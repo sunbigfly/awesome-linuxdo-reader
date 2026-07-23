@@ -6,6 +6,8 @@
 !/CONTRIBUTING.md
 !/SECURITY.md
 !/eslint.config.mjs
+!/package.json
+!/package-lock.json
 
 !/.github/
 /.github/*
@@ -15,6 +17,8 @@
 !/.github/ISSUE_TEMPLATE/config.yml
 !/.github/ISSUE_TEMPLATE/bug_report.yml
 !/.github/ISSUE_TEMPLATE/feature_request.yml
+!/.github/workflows/
+!/.github/workflows/*.yml
 
 !/assets/
 /assets/*
@@ -22,16 +26,19 @@
 !/assets/screenshots/
 /assets/screenshots/*
 !/assets/screenshots/*.png
+/assets/screenshots/manual-*.png
 
 !/docs/
-/docs/*
-!/docs/README.md
-!/docs/INTRODUCTION.md
+!/docs/**
+/docs/superpowers/
+/docs/.vitepress/cache/
+/docs/.vitepress/dist/
 
 !/scripts/
 /scripts/*
 !/scripts/userscript-dev
 !/scripts/userscript-dev.ps1
+!/scripts/validate-docs.mjs
 
 !/tools/
 /tools/*

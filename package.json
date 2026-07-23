@@ -1,0 +1,22 @@
+{
+  "name": "awesome-linuxdo-reader",
+  "version": "0.1.2",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "docs:dev": "vitepress dev docs --host 127.0.0.1",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs --host 127.0.0.1",
+    "docs:check": "node scripts/validate-docs.mjs",
+    "docs:verify": "npm run docs:check && npm run docs:build"
+  },
+  "devDependencies": {
+    "vitepress": "1.6.4"
+  },
+  "overrides": {
+    "vite": "6.4.3"
+  }
+}

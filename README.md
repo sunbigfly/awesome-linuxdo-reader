@@ -10,14 +10,15 @@
   <a href="https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js">安装脚本</a> ·
   <a href="https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader">GreasyFork</a> ·
   <a href="work/main.js">脚本源码</a> ·
+  <a href="docs/index.md">用户手册</a> ·
   <a href="docs/INTRODUCTION.md">项目介绍</a> ·
   <a href="CONTRIBUTING.md">参与开发</a> ·
   <a href="LICENSE">MIT License</a>
 </p>
 
 <p align="center">
-  <a href="assets/screenshots/02-parent-preview.png">
-    <img src="assets/screenshots/02-parent-preview.png" alt="在 LINUX DO 列表页内打开完整主题并保留父回复上下文" width="960">
+  <a href="assets/screenshots/guide-01-reader-overview.png">
+    <img src="assets/screenshots/guide-01-reader-overview.png" alt="在 LINUX DO 列表页右侧打开完整增强阅读工作区" width="960">
   </a>
 </p>
 
@@ -40,9 +41,9 @@
     <th width="33%">请求流与 429 控制</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/01-image-lightbox.png"><img src="assets/screenshots/01-image-lightbox.png" alt="在阅读器内查看帖子原图和关联评论"></a></td>
-    <td><a href="assets/screenshots/03-messages.png"><img src="assets/screenshots/03-messages.png" alt="查看真实内容的消息中心"></a></td>
-    <td><a href="assets/screenshots/10-request-flow-429.png"><img src="assets/screenshots/10-request-flow-429.png" alt="查看请求调度、限流边界和 429 恢复状态"></a></td>
+    <td><a href="assets/screenshots/guide-19-image-lightbox.png"><img src="assets/screenshots/guide-19-image-lightbox.png" alt="在阅读器内查看帖子原图、图片序列和关联评论"></a></td>
+    <td><a href="assets/screenshots/guide-15-notifications-replies.png"><img src="assets/screenshots/guide-15-notifications-replies.png" alt="查看消息中心的回复分类和真实通知"></a></td>
+    <td><a href="assets/screenshots/guide-11-request-flow.png"><img src="assets/screenshots/guide-11-request-flow.png" alt="查看请求调度、限流边界和异常恢复状态"></a></td>
   </tr>
   <tr>
     <td>原图、图片序列与关联评论。</td>
@@ -53,19 +54,19 @@
 
 ## 更多截图
 
-以下图片选取自 Chrome DevTools 采集的真实 LINUX DO 页面关键状态，统一输出为 1440 × 711。消息、历史和收藏保留真实界面内容；用户身份信息已脱敏。点击分组展开，点击图片查看原图。
+以下图片由 Chrome DevTools 在真实 LINUX DO 页面重新采集，保留当时的公开界面、账号和状态信息，未额外打码。点击分组展开，点击图片查看原图。
 
 <details>
-<summary><strong>阅读流转</strong> — 左右切换阅读历史</summary>
+<summary><strong>阅读流转</strong> — 工作区与楼中楼上下文</summary>
 
 <table>
   <tr>
-    <th width="50%">上一条历史</th>
-    <th width="50%">下一条历史</th>
+    <th width="50%">阅读器工作区</th>
+    <th width="50%">楼中楼上下文</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/06-history-previous.png"><img src="assets/screenshots/06-history-previous.png" alt="切换到上一条阅读历史"></a></td>
-    <td><a href="assets/screenshots/06-history-next.png"><img src="assets/screenshots/06-history-next.png" alt="切换到下一条阅读历史"></a></td>
+    <td><a href="assets/screenshots/guide-01-reader-overview.png"><img src="assets/screenshots/guide-01-reader-overview.png" alt="列表页右侧嵌入阅读器工作区"></a></td>
+    <td><a href="assets/screenshots/guide-18-thread-context.png"><img src="assets/screenshots/guide-18-thread-context.png" alt="父楼层下展开楼中楼并保留关系线"></a></td>
   </tr>
 </table>
 </details>
@@ -79,8 +80,8 @@
     <th width="50%">收藏与回应</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/04-history.png"><img src="assets/screenshots/04-history.png" alt="查看浏览历史和目标阅读位置"></a></td>
-    <td><a href="assets/screenshots/05-bookmarks.png"><img src="assets/screenshots/05-bookmarks.png" alt="查看收藏、书签与社区回应"></a></td>
+    <td><a href="assets/screenshots/guide-16-history.png"><img src="assets/screenshots/guide-16-history.png" alt="查看浏览历史和目标阅读位置"></a></td>
+    <td><a href="assets/screenshots/guide-17-bookmarks-reactions.png"><img src="assets/screenshots/guide-17-bookmarks-reactions.png" alt="查看收藏、书签与社区回应"></a></td>
   </tr>
 </table>
 </details>
@@ -95,9 +96,9 @@
     <th width="33%">布局设置</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/07-user-info.png"><img src="assets/screenshots/07-user-info.png" alt="查看已脱敏的用户信息和社区统计"></a></td>
-    <td><a href="assets/screenshots/08-appearance-settings.png"><img src="assets/screenshots/08-appearance-settings.png" alt="配置主题、颜色、背景和回复关系样式"></a></td>
-    <td><a href="assets/screenshots/09-layout-settings.png"><img src="assets/screenshots/09-layout-settings.png" alt="配置浮窗、全屏和移动模式布局"></a></td>
+    <td><a href="assets/screenshots/guide-02-settings-overview.png"><img src="assets/screenshots/guide-02-settings-overview.png" alt="查看当前账号信息、社区统计和 Connect 进度"></a></td>
+    <td><a href="assets/screenshots/guide-07-appearance-settings.png"><img src="assets/screenshots/guide-07-appearance-settings.png" alt="配置主题、颜色、背景和回复关系样式"></a></td>
+    <td><a href="assets/screenshots/guide-05-layout-settings.png"><img src="assets/screenshots/guide-05-layout-settings.png" alt="配置浮窗、全屏和移动模式布局"></a></td>
   </tr>
 </table>
 </details>
@@ -111,8 +112,8 @@
     <th width="50%">DOM 渲染管理</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/11-cache-management.png"><img src="assets/screenshots/11-cache-management.png" alt="按资源类型查看和管理本地缓存"></a></td>
-    <td><a href="assets/screenshots/12-dom-rendering.png"><img src="assets/screenshots/12-dom-rendering.png" alt="配置 DOM 挂载窗口、缓冲区与渲染上限"></a></td>
+    <td><a href="assets/screenshots/guide-13-data-management.png"><img src="assets/screenshots/guide-13-data-management.png" alt="按资源类型查看和管理本地缓存"></a></td>
+    <td><a href="assets/screenshots/guide-09-performance-settings.png"><img src="assets/screenshots/guide-09-performance-settings.png" alt="配置 DOM 挂载窗口、缓冲区与渲染上限"></a></td>
   </tr>
 </table>
 </details>
@@ -143,6 +144,18 @@
 ```
 
 本地开发与验证流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 用户手册
+
+`docs/` 提供基于 VitePress 的正式中文用户手册，覆盖安装、阅读导航、社区互动、图片与媒体、全部设置、缓存、请求治理、隐私和故障排查。
+
+```bash
+npm install
+npm run docs:dev
+npm run docs:verify
+```
+
+功能覆盖目录位于 [`docs/public/feature-catalog.json`](docs/public/feature-catalog.json)。每项用户可见能力都有稳定 `feature_id`、源码锚点、版本、验证日期、截图和对应文档；修改用户功能时必须同步更新。
 
 ## 许可
 

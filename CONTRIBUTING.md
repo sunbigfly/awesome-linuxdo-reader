@@ -48,3 +48,23 @@ npx --yes eslint@9.39.1 work/main.js
 - UI 改动附修改前后截图；网络或性能改动附可复核的测量口径。
 - 不提交 `work/local-debug.user.js`、临时截图、浏览器缓存或个人环境配置。
 - 不顺带重构、改名或清理与当前问题无关的代码。
+
+## 用户手册同步
+
+用户可见入口、行为、设置、数据边界、权限或故障恢复发生变化时，文档属于同一项交付：
+
+1. 更新 `docs/public/feature-catalog.json` 中对应功能的 `source_anchor`、`version`、`last_verified`、`screenshots` 和 `docs`。
+2. 新功能创建稳定 `feature_id`；既有功能改名时保留编号。
+3. 更新分类手册、完整设置参考和 `docs/reference/changelog.md`。
+4. 每篇受影响页面同步更新 frontmatter 的 `feature_ids`、`source_anchors`、`version`、`last_verified` 和 `screenshots`。
+5. 交互或视觉变化使用真实浏览器采集截图，并提供替代文本和说明；默认避开私信、凭据和敏感内容，维护者明确授权时可保留公开页面与公开账号信息。
+
+文档验证：
+
+```bash
+npm install
+npm run docs:check
+npm run docs:build
+```
+
+`docs:check` 必须达到未文档化功能、缺失源码锚点、无效链接/图片和元数据错误均为 0。详细规范见 [`docs/reference/documentation.md`](docs/reference/documentation.md)。
