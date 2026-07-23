@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      0.1.1
+// @version      0.1.2
 // @license      MIT
 // @description  面向 LINUX DO 的沉浸式增强阅读器，支持父回复预览、消息/历史/收藏、原图灯箱、主题布局、请求限流、缓存与 DOM 渲染管理。
 // @description:en An immersive LINUX DO reader with threaded context, community panels, image lightbox, layouts, request control, cache, and DOM rendering management.
@@ -26,7 +26,7 @@
   'use strict';
 
   const BASE = location.origin;
-  const READER_VERSION = '0.1.1';
+  const READER_VERSION = '0.1.2';
   const HOST_PAGE_WINDOW = globalThis.unsafeWindow || window;
   const TOPIC_CACHE_TTL = 90 * 1000;
   const READ_THRESHOLD = 1500;
@@ -331,6 +331,11 @@
   });
   const READER_PROFILE_KEYS = Object.freeze(['popup', 'full', 'mobile']);
   const READER_PROFILE_LABELS = Object.freeze({ popup: '浮窗', full: '全屏', mobile: '移动' });
+  const COMPOSER_WINDOW_PROFILE_PREFIXES = Object.freeze({
+    popup: 'composerWindow',
+    full: 'fullComposerWindow',
+    mobile: 'mobileComposerWindow',
+  });
   const READER_PROFILE_SHARING_KEYS = Object.freeze(['image', 'font', 'layout', 'appearance']);
   const READER_PROFILE_SHARING_LABELS = Object.freeze({ image: '图片', font: '字体', layout: '布局', appearance: '外观' });
   const EMBEDDED_MOBILE_MAX_ASPECT_RATIO = 3 / 4;
@@ -535,7 +540,9 @@
     listReaderMode: 'floating',
     listReaderEmbedWidth: READER_EMBED_DEFAULT_WIDTH,
     ...normalizeReaderWindowPreferenceGroup({}, 'listReaderWindow'),
-    ...normalizeWindowGeometryPreferenceGroup({}, 'composerWindow'),
+    ...normalizeWindowGeometryPreferenceGroup({}, COMPOSER_WINDOW_PROFILE_PREFIXES.popup),
+    ...normalizeWindowGeometryPreferenceGroup({}, COMPOSER_WINDOW_PROFILE_PREFIXES.full),
+    ...normalizeWindowGeometryPreferenceGroup({}, COMPOSER_WINDOW_PROFILE_PREFIXES.mobile),
     historySortMode: 'recent-viewed',
     bookmarkTabOrder: BOOKMARK_TAB_TYPES,
     historyButtonsAlwaysVisible: false,
@@ -3786,6 +3793,7 @@
     html > .ldp-reader-portal-host{display:contents!important;color:var(--ldp-interface-font-color,inherit);
       font-family:var(--ldp-interface-font-family,inherit);font-weight:var(--ldp-interface-font-weight,400);}
     html.ldp-route-takeover body:not([data-ldp-shadow-context-body]) > :not(.ldp-overlay):not(.ldp-native-boost-menu):not(#reply-control):not(.composer-popup):not(#d-menu-portals):not(.fk-d-menu):not(.d-modal):not(.dialog-holder):not(#user-card):not(#group-card):not(.user-card):not(.group-card):not(.user-card-container):not(.ldp-user-card-fallback){visibility:hidden!important;}
+    html.ldp-composer-host-isolated body:not([data-ldp-shadow-context-body]) > :not(.ldp-native-boost-menu):not(#reply-control):not(.composer-popup):not(#d-menu-portals):not(.fk-d-menu):not(.d-modal):not(.dialog-holder):not(#user-card):not(#group-card):not(.user-card):not(.group-card):not(.user-card-container):not(.ldp-user-card-fallback){visibility:hidden!important;}
     html.ldp-native-reader-trigger-visible .d-header-icons{margin-inline-end:30px!important;}
     html.ldp-native-reader-trigger-visible .d-header-icons .current-user{position:relative!important;}
     .ldp-native-reader-trigger-item{position:absolute;left:100%;top:50%;z-index:2147482999;display:flex;align-items:center;
@@ -6291,8 +6299,6 @@
       padding:3px 8px 3px 3px;border-radius:999px;background:var(--primary-very-low,#f2f4f6);
       color:var(--primary,#222);font-size:var(--ldp-font-ui,12px);line-height:1.35;}
     .ldp-floor-preview .ldp-boost-bubble{opacity:.82;}
-    .ldp-boost-bubble.ldp-boost-own{
-      box-shadow:0 0 0 2px color-mix(in srgb,var(--tertiary,#47855f) 58%,transparent);}
     .ldp-boost-avatar-link{display:inline-flex;line-height:0;flex:none;}
     .ldp-boost-avatar{width:20px;height:20px;border-radius:50%;}
     .ldp-boost-fallback-icon{width:14px;height:14px;margin-left:3px;opacity:.65;}
@@ -8625,7 +8631,9 @@
       ])),
       ...normalizeReaderWindowPreferenceGroup(performancePrefs, 'readerWindow'),
       ...normalizeReaderWindowPreferenceGroup(performancePrefs, 'listReaderWindow'),
-      ...normalizeWindowGeometryPreferenceGroup(performancePrefs, 'composerWindow'),
+      ...normalizeWindowGeometryPreferenceGroup(performancePrefs, COMPOSER_WINDOW_PROFILE_PREFIXES.popup),
+      ...normalizeWindowGeometryPreferenceGroup(performancePrefs, COMPOSER_WINDOW_PROFILE_PREFIXES.full),
+      ...normalizeWindowGeometryPreferenceGroup(performancePrefs, COMPOSER_WINDOW_PROFILE_PREFIXES.mobile),
       topicReaderMode: normalizeTopicReaderMode(performancePrefs.topicReaderMode),
       listReaderMode: normalizeListReaderMode(performancePrefs.listReaderMode),
       listReaderEmbedWidth: normalizeListReaderEmbedWidth(performancePrefs.listReaderEmbedWidth),
@@ -8842,16 +8850,25 @@
   function readerPrefsFromConfigExport(payload) {
     const schemaVersion = Number(payload && payload.schemaVersion);
     const settingKeys = readerConfigSettingKeys();
+    const optionalLegacySettingKeys = new Set(['full', 'mobile'].flatMap((profile) => {
+      const prefix = COMPOSER_WINDOW_PROFILE_PREFIXES[profile];
+      return ['Width', 'Height', 'X', 'Y'].map((suffix) => `${prefix}${suffix}`);
+    }));
+    const payloadSettingKeys = payload && payload.settings && typeof payload.settings === 'object' &&
+      !Array.isArray(payload.settings)
+      ? Object.keys(payload.settings)
+      : [];
     if (!payload || payload.format !== LDP_CONFIG_EXPORT_FORMAT ||
       schemaVersion !== LDP_CONFIG_EXPORT_VERSION ||
-      Number(payload.settingsCount) !== settingKeys.length ||
       !payload.settings || typeof payload.settings !== 'object' || Array.isArray(payload.settings) ||
-      Object.keys(payload.settings).length !== settingKeys.length ||
-      settingKeys.some((key) => !Object.prototype.hasOwnProperty.call(payload.settings, key))) {
+      Number(payload.settingsCount) !== payloadSettingKeys.length ||
+      payloadSettingKeys.some((key) => !settingKeys.includes(key)) ||
+      settingKeys.some((key) => !optionalLegacySettingKeys.has(key) &&
+        !Object.prototype.hasOwnProperty.call(payload.settings, key))) {
       throw new Error('invalid_config');
     }
     const importedSettings = settingKeys.reduce((settings, key) => {
-      settings[key] = payload.settings[key];
+      if (Object.prototype.hasOwnProperty.call(payload.settings, key)) settings[key] = payload.settings[key];
       return settings;
     }, {});
     return normalizeReaderPrefs(Object.assign({}, DEFAULT_PREFS, importedSettings));
@@ -11167,18 +11184,21 @@
 
   function currentUserUnreadNotificationCount(currentUser) {
     if (!currentUser || typeof currentUser !== 'object') return null;
-    const candidates = [
-      currentUser.unread_notifications,
-      currentUser.unread_notification_count,
-      currentUser.notification_count,
-      currentUser.unread_high_priority_notifications,
-    ];
-    for (const value of candidates) {
-      if (value == null || value === '') continue;
+    const readCount = (key) => {
+      const value = currentUser[key];
+      if (value == null || value === '') return null;
       const count = Number(value);
       if (Number.isFinite(count)) return Math.max(0, Math.floor(count));
+      return null;
+    };
+    const allUnread = readCount('all_unread_notifications_count');
+    if (allUnread != null) return allUnread;
+    const normalUnread = readCount('unread_notifications');
+    const highPriorityUnread = readCount('unread_high_priority_notifications');
+    if (normalUnread != null || highPriorityUnread != null) {
+      return (normalUnread || 0) + (highPriorityUnread || 0);
     }
-    return null;
+    return readCount('unread_notification_count');
   }
 
   function cachedUnreadNotificationCount(groupKey = 'all') {
@@ -11238,7 +11258,8 @@
     if (readState) readState.textContent = '已读';
     syncNotificationUnreadUi(Math.max(0, NOTIFICATION_UNREAD_COUNT - 1));
     if (ME_CURRENT_USER) {
-      ['unread_notifications', 'unread_notification_count', 'notification_count', 'unread_high_priority_notifications']
+      ['all_unread_notifications_count', 'unread_notifications', 'unread_notification_count',
+        'unread_high_priority_notifications']
         .forEach((key) => {
           if (!Object.prototype.hasOwnProperty.call(ME_CURRENT_USER, key)) return;
           const value = Number(ME_CURRENT_USER[key]);
@@ -23033,7 +23054,10 @@
       setWorkspaceStyle('--ldp-reader-host-min-width', `${READER_HOST_MIN_WIDTH}px`);
       if (nativeListRowHeight) setWorkspaceStyle('--ldp-reader-native-row-height', `${nativeListRowHeight}px`);
       const appearance = currentAppearanceProfile();
-      root.style.setProperty('--ldp-reader-list-zebra-color', appearance.listZebraColor);
+      root.style.setProperty('--ldp-reader-list-zebra-color',
+        resolvedReaderThemeMode() === 'dark' && appearance.listZebraColor === LIST_ZEBRA_COLOR_DEFAULT
+          ? READER_THEME_VARIABLES.dark['--ldp-zebra-color']
+          : appearance.listZebraColor);
       if (appearance.dividerLineColor === DIVIDER_LINE_COLOR_DEFAULT) root.style.removeProperty('--ldp-divider-line-color');
       else root.style.setProperty('--ldp-divider-line-color', appearance.dividerLineColor);
       if (appearance.dividerLineWidth === DIVIDER_LINE_WIDTH_DEFAULT) root.style.removeProperty('--ldp-divider-line-width');
@@ -23151,7 +23175,9 @@
     let composerOverflowFrame = 0;
     let chrome = null;
     let composerObserver = null;
+    let composerHostObserver = null;
     let state = null;
+    let stateProfile = '';
     let pointer = null;
     let pointerFrame = 0;
     let pointerClientX = 0;
@@ -23249,16 +23275,23 @@
       }
       scheduleNativeFloatingTopLayerSync();
     };
-    const releaseComposerTopLayers = () => {
+    const releaseOwnedComposerTopLayers = () => {
       if (nativeFloatingFrame) cancelAnimationFrame(nativeFloatingFrame);
       nativeFloatingFrame = 0;
       if (nativeFloatingObserver) nativeFloatingObserver.disconnect();
       nativeFloatingObserver = null;
       Array.from(ownedTopLayerElements).reverse().forEach(releaseOwnedTopLayer);
     };
+    const releaseComposerTopLayers = () => {
+      releaseOwnedComposerTopLayers();
+      root.classList.remove('ldp-composer-host-isolated');
+    };
     const syncComposerTopLayers = () => {
-      if (!composer || !promoteOwnedTopLayer(composer, 'composer')) {
-        releaseComposerTopLayers();
+      const composerOpen = !!(composer && composer.isConnected &&
+        !composer.classList.contains('closed') && composerElementAvailable(composer));
+      root.classList.toggle('ldp-composer-host-isolated', composerOpen);
+      if (!composerOpen || !promoteOwnedTopLayer(composer, 'composer')) {
+        releaseOwnedComposerTopLayers();
         return false;
       }
       if (chrome && !chrome.hidden) promoteOwnedTopLayer(chrome, 'chrome');
@@ -23312,11 +23345,22 @@
       composerOverflowFrame = requestAnimationFrame(syncComposerOverflowLayers);
     };
     const limits = () => {
-      const margin = Math.max(0, Math.min(16, Math.floor((window.innerWidth - 1) / 2), Math.floor((window.innerHeight - 1) / 2)));
-      const maxWidth = Math.max(1, window.innerWidth - margin * 2);
-      const maxHeight = Math.max(1, window.innerHeight - margin * 2);
+      const margin = Math.max(0, Math.min(
+        16,
+        Math.floor((window.innerWidth - 1) / 2),
+        Math.floor((window.innerHeight - 1) / 2),
+      ));
+      const left = margin;
+      const top = margin;
+      const right = window.innerWidth - margin;
+      const bottom = window.innerHeight - margin;
+      const maxWidth = Math.max(1, right - left);
+      const maxHeight = Math.max(1, bottom - top);
       return {
-        margin,
+        left,
+        top,
+        right,
+        bottom,
         maxWidth,
         maxHeight,
         minWidth: Math.min(520, maxWidth),
@@ -23326,10 +23370,10 @@
     const defaultState = () => {
       const bounds = limits();
       const width = Math.min(1200, bounds.maxWidth);
-      const height = clamp(window.innerHeight * .7, bounds.minHeight, bounds.maxHeight);
+      const height = clamp(bounds.maxHeight * .7, bounds.minHeight, bounds.maxHeight);
       return {
-        left: (window.innerWidth - width) / 2,
-        top: (window.innerHeight - height) / 2,
+        left: bounds.left + (bounds.maxWidth - width) / 2,
+        top: bounds.top + (bounds.maxHeight - height) / 2,
         width,
         height,
       };
@@ -23340,19 +23384,24 @@
       const width = clamp(numeric(next && next.width, fallback.width), bounds.minWidth, bounds.maxWidth);
       const height = clamp(numeric(next && next.height, fallback.height), bounds.minHeight, bounds.maxHeight);
       return {
-        left: clamp(numeric(next && next.left, fallback.left), bounds.margin, window.innerWidth - bounds.margin - width),
-        top: clamp(numeric(next && next.top, fallback.top), bounds.margin, window.innerHeight - bounds.margin - height),
+        left: clamp(numeric(next && next.left, fallback.left), bounds.left, bounds.right - width),
+        top: clamp(numeric(next && next.top, fallback.top), bounds.top, bounds.bottom - height),
         width,
         height,
       };
     };
-    const preferredState = () => {
+    const activeStateProfile = () => {
+      const profile = currentReaderProfileName();
+      return READER_PROFILE_KEYS.includes(profile) ? profile : 'full';
+    };
+    const preferredState = (profile = activeStateProfile()) => {
       const fallback = defaultState();
+      const prefix = COMPOSER_WINDOW_PROFILE_PREFIXES[profile];
       return normalizeState({
-        left: PREFS.composerWindowX || fallback.left,
-        top: PREFS.composerWindowY || fallback.top,
-        width: PREFS.composerWindowWidth || fallback.width,
-        height: PREFS.composerWindowHeight || fallback.height,
+        left: PREFS[`${prefix}X`] || fallback.left,
+        top: PREFS[`${prefix}Y`] || fallback.top,
+        width: PREFS[`${prefix}Width`] || fallback.width,
+        height: PREFS[`${prefix}Height`] || fallback.height,
       });
     };
     const syncFont = (fontProfile = currentFontProfile(currentReaderProfileName())) => {
@@ -23424,17 +23473,33 @@
     const persistState = () => {
       if (statePersistTimer) clearTimeout(statePersistTimer);
       statePersistTimer = 0;
-      if (!state || !desktopWindow()) return;
+      if (!state || !stateProfile || !desktopWindow()) return;
+      const prefix = COMPOSER_WINDOW_PROFILE_PREFIXES[stateProfile];
       setPrefs({
-        composerWindowWidth: Math.round(state.width),
-        composerWindowHeight: Math.round(state.height),
-        composerWindowX: Math.round(state.left),
-        composerWindowY: Math.round(state.top),
+        [`${prefix}Width`]: Math.round(state.width),
+        [`${prefix}Height`]: Math.round(state.height),
+        [`${prefix}X`]: Math.round(state.left),
+        [`${prefix}Y`]: Math.round(state.top),
       });
     };
     const scheduleStatePersist = () => {
       if (statePersistTimer) clearTimeout(statePersistTimer);
       statePersistTimer = setTimeout(persistState, 160);
+    };
+    const syncStateProfile = () => {
+      const nextProfile = activeStateProfile();
+      if (!state) {
+        stateProfile = nextProfile;
+        applyState(preferredState(nextProfile));
+        return;
+      }
+      if (nextProfile === stateProfile) {
+        applyState(state);
+        return;
+      }
+      persistState();
+      stateProfile = nextProfile;
+      applyState(preferredState(nextProfile));
     };
     const clearGeometry = () => {
       const composerStyle = composer && composer.style;
@@ -23480,10 +23545,10 @@
       let top = start.top;
       let right = start.left + start.width;
       let bottom = start.top + start.height;
-      if (direction.includes('w')) left = clamp(start.left + deltaX, bounds.margin, right - bounds.minWidth);
-      if (direction.includes('e')) right = clamp(start.left + start.width + deltaX, left + bounds.minWidth, window.innerWidth - bounds.margin);
-      if (direction.includes('n')) top = clamp(start.top + deltaY, bounds.margin, bottom - bounds.minHeight);
-      if (direction.includes('s')) bottom = clamp(start.top + start.height + deltaY, top + bounds.minHeight, window.innerHeight - bounds.margin);
+      if (direction.includes('w')) left = clamp(start.left + deltaX, bounds.left, right - bounds.minWidth);
+      if (direction.includes('e')) right = clamp(start.left + start.width + deltaX, left + bounds.minWidth, bounds.right);
+      if (direction.includes('n')) top = clamp(start.top + deltaY, bounds.top, bottom - bounds.minHeight);
+      if (direction.includes('s')) bottom = clamp(start.top + start.height + deltaY, top + bounds.minHeight, bounds.bottom);
       return { left, top, width: right - left, height: bottom - top };
     };
     function applyPointerPosition() {
@@ -23493,8 +23558,8 @@
       if (pointer.mode === 'move') {
         const bounds = limits();
         applyState({
-          left: clamp(pointer.state.left + deltaX, bounds.margin, window.innerWidth - bounds.margin - pointer.state.width),
-          top: clamp(pointer.state.top + deltaY, bounds.margin, window.innerHeight - bounds.margin - pointer.state.height),
+          left: clamp(pointer.state.left + deltaX, bounds.left, bounds.right - pointer.state.width),
+          top: clamp(pointer.state.top + deltaY, bounds.top, bounds.bottom - pointer.state.height),
           width: pointer.state.width,
           height: pointer.state.height,
         });
@@ -23580,6 +23645,7 @@
       persistState();
       releaseComposerTopLayers();
       state = null;
+      stateProfile = '';
       if (chrome) chrome.hidden = true;
       clearGeometry();
       clearComposerOverflowLayers();
@@ -23594,6 +23660,9 @@
           deactivate();
           return;
         }
+        ensureChrome();
+        syncComposerRoot();
+        if (!state || activeStateProfile() !== stateProfile) syncStateProfile();
         if (composer.classList.contains('fullscreen')) {
           stopPointer();
           composer.style.removeProperty('translate');
@@ -23601,7 +23670,7 @@
           applyState(state);
         }
         scheduleChromeSync();
-        scheduleNativeFloatingTopLayerSync();
+        syncComposerTopLayers();
         scheduleComposerOverflowSync();
       });
       composerObserver.observe(composer, {
@@ -23616,23 +23685,44 @@
       ensureChrome();
       if (composer !== element) observeComposer(element);
       syncComposerRoot();
-      if (!state) applyState(preferredState());
+      if (!state || activeStateProfile() !== stateProfile) syncStateProfile();
       else scheduleChromeSync();
       syncComposerTopLayers();
       scheduleComposerOverflowSync();
       return true;
     };
+    const syncComposerElement = () => {
+      const nextComposer = document.querySelector('#reply-control');
+      if (nextComposer === composer) {
+        if (nativeComposerVisible(nextComposer) && !state) open(nextComposer);
+        return;
+      }
+      if (composerObserver) composerObserver.disconnect();
+      composerObserver = null;
+      if (composer) deactivate();
+      composer = null;
+      if (!nextComposer) return;
+      observeComposer(nextComposer);
+      if (nativeComposerVisible(nextComposer)) open(nextComposer);
+    };
+    const composerMutationNodeIsRelevant = (node) => {
+      const element = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
+      return !!(element && (element.matches('#reply-control') || element.querySelector('#reply-control')));
+    };
+    const composerHostMutationIsRelevant = (mutation) => (
+      [...mutation.addedNodes, ...mutation.removedNodes].some(composerMutationNodeIsRelevant)
+    );
     const syncLayer = () => {
       if (!composer || !nativeComposerVisible(composer)) return false;
       syncComposerRoot();
-      if (state) applyState(state);
+      if (state) syncStateProfile();
       syncComposerTopLayers();
       scheduleComposerOverflowSync();
       return true;
     };
     const onWindowResize = () => {
       stopPointer();
-      if (state) applyState(state);
+      if (state) syncStateProfile();
       else scheduleChromeSync();
       syncComposerTopLayers();
       scheduleComposerOverflowSync();
@@ -23643,17 +23733,26 @@
       stopPointer();
       persistState();
       if (composerObserver) composerObserver.disconnect();
+      if (composerHostObserver) composerHostObserver.disconnect();
       if (chromeFrame) cancelAnimationFrame(chromeFrame);
       window.removeEventListener('resize', onWindowResize);
       releaseComposerTopLayers();
       if (chrome) removeOwnedNode(chrome);
       chrome = null;
       state = null;
+      stateProfile = '';
       clearGeometry();
       clearComposerOverflowLayers();
       clearComposerRoot();
       composer = null;
     };
+    if (document.body) {
+      composerHostObserver = new MutationObserver((mutations) => {
+        if (mutations.some(composerHostMutationIsRelevant)) syncComposerElement();
+      });
+      composerHostObserver.observe(document.body, { childList: true, subtree: true });
+    }
+    syncComposerElement();
     window.addEventListener('resize', onWindowResize);
     return { open, syncFont, syncLayer, destroy };
   }
@@ -23799,6 +23898,20 @@
     return false;
   }
 
+  function focusReaderNativeComposerInput(ctx) {
+    requestAnimationFrame(() => {
+      if (ctx?.readerSession && !ctx.readerSession.isCurrent('opening', 'active')) return;
+      const popup = document.querySelector('#reply-control');
+      if (!nativeComposerVisible(popup)) return;
+      const input = Array.from(popup.querySelectorAll(
+        'textarea.d-editor-input, textarea, .ProseMirror[contenteditable="true"]'
+      )).find((candidate) => composerElementAvailable(candidate) &&
+        !candidate.matches('[disabled],[aria-disabled="true"]'));
+      if (!input) return;
+      try { input.focus({ preventScroll: true }); } catch (error) { input.focus(); }
+    });
+  }
+
   function createDetachedComposerModels(postNode, ctx, Topic, Post) {
     const topicData = ctx.topicData || {};
     const postData = postNode && postNode._ldpPostData || {};
@@ -23895,6 +24008,7 @@
         if (typeof currentModel.set === 'function') currentModel.set('post', replyTarget);
         else currentModel.post = replyTarget;
         if (quoteRaw) appEvents.trigger('composer:insert-block', quoteRaw);
+        focusReaderNativeComposerInput(ctx);
         return true;
       }
 
@@ -23946,6 +24060,7 @@
       await composer.open(options);
       rememberReplyComposer();
       if (!await waitForNativeComposerPopup(ctx)) return nativeComposerFailure('open');
+      focusReaderNativeComposerInput(ctx);
       console.info('[LINUX DO reader] native composer: visible', {
         topicId: +ctx.topicId,
         postId,
@@ -30832,7 +30947,11 @@
       overlay.style.setProperty('--ldp-zebra-radius', `${values.zebraRadius}px`);
     };
     const applyListZebraColor = () => {
-      const value = activeAppearanceColors().listZebraColor;
+      const value = themeAdjustedDefaultColor(
+        activeAppearanceColors().listZebraColor,
+        LIST_ZEBRA_COLOR_DEFAULT,
+        READER_THEME_VARIABLES.dark['--ldp-zebra-color']
+      );
       if (!readerWorkspace.isEmbedded()) {
         document.documentElement.style.removeProperty('--ldp-reader-list-zebra-color');
         return;
@@ -33286,7 +33405,8 @@
         await apiSend(`${BASE}/notifications/mark-read`, 'PUT', dismissParams);
         const markedCount = markCachedNotificationsRead(groupKey);
         if (ME_CURRENT_USER && groupKey === 'all') {
-          ['unread_notifications', 'unread_notification_count', 'notification_count', 'unread_high_priority_notifications']
+          ['all_unread_notifications_count', 'unread_notifications', 'unread_notification_count',
+            'unread_high_priority_notifications']
             .forEach((key) => {
               if (Object.prototype.hasOwnProperty.call(ME_CURRENT_USER, key)) ME_CURRENT_USER[key] = 0;
             });
@@ -33323,6 +33443,7 @@
       notificationsBtn.setAttribute('aria-expanded', String(opening));
       if (!opening) return;
       positionNotificationsPopover();
+      void ensureMe(true);
       loadNotificationPage(notificationState.group, notificationState.page);
       });
       const bindReaderAuxPanelToggle = (button, popover, closePanel, closePeer, openPanel) => {
@@ -34520,6 +34641,7 @@
       syncReaderBackgroundMode();
       applyReaderVisualSettings();
       syncOpenSettingsProfileControls(true);
+      if (ctx.nativeComposerWindow) ctx.nativeComposerWindow.syncLayer();
       positionHeaderPopovers();
       ctx.streamListOffset = NaN;
       ctx.streamNeedsRepair = true;
