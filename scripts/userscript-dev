@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly project_root="$(cd -- "${script_dir}/.." && pwd)"
+readonly manifest_path="${project_root}/tools/userscript-dev/Cargo.toml"
+readonly build_root="${TMPDIR:-/tmp}/awesome-linuxdo-reader-userscript-dev-target"
+
+if ! command -v cargo >/dev/null 2>&1; then
+  printf '%s\n' '{"ok":false,"command":"launcher","error":{"kind":"missing_dependency","message":"Rust Cargo is required. Install Rust from https://rustup.rs/ and retry."}}'
+  exit 2
+fi
+
+cd -- "$project_root"
+CARGO_TARGET_DIR="$build_root" exec cargo run --quiet --locked --manifest-path "$manifest_path" -- "$@"

@@ -1,0 +1,54 @@
+name: Bug 报告
+description: 报告可复现的功能、交互或性能问题
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: 请先确认问题可在最新版本复现，并移除日志和截图中的敏感信息。
+  - type: input
+    id: version
+    attributes:
+      label: 脚本版本
+      placeholder: 例如 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 运行环境
+      description: 浏览器、userscript 管理器及其版本
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: 按顺序说明如何稳定复现问题
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 补充证据
+      description: 可附脱敏后的 Console、Network、性能记录或截图
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已确认内容中不包含 Cookie、Authorization、个人数据或完整响应正文。
+          required: true
