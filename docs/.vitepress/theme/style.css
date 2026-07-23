@@ -23,6 +23,15 @@
   filter: drop-shadow(0 24px 42px rgba(36, 79, 57, 0.24));
 }
 
+.VPFeature .icon {
+  color: var(--vp-c-brand-1);
+}
+
+.VPFeature .icon svg {
+  width: 24px;
+  height: 24px;
+}
+
 .VPDoc img {
   border: 1px solid var(--vp-c-divider);
   border-radius: 12px;

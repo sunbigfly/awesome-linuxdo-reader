@@ -8,6 +8,7 @@ const docsRoot = path.join(root, 'docs')
 const sourcePath = path.join(root, 'work/main.js')
 const catalogPath = path.join(docsRoot, 'public/feature-catalog.json')
 const ignoredPages = new Set(['README.md', 'INTRODUCTION.md'])
+const emojiPattern = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u
 const requiredPageFields = [
   'title',
   'description',
@@ -111,7 +112,20 @@ if (!fs.existsSync(catalogPath)) errors.push('docs/public/feature-catalog.json: 
 const source = fs.existsSync(sourcePath) ? fs.readFileSync(sourcePath, 'utf8') : ''
 const version = sourceVersion(source)
 const pages = walk(docsRoot, (file) => file.endsWith('.md') && !ignoredPages.has(relativeDocs(file)))
+const siteTextFiles = [
+  ...pages,
+  path.join(docsRoot, '.vitepress/config.mts'),
+  path.join(docsRoot, '.vitepress/theme/index.ts'),
+  path.join(docsRoot, '.vitepress/theme/style.css'),
+  catalogPath,
+]
 const pageMeta = new Map()
+
+for (const file of new Set(siteTextFiles)) {
+  if (fs.existsSync(file) && emojiPattern.test(fs.readFileSync(file, 'utf8'))) {
+    errors.push(`${relativeDocs(file)}: 用户手册禁止使用 Emoji，请改用可访问的 Lucide SVG`)
+  }
+}
 
 for (const file of pages) {
   const relative = relativeDocs(file)
@@ -225,6 +239,7 @@ const summary = {
   screenshots: screenshotCount,
   undocumented_features: errors.filter((error) => error.includes('docs 必须') || error.includes('未反向声明')).length,
   missing_source_anchors: errors.filter((error) => error.includes('源码锚点不存在') || error.includes('source_anchor 不存在')).length,
+  emoji_violations: errors.filter((error) => error.includes('禁止使用 Emoji')).length,
   errors,
 }
 
