@@ -10,7 +10,7 @@
   <a href="https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js">安装脚本</a> ·
   <a href="https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader">GreasyFork</a> ·
   <a href="work/main.js">脚本源码</a> ·
-  <a href="docs/index.md">用户手册</a> ·
+  <a href="https://sunbigfly.github.io/awesome-linuxdo-reader/">在线用户手册</a> ·
   <a href="docs/INTRODUCTION.md">项目介绍</a> ·
   <a href="CONTRIBUTING.md">参与开发</a> ·
   <a href="LICENSE">MIT License</a>
@@ -147,13 +147,7 @@
 
 ## 用户手册
 
-`docs/` 提供基于 VitePress 的正式中文用户手册，覆盖安装、阅读导航、社区互动、图片与媒体、全部设置、缓存、请求治理、隐私和故障排查。
-
-```bash
-npm install
-npm run docs:dev
-npm run docs:verify
-```
+直接打开 [在线用户手册](https://sunbigfly.github.io/awesome-linuxdo-reader/) 即可浏览，无需安装本项目、下载文档或运行本地服务。手册覆盖安装、阅读导航、社区互动、图片与媒体、全部设置、缓存、请求治理、隐私和故障排查。
 
 功能覆盖目录位于 [`docs/public/feature-catalog.json`](docs/public/feature-catalog.json)。每项用户可见能力都有稳定 `feature_id`、源码锚点、版本、验证日期、截图和对应文档；修改用户功能时必须同步更新。
 
