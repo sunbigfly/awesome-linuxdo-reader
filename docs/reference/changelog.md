@@ -7,10 +7,14 @@ since: 0.1.2
 version: 0.1.3
 status: current
 last_verified: 2026-07-24
-screenshots: []
+screenshots: ["/screenshots/guide-14-about.png"]
 ---
 
 # 更新记录
+
+![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about.png)
+
+<p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
 
 ## 0.1.3 — 阅读队列与主题配色
 

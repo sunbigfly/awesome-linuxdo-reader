@@ -6,13 +6,17 @@ source_anchors: ["@version"]
 since: 0.1.2
 version: 0.1.3
 status: current
-last_verified: 2026-07-23
-screenshots: []
+last_verified: 2026-07-24
+screenshots: ["/screenshots/guide-23-documentation-maintenance.png"]
 ---
 
 # 文档维护规范
 
 用户手册是功能交付的一部分。只要 `work/main.js` 的用户可见入口、行为、设置、数据边界或故障恢复发生变化，就必须更新对应文档。
+
+![线上文档维护规范中的功能字段和完成标准](/screenshots/guide-23-documentation-maintenance.png)
+
+<p class="image-caption">维护规范本身也是公开手册页面，字段、截图与验证规则都接受同一套自动检查。</p>
 
 ## 功能项字段
 
@@ -29,14 +33,14 @@ screenshots: []
 | `version` | 当前核验的 userscript 版本 |
 | `status` | `current`、`experimental` 或 `deprecated` |
 | `last_verified` | 最后通过源码/运行态核对的日期 |
-| `screenshots` | 相关真实浏览器截图，可为空数组 |
+| `screenshots` | 至少一张与页面主题直接相关的真实浏览器截图 |
 | `docs` | 至少一篇手册页面 |
 
 ## 页面字段
 
-所有公开手册页面必须维护 `title`、`description`、`feature_ids`、`source_anchors`、`since`、`version`、`status`、`last_verified` 和 `screenshots`。
+所有公开手册页面必须维护 `title`、`description`、`feature_ids`、`source_anchors`、`since`、`version`、`status`、`last_verified` 和非空 `screenshots`。
 
-页面 `feature_ids` 与功能目录 `docs` 必须双向匹配。源码锚点不用行号，因为大文件行号会频繁漂移。
+页面正文必须实际显示至少一张 `screenshots` 中登记的图片。页面 `feature_ids` 与功能目录 `docs` 必须双向匹配。源码锚点不用行号，因为大文件行号会频繁漂移。
 
 ## 一次功能更新的文档动作
 
@@ -44,7 +48,7 @@ screenshots: []
 2. 新能力创建 `feature_id`；既有能力保留编号。
 3. 更新对应分类手册和完整设置参考。
 4. 更新版本、验证日期、状态和更新记录。
-5. 只有界面结构或关键操作发生变化时更新截图。
+5. 核对正文图片与当前界面；界面结构或关键操作发生变化时重新拍摄。
 6. 运行：
 
 ```bash
@@ -55,6 +59,7 @@ npm run docs:build
 ## 截图标准
 
 - 通过真实浏览器采集，不用静态 HTML 冒充运行态。
+- 每个公开手册页面至少显示一张与页面主题直接相关的图片。
 - 展示一个明确功能状态，避免无关全页内容。
 - 默认避开私信、凭据、Cookie、请求正文和仅当前账号可见的敏感内容。
 - 仓库维护者明确授权时，公开页面、公开账号资料、头像、正文、通知摘要和统计可原样保留；当前 `guide-*` 批次按此授权未额外打码。
@@ -76,6 +81,8 @@ npm run docs:build
 - 缺失源码锚点 0；
 - 版本漂移 0；
 - Emoji 使用 0；
+- 正文无图片页面 0；
+- 正文图片未登记页面 0；
 - 缺失链接、图片和必填元数据 0。
 
 `docs:build` 必须完成 VitePress 生产构建。前端导航、搜索、暗色模式、截图和移动视口仍需真实浏览器抽查。

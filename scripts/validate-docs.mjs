@@ -148,6 +148,8 @@ for (const file of pages) {
   }
   if (!Array.isArray(meta.screenshots)) {
     errors.push(`${relative}: screenshots 必须是数组`)
+  } else if (meta.screenshots.length === 0) {
+    errors.push(`${relative}: screenshots 必须至少登记一张与页面主题相关的图片`)
   } else {
     for (const screenshot of meta.screenshots) {
       if (!assetExists(screenshot, file)) errors.push(`${relative}: 截图不存在：${screenshot}`)
@@ -163,10 +165,18 @@ for (const file of pages) {
     errors.push(`${relative}: status 必须为 current、experimental 或 deprecated`)
   }
 
+  const bodyImages = []
   for (const match of text.matchAll(/(!?)\[([^\]]*)\]\(([^)]+)\)/g)) {
     const [, image, label, reference] = match
     if (image && !label.trim()) errors.push(`${relative}: 图片缺少替代文本：${reference}`)
+    if (image) bodyImages.push(reference.trim().split(/[?#]/, 1)[0])
     if (!assetExists(reference.trim(), file)) errors.push(`${relative}: 链接或图片不存在：${reference}`)
+  }
+  if (bodyImages.length === 0) {
+    errors.push(`${relative}: 正文必须显示至少一张与页面主题相关的图片`)
+  } else if (Array.isArray(meta.screenshots) &&
+      !bodyImages.some((reference) => meta.screenshots.includes(reference))) {
+    errors.push(`${relative}: 正文图片必须至少有一张登记在 screenshots`)
   }
 }
 
@@ -240,6 +250,8 @@ const summary = {
   undocumented_features: errors.filter((error) => error.includes('docs 必须') || error.includes('未反向声明')).length,
   missing_source_anchors: errors.filter((error) => error.includes('源码锚点不存在') || error.includes('source_anchor 不存在')).length,
   emoji_violations: errors.filter((error) => error.includes('禁止使用 Emoji')).length,
+  pages_without_body_images: errors.filter((error) => error.includes('正文必须显示至少一张')).length,
+  pages_with_unregistered_body_images: errors.filter((error) => error.includes('正文图片必须至少有一张登记')).length,
   errors,
 }
 

@@ -8,8 +8,10 @@
     "since": "0.1.2",
     "version": "0.1.3",
     "status": "current",
-    "last_verified": "2026-07-23",
-    "screenshots": [],
+    "last_verified": "2026-07-24",
+    "screenshots": [
+      "assets/screenshots/guide-01-reader-overview.png"
+    ],
     "docs": [
       "getting-started/installation.md"
     ]
@@ -79,7 +81,9 @@
     "version": "0.1.3",
     "status": "current",
     "last_verified": "2026-07-23",
-    "screenshots": [],
+    "screenshots": [
+      "assets/screenshots/guide-21-reading-queue.png"
+    ],
     "docs": [
       "guide/reading-modes.md",
       "manage/troubleshooting.md"
@@ -131,8 +135,10 @@
     "since": "0.1.2",
     "version": "0.1.3",
     "status": "current",
-    "last_verified": "2026-07-23",
-    "screenshots": [],
+    "last_verified": "2026-07-24",
+    "screenshots": [
+      "assets/screenshots/guide-01-reader-overview.png"
+    ],
     "docs": [
       "guide/reading-modes.md",
       "settings/performance.md"
@@ -1598,9 +1604,11 @@
     "since": "0.1.2",
     "version": "0.1.3",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-24",
     "screenshots": [
-      "assets/screenshots/guide-14-about.png"
+      "assets/screenshots/guide-14-about.png",
+      "assets/screenshots/guide-22-feature-catalog.png",
+      "assets/screenshots/guide-23-documentation-maintenance.png"
     ],
     "docs": [
       "reference/feature-catalog.md",

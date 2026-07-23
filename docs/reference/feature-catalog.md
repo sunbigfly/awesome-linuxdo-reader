@@ -6,8 +6,8 @@ source_anchors: ["@version"]
 since: 0.1.2
 version: 0.1.3
 status: current
-last_verified: 2026-07-23
-screenshots: []
+last_verified: 2026-07-24
+screenshots: ["/screenshots/guide-22-feature-catalog.png"]
 ---
 
 <script setup>
@@ -25,11 +25,15 @@ const docLink = (document) => withBase(`/${document.replace(/\.md$/, '')}`)
 
 本目录由 `docs/public/feature-catalog.json` 驱动，是“当前功能是否已经写入手册”的事实表。每项都有唯一编号、源码锚点、首次纳入目录版本、当前版本、状态、验证日期、截图和至少一篇对应文档。
 
+![线上功能覆盖目录中的功能数量、分类、源码锚点和手册入口](/screenshots/guide-22-feature-catalog.png)
+
+<p class="image-caption">目录按分类展示 94 项当前能力，每项都可以回到对应手册页面。</p>
+
 <div class="doc-meta">
   <span>{{ catalog.length }} 项功能</span>
   <span>{{ Object.keys(grouped).length }} 个分类</span>
   <span>当前版本 0.1.3</span>
-  <span>核验日期 2026-07-23</span>
+  <span>核验日期 2026-07-24</span>
 </div>
 
 <section v-for="(features, category) in grouped" :key="category" class="catalog-section">

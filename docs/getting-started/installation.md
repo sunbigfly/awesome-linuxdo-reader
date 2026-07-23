@@ -6,13 +6,17 @@ source_anchors: ["@downloadURL", "@match"]
 since: 0.1.2
 version: 0.1.3
 status: current
-last_verified: 2026-07-23
-screenshots: []
+last_verified: 2026-07-24
+screenshots: ["/screenshots/guide-01-reader-overview.png"]
 ---
 
 # 安装与更新
 
 Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要先安装脚本管理器，再从 GreasyFork 安装正式版。
+
+![安装并启用脚本后，LINUX DO 列表页与增强阅读工作区同时可用](/screenshots/guide-01-reader-overview.png)
+
+<p class="image-caption">安装成功并刷新页面后，主题列表仍保留在宿主区域，主题可直接进入右侧增强阅读工作区。</p>
 
 ## 环境要求
 

@@ -6,11 +6,15 @@ source_anchors: ["PERSISTENT_CACHE_CONFIG", "@grant", "requestFlowPath", "@suppo
 since: 0.1.2
 version: 0.1.3
 status: current
-last_verified: 2026-07-23
-screenshots: []
+last_verified: 2026-07-24
+screenshots: ["/screenshots/guide-14-about.png"]
 ---
 
 # 隐私、权限与边界
+
+![关于面板中的版本、第三方组件、许可证和项目边界信息](/screenshots/guide-14-about.png)
+
+<p class="image-caption">关于面板集中展示当前版本、第三方组件、许可证和项目入口；账号数据与互动结果仍以 LINUX DO 原站为准。</p>
 
 ## userscript 元数据
 

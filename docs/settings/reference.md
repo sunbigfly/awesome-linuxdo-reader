@@ -6,11 +6,15 @@ source_anchors: ["PERFORMANCE_SETTING_GROUPS", "streamOverscanViewports", "neste
 since: 0.1.2
 version: 0.1.3
 status: current
-last_verified: 2026-07-23
-screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-04-font-settings.png", "/screenshots/guide-05-layout-settings.png", "/screenshots/guide-07-appearance-settings.png", "/screenshots/guide-09-performance-settings.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-13-data-management.png"]
+last_verified: 2026-07-24
+screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide-03-image-settings.png", "/screenshots/guide-04-font-settings.png", "/screenshots/guide-05-layout-settings.png", "/screenshots/guide-07-appearance-settings.png", "/screenshots/guide-09-performance-settings.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-13-data-management.png"]
 ---
 
 # 完整设置参考
+
+![设置中心中的分类导航、当前用户信息和配置入口](/screenshots/guide-02-settings-overview.png)
+
+<p class="image-caption">设置中心按用户信息、图片、字体、布局、外观、性能、监控和数据管理分类；本页汇总各分类的范围与默认值。</p>
 
 ## 用户信息
 
