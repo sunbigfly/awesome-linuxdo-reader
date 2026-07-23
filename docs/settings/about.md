@@ -1,8 +1,8 @@
 ---
 title: 关于
-description: 查看阅读器定位、能力摘要、当前版本、许可证和项目入口。
-feature_ids: ["REF-002"]
-source_anchors: ["@version"]
+description: 查看阅读器定位、能力摘要、当前版本、在线用户手册、许可证和项目入口。
+feature_ids: ["REF-002", "REF-003"]
+source_anchors: ["@version", "READER_MANUAL_URL"]
 since: 0.1.2
 version: 0.1.3
 status: current
@@ -25,8 +25,13 @@ screenshots: ["/screenshots/guide-14-about.png"]
 - 完整内容与楼层关系；
 - 原生社区互动；
 - 长帖数据与性能能力；
+- 在线用户手册入口；
 - 第三方组件和特别致谢；
 - 许可证与项目入口。
+
+## 打开在线用户手册
+
+点击“在线用户手册”会在新标签页打开当前正式手册。浏览手册无需安装项目、下载文档或运行本地服务。
 
 ## 核对版本
 

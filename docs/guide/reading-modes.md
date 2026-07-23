@@ -2,11 +2,11 @@
 title: 阅读模式与工作区
 description: 选择浮窗、全屏、嵌入或移动布局，理解多主题队列和虚拟阅读流。
 feature_ids: ["CORE-003", "CORE-004", "CORE-005", "CORE-006", "READ-001", "READ-002"]
-source_anchors: ["INITIAL_TOPIC_ID", "LIST_READER_MODES", "bypassReaderForThisTab", "READER_QUEUE_VISIBLE_BUBBLES", "stableStreamMountRange", "loadPostsByIds"]
+source_anchors: ["INITIAL_TOPIC_ID", "LIST_READER_MODES", "bypassReaderForThisTab", "LDP_READER_QUEUE_KEY", "stableStreamMountRange", "loadPostsByIds"]
 since: 0.1.2
 version: 0.1.3
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-05-layout-settings.png", "/screenshots/guide-09-performance-settings.png"]
 ---
 
@@ -28,16 +28,9 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-0
 
 ## 多主题阅读队列
 
-当你在同一列表页连续打开多个主题时，阅读器会建立阅读队列：
+阅读队列允许从列表页提前加入多个主题，在同一个工作区内切换，并为非当前主题后台准备正文、楼中楼和相关图片。队列会保存阅读位置、固定状态与浮层位置；刷新后仍可恢复。
 
-- 工作区可见最多 5 个队列气泡；
-- 更多主题仍保留在可滚动的队列列表中；
-- 切换主题时保存当前视口；
-- 对候选主题按小批次预取，优先保证当前阅读；
-- 可固定需要长期保留的主题，并一键清理其他未固定主题；
-- 关闭或移除队列项不会删除原站帖子。
-
-队列的目标是减少反复离开列表页，不是离线下载工具。预取仍受共享请求调度、缓存和 429 状态约束。
+完整的入口、状态说明、预加载边界、键盘操作和故障恢复见[阅读队列](/guide/reading-queue)。
 
 ## 长帖为什么不会越读越重
 

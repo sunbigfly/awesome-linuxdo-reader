@@ -2,11 +2,11 @@
 title: 楼层、时间轴与历史
 description: 使用时间轴、只看楼主、历史前后切换、多主题队列和实时阅读进度。
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014"]
-source_anchors: ["READER_QUEUE_VISIBLE_BUBBLES", "ldp-only-op-toggle", "bindTopicTimeline", "createReaderHistoryNavigation", "historyEdgeTriggerPercent", "READ_THRESHOLD", "bindReaderTopicPresence", "renderTopicNavLinks", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
+source_anchors: ["LDP_READER_QUEUE_KEY", "ldp-only-op-toggle", "bindTopicTimeline", "createReaderHistoryNavigation", "historyEdgeTriggerPercent", "READ_THRESHOLD", "bindReaderTopicPresence", "renderTopicNavLinks", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
 since: 0.1.2
 version: 0.1.3
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-16-history.png"]
 ---
 
@@ -57,7 +57,7 @@ screenshots: ["/screenshots/guide-16-history.png"]
 ## 相邻主题和队列
 
 - 主题导航用于沿 LINUX DO 提供的前后主题关系移动。
-- 阅读队列用于保留本次列表页会话中打开过的多个主题。
+- [阅读队列](/guide/reading-queue)用于准备接下来要读的多个主题，并在当前浏览器中跨刷新恢复。
 - 浏览历史用于跨会话恢复已读主题和位置。
 
 三者用途不同，但最终都进入同一个受缓存和请求调度约束的阅读工作区。

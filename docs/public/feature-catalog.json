@@ -89,14 +89,17 @@
     "feature_id": "CORE-006",
     "title": "多主题阅读队列",
     "category": "开始使用",
-    "description": "保留多个主题的阅读状态，并在队列中切换和预取。",
-    "source_anchor": "READER_QUEUE_VISIBLE_BUBBLES",
+    "description": "从列表页建立可跨刷新恢复的多主题队列，切换并恢复阅读位置，分层预加载正文、楼中楼和相关图片。",
+    "source_anchor": "LDP_READER_QUEUE_KEY",
     "since": "0.1.2",
     "version": "0.1.3",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-24",
     "screenshots": [],
     "docs": [
+      "getting-started/quick-start.md",
+      "getting-started/interface-tour.md",
+      "guide/reading-queue.md",
       "guide/reading-modes.md",
       "guide/navigation.md"
     ]
@@ -1603,6 +1606,23 @@
       "reference/feature-catalog.md",
       "reference/changelog.md",
       "reference/documentation.md",
+      "settings/about.md"
+    ]
+  },
+  {
+    "feature_id": "REF-003",
+    "title": "在线用户手册入口",
+    "category": "参考",
+    "description": "从设置的“关于”面板直接打开独立网页用户手册，无需安装文档环境。",
+    "source_anchor": "READER_MANUAL_URL",
+    "since": "0.1.3",
+    "version": "0.1.3",
+    "status": "current",
+    "last_verified": "2026-07-23",
+    "screenshots": [
+      "assets/screenshots/guide-14-about.png"
+    ],
+    "docs": [
       "settings/about.md"
     ]
   }

@@ -1,12 +1,12 @@
 ---
 title: 五分钟上手
 description: 从主题列表打开阅读器，完成阅读、导航、互动和关闭工作区。
-feature_ids: ["CORE-002", "CORE-003"]
-source_anchors: ["ldp-native-reader-trigger", "INITIAL_TOPIC_ID"]
+feature_ids: ["CORE-002", "CORE-003", "CORE-006"]
+source_anchors: ["ldp-native-reader-trigger", "INITIAL_TOPIC_ID", "ensureReaderQueueEntry"]
 since: 0.1.2
 version: 0.1.3
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-01-reader-overview.png"]
 ---
 
@@ -21,6 +21,8 @@ screenshots: ["/screenshots/guide-01-reader-overview.png"]
 - 若启用了“打开帖子起始楼层号为 #1”，普通主题链接会从主楼层开始。
 
 也可以用页面顶部的阅读器入口恢复最近一次阅读的主题。
+
+如果想连续阅读多篇文章，点击主题行中的加号可先把文章加入阅读队列并后台预加载。进入阅读器后，使用队列浮层在文章之间切换；详细操作见[阅读队列](/guide/reading-queue)。
 
 ## 2. 阅读与定位
 

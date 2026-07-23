@@ -58,6 +58,7 @@ export default defineConfig({
           text: '阅读',
           items: [
             { text: '阅读模式与工作区', link: '/guide/reading-modes' },
+            { text: '阅读队列', link: '/guide/reading-queue' },
             { text: '楼层、时间轴与历史', link: '/guide/navigation' },
             { text: '楼中楼与上下文', link: '/guide/thread-context' },
             { text: '图片、媒体与富内容', link: '/guide/content-and-media' },

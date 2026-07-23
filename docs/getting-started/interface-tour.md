@@ -1,23 +1,24 @@
 ---
 title: 界面总览
-description: 认识宿主区、标题栏、阅读流、时间轴、工具面板和设置中心。
-feature_ids: ["CORE-002", "READ-013"]
-source_anchors: ["ldp-native-reader-trigger", "ldp-meta-owner"]
+description: 认识宿主区、标题栏、阅读队列、阅读流、时间轴、工具面板和设置中心。
+feature_ids: ["CORE-002", "CORE-006", "READ-013"]
+source_anchors: ["ldp-native-reader-trigger", "ldp-reader-queue", "ldp-meta-owner"]
 since: 0.1.2
 version: 0.1.3
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-05-layout-settings.png"]
 ---
 
 # 界面总览
 
-阅读器由六个稳定区域组成。不同显示形态会改变尺寸和排列，但区域职责不变。
+阅读器由七个稳定区域组成。不同显示形态会改变尺寸和排列，但区域职责不变。
 
 | 区域 | 主要内容 | 常见操作 |
 | --- | --- | --- |
 | 宿主页面 | LINUX DO 主题列表或原始主题环境 | 继续浏览列表、选择另一个主题 |
 | 标题栏 | 主题标题、楼主、分类、标签、统计和布局控制 | 返回首页、跳到 #1、切换形态、关闭 |
+| 阅读队列 | 文章头像、阅读进度、预加载状态和完整列表 | 切换、固定、重试、移除和清理 |
 | 阅读流 | 主楼层、楼中楼、媒体和主题尾部操作 | 滚动、回复、互动、展开上下文 |
 | 时间轴 | 当前楼层、日期、总楼层与跳转位置 | 拖动或点击定位、回到顶部 |
 | 工具面板 | 消息、历史、收藏与回应 | 检索、翻页、多选和回跳 |
@@ -31,6 +32,10 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-0
 
 主楼层使用虚拟窗口渲染，离当前视口很远的楼层可能暂时卸载，但时间轴和高度占位会保留阅读连续性。楼层上的绿色关系线、引用提示、楼中楼区域和闪烁目标用于表达上下文，不代表原站数据被复制到另一个账号体系。
 
+## 阅读队列
+
+阅读队列浮层显示当前队列数量、主题头像、实际阅读进度和后台预加载状态。桌面端可以拖动并贴边收纳；移动端使用紧凑按钮打开列表。完整说明见[阅读队列](/guide/reading-queue)。
+
 ## 设置中心
 
 ![设置中心中的布局设置和三种形态配置](/screenshots/guide-05-layout-settings.png)
@@ -41,5 +46,6 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-0
 
 - `Esc`：关闭当前灯箱、预览层或浮动面板。
 - 方向键：图片灯箱前后翻图；部分时间轴和分页控件也支持键盘。
+- 阅读队列：`ArrowUp` / `ArrowDown` 移动焦点，`Enter` 或空格切换文章，`Esc` 收起列表。
 - `+` / `-` / `0`：在图片预览中缩放或适应窗口。
 - 可聚焦按钮提供可见焦点，状态切换使用 `aria-pressed`、`aria-selected` 或状态文本表达。
