@@ -4,7 +4,7 @@ description: 调整主楼层批量、DOM 窗口、楼中楼预取、并发、请
 feature_ids: ["READ-001", "READ-002", "SET-012", "SET-013", "SET-014", "SET-015", "MONITOR-003"]
 source_anchors: ["stableStreamMountRange", "loadPostsByIds", "PERFORMANCE_PRESETS", "streamOverscanViewports", "nestedPrefetchViewports", "requestMaxConcurrent", "READER_ENDPOINT_429_BASE_BLOCK_MS"]
 since: 0.1.2
-version: 0.1.2
+version: 0.1.3
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-09-performance-settings.png", "/screenshots/guide-11-request-flow.png"]

@@ -4,7 +4,7 @@ description: 查看当前账号资料、社区统计和 Connect 信任级别进�
 feature_ids: ["USER-005"]
 source_anchors: ["renderSettingsUserInfo"]
 since: 0.1.2
-version: 0.1.2
+version: 0.1.3
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-02-settings-overview.png"]

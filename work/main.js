@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      0.1.2
+// @version      0.1.3
 // @license      MIT
 // @description  面向 LINUX DO 的沉浸式增强阅读器，支持父回复预览、消息/历史/收藏、原图灯箱、主题布局、请求限流、缓存与 DOM 渲染管理。
 // @description:en An immersive LINUX DO reader with threaded context, community panels, image lightbox, layouts, request control, cache, and DOM rendering management.
@@ -26,7 +26,7 @@
   'use strict';
 
   const BASE = location.origin;
-  const READER_VERSION = '0.1.2';
+  const READER_VERSION = '0.1.3';
   const HOST_PAGE_WINDOW = globalThis.unsafeWindow || window;
   const TOPIC_CACHE_TTL = 90 * 1000;
   const READ_THRESHOLD = 1500;
@@ -251,6 +251,7 @@
   const LEGACY_FLOOR_PREVIEW_COLOR_DEFAULT = '#9a5b13';
   const LEGACY_FLOOR_PREVIEW_COLOR_DEFAULT_V2 = '#ec5809';
   const FLOOR_PREVIEW_COLOR_DEFAULT = '#dc2626';
+  const FLOOR_PREVIEW_COLOR_DARK_DEFAULT = '#f87171';
   const FLOOR_PREVIEW_HEIGHT_MIN = 180;
   const FLOOR_PREVIEW_HEIGHT_MAX = 720;
   const FLOOR_PREVIEW_HEIGHT_DEFAULT = 300;
@@ -395,20 +396,62 @@
   const IMAGE_PROFILE_DEFAULTS = Object.freeze(Object.fromEntries(
     READER_PROFILE_KEYS.map((profile) => [profile, IMAGE_PROFILE_DEFAULT])
   ));
-  const APPEARANCE_PROFILE_DEFAULT = Object.freeze({ accentColor: ACCENT_COLOR_DEFAULT, linkColor: LINK_COLOR_DEFAULT, zebraColor: ZEBRA_COLOR_DEFAULT, zebraRadius: ZEBRA_RADIUS_DEFAULT, listZebraColor: LIST_ZEBRA_COLOR_DEFAULT, replyLineColor: REPLY_LINE_COLOR_DEFAULT, replyLineWidth: REPLY_LINE_WIDTH_DEFAULT, replyLineRadius: REPLY_LINE_RADIUS_DEFAULT, quoteLineColor: QUOTE_LINE_COLOR_DEFAULT, quoteLineWidth: QUOTE_LINE_WIDTH_DEFAULT, dividerLineColor: DIVIDER_LINE_COLOR_DEFAULT, dividerLineWidth: DIVIDER_LINE_WIDTH_DEFAULT, floorPreviewColor: FLOOR_PREVIEW_COLOR_DEFAULT, floorPreviewHeight: FLOOR_PREVIEW_HEIGHT_DEFAULT });
+  const APPEARANCE_COLOR_KEYS = Object.freeze([
+    'accentColor', 'linkColor', 'zebraColor', 'listZebraColor',
+    'replyLineColor', 'quoteLineColor', 'dividerLineColor', 'floorPreviewColor',
+  ]);
+  const APPEARANCE_COLOR_THEME_LIMITS = Object.freeze({
+    accentColor: Object.freeze({ saturationMax: 82, light: [30, 55], dark: [58, 78] }),
+    linkColor: Object.freeze({ saturationMax: 90, light: [30, 55], dark: [60, 80] }),
+    zebraColor: Object.freeze({ saturationMax: 70, light: [92, 100], dark: [10, 20] }),
+    listZebraColor: Object.freeze({ saturationMax: 38, light: [88, 98], dark: [10, 20] }),
+    replyLineColor: Object.freeze({ saturationMax: 76, light: [30, 58], dark: [55, 78] }),
+    quoteLineColor: Object.freeze({ saturationMax: 50, light: [72, 92], dark: [22, 42] }),
+    dividerLineColor: Object.freeze({ saturationMax: 40, light: [80, 94], dark: [18, 34] }),
+    floorPreviewColor: Object.freeze({ saturationMax: 88, light: [35, 58], dark: [58, 78] }),
+  });
+  const APPEARANCE_PROFILE_SETTING_KEYS = Object.freeze([
+    'accentColor', 'linkColor', 'zebraColor', 'zebraRadius', 'listZebraColor',
+    'structureColorsEnabled', 'replyLineColor', 'replyLineWidth', 'replyLineRadius',
+    'quoteLineColor', 'quoteLineWidth', 'dividerLineColor', 'dividerLineWidth',
+    'floorPreviewColor', 'floorPreviewHeight',
+  ]);
+  const APPEARANCE_PROFILE_DEFAULT = Object.freeze({
+    accentColor: ACCENT_COLOR_DEFAULT,
+    accentColorDark: READER_THEME_VARIABLES.dark['--tertiary'],
+    linkColor: LINK_COLOR_DEFAULT,
+    linkColorDark: READER_THEME_VARIABLES.dark['--d-link-color'],
+    zebraColor: ZEBRA_COLOR_DEFAULT,
+    zebraColorDark: READER_THEME_VARIABLES.dark['--ldp-zebra-color'],
+    zebraRadius: ZEBRA_RADIUS_DEFAULT,
+    listZebraColor: LIST_ZEBRA_COLOR_DEFAULT,
+    listZebraColorDark: READER_THEME_VARIABLES.dark['--primary-very-low'],
+    structureColorsEnabled: true,
+    replyLineColor: REPLY_LINE_COLOR_DEFAULT,
+    replyLineColorDark: READER_THEME_VARIABLES.dark['--ldp-reply-line-color'],
+    replyLineWidth: REPLY_LINE_WIDTH_DEFAULT,
+    replyLineRadius: REPLY_LINE_RADIUS_DEFAULT,
+    quoteLineColor: QUOTE_LINE_COLOR_DEFAULT,
+    quoteLineColorDark: READER_THEME_VARIABLES.dark['--ldp-quote-line-color'],
+    quoteLineWidth: QUOTE_LINE_WIDTH_DEFAULT,
+    dividerLineColor: DIVIDER_LINE_COLOR_DEFAULT,
+    dividerLineColorDark: READER_THEME_VARIABLES.dark['--ldp-divider-line-color'],
+    dividerLineWidth: DIVIDER_LINE_WIDTH_DEFAULT,
+    floorPreviewColor: FLOOR_PREVIEW_COLOR_DEFAULT,
+    floorPreviewColorDark: FLOOR_PREVIEW_COLOR_DARK_DEFAULT,
+    floorPreviewHeight: FLOOR_PREVIEW_HEIGHT_DEFAULT,
+  });
   const APPEARANCE_PROFILE_DEFAULTS = Object.freeze(Object.fromEntries(
     READER_PROFILE_KEYS.map((profile) => [profile, APPEARANCE_PROFILE_DEFAULT])
   ));
-  const APPEARANCE_PROFILE_VALUE_KEYS = Object.freeze([
-    'accentColor', 'linkColor', 'zebraColor', 'zebraRadius', 'listZebraColor',
-    'replyLineColor', 'replyLineWidth', 'replyLineRadius', 'quoteLineColor', 'quoteLineWidth', 'dividerLineColor', 'dividerLineWidth',
-    'floorPreviewColor', 'floorPreviewHeight',
-  ]);
+  const APPEARANCE_PROFILE_VALUE_KEYS = Object.freeze(APPEARANCE_PROFILE_SETTING_KEYS.flatMap((key) =>
+    APPEARANCE_COLOR_KEYS.includes(key) ? [key, `${key}Dark`] : [key]
+  ));
   const READER_PROFILE_SHARING_FIELDS = Object.freeze({
     image: Object.freeze(['scale']),
     font: Object.freeze(['family', 'weight', 'interfaceColor', 'interface', 'postFamily', 'postWeight', 'postColor', 'post', 'composerFamily', 'composerWeight', 'composerColor', 'composer']),
     layout: LAYOUT_REGION_KEYS,
-    appearance: APPEARANCE_PROFILE_VALUE_KEYS,
+    appearance: APPEARANCE_PROFILE_SETTING_KEYS,
   });
   const READER_PROFILE_SHARING_DEFAULTS = Object.freeze(READER_PROFILE_SHARING_KEYS.reduce((result, category) => {
     result[category] = Object.freeze(READER_PROFILE_SHARING_FIELDS[category].reduce((fields, field) => {
@@ -506,6 +549,9 @@
   const HISTORY_EDGE_TRIGGER_MIN = 0;
   const HISTORY_EDGE_TRIGGER_MAX = 15;
   const HISTORY_EDGE_TRIGGER_DEFAULT = 15;
+  const READER_QUEUE_VISIBLE_BUBBLES = 5;
+  const READER_QUEUE_PREFETCH_BATCH_SIZE = 20;
+  const READER_QUEUE_PREFETCH_MAX_POSTS = 200;
   const READER_LOADING_ANIMATION_KEYS = Object.freeze([
     'portal', 'constellation', 'corridor', 'typewave', 'crystal',
     'marginalia', 'chapters', 'quoteecho', 'footnotes', 'inkverse',
@@ -569,6 +615,10 @@
   const SHARED_ISSUE_FORBIDDEN_TOPIC_IDS = new Set();
   let NOTIFICATION_UNREAD_COUNT = 0;
   let ACTIVE_READER_REQUEST_SCHEDULER = null;
+  const READER_QUEUE_ENTRIES = [];
+  const READER_QUEUE_BY_TOPIC = new Map();
+  let READER_QUEUE_ACTIVE_TOPIC_ID = '';
+  let READER_QUEUE_PREFETCH_RUNNING = false;
   let SHARED_REQUEST_COORDINATOR = null;
   let READER_PORTAL_HOST = null;
   let READER_PORTAL_ROOT = null;
@@ -3450,6 +3500,664 @@
     };
   }
 
+  function readerQueueEntry(topicId) {
+    const safeTopicId = Number(topicId);
+    return safeTopicId > 0 ? READER_QUEUE_BY_TOPIC.get(String(safeTopicId)) || null : null;
+  }
+
+  function readerQueueTopicSummary(topicId, metadata = {}, topic = null) {
+    const safeTopicId = Number(topicId);
+    const cachedTopic = topic || getCachedTopicData(safeTopicId);
+    const historyEntry = readTopicHistory().find((item) => Number(item.topicId) === safeTopicId);
+    const posts = cachedTopic && cachedTopic.post_stream && Array.isArray(cachedTopic.post_stream.posts)
+      ? cachedTopic.post_stream.posts : [];
+    const firstPost = posts.find((post) => Number(post && post.post_number) === 1);
+    return {
+      title: String(
+        metadata.title || cachedTopic && cachedTopic.title || historyEntry && historyEntry.title ||
+        `帖子 #${safeTopicId}`
+      ).replace(/\s+/g, ' ').trim(),
+      avatarTemplate: String(
+        metadata.avatarTemplate ||
+        cachedTopic && cachedTopic.details && cachedTopic.details.created_by &&
+          cachedTopic.details.created_by.avatar_template ||
+        firstPost && firstPost.avatar_template ||
+        historyEntry && historyEntry.avatarTemplate || ''
+      ),
+      avatarSource: String(metadata.avatarSource || ''),
+      ownerUsername: String(
+        metadata.ownerUsername ||
+        cachedTopic && cachedTopic.details && cachedTopic.details.created_by &&
+          cachedTopic.details.created_by.username ||
+        firstPost && firstPost.username ||
+        historyEntry && historyEntry.ownerUsername || ''
+      ),
+      navMetadata: mergeTopicNavMetadata(
+        metadata.navMetadata || {},
+        cachedTopicNavMetadata(cachedTopic),
+      ),
+    };
+  }
+
+  function readerQueueMetadataFromLink(link, topicId) {
+    const source = link && link.nodeType === Node.ELEMENT_NODE ? link : null;
+    const card = source && source.closest(
+      'tr.topic-list-item,.topic-list-item,.latest-topic-list-item,.search-result-topic,.fps-result,.category-topic-link'
+    );
+    const titleLink = card && card.querySelector(
+      'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],.link-top-line a[href*="/t/"],a[href*="/t/"]'
+    );
+    const avatar = card && card.querySelector(':is(.posters,.topic-poster) img.avatar,img.avatar');
+    const ownerNode = card && card.querySelector('[data-user-card]');
+    return {
+      title: String(
+        source && source.dataset.topicTitle ||
+        titleLink && (titleLink.dataset.topicTitle || titleLink.textContent) ||
+        source && source.textContent || `帖子 #${topicId}`
+      ).replace(/\s+/g, ' ').trim(),
+      avatarSource: String(avatar && (avatar.currentSrc || avatar.src) || ''),
+      ownerUsername: String(ownerNode && ownerNode.dataset.userCard || ''),
+      navMetadata: readTopicNavMetadata(source, topicId),
+    };
+  }
+
+  function readerQueueLoadedCounts(topic) {
+    const postStream = topic && topic.post_stream || {};
+    const stream = Array.isArray(postStream.stream) ? postStream.stream.filter(Boolean) : [];
+    const streamIds = new Set(stream.map(Number).filter(Boolean));
+    const loadedIds = new Set((Array.isArray(postStream.posts) ? postStream.posts : [])
+      .map((post) => Number(post && post.id)).filter((postId) => postId && (!streamIds.size || streamIds.has(postId))));
+    return {
+      total: stream.length || Math.max(0, Number(topic && topic.posts_count) || 0),
+      loaded: loadedIds.size,
+    };
+  }
+
+  function readerQueueCoverage(entry) {
+    const total = Math.max(0, Number(entry && entry.totalCount) || 0);
+    if (!entry || !total) return 0;
+    return Math.max(0, Math.min(100, Math.round(entry.seenPostNumbers.size / total * 100)));
+  }
+
+  function readerQueueStatusText(entry) {
+    const coverage = readerQueueCoverage(entry);
+    const viewed = entry.seenPostNumbers.size;
+    const total = Math.max(0, Number(entry.totalCount) || 0);
+    const floor = Math.max(0, Number(entry.viewport && entry.viewport.postNumber) || 0);
+    const pinned = entry.pinned ? '已固定 · ' : '';
+    if (String(entry.topicId) === READER_QUEUE_ACTIVE_TOPIC_ID) {
+      return `${pinned}已浏览 ${viewed}/${total || '?'}${floor ? ` · 当前 #${floor}` : ''}`;
+    }
+    if (entry.loadState === 'ready') return `${pinned}已预加载 · 已浏览 ${coverage}%`;
+    if (entry.loadState === 'loading') {
+      return `${pinned}正在加载 ${Math.max(0, Number(entry.loadedCount) || 0)}/${total || '?'}`;
+    }
+    if (entry.loadState === 'partial') {
+      return `${pinned}已预加载 ${Math.max(0, Number(entry.loadedCount) || 0)}/${total || '?'} · 已浏览 ${coverage}%`;
+    }
+    if (entry.loadState === 'error') return `${pinned}预加载失败，点击重试`;
+    return `${pinned}等待预加载 · 已浏览 ${coverage}%`;
+  }
+
+  function readerQueueAvatarHtml(entry) {
+    const fallback = String(entry.title || '?').trim().slice(0, 1).toUpperCase() || '?';
+    const avatar = persistentAvatarHtml(
+      entry.avatarTemplate || entry.avatarSource,
+      64,
+      'ldp-reader-queue-avatar-image',
+      fallback,
+    );
+    if (avatar) return avatar;
+    return `<span>${esc(fallback)}</span>`;
+  }
+
+  function syncReaderQueueScrollHint(rail) {
+    const bubbles = rail && rail.querySelector('.ldp-reader-queue-bubbles');
+    const hint = rail && rail.querySelector('.ldp-reader-queue-scroll-hint');
+    if (!bubbles || !hint) return;
+    const maxScroll = Math.max(0, bubbles.scrollHeight - bubbles.clientHeight);
+    const hasOverflow = maxScroll >= 2;
+    hint.hidden = !hasOverflow;
+    if (!hasOverflow) return;
+    const scrollUp = bubbles.scrollTop >= maxScroll - 2;
+    hint.classList.toggle('is-up', scrollUp);
+    hint.dataset.scrollDirection = scrollUp ? '-1' : '1';
+    hint.setAttribute('aria-label', scrollUp ? '回到队列上方头像' : '显示下方更多队列头像');
+  }
+
+  function renderReaderQueueSurface(overlay) {
+    const rail = overlay && overlay.querySelector('.ldp-reader-queue');
+    if (!rail) return;
+    const toggle = rail.querySelector('.ldp-reader-queue-toggle');
+    const count = toggle && toggle.querySelector('b');
+    const bubbles = rail.querySelector('.ldp-reader-queue-bubbles');
+    const scrollHint = rail.querySelector('.ldp-reader-queue-scroll-hint');
+    const panel = rail.querySelector('.ldp-reader-queue-panel');
+    const list = rail.querySelector('.ldp-reader-queue-list');
+    const panelCount = rail.querySelector('.ldp-reader-queue-panel-count');
+    const clear = rail.querySelector('.ldp-reader-queue-clear');
+    const panelWasOpen = panel && !panel.hidden;
+    const previousActiveTopicId = rail.dataset.readerQueueActiveTopicId || '';
+    const previousBubbleScrollTop = bubbles ? bubbles.scrollTop : 0;
+    rail.hidden = READER_QUEUE_ENTRIES.length === 0;
+    if (!toggle || !count || !bubbles || !scrollHint || !panel || !list || !panelCount || !clear) return;
+    count.textContent = String(READER_QUEUE_ENTRIES.length);
+    toggle.setAttribute('aria-label', `阅读队列，共 ${READER_QUEUE_ENTRIES.length} 篇`);
+    panelCount.textContent = `${READER_QUEUE_ENTRIES.length} 篇`;
+    const activeEntry = readerQueueEntry(READER_QUEUE_ACTIVE_TOPIC_ID);
+    clear.disabled = !READER_QUEUE_ENTRIES.some((entry) => entry !== activeEntry && !entry.pinned);
+    bubbles.style.maxHeight = `${READER_QUEUE_VISIBLE_BUBBLES * 32 +
+      Math.max(0, READER_QUEUE_VISIBLE_BUBBLES - 1) * 6 + 8}px`;
+    releasePersistentAvatarImages(bubbles);
+    bubbles.innerHTML = READER_QUEUE_ENTRIES.map((entry) => {
+      const active = String(entry.topicId) === READER_QUEUE_ACTIVE_TOPIC_ID;
+      const coverage = readerQueueCoverage(entry);
+      const removable = READER_QUEUE_ENTRIES.length > 1 || !active;
+      return `<span class="ldp-reader-queue-bubble-shell${entry.pinned ? ' is-pinned' : ''}">
+          <button class="ldp-reader-queue-bubble${active ? ' is-active' : ''} is-${entry.loadState}" type="button"
+            data-reader-queue-topic-id="${entry.topicId}" aria-current="${active ? 'true' : 'false'}"
+            aria-label="${escAttr(`${entry.title}，${readerQueueStatusText(entry)}`)}"
+            data-ldp-tooltip-label="${escAttr(`${entry.title} · ${readerQueueStatusText(entry)}`)}"
+            style="--ldp-reader-queue-progress:${coverage * 3.6}deg">
+            <span class="ldp-reader-queue-avatar">${readerQueueAvatarHtml(entry)}</span>
+            <i aria-hidden="true"></i>
+          </button>
+          ${entry.pinned ? `<span class="ldp-reader-queue-bubble-pin" aria-hidden="true">${icon('pin')}</span>` : ''}
+          <button class="ldp-reader-queue-bubble-remove" type="button"
+            data-reader-queue-topic-id="${entry.topicId}" aria-label="${escAttr(`从阅读队列移除 ${entry.title}`)}"
+            ${removable ? '' : 'disabled'}>${icon('x')}</button>
+        </span>`;
+    }).join('');
+    releasePersistentAvatarImages(list);
+    list.innerHTML = READER_QUEUE_ENTRIES.map((entry) => {
+      const active = String(entry.topicId) === READER_QUEUE_ACTIVE_TOPIC_ID;
+      const coverage = readerQueueCoverage(entry);
+      const removable = READER_QUEUE_ENTRIES.length > 1 || !active;
+      return `<div class="ldp-reader-queue-row${active ? ' is-active' : ''}${entry.pinned ? ' is-pinned' : ''}" role="option" tabindex="0"
+          aria-selected="${active ? 'true' : 'false'}" data-reader-queue-topic-id="${entry.topicId}">
+          <span class="ldp-reader-queue-row-progress" style="--ldp-reader-queue-progress:${coverage * 3.6}deg">
+            <span class="ldp-reader-queue-avatar">${readerQueueAvatarHtml(entry)}</span>
+          </span>
+          <span class="ldp-reader-queue-row-copy">
+            <strong>${esc(entry.title)}</strong>
+            <small>${esc(readerQueueStatusText(entry))}</small>
+          </span>
+          <span class="ldp-reader-queue-row-actions">
+            ${entry.loadState === 'error'
+              ? `<button class="ldp-reader-queue-retry" type="button" aria-label="重新预加载">${icon('rotateCcw')}</button>`
+              : ''}
+            <button class="ldp-reader-queue-pin${entry.pinned ? ' active' : ''}" type="button"
+              aria-label="${entry.pinned ? '取消固定，离开后自动移出队列' : '固定文章，离开后保留在队列'}"
+              aria-pressed="${entry.pinned ? 'true' : 'false'}">${icon('pin')}</button>
+            <button class="ldp-reader-queue-remove" type="button" aria-label="从阅读队列移除"${removable ? '' : ' disabled'}>${icon('x')}</button>
+          </span>
+        </div>`;
+    }).join('');
+    hydratePersistentAvatarImages(bubbles, POST_REQUEST_PRIORITY.auxiliary);
+    hydratePersistentAvatarImages(list, POST_REQUEST_PRIORITY.auxiliary);
+    const activeChanged = previousActiveTopicId !== READER_QUEUE_ACTIVE_TOPIC_ID;
+    rail.dataset.readerQueueActiveTopicId = READER_QUEUE_ACTIVE_TOPIC_ID;
+    if (activeChanged) {
+      const activeBubble = bubbles.querySelector('.ldp-reader-queue-bubble.is-active');
+      if (activeBubble) {
+        const top = activeBubble.offsetTop;
+        const bottom = top + activeBubble.offsetHeight;
+        if (top < bubbles.scrollTop) bubbles.scrollTop = Math.max(0, top - 4);
+        else if (bottom > bubbles.scrollTop + bubbles.clientHeight) {
+          bubbles.scrollTop = Math.max(0, bottom - bubbles.clientHeight + 4);
+        }
+      }
+    } else {
+      bubbles.scrollTop = Math.min(previousBubbleScrollTop, Math.max(0, bubbles.scrollHeight - bubbles.clientHeight));
+    }
+    syncReaderQueueScrollHint(rail);
+    panel.hidden = !panelWasOpen;
+    toggle.setAttribute('aria-expanded', String(panelWasOpen));
+  }
+
+  function syncReaderQueueSurfaces() {
+    document.querySelectorAll('.ldp-reader-queue-add[data-reader-queue-topic-id]').forEach((button) => {
+      const added = !!readerQueueEntry(button.dataset.readerQueueTopicId);
+      if (button.dataset.readerQueueAdded === String(added)) return;
+      button.dataset.readerQueueAdded = String(added);
+      button.classList.toggle('is-added', added);
+      button.innerHTML = icon(added ? 'check' : 'plus');
+      button.setAttribute('aria-label', added ? '从阅读队列移除' : '加入阅读队列并后台预加载');
+      button.setAttribute('title', added ? '从阅读队列移除' : '加入阅读队列并后台预加载');
+    });
+    if (CURRENT_OVERLAY && typeof CURRENT_OVERLAY._ldpSyncReaderQueue === 'function') {
+      CURRENT_OVERLAY._ldpSyncReaderQueue();
+    }
+  }
+
+  function updateReaderQueueEntryFromTopic(entry, topic, totalHint = 0) {
+    if (!entry || !topic) return;
+    const summary = readerQueueTopicSummary(entry.topicId, entry, topic);
+    entry.title = summary.title;
+    entry.avatarTemplate = summary.avatarTemplate || entry.avatarTemplate;
+    entry.avatarSource = summary.avatarSource || entry.avatarSource;
+    entry.ownerUsername = summary.ownerUsername || entry.ownerUsername;
+    entry.navMetadata = summary.navMetadata;
+    const counts = readerQueueLoadedCounts(topic);
+    entry.totalCount = Math.max(0, Number(totalHint) || counts.total || entry.totalCount || 0);
+    entry.loadedCount = Math.min(entry.totalCount || counts.loaded, counts.loaded);
+    if (entry.totalCount > 0 && entry.loadedCount >= entry.totalCount) entry.loadState = 'ready';
+    else if (entry.loadState === 'ready') entry.loadState = 'queued';
+    entry.error = '';
+    syncReaderQueueSurfaces();
+  }
+
+  function ensureReaderQueueEntry(topicId, metadata = {}, options = {}) {
+    const safeTopicId = Number(topicId);
+    if (!(safeTopicId > 0)) return null;
+    let entry = readerQueueEntry(safeTopicId);
+    const summary = readerQueueTopicSummary(safeTopicId, metadata);
+    if (!entry) {
+      entry = {
+        topicId: safeTopicId,
+        title: summary.title,
+        avatarTemplate: summary.avatarTemplate,
+        avatarSource: summary.avatarSource,
+        ownerUsername: summary.ownerUsername,
+        navMetadata: summary.navMetadata,
+        addedAt: Date.now(),
+        loadState: 'queued',
+        loadedCount: 0,
+        totalCount: 0,
+        viewport: null,
+        seenPostNumbers: new Set(),
+        prefetchController: null,
+        switching: false,
+        pinned: false,
+        error: '',
+      };
+      READER_QUEUE_ENTRIES.push(entry);
+      READER_QUEUE_BY_TOPIC.set(String(safeTopicId), entry);
+      const cachedTopic = getCachedTopicData(safeTopicId);
+      if (cachedTopic) updateReaderQueueEntryFromTopic(entry, cachedTopic);
+    } else {
+      entry.title = summary.title || entry.title;
+      entry.avatarTemplate = summary.avatarTemplate || entry.avatarTemplate;
+      entry.avatarSource = summary.avatarSource || entry.avatarSource;
+      entry.ownerUsername = summary.ownerUsername || entry.ownerUsername;
+      entry.navMetadata = mergeTopicNavMetadata(summary.navMetadata, entry.navMetadata);
+      if (entry.loadState === 'error' && options.retry === true) {
+        entry.loadState = 'queued';
+        entry.error = '';
+      }
+    }
+    syncReaderQueueSurfaces();
+    if (options.prefetch !== false) scheduleReaderQueuePrefetch();
+    return entry;
+  }
+
+  function saveReaderQueueViewport(topicId, viewport) {
+    const entry = readerQueueEntry(topicId);
+    const normalized = normalizeReaderHistoryViewport(viewport);
+    if (!entry || !normalized) return;
+    entry.viewport = normalized;
+    syncReaderQueueSurfaces();
+  }
+
+  function activateReaderQueueEntry(entry) {
+    if (!entry) return;
+    READER_QUEUE_ACTIVE_TOPIC_ID = String(entry.topicId);
+    if (entry.prefetchController) {
+      entry.prefetchController.abort();
+      entry.prefetchController = null;
+      if (entry.loadState === 'loading') entry.loadState = 'queued';
+    }
+    syncReaderQueueSurfaces();
+  }
+
+  async function switchReaderQueueTopic(topicId) {
+    const entry = readerQueueEntry(topicId);
+    if (!entry || entry.switching) return;
+    if (String(entry.topicId) === READER_QUEUE_ACTIVE_TOPIC_ID &&
+        CURRENT_OVERLAY && Number(CURRENT_OVERLAY.dataset.topicId) === entry.topicId) {
+      const panel = CURRENT_OVERLAY.querySelector('.ldp-reader-queue-panel');
+      const toggle = CURRENT_OVERLAY.querySelector('.ldp-reader-queue-toggle');
+      if (panel) panel.hidden = true;
+      if (toggle) toggle.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    const activeTopicId = Number(CURRENT_OVERLAY && CURRENT_OVERLAY.dataset.topicId);
+    if (activeTopicId > 0 && typeof CURRENT_OVERLAY._ldpCaptureHistoryViewport === 'function') {
+      saveReaderQueueViewport(activeTopicId, CURRENT_OVERLAY._ldpCaptureHistoryViewport());
+    }
+    entry.switching = true;
+    syncReaderQueueSurfaces();
+    try {
+      await openModal(entry.topicId, {
+        targetPostNumber: entry.viewport ? entry.viewport.postNumber : 0,
+        restoreViewport: entry.viewport || undefined,
+        topicNavMetadata: entry.navMetadata,
+        readerQueueMetadata: entry,
+        settleTargetJump: true,
+      });
+    } finally {
+      entry.switching = false;
+      syncReaderQueueSurfaces();
+    }
+  }
+
+  function removeReaderQueueEntry(topicId) {
+    const entry = readerQueueEntry(topicId);
+    if (!entry) return false;
+    const index = READER_QUEUE_ENTRIES.indexOf(entry);
+    const active = String(entry.topicId) === READER_QUEUE_ACTIVE_TOPIC_ID;
+    const currentReaderShowsEntry = CURRENT_OVERLAY && CURRENT_OVERLAY.isConnected &&
+      Number(CURRENT_OVERLAY.dataset.topicId) === Number(entry.topicId);
+    if (active && currentReaderShowsEntry && READER_QUEUE_ENTRIES.length === 1) {
+      showSelectionToast('当前文章是队列中的最后一篇');
+      return false;
+    }
+    if (entry.prefetchController) entry.prefetchController.abort();
+    READER_QUEUE_BY_TOPIC.delete(String(entry.topicId));
+    if (index >= 0) READER_QUEUE_ENTRIES.splice(index, 1);
+    let switching = false;
+    if (active) {
+      READER_QUEUE_ACTIVE_TOPIC_ID = '';
+      const next = READER_QUEUE_ENTRIES[Math.min(index, READER_QUEUE_ENTRIES.length - 1)] ||
+        READER_QUEUE_ENTRIES[index - 1] || null;
+      if (next && currentReaderShowsEntry) {
+        switching = true;
+        void switchReaderQueueTopic(next.topicId);
+      } else if (next) {
+        READER_QUEUE_ACTIVE_TOPIC_ID = String(next.topicId);
+      }
+    }
+    syncReaderQueueSurfaces();
+    if (!switching) scheduleReaderQueuePrefetch();
+    return true;
+  }
+
+  function toggleReaderQueuePinned(topicId) {
+    const entry = readerQueueEntry(topicId);
+    if (!entry) return false;
+    entry.pinned = !entry.pinned;
+    syncReaderQueueSurfaces();
+    showSelectionToast(entry.pinned ? '已固定，离开后仍保留在队列' : '已取消固定，离开后将自动出队');
+    return true;
+  }
+
+  function autoDequeueReaderQueueEntry(topicId) {
+    const entry = readerQueueEntry(topicId);
+    if (!entry || entry.pinned) return false;
+    return removeReaderQueueEntry(entry.topicId);
+  }
+
+  function clearReaderQueueEntries() {
+    const currentTopicId = Number(CURRENT_OVERLAY && CURRENT_OVERLAY.dataset.topicId) ||
+      Number(READER_QUEUE_ACTIVE_TOPIC_ID);
+    const keep = readerQueueEntry(currentTopicId);
+    const retained = READER_QUEUE_ENTRIES.filter((entry) => entry === keep || entry.pinned);
+    const retainedEntries = new Set(retained);
+    const removable = READER_QUEUE_ENTRIES.filter((entry) => !retainedEntries.has(entry));
+    if (!removable.length) {
+      showSelectionToast('队列中没有可清理的未固定文章');
+      return false;
+    }
+    const confirmed = globalThis.confirm(
+      `确认清理队列中的其他 ${removable.length} 篇文章？\n\n` +
+      '当前文章和已固定文章会保留，正文、头像和图片缓存不会删除。'
+    );
+    if (!confirmed) return false;
+    removable.forEach((entry) => {
+      if (entry.prefetchController) entry.prefetchController.abort();
+      READER_QUEUE_BY_TOPIC.delete(String(entry.topicId));
+    });
+    READER_QUEUE_ENTRIES.splice(0, READER_QUEUE_ENTRIES.length, ...retained);
+    READER_QUEUE_ACTIVE_TOPIC_ID = keep ? String(keep.topicId) : '';
+    syncReaderQueueSurfaces();
+    scheduleReaderQueuePrefetch();
+    showSelectionToast(`已从队列清理 ${removable.length} 篇文章`);
+    return true;
+  }
+
+  async function prefetchReaderQueueEntry(entry) {
+    if (!entry || !CURRENT_OVERLAY || String(entry.topicId) === READER_QUEUE_ACTIVE_TOPIC_ID ||
+        !READER_QUEUE_BY_TOPIC.has(String(entry.topicId))) return;
+    const controller = new AbortController();
+    entry.prefetchController = controller;
+    entry.loadState = 'loading';
+    entry.error = '';
+    syncReaderQueueSurfaces();
+    try {
+      let topic = getCachedTopicData(entry.topicId);
+      const cachedStream = topic && topic.post_stream && Array.isArray(topic.post_stream.stream)
+        ? topic.post_stream.stream : [];
+      const expectedCount = Math.max(0, Number(topic && topic.posts_count) || 0);
+      if (!topic || !cachedStream.length || expectedCount > cachedStream.length) {
+        const freshTopic = await fetchJSON(`${BASE}/t/${entry.topicId}.json?forceLoad=true`, {
+          signal: controller.signal,
+          cacheMode: 'refresh',
+          key: `reader-queue-topic:${entry.topicId}`,
+          priority: POST_REQUEST_PRIORITY.background,
+          fetchOptions: {
+            method: 'GET',
+            credentials: 'include',
+            cache: 'no-store',
+            headers: {
+              'Accept': 'application/json, text/javascript, */*; q=0.01',
+              'X-Requested-With': 'XMLHttpRequest',
+              'Discourse-Present': 'true',
+            },
+          },
+        });
+        if (topic) mergeMissingSnapshotPosts(freshTopic, topic);
+        topic = freshTopic;
+        setCachedTopicData(entry.topicId, topic, { fetchedAt: Date.now(), source: 'network' });
+      }
+      updateReaderQueueEntryFromTopic(entry, topic);
+      const postStream = topic && topic.post_stream || {};
+      const stream = Array.isArray(postStream.stream) ? postStream.stream.filter(Boolean) : [];
+      const preloadStream = stream.slice(0, READER_QUEUE_PREFETCH_MAX_POSTS);
+      let loadedIds = new Set((Array.isArray(postStream.posts) ? postStream.posts : [])
+        .map((post) => Number(post && post.id)).filter(Boolean));
+      let missing = preloadStream.filter((postId) => !loadedIds.has(Number(postId)));
+      while (missing.length && READER_QUEUE_BY_TOPIC.has(String(entry.topicId)) &&
+          String(entry.topicId) !== READER_QUEUE_ACTIVE_TOPIC_ID) {
+        const ids = missing.slice(0, READER_QUEUE_PREFETCH_BATCH_SIZE);
+        const query = ids.map((postId) => `post_ids[]=${encodeURIComponent(postId)}`).join('&');
+        const part = await fetchJSON(`${BASE}/t/${entry.topicId}/posts.json?${query}`, {
+          signal: controller.signal,
+          key: `reader-queue-posts:${entry.topicId}:${ids.join(',')}`,
+          priority: POST_REQUEST_PRIORITY.background,
+        });
+        const before = loadedIds.size;
+        mergeMissingSnapshotPosts(topic, part);
+        loadedIds = new Set((Array.isArray(topic.post_stream && topic.post_stream.posts)
+          ? topic.post_stream.posts : []).map((post) => Number(post && post.id)).filter(Boolean));
+        if (loadedIds.size <= before) throw new Error('预加载未返回新的楼层');
+        setCachedTopicData(entry.topicId, topic);
+        updateReaderQueueEntryFromTopic(entry, topic, stream.length);
+        missing = preloadStream.filter((postId) => !loadedIds.has(Number(postId)));
+      }
+      if (!missing.length) entry.loadState = stream.every((postId) => loadedIds.has(Number(postId)))
+        ? 'ready'
+        : 'partial';
+      else if (entry.loadState === 'loading') entry.loadState = 'queued';
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        if (entry.loadState === 'loading') entry.loadState = 'queued';
+      } else {
+        entry.loadState = 'error';
+        entry.error = String(error && error.message || '预加载失败');
+      }
+    } finally {
+      if (entry.prefetchController === controller) entry.prefetchController = null;
+      syncReaderQueueSurfaces();
+    }
+  }
+
+  function scheduleReaderQueuePrefetch() {
+    if (READER_QUEUE_PREFETCH_RUNNING || !CURRENT_OVERLAY || !ACTIVE_READER_REQUEST_SCHEDULER) return;
+    const entry = READER_QUEUE_ENTRIES.find((candidate) =>
+      String(candidate.topicId) !== READER_QUEUE_ACTIVE_TOPIC_ID &&
+      candidate.loadState === 'queued' && !candidate.prefetchController
+    );
+    if (!entry) return;
+    READER_QUEUE_PREFETCH_RUNNING = true;
+    Promise.resolve(prefetchReaderQueueEntry(entry)).finally(() => {
+      READER_QUEUE_PREFETCH_RUNNING = false;
+      if (CURRENT_OVERLAY && ACTIVE_READER_REQUEST_SCHEDULER) {
+        setTimeout(scheduleReaderQueuePrefetch, 300);
+      }
+    });
+  }
+
+  function createReaderQueueViewportTracker(ctx, entry) {
+    const visibleNodes = new WeakMap();
+    const pendingTimers = new Map();
+    const qualifies = (intersectionEntry) => {
+      if (!intersectionEntry.isIntersecting || intersectionEntry.intersectionRect.width <= 0) return false;
+      const nodeHeight = Math.max(1, intersectionEntry.boundingClientRect.height || 1);
+      const requiredHeight = Math.min(nodeHeight, 120, Math.max(36, nodeHeight * .3));
+      return intersectionEntry.intersectionRect.height >= requiredHeight;
+    };
+    const cancelPending = (postNumber, node) => {
+      const pending = pendingTimers.get(postNumber);
+      if (!pending || pending.node !== node) return;
+      clearTimeout(pending.timer);
+      pendingTimers.delete(postNumber);
+    };
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((intersectionEntry) => {
+        const node = intersectionEntry.target;
+        const postNumber = Number(node && node.dataset.postNumber);
+        if (!(postNumber > 0) || entry.seenPostNumbers.has(postNumber)) return;
+        const visible = qualifies(intersectionEntry);
+        visibleNodes.set(node, visible);
+        if (!visible) {
+          cancelPending(postNumber, node);
+          return;
+        }
+        const existing = pendingTimers.get(postNumber);
+        if (existing && existing.node === node) return;
+        if (existing) {
+          clearTimeout(existing.timer);
+          pendingTimers.delete(postNumber);
+        }
+        const timer = setTimeout(() => {
+          pendingTimers.delete(postNumber);
+          if (!visibleNodes.get(node) || !node.isConnected ||
+              String(ctx.topicId) !== String(entry.topicId)) return;
+          entry.seenPostNumbers.add(postNumber);
+          const viewport = typeof CURRENT_OVERLAY?._ldpCaptureHistoryViewport === 'function' &&
+            Number(CURRENT_OVERLAY.dataset.topicId) === Number(entry.topicId)
+            ? CURRENT_OVERLAY._ldpCaptureHistoryViewport()
+            : null;
+          if (viewport) entry.viewport = normalizeReaderHistoryViewport(viewport);
+          syncReaderQueueSurfaces();
+        }, READ_THRESHOLD);
+        pendingTimers.set(postNumber, { node, timer });
+      });
+    }, { root: ctx.scrollRoot, threshold: [0, .1, .3] });
+    return {
+      observe(node) {
+        if (node && !node.classList.contains('ldp-nested-preview')) observer.observe(node);
+      },
+      unobserve(node) {
+        if (!node) return;
+        visibleNodes.delete(node);
+        cancelPending(Number(node.dataset.postNumber), node);
+        observer.unobserve(node);
+      },
+      stop() {
+        pendingTimers.forEach((pending) => clearTimeout(pending.timer));
+        pendingTimers.clear();
+        observer.disconnect();
+      },
+    };
+  }
+
+  function bindReaderQueueSurface(overlay) {
+    const rail = overlay && overlay.querySelector('.ldp-reader-queue');
+    if (!rail || overlay._ldpReaderQueueBound) return;
+    overlay._ldpReaderQueueBound = true;
+    const panel = rail.querySelector('.ldp-reader-queue-panel');
+    const toggle = rail.querySelector('.ldp-reader-queue-toggle');
+    const bubbles = rail.querySelector('.ldp-reader-queue-bubbles');
+    const scrollHint = rail.querySelector('.ldp-reader-queue-scroll-hint');
+    const close = rail.querySelector('.ldp-reader-queue-close');
+    const clear = rail.querySelector('.ldp-reader-queue-clear');
+    const setPanelOpen = (open) => {
+      panel.hidden = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+      if (open) panel.querySelector('.ldp-reader-queue-row')?.focus();
+    };
+    toggle.addEventListener('click', () => setPanelOpen(panel.hidden));
+    bindFloatingSurfaceWheel(bubbles);
+    bubbles.addEventListener('scroll', () => syncReaderQueueScrollHint(rail), { passive: true });
+    scrollHint.addEventListener('click', () => {
+      const direction = Number(scrollHint.dataset.scrollDirection) || 1;
+      const reduceMotion = typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (direction < 0) {
+        bubbles.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+        return;
+      }
+      const distance = Math.max(38, Math.round(bubbles.clientHeight * .72));
+      bubbles.scrollBy({ top: distance, behavior: reduceMotion ? 'auto' : 'smooth' });
+    });
+    close.addEventListener('click', () => setPanelOpen(false));
+    clear.addEventListener('click', () => clearReaderQueueEntries());
+    rail.addEventListener('click', (event) => {
+      const bubbleRemove = event.target.closest('.ldp-reader-queue-bubble-remove');
+      if (bubbleRemove) {
+        removeReaderQueueEntry(bubbleRemove.dataset.readerQueueTopicId);
+        return;
+      }
+      const bubble = event.target.closest('.ldp-reader-queue-bubble');
+      if (bubble) {
+        void switchReaderQueueTopic(bubble.dataset.readerQueueTopicId);
+        return;
+      }
+      const row = event.target.closest('.ldp-reader-queue-row');
+      if (!row) return;
+      const topicId = Number(row.dataset.readerQueueTopicId);
+      if (event.target.closest('.ldp-reader-queue-remove')) {
+        removeReaderQueueEntry(topicId);
+        return;
+      }
+      if (event.target.closest('.ldp-reader-queue-pin')) {
+        toggleReaderQueuePinned(topicId);
+        return;
+      }
+      if (event.target.closest('.ldp-reader-queue-retry')) {
+        ensureReaderQueueEntry(topicId, {}, { retry: true });
+        return;
+      }
+      void switchReaderQueueTopic(topicId);
+    });
+    rail.addEventListener('keydown', (event) => {
+      const row = event.target.closest('.ldp-reader-queue-row');
+      if (!row) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setPanelOpen(false);
+        toggle.focus();
+        return;
+      }
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        void switchReaderQueueTopic(row.dataset.readerQueueTopicId);
+        return;
+      }
+      if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+      event.preventDefault();
+      const rows = Array.from(panel.querySelectorAll('.ldp-reader-queue-row'));
+      const index = rows.indexOf(row);
+      rows[Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))]?.focus();
+    });
+    overlay.addEventListener('pointerdown', (event) => {
+      if (!panel.hidden && !event.target.closest('.ldp-reader-queue')) setPanelOpen(false);
+    });
+    overlay._ldpSyncReaderQueue = () => renderReaderQueueSurface(overlay);
+    renderReaderQueueSurface(overlay);
+  }
+
   function cachePayload(key) {
     if (key === 'history') return readTopicHistory();
     if (key === 'topics') return Array.from(TOPIC_NAV_ICON_CACHE.entries());
@@ -3892,6 +4600,15 @@
     html.ldp-reader-workspace tr.topic-list-item:hover,
     html.ldp-reader-workspace .topic-list-item:hover,
     html.ldp-reader-workspace .latest-topic-list-item:hover{cursor:pointer!important;}
+    .ldp-reader-queue-add{display:inline-flex;width:20px;height:20px;align-items:center;justify-content:center;
+      box-sizing:border-box;margin-left:5px;padding:2px;border:0;border-radius:50%;vertical-align:middle;
+      background:transparent;color:var(--primary-medium,#777);cursor:pointer;opacity:0;transition:opacity .12s ease-out,background .12s ease-out,color .12s ease-out;}
+    .ldp-reader-queue-add .ldp-icon{width:13px;height:13px;}
+    :is(.topic-list-item,.latest-topic-list-item,.search-result-topic,.fps-result):hover .ldp-reader-queue-add,
+    .ldp-reader-queue-add:is(:focus-visible,.is-added){opacity:1;}
+    .ldp-reader-queue-add:hover{background:var(--primary-very-low,#f2f2f2);color:var(--primary,#222);}
+    .ldp-reader-queue-add.is-added{color:var(--tertiary,#47855f);}
+    @media (hover:none){.ldp-reader-queue-add{opacity:1;}}
     html.ldp-reader-workspace :is(tr.topic-list-item,.topic-list-item,.latest-topic-list-item)[data-ldp-reader-active-topic="true"]{
       border-color:var(--tertiary,#47855f)!important;box-shadow:none!important;}
     html.ldp-reader-workspace :is(tr.topic-list-item,.topic-list-item,.latest-topic-list-item)[data-ldp-reader-active-topic="true"]::before,
@@ -4730,9 +5447,12 @@
     .ldp-color-groups{display:grid;gap:14px;}
     .ldp-settings-category-group,.ldp-color-group{display:grid;min-width:0;gap:0;padding:0 14px;border:1px solid var(--primary-low,#ddd);
       border-radius:10px;background:color-mix(in srgb,var(--primary-very-low,#f7f7f7) 34%,var(--secondary,#fff));}
-    .ldp-color-group-head{display:grid;gap:2px;padding:12px 0 10px;
+    .ldp-color-group-head{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 12px;padding:12px 0 10px;
       border-bottom:var(--ldp-divider-line-width,1px) solid var(--ldp-divider-line-color,#e5e5e5);
       transition:opacity .12s ease-out;}
+    .ldp-color-group-head-copy{display:grid;gap:2px;min-width:0;}
+    .ldp-color-group-head-actions{display:flex;align-items:center;gap:4px;}
+    .ldp-color-group.is-disabled > .ldp-settings-fields{opacity:.42;}
     .ldp-color-group-title{margin:0;color:var(--primary-high,#333);font-size:var(--ldp-font-base,13px);font-weight:700;line-height:1.35;}
     .ldp-color-group-description{margin:0;color:var(--primary-medium,#777);font-size:var(--ldp-font-sm,11px);line-height:1.45;}
     .ldp-settings-fields{display:grid;gap:0;border-top:var(--ldp-divider-line-width,1px) solid var(--ldp-divider-line-color,#e5e5e5);}
@@ -5117,6 +5837,10 @@
     .ldp-profile-field-sharing input:active + .ldp-profile-field-sharing-button{transform:scale(.94);}
     .ldp-reader-profile-routing{margin:0 0 2px;color:var(--primary-medium,#777);
       font-size:var(--ldp-font-sm,11px);line-height:1.45;font-variant-numeric:tabular-nums;}
+    .ldp-appearance-theme-note{display:flex;align-items:center;gap:7px;margin:0;padding:8px 10px;border-radius:8px;
+      background:color-mix(in srgb,var(--tertiary-low,#dcefe3) 42%,var(--secondary,#fff));
+      color:var(--primary-medium,#777);font-size:var(--ldp-font-sm,11px);line-height:1.4;}
+    .ldp-appearance-theme-note strong{color:var(--tertiary,#47855f);font-weight:700;}
     .ldp-reader-profile-routing:is(.is-embedded,.is-shared){display:flex;align-items:center;flex-wrap:wrap;gap:5px 8px;}
     .ldp-reader-profile-line{display:flex;align-items:center;flex-wrap:wrap;gap:5px 8px;flex:0 0 100%;min-width:0;}
     .ldp-reader-profile-indicator{display:inline-flex;align-items:center;gap:4px;flex:none;padding:2px 7px;border-radius:999px;
@@ -5377,6 +6101,93 @@
     .ldp-reader-history-nav:disabled{cursor:wait;}
     .ldp-reader-history-edge.is-active .ldp-reader-history-nav:disabled,
     .ldp-history-buttons-always-visible .ldp-reader-history-edge .ldp-reader-history-nav:disabled{opacity:.45;}
+    .ldp-reader-queue{position:absolute;z-index:11;left:12px;top:96px;display:flex;width:36px;max-height:calc(100% - 120px);
+      flex-direction:column;align-items:center;gap:7px;color:var(--ldp-interface-font-color,var(--primary,#222));
+      font-family:var(--ldp-interface-font-family,inherit);font-weight:var(--ldp-interface-font-weight,400);pointer-events:auto;}
+    .ldp-reader-queue[hidden],.ldp-reader-queue-panel[hidden]{display:none!important;}
+    .ldp-reader-queue-toggle,.ldp-reader-queue-bubble{position:relative;display:inline-flex;flex:none;
+      align-items:center;justify-content:center;box-sizing:border-box;border:0;cursor:pointer;}
+    .ldp-reader-queue-toggle{width:36px;height:36px;border:1px solid color-mix(in srgb,var(--tertiary,#47855f) 28%,var(--primary-low,#ddd));
+      border-radius:11px;background:color-mix(in srgb,var(--secondary,#fff) 92%,var(--tertiary-low,#dceee2));
+      color:var(--tertiary,#47855f);box-shadow:0 5px 18px rgba(0,0,0,.12);}
+    .ldp-reader-queue-toggle:hover{background:color-mix(in srgb,var(--secondary,#fff) 78%,var(--tertiary-low,#dceee2));}
+    .ldp-reader-queue-toggle .ldp-icon{width:16px;height:16px;}
+    .ldp-reader-queue-toggle b{position:absolute;right:-4px;top:-5px;display:inline-flex;min-width:16px;height:16px;
+      align-items:center;justify-content:center;box-sizing:border-box;padding:0 3px;border:2px solid var(--secondary,#fff);border-radius:999px;
+      background:var(--tertiary,#47855f);color:#fff;font-size:var(--ldp-font-micro,9px);font-variant-numeric:tabular-nums;line-height:1;}
+    .ldp-reader-queue-bubbles{display:flex;min-height:0;box-sizing:border-box;flex-direction:column;align-items:center;gap:6px;
+      overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;padding:4px 6px;scrollbar-width:none;}
+    .ldp-reader-queue-bubbles::-webkit-scrollbar{display:none;}
+    .ldp-reader-queue-scroll-hint{display:flex;width:32px;height:32px;flex:none;align-items:center;justify-content:center;
+      box-sizing:border-box;padding:0;border:0;background:none;color:#f2aa2e;cursor:pointer;}
+    .ldp-reader-queue-scroll-hint[hidden]{display:none!important;}
+    .ldp-reader-queue-scroll-hint:hover{color:#d98600;}
+    .ldp-reader-queue-scroll-hint:focus-visible{outline:2px solid var(--tertiary,#47855f);outline-offset:-2px;}
+    .ldp-reader-queue-scroll-hint .ldp-icon{width:22px;height:22px;filter:drop-shadow(0 1px 0 var(--secondary,#fff));
+      transform:rotate(90deg);transition:transform .16s ease-out;}
+    .ldp-reader-queue-scroll-hint.is-up .ldp-icon{transform:rotate(-90deg);}
+    .ldp-reader-queue-bubble-shell{position:relative;display:flex;width:32px;height:32px;flex:none;align-items:center;justify-content:center;}
+    .ldp-reader-queue-bubble,.ldp-reader-queue-row-progress{background:conic-gradient(
+      var(--tertiary,#47855f) var(--ldp-reader-queue-progress,0deg),
+      color-mix(in srgb,var(--primary-low,#ddd) 75%,transparent) 0);}
+    .ldp-reader-queue-bubble{width:32px;height:32px;padding:2px;border-radius:50%;color:var(--primary-medium,#777);
+      box-shadow:0 2px 8px rgba(0,0,0,.09);}
+    .ldp-reader-queue-bubble:hover{transform:translateX(2px);}
+    .ldp-reader-queue-bubble.is-active{box-shadow:0 0 0 1px var(--secondary,#fff),0 0 0 3px var(--tertiary,#47855f),0 3px 10px rgba(0,0,0,.13);}
+    .ldp-reader-queue-avatar{display:flex;width:100%;height:100%;align-items:center;justify-content:center;overflow:hidden;
+      border-radius:50%;background:var(--secondary,#fff);color:var(--primary-high,#333);font-size:var(--ldp-font-sm,11px);font-weight:700;}
+    .ldp-reader-queue-avatar img{width:100%;height:100%;object-fit:cover;}
+    .ldp-reader-queue-bubble > i{position:absolute;right:-1px;bottom:-1px;width:7px;height:7px;box-sizing:border-box;
+      border:2px solid var(--secondary,#fff);border-radius:50%;background:var(--primary-low,#ccc);}
+    .ldp-reader-queue-bubble.is-ready > i{background:var(--success,#3f8f5b);}
+    .ldp-reader-queue-bubble.is-partial > i{background:#d98600;}
+    .ldp-reader-queue-bubble.is-error > i{background:var(--danger,#c94747);}
+    .ldp-reader-queue-bubble.is-loading > i{width:9px;height:9px;border:2px solid color-mix(in srgb,var(--tertiary,#47855f) 25%,var(--secondary,#fff));
+      border-top-color:var(--tertiary,#47855f);background:var(--secondary,#fff);animation:ldp-spin .8s linear infinite;}
+    .ldp-reader-queue-bubble-remove{position:absolute;z-index:2;right:-3px;top:-3px;display:inline-flex;width:14px;height:14px;
+      align-items:center;justify-content:center;box-sizing:border-box;padding:2px;border:1px solid var(--secondary,#fff);border-radius:50%;
+      background:var(--danger,#c94747);color:#fff;cursor:pointer;opacity:0;pointer-events:none;transform:scale(.82);
+      transition:opacity .12s ease-out,transform .12s ease-out;}
+    .ldp-reader-queue-bubble-shell:hover .ldp-reader-queue-bubble-remove,
+    .ldp-reader-queue-bubble-remove:focus-visible{opacity:1;pointer-events:auto;transform:scale(1);}
+    .ldp-reader-queue-bubble-remove:disabled{display:none;}
+    .ldp-reader-queue-bubble-remove .ldp-icon{width:8px;height:8px;stroke-width:2.5;}
+    .ldp-reader-queue-bubble-pin{position:absolute;z-index:1;left:-3px;top:-3px;display:flex;width:13px;height:13px;
+      align-items:center;justify-content:center;box-sizing:border-box;border:1px solid var(--secondary,#fff);border-radius:50%;
+      background:var(--tertiary,#47855f);color:#fff;pointer-events:none;}
+    .ldp-reader-queue-bubble-pin .ldp-icon{width:8px;height:8px;}
+    .ldp-reader-queue-panel{position:absolute;left:44px;top:0;display:grid;width:min(330px,calc(100vw - 78px));
+      max-height:min(62vh,560px);grid-template-rows:auto minmax(0,1fr);box-sizing:border-box;border:1px solid var(--primary-low,#ddd);
+      border-radius:11px;background:var(--secondary,#fff);box-shadow:0 16px 46px rgba(0,0,0,.22);overflow:hidden;}
+    .ldp-reader-queue-panel-head{display:flex;min-height:42px;align-items:center;gap:8px;padding:7px 9px 7px 12px;
+      border-bottom:var(--ldp-divider-line-width,1px) solid var(--ldp-divider-line-color,#e5e5e5);}
+    .ldp-reader-queue-panel-head strong{font-size:var(--ldp-font-base,13px);}
+    .ldp-reader-queue-panel-count{margin-right:auto;color:var(--primary-medium,#777);font-size:var(--ldp-font-sm,11px);}
+    .ldp-reader-queue-close,.ldp-reader-queue-clear,.ldp-reader-queue-pin,.ldp-reader-queue-remove,.ldp-reader-queue-retry{display:inline-flex;flex:none;align-items:center;justify-content:center;
+      box-sizing:border-box;border:0;border-radius:6px;background:transparent;color:var(--primary-medium,#777);cursor:pointer;}
+    .ldp-reader-queue-close,.ldp-reader-queue-clear{width:28px;height:28px;}
+    .ldp-reader-queue-close:hover,.ldp-reader-queue-clear:hover,.ldp-reader-queue-pin:hover,.ldp-reader-queue-remove:hover,.ldp-reader-queue-retry:hover{
+      background:var(--primary-very-low,#f3f3f3);color:var(--primary,#222);}
+    .ldp-reader-queue-clear:hover{color:var(--danger,#c94747);}
+    .ldp-reader-queue-clear:disabled{cursor:default;opacity:.35;}
+    .ldp-reader-queue-pin.active{background:color-mix(in srgb,var(--tertiary-low,#dceee2) 72%,var(--secondary,#fff));
+      color:var(--tertiary,#47855f);}
+    .ldp-reader-queue-list{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:5px;}
+    .ldp-reader-queue-row{display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:9px;
+      min-height:54px;padding:6px 7px;border-radius:8px;cursor:pointer;outline:none;}
+    .ldp-reader-queue-row:hover{background:var(--primary-very-low,#f5f5f5);}
+    .ldp-reader-queue-row.is-active{background:color-mix(in srgb,var(--tertiary-low,#dceee2) 72%,var(--secondary,#fff));}
+    .ldp-reader-queue-row:focus-visible{outline:2px solid var(--tertiary,#47855f);outline-offset:-2px;}
+    .ldp-reader-queue-row-progress{display:flex;width:38px;height:38px;box-sizing:border-box;padding:2px;border-radius:50%;}
+    .ldp-reader-queue-row-copy{display:grid;min-width:0;gap:3px;}
+    .ldp-reader-queue-row-copy strong{overflow:hidden;color:var(--primary,#222);font-size:var(--ldp-font-base,13px);
+      font-weight:650;line-height:1.3;text-overflow:ellipsis;white-space:nowrap;}
+    .ldp-reader-queue-row-copy small{overflow:hidden;color:var(--primary-medium,#777);font-size:var(--ldp-font-sm,11px);
+      line-height:1.25;text-overflow:ellipsis;white-space:nowrap;}
+    .ldp-reader-queue-row-actions{display:flex;align-items:center;gap:2px;}
+    .ldp-reader-queue-pin,.ldp-reader-queue-remove,.ldp-reader-queue-retry{width:26px;height:26px;}
+    .ldp-reader-queue-remove:disabled{visibility:hidden;}
+    .ldp-reader-queue-panel :is(.ldp-reader-queue-close,.ldp-reader-queue-clear,.ldp-reader-queue-pin,.ldp-reader-queue-remove,.ldp-reader-queue-retry) .ldp-icon{width:14px;height:14px;}
     .ldp-body{grid-column:1 / -1;grid-row:1;display:grid;grid-template-columns:subgrid;min-height:0;position:relative;
       grid-auto-rows:max-content;align-content:start;box-sizing:border-box;width:100%;max-width:none;
       margin:0;padding:0;overflow-y:auto;overscroll-behavior:contain;overflow-anchor:auto;}
@@ -7192,6 +8003,11 @@
       .ldp-topic-timeline,.ldp-fullpage .ldp-topic-timeline{margin:18px 0;padding-inline:2px;}
       .ldp-topic-timeline-count,.ldp-topic-timeline-preview{left:24px;max-width:calc(100% - 24px);}
     }
+    @container ldp-reader (max-width:700px){
+      .ldp-reader-queue{left:8px;top:auto;bottom:12px;max-height:none;}
+      .ldp-reader-queue-bubbles,.ldp-reader-queue-scroll-hint{display:none!important;}
+      .ldp-reader-queue-panel{left:44px;top:auto;bottom:0;width:min(330px,calc(100cqw - 64px));max-height:min(70vh,520px);}
+    }
     @media (max-width:700px){
       .ldp-overlay{align-items:stretch;justify-content:stretch;background:var(--secondary,#fff);pointer-events:auto;}
       .ldp-modal{width:100vw;height:100vh;border-radius:0;box-shadow:none;}
@@ -7992,6 +8808,7 @@
     link2: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     lightbulb: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.84.65-1.64 1.35-2.35a6 6 0 1 0-8.88 0c.7.71 1.17 1.51 1.35 2.35Z"/>',
     list: '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>',
+    layers: '<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
     listChecks: '<path d="m3 5 2 2 4-4"/><path d="M11 6h10"/><path d="m3 12 2 2 4-4"/><path d="M11 13h10"/><path d="m3 19 2 2 4-4"/><path d="M11 20h10"/>',
     rotateCcw: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
     share2: '<path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/>',
@@ -8048,7 +8865,8 @@
     { id: 'interaction', title: '强调与交互', description: '控制按钮、选中态、焦点、时间轴和正文链接，不改变错误、警告、成功等状态色。', sections: ['interaction'] },
     { id: 'background', title: '内容背景', description: '区分相邻楼层和列表卡片，只改变淡色背景，不改变正文文字。',
       sections: [{ id: 'zebra', title: '楼层斑马线' }, 'list-zebra'] },
-    { id: 'structure', title: '结构与关系', description: '分别控制回复层级、引用关系和界面边界的颜色与粗细，并可调整回复线转折圆角。',
+    { id: 'structure', title: '结构与关系', description: '分别控制回复层级、引用关系和界面边界；关闭后隐藏这些配色，已设置的颜色、粗细和圆角会保留。',
+      toggleKey: 'structureColorsEnabled', toggleLabel: '显示结构配色',
       sections: [{ id: 'reply-line', title: '回复关系线' }, { id: 'quote-line', title: '引用线' }, { id: 'divider-line', title: '界面分隔线' }] },
     { id: 'floor-preview', title: '父回复插入预览', description: '单独控制悬停父楼层号后插入的预览卡片，不影响回复关系线和其他内容样式。', sections: ['floor-preview'] },
   ];
@@ -8088,10 +8906,22 @@
         ${rows}
       </div>`;
     }).join('');
-    return `<section class="ldp-color-group" aria-labelledby="ldp-color-group-${group.id}">
+    const toggle = group.toggleKey
+      ? `<span class="ldp-color-group-head-actions">
+          ${profileFieldSharingControl('appearance', group.toggleKey, `${group.title}开关`)}
+          <span class="ldp-setting-switch">
+            <input type="checkbox" role="switch" data-appearance-group-toggle="${group.toggleKey}" aria-label="${group.toggleLabel}">
+            <span class="ldp-setting-switch-track" aria-hidden="true"></span>
+          </span>
+        </span>`
+      : '';
+    return `<section class="ldp-color-group" data-appearance-group="${group.id}" aria-labelledby="ldp-color-group-${group.id}">
       <header class="ldp-color-group-head">
-        <h4 class="ldp-color-group-title" id="ldp-color-group-${group.id}">${group.title}</h4>
-        <p class="ldp-color-group-description">${group.description}</p>
+        <div class="ldp-color-group-head-copy">
+          <h4 class="ldp-color-group-title" id="ldp-color-group-${group.id}">${group.title}</h4>
+          <p class="ldp-color-group-description">${group.description}</p>
+        </div>
+        ${toggle}
       </header>
       <div class="ldp-settings-fields">${sections}</div>
     </section>`;
@@ -8156,7 +8986,7 @@
     ['font', 'type', '字体设置', '字体渲染默认作用于整个增强阅读器，也可扩展到宿主页面；界面、正文和回复的字体外观继续分别设置。'],
     ['layout', 'layoutGrid', '布局设置', '五区比例可逐项共享；共享项目变化时自动平衡其它区域，始终保持合计 100%。'],
     ['window', 'floatingWindow', '浮窗设置', '设置桌面浮窗的长宽和左上角坐标；拖动或缩放浮窗后会同步保存，其他显示方式下修改会在切回浮窗后生效。'],
-    ['appearance', 'palette', '外观设置', '每一项外观都可单独共享，其余项目继续由浮窗、全屏和移动分别保存。'],
+    ['appearance', 'palette', '外观设置', '选择颜色后自动生成明亮与暗色主题的适应色；每一项外观都可单独共享，其余项目继续由浮窗、全屏和移动分别保存。'],
     ['flash', 'lightbulb', '闪烁动效', '集中设置跳转楼层时的闪烁提示，以及打开或切换帖子时的等待区域动画。'],
     ['performance', 'rocket', '性能设置', '先控制“产生多少请求与 DOM”，再控制“请求何时启动”。主楼层取数与楼中楼自动请求属于需求来源；DOM 窗口只负责渲染；共享调度负责排队、双窗口预算、429 退避与恢复探测，但不会抵消过大的预取需求。设置在下次打开阅读器时生效。'],
     ['resource-monitor', 'monitor', '资源监控', '状态每秒快照，长任务、长帧脚本、DOM 变更、网络和前后台切换按浏览器原始事件记录到毫秒；标签页进入后台后继续取证，计时器被节流或冻结时保留真实空档，不补造样本。仅在本页内存保留最近 10 分钟。', '实时资源监控'],
@@ -9426,13 +10256,108 @@
     return Math.min(maximum, Math.max(minimum, Math.round(safeValue / step) * step));
   }
 
+  function appearanceDarkColorKey(key) {
+    return `${key}Dark`;
+  }
+
+  function appearanceBaseSettingKey(key) {
+    if (!String(key).endsWith('Dark')) return key;
+    const baseKey = String(key).slice(0, -4);
+    return APPEARANCE_COLOR_KEYS.includes(baseKey) ? baseKey : key;
+  }
+
+  function appearanceSettingValueFields(key) {
+    return APPEARANCE_COLOR_KEYS.includes(key) ? [key, appearanceDarkColorKey(key)] : [key];
+  }
+
+  function hexColorToHsl(value) {
+    const color = normalizeHexColor(value);
+    if (!color) return null;
+    const [red, green, blue] = [1, 3, 5].map((index) =>
+      parseInt(color.slice(index, index + 2), 16) / 255);
+    const maximum = Math.max(red, green, blue);
+    const minimum = Math.min(red, green, blue);
+    const delta = maximum - minimum;
+    const lightness = (maximum + minimum) / 2;
+    const saturation = delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+    let hue = 0;
+    if (delta !== 0) {
+      if (maximum === red) hue = 60 * (((green - blue) / delta) % 6);
+      else if (maximum === green) hue = 60 * ((blue - red) / delta + 2);
+      else hue = 60 * ((red - green) / delta + 4);
+    }
+    return {
+      hue: hue < 0 ? hue + 360 : hue,
+      saturation: saturation * 100,
+      lightness: lightness * 100,
+    };
+  }
+
+  function hslColorToHex(hue, saturation, lightness) {
+    const normalizedHue = ((Number(hue) % 360) + 360) % 360;
+    const normalizedSaturation = Math.min(100, Math.max(0, Number(saturation))) / 100;
+    const normalizedLightness = Math.min(100, Math.max(0, Number(lightness))) / 100;
+    const chroma = (1 - Math.abs(2 * normalizedLightness - 1)) * normalizedSaturation;
+    const intermediate = chroma * (1 - Math.abs((normalizedHue / 60) % 2 - 1));
+    const offset = normalizedLightness - chroma / 2;
+    const sector = Math.floor(normalizedHue / 60);
+    const channels = [
+      [chroma, intermediate, 0], [intermediate, chroma, 0], [0, chroma, intermediate],
+      [0, intermediate, chroma], [intermediate, 0, chroma], [chroma, 0, intermediate],
+    ][sector] || [0, 0, 0];
+    return `#${channels.map((channel) =>
+      Math.round((channel + offset) * 255).toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  function adaptAppearanceColorToTheme(key, value, mode) {
+    const resolved = mode === 'dark' ? 'dark' : 'light';
+    const valueKey = resolved === 'dark' ? appearanceDarkColorKey(key) : key;
+    const normalized = normalizeHexColor(value, APPEARANCE_PROFILE_DEFAULT[valueKey]);
+    if (normalized === APPEARANCE_PROFILE_DEFAULT[key]) {
+      return APPEARANCE_PROFILE_DEFAULT[valueKey];
+    }
+    const limits = APPEARANCE_COLOR_THEME_LIMITS[key];
+    const hsl = limits && hexColorToHsl(normalized);
+    if (!hsl) return normalized;
+    const [minimumLightness, maximumLightness] = limits[resolved];
+    const saturation = Math.min(hsl.saturation, limits.saturationMax);
+    const lightness = Math.min(maximumLightness, Math.max(minimumLightness, hsl.lightness));
+    if (Math.abs(saturation - hsl.saturation) < 0.01 && Math.abs(lightness - hsl.lightness) < 0.01) {
+      return normalized;
+    }
+    return hslColorToHex(hsl.hue, saturation, lightness);
+  }
+
+  function appearanceThemeValueKey(key, mode = resolvedReaderThemeMode()) {
+    return APPEARANCE_COLOR_KEYS.includes(key) && mode === 'dark'
+      ? appearanceDarkColorKey(key)
+      : key;
+  }
+
+  function appearanceThemeColor(values, key, mode = resolvedReaderThemeMode()) {
+    return adaptAppearanceColorToTheme(key, values && values[key], mode);
+  }
+
   function normalizeAppearanceProfile(source, fallback = APPEARANCE_PROFILE_DEFAULTS.full) {
     const values = source || {};
-    return APPEARANCE_SETTING_FIELDS.reduce((profile, field) => {
-      const value = field.range ? values[field.key] : values[field.key] || fallback[field.key];
-      profile[field.key] = field.normalize(value, fallback[field.key]);
-      return profile;
+    const profile = APPEARANCE_SETTING_FIELDS.reduce((result, field) => {
+      if (field.range) {
+        result[field.key] = field.normalize(values[field.key], fallback[field.key]);
+        return result;
+      }
+      const lightFallback = normalizeHexColor(fallback[field.key], APPEARANCE_PROFILE_DEFAULT[field.key]);
+      const storedLight = normalizeHexColor(values[field.key]);
+      const darkKey = appearanceDarkColorKey(field.key);
+      const storedDark = normalizeHexColor(values[darkKey]);
+      const sourceColor = storedLight || storedDark || lightFallback;
+      result[field.key] = sourceColor;
+      result[darkKey] = sourceColor;
+      return result;
     }, {});
+    profile.structureColorsEnabled = typeof values.structureColorsEnabled === 'boolean'
+      ? values.structureColorsEnabled
+      : fallback.structureColorsEnabled !== false;
+    return profile;
   }
 
   function currentAppearanceProfiles() {
@@ -9449,7 +10374,7 @@
     if (!readerProfileSharingEnabled('appearance')) return values;
     return normalizeAppearanceProfile(mergeSharedProfileValues(
       values, currentSharedAppearanceProfile(), APPEARANCE_PROFILE_VALUE_KEYS,
-      (key) => readerProfileSettingShared('appearance', key)
+      (key) => readerProfileSettingShared('appearance', appearanceBaseSettingKey(key))
     ), APPEARANCE_PROFILE_DEFAULTS[safeProfile]);
   }
 
@@ -9464,15 +10389,10 @@
   function appearanceInteractionColors(values, mode = currentReaderThemeMode()) {
     const appearance = values || APPEARANCE_PROFILE_DEFAULTS.full;
     const resolved = resolvedReaderThemeMode(mode);
-    const accentSource = normalizeAccentColor(appearance.accentColor);
-    const linkSource = normalizeLinkColor(appearance.linkColor);
-    const accent = resolved === 'dark' && accentSource === ACCENT_COLOR_DEFAULT
-      ? READER_THEME_VARIABLES.dark['--tertiary']
-      : accentSource;
-    const link = resolved === 'dark' && linkSource === LINK_COLOR_DEFAULT
-      ? READER_THEME_VARIABLES.dark['--d-link-color']
-      : linkSource;
-    const accentLow = accentSource === ACCENT_COLOR_DEFAULT
+    const accent = appearanceThemeColor(appearance, 'accentColor', resolved);
+    const link = appearanceThemeColor(appearance, 'linkColor', resolved);
+    const accentDefault = APPEARANCE_PROFILE_DEFAULT[appearanceThemeValueKey('accentColor', resolved)];
+    const accentLow = accent === accentDefault
       ? READER_THEME_VARIABLES[resolved]['--tertiary-low']
       : `color-mix(in srgb,${accent} 18%,var(--secondary,#fff))`;
     return { accent, accentLow, link };
@@ -15483,6 +16403,7 @@
         ctx.tracker.unobserve(node);
         forEachDirectNestedPost(node, (child) => ctx.tracker.unobserve(child));
       }
+      if (ctx.queueViewportTracker) ctx.queueViewportTracker.unobserve(node);
       if (ctx.repliesIO && ctx.repliesIO.unobserve) ctx.repliesIO.unobserve(node);
       cancelPostContentHydration(node, ctx);
       cancelPostLatexRender(node, ctx);
@@ -15525,6 +16446,7 @@
         syncReaderSvgSymbols(node);
         ctx.streamResizeObserver.observe(node);
         ctx.tracker.observe(node);
+        if (ctx.queueViewportTracker) ctx.queueViewportTracker.observe(node);
         forEachDirectNestedPost(node, (child) => ctx.tracker.observe(child));
         if (!deferPreTargetWork && node.dataset.childReplyTotal && ctx.repliesIO && ctx.repliesIO.observe) {
           ctx.repliesIO.observe(node);
@@ -19785,6 +20707,7 @@
     bindPostMediaLayoutSync(node, ctx);
     ctx.streamNodeMap.set(+p.post_number, node);
     ctx.tracker.observe(node);
+    if (ctx.queueViewportTracker) ctx.queueViewportTracker.observe(node);
     if (+p.post_number === 1) syncCommentsHeaderPlacement(ctx);
     return node;
   }
@@ -22530,6 +23453,67 @@
     return reactionCountsByTopicId.has(topicId) ? reactionCountsByTopicId.get(topicId) : null;
   }
 
+  function syncNativeTopicQueueButton(card) {
+    if (!card || card.closest('.ldp-overlay')) return;
+    const topicLink = card.querySelector(
+      'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],.link-top-line a[href*="/t/"],a[href*="/t/"]'
+    );
+    const route = extractTopicRouteFromUrl(topicLink && (topicLink.getAttribute('href') || topicLink.href));
+    const topicId = Number(card.dataset.topicId || card.getAttribute('data-topic-id') || route && route.topicId);
+    const line = topicLink && (topicLink.closest('.link-top-line') || topicLink.parentElement);
+    if (!(topicId > 0) || !line) return;
+    let button = line.querySelector(':scope > .ldp-reader-queue-add');
+    if (!button) {
+      button = document.createElement('button');
+      button.className = 'ldp-reader-queue-add';
+      button.type = 'button';
+      line.appendChild(button);
+    }
+    button.dataset.readerQueueTopicId = String(topicId);
+    const added = !!readerQueueEntry(topicId);
+    if (button.dataset.readerQueueAdded === String(added) && button.firstElementChild) return;
+    button.dataset.readerQueueAdded = String(added);
+    button.classList.toggle('is-added', added);
+    button.innerHTML = icon(added ? 'check' : 'plus');
+    button.setAttribute('aria-label', added ? '从阅读队列移除' : '加入阅读队列并后台预加载');
+    button.setAttribute('title', added ? '从阅读队列移除' : '加入阅读队列并后台预加载');
+  }
+
+  function installNativeTopicQueueButtons() {
+    if (!document.body || document.body._ldpReaderQueueButtonsObserver) return;
+    const cardSelector = 'tr.topic-list-item,.topic-list-item,.latest-topic-list-item,.search-result-topic,.fps-result';
+    const pendingCards = new Set();
+    let frame = 0;
+    const collect = (node) => {
+      const element = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
+      if (!element || element.closest('.ldp-overlay')) return;
+      if (element.matches(cardSelector)) pendingCards.add(element);
+      element.querySelectorAll && element.querySelectorAll(cardSelector).forEach((card) => pendingCards.add(card));
+      const parentCard = element.closest(cardSelector);
+      if (parentCard) pendingCards.add(parentCard);
+    };
+    const flush = () => {
+      frame = 0;
+      const cards = Array.from(pendingCards).filter((card) => card.isConnected);
+      pendingCards.clear();
+      cards.forEach(syncNativeTopicQueueButton);
+    };
+    const schedule = () => {
+      if (!frame && pendingCards.size) frame = requestAnimationFrame(flush);
+    };
+    document.querySelectorAll(cardSelector).forEach((card) => pendingCards.add(card));
+    schedule();
+    const observer = new MutationObserver((records) => {
+      records.forEach((record) => {
+        collect(record.target);
+        record.addedNodes.forEach(collect);
+      });
+      schedule();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    document.body._ldpReaderQueueButtonsObserver = observer;
+  }
+
   function syncNativeTopicTitleTools(card, dndControl) {
     const line = dndControl && dndControl.closest('.link-top-line');
     if (!card || !line || !card.contains(line)) return;
@@ -22581,6 +23565,7 @@
       const dndControl = matchingControl || (fallback && (fallback.closest('a,button,[role="button"]') || fallback));
       if (dndControl && dndControl.dataset.ldpNativeDnd !== 'true') dndControl.dataset.ldpNativeDnd = 'true';
       syncNativeTopicTitleTools(card, dndControl);
+      syncNativeTopicQueueButton(card);
       syncNativeTopicStatsComponent(card, reactionCounts);
     });
   }
@@ -23054,12 +24039,16 @@
       setWorkspaceStyle('--ldp-reader-host-min-width', `${READER_HOST_MIN_WIDTH}px`);
       if (nativeListRowHeight) setWorkspaceStyle('--ldp-reader-native-row-height', `${nativeListRowHeight}px`);
       const appearance = currentAppearanceProfile();
+      const themeMode = resolvedReaderThemeMode();
+      const dividerLineColor = appearanceThemeColor(appearance, 'dividerLineColor', themeMode);
+      const dividerLineDefault = APPEARANCE_PROFILE_DEFAULT[
+        appearanceThemeValueKey('dividerLineColor', themeMode)
+      ];
       root.style.setProperty('--ldp-reader-list-zebra-color',
-        resolvedReaderThemeMode() === 'dark' && appearance.listZebraColor === LIST_ZEBRA_COLOR_DEFAULT
-          ? READER_THEME_VARIABLES.dark['--ldp-zebra-color']
-          : appearance.listZebraColor);
-      if (appearance.dividerLineColor === DIVIDER_LINE_COLOR_DEFAULT) root.style.removeProperty('--ldp-divider-line-color');
-      else root.style.setProperty('--ldp-divider-line-color', appearance.dividerLineColor);
+        appearanceThemeColor(appearance, 'listZebraColor', themeMode));
+      if (!appearance.structureColorsEnabled) root.style.setProperty('--ldp-divider-line-color', 'transparent');
+      else if (dividerLineColor === dividerLineDefault) root.style.removeProperty('--ldp-divider-line-color');
+      else root.style.setProperty('--ldp-divider-line-color', dividerLineColor);
       if (appearance.dividerLineWidth === DIVIDER_LINE_WIDTH_DEFAULT) root.style.removeProperty('--ldp-divider-line-width');
       else root.style.setProperty('--ldp-divider-line-width', `${appearance.dividerLineWidth}px`);
       startEmbeddedHostRootObserver();
@@ -24398,6 +25387,7 @@
     let outsideListenerTimer = 0;
     let previousEditorHTML = '';
     let emojiPickerContent = null;
+    let composing = false;
 
     const closeEmojiPicker = () => {
       if (emojiPickerContent && typeof emojiPickerContent._ldpStopEmojiImageCache === 'function') {
@@ -24491,17 +25481,18 @@
     };
     const syncInput = () => {
       let stats = readInput();
-      if (stats.length > 16 || stats.emojiCount > 5) {
+      if (!composing && (stats.length > 16 || stats.emojiCount > 5)) {
         editor.innerHTML = previousEditorHTML;
         placeEditorCursorAtEnd();
         stats = readInput();
-      } else {
+      } else if (!composing) {
         if (stats.length === 0 && editor.innerHTML) editor.innerHTML = '';
         previousEditorHTML = editor.innerHTML;
       }
       count.textContent = `${stats.length}/16`;
-      emojiButton.disabled = submitting || stats.length + (stats.length ? 2 : 1) > 16 || stats.emojiCount >= 5;
-      submit.disabled = submitting || !stats.raw.trim();
+      emojiButton.disabled = submitting || composing ||
+        stats.length + (stats.length ? 2 : 1) > 16 || stats.emojiCount >= 5;
+      submit.disabled = submitting || composing || !stats.raw.trim();
       return stats.raw;
     };
     const insertEmoji = (code) => {
@@ -24647,6 +25638,7 @@
       }
     };
     const send = async () => {
+      if (composing) return;
       const raw = syncInput().trim();
       if (!raw || submitting) return;
       if (typeof createBoost !== 'function' || !currentUser) {
@@ -24677,8 +25669,17 @@
 
     menu._ldpCloseEmojiPicker = closeEmojiPicker;
     menu._ldpClose = close;
+    editor.addEventListener('compositionstart', () => {
+      composing = true;
+      syncInput();
+    });
+    editor.addEventListener('compositionend', () => {
+      composing = false;
+      syncInput();
+    });
     editor.addEventListener('input', syncInput);
     editor.addEventListener('keydown', (event) => {
+      if (event.isComposing || composing || event.keyCode === 229) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
@@ -28637,6 +29638,7 @@
 
   async function openModal(topicId, options = {}) {
     const openRequestId = ++READER_OPEN_REQUEST_SEQUENCE;
+    const previousQueueTopicId = Number(CURRENT_OVERLAY && CURRENT_OVERLAY.dataset.topicId) || 0;
     const performance = Object.freeze(currentPerformanceConfig());
     let targetPostNumber = +options.targetPostNumber || 0;
     let unavailableTargetPostNumber = 0;
@@ -28659,6 +29661,10 @@
       options.topicNavMetadata || readTopicNavMetadata(null, topicId),
       cachedTopicNavMetadata(cachedTopicPreview),
     );
+    const queueEntry = ensureReaderQueueEntry(topicId, {
+      ...(options.readerQueueMetadata || {}),
+      navMetadata: sourceTopicNavMetadata,
+    }, { prefetch: false, silent: true });
     const inheritedHistoryPositions = normalizeReaderHistoryPositions(
       CURRENT_OVERLAY && CURRENT_OVERLAY._ldpReaderHistoryNavigation?.positions
     );
@@ -28675,6 +29681,7 @@
       );
       if (previousTopicId > 0 && previousViewport) {
         historyNavigation.positions[previousTopicId] = previousViewport;
+        saveReaderQueueViewport(previousTopicId, previousViewport);
       }
       // 列表嵌入态必须保留同一个工作台；宿主压缩、分隔线和右侧面板都属于壳层，不属于单篇帖子。
       const canReuseEmbeddedShell = !directTopicRoute && isEmbeddedListReaderMode(requestedReaderMode) &&
@@ -28700,6 +29707,11 @@
     if (document.documentElement.classList.contains('ldp-reader-sidepanel-active') &&
         !await closeChromeSidePanelForReader()) return;
     if (openRequestId !== READER_OPEN_REQUEST_SEQUENCE) return;
+    if (queueEntry) activateReaderQueueEntry(queueEntry);
+    else {
+      READER_QUEUE_ACTIVE_TOPIC_ID = '';
+      syncReaderQueueSurfaces();
+    }
     if (directTopicRoute) document.documentElement.classList.add('ldp-route-takeover');
     const readerSessionId = ++READER_SESSION_SEQUENCE;
     const reusingShell = !!reusableOverlay;
@@ -28956,6 +29968,7 @@
                 <div class="ldp-settings-section" data-settings-panel="appearance" hidden>
                   ${settingsPanelIntroMarkup('appearance')}
                   ${readerProfileTabsMarkup('appearance', '外观')}
+                  <p class="ldp-appearance-theme-note" role="status"></p>
                   <div class="ldp-color-groups">${APPEARANCE_SETTING_GROUPS.map(appearanceSettingGroupMarkup).join('')}</div>
                   ${settingsApplyFooterMarkup('ldp-appearance-status', 'ldp-appearance-apply')}
                 </div>
@@ -29232,6 +30245,22 @@
         <div class="ldp-reader-history-edge ldp-reader-history-edge-back" hidden>
           <button class="ldp-reader-history-nav ldp-reader-history-back" type="button" hidden>${icon('chevronRight')}</button>
         </div>
+        <aside class="ldp-reader-queue" aria-label="阅读队列" hidden>
+          <button class="ldp-reader-queue-toggle" type="button" aria-expanded="false">${icon('layers')}<b>0</b></button>
+          <div class="ldp-reader-queue-bubbles" aria-label="队列文章头像，可滚动查看"></div>
+          <button class="ldp-reader-queue-scroll-hint" type="button"
+            aria-label="显示下方更多队列头像" hidden>${icon('chevronRight')}</button>
+          <section class="ldp-reader-queue-panel" aria-label="阅读队列文章列表" hidden>
+            <header class="ldp-reader-queue-panel-head">
+              <strong>阅读队列</strong>
+              <span class="ldp-reader-queue-panel-count">0 篇</span>
+              <button class="ldp-reader-queue-clear" type="button"
+                aria-label="清理其他队列文章，保留当前文章">${icon('trash')}</button>
+              <button class="ldp-reader-queue-close" type="button" aria-label="收起阅读队列">${icon('x')}</button>
+            </header>
+            <div class="ldp-reader-queue-list" role="listbox" aria-label="队列文章"></div>
+          </section>
+        </aside>
         <div class="ldp-reader-main">
           <div class="ldp-rate-limit-notice" role="status" aria-live="polite" aria-atomic="true" hidden>
             <span class="ldp-rate-limit-icon" aria-hidden="true">${icon('alertTriangle')}</span>
@@ -29277,6 +30306,7 @@
     }
     overlay.dataset.topicId = String(topicId);
     CURRENT_OVERLAY = overlay;
+    bindReaderQueueSurface(overlay);
     syncReaderFontRenderingState();
     overlay._ldpReaderHistoryNavigation = historyNavigation;
     const disposeHistoryNavigation = bindReaderHistoryNavigation(overlay, topicId, historyNavigation);
@@ -29450,12 +30480,14 @@
     const appearanceSettingElements = APPEARANCE_SETTING_FIELDS.map((field) => {
       const className = appearanceSettingClassName(field.key);
       return Object.assign({}, field, {
-        input: overlay.querySelector(`.${className}${field.range ? '-range' : ''}`),
-        output: overlay.querySelector(`.${className}-value`),
+        input: overlay.querySelector(`[data-settings-panel="appearance"] .${className}${field.range ? '-range' : ''}`),
+        output: overlay.querySelector(`[data-settings-panel="appearance"] .${className}-value`),
       });
     });
+    const appearanceGroupToggleInputs = overlay.querySelectorAll('[data-appearance-group-toggle]');
     const colorResetButtons = overlay.querySelectorAll('[data-color-reset]');
     const appearanceProfileTabs = overlay.querySelectorAll('[data-appearance-profile]');
+    const appearanceThemeNote = overlay.querySelector('.ldp-appearance-theme-note');
     const appearanceStatus = overlay.querySelector('.ldp-appearance-status');
     const appearanceApplyBtn = overlay.querySelector('.ldp-appearance-apply');
     const performancePresetButtons = overlay.querySelectorAll('.ldp-performance-preset');
@@ -29789,7 +30821,10 @@
     profileSharingInputs.forEach((input) => setSettingHelp(input,
       input.dataset.profileSharingCategory === 'image'
         ? '开启后只让这一项由浮窗、全屏和移动共享，并以当前选中形态的值为起点；图片设置修改后立即保存。'
-        : '可先修改数值再选择共享，也可先选择共享再修改；点击当前分类的“确认应用”后，一次保存数值和共享状态。'));
+        : input.dataset.profileSharingCategory === 'appearance'
+          && APPEARANCE_COLOR_KEYS.includes(input.dataset.profileSharingField)
+          ? '开启后，这个颜色的明亮与暗色主题值会一起由浮窗、全屏和移动共享；点击“确认应用”后保存。'
+          : '可先修改数值再选择共享，也可先选择共享再修改；点击当前分类的“确认应用”后，一次保存数值和共享状态。'));
     const layoutHelp = {
       left: '控制阅读内容左边保留多少空白。数值越大，正文会整体向右并变窄；它需要和另外四个区域合计正好 100%。',
       main: '控制主帖和楼层正文实际占用的宽度。太小会增加换行，太大会挤压时间轴和两侧留白；五个区域必须合计 100%。',
@@ -29804,7 +30839,10 @@
     setSettingHelp(readerWindowYInput.closest('.ldp-reader-window-field'), '设置浮窗上边缘距离浏览器顶部的像素数。数值越大，浮窗越靠下；只影响桌面浮窗并立即保存。');
     setSettingHelp(readerWindowPinInput.closest('.ldp-reader-window-option'), '开启后，点击阅读器外面的网页区域也不会自动收起浮窗，适合边看帖子边操作原页面。');
     setSettingHelp(readerWindowLockInput.closest('.ldp-reader-window-option'), '开启后禁止拖动和缩放浮窗，避免误操作改变位置或大小；仍可通过小锁或这里重新解锁。');
-    appearanceSettingElements.forEach(({ input, help }) => setSettingRowHelp(input, help));
+    appearanceSettingElements.forEach(({ input, help, range }) => setSettingRowHelp(input,
+      range ? help : `${help}确定颜色后会保留色相，并按用途自动生成明亮与暗色主题的安全亮度；切换主题时自动应用。`));
+    appearanceGroupToggleInputs.forEach((input) => setSettingHelp(input.closest('.ldp-setting-switch'),
+      '关闭后隐藏回复关系线、引用线和界面分隔线；当前形态已经设置的颜色、粗细和圆角不会丢失，重新开启即可恢复。'));
     const presetHelp = {
       low: '同时收紧请求来源、DOM 窗口和共享调度，优先降低网络、内存与主线程占用；下次打开阅读器生效。',
       balanced: '在请求需求、滚动跟手、DOM 占用和鲁棒调度之间取默认平衡；下次打开阅读器生效。',
@@ -29902,6 +30940,7 @@
         topicNavMetadataOverride || liveTopicNavMetadata,
         mergeTopicNavMetadata(sourceTopicNavMetadata, cachedTopicNavMetadata(topicData)),
       );
+      if (queueEntry) updateReaderQueueEntryFromTopic(queueEntry, topicData);
       readerShell.topicNavMetadata = sourceTopicNavMetadata;
       const topicMetadataFilled = fillTopicNavMetadata(topicData, sourceTopicNavMetadata);
       const topicMetadataRemembered = rememberTopicNavMetadata(topicId, topicData, sourceTopicNavMetadata);
@@ -29981,6 +31020,7 @@
     startTopicNavMetadataHydration();
     const postRequestScheduler = createReaderRequestScheduler(performance);
     ACTIVE_READER_REQUEST_SCHEDULER = postRequestScheduler;
+    scheduleReaderQueuePrefetch();
     let rateLimitNoticeTimer = 0;
     let rateLimitChallengePending = false;
     const rateLimitCooldownRemaining = () => {
@@ -30688,7 +31728,7 @@
         const category = note.dataset.profileRouting;
         const sharedCount = category === 'font' ? READER_PROFILE_SHARING_FIELDS.font.filter(fontDraftSettingShared).length
           : category === 'layout' ? LAYOUT_REGION_KEYS.filter(layoutDraftSettingShared).length
-            : category === 'appearance' ? APPEARANCE_PROFILE_VALUE_KEYS.filter(appearanceDraftSettingShared).length
+            : category === 'appearance' ? APPEARANCE_PROFILE_SETTING_KEYS.filter(appearanceDraftSettingShared).length
               : readerProfileSharingCount(category);
         if (sharedCount) {
           note.classList.toggle('is-embedded', embedded);
@@ -30745,8 +31785,11 @@
     const layoutDraftSettingShared = (field) => LAYOUT_REGION_KEYS.includes(field)
       && layoutSharingDraft[field] === true;
     const layoutDraftSharingEnabled = () => LAYOUT_REGION_KEYS.some(layoutDraftSettingShared);
-    const appearanceDraftSettingShared = (field) => APPEARANCE_PROFILE_VALUE_KEYS.includes(field)
-      && appearanceSharingDraft[field] === true;
+    const appearanceDraftSettingShared = (field) => {
+      const settingKey = appearanceBaseSettingKey(field);
+      return APPEARANCE_PROFILE_SETTING_KEYS.includes(settingKey)
+        && appearanceSharingDraft[settingKey] === true;
+    };
     const categorySharingDraftChanged = (category, draft) => {
       const saved = currentReaderProfileSharing()[category];
       return READER_PROFILE_SHARING_FIELDS[category].some((field) => draft[field] !== saved[field]);
@@ -30791,7 +31834,8 @@
       );
     };
     const currentAppearanceDefaults = () => mergeSharedProfileValues(
-      APPEARANCE_PROFILE_DEFAULTS[appearanceSettingsProfile], APPEARANCE_PROFILE_DEFAULTS.full,
+      normalizeAppearanceProfile(APPEARANCE_PROFILE_DEFAULTS[appearanceSettingsProfile]),
+      normalizeAppearanceProfile(APPEARANCE_PROFILE_DEFAULTS.full),
       APPEARANCE_PROFILE_VALUE_KEYS, appearanceDraftSettingShared
     );
     const currentSettingsProfileLabel = (profile) => READER_PROFILE_LABELS[profile];
@@ -30880,9 +31924,6 @@
       });
       return values;
     };
-    const themeAdjustedDefaultColor = (value, lightDefault, darkDefault) => (
-      resolvedReaderThemeMode() === 'dark' && value === lightDefault ? darkDefault : value
-    );
     const activeFontScaleProfile = () => {
       const profile = activeReaderProfileName();
       const previewing = !settingsPopover.hidden && !fontSettingsSection.hidden;
@@ -30939,36 +31980,27 @@
     };
     const applyZebraAppearance = () => {
       const values = activeAppearanceColors();
-      overlay.style.setProperty('--ldp-zebra-color', themeAdjustedDefaultColor(
-        values.zebraColor,
-        ZEBRA_COLOR_DEFAULT,
-        READER_THEME_VARIABLES.dark['--ldp-zebra-color']
-      ));
+      overlay.style.setProperty('--ldp-zebra-color', appearanceThemeColor(values, 'zebraColor'));
       overlay.style.setProperty('--ldp-zebra-radius', `${values.zebraRadius}px`);
     };
     const applyListZebraColor = () => {
-      const value = themeAdjustedDefaultColor(
-        activeAppearanceColors().listZebraColor,
-        LIST_ZEBRA_COLOR_DEFAULT,
-        READER_THEME_VARIABLES.dark['--ldp-zebra-color']
-      );
+      const value = appearanceThemeColor(activeAppearanceColors(), 'listZebraColor');
       if (!readerWorkspace.isEmbedded()) {
         document.documentElement.style.removeProperty('--ldp-reader-list-zebra-color');
         return;
       }
       document.documentElement.style.setProperty('--ldp-reader-list-zebra-color', value);
     };
-    const applyLineAppearance = (type, defaultColor, emphasis) => {
+    const applyLineAppearance = (type, emphasis) => {
       const values = activeAppearanceColors();
       const key = `${type}Line`;
       const property = `--ldp-${type}-line`;
-      const value = values[`${key}Color`];
+      const colorKey = `${key}Color`;
+      const value = appearanceThemeColor(values, colorKey);
+      const defaultValue = APPEARANCE_PROFILE_DEFAULT[appearanceThemeValueKey(colorKey)];
       const width = values[`${key}Width`];
-      overlay.style.setProperty(`${property}-color`, themeAdjustedDefaultColor(
-        value,
-        defaultColor,
-        READER_THEME_VARIABLES.dark[`${property}-color`]
-      ));
+      const enabled = values.structureColorsEnabled !== false;
+      overlay.style.setProperty(`${property}-color`, enabled ? value : 'transparent');
       overlay.style.setProperty(`${property}-width`, `${width}px`);
       overlay.style.setProperty(`${property}-emphasis-width`, `${width * emphasis}px`);
       if (type === 'reply') {
@@ -30982,7 +32014,11 @@
         return;
       }
       if (type !== 'divider') return;
-      if (!readerWorkspace.isEmbedded() || value === DIVIDER_LINE_COLOR_DEFAULT) {
+      if (!readerWorkspace.isEmbedded()) {
+        document.documentElement.style.removeProperty('--ldp-divider-line-color');
+      } else if (!enabled) {
+        document.documentElement.style.setProperty('--ldp-divider-line-color', 'transparent');
+      } else if (value === defaultValue) {
         document.documentElement.style.removeProperty('--ldp-divider-line-color');
       } else {
         document.documentElement.style.setProperty('--ldp-divider-line-color', value);
@@ -30993,12 +32029,13 @@
         document.documentElement.style.setProperty('--ldp-divider-line-width', `${width}px`);
       }
     };
-    const applyReplyLineAppearance = () => applyLineAppearance('reply', REPLY_LINE_COLOR_DEFAULT, 2);
-    const applyQuoteLineAppearance = () => applyLineAppearance('quote', QUOTE_LINE_COLOR_DEFAULT, 5);
-    const applyDividerLineAppearance = () => applyLineAppearance('divider', DIVIDER_LINE_COLOR_DEFAULT, 2);
+    const applyReplyLineAppearance = () => applyLineAppearance('reply', 2);
+    const applyQuoteLineAppearance = () => applyLineAppearance('quote', 5);
+    const applyDividerLineAppearance = () => applyLineAppearance('divider', 2);
     const applyFloorPreviewAppearance = () => {
       const values = activeAppearanceColors();
-      overlay.style.setProperty('--ldp-floor-preview-color', values.floorPreviewColor);
+      overlay.style.setProperty('--ldp-floor-preview-color',
+        appearanceThemeColor(values, 'floorPreviewColor'));
       overlay.style.setProperty('--ldp-floor-preview-height', `${values.floorPreviewHeight}px`);
       const activeContext = readerShell.activeContext;
       if (activeContext && activeContext.floorPreview && activeContext.floorPreview.isOpen()) {
@@ -31021,7 +32058,10 @@
       overlay.style.setProperty('--ldp-jump-highlight-duration', `${jumpHighlightDurationMs(config)}ms`);
       overlay.style.setProperty('--ldp-jump-highlight-count', String(config.count));
     };
-    overlay._ldpApplyThemeDependentColors = applyAppearanceColors;
+    overlay._ldpApplyThemeDependentColors = () => {
+      applyAppearanceColors();
+      if (!settingsPopover.hidden && !appearanceSettingsSection.hidden) syncAppearanceControls();
+    };
     const syncRangeVisual = (input) => {
       const min = Number(input.min) || 0;
       const max = Number(input.max) || 100;
@@ -31471,10 +32511,11 @@
     const syncAppearanceValueControls = () => {
       const values = currentAppearanceDraft();
       appearanceControlSettings.forEach(({ input, output, key }) => {
-        const value = values[key];
         const range = input.type === 'range';
+        const value = values[key];
         input.value = range ? String(value) : value;
         output.textContent = range ? `${value}px` : value;
+        if (!range) output.title = `当前主题实际应用 ${appearanceThemeColor(values, key).toUpperCase()}`;
         if (range) syncRangeVisual(input);
       });
     };
@@ -31482,14 +32523,38 @@
       const values = currentAppearanceDraft();
       const defaults = currentAppearanceDefaults();
       colorResetButtons.forEach((button) => {
-        const key = button.dataset.colorReset;
-        button.disabled = !defaults[key] || values[key] === defaults[key];
+        const baseKey = button.dataset.colorReset;
+        const valueKeys = appearanceSettingValueFields(baseKey);
+        const structureDisabled = button.closest('[data-appearance-group="structure"]')
+          && values.structureColorsEnabled === false;
+        button.disabled = structureDisabled || valueKeys.every((key) =>
+          defaults[key] == null || values[key] === defaults[key]);
+      });
+    };
+    const syncAppearanceGroupControls = () => {
+      const values = currentAppearanceDraft();
+      appearanceGroupToggleInputs.forEach((input) => {
+        const key = input.dataset.appearanceGroupToggle;
+        const enabled = values[key] !== false;
+        const group = input.closest('.ldp-color-group');
+        input.checked = enabled;
+        group.classList.toggle('is-disabled', !enabled);
+        group.querySelector('.ldp-settings-fields').setAttribute('aria-disabled', String(!enabled));
+        group.querySelectorAll('.ldp-settings-fields input').forEach((control) => {
+          control.disabled = !enabled;
+        });
       });
     };
     const syncAppearanceControls = () => {
       const profileLabel = currentSettingsProfileLabel(appearanceSettingsProfile);
+      const configuredTheme = resolvedReaderThemeMode();
+      const selectedTheme = normalizeReaderThemeMode(currentReaderThemeMode());
+      const themeLabel = configuredTheme === 'dark' ? '暗色主题' : '明亮主题';
+      appearanceThemeNote.innerHTML = `当前预览 <strong>${themeLabel}适应色</strong>`
+        + `${selectedTheme === 'system' ? '（跟随系统）' : ''}；HEX 保留所选原色，实际呈现自动限制亮度与对比。`;
       syncTabSelection(appearanceProfileTabs, 'appearanceProfile', appearanceSettingsProfile, true);
       syncAppearanceValueControls();
+      syncAppearanceGroupControls();
       syncColorResetButtons();
       const changed = appearanceValuesChanged();
       appearanceStatus.textContent = changed
@@ -32950,8 +34015,9 @@
       undefined, (left, right) => Math.abs(left - right) >= 0.01
     );
     const appearanceDraftChangeCount = () => profileSettingsDraftChangeCount(
-      APPEARANCE_PROFILE_VALUE_KEYS, appearanceDraftProfiles, sharedAppearanceDraft, appearanceSharingDraft,
-      currentAppearanceProfiles(), currentSharedAppearanceProfile(), currentReaderProfileSharing().appearance
+      APPEARANCE_PROFILE_SETTING_KEYS, appearanceDraftProfiles, sharedAppearanceDraft, appearanceSharingDraft,
+      currentAppearanceProfiles(), currentSharedAppearanceProfile(), currentReaderProfileSharing().appearance,
+      appearanceSettingValueFields
     );
     const jumpHighlightDraftChangeCount = () => {
       const saved = jumpHighlightConfigFromPrefs(PREFS);
@@ -33860,7 +34926,10 @@
         } else if (category === 'appearance') {
           const values = currentAppearanceDraft();
           appearanceSharingDraft = Object.assign({}, appearanceSharingDraft, { [field]: enabled });
-          if (enabled) sharedAppearanceDraft = Object.assign({}, sharedAppearanceDraft, { [field]: values[field] });
+          if (enabled) {
+            sharedAppearanceDraft = Object.assign({}, sharedAppearanceDraft,
+              Object.fromEntries(appearanceSettingValueFields(field).map((key) => [key, values[key]])));
+          }
           syncControls = syncAppearanceControls;
           applyPreview = applyAppearanceColors;
         } else return false;
@@ -34141,18 +35210,37 @@
       const setAppearanceDraftValue = (key, value) => {
         setCurrentAppearanceDraft(Object.assign({}, currentAppearanceDraft(), { [key]: value }));
       };
+      const setAppearanceDraftValues = (values) => {
+        setCurrentAppearanceDraft(Object.assign({}, currentAppearanceDraft(), values));
+      };
+      appearanceGroupToggleInputs.forEach((input) => input.addEventListener('change', () => {
+        const key = input.dataset.appearanceGroupToggle;
+        if (!APPEARANCE_PROFILE_SETTING_KEYS.includes(key)) return;
+        setAppearanceDraftValue(key, input.checked);
+        applyAppearanceColors();
+        syncAppearanceControls();
+      }));
       appearanceControlSettings.forEach(({ input, key, normalize: normalizeValue, apply: applyPreview }) => {
         input.addEventListener('input', () => {
-          setAppearanceDraftValue(key, normalizeValue(input.value));
+          if (input.type === 'color') {
+            const sourceColor = normalizeHexColor(input.value, currentAppearanceDefaults()[key]);
+            setAppearanceDraftValues({
+              [key]: sourceColor,
+              [appearanceDarkColorKey(key)]: sourceColor,
+            });
+          } else {
+            setAppearanceDraftValue(key, normalizeValue(input.value));
+          }
           applyPreview();
           syncAppearanceControls();
         });
       });
       colorResetButtons.forEach((button) => button.addEventListener('click', () => {
       const key = button.dataset.colorReset;
-      const defaultValue = currentAppearanceDefaults()[key];
-      if (!defaultValue) return;
-      setAppearanceDraftValue(key, defaultValue);
+      const defaults = currentAppearanceDefaults();
+      const valueKeys = appearanceSettingValueFields(key);
+      if (valueKeys.some((valueKey) => defaults[valueKey] == null)) return;
+      setAppearanceDraftValues(Object.fromEntries(valueKeys.map((valueKey) => [valueKey, defaults[valueKey]])));
       applyAppearanceColors();
       syncAppearanceControls();
       }));
@@ -34198,7 +35286,7 @@
       streamMountedNodes: new Set(), streamHydratedNodes: new Set(),
       pendingPostHydrations: new Set(), pendingPostLatexRenders: new Set(),
       streamTopSpacer: createStreamSpacer('top'), streamBottomSpacer: createStreamSpacer('bottom'),
-      streamResizeObserver: null, streamWindowFrame: 0, floorPreviewSyncFrame: 0,
+      streamResizeObserver: null, queueViewportTracker: null, streamWindowFrame: 0, floorPreviewSyncFrame: 0,
       latestReplyAt: '', latestReplyTimestamp: 0,
       topicBookmarked: !!(cachedTopicPreview && cachedTopicPreview.bookmarked),
       topicNotificationLevel: topicNotificationLevel(cachedTopicPreview),
@@ -34211,6 +35299,9 @@
       cancelInitialTargetPosition: null, releaseInitialPrecedingContent: null, readerActionDialog: null,
       nativeComposerSession: null, toggleTopicBookmark: null, readerWindow, readerWorkspace,
     };
+    ctx.queueViewportTracker = queueEntry
+      ? createReaderQueueViewportTracker(ctx, queueEntry)
+      : { observe() {}, unobserve() {}, stop() {} };
     readerShell.activeContext = ctx;
     if (typeof readerShell.refreshBookmarksPanel !== 'function') {
       readerShell.refreshBookmarksPanel = (confirmedReaction = null) => {
@@ -35176,10 +36267,14 @@
       );
       if (!appEvents || typeof appEvents.trigger !== 'function') return null;
       const originalTrigger = appEvents.trigger;
-      const suppressedEvents = new Set([
+      const readerRefreshEvents = new Set([
+        'composer:created-post',
         'post:created',
         'post-stream:posted',
         'post-stream:refresh',
+      ]);
+      const suppressedEvents = new Set([
+        ...readerRefreshEvents,
         'post:highlight',
       ]);
       const isolation = {
@@ -35189,7 +36284,11 @@
         released: false,
       };
       isolation.trigger = function (eventName, ...args) {
-        if (suppressedEvents.has(String(eventName || ''))) return this;
+        const name = String(eventName || '');
+        if (readerRefreshEvents.has(name) && typeof handleNativeComposerPostRefresh === 'function') {
+          handleNativeComposerPostRefresh();
+        }
+        if (suppressedEvents.has(name)) return this;
         return originalTrigger.call(this, eventName, ...args);
       };
       try {
@@ -35314,6 +36413,9 @@
       const preserveShell = options.preserveShell === true;
       if (!runtimeStopped) {
         runtimeStopped = true;
+        if (queueEntry && typeof overlay._ldpCaptureHistoryViewport === 'function') {
+          saveReaderQueueViewport(queueEntry.topicId, overlay._ldpCaptureHistoryViewport());
+        }
         if (typeof overlay._ldpCloseCodePreview === 'function') overlay._ldpCloseCodePreview(false, true);
         if (preserveShell) {
           const parkedCommentsHeader = parkReaderCommentsHeader(overlay, ctx.commentsHeader);
@@ -35344,6 +36446,7 @@
           ['composer window', () => ctx.nativeComposerWindow.destroy()],
           ['post actions', () => destroyActions && destroyActions()],
           ['read tracker', () => tracker.stop()],
+          ['queue viewport tracker', () => ctx.queueViewportTracker.stop()],
           ['nested replies', () => ctx.repliesIO.disconnect()],
           ['media players', () => suspendReaderMedia(overlay)],
           ['detached media players', () => ctx.streamHydratedNodes.forEach((node) => suspendReaderMedia(node))],
@@ -35528,6 +36631,7 @@
       disposeHistoryNavigation();
       removeOwnedNode(overlay);
       if (CURRENT_OVERLAY === overlay) CURRENT_OVERLAY = null;
+      if (!closeOptions.suppressNavigation) autoDequeueReaderQueueEntry(topicId);
       queueMicrotask(releaseReaderPortalIfIdle);
       if (ACTIVE_READER_SESSION_ID === readerSessionId) ACTIVE_READER_SESSION_ID = 0;
       document.documentElement.classList.remove('ldp-reader-open');
@@ -36478,6 +37582,9 @@
       }
       setReaderOpenPhase('activate-reader');
       readerSession.state = 'active';
+      if (previousQueueTopicId > 0 && previousQueueTopicId !== Number(topicId)) {
+        autoDequeueReaderQueueEntry(previousQueueTopicId);
+      }
       readerRefreshBtn.disabled = false;
       if (initialQuoteSourceTarget) await returnToReaderQuoteSource(initialQuoteSourceTarget, ctx);
       ctx.timeline.update();
@@ -37158,6 +38265,20 @@
 
   function handleTopicLinkTrigger(e) {
     if (e.type === 'click' && e.button && e.button !== 0) return false;
+    const queueButton = eventPathClosest(e, '.ldp-reader-queue-add[data-reader-queue-topic-id]');
+    if (queueButton) {
+      e.preventDefault();
+      e.stopPropagation();
+      const topicId = Number(queueButton.dataset.readerQueueTopicId);
+      const existing = readerQueueEntry(topicId);
+      if (existing) {
+        if (removeReaderQueueEntry(topicId)) showSelectionToast('已从阅读队列移除');
+      } else {
+        const entry = ensureReaderQueueEntry(topicId, readerQueueMetadataFromLink(queueButton, topicId));
+        if (entry) showSelectionToast(`已加入阅读队列：${entry.title}`);
+      }
+      return true;
+    }
     let a = eventPathClosest(e, 'a[href]');
     if (!a && document.documentElement.classList.contains('ldp-reader-workspace')) {
       const card = eventPathClosest(e, 'tr.topic-list-item,.topic-list-item,.latest-topic-list-item');
@@ -37191,6 +38312,7 @@
     if (shouldBypassReaderUrl(a.href)) return false;
     const route = extractTopicRouteFromUrl(a.getAttribute('href') || a.href);
     if (!route) return false;
+    const readerQueueMetadata = readerQueueMetadataFromLink(a, route.topicId);
     const hostTopicPointerAnchor = captureHostTopicPointerAnchor(e, route.topicId);
     if (hostTopicPointerAnchor && typeof a.blur === 'function') a.blur();
     e.preventDefault(); e.stopPropagation();
@@ -37199,6 +38321,7 @@
     openModal(route.topicId, {
       targetPostNumber: topicLinkReaderStartPostNumber(route, a),
       topicNavMetadata: readTopicNavMetadata(a),
+      readerQueueMetadata,
       hostTopicPointerAnchor,
     });
     return true;
@@ -37223,6 +38346,7 @@
   runWhenBodyReady(async () => {
     ensureReaderStyleMounted();
     installNativeReaderTriggerObserver();
+    installNativeTopicQueueButtons();
     let directTopicTakenOver = false;
     try {
       directTopicTakenOver = await takeoverDirectTopicRoute();

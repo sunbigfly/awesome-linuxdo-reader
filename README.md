@@ -124,7 +124,7 @@
 2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。
 3. 打开 [LINUX DO](https://linux.do/)，点击主题标题开始使用。
 
-当前项目版本为 `0.1.2`，脚本仅匹配 `https://linux.do/*`。
+当前项目版本为 `0.1.3`，脚本仅匹配 `https://linux.do/*`。
 
 ## 开发
 
