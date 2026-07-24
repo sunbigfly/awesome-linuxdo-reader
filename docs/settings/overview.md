@@ -4,7 +4,7 @@ description: 理解 13 个设置面板、三种形态配置、共享字段、草
 feature_ids: ["USER-005", "SET-001"]
 source_anchors: ["renderSettingsUserInfo", "SETTINGS_PANEL_META", "READER_THEME_MODES"]
 since: 0.1.2
-version: 0.1.3
+version: 0.1.4
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-02-settings-overview.png"]

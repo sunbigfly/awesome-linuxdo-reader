@@ -5,7 +5,7 @@ description: 从安装到进阶调优，完整掌握 Awesome LinuxDo Reader。
 feature_ids: ["CORE-001", "CORE-002", "CORE-004", "READ-001", "ACTION-001", "DATA-001"]
 source_anchors: ["@downloadURL", "ldp-native-reader-trigger", "LIST_READER_MODES", "stableStreamMountRange", "ldp-replybtn", "readerConfigExportPayload"]
 since: 0.1.2
-version: 0.1.3
+version: 0.1.4
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-01-reader-overview.png"]
@@ -57,7 +57,7 @@ features:
 
 ## 手册覆盖范围
 
-这套手册对应 userscript `0.1.3`，以当前源码和真实 LINUX DO 运行界面为事实源。功能目录记录了每项能力的源码锚点、版本、验证日期、截图和对应文档；自动检查会阻止“功能存在但没有文档”或“文档还指向旧版本”的变更。
+这套手册对应 userscript `0.1.4`，以当前源码和真实 LINUX DO 运行界面为事实源。功能目录记录了每项能力的源码锚点、版本、验证日期、截图和对应文档；自动检查会阻止“功能存在但没有文档”或“文档还指向旧版本”的变更。
 
 ::: tip 推荐路径
 第一次使用按“安装与更新 → 五分钟上手 → 界面总览”阅读。遇到加载、图片或限流问题，直接进入“故障排查”。

@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      0.1.3
+// @version      0.1.4
 // @license      MIT
 // @description  面向 LINUX DO 的沉浸式增强阅读器，支持父回复预览、消息/历史/收藏、原图灯箱、主题布局、请求限流、缓存与 DOM 渲染管理。
 // @description:en An immersive LINUX DO reader with threaded context, community panels, image lightbox, layouts, request control, cache, and DOM rendering management.
@@ -28,7 +28,7 @@
   'use strict';
 
   const BASE = location.origin;
-  const READER_VERSION = '0.1.3';
+  const READER_VERSION = '0.1.4';
   const HOST_PAGE_WINDOW = globalThis.unsafeWindow || window;
   const TOPIC_CACHE_TTL = 90 * 1000;
   const READ_THRESHOLD = 1500;

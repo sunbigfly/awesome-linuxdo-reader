@@ -4,7 +4,7 @@ description: 阅读资源趋势、请求脉络、429 状态和 Cloudflare 恢复
 feature_ids: ["MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
 source_anchors: ["RESOURCE_MONITOR_ROWS", "REQUEST_FLOW_MAX_ENTRIES", "READER_ENDPOINT_429_BASE_BLOCK_MS", "LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY", "requestFlowPath"]
 since: 0.1.2
-version: 0.1.3
+version: 0.1.4
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-10-resource-monitor.png", "/screenshots/guide-11-request-flow.png"]

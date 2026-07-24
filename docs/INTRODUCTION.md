@@ -1,6 +1,6 @@
 # Awesome LinuxDo Reader 项目介绍
 
-本文集中维护可复用的对外介绍文案。当前版本：`0.1.3`。
+本文集中维护可复用的对外介绍文案。当前版本：`0.1.4`。
 
 ## 一句话介绍
 
@@ -53,6 +53,6 @@ Awesome LinuxDo Reader 面向频繁阅读长帖、跟进讨论和处理社区消
 
 - 项目名称：Awesome LinuxDo Reader
 - 中文名称：LinuxDo 增强阅读
-- 当前版本：0.1.3
+- 当前版本：0.1.4
 - Logo：[`assets/logo.png`](../assets/logo.png)
 - 开源许可：[MIT License](../LICENSE)
