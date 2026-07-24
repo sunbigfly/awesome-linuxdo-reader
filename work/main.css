@@ -1582,6 +1582,11 @@
     .ldp-topic-timeline-track.ldp-timeline-hovering .ldp-topic-timeline-cursor{opacity:1;transform:translate3d(0,-50%,0) scale(1);}
     .ldp-topic-timeline-track.ldp-timeline-jumping .ldp-topic-timeline-cursor{opacity:1;transform:translate3d(0,-50%,0) scale(1);
       transition:opacity .1s ease-out,transform .1s cubic-bezier(.22,1,.36,1);}
+    .ldp-topic-timeline-cursor.ldp-timeline-lens-composited{top:0;will-change:transform,opacity;transition:opacity .1s ease-out;
+      transform:translate3d(0,var(--ldp-timeline-lens-top,0px),0) translateY(-50%) scale(.94);}
+    .ldp-topic-timeline-track.ldp-timeline-hovering .ldp-topic-timeline-cursor.ldp-timeline-lens-composited,
+    .ldp-topic-timeline-track.ldp-timeline-jumping .ldp-topic-timeline-cursor.ldp-timeline-lens-composited{
+      transform:translate3d(0,var(--ldp-timeline-lens-top,0px),0) translateY(-50%) scale(1);transition:opacity .1s ease-out;}
     .ldp-topic-timeline-track.ldp-timeline-jumping .ldp-topic-timeline-cursor > .ldp-timeline-lens-focus{animation:ldp-topic-timeline-lens-focus .46s ease-out both;}
     @keyframes ldp-topic-timeline-lens-focus{
       0%{filter:blur(.35px);opacity:.52;}
