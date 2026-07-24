@@ -33504,6 +33504,10 @@
       if (isolation.appEvents && isolation.appEvents.trigger === isolation.trigger) {
         try { isolation.appEvents.trigger = isolation.originalTrigger; } catch (error) {}
       }
+      (isolation.routeGuards || []).forEach(({ owner, originalRouteTo, guardedRouteTo }) => {
+        if (owner.routeTo !== guardedRouteTo) return;
+        try { owner.routeTo = originalRouteTo; } catch (error) {}
+      });
       if (nativeComposerHostIsolation === isolation) nativeComposerHostIsolation = null;
     };
     const resumeReaderNativeComposerHostTopicBus = () => {
@@ -33518,7 +33522,7 @@
     };
     const isolateReaderNativeComposerFromHost = () => {
       const session = ctx.nativeComposerSession;
-      if (!readerWorkspace.isEmbedded() || !session || session.action !== 'reply') return null;
+      if (!session || session.action !== 'reply') return null;
       releaseReaderNativeComposerHostIsolation();
       const appEvents = session.composer && (
         session.composer.appEvents || lookupDiscourse('service:app-events')
@@ -33539,6 +33543,7 @@
         appEvents,
         originalTrigger,
         trigger: null,
+        routeGuards: [],
         released: false,
       };
       isolation.trigger = function (eventName, ...args) {
@@ -33554,6 +33559,28 @@
       } catch (error) {
         return null;
       }
+      const discourseUrlModule = tryRequire('discourse/lib/url');
+      const routeOwners = Array.from(new Set([
+        discourseUrlModule,
+        discourseUrlModule && discourseUrlModule.default,
+        HOST_PAGE_WINDOW.DiscourseURL,
+        HOST_PAGE_WINDOW.Discourse && HOST_PAGE_WINDOW.Discourse.URL,
+      ].filter(Boolean)));
+      routeOwners.forEach((owner) => {
+        if (typeof owner.routeTo !== 'function') return;
+        const originalRouteTo = owner.routeTo;
+        const guardedRouteTo = function (url, ...args) {
+          const route = extractTopicRouteFromUrl(String(url || ''));
+          if (route && +route.topicId === +ctx.topicId && +route.postNumber > 0) return;
+          return originalRouteTo.call(this, url, ...args);
+        };
+        try {
+          owner.routeTo = guardedRouteTo;
+          if (owner.routeTo === guardedRouteTo) {
+            isolation.routeGuards.push({ owner, originalRouteTo, guardedRouteTo });
+          }
+        } catch (error) {}
+      });
       const topicController = lookupDiscourse('controller:topic');
       const hostModel = discourseModelValue(topicController, 'model');
       const hostTopicId = +(discourseModelValue(hostModel, 'id') || 0);
@@ -33597,7 +33624,7 @@
       return true;
     };
     onNativeComposerSubmitClick = (event) => {
-      const button = event.target.closest?.('#reply-control .composer-action-reply .save-or-cancel button.create');
+      const button = event.target.closest?.('#reply-control .save-or-cancel button.create');
       if (!button || button !== nativeReaderReplyComposerButton()) return;
       event.preventDefault();
       event.stopImmediatePropagation();
