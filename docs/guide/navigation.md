@@ -7,7 +7,7 @@ since: 0.1.2
 version: 0.1.3
 status: current
 last_verified: 2026-07-24
-screenshots: ["/screenshots/guide-16-history.png"]
+screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-16-history.png", "/screenshots/guide-21-reading-queue.png"]
 ---
 
 # 楼层、时间轴与历史
@@ -22,6 +22,10 @@ screenshots: ["/screenshots/guide-16-history.png"]
 - 底部回顶按钮返回当前主题顶部，而不是宿主页面顶部。
 
 大量楼层快速跳转需要经过“获取数据 → 挂载目标 → 定位”的顺序。不要在第一次等待时连续重复点击，否则会产生互相覆盖的目标。
+
+![阅读工作区右侧时间轴、当前楼层和回顶入口](/screenshots/guide-01-reader-overview.png)
+
+<p class="image-caption">时间轴位于阅读工作区右侧：拖动滑块选择楼层，观察当前楼层与日期，底部按钮返回主题顶部。</p>
 
 ## 只看楼主
 
@@ -39,6 +43,8 @@ screenshots: ["/screenshots/guide-16-history.png"]
 阅读器保存主题 ID、标题、最近阅读楼层、首次查看和最后查看时间。左右按钮按历史链前进或后退，并恢复对应位置。
 
 ![浏览历史中的顺序、检索、目标位置和前后翻页](/screenshots/guide-16-history.png)
+
+<p class="image-caption">历史面板显示保存的主题和最近位置；阅读器边缘的前后按钮沿同一条历史链切换，不按主题列表顺序切换。</p>
 
 “设置 → 其他功能 → 历史导航”提供：
 
@@ -59,5 +65,9 @@ screenshots: ["/screenshots/guide-16-history.png"]
 - 主题导航用于沿 LINUX DO 提供的前后主题关系移动。
 - [阅读队列](/guide/reading-queue)用于准备接下来要读的多个主题，并在当前浏览器中跨刷新恢复。
 - 浏览历史用于跨会话恢复已读主题和位置。
+
+![阅读队列中的当前主题、预加载状态和阅读进度](/screenshots/guide-21-reading-queue.png)
+
+<p class="image-caption">需要连续阅读多篇文章时打开队列面板；点击队列项切换主题，并通过进度与预加载状态判断是否已经准备完成。</p>
 
 三者用途不同，但最终都进入同一个受缓存和请求调度约束的阅读工作区。

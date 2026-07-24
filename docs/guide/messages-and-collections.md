@@ -6,7 +6,7 @@ source_anchors: ["toggleReaderPostReaction", "toggleReaderBookmark", "NOTIFICATI
 since: 0.1.2
 version: 0.1.3
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-15-notifications-replies.png", "/screenshots/guide-16-history.png", "/screenshots/guide-17-bookmarks-reactions.png"]
 ---
 
@@ -25,6 +25,8 @@ screenshots: ["/screenshots/guide-15-notifications-replies.png", "/screenshots/g
 
 ![消息中心回复分类中的真实通知和目标回跳](/screenshots/guide-15-notifications-replies.png)
 
+<p class="image-caption">从标题栏打开消息中心，先选择消息类别，再点击具体通知；阅读器会进入对应主题并定位到目标楼层。</p>
+
 每页最多 24 条。检索只筛选已经加载或缓存的消息；没有匹配不等于服务器上不存在。点击消息时，阅读器会打开目标主题、等待楼层挂载并定位。
 
 “全部已读”会调用原站通知能力，影响账号状态；单纯清理消息缓存不会把通知标记为已读。
@@ -34,6 +36,8 @@ screenshots: ["/screenshots/guide-15-notifications-replies.png", "/screenshots/g
 历史是阅读器保存在当前浏览器中的主题访问记录，包括标题、主题 ID、最近楼层、首次查看和最后查看时间。
 
 ![浏览历史列表、检索和目标阅读位置](/screenshots/guide-16-history.png)
+
+<p class="image-caption">打开历史面板后可检索、排序和多选；点击一条历史记录会恢复该主题最近保存的阅读位置。</p>
 
 可用操作：
 
@@ -49,6 +53,8 @@ screenshots: ["/screenshots/guide-15-notifications-replies.png", "/screenshots/g
 ## 收藏与回应
 
 ![回应、主题书签和楼层书签统一入口](/screenshots/guide-17-bookmarks-reactions.png)
+
+<p class="image-caption">在收藏与回应中心切换“回应、帖子、楼层”标签；先确认对象类型，再执行跳转或移除。</p>
 
 三个标签：
 

@@ -40,7 +40,7 @@ screenshots: ["/screenshots/guide-23-documentation-maintenance.png"]
 
 所有公开手册页面必须维护 `title`、`description`、`feature_ids`、`source_anchors`、`since`、`version`、`status`、`last_verified` 和非空 `screenshots`。
 
-页面正文必须实际显示至少一张 `screenshots` 中登记的图片。页面 `feature_ids` 与功能目录 `docs` 必须双向匹配。源码锚点不用行号，因为大文件行号会频繁漂移。
+页面正文中的每张图片都必须登记在 `screenshots`。`docs/guide/` 下的使用指南还必须达到 `max(2, ceil(二级章节数 / 3))` 的图片密度，并在每张图片后紧跟一段 `.image-caption` 操作说明，明确入口、动作或结果。页面 `feature_ids` 与功能目录 `docs` 必须双向匹配。源码锚点不用行号，因为大文件行号会频繁漂移。
 
 ## 一次功能更新的文档动作
 
@@ -83,6 +83,8 @@ npm run docs:build
 - Emoji 使用 0；
 - 正文无图片页面 0；
 - 正文图片未登记页面 0；
+- 图片密度不足的使用指南 0；
+- 图片后缺少操作说明的使用指南 0；
 - 缺失链接、图片和必填元数据 0。
 
 `docs:build` 必须完成 VitePress 生产构建。前端导航、搜索、暗色模式、截图和移动视口仍需真实浏览器抽查。

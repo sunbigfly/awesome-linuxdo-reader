@@ -6,8 +6,8 @@ source_anchors: ["renderSolvedAnswerCard", "IMAGE_SCALE_OPTIONS", "openLightbox"
 since: 0.1.2
 version: 0.1.3
 status: current
-last_verified: 2026-07-23
-screenshots: ["/screenshots/guide-19-image-lightbox.png"]
+last_verified: 2026-07-24
+screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-25-user-card.png"]
 ---
 
 # 图片、媒体与富内容
@@ -15,6 +15,10 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png"]
 ## 帖子图片
 
 正文图片比例可以按浮窗、全屏、移动分别保存，范围为 50%–200%。比例只影响帖子内显示尺寸，不修改远端图片。
+
+![图片设置中的显示比例、灯箱原图和评论面板选项](/screenshots/guide-03-image-settings.png)
+
+<p class="image-caption">打开“设置 → 图片设置”，分别调整浮窗、全屏和移动布局的图片比例，并决定灯箱是否默认加载原图。</p>
 
 点击图片进入灯箱。常用操作：
 
@@ -28,6 +32,8 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png"]
 | 关闭 | `Esc` |
 
 ![原图灯箱、图片序列、工具栏、描述和关联评论](/screenshots/guide-19-image-lightbox.png)
+
+<p class="image-caption">点击正文图片后，使用顶部工具栏缩放、重置、下载或返回楼层；底部缩略图用于前后翻图，右侧面板显示描述和关联评论。</p>
 
 ## 原图、描述与评论
 
@@ -49,6 +55,10 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png"]
 ## 头像与资料媒体
 
 点击用户头像可以打开独立预览器，支持缩放、前后翻看和下载。头像缓存与帖子原图缓存分开管理。
+
+![阅读器用户卡与头像原图预览器同时打开](/screenshots/guide-25-user-card.png)
+
+<p class="image-caption">先点击作者用户名打开用户卡，再点击卡片中的头像进入原图预览；右上角按钮用于下载或关闭。</p>
 
 ## 视频、音频与 HLS
 

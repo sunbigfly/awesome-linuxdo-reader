@@ -174,9 +174,29 @@ for (const file of pages) {
   }
   if (bodyImages.length === 0) {
     errors.push(`${relative}: 正文必须显示至少一张与页面主题相关的图片`)
-  } else if (Array.isArray(meta.screenshots) &&
-      !bodyImages.some((reference) => meta.screenshots.includes(reference))) {
-    errors.push(`${relative}: 正文图片必须至少有一张登记在 screenshots`)
+  } else if (Array.isArray(meta.screenshots)) {
+    const unregisteredImages = bodyImages.filter((reference) => !meta.screenshots.includes(reference))
+    if (unregisteredImages.length > 0) {
+      errors.push(`${relative}: 正文图片未登记在 screenshots：${unregisteredImages.join('、')}`)
+    }
+  }
+
+  if (relative.startsWith('guide/')) {
+    const sectionCount = (text.match(/^## /gm) || []).length
+    const requiredImageCount = Math.max(2, Math.ceil(sectionCount / 3))
+    if (bodyImages.length < requiredImageCount) {
+      errors.push(`${relative}: 使用指南图片不足：${sectionCount} 个二级章节至少需要 ${requiredImageCount} 张，当前 ${bodyImages.length} 张`)
+    }
+    const lines = text.split(/\r?\n/)
+    const uncaptionedImageLines = lines.flatMap((line, index) =>
+      /^!\[[^\]]+\]\([^)]+\)$/.test(line.trim()) &&
+        !lines.slice(index + 1, index + 4).some((candidate) =>
+          candidate.trim().startsWith('<p class="image-caption">'))
+        ? [index + 1]
+        : [])
+    if (uncaptionedImageLines.length > 0) {
+      errors.push(`${relative}: 使用指南图片缺少紧随其后的操作说明：第 ${uncaptionedImageLines.join('、')} 行`)
+    }
   }
 }
 
@@ -251,7 +271,9 @@ const summary = {
   missing_source_anchors: errors.filter((error) => error.includes('源码锚点不存在') || error.includes('source_anchor 不存在')).length,
   emoji_violations: errors.filter((error) => error.includes('禁止使用 Emoji')).length,
   pages_without_body_images: errors.filter((error) => error.includes('正文必须显示至少一张')).length,
-  pages_with_unregistered_body_images: errors.filter((error) => error.includes('正文图片必须至少有一张登记')).length,
+  pages_with_unregistered_body_images: errors.filter((error) => error.includes('正文图片未登记在 screenshots')).length,
+  underillustrated_guides: errors.filter((error) => error.includes('使用指南图片不足')).length,
+  guides_with_uncaptioned_images: errors.filter((error) => error.includes('使用指南图片缺少紧随其后的操作说明')).length,
   errors,
 }
 

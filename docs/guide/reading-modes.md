@@ -7,7 +7,7 @@ since: 0.1.2
 version: 0.1.3
 status: current
 last_verified: 2026-07-24
-screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-05-layout-settings.png", "/screenshots/guide-09-performance-settings.png"]
+screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-05-layout-settings.png", "/screenshots/guide-21-reading-queue.png", "/screenshots/guide-09-performance-settings.png"]
 ---
 
 # 阅读模式与工作区
@@ -24,13 +24,23 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-0
 
 主题原始路由只使用浮窗接管；列表页可以切换浮窗、全屏和左右嵌入。布局按钮的实际可用项会随当前路由和窗口宽度变化。
 
+![列表页与右侧嵌入阅读工作区同时显示](/screenshots/guide-01-reader-overview.png)
+
+<p class="image-caption">在列表页打开主题后，从阅读器标题栏切换浮窗、全屏或左右嵌入；嵌入模式会保留另一侧主题列表。</p>
+
 ![三种配置形态和五区比例设置](/screenshots/guide-05-layout-settings.png)
+
+<p class="image-caption">需要长期改变布局时，进入“设置 → 布局设置”，分别保存浮窗、全屏和移动配置，而不是只拖动当前窗口。</p>
 
 ## 多主题阅读队列
 
 阅读队列允许从列表页提前加入多个主题，在同一个工作区内切换，并为非当前主题后台准备正文、楼中楼和相关图片。队列会保存阅读位置、固定状态与浮层位置；刷新后仍可恢复。
 
 完整的入口、状态说明、预加载边界、键盘操作和故障恢复见[阅读队列](/guide/reading-queue)。
+
+![多主题阅读队列中的当前项、固定状态和后台准备进度](/screenshots/guide-21-reading-queue.png)
+
+<p class="image-caption">队列面板同时显示当前主题和后台准备状态；点击文章行切换，点击图钉决定离开后是否继续保留。</p>
 
 ## 长帖为什么不会越读越重
 
@@ -42,6 +52,8 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-0
 4. 回到相应位置时从内存或缓存重新渲染。
 
 ![主楼层批量、DOM 窗口和挂载上限设置](/screenshots/guide-09-performance-settings.png)
+
+<p class="image-caption">长帖滚动不顺畅时进入“设置 → 性能设置”，优先检查每批楼层、DOM 前后窗口和挂载上限，不要一次把所有值调到最大。</p>
 
 因此，快速跳楼时可能短暂看到等待区域；这通常表示数据或节点正在补齐，不等同于丢失阅读位置。
 

@@ -6,8 +6,8 @@ source_anchors: ["openUserAvatarViewer", "renderFallbackUserCard", "fetchUserPro
 since: 0.1.2
 version: 0.1.3
 status: current
-last_verified: 2026-07-23
-screenshots: ["/screenshots/guide-02-settings-overview.png"]
+last_verified: 2026-07-24
+screenshots: ["/screenshots/guide-25-user-card.png", "/screenshots/guide-02-settings-overview.png"]
 ---
 
 # 用户资料与关系
@@ -23,6 +23,10 @@ screenshots: ["/screenshots/guide-02-settings-overview.png"]
 - 账号允许的关系操作。
 
 缓存资料可能短暂显示旧值，联网成功后会刷新。用户资料最终以原站为准。
+
+![阅读器用户卡中的资料、统计、关系操作和头像预览](/screenshots/guide-25-user-card.png)
+
+<p class="image-caption">点击楼层作者的用户名打开用户卡；统计卡片用于进入帖子、获赞和主题，底部按钮依次提供私信、通知和账号关系操作。</p>
 
 ## 头像预览
 
@@ -58,5 +62,7 @@ screenshots: ["/screenshots/guide-02-settings-overview.png"]
 “设置 → 用户信息”集中展示当前登录账号、社区统计以及 Connect 信任级别升级进度，并允许手动刷新。
 
 ![设置中心的当前账号信息、社区统计和 Connect 进度](/screenshots/guide-02-settings-overview.png)
+
+<p class="image-caption">查看自己的账号时打开“设置 → 用户信息”，切换 Connect 与基本信息标签，并用右上角刷新按钮重新取得资料。</p>
 
 该页面可能包含个人数据。提交截图或问题报告前，应遮盖头像、用户名、显示名称、私信内容、唯一统计组合和其他可识别信息。

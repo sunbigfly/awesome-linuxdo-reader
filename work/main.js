@@ -319,6 +319,7 @@
   const PERFORMANCE_PREF_KEYS = Object.freeze(Object.fromEntries(
     PERFORMANCE_SETTING_FIELDS.map((field) => [field.key, field.pref]),
   ));
+  const PERFORMANCE_SETTING_KEYS = Object.freeze(Object.keys(PERFORMANCE_PREF_KEYS));
   const LAYOUT_REGION_KEYS = Object.freeze(['left', 'main', 'gap', 'timeline', 'right']);
   const LAYOUT_REGION_LABELS = Object.freeze({
     left: '左留白',
@@ -894,9 +895,9 @@
     serverReset: ['RateLimit-Reset', 'X-RateLimit-Reset'],
   };
 
-  function requestFlowHeader(headers, names) {
+  function requestFlowHeader(headers, names, splitHeaders = null) {
     if (typeof headers === 'string') {
-      const lines = headers.split(/\r?\n/);
+      const lines = splitHeaders || headers.split(/\r?\n/);
       for (const name of names) {
         const prefix = `${name.toLowerCase()}:`;
         const line = lines.find((candidate) => candidate.toLowerCase().startsWith(prefix));
@@ -910,16 +911,6 @@
       if (value != null && value !== '') return String(value);
     }
     return '';
-  }
-
-  function requestFlowResponseMetadata(headers) {
-    const contentLength = Number(requestFlowHeader(headers, ['Content-Length']));
-    return {
-      size: Number.isFinite(contentLength) ? contentLength : 0,
-      ...Object.fromEntries(Object.entries(REQUEST_FLOW_RESPONSE_HEADERS).map(
-        ([key, names]) => [key, requestFlowHeader(headers, names)]
-      )),
-    };
   }
 
   function requestFlowRateLimitNumber(value) {
@@ -1060,9 +1051,14 @@
         event.type = requestFlowType(finalUrl, event.transport, event.method);
       }
     }
+    const splitHeaders = typeof headers === 'string' ? headers.split(/\r?\n/) : null;
+    const contentLength = Number(requestFlowHeader(headers, ['Content-Length'], splitHeaders));
     finishRequestFlow(event, {
       status,
-      ...requestFlowResponseMetadata(headers),
+      size: Number.isFinite(contentLength) ? contentLength : 0,
+      ...Object.fromEntries(Object.entries(REQUEST_FLOW_RESPONSE_HEADERS).map(
+        ([key, names]) => [key, requestFlowHeader(headers, names, splitHeaders)]
+      )),
     });
     return finalUrl;
   }
@@ -1093,9 +1089,8 @@
     }
   }
 
-  function captureHostTopicFetchResponse(event, response) {
+  function captureHostTopicFetchResponse(event, response, url) {
     if (!response || !response.ok || event.source !== 'host' || event.method !== 'GET') return;
-    const url = requestFlowUrl(response.url);
     const contentType = requestFlowHeader(response.headers, ['Content-Type']).toLowerCase();
     if (!hostTopicResponseId(url) || !contentType.includes('json')) return;
     try {
@@ -1122,8 +1117,8 @@
     const startedAt = performance.timeOrigin + Number(entry.startTime || 0);
     const duration = Math.max(0, Number(entry.duration) || 0);
     const size = Math.max(0, Number(entry.transferSize || entry.encodedBodySize) || 0);
+    const path = requestFlowPath(url);
     if (['fetch', 'xmlhttprequest'].includes(initiator)) {
-      const path = requestFlowPath(url);
       let matchingRequest = null;
       for (let index = requestFlowEventIndex(startedAt - 100); index < REQUEST_FLOW_EVENTS.length; index++) {
         const event = REQUEST_FLOW_EVENTS[index];
@@ -1150,7 +1145,7 @@
       priority: null,
       callSite: initiator ? `${initiator} 资源加载` : '浏览器资源加载',
       type: requestFlowType(url, initiator, 'GET'),
-      path: requestFlowPath(url),
+      path,
     });
     finishRequestFlow(event, {
       endedAt: performance.timeOrigin + Number(entry.responseEnd || entry.startTime || 0),
@@ -1278,23 +1273,15 @@
       waiters.clear();
     };
 
-    const publish = () => {
-      try { if (channel) channel.postMessage({ type: 'updated', contextId }); } catch (error) {}
-      notifyWaiters();
-    };
-
-    const writeState = (state, at = Date.now()) => {
-      state.updatedAt = at;
-      try { localStorage.setItem(LDP_SHARED_REQUEST_STATE_KEY, JSON.stringify(state)); } catch (error) {}
-      publish();
-    };
-
     const transact = async (operation) => {
       const execute = () => {
         const at = Date.now();
         const state = readState(at);
         const result = operation(state, at);
-        writeState(state, at);
+        state.updatedAt = at;
+        try { localStorage.setItem(LDP_SHARED_REQUEST_STATE_KEY, JSON.stringify(state)); } catch (error) {}
+        try { if (channel) channel.postMessage({ type: 'updated', contextId }); } catch (error) {}
+        notifyWaiters();
         return result;
       };
       const locks = navigator.locks;
@@ -1364,17 +1351,21 @@
       return policy;
     };
 
-    const effectivePolicy = (state, options = {}) => {
-      const ownPolicy = requestPolicy(options);
-      const policies = state.policies.filter((policy) => policy.contextId !== contextId);
-      policies.push(ownPolicy);
-      return {
-        shortBudget: Math.min(...policies.map((policy) => policy.shortBudget)),
-        longBudget: Math.min(...policies.map((policy) => policy.longBudget)),
-        minInterval: Math.max(...policies.map((policy) => policy.minInterval)),
-        maxConcurrent: Math.min(state.rateLimited ? 2 : Infinity,
-          ...policies.map((policy) => policy.maxConcurrent)),
+    const effectivePolicy = (state, ownPolicy) => {
+      const effective = {
+        shortBudget: ownPolicy.shortBudget,
+        longBudget: ownPolicy.longBudget,
+        minInterval: ownPolicy.minInterval,
+        maxConcurrent: Math.min(state.rateLimited ? 2 : Infinity, ownPolicy.maxConcurrent),
       };
+      state.policies.forEach((policy) => {
+        if (policy.contextId === contextId) return;
+        effective.shortBudget = Math.min(effective.shortBudget, policy.shortBudget);
+        effective.longBudget = Math.min(effective.longBudget, policy.longBudget);
+        effective.minInterval = Math.max(effective.minInterval, policy.minInterval);
+        effective.maxConcurrent = Math.min(effective.maxConcurrent, policy.maxConcurrent);
+      });
+      return effective;
     };
 
     const intentPriority = (intent, at) => {
@@ -1414,8 +1405,8 @@
       try {
         while (!destroyed && !(signal && signal.aborted)) {
           const result = await transact((state, at) => {
-            rememberPolicy(state, at, options);
-            const policy = effectivePolicy(state, options);
+            const ownPolicy = rememberPolicy(state, at, options);
+            const policy = effectivePolicy(state, ownPolicy);
             const existing = state.intents.find((intent) => intent.id === intentId);
             if (existing) existing.expiresAt = at + 15000;
             else state.intents.push({
@@ -1731,12 +1722,12 @@
       at = Date.now()
     ) => {
       const state = readState(at);
-      const policy = effectivePolicy(state, {
+      const policy = effectivePolicy(state, requestPolicy({
         shortBudget: requestedShortBudget,
         longBudget: requestedLongBudget,
         minInterval: requestedMinInterval,
         maxConcurrent: requestedMaxConcurrent,
-      });
+      }));
       const { windows, cooldownDelay: cooldownRemaining, intervalDelay } = permitTiming(state, at, policy);
       const nextPermitDelay = Math.max(cooldownRemaining, intervalDelay, windows.delay);
       const liveContexts = new Set([
@@ -1840,10 +1831,10 @@
           throw error;
         }
         return Promise.resolve(request).then((response) => {
-          finishResponseRequestFlow(
+          const finalUrl = finishResponseRequestFlow(
             event, response && response.url, response && response.status, response && response.headers
           );
-          captureHostTopicFetchResponse(event, response);
+          captureHostTopicFetchResponse(event, response, finalUrl);
           return response;
         }, (error) => {
           finishRequestFlow(event, { error: error && error.name || 'fetch_error' });
@@ -2090,13 +2081,6 @@
     }
   }
 
-  function requestPersistentReaderStorage() {
-    if (responseCachePersistenceRequested) return;
-    responseCachePersistenceRequested = true;
-    if (!navigator.storage || typeof navigator.storage.persist !== 'function') return;
-    navigator.storage.persist().catch(() => false);
-  }
-
   function responseCacheUrl(url) {
     try {
       const parsed = new URL(String(url || ''), location.href);
@@ -2225,10 +2209,11 @@
   }
 
   async function getStoredResponseCacheEntry(id) {
-    if (RESPONSE_CACHE_MEMORY.has(id)) {
-      const entry = RESPONSE_CACHE_MEMORY.get(id);
-      rememberResponseCacheEntry(id, entry);
-      return entry;
+    const cachedEntry = RESPONSE_CACHE_MEMORY.get(id);
+    if (cachedEntry) {
+      RESPONSE_CACHE_MEMORY.delete(id);
+      RESPONSE_CACHE_MEMORY.set(id, cachedEntry);
+      return cachedEntry;
     }
     const db = await openResponseCacheDatabase();
     if (!db) return null;
@@ -2271,7 +2256,12 @@
     const entry = storedResponseCacheEntry(policy, value);
     rememberResponseCacheEntry(policy.id, entry);
     if (!policy.persist) return Promise.resolve();
-    requestPersistentReaderStorage();
+    if (!responseCachePersistenceRequested) {
+      responseCachePersistenceRequested = true;
+      if (navigator.storage && typeof navigator.storage.persist === 'function') {
+        navigator.storage.persist().catch(() => false);
+      }
+    }
     return queueStoredResponseCacheWrite(policy.id, (store) => store.put(entry), (stored) => {
       if (stored) publishResponseCacheMutation('response-write', { token: sharedCacheIdToken(policy.id) });
     });
@@ -2291,8 +2281,12 @@
     };
   }
 
+  function topicPostStream(topic) {
+    return topic && topic.post_stream || {};
+  }
+
   function estimateTopicSnapshotBytes(topic) {
-    const postStream = topic && topic.post_stream || {};
+    const postStream = topicPostStream(topic);
     const posts = Array.isArray(postStream.posts) ? postStream.posts : [];
     const stream = Array.isArray(postStream.stream) ? postStream.stream : [];
     let bytes = 4096 + stream.length * 16;
@@ -2551,8 +2545,9 @@
   }
 
   async function requestCachedJSON(url, fetchOptions, options, networkRequest) {
+    if (options.cacheMode === 'bypass') return networkRequest();
     const policy = responseCachePolicy(url, fetchOptions, options);
-    if (!policy || policy.cacheMode === 'bypass') return networkRequest();
+    if (!policy) return networkRequest();
     let cached = await getStoredResponseCacheEntry(policy.id);
     const cachedBeforeRequest = Number(cached && cached.storedAt || 0);
     let age = cached ? Date.now() - Number(cached.storedAt || 0) : Infinity;
@@ -2565,7 +2560,8 @@
     }
 
     const requestKey = `${policy.cacheMode}:${policy.id}`;
-    if (RESPONSE_CACHE_REQUESTS.has(requestKey)) return RESPONSE_CACHE_REQUESTS.get(requestKey);
+    const pendingRequest = RESPONSE_CACHE_REQUESTS.get(requestKey);
+    if (pendingRequest) return pendingRequest;
     const request = (async () => {
       const flightToken = policy.persist && SHARED_REQUEST_COORDINATOR
         ? sharedCacheIdToken(policy.id)
@@ -2649,7 +2645,7 @@
   async function scanStoredResponseCache(mode, visit) {
     const db = await openResponseCacheDatabase();
     if (!db) return false;
-    await runResponseCacheTransaction(db, mode, (store) => {
+    return runResponseCacheTransaction(db, mode, (store) => {
       const request = store.openCursor();
       request.onsuccess = () => {
         const cursor = request.result;
@@ -2658,7 +2654,6 @@
         cursor.continue();
       };
     });
-    return true;
   }
 
   function storedResponseCachePruneIds(entries, entryExpiresAt, now) {
@@ -2672,8 +2667,12 @@
         return;
       }
       const kind = PERSISTENT_CACHE_CONFIG[entry.kind] ? entry.kind : 'responses';
-      if (!entriesByKind.has(kind)) entriesByKind.set(kind, []);
-      entriesByKind.get(kind).push(entry);
+      let kindEntries = entriesByKind.get(kind);
+      if (!kindEntries) {
+        kindEntries = [];
+        entriesByKind.set(kind, kindEntries);
+      }
+      kindEntries.push(entry);
     });
     entriesByKind.forEach((kindEntries, kind) => {
       const config = PERSISTENT_CACHE_CONFIG[kind] || PERSISTENT_CACHE_CONFIG.responses;
@@ -2811,7 +2810,7 @@
       notifications: { ...counts.notifications, notificationIds: Array.from(notificationIds) },
       responses: { ...counts.responses, responseRecords },
     });
-    const scanned = await scanStoredResponseCache('readonly', (entry) => {
+    await scanStoredResponseCache('readonly', (entry) => {
         const stat = counts[entry.kind];
         if (stat) {
           stat.count++;
@@ -2867,7 +2866,6 @@
           }
         }
     });
-    if (!scanned) return result();
     return result();
   }
 
@@ -3014,10 +3012,6 @@
     return `${responseCacheAuthScope()}|${key}`;
   }
 
-  function currentAuthCacheKey(key) {
-    return ME_USERNAME !== null && String(key).startsWith(authScopedCacheKey(''));
-  }
-
   function getCachedUserCard(username) {
     const key = authScopedCacheKey(cleanUsernameValue(username));
     const entry = USER_CARD_CACHE.get(key);
@@ -3067,10 +3061,12 @@
     const config = PERSISTENT_CACHE_CONFIG[key];
     if (!config) return [];
     const now = Date.now();
+    const authPrefix = (key === 'users' || key === 'notifications') && ME_USERNAME !== null
+      ? authScopedCacheKey('')
+      : '';
     const bounded = (Array.isArray(entries) ? entries : []).filter((entry) => {
       if (!Array.isArray(entry) || entry.length !== 2 || entry[0] == null || !entry[1]) return false;
-      if ((key === 'users' || key === 'notifications') && ME_USERNAME !== null &&
-          !currentAuthCacheKey(entry[0])) return false;
+      if (authPrefix && !String(entry[0]).startsWith(authPrefix)) return false;
       return Number.isFinite(Number(entry[1].at)) && now - Number(entry[1].at) <= config.maxAge;
     });
     return config.maxEntries ? bounded.slice(-config.maxEntries) : bounded;
@@ -3265,8 +3261,8 @@
       : historyEntryFirstViewedAt(entry);
   }
 
-  function orderedTopicHistory() {
-    return readTopicHistory().slice().sort((left, right) =>
+  function orderedTopicHistory(entries = readTopicHistory()) {
+    return entries.slice().sort((left, right) =>
       historyEntrySortTime(right) - historyEntrySortTime(left) ||
       Number(right.topicId || 0) - Number(left.topicId || 0)
     );
@@ -3430,9 +3426,8 @@
       backEdge?.classList.toggle('is-active', triggerWidth > 0 && (event.clientX <= rect.left + triggerWidth || overBackButton));
       forwardEdge?.classList.toggle('is-active', triggerWidth > 0 && (event.clientX >= rect.right - triggerWidth || overForwardButton));
     };
-    const onModalPointerLeave = () => clearActiveEdge();
     if (modal) addTrackedEventListener(historyEventBindings, modal, 'pointermove', onModalPointerMove);
-    if (modal) addTrackedEventListener(historyEventBindings, modal, 'pointerleave', onModalPointerLeave);
+    if (modal) addTrackedEventListener(historyEventBindings, modal, 'pointerleave', clearActiveEdge);
     overlay._ldpSyncHistoryButtonVisibilityPreference = syncVisibilityPreference;
     syncVisibilityPreference();
     backButton.setAttribute('aria-keyshortcuts', 'ArrowLeft');
@@ -3493,12 +3488,10 @@
         settleTargetJump: true,
       });
     };
-    const onBackClick = () => navigate('back');
-    const onForwardClick = () => navigate('forward');
     const onBackHover = () => refreshVisibleTooltip(backButton);
     const onForwardHover = () => refreshVisibleTooltip(forwardButton);
-    addTrackedEventListener(historyEventBindings, backButton, 'click', onBackClick);
-    addTrackedEventListener(historyEventBindings, forwardButton, 'click', onForwardClick);
+    addTrackedEventListener(historyEventBindings, backButton, 'click', () => navigate('back'));
+    addTrackedEventListener(historyEventBindings, forwardButton, 'click', () => navigate('forward'));
     addTrackedEventListener(historyEventBindings, backButton, 'pointerenter', onBackHover);
     addTrackedEventListener(historyEventBindings, forwardButton, 'pointerenter', onForwardHover);
     const onHistoryKeyDown = (event) => {
@@ -3539,22 +3532,6 @@
     return safeTopicId > 0 ? READER_QUEUE_BY_TOPIC.get(String(safeTopicId)) || null : null;
   }
 
-  function readerQueuePersistedEntry(entry) {
-    const avatarSource = String(entry && entry.avatarSource || '');
-    return {
-      topicId: Number(entry && entry.topicId) || 0,
-      title: String(entry && entry.title || ''),
-      avatarTemplate: String(entry && entry.avatarTemplate || ''),
-      avatarSource: /^https?:\/\//i.test(avatarSource) ? avatarSource : '',
-      ownerUsername: String(entry && entry.ownerUsername || ''),
-      addedAt: Math.max(0, Number(entry && entry.addedAt) || 0),
-      pinned: entry && entry.pinned === true,
-      totalCount: Math.max(0, Number(entry && entry.totalCount) || 0),
-      urlPostNumber: Math.max(0, Number(entry && entry.urlPostNumber) || 0),
-      viewport: normalizeReaderHistoryViewport(entry && entry.viewport),
-    };
-  }
-
   function normalizeReaderQueueSurfaceState(state) {
     const rawX = state && state.x;
     const rawY = state && state.y;
@@ -3579,7 +3556,21 @@
     if (READER_QUEUE_PERSIST_TIMER) clearTimeout(READER_QUEUE_PERSIST_TIMER);
     READER_QUEUE_PERSIST_TIMER = 0;
     if (READER_QUEUE_RESTORING) return;
-    const entries = READER_QUEUE_ENTRIES.map(readerQueuePersistedEntry)
+    const entries = READER_QUEUE_ENTRIES.map((entry) => {
+      const avatarSource = String(entry && entry.avatarSource || '');
+      return {
+        topicId: Number(entry && entry.topicId) || 0,
+        title: String(entry && entry.title || ''),
+        avatarTemplate: String(entry && entry.avatarTemplate || ''),
+        avatarSource: /^https?:\/\//i.test(avatarSource) ? avatarSource : '',
+        ownerUsername: String(entry && entry.ownerUsername || ''),
+        addedAt: Math.max(0, Number(entry && entry.addedAt) || 0),
+        pinned: entry && entry.pinned === true,
+        totalCount: Math.max(0, Number(entry && entry.totalCount) || 0),
+        urlPostNumber: Math.max(0, Number(entry && entry.urlPostNumber) || 0),
+        viewport: normalizeReaderHistoryViewport(entry && entry.viewport),
+      };
+    })
       .filter((entry) => entry.topicId > 0);
     const surface = normalizeReaderQueueSurfaceState(READER_QUEUE_SURFACE_STATE);
     try {
@@ -3702,7 +3693,7 @@
   }
 
   function readerQueueLoadedCounts(topic) {
-    const postStream = topic && topic.post_stream || {};
+    const postStream = topicPostStream(topic);
     const stream = Array.isArray(postStream.stream) ? postStream.stream.filter(Boolean) : [];
     const streamIds = new Set(stream.map(Number).filter(Boolean));
     const loadedIds = new Set((Array.isArray(postStream.posts) ? postStream.posts : [])
@@ -3791,10 +3782,6 @@
     if (entry.progressPersistTimer) clearTimeout(entry.progressPersistTimer);
     entry.progressPersistTimer = 0;
     persistReaderQueueReadProgress(entry);
-  }
-
-  function flushReaderQueueReadProgressHistory() {
-    READER_QUEUE_ENTRIES.forEach(flushReaderQueueReadProgress);
   }
 
   function markReaderQueuePostRead(entry, postNumber) {
@@ -4032,15 +4019,20 @@
     document.querySelectorAll('.ldp-reader-queue-add[data-reader-queue-topic-id]').forEach((button) => {
       const added = !!readerQueueEntry(button.dataset.readerQueueTopicId);
       if (button.dataset.readerQueueAdded === String(added)) return;
-      button.dataset.readerQueueAdded = String(added);
-      button.classList.toggle('is-added', added);
-      button.innerHTML = icon(added ? 'check' : 'plus');
-      button.setAttribute('aria-label', added ? '从阅读队列移除' : '加入阅读队列并后台预加载');
-      button.setAttribute('title', added ? '从阅读队列移除' : '加入阅读队列并后台预加载');
+      syncReaderQueueAddButton(button, added);
     });
     if (CURRENT_OVERLAY && typeof CURRENT_OVERLAY._ldpSyncReaderQueue === 'function') {
       CURRENT_OVERLAY._ldpSyncReaderQueue();
     }
+  }
+
+  function syncReaderQueueAddButton(button, added) {
+    const label = added ? '从阅读队列移除' : '加入阅读队列并后台预加载';
+    button.dataset.readerQueueAdded = String(added);
+    button.classList.toggle('is-added', added);
+    button.innerHTML = icon(added ? 'check' : 'plus');
+    button.setAttribute('aria-label', label);
+    button.setAttribute('title', label);
   }
 
   function updateReaderQueueEntryFromTopic(entry, topic, totalHint = 0, options = {}) {
@@ -4280,15 +4272,16 @@
   }
 
   function readerQueuePrefetchStream(entry, topic) {
-    const postStream = topic && topic.post_stream || {};
+    const postStream = topicPostStream(topic);
     const stream = Array.isArray(postStream.stream) ? postStream.stream.filter(Boolean) : [];
     if (stream.length <= READER_QUEUE_PREFETCH_MAX_POSTS) return stream;
     const posts = Array.isArray(postStream.posts) ? postStream.posts : [];
     const startPostNumber = readerQueueStartPostNumber(entry);
     const targetPost = posts.find((post) => +(post && post.post_number || 0) === startPostNumber);
     const targetPostId = +(targetPost && targetPost.id || 0);
-    const targetIndex = targetPostId && stream.indexOf(targetPostId) >= 0
-      ? stream.indexOf(targetPostId)
+    const foundIndex = targetPostId ? stream.indexOf(targetPostId) : -1;
+    const targetIndex = foundIndex >= 0
+      ? foundIndex
       : Math.max(0, Math.min(stream.length - 1, startPostNumber - 1));
     if (PREFS.openTopicsAtFirstPost !== true && +(entry && entry.urlPostNumber || 0) > 0) {
       const before = Math.min(targetIndex, READER_QUEUE_PREFETCH_URL_BEFORE_POSTS);
@@ -4317,15 +4310,6 @@
     return Array.from(selected).slice(0, READER_QUEUE_PREFETCH_MAX_POSTS);
   }
 
-  function readerQueuePostsForStream(topic, stream) {
-    const posts = Array.isArray(topic && topic.post_stream && topic.post_stream.posts)
-      ? topic.post_stream.posts : [];
-    const postsById = new Map(posts.map((post) => [+(post && post.id || 0), post]));
-    return (Array.isArray(stream) ? stream : [])
-      .map((postId) => postsById.get(+postId))
-      .filter(Boolean);
-  }
-
   function mergeReaderQueuePostPayload(topic, payload, parentPostNumber = 0) {
     const topicPosts = topic && topic.post_stream && Array.isArray(topic.post_stream.posts)
       ? topic.post_stream.posts : null;
@@ -4352,8 +4336,8 @@
 
   function readerQueueDirectReplies(topic, parentPostNumber) {
     const parent = +parentPostNumber;
-    return (Array.isArray(topic && topic.post_stream && topic.post_stream.posts)
-      ? topic.post_stream.posts : [])
+    const postStream = topicPostStream(topic);
+    return (Array.isArray(postStream.posts) ? postStream.posts : [])
       .filter((reply) => +(reply && reply.reply_to_post_number || 0) === parent);
   }
 
@@ -4552,7 +4536,7 @@
         setCachedTopicData(entry.topicId, topic, { fetchedAt: Date.now(), source: 'network' });
       }
       updateReaderQueueEntryFromTopic(entry, topic, 0, { progressOnly: true });
-      const postStream = topic && topic.post_stream || {};
+      const postStream = topicPostStream(topic);
       const stream = Array.isArray(postStream.stream) ? postStream.stream.filter(Boolean) : [];
       const preloadStream = readerQueuePrefetchStream(entry, topic);
       let loadedIds = new Set((Array.isArray(postStream.posts) ? postStream.posts : [])
@@ -4577,7 +4561,12 @@
         missing = preloadStream.filter((postId) => !loadedIds.has(Number(postId)));
       }
       if (!missing.length) {
-        const scopePosts = readerQueuePostsForStream(topic, preloadStream);
+        const scopePostStream = topicPostStream(topic);
+        const scopePostsById = new Map(
+          (Array.isArray(scopePostStream.posts) ? scopePostStream.posts : [])
+            .map((post) => [+(post && post.id || 0), post])
+        );
+        const scopePosts = preloadStream.map((postId) => scopePostsById.get(+postId)).filter(Boolean);
         const enrichedPosts = await prefetchReaderQueueNestedReplies(
           entry,
           topic,
@@ -4681,6 +4670,9 @@
     const scrollHint = rail.querySelector('.ldp-reader-queue-scroll-hint');
     const close = rail.querySelector('.ldp-reader-queue-close');
     const clear = rail.querySelector('.ldp-reader-queue-clear');
+    const queueEventBindings = [];
+    const on = (target, type, listener, options) =>
+      addTrackedEventListener(queueEventBindings, target, type, listener, options);
     let hoverCloseTimer = 0;
     let queueDrag = null;
     let suppressToggleClickUntil = 0;
@@ -4739,7 +4731,7 @@
       applyReaderQueueSurfacePosition(rail);
       scheduleReaderQueueStatePersist();
     };
-    toggle.addEventListener('pointerdown', (event) => {
+    on(toggle, 'pointerdown', (event) => {
       if (event.button !== 0 || event.isPrimary === false) return;
       const modal = rail.closest('.ldp-modal');
       if (!modal) return;
@@ -4756,7 +4748,7 @@
       };
       toggle.setPointerCapture(event.pointerId);
     });
-    toggle.addEventListener('pointermove', (event) => {
+    on(toggle, 'pointermove', (event) => {
       if (!queueDrag || event.pointerId !== queueDrag.pointerId) return;
       const deltaX = event.clientX - queueDrag.startX;
       const deltaY = event.clientY - queueDrag.startY;
@@ -4777,9 +4769,9 @@
       rail.style.bottom = 'auto';
       event.preventDefault();
     });
-    toggle.addEventListener('pointerup', (event) => finishQueueDrag(event));
-    toggle.addEventListener('pointercancel', (event) => finishQueueDrag(event, true));
-    toggle.addEventListener('click', (event) => {
+    on(toggle, 'pointerup', (event) => finishQueueDrag(event));
+    on(toggle, 'pointercancel', (event) => finishQueueDrag(event, true));
+    on(toggle, 'click', (event) => {
       if (Date.now() < suppressToggleClickUntil) {
         event.preventDefault();
         event.stopPropagation();
@@ -4787,31 +4779,31 @@
       }
       setPreviewExpanded(rail.classList.contains('is-preview-collapsed'));
     });
-    toggle.addEventListener('pointerenter', () => {
+    on(toggle, 'pointerenter', () => {
       if (!queueDrag) setPanelOpen(true);
     });
-    toggle.addEventListener('keydown', (event) => {
+    on(toggle, 'keydown', (event) => {
       if (event.key !== 'ArrowDown') return;
       event.preventDefault();
       setPanelOpen(true);
       panel.querySelector('.ldp-reader-queue-row')?.focus();
     });
-    rail.addEventListener('pointerenter', () => {
+    on(rail, 'pointerenter', () => {
       rail.classList.add('is-dock-revealed');
       cancelPanelClose();
     });
-    rail.addEventListener('pointerleave', () => {
+    on(rail, 'pointerleave', () => {
       rail.classList.remove('is-dock-revealed');
       schedulePanelClose();
     });
-    panel.addEventListener('focusin', cancelPanelClose);
-    panel.addEventListener('focusout', (event) => {
+    on(panel, 'focusin', cancelPanelClose);
+    on(panel, 'focusout', (event) => {
       if (event.relatedTarget instanceof Node && panel.contains(event.relatedTarget)) return;
       schedulePanelClose();
     });
     bindFloatingSurfaceWheel(bubbles);
-    bubbles.addEventListener('scroll', () => syncReaderQueueScrollHint(rail), { passive: true });
-    scrollHint.addEventListener('click', () => {
+    on(bubbles, 'scroll', () => syncReaderQueueScrollHint(rail), { passive: true });
+    on(scrollHint, 'click', () => {
       const direction = Number(scrollHint.dataset.scrollDirection) || 1;
       const reduceMotion = typeof window.matchMedia === 'function' &&
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -4822,12 +4814,12 @@
       const distance = Math.max(38, Math.round(bubbles.clientHeight * .72));
       bubbles.scrollBy({ top: distance, behavior: reduceMotion ? 'auto' : 'smooth' });
     });
-    close.addEventListener('click', () => {
+    on(close, 'click', () => {
       setPanelOpen(false);
       toggle.focus();
     });
-    clear.addEventListener('click', () => clearReaderQueueEntries(overlay._ldpReaderShell?.activeContext));
-    rail.addEventListener('click', (event) => {
+    on(clear, 'click', () => clearReaderQueueEntries(overlay._ldpReaderShell?.activeContext));
+    on(rail, 'click', (event) => {
       const bubbleRemove = event.target.closest('.ldp-reader-queue-bubble-remove');
       if (bubbleRemove) {
         removeReaderQueueEntry(bubbleRemove.dataset.readerQueueTopicId);
@@ -4855,7 +4847,7 @@
       }
       void switchReaderQueueTopic(topicId);
     });
-    rail.addEventListener('keydown', (event) => {
+    on(rail, 'keydown', (event) => {
       const row = event.target.closest('.ldp-reader-queue-row');
       if (!row) return;
       if (event.key === 'Escape') {
@@ -4875,11 +4867,20 @@
       const index = rows.indexOf(row);
       rows[Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))]?.focus();
     });
-    overlay.addEventListener('pointerdown', (event) => {
+    on(overlay, 'pointerdown', (event) => {
       if (!panel.hidden && !event.target.closest('.ldp-reader-queue')) setPanelOpen(false);
     });
     overlay._ldpSyncReaderQueue = () => renderReaderQueueSurface(overlay);
     overlay._ldpSyncReaderQueuePosition = () => applyReaderQueueSurfacePosition(rail);
+    overlay._ldpDestroyReaderQueueSurface = () => {
+      cancelPanelClose();
+      if (queueDrag) finishQueueDrag({ pointerId: queueDrag.pointerId }, true);
+      removeTrackedEventListeners(queueEventBindings);
+      delete overlay._ldpSyncReaderQueue;
+      delete overlay._ldpSyncReaderQueuePosition;
+      delete overlay._ldpDestroyReaderQueueSurface;
+      overlay._ldpReaderQueueBound = false;
+    };
     renderReaderQueueSurface(overlay);
   }
 
@@ -4951,13 +4952,12 @@
       stat.topicCount = new Set(payload.map((entry) => Number(entry && entry.topicId)).filter(Boolean)).size;
       stat.historyRecordCount = payload.length;
     } else if (key === 'topics') {
-      const topicNavIcons = Array.from(TOPIC_NAV_ICON_CACHE.entries());
       const topicIds = new Set(responseStat.topicIds || []);
       stat.topicCount = topicIds.size;
       stat.postCount = Math.max(0, Number(responseStat.postCount) || 0);
       stat.topicSnapshotCount = Math.max(0, Number(responseStat.topicSnapshotCount) || 0);
       stat.topicRequestCount = Math.max(0, Number(responseStat.topicRequestCount) || 0);
-      stat.topicNavIconCount = topicNavIcons.length;
+      stat.topicNavIconCount = payload.length;
     } else if (key === 'users') {
       const userNames = new Set(responseStat.userNames || []);
       payload.forEach(([username, entry]) => {
@@ -5061,15 +5061,11 @@
       writeTopicHistory([]);
     }
     clearPersistentCacheMaps(mapKeys);
-    if (selected.has('topics')) {
-      try { localStorage.removeItem(LDP_TOPIC_NAV_ICON_CACHE_KEY); } catch (e) {}
-    }
-    if (selected.has('users')) {
-      try { localStorage.removeItem(LDP_USER_CARD_CACHE_KEY); } catch (e) {}
-    }
-    if (selected.has('notifications')) {
-      try { localStorage.removeItem(LDP_NOTIFICATION_CACHE_KEY); } catch (e) {}
-    }
+    mapKeys.forEach((key) => {
+      const storageKey = PERSISTENT_CACHE_CONFIG[key]?.storageKey;
+      if (!storageKey) return;
+      try { localStorage.removeItem(storageKey); } catch (e) {}
+    });
     if (selected.has('assets')) {
       RESOURCE_CACHE_CLEARING = true;
       RESOURCE_CACHE_ABORT_CONTROLLER.abort();
@@ -5139,7 +5135,7 @@
       .then(() => prunePersistentResourceCacheOnce(LDP_EMOJI_IMAGE_CACHE_NAME, LDP_EMOJI_IMAGE_CACHE_MAX_AGE));
   }, 2000);
   window.addEventListener('pagehide', (event) => {
-    flushReaderQueueReadProgressHistory();
+    READER_QUEUE_ENTRIES.forEach(flushReaderQueueReadProgress);
     flushReaderQueueState();
     flushPersistentCacheWrites();
     void flushTopicSnapshotWrites();
@@ -5709,6 +5705,9 @@
     tooltip.setAttribute('role', 'tooltip');
     tooltip.hidden = true;
     (READER_PORTAL_CONTEXT_BODY || root).appendChild(tooltip);
+    const tooltipEventBindings = [];
+    const on = (target, type, listener, options) =>
+      addTrackedEventListener(tooltipEventBindings, target, type, listener, options);
     let activeControl = null;
     const hide = () => {
       activeControl = null;
@@ -5780,7 +5779,7 @@
       position(match.control, pointerEvent);
     };
     const keepOpen = (control) => control && (control.matches(':hover') || control.matches(':focus-visible'));
-    root.addEventListener('ldp-tooltip-refresh', (event) => {
+    on(root, 'ldp-tooltip-refresh', (event) => {
       if (!(event.target instanceof Element)) return;
       const control = event.target;
       if (activeControl && !activeControl.isConnected) hide();
@@ -5791,7 +5790,7 @@
       }
       show(control, null, match);
     });
-    root.addEventListener('click', (event) => {
+    on(root, 'click', (event) => {
       const copyTarget = event.target instanceof Element &&
         event.target.closest('.ldp-avatar-flair,.ldp-user-card-badge');
       if (!copyTarget) return;
@@ -5814,36 +5813,41 @@
         .then(() => showCopyState('已复制'))
         .catch(() => showCopyState('复制失败'));
     }, true);
-    root.addEventListener('pointerover', (event) => {
+    on(root, 'pointerover', (event) => {
       const match = tooltipControl(event.target);
       if (!match || (event.relatedTarget instanceof Node && match.control.contains(event.relatedTarget))) return;
       show(match.control, event, match);
     });
-    root.addEventListener('pointerdown', (event) => {
+    on(root, 'pointerdown', (event) => {
       if (event.target instanceof Element && event.target.closest('.ldp-reader-drag-handle')) hide();
     }, true);
-    root.addEventListener('pointermove', (event) => {
+    on(root, 'pointermove', (event) => {
       if (!activeControl?.matches('.ldp-nested-rail-toggle,.ldp-nested-branch-toggle') ||
         !(event.target instanceof Node) || !activeControl.contains(event.target)) return;
       position(activeControl, event);
     });
-    root.addEventListener('pointerout', (event) => {
+    on(root, 'pointerout', (event) => {
       if (!activeControl || (event.relatedTarget instanceof Node && activeControl.contains(event.relatedTarget))) return;
       if (!activeControl.matches(':focus-visible')) hide();
     });
-    root.addEventListener('focusin', (event) => show(event.target));
-    root.addEventListener('focusout', () => {
+    on(root, 'focusin', (event) => show(event.target));
+    on(root, 'focusout', () => {
       queueMicrotask(() => {
         if (!keepOpen(activeControl)) hide();
       });
     });
-    root.addEventListener('scroll', () => {
+    on(root, 'scroll', () => {
       const hoveredHistoryControl = root.querySelector('.ldp-reader-history-nav:hover');
       if (hoveredHistoryControl) show(hoveredHistoryControl);
       else hide();
     }, true);
-    window.addEventListener('resize', hide);
-    READER_ICON_TOOLTIP_CLEANUP = () => window.removeEventListener('resize', hide);
+    on(window, 'resize', hide);
+    READER_ICON_TOOLTIP_CLEANUP = () => {
+      hide();
+      removeTrackedEventListeners(tooltipEventBindings);
+      tooltip.remove();
+      root._ldpReaderIconTooltipReady = false;
+    };
   }
 
   function readerActiveElement() {
@@ -5965,14 +5969,15 @@
   }
 
   function bindReaderPanelPager(previousButton, nextButton, state, update) {
-    previousButton.addEventListener('click', () => {
-      if (state.page <= 0) return;
-      state.page--;
-      update();
-    });
-    nextButton.addEventListener('click', () => {
-      if (state.hasNext === false) return;
-      state.page++;
+    previousButton.closest('.ldp-notification-pager').addEventListener('click', (event) => {
+      const button = event.target instanceof Element ? event.target.closest('button') : null;
+      if (button === previousButton) {
+        if (state.page <= 0) return;
+        state.page--;
+      } else if (button === nextButton) {
+        if (state.hasNext === false) return;
+        state.page++;
+      } else return;
       update();
     });
   }
@@ -5995,19 +6000,20 @@
     });
   }
 
-  function bindReaderPanelMultiMode(state, selection, startButton, doneButton, scopeSelect, render, reset = () => {}) {
+  function bindReaderPanelMultiMode(root, state, selection, startButton, doneButton, scopeSelect, render, reset = () => {}) {
     const clear = () => {
       reset();
       selection.clear();
       render();
     };
-    startButton.addEventListener('click', () => {
-      state.multi = true;
-      state.scope = 'page';
-      clear();
-    });
-    doneButton.addEventListener('click', () => {
-      state.multi = false;
+    root.addEventListener('click', (event) => {
+      const button = event.target instanceof Element ? event.target.closest('button') : null;
+      if (button === startButton) {
+        state.multi = true;
+        state.scope = 'page';
+      } else if (button === doneButton) {
+        state.multi = false;
+      } else return;
       clear();
     });
     scopeSelect.addEventListener('change', () => {
@@ -6133,31 +6139,31 @@
   }
 
   const APPEARANCE_SETTING_FIELDS = [
-    { key: 'accentColor', section: 'interaction', label: '界面强调色', ariaLabel: '界面强调色', normalize: normalizeAccentColor, applyGroup: 'interaction',
+    { key: 'accentColor', section: 'interaction', label: '界面强调色', ariaLabel: '界面强调色', applyGroup: 'interaction',
       help: '控制阅读器的主强调色，包括主要按钮、选中态、焦点轮廓、开关开启态、时间轴和操作反馈；不会改变错误、警告、成功和点赞等语义颜色。选择时实时预览，确认后保存。' },
-    { key: 'linkColor', section: 'interaction', label: '正文链接色', ariaLabel: '正文链接色', normalize: normalizeLinkColor, applyGroup: 'interaction',
+    { key: 'linkColor', section: 'interaction', label: '正文链接色', ariaLabel: '正文链接色', applyGroup: 'interaction',
       help: '控制帖子正文中的 URL 链接颜色，与按钮和选中态的界面强调色分开设置；选择时实时预览，确认后保存。' },
-    { key: 'zebraColor', section: 'zebra', label: '颜色', ariaLabel: '楼层斑马线颜色', normalize: normalizeZebraColor, applyGroup: 'zebra',
+    { key: 'zebraColor', section: 'zebra', label: '颜色', ariaLabel: '楼层斑马线颜色', applyGroup: 'zebra',
       help: '设置阅读器正文楼层隔行出现的淡色背景，用来更容易分清相邻楼层。选择时实时预览，点击“确认应用”后才保存。' },
     { key: 'zebraRadius', section: 'zebra', label: '圆角', ariaLabel: '楼层斑马线圆角', range: [ZEBRA_RADIUS_MIN, ZEBRA_RADIUS_MAX, ZEBRA_RADIUS_STEP], normalize: (value, fallback = ZEBRA_RADIUS_DEFAULT) => normalizeSteppedValue(value, fallback, ZEBRA_RADIUS_MIN, ZEBRA_RADIUS_MAX, ZEBRA_RADIUS_STEP), applyGroup: 'zebra',
       help: `设置阅读器正文斑马线楼层的圆角，${ZEBRA_RADIUS_MIN}px 为直角，最高 ${ZEBRA_RADIUS_MAX}px。拖动时实时预览，点击“确认应用”后才保存。` },
-    { key: 'listZebraColor', section: 'list-zebra', label: '列表斑马线', ariaLabel: 'Linux DO 列表斑马线颜色', shareLabel: '列表斑马线', normalize: normalizeZebraColor, applyGroup: 'list-zebra',
+    { key: 'listZebraColor', section: 'list-zebra', label: '列表斑马线', ariaLabel: 'Linux DO 列表斑马线颜色', shareLabel: '列表斑马线', applyGroup: 'list-zebra',
       help: '设置 LINUX DO 帖子列表卡片的隔行色调；所选颜色会作为主色与宿主背景适度混合，兼顾辨识度和文字清晰度。选择时实时预览，点击“确认应用”后才保存。' },
-    { key: 'replyLineColor', section: 'reply-line', label: '颜色', ariaLabel: '回复关系线颜色', normalize: (value) => normalizeHexColor(value, REPLY_LINE_COLOR_DEFAULT), applyGroup: 'reply-line',
+    { key: 'replyLineColor', section: 'reply-line', label: '颜色', ariaLabel: '回复关系线颜色', applyGroup: 'reply-line',
       help: '控制阅读器里的关系线颜色，包括二级回复连线、父楼层预览、时间轴、特殊提示边框和灯箱评论层级线。选择时实时预览，确认后保存。' },
     { key: 'replyLineWidth', section: 'reply-line', label: '粗细', ariaLabel: '回复关系线粗细', range: [LINE_WIDTH_MIN, LINE_WIDTH_MAX, LINE_WIDTH_STEP], normalize: (value, fallback = REPLY_LINE_WIDTH_DEFAULT) => normalizeLineWidth(value, fallback), applyGroup: 'reply-line',
       help: `控制回复关系线的基础粗细，可在 ${LINE_WIDTH_MIN}–${LINE_WIDTH_MAX}px 之间调整；二级回复树线、父子回复连接线和相关层级线会同步变化。拖动时实时预览，确认后保存。` },
     { key: 'replyLineRadius', section: 'reply-line', label: '圆角', ariaLabel: '父子与二级回复线圆角', shareLabel: '回复关系线圆角', range: [REPLY_LINE_RADIUS_MIN, REPLY_LINE_RADIUS_MAX, REPLY_LINE_RADIUS_STEP], normalize: normalizeReplyLineRadius, applyGroup: 'reply-line',
       help: `控制父子回复和二级回复连接线转折处的圆角，${REPLY_LINE_RADIUS_MIN}px 为直角，最高 ${REPLY_LINE_RADIUS_MAX}px。拖动时实时预览，确认后保存。` },
-    { key: 'quoteLineColor', section: 'quote-line', label: '颜色', ariaLabel: '引用线颜色', normalize: (value) => normalizeHexColor(value, QUOTE_LINE_COLOR_DEFAULT), applyGroup: 'quote-line',
+    { key: 'quoteLineColor', section: 'quote-line', label: '颜色', ariaLabel: '引用线颜色', applyGroup: 'quote-line',
       help: '控制帖子正文引用块和“引用某楼层”卡片左侧竖线的颜色，只改变引用提示线，不改变引用文字或背景。选择时实时预览，确认后保存。' },
     { key: 'quoteLineWidth', section: 'quote-line', label: '粗细', ariaLabel: '引用线粗细', range: [LINE_WIDTH_MIN, LINE_WIDTH_MAX, LINE_WIDTH_STEP], normalize: (value, fallback = QUOTE_LINE_WIDTH_DEFAULT) => normalizeLineWidth(value, fallback), applyGroup: 'quote-line',
       help: `控制引用线的基础粗细，可在 ${LINE_WIDTH_MIN}–${LINE_WIDTH_MAX}px 之间调整；不同引用样式会保留原有粗细层级。拖动时实时预览，确认后保存。` },
-    { key: 'dividerLineColor', section: 'divider-line', label: '颜色', ariaLabel: '界面分隔线颜色', normalize: (value) => normalizeHexColor(value, DIVIDER_LINE_COLOR_DEFAULT), applyGroup: 'divider-line',
+    { key: 'dividerLineColor', section: 'divider-line', label: '颜色', ariaLabel: '界面分隔线颜色', applyGroup: 'divider-line',
       help: '控制楼层边界、标题栏、设置与通知面板、嵌入阅读边界和灯箱结构分隔线的颜色；按钮和输入框外框不会跟着改变。选择时实时预览，确认后保存。' },
     { key: 'dividerLineWidth', section: 'divider-line', label: '粗细', ariaLabel: '界面分隔线粗细', range: [LINE_WIDTH_MIN, LINE_WIDTH_MAX, LINE_WIDTH_STEP], normalize: (value, fallback = DIVIDER_LINE_WIDTH_DEFAULT) => normalizeLineWidth(value, fallback), applyGroup: 'divider-line',
       help: `控制界面结构分隔线的基础粗细，可在 ${LINE_WIDTH_MIN}–${LINE_WIDTH_MAX}px 之间调整；按钮和输入框外框不会跟着改变。拖动时实时预览，确认后保存。` },
-    { key: 'floorPreviewColor', section: 'floor-preview', label: '预览颜色', ariaLabel: '父回复插入预览颜色', shareLabel: '父回复预览颜色', normalize: (value) => normalizeHexColor(value, FLOOR_PREVIEW_COLOR_DEFAULT), applyGroup: 'floor-preview',
+    { key: 'floorPreviewColor', section: 'floor-preview', label: '预览颜色', ariaLabel: '父回复插入预览颜色', shareLabel: '父回复预览颜色', applyGroup: 'floor-preview',
       help: '控制父楼层号悬停后插入的预览卡片边框、淡色背景和楼层标记颜色；不改变二级回复关系线。选择时实时预览，确认后保存。' },
     { key: 'floorPreviewHeight', section: 'floor-preview', label: '最大高度', ariaLabel: '父回复插入预览最大高度', shareLabel: '父回复预览高度', range: [FLOOR_PREVIEW_HEIGHT_MIN, FLOOR_PREVIEW_HEIGHT_MAX, FLOOR_PREVIEW_HEIGHT_STEP], normalize: (value, fallback = FLOOR_PREVIEW_HEIGHT_DEFAULT) => normalizeSteppedValue(value, fallback, FLOOR_PREVIEW_HEIGHT_MIN, FLOOR_PREVIEW_HEIGHT_MAX, FLOOR_PREVIEW_HEIGHT_STEP), applyGroup: 'floor-preview',
       help: `控制父回复插入预览在长内容时允许占用的最大高度，最低 ${FLOOR_PREVIEW_HEIGHT_MIN}px；内容较短时仍按实际高度显示，并始终受当前窗口可用高度限制。拖动时实时预览，确认后保存。` },
@@ -6191,15 +6197,11 @@
     </div>`;
   }
 
-  function appearanceSettingsMarkup(section) {
-    return APPEARANCE_SETTING_FIELDS.filter((field) => field.section === section)
-      .map(appearanceSettingRowMarkup).join('');
-  }
-
   function appearanceSettingGroupMarkup(group) {
     const sections = group.sections.map((section) => {
       const { id, title } = typeof section === 'string' ? { id: section } : section;
-      const rows = appearanceSettingsMarkup(id);
+      const rows = APPEARANCE_SETTING_FIELDS.filter((field) => field.section === id)
+        .map(appearanceSettingRowMarkup).join('');
       if (!title) return rows;
       const titleId = `ldp-${id}-setting-group-title`;
       return `<div class="ldp-setting-group" role="group" aria-labelledby="${titleId}">
@@ -6501,7 +6503,7 @@
   function performanceConfigFromPrefs(prefs) {
     const source = prefs || {};
     const fallback = BALANCED_PERFORMANCE;
-    return Object.keys(PERFORMANCE_PREF_KEYS).reduce((config, name) => {
+    return PERFORMANCE_SETTING_KEYS.reduce((config, name) => {
       config[name] = normalizePerformanceValue(
         name,
         source[PERFORMANCE_PREF_KEYS[name]],
@@ -6512,23 +6514,17 @@
   }
 
   function performancePresetForConfig(config) {
-    const names = Object.keys(PERFORMANCE_PREF_KEYS);
     const match = Object.entries(PERFORMANCE_PRESETS).find(([, preset]) =>
-      names.every((name) => config[name] === preset[name])
+      PERFORMANCE_SETTING_KEYS.every((name) => config[name] === preset[name])
     );
     return match ? match[0] : 'custom';
   }
 
   function performancePrefsPatch(config, presetName = performancePresetForConfig(config)) {
-    return Object.keys(PERFORMANCE_PREF_KEYS).reduce((patch, name) => {
+    return PERFORMANCE_SETTING_KEYS.reduce((patch, name) => {
       patch[PERFORMANCE_PREF_KEYS[name]] = config[name];
       return patch;
     }, { performancePreset: presetName });
-  }
-
-  function normalizePerformancePrefs(prefs) {
-    const config = performanceConfigFromPrefs(prefs);
-    return Object.assign({}, prefs, performancePrefsPatch(config));
   }
 
   function roundLayoutRatio(value) {
@@ -6602,10 +6598,6 @@
 
   function normalizeListReaderMode(value) {
     return LIST_READER_MODES.includes(value) ? value : 'floating';
-  }
-
-  function normalizeTopicReaderMode(value) {
-    return TOPIC_READER_MODES.includes(value) ? value : 'floating';
   }
 
   function normalizeBoostCopyString(value, fallback = '') {
@@ -6729,7 +6721,8 @@
   }
 
   function normalizeReaderPrefs(prefs) {
-    const performancePrefs = normalizePerformancePrefs(prefs);
+    const performanceConfig = performanceConfigFromPrefs(prefs);
+    const performancePrefs = Object.assign({}, prefs, performancePrefsPatch(performanceConfig));
     const boostCopy = boostCopyConfigFromPrefs(performancePrefs);
     const jumpHighlight = jumpHighlightConfigFromPrefs(performancePrefs);
     const expandLeafNestedReplies = performancePrefs.expandLeafNestedReplies === true;
@@ -6765,7 +6758,7 @@
       ...normalizeWindowGeometryPreferenceGroup(performancePrefs, COMPOSER_WINDOW_PROFILE_PREFIXES.popup),
       ...normalizeWindowGeometryPreferenceGroup(performancePrefs, COMPOSER_WINDOW_PROFILE_PREFIXES.full),
       ...normalizeWindowGeometryPreferenceGroup(performancePrefs, COMPOSER_WINDOW_PROFILE_PREFIXES.mobile),
-      topicReaderMode: normalizeTopicReaderMode(performancePrefs.topicReaderMode),
+      topicReaderMode: 'floating',
       listReaderMode: normalizeListReaderMode(performancePrefs.listReaderMode),
       listReaderEmbedWidth: normalizeListReaderEmbedWidth(performancePrefs.listReaderEmbedWidth),
       historySortMode: performancePrefs.historySortMode === 'first-viewed' ? 'first-viewed' : 'recent-viewed',
@@ -6831,7 +6824,7 @@
         merged.imageProfiles = mapProfileValues(READER_PROFILE_KEYS, () => Object.assign({}, legacyImage));
       }
       if (!stored.appearanceProfiles) {
-        const legacyZebraColor = normalizeZebraColor(stored.zebraColor);
+        const legacyZebraColor = normalizeHexColor(stored.zebraColor, ZEBRA_COLOR_DEFAULT);
         const legacyAppearance = normalizeAppearanceProfile({
           zebraColor: legacyZebraColor,
           listZebraColor: Object.prototype.hasOwnProperty.call(stored, 'listZebraColor')
@@ -6872,19 +6865,15 @@
 
   let PREFS = readPrefs();
 
-  function externalFontRenderingDetected() {
-    const root = document.documentElement;
-    if (!root.hasAttribute(EXTERNAL_FONT_RENDERING_MARKER)) return false;
-    return getComputedStyle(root).getPropertyValue('--fr-render-text').trim() !== '';
-  }
-
   function syncReaderFontRenderingState() {
     applyHostEmbeddedSizeSettings();
     applyHostFontAppearance();
-    const external = externalFontRenderingDetected();
+    const root = document.documentElement;
+    const external = root.hasAttribute(EXTERNAL_FONT_RENDERING_MARKER) &&
+      getComputedStyle(root).getPropertyValue('--fr-render-text').trim() !== '';
     const mode = external ? 'external' : PREFS.fontRenderingEnabled ? 'builtin' : 'off';
-    document.documentElement.dataset.ldpFontRendering = mode;
-    document.documentElement.dataset.ldpFontRenderingHost = String(
+    root.dataset.ldpFontRendering = mode;
+    root.dataset.ldpFontRenderingHost = String(
       mode === 'builtin' && PREFS.fontRenderingOnHost === true
     );
     if (READER_PORTAL_HOST) READER_PORTAL_HOST.dataset.ldpFontRendering = mode;
@@ -6934,40 +6923,29 @@
     if (Object.keys(patch).some((key) => /^(?:fontRendering|hostFont|hostEmbedded)/.test(key))) syncReaderFontRenderingState();
   }
 
-  function replacePrefs(nextPrefs) {
+  function replacePrefsAndReload(nextPrefs, failureMessage) {
     const normalized = normalizeReaderPrefs(Object.assign({}, DEFAULT_PREFS, nextPrefs || {}));
     try {
       localStorage.setItem(LDP_PREF_KEY, JSON.stringify(normalized));
       PREFS = normalized;
       syncReaderFontRenderingState();
-      return true;
     } catch (e) {
-      return false;
-    }
-  }
-
-  function replacePrefsAndReload(nextPrefs, failureMessage) {
-    if (!replacePrefs(nextPrefs)) {
       showSelectionToast(failureMessage);
       return;
     }
     location.reload();
   }
 
-  function readerConfigSettingKeys() {
-    return Object.keys(normalizeReaderPrefs(Object.assign({}, DEFAULT_PREFS)));
-  }
-
-  function readerConfigSettings(prefs = PREFS) {
-    const normalized = normalizeReaderPrefs(Object.assign({}, DEFAULT_PREFS, prefs));
-    return readerConfigSettingKeys().reduce((settings, key) => {
-      settings[key] = normalized[key];
-      return settings;
-    }, {});
-  }
+  const READER_CONFIG_SETTING_KEYS = Object.freeze(
+    Object.keys(normalizeReaderPrefs(Object.assign({}, DEFAULT_PREFS)))
+  );
 
   function readerConfigExportPayload() {
-    const settings = readerConfigSettings();
+    const normalized = normalizeReaderPrefs(Object.assign({}, DEFAULT_PREFS, PREFS));
+    const settings = READER_CONFIG_SETTING_KEYS.reduce((result, key) => {
+      result[key] = normalized[key];
+      return result;
+    }, {});
     return {
       format: LDP_CONFIG_EXPORT_FORMAT,
       schemaVersion: LDP_CONFIG_EXPORT_VERSION,
@@ -6980,7 +6958,7 @@
 
   function readerPrefsFromConfigExport(payload) {
     const schemaVersion = Number(payload && payload.schemaVersion);
-    const settingKeys = readerConfigSettingKeys();
+    const settingKeys = READER_CONFIG_SETTING_KEYS;
     const optionalLegacySettingKeys = new Set(['full', 'mobile'].flatMap((profile) => {
       const prefix = COMPOSER_WINDOW_PROFILE_PREFIXES[profile];
       return ['Width', 'Height', 'X', 'Y'].map((suffix) => `${prefix}${suffix}`);
@@ -7015,7 +6993,7 @@
   }
 
   function currentReaderProfileSharing() {
-    return normalizeReaderProfileSharing(PREFS.profileSharing);
+    return PREFS.profileSharing;
   }
 
   function readerProfileSharingEnabled(category) {
@@ -7105,10 +7083,6 @@
       : normalized === 'dark' ? 'dark' : 'light';
   }
 
-  function readerThemeIconName(mode = currentReaderThemeMode()) {
-    return mode === 'light' ? 'sun' : mode === 'dark' ? 'moon' : 'monitor';
-  }
-
   function applyReaderThemeVariables(node, mode = currentReaderThemeMode(), ownPalette = readerUsesOwnThemePalette()) {
     if (!node || !node.style) return;
     const normalized = normalizeReaderThemeMode(mode);
@@ -7159,8 +7133,7 @@
     }));
   }
 
-  function applyLinuxDoNativeThemeFallback(mode) {
-    const normalized = normalizeReaderThemeMode(mode);
+  function applyLinuxDoNativeThemeFallback(normalized) {
     const lightStylesheet = document.querySelector('link.light-scheme');
     const darkStylesheet = document.querySelector('link.dark-scheme');
     if (!lightStylesheet || !darkStylesheet) return false;
@@ -7303,7 +7276,7 @@
 
   function currentLayoutRatios(profile = 'full') {
     const safeProfile = READER_PROFILE_KEYS.includes(profile) ? profile : 'full';
-    const values = currentLayoutProfiles()[safeProfile];
+    const values = normalizeLayoutRatios(PREFS.layoutProfiles[safeProfile], LAYOUT_PROFILE_DEFAULTS[safeProfile]);
     return readerProfileSharingEnabled('layout')
       ? resolveSharedLayoutRatios(values, currentSharedLayoutProfile())
       : values;
@@ -7322,18 +7295,14 @@
     return scope ? FONT_SCOPE_CONFIG[scope].family : name;
   }
 
-  function mergeSharedFontProfile(profileValues, sharedValues) {
-    const values = mergeSharedProfileValues(profileValues, sharedValues, FONT_PROFILE_VALUE_KEYS,
-      (name) => readerProfileSettingShared('font', fontProfileSharingField(name)));
-    return normalizeFontProfile(values, profileValues);
-  }
-
   function currentFontProfile(profile = 'full') {
     const safeProfile = READER_PROFILE_KEYS.includes(profile) ? profile : 'full';
-    const values = currentFontProfiles()[safeProfile];
-    return readerProfileSharingEnabled('font')
-      ? mergeSharedFontProfile(values, currentSharedFontProfile())
-      : values;
+    const values = normalizeFontProfile(PREFS.fontProfiles[safeProfile], FONT_PROFILE_DEFAULTS[safeProfile]);
+    if (!readerProfileSharingEnabled('font')) return values;
+    return normalizeFontProfile(mergeSharedProfileValues(
+      values, currentSharedFontProfile(), FONT_PROFILE_VALUE_KEYS,
+      (name) => readerProfileSettingShared('font', fontProfileSharingField(name))
+    ), values);
   }
 
   function currentPerformanceConfig() {
@@ -7376,15 +7345,11 @@
     };
   }
 
-  function currentImageProfiles() {
-    return normalizeImageProfiles(PREFS.imageProfiles);
-  }
-
   function currentImageProfile(profile = 'full') {
     const safeProfile = READER_PROFILE_KEYS.includes(profile) ? profile : 'full';
     return readerProfileSettingShared('image', 'scale')
       ? normalizeImageProfile(PREFS.sharedImageProfile, IMAGE_PROFILE_DEFAULTS.full)
-      : currentImageProfiles()[safeProfile];
+      : normalizeImageProfile(PREFS.imageProfiles[safeProfile], IMAGE_PROFILE_DEFAULTS[safeProfile]);
   }
 
   function currentImageScalePercent(profile = 'full') {
@@ -7398,15 +7363,12 @@
 
   function normalizeHostEmbeddedSizeScale(value, fallback = HOST_EMBED_SIZE_DEFAULT) { return normalizeRoundedRange(value, fallback, HOST_EMBED_SIZE_MIN, HOST_EMBED_SIZE_MAX); }
 
-  function scaledHostEmbeddedPixels(base, percent) {
-    return `${Math.round(base * normalizeHostEmbeddedSizeScale(percent) * 10 / 100) / 10}px`;
-  }
-
   function applyHostEmbeddedSizeSettings() {
     const style = document.documentElement.style;
     Object.values(HOST_EMBED_SIZE_SETTINGS).forEach((setting) => {
       setting.properties.forEach(([property, basePixels]) => {
-        style.setProperty(property, scaledHostEmbeddedPixels(basePixels, PREFS[setting.pref]));
+        const pixels = Math.round(basePixels * normalizeHostEmbeddedSizeScale(PREFS[setting.pref]) * 10 / 100) / 10;
+        style.setProperty(property, `${pixels}px`);
       });
     });
   }
@@ -7547,10 +7509,6 @@
     Object.keys(INTERFACE_FONT_TOKEN_BASES).forEach((property) => styleDeclaration.removeProperty(property));
   }
 
-  function normalizeZebraColor(value) {
-    return normalizeHexColor(value, ZEBRA_COLOR_DEFAULT);
-  }
-
   function normalizeSteppedValue(value, fallback, minimum, maximum, step) {
     const parsed = Number(value);
     const safeValue = Number.isFinite(parsed) ? parsed : fallback;
@@ -7671,7 +7629,9 @@
 
   function currentAppearanceProfile(profile = currentReaderProfileName()) {
     const safeProfile = READER_PROFILE_KEYS.includes(profile) ? profile : 'full';
-    const values = currentAppearanceProfiles()[safeProfile];
+    const values = normalizeAppearanceProfile(
+      PREFS.appearanceProfiles[safeProfile], APPEARANCE_PROFILE_DEFAULTS[safeProfile]
+    );
     if (!readerProfileSharingEnabled('appearance')) return values;
     return normalizeAppearanceProfile(mergeSharedProfileValues(
       values, currentSharedAppearanceProfile(), APPEARANCE_PROFILE_VALUE_KEYS,
@@ -7679,32 +7639,17 @@
     ), APPEARANCE_PROFILE_DEFAULTS[safeProfile]);
   }
 
-  function normalizeAccentColor(value) {
-    return normalizeHexColor(value, ACCENT_COLOR_DEFAULT);
-  }
-
-  function normalizeLinkColor(value) {
-    return normalizeHexColor(value, LINK_COLOR_DEFAULT);
-  }
-
-  function appearanceInteractionColors(values, mode = currentReaderThemeMode()) {
+  function applyAppearanceInteractionColors(node, values = currentAppearanceProfile(), mode = currentReaderThemeMode()) {
+    if (!node || !node.style) return;
     const appearance = values || APPEARANCE_PROFILE_DEFAULTS.full;
     const resolved = resolvedReaderThemeMode(mode);
     const accent = appearanceThemeColor(appearance, 'accentColor', resolved);
-    const link = appearanceThemeColor(appearance, 'linkColor', resolved);
     const accentDefault = APPEARANCE_PROFILE_DEFAULT[appearanceThemeValueKey('accentColor', resolved)];
-    const accentLow = accent === accentDefault
+    node.style.setProperty('--tertiary', accent);
+    node.style.setProperty('--tertiary-low', accent === accentDefault
       ? READER_THEME_VARIABLES[resolved]['--tertiary-low']
-      : `color-mix(in srgb,${accent} 18%,var(--secondary,#fff))`;
-    return { accent, accentLow, link };
-  }
-
-  function applyAppearanceInteractionColors(node, values = currentAppearanceProfile(), mode = currentReaderThemeMode()) {
-    if (!node || !node.style) return;
-    const colors = appearanceInteractionColors(values, mode);
-    node.style.setProperty('--tertiary', colors.accent);
-    node.style.setProperty('--tertiary-low', colors.accentLow);
-    node.style.setProperty('--d-link-color', colors.link);
+      : `color-mix(in srgb,${accent} 18%,var(--secondary,#fff))`);
+    node.style.setProperty('--d-link-color', appearanceThemeColor(appearance, 'linkColor', resolved));
   }
 
   function normalizeLineWidth(value, fallback) {
@@ -7729,10 +7674,6 @@
 
   function currentListReaderMode() {
     return normalizeListReaderMode(PREFS.listReaderMode);
-  }
-
-  function currentTopicReaderMode() {
-    return normalizeTopicReaderMode(PREFS.topicReaderMode);
   }
 
   function currentListReaderEmbedWidth() {
@@ -8240,8 +8181,12 @@
     }
   }
 
-  function persistentResourceResponseIsFresh(response, maxAge, at = Date.now()) {
-    const cachedAt = Number(response && response.headers.get('x-ldp-cached-at')) || 0;
+  function persistentResourceResponseIsFresh(
+    response,
+    maxAge,
+    at = Date.now(),
+    cachedAt = Number(response && response.headers.get('x-ldp-cached-at')) || 0
+  ) {
     return !!response && cachedAt > 0 && at - cachedAt <= maxAge;
   }
 
@@ -8272,13 +8217,14 @@
       const entries = [];
       await runInBatches(requests, RESOURCE_CACHE_PRUNE_BATCH_SIZE, async (request) => {
         const response = await storage.match(request);
-        if (!persistentResourceResponseIsFresh(response, maxAge, now)) {
+        const cachedAt = Number(response && response.headers.get('x-ldp-cached-at')) || 0;
+        if (!persistentResourceResponseIsFresh(response, maxAge, now, cachedAt)) {
           await storage.delete(request);
           return;
         }
         entries.push({
           request,
-          cachedAt: Number(response.headers.get('x-ldp-cached-at')) || 0,
+          cachedAt,
           bytes: Math.max(0, Number(response.headers.get('content-length')) || 0),
         });
       });
@@ -8308,15 +8254,18 @@
 
   function prunePersistentResourceCacheOnce(cacheName, maxAge) {
     if (typeof caches === 'undefined') return Promise.resolve();
-    if (!RESOURCE_CACHE_PRUNE_REQUESTS.has(cacheName)) {
-      RESOURCE_CACHE_PRUNE_REQUESTS.set(cacheName, prunePersistentResourceCache(cacheName, maxAge));
+    let request = RESOURCE_CACHE_PRUNE_REQUESTS.get(cacheName);
+    if (!request) {
+      request = prunePersistentResourceCache(cacheName, maxAge);
+      RESOURCE_CACHE_PRUNE_REQUESTS.set(cacheName, request);
     }
-    return RESOURCE_CACHE_PRUNE_REQUESTS.get(cacheName);
+    return request;
   }
 
   function cacheResourceObjectUrl(cache, source, objectUrl, maxEntries) {
-    if (cache.has(source)) {
-      URL.revokeObjectURL(cache.get(source));
+    const previousUrl = cache.get(source);
+    if (previousUrl) {
+      URL.revokeObjectURL(previousUrl);
       cache.delete(source);
     }
     while (cache.size >= maxEntries) {
@@ -8330,8 +8279,8 @@
   }
 
   function touchResourceObjectUrl(cache, source) {
-    if (!cache.has(source)) return '';
     const objectUrl = cache.get(source);
+    if (!objectUrl) return '';
     cache.delete(source);
     cache.set(source, objectUrl);
     return objectUrl;
@@ -8428,8 +8377,9 @@
       completeProgress();
       return cachedObjectUrl;
     }
-    if (AVATAR_RESOURCE_REQUESTS.has(source)) {
-      const sharedSource = await AVATAR_RESOURCE_REQUESTS.get(source);
+    const pendingRequest = AVATAR_RESOURCE_REQUESTS.get(source);
+    if (pendingRequest) {
+      const sharedSource = await pendingRequest;
       if (sharedSource) completeProgress();
       return sharedSource;
     }
@@ -8523,6 +8473,7 @@
 
   function createImageTransformController(stage, image, options = {}) {
     const captureTarget = options.captureTarget || stage;
+    const eventBindings = [];
     let scale = 1;
     let panX = 0;
     let panY = 0;
@@ -8613,10 +8564,10 @@
       pointerId = null;
       image.classList.remove('is-dragging');
     };
-    captureTarget.addEventListener('pointerdown', onPointerDown);
-    captureTarget.addEventListener('pointermove', onPointerMove);
-    captureTarget.addEventListener('pointerup', onPointerEnd);
-    captureTarget.addEventListener('pointercancel', onPointerEnd);
+    addTrackedEventListener(eventBindings, captureTarget, 'pointerdown', onPointerDown);
+    addTrackedEventListener(eventBindings, captureTarget, 'pointermove', onPointerMove);
+    addTrackedEventListener(eventBindings, captureTarget, 'pointerup', onPointerEnd);
+    addTrackedEventListener(eventBindings, captureTarget, 'pointercancel', onPointerEnd);
     return {
       get scale() { return scale; },
       render,
@@ -8624,10 +8575,7 @@
       reset,
       destroy() {
         if (dragFrame) cancelAnimationFrame(dragFrame);
-        captureTarget.removeEventListener('pointerdown', onPointerDown);
-        captureTarget.removeEventListener('pointermove', onPointerMove);
-        captureTarget.removeEventListener('pointerup', onPointerEnd);
-        captureTarget.removeEventListener('pointercancel', onPointerEnd);
+        removeTrackedEventListeners(eventBindings);
       },
     };
   }
@@ -8704,6 +8652,7 @@
     if (currentViewer && typeof currentViewer._ldpClose === 'function') currentViewer._ldpClose();
 
     const viewer = document.createElement('div');
+    const eventBindings = [];
     const mediaLabel = isBackground ? '背景图' : isImage ? '图片' : '头像';
     const accessibleName = username ? `${username} 的${mediaLabel}预览` : `${mediaLabel}预览`;
     viewer.className = `ldp-avatar-viewer${isBackground ? ' is-background' : isImage ? ' is-image' : ''}`;
@@ -8764,10 +8713,7 @@
     const close = (dismissed = false) => {
       if (closed) return;
       closed = true;
-      document.removeEventListener('keydown', onKey);
-      document.removeEventListener('pointerdown', onOutside, true);
-      document.removeEventListener('wheel', onViewerWheel, true);
-      window.removeEventListener('resize', reposition);
+      removeTrackedEventListeners(eventBindings);
       if (imageTransform) imageTransform.destroy();
       if (viewer._ldpBatchDialog) viewer._ldpBatchDialog.style.removeProperty('transform');
       viewer.remove();
@@ -8944,14 +8890,16 @@
         );
       });
     }
-    document.addEventListener('keydown', onKey);
+    addTrackedEventListener(eventBindings, document, 'keydown', onKey);
     appendReaderPortalNode(viewer);
     syncReaderSvgSymbols(viewer);
     reposition();
     if (imageTransform) imageTransform.render();
-    document.addEventListener('pointerdown', onOutside, true);
-    if (isImage) document.addEventListener('wheel', onViewerWheel, { capture: true, passive: false });
-    window.addEventListener('resize', reposition);
+    addTrackedEventListener(eventBindings, document, 'pointerdown', onOutside, true);
+    if (isImage) addTrackedEventListener(
+      eventBindings, document, 'wheel', onViewerWheel, { capture: true, passive: false }
+    );
+    addTrackedEventListener(eventBindings, window, 'resize', reposition);
     if (isBackground) {
       loadingHighResolution = true;
       image.src = highResolutionSource;
@@ -9099,7 +9047,6 @@
     const requestCallSite = requestFlowCallSite();
     const fetchOptions = {
       credentials: 'include',
-      headers: { 'Accept': 'application/json' },
       ...(options.fetchOptions || {}),
     };
     fetchOptions.headers = Object.assign(
@@ -9117,10 +9064,11 @@
       }
       const queuedAt = requestFlowNow();
       const requestScope = createRequestAbortScope(fetchOptions.signal);
+      const requestType = requestFlowType(requestFlowUrl(url), 'fetch', fetchOptions.method || 'GET');
       let sharedPermit = null;
       try {
         sharedPermit = await acquireSharedReaderRequestPermit(
-          priority, requestScope.signal, requestFlowType(requestFlowUrl(url), 'fetch', fetchOptions.method || 'GET'), scheduler);
+          priority, requestScope.signal, requestType, scheduler);
         requestScope.startTimeout();
         const res = await fetch(url, {
           ...fetchOptions,
@@ -9134,6 +9082,7 @@
             waitReason: sharedPermit && sharedPermit.waitReason || '',
             callSite: requestCallSite,
             attempt: 1,
+            type: requestType,
           },
         });
         noteSharedRequestRateLimit(res);
@@ -9283,8 +9232,8 @@
   function pinyinSearchForms(value) {
     const source = String(value || '');
     if (!source) return [];
-    if (SEARCH_PINYIN_CACHE.has(source)) {
-      const cached = SEARCH_PINYIN_CACHE.get(source);
+    const cached = SEARCH_PINYIN_CACHE.get(source);
+    if (cached) {
       SEARCH_PINYIN_CACHE.delete(source);
       SEARCH_PINYIN_CACHE.set(source, cached);
       return cached;
@@ -9307,28 +9256,13 @@
     return result;
   }
 
-  function notificationUserIds(notification) {
-    const data = notificationData(notification);
-    return [
-      notification && notification.user_id,
-      notification && notification.acting_user_id,
-      data.user_id,
-      data.acting_user_id,
-      data.original_user_id,
-    ].filter((value) => value != null && value !== '').map(String);
-  }
-
-  function notificationStatsIdentity(notification) {
-    return String(notification && notification.id || '') || [
-      notification && notification.topic_id,
-      notification && notification.post_number,
-      notification && notification.created_at,
-    ].filter(Boolean).join(':');
-  }
-
   function addNotificationStatsIdentities(notificationIds, notifications) {
     notifications.forEach((notification) => {
-      const notificationId = notificationStatsIdentity(notification);
+      const notificationId = String(notification && notification.id || '') || [
+        notification && notification.topic_id,
+        notification && notification.post_number,
+        notification && notification.created_at,
+      ].filter(Boolean).join(':');
       if (notificationId) notificationIds.add(notificationId);
     });
   }
@@ -9339,8 +9273,7 @@
     ].join('|');
   }
 
-  function notificationMatchesSearch(notification, query) {
-    const needle = normalizeSearchText(query);
+  function notificationMatchesSearch(notification, needle) {
     if (!needle) return true;
     const data = notificationData(notification);
     return [
@@ -9350,7 +9283,13 @@
       data.acting_user_name,
       data.username,
       notification && notification.username,
-      ...notificationUserIds(notification),
+      ...[
+        notification && notification.user_id,
+        notification && notification.acting_user_id,
+        data.user_id,
+        data.acting_user_id,
+        data.original_user_id,
+      ].filter((value) => value != null && value !== '').map(String),
     ].some((value) => normalizeSearchText(value).includes(needle));
   }
 
@@ -9360,8 +9299,7 @@
     return pinyinSearchForms(entry && entry.title).some((value) => value.includes(needle));
   }
 
-  function reactionRecordMatchesSearch(entry, query) {
-    const needle = normalizeSearchText(query);
+  function reactionRecordMatchesSearch(entry, needle) {
     if (!needle) return true;
     return [
       entry && entry.reaction,
@@ -9378,14 +9316,16 @@
   }
 
   function forEachCachedNotification(callback) {
+    if (ME_USERNAME === null) return;
+    const authPrefix = authScopedCacheKey('');
     NOTIFICATION_CACHE.forEach((entry, cacheKey) => {
-      if (currentAuthCacheKey(cacheKey) && Array.isArray(entry?.value?.notifications)) {
+      if (String(cacheKey).startsWith(authPrefix) && Array.isArray(entry?.value?.notifications)) {
         entry.value.notifications.forEach(callback);
       }
     });
   }
 
-  function cachedNotificationsForGroup(groupKey) {
+  function cachedNotificationsForGroup(groupKey, sort = true) {
     const seen = new Set();
     const notifications = [];
     forEachCachedNotification((notification) => {
@@ -9395,7 +9335,7 @@
       seen.add(key);
       notifications.push(notification);
     });
-    return sortNotificationsNewestFirst(notifications);
+    return sort ? sortNotificationsNewestFirst(notifications) : notifications;
   }
 
   function notificationMatchesGroup(notification, groupKey) {
@@ -9423,7 +9363,7 @@
   }
 
   function cachedUnreadNotificationCount(groupKey = 'all') {
-    return cachedNotificationsForGroup(groupKey).reduce((count, notification) =>
+    return cachedNotificationsForGroup(groupKey, false).reduce((count, notification) =>
       count + (notification && notification.read === false ? 1 : 0), 0);
   }
 
@@ -9529,10 +9469,10 @@
   function cachedActorAvatar(actor, historySource = readTopicHistory) {
     actor = cleanUsernameValue(actor);
     if (!actor) return '';
-    if (NOTIFICATION_AVATAR_CACHE.has(actor)) {
-      const template = NOTIFICATION_AVATAR_CACHE.get(actor);
-      rememberNotificationAvatar(actor, template);
-      return template;
+    const cachedTemplate = NOTIFICATION_AVATAR_CACHE.get(actor);
+    if (cachedTemplate) {
+      rememberNotificationAvatar(actor, cachedTemplate);
+      return cachedTemplate;
     }
     const cachedUser = getCachedUserCard(actor);
     let template = String(cachedUser && cachedUser.avatar_template || '').trim();
@@ -9561,12 +9501,12 @@
   function notificationCacheSnapshot(notification) {
     if (!notification || typeof notification !== 'object') return notification;
     const data = notificationData(notification);
-    const snapshot = Object.assign({}, notification, {
-      data,
-      _ldp_actor: notificationActor(notification),
-      _ldp_summary: notificationSummary(notification),
-      _ldp_href: notificationHref(notification),
-      _ldp_type_label: notificationTypeLabel(notification),
+    const snapshot = Object.assign({}, notification, { data });
+    Object.assign(snapshot, {
+      _ldp_actor: notificationActor(snapshot),
+      _ldp_summary: notificationSummary(snapshot),
+      _ldp_href: notificationHref(snapshot),
+      _ldp_type_label: notificationTypeLabel(snapshot),
     });
     const actor = notificationActor(snapshot);
     const template = notification.acting_user_avatar_template || notification.avatar_template ||
@@ -9631,14 +9571,14 @@
     hydratePersistentAvatarImages(container, POST_REQUEST_PRIORITY.auxiliary);
   }
 
-  function hydrateHistoryAvatars(container, entries) {
+  function hydrateHistoryAvatars(container, entries, storedHistory = null) {
     if (!container) return;
     const actors = new Set();
     (entries || []).forEach((entry) => {
       const actor = cleanUsernameValue(entry && entry.ownerUsername);
       if (actor && !entry.avatarTemplate) actors.add(actor);
     });
-    const history = actors.size ? readTopicHistory() : [];
+    const history = actors.size ? storedHistory || readTopicHistory() : [];
     const templates = cachedActorAvatars(actors, () => history);
     let historyChanged = false;
     history.forEach((entry) => {
@@ -9685,11 +9625,6 @@
     return entry.value || null;
   }
 
-  function cachedNotificationPageIsFresh(cacheKey) {
-    const entry = NOTIFICATION_CACHE.get(cacheKey);
-    return !!entry && Date.now() - Number(entry.at || 0) <= NOTIFICATION_CACHE_FRESH_FOR;
-  }
-
   function setCachedNotificationPage(cacheKey, value) {
     if (!cacheKey || !value) return;
     NOTIFICATION_CACHE.delete(cacheKey);
@@ -9714,10 +9649,8 @@
     const safeGroupKey = Object.prototype.hasOwnProperty.call(NOTIFICATION_GROUPS, groupKey) ? groupKey : 'all';
     page = Math.max(0, Number(page) || 0);
     const cacheKey = notificationPageCacheKey(safeGroupKey, page);
-    const cached = getCachedNotificationPage(cacheKey);
-    if (cached && !options.force) return cached;
-
-    if (NOTIFICATION_REQUESTS.has(cacheKey)) return NOTIFICATION_REQUESTS.get(cacheKey);
+    const pendingRequest = NOTIFICATION_REQUESTS.get(cacheKey);
+    if (pendingRequest) return pendingRequest;
     const request = (async () => {
       const params = new URLSearchParams();
       params.set('offset', String(page * NOTIFICATION_PAGE_SIZE));
@@ -9820,24 +9753,29 @@
 
     const abortError = (reason = 'Aborted') => new DOMException(String(reason || 'Aborted'), 'AbortError');
 
-    const endpointRateLimitIdentity = (input, method = 'GET', routeOnly = false) => {
+    const endpointRateLimitIdentity = (input, method = 'GET') => {
       const url = requestFlowUrl(input);
       const normalizedMethod = String(method || 'GET').toUpperCase();
-      if (!url) return `${normalizedMethod}:invalid:${String(input || '').slice(0, 160)}`;
-      const path = routeOnly
-        ? url.pathname
-          .replace(/\b\d+\b/g, ':id')
-          .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':uuid')
-        : url.pathname;
-      const params = Array.from(url.searchParams.entries())
-        .filter(([key]) => key !== '_ldp_retry')
-        .map(([key, value]) => routeOnly ? [key, ''] : [key, value])
-        .sort(([aKey, aValue], [bKey, bValue]) =>
-          aKey.localeCompare(bKey) || aValue.localeCompare(bValue));
-      const query = routeOnly
-        ? Array.from(new Set(params.map(([key]) => encodeURIComponent(key)))).join('&')
-        : params.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&');
-      return `${normalizedMethod}:${url.origin}${path}${query ? `?${query}` : ''}`;
+      if (!url) {
+        const invalid = `${normalizedMethod}:invalid:${String(input || '').slice(0, 160)}`;
+        return { fingerprint: invalid, route: invalid };
+      }
+      const params = Array.from(url.searchParams.entries()).filter(([key]) => key !== '_ldp_retry');
+      const identity = (routeOnly) => {
+        const path = routeOnly
+          ? url.pathname
+            .replace(/\b\d+\b/g, ':id')
+            .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':uuid')
+          : url.pathname;
+        const sorted = params.map(([key, value]) => routeOnly ? [key, ''] : [key, value])
+          .sort(([aKey, aValue], [bKey, bValue]) =>
+            aKey.localeCompare(bKey) || aValue.localeCompare(bValue));
+        const query = routeOnly
+          ? Array.from(new Set(sorted.map(([key]) => encodeURIComponent(key)))).join('&')
+          : sorted.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&');
+        return `${normalizedMethod}:${url.origin}${path}${query ? `?${query}` : ''}`;
+      };
+      return { fingerprint: identity(false), route: identity(true) };
     };
 
     const pruneEndpointRateLimitState = (at = Date.now()) => {
@@ -9915,7 +9853,7 @@
           ? error.message
           : '';
         const controlReason = String(task.controlReason || errorReason || task.waitReason || (disposed ? 'context-close' : 'cancelled'));
-        const type = task.sharedType || requestFlowType(requestFlowUrl(task.url), 'fetch', task.fetchOptions.method || 'GET');
+        const type = task.sharedType;
         recordRequestFlowControl(task.url, {
           queuedAt: task.queuedAt,
           method: task.fetchOptions.method || 'GET',
@@ -9994,6 +9932,7 @@
             waitReason: task.waitReason,
             callSite: task.callSite,
             attempt: task.attempt + 1,
+            type: task.sharedType,
           },
         });
         if (response.status === 429) {
@@ -10091,7 +10030,7 @@
             longBudget: longWindowBudget,
             minInterval: requestMinInterval,
             maxConcurrent: effectiveMaxConcurrent(),
-            type: task.sharedType || requestFlowType(requestFlowUrl(task.url), 'fetch', task.fetchOptions.method || 'GET'),
+            type: task.sharedType,
           })
           : Promise.resolve({ startedAt: Date.now(), recoveryProbe: false });
         acquire.then((permit) => {
@@ -10135,8 +10074,7 @@
       }
       const callSite = String(requestOptions.callSite || requestFlowCallSite());
       const method = String(fetchOptions.method || 'GET').toUpperCase();
-      const endpointFingerprint = endpointRateLimitIdentity(url, method);
-      const endpointRoute = endpointRateLimitIdentity(url, method, true);
+      const { fingerprint: endpointFingerprint, route: endpointRoute } = endpointRateLimitIdentity(url, method);
       const endpointLimit = endpointRateLimitState(endpointFingerprint);
       let controlError = null;
       let controlReason = '';
@@ -10192,7 +10130,8 @@
         promise,
         permitOnly: requestOptions.permitOnly === true,
         countsTowardApi: requestOptions.countsTowardApi !== false,
-        sharedType: String(requestOptions.sharedType || ''),
+        sharedType: String(requestOptions.sharedType ||
+          requestFlowType(requestFlowUrl(url), 'fetch', options.method || 'GET')),
         endpointFingerprint,
         endpointRoute,
       };
@@ -10386,6 +10325,7 @@
             sharedPermit && sharedPermit.waitReason || '',
           callSite: requestPermit.callSite,
           attempt: 1,
+          type: requestType,
         },
       });
       if (res.status === 429) {
@@ -10508,12 +10448,6 @@
     return { min, max };
   }
 
-  function pollTitleHtml(container, poll) {
-    const existing = container.querySelector('.poll-title, .ldp-poll-title');
-    if (existing) return `<div class="ldp-poll-title">${existing.innerHTML}</div>`;
-    return poll && poll.title ? `<div class="ldp-poll-title">${esc(poll.title)}</div>` : '';
-  }
-
   function pollOptionHtml(option) {
     return String((option && option.html) || '');
   }
@@ -10552,7 +10486,10 @@
 
   function renderReaderPoll(container, postData, poll, ctx, showResultsOverride) {
     const name = pollName(poll);
-    const title = pollTitleHtml(container, poll);
+    const existingTitle = container.querySelector('.poll-title, .ldp-poll-title');
+    const title = existingTitle
+      ? `<div class="ldp-poll-title">${existingTitle.innerHTML}</div>`
+      : poll && poll.title ? `<div class="ldp-poll-title">${esc(poll.title)}</div>` : '';
     const saved = pollSavedVotes(postData, poll);
     const closed = pollIsClosed(poll, ctx);
     const canShowResults = pollCanShowResults(postData, poll, ctx);
@@ -11296,8 +11233,11 @@
           window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         track.scrollTo({ left: target.offsetLeft, behavior: reducedMotion ? 'auto' : 'smooth' });
       };
-      previous.addEventListener('click', () => show(activeIndex - 1));
-      next.addEventListener('click', () => show(activeIndex + 1));
+      controls.addEventListener('click', (event) => {
+        const button = event.target instanceof Element ? event.target.closest('button') : null;
+        if (button === previous) show(activeIndex - 1);
+        else if (button === next) show(activeIndex + 1);
+      });
       track.addEventListener('scroll', scheduleSync, { passive: true });
       sync();
     });
@@ -12266,23 +12206,19 @@
     );
   }
 
-  function boostIdentitySourcePost(boost, ctx) {
-    const username = String(boost && boost.username || '').toLocaleLowerCase();
-    if (!username || !ctx) return null;
-    const cachedPosts = ctx.loader && Array.isArray(ctx.loader.cachedPosts) ? ctx.loader.cachedPosts : [];
-    const candidates = cachedPosts.concat(postsFromPayload(ctx.topicData));
-    return candidates.find((post) => {
-      if (String(post && post.username || '').toLocaleLowerCase() !== username) return false;
-      return post.admin === true || post.moderator === true || post.group_moderator === true ||
-        ['new_user', 'returning_user', 'custom'].includes(postNoticeType(post));
-    }) || null;
-  }
-
   function boostIdentities(boost, ctx) {
     const identities = [];
     const username = String(boost && boost.username || '');
     const usernameKey = username.toLocaleLowerCase();
-    const sourcePost = boostIdentitySourcePost(boost, ctx) || {};
+    let sourcePost = {};
+    if (usernameKey && ctx) {
+      const cachedPosts = ctx.loader && Array.isArray(ctx.loader.cachedPosts) ? ctx.loader.cachedPosts : [];
+      sourcePost = cachedPosts.concat(postsFromPayload(ctx.topicData)).find((post) => {
+        if (String(post && post.username || '').toLocaleLowerCase() !== usernameKey) return false;
+        return post.admin === true || post.moderator === true || post.group_moderator === true ||
+          ['new_user', 'returning_user', 'custom'].includes(postNoticeType(post));
+      }) || {};
+    }
     const noticeType = postNoticeType(sourcePost) || boost.noticeType;
     const isAdmin = boost.admin === true || sourcePost.admin === true;
     const isModerator = boost.moderator === true || sourcePost.moderator === true ||
@@ -12438,12 +12374,6 @@
     });
     return ME_REQUEST;
   }
-
-  function likeInfo(p) {
-    const like = (p.actions_summary || []).find((a) => a.id === 2) || {};
-    return { count: like.count || 0, acted: !!like.acted, canAct: !!like.can_act };
-  }
-
   function canShowBoostButton(p) {
     return !!(p && p.can_boost === true && (!ME_USERNAME || p.username !== ME_USERNAME));
   }
@@ -12500,12 +12430,6 @@
     const data = post || {};
     const bookmarkId = data.bookmark_id || (data.bookmark && data.bookmark.id) || null;
     return { bookmarked: !!(data.bookmarked || bookmarkId), bookmarkId };
-  }
-
-  function topicNotificationOptions(level) {
-    return TOPIC_NOTIFICATION_LEVELS.map((item) =>
-      `<option value="${item.value}"${item.value === level ? ' selected' : ''}>${item.label}</option>`
-    ).join('');
   }
 
   const POST_CONTEXT_ACTIONS = Object.freeze([
@@ -12590,6 +12514,9 @@
     const level = Number.isInteger(ctx.topicNotificationLevel)
       ? ctx.topicNotificationLevel
       : topicNotificationLevel(ctx.topicData);
+    const notificationOptions = TOPIC_NOTIFICATION_LEVELS.map((item) =>
+      `<option value="${item.value}"${item.value === level ? ' selected' : ''}>${item.label}</option>`
+    ).join('');
     return `
       <div class="ldp-topic-footer-actions" aria-label="主题操作">
         <button class="ldp-topic-footer-button ldp-topic-shared-issue${sharedIssue.active ? ' on' : ''}" type="button" data-topic-action="shared-issue" aria-label="${sharedIssueLabel}" aria-pressed="${sharedIssue.active ? 'true' : 'false'}"${sharedIssue.visible ? '' : ' hidden'}${sharedIssue.isAuthor ? ' disabled' : ''}>${icon('hand')}<span class="ldp-topic-shared-issue-label">俺也一样</span><span class="ldp-topic-shared-issue-count">(${sharedIssue.count})</span></button>
@@ -12599,7 +12526,7 @@
         <button class="ldp-topic-footer-link ldp-topic-report" type="button" data-reader-action="report" aria-label="举报主题"${capabilities.canReport ? '' : ' hidden'}>${icon('flag')}<span>举报</span></button>
         <button class="ldp-topic-footer-link ldp-topic-assign" type="button" data-reader-action="assign-topic" aria-label="指定主题负责人"${capabilities.canAssign ? '' : ' hidden'}>${icon('userPlus')}<span>指定</span></button>
         <button class="ldp-topic-footer-button ldp-topic-reply ldp-replybtn" type="button" aria-label="回复主题">${icon('reply')}<span>回复</span></button>
-        <span class="ldp-topic-notification" aria-label="通知：${escAttr((TOPIC_NOTIFICATION_LEVELS.find((item) => item.value === level) || TOPIC_NOTIFICATION_LEVELS[0]).label)}">${icon('bell')}<select class="ldp-reader-select ldp-topic-notification-select" aria-label="主题通知级别"><button></button>${topicNotificationOptions(level)}</select></span>
+        <span class="ldp-topic-notification" aria-label="通知：${escAttr((TOPIC_NOTIFICATION_LEVELS.find((item) => item.value === level) || TOPIC_NOTIFICATION_LEVELS[0]).label)}">${icon('bell')}<select class="ldp-reader-select ldp-topic-notification-select" aria-label="主题通知级别"><button></button>${notificationOptions}</select></span>
       </div>`;
   }
 
@@ -12695,11 +12622,6 @@
         select.disabled = options.notificationBusy === true || !ME_USERNAME;
       });
     });
-  }
-
-  function shouldCollapseNestedReply(p, isReply, options = {}) {
-    if (!isReply || p.reply_count > 0) return false;
-    return !!options.forceCollapsed;
   }
 
   function ensureParentJumpControl(post, parentNumber) {
@@ -14200,11 +14122,6 @@
     return body;
   }
 
-  function setFloorPreviewTip(preview, postNumber, text) {
-    const body = resetFloorPreview(preview, postNumber);
-    body.innerHTML = `<div class="ldp-floor-preview-tip">${esc(text)}</div>`;
-  }
-
   function fillFloorPreview(preview, source, postNumber) {
     const body = resetFloorPreview(preview, postNumber);
     const wrap = document.createElement('div');
@@ -14331,7 +14248,8 @@
       hydratePostContent(source, ctx);
       fillFloorPreview(preview, source, postNumber);
     } else {
-      setFloorPreviewTip(preview, postNumber, `还没加载到 #${postNumber}`);
+      const body = resetFloorPreview(preview, postNumber);
+      body.innerHTML = `<div class="ldp-floor-preview-tip">${esc(`还没加载到 #${postNumber}`)}</div>`;
     }
     const relatedPost = anchor.closest('.ldp-post');
     if (typeof options.beforePlace === 'function') options.beforePlace();
@@ -14345,6 +14263,7 @@
 
   function bindFloorPreview(modal, ctx) {
     const root = ctx.scrollRoot || modal;
+    const eventBindings = [];
     const floorPreviewBundles = new Map();
     const openBundles = new Set();
     const bundleByPost = new WeakMap();
@@ -14507,9 +14426,9 @@
       activateBundle(bundle);
       showFloorPreview(btn, ctx, bundle);
     };
-    modal.addEventListener('mouseover', onFloorPreviewMouseOver);
-    modal.addEventListener('mouseout', onFloorPreviewMouseOut);
-    modal.addEventListener('focusin', onFloorPreviewFocusIn);
+    addTrackedEventListener(eventBindings, modal, 'mouseover', onFloorPreviewMouseOver);
+    addTrackedEventListener(eventBindings, modal, 'mouseout', onFloorPreviewMouseOut);
+    addTrackedEventListener(eventBindings, modal, 'focusin', onFloorPreviewFocusIn);
     const getBundleForPost = (post) => {
       cleanupClosedBundles();
       const bundle = bundleByPost.get(post);
@@ -14526,9 +14445,7 @@
       });
     };
     const destroy = () => {
-      modal.removeEventListener('mouseover', onFloorPreviewMouseOver);
-      modal.removeEventListener('mouseout', onFloorPreviewMouseOut);
-      modal.removeEventListener('focusin', onFloorPreviewFocusIn);
+      removeTrackedEventListeners(eventBindings);
       floorPreviewBundles.forEach((bundle) => {
         clearTimeout(bundle.showTimer);
         clearTimeout(bundle.hideTimer);
@@ -14588,7 +14505,8 @@
       return Promise.resolve();
     }
     const resourceCacheSignal = RESOURCE_CACHE_ABORT_CONTROLLER.signal;
-    if (EMOJI_IMAGE_RESOURCE_REQUESTS.has(source)) return EMOJI_IMAGE_RESOURCE_REQUESTS.get(source);
+    const pendingRequest = EMOJI_IMAGE_RESOURCE_REQUESTS.get(source);
+    if (pendingRequest) return pendingRequest;
     const request = (async () => {
       try {
         const { storage, response: existing } = await persistentResourceCacheEntry(
@@ -14675,16 +14593,6 @@
     }
   }
 
-  function lightboxImageIdentity(item) {
-    if (!item) return '';
-    return [
-      Math.max(0, +(item.topicId || 0)),
-      Math.max(0, +(item.postNumber || 0)),
-      Math.max(0, +(item.imageOrder || 0)),
-      comparableLightboxImageSource(item.originalSrc),
-    ].join(':');
-  }
-
   function lightboxImageItem(img, postNumber = 0, imageOrder = 0, postData = null, topicId = 0) {
     if (!img) return null;
     const originalSrc = absoluteImageUrl(resolveOriginalSrc(img));
@@ -14702,23 +14610,25 @@
       username: String(sourcePost && sourcePost.username || ownerPost && ownerPost.dataset.username || '').trim(),
       sourcePost,
     };
-    item.key = lightboxImageIdentity(item);
+    item.key = [
+      Math.max(0, +(item.topicId || 0)),
+      Math.max(0, +(item.postNumber || 0)),
+      Math.max(0, +(item.imageOrder || 0)),
+      comparableLightboxImageSource(item.originalSrc),
+    ].join(':');
     return item;
-  }
-
-  function isHostBoostEmojiImage(img) {
-    if (!img) return false;
-    if (img.classList.contains('emoji')) return true;
-    if (!reactionEmojiImageSources || !reactionEmojiImageSources.size) return false;
-    return [img.currentSrc, img.src, img.getAttribute('src'), resolveOriginalSrc(img)]
-      .map(comparableLightboxImageSource)
-      .some((source) => source && reactionEmojiImageSources.has(source));
   }
 
   function isLightboxContentImage(img, quoted = false) {
     if (!img || typeof img.closest !== 'function') return false;
     const contentSelector = quoted ? '.ldp-content aside.ldp-post-quote > blockquote' : '.ldp-content';
-    if (!img.closest(contentSelector) || isHostBoostEmojiImage(img)) return false;
+    if (!img.closest(contentSelector)) return false;
+    const isBoostEmoji = img.classList.contains('emoji') ||
+      !!(reactionEmojiImageSources && reactionEmojiImageSources.size &&
+        [img.currentSrc, img.src, img.getAttribute('src'), resolveOriginalSrc(img)]
+          .map(comparableLightboxImageSource)
+          .some((source) => source && reactionEmojiImageSources.has(source)));
+    if (isBoostEmoji) return false;
     const excludedSelector = quoted
       ? '.ldp-quote-title,[data-user-card],aside.onebox'
       : 'aside.quote,.ldp-quote-title,[data-user-card],aside.onebox';
@@ -14742,9 +14652,6 @@
 
   const lightboxImageFromEvent = (event) =>
     lightboxImageFromEventIn(event, '.ldp-content', isLightboxFloorImage);
-
-  const lightboxQuotedImageFromEvent = (event) => lightboxImageFromEventIn(
-    event, '.ldp-content aside.ldp-post-quote > blockquote', isLightboxQuotedImage);
 
   function collectLightboxItems(clickedImg, ctx) {
     const items = [];
@@ -14867,11 +14774,6 @@
     return `[quote="${username}, post:${postNumber}, topic:${topicId}"]\n![${alt}](<${source}>)\n[/quote]\n\n`;
   }
 
-  function lightboxCommentMinimumLength() {
-    const siteSettings = lookupDiscourse('service:site-settings');
-    return Math.max(1, +(siteSettings && siteSettings.min_post_length) || 16);
-  }
-
   function lightboxQuoteContainsImage(quote, item, expectedSource) {
     return Array.from(quote.querySelectorAll(':scope > blockquote img')).some((image) => {
       if (comparableLightboxImageSource(resolveOriginalSrc(image)) !== expectedSource) return false;
@@ -14953,26 +14855,23 @@
     return `${date.getFullYear()}年${part(date.getMonth() + 1)}月${part(date.getDate())}日${part(date.getHours())}时${part(date.getMinutes())}分${part(date.getSeconds())}秒`;
   }
 
-  function lightboxImageExtension(item, blob) {
+  function lightboxImageDownloadName(item, index, blob) {
+    let sourceName = '';
+    try { sourceName = decodeURIComponent(new URL(item && item.originalSrc || '', location.href).pathname.split('/').pop() || ''); }
+    catch (error) {}
     const mimeExtensions = {
       'image/avif': 'avif', 'image/bmp': 'bmp', 'image/gif': 'gif', 'image/heic': 'heic',
       'image/heif': 'heif', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/svg+xml': 'svg',
       'image/tiff': 'tiff', 'image/webp': 'webp',
     };
-    const mimeExtension = mimeExtensions[String(blob && blob.type || '').toLowerCase()];
-    if (mimeExtension) return mimeExtension;
-    try {
-      const match = new URL(item && item.originalSrc || '', location.href).pathname.match(/\.([a-z0-9]{2,5})$/i);
-      if (match) return match[1].toLowerCase();
-    } catch (error) {}
-    return 'img';
-  }
-
-  function lightboxImageDownloadName(item, index, blob) {
-    let sourceName = '';
-    try { sourceName = decodeURIComponent(new URL(item && item.originalSrc || '', location.href).pathname.split('/').pop() || ''); }
-    catch (error) {}
-    const extension = lightboxImageExtension(item, blob);
+    let extension = mimeExtensions[String(blob && blob.type || '').toLowerCase()];
+    if (!extension) {
+      try {
+        const match = new URL(item && item.originalSrc || '', location.href).pathname.match(/\.([a-z0-9]{2,5})$/i);
+        if (match) extension = match[1].toLowerCase();
+      } catch (error) {}
+    }
+    extension ||= 'img';
     const stem = safeDownloadFilename(sourceName.replace(/\.[a-z0-9]{2,5}$/i, ''), `image-${index + 1}`);
     return `${String(index + 1).padStart(3, '0')}-${stem}.${extension}`;
   }
@@ -15036,7 +14935,8 @@
     if (!source) throw new Error('图片获取失败');
     const normalizedSource = absoluteImageUrl(source);
     const persistentSource = /^https?:/i.test(normalizedSource) ? normalizedSource : '';
-    const request = LIGHTBOX_IMAGE_RESOURCE_REQUESTS.get(persistentSource) || (async () => {
+    const pendingRequest = LIGHTBOX_IMAGE_RESOURCE_REQUESTS.get(persistentSource);
+    const request = pendingRequest || (async () => {
       const resourceCacheSignal = RESOURCE_CACHE_ABORT_CONTROLLER.signal;
       const localSource = normalizedSource.startsWith('blob:') || normalizedSource.startsWith('data:');
       const abortWithCacheClear = options.abortWithCacheClear === true && !RESOURCE_CACHE_CLEARING;
@@ -15074,7 +14974,7 @@
         if (resource) resource.release();
       }
     })();
-    const tracked = persistentSource && !LIGHTBOX_IMAGE_RESOURCE_REQUESTS.has(persistentSource)
+    const tracked = persistentSource && !pendingRequest
       ? trackSingleFlightRequest(LIGHTBOX_IMAGE_RESOURCE_REQUESTS, persistentSource, request)
       : request;
     try {
@@ -15442,8 +15342,10 @@
       : collectLightboxItems(clickedImg, ctx);
     const { items, initialIndex } = imageSet;
     if (!items.length) return;
-    const minimumCommentLength = lightboxCommentMinimumLength();
+    const siteSettings = lookupDiscourse('service:site-settings');
+    const minimumCommentLength = Math.max(1, +(siteSettings && siteSettings.min_post_length) || 16);
     const lb = document.createElement('div');
+    const eventBindings = [];
     lb.className = 'ldp-lightbox';
     lb.setAttribute('role', 'dialog');
     lb.setAttribute('aria-modal', 'true');
@@ -15606,6 +15508,12 @@
     commentsToggle.setAttribute('aria-label', commentsExpandedByDefault ? '收起图片评论' : '展开图片评论');
     lb.style.setProperty('--ldp-lb-description-height', `${normalizeLightboxDescriptionHeight(PREFS.lightboxDescriptionHeight)}px`);
     let commentsWidthPercent = normalizeLightboxCommentsWidth(PREFS.lightboxCommentsWidthPercent);
+    const setViewOriginalButtonState = (disabled, busy, label) => {
+      viewOriginalBtn.disabled = disabled;
+      if (busy) viewOriginalBtn.setAttribute('aria-busy', 'true');
+      else viewOriginalBtn.removeAttribute('aria-busy');
+      if (label) viewOriginalBtn.setAttribute('aria-label', label);
+    };
     const imageTransform = createImageTransformController(stage, mainImg, {
       overflowPadding: 24,
       allowContainedPan: true,
@@ -15671,16 +15579,7 @@
         return `<button class="ldp-lb-thumb" type="button" role="option" data-lb-index="${index}" aria-label="${escAttr(item.alt || `查看第 ${index + 1} 张图片`)}"><img src="${escAttr(item.thumbSrc)}" alt="" decoding="async"></button>`;
       }).join('');
       thumbs = Array.from(thumbsEl.querySelectorAll('.ldp-lb-thumb'));
-      thumbs.forEach((thumb) => thumb.addEventListener('click', () => showItem(+thumb.dataset.lbIndex)));
       if (!batchOverlay.hidden) renderBatchSelection();
-    };
-    const batchArchivePlaceholder = () => {
-      const title = safeDownloadFilename(ctx && ctx.topicData && ctx.topicData.title || document.title || '帖子图片', '帖子图片');
-      return `${title}_${lightboxDownloadTimestamp()}.zip`;
-    };
-    const batchArchiveName = () => {
-      const candidate = String(batchNameInput.value || batchNameInput.placeholder || '').trim().replace(/\.zip$/i, '');
-      return `${safeDownloadFilename(candidate, `帖子图片_${lightboxDownloadTimestamp()}`)}.zip`;
     };
     const batchScopeItems = () => batchScope === 'all'
       ? items
@@ -15889,7 +15788,11 @@
       );
       batchLoadedScopeExhausted = Boolean(totalPostNumber() && batchLoadedForwardPostNumber >= totalPostNumber());
       batchNameInput.value = '';
-      batchNameInput.placeholder = batchArchivePlaceholder();
+      const title = safeDownloadFilename(
+        ctx && ctx.topicData && ctx.topicData.title || document.title || '帖子图片',
+        '帖子图片'
+      );
+      batchNameInput.placeholder = `${title}_${lightboxDownloadTimestamp()}.zip`;
       batchStatus.textContent = '请选择要打包的图片';
       batchProgress.hidden = true;
       batchOverlay.hidden = false;
@@ -16304,9 +16207,9 @@
       mainImg.hidden = true;
       mainImg.alt = item.alt;
       mainImg.dataset.ldpSourceMode = hasSeparateOriginal ? 'preview' : 'original';
-      viewOriginalBtn.disabled = !hasSeparateOriginal;
-      viewOriginalBtn.removeAttribute('aria-busy');
-      viewOriginalBtn.setAttribute('aria-label', hasSeparateOriginal ? '查看原图' : '当前已是原图');
+      setViewOriginalButtonState(
+        !hasSeparateOriginal, false, hasSeparateOriginal ? '查看原图' : '当前已是原图'
+      );
       status.hidden = false;
       statusText.textContent = hasSeparateOriginal ? '正在加载预览…' : '正在加载图片…';
       retryBtn.hidden = true;
@@ -16315,9 +16218,7 @@
         status.hidden = true;
         void fetchLightboxDownloadBlob(previewSrc, POST_REQUEST_PRIORITY.background).catch(() => {});
         if (mainImg.dataset.ldpSourceMode === 'original') {
-          viewOriginalBtn.disabled = true;
-          viewOriginalBtn.removeAttribute('aria-busy');
-          viewOriginalBtn.setAttribute('aria-label', '当前已是原图');
+          setViewOriginalButtonState(true, false, '当前已是原图');
         }
         renderTransform();
       };
@@ -16327,8 +16228,7 @@
         const originalFailed = mainImg.dataset.ldpSourceMode === 'original' && hasSeparateOriginal;
         statusText.textContent = originalFailed ? '原图加载失败' : '预览图加载失败';
         retryBtn.hidden = !originalFailed;
-        viewOriginalBtn.disabled = !hasSeparateOriginal;
-        viewOriginalBtn.removeAttribute('aria-busy');
+        setViewOriginalButtonState(!hasSeparateOriginal, false);
       };
       mainImg.removeAttribute('src');
       mainImg.src = previewSrc;
@@ -16349,14 +16249,10 @@
       const allowOriginalRetry = (message) => {
         statusText.textContent = message;
         retryBtn.hidden = false;
-        viewOriginalBtn.disabled = false;
-        viewOriginalBtn.removeAttribute('aria-busy');
-        viewOriginalBtn.setAttribute('aria-label', '查看原图');
+        setViewOriginalButtonState(false, false, '查看原图');
       };
       if (!cachedOnly) {
-        viewOriginalBtn.disabled = true;
-        viewOriginalBtn.setAttribute('aria-busy', 'true');
-        viewOriginalBtn.setAttribute('aria-label', '正在加载原图');
+        setViewOriginalButtonState(true, true, '正在加载原图');
         status.hidden = false;
         statusText.textContent = refresh ? '正在重新加载原图…' : '正在加载原图…';
         retryBtn.hidden = true;
@@ -16621,7 +16517,12 @@
         if (!entries.length) throw new Error('所选图片均下载失败');
         setBatchProgress(selectedItems.length, selectedItems.length, '正在生成 ZIP 文件…');
         const zip = createStoredZip(entries);
-        triggerBrowserDownload(zip, batchArchiveName());
+        const archiveName = String(batchNameInput.value || batchNameInput.placeholder || '')
+          .trim().replace(/\.zip$/i, '');
+        triggerBrowserDownload(
+          zip,
+          `${safeDownloadFilename(archiveName, `帖子图片_${lightboxDownloadTimestamp()}`)}.zip`
+        );
         batchStatus.textContent = failures.length
           ? `已打包 ${entries.length} 张，${failures.length} 张获取失败`
           : `已打包 ${entries.length} 张图片`;
@@ -16670,6 +16571,15 @@
         });
       });
     };
+    const setBatchItemSelected = (item, itemIndex, selected, itemNode = null) => {
+      if (selected) batchSelection.add(item.key);
+      else batchSelection.delete(item.key);
+      const card = itemNode || batchGrid.querySelector(`[data-lb-batch-index="${itemIndex}"]`);
+      const input = card && card.querySelector('input[type="checkbox"]');
+      if (input) input.checked = selected;
+      if (card) card.classList.toggle('selected', selected);
+      syncBatchSelectionControls();
+    };
     const openBatchItemPreview = async (itemIndex, anchorCard) => {
       if (batchBusy || lightboxClosed || batchOverlay.hidden) return;
       const item = items[itemIndex];
@@ -16680,15 +16590,6 @@
       try {
         const previewSource = await ensureBatchPreviewSource(item, itemIndex);
         if (requestToken !== batchPreviewRequestToken || lightboxClosed || batchOverlay.hidden) return;
-        const updateSelection = (selected) => {
-          if (selected) batchSelection.add(item.key);
-          else batchSelection.delete(item.key);
-          const itemNode = batchGrid.querySelector(`[data-lb-batch-index="${itemIndex}"]`);
-          const input = itemNode && itemNode.querySelector('input[type="checkbox"]');
-          if (input) input.checked = selected;
-          if (itemNode) itemNode.classList.toggle('selected', selected);
-          syncBatchSelectionControls();
-        };
         openUserAvatarViewer(item.key, '', anchorCard, previewSource, null, null, {
           kind: 'image',
           reuseImageViewer: true,
@@ -16707,7 +16608,7 @@
             const next = scopedItems[scopedIndex + 1];
             if (next) void openBatchItemPreview(items.indexOf(next), anchorCard);
           },
-          onSelectionChange: updateSelection,
+          onSelectionChange: (selected) => setBatchItemSelected(item, itemIndex, selected),
           onDownload: () => downloadLightboxItem(item, itemIndex),
         });
       } catch (error) {
@@ -16755,8 +16656,7 @@
       batchThumbnailUrls.clear();
       imageTransform.destroy();
       lb.remove();
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', renderTransform);
+      removeTrackedEventListeners(eventBindings);
     };
     let descriptionHeightSaveTimer = 0;
     const descriptionResizeObserver = typeof ResizeObserver === 'function'
@@ -16809,8 +16709,8 @@
       lb.classList.remove('is-resizing-comments');
       applyCommentsWidth(commentsWidthPercent, true);
     };
-    commentsResizer.addEventListener('pointerup', finishCommentsResize);
-    commentsResizer.addEventListener('pointercancel', finishCommentsResize);
+    ['pointerup', 'pointercancel'].forEach((type) =>
+      commentsResizer.addEventListener(type, finishCommentsResize));
     commentsResizer.addEventListener('keydown', (event) => {
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
       event.preventDefault();
@@ -16859,7 +16759,40 @@
         setCommentsExpanded(lb.classList.contains('ldp-lb-comments-collapsed'), true);
       }
     });
-    batchCloseButtons.forEach((button) => button.addEventListener('click', closeBatchDownload));
+    batchOverlay.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('.ldp-lb-batch-close,.ldp-lb-batch-cancel')) {
+        closeBatchDownload();
+        return;
+      }
+      const scopeButton = target?.closest('[data-lb-batch-scope]');
+      if (scopeButton) {
+        if (batchBusy || scopeButton.disabled) return;
+        const nextScope = scopeButton.dataset.lbBatchScope === 'all' ? 'all' : 'loaded';
+        batchScope = nextScope;
+        batchSelection.clear();
+        batchProgress.hidden = true;
+        batchStatus.textContent = nextScope === 'all'
+          ? batchAllImagesLoaded ? `已扫描全部帖子，共找到 ${items.length} 张图片` : '准备扫描全部帖子…'
+          : '请选择当前已加载的图片';
+        if (nextScope === 'all' && !batchAllImagesLoaded) {
+          void scanAllTopicImages();
+          return;
+        }
+        renderBatchSelection();
+        return;
+      }
+      if (target?.closest('.ldp-lb-batch-select-all')) {
+        if (batchBusy) return;
+        const scopedItems = batchScopeItems();
+        const allSelected = scopedItems.length > 0 && scopedItems.every((item) => batchSelection.has(item.key));
+        batchSelection.clear();
+        if (!allSelected) scopedItems.forEach((item) => batchSelection.add(item.key));
+        renderBatchSelection();
+      } else if (target?.closest('.ldp-lb-batch-download')) {
+        void downloadBatch();
+      }
+    });
     batchOverlay.addEventListener('pointerdown', (event) => {
       if (event.target === batchOverlay) closeBatchDownload();
     });
@@ -16877,38 +16810,13 @@
       event.stopPropagation();
       batchGrid.scrollTop = nextScrollTop;
     }, { passive: false });
-    batchScopeButtons.forEach((button) => button.addEventListener('click', () => {
-      if (batchBusy || button.disabled) return;
-      const nextScope = button.dataset.lbBatchScope === 'all' ? 'all' : 'loaded';
-      batchScope = nextScope;
-      batchSelection.clear();
-      batchProgress.hidden = true;
-      batchStatus.textContent = nextScope === 'all'
-        ? batchAllImagesLoaded ? `已扫描全部帖子，共找到 ${items.length} 张图片` : '准备扫描全部帖子…'
-        : '请选择当前已加载的图片';
-      if (nextScope === 'all' && !batchAllImagesLoaded) {
-        void scanAllTopicImages();
-        return;
-      }
-      renderBatchSelection();
-    }));
-    batchSelectAll.addEventListener('click', () => {
-      if (batchBusy) return;
-      const scopedItems = batchScopeItems();
-      const allSelected = scopedItems.length > 0 && scopedItems.every((item) => batchSelection.has(item.key));
-      batchSelection.clear();
-      if (!allSelected) scopedItems.forEach((item) => batchSelection.add(item.key));
-      renderBatchSelection();
-    });
     batchGrid.addEventListener('change', (event) => {
       const input = event.target.closest('input[type="checkbox"]');
       const itemNode = input && input.closest('[data-lb-batch-index]');
-      const item = itemNode && items[+itemNode.dataset.lbBatchIndex];
+      const itemIndex = itemNode && +itemNode.dataset.lbBatchIndex;
+      const item = itemNode && items[itemIndex];
       if (!item || batchBusy) return;
-      if (input.checked) batchSelection.add(item.key);
-      else batchSelection.delete(item.key);
-      itemNode.classList.toggle('selected', input.checked);
-      syncBatchSelectionControls();
+      setBatchItemSelected(item, itemIndex, input.checked, itemNode);
     });
     batchGrid.addEventListener('click', (event) => {
       const loadMoreButton = event.target.closest('.ldp-lb-batch-more');
@@ -16926,10 +16834,15 @@
       event.stopPropagation();
       void openBatchItemPreview(itemIndex, itemNode);
     });
-    batchDownloadButton.addEventListener('click', () => { void downloadBatch(); });
-    prevBtn.addEventListener('click', () => move(-1));
-    nextBtn.addEventListener('click', () => move(1));
-    retryBtn.addEventListener('click', () => loadCurrentOriginal(true));
+    lb.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const thumb = target?.closest('.ldp-lb-thumb');
+      if (thumb) showItem(+thumb.dataset.lbIndex);
+      else if (target?.closest('.ldp-lb-prev')) move(-1);
+      else if (target?.closest('.ldp-lb-next')) move(1);
+      else if (target?.closest('.ldp-lb-retry')) loadCurrentOriginal(true);
+      else if (target?.closest('.ldp-lb-comment-cancel')) closeCommentForm();
+    });
     stage.addEventListener('wheel', (e) => {
       e.preventDefault();
       const nextScale = imageTransform.scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15);
@@ -16944,9 +16857,8 @@
     lb.querySelector('.ldp-lb-comments').addEventListener('click', onCommentsClick);
     lb.querySelector('.ldp-lb-comments').addEventListener('keydown', onCommentsKeydown);
     commentForm.addEventListener('submit', onCommentFormSubmit);
-    commentForm.querySelector('.ldp-lb-comment-cancel').addEventListener('click', closeCommentForm);
-    document.addEventListener('keydown', onKey);
-    window.addEventListener('resize', renderTransform);
+    addTrackedEventListener(eventBindings, document, 'keydown', onKey);
+    addTrackedEventListener(eventBindings, window, 'resize', renderTransform);
     syncThumbs();
     appendReaderPortalNode(lb);
     showItem(initialIndex);
@@ -18543,12 +18455,6 @@
       : '<svg class="ldp-icon ldp-post-read-state-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5.5"/></svg>';
   }
 
-  function postReadStateHtml(isRead) {
-    const state = isRead ? 'read' : 'unread';
-    const label = isRead ? '该楼层已读' : '该楼层未读';
-    return `<span class="ldp-post-read-state is-${state}" data-read-state="${state}" data-ldp-tooltip-label="${label}" role="img" aria-label="${label}">${postReadStateIconHtml(isRead)}</span>`;
-  }
-
   function readerPostNodeInViewport(postNode, scrollRoot) {
     if (!postNode || !postNode.isConnected || !postNode.getClientRects().length) return false;
     const rect = postNode.getBoundingClientRect();
@@ -18682,7 +18588,10 @@
       ),
       p
     );
-    const { count, acted, canAct } = likeInfo(p);
+    const like = (p.actions_summary || []).find((action) => action.id === 2) || {};
+    const count = like.count || 0;
+    const acted = !!like.acted;
+    const canAct = !!like.can_act;
     const isOP = ctx.op && p.username === ctx.op;
     const isME = ME_USERNAME && p.username === ME_USERNAME;
     const time = fmtTime(p.created_at);
@@ -18709,14 +18618,12 @@
         : `<span class="ldp-floor ldp-body-floor${parentFloorHtml ? ' ldp-current-floor' : ''}">#${p.post_number}</span>`;
     const deferConfirmedReadAnimation = !!(ctx && ctx.confirmedReadPostNumbers &&
       ctx.confirmedReadPostNumbers.has(+(p.post_number || 0)));
-    const readStateHtml = postReadStateHtml(
-      deferConfirmedReadAnimation ? false : readerPostIsRead(p, ctx)
-    );
-    const collapseNested = options.forceExpanded
-        ? false
-        : hiddenCollapsible || options.forceCollapsed
-          ? true
-          : shouldCollapseNestedReply(p, isReply, options);
+    const isRead = deferConfirmedReadAnimation ? false : readerPostIsRead(p, ctx);
+    const readState = isRead ? 'read' : 'unread';
+    const readStateLabel = isRead ? '该楼层已读' : '该楼层未读';
+    const readStateHtml = `<span class="ldp-post-read-state is-${readState}" data-read-state="${readState}" data-ldp-tooltip-label="${readStateLabel}" role="img" aria-label="${readStateLabel}">${postReadStateIconHtml(isRead)}</span>`;
+    const collapseNested = !options.forceExpanded &&
+      (hiddenCollapsible || !!options.forceCollapsed);
     const allowChildReplies = !ctx.isPostVoting && !options.nestedPreview && p.reply_count > 0;
     const childRepliesHtml = allowChildReplies ? childReplyShellHtml(p.reply_count) : '';
 
@@ -19031,9 +18938,10 @@
     }
   }
 
-  function emitUserCardUpdate(entry, user, phase) {
+  function emitUserCardUpdate(entry, user, phase, skipListener = null) {
     if (!entry || !entry.listeners) return;
     entry.listeners.forEach((listener) => {
+      if (listener === skipListener) return;
       try { listener(user, phase); } catch (e) {}
     });
   }
@@ -19162,7 +19070,8 @@
     const cacheKey = authScopedCacheKey(`${username}:${type}`);
     const cached = cachedUserFollowList(cacheKey);
     if (cached) return cached;
-    if (USER_FOLLOW_LIST_REQUESTS.has(cacheKey)) return USER_FOLLOW_LIST_REQUESTS.get(cacheKey);
+    const pendingRequest = USER_FOLLOW_LIST_REQUESTS.get(cacheKey);
+    if (pendingRequest) return pendingRequest;
     const request = fetchUserJSON(
       `/u/${encodeURIComponent(username)}/follow/${type}`,
       `user-${type}:${username}`
@@ -19200,6 +19109,7 @@
       return cached;
     }
     if (cached && typeof onUpdate === 'function') onUpdate(cached, 'stats');
+    const cachedStatsListener = cached && profileChecked ? onUpdate : null;
     const profilePromise = profileChecked
       ? Promise.resolve(cached)
       : fetchUserProfileDetails(username);
@@ -19221,7 +19131,7 @@
       });
       entry.basic = user;
       setCachedUserCard(username, user);
-      emitUserCardUpdate(entry, user, 'stats');
+      emitUserCardUpdate(entry, user, 'stats', cachedStatsListener);
       if (entry.cancelled) return user;
       const [summaryResult, badgesResult] = await supplementalPromise;
       if (badgesResult.status === 'fulfilled') {
@@ -19322,22 +19232,16 @@
     return user;
   }
 
-  function getFallbackUserCard() {
-    let card = readerPortalQuery('.ldp-user-card-fallback:not(.ldp-user-card-follow-preview)');
+  function getUserCardSurface(preview = false) {
+    const previewClass = 'ldp-user-card-follow-preview';
+    let card = readerPortalQuery(preview
+      ? `.${previewClass}`
+      : `.ldp-user-card-fallback:not(.${previewClass})`);
     if (!card) {
       card = document.createElement('div');
-      card.className = 'ldp-user-card-fallback';
+      card.className = `ldp-user-card-fallback${preview ? ` ${previewClass}` : ''}`;
       appendReaderPortalNode(card);
     }
-    return card;
-  }
-
-  function getUserCardFollowPreview() {
-    let card = readerPortalQuery('.ldp-user-card-follow-preview');
-    if (card) return card;
-    card = document.createElement('div');
-    card.className = 'ldp-user-card-fallback ldp-user-card-follow-preview';
-    appendReaderPortalNode(card);
     return card;
   }
 
@@ -19629,9 +19533,12 @@
     return userRegistrationDate(value);
   }
 
-  function userVisibleGroups(groups) {
+  function userVisibleGroups(user, includePrimaryGroup = false) {
     const visible = new Map();
-    (Array.isArray(groups) ? groups : []).forEach((group) => {
+    const groups = Array.isArray(user && user.groups) ? user.groups : [];
+    [...groups, includePrimaryGroup && user && user.primary_group_name
+      ? { name: user.primary_group_name }
+      : null].forEach((group) => {
       const name = String(group && group.name || '').trim();
       if (!name || /^trust_level_[0-9]+$/i.test(name)) return;
       const key = name.toLocaleLowerCase();
@@ -19645,10 +19552,7 @@
   }
 
   function userCardGroupsHtml(user) {
-    const groups = userVisibleGroups([
-      ...(Array.isArray(user && user.groups) ? user.groups : []),
-      user && user.primary_group_name ? { name: user.primary_group_name } : null,
-    ].filter(Boolean));
+    const groups = userVisibleGroups(user, true);
     if (!groups.length) return '';
     return `<div class="ldp-user-card-groups" aria-label="用户分组">
       <span>用户分组</span><div>${groups.map((group) => `<a href="${BASE}/g/${encodeURIComponent(group.name)}"
@@ -19672,12 +19576,10 @@
       return Number.isFinite(numeric) ? numeric.toLocaleString('zh-CN') : '';
     };
     const trustLabels = ['新用户', '基本用户', '成员', '活跃用户', '领导者'];
-    const trustLevel = userTrustLevel(user);
-    const groups = userVisibleGroups([
-      ...(Array.isArray(user && user.groups) ? user.groups : []),
-      options.includePrimaryGroup && user && user.primary_group_name ? { name: user.primary_group_name } : null,
-    ].filter(Boolean));
-    const groupText = groups.map((group) => group.label).join(', ');
+    const trustLevel = Object.hasOwn(options, 'trustLevel') ? options.trustLevel : userTrustLevel(user);
+    const groupText = variant === 'card'
+      ? ''
+      : userVisibleGroups(user, options.includePrimaryGroup).map((group) => group.label).join(', ');
     const facts = [
       fact('加入日期：', userRegistrationDate(user && user.created_at)),
       fact('最后一个帖子', userRecentDate(user && (user.last_posted_at || user.last_post_at))),
@@ -19900,7 +19802,7 @@
           ${safeWebsite ? `<a class="ldp-user-info-site" href="${escAttr(safeWebsite)}" target="_blank" rel="noopener">${icon('externalLink')}<span>${esc(website || websiteUrl)}</span></a>` : ''}
         </div>
         ${bio ? `<div class="ldp-user-info-bio">${sanitizeUserCardBioHtml(bio)}</div>` : ''}
-        ${userProfileFactsHtml(user, 'settings', { emptyNumberAsZero: true })}
+        ${userProfileFactsHtml(user, 'settings', { emptyNumberAsZero: true, trustLevel })}
       </div>
     </section>`;
   }
@@ -20256,7 +20158,7 @@
           ${title ? `<div class="ldp-user-card-title">${esc(title)}</div>` : ''}
         </div>
       </div>
-      ${userProfileFactsHtml(user, 'card', { includePrimaryGroup: true, groupTooltip: true })}
+      ${userProfileFactsHtml(user, 'card', { includePrimaryGroup: true, groupTooltip: true, trustLevel })}
       ${userCardGroupsHtml(user)}
       ${userCardFollowStatsHtml(user, username, { interactive: options.followStatsInteractive !== false })}
       ${bio ? `<div class="ldp-user-card-bio">${sanitizeUserCardBioHtml(bio)}</div>` : ''}
@@ -20297,7 +20199,7 @@
   async function showFallbackUserCard(link, isCurrent, onOpen = null, options = {}) {
     const username = getUserCardUsername(link);
     if (!username || !isCurrent()) return;
-    const card = options.card || getFallbackUserCard();
+    const card = options.card || getUserCardSurface();
     const positionCard = typeof options.positionCard === 'function'
       ? options.positionCard
       : (target) => positionFallbackUserCard(target, link);
@@ -20655,7 +20557,12 @@
       .map((node) => node.nodeType === 1 ? node.outerHTML : String(node.textContent || ''))
       .join('');
     const isOldTopic = views.dataset.ldpNativeOldTopic === 'true';
-    const responseCount = nativeTopicOpReactionCount(card, reactionCountsByTopicId);
+    const directId = card.dataset.topicId || card.getAttribute('data-topic-id');
+    const topicLink = card.querySelector('a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],a[href*="/t/"]');
+    const topicId = String(directId || extractTopicRouteFromUrl(topicLink && topicLink.href)?.topicId || '');
+    const responseCount = topicId && reactionCountsByTopicId.has(topicId)
+      ? reactionCountsByTopicId.get(topicId)
+      : null;
     const sourceSignature = `${sourceMarkup(posts)}\u0001${sourceMarkup(views)}\u0001${sourceMarkup(activity)}\u0001${isOldTopic ? 'old' : 'recent'}\u0001${responseCount == null ? '' : responseCount}`;
     if (component && component.dataset.ldpSourceSignature === sourceSignature && component.querySelectorAll(':scope > .ldp-topic-stats-row').length === 2) return;
     const cloneSourceNodes = (cell) => [...cell.childNodes]
@@ -20755,14 +20662,6 @@
     return counts;
   }
 
-  function nativeTopicOpReactionCount(card, reactionCountsByTopicId) {
-    const directId = card && (card.dataset.topicId || card.getAttribute('data-topic-id'));
-    const topicLink = card && card.querySelector('a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],a[href*="/t/"]');
-    const topicId = String(directId || extractTopicRouteFromUrl(topicLink && topicLink.href)?.topicId || '');
-    if (!topicId) return null;
-    return reactionCountsByTopicId.has(topicId) ? reactionCountsByTopicId.get(topicId) : null;
-  }
-
   function syncNativeTopicQueueButton(card) {
     if (!card || card.closest('.ldp-overlay')) return;
     const topicLink = card.querySelector(
@@ -20782,11 +20681,7 @@
     button.dataset.readerQueueTopicId = String(topicId);
     const added = !!readerQueueEntry(topicId);
     if (button.dataset.readerQueueAdded === String(added) && button.firstElementChild) return;
-    button.dataset.readerQueueAdded = String(added);
-    button.classList.toggle('is-added', added);
-    button.innerHTML = icon(added ? 'check' : 'plus');
-    button.setAttribute('aria-label', added ? '从阅读队列移除' : '加入阅读队列并后台预加载');
-    button.setAttribute('title', added ? '从阅读队列移除' : '加入阅读队列并后台预加载');
+    syncReaderQueueAddButton(button, added);
   }
 
   function installNativeTopicQueueButtons() {
@@ -21221,14 +21116,9 @@
       const reactionCountsByTopicId = nativeTopicOpReactionCounts();
       cards.forEach((card) => markNativeDoNotDisturbBadges(card, reactionCountsByTopicId));
     };
-    const scheduleEmbeddedHostCards = (cards) => {
-      cards.forEach((card) => embeddedHostChangedCards.add(card));
-      if (!embeddedHostChangedCards.size || embeddedHostCardFrame || destroyed || !isEmbeddedListReaderMode(mode)) return;
-      embeddedHostCardFrame = requestAnimationFrame(flushEmbeddedHostCards);
-    };
-    const scheduleEmbeddedHostActivityCards = (cards) => {
-      cards.forEach((card) => embeddedHostActivityCards.add(card));
-      if (!embeddedHostActivityCards.size || embeddedHostCardFrame || destroyed || !isEmbeddedListReaderMode(mode)) return;
+    const scheduleEmbeddedHostCardSet = (cards, pendingCards) => {
+      cards.forEach((card) => pendingCards.add(card));
+      if (!pendingCards.size || embeddedHostCardFrame || destroyed || !isEmbeddedListReaderMode(mode)) return;
       embeddedHostCardFrame = requestAnimationFrame(flushEmbeddedHostCards);
     };
     const startEmbeddedHostRootObserver = () => {
@@ -21260,7 +21150,7 @@
               [...record.addedNodes, ...record.removedNodes].every((node) => node.nodeType === 3);
             if (onlyActivityTextChanged) {
               const card = activityTarget.closest(cardSelector);
-              if (card) scheduleEmbeddedHostActivityCards([card]);
+              if (card) scheduleEmbeddedHostCardSet([card], embeddedHostActivityCards);
               return;
             }
             if (record.type === 'childList' && record.target === document.body) scheduleEmbeddedHostRootSync();
@@ -21273,7 +21163,7 @@
             if (!onlyOwnedStatsChanged) collectNearestCard(record.target);
             record.addedNodes && record.addedNodes.forEach(collectAddedCards);
           });
-          scheduleEmbeddedHostCards(changedCards);
+          scheduleEmbeddedHostCardSet(changedCards, embeddedHostChangedCards);
         });
         embeddedHostObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
       }
@@ -21422,8 +21312,8 @@
     if (resizeHandle) {
       addTrackedEventListener(workspaceEventBindings, resizeHandle, 'pointerdown', onResizePointerDown);
       addTrackedEventListener(workspaceEventBindings, resizeHandle, 'pointermove', onResizePointerMove);
-      addTrackedEventListener(workspaceEventBindings, resizeHandle, 'pointerup', stopResize);
-      addTrackedEventListener(workspaceEventBindings, resizeHandle, 'pointercancel', stopResize);
+      ['pointerup', 'pointercancel'].forEach((type) =>
+        addTrackedEventListener(workspaceEventBindings, resizeHandle, type, stopResize));
     }
     addTrackedEventListener(workspaceEventBindings, window, 'resize', onViewportResize);
     addTrackedEventListener(workspaceEventBindings, window, 'pointermove', rememberHostPointer, { passive: true });
@@ -21433,8 +21323,8 @@
     if (hostScrollbar) {
       addTrackedEventListener(workspaceEventBindings, hostScrollbar, 'pointerdown', onHostScrollbarPointerDown);
       addTrackedEventListener(workspaceEventBindings, hostScrollbar, 'pointermove', onHostScrollbarPointerMove);
-      addTrackedEventListener(workspaceEventBindings, hostScrollbar, 'pointerup', stopHostScrollbarPointer);
-      addTrackedEventListener(workspaceEventBindings, hostScrollbar, 'pointercancel', stopHostScrollbarPointer);
+      ['pointerup', 'pointercancel'].forEach((type) =>
+        addTrackedEventListener(workspaceEventBindings, hostScrollbar, type, stopHostScrollbarPointer));
       addTrackedEventListener(workspaceEventBindings, hostScrollbar, 'keydown', onHostScrollbarKeyDown);
     }
     apply(isDirectTopicRoute ? 'floating' : currentListReaderMode());
@@ -21878,7 +21768,7 @@
       }
       event.preventDefault();
     };
-    const startPointer = (event, mode) => {
+    const startPointer = (event, mode, target) => {
       if (!state || !desktopWindow() || !nativeComposerVisible(composer) || composer.classList.contains('fullscreen')) return;
       if (event.button !== 0) return;
       pointer = {
@@ -21887,11 +21777,11 @@
         startX: event.clientX,
         startY: event.clientY,
         state: Object.assign({}, state),
-        target: event.currentTarget,
+        target,
       };
       pointerClientX = event.clientX;
       pointerClientY = event.clientY;
-      event.currentTarget.setPointerCapture(event.pointerId);
+      target.setPointerCapture(event.pointerId);
       chrome.classList.add('is-interacting');
       root.classList.add('ldp-composer-window-interacting');
       event.preventDefault();
@@ -21906,37 +21796,33 @@
         ? '<button class="ldp-composer-resize-handle" data-resize="se" type="button" aria-label="拖动调整回复窗口大小；方向键可微调"></button>'
         : `<span class="ldp-composer-resize-handle" data-resize="${direction}" aria-hidden="true"></span>`).join('')}`;
       appendReaderPortalNode(chrome);
-      const dragHandle = chrome.querySelector('.ldp-composer-drag-handle');
-      dragHandle.addEventListener('pointerdown', (event) => startPointer(event, 'move'));
-      dragHandle.addEventListener('keydown', (event) => {
+      chrome.addEventListener('pointerdown', (event) => {
+        const handle = event.target instanceof Element
+          ? event.target.closest('.ldp-composer-drag-handle,[data-resize]')
+          : null;
+        if (handle && chrome.contains(handle)) startPointer(event, handle.dataset.resize || 'move', handle);
+      });
+      chrome.addEventListener('keydown', (event) => {
         if (!state || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
         const step = event.shiftKey ? 40 : 12;
-        const next = Object.assign({}, state);
-        if (event.key === 'ArrowLeft') next.left -= step;
-        else if (event.key === 'ArrowRight') next.left += step;
-        else if (event.key === 'ArrowUp') next.top -= step;
-        else next.top += step;
-        applyState(next);
-        scheduleStatePersist();
-        event.preventDefault();
-      });
-      chrome.querySelectorAll('[data-resize]').forEach((handle) => {
-        handle.addEventListener('pointerdown', (event) => startPointer(event, handle.dataset.resize));
-      });
-      const resizeGrip = chrome.querySelector('[data-resize="se"]');
-      resizeGrip.addEventListener('keydown', (event) => {
-        if (!state || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
-        const step = event.shiftKey ? 40 : 12;
-        const deltaX = event.key === 'ArrowLeft' ? -step : (event.key === 'ArrowRight' ? step : 0);
-        const deltaY = event.key === 'ArrowUp' ? -step : (event.key === 'ArrowDown' ? step : 0);
-        applyState(resizeState(state, 'se', deltaX, deltaY));
+        if (event.target.matches('.ldp-composer-drag-handle')) {
+          const next = Object.assign({}, state);
+          if (event.key === 'ArrowLeft') next.left -= step;
+          else if (event.key === 'ArrowRight') next.left += step;
+          else if (event.key === 'ArrowUp') next.top -= step;
+          else next.top += step;
+          applyState(next);
+        } else if (event.target.matches('[data-resize="se"]')) {
+          const deltaX = event.key === 'ArrowLeft' ? -step : (event.key === 'ArrowRight' ? step : 0);
+          const deltaY = event.key === 'ArrowUp' ? -step : (event.key === 'ArrowDown' ? step : 0);
+          applyState(resizeState(state, 'se', deltaX, deltaY));
+        } else return;
         scheduleStatePersist();
         event.preventDefault();
       });
       chrome.addEventListener('pointermove', movePointer);
-      chrome.addEventListener('pointerup', stopPointer);
-      chrome.addEventListener('pointercancel', stopPointer);
-      chrome.addEventListener('lostpointercapture', stopPointer);
+      ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((type) =>
+        chrome.addEventListener(type, stopPointer));
       return chrome;
     };
     const deactivate = () => {
@@ -22519,11 +22405,6 @@
     });
   }
 
-  function getNativeCreateBoost() {
-    const module = tryRequire('discourse/plugins/discourse-boosts/discourse/lib/create-boost');
-    return module && (module.default || module);
-  }
-
   function positionNativeBoostMenu(anchor, menu) {
     const anchorRect = anchor.getBoundingClientRect();
     const menuRect = menu.getBoundingClientRect();
@@ -22648,7 +22529,8 @@
     const overlay = post && post.closest('.ldp-overlay');
     const postData = post && post._ldpPostData;
     const scrollRoot = ctx && ctx.scrollRoot;
-    const createBoost = getNativeCreateBoost();
+    const createBoostModule = tryRequire('discourse/plugins/discourse-boosts/discourse/lib/create-boost');
+    const createBoost = createBoostModule && (createBoostModule.default || createBoostModule);
     const currentUser = ME_CURRENT_USER;
     const nativeMenu = lookupDiscourse('service:menu');
     const prettyTextEmoji = tryRequire('pretty-text/emoji');
@@ -22663,6 +22545,7 @@
     else if (previous) previous.remove();
 
     const menu = document.createElement('div');
+    const eventBindings = [];
     menu.className = 'ldp-native-boost-menu sciapp-ldp-owned';
     menu.setAttribute('role', 'dialog');
     menu.setAttribute('aria-label', '助推');
@@ -22768,9 +22651,7 @@
       closed = true;
       closeEmojiPicker();
       clearTimeout(outsideListenerTimer);
-      document.removeEventListener('pointerdown', onOutside, true);
-      if (scrollRoot) scrollRoot.removeEventListener('scroll', scheduleAnchorSync);
-      window.removeEventListener('resize', scheduleAnchorSync);
+      removeTrackedEventListeners(eventBindings);
       if (anchorSyncFrame) cancelAnimationFrame(anchorSyncFrame);
       if (anchorObserver) anchorObserver.disconnect();
       menu.remove();
@@ -22999,11 +22880,16 @@
         send();
       }
     });
-    emojiButton.addEventListener('click', openEmojiPicker);
-    submit.addEventListener('click', send);
-    cancel.addEventListener('click', close);
-    if (scrollRoot) scrollRoot.addEventListener('scroll', scheduleAnchorSync, { passive: true });
-    window.addEventListener('resize', scheduleAnchorSync, { passive: true });
+    menu.addEventListener('click', (event) => {
+      const button = event.target instanceof Element ? event.target.closest('button') : null;
+      if (button === emojiButton) openEmojiPicker();
+      else if (button === submit) send();
+      else if (button === cancel) close();
+    });
+    if (scrollRoot) addTrackedEventListener(
+      eventBindings, scrollRoot, 'scroll', scheduleAnchorSync, { passive: true }
+    );
+    addTrackedEventListener(eventBindings, window, 'resize', scheduleAnchorSync, { passive: true });
     if (typeof IntersectionObserver === 'function') {
       anchorObserver = new IntersectionObserver((entries) => {
         const entry = entries[0];
@@ -23014,7 +22900,7 @@
     }
     outsideListenerTimer = setTimeout(() => {
       outsideListenerTimer = 0;
-      if (!closed) document.addEventListener('pointerdown', onOutside, true);
+      if (!closed) addTrackedEventListener(eventBindings, document, 'pointerdown', onOutside, true);
     }, 0);
     editor.textContent = Array.from(String(initialRaw || '')).slice(0, 16).join('');
     syncInput();
@@ -23463,17 +23349,6 @@
     { id: 8, nameKey: 'notify_moderators', label: '通知管理人员', description: '需要管理人员结合补充说明进行判断。', requireMessage: true },
   ];
 
-  function readerReportOptionsHtml(options) {
-    return options.map((option, index) => `
-      <label class="ldp-reader-action-option">
-        <input type="radio" name="report_type" value="${option.id}"${index === 0 ? ' checked' : ''}>
-        <span class="ldp-reader-action-option-copy">
-          <strong>${esc(option.label)}</strong>
-          <small>${esc(option.description)}</small>
-        </span>
-      </label>`).join('');
-  }
-
   function openReaderReportForm(ctx, config) {
     const reportOptions = config.options || READER_REPORT_OPTIONS;
     return openReaderActionDialog(ctx, {
@@ -23482,7 +23357,14 @@
       submitLabel: '提交举报',
       initialFocus: 'input[name="report_type"]',
       bodyHtml: `
-        <div class="ldp-reader-action-options">${readerReportOptionsHtml(reportOptions)}</div>
+        <div class="ldp-reader-action-options">${reportOptions.map((option, index) => `
+          <label class="ldp-reader-action-option">
+            <input type="radio" name="report_type" value="${option.id}"${index === 0 ? ' checked' : ''}>
+            <span class="ldp-reader-action-option-copy">
+              <strong>${esc(option.label)}</strong>
+              <small>${esc(option.description)}</small>
+            </span>
+          </label>`).join('')}</div>
         <label class="ldp-reader-action-field">
           <span>补充说明</span>
           <textarea name="message" maxlength="1000" placeholder="${escAttr(config.placeholder || '选填；通知管理人员时请填写具体原因')}"></textarea>
@@ -23542,11 +23424,12 @@
       });
       submit.textContent = nextBusy ? '提交中…' : (options.submitLabel || '提交');
     };
-    layer.querySelector('.ldp-reader-action-close').addEventListener('click', close);
-    layer.querySelector('.ldp-reader-action-cancel').addEventListener('click', close);
     bindFloatingSurfaceWheel(layer);
     layer.addEventListener('click', (event) => {
-      if (event.target === layer && !busy) close();
+      const closeControl = event.target instanceof Element &&
+        event.target.closest('.ldp-reader-action-close,.ldp-reader-action-cancel');
+      if (closeControl && layer.contains(closeControl)) close();
+      else if (event.target === layer && !busy) close();
     });
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -23616,20 +23499,20 @@
         }
       });
     };
-    cancelButton.addEventListener('click', close);
-    if (secondaryButton) secondaryButton.addEventListener('click', () => {
-      if (closed) return;
-      if (typeof options.onSecondary === 'function') options.onSecondary();
-      close();
-    });
     bindFloatingSurfaceWheel(layer);
-    confirmButton.addEventListener('click', () => {
-      if (closed) return;
-      if (typeof options.onConfirm === 'function') options.onConfirm();
-      close();
-    });
     layer.addEventListener('click', (event) => {
-      if (event.target === layer) close();
+      const target = event.target instanceof Element ? event.target : null;
+      if (event.target === layer || target?.closest('.ldp-reader-action-cancel')) {
+        close();
+      } else if (target?.closest('.ldp-reader-action-secondary')) {
+        if (closed) return;
+        if (typeof options.onSecondary === 'function') options.onSecondary();
+        close();
+      } else if (target?.closest('.ldp-reader-action-submit')) {
+        if (closed) return;
+        if (typeof options.onConfirm === 'function') options.onConfirm();
+        close();
+      }
     });
     layer.addEventListener('keydown', (event) => {
       if (event.key !== 'Tab') return;
@@ -23746,9 +23629,9 @@
     let userCardAnchor = null;
     let userCardPositionFrame = 0;
     let userCardAnchorObserver = null;
-    const fallbackUserCard = getFallbackUserCard();
+    const fallbackUserCard = getUserCardSurface();
     const userCardFollowPanel = getUserCardFollowPanel();
-    const userCardFollowPreview = getUserCardFollowPreview();
+    const userCardFollowPreview = getUserCardSurface(true);
     let userCardFollowPreviewAnchor = null;
     let userCardFollowPreviewToken = 0;
     let userCardFollowPreviewShowTimer = 0;
@@ -23877,9 +23760,6 @@
       if (activeActionPost) activeActionPost.classList.remove('ldp-actions-active');
       activeActionPost = null;
     };
-    addTrackedEventListener(actionEventBindings, modal, 'pointerover', activatePostActions);
-    addTrackedEventListener(actionEventBindings, modal, 'pointerover', onReactionPointerOver);
-    addTrackedEventListener(actionEventBindings, modal, 'pointerout', onReactionPointerOut);
     addTrackedEventListener(actionEventBindings, modal, 'focusin', activatePostActions);
     addTrackedEventListener(actionEventBindings, modal, 'pointerleave', clearActivePostActions);
 
@@ -24083,9 +23963,16 @@
 
     addTrackedEventListener(actionEventBindings, modal, 'mouseup', scheduleSelectionToolbar);
     addTrackedEventListener(actionEventBindings, modal, 'keyup', scheduleSelectionToolbar);
-    addTrackedEventListener(actionEventBindings, modal, 'pointerover', onImageQuotePointerUpdate);
+    addTrackedEventListener(actionEventBindings, modal, 'pointerover', (event) => {
+      activatePostActions(event);
+      onReactionPointerOver(event);
+      onImageQuotePointerUpdate(event);
+    });
     addTrackedEventListener(actionEventBindings, modal, 'pointermove', onImageQuotePointerUpdate);
-    addTrackedEventListener(actionEventBindings, modal, 'pointerout', onImageQuotePointerOut);
+    addTrackedEventListener(actionEventBindings, modal, 'pointerout', (event) => {
+      onReactionPointerOut(event);
+      onImageQuotePointerOut(event);
+    });
     addTrackedEventListener(actionEventBindings, selectionToolbar, 'pointerdown', onSelectionPointerDown);
     addTrackedEventListener(actionEventBindings, selectionToolbar, 'click', onSelectionAction);
     addTrackedEventListener(actionEventBindings, imageQuoteToolbar, 'pointerdown', onSelectionPointerDown);
@@ -24097,8 +23984,10 @@
       addTrackedEventListener(actionEventBindings, selectionRoot, 'selectionchange', scheduleSelectionToolbar);
     }
     addTrackedEventListener(actionEventBindings, document, 'pointerdown', onDocumentPointerDown, true);
-    addTrackedEventListener(actionEventBindings, ctx.scrollRoot, 'scroll', hideSelectionToolbar, { passive: true });
-    addTrackedEventListener(actionEventBindings, ctx.scrollRoot, 'scroll', hideImageQuoteToolbar, { passive: true });
+    addTrackedEventListener(actionEventBindings, ctx.scrollRoot, 'scroll', () => {
+      hideSelectionToolbar();
+      hideImageQuoteToolbar();
+    }, { passive: true });
 
     const closeUserCardFollowPreview = (options = {}) => {
       userCardFollowPreviewToken++;
@@ -24468,7 +24357,15 @@
         userCardFollowPanel.dataset.followPage = String(pageButton.dataset.userCardFollowPage === 'previous'
           ? Math.max(0, currentPage - 1)
           : currentPage + 1);
-        restoreUserCardNavigationEntry(Math.max(0, userCardNavigationStack.length - 1));
+        const navigationIndex = Math.max(0, userCardNavigationStack.length - 1);
+        if (navigationIndex === 0) closeUserCardFollowPreview();
+        renderUserCardFollowList(userCardFollowPanel);
+        positionUserCardFollowPanel(userCardFollowPanel, fallbackUserCard);
+        if (navigationIndex > 0) {
+          positionUserCardFollowPreview(userCardFollowPreview, userCardFollowPanel, fallbackUserCard);
+        }
+        rememberCurrentUserCardNavigationState();
+        renderUserCardBreadcrumbs();
         return;
       }
       const followButton = event.target.closest && event.target.closest('[data-user-card-follow-type]');
@@ -25017,7 +24914,9 @@
         e.stopPropagation();
         await hydrateReactionRegistry();
       }
-      const quotedImg = lightboxQuotedImageFromEvent(e);
+      const quotedImg = lightboxImageFromEventIn(
+        e, '.ldp-content aside.ldp-post-quote > blockquote', isLightboxQuotedImage
+      );
       if (quotedImg) {
         e.preventDefault();
         e.stopPropagation();
@@ -26062,14 +25961,6 @@
     io.loadDirectReplies = loadDirectReplies;
     return io;
   }
-
-  /* ============ 12. 收藏 ============ */
-  function bindTopicBookmark(topic, ctx) {
-    ctx.topicBookmarked = !!topic.bookmarked;
-    syncTopicActionControls(ctx);
-    return () => toggleReaderBookmark(topic, ctx, 'Topic');
-  }
-
   function syncCommentsHeaderPlacement(ctx) {
     if (!ctx || !ctx.commentsHeader || !ctx.streamNodeMap) return;
     if (ctx.readerSession && !ctx.readerSession.isCurrent('opening', 'active')) return;
@@ -26238,20 +26129,18 @@
     </div>`;
   }
 
-  function createReaderCommentsHeader() {
-    const commentsHeader = document.createElement('div');
-    commentsHeader.className = 'ldp-comments-header';
-    commentsHeader.hidden = true;
-    commentsHeader.innerHTML = `${icon('messageSquare')}<span>评论</span><span class="ldp-comments-count" aria-live="polite"></span>`;
-    return commentsHeader;
-  }
-
   function parkReaderCommentsHeader(overlay, preferredHeader = null) {
     const body = overlay && overlay.querySelector('.ldp-body');
     if (!body) return null;
     const readerShell = overlay._ldpReaderShell;
-    const commentsHeader = preferredHeader || (readerShell && readerShell.commentsHeader) ||
-      overlay.querySelector('.ldp-comments-header') || createReaderCommentsHeader();
+    let commentsHeader = preferredHeader || (readerShell && readerShell.commentsHeader) ||
+      overlay.querySelector('.ldp-comments-header');
+    if (!commentsHeader) {
+      commentsHeader = document.createElement('div');
+      commentsHeader.className = 'ldp-comments-header';
+      commentsHeader.hidden = true;
+      commentsHeader.innerHTML = `${icon('messageSquare')}<span>评论</span><span class="ldp-comments-count" aria-live="polite"></span>`;
+    }
     const loadingTip = body.querySelector('.ldp-loading-tip');
     commentsHeader.hidden = true;
     commentsHeader.remove();
@@ -26677,8 +26566,7 @@
       const top = Math.max(trackTopInset, Math.min(rect.height - trackBottomInset, clientY - rect.top));
       return { top, ratio: Math.max(0, Math.min(1, (top - trackTopInset) / usableHeight)) };
     };
-    const pointerRatio = (clientY) => timelinePointerPosition(clientY).ratio;
-    const targetFromPointer = (clientY) => targetFromRatio(pointerRatio(clientY));
+    const targetFromPointer = (clientY) => targetFromRatio(timelinePointerPosition(clientY).ratio);
     const showPointerPreview = (clientY) => {
       previewVisible = true;
       previewClientY = clientY;
@@ -26879,11 +26767,9 @@
       })().finally(() => { endJumpPromise = null; });
       return endJumpPromise;
     };
-    const onDateClick = () => timeline.querySelector('.ldp-topic-timeline-top')?.click();
     const onRelativeClick = async () => {
       if (!await jumpToEnd()) showSelectionToast('最后一楼加载失败，请重试');
     };
-    const onTrackPointerEnter = (e) => showPointerPreview(e.clientY);
     const onTrackPointerLeave = () => {
       if (!dragging) hidePointerPreview();
     };
@@ -26894,9 +26780,6 @@
       dragTarget = targetFromPointer(e.clientY);
       track.setPointerCapture(e.pointerId);
       showPointerPreview(e.clientY);
-    };
-    const onTrackPointerMove = (e) => {
-      if (previewVisible) showPointerPreview(e.clientY);
     };
     const onTrackPointerUp = (e) => {
       if (!dragging) return;
@@ -26926,12 +26809,16 @@
       e.preventDefault();
       jumpTo(target);
     };
-    addTrackedEventListener(timelineEventBindings, dateEl, 'click', onDateClick);
+    addTrackedEventListener(timelineEventBindings, dateEl, 'click',
+      () => timeline.querySelector('.ldp-topic-timeline-top')?.click());
     addTrackedEventListener(timelineEventBindings, relativeEl, 'click', onRelativeClick);
-    addTrackedEventListener(timelineEventBindings, track, 'pointerenter', onTrackPointerEnter);
+    addTrackedEventListener(timelineEventBindings, track, 'pointerenter',
+      (event) => showPointerPreview(event.clientY));
     addTrackedEventListener(timelineEventBindings, track, 'pointerleave', onTrackPointerLeave);
     addTrackedEventListener(timelineEventBindings, track, 'pointerdown', onTrackPointerDown);
-    addTrackedEventListener(timelineEventBindings, track, 'pointermove', onTrackPointerMove);
+    addTrackedEventListener(timelineEventBindings, track, 'pointermove', (event) => {
+      if (previewVisible) showPointerPreview(event.clientY);
+    });
     addTrackedEventListener(timelineEventBindings, track, 'pointerup', onTrackPointerUp);
     addTrackedEventListener(timelineEventBindings, track, 'pointercancel', onTrackPointerCancel);
     addTrackedEventListener(timelineEventBindings, track, 'keydown', onTrackKeyDown);
@@ -26981,7 +26868,7 @@
     const restoreOnlyOp = options.restoreOnlyOp === true;
     const settleTargetJump = options.settleTargetJump !== false;
     const directTopicRoute = !!extractTopicRouteFromUrl(location.href);
-    const requestedReaderMode = directTopicRoute ? currentTopicReaderMode() : currentListReaderMode();
+    const requestedReaderMode = directTopicRoute ? 'floating' : currentListReaderMode();
     const hostTopicPointerAnchor = options.hostTopicPointerAnchor || null;
     const cachedTopicPreview = getCachedTopicData(topicId);
     let sourceTopicNavMetadata = mergeTopicNavMetadata(
@@ -27170,7 +27057,7 @@
                 </div>
                 <div class="ldp-settings-footer">
                   <div class="ldp-settings-theme" role="group" aria-label="明暗模式">
-                    ${READER_THEME_MODES.map((mode) => `<button class="ldp-settings-theme-button" type="button" data-reader-theme-mode="${mode}" aria-pressed="false">${icon(readerThemeIconName(mode))}</button>`).join('')}
+                    ${READER_THEME_MODES.map((mode) => `<button class="ldp-settings-theme-button" type="button" data-reader-theme-mode="${mode}" aria-pressed="false">${icon(mode === 'light' ? 'sun' : mode === 'dark' ? 'moon' : 'monitor')}</button>`).join('')}
                   </div>
                 </div>
               </div>
@@ -27653,6 +27540,10 @@
     const modal = overlay.querySelector('.ldp-modal'), body = overlay.querySelector('.ldp-body');
     if (reusingShell) resetReaderTopicShell(overlay);
     const readerShell = reusingShell ? overlay._ldpReaderShell : {};
+    const shellEventBindings = readerShell.eventBindings || [];
+    readerShell.eventBindings = shellEventBindings;
+    const onShell = (target, type, listener, options) =>
+      addTrackedEventListener(shellEventBindings, target, type, listener, options);
     const shouldRestoreHostTopicAnchor = !!hostTopicPointerAnchor && !directTopicRoute && isEmbeddedListReaderMode(requestedReaderMode);
     if (shouldRestoreHostTopicAnchor) document.documentElement.classList.add('ldp-reader-host-anchor-restoring');
     const readerWorkspace = readerShell.readerWorkspace || createReaderWorkspaceController(overlay, modal, directTopicRoute);
@@ -28061,80 +27952,84 @@
       syncColorPickerPopover();
       if (closeAfter) closeColorPickerPopover({ restoreFocus: true });
     };
-    settingsColorInputs.forEach((input) => {
-      input.setAttribute('aria-haspopup', 'dialog');
-      input.addEventListener('click', (event) => {
-        event.preventDefault();
-        openColorPickerPopover(input);
+    if (!reusingShell) {
+      settingsColorInputs.forEach((input) => {
+        input.setAttribute('aria-haspopup', 'dialog');
+        onShell(input, 'click', (event) => {
+          event.preventDefault();
+          openColorPickerPopover(input);
+        });
+        onShell(input, 'keydown', (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          openColorPickerPopover(input);
+        });
       });
-      input.addEventListener('keydown', (event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        openColorPickerPopover(input);
+      colorPickerPresetButtons.forEach((button) => onShell(button, 'click', () => {
+        applyColorPickerValue(button.dataset.color, true);
+      }));
+      onShell(colorPickerHexInput, 'input', () => {
+        const rawValue = colorPickerHexInput.value.trim();
+        const color = /^#?[\da-f]{6}$/i.test(rawValue) ? normalizeColorPickerHex(rawValue) : '';
+        colorPickerHexInput.setAttribute('aria-invalid', String(rawValue.length >= 7 && !color));
+        if (color) applyColorPickerValue(color);
       });
-    });
-    colorPickerPresetButtons.forEach((button) => button.addEventListener('click', () => {
-      applyColorPickerValue(button.dataset.color, true);
-    }));
-    colorPickerHexInput.addEventListener('input', () => {
-      const rawValue = colorPickerHexInput.value.trim();
-      const color = /^#?[\da-f]{6}$/i.test(rawValue) ? normalizeColorPickerHex(rawValue) : '';
-      colorPickerHexInput.setAttribute('aria-invalid', String(rawValue.length >= 7 && !color));
-      if (color) applyColorPickerValue(color);
-    });
-    colorPickerHexInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
+      onShell(colorPickerHexInput, 'keydown', (event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          closeColorPickerPopover({ restoreFocus: true });
+          return;
+        }
+        if (event.key !== 'Enter') return;
+        const color = normalizeColorPickerHex(colorPickerHexInput.value);
+        if (!color) {
+          colorPickerHexInput.setAttribute('aria-invalid', 'true');
+          return;
+        }
+        event.preventDefault();
+        applyColorPickerValue(color, true);
+      });
+      onShell(colorPickerHexInput, 'blur', () => {
+        if (!activeColorInput || colorPickerPopover.contains(document.activeElement)) return;
+        colorPickerHexInput.value = activeColorInput.value.toUpperCase();
+        colorPickerHexInput.setAttribute('aria-invalid', 'false');
+      });
+      onShell(colorPickerMoreButton, 'click', () => {
+        const expanded = colorPickerAdvanced.hidden;
+        colorPickerAdvanced.hidden = !expanded;
+        colorPickerMoreButton.setAttribute('aria-expanded', String(expanded));
+        colorPickerMoreButton.textContent = expanded ? '收起调色' : '更多颜色';
+        if (activeColorInput) positionColorPickerPopover(activeColorInput);
+      });
+      [colorPickerHueInput, colorPickerSaturationInput, colorPickerBrightnessInput].forEach((input) =>
+        onShell(input, 'input', () => {
+          colorPickerHsv = {
+            h: Number(colorPickerHueInput.value),
+            s: Number(colorPickerSaturationInput.value),
+            v: Number(colorPickerBrightnessInput.value),
+          };
+          const color = colorPickerHsvToHex(colorPickerHsv);
+          colorPickerHexInput.value = color;
+          colorPickerHexInput.setAttribute('aria-invalid', 'false');
+          syncColorPickerAdvanced();
+          colorPickerPresetButtons.forEach((button) =>
+            button.setAttribute('aria-pressed', String(button.dataset.color === color)));
+          scheduleColorPickerValue(color);
+        }));
+      [colorPickerHueInput, colorPickerSaturationInput, colorPickerBrightnessInput]
+        .forEach((input) => onShell(input, 'change', flushScheduledColorPickerValue));
+      onShell(colorPickerPopover, 'keydown', (event) => {
+        if (event.key !== 'Escape') return;
         event.preventDefault();
         closeColorPickerPopover({ restoreFocus: true });
-        return;
-      }
-      if (event.key !== 'Enter') return;
-      const color = normalizeColorPickerHex(colorPickerHexInput.value);
-      if (!color) {
-        colorPickerHexInput.setAttribute('aria-invalid', 'true');
-        return;
-      }
-      event.preventDefault();
-      applyColorPickerValue(color, true);
-    });
-    colorPickerHexInput.addEventListener('blur', () => {
-      if (!activeColorInput || colorPickerPopover.contains(document.activeElement)) return;
-      colorPickerHexInput.value = activeColorInput.value.toUpperCase();
-      colorPickerHexInput.setAttribute('aria-invalid', 'false');
-    });
-    colorPickerMoreButton.addEventListener('click', () => {
-      const expanded = colorPickerAdvanced.hidden;
-      colorPickerAdvanced.hidden = !expanded;
-      colorPickerMoreButton.setAttribute('aria-expanded', String(expanded));
-      colorPickerMoreButton.textContent = expanded ? '收起调色' : '更多颜色';
-      if (activeColorInput) positionColorPickerPopover(activeColorInput);
-    });
-    [colorPickerHueInput, colorPickerSaturationInput, colorPickerBrightnessInput].forEach((input) => input.addEventListener('input', () => {
-      colorPickerHsv = {
-        h: Number(colorPickerHueInput.value),
-        s: Number(colorPickerSaturationInput.value),
-        v: Number(colorPickerBrightnessInput.value),
-      };
-      const color = colorPickerHsvToHex(colorPickerHsv);
-      colorPickerHexInput.value = color;
-      colorPickerHexInput.setAttribute('aria-invalid', 'false');
-      syncColorPickerAdvanced();
-      colorPickerPresetButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.color === color)));
-      scheduleColorPickerValue(color);
-    }));
-    [colorPickerHueInput, colorPickerSaturationInput, colorPickerBrightnessInput]
-      .forEach((input) => input.addEventListener('change', flushScheduledColorPickerValue));
-    colorPickerPopover.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      closeColorPickerPopover({ restoreFocus: true });
-    });
-    colorPickerPopover.addEventListener('pointerdown', (event) => event.stopPropagation());
-    colorPickerPopover.addEventListener('click', (event) => event.stopPropagation());
-    overlay.addEventListener('pointerdown', (event) => {
-      if (colorPickerPopover.hidden || colorPickerPopover.contains(event.target) || event.target === activeColorInput) return;
-      closeColorPickerPopover();
-    }, true);
+      });
+      onShell(colorPickerPopover, 'pointerdown', (event) => event.stopPropagation());
+      onShell(colorPickerPopover, 'click', (event) => event.stopPropagation());
+      onShell(overlay, 'pointerdown', (event) => {
+        if (colorPickerPopover.hidden || colorPickerPopover.contains(event.target) || event.target === activeColorInput) return;
+        closeColorPickerPopover();
+      }, true);
+    }
     const setSettingHelp = (target, copy) => {
       if (target && copy) target.dataset.settingHelp = copy;
     };
@@ -28217,7 +28112,7 @@
       readerPlacementStrip.hidden = visibleModeCount < 2;
       readerCapsule.classList.toggle('ldp-reader-placement-available', visibleModeCount > 1);
       if (visibleModeCount < 2) readerCapsule.classList.remove('ldp-reader-placement-expanded');
-      const activeMode = directTopicRoute ? currentTopicReaderMode() : readerWorkspace.mode();
+      const activeMode = directTopicRoute ? 'floating' : readerWorkspace.mode();
       readerPlacementOptions.forEach((option) => {
         const optionMode = option.dataset.readerPlacement;
         option.hidden = !allowedModes.includes(optionMode);
@@ -28241,14 +28136,14 @@
       syncReaderPlacementUi();
     };
     if (!reusingShell) {
-      readerPlacementControl.addEventListener('pointerenter', () => {
+      onShell(readerPlacementControl, 'pointerenter', () => {
         readerCapsule.classList.add('ldp-reader-placement-expanded');
       });
-      readerCapsule.addEventListener('pointerleave', () => {
+      onShell(readerCapsule, 'pointerleave', () => {
         readerCapsule.classList.remove('ldp-reader-placement-expanded');
       });
       readerPlacementOptions.forEach((option) => {
-        option.addEventListener('click', () => applyReaderPlacement(option.dataset.readerPlacement));
+        onShell(option, 'click', () => applyReaderPlacement(option.dataset.readerPlacement));
       });
     }
     syncReaderPlacementUi();
@@ -28404,6 +28299,7 @@
     ) || ACTIVE_READER_REQUEST_SCHEDULER || postRequestScheduler;
     const historyState = { page: 0, query: '', multi: false, scope: 'page' };
     const historySelection = new Set();
+    let historyScopeIds = [];
     const bookmarksState = {
       page: 0,
       query: '',
@@ -28502,9 +28398,16 @@
       panel.deleteSelectedLabel.textContent = String(selection.size);
       panel.deleteSelectedLabel.hidden = selection.size === 0;
     };
+    const localCollectionPage = (entries, state, pageSize) => {
+      const totalPages = Math.max(1, Math.ceil(entries.length / pageSize));
+      state.page = Math.max(0, Math.min(totalPages - 1, state.page));
+      const start = state.page * pageSize;
+      return { entries: entries.slice(start, start + pageSize), totalPages };
+    };
     function renderHistoryPage() {
       syncHistorySortToggle();
-      const allEntries = orderedTopicHistory();
+      const storedHistory = readTopicHistory();
+      const allEntries = orderedTopicHistory(storedHistory);
       const availableTopicIds = new Set(allEntries.map((entry) => Number(entry.topicId)));
       historySelection.forEach((topicId) => {
         if (!availableTopicIds.has(topicId)) historySelection.delete(topicId);
@@ -28512,10 +28415,8 @@
       const entries = historyState.query
         ? allEntries.filter((entry) => historyMatchesSearch(entry, historyState.query))
         : allEntries;
-      const totalPages = Math.max(1, Math.ceil(entries.length / HISTORY_PAGE_SIZE));
-      historyState.page = Math.max(0, Math.min(totalPages - 1, historyState.page));
-      const start = historyState.page * HISTORY_PAGE_SIZE;
-      const pageEntries = entries.slice(start, start + HISTORY_PAGE_SIZE);
+      const { entries: pageEntries, totalPages } =
+        localCollectionPage(entries, historyState, HISTORY_PAGE_SIZE);
       releasePersistentAvatarImages(historyPanel.list);
       historyPanel.list.innerHTML = pageEntries.length
         ? pageEntries.map((entry) => {
@@ -28544,13 +28445,14 @@
           </div>`;
         }).join('')
         : `<div class="ldp-notification-empty">${historyState.query ? '没有匹配的浏览历史' : '暂无浏览历史'}</div>`;
-      hydrateHistoryAvatars(historyPanel.list, pageEntries);
+      hydrateHistoryAvatars(historyPanel.list, pageEntries, storedHistory);
       historyPanel.pagePrev.disabled = historyState.page <= 0;
       historyPanel.pageNext.disabled = historyState.page >= totalPages - 1;
       const scopeEntries = historyState.scope === 'all' ? entries : pageEntries;
+      historyScopeIds = scopeEntries.map((entry) => Number(entry.topicId));
       syncCollectionSelectionControls(
-        historyPanel, historyState, historySelection,
-        scopeEntries.map((entry) => Number(entry.topicId)), '浏览历史', allEntries.length === 0, scopeEntries.length === 0
+        historyPanel, historyState, historySelection, historyScopeIds,
+        '浏览历史', allEntries.length === 0, scopeEntries.length === 0
       );
       historyPanel.clear.disabled = allEntries.length === 0;
       historyPanel.pageInfo.textContent = entries.length ? `${historyState.page + 1} / ${totalPages}` : '暂无记录';
@@ -28561,19 +28463,6 @@
       if (PREFS.historySortMode === 'recent-viewed') historyState.page = 0;
       renderHistoryPage();
     };
-    const bookmarkPageUrl = async (page, query) => {
-      const username = await ensureMe();
-      if (!username) throw new Error('登录后才能查看收藏');
-      const params = new URLSearchParams({ page: String(Math.max(0, Number(page) || 0)) });
-      if (query) params.set('q', query);
-      return `${BASE}/u/${encodeURIComponent(username)}/bookmarks.json?${params}`;
-    };
-    const fetchBookmarkPage = async (page, query) => fetchJSON(await bookmarkPageUrl(page, query), {
-      key: `bookmarks:${page}:${query}`,
-      priority: POST_REQUEST_PRIORITY.auxiliary,
-      cacheMode: 'default',
-    });
-    const bookmarkPagePayload = (result) => result && result.user_bookmark_list || result || {};
     const bookmarkAvatarHtml = (entry) => {
       const user = entry && entry.user || {};
       const avatar = persistentAvatarHtml(
@@ -28636,10 +28525,11 @@
       if (Number(entry && entry.action_type) !== 1 || !topicId || !postId) return null;
       return givenReactionRecord({ ...entry, id: postId }, null, 'heart', entry.id, entry.created_at, entry.title);
     };
+    const givenReactionEntriesByPostId = (entries) => new Map((Array.isArray(entries) ? entries : [])
+      .map((entry) => [Number(entry && entry.postId), entry])
+      .filter(([postId]) => postId > 0));
     const mergeGivenReactionOverrides = (entries) => {
-      const entriesByPostId = new Map((Array.isArray(entries) ? entries : [])
-        .map((entry) => [Number(entry && entry.postId), entry])
-        .filter(([postId]) => postId > 0));
+      const entriesByPostId = givenReactionEntriesByPostId(entries);
       givenReactionOverrides.forEach((override, postId) => {
         const serverEntry = entriesByPostId.get(postId);
         if (override && Number(serverEntry && serverEntry.id) > 0 && serverEntry.reaction === override.reaction) {
@@ -28670,9 +28560,7 @@
     const applyConfirmedGivenLike = (entries, post, topic, acted) => {
       const postId = Number(post && post.id) || 0;
       if (!postId) return Array.isArray(entries) ? entries : [];
-      const entriesByPostId = new Map((Array.isArray(entries) ? entries : [])
-        .map((entry) => [Number(entry && entry.postId), entry])
-        .filter(([entryPostId]) => entryPostId > 0));
+      const entriesByPostId = givenReactionEntriesByPostId(entries);
       const current = entriesByPostId.get(postId);
       if (acted && (!current || current.reaction === 'heart')) {
         entriesByPostId.set(postId, confirmedGivenReactionRecord(post, topic, 'heart'));
@@ -28743,9 +28631,12 @@
       },
       normalizeGivenLike, (entry) => entry.postId, () => reactionCollectionIsCurrent(token)
     );
-    const reactionRecordEntries = () => bookmarksState.reactionEntries.filter((entry) =>
-      (!bookmarksState.reactionFilter || entry.reaction === bookmarksState.reactionFilter) &&
-      reactionRecordMatchesSearch(entry, bookmarksState.query));
+    const reactionRecordEntries = () => {
+      const needle = normalizeSearchText(bookmarksState.query);
+      return bookmarksState.reactionEntries.filter((entry) =>
+        (!bookmarksState.reactionFilter || entry.reaction === bookmarksState.reactionFilter) &&
+        reactionRecordMatchesSearch(entry, needle));
+    };
     const reactionAvatarHtml = (entry) => userCardAvatarHtml(
       persistentAvatarHtml(
         entry && entry.avatarTemplate,
@@ -28780,16 +28671,16 @@
           })].join('')
         : '';
       const typeEntries = bookmarkTypeEntries();
-      const totalPages = Math.max(1, Math.ceil(typeEntries.length / BOOKMARKS_PAGE_SIZE));
-      bookmarksState.page = Math.max(0, Math.min(totalPages - 1, bookmarksState.page));
-      const start = bookmarksState.page * BOOKMARKS_PAGE_SIZE;
-      const entries = typeEntries.slice(start, start + BOOKMARKS_PAGE_SIZE);
+      const { entries, totalPages } =
+        localCollectionPage(typeEntries, bookmarksState, BOOKMARKS_PAGE_SIZE);
       bookmarksState.entries = entries;
       bookmarksState.hasNext = bookmarksState.page < totalPages - 1;
-      const availableIds = new Set(isReaction ? [] : typeEntries.map((entry) => Number(entry.id)));
-      bookmarksSelection.forEach((bookmarkId) => {
-        if (!availableIds.has(bookmarkId)) bookmarksSelection.delete(bookmarkId);
-      });
+      if (bookmarksSelection.size) {
+        const availableIds = new Set(isReaction ? [] : typeEntries.map((entry) => Number(entry.id)));
+        bookmarksSelection.forEach((bookmarkId) => {
+          if (!availableIds.has(bookmarkId)) bookmarksSelection.delete(bookmarkId);
+        });
+      }
       releasePersistentAvatarImages(bookmarksPanel.list);
       if (isReaction) {
         bookmarksPanel.list.innerHTML = entries.length
@@ -28797,12 +28688,14 @@
             const reaction = String(entry.reaction || '');
             const reactionIcon = reactionLabel(reaction) || esc(`:${reaction}:`);
             const authorLabel = entry.authorUsername ? ` · @${entry.authorUsername}` : '';
-            return `<div class="ldp-reaction-record ldp-collection-item" data-reaction-record data-reaction-topic-id="${Number(entry.topicId)}" data-reaction-post-number="${Math.max(1, Number(entry.postNumber) || 1)}">
-              <a class="ldp-notification-item ldp-bookmark-link" data-ldp-preserve-target-post="1" href="${BASE}/t/${Number(entry.topicId)}/${Math.max(1, Number(entry.postNumber) || 1)}?${NATIVE_BYPASS_PARAM}=1">
+            const topicId = Number(entry.topicId);
+            const postNumber = Math.max(1, Number(entry.postNumber) || 1);
+            return `<div class="ldp-reaction-record ldp-collection-item" data-reaction-record data-reaction-topic-id="${topicId}" data-reaction-post-number="${postNumber}">
+              <a class="ldp-notification-item ldp-bookmark-link" data-ldp-preserve-target-post="1" href="${BASE}/t/${topicId}/${postNumber}?${NATIVE_BYPASS_PARAM}=1">
                 ${reactionAvatarHtml(entry)}
                 <span class="ldp-notification-copy">
                   <span class="ldp-notification-title">${esc(entry.title || `帖子 #${entry.topicId}`)}</span>
-                  <span class="ldp-notification-meta"><span class="ldp-reaction-record-icon" role="img" aria-label="${escAttr(reaction)} 回应">${reactionIcon}</span>${esc(`回应 · 楼层 #${Math.max(1, Number(entry.postNumber) || 1)}${authorLabel} · ${fmtTime(entry.reactedAt)}`)}</span>
+                  <span class="ldp-notification-meta"><span class="ldp-reaction-record-icon" role="img" aria-label="${escAttr(reaction)} 回应">${reactionIcon}</span>${esc(`回应 · 楼层 #${postNumber}${authorLabel} · ${fmtTime(entry.reactedAt)}`)}</span>
                 </span>
               </a>
             </div>`;
@@ -28854,9 +28747,19 @@
       positionBookmarksPopover();
     };
     const fetchAllBookmarkEntries = (query = bookmarksState.query, token = bookmarksState.token) => collectPagedEntries(
-      (page) => fetchBookmarkPage(page, query),
+      async (page) => {
+        const username = await ensureMe();
+        if (!username) throw new Error('登录后才能查看收藏');
+        const params = new URLSearchParams({ page: String(Math.max(0, Number(page) || 0)) });
+        if (query) params.set('q', query);
+        return fetchJSON(`${BASE}/u/${encodeURIComponent(username)}/bookmarks.json?${params}`, {
+          key: `bookmarks:${page}:${query}`,
+          priority: POST_REQUEST_PRIORITY.auxiliary,
+          cacheMode: 'default',
+        });
+      },
       (result, page) => {
-        const payload = bookmarkPagePayload(result);
+        const payload = result && result.user_bookmark_list || result || {};
         return [Array.isArray(payload.bookmarks) ? payload.bookmarks : [], payload.more_bookmarks_url ? page + 1 : null];
       },
       (entry) => Number(entry && entry.id) > 0 ? entry : null,
@@ -28868,12 +28771,13 @@
       const isReaction = bookmarksState.type === 'Reaction';
       let reactionSnapshotVisible = isReaction && bookmarksState.reactionLoadedAt > 0 &&
         bookmarksState.reactionUsername === ME_USERNAME;
+      let reactionIconHydration = null;
       const hydrateReactionIcons = () => {
-        if (reactionEmojiUrls) return;
-        void loadReactionEmojiRegistry().then(() => {
+        if (reactionEmojiUrls || reactionIconHydration) return;
+        reactionIconHydration = loadReactionEmojiRegistry().then(() => {
           if (reactionSnapshotVisible && token === bookmarksState.token &&
             !bookmarksPanel.popover.hidden && bookmarksState.type === 'Reaction') renderBookmarksPage();
-        });
+        }).finally(() => { reactionIconHydration = null; });
       };
       if (reactionSnapshotVisible) {
         renderBookmarksPage();
@@ -28953,7 +28857,7 @@
       syncReaderBookmarkState(activeCtx, type, entry && entry.bookmarkable_id, false, null, { persist: true });
     };
     const renderNotificationPage = (result, options = {}) => {
-      const visibleNotifications = sortNotificationsNewestFirst(result.notifications);
+      const visibleNotifications = result.notifications;
       notificationState.total = result.total;
       notificationState.hasNext = result.hasNext;
       releasePersistentAvatarImages(notificationPanel.list);
@@ -28973,13 +28877,13 @@
       positionNotificationsPopover();
     };
     const renderNotificationSearchPage = () => {
+      const needle = normalizeSearchText(notificationState.query);
       const matches = cachedNotificationsForGroup(notificationState.group)
-        .filter((notification) => notificationMatchesSearch(notification, notificationState.query));
-      const totalPages = Math.max(1, Math.ceil(matches.length / NOTIFICATION_PAGE_SIZE));
-      notificationState.page = Math.max(0, Math.min(totalPages - 1, notificationState.page));
-      const start = notificationState.page * NOTIFICATION_PAGE_SIZE;
+        .filter((notification) => notificationMatchesSearch(notification, needle));
+      const { entries, totalPages } =
+        localCollectionPage(matches, notificationState, NOTIFICATION_PAGE_SIZE);
       renderNotificationPage({
-        notifications: matches.slice(start, start + NOTIFICATION_PAGE_SIZE),
+        notifications: entries,
         total: matches.length,
         hasNext: notificationState.page < totalPages - 1,
       }, { search: true });
@@ -29001,7 +28905,9 @@
         currentReaderRequestScheduler().cancelQueued(notificationQueuedRequestKey);
       }
       const cached = getCachedNotificationPage(cacheKey);
-      const cachedIsFresh = cached && cachedNotificationPageIsFresh(cacheKey);
+      const cachedEntry = cached && NOTIFICATION_CACHE.get(cacheKey);
+      const cachedIsFresh = cachedEntry &&
+        Date.now() - Number(cachedEntry.at || 0) <= NOTIFICATION_CACHE_FRESH_FOR;
       if (cached) {
         renderNotificationPage(cached);
         if (cachedIsFresh) {
@@ -29088,6 +28994,10 @@
           + `<span class="ldp-reader-profile-metrics">${width} × ${height} · 宽高比 ${ratio.toFixed(2)} ${comparison} 3:4</span>`;
       });
     };
+    const syncProfileSharingUi = () => {
+      syncProfileSharingControls();
+      syncProfileRoutingNotes();
+    };
     const syncReaderBackgroundMode = () => {
       setPageScrollLocked(readerUsesFullPage() || window.innerWidth <= READER_WINDOW_COMPACT_WIDTH);
     };
@@ -29107,16 +29017,13 @@
     let sharedAppearanceDraft = currentSharedAppearanceProfile();
     let appearanceSharingDraft = Object.assign({}, currentReaderProfileSharing().appearance);
     let jumpHighlightDraft = jumpHighlightConfigFromPrefs(PREFS);
-    const jumpHighlightDraftChanged = () => {
+    const jumpHighlightDraftChangeCount = () => {
       const saved = jumpHighlightConfigFromPrefs(PREFS);
-      return JUMP_HIGHLIGHT_SETTING_FIELDS.some((field) => jumpHighlightDraft[field.key] !== saved[field.key]);
+      return JUMP_HIGHLIGHT_SETTING_FIELDS.reduce((count, field) =>
+        count + (jumpHighlightDraft[field.key] !== saved[field.key] ? 1 : 0), 0);
     };
     const fontDraftSettingShared = (field) => READER_PROFILE_SHARING_FIELDS.font.includes(field)
       && fontSharingDraft[field] === true;
-    const fontSharingDraftChanged = () => {
-      const saved = currentReaderProfileSharing().font;
-      return READER_PROFILE_SHARING_FIELDS.font.some((field) => fontSharingDraft[field] !== saved[field]);
-    };
     const layoutDraftSettingShared = (field) => LAYOUT_REGION_KEYS.includes(field)
       && layoutSharingDraft[field] === true;
     const layoutDraftSharingEnabled = () => LAYOUT_REGION_KEYS.some(layoutDraftSettingShared);
@@ -29215,9 +29122,8 @@
     };
     if (!reusingShell) {
       syncLayoutBtn();
-      overlay.addEventListener('ldp-reader-workspace-change', onReaderWorkspaceChange);
-      readerShell.onReaderWorkspaceChange = onReaderWorkspaceChange;
-      layoutBtn.addEventListener('click', () => {
+      onShell(overlay, 'ldp-reader-workspace-change', onReaderWorkspaceChange);
+      onShell(layoutBtn, 'click', () => {
         if (directTopicRoute) setPref('fullPage', !PREFS.fullPage);
         else if (readerUsesFullPage()) readerWorkspace.setMode('floating');
         else return;
@@ -29436,10 +29342,6 @@
       : readerValues;
     const activeFontFamilyTrigger = () => Array.from(fontFamilyTriggers)
       .find((trigger) => trigger.dataset.fontScope === activeFontFamilyScope);
-    const fontFamilySort = (left, right) => String(left.name || '').localeCompare(
-      String(right.name || ''), 'zh-CN', { sensitivity: 'base', numeric: true }
-    );
-    const fontFamilySearchText = (...values) => values.flatMap((value) => pinyinSearchForms(value)).join(' ');
     const collectAvailableFontFamilies = (fonts, searchFields, fallbackNameField = '') => {
       const entries = new Map();
       Array.from(fonts || []).forEach((font) => {
@@ -29455,7 +29357,9 @@
       return Array.from(entries.values()).map((entry) => ({
         name: entry.name,
         search: Array.from(entry.search),
-      })).sort(fontFamilySort);
+      })).sort((left, right) => String(left.name || '').localeCompare(
+        String(right.name || ''), 'zh-CN', { sensitivity: 'base', numeric: true }
+      ));
     };
     const collectPageFontFamilies = () => {
       try {
@@ -29464,17 +29368,16 @@
         );
       } catch (e) { return []; }
     };
-    const fontFamilyDisplayLabel = (values = fontValuesForScope(), scope = activeFontFamilyScope) => {
-      const config = fontScopeConfig(scope);
-      const family = normalizeFontFamily(values[config.family]);
-      if (family !== 'custom') return FONT_FAMILY_OPTIONS[family].label;
-      return normalizeCustomFontFamily(values[config.customFamily]) || '手动输入字体名';
-    };
     const syncFontFamilySelection = (values = currentFontDraft()) => {
       fontFamilyTriggers.forEach((trigger) => {
         const scope = trigger.dataset.fontScope;
         const value = trigger.querySelector('.ldp-font-family-value');
-        value.textContent = fontFamilyDisplayLabel(fontValuesForScope(scope, values), scope);
+        const config = fontScopeConfig(scope);
+        const scopeValues = fontValuesForScope(scope, values);
+        const family = normalizeFontFamily(scopeValues[config.family]);
+        value.textContent = family !== 'custom'
+          ? FONT_FAMILY_OPTIONS[family].label
+          : normalizeCustomFontFamily(scopeValues[config.customFamily]) || '手动输入字体名';
         trigger.dataset.ldpTooltipLabel = value.textContent;
       });
       const config = fontScopeConfig();
@@ -29499,7 +29402,8 @@
       option.type = 'button';
       option.dataset.fontKind = kind;
       option.dataset.fontValue = value;
-      option.dataset.searchText = fontFamilySearchText(label, source, ...search);
+      option.dataset.searchText = [label, source, ...search]
+        .flatMap((searchValue) => pinyinSearchForms(searchValue)).join(' ');
       option.setAttribute('role', 'option');
       option.setAttribute('aria-selected', String(selected));
       option.innerHTML = `<span class="ldp-font-family-option-copy ldp-picker-option-copy"><strong>${esc(label)}</strong><small>${esc(source)}</small></span>`
@@ -29519,14 +29423,6 @@
       group.append(heading);
       items.forEach((item) => group.append(createFontFamilyOption(item, values)));
       fragment.append(group);
-    };
-    const fontFamilyStatusCopy = () => {
-      if (localFontAccessState === 'loading') return '正在读取浏览器允许访问的本机字体…';
-      if (localFontAccessState === 'unsupported') return '当前浏览器未开放本机字体列表；仍可选择页面字体或手动输入。';
-      if (localFontAccessState === 'denied') return '未获得本机字体读取权限；仍可选择页面字体或手动输入。';
-      if (localFontAccessState === 'error') return '本机字体读取失败；仍可选择页面字体或手动输入。';
-      if (localFontAccessState === 'ready' && !localFontFamilies.length) return '浏览器没有返回可用的本机字体；仍可手动输入字体名。';
-      return '';
     };
     const applyFontFamilySearch = () => {
       const query = normalizeSearchText(fontFamilySearch.value);
@@ -29572,7 +29468,14 @@
       appendFontFamilyGroup(fragment, '本机已安装', localItems, values);
       appendFontFamilyGroup(fragment, '当前选择', currentItems, values);
       fontFamilyOptions.replaceChildren(fragment);
-      const statusCopy = fontFamilyStatusCopy();
+      let statusCopy = '';
+      if (localFontAccessState === 'loading') statusCopy = '正在读取浏览器允许访问的本机字体…';
+      else if (localFontAccessState === 'unsupported') statusCopy = '当前浏览器未开放本机字体列表；仍可选择页面字体或手动输入。';
+      else if (localFontAccessState === 'denied') statusCopy = '未获得本机字体读取权限；仍可选择页面字体或手动输入。';
+      else if (localFontAccessState === 'error') statusCopy = '本机字体读取失败；仍可选择页面字体或手动输入。';
+      else if (localFontAccessState === 'ready' && !localFontFamilies.length) {
+        statusCopy = '浏览器没有返回可用的本机字体；仍可手动输入字体名。';
+      }
       fontFamilySourceStatus.textContent = statusCopy;
       fontFamilySourceStatus.hidden = !statusCopy;
       applyFontFamilySearch();
@@ -29759,7 +29662,7 @@
         button.querySelector('span').textContent = `默认 ${defaultLabel}`;
         button.setAttribute('aria-label', `恢复${fieldLabel}默认值 ${defaultLabel}`);
       });
-      const changed = fontSharingDraftChanged()
+      const changed = categorySharingDraftChanged('font', fontSharingDraft)
         || FONT_PROFILE_VALUE_KEYS.some((name) => values[name] !== savedValues[name]);
       fontStatus.textContent = changed
         ? `${profileLabel}字体正在实时预览；点击“确认应用”后保存。`
@@ -30474,6 +30377,10 @@
         detail: `Resource Timing 有 ${entry.count} 条浏览器记录被丢弃；该区间统计不完整`,
         basis: 'PerformanceObserver droppedEntriesCount',
       }));
+    const resourceMonitorEvidenceEvents = (requestEvents, resourceDropEvents) => resourceMonitorState.events.concat(
+      requestEvents.filter((event) => ['visible', 'hidden'].includes(event.visibility)),
+      resourceDropEvents.filter((event) => ['visible', 'hidden'].includes(event.visibility))
+    );
     const resourceMonitorIsReaderRoot = (node) => {
       if (!node || node.nodeType !== 1) return false;
       if (node === READER_PORTAL_HOST) return true;
@@ -30629,7 +30536,7 @@
       if (memory.status === 'error') return '测量失败';
       return '等待测量';
     };
-    const resourceMonitorScopeSnapshot = (at) => {
+    const resourceMonitorScopeSnapshot = (at, requestEvents) => {
       const createCell = () => ({ requests: 0, requestDuration: 0, bytes: 0, scripts: 0, longTasks: 0, longTaskDuration: 0, domChanges: 0 });
       const scopes = {
         reader: { visible: createCell(), hidden: createCell() },
@@ -30637,7 +30544,7 @@
         shared: { visible: createCell(), hidden: createCell() },
       };
       const cutoff = at - 60000;
-      resourceMonitorRequestEvents(at).forEach((event) => {
+      requestEvents.forEach((event) => {
         if (event.at < cutoff || !['visible', 'hidden'].includes(event.visibility)) return;
         const cell = scopes[event.scope][event.visibility];
         cell.requests++;
@@ -30668,8 +30575,8 @@
       if (cell.domChanges) parts.push(`DOM 变更 ${cell.domChanges}`);
       return parts.length ? parts.join(' · ') : '—';
     };
-    const syncResourceMonitorScopeControls = (sample, at) => {
-      const scopes = resourceMonitorScopeSnapshot(at);
+    const syncResourceMonitorScopeControls = (sample, at, requestEvents, evidenceEvents) => {
+      const scopes = resourceMonitorScopeSnapshot(at, requestEvents);
       const scopeValues = {
         reader: `${sample.dom} DOM · ${sample.retainedFloors} 楼`,
         host: `${sample.hostDom} DOM`,
@@ -30685,22 +30592,16 @@
         row.querySelector('[data-resource-monitor-scope-hidden]').textContent = resourceMonitorScopeCellLabel(scopes[scope].hidden, scope);
         row.querySelector('[data-resource-monitor-scope-basis]').textContent = scopeValues[`${scope}Basis`] || '—';
       });
-      const recentEvents = resourceMonitorState.events.concat(
-        resourceMonitorRequestEvents(at).filter((event) => ['visible', 'hidden'].includes(event.visibility)),
-        resourceMonitorResourceDropEvents(at).filter((event) => ['visible', 'hidden'].includes(event.visibility))
-      ).filter((event) => event.at >= at - 60000);
+      const recentEvents = evidenceEvents.filter((event) => event.at >= at - 60000);
       const visibleCount = recentEvents.filter((event) => event.visibility === 'visible').length;
       const hiddenCount = recentEvents.filter((event) => event.visibility === 'hidden').length;
       const unknownCount = recentEvents.length - visibleCount - hiddenCount;
       resourceMonitorEvidenceWindow.textContent = `${document.visibilityState === 'visible' ? '当前前台' : '当前后台'} · 前 ${visibleCount} / 后 ${hiddenCount}${unknownCount ? ` / 未归档 ${unknownCount}` : ''} 个原始事件`;
     };
     const resourceMonitorScopeLabel = (scope) => RESOURCE_MONITOR_SCOPE_LABELS[scope] || '未归因';
-    const syncResourceMonitorEventLog = (at) => {
+    const syncResourceMonitorEventLog = (at, evidenceEvents) => {
       if (!resourceMonitorEventLog) return;
-      const events = resourceMonitorState.events.concat(
-        resourceMonitorRequestEvents(at).filter((event) => ['visible', 'hidden'].includes(event.visibility)),
-        resourceMonitorResourceDropEvents(at).filter((event) => ['visible', 'hidden'].includes(event.visibility))
-      )
+      const events = evidenceEvents
         .filter((event) => event.at >= at - RESOURCE_MONITOR_RETENTION_MS && event.at <= at)
         .sort((left, right) => right.at - left.at || String(right.id).localeCompare(String(left.id)))
         .slice(0, 48);
@@ -30769,12 +30670,13 @@
       const activeContext = readerShell.activeContext;
       requestResourceMonitorMemoryMeasurement(at);
       resourceMonitorPrune(at);
+      const requestEvents = resourceMonitorRequestEvents(at);
       const recentLongTasks = resourceMonitorState.events.filter((entry) =>
         entry.kind === 'longtask' && entry.at >= at - 10000);
       const longTaskDuration = recentLongTasks.reduce((sum, entry) => sum + entry.duration, 0);
       let schedulerState = null;
       try { schedulerState = currentReaderRequestScheduler().snapshot(); } catch (error) {}
-      const recentReaderRequests = resourceMonitorRequestEvents(at)
+      const recentReaderRequests = requestEvents
         .filter((event) => event.scope === 'reader' && event.at >= at - 60000);
       const readerTransfer = recentReaderRequests.reduce((sum, event) => sum + event.bytes, 0);
       const sample = {
@@ -30814,6 +30716,10 @@
       }
       resourceMonitorPrune(at);
       if (document.visibilityState !== 'visible') return;
+      const evidenceEvents = resourceMonitorEvidenceEvents(
+        requestEvents,
+        resourceMonitorResourceDropEvents(at)
+      );
       const samples = resourceMonitorState.samples;
       const stats = RESOURCE_MONITOR_STAT_KEYS.reduce((result, key) => {
         result[key] = resourceMonitorStats(key === 'heapUsed' ? resourceMonitorState.memorySamples : samples, key);
@@ -30880,8 +30786,8 @@
       const hiddenSamples = samples.filter((entry) => entry.visibility === 'hidden').length;
       const coveredLabel = coveredMs >= 60000 ? `${(coveredMs / 60000).toFixed(1)} 分钟` : `${Math.round(coveredMs / 1000)} 秒`;
       resourceMonitorTrendWindow.textContent = `${coveredLabel} · 前 ${visibleSamples} / 后 ${hiddenSamples}${maximumGap > 1800 ? ` · 最大空档 ${formatRequestFlowDuration(maximumGap)}` : ''}`;
-      syncResourceMonitorScopeControls(sample, at);
-      syncResourceMonitorEventLog(at);
+      syncResourceMonitorScopeControls(sample, at, requestEvents, evidenceEvents);
+      syncResourceMonitorEventLog(at, evidenceEvents);
       const health = resourceMonitorHealthInfo(samples, sample, at);
       resourceMonitorHealth.dataset.level = health.level;
       resourceMonitorHealthState.textContent = health.state;
@@ -30999,7 +30905,7 @@
         control.output.textContent = field.format(config[field.key]);
         if (field.type !== 'color') syncRangeVisual(control.input);
       });
-      const changed = jumpHighlightDraftChanged();
+      const changed = jumpHighlightDraftChangeCount() > 0;
       jumpHighlightStatus.textContent = changed
         ? '闪烁效果正在实时预览；点击“确认应用”后保存。'
         : '闪烁效果当前配置已应用。';
@@ -31354,11 +31260,6 @@
       currentAppearanceProfiles(), currentSharedAppearanceProfile(), currentReaderProfileSharing().appearance,
       appearanceSettingValueFields
     );
-    const jumpHighlightDraftChangeCount = () => {
-      const saved = jumpHighlightConfigFromPrefs(PREFS);
-      return JUMP_HIGHLIGHT_SETTING_FIELDS.reduce((count, field) =>
-        count + (jumpHighlightDraft[field.key] !== saved[field.key] ? 1 : 0), 0);
-    };
     const settingsDraftSummary = () => [
       { panel: 'font', label: '字体设置', count: fontDraftChangeCount() },
       { panel: 'layout', label: '布局设置', count: layoutDraftChangeCount() },
@@ -31482,8 +31383,9 @@
     ) => {
       const profiles = Object.fromEntries(READER_PROFILE_KEYS.map((profile) =>
         [profile, Object.assign({}, draftProfiles[profile])]));
-      const sharing = currentReaderProfileSharing();
-      sharing[category] = Object.assign({}, sharingDraft);
+      const sharing = Object.assign({}, currentReaderProfileSharing(), {
+        [category]: Object.assign({}, sharingDraft),
+      });
       const categoryName = `${category[0].toUpperCase()}${category.slice(1)}`;
       setPrefs({
         [`${category}Profiles`]: profiles,
@@ -31495,8 +31397,7 @@
     };
     const syncSavedReaderProfileSettings = (applySettings, syncControls) => {
       applySettings();
-      syncProfileSharingControls();
-      syncProfileRoutingNotes();
+      syncProfileSharingUi();
       syncControls();
     };
     const saveFontSettingsDraft = () => {
@@ -31552,7 +31453,7 @@
       const summary = settingsDraftSummary();
       if (summary.length) {
         const total = summary.reduce((count, entry) => count + entry.count, 0);
-        openReaderConfirmDialog(ctx, {
+        openReaderConfirmDialog(readerShell.activeContext, {
           title: `${total} 项设置尚未保存`,
           message: '草稿已保留在各设置页。可以保存全部修改后关闭，也可以明确放弃这些草稿。',
           details: summary.map((entry) => ({ label: entry.label, value: `${entry.count} 项` })),
@@ -31590,19 +31491,19 @@
       applyJumpHighlightSettings();
       syncOtherControls();
       settingsTabs.forEach((tab) => {
-      tab.addEventListener('click', () => showSettingsPanel(tab.dataset.settingsPanel || 'image'));
+      onShell(tab, 'click', () => showSettingsPanel(tab.dataset.settingsPanel || 'image'));
       });
-      loadingAnimationSelect.addEventListener('change', () => {
+      onShell(loadingAnimationSelect, 'change', () => {
         setPref('loadingAnimation', normalizeReaderLoadingAnimation(loadingAnimationSelect.value));
         loadingAnimationPreviewRandomKey = '';
         syncLoadingAnimationControls();
       });
-      loadingAnimationSelect.addEventListener('wheel', (event) => event.stopPropagation(), { passive: true });
-      loadingAnimationReroll.addEventListener('click', () => syncLoadingAnimationControls(true));
-      settingsNav?.addEventListener('scroll', syncSettingsNavScrollHints, { passive: true });
-      settingsNavScrollUp?.addEventListener('click', () => scrollSettingsNav(-1));
-      settingsNavScrollDown?.addEventListener('click', () => scrollSettingsNav(1));
-      userInfoContent?.addEventListener('click', (event) => {
+      onShell(loadingAnimationSelect, 'wheel', (event) => event.stopPropagation(), { passive: true });
+      onShell(loadingAnimationReroll, 'click', () => syncLoadingAnimationControls(true));
+      if (settingsNav) onShell(settingsNav, 'scroll', syncSettingsNavScrollHints, { passive: true });
+      if (settingsNavScrollUp) onShell(settingsNavScrollUp, 'click', () => scrollSettingsNav(-1));
+      if (settingsNavScrollDown) onShell(settingsNavScrollDown, 'click', () => scrollSettingsNav(1));
+      if (userInfoContent) onShell(userInfoContent, 'click', (event) => {
         const viewTab = event.target.closest('[data-user-info-view]');
         if (viewTab) {
           const view = viewTab.dataset.userInfoView === 'profile' ? 'profile' : 'connect';
@@ -31613,8 +31514,8 @@
           });
         }
       });
-      userInfoTitleRefresh?.addEventListener('click', () => void loadUserInfoSettings(true));
-      settingsPopover.addEventListener('pointerdown', (event) => {
+      if (userInfoTitleRefresh) onShell(userInfoTitleRefresh, 'click', () => void loadUserInfoSettings(true));
+      onShell(settingsPopover, 'pointerdown', (event) => {
         const row = event.target.closest('.ldp-settings-intro');
         if (!row) return;
         if (event.button !== 0) return;
@@ -31642,7 +31543,7 @@
         try { row.setPointerCapture(event.pointerId); } catch (e) {}
         event.preventDefault();
       });
-      settingsPopover.addEventListener('pointermove', (event) => {
+      onShell(settingsPopover, 'pointermove', (event) => {
         if (!settingsWindowDrag || event.pointerId !== settingsWindowDrag.pointerId) return;
         const coalescedEvents = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [];
         const latestEvent = coalescedEvents[coalescedEvents.length - 1] || event;
@@ -31656,9 +31557,9 @@
         stopSettingsRangeDrag();
       };
       ['pointerup', 'pointercancel'].forEach((type) =>
-        settingsPopover.addEventListener(type, stopSettingsPointerInteractions));
-      settingsPopover.addEventListener('lostpointercapture', stopSettingsPointerInteractions, true);
-      configExportBtn.addEventListener('click', () => {
+        onShell(settingsPopover, type, stopSettingsPointerInteractions));
+      onShell(settingsPopover, 'lostpointercapture', stopSettingsPointerInteractions, true);
+      onShell(configExportBtn, 'click', () => {
       try {
         downloadReaderConfigExport();
         showSelectionToast('设置配置已导出');
@@ -31666,11 +31567,11 @@
         showSelectionToast('导出失败，请重试');
       }
       });
-      configImportBtn.addEventListener('click', () => {
+      onShell(configImportBtn, 'click', () => {
       configFileInput.value = '';
       configFileInput.click();
       });
-      configFileInput.addEventListener('change', async () => {
+      onShell(configFileInput, 'change', async () => {
       const file = configFileInput.files && configFileInput.files[0];
       if (!file) return;
       let importedPrefs;
@@ -31680,7 +31581,7 @@
         showSelectionToast('配置文件无效，请选择由阅读器导出的 JSON 文件');
         return;
       }
-      openReaderConfirmDialog(ctx, {
+      openReaderConfirmDialog(readerShell.activeContext, {
         title: '导入这份设置配置？',
         message: `将使用“${file.name}”覆盖当前阅读器设置，并刷新页面。`,
         note: '浏览历史和缓存不会改变；浮窗尺寸与位置会自动限制在当前屏幕范围内。',
@@ -31688,8 +31589,8 @@
         onConfirm: () => replacePrefsAndReload(importedPrefs, '导入失败，浏览器未能保存设置'),
       });
       });
-      configResetBtn.addEventListener('click', () => {
-      openReaderConfirmDialog(ctx, {
+      onShell(configResetBtn, 'click', () => {
+      openReaderConfirmDialog(readerShell.activeContext, {
         title: '恢复全部默认设置？',
         message: '图片、字体、布局、浮窗、外观、闪烁、动效、性能和其他功能设置都会恢复默认，并刷新页面。',
         note: '浏览历史和缓存不会被删除。',
@@ -31697,10 +31598,10 @@
         onConfirm: () => replacePrefsAndReload(DEFAULT_PREFS, '恢复失败，浏览器未能保存设置'),
       });
       });
-      cacheSelects.forEach((input) => input.addEventListener('change', () => {
+      cacheSelects.forEach((input) => onShell(input, 'change', () => {
       cacheClearBtn.disabled = !Array.from(cacheSelects).some((candidate) => candidate.checked);
       }));
-      cacheClearBtn.addEventListener('click', async () => {
+      onShell(cacheClearBtn, 'click', async () => {
       const selected = Array.from(cacheSelects).filter((input) => input.checked).map((input) => input.value);
       if (!selected.length) return;
       cacheClearBtn.disabled = true;
@@ -31709,7 +31610,7 @@
       await syncCacheControls();
       });
       performancePresetButtons.forEach((button) => {
-      button.addEventListener('click', () => {
+      onShell(button, 'click', () => {
         const name = button.dataset.performancePreset;
         if (name === 'custom') {
           const firstInput = performanceInputs[0];
@@ -31722,13 +31623,13 @@
       });
       });
       performanceInputs.forEach((input) => {
-      input.addEventListener('change', () => {
+      onShell(input, 'change', () => {
         setPerformanceValue(input.dataset.performanceKey, input.value);
         performanceSettingsChanged = true;
         syncPerformanceControls();
       });
       });
-      performanceResetBtn.addEventListener('click', () => {
+      onShell(performanceResetBtn, 'click', () => {
       setPerformancePreset('balanced');
       performanceSettingsChanged = true;
       syncPerformanceControls();
@@ -31739,8 +31640,8 @@
       jumpHighlightDraft = jumpHighlightConfigFromPrefs(Object.assign({}, PREFS, jumpHighlightPrefsPatch(config)));
       syncJumpHighlightControls();
       };
-      jumpHighlightInputs.forEach((input) => input.addEventListener('input', previewJumpHighlightControls));
-      jumpHighlightApplyBtn.addEventListener('click', saveJumpHighlightSettingsDraft);
+      jumpHighlightInputs.forEach((input) => onShell(input, 'input', previewJumpHighlightControls));
+      onShell(jumpHighlightApplyBtn, 'click', saveJumpHighlightSettingsDraft);
       [
         [historyButtonsAlwaysVisibleInput, (checked) => setPref('historyButtonsAlwaysVisible', checked), syncOtherControls],
         [openTopicsAtFirstPostInput, (checked) => setPref('openTopicsAtFirstPost', checked), syncOtherControls],
@@ -31751,15 +31652,15 @@
         [fontRenderingOnHostInput, (checked) => setPref('fontRenderingOnHost', checked)],
         [readerWindowPinInput, (checked) => readerWindow.setPinned(checked), syncReaderWindowControls],
         [readerWindowLockInput, (checked) => readerWindow.setLocked(checked), syncReaderWindowControls],
-      ].forEach(([input, save, sync]) => input.addEventListener('change', () => {
+      ].forEach(([input, save, sync]) => onShell(input, 'change', () => {
         save(input.checked);
         if (sync) sync();
       }));
-      historyEdgeTriggerRange.addEventListener('input', () => {
+      onShell(historyEdgeTriggerRange, 'input', () => {
       setPref('historyEdgeTriggerPercent', normalizeHistoryEdgeTriggerPercent(historyEdgeTriggerRange.value));
       syncOtherControls();
       });
-      historySortModeSelect.addEventListener('change', () => {
+      onShell(historySortModeSelect, 'change', () => {
       setPref('historySortMode', historySortModeSelect.value);
       syncOtherControls();
       syncHistorySortToggle();
@@ -31778,18 +31679,18 @@
       syncOtherControls();
       };
       [expandNestedRepliesByDefaultInput, expandLeafNestedRepliesInput].forEach((input) =>
-        input.addEventListener('change', () => saveNestedReplyDisplayPreference(input)));
+        onShell(input, 'change', () => saveNestedReplyDisplayPreference(input)));
       const saveBoostCopyControls = () => {
       setPrefs(boostCopyDraftFromControls());
       syncOtherControls();
       };
-      boostCopyModeSelect.addEventListener('change', saveBoostCopyControls);
+      onShell(boostCopyModeSelect, 'change', saveBoostCopyControls);
       [boostCopyPrefixInput, boostCopyCounterMarkerInput, boostCopyCounterStepInput, boostCopyFixedSuffixInput]
         .forEach((input) => {
-          input.addEventListener('input', () => syncBoostCopyPreview());
-          input.addEventListener('change', saveBoostCopyControls);
+          onShell(input, 'input', () => syncBoostCopyPreview());
+          onShell(input, 'change', saveBoostCopyControls);
         });
-      notificationPanel.markAll.addEventListener('click', async () => {
+      onShell(notificationPanel.markAll, 'click', async () => {
       if (notificationPanel.markAll.disabled || notificationPanel.markAll.dataset.busy === '1') return;
       notificationPanel.markAll.dataset.busy = '1';
       notificationPanel.markAll.disabled = true;
@@ -31833,7 +31734,7 @@
         notificationPanel.markAll.disabled = cachedUnreadNotificationCount(notificationState.group) <= 0;
       }
       });
-      notificationsBtn.addEventListener('click', (e) => {
+      onShell(notificationsBtn, 'click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       const opening = notificationsPopover.hidden;
@@ -31848,7 +31749,7 @@
       loadNotificationPage(notificationState.group, notificationState.page);
       });
       const bindReaderAuxPanelToggle = (button, popover, closePanel, closePeer, openPanel) => {
-        button.addEventListener('click', (event) => {
+        onShell(button, 'click', (event) => {
           event.preventDefault();
           event.stopPropagation();
           const opening = popover.hidden;
@@ -31867,7 +31768,7 @@
         loadBookmarksPage();
       });
       notificationTabs.forEach((tab) => {
-      tab.addEventListener('click', () => {
+      onShell(tab, 'click', () => {
         notificationState.group = tab.dataset.notificationGroup || 'all';
         notificationState.page = 0;
         loadNotificationPage(notificationState.group, notificationState.page);
@@ -31880,7 +31781,7 @@
       });
       bindReaderPanelPager(notificationPanel.pagePrev, notificationPanel.pageNext, notificationState,
         () => loadNotificationPage(notificationState.group, notificationState.page));
-      historyPanel.sortToggle.addEventListener('click', () => {
+      onShell(historyPanel.sortToggle, 'click', () => {
       setPref('historySortMode', PREFS.historySortMode === 'recent-viewed' ? 'first-viewed' : 'recent-viewed');
       historyState.page = 0;
       historySelection.clear();
@@ -31890,19 +31791,11 @@
       historyPanel.sortToggle.dispatchEvent(new CustomEvent('ldp-tooltip-refresh', { bubbles: true, composed: true }));
       });
       bindReaderPanelMultiMode(
-        historyState, historySelection, historyPanel.multi, historyPanel.multiDone, historyPanel.selectScope, renderHistoryPage
+        historyPanel.popover, historyState, historySelection,
+        historyPanel.multi, historyPanel.multiDone, historyPanel.selectScope, renderHistoryPage
       );
-      historyPanel.selectToggle.addEventListener('click', () => {
-      const orderedEntries = orderedTopicHistory();
-      const filteredEntries = historyState.query
-        ? orderedEntries.filter((entry) => historyMatchesSearch(entry, historyState.query))
-        : orderedEntries;
-      const start = historyState.page * HISTORY_PAGE_SIZE;
-      const scopeEntries = historyState.scope === 'all'
-        ? filteredEntries
-        : filteredEntries.slice(start, start + HISTORY_PAGE_SIZE);
-      const scopeIds = scopeEntries.map((entry) => Number(entry.topicId)).filter((id) => id > 0);
-      toggleReaderPanelSelection(historySelection, scopeIds);
+      onShell(historyPanel.selectToggle, 'click', () => {
+      toggleReaderPanelSelection(historySelection, historyScopeIds);
       renderHistoryPage();
       });
       bindReaderPanelPager(historyPanel.pagePrev, historyPanel.pageNext, historyState, renderHistoryPage);
@@ -31912,10 +31805,10 @@
         historySelection.clear();
         renderHistoryPage();
       });
-      historyPanel.deleteSelected.addEventListener('click', () => {
+      onShell(historyPanel.deleteSelected, 'click', () => {
       const selectedCount = historySelection.size;
       if (!selectedCount) return;
-      openReaderConfirmDialog(ctx, {
+      openReaderConfirmDialog(readerShell.activeContext, {
         title: '删除所选浏览历史？',
         message: `将删除选中的 ${selectedCount} 条阅读器浏览历史。`,
         note: '不会清除浏览器自身的访问历史。',
@@ -31929,10 +31822,10 @@
         },
       });
       });
-      historyPanel.clear.addEventListener('click', () => {
+      onShell(historyPanel.clear, 'click', () => {
       const historyCount = readTopicHistory().length;
       if (!historyCount) return;
-      openReaderConfirmDialog(ctx, {
+      openReaderConfirmDialog(readerShell.activeContext, {
         title: '清空浏览历史？',
         message: `将删除全部 ${historyCount} 条阅读器浏览历史。`,
         note: '此操作无法撤销，但不会清除浏览器自身的访问历史。',
@@ -31951,7 +31844,7 @@
       });
       });
       bookmarksTabs.forEach((tab) => {
-      tab.addEventListener('click', () => {
+      onShell(tab, 'click', () => {
         const requestedType = tab.dataset.bookmarkType;
         const nextType = ['Topic', 'Post', 'Reaction'].includes(requestedType) ? requestedType : 'Topic';
         if (nextType === bookmarksState.type) return;
@@ -31974,13 +31867,13 @@
         suppressBookmarkTabClick = true;
         setPref('bookmarkTabOrder', Array.from(bookmarksTabList.children, (item) => item.dataset.bookmarkType));
       };
-      bookmarksTabList.addEventListener('click', (event) => {
+      onShell(bookmarksTabList, 'click', (event) => {
         if (!suppressBookmarkTabClick) return;
         suppressBookmarkTabClick = false;
         event.preventDefault();
         event.stopImmediatePropagation();
       }, true);
-      bookmarksTabList.addEventListener('pointerdown', (event) => {
+      onShell(bookmarksTabList, 'pointerdown', (event) => {
         if (event.pointerType !== 'mouse' || event.button !== 0) return;
         const tab = event.target.closest('.ldp-bookmark-tab');
         if (!tab) return;
@@ -31993,7 +31886,7 @@
         };
         try { tab.setPointerCapture(event.pointerId); } catch (e) {}
       });
-      bookmarksTabList.addEventListener('pointermove', (event) => {
+      onShell(bookmarksTabList, 'pointermove', (event) => {
         if (!bookmarkTabDrag || event.pointerId !== bookmarkTabDrag.pointerId) return;
         if (!bookmarkTabDrag.moved && Math.hypot(
           event.clientX - bookmarkTabDrag.startX,
@@ -32009,9 +31902,9 @@
         });
         bookmarksTabList.insertBefore(bookmarkTabDrag.tab, next || null);
       });
-      bookmarksTabList.addEventListener('pointerup', finishBookmarkTabDrag);
-      bookmarksTabList.addEventListener('pointercancel', finishBookmarkTabDrag);
-      bookmarksReactionFilters.addEventListener('click', (e) => {
+      onShell(bookmarksTabList, 'pointerup', finishBookmarkTabDrag);
+      onShell(bookmarksTabList, 'pointercancel', finishBookmarkTabDrag);
+      onShell(bookmarksReactionFilters, 'click', (e) => {
       const button = e.target.closest('[data-reaction-filter]');
       if (!button) return;
       bookmarksState.reactionFilter = String(button.dataset.reactionFilter || '');
@@ -32019,10 +31912,11 @@
       renderBookmarksPage();
       });
       bindReaderPanelMultiMode(
-        bookmarksState, bookmarksSelection, bookmarksPanel.multi, bookmarksPanel.multiDone, bookmarksPanel.selectScope,
-        renderBookmarksPage, () => { bookmarksState.allIds = null; }
+        bookmarksPanel.popover, bookmarksState, bookmarksSelection,
+        bookmarksPanel.multi, bookmarksPanel.multiDone, bookmarksPanel.selectScope, renderBookmarksPage,
+        () => { bookmarksState.allIds = null; }
       );
-      bookmarksPanel.selectToggle.addEventListener('click', () => {
+      onShell(bookmarksPanel.selectToggle, 'click', () => {
       let scopeIds = bookmarksState.entries.map((entry) => Number(entry.id)).filter((id) => id > 0);
       if (bookmarksState.scope === 'all') {
         if (!bookmarksState.allIds) {
@@ -32044,7 +31938,7 @@
         else loadBookmarksPage();
       }, 250);
       readerShell.cancelBookmarksSearch = cancelBookmarksSearch;
-      bookmarksPanel.deleteSelected.addEventListener('click', async () => {
+      onShell(bookmarksPanel.deleteSelected, 'click', async () => {
       const bookmarkIds = Array.from(bookmarksSelection);
       if (!bookmarkIds.length || bookmarksPanel.deleteSelected.dataset.busy === '1' ||
         !window.confirm(`确定取消选中的 ${bookmarkIds.length} 条收藏吗？`)) return;
@@ -32073,11 +31967,11 @@
         if (!bookmarksPanel.popover.hidden) renderBookmarksPage();
       }
       });
-      notificationsPopover.addEventListener('click', (e) => e.stopPropagation());
+      onShell(notificationsPopover, 'click', (e) => e.stopPropagation());
       bindFloatingSurfaceWheel(notificationsPopover);
       bindReaderPanelSelectionList(historyPanel.list, '.ldp-history-select-input', '[data-history-topic-id]',
         'historyTopicId', historySelection, renderHistoryPage);
-      historyPanel.popover.addEventListener('click', (e) => {
+      onShell(historyPanel.popover, 'click', (e) => {
       e.stopPropagation();
       const item = e.target.closest('[data-history-topic-id]');
       if (!item) return;
@@ -32097,7 +31991,7 @@
       bindFloatingSurfaceWheel(historyPanel.popover);
       bindReaderPanelSelectionList(bookmarksPanel.list, '.ldp-bookmark-select-input', '[data-bookmark-id]',
         'bookmarkId', bookmarksSelection, renderBookmarksPage);
-      bookmarksPanel.popover.addEventListener('click', async (e) => {
+      onShell(bookmarksPanel.popover, 'click', async (e) => {
       e.stopPropagation();
       const reactionItem = e.target.closest('[data-reaction-record]');
       if (reactionItem) {
@@ -32143,12 +32037,12 @@
       }
       });
       bindFloatingSurfaceWheel(bookmarksPanel.popover);
-      themeButtons.forEach((button) => button.addEventListener('click', (event) => {
+      themeButtons.forEach((button) => onShell(button, 'click', (event) => {
       event.preventDefault();
       event.stopPropagation();
       transitionReaderTheme(button.dataset.readerThemeMode);
       }));
-      settingsBtn.addEventListener('click', (e) => {
+      onShell(settingsBtn, 'click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       const nextHidden = !settingsPopover.hidden;
@@ -32173,13 +32067,13 @@
       syncProfileSharingControls();
       requestAnimationFrame(syncSettingsNavScrollHints);
       });
-      settingsCloseBtn.addEventListener('click', (event) => {
+      onShell(settingsCloseBtn, 'click', (event) => {
       event.preventDefault();
       requestCloseSettings();
       });
-      settingsPopover.addEventListener('click', (e) => e.stopPropagation());
+      onShell(settingsPopover, 'click', (e) => e.stopPropagation());
       bindFloatingSurfaceWheel(settingsPopover);
-      settingsPopover.addEventListener('pointerover', (event) => {
+      onShell(settingsPopover, 'pointerover', (event) => {
       const target = event.target.closest('[data-setting-help]');
       if (!target || (event.relatedTarget && target.contains(event.relatedTarget))) return;
       showSettingHelp(target);
@@ -32191,22 +32085,22 @@
             && !activeSettingHelpTarget.matches(':focus-within')) hideSettingHelp();
         });
       };
-      settingsPopover.addEventListener('pointerout', (event) => {
+      onShell(settingsPopover, 'pointerout', (event) => {
       if (!activeSettingHelpTarget) return;
       if (event.relatedTarget && activeSettingHelpTarget.contains(event.relatedTarget)) return;
       scheduleSettingHelpHide();
       });
-      settingsPopover.addEventListener('focusin', (event) => {
+      onShell(settingsPopover, 'focusin', (event) => {
       const target = event.target.closest('[data-setting-help]');
       if (target) showSettingHelp(target);
       });
-      settingsPopover.addEventListener('focusout', scheduleSettingHelpHide);
-      settingsPanel.addEventListener('scroll', () => {
+      onShell(settingsPopover, 'focusout', scheduleSettingHelpHide);
+      onShell(settingsPanel, 'scroll', () => {
         hideSettingHelp();
         closeFontFamilyMenu();
         closeColorPickerPopover();
       }, { passive: true });
-      settingsPopover.addEventListener('pointerdown', (event) => {
+      onShell(settingsPopover, 'pointerdown', (event) => {
       if (!fontFamilyMenu.hidden && !event.target.closest('.ldp-font-family-picker')) closeFontFamilyMenu();
       const color = event.target.closest('input[type="color"]');
       if (color && !color.disabled && event.button === 0) {
@@ -32228,14 +32122,14 @@
       settingsPopover.classList.add('ldp-range-dragging');
       try { range.setPointerCapture(event.pointerId); } catch (e) {}
       });
-      settingsPopover.addEventListener('change', (event) => {
+      onShell(settingsPopover, 'change', (event) => {
       if (event.target.matches('input[type="color"]')) stopSettingsColorPick();
       if (event.target.matches('input[type="range"]')) remindUnsavedRangeSetting(event.target);
       });
-      settingsPopover.addEventListener('focusout', (event) => {
+      onShell(settingsPopover, 'focusout', (event) => {
       if (event.target.matches('input[type="color"]')) stopSettingsColorPick();
       });
-      modal.addEventListener('click', closeReaderFloatingPanels);
+      onShell(modal, 'click', closeReaderFloatingPanels);
       const updateDraftProfileSharing = (category, field, enabled, input) => {
         let syncControls;
         let applyPreview;
@@ -32268,8 +32162,7 @@
           syncControls = syncAppearanceControls;
           applyPreview = applyAppearanceColors;
         } else return false;
-        syncProfileSharingControls();
-        syncProfileRoutingNotes();
+        syncProfileSharingUi();
         syncControls();
         applyPreview();
         const fieldLabel = input.getAttribute('aria-label').replace('三种形态共享', '');
@@ -32278,7 +32171,7 @@
           : `${fieldLabel}将恢复按形态分别设置；点击“确认应用”后保存。`);
         return true;
       };
-      profileSharingInputs.forEach((input) => input.addEventListener('change', () => {
+      profileSharingInputs.forEach((input) => onShell(input, 'change', () => {
       const category = input.dataset.profileSharingCategory;
       const field = input.dataset.profileSharingField;
       if (!READER_PROFILE_SHARING_KEYS.includes(category) || !READER_PROFILE_SHARING_FIELDS[category].includes(field)) return;
@@ -32290,13 +32183,13 @@
       if (enabled === wasEnabled) return;
       if (updateDraftProfileSharing(category, field, enabled, input)) return;
       if (category !== 'image') return;
-      const sharing = currentReaderProfileSharing();
-      sharing[category][field] = enabled;
+      const sharing = Object.assign({}, currentReaderProfileSharing(), {
+        [category]: Object.assign({}, currentReaderProfileSharing()[category], { [field]: enabled }),
+      });
       const patch = { profileSharing: sharing };
       if (enabled) patch.sharedImageProfile = Object.assign({}, currentImageProfile(imageSettingsProfile));
       setPrefs(patch);
-      syncProfileSharingControls();
-      syncProfileRoutingNotes();
+      syncProfileSharingUi();
       syncImageScaleControls();
       applyImageScale();
       const fieldLabel = input.getAttribute('aria-label').replace('三种形态共享', '');
@@ -32304,7 +32197,7 @@
         ? `${fieldLabel}已由三种形态共享；原独立值已保留。`
         : `${fieldLabel}已恢复按形态分别设置。`);
       }));
-      settingsPopover.addEventListener('click', (event) => {
+      onShell(settingsPopover, 'click', (event) => {
         const tab = event.target.closest(
           '[data-image-profile],[data-font-profile],[data-layout-profile],[data-appearance-profile]'
         );
@@ -32320,11 +32213,11 @@
         setPrefs({ sharedImageProfile: values });
         return;
       }
-      const profiles = currentImageProfiles();
+      const profiles = normalizeImageProfiles(PREFS.imageProfiles);
       profiles[imageSettingsProfile] = values;
       setPrefs({ imageProfiles: profiles });
       };
-      imageScaleRange.addEventListener('input', () => {
+      onShell(imageScaleRange, 'input', () => {
       const next = normalizeImageScalePercent(imageScaleRange.value, currentImageScalePercent(imageSettingsProfile));
       saveCurrentImageProfile(Object.assign({}, currentImageProfile(imageSettingsProfile), {
         preset: 'custom',
@@ -32333,13 +32226,13 @@
       syncImageScaleControls();
       applyImageScale();
       });
-      imageScaleReset.addEventListener('click', () => {
+      onShell(imageScaleReset, 'click', () => {
       saveCurrentImageProfile(Object.assign({}, IMAGE_PROFILE_DEFAULTS[imageSettingsProfile]));
       syncImageScaleControls();
       applyImageScale();
       });
       fontScopeTabs.forEach((tab) => {
-      tab.addEventListener('click', () => {
+      onShell(tab, 'click', () => {
         const scope = tab.dataset.fontScopeTab;
         if (!FONT_SCOPE_KEYS.includes(scope) || scope === fontSettingsScope) return;
         closeFontFamilyMenu();
@@ -32348,7 +32241,7 @@
       });
       });
       fontFamilyTriggers.forEach((trigger) => {
-      trigger.addEventListener('click', (event) => {
+      onShell(trigger, 'click', (event) => {
         event.preventDefault();
         event.stopPropagation();
         hideSettingHelp();
@@ -32356,14 +32249,14 @@
         if (!fontFamilyMenu.hidden && activeFontFamilyScope === scope) closeFontFamilyMenu(true);
         else openFontFamilyMenu(scope);
       });
-      trigger.addEventListener('keydown', (event) => {
+      onShell(trigger, 'keydown', (event) => {
         if (event.key !== 'ArrowDown') return;
         event.preventDefault();
         openFontFamilyMenu(trigger.dataset.fontScope);
       });
       });
-      fontFamilySearch.addEventListener('input', applyFontFamilySearch);
-      fontFamilyOptions.addEventListener('click', (event) => {
+      onShell(fontFamilySearch, 'input', applyFontFamilySearch);
+      onShell(fontFamilyOptions, 'click', (event) => {
       const option = event.target.closest('.ldp-font-family-option');
       if (!option) return;
       const config = fontScopeConfig();
@@ -32385,7 +32278,7 @@
       syncFontControls();
       if (activeFontFamilyScope !== 'host') applyFontScales();
       });
-      fontFamilyManualButton.addEventListener('click', () => {
+      onShell(fontFamilyManualButton, 'click', () => {
       const scope = activeFontFamilyScope;
       const config = fontScopeConfig(scope);
       const values = Object.assign({}, fontValuesForScope(scope), { [config.family]: 'custom' });
@@ -32399,14 +32292,14 @@
       input.focus();
       input.select();
       });
-      fontFamilyMenu.addEventListener('keydown', (event) => {
+      onShell(fontFamilyMenu, 'keydown', (event) => {
       handleSearchableMenuKeyDown(event, fontFamilySearch, fontFamilyOptions,
         '.ldp-font-family-option:not([hidden])', closeFontFamilyMenu);
       });
-      fontFamilyMenu.addEventListener('click', (event) => event.stopPropagation());
-      fontFamilyMenu.addEventListener('pointerdown', (event) => event.stopPropagation());
+      onShell(fontFamilyMenu, 'click', (event) => event.stopPropagation());
+      onShell(fontFamilyMenu, 'pointerdown', (event) => event.stopPropagation());
       bindFloatingSurfaceWheel(fontFamilyMenu);
-      fontFamilyCustomInputs.forEach((input) => input.addEventListener('input', () => {
+      fontFamilyCustomInputs.forEach((input) => onShell(input, 'input', () => {
       const scope = input.dataset.fontScope;
       const config = fontScopeConfig(scope);
       const values = Object.assign({}, fontValuesForScope(scope));
@@ -32424,7 +32317,7 @@
         [fontWeightSelects, 'change', 'weight', normalizeFontWeight],
         [fontColorInputs, 'input', 'color', normalizeHexColor],
       ].forEach(([inputs, eventName, configField, normalizeValue]) => inputs.forEach((input) => {
-        input.addEventListener(eventName, () => {
+        onShell(input, eventName, () => {
           const scope = input.dataset.fontScope;
           const config = fontScopeConfig(scope);
           const values = Object.assign({}, fontValuesForScope(scope));
@@ -32436,26 +32329,26 @@
           if (scope !== 'host') applyFontScales();
         });
       }));
-      fontScaleSettings.forEach(({ input, key, normalize }) => input.addEventListener('input', () => {
+      fontScaleSettings.forEach(({ input, key, normalize }) => onShell(input, 'input', () => {
         const values = Object.assign({}, currentFontDraft());
         values[key] = normalize(input.value, values[key]);
         setCurrentFontDraft(values);
         syncFontControls();
         applyFontScales();
       }));
-      hostEmbeddedSizeInputs.forEach((input) => input.addEventListener('input', () => {
+      hostEmbeddedSizeInputs.forEach((input) => onShell(input, 'input', () => {
       const config = HOST_EMBED_SIZE_SETTINGS[input.dataset.hostEmbedSize];
       if (!config) return;
       setPref(config.pref, normalizeHostEmbeddedSizeScale(input.value));
       syncFontControls();
       }));
-      hostEmbeddedSizeResetButtons.forEach((button) => button.addEventListener('click', () => {
+      hostEmbeddedSizeResetButtons.forEach((button) => onShell(button, 'click', () => {
       const config = HOST_EMBED_SIZE_SETTINGS[button.dataset.hostEmbedSizeReset];
       if (!config) return;
       setPref(config.pref, config.defaultScale);
       syncFontControls();
       }));
-      fontFieldResetButtons.forEach((button) => button.addEventListener('click', () => {
+      fontFieldResetButtons.forEach((button) => onShell(button, 'click', () => {
       const host = button.dataset.hostFontReset != null;
       const profileField = button.dataset.fontFieldReset;
       const scope = host ? 'host' : FONT_SCOPE_KEYS.find((key) => Object.values(fontScopeConfig(key)).includes(profileField));
@@ -32474,7 +32367,7 @@
       syncFontControls();
       if (!host) applyFontScales();
       }));
-      fontResetBtn.addEventListener('click', () => {
+      onShell(fontResetBtn, 'click', () => {
       closeFontFamilyMenu();
       fontFamilyManualEditing.clear();
       setPrefs(HOST_FONT_DEFAULTS);
@@ -32482,9 +32375,9 @@
       syncFontControls();
       applyFontScales();
       });
-      fontApplyBtn.addEventListener('click', saveFontSettingsDraft);
+      onShell(fontApplyBtn, 'click', saveFontSettingsDraft);
       layoutRatioInputs.forEach((input) => {
-      input.addEventListener('input', () => {
+      onShell(input, 'input', () => {
         const name = input.dataset.layoutRegion;
         if (!LAYOUT_REGION_KEYS.includes(name)) return;
         const ratios = Object.assign({}, currentLayoutDraft());
@@ -32518,13 +32411,13 @@
         syncLayoutControls();
       });
       });
-      layoutResetBtn.addEventListener('click', () => {
+      onShell(layoutResetBtn, 'click', () => {
       layoutDraftEditedRegion = '';
       setCurrentLayoutDraft(Object.assign({}, currentLayoutDefaults()));
       applyLayoutRatios();
       syncLayoutControls();
       });
-      layoutApplyBtn.addEventListener('click', saveLayoutSettingsDraft);
+      onShell(layoutApplyBtn, 'click', saveLayoutSettingsDraft);
       const applyReaderWindowInputs = () => {
       readerWindow.setGeometry(
         readerWindowWidthInput.value,
@@ -32534,11 +32427,11 @@
       );
       syncReaderWindowControls();
       };
-      readerWindowWidthInput.addEventListener('change', applyReaderWindowInputs);
-      readerWindowHeightInput.addEventListener('change', applyReaderWindowInputs);
-      readerWindowXInput.addEventListener('change', applyReaderWindowInputs);
-      readerWindowYInput.addEventListener('change', applyReaderWindowInputs);
-      readerWindowResetBtn.addEventListener('click', () => {
+      onShell(readerWindowWidthInput, 'change', applyReaderWindowInputs);
+      onShell(readerWindowHeightInput, 'change', applyReaderWindowInputs);
+      onShell(readerWindowXInput, 'change', applyReaderWindowInputs);
+      onShell(readerWindowYInput, 'change', applyReaderWindowInputs);
+      onShell(readerWindowResetBtn, 'click', () => {
       readerWindow.reset();
       syncReaderWindowControls();
       });
@@ -32548,7 +32441,7 @@
       const setAppearanceDraftValues = (values) => {
         setCurrentAppearanceDraft(Object.assign({}, currentAppearanceDraft(), values));
       };
-      appearanceGroupToggleInputs.forEach((input) => input.addEventListener('change', () => {
+      appearanceGroupToggleInputs.forEach((input) => onShell(input, 'change', () => {
         const key = input.dataset.appearanceGroupToggle;
         if (!APPEARANCE_PROFILE_SETTING_KEYS.includes(key)) return;
         setAppearanceDraftValue(key, input.checked);
@@ -32556,7 +32449,7 @@
         syncAppearanceControls();
       }));
       appearanceControlSettings.forEach(({ input, key, normalize: normalizeValue, apply: applyPreview }) => {
-        input.addEventListener('input', () => {
+        onShell(input, 'input', () => {
           if (input.type === 'color') {
             const sourceColor = normalizeHexColor(input.value, currentAppearanceDefaults()[key]);
             setAppearanceDraftValues({
@@ -32570,7 +32463,7 @@
           syncAppearanceControls();
         });
       });
-      colorResetButtons.forEach((button) => button.addEventListener('click', () => {
+      colorResetButtons.forEach((button) => onShell(button, 'click', () => {
       const key = button.dataset.colorReset;
       const defaults = currentAppearanceDefaults();
       const valueKeys = appearanceSettingValueFields(key);
@@ -32579,7 +32472,7 @@
       applyAppearanceColors();
       syncAppearanceControls();
       }));
-      appearanceApplyBtn.addEventListener('click', saveAppearanceSettingsDraft);
+      onShell(appearanceApplyBtn, 'click', saveAppearanceSettingsDraft);
       readerShell.cancelShellFrames = () => {
         if (colorPickerCommitFrame) cancelAnimationFrame(colorPickerCommitFrame);
         colorPickerCommitFrame = 0;
@@ -32593,6 +32486,7 @@
       };
     }
 
+    const readerContextEventBindings = [];
     let ctx = null;
     const tracker = createReadTracker(topicId, body, postRequestScheduler, (postNumbers) => {
       markReaderPostsRead(postNumbers, ctx);
@@ -32752,14 +32646,12 @@
             <button class="ldp-topic-edit-label-remove" type="button" data-label-key="${escAttr(labelKey(label.name))}" aria-label="移除 label ${escAttr(label.name)}">${icon('x')}</button>
           </span>`).join('');
       };
-      const categoryDisplayName = (category) => {
-        if (!category) return '请选择类别';
-        const parent = categoriesById.get(Number(category.parent_category_id));
-        return parent ? `${parent.name} / ${category.name}` : String(category.name || '请选择类别');
-      };
       const syncCategorySelection = () => {
         const selected = categoriesById.get(selectedCategoryId);
-        categoryValue.textContent = categoryDisplayName(selected);
+        const parent = selected && categoriesById.get(Number(selected.parent_category_id));
+        categoryValue.textContent = !selected
+          ? '请选择类别'
+          : parent ? `${parent.name} / ${selected.name}` : String(selected.name || '请选择类别');
         categoryOptions.querySelectorAll('.ldp-topic-edit-category-option').forEach((option) => {
           option.setAttribute('aria-selected', +option.dataset.categoryId === selectedCategoryId ? 'true' : 'false');
         });
@@ -33044,7 +32936,9 @@
         status.textContent = `类别和 label 加载失败：${error && error.message ? error.message : '请重试'}`;
       });
     };
-    overlay.querySelector('.ldp-topic-edit-trigger').addEventListener('click', openTopicEditor);
+    addTrackedEventListener(
+      readerContextEventBindings, overlay.querySelector('.ldp-topic-edit-trigger'), 'click', openTopicEditor
+    );
     overlay._ldpCaptureHistoryViewport = () => {
       timeline.sync();
       const viewport = embeddedReaderViewportState(ctx) || {};
@@ -33077,8 +32971,8 @@
       ctx.streamNeedsRepair = true;
       scheduleStreamWindowSync(ctx);
     };
-    window.addEventListener('resize', onWindowResize);
-    overlay.addEventListener('ldp-reader-window-change', onWindowResize);
+    addTrackedEventListener(readerContextEventBindings, window, 'resize', onWindowResize);
+    addTrackedEventListener(readerContextEventBindings, overlay, 'ldp-reader-window-change', onWindowResize);
 
     let loading = false, done = false, pendingRetry = false, loadHalted = false, loadHaltError = null;
     let loadingPrev = false, loadingNext = false;
@@ -33339,8 +33233,8 @@
       liveUpdateDismissed = true;
       syncLiveUpdateButton();
     };
-    liveUpdateJumpBtn.addEventListener('click', onLiveUpdateJump);
-    liveUpdateDismissBtn.addEventListener('click', onLiveUpdateDismiss);
+    addTrackedEventListener(readerContextEventBindings, liveUpdateJumpBtn, 'click', onLiveUpdateJump);
+    addTrackedEventListener(readerContextEventBindings, liveUpdateDismissBtn, 'click', onLiveUpdateDismiss);
 
     const refreshLatestReplyState = async (options = {}) => {
       const force = options.force === true;
@@ -33536,7 +33430,7 @@
       ctx.timeline.refreshRelativeTimes();
       refreshLatestReplyState();
     };
-    document.addEventListener('visibilitychange', onVisibilityChange);
+    addTrackedEventListener(readerContextEventBindings, document, 'visibilitychange', onVisibilityChange);
 
     const readerEscapeExitWindow = 1500;
     let readerEscapeExitDeadline = 0;
@@ -33817,40 +33711,9 @@
         gapLoadDueAt = 0;
         pendingGapDirection = 0;
         pendingGapBatches = 1;
-        const nativeOpen = onOpenNativePost && overlay.querySelector('.ldp-open');
-        removeTrackedEventListeners([
-          [body, 'scroll', onBodyScroll],
-          [body, 'touchstart', onBodyTouchStart],
-          [overlay, 'keydown', onReaderScrollKeyDown],
-          [onlyOpBtn, 'click', onOnlyOpToggle],
-          [overlay.querySelector('.ldp-title-jump'), 'click', onTitleJump],
-          [overlay.querySelector('.ldp-title-jump'), 'keydown', onTitleJumpKeyDown],
-          [overlay.querySelector('.ldp-topic-edit-trigger'), 'click', openTopicEditor],
-          [timelineEl.querySelector('.ldp-topic-timeline-top'), 'click', onTimelineTopClick],
-          [nativeOpen, 'click', onOpenNativePost],
-          [nativeOpen, 'auxclick', onOpenNativePost],
-          [liveUpdateJumpBtn, 'click', onLiveUpdateJump],
-          [liveUpdateDismissBtn, 'click', onLiveUpdateDismiss],
-          [overlay.querySelector('.ldp-reader-refresh'), 'click', onReaderRefreshClick],
-          [overlay.querySelector('.ldp-close'), 'click', onReaderCloseClick],
-          [overlay, 'pointermove', onReaderSwitchPointerMove],
-          [overlay, 'click', onOverlayClick],
-          [modal, 'wheel', onModalWheel],
-          [document, 'click', onNativeComposerSubmitClick, true],
-          [document, 'keydown', onNativeComposerSubmitKeyDown, true],
-          [document, 'click', onNativeComposerCloseClick, true],
-        ].filter(([target, , listener]) => target && listener));
+        removeTrackedEventListeners(readerContextEventBindings);
         disarmNativeComposerClose();
         disarmReaderEscapeExit();
-        removeTrackedEventListeners([
-          [overlay, 'pointermove', onReaderEscapePointerMove],
-          [document, 'pointerdown', onReaderEscapeExitInteraction, true],
-          [document, 'scroll', onReaderEscapeExitInteraction, true],
-          [document, 'keydown', onEsc, true],
-          [document, 'visibilitychange', onVisibilityChange],
-          [window, 'resize', onWindowResize],
-          [overlay, 'ldp-reader-window-change', onWindowResize],
-        ].filter(([target, , listener]) => target && listener));
         if (readerShell.activeContext === ctx) readerShell.activeContext = null;
         [ctx.streamItems, ctx.streamLayoutItems].forEach((items) => { items.length = 0; });
         [ctx.streamItemMap, ctx.streamMountedNodes, ctx.streamHydratedNodes, ctx.pendingPostHydrations,
@@ -33869,11 +33732,10 @@
         runReaderCleanup('resource monitor view', stopResourceMonitorUpdates);
         runReaderCleanup('request flow view', stopRequestFlowUpdates);
         if (readerShell.cancelShellFrames) readerShell.cancelShellFrames();
+        runReaderCleanup('shell events', () => removeTrackedEventListeners(shellEventBindings));
         runReaderCleanup('reader window', () => readerShell.readerWindow.destroy());
         runReaderCleanup('reader workspace', () => readerShell.readerWorkspace.destroy());
-        if (readerShell.onReaderWorkspaceChange) {
-          overlay.removeEventListener('ldp-reader-workspace-change', readerShell.onReaderWorkspaceChange);
-        }
+        runReaderCleanup('reader queue surface', () => overlay._ldpDestroyReaderQueueSurface?.());
       }
     };
 
@@ -34134,10 +33996,12 @@
         if (readerRefreshBtn.isConnected && readerSession.state === 'active') readerRefreshBtn.disabled = false;
       }
     };
-    readerRefreshBtn.addEventListener('click', onReaderRefreshClick);
+    addTrackedEventListener(readerContextEventBindings, readerRefreshBtn, 'click', onReaderRefreshClick);
     onReaderCloseClick = () => close();
-    overlay.querySelector('.ldp-close').addEventListener('click', onReaderCloseClick);
-    overlay.addEventListener('pointermove', onReaderSwitchPointerMove);
+    addTrackedEventListener(
+      readerContextEventBindings, overlay.querySelector('.ldp-close'), 'click', onReaderCloseClick
+    );
+    addTrackedEventListener(readerContextEventBindings, overlay, 'pointermove', onReaderSwitchPointerMove);
     onOverlayClick = (e) => {
       if (e.target !== overlay || !popupCanSwitchTopic()) return;
       const target = readerTopicTargetAt(e.clientX, e.clientY);
@@ -34153,7 +34017,7 @@
       }
       close();
     };
-    overlay.addEventListener('click', onOverlayClick);
+    addTrackedEventListener(readerContextEventBindings, overlay, 'click', onOverlayClick);
     onModalWheel = (e) => {
       const floatingSurface = e.target.closest?.('.ldp-reaction-picker,.ldp-reader-action-layer:not(.ldp-topic-edit-layer)');
       if (floatingSurface) {
@@ -34195,14 +34059,14 @@
       e.preventDefault();
       body.scrollTop += delta;
     };
-    modal.addEventListener('wheel', onModalWheel, { passive: false });
-    document.addEventListener('pointerdown', onReaderEscapeExitInteraction, true);
-    document.addEventListener('scroll', onReaderEscapeExitInteraction, true);
-    document.addEventListener('click', onNativeComposerSubmitClick, true);
-    document.addEventListener('keydown', onNativeComposerSubmitKeyDown, true);
-    document.addEventListener('click', onNativeComposerCloseClick, true);
-    document.addEventListener('keydown', onEsc, true);
-    overlay.addEventListener('pointermove', onReaderEscapePointerMove);
+    addTrackedEventListener(readerContextEventBindings, modal, 'wheel', onModalWheel, { passive: false });
+    addTrackedEventListener(readerContextEventBindings, document, 'pointerdown', onReaderEscapeExitInteraction, true);
+    addTrackedEventListener(readerContextEventBindings, document, 'scroll', onReaderEscapeExitInteraction, true);
+    addTrackedEventListener(readerContextEventBindings, document, 'click', onNativeComposerSubmitClick, true);
+    addTrackedEventListener(readerContextEventBindings, document, 'keydown', onNativeComposerSubmitKeyDown, true);
+    addTrackedEventListener(readerContextEventBindings, document, 'click', onNativeComposerCloseClick, true);
+    addTrackedEventListener(readerContextEventBindings, document, 'keydown', onEsc, true);
+    addTrackedEventListener(readerContextEventBindings, overlay, 'pointermove', onReaderEscapePointerMove);
 
     const sentinelVisible = () => body.scrollTop + body.clientHeight >= body.scrollHeight - 300;
 
@@ -34554,7 +34418,7 @@
       ctx.timeline.update();
       if (ctx.onlyOp) pump({ maxBatches: 1, forceOnlyOpScan: true });
     };
-    onlyOpBtn.addEventListener('click', onOnlyOpToggle);
+    addTrackedEventListener(readerContextEventBindings, onlyOpBtn, 'click', onOnlyOpToggle);
 
     try {
       setReaderOpenPhase('load-topic');
@@ -34609,15 +34473,17 @@
         if (!sessionAcceptsWork()) return;
         await ctx.timeline.jumpToStart();
       };
-      titleBtn.addEventListener('click', onTitleJump);
+      addTrackedEventListener(readerContextEventBindings, titleBtn, 'click', onTitleJump);
       onTitleJumpKeyDown = (event) => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         titleBtn.click();
       };
-      titleBtn.addEventListener('keydown', onTitleJumpKeyDown);
+      addTrackedEventListener(readerContextEventBindings, titleBtn, 'keydown', onTitleJumpKeyDown);
       onTimelineTopClick = () => titleBtn.click();
-      timelineEl.querySelector('.ldp-topic-timeline-top').addEventListener('click', onTimelineTopClick);
+      addTrackedEventListener(
+        readerContextEventBindings, timelineEl.querySelector('.ldp-topic-timeline-top'), 'click', onTimelineTopClick
+      );
 
       const openBtn = overlay.querySelector('.ldp-open');
       openBtn.href = `${BASE}/t/${topic.id}?${NATIVE_BYPASS_PARAM}=1`; openBtn.hidden = false;
@@ -34629,9 +34495,11 @@
         event.preventDefault();
         event.stopPropagation();
       };
-      openBtn.addEventListener('click', onOpenNativePost);
-      openBtn.addEventListener('auxclick', onOpenNativePost);
-      ctx.toggleTopicBookmark = bindTopicBookmark(topic, ctx);
+      addTrackedEventListener(readerContextEventBindings, openBtn, 'click', onOpenNativePost);
+      addTrackedEventListener(readerContextEventBindings, openBtn, 'auxclick', onOpenNativePost);
+      ctx.topicBookmarked = !!topic.bookmarked;
+      syncTopicActionControls(ctx);
+      ctx.toggleTopicBookmark = () => toggleReaderBookmark(topic, ctx, 'Topic');
       stopTopicPresence = bindReaderTopicPresence(ctx);
 
       destroyActions = bindActions(modal, ctx);
@@ -34720,14 +34588,14 @@
           }
         });
       };
-      body.addEventListener('scroll', onBodyScroll, { passive: true });
+      addTrackedEventListener(readerContextEventBindings, body, 'scroll', onBodyScroll, { passive: true });
       onBodyTouchStart = () => {
         if (ctx.timeline && ctx.timeline.releaseJump) ctx.timeline.releaseJump();
         ctx.streamScrollDirection = 0;
         captureStreamViewportAnchor(ctx);
         ctx.releaseInitialPrecedingContent();
       };
-      body.addEventListener('touchstart', onBodyTouchStart, { passive: true });
+      addTrackedEventListener(readerContextEventBindings, body, 'touchstart', onBodyTouchStart, { passive: true });
       onReaderScrollKeyDown = (event) => {
         if (['ArrowUp', 'PageUp', 'Home'].includes(event.key) || (event.key === ' ' && event.shiftKey)) {
           if (ctx.timeline && ctx.timeline.releaseJump) ctx.timeline.releaseJump();
@@ -34742,7 +34610,7 @@
           captureStreamViewportAnchor(ctx);
         }
       };
-      overlay.addEventListener('keydown', onReaderScrollKeyDown);
+      addTrackedEventListener(readerContextEventBindings, overlay, 'keydown', onReaderScrollKeyDown);
 
       setReaderOpenPhase('load-target-post');
       let targetLoaded = false;
@@ -34966,7 +34834,6 @@
       body.replaceChildren(errorEl);
       const retryButton = errorEl.querySelector('.ldp-error-retry');
       const errorChallenge = errorEl.querySelector('.ldp-error-challenge');
-      const errorCloseButton = errorEl.querySelector('.ldp-error-close');
       let retryOpening = false;
       let challengeAutoOpened = false;
       const syncRetryState = () => {
@@ -34986,7 +34853,13 @@
           openCloudflareChallengePopup(errorChallenge.href);
         }
       };
-      retryButton.addEventListener('click', () => {
+      errorEl.addEventListener('click', (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest('.ldp-error-close')) {
+          onReaderCloseClick();
+          return;
+        }
+        if (!target?.closest('.ldp-error-retry')) return;
         if (retryButton.disabled || retryOpening) return;
         retryOpening = true;
         syncRetryState();
@@ -35002,7 +34875,6 @@
           syncRetryState();
         });
       });
-      errorCloseButton.addEventListener('click', onReaderCloseClick);
       syncRetryState();
     }
   }
@@ -35355,11 +35227,6 @@
     return PREFS.openTopicsAtFirstPost ? 1 : (+route.postNumber || 0);
   }
 
-  function topicLinkReaderStartPostNumber(route, link) {
-    if (link && link.dataset.ldpPreserveTargetPost === '1') return +route.postNumber || 0;
-    return topicUrlReaderStartPostNumber(route);
-  }
-
   function runWhenBodyReady(fn) {
     if (document.body) fn();
     else document.addEventListener('DOMContentLoaded', fn, { once: true });
@@ -35378,23 +35245,22 @@
     return document.querySelector('.d-header-icons .current-user:has(img.avatar)');
   }
 
-  function currentNativeReaderTriggerTarget() {
-    const route = extractTopicRouteFromUrl(location.href);
-    if (route) return { ...route, source: 'route', title: '' };
-    const firstHistoryTopic = orderedTopicHistory()[0];
-    const topicId = Number(firstHistoryTopic && firstHistoryTopic.topicId);
-    if (!topicId) return null;
-    return {
-      topicId,
-      postNumber: Math.max(1, Number(firstHistoryTopic.postNumber) || 1),
-      source: 'history',
-      title: String(firstHistoryTopic.title || ''),
-    };
-  }
-
   function syncNativeReaderTrigger() {
     if (!document.body) return;
-    const target = currentNativeReaderTriggerTarget();
+    const route = extractTopicRouteFromUrl(location.href);
+    let target = route ? { ...route, source: 'route', title: '' } : null;
+    if (!target) {
+      const firstHistoryTopic = orderedTopicHistory()[0];
+      const historyTopicId = Number(firstHistoryTopic && firstHistoryTopic.topicId);
+      if (historyTopicId) {
+        target = {
+          topicId: historyTopicId,
+          postNumber: Math.max(1, Number(firstHistoryTopic.postNumber) || 1),
+          source: 'history',
+          title: String(firstHistoryTopic.title || ''),
+        };
+      }
+    }
     const topicId = target && String(target.topicId);
     if (CURRENT_OVERLAY) {
       hideNativeReaderTrigger();
@@ -35659,7 +35525,9 @@
     AUTO_OPEN_SUPPRESSED_TOPIC_ID = '';
     hideNativeReaderTrigger();
     openModal(route.topicId, {
-      targetPostNumber: topicLinkReaderStartPostNumber(route, a),
+      targetPostNumber: a.dataset.ldpPreserveTargetPost === '1'
+        ? +route.postNumber || 0
+        : topicUrlReaderStartPostNumber(route),
       topicNavMetadata: readTopicNavMetadata(a),
       readerQueueMetadata,
       hostTopicPointerAnchor,
@@ -35667,7 +35535,7 @@
     return true;
   }
 
-  function handleEmbeddedHostRefreshKeyDown(event) {
+  document.addEventListener('keydown', (event) => {
     if (event.key !== 'F5') return false;
     const readerShell = CURRENT_OVERLAY && CURRENT_OVERLAY._ldpReaderShell;
     const readerWorkspace = readerShell && readerShell.readerWorkspace;
@@ -35678,9 +35546,7 @@
       showSelectionToast('LINUX DO 宿主刷新暂不可用，请稍后重试');
     }
     return true;
-  }
-
-  document.addEventListener('keydown', handleEmbeddedHostRefreshKeyDown, true);
+  }, true);
   document.addEventListener('click', handleTopicLinkTrigger, true);
   installRouteTakeoverHooks();
   runWhenBodyReady(async () => {
