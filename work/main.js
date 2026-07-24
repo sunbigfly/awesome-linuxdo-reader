@@ -18,7 +18,7 @@
 // @grant        unsafeWindow
 // @connect      connect.linux.do
 // @run-at       document-start
-// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@main/work/main.css#sha256=e76e64f9def6d8042b7547839cc70abcc9ff84fcf6749ab600b641e2034f2186
+// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@2d5bb09/work/main.css#sha256=d2a7ab8ab784c9cf8cbf316bda6c6be3fa2e08cbc6478bba94d8332818563615
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
@@ -26356,6 +26356,7 @@
     const previewEl = timeline.querySelector('.ldp-topic-timeline-preview');
     const cursorEl = timeline.querySelector('.ldp-topic-timeline-cursor');
     const lensFloorElements = new Map();
+    const spareLensFloorElements = [];
     const timelineEventBindings = [];
     let frame = 0;
     let previewFrame = 0;
@@ -26371,6 +26372,7 @@
     let stableCreatedAt = '';
     let lensTargetPostNumber = 0;
     let jumpSequence = 0;
+    let timelineTrackRect = null;
 
     const totalPostCount = () => Math.max(1, ctx.totalPosts || ctx.streamItems.length || 1);
     const onlyOpTimelineItems = () => ctx.onlyOp ? streamLayoutItems(ctx) : null;
@@ -26408,6 +26410,21 @@
       const total = totalPostCount();
       return Math.max(1, Math.min(total, current + delta));
     };
+    const refreshTimelineTrackRect = () => {
+      timelineTrackRect = track.getBoundingClientRect();
+      return timelineTrackRect;
+    };
+    const timelineTrackMetrics = () => {
+      const rect = timelineTrackRect || refreshTimelineTrackRect();
+      return {
+        rect,
+        usableHeight: Math.max(1, rect.height - trackTopInset - trackBottomInset),
+      };
+    };
+    const timelineLensTopAtRatio = (ratio) => {
+      const { usableHeight } = timelineTrackMetrics();
+      return trackTopInset + Math.max(0, Math.min(1, ratio)) * usableHeight;
+    };
     const timelineLensLayout = () => {
       const items = onlyOpTimelineItems();
       if (items && items.length) {
@@ -26424,8 +26441,9 @@
         shiftX: -Math.min(6, distance * 2),
       };
     };
-    const renderTimelineLensAtRatio = (ratio) => {
+    const renderTimelineLensAtRatio = (ratio, lensTop = timelineLensTopAtRatio(ratio)) => {
       if (!cursorEl) return;
+      cursorEl.style.setProperty('--ldp-timeline-lens-top', `${lensTop.toFixed(2)}px`);
       const layout = timelineLensLayout();
       const continuousIndex = Math.max(0, Math.min(layout.length - 1, ratio * (layout.length - 1)));
       const nearestIndex = Math.round(continuousIndex);
@@ -26438,16 +26456,18 @@
       }
       lensFloorElements.forEach((element, floor) => {
         if (desiredFloors.has(floor)) return;
-        element.remove();
+        element.hidden = true;
         lensFloorElements.delete(floor);
+        spareLensFloorElements.push(element);
       });
       desiredFloors.forEach((offset, floor) => {
         let element = lensFloorElements.get(floor);
         if (!element) {
-          element = document.createElement('span');
+          element = spareLensFloorElements.pop() || document.createElement('span');
           element.textContent = `#${floor}`;
           lensFloorElements.set(floor, element);
-          cursorEl.append(element);
+          if (!element.isConnected) cursorEl.append(element);
+          element.hidden = false;
         }
         const profile = timelineLensProfile(offset);
         element.style.setProperty('--ldp-lens-offset', String(offset));
@@ -26561,8 +26581,7 @@
     setActive(document.visibilityState === 'visible');
 
     const timelinePointerPosition = (clientY) => {
-      const rect = track.getBoundingClientRect();
-      const usableHeight = Math.max(1, rect.height - trackTopInset - trackBottomInset);
+      const { rect, usableHeight } = timelineTrackMetrics();
       const top = Math.max(trackTopInset, Math.min(rect.height - trackBottomInset, clientY - rect.top));
       return { top, ratio: Math.max(0, Math.min(1, (top - trackTopInset) / usableHeight)) };
     };
@@ -26578,14 +26597,16 @@
         const target = targetFromRatio(pointerPosition.ratio);
         const progress = pointerPosition.ratio;
         const current = +(track.getAttribute('aria-valuenow') || 0);
+        const targetChanged = previewTarget !== target;
         previewTarget = target;
-        timeline.style.setProperty('--ldp-timeline-preview-progress', String(progress));
-        timeline.style.setProperty('--ldp-timeline-lens-top', `${pointerPosition.top}px`);
-        renderTimelineLensAtRatio(progress);
+        renderTimelineLensAtRatio(progress, pointerPosition.top);
         if (dragging) previewPointerTarget(previewClientY, target);
-        previewEl.textContent = `#${target}`;
-        track.classList.toggle('ldp-timeline-previewing', target !== current);
-        track.classList.add('ldp-timeline-hovering');
+        if (targetChanged) previewEl.textContent = `#${target}`;
+        const previewing = target !== current;
+        if (track.classList.contains('ldp-timeline-previewing') !== previewing) {
+          track.classList.toggle('ldp-timeline-previewing', previewing);
+        }
+        if (!track.classList.contains('ldp-timeline-hovering')) track.classList.add('ldp-timeline-hovering');
       });
     };
     const hidePointerPreview = () => {
@@ -26593,6 +26614,7 @@
       previewTarget = 0;
       if (previewFrame) cancelAnimationFrame(previewFrame);
       previewFrame = 0;
+      timelineTrackRect = null;
       track.classList.remove('ldp-timeline-previewing', 'ldp-timeline-hovering');
     };
     const finishTimelineJumpAnimation = () => {
@@ -26616,8 +26638,6 @@
       const currentProgress = progressForPost(currentPostNumber);
       const targetProgress = progressForPost(targetPostNumber);
       if (!alreadyFocusedOnTarget) {
-        timeline.style.removeProperty('--ldp-timeline-lens-top');
-        timeline.style.setProperty('--ldp-timeline-preview-progress', String(currentProgress));
         renderTimelineLensAtRatio(currentProgress);
       }
       track.classList.remove('ldp-timeline-jumping');
@@ -26639,7 +26659,6 @@
         const elapsedRatio = Math.min(1, (timestamp - startedAt) / duration);
         const easedRatio = 1 - Math.pow(1 - elapsedRatio, 3);
         const progress = currentProgress + (targetProgress - currentProgress) * easedRatio;
-        timeline.style.setProperty('--ldp-timeline-preview-progress', String(progress));
         renderTimelineLensAtRatio(progress);
         if (elapsedRatio < 1) {
           jumpAnimationFrame = requestAnimationFrame(animateJump);
@@ -26651,6 +26670,7 @@
       jumpAnimationFrame = requestAnimationFrame(animateJump);
     };
     const previewPointerTarget = (clientY, targetPostNumber = targetFromPointer(clientY)) => {
+      if (dragTarget === targetPostNumber) return;
       dragTarget = targetPostNumber;
       const node = ctx.streamNodeMap.get(dragTarget);
       renderPosition(dragTarget, node ? node.dataset.createdAt : '');
@@ -26777,7 +26797,8 @@
       e.preventDefault();
       dragging = true;
       activePointerId = e.pointerId;
-      dragTarget = targetFromPointer(e.clientY);
+      refreshTimelineTrackRect();
+      dragTarget = 0;
       track.setPointerCapture(e.pointerId);
       showPointerPreview(e.clientY);
     };
@@ -26813,7 +26834,10 @@
       () => timeline.querySelector('.ldp-topic-timeline-top')?.click());
     addTrackedEventListener(timelineEventBindings, relativeEl, 'click', onRelativeClick);
     addTrackedEventListener(timelineEventBindings, track, 'pointerenter',
-      (event) => showPointerPreview(event.clientY));
+      (event) => {
+        refreshTimelineTrackRect();
+        showPointerPreview(event.clientY);
+      });
     addTrackedEventListener(timelineEventBindings, track, 'pointerleave', onTrackPointerLeave);
     addTrackedEventListener(timelineEventBindings, track, 'pointerdown', onTrackPointerDown);
     addTrackedEventListener(timelineEventBindings, track, 'pointermove', (event) => {
@@ -26839,6 +26863,7 @@
         hidePointerPreview();
         if (cursorEl) cursorEl.replaceChildren();
         lensFloorElements.clear();
+        spareLensFloorElements.length = 0;
         lensTargetPostNumber = 0;
         if (activePointerId && track.hasPointerCapture && track.hasPointerCapture(activePointerId)) {
           try { track.releasePointerCapture(activePointerId); } catch (e) {}
@@ -27503,7 +27528,7 @@
           <aside class="ldp-topic-timeline" hidden aria-label="帖子时间轴">
             <button class="ldp-topic-timeline-date" type="button" aria-label="跳到首帖"></button>
             <button class="ldp-topic-timeline-track" type="button" role="slider" aria-label="跳转楼层" aria-orientation="vertical">
-              <span class="ldp-topic-timeline-cursor" aria-hidden="true"></span>
+              <span class="ldp-topic-timeline-cursor ldp-timeline-lens-composited" aria-hidden="true"></span>
               <span class="ldp-topic-timeline-thumb"></span>
               <strong class="ldp-topic-timeline-count"><span class="ldp-topic-timeline-current">1</span><span>/</span><span class="ldp-topic-timeline-total">1</span></strong>
               <span class="ldp-topic-timeline-preview" aria-hidden="true"></span>
