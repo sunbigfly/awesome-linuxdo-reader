@@ -18,7 +18,7 @@
 // @grant        unsafeWindow
 // @connect      connect.linux.do
 // @run-at       document-start
-// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@main/work/main.css#sha256=639d627a34d272f96d0c830d9d561165c608e05b3d78e939e3c74938de00c5e3
+// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@main/work/main.css#sha256=e76e64f9def6d8042b7547839cc70abcc9ff84fcf6749ab600b641e2034f2186
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
@@ -560,7 +560,7 @@
   const READER_QUEUE_PREFETCH_HEAD_POSTS = 40;
   const READER_QUEUE_PREFETCH_BEFORE_POSTS = 80;
   const READER_QUEUE_PREFETCH_MEDIA_CONCURRENCY = 2;
-  const READER_QUEUE_DOCK_THRESHOLD_RATIO = .05;
+  const READER_QUEUE_DOCK_THRESHOLD_RATIO = .01;
   const READER_LOADING_ANIMATION_KEYS = Object.freeze([
     'portal', 'constellation', 'corridor', 'typewave', 'crystal',
     'marginalia', 'chapters', 'quoteecho', 'footnotes', 'inkverse',
