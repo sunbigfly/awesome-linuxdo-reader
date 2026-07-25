@@ -4,7 +4,7 @@
 
 <h1 align="center">Awesome LinuxDo Reader</h1>
 
-<p align="center">为 LINUX DO 深度定制并保持完整功能覆盖，同时通过站点识别与能力检测全面兼容标准 Discourse 社区，在列表页内完成阅读、翻译、回复与原站互动。</p>
+<p align="center">为 LINUX DO 深度定制并保持完整功能覆盖，同时通过站点识别与能力检测兼容中文、英文及其他语言的标准 Discourse 社区，在列表页内完成阅读、翻译、回复与原站互动。</p>
 
 <p align="center">
   <a href="https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js">安装脚本</a> ·
@@ -27,7 +27,7 @@
 ## 功能
 
 - LINUX DO 全面适配，消息、历史、收藏、回应、Boost、长帖与楼层关系等能力保持完整覆盖。
-- 标准 Discourse 站点可直接使用；插件、主题和权限差异由站点适配层与能力检测自动降级。
+- 中文、英文及其他语言的标准 Discourse 站点均可使用；插件、主题和权限差异由站点适配层与能力检测自动降级。
 - 列表页直接打开完整帖子，支持浮窗、全屏与移动端布局。
 - 保留楼层关系、楼中楼、跳转、浏览历史与真实已读进度。
 - 集成回复、点赞、回应、收藏、通知、搜索与用户资料等社区能力。
@@ -150,7 +150,7 @@
 4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 其他功能 → 自定义站点”中验证并添加。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `0.1.12`。脚本对 LINUX DO 保持全面适配和完整功能回归，同时内置匹配 20 个其他 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。非中文内置社区还支持原文、双语和全译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `0.1.12`。脚本对 LINUX DO 保持全面适配和完整功能回归，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。已标记为非中文的内置社区还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
 ## 开发
 

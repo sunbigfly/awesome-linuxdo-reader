@@ -1,6 +1,6 @@
 ---
 title: 兼容性
-description: LINUX DO 全面适配、标准 Discourse 站点通用、正文翻译以及插件能力降级边界。
+description: LINUX DO 全面适配、中英文及其他语言 Discourse 站点通用、正文翻译以及插件能力降级边界。
 feature_ids: ["CORE-007", "DATA-005", "REF-001"]
 source_anchors: ["@grant", "@run-at", "DISCOURSE_SITE_ADAPTERS", "hasDiscourseCapability", "resolveSiteLogo", "createReaderTranslationController"]
 since: 0.1.2
@@ -16,7 +16,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png"]
 
 <p class="image-caption">桌面端浏览器可在保留宿主列表的同时运行增强阅读工作区；具体能力仍取决于浏览器、脚本管理器和站点权限。</p>
 
-LINUX DO 是完整功能与真实回归基线。对于其他标准 Discourse 站点，脚本会先验证站点身份，再根据当前版本、主题、权限以及 Boost、Reactions、Post Voting 等插件能力显示可用入口；缺少插件时自动降级，不影响长帖阅读、楼层上下文和原站基础互动。
+LINUX DO 是完整功能与真实回归基线。中文、英文及其他语言的标准 Discourse 站点均可适配；脚本会先验证站点身份，再根据当前版本、主题、权限以及 Boost、Reactions、Post Voting 等插件能力显示可用入口。缺少插件时自动降级，不影响长帖阅读、楼层上下文和原站基础互动。
 
 ## 当前支持范围
 
@@ -58,7 +58,7 @@ LINUX DO 是完整功能与真实回归基线。对于其他标准 Discourse 站
 
 脚本同时声明 `https://*/*`，以便用户保存的自定义域名能够启动；未命中内置列表或用户列表时会在业务初始化前退出。添加自定义站点时会匿名请求该域名的 `/site/basic-info.json`，只有检测到 Discourse 站点信息才保存。站点 Logo 从 Discourse 公开站点信息、宿主 Header 或页面图标中自动选择。
 
-非中文正文翻译只对已预设语言的内置社区开放；自定义站点没有可靠语言标记，暂不显示翻译入口。Google / Microsoft 翻译接口不可用时，原文阅读不受影响。
+站点适配不限制内容语言。正文翻译目前只对已预设语言的非中文内置社区开放，译文目标为简体中文；自定义站点没有可靠语言标记，暂不显示翻译入口。Google / Microsoft 翻译接口不可用时，原文阅读不受影响。
 
 ## 浏览器
 

@@ -58,7 +58,7 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
 6. 在主题列表顶部或主题链接附近确认阅读器入口已经出现。
 
 ::: tip 站点与翻译能力
-LINUX DO 保持完整功能覆盖。其他标准 HTTPS Discourse 论坛通过验证后即可使用核心阅读能力，站点未安装的 Boost、Reactions、Post Voting 等插件入口会自动隐藏。已标记为非中文的内置社区还会显示正文翻译按钮。
+LINUX DO 保持完整功能覆盖。中文、英文及其他语言的标准 HTTPS Discourse 论坛通过验证后即可使用核心阅读能力，站点未安装的 Boost、Reactions、Post Voting 等插件入口会自动隐藏。站点适配不限内容语言；已标记为非中文的内置社区还会显示译为简体中文的正文翻译按钮。
 :::
 
 ::: warning 不要同时启用两个版本
