@@ -4,7 +4,7 @@ description: 按安装、打开、跳楼、图片、429、配置和缓存分类�
 feature_ids: ["CORE-005", "MEDIA-013", "DATA-003", "MONITOR-003", "MONITOR-004", "TROUBLE-001", "TROUBLE-002", "TROUBLE-003", "TROUBLE-004", "TROUBLE-005"]
 source_anchors: ["bypassReaderForThisTab", "showReaderImageRetry", "clearCurrentTopicCaches", "READER_ENDPOINT_429_BASE_BLOCK_MS", "LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY", "@match", "unavailablePostNumbers", "LIGHTBOX_IMAGE_RESOURCE_REQUESTS", "replacePrefsAndReload", "@supportURL"]
 since: 0.1.2
-version: 0.1.8
+version: 0.1.9
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-13-data-management.png"]
@@ -30,7 +30,7 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11
 2. 确认脚本和站点访问权限已启用。
 3. 安装/更新后完整刷新。
 4. 停用重复的正式版、本地版或同类接管脚本。
-5. 从脚本管理器确认版本为 `0.1.8`。
+5. 从脚本管理器确认版本为 `0.1.9`。
 
 ## 主题或楼层无法加载
 

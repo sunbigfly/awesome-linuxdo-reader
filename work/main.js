@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      0.1.8
+// @version      0.1.9
 // @license      MIT
 // @description  面向 LINUX DO 的沉浸式增强阅读器，支持父回复预览、消息/历史/收藏、原图灯箱、主题布局、请求限流、缓存与 DOM 渲染管理。
 // @description:en An immersive LINUX DO reader with threaded context, community panels, image lightbox, layouts, request control, cache, and DOM rendering management.
@@ -18,7 +18,7 @@
 // @grant        unsafeWindow
 // @connect      connect.linux.do
 // @run-at       document-start
-// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@31f5d65ebc0d5e783689a2c694da5241de476356/work/main.css#sha256=5708dabd48452f43b68842d0a14de719da78f10d675619a042d862000acd3b20
+// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@b32c55af574a0da22bfecf48b44953b3e2548799/work/main.css#sha256=0ec9ad6445477dd4aef79f7e6d7418216bfd2b0fa8eb63c42dd33a5bcfac711e
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
@@ -30,7 +30,7 @@
 	const BASE = location.origin;
 	const PAGE_ROOT = document.documentElement;
 	const makeElement = (tagName) => document.createElement(tagName);
-	const READER_VERSION = '0.1.8';
+	const READER_VERSION = '0.1.9';
 	const HOST_PAGE_WINDOW = globalThis.unsafeWindow;
 	const TOPIC_CACHE_TTL = 90 * 1000;
 	const READ_THRESHOLD = 1500;

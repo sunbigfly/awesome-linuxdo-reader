@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["@version"]
 since: 0.1.2
-version: 0.1.8
+version: 0.1.9
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-14-about.png"]
@@ -15,6 +15,12 @@ screenshots: ["/screenshots/guide-14-about.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 0.1.9 — 通知样式资源修复
+
+核验日期：2026-07-25。
+
+- 将正式 userscript 的静态样式资源更新到已校验的不可变 CSS 提交，使通知分类、类型图标与消息卡片在发布版中和本地调试保持一致。
 
 ## 0.1.8 — 消息分类与阅读链路强化
 

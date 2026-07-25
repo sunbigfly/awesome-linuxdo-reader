@@ -4,7 +4,7 @@ description: 逐项配置灯箱评论、描述、原图策略和三种阅读形�
 feature_ids: ["MEDIA-001", "MEDIA-003", "MEDIA-004", "MEDIA-005", "SET-002", "SET-003"]
 source_anchors: ["IMAGE_SCALE_OPTIONS", "lightboxOriginalByDefault", "loadLightboxCommentTree", "lightboxDescriptionHeight", "currentImageProfile", "image-lightbox"]
 since: 0.1.2
-version: 0.1.8
+version: 0.1.9
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19-image-lightbox.png"]

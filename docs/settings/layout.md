@@ -4,7 +4,7 @@ description: 逐项调整左留白、主帖、中间间距、时间轴和右留�
 feature_ids: ["SET-007"]
 source_anchors: ["LAYOUT_REGION_KEYS"]
 since: 0.1.2
-version: 0.1.8
+version: 0.1.9
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-05-layout-settings.png"]

@@ -3,17 +3,17 @@
   "source": {
     "path": "work/main.js",
     "bytes": 1631052,
-    "sha256": "7ae818a2d04298ba23b740431dddf4d573ea3825c70d8b7d96b2703384f88c30"
+    "sha256": "bd669435c06d57e98545bf8bf46e994678338d2b76835a0a7c27652edc5d6034"
   },
   "metadata": {
     "bytes": 1730,
-    "sha256": "4d3da031bfa0bffd130f72cd41d9f8d847d2604cf257960d202d1676bcb643d2"
+    "sha256": "18c2a5478323bd3e37303c1904cb55ae5882c5566727d74a3dbb0165c6c587c9"
   },
   "artifact": {
     "path": "dist/awesome-linuxdo-reader.user.js",
     "bytes": 856531,
     "gzipBytes": 289163,
-    "sha256": "3a369b0daca176c21bb831ef2602f93d426f5d4882f59a939e81da041647250f"
+    "sha256": "f0fda2117ace9ff3beed7202aa186ed68f4472d654bba21bf124436b81f3dfbc"
   },
   "compiler": {
     "name": "esbuild",
