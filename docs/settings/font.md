@@ -4,7 +4,7 @@ description: 配置内置字体渲染、宿主主题列表尺寸，以及界面�
 feature_ids: ["SET-004", "SET-005", "SET-006"]
 source_anchors: ["font-rendering", "HOST_EMBED_SIZE_SETTINGS", "FONT_SCOPE_CONFIG"]
 since: 0.1.2
-version: 0.1.7
+version: 0.1.8
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-04-font-settings.png"]

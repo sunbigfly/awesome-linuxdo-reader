@@ -4,7 +4,7 @@ description: 配置历史按钮、边缘触发、历史排序、帖子起始楼�
 feature_ids: ["READ-007", "ACTION-006", "SET-016", "SET-017", "SET-018", "SET-019"]
 source_anchors: ["historyEdgeTriggerPercent", "BOOST_COPY_SETTING_ROWS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
 since: 0.1.2
-version: 0.1.7
+version: 0.1.8
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18-thread-context.png"]

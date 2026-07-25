@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      0.1.7
+// @version      0.1.8
 // @license      MIT
 // @description  面向 LINUX DO 的沉浸式增强阅读器，支持父回复预览、消息/历史/收藏、原图灯箱、主题布局、请求限流、缓存与 DOM 渲染管理。
 // @description:en An immersive LINUX DO reader with threaded context, community panels, image lightbox, layouts, request control, cache, and DOM rendering management.
@@ -30,7 +30,7 @@
 	const BASE = location.origin;
 	const PAGE_ROOT = document.documentElement;
 	const makeElement = (tagName) => document.createElement(tagName);
-	const READER_VERSION = '0.1.7';
+	const READER_VERSION = '0.1.8';
 	const HOST_PAGE_WINDOW = globalThis.unsafeWindow;
 	const TOPIC_CACHE_TTL = 90 * 1000;
 	const READ_THRESHOLD = 1500;
@@ -488,11 +488,35 @@
 	const NOTIFICATION_AVATAR_CACHE_MAX_ENTRIES = 512;
 	const USER_FOLLOW_LIST_PAGE_SIZE = 10;
 	const NOTIFICATION_GROUPS = {
-		all: { label: '全部', types: [] },
-		replies: { label: '回复', types: ['mentioned', 'replied', 'quoted', 'posted', 'group_mentioned'] },
-		likes: { label: '点赞', types: ['liked', 'liked_consolidated', 'reaction'] },
-		boosts: { label: 'Boost', types: ['boost'] },
-		messages: { label: '私信', types: ['private_message', 'invited_to_private_message', 'group_message_summary'] },
+		all: { label: '全部', icon: 'bell', types: [] },
+		replies: { label: '回复', icon: 'reply', types: ['mentioned', 'replied', 'quoted', 'posted', 'group_mentioned'] },
+		likes: { label: '点赞', icon: 'heart', types: ['liked', 'liked_consolidated', 'reaction'] },
+		boosts: { label: 'Boost', icon: 'rocket', types: ['boost'] },
+		follows: {
+			label: '关注',
+			icon: 'userRound',
+			types: ['following', 'following_created_topic', 'following_replied', 'watching_first_post', 'watching_category_or_tag'],
+		},
+		messages: {
+			label: '私信',
+			icon: 'mail',
+			types: [
+				'private_message', 'invited_to_private_message', 'group_message_summary',
+				'chat_mention', 'chat_message', 'chat_invitation', 'chat_group_mention', 'chat_quoted', 'chat_watched_thread',
+			],
+		},
+		other: {
+			label: '其他',
+			icon: 'layers',
+			types: [
+				'edited', 'invitee_accepted', 'moved_post', 'linked', 'granted_badge', 'invited_to_topic', 'custom',
+				'topic_reminder', 'post_approved', 'code_review_commit_approved', 'membership_request_accepted',
+				'membership_request_consolidated', 'bookmark_reminder', 'votes_released', 'event_reminder',
+				'event_invitation', 'assigned', 'question_answer_user_commented', 'new_features', 'admin_problems',
+				'linked_consolidated', 'upcoming_change_available', 'upcoming_change_automatically_promoted',
+				'suggested_edit_created', 'suggested_edit_accepted', 'circles_activity',
+			],
+		},
 	};
 	const PERSISTENT_CACHE_CONFIG = {
 		history: { storageKey: LDP_HISTORY_KEY, maxAge: 365 * DAY },
@@ -3960,18 +3984,16 @@
 		const panelWasOpen = panel && !panel.hidden;
 		const previousActiveTopicId = rail.dataset.readerQueueActiveTopicId || '';
 		const previousBubbleScrollTop = bubbles ? bubbles.scrollTop : 0;
-		rail.hidden = READER_QUEUE_ENTRIES.length === 0;
+		rail.hidden = false;
 		if (!toggle || !count || !bubbles || !scrollHint || !panel || !list || !panelCount || !clear) return;
 		count.textContent = String(READER_QUEUE_ENTRIES.length);
 		syncReaderQueueToggleState(rail);
 		panelCount.textContent = `${READER_QUEUE_ENTRIES.length} 篇`;
-		const activeEntry = readerQueueEntry(READER_QUEUE_ACTIVE_TOPIC_ID);
-		clear.disabled = !READER_QUEUE_ENTRIES.some((entry) => entry !== activeEntry && !entry.pinned);
+		clear.disabled = !READER_QUEUE_ENTRIES.some((entry) => !entry.pinned);
 		releasePersistentAvatarImages(bubbles);
 		bubbles.innerHTML = READER_QUEUE_ENTRIES.map((entry) => {
 			const active = String(entry.topicId) === READER_QUEUE_ACTIVE_TOPIC_ID;
 			const progress = readerQueueProgress(entry);
-			const removable = READER_QUEUE_ENTRIES.length > 1 || !active;
 			return `<span class="ldp-reader-queue-bubble-shell${entry.pinned ? ' is-pinned' : ''}">
 					<button class="ldp-reader-queue-bubble${active ? ' is-active' : ''}${progress >= 100 ? ' is-progress-complete' : ''} is-${entry.loadState}" type="button"
 						data-reader-queue-topic-id="${entry.topicId}" aria-current="${active ? 'true' : 'false'}"
@@ -3983,15 +4005,13 @@
 					</button>
 					${entry.pinned ? `<span class="ldp-reader-queue-bubble-pin" aria-hidden="true">${icon('pin')}</span>` : ''}
 					<button class="ldp-reader-queue-bubble-remove" type="button"
-						data-reader-queue-topic-id="${entry.topicId}" aria-label="${escAttr(`从阅读队列移除 ${entry.title}`)}"
-						${removable ? '' : 'disabled'}>${icon('x')}</button>
+						data-reader-queue-topic-id="${entry.topicId}" aria-label="${escAttr(`从阅读队列移除 ${entry.title}`)}">${icon('x')}</button>
 				</span>`;
 		}).join('');
 		releasePersistentAvatarImages(list);
 		list.innerHTML = READER_QUEUE_ENTRIES.map((entry) => {
 			const active = String(entry.topicId) === READER_QUEUE_ACTIVE_TOPIC_ID;
 			const progress = readerQueueProgress(entry);
-			const removable = READER_QUEUE_ENTRIES.length > 1 || !active;
 			return `<div class="ldp-reader-queue-row${active ? ' is-active' : ''}${entry.pinned ? ' is-pinned' : ''}" role="option" tabindex="0"
 					aria-selected="${active ? 'true' : 'false'}" data-reader-queue-topic-id="${entry.topicId}">
 					<span class="ldp-reader-queue-row-progress${progress >= 100 ? ' is-progress-complete' : ''}" style="--ldp-reader-queue-progress:${progress * 3.6}deg">
@@ -4008,7 +4028,7 @@
 						<button class="ldp-reader-queue-pin${entry.pinned ? ' active' : ''}" type="button"
 							aria-label="${entry.pinned ? '取消固定，离开后自动移出队列' : '固定文章，离开后保留在队列'}"
 							aria-pressed="${entry.pinned ? 'true' : 'false'}">${icon('pin')}</button>
-						<button class="ldp-reader-queue-remove" type="button" aria-label="从阅读队列移除"${removable ? '' : ' disabled'}>${icon('x')}</button>
+						<button class="ldp-reader-queue-remove" type="button" aria-label="从阅读队列移除">${icon('x')}</button>
 					</span>
 				</div>`;
 		}).join('');
@@ -4197,31 +4217,14 @@
 		if (!entry) return false;
 		const index = READER_QUEUE_ENTRIES.indexOf(entry);
 		const active = String(entry.topicId) === READER_QUEUE_ACTIVE_TOPIC_ID;
-		const currentReaderShowsEntry = CURRENT_OVERLAY?.isConnected &&
-			Number(CURRENT_OVERLAY.dataset.topicId) === Number(entry.topicId);
-		if (active && currentReaderShowsEntry && READER_QUEUE_ENTRIES.length === 1) {
-			showSelectionToast('当前文章是队列中的最后一篇');
-			return false;
-		}
 		flushReaderQueueReadProgress(entry);
 		if (entry.prefetchController) entry.prefetchController.abort();
 		READER_QUEUE_BY_TOPIC.delete(String(entry.topicId));
 		if (index >= 0) READER_QUEUE_ENTRIES.splice(index, 1);
 		scheduleReaderQueueStatePersist();
-		let switching = false;
-		if (active) {
-			READER_QUEUE_ACTIVE_TOPIC_ID = '';
-			const next = READER_QUEUE_ENTRIES[Math.min(index, READER_QUEUE_ENTRIES.length - 1)] ||
-				READER_QUEUE_ENTRIES[index - 1] || null;
-			if (next && currentReaderShowsEntry) {
-				switching = true;
-				void switchReaderQueueTopic(next.topicId);
-			} else if (next) {
-				READER_QUEUE_ACTIVE_TOPIC_ID = String(next.topicId);
-			}
-		}
+		if (active) READER_QUEUE_ACTIVE_TOPIC_ID = '';
 		syncReaderQueueSurfaces();
-		if (!switching) scheduleReaderQueuePrefetch();
+		scheduleReaderQueuePrefetch();
 		return true;
 	}
 
@@ -4242,10 +4245,7 @@
 	}
 
 	function clearReaderQueueEntries(ctx) {
-		const currentTopicId = Number(CURRENT_OVERLAY && CURRENT_OVERLAY.dataset.topicId) ||
-			Number(READER_QUEUE_ACTIVE_TOPIC_ID);
-		const keep = readerQueueEntry(currentTopicId);
-		const retained = READER_QUEUE_ENTRIES.filter((entry) => entry === keep || entry.pinned);
+		const retained = READER_QUEUE_ENTRIES.filter((entry) => entry.pinned);
 		const retainedEntries = new Set(retained);
 		const removable = READER_QUEUE_ENTRIES.filter((entry) => !retainedEntries.has(entry));
 		if (!removable.length) {
@@ -4254,21 +4254,16 @@
 		}
 		const removableTopicIds = new Set(removable.map((entry) => String(entry.topicId)));
 		return !!openReaderConfirmDialog(ctx, {
-			title: '清理其他队列文章？',
-			message: `将从阅读队列移除 ${removable.length} 篇未固定文章。`,
-			details: [
-				{ label: '移出队列', value: `${removable.length} 篇` },
-				{ label: '继续保留', value: `${retained.length} 篇` },
-			],
-			note: '当前文章和已固定文章会保留；正文、头像和图片缓存不会删除。',
+			title: '清理阅读队列？',
+			message: retained.length
+				? `将移除 ${removable.length} 篇未固定文章，保留 ${retained.length} 篇固定文章。`
+				: `将移除队列中的 ${removable.length} 篇文章。`,
+			note: '当前阅读不会关闭，正文、头像和图片缓存不会删除。',
 			icon: 'trash',
 			confirmLabel: `清理 ${removable.length} 篇`,
 			onConfirm: () => {
-				const latestCurrentTopicId = Number(CURRENT_OVERLAY && CURRENT_OVERLAY.dataset.topicId) ||
-					Number(READER_QUEUE_ACTIVE_TOPIC_ID);
-				const latestKeep = readerQueueEntry(latestCurrentTopicId);
 				const confirmedRemovable = READER_QUEUE_ENTRIES.filter((entry) =>
-					removableTopicIds.has(String(entry.topicId)) && entry !== latestKeep && !entry.pinned
+					removableTopicIds.has(String(entry.topicId)) && !entry.pinned
 				);
 				if (!confirmedRemovable.length) {
 					showSelectionToast('队列中没有可清理的未固定文章');
@@ -4282,7 +4277,7 @@
 				});
 				const latestRetained = READER_QUEUE_ENTRIES.filter((entry) => !confirmedRemovableEntries.has(entry));
 				READER_QUEUE_ENTRIES.splice(0, READER_QUEUE_ENTRIES.length, ...latestRetained);
-				READER_QUEUE_ACTIVE_TOPIC_ID = latestKeep ? String(latestKeep.topicId) : '';
+				if (!readerQueueEntry(READER_QUEUE_ACTIVE_TOPIC_ID)) READER_QUEUE_ACTIVE_TOPIC_ID = '';
 				scheduleReaderQueueStatePersist();
 				syncReaderQueueSurfaces();
 				scheduleReaderQueuePrefetch();
@@ -5502,7 +5497,7 @@
 			const inReaderSurface = control && (control.closest('.ldp-overlay,.ldp-lightbox') ||
 				control.closest('.ldp-user-card-fallback,.ldp-avatar-viewer') || control.matches('.ldp-native-reader-trigger'));
 			if (!inReaderSurface || control.hasAttribute('data-tooltip') ||
-				control.matches('.ldp-topic-timeline-track,[data-reaction-picker][aria-expanded="true"]')) return null;
+				control.matches('.ldp-settings-tab,.ldp-topic-timeline-track,[data-reaction-picker][aria-expanded="true"]')) return null;
 			const isFunctionalButton = control.matches('button,[role="button"],.ldp-nested-branch-toggle');
 			const isIconOnlyLink = control.matches('a') && control.querySelector('.ldp-icon,.ldp-logo,img') && !hasVisibleText(control);
 			const isNamedCopyTarget = control.matches('.ldp-avatar-flair,.ldp-user-card-badge');
@@ -7326,9 +7321,45 @@
 	function safeTopicNavIconHtml(value) {
 		const html = String(value || '').trim();
 		if (!/^<(?:svg|img)\b/i.test(html)) return '';
-		if (/<(?:script|foreignObject)\b/i.test(html) || /\son[a-z:-]*\s*=/i.test(html) ||
+		if (/<(?:script|foreignObject|use)\b/i.test(html) || /\son[a-z:-]*\s*=/i.test(html) ||
 			/(?:href|src)\s*=\s*["']?\s*javascript:/i.test(html)) return '';
 		return html;
+	}
+
+	function inlineTopicNavSvgUses(svg) {
+		if (!svg || svg.tagName?.toLowerCase() !== 'svg') return true;
+		const uses = [...svg.querySelectorAll('use')];
+		if (!uses.length) return true;
+		let complete = true;
+		uses.forEach((use) => {
+			const href = String(
+				use.getAttribute('href') ||
+				use.getAttribute('xlink:href') ||
+				use.getAttributeNS('http://www.w3.org/1999/xlink', 'href') ||
+				''
+			);
+			const symbolId = href.startsWith('#') ? href.slice(1) : '';
+			const symbol = symbolId ? document.getElementById(symbolId) : null;
+			if (!symbol || !['symbol', 'g'].includes(symbol.tagName?.toLowerCase())) {
+				complete = false;
+				return;
+			}
+			if (!svg.hasAttribute('viewBox') && symbol.hasAttribute('viewBox')) {
+				svg.setAttribute('viewBox', symbol.getAttribute('viewBox'));
+			}
+			const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+			[...use.attributes].forEach((attribute) => {
+				if (attribute.name === 'href' || attribute.name === 'xlink:href') return;
+				if (attribute.namespaceURI) {
+					group.setAttributeNS(attribute.namespaceURI, attribute.name, attribute.value);
+				} else {
+					group.setAttribute(attribute.name, attribute.value);
+				}
+			});
+			[...symbol.childNodes].forEach((child) => group.appendChild(child.cloneNode(true)));
+			use.replaceWith(group);
+		});
+		return complete && !svg.querySelector('use');
 	}
 
 	function topicNavIconCacheKeys(type, value) {
@@ -7424,6 +7455,7 @@
 			.filter((node) => node.closest('a') === link)
 			.map((node) => {
 				const copy = node.cloneNode(true);
+				if (copy.tagName?.toLowerCase() === 'svg' && !inlineTopicNavSvgUses(copy)) return '';
 				copy.querySelectorAll('script,foreignObject').forEach((unsafe) => unsafe.remove());
 				[copy, ...copy.querySelectorAll('*')].forEach((part) => {
 					[...part.attributes || []].forEach((attribute) => {
@@ -7663,12 +7695,13 @@
 			: '';
 	}
 
-	function persistentAvatarHtml(template, size, className, fallbackText = '?') {
+	function persistentAvatarHtml(template, size, className, fallbackText = '?', options = {}) {
 		const source = avatarUrl(template, size);
 		if (!source) return '';
 		const cachedSource = touchResourceObjectUrl(AVATAR_OBJECT_URL_CACHE, source);
-		if (cachedSource || source.startsWith('data:') || source.startsWith('blob:')) {
-			return `<img class="${escAttr(className)}" src="${escAttr(cachedSource || source)}" alt="" loading="lazy" decoding="async">`;
+		const eager = options.eager === true;
+		if (eager || cachedSource || source.startsWith('data:') || source.startsWith('blob:')) {
+			return `<img class="${escAttr(className)}" src="${escAttr(cachedSource || source)}" alt="" loading="${eager ? 'eager' : 'lazy'}" decoding="async"${eager ? ' fetchpriority="high"' : ''} data-ldp-avatar-original-template="${escAttr(template)}">`;
 		}
 		return `<span class="${escAttr(className)} ldp-persistent-avatar-fallback" data-ldp-avatar-template="${escAttr(template)}" data-ldp-avatar-size="${Math.max(1, Number(size) || 48)}" data-ldp-avatar-class="${escAttr(className)}">${esc(String(fallbackText || '?').slice(0, 1).toUpperCase())}</span>`;
 	}
@@ -8776,6 +8809,12 @@
 		return String(notification?._ldp_type_label || notificationTypeName(notification) || '通知');
 	}
 
+	function notificationTypeIconName(notification) {
+		const typeName = notificationTypeName(notification);
+		const group = Object.values(NOTIFICATION_GROUPS).find((entry) => entry.types.includes(typeName));
+		return group?.icon || NOTIFICATION_GROUPS.all.icon;
+	}
+
 	function consolidatedReplyInfo(notification) {
 		if (notificationTypeName(notification) !== 'replied') return null;
 		const data = notificationData(notification);
@@ -9330,15 +9369,16 @@
 			<section class="ldp-notification-date-group">
 				<div class="ldp-notification-date-label">${label}</div>
 				${items.map((notification) => `
-					<a class="ldp-notification-item${notification.read ? '' : ' unread'}" data-notification-id="${Math.max(0, Number(notification.id) || 0)}" data-notification-key="${escAttr(notificationDisplayIdentity(notification))}" data-notification-read-key="${escAttr(notificationReadIdentity(notification))}" data-notification-actor="${escAttr(notificationActor(notification))}" data-ldp-preserve-target-post="1" href="${escAttr(notificationHref(notification))}">
+					<a class="ldp-notification-item ldp-notification-message-item${notification.read ? '' : ' unread'}" data-notification-id="${Math.max(0, Number(notification.id) || 0)}" data-notification-key="${escAttr(notificationDisplayIdentity(notification))}" data-notification-read-key="${escAttr(notificationReadIdentity(notification))}" data-notification-actor="${escAttr(notificationActor(notification))}" data-ldp-preserve-target-post="1" href="${escAttr(notificationHref(notification))}">
 						${notificationAvatarHtml(notification)}
 						<span class="ldp-notification-copy">
-							<span class="ldp-notification-title">${esc(notificationSummary(notification))}</span>
-							<span class="ldp-notification-footer">
-								<span class="ldp-notification-meta">${esc(discourseRelativeTime(notification.created_at))}</span>
-								<span class="ldp-notification-read-state">${notification.read ? '已读' : '未读'}</span>
+							<span class="ldp-notification-title">
+								<span class="ldp-notification-type-icon">${icon(notificationTypeIconName(notification))}</span>
+								<span class="ldp-notification-title-text">${esc(notificationSummary(notification))}</span>
 							</span>
+							<span class="ldp-notification-meta">${esc(discourseRelativeTime(notification.created_at))}</span>
 						</span>
+						<span class="ldp-notification-read-state">${notification.read ? '已读' : '未读'}</span>
 					</a>`).join('')}
 			</section>`).join('');
 	}
@@ -12076,7 +12116,9 @@
 		const userCardAttr = boost.username ? `data-user-card="${escAttr(boost.username)}"` : '';
 		const avatarLabel = boost.username ? ` aria-label="@${escAttr(boost.username)}"` : '';
 		const avatar = boost.avatarTemplate
-				? persistentAvatarHtml(boost.avatarTemplate, 24, 'ldp-boost-avatar', boost.name || boost.username || '?')
+				? persistentAvatarHtml(
+					boost.avatarTemplate, 24, 'ldp-boost-avatar', boost.name || boost.username || '?', { eager: true }
+				)
 				: icon('rocket', 'ldp-boost-fallback-icon');
 		const avatarHtml = boost.username
 				? `<a class="ldp-user-link ldp-boost-avatar-link" href="${userProfileUrl(boost.username)}" target="_blank" rel="noopener" ${userCardAttr}${avatarLabel} data-tooltip>${avatar}</a>`
@@ -12688,6 +12730,30 @@
 		return new Promise((resolve) => {
 			setTimeout(resolve, delay);
 		});
+	}
+
+	function readerOpenFailureCanAutoRetry(error, phase) {
+		const status = Number(error?.status || 0);
+		if (status === 429) return false;
+		if (status && status !== 408 && status !== 425 && status < 500) return false;
+		const name = String(error?.name || '');
+		const message = String(error?.message || '');
+		if (name === 'AbortError' || name === 'TimeoutError' || status === 408 || status === 425 || status >= 500) {
+			return true;
+		}
+		if (/定位失败|恢复失败|布局稳定校验失败|校准失败/.test(message)) return true;
+		if (!['load-topic', 'load-target-post', 'load-target-boosts', 'load-target-neighborhood'].includes(String(phase || ''))) {
+			return false;
+		}
+		return name === 'TypeError' ||
+			/加载失败|请求失败|failed to fetch|network|timeout|timed out|aborted|signal/i.test(message);
+	}
+
+	function readerOpenAutoRetryDelay(attempt, error) {
+		const retryAtDelay = Math.max(0, Number(error?.retryAt || 0) - Date.now());
+		const delays = [500, 1200, 2500, 5000, 8000];
+		const backoff = delays[Math.min(delays.length - 1, Math.max(0, Number(attempt) - 1))];
+		return Math.max(backoff, retryAtDelay);
 	}
 
 	async function waitForReaderInitialLayout(overlay) {
@@ -17393,10 +17459,10 @@
 
 		async function loadPost(postNumber, options = {}) {
 			const target = +postNumber;
-			if (!target || unavailablePostNumbers.has(target)) return [];
+			const forceRefresh = options.forceRefresh === true;
+			if (!target || (!forceRefresh && unavailablePostNumbers.has(target))) return [];
 			const around = options.scope === 'around';
 			const shouldAdvance = around || options.advanceCursor !== false;
-			const forceRefresh = !around && options.forceRefresh === true;
 			const priority = Number.isFinite(options.priority) ? options.priority : POST_REQUEST_PRIORITY.scroll;
 			const cached = around || forceRefresh ? null : postByNumber.get(target);
 			if (cached) {
@@ -22195,6 +22261,7 @@
 				post: postModel,
 				draftKey: topicData.draft_key,
 				draftSequence: topicData.draft_sequence,
+				skipJumpOnSave: true,
 			});
 			rememberReaderNativeComposer(ctx, composer, {
 				action: 'edit',
@@ -26257,6 +26324,7 @@
 	let HOST_DOCUMENT_TITLE;
 	let AUTO_OPEN_SUPPRESSED_TOPIC_ID = bypassReaderForThisTab ? String(INITIAL_TOPIC_ID || '') : '';
 	let DISCOURSE_ROUTE_HANDLER_INSTALLED = false;
+	let LAST_READER_TOPIC_ROUTE_KEY = '';
 
 	function syncReaderDocumentTitle(topicTitle) {
 		const title = String(topicTitle || '').trim();
@@ -26394,6 +26462,7 @@
 		const spareLensFloorElements = [];
 		const timelineScope = createLifecycleScope();
 		let renderedCurrent = 0;
+		let renderedDisplayCurrent = 0;
 		let renderedTotal = 0;
 		let renderedProgress = NaN;
 		let renderedDateText = null;
@@ -26415,6 +26484,7 @@
 		let lensTargetPostNumber = 0;
 		let jumpSequence = 0;
 		let timelineTrackRect = null;
+		let currentDisplayOverride = 0;
 
 		const totalPostCount = () => Math.max(1, ctx.totalPosts || ctx.streamItems.length || 1);
 		const onlyOpTimelineItems = () => ctx.onlyOp ? streamLayoutItems(ctx) : null;
@@ -26524,14 +26594,16 @@
 		const renderPosition = (postNumber, createdAt = '') => {
 			const total = totalPostCount();
 			const current = Math.max(1, Math.min(total, +postNumber || 1));
+			const displayCurrent = currentDisplayOverride || current;
 			const progress = progressForPost(current);
 			const currentChanged = renderedCurrent !== current;
+			const displayCurrentChanged = renderedDisplayCurrent !== displayCurrent;
 			const totalChanged = renderedTotal !== total;
 			if (renderedProgress !== progress) {
 				renderedProgress = progress;
 				timeline.style.setProperty('--ldp-timeline-progress', String(progress));
 			}
-			if (currentChanged) currentEl.textContent = String(current);
+			if (displayCurrentChanged) currentEl.textContent = String(displayCurrent);
 			if (totalChanged) totalEl.textContent = String(total);
 			const dateText = timelineMonthLabel(createdAt);
 			if (renderedDateText !== dateText) {
@@ -26567,6 +26639,7 @@
 				timeline.hidden = timelineHidden;
 			}
 			renderedCurrent = current;
+			renderedDisplayCurrent = displayCurrent;
 			renderedTotal = total;
 		};
 
@@ -26585,6 +26658,7 @@
 
 		const updateNow = () => {
 			frame = 0;
+			currentDisplayOverride = 0;
 			if (!ctx.streamItems.length) {
 				timeline.hidden = true;
 				return;
@@ -26597,10 +26671,13 @@
 			}
 			const layoutItems = streamLayoutItems(ctx);
 			const streamHeight = ctx.streamPrefix[layoutItems.length] || 0;
+			const atScrollEnd = ctx.scrollRoot.scrollTop + ctx.scrollRoot.clientHeight >=
+				ctx.scrollRoot.scrollHeight - 16;
 			const atStreamEnd = +(ctx.streamViewportLocalTop || 0) +
 				+(ctx.streamViewportHeight || 0) >= streamHeight - 16;
-			const atLoadedEnd = atStreamEnd &&
-				lastLoadedPostNumber >= Math.max(1, ctx.totalPosts || 1);
+			const hasLoadedEnd = lastLoadedPostNumber >= Math.max(1, ctx.totalPosts || 1);
+			if (atScrollEnd && hasLoadedEnd) currentDisplayOverride = totalPostCount();
+			const atLoadedEnd = atStreamEnd && hasLoadedEnd;
 			if (atLoadedEnd) {
 				const lastTimelineItem = ctx.onlyOp ? layoutItems[layoutItems.length - 1] : null;
 				renderBoundaryPosition(lastTimelineItem ? lastTimelineItem.postNumber : totalPostCount());
@@ -26871,6 +26948,7 @@
 		};
 		const onTrackPointerDown = (e) => {
 			e.preventDefault();
+			currentDisplayOverride = 0;
 			dragging = true;
 			activePointerId = e.pointerId;
 			refreshTimelineTrackRect();
@@ -26955,8 +27033,10 @@
 		const openRequestId = ++READER_OPEN_REQUEST_SEQUENCE;
 		const previousQueueTopicId = Number(CURRENT_OVERLAY && CURRENT_OVERLAY.dataset.topicId) || 0;
 		const performance = Object.freeze(currentPerformanceConfig());
+		const autoRetryAttempt = Math.max(0, Number(options.autoRetryAttempt) || 0);
 		let targetPostNumber = +options.targetPostNumber || 0;
 		let unavailableTargetPostNumber = 0;
+		const refreshTargetBoosts = options.refreshTargetBoosts === true;
 		const initialQuoteHighlight = options.quoteHighlight && typeof options.quoteHighlight.text === 'string'
 			? { text: options.quoteHighlight.text, source: options.quoteHighlight.source || null }
 			: null;
@@ -26976,10 +27056,13 @@
 			options.topicNavMetadata || readTopicNavMetadata(null, topicId),
 			cachedTopicNavMetadata(cachedTopicPreview),
 		);
-		const queueEntry = ensureReaderQueueEntry(topicId, {
-			...(options.readerQueueMetadata || {}),
-			navMetadata: sourceTopicNavMetadata,
-		}, { prefetch: false, silent: true });
+		let queueEntry = readerQueueEntry(topicId);
+		if (queueEntry) {
+			queueEntry = ensureReaderQueueEntry(topicId, {
+				...(options.readerQueueMetadata || {}),
+				navMetadata: sourceTopicNavMetadata,
+			}, { prefetch: false, silent: true });
+		}
 		const inheritedHistoryPositions = normalizeReaderHistoryPositions(
 			CURRENT_OVERLAY && CURRENT_OVERLAY._ldpReaderHistoryNavigation?.positions
 		);
@@ -26988,6 +27071,9 @@
 		let reusableOverlay = null;
 		if (CURRENT_OVERLAY) {
 			const previousOverlay = CURRENT_OVERLAY;
+			if (isFunction(previousOverlay._ldpCancelAutoRetryWait)) {
+				previousOverlay._ldpCancelAutoRetryWait();
+			}
 			const previousTopicId = Number(previousOverlay.dataset.topicId);
 			const previousViewport = normalizeReaderHistoryViewport(
 				isFunction(previousOverlay._ldpCaptureHistoryViewport)
@@ -27106,11 +27192,11 @@
 					<div class="ldp-head-btns">
 						<button class="ldp-layout-toggle" type="button"></button>
 						<button class="ldp-notifications-toggle" type="button" aria-label="消息" aria-expanded="false">${icon('headerBell')}<span>消息</span><b class="ldp-notification-unread-badge" hidden></b></button>
-						<div class="ldp-notifications-popover" hidden>
-							<div class="ldp-notification-tabs" role="tablist" aria-label="消息分类">
-								${Object.entries(NOTIFICATION_GROUPS).map(([key, group], index) =>
-									`<button class="ldp-notification-tab${index === 0 ? ' active' : ''}" type="button" role="tab" data-notification-group="${key}" aria-selected="${index === 0 ? 'true' : 'false'}">${group.label}</button>`).join('')}
-							</div>
+							<div class="ldp-notifications-popover" hidden>
+								<div class="ldp-notification-tabs" role="tablist" aria-label="消息分类">
+									${Object.entries(NOTIFICATION_GROUPS).map(([key, group], index) =>
+										`<button class="ldp-notification-tab${index === 0 ? ' active' : ''}" type="button" role="tab" data-notification-group="${key}" aria-selected="${index === 0 ? 'true' : 'false'}">${icon(group.icon)}<span>${group.label}</span></button>`).join('')}
+								</div>
 							<div class="ldp-notification-toolbar">
 								<span class="ldp-notification-unread-status">没有未读消息</span>
 								<button class="ldp-notification-mark-all" type="button" disabled>${icon('check')}<span>全部已读</span></button>
@@ -29572,30 +29658,40 @@
 		};
 		const requestLocalFontFamilies = () => {
 			if (localFontAccessState !== 'idle') return localFontAccessRequest;
-			if (!isFunction(globalThis.queryLocalFonts)) {
+			const localFontWindow = isFunction(HOST_PAGE_WINDOW?.queryLocalFonts)
+				? HOST_PAGE_WINDOW : globalThis;
+			if (!isFunction(localFontWindow.queryLocalFonts)) {
 				localFontAccessState = 'unsupported';
 				renderFontFamilyOptions();
 				return null;
 			}
+			const handleLocalFontAccessError = (error) => {
+				const denied = error && (error.name === 'NotAllowedError' || error.name === 'SecurityError');
+				localFontAccessState = denied ? 'denied' : 'error';
+				if (!denied) {
+					console.warn('[LDP] local font access failed', {
+						name: String(error?.name || 'Error'),
+						message: String(error?.message || ''),
+					});
+				}
+			};
 			localFontAccessState = 'loading';
 			renderFontFamilyOptions();
 			try {
-				localFontAccessRequest = Promise.resolve(globalThis.queryLocalFonts()).then((fonts) => {
+				localFontAccessRequest = Promise.resolve(localFontWindow.queryLocalFonts()).then((fonts) => {
 					localFontFamilies = collectAvailableFontFamilies(
 						fonts, ['family', 'fullName', 'postscriptName', 'style'], 'fullName'
 					);
 					localFontAccessState = 'ready';
 				}).catch((error) => {
-					localFontAccessState = error && (error.name === 'NotAllowedError' || error.name === 'SecurityError')
-						? 'denied' : 'error';
+					handleLocalFontAccessError(error);
 				}).finally(() => {
 					localFontAccessRequest = null;
 					renderFontFamilyOptions();
 					positionFontFamilyMenu();
 				});
 			} catch (error) {
-				localFontAccessState = error && (error.name === 'NotAllowedError' || error.name === 'SecurityError')
-					? 'denied' : 'error';
+				handleLocalFontAccessError(error);
 				renderFontFamilyOptions();
 			}
 			return localFontAccessRequest;
@@ -33241,7 +33337,6 @@
 					0,
 					Number.isFinite(+options.afterPostNumber) ? +options.afterPostNumber : +(ctx.totalPosts || 0),
 				);
-				const wasNearBottom = body.scrollHeight - body.scrollTop - body.clientHeight <= 120;
 				const freshTopic = await loader.refreshTopicData({ priority: refreshPriority });
 				if (!freshTopic || !sessionAcceptsWork()) return null;
 				const freshHighestPostNumber = Math.max(0, +(freshTopic.highest_post_number || 0), +(freshTopic.posts_count || 0));
@@ -33267,6 +33362,10 @@
 					if (nextAfter <= fetchAfter) break;
 					fetchAfter = nextAfter;
 				}
+				const hasNewPostCandidates = [...postsByNumber.keys()]
+					.some((postNumber) => postNumber > previousHighestPostNumber);
+				const wasNearBottom = hasNewPostCandidates &&
+					body.scrollHeight - body.scrollTop - body.clientHeight <= 120;
 				const freshPosts = ingestLivePosts([...postsByNumber.values()], ctx);
 				ctx.topicData = freshTopic;
 				ctx.topicSharedIssueHostVisible = nativeTopicSharedIssueVisible(freshTopic);
@@ -33337,9 +33436,7 @@
 			if (session.action === 'edit') {
 				const updated = await ctx.refreshPostByNumber(session.postNumber);
 				if (!updated) return false;
-				const target = readerPostCopies(updated.id, ctx)[0];
-				if (target) keepJumpHighlightUntilSettled(target);
-				return true;
+				return focusLiveNestedReply(updated, ctx);
 			}
 			if (session.action !== 'reply') return false;
 			const parentPostNumber = +(session.parentPostNumber || 0);
@@ -33396,6 +33493,7 @@
 				}, 0);
 			};
 			nativeAppEvents.on('composer:created-post', handleNativeComposerPostRefresh);
+			nativeAppEvents.on('composer:edited-post', handleNativeComposerPostRefresh);
 			nativeAppEvents.on('post:created', handleNativeComposerPostRefresh);
 			return true;
 		};
@@ -33498,17 +33596,16 @@
 		};
 		const isolateReaderNativeComposerFromHost = () => {
 			const session = ctx.nativeComposerSession;
-			if (!session || session.action !== 'reply') return null;
+			if (!session || !['reply', 'edit'].includes(session.action)) return null;
 			releaseReaderNativeComposerHostIsolation();
 			const appEvents = session.composer && (
 				session.composer.appEvents || lookupDiscourse('service:app-events')
 			);
 			if (!appEvents || !isFunction(appEvents.trigger)) return null;
 			const originalTrigger = appEvents.trigger;
-			const readerRefreshEvents = new Set([
-				'composer:created-post',
-				'post:created',
-			]);
+			const readerRefreshEvents = new Set(session.action === 'edit'
+				? ['composer:edited-post']
+				: ['composer:created-post', 'post:created']);
 			const suppressedEvents = new Set([
 				...readerRefreshEvents,
 				'post:highlight',
@@ -33566,15 +33663,16 @@
 			nativeComposerHostIsolation = isolation;
 			return isolation;
 		};
-		const nativeReaderReplyComposerButton = () => {
+		const nativeReaderComposerButton = () => {
 			const session = ctx.nativeComposerSession;
-			if (!session || session.action !== 'reply' ||
+			if (!session || !['reply', 'edit'].includes(session.action) ||
 					discourseModelValue(session.composer, 'model') !== session.model) return null;
 			const composer = document.querySelector('#reply-control');
-			if (!nativeComposerVisible(composer) || !composer.matches('.composer-action-reply')) return null;
+			if (!nativeComposerVisible(composer) ||
+					!composer.matches(`.composer-action-${session.action}`)) return null;
 			return composer.querySelector('.save-or-cancel button.create');
 		};
-		const submitReaderNativeReplyWithoutHostRefresh = (button) => {
+		const submitReaderNativeComposerWithoutHostRefresh = (button) => {
 			const session = ctx.nativeComposerSession;
 			const composer = session?.composer;
 			if (!button || button.disabled || !composer || !isFunction(composer.save)) return false;
@@ -33587,25 +33685,25 @@
 				);
 			} catch (error) {
 				releaseReaderNativeComposerHostIsolation(isolation);
-				console.warn('[LINUX DO reader] native composer reply submit failed', error);
+				console.warn('[LINUX DO reader] native composer submit failed', error);
 			}
 			return true;
 		};
 		onNativeComposerSubmitClick = (event) => {
 			const button = event.target.closest?.('#reply-control .save-or-cancel button.create');
-			if (!button || button !== nativeReaderReplyComposerButton()) return;
+			if (!button || button !== nativeReaderComposerButton()) return;
 			event.preventDefault();
 			event.stopImmediatePropagation();
-			submitReaderNativeReplyWithoutHostRefresh(button);
+			submitReaderNativeComposerWithoutHostRefresh(button);
 		};
 		onNativeComposerSubmitKeyDown = (event) => {
 			if (event.isComposing || !(event.ctrlKey || event.metaKey) ||
 					(event.key !== 'Enter' && event.code !== 'Enter')) return;
-			const button = nativeReaderReplyComposerButton();
+			const button = nativeReaderComposerButton();
 			if (!button) return;
 			event.preventDefault();
 			event.stopImmediatePropagation();
-			submitReaderNativeReplyWithoutHostRefresh(button);
+			submitReaderNativeComposerWithoutHostRefresh(button);
 		};
 		onNativeComposerCloseClick = (event) => {
 			const button = event.target.closest?.('#reply-control .toggle-save-and-close, #reply-control .discard-button');
@@ -33685,6 +33783,7 @@
 				resumeReaderNativeComposerHostTopicBus();
 				if (nativeAppEvents && handleNativeComposerPostRefresh && isFunction(nativeAppEvents.off)) {
 					nativeAppEvents.off('composer:created-post', handleNativeComposerPostRefresh);
+					nativeAppEvents.off('composer:edited-post', handleNativeComposerPostRefresh);
 					nativeAppEvents.off('post:created', handleNativeComposerPostRefresh);
 				}
 				[
@@ -33848,6 +33947,7 @@
 		const close = (closeOptions = {}) => {
 			if (closePromise) return closePromise;
 			if (disposed) return Promise.resolve();
+			if (isFunction(overlay._ldpCancelAutoRetryWait)) overlay._ldpCancelAutoRetryWait();
 			clearFailureRetryTimer();
 			stopReaderSwitchTarget();
 			disposed = true;
@@ -34371,7 +34471,7 @@
 			const shouldMount = options.mount !== false;
 			const ensureAround = options.ensureAround === true && postNumber > 1;
 			const targetAlreadyKnown = ctx.streamNodeMap.has(postNumber);
-			if (targetAlreadyKnown && (!around || !ensureAround)) {
+			if (targetAlreadyKnown && options.forceRefresh !== true && (!around || !ensureAround)) {
 				return shouldMount ? !!getStreamPostNode(ctx, postNumber, { mount: true }) : true;
 			}
 			let posts = [];
@@ -34381,10 +34481,10 @@
 					priority: Number.isFinite(options.priority) ? options.priority
 						: around ? POST_REQUEST_PRIORITY.target : undefined,
 					scope: around ? 'around' : 'single',
-					...(around ? {} : { forceRefresh: options.forceRefresh === true }),
+					forceRefresh: options.forceRefresh === true,
 				});
 			} catch (error) {
-				if (!around || !targetAlreadyKnown) throw error;
+				if (!around || !targetAlreadyKnown || options.forceRefresh === true) throw error;
 			}
 			if (!sessionAcceptsWork()) return false;
 			const fresh = around
@@ -34638,6 +34738,7 @@
 					if (ctx.timeline?.releaseJump) ctx.timeline.releaseJump();
 					ctx.streamScrollDirection = -1;
 					captureStreamViewportAnchor(ctx);
+					markWheelScrollPrepared(-1);
 					clearInitialTargetHeadSpacer(ctx);
 					ctx.releaseInitialPrecedingContent();
 					scheduleGapLoad(true);
@@ -34645,6 +34746,7 @@
 					if (ctx.timeline?.releaseJump) ctx.timeline.releaseJump();
 					ctx.streamScrollDirection = 1;
 					captureStreamViewportAnchor(ctx);
+					markWheelScrollPrepared(1);
 				}
 			};
 			onContext(overlay, 'keydown', onReaderScrollKeyDown);
@@ -34669,6 +34771,21 @@
 					onSource: syncTargetLoadingSource,
 				});
 			}
+			if (refreshTargetBoosts && targetPostNumber > 0 && !cancelInitialTargetJump) {
+				setReaderOpenPhase('load-target-boosts');
+				targetLoaded = await ctx.loadPost(targetPostNumber, {
+					ensureAround: true,
+					priority: POST_REQUEST_PRIORITY.target,
+					forceRefresh: true,
+					onSource: syncTargetLoadingSource,
+					scope: 'around',
+				}) || targetLoaded;
+				if (!sessionAcceptsWork()) return;
+				const targetPostNode = ctx.streamNodeMap.get(targetPostNumber);
+				if (targetPostNode) {
+					syncRenderedBoost(targetPostNode, targetPostNode._ldpPostData || {}, ctx);
+				}
+			}
 			if (targetPostNumber > 1 && !targetLoaded && !cancelInitialTargetJump) {
 				const fallbackPost = nearestAvailablePost(targetPostNumber);
 				const fallbackPostNumber = +(fallbackPost?.post_number || 0);
@@ -34688,7 +34805,7 @@
 					throw new Error(`目标楼层 #${targetPostNumber} 加载失败，请重试`);
 				}
 			}
-			if (targetPostNumber > 1 && targetLoaded && !cancelInitialTargetJump) {
+			if (targetPostNumber > 1 && targetLoaded && !cancelInitialTargetJump && !refreshTargetBoosts) {
 				setReaderOpenPhase('load-target-neighborhood');
 				await ctx.loadPost(targetPostNumber, {
 					ensureAround: true,
@@ -34838,8 +34955,68 @@
 			}
 			if (sessionAcceptsWork()) rememberTopic(topic, targetPostNumber || 1, queueEntry?.seenPostNumbers);
 		} catch (err) {
-			if (disposed || !readerSession.isCurrent() || !overlay.isConnected) return;
+			if (disposed || openRequestId !== READER_OPEN_REQUEST_SEQUENCE ||
+					!readerSession.isCurrent('opening') || !overlay.isConnected) return;
 			const failedPhase = readerOpenPhase;
+			const canAutoRetry = readerOpenFailureCanAutoRetry(err, failedPhase);
+			if (canAutoRetry) {
+				const nextAutoRetryAttempt = autoRetryAttempt + 1;
+				const retryDelay = readerOpenAutoRetryDelay(nextAutoRetryAttempt, err);
+				console.warn('[LDP] reader open interrupted; retrying automatically', {
+					phase: failedPhase,
+					topicId: String(topicId || ''),
+					targetPostNumber,
+					sessionId: readerSessionId,
+					attempt: nextAutoRetryAttempt,
+					retryDelay,
+				});
+				readerSession.state = 'retrying';
+				overlay.classList.remove('ldp-initial-target-layout');
+				ctx.initialTargetPositionPending = false;
+				readerRefreshBtn.disabled = true;
+				stopReaderRuntime({ preserveShell: true });
+				if (loadingStatus) loadingStatus.textContent = '载入暂时中断，正在自动重试';
+				if (loadingDetail) {
+					loadingDetail.textContent = `第 ${nextAutoRetryAttempt} 次恢复将在 ${Math.max(1, Math.ceil(retryDelay / 1000))} 秒内开始…`;
+				}
+				if (loadingStage) {
+					setLabel(loadingStage, `载入暂时中断，第 ${nextAutoRetryAttempt} 次自动恢复即将开始`);
+				}
+				clearFailureRetryTimer();
+				const retryCloseButton = readerElement('.ldp-close');
+				const cancelAutoRetryWait = () => {
+					clearFailureRetryTimer();
+					retryCloseButton?.removeEventListener('click', closeWhileAutoRetry);
+					if (overlay._ldpCancelAutoRetryWait === cancelAutoRetryWait) {
+						delete overlay._ldpCancelAutoRetryWait;
+					}
+				};
+				const closeWhileAutoRetry = () => {
+					cancelAutoRetryWait();
+					close();
+				};
+				overlay._ldpCancelAutoRetryWait = cancelAutoRetryWait;
+				retryCloseButton?.addEventListener('click', closeWhileAutoRetry);
+				failureRetryTimer = setTimeout(() => {
+					cancelAutoRetryWait();
+					if (disposed || !readerSession.isCurrent('retrying') || !overlay.isConnected) return;
+					Promise.resolve(openModal(topicId, {
+						targetPostNumber,
+						topicNavMetadata: sourceTopicNavMetadata,
+						restoreViewport,
+						restoreOnlyOp,
+						historyNavigation,
+						settleTargetJump,
+						quoteHighlight: initialQuoteHighlight,
+						quoteSourceTarget: initialQuoteSourceTarget,
+						refreshTargetBoosts,
+						autoRetryAttempt: nextAutoRetryAttempt,
+					})).catch((retryError) => {
+						console.warn('[LDP] reader automatic retry setup failed', retryError);
+					});
+				}, retryDelay);
+				return;
+			}
 			console.error('[LDP] reader open failed', {
 				phase: failedPhase,
 				topicId: String(topicId || ''),
@@ -34906,6 +35083,7 @@
 					restoreViewport,
 					historyNavigation,
 					settleTargetJump,
+					refreshTargetBoosts,
 				})).catch((retryError) => {
 					console.error('[LDP] reader retry failed', retryError);
 					retryOpening = false;
@@ -35443,9 +35621,13 @@
 		}
 		const route = extractTopicRouteFromUrl(location.href);
 		if (!route) {
+			LAST_READER_TOPIC_ROUTE_KEY = '';
 			return stopDirectTopicTakeover(syncNativeReaderTrigger, '');
 		}
 		const topicId = String(route.topicId);
+		const routeKey = `${topicId}:${Math.max(0, Number(route.postNumber) || 0)}`;
+		const routeChanged = LAST_READER_TOPIC_ROUTE_KEY !== routeKey;
+		LAST_READER_TOPIC_ROUTE_KEY = routeKey;
 		const activeReaderWorkspace = CURRENT_OVERLAY && CURRENT_OVERLAY._ldpReaderShell?.readerWorkspace;
 		if (AUTO_OPEN_SUPPRESSED_TOPIC_ID === topicId && activeReaderWorkspace?.isEmbedded()) {
 			return stopDirectTopicTakeover(syncNativeReaderTrigger);
@@ -35465,10 +35647,25 @@
 			return stopDirectTopicTakeover(syncNativeReaderTrigger);
 		}
 		hideNativeReaderTrigger();
-		if (CURRENT_OVERLAY && CURRENT_OVERLAY.dataset.topicId === topicId) return true;
+		if (CURRENT_OVERLAY && CURRENT_OVERLAY.dataset.topicId === topicId) {
+			const targetPostNumber = Math.max(0, Number(currentRoute.postNumber) || 0);
+			if (!routeChanged || !targetPostNumber) return true;
+			const activeContext = CURRENT_OVERLAY._ldpReaderShell?.activeContext;
+			if (activeContext?.readerSession?.state === 'active' && activeContext.timeline) {
+				await activeContext.timeline.jumpTo(targetPostNumber);
+				return true;
+			}
+			openModal(currentRoute.topicId, {
+				targetPostNumber,
+				topicNavMetadata: readTopicNavMetadata(null, currentRoute.topicId),
+			});
+			return true;
+		}
 		PAGE_ROOT.classList.add('ldp-route-takeover');
 		openModal(currentRoute.topicId, {
-			targetPostNumber: topicUrlReaderStartPostNumber(currentRoute),
+			targetPostNumber: CURRENT_OVERLAY && currentRoute.postNumber
+				? +currentRoute.postNumber
+				: topicUrlReaderStartPostNumber(currentRoute),
 			topicNavMetadata: readTopicNavMetadata(null, currentRoute.topicId),
 		});
 		return true;
@@ -35561,7 +35758,9 @@
 			openCloudflareChallengePopup(a.href);
 			return true;
 		}
-		const notificationId = markClickedNotificationRead(a.closest('.ldp-notification-item'));
+		const notificationItem = a.closest('.ldp-notification-item');
+		const refreshNotificationTarget = notificationItem?.classList.contains('ldp-notification-message-item') === true;
+		const notificationId = markClickedNotificationRead(notificationItem);
 		if (notificationId > 0) {
 			void apiSend(`${BASE}/notifications/mark-read`, 'PUT', { id: notificationId }, null, {
 				surviveReaderSwitch: true,
@@ -35593,6 +35792,7 @@
 			topicNavMetadata: readTopicNavMetadata(a),
 			readerQueueMetadata,
 			hostTopicPointerAnchor,
+			refreshTargetBoosts: refreshNotificationTarget,
 		});
 		return true;
 	}

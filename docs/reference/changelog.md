@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["@version"]
 since: 0.1.2
-version: 0.1.7
+version: 0.1.8
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-14-about.png"]
@@ -15,6 +15,16 @@ screenshots: ["/screenshots/guide-14-about.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 0.1.8 — 消息分类与阅读链路强化
+
+核验日期：2026-07-25。
+
+- 通知面板扩展为全部、回复、点赞、Boost、关注、私信与其他七类，并以类型图标、消息卡片和未读状态提升信息辨识度。
+- 阅读队列允许移除当前或最后一篇文章，清理操作仅保留固定项，同时保持当前阅读页面不被强制关闭或切换。
+- 增强主题分类与标签图标的 SVG 安全内联、头像优先加载和本地字体访问异常处理。
+- 阅读器打开失败按错误类型自动退避重试，路由楼层、时间轴末端与新楼层同步进一步保持定位一致。
+- 回复提交、通知跳转与 Boost 目标刷新继续隔离宿主自主跳转，减少重复刷新和上下文丢失。
 
 ## 0.1.7 — 阅读器全层性能强化
 
