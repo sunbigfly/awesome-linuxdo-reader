@@ -2,11 +2,11 @@
 title: 楼中楼与上下文
 description: 理解父回复预览、楼中楼分页、正式楼层展开和已解决答案。
 feature_ids: ["READ-003", "READ-008", "READ-012"]
-source_anchors: ["SUB_REPLY_PAGE_SIZE", "loadReaderQuotedPost", "renderSolvedAnswerCard"]
+source_anchors: ["SUB_REPLY_PAGE_SIZE", "loadReaderQuotedPost", "focusLiveNestedReply", "renderSolvedAnswerCard"]
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-24
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-18-thread-context.png", "/screenshots/guide-20-community-actions.png"]
 ---
 
@@ -37,6 +37,8 @@ LINUX DO 的回复既有正式楼层号，也可能属于某个父楼层的直�
 - **展开二级回复对应楼层**：在主信息流正式楼层处完整显示该回复。
 
 至少保留一种展开方式。两种都打开时，同一内容可能在父楼层下和正式楼层处各出现一次，这是关系表达，不是重复数据。
+
+回复或编辑楼中楼内容成功后，阅读器会刷新权威楼层数据，并把焦点放回对应的父楼层讨论分支。这样可以立即核对更新结果，而不需要先回到原生主题再寻找楼层。
 
 ![展开后的楼中楼、关系线、回应和回复入口](/screenshots/guide-20-community-actions.png)
 

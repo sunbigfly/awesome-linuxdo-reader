@@ -6,7 +6,7 @@ source_anchors: ["ldp-native-reader-trigger", "ldp-reader-queue", "ldp-meta-owne
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-24
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-05-layout-settings.png"]
 ---
 
@@ -18,10 +18,10 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-0
 | --- | --- | --- |
 | 宿主页面 | LINUX DO 主题列表或原始主题环境 | 继续浏览列表、选择另一个主题 |
 | 标题栏 | 主题标题、楼主、分类、标签、统计和布局控制 | 返回首页、跳到 #1、切换形态、关闭 |
-| 阅读队列 | 文章头像、阅读进度、预加载状态和完整列表 | 切换、固定、重试、移除和清理 |
+| 阅读队列 | 始终可见的数量按钮、文章头像、阅读进度、预加载状态和完整列表 | 明确加入、切换、固定、重试、移除和清理 |
 | 阅读流 | 主楼层、楼中楼、媒体和主题尾部操作 | 滚动、回复、互动、展开上下文 |
 | 时间轴 | 当前楼层、日期、总楼层与跳转位置 | 拖动或点击定位、回到顶部 |
-| 工具面板 | 消息、历史、收藏与回应 | 检索、翻页、多选和回跳 |
+| 工具面板 | 七类消息、历史、收藏与回应 | 分类、检索、翻页、多选和回跳 |
 | 设置中心 | 13 个分类面板 | 个性化、性能调优、监控和数据管理 |
 
 ## 标题栏
@@ -34,7 +34,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-0
 
 ## 阅读队列
 
-阅读队列浮层显示当前队列数量、主题头像、实际阅读进度和后台预加载状态。桌面端可以拖动并贴边收纳；移动端使用紧凑按钮打开列表。完整说明见[阅读队列](/guide/reading-queue)。
+阅读队列按钮始终显示当前数量，空队列显示 `0`。普通打开主题不会自动入队；使用主题行加号明确加入后，浮层显示头像、实际阅读进度和后台预加载状态。桌面端可以拖动并贴边收纳；移动端使用紧凑按钮打开列表。完整说明见[阅读队列](/guide/reading-queue)。
 
 ## 设置中心
 

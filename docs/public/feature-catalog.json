@@ -93,12 +93,12 @@
     "feature_id": "CORE-006",
     "title": "多主题阅读队列",
     "category": "开始使用",
-    "description": "从列表页建立可跨刷新恢复的多主题队列，切换并恢复阅读位置，分层预加载正文、楼中楼和相关图片。",
+    "description": "从列表页明确加入可跨刷新恢复的多主题队列；空队列入口常驻，移除当前项不打断阅读，并分层预加载正文、楼中楼和图片。",
     "source_anchor": "LDP_READER_QUEUE_KEY",
     "since": "0.1.2",
     "version": "0.1.10",
     "status": "current",
-    "last_verified": "2026-07-24",
+    "last_verified": "2026-07-25",
     "screenshots": [
       "assets/screenshots/guide-21-reading-queue.png",
       "assets/screenshots/guide-24-reading-queue-entry.png"
@@ -151,12 +151,12 @@
     "feature_id": "READ-003",
     "title": "楼中楼分页",
     "category": "阅读与导航",
-    "description": "在父楼层下按需加载直属回复，并提供分页与展开策略。",
+    "description": "在父楼层下按需加载直属回复，提供分页与展开策略，并在回复或编辑后刷新和聚焦对应分支。",
     "source_anchor": "SUB_REPLY_PAGE_SIZE",
     "since": "0.1.2",
     "version": "0.1.10",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-25",
     "screenshots": [
       "assets/screenshots/guide-18-thread-context.png"
     ],
@@ -183,12 +183,12 @@
     "feature_id": "READ-005",
     "title": "主题时间轴",
     "category": "阅读与导航",
-    "description": "通过时间轴观察阅读位置、定位楼层并连续跳转。",
+    "description": "通过时间轴观察阅读位置、定位楼层并连续跳转；到达真实底部时把当前楼层校准到主题总楼层。",
     "source_anchor": "bindTopicTimeline",
     "since": "0.1.2",
     "version": "0.1.10",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-25",
     "screenshots": [
       "assets/screenshots/guide-16-history.png"
     ],
@@ -266,12 +266,12 @@
     "feature_id": "READ-010",
     "title": "主题在线状态与实时同步",
     "category": "阅读与导航",
-    "description": "同步主题活动、在线状态、新回复和回应变化。",
+    "description": "同步主题活动、在线状态、新回复和回应变化；仅在确认存在新楼层时执行近底部自动跟随。",
     "source_anchor": "bindReaderTopicPresence",
     "since": "0.1.2",
     "version": "0.1.10",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-25",
     "screenshots": [],
     "docs": [
       "guide/navigation.md"
@@ -281,12 +281,12 @@
     "feature_id": "READ-011",
     "title": "相邻主题导航",
     "category": "阅读与导航",
-    "description": "显示主题前后导航信息并保持阅读工作区。",
+    "description": "显示主题前后导航信息，安全内联分类与标签图标，并在同主题楼层路由变化时直接跳转。",
     "source_anchor": "renderTopicNavLinks",
     "since": "0.1.2",
     "version": "0.1.10",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-25",
     "screenshots": [],
     "docs": [
       "guide/navigation.md"
@@ -533,12 +533,12 @@
     "feature_id": "MEDIA-012",
     "title": "链接、Onebox 与提示块",
     "category": "内容与媒体",
-    "description": "保留帖子链接预览、内嵌 Onebox、SVG 和 Markdown 提示内容。",
+    "description": "保留帖子链接预览、内嵌 Onebox、SVG 和 Markdown 提示内容，并把 GitHub 仓库卡片整理为紧凑结构。",
     "source_anchor": "readerMediaHtml",
     "since": "0.1.2",
     "version": "0.1.10",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-25",
     "screenshots": [],
     "docs": [
       "guide/content-and-media.md"
@@ -564,12 +564,12 @@
     "feature_id": "ACTION-001",
     "title": "回复与编辑器",
     "category": "社区互动",
-    "description": "在阅读器内回复主题或楼层，并使用适配当前形态的编辑器窗口。",
+    "description": "在阅读器内回复主题或楼层，隔离宿主自主跳转，并在提交后刷新和聚焦对应内容。",
     "source_anchor": "ldp-replybtn",
     "since": "0.1.2",
     "version": "0.1.10",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-25",
     "screenshots": [
       "assets/screenshots/guide-20-community-actions.png"
     ],
@@ -741,12 +741,12 @@
     "feature_id": "ACTION-011",
     "title": "编辑与删除楼层",
     "category": "社区互动",
-    "description": "按原站权限编辑或删除自己的楼层。",
+    "description": "按原站权限编辑或删除自己的楼层；编辑成功后就地刷新楼层并恢复楼中楼焦点。",
     "source_anchor": "name: 'edit'",
     "since": "0.1.2",
     "version": "0.1.10",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-25",
     "screenshots": [
       "assets/screenshots/guide-20-community-actions.png"
     ],
@@ -792,12 +792,12 @@
     "feature_id": "COLLECT-001",
     "title": "消息分类",
     "category": "消息与收藏",
-    "description": "按全部、回复、点赞和私信查看通知。",
+    "description": "按全部、回复、点赞、Boost、关注、私信和其他七类查看通知，并显示类型图标、相对时间及已读状态。",
     "source_anchor": "NOTIFICATION_GROUPS",
     "since": "0.1.2",
     "version": "0.1.10",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-25",
     "screenshots": [
       "assets/screenshots/guide-15-notifications-replies.png"
     ],
@@ -809,12 +809,12 @@
     "feature_id": "COLLECT-002",
     "title": "消息检索、翻页与全部已读",
     "category": "消息与收藏",
-    "description": "检索已加载消息、翻页并将通知标记为全部已读。",
+    "description": "检索已加载消息、翻页、按当前类别标记已读，并精确跳转目标楼层或刷新 Boost 上下文。",
     "source_anchor": "ldp-notification-mark-all",
     "since": "0.1.2",
     "version": "0.1.10",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-25",
     "screenshots": [
       "assets/screenshots/guide-15-notifications-replies.png"
     ],
@@ -1076,12 +1076,12 @@
     "feature_id": "SET-006",
     "title": "分作用域字体配置",
     "category": "个性化设置",
-    "description": "分别设置界面、正文和回复的字体、字重、颜色与字号，并支持自定义本机字体。",
+    "description": "分别设置界面、正文和回复的字体、字重、颜色与字号，通过宿主能力读取本机字体并显示授权或错误状态。",
     "source_anchor": "FONT_SCOPE_CONFIG",
     "since": "0.1.2",
     "version": "0.1.10",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-25",
     "screenshots": [
       "assets/screenshots/guide-04-font-settings.png"
     ],
@@ -1130,12 +1130,12 @@
     "feature_id": "SET-009",
     "title": "外观颜色与结构线",
     "category": "个性化设置",
-    "description": "设置强调色、链接、斑马纹、回复线、引用线、分隔线和楼层预览。",
+    "description": "设置强调色、链接、斑马纹、回复线、引用线、分隔线和楼层预览，并提供 0.1.8 明亮主题默认配色。",
     "source_anchor": "APPEARANCE_PROFILE_SETTING_KEYS",
     "since": "0.1.2",
     "version": "0.1.10",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-25",
     "screenshots": [
       "assets/screenshots/guide-07-appearance-settings.png"
     ],
@@ -1588,6 +1588,23 @@
     "docs": [
       "manage/troubleshooting.md",
       "manage/privacy-and-permissions.md"
+    ]
+  },
+  {
+    "feature_id": "TROUBLE-006",
+    "title": "主题打开自动恢复",
+    "category": "故障排查",
+    "description": "主题打开遇到短暂网络、超时、服务器或定位异常时自动退避重试，并与 429 冷却和手动重试分流。",
+    "source_anchor": "readerOpenFailureCanAutoRetry",
+    "since": "0.1.8",
+    "version": "0.1.10",
+    "status": "current",
+    "last_verified": "2026-07-25",
+    "screenshots": [
+      "assets/screenshots/guide-11-request-flow.png"
+    ],
+    "docs": [
+      "manage/troubleshooting.md"
     ]
   },
   {

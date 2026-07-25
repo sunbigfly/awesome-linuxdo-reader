@@ -6,7 +6,7 @@ source_anchors: ["READER_THEME_MODES", "APPEARANCE_PROFILE_SETTING_KEYS"]
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-07-appearance-settings.png"]
 ---
 
@@ -40,6 +40,17 @@ screenshots: ["/screenshots/guide-07-appearance-settings.png"]
 | 楼层预览 | 颜色、高度 | 父回复和目标楼层预览 |
 
 线宽允许约 0.5–4 px；楼层预览高度允许 180–720 px。
+
+0.1.8 的明亮主题默认值为：
+
+| 项目 | 默认颜色 |
+| --- | --- |
+| 帖子斑马纹 | `#f7f7f7` |
+| 宿主列表斑马纹 | `#f7f7f7` |
+| 回复关系线 | `#6dab85` |
+| 楼层预览 | `#dba7a7` |
+
+已保存过自定义外观的浏览器继续使用原配置；恢复对应项目默认值后才会采用上述值。
 
 ## 调整步骤
 

@@ -6,7 +6,7 @@ source_anchors: ["PERFORMANCE_SETTING_GROUPS", "streamOverscanViewports", "neste
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-24
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide-03-image-settings.png", "/screenshots/guide-04-font-settings.png", "/screenshots/guide-05-layout-settings.png", "/screenshots/guide-07-appearance-settings.png", "/screenshots/guide-09-performance-settings.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-13-data-management.png"]
 ---
 
@@ -51,6 +51,8 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 ## 外观
 
 强调色、链接色、帖子/列表斑马纹、圆角、结构颜色、回复线、引用线、分隔线、楼层预览均按明/暗主题和阅读形态保存。线宽允许 0.5–4 px；楼层预览高度 180–720 px。
+
+明亮主题中，帖子斑马纹和宿主列表斑马纹默认均为 `#f7f7f7`，回复关系线默认为 `#6dab85`，楼层预览默认为 `#dba7a7`。已有自定义配置不会被版本更新强制覆盖。
 
 ## 闪烁动效
 

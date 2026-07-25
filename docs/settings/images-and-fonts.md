@@ -2,11 +2,11 @@
 title: 图片与字体
 description: 配置帖子图片比例、灯箱默认行为、字体渲染、宿主尺寸和分作用域字体。
 feature_ids: ["MEDIA-001", "MEDIA-003", "MEDIA-005", "SET-002", "SET-003", "SET-004", "SET-005", "SET-006"]
-source_anchors: ["IMAGE_SCALE_OPTIONS", "lightboxOriginalByDefault", "lightboxDescriptionHeight", "currentImageProfile", "image-lightbox", "font-rendering", "HOST_EMBED_SIZE_SETTINGS", "FONT_SCOPE_CONFIG"]
+source_anchors: ["IMAGE_SCALE_OPTIONS", "lightboxOriginalByDefault", "lightboxDescriptionHeight", "currentImageProfile", "image-lightbox", "font-rendering", "HOST_EMBED_SIZE_SETTINGS", "FONT_SCOPE_CONFIG", "queryLocalFonts"]
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-04-font-settings.png", "/screenshots/guide-19-image-lightbox.png"]
 ---
 
@@ -71,7 +71,7 @@ screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-04
 - 颜色：跟随主题或自定义；
 - 字号：50%–250%。
 
-回复字号默认比界面和正文更紧凑。自定义字体只引用本机已安装字体，不会上传字体文件。
+回复字号默认比界面和正文更紧凑。打开字体菜单时，阅读器会通过 LINUX DO 宿主页面能力查询本机字体；浏览器不支持、拒绝授权或查询失败时会显示对应状态。自定义字体只引用本机已安装字体，不会上传字体文件。
 
 ## 跨形态共享
 

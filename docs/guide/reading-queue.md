@@ -2,11 +2,11 @@
 title: 阅读队列
 description: 从主题列表建立多主题阅读队列，管理后台预加载、阅读进度、固定、清理、位置恢复与异常重试。
 feature_ids: ["CORE-006"]
-source_anchors: ["LDP_READER_QUEUE_KEY", "ensureReaderQueueEntry", "readerQueueStatusText", "bindReaderQueueSurface", "prefetchReaderQueueEntry", "createReaderQueueViewportTracker", "autoDequeueReaderQueueEntry"]
+source_anchors: ["LDP_READER_QUEUE_KEY", "ensureReaderQueueEntry", "readerQueueStatusText", "bindReaderQueueSurface", "prefetchReaderQueueEntry", "createReaderQueueViewportTracker", "autoDequeueReaderQueueEntry", "clearReaderQueueEntries"]
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-24
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-reading-queue-entry.png", "/screenshots/guide-13-data-management.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-16-history.png"]
 ---
 
@@ -30,7 +30,7 @@ screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-
 
 触控设备会直接显示该按钮，不需要先悬停。
 
-直接点击主题标题打开阅读器时，当前主题也会进入队列。加号按钮适合在不离开当前主题的情况下，先连续挑选几篇准备阅读的文章。
+直接点击主题标题只会打开阅读器，不会自动加入队列。需要跨主题准备、预加载或稍后切换时，再点击加号明确加入；这样普通阅读不会悄悄改变队列。
 
 ![主题列表中的加号入口、已加入状态和阅读器队列](/screenshots/guide-24-reading-queue-entry.png)
 
@@ -38,7 +38,7 @@ screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-
 
 ## 认识队列浮层
 
-队列至少包含一篇文章时，阅读工作区中会出现队列浮层。
+队列浮层在阅读工作区中始终可见。队列为空时按钮显示 `0`，展开后显示空列表；加入第一篇文章后，头像预览、进度和管理操作才会出现。
 
 | 区域 | 显示内容 | 操作 |
 | --- | --- | --- |
@@ -47,7 +47,7 @@ screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-
 | 更多提示 | 头像超过可见区域时出现 | 向下浏览更多头像；到底后可返回顶部 |
 | 完整列表 | 标题、阅读进度、预加载明细和管理按钮 | 切换、固定、取消固定、重试或移除 |
 
-当前主题带有选中状态。进度环表示实际阅读进度；头像右下角的状态点表示后台预加载状态，两者不是同一个指标。
+只有当前打开的主题仍在队列中时，它才带有选中状态。进度环表示实际阅读进度；头像右下角的状态点表示后台预加载状态，两者不是同一个指标。
 
 ## 移动、贴边与收纳
 
@@ -115,11 +115,12 @@ screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-
 单篇移除遵循以下规则：
 
 - 移除非当前主题会同时取消尚未完成的后台预加载；
-- 移除当前主题时，如果队列还有其他文章，阅读器切换到相邻队列项；
-- 当前文章是队列中最后一篇时，不能从浮层中单独移除；
+- 当前主题和队列中的最后一篇文章都可以移除；
+- 移除当前主题只改变队列成员，不会关闭阅读器，也不会强制切换到相邻文章；
+- 当前主题移出后仍可继续阅读，只是不再显示为队列当前项，也不再参加队列切换；
 - 移出队列不会删除正文、头像或图片缓存。
 
-点击队列面板顶部的清理按钮会打开确认框。确认后只移除其他未固定文章，当前文章和所有固定文章继续保留。
+点击队列面板顶部的清理按钮会打开确认框。确认后移除全部未固定文章，只保留固定项；即使当前正在阅读的主题被移出，阅读页面也会保持打开。
 
 ## 刷新、关闭与本地数据
 

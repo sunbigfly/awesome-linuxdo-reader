@@ -2,11 +2,11 @@
 title: 字体设置
 description: 配置内置字体渲染、宿主主题列表尺寸，以及界面、正文和回复的字体外观。
 feature_ids: ["SET-004", "SET-005", "SET-006"]
-source_anchors: ["font-rendering", "HOST_EMBED_SIZE_SETTINGS", "FONT_SCOPE_CONFIG"]
+source_anchors: ["font-rendering", "HOST_EMBED_SIZE_SETTINGS", "FONT_SCOPE_CONFIG", "queryLocalFonts"]
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-04-font-settings.png"]
 ---
 
@@ -56,6 +56,8 @@ screenshots: ["/screenshots/guide-04-font-settings.png"]
 - 衬线；
 - 等宽；
 - 自定义本机字体。
+
+打开字体选择器时，阅读器会优先通过当前 LINUX DO 宿主页面提供的本地字体能力读取可用字体名称。浏览器可能要求授权；不支持、拒绝授权或读取失败时，菜单会显示相应状态，仍可使用预设字体或手动填写字体名称。
 
 自定义字体只引用本机已安装的字体名称，不会上传字体文件，也不会让其他设备自动获得该字体。
 

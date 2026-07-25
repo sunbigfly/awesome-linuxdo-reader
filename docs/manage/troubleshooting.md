@@ -1,12 +1,12 @@
 ---
 title: 故障排查
 description: 按安装、打开、跳楼、图片、429、配置和缓存分类排查常见问题。
-feature_ids: ["CORE-005", "MEDIA-013", "DATA-003", "MONITOR-003", "MONITOR-004", "TROUBLE-001", "TROUBLE-002", "TROUBLE-003", "TROUBLE-004", "TROUBLE-005"]
-source_anchors: ["bypassReaderForThisTab", "showReaderImageRetry", "clearCurrentTopicCaches", "READER_ENDPOINT_429_BASE_BLOCK_MS", "LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY", "@match", "unavailablePostNumbers", "LIGHTBOX_IMAGE_RESOURCE_REQUESTS", "replacePrefsAndReload", "@supportURL"]
+feature_ids: ["CORE-005", "MEDIA-013", "DATA-003", "MONITOR-003", "MONITOR-004", "TROUBLE-001", "TROUBLE-002", "TROUBLE-003", "TROUBLE-004", "TROUBLE-005", "TROUBLE-006"]
+source_anchors: ["bypassReaderForThisTab", "showReaderImageRetry", "clearCurrentTopicCaches", "readerOpenFailureCanAutoRetry", "readerOpenAutoRetryDelay", "READER_ENDPOINT_429_BASE_BLOCK_MS", "LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY", "@match", "unavailablePostNumbers", "LIGHTBOX_IMAGE_RESOURCE_REQUESTS", "replacePrefsAndReload", "@supportURL"]
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-13-data-management.png"]
 ---
 
@@ -18,6 +18,7 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11
 | --- | --- |
 | 没有阅读器入口 | 脚本启用、站点匹配、刷新、重复脚本 |
 | 主题打不开 | 原生页面是否可打开、请求数据、当前主题缓存 |
+| 打开过程中显示自动恢复 | 等待当前倒计时；反复失败时查看请求数据 |
 | 跳不到楼层 | 过滤状态、目标是否删除、虚拟窗口是否仍在补齐 |
 | 图片打不开 | 预览是否存在、原图源、来源楼层、资源缓存 |
 | 持续 429 | 请求数据、端点冷却、性能预设、Cloudflare |
@@ -42,6 +43,20 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11
 目标楼层 404/410 时，阅读器把它记为当前会话不可用，避免反复请求。只看楼主或其他筛选可能隐藏目标；消息跳转会尝试解除不兼容过滤。
 
 若仅一个主题异常，使用“数据管理”清理当前主题缓存，而不是清空全部历史。
+
+## 打开中断与自动恢复
+
+主题信息、目标楼层或初始定位遇到短暂网络中断、超时、`408`、`425`、服务器 `5xx` 或可恢复的布局定位失败时，阅读器会保留外壳并自动重试。加载区会显示“载入暂时中断，正在自动重试”、恢复次数和倒计时。
+
+自动恢复的等待基线依次为约 0.5、1.2、2.5、5 和 8 秒，后续仍以 8 秒为上限；如果服务器提供更晚的允许时间，则以该时间为准。关闭阅读器会取消当前等待。
+
+以下情况不会走这条自动恢复链：
+
+- `429`：继续由请求调度和端点冷却处理，避免自动重试绕过退避；
+- 大多数不可恢复的 `4xx`：直接显示失败信息和“重新加载”；
+- 登录、权限、主题删除或 Cloudflare 验证：需要先处理对应原因。
+
+自动恢复持续出现时，不要同时重复点击刷新。先打开“设置 → 请求数据”查看请求类型、状态和冷却原因；最终失败后再使用错误页的“重新加载”手动重试。
 
 ## 图片和媒体
 

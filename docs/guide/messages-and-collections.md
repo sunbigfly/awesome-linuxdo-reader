@@ -2,11 +2,11 @@
 title: 消息、历史与收藏
 description: 使用消息分类、检索、分页、历史管理以及收藏与回应中心。
 feature_ids: ["ACTION-004", "ACTION-007", "COLLECT-001", "COLLECT-002", "COLLECT-003", "COLLECT-004", "COLLECT-005", "COLLECT-006"]
-source_anchors: ["toggleReaderPostReaction", "toggleReaderBookmark", "NOTIFICATION_GROUPS", "ldp-notification-mark-all", "renderHistoryPage", "ldp-history-clear", "BOOKMARK_TAB_LABELS", "ldp-bookmarks-multi"]
+source_anchors: ["toggleReaderPostReaction", "toggleReaderBookmark", "NOTIFICATION_GROUPS", "notificationTypeIconName", "ldp-notification-mark-all", "renderHistoryPage", "ldp-history-clear", "BOOKMARK_TAB_LABELS", "ldp-bookmarks-multi"]
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-24
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-15-notifications-replies.png", "/screenshots/guide-16-history.png", "/screenshots/guide-17-bookmarks-reactions.png"]
 ---
 
@@ -16,20 +16,27 @@ screenshots: ["/screenshots/guide-15-notifications-replies.png", "/screenshots/g
 
 ## 消息
 
-消息面板分为：
+消息面板分为七类：
 
-- **全部**；
-- **回复**：提及、回复、引用、发帖和组提及；
-- **点赞**：点赞、合并点赞和回应；
-- **私信**：私信、私信邀请和群组消息摘要。
+| 分类 | 包含的常见通知 |
+| --- | --- |
+| 全部 | 当前账号可见的所有通知 |
+| 回复 | 提及、回复、引用、发帖和组提及 |
+| 点赞 | 点赞、合并点赞和回应 |
+| Boost | Boost 通知 |
+| 关注 | 关注关系、关注对象发帖或回复、首帖关注以及分类/标签关注 |
+| 私信 | 私信、私信邀请、群组摘要，以及聊天提及、消息、邀请、引用和关注会话 |
+| 其他 | 编辑、移动、链接、徽章、提醒、审核、指定和其他系统通知 |
 
 ![消息中心回复分类中的真实通知和目标回跳](/screenshots/guide-15-notifications-replies.png)
 
 <p class="image-caption">从标题栏打开消息中心，先选择消息类别，再点击具体通知；阅读器会进入对应主题并定位到目标楼层。</p>
 
-每页最多 24 条。检索只筛选已经加载或缓存的消息；没有匹配不等于服务器上不存在。点击消息时，阅读器会打开目标主题、等待楼层挂载并定位。
+分类标签和每条消息都使用可访问的 Lucide 图标。消息卡片同时显示摘要、相对时间以及明确的“已读/未读”状态。
 
-“全部已读”会调用原站通知能力，影响账号状态；单纯清理消息缓存不会把通知标记为已读。
+每页最多 24 条。检索只筛选已经加载或缓存的消息；没有匹配不等于服务器上不存在。点击消息时，阅读器会打开目标主题、等待楼层挂载并定位。同一主题内的新目标楼层会在现有阅读器中直接跳转；Boost 通知会强制刷新目标附近数据，避免继续显示旧缓存。
+
+“全部已读”会调用原站通知能力，影响账号状态。在具体分类中执行时只处理该分类支持的通知类型；单纯清理消息缓存不会把通知标记为已读。
 
 ## 浏览历史
 

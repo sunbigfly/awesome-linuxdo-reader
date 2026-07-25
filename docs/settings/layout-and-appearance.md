@@ -6,7 +6,7 @@ source_anchors: ["READER_THEME_MODES", "LAYOUT_REGION_KEYS", "readerWindowGeomet
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-05-layout-settings.png", "/screenshots/guide-06-window-settings.png", "/screenshots/guide-07-appearance-settings.png"]
 ---
 
@@ -73,6 +73,8 @@ screenshots: ["/screenshots/guide-05-layout-settings.png", "/screenshots/guide-0
 - 楼层预览颜色和高度。
 
 颜色为明亮与暗色主题分别保存，避免同一颜色在另一主题中失去对比度。每项都可以单独开启共享。
+
+0.1.8 明亮主题的帖子/列表斑马纹默认值为 `#f7f7f7`，回复关系线为 `#6dab85`，楼层预览为 `#dba7a7`。已有自定义值继续保留。
 
 ## 推荐调整顺序
 

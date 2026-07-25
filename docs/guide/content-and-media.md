@@ -2,11 +2,11 @@
 title: 图片、媒体与富内容
 description: 使用原图灯箱、图片评论、下载、音视频、公式、投票和代码预览。
 feature_ids: ["READ-012", "MEDIA-001", "MEDIA-002", "MEDIA-003", "MEDIA-004", "MEDIA-005", "MEDIA-006", "MEDIA-007", "MEDIA-008", "MEDIA-009", "MEDIA-010", "MEDIA-011", "MEDIA-012", "MEDIA-013"]
-source_anchors: ["renderSolvedAnswerCard", "IMAGE_SCALE_OPTIONS", "openLightbox", "lightboxOriginalByDefault", "loadLightboxCommentTree", "lightboxDescriptionHeight", "batch-download", "openUserAvatarViewer", "bindReaderHls", "KATEX_VERSION", "renderReaderPoll", "data-reader-code-action", "readerMediaHtml", "showReaderImageRetry"]
+source_anchors: ["renderSolvedAnswerCard", "IMAGE_SCALE_OPTIONS", "openLightbox", "lightboxOriginalByDefault", "loadLightboxCommentTree", "lightboxDescriptionHeight", "batch-download", "openUserAvatarViewer", "bindReaderHls", "KATEX_VERSION", "renderReaderPoll", "data-reader-code-action", "readerMediaHtml", "prepareReaderOneboxes", "showReaderImageRetry"]
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-24
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-25-user-card.png"]
 ---
 
@@ -80,3 +80,5 @@ screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19
 ## Onebox 与特殊内容
 
 主题链接卡片、内联 Onebox、SVG、Markdown 提示块、已解决答案和部分系统事件沿用阅读器统一内容样式。第三方 iframe 或嵌入内容仍受浏览器 CSP、跨域和原站策略约束。
+
+GitHub 仓库 Onebox 会整理为更紧凑的阅读结构：仓库缩略图移动到来源行，标题和说明保持单行节奏，并移除重复缩略图。点击卡片中的链接仍会打开原始 GitHub 页面，阅读器不会复制或改写仓库内容。

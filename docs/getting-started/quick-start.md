@@ -6,7 +6,7 @@ source_anchors: ["ldp-native-reader-trigger", "INITIAL_TOPIC_ID", "ensureReaderQ
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-24
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-01-reader-overview.png"]
 ---
 
@@ -22,7 +22,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png"]
 
 也可以用页面顶部的阅读器入口恢复最近一次阅读的主题。
 
-如果想连续阅读多篇文章，点击主题行中的加号可先把文章加入阅读队列并后台预加载。进入阅读器后，使用队列浮层在文章之间切换；详细操作见[阅读队列](/guide/reading-queue)。
+普通打开不会自动加入阅读队列。如果想连续阅读多篇文章，点击主题行中的加号明确加入并后台预加载；进入阅读器后，使用始终可见的队列按钮在文章之间切换。详细操作见[阅读队列](/guide/reading-queue)。
 
 ## 2. 阅读与定位
 
@@ -49,7 +49,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png"]
 
 阅读器标题栏提供：
 
-- **消息**：回复、点赞和私信通知；
+- **消息**：按全部、回复、点赞、Boost、关注、私信和其他七类查看通知；
 - **历史**：最近阅读主题、位置和时间；
 - **收藏与回应**：回应、主题书签和楼层书签；
 - **设置**：图片、字体、布局、性能、监控、数据管理等。

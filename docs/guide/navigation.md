@@ -2,11 +2,11 @@
 title: 楼层、时间轴与历史
 description: 使用时间轴、只看楼主、历史前后切换、多主题队列和实时阅读进度。
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014"]
-source_anchors: ["LDP_READER_QUEUE_KEY", "ldp-only-op-toggle", "bindTopicTimeline", "createReaderHistoryNavigation", "historyEdgeTriggerPercent", "READ_THRESHOLD", "bindReaderTopicPresence", "renderTopicNavLinks", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
+source_anchors: ["LDP_READER_QUEUE_KEY", "ldp-only-op-toggle", "bindTopicTimeline", "createReaderHistoryNavigation", "historyEdgeTriggerPercent", "READ_THRESHOLD", "bindReaderTopicPresence", "renderTopicNavLinks", "inlineTopicNavSvgUses", "LAST_READER_TOPIC_ROUTE_KEY", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-24
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-16-history.png", "/screenshots/guide-21-reading-queue.png"]
 ---
 
@@ -19,6 +19,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-1
 - 点击或拖动轨道可连续选择目标；
 - 目标楼层未加载时，阅读器先补齐数据和虚拟窗口；
 - 跳转完成后目标楼层按设置闪烁；
+- 滚动到已经加载内容的真实底部时，当前楼层会校准为主题总楼层；
 - 底部回顶按钮返回当前主题顶部，而不是宿主页面顶部。
 
 大量楼层快速跳转需要经过“获取数据 → 挂载目标 → 定位”的顺序。不要在第一次等待时连续重复点击，否则会产生互相覆盖的目标。
@@ -58,13 +59,15 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-1
 
 阅读器在楼层进入有效阅读区域并达到阈值后更新已读状态，同时保存本地位置。滚动经过但未实际阅读的远处占位，不会简单地按最大楼层号全部标记。
 
-新回复到达时，主题活动与阅读器状态会同步；消息跳转会等待目标进入虚拟窗口后再定位。
+新回复到达时，主题活动与阅读器状态会同步；只有确认存在新楼层时，接近底部的阅读器才自动跟随，单纯刷新元数据不会改变滚动位置。消息跳转会等待目标进入虚拟窗口后再定位。
 
 ## 相邻主题和队列
 
-- 主题导航用于沿 LINUX DO 提供的前后主题关系移动。
+- 主题导航用于沿 LINUX DO 提供的前后主题关系移动；分类和标签 SVG 图标会先安全内联，无法解析或不安全的图标会被丢弃，不影响文字链接。
 - [阅读队列](/guide/reading-queue)用于准备接下来要读的多个主题，并在当前浏览器中跨刷新恢复。
 - 浏览历史用于跨会话恢复已读主题和位置。
+
+当地址栏在同一主题内从一个楼层路由变到另一个楼层路由时，已经打开的阅读器会直接跳到新楼层，不会重新创建整个阅读工作区。
 
 ![阅读队列中的当前主题、预加载状态和阅读进度](/screenshots/guide-21-reading-queue.png)
 

@@ -4,14 +4,22 @@
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
 // @version      0.1.10
 // @license      MIT
-// @description  面向 LINUX DO 的沉浸式增强阅读器，支持父回复预览、消息/历史/收藏、原图灯箱、主题布局、请求限流、缓存与 DOM 渲染管理。
-// @description:en An immersive LINUX DO reader with threaded context, community panels, image lightbox, layouts, request control, cache, and DOM rendering management.
+// @description  面向 LINUX DO 与知名 Discourse 社区的沉浸式增强阅读器，支持父回复预览、消息/历史/收藏、原图灯箱、主题布局、请求限流、缓存与 DOM 渲染管理。
+// @description:en An immersive reader for LINUX DO and selected Discourse communities with threaded context, community panels, image lightbox, layouts, request control, cache, and DOM rendering management.
 // @author       sunbigfly
 // @homepageURL  https://github.com/sunbigfly/awesome-linuxdo-reader
 // @supportURL   https://github.com/sunbigfly/awesome-linuxdo-reader/issues
 // @downloadURL  https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js
 // @updateURL    https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.meta.js
 // @match        https://linux.do/*
+// @match        https://community.openai.com/*
+// @match        https://meta.discourse.org/*
+// @match        https://discuss.python.org/*
+// @match        https://forums.swift.org/*
+// @match        https://discourse.julialang.org/*
+// @match        https://community.home-assistant.io/*
+// @match        https://forum.arduino.cc/*
+// @match        https://users.rust-lang.org/*
 // @icon         https://cdn3.ldstatic.com/optimized/4X/6/a/6/6a6affc7b1ce8140279e959d32671304db06d5ab_2_512x512.png
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getResourceText
@@ -32,6 +40,72 @@
 	const makeElement = (tagName) => document.createElement(tagName);
 	const READER_VERSION = '0.1.10';
 	const HOST_PAGE_WINDOW = globalThis.unsafeWindow;
+	const GENERIC_DISCOURSE_SITE_ADAPTER = Object.freeze({
+		id: 'discourse',
+		name: location.hostname,
+		capabilities: Object.freeze({ connect: false }),
+	});
+	// New hosts still require an explicit userscript @match (or a user-managed match);
+	// this table only carries site-specific overrides after the Discourse runtime gate passes.
+	const DISCOURSE_SITE_ADAPTERS = Object.freeze({
+		'linux.do': Object.freeze({
+			id: 'linux-do',
+			name: 'LINUX DO',
+			capabilities: Object.freeze({
+				boosts: true,
+				reactions: true,
+				postVoting: true,
+				topicVoting: true,
+				connect: true,
+				categoryExperts: true,
+				follows: true,
+				sharedIssue: true,
+			}),
+		}),
+		'community.openai.com': Object.freeze({
+			id: 'openai-community',
+			name: 'OpenAI Community',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'meta.discourse.org': Object.freeze({
+			id: 'discourse-meta',
+			name: 'Discourse Meta',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'discuss.python.org': Object.freeze({
+			id: 'python-discussions',
+			name: 'Python Discussions',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'forums.swift.org': Object.freeze({
+			id: 'swift-forums',
+			name: 'Swift Forums',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'discourse.julialang.org': Object.freeze({
+			id: 'julia-discourse',
+			name: 'Julia Discourse',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'community.home-assistant.io': Object.freeze({
+			id: 'home-assistant-community',
+			name: 'Home Assistant Community',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'forum.arduino.cc': Object.freeze({
+			id: 'arduino-forum',
+			name: 'Arduino Forum',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'users.rust-lang.org': Object.freeze({
+			id: 'rust-users',
+			name: 'Rust Users Forum',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+	});
+	const SITE_ADAPTER = DISCOURSE_SITE_ADAPTERS[location.hostname.toLowerCase()] ||
+		GENERIC_DISCOURSE_SITE_ADAPTER;
+	const SITE_DISPLAY_NAME = SITE_ADAPTER.name || location.hostname;
 	const TOPIC_CACHE_TTL = 90 * 1000;
 	const READ_THRESHOLD = 1500;
 	const FLUSH_INTERVAL = 5000;
@@ -60,7 +134,108 @@
 		{ key: 'count', pref: 'jumpHighlightCount', label: '次数', ariaLabel: '闪烁次数', format: (value) => `${value} 次`,
 			help: `控制一次跳转连续闪烁多少次，可在 ${JUMP_HIGHLIGHT_LIMITS.count.min}–${JUMP_HIGHLIGHT_LIMITS.count.max} 次之间调整。拖动时实时预览，确认后保存。` },
 	]);
-	const LINUXDO_LOGO_URL = 'https://cdn3.ldstatic.com/optimized/4X/6/a/6/6a6affc7b1ce8140279e959d32671304db06d5ab_2_512x512.png';
+	const SITE_LOGO_FALLBACK_URL = `${BASE}/favicon.ico`;
+	const SITE_LOGO_PLACEHOLDER_URL = `data:image/svg+xml,${encodeURIComponent(
+		'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#e9eef3"/><path d="M18 33a14 14 0 1 1 28 0v13H18V33Z" fill="#748392"/><circle cx="27" cy="31" r="3" fill="#fff"/><circle cx="37" cy="31" r="3" fill="#fff"/></svg>'
+	)}`;
+	let SITE_LOGO_URL = SITE_LOGO_FALLBACK_URL;
+	let SITE_LOGO_CANDIDATES = [SITE_LOGO_FALLBACK_URL, SITE_LOGO_PLACEHOLDER_URL];
+
+	function normalizeSiteLogoUrl(value) {
+		const source = String(value || '').trim();
+		if (!source) return '';
+		if (/^data:image\//i.test(source)) return source;
+		try {
+			const url = new URL(source, BASE);
+			return /^https?:$/i.test(url.protocol) ? url.href : '';
+		} catch (error) {
+			return '';
+		}
+	}
+
+	function syncSiteLogoImages() {
+		const candidates = SITE_LOGO_CANDIDATES.slice();
+		readerPortalQueryAll('[data-ldp-site-logo]').forEach((image) => {
+			image._ldpSiteLogoCandidates = candidates;
+			image._ldpSiteLogoIndex = 0;
+			image.onerror = () => {
+				const nextIndex = Number(image._ldpSiteLogoIndex || 0) + 1;
+				image._ldpSiteLogoIndex = nextIndex;
+				const next = image._ldpSiteLogoCandidates?.[nextIndex];
+				if (next) {
+					image.src = next;
+				} else {
+					image.onerror = null;
+				}
+			};
+			if (image.src !== SITE_LOGO_URL) {
+				image.src = SITE_LOGO_URL;
+			} else if (image.complete && image.naturalWidth === 0) {
+				image.onerror();
+			}
+		});
+	}
+
+	function applySiteLogoCandidates(values) {
+		const candidates = [...new Set((values || []).map(normalizeSiteLogoUrl).filter(Boolean))];
+		if (!candidates.length) return;
+		SITE_LOGO_CANDIDATES = [
+			...candidates,
+			...SITE_LOGO_CANDIDATES.filter((candidate) => !candidates.includes(candidate)),
+		];
+		SITE_LOGO_URL = SITE_LOGO_CANDIDATES[0];
+		syncSiteLogoImages();
+	}
+
+	function siteLogoCandidatesFromHost() {
+		const siteSettings = lookupDiscourse('service:site-settings');
+		const hostLogo = document.querySelector(
+			'.d-header #site-logo,.d-header img.logo-big,.d-header img.logo-small,.custom-logo-link img'
+		);
+		const touchIcon = document.querySelector('link[rel~="apple-touch-icon"]');
+		const pageIcon = document.querySelector('link[rel~="icon"]');
+		return [
+			siteSettings?.large_icon,
+			siteSettings?.apple_touch_icon,
+			siteSettings?.favicon,
+			siteSettings?.logo_small,
+			siteSettings?.mobile_logo,
+			siteSettings?.logo,
+			hostLogo?.currentSrc || hostLogo?.src,
+			touchIcon?.href,
+			pageIcon?.href,
+		];
+	}
+
+	async function resolveSiteLogo() {
+		applySiteLogoCandidates(siteLogoCandidatesFromHost());
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), 5000);
+		try {
+			const response = await fetch(`${BASE}/site/basic-info.json`, {
+				credentials: 'same-origin',
+				headers: { Accept: 'application/json' },
+				cache: 'force-cache',
+				signal: controller.signal,
+			});
+			if (!response.ok) return;
+			const info = await response.json();
+			applySiteLogoCandidates([
+				info.large_icon_url,
+				info.apple_touch_icon_url,
+				info.favicon_url,
+				info.logo_small_url,
+				info.mobile_logo_url,
+				info.logo_url,
+			]);
+		} catch (error) {
+			if (error?.name !== 'AbortError') {
+				console.warn('[LDP] site logo discovery failed', error);
+			}
+		} finally {
+			clearTimeout(timer);
+		}
+	}
 	const READER_MANUAL_URL = 'https://sunbigfly.github.io/awesome-linuxdo-reader/';
 	const EXTERNAL_FONT_RENDERING_MARKER = 'fr-init-once';
 	const FONT_RENDERING_PROJECT_URL = 'https://github.com/F9y4ng/GreasyFork-Scripts/';
@@ -76,11 +251,13 @@
 			macSmoothing: /Mac/.test(navigator.platform || ''),
 		});
 	})();
-	PAGE_ROOT.style.setProperty('--ldp-font-rendering-stroke-runtime', `${READER_FONT_RENDERING_DEFAULTS.stroke}px currentcolor`);
-	PAGE_ROOT.style.setProperty('--ldp-font-rendering-shadow-runtime', `0 0 ${READER_FONT_RENDERING_DEFAULTS.shadow}px #7c7c7cdd`);
-	if (READER_FONT_RENDERING_DEFAULTS.macSmoothing) {
-		PAGE_ROOT.style.setProperty('--ldp-font-webkit-smoothing', 'antialiased');
-		PAGE_ROOT.style.setProperty('--ldp-font-moz-smoothing', 'grayscale');
+	function applyReaderFontRenderingRuntimeProperties() {
+		PAGE_ROOT.style.setProperty('--ldp-font-rendering-stroke-runtime', `${READER_FONT_RENDERING_DEFAULTS.stroke}px currentcolor`);
+		PAGE_ROOT.style.setProperty('--ldp-font-rendering-shadow-runtime', `0 0 ${READER_FONT_RENDERING_DEFAULTS.shadow}px #7c7c7cdd`);
+		if (READER_FONT_RENDERING_DEFAULTS.macSmoothing) {
+			PAGE_ROOT.style.setProperty('--ldp-font-webkit-smoothing', 'antialiased');
+			PAGE_ROOT.style.setProperty('--ldp-font-moz-smoothing', 'grayscale');
+		}
 	}
 	const LDP_PREF_KEY = 'linuxdo-enhanced-reader:prefs';
 	const LDP_CONFIG_EXPORT_FORMAT = 'awesome-linuxdo-reader-settings';
@@ -5999,7 +6176,7 @@
 		{ key: 'zebraRadius', section: 'zebra', label: '圆角', ariaLabel: '楼层斑马线圆角', range: [ZEBRA_RADIUS_MIN, ZEBRA_RADIUS_MAX, ZEBRA_RADIUS_STEP], normalize: (value, fallback = ZEBRA_RADIUS_DEFAULT) => normalizeSteppedValue(value, fallback, ZEBRA_RADIUS_MIN, ZEBRA_RADIUS_MAX, ZEBRA_RADIUS_STEP),
 			help: `设置阅读器正文斑马线楼层的圆角，${ZEBRA_RADIUS_MIN}px 为直角，最高 ${ZEBRA_RADIUS_MAX}px。拖动时实时预览，点击“确认应用”后才保存。` },
 		{ key: 'listZebraColor', section: 'list-zebra', label: '列表斑马线', ariaLabel: 'Linux DO 列表斑马线颜色', shareLabel: '列表斑马线',
-			help: '设置 LINUX DO 帖子列表卡片的隔行色调；所选颜色会作为主色与宿主背景适度混合，兼顾辨识度和文字清晰度。选择时实时预览，点击“确认应用”后才保存。' },
+			help: `设置 ${SITE_DISPLAY_NAME} 帖子列表卡片的隔行色调；所选颜色会作为主色与宿主背景适度混合，兼顾辨识度和文字清晰度。选择时实时预览，点击“确认应用”后才保存。` },
 		{ key: 'replyLineColor', section: 'reply-line', label: '颜色', ariaLabel: '回复关系线颜色',
 			help: '控制阅读器里的关系线颜色，包括二级回复连线、父楼层预览、时间轴、特殊提示边框和灯箱评论层级线。选择时实时预览，确认后保存。' },
 		{ key: 'replyLineWidth', section: 'reply-line', label: '粗细', ariaLabel: '回复关系线粗细', range: [LINE_WIDTH_MIN, LINE_WIDTH_MAX, LINE_WIDTH_STEP], normalize: (value, fallback = REPLY_LINE_WIDTH_DEFAULT) => normalizeLineWidth(value, fallback),
@@ -6145,7 +6322,7 @@
 		['request-flow', 'activity', '请求数据', '同源标签页共享阅读器与 LINUX DO 宿主 API 的 10 秒/60 秒请求账本、优先级、活动槽、有效策略和限流状态；宿主请求发出后立即纳入账本，后续阅读器请求主动避让。当前页静态资源只用于网络观测，不消耗 API 配额。下方速率、类型、P95 与详细日志是当前标签页口径，只在本页内存保留最近 15 分钟、最多 1200 条；“全局”执行、排队和窗口来自共享账本。不会记录查询参数、请求正文、Cookie 或响应内容。'],
 		['other', 'wrench', '其他功能', '按历史导航、帖子打开、回复展示和 Boost 复制分类管理，修改后自动保存在当前浏览器。'],
 		['cache', 'database', '数据管理', '备份或恢复阅读器设置，并查看、清理当前浏览器保存的本地缓存。'],
-		['about', 'info', '关于', '专注于长帖阅读、楼层关系和原生社区操作的 LINUX DO 阅读工作台。'],
+		['about', 'info', '关于', `专注于长帖阅读、楼层关系和原生社区操作的 ${SITE_DISPLAY_NAME} 阅读工作台。`],
 	];
 
 	function settingsNavigationMarkup() {
@@ -6255,7 +6432,7 @@
 		{ section: 'image-lightbox', className: 'ldp-lightbox-description-expanded', label: '默认展开图片描述', description: '描述可在灯箱内收纳，也可拖动底边调整高度；收纳状态与高度会自动记住。' },
 		{ section: 'image-lightbox', className: 'ldp-lightbox-original-by-default', label: '灯箱浏览默认使用原图', description: '开启后，打开灯箱和前后翻图都会自动加载原图；关闭时先显示预览图，仍可手动查看原图。' },
 		{ section: 'font-rendering', className: 'ldp-font-rendering-enabled', label: '内置字体渲染', detailHtml: '<small class="ldp-font-rendering-status" role="status">正在检测字体渲染环境…</small>' },
-		{ section: 'font-rendering', className: 'ldp-font-rendering-on-host', label: '扩展到 LINUX DO 宿主页面', ariaLabel: '扩展字体渲染到 LINUX DO 宿主页面', description: '默认开启；主题列表、帖子原页和其它宿主界面也使用相同渲染。' },
+		{ section: 'font-rendering', className: 'ldp-font-rendering-on-host', label: `扩展到 ${SITE_DISPLAY_NAME} 宿主页面`, ariaLabel: `扩展字体渲染到 ${SITE_DISPLAY_NAME} 宿主页面`, description: '默认开启；主题列表、帖子原页和其它宿主界面也使用相同渲染。' },
 		{ section: 'history', className: 'ldp-history-buttons-always-visible', label: '长显左右按钮', description: '始终显示浏览历史的左右导航按钮；开启后不再使用边缘触发区域。' },
 		{ section: 'topic-opening', className: 'ldp-open-topics-first-post', label: '打开帖子起始楼层号为 #1', description: '普通帖子链接默认从 #1 打开；消息、历史和收藏仍按各自目标楼层打开。' },
 		{ section: 'replies', className: 'ldp-expand-nested-replies-default', label: '默认展开二级回复', description: '开启后，父楼层下默认铺开直属二级回复；关闭时必须保留下面的对应楼层展开。' },
@@ -10590,6 +10767,13 @@
 	function renderPostReactions(postNode, ctx) {
 		if (!postNode) return;
 		const post = postNode._ldpPostData || {};
+		if (!hasDiscourseCapability('reactions', { post, topic: ctx?.topicData })) {
+			const root = postNode.querySelector(':scope > .ldp-reactions');
+			root?.querySelector(':scope > .ldp-reaction-summary')?.remove();
+			root?.querySelector(':scope > .ldp-reaction-picker')?.remove();
+			postNode.classList.remove('ldp-has-reactions');
+			return;
+		}
 		const reactions = Array.isArray(post.reactions) ? post.reactions : [];
 		const validSource = Array.isArray(ctx?.topicData && ctx.topicData.valid_reactions)
 			? ctx.topicData.valid_reactions
@@ -10665,6 +10849,10 @@
 
 	async function toggleReaderPostReaction(postNode, ctx, reaction, onSync, onError) {
 		const postId = +(postNode && (postNode.dataset.postId || postNode._ldpPostData?.id) || 0);
+		if (!hasDiscourseCapability('reactions', {
+			post: postNode?._ldpPostData,
+			topic: ctx?.topicData,
+		})) return false;
 		return runReaderActionOnce(ctx, `post:${postId}:reaction`, async () => {
 			const previousState = reactionStateSnapshot(postNode._ldpPostData || {});
 			const sync = (fresh) => {
@@ -10741,6 +10929,9 @@
 	}
 
 	function postVotingCapabilities(post, ctx) {
+		if (!hasDiscourseCapability('postVoting', { post, topic: ctx?.topicData })) {
+			return { voteControls: false, comments: false };
+		}
 		const topicEnabled = !!(ctx?.isPostVoting);
 		const voteControls = topicEnabled || ['post_voting_vote_count', 'post_voting_user_voted_direction', 'post_voting_has_votes']
 			.some((key) => Object.hasOwn(post || {}, key));
@@ -12223,7 +12414,8 @@
 		return ME_USERNAME;
 	}
 	function canShowBoostButton(p) {
-		return !!(p && p.can_boost === true && (!ME_USERNAME || p.username !== ME_USERNAME));
+		return !!(hasDiscourseCapability('boosts', { post: p }) &&
+			p && p.can_boost === true && (!ME_USERNAME || p.username !== ME_USERNAME));
 	}
 
 	const TOPIC_NOTIFICATION_LEVELS = [
@@ -12342,7 +12534,8 @@
 		const topic = (ctx?.topicData) || {};
 		const count = Math.max(0, Number(topic.shared_issue_count) || 0);
 		return {
-			visible: ctx?.topicSharedIssueHostVisible === true &&
+			visible: hasDiscourseCapability('sharedIssue', { topic }) &&
+				ctx?.topicSharedIssueHostVisible === true &&
 				!SHARED_ISSUE_FORBIDDEN_TOPIC_IDS.has(Number(ctx?.topicId)),
 			active: topic.user_created_shared_issue === true,
 			count,
@@ -18583,15 +18776,22 @@
 	/* ============ 8. 回复框 ============ */
 	function lookupDiscourseModule(name) {
 		if (DISCOURSE_MODULE_CACHE.has(name)) return DISCOURSE_MODULE_CACHE.get(name);
-		try {
-			const broker = HOST_PAGE_WINDOW.moduleBroker;
-			if (!broker || !isFunction(broker.lookup)) return null;
-			const module = broker.lookup(name, true);
-			if (module && Object.keys(module).length) {
-				DISCOURSE_MODULE_CACHE.set(name, module);
-				return module;
-			}
-		} catch (error) {}
+		const hostWindow = HOST_PAGE_WINDOW || window;
+		const broker = hostWindow.moduleBroker;
+		const resolvers = [
+			() => broker && isFunction(broker.lookup) ? broker.lookup(name, true) : null,
+			() => isFunction(hostWindow.require) ? hostWindow.require(name) : null,
+			() => isFunction(hostWindow.requirejs) ? hostWindow.requirejs(name) : null,
+		];
+		for (const resolve of resolvers) {
+			try {
+				const module = resolve();
+				if (module && Object.keys(module).length) {
+					DISCOURSE_MODULE_CACHE.set(name, module);
+					return module;
+				}
+			} catch (error) {}
+		}
 		return null;
 	}
 
@@ -18599,7 +18799,10 @@
 		if (DISCOURSE_LOOKUP_CACHE.has(name)) return DISCOURSE_LOOKUP_CACHE.get(name);
 		const discourseUrlModule = lookupDiscourseModule('discourse/lib/url');
 		const discourseUrl = discourseUrlModule?.default;
-		const container = discourseUrl?.container;
+		const hostWindow = HOST_PAGE_WINDOW || window;
+		const container = discourseUrl?.container ||
+			hostWindow.Discourse?.__container__ ||
+			hostWindow.Discourse?.container;
 		if (!container || !isFunction(container.lookup)) return null;
 		try {
 			const item = container.lookup(name) || null;
@@ -18608,6 +18811,135 @@
 		} catch (error) {
 			return null;
 		}
+	}
+
+	const DISCOURSE_CAPABILITY_MODULES = Object.freeze({
+		boosts: 'discourse/plugins/discourse-boosts/discourse/lib/create-boost',
+		reactions: 'discourse/plugins/discourse-reactions/discourse/models/discourse-reactions-custom-reaction',
+		postVoting: 'discourse/plugins/discourse-post-voting/discourse/lib/post-voting-utilities',
+	});
+	const DISCOURSE_CAPABILITY_SITE_SETTINGS = Object.freeze({
+		boosts: Object.freeze(['discourse_boosts_enabled']),
+		reactions: Object.freeze(['discourse_reactions_enabled']),
+		postVoting: Object.freeze(['post_voting_enabled']),
+		topicVoting: Object.freeze(['voting_enabled']),
+	});
+	const DISCOURSE_CAPABILITY_FIELDS = Object.freeze({
+		boosts: Object.freeze({
+			post: Object.freeze(['can_boost', 'boosts']),
+		}),
+		reactions: Object.freeze({
+			post: Object.freeze(['reactions', 'current_user_reaction', 'reaction_users_count']),
+			topic: Object.freeze(['valid_reactions']),
+		}),
+		postVoting: Object.freeze({
+			post: Object.freeze([
+				'post_voting_vote_count',
+				'post_voting_user_voted_direction',
+				'post_voting_has_votes',
+				'comments_count',
+				'comments',
+			]),
+			topic: Object.freeze(['is_post_voting']),
+		}),
+		topicVoting: Object.freeze({
+			topic: Object.freeze(['can_vote', 'user_voted', 'vote_count']),
+		}),
+		categoryExperts: Object.freeze({
+			user: Object.freeze(['category_expert_endorsements']),
+		}),
+		follows: Object.freeze({
+			user: Object.freeze([
+				'can_follow',
+				'is_followed',
+				'total_following',
+				'total_followers',
+				'following_count',
+				'follower_count',
+			]),
+		}),
+		sharedIssue: Object.freeze({
+			topic: Object.freeze([
+				'shared_issue_visible',
+				'shared_issue_count',
+				'user_created_shared_issue',
+			]),
+		}),
+	});
+	const DISCOURSE_CAPABILITY_NAMES = Object.freeze([
+		'boosts',
+		'reactions',
+		'postVoting',
+		'topicVoting',
+		'categoryExperts',
+		'follows',
+		'sharedIssue',
+		'connect',
+	]);
+
+	function objectHasAnyOwnField(value, fields) {
+		return !!value && Array.isArray(fields) && fields.some((field) => Object.hasOwn(value, field));
+	}
+
+	function hasDiscourseCapability(name, context = {}) {
+		const override = SITE_ADAPTER.capabilities?.[name];
+		if (override === true || override === false) return override;
+		const fields = DISCOURSE_CAPABILITY_FIELDS[name] || {};
+		if (objectHasAnyOwnField(context.post, fields.post) ||
+				objectHasAnyOwnField(context.topic, fields.topic) ||
+				objectHasAnyOwnField(context.user, fields.user)) {
+			return true;
+		}
+		const siteSettings = lookupDiscourse('service:site-settings');
+		const settingFields = DISCOURSE_CAPABILITY_SITE_SETTINGS[name] || [];
+		const declaredSettings = settingFields.filter((field) => Object.hasOwn(siteSettings || {}, field));
+		if (declaredSettings.length) {
+			return declaredSettings.some((field) => siteSettings[field] === true);
+		}
+		const moduleName = DISCOURSE_CAPABILITY_MODULES[name];
+		return !!(moduleName && lookupDiscourseModule(moduleName));
+	}
+
+	function isDiscourseHostDetected() {
+		if (lookupDiscourseModule('discourse/lib/url')) return true;
+		if (document.querySelector('meta[name="generator"][content*="Discourse" i],meta[name="discourse_theme_id"],#data-preloaded')) {
+			return true;
+		}
+		return !!document.querySelector('#ember-app .d-header,#ember-app .topic-list,#ember-app .topic-post');
+	}
+
+	function waitForDiscourseHost(timeout = 15000) {
+		if (isDiscourseHostDetected()) return Promise.resolve(true);
+		return new Promise((resolve) => {
+			let settled = false;
+			let observer = null;
+			let timer = 0;
+			const finish = (detected) => {
+				if (settled) return;
+				settled = true;
+				if (timer) clearTimeout(timer);
+				observer?.disconnect();
+				window.removeEventListener('load', check);
+				resolve(detected);
+			};
+			const check = () => {
+				if (isDiscourseHostDetected()) finish(true);
+			};
+			observer = new MutationObserver(check);
+			observer.observe(document.documentElement, { childList: true, subtree: true });
+			window.addEventListener('load', check);
+			timer = setTimeout(() => finish(isDiscourseHostDetected()), timeout);
+		});
+	}
+
+	function updateDiscourseCapabilityDiagnostics(context = {}) {
+		const generator = document.querySelector('meta[name="generator"]')?.content || '';
+		const version = String(generator).match(/Discourse\s+([^\s]+)/i)?.[1] || '';
+		PAGE_ROOT.dataset.ldpSiteAdapter = SITE_ADAPTER.id;
+		if (version) PAGE_ROOT.dataset.ldpDiscourseVersion = version;
+		PAGE_ROOT.dataset.ldpCapabilities = DISCOURSE_CAPABILITY_NAMES
+			.filter((name) => hasDiscourseCapability(name, context))
+			.join(',');
 	}
 
 	function navigateDiscourseHostRoute(href) {
@@ -18681,7 +19013,7 @@
 
 	async function openReaderEndorsementDialog(ctx, user) {
 		const username = String(user?.username || '').trim();
-		if (!ctx || !username) return false;
+		if (!ctx || !username || !hasDiscourseCapability('categoryExperts', { user })) return false;
 		const data = await fetchJSON(`${BASE}/category-experts/endorsable-categories/${encodeURIComponent(username)}.json`, {
 			key: `user-endorsements:${username}`,
 			priority: POST_REQUEST_PRIORITY.userCard,
@@ -18805,6 +19137,9 @@
 				return { ok: opened, reason: opened ? '' : 'endorsement-unavailable' };
 			}
 			if (action === 'follow') {
+				if (!hasDiscourseCapability('follows', { user })) {
+					return { ok: false, reason: 'follow-unavailable' };
+				}
 				if (user && user.can_follow === false && !user.is_followed) {
 					return { ok: false, reason: 'follow-not-allowed' };
 				}
@@ -19508,6 +19843,7 @@
 	}
 
 	function userCardFollowStatsHtml(user, username, options = {}) {
+		if (!hasDiscourseCapability('follows', { user })) return '';
 		const interactive = options.interactive !== false;
 		const configs = [
 			{ type: 'following', label: '关注', total: userStatValue(user, ['total_following', 'following_count', 'followings_count']), visible: user && user.can_see_following !== false },
@@ -19643,6 +19979,9 @@
 	}
 
 	function requestConnectTrustHtml() {
+		if (!hasDiscourseCapability('connect')) {
+			return Promise.reject(new Error('当前站点没有配置 Connect 能力'));
+		}
 		const request = globalThis.GM_xmlhttpRequest;
 		if (!isFunction(request)) return Promise.reject(new Error('当前脚本未获得 Connect 跨域读取权限'));
 		return new Promise((resolve, reject) => {
@@ -19784,15 +20123,17 @@
 
 	function renderSettingsUserInfo(container, user, connectData, connectError) {
 		if (!container) return;
-		const selectedView = ['connect', 'profile'].includes(container.dataset.userInfoView)
+		const connectAvailable = hasDiscourseCapability('connect');
+		const availableViews = connectAvailable ? ['connect', 'profile'] : ['profile'];
+		const selectedView = availableViews.includes(container.dataset.userInfoView)
 			? container.dataset.userInfoView
-			: 'connect';
+			: availableViews[0];
 		container.dataset.userInfoView = selectedView;
 		container.innerHTML = `<div class="ldp-user-info-tabs" role="tablist" aria-label="用户信息分类">
-				<button class="ldp-user-info-tab${selectedView === 'connect' ? ' active' : ''}" type="button" role="tab" data-user-info-view="connect" aria-selected="${selectedView === 'connect'}">${icon('activity')}<span>Connect</span></button>
+				${connectAvailable ? `<button class="ldp-user-info-tab${selectedView === 'connect' ? ' active' : ''}" type="button" role="tab" data-user-info-view="connect" aria-selected="${selectedView === 'connect'}">${icon('activity')}<span>Connect</span></button>` : ''}
 				<button class="ldp-user-info-tab${selectedView === 'profile' ? ' active' : ''}" type="button" role="tab" data-user-info-view="profile" aria-selected="${selectedView === 'profile'}">${icon('userRound')}<span>基本信息</span></button>
 			</div>
-			<div class="ldp-user-info-view" role="tabpanel" data-user-info-panel="connect"${selectedView === 'connect' ? '' : ' hidden'}>${settingsConnectHtml(connectData, connectError)}</div>
+			${connectAvailable ? `<div class="ldp-user-info-view" role="tabpanel" data-user-info-panel="connect"${selectedView === 'connect' ? '' : ' hidden'}>${settingsConnectHtml(connectData, connectError)}</div>` : ''}
 			<div class="ldp-user-info-view" role="tabpanel" data-user-info-panel="profile"${selectedView === 'profile' ? '' : ' hidden'}>${settingsUserProfileHtml(user)}</div>`;
 		hydratePersistentAvatarImages(container, POST_REQUEST_PRIORITY.userCard);
 	}
@@ -19810,9 +20151,9 @@
 		const actions = [
 			{ action: 'message', icon: 'mail', label: privateMessageUnavailable ? '私信（当前不可用）' : '私信', disabled: privateMessageUnavailable },
 			{ action: 'notifications', icon: 'bell', label: notificationUnavailable ? '消息设置（当前不可用）' : `消息设置：${USER_NOTIFICATION_LEVEL_LABELS[notificationLevel]}`, active: notificationLevel !== 'normal', disabled: notificationUnavailable, expanded: true },
-			{ action: 'endorse', icon: 'award', label: endorsementUnavailable ? '认可（当前不可用）' : '认可', disabled: endorsementUnavailable },
-			{ action: 'follow', icon: 'userPlus', label: followUnavailable ? '关注（当前不可用）' : (followed ? '取消关注' : '关注'), active: followed, disabled: followUnavailable },
-		];
+			{ action: 'endorse', icon: 'award', label: endorsementUnavailable ? '认可（当前不可用）' : '认可', disabled: endorsementUnavailable, visible: hasDiscourseCapability('categoryExperts', { user }) },
+			{ action: 'follow', icon: 'userPlus', label: followUnavailable ? '关注（当前不可用）' : (followed ? '取消关注' : '关注'), active: followed, disabled: followUnavailable, visible: hasDiscourseCapability('follows', { user }) },
+		].filter((item) => item.visible !== false);
 		const notificationOptions = [
 			{ level: 'normal', icon: 'bell', label: '常规', description: '回复、引用或提到您时正常通知。' },
 			...(user && user.can_mute_user === false ? [] : [
@@ -22514,7 +22855,8 @@
 		const unicodeEmojiRegex = prettyTextEmoji?.emojiReplacementRegex
 			? new RegExp(prettyTextEmoji.emojiReplacementRegex, 'g')
 			: null;
-		if (!overlay || !postData || !document.body) return false;
+		if (!overlay || !postData || !document.body ||
+				!hasDiscourseCapability('boosts', { post: postData, topic: ctx?.topicData })) return false;
 
 		const previous = document.body.querySelector(':scope > .ldp-native-boost-menu');
 		if (isFunction(previous?._ldpClose)) previous._ldpClose();
@@ -23202,7 +23544,7 @@
 		const sharingPost = !!postNode;
 		const postNumber = +(postNode && postNode.dataset.postNumber || 0);
 		if (!ctx || !ctx.topicId || (sharingPost && !postNumber)) return;
-		const title = String(ctx?.topicData && ctx.topicData.title || document.title || 'LINUX DO');
+		const title = String(ctx?.topicData && ctx.topicData.title || document.title || SITE_DISPLAY_NAME);
 		const url = topicPageUrl(ctx.topicId, sharingPost ? postNumber : 0);
 		if (!url) return;
 		if (!sharingPost && navigator.share) {
@@ -24645,10 +24987,11 @@
 			button.removeAttribute('aria-busy');
 			button.disabled = false;
 			const label = button.getAttribute('aria-label') || '该功能';
-			const failureMessages = {
-				'route-unavailable': `未能打开“${label}”页面，请重试`,
-				'endorsement-unavailable': '当前页面暂时无法打开认可类别选择',
-				'follow-not-allowed': '该用户当前不允许被关注',
+				const failureMessages = {
+					'route-unavailable': `未能打开“${label}”页面，请重试`,
+					'endorsement-unavailable': '当前页面暂时无法打开认可类别选择',
+					'follow-unavailable': '当前站点未提供关注能力',
+					'follow-not-allowed': '该用户当前不允许被关注',
 				'action-failed': `执行“${label}”时发生错误，请重试`,
 			};
 			const failureMessage = outcome.reason === 'action-failed' && outcome.error && outcome.error.message
@@ -25083,6 +25426,7 @@
 			const topicVote = e.target.closest('[data-topic-vote]');
 			if (topicVote) {
 				e.preventDefault();
+				if (!hasDiscourseCapability('topicVoting', { topic: ctx.topicData })) return;
 				if (!ME_USERNAME) { alert('登录后才能为主题投票。'); return; }
 				await runReaderActionOnce(ctx, `topic:${ctx.topicId}:vote`, async () => {
 					const voted = !!(ctx.topicData?.user_voted);
@@ -25204,6 +25548,10 @@
 			}
 			const reactionPicker = e.target.closest('[data-reaction-picker]');
 			if (reactionPicker) {
+				if (!hasDiscourseCapability('reactions', {
+					post: post._ldpPostData,
+					topic: ctx.topicData,
+				})) return;
 				hydrateReactionRegistry();
 				const reactionsRoot = reactionPicker.closest('.ldp-reactions');
 				const picker = reactionsRoot?.querySelector('.ldp-reaction-picker');
@@ -25226,6 +25574,7 @@
 			if (pvVote) {
 				const direction = pvVote.dataset.pvVote;
 				const postData = post._ldpPostData || {};
+				if (!hasDiscourseCapability('postVoting', { post: postData, topic: ctx.topicData })) return;
 				const remove = postData.post_voting_user_voted_direction === direction;
 				await runReaderActionOnce(ctx, `post:${postId}:pv-vote`, async () => {
 					setReaderPostControlsBusy(postId, ctx, '.ldp-pv-vote', true);
@@ -26214,7 +26563,7 @@
 		<div class="ldp-loading-stage" role="status" aria-live="polite" aria-atomic="true" aria-label="正在载入">
 			${readerLoadingVisualHTML(animation)}
 			<div class="ldp-loading-copy">
-				<div class="ldp-loading-mode">LINUX DO READER · ${animation.label}</div>
+				<div class="ldp-loading-mode">${esc(SITE_DISPLAY_NAME.toUpperCase())} READER · ${animation.label}</div>
 				<div class="ldp-loading-status"><span>正在载入帖子</span><strong class="ldp-loading-target"></strong></div>
 				<div class="ldp-loading-detail">正在准备阅读现场…</div>
 			</div>
@@ -27052,6 +27401,12 @@
 		const requestedReaderMode = directTopicRoute ? currentTopicReaderMode() : currentListReaderMode();
 		const hostTopicPointerAnchor = options.hostTopicPointerAnchor || null;
 		const cachedTopicPreview = getCachedTopicData(topicId);
+		const reactionsAvailable = hasDiscourseCapability('reactions', { topic: cachedTopicPreview });
+		const boostsAvailable = hasDiscourseCapability('boosts');
+		const bookmarkTabOrder = PREFS.bookmarkTabOrder.filter((type) =>
+			type !== 'Reaction' || reactionsAvailable
+		);
+		const bookmarkCollectionLabel = reactionsAvailable ? '收藏与回应' : '收藏';
 		let sourceTopicNavMetadata = mergeTopicNavMetadata(
 			options.topicNavMetadata || readTopicNavMetadata(null, topicId),
 			cachedTopicNavMetadata(cachedTopicPreview),
@@ -27169,8 +27524,8 @@
 				${['n', 's', 'e', 'w', 'nw', 'ne', 'sw', 'se'].map((direction) =>
 					`<span class="ldp-reader-resize-handle" data-reader-resize="${direction}" aria-hidden="true"></span>`).join('')}
 				<div class="ldp-header">
-					<a class="ldp-home-logo" href="${BASE}/" aria-label="回到 LINUX DO 首页">
-						<img class="ldp-logo" src="${LINUXDO_LOGO_URL}" alt="" loading="lazy" decoding="async">
+					<a class="ldp-home-logo" href="${BASE}/" aria-label="回到 ${escAttr(SITE_DISPLAY_NAME)} 首页">
+						<img class="ldp-logo" data-ldp-site-logo src="${escAttr(SITE_LOGO_URL)}" alt="" loading="lazy" decoding="async">
 					</a>
 					<div class="ldp-title-wrap">
 						<h2 class="ldp-title">
@@ -27220,17 +27575,17 @@
 							<div class="ldp-history-list ldp-notification-list"><div class="ldp-notification-empty">暂无浏览历史</div></div>
 							${popoverPagerMarkup('history')}
 						</div>
-						<button class="ldp-bookmarks-toggle" type="button" aria-label="收藏与回应" aria-expanded="false">${icon('headerBookmark')}<span>收藏与回应</span></button>
-						<div class="ldp-bookmarks-popover" hidden>
-							<div class="ldp-collection-title">
-								<span>收藏与回应</span>
+							<button class="ldp-bookmarks-toggle" type="button" aria-label="${bookmarkCollectionLabel}" aria-expanded="false">${icon('headerBookmark')}<span>${bookmarkCollectionLabel}</span></button>
+							<div class="ldp-bookmarks-popover" hidden>
+								<div class="ldp-collection-title">
+									<span>${bookmarkCollectionLabel}</span>
 								<div class="ldp-collection-title-actions ldp-bookmarks-default-actions">
 									<button class="ldp-collection-action ldp-bookmarks-multi" type="button" aria-label="多选收藏">${icon('listChecks')}</button>
 								</div>
 								${collectionBulkActionsMarkup('bookmarks', '收藏', '收藏', '取消所选收藏')}
-							</div>
-							<div class="ldp-bookmark-tabs" role="tablist" aria-label="收藏与回应类型">
-								${PREFS.bookmarkTabOrder.map((type, index) => `<button class="ldp-bookmark-tab${index === 0 ? ' active' : ''}" type="button" role="tab" data-bookmark-type="${type}" data-ldp-tooltip-label="拖动排序 · 首项默认" aria-selected="${String(index === 0)}">${BOOKMARK_TAB_LABELS[type]}</button>`).join('')}
+								</div>
+								<div class="ldp-bookmark-tabs" role="tablist" aria-label="收藏与回应类型">
+									${bookmarkTabOrder.map((type, index) => `<button class="ldp-bookmark-tab${index === 0 ? ' active' : ''}" type="button" role="tab" data-bookmark-type="${type}" data-ldp-tooltip-label="拖动排序 · 首项默认" aria-selected="${String(index === 0)}">${BOOKMARK_TAB_LABELS[type]}</button>`).join('')}
 							</div>
 							${popoverSearchMarkup('bookmarks', '搜索收藏标题或内容', '搜索收藏', '清空收藏搜索')}
 							<div class="ldp-reaction-filters" role="group" aria-label="按回应表情筛选" hidden></div>
@@ -27241,8 +27596,8 @@
 						<div class="ldp-settings-popover" hidden>
 							<div class="ldp-settings-tabs">
 								<div class="ldp-settings-brand" aria-label="awesome linuxdo reader">
-									<img class="ldp-settings-brand-logo" src="${LINUXDO_LOGO_URL}" alt="" loading="lazy" decoding="async">
-									<span class="ldp-settings-brand-name"><span>AWESOME</span><span>LINUXDO</span><span>READER</span></span>
+									<img class="ldp-settings-brand-logo" data-ldp-site-logo src="${escAttr(SITE_LOGO_URL)}" alt="" loading="lazy" decoding="async">
+									<span class="ldp-settings-brand-name"><span>AWESOME</span><span>${esc(SITE_DISPLAY_NAME.toUpperCase())}</span><span>READER</span></span>
 								</div>
 								<div class="ldp-settings-nav-shell">
 									<button class="ldp-settings-nav-scroll ldp-settings-nav-scroll-up" type="button" aria-label="显示上方更多设置" hidden>${icon('chevronRight')}</button>
@@ -27520,6 +27875,7 @@
 										${settingSwitchesMarkup('replies')}
 										<p class="ldp-nested-display-warning" role="status" aria-live="polite" hidden>两种方式同时开启时，同一条二级回复可能会在父楼层下和主信息流中重复出现，阅读时可能看到重复信息。</p>
 											`)}
+										<div${boostsAvailable ? '' : ' hidden'}>
 										${otherSettingGroupMarkup('boost', 'Boost 复制', '复制结果 = 开头文字 + 原 Boost + 小尾巴；不用填写正则。', `
 												${boostCopySettingsMarkup()}
 												<div class="ldp-setting-row ldp-boost-rule-row">
@@ -27530,6 +27886,7 @@
 													</span>
 												</div>
 											`)}
+										</div>
 									</div>
 								</div>
 								<div class="ldp-settings-section" data-settings-panel="cache" hidden>
@@ -27563,7 +27920,7 @@
 								<div class="ldp-settings-section" data-settings-panel="about" hidden>
 									<div class="ldp-about-content">
 										<section class="ldp-about-hero" aria-labelledby="ldp-about-name">
-											<img class="ldp-about-logo" src="${LINUXDO_LOGO_URL}" alt="" loading="lazy" decoding="async">
+											<img class="ldp-about-logo" data-ldp-site-logo src="${escAttr(SITE_LOGO_URL)}" alt="" loading="lazy" decoding="async">
 											<div class="ldp-about-identity">
 												<h4 class="ldp-about-name" id="ldp-about-name">awesome linuxdo reader</h4>
 												<p class="ldp-about-tagline">在原站能力之上，提供更连贯、更可控的阅读体验。</p>
@@ -27702,6 +28059,7 @@
 			</div>`;
 			mountSettingsPanelIntros(overlay);
 			appendReaderPortalNode(overlay);
+			syncSiteLogoImages();
 			ensureReaderIconTooltip();
 		}
 		overlay.dataset.topicId = String(topicId);
@@ -28370,9 +28728,10 @@
 			topicNavMetadataSyncFrame = 0;
 			topicNavMetadataStopTimer = 0;
 		};
-		const renderTopicShell = (topicData) => {
-			if (!topicData) return;
-			latestTopicShellData = topicData;
+			const renderTopicShell = (topicData) => {
+				if (!topicData) return;
+				updateDiscourseCapabilityDiagnostics({ topic: topicData });
+				latestTopicShellData = topicData;
 			const liveTopicNavMetadata = readTopicNavMetadata(null, topicId);
 			sourceTopicNavMetadata = mergeTopicNavMetadata(
 				topicNavMetadataOverride || liveTopicNavMetadata,
@@ -28419,7 +28778,8 @@
 			tagsEl.innerHTML = renderTopicNavLinks(topicData, sourceTopicNavMetadata);
 			tagsEl.hidden = !tagsEl.innerHTML;
 			const voteSlot = readerElement('.ldp-topic-vote-slot');
-			const hasTopicVote = topicData.can_vote === true || topicData.user_voted === true || +topicData.vote_count > 0;
+			const hasTopicVote = hasDiscourseCapability('topicVoting', { topic: topicData }) &&
+				(topicData.can_vote === true || topicData.user_voted === true || +topicData.vote_count > 0);
 			voteSlot.hidden = !hasTopicVote;
 			voteSlot.innerHTML = hasTopicVote
 				? `<button class="ldp-topic-vote${topicData.user_voted ? ' on' : ''}" type="button" data-topic-vote aria-pressed="${topicData.user_voted ? 'true' : 'false'}"${topicData.can_vote === false && !topicData.user_voted ? ' disabled' : ''}>▲ <span>${Math.max(0, +topicData.vote_count || 0)}</span> 票</button>`
@@ -28529,7 +28889,7 @@
 			reactionLoadedAt: 0,
 			reactionUsername: '',
 			reactionFilter: '',
-			type: PREFS.bookmarkTabOrder[0],
+				type: bookmarkTabOrder[0],
 			multi: false,
 			scope: 'page',
 			allIds: null,
@@ -31257,7 +31617,7 @@
 			if (loadId !== userInfoLoadId) return;
 			const username = String(ME_USERNAME || ME_CURRENT_USER?.username || '').trim();
 			if (!username) {
-				userInfoContent.innerHTML = '<div class="ldp-user-info-error">当前未登录 LINUX DO，无法读取用户资料。</div>';
+				userInfoContent.innerHTML = `<div class="ldp-user-info-error">当前未登录 ${esc(SITE_DISPLAY_NAME)}，无法读取用户资料。</div>`;
 				syncUserInfoTitleRefresh(false);
 				return;
 			}
@@ -31278,9 +31638,10 @@
 			} else {
 				userInfoContent.innerHTML = '<div class="ldp-user-info-loading">正在加载用户信息…</div>';
 			}
+			const connectAvailable = hasDiscourseCapability('connect');
 			const [profileResult, connectResult] = await Promise.allSettled([
 				fetchSettingsUserInfo(username, force),
-				fetchConnectTrustData(force, cachedConnect),
+				connectAvailable ? fetchConnectTrustData(force, cachedConnect) : Promise.resolve(null),
 			]);
 			if (loadId !== userInfoLoadId) return;
 			const profile = profileResult.status === 'fulfilled' ? profileResult.value : cachedUser;
@@ -31289,7 +31650,7 @@
 				? connectResult.value
 				: cachedConnect?.data || null;
 			const connectError = connectResult.status === 'rejected' ? connectResult.reason : null;
-			if (connectResult.status === 'fulfilled') {
+			if (connectAvailable && connectResult.status === 'fulfilled') {
 				user._ldp_connect_trust = {
 					data: connectData,
 					cachedAt: Number(CONNECT_TRUST_CACHE?.cachedAt || Date.now()),
@@ -35797,7 +36158,7 @@
 		return true;
 	}
 
-	document.addEventListener('keydown', (event) => {
+	function handleReaderHostRefreshShortcut(event) {
 		if (event.key !== 'F5') return false;
 		const readerShell = CURRENT_OVERLAY?._ldpReaderShell;
 		const readerWorkspace = readerShell?.readerWorkspace;
@@ -35805,13 +36166,28 @@
 		event.preventDefault();
 		event.stopImmediatePropagation();
 		if (!refreshDiscourseHostRoute()) {
-			showSelectionToast('LINUX DO 宿主刷新暂不可用，请稍后重试');
+			showSelectionToast(`${SITE_ADAPTER.name} 宿主刷新暂不可用，请稍后重试`);
 		}
 		return true;
-	}, true);
-	document.addEventListener('click', handleTopicLinkTrigger, true);
+	}
+
+	function installReaderHostEventHandlers() {
+		if (document._ldpReaderHostEventHandlersInstalled) return;
+		document._ldpReaderHostEventHandlersInstalled = true;
+		document.addEventListener('keydown', handleReaderHostRefreshShortcut, true);
+		document.addEventListener('click', handleTopicLinkTrigger, true);
+	}
+
 	runWhenBodyReady(async () => {
+		if (!await waitForDiscourseHost()) {
+			console.warn(`[LDP] ${location.hostname} 未检测到 Discourse，阅读器未启动`);
+			return;
+		}
+		applyReaderFontRenderingRuntimeProperties();
+		updateDiscourseCapabilityDiagnostics();
+		installReaderHostEventHandlers();
 		installRequestFlowInstrumentation();
+		void resolveSiteLogo();
 		if (!installDiscourseRouteChangeHandler()) {
 			window.addEventListener('load', () => {
 				if (!installDiscourseRouteChangeHandler()) {

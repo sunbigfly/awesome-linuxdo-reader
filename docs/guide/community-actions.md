@@ -2,11 +2,11 @@
 title: 回复与社区操作
 description: 在阅读器内回复、引用、点赞、回应、Boost、收藏、分享和执行权限操作。
 feature_ids: ["MEDIA-010", "ACTION-001", "ACTION-002", "ACTION-003", "ACTION-004", "ACTION-005", "ACTION-006", "ACTION-007", "ACTION-008", "ACTION-009", "ACTION-010", "ACTION-011", "ACTION-012", "ACTION-013"]
-source_anchors: ["renderReaderPoll", "ldp-replybtn", "data-selection-action=\"quote\"", "toggleReaderPostLike", "toggleReaderPostReaction", "renderBoostBubble", "BOOST_COPY_SETTING_ROWS", "toggleReaderBookmark", "name: 'share'", "TOPIC_NOTIFICATION_LEVELS", "openReaderReportDialog", "name: 'edit'", "openReaderAssignDialog", "topicSharedIssueState"]
+source_anchors: ["renderReaderPoll", "ldp-replybtn", "data-selection-action=\"quote\"", "toggleReaderPostLike", "toggleReaderPostReaction", "renderBoostBubble", "BOOST_COPY_SETTING_ROWS", "toggleReaderBookmark", "name: 'share'", "TOPIC_NOTIFICATION_LEVELS", "openReaderReportDialog", "name: 'edit'", "composer:edited-post", "openReaderAssignDialog", "topicSharedIssueState"]
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-24
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide-17-bookmarks-reactions.png", "/screenshots/guide-15-notifications-replies.png"]
 ---
 
@@ -28,6 +28,8 @@ screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide
 - **复制引用**：生成可粘贴的引用文本，不打开编辑器。
 
 发送前仍应检查目标用户、引用范围和草稿内容。切换工作区形态时，编辑器窗口按浮窗、全屏、移动分别保存几何设置。
+
+编辑已有楼层时，阅读器使用与回复相同的宿主隔离提交链路。保存成功后会重新读取该楼层并就地刷新；如果编辑的是楼中楼回复，阅读器会重新聚焦对应的直属讨论，不会让宿主页面自行跳走。
 
 ## 点赞与回应
 
@@ -67,9 +69,9 @@ Boost 气泡显示内容和参与用户。账号权限允许时可以发送、�
 
 主题底部的通知级别选择器沿用 Discourse 状态，例如正常、跟踪、关注和静音。修改后影响原站为当前账号发送通知的方式，不只是阅读器本地显示。
 
-![消息中心按回复、点赞和私信分类展示通知](/screenshots/guide-15-notifications-replies.png)
+![消息中心按不同通知类型分类展示消息](/screenshots/guide-15-notifications-replies.png)
 
-<p class="image-caption">通知设置生效后，从标题栏打开消息中心；使用顶部分类筛选回复、提及、点赞或私信，再点击消息返回目标楼层。</p>
+<p class="image-caption">通知设置生效后，从标题栏打开消息中心；使用顶部分类筛选通知，再点击消息返回目标楼层。</p>
 
 ## 投票
 

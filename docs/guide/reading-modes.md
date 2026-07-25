@@ -6,7 +6,7 @@ source_anchors: ["INITIAL_TOPIC_ID", "LIST_READER_MODES", "bypassReaderForThisTa
 since: 0.1.2
 version: 0.1.10
 status: current
-last_verified: 2026-07-24
+last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-05-layout-settings.png", "/screenshots/guide-21-reading-queue.png", "/screenshots/guide-09-performance-settings.png"]
 ---
 
@@ -34,7 +34,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-0
 
 ## 多主题阅读队列
 
-阅读队列允许从列表页提前加入多个主题，在同一个工作区内切换，并为非当前主题后台准备正文、楼中楼和相关图片。队列会保存阅读位置、固定状态与浮层位置；刷新后仍可恢复。
+阅读队列允许从列表页用加号明确加入多个主题，在同一个工作区内切换，并为非当前主题后台准备正文、楼中楼和相关图片。直接打开主题不会自动入队；队列按钮仍会常驻并以 `0` 表示空队列。队列会保存阅读位置、固定状态与浮层位置；刷新后仍可恢复。
 
 完整的入口、状态说明、预加载边界、键盘操作和故障恢复见[阅读队列](/guide/reading-queue)。
 
