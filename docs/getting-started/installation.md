@@ -4,9 +4,9 @@ description: 安装 userscript、确认启用状态、理解更新方式并排�
 feature_ids: ["CORE-001", "CORE-007", "TROUBLE-001"]
 source_anchors: ["@downloadURL", "@match", "DISCOURSE_SITE_ADAPTERS"]
 since: 0.1.2
-version: 0.1.11
+version: 0.1.12
 status: current
-last_verified: 2026-07-24
+last_verified: 2026-07-26
 screenshots: ["/screenshots/guide-01-reader-overview.png"]
 ---
 
@@ -22,7 +22,7 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
 
 | 项目 | 要求 |
 | --- | --- |
-| 站点 | 21 个内置 Discourse 社区，也可验证后添加自定义 HTTPS Discourse 站点 |
+| 站点 | LINUX DO 全面适配；20 个其他社区内置支持；其余标准 HTTPS Discourse 站点可验证后添加 |
 | 登录 | 阅读公开内容不一定需要；消息、收藏、回复等能力需要对应账号权限 |
 | 脚本管理器 | Tampermonkey 或能够完整支持本脚本权限的兼容管理器 |
 | 浏览器能力 | 现代 Chromium、Firefox 或同等级浏览器；具体边界见[兼容性](/reference/compatibility) |
@@ -57,6 +57,10 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
 5. 其他站点可先在任一已支持论坛打开阅读器，通过“设置 → 其他功能 → 自定义站点”输入域名或网址；脚本验证其为 Discourse 后才会保存。
 6. 在主题列表顶部或主题链接附近确认阅读器入口已经出现。
 
+::: tip 站点与翻译能力
+LINUX DO 保持完整功能覆盖。其他标准 HTTPS Discourse 论坛通过验证后即可使用核心阅读能力，站点未安装的 Boost、Reactions、Post Voting 等插件入口会自动隐藏。已标记为非中文的内置社区还会显示正文翻译按钮。
+:::
+
 ::: warning 不要同时启用两个版本
 正式版、本地调试版或其他同类脚本同时接管主题链接时，可能造成重复入口、重复请求和界面状态冲突。
 :::
@@ -67,7 +71,7 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
 
 - 想立即检查时，在 Tampermonkey 面板中对该脚本执行“检查更新”。
 - 更新后刷新当前 Discourse 页面，已打开页面不会自动替换正在运行的旧代码。
-- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `0.1.11`。
+- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `0.1.12`。
 
 ## 入口没有出现
 

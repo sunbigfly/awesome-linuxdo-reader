@@ -4,7 +4,7 @@ description: 理解 userscript 权限、外部依赖、本地存储、请求脱�
 feature_ids: ["MEDIA-014", "DATA-004", "DATA-005", "MONITOR-005", "TROUBLE-005"]
 source_anchors: ["READER_TRANSLATION_CACHE_KEY", "PERSISTENT_CACHE_CONFIG", "@grant", "requestFlowPath", "@supportURL"]
 since: 0.1.2
-version: 0.1.11
+version: 0.1.12
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-14-about.png"]
@@ -18,7 +18,7 @@ screenshots: ["/screenshots/guide-14-about.png"]
 
 ## userscript 元数据
 
-当前 `0.1.11`：
+当前 `0.1.12`：
 
 | 字段 | 值 | 用途 |
 | --- | --- | --- |

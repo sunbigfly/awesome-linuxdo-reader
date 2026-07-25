@@ -8,7 +8,7 @@ export default defineConfig({
   lang: 'zh-CN',
   title: 'Awesome LinuxDo Reader',
   titleTemplate: ':title · 用户手册',
-  description: 'Awesome LinuxDo Reader 正式用户手册：多站点 Discourse 安装、阅读、互动、个性化、性能与故障排查。',
+  description: 'Awesome LinuxDo Reader 正式用户手册：LINUX DO 全面适配、标准 Discourse 站点兼容、正文翻译、阅读与原站互动。',
   base,
   cleanUrls: true,
   lastUpdated: true,
@@ -35,7 +35,7 @@ export default defineConfig({
       { text: '维护与排障', link: '/manage/data-and-cache' },
       { text: '功能索引', link: '/reference/feature-catalog' },
       {
-        text: 'v0.1.11',
+        text: 'v0.1.12',
         items: [
           { text: '更新记录', link: '/reference/changelog' },
           { text: '兼容性', link: '/reference/compatibility' },

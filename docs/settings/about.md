@@ -4,9 +4,9 @@ description: 查看阅读器定位、能力摘要、当前版本、在线用户�
 feature_ids: ["REF-002", "REF-003"]
 source_anchors: ["@version", "READER_MANUAL_URL"]
 since: 0.1.2
-version: 0.1.11
+version: 0.1.12
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-26
 screenshots: ["/screenshots/guide-14-about.png"]
 ---
 
@@ -43,10 +43,10 @@ screenshots: ["/screenshots/guide-14-about.png"]
 4. 浏览器和脚本管理器名称；
 5. 能稳定复现问题的最短步骤。
 
-关于页版本来自当前正在运行的脚本。若它与管理器显示不一致，先刷新 LINUX DO 页面；仍不一致时检查脚本是否实际更新、是否存在重复安装。
+关于页版本来自当前正在运行的脚本。若它与管理器显示不一致，先刷新当前论坛页面；仍不一致时检查脚本是否实际更新、是否存在重复安装。
 
 ## 项目边界
 
-Awesome LinuxDo Reader 是非 LINUX DO 官方项目。账号、权限、帖子、通知、收藏和互动结果最终以原站为准。
+Awesome LinuxDo Reader 不是任何适配社区的官方项目。账号、权限、帖子、通知、收藏和互动结果最终以原站为准。
 
-第三方库的许可证、浏览器能力和 LINUX DO 接口状态都可能影响某些功能；“关于”页用于说明当前构成，不代表原站对项目提供支持。
+第三方库的许可证、浏览器能力和当前论坛接口状态都可能影响某些功能；“关于”页用于说明当前构成，不代表任何原站对项目提供支持。

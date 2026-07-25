@@ -1,12 +1,12 @@
 ---
 title: 图片、媒体与富内容
-description: 使用原图灯箱、图片评论、下载、音视频、公式、投票和代码预览。
+description: 使用非中文正文翻译、原图灯箱、图片评论、下载、音视频、公式、投票和代码预览。
 feature_ids: ["READ-012", "MEDIA-001", "MEDIA-002", "MEDIA-003", "MEDIA-004", "MEDIA-005", "MEDIA-006", "MEDIA-007", "MEDIA-008", "MEDIA-009", "MEDIA-010", "MEDIA-011", "MEDIA-012", "MEDIA-013", "MEDIA-014"]
 source_anchors: ["renderSolvedAnswerCard", "IMAGE_SCALE_OPTIONS", "openLightbox", "lightboxOriginalByDefault", "loadLightboxCommentTree", "lightboxDescriptionHeight", "batch-download", "openUserAvatarViewer", "bindReaderHls", "KATEX_VERSION", "renderReaderPoll", "data-reader-code-action", "readerMediaHtml", "prepareReaderOneboxes", "showReaderImageRetry", "createReaderTranslationController"]
 since: 0.1.2
-version: 0.1.11
+version: 0.1.12
 status: current
-last_verified: 2026-07-25
+last_verified: 2026-07-26
 screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-25-user-card.png"]
 ---
 
@@ -85,7 +85,7 @@ GitHub 仓库 Onebox 会整理为更紧凑的阅读结构：仓库缩略图移�
 
 ## 非中文正文翻译
 
-已标记为非中文的内置社区会在标题栏显示翻译按钮。每次点击按以下顺序切换：
+已标记为非中文的内置社区会在阅读器标题栏显示翻译按钮，无需离开帖子或复制正文。每次点击按以下顺序切换：
 
 1. 原文；
 2. 原文与中文译文并排的双语模式；

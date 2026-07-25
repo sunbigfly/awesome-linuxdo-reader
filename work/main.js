@@ -2,10 +2,10 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      0.1.11
+// @version      0.1.12
 // @license      MIT
-// @description  面向 LINUX DO 与 Discourse 社区的沉浸式增强阅读器，支持长帖上下文、消息/历史/收藏、原图灯箱、非中文正文翻译、自定义站点与个性布局。
-// @description:en An immersive reader for LINUX DO and Discourse communities with threaded context, community panels, image lightbox, body translation, custom sites, and personalized layouts.
+// @description  为 LINUX DO 深度适配、全面兼容标准 Discourse 站点的沉浸式增强阅读器，支持长帖上下文、原站互动、非中文正文翻译、自定义站点与个性布局。
+// @description:en Deeply adapted for LINUX DO and compatible with standard Discourse sites, with threaded reading, native interactions, body translation, custom sites, and personalized layouts.
 // @author       sunbigfly
 // @homepageURL  https://github.com/sunbigfly/awesome-linuxdo-reader
 // @supportURL   https://github.com/sunbigfly/awesome-linuxdo-reader/issues
@@ -104,7 +104,7 @@
 	const BASE = location.origin;
 	const PAGE_ROOT = document.documentElement;
 	const makeElement = (tagName) => document.createElement(tagName);
-	const READER_VERSION = '0.1.11';
+	const READER_VERSION = '0.1.12';
 	const HOST_PAGE_WINDOW = globalThis.unsafeWindow;
 	const GENERIC_DISCOURSE_SITE_ADAPTER = Object.freeze({
 		id: 'discourse',

@@ -4,7 +4,7 @@
 
 <h1 align="center">Awesome LinuxDo Reader</h1>
 
-<p align="center">以 LINUX DO 为完整基线、兼容多个 Discourse 社区的沉浸式增强阅读器，在不离开列表页的情况下完成阅读、回复与原站互动。</p>
+<p align="center">为 LINUX DO 深度定制并保持完整功能覆盖，同时通过站点识别与能力检测全面兼容标准 Discourse 社区，在列表页内完成阅读、翻译、回复与原站互动。</p>
 
 <p align="center">
   <a href="https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js">安装脚本</a> ·
@@ -26,11 +26,13 @@
 
 ## 功能
 
+- LINUX DO 全面适配，消息、历史、收藏、回应、Boost、长帖与楼层关系等能力保持完整覆盖。
+- 标准 Discourse 站点可直接使用；插件、主题和权限差异由站点适配层与能力检测自动降级。
 - 列表页直接打开完整帖子，支持浮窗、全屏与移动端布局。
 - 保留楼层关系、楼中楼、跳转、浏览历史与真实已读进度。
 - 集成回复、点赞、回应、收藏、通知、搜索与用户资料等社区能力。
-- 提供原图灯箱、非中文正文翻译、媒体播放、公式渲染、主题外观、缓存和性能设置。
-- 内置 21 个 Discourse 社区，并支持验证后添加自定义 HTTPS Discourse 站点。
+- 为非中文内置社区提供原文、双语与全译文切换，并集成原图灯箱、媒体播放和公式渲染。
+- 内置 21 个社区；其他 HTTPS Discourse 论坛可验证后添加，非 Discourse 网站不会启动。
 - 内置请求调度、429 退避、DOM 窗口化与本地资源监控。
 
 ## 核心体验
@@ -148,7 +150,7 @@
 4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 其他功能 → 自定义站点”中验证并添加。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `0.1.11`。脚本以 LINUX DO 为完整功能基线，内置匹配 20 个其他 Discourse 社区，并允许用户验证后添加自定义 HTTPS Discourse 站点；完整范围和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `0.1.12`。脚本对 LINUX DO 保持全面适配和完整功能回归，同时内置匹配 20 个其他 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。非中文内置社区还支持原文、双语和全译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
 ## 开发
 

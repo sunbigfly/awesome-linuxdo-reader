@@ -4,9 +4,9 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["@version"]
 since: 0.1.2
-version: 0.1.11
+version: 0.1.12
 status: current
-last_verified: 2026-07-25
+last_verified: 2026-07-26
 screenshots: ["/screenshots/guide-14-about.png"]
 ---
 
@@ -15,6 +15,15 @@ screenshots: ["/screenshots/guide-14-about.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 0.1.12 — 全站点适配与翻译说明
+
+核验日期：2026-07-26。
+
+- 保留 Awesome LinuxDo Reader 名称，并在脚本简介、项目首页和用户手册中明确 LINUX DO 的完整适配范围。
+- 补充标准 Discourse 站点的运行态识别、插件能力检测与自动降级说明，明确自定义 HTTPS Discourse 论坛的验证入口。
+- 将非中文正文翻译提升为核心能力说明，补齐入口、原文/双语/全译文切换、批量请求、服务回退、缓存和隐私边界。
+- GitHub 项目描述、主页和 Topics 补充 Discourse、userscript、翻译、沉浸阅读及常用脚本管理器关键词，方便相关用户检索。
 
 ## 0.1.11 — 自定义站点与跨语阅读
 

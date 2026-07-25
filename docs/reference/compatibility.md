@@ -1,12 +1,12 @@
 ---
 title: 兼容性
-description: 当前站点、脚本权限、浏览器能力、外部依赖和已知降级边界。
+description: LINUX DO 全面适配、标准 Discourse 站点通用、正文翻译以及插件能力降级边界。
 feature_ids: ["CORE-007", "DATA-005", "REF-001"]
 source_anchors: ["@grant", "@run-at", "DISCOURSE_SITE_ADAPTERS", "hasDiscourseCapability", "resolveSiteLogo", "createReaderTranslationController"]
 since: 0.1.2
-version: 0.1.11
+version: 0.1.12
 status: current
-last_verified: 2026-07-25
+last_verified: 2026-07-26
 screenshots: ["/screenshots/guide-01-reader-overview.png"]
 ---
 
@@ -16,12 +16,14 @@ screenshots: ["/screenshots/guide-01-reader-overview.png"]
 
 <p class="image-caption">桌面端浏览器可在保留宿主列表的同时运行增强阅读工作区；具体能力仍取决于浏览器、脚本管理器和站点权限。</p>
 
+LINUX DO 是完整功能与真实回归基线。对于其他标准 Discourse 站点，脚本会先验证站点身份，再根据当前版本、主题、权限以及 Boost、Reactions、Post Voting 等插件能力显示可用入口；缺少插件时自动降级，不影响长帖阅读、楼层上下文和原站基础互动。
+
 ## 当前支持范围
 
 | 项目 | 当前值 |
 | --- | --- |
-| 脚本版本 | `0.1.11` |
-| 匹配站点 | 21 个内置 Discourse 社区，以及通过设置验证并保存的自定义 HTTPS Discourse 站点 |
+| 脚本版本 | `0.1.12` |
+| 匹配站点 | LINUX DO 全面适配；20 个其他社区内置支持；其余标准 HTTPS Discourse 站点可验证后添加 |
 | 启动时机 | `document-start` |
 | GM 权限 | `GM_getValue`、`GM_setValue`、`GM_xmlhttpRequest`、`GM_getResourceText`、`unsafeWindow` |
 | 跨域连接 | `connect.linux.do`、用户输入站点的 `/site/basic-info.json`、Google / Microsoft 翻译接口 |
