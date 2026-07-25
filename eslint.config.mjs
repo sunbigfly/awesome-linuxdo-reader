@@ -63,4 +63,24 @@ export default [
       'valid-typeof': 'error',
     },
   },
+  {
+    name: 'userscript-build-tool',
+    files: ['scripts/build-userscript.mjs', 'docs/.vitepress/config.mts'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        Buffer: 'readonly',
+        process: 'readonly',
+        URL: 'readonly',
+      },
+    },
+    rules: {
+      'no-dupe-keys': 'error',
+      'no-duplicate-case': 'error',
+      'no-undef': 'error',
+      'no-unreachable': 'error',
+      'valid-typeof': 'error',
+    },
+  },
 ];

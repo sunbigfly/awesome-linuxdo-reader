@@ -38,6 +38,7 @@
 /scripts/*
 !/scripts/userscript-dev
 !/scripts/userscript-dev.ps1
+!/scripts/build-userscript.mjs
 !/scripts/validate-docs.mjs
 
 !/tools/
@@ -55,3 +56,8 @@
 /work/*
 !/work/main.js
 !/work/main.css
+
+!/dist/
+/dist/*
+!/dist/awesome-linuxdo-reader.user.js
+!/dist/awesome-linuxdo-reader.build.json

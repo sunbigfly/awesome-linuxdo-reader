@@ -124,17 +124,18 @@
 2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。
 3. 打开 [LINUX DO](https://linux.do/)，点击主题标题开始使用。
 
-当前项目版本为 `0.1.4`，脚本仅匹配 `https://linux.do/*`。
+当前项目版本为 `0.1.5`，脚本仅匹配 `https://linux.do/*`。
 
 ## 开发
 
-`work/main.js` 是唯一业务源码。仓库不使用构建产物作为开发入口，调试、校验和发布都从该文件开始。
+`work/main.js` 是唯一业务源码，也是 GreasyFork 发布与仓库同步入口。`dist/awesome-linuxdo-reader.user.js` 是由固定版本工具生成的仓库直装产物，禁止直接编辑；由于 GreasyFork 不接受压缩代码，该文件不得上传到 GreasyFork。开发和调试始终修改源码，需要仓库直装产物时运行 `npm run userscript:build`。
 
 ```text
 .
 ├── .github/          GitHub 协作模板
 ├── assets/           品牌与文档资源
 ├── docs/             项目介绍和资料索引
+├── dist/             仓库直装的压缩 userscript 与来源清单
 ├── scripts/          跨平台开发工具入口
 ├── tools/            Rust 开发辅助工具源码
 ├── work/main.js      userscript 唯一业务源码

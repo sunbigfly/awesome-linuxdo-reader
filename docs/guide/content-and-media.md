@@ -4,7 +4,7 @@ description: 使用原图灯箱、图片评论、下载、音视频、公式、�
 feature_ids: ["READ-012", "MEDIA-001", "MEDIA-002", "MEDIA-003", "MEDIA-004", "MEDIA-005", "MEDIA-006", "MEDIA-007", "MEDIA-008", "MEDIA-009", "MEDIA-010", "MEDIA-011", "MEDIA-012", "MEDIA-013"]
 source_anchors: ["renderSolvedAnswerCard", "IMAGE_SCALE_OPTIONS", "openLightbox", "lightboxOriginalByDefault", "loadLightboxCommentTree", "lightboxDescriptionHeight", "batch-download", "openUserAvatarViewer", "bindReaderHls", "KATEX_VERSION", "renderReaderPoll", "data-reader-code-action", "readerMediaHtml", "showReaderImageRetry"]
 since: 0.1.2
-version: 0.1.4
+version: 0.1.5
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-25-user-card.png"]

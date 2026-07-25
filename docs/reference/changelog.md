@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["@version"]
 since: 0.1.2
-version: 0.1.4
+version: 0.1.5
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-14-about.png"]
@@ -15,6 +15,16 @@ screenshots: ["/screenshots/guide-14-about.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 0.1.5 — 统一阅读器内核与事件驱动更新
+
+核验日期：2026-07-25。
+
+- 摒弃 Shadow Root 和三套形态业务分支，以嵌入态作为唯一阅读器内核；浮窗、全屏只改变外层呈现，保留按容器宽度响应的窄屏布局。
+- 通知与新信息改用 Discourse 事件信号更新，保留普通通知跳转、Boost 分类和聚合回复展开；移除对应的定时轮询旧路径。
+- 回复提交继续拦截宿主自主跳楼层，同时保持阅读器内新楼层插入与定位。
+- 统一设置、集合面板、生命周期与媒体查看器中的重复链路，并将静态 CSS 迁入不可变 `@resource`。
+- 保留可维护的 `work/main.js` 作为 GreasyFork 发布源码；新增确定性压缩产物，仅用于仓库直装和体积审计。
 
 ## 0.1.4 — 内部精简与文档验收
 

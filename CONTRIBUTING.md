@@ -4,7 +4,7 @@
 
 ## 源码约定
 
-- `work/main.js` 是唯一业务源码，不维护并行副本。
+- `work/main.js` 是唯一业务源码与 GreasyFork 同步入口；`dist/awesome-linuxdo-reader.user.js` 只由构建脚本生成，不直接编辑，也不上传到 GreasyFork。
 - 保持 userscript 元数据权限最小化。新增网络目标时检查 `@connect`，新增 GM API 时检查 `@grant`。
 - 兼容 LINUX DO 的 SPA 导航和动态 DOM；监听器、Observer、计时器、Object URL 与缓存必须有明确的生命周期。
 - 网络逻辑需要考虑超时、取消、并发、缓存、重试和 429 退避。
@@ -30,6 +30,26 @@ Windows PowerShell 使用 `.\scripts\userscript-dev.ps1`，参数与 Bash 入口
 
 首次使用需在 Tampermonkey 中安装加载器，并开启“允许访问文件网址”。正式版和本地调试版不要同时启用。
 
+## 仓库直装产物
+
+安装依赖后，从唯一业务源码生成确定性的压缩 userscript：
+
+```bash
+npm run userscript:build
+```
+
+构建会逐字节保留 userscript 元数据，不改写对象属性、DOM class、协议字段或字符串；仅压缩发布产物中的局部标识符和语法，并关闭 tree shaking。构建同时强制检查原始体积不高于 950,000 字节、gzip 体积不高于 400,000 字节。`dist/awesome-linuxdo-reader.build.json` 记录源码、元数据、产物和编译器配置的 SHA-256，可用于确认产物对应的源码版本。
+
+## GreasyFork 发布
+
+GreasyFork 禁止压缩或混淆代码，因此只发布 `work/main.js`，不得上传 `dist/awesome-linuxdo-reader.user.js`。仓库同步地址固定为：
+
+```text
+https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/main.js
+```
+
+发布前统一 userscript、运行常量、package 和手册版本，完成源码静态检查与真实浏览器回归，再在 GreasyFork 管理页同步或提交新版本。
+
 ## 验证
 
 修改 JavaScript 后至少完成：
@@ -38,6 +58,9 @@ Windows PowerShell 使用 `.\scripts\userscript-dev.ps1`，参数与 Bash 入口
 ./scripts/userscript-dev --json inspect work/main.js
 node --check work/main.js
 npx --yes eslint@9.39.1 work/main.js
+npm run userscript:build
+./scripts/userscript-dev --json inspect dist/awesome-linuxdo-reader.user.js
+node --check dist/awesome-linuxdo-reader.user.js
 ```
 
 交互、布局、视觉、性能和网络行为必须在真实浏览器中复现并检查。静态检查通过不等于浏览器验收通过。

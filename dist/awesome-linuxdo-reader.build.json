@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "path": "work/main.js",
+    "bytes": 1590711,
+    "sha256": "8a421510822cec3566ab95f81dfb9ef27d7201d826f0701d560e2237c9ce2cac"
+  },
+  "metadata": {
+    "bytes": 1697,
+    "sha256": "a94a94e8068d7b1224cf9bd998f86db65acac6ec1e84cc76787103f20fa97935"
+  },
+  "artifact": {
+    "path": "dist/awesome-linuxdo-reader.user.js",
+    "bytes": 838497,
+    "gzipBytes": 282868,
+    "sha256": "553097efc411090f979ce9475eb082bdb97cff735b3ea3395b040bfeb9979cb9"
+  },
+  "compiler": {
+    "name": "esbuild",
+    "version": "0.25.12",
+    "options": {
+      "charset": "utf8",
+      "keepNames": false,
+      "legalComments": "none",
+      "minify": true,
+      "sourcefile": "work/main.js",
+      "target": "es2022",
+      "treeShaking": false
+    }
+  },
+  "limits": {
+    "artifactBytes": 950000,
+    "gzipBytes": 400000
+  }
+}

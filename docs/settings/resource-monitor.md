@@ -4,7 +4,7 @@ description: 阅读实时资源快照、前后台事件、DOM、长任务、长�
 feature_ids: ["MONITOR-001"]
 source_anchors: ["RESOURCE_MONITOR_ROWS"]
 since: 0.1.2
-version: 0.1.4
+version: 0.1.5
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-10-resource-monitor.png"]

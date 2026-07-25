@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      0.1.4
+// @version      0.1.5
 // @license      MIT
 // @description  面向 LINUX DO 的沉浸式增强阅读器，支持父回复预览、消息/历史/收藏、原图灯箱、主题布局、请求限流、缓存与 DOM 渲染管理。
 // @description:en An immersive LINUX DO reader with threaded context, community panels, image lightbox, layouts, request control, cache, and DOM rendering management.
@@ -30,7 +30,7 @@
 	const BASE = location.origin;
 	const PAGE_ROOT = document.documentElement;
 	const makeElement = (tagName) => document.createElement(tagName);
-	const READER_VERSION = '0.1.4';
+	const READER_VERSION = '0.1.5';
 	const HOST_PAGE_WINDOW = globalThis.unsafeWindow;
 	const TOPIC_CACHE_TTL = 90 * 1000;
 	const READ_THRESHOLD = 1500;
@@ -145,7 +145,7 @@
 				} catch (e) {}
 				return;
 			}
-			const navigation = performance && performance.getEntriesByType
+			const navigation = performance?.getEntriesByType
 				? performance.getEntriesByType('navigation')[0]
 				: null;
 			let challenged = false;
@@ -155,7 +155,7 @@
 			} catch (e) {}
 			const result = {
 				owner: cloudflareChallengeReturnOwner,
-				status: Math.max(0, Number(navigation && navigation.responseStatus) || 0),
+				status: Math.max(0, Number(navigation?.responseStatus) || 0),
 				challenged,
 				at: Date.now(),
 			};
@@ -664,7 +664,7 @@
 
 	function requestFlowNow() {
 		const clock = globalThis.performance;
-		if (clock && Number.isFinite(clock.timeOrigin) && typeof clock.now === 'function') {
+		if (clock && Number.isFinite(clock.timeOrigin) && isFunction(clock.now)) {
 			return clock.timeOrigin + clock.now();
 		}
 		return Date.now();
@@ -730,8 +730,8 @@
 	}
 
 	function requestFlowType(url, initiatorType = '', method = 'GET') {
-		const path = String(url && url.pathname || '').toLowerCase();
-		const host = String(url && url.hostname || '').toLowerCase();
+		const path = String(url?.pathname || '').toLowerCase();
+		const host = String(url?.hostname || '').toLowerCase();
 		const initiator = String(initiatorType || '').toLowerCase();
 		if (/\/posts\/\d+\/replies(?:\.json)?$/.test(path)) return 'nested';
 		if (/\/user_avatar\/|\/letter_avatar\//.test(path) || /avatar/.test(host)) return 'avatar';
@@ -798,8 +798,8 @@
 
 	function beginRequestFlow(input, init = {}, transport = 'fetch') {
 		const url = requestFlowUrl(input);
-		const method = String(init.method || (input && input.method) || 'GET').toUpperCase();
-		const meta = init && init[REQUEST_FLOW_FETCH_META] || {};
+		const method = String(init.method || (input?.method) || 'GET').toUpperCase();
+		const meta = init?.[REQUEST_FLOW_FETCH_META] || {};
 		const startedAt = Number.isFinite(Number(meta.startedAt)) ? Number(meta.startedAt) : requestFlowNow();
 		const queuedAt = Number.isFinite(Number(meta.queuedAt))
 			? Math.min(startedAt, Math.max(startedAt - REQUEST_FLOW_RETENTION_MS, Number(meta.queuedAt)))
@@ -866,7 +866,7 @@
 			}
 			return '';
 		}
-		if (!headers || typeof headers.get !== 'function') return '';
+		if (!headers || !isFunction(headers.get)) return '';
 		for (const name of names) {
 			const value = headers.get(name);
 			if (value != null && value !== '') return String(value);
@@ -904,11 +904,11 @@
 	}
 
 	function requestFlowRateLimitPolicies(event) {
-		const rawLimit = String(event && event.serverLimit || '');
+		const rawLimit = String(event?.serverLimit || '');
 		if (!rawLimit) return [];
-		const remainingParts = String(event && event.serverRemaining || '').split(',');
-		const resetParts = String(event && event.serverReset || '').split(',');
-		const rateWindow = rateLimitWindowFromCode(event && event.rateLimitCode);
+		const remainingParts = String(event?.serverRemaining || '').split(',');
+		const resetParts = String(event?.serverReset || '').split(',');
+		const rateWindow = rateLimitWindowFromCode(event?.rateLimitCode);
 		const byWindow = new Map();
 		rawLimit.split(',').forEach((part, index) => {
 			const limit = requestFlowRateLimitNumber(part);
@@ -942,7 +942,7 @@
 			const previous = byWindow.get(window);
 			if (!previous || policy.limit < previous.limit) byWindow.set(window, policy);
 		});
-		return Array.from(byWindow.values());
+		return [...byWindow.values()];
 	}
 
 	function finishRequestFlow(event, details = {}) {
@@ -968,7 +968,7 @@
 		const successfulApiEvent = (hostApiEvent || readerApiEvent) && event.status >= 200 && event.status < 400;
 		let schedulerState = null;
 		if (SHARED_REQUEST_COORDINATOR && (successfulApiEvent || (hostApiEvent && event.status === 429))) {
-			try { schedulerState = ACTIVE_READER_REQUEST_SCHEDULER && ACTIVE_READER_REQUEST_SCHEDULER.snapshot(); } catch (error) {}
+			try { schedulerState = ACTIVE_READER_REQUEST_SCHEDULER?.snapshot(); } catch (error) {}
 		}
 		if (successfulApiEvent && SHARED_REQUEST_COORDINATOR && event.serverLimit) {
 			SHARED_REQUEST_COORDINATOR.noteServerLimits({
@@ -1033,8 +1033,8 @@
 	function storeHostTopicResponse(event, url, payload) {
 		if (!event || event.source !== 'host' || event.method !== 'GET') return;
 		const topicId = hostTopicResponseId(url);
-		const postStream = payload && payload.post_stream;
-		if (!topicId || Number(payload && payload.id) !== topicId || !postStream ||
+		const postStream = payload?.post_stream;
+		if (!topicId || Number(payload?.id) !== topicId || !postStream ||
 			!Array.isArray(postStream.stream) || !Array.isArray(postStream.posts)) return;
 		const key = String(topicId);
 		const readerEntry = TOPIC_DATA_CACHE.get(key);
@@ -1062,7 +1062,7 @@
 	}
 
 	function recordResourceRequestFlow(entry) {
-		const initiator = String(entry && entry.initiatorType || '').toLowerCase();
+		const initiator = String(entry?.initiatorType || '').toLowerCase();
 		if (!entry) return;
 		const url = requestFlowUrl(entry.name);
 		if (!url || !['http:', 'https:'].includes(url.protocol)) return;
@@ -1161,7 +1161,7 @@
 			const state = raw && typeof raw === 'object' ? raw : emptyState();
 			state.version = 2;
 			state.events = (Array.isArray(state.events) ? state.events : [])
-				.map((event) => ({ at: Number(event && event.at) || 0 }))
+				.map((event) => ({ at: Number(event?.at) || 0 }))
 				.filter((event) => event.at > at - READER_REQUEST_LONG_WINDOW_MS && event.at <= at)
 				.sort((a, b) => a.at - b.at)
 				.slice(-600);
@@ -1172,7 +1172,7 @@
 				.filter((lease) => lease && Number(lease.expiresAt) > at)
 				.slice(-32);
 			state.policies = (Array.isArray(state.policies) ? state.policies : [])
-				.filter((policy) => policy && policy.contextId && Number(policy.expiresAt) > at)
+				.filter((policy) => policy?.contextId && Number(policy.expiresAt) > at)
 				.map((policy) => ({
 					...requestPolicy(policy, policy.contextId),
 					expiresAt: Number(policy.expiresAt),
@@ -1181,10 +1181,10 @@
 			state.flights = (Array.isArray(state.flights) ? state.flights : [])
 				.map((flight) => ({
 					...flight,
-					heartbeatAt: Number(flight && flight.heartbeatAt) ||
-						Math.max(0, Number(flight && flight.expiresAt) - SHARED_CACHE_FLIGHT_TTL),
+					heartbeatAt: Number(flight?.heartbeatAt) ||
+						Math.max(0, Number(flight?.expiresAt) - SHARED_CACHE_FLIGHT_TTL),
 				}))
-				.filter((flight) => flight && flight.token && Number(flight.expiresAt) > at &&
+				.filter((flight) => flight?.token && Number(flight.expiresAt) > at &&
 					Number(flight.heartbeatAt) > at - SHARED_CACHE_FLIGHT_STALE_MS)
 				.sort((a, b) => Number(a.expiresAt) - Number(b.expiresAt))
 				.slice(-120);
@@ -1237,7 +1237,7 @@
 				return result;
 			};
 			const locks = navigator.locks;
-			if (locks && typeof locks.request === 'function') {
+			if (isFunction(locks?.request)) {
 				return locks.request(lockName, { mode: 'exclusive' }, execute);
 			}
 			return execute();
@@ -1245,7 +1245,7 @@
 
 		const withCacheLock = (operation) => {
 			const locks = navigator.locks;
-			if (locks && typeof locks.request === 'function') {
+			if (isFunction(locks?.request)) {
 				return locks.request(cacheLockName, { mode: 'exclusive' }, operation);
 			}
 			return Promise.resolve().then(operation);
@@ -1355,7 +1355,7 @@
 			let granted = false;
 			let waitReason = '';
 			try {
-				while (!destroyed && !(signal && signal.aborted)) {
+				while (!destroyed && !(signal?.aborted)) {
 					const result = await transact((state, at) => {
 						const ownPolicy = rememberPolicy(state, at, options);
 						const policy = effectivePolicy(state, ownPolicy);
@@ -1500,13 +1500,13 @@
 
 		const waitForCacheFlight = async (token, signal, deadline = Date.now() + SHARED_CACHE_FLIGHT_TTL) => {
 			const normalizedToken = String(token || '');
-			while (!destroyed && Date.now() < deadline && !(signal && signal.aborted)) {
+			while (!destroyed && Date.now() < deadline && !(signal?.aborted)) {
 				const state = readState();
 				const flight = state.flights.find((candidate) => candidate.token === normalizedToken);
 				if (!flight) return true;
 				await waitForUpdate(Math.min(1000, Math.max(25, flight.expiresAt - Date.now())), signal);
 			}
-			if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError');
+			if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 			return false;
 		};
 
@@ -1559,13 +1559,13 @@
 			const longCap = Math.max(1, Math.floor(Number(options.longBudgetCap) || 160));
 			const policies = (Array.isArray(options.policies) ? options.policies : []).map((policy) => {
 				const window = policy && policy.window === '10s' ? '10s' : policy && policy.window === '60s' ? '60s' : '';
-				const limit = Math.max(0, Number(policy && policy.limit) || 0);
+				const limit = Math.max(0, Number(policy?.limit) || 0);
 				const cap = window === '10s' ? shortCap : longCap;
 				return {
 					window,
 					limit,
-					remaining: Number(policy && policy.remaining),
-					resetDelay: Math.max(0, Number(policy && policy.resetDelay) || 0),
+					remaining: Number(policy?.remaining),
+					resetDelay: Math.max(0, Number(policy?.resetDelay) || 0),
 					cap,
 					desired: Math.max(1, Math.min(cap, Math.floor(limit * rateTarget))),
 				};
@@ -1694,7 +1694,7 @@
 				instances: Math.max(1, liveContexts.size),
 				maxConcurrent: policy.maxConcurrent,
 				minInterval: policy.minInterval,
-				coordinationMode: navigator.locks && typeof navigator.locks.request === 'function'
+				coordinationMode: isFunction(navigator.locks?.request)
 					? 'atomic'
 					: 'best-effort',
 				coolingDown: cooldownRemaining > 0,
@@ -1715,7 +1715,7 @@
 			} catch (error) {}
 		};
 		const onChannelMessage = (event) => {
-			const data = event && event.data;
+			const data = event?.data;
 			if (data && data.type === 'cache' && data.contextId !== contextId) {
 				cacheListeners.forEach((listener) => {
 					try { listener(data.message || {}); } catch (error) {}
@@ -1748,7 +1748,7 @@
 			snapshot,
 			publishCache,
 			subscribeCache(listener) {
-				if (typeof listener !== 'function') return () => {};
+				if (!isFunction(listener)) return () => {};
 				cacheListeners.add(listener);
 				return () => cacheListeners.delete(listener);
 			},
@@ -1774,7 +1774,7 @@
 		if (!REQUEST_FLOW_AJAX_BOUND) {
 			const jqueryModule = lookupDiscourseModule('jquery');
 			const jquery = jqueryModule && (jqueryModule.default || jqueryModule);
-			if (typeof jquery === 'function') {
+			if (isFunction(jquery)) {
 				const target = jquery(document);
 				target.on('ajaxSend.ldpRequestFlow', (_event, xhr, settings = {}) => {
 					const method = String(settings.type || settings.method || 'GET').toUpperCase();
@@ -1804,11 +1804,11 @@
 			}
 		}
 
-		if (!REQUEST_FLOW_RESOURCE_OBSERVER && typeof window.PerformanceObserver === 'function') {
+		if (!REQUEST_FLOW_RESOURCE_OBSERVER && isFunction(window.PerformanceObserver)) {
 			try {
 				REQUEST_FLOW_RESOURCE_OBSERVER = new window.PerformanceObserver((list, _observer, options) => {
 					list.getEntries().forEach(recordResourceRequestFlow);
-					const dropped = Math.max(0, Number(options && options.droppedEntriesCount) || 0);
+					const dropped = Math.max(0, Number(options?.droppedEntriesCount) || 0);
 					if (dropped) REQUEST_FLOW_RESOURCE_DROPS.push({ at: requestFlowNow(), count: dropped });
 					pruneRequestFlowEvents();
 				});
@@ -1829,19 +1829,19 @@
 		try {
 			request = window.fetch(input, init);
 		} catch (error) {
-			finishRequestFlow(event, { error: error && error.name || 'fetch_error' });
+			finishRequestFlow(event, { error: error?.name || 'fetch_error' });
 			throw error;
 		}
 		return Promise.resolve(request).then((response) => {
 			finishResponseRequestFlow(
 				event,
-				response && response.url,
-				response && response.status,
-				response && response.headers
+				response?.url,
+				response?.status,
+				response?.headers
 			);
 			return response;
 		}, (error) => {
-			finishRequestFlow(event, { error: error && error.name || 'fetch_error' });
+			finishRequestFlow(event, { error: error?.name || 'fetch_error' });
 			throw error;
 		});
 	}
@@ -1850,7 +1850,7 @@
 	installRequestFlowInstrumentation();
 
 	function resetReaderRateAfterChallenge() {
-		if (ACTIVE_READER_REQUEST_SCHEDULER && ACTIVE_READER_REQUEST_SCHEDULER.resetRateLimits) {
+		if (ACTIVE_READER_REQUEST_SCHEDULER?.resetRateLimits) {
 			void ACTIVE_READER_REQUEST_SCHEDULER.resetRateLimits();
 			return true;
 		}
@@ -1936,12 +1936,12 @@
 
 	function trimResponseCacheMemory() {
 		let bytes = 0;
-		RESPONSE_CACHE_MEMORY.forEach((entry) => { bytes += Math.max(0, Number(entry && entry.bytes) || 0); });
+		RESPONSE_CACHE_MEMORY.forEach((entry) => { bytes += Math.max(0, Number(entry?.bytes) || 0); });
 		while (RESPONSE_CACHE_MEMORY.size > RESPONSE_CACHE_MEMORY_MAX_ENTRIES ||
 				(bytes > RESPONSE_CACHE_MEMORY_MAX_BYTES && RESPONSE_CACHE_MEMORY.size > 1)) {
 			const oldestId = RESPONSE_CACHE_MEMORY.keys().next().value;
 			const oldest = RESPONSE_CACHE_MEMORY.get(oldestId);
-			bytes -= Math.max(0, Number(oldest && oldest.bytes) || 0);
+			bytes -= Math.max(0, Number(oldest?.bytes) || 0);
 			RESPONSE_CACHE_MEMORY.delete(oldestId);
 		}
 	}
@@ -2057,7 +2057,7 @@
 	}
 
 	function responseCacheAuthScope() {
-		const currentUserId = Number(ME_CURRENT_USER && ME_CURRENT_USER.id) || 0;
+		const currentUserId = Number(ME_CURRENT_USER?.id) || 0;
 		const currentUsername = String(ME_USERNAME || '').trim().toLocaleLowerCase();
 		const accountIdentity = currentUserId
 			? `id:${currentUserId}`
@@ -2141,7 +2141,7 @@
 		return {
 			id: `${scope}|${parsed.href}`,
 			kind,
-			tags: Array.from(tags),
+			tags: [...tags],
 			freshFor,
 			retainFor,
 			persist,
@@ -2199,7 +2199,7 @@
 		if (!policy.persist) return Promise.resolve();
 		if (!responseCachePersistenceRequested) {
 			responseCachePersistenceRequested = true;
-			if (navigator.storage && typeof navigator.storage.persist === 'function') {
+			if (isFunction(navigator.storage?.persist)) {
 				navigator.storage.persist().catch(() => false);
 			}
 		}
@@ -2223,7 +2223,7 @@
 	}
 
 	function topicPostStream(topic) {
-		return topic && topic.post_stream || {};
+		return topic?.post_stream || {};
 	}
 
 	function estimateTopicSnapshotBytes(topic) {
@@ -2243,7 +2243,7 @@
 
 	function subscribeTopicCache(topicId, listener) {
 		const key = String(Number(topicId) || '');
-		if (!key || typeof listener !== 'function') return () => {};
+		if (!key || !isFunction(listener)) return () => {};
 		if (!TOPIC_CACHE_SUBSCRIBERS.has(key)) TOPIC_CACHE_SUBSCRIBERS.set(key, new Set());
 		const listeners = TOPIC_CACHE_SUBSCRIBERS.get(key);
 		listeners.add(listener);
@@ -2269,7 +2269,7 @@
 			const request = store.get(policy.id);
 			request.onsuccess = () => {
 				const existing = request.result;
-				const existingValue = existing && existing.value;
+				const existingValue = existing?.value;
 				const existingValid = existingValue && existingValue.version === TOPIC_SNAPSHOT_VERSION &&
 					Number(existingValue.topicId) === Number(payload.topicId) && existingValue.topic;
 				if (existingValid && Number(existingValue.updatedAt) > Number(payload.updatedAt)) {
@@ -2309,7 +2309,7 @@
 	async function flushTopicSnapshotWrite(topicId) {
 		const key = String(Number(topicId) || '');
 		const queued = TOPIC_SNAPSHOT_WRITE_QUEUE.get(key);
-		if (queued && queued.timer) clearTimeout(queued.timer);
+		if (queued?.timer) clearTimeout(queued.timer);
 		TOPIC_SNAPSHOT_WRITE_QUEUE.delete(key);
 		const entry = TOPIC_DATA_CACHE.get(key);
 		const scope = responseCacheAuthScope();
@@ -2354,8 +2354,8 @@
 		if (!key || !entry || entry.scope !== responseCacheAuthScope()) return;
 		const now = Date.now();
 		const previous = TOPIC_SNAPSHOT_WRITE_QUEUE.get(key);
-		if (previous && previous.timer) clearTimeout(previous.timer);
-		const firstQueuedAt = Number(previous && previous.firstQueuedAt) || now;
+		if (previous?.timer) clearTimeout(previous.timer);
+		const firstQueuedAt = Number(previous?.firstQueuedAt) || now;
 		const dueAt = Math.min(now + TOPIC_SNAPSHOT_WRITE_DELAY, firstQueuedAt + TOPIC_SNAPSHOT_WRITE_MAX_DELAY);
 		const timer = setTimeout(() => { void flushTopicSnapshotWrite(key); }, Math.max(0, dueAt - now));
 		TOPIC_SNAPSHOT_WRITE_QUEUE.set(key, { firstQueuedAt, timer });
@@ -2363,11 +2363,11 @@
 
 	function cancelTopicSnapshotWrites(topicId) {
 		const keys = topicId == null
-			? Array.from(TOPIC_SNAPSHOT_WRITE_QUEUE.keys())
+			? [...TOPIC_SNAPSHOT_WRITE_QUEUE.keys()]
 			: [String(Number(topicId) || '')];
 		keys.forEach((key) => {
 			const queued = TOPIC_SNAPSHOT_WRITE_QUEUE.get(key);
-			if (queued && queued.timer) clearTimeout(queued.timer);
+			if (queued?.timer) clearTimeout(queued.timer);
 			TOPIC_SNAPSHOT_WRITE_QUEUE.delete(key);
 		});
 	}
@@ -2379,14 +2379,14 @@
 	}
 
 	function mergeMissingSnapshotPosts(targetTopic, sourceTopic) {
-		const targetStream = targetTopic && targetTopic.post_stream;
-		const sourceStream = sourceTopic && sourceTopic.post_stream;
+		const targetStream = targetTopic?.post_stream;
+		const sourceStream = sourceTopic?.post_stream;
 		if (!targetStream || !sourceStream) return false;
 		const current = Array.isArray(targetStream.posts) ? targetStream.posts : [];
-		const indexes = new Map(current.map((post, index) => [Number(post && post.id), index]));
+		const indexes = new Map(current.map((post, index) => [Number(post?.id), index]));
 		let changed = false;
 		(Array.isArray(sourceStream.posts) ? sourceStream.posts : []).forEach((post) => {
-			const postId = Number(post && post.id);
+			const postId = Number(post?.id);
 			if (!postId || indexes.has(postId)) return;
 			indexes.set(postId, current.length);
 			current.push(post);
@@ -2405,9 +2405,9 @@
 		if (!policy) return null;
 		if (options.preferStored === true) RESPONSE_CACHE_MEMORY.delete(policy.id);
 		const stored = await getStoredResponseCacheEntry(policy.id);
-		const value = stored && stored.value;
+		const value = stored?.value;
 		const now = Date.now();
-		const fetchedAt = Number(value && value.fetchedAt) || Number(stored && stored.storedAt) || 0;
+		const fetchedAt = Number(value?.fetchedAt) || Number(stored?.storedAt) || 0;
 		if (!value || value.version !== TOPIC_SNAPSHOT_VERSION || Number(value.topicId) !== Number(topicId) ||
 				!value.topic || !(fetchedAt > 0) || now - fetchedAt > PERSISTENT_CACHE_CONFIG.topics.maxAge) {
 			if (stored) await deleteStoredResponseCacheEntry(policy.id);
@@ -2490,7 +2490,7 @@
 		const policy = responseCachePolicy(url, fetchOptions, options);
 		if (!policy) return networkRequest();
 		let cached = await getStoredResponseCacheEntry(policy.id);
-		const cachedBeforeRequest = Number(cached && cached.storedAt || 0);
+		const cachedBeforeRequest = Number(cached?.storedAt || 0);
 		let age = cached ? Date.now() - Number(cached.storedAt || 0) : Infinity;
 		if (cached && age > policy.retainFor) {
 			await deleteStoredResponseCacheEntry(policy.id);
@@ -2510,7 +2510,7 @@
 			const readLatestSharedCache = async () => {
 				RESPONSE_CACHE_MEMORY.delete(policy.id);
 				const latest = await getStoredResponseCacheEntry(policy.id);
-				const storedAt = Number(latest && latest.storedAt || 0);
+				const storedAt = Number(latest?.storedAt || 0);
 				const latestAge = latest ? Date.now() - storedAt : Infinity;
 				if (!latest || latestAge > policy.retainFor) return undefined;
 				cached = latest;
@@ -2601,7 +2601,7 @@
 		const removeIds = new Set();
 		const entriesByKind = new Map();
 		entries.forEach((entry) => {
-			const id = String(entry && entry.id || '');
+			const id = String(entry?.id || '');
 			if (!id) return;
 			if (entryExpiresAt(entry) <= now) {
 				removeIds.add(id);
@@ -2622,9 +2622,9 @@
 			if (!maxEntries && !maxBytes) return;
 			let keptEntries = 0;
 			let keptBytes = 0;
-			kindEntries.sort((left, right) => Number(right && right.storedAt || 0) - Number(left && left.storedAt || 0));
+			kindEntries.sort((left, right) => Number(right?.storedAt || 0) - Number(left?.storedAt || 0));
 			kindEntries.forEach((entry) => {
-				const bytes = Math.max(0, Number(entry && entry.bytes) || 0);
+				const bytes = Math.max(0, Number(entry?.bytes) || 0);
 				const exceedsEntries = maxEntries > 0 && keptEntries >= maxEntries;
 				const exceedsBytes = maxBytes > 0 && keptBytes + bytes > maxBytes;
 				if (exceedsEntries || exceedsBytes) {
@@ -2643,12 +2643,12 @@
 		if (!force && now - responseCachePrunedAt < HOUR) return;
 		if (responseCachePruneRequest) return responseCachePruneRequest;
 		const entryExpiresAt = (entry) => {
-			const explicit = Number(entry && entry.expiresAt);
+			const explicit = Number(entry?.expiresAt);
 			if (explicit > 0) return explicit;
-			const id = String(entry && entry.id || '');
+			const id = String(entry?.id || '');
 			const separator = id.indexOf('|');
 			const policy = separator >= 0 ? responseCachePolicy(id.slice(separator + 1)) : null;
-			return Number(entry && entry.storedAt || 0) +
+			return Number(entry?.storedAt || 0) +
 				(policy ? policy.retainFor : PERSISTENT_CACHE_CONFIG.responses.maxAge);
 		};
 		responseCachePruneRequest = (async () => {
@@ -2691,7 +2691,7 @@
 		if (SHARED_REQUEST_COORDINATOR) {
 			await SHARED_REQUEST_COORDINATOR.invalidateCacheWrites();
 		}
-		if (RESPONSE_CACHE_WRITES.size) await Promise.all(Array.from(RESPONSE_CACHE_WRITES.values()));
+		if (RESPONSE_CACHE_WRITES.size) await Promise.all([...RESPONSE_CACHE_WRITES.values()]);
 		const kindSet = new Set(kinds);
 		const tagSet = new Set(tags);
 		RESPONSE_CACHE_MEMORY.forEach((entry, id) => {
@@ -2745,10 +2745,10 @@
 		const notificationIds = new Set();
 		const responseRecords = { bookmarks: 0, reactions: 0, other: 0 };
 		const result = () => ({
-			topics: { ...counts.topics, topicIds: Array.from(topicIds), postCount: postIds.size,
+			topics: { ...counts.topics, topicIds: [...topicIds], postCount: postIds.size,
 				topicSnapshotCount, topicRequestCount },
-			users: { ...counts.users, userNames: Array.from(userNames) },
-			notifications: { ...counts.notifications, notificationIds: Array.from(notificationIds) },
+			users: { ...counts.users, userNames: [...userNames] },
+			notifications: { ...counts.notifications, notificationIds: [...notificationIds] },
 			responses: { ...counts.responses, responseRecords },
 		});
 		await scanStoredResponseCache('readonly', (entry) => {
@@ -2770,20 +2770,20 @@
 						const snapshotTopic = isTopicSnapshot && value
 							? value.topic
 							: value;
-						const snapshotTopicId = Number(value && value.topicId || snapshotTopic && snapshotTopic.id || 0);
+						const snapshotTopicId = Number(value?.topicId || snapshotTopic?.id || 0);
 						if (snapshotTopicId > 0) topicIds.add(snapshotTopicId);
 						postsFromPayload(snapshotTopic).forEach((post) => {
-							const topicId = Number(post && post.topic_id || snapshotTopicId || 0);
+							const topicId = Number(post?.topic_id || snapshotTopicId || 0);
 							if (topicId > 0) topicIds.add(topicId);
-							const postId = Number(post && post.id || 0);
-							const postNumber = Number(post && post.post_number || 0);
+							const postId = Number(post?.id || 0);
+							const postNumber = Number(post?.post_number || 0);
 							if (postId > 0) postIds.add(`id:${postId}`);
 							else if (topicId > 0 && postNumber > 0) postIds.add(`number:${topicId}:${postNumber}`);
 						});
 					} else if (entry.kind === 'users') {
 						tags.forEach((tag) => {
 							const match = tag.match(/^user:(.+)$/);
-							if (match && match[1]) userNames.add(match[1].toLocaleLowerCase());
+							if (match?.[1]) userNames.add(match[1].toLocaleLowerCase());
 						});
 						const value = entry.value || {};
 						const candidates = [value.user, value];
@@ -2791,7 +2791,7 @@
 							candidates.push(item && (item.user || item));
 						});
 						candidates.forEach((user) => {
-							const username = cleanUsernameValue(user && user.username).toLocaleLowerCase();
+							const username = cleanUsernameValue(user?.username).toLocaleLowerCase();
 							if (username) userNames.add(username);
 						});
 					} else if (entry.kind === 'notifications') {
@@ -2818,7 +2818,7 @@
 			(source.bookmarkable_type === 'Topic' && source.bookmarkable_id) || 0);
 		const postId = Number(source.post_id || source.postId ||
 			(source.bookmarkable_type === 'Post' && source.bookmarkable_id) ||
-			(data && data.post && data.post.id) || 0);
+			(data?.post && data.post.id) || 0);
 		if (topicId) tags.add(`topic:${topicId}`);
 		if (postId) tags.add(`post:${postId}`);
 		if (parsed) {
@@ -2832,7 +2832,7 @@
 				tags.add(`post:${reactionPostMatch[1]}`);
 				tags.add('reactions-given');
 			}
-			if (parsed.pathname === '/post_actions' && Number(params && params.id)) {
+			if (parsed.pathname === '/post_actions' && Number(params?.id)) {
 				tags.add(`post:${Number(params.id)}`);
 			}
 			if (parsed.pathname === '/post_actions' || /^\/post_actions\/\d+/.test(parsed.pathname)) {
@@ -2843,7 +2843,7 @@
 			if (userMatch) tags.add(`user:${decodeURIComponent(userMatch[1]).toLocaleLowerCase()}`);
 			if (parsed.pathname.startsWith('/notifications/')) tags.add('notifications');
 		}
-		return Array.from(tags);
+		return [...tags];
 	}
 
 	function scheduleIdleWork(callback, timeout = 1200) {
@@ -2851,11 +2851,11 @@
 		const run = () => {
 			if (!cancelled) callback();
 		};
-		if (typeof requestIdleCallback === 'function') {
+		if (isFunction(requestIdleCallback)) {
 			const id = requestIdleCallback(run, { timeout });
 			return () => {
 				cancelled = true;
-				if (typeof cancelIdleCallback === 'function') cancelIdleCallback(id);
+				if (isFunction(cancelIdleCallback)) cancelIdleCallback(id);
 			};
 		}
 		const id = setTimeout(run, timeout);
@@ -2867,13 +2867,13 @@
 
 	function trimPersistentCacheMap(key) {
 		const cache = cacheMapForKey(key);
-		const maxEntries = Number(PERSISTENT_CACHE_CONFIG[key] && PERSISTENT_CACHE_CONFIG[key].maxEntries) || 0;
+		const maxEntries = Number(PERSISTENT_CACHE_CONFIG[key]?.maxEntries) || 0;
 		if (!cache || !maxEntries) return;
 		while (cache.size > maxEntries) cache.delete(cache.keys().next().value);
 	}
 
 	function topicCacheEntryTimestamp(entry) {
-		return Number(entry && entry.fetchedAt) || Number(entry && entry.at) || 0;
+		return Number(entry?.fetchedAt) || Number(entry?.at) || 0;
 	}
 
 	function rememberCachedTopicData(topicId, topic, options = {}) {
@@ -2889,7 +2889,7 @@
 			fetchedAt: Number(options.fetchedAt) || topicCacheEntryTimestamp(sameScope) || now,
 			lastAccessAt: Number(options.lastAccessAt) || now,
 			updatedAt: Number(options.updatedAt) || now,
-			source: String(options.source || sameScope && sameScope.source || 'memory'),
+			source: String(options.source || sameScope?.source || 'memory'),
 		};
 		TOPIC_DATA_CACHE.delete(key);
 		TOPIC_DATA_CACHE.set(key, entry);
@@ -3029,12 +3029,12 @@
 		cache.forEach((value, entryKey) => {
 			const normalizedKey = String(entryKey);
 			const previous = merged.get(normalizedKey);
-			if (!previous || Number(value && value.at || 0) >= Number(previous && previous.at || 0)) {
+			if (!previous || Number(value?.at || 0) >= Number(previous?.at || 0)) {
 				merged.delete(normalizedKey);
 				merged.set(normalizedKey, value);
 			}
 		});
-		const entries = boundedPersistentEntries(key, Array.from(merged.entries()));
+		const entries = boundedPersistentEntries(key, [...merged.entries()]);
 		while (true) {
 			try {
 				if (entries.length) localStorage.setItem(config.storageKey, JSON.stringify({ version: PERSISTENT_CACHE_VERSION, entries }));
@@ -3059,7 +3059,7 @@
 			cancel();
 		}
 		persistentCacheWriteDueAt = 0;
-		const keys = Array.from(PERSISTENT_CACHE_WRITE_KEYS);
+		const keys = [...PERSISTENT_CACHE_WRITE_KEYS];
 		PERSISTENT_CACHE_WRITE_KEYS.clear();
 		keys.forEach(persistCacheType);
 	}
@@ -3089,7 +3089,7 @@
 			entries.forEach(([entryKey, value]) => cache.set(String(entryKey), value));
 			if (key === 'notifications') {
 				entries.forEach(([, entry]) => {
-					const notifications = entry && entry.value && entry.value.notifications;
+					const notifications = entry?.value && entry.value.notifications;
 					if (!Array.isArray(notifications)) return;
 					notifications.forEach((notification) => {
 						const data = notificationData(notification);
@@ -3111,7 +3111,7 @@
 		boundedPersistentEntries(key, readPersistentCacheEntries(key)).forEach(([entryKey, value]) => {
 			const normalizedKey = String(entryKey);
 			const current = cache.get(normalizedKey);
-			if (!current || Number(value && value.at || 0) > Number(current && current.at || 0)) {
+			if (!current || Number(value?.at || 0) > Number(current?.at || 0)) {
 				cache.delete(normalizedKey);
 				cache.set(normalizedKey, value);
 				changed = true;
@@ -3139,7 +3139,7 @@
 	}
 
 	function applySharedCacheMessage(message) {
-		const action = String(message && message.action || '');
+		const action = String(message?.action || '');
 		if (action === 'topic-snapshot-write') {
 			const topicId = Number(message.topicId);
 			if (!(topicId > 0) || String(message.scopeToken || '') !== sharedCacheIdToken(responseCacheAuthScope())) return;
@@ -3201,7 +3201,7 @@
 
 	function historyEntrySortTime(entry) {
 		return PREFS.historySortMode === 'recent-viewed'
-			? Number(entry && entry.viewedAt) || 0
+			? Number(entry?.viewedAt) || 0
 			: historyEntryFirstViewedAt(entry);
 	}
 
@@ -3228,46 +3228,46 @@
 	}
 
 	function normalizeReadPostNumbers(values) {
-		const source = values instanceof Set ? Array.from(values) : (Array.isArray(values) ? values : []);
-		return Array.from(new Set(source
+		const source = values instanceof Set ? [...values] : (Array.isArray(values) ? values : []);
+		return [...new Set(source
 			.map((value) => Math.floor(Number(value) || 0))
-			.filter((value) => value > 0)))
+			.filter((value) => value > 0))]
 			.sort((left, right) => left - right);
 	}
 
 	function historyEntryReadPostNumbers(entry) {
-		return normalizeReadPostNumbers(entry && entry.readPostNumbers);
+		return normalizeReadPostNumbers(entry?.readPostNumbers);
 	}
 
 	function rememberTopic(topic, postNumber = 0, readPostNumbers = []) {
-		const topicId = Number(topic && topic.id);
+		const topicId = Number(topic?.id);
 		if (!topicId) return;
 		const history = readTopicHistory();
 		const previousEntry = history.find((item) => Number(item.topicId) === topicId);
 		const viewedPostNumber = Math.max(
 			1,
-			Math.floor(Number(postNumber) || Number(previousEntry && previousEntry.postNumber) || 1),
+			Math.floor(Number(postNumber) || Number(previousEntry?.postNumber) || 1),
 		);
 		const cumulativeReadPostNumbers = normalizeReadPostNumbers([
 			...historyEntryReadPostNumbers(previousEntry),
 			...normalizeReadPostNumbers(readPostNumbers),
 			viewedPostNumber,
 		]);
-		const posts = topic && topic.post_stream && Array.isArray(topic.post_stream.posts)
+		const posts = topic?.post_stream && Array.isArray(topic.post_stream.posts)
 			? topic.post_stream.posts : [];
-		const firstPost = posts.find((post) => Number(post && post.post_number) === 1);
+		const firstPost = posts.find((post) => Number(post?.post_number) === 1);
 		const viewedAt = Date.now();
 		const entry = {
 			topicId,
 			title: String(topic.title || `帖子 #${topicId}`),
 			postsCount: Math.max(0, Number(topic.posts_count) || 0),
 			avatarTemplate: String(
-				(topic.details && topic.details.created_by && topic.details.created_by.avatar_template) ||
-				(firstPost && firstPost.avatar_template) || ''
+				(topic.details?.created_by && topic.details.created_by.avatar_template) ||
+				(firstPost?.avatar_template) || ''
 			),
 			ownerUsername: String(
-				(topic.details && topic.details.created_by && topic.details.created_by.username) ||
-				(firstPost && firstPost.username) || topic._opUsername || ''
+				(topic.details?.created_by && topic.details.created_by.username) ||
+				(firstPost?.username) || topic._opUsername || ''
 			),
 			postNumber: viewedPostNumber,
 			readPostNumbers: cumulativeReadPostNumbers,
@@ -3275,8 +3275,8 @@
 			viewedAt,
 		};
 		writeTopicHistory([entry, ...history.filter((item) => Number(item.topicId) !== topicId)]);
-		const readerShell = CURRENT_OVERLAY && CURRENT_OVERLAY._ldpReaderShell;
-		if (readerShell && typeof readerShell.refreshHistoryPanel === 'function') {
+		const readerShell = CURRENT_OVERLAY?._ldpReaderShell;
+		if (isFunction(readerShell?.refreshHistoryPanel)) {
 			readerShell.refreshHistoryPanel();
 		}
 	}
@@ -3313,8 +3313,8 @@
 
 	function createReaderHistoryNavigation(topicId, source) {
 		const currentTopicId = Number(topicId);
-		const normalize = (values) => Array.from(new Set((Array.isArray(values) ? values : [])
-			.map(Number).filter((id) => id > 0 && id !== currentTopicId)));
+		const normalize = (values) => [...new Set((Array.isArray(values) ? values : [])
+			.map(Number).filter((id) => id > 0 && id !== currentTopicId))];
 		if (source && (Array.isArray(source.back) || Array.isArray(source.forward))) {
 			return {
 				back: normalize(source.back),
@@ -3374,7 +3374,7 @@
 		forwardButton.setAttribute('aria-keyshortcuts', 'ArrowRight');
 		const topicTitle = (targetTopicId) => {
 			const entry = readTopicHistory().find((item) => Number(item.topicId) === Number(targetTopicId));
-			return entry && entry.title ? entry.title : `帖子 #${targetTopicId}`;
+			return entry?.title ? entry.title : `帖子 #${targetTopicId}`;
 		};
 		const refreshVisibleTooltip = (button) => {
 			refreshTooltips(button);
@@ -3409,7 +3409,7 @@
 			forwardButton.disabled = true;
 			const currentPostNumber = Number(overlay.querySelector('.ldp-topic-timeline-track')?.getAttribute('aria-valuenow')) || 1;
 			const currentViewport = normalizeReaderHistoryViewport(
-				typeof overlay._ldpCaptureHistoryViewport === 'function'
+				isFunction(overlay._ldpCaptureHistoryViewport)
 					? overlay._ldpCaptureHistoryViewport()
 					: { postNumber: currentPostNumber, scrollTop: overlay.querySelector('.ldp-body')?.scrollTop || 0 }
 			);
@@ -3472,8 +3472,8 @@
 	}
 
 	function normalizeReaderQueueSurfaceState(state) {
-		const rawX = state && state.x;
-		const rawY = state && state.y;
+		const rawX = state?.x;
+		const rawY = state?.y;
 		const x = Number(rawX);
 		const y = Number(rawY);
 		const hasPosition = rawX != null && rawX !== '' && rawY != null && rawY !== '' &&
@@ -3481,14 +3481,14 @@
 		return {
 			x: hasPosition ? Math.max(0, Math.min(1, x)) : null,
 			y: hasPosition ? Math.max(0, Math.min(1, y)) : null,
-			dock: hasPosition && ['left', 'right'].includes(state && state.dock)
+			dock: hasPosition && ['left', 'right'].includes(state?.dock)
 				? state.dock
 				: '',
 		};
 	}
 
 	function readerQueueSurfaceStateCustomized(state = READER_QUEUE_SURFACE_STATE) {
-		return Number.isFinite(state && state.x) && Number.isFinite(state && state.y);
+		return Number.isFinite(state?.x) && Number.isFinite(state?.y);
 	}
 
 	function flushReaderQueueState() {
@@ -3496,18 +3496,18 @@
 		READER_QUEUE_PERSIST_TIMER = 0;
 		if (READER_QUEUE_RESTORING) return;
 		const entries = READER_QUEUE_ENTRIES.map((entry) => {
-			const avatarSource = String(entry && entry.avatarSource || '');
+			const avatarSource = String(entry?.avatarSource || '');
 			return {
-				topicId: Number(entry && entry.topicId) || 0,
-				title: String(entry && entry.title || ''),
-				avatarTemplate: String(entry && entry.avatarTemplate || ''),
+				topicId: Number(entry?.topicId) || 0,
+				title: String(entry?.title || ''),
+				avatarTemplate: String(entry?.avatarTemplate || ''),
 				avatarSource: /^https?:\/\//i.test(avatarSource) ? avatarSource : '',
-				ownerUsername: String(entry && entry.ownerUsername || ''),
-				addedAt: Math.max(0, Number(entry && entry.addedAt) || 0),
+				ownerUsername: String(entry?.ownerUsername || ''),
+				addedAt: Math.max(0, Number(entry?.addedAt) || 0),
 				pinned: entry && entry.pinned === true,
-				totalCount: Math.max(0, Number(entry && entry.totalCount) || 0),
-				urlPostNumber: Math.max(0, Number(entry && entry.urlPostNumber) || 0),
-				viewport: normalizeReaderHistoryViewport(entry && entry.viewport),
+				totalCount: Math.max(0, Number(entry?.totalCount) || 0),
+				urlPostNumber: Math.max(0, Number(entry?.urlPostNumber) || 0),
+				viewport: normalizeReaderHistoryViewport(entry?.viewport),
 			};
 		})
 			.filter((entry) => entry.topicId > 0);
@@ -3519,7 +3519,7 @@
 				localStorage.removeItem(LDP_READER_QUEUE_KEY);
 			}
 		} catch (error) {
-			console.warn('[LDP] 阅读队列保存失败', error && error.name || 'storage-error');
+			console.warn('[LDP] 阅读队列保存失败', error?.name || 'storage-error');
 		}
 	}
 
@@ -3533,7 +3533,7 @@
 		let storedSurface = null;
 		try {
 			const payload = JSON.parse(localStorage.getItem(LDP_READER_QUEUE_KEY) || 'null');
-			storedEntries = Array.isArray(payload) ? payload : (Array.isArray(payload && payload.entries) ? payload.entries : []);
+			storedEntries = Array.isArray(payload) ? payload : (Array.isArray(payload?.entries) ? payload.entries : []);
 			storedSurface = !Array.isArray(payload) && payload && payload.surface;
 		} catch (error) {
 			return;
@@ -3544,7 +3544,7 @@
 		READER_QUEUE_RESTORING = true;
 		try {
 			storedEntries.forEach((storedEntry) => {
-				const topicId = Number(storedEntry && storedEntry.topicId);
+				const topicId = Number(storedEntry?.topicId);
 				if (!(topicId > 0) || restoredTopicIds.has(topicId)) return;
 				restoredTopicIds.add(topicId);
 				const entry = ensureReaderQueueEntry(topicId, {
@@ -3569,28 +3569,28 @@
 		const safeTopicId = Number(topicId);
 		const cachedTopic = topic || getCachedTopicData(safeTopicId);
 		const historyEntry = readTopicHistory().find((item) => Number(item.topicId) === safeTopicId);
-		const posts = cachedTopic && cachedTopic.post_stream && Array.isArray(cachedTopic.post_stream.posts)
+		const posts = cachedTopic?.post_stream && Array.isArray(cachedTopic.post_stream.posts)
 			? cachedTopic.post_stream.posts : [];
-		const firstPost = posts.find((post) => Number(post && post.post_number) === 1);
+		const firstPost = posts.find((post) => Number(post?.post_number) === 1);
 		return {
 			title: String(
-				metadata.title || cachedTopic && cachedTopic.title || historyEntry && historyEntry.title ||
+				metadata.title || cachedTopic?.title || historyEntry?.title ||
 				`帖子 #${safeTopicId}`
 			).replace(/\s+/g, ' ').trim(),
 			avatarTemplate: String(
 				metadata.avatarTemplate ||
-				cachedTopic && cachedTopic.details && cachedTopic.details.created_by &&
+				cachedTopic?.details && cachedTopic.details.created_by &&
 					cachedTopic.details.created_by.avatar_template ||
-				firstPost && firstPost.avatar_template ||
-				historyEntry && historyEntry.avatarTemplate || ''
+				firstPost?.avatar_template ||
+				historyEntry?.avatarTemplate || ''
 			),
 			avatarSource: String(metadata.avatarSource || ''),
 			ownerUsername: String(
 				metadata.ownerUsername ||
-				cachedTopic && cachedTopic.details && cachedTopic.details.created_by &&
+				cachedTopic?.details && cachedTopic.details.created_by &&
 					cachedTopic.details.created_by.username ||
-				firstPost && firstPost.username ||
-				historyEntry && historyEntry.ownerUsername || ''
+				firstPost?.username ||
+				historyEntry?.ownerUsername || ''
 			),
 			navMetadata: mergeTopicNavMetadata(
 				metadata.navMetadata || {},
@@ -3599,9 +3599,9 @@
 			totalCount: Math.max(
 				0,
 				Number(cachedTopic && (cachedTopic.highest_post_number || cachedTopic.posts_count)) || 0,
-				Number(historyEntry && historyEntry.postsCount) || 0,
+				Number(historyEntry?.postsCount) || 0,
 			),
-			historyPostNumber: Math.max(0, Number(historyEntry && historyEntry.postNumber) || 0),
+			historyPostNumber: Math.max(0, Number(historyEntry?.postNumber) || 0),
 			urlPostNumber: Math.max(0, Number(metadata.urlPostNumber) || 0),
 			readPostNumbers: historyEntryReadPostNumbers(historyEntry),
 		};
@@ -3609,25 +3609,25 @@
 
 	function readerQueueMetadataFromLink(link, topicId) {
 		const source = link && link.nodeType === Node.ELEMENT_NODE ? link : null;
-		const card = source && source.closest(
+		const card = source?.closest(
 			'tr.topic-list-item,.topic-list-item,.latest-topic-list-item,.search-result-topic,.fps-result,.category-topic-link'
 		);
-		const titleLink = card && card.querySelector(
+		const titleLink = card?.querySelector(
 			'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],.link-top-line a[href*="/t/"],a[href*="/t/"]'
 		);
-		const avatar = card && card.querySelector(':is(.posters,.topic-poster) img.avatar,img.avatar');
-		const ownerNode = card && card.querySelector('[data-user-card]');
+		const avatar = card?.querySelector(':is(.posters,.topic-poster) img.avatar,img.avatar');
+		const ownerNode = card?.querySelector('[data-user-card]');
 		const route = extractTopicRouteFromUrl(titleLink && (titleLink.getAttribute('href') || titleLink.href));
 		return {
 			title: String(
 				source && source.dataset.topicTitle ||
 				titleLink && (titleLink.dataset.topicTitle || titleLink.textContent) ||
-				source && source.textContent || `帖子 #${topicId}`
+				source?.textContent || `帖子 #${topicId}`
 			).replace(/\s+/g, ' ').trim(),
 			avatarSource: String(avatar && (avatar.currentSrc || avatar.src) || ''),
 			ownerUsername: String(ownerNode && ownerNode.dataset.userCard || ''),
 			navMetadata: readTopicNavMetadata(source, topicId),
-			urlPostNumber: Math.max(0, Number(route && route.postNumber) || 0),
+			urlPostNumber: Math.max(0, Number(route?.postNumber) || 0),
 		};
 	}
 
@@ -3636,16 +3636,16 @@
 		const stream = Array.isArray(postStream.stream) ? postStream.stream.filter(Boolean) : [];
 		const streamIds = new Set(stream.map(Number).filter(Boolean));
 		const loadedIds = new Set((Array.isArray(postStream.posts) ? postStream.posts : [])
-			.map((post) => Number(post && post.id)).filter((postId) => postId && (!streamIds.size || streamIds.has(postId))));
+			.map((post) => Number(post?.id)).filter((postId) => postId && (!streamIds.size || streamIds.has(postId))));
 		return {
-			total: stream.length || Math.max(0, Number(topic && topic.posts_count) || 0),
+			total: stream.length || Math.max(0, Number(topic?.posts_count) || 0),
 			loaded: loadedIds.size,
 		};
 	}
 
 	function syncReaderQueueReadHistory(entries) {
 		const historyByTopic = new Map((Array.isArray(entries) ? entries : [])
-			.map((historyEntry) => [String(Number(historyEntry && historyEntry.topicId) || 0), historyEntry]));
+			.map((historyEntry) => [String(Number(historyEntry?.topicId) || 0), historyEntry]));
 		let changed = false;
 		READER_QUEUE_ENTRIES.forEach((entry) => {
 			const historyEntry = historyByTopic.get(String(entry.topicId));
@@ -3653,7 +3653,7 @@
 				? new Set([...entry.seenPostNumbers, ...historyEntryReadPostNumbers(historyEntry)])
 				: new Set();
 			if (nextReadPostNumbers.size !== entry.seenPostNumbers.size ||
-					Array.from(nextReadPostNumbers).some((postNumber) => !entry.seenPostNumbers.has(postNumber))) {
+					[...nextReadPostNumbers].some((postNumber) => !entry.seenPostNumbers.has(postNumber))) {
 				entry.seenPostNumbers = nextReadPostNumbers;
 				changed = true;
 			}
@@ -3679,27 +3679,27 @@
 		const postsCount = Math.max(
 			cumulativeReadPostNumbers[cumulativeReadPostNumbers.length - 1] || 0,
 			Number(entry.totalCount) || 0,
-			Number(previousEntry && previousEntry.postsCount) || 0,
+			Number(previousEntry?.postsCount) || 0,
 		);
 		if (cumulativeReadPostNumbers.length === previousReadPostNumbers.length &&
-				Number(previousEntry && previousEntry.postsCount) >= postsCount) return;
+				Number(previousEntry?.postsCount) >= postsCount) return;
 		const now = Date.now();
 		const nextEntry = {
 			...(previousEntry || {}),
 			topicId: Number(entry.topicId),
-			title: String(entry.title || previousEntry && previousEntry.title || `帖子 #${entry.topicId}`),
+			title: String(entry.title || previousEntry?.title || `帖子 #${entry.topicId}`),
 			postsCount,
-			avatarTemplate: String(entry.avatarTemplate || previousEntry && previousEntry.avatarTemplate || ''),
-			ownerUsername: String(entry.ownerUsername || previousEntry && previousEntry.ownerUsername || ''),
+			avatarTemplate: String(entry.avatarTemplate || previousEntry?.avatarTemplate || ''),
+			ownerUsername: String(entry.ownerUsername || previousEntry?.ownerUsername || ''),
 			postNumber: Math.max(
 				1,
-				Number(previousEntry && previousEntry.postNumber) ||
-					Number(entry.viewport && entry.viewport.postNumber) ||
+				Number(previousEntry?.postNumber) ||
+					Number(entry.viewport?.postNumber) ||
 					cumulativeReadPostNumbers[cumulativeReadPostNumbers.length - 1] || 1,
 			),
 			readPostNumbers: cumulativeReadPostNumbers,
 			firstViewedAt: historyEntryFirstViewedAt(previousEntry) || now,
-			viewedAt: Number(previousEntry && previousEntry.viewedAt) || now,
+			viewedAt: Number(previousEntry?.viewedAt) || now,
 		};
 		delete nextEntry.readPostNumber;
 		writeTopicHistory([
@@ -3732,7 +3732,7 @@
 	}
 
 	function readerQueueProgress(entry) {
-		const total = Math.max(0, Number(entry && entry.totalCount) || 0);
+		const total = Math.max(0, Number(entry?.totalCount) || 0);
 		if (!entry || !total) return 0;
 		return Math.max(0, Math.min(100, entry.seenPostNumbers.size / total * 100));
 	}
@@ -3742,14 +3742,14 @@
 		return Math.max(
 			1,
 			Number(entry.urlPostNumber) ||
-			Number(entry.viewport && entry.viewport.postNumber) ||
+			Number(entry.viewport?.postNumber) ||
 			1
 		);
 	}
 
 	function readerQueueStatusText(entry) {
 		const total = Math.max(0, Number(entry.totalCount) || 0);
-		const currentFloor = Math.max(0, Number(entry.viewport && entry.viewport.postNumber) || 0);
+		const currentFloor = Math.max(0, Number(entry.viewport?.postNumber) || 0);
 		const readCount = entry.seenPostNumbers.size;
 		const progress = Math.round(readerQueueProgress(entry));
 		const pinned = entry.pinned ? '已固定 · ' : '';
@@ -3818,8 +3818,8 @@
 	}
 
 	function syncReaderQueueScrollHint(rail) {
-		const bubbles = rail && rail.querySelector('.ldp-reader-queue-bubbles');
-		const hint = rail && rail.querySelector('.ldp-reader-queue-scroll-hint');
+		const bubbles = rail?.querySelector('.ldp-reader-queue-bubbles');
+		const hint = rail?.querySelector('.ldp-reader-queue-scroll-hint');
 		if (!bubbles || !hint) return;
 		const maxScroll = Math.max(0, bubbles.scrollHeight - bubbles.clientHeight);
 		const hasOverflow = maxScroll >= 2;
@@ -3832,8 +3832,8 @@
 	}
 
 	function syncReaderQueueToggleState(rail) {
-		const toggle = rail && rail.querySelector('.ldp-reader-queue-toggle');
-		const count = toggle && toggle.querySelector('b');
+		const toggle = rail?.querySelector('.ldp-reader-queue-toggle');
+		const count = toggle?.querySelector('b');
 		if (!toggle || !count) return;
 		const previewExpanded = !rail.classList.contains('is-preview-collapsed');
 		setPressed(toggle, previewExpanded);
@@ -3863,10 +3863,10 @@
 	}
 
 	function renderReaderQueueSurface(overlay) {
-		const rail = overlay && overlay.querySelector('.ldp-reader-queue');
+		const rail = overlay?.querySelector('.ldp-reader-queue');
 		if (!rail) return;
 		const toggle = rail.querySelector('.ldp-reader-queue-toggle');
-		const count = toggle && toggle.querySelector('b');
+		const count = toggle?.querySelector('b');
 		const bubbles = rail.querySelector('.ldp-reader-queue-bubbles');
 		const scrollHint = rail.querySelector('.ldp-reader-queue-scroll-hint');
 		const panel = rail.querySelector('.ldp-reader-queue-panel');
@@ -3889,19 +3889,19 @@
 			const progress = readerQueueProgress(entry);
 			const removable = READER_QUEUE_ENTRIES.length > 1 || !active;
 			return `<span class="ldp-reader-queue-bubble-shell${entry.pinned ? ' is-pinned' : ''}">
-          <button class="ldp-reader-queue-bubble${active ? ' is-active' : ''}${progress >= 100 ? ' is-progress-complete' : ''} is-${entry.loadState}" type="button"
-            data-reader-queue-topic-id="${entry.topicId}" aria-current="${active ? 'true' : 'false'}"
-            aria-label="${escAttr(`${entry.title}，${readerQueueStatusText(entry)}`)}"
-            data-ldp-tooltip-label="${escAttr(`${entry.title} · ${readerQueueStatusText(entry)}`)}"
-            style="--ldp-reader-queue-progress:${progress * 3.6}deg">
-            <span class="ldp-reader-queue-avatar">${readerQueueAvatarHtml(entry)}</span>
-            <i aria-hidden="true"></i>
-          </button>
-          ${entry.pinned ? `<span class="ldp-reader-queue-bubble-pin" aria-hidden="true">${icon('pin')}</span>` : ''}
-          <button class="ldp-reader-queue-bubble-remove" type="button"
-            data-reader-queue-topic-id="${entry.topicId}" aria-label="${escAttr(`从阅读队列移除 ${entry.title}`)}"
-            ${removable ? '' : 'disabled'}>${icon('x')}</button>
-        </span>`;
+					<button class="ldp-reader-queue-bubble${active ? ' is-active' : ''}${progress >= 100 ? ' is-progress-complete' : ''} is-${entry.loadState}" type="button"
+						data-reader-queue-topic-id="${entry.topicId}" aria-current="${active ? 'true' : 'false'}"
+						aria-label="${escAttr(`${entry.title}，${readerQueueStatusText(entry)}`)}"
+						data-ldp-tooltip-label="${escAttr(`${entry.title} · ${readerQueueStatusText(entry)}`)}"
+						style="--ldp-reader-queue-progress:${progress * 3.6}deg">
+						<span class="ldp-reader-queue-avatar">${readerQueueAvatarHtml(entry)}</span>
+						<i aria-hidden="true"></i>
+					</button>
+					${entry.pinned ? `<span class="ldp-reader-queue-bubble-pin" aria-hidden="true">${icon('pin')}</span>` : ''}
+					<button class="ldp-reader-queue-bubble-remove" type="button"
+						data-reader-queue-topic-id="${entry.topicId}" aria-label="${escAttr(`从阅读队列移除 ${entry.title}`)}"
+						${removable ? '' : 'disabled'}>${icon('x')}</button>
+				</span>`;
 		}).join('');
 		releasePersistentAvatarImages(list);
 		list.innerHTML = READER_QUEUE_ENTRIES.map((entry) => {
@@ -3909,24 +3909,24 @@
 			const progress = readerQueueProgress(entry);
 			const removable = READER_QUEUE_ENTRIES.length > 1 || !active;
 			return `<div class="ldp-reader-queue-row${active ? ' is-active' : ''}${entry.pinned ? ' is-pinned' : ''}" role="option" tabindex="0"
-          aria-selected="${active ? 'true' : 'false'}" data-reader-queue-topic-id="${entry.topicId}">
-          <span class="ldp-reader-queue-row-progress${progress >= 100 ? ' is-progress-complete' : ''}" style="--ldp-reader-queue-progress:${progress * 3.6}deg">
-            <span class="ldp-reader-queue-avatar">${readerQueueAvatarHtml(entry)}</span>
-          </span>
-          <span class="ldp-reader-queue-row-copy">
-            <strong>${esc(entry.title)}</strong>
-            <small>${esc(readerQueueStatusText(entry))}</small>
-          </span>
-          <span class="ldp-reader-queue-row-actions">
-            ${entry.loadState === 'error'
+					aria-selected="${active ? 'true' : 'false'}" data-reader-queue-topic-id="${entry.topicId}">
+					<span class="ldp-reader-queue-row-progress${progress >= 100 ? ' is-progress-complete' : ''}" style="--ldp-reader-queue-progress:${progress * 3.6}deg">
+						<span class="ldp-reader-queue-avatar">${readerQueueAvatarHtml(entry)}</span>
+					</span>
+					<span class="ldp-reader-queue-row-copy">
+						<strong>${esc(entry.title)}</strong>
+						<small>${esc(readerQueueStatusText(entry))}</small>
+					</span>
+					<span class="ldp-reader-queue-row-actions">
+						${entry.loadState === 'error'
 							? `<button class="ldp-reader-queue-retry" type="button" aria-label="重新预加载">${icon('rotateCcw')}</button>`
 							: ''}
-            <button class="ldp-reader-queue-pin${entry.pinned ? ' active' : ''}" type="button"
-              aria-label="${entry.pinned ? '取消固定，离开后自动移出队列' : '固定文章，离开后保留在队列'}"
-              aria-pressed="${entry.pinned ? 'true' : 'false'}">${icon('pin')}</button>
-            <button class="ldp-reader-queue-remove" type="button" aria-label="从阅读队列移除"${removable ? '' : ' disabled'}>${icon('x')}</button>
-          </span>
-        </div>`;
+						<button class="ldp-reader-queue-pin${entry.pinned ? ' active' : ''}" type="button"
+							aria-label="${entry.pinned ? '取消固定，离开后自动移出队列' : '固定文章，离开后保留在队列'}"
+							aria-pressed="${entry.pinned ? 'true' : 'false'}">${icon('pin')}</button>
+						<button class="ldp-reader-queue-remove" type="button" aria-label="从阅读队列移除"${removable ? '' : ' disabled'}>${icon('x')}</button>
+					</span>
+				</div>`;
 		}).join('');
 		hydratePersistentAvatarImages(bubbles, POST_REQUEST_PRIORITY.auxiliary);
 		hydratePersistentAvatarImages(list, POST_REQUEST_PRIORITY.auxiliary);
@@ -3957,7 +3957,7 @@
 			if (button.dataset.readerQueueAdded === String(added)) return;
 			syncReaderQueueAddButton(button, added);
 		});
-		if (CURRENT_OVERLAY && typeof CURRENT_OVERLAY._ldpSyncReaderQueue === 'function') {
+		if (isFunction(CURRENT_OVERLAY?._ldpSyncReaderQueue)) {
 			CURRENT_OVERLAY._ldpSyncReaderQueue();
 		}
 	}
@@ -4085,7 +4085,7 @@
 			return;
 		}
 		const activeTopicId = Number(CURRENT_OVERLAY && CURRENT_OVERLAY.dataset.topicId);
-		if (activeTopicId > 0 && typeof CURRENT_OVERLAY._ldpCaptureHistoryViewport === 'function') {
+		if (activeTopicId > 0 && isFunction(CURRENT_OVERLAY._ldpCaptureHistoryViewport)) {
 			saveReaderQueueViewport(activeTopicId, CURRENT_OVERLAY._ldpCaptureHistoryViewport());
 		}
 		entry.switching = true;
@@ -4113,7 +4113,7 @@
 		if (!entry) return false;
 		const index = READER_QUEUE_ENTRIES.indexOf(entry);
 		const active = String(entry.topicId) === READER_QUEUE_ACTIVE_TOPIC_ID;
-		const currentReaderShowsEntry = CURRENT_OVERLAY && CURRENT_OVERLAY.isConnected &&
+		const currentReaderShowsEntry = CURRENT_OVERLAY?.isConnected &&
 			Number(CURRENT_OVERLAY.dataset.topicId) === Number(entry.topicId);
 		if (active && currentReaderShowsEntry && READER_QUEUE_ENTRIES.length === 1) {
 			showSelectionToast('当前文章是队列中的最后一篇');
@@ -4213,13 +4213,13 @@
 		if (stream.length <= READER_QUEUE_PREFETCH_MAX_POSTS) return stream;
 		const posts = Array.isArray(postStream.posts) ? postStream.posts : [];
 		const startPostNumber = readerQueueStartPostNumber(entry);
-		const targetPost = posts.find((post) => +(post && post.post_number || 0) === startPostNumber);
-		const targetPostId = +(targetPost && targetPost.id || 0);
+		const targetPost = posts.find((post) => +(post?.post_number || 0) === startPostNumber);
+		const targetPostId = +(targetPost?.id || 0);
 		const foundIndex = targetPostId ? stream.indexOf(targetPostId) : -1;
 		const targetIndex = foundIndex >= 0
 			? foundIndex
 			: Math.max(0, Math.min(stream.length - 1, startPostNumber - 1));
-		if (PREFS.openTopicsAtFirstPost !== true && +(entry && entry.urlPostNumber || 0) > 0) {
+		if (PREFS.openTopicsAtFirstPost !== true && +(entry?.urlPostNumber || 0) > 0) {
 			const before = Math.min(targetIndex, READER_QUEUE_PREFETCH_URL_BEFORE_POSTS);
 			let start = Math.max(0, targetIndex - before);
 			let end = Math.min(
@@ -4243,17 +4243,17 @@
 			stream.slice(localEnd, localEnd + READER_QUEUE_PREFETCH_MAX_POSTS - selected.size)
 				.forEach((postId) => selected.add(postId));
 		}
-		return Array.from(selected).slice(0, READER_QUEUE_PREFETCH_MAX_POSTS);
+		return [...selected].slice(0, READER_QUEUE_PREFETCH_MAX_POSTS);
 	}
 
 	function mergeReaderQueuePostPayload(topic, payload, parentPostNumber = 0) {
-		const topicPosts = topic && topic.post_stream && Array.isArray(topic.post_stream.posts)
+		const topicPosts = topic?.post_stream && Array.isArray(topic.post_stream.posts)
 			? topic.post_stream.posts : null;
 		if (!topicPosts) return 0;
-		const indexes = new Map(topicPosts.map((post, index) => [+(post && post.id || 0), index]));
+		const indexes = new Map(topicPosts.map((post, index) => [+(post?.id || 0), index]));
 		let merged = 0;
 		postsFromPayload(payload).forEach((incoming) => {
-			const postId = +(incoming && incoming.id || 0);
+			const postId = +(incoming?.id || 0);
 			if (!postId) return;
 			if (parentPostNumber > 0 && !(+(incoming.reply_to_post_number || 0) > 0)) {
 				incoming.reply_to_post_number = +parentPostNumber;
@@ -4274,7 +4274,7 @@
 		const parent = +parentPostNumber;
 		const postStream = topicPostStream(topic);
 		return (Array.isArray(postStream.posts) ? postStream.posts : [])
-			.filter((reply) => +(reply && reply.reply_to_post_number || 0) === parent);
+			.filter((reply) => +(reply?.reply_to_post_number || 0) === parent);
 	}
 
 	async function prefetchReaderQueueNestedReplies(entry, topic, controller, scopePosts) {
@@ -4282,7 +4282,7 @@
 		const parents = [];
 		const parentIds = new Set();
 		const addPost = (post) => {
-			const postId = +(post && post.id || 0);
+			const postId = +(post?.id || 0);
 			if (!postId) return;
 			collected.set(postId, post);
 			if (!(+(post.reply_count || 0) > 0) || parentIds.has(postId)) return;
@@ -4343,7 +4343,7 @@
 			}
 		}
 		syncNestedProgress();
-		return Array.from(collected.values());
+		return [...collected.values()];
 	}
 
 	function readerQueueMediaSources(posts, topic = null) {
@@ -4365,19 +4365,19 @@
 			});
 		};
 		(Array.isArray(posts) ? posts : []).forEach((post) => {
-			addCookedSources(post && post.cooked);
-			normalizeBoosts(post && post.boosts).forEach((boost) => addCookedSources(boost.cooked));
-			(Array.isArray(post && post.reactions) ? post.reactions : []).forEach((reaction) => {
-				if (reactionEmojiUrls) addSource(reactionEmojiUrls.get(String(reaction && reaction.id || '')));
+			addCookedSources(post?.cooked);
+			normalizeBoosts(post?.boosts).forEach((boost) => addCookedSources(boost.cooked));
+			(Array.isArray(post?.reactions) ? post.reactions : []).forEach((reaction) => {
+				if (reactionEmojiUrls) addSource(reactionEmojiUrls.get(String(reaction?.id || '')));
 			});
 		});
-		(Array.isArray(topic && topic.valid_reactions) ? topic.valid_reactions : []).forEach((reaction) => {
+		(Array.isArray(topic?.valid_reactions) ? topic.valid_reactions : []).forEach((reaction) => {
 			const id = String(typeof reaction === 'string'
 				? reaction
 				: reaction && (reaction.id || reaction.name) || '');
 			if (reactionEmojiUrls) addSource(reactionEmojiUrls.get(id));
 		});
-		return Array.from(sources);
+		return [...sources];
 	}
 
 	async function prefetchReaderQueueMedia(entry, topic, posts, controller) {
@@ -4447,9 +4447,9 @@
 		syncReaderQueueProgressSurface(entry);
 		try {
 			let topic = getCachedTopicData(entry.topicId);
-			const cachedStream = topic && topic.post_stream && Array.isArray(topic.post_stream.stream)
+			const cachedStream = topic?.post_stream && Array.isArray(topic.post_stream.stream)
 				? topic.post_stream.stream : [];
-			const expectedCount = Math.max(0, Number(topic && topic.posts_count) || 0);
+			const expectedCount = Math.max(0, Number(topic?.posts_count) || 0);
 			if (!topic || !cachedStream.length || expectedCount > cachedStream.length) {
 				const freshTopic = await fetchJSON(`${BASE}/t/${entry.topicId}.json?forceLoad=true`, {
 					signal: controller.signal,
@@ -4467,7 +4467,7 @@
 			const stream = Array.isArray(postStream.stream) ? postStream.stream.filter(Boolean) : [];
 			const preloadStream = readerQueuePrefetchStream(entry, topic);
 			let loadedIds = new Set((Array.isArray(postStream.posts) ? postStream.posts : [])
-				.map((post) => Number(post && post.id)).filter(Boolean));
+				.map((post) => Number(post?.id)).filter(Boolean));
 			let missing = preloadStream.filter((postId) => !loadedIds.has(Number(postId)));
 			while (missing.length && READER_QUEUE_BY_TOPIC.has(String(entry.topicId)) &&
 					String(entry.topicId) !== READER_QUEUE_ACTIVE_TOPIC_ID) {
@@ -4480,8 +4480,8 @@
 				});
 				const before = loadedIds.size;
 				mergeReaderQueuePostPayload(topic, part);
-				loadedIds = new Set((Array.isArray(topic.post_stream && topic.post_stream.posts)
-					? topic.post_stream.posts : []).map((post) => Number(post && post.id)).filter(Boolean));
+				loadedIds = new Set((Array.isArray(topic.post_stream?.posts)
+					? topic.post_stream.posts : []).map((post) => Number(post?.id)).filter(Boolean));
 				if (loadedIds.size <= before) throw new Error('预加载未返回新的楼层');
 				setCachedTopicData(entry.topicId, topic);
 				updateReaderQueueEntryFromTopic(entry, topic, stream.length, { progressOnly: true });
@@ -4491,7 +4491,7 @@
 				const scopePostStream = topicPostStream(topic);
 				const scopePostsById = new Map(
 					(Array.isArray(scopePostStream.posts) ? scopePostStream.posts : [])
-						.map((post) => [+(post && post.id || 0), post])
+						.map((post) => [+(post?.id || 0), post])
 				);
 				const scopePosts = preloadStream.map((postId) => scopePostsById.get(+postId)).filter(Boolean);
 				const enrichedPosts = await prefetchReaderQueueNestedReplies(
@@ -4513,7 +4513,7 @@
 				if (entry.loadState === 'loading') entry.loadState = 'queued';
 			} else {
 				entry.loadState = 'error';
-				entry.error = String(error && error.message || '预加载失败');
+				entry.error = String(error?.message || '预加载失败');
 			}
 		} finally {
 			if (entry.prefetchController === controller) entry.prefetchController = null;
@@ -4588,7 +4588,7 @@
 	}
 
 	function bindReaderQueueSurface(overlay) {
-		const rail = overlay && overlay.querySelector('.ldp-reader-queue');
+		const rail = overlay?.querySelector('.ldp-reader-queue');
 		if (!rail || overlay._ldpReaderQueueBound) return;
 		overlay._ldpReaderQueueBound = true;
 		const panel = rail.querySelector('.ldp-reader-queue-panel');
@@ -4731,8 +4731,7 @@
 		on(bubbles, 'scroll', () => syncReaderQueueScrollHint(rail), { passive: true });
 		on(scrollHint, 'click', () => {
 			const direction = Number(scrollHint.dataset.scrollDirection) || 1;
-			const reduceMotion = typeof window.matchMedia === 'function' &&
-				window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+			const reduceMotion = prefersReducedMotion();
 			if (direction < 0) {
 				bubbles.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
 				return;
@@ -4789,7 +4788,7 @@
 			}
 			if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return;
 			event.preventDefault();
-			const rows = Array.from(panel.querySelectorAll('.ldp-reader-queue-row'));
+			const rows = [...panel.querySelectorAll('.ldp-reader-queue-row')];
 			const index = rows.indexOf(row);
 			rows[Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))]?.focus();
 		});
@@ -4812,9 +4811,9 @@
 
 	function cachePayload(key) {
 		if (key === 'history') return readTopicHistory();
-		if (key === 'topics') return Array.from(TOPIC_NAV_ICON_CACHE.entries());
+		if (key === 'topics') return [...TOPIC_NAV_ICON_CACHE.entries()];
 		const cache = cacheMapForKey(key);
-		if (cache) return Array.from(cache.entries());
+		if (cache) return [...cache.entries()];
 		return [];
 	}
 
@@ -4875,7 +4874,7 @@
 			bytes: payloadBytes + responseStat.bytes,
 		};
 		if (key === 'history') {
-			stat.topicCount = new Set(payload.map((entry) => Number(entry && entry.topicId)).filter(Boolean)).size;
+			stat.topicCount = new Set(payload.map((entry) => Number(entry?.topicId)).filter(Boolean)).size;
 			stat.historyRecordCount = payload.length;
 		} else if (key === 'topics') {
 			const topicIds = new Set(responseStat.topicIds || []);
@@ -4887,7 +4886,7 @@
 		} else if (key === 'users') {
 			const userNames = new Set(responseStat.userNames || []);
 			payload.forEach(([username, entry]) => {
-				const resolvedUsername = cleanUsernameValue(entry && entry.user && entry.user.username || username)
+				const resolvedUsername = cleanUsernameValue(entry?.user && entry.user.username || username)
 					.toLocaleLowerCase();
 				if (resolvedUsername) userNames.add(resolvedUsername);
 			});
@@ -4897,7 +4896,7 @@
 		} else if (key === 'notifications') {
 			const notificationIds = new Set(responseStat.notificationIds || []);
 			payload.forEach(([, entry]) => {
-				const notifications = entry && entry.value && Array.isArray(entry.value.notifications)
+				const notifications = entry?.value && Array.isArray(entry.value.notifications)
 					? entry.value.notifications
 					: [];
 				addNotificationStatsIdentities(notificationIds, notifications);
@@ -4977,7 +4976,7 @@
 			selected.has(key) || (key === 'topicNavIcons' && selected.has('topics')));
 		const pendingCacheRequests = new Set([
 			...(selected.has('users')
-				? Array.from(USER_CARD_REQUESTS.values(), (entry) => entry && entry.promise).filter(Boolean) : []),
+				? Array.from(USER_CARD_REQUESTS.values(), (entry) => entry?.promise).filter(Boolean) : []),
 			...(selected.has('users') ? USER_FOLLOW_LIST_REQUESTS.values() : []),
 			...(selected.has('notifications') ? NOTIFICATION_REQUESTS.values() : []),
 			...(kinds.length ? RESPONSE_CACHE_REQUESTS.values() : []),
@@ -4999,7 +4998,7 @@
 				await Promise.allSettled(RESOURCE_CACHE_PRUNE_REQUESTS.values());
 			}
 			const pendingResourceRequests = [
-				...RESOURCE_CACHE_GROUPS.flatMap(({ requests }) => Array.from(requests.values())),
+				...RESOURCE_CACHE_GROUPS.flatMap(({ requests }) => [...requests.values()]),
 				...RESOURCE_CACHE_WRITES,
 			];
 			if (pendingResourceRequests.length) {
@@ -5027,24 +5026,24 @@
 		const safeTopicId = Number(topicId);
 		const tags = new Set(safeTopicId > 0 ? [`topic:${safeTopicId}`] : []);
 		topicSources.filter(Boolean).forEach((topic) => {
-			const stream = topic && topic.post_stream && Array.isArray(topic.post_stream.stream)
+			const stream = topic?.post_stream && Array.isArray(topic.post_stream.stream)
 				? topic.post_stream.stream : [];
 			stream.forEach((postId) => {
 				const safePostId = Number(postId);
 				if (safePostId > 0) tags.add(`post:${safePostId}`);
 			});
 			postsFromPayload(topic).forEach((post) => {
-				const safePostId = Number(post && post.id);
+				const safePostId = Number(post?.id);
 				if (safePostId > 0) tags.add(`post:${safePostId}`);
 			});
 		});
-		return Array.from(tags);
+		return [...tags];
 	}
 
 	async function clearCurrentTopicCaches(topicId, topicData) {
 		const key = String(topicId || '');
 		const cachedEntry = TOPIC_DATA_CACHE.get(key);
-		const tags = topicResponseCacheTags(topicId, topicData, cachedEntry && cachedEntry.topic);
+		const tags = topicResponseCacheTags(topicId, topicData, cachedEntry?.topic);
 		cancelTopicSnapshotWrites(topicId);
 		HOST_TOPIC_DATA_CACHE.delete(key);
 		TOPIC_DATA_CACHE.delete(key);
@@ -5076,7 +5075,7 @@
 	const style = makeElement('style');
 	const readerStaticStyle = (() => {
 		const getResourceText = globalThis.GM_getResourceText;
-		if (typeof getResourceText !== 'function') return '';
+		if (!isFunction(getResourceText)) return '';
 		try {
 			return getResourceText('ldpReaderStyles') || '';
 		} catch (error) {
@@ -5107,14 +5106,14 @@
 	}
 
 	function clearReaderResourceObjectUrlsIfIdle() {
-		if (CURRENT_OVERLAY && CURRENT_OVERLAY.isConnected) return false;
+		if (CURRENT_OVERLAY?.isConnected) return false;
 		[AVATAR_OBJECT_URL_CACHE, EMOJI_IMAGE_OBJECT_URL_CACHE, LIGHTBOX_IMAGE_OBJECT_URL_CACHE]
 			.forEach(clearResourceObjectUrlCache);
 		return true;
 	}
 
 	function releaseReaderPortalIfIdle() {
-		if (CURRENT_OVERLAY && CURRENT_OVERLAY.isConnected) return false;
+		if (CURRENT_OVERLAY?.isConnected) return false;
 		destroyReaderPortal();
 		const pendingResourceRequests = [
 			...AVATAR_RESOURCE_REQUESTS.values(),
@@ -5153,11 +5152,11 @@
 	}
 
 	function readerPortalQuery(selector) {
-		return (READER_PORTAL_HOST && READER_PORTAL_HOST.querySelector(selector)) || document.querySelector(selector);
+		return (READER_PORTAL_HOST?.querySelector(selector)) || document.querySelector(selector);
 	}
 
 	function readerPortalQueryAll(selector) {
-		const nodes = READER_PORTAL_HOST ? Array.from(READER_PORTAL_HOST.querySelectorAll(selector)) : [];
+		const nodes = READER_PORTAL_HOST ? [...READER_PORTAL_HOST.querySelectorAll(selector)] : [];
 		document.querySelectorAll(selector).forEach((node) => {
 			if (!nodes.includes(node)) nodes.push(node);
 		});
@@ -5182,7 +5181,7 @@
 			tooltip.hidden = true;
 			tooltip.textContent = '';
 		};
-		const hasVisibleText = (control) => Array.from(control.childNodes).some((node) => {
+		const hasVisibleText = (control) => [...control.childNodes].some((node) => {
 			if (node.nodeType === Node.TEXT_NODE) return !!String(node.textContent || '').trim();
 			if (!(node instanceof Element) || node.matches('.ldp-icon,.ldp-logo,.ldp-notification-unread-badge')) return false;
 			const computed = getComputedStyle(node);
@@ -5330,15 +5329,15 @@
 	}
 
 	function eventPathClosest(event, selector) {
-		const path = event && typeof event.composedPath === 'function' ? event.composedPath() : [];
+		const path = isFunction(event?.composedPath) ? event.composedPath() : [];
 		const matched = path.find((node) => node && node.nodeType === Node.ELEMENT_NODE && node.matches(selector));
 		if (matched) return matched;
-		return event && event.target && event.target.closest ? event.target.closest(selector) : null;
+		return event?.target && event.target.closest ? event.target.closest(selector) : null;
 	}
 
 	function eventPathIncludes(event, node) {
 		if (!event || !node) return false;
-		const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+		const path = isFunction(event.composedPath) ? event.composedPath() : [];
 		return path.includes(node) || node.contains(event.target);
 	}
 
@@ -5521,7 +5520,7 @@
 			return;
 		}
 		if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-		const options = Array.from(optionsRoot.querySelectorAll(optionSelector));
+		const options = [...optionsRoot.querySelectorAll(optionSelector)];
 		if (!options.length) return;
 		event.preventDefault();
 		const currentIndex = options.indexOf(document.activeElement);
@@ -5551,6 +5550,13 @@
 	}
 	function setLabel(target, label) {
 		target.setAttribute('aria-label', label);
+	}
+	function isFunction(value) {
+		return typeof value === 'function';
+	}
+	function prefersReducedMotion() {
+		return isFunction(window.matchMedia) &&
+			window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 	}
 
 	const ICONS = {
@@ -5686,12 +5692,12 @@
 			? `<input class="${className}-range" type="range" min="${field.range[0]}" max="${field.range[1]}" step="${field.range[2]}" aria-label="${field.ariaLabel || field.label}">`
 			: `<input class="${className}" type="color" aria-label="${field.ariaLabel || field.label}">`;
 		return `<div class="ldp-setting-row">
-      <span class="ldp-setting-label">${field.label}</span>
-      <span class="${field.range ? 'ldp-font-scale-control' : 'ldp-color-control'}">
-        ${input}<span class="${className}-value"></span>
-        <button class="ldp-color-reset" type="button" data-color-reset="${field.key}">${icon('rotateCcw')}<span>恢复默认</span></button>
-      </span>
-    </div>`;
+			<span class="ldp-setting-label">${field.label}</span>
+			<span class="${field.range ? 'ldp-font-scale-control' : 'ldp-color-control'}">
+				${input}<span class="${className}-value"></span>
+				<button class="ldp-color-reset" type="button" data-color-reset="${field.key}">${icon('rotateCcw')}<span>恢复默认</span></button>
+			</span>
+		</div>`;
 	}
 
 	function appearanceSettingGroupMarkup(group) {
@@ -5702,28 +5708,28 @@
 			if (!title) return rows;
 			const titleId = `ldp-${id}-setting-group-title`;
 			return `<div class="ldp-setting-group" role="group" aria-labelledby="${titleId}">
-        <div class="ldp-setting-group-title" id="${titleId}">${title}</div>
-        ${rows}
-      </div>`;
+				<div class="ldp-setting-group-title" id="${titleId}">${title}</div>
+				${rows}
+			</div>`;
 		}).join('');
 		const toggle = group.toggleKey
 			? `<span class="ldp-color-group-head-actions">
-          <span class="ldp-setting-switch">
-            <input type="checkbox" role="switch" data-appearance-group-toggle="${group.toggleKey}" aria-label="${group.toggleLabel}">
-            <span class="ldp-setting-switch-track" aria-hidden="true"></span>
-          </span>
-        </span>`
+					<span class="ldp-setting-switch">
+						<input type="checkbox" role="switch" data-appearance-group-toggle="${group.toggleKey}" aria-label="${group.toggleLabel}">
+						<span class="ldp-setting-switch-track" aria-hidden="true"></span>
+					</span>
+				</span>`
 			: '';
 		return `<section class="ldp-color-group" data-appearance-group="${group.id}" aria-labelledby="ldp-color-group-${group.id}">
-      <header class="ldp-color-group-head">
-        <div class="ldp-color-group-head-copy">
-          <h4 class="ldp-color-group-title" id="ldp-color-group-${group.id}">${group.title}</h4>
-          <p class="ldp-color-group-description">${group.description}</p>
-        </div>
-        ${toggle}
-      </header>
-      <div class="ldp-settings-fields">${sections}</div>
-    </section>`;
+			<header class="ldp-color-group-head">
+				<div class="ldp-color-group-head-copy">
+					<h4 class="ldp-color-group-title" id="ldp-color-group-${group.id}">${group.title}</h4>
+					<p class="ldp-color-group-description">${group.description}</p>
+				</div>
+				${toggle}
+			</header>
+			<div class="ldp-settings-fields">${sections}</div>
+		</section>`;
 	}
 
 	function jumpHighlightSettingsMarkup() {
@@ -5734,11 +5740,11 @@
 				? `<input class="${className}" type="color" aria-label="${field.ariaLabel || field.label}">`
 				: `<input class="${className} ldp-flash-range" type="range" min="${limits.min}" max="${limits.max}" step="${limits.step}" aria-label="${field.ariaLabel || field.label}">`;
 			return `<label class="ldp-setting-row">
-        <span class="ldp-setting-label">${field.label}</span>
-        <span class="${field.type === 'color' ? 'ldp-color-control' : 'ldp-flash-range-control'}">
-          ${input}<${field.type === 'color' ? 'span' : 'output'} class="${className}-value${field.type === 'color' ? '' : ' ldp-flash-value'}"></${field.type === 'color' ? 'span' : 'output'}>
-        </span>
-      </label>`;
+				<span class="ldp-setting-label">${field.label}</span>
+				<span class="${field.type === 'color' ? 'ldp-color-control' : 'ldp-flash-range-control'}">
+					${input}<${field.type === 'color' ? 'span' : 'output'} class="${className}-value${field.type === 'color' ? '' : ' ldp-flash-value'}"></${field.type === 'color' ? 'span' : 'output'}>
+				</span>
+			</label>`;
 		}).join('');
 	}
 
@@ -5746,23 +5752,23 @@
 			contentClass = 'ldp-settings-category-content', descriptionClass = '') {
 		const titleId = `ldp-${id}-title`;
 		return `<section class="ldp-settings-category-group" aria-labelledby="${titleId}">
-      <header class="ldp-settings-category-head">
-        <strong id="${titleId}">${title}</strong>
-        <small${descriptionClass ? ` class="${descriptionClass}"` : ''}>${description}</small>
-      </header>
-      <div class="${contentClass}">${content}</div>
-    </section>`;
+			<header class="ldp-settings-category-head">
+				<strong id="${titleId}">${title}</strong>
+				<small${descriptionClass ? ` class="${descriptionClass}"` : ''}>${description}</small>
+			</header>
+			<div class="${contentClass}">${content}</div>
+		</section>`;
 	}
 
 	function otherSettingGroupMarkup(id, title, description, content) {
 		const titleId = `ldp-other-${id}-title`;
 		return `<section class="ldp-other-setting-group" aria-labelledby="${titleId}">
-      <header class="ldp-other-setting-group-head">
-        <strong id="${titleId}">${title}</strong>
-        <small>${description}</small>
-      </header>
-      <div class="ldp-other-setting-list">${content}</div>
-    </section>`;
+			<header class="ldp-other-setting-group-head">
+				<strong id="${titleId}">${title}</strong>
+				<small>${description}</small>
+			</header>
+			<div class="ldp-other-setting-list">${content}</div>
+		</section>`;
 	}
 
 	function performanceSettingsMarkup() {
@@ -5771,9 +5777,9 @@
 			group.fields.map((field) => {
 					const limits = PERFORMANCE_LIMITS[field.key];
 					return `<label class="ldp-setting-row">
-            <span class="ldp-performance-copy"><strong>${field.title}</strong><small>${field.description}</small></span>
-            <span class="ldp-performance-control"><input type="number" data-performance-key="${field.key}" min="${limits.min}" max="${limits.max}" step="${limits.step}" inputmode="${field.inputMode}"><em>${field.unit}</em></span>
-          </label>`;
+						<span class="ldp-performance-copy"><strong>${field.title}</strong><small>${field.description}</small></span>
+						<span class="ldp-performance-control"><input type="number" data-performance-key="${field.key}" min="${limits.min}" max="${limits.max}" step="${limits.step}" inputmode="${field.inputMode}"><em>${field.unit}</em></span>
+					</label>`;
 				}).join(''),
 			'ldp-settings-fields ldp-settings-category-list ldp-performance-fields'
 		)).join('');
@@ -5810,12 +5816,18 @@
 		return `<div class="ldp-settings-intro"><h3 class="ldp-settings-title">${panel[4] || panel[2]}</h3><p class="ldp-settings-description">${panel[3]}</p>${extra}</div>`;
 	}
 
+	function mountSettingsPanelIntros(root) {
+		root.querySelectorAll('.ldp-settings-section[data-settings-panel]').forEach((section) => {
+			section.insertAdjacentHTML('afterbegin', settingsPanelIntroMarkup(section.dataset.settingsPanel));
+		});
+	}
+
 	function settingsApplyFooterMarkup(statusClass, applyClass, resetLabel = '', resetClass = '') {
 		const resetButton = resetLabel
 			? `<button class="ldp-layout-reset${resetClass ? ` ${resetClass}` : ''}" type="button">${icon('rotateCcw')}<span>${resetLabel}</span></button>`
 			: '';
 		return `<div class="ldp-layout-footer"><span class="ldp-layout-total${statusClass ? ` ${statusClass}` : ''}" role="status"></span>
-      <span class="ldp-layout-footer-actions">${resetButton}<button class="ldp-layout-apply${applyClass ? ` ${applyClass}` : ''}" type="button" disabled>${icon('check')}<span>确认应用</span></button></span></div>`;
+			<span class="ldp-layout-footer-actions">${resetButton}<button class="ldp-layout-apply${applyClass ? ` ${applyClass}` : ''}" type="button" disabled>${icon('check')}<span>确认应用</span></button></span></div>`;
 	}
 
 	function readerWindowGeometryMarkup() {
@@ -5825,7 +5837,7 @@
 			['x', '左上角 X', READER_WINDOW_MARGIN],
 			['y', '左上角 Y', READER_WINDOW_MARGIN],
 		].map(([key, label, min]) => `<label class="ldp-reader-window-field"><span>${label}</span>
-      <span class="ldp-reader-window-input-wrap"><input class="ldp-reader-window-input ldp-reader-window-${key}" type="number" min="${min}" step="1" inputmode="numeric"><span>px</span></span></label>`).join('');
+			<span class="ldp-reader-window-input-wrap"><input class="ldp-reader-window-input ldp-reader-window-${key}" type="number" min="${min}" step="1" inputmode="numeric"><span>px</span></span></label>`).join('');
 	}
 
 	function aboutFeaturesMarkup() {
@@ -5835,37 +5847,37 @@
 			['heart', '原生社区互动', '回复、点赞、Boost、回应、收藏、通知和帖子编辑无需离开阅读器。'],
 			['rocket', '长帖数据与性能', '按需加载、缓存和请求节奏控制，并集中管理历史、收藏与回应。'],
 		].map(([iconName, title, description]) => `<article class="ldp-about-feature"><span class="ldp-about-feature-icon">${icon(iconName)}</span>
-      <div class="ldp-about-feature-copy"><strong>${title}</strong><p>${description}</p></div></article>`).join('');
+			<div class="ldp-about-feature-copy"><strong>${title}</strong><p>${description}</p></div></article>`).join('');
 	}
 
 	function popoverSearchMarkup(type, placeholder, label, clearLabel) {
 		return `<label class="ldp-popover-search">
-      ${icon('search')}
-      <input class="ldp-popover-search-input ldp-${type}-search" type="search" autocomplete="off" spellcheck="false" placeholder="${placeholder}" aria-label="${label}">
-      <button class="ldp-popover-search-clear ldp-${type}-search-clear" type="button" aria-label="${clearLabel}" hidden>${icon('x')}</button>
-    </label>`;
+			${icon('search')}
+			<input class="ldp-popover-search-input ldp-${type}-search" type="search" autocomplete="off" spellcheck="false" placeholder="${placeholder}" aria-label="${label}">
+			<button class="ldp-popover-search-clear ldp-${type}-search-clear" type="button" aria-label="${clearLabel}" hidden>${icon('x')}</button>
+		</label>`;
 	}
 
 	function popoverPagerMarkup(type) {
 		const prefix = `ldp-${type}-page`;
 		const shared = type === 'notification' ? '' : ' ldp-notification-page';
 		return `<div class="ldp-notification-pager">
-      <button class="${prefix}-prev${shared ? `${shared}-prev` : ''}" type="button" aria-label="上一页" disabled>${icon('chevronRight', 'ldp-notification-prev-icon')}</button>
-      <span class="${prefix}-info${shared ? `${shared}-info` : ''}">第 1 页</span>
-      <button class="${prefix}-next${shared ? `${shared}-next` : ''}" type="button" aria-label="下一页" disabled>${icon('chevronRight')}</button>
-    </div>`;
+			<button class="${prefix}-prev${shared ? `${shared}-prev` : ''}" type="button" aria-label="上一页" disabled>${icon('chevronRight', 'ldp-notification-prev-icon')}</button>
+			<span class="${prefix}-info${shared ? `${shared}-info` : ''}">第 1 页</span>
+			<button class="${prefix}-next${shared ? `${shared}-next` : ''}" type="button" aria-label="下一页" disabled>${icon('chevronRight')}</button>
+		</div>`;
 	}
 
 	function collectionBulkActionsMarkup(type, scopeLabel, itemLabel, deleteLabel) {
 		return `<div class="ldp-collection-title-actions ldp-${type}-bulk-actions" hidden>
-      <select class="ldp-reader-select ldp-collection-scope ldp-${type}-select-scope" aria-label="${scopeLabel}全选范围">
-        <option value="page">本页</option>
-        <option value="all">全部页</option>
-      </select>
-      <button class="ldp-collection-action ldp-${type}-select-toggle" type="button" aria-label="全选本页${itemLabel}" aria-pressed="false">${icon('square')}</button>
-      <button class="ldp-collection-action danger ldp-${type}-delete-selected" type="button" aria-label="${deleteLabel}" disabled>${icon('trash')}<b class="ldp-collection-count ldp-${type}-delete-selected-label" hidden>0</b></button>
-      <button class="ldp-collection-action ldp-${type}-multi-done" type="button" aria-label="退出多选">${icon('x')}</button>
-    </div>`;
+			<select class="ldp-reader-select ldp-collection-scope ldp-${type}-select-scope" aria-label="${scopeLabel}全选范围">
+				<option value="page">本页</option>
+				<option value="all">全部页</option>
+			</select>
+			<button class="ldp-collection-action ldp-${type}-select-toggle" type="button" aria-label="全选本页${itemLabel}" aria-pressed="false">${icon('square')}</button>
+			<button class="ldp-collection-action danger ldp-${type}-delete-selected" type="button" aria-label="${deleteLabel}" disabled>${icon('trash')}<b class="ldp-collection-count ldp-${type}-delete-selected-label" hidden>0</b></button>
+			<button class="ldp-collection-action ldp-${type}-multi-done" type="button" aria-label="退出多选">${icon('x')}</button>
+		</div>`;
 	}
 
 	const RESOURCE_MONITOR_ROWS = [
@@ -5885,10 +5897,10 @@
 
 	function resourceMonitorRowMarkup([key, label, detail]) {
 		return `<div class="ldp-resource-monitor-row" role="row" data-resource-monitor-row="${key}">
-      <span class="ldp-resource-monitor-copy"><strong>${label}</strong><small>${detail}</small></span>
-      <strong class="ldp-resource-monitor-current" data-resource-monitor-metric="${key}">—</strong>
-      <span class="ldp-resource-monitor-summary"><span data-resource-monitor-average="${key}">—</span><span data-resource-monitor-peak="${key}">—</span><span data-resource-monitor-trend="${key}">—</span></span>
-    </div>`;
+			<span class="ldp-resource-monitor-copy"><strong>${label}</strong><small>${detail}</small></span>
+			<strong class="ldp-resource-monitor-current" data-resource-monitor-metric="${key}">—</strong>
+			<span class="ldp-resource-monitor-summary"><span data-resource-monitor-average="${key}">—</span><span data-resource-monitor-peak="${key}">—</span><span data-resource-monitor-trend="${key}">—</span></span>
+		</div>`;
 	}
 
 	const SETTING_SWITCH_FIELDS = [
@@ -5905,15 +5917,15 @@
 
 	function settingSwitchMarkup(field) {
 		return `<label class="ldp-setting-row ldp-setting-option-row">
-      <span class="ldp-setting-option-copy">
-        <strong>${field.label}</strong>
-        ${field.detailHtml || `<small>${field.description}</small>`}
-      </span>
-      <span class="ldp-setting-switch">
-        <input class="${field.className}" type="checkbox" role="switch" aria-label="${field.ariaLabel || field.label}">
-        <span class="ldp-setting-switch-track" aria-hidden="true"></span>
-      </span>
-    </label>`;
+			<span class="ldp-setting-option-copy">
+				<strong>${field.label}</strong>
+				${field.detailHtml || `<small>${field.description}</small>`}
+			</span>
+			<span class="ldp-setting-switch">
+				<input class="${field.className}" type="checkbox" role="switch" aria-label="${field.ariaLabel || field.label}">
+				<span class="ldp-setting-switch-track" aria-hidden="true"></span>
+			</span>
+		</label>`;
 	}
 
 	function settingSwitchesMarkup(section) {
@@ -5931,9 +5943,9 @@
 
 	function boostCopySettingsMarkup() {
 		return BOOST_COPY_SETTING_ROWS.map((row) => `<label class="ldp-setting-row ldp-boost-rule-row${row.className || ''}"${row.hidden ? ' hidden' : ''}>
-      <span class="ldp-setting-label">${row.label}</span>
-      ${row.control}
-    </label>`).join('');
+			<span class="ldp-setting-label">${row.label}</span>
+			${row.control}
+		</label>`).join('');
 	}
 
 	function fontFieldRowsMarkup(scope, config) {
@@ -5942,24 +5954,24 @@
 		const reset = (field) => `<button class="ldp-color-reset ${host ? 'ldp-host-font-reset' : 'ldp-font-field-reset'}" type="button" ${host ? 'data-host-font-reset' : 'data-font-field-reset'}="${host ? field : config[field]}">${icon('rotateCcw')}<span>默认</span></button>`;
 		const defaultFamily = host ? HOST_FONT_DEFAULTS.hostFontFamily : FONT_FAMILY_DEFAULT;
 		const row = (label, controlClass, control, field) => `<div class="${rowClass}">
-      <span class="ldp-setting-label">${label}</span>
-      <span class="${controlClass}">${control}${reset(field)}</span>
-    </div>`;
+			<span class="ldp-setting-label">${label}</span>
+			<span class="${controlClass}">${control}${reset(field)}</span>
+		</div>`;
 		return [
 			row('字体', 'ldp-font-option-control', `
-        <span class="ldp-font-family-picker" data-font-scope="${scope}">
-          <button class="ldp-font-family-trigger ldp-picker-trigger" type="button" data-font-scope="${scope}" aria-haspopup="listbox" aria-expanded="false" aria-controls="ldp-font-family-menu">
-            <span class="ldp-font-family-value">${FONT_FAMILY_OPTIONS[defaultFamily].label}</span>${icon('chevronDown')}
-          </button>
-        </span>
-        <input class="ldp-font-family-custom" type="text" data-font-scope="${scope}" maxlength="64" autocomplete="off" spellcheck="false" placeholder="输入字体名称" aria-label="${config.label}自定义字体名称" hidden>`, 'family'),
+				<span class="ldp-font-family-picker" data-font-scope="${scope}">
+					<button class="ldp-font-family-trigger ldp-picker-trigger" type="button" data-font-scope="${scope}" aria-haspopup="listbox" aria-expanded="false" aria-controls="ldp-font-family-menu">
+						<span class="ldp-font-family-value">${FONT_FAMILY_OPTIONS[defaultFamily].label}</span>${icon('chevronDown')}
+					</button>
+				</span>
+				<input class="ldp-font-family-custom" type="text" data-font-scope="${scope}" maxlength="64" autocomplete="off" spellcheck="false" placeholder="输入字体名称" aria-label="${config.label}自定义字体名称" hidden>`, 'family'),
 			row('字重', 'ldp-font-option-control', `
-        <select class="ldp-reader-select ldp-font-weight-select" data-font-scope="${scope}" aria-label="${config.label}字重">
-          ${FONT_WEIGHT_OPTIONS.map((value) => `<option value="${value}">${value} · ${FONT_WEIGHT_LABELS[value]}</option>`).join('')}
-        </select>`, 'weight'),
+				<select class="ldp-reader-select ldp-font-weight-select" data-font-scope="${scope}" aria-label="${config.label}字重">
+					${FONT_WEIGHT_OPTIONS.map((value) => `<option value="${value}">${value} · ${FONT_WEIGHT_LABELS[value]}</option>`).join('')}
+				</select>`, 'weight'),
 			row('颜色', 'ldp-color-control ldp-font-color-control', `
-        <input class="ldp-font-color" type="color" data-font-scope="${scope}" value="${READER_THEME_VARIABLES.light['--primary']}" aria-label="${config.label}${host ? '颜色' : '文字颜色'}">
-        <span class="ldp-accent-color-value ldp-font-color-value" data-font-scope="${scope}">跟随主题</span>`, 'color'),
+				<input class="ldp-font-color" type="color" data-font-scope="${scope}" value="${READER_THEME_VARIABLES.light['--primary']}" aria-label="${config.label}${host ? '颜色' : '文字颜色'}">
+				<span class="ldp-accent-color-value ldp-font-color-value" data-font-scope="${scope}">跟随主题</span>`, 'color'),
 		].join('');
 	}
 
@@ -5967,16 +5979,16 @@
 		const config = FONT_SCOPE_CONFIG[scope];
 		const scaleClass = scope === 'interface' ? 'ldp-interface-font-scale' : scope === 'post' ? 'ldp-font-scale' : 'ldp-composer-font-scale';
 		return `<div class="ldp-setting-group ldp-font-scope-group" id="ldp-font-scope-panel-${scope}" role="tabpanel" data-font-scope-panel="${scope}" aria-labelledby="ldp-font-scope-tab-${scope}"${scope === 'interface' ? '' : ' hidden'}>
-      ${fontFieldRowsMarkup(scope, config)}
-      <div class="ldp-setting-row">
-        <span class="ldp-setting-label">字号</span>
-        <span class="ldp-font-scale-control">
-          <input class="${scaleClass}-range" type="range" data-font-scope="${scope}" min="${FONT_SCALE_MIN}" max="${FONT_SCALE_MAX}" step="1" aria-label="${config.label}字号">
-          <span class="${scaleClass}-value"></span>
-          <button class="ldp-color-reset ldp-font-field-reset" type="button" data-font-field-reset="${config.scale}">${icon('rotateCcw')}<span>默认</span></button>
-        </span>
-      </div>
-    </div>`;
+			${fontFieldRowsMarkup(scope, config)}
+			<div class="ldp-setting-row">
+				<span class="ldp-setting-label">字号</span>
+				<span class="ldp-font-scale-control">
+					<input class="${scaleClass}-range" type="range" data-font-scope="${scope}" min="${FONT_SCALE_MIN}" max="${FONT_SCALE_MAX}" step="1" aria-label="${config.label}字号">
+					<span class="${scaleClass}-value"></span>
+					<button class="ldp-color-reset ldp-font-field-reset" type="button" data-font-field-reset="${config.scale}">${icon('rotateCcw')}<span>默认</span></button>
+				</span>
+			</div>
+		</div>`;
 	}
 
 	function normalizePerformanceValue(name, value, fallback) {
@@ -6062,7 +6074,7 @@
 
 	function normalizeBoostCopyString(value, fallback = '') {
 		const normalized = String(value == null ? fallback : value).replace(/\s+/g, ' ');
-		return Array.from(normalized).slice(0, BOOST_COPY_MAX_LENGTH).join('');
+		return [...normalized].slice(0, BOOST_COPY_MAX_LENGTH).join('');
 	}
 
 	function boostCopyConfigFromPrefs(prefs) {
@@ -6164,7 +6176,7 @@
 
 	function normalizeReaderPrefs(prefs) {
 		const knownPrefs = Object.keys(DEFAULT_PREFS).reduce((result, key) => {
-			if (Object.prototype.hasOwnProperty.call(prefs || {}, key)) result[key] = prefs[key];
+			if (Object.hasOwn(prefs || {}, key)) result[key] = prefs[key];
 			return result;
 		}, {});
 		const performanceConfig = performanceConfigFromPrefs(knownPrefs);
@@ -6220,7 +6232,7 @@
 		try {
 			const stored = JSON.parse(localStorage.getItem(LDP_PREF_KEY) || '{}');
 			const merged = Object.assign({}, DEFAULT_PREFS, stored);
-			const storedPreset = Object.prototype.hasOwnProperty.call(stored, 'performancePreset')
+			const storedPreset = Object.hasOwn(stored, 'performancePreset')
 				? stored.performancePreset
 				: '';
 			if (PERFORMANCE_PRESETS[storedPreset]) {
@@ -6228,7 +6240,7 @@
 			}
 			return normalizeReaderPrefs(merged);
 		} catch (e) {
-			return normalizeReaderPrefs(Object.assign({}, DEFAULT_PREFS));
+			return normalizeReaderPrefs({ ...DEFAULT_PREFS });
 		}
 	}
 
@@ -6306,7 +6318,7 @@
 	}
 
 	const READER_CONFIG_SETTING_KEYS = Object.freeze(
-		Object.keys(normalizeReaderPrefs(Object.assign({}, DEFAULT_PREFS)))
+		Object.keys(normalizeReaderPrefs({ ...DEFAULT_PREFS }))
 	);
 
 	function readerConfigExportPayload() {
@@ -6326,9 +6338,9 @@
 	}
 
 	function readerPrefsFromConfigExport(payload) {
-		const schemaVersion = Number(payload && payload.schemaVersion);
+		const schemaVersion = Number(payload?.schemaVersion);
 		const settingKeys = READER_CONFIG_SETTING_KEYS;
-		const payloadSettingKeys = payload && payload.settings && typeof payload.settings === 'object' &&
+		const payloadSettingKeys = payload?.settings && typeof payload.settings === 'object' &&
 			!Array.isArray(payload.settings)
 			? Object.keys(payload.settings)
 			: [];
@@ -6337,11 +6349,11 @@
 			!payload.settings || typeof payload.settings !== 'object' || Array.isArray(payload.settings) ||
 			Number(payload.settingsCount) !== payloadSettingKeys.length ||
 			payloadSettingKeys.some((key) => !settingKeys.includes(key)) ||
-			settingKeys.some((key) => !Object.prototype.hasOwnProperty.call(payload.settings, key))) {
+			settingKeys.some((key) => !Object.hasOwn(payload.settings, key))) {
 			throw new Error('invalid_config');
 		}
 		const importedSettings = settingKeys.reduce((settings, key) => {
-			if (Object.prototype.hasOwnProperty.call(payload.settings, key)) settings[key] = payload.settings[key];
+			if (Object.hasOwn(payload.settings, key)) settings[key] = payload.settings[key];
 			return settings;
 		}, {});
 		return normalizeReaderPrefs(Object.assign({}, DEFAULT_PREFS, importedSettings));
@@ -6356,7 +6368,7 @@
 		setPrefs({ [key]: value });
 	}
 
-	const READER_SYSTEM_THEME_QUERY = typeof window.matchMedia === 'function'
+	const READER_SYSTEM_THEME_QUERY = isFunction(window.matchMedia)
 		? window.matchMedia('(prefers-color-scheme: dark)')
 		: null;
 
@@ -6410,8 +6422,8 @@
 	}
 
 	function bindLinuxDoNativeThemeEvents(service = linuxDoInterfaceColorService()) {
-		if (service && linuxDoThemeEventService !== service && typeof service.appEvents?.on === 'function') {
-			if (linuxDoThemeEventService && typeof linuxDoThemeEventService.appEvents?.off === 'function') {
+		if (service && linuxDoThemeEventService !== service && isFunction(service.appEvents?.on)) {
+			if (linuxDoThemeEventService && isFunction(linuxDoThemeEventService.appEvents?.off)) {
 				linuxDoThemeEventService.appEvents.off('interface-color:changed', document, onLinuxDoInterfaceColorChanged);
 			}
 			service.appEvents.on('interface-color:changed', document, onLinuxDoInterfaceColorChanged);
@@ -6426,7 +6438,7 @@
 		const actions = normalized === 'light'
 			? ['forceLightMode']
 			: normalized === 'dark' ? ['forceDarkMode'] : ['useAutoMode'];
-		const action = actions.find((name) => typeof service?.[name] === 'function');
+		const action = actions.find((name) => isFunction(service?.[name]));
 		if (!action) return false;
 		linuxDoThemeChangeInProgress = true;
 		try {
@@ -6457,12 +6469,12 @@
 		const mode = normalizeReaderThemeMode(themeMode);
 		const ownPalette = readerUsesOwnThemePalette();
 		bindLinuxDoNativeThemeEvents();
-		Array.from(READER_PORTAL_HOST?.children || []).forEach((node) =>
+		[...READER_PORTAL_HOST?.children || []].forEach((node) =>
 			applyReaderThemeVariables(node, mode, ownPalette));
 		if (CURRENT_OVERLAY && !CURRENT_OVERLAY.isConnected) applyReaderThemeVariables(CURRENT_OVERLAY, mode, ownPalette);
 		document.querySelectorAll('[data-ldp-reader-composer-root]').forEach((node) => applyReaderThemeVariables(node, mode, ownPalette));
 		syncReaderThemeButtons(undefined, mode);
-		if (CURRENT_OVERLAY && typeof CURRENT_OVERLAY._ldpApplyThemeDependentColors === 'function') {
+		if (isFunction(CURRENT_OVERLAY?._ldpApplyThemeDependentColors)) {
 			CURRENT_OVERLAY._ldpApplyThemeDependentColors();
 		}
 	}
@@ -6492,7 +6504,7 @@
 	READER_SYSTEM_THEME_QUERY?.addEventListener('change', onReaderSystemThemeChange);
 
 	function balanceLayoutRatios(source, adjustable) {
-		const result = Object.assign({}, source);
+		const result = { ...source };
 		const difference = roundLayoutRatio(100 - layoutRatioTotal(result));
 		const direction = difference > 0 ? 1 : -1;
 		let remaining = Math.abs(difference);
@@ -6598,7 +6610,7 @@
 	}
 
 	function normalizeFontFamily(value, fallback = FONT_FAMILY_DEFAULT) {
-		return Object.prototype.hasOwnProperty.call(FONT_FAMILY_OPTIONS, value) ? value : fallback;
+		return Object.hasOwn(FONT_FAMILY_OPTIONS, value) ? value : fallback;
 	}
 
 	function normalizeCustomFontFamily(value, fallback = '') {
@@ -6606,7 +6618,7 @@
 			.replace(/[\u0000-\u001f\u007f"'`,;{}<>\\]/g, '')
 			.replace(/\s+/g, ' ')
 			.trim();
-		return Array.from(source).slice(0, 64).join('');
+		return [...source].slice(0, 64).join('');
 	}
 
 	function normalizeFontWeight(value, fallback = FONT_WEIGHT_DEFAULT) {
@@ -6633,9 +6645,9 @@
 
 	function resolvedFontFamily(values, scope = 'interface') {
 		const config = scope === 'host' ? HOST_FONT_CONFIG : FONT_SCOPE_CONFIG[scope] || FONT_SCOPE_CONFIG.interface;
-		const family = normalizeFontFamily(values && values[config.family]);
+		const family = normalizeFontFamily(values?.[config.family]);
 		if (family !== 'custom') return family === 'site' ? resolvedSiteFontFamily() : FONT_FAMILY_OPTIONS[family].stack;
-		const customFamily = normalizeCustomFontFamily(values && values[config.customFamily]);
+		const customFamily = normalizeCustomFontFamily(values?.[config.customFamily]);
 		return customFamily
 			? `${JSON.stringify(customFamily)},${FONT_FAMILY_OPTIONS.system.stack}`
 			: FONT_FAMILY_OPTIONS.system.stack;
@@ -6646,13 +6658,13 @@
 		FONT_SCOPE_KEYS.forEach((scope) => {
 			const config = FONT_SCOPE_CONFIG[scope];
 			const prefix = `--ldp-${scope}-font`;
-			const color = normalizeHexColor(values && values[config.color]);
+			const color = normalizeHexColor(values?.[config.color]);
 			styleDeclaration.setProperty(`${prefix}-family`, resolvedFontFamily(values, scope));
-			styleDeclaration.setProperty(`${prefix}-weight`, String(normalizeFontWeight(values && values[config.weight])));
+			styleDeclaration.setProperty(`${prefix}-weight`, String(normalizeFontWeight(values?.[config.weight])));
 			if (color) styleDeclaration.setProperty(`${prefix}-color`, color);
 			else styleDeclaration.removeProperty(`${prefix}-color`);
 		});
-		styleDeclaration.setProperty('--ldp-reader-font-weight-base', String(normalizeFontWeight(values && values.weight)));
+		styleDeclaration.setProperty('--ldp-reader-font-weight-base', String(normalizeFontWeight(values?.weight)));
 	}
 
 	function clearReaderFontAppearance(styleDeclaration) {
@@ -6779,7 +6791,7 @@
 	}
 
 	function appearanceThemeColor(values, key, mode = resolvedReaderThemeMode()) {
-		return adaptAppearanceColorToTheme(key, values && values[key], mode);
+		return adaptAppearanceColorToTheme(key, values?.[key], mode);
 	}
 
 	function normalizeAppearanceProfile(source, fallback = APPEARANCE_PROFILE_DEFAULT) {
@@ -6860,7 +6872,7 @@
 	function chromeExtensionRuntime() {
 		try {
 			if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id ||
-				typeof chrome.runtime.sendMessage !== 'function') return null;
+				!isFunction(chrome.runtime.sendMessage)) return null;
 			return chrome.runtime;
 		} catch (e) {
 			return null;
@@ -6878,7 +6890,7 @@
 		} catch (error) {
 			return {
 				ok: false,
-				reason: error && error.message ? error.message : 'extension-message-failed',
+				reason: error?.message ? error.message : 'extension-message-failed',
 			};
 		}
 	}
@@ -6903,7 +6915,7 @@
 
 	function installChromeSidePanelBridge() {
 		const runtime = chromeExtensionRuntime();
-		if (!runtime || !runtime.onMessage || typeof runtime.onMessage.addListener !== 'function') return;
+		if (!runtime || !runtime.onMessage || !isFunction(runtime.onMessage.addListener)) return;
 		runtime.onMessage.addListener((message) => {
 			if (!message || message.type !== 'ldp-sidepanel-state') return;
 			setChromeSidePanelActive(!!message.active);
@@ -6913,7 +6925,7 @@
 
 	function userProfileUrl(username) {
 		const discourseUrl = lookupDiscourseModule('discourse/lib/url');
-		return discourseUrl && typeof discourseUrl.userPath === 'function'
+		return isFunction(discourseUrl?.userPath)
 			? discourseUrl.userPath(encodeURIComponent(username || ''))
 			: '';
 	}
@@ -6922,15 +6934,15 @@
 		const suffix = String(path || '').replace(/^\/+/, '');
 		const discourseUrl = lookupDiscourseModule('discourse/lib/url');
 		const userPath = encodeURIComponent(username || '');
-		return discourseUrl && typeof discourseUrl.userPath === 'function'
+		return isFunction(discourseUrl?.userPath)
 			? discourseUrl.userPath(suffix ? `${userPath}/${suffix}` : userPath)
 			: '';
 	}
 
 	function discoursePageUrl(path) {
 		const getUrlModule = lookupDiscourseModule('discourse/lib/get-url');
-		const getURL = getUrlModule && getUrlModule.default;
-		if (typeof getURL !== 'function') return '';
+		const getURL = getUrlModule?.default;
+		if (!isFunction(getURL)) return '';
 		const resolved = getURL(String(path || ''));
 		return resolved ? new URL(resolved, location.origin).href : '';
 	}
@@ -7026,8 +7038,8 @@
 	function topicNavMetadataWithCachedIcons(metadata = {}) {
 		const tagIcons = new Map();
 		(Array.isArray(metadata.tagIcons) ? metadata.tagIcons : []).forEach((item) => {
-			const name = topicNavText(item && item.name).trim();
-			const iconHtml = safeTopicNavIconHtml(item && item.iconHtml);
+			const name = topicNavText(item?.name).trim();
+			const iconHtml = safeTopicNavIconHtml(item?.iconHtml);
 			if (name && iconHtml) tagIcons.set(name, { name, iconHtml });
 		});
 		(Array.isArray(metadata.tags) ? metadata.tags : []).map(topicNavText).map((tag) => tag.trim()).filter(Boolean)
@@ -7038,14 +7050,14 @@
 			});
 		return Object.assign({}, metadata, {
 			categoryIconHtml: safeTopicNavIconHtml(metadata.categoryIconHtml) || cachedTopicNavIcon('category', metadata),
-			tagIcons: Array.from(tagIcons.values()),
+			tagIcons: [...tagIcons.values()],
 		});
 	}
 
 	function cacheTopicNavMetadataIcons(metadata = {}) {
 		rememberTopicNavIcon('category', metadata, metadata.categoryIconHtml);
 		(Array.isArray(metadata.tagIcons) ? metadata.tagIcons : []).forEach((item) => {
-			rememberTopicNavIcon('tag', item && item.name, item && item.iconHtml);
+			rememberTopicNavIcon('tag', item?.name, item?.iconHtml);
 		});
 	}
 
@@ -7056,13 +7068,13 @@
 
 	function topicNavIconHtml(link) {
 		if (!link) return '';
-		return Array.from(link.querySelectorAll('svg,img'))
+		return [...link.querySelectorAll('svg,img')]
 			.filter((node) => node.closest('a') === link)
 			.map((node) => {
 				const copy = node.cloneNode(true);
 				copy.querySelectorAll('script,foreignObject').forEach((unsafe) => unsafe.remove());
 				[copy, ...copy.querySelectorAll('*')].forEach((part) => {
-					Array.from(part.attributes || []).forEach((attribute) => {
+					[...part.attributes || []].forEach((attribute) => {
 						if (/^on/i.test(attribute.name)) part.removeAttribute(attribute.name);
 					});
 				});
@@ -7108,7 +7120,7 @@
 		if (!root) {
 			const currentRoute = extractTopicRouteFromUrl(location.href);
 			if (expectedTopicId && (!currentRoute || Number(currentRoute.topicId) !== Number(expectedTopicId))) return {};
-			root = Array.from(document.querySelectorAll('#topic-title,.topic-title,.title-wrapper'))
+			root = [...document.querySelectorAll('#topic-title,.topic-title,.title-wrapper')]
 				.find((node) => !node.closest('.ldp-overlay')) || null;
 		}
 		if (!root) return {};
@@ -7116,7 +7128,7 @@
 			'a.badge-category__wrapper,a.badge-category,a.topic-category,a[href^="/c/"],a[href*="/c/"]',
 		);
 		const metadata = topicCategoryLinkMetadata(categoryLink);
-		const tagLinks = Array.from(root.querySelectorAll('a.discourse-tag,.discourse-tags a,.topic-tags a'))
+		const tagLinks = [...root.querySelectorAll('a.discourse-tag,.discourse-tags a,.topic-tags a')]
 			.filter((node) => !node.closest('.ldp-overlay'));
 		metadata.tags = tagLinks
 			.map((node) => topicNavText(node.dataset.tagName || node.textContent).trim())
@@ -7136,8 +7148,8 @@
 		const tagIcons = new Map();
 		[fallback.tagIcons, primary.tagIcons].forEach((items) => {
 			(Array.isArray(items) ? items : []).forEach((item) => {
-				const name = topicNavText(item && item.name).trim();
-				const iconHtml = String(item && item.iconHtml || '').trim();
+				const name = topicNavText(item?.name).trim();
+				const iconHtml = String(item?.iconHtml || '').trim();
 				if (name && iconHtml) tagIcons.set(name, { name, iconHtml });
 			});
 		});
@@ -7150,7 +7162,7 @@
 			categoryId: Number(primary.categoryId || fallback.categoryId) || 0,
 			categoryIconHtml: String(primary.categoryIconHtml || (sameCategory ? fallback.categoryIconHtml : '') || '').trim(),
 			tags: primaryTags.length ? primaryTags : fallbackTags,
-			tagIcons: Array.from(tagIcons.values()),
+			tagIcons: [...tagIcons.values()],
 		});
 	}
 
@@ -7182,11 +7194,11 @@
 				categoryIconHtml: matchingCategory ? candidate.categoryIconHtml : '',
 				tags,
 				tagIcons: (Array.isArray(candidate.tagIcons) ? candidate.tagIcons : [])
-					.filter((item) => wantedTags.has(topicNavText(item && item.name).trim())),
+					.filter((item) => wantedTags.has(topicNavText(item?.name).trim())),
 			});
 		};
 		collect(topic._ldpTopicNavMetadata);
-		TOPIC_DATA_CACHE.forEach((entry) => collect(entry && entry.topic && entry.topic._ldpTopicNavMetadata));
+		TOPIC_DATA_CACHE.forEach((entry) => collect(entry?.topic && entry.topic._ldpTopicNavMetadata));
 		return mergeTopicNavMetadata({ categoryName, categoryLevel, categorySlug, categoryId, tags }, cached);
 	}
 
@@ -7242,7 +7254,7 @@
 			changed = true;
 		}
 		if ((!Array.isArray(topic.tags) || !topic.tags.length) && Array.isArray(fallback.tags) && fallback.tags.length) {
-			topic.tags = Array.from(new Set(fallback.tags.map(topicNavText).map((tag) => tag.trim()).filter(Boolean)));
+			topic.tags = [...new Set(fallback.tags.map(topicNavText).map((tag) => tag.trim()).filter(Boolean))];
 			changed = true;
 		}
 		return changed;
@@ -7265,9 +7277,9 @@
 		}));
 		const discourseUrl = lookupDiscourseModule('discourse/lib/url');
 		const site = lookupDiscourse('service:site');
-		const nativeCategory = Array.from(discourseModelValue(site, 'categories') || [])
+		const nativeCategory = [...discourseModelValue(site, 'categories') || []]
 			.find((candidate) => Number(discourseModelValue(candidate, 'id')) === Number(categoryId));
-		const categoryHref = discourseUrl && typeof discourseUrl.getCategoryAndTagUrl === 'function' &&
+		const categoryHref = isFunction(discourseUrl?.getCategoryAndTagUrl) &&
 			nativeCategory
 			? discourseUrl.getCategoryAndTagUrl(nativeCategory, true)
 			: '';
@@ -7281,7 +7293,7 @@
 		(Array.isArray(topic.tags) ? topic.tags : []).map(topicNavText).filter(Boolean).forEach((tag) => {
 			const tagIcon = (Array.isArray(navMetadata.tagIcons) ? navMetadata.tagIcons : [])
 				.find((item) => item && item.name === tag);
-			const tagHref = discourseUrl && typeof discourseUrl.getCategoryAndTagUrl === 'function'
+			const tagHref = isFunction(discourseUrl?.getCategoryAndTagUrl)
 				? discourseUrl.getCategoryAndTagUrl(null, true, tag)
 				: '';
 			const tagContent = `${tagIcon ? tagIcon.iconHtml : ''}${esc(tag)}`;
@@ -7294,7 +7306,7 @@
 
 	function avatarUrl(template, size) {
 		const avatarUtils = lookupDiscourseModule('discourse/lib/avatar-utils');
-		return avatarUtils && typeof avatarUtils.avatarUrl === 'function'
+		return isFunction(avatarUtils?.avatarUrl)
 			? avatarUtils.avatarUrl(template, size || 48)
 			: '';
 	}
@@ -7356,7 +7368,7 @@
 		let scheduler = options.surviveReaderSwitch === true ? null : ACTIVE_READER_REQUEST_SCHEDULER;
 		if (!scheduler) return { queuedAt, permittedAt: queuedAt, waitReason: '', callSite, scheduler };
 		let untrackController = options.controller && scheduler !== options.trackedScheduler &&
-				typeof scheduler.trackExternalController === 'function'
+				isFunction(scheduler.trackExternalController)
 			? scheduler.trackExternalController(options.controller)
 			: () => {};
 		for (let attempt = 0; attempt < 2; attempt++) {
@@ -7364,13 +7376,13 @@
 				const permit = await scheduler.waitForPermit(priority, options);
 				return {
 					queuedAt,
-					permittedAt: Number(permit && permit.startedAt) || requestFlowNow(),
-					waitReason: String(permit && permit.waitReason || ''),
+					permittedAt: Number(permit?.startedAt) || requestFlowNow(),
+					waitReason: String(permit?.waitReason || ''),
 					callSite,
 					recoveryProbe: permit && permit.recoveryProbe === true,
 					scheduler,
 					release: () => {
-						if (typeof permit?.release === 'function') permit.release();
+						if (isFunction(permit?.release)) permit.release();
 						untrackController();
 					},
 				};
@@ -7383,7 +7395,7 @@
 				}
 				untrackController();
 				scheduler = replacementScheduler;
-				untrackController = options.controller && typeof scheduler.trackExternalController === 'function'
+				untrackController = options.controller && isFunction(scheduler.trackExternalController)
 					? scheduler.trackExternalController(options.controller)
 					: () => {};
 			}
@@ -7438,8 +7450,8 @@
 				});
 			});
 			const group = RESOURCE_CACHE_GROUPS.find((entry) => entry.cacheName === cacheName);
-			const maxEntries = Math.max(0, Number(group && group.maxEntries) || 0);
-			const maxBytes = Math.max(0, Number(group && group.maxBytes) || 0);
+			const maxEntries = Math.max(0, Number(group?.maxEntries) || 0);
+			const maxBytes = Math.max(0, Number(group?.maxBytes) || 0);
 			if (!maxEntries && !maxBytes) return;
 			let keptEntries = 0;
 			let keptBytes = 0;
@@ -7532,17 +7544,17 @@
 				signal,
 				[REQUEST_FLOW_FETCH_META]: { source: 'reader', priority, type, ...requestFlowMeta },
 			});
-			return { response, release: typeof release === 'function' ? release : () => {} };
+			return { response, release: isFunction(release) ? release : () => {} };
 		} catch (error) {
-			if (typeof release === 'function') release();
+			if (isFunction(release)) release();
 			throw error;
 		}
 	}
 
 	async function avatarResponseBlob(response, onProgress) {
-		if (typeof onProgress !== 'function' || !response.body || typeof response.body.getReader !== 'function') {
+		if (!isFunction(onProgress) || !response.body || !isFunction(response.body.getReader)) {
 			const blob = await response.blob();
-			if (typeof onProgress === 'function') onProgress(blob.size, blob.size);
+			if (isFunction(onProgress)) onProgress(blob.size, blob.size);
 			return blob;
 		}
 		const total = Math.max(0, Number(response.headers.get('content-length')) || 0);
@@ -7573,7 +7585,7 @@
 
 	async function persistentAvatarSource(template, size = 64, priority = POST_REQUEST_PRIORITY.visible, options = {}) {
 		const source = avatarUrl(template, size);
-		const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
+		const onProgress = isFunction(options.onProgress) ? options.onProgress : null;
 		const completeProgress = () => onProgress && onProgress(1, 1);
 		if (!source || source.startsWith('data:') || source.startsWith('blob:')) {
 			if (source) completeProgress();
@@ -7805,7 +7817,7 @@
 		if (!viewer || !viewer.isConnected) return;
 		const margin = 10;
 		const gap = 10;
-		const rect = anchor && anchor.isConnected ? anchor.getBoundingClientRect() : null;
+		const rect = anchor?.isConnected ? anchor.getBoundingClientRect() : null;
 		const imageViewerSize = Math.min(480, window.innerWidth - margin * 2, window.innerHeight - margin * 2);
 		const width = viewer.offsetWidth || (viewer.classList.contains('is-image') ? imageViewerSize : 320);
 		const height = viewer.offsetHeight || (viewer.classList.contains('is-image') ? imageViewerSize : 358);
@@ -7849,7 +7861,7 @@
 		if (!highResolutionSource && !previewSource) return null;
 		const currentViewer = readerPortalQuery('.ldp-avatar-viewer');
 		if (currentViewer && isImage && options.reuseImageViewer === true && currentViewer._ldpKind === 'image' &&
-			typeof currentViewer._ldpUpdateImage === 'function') {
+			isFunction(currentViewer._ldpUpdateImage)) {
 			currentViewer._ldpUpdateImage({ template, previewSource, highResolutionSource, options });
 			return currentViewer;
 		}
@@ -7858,7 +7870,7 @@
 			positionUserAvatarViewer(currentViewer, anchorCard);
 			return currentViewer;
 		}
-		if (currentViewer && typeof currentViewer._ldpClose === 'function') currentViewer._ldpClose();
+		if (isFunction(currentViewer?._ldpClose)) currentViewer._ldpClose();
 
 		const viewer = makeElement('div');
 		const viewerScope = createLifecycleScope();
@@ -7868,27 +7880,27 @@
 		viewer.setAttribute('role', 'dialog');
 		setLabel(viewer, accessibleName);
 		viewer.innerHTML = `
-      <div class="ldp-avatar-viewer-toolbar" role="toolbar" aria-label="${mediaLabel}工具">
-        ${isImage && options.selectable ? `<label class="ldp-avatar-viewer-selection"><input type="checkbox"${options.selected ? ' checked' : ''}><span>${esc(options.selectionLabel || '选择当前图片')}</span></label>` : ''}
-        <div class="ldp-avatar-viewer-progress is-indeterminate" role="progressbar" aria-label="${mediaLabel}原图加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuetext="正在加载${mediaLabel}原图"${highResolutionSource && !isBackground && (!isImage || loadImageOriginal) ? '' : ' hidden'}>
-          <span class="ldp-avatar-viewer-progress-track" aria-hidden="true"><span class="ldp-avatar-viewer-progress-fill"></span></span>
-          <span class="ldp-avatar-viewer-progress-value">原图加载中</span>
-        </div>
-        ${isImage ? `${iconActionButtons('ldp-lb-btn', 'data-avatar-viewer-action', [['zoom-out', '缩小（-）', 'minus']])}
-        <button class="ldp-lb-btn ldp-avatar-viewer-zoom-value" type="button" data-avatar-viewer-action="zoom-reset" aria-label="恢复 100%">100%</button>
-        ${iconActionButtons('ldp-lb-btn', 'data-avatar-viewer-action', [['zoom-in', '放大（+）', 'plus']])}` : ''}
-        ${iconActionButtons('ldp-lb-btn', 'data-avatar-viewer-action', [
+			<div class="ldp-avatar-viewer-toolbar" role="toolbar" aria-label="${mediaLabel}工具">
+				${isImage && options.selectable ? `<label class="ldp-avatar-viewer-selection"><input type="checkbox"${options.selected ? ' checked' : ''}><span>${esc(options.selectionLabel || '选择当前图片')}</span></label>` : ''}
+				<div class="ldp-avatar-viewer-progress is-indeterminate" role="progressbar" aria-label="${mediaLabel}原图加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuetext="正在加载${mediaLabel}原图"${highResolutionSource && !isBackground && (!isImage || loadImageOriginal) ? '' : ' hidden'}>
+					<span class="ldp-avatar-viewer-progress-track" aria-hidden="true"><span class="ldp-avatar-viewer-progress-fill"></span></span>
+					<span class="ldp-avatar-viewer-progress-value">原图加载中</span>
+				</div>
+				${isImage ? `${iconActionButtons('ldp-lb-btn', 'data-avatar-viewer-action', [['zoom-out', '缩小（-）', 'minus']])}
+				<button class="ldp-lb-btn ldp-avatar-viewer-zoom-value" type="button" data-avatar-viewer-action="zoom-reset" aria-label="恢复 100%">100%</button>
+				${iconActionButtons('ldp-lb-btn', 'data-avatar-viewer-action', [['zoom-in', '放大（+）', 'plus']])}` : ''}
+				${iconActionButtons('ldp-lb-btn', 'data-avatar-viewer-action', [
 					['download', `下载当前${mediaLabel}`, 'download', ' disabled'],
 					['close', `关闭${mediaLabel}预览（Esc）`, 'x'],
 				])}
-      </div>
-      <div class="ldp-avatar-viewer-stage">
-        ${isImage && typeof options.onPrevious === 'function' ? `<button class="ldp-avatar-viewer-nav ldp-avatar-viewer-prev" type="button" data-avatar-viewer-action="previous" aria-label="上一张（←）"${options.previousDisabled ? ' disabled' : ''}>${icon('chevronRight')}</button>` : ''}
-        <img class="ldp-avatar-viewer-image" alt="${escAttr(accessibleName)}" draggable="false" decoding="async" hidden>
-        ${isImage && typeof options.onNext === 'function' ? `<button class="ldp-avatar-viewer-nav ldp-avatar-viewer-next" type="button" data-avatar-viewer-action="next" aria-label="下一张（→）"${options.nextDisabled ? ' disabled' : ''}>${icon('chevronRight')}</button>` : ''}
-        ${isBackground || isImage ? '' : userFlairHtml(user)}
-        <div class="ldp-avatar-viewer-status" role="status" aria-live="polite">正在加载${mediaLabel}…</div>
-      </div>`;
+			</div>
+			<div class="ldp-avatar-viewer-stage">
+				${isImage && isFunction(options.onPrevious) ? `<button class="ldp-avatar-viewer-nav ldp-avatar-viewer-prev" type="button" data-avatar-viewer-action="previous" aria-label="上一张（←）"${options.previousDisabled ? ' disabled' : ''}>${icon('chevronRight')}</button>` : ''}
+				<img class="ldp-avatar-viewer-image" alt="${escAttr(accessibleName)}" draggable="false" decoding="async" hidden>
+				${isImage && isFunction(options.onNext) ? `<button class="ldp-avatar-viewer-nav ldp-avatar-viewer-next" type="button" data-avatar-viewer-action="next" aria-label="下一张（→）"${options.nextDisabled ? ' disabled' : ''}>${icon('chevronRight')}</button>` : ''}
+				${isBackground || isImage ? '' : userFlairHtml(user)}
+				<div class="ldp-avatar-viewer-status" role="status" aria-live="polite">正在加载${mediaLabel}…</div>
+			</div>`;
 		const image = viewer.querySelector('.ldp-avatar-viewer-image');
 		const stage = viewer.querySelector('.ldp-avatar-viewer-stage');
 		const status = viewer.querySelector('.ldp-avatar-viewer-status');
@@ -7928,10 +7940,10 @@
 			if (imageTransform) imageTransform.destroy();
 			if (viewer._ldpBatchDialog) viewer._ldpBatchDialog.style.removeProperty('transform');
 			viewer.remove();
-			if (dismissed && typeof onDismiss === 'function') onDismiss();
+			if (dismissed && isFunction(onDismiss)) onDismiss();
 		};
 		const download = () => {
-			if (typeof activeOptions.onDownload === 'function') {
+			if (isFunction(activeOptions.onDownload)) {
 				void activeOptions.onDownload();
 				return;
 			}
@@ -7950,11 +7962,11 @@
 				event.preventDefault();
 				event.stopImmediatePropagation();
 				close(true);
-			} else if (isImage && event.key === 'ArrowLeft' && typeof activeOptions.onPrevious === 'function' && !activeOptions.previousDisabled) {
+			} else if (isImage && event.key === 'ArrowLeft' && isFunction(activeOptions.onPrevious) && !activeOptions.previousDisabled) {
 				event.preventDefault();
 				event.stopImmediatePropagation();
 				activeOptions.onPrevious();
-			} else if (isImage && event.key === 'ArrowRight' && typeof activeOptions.onNext === 'function' && !activeOptions.nextDisabled) {
+			} else if (isImage && event.key === 'ArrowRight' && isFunction(activeOptions.onNext) && !activeOptions.nextDisabled) {
 				event.preventDefault();
 				event.stopImmediatePropagation();
 				activeOptions.onNext();
@@ -7964,7 +7976,7 @@
 		}
 		function onOutside(event) {
 			if (eventPathIncludes(event, viewer) || eventPathIncludes(event, anchorCard)) return;
-			const batchDialog = viewer._ldpBatchDialog || (anchorCard && anchorCard.closest && anchorCard.closest('.ldp-lb-batch-dialog'));
+			const batchDialog = viewer._ldpBatchDialog || (anchorCard?.closest && anchorCard.closest('.ldp-lb-batch-dialog'));
 			if (isImage && activeOptions.reuseImageViewer === true && batchDialog && eventPathIncludes(event, batchDialog)) return;
 			close(true);
 		}
@@ -8051,14 +8063,14 @@
 			const action = event.target.closest && event.target.closest('[data-avatar-viewer-action]')?.dataset.avatarViewerAction;
 			if (action === 'download') download();
 			else if (action === 'close') close(true);
-			else if (action === 'previous' && typeof activeOptions.onPrevious === 'function') activeOptions.onPrevious();
-			else if (action === 'next' && typeof activeOptions.onNext === 'function') activeOptions.onNext();
+			else if (action === 'previous' && isFunction(activeOptions.onPrevious)) activeOptions.onPrevious();
+			else if (action === 'next' && isFunction(activeOptions.onNext)) activeOptions.onNext();
 			else if (action === 'zoom-out') imageTransform.setZoom(imageTransform.scale / 1.2);
 			else if (action === 'zoom-in') imageTransform.setZoom(imageTransform.scale * 1.2);
 			else if (action === 'zoom-reset') imageTransform.reset();
 		});
 		if (selectionInput) selectionInput.addEventListener('change', () => {
-			if (typeof activeOptions.onSelectionChange === 'function') activeOptions.onSelectionChange(selectionInput.checked);
+			if (isFunction(activeOptions.onSelectionChange)) activeOptions.onSelectionChange(selectionInput.checked);
 		});
 		image.addEventListener('load', () => {
 			if (closed) return;
@@ -8141,7 +8153,7 @@
 		const d = new Date(iso);
 		if (!Number.isFinite(d.getTime())) return '';
 		const formatter = lookupDiscourseModule('discourse/lib/formatter');
-		return formatter && typeof formatter.relativeAge === 'function'
+		return isFunction(formatter?.relativeAge)
 			? String(formatter.relativeAge(d, { format: 'medium-with-ago', wrapInSpan: false }) || '')
 			: '';
 	}
@@ -8150,7 +8162,7 @@
 		const d = new Date(iso);
 		if (!Number.isFinite(d.getTime())) return '';
 		const formatter = lookupDiscourseModule('discourse/lib/formatter');
-		return formatter && typeof formatter.longDate === 'function'
+		return isFunction(formatter?.longDate)
 			? String(formatter.longDate(d) || '')
 			: '';
 	}
@@ -8168,10 +8180,10 @@
 
 	async function discourseCsrfToken() {
 		const sessionModule = lookupDiscourseModule('discourse/models/session');
-		const Session = sessionModule && sessionModule.default;
+		const Session = sessionModule?.default;
 		const ajaxModule = lookupDiscourseModule('discourse/lib/ajax');
-		if (!Session || typeof Session.currentProp !== 'function' ||
-				!ajaxModule || typeof ajaxModule.updateCsrfToken !== 'function') {
+		if (!Session || !isFunction(Session.currentProp) ||
+				!ajaxModule || !isFunction(ajaxModule.updateCsrfToken)) {
 			throw new Error('Discourse 会话服务尚未就绪');
 		}
 		let token = String(Session.currentProp('csrfToken') || '');
@@ -8187,7 +8199,7 @@
 		const controller = new AbortController();
 		let timeout = 0;
 		let timedOut = false;
-		const abortFromExternal = () => controller.abort(externalSignal && externalSignal.reason);
+		const abortFromExternal = () => controller.abort(externalSignal?.reason);
 		if (externalSignal) {
 			if (externalSignal.aborted) abortFromExternal();
 			else externalSignal.addEventListener('abort', abortFromExternal, { once: true });
@@ -8229,7 +8241,7 @@
 	function acquireSharedReaderRequestPermit(priority, signal, type, scheduler) {
 		if (!SHARED_REQUEST_COORDINATOR) return null;
 		let requestState = null;
-		try { requestState = scheduler && scheduler.snapshot(); } catch (error) {}
+		try { requestState = scheduler?.snapshot(); } catch (error) {}
 		return SHARED_REQUEST_COORDINATOR.acquirePermit({
 			priority,
 			signal,
@@ -8265,7 +8277,7 @@
 		};
 		fetchOptions.headers = Object.assign(
 			{ 'Accept': 'application/json' },
-			options.fetchOptions && options.fetchOptions.headers || {}
+			options.fetchOptions?.headers || {}
 		);
 		if (options.signal) fetchOptions.signal = options.signal;
 		return requestCachedJSON(url, fetchOptions, options, async () => {
@@ -8292,8 +8304,8 @@
 						priority,
 						recoveryProbe: sharedPermit && sharedPermit.recoveryProbe === true,
 						queuedAt,
-						permittedAt: sharedPermit && sharedPermit.startedAt || requestFlowNow(),
-						waitReason: sharedPermit && sharedPermit.waitReason || '',
+						permittedAt: sharedPermit?.startedAt || requestFlowNow(),
+						waitReason: sharedPermit?.waitReason || '',
 						callSite: requestCallSite,
 						attempt: 1,
 						type: requestType,
@@ -8305,7 +8317,7 @@
 				}
 				return res.json();
 			} catch (error) {
-				if (requestScope.timedOut() && !(fetchOptions.signal && fetchOptions.signal.aborted)) {
+				if (requestScope.timedOut() && !(fetchOptions.signal?.aborted)) {
 					throw requestTimeoutError();
 				}
 				throw error;
@@ -8396,7 +8408,7 @@
 	}
 
 	function notificationData(notification) {
-		const raw = notification && notification.data;
+		const raw = notification?.data;
 		if (!raw) return {};
 		if (typeof raw === 'object') return raw;
 		try { return JSON.parse(raw); } catch (e) { return {}; }
@@ -8405,11 +8417,11 @@
 	function notificationTypeName(notification) {
 		const site = lookupDiscourse('service:site');
 		const lookup = site && discourseModelValue(site, 'notificationLookup');
-		return String(lookup && lookup[Number(notification && notification.notification_type)] || '');
+		return String(lookup?.[Number(notification && notification.notification_type)] || '');
 	}
 
 	function notificationTypeLabel(notification) {
-		return String(notification && notification._ldp_type_label || notificationTypeName(notification) || '通知');
+		return String(notification?._ldp_type_label || notificationTypeName(notification) || '通知');
 	}
 
 	function consolidatedReplyInfo(notification) {
@@ -8422,7 +8434,7 @@
 	}
 
 	function notificationPresentationText(value) {
-		const html = value && typeof value.toHTML === 'function' ? value.toHTML() : String(value || '');
+		const html = isFunction(value?.toHTML) ? value.toHTML() : String(value || '');
 		if (!html) return '';
 		const template = makeElement('template');
 		template.innerHTML = html;
@@ -8431,13 +8443,13 @@
 
 	async function applyDiscourseNotificationPresentation(notifications) {
 		const notificationModule = lookupDiscourseModule('discourse/models/notification');
-		const Notification = notificationModule && notificationModule.default;
+		const Notification = notificationModule?.default;
 		const manager = lookupDiscourseModule('discourse/lib/notification-types-manager');
 		const currentUser = lookupDiscourse('service:current-user');
 		const siteSettings = lookupDiscourse('service:site-settings');
 		const site = lookupDiscourse('service:site');
-		if (!Notification || typeof Notification.initializeNotifications !== 'function' ||
-				!manager || typeof manager.getRenderDirector !== 'function' ||
+		if (!Notification || !isFunction(Notification.initializeNotifications) ||
+				!manager || !isFunction(manager.getRenderDirector) ||
 				!currentUser || !siteSettings || !site) {
 			throw new Error('Discourse 通知渲染服务尚未就绪');
 		}
@@ -8464,15 +8476,15 @@
 	}
 
 	function notificationHref(notification) {
-		return String(notification && notification._ldp_href || discoursePageUrl('/my/notifications'));
+		return String(notification?._ldp_href || discoursePageUrl('/my/notifications'));
 	}
 
 	function notificationSummary(notification) {
-		return String(notification && notification._ldp_summary || notificationTypeLabel(notification));
+		return String(notification?._ldp_summary || notificationTypeLabel(notification));
 	}
 
 	function notificationActor(notification) {
-		if (notification && notification._ldp_actor) return String(notification._ldp_actor);
+		if (notification?._ldp_actor) return String(notification._ldp_actor);
 		const data = notificationData(notification);
 		return cleanUsernameValue(data.display_username || data.original_username || data.acting_user_name ||
 			data.username || notification.username);
@@ -8493,7 +8505,7 @@
 		}
 		const forms = [normalizeSearchText(source)];
 		const api = globalThis.pinyinPro;
-		if (api && typeof api.pinyin === 'function') {
+		if (isFunction(api?.pinyin)) {
 			try {
 				forms.push(normalizeSearchText(api.pinyin(source, { toneType: 'none', nonZh: 'consecutive' })));
 				forms.push(normalizeSearchText(api.pinyin(source, {
@@ -8501,7 +8513,7 @@
 				})));
 			} catch (e) {}
 		}
-		const result = Array.from(new Set(forms.filter(Boolean)));
+		const result = [...new Set(forms.filter(Boolean))];
 		SEARCH_PINYIN_CACHE.set(source, result);
 		while (SEARCH_PINYIN_CACHE.size > SEARCH_PINYIN_CACHE_MAX_ENTRIES) {
 			SEARCH_PINYIN_CACHE.delete(SEARCH_PINYIN_CACHE.keys().next().value);
@@ -8511,25 +8523,25 @@
 
 	function addNotificationStatsIdentities(notificationIds, notifications) {
 		notifications.forEach((notification) => {
-			const notificationId = String(notification && notification.id || '') || [
-				notification && notification.topic_id,
-				notification && notification.post_number,
-				notification && notification.created_at,
+			const notificationId = String(notification?.id || '') || [
+				notification?.topic_id,
+				notification?.post_number,
+				notification?.created_at,
 			].filter(Boolean).join(':');
 			if (notificationId) notificationIds.add(notificationId);
 		});
 	}
 
 	function notificationDisplayIdentity(notification) {
-		return String(notification && notification._ldp_display_identity || '') ||
-			String(notification && notification.id || '') || [
-			notificationHref(notification), notification && notification.created_at, notificationActor(notification),
+		return String(notification?._ldp_display_identity || '') ||
+			String(notification?.id || '') || [
+			notificationHref(notification), notification?.created_at, notificationActor(notification),
 		].join('|');
 	}
 
 	function notificationReadIdentity(notification) {
-		return String(notification && notification._ldp_source_notification_id || '') ||
-			String(notification && notification.id || '') ||
+		return String(notification?._ldp_source_notification_id || '') ||
+			String(notification?.id || '') ||
 			notificationDisplayIdentity(notification);
 	}
 
@@ -8542,10 +8554,10 @@
 			data.original_username,
 			data.acting_user_name,
 			data.username,
-			notification && notification.username,
+			notification?.username,
 			...[
-				notification && notification.user_id,
-				notification && notification.acting_user_id,
+				notification?.user_id,
+				notification?.acting_user_id,
 				data.user_id,
 				data.acting_user_id,
 				data.original_user_id,
@@ -8556,23 +8568,23 @@
 	function historyMatchesSearch(entry, query) {
 		const needle = normalizeSearchText(query);
 		if (!needle) return true;
-		return pinyinSearchForms(entry && entry.title).some((value) => value.includes(needle));
+		return pinyinSearchForms(entry?.title).some((value) => value.includes(needle));
 	}
 
 	function reactionRecordMatchesSearch(entry, needle) {
 		if (!needle) return true;
 		return [
-			entry && entry.reaction,
-			entry && entry.authorUsername,
-			entry && entry.postNumber,
-			...pinyinSearchForms(entry && entry.title),
+			entry?.reaction,
+			entry?.authorUsername,
+			entry?.postNumber,
+			...pinyinSearchForms(entry?.title),
 		].some((value) => normalizeSearchText(value).includes(needle));
 	}
 
 	function compareGivenReactionRecords(left, right) {
-		return (Date.parse(right && right.reactedAt || '') || 0) -
-			(Date.parse(left && left.reactedAt || '') || 0) ||
-			Number(right && right.id || 0) - Number(left && left.id || 0);
+		return (Date.parse(right?.reactedAt || '') || 0) -
+			(Date.parse(left?.reactedAt || '') || 0) ||
+			Number(right?.id || 0) - Number(left?.id || 0);
 	}
 
 	function forEachCachedNotification(callback) {
@@ -8632,7 +8644,7 @@
 
 	function decrementCurrentUserNotificationType(typeId) {
 		const currentUser = lookupDiscourse('service:current-user');
-		if (!currentUser || typeof currentUser.set !== 'function' || !(Number(typeId) > 0)) return;
+		if (!currentUser || !isFunction(currentUser.set) || !(Number(typeId) > 0)) return;
 		const grouped = {
 			...(discourseModelValue(currentUser, 'grouped_unread_notifications') || {}),
 		};
@@ -8645,7 +8657,7 @@
 
 	function syncCurrentUserNotificationsDismissed(groupKey) {
 		const currentUser = lookupDiscourse('service:current-user');
-		if (!currentUser || typeof currentUser.set !== 'function') return;
+		if (!currentUser || !isFunction(currentUser.set)) return;
 		const group = NOTIFICATION_GROUPS[groupKey] || NOTIFICATION_GROUPS.all;
 		if (!group.types.length) {
 			currentUser.set('all_unread_notifications_count', 0);
@@ -8742,7 +8754,7 @@
 		(notifications || []).forEach((notification) => {
 			buckets.get(notificationDateGroup(notification.created_at)).push(notification);
 		});
-		return Array.from(buckets.entries()).filter(([, items]) => items.length);
+		return [...buckets.entries()].filter(([, items]) => items.length);
 	}
 
 	function notificationAvatarHtml(notification) {
@@ -8771,13 +8783,13 @@
 			return cachedTemplate;
 		}
 		const cachedUser = getCachedUserCard(actor);
-		let template = String(cachedUser && cachedUser.avatar_template || '').trim();
+		let template = String(cachedUser?.avatar_template || '').trim();
 		if (!template) {
 			const actorKey = actor.toLocaleLowerCase();
 			const historyEntry = historySource().find((entry) =>
-				cleanUsernameValue(entry && entry.ownerUsername).toLocaleLowerCase() === actorKey && entry.avatarTemplate
+				cleanUsernameValue(entry?.ownerUsername).toLocaleLowerCase() === actorKey && entry.avatarTemplate
 			);
-			template = String(historyEntry && historyEntry.avatarTemplate || '').trim();
+			template = String(historyEntry?.avatarTemplate || '').trim();
 		}
 		if (template) rememberNotificationAvatar(actor, template);
 		return template;
@@ -8810,16 +8822,16 @@
 	}
 
 	function topicReplyMatchesConsolidatedBucket(post, parentPostNumber, latestPostNumber) {
-		const postNumber = Math.max(0, Number(post && post.post_number) || 0);
+		const postNumber = Math.max(0, Number(post?.post_number) || 0);
 		if (!postNumber || postNumber > latestPostNumber) return false;
-		const replyTo = Math.max(0, Number(post && post.reply_to_post_number) || 0);
+		const replyTo = Math.max(0, Number(post?.reply_to_post_number) || 0);
 		return parentPostNumber === 1 ? replyTo <= 1 && postNumber > 1 : replyTo === parentPostNumber;
 	}
 
 	function expandedReplyNotification(notification, post) {
-		const data = Object.assign({}, notificationData(notification));
-		const actor = cleanUsernameValue(post && post.username);
-		const postNumber = Math.max(0, Number(post && post.post_number) || 0);
+		const data = { ...notificationData(notification) };
+		const actor = cleanUsernameValue(post?.username);
+		const postNumber = Math.max(0, Number(post?.post_number) || 0);
 		Object.assign(data, {
 			consolidated_count: 1,
 			display_username: actor,
@@ -8831,9 +8843,9 @@
 		const expanded = Object.assign({}, notification, {
 			data,
 			post_number: postNumber,
-			created_at: post && post.created_at || notification.created_at,
+			created_at: post?.created_at || notification.created_at,
 			username: actor,
-			acting_user_avatar_template: post && post.avatar_template ||
+			acting_user_avatar_template: post?.avatar_template ||
 				notification.acting_user_avatar_template,
 			_ldp_display_identity: `${notification.id || 'reply'}:reply:${postNumber}`,
 			_ldp_source_notification_id: notification.id || '',
@@ -8847,10 +8859,10 @@
 
 	async function expandConsolidatedReplyNotification(notification, options = {}) {
 		const info = consolidatedReplyInfo(notification);
-		const topicId = Math.max(0, Number(notification && notification.topic_id) || 0);
+		const topicId = Math.max(0, Number(notification?.topic_id) || 0);
 		const latestPostNumber = Math.max(
 			0,
-			Number(notification && notification.post_number) ||
+			Number(notification?.post_number) ||
 			Number(notificationData(notification).post_number) ||
 			0
 		);
@@ -8942,14 +8954,14 @@
 		if (!container) return;
 		const actors = new Set();
 		(entries || []).forEach((entry) => {
-			const actor = cleanUsernameValue(entry && entry.ownerUsername);
+			const actor = cleanUsernameValue(entry?.ownerUsername);
 			if (actor && !entry.avatarTemplate) actors.add(actor);
 		});
 		const history = actors.size ? storedHistory || readTopicHistory() : [];
 		const templates = cachedActorAvatars(actors, () => history);
 		let historyChanged = false;
 		history.forEach((entry) => {
-			const template = templates.get(cleanUsernameValue(entry && entry.ownerUsername));
+			const template = templates.get(cleanUsernameValue(entry?.ownerUsername));
 			if (!template || entry.avatarTemplate === template) return;
 			entry.avatarTemplate = template;
 			historyChanged = true;
@@ -8963,30 +8975,30 @@
 		const groups = groupNotificationsByDate(notifications);
 		if (!groups.length) return '<div class="ldp-notification-empty">暂无消息</div>';
 		return groups.map(([label, items]) => `
-      <section class="ldp-notification-date-group">
-        <div class="ldp-notification-date-label">${label}</div>
-        ${items.map((notification) => `
-          <a class="ldp-notification-item${notification.read ? '' : ' unread'}" data-notification-id="${Math.max(0, Number(notification.id) || 0)}" data-notification-key="${escAttr(notificationDisplayIdentity(notification))}" data-notification-read-key="${escAttr(notificationReadIdentity(notification))}" data-notification-actor="${escAttr(notificationActor(notification))}" data-ldp-preserve-target-post="1" href="${escAttr(notificationHref(notification))}">
-            ${notificationAvatarHtml(notification)}
-            <span class="ldp-notification-copy">
-              <span class="ldp-notification-title">${esc(notificationSummary(notification))}</span>
-              <span class="ldp-notification-footer">
-                <span class="ldp-notification-meta">${esc(discourseRelativeTime(notification.created_at))}</span>
-                <span class="ldp-notification-read-state">${notification.read ? '已读' : '未读'}</span>
-              </span>
-            </span>
-          </a>`).join('')}
-      </section>`).join('');
+			<section class="ldp-notification-date-group">
+				<div class="ldp-notification-date-label">${label}</div>
+				${items.map((notification) => `
+					<a class="ldp-notification-item${notification.read ? '' : ' unread'}" data-notification-id="${Math.max(0, Number(notification.id) || 0)}" data-notification-key="${escAttr(notificationDisplayIdentity(notification))}" data-notification-read-key="${escAttr(notificationReadIdentity(notification))}" data-notification-actor="${escAttr(notificationActor(notification))}" data-ldp-preserve-target-post="1" href="${escAttr(notificationHref(notification))}">
+						${notificationAvatarHtml(notification)}
+						<span class="ldp-notification-copy">
+							<span class="ldp-notification-title">${esc(notificationSummary(notification))}</span>
+							<span class="ldp-notification-footer">
+								<span class="ldp-notification-meta">${esc(discourseRelativeTime(notification.created_at))}</span>
+								<span class="ldp-notification-read-state">${notification.read ? '已读' : '未读'}</span>
+							</span>
+						</span>
+					</a>`).join('')}
+			</section>`).join('');
 	}
 
 	function collectionLinkMarkup(className, href, avatar, title, meta, metaIsHtml = false) {
 		return `<a class="ldp-notification-item ${className}" data-ldp-preserve-target-post="1" href="${escAttr(href)}">
-      ${avatar}
-      <span class="ldp-notification-copy">
-        <span class="ldp-notification-title">${esc(title)}</span>
-        <span class="ldp-notification-meta">${metaIsHtml ? meta : esc(meta)}</span>
-      </span>
-    </a>`;
+			${avatar}
+			<span class="ldp-notification-copy">
+				<span class="ldp-notification-title">${esc(title)}</span>
+				<span class="ldp-notification-meta">${metaIsHtml ? meta : esc(meta)}</span>
+			</span>
+		</a>`;
 	}
 
 	function getCachedNotificationPage(cacheKey) {
@@ -9023,14 +9035,14 @@
 
 	function sortNotificationsNewestFirst(notifications) {
 		return (notifications || []).slice().sort((a, b) => {
-			const timeA = Date.parse(a && a.created_at || '') || 0;
-			const timeB = Date.parse(b && b.created_at || '') || 0;
-			return timeB - timeA || Number(b && b.id || 0) - Number(a && a.id || 0);
+			const timeA = Date.parse(a?.created_at || '') || 0;
+			const timeB = Date.parse(b?.created_at || '') || 0;
+			return timeB - timeA || Number(b?.id || 0) - Number(a?.id || 0);
 		});
 	}
 
 	async function fetchNotificationPage(groupKey, page, options = {}) {
-		const safeGroupKey = Object.prototype.hasOwnProperty.call(NOTIFICATION_GROUPS, groupKey) ? groupKey : 'all';
+		const safeGroupKey = Object.hasOwn(NOTIFICATION_GROUPS, groupKey) ? groupKey : 'all';
 		page = Math.max(0, Number(page) || 0);
 		const cacheKey = notificationPageCacheKey(safeGroupKey, page);
 		const pendingRequest = NOTIFICATION_REQUESTS.get(cacheKey);
@@ -9072,20 +9084,20 @@
 	function postsFromPayload(data) {
 		if (!data) return [];
 		if (Array.isArray(data)) return data;
-		if (Array.isArray(data.post_stream && data.post_stream.posts)) return data.post_stream.posts;
+		if (Array.isArray(data.post_stream?.posts)) return data.post_stream.posts;
 		if (Array.isArray(data.posts)) return data.posts;
-		if (data.post && data.post.post_number) return [data.post];
+		if (data.post?.post_number) return [data.post];
 		if (data.post_number) return [data];
 		return [];
 	}
 
 	function shouldStopReaderFallback(error) {
-		const status = Number(error && error.status || 0);
+		const status = Number(error?.status || 0);
 		return !!(error && error.name === 'AbortError') || status === 408 || status === 429 || status >= 500;
 	}
 
 	function retryAfterMs(response, attempt) {
-		const raw = requestFlowHeader(response && response.headers, REQUEST_FLOW_RESPONSE_HEADERS.retryAfter);
+		const raw = requestFlowHeader(response?.headers, REQUEST_FLOW_RESPONSE_HEADERS.retryAfter);
 		let wait = 0;
 		if (raw) {
 			const seconds = Number(raw);
@@ -9099,7 +9111,7 @@
 
 	function requestRateLimitWindow(response) {
 		return rateLimitWindowFromCode(requestFlowHeader(
-			response && response.headers, REQUEST_FLOW_RESPONSE_HEADERS.rateLimitCode
+			response?.headers, REQUEST_FLOW_RESPONSE_HEADERS.rateLimitCode
 		));
 	}
 
@@ -9146,7 +9158,7 @@
 				const invalid = `${normalizedMethod}:invalid:${String(input || '').slice(0, 160)}`;
 				return { fingerprint: invalid, route: invalid };
 			}
-			const params = Array.from(url.searchParams.entries()).filter(([key]) => key !== '_ldp_retry');
+			const params = [...url.searchParams.entries()].filter(([key]) => key !== '_ldp_retry');
 			const identity = (routeOnly) => {
 				const path = routeOnly
 					? url.pathname
@@ -9157,7 +9169,7 @@
 					.sort(([aKey, aValue], [bKey, bValue]) =>
 						aKey.localeCompare(bKey) || aValue.localeCompare(bValue));
 				const query = routeOnly
-					? Array.from(new Set(sorted.map(([key]) => encodeURIComponent(key)))).join('&')
+					? [...new Set(sorted.map(([key]) => encodeURIComponent(key)))].join('&')
 					: sorted.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&');
 				return `${normalizedMethod}:${url.origin}${path}${query ? `?${query}` : ''}`;
 			};
@@ -9173,7 +9185,7 @@
 				if (state.lastAt < at - READER_ENDPOINT_429_STATE_TTL) endpointRateLimitCircuits.delete(key);
 			});
 			if (endpointRateLimitCircuits.size > READER_ENDPOINT_429_MAX_ENTRIES) {
-				Array.from(endpointRateLimitCircuits.entries())
+				[...endpointRateLimitCircuits.entries()]
 					.sort(([, a], [, b]) => a.lastAt - b.lastAt)
 					.slice(0, endpointRateLimitCircuits.size - READER_ENDPOINT_429_MAX_ENTRIES)
 					.forEach(([key]) => endpointRateLimitCircuits.delete(key));
@@ -9371,7 +9383,7 @@
 			} catch (error) {
 				tasksByKey.delete(task.key);
 				task.state = 'done';
-				if (timedOut && !(externalSignal && externalSignal.aborted)) {
+				if (timedOut && !(externalSignal?.aborted)) {
 					task.reject(requestTimeoutError());
 				} else {
 					task.reject(error);
@@ -9397,7 +9409,7 @@
 			sortQueue();
 			while (queue.length) {
 				const task = queue.shift();
-				if (task.signal && task.signal.aborted) {
+				if (task.signal?.aborted) {
 					task.controlReason = 'signal';
 					finishQueuedTask(task, abortError());
 					continue;
@@ -9538,7 +9550,7 @@
 		});
 
 		const trackExternalController = (controller) => {
-			if (!controller || typeof controller.abort !== 'function') return () => {};
+			if (!controller || !isFunction(controller.abort)) return () => {};
 			if (disposed) {
 				controller.abort();
 				return () => {};
@@ -9561,7 +9573,7 @@
 			endpointRateLimitCircuits.clear();
 			unknownRateLimitEvidence.length = 0;
 			schedulePump();
-			return SHARED_REQUEST_COORDINATOR && SHARED_REQUEST_COORDINATOR.resetRateLimits
+			return SHARED_REQUEST_COORDINATOR?.resetRateLimits
 				? SHARED_REQUEST_COORDINATOR.resetRateLimits()
 				: Promise.resolve(true);
 		};
@@ -9588,10 +9600,10 @@
 		const snapshot = () => {
 			const at = Date.now();
 			pruneEndpointRateLimitState(at);
-			const endpointBlocks = Array.from(endpointRateLimitCircuits.values())
+			const endpointBlocks = [...endpointRateLimitCircuits.values()]
 				.filter((state) => state.blockedUntil > at);
 			sortQueue(at);
-			const shared = SHARED_REQUEST_COORDINATOR && SHARED_REQUEST_COORDINATOR.snapshot(
+			const shared = SHARED_REQUEST_COORDINATOR?.snapshot(
 				shortWindowBudget,
 				longWindowBudget,
 				requestMinInterval,
@@ -9619,7 +9631,7 @@
 			longWindowCount: shared ? shared.longCount : 0,
 			blockingReason: shared ? shared.blockingReason : '',
 			nextPermitDelay: shared ? shared.nextPermitDelay : 0,
-			coolingDown: !!(shared && shared.coolingDown),
+			coolingDown: !!(shared?.coolingDown),
 			cooldownRemaining: shared ? shared.cooldownRemaining : 0,
 			endpointCoolingDown: endpointBlocks.length > 0,
 			endpointCooldownCount: endpointBlocks.length,
@@ -9652,7 +9664,7 @@
 		const requestType = requestFlowType(requestFlowUrl(url), 'fetch', method);
 		const requestScope = createRequestAbortScope();
 		const initialScheduler = requestOptions.surviveReaderSwitch === true ? null : ACTIVE_READER_REQUEST_SCHEDULER;
-		const untrackInitialController = initialScheduler && typeof initialScheduler.trackExternalController === 'function'
+		const untrackInitialController = isFunction(initialScheduler?.trackExternalController)
 			? initialScheduler.trackExternalController(requestScope.controller)
 			: () => {};
 		let requestPermit = null;
@@ -9702,13 +9714,13 @@
 					priority,
 					recoveryProbe: !!(
 						requestPermit.recoveryProbe ||
-						(sharedPermit && sharedPermit.recoveryProbe)
+						(sharedPermit?.recoveryProbe)
 					),
 					queuedAt: requestPermit.queuedAt,
 					permittedAt: requestPermit.permittedAt ||
-						sharedPermit && sharedPermit.startedAt || requestFlowNow(),
+						sharedPermit?.startedAt || requestFlowNow(),
 					waitReason: requestPermit.waitReason ||
-						sharedPermit && sharedPermit.waitReason || '',
+						sharedPermit?.waitReason || '',
 					callSite: requestPermit.callSite,
 					attempt: 1,
 					type: requestType,
@@ -9736,17 +9748,17 @@
 					requestFlowHeader(res.headers, ['cf-mitigated']).toLowerCase() === 'challenge';
 				throw statusError;
 			}
-			const mutationTags = Array.from(new Set([
+			const mutationTags = [...new Set([
 				...responseCacheMutationTags(url, params, data),
 				...(Array.isArray(requestOptions.invalidateTags) ? requestOptions.invalidateTags : []),
-			]));
+			])];
 			if (mutationTags.length) await clearStoredResponseCache({ tags: mutationTags });
 			return data;
 		} catch (error) {
 			if (requestScope.timedOut()) throw requestTimeoutError();
 			throw error;
 		} finally {
-			if (requestPermit && typeof requestPermit.release === 'function') requestPermit.release();
+			if (isFunction(requestPermit?.release)) requestPermit.release();
 			if (sharedPermit && SHARED_REQUEST_COORDINATOR) {
 				SHARED_REQUEST_COORDINATOR.finishPermit(sharedPermit.permitId);
 			}
@@ -9787,17 +9799,17 @@
 	}
 
 	function pollName(poll) {
-		return String((poll && poll.name) || 'poll');
+		return String((poll?.name) || 'poll');
 	}
 
 	function pollSavedVotes(postData, poll) {
-		const votes = postData && postData.polls_votes && postData.polls_votes[pollName(poll)];
+		const votes = postData?.polls_votes && postData.polls_votes[pollName(poll)];
 		return Array.isArray(votes) ? votes.map(String) : [];
 	}
 
 	function pollIsClosed(poll, ctx) {
 		if (!poll) return true;
-		if (poll.status === 'closed' || (ctx && ctx.topicData && ctx.topicData.archived)) return true;
+		if (poll.status === 'closed' || (ctx?.topicData && ctx.topicData.archived)) return true;
 		if (!poll.close) return false;
 		const closeAt = Date.parse(poll.close);
 		return Number.isFinite(closeAt) && closeAt <= Date.now();
@@ -9805,9 +9817,9 @@
 
 	function currentUserCanVoteInPoll(poll) {
 		if (!ME_USERNAME) return false;
-		const required = String((poll && poll.groups) || '').split(',').map((name) => name.trim().toLowerCase()).filter(Boolean);
+		const required = String((poll?.groups) || '').split(',').map((name) => name.trim().toLowerCase()).filter(Boolean);
 		if (!required.length) return true;
-		const groups = Array.isArray(ME_CURRENT_USER && ME_CURRENT_USER.groups)
+		const groups = Array.isArray(ME_CURRENT_USER?.groups)
 			? ME_CURRENT_USER.groups.map((group) => String((group && (group.name || group.full_name)) || '').toLowerCase())
 			: [];
 		return required.some((name) => groups.includes(name));
@@ -9818,24 +9830,24 @@
 		const closed = pollIsClosed(poll, ctx);
 		const resultRule = String(poll.results || 'always');
 		if (resultRule === 'on_close' && !closed) return false;
-		if (resultRule === 'staff_only' && !(ME_CURRENT_USER && ME_CURRENT_USER.staff)) return false;
+		if (resultRule === 'staff_only' && !(ME_CURRENT_USER?.staff)) return false;
 		if (resultRule === 'on_vote' && !pollSavedVotes(postData, poll).length) {
-			const currentUserId = +(ME_CURRENT_USER && ME_CURRENT_USER.id || 0);
+			const currentUserId = +(ME_CURRENT_USER?.id || 0);
 			if (!currentUserId || +postData.user_id !== currentUserId) return false;
 		}
 		return true;
 	}
 
 	function pollChoiceLimits(poll) {
-		const optionCount = Array.isArray(poll && poll.options) ? poll.options.length : 0;
-		const min = Math.max(1, Number.parseInt(poll && poll.min, 10) || 1);
-		const parsedMax = Number.parseInt(poll && poll.max, 10);
+		const optionCount = Array.isArray(poll?.options) ? poll.options.length : 0;
+		const min = Math.max(1, Number.parseInt(poll?.min, 10) || 1);
+		const parsedMax = Number.parseInt(poll?.max, 10);
 		const max = Math.max(min, Math.min(optionCount, Number.isFinite(parsedMax) ? parsedMax : optionCount));
 		return { min, max };
 	}
 
 	function pollOptionHtml(option) {
-		return String((option && option.html) || '');
+		return String((option?.html) || '');
 	}
 
 	function renderPollChoices(postData, poll, ctx) {
@@ -9848,10 +9860,10 @@
 		const options = (poll.options || []).map((option, index) => {
 			const id = String(option.id || '');
 			return `<label class="ldp-poll-option">
-        <input type="${inputType}" name="ldp-poll-${escAttr(postData.id)}-${escAttr(name)}" value="${escAttr(id)}"
-          data-poll-option="${escAttr(id)}"${saved.has(id) ? ' checked' : ''}${canVote ? '' : ' disabled'}>
-        <span class="ldp-poll-option-text">${pollOptionHtml(option) || `选项 ${index + 1}`}</span>
-      </label>`;
+				<input type="${inputType}" name="ldp-poll-${escAttr(postData.id)}-${escAttr(name)}" value="${escAttr(id)}"
+					data-poll-option="${escAttr(id)}"${saved.has(id) ? ' checked' : ''}${canVote ? '' : ' disabled'}>
+				<span class="ldp-poll-option-text">${pollOptionHtml(option) || `选项 ${index + 1}`}</span>
+			</label>`;
 		}).join('');
 		return `<div class="ldp-poll-options">${options}</div>`;
 	}
@@ -9862,10 +9874,10 @@
 			const votes = Math.max(0, Number(option.votes) || 0);
 			const percent = voters > 0 ? Math.round(votes / voters * 100) : 0;
 			return `<div class="ldp-poll-result">
-        <div class="ldp-poll-result-label">${pollOptionHtml(option)}</div>
-        <div class="ldp-poll-result-value">${votes} 票 · ${percent}%</div>
-        <div class="ldp-poll-result-track"><span class="ldp-poll-result-bar" style="width:${Math.min(100, percent)}%"></span></div>
-      </div>`;
+				<div class="ldp-poll-result-label">${pollOptionHtml(option)}</div>
+				<div class="ldp-poll-result-value">${votes} 票 · ${percent}%</div>
+				<div class="ldp-poll-result-track"><span class="ldp-poll-result-bar" style="width:${Math.min(100, percent)}%"></span></div>
+			</div>`;
 		}).join('');
 		return `<div class="ldp-poll-results">${options}</div>`;
 	}
@@ -9875,7 +9887,7 @@
 		const existingTitle = container.querySelector('.poll-title, .ldp-poll-title');
 		const title = existingTitle
 			? `<div class="ldp-poll-title">${existingTitle.innerHTML}</div>`
-			: poll && poll.title ? `<div class="ldp-poll-title">${esc(poll.title)}</div>` : '';
+			: poll?.title ? `<div class="ldp-poll-title">${esc(poll.title)}</div>` : '';
 		const saved = pollSavedVotes(postData, poll);
 		const closed = pollIsClosed(poll, ctx);
 		const canShowResults = pollCanShowResults(postData, poll, ctx);
@@ -9911,9 +9923,9 @@
 		}
 		const votersLabel = `${Math.max(0, Number(poll.voters) || 0)} 位投票人${multipleHint}`;
 		container.innerHTML = `${title}
-      ${showResults ? renderPollResults(poll) : renderPollChoices(postData, poll, ctx)}
-      ${note ? `<div class="ldp-poll-note">${esc(note)}</div>` : ''}
-      <div class="ldp-poll-footer"><span class="ldp-poll-meta">${votersLabel}</span>${footerButtons.join('')}</div>`;
+			${showResults ? renderPollResults(poll) : renderPollChoices(postData, poll, ctx)}
+			${note ? `<div class="ldp-poll-note">${esc(note)}</div>` : ''}
+			<div class="ldp-poll-footer"><span class="ldp-poll-meta">${votersLabel}</span>${footerButtons.join('')}</div>`;
 	}
 
 	function renderPostPolls(postNode, ctx, mode) {
@@ -9923,7 +9935,7 @@
 		if (!polls.length) return;
 		const content = postNode.querySelector(':scope > .ldp-content');
 		if (!content) return;
-		const containers = Array.from(content.querySelectorAll('.poll'));
+		const containers = [...content.querySelectorAll('.poll')];
 		const used = new Set();
 		polls.forEach((poll) => {
 			const name = pollName(poll);
@@ -9944,12 +9956,12 @@
 	function readerPostCopies(postId, ctx, includeDetachedNested = false) {
 		const copies = new Set();
 		const key = String(postId);
-		if (ctx && ctx.modal) {
+		if (ctx?.modal) {
 			ctx.modal.querySelectorAll('.ldp-post').forEach((node) => {
 				if (String(node.dataset.postId || '') === key) copies.add(node);
 			});
 		}
-		if (ctx && ctx.streamNodeMap) {
+		if (ctx?.streamNodeMap) {
 			ctx.streamNodeMap.forEach((node) => {
 				if (!node) return;
 				if (String(node.dataset.postId || '') === key) copies.add(node);
@@ -9959,21 +9971,21 @@
 				});
 			});
 		}
-		return Array.from(copies);
+		return [...copies];
 	}
 
 	function persistReaderPostState(ctx, postData) {
-		const postId = +(postData && postData.id || 0);
+		const postId = +(postData?.id || 0);
 		if (!ctx || !ctx.topicId || !postId) return;
 		const entry = TOPIC_DATA_CACHE.get(String(ctx.topicId));
-		const topic = (entry && entry.topic) || ctx.topicData;
+		const topic = (entry?.topic) || ctx.topicData;
 		const cachedPost = postsFromPayload(topic).find((post) => +post.id === postId);
 		if (cachedPost) {
 			Object.assign(cachedPost, postData);
 			setCachedTopicData(ctx.topicId, topic);
 			return;
 		}
-		if (ctx.loader && typeof ctx.loader.persistFetchedPosts === 'function') {
+		if (isFunction(ctx.loader?.persistFetchedPosts)) {
 			ctx.loader.persistFetchedPosts([postData]);
 		}
 	}
@@ -10032,16 +10044,16 @@
 
 	async function toggleReaderPostLike(postId, ctx, button, options) {
 		const { setBusy, beforeSync, postData, persist, onError } = options;
-		const countNode = button && button.querySelector('.ldp-like-count');
+		const countNode = button?.querySelector('.ldp-like-count');
 		const acted = !!button && button.dataset.acted === '1';
-		const count = Math.max(0, +(countNode && countNode.textContent || 0));
+		const count = Math.max(0, +(countNode?.textContent || 0));
 		setBusy(true);
 		try {
-			const sourcePost = button && button.closest('.ldp-post');
+			const sourcePost = button?.closest('.ldp-post');
 			const postModel = detachedNativePostModel(sourcePost, ctx);
 			const likeAction = discourseModelValue(postModel, 'likeAction');
 			if (!postModel || Number(discourseModelValue(postModel, 'id')) !== Number(postId) ||
-					!likeAction || typeof likeAction.togglePromise !== 'function') {
+					!likeAction || !isFunction(likeAction.togglePromise)) {
 				throw new Error('Discourse 点赞接口尚未就绪');
 			}
 			const result = await likeAction.togglePromise(postModel);
@@ -10059,7 +10071,7 @@
 			if (beforeSync) beforeSync(nextActed, nextCount);
 			syncReaderPostLike(postId, ctx, nextActed, nextCount);
 			if (persist) persistReaderPostState(ctx, postData);
-			if (typeof ctx.refreshBookmarksPanel === 'function') {
+			if (isFunction(ctx.refreshBookmarksPanel)) {
 				ctx.refreshBookmarksPanel({ post: postData, topic: ctx.topicData, likeActed: nextActed });
 			}
 		} catch (error) {
@@ -10130,9 +10142,9 @@
 		const emojiStore = lookupDiscourse('service:emoji-store');
 		const ajaxModule = lookupDiscourseModule('discourse/lib/ajax');
 		const textModule = lookupDiscourseModule('discourse/lib/text');
-		const loadEmojis = emojiStore && emojiStore.list
+		const loadEmojis = emojiStore?.list
 			? Promise.resolve(emojiStore.list)
-			: emojiStore && ajaxModule && typeof ajaxModule.ajax === 'function'
+			: emojiStore && ajaxModule && isFunction(ajaxModule.ajax)
 				? ajaxModule.ajax('/emojis.json').then((data) => {
 					emojiStore.list = data;
 					return data;
@@ -10143,16 +10155,16 @@
 			Object.values(data || {}).forEach((items) => {
 				if (!Array.isArray(items)) return;
 				items.forEach((item) => {
-					const name = String(item && item.name || '');
-					const url = String(item && item.url ||
-						(name && textModule && typeof textModule.emojiUrlFor === 'function'
+					const name = String(item?.name || '');
+					const url = String(item?.url ||
+						(name && textModule && isFunction(textModule.emojiUrlFor)
 							? textModule.emojiUrlFor(name)
 							: '') || '');
 					if (name && url) registry.set(name, url);
 				});
 			});
 			reactionEmojiUrls = registry;
-			reactionEmojiImageSources = new Set(Array.from(registry.values())
+			reactionEmojiImageSources = new Set([...registry.values()]
 				.map(comparableLightboxImageSource)
 				.filter(Boolean));
 			return registry;
@@ -10170,10 +10182,10 @@
 		const key = String(id || '').replace(/^:|:$/g, '');
 		if (!key) return '';
 		const textModule = lookupDiscourseModule('discourse/lib/text');
-		const nativeSource = textModule && typeof textModule.emojiUrlFor === 'function'
+		const nativeSource = isFunction(textModule?.emojiUrlFor)
 			? textModule.emojiUrlFor(key)
 			: '';
-		const source = reactionEmojiUrls && reactionEmojiUrls.get(key) || nativeSource;
+		const source = reactionEmojiUrls?.get(key) || nativeSource;
 		if (source) {
 			const url = absoluteImageUrl(source);
 			if (url) {
@@ -10187,7 +10199,7 @@
 		if (!postNode) return;
 		const post = postNode._ldpPostData || {};
 		const reactions = Array.isArray(post.reactions) ? post.reactions : [];
-		const validSource = Array.isArray(ctx && ctx.topicData && ctx.topicData.valid_reactions)
+		const validSource = Array.isArray(ctx?.topicData && ctx.topicData.valid_reactions)
 			? ctx.topicData.valid_reactions
 			: reactions.map((item) => item.id);
 		const valid = validSource.map((item) => String(
@@ -10204,7 +10216,7 @@
 			root = makeElement('div');
 			root.className = 'ldp-reactions';
 			const content = postNode.querySelector('.ldp-content');
-			content && content.after(root);
+			content?.after(root);
 		}
 		if (!renderedReactions.length && !canAdd) {
 			root.querySelector(':scope > .ldp-reaction-summary')?.remove();
@@ -10214,7 +10226,7 @@
 			return;
 		}
 		postNode.classList.add('ldp-has-reactions');
-		const current = String(post.current_user_reaction && post.current_user_reaction.id || '');
+		const current = String(post.current_user_reaction?.id || '');
 		const summaryHtml = renderedReactions.map(({ item, label }) => {
 			const id = String(item.id || '');
 			return `<button class="ldp-reaction-chip${id === current ? ' on' : ''}" type="button" data-reaction="${escAttr(id)}" aria-label="${escAttr(id)}"><span>${label}</span><b>${Math.max(0, +item.count || 0)}</b></button>`;
@@ -10227,19 +10239,19 @@
 
 	function reactionStateSnapshot(post) {
 		return {
-			reactions: Array.isArray(post && post.reactions)
+			reactions: Array.isArray(post?.reactions)
 				? post.reactions.map((item) => ({ ...item }))
 				: [],
-			current_user_reaction: post && post.current_user_reaction
+			current_user_reaction: post?.current_user_reaction
 				? { ...post.current_user_reaction }
 				: null,
-			reaction_users_count: post && post.reaction_users_count,
+			reaction_users_count: post?.reaction_users_count,
 		};
 	}
 
 	function toggledPostReactionState(post, reaction) {
 		const state = reactionStateSnapshot(post);
-		const current = String(state.current_user_reaction && state.current_user_reaction.id || '');
+		const current = String(state.current_user_reaction?.id || '');
 		const target = String(reaction || '');
 		const adjustCount = (id, delta) => {
 			if (!id) return;
@@ -10273,18 +10285,18 @@
 				const reactionModule = lookupDiscourseModule(
 					'discourse/plugins/discourse-reactions/discourse/models/discourse-reactions-custom-reaction'
 				);
-				const CustomReaction = reactionModule && reactionModule.default;
+				const CustomReaction = reactionModule?.default;
 				const appEvents = lookupDiscourse('service:app-events');
 				const postModel = detachedNativePostModel(postNode, ctx);
-				if (!CustomReaction || typeof CustomReaction.toggle !== 'function' ||
-						!appEvents || typeof appEvents.on !== 'function' ||
-						typeof appEvents.off !== 'function' || !postModel) {
+				if (!CustomReaction || !isFunction(CustomReaction.toggle) ||
+						!appEvents || !isFunction(appEvents.on) ||
+						!isFunction(appEvents.off) || !postModel) {
 					throw new Error('Discourse 回应接口尚未就绪');
 				}
 				let serverPost = null;
 				const onReactionToggled = (payload) => {
-					const nextPost = payload && payload.post;
-					if (Number(nextPost && nextPost.id) === postId) serverPost = nextPost;
+					const nextPost = payload?.post;
+					if (Number(nextPost?.id) === postId) serverPost = nextPost;
 				};
 				appEvents.on('discourse-reactions:reaction-toggled', postNode, onReactionToggled);
 				try {
@@ -10318,16 +10330,16 @@
 			username
 		);
 		return `<div class="ldp-pv-comment" data-comment-id="${escAttr(comment.id)}">
-      ${avatar || '<span></span>'}
-      <div class="ldp-pv-comment-body"><div class="ldp-pv-comment-meta"><b>${esc(comment.name || user.name || username)}</b> @${esc(username)} · ${esc(discourseRelativeTime(comment.created_at))}</div><div class="cooked">${readerMediaHtml(comment.cooked || esc(comment.raw || ''))}</div></div>
-      <button class="ldp-pv-comment-vote${comment.user_voted ? ' on' : ''}" type="button" data-pv-comment-vote
-        aria-label="赞同评论">${icon('chevronUp')}<span>${Math.max(0, +comment.post_voting_vote_count || 0)}</span></button>
-    </div>`;
+			${avatar || '<span></span>'}
+			<div class="ldp-pv-comment-body"><div class="ldp-pv-comment-meta"><b>${esc(comment.name || user.name || username)}</b> @${esc(username)} · ${esc(discourseRelativeTime(comment.created_at))}</div><div class="cooked">${readerMediaHtml(comment.cooked || esc(comment.raw || ''))}</div></div>
+			<button class="ldp-pv-comment-vote${comment.user_voted ? ' on' : ''}" type="button" data-pv-comment-vote
+				aria-label="赞同评论">${icon('chevronUp')}<span>${Math.max(0, +comment.post_voting_vote_count || 0)}</span></button>
+		</div>`;
 	}
 
 	function postVotingComments(postData) {
-		if (Array.isArray(postData && postData._ldpPvComments)) return postData._ldpPvComments;
-		return Array.isArray(postData && postData.comments) ? postData.comments : [];
+		if (Array.isArray(postData?._ldpPvComments)) return postData._ldpPvComments;
+		return Array.isArray(postData?.comments) ? postData.comments : [];
 	}
 
 	function readerPostVotingComments(postId, ctx) {
@@ -10337,7 +10349,7 @@
 	}
 
 	function postVotingCapabilities(post, ctx) {
-		const topicEnabled = !!(ctx && ctx.isPostVoting);
+		const topicEnabled = !!(ctx?.isPostVoting);
 		const voteControls = topicEnabled || ['post_voting_vote_count', 'post_voting_user_voted_direction', 'post_voting_has_votes']
 			.some((key) => Object.hasOwn(post || {}, key));
 		const comments = topicEnabled || ['comments_count', 'comments']
@@ -10379,7 +10391,7 @@
 			votes.className = 'ldp-pv-votes';
 			layout.append(votes, main);
 			const head = postNode.querySelector(':scope > .ldp-post-head');
-			head && head.after(layout);
+			head?.after(layout);
 		}
 		if (!capabilities.voteControls && wrappedContent) {
 			const layout = wrappedContent.closest('.ldp-pv-layout');
@@ -10447,14 +10459,14 @@
 	function systemActionContentHtml(post, actionCode) {
 		const actionLabel = SYSTEM_ACTION_LABELS[actionCode] || `系统操作：${actionCode.replace(/[._]/g, ' ')}`;
 		if (actionCode !== 'assigned') return `<span>${esc(actionLabel)}</span>`;
-		const username = cleanUsernameValue(post && post.action_code_who);
+		const username = cleanUsernameValue(post?.action_code_who);
 		if (!username) return `<span>${esc(actionLabel)}</span>`;
 		return `<span>${esc(`${actionLabel}给 `)}<a class="ldp-user-link ldp-system-action-user"
-      href="${escAttr(userProfileUrl(username))}" target="_blank" rel="noopener" data-user-card="${escAttr(username)}">@${esc(username)}</a></span>`;
+			href="${escAttr(userProfileUrl(username))}" target="_blank" rel="noopener" data-user-card="${escAttr(username)}">@${esc(username)}</a></span>`;
 	}
 
 	function postNoticeType(post) {
-		const notice = post && post.notice;
+		const notice = post?.notice;
 		return notice && typeof notice === 'object' ? String(notice.type || '') : '';
 	}
 
@@ -10462,7 +10474,7 @@
 		if (type === 'new_user') return { label: '新用户', title: '新用户，首次发帖', icon: 'userPlus' };
 		if (type === 'returning_user') return { label: '回归用户', title: '回归用户，久未发帖', icon: 'rotateCcw' };
 		if (type !== 'custom') return null;
-		const notice = post && post.notice;
+		const notice = post?.notice;
 		const customNotice = notice && typeof notice === 'object'
 			? `${String(notice.raw || '')} ${String(notice.cooked || '')}`
 			: '';
@@ -10483,7 +10495,7 @@
 		if (!postNode) return;
 		const post = postNode._ldpPostData || {};
 		const head = postNode.querySelector(':scope > .ldp-post-head');
-		let hiddenBadge = head && head.querySelector(':scope > .ldp-hidden-badge');
+		let hiddenBadge = head?.querySelector(':scope > .ldp-hidden-badge');
 		const hiddenCollapsible = !!post.hidden && !postNode.classList.contains('ldp-nested-preview');
 		const wasHiddenCollapsible = postNode.classList.contains('ldp-hidden-collapsible');
 		if (post.hidden) {
@@ -10514,7 +10526,7 @@
 		if (post.deleted_at) items.push(['已删除', 'danger']);
 		if (post.locked) items.push(['已锁定', 'warn']);
 		if (items.length) {
-			if (!badges) { badges = makeElement('div'); badges.className = 'ldp-special-badges'; head && head.after(badges); }
+			if (!badges) { badges = makeElement('div'); badges.className = 'ldp-special-badges'; head?.after(badges); }
 			badges.innerHTML = items.map(([label, type]) => `<span class="ldp-special-badge ${type}">${label}</span>`).join('');
 		} else if (badges) badges.remove();
 		postNode.classList.toggle('ldp-whisper', +post.post_type === 4);
@@ -10522,7 +10534,7 @@
 		let notice = postNode.querySelector(':scope > .ldp-special-notice');
 		const noticeType = postNoticeType(post);
 		if (post.notice && !['new_user', 'returning_user', 'custom'].includes(noticeType)) {
-			if (!notice) { notice = makeElement('div'); notice.className = 'ldp-special-notice'; head && head.after(notice); }
+			if (!notice) { notice = makeElement('div'); notice.className = 'ldp-special-notice'; head?.after(notice); }
 			notice.innerHTML = typeof post.notice === 'string' ? post.notice : esc(post.notice.type || '站点提示');
 		} else if (notice) notice.remove();
 		let action = postNode.querySelector(':scope > .ldp-system-action');
@@ -10530,13 +10542,13 @@
 		const needsAction = (+post.post_type === 2 || +post.post_type === 3) && actionCode;
 		postNode.classList.toggle('ldp-system-action-compact', needsAction && actionCode === 'assigned');
 		if (needsAction) {
-			if (!action) { action = makeElement('div'); action.className = 'ldp-system-action'; head && head.after(action); }
+			if (!action) { action = makeElement('div'); action.className = 'ldp-system-action'; head?.after(action); }
 			action.innerHTML = `${icon(SYSTEM_ACTION_ICONS[actionCode] || 'settings')}${systemActionContentHtml(post, actionCode)}`;
 		} else if (action) action.remove();
 	}
 
 	function acceptedTopicAnswers(ctx) {
-		const topic = ctx && ctx.topicData;
+		const topic = ctx?.topicData;
 		if (!topic) return [];
 		const answersByPostNumber = new Map();
 		const addAnswer = (answer) => {
@@ -10554,15 +10566,15 @@
 		if (Array.isArray(topic.accepted_answers)) topic.accepted_answers.forEach(addAnswer);
 		addAnswer(topic.accepted_answer);
 		postsFromPayload(topic).forEach((post) => {
-			if (post && post.accepted_answer) addAnswer(post);
+			if (post?.accepted_answer) addAnswer(post);
 		});
 		if (ctx.streamNodeMap) {
 			ctx.streamNodeMap.forEach((node) => {
-				const post = node && node._ldpPostData;
-				if (post && post.accepted_answer) addAnswer(post);
+				const post = node?._ldpPostData;
+				if (post?.accepted_answer) addAnswer(post);
 			});
 		}
-		return Array.from(answersByPostNumber.values()).sort((a, b) => a.post_number - b.post_number);
+		return [...answersByPostNumber.values()].sort((a, b) => a.post_number - b.post_number);
 	}
 
 	function renderSolvedAnswerCard(postNode, ctx) {
@@ -10586,8 +10598,8 @@
 		}
 		card.innerHTML = `<div class="ldp-solved-head">${icon('check')}<span>${answers.length > 1 ? `已解决 · ${answers.length} 个答案` : '已解决'}</span></div>${answers.map((answer) => {
 			const postNumber = +answer.post_number;
-			const acceptedNode = ctx.streamNodeMap && ctx.streamNodeMap.get(postNumber);
-			const acceptedPost = acceptedNode && acceptedNode._ldpPostData ||
+			const acceptedNode = ctx.streamNodeMap?.get(postNumber);
+			const acceptedPost = acceptedNode?._ldpPostData ||
 				topicPosts.find((item) => +item.post_number === postNumber) || {};
 			const username = String(answer.username || acceptedPost.username || '');
 			const name = String(answer.name || acceptedPost.name || username || '已解决回复');
@@ -10601,23 +10613,23 @@
 			const time = discourseRelativeTime(answer.created_at || acceptedPost.created_at);
 			const answerHtml = String(answer.cooked || acceptedPost.cooked || answer.excerpt || acceptedPost.excerpt || '').trim();
 			return `<div class="ldp-solved-body" data-solved-post-number="${postNumber}">
-        <div class="ldp-solved-author-row">
-          ${avatar ? `<a class="ldp-user-link" href="${escAttr(profileUrl)}" target="_blank" rel="noopener" data-user-card="${escAttr(username)}">${avatar}</a>` : ''}
-          ${profileUrl ? `<a class="ldp-user-link ldp-solved-author" href="${escAttr(profileUrl)}" target="_blank" rel="noopener" data-user-card="${escAttr(username)}">${esc(name)}</a>` : `<span class="ldp-solved-author">${esc(name)}</span>`}
-          ${username ? `<span class="ldp-solved-username">@${esc(username)}</span>` : ''}
-          ${time ? `<span>· ${esc(time)}</span>` : ''}
-          <button class="ldp-solved-floor ldp-jump-self" type="button" data-target-post-number="${postNumber}" aria-label="跳到楼层 #${postNumber}">#${postNumber}</button>
-        </div>
-        ${answerHtml ? `<div class="ldp-solved-excerpt ldp-content cooked">${readerMediaHtml(answerHtml, { inlineOneboxes: true })}</div>` : '<div class="ldp-solved-excerpt">查看被采纳的完整回复。</div>'}
-        <button class="ldp-solved-jump ldp-jump-self" type="button" data-target-post-number="${postNumber}">阅读更多</button>
-      </div>`;
+				<div class="ldp-solved-author-row">
+					${avatar ? `<a class="ldp-user-link" href="${escAttr(profileUrl)}" target="_blank" rel="noopener" data-user-card="${escAttr(username)}">${avatar}</a>` : ''}
+					${profileUrl ? `<a class="ldp-user-link ldp-solved-author" href="${escAttr(profileUrl)}" target="_blank" rel="noopener" data-user-card="${escAttr(username)}">${esc(name)}</a>` : `<span class="ldp-solved-author">${esc(name)}</span>`}
+					${username ? `<span class="ldp-solved-username">@${esc(username)}</span>` : ''}
+					${time ? `<span>· ${esc(time)}</span>` : ''}
+					<button class="ldp-solved-floor ldp-jump-self" type="button" data-target-post-number="${postNumber}" aria-label="跳到楼层 #${postNumber}">#${postNumber}</button>
+				</div>
+				${answerHtml ? `<div class="ldp-solved-excerpt ldp-content cooked">${readerMediaHtml(answerHtml, { inlineOneboxes: true })}</div>` : '<div class="ldp-solved-excerpt">查看被采纳的完整回复。</div>'}
+				<button class="ldp-solved-jump ldp-jump-self" type="button" data-target-post-number="${postNumber}">阅读更多</button>
+			</div>`;
 		}).join('')}`;
 	}
 
 	function prepareReaderImageCarousels(root) {
 		root.querySelectorAll('.d-image-grid[data-mode="carousel"]').forEach((grid) => {
 			if (grid.dataset.ldpCarouselPrepared === '1') return;
-			const items = Array.from(grid.querySelectorAll('.lightbox-wrapper'))
+			const items = [...grid.querySelectorAll('.lightbox-wrapper')]
 				.filter((item) => item.closest('.d-image-grid') === grid);
 			if (items.length < 2) return;
 			grid.dataset.ldpCarouselPrepared = '1';
@@ -10663,8 +10675,7 @@
 			const show = (index) => {
 				const target = items[Math.max(0, Math.min(items.length - 1, index))];
 				if (!target) return;
-				const reducedMotion = typeof window.matchMedia === 'function' &&
-					window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+				const reducedMotion = prefersReducedMotion();
 				track.scrollTo({ left: target.offsetLeft, behavior: reducedMotion ? 'auto' : 'smooth' });
 			};
 			controls.addEventListener('click', (event) => {
@@ -10712,7 +10723,7 @@
 		const nativeHls = !!video.canPlayType('application/vnd.apple.mpegurl') && 'ManagedMediaSource' in window;
 		if (nativeHls) return;
 		const HlsPlayer = window.Hls;
-		if (!HlsPlayer || typeof HlsPlayer.isSupported !== 'function' || !HlsPlayer.isSupported()) return;
+		if (!HlsPlayer || !isFunction(HlsPlayer.isSupported) || !HlsPlayer.isSupported()) return;
 		const player = new HlsPlayer();
 		video.dataset.ldpHlsBound = '1';
 		video._ldpHlsPlayer = player;
@@ -10721,17 +10732,17 @@
 	}
 
 	function destroyReaderMedia(root) {
-		if (!root || typeof root.querySelectorAll !== 'function') return;
+		if (!root || !isFunction(root.querySelectorAll)) return;
 		root.querySelectorAll('video').forEach((video) => {
 			const player = video._ldpHlsPlayer;
-			if (player && typeof player.destroy === 'function') player.destroy();
+			if (isFunction(player?.destroy)) player.destroy();
 			video._ldpHlsPlayer = null;
 			delete video.dataset.ldpHlsBound;
 		});
 	}
 
 	function suspendReaderMedia(root) {
-		if (!root || typeof root.querySelectorAll !== 'function') return;
+		if (!root || !isFunction(root.querySelectorAll)) return;
 		root.querySelectorAll('video,audio').forEach((media) => {
 			try { media.pause(); } catch (error) {}
 		});
@@ -10739,12 +10750,12 @@
 	}
 
 	function activateReaderMedia(root) {
-		if (!root || typeof root.querySelectorAll !== 'function' || document.visibilityState !== 'visible') return;
+		if (!root || !isFunction(root.querySelectorAll) || document.visibilityState !== 'visible') return;
 		root.querySelectorAll('video').forEach(bindReaderHls);
 	}
 
 	function prepareReaderMedia(root, options = {}) {
-		if (!root || typeof root.querySelectorAll !== 'function') return;
+		if (!root || !isFunction(root.querySelectorAll)) return;
 		root.querySelectorAll('[title]').forEach((element) => element.removeAttribute('title'));
 		if (options.interactive !== false) prepareReaderImageCarousels(root);
 		root.querySelectorAll('iframe').forEach(prepareReaderFrame);
@@ -10762,7 +10773,7 @@
 	}
 
 	function prepareReaderCodeBlocks(root) {
-		if (!root || typeof root.querySelectorAll !== 'function') return;
+		if (!root || !isFunction(root.querySelectorAll)) return;
 		root.querySelectorAll('pre').forEach((pre) => {
 			if (pre.closest('.ldp-code-block')) return;
 			const block = makeElement('div');
@@ -10800,8 +10811,8 @@
 	}
 
 	function readerCodeDownloadExtension(pre) {
-		const code = pre && pre.querySelector('code');
-		const classNames = `${pre && pre.className || ''} ${code && code.className || ''}`;
+		const code = pre?.querySelector('code');
+		const classNames = `${pre?.className || ''} ${code?.className || ''}`;
 		const language = (classNames.match(/(?:language|lang)-([a-z0-9_+-]+)/i) || [])[1]?.toLowerCase() || '';
 		return ({
 			javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts', python: 'py', py: 'py',
@@ -10822,7 +10833,7 @@
 	function openReaderCodePreview(pre, modal) {
 		if (!pre || !modal) return;
 		const overlay = modal.closest('.ldp-overlay');
-		if (overlay && typeof overlay._ldpCloseCodePreview === 'function') overlay._ldpCloseCodePreview(false, true);
+		if (isFunction(overlay?._ldpCloseCodePreview)) overlay._ldpCloseCodePreview(false, true);
 		const previousFocus = readerActiveElement();
 		const layer = makeElement('section');
 		layer.className = 'ldp-code-preview-layer';
@@ -10836,16 +10847,16 @@
 		layer.style.setProperty('--ldp-code-preview-line-height', sourceStyle.lineHeight);
 		layer.style.setProperty('--ldp-code-preview-tab-size', sourceStyle.tabSize || '4');
 		layer.innerHTML = `
-      <header class="ldp-code-preview-head">
-        <strong>文本预览</strong>
-        <span class="ldp-code-preview-actions">
-          ${iconActionButtons('ldp-code-block-action', 'data-reader-code-preview-action', [
+			<header class="ldp-code-preview-head">
+				<strong>文本预览</strong>
+				<span class="ldp-code-preview-actions">
+					${iconActionButtons('ldp-code-block-action', 'data-reader-code-preview-action', [
 						['edit', '编辑文本副本', 'pencil'], ['save', '保存编辑副本到本地', 'download', ' hidden'],
 						['copy', '复制文本', 'copy'], ['close', '关闭文本预览', 'x'],
 					])}
-        </span>
-      </header>
-      <div class="ldp-code-preview-body"></div>`;
+				</span>
+			</header>
+			<div class="ldp-code-preview-body"></div>`;
 		const previewPre = pre.cloneNode(true);
 		const previewBody = layer.querySelector('.ldp-code-preview-body');
 		const previewTitle = layer.querySelector('.ldp-code-preview-head strong');
@@ -10925,14 +10936,14 @@
 	}
 
 	function prepareReaderHashtags(root) {
-		if (!root || typeof root.querySelectorAll !== 'function') return;
+		if (!root || !isFunction(root.querySelectorAll)) return;
 		const iconTemplate = makeElement('template');
 		iconTemplate.innerHTML = icon('tag', 'ldp-hashtag-icon');
 		root.querySelectorAll('.hashtag-cooked').forEach((hashtag) => {
 			const iconHost = hashtag.matches('a') ? hashtag : hashtag.querySelector('a') || hashtag;
 			if (iconHost.querySelector('img.emoji')) return;
 			const existingSvg = iconHost.querySelector('svg');
-			if (existingSvg && existingSvg.querySelector('path,circle,rect,ellipse,line,polyline,polygon')) return;
+			if (existingSvg?.querySelector('path,circle,rect,ellipse,line,polyline,polygon')) return;
 			const tagIcon = iconTemplate.content.firstElementChild.cloneNode(true);
 			tagIcon.setAttribute('focusable', 'false');
 			const placeholder = iconHost.querySelector('.hashtag-icon-placeholder');
@@ -10943,7 +10954,7 @@
 	}
 
 	function prepareReaderUserMentions(root) {
-		if (!root || typeof root.querySelectorAll !== 'function') return;
+		if (!root || !isFunction(root.querySelectorAll)) return;
 		root.querySelectorAll('a.mention').forEach((link) => {
 			let username = cleanUsernameValue(link.dataset.username);
 			if (!username) {
@@ -10972,7 +10983,7 @@
 	].flatMap(([iconName, types]) => types.map((type) => [type, iconName]))));
 
 	function prepareReaderCallouts(root) {
-		if (!root || typeof root.querySelectorAll !== 'function') return;
+		if (!root || !isFunction(root.querySelectorAll)) return;
 		root.querySelectorAll('blockquote').forEach((quote) => {
 			const firstBlock = quote.firstElementChild;
 			if (!firstBlock) return;
@@ -11034,7 +11045,7 @@
 	}
 
 	function prepareReaderPostQuotes(root) {
-		if (!root || typeof root.querySelectorAll !== 'function') return;
+		if (!root || !isFunction(root.querySelectorAll)) return;
 		root.querySelectorAll('aside.quote').forEach((quote) => {
 			const title = quote.querySelector(':scope > .title');
 			const body = quote.querySelector(':scope > blockquote');
@@ -11044,7 +11055,7 @@
 			quote._ldpQuoteExcerptHtml = body.innerHTML;
 			title.classList.add('ldp-quote-title');
 			const username = cleanUsernameValue(quote.dataset.username);
-			const avatar = Array.from(title.querySelectorAll('img')).find((image) => !image.classList.contains('emoji'));
+			const avatar = [...title.querySelectorAll('img')].find((image) => !image.classList.contains('emoji'));
 			if (username && avatar) {
 				avatar.classList.add('ldp-user-avatar-card');
 				avatar.dataset.userCard = username;
@@ -11080,12 +11091,12 @@
 	}
 
 	function cachedReaderQuotedPost(ctx, topicId, postNumber) {
-		const targetTopicId = +topicId || +(ctx && ctx.topicId || 0);
+		const targetTopicId = +topicId || +(ctx?.topicId || 0);
 		const targetPostNumber = +postNumber || 0;
 		if (!targetTopicId || !targetPostNumber) return null;
 		if (ctx && targetTopicId === +ctx.topicId) {
-			const streamPost = ctx.streamNodeMap && ctx.streamNodeMap.get(targetPostNumber);
-			const streamData = streamPost && streamPost._ldpPostData;
+			const streamPost = ctx.streamNodeMap?.get(targetPostNumber);
+			const streamData = streamPost?._ldpPostData;
 			if (streamData && streamData.cooked != null) return streamData;
 			const topicPost = postsFromPayload(ctx.topicData).find((post) => +post.post_number === targetPostNumber);
 			if (topicPost && topicPost.cooked != null) return topicPost;
@@ -11119,7 +11130,7 @@
 						key: `quote:${targetTopicId}:${targetPostNumber}:${url}`,
 						priority: POST_REQUEST_PRIORITY.auxiliary,
 					});
-					const posts = payload && payload.post_number ? [payload] : postsFromPayload(payload);
+					const posts = payload?.post_number ? [payload] : postsFromPayload(payload);
 					post = posts.find((item) => +item.post_number === targetPostNumber && item.cooked != null) || null;
 					if (post) break;
 				} catch (error) {
@@ -11132,7 +11143,7 @@
 	}
 
 	function preserveReaderQuotePosition(quote, ctx, update) {
-		const scrollRoot = ctx && ctx.scrollRoot;
+		const scrollRoot = ctx?.scrollRoot;
 		if (!quote || !quote.isConnected || !scrollRoot) {
 			update();
 			return;
@@ -11153,7 +11164,7 @@
 	}
 
 	function syncReaderQuoteLayout(quote, ctx) {
-		const post = quote && quote.closest('.ldp-post');
+		const post = quote?.closest('.ldp-post');
 		if (!post || !ctx) return;
 		bindPostMediaLayoutSync(post, ctx);
 		scheduleNestedBranchSync(post, ctx);
@@ -11184,17 +11195,17 @@
 		if (body && quote.dataset.ldpQuoteExpanded !== '1') return String(body.textContent || '').trim();
 		const html = quote._ldpQuoteExcerptHtml != null
 			? quote._ldpQuoteExcerptHtml
-			: body && body.innerHTML;
+			: body?.innerHTML;
 		const template = makeElement('template');
 		template.innerHTML = String(html || '');
 		return String(template.content.textContent || '').trim();
 	}
 
 	function readerQuoteSourceFromJump(jump, ctx) {
-		const preview = jump && jump.closest('.ldp-floor-preview');
-		const sourcePost = jump && (jump.closest('.ldp-post') || (preview && preview._ldpRelatedPost));
+		const preview = jump?.closest('.ldp-floor-preview');
+		const sourcePost = jump && (jump.closest('.ldp-post') || (preview?._ldpRelatedPost));
 		const postNumber = +(sourcePost && sourcePost.dataset.postNumber || 0);
-		const topicId = +(ctx && ctx.topicId || 0);
+		const topicId = +(ctx?.topicId || 0);
 		if (!sourcePost || !postNumber || !topicId) return null;
 		const nested = !!(sourcePost.parentElement && sourcePost.parentElement.classList.contains('ldp-children'));
 		return {
@@ -11207,7 +11218,7 @@
 	}
 
 	function quoteHighlightFromJump(jump, ctx) {
-		const quote = jump && jump.closest('.ldp-post-quote');
+		const quote = jump?.closest('.ldp-post-quote');
 		const text = readerQuoteExcerptText(quote);
 		return text ? { text, source: readerQuoteSourceFromJump(jump, ctx) } : null;
 	}
@@ -11260,7 +11271,7 @@
 	}
 
 	function highlightReaderExpandedQuote(quote) {
-		const body = quote && quote.querySelector(':scope > blockquote');
+		const body = quote?.querySelector(':scope > blockquote');
 		const comparableQuote = discourseComparableQuoteText(readerQuoteExcerptText(quote));
 		if (!body || !comparableQuote) return false;
 		return markReaderTextMatch(body, comparableQuote,
@@ -11268,7 +11279,7 @@
 	}
 
 	function clearReaderQuoteHighlight(ctx) {
-		const state = ctx && ctx.quoteHighlightState;
+		const state = ctx?.quoteHighlightState;
 		if (!state) return;
 		if (state.hintHideTimer) clearTimeout(state.hintHideTimer);
 		if (state.hint) state.hint.remove();
@@ -11282,7 +11293,7 @@
 	}
 
 	function setReaderQuoteHighlightActive(ctx, active) {
-		const state = ctx && ctx.quoteHighlightState;
+		const state = ctx?.quoteHighlightState;
 		if (!state) return;
 		state.active = active !== false;
 		const hintText = state.active ? '点击关闭高亮' : '点击继续高亮';
@@ -11365,8 +11376,8 @@
 			const markRect = mark.getBoundingClientRect();
 			const rootRect = ctx.scrollRoot.getBoundingClientRect();
 			const hintRect = state.hint.getBoundingClientRect();
-			const anchorX = Number.isFinite(event && event.clientX) ? event.clientX : markRect.left + markRect.width / 2;
-			const anchorY = Number.isFinite(event && event.clientY) ? event.clientY : markRect.top;
+			const anchorX = Number.isFinite(event?.clientX) ? event.clientX : markRect.left + markRect.width / 2;
+			const anchorY = Number.isFinite(event?.clientY) ? event.clientY : markRect.top;
 			const edge = 8;
 			const gap = 10;
 			const left = Math.max(edge, Math.min(anchorX - hintRect.width / 2, window.innerWidth - hintRect.width - edge));
@@ -11423,10 +11434,10 @@
 	}
 
 	function restoreReaderQuoteHighlightForPost(post, ctx) {
-		const state = ctx && ctx.quoteHighlightState;
+		const state = ctx?.quoteHighlightState;
 		const postNumber = +(post && post.dataset.postNumber);
 		if (!state || !postNumber || +state.postNumber !== postNumber || !state.quoteText) return;
-		if (state.marks && state.marks.length && state.marks.every((mark) => post.contains(mark))) return;
+		if (state.marks?.length && state.marks.every((mark) => post.contains(mark))) return;
 		applyReaderQuoteHighlight(postNumber, ctx, state.quoteText, { active: state.active, source: state.source });
 	}
 
@@ -11449,16 +11460,16 @@
 	}
 
 	function prepareReaderInlineOneboxes(root) {
-		if (!root || typeof root.querySelectorAll !== 'function') return;
+		if (!root || !isFunction(root.querySelectorAll)) return;
 		root.querySelectorAll('a.inline-onebox').forEach((link) => {
 			if (link.querySelector(':scope > .ldp-inline-onebox-label')) return;
-			const labelNodes = Array.from(link.childNodes).filter((node) =>
+			const labelNodes = [...link.childNodes].filter((node) =>
 				!(node.nodeType === Node.ELEMENT_NODE && node.matches('svg,.svg-icon,.ldp-link-click-count')));
 			if (!labelNodes.some((node) => String(node.textContent || '').trim())) return;
 			const label = makeElement('span');
 			label.className = 'ldp-inline-onebox-label';
 			labelNodes.forEach((node) => label.append(node));
-			const linkIcon = Array.from(link.children).find((child) => child.matches('svg,.svg-icon'));
+			const linkIcon = [...link.children].find((child) => child.matches('svg,.svg-icon'));
 			if (linkIcon) linkIcon.after(label);
 			else link.prepend(label);
 		});
@@ -11468,7 +11479,7 @@
 		if (!root || !Array.isArray(linkCounts) || !linkCounts.length) return;
 		const countsByUrl = new Map();
 		linkCounts.forEach((item) => {
-			const clicks = Math.max(0, Math.trunc(Number(item && item.clicks) || 0));
+			const clicks = Math.max(0, Math.trunc(Number(item?.clicks) || 0));
 			const url = !item || item.reflection ? '' : normalizedPostLinkUrl(item.url);
 			if (!url || !clicks) return;
 			countsByUrl.set(url, Math.max(clicks, countsByUrl.get(url) || 0));
@@ -11524,7 +11535,7 @@
 		const isNewUser = noticeType === 'new_user';
 		postNode.classList.toggle('ldp-new-user', isNewUser);
 		const head = postNode.querySelector(':scope > .ldp-post-head');
-		let badge = head && head.querySelector(':scope > .ldp-new-user-badge');
+		let badge = head?.querySelector(':scope > .ldp-new-user-badge');
 		if (!identity) {
 			if (badge) badge.remove();
 			return;
@@ -11550,7 +11561,7 @@
 		renderPostReactions(postNode, ctx);
 		renderPostEvent(postNode);
 		renderPostVoting(postNode, ctx);
-		const post = postNode && postNode._ldpPostData || {};
+		const post = postNode?._ldpPostData || {};
 		if (post.accepted_answer && ctx && ctx.streamNodeMap) {
 			const firstPost = ctx.streamNodeMap.get(1);
 			if (firstPost && firstPost !== postNode) renderSolvedAnswerCard(firstPost, ctx);
@@ -11576,7 +11587,7 @@
 			renderPostSpecialContent(copy, ctx);
 		});
 		if (latestPostData) persistReaderPostState(ctx, latestPostData);
-		if (ctx && ctx.isPostVoting) {
+		if (ctx?.isPostVoting) {
 			ctx.streamItems.sort(comparePostVotingStreamItems);
 			reindexStreamItems(ctx, 0);
 			invalidateStreamLayout(ctx);
@@ -11599,7 +11610,7 @@
 			const incoming = Array.isArray(data) ? data : (data.comments || []);
 			const merged = new Map(loaded.map((comment) => [String(comment.id), comment]));
 			incoming.forEach((comment) => merged.set(String(comment.id), comment));
-			const comments = Array.from(merged.values());
+			const comments = [...merged.values()];
 			syncPostVotingComments(postId, ctx, comments);
 			return comments;
 		});
@@ -11623,14 +11634,14 @@
 				admin: user.admin === true || boost.admin === true,
 				moderator: user.moderator === true || user.group_moderator === true ||
 					boost.moderator === true || boost.group_moderator === true,
-				noticeType: String((boost.notice && boost.notice.type) || boost.notice_type || ''),
+				noticeType: String((boost.notice?.type) || boost.notice_type || ''),
 				cooked,
 			};
 		}).filter(Boolean);
 	}
 
 	function boostBelongsToCurrentUser(boost) {
-		const currentUserId = +(ME_CURRENT_USER && ME_CURRENT_USER.id || 0);
+		const currentUserId = +(ME_CURRENT_USER?.id || 0);
 		if (currentUserId && +boost.userId) return currentUserId === +boost.userId;
 		return !!(
 			ME_USERNAME && boost.username &&
@@ -11640,13 +11651,13 @@
 
 	function boostIdentities(boost, ctx) {
 		const identities = [];
-		const username = String(boost && boost.username || '');
+		const username = String(boost?.username || '');
 		const usernameKey = username.toLocaleLowerCase();
 		let sourcePost = {};
 		if (usernameKey && ctx) {
 			const cachedPosts = ctx.loader && Array.isArray(ctx.loader.cachedPosts) ? ctx.loader.cachedPosts : [];
 			sourcePost = cachedPosts.concat(postsFromPayload(ctx.topicData)).find((post) => {
-				if (String(post && post.username || '').toLocaleLowerCase() !== usernameKey) return false;
+				if (String(post?.username || '').toLocaleLowerCase() !== usernameKey) return false;
 				return post.admin === true || post.moderator === true || post.group_moderator === true ||
 					['new_user', 'returning_user', 'custom'].includes(postNoticeType(post));
 			}) || {};
@@ -11658,7 +11669,7 @@
 		if (boostBelongsToCurrentUser(boost)) {
 			identities.push({ type: 'me', label: 'ME', title: '当前用户', icon: 'userRound' });
 		}
-		if (usernameKey && String(ctx && ctx.op || '').toLocaleLowerCase() === usernameKey) {
+		if (usernameKey && String(ctx?.op || '').toLocaleLowerCase() === usernameKey) {
 			identities.push({ type: 'op', label: 'OP', title: '楼主', icon: 'award' });
 		}
 		if (isAdmin) {
@@ -11695,7 +11706,7 @@
 			? '<button class="ldp-boost-copy-action ldp-action-surface" type="button" aria-label="复制到 Boost 输入框" data-tooltip>复制</button>'
 			: '';
 		const isOwnBoost = boostBelongsToCurrentUser(boost);
-		const signedIn = !!(ME_CURRENT_USER && ME_CURRENT_USER.id || ME_USERNAME);
+		const signedIn = !!(ME_CURRENT_USER?.id || ME_USERNAME);
 		const itemAction = signedIn && boost.id
 			? (isOwnBoost
 				? `<button class="ldp-boost-item-action ldp-boost-delete-action" type="button" aria-label="删除自己的 Boost">${icon('trash')}</button>`
@@ -11741,7 +11752,7 @@
 	}
 
 	function boostBubblePlainText(bubble) {
-		const cooked = bubble && bubble.querySelector('.ldp-boost-cooked');
+		const cooked = bubble?.querySelector('.ldp-boost-cooked');
 		if (!cooked) return '';
 		const copy = cooked.cloneNode(true);
 		copy.querySelectorAll('img[alt]').forEach((image) => image.replaceWith(document.createTextNode(image.alt || '')));
@@ -11753,9 +11764,9 @@
 	}
 
 	function fitBoostCopyParts(prefix, base, suffix) {
-		const suffixChars = Array.from(suffix).slice(0, BOOST_COPY_MAX_LENGTH);
-		const prefixChars = Array.from(prefix).slice(0, BOOST_COPY_MAX_LENGTH - suffixChars.length);
-		const baseChars = Array.from(base).slice(0, BOOST_COPY_MAX_LENGTH - suffixChars.length - prefixChars.length);
+		const suffixChars = [...suffix].slice(0, BOOST_COPY_MAX_LENGTH);
+		const prefixChars = [...prefix].slice(0, BOOST_COPY_MAX_LENGTH - suffixChars.length);
+		const baseChars = [...base].slice(0, BOOST_COPY_MAX_LENGTH - suffixChars.length - prefixChars.length);
 		return `${prefixChars.join('')}${baseChars.join('')}${suffixChars.join('')}`;
 	}
 
@@ -11804,14 +11815,14 @@
 	function topicNotificationLevel(topic) {
 		const value = Number(topic && (
 			topic.notification_level ??
-			(topic.details && topic.details.notification_level)
+			(topic.details?.notification_level)
 		));
 		return Number.isInteger(value) && value >= 0 && value <= 3 ? value : 1;
 	}
 
 	function topicActionCapabilities(post, ctx) {
 		const data = post || {};
-		const topic = (ctx && ctx.topicData) || {};
+		const topic = (ctx?.topicData) || {};
 		const actions = Array.isArray(data.actions_summary) ? data.actions_summary : [];
 		const hasFlagAction = actions.some((action) =>
 			action && action.can_act === true && ![2, 8].includes(+action.id)
@@ -11844,7 +11855,7 @@
 
 	function postBookmarkInfo(post) {
 		const data = post || {};
-		const bookmarkId = data.bookmark_id || (data.bookmark && data.bookmark.id) || null;
+		const bookmarkId = data.bookmark_id || (data.bookmark?.id) || null;
 		return { bookmarked: !!(data.bookmarked || bookmarkId), bookmarkId };
 	}
 
@@ -11860,9 +11871,9 @@
 
 	function postContextActionsHtml(post, ctx) {
 		const capabilities = topicActionCapabilities(post, ctx);
-		const isTopicStarter = Number(post && post.post_number) === 1;
+		const isTopicStarter = Number(post?.post_number) === 1;
 		const bookmarked = isTopicStarter
-			? !!(ctx && ctx.topicBookmarked)
+			? !!(ctx?.topicBookmarked)
 			: postBookmarkInfo(post).bookmarked;
 		const bookmarkButton = isTopicStarter
 			? `<button class="ldp-btn ldp-context-action ldp-topic-bookmark${bookmarked ? ' on' : ''}" type="button" data-topic-action="bookmark" aria-label="${bookmarked ? '已收藏本帖' : '收藏本帖'}" aria-pressed="${bookmarked ? 'true' : 'false'}"${capabilities.canBookmark ? '' : ' hidden'}>${icon('bookmark')}</button>`
@@ -11881,12 +11892,12 @@
 
 	function compactPostActionsHtml(post, ctx) {
 		const count = postContextActionCount(post, ctx);
-		const eager = typeof matchMedia === 'function' && matchMedia('(hover: none)').matches;
+		const eager = isFunction(matchMedia) && matchMedia('(hover: none)').matches;
 		return `
-      <button class="ldp-btn ldp-replybtn" type="button" aria-label="回复">${icon('reply')}<span>回复</span></button>
-      ${canShowBoostButton(post) ? `<button class="ldp-btn ldp-boostbtn" type="button" aria-label="boost">${icon('rocket')}</button>` : ''}
-      <span class="ldp-context-actions-slot" data-ldp-context-actions="${eager ? '1' : '0'}"
-        style="--ldp-context-action-count:${count}"${eager ? '' : ' aria-hidden="true"'}>${eager ? postContextActionsHtml(post, ctx) : ''}</span>`;
+			<button class="ldp-btn ldp-replybtn" type="button" aria-label="回复">${icon('reply')}<span>回复</span></button>
+			${canShowBoostButton(post) ? `<button class="ldp-btn ldp-boostbtn" type="button" aria-label="boost">${icon('rocket')}</button>` : ''}
+			<span class="ldp-context-actions-slot" data-ldp-context-actions="${eager ? '1' : '0'}"
+				style="--ldp-context-action-count:${count}"${eager ? '' : ' aria-hidden="true"'}>${eager ? postContextActionsHtml(post, ctx) : ''}</span>`;
 	}
 
 	function hydratePostContextActions(postNode, ctx) {
@@ -11907,11 +11918,11 @@
 	}
 
 	function topicSharedIssueState(post, ctx) {
-		const topic = (ctx && ctx.topicData) || {};
+		const topic = (ctx?.topicData) || {};
 		const count = Math.max(0, Number(topic.shared_issue_count) || 0);
 		return {
 			visible: ctx?.topicSharedIssueHostVisible === true &&
-				!SHARED_ISSUE_FORBIDDEN_TOPIC_IDS.has(Number(ctx && ctx.topicId)),
+				!SHARED_ISSUE_FORBIDDEN_TOPIC_IDS.has(Number(ctx?.topicId)),
 			active: topic.user_created_shared_issue === true,
 			count,
 			isAuthor: !!ME_USERNAME && !!post && String(post.username || '') === String(ME_USERNAME),
@@ -11934,16 +11945,16 @@
 			`<option value="${item.value}"${item.value === level ? ' selected' : ''}>${item.label}</option>`
 		).join('');
 		return `
-      <div class="ldp-topic-footer-actions" aria-label="主题操作">
-        <button class="ldp-topic-footer-button ldp-topic-shared-issue${sharedIssue.active ? ' on' : ''}" type="button" data-topic-action="shared-issue" aria-label="${sharedIssueLabel}" aria-pressed="${sharedIssue.active ? 'true' : 'false'}"${sharedIssue.visible ? '' : ' hidden'}${sharedIssue.isAuthor ? ' disabled' : ''}>${icon('hand')}<span class="ldp-topic-shared-issue-label">俺也一样</span><span class="ldp-topic-shared-issue-count">(${sharedIssue.count})</span></button>
-        <span class="ldp-topic-footer-separator" aria-hidden="true"${sharedIssue.visible ? '' : ' hidden'}></span>
-        <button class="ldp-topic-footer-button ldp-topic-share" type="button" data-topic-action="share" aria-label="分享主题">${icon('share2')}<span>分享</span></button>
-        <button class="ldp-topic-footer-button ldp-topic-bookmark${bookmarked ? ' on' : ''}" type="button" data-topic-action="bookmark" aria-label="${bookmarked ? '已添加主题书签' : '添加主题书签'}" aria-pressed="${bookmarked ? 'true' : 'false'}">${icon('bookmark')}<span>${bookmarked ? '已收藏' : '添加为书签'}</span></button>
-        <button class="ldp-topic-footer-link ldp-topic-report" type="button" data-reader-action="report" aria-label="举报主题"${capabilities.canReport ? '' : ' hidden'}>${icon('flag')}<span>举报</span></button>
-        <button class="ldp-topic-footer-link ldp-topic-assign" type="button" data-reader-action="assign-topic" aria-label="指定主题负责人"${capabilities.canAssign ? '' : ' hidden'}>${icon('userPlus')}<span>指定</span></button>
-        <button class="ldp-topic-footer-button ldp-topic-reply ldp-replybtn" type="button" aria-label="回复主题">${icon('reply')}<span>回复</span></button>
-        <span class="ldp-topic-notification" aria-label="通知：${escAttr((TOPIC_NOTIFICATION_LEVELS.find((item) => item.value === level) || TOPIC_NOTIFICATION_LEVELS[0]).label)}">${icon('bell')}<select class="ldp-reader-select ldp-topic-notification-select" aria-label="主题通知级别"><button></button>${notificationOptions}</select></span>
-      </div>`;
+			<div class="ldp-topic-footer-actions" aria-label="主题操作">
+				<button class="ldp-topic-footer-button ldp-topic-shared-issue${sharedIssue.active ? ' on' : ''}" type="button" data-topic-action="shared-issue" aria-label="${sharedIssueLabel}" aria-pressed="${sharedIssue.active ? 'true' : 'false'}"${sharedIssue.visible ? '' : ' hidden'}${sharedIssue.isAuthor ? ' disabled' : ''}>${icon('hand')}<span class="ldp-topic-shared-issue-label">俺也一样</span><span class="ldp-topic-shared-issue-count">(${sharedIssue.count})</span></button>
+				<span class="ldp-topic-footer-separator" aria-hidden="true"${sharedIssue.visible ? '' : ' hidden'}></span>
+				<button class="ldp-topic-footer-button ldp-topic-share" type="button" data-topic-action="share" aria-label="分享主题">${icon('share2')}<span>分享</span></button>
+				<button class="ldp-topic-footer-button ldp-topic-bookmark${bookmarked ? ' on' : ''}" type="button" data-topic-action="bookmark" aria-label="${bookmarked ? '已添加主题书签' : '添加主题书签'}" aria-pressed="${bookmarked ? 'true' : 'false'}">${icon('bookmark')}<span>${bookmarked ? '已收藏' : '添加为书签'}</span></button>
+				<button class="ldp-topic-footer-link ldp-topic-report" type="button" data-reader-action="report" aria-label="举报主题"${capabilities.canReport ? '' : ' hidden'}>${icon('flag')}<span>举报</span></button>
+				<button class="ldp-topic-footer-link ldp-topic-assign" type="button" data-reader-action="assign-topic" aria-label="指定主题负责人"${capabilities.canAssign ? '' : ' hidden'}>${icon('userPlus')}<span>指定</span></button>
+				<button class="ldp-topic-footer-button ldp-topic-reply ldp-replybtn" type="button" aria-label="回复主题">${icon('reply')}<span>回复</span></button>
+				<span class="ldp-topic-notification" aria-label="通知：${escAttr((TOPIC_NOTIFICATION_LEVELS.find((item) => item.value === level) || TOPIC_NOTIFICATION_LEVELS[0]).label)}">${icon('bell')}<select class="ldp-reader-select ldp-topic-notification-select" aria-label="主题通知级别"><button></button>${notificationOptions}</select></span>
+			</div>`;
 	}
 
 	function syncPostActionControls(postNode, ctx, options = {}) {
@@ -11984,9 +11995,9 @@
 
 	function topicActionPostNodes(ctx) {
 		const nodes = new Set();
-		const streamNode = ctx && ctx.streamNodeMap && ctx.streamNodeMap.get(1);
+		const streamNode = ctx?.streamNodeMap && ctx.streamNodeMap.get(1);
 		if (streamNode) nodes.add(streamNode);
-		if (ctx && ctx.modal) {
+		if (ctx?.modal) {
 			ctx.modal.querySelectorAll('.ldp-post[data-post-number="1"]').forEach((node) => nodes.add(node));
 		}
 		return nodes;
@@ -12072,9 +12083,9 @@
 	}
 
 	function syncCollapsedNestedReplyZebra(post, options = {}) {
-		const ctx = post && post._ldpReaderContext;
+		const ctx = post?._ldpReaderContext;
 		const postNumber = +(post && post.dataset.postNumber || 0);
-		const item = ctx && ctx.streamItemMap && ctx.streamItemMap.get(postNumber);
+		const item = ctx?.streamItemMap && ctx.streamItemMap.get(postNumber);
 		if (!item || item.node !== post) return;
 		const excluded = !!post._ldpPostData?.hidden || post.classList.contains('ldp-nested-collapsed');
 		if (options.deferZebraSync) return;
@@ -12211,7 +12222,7 @@
 		target.dataset.jumpHighlightToken = token;
 		target.classList.add('ldp-jump-highlight');
 		let resizeObserver = null;
-		if (firstPostReactions && typeof ResizeObserver === 'function') {
+		if (firstPostReactions && isFunction(ResizeObserver)) {
 			resizeObserver = new ResizeObserver(() => {
 				if (target.isConnected && target.dataset.jumpHighlightToken === token) {
 					syncFirstPostJumpHighlightRegion(target);
@@ -12221,8 +12232,7 @@
 			resizeObserver.observe(firstPostReactions);
 		}
 		const config = jumpHighlightConfigFromPrefs(PREFS);
-		const reducedMotion = typeof window.matchMedia === 'function'
-			&& window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		const reducedMotion = prefersReducedMotion();
 		const lifetime = reducedMotion ? 1000 : jumpHighlightDurationMs(config) * config.count;
 		const timer = setTimeout(() => {
 			if (resizeObserver) resizeObserver.disconnect();
@@ -12248,21 +12258,21 @@
 	}
 
 	function streamPostNumber(node) {
-		return +(node && node.dataset && node.dataset.postNumber) || 0;
+		return +(node?.dataset && node.dataset.postNumber) || 0;
 	}
 
 	function streamOwnerPostNode(ctx, node) {
 		if (!ctx || !ctx.commentsEl || !node) return null;
 		let owner = node;
 		while (owner && owner.parentElement !== ctx.commentsEl) {
-			owner = owner.parentElement && owner.parentElement.closest('.ldp-post');
+			owner = owner.parentElement?.closest('.ldp-post');
 		}
 		return owner && owner.parentElement === ctx.commentsEl ? owner : null;
 	}
 
 	function clearStreamProgrammaticTarget(ctx) {
 		if (!ctx) return;
-		if (ctx.streamProgrammaticTarget && ctx.streamProgrammaticTarget.animationFrame) {
+		if (ctx.streamProgrammaticTarget?.animationFrame) {
 			cancelAnimationFrame(ctx.streamProgrammaticTarget.animationFrame);
 		}
 		ctx.streamProgrammaticTarget = null;
@@ -12303,8 +12313,8 @@
 
 	async function waitForReaderInitialLayout(overlay) {
 		await waitForReaderJumpLayout();
-		const modal = overlay && overlay.querySelector('.ldp-modal');
-		if (!modal || !overlay.classList.contains('ldp-reader-embedded') || typeof modal.getAnimations !== 'function') return;
+		const modal = overlay?.querySelector('.ldp-modal');
+		if (!modal || !overlay.classList.contains('ldp-reader-embedded') || !isFunction(modal.getAnimations)) return;
 		const motions = modal.getAnimations().filter((motion) => motion.playState !== 'finished');
 		if (!motions.length) return;
 		await Promise.race([
@@ -12368,7 +12378,7 @@
 
 	function alignStreamProgrammaticTarget(ctx, state) {
 		if (!ctx || !state || ctx.streamProgrammaticTarget !== state) return false;
-		const target = state.visualNode && state.visualNode.isConnected
+		const target = state.visualNode?.isConnected
 			? state.visualNode
 			: getStreamPostNode(ctx, state.postNumber);
 		if (!target || !target.isConnected) return false;
@@ -12391,13 +12401,13 @@
 
 	function animateStreamProgrammaticTarget(ctx, state) {
 		if (!ctx || !state || ctx.streamProgrammaticTarget !== state) return false;
-		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+		if (prefersReducedMotion()) {
 			const aligned = alignStreamProgrammaticTarget(ctx, state);
 			clearStreamProgrammaticTarget(ctx);
 			scheduleStreamWindowSync(ctx);
 			return aligned;
 		}
-		const initialTarget = state.visualNode && state.visualNode.isConnected
+		const initialTarget = state.visualNode?.isConnected
 			? state.visualNode
 			: getStreamPostNode(ctx, state.postNumber, { mount: true });
 		if (!initialTarget || !initialTarget.isConnected) {
@@ -12417,7 +12427,7 @@
 		const startScrollTop = ctx.scrollRoot.scrollTop;
 		const step = (now) => {
 			if (ctx.streamProgrammaticTarget !== state) return;
-			const target = state.visualNode && state.visualNode.isConnected
+			const target = state.visualNode?.isConnected
 				? state.visualNode
 				: getStreamPostNode(ctx, state.postNumber, { mount: true });
 			if (!target || !target.isConnected) {
@@ -12452,7 +12462,7 @@
 	function findTopVisibleStreamPost(ctx) {
 		if (!ctx || !ctx.scrollRoot || !ctx.commentsEl) return null;
 		const rootRect = ctx.scrollRoot.getBoundingClientRect();
-		const allPosts = Array.from(ctx.commentsEl.querySelectorAll(':scope > .ldp-post:not(.ldp-floor-preview)'));
+		const allPosts = [...ctx.commentsEl.querySelectorAll(':scope > .ldp-post:not(.ldp-floor-preview)')];
 		let posts = allPosts;
 		const items = streamLayoutItems(ctx);
 		rebuildStreamPrefix(ctx);
@@ -12461,7 +12471,7 @@
 			const index = findStreamIndexAtOffset(ctx.streamPrefix, localTop);
 			const nearby = [];
 			for (let cursor = Math.max(0, index - 2); cursor < Math.min(items.length, index + 7); cursor++) {
-				const node = items[cursor] && items[cursor].node;
+				const node = items[cursor]?.node;
 				if (node && node.parentElement === ctx.commentsEl) nearby.push(node);
 			}
 			if (nearby.length) posts = nearby;
@@ -12498,7 +12508,7 @@
 
 	function findStreamViewportAnchorMarker(ctx) {
 		const visible = findTopVisibleStreamPost(ctx);
-		const owner = visible && visible.ownerNode;
+		const owner = visible?.ownerNode;
 		if (!owner || !owner.isConnected) return null;
 		const rootRect = ctx.scrollRoot.getBoundingClientRect();
 		const viewportEdge = rootRect.top + 1;
@@ -12521,7 +12531,7 @@
 				best = { marker: candidate, distance, height: rect.height };
 			}
 		});
-		return best && best.marker;
+		return best?.marker;
 	}
 
 	function clearStreamViewportAnchor(ctx) {
@@ -12567,14 +12577,14 @@
 	}
 
 	function applyStreamViewportAnchorRestore(ctx) {
-		const state = ctx && ctx.streamViewportAnchor;
+		const state = ctx?.streamViewportAnchor;
 		if (!state) return false;
 		if (!ctx.scrollRoot || !ctx.commentsEl || ctx.streamProgrammaticTarget) {
 			clearStreamViewportAnchor(ctx);
 			return false;
 		}
-		const markerConnected = state.marker && state.marker.isConnected && ctx.commentsEl.contains(state.marker);
-		const ownerConnected = state.owner && state.owner.isConnected && ctx.commentsEl.contains(state.owner);
+		const markerConnected = state.marker?.isConnected && ctx.commentsEl.contains(state.marker);
+		const ownerConnected = state.owner?.isConnected && ctx.commentsEl.contains(state.owner);
 		const marker = markerConnected ? state.marker : ownerConnected ? state.owner : null;
 		if (!marker) {
 			clearStreamViewportAnchor(ctx);
@@ -12608,7 +12618,7 @@
 	}
 
 	function forEachDirectNestedPost(node, callback) {
-		const children = node && node.querySelector(':scope > .ldp-children');
+		const children = node?.querySelector(':scope > .ldp-children');
 		if (!children) return;
 		for (const child of children.children) {
 			if (child.classList.contains('ldp-post')) callback(child);
@@ -12643,7 +12653,7 @@
 	}
 
 	function streamLayoutItems(ctx) {
-		if (!ctx || !ctx.onlyOp) return (ctx && ctx.streamItems) || [];
+		if (!ctx || !ctx.onlyOp) return (ctx?.streamItems) || [];
 		if (!ctx.streamLayoutDirty && Array.isArray(ctx.streamLayoutItems)) return ctx.streamLayoutItems;
 		const items = ctx.streamItems.filter((item) => streamItemMatchesFilter(ctx, item));
 		let zebraIndex = 0;
@@ -12719,7 +12729,7 @@
 				const item = ctx.streamItemMap.get(streamPostNumber(entry.target));
 				if (!item) return;
 				const borderBox = Array.isArray(entry.borderBoxSize) ? entry.borderBoxSize[0] : entry.borderBoxSize;
-				const measured = (borderBox && borderBox.blockSize) || entry.target.offsetHeight || entry.contentRect.height;
+				const measured = (borderBox?.blockSize) || entry.target.offsetHeight || entry.contentRect.height;
 				const height = Math.max(Math.round(measured || 0), STREAM_PLACEHOLDER_MIN_HEIGHT);
 				if (entry.target.classList.contains('ldp-has-child-branches')) {
 					scheduleNestedBranchSync(entry.target, ctx);
@@ -12767,7 +12777,7 @@
 		const cancel = work.cancels.get(post);
 		if (cancel) cancel();
 		work.cancels.delete(post);
-		if (ctx && ctx[work.pendingSet]) ctx[work.pendingSet].delete(post);
+		if (ctx?.[work.pendingSet]) ctx[work.pendingSet].delete(post);
 		delete post.dataset[pendingKey];
 	}
 
@@ -12780,7 +12790,7 @@
 	}
 
 	function postContentPlaceholderHeight(postData) {
-		const cooked = String((postData && postData.cooked) || '');
+		const cooked = String((postData?.cooked) || '');
 		if (!cooked) return 72;
 		const blockCount = (cooked.match(/<(?:p|li|pre|blockquote|h[1-6]|tr|br)\b/gi) || []).length;
 		const lineEstimate = Math.max(2, blockCount, Math.ceil(cooked.length / 180));
@@ -12818,7 +12828,7 @@
 		}
 
 		post.dataset.ldpContentHydrated = '1';
-		if (ctx && ctx.streamNodeMap && ctx.streamNodeMap.get(+post.dataset.postNumber) === post) {
+		if (ctx?.streamNodeMap && ctx.streamNodeMap.get(+post.dataset.postNumber) === post) {
 			if (ctx.streamHydratedNodes) ctx.streamHydratedNodes.add(post);
 		}
 		delete post.dataset.ldpLatexRendered;
@@ -12834,7 +12844,7 @@
 
 	function dehydratePostContent(post, ctx) {
 		if (!post || post.isConnected || post.dataset.ldpContentHydrated !== '1') return false;
-		if (ctx && ctx.floorPreview && ctx.floorPreview.isOpen()) return false;
+		if (ctx?.floorPreview && ctx.floorPreview.isOpen()) return false;
 		cancelPostContentHydration(post, ctx);
 		cancelPostLatexRender(post, ctx);
 		const postData = post._ldpPostData || {};
@@ -12859,16 +12869,16 @@
 		post.dataset.ldpContentHydrated = '0';
 		delete post.dataset.ldpLatexRendered;
 		delete post.dataset.ldpLatexPending;
-		if (ctx && ctx.streamHydratedNodes) ctx.streamHydratedNodes.delete(post);
+		if (ctx?.streamHydratedNodes) ctx.streamHydratedNodes.delete(post);
 		return true;
 	}
 
 	function pruneStreamHydratedContent(ctx, items, start, end) {
-		if (!ctx || !ctx.streamHydratedNodes || ctx.floorPreview && ctx.floorPreview.isOpen()) return;
+		if (!ctx || !ctx.streamHydratedNodes || ctx.floorPreview?.isOpen()) return;
 		const warmBuffer = Math.min(24, Math.max(8, Math.ceil(streamPerformance(ctx).streamMaxItems / 4)));
 		const warmStart = Math.max(0, start - warmBuffer);
 		const warmEnd = Math.min(items.length, end + warmBuffer);
-		Array.from(ctx.streamHydratedNodes).forEach((post) => {
+		[...ctx.streamHydratedNodes].forEach((post) => {
 			if (!post || post.isConnected) return;
 			const item = ctx.streamItemMap.get(streamPostNumber(post));
 			const index = item && (ctx.onlyOp ? item.layoutIndex : item.index);
@@ -12880,7 +12890,7 @@
 	}
 
 	function hydrateStreamNavigationNeighborhood(ctx, postNumber) {
-		const targetItem = ctx && ctx.streamItemMap && ctx.streamItemMap.get(+postNumber);
+		const targetItem = ctx?.streamItemMap && ctx.streamItemMap.get(+postNumber);
 		if (!targetItem) return;
 		const items = streamLayoutItems(ctx);
 		const targetIndex = ctx.onlyOp ? targetItem.layoutIndex : targetItem.index;
@@ -12892,7 +12902,7 @@
 		start = Math.max(0, end - span);
 		for (let index = start; index < end; index++) {
 			const item = items[index];
-			if (item && item.node) hydratePostContent(item.node, ctx);
+			if (item?.node) hydratePostContent(item.node, ctx);
 		}
 	}
 
@@ -12904,7 +12914,7 @@
 		const cancel = () => cancelPostIdleWork(post, ctx, work, pendingKey);
 		const queue = () => {
 			work.cancels.set(post, scheduleIdleWork(attempt, delay));
-			if (ctx && ctx[work.pendingSet]) ctx[work.pendingSet].add(post);
+			if (ctx?.[work.pendingSet]) ctx[work.pendingSet].add(post);
 		};
 		const attempt = () => {
 			if (!isPending() || !post.isConnected) return cancel();
@@ -13006,8 +13016,8 @@
 		end = Math.max(start, Math.min(total, +end || 0));
 
 		hydrateStreamRangeContent(ctx, items, start, end);
-		const firstRangeNode = items[start] && items[start].node;
-		const lastRangeNode = items[end - 1] && items[end - 1].node;
+		const firstRangeNode = items[start]?.node;
+		const lastRangeNode = items[end - 1]?.node;
 		const rangeEndpointsConnected = start === end ||
 			(firstRangeNode && lastRangeNode &&
 				firstRangeNode.parentElement === ctx.commentsEl && lastRangeNode.parentElement === ctx.commentsEl);
@@ -13032,15 +13042,15 @@
 
 		const rangeItems = items.slice(start, end);
 		const desired = new Set(rangeItems.map((item) => item.node));
-		Array.from(ctx.streamMountedNodes).forEach((node) => {
+		[...ctx.streamMountedNodes].forEach((node) => {
 			if (desired.has(node)) return;
 			ctx.streamResizeObserver.unobserve(node);
-			if (ctx.tracker && ctx.tracker.unobserve) {
+			if (ctx.tracker?.unobserve) {
 				ctx.tracker.unobserve(node);
 				forEachDirectNestedPost(node, (child) => ctx.tracker.unobserve(child));
 			}
 			if (ctx.queueViewportTracker) ctx.queueViewportTracker.unobserve(node);
-			if (ctx.repliesIO && ctx.repliesIO.unobserve) ctx.repliesIO.unobserve(node);
+			if (ctx.repliesIO?.unobserve) ctx.repliesIO.unobserve(node);
 			cancelPostContentHydration(node, ctx);
 			cancelPostLatexRender(node, ctx);
 			suspendReaderMedia(node);
@@ -13097,12 +13107,12 @@
 		ctx.streamMountedItemCount = total;
 		refreshStreamZebra(ctx, rangeItems.map((item) => item.node));
 		syncCommentsHeaderPlacement(ctx);
-		if (ctx.floorPreview && ctx.floorPreview.isOpen()) scheduleFloorPreviewSync(ctx);
+		if (ctx.floorPreview?.isOpen()) scheduleFloorPreviewSync(ctx);
 		restoreStreamViewportAnchor(ctx);
 	}
 
 	function streamPerformance(ctx) {
-		return (ctx && ctx.performance) || BALANCED_PERFORMANCE;
+		return (ctx?.performance) || BALANCED_PERFORMANCE;
 	}
 
 	function streamScrollIsActive(ctx, settleMs = 120) {
@@ -13122,12 +13132,12 @@
 	}
 
 	function scrollLoadPressure(ctx) {
-		const lastScrollAt = +(ctx && ctx.streamLastScrollAt || 0);
+		const lastScrollAt = +(ctx?.streamLastScrollAt || 0);
 		const age = Date.now() - lastScrollAt;
-		const viewportHeight = Math.max(1, +(ctx && ctx.scrollRoot && ctx.scrollRoot.clientHeight || 0));
+		const viewportHeight = Math.max(1, +(ctx?.scrollRoot && ctx.scrollRoot.clientHeight || 0));
 		const viewportsPerSecond = age > 300
 			? 0
-			: Math.max(0, +(ctx && ctx.streamScrollVelocity || 0)) * 1000 / viewportHeight;
+			: Math.max(0, +(ctx?.streamScrollVelocity || 0)) * 1000 / viewportHeight;
 		if (viewportsPerSecond >= 0.75) return { batches: 2, lookahead: viewportsPerSecond >= 2.5 ? 24 : 14 };
 		return { batches: 1, lookahead: 8 };
 	}
@@ -13136,7 +13146,7 @@
 		if (!ctx || !ctx.streamMountedNodes.size) return;
 		const rootRect = ctx.scrollRoot.getBoundingClientRect();
 		const items = streamLayoutItems(ctx);
-		let firstNode = items[start] && items[start].node;
+		let firstNode = items[start]?.node;
 		if (!firstNode || !firstNode.isConnected) return;
 		let firstRect = firstNode.getBoundingClientRect();
 		const leadingGap = firstRect.top - rootRect.top;
@@ -13148,13 +13158,13 @@
 				mountStreamRange(ctx, range.start, range.end);
 				start = ctx.streamWindowStart;
 				end = ctx.streamWindowEnd;
-				firstNode = items[start] && items[start].node;
-				firstRect = firstNode && firstNode.getBoundingClientRect();
+				firstNode = items[start]?.node;
+				firstRect = firstNode?.getBoundingClientRect();
 			}
 		}
 		const commentsRect = ctx.commentsEl.getBoundingClientRect();
 		if (commentsRect.bottom < rootRect.top || commentsRect.top > rootRect.bottom) return;
-		const lastNode = items[end - 1] && items[end - 1].node;
+		const lastNode = items[end - 1]?.node;
 		if (!firstNode || !lastNode || !firstNode.isConnected || !lastNode.isConnected) return;
 		const lastRect = lastNode === firstNode ? firstRect : lastNode.getBoundingClientRect();
 		if (lastRect.bottom >= rootRect.top && firstRect.top <= rootRect.bottom) return;
@@ -13190,7 +13200,7 @@
 	}
 
 	function mountStreamPost(ctx, postNumber) {
-		const item = ctx && ctx.streamItemMap && ctx.streamItemMap.get(+postNumber);
+		const item = ctx?.streamItemMap && ctx.streamItemMap.get(+postNumber);
 		if (!item || !item.node || !streamItemMatchesFilter(ctx, item)) return null;
 		const items = streamLayoutItems(ctx);
 		const layoutIndex = ctx.onlyOp ? item.layoutIndex : item.index;
@@ -13209,8 +13219,8 @@
 	function getStreamPostNode(ctx, postNumber, options = {}) {
 		const num = +postNumber;
 		if (!ctx || !num) return null;
-		const node = ctx.streamNodeMap && ctx.streamNodeMap.get(num);
-		if (node && node.isConnected) return node;
+		const node = ctx.streamNodeMap?.get(num);
+		if (node?.isConnected) return node;
 		if (options.mount) return mountStreamPost(ctx, num);
 		return null;
 	}
@@ -13238,8 +13248,8 @@
 			currentStart >= 0 && currentEnd <= total;
 		if (!currentValid) return { start, end };
 		const maxItems = Math.max(1, streamPerformance(ctx).streamMaxItems);
-		const anchorOwner = ctx.streamViewportAnchor && ctx.streamViewportAnchor.owner;
-		const anchorItem = anchorOwner && anchorOwner.isConnected
+		const anchorOwner = ctx.streamViewportAnchor?.owner;
+		const anchorItem = anchorOwner?.isConnected
 			? ctx.streamItemMap.get(streamPostNumber(anchorOwner))
 			: null;
 		const anchorIndex = anchorItem && (ctx.onlyOp ? anchorItem.layoutIndex : anchorItem.index);
@@ -13327,11 +13337,11 @@
 		if (needsRepair) {
 			repairBlankStreamViewport(ctx, start, end);
 		}
-		if (ctx.viewportPersistenceEnabled && ctx.loader && typeof ctx.loader.persistViewedPostNumbers === 'function') {
+		if (ctx.viewportPersistenceEnabled && ctx.loader && isFunction(ctx.loader.persistViewedPostNumbers)) {
 			const visibleStart = Math.max(0, Math.min(items.length - 1, ctx.streamViewportTopIndex));
 			const visibleEnd = Math.max(visibleStart, Math.min(items.length - 1, ctx.streamViewportBottomIndex));
 			ctx.loader.persistViewedPostNumbers(
-				items.slice(visibleStart, visibleEnd + 1).map((item) => item && item.postNumber)
+				items.slice(visibleStart, visibleEnd + 1).map((item) => item?.postNumber)
 			);
 		}
 	}
@@ -13356,7 +13366,7 @@
 		if (!ctx || !ctx.floorPreview || ctx.floorPreviewSyncFrame) return;
 		ctx.floorPreviewSyncFrame = requestAnimationFrame(() => {
 			ctx.floorPreviewSyncFrame = 0;
-			if (ctx.floorPreview && ctx.floorPreview.isOpen()) ctx.floorPreview.syncPlacement();
+			if (ctx.floorPreview?.isOpen()) ctx.floorPreview.syncPlacement();
 		});
 	}
 
@@ -13386,16 +13396,16 @@
 		}
 		const previousScrollTop = ctx.scrollRoot.scrollTop;
 		if (!options.alignTop && !options.alignBottom && +postNumber < +(ctx.initialTargetHydrationBoundary || 0) &&
-			typeof ctx.releaseInitialPrecedingContent === 'function') {
+			isFunction(ctx.releaseInitialPrecedingContent)) {
 			ctx.releaseInitialPrecedingContent();
 		}
 		hydratePostContent(target, ctx);
-		const resolvedVisualTarget = typeof options.resolveVisualTarget === 'function'
+		const resolvedVisualTarget = isFunction(options.resolveVisualTarget)
 			? options.resolveVisualTarget(target)
 			: options.visualNode;
-		const scrollTarget = resolvedVisualTarget && resolvedVisualTarget.isConnected ? resolvedVisualTarget : target;
+		const scrollTarget = resolvedVisualTarget?.isConnected ? resolvedVisualTarget : target;
 		const hasVisualTarget = scrollTarget !== target;
-		const highlightTarget = options.highlightTarget && options.highlightTarget.isConnected
+		const highlightTarget = options.highlightTarget?.isConnected
 			? options.highlightTarget
 			: target;
 		const alignOffset = Number(options.alignOffset);
@@ -13491,9 +13501,9 @@
 		if (!num) return null;
 		// Previewing must not remount the virtual window. Detached stream nodes still
 		// contain the complete post markup and are safe to clone into the preview.
-		const streamNode = ctx.streamNodeMap && ctx.streamNodeMap.get(num);
+		const streamNode = ctx.streamNodeMap?.get(num);
 		if (streamNode) return streamNode;
-		return (ctx.scrollRoot && ctx.scrollRoot.querySelector(`.ldp-post[data-post-number="${num}"]`)) ||
+		return (ctx.scrollRoot?.querySelector(`.ldp-post[data-post-number="${num}"]`)) ||
 				null;
 	}
 
@@ -13502,7 +13512,7 @@
 		let source = findFloorPreviewSource(target, ctx);
 		if (!target || source || !ctx) return source;
 
-		const loaders = typeof ctx.loadPost === 'function'
+		const loaders = isFunction(ctx.loadPost)
 			? ['single', 'around'].map((scope) => () => ctx.loadPost(target, {
 				mount: false,
 				priority: POST_REQUEST_PRIORITY.target,
@@ -13572,7 +13582,7 @@
 		const lineRect = line.getBoundingClientRect();
 		const previewRect = preview.getBoundingClientRect();
 		const layerRect = layer ? layer.getBoundingClientRect() : previewRect;
-		const avatar = layer && layer.querySelector(':scope > .ldp-post-head .ldp-avatar');
+		const avatar = layer?.querySelector(':scope > .ldp-post-head .ldp-avatar');
 		const avatarRect = avatar ? avatar.getBoundingClientRect() : layerRect;
 		const previewAvatar = preview.querySelector(':scope > .ldp-post-head .ldp-avatar');
 		const previewAvatarRect = previewAvatar ? previewAvatar.getBoundingClientRect() : previewRect;
@@ -13638,7 +13648,7 @@
 	}
 
 	function canShowFloorPreview(anchor) {
-		const post = anchor && anchor.closest('.ldp-post');
+		const post = anchor?.closest('.ldp-post');
 		return !!post && !post.classList.contains('ldp-nested-collapsed');
 	}
 
@@ -13664,7 +13674,7 @@
 			body.innerHTML = `<div class="ldp-floor-preview-tip">${esc(`还没加载到 #${postNumber}`)}</div>`;
 		}
 		const relatedPost = anchor.closest('.ldp-post');
-		if (typeof options.beforePlace === 'function') options.beforePlace();
+		if (isFunction(options.beforePlace)) options.beforePlace();
 		if (!canShowFloorPreview(anchor)) return;
 		setNestedReplyEscapeHint(relatedPost, isEscCollapsibleNestedReply(relatedPost));
 		placeFloorPreview(preview, state.line, anchor, ctx.scrollRoot, () => {
@@ -13680,7 +13690,7 @@
 		const openBundles = new Set();
 		const bundleByPost = new WeakMap();
 		let activeBundle = null;
-		const bundlePost = (bundle) => bundle && (bundle.post || (bundle.anchor && bundle.anchor.closest('.ldp-post')));
+		const bundlePost = (bundle) => bundle && (bundle.post || (bundle.anchor?.closest('.ldp-post')));
 		const unregisterBundle = (bundle) => {
 			if (!bundle) return;
 			clearTimeout(bundle.showTimer);
@@ -13695,7 +13705,7 @@
 			if (activeBundle === bundle) activeBundle = null;
 		};
 		const cleanupClosedBundles = () => {
-			Array.from(openBundles).forEach((bundle) => {
+			[...openBundles].forEach((bundle) => {
 				// Virtual-list unmounting temporarily detaches an open preview together
 				// with its post. Keep that bundle so the same DOM can be mounted again.
 				if (!bundle.pending && !bundle.preview.classList.contains('open')) unregisterBundle(bundle);
@@ -13728,7 +13738,7 @@
 		};
 		const hide = (targetPost = null) => {
 			cleanupClosedBundles();
-			const bundles = Array.from(openBundles);
+			const bundles = [...openBundles];
 			let bundle = targetPost
 				? bundles.find((item) => bundlePost(item) === targetPost)
 				: null;
@@ -13785,7 +13795,7 @@
 		};
 		const previewVisibleInViewport = () => {
 			cleanupClosedBundles();
-			return Array.from(openBundles).some(bundleVisibleInViewport);
+			return [...openBundles].some(bundleVisibleInViewport);
 		};
 		const onFloorPreviewMouseOver = (e) => {
 			if (e.target.closest('.ldp-floor-preview')) return;
@@ -14009,16 +14019,16 @@
 		const originalSrc = absoluteImageUrl(resolveOriginalSrc(img));
 		if (!originalSrc) return null;
 		const ownerPost = img.closest('.ldp-post');
-		const sourcePost = postData || (ownerPost && ownerPost._ldpPostData) || null;
+		const sourcePost = postData || (ownerPost?._ldpPostData) || null;
 		const item = {
 			originalSrc,
 			thumbSrc: absoluteImageUrl(img.currentSrc || img.src || originalSrc),
 			alt: String(img.alt || '').trim(),
 			postNumber: Math.max(0, +postNumber || +(ownerPost && ownerPost.dataset.postNumber) || 0),
 			imageOrder: Math.max(0, +imageOrder || 0),
-			topicId: Math.max(0, +topicId || +(sourcePost && sourcePost.topic_id) || 0),
-			postId: Math.max(0, +(sourcePost && sourcePost.id) || +(ownerPost && ownerPost.dataset.postId) || 0),
-			username: String(sourcePost && sourcePost.username || ownerPost && ownerPost.dataset.username || '').trim(),
+			topicId: Math.max(0, +topicId || +(sourcePost?.topic_id) || 0),
+			postId: Math.max(0, +(sourcePost?.id) || +(ownerPost && ownerPost.dataset.postId) || 0),
+			username: String(sourcePost?.username || ownerPost && ownerPost.dataset.username || '').trim(),
 			sourcePost,
 		};
 		item.key = [
@@ -14031,11 +14041,11 @@
 	}
 
 	function isLightboxContentImage(img, quoted = false) {
-		if (!img || typeof img.closest !== 'function') return false;
+		if (!img || !isFunction(img.closest)) return false;
 		const contentSelector = quoted ? '.ldp-content aside.ldp-post-quote > blockquote' : '.ldp-content';
 		if (!img.closest(contentSelector)) return false;
 		const isBoostEmoji = img.classList.contains('emoji') ||
-			!!(reactionEmojiImageSources && reactionEmojiImageSources.size &&
+			!!(reactionEmojiImageSources?.size &&
 				[img.currentSrc, img.src, img.getAttribute('src'), resolveOriginalSrc(img)]
 					.map(comparableLightboxImageSource)
 					.some((source) => source && reactionEmojiImageSources.has(source)));
@@ -14044,7 +14054,7 @@
 			? '.ldp-quote-title,[data-user-card],aside.onebox'
 			: 'aside.quote,.ldp-quote-title,[data-user-card],aside.onebox';
 		if (img.closest(excludedSelector)) return false;
-		const hasAvatarClass = Array.from(img.classList || [])
+		const hasAvatarClass = [...img.classList || []]
 			.some((name) => /(^|[-_])avatar($|[-_])/i.test(name));
 		const source = String(img.currentSrc || img.src || img.getAttribute('src') || '');
 		return !hasAvatarClass && !/\/user_avatar\//i.test(source);
@@ -14069,29 +14079,29 @@
 		const seen = new Set();
 		const add = (img, postNumber = 0, imageOrder = 0, postData = null) => {
 			if (!isLightboxFloorImage(img)) return;
-			const item = lightboxImageItem(img, postNumber, imageOrder, postData, ctx && ctx.topicId);
+			const item = lightboxImageItem(img, postNumber, imageOrder, postData, ctx?.topicId);
 			if (!item || seen.has(item.key)) return;
 			seen.add(item.key);
 			items.push(item);
 		};
 		const roots = ctx && Array.isArray(ctx.streamItems)
-			? ctx.streamItems.map((item) => item && item.node).filter(Boolean)
+			? ctx.streamItems.map((item) => item?.node).filter(Boolean)
 			: [];
 		if (!roots.length && ctx && ctx.commentsEl) {
 			roots.push(...ctx.commentsEl.querySelectorAll(':scope > .ldp-post'));
 		}
 		roots.forEach((root) => {
-			const postNumber = +(root.dataset.postNumber || (root._ldpPostData && root._ldpPostData.post_number)) || 0;
-			Array.from(root.querySelectorAll(':scope > .ldp-content img'))
+			const postNumber = +(root.dataset.postNumber || (root._ldpPostData?.post_number)) || 0;
+			[...root.querySelectorAll(':scope > .ldp-content img')]
 				.filter(isLightboxFloorImage)
 				.forEach((img, imageOrder) => add(img, postNumber, imageOrder, root._ldpPostData));
 		});
-		const clickedContent = clickedImg && clickedImg.closest('.ldp-content');
+		const clickedContent = clickedImg?.closest('.ldp-content');
 		const clickedOrder = clickedContent
-			? Array.from(clickedContent.querySelectorAll('img')).filter(isLightboxFloorImage).indexOf(clickedImg)
+			? [...clickedContent.querySelectorAll('img')].filter(isLightboxFloorImage).indexOf(clickedImg)
 			: 0;
 		const clickedItem = isLightboxFloorImage(clickedImg)
-			? lightboxImageItem(clickedImg, 0, Math.max(0, clickedOrder), null, ctx && ctx.topicId)
+			? lightboxImageItem(clickedImg, 0, Math.max(0, clickedOrder), null, ctx?.topicId)
 			: null;
 		if (clickedItem && !seen.has(clickedItem.key)) {
 			seen.add(clickedItem.key);
@@ -14109,7 +14119,7 @@
 		const content = makeElement('div');
 		content.className = 'ldp-content cooked';
 		setPostCookedContent(content, post.cooked);
-		return Array.from(content.querySelectorAll('img'))
+		return [...content.querySelectorAll('img')]
 			.filter(isLightboxFloorImage)
 			.map((img, imageOrder) => lightboxImageItem(
 				img,
@@ -14121,11 +14131,11 @@
 	}
 
 	async function openQuotedImageLightbox(clickedImg, ctx) {
-		const quote = clickedImg && clickedImg.closest('aside.ldp-post-quote');
+		const quote = clickedImg?.closest('aside.ldp-post-quote');
 		if (!quote || !ctx) return false;
 		try {
 			const sourcePost = await loadReaderQuotedPost(quote, ctx);
-			const sourceTopicId = Math.max(0, +quote.dataset.topic || +(sourcePost && sourcePost.topic_id) || +ctx.topicId || 0);
+			const sourceTopicId = Math.max(0, +quote.dataset.topic || +(sourcePost?.topic_id) || +ctx.topicId || 0);
 			const items = lightboxItemsFromPost(sourcePost, sourceTopicId);
 			if (!items.length) throw new Error('quoted image unavailable');
 			const clickedSource = comparableLightboxImageSource(resolveOriginalSrc(clickedImg));
@@ -14137,7 +14147,7 @@
 			if (initialIndex < 0) {
 				const quoteBody = quote.querySelector(':scope > blockquote');
 				const excerptOrder = quoteBody
-					? Array.from(quoteBody.querySelectorAll('img')).filter(isLightboxQuotedImage).indexOf(clickedImg)
+					? [...quoteBody.querySelectorAll('img')].filter(isLightboxQuotedImage).indexOf(clickedImg)
 					: -1;
 				initialIndex = Math.max(0, Math.min(items.length - 1, excerptOrder));
 			}
@@ -14172,21 +14182,21 @@
 	}
 
 	function lightboxImageQuoteRaw(item, ctx) {
-		const sourcePost = item && item.sourcePost || {};
-		const username = cleanUsernameValue(item && item.username || sourcePost.username);
-		const postNumber = Math.max(0, +(item && item.postNumber || 0));
-		const topicId = Math.max(0, +(item && item.topicId || ctx && ctx.topicId || 0));
-		const source = String(item && item.originalSrc || '').replace(/</g, '%3C').replace(/>/g, '%3E');
-		const alt = String(item && item.alt || '图片')
+		const sourcePost = item?.sourcePost || {};
+		const username = cleanUsernameValue(item?.username || sourcePost.username);
+		const postNumber = Math.max(0, +(item?.postNumber || 0));
+		const topicId = Math.max(0, +(item?.topicId || ctx?.topicId || 0));
+		const source = String(item?.originalSrc || '').replace(/</g, '%3C').replace(/>/g, '%3E');
+		const alt = String(item?.alt || '图片')
 			.replace(/\\/g, '\\\\')
 			.replace(/\[/g, '\\[')
-			.replace(/\]/g, '\\]') + lightboxImageOrderMarker(item && item.imageOrder);
+			.replace(/\]/g, '\\]') + lightboxImageOrderMarker(item?.imageOrder);
 		if (!username || !postNumber || !topicId || !source) return '';
 		return `[quote="${username}, post:${postNumber}, topic:${topicId}"]\n![${alt}](<${source}>)\n[/quote]\n\n`;
 	}
 
 	function lightboxQuoteContainsImage(quote, item, expectedSource) {
-		return Array.from(quote.querySelectorAll(':scope > blockquote img')).some((image) => {
+		return [...quote.querySelectorAll(':scope > blockquote img')].some((image) => {
 			if (comparableLightboxImageSource(resolveOriginalSrc(image)) !== expectedSource) return false;
 			const markedOrder = lightboxImageOrderFromAlt(image.alt);
 			return markedOrder == null || markedOrder === +item.imageOrder;
@@ -14201,7 +14211,7 @@
 		template.innerHTML = String(post.cooked || '');
 		const expectedTopicId = +(item.topicId || 0);
 		const expectedSource = comparableLightboxImageSource(item.originalSrc);
-		return Array.from(template.content.querySelectorAll('aside.quote')).some((quote) => {
+		return [...template.content.querySelectorAll('aside.quote')].some((quote) => {
 			if (+quote.dataset.post !== +item.postNumber) return false;
 			const quotedTopicId = +(quote.dataset.topic || 0);
 			if (quotedTopicId && expectedTopicId && quotedTopicId !== expectedTopicId) return false;
@@ -14223,7 +14233,7 @@
 				.trim();
 			return text;
 		};
-		const altFallback = clean(item && item.alt);
+		const altFallback = clean(item?.alt);
 		const fallback = !altFallback || /^(?:该楼层)?图片$/.test(altFallback) ? '无描述' : altFallback;
 		if (!post || !post.cooked) return fallback;
 		const template = makeElement('template');
@@ -14268,17 +14278,17 @@
 
 	function lightboxImageDownloadName(item, index, blob) {
 		let sourceName = '';
-		try { sourceName = decodeURIComponent(new URL(item && item.originalSrc || '', location.href).pathname.split('/').pop() || ''); }
+		try { sourceName = decodeURIComponent(new URL(item?.originalSrc || '', location.href).pathname.split('/').pop() || ''); }
 		catch (error) {}
 		const mimeExtensions = {
 			'image/avif': 'avif', 'image/bmp': 'bmp', 'image/gif': 'gif', 'image/heic': 'heic',
 			'image/heif': 'heif', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/svg+xml': 'svg',
 			'image/tiff': 'tiff', 'image/webp': 'webp',
 		};
-		let extension = mimeExtensions[String(blob && blob.type || '').toLowerCase()];
+		let extension = mimeExtensions[String(blob?.type || '').toLowerCase()];
 		if (!extension) {
 			try {
-				const match = new URL(item && item.originalSrc || '', location.href).pathname.match(/\.([a-z0-9]{2,5})$/i);
+				const match = new URL(item?.originalSrc || '', location.href).pathname.match(/\.([a-z0-9]{2,5})$/i);
 				if (match) extension = match[1].toLowerCase();
 			} catch (error) {}
 		}
@@ -14325,7 +14335,7 @@
 	}
 
 	function cachedLightboxOriginalBlob(item) {
-		return cachedPersistentLightboxBlob(item && item.originalSrc);
+		return cachedPersistentLightboxBlob(item?.originalSrc);
 	}
 
 	async function persistLightboxBlob(rawSource, blob, contentType = '',
@@ -14420,7 +14430,7 @@
 	async function lightboxImageDownloadBlob(item, options = {}) {
 		const cachedOriginal = await cachedLightboxOriginalBlob(item);
 		if (cachedOriginal) return cachedOriginal;
-		const originalSrc = item && item.originalSrc;
+		const originalSrc = item?.originalSrc;
 		const previewSrc = item && (item.thumbSrc || originalSrc);
 		if (options.original !== true && previewSrc && previewSrc !== originalSrc) {
 			return fetchLightboxDownloadBlob(previewSrc);
@@ -14443,7 +14453,7 @@
 
 	async function lightboxMissingOriginalCount(items) {
 		const candidates = (Array.isArray(items) ? items : []).filter((item) => (
-			item && item.originalSrc && item.thumbSrc && item.originalSrc !== item.thumbSrc
+			item?.originalSrc && item.thumbSrc && item.originalSrc !== item.thumbSrc
 		));
 		let missing = 0;
 		for (const item of candidates) {
@@ -14523,7 +14533,7 @@
 
 	function mergeLightboxPosts(target, posts) {
 		(Array.isArray(posts) ? posts : []).forEach((post) => {
-			const postNumber = +(post && post.post_number || 0);
+			const postNumber = +(post?.post_number || 0);
 			if (!postNumber || !post.id) return;
 			const previous = target.get(postNumber);
 			target.set(postNumber, previous ? Object.assign(previous, post) : post);
@@ -14533,23 +14543,23 @@
 
 	function knownLightboxPosts(ctx) {
 		const posts = new Map();
-		mergeLightboxPosts(posts, ctx && ctx.loader && ctx.loader.cachedPosts);
-		mergeLightboxPosts(posts, postsFromPayload(ctx && ctx.topicData));
+		mergeLightboxPosts(posts, ctx?.loader && ctx.loader.cachedPosts);
+		mergeLightboxPosts(posts, postsFromPayload(ctx?.topicData));
 		if (ctx && Array.isArray(ctx.streamItems)) {
-			mergeLightboxPosts(posts, ctx.streamItems.map((item) => item && item.node && item.node._ldpPostData));
+			mergeLightboxPosts(posts, ctx.streamItems.map((item) => item?.node && item.node._ldpPostData));
 		}
-		if (ctx && ctx.directRepliesByParent) {
-			ctx.directRepliesByParent.forEach((replies) => mergeLightboxPosts(posts, Array.from(replies.values())));
+		if (ctx?.directRepliesByParent) {
+			ctx.directRepliesByParent.forEach((replies) => mergeLightboxPosts(posts, [...replies.values()]));
 		}
-		if (ctx && ctx.subReplyState) {
-			ctx.subReplyState.forEach((state) => mergeLightboxPosts(posts, state && state.all));
+		if (ctx?.subReplyState) {
+			ctx.subReplyState.forEach((state) => mergeLightboxPosts(posts, state?.all));
 		}
-		if (ctx && ctx.lightboxImageCommentPosts) mergeLightboxPosts(posts, Array.from(ctx.lightboxImageCommentPosts.values()));
+		if (ctx?.lightboxImageCommentPosts) mergeLightboxPosts(posts, [...ctx.lightboxImageCommentPosts.values()]);
 		return posts;
 	}
 
 	async function searchLightboxImagePosts(ctx) {
-		if (!ctx || !ctx.topicId || !ctx.loader || typeof ctx.loader.loadPostsByIds !== 'function') return [];
+		if (!ctx || !ctx.topicId || !ctx.loader || !isFunction(ctx.loader.loadPostsByIds)) return [];
 		if (ctx.lightboxImageSearchPostsPromise) return ctx.lightboxImageSearchPostsPromise;
 		const request = (async () => {
 			const posts = new Map();
@@ -14566,13 +14576,13 @@
 					key: `image-comments:search:${ctx.topicId}:${page}`,
 					priority: POST_REQUEST_PRIORITY.background,
 				});
-				const grouped = payload && payload.grouped_search_result || {};
+				const grouped = payload?.grouped_search_result || {};
 				const payloadPosts = postsFromPayload(payload);
 				mergeLightboxPosts(posts, payloadPosts);
-				const postIds = Array.from(new Set([
+				const postIds = [...new Set([
 					...(Array.isArray(grouped.post_ids) ? grouped.post_ids : []),
-					...payloadPosts.map((post) => post && post.id),
-				].map(Number).filter(Boolean)));
+					...payloadPosts.map((post) => post?.id),
+				].map(Number).filter(Boolean))];
 				const signature = postIds.join(',');
 				if (!postIds.length || seenPages.has(signature)) break;
 				seenPages.add(signature);
@@ -14585,7 +14595,7 @@
 				if (!hasMore) break;
 				page++;
 			}
-			const result = Array.from(posts.values());
+			const result = [...posts.values()];
 			ctx.loader.persistFetchedPosts(result);
 			return result;
 		})();
@@ -14605,7 +14615,7 @@
 			childrenByParent.get(parentNumber).push(post);
 		});
 		childrenByParent.forEach((children) => children.sort((left, right) => +left.post_number - +right.post_number));
-		const roots = Array.from(directMatchNumbers)
+		const roots = [...directMatchNumbers]
 			.map((postNumber) => postsByNumber.get(postNumber))
 			.filter((post) => post && !postsByNumber.has(+(post.reply_to_post_number || 0)))
 			.sort((left, right) => +left.post_number - +right.post_number);
@@ -14629,9 +14639,9 @@
 
 	function cachedLightboxCommentRelation(item, ctx, knownPosts) {
 		const entry = ctx && TOPIC_DATA_CACHE.get(String(ctx.topicId));
-		const topic = entry && entry.topic || ctx && ctx.topicData;
-		const relations = topic && topic._ldpLightboxCommentRelations;
-		const relation = relations && relations[item && item.key];
+		const topic = entry?.topic || ctx?.topicData;
+		const relations = topic?._ldpLightboxCommentRelations;
+		const relation = relations?.[item && item.key];
 		if (!relation || Date.now() - Number(relation.cachedAt || 0) > LIGHTBOX_COMMENT_RELATION_CACHE_FRESH_FOR) return null;
 		const postsByNumber = new Map();
 		mergeLightboxPosts(postsByNumber, relation.posts);
@@ -14642,9 +14652,9 @@
 			}
 		}
 		const directMatchNumbers = new Set((relation.directMatchNumbers || []).map(Number).filter((value) => value > 0));
-		if (directMatchNumbers.size && !Array.from(directMatchNumbers).every((postNumber) => postsByNumber.has(postNumber))) return null;
-		const sourcePostNumber = +(relation.sourcePostNumber || item && item.postNumber || 0);
-		const sourcePost = knownPosts && knownPosts.get(sourcePostNumber) || relation.sourcePost || null;
+		if (directMatchNumbers.size && ![...directMatchNumbers].every((postNumber) => postsByNumber.has(postNumber))) return null;
+		const sourcePostNumber = +(relation.sourcePostNumber || item?.postNumber || 0);
+		const sourcePost = knownPosts?.get(sourcePostNumber) || relation.sourcePost || null;
 		rememberLightboxSourcePost(item, sourcePost);
 		return lightboxCommentTreeState(sourcePost, postsByNumber, directMatchNumbers, relation.partial);
 	}
@@ -14652,21 +14662,21 @@
 	function persistLightboxCommentRelation(item, ctx, state) {
 		if (!item || !item.key || !ctx || !ctx.topicId || !state) return;
 		const entry = TOPIC_DATA_CACHE.get(String(ctx.topicId));
-		const topic = entry && entry.topic || ctx.topicData;
+		const topic = entry?.topic || ctx.topicData;
 		if (!topic) return;
 		const relations = topic._ldpLightboxCommentRelations && typeof topic._ldpLightboxCommentRelations === 'object'
 			? topic._ldpLightboxCommentRelations
 			: {};
 		relations[item.key] = {
 			cachedAt: Date.now(),
-			sourcePostNumber: +(state.sourcePost && state.sourcePost.post_number || item.postNumber || 0),
+			sourcePostNumber: +(state.sourcePost?.post_number || item.postNumber || 0),
 			sourcePost: state.sourcePost || item.sourcePost || null,
-			directMatchNumbers: Array.from(state.directMatchNumbers || []),
-			posts: Array.from(state.postsByNumber && state.postsByNumber.values() || []),
+			directMatchNumbers: [...state.directMatchNumbers || []],
+			posts: [...state.postsByNumber?.values() || []],
 			partial: state.partial === true,
 		};
 		const keys = Object.keys(relations).sort((left, right) => (
-			Number(relations[right] && relations[right].cachedAt || 0) - Number(relations[left] && relations[left].cachedAt || 0)
+			Number(relations[right]?.cachedAt || 0) - Number(relations[left]?.cachedAt || 0)
 		));
 		keys.slice(64).forEach((key) => delete relations[key]);
 		topic._ldpLightboxCommentRelations = relations;
@@ -14677,8 +14687,8 @@
 		const knownPosts = knownLightboxPosts(ctx);
 		const cachedRelation = cachedLightboxCommentRelation(item, ctx, knownPosts);
 		if (cachedRelation) return cachedRelation;
-		let sourcePost = item && item.sourcePost || knownPosts.get(+(item && item.postNumber || 0)) || null;
-		if (!sourcePost && ctx && ctx.loader && typeof ctx.loader.loadPost === 'function') {
+		let sourcePost = item?.sourcePost || knownPosts.get(+(item?.postNumber || 0)) || null;
+		if (!sourcePost && ctx && ctx.loader && isFunction(ctx.loader.loadPost)) {
 			const loaded = await ctx.loader.loadPost(item.postNumber, {
 				advanceCursor: false,
 				priority: POST_REQUEST_PRIORITY.visible,
@@ -14706,11 +14716,11 @@
 			const post = knownPosts.get(postNumber);
 			if (post) included.set(postNumber, post);
 		});
-		const queue = Array.from(included.values()).sort((left, right) => +left.post_number - +right.post_number);
+		const queue = [...included.values()].sort((left, right) => +left.post_number - +right.post_number);
 		const fetchedPostIds = new Set();
 		const includeReplies = (replies) => {
 			replies.forEach((reply) => {
-				const replyNumber = +(reply && reply.post_number || 0);
+				const replyNumber = +(reply?.post_number || 0);
 				if (!replyNumber) return;
 				if (postQuotesLightboxImage(reply, item)) directMatchNumbers.add(replyNumber);
 				if (!included.has(replyNumber)) {
@@ -14721,15 +14731,15 @@
 		};
 		while (queue.length) {
 			const parent = queue.shift();
-			const postId = +(parent && parent.id || 0);
+			const postId = +(parent?.id || 0);
 			if (!postId || fetchedPostIds.has(postId)) continue;
 			fetchedPostIds.add(postId);
 			const parentNumber = +(parent.post_number || 0);
-			const localChildren = Array.from(knownPosts.values()).filter((post) => (
-				+(post && post.reply_to_post_number || 0) === parentNumber
+			const localChildren = [...knownPosts.values()].filter((post) => (
+				+(post?.reply_to_post_number || 0) === parentNumber
 			));
 			includeReplies(localChildren);
-			const knownChildren = ctx.directRepliesByParent && ctx.directRepliesByParent.get(parentNumber);
+			const knownChildren = ctx.directRepliesByParent?.get(parentNumber);
 			if (!(+(parent.reply_count || 0) > localChildren.length || knownChildren && knownChildren.size > localChildren.length)) continue;
 			try {
 				const replies = await ctx.repliesIO.loadDirectReplies(parent);
@@ -14754,7 +14764,7 @@
 		const { items, initialIndex } = imageSet;
 		if (!items.length) return;
 		const siteSettings = lookupDiscourse('service:site-settings');
-		const minimumCommentLength = Math.max(1, +(siteSettings && siteSettings.min_post_length) || 16);
+		const minimumCommentLength = Math.max(1, +(siteSettings?.min_post_length) || 16);
 		const lb = makeElement('div');
 		const lightboxScope = createLifecycleScope();
 		lb.className = 'ldp-lightbox';
@@ -14864,12 +14874,12 @@
 		const nextBtn = lb.querySelector('.ldp-lb-next');
 		const filmstrip = lb.querySelector('.ldp-lb-filmstrip');
 		const thumbsEl = lb.querySelector('.ldp-lb-thumbs');
-		let thumbs = Array.from(lb.querySelectorAll('.ldp-lb-thumb'));
+		let thumbs = [...lb.querySelectorAll('.ldp-lb-thumb')];
 		const progress = lb.querySelector('.ldp-lb-strip-progress > span');
 		const batchOverlay = lb.querySelector('.ldp-lb-batch-overlay');
 		const batchCloseButtons = lb.querySelectorAll('.ldp-lb-batch-close,.ldp-lb-batch-cancel');
 		const batchNameInput = lb.querySelector('.ldp-lb-batch-name input');
-		const batchScopeButtons = Array.from(lb.querySelectorAll('[data-lb-batch-scope]'));
+		const batchScopeButtons = [...lb.querySelectorAll('[data-lb-batch-scope]')];
 		const batchSelectAll = lb.querySelector('.ldp-lb-batch-select-all');
 		const batchCount = lb.querySelector('.ldp-lb-batch-count');
 		const batchGrid = lb.querySelector('.ldp-lb-batch-grid');
@@ -14900,17 +14910,17 @@
 		let commentRequestToken = 0;
 		let commentTargetPost = null;
 		let commentsManuallyToggled = false;
-		const initialPostNumber = +(items[initialIndex] && items[initialIndex].postNumber) || 0;
+		const initialPostNumber = +(items[initialIndex]?.postNumber) || 0;
 		let exploringPrevious = false;
 		let exploringNext = false;
 		let jumpingToPost = false;
 		let backwardScanPostNumber = initialPostNumber;
 		let forwardScanPostNumber = initialPostNumber;
 		let backwardExhausted = fixedItems || !initialPostNumber ||
-			!(ctx && ctx.loader && typeof ctx.loader.loadBeforePost === 'function') ||
+			!(ctx?.loader && isFunction(ctx.loader.loadBeforePost)) ||
 			initialPostNumber <= 1;
 		let forwardExhausted = fixedItems || !initialPostNumber ||
-			!(ctx && ctx.loader && typeof ctx.loader.loadAfterPost === 'function');
+			!(ctx?.loader && isFunction(ctx.loader.loadAfterPost));
 		let lightboxClosed = false;
 		const commentsExpandedByDefault = commentsEnabled && PREFS.lightboxCommentsExpandedByDefault === true;
 		lb.classList.toggle('ldp-lb-comments-collapsed', !commentsExpandedByDefault);
@@ -14952,8 +14962,8 @@
 		applyCommentsWidth(commentsWidthPercent);
 		const totalPostNumber = () => Math.max(
 			0,
-			+(ctx && ctx.totalPosts || 0),
-			+(ctx && ctx.topicData && ctx.topicData.highest_post_number || 0)
+			+(ctx?.totalPosts || 0),
+			+(ctx?.topicData && ctx.topicData.highest_post_number || 0)
 		);
 		if (initialPostNumber && totalPostNumber() && initialPostNumber >= totalPostNumber()) {
 			forwardExhausted = true;
@@ -14978,7 +14988,7 @@
 			});
 		};
 		const updateJumpToPostState = () => {
-			const postNumber = +(items[currentIndex] && items[currentIndex].postNumber) || 0;
+			const postNumber = +(items[currentIndex]?.postNumber) || 0;
 			jumpToPostBtn.disabled = jumpingToPost || !postNumber;
 			jumpToPostBtn.setAttribute('aria-busy', String(jumpingToPost));
 			setLabel(jumpToPostBtn, '跳到楼层');
@@ -14988,14 +14998,14 @@
 			thumbsEl.innerHTML = items.map((item, index) => {
 				return `<button class="ldp-lb-thumb" type="button" role="option" data-lb-index="${index}" aria-label="${escAttr(item.alt || `查看第 ${index + 1} 张图片`)}"><img src="${escAttr(item.thumbSrc)}" alt="" decoding="async"></button>`;
 			}).join('');
-			thumbs = Array.from(thumbsEl.querySelectorAll('.ldp-lb-thumb'));
+			thumbs = [...thumbsEl.querySelectorAll('.ldp-lb-thumb')];
 			if (!batchOverlay.hidden) renderBatchSelection();
 		};
 		const batchScopeItems = () => batchScope === 'all'
 			? items
 			: items.filter((item) => batchLoadedScopeKeys.has(item.key));
 		const batchCanLoadMore = () => batchScope === 'loaded' && !fixedItems && !batchLoadedScopeExhausted &&
-			ctx && ctx.loader && typeof ctx.loader.loadAfterPost === 'function';
+			ctx && ctx.loader && isFunction(ctx.loader.loadAfterPost);
 		const syncBatchScopeControls = () => {
 			batchScopeButtons.forEach((button) => {
 				const active = button.dataset.lbBatchScope === batchScope;
@@ -15029,7 +15039,7 @@
 		const createBatchThumbnail = async (item) => {
 			const persistentKey = batchThumbnailPersistentKey(item);
 			const blob = await fetchLightboxDownloadBlob(item.thumbSrc || item.originalSrc, POST_REQUEST_PRIORITY.background);
-			if (typeof globalThis.createImageBitmap !== 'function') return URL.createObjectURL(blob);
+			if (!isFunction(globalThis.createImageBitmap)) return URL.createObjectURL(blob);
 			let bitmap;
 			try {
 				bitmap = await globalThis.createImageBitmap(blob, { resizeWidth: 240, resizeQuality: 'low' });
@@ -15053,7 +15063,7 @@
 			const thumbnailBlob = await new Promise((resolve) => {
 				canvas.toBlob(resolve, 'image/webp', 0.78);
 			});
-			const result = thumbnailBlob && thumbnailBlob.size ? thumbnailBlob : blob;
+			const result = thumbnailBlob?.size ? thumbnailBlob : blob;
 			if (persistentKey && result === thumbnailBlob) await persistLightboxBlob(persistentKey, result, 'image/webp');
 			return URL.createObjectURL(result);
 		};
@@ -15120,7 +15130,7 @@
 		const observeBatchThumbnails = () => {
 			if (batchThumbnailObserver) batchThumbnailObserver.disconnect();
 			const images = batchGrid.querySelectorAll('[data-ldp-batch-thumb-key]');
-			if (typeof IntersectionObserver !== 'function') {
+			if (!isFunction(IntersectionObserver)) {
 				images.forEach((image) => loadBatchThumbnail(image, items[+image.dataset.ldpBatchIndex]));
 				return;
 			}
@@ -15146,10 +15156,10 @@
 				const cachedThumbnail = batchThumbnailUrls.get(item.key);
 				const immediateThumbnail = cachedThumbnail || item.thumbSrc || item.originalSrc;
 				return `<label class="ldp-lb-batch-item${selected ? ' selected' : ''}" data-lb-batch-index="${itemIndex}">
-          <input type="checkbox" aria-label="选择${escAttr(label)}"${selected ? ' checked' : ''}>
-          <img${immediateThumbnail ? ` src="${escAttr(immediateThumbnail)}" data-ldp-batch-thumb-fallback="${escAttr(immediateThumbnail)}"` : ''} data-ldp-batch-thumb-key="${escAttr(item.key)}" data-ldp-batch-index="${itemIndex}" data-ldp-batch-thumb-state="loading" alt="" decoding="async">
-          <span>${esc(label)}</span>
-        </label>`;
+					<input type="checkbox" aria-label="选择${escAttr(label)}"${selected ? ' checked' : ''}>
+					<img${immediateThumbnail ? ` src="${escAttr(immediateThumbnail)}" data-ldp-batch-thumb-fallback="${escAttr(immediateThumbnail)}"` : ''} data-ldp-batch-thumb-key="${escAttr(item.key)}" data-ldp-batch-index="${itemIndex}" data-ldp-batch-thumb-state="loading" alt="" decoding="async">
+					<span>${esc(label)}</span>
+				</label>`;
 			}).join('');
 			const moreMarkup = batchCanLoadMore()
 				? `<button class="ldp-lb-batch-more" type="button"${batchBusy ? ' disabled' : ''}>${icon('plus')}<span>${batchBusy ? '正在加载…' : '加载更多图片'}</span></button>`
@@ -15199,7 +15209,7 @@
 			batchLoadedScopeExhausted = Boolean(totalPostNumber() && batchLoadedForwardPostNumber >= totalPostNumber());
 			batchNameInput.value = '';
 			const title = safeDownloadFilename(
-				ctx && ctx.topicData && ctx.topicData.title || document.title || '帖子图片',
+				ctx?.topicData && ctx.topicData.title || document.title || '帖子图片',
 				'帖子图片'
 			);
 			batchNameInput.placeholder = `${title}_${lightboxDownloadTimestamp()}.zip`;
@@ -15218,7 +15228,7 @@
 		const closeBatchDownload = () => {
 			if (batchBusy) return;
 			const imageViewer = readerPortalQuery('.ldp-avatar-viewer.is-image');
-			if (imageViewer && typeof imageViewer._ldpClose === 'function') imageViewer._ldpClose();
+			if (isFunction(imageViewer?._ldpClose)) imageViewer._ldpClose();
 			batchOverlay.hidden = true;
 			batchSelection.clear();
 		};
@@ -15238,16 +15248,16 @@
 			commentError.textContent = '';
 		};
 		const renderCommentSource = (item, sourcePost = null) => {
-			const post = sourcePost || item && item.sourcePost || null;
-			const postNumber = +(item && item.postNumber || post && post.post_number || 0);
+			const post = sourcePost || item?.sourcePost || null;
+			const postNumber = +(item?.postNumber || post?.post_number || 0);
 			commentsSource.hidden = !postNumber;
 			commentsDescriptionToggle.hidden = !postNumber;
 			commentsSourceText.textContent = lightboxSourceDescription(post, item);
 			commentsSourceReactions.hidden = true;
 			commentsSourceReactions._ldpPostData = post;
-			commentsSourceReactions.dataset.postId = String(post && post.id || '');
+			commentsSourceReactions.dataset.postId = String(post?.id || '');
 			commentsSourceReactions.dataset.postNumber = String(postNumber || '');
-			if (post && post.id) {
+			if (post?.id) {
 				renderPostReactions(commentsSourceReactions, ctx);
 				commentsSourceReactions.hidden = !commentsSourceReactions.classList.contains('ldp-has-reactions');
 			}
@@ -15299,7 +15309,7 @@
 			const visit = (postNumber) => {
 				const children = state.childrenByParent.get(+postNumber) || [];
 				children.forEach((child) => {
-					const childNumber = +(child && child.post_number || 0);
+					const childNumber = +(child?.post_number || 0);
 					if (!childNumber || visited.has(childNumber)) return;
 					visited.add(childNumber);
 					descendants.push(child);
@@ -15310,19 +15320,19 @@
 			return descendants;
 		};
 		const renderCommentState = (state, item) => {
-			const count = state && state.postsByNumber ? state.postsByNumber.size : 0;
+			const count = state?.postsByNumber ? state.postsByNumber.size : 0;
 			commentsToggleCount.textContent = String(count);
 			commentsHeadingCount.textContent = `（${count}）`;
-			renderCommentSource(item, state && state.sourcePost);
+			renderCommentSource(item, state?.sourcePost);
 			commentsList.replaceChildren();
 			commentsStatus.hidden = true;
 			commentsEmpty.hidden = count > 0;
 			if (!count) {
-				commentsEmpty.querySelector('span').textContent = state && state.partial
+				commentsEmpty.querySelector('span').textContent = state?.partial
 					? '暂未找到评论，部分结果加载失败'
 					: '还没有人评论这张图片';
 			}
-			(state && state.roots || []).forEach((rootPost) => {
+			(state?.roots || []).forEach((rootPost) => {
 				const thread = makeElement('section');
 				thread.className = 'ldp-lb-comment-thread';
 				const rootWrap = makeElement('div');
@@ -15343,7 +15353,7 @@
 				}
 				commentsList.append(thread);
 			});
-			if (state && state.partial && count > 0) {
+			if (state?.partial && count > 0) {
 				commentsStatus.hidden = false;
 				commentsStatus.textContent = '部分关联回复暂未加载';
 			}
@@ -15357,8 +15367,8 @@
 				post_number: item.postNumber,
 				username: item.username,
 			};
-			const username = cleanUsernameValue(commentTargetPost && commentTargetPost.username);
-			const targetNumber = +(commentTargetPost && commentTargetPost.post_number || item.postNumber || 0);
+			const username = cleanUsernameValue(commentTargetPost?.username);
+			const targetNumber = +(commentTargetPost?.post_number || item.postNumber || 0);
 			commentForm.dataset.rootComment = rootComment ? '1' : '0';
 			commentTargetLabel.textContent = rootComment
 				? `${username ? `评论 @${username}` : '评论'} 的图片（回复 #${targetNumber}）`
@@ -15407,8 +15417,8 @@
 			}
 		};
 		const toggleLightboxCommentLike = async (button, postNode) => {
-			const postData = postNode && postNode._ldpPostData;
-			const postId = +(postData && postData.id || postNode && postNode.dataset.postId || 0);
+			const postData = postNode?._ldpPostData;
+			const postId = +(postData?.id || postNode && postNode.dataset.postId || 0);
 			if (!postId || !postData || button.disabled) return;
 			await runReaderActionOnce(ctx, `post:${postId}:like`, async () => {
 				await toggleReaderPostLike(postId, ctx, button, {
@@ -15435,9 +15445,9 @@
 			picker.style.left = `${Math.round(shift)}px`;
 		};
 		const setLightboxReactionPickerExpanded = (postNode, expanded) => {
-			const root = postNode && postNode.querySelector(':scope > .ldp-reactions');
-			const trigger = root && root.querySelector('[data-reaction-picker]');
-			const picker = root && root.querySelector('.ldp-reaction-picker');
+			const root = postNode?.querySelector(':scope > .ldp-reactions');
+			const trigger = root?.querySelector('[data-reaction-picker]');
+			const picker = root?.querySelector('.ldp-reaction-picker');
 			if (!trigger || !picker) return;
 			picker.hidden = !expanded;
 			if (expanded) requestAnimationFrame(() => positionLightboxReactionPicker(picker));
@@ -15445,8 +15455,8 @@
 			refreshTooltips(trigger);
 		};
 		const toggleLightboxReactionPicker = async (postNode) => {
-			const currentPicker = postNode && postNode.querySelector(':scope > .ldp-reactions .ldp-reaction-picker');
-			const shouldOpen = !!(currentPicker && currentPicker.hidden);
+			const currentPicker = postNode?.querySelector(':scope > .ldp-reactions .ldp-reaction-picker');
+			const shouldOpen = !!(currentPicker?.hidden);
 			if (shouldOpen && !reactionEmojiUrls) {
 				await loadReactionEmojiRegistry();
 				renderPostReactions(postNode, ctx);
@@ -15454,22 +15464,22 @@
 			setLightboxReactionPickerExpanded(postNode, shouldOpen);
 		};
 		const toggleLightboxReaction = async (button, postNode) => {
-			const postData = postNode && postNode._ldpPostData;
-			const postId = +(postData && postData.id || postNode && postNode.dataset.postId || 0);
+			const postData = postNode?._ldpPostData;
+			const postId = +(postData?.id || postNode && postNode.dataset.postId || 0);
 			const reaction = String(button && button.dataset.reaction || '');
 			if (!postId || !reaction) return;
 			const item = items[currentIndex];
 			await toggleReaderPostReaction(postNode, ctx, reaction, (fresh) => {
 				postNode._ldpPostData = Object.assign({}, postData, fresh);
 				const state = commentCache.get(item.key);
-				const cachedPost = state && state.postsByNumber.get(+(postData && postData.post_number || 0));
+				const cachedPost = state && state.postsByNumber.get(+(postData?.post_number || 0));
 				if (cachedPost && +cachedPost.id === postId) Object.assign(cachedPost, fresh);
 				if (item.sourcePost && +item.sourcePost.id === postId) Object.assign(item.sourcePost, fresh);
 				renderPostReactions(postNode, ctx);
 			}, (error) => showSelectionToast(`回应失败：${error.message}`));
 		};
 		const jumpToLightboxComment = async (post) => {
-			const postNumber = +(post && post.post_number || 0);
+			const postNumber = +(post?.post_number || 0);
 			if (!postNumber || lightboxClosed) return;
 			try {
 				const acceptsWork = () => !lightboxClosed;
@@ -15487,9 +15497,9 @@
 			if (commentForm.getAttribute('aria-busy') === 'true') return;
 			const item = items[currentIndex];
 			const targetPost = commentTargetPost;
-			const targetPostNumber = +(targetPost && targetPost.post_number || 0);
+			const targetPostNumber = +(targetPost?.post_number || 0);
 			const message = String(commentInput.value || '').trim();
-			const messageLength = Array.from(message).length;
+			const messageLength = [...message].length;
 			const includeImage = commentForm.dataset.rootComment === '1' || commentImageCheckbox.checked;
 			const quoteRaw = includeImage ? lightboxImageQuoteRaw(item, ctx) : '';
 			if (!message || !targetPostNumber || includeImage && !quoteRaw) {
@@ -15508,19 +15518,19 @@
 					raw: `${quoteRaw}${message}`,
 					reply_to_post_number: targetPostNumber,
 				}, null, { priority: POST_REQUEST_PRIORITY.visible });
-				const created = postsFromPayload(payload)[0] || payload && payload.post || payload;
+				const created = postsFromPayload(payload)[0] || payload?.post || payload;
 				if (!created || !created.id || !created.post_number) throw new Error('服务器未返回新楼层');
 				if (!created.reply_to_post_number) created.reply_to_post_number = targetPostNumber;
 				if (!created.topic_id) created.topic_id = +ctx.topicId;
 				if (includeImage) {
-					created._ldpImageReferenceKeys = Array.from(new Set([
+					created._ldpImageReferenceKeys = [...new Set([
 						...(Array.isArray(created._ldpImageReferenceKeys) ? created._ldpImageReferenceKeys : []),
 						item.key,
-					]));
+					])];
 				}
 				if (!ctx.lightboxImageCommentPosts) ctx.lightboxImageCommentPosts = new Map();
 				ctx.lightboxImageCommentPosts.set(+created.post_number, created);
-				if (targetPost && targetPost.id) {
+				if (targetPost?.id) {
 					targetPost.reply_count = Math.max(0, +(targetPost.reply_count || 0)) + 1;
 					persistReaderPostState(ctx, targetPost);
 				}
@@ -15584,7 +15594,7 @@
 			const floor = event.target.closest('.ldp-lb-floor-jump');
 			if (floor) {
 				event.preventDefault();
-				const targetNumber = +(floor.dataset.targetPostNumber || postData && postData.post_number || 0);
+				const targetNumber = +(floor.dataset.targetPostNumber || postData?.post_number || 0);
 				const state = commentCache.get(items[currentIndex].key);
 				const targetPost = state && state.postsByNumber.get(targetNumber) || knownLightboxPosts(ctx).get(targetNumber);
 				if (targetPost) void jumpToLightboxComment(targetPost);
@@ -15695,17 +15705,17 @@
 		};
 		const adjacentItemIsScanned = (direction) => {
 			const item = items[currentIndex + direction];
-			const postNumber = +(item && item.postNumber) || 0;
+			const postNumber = +(item?.postNumber) || 0;
 			if (!postNumber) return false;
 			return direction < 0
 				? postNumber >= backwardScanPostNumber
 				: postNumber <= forwardScanPostNumber;
 		};
 		const mergeScannedLightboxItems = (posts) => {
-			const currentKey = items[currentIndex] && items[currentIndex].key;
+			const currentKey = items[currentIndex]?.key;
 			let added = false;
 			posts.forEach((post) => {
-				lightboxItemsFromPost(post, ctx && ctx.topicId).forEach((item) => {
+				lightboxItemsFromPost(post, ctx?.topicId).forEach((item) => {
 					if (seenImageKeys.has(item.key)) return;
 					seenImageKeys.add(item.key);
 					items.push(item);
@@ -15739,7 +15749,7 @@
 				);
 				const discoveredKeys = new Set();
 				posts.forEach((post) => {
-					lightboxItemsFromPost(post, ctx && ctx.topicId).forEach((item) => discoveredKeys.add(item.key));
+					lightboxItemsFromPost(post, ctx?.topicId).forEach((item) => discoveredKeys.add(item.key));
 				});
 				mergeScannedLightboxItems(posts);
 				discoveredKeys.forEach((key) => {
@@ -15759,11 +15769,11 @@
 		};
 		const scanAllTopicImages = async () => {
 			if (batchBusy || batchAllImagesLoaded || fixedItems || lightboxClosed) return;
-			const topic = ctx && ctx.loader && ctx.loader.topic || ctx && ctx.topicData;
-			const stream = topic && topic.post_stream && Array.isArray(topic.post_stream.stream)
+			const topic = ctx?.loader && ctx.loader.topic || ctx?.topicData;
+			const stream = topic?.post_stream && Array.isArray(topic.post_stream.stream)
 				? topic.post_stream.stream.filter(Boolean)
 				: [];
-			if (!stream.length || !ctx || !ctx.loader || typeof ctx.loader.loadPostsByIds !== 'function') {
+			if (!stream.length || !ctx || !ctx.loader || !isFunction(ctx.loader.loadPostsByIds)) {
 				batchStatus.textContent = '未找到完整楼层列表，暂时只能使用当前加载的图片';
 				return;
 			}
@@ -15952,7 +15962,7 @@
 			const existing = batchThumbnailUrls.get(item.key);
 			if (existing) return existing;
 			const itemNode = batchGrid.querySelector(`[data-lb-batch-index="${itemIndex}"]`);
-			const thumbnailImage = itemNode && itemNode.querySelector('img');
+			const thumbnailImage = itemNode?.querySelector('img');
 			const displayed = thumbnailImage && (thumbnailImage.currentSrc || thumbnailImage.src);
 			if (displayed) return displayed;
 			const persistentKey = batchThumbnailPersistentKey(item);
@@ -15985,7 +15995,7 @@
 			if (selected) batchSelection.add(item.key);
 			else batchSelection.delete(item.key);
 			const card = itemNode || batchGrid.querySelector(`[data-lb-batch-index="${itemIndex}"]`);
-			const input = card && card.querySelector('input[type="checkbox"]');
+			const input = card?.querySelector('input[type="checkbox"]');
 			if (input) input.checked = selected;
 			if (card) card.classList.toggle('selected', selected);
 			syncBatchSelectionControls();
@@ -16027,8 +16037,8 @@
 		};
 		const jumpToCurrentPost = async () => {
 			const currentItem = items[currentIndex];
-			const postNumber = +(currentItem && currentItem.postNumber) || 0;
-			const topicId = +(currentItem && currentItem.topicId) || +(ctx && ctx.topicId) || 0;
+			const postNumber = +(currentItem?.postNumber) || 0;
+			const topicId = +(currentItem?.topicId) || +(ctx?.topicId) || 0;
 			if (!postNumber || jumpingToPost || lightboxClosed) return;
 			if (topicId && ctx && topicId !== +ctx.topicId) {
 				close();
@@ -16038,7 +16048,7 @@
 			jumpingToPost = true;
 			updateJumpToPostState();
 			try {
-				const jumped = !!(ctx && ctx.timeline) && await ctx.timeline.jumpTo(postNumber, {
+				const jumped = !!(ctx?.timeline) && await ctx.timeline.jumpTo(postNumber, {
 					acceptsWork: () => !lightboxClosed,
 				});
 				if (lightboxClosed) return;
@@ -16069,7 +16079,7 @@
 			lightboxScope.destroy();
 		};
 		let descriptionHeightSaveTimer = 0;
-		const descriptionResizeObserver = typeof ResizeObserver === 'function'
+		const descriptionResizeObserver = isFunction(ResizeObserver)
 			? new ResizeObserver(() => {
 					if (!commentsSource.open || commentsSource.hidden || lightboxClosed) return;
 					clearTimeout(descriptionHeightSaveTimer);
@@ -16129,7 +16139,7 @@
 		function onKey(e) {
 			if (!lb.isConnected) return;
 			const imageViewer = readerPortalQuery('.ldp-avatar-viewer');
-			if (imageViewer && imageViewer.isConnected) return;
+			if (imageViewer?.isConnected) return;
 			if (e.key === 'Escape') {
 				if (!batchOverlay.hidden) {
 					if (!batchBusy) closeBatchDownload();
@@ -16144,7 +16154,7 @@
 				return;
 			}
 			if (!batchOverlay.hidden) return;
-			if (e.target && e.target.closest && e.target.closest('textarea,input,select,[contenteditable="true"]')) return;
+			if (e.target?.closest && e.target.closest('textarea,input,select,[contenteditable="true"]')) return;
 			if (e.key === 'ArrowLeft') {
 				e.preventDefault();
 				move(-1);
@@ -16221,7 +16231,7 @@
 		}, { passive: false });
 		batchGrid.addEventListener('change', (event) => {
 			const input = event.target.closest('input[type="checkbox"]');
-			const itemNode = input && input.closest('[data-lb-batch-index]');
+			const itemNode = input?.closest('[data-lb-batch-index]');
 			const itemIndex = itemNode && +itemNode.dataset.lbBatchIndex;
 			const item = itemNode && items[itemIndex];
 			if (!item || batchBusy) return;
@@ -16235,7 +16245,7 @@
 				return;
 			}
 			const image = event.target.closest('.ldp-lb-batch-item img');
-			const itemNode = image && image.closest('[data-lb-batch-index]');
+			const itemNode = image?.closest('[data-lb-batch-index]');
 			const itemIndex = itemNode ? +itemNode.dataset.lbBatchIndex : -1;
 			const item = itemIndex >= 0 ? items[itemIndex] : null;
 			if (!item || batchBusy) return;
@@ -16274,7 +16284,7 @@
 
 	function resolveOriginalSrc(imgEl) {
 		const a = imgEl.closest('a.lightbox, a[href]');
-		if (a && a.getAttribute('href')) {
+		if (a?.getAttribute('href')) {
 			const href = a.getAttribute('href');
 			if (/\.(png|jpe?g|gif|webp|bmp|avif)(\?|#|$)/i.test(href) || a.classList.contains('lightbox')) {
 				return href;
@@ -16297,7 +16307,7 @@
 		let readChallengeAttempted = false;
 
 		const notifyReadConfirmed = (postNumbers) => {
-			if (typeof onReadConfirmed !== 'function') return;
+			if (!isFunction(onReadConfirmed)) return;
 			try {
 				onReadConfirmed(postNumbers);
 			} catch (error) {
@@ -16346,7 +16356,7 @@
 			if (flushRunning) return false;
 			if (initialReadRetryAt > Date.now()) return false;
 			if (options.force !== true && readFlushDueAt > Date.now()) return false;
-			const requestState = requestScheduler && requestScheduler.snapshot();
+			const requestState = requestScheduler?.snapshot();
 			if (options.force !== true && requestState && (
 				requestState.active > 0 || requestState.queued > 0 || requestState.coolingDown
 			)) return false;
@@ -16400,16 +16410,16 @@
 			} catch (e) {
 				initialReadFlushPending = initialReadFlushPending || retryInitialReadFlush;
 				if (initialReadFlushPending) {
-					initialReadRetryAt = Date.now() + (e && e.cloudflareMitigated ? 5 * 60 * 1000 : FLUSH_INTERVAL);
+					initialReadRetryAt = Date.now() + (e?.cloudflareMitigated ? 5 * 60 * 1000 : FLUSH_INTERVAL);
 				}
 				Object.keys(params).forEach((k) => {
 					const m = k.match(/^timings\[(\d+)\]$/);
 					if (m) reported.set(+m[1], (reported.get(+m[1]) || 0) - params[k]);
 				});
-				if (e && e.cloudflareMitigated && !readChallengeAttempted) {
+				if (e?.cloudflareMitigated && !readChallengeAttempted) {
 					readChallengeAttempted = true;
 					challengeRecovery = {
-						params: Object.assign({}, params),
+						params: { ...params },
 						postNumbers: submittedPostNumbers.slice(),
 					};
 				}
@@ -16471,7 +16481,7 @@
 				if (!node) return;
 				observedNodes.add(node);
 				io.observe(node);
-				const postNumber = +(node.dataset && node.dataset.postNumber || 0);
+				const postNumber = +(node.dataset?.postNumber || 0);
 				if (postNumber && !dwell.has(postNumber)) {
 					dwell.set(postNumber, READ_THRESHOLD);
 					if (!initialReadFlushPending) readFlushDueAt = Date.now() + FLUSH_INTERVAL;
@@ -16486,7 +16496,7 @@
 				io.unobserve(node);
 			},
 			runWhenVisible(node, callback) {
-				if (!node || typeof callback !== 'function') return false;
+				if (!node || !isFunction(callback)) return false;
 				if (viewportNodes.has(node) || readerPostNodeInViewport(node, scrollRoot)) {
 					callback();
 					return true;
@@ -16551,7 +16561,7 @@
 
 		const growOnlyOpBatch = () => {
 			let requestState = null;
-			try { requestState = requestScheduler && requestScheduler.snapshot(); } catch (error) {}
+			try { requestState = requestScheduler?.snapshot(); } catch (error) {}
 			const shortPressure = requestState
 				? Number(requestState.shortWindowCount || 0) / Math.max(1, Number(requestState.shortWindowBudget) || 1)
 				: 0;
@@ -16571,7 +16581,7 @@
 		};
 
 		const adjustOnlyOpBatchAfterError = (error) => {
-			const status = Number(error && error.status || 0);
+			const status = Number(error?.status || 0);
 			if (status === 408 || status === 429 || status >= 500) {
 				onlyOpPageSize = PERFORMANCE_LIMITS.pageSize.max;
 				return;
@@ -16605,7 +16615,7 @@
 			const current = Array.isArray(topicData.post_stream.posts) ? topicData.post_stream.posts : [];
 			const indexesById = new Map();
 			current.forEach((post, index) => {
-				if (post && post.id) indexesById.set(post.id, index);
+				if (post?.id) indexesById.set(post.id, index);
 			});
 			let changed = false;
 			posts.forEach((post) => {
@@ -16629,7 +16639,7 @@
 		const persistFetchedPosts = (posts) => {
 			if (!Array.isArray(posts) || !posts.length) return;
 			const entry = TOPIC_DATA_CACHE.get(String(topicId));
-			const persistedTopic = (entry && entry.topic) || topic;
+			const persistedTopic = (entry?.topic) || topic;
 			if (!persistedTopic) return;
 			const changed = appendMissingTopicPosts(persistedTopic, posts);
 			if (topic && topic !== persistedTopic) appendMissingTopicPosts(topic, posts);
@@ -16637,21 +16647,21 @@
 		};
 
 		const persistViewedPostNumbers = (postNumbers) => {
-			const posts = Array.from(new Set((postNumbers || []).map(Number).filter(Boolean)))
+			const posts = [...new Set((postNumbers || []).map(Number).filter(Boolean))]
 				.map((postNumber) => postByNumber.get(postNumber))
 				.filter(Boolean);
 			persistFetchedPosts(posts);
 		};
 
 		function normalizeTopicData(data) {
-			const posts = Array.isArray(data.post_stream && data.post_stream.posts) ? data.post_stream.posts : [];
-			const op = (data.details && data.details.created_by && data.details.created_by.username)
+			const posts = Array.isArray(data.post_stream?.posts) ? data.post_stream.posts : [];
+			const op = (data.details?.created_by && data.details.created_by.username)
 					|| (posts.find((p) => p.post_number === 1) || {}).username
 					|| null;
 			data._opUsername = op;
 			return {
 				posts,
-				stream: (data.post_stream && data.post_stream.stream) || posts.map((p) => p.id).filter(Boolean),
+				stream: (data.post_stream?.stream) || posts.map((p) => p.id).filter(Boolean),
 			};
 		}
 
@@ -16702,8 +16712,8 @@
 								: POST_REQUEST_PRIORITY.topic,
 					});
 					const entry = TOPIC_DATA_CACHE.get(String(topicId));
-					const previousTopic = (entry && entry.topic) || topic;
-					if (previousTopic && previousTopic.post_stream) {
+					const previousTopic = (entry?.topic) || topic;
+					if (previousTopic?.post_stream) {
 						appendMissingTopicPosts(data, previousTopic.post_stream.posts);
 					}
 					normalizeTopicData(data);
@@ -16770,12 +16780,12 @@
 				if (!opUsername) return posts;
 				const matches = [];
 				posts.forEach((post) => {
-					if (String(post && post.username || '') === opUsername) {
+					if (String(post?.username || '') === opUsername) {
 						matches.push(post);
 						return;
 					}
-					if (post && post.id && cache.get(post.id) === post) cache.delete(post.id);
-					const postNumber = +(post && post.post_number || 0);
+					if (post?.id && cache.get(post.id) === post) cache.delete(post.id);
+					const postNumber = +(post?.post_number || 0);
 					if (postNumber && postByNumber.get(postNumber) === post) postByNumber.delete(postNumber);
 				});
 				if (matches.length) persistFetchedPosts(matches);
@@ -16789,7 +16799,7 @@
 				return { posts, done };
 			};
 			let missing = slice.filter((id) => !cache.has(id));
-			if (typeof options.onSource === 'function') {
+			if (isFunction(options.onSource)) {
 				options.onSource(missing.length ? 'network' : 'cache', {
 					cachedCount: slice.length - missing.length,
 					missingCount: missing.length,
@@ -16837,14 +16847,14 @@
 			const missing = ids.filter((id) => !cache.has(id));
 			const unclaimed = missing.filter((id) => !pendingPostRequests.has(id));
 			if (unclaimed.length) {
-				const requestIds = Array.from(new Set(unclaimed));
+				const requestIds = [...new Set(unclaimed)];
 				const requestKey = requestIds.slice().sort((a, b) => String(a).localeCompare(String(b))).join(',');
 				const qs = requestIds.map((id) => `post_ids[]=${id}`).join('&');
 				const request = fetchLoaderJSON(`${BASE}/t/${topicId}/posts.json?${qs}`, {
 					key: `posts:${topicId}:${requestKey}`,
 					priority,
 				}).then((part) => {
-					cachePosts(part && part.post_stream && part.post_stream.posts);
+					cachePosts(part?.post_stream && part.post_stream.posts);
 				}).finally(() => {
 					requestIds.forEach((id) => {
 						if (pendingPostRequests.get(id) === request) pendingPostRequests.delete(id);
@@ -16852,15 +16862,15 @@
 				});
 				requestIds.forEach((id) => pendingPostRequests.set(id, request));
 			}
-			const requests = Array.from(new Set(
+			const requests = [...new Set(
 				missing.map((id) => pendingPostRequests.get(id)).filter(Boolean)
-			));
+			)];
 			if (requests.length) await Promise.all(requests);
 			if (shouldPersist) persistFetchedPosts(missing.map((id) => cache.get(id)).filter(Boolean));
 		}
 
 		async function loadPostsByIds(ids, options = {}) {
-			const requestedIds = Array.from(new Set((ids || []).filter(Boolean)));
+			const requestedIds = [...new Set((ids || []).filter(Boolean))];
 			let missing = requestedIds.filter((id) => !cache.has(id));
 			let lastError = null;
 			const priority = Number.isFinite(options.priority) ? options.priority : POST_REQUEST_PRIORITY.visible;
@@ -16871,7 +16881,7 @@
 					lastError = null;
 				} catch (error) {
 					lastError = error;
-					const status = Number(error && error.status || 0);
+					const status = Number(error?.status || 0);
 					const splitDepth = Math.max(0, Number(options.clientSplitDepth) || 0);
 					const canSplitClientError = [400, 404, 413, 414, 422].includes(status) &&
 						missing.length > 1 && splitDepth < 1;
@@ -16883,10 +16893,10 @@
 							loadPostsByIds(missing.slice(middle), splitOptions),
 						]);
 						const authFailure = results.find((result) => result.status === 'rejected' &&
-							[401, 403].includes(Number(result.reason && result.reason.status || 0)));
+							[401, 403].includes(Number(result.reason?.status || 0)));
 						if (authFailure) throw authFailure.reason;
 						const transientFailure = results.find((result) => result.status === 'rejected' && (
-							!Number(result.reason && result.reason.status || 0) || shouldStopReaderFallback(result.reason)
+							!Number(result.reason?.status || 0) || shouldStopReaderFallback(result.reason)
 						));
 						if (transientFailure) throw transientFailure.reason;
 						lastError = null;
@@ -16957,13 +16967,13 @@
 			const priority = Number.isFinite(options.priority) ? options.priority : POST_REQUEST_PRIORITY.scroll;
 			const cached = around || forceRefresh ? null : postByNumber.get(target);
 			if (cached) {
-				if (typeof options.onSource === 'function') options.onSource('cache');
+				if (isFunction(options.onSource)) options.onSource('cache');
 				if (shouldAdvance) advanceCursorPast([cached], target);
 				return [cached];
 			}
-			if (typeof options.onSource === 'function') options.onSource('network');
+			if (isFunction(options.onSource)) options.onSource('network');
 			if (!around) {
-				const highestPostNumber = Math.max(0, Number(topic && topic.highest_post_number) || 0);
+				const highestPostNumber = Math.max(0, Number(topic?.highest_post_number) || 0);
 				const id = (!highestPostNumber || highestPostNumber === stream.length) ? stream[target - 1] : null;
 				const posts = id && !forceRefresh ? await loadPostsByIds([id], { priority }) : [];
 				const hit = posts.find((post) => +post.post_number === target);
@@ -16972,7 +16982,7 @@
 					return [hit];
 				}
 			}
-			const slug = encodeURIComponent((topic && topic.slug) || 'topic');
+			const slug = encodeURIComponent((topic?.slug) || 'topic');
 			const urls = around
 				? [
 						`${BASE}/t/${slug}/${topicId}/${target}.json`,
@@ -16994,7 +17004,7 @@
 						fetchOptions: forceRefresh ? { cache: 'no-store' } : {},
 						cacheMode: forceRefresh ? 'refresh' : 'default',
 					});
-					const fetched = postsFromPayload(payload).filter((p) => p && p.id && p.post_number);
+					const fetched = postsFromPayload(payload).filter((p) => p?.id && p.post_number);
 					cachePosts(fetched);
 					const found = fetched.find((p) => +p.post_number === target);
 					if (found) {
@@ -17003,7 +17013,7 @@
 					}
 					if (around && fetched.length && !fallbackPosts.length) fallbackPosts = fetched;
 				} catch (error) {
-					const status = Number(error && error.status || 0);
+					const status = Number(error?.status || 0);
 					if (!around && (status === 404 || status === 410) && url.includes('/posts/by_number/')) {
 						unavailablePostNumbers.add(target);
 						return [];
@@ -17051,7 +17061,7 @@
 				refreshRequest = null;
 			},
 			get topic() { return topic; },
-			get cachedPosts() { return Array.from(cache.values()); },
+			get cachedPosts() { return [...cache.values()]; },
 			get initializedFromCache() { return initializedFromCache; },
 			get loadDone() { return cursor >= stream.length; },
 			get scanDone() { return onlyOpCursor >= stream.length; },
@@ -17064,14 +17074,14 @@
 
 	/* ============ 6. 楼层归位 ============ */
 	function streamItemParticipatesInZebra(item) {
-		return !!(item && item.node) &&
+		return !!(item?.node) &&
 			!item.zebraExcluded &&
 			!item.node.classList.contains('ldp-nested-collapsed') &&
 			!item.node.classList.contains('ldp-nested-preview');
 	}
 
 	function reindexStreamItems(ctx, start = 0) {
-		const items = ctx && ctx.streamItems;
+		const items = ctx?.streamItems;
 		if (!items || !items.length) return;
 		const from = Math.max(0, Math.min(items.length - 1, +start || 0));
 		let zebraIndex = from > 0 ? +(items[from - 1].zebraCountAfter || 0) : 0;
@@ -17092,8 +17102,8 @@
 		const compare = (item) => {
 			if (!ctx.isPostVoting) return item.postNumber - current;
 			if (item.postNumber === 1 || current === 1) return item.postNumber === current ? 0 : (item.postNumber === 1 ? -1 : 1);
-			const left = +(item.node && item.node._ldpPostData && item.node._ldpPostData.post_voting_vote_count || 0);
-			const right = +(node._ldpPostData && node._ldpPostData.post_voting_vote_count || 0);
+			const left = +(item.node?._ldpPostData && item.node._ldpPostData.post_voting_vote_count || 0);
+			const right = +(node._ldpPostData?.post_voting_vote_count || 0);
 			return right - left || item.postNumber - current;
 		};
 		while (low < high) {
@@ -17115,7 +17125,7 @@
 		}
 		const item = {
 			postNumber: current,
-			username: String((node._ldpPostData && node._ldpPostData.username) || node.dataset.username || ''),
+			username: String((node._ldpPostData?.username) || node.dataset.username || ''),
 			node,
 			zebraExcluded: options.zebraExcluded === true,
 			height: estimatedHeight,
@@ -17169,7 +17179,7 @@
 		const targets = nodes || ctx.commentsEl.children;
 		for (const node of targets) {
 			if (!node.classList.contains('ldp-post')) continue;
-			const item = ctx.streamItemMap && ctx.streamItemMap.get(streamPostNumber(node));
+			const item = ctx.streamItemMap?.get(streamPostNumber(node));
 			const zebraIndex = item ? (ctx.onlyOp ? item.layoutZebraIndex : item.zebraIndex) : -1;
 			node.classList.toggle('ldp-zebra-alt', zebraIndex >= 0 && zebraIndex % 2 === 1);
 		}
@@ -17181,7 +17191,7 @@
 		const expandLeaf = PREFS.expandLeafNestedReplies === true;
 		let reindexFrom = null;
 		ctx.streamItems.forEach((item, index) => {
-			const node = item && item.node;
+			const node = item?.node;
 			if (!node) return;
 			const keepOnlyOpExpanded = !!(ctx.onlyOp && String(item.username || '') === String(ctx.op || ''));
 			if (+(node.dataset.childReplyTotal || 0) > 0) {
@@ -17210,13 +17220,13 @@
 		const num = +postNumber;
 		if (!num || !ctx) return null;
 		const streamNode = getStreamPostNode(ctx, num);
-		if (streamNode && streamNode.isConnected) return streamNode;
-		return (ctx.commentsEl && ctx.commentsEl.querySelector(`:scope > .ldp-post[data-post-number="${num}"]`)) ||
+		if (streamNode?.isConnected) return streamNode;
+		return (ctx.commentsEl?.querySelector(`:scope > .ldp-post[data-post-number="${num}"]`)) ||
 				null;
 	}
 
 	function rememberLatestReplyTime(ctx, post, options = {}) {
-		const createdAt = String((post && post.created_at) || '');
+		const createdAt = String((post?.created_at) || '');
 		const timestamp = Date.parse(createdAt);
 		if (!ctx || !Number.isFinite(timestamp)) return;
 		if (!options.force && timestamp <= +(ctx.latestReplyTimestamp || 0)) return;
@@ -17226,9 +17236,9 @@
 	}
 
 	function rememberPostData(ctx, post, parentHint = 0) {
-		const postNumber = +(post && post.post_number || 0);
+		const postNumber = +(post?.post_number || 0);
 		if (!ctx || !postNumber) return 0;
-		const knownParentNumber = +(ctx.replyParentByPost && ctx.replyParentByPost.get(postNumber) || 0);
+		const knownParentNumber = +(ctx.replyParentByPost?.get(postNumber) || 0);
 		const parentNumber = +(post.reply_to_post_number || parentHint || knownParentNumber || 0);
 		if (!parentNumber) return 0;
 		if (!post.reply_to_post_number) post.reply_to_post_number = parentNumber;
@@ -17247,7 +17257,7 @@
 		if (!batch.length) return [];
 		const batchOptions = { ...options, deferStreamSync: true };
 		const nodes = batch.map((post) => attachPost(post, ctx, batchOptions)).filter(Boolean);
-		syncKnownBoostIdentities(ctx, batch.map((post) => post && post.username));
+		syncKnownBoostIdentities(ctx, batch.map((post) => post?.username));
 		flushStreamPostBatch(
 			ctx,
 			options.syncStreamNow === true,
@@ -17264,7 +17274,7 @@
 		const isNestedReply = !ctx.isPostVoting && !!parentNum;
 		const renderAsReply = isNestedReply || (fromNestedList && !!parentNum);
 		const preferredParentNode = options.preferredParentNode;
-		const preferredParentMatches = preferredParentNode && preferredParentNode.isConnected &&
+		const preferredParentMatches = preferredParentNode?.isConnected &&
 			+preferredParentNode.dataset.postNumber === +parentNum;
 		const logicalParentNode = fromNestedList && parentNum
 			? (preferredParentMatches ? preferredParentNode : findReplyListParent(parentNum, ctx))
@@ -17274,8 +17284,8 @@
 		// be reattached to an ancestor and create a visual reply cycle.
 		const parentNode = fromNestedList ? logicalParentNode : null;
 		if (fromNestedList) {
-			const parentChildren = parentNode && parentNode.querySelector(':scope > .ldp-children');
-			const existingNode = parentChildren && parentChildren.querySelector(
+			const parentChildren = parentNode?.querySelector(':scope > .ldp-children');
+			const existingNode = parentChildren?.querySelector(
 				`:scope > .ldp-post[data-post-number="${+p.post_number}"]`
 			);
 			if (existingNode) return existingNode;
@@ -17337,7 +17347,7 @@
 	let threadGroupGradientSerial = 0;
 
 	function findParentPreviewLine(post) {
-		const line = post && post.previousElementSibling;
+		const line = post?.previousElementSibling;
 		return line && line.classList.contains('ldp-floor-preview-link') ? line : null;
 	}
 
@@ -17354,9 +17364,9 @@
 	}
 
 	function syncGroupedParentPreviewLine(line, parent, posts) {
-		const preview = line && line.previousElementSibling;
+		const preview = line?.previousElementSibling;
 		if (!line || !line.classList.contains('open') || !preview || !preview.classList.contains('ldp-floor-preview')) return false;
-		const parentAvatar = parent && parent.querySelector(':scope > .ldp-post-head .ldp-avatar');
+		const parentAvatar = parent?.querySelector(':scope > .ldp-post-head .ldp-avatar');
 		const childAvatars = posts.map((post) => post.querySelector(':scope > .ldp-post-head .ldp-avatar'));
 		const previewAvatar = preview.querySelector(':scope > .ldp-post-head .ldp-avatar');
 		if (!parentAvatar || !previewAvatar || childAvatars.some((avatar) => !avatar)) return false;
@@ -17438,7 +17448,7 @@
 			defs.classList.add('ldp-thread-group-defs');
 			svg.insertBefore(defs, svg.firstChild);
 		}
-		const gradients = Array.from(defs.querySelectorAll(':scope > .ldp-thread-group-gradient'));
+		const gradients = [...defs.querySelectorAll(':scope > .ldp-thread-group-gradient')];
 		while (gradients.length < branchPathParts.length) {
 			const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
 			gradient.classList.add('ldp-thread-group-gradient');
@@ -17455,7 +17465,7 @@
 			gradients.push(gradient);
 		}
 		while (gradients.length > branchPathParts.length) gradients.pop().remove();
-		const paths = Array.from(svg.querySelectorAll(':scope > .ldp-thread-group-path'));
+		const paths = [...svg.querySelectorAll(':scope > .ldp-thread-group-path')];
 		while (paths.length < pathParts.length) {
 			const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
 			path.classList.add('ldp-thread-group-path');
@@ -17489,9 +17499,9 @@
 	}
 
 	function syncNestedReplyBranches(children) {
-		const posts = Array.from(children.children).filter((node) => node.classList.contains('ldp-post'));
+		const posts = [...children.children].filter((node) => node.classList.contains('ldp-post'));
 		const parent = children.closest('.ldp-post');
-		const parentAvatar = parent && parent.querySelector(':scope > .ldp-post-head .ldp-avatar');
+		const parentAvatar = parent?.querySelector(':scope > .ldp-post-head .ldp-avatar');
 		const railToggle = children.querySelector(':scope > .ldp-nested-rail-toggle');
 		const branchToggle = children.querySelector(':scope > .ldp-nested-branch-toggle');
 		if (!parent || !parentAvatar || !posts.length || !children.isConnected) {
@@ -17524,7 +17534,7 @@
 				axisX = Math.round(parentLine.getBoundingClientRect().left + parentAxisX - childrenRect.left);
 				dropAnchorY = avatarRect.top + avatarRect.height / 2;
 			}
-			const firstChildAvatar = posts[0] && posts[0].querySelector(':scope > .ldp-post-head .ldp-avatar');
+			const firstChildAvatar = posts[0]?.querySelector(':scope > .ldp-post-head .ldp-avatar');
 			const firstChildX = firstChildAvatar ? Math.round(firstChildAvatar.getBoundingClientRect().left - childrenRect.left) : 18;
 			const firstBranchWidth = Math.max(0, firstChildX - axisX - branchGap);
 			const parentHeadWidth = Math.max(0, avatarRect.left - childrenRect.left - axisX - branchGap);
@@ -17685,7 +17695,7 @@
 	}
 
 	function clearReaderImageRetry(img) {
-		const button = img && img._ldpImageRetryButton;
+		const button = img?._ldpImageRetryButton;
 		if (button) button.remove();
 		if (img) img._ldpImageRetryButton = null;
 	}
@@ -17728,8 +17738,8 @@
 	}
 
 	function syncChildControls(post) {
-		const children = post && post.querySelector(':scope > .ldp-children');
-		const btn = post && post.querySelector(':scope > .ldp-collapse-replies');
+		const children = post?.querySelector(':scope > .ldp-children');
+		const btn = post?.querySelector(':scope > .ldp-collapse-replies');
 		if (!children || !btn) return;
 		const collapsed = post.classList.contains('ldp-children-collapsed');
 		let renderedCount = 0;
@@ -17780,23 +17790,23 @@
 	/* ============ 7. 渲染单条 ============ */
 	function childReplyShellHtml(total) {
 		return `<button class="ldp-btn ldp-collapse-replies" type="button" aria-expanded="true"></button>
-      <div class="ldp-children">
-        <button class="ldp-nested-rail-toggle" type="button" aria-label="点击收起 ${total} 条回复"></button>
-        <svg class="ldp-nested-branch-toggle" aria-hidden="true" focusable="false" data-ldp-tooltip-label="点击收起 ${total} 条回复"><path class="ldp-nested-branch-hit-path"></path></svg>
-        <div class="ldp-sub-actions">
-          <button class="ldp-btn ldp-sub-page-btn ldp-sub-page-prev" type="button">${icon('chevronRight')}<span>上一页</span></button>
-          <span class="ldp-sub-page-info"></span>
-          <button class="ldp-btn ldp-sub-page-btn ldp-sub-page-next" type="button">${icon('chevronRight')}<span>下一页</span></button>
-        </div>
-      </div>
-      <div class="ldp-sub-loading">加载楼中楼中…</div>`;
+			<div class="ldp-children">
+				<button class="ldp-nested-rail-toggle" type="button" aria-label="点击收起 ${total} 条回复"></button>
+				<svg class="ldp-nested-branch-toggle" aria-hidden="true" focusable="false" data-ldp-tooltip-label="点击收起 ${total} 条回复"><path class="ldp-nested-branch-hit-path"></path></svg>
+				<div class="ldp-sub-actions">
+					<button class="ldp-btn ldp-sub-page-btn ldp-sub-page-prev" type="button">${icon('chevronRight')}<span>上一页</span></button>
+					<span class="ldp-sub-page-info"></span>
+					<button class="ldp-btn ldp-sub-page-btn ldp-sub-page-next" type="button">${icon('chevronRight')}<span>下一页</span></button>
+				</div>
+			</div>
+			<div class="ldp-sub-loading">加载楼中楼中…</div>`;
 	}
 
 	function readerPostIsRead(post, ctx) {
 		if (!post) return false;
 		if (post.read === true) return true;
 		const postNumber = +(post.post_number || 0);
-		const lastReadPostNumber = +(ctx && ctx.topicData && ctx.topicData.last_read_post_number || 0);
+		const lastReadPostNumber = +(ctx?.topicData && ctx.topicData.last_read_post_number || 0);
 		return postNumber > 0 && lastReadPostNumber >= postNumber;
 	}
 
@@ -17809,7 +17819,7 @@
 	function readerPostNodeInViewport(postNode, scrollRoot) {
 		if (!postNode || !postNode.isConnected || !postNode.getClientRects().length) return false;
 		const rect = postNode.getBoundingClientRect();
-		const viewport = scrollRoot && scrollRoot.getBoundingClientRect
+		const viewport = scrollRoot?.getBoundingClientRect
 			? scrollRoot.getBoundingClientRect()
 			: { top: 0, right: window.innerWidth, bottom: window.innerHeight, left: 0 };
 		return rect.bottom > viewport.top && rect.top < viewport.bottom &&
@@ -17850,8 +17860,7 @@
 			cancelTransition();
 			if (marker.dataset.readState !== state) applyVisual();
 		};
-		const reduceMotion = window.matchMedia &&
-			window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		const reduceMotion = prefersReducedMotion();
 		if (options.animate === true && isRead && !reduceMotion) {
 			marker.dataset.readTransitionState = state;
 			marker.classList.add('is-confirming');
@@ -17875,9 +17884,9 @@
 	function syncConfirmedPostReadStateWhenVisible(node, ctx) {
 		if (!node) return;
 		const syncConfirmedState = () => syncPostReadState(node, true, { animate: true });
-		if (readerPostNodeInViewport(node, ctx && ctx.scrollRoot)) {
+		if (readerPostNodeInViewport(node, ctx?.scrollRoot)) {
 			syncConfirmedState();
-		} else if (ctx && ctx.tracker && typeof ctx.tracker.runWhenVisible === 'function') {
+		} else if (ctx?.tracker && isFunction(ctx.tracker.runWhenVisible)) {
 			ctx.tracker.runWhenVisible(node, syncConfirmedState);
 		} else {
 			syncPostReadState(node, true);
@@ -17896,7 +17905,7 @@
 			if (post.id) persistedPosts.set(+post.id, post);
 		};
 		const syncNode = (node) => {
-			const postNumber = +(node && node.dataset && node.dataset.postNumber || 0);
+			const postNumber = +(node?.dataset && node.dataset.postNumber || 0);
 			if (!confirmed.has(postNumber)) return;
 			const postData = node._ldpPostData;
 			syncPostData(postData);
@@ -17906,12 +17915,12 @@
 		if (ctx.streamNodeMap) {
 			ctx.streamNodeMap.forEach((node) => {
 				syncNode(node);
-				if (node && node.querySelectorAll) node.querySelectorAll('.ldp-post').forEach(syncNode);
+				if (node?.querySelectorAll) node.querySelectorAll('.ldp-post').forEach(syncNode);
 			});
 		}
 		if (ctx.subReplyState) {
 			ctx.subReplyState.forEach((state) => {
-				if (state && state.nodeCache) state.nodeCache.forEach(syncNode);
+				if (state?.nodeCache) state.nodeCache.forEach(syncNode);
 				if (state && Array.isArray(state.all)) state.all.forEach(syncPostData);
 			});
 		}
@@ -17922,8 +17931,8 @@
 		}
 		postsFromPayload(ctx.topicData).forEach(syncPostData);
 		if (!persistedPosts.size) return;
-		if (ctx.loader && typeof ctx.loader.persistFetchedPosts === 'function') {
-			ctx.loader.persistFetchedPosts(Array.from(persistedPosts.values()));
+		if (isFunction(ctx.loader?.persistFetchedPosts)) {
+			ctx.loader.persistFetchedPosts([...persistedPosts.values()]);
 		} else if (ctx.topicData) {
 			setCachedTopicData(ctx.topicId, ctx.topicData);
 		}
@@ -17967,7 +17976,7 @@
 		const currentFloorHtml = options.nestedPreview
 				? `<button class="ldp-floor ldp-jump-self" type="button" data-target-post-number="${p.post_number}" data-parent-post-number="${replyToPostNumber || ''}" aria-label="跳到楼层 #${p.post_number}">#${p.post_number}</button>`
 				: `<span class="ldp-floor ldp-body-floor${parentFloorHtml ? ' ldp-current-floor' : ''}">#${p.post_number}</span>`;
-		const deferConfirmedReadAnimation = !!(ctx && ctx.confirmedReadPostNumbers &&
+		const deferConfirmedReadAnimation = !!(ctx?.confirmedReadPostNumbers &&
 			ctx.confirmedReadPostNumbers.has(+(p.post_number || 0)));
 		const isRead = deferConfirmedReadAnimation ? false : readerPostIsRead(p, ctx);
 		const readState = isRead ? 'read' : 'unread';
@@ -17996,31 +18005,31 @@
 		if (replyToPostNumber) node.dataset.replyToPostNumber = replyToPostNumber;
 		if (allowChildReplies) node.dataset.childReplyTotal = String(p.reply_count);
 		node.innerHTML = `
-      ${isReply || hiddenCollapsible ? '<button class="ldp-btn ldp-nested-toggle" type="button"></button>' : ''}
-      <div class="ldp-post-head">
-        ${avatar ? `<button class="ldp-user-link ldp-avatar-link" type="button" data-user-avatar-preview data-tooltip ${userCardAttr} aria-label="查看 ${escAttr(p.name || p.username)} 的头像原图">${avatar}</button>` : ''}
-        <a class="ldp-user-link ldp-author" href="${profileUrl}" target="_blank" rel="noopener" ${userCardAttr}>${esc(p.name || p.username)}</a>
-        ${isME ? '<span class="ldp-me">ME</span>' : ''}
-        <a class="ldp-user-link ldp-user" href="${profileUrl}" target="_blank" rel="noopener" ${userCardAttr}>@${esc(p.username)}</a>
-        ${isOP ? '<span class="ldp-op">OP</span>' : ''}
-        ${time ? `<span class="ldp-time"${exactTime ? ` data-exact-time="${escAttr(exactTime)}"` : ''}><span class="ldp-time-relative">· ${esc(time)}</span></span>` : ''}
-        ${p.hidden ? '<span class="ldp-special-badge ldp-hidden-badge warn">已隐藏</span>' : ''}
-        ${parentFloorHtml}${currentFloorHtml}${readStateHtml}
-      </div>
-      ${contentHtml}
-      <div class="ldp-reactions">
-        <div class="ldp-actions">
-          <button class="ldp-btn ldp-like ${acted ? 'liked' : ''}"
-            data-acted="${acted ? '1' : '0'}" aria-label="${acted ? '取消点赞' : '点赞'}" ${canAct || acted ? '' : 'disabled'}>
-            ${icon('heart')} <span class="ldp-like-count">${count}</span>
-          </button>
-          ${compactPostActionsHtml(p, ctx)}
-        </div>
-      </div>
-      ${boostListHtml}
-      ${childRepliesHtml}
-      ${isTopicStarter ? topicFooterActionsHtml(p, ctx) : ''}
-    `;
+			${isReply || hiddenCollapsible ? '<button class="ldp-btn ldp-nested-toggle" type="button"></button>' : ''}
+			<div class="ldp-post-head">
+				${avatar ? `<button class="ldp-user-link ldp-avatar-link" type="button" data-user-avatar-preview data-tooltip ${userCardAttr} aria-label="查看 ${escAttr(p.name || p.username)} 的头像原图">${avatar}</button>` : ''}
+				<a class="ldp-user-link ldp-author" href="${profileUrl}" target="_blank" rel="noopener" ${userCardAttr}>${esc(p.name || p.username)}</a>
+				${isME ? '<span class="ldp-me">ME</span>' : ''}
+				<a class="ldp-user-link ldp-user" href="${profileUrl}" target="_blank" rel="noopener" ${userCardAttr}>@${esc(p.username)}</a>
+				${isOP ? '<span class="ldp-op">OP</span>' : ''}
+				${time ? `<span class="ldp-time"${exactTime ? ` data-exact-time="${escAttr(exactTime)}"` : ''}><span class="ldp-time-relative">· ${esc(time)}</span></span>` : ''}
+				${p.hidden ? '<span class="ldp-special-badge ldp-hidden-badge warn">已隐藏</span>' : ''}
+				${parentFloorHtml}${currentFloorHtml}${readStateHtml}
+			</div>
+			${contentHtml}
+			<div class="ldp-reactions">
+				<div class="ldp-actions">
+					<button class="ldp-btn ldp-like ${acted ? 'liked' : ''}"
+						data-acted="${acted ? '1' : '0'}" aria-label="${acted ? '取消点赞' : '点赞'}" ${canAct || acted ? '' : 'disabled'}>
+						${icon('heart')} <span class="ldp-like-count">${count}</span>
+					</button>
+					${compactPostActionsHtml(p, ctx)}
+				</div>
+			</div>
+			${boostListHtml}
+			${childRepliesHtml}
+			${isTopicStarter ? topicFooterActionsHtml(p, ctx) : ''}
+		`;
 		if (deferConfirmedReadAnimation) syncConfirmedPostReadStateWhenVisible(node, ctx);
 		if (!deferContent) {
 			const content = node.querySelector(':scope > .ldp-content');
@@ -18041,7 +18050,7 @@
 		if (DISCOURSE_MODULE_CACHE.has(name)) return DISCOURSE_MODULE_CACHE.get(name);
 		try {
 			const broker = HOST_PAGE_WINDOW.moduleBroker;
-			if (!broker || typeof broker.lookup !== 'function') return null;
+			if (!broker || !isFunction(broker.lookup)) return null;
 			const module = broker.lookup(name, true);
 			if (module && Object.keys(module).length) {
 				DISCOURSE_MODULE_CACHE.set(name, module);
@@ -18054,9 +18063,9 @@
 	function lookupDiscourse(name) {
 		if (DISCOURSE_LOOKUP_CACHE.has(name)) return DISCOURSE_LOOKUP_CACHE.get(name);
 		const discourseUrlModule = lookupDiscourseModule('discourse/lib/url');
-		const discourseUrl = discourseUrlModule && discourseUrlModule.default;
-		const container = discourseUrl && discourseUrl.container;
-		if (!container || typeof container.lookup !== 'function') return null;
+		const discourseUrl = discourseUrlModule?.default;
+		const container = discourseUrl?.container;
+		if (!container || !isFunction(container.lookup)) return null;
 		try {
 			const item = container.lookup(name) || null;
 			if (item) DISCOURSE_LOOKUP_CACHE.set(name, item);
@@ -18076,11 +18085,11 @@
 			return false;
 		}
 		const discourseUrlModule = lookupDiscourseModule('discourse/lib/url');
-		const discourseUrl = discourseUrlModule && discourseUrlModule.default;
-		if (!discourseUrl || typeof discourseUrl.routeTo !== 'function') return false;
+		const discourseUrl = discourseUrlModule?.default;
+		if (!discourseUrl || !isFunction(discourseUrl.routeTo)) return false;
 		try {
 			const transition = discourseUrl.routeTo(route);
-			if (transition && typeof transition.catch === 'function') transition.catch(() => {});
+			if (isFunction(transition?.catch)) transition.catch(() => {});
 			return true;
 		} catch (e) {
 			return false;
@@ -18110,10 +18119,10 @@
 
 	function refreshDiscourseHostRoute() {
 		const router = lookupDiscourse('service:router');
-		if (!router || typeof router.refresh !== 'function') return false;
+		if (!router || !isFunction(router.refresh)) return false;
 		try {
 			const transition = router.refresh();
-			if (transition && typeof transition.catch === 'function') {
+			if (isFunction(transition?.catch)) {
 				transition.catch(() => {});
 			}
 			return true;
@@ -18131,31 +18140,31 @@
 		const href = `/new-message?username=${encodeURIComponent(username)}`;
 		if (!navigateDiscourseHostRoute(href)) return false;
 		if (!await waitForNativeComposerPopup(ctx)) return false;
-		return !!(ctx && ctx.nativeComposerWindow
+		return !!(ctx?.nativeComposerWindow
 			&& ctx.nativeComposerWindow.open(document.querySelector('#reply-control')));
 	}
 
 	async function openReaderEndorsementDialog(ctx, user) {
-		const username = String(user && user.username || '').trim();
+		const username = String(user?.username || '').trim();
 		if (!ctx || !username) return false;
 		const data = await fetchJSON(`${BASE}/category-experts/endorsable-categories/${encodeURIComponent(username)}.json`, {
 			key: `user-endorsements:${username}`,
 			priority: POST_REQUEST_PRIORITY.userCard,
 		});
-		const categories = Array.isArray(data && data.categories) ? data.categories : [];
-		const remaining = Number(data && data.extras && data.extras.remaining_endorsements);
+		const categories = Array.isArray(data?.categories) ? data.categories : [];
+		const remaining = Number(data?.extras && data.extras.remaining_endorsements);
 		const existingIds = new Set((Array.isArray(user.category_expert_endorsements)
 			? user.category_expert_endorsements
-			: []).map((item) => Number(item && item.category_id)).filter(Number.isFinite));
+			: []).map((item) => Number(item?.category_id)).filter(Number.isFinite));
 		if (!categories.length) throw new Error('当前没有可认可的类别');
 		const optionsHtml = categories.map((category) => {
-			const categoryId = Number(category && category.id);
+			const categoryId = Number(category?.id);
 			const existing = existingIds.has(categoryId);
 			return `<label class="ldp-reader-action-option">
-        <input type="checkbox" name="category_id" value="${categoryId}"${existing ? ' checked disabled' : ''}>
-        <span class="ldp-reader-action-option-copy"><strong>${esc(category && category.name || `类别 ${categoryId}`)}</strong>
-          <small>${existing ? '已经认可' : '选择后将认可该用户为此类别的专家'}</small></span>
-      </label>`;
+				<input type="checkbox" name="category_id" value="${categoryId}"${existing ? ' checked disabled' : ''}>
+				<span class="ldp-reader-action-option-copy"><strong>${esc(category?.name || `类别 ${categoryId}`)}</strong>
+					<small>${existing ? '已经认可' : '选择后将认可该用户为此类别的专家'}</small></span>
+			</label>`;
 		}).join('');
 		return !!openReaderActionDialog(ctx, {
 			title: `认可 @${username}`,
@@ -18168,13 +18177,13 @@
 				const addedIds = formData.getAll('category_id').map(Number)
 					.filter((categoryId) => Number.isFinite(categoryId) && !existingIds.has(categoryId));
 				if (!addedIds.length) throw new Error('请选择一个尚未认可的类别');
-				const categoryIds = Array.from(new Set([...existingIds, ...addedIds]));
+				const categoryIds = [...new Set([...existingIds, ...addedIds])];
 				const response = await apiSend(
 					`${BASE}/category-experts/endorse/${encodeURIComponent(username)}.json`,
 					'PUT',
 					{ categoryIds }
 				);
-				user.category_expert_endorsements = Array.isArray(response && response.category_expert_endorsements)
+				user.category_expert_endorsements = Array.isArray(response?.category_expert_endorsements)
 					? response.category_expert_endorsements
 					: user.category_expert_endorsements;
 				setCachedUserCard(username, user, 0);
@@ -18184,8 +18193,8 @@
 	}
 
 	function userNotificationLevel(user) {
-		if (user && user.ignored) return 'ignore';
-		if (user && user.muted) return 'mute';
+		if (user?.ignored) return 'ignore';
+		if (user?.muted) return 'mute';
 		return 'normal';
 	}
 
@@ -18201,11 +18210,11 @@
 		}
 		const store = lookupDiscourse('service:store');
 		const currentUser = lookupDiscourse('service:current-user');
-		if (!store || typeof store.createRecord !== 'function' || !currentUser) {
+		if (!store || !isFunction(store.createRecord) || !currentUser) {
 			throw new Error('Discourse 用户服务尚未就绪');
 		}
 		const userModel = store.createRecord('user', { username });
-		if (!userModel || typeof userModel.updateNotificationLevel !== 'function') {
+		if (!userModel || !isFunction(userModel.updateNotificationLevel)) {
 			throw new Error('Discourse 用户消息设置接口尚未就绪');
 		}
 		await userModel.updateNotificationLevel({
@@ -18235,8 +18244,8 @@
 			submitLabel: '确认忽略',
 			initialFocus: 'select[name="ignore_days"]',
 			bodyHtml: `<label class="ldp-reader-action-field"><span>忽略期限</span>
-        <select class="ldp-reader-select" name="ignore_days">${durations.map((item) => `<option value="${item.days}"${item.days === 30 ? ' selected' : ''}>${item.label}</option>`).join('')}</select>
-      </label>`,
+				<select class="ldp-reader-select" name="ignore_days">${durations.map((item) => `<option value="${item.days}"${item.days === 30 ? ' selected' : ''}>${item.label}</option>`).join('')}</select>
+			</label>`,
 			onSubmit: async (formData) => {
 				const days = Number(formData.get('ignore_days'));
 				if (!durations.some((item) => item.days === days)) throw new Error('请选择有效的忽略期限');
@@ -18264,7 +18273,7 @@
 				if (user && user.can_follow === false && !user.is_followed) {
 					return { ok: false, reason: 'follow-not-allowed' };
 				}
-				const followed = !!(user && user.is_followed);
+				const followed = !!(user?.is_followed);
 				await apiSend(`${BASE}/follow/${encodeURIComponent(username)}.json`, followed ? 'DELETE' : 'PUT');
 				if (user) {
 					const totalFollowers = Number(user.total_followers);
@@ -18291,15 +18300,15 @@
 	}
 
 	function userTrustLevel(user) {
-		const rawLevel = user && user.trust_level;
+		const rawLevel = user?.trust_level;
 		const direct = Number(rawLevel);
 		if (rawLevel != null && rawLevel !== '' && Number.isFinite(direct)) return direct;
 		const labels = [
-			user && user.title,
-			user && user.flair_name,
-			user && user.primary_group_name,
-			...(Array.isArray(user && user.groups)
-				? user.groups.flatMap((group) => [group && group.name, group && group.full_name, group && group.title])
+			user?.title,
+			user?.flair_name,
+			user?.primary_group_name,
+			...(Array.isArray(user?.groups)
+				? user.groups.flatMap((group) => [group?.name, group?.full_name, group?.title])
 				: []),
 		];
 		for (const label of labels) {
@@ -18310,7 +18319,7 @@
 	}
 
 	function userDetailsChecked(user, detail) {
-		const checkedAt = Number(user && user[`_ldp_${detail}_checked_at`] || 0);
+		const checkedAt = Number(user?.[`_ldp_${detail}_checked_at`] || 0);
 		return checkedAt > 0 && Date.now() - checkedAt < USER_CARD_CACHE_FRESH_FOR;
 	}
 
@@ -18325,7 +18334,7 @@
 
 	async function fetchUserProfileDetails(username, options = {}) {
 		const User = lookupDiscourseModule('discourse/models/user')?.default;
-		if (!User || typeof User.findByUsername !== 'function') {
+		if (!User || !isFunction(User.findByUsername)) {
 			throw new Error('Discourse 用户模型尚未就绪');
 		}
 		try {
@@ -18359,21 +18368,21 @@
 			if (!badgeId && !name) return;
 			const previous = unique.get(key);
 			const grantedAt = Date.parse(badge.granted_at || '') || 0;
-			const previousGrantedAt = Date.parse(previous && previous.granted_at || '') || 0;
+			const previousGrantedAt = Date.parse(previous?.granted_at || '') || 0;
 			if (!previous || grantedAt >= previousGrantedAt) unique.set(key, badge);
 		});
-		return Array.from(unique.values());
+		return [...unique.values()];
 	}
 
 	async function fetchUserBadges(username) {
 		const data = await fetchUserJSON(`/user-badges/${encodeURIComponent(username)}.json`, `user-badges:${username}`);
-		const badgesById = new Map((Array.isArray(data && data.badges) ? data.badges : [])
-			.map((badge) => [Number(badge && badge.id), badge]));
-		return uniqueUserBadges((Array.isArray(data && data.user_badges) ? data.user_badges : []).map((grant) => {
-			const badge = badgesById.get(Number(grant && grant.badge_id)) || {};
+		const badgesById = new Map((Array.isArray(data?.badges) ? data.badges : [])
+			.map((badge) => [Number(badge?.id), badge]));
+		return uniqueUserBadges((Array.isArray(data?.user_badges) ? data.user_badges : []).map((grant) => {
+			const badge = badgesById.get(Number(grant?.badge_id)) || {};
 			return Object.assign({}, badge, grant, {
-				id: Number(grant && grant.badge_id || badge.id) || 0,
-				name: String(badge.name || grant && grant.name || '').trim(),
+				id: Number(grant?.badge_id || badge.id) || 0,
+				name: String(badge.name || grant?.name || '').trim(),
 			});
 		}).filter((badge) => badge.id && badge.name && badge.enabled !== false));
 	}
@@ -18381,14 +18390,14 @@
 	function normalizeUserFollowList(data, type) {
 		const source = Array.isArray(data)
 			? data
-			: Array.isArray(data && data.users)
+			: Array.isArray(data?.users)
 				? data.users
-				: Array.isArray(data && data[type])
+				: Array.isArray(data?.[type])
 					? data[type]
 					: [];
 		return source.map((entry) => {
 			const user = entry && (entry.user || entry);
-			const username = cleanUsernameValue(user && user.username);
+			const username = cleanUsernameValue(user?.username);
 			if (!username) return null;
 			const name = String(user.name || username).trim();
 			return {
@@ -18452,7 +18461,7 @@
 		if (!username) return null;
 		const existing = USER_CARD_REQUESTS.get(username);
 		if (existing && !existing.cancelled) {
-			if (typeof onUpdate === 'function') {
+			if (isFunction(onUpdate)) {
 				existing.listeners.add(onUpdate);
 				if (existing.basic) onUpdate(existing.basic, 'stats');
 			}
@@ -18464,10 +18473,10 @@
 		const summaryChecked = cached && userDetailsChecked(cached, 'summary');
 		const badgesChecked = cached && userDetailsChecked(cached, 'badges');
 		if (cached && profileChecked && summaryChecked && badgesChecked) {
-			if (typeof onUpdate === 'function') onUpdate(cached, 'ready');
+			if (isFunction(onUpdate)) onUpdate(cached, 'ready');
 			return cached;
 		}
-		if (cached && typeof onUpdate === 'function') onUpdate(cached, 'stats');
+		if (cached && isFunction(onUpdate)) onUpdate(cached, 'stats');
 		const cachedStatsListener = cached && profileChecked ? onUpdate : null;
 		const profilePromise = profileChecked
 			? Promise.resolve(cached)
@@ -18480,7 +18489,7 @@
 			: fetchUserBadges(username);
 		const supplementalPromise = Promise.allSettled([summaryPromise, badgesPromise]);
 		const entry = { listeners: new Set(), basic: null, promise: null, cancelled: false };
-		if (typeof onUpdate === 'function') entry.listeners.add(onUpdate);
+		if (isFunction(onUpdate)) entry.listeners.add(onUpdate);
 		const request = (async () => {
 			const profile = await profilePromise;
 			const user = Object.assign({}, cached || {}, profile || {}, {
@@ -18613,19 +18622,19 @@
 		setLabel(panel, '关注人员列表');
 		panel.hidden = true;
 		panel.innerHTML = `
-      <header><strong class="ldp-user-card-follow-title"></strong>
-        <button type="button" data-user-card-follow-close aria-label="关闭关注人员列表">×</button></header>
-      <nav class="ldp-user-card-breadcrumbs" aria-label="用户卡层级" hidden></nav>
-      <label class="ldp-user-card-follow-search"><span>检索</span>
-        <input type="search" autocomplete="off" spellcheck="false" placeholder="昵称、用户名或拼音">
-      </label>
-      <div class="ldp-user-card-follow-summary" aria-live="polite"></div>
-      <div class="ldp-user-card-follow-list" role="list"></div>
-      <nav class="ldp-user-card-follow-pagination" aria-label="人员列表分页" hidden>
-        <button type="button" data-user-card-follow-page="previous">上一页</button>
-        <span aria-live="polite"></span>
-        <button type="button" data-user-card-follow-page="next">下一页</button>
-      </nav>`;
+			<header><strong class="ldp-user-card-follow-title"></strong>
+				<button type="button" data-user-card-follow-close aria-label="关闭关注人员列表">×</button></header>
+			<nav class="ldp-user-card-breadcrumbs" aria-label="用户卡层级" hidden></nav>
+			<label class="ldp-user-card-follow-search"><span>检索</span>
+				<input type="search" autocomplete="off" spellcheck="false" placeholder="昵称、用户名或拼音">
+			</label>
+			<div class="ldp-user-card-follow-summary" aria-live="polite"></div>
+			<div class="ldp-user-card-follow-list" role="list"></div>
+			<nav class="ldp-user-card-follow-pagination" aria-label="人员列表分页" hidden>
+				<button type="button" data-user-card-follow-page="previous">上一页</button>
+				<span aria-live="polite"></span>
+				<button type="button" data-user-card-follow-page="next">下一页</button>
+			</nav>`;
 		appendReaderPortalNode(panel);
 		return panel;
 	}
@@ -18640,8 +18649,8 @@
 	}
 
 	function positionFallbackUserCardNotificationMenu(card) {
-		const menu = card && card.querySelector('.ldp-user-card-notification-menu:not([hidden])');
-		const actions = card && card.querySelector('.ldp-user-card-actions');
+		const menu = card?.querySelector('.ldp-user-card-notification-menu:not([hidden])');
+		const actions = card?.querySelector('.ldp-user-card-actions');
 		if (!menu || !actions) return;
 		const margin = 10;
 		const gap = 6;
@@ -18688,7 +18697,7 @@
 		const fallbackLeft = Math.max(margin, Math.min(preferredLeft, window.innerWidth - width - margin));
 		const fallbackTop = Math.max(margin, Math.min(cardRect.top, window.innerHeight - height - margin));
 		const avatarViewer = readerPortalQuery('.ldp-avatar-viewer');
-		const viewerRect = avatarViewer && avatarViewer.isConnected && avatarViewer._ldpAnchorCard === card
+		const viewerRect = avatarViewer?.isConnected && avatarViewer._ldpAnchorCard === card
 			? avatarViewer.getBoundingClientRect()
 			: null;
 		const overlaps = (first, second) => first.left < second.right + gap && first.right + gap > second.left &&
@@ -18725,7 +18734,7 @@
 				region.top,
 				region.bottom - placedHeight,
 			]);
-			return Array.from(candidateLefts).flatMap((placedLeft) => Array.from(candidateTops).map((placedTop) => {
+			return [...candidateLefts].flatMap((placedLeft) => [...candidateTops].map((placedTop) => {
 				const rect = {
 					left: placedLeft,
 					top: placedTop,
@@ -18813,7 +18822,7 @@
 	}
 
 	function userStatValue(user, keys) {
-		const sources = [user && user.user_summary, user, user && user.summary, user && user.user_stat, user && user.stats].filter(Boolean);
+		const sources = [user?.user_summary, user, user?.summary, user?.user_stat, user?.stats].filter(Boolean);
 		for (const key of keys) {
 			for (const source of sources) {
 				const value = source[key];
@@ -18848,13 +18857,13 @@
 			if (node.nodeType === Node.TEXT_NODE) return esc(node.textContent || '');
 			if (node.nodeType !== Node.ELEMENT_NODE) return '';
 			const tag = node.tagName;
-			const children = Array.from(node.childNodes).map(cleanNode).join('');
+			const children = [...node.childNodes].map(cleanNode).join('');
 			if (!allowedTags.has(tag)) return children;
-			const attrs = Array.from(node.attributes)
+			const attrs = [...node.attributes]
 					.filter((attr) => {
 						const name = attr.name.toLowerCase();
 						if (name.startsWith('on') || name === 'style') return false;
-						if (!(allowedAttrs[tag] && allowedAttrs[tag].has(name))) return false;
+						if (!(allowedAttrs[tag]?.has(name))) return false;
 						if ((name === 'href' || name === 'src') && !isSafeUserCardUrl(attr.value)) return false;
 						return true;
 					})
@@ -18863,7 +18872,7 @@
 			if (tag === 'IMG') return `<img${attrs} loading="lazy" decoding="async">`;
 			return `<${tag.toLowerCase()}${attrs}>${children}</${tag.toLowerCase()}>`;
 		};
-		return Array.from(template.content.childNodes).map(cleanNode).join('');
+		return [...template.content.childNodes].map(cleanNode).join('');
 	}
 
 	function userCardProgressHtml(phase) {
@@ -18871,8 +18880,8 @@
 		const loadingStats = phase === 'stats';
 		const label = loadingStats ? '资料已获取，正在获取统计…' : '正在获取用户资料…';
 		return `<div class="ldp-user-card-progress${loadingStats ? ' is-stats' : ''}" role="status" aria-live="polite">
-      <span>${label}</span><span class="ldp-user-card-progress-track"><span class="ldp-user-card-progress-fill"></span></span>
-    </div>`;
+			<span>${label}</span><span class="ldp-user-card-progress-track"><span class="ldp-user-card-progress-fill"></span></span>
+		</div>`;
 	}
 
 	function userRegistrationDate(value) {
@@ -18894,11 +18903,11 @@
 
 	function userVisibleGroups(user, includePrimaryGroup = false) {
 		const visible = new Map();
-		const groups = Array.isArray(user && user.groups) ? user.groups : [];
+		const groups = Array.isArray(user?.groups) ? user.groups : [];
 		[...groups, includePrimaryGroup && user && user.primary_group_name
 			? { name: user.primary_group_name }
 			: null].forEach((group) => {
-			const name = String(group && group.name || '').trim();
+			const name = String(group?.name || '').trim();
 			if (!name || /^trust_level_[0-9]+$/i.test(name)) return;
 			const key = name.toLocaleLowerCase();
 			if (visible.has(key)) return;
@@ -18907,7 +18916,7 @@
 				label: String(group.full_name || group.display_name || group.title || name).trim() || name,
 			});
 		});
-		return Array.from(visible.values());
+		return [...visible.values()];
 	}
 
 	function userCardGroupsHtml(user) {
@@ -18915,15 +18924,15 @@
 		if (!groups.length) return '';
 		const discourseUrl = lookupDiscourseModule('discourse/lib/url');
 		return `<div class="ldp-user-card-groups" aria-label="用户分组">
-      <span>用户分组</span><div>${groups.map((group) => {
-				const href = discourseUrl && typeof discourseUrl.groupPath === 'function'
+			<span>用户分组</span><div>${groups.map((group) => {
+				const href = isFunction(discourseUrl?.groupPath)
 					? discourseUrl.groupPath(encodeURIComponent(group.name))
 					: '';
 				return href
 					? `<a href="${escAttr(href)}" target="_blank" rel="noopener" data-ldp-tooltip-label="进入 ${escAttr(group.label)} 分组">${esc(group.label)}</a>`
 					: `<span>${esc(group.label)}</span>`;
 			}).join('')}</div>
-    </div>`;
+		</div>`;
 	}
 
 	function userProfileFactsHtml(user, variant, options = {}) {
@@ -18947,12 +18956,12 @@
 			? ''
 			: userVisibleGroups(user, options.includePrimaryGroup).map((group) => group.label).join(', ');
 		const facts = [
-			fact('加入日期：', userRegistrationDate(user && user.created_at)),
+			fact('加入日期：', userRegistrationDate(user?.created_at)),
 			fact('最后一个帖子', userRecentDate(user && (user.last_posted_at || user.last_post_at))),
 			fact('最后活动', userRecentDate(user && (user.last_seen_at || user.last_active_at))),
 			fact('浏览量', numberValue(['profile_view_count', 'profile_views', 'views'])),
 			fact('信任级别', Number.isFinite(trustLevel) ? (trustLabels[trustLevel] || `Lv${trustLevel}`) : ''),
-			fact('电子邮件', user && user.email, { wide: true }),
+			fact('电子邮件', user?.email, { wide: true }),
 			...(variant === 'card' ? [] : [fact('群组', groupText, { accent: true, wide: true, title: options.groupTooltip ? groupText : '' })]),
 			...(variant === 'card' ? [] : [
 				fact('正在关注', numberValue(['total_following', 'following_count', 'followings_count'])),
@@ -18970,43 +18979,43 @@
 			{ type: 'followers', label: '被关注', total: userStatValue(user, ['total_followers', 'follower_count', 'followers_count']), visible: user && user.can_see_followers !== false },
 		];
 		return `<div class="ldp-user-card-follow-stats" aria-label="用户关注关系">
-      ${configs.map((item) => {
+			${configs.map((item) => {
 				const total = Number(item.total);
 				const count = Number.isFinite(total) ? total.toLocaleString('zh-CN') : '-';
 				if (!interactive) {
 					return `<span class="ldp-user-card-follow-stat is-readonly" aria-label="${escAttr(`${item.label} ${count}`)}">
-            <strong>${esc(count)}</strong><span>${esc(item.label)}</span>
-          </span>`;
+						<strong>${esc(count)}</strong><span>${esc(item.label)}</span>
+					</span>`;
 				}
 				const label = item.visible ? `查看${item.label}人员` : `${item.label}列表不可见`;
 				return `<button class="ldp-user-card-follow-stat" type="button" data-user-card-follow-type="${item.type}"
-          data-username="${escAttr(username)}" aria-controls="ldp-user-card-follow-panel" aria-expanded="false"
-          aria-label="${escAttr(label)}"${item.visible ? '' : ' disabled'}>
-          <strong>${esc(count)}</strong><span>${esc(item.label)}</span>
-        </button>`;
+					data-username="${escAttr(username)}" aria-controls="ldp-user-card-follow-panel" aria-expanded="false"
+					aria-label="${escAttr(label)}"${item.visible ? '' : ' disabled'}>
+					<strong>${esc(count)}</strong><span>${esc(item.label)}</span>
+				</button>`;
 			}).join('')}
-    </div>`;
+		</div>`;
 	}
 
 	function userCardFollowItemHtml(user) {
-		const username = String(user && user.username || '');
-		const name = String(user && user.name || username);
+		const username = String(user?.username || '');
+		const name = String(user?.name || username);
 		const avatar = avatarWithFlairHtml(
-			persistentAvatarHtml(user && user.avatar_template, 48, 'ldp-user-card-follow-avatar', name),
+			persistentAvatarHtml(user?.avatar_template, 48, 'ldp-user-card-follow-avatar', name),
 			user
 		);
 		return `<a class="ldp-user-card-follow-item ldp-user-link" href="${userProfileUrl(username)}" target="_blank" rel="noopener"
-      role="listitem" data-user-card="${escAttr(username)}">
-      ${avatar}<span><strong>${esc(name)}</strong><small>@${esc(username)}</small></span>
-    </a>`;
+			role="listitem" data-user-card="${escAttr(username)}">
+			${avatar}<span><strong>${esc(name)}</strong><small>@${esc(username)}</small></span>
+		</a>`;
 	}
 
 	function renderUserCardFollowList(panel) {
 		if (panel?.hidden) return;
-		const list = panel && panel.querySelector('.ldp-user-card-follow-list');
-		const summary = panel && panel.querySelector('.ldp-user-card-follow-summary');
-		const input = panel && panel.querySelector('input[type="search"]');
-		const pagination = panel && panel.querySelector('.ldp-user-card-follow-pagination');
+		const list = panel?.querySelector('.ldp-user-card-follow-list');
+		const summary = panel?.querySelector('.ldp-user-card-follow-summary');
+		const input = panel?.querySelector('input[type="search"]');
+		const pagination = panel?.querySelector('.ldp-user-card-follow-pagination');
 		if (!panel || !list || !summary || !input || !pagination) return;
 		const users = Array.isArray(panel._ldpFollowUsers) ? panel._ldpFollowUsers : [];
 		const query = normalizeSearchText(input.value);
@@ -19044,7 +19053,7 @@
 
 	function parseConnectTrustHtml(html) {
 		const doc = new globalThis.DOMParser().parseFromString(String(html || ''), 'text/html');
-		const card = Array.from(doc.querySelectorAll('.card')).find((candidate) => {
+		const card = [...doc.querySelectorAll('.card')].find((candidate) => {
 			const heading = candidate.querySelector('.card-title,h2');
 			return heading && /信任级别\s*\d+\s*的要求/.test(heading.textContent || '');
 		});
@@ -19054,7 +19063,7 @@
 		const subtitle = String(card.querySelector('.card-subtitle')?.textContent || '').trim();
 		const username = (subtitle.match(/@([^\s·]+)/) || [])[1] || '';
 		const timePeriod = Number((subtitle.match(/过去\s*([\d,]+)\s*天/) || [])[1]?.replace(/,/g, '')) || 100;
-		const rings = Array.from(card.querySelectorAll('.tl3-ring')).map((item) => ({
+		const rings = [...card.querySelectorAll('.tl3-ring')].map((item) => ({
 			label: String(item.querySelector('.tl3-ring-label')?.textContent || '').trim(),
 			current: connectNumber(item.querySelector('.tl3-ring-current')?.textContent),
 			target: connectNumber(item.querySelector('.tl3-ring-target')?.textContent),
@@ -19067,7 +19076,7 @@
 		];
 		const { bars, quotas, vetoes } = Object.fromEntries(requirementGroups.map(([
 			group, itemSelector, labelSelector, valueSelector,
-		]) => [group, Array.from(card.querySelectorAll(itemSelector)).map((item) => {
+		]) => [group, [...card.querySelectorAll(itemSelector)].map((item) => {
 			const valueNode = item.querySelector(valueSelector);
 			const values = group === 'vetoes'
 				? { current: connectNumber(valueNode?.textContent), target: 0 }
@@ -19100,7 +19109,7 @@
 
 	function requestConnectTrustHtml() {
 		const request = globalThis.GM_xmlhttpRequest;
-		if (typeof request !== 'function') return Promise.reject(new Error('当前脚本未获得 Connect 跨域读取权限'));
+		if (!isFunction(request)) return Promise.reject(new Error('当前脚本未获得 Connect 跨域读取权限'));
 		return new Promise((resolve, reject) => {
 			request({
 				method: 'GET',
@@ -19139,14 +19148,14 @@
 	}
 
 	function settingsUserProfileHtml(user) {
-		const username = String(user && user.username || ME_USERNAME || '');
-		const name = String(user && user.name || username);
+		const username = String(user?.username || ME_USERNAME || '');
+		const name = String(user?.name || username);
 		const trustLevel = userTrustLevel(user);
 		const background = String(user && (
 			user.card_background_upload_url || user.profile_background_upload_url
 		) || '').trim();
 		const avatar = avatarWithFlairHtml(
-			persistentAvatarHtml(user && user.avatar_template, 144, 'ldp-user-info-avatar-image', name),
+			persistentAvatarHtml(user?.avatar_template, 144, 'ldp-user-info-avatar-image', name),
 			user
 		);
 		const title = String(user && (user.title || user.flair_name) || '').trim();
@@ -19158,19 +19167,19 @@
 			? (websiteUrl.startsWith('/') ? `${BASE}${websiteUrl}` : websiteUrl)
 			: '';
 		return `<section class="ldp-user-info-profile" aria-label="当前用户资料">
-      <div class="ldp-user-info-cover">${background && isSafeUserCardUrl(background) ? `<img src="${escAttr(absoluteImageUrl(background))}" alt="" loading="lazy" decoding="async">` : ''}</div>
-      <div class="ldp-user-info-profile-body">
-        <div class="ldp-user-info-avatar">${avatar || esc(name.slice(0, 1).toUpperCase())}</div>
-        <div class="ldp-user-info-identity">
-          <div class="ldp-user-info-name-row"><strong class="ldp-user-info-name">${esc(name)}</strong>${Number.isFinite(trustLevel) ? `<span class="ldp-user-info-level">Lv${trustLevel}</span>` : ''}</div>
-          <div class="ldp-user-info-username">@${esc(username)}</div>
-          ${title ? `<div class="ldp-user-info-title">${titleFlair}${esc(title)}</div>` : ''}
-          ${safeWebsite ? `<a class="ldp-user-info-site" href="${escAttr(safeWebsite)}" target="_blank" rel="noopener">${icon('externalLink')}<span>${esc(website || websiteUrl)}</span></a>` : ''}
-        </div>
-        ${bio ? `<div class="ldp-user-info-bio">${sanitizeUserCardBioHtml(bio)}</div>` : ''}
-        ${userProfileFactsHtml(user, 'settings', { emptyNumberAsZero: true, trustLevel })}
-      </div>
-    </section>`;
+			<div class="ldp-user-info-cover">${background && isSafeUserCardUrl(background) ? `<img src="${escAttr(absoluteImageUrl(background))}" alt="" loading="lazy" decoding="async">` : ''}</div>
+			<div class="ldp-user-info-profile-body">
+				<div class="ldp-user-info-avatar">${avatar || esc(name.slice(0, 1).toUpperCase())}</div>
+				<div class="ldp-user-info-identity">
+					<div class="ldp-user-info-name-row"><strong class="ldp-user-info-name">${esc(name)}</strong>${Number.isFinite(trustLevel) ? `<span class="ldp-user-info-level">Lv${trustLevel}</span>` : ''}</div>
+					<div class="ldp-user-info-username">@${esc(username)}</div>
+					${title ? `<div class="ldp-user-info-title">${titleFlair}${esc(title)}</div>` : ''}
+					${safeWebsite ? `<a class="ldp-user-info-site" href="${escAttr(safeWebsite)}" target="_blank" rel="noopener">${icon('externalLink')}<span>${esc(website || websiteUrl)}</span></a>` : ''}
+				</div>
+				${bio ? `<div class="ldp-user-info-bio">${sanitizeUserCardBioHtml(bio)}</div>` : ''}
+				${userProfileFactsHtml(user, 'settings', { emptyNumberAsZero: true, trustLevel })}
+			</div>
+		</section>`;
 	}
 
 	function connectProgress(item) {
@@ -19218,7 +19227,7 @@
 	}
 
 	function settingsConnectHtml(data, error) {
-		if (!data) return `<section class="ldp-connect-card"><div class="ldp-connect-head"><div class="ldp-connect-heading"><strong>Connect 升级进度</strong><small>升级要求来自 connect.linux.do</small></div></div><div class="ldp-connect-error"><span>${esc(error && error.message || '暂时无法读取 Connect 数据')}</span></div></section>`;
+		if (!data) return `<section class="ldp-connect-card"><div class="ldp-connect-head"><div class="ldp-connect-heading"><strong>Connect 升级进度</strong><small>升级要求来自 connect.linux.do</small></div></div><div class="ldp-connect-error"><span>${esc(error?.message || '暂时无法读取 Connect 数据')}</span></div></section>`;
 		const timePeriod = Number(data.timePeriod) > 0 ? Number(data.timePeriod) : 100;
 		const valueLabel = (item) => `${Number(item.current).toLocaleString('zh-CN')} / ${Number(item.target).toLocaleString('zh-CN')}`;
 		const style = (item, forceDanger = false) => `--ldp-connect-progress:${connectProgress(item).toFixed(1)}%;--ldp-connect-color:${forceDanger || connectMetricBelowTarget(item) || !item.met ? 'var(--danger,#c84545)' : 'var(--tertiary,#47855f)'}`;
@@ -19231,11 +19240,11 @@
 		const participationGroup = barGroup('参与互动', data.bars);
 		const complianceGroup = quotaItems.length ? `<div class="ldp-connect-group"><div class="ldp-connect-group-title">合规记录</div><div class="ldp-connect-quotas">${quotaItems.map((item) => `<div class="ldp-connect-quota ldp-connect-metric" style="${style(item, Number(item.current) > 0)}"${metricHelp(item)}><div class="ldp-connect-quota-copy"><span>${esc(item.label)}</span><strong>${esc(valueLabel(item))}</strong></div><div class="ldp-connect-bar-track"><span class="ldp-connect-bar-fill"></span></div></div>`).join('')}</div></div>` : '';
 		return `<section class="ldp-connect-card" aria-label="Connect 升级进度">
-      <div class="ldp-connect-head"><div class="ldp-connect-heading"><strong>信任级别 ${esc(data.targetLevel == null ? '' : data.targetLevel)} 的要求</strong><small>${data.username ? `@${esc(data.username)} · ` : ''}过去 ${esc(timePeriod)} 天的数据</small></div><span class="ldp-connect-status ldp-connect-metric${data.met ? '' : ' is-unmet'}" data-ldp-tooltip-label="所有项目需要同时达标。互动与活跃项须达到下限；合规项不得超过上限，并在存在记录时以红色提醒。">${data.met ? '已达到' : '未达到'}</span></div>
-      ${data.rings.length ? `<div class="ldp-connect-rings">${data.rings.map((item) => `<div class="ldp-connect-ring ldp-connect-metric" style="${style(item)}"${metricHelp(item)}><div class="ldp-connect-ring-visual"><span class="ldp-connect-ring-value">${esc(Number(item.current).toLocaleString('zh-CN'))}<small>/ ${esc(Number(item.target).toLocaleString('zh-CN'))}</small></span></div><span class="ldp-connect-ring-label">${esc(item.label)}</span></div>`).join('')}</div>` : ''}
-      ${participationGroup || complianceGroup ? `<div class="ldp-connect-detail-groups">${participationGroup}${complianceGroup}</div>` : ''}
-      ${error ? `<div class="ldp-connect-error"><span>当前显示缓存数据；${esc(error.message || '联网更新失败')}</span></div>` : ''}
-    </section>`;
+			<div class="ldp-connect-head"><div class="ldp-connect-heading"><strong>信任级别 ${esc(data.targetLevel == null ? '' : data.targetLevel)} 的要求</strong><small>${data.username ? `@${esc(data.username)} · ` : ''}过去 ${esc(timePeriod)} 天的数据</small></div><span class="ldp-connect-status ldp-connect-metric${data.met ? '' : ' is-unmet'}" data-ldp-tooltip-label="所有项目需要同时达标。互动与活跃项须达到下限；合规项不得超过上限，并在存在记录时以红色提醒。">${data.met ? '已达到' : '未达到'}</span></div>
+			${data.rings.length ? `<div class="ldp-connect-rings">${data.rings.map((item) => `<div class="ldp-connect-ring ldp-connect-metric" style="${style(item)}"${metricHelp(item)}><div class="ldp-connect-ring-visual"><span class="ldp-connect-ring-value">${esc(Number(item.current).toLocaleString('zh-CN'))}<small>/ ${esc(Number(item.target).toLocaleString('zh-CN'))}</small></span></div><span class="ldp-connect-ring-label">${esc(item.label)}</span></div>`).join('')}</div>` : ''}
+			${participationGroup || complianceGroup ? `<div class="ldp-connect-detail-groups">${participationGroup}${complianceGroup}</div>` : ''}
+			${error ? `<div class="ldp-connect-error"><span>当前显示缓存数据；${esc(error.message || '联网更新失败')}</span></div>` : ''}
+		</section>`;
 	}
 
 	function renderSettingsUserInfo(container, user, connectData, connectError) {
@@ -19245,11 +19254,11 @@
 			: 'connect';
 		container.dataset.userInfoView = selectedView;
 		container.innerHTML = `<div class="ldp-user-info-tabs" role="tablist" aria-label="用户信息分类">
-        <button class="ldp-user-info-tab${selectedView === 'connect' ? ' active' : ''}" type="button" role="tab" data-user-info-view="connect" aria-selected="${selectedView === 'connect'}">${icon('activity')}<span>Connect</span></button>
-        <button class="ldp-user-info-tab${selectedView === 'profile' ? ' active' : ''}" type="button" role="tab" data-user-info-view="profile" aria-selected="${selectedView === 'profile'}">${icon('userRound')}<span>基本信息</span></button>
-      </div>
-      <div class="ldp-user-info-view" role="tabpanel" data-user-info-panel="connect"${selectedView === 'connect' ? '' : ' hidden'}>${settingsConnectHtml(connectData, connectError)}</div>
-      <div class="ldp-user-info-view" role="tabpanel" data-user-info-panel="profile"${selectedView === 'profile' ? '' : ' hidden'}>${settingsUserProfileHtml(user)}</div>`;
+				<button class="ldp-user-info-tab${selectedView === 'connect' ? ' active' : ''}" type="button" role="tab" data-user-info-view="connect" aria-selected="${selectedView === 'connect'}">${icon('activity')}<span>Connect</span></button>
+				<button class="ldp-user-info-tab${selectedView === 'profile' ? ' active' : ''}" type="button" role="tab" data-user-info-view="profile" aria-selected="${selectedView === 'profile'}">${icon('userRound')}<span>基本信息</span></button>
+			</div>
+			<div class="ldp-user-info-view" role="tabpanel" data-user-info-panel="connect"${selectedView === 'connect' ? '' : ' hidden'}>${settingsConnectHtml(connectData, connectError)}</div>
+			<div class="ldp-user-info-view" role="tabpanel" data-user-info-panel="profile"${selectedView === 'profile' ? '' : ' hidden'}>${settingsUserProfileHtml(user)}</div>`;
 		hydratePersistentAvatarImages(container, POST_REQUEST_PRIORITY.userCard);
 	}
 
@@ -19257,7 +19266,7 @@
 		const privateMessageUnavailable = user && (
 			user.can_send_private_message_to_user === false || user.can_send_private_messages === false
 		);
-		const followed = !!(user && user.is_followed);
+		const followed = !!(user?.is_followed);
 		const followUnavailable = !!(user && user.can_follow === false && !followed);
 		const endorsementUnavailable = !!(user && user.category_expert_endorsements === null);
 		const notificationLevel = userNotificationLevel(user);
@@ -19279,28 +19288,28 @@
 			]),
 		];
 		return `<div class="ldp-user-card-actions-wrap">
-      <div class="ldp-user-card-actions" role="toolbar" aria-label="用户操作">
-        ${actions.map((item) => `<button type="button" class="ldp-user-card-action${item.active ? ' is-active' : ''}"
-          data-user-card-action="${item.action}" data-username="${escAttr(username)}"
-          data-tooltip="${escAttr(item.label)}" aria-label="${escAttr(item.label)}"${item.expanded ? ' aria-expanded="false"' : ''}${item.disabled ? ' disabled' : ''}>
-          ${icon(item.icon)}
-        </button>`).join('')}
-      </div>
-      <div class="ldp-user-card-notification-menu" role="menu" aria-label="消息设置" hidden>
-        ${notificationOptions.map((item) => `<button type="button" role="menuitemradio"
-          class="ldp-user-card-notification-option${item.level === notificationLevel ? ' is-active' : ''}"
-          data-user-notification-level="${item.level}" aria-checked="${item.level === notificationLevel}">
-          ${icon(item.icon)}<span class="ldp-user-card-notification-option-copy">
-            <strong>${item.label}</strong><small>${item.description}</small>
-          </span>
-        </button>`).join('')}
-      </div>
-    </div>`;
+			<div class="ldp-user-card-actions" role="toolbar" aria-label="用户操作">
+				${actions.map((item) => `<button type="button" class="ldp-user-card-action${item.active ? ' is-active' : ''}"
+					data-user-card-action="${item.action}" data-username="${escAttr(username)}"
+					data-tooltip="${escAttr(item.label)}" aria-label="${escAttr(item.label)}"${item.expanded ? ' aria-expanded="false"' : ''}${item.disabled ? ' disabled' : ''}>
+					${icon(item.icon)}
+				</button>`).join('')}
+			</div>
+			<div class="ldp-user-card-notification-menu" role="menu" aria-label="消息设置" hidden>
+				${notificationOptions.map((item) => `<button type="button" role="menuitemradio"
+					class="ldp-user-card-notification-option${item.level === notificationLevel ? ' is-active' : ''}"
+					data-user-notification-level="${item.level}" aria-checked="${item.level === notificationLevel}">
+					${icon(item.icon)}<span class="ldp-user-card-notification-option-copy">
+						<strong>${item.label}</strong><small>${item.description}</small>
+					</span>
+				</button>`).join('')}
+			</div>
+		</div>`;
 	}
 
 	function userCardHomeHtml(username) {
 		return `<a class="ldp-user-card-home" href="${userProfileUrl(username)}" target="_blank" rel="noopener"
-      data-tooltip="进入用户空间" aria-label="进入用户空间">${icon('externalLink')}</a>`;
+			data-tooltip="进入用户空间" aria-label="进入用户空间">${icon('externalLink')}</a>`;
 	}
 
 	function userCardBackgroundHtml(user) {
@@ -19311,13 +19320,13 @@
 		if (!backgroundUrl || !isSafeUserCardUrl(backgroundUrl)) return '';
 		const source = absoluteImageUrl(backgroundUrl);
 		return `<button class="ldp-user-card-background" type="button" data-user-card-background
-      data-background-url="${escAttr(source)}" aria-label="预览用户背景图">
-      <img src="${escAttr(source)}" alt="" loading="lazy" decoding="async">
-    </button>`;
+			data-background-url="${escAttr(source)}" aria-label="预览用户背景图">
+			<img src="${escAttr(source)}" alt="" loading="lazy" decoding="async">
+		</button>`;
 	}
 
 	function userCardBadgeHash(badge) {
-		const identity = `${badge && badge.id || ''}|${badge && badge.name || ''}|${badge && badge.icon || ''}`;
+		const identity = `${badge?.id || ''}|${badge?.name || ''}|${badge?.icon || ''}`;
 		let hash = 2166136261;
 		for (let index = 0; index < identity.length; index++) {
 			hash ^= identity.charCodeAt(index);
@@ -19369,9 +19378,9 @@
 	]);
 
 	function userCardBadgeGlyphKind(badge) {
-		const name = String(badge && badge.name || '').trim();
+		const name = String(badge?.name || '').trim();
 		if (USER_CARD_BADGE_EXACT_KINDS[name]) return USER_CARD_BADGE_EXACT_KINDS[name];
-		const source = `${badge && badge.icon || ''} ${name}`.toLowerCase();
+		const source = `${badge?.icon || ''} ${name}`.toLowerCase();
 		return (USER_CARD_BADGE_KIND_RULES.find(([, pattern]) => pattern.test(source)) || ['sigil'])[0];
 	}
 
@@ -19427,42 +19436,42 @@
 
 	function userCardBadgeIconHtml(badge) {
 		return `<svg class="ldp-user-card-badge-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <g transform="translate(3 1) scale(.75)">${userCardBadgeGlyphHtml(userCardBadgeGlyphKind(badge), badge)}</g>
-    </svg>`;
+			<g transform="translate(3 1) scale(.75)">${userCardBadgeGlyphHtml(userCardBadgeGlyphKind(badge), badge)}</g>
+		</svg>`;
 	}
 
 	function userCardBadgesHtml(user) {
-		const badges = uniqueUserBadges(user && user.user_badges);
+		const badges = uniqueUserBadges(user?.user_badges);
 		if (!badges.length) return '';
-		const featuredIds = new Set((Array.isArray(user && user.featured_user_badge_ids)
+		const featuredIds = new Set((Array.isArray(user?.featured_user_badge_ids)
 			? user.featured_user_badge_ids : []).map(Number));
 		const badgeSortNumber = (badge, field, minimum = 0) => {
-			const value = Number(badge && badge[field]);
+			const value = Number(badge?.[field]);
 			return Number.isFinite(value) && value >= minimum ? value : Number.MAX_SAFE_INTEGER;
 		};
 		const ordered = badges.slice().sort((a, b) =>
 			badgeSortNumber(a, 'badge_type_id', 1) - badgeSortNumber(b, 'badge_type_id', 1) ||
 			badgeSortNumber(a, 'grant_count') - badgeSortNumber(b, 'grant_count') ||
-			Number(featuredIds.has(Number(b && b.id))) - Number(featuredIds.has(Number(a && a.id))) ||
-			String(b && b.granted_at || '').localeCompare(String(a && a.granted_at || ''))
+			Number(featuredIds.has(Number(b?.id))) - Number(featuredIds.has(Number(a?.id))) ||
+			String(b?.granted_at || '').localeCompare(String(a?.granted_at || ''))
 		);
 		return `<div class="ldp-user-card-badges" aria-label="用户徽章，共 ${ordered.length} 枚">
-      <span class="ldp-user-card-badges-label">徽章（${ordered.length}）</span>
-      <div class="ldp-user-card-badge-strip">
-        <button class="ldp-user-card-badge-scroll is-prev" type="button" data-user-card-badge-scroll="-1"
-          aria-label="向左查看更多徽章" hidden>${icon('chevronRight')}</button>
-        <div class="ldp-user-card-badge-list" tabindex="0" aria-label="全部 ${ordered.length} 枚徽章，可左右滚动查看">
-          ${ordered.map((badge) => {
+			<span class="ldp-user-card-badges-label">徽章（${ordered.length}）</span>
+			<div class="ldp-user-card-badge-strip">
+				<button class="ldp-user-card-badge-scroll is-prev" type="button" data-user-card-badge-scroll="-1"
+					aria-label="向左查看更多徽章" hidden>${icon('chevronRight')}</button>
+				<div class="ldp-user-card-badge-list" tabindex="0" aria-label="全部 ${ordered.length} 枚徽章，可左右滚动查看">
+					${ordered.map((badge) => {
 						const name = String(badge.name || '').trim();
-						const tier = Number(badge && badge.badge_type_id);
+						const tier = Number(badge?.badge_type_id);
 						return `<button class="ldp-user-card-badge" type="button" data-badge-tier="${Number.isFinite(tier) ? tier : ''}"
-              data-ldp-tooltip-label="${escAttr(name)}" aria-label="${escAttr(name)}">${userCardBadgeIconHtml(badge)}</button>`;
+							data-ldp-tooltip-label="${escAttr(name)}" aria-label="${escAttr(name)}">${userCardBadgeIconHtml(badge)}</button>`;
 					}).join('')}
-        </div>
-        <button class="ldp-user-card-badge-scroll is-next" type="button" data-user-card-badge-scroll="1"
-          aria-label="向右查看更多徽章" hidden>${icon('chevronRight')}</button>
-      </div>
-    </div>`;
+				</div>
+				<button class="ldp-user-card-badge-scroll is-next" type="button" data-user-card-badge-scroll="1"
+					aria-label="向右查看更多徽章" hidden>${icon('chevronRight')}</button>
+			</div>
+		</div>`;
 	}
 
 	function syncUserCardBadgeScrollControls(root) {
@@ -19490,7 +19499,7 @@
 			return persistentAvatarHtml(template, 96, 'ldp-user-card-avatar', name);
 		}
 		return `<img class="ldp-user-card-avatar" src="${escAttr(preview)}" alt="" loading="eager" decoding="async"
-      data-ldp-avatar-template="${escAttr(template)}" data-ldp-avatar-size="96" data-ldp-avatar-class="ldp-user-card-avatar">`;
+			data-ldp-avatar-template="${escAttr(template)}" data-ldp-avatar-size="96" data-ldp-avatar-class="ldp-user-card-avatar">`;
 	}
 
 	function renderFallbackUserCard(user, username, phase = 'ready', avatarPreviewSource = '', options = {}) {
@@ -19510,43 +19519,43 @@
 				? `<span class="ldp-user-card-avatar-trigger">${avatar}</span>`
 				: `<button class="ldp-user-card-avatar-trigger" type="button" data-user-card-avatar data-avatar-template="${escAttr(user.avatar_template)}" data-avatar-username="${escAttr(username)}" aria-label="查看 ${escAttr(name)} 的头像原图">${avatar}</button>`;
 		return `
-      ${options.mediaInteractive === false ? '' : userCardBackgroundHtml(user)}
-      ${userCardHomeHtml(username)}
-      <div class="ldp-user-card-head">
-        ${avatarControl}
-        <div class="ldp-user-card-identity">
-          <div class="ldp-user-card-name-row">
-            <div class="ldp-user-card-name">${esc(name)}</div>
-            ${Number.isFinite(trustLevel) ? `<span class="ldp-user-card-level">Lv${esc(trustLevel)}</span>` : ''}
-          </div>
-          <div class="ldp-user-card-username">@${esc(username)}</div>
-          ${title ? `<div class="ldp-user-card-title">${esc(title)}</div>` : ''}
-        </div>
-      </div>
-      ${userProfileFactsHtml(user, 'card', { includePrimaryGroup: true, groupTooltip: true, trustLevel })}
-      ${userCardGroupsHtml(user)}
-      ${userCardFollowStatsHtml(user, username, { interactive: options.followStatsInteractive !== false })}
-      ${bio ? `<div class="ldp-user-card-bio">${sanitizeUserCardBioHtml(bio)}</div>` : ''}
-      ${userCardBadgesHtml(user)}
-      <div class="ldp-user-card-stats">
-        ${userCardStat(userStatValue(user, ['post_count', 'posts_count']), '帖子', userActivityUrl(username, 'activity/replies'))}
-        ${userCardStat(userStatValue(user, ['likes_received', 'likes_given']), '获赞', userActivityUrl(username, 'activity/likes-received'))}
-        ${userCardStat(userStatValue(user, ['topic_count', 'topics_entered']), '主题', userActivityUrl(username, 'activity/topics'))}
-      </div>
-      ${userCardProgressHtml(phase)}
-      ${options.actions === false ? '' : `${userCardActionsHtml(user, username)}
-      <div class="ldp-user-card-action-status" role="status" aria-live="polite"></div>`}`;
+			${options.mediaInteractive === false ? '' : userCardBackgroundHtml(user)}
+			${userCardHomeHtml(username)}
+			<div class="ldp-user-card-head">
+				${avatarControl}
+				<div class="ldp-user-card-identity">
+					<div class="ldp-user-card-name-row">
+						<div class="ldp-user-card-name">${esc(name)}</div>
+						${Number.isFinite(trustLevel) ? `<span class="ldp-user-card-level">Lv${esc(trustLevel)}</span>` : ''}
+					</div>
+					<div class="ldp-user-card-username">@${esc(username)}</div>
+					${title ? `<div class="ldp-user-card-title">${esc(title)}</div>` : ''}
+				</div>
+			</div>
+			${userProfileFactsHtml(user, 'card', { includePrimaryGroup: true, groupTooltip: true, trustLevel })}
+			${userCardGroupsHtml(user)}
+			${userCardFollowStatsHtml(user, username, { interactive: options.followStatsInteractive !== false })}
+			${bio ? `<div class="ldp-user-card-bio">${sanitizeUserCardBioHtml(bio)}</div>` : ''}
+			${userCardBadgesHtml(user)}
+			<div class="ldp-user-card-stats">
+				${userCardStat(userStatValue(user, ['post_count', 'posts_count']), '帖子', userActivityUrl(username, 'activity/replies'))}
+				${userCardStat(userStatValue(user, ['likes_received', 'likes_given']), '获赞', userActivityUrl(username, 'activity/likes-received'))}
+				${userCardStat(userStatValue(user, ['topic_count', 'topics_entered']), '主题', userActivityUrl(username, 'activity/topics'))}
+			</div>
+			${userCardProgressHtml(phase)}
+			${options.actions === false ? '' : `${userCardActionsHtml(user, username)}
+			<div class="ldp-user-card-action-status" role="status" aria-live="polite"></div>`}`;
 	}
 
 	function userCardSeedFromLink(link, username) {
-		const head = link && link.closest('.ldp-post-head');
-		const post = head && head.closest('.ldp-post');
-		const postData = post && post._ldpPostData || {};
-		const avatar = head && head.querySelector('.ldp-avatar');
-		const author = head && head.querySelector('.ldp-author');
+		const head = link?.closest('.ldp-post-head');
+		const post = head?.closest('.ldp-post');
+		const postData = post?._ldpPostData || {};
+		const avatar = head?.querySelector('.ldp-avatar');
+		const author = head?.querySelector('.ldp-author');
 		return {
 			username,
-			name: (author && author.textContent || '').trim() || username,
+			name: (author?.textContent || '').trim() || username,
 			_ldp_avatar_preview_url: avatar && (avatar.currentSrc || avatar.src) || '',
 			avatar_template: avatar && (
 				avatar.dataset.ldpAvatarTemplate ||
@@ -19565,7 +19574,7 @@
 		const username = getUserCardUsername(link);
 		if (!username || !isCurrent()) return;
 		const card = options.card || getUserCardSurface();
-		const positionCard = typeof options.positionCard === 'function'
+		const positionCard = isFunction(options.positionCard)
 			? options.positionCard
 			: (target) => positionFallbackUserCard(target, link);
 		const seedUser = userCardSeedFromLink(link, username);
@@ -19582,7 +19591,7 @@
 			positionCard(card, link);
 		};
 		renderUser(seedUser, 'profile');
-		if (typeof onOpen === 'function') onOpen(card._ldpUserData);
+		if (isFunction(onOpen)) onOpen(card._ldpUserData);
 		try {
 			await fetchUserCard(username, renderUser);
 		} catch (e) {
@@ -19609,7 +19618,7 @@
 	}
 
 	function visibleNativeFloatingSurface() {
-		return Array.from(document.querySelectorAll('.fk-d-menu,.emoji-picker')).find(nativeComposerVisible) || null;
+		return [...document.querySelectorAll('.fk-d-menu,.emoji-picker')].find(nativeComposerVisible) || null;
 	}
 
 	function createReaderWindowController(overlay, modal) {
@@ -19685,7 +19694,7 @@
 			}
 		};
 		const animateLockButton = () => {
-			if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+			if (prefersReducedMotion()) return;
 			lockButton.classList.remove('ldp-lock-state-changing');
 			void lockButton.offsetWidth;
 			lockButton.classList.add('ldp-lock-state-changing');
@@ -19904,9 +19913,9 @@
 	}
 
 	function syncNativeTopicStatsComponent(card, reactionCountsByTopicId) {
-		const posts = card && card.querySelector(':scope > td.posts');
-		const views = card && card.querySelector(':scope > td.views');
-		const activity = card && card.querySelector(':scope > td.activity');
+		const posts = card?.querySelector(':scope > td.posts');
+		const views = card?.querySelector(':scope > td.views');
+		const activity = card?.querySelector(':scope > td.activity');
 		if (!posts || !views || !activity) return;
 		let component = posts.querySelector(':scope > .ldp-topic-stats-component');
 		const sourceMarkup = (cell) => [...cell.childNodes]
@@ -19916,7 +19925,7 @@
 		const isOldTopic = views.dataset.ldpNativeOldTopic === 'true';
 		const directId = card.dataset.topicId || card.getAttribute('data-topic-id');
 		const topicLink = card.querySelector('a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],a[href*="/t/"]');
-		const topicId = String(directId || extractTopicRouteFromUrl(topicLink && topicLink.href)?.topicId || '');
+		const topicId = String(directId || extractTopicRouteFromUrl(topicLink?.href)?.topicId || '');
 		const responseCount = topicId && reactionCountsByTopicId.has(topicId)
 			? reactionCountsByTopicId.get(topicId)
 			: null;
@@ -19965,10 +19974,10 @@
 	}
 
 	function syncNativeTopicActivityStat(card) {
-		const activity = card && card.querySelector(':scope > td.activity');
-		const component = card && card.querySelector(':scope > td.posts > .ldp-topic-stats-component');
-		const source = activity && activity.querySelector('.relative-date');
-		const target = component && component.querySelector('.ldp-topic-stat--activity .relative-date');
+		const activity = card?.querySelector(':scope > td.activity');
+		const component = card?.querySelector(':scope > td.posts > .ldp-topic-stats-component');
+		const source = activity?.querySelector('.relative-date');
+		const target = component?.querySelector('.ldp-topic-stat--activity .relative-date');
 		if (!activity || !component || !source || !target) return false;
 		if (target.textContent !== source.textContent) target.textContent = source.textContent;
 		const signatureParts = String(component.dataset.ldpSourceSignature || '').split('\u0001');
@@ -20002,7 +20011,7 @@
 			const topicsValue = discourseModelValue(list, 'topics') || discourseModelValue(list, 'content');
 			const topics = Array.isArray(topicsValue)
 				? topicsValue
-				: topicsValue && typeof topicsValue.toArray === 'function'
+				: isFunction(topicsValue?.toArray)
 					? topicsValue.toArray()
 					: [];
 			topics.forEach((topic) => {
@@ -20025,7 +20034,7 @@
 			'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],.link-top-line a[href*="/t/"],a[href*="/t/"]'
 		);
 		const route = extractTopicRouteFromUrl(topicLink && (topicLink.getAttribute('href') || topicLink.href));
-		const topicId = Number(card.dataset.topicId || card.getAttribute('data-topic-id') || route && route.topicId);
+		const topicId = Number(card.dataset.topicId || card.getAttribute('data-topic-id') || route?.topicId);
 		const line = topicLink && (topicLink.closest('.link-top-line') || topicLink.parentElement);
 		if (!(topicId > 0) || !line) return;
 		let button = line.querySelector(':scope > .ldp-reader-queue-add');
@@ -20056,7 +20065,7 @@
 		};
 		const flush = () => {
 			frame = 0;
-			const cards = Array.from(pendingCards).filter((card) => card.isConnected);
+			const cards = [...pendingCards].filter((card) => card.isConnected);
 			pendingCards.clear();
 			cards.forEach(syncNativeTopicQueueButton);
 		};
@@ -20077,9 +20086,9 @@
 	}
 
 	function syncNativeTopicTitleTools(card, dndControl) {
-		const line = dndControl && dndControl.closest('.link-top-line');
+		const line = dndControl?.closest('.link-top-line');
 		if (!card || !line || !card.contains(line)) return;
-		const normalizeText = (node) => String(node && node.textContent || '').replace(/\s+/g, ' ').trim();
+		const normalizeText = (node) => String(node?.textContent || '').replace(/\s+/g, ' ').trim();
 		const expertLabel = [...line.querySelectorAll('*')].find((node) => normalizeText(node) === '专家回应');
 		if (!expertLabel) return;
 		const directChild = (node) => {
@@ -20105,8 +20114,8 @@
 	function markNativeDoNotDisturbBadges(scope = document, reactionCountsByTopicId = null) {
 		const cardSelector = 'tr.topic-list-item,.topic-list-item,.latest-topic-list-item';
 		const cards = [];
-		if (scope && typeof scope.matches === 'function' && scope.matches(cardSelector)) cards.push(scope);
-		if (scope && typeof scope.querySelectorAll === 'function') cards.push(...scope.querySelectorAll(cardSelector));
+		if (isFunction(scope?.matches) && scope.matches(cardSelector)) cards.push(scope);
+		if (isFunction(scope?.querySelectorAll)) cards.push(...scope.querySelectorAll(cardSelector));
 		if (!cards.length) return;
 		const reactionCounts = reactionCountsByTopicId || nativeTopicOpReactionCounts();
 		cards.forEach((card) => {
@@ -20133,10 +20142,10 @@
 	}
 
 	function clearNativeEmbeddedTopicEnhancements(scope = document) {
-		if (!scope || typeof scope.querySelectorAll !== 'function') return;
+		if (!scope || !isFunction(scope.querySelectorAll)) return;
 		scope.querySelectorAll('.ldp-topic-stats-component').forEach((component) => component.remove());
 		scope.querySelectorAll('.ldp-native-topic-title-tools').forEach((group) => {
-			group.replaceWith(...Array.from(group.childNodes));
+			group.replaceWith(...[...group.childNodes]);
 		});
 		scope.querySelectorAll('[data-ldp-native-dnd]').forEach((node) => node.removeAttribute('data-ldp-native-dnd'));
 		scope.querySelectorAll('[data-ldp-native-topic-date]').forEach((node) => node.removeAttribute('data-ldp-native-topic-date'));
@@ -20146,7 +20155,7 @@
 	function createReaderWorkspaceController(overlay, modal, isDirectTopicRoute) {
 		const resizeHandle = modal.querySelector('.ldp-reader-embed-resize');
 		const hostScrollbar = overlay.querySelector('.ldp-reader-host-scrollbar');
-		const hostScrollbarThumb = hostScrollbar && hostScrollbar.querySelector('.ldp-reader-host-scrollbar-thumb');
+		const hostScrollbarThumb = hostScrollbar?.querySelector('.ldp-reader-host-scrollbar-thumb');
 		const hostTopButton = overlay.querySelector('.ldp-reader-host-top');
 		const root = PAGE_ROOT;
 		const availableModes = isDirectTopicRoute ? TOPIC_READER_MODES : LIST_READER_MODES;
@@ -20205,12 +20214,12 @@
 			const viewportHeight = Math.max(1, Number(window.innerHeight || root.clientHeight || 0));
 			const scrollHeight = Math.max(
 				viewportHeight,
-				Number(scrollingElement && scrollingElement.scrollHeight || 0),
-				Number(document.body && document.body.scrollHeight || 0),
+				Number(scrollingElement?.scrollHeight || 0),
+				Number(document.body?.scrollHeight || 0),
 			);
 			const maxScroll = Math.max(0, scrollHeight - viewportHeight);
 			const scrollTop = Math.min(maxScroll, Math.max(0, Number(
-				window.scrollY || scrollingElement && scrollingElement.scrollTop || 0,
+				window.scrollY || scrollingElement?.scrollTop || 0,
 			)));
 			return { viewportHeight, scrollHeight, maxScroll, scrollTop };
 		};
@@ -20338,7 +20347,7 @@
 		};
 		const startHostScrollbarSync = () => {
 			if (!hostScrollbar || !hostScrollbarThumb) return;
-			if (!hostScrollbarResizeObserver && typeof ResizeObserver === 'function') {
+			if (!hostScrollbarResizeObserver && isFunction(ResizeObserver)) {
 				hostScrollbarResizeObserver = new ResizeObserver(scheduleHostScrollbarSync);
 				hostScrollbarResizeObserver.observe(root);
 				if (document.body) hostScrollbarResizeObserver.observe(document.body);
@@ -20424,7 +20433,7 @@
 		};
 		const topLevelBodyChild = (node) => {
 			let current = node && node.nodeType === 1 ? node : null;
-			while (current && current.parentElement && current.parentElement !== document.body) current = current.parentElement;
+			while (current?.parentElement && current.parentElement !== document.body) current = current.parentElement;
 			return current && current.parentElement === document.body ? current : null;
 		};
 		const syncEmbeddedHostRoots = () => {
@@ -20461,13 +20470,13 @@
 				embeddedHostActivityCards.clear();
 				return;
 			}
-			const activityCards = Array.from(embeddedHostActivityCards)
+			const activityCards = [...embeddedHostActivityCards]
 				.filter((card) => card.isConnected && !embeddedHostChangedCards.has(card));
 			embeddedHostActivityCards.clear();
 			activityCards.forEach((card) => {
 				if (!syncNativeTopicActivityStat(card)) embeddedHostChangedCards.add(card);
 			});
-			const cards = Array.from(embeddedHostChangedCards).filter((card) => card.isConnected);
+			const cards = [...embeddedHostChangedCards].filter((card) => card.isConnected);
 			embeddedHostChangedCards.clear();
 			if (!cards.length) return;
 			const reactionCountsByTopicId = nativeTopicOpReactionCounts();
@@ -20518,7 +20527,7 @@
 							node.nodeType === 1 && (node.matches('.ldp-topic-stats-component') || node.closest('.ldp-topic-stats-component'))
 						);
 						if (!onlyOwnedStatsChanged) collectNearestCard(record.target);
-						record.addedNodes && record.addedNodes.forEach(collectAddedCards);
+						record.addedNodes?.forEach(collectAddedCards);
 					});
 					scheduleEmbeddedHostCardSet(changedCards, embeddedHostChangedCards);
 				});
@@ -20651,7 +20660,7 @@
 			setEmbedResizing(false);
 			setPref('listReaderEmbedWidth', embedWidth);
 			try {
-				if (resizeHandle && resizeHandle.hasPointerCapture(pointer.pointerId)) resizeHandle.releasePointerCapture(pointer.pointerId);
+				if (resizeHandle?.hasPointerCapture(pointer.pointerId)) resizeHandle.releasePointerCapture(pointer.pointerId);
 			} catch (e) {}
 			pointer = null;
 			emitChange();
@@ -20746,7 +20755,7 @@
 		const desktopWindow = () => window.innerWidth > 760;
 		const elementInTopLayer = (element) => {
 			try {
-				return !!(element && element.matches(':popover-open'));
+				return !!(element?.matches(':popover-open'));
 			} catch (error) {
 				return false;
 			}
@@ -20754,13 +20763,13 @@
 		const releaseOwnedTopLayer = (element) => {
 			if (!element || !ownedTopLayerElements.delete(element)) return;
 			try {
-				if (elementInTopLayer(element) && typeof element.hidePopover === 'function') element.hidePopover();
+				if (elementInTopLayer(element) && isFunction(element.hidePopover)) element.hidePopover();
 			} catch (error) {}
 			element.removeAttribute('popover');
 			delete element.dataset.ldpReaderTopLayer;
 		};
 		const promoteOwnedTopLayer = (element, type) => {
-			if (!element || typeof element.showPopover !== 'function') return false;
+			if (!element || !isFunction(element.showPopover)) return false;
 			if (element.hasAttribute('popover') && !ownedTopLayerElements.has(element)) return elementInTopLayer(element);
 			if (!ownedTopLayerElements.has(element)) {
 				element.setAttribute('popover', 'manual');
@@ -20787,7 +20796,7 @@
 		const syncNativeFloatingTopLayers = () => {
 			nativeFloatingFrame = 0;
 			if (!elementInTopLayer(composer)) return;
-			const visible = Array.from(document.querySelectorAll(nativeFloatingSurfaceSelector))
+			const visible = [...document.querySelectorAll(nativeFloatingSurfaceSelector)]
 				.filter(nativeFloatingSurfaceVisible);
 			const surfaces = visible.filter((element) => !visible.some((parent) => parent !== element && parent.contains(element)));
 			ownedTopLayerElements.forEach((element) => {
@@ -20829,14 +20838,14 @@
 			nativeFloatingFrame = 0;
 			if (nativeFloatingObserver) nativeFloatingObserver.disconnect();
 			nativeFloatingObserver = null;
-			Array.from(ownedTopLayerElements).reverse().forEach(releaseOwnedTopLayer);
+			[...ownedTopLayerElements].reverse().forEach(releaseOwnedTopLayer);
 		};
 		const releaseComposerTopLayers = () => {
 			releaseOwnedComposerTopLayers();
 			root.classList.remove('ldp-composer-host-isolated');
 		};
 		const syncComposerTopLayers = () => {
-			const composerOpen = !!(composer && composer.isConnected &&
+			const composerOpen = !!(composer?.isConnected &&
 				!composer.classList.contains('closed') && composerElementAvailable(composer));
 			root.classList.toggle('ldp-composer-host-isolated', composerOpen);
 			if (!composerOpen || !promoteOwnedTopLayer(composer, 'composer')) {
@@ -20853,7 +20862,7 @@
 		};
 		const syncComposerRoot = () => {
 			let next = composer;
-			while (next && next.parentElement && next.parentElement !== document.body) next = next.parentElement;
+			while (next?.parentElement && next.parentElement !== document.body) next = next.parentElement;
 			if (!next || next.parentElement !== document.body) next = null;
 			if (next === composerRoot) return;
 			clearComposerRoot();
@@ -20930,11 +20939,11 @@
 		const normalizeState = (next) => {
 			const bounds = limits();
 			const fallback = defaultState();
-			const width = clamp(numeric(next && next.width, fallback.width), bounds.minWidth, bounds.maxWidth);
-			const height = clamp(numeric(next && next.height, fallback.height), bounds.minHeight, bounds.maxHeight);
+			const width = clamp(numeric(next?.width, fallback.width), bounds.minWidth, bounds.maxWidth);
+			const height = clamp(numeric(next?.height, fallback.height), bounds.minHeight, bounds.maxHeight);
 			return {
-				left: clamp(numeric(next && next.left, fallback.left), bounds.left, bounds.right - width),
-				top: clamp(numeric(next && next.top, fallback.top), bounds.top, bounds.bottom - height),
+				left: clamp(numeric(next?.left, fallback.left), bounds.left, bounds.right - width),
+				top: clamp(numeric(next?.top, fallback.top), bounds.top, bounds.bottom - height),
 				width,
 				height,
 			};
@@ -21031,7 +21040,7 @@
 		};
 		const syncState = () => applyState(state || preferredState());
 		const clearGeometry = () => {
-			const composerStyle = composer && composer.style;
+			const composerStyle = composer?.style;
 			if (composer) composer.removeAttribute(positionedAttribute);
 			geometryProperties.forEach((property) => {
 				rootStyle.removeProperty(property);
@@ -21062,7 +21071,7 @@
 			const activePointer = pointer;
 			pointer = null;
 			const target = activePointer.target;
-			if (target && target.hasPointerCapture(activePointer.id)) target.releasePointerCapture(activePointer.id);
+			if (target?.hasPointerCapture(activePointer.id)) target.releasePointerCapture(activePointer.id);
 			if (chrome) chrome.classList.remove('is-interacting');
 			root.classList.remove('ldp-composer-window-interacting');
 			scheduleComposerOverflowSync();
@@ -21116,7 +21125,7 @@
 				mode,
 				startX: event.clientX,
 				startY: event.clientY,
-				state: Object.assign({}, state),
+				state: { ...state },
 				target,
 			};
 			pointerClientX = event.clientX;
@@ -21145,7 +21154,7 @@
 				if (!state || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
 				const step = event.shiftKey ? 40 : 12;
 				if (event.target.matches('.ldp-composer-drag-handle')) {
-					const next = Object.assign({}, state);
+					const next = { ...state };
 					if (event.key === 'ArrowLeft') next.left -= step;
 					else if (event.key === 'ArrowRight') next.left += step;
 					else if (event.key === 'ArrowUp') next.top -= step;
@@ -21281,7 +21290,7 @@
 
 	function discourseModelValue(model, key) {
 		if (!model) return undefined;
-		if (typeof model.get === 'function') return model.get(key);
+		if (isFunction(model.get)) return model.get(key);
 		return model[key];
 	}
 
@@ -21289,24 +21298,24 @@
 		const model = discourseModelValue(composer, 'model');
 		if (!ctx || !composer || !model) return false;
 		ctx.nativeComposerSession = { composer, model, ...metadata };
-		if (typeof ctx.bindNativeComposerRefresh === 'function') ctx.bindNativeComposerRefresh();
+		if (isFunction(ctx.bindNativeComposerRefresh)) ctx.bindNativeComposerRefresh();
 		return true;
 	}
 
 	function cancelNativeComposerDraftDebounce(composer) {
 		const runloopModule = lookupDiscourseModule('@ember/runloop');
-		const cancelRunloop = runloopModule && runloopModule.cancel;
-		if (typeof cancelRunloop === 'function') cancelRunloop(composer && composer._saveDraftDebounce);
+		const cancelRunloop = runloopModule?.cancel;
+		if (isFunction(cancelRunloop)) cancelRunloop(composer?._saveDraftDebounce);
 	}
 
 	async function discardReaderNativeComposer(ctx) {
-		const ownedSession = ctx && ctx.nativeComposerSession;
+		const ownedSession = ctx?.nativeComposerSession;
 		const visibleComposer = nativeComposerVisible(document.querySelector('#reply-control'))
 			? lookupDiscourse('service:composer')
 			: null;
 		const visibleModel = discourseModelValue(visibleComposer, 'model');
-		const composer = visibleModel ? visibleComposer : ownedSession && ownedSession.composer;
-		const model = visibleModel || ownedSession && ownedSession.model;
+		const composer = visibleModel ? visibleComposer : ownedSession?.composer;
+		const model = visibleModel || ownedSession?.model;
 		if (ctx) ctx.nativeComposerSession = null;
 		if (!composer || discourseModelValue(composer, 'model') !== model) return true;
 
@@ -21320,24 +21329,24 @@
 		}
 
 		try {
-			if (typeof composer.destroyDraft === 'function') await composer.destroyDraft();
+			if (isFunction(composer.destroyDraft)) await composer.destroyDraft();
 		} catch (error) {
 			cleanupError = error;
 		}
 
 		if (discourseModelValue(composer, 'model') === model) {
 			try {
-				if (typeof model.clearState === 'function') model.clearState();
+				if (isFunction(model.clearState)) model.clearState();
 			} catch (error) {
 				cleanupError = cleanupError || error;
 			}
 			try {
-				if (typeof composer.close === 'function') composer.close();
+				if (isFunction(composer.close)) composer.close();
 			} catch (error) {
 				cleanupError = cleanupError || error;
 			}
 			try {
-				if (appEvents && typeof appEvents.trigger === 'function') appEvents.trigger('composer:cancelled');
+				if (isFunction(appEvents?.trigger)) appEvents.trigger('composer:cancelled');
 			} catch (error) {
 				cleanupError = cleanupError || error;
 			}
@@ -21353,15 +21362,15 @@
 	}
 
 	async function saveAndCloseReaderNativeComposer(ctx) {
-		const ownedSession = ctx && ctx.nativeComposerSession;
+		const ownedSession = ctx?.nativeComposerSession;
 		if (ctx) ctx.nativeComposerSession = null;
-		const composer = ownedSession && ownedSession.composer;
-		const model = ownedSession && ownedSession.model;
+		const composer = ownedSession?.composer;
+		const model = ownedSession?.model;
 		if (!composer || discourseModelValue(composer, 'model') !== model) return true;
 
 		try {
 			cancelNativeComposerDraftDebounce(composer);
-			if (typeof composer.saveAndCloseComposer !== 'function') return false;
+			if (!isFunction(composer.saveAndCloseComposer)) return false;
 			const closeResult = composer.saveAndCloseComposer();
 			const savePromise = composer._saveDraftPromise;
 			await Promise.resolve(closeResult);
@@ -21411,9 +21420,9 @@
 			if (ctx?.readerSession && !ctx.readerSession.isCurrent('opening', 'active')) return;
 			const popup = document.querySelector('#reply-control');
 			if (!nativeComposerVisible(popup)) return;
-			const input = Array.from(popup.querySelectorAll(
+			const input = [...popup.querySelectorAll(
 				'textarea.d-editor-input, textarea, .ProseMirror[contenteditable="true"]'
-			)).find((candidate) => composerElementAvailable(candidate) &&
+			)].find((candidate) => composerElementAvailable(candidate) &&
 				!candidate.matches('[disabled],[aria-disabled="true"]'));
 			if (!input) return;
 			try { input.focus({ preventScroll: true }); } catch (error) { input.focus(); }
@@ -21422,7 +21431,7 @@
 
 	function createDetachedComposerModels(postNode, ctx, Topic, Post) {
 		const topicData = ctx.topicData || {};
-		const postData = postNode && postNode._ldpPostData || {};
+		const postData = postNode?._ldpPostData || {};
 		const topicModel = Topic.create({
 			id: +ctx.topicId,
 			title: topicData.title || '',
@@ -21439,7 +21448,7 @@
 			details: Object.assign({ can_create_post: true }, topicData.details || {}),
 			tags: Array.isArray(topicData.tags) ? topicData.tags.slice() : [],
 		});
-		if (typeof Post.munge !== 'function') {
+		if (!isFunction(Post.munge)) {
 			throw new Error('Discourse 楼层模型尚未就绪');
 		}
 		const postAttributes = Object.assign({}, postData, {
@@ -21470,32 +21479,32 @@
 		const topicModule = lookupDiscourseModule('discourse/models/topic');
 		const postModule = lookupDiscourseModule('discourse/models/post');
 		const draftModule = lookupDiscourseModule('discourse/models/draft');
-		const Composer = composerModule && composerModule.default;
-		const Topic = topicModule && topicModule.default;
-		const Post = postModule && postModule.default;
-		const Draft = draftModule && draftModule.default;
-		if (!composer || typeof composer.open !== 'function' || !appEvents) {
+		const Composer = composerModule?.default;
+		const Topic = topicModule?.default;
+		const Post = postModule?.default;
+		const Draft = draftModule?.default;
+		if (!composer || !isFunction(composer.open) || !appEvents) {
 			return nativeComposerFailure('service');
 		}
-		if (!Composer || !Composer.REPLY || !Topic || typeof Topic.create !== 'function' ||
-				!Post || typeof Post.create !== 'function') {
+		if (!Composer || !Composer.REPLY || !Topic || !isFunction(Topic.create) ||
+				!Post || !isFunction(Post.create)) {
 			return nativeComposerFailure('model');
 		}
-		if (!Draft || typeof Draft.get !== 'function') return nativeComposerFailure('draft');
+		if (!Draft || !isFunction(Draft.get)) return nativeComposerFailure('draft');
 		const rememberReplyComposer = () => rememberReaderNativeComposer(ctx, composer, {
 			action: 'reply',
 			parentPostNumber: postNumber,
 			highestPostNumber: Math.max(
 				0,
 				+(ctx.totalPosts || 0),
-				+(ctx.topicData && ctx.topicData.highest_post_number || 0),
+				+(ctx.topicData?.highest_post_number || 0),
 			),
 		});
 
 		try {
 			let topicData = ctx.topicData || {};
 			if ((!topicData.draft_key || topicData.draft_sequence == null) &&
-					ctx.loader && typeof ctx.loader.refreshTopicData === 'function') {
+					ctx.loader && isFunction(ctx.loader.refreshTopicData)) {
 				const freshTopic = await ctx.loader.refreshTopicData({ prime: false });
 				if (freshTopic) {
 					ctx.topicData = freshTopic;
@@ -21539,7 +21548,7 @@
 				if (ctx.nativeComposerSession && ctx.nativeComposerSession.model === currentModel) {
 					ctx.nativeComposerSession = null;
 				}
-				if (typeof composer.close === 'function') composer.close();
+				if (isFunction(composer.close)) composer.close();
 				await waitForDelay(0);
 			}
 
@@ -21553,7 +21562,7 @@
 			else options.post = postModel;
 
 			const draftData = await Draft.get(options.draftKey);
-			if (draftData && draftData.draft) {
+			if (draftData?.draft) {
 				const data = JSON.parse(draftData.draft);
 				options.draftSequence = draftData.draft_sequence;
 				options.reply = `${String(data.reply || '')}${quoteRaw ? `\n${quoteRaw}` : ''}`;
@@ -21590,17 +21599,17 @@
 	async function tryOpenNativeEditComposer(post, ctx) {
 		const postNumber = +(post && post.dataset.postNumber);
 		const postId = +(post && post.dataset.postId);
-		const postData = post && post._ldpPostData || {};
+		const postData = post?._ldpPostData || {};
 		if (!postNumber || !postId || postData.can_edit !== true) return false;
 		const composer = lookupDiscourse('service:composer');
 		const composerModule = lookupDiscourseModule('discourse/models/composer');
 		const topicModule = lookupDiscourseModule('discourse/models/topic');
 		const postModule = lookupDiscourseModule('discourse/models/post');
-		const Composer = composerModule && composerModule.default;
-		const Topic = topicModule && topicModule.default;
-		const Post = postModule && postModule.default;
-		if (!composer || typeof composer.open !== 'function' || !Composer || !Composer.EDIT ||
-				!Topic || typeof Topic.create !== 'function' || !Post || typeof Post.create !== 'function') {
+		const Composer = composerModule?.default;
+		const Topic = topicModule?.default;
+		const Post = postModule?.default;
+		if (!composer || !isFunction(composer.open) || !Composer || !Composer.EDIT ||
+				!Topic || !isFunction(Topic.create) || !Post || !isFunction(Post.create)) {
 			return nativeComposerFailure('service');
 		}
 		try {
@@ -21632,20 +21641,20 @@
 	function detachedNativePostModel(post, ctx) {
 		const topicModule = lookupDiscourseModule('discourse/models/topic');
 		const postModule = lookupDiscourseModule('discourse/models/post');
-		const Topic = topicModule && topicModule.default;
-		const Post = postModule && postModule.default;
-		if (!Topic || typeof Topic.create !== 'function' || !Post || typeof Post.create !== 'function') return null;
+		const Topic = topicModule?.default;
+		const Post = postModule?.default;
+		if (!Topic || !isFunction(Topic.create) || !Post || !isFunction(Post.create)) return null;
 		return createDetachedComposerModels(post, ctx, Topic, Post).postModel;
 	}
 
 	function openNativeAdminPostMenu(post, anchor, ctx) {
 		const menu = lookupDiscourse('service:menu');
 		const componentModule = lookupDiscourseModule('discourse/components/admin-post-menu');
-		const AdminPostMenu = componentModule && componentModule.default;
+		const AdminPostMenu = componentModule?.default;
 		const topicController = lookupDiscourse('controller:topic');
 		const postModel = detachedNativePostModel(post, ctx);
-		if (!menu || typeof menu.show !== 'function' || !AdminPostMenu || !topicController ||
-				typeof topicController.send !== 'function' || !postModel) {
+		if (!menu || !isFunction(menu.show) || !AdminPostMenu || !topicController ||
+				!isFunction(topicController.send) || !postModel) {
 			showSelectionToast('LINUX DO 原生楼层管理菜单尚未就绪，请稍后重试');
 			return false;
 		}
@@ -21677,7 +21686,7 @@
 	function removeReaderPost(post, ctx) {
 		const postId = +(post && post.dataset.postId);
 		const postNumber = +(post && post.dataset.postNumber);
-		const postData = post && post._ldpPostData || {};
+		const postData = post?._ldpPostData || {};
 		const parentNumber = +(postData.reply_to_post_number || post && post.dataset.replyToPostNumber || 0);
 		readerPostCopies(postId, ctx).forEach((node) => removeOwnedNode(node));
 		const item = ctx.streamItemMap.get(postNumber);
@@ -21704,7 +21713,7 @@
 			if (state.nodeCache) state.nodeCache.delete(postNumber);
 			state.totalCount = Math.max(0, state.totalCount - 1);
 			state.renderedKey = '';
-			if (parentNode && parentNode.isConnected) renderSubReplyBatch(parentNumber, ctx, 0, parentNode);
+			if (parentNode?.isConnected) renderSubReplyBatch(parentNumber, ctx, 0, parentNode);
 		}
 		if (parentNode) {
 			const total = Math.max(0, +(parentNode.dataset.childReplyTotal || 0) - 1);
@@ -21713,8 +21722,8 @@
 			syncChildControls(parentNode);
 		}
 		const cacheEntry = TOPIC_DATA_CACHE.get(String(ctx.topicId));
-		const cachedTopic = (cacheEntry && cacheEntry.topic) || ctx.topicData;
-		if (cachedTopic && cachedTopic.post_stream && Array.isArray(cachedTopic.post_stream.posts)) {
+		const cachedTopic = (cacheEntry?.topic) || ctx.topicData;
+		if (cachedTopic?.post_stream && Array.isArray(cachedTopic.post_stream.posts)) {
 			cachedTopic.post_stream.posts = cachedTopic.post_stream.posts.filter((item) => +item.id !== postId);
 			setCachedTopicData(ctx.topicId, cachedTopic);
 		}
@@ -21723,14 +21732,14 @@
 	}
 
 	async function deleteReaderPost(post, ctx) {
-		const postData = post && post._ldpPostData || {};
+		const postData = post?._ldpPostData || {};
 		const postId = +(post && post.dataset.postId);
 		if (!postId || postData.can_delete !== true) return false;
 		return runReaderActionOnce(ctx, `post:${postId}:delete`, async () => {
 			if (!window.confirm('确定删除这条回复吗？')) return false;
 			const postModel = detachedNativePostModel(post, ctx);
 			const currentUser = lookupDiscourse('service:current-user');
-			if (!postModel || typeof postModel.destroy !== 'function' || !currentUser) {
+			if (!postModel || !isFunction(postModel.destroy) || !currentUser) {
 				throw new Error('Discourse 楼层删除接口尚未就绪');
 			}
 			await postModel.destroy(currentUser);
@@ -21764,7 +21773,7 @@
 		else if (next) post.insertBefore(next, post.querySelector(':scope > .ldp-collapse-replies'));
 		hydratePersistentAvatarImages(post);
 		const actions = post.querySelector(':scope > .ldp-reactions .ldp-actions');
-		const boostButton = actions && actions.querySelector('.ldp-boostbtn');
+		const boostButton = actions?.querySelector('.ldp-boostbtn');
 		if (canShowBoostButton(postData) && actions && !boostButton) {
 			const actionHolder = makeElement('template');
 			actionHolder.innerHTML = `<button class="ldp-btn ldp-boostbtn" type="button" aria-label="boost">${icon('rocket')}</button>`;
@@ -21786,7 +21795,7 @@
 			const boosts = Array.isArray(postData.boosts)
 				? postData.boosts
 				: (postData.boosts ? [postData.boosts] : []);
-			postData.boosts = boosts.filter((boost) => String(boost && boost.id || '') !== String(boostId));
+			postData.boosts = boosts.filter((boost) => String(boost?.id || '') !== String(boostId));
 			postData.can_boost = true;
 			copy._ldpPostData = postData;
 			latestPostData = postData;
@@ -21814,11 +21823,11 @@
 			{ cacheMode: 'bypass', allowStaleOnError: false, key: `boost:${boostId}:permissions` }
 		);
 		if (!boost || boost.can_flag !== true) {
-			throw new Error(boost && boost.user_flag_status ? '你已经举报过这个 Boost' : '当前账号不能举报这个 Boost');
+			throw new Error(boost?.user_flag_status ? '你已经举报过这个 Boost' : '当前账号不能举报这个 Boost');
 		}
 		const availableFlags = new Set(Array.isArray(boost.available_flags) ? boost.available_flags : []);
 		const site = lookupDiscourse('service:site');
-		const siteFlags = Array.from(site && site.flagTypes || []);
+		const siteFlags = [...site?.flagTypes || []];
 		const descriptionText = (value) => {
 			const holder = makeElement('template');
 			holder.innerHTML = String(value || '');
@@ -21837,7 +21846,7 @@
 				requireMessage: flag.require_message === true,
 			}));
 		if (!reportOptions.length) throw new Error('当前没有可用的 Boost 举报类型');
-		const username = String(boost.user && boost.user.username || boostBubble.dataset.boostUser || '').trim();
+		const username = String(boost.user?.username || boostBubble.dataset.boostUser || '').trim();
 		return !!openReaderReportForm(ctx, {
 			title: '举报 Boost',
 			intro: username
@@ -21856,22 +21865,22 @@
 
 	function renderNativeBoostMenu(post, anchor, ctx, initialRaw = '') {
 		const emojiMenuIdentifier = 'ldp-native-boost-emoji-picker';
-		const overlay = post && post.closest('.ldp-overlay');
-		const postData = post && post._ldpPostData;
-		const scrollRoot = ctx && ctx.scrollRoot;
+		const overlay = post?.closest('.ldp-overlay');
+		const postData = post?._ldpPostData;
+		const scrollRoot = ctx?.scrollRoot;
 		const createBoostModule = lookupDiscourseModule('discourse/plugins/discourse-boosts/discourse/lib/create-boost');
-		const createBoost = createBoostModule && createBoostModule.default;
+		const createBoost = createBoostModule?.default;
 		const currentUser = ME_CURRENT_USER;
 		const nativeMenu = lookupDiscourse('service:menu');
 		const prettyTextEmoji = lookupDiscourseModule('pretty-text/emoji');
 		const discourseText = lookupDiscourseModule('discourse/lib/text');
-		const unicodeEmojiRegex = prettyTextEmoji && prettyTextEmoji.emojiReplacementRegex
+		const unicodeEmojiRegex = prettyTextEmoji?.emojiReplacementRegex
 			? new RegExp(prettyTextEmoji.emojiReplacementRegex, 'g')
 			: null;
 		if (!overlay || !postData || !document.body) return false;
 
 		const previous = document.body.querySelector(':scope > .ldp-native-boost-menu');
-		if (previous && typeof previous._ldpClose === 'function') previous._ldpClose();
+		if (isFunction(previous?._ldpClose)) previous._ldpClose();
 		else if (previous) previous.remove();
 
 		const menu = makeElement('div');
@@ -21880,18 +21889,18 @@
 		menu.setAttribute('role', 'dialog');
 		setLabel(menu, '助推');
 		menu.innerHTML = `
-      <div class="discourse-boosts__input-container">
-        <div class="discourse-boosts__input" contenteditable="true" role="textbox"
-          aria-label="Boost 内容" data-placeholder="写一句，最多 16 字"></div>
-        <span class="ldp-native-boost-count">0/16</span>
-        <button class="btn-transparent btn-icon-only discourse-boosts__emoji-btn" type="button"
-          aria-label="插入表情">${icon('smile')}</button>
-        <button class="btn-default --success btn-icon-only discourse-boosts__submit" type="button"
-          aria-label="发送" disabled>${icon('check')}</button>
-        <button class="btn-default --danger btn-icon-only discourse-boosts__cancel" type="button"
-          aria-label="取消">${icon('x')}</button>
-      </div>
-      <span class="ldp-native-boost-error" role="status"></span>`;
+			<div class="discourse-boosts__input-container">
+				<div class="discourse-boosts__input" contenteditable="true" role="textbox"
+					aria-label="Boost 内容" data-placeholder="写一句，最多 16 字"></div>
+				<span class="ldp-native-boost-count">0/16</span>
+				<button class="btn-transparent btn-icon-only discourse-boosts__emoji-btn" type="button"
+					aria-label="插入表情">${icon('smile')}</button>
+				<button class="btn-default --success btn-icon-only discourse-boosts__submit" type="button"
+					aria-label="发送" disabled>${icon('check')}</button>
+				<button class="btn-default --danger btn-icon-only discourse-boosts__cancel" type="button"
+					aria-label="取消">${icon('x')}</button>
+			</div>
+			<span class="ldp-native-boost-error" role="status"></span>`;
 		document.body.appendChild(menu);
 		applyReaderThemeVariables(menu);
 		positionNativeBoostMenu(anchor, menu);
@@ -21912,14 +21921,14 @@
 		let composing = false;
 
 		const closeEmojiPicker = () => {
-			if (emojiPickerContent && typeof emojiPickerContent._ldpStopEmojiImageCache === 'function') {
+			if (isFunction(emojiPickerContent?._ldpStopEmojiImageCache)) {
 				emojiPickerContent._ldpStopEmojiImageCache();
 			}
 			emojiPickerContent = null;
-			if (!nativeMenu || typeof nativeMenu.close !== 'function') return;
+			if (!nativeMenu || !isFunction(nativeMenu.close)) return;
 			try {
 				const result = nativeMenu.close(emojiMenuIdentifier);
-				if (result && typeof result.catch === 'function') result.catch(() => {});
+				if (isFunction(result?.catch)) result.catch(() => {});
 			} catch (e) {}
 		};
 		const placeEditorCursorAtEnd = () => {
@@ -21937,7 +21946,7 @@
 			const unicodeMatches = unicodeEmojiRegex ? text.match(unicodeEmojiRegex) : null;
 			return {
 				raw: text,
-				length: Array.from(unicodeMatches ? text.replace(unicodeEmojiRegex, 'x') : text).length,
+				length: [...unicodeMatches ? text.replace(unicodeEmojiRegex, 'x') : text].length,
 				emojiCount: unicodeMatches ? unicodeMatches.length : 0,
 			};
 		};
@@ -22016,17 +22025,17 @@
 			const emojiCode = String(code || '').replace(/^:|:$/g, '');
 			const stats = readInput();
 			if (!emojiCode || stats.length + (stats.length ? 2 : 1) > 16 || stats.emojiCount >= 5) return;
-			const buildEmojiUrl = prettyTextEmoji && prettyTextEmoji.buildEmojiUrl;
-			const isCustomEmoji = prettyTextEmoji && prettyTextEmoji.isCustomEmoji;
-			const emojiOptions = discourseText && discourseText.emojiOptions;
-			if (typeof buildEmojiUrl !== 'function' || typeof emojiOptions !== 'function') {
+			const buildEmojiUrl = prettyTextEmoji?.buildEmojiUrl;
+			const isCustomEmoji = prettyTextEmoji?.isCustomEmoji;
+			const emojiOptions = discourseText?.emojiOptions;
+			if (!isFunction(buildEmojiUrl) || !isFunction(emojiOptions)) {
 				error.textContent = 'LinuxDo 原生表情组件尚未就绪，请稍后重试';
 				return;
 			}
 			try {
 				const options = emojiOptions();
 				const image = makeElement('img');
-				image.className = typeof isCustomEmoji === 'function' && isCustomEmoji(emojiCode, options)
+				image.className = isFunction(isCustomEmoji) && isCustomEmoji(emojiCode, options)
 					? 'emoji emoji-custom'
 					: 'emoji';
 				image.alt = `:${emojiCode}:`;
@@ -22045,7 +22054,7 @@
 			const reader = post.closest('.ldp-modal');
 			if (!content || !reader) return;
 			if (emojiPickerContent !== content) {
-				if (emojiPickerContent && typeof emojiPickerContent._ldpStopEmojiImageCache === 'function') {
+				if (isFunction(emojiPickerContent?._ldpStopEmojiImageCache)) {
 					emojiPickerContent._ldpStopEmojiImageCache();
 				}
 				emojiPickerContent = content;
@@ -22076,12 +22085,12 @@
 			};
 			const picker = content.querySelector('.emoji-picker');
 			const initialRect = content.getBoundingClientRect();
-			const pickerRect = picker && picker.getBoundingClientRect();
+			const pickerRect = picker?.getBoundingClientRect();
 			const naturalHeight = picker && +(picker.dataset.ldpBoostNaturalHeight || picker.offsetHeight || 0);
 			if (picker && naturalHeight && !picker.dataset.ldpBoostNaturalHeight) {
 				picker.dataset.ldpBoostNaturalHeight = String(naturalHeight);
 			}
-			const scale = picker && picker.offsetHeight ? pickerRect.height / picker.offsetHeight : 1;
+			const scale = picker?.offsetHeight ? pickerRect.height / picker.offsetHeight : 1;
 			const chromeHeight = pickerRect ? Math.max(0, initialRect.height - pickerRect.height) : 0;
 			const naturalVisualHeight = naturalHeight ? naturalHeight * scale + chromeHeight : initialRect.height;
 			const above = Math.max(0, anchorRect.top - gap - bounds.top);
@@ -22125,8 +22134,8 @@
 		};
 		const openEmojiPicker = () => {
 			const pickerModule = lookupDiscourseModule('discourse/components/emoji-picker/detached');
-			const EmojiPickerDetached = pickerModule && pickerModule.default;
-			if (!nativeMenu || typeof nativeMenu.show !== 'function' || !EmojiPickerDetached) {
+			const EmojiPickerDetached = pickerModule?.default;
+			if (!nativeMenu || !isFunction(nativeMenu.show) || !EmojiPickerDetached) {
 				error.textContent = 'LinuxDo 原生表情组件尚未就绪，请稍后重试';
 				return;
 			}
@@ -22145,7 +22154,7 @@
 						didSelectEmoji: insertEmoji,
 					},
 				});
-				if (result && typeof result.catch === 'function') {
+				if (isFunction(result?.catch)) {
 					result.catch(() => {
 						if (!closed) error.textContent = 'LinuxDo 原生表情组件尚未就绪，请稍后重试';
 					});
@@ -22158,7 +22167,7 @@
 			if (composing) return;
 			const raw = syncInput().trim();
 			if (!raw || submitting) return;
-			if (typeof createBoost !== 'function' || !currentUser) {
+			if (!isFunction(createBoost) || !currentUser) {
 				error.textContent = 'LinuxDo Boost 组件尚未就绪，请稍后重试';
 				return;
 			}
@@ -22178,7 +22187,7 @@
 				submitting = false;
 				cancel.disabled = false;
 				editor.contentEditable = 'true';
-				error.textContent = `发送失败：${e && e.message ? e.message : '请稍后重试'}`;
+				error.textContent = `发送失败：${e?.message ? e.message : '请稍后重试'}`;
 				syncInput();
 				editor.focus();
 			}
@@ -22215,7 +22224,7 @@
 			scrollRoot, 'scroll', scheduleAnchorSync, { passive: true }
 		);
 		menuScope.listen(window, 'resize', scheduleAnchorSync, { passive: true });
-		if (typeof IntersectionObserver === 'function') {
+		if (isFunction(IntersectionObserver)) {
 			anchorObserver = new IntersectionObserver((entries) => {
 				const entry = entries[0];
 				if (!entry || !entry.isIntersecting) close();
@@ -22226,7 +22235,7 @@
 		menuScope.timer(() => {
 			if (!closed) menuScope.listen(document, 'pointerdown', onOutside, true);
 		}, 0);
-		editor.textContent = Array.from(String(initialRaw || '')).slice(0, 16).join('');
+		editor.textContent = [...String(initialRaw || '')].slice(0, 16).join('');
 		syncInput();
 		editor.focus();
 		if (initialRaw) {
@@ -22238,7 +22247,7 @@
 	/* ============ 9. 楼中楼分批渲染 ============ */
 	function renderSubReplyBatch(postNumber, ctx, pageDelta = 0, preferredParentNode = null) {
 		const state = ctx.subReplyState.get(postNumber);
-		const parentNode = preferredParentNode && preferredParentNode.isConnected && +preferredParentNode.dataset.postNumber === +postNumber
+		const parentNode = preferredParentNode?.isConnected && +preferredParentNode.dataset.postNumber === +postNumber
 			? preferredParentNode
 			: findReplyListParent(postNumber, ctx);
 		if (!state || !parentNode) return;
@@ -22253,10 +22262,10 @@
 		const start = state.pageIndex * pageSize;
 		const batch = state.all.slice(start, start + pageSize);
 		const renderKey = `${state.pageIndex}:${state.all.length}:${totalCount}:${state.loadingMore ? 1 : 0}:${batch.map((reply) => +(reply.post_number || 0)).join(',')}`;
-		const mountedReplies = Array.from(children.children).filter((node) => node.classList.contains('ldp-post'));
+		const mountedReplies = [...children.children].filter((node) => node.classList.contains('ldp-post'));
 		if (state.renderedParent === parentNode && state.renderedKey === renderKey &&
 				mountedReplies.length === batch.length &&
-				mountedReplies.every((node, index) => +node.dataset.postNumber === +(batch[index] && batch[index].post_number || 0))) {
+				mountedReplies.every((node, index) => +node.dataset.postNumber === +(batch[index]?.post_number || 0))) {
 			return;
 		}
 		parentNode.classList.remove('ldp-nested-branches-ready');
@@ -22297,9 +22306,9 @@
 			before = node;
 		}
 		parentNode.dataset.childReplyTotal = String(Math.max(+(parentNode.dataset.childReplyTotal || 0), state.all.length));
-		const prevBtn = actionEl && actionEl.querySelector('.ldp-sub-page-prev');
-		const nextBtn = actionEl && actionEl.querySelector('.ldp-sub-page-next');
-		const infoEl = actionEl && actionEl.querySelector('.ldp-sub-page-info');
+		const prevBtn = actionEl?.querySelector('.ldp-sub-page-prev');
+		const nextBtn = actionEl?.querySelector('.ldp-sub-page-next');
+		const infoEl = actionEl?.querySelector('.ldp-sub-page-info');
 		if (actionEl && actionEl.parentNode === children && actionEl.nextSibling) children.appendChild(actionEl);
 		if (pageCount > 1) {
 			if (actionEl) actionEl.style.display = 'flex';
@@ -22336,26 +22345,26 @@
 			const isTopicStarter = +parentNode.dataset.postNumber === 1;
 			setChildRepliesCollapsed(parentNode, isTopicStarter || PREFS.expandNestedRepliesByDefault !== true);
 		}
-		if (ctx && ctx.repliesIO) ctx.repliesIO.observe(parentNode);
+		if (ctx?.repliesIO) ctx.repliesIO.observe(parentNode);
 		syncChildControls(parentNode);
 		return children;
 	}
 
 	function syncLiveNestedReply(post, ctx, options = {}) {
-		const postNumber = +(post && post.post_number || 0);
-		const parentNumber = +(post && post.reply_to_post_number || 0);
+		const postNumber = +(post?.post_number || 0);
+		const parentNumber = +(post?.reply_to_post_number || 0);
 		const allowOpParent = options.allowOpParent === true;
 		if (!ctx || !postNumber || parentNumber < 1 || (parentNumber === 1 && !allowOpParent)) return false;
 		const previous = ctx.subReplyState.get(parentNumber);
 		const previousAll = previous && Array.isArray(previous.all) ? previous.all : [];
-		const wasAlreadyKnown = previousAll.some((reply) => +(reply && reply.post_number || 0) === postNumber);
+		const wasAlreadyKnown = previousAll.some((reply) => +(reply?.post_number || 0) === postNumber);
 		rememberPostData(ctx, post, parentNumber);
 		const parentNode = ctx.streamNodeMap.get(parentNumber);
 		if (!parentNode) return false;
 		const knownMap = ctx.directRepliesByParent.get(parentNumber);
-		const knownReplies = knownMap ? Array.from(knownMap.values()) : [];
+		const knownReplies = knownMap ? [...knownMap.values()] : [];
 		const merged = mergeDirectReplies(previousAll, knownReplies, [post]);
-		const previousTotal = Math.max(previousAll.length, +(previous && previous.totalCount || 0));
+		const previousTotal = Math.max(previousAll.length, +(previous?.totalCount || 0));
 		const pageSize = SUB_REPLY_PAGE_SIZE;
 		const previousPageCount = Math.max(1, Math.ceil(previousTotal / pageSize));
 		const wasOnLastPage = !previous || +(previous.pageIndex || 0) >= previousPageCount - 1;
@@ -22363,22 +22372,22 @@
 			merged.length,
 			previousTotal + (options.incrementTotal === true && !wasAlreadyKnown ? 1 : 0),
 			+(parentNode.dataset.childReplyTotal || 0),
-			+(parentNode._ldpPostData && parentNode._ldpPostData.reply_count || 0),
+			+(parentNode._ldpPostData?.reply_count || 0),
 		);
 		ensureLiveReplyShell(parentNode, totalCount, ctx);
 		const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
-		const liveReplyIndex = merged.findIndex((reply) => +(reply && reply.post_number || 0) === postNumber);
+		const liveReplyIndex = merged.findIndex((reply) => +(reply?.post_number || 0) === postNumber);
 		const liveReplyPage = liveReplyIndex >= 0 ? Math.floor(liveReplyIndex / pageSize) : pageCount - 1;
 		const state = {
 			all: merged,
-			pageIndex: wasOnLastPage ? liveReplyPage : +(previous && previous.pageIndex || 0),
-			nodeCache: previous && previous.nodeCache,
+			pageIndex: wasOnLastPage ? liveReplyPage : +(previous?.pageIndex || 0),
+			nodeCache: previous?.nodeCache,
 			renderedKey: '',
-			renderedParent: previous && previous.renderedParent,
+			renderedParent: previous?.renderedParent,
 			totalCount,
-			fetchedReplyCount: Math.max(merged.length, +(previous && previous.fetchedReplyCount || 0)),
-			fetchAfter: Math.max(postNumber, +(previous && previous.fetchAfter || 0)),
-			hasMore: totalCount > merged.length || !!(previous && previous.hasMore),
+			fetchedReplyCount: Math.max(merged.length, +(previous?.fetchedReplyCount || 0)),
+			fetchAfter: Math.max(postNumber, +(previous?.fetchAfter || 0)),
+			hasMore: totalCount > merged.length || !!(previous?.hasMore),
 			loadingMore: false,
 		};
 		ctx.subReplyState.set(parentNumber, state);
@@ -22387,9 +22396,9 @@
 	}
 
 	function updateLivePostData(post, ctx, options = {}) {
-		const postNumber = +(post && post.post_number || 0);
-		const streamNode = ctx && ctx.streamNodeMap && ctx.streamNodeMap.get(postNumber);
-		const postId = +(post && post.id || streamNode && streamNode.dataset.postId || 0);
+		const postNumber = +(post?.post_number || 0);
+		const streamNode = ctx?.streamNodeMap && ctx.streamNodeMap.get(postNumber);
+		const postId = +(post?.id || streamNode && streamNode.dataset.postId || 0);
 		const copies = new Set(postId ? readerPostCopies(postId, ctx) : []);
 		if (streamNode) copies.add(streamNode);
 		if (!copies.size) return false;
@@ -22407,7 +22416,7 @@
 			renderPostSpecialContent(node, ctx);
 			syncPostActionControls(node, ctx);
 		});
-		const mergedPost = streamNode && streamNode._ldpPostData || Object.assign({}, post);
+		const mergedPost = streamNode?._ldpPostData || { ...post };
 		rememberPostData(ctx, mergedPost);
 		const replyCount = +(post.reply_count || 0);
 		if (replyCount > 0 && streamNode) ensureLiveReplyShell(streamNode, replyCount, ctx);
@@ -22415,8 +22424,8 @@
 	}
 
 	async function focusLiveNestedReply(post, ctx, options = {}) {
-		const postNumber = +(post && post.post_number || 0);
-		const parentNumber = +(post && post.reply_to_post_number || 0);
+		const postNumber = +(post?.post_number || 0);
+		const parentNumber = +(post?.reply_to_post_number || 0);
 		const forceNested = options.forceNested === true;
 		if (!ctx || !postNumber) return false;
 		if (!forceNested && parentNumber <= 1) {
@@ -22427,7 +22436,7 @@
 		if (parentNumber < 1) return false;
 		const navigationSequence = options.navigationSequence || beginReaderNavigation(ctx);
 		const jumpStillCurrent = () => readerNavigationIsCurrent(ctx, navigationSequence) &&
-			(typeof options.acceptsWork !== 'function' || options.acceptsWork());
+			(!isFunction(options.acceptsWork) || options.acceptsWork());
 		if (!jumpStillCurrent()) return false;
 		if (ctx.cancelInitialTargetPosition) ctx.cancelInitialTargetPosition();
 		if (!ctx.streamNodeMap.has(parentNumber) && ctx.loadPost) {
@@ -22443,7 +22452,7 @@
 		const state = ctx.subReplyState.get(parentNumber);
 		if (!state) return false;
 		const pageSize = SUB_REPLY_PAGE_SIZE;
-		const replyIndex = state.all.findIndex((reply) => +(reply && reply.post_number || 0) === postNumber);
+		const replyIndex = state.all.findIndex((reply) => +(reply?.post_number || 0) === postNumber);
 		state.pageIndex = replyIndex >= 0
 			? Math.floor(replyIndex / pageSize)
 			: Math.max(0, Math.ceil(state.all.length / pageSize) - 1);
@@ -22469,9 +22478,9 @@
 	}
 
 	async function returnToReaderQuoteSource(source, ctx) {
-		const topicId = +(source && source.topicId || 0);
-		const postNumber = +(source && source.postNumber || 0);
-		const parentPostNumber = +(source && source.parentPostNumber || 0);
+		const topicId = +(source?.topicId || 0);
+		const postNumber = +(source?.postNumber || 0);
+		const parentPostNumber = +(source?.parentPostNumber || 0);
 		const nested = source && source.nested === true && parentPostNumber > 0;
 		if (!ctx || !topicId || !postNumber) return false;
 		if (ctx.readerSession && !ctx.readerSession.isCurrent('opening', 'active')) return false;
@@ -22500,7 +22509,7 @@
 
 	function ingestLivePosts(posts, ctx, options = {}) {
 		const ordered = (Array.isArray(posts) ? posts : [])
-			.filter((post) => post && post.id && post.post_number)
+			.filter((post) => post?.id && post.post_number)
 			.sort((a, b) => +(a.post_number || 0) - +(b.post_number || 0));
 		if (!ordered.length) return [];
 		const fresh = [];
@@ -22523,17 +22532,17 @@
 	}
 
 	function selectedQuoteRaw(post, ctx, selectedText) {
-		const postData = post && post._ldpPostData || {};
+		const postData = post?._ldpPostData || {};
 		const username = cleanUsernameValue(postData.username || post && post.dataset.username);
 		const postNumber = +(post && post.dataset.postNumber || 0);
-		const topicId = +(ctx && ctx.topicId || 0);
+		const topicId = +(ctx?.topicId || 0);
 		const text = String(selectedText || '').trim();
 		if (!username || !postNumber || !topicId || !text) return '';
 		return `[quote="${username}, post:${postNumber}, topic:${topicId}"]\n${text}\n[/quote]\n\n`;
 	}
 
 	async function writeSelectionQuoteToClipboard(raw) {
-		if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+		if (!navigator.clipboard || !isFunction(navigator.clipboard.writeText)) {
 			throw new Error('clipboard unavailable');
 		}
 		await navigator.clipboard.writeText(raw);
@@ -22556,7 +22565,7 @@
 		const sharingPost = !!postNode;
 		const postNumber = +(postNode && postNode.dataset.postNumber || 0);
 		if (!ctx || !ctx.topicId || (sharingPost && !postNumber)) return;
-		const title = String(ctx && ctx.topicData && ctx.topicData.title || document.title || 'LINUX DO');
+		const title = String(ctx?.topicData && ctx.topicData.title || document.title || 'LINUX DO');
 		const url = topicPageUrl(ctx.topicId, sharingPost ? postNumber : 0);
 		if (!url) return;
 		if (!sharingPost && navigator.share) {
@@ -22601,8 +22610,8 @@
 
 	function discourseBookmarkApi() {
 		const bookmarkApi = lookupDiscourse('service:bookmark-api');
-		if (!bookmarkApi || typeof bookmarkApi.buildNewBookmark !== 'function' ||
-				typeof bookmarkApi.create !== 'function' || typeof bookmarkApi.delete !== 'function') {
+		if (!bookmarkApi || !isFunction(bookmarkApi.buildNewBookmark) ||
+				!isFunction(bookmarkApi.create) || !isFunction(bookmarkApi.delete)) {
 			throw new Error('Discourse 收藏服务尚未就绪');
 		}
 		return bookmarkApi;
@@ -22611,13 +22620,13 @@
 	async function createDiscourseBookmark(type, itemId) {
 		const bookmarkApi = discourseBookmarkApi();
 		const formDataModule = lookupDiscourseModule('discourse/lib/bookmark-form-data');
-		const BookmarkFormData = formDataModule && formDataModule.BookmarkFormData;
-		if (typeof BookmarkFormData !== 'function') {
+		const BookmarkFormData = formDataModule?.BookmarkFormData;
+		if (!isFunction(BookmarkFormData)) {
 			throw new Error('Discourse 收藏表单模型尚未就绪');
 		}
 		const bookmark = bookmarkApi.buildNewBookmark(type, itemId);
 		const saved = await bookmarkApi.create(new BookmarkFormData(bookmark));
-		return Number(saved && saved.id) || null;
+		return Number(saved?.id) || null;
 	}
 
 	async function deleteDiscourseBookmark(bookmarkId) {
@@ -22627,7 +22636,7 @@
 
 	async function toggleReaderBookmark(subject, ctx, type) {
 		const postBookmark = type === 'Post';
-		const item = postBookmark ? subject && subject._ldpPostData : subject;
+		const item = postBookmark ? subject?._ldpPostData : subject;
 		if (!item || !item.id || !ME_USERNAME) return;
 		return runReaderActionOnce(ctx, `${type.toLowerCase()}:${item.id}:bookmark`, async () => {
 			let { bookmarked, bookmarkId } = postBookmark
@@ -22649,7 +22658,7 @@
 							cacheMode: 'refresh',
 							allowStaleOnError: false,
 						});
-						bookmarkId = fresh && fresh.bookmark_id;
+						bookmarkId = fresh?.bookmark_id;
 					}
 					if (bookmarkId) {
 						await deleteDiscourseBookmark(bookmarkId);
@@ -22657,12 +22666,12 @@
 						throw new Error('缺少楼层书签编号');
 					} else {
 						const topicModule = lookupDiscourseModule('discourse/models/topic');
-						const Topic = topicModule && topicModule.default;
-						if (!Topic || typeof Topic.create !== 'function') {
+						const Topic = topicModule?.default;
+						if (!Topic || !isFunction(Topic.create)) {
 							throw new Error('Discourse 主题模型尚未就绪');
 						}
 						const topicModel = Topic.create({ ...item, id: Number(item.id) });
-						if (typeof topicModel.deleteBookmarks !== 'function') {
+						if (!isFunction(topicModel.deleteBookmarks)) {
 							throw new Error('Discourse 主题收藏接口尚未就绪');
 						}
 						await topicModel.deleteBookmarks();
@@ -22674,7 +22683,7 @@
 					tags: ['bookmarks', `${type.toLowerCase()}:${item.id}`],
 				});
 				mutationSucceeded = true;
-				if (typeof ctx.refreshBookmarksPanel === 'function') ctx.refreshBookmarksPanel();
+				if (isFunction(ctx.refreshBookmarksPanel)) ctx.refreshBookmarksPanel();
 				if (postBookmark) showSelectionToast(bookmarked ? '已收藏该楼层' : '已取消楼层收藏');
 			} catch (error) {
 				if (postBookmark || !mutationSucceeded) ({ bookmarked, bookmarkId } = original);
@@ -22734,7 +22743,7 @@
 		const postActionTypeModule = lookupDiscourseModule('discourse/models/post-action-type');
 		const messageMaxLength = Math.max(
 			1,
-			Number(postActionTypeModule && postActionTypeModule.MAX_MESSAGE_LENGTH) || 500,
+			Number(postActionTypeModule?.MAX_MESSAGE_LENGTH) || 500,
 		);
 		return openReaderActionDialog(ctx, {
 			title: config.title,
@@ -22743,13 +22752,13 @@
 			initialFocus: 'input[name="report_type"]',
 			bodyHtml: `
         <div class="ldp-reader-action-options">${reportOptions.map((option, index) => `
-          <label class="ldp-reader-action-option">
-            <input type="radio" name="report_type" value="${option.id}"${index === 0 ? ' checked' : ''}>
-            <span class="ldp-reader-action-option-copy">
-              <strong>${esc(option.label)}</strong>
-              <small>${esc(option.description)}</small>
-            </span>
-          </label>`).join('')}</div>
+					<label class="ldp-reader-action-option">
+						<input type="radio" name="report_type" value="${option.id}"${index === 0 ? ' checked' : ''}>
+						<span class="ldp-reader-action-option-copy">
+							<strong>${esc(option.label)}</strong>
+							<small>${esc(option.description)}</small>
+						</span>
+					</label>`).join('')}</div>
         <label class="ldp-reader-action-field">
           <span>补充说明</span>
           <textarea name="message" maxlength="${messageMaxLength}" placeholder="${escAttr(config.placeholder || '选填；通知管理人员时请填写具体原因')}"></textarea>
@@ -22773,23 +22782,23 @@
 		const layer = makeElement('div');
 		layer.className = 'ldp-reader-action-layer';
 		layer.innerHTML = `
-      <section class="ldp-reader-action-dialog" role="dialog" aria-modal="true" aria-labelledby="ldp-reader-action-title">
-        <div class="ldp-reader-action-head">
-          <strong id="ldp-reader-action-title">${esc(options.title || '操作')}</strong>
-          <button class="ldp-reader-action-close" type="button" aria-label="关闭">${icon('x')}</button>
-        </div>
-        <form class="ldp-reader-action-form">
-          <div class="ldp-reader-action-body">
-            ${options.intro ? `<p class="ldp-reader-action-intro">${esc(options.intro)}</p>` : ''}
-            ${options.bodyHtml || ''}
-            <p class="ldp-reader-action-status" role="status" aria-live="polite"></p>
-          </div>
-          <div class="ldp-reader-action-footer">
-            <button class="ldp-reader-action-cancel" type="button">取消</button>
-            <button class="ldp-reader-action-submit" type="submit">${esc(options.submitLabel || '提交')}</button>
-          </div>
-        </form>
-      </section>`;
+			<section class="ldp-reader-action-dialog" role="dialog" aria-modal="true" aria-labelledby="ldp-reader-action-title">
+				<div class="ldp-reader-action-head">
+					<strong id="ldp-reader-action-title">${esc(options.title || '操作')}</strong>
+					<button class="ldp-reader-action-close" type="button" aria-label="关闭">${icon('x')}</button>
+				</div>
+				<form class="ldp-reader-action-form">
+					<div class="ldp-reader-action-body">
+						${options.intro ? `<p class="ldp-reader-action-intro">${esc(options.intro)}</p>` : ''}
+						${options.bodyHtml || ''}
+						<p class="ldp-reader-action-status" role="status" aria-live="polite"></p>
+					</div>
+					<div class="ldp-reader-action-footer">
+						<button class="ldp-reader-action-cancel" type="button">取消</button>
+						<button class="ldp-reader-action-submit" type="submit">${esc(options.submitLabel || '提交')}</button>
+					</div>
+				</form>
+			</section>`;
 		const form = layer.querySelector('.ldp-reader-action-form');
 		const status = layer.querySelector('.ldp-reader-action-status');
 		const submit = layer.querySelector('.ldp-reader-action-submit');
@@ -22828,7 +22837,7 @@
 				status.textContent = successMessage || '操作已完成';
 				closeTimer = setTimeout(close, 650);
 			} catch (error) {
-				status.textContent = error && error.message ? error.message : '操作失败，请重试';
+				status.textContent = error?.message ? error.message : '操作失败，请重试';
 				setBusy(false);
 			}
 		});
@@ -22848,27 +22857,27 @@
 		const layer = makeElement('div');
 		const previouslyFocused = document.activeElement;
 		const note = String(options.note || '').trim();
-		const details = Array.isArray(options.details) ? options.details.filter((detail) => detail && detail.label) : [];
+		const details = Array.isArray(options.details) ? options.details.filter((detail) => detail?.label) : [];
 		const secondaryLabel = String(options.secondaryLabel || '').trim();
 		layer.className = 'ldp-reader-action-layer ldp-reader-confirm-layer';
 		layer.innerHTML = `
-      <section class="ldp-reader-action-dialog ldp-reader-confirm-dialog${options.tone === 'primary' ? ' is-primary' : ''}" role="alertdialog" aria-modal="true"
-        aria-labelledby="ldp-reader-confirm-title" aria-describedby="ldp-reader-confirm-description${details.length ? ' ldp-reader-confirm-details' : ''}${note ? ' ldp-reader-confirm-note' : ''}">
-        <div class="ldp-reader-confirm-content">
-          <span class="ldp-reader-confirm-icon" aria-hidden="true">${icon(options.icon || 'alertTriangle')}</span>
-          <div class="ldp-reader-confirm-copy">
-            <strong id="ldp-reader-confirm-title">${esc(options.title || '确认操作')}</strong>
-            <p id="ldp-reader-confirm-description">${esc(options.message || '')}</p>
-            ${details.length ? `<ul class="ldp-reader-confirm-details" id="ldp-reader-confirm-details">${details.map((detail) => `<li><span>${esc(detail.label)}</span><strong>${esc(detail.value || '')}</strong></li>`).join('')}</ul>` : ''}
-            ${note ? `<small id="ldp-reader-confirm-note">${esc(note)}</small>` : ''}
-          </div>
-        </div>
-        <div class="ldp-reader-action-footer">
-          <button class="ldp-reader-action-cancel" type="button">${esc(options.cancelLabel || '取消')}</button>
-          ${secondaryLabel ? `<button class="ldp-reader-action-secondary" type="button">${esc(secondaryLabel)}</button>` : ''}
-          <button class="ldp-reader-action-submit" type="button">${esc(options.confirmLabel || '确认')}</button>
-        </div>
-      </section>`;
+			<section class="ldp-reader-action-dialog ldp-reader-confirm-dialog${options.tone === 'primary' ? ' is-primary' : ''}" role="alertdialog" aria-modal="true"
+				aria-labelledby="ldp-reader-confirm-title" aria-describedby="ldp-reader-confirm-description${details.length ? ' ldp-reader-confirm-details' : ''}${note ? ' ldp-reader-confirm-note' : ''}">
+				<div class="ldp-reader-confirm-content">
+					<span class="ldp-reader-confirm-icon" aria-hidden="true">${icon(options.icon || 'alertTriangle')}</span>
+					<div class="ldp-reader-confirm-copy">
+						<strong id="ldp-reader-confirm-title">${esc(options.title || '确认操作')}</strong>
+						<p id="ldp-reader-confirm-description">${esc(options.message || '')}</p>
+						${details.length ? `<ul class="ldp-reader-confirm-details" id="ldp-reader-confirm-details">${details.map((detail) => `<li><span>${esc(detail.label)}</span><strong>${esc(detail.value || '')}</strong></li>`).join('')}</ul>` : ''}
+						${note ? `<small id="ldp-reader-confirm-note">${esc(note)}</small>` : ''}
+					</div>
+				</div>
+				<div class="ldp-reader-action-footer">
+					<button class="ldp-reader-action-cancel" type="button">${esc(options.cancelLabel || '取消')}</button>
+					${secondaryLabel ? `<button class="ldp-reader-action-secondary" type="button">${esc(secondaryLabel)}</button>` : ''}
+					<button class="ldp-reader-action-submit" type="button">${esc(options.confirmLabel || '确认')}</button>
+				</div>
+			</section>`;
 		const cancelButton = layer.querySelector('.ldp-reader-action-cancel');
 		const secondaryButton = layer.querySelector('.ldp-reader-action-secondary');
 		const confirmButton = layer.querySelector('.ldp-reader-action-submit');
@@ -22879,7 +22888,7 @@
 			layer.remove();
 			if (ctx.readerActionDialog && ctx.readerActionDialog.layer === layer) ctx.readerActionDialog = null;
 			requestAnimationFrame(() => {
-				if (previouslyFocused && previouslyFocused.isConnected && typeof previouslyFocused.focus === 'function') {
+				if (previouslyFocused?.isConnected && isFunction(previouslyFocused.focus)) {
 					previouslyFocused.focus();
 				}
 			});
@@ -22891,11 +22900,11 @@
 				close();
 			} else if (target?.closest('.ldp-reader-action-secondary')) {
 				if (closed) return;
-				if (typeof options.onSecondary === 'function') options.onSecondary();
+				if (isFunction(options.onSecondary)) options.onSecondary();
 				close();
 			} else if (target?.closest('.ldp-reader-action-submit')) {
 				if (closed) return;
-				if (typeof options.onConfirm === 'function') options.onConfirm();
+				if (isFunction(options.onConfirm)) options.onConfirm();
 				close();
 			}
 		});
@@ -22921,8 +22930,8 @@
 
 	function openReaderReportDialog(postNode, ctx) {
 		const post = postNode && (postNode._ldpPostData || {});
-		const postId = +(post && post.id || postNode && postNode.dataset.postId || 0);
-		const postNumber = +(post && post.post_number || postNode && postNode.dataset.postNumber || 0);
+		const postId = +(post?.id || postNode && postNode.dataset.postId || 0);
+		const postNumber = +(post?.post_number || postNode && postNode.dataset.postNumber || 0);
 		if (!postId || !postNumber) return;
 		const postModel = detachedNativePostModel(postNode, ctx);
 		if (!postModel) {
@@ -22936,7 +22945,7 @@
 			requiredMessageError: '通知管理人员时需要填写具体原因',
 			onSubmit: async (actionType, message) => {
 				const selected = reportOptions.find((option) => option.id === actionType);
-				if (!selected || typeof selected.action.act !== 'function') {
+				if (!selected || !isFunction(selected.action.act)) {
 					throw new Error('Discourse 举报接口尚未就绪');
 				}
 				if (postNumber === 1) selected.action.flagTopic = postModel;
@@ -22955,13 +22964,13 @@
 	function openReaderAssignDialog(postNode, ctx, targetType) {
 		const post = postNode && (postNode._ldpPostData || {});
 		const isTopic = targetType === 'Topic';
-		const targetId = isTopic ? +ctx.topicId : +(post && post.id || postNode && postNode.dataset.postId || 0);
-		const postNumber = +(post && post.post_number || postNode && postNode.dataset.postNumber || 0);
+		const targetId = isTopic ? +ctx.topicId : +(post?.id || postNode && postNode.dataset.postId || 0);
+		const postNumber = +(post?.post_number || postNode && postNode.dataset.postNumber || 0);
 		if (!targetId) return;
 		const currentAssignment = isTopic
-			? ctx.topicData && ctx.topicData.assigned_to_user
-			: post && post.assigned_to_user;
-		const currentUsername = currentAssignment && currentAssignment.username || '';
+			? ctx.topicData?.assigned_to_user
+			: post?.assigned_to_user;
+		const currentUsername = currentAssignment?.username || '';
 		openReaderActionDialog(ctx, {
 			title: isTopic ? '指定主题负责人' : `指定 #${postNumber} 负责人`,
 			intro: '输入社区用户名后直接提交，不会离开阅读器。',
@@ -22987,7 +22996,7 @@
 					targetType,
 				};
 				const taskActions = lookupDiscourse('service:task-actions');
-				if (!taskActions || typeof taskActions.putAssignment !== 'function') {
+				if (!taskActions || !isFunction(taskActions.putAssignment)) {
 					throw new Error('Discourse 指定任务服务尚未就绪');
 				}
 				await taskActions.putAssignment(assignment);
@@ -23042,8 +23051,8 @@
 		selectionToolbar.setAttribute('role', 'toolbar');
 		setLabel(selectionToolbar, '引用所选文字');
 		selectionToolbar.innerHTML = `
-      <button type="button" data-selection-action="quote">引用</button>
-      <button type="button" data-selection-action="copy">复制引用</button>`;
+			<button type="button" data-selection-action="quote">引用</button>
+			<button type="button" data-selection-action="copy">复制引用</button>`;
 		appendReaderPortalNode(selectionToolbar);
 		const imageQuoteToolbar = makeElement('div');
 		imageQuoteToolbar.className = 'ldp-selection-toolbar ldp-image-quote-toolbar ldp-action-surface';
@@ -23098,7 +23107,7 @@
 					(ctx.readerSession && !ctx.readerSession.isCurrent('opening', 'active'))) return;
 				modal.querySelectorAll('.ldp-post').forEach((postNode) => {
 					const root = postNode.querySelector(':scope > .ldp-reactions');
-					const wasExpanded = !!(root && root.querySelector('.ldp-reaction-picker:not([hidden])'));
+					const wasExpanded = !!(root?.querySelector('.ldp-reaction-picker:not([hidden])'));
 					renderPostReactions(postNode, ctx);
 					if (wasExpanded) setReactionPickerExpanded(postNode.querySelector(':scope > .ldp-reactions'), true);
 				});
@@ -23106,7 +23115,7 @@
 			return reactionRegistryHydration;
 		};
 		hydrateReactionRegistry();
-		if (typeof IntersectionObserver === 'function') {
+		if (isFunction(IntersectionObserver)) {
 			reactionVisibilityObserver = new IntersectionObserver((entries) => {
 				entries.forEach((entry) => {
 					if (entry.isIntersecting) return;
@@ -23168,7 +23177,7 @@
 
 		const clearSelectedText = () => {
 			const selection = readerSelection();
-			if (selection && typeof selection.removeAllRanges === 'function') selection.removeAllRanges();
+			if (isFunction(selection?.removeAllRanges)) selection.removeAllRanges();
 		};
 
 		const updateSelectionToolbar = () => {
@@ -23181,8 +23190,8 @@
 				? range.startContainer : range.startContainer.parentElement;
 			const endNode = range.endContainer.nodeType === Node.ELEMENT_NODE
 				? range.endContainer : range.endContainer.parentElement;
-			const startContent = startNode && startNode.closest && startNode.closest('.ldp-content');
-			const endContent = endNode && endNode.closest && endNode.closest('.ldp-content');
+			const startContent = startNode?.closest && startNode.closest('.ldp-content');
+			const endContent = endNode?.closest && endNode.closest('.ldp-content');
 			if (!startContent || startContent !== endContent || !modal.contains(startContent)) return hideSelectionToolbar();
 			const post = startContent.closest('.ldp-post');
 			const raw = selectedQuoteRaw(post, ctx, text);
@@ -23215,7 +23224,7 @@
 			if (selectionToolbar.contains(event.target) || imageQuoteToolbar.contains(event.target)) event.preventDefault();
 		};
 		const onDocumentPointerDown = (event) => {
-			const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+			const path = isFunction(event.composedPath) ? event.composedPath() : [];
 			if (!selectionToolbar.hidden && !path.includes(selectionToolbar) && !selectionToolbar.contains(event.target)) {
 				hideSelectionToolbar();
 			}
@@ -23347,8 +23356,8 @@
 		const onImageQuoteAction = async (event) => {
 			event.preventDefault();
 			const image = imageQuoteTarget;
-			const post = image && image.closest('.ldp-post');
-			const imageSet = image && image.isConnected ? collectLightboxItems(image, ctx) : null;
+			const post = image?.closest('.ldp-post');
+			const imageSet = image?.isConnected ? collectLightboxItems(image, ctx) : null;
 			const item = imageSet && imageSet.items[imageSet.initialIndex];
 			const raw = lightboxImageQuoteRaw(item, ctx);
 			hideImageQuoteToolbar();
@@ -23398,7 +23407,7 @@
 		};
 
 		const navigationEntryFromUser = (user) => ({
-			username: String(user && user.username || ''),
+			username: String(user?.username || ''),
 			name: String(user && (user.name || user.username) || ''),
 			user,
 			followType: '',
@@ -23408,7 +23417,7 @@
 		});
 		const ensureUserCardNavigationRoot = () => {
 			const user = fallbackUserCard._ldpUserData;
-			const username = String(user && user.username || '');
+			const username = String(user?.username || '');
 			if (!username) return null;
 			if (!userCardNavigationStack.length) userCardNavigationStack.push(navigationEntryFromUser(user));
 			return userCardNavigationStack[userCardNavigationStack.length - 1];
@@ -23418,7 +23427,7 @@
 			if (!entry) return;
 			const activeCard = userCardNavigationStack.length > 1 ? userCardFollowPreview : fallbackUserCard;
 			const displayedUser = activeCard._ldpUserData;
-			if (String(displayedUser && displayedUser.username || '') === entry.username) {
+			if (String(displayedUser?.username || '') === entry.username) {
 				entry.user = displayedUser;
 			}
 			entry.name = String(entry.user && (entry.user.name || entry.user.username) || entry.username);
@@ -23517,7 +23526,7 @@
 		};
 		const promoteUserCardFollowPreview = () => {
 			const user = userCardFollowPreview._ldpUserData;
-			const username = String(user && user.username || '');
+			const username = String(user?.username || '');
 			if (!username) return false;
 			rememberCurrentUserCardNavigationState();
 			const current = userCardNavigationStack[userCardNavigationStack.length - 1];
@@ -23541,7 +23550,7 @@
 
 		const closeUserCard = () => {
 			const avatarViewer = readerPortalQuery('.ldp-avatar-viewer');
-			if (avatarViewer?._ldpAnchorCard === fallbackUserCard && typeof avatarViewer._ldpClose === 'function') {
+			if (avatarViewer?._ldpAnchorCard === fallbackUserCard && isFunction(avatarViewer._ldpClose)) {
 				avatarViewer._ldpClose();
 			}
 			closeUserCardFollowPanel();
@@ -23609,7 +23618,7 @@
 		const observeUserCardAnchor = (anchor) => {
 			userCardAnchorObserver?.disconnect();
 			userCardAnchorObserver = null;
-			if (typeof IntersectionObserver !== 'function' || !anchor) return;
+			if (!isFunction(IntersectionObserver) || !anchor) return;
 			userCardAnchorObserver = new IntersectionObserver((entries) => {
 				const entry = entries.find((item) => item.target === anchor);
 				if (userCardAnchor !== anchor || !entry) return;
@@ -23625,7 +23634,7 @@
 
 		const scheduleCloseUserCard = (event) => {
 			if (!userCardFollowPanel.hidden) return;
-			const relatedTarget = event && event.relatedTarget;
+			const relatedTarget = event?.relatedTarget;
 			const avatarViewer = readerPortalQuery('.ldp-avatar-viewer');
 			if (relatedTarget && (fallbackUserCard.contains(relatedTarget) || userCardFollowPanel.contains(relatedTarget) ||
 				userCardFollowPreview.contains(relatedTarget) || avatarViewer?.contains(relatedTarget))) return;
@@ -23710,7 +23719,7 @@
 		onAction(userCardFollowPreview, 'scroll', onUserCardBadgeListScroll, true);
 
 		const setUserCardActionStatus = (card, message, isError = false) => {
-			const status = card && card.querySelector('.ldp-user-card-action-status');
+			const status = card?.querySelector('.ldp-user-card-action-status');
 			if (!status) return;
 			status.textContent = message || '';
 			status.classList.toggle('is-error', !!isError);
@@ -23826,8 +23835,8 @@
 				} catch (error) {
 					if (userCardAnchor !== anchor || !fallbackUserCardOpen() || panel.hidden ||
 						panel.dataset.followType !== type || panel.dataset.followUsername !== username) return;
-					summary.textContent = Number(error && error.status) === 429 ? '请求受限，请过盾后重试' : '人员列表加载失败';
-					list.innerHTML = `<div class="ldp-user-card-follow-empty">${esc(error && error.message || '请稍后重试')}</div>`;
+					summary.textContent = Number(error?.status) === 429 ? '请求受限，请过盾后重试' : '人员列表加载失败';
+					list.innerHTML = `<div class="ldp-user-card-follow-empty">${esc(error?.message || '请稍后重试')}</div>`;
 				} finally {
 					if (followButton.isConnected) delete followButton.dataset.busy;
 				}
@@ -23898,7 +23907,7 @@
 					return;
 				}
 				const menu = notificationOption.closest('.ldp-user-card-notification-menu');
-				const options = menu ? Array.from(menu.querySelectorAll('[data-user-notification-level]')) : [];
+				const options = menu ? [...menu.querySelectorAll('[data-user-notification-level]')] : [];
 				options.forEach((option) => {
 					option.dataset.busy = '1';
 					option.disabled = true;
@@ -23925,7 +23934,7 @@
 					positionFallbackUserCardNotificationMenu(actionCard);
 				} catch (error) {
 					if (isCurrent()) {
-						setUserCardActionStatus(actionCard, error && error.message ? error.message : '消息设置保存失败，请重试', true);
+						setUserCardActionStatus(actionCard, error?.message ? error.message : '消息设置保存失败，请重试', true);
 					}
 				} finally {
 					if (isCurrent()) {
@@ -23984,7 +23993,7 @@
 						button.dataset.tooltip = label;
 						setLabel(button, label);
 						setUserCardActionStatus(actionCard, outcome.followed ? '已关注' : '已取消关注');
-						const followerCount = Number(actionCard._ldpUserData && actionCard._ldpUserData.total_followers);
+						const followerCount = Number(actionCard._ldpUserData?.total_followers);
 						const followerValue = actionCard.querySelector('[data-user-card-follow-type="followers"] strong');
 						if (followerValue && Number.isFinite(followerCount)) followerValue.textContent = followerCount.toLocaleString('zh-CN');
 					}
@@ -24013,7 +24022,7 @@
 		onAction(userCardFollowPanel, 'click', onUserCardAction);
 		onAction(userCardFollowPreview, 'click', onUserCardAction);
 		let userCardFollowPreviewActionIntent = null;
-		const userCardFollowPreviewActionControl = (target) => target && target.closest && target.closest(
+		const userCardFollowPreviewActionControl = (target) => target?.closest && target.closest(
 			'[data-user-card-follow-type],[data-user-card-action],[data-user-card-background],[data-user-card-avatar],[data-user-card-badge-scroll]'
 		);
 		const armUserCardFollowPreviewAction = (event) => {
@@ -24104,7 +24113,7 @@
 				void showFallbackUserCard(link, () => token === userCardToken &&
 					userCardAnchor === link && userCardAnchorIsVisible(link), (user) => {
 					userCardNavigationStack.length = 0;
-					if (user && user.username) userCardNavigationStack.push(navigationEntryFromUser(user));
+					if (user?.username) userCardNavigationStack.push(navigationEntryFromUser(user));
 					renderUserCardBreadcrumbs();
 				});
 			}, USER_CARD_SHOW_DELAY);
@@ -24116,7 +24125,7 @@
 			const to = event.relatedTarget;
 			if (userCardFollowPanel.contains(link)) {
 				userCardFollowPreviewHoverArmed = true;
-				const nextLink = to && typeof to.closest === 'function' ? to.closest(USER_CARD_LINK_SEL) : null;
+				const nextLink = isFunction(to?.closest) ? to.closest(USER_CARD_LINK_SEL) : null;
 				if (to && typeof to.nodeType === 'number' &&
 					(link.contains(to) || userCardFollowPreview.contains(to) ||
 						(nextLink && userCardFollowPanel.contains(nextLink)))) return;
@@ -24128,7 +24137,7 @@
 				(link.contains(to) || fallbackUserCard.contains(to) || userCardFollowPanel.contains(to) ||
 					userCardFollowPreview.contains(to))) return;
 			cancelUserCardOpening();
-			const nextLink = to && typeof to.closest === 'function' ? to.closest(USER_CARD_LINK_SEL) : null;
+			const nextLink = isFunction(to?.closest) ? to.closest(USER_CARD_LINK_SEL) : null;
 			if (nextLink && getUserCardUsername(nextLink) === getUserCardUsername(link)) {
 				return;
 			}
@@ -24163,10 +24172,10 @@
 			try {
 				const topicModule = lookupDiscourseModule('discourse/models/topic');
 				const topicDetailsModule = lookupDiscourseModule('discourse/models/topic-details');
-				const Topic = topicModule && topicModule.default;
-				const TopicDetails = topicDetailsModule && topicDetailsModule.default;
-				if (!Topic || typeof Topic.create !== 'function' ||
-						!TopicDetails || typeof TopicDetails.create !== 'function') {
+				const Topic = topicModule?.default;
+				const TopicDetails = topicDetailsModule?.default;
+				if (!Topic || !isFunction(Topic.create) ||
+						!TopicDetails || !isFunction(TopicDetails.create)) {
 					throw new Error('Discourse 主题通知接口尚未就绪');
 				}
 				const topicModel = Topic.create({
@@ -24174,7 +24183,7 @@
 					id: Number(ctx.topicId),
 				});
 				const detailsModel = TopicDetails.create({
-					...(ctx.topicData && ctx.topicData.details || {}),
+					...(ctx.topicData?.details || {}),
 					topic: topicModel,
 					notification_level: previousLevel,
 				});
@@ -24208,7 +24217,7 @@
 				await updateReaderPollVote(post, ctx, name, [input.value]);
 				return;
 			}
-			const selected = Array.from(container.querySelectorAll('input[data-poll-option]:checked')).map((item) => item.value);
+			const selected = [...container.querySelectorAll('input[data-poll-option]:checked')].map((item) => item.value);
 			const { min, max } = pollChoiceLimits(poll);
 			const submit = container.querySelector('[data-poll-action="submit"]');
 			if (submit) {
@@ -24224,7 +24233,7 @@
 			event.preventDefault();
 			const post = form.closest('.ldp-post');
 			const input = form.querySelector('.ldp-pv-comment-input');
-			const raw = String(input && input.value || '').trim();
+			const raw = String(input?.value || '').trim();
 			if (!post || !raw) return;
 			const postId = post.dataset.postId;
 			await runReaderActionOnce(ctx, `post:${postId}:pv-comment-create`, async () => {
@@ -24234,12 +24243,12 @@
 					const existing = readerPostVotingComments(postId, ctx);
 					const comments = new Map(existing.map((comment) => [String(comment.id), comment]));
 					const comment = data.comment || data;
-					if (comment && comment.id) comments.set(String(comment.id), comment);
+					if (comment?.id) comments.set(String(comment.id), comment);
 					readerPostCopies(postId, ctx).forEach((copy) => {
 						const root = copy.querySelector(':scope > .ldp-pv-comments');
 						if (root) root.dataset.expanded = '1';
 					});
-					syncPostVotingComments(postId, ctx, Array.from(comments.values()));
+					syncPostVotingComments(postId, ctx, [...comments.values()]);
 				} catch (error) {
 					alert('发送评论失败：' + error.message);
 				} finally {
@@ -24251,7 +24260,7 @@
 
 		const showReaderAvatarPreview = (avatarPreview) => {
 			const post = avatarPreview.closest('.ldp-post');
-			const postData = post && post._ldpPostData || {};
+			const postData = post?._ldpPostData || {};
 			const username = String(postData.username || avatarPreview.dataset.userCard || '').trim();
 			const avatarImage = avatarPreview.querySelector('.ldp-avatar');
 			const template = String(postData.avatar_template || avatarImage?.dataset.ldpAvatarOriginalTemplate ||
@@ -24285,7 +24294,7 @@
 				() => token === userCardToken && userCardAnchor === avatarPreview && userCardAnchorIsVisible(avatarPreview),
 				(user) => {
 					userCardNavigationStack.length = 0;
-					if (user && user.username) userCardNavigationStack.push(navigationEntryFromUser(user));
+					if (user?.username) userCardNavigationStack.push(navigationEntryFromUser(user));
 					renderUserCardBreadcrumbs();
 					openPreviewFromCard(user);
 				}
@@ -24304,6 +24313,24 @@
 				String(post.dataset.username || '') === String(ctx.op || '');
 			if (preserve) keepOnlyOpPostExpanded(post, ctx);
 			return preserve;
+		};
+		const readerActionHandlers = {
+			report: (post) => openReaderReportDialog(post, ctx),
+			'assign-post': (post) => openReaderAssignDialog(post, ctx, 'Post'),
+			'assign-topic': (post) => openReaderAssignDialog(post, ctx, 'Topic'),
+		};
+		const postActionHandlers = {
+			share: (post) => shareReaderLink(ctx, post),
+			bookmark: (post) => toggleReaderBookmark(post, ctx, 'Post'),
+			edit: (post, postId) => runReaderActionOnce(
+				ctx,
+				`post:${postId}:edit-composer`,
+				() => tryOpenNativeEditComposer(post, ctx)
+			),
+		};
+		const topicActionHandlers = {
+			share: () => shareReaderLink(ctx),
+			bookmark: () => isFunction(ctx.toggleTopicBookmark) ? ctx.toggleTopicBookmark() : undefined,
 		};
 		const onModalClick = async (e) => {
 			const imageCandidate = eventPathClosest(e, '.ldp-content img') ||
@@ -24371,8 +24398,8 @@
 			if (quoteAction) {
 				e.preventDefault();
 				const quote = quoteAction.closest('.ldp-post-quote');
-				const quoteBody = quote && quote.querySelector(':scope > blockquote');
-				const quoteToggle = quote && quote.querySelector(':scope > .ldp-quote-title .ldp-quote-toggle');
+				const quoteBody = quote?.querySelector(':scope > blockquote');
+				const quoteToggle = quote?.querySelector(':scope > .ldp-quote-title .ldp-quote-toggle');
 				if (!quote || !quoteBody || !quoteToggle) return;
 				if (quote.dataset.ldpQuoteExpanded === '1') {
 					preserveReaderQuotePosition(quote, ctx, () => {
@@ -24420,7 +24447,7 @@
 				e.preventDefault();
 				if (!ME_USERNAME) { alert('登录后才能为主题投票。'); return; }
 				await runReaderActionOnce(ctx, `topic:${ctx.topicId}:vote`, async () => {
-					const voted = !!(ctx.topicData && ctx.topicData.user_voted);
+					const voted = !!(ctx.topicData?.user_voted);
 					modal.querySelectorAll('[data-topic-vote]').forEach((button) => { button.disabled = true; });
 					try {
 						const data = await apiSend(`${BASE}/voting/${voted ? 'unvote' : 'vote'}`, 'POST', { topic_id: ctx.topicId });
@@ -24510,8 +24537,8 @@
 				if (direction > 0) {
 					const state = ctx.subReplyState.get(postNumber);
 					const pageSize = SUB_REPLY_PAGE_SIZE;
-					const targetPage = +(state && state.pageIndex || 0) + 1;
-					const requiredCount = Math.min(+(state && state.totalCount || 0), (targetPage + 1) * pageSize);
+					const targetPage = +(state?.pageIndex || 0) + 1;
+					const requiredCount = Math.min(+(state?.totalCount || 0), (targetPage + 1) * pageSize);
 					if (state && +(state.fetchedReplyCount || 0) < requiredCount && state.hasMore !== false) {
 						await ctx.repliesIO.loadNextPage(post, requiredCount);
 					}
@@ -24523,8 +24550,8 @@
 			}
 
 			const quoteJump = e.target.closest('.ldp-quote-jump');
-			const preview = quoteJump && quoteJump.closest('.ldp-floor-preview');
-			const post = e.target.closest('.ldp-post') || (preview && preview._ldpRelatedPost);
+			const preview = quoteJump?.closest('.ldp-floor-preview');
+			const post = e.target.closest('.ldp-post') || (preview?._ldpRelatedPost);
 			if (!post) return;
 			const postId = post.dataset.postId, postNumber = +post.dataset.postNumber;
 			if (quoteJump) {
@@ -24542,7 +24569,7 @@
 				hydrateReactionRegistry();
 				const reactionsRoot = reactionPicker.closest('.ldp-reactions');
 				const picker = reactionsRoot?.querySelector('.ldp-reaction-picker');
-				const open = picker && picker.hidden;
+				const open = picker?.hidden;
 				setReactionPickerExpanded(reactionsRoot, open);
 				return;
 			}
@@ -24569,7 +24596,7 @@
 							'discourse/plugins/discourse-post-voting/discourse/lib/post-voting-utilities'
 						);
 						const mutateVote = votingModule && (remove ? votingModule.removeVote : votingModule.castVote);
-						if (typeof mutateVote !== 'function') {
+						if (!isFunction(mutateVote)) {
 							throw new Error('Discourse 回答投票接口尚未就绪');
 						}
 						const data = await mutateVote(
@@ -24593,7 +24620,7 @@
 			const commentsMore = !commentsToggle && e.target.closest('.ldp-pv-comments-more');
 			const commentsAction = commentsToggle || commentsMore;
 			if (commentsAction) {
-				const root = commentsToggle && commentsToggle.closest('.ldp-pv-comments');
+				const root = commentsToggle?.closest('.ldp-pv-comments');
 				const open = !commentsToggle || root.dataset.expanded !== '1';
 				if (commentsToggle) root.dataset.expanded = open ? '1' : '0';
 				const loadComments = commentsMore || (open &&
@@ -24640,7 +24667,7 @@
 			const eventAction = e.target.closest('[data-event-status]');
 			if (eventAction) {
 				const status = eventAction.dataset.eventStatus;
-				const eventData = post._ldpPostData && post._ldpPostData.event || {};
+				const eventData = post._ldpPostData?.event || {};
 				const invitee = eventData.watching_invitee || {};
 				await runReaderActionOnce(ctx, `post:${postId}:event-attendance`, async () => {
 					setReaderPostControlsBusy(postId, ctx, '.ldp-event-action', true);
@@ -24649,10 +24676,10 @@
 						const eventModule = lookupDiscourseModule(
 							'discourse/plugins/discourse-calendar/discourse/models/discourse-post-event-event'
 						);
-						const EventModel = eventModule && eventModule.default;
-						if (!eventApi || typeof eventApi.updateEventAttendance !== 'function' ||
-								typeof eventApi.joinEvent !== 'function' ||
-								!EventModel || typeof EventModel.create !== 'function') {
+						const EventModel = eventModule?.default;
+						if (!eventApi || !isFunction(eventApi.updateEventAttendance) ||
+								!isFunction(eventApi.joinEvent) ||
+								!EventModel || !isFunction(EventModel.create)) {
 							throw new Error('Discourse 活动出席服务尚未就绪');
 						}
 						const eventModel = EventModel.create({
@@ -24692,7 +24719,7 @@
 					return;
 				}
 				if (action === 'submit') {
-					const selected = Array.from(container.querySelectorAll('input[data-poll-option]:checked')).map((item) => item.value);
+					const selected = [...container.querySelectorAll('input[data-poll-option]:checked')].map((item) => item.value);
 					const postData = post._ldpPostData || {};
 					const poll = (postData.polls || []).find((item) => pollName(item) === name);
 					const { min, max } = pollChoiceLimits(poll);
@@ -24704,30 +24731,16 @@
 			const readerAction = e.target.closest('[data-reader-action]');
 			if (readerAction) {
 				e.preventDefault();
-				const action = readerAction.dataset.readerAction;
-				if (action === 'report') openReaderReportDialog(post, ctx);
-				else if (action === 'assign-post') openReaderAssignDialog(post, ctx, 'Post');
-				else if (action === 'assign-topic') openReaderAssignDialog(post, ctx, 'Topic');
+				readerActionHandlers[readerAction.dataset.readerAction]?.(post);
 				return;
 			}
 			const postAction = e.target.closest('[data-post-action]');
 			if (postAction) {
 				e.preventDefault();
 				const action = postAction.dataset.postAction;
-				if (action === 'share') {
-					await shareReaderLink(ctx, post);
-					return;
-				}
-				if (action === 'bookmark' && !postAction.disabled) {
-					await toggleReaderBookmark(post, ctx, 'Post');
-					return;
-				}
-				if (action === 'edit' && !postAction.disabled) {
-					await runReaderActionOnce(
-						ctx,
-						`post:${postId}:edit-composer`,
-						() => tryOpenNativeEditComposer(post, ctx)
-					);
+				const handler = postActionHandlers[action];
+				if (handler && (action === 'share' || !postAction.disabled)) {
+					await handler(post, postId);
 					return;
 				}
 				if (action === 'delete' && !postAction.disabled) {
@@ -24756,15 +24769,15 @@
 						return;
 					}
 					const firstPostNode = topicAction.closest('.ldp-post');
-					const sharedIssue = topicSharedIssueState(firstPostNode && firstPostNode._ldpPostData, ctx);
+					const sharedIssue = topicSharedIssueState(firstPostNode?._ldpPostData, ctx);
 					if (!sharedIssue.visible || sharedIssue.isAuthor) return;
 					await runReaderActionOnce(ctx, `topic:${ctx.topicId}:shared-issue`, async () => {
 						ctx.topicSharedIssueBusy = true;
 						syncTopicActionControls(ctx);
 						try {
 							const data = await apiSend(`${BASE}/solution/shared_issue`, 'POST', { topic_id: ctx.topicId });
-							ctx.topicData.shared_issue_count = Math.max(0, Number(data && data.count) || 0);
-							ctx.topicData.user_created_shared_issue = !!(data && data.user_created_shared_issue);
+							ctx.topicData.shared_issue_count = Math.max(0, Number(data?.count) || 0);
+							ctx.topicData.user_created_shared_issue = !!(data?.user_created_shared_issue);
 							if (ctx.topicData.user_created_shared_issue) {
 								const currentLevel = Number.isInteger(ctx.topicNotificationLevel)
 									? ctx.topicNotificationLevel
@@ -24777,7 +24790,7 @@
 							}
 							setCachedTopicData(ctx.topicId, ctx.topicData);
 						} catch (error) {
-							if (Number(error && error.status) === 403) {
+							if (Number(error?.status) === 403) {
 								SHARED_ISSUE_FORBIDDEN_TOPIC_IDS.add(Number(ctx.topicId));
 							} else {
 								alert('“俺也一样”操作失败：' + error.message);
@@ -24789,12 +24802,9 @@
 					});
 					return;
 				}
-				if (action === 'share') {
-					await shareReaderLink(ctx);
-					return;
-				}
-				if (action === 'bookmark') {
-					if (typeof ctx.toggleTopicBookmark === 'function') await ctx.toggleTopicBookmark();
+				const handler = topicActionHandlers[action];
+				if (handler) {
+					await handler();
 					return;
 				}
 			}
@@ -24876,7 +24886,7 @@
 						() => report ? openReaderBoostReportDialog(boostBubble, ctx) : deleteReaderBoost(post, boostBubble, ctx)
 					);
 				} catch (error) {
-					if (report) showSelectionToast(error && error.message ? error.message : '举报 Boost 失败，请重试');
+					if (report) showSelectionToast(error?.message ? error.message : '举报 Boost 失败，请重试');
 					else alert('删除 Boost 失败：' + error.message);
 				} finally {
 					if (boostItemAction.isConnected) boostItemAction.disabled = false;
@@ -24918,7 +24928,7 @@
 		onAction(modal, 'click', onModalClick);
 		return () => {
 			const boostMenu = document.body?.querySelector(':scope > .ldp-native-boost-menu');
-			if (boostMenu && typeof boostMenu._ldpClose === 'function') boostMenu._ldpClose();
+			if (isFunction(boostMenu?._ldpClose)) boostMenu._ldpClose();
 			closeUserCard();
 			if (ctx.closeUserCard === closeUserCard) ctx.closeUserCard = null;
 			if (ctx.closeUserCardLayer === closeUserCardLayer) ctx.closeUserCardLayer = null;
@@ -24949,7 +24959,7 @@
 		const parent = +postNumber;
 		const posts = Array.isArray(replies) ? replies : postsFromPayload(replies);
 		return posts.filter((reply) => {
-			const rawReplyTo = reply && reply.reply_to_post_number;
+			const rawReplyTo = reply?.reply_to_post_number;
 			const replyTo = +(rawReplyTo || 0);
 			// /posts/:id/replies.json is already scoped to this post. LinuxDo can
 			// omit reply_to_post_number here, but an explicit different parent is a
@@ -24965,12 +24975,12 @@
 			const key = +(reply.post_number || 0) || String(reply.id || '');
 			if (key) merged.set(key, reply);
 		});
-		return Array.from(merged.values()).sort((a, b) => +(a.post_number || 0) - +(b.post_number || 0));
+		return [...merged.values()].sort((a, b) => +(a.post_number || 0) - +(b.post_number || 0));
 	}
 
 	function replyPageCursor(posts) {
 		return posts.reduce(
-			(latest, reply) => Math.max(latest, +(reply && reply.post_number || 0)),
+			(latest, reply) => Math.max(latest, +(reply?.post_number || 0)),
 			0,
 		);
 	}
@@ -25032,8 +25042,8 @@
 						scheduleNestedPrefetchDrain();
 						break;
 					}
-					const candidates = Array.from(pendingPrefetchNodes)
-						.filter((node) => node && node.isConnected);
+					const candidates = [...pendingPrefetchNodes]
+						.filter((node) => node?.isConnected);
 					let post = candidates[0] || null;
 					if (candidates.length > 1) {
 						const rootRect = ctx.scrollRoot.getBoundingClientRect();
@@ -25059,7 +25069,7 @@
 						if (loaded) io.unobserve(post);
 						transientRetryCounts.delete(post);
 					} catch (error) {
-						const status = Number(error && error.status || 0);
+						const status = Number(error?.status || 0);
 						const transient = !!error && (
 							error.name === 'AbortError' ||
 							error.name === 'TypeError' ||
@@ -25090,9 +25100,9 @@
 			let requestState = null;
 			try { requestState = ctx.postRequestScheduler.snapshot(); } catch (error) {}
 			const controllerWait = Math.max(
-				Number(requestState && requestState.cooldownRemaining) || 0,
-				Number(requestState && requestState.nextPermitDelay) || 0,
-				Math.max(0, Number(cause && cause.retryAt || 0) - Date.now())
+				Number(requestState?.cooldownRemaining) || 0,
+				Number(requestState?.nextPermitDelay) || 0,
+				Math.max(0, Number(cause?.retryAt || 0) - Date.now())
 			);
 			const delay = controllerWait > 0
 				? Math.min(60000, controllerWait + 80)
@@ -25143,11 +25153,11 @@
 
 		async function loadDirectReplies(post, options = {}) {
 			assertSessionActive();
-			const postId = +(post && post.id || 0);
-			const postNumber = +(post && post.post_number || 0);
+			const postId = +(post?.id || 0);
+			const postNumber = +(post?.post_number || 0);
 			if (!postId || !postNumber) return [];
 			const knownMap = ctx.directRepliesByParent.get(postNumber);
-			let merged = mergeDirectReplies(knownMap ? Array.from(knownMap.values()) : []);
+			let merged = mergeDirectReplies(knownMap ? [...knownMap.values()] : []);
 			const expected = Math.max(0, +(post.reply_count || 0));
 			if ((options.force !== true || completeDirectReplyPostIds.has(postId)) && expected <= merged.length) return merged;
 			let after = 0;
@@ -25238,24 +25248,24 @@
 			if (loadingEl) loadingEl.style.display = 'block';
 			const expectedCount = +(post.dataset.childReplyTotal || 0);
 			const knownReplyMap = ctx.directRepliesByParent.get(postNumber);
-			const knownReplies = knownReplyMap ? Array.from(knownReplyMap.values()) : [];
+			const knownReplies = knownReplyMap ? [...knownReplyMap.values()] : [];
 			if (knownReplies.length) {
 				const previousState = ctx.subReplyState.get(postNumber);
 				const knownComplete = knownReplies.length >= expectedCount;
-				const previousHasCursor = +(previousState && previousState.fetchAfter || 0) > 0;
+				const previousHasCursor = +(previousState?.fetchAfter || 0) > 0;
 				const needsInitialFetch = !knownComplete && !previousHasCursor &&
 					(!previousState || previousState.hasMore !== false);
 				ctx.subReplyState.set(postNumber, {
 					...previousState,
 					all: mergeDirectReplies(knownReplies),
-					pageIndex: +(previousState && previousState.pageIndex || 0),
+					pageIndex: +(previousState?.pageIndex || 0),
 					totalCount: previousState && previousState.hasMore === false
 						? Math.max(knownReplies.length, +(previousState.totalCount || 0))
 						: Math.max(expectedCount, knownReplies.length),
 					fetchedReplyCount: knownComplete
 						? knownReplies.length
-						: +(previousState && previousState.fetchedReplyCount || 0),
-					fetchAfter: +(previousState && previousState.fetchAfter || 0),
+						: +(previousState?.fetchedReplyCount || 0),
+					fetchAfter: +(previousState?.fetchAfter || 0),
 					hasMore: knownComplete ? false : previousState ? previousState.hasMore !== false : true,
 					loadingMore: needsInitialFetch,
 				});
@@ -25277,7 +25287,7 @@
 				const nextState = {
 					...previousState,
 					all: knownReplies,
-					pageIndex: +(previousState && previousState.pageIndex || 0),
+					pageIndex: +(previousState?.pageIndex || 0),
 					loadingMore: false,
 				};
 				mergeReplyPageIntoState(nextState, replies, postNumber, expectedCount);
@@ -25397,7 +25407,7 @@
 	}
 
 	function updateCommentsHeader(ctx) {
-		const commentCount = Math.max(0, +(ctx && ctx.totalPosts || 0) - 1);
+		const commentCount = Math.max(0, +(ctx?.totalPosts || 0) - 1);
 		if (ctx.countEl) ctx.countEl.textContent = `（${commentCount}）`;
 		if (ctx.emptyEl) ctx.emptyEl.style.display = ctx.totalPosts ? 'none' : '';
 		syncCommentsHeaderPlacement(ctx);
@@ -25446,7 +25456,7 @@
 			changeHandler = presenceChangeHandler
 		) => {
 			if (!channelProxy) return;
-			if (changeHandler && typeof channelProxy.off === 'function') {
+			if (changeHandler && isFunction(channelProxy.off)) {
 				channelProxy.off('change', changeHandler);
 			}
 			try {
@@ -25459,22 +25469,22 @@
 		};
 		const start = async () => {
 			const presenceService = lookupDiscourse('service:presence');
-			if (!presenceService || typeof presenceService.getChannel !== 'function') {
+			if (!presenceService || !isFunction(presenceService.getChannel)) {
 				render([]);
 				return;
 			}
 			const channelProxy = presenceService.getChannel(channel);
 			presenceChannel = channelProxy;
-			if (!channelProxy || typeof channelProxy.subscribe !== 'function') {
+			if (!channelProxy || !isFunction(channelProxy.subscribe)) {
 				presenceChannel = null;
 				render([]);
 				return;
 			}
 			const changeHandler = () => {
-				if (!stopped) render(Array.from(channelProxy.users || []));
+				if (!stopped) render([...channelProxy.users || []]);
 			};
 			presenceChangeHandler = changeHandler;
-			if (typeof channelProxy.on === 'function') {
+			if (isFunction(channelProxy.on)) {
 				channelProxy.on('change', changeHandler);
 			}
 			try {
@@ -25526,8 +25536,8 @@
 
 	function readerLoadingVisualHTML(animation) {
 		return `<div class="ldp-loading-visual" data-animation="${animation.key}" aria-hidden="true">
-      ${animation.markup}
-    </div>`;
+			${animation.markup}
+		</div>`;
 	}
 
 	let lastRandomReaderLoadingAnimationKey = '';
@@ -25537,21 +25547,21 @@
 			normalized === 'random' ? lastRandomReaderLoadingAnimationKey : '');
 		if (normalized === 'random') lastRandomReaderLoadingAnimationKey = animation.key;
 		return `
-    <div class="ldp-loading-stage" role="status" aria-live="polite" aria-atomic="true" aria-label="正在载入">
-      ${readerLoadingVisualHTML(animation)}
-      <div class="ldp-loading-copy">
-        <div class="ldp-loading-mode">LINUX DO READER · ${animation.label}</div>
-        <div class="ldp-loading-status"><span>正在载入帖子</span><strong class="ldp-loading-target"></strong></div>
-        <div class="ldp-loading-detail">正在准备阅读现场…</div>
-      </div>
-    </div>`;
+		<div class="ldp-loading-stage" role="status" aria-live="polite" aria-atomic="true" aria-label="正在载入">
+			${readerLoadingVisualHTML(animation)}
+			<div class="ldp-loading-copy">
+				<div class="ldp-loading-mode">LINUX DO READER · ${animation.label}</div>
+				<div class="ldp-loading-status"><span>正在载入帖子</span><strong class="ldp-loading-target"></strong></div>
+				<div class="ldp-loading-detail">正在准备阅读现场…</div>
+			</div>
+		</div>`;
 	}
 
 	function parkReaderCommentsHeader(overlay, preferredHeader = null) {
-		const body = overlay && overlay.querySelector('.ldp-body');
+		const body = overlay?.querySelector('.ldp-body');
 		if (!body) return null;
 		const readerShell = overlay._ldpReaderShell;
-		let commentsHeader = preferredHeader || (readerShell && readerShell.commentsHeader) ||
+		let commentsHeader = preferredHeader || (readerShell?.commentsHeader) ||
 			overlay.querySelector('.ldp-comments-header');
 		if (!commentsHeader) {
 			commentsHeader = makeElement('div');
@@ -25569,7 +25579,7 @@
 	}
 
 	function resetReaderTopicShell(overlay) {
-		const body = overlay && overlay.querySelector('.ldp-body');
+		const body = overlay?.querySelector('.ldp-body');
 		if (!body) return;
 		const comments = body.querySelector('.ldp-comments');
 		parkReaderCommentsHeader(overlay);
@@ -25655,9 +25665,9 @@
 		const title = String(topicTitle || '').trim();
 		if (!title) return;
 		const documentTitle = lookupDiscourse('service:document-title');
-		if (!documentTitle || typeof documentTitle.setTitle !== 'function') return;
+		if (!documentTitle || !isFunction(documentTitle.setTitle)) return;
 		if (HOST_DOCUMENT_TITLE === undefined) {
-			HOST_DOCUMENT_TITLE = typeof documentTitle.getTitle === 'function'
+			HOST_DOCUMENT_TITLE = isFunction(documentTitle.getTitle)
 				? documentTitle.getTitle()
 				: null;
 		}
@@ -25667,7 +25677,7 @@
 	function restoreHostDocumentTitle() {
 		if (HOST_DOCUMENT_TITLE === undefined) return;
 		const documentTitle = lookupDiscourse('service:document-title');
-		if (documentTitle && typeof documentTitle.setTitle === 'function') {
+		if (isFunction(documentTitle?.setTitle)) {
 			documentTitle.setTitle(HOST_DOCUMENT_TITLE);
 		}
 		HOST_DOCUMENT_TITLE = undefined;
@@ -25680,8 +25690,8 @@
 	function embeddedReaderViewportState(ctx) {
 		if (!ctx || !ctx.scrollRoot) return null;
 		const rootRect = ctx.scrollRoot.getBoundingClientRect();
-		const visible = Array.from(ctx.streamMountedNodes || [])
-			.filter((node) => node && node.isConnected && +node.dataset.postNumber > 0)
+		const visible = [...ctx.streamMountedNodes || []]
+			.filter((node) => node?.isConnected && +node.dataset.postNumber > 0)
 			.map((node) => ({ node, rect: node.getBoundingClientRect() }))
 			.filter((item) => item.rect.bottom > rootRect.top && item.rect.top < rootRect.bottom)
 			.sort((left, right) => left.rect.top - right.rect.top)[0];
@@ -25695,9 +25705,9 @@
 	function embeddedReaderPostViewportState(ctx, postNumber) {
 		const safePostNumber = Math.max(0, Number(postNumber) || 0);
 		if (!ctx || !ctx.scrollRoot || !safePostNumber) return null;
-		const node = ctx.streamNodeMap && ctx.streamNodeMap.get(safePostNumber);
+		const node = ctx.streamNodeMap?.get(safePostNumber);
 		const rootRect = ctx.scrollRoot.getBoundingClientRect();
-		const postOffset = node && node.isConnected
+		const postOffset = node?.isConnected
 			? node.getBoundingClientRect().top - rootRect.top
 			: 0;
 		return {
@@ -25709,9 +25719,9 @@
 
 	function saveEmbeddedReaderReloadState() {
 		const overlay = CURRENT_OVERLAY;
-		const readerShell = overlay && overlay._ldpReaderShell;
-		const readerWorkspace = readerShell && readerShell.readerWorkspace;
-		const ctx = readerShell && readerShell.activeContext;
+		const readerShell = overlay?._ldpReaderShell;
+		const readerWorkspace = readerShell?.readerWorkspace;
+		const ctx = readerShell?.activeContext;
 		if (!overlay || !readerWorkspace || !readerWorkspace.isEmbedded() || !ctx || !ctx.readerSession ||
 			!ctx.readerSession.isCurrent('opening', 'active')) return;
 		const viewport = embeddedReaderViewportState(ctx) || {};
@@ -25806,7 +25816,7 @@
 		const onlyOpTimelineItems = () => ctx.onlyOp ? streamLayoutItems(ctx) : null;
 		const progressForPost = (postNumber) => {
 			const items = onlyOpTimelineItems();
-			if (items && items.length) {
+			if (items?.length) {
 				const item = ctx.streamItemMap.get(+postNumber);
 				const index = item && streamItemMatchesFilter(ctx, item) && Number.isInteger(item.layoutIndex)
 					? item.layoutIndex
@@ -25819,7 +25829,7 @@
 		};
 		const targetFromRatio = (ratio) => {
 			const items = onlyOpTimelineItems();
-			if (items && items.length) {
+			if (items?.length) {
 				const index = Math.round(ratio * (items.length - 1));
 				return +items[Math.max(0, Math.min(items.length - 1, index))].postNumber;
 			}
@@ -25828,7 +25838,7 @@
 		};
 		const targetFromKey = (current, delta) => {
 			const items = onlyOpTimelineItems();
-			if (items && items.length) {
+			if (items?.length) {
 				const item = ctx.streamItemMap.get(+current);
 				const index = item && streamItemMatchesFilter(ctx, item) && Number.isInteger(item.layoutIndex)
 					? item.layoutIndex
@@ -25855,7 +25865,7 @@
 		};
 		const timelineLensLayout = () => {
 			const items = onlyOpTimelineItems();
-			if (items && items.length) {
+			if (items?.length) {
 				return { length: items.length, floorAt: (index) => +items[index].postNumber };
 			}
 			return { length: totalPostCount(), floorAt: (index) => index + 1 };
@@ -25917,7 +25927,7 @@
 			totalEl.textContent = String(total);
 			dateEl.textContent = timelineMonthLabel(createdAt);
 			dateEl.disabled = !dateEl.textContent;
-			const latestReplyAt = ctx.latestReplyAt || (ctx.topicData && ctx.topicData.last_posted_at) || '';
+			const latestReplyAt = ctx.latestReplyAt || (ctx.topicData?.last_posted_at) || '';
 			relativeEl.textContent = latestReplyAt ? discourseRelativeTime(latestReplyAt) : '';
 			relativeEl.disabled = !latestReplyAt;
 			track.setAttribute('aria-valuemin', '1');
@@ -25965,13 +25975,13 @@
 				renderBoundaryPosition(lastTimelineItem ? lastTimelineItem.postNumber : totalPostCount());
 				return;
 			}
-			const anchoredOwnerNode = ctx.streamViewportAnchor && ctx.streamViewportAnchor.owner;
-			const visibleAnchor = anchoredOwnerNode && anchoredOwnerNode.isConnected
+			const anchoredOwnerNode = ctx.streamViewportAnchor?.owner;
+			const visibleAnchor = anchoredOwnerNode?.isConnected
 				? null
 				: findTopVisibleStreamPost(ctx);
-			const visibleOwnerNode = anchoredOwnerNode && anchoredOwnerNode.isConnected
+			const visibleOwnerNode = anchoredOwnerNode?.isConnected
 				? anchoredOwnerNode
-				: visibleAnchor && visibleAnchor.ownerNode;
+				: visibleAnchor?.ownerNode;
 			const visiblePostNumber = streamPostNumber(visibleOwnerNode);
 			const visibleItem = visiblePostNumber && ctx.streamItemMap.get(visiblePostNumber);
 			if (visiblePostNumber && (!ctx.onlyOp || streamItemMatchesFilter(ctx, visibleItem))) {
@@ -26054,8 +26064,7 @@
 			if (previewVisible) showPointerPreview(previewClientY);
 		};
 		const beginTimelineJumpAnimation = (targetPostNumber) => {
-			const reducedMotion = typeof window.matchMedia === 'function' &&
-				window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+			const reducedMotion = prefersReducedMotion();
 			if (reducedMotion || !cursorEl) return;
 			if (jumpAnimationFrame) cancelAnimationFrame(jumpAnimationFrame);
 			if (jumpAnimationTimer) clearTimeout(jumpAnimationTimer);
@@ -26111,7 +26120,7 @@
 			const navigationSequence = beginReaderNavigation(ctx);
 			const jumpStillCurrent = () => currentJumpSequence === jumpSequence &&
 				readerNavigationIsCurrent(ctx, navigationSequence) &&
-				(typeof options.acceptsWork !== 'function' || options.acceptsWork());
+				(!isFunction(options.acceptsWork) || options.acceptsWork());
 			if (!jumpStillCurrent()) return false;
 			if (ctx.cancelInitialTargetPosition) ctx.cancelInitialTargetPosition();
 			const loaded = !ctx.loadPost || await ctx.loadPost(targetPostNumber, {
@@ -26127,7 +26136,7 @@
 			let visualTarget = null;
 			const scrollOptions = {
 				...PINNED_STREAM_SCROLL_OPTIONS,
-				resolveVisualTarget: typeof options.prepareTarget === 'function'
+				resolveVisualTarget: isFunction(options.prepareTarget)
 					? () => {
 						visualTarget = options.prepareTarget(targetPostNumber);
 						return visualTarget;
@@ -26145,7 +26154,7 @@
 			}
 			await waitForReaderJumpLayout();
 			if (!jumpStillCurrent()) return false;
-			const settledTarget = visualTarget && visualTarget.isConnected
+			const settledTarget = visualTarget?.isConnected
 				? visualTarget
 				: getStreamPostNode(ctx, targetPostNumber);
 			if (!readerTargetNodeIsVisible(settledTarget, ctx)) {
@@ -26161,7 +26170,7 @@
 			let jumped = await jumpTo(targetPostNumber, options);
 			if (jumped) return true;
 			const attemptWasNotCancelled = jumpSequence === sequenceBeforeAttempt + 1 &&
-				(typeof options.acceptsWork !== 'function' || options.acceptsWork());
+				(!isFunction(options.acceptsWork) || options.acceptsWork());
 			if (!attemptWasNotCancelled) return false;
 			ctx.streamWindowResetPending = true;
 			syncStreamWindow(ctx);
@@ -26199,12 +26208,12 @@
 			if (endJumpPromise) return endJumpPromise;
 			endJumpPromise = (async () => {
 				const items = onlyOpTimelineItems();
-				let target = items && items.length ? items[items.length - 1].postNumber : totalPostCount();
-				if (!items && ctx.loader && typeof ctx.loader.loadLastPost === 'function') {
+				let target = items?.length ? items[items.length - 1].postNumber : totalPostCount();
+				if (!items && ctx.loader && isFunction(ctx.loader.loadLastPost)) {
 					try {
 						const lastPosts = await ctx.loader.loadLastPost({ priority: POST_REQUEST_PRIORITY.target });
 						const lastPost = lastPosts.reduce((latest, post) =>
-							+(post && post.post_number || 0) > +(latest && latest.post_number || 0) ? post : latest, null);
+							+(post?.post_number || 0) > +(latest?.post_number || 0) ? post : latest, null);
 						if (lastPost) {
 							attachPostBatch(lastPosts.filter((post) => !ctx.streamNodeMap.has(+post.post_number)), ctx);
 							target = +lastPost.post_number;
@@ -26342,7 +26351,7 @@
 			const previousOverlay = CURRENT_OVERLAY;
 			const previousTopicId = Number(previousOverlay.dataset.topicId);
 			const previousViewport = normalizeReaderHistoryViewport(
-				typeof previousOverlay._ldpCaptureHistoryViewport === 'function'
+				isFunction(previousOverlay._ldpCaptureHistoryViewport)
 					? previousOverlay._ldpCaptureHistoryViewport()
 					: null
 			);
@@ -26355,14 +26364,14 @@
 				previousOverlay.dataset.readerListModeAllowed === String(!directTopicRoute) &&
 				previousOverlay.dataset.readerShellDestroyed !== '1' &&
 				previousOverlay._ldpReaderSession && previousOverlay._ldpReaderSession.state !== 'failed' &&
-				typeof previousOverlay._ldpPrepareTopicSwitch === 'function';
+				isFunction(previousOverlay._ldpPrepareTopicSwitch);
 			if (canReuseReaderShell) {
 				await previousOverlay._ldpPrepareTopicSwitch();
 				if (openRequestId !== READER_OPEN_REQUEST_SEQUENCE || CURRENT_OVERLAY !== previousOverlay || !previousOverlay.isConnected) return;
 				reusableOverlay = previousOverlay;
-			} else if (typeof previousOverlay._ldpDispose === 'function') await previousOverlay._ldpDispose();
+			} else if (isFunction(previousOverlay._ldpDispose)) await previousOverlay._ldpDispose();
 			else {
-				if (typeof previousOverlay._ldpStopLatestReplyUpdates === 'function') {
+				if (isFunction(previousOverlay._ldpStopLatestReplyUpdates)) {
 					previousOverlay._ldpStopLatestReplyUpdates();
 				}
 				previousOverlay.remove();
@@ -26385,6 +26394,8 @@
 		const overlay = reusableOverlay || makeElement('div');
 		const readerElement = (selector) => overlay.querySelector(selector);
 		const readerElements = (selector) => overlay.querySelectorAll(selector);
+		const readerElementGroup = (...selectors) => selectors.map(readerElement);
+		const readerElementsGroup = (...selectors) => selectors.map(readerElements);
 		let readerOpenPhase = 'create-overlay';
 		const setReaderOpenPhase = (phase) => {
 			readerOpenPhase = phase;
@@ -26405,573 +26416,561 @@
 			overlay.dataset.readerWorkspaceMode = 'floating';
 			overlay.dataset.readerListModeAllowed = String(!directTopicRoute);
 			overlay.innerHTML = `
-      <div class="ldp-reader-window-capsule">
-        <button class="ldp-reader-drag-handle" type="button" aria-label="拖动阅读器">${icon('minus')}</button>
-        <button class="ldp-reader-pin-button" type="button" aria-label="置顶浮窗" aria-pressed="false">${icon('pin')}</button>
-        <button class="ldp-reader-lock-button" type="button" aria-label="锁定浮窗" aria-pressed="false">${icon('unlock')}</button>
-        <div class="ldp-reader-placement-control" hidden>
-          <button class="ldp-reader-placement-trigger" type="button" aria-label="显示方式" aria-haspopup="true">${icon('layoutGrid')}</button>
-          <div class="ldp-reader-placement-strip" role="group" aria-label="切换阅读器显示方式" hidden>
-            <button class="ldp-reader-placement-option" type="button" data-reader-placement="embed-left" data-reader-placement-label="嵌入左侧" aria-label="嵌入左侧">${icon('panelLeft')}</button>
-            <button class="ldp-reader-placement-option" type="button" data-reader-placement="embed-right" data-reader-placement-label="嵌入右侧" aria-label="嵌入右侧">${icon('panelRight')}</button>
-            <button class="ldp-reader-placement-option" type="button" data-reader-placement="floating" data-reader-placement-label="浮窗阅读器" aria-label="浮窗阅读器">${icon('floatingWindow')}</button>
-            <button class="ldp-reader-placement-option" type="button" data-reader-placement="fullpage" data-reader-placement-label="全屏阅读器" aria-label="全屏阅读器">${icon('maximize2')}</button>
-          </div>
-        </div>
-      </div>
-      <div class="ldp-reader-host-scrollbar ldp-reader-host-scrollbar-inactive" role="scrollbar" aria-label="Linux DO 主题列表滚动条" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-disabled="true" tabindex="0">
-        <span class="ldp-reader-host-scrollbar-thumb" aria-hidden="true"></span>
-      </div>
-      <button class="ldp-reader-host-top" type="button" aria-label="回到宿主页面顶部" title="回到宿主页面顶部" hidden>${icon('arrowUp')}<span class="ldp-reader-host-top-countdown" aria-hidden="true">3</span></button>
-      <div class="ldp-modal">
-        <span class="ldp-reader-embed-resize" aria-hidden="true"></span>
-        ${['n', 's', 'e', 'w', 'nw', 'ne', 'sw', 'se'].map((direction) =>
+			<div class="ldp-reader-window-capsule">
+				<button class="ldp-reader-drag-handle" type="button" aria-label="拖动阅读器">${icon('minus')}</button>
+				<button class="ldp-reader-pin-button" type="button" aria-label="置顶浮窗" aria-pressed="false">${icon('pin')}</button>
+				<button class="ldp-reader-lock-button" type="button" aria-label="锁定浮窗" aria-pressed="false">${icon('unlock')}</button>
+				<div class="ldp-reader-placement-control" hidden>
+					<button class="ldp-reader-placement-trigger" type="button" aria-label="显示方式" aria-haspopup="true">${icon('layoutGrid')}</button>
+					<div class="ldp-reader-placement-strip" role="group" aria-label="切换阅读器显示方式" hidden>
+						<button class="ldp-reader-placement-option" type="button" data-reader-placement="embed-left" data-reader-placement-label="嵌入左侧" aria-label="嵌入左侧">${icon('panelLeft')}</button>
+						<button class="ldp-reader-placement-option" type="button" data-reader-placement="embed-right" data-reader-placement-label="嵌入右侧" aria-label="嵌入右侧">${icon('panelRight')}</button>
+						<button class="ldp-reader-placement-option" type="button" data-reader-placement="floating" data-reader-placement-label="浮窗阅读器" aria-label="浮窗阅读器">${icon('floatingWindow')}</button>
+						<button class="ldp-reader-placement-option" type="button" data-reader-placement="fullpage" data-reader-placement-label="全屏阅读器" aria-label="全屏阅读器">${icon('maximize2')}</button>
+					</div>
+				</div>
+			</div>
+			<div class="ldp-reader-host-scrollbar ldp-reader-host-scrollbar-inactive" role="scrollbar" aria-label="Linux DO 主题列表滚动条" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-disabled="true" tabindex="0">
+				<span class="ldp-reader-host-scrollbar-thumb" aria-hidden="true"></span>
+			</div>
+			<button class="ldp-reader-host-top" type="button" aria-label="回到宿主页面顶部" title="回到宿主页面顶部" hidden>${icon('arrowUp')}<span class="ldp-reader-host-top-countdown" aria-hidden="true">3</span></button>
+			<div class="ldp-modal">
+				<span class="ldp-reader-embed-resize" aria-hidden="true"></span>
+				${['n', 's', 'e', 'w', 'nw', 'ne', 'sw', 'se'].map((direction) =>
 					`<span class="ldp-reader-resize-handle" data-reader-resize="${direction}" aria-hidden="true"></span>`).join('')}
-        <div class="ldp-header">
-          <a class="ldp-home-logo" href="${BASE}/" aria-label="回到 LINUX DO 首页">
-            <img class="ldp-logo" src="${LINUXDO_LOGO_URL}" alt="" loading="lazy" decoding="async">
-          </a>
-          <div class="ldp-title-wrap">
-            <h2 class="ldp-title">
-              <span class="ldp-title-jump" role="button" tabindex="0" aria-label="跳到 #1">正在载入主题…</span>
-            </h2>
-            <div class="ldp-title-subline">
-              <div class="ldp-meta-row">
-                <div class="ldp-meta">
-                  <span class="ldp-meta-stats">正在读取主题信息…</span>
-                  <span class="ldp-meta-owner" hidden><span class="ldp-meta-owner-copy">楼主&nbsp;<span class="ldp-meta-owner-value">@?</span></span><button class="ldp-only-op-toggle" type="button" aria-label="只看楼主" aria-pressed="false" disabled>${icon('userRound')}</button><span class="ldp-only-op-progress" role="status" aria-live="polite" hidden><span class="ldp-only-op-progress-track"><i class="ldp-only-op-progress-fill"></i></span><span class="ldp-only-op-progress-value"></span></span></span>
-                </div>
-              </div>
-              <div class="ldp-title-topic-row">
-                <div class="ldp-topic-tags" hidden></div>
-                <div class="ldp-topic-vote-slot" hidden></div>
-              </div>
-            </div>
-          </div>
-          <div class="ldp-head-btns">
-            <button class="ldp-layout-toggle" type="button"></button>
-            <button class="ldp-notifications-toggle" type="button" aria-label="消息" aria-expanded="false">${icon('headerBell')}<span>消息</span><b class="ldp-notification-unread-badge" hidden></b></button>
-            <div class="ldp-notifications-popover" hidden>
-              <div class="ldp-notification-tabs" role="tablist" aria-label="消息分类">
-                ${Object.entries(NOTIFICATION_GROUPS).map(([key, group], index) =>
+				<div class="ldp-header">
+					<a class="ldp-home-logo" href="${BASE}/" aria-label="回到 LINUX DO 首页">
+						<img class="ldp-logo" src="${LINUXDO_LOGO_URL}" alt="" loading="lazy" decoding="async">
+					</a>
+					<div class="ldp-title-wrap">
+						<h2 class="ldp-title">
+							<span class="ldp-title-jump" role="button" tabindex="0" aria-label="跳到 #1">正在载入主题…</span>
+						</h2>
+						<div class="ldp-title-subline">
+							<div class="ldp-meta-row">
+								<div class="ldp-meta">
+									<span class="ldp-meta-stats">正在读取主题信息…</span>
+									<span class="ldp-meta-owner" hidden><span class="ldp-meta-owner-copy">楼主&nbsp;<span class="ldp-meta-owner-value">@?</span></span><button class="ldp-only-op-toggle" type="button" aria-label="只看楼主" aria-pressed="false" disabled>${icon('userRound')}</button><span class="ldp-only-op-progress" role="status" aria-live="polite" hidden><span class="ldp-only-op-progress-track"><i class="ldp-only-op-progress-fill"></i></span><span class="ldp-only-op-progress-value"></span></span></span>
+								</div>
+							</div>
+							<div class="ldp-title-topic-row">
+								<div class="ldp-topic-tags" hidden></div>
+								<div class="ldp-topic-vote-slot" hidden></div>
+							</div>
+						</div>
+					</div>
+					<div class="ldp-head-btns">
+						<button class="ldp-layout-toggle" type="button"></button>
+						<button class="ldp-notifications-toggle" type="button" aria-label="消息" aria-expanded="false">${icon('headerBell')}<span>消息</span><b class="ldp-notification-unread-badge" hidden></b></button>
+						<div class="ldp-notifications-popover" hidden>
+							<div class="ldp-notification-tabs" role="tablist" aria-label="消息分类">
+								${Object.entries(NOTIFICATION_GROUPS).map(([key, group], index) =>
 									`<button class="ldp-notification-tab${index === 0 ? ' active' : ''}" type="button" role="tab" data-notification-group="${key}" aria-selected="${index === 0 ? 'true' : 'false'}">${group.label}</button>`).join('')}
-              </div>
-              <div class="ldp-notification-toolbar">
-                <span class="ldp-notification-unread-status">没有未读消息</span>
-                <button class="ldp-notification-mark-all" type="button" disabled>${icon('check')}<span>全部已读</span></button>
-              </div>
-              ${popoverSearchMarkup('notification', '搜索用户名或用户 ID', '搜索消息', '清空消息搜索')}
-              <div class="ldp-notification-list"><div class="ldp-notification-empty">正在加载消息…</div></div>
-              ${popoverPagerMarkup('notification')}
-            </div>
-            <button class="ldp-history-toggle" type="button" aria-label="浏览历史" aria-expanded="false">${icon('headerHistory')}<span>历史</span></button>
-            <div class="ldp-history-popover" hidden>
-              <div class="ldp-collection-title">
-                <span>浏览历史</span>
-                <div class="ldp-collection-title-actions ldp-history-default-actions">
-                  <button class="ldp-collection-action ldp-history-sort-toggle" type="button"></button>
-                  <button class="ldp-collection-action ldp-history-multi" type="button" aria-label="多选浏览历史">${icon('listChecks')}</button>
-                  <button class="ldp-collection-action danger ldp-history-clear" type="button" aria-label="清空全部浏览历史" disabled>${icon('trash')}</button>
-                </div>
-                ${collectionBulkActionsMarkup('history', '历史', '浏览历史', '删除所选浏览历史')}
-              </div>
-              ${popoverSearchMarkup('history', '搜索标题或拼音', '搜索浏览历史', '清空历史搜索')}
-              <div class="ldp-history-list ldp-notification-list"><div class="ldp-notification-empty">暂无浏览历史</div></div>
-              ${popoverPagerMarkup('history')}
-            </div>
-            <button class="ldp-bookmarks-toggle" type="button" aria-label="收藏与回应" aria-expanded="false">${icon('headerBookmark')}<span>收藏与回应</span></button>
-            <div class="ldp-bookmarks-popover" hidden>
-              <div class="ldp-collection-title">
-                <span>收藏与回应</span>
-                <div class="ldp-collection-title-actions ldp-bookmarks-default-actions">
-                  <button class="ldp-collection-action ldp-bookmarks-multi" type="button" aria-label="多选收藏">${icon('listChecks')}</button>
-                </div>
-                ${collectionBulkActionsMarkup('bookmarks', '收藏', '收藏', '取消所选收藏')}
-              </div>
-              <div class="ldp-bookmark-tabs" role="tablist" aria-label="收藏与回应类型">
-                ${PREFS.bookmarkTabOrder.map((type, index) => `<button class="ldp-bookmark-tab${index === 0 ? ' active' : ''}" type="button" role="tab" data-bookmark-type="${type}" data-ldp-tooltip-label="拖动排序 · 首项默认" aria-selected="${String(index === 0)}">${BOOKMARK_TAB_LABELS[type]}</button>`).join('')}
-              </div>
-              ${popoverSearchMarkup('bookmarks', '搜索收藏标题或内容', '搜索收藏', '清空收藏搜索')}
-              <div class="ldp-reaction-filters" role="group" aria-label="按回应表情筛选" hidden></div>
-              <div class="ldp-bookmarks-list ldp-notification-list"><div class="ldp-notification-empty">正在加载收藏…</div></div>
-              ${popoverPagerMarkup('bookmarks')}
-            </div>
-            <button class="ldp-settings-toggle" type="button" aria-label="设置" aria-expanded="false">${icon('headerSettings')}<span>设置</span></button>
-            <div class="ldp-settings-popover" hidden>
-              <div class="ldp-settings-tabs">
-                <div class="ldp-settings-brand" aria-label="awesome linuxdo reader">
-                  <img class="ldp-settings-brand-logo" src="${LINUXDO_LOGO_URL}" alt="" loading="lazy" decoding="async">
-                  <span class="ldp-settings-brand-name"><span>AWESOME</span><span>LINUXDO</span><span>READER</span></span>
-                </div>
-                <div class="ldp-settings-nav-shell">
-                  <button class="ldp-settings-nav-scroll ldp-settings-nav-scroll-up" type="button" aria-label="显示上方更多设置" hidden>${icon('chevronRight')}</button>
-                  <div class="ldp-settings-nav">
-                    ${settingsNavigationMarkup()}
-                  </div>
-                  <button class="ldp-settings-nav-scroll ldp-settings-nav-scroll-down" type="button" aria-label="显示下方更多设置" hidden>${icon('chevronRight')}</button>
-                </div>
-                <div class="ldp-settings-footer">
-                  <div class="ldp-settings-theme" role="group" aria-label="明暗模式">
-                    ${READER_THEME_MODES.map((mode) => `<button class="ldp-settings-theme-button" type="button" data-reader-theme-mode="${mode}" aria-pressed="false">${icon(mode === 'light' ? 'sun' : mode === 'dark' ? 'moon' : 'monitor')}</button>`).join('')}
-                  </div>
-                </div>
-              </div>
-              <div class="ldp-settings-panel">
-                <div class="ldp-settings-section" data-settings-panel="user">
-                  ${settingsPanelIntroMarkup('user')}
-                  <div class="ldp-user-info-content" aria-live="polite">
-                    <div class="ldp-user-info-loading">正在加载用户信息…</div>
-                  </div>
-                </div>
-                <div class="ldp-settings-section" data-settings-panel="image" hidden>
-                  ${settingsPanelIntroMarkup('image')}
-                  <div class="ldp-settings-category-groups">
-                    ${settingsCategoryMarkup(
+							</div>
+							<div class="ldp-notification-toolbar">
+								<span class="ldp-notification-unread-status">没有未读消息</span>
+								<button class="ldp-notification-mark-all" type="button" disabled>${icon('check')}<span>全部已读</span></button>
+							</div>
+							${popoverSearchMarkup('notification', '搜索用户名或用户 ID', '搜索消息', '清空消息搜索')}
+							<div class="ldp-notification-list"><div class="ldp-notification-empty">正在加载消息…</div></div>
+							${popoverPagerMarkup('notification')}
+						</div>
+						<button class="ldp-history-toggle" type="button" aria-label="浏览历史" aria-expanded="false">${icon('headerHistory')}<span>历史</span></button>
+						<div class="ldp-history-popover" hidden>
+							<div class="ldp-collection-title">
+								<span>浏览历史</span>
+								<div class="ldp-collection-title-actions ldp-history-default-actions">
+									<button class="ldp-collection-action ldp-history-sort-toggle" type="button"></button>
+									<button class="ldp-collection-action ldp-history-multi" type="button" aria-label="多选浏览历史">${icon('listChecks')}</button>
+									<button class="ldp-collection-action danger ldp-history-clear" type="button" aria-label="清空全部浏览历史" disabled>${icon('trash')}</button>
+								</div>
+								${collectionBulkActionsMarkup('history', '历史', '浏览历史', '删除所选浏览历史')}
+							</div>
+							${popoverSearchMarkup('history', '搜索标题或拼音', '搜索浏览历史', '清空历史搜索')}
+							<div class="ldp-history-list ldp-notification-list"><div class="ldp-notification-empty">暂无浏览历史</div></div>
+							${popoverPagerMarkup('history')}
+						</div>
+						<button class="ldp-bookmarks-toggle" type="button" aria-label="收藏与回应" aria-expanded="false">${icon('headerBookmark')}<span>收藏与回应</span></button>
+						<div class="ldp-bookmarks-popover" hidden>
+							<div class="ldp-collection-title">
+								<span>收藏与回应</span>
+								<div class="ldp-collection-title-actions ldp-bookmarks-default-actions">
+									<button class="ldp-collection-action ldp-bookmarks-multi" type="button" aria-label="多选收藏">${icon('listChecks')}</button>
+								</div>
+								${collectionBulkActionsMarkup('bookmarks', '收藏', '收藏', '取消所选收藏')}
+							</div>
+							<div class="ldp-bookmark-tabs" role="tablist" aria-label="收藏与回应类型">
+								${PREFS.bookmarkTabOrder.map((type, index) => `<button class="ldp-bookmark-tab${index === 0 ? ' active' : ''}" type="button" role="tab" data-bookmark-type="${type}" data-ldp-tooltip-label="拖动排序 · 首项默认" aria-selected="${String(index === 0)}">${BOOKMARK_TAB_LABELS[type]}</button>`).join('')}
+							</div>
+							${popoverSearchMarkup('bookmarks', '搜索收藏标题或内容', '搜索收藏', '清空收藏搜索')}
+							<div class="ldp-reaction-filters" role="group" aria-label="按回应表情筛选" hidden></div>
+							<div class="ldp-bookmarks-list ldp-notification-list"><div class="ldp-notification-empty">正在加载收藏…</div></div>
+							${popoverPagerMarkup('bookmarks')}
+						</div>
+						<button class="ldp-settings-toggle" type="button" aria-label="设置" aria-expanded="false">${icon('headerSettings')}<span>设置</span></button>
+						<div class="ldp-settings-popover" hidden>
+							<div class="ldp-settings-tabs">
+								<div class="ldp-settings-brand" aria-label="awesome linuxdo reader">
+									<img class="ldp-settings-brand-logo" src="${LINUXDO_LOGO_URL}" alt="" loading="lazy" decoding="async">
+									<span class="ldp-settings-brand-name"><span>AWESOME</span><span>LINUXDO</span><span>READER</span></span>
+								</div>
+								<div class="ldp-settings-nav-shell">
+									<button class="ldp-settings-nav-scroll ldp-settings-nav-scroll-up" type="button" aria-label="显示上方更多设置" hidden>${icon('chevronRight')}</button>
+									<div class="ldp-settings-nav">
+										${settingsNavigationMarkup()}
+									</div>
+									<button class="ldp-settings-nav-scroll ldp-settings-nav-scroll-down" type="button" aria-label="显示下方更多设置" hidden>${icon('chevronRight')}</button>
+								</div>
+								<div class="ldp-settings-footer">
+									<div class="ldp-settings-theme" role="group" aria-label="明暗模式">
+										${READER_THEME_MODES.map((mode) => `<button class="ldp-settings-theme-button" type="button" data-reader-theme-mode="${mode}" aria-pressed="false">${icon(mode === 'light' ? 'sun' : mode === 'dark' ? 'moon' : 'monitor')}</button>`).join('')}
+									</div>
+								</div>
+							</div>
+							<div class="ldp-settings-panel">
+								<div class="ldp-settings-section" data-settings-panel="user">
+									<div class="ldp-user-info-content" aria-live="polite">
+										<div class="ldp-user-info-loading">正在加载用户信息…</div>
+									</div>
+								</div>
+								<div class="ldp-settings-section" data-settings-panel="image" hidden>
+									<div class="ldp-settings-category-groups">
+										${settingsCategoryMarkup(
 											'image-lightbox', '灯箱行为', '控制灯箱打开后的评论、描述和原图加载方式。',
 											settingSwitchesMarkup('image-lightbox'), 'ldp-settings-fields ldp-settings-category-list'
 										)}
-                    ${settingsCategoryMarkup(
+										${settingsCategoryMarkup(
 											'image-display', '帖子图片显示', '图片比例统一用于所有显示形态，并随阅读器容器宽度参与响应式排版。', `
-                        <div class="ldp-settings-fields">
-                          <div class="ldp-setting-row">
-                            <span class="ldp-setting-label">图片比例</span>
-                            <span class="ldp-image-scale-control">
-                              <input class="ldp-image-scale-range" type="range" min="${IMAGE_SCALE_MIN}" max="${IMAGE_SCALE_MAX}" step="1" aria-label="图片比例">
-                              <span class="ldp-image-scale-value"></span>
-                              <button class="ldp-color-reset ldp-image-scale-reset" type="button">${icon('rotateCcw')}<span>默认</span></button>
-                            </span>
-                          </div>
-                        </div>
-                      `)}
-                  </div>
-                </div>
-                <div class="ldp-settings-section" data-settings-panel="font" hidden>
-                  ${settingsPanelIntroMarkup('font')}
-                  <div class="ldp-settings-category-groups">
-                    ${settingsCategoryMarkup(
+												<div class="ldp-settings-fields">
+													<div class="ldp-setting-row">
+														<span class="ldp-setting-label">图片比例</span>
+														<span class="ldp-image-scale-control">
+															<input class="ldp-image-scale-range" type="range" min="${IMAGE_SCALE_MIN}" max="${IMAGE_SCALE_MAX}" step="1" aria-label="图片比例">
+															<span class="ldp-image-scale-value"></span>
+															<button class="ldp-color-reset ldp-image-scale-reset" type="button">${icon('rotateCcw')}<span>默认</span></button>
+														</span>
+													</div>
+												</div>
+											`)}
+									</div>
+								</div>
+								<div class="ldp-settings-section" data-settings-panel="font" hidden>
+									<div class="ldp-settings-category-groups">
+										${settingsCategoryMarkup(
 											'font-rendering', '字体渲染', '控制增强阅读器及 LINUX DO 宿主页面是否使用内置字体渲染。',
 											settingSwitchesMarkup('font-rendering'),
 											'ldp-settings-fields ldp-settings-category-list ldp-font-rendering-settings'
 										)}
-                    ${settingsCategoryMarkup(
+										${settingsCategoryMarkup(
 											'host-font', '宿主主题列表文字', '标题、Label Card 和右下角信息共享字体、字重和颜色；修改后立即保存。',
 											fontFieldRowsMarkup('host', HOST_FONT_CONFIG),
 											'ldp-settings-fields ldp-settings-category-list ldp-host-font-settings'
 										)}
-                    ${settingsCategoryMarkup(
+										${settingsCategoryMarkup(
 											'host-embed-size', '宿主嵌入态字号', '分别调整阅读器嵌入 LINUX DO 页面时，原帖、主题列表和通知区域的显示尺寸。', `
-                      ${Object.entries(HOST_EMBED_SIZE_SETTINGS).map(([key, config]) => `
-                        <div class="ldp-setting-row">
-                          <span class="ldp-setting-label">${config.label}</span>
-                          <span class="ldp-host-embed-size-control">
-                            <input type="range" data-host-embed-size="${key}" min="${HOST_EMBED_SIZE_MIN}" max="${HOST_EMBED_SIZE_MAX}" step="1" aria-label="宿主嵌入态${config.label}大小">
-                            <output class="ldp-host-embed-size-value" data-host-embed-size-value="${key}"></output>
-                            <button class="ldp-color-reset ldp-host-embed-size-reset" type="button" data-host-embed-size-reset="${key}">${icon('rotateCcw')}<span>默认</span></button>
-                          </span>
-                        </div>`).join('')}
-                      `, 'ldp-settings-fields ldp-settings-category-list ldp-host-embed-size-settings')}
-                    ${settingsCategoryMarkup(
+											${Object.entries(HOST_EMBED_SIZE_SETTINGS).map(([key, config]) => `
+												<div class="ldp-setting-row">
+													<span class="ldp-setting-label">${config.label}</span>
+													<span class="ldp-host-embed-size-control">
+														<input type="range" data-host-embed-size="${key}" min="${HOST_EMBED_SIZE_MIN}" max="${HOST_EMBED_SIZE_MAX}" step="1" aria-label="宿主嵌入态${config.label}大小">
+														<output class="ldp-host-embed-size-value" data-host-embed-size-value="${key}"></output>
+														<button class="ldp-color-reset ldp-host-embed-size-reset" type="button" data-host-embed-size-reset="${key}">${icon('rotateCcw')}<span>默认</span></button>
+													</span>
+												</div>`).join('')}
+											`, 'ldp-settings-fields ldp-settings-category-list ldp-host-embed-size-settings')}
+										${settingsCategoryMarkup(
 											'reader-font', '阅读器字体', '一套界面、正文和回复字体用于所有显示形态。', `
-                        <div class="ldp-font-scope-tabs" role="tablist" aria-label="字体作用范围">
-                          ${FONT_SCOPE_KEYS.map((scope) => `<button class="ldp-font-scope-tab${scope === 'interface' ? ' active' : ''}" id="ldp-font-scope-tab-${scope}" type="button" role="tab" data-font-scope-tab="${scope}" aria-controls="ldp-font-scope-panel-${scope}" aria-selected="${scope === 'interface'}" tabindex="${scope === 'interface' ? '0' : '-1'}">${FONT_SCOPE_CONFIG[scope].label}</button>`).join('')}
-                        </div>
-                        <div class="ldp-settings-fields ldp-font-settings-fields">
-                          ${FONT_SCOPE_KEYS.map(fontScopeSettingsMarkup).join('')}
-                        </div>
-                      `)}
-                  </div>
-                  <div class="ldp-font-family-menu" id="ldp-font-family-menu" hidden>
-                    <label class="ldp-font-family-search ldp-picker-search">
-                      ${icon('search')}
-                      <input type="search" autocomplete="off" spellcheck="false" placeholder="搜索字体名称" aria-label="搜索字体" aria-controls="ldp-font-family-options">
-                    </label>
-                    <p class="ldp-font-family-source-status" role="status" aria-live="polite"></p>
-                    <div class="ldp-font-family-options ldp-picker-options" id="ldp-font-family-options" role="listbox" aria-label="可用字体"></div>
-                    <div class="ldp-font-family-empty" hidden>没有匹配的字体</div>
-                    <div class="ldp-font-family-manual"><span>列表里没有？</span><button type="button">手动输入字体名</button></div>
-                  </div>
-                  ${settingsApplyFooterMarkup('ldp-font-status', 'ldp-font-apply', '全部恢复默认', 'ldp-font-reset')}
-                </div>
-                <div class="ldp-settings-section" data-settings-panel="layout" hidden>
-                  ${settingsPanelIntroMarkup('layout')}
-                  <div class="ldp-settings-category-groups">
-                    <div class="ldp-settings-category-group">
-                      <div class="ldp-settings-category-content">
-                        <div class="ldp-settings-fields ldp-layout-fields">
-                          ${LAYOUT_REGION_KEYS.map((name) => `<div class="ldp-setting-row">
-                            <span class="ldp-setting-label">${LAYOUT_REGION_LABELS[name]}</span>
-                            <span class="ldp-layout-ratio-control">
-                              <input type="range" data-layout-region="${name}" min="0" max="100" step="0.1" aria-valuemin="${LAYOUT_MIN_RATIOS[name]}" aria-label="${LAYOUT_REGION_LABELS[name]}比例">
-                              <span class="ldp-layout-ratio-value" data-layout-value="${name}"></span>
-                            </span>
-                          </div>`).join('')}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  ${settingsApplyFooterMarkup('', '', '恢复默认')}
-                </div>
-                <div class="ldp-settings-section" data-settings-panel="window" hidden>
-                  ${settingsPanelIntroMarkup('window')}
-                  <div class="ldp-settings-category-groups">
-                    ${settingsCategoryMarkup(
+												<div class="ldp-font-scope-tabs" role="tablist" aria-label="字体作用范围">
+													${FONT_SCOPE_KEYS.map((scope) => `<button class="ldp-font-scope-tab${scope === 'interface' ? ' active' : ''}" id="ldp-font-scope-tab-${scope}" type="button" role="tab" data-font-scope-tab="${scope}" aria-controls="ldp-font-scope-panel-${scope}" aria-selected="${scope === 'interface'}" tabindex="${scope === 'interface' ? '0' : '-1'}">${FONT_SCOPE_CONFIG[scope].label}</button>`).join('')}
+												</div>
+												<div class="ldp-settings-fields ldp-font-settings-fields">
+													${FONT_SCOPE_KEYS.map(fontScopeSettingsMarkup).join('')}
+												</div>
+											`)}
+									</div>
+									<div class="ldp-font-family-menu" id="ldp-font-family-menu" hidden>
+										<label class="ldp-font-family-search ldp-picker-search">
+											${icon('search')}
+											<input type="search" autocomplete="off" spellcheck="false" placeholder="搜索字体名称" aria-label="搜索字体" aria-controls="ldp-font-family-options">
+										</label>
+										<p class="ldp-font-family-source-status" role="status" aria-live="polite"></p>
+										<div class="ldp-font-family-options ldp-picker-options" id="ldp-font-family-options" role="listbox" aria-label="可用字体"></div>
+										<div class="ldp-font-family-empty" hidden>没有匹配的字体</div>
+										<div class="ldp-font-family-manual"><span>列表里没有？</span><button type="button">手动输入字体名</button></div>
+									</div>
+									${settingsApplyFooterMarkup('ldp-font-status', 'ldp-font-apply', '全部恢复默认', 'ldp-font-reset')}
+								</div>
+								<div class="ldp-settings-section" data-settings-panel="layout" hidden>
+									<div class="ldp-settings-category-groups">
+										<div class="ldp-settings-category-group">
+											<div class="ldp-settings-category-content">
+												<div class="ldp-settings-fields ldp-layout-fields">
+													${LAYOUT_REGION_KEYS.map((name) => `<div class="ldp-setting-row">
+														<span class="ldp-setting-label">${LAYOUT_REGION_LABELS[name]}</span>
+														<span class="ldp-layout-ratio-control">
+															<input type="range" data-layout-region="${name}" min="0" max="100" step="0.1" aria-valuemin="${LAYOUT_MIN_RATIOS[name]}" aria-label="${LAYOUT_REGION_LABELS[name]}比例">
+															<span class="ldp-layout-ratio-value" data-layout-value="${name}"></span>
+														</span>
+													</div>`).join('')}
+												</div>
+											</div>
+										</div>
+									</div>
+									${settingsApplyFooterMarkup('', '', '恢复默认')}
+								</div>
+								<div class="ldp-settings-section" data-settings-panel="window" hidden>
+									<div class="ldp-settings-category-groups">
+										${settingsCategoryMarkup(
 											'reader-window-geometry', '尺寸与位置', '设置浮窗宽高和左上角坐标，拖动或缩放浮窗后会同步更新。', `
-                        <div class="ldp-reader-window-fields">${readerWindowGeometryMarkup()}</div>
-                      `)}
-                    ${settingsCategoryMarkup(
+												<div class="ldp-reader-window-fields">${readerWindowGeometryMarkup()}</div>
+											`)}
+										${settingsCategoryMarkup(
 											'reader-window-behavior', '窗口行为', '控制浮窗离开焦点后的显示状态，以及是否允许拖动和缩放。', `
-                        <label class="ldp-reader-window-option"><input class="ldp-reader-window-pin-input" type="checkbox"><span>置顶浮窗（点击页面其他位置时保持显示）</span></label>
-                        <label class="ldp-reader-window-option"><input class="ldp-reader-window-lock-input" type="checkbox"><span>锁定浮窗（锁定后可点小锁或在这里解锁）</span></label>
-                      `, 'ldp-settings-category-content ldp-reader-window-options')}
-                  </div>
-                  <div class="ldp-reader-window-footer">
-                    <span class="ldp-reader-window-status" role="status"></span>
-                    <button class="ldp-reader-window-reset" type="button">${icon('rotateCcw')}<span>恢复浮窗默认</span></button>
-                    </div>
-                </div>
-                <div class="ldp-settings-section" data-settings-panel="appearance" hidden>
-                  ${settingsPanelIntroMarkup('appearance')}
-                  <p class="ldp-appearance-theme-note" role="status"></p>
-                  <div class="ldp-color-groups">${APPEARANCE_SETTING_GROUPS.map(appearanceSettingGroupMarkup).join('')}</div>
-                  ${settingsApplyFooterMarkup('ldp-appearance-status', 'ldp-appearance-apply')}
-                </div>
-                <div class="ldp-settings-section" data-settings-panel="flash" hidden>
-                  ${settingsPanelIntroMarkup('flash')}
-                  <div class="ldp-settings-category-groups">
-                    <div class="ldp-settings-category-group">
-                      <div class="ldp-settings-category-content">
-                  <div class="ldp-settings-fields ldp-flash-fields">${jumpHighlightSettingsMarkup()}</div>
-                      </div>
-                    </div>
-                  </div>
-                  ${settingsApplyFooterMarkup('ldp-flash-status', 'ldp-flash-apply')}
-                  <div class="ldp-settings-category-groups">
-                    ${settingsCategoryMarkup(
+												<label class="ldp-reader-window-option"><input class="ldp-reader-window-pin-input" type="checkbox"><span>置顶浮窗（点击页面其他位置时保持显示）</span></label>
+												<label class="ldp-reader-window-option"><input class="ldp-reader-window-lock-input" type="checkbox"><span>锁定浮窗（锁定后可点小锁或在这里解锁）</span></label>
+											`, 'ldp-settings-category-content ldp-reader-window-options')}
+									</div>
+									<div class="ldp-reader-window-footer">
+										<span class="ldp-reader-window-status" role="status"></span>
+										<button class="ldp-reader-window-reset" type="button">${icon('rotateCcw')}<span>恢复浮窗默认</span></button>
+										</div>
+								</div>
+								<div class="ldp-settings-section" data-settings-panel="appearance" hidden>
+									<p class="ldp-appearance-theme-note" role="status"></p>
+									<div class="ldp-color-groups">${APPEARANCE_SETTING_GROUPS.map(appearanceSettingGroupMarkup).join('')}</div>
+									${settingsApplyFooterMarkup('ldp-appearance-status', 'ldp-appearance-apply')}
+								</div>
+								<div class="ldp-settings-section" data-settings-panel="flash" hidden>
+									<div class="ldp-settings-category-groups">
+										<div class="ldp-settings-category-group">
+											<div class="ldp-settings-category-content">
+									<div class="ldp-settings-fields ldp-flash-fields">${jumpHighlightSettingsMarkup()}</div>
+											</div>
+										</div>
+									</div>
+									${settingsApplyFooterMarkup('ldp-flash-status', 'ldp-flash-apply')}
+									<div class="ldp-settings-category-groups">
+										${settingsCategoryMarkup(
 											'loading-motion', '等待区域动画', '选择“每次随机”时，每次打开或切换帖子都会从 10 个系统动效中重新抽取。', `
-                        <label class="ldp-setting-row ldp-motion-choice-row">
-                          <span class="ldp-setting-label">使用动效</span>
-                          <select class="ldp-reader-select ldp-loading-animation-select" aria-label="等待区域动效">
-                            <option value="random">每次随机（推荐）</option>
-                            ${READER_LOADING_ANIMATIONS.map((animation) => `<option value="${animation.key}">${animation.label}</option>`).join('')}
-                          </select>
-                        </label>
-                      `)}
-                  </div>
-                  <div class="ldp-loading-settings-preview">
-                    <div class="ldp-loading-settings-preview-head">
-                      <span><strong>页面预览</strong><small class="ldp-loading-settings-preview-label"></small></span>
-                      <button class="ldp-loading-preview-reroll" type="button">换一个</button>
-                    </div>
-                    <div class="ldp-loading-preview-stage" aria-live="polite"></div>
-                  </div>
-                  <p class="ldp-loading-settings-note">预览与阅读器等待区域共用同一套动效代码；偏好会自动保存在当前浏览器。</p>
-                </div>
-                <div class="ldp-settings-section" data-settings-panel="performance" hidden>
-                  ${settingsPanelIntroMarkup('performance')}
-                  <div class="ldp-performance-presets" role="group" aria-label="性能预设">
-                    <button class="ldp-performance-preset" type="button" data-performance-preset="low">省资源</button>
-                    <button class="ldp-performance-preset" type="button" data-performance-preset="balanced">均衡</button>
-                    <button class="ldp-performance-preset" type="button" data-performance-preset="high">低等待</button>
-                    <button class="ldp-performance-preset" type="button" data-performance-preset="custom">自定义</button>
-                  </div>
-                  <div class="ldp-settings-category-groups">
-                    ${performanceSettingsMarkup()}
-                  </div>
-                  <div class="ldp-performance-footer">
-                    <span class="ldp-performance-status" role="status"></span>
-                    <button class="ldp-performance-reset" type="button">${icon('rotateCcw')}<span>恢复默认</span></button>
-                  </div>
-                </div>
-                <div class="ldp-settings-section" data-settings-panel="resource-monitor" hidden>
-                  ${settingsPanelIntroMarkup('resource-monitor')}
-                  <div class="ldp-resource-monitor-health" data-level="normal" role="status">
-                    <strong class="ldp-resource-monitor-health-state">建立基线</strong>
-                    <p class="ldp-resource-monitor-health-detail">连续取得 10 个真实快照后，开始判断 DOM 增长、共享主线程长任务和阅读器请求排队。</p>
-                    <span class="ldp-resource-monitor-updated">等待采样</span>
-                  </div>
-                  <section class="ldp-resource-monitor-evidence" aria-labelledby="ldp-resource-monitor-evidence-title">
-                    <div class="ldp-resource-monitor-evidence-head"><strong id="ldp-resource-monitor-evidence-title">最近 60 秒前后台实测</strong><span class="ldp-resource-monitor-evidence-window">等待事件</span></div>
-                    <div class="ldp-resource-monitor-scope-table" role="table" aria-label="阅读器与宿主前后台资源证据">
-                      <div class="ldp-resource-monitor-scope-head" role="row"><span>范围</span><span>当前结构</span><span>前台事件</span><span>后台事件</span></div>
-                      <div class="ldp-resource-monitor-scope-row" role="row" data-resource-monitor-scope="reader"><strong>阅读器</strong><span data-resource-monitor-scope-current>—</span><span data-resource-monitor-scope-visible>—</span><span data-resource-monitor-scope-hidden>—</span><small data-resource-monitor-scope-basis>—</small></div>
-                      <div class="ldp-resource-monitor-scope-row" role="row" data-resource-monitor-scope="host"><strong>宿主 / 未标记</strong><span data-resource-monitor-scope-current>—</span><span data-resource-monitor-scope-visible>—</span><span data-resource-monitor-scope-hidden>—</span><small data-resource-monitor-scope-basis>—</small></div>
-                      <div class="ldp-resource-monitor-scope-row" role="row" data-resource-monitor-scope="shared"><strong>页面共享</strong><span data-resource-monitor-scope-current>—</span><span data-resource-monitor-scope-visible>—</span><span data-resource-monitor-scope-hidden>—</span><small data-resource-monitor-scope-basis>—</small></div>
-                    </div>
-                  </section>
-                  <div class="ldp-resource-monitor-table" role="table" aria-label="阅读器实时资源数据">
-                    <div class="ldp-resource-monitor-table-head" role="row"><span>指标</span><span>当前</span><span>样本均</span><span>观测峰</span><span>首末变化</span></div>
-                    ${RESOURCE_MONITOR_ROWS.map(resourceMonitorRowMarkup).join('')}
-                  </div>
-                  <section class="ldp-resource-monitor-trends" aria-labelledby="ldp-resource-monitor-trend-title">
-                    <div class="ldp-resource-monitor-trend-head"><strong id="ldp-resource-monitor-trend-title">最近 10 分钟趋势</strong><span class="ldp-resource-monitor-trend-window">等待采样</span></div>
-                    <div class="ldp-resource-monitor-trend-list">
-                      <div class="ldp-resource-monitor-trend-row" data-resource-monitor-chart="heapUsed"><span>页面内存估计</span><strong data-resource-monitor-chart-current="heapUsed">—</strong><svg viewBox="0 0 240 34" preserveAspectRatio="none" aria-hidden="true"><polyline points=""></polyline></svg></div>
-                      <div class="ldp-resource-monitor-trend-row" data-resource-monitor-chart="dom"><span>阅读器 DOM</span><strong data-resource-monitor-chart-current="dom">—</strong><svg viewBox="0 0 240 34" preserveAspectRatio="none" aria-hidden="true"><polyline points=""></polyline></svg></div>
-                      <div class="ldp-resource-monitor-trend-row" data-resource-monitor-chart="retainedFloors"><span>保留主楼层</span><strong data-resource-monitor-chart-current="retainedFloors">—</strong><svg viewBox="0 0 240 34" preserveAspectRatio="none" aria-hidden="true"><polyline points=""></polyline></svg></div>
-                    </div>
-                  </section>
-                  <section class="ldp-resource-monitor-events" aria-labelledby="ldp-resource-monitor-events-title">
-                    <div class="ldp-resource-monitor-events-head"><strong id="ldp-resource-monitor-events-title">毫秒级事件记录</strong><span>时间 · 前后台 · 范围 · 原始事件</span></div>
-                    <div class="ldp-resource-monitor-event-log" role="log" aria-live="off"><div class="ldp-resource-monitor-event-empty">等待 Performance Timeline、Resource Timing、DOM 或可见性事件。</div></div>
-                  </section>
-                  <p class="ldp-resource-monitor-boundary">“前台 / 后台”严格取自 Page Visibility，网络与性能条目按开始时状态归档；MutationRecord 没有原生时间戳，DOM 变更只能按观察器回调时状态记录。阅读器请求以显式元数据归因；未标记的页面 fetch/XHR 只能记为“宿主 / 未标记”；浏览器资源、垃圾回收、样式布局及无法确认脚本来源的长任务保留在“页面共享”。浏览器不提供单个脚本的真实总 CPU 或独占内存，本页不会用推算值冒充。跨源隔离不可用时不读取已弃用且不可靠的 performance.memory。</p>
-                </div>
-                <div class="ldp-settings-section" data-settings-panel="request-flow" hidden>
-                  ${settingsPanelIntroMarkup('request-flow')}
-                  <div class="ldp-request-flow-summary" aria-label="请求速率摘要">
-                    <div class="ldp-request-flow-metric"><span>本页 10 秒</span><strong data-request-flow-metric="rate10">0 次</strong></div>
-                    <div class="ldp-request-flow-metric"><span>本页 60 秒</span><strong data-request-flow-metric="rate60">0 次</strong></div>
-                    <div class="ldp-request-flow-metric"><span>本页 100ms 峰值</span><strong data-request-flow-metric="peak">0 次</strong></div>
-                    <div class="ldp-request-flow-metric"><span>本页 60 秒传输</span><strong data-request-flow-metric="transfer">0 B</strong></div>
-                    <div class="ldp-request-flow-metric"><span>本页 60 秒异常</span><strong data-request-flow-metric="issues">0 次</strong></div>
-                  </div>
-                  <section class="ldp-request-flow-block ldp-request-flow-chart-block" aria-labelledby="ldp-request-flow-timeline-title">
-                    <div class="ldp-request-flow-block-head">
-                      <strong id="ldp-request-flow-timeline-title">毫秒请求脉络</strong>
-                      <span class="ldp-request-flow-window">等待采样</span>
-                    </div>
-                    <div class="ldp-request-flow-trace" role="img" aria-label="最近 10 秒按来源显示排队、网络耗时与异常点"></div>
-                    <div class="ldp-request-flow-axis"><span>10 秒前</span><span>虚线排队 · 短线放行 · 实色网络 · 圆点异常</span><span>现在</span></div>
-                    <div class="ldp-request-flow-legend" aria-label="请求类型图例"></div>
-                  </section>
-                  <div class="ldp-request-flow-bottleneck" data-level="normal" role="status">
-                    <strong class="ldp-request-flow-bottleneck-state">采样中</strong>
-                    <p class="ldp-request-flow-bottleneck-detail">打开帖子并正常滚动后，这里会判断限流、排队、响应延迟或静态资源是否成为主要瓶颈。</p>
-                  </div>
-                  <section class="ldp-request-flow-block ldp-request-flow-anomaly-block" aria-labelledby="ldp-request-flow-anomaly-title">
-                    <div class="ldp-request-flow-block-head"><strong id="ldp-request-flow-anomaly-title">最近异常点</strong><span class="ldp-request-flow-anomaly-window">最近 60 秒</span></div>
-                    <div class="ldp-request-flow-anomalies"></div>
-                  </section>
-                  <section class="ldp-request-flow-block ldp-request-flow-types-block" aria-labelledby="ldp-request-flow-types-title">
-                    <div class="ldp-request-flow-type-head"><strong id="ldp-request-flow-types-title">最近 60 秒按类型</strong><span>数量</span><span>P95</span><span>异常</span></div>
-                    <div class="ldp-request-flow-types"></div>
-                  </section>
-                  <section class="ldp-request-flow-block ldp-request-flow-log-block" aria-labelledby="ldp-request-flow-log-title">
-                    <div class="ldp-request-flow-block-head"><strong id="ldp-request-flow-log-title">毫秒请求记录</strong><span>路径与发起点已脱敏，不保存查询参数</span></div>
-                    <div class="ldp-request-flow-log" role="log" aria-live="off"></div>
-                  </section>
-                  <section class="ldp-request-flow-limit" aria-labelledby="ldp-request-flow-limit-title">
-                    <h4 id="ldp-request-flow-limit-title">LINUX DO 可能的请求上限</h4>
-                    <p class="ldp-request-flow-observed">当前还没有观察到服务器限流信息。</p>
-                    <p><strong>Discourse 公开默认：</strong>应用请求约 50 次/10 秒、200 次/分钟；头像、CSS 等静态资源约 200 次/10 秒。LINUX DO 可以覆盖这些数字，搜索、发帖、私信、插件和反向代理也可能有更低的独立限制。</p>
-                    <p>因此这里只作为风险刻度；真实边界以本页收到的 <strong>429、Retry-After 和限流错误码</strong>为准。<a href="https://meta.discourse.org/t/available-settings-for-global-rate-limits-and-throttling/78612" target="_blank" rel="noopener">查看 Discourse 公开说明</a></p>
-                  </section>
-                </div>
-                <div class="ldp-settings-section" data-settings-panel="other" hidden>
-                  ${settingsPanelIntroMarkup('other')}
-                  <div class="ldp-settings-fields ldp-other-settings-fields">
-                    ${otherSettingGroupMarkup('history', '历史导航', '控制历史前进、后退按钮的显示方式与历史列表顺序。', `
-                    ${settingSwitchesMarkup('history')}
-                    <label class="ldp-setting-row ldp-setting-option-row ldp-history-edge-trigger-row">
-                      <span class="ldp-setting-option-copy">
-                        <strong>左右按钮触发区域</strong>
-                        <small>鼠标进入阅读器左右边缘后显示对应按钮；0% 为关闭，左右两侧各自最大 15%。</small>
-                      </span>
-                      <span class="ldp-history-edge-trigger-control">
-                        <input class="ldp-history-edge-trigger-range" type="range" min="${HISTORY_EDGE_TRIGGER_MIN}" max="${HISTORY_EDGE_TRIGGER_MAX}" step="1" aria-label="左右按钮触发区域">
-                        <output class="ldp-history-edge-trigger-value"></output>
-                      </span>
-                    </label>
-                    <label class="ldp-setting-row ldp-setting-option-row">
-                      <span class="ldp-setting-option-copy">
-                        <strong>浏览历史排序</strong>
-                        <small>默认按最后一次打开时间倒序，距离现在越近越靠前；也可固定为首次点击顺序。</small>
-                      </span>
-                      <select class="ldp-reader-select ldp-history-sort-mode" aria-label="浏览历史排序规则">
-                        <option value="recent-viewed">最近点击（默认）</option>
-                        <option value="first-viewed">首次点击（固定）</option>
-                      </select>
-                    </label>
-                      `)}
-                    ${otherSettingGroupMarkup('topic-opening', '帖子打开', '决定从普通帖子链接进入阅读器时采用的起始楼层。', `
+												<label class="ldp-setting-row ldp-motion-choice-row">
+													<span class="ldp-setting-label">使用动效</span>
+													<select class="ldp-reader-select ldp-loading-animation-select" aria-label="等待区域动效">
+														<option value="random">每次随机（推荐）</option>
+														${READER_LOADING_ANIMATIONS.map((animation) => `<option value="${animation.key}">${animation.label}</option>`).join('')}
+													</select>
+												</label>
+											`)}
+									</div>
+									<div class="ldp-loading-settings-preview">
+										<div class="ldp-loading-settings-preview-head">
+											<span><strong>页面预览</strong><small class="ldp-loading-settings-preview-label"></small></span>
+											<button class="ldp-loading-preview-reroll" type="button">换一个</button>
+										</div>
+										<div class="ldp-loading-preview-stage" aria-live="polite"></div>
+									</div>
+									<p class="ldp-loading-settings-note">预览与阅读器等待区域共用同一套动效代码；偏好会自动保存在当前浏览器。</p>
+								</div>
+								<div class="ldp-settings-section" data-settings-panel="performance" hidden>
+									<div class="ldp-performance-presets" role="group" aria-label="性能预设">
+										<button class="ldp-performance-preset" type="button" data-performance-preset="low">省资源</button>
+										<button class="ldp-performance-preset" type="button" data-performance-preset="balanced">均衡</button>
+										<button class="ldp-performance-preset" type="button" data-performance-preset="high">低等待</button>
+										<button class="ldp-performance-preset" type="button" data-performance-preset="custom">自定义</button>
+									</div>
+									<div class="ldp-settings-category-groups">
+										${performanceSettingsMarkup()}
+									</div>
+									<div class="ldp-performance-footer">
+										<span class="ldp-performance-status" role="status"></span>
+										<button class="ldp-performance-reset" type="button">${icon('rotateCcw')}<span>恢复默认</span></button>
+									</div>
+								</div>
+								<div class="ldp-settings-section" data-settings-panel="resource-monitor" hidden>
+									<div class="ldp-resource-monitor-health" data-level="normal" role="status">
+										<strong class="ldp-resource-monitor-health-state">建立基线</strong>
+										<p class="ldp-resource-monitor-health-detail">连续取得 10 个真实快照后，开始判断 DOM 增长、共享主线程长任务和阅读器请求排队。</p>
+										<span class="ldp-resource-monitor-updated">等待采样</span>
+									</div>
+									<section class="ldp-resource-monitor-evidence" aria-labelledby="ldp-resource-monitor-evidence-title">
+										<div class="ldp-resource-monitor-evidence-head"><strong id="ldp-resource-monitor-evidence-title">最近 60 秒前后台实测</strong><span class="ldp-resource-monitor-evidence-window">等待事件</span></div>
+										<div class="ldp-resource-monitor-scope-table" role="table" aria-label="阅读器与宿主前后台资源证据">
+											<div class="ldp-resource-monitor-scope-head" role="row"><span>范围</span><span>当前结构</span><span>前台事件</span><span>后台事件</span></div>
+											<div class="ldp-resource-monitor-scope-row" role="row" data-resource-monitor-scope="reader"><strong>阅读器</strong><span data-resource-monitor-scope-current>—</span><span data-resource-monitor-scope-visible>—</span><span data-resource-monitor-scope-hidden>—</span><small data-resource-monitor-scope-basis>—</small></div>
+											<div class="ldp-resource-monitor-scope-row" role="row" data-resource-monitor-scope="host"><strong>宿主 / 未标记</strong><span data-resource-monitor-scope-current>—</span><span data-resource-monitor-scope-visible>—</span><span data-resource-monitor-scope-hidden>—</span><small data-resource-monitor-scope-basis>—</small></div>
+											<div class="ldp-resource-monitor-scope-row" role="row" data-resource-monitor-scope="shared"><strong>页面共享</strong><span data-resource-monitor-scope-current>—</span><span data-resource-monitor-scope-visible>—</span><span data-resource-monitor-scope-hidden>—</span><small data-resource-monitor-scope-basis>—</small></div>
+										</div>
+									</section>
+									<div class="ldp-resource-monitor-table" role="table" aria-label="阅读器实时资源数据">
+										<div class="ldp-resource-monitor-table-head" role="row"><span>指标</span><span>当前</span><span>样本均</span><span>观测峰</span><span>首末变化</span></div>
+										${RESOURCE_MONITOR_ROWS.map(resourceMonitorRowMarkup).join('')}
+									</div>
+									<section class="ldp-resource-monitor-trends" aria-labelledby="ldp-resource-monitor-trend-title">
+										<div class="ldp-resource-monitor-trend-head"><strong id="ldp-resource-monitor-trend-title">最近 10 分钟趋势</strong><span class="ldp-resource-monitor-trend-window">等待采样</span></div>
+										<div class="ldp-resource-monitor-trend-list">
+											<div class="ldp-resource-monitor-trend-row" data-resource-monitor-chart="heapUsed"><span>页面内存估计</span><strong data-resource-monitor-chart-current="heapUsed">—</strong><svg viewBox="0 0 240 34" preserveAspectRatio="none" aria-hidden="true"><polyline points=""></polyline></svg></div>
+											<div class="ldp-resource-monitor-trend-row" data-resource-monitor-chart="dom"><span>阅读器 DOM</span><strong data-resource-monitor-chart-current="dom">—</strong><svg viewBox="0 0 240 34" preserveAspectRatio="none" aria-hidden="true"><polyline points=""></polyline></svg></div>
+											<div class="ldp-resource-monitor-trend-row" data-resource-monitor-chart="retainedFloors"><span>保留主楼层</span><strong data-resource-monitor-chart-current="retainedFloors">—</strong><svg viewBox="0 0 240 34" preserveAspectRatio="none" aria-hidden="true"><polyline points=""></polyline></svg></div>
+										</div>
+									</section>
+									<section class="ldp-resource-monitor-events" aria-labelledby="ldp-resource-monitor-events-title">
+										<div class="ldp-resource-monitor-events-head"><strong id="ldp-resource-monitor-events-title">毫秒级事件记录</strong><span>时间 · 前后台 · 范围 · 原始事件</span></div>
+										<div class="ldp-resource-monitor-event-log" role="log" aria-live="off"><div class="ldp-resource-monitor-event-empty">等待 Performance Timeline、Resource Timing、DOM 或可见性事件。</div></div>
+									</section>
+									<p class="ldp-resource-monitor-boundary">“前台 / 后台”严格取自 Page Visibility，网络与性能条目按开始时状态归档；MutationRecord 没有原生时间戳，DOM 变更只能按观察器回调时状态记录。阅读器请求以显式元数据归因；未标记的页面 fetch/XHR 只能记为“宿主 / 未标记”；浏览器资源、垃圾回收、样式布局及无法确认脚本来源的长任务保留在“页面共享”。浏览器不提供单个脚本的真实总 CPU 或独占内存，本页不会用推算值冒充。跨源隔离不可用时不读取已弃用且不可靠的 performance.memory。</p>
+								</div>
+								<div class="ldp-settings-section" data-settings-panel="request-flow" hidden>
+									<div class="ldp-request-flow-summary" aria-label="请求速率摘要">
+										<div class="ldp-request-flow-metric"><span>本页 10 秒</span><strong data-request-flow-metric="rate10">0 次</strong></div>
+										<div class="ldp-request-flow-metric"><span>本页 60 秒</span><strong data-request-flow-metric="rate60">0 次</strong></div>
+										<div class="ldp-request-flow-metric"><span>本页 100ms 峰值</span><strong data-request-flow-metric="peak">0 次</strong></div>
+										<div class="ldp-request-flow-metric"><span>本页 60 秒传输</span><strong data-request-flow-metric="transfer">0 B</strong></div>
+										<div class="ldp-request-flow-metric"><span>本页 60 秒异常</span><strong data-request-flow-metric="issues">0 次</strong></div>
+									</div>
+									<section class="ldp-request-flow-block ldp-request-flow-chart-block" aria-labelledby="ldp-request-flow-timeline-title">
+										<div class="ldp-request-flow-block-head">
+											<strong id="ldp-request-flow-timeline-title">毫秒请求脉络</strong>
+											<span class="ldp-request-flow-window">等待采样</span>
+										</div>
+										<div class="ldp-request-flow-trace" role="img" aria-label="最近 10 秒按来源显示排队、网络耗时与异常点"></div>
+										<div class="ldp-request-flow-axis"><span>10 秒前</span><span>虚线排队 · 短线放行 · 实色网络 · 圆点异常</span><span>现在</span></div>
+										<div class="ldp-request-flow-legend" aria-label="请求类型图例"></div>
+									</section>
+									<div class="ldp-request-flow-bottleneck" data-level="normal" role="status">
+										<strong class="ldp-request-flow-bottleneck-state">采样中</strong>
+										<p class="ldp-request-flow-bottleneck-detail">打开帖子并正常滚动后，这里会判断限流、排队、响应延迟或静态资源是否成为主要瓶颈。</p>
+									</div>
+									<section class="ldp-request-flow-block ldp-request-flow-anomaly-block" aria-labelledby="ldp-request-flow-anomaly-title">
+										<div class="ldp-request-flow-block-head"><strong id="ldp-request-flow-anomaly-title">最近异常点</strong><span class="ldp-request-flow-anomaly-window">最近 60 秒</span></div>
+										<div class="ldp-request-flow-anomalies"></div>
+									</section>
+									<section class="ldp-request-flow-block ldp-request-flow-types-block" aria-labelledby="ldp-request-flow-types-title">
+										<div class="ldp-request-flow-type-head"><strong id="ldp-request-flow-types-title">最近 60 秒按类型</strong><span>数量</span><span>P95</span><span>异常</span></div>
+										<div class="ldp-request-flow-types"></div>
+									</section>
+									<section class="ldp-request-flow-block ldp-request-flow-log-block" aria-labelledby="ldp-request-flow-log-title">
+										<div class="ldp-request-flow-block-head"><strong id="ldp-request-flow-log-title">毫秒请求记录</strong><span>路径与发起点已脱敏，不保存查询参数</span></div>
+										<div class="ldp-request-flow-log" role="log" aria-live="off"></div>
+									</section>
+									<section class="ldp-request-flow-limit" aria-labelledby="ldp-request-flow-limit-title">
+										<h4 id="ldp-request-flow-limit-title">LINUX DO 可能的请求上限</h4>
+										<p class="ldp-request-flow-observed">当前还没有观察到服务器限流信息。</p>
+										<p><strong>Discourse 公开默认：</strong>应用请求约 50 次/10 秒、200 次/分钟；头像、CSS 等静态资源约 200 次/10 秒。LINUX DO 可以覆盖这些数字，搜索、发帖、私信、插件和反向代理也可能有更低的独立限制。</p>
+										<p>因此这里只作为风险刻度；真实边界以本页收到的 <strong>429、Retry-After 和限流错误码</strong>为准。<a href="https://meta.discourse.org/t/available-settings-for-global-rate-limits-and-throttling/78612" target="_blank" rel="noopener">查看 Discourse 公开说明</a></p>
+									</section>
+								</div>
+								<div class="ldp-settings-section" data-settings-panel="other" hidden>
+									<div class="ldp-settings-fields ldp-other-settings-fields">
+										${otherSettingGroupMarkup('history', '历史导航', '控制历史前进、后退按钮的显示方式与历史列表顺序。', `
+										${settingSwitchesMarkup('history')}
+										<label class="ldp-setting-row ldp-setting-option-row ldp-history-edge-trigger-row">
+											<span class="ldp-setting-option-copy">
+												<strong>左右按钮触发区域</strong>
+												<small>鼠标进入阅读器左右边缘后显示对应按钮；0% 为关闭，左右两侧各自最大 15%。</small>
+											</span>
+											<span class="ldp-history-edge-trigger-control">
+												<input class="ldp-history-edge-trigger-range" type="range" min="${HISTORY_EDGE_TRIGGER_MIN}" max="${HISTORY_EDGE_TRIGGER_MAX}" step="1" aria-label="左右按钮触发区域">
+												<output class="ldp-history-edge-trigger-value"></output>
+											</span>
+										</label>
+										<label class="ldp-setting-row ldp-setting-option-row">
+											<span class="ldp-setting-option-copy">
+												<strong>浏览历史排序</strong>
+												<small>默认按最后一次打开时间倒序，距离现在越近越靠前；也可固定为首次点击顺序。</small>
+											</span>
+											<select class="ldp-reader-select ldp-history-sort-mode" aria-label="浏览历史排序规则">
+												<option value="recent-viewed">最近点击（默认）</option>
+												<option value="first-viewed">首次点击（固定）</option>
+											</select>
+										</label>
+											`)}
+										${otherSettingGroupMarkup('topic-opening', '帖子打开', '决定从普通帖子链接进入阅读器时采用的起始楼层。', `
                     ${settingSwitchesMarkup('topic-opening')}
                       `)}
-                    ${otherSettingGroupMarkup('replies', '回复展示', '控制二级回复在父楼层和主信息流中的默认展开位置。', `
-                    ${settingSwitchesMarkup('replies')}
-                    <p class="ldp-nested-display-warning" role="status" aria-live="polite" hidden>两种方式同时开启时，同一条二级回复可能会在父楼层下和主信息流中重复出现，阅读时可能看到重复信息。</p>
-                      `)}
-                    ${otherSettingGroupMarkup('boost', 'Boost 复制', '复制结果 = 开头文字 + 原 Boost + 小尾巴；不用填写正则。', `
-                        ${boostCopySettingsMarkup()}
-                        <div class="ldp-setting-row ldp-boost-rule-row">
-                          <span class="ldp-setting-label">结果预览</span>
-                          <span class="ldp-boost-rule-preview">
-                            <code class="ldp-boost-copy-preview"></code>
-                            <small>最多 16 字</small>
-                          </span>
-                        </div>
-                      `)}
-                  </div>
-                </div>
-                <div class="ldp-settings-section" data-settings-panel="cache" hidden>
-                  ${settingsPanelIntroMarkup('cache')}
-                  <div class="ldp-settings-category-groups">
-                  ${settingsCategoryMarkup(
+										${otherSettingGroupMarkup('replies', '回复展示', '控制二级回复在父楼层和主信息流中的默认展开位置。', `
+										${settingSwitchesMarkup('replies')}
+										<p class="ldp-nested-display-warning" role="status" aria-live="polite" hidden>两种方式同时开启时，同一条二级回复可能会在父楼层下和主信息流中重复出现，阅读时可能看到重复信息。</p>
+											`)}
+										${otherSettingGroupMarkup('boost', 'Boost 复制', '复制结果 = 开头文字 + 原 Boost + 小尾巴；不用填写正则。', `
+												${boostCopySettingsMarkup()}
+												<div class="ldp-setting-row ldp-boost-rule-row">
+													<span class="ldp-setting-label">结果预览</span>
+													<span class="ldp-boost-rule-preview">
+														<code class="ldp-boost-copy-preview"></code>
+														<small>最多 16 字</small>
+													</span>
+												</div>
+											`)}
+									</div>
+								</div>
+								<div class="ldp-settings-section" data-settings-panel="cache" hidden>
+									<div class="ldp-settings-category-groups">
+									${settingsCategoryMarkup(
 										'config-management', '设置配置',
 										'配置文件包含当前开发版全部规范化设置（含图片与灯箱、字体、布局、浮窗、外观、闪烁、性能、主题及其他功能）和脚本版本，不包含浏览历史、帖子内容、API 响应、图片缓存或账号数据。只接受当前格式；导入与恢复后会刷新页面。', `
-                    <div class="ldp-config-actions">
-                      <button class="ldp-config-action ldp-config-export" type="button">${icon('download')}<span>导出设置</span></button>
-                      <button class="ldp-config-action ldp-config-import" type="button">${icon('upload')}<span>导入设置</span></button>
-                      <button class="ldp-config-action ldp-config-reset danger" type="button">${icon('rotateCcw')}<span>恢复全部默认</span></button>
-                    </div>
-                    <input class="ldp-config-file" type="file" accept="application/json,.json" hidden>
-                    `)}
-                  ${settingsCategoryMarkup(
+										<div class="ldp-config-actions">
+											<button class="ldp-config-action ldp-config-export" type="button">${icon('download')}<span>导出设置</span></button>
+											<button class="ldp-config-action ldp-config-import" type="button">${icon('upload')}<span>导入设置</span></button>
+											<button class="ldp-config-action ldp-config-reset danger" type="button">${icon('rotateCcw')}<span>恢复全部默认</span></button>
+										</div>
+										<input class="ldp-config-file" type="file" accept="application/json,.json" hidden>
+										`)}
+									${settingsCategoryMarkup(
 										'local-cache', '本地缓存',
 										'只保存可复用的结构化数据，并按浏览记录、主题快照、楼层正文、用户资料、消息分页和通用 API 分组管理；头像、表情和查看过的原图使用独立资源缓存。各项统计会区分业务对象与底层记录，并对重复对象去重。新鲜数据直接读取，过期后联网校准，网络异常时可回退到保留期内的数据。', `
-                    <div class="ldp-cache-list">
-                      ${CACHE_TYPES.map((type) => {
+										<div class="ldp-cache-list">
+											${CACHE_TYPES.map((type) => {
 												return `<label class="ldp-cache-row">
-                          <input class="ldp-cache-select" type="checkbox" value="${type.key}">
-                          <span><strong>${type.label}</strong><small data-cache-size="${type.key}"></small></span>
-                          <em data-cache-retention="${type.key}">${cacheRetentionLabel(type.key)}</em>
-                        </label>`;
+													<input class="ldp-cache-select" type="checkbox" value="${type.key}">
+													<span><strong>${type.label}</strong><small data-cache-size="${type.key}"></small></span>
+													<em data-cache-retention="${type.key}">${cacheRetentionLabel(type.key)}</em>
+												</label>`;
 											}).join('')}
-                    </div>
-                    <button class="ldp-cache-clear" type="button" disabled>清理已选缓存</button>
-                    `, 'ldp-settings-category-content', 'ldp-cache-note')}
-                  </div>
-                </div>
-                <div class="ldp-settings-section" data-settings-panel="about" hidden>
-                  ${settingsPanelIntroMarkup('about')}
-                  <div class="ldp-about-content">
-                    <section class="ldp-about-hero" aria-labelledby="ldp-about-name">
-                      <img class="ldp-about-logo" src="${LINUXDO_LOGO_URL}" alt="" loading="lazy" decoding="async">
-                      <div class="ldp-about-identity">
-                        <h4 class="ldp-about-name" id="ldp-about-name">awesome linuxdo reader</h4>
-                        <p class="ldp-about-tagline">在原站能力之上，提供更连贯、更可控的阅读体验。</p>
-                      </div>
-                      <span class="ldp-about-version">v${READER_VERSION}</span>
-                    </section>
-                    <nav class="ldp-about-links" aria-label="项目链接">
-                      <a class="ldp-about-link" href="${READER_MANUAL_URL}" target="_blank" rel="noopener noreferrer">
-                        <span class="ldp-about-link-icon">${icon('listChecks')}</span>
-                        <span class="ldp-about-link-copy"><strong>在线用户手册</strong><small>无需安装，使用浏览器直接打开</small></span>
-                        ${icon('externalLink')}
-                      </a>
-                    </nav>
-                    <div class="ldp-about-features" aria-label="阅读器核心特性">${aboutFeaturesMarkup()}</div>
-                    <section class="ldp-about-credits" aria-labelledby="ldp-about-credits-title">
-                      <strong id="ldp-about-credits-title">特别致谢</strong>
-                      <p>字体渲染参数与实现思路参考 <a href="${FONT_RENDERING_PROJECT_URL}" target="_blank" rel="noopener">F9y4ng / GreasyFork-Scripts 的 Font Rendering</a>；感谢作者的长期维护。上游项目采用 <a href="${FONT_RENDERING_LICENSE_URL}" target="_blank" rel="noopener">GPL-3.0-only</a>。</p>
-                    </section>
-                  </div>
-                </div>
-              </div>
-              <button class="ldp-settings-close" type="button" aria-label="关闭设置">${icon('x')}</button>
-            </div>
-          </div>
-          <div class="ldp-title-actions">
-            <button class="ldp-topic-edit-trigger" type="button" aria-label="编辑帖子标题、类别和 label" aria-haspopup="dialog" aria-expanded="false" hidden>${icon('pencil')}</button>
-            <button class="ldp-reader-refresh ldp-icon-btn" type="button" aria-label="清除当前帖子缓存并刷新" disabled>${icon('rotateCcw')}</button>
-            <a class="ldp-open" href="#" target="_blank" rel="noopener" aria-label="打开原帖" hidden>${icon('externalLink')}</a>
-            <button class="ldp-close ldp-icon-btn" type="button" aria-label="关闭">${icon('x')}</button>
-          </div>
-        </div>
-        <div class="ldp-reader-action-layer ldp-topic-edit-layer" hidden>
-          <section class="ldp-reader-action-dialog ldp-topic-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="ldp-topic-edit-dialog-title">
-            <div class="ldp-reader-action-head">
-              <strong id="ldp-topic-edit-dialog-title">编辑帖子信息</strong>
-              <button class="ldp-reader-action-close ldp-topic-edit-close" type="button" aria-label="关闭编辑弹层">${icon('x')}</button>
-            </div>
-            <form class="ldp-reader-action-form ldp-topic-edit-form">
-              <div class="ldp-reader-action-body ldp-topic-edit-body">
-                <label class="ldp-topic-edit-field ldp-topic-edit-title">
-                  <span>标题</span>
-                  <input name="title" type="text" maxlength="255" autocomplete="off" required>
-                </label>
-                <div class="ldp-topic-edit-field">
-                  <span id="ldp-topic-edit-category-label">类别</span>
-                  <div class="ldp-topic-edit-category">
-                    <button class="ldp-topic-edit-category-trigger ldp-picker-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ldp-topic-edit-category-label ldp-topic-edit-category-value" disabled>
-                      <span id="ldp-topic-edit-category-value" class="ldp-topic-edit-category-value">正在加载…</span>
-                      ${icon('chevronDown')}
-                    </button>
-                    <div class="ldp-topic-edit-category-menu" hidden>
-                      <label class="ldp-topic-edit-category-search ldp-picker-search">
-                        ${icon('search')}
-                        <input type="search" autocomplete="off" spellcheck="false" placeholder="搜索类别" aria-label="搜索类别">
-                      </label>
-                      <div class="ldp-topic-edit-category-options ldp-picker-options" role="listbox" aria-labelledby="ldp-topic-edit-category-label"></div>
-                    </div>
-                  </div>
-                </div>
-                <label class="ldp-topic-edit-field">
-                  <span>Label</span>
-                  <span class="ldp-topic-edit-label-control">
-                    <span class="ldp-topic-edit-label-values"></span>
-                    <input class="ldp-topic-edit-label-input" type="text" autocomplete="off" list="ldp-topic-edit-label-options" placeholder="搜索 label" aria-label="添加 label" disabled>
-                  </span>
-                  <datalist id="ldp-topic-edit-label-options" class="ldp-topic-edit-label-options"></datalist>
-                </label>
-                <p class="ldp-topic-edit-status" role="status" aria-live="polite"></p>
-              </div>
-              <div class="ldp-reader-action-footer ldp-topic-edit-actions">
-                <button class="ldp-topic-edit-save" type="submit" aria-label="保存帖子信息">${icon('check')}</button>
-                <button class="ldp-topic-edit-cancel" type="button" aria-label="取消编辑">${icon('x')}</button>
-              </div>
-            </form>
-          </section>
-        </div>
-        <div class="ldp-reader-history-edge ldp-reader-history-edge-back" hidden>
-          <button class="ldp-reader-history-nav ldp-reader-history-back" type="button" hidden>${icon('chevronRight')}</button>
-        </div>
-        <aside class="ldp-reader-queue" aria-label="阅读队列" hidden>
-          <button class="ldp-reader-queue-toggle" type="button" aria-expanded="false" aria-pressed="true"
-            aria-haspopup="listbox">${icon('layers')}<b>0</b></button>
-          <div class="ldp-reader-queue-bubbles" aria-label="队列文章头像，可滚动查看"></div>
-          <button class="ldp-reader-queue-scroll-hint" type="button"
-            aria-label="显示下方更多队列头像" hidden>${icon('chevronRight')}</button>
-          <section class="ldp-reader-queue-panel" aria-label="阅读队列文章列表" hidden>
-            <header class="ldp-reader-queue-panel-head">
-              <strong>阅读队列</strong>
-              <span class="ldp-reader-queue-panel-count">0 篇</span>
-              <button class="ldp-reader-queue-clear" type="button"
-                aria-label="清理其他队列文章，保留当前文章">${icon('trash')}</button>
-              <button class="ldp-reader-queue-close" type="button" aria-label="收起阅读队列">${icon('x')}</button>
-            </header>
-            <div class="ldp-reader-queue-list" role="listbox" aria-label="队列文章"></div>
-          </section>
-        </aside>
-        <div class="ldp-reader-main">
-          <div class="ldp-rate-limit-notice" role="status" aria-live="polite" aria-atomic="true" hidden>
-            <span class="ldp-rate-limit-icon" aria-hidden="true">${icon('alertTriangle')}</span>
-            <span class="ldp-rate-limit-copy">
-              <strong>请求已暂停</strong>
-              <span class="ldp-rate-limit-detail">触发 429，冷却结束后将自动打开过盾浮窗。</span>
-            </span>
-            <a class="ldp-rate-limit-challenge" href="${BASE}/" target="_blank" rel="noopener" aria-label="在独立浮窗打开 LINUX DO 官网完成 Cloudflare 验证">${icon('externalLink')}<span>Cloudflare 验证</span></a>
-          </div>
-          <div class="ldp-body">
-            <div class="ldp-loadmask">${createReaderLoadingHTML()}</div>
-            <div class="ldp-comments"><div class="ldp-comments-empty" style="display:none">暂无评论</div></div>
-            <div class="ldp-comments-header" hidden>${icon('messageSquare')}<span>评论</span><span class="ldp-comments-count" aria-live="polite"></span></div>
-            <div class="ldp-loading-tip">${icon('loader', 'ldp-tip-icon')}<span>正在加载楼层…</span></div>
-            <div class="ldp-end-tip">已经到底了~</div>
-            <div class="ldp-sentinel"></div>
-          </div>
-          <aside class="ldp-topic-timeline" hidden aria-label="帖子时间轴">
-            <button class="ldp-topic-timeline-date" type="button" aria-label="跳到首帖"></button>
-            <button class="ldp-topic-timeline-track" type="button" role="slider" aria-label="跳转楼层" aria-orientation="vertical">
-              <span class="ldp-topic-timeline-cursor ldp-timeline-lens-composited" aria-hidden="true"></span>
-              <span class="ldp-topic-timeline-thumb"></span>
-              <strong class="ldp-topic-timeline-count"><span class="ldp-topic-timeline-current">1</span><span>/</span><span class="ldp-topic-timeline-total">1</span></strong>
-              <span class="ldp-topic-timeline-preview" aria-hidden="true"></span>
-            </button>
-            <div class="ldp-topic-timeline-footer">
-              <button class="ldp-topic-timeline-relative" type="button" aria-label="跳到最后一楼"></button>
-              <button class="ldp-topic-timeline-top" type="button" aria-label="回到顶部，第 1 楼">${icon('arrowUp')}</button>
-            </div>
-          </aside>
-        </div>
-        <div class="ldp-reader-history-edge ldp-reader-history-edge-forward" hidden>
-          <button class="ldp-reader-history-nav ldp-reader-history-forward" type="button" hidden>${icon('chevronRight')}</button>
-        </div>
-        <div class="ldp-live-update" hidden aria-live="polite">
-          <button class="ldp-live-update-jump" type="button">${icon('messageSquare')}<span></span></button>
-          <button class="ldp-live-update-dismiss" type="button" aria-label="暂时关闭新消息提示">${icon('x')}</button>
-        </div>
-        <div class="ldp-setting-help-tooltip ldp-transient-surface" role="tooltip" hidden></div>
-      </div>`;
+										</div>
+										<button class="ldp-cache-clear" type="button" disabled>清理已选缓存</button>
+										`, 'ldp-settings-category-content', 'ldp-cache-note')}
+									</div>
+								</div>
+								<div class="ldp-settings-section" data-settings-panel="about" hidden>
+									<div class="ldp-about-content">
+										<section class="ldp-about-hero" aria-labelledby="ldp-about-name">
+											<img class="ldp-about-logo" src="${LINUXDO_LOGO_URL}" alt="" loading="lazy" decoding="async">
+											<div class="ldp-about-identity">
+												<h4 class="ldp-about-name" id="ldp-about-name">awesome linuxdo reader</h4>
+												<p class="ldp-about-tagline">在原站能力之上，提供更连贯、更可控的阅读体验。</p>
+											</div>
+											<span class="ldp-about-version">v${READER_VERSION}</span>
+										</section>
+										<nav class="ldp-about-links" aria-label="项目链接">
+											<a class="ldp-about-link" href="${READER_MANUAL_URL}" target="_blank" rel="noopener noreferrer">
+												<span class="ldp-about-link-icon">${icon('listChecks')}</span>
+												<span class="ldp-about-link-copy"><strong>在线用户手册</strong><small>无需安装，使用浏览器直接打开</small></span>
+												${icon('externalLink')}
+											</a>
+										</nav>
+										<div class="ldp-about-features" aria-label="阅读器核心特性">${aboutFeaturesMarkup()}</div>
+										<section class="ldp-about-credits" aria-labelledby="ldp-about-credits-title">
+											<strong id="ldp-about-credits-title">特别致谢</strong>
+											<p>字体渲染参数与实现思路参考 <a href="${FONT_RENDERING_PROJECT_URL}" target="_blank" rel="noopener">F9y4ng / GreasyFork-Scripts 的 Font Rendering</a>；感谢作者的长期维护。上游项目采用 <a href="${FONT_RENDERING_LICENSE_URL}" target="_blank" rel="noopener">GPL-3.0-only</a>。</p>
+										</section>
+									</div>
+								</div>
+							</div>
+							<button class="ldp-settings-close" type="button" aria-label="关闭设置">${icon('x')}</button>
+						</div>
+					</div>
+					<div class="ldp-title-actions">
+						<button class="ldp-topic-edit-trigger" type="button" aria-label="编辑帖子标题、类别和 label" aria-haspopup="dialog" aria-expanded="false" hidden>${icon('pencil')}</button>
+						<button class="ldp-reader-refresh ldp-icon-btn" type="button" aria-label="清除当前帖子缓存并刷新" disabled>${icon('rotateCcw')}</button>
+						<a class="ldp-open" href="#" target="_blank" rel="noopener" aria-label="打开原帖" hidden>${icon('externalLink')}</a>
+						<button class="ldp-close ldp-icon-btn" type="button" aria-label="关闭">${icon('x')}</button>
+					</div>
+				</div>
+				<div class="ldp-reader-action-layer ldp-topic-edit-layer" hidden>
+					<section class="ldp-reader-action-dialog ldp-topic-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="ldp-topic-edit-dialog-title">
+						<div class="ldp-reader-action-head">
+							<strong id="ldp-topic-edit-dialog-title">编辑帖子信息</strong>
+							<button class="ldp-reader-action-close ldp-topic-edit-close" type="button" aria-label="关闭编辑弹层">${icon('x')}</button>
+						</div>
+						<form class="ldp-reader-action-form ldp-topic-edit-form">
+							<div class="ldp-reader-action-body ldp-topic-edit-body">
+								<label class="ldp-topic-edit-field ldp-topic-edit-title">
+									<span>标题</span>
+									<input name="title" type="text" maxlength="255" autocomplete="off" required>
+								</label>
+								<div class="ldp-topic-edit-field">
+									<span id="ldp-topic-edit-category-label">类别</span>
+									<div class="ldp-topic-edit-category">
+										<button class="ldp-topic-edit-category-trigger ldp-picker-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ldp-topic-edit-category-label ldp-topic-edit-category-value" disabled>
+											<span id="ldp-topic-edit-category-value" class="ldp-topic-edit-category-value">正在加载…</span>
+											${icon('chevronDown')}
+										</button>
+										<div class="ldp-topic-edit-category-menu" hidden>
+											<label class="ldp-topic-edit-category-search ldp-picker-search">
+												${icon('search')}
+												<input type="search" autocomplete="off" spellcheck="false" placeholder="搜索类别" aria-label="搜索类别">
+											</label>
+											<div class="ldp-topic-edit-category-options ldp-picker-options" role="listbox" aria-labelledby="ldp-topic-edit-category-label"></div>
+										</div>
+									</div>
+								</div>
+								<label class="ldp-topic-edit-field">
+									<span>Label</span>
+									<span class="ldp-topic-edit-label-control">
+										<span class="ldp-topic-edit-label-values"></span>
+										<input class="ldp-topic-edit-label-input" type="text" autocomplete="off" list="ldp-topic-edit-label-options" placeholder="搜索 label" aria-label="添加 label" disabled>
+									</span>
+									<datalist id="ldp-topic-edit-label-options" class="ldp-topic-edit-label-options"></datalist>
+								</label>
+								<p class="ldp-topic-edit-status" role="status" aria-live="polite"></p>
+							</div>
+							<div class="ldp-reader-action-footer ldp-topic-edit-actions">
+								<button class="ldp-topic-edit-save" type="submit" aria-label="保存帖子信息">${icon('check')}</button>
+								<button class="ldp-topic-edit-cancel" type="button" aria-label="取消编辑">${icon('x')}</button>
+							</div>
+						</form>
+					</section>
+				</div>
+				<div class="ldp-reader-history-edge ldp-reader-history-edge-back" hidden>
+					<button class="ldp-reader-history-nav ldp-reader-history-back" type="button" hidden>${icon('chevronRight')}</button>
+				</div>
+				<aside class="ldp-reader-queue" aria-label="阅读队列" hidden>
+					<button class="ldp-reader-queue-toggle" type="button" aria-expanded="false" aria-pressed="true"
+						aria-haspopup="listbox">${icon('layers')}<b>0</b></button>
+					<div class="ldp-reader-queue-bubbles" aria-label="队列文章头像，可滚动查看"></div>
+					<button class="ldp-reader-queue-scroll-hint" type="button"
+						aria-label="显示下方更多队列头像" hidden>${icon('chevronRight')}</button>
+					<section class="ldp-reader-queue-panel" aria-label="阅读队列文章列表" hidden>
+						<header class="ldp-reader-queue-panel-head">
+							<strong>阅读队列</strong>
+							<span class="ldp-reader-queue-panel-count">0 篇</span>
+							<button class="ldp-reader-queue-clear" type="button"
+								aria-label="清理其他队列文章，保留当前文章">${icon('trash')}</button>
+							<button class="ldp-reader-queue-close" type="button" aria-label="收起阅读队列">${icon('x')}</button>
+						</header>
+						<div class="ldp-reader-queue-list" role="listbox" aria-label="队列文章"></div>
+					</section>
+				</aside>
+				<div class="ldp-reader-main">
+					<div class="ldp-rate-limit-notice" role="status" aria-live="polite" aria-atomic="true" hidden>
+						<span class="ldp-rate-limit-icon" aria-hidden="true">${icon('alertTriangle')}</span>
+						<span class="ldp-rate-limit-copy">
+							<strong>请求已暂停</strong>
+							<span class="ldp-rate-limit-detail">触发 429，冷却结束后将自动打开过盾浮窗。</span>
+						</span>
+						<a class="ldp-rate-limit-challenge" href="${BASE}/" target="_blank" rel="noopener" aria-label="在独立浮窗打开 LINUX DO 官网完成 Cloudflare 验证">${icon('externalLink')}<span>Cloudflare 验证</span></a>
+					</div>
+					<div class="ldp-body">
+						<div class="ldp-loadmask">${createReaderLoadingHTML()}</div>
+						<div class="ldp-comments"><div class="ldp-comments-empty" style="display:none">暂无评论</div></div>
+						<div class="ldp-comments-header" hidden>${icon('messageSquare')}<span>评论</span><span class="ldp-comments-count" aria-live="polite"></span></div>
+						<div class="ldp-loading-tip">${icon('loader', 'ldp-tip-icon')}<span>正在加载楼层…</span></div>
+						<div class="ldp-end-tip">已经到底了~</div>
+						<div class="ldp-sentinel"></div>
+					</div>
+					<aside class="ldp-topic-timeline" hidden aria-label="帖子时间轴">
+						<button class="ldp-topic-timeline-date" type="button" aria-label="跳到首帖"></button>
+						<button class="ldp-topic-timeline-track" type="button" role="slider" aria-label="跳转楼层" aria-orientation="vertical">
+							<span class="ldp-topic-timeline-cursor ldp-timeline-lens-composited" aria-hidden="true"></span>
+							<span class="ldp-topic-timeline-thumb"></span>
+							<strong class="ldp-topic-timeline-count"><span class="ldp-topic-timeline-current">1</span><span>/</span><span class="ldp-topic-timeline-total">1</span></strong>
+							<span class="ldp-topic-timeline-preview" aria-hidden="true"></span>
+						</button>
+						<div class="ldp-topic-timeline-footer">
+							<button class="ldp-topic-timeline-relative" type="button" aria-label="跳到最后一楼"></button>
+							<button class="ldp-topic-timeline-top" type="button" aria-label="回到顶部，第 1 楼">${icon('arrowUp')}</button>
+						</div>
+					</aside>
+				</div>
+				<div class="ldp-reader-history-edge ldp-reader-history-edge-forward" hidden>
+					<button class="ldp-reader-history-nav ldp-reader-history-forward" type="button" hidden>${icon('chevronRight')}</button>
+				</div>
+				<div class="ldp-live-update" hidden aria-live="polite">
+					<button class="ldp-live-update-jump" type="button">${icon('messageSquare')}<span></span></button>
+					<button class="ldp-live-update-dismiss" type="button" aria-label="暂时关闭新消息提示">${icon('x')}</button>
+				</div>
+				<div class="ldp-setting-help-tooltip ldp-transient-surface" role="tooltip" hidden></div>
+			</div>`;
+			mountSettingsPanelIntros(overlay);
 			appendReaderPortalNode(overlay);
 			ensureReaderIconTooltip();
 		}
@@ -27010,12 +27009,12 @@
 		const commentsHeader = readerElement('.ldp-comments-header');
 		const countEl = readerElement('.ldp-comments-count'), emptyEl = readerElement('.ldp-comments-empty');
 		const maskEl = readerElement('.ldp-loadmask');
-		const loadingStage = maskEl && maskEl.querySelector('.ldp-loading-stage');
-		const loadingStatus = maskEl && maskEl.querySelector('.ldp-loading-status span');
-		const loadingTarget = maskEl && maskEl.querySelector('.ldp-loading-target');
-		const loadingDetail = maskEl && maskEl.querySelector('.ldp-loading-detail');
+		const loadingStage = maskEl?.querySelector('.ldp-loading-stage');
+		const loadingStatus = maskEl?.querySelector('.ldp-loading-status span');
+		const loadingTarget = maskEl?.querySelector('.ldp-loading-target');
+		const loadingDetail = maskEl?.querySelector('.ldp-loading-detail');
 		const loadingTip = readerElement('.ldp-loading-tip');
-		const loadingTipText = loadingTip && loadingTip.querySelector('span');
+		const loadingTipText = loadingTip?.querySelector('span');
 		const syncLoadingState = (state, options = {}) => {
 			const isTarget = options.target === true && targetPostNumber > 1;
 			const cachedCount = Math.max(0, Number(options.cachedCount) || 0);
@@ -27039,7 +27038,7 @@
 			if (loadingTarget) loadingTarget.textContent = isTarget ? `#${targetPostNumber}` : '';
 			if (loadingStage) setLabel(loadingStage, `${copy.status}，${copy.detail.replace('…', '')}`);
 		};
-		const cachedTargetAvailable = targetPostNumber <= 1 || !!(cachedTopicPreview && cachedTopicPreview.post_stream &&
+		const cachedTargetAvailable = targetPostNumber <= 1 || !!(cachedTopicPreview?.post_stream &&
 			Array.isArray(cachedTopicPreview.post_stream.posts) &&
 			cachedTopicPreview.post_stream.posts.some((post) => +post.post_number === targetPostNumber));
 		syncLoadingState(cachedTopicPreview && cachedTargetAvailable ? 'cache' : 'network', {
@@ -27053,10 +27052,10 @@
 		const layoutBtn = readerElement('.ldp-layout-toggle');
 		const onlyOpBtn = readerElement('.ldp-only-op-toggle');
 		const onlyOpProgress = readerElement('.ldp-only-op-progress');
-		const onlyOpProgressValue = onlyOpProgress && onlyOpProgress.querySelector('.ldp-only-op-progress-value');
+		const onlyOpProgressValue = onlyOpProgress?.querySelector('.ldp-only-op-progress-value');
 		const rateLimitNotice = readerElement('.ldp-rate-limit-notice');
-		const rateLimitDetail = rateLimitNotice && rateLimitNotice.querySelector('.ldp-rate-limit-detail');
-		const rateLimitChallenge = rateLimitNotice && rateLimitNotice.querySelector('.ldp-rate-limit-challenge');
+		const rateLimitDetail = rateLimitNotice?.querySelector('.ldp-rate-limit-detail');
+		const rateLimitChallenge = rateLimitNotice?.querySelector('.ldp-rate-limit-challenge');
 		const notificationsBtn = readerElement('.ldp-notifications-toggle');
 		const notificationsPopover = readerElement('.ldp-notifications-popover');
 		const notificationTabs = readerElements('.ldp-notification-tab');
@@ -27075,18 +27074,16 @@
 			'toggle', 'popover', 'list', 'pagePrev', 'pageNext', 'pageInfo', 'search', 'searchClear', 'defaultActions',
 			'bulkActions', 'multi', 'multiDone', 'selectScope', 'selectToggle', 'deleteSelected', 'deleteSelectedLabel',
 		]);
-		const bookmarksReactionFilters = readerElement('.ldp-reaction-filters');
-		const bookmarksTabList = readerElement('.ldp-bookmark-tabs');
-		const bookmarksTabs = readerElements('.ldp-bookmark-tab');
-		const themeButtons = readerElements('.ldp-settings-theme-button');
-		const settingsBtn = readerElement('.ldp-settings-toggle');
-		const settingsPopover = readerElement('.ldp-settings-popover');
-		const settingsNav = readerElement('.ldp-settings-nav');
-		const settingsNavScrollUp = readerElement('.ldp-settings-nav-scroll-up');
-		const settingsNavScrollDown = readerElement('.ldp-settings-nav-scroll-down');
-		const settingsPanel = readerElement('.ldp-settings-panel');
-		const settingsCloseBtn = readerElement('.ldp-settings-close');
-		const settingHelpTooltip = readerElement('.ldp-setting-help-tooltip');
+		const [
+			bookmarksReactionFilters, bookmarksTabList, settingsBtn, settingsPopover, settingsNav,
+			settingsNavScrollUp, settingsNavScrollDown, settingsPanel, settingsCloseBtn, settingHelpTooltip,
+		] = readerElementGroup(
+			'.ldp-reaction-filters', '.ldp-bookmark-tabs', '.ldp-settings-toggle', '.ldp-settings-popover',
+			'.ldp-settings-nav', '.ldp-settings-nav-scroll-up', '.ldp-settings-nav-scroll-down',
+			'.ldp-settings-panel', '.ldp-settings-close', '.ldp-setting-help-tooltip',
+		);
+		const [bookmarksTabs, themeButtons] = readerElementsGroup(
+			'.ldp-bookmark-tab', '.ldp-settings-theme-button');
 		const settingsSurfaceBounds = () => {
 			const rect = modal.getBoundingClientRect();
 			const left = rect.left + modal.clientLeft;
@@ -27112,59 +27109,55 @@
 		if (settingHelpTooltip && settingHelpTooltip.parentElement !== modal) modal.append(settingHelpTooltip);
 		syncReaderSurfaceDensity();
 		syncReaderThemeSurfaces();
-		const settingsTabs = readerElements('.ldp-settings-tab');
-		const settingsSections = readerElements('.ldp-settings-section');
-		const userInfoContent = readerElement('.ldp-user-info-content');
-		const userInfoLastRefresh = readerElement('.ldp-user-info-last-refresh');
-		const userInfoTitleRefresh = readerElement('.ldp-user-info-title-refresh');
-		const imageScaleRange = readerElement('.ldp-image-scale-range');
-		const imageScaleValue = readerElement('.ldp-image-scale-value');
-		const imageScaleReset = readerElement('.ldp-image-scale-reset');
-		const lightboxOriginalByDefaultInput = readerElement('.ldp-lightbox-original-by-default');
-		const lightboxCommentsExpandedInput = readerElement('.ldp-lightbox-comments-expanded');
-		const lightboxDescriptionExpandedInput = readerElement('.ldp-lightbox-description-expanded');
-		const fontFamilyTriggers = readerElements('.ldp-font-family-trigger');
-		const fontFamilyMenu = readerElement('.ldp-font-family-menu');
-		const fontFamilySearch = readerElement('.ldp-font-family-search input');
-		const fontFamilyOptions = readerElement('.ldp-font-family-options');
-		const fontFamilyEmpty = readerElement('.ldp-font-family-empty');
-		const fontFamilySourceStatus = readerElement('.ldp-font-family-source-status');
-		const fontFamilyManualButton = readerElement('.ldp-font-family-manual button');
-		const fontFamilyCustomInputs = readerElements('.ldp-font-family-custom');
+		const [
+			userInfoContent, userInfoLastRefresh, userInfoTitleRefresh,
+			imageScaleRange, imageScaleValue, imageScaleReset,
+			lightboxOriginalByDefaultInput, lightboxCommentsExpandedInput, lightboxDescriptionExpandedInput,
+			fontFamilyMenu, fontFamilySearch, fontFamilyOptions, fontFamilyEmpty,
+			fontFamilySourceStatus, fontFamilyManualButton,
+		] = readerElementGroup(
+			'.ldp-user-info-content', '.ldp-user-info-last-refresh', '.ldp-user-info-title-refresh',
+			'.ldp-image-scale-range', '.ldp-image-scale-value', '.ldp-image-scale-reset',
+			'.ldp-lightbox-original-by-default', '.ldp-lightbox-comments-expanded',
+			'.ldp-lightbox-description-expanded', '.ldp-font-family-menu', '.ldp-font-family-search input',
+			'.ldp-font-family-options', '.ldp-font-family-empty', '.ldp-font-family-source-status',
+			'.ldp-font-family-manual button',
+		);
+		const [settingsTabs, settingsSections, fontFamilyTriggers, fontFamilyCustomInputs] = readerElementsGroup(
+			'.ldp-settings-tab', '.ldp-settings-section', '.ldp-font-family-trigger', '.ldp-font-family-custom');
 		if (fontFamilyMenu && fontFamilyMenu.parentElement !== modal) modal.append(fontFamilyMenu);
-		const fontWeightSelects = readerElements('.ldp-font-weight-select');
-		const fontColorInputs = readerElements('.ldp-font-color');
-		const fontColorValues = readerElements('.ldp-font-color-value');
-		const interfaceFontScaleRange = readerElement('.ldp-interface-font-scale-range');
-		const interfaceFontScaleValue = readerElement('.ldp-interface-font-scale-value');
-		const fontScaleRange = readerElement('.ldp-font-scale-range');
-		const fontScaleValue = readerElement('.ldp-font-scale-value');
-		const composerFontScaleRange = readerElement('.ldp-composer-font-scale-range');
-		const composerFontScaleValue = readerElement('.ldp-composer-font-scale-value');
-		const hostEmbeddedSizeInputs = readerElements('[data-host-embed-size]');
-		const hostEmbeddedSizeValues = readerElements('[data-host-embed-size-value]');
-		const hostEmbeddedSizeResetButtons = readerElements('[data-host-embed-size-reset]');
-		const fontFieldResetButtons = readerElements('[data-host-font-reset],[data-font-field-reset]');
-		const fontScopeTabs = readerElements('[data-font-scope-tab]');
-		const fontScopePanels = readerElements('[data-font-scope-panel]');
-		const fontStatus = readerElement('.ldp-font-status');
-		const fontResetBtn = readerElement('.ldp-font-reset');
-		const fontApplyBtn = readerElement('.ldp-font-apply');
-		const fontRenderingEnabledInput = readerElement('.ldp-font-rendering-enabled');
-		const fontRenderingOnHostInput = readerElement('.ldp-font-rendering-on-host');
-		const layoutRatioInputs = readerElements('[data-layout-region]');
-		const layoutRatioValues = readerElements('[data-layout-value]');
-		const layoutTotal = readerElement('[data-settings-panel="layout"] .ldp-layout-total');
-		const layoutResetBtn = readerElement('[data-settings-panel="layout"] .ldp-layout-reset');
-		const layoutApplyBtn = readerElement('[data-settings-panel="layout"] .ldp-layout-apply');
-		const readerWindowWidthInput = readerElement('.ldp-reader-window-width');
-		const readerWindowHeightInput = readerElement('.ldp-reader-window-height');
-		const readerWindowXInput = readerElement('.ldp-reader-window-x');
-		const readerWindowYInput = readerElement('.ldp-reader-window-y');
-		const readerWindowPinInput = readerElement('.ldp-reader-window-pin-input');
-		const readerWindowLockInput = readerElement('.ldp-reader-window-lock-input');
-		const readerWindowStatus = readerElement('.ldp-reader-window-status');
-		const readerWindowResetBtn = readerElement('.ldp-reader-window-reset');
+		const [
+			interfaceFontScaleRange, interfaceFontScaleValue, fontScaleRange, fontScaleValue,
+			composerFontScaleRange, composerFontScaleValue, fontStatus, fontResetBtn, fontApplyBtn,
+			fontRenderingEnabledInput, fontRenderingOnHostInput,
+		] = readerElementGroup(
+			'.ldp-interface-font-scale-range', '.ldp-interface-font-scale-value', '.ldp-font-scale-range',
+			'.ldp-font-scale-value', '.ldp-composer-font-scale-range', '.ldp-composer-font-scale-value',
+			'.ldp-font-status', '.ldp-font-reset', '.ldp-font-apply', '.ldp-font-rendering-enabled',
+			'.ldp-font-rendering-on-host',
+		);
+		const [
+			fontWeightSelects, fontColorInputs, fontColorValues, hostEmbeddedSizeInputs, hostEmbeddedSizeValues,
+			hostEmbeddedSizeResetButtons, fontFieldResetButtons, fontScopeTabs, fontScopePanels,
+		] = readerElementsGroup(
+			'.ldp-font-weight-select', '.ldp-font-color', '.ldp-font-color-value', '[data-host-embed-size]',
+			'[data-host-embed-size-value]', '[data-host-embed-size-reset]',
+			'[data-host-font-reset],[data-font-field-reset]', '[data-font-scope-tab]', '[data-font-scope-panel]',
+		);
+		const [layoutRatioInputs, layoutRatioValues] = readerElementsGroup(
+			'[data-layout-region]', '[data-layout-value]');
+		const [
+			layoutTotal, layoutResetBtn, layoutApplyBtn, readerWindowWidthInput, readerWindowHeightInput,
+			readerWindowXInput, readerWindowYInput, readerWindowPinInput, readerWindowLockInput,
+			readerWindowStatus, readerWindowResetBtn,
+		] = readerElementGroup(
+			'[data-settings-panel="layout"] .ldp-layout-total',
+			'[data-settings-panel="layout"] .ldp-layout-reset',
+			'[data-settings-panel="layout"] .ldp-layout-apply',
+			'.ldp-reader-window-width', '.ldp-reader-window-height', '.ldp-reader-window-x',
+			'.ldp-reader-window-y', '.ldp-reader-window-pin-input', '.ldp-reader-window-lock-input',
+			'.ldp-reader-window-status', '.ldp-reader-window-reset',
+		);
 		const appearanceSettingElements = APPEARANCE_SETTING_FIELDS.map((field) => {
 			const className = appearanceSettingClassName(field.key);
 			return Object.assign({}, field, {
@@ -27172,48 +27165,47 @@
 				output: readerElement(`[data-settings-panel="appearance"] .${className}-value`),
 			});
 		});
-		const appearanceGroupToggleInputs = readerElements('[data-appearance-group-toggle]');
-		const colorResetButtons = readerElements('[data-color-reset]');
-		const appearanceThemeNote = readerElement('.ldp-appearance-theme-note');
-		const appearanceStatus = readerElement('.ldp-appearance-status');
-		const appearanceApplyBtn = readerElement('.ldp-appearance-apply');
-		const performancePresetButtons = readerElements('.ldp-performance-preset');
-		const performanceInputs = readerElements('[data-performance-key]');
-		const performanceStatus = readerElement('.ldp-performance-status');
-		const performanceResetBtn = readerElement('.ldp-performance-reset');
-		const resourceMonitorMetrics = readerElements('[data-resource-monitor-metric]');
-		const resourceMonitorAverages = readerElements('[data-resource-monitor-average]');
-		const resourceMonitorPeaks = readerElements('[data-resource-monitor-peak]');
-		const resourceMonitorTrends = readerElements('[data-resource-monitor-trend]');
+		const [
+			appearanceThemeNote, appearanceStatus, appearanceApplyBtn, performanceStatus, performanceResetBtn,
+		] = readerElementGroup(
+			'.ldp-appearance-theme-note', '.ldp-appearance-status', '.ldp-appearance-apply',
+			'.ldp-performance-status', '.ldp-performance-reset',
+		);
+		const [
+			appearanceGroupToggleInputs, colorResetButtons, performancePresetButtons, performanceInputs,
+			resourceMonitorMetrics, resourceMonitorAverages, resourceMonitorPeaks, resourceMonitorTrends,
+		] = readerElementsGroup(
+			'[data-appearance-group-toggle]', '[data-color-reset]', '.ldp-performance-preset',
+			'[data-performance-key]', '[data-resource-monitor-metric]', '[data-resource-monitor-average]',
+			'[data-resource-monitor-peak]', '[data-resource-monitor-trend]',
+		);
 		const resourceMonitorValueColumns = [
 			[resourceMonitorMetrics, 'resourceMonitorMetric', ''],
 			[resourceMonitorAverages, 'resourceMonitorAverage', 'Average'],
 			[resourceMonitorPeaks, 'resourceMonitorPeak', 'Peak'],
 			[resourceMonitorTrends, 'resourceMonitorTrend', 'Trend'],
 		];
-		const resourceMonitorChartRows = readerElements('[data-resource-monitor-chart]');
-		const resourceMonitorHealth = readerElement('.ldp-resource-monitor-health');
-		const resourceMonitorHealthState = readerElement('.ldp-resource-monitor-health-state');
-		const resourceMonitorHealthDetail = readerElement('.ldp-resource-monitor-health-detail');
-		const resourceMonitorTrendWindow = readerElement('.ldp-resource-monitor-trend-window');
-		const resourceMonitorUpdated = readerElement('.ldp-resource-monitor-updated');
-		const resourceMonitorEvidenceWindow = readerElement('.ldp-resource-monitor-evidence-window');
-		const resourceMonitorScopeRows = readerElements('[data-resource-monitor-scope]');
-		const resourceMonitorEventLog = readerElement('.ldp-resource-monitor-event-log');
-		const resourceMonitorSection = readerElement('.ldp-settings-section[data-settings-panel="resource-monitor"]');
-		const requestFlowMetrics = readerElements('[data-request-flow-metric]');
-		const requestFlowWindow = readerElement('.ldp-request-flow-window');
-		const requestFlowChart = readerElement('.ldp-request-flow-trace');
-		const requestFlowLegend = readerElement('.ldp-request-flow-legend');
-		const requestFlowBottleneck = readerElement('.ldp-request-flow-bottleneck');
-		const requestFlowBottleneckState = readerElement('.ldp-request-flow-bottleneck-state');
-		const requestFlowBottleneckDetail = readerElement('.ldp-request-flow-bottleneck-detail');
-		const requestFlowAnomalyWindow = readerElement('.ldp-request-flow-anomaly-window');
-		const requestFlowAnomalies = readerElement('.ldp-request-flow-anomalies');
-		const requestFlowTypes = readerElement('.ldp-request-flow-types');
-		const requestFlowLog = readerElement('.ldp-request-flow-log');
-		const requestFlowObserved = readerElement('.ldp-request-flow-observed');
-		const requestFlowSection = readerElement('.ldp-settings-section[data-settings-panel="request-flow"]');
+		const [resourceMonitorChartRows, resourceMonitorScopeRows, requestFlowMetrics] = readerElementsGroup(
+			'[data-resource-monitor-chart]', '[data-resource-monitor-scope]', '[data-request-flow-metric]');
+		const [
+			resourceMonitorHealth, resourceMonitorHealthState, resourceMonitorHealthDetail,
+			resourceMonitorTrendWindow, resourceMonitorUpdated, resourceMonitorEvidenceWindow,
+			resourceMonitorEventLog, resourceMonitorSection, requestFlowWindow, requestFlowChart,
+			requestFlowLegend, requestFlowBottleneck, requestFlowBottleneckState, requestFlowBottleneckDetail,
+			requestFlowAnomalyWindow, requestFlowAnomalies, requestFlowTypes, requestFlowLog,
+			requestFlowObserved, requestFlowSection,
+		] = readerElementGroup(
+			'.ldp-resource-monitor-health', '.ldp-resource-monitor-health-state',
+			'.ldp-resource-monitor-health-detail', '.ldp-resource-monitor-trend-window',
+			'.ldp-resource-monitor-updated', '.ldp-resource-monitor-evidence-window',
+			'.ldp-resource-monitor-event-log',
+			'.ldp-settings-section[data-settings-panel="resource-monitor"]',
+			'.ldp-request-flow-window', '.ldp-request-flow-trace', '.ldp-request-flow-legend',
+			'.ldp-request-flow-bottleneck', '.ldp-request-flow-bottleneck-state',
+			'.ldp-request-flow-bottleneck-detail', '.ldp-request-flow-anomaly-window',
+			'.ldp-request-flow-anomalies', '.ldp-request-flow-types', '.ldp-request-flow-log',
+			'.ldp-request-flow-observed', '.ldp-settings-section[data-settings-panel="request-flow"]',
+		);
 		const jumpHighlightControls = Object.fromEntries(JUMP_HIGHLIGHT_SETTING_FIELDS.map((field) => {
 			const className = `.ldp-flash-${field.key}`;
 			return [field.key, {
@@ -27222,37 +27214,32 @@
 			}];
 		}));
 		const jumpHighlightInputs = JUMP_HIGHLIGHT_SETTING_FIELDS.map((field) => jumpHighlightControls[field.key].input);
-		const jumpHighlightStatus = readerElement('.ldp-flash-status');
-		const jumpHighlightApplyBtn = readerElement('.ldp-flash-apply');
-		const loadingAnimationSelect = readerElement('.ldp-loading-animation-select');
-		const loadingAnimationPreview = readerElement('.ldp-loading-preview-stage');
-		const loadingAnimationPreviewLabel = readerElement('.ldp-loading-settings-preview-label');
-		const loadingAnimationReroll = readerElement('.ldp-loading-preview-reroll');
-		const historySortModeSelect = readerElement('.ldp-history-sort-mode');
-		const historyButtonsAlwaysVisibleInput = readerElement('.ldp-history-buttons-always-visible');
-		const historyEdgeTriggerRange = readerElement('.ldp-history-edge-trigger-range');
-		const historyEdgeTriggerValue = readerElement('.ldp-history-edge-trigger-value');
-		const openTopicsAtFirstPostInput = readerElement('.ldp-open-topics-first-post');
-		const expandNestedRepliesByDefaultInput = readerElement('.ldp-expand-nested-replies-default');
-		const expandLeafNestedRepliesInput = readerElement('.ldp-expand-leaf-nested-replies');
-		const nestedReplyDisplayWarning = readerElement('.ldp-nested-display-warning');
-		const boostCopyModeSelect = readerElement('.ldp-boost-copy-mode');
-		const boostCopyPrefixInput = readerElement('.ldp-boost-copy-prefix');
-		const boostCopyCounterMarkerInput = readerElement('.ldp-boost-copy-counter-marker');
-		const boostCopyCounterStepInput = readerElement('.ldp-boost-copy-counter-step');
-		const boostCopyFixedSuffixInput = readerElement('.ldp-boost-copy-fixed-suffix');
-		const boostCopyCounterRows = readerElements('.ldp-boost-counter-row');
-		const boostCopyTextRows = readerElements('.ldp-boost-text-row');
-		const boostCopyPreview = readerElement('.ldp-boost-copy-preview');
-		const configExportBtn = readerElement('.ldp-config-export');
-		const configImportBtn = readerElement('.ldp-config-import');
-		const configResetBtn = readerElement('.ldp-config-reset');
-		const configFileInput = readerElement('.ldp-config-file');
-		const cacheSelects = readerElements('.ldp-cache-select');
-		const cacheSizeEls = readerElements('[data-cache-size]');
-		const cacheRetentionEls = readerElements('[data-cache-retention]');
-		const cacheClearBtn = readerElement('.ldp-cache-clear');
-		const settingsColorInputs = readerElements('.ldp-color-control input[type="color"]');
+		const [
+			jumpHighlightStatus, jumpHighlightApplyBtn, loadingAnimationSelect, loadingAnimationPreview,
+			loadingAnimationPreviewLabel, loadingAnimationReroll, historySortModeSelect,
+			historyButtonsAlwaysVisibleInput, historyEdgeTriggerRange, historyEdgeTriggerValue,
+			openTopicsAtFirstPostInput, expandNestedRepliesByDefaultInput, expandLeafNestedRepliesInput,
+			nestedReplyDisplayWarning, boostCopyModeSelect, boostCopyPrefixInput, boostCopyCounterMarkerInput,
+			boostCopyCounterStepInput, boostCopyFixedSuffixInput, boostCopyPreview, configExportBtn,
+			configImportBtn, configResetBtn, configFileInput, cacheClearBtn,
+		] = readerElementGroup(
+			'.ldp-flash-status', '.ldp-flash-apply', '.ldp-loading-animation-select',
+			'.ldp-loading-preview-stage', '.ldp-loading-settings-preview-label',
+			'.ldp-loading-preview-reroll', '.ldp-history-sort-mode', '.ldp-history-buttons-always-visible',
+			'.ldp-history-edge-trigger-range', '.ldp-history-edge-trigger-value',
+			'.ldp-open-topics-first-post', '.ldp-expand-nested-replies-default',
+			'.ldp-expand-leaf-nested-replies', '.ldp-nested-display-warning', '.ldp-boost-copy-mode',
+			'.ldp-boost-copy-prefix', '.ldp-boost-copy-counter-marker', '.ldp-boost-copy-counter-step',
+			'.ldp-boost-copy-fixed-suffix', '.ldp-boost-copy-preview', '.ldp-config-export',
+			'.ldp-config-import', '.ldp-config-reset', '.ldp-config-file', '.ldp-cache-clear',
+		);
+		const [
+			boostCopyCounterRows, boostCopyTextRows, cacheSelects, cacheSizeEls, cacheRetentionEls,
+			settingsColorInputs,
+		] = readerElementsGroup(
+			'.ldp-boost-counter-row', '.ldp-boost-text-row', '.ldp-cache-select', '[data-cache-size]',
+			'[data-cache-retention]', '.ldp-color-control input[type="color"]',
+		);
 		const colorPickerPresets = ['#F0FFF0', '#FFFFFF', '#E5E7EB', '#94A3B8', '#475569', '#111827',
 			'#47855F', '#22C55E', '#2563EB', '#7C3AED', '#D97706', '#DC2626'];
 		let colorPickerPopover = modal.querySelector(':scope > .ldp-color-picker-popover');
@@ -27264,19 +27251,19 @@
 			setLabel(colorPickerPopover, '选择颜色');
 			colorPickerPopover.hidden = true;
 			colorPickerPopover.innerHTML = `
-        <div class="ldp-color-picker-title">选择颜色</div>
-        <div class="ldp-color-picker-presets" role="group" aria-label="常用颜色">
-          ${colorPickerPresets.map((color) => `<button class="ldp-color-picker-preset" type="button" data-color="${color}" style="--ldp-color-picker-preset:${color}" aria-label="使用颜色 ${color}" aria-pressed="false"></button>`).join('')}
-        </div>
-        <div class="ldp-color-picker-fields">
-          <input class="ldp-color-picker-hex" type="text" inputmode="text" maxlength="7" autocomplete="off" spellcheck="false" aria-label="十六进制颜色" placeholder="#RRGGBB">
-          <button class="ldp-color-picker-more" type="button" aria-expanded="false">更多颜色</button>
-        </div>
-        <div class="ldp-color-picker-advanced" hidden>
-          <label class="ldp-color-picker-slider"><span>色相</span><input class="ldp-color-picker-hue" type="range" min="0" max="359" step="1"><output class="ldp-color-picker-hue-value"></output></label>
-          <label class="ldp-color-picker-slider"><span>饱和度</span><input class="ldp-color-picker-saturation" type="range" min="0" max="100" step="1"><output class="ldp-color-picker-saturation-value"></output></label>
-          <label class="ldp-color-picker-slider"><span>明度</span><input class="ldp-color-picker-brightness" type="range" min="0" max="100" step="1"><output class="ldp-color-picker-brightness-value"></output></label>
-        </div>`;
+				<div class="ldp-color-picker-title">选择颜色</div>
+				<div class="ldp-color-picker-presets" role="group" aria-label="常用颜色">
+					${colorPickerPresets.map((color) => `<button class="ldp-color-picker-preset" type="button" data-color="${color}" style="--ldp-color-picker-preset:${color}" aria-label="使用颜色 ${color}" aria-pressed="false"></button>`).join('')}
+				</div>
+				<div class="ldp-color-picker-fields">
+					<input class="ldp-color-picker-hex" type="text" inputmode="text" maxlength="7" autocomplete="off" spellcheck="false" aria-label="十六进制颜色" placeholder="#RRGGBB">
+					<button class="ldp-color-picker-more" type="button" aria-expanded="false">更多颜色</button>
+				</div>
+				<div class="ldp-color-picker-advanced" hidden>
+					<label class="ldp-color-picker-slider"><span>色相</span><input class="ldp-color-picker-hue" type="range" min="0" max="359" step="1"><output class="ldp-color-picker-hue-value"></output></label>
+					<label class="ldp-color-picker-slider"><span>饱和度</span><input class="ldp-color-picker-saturation" type="range" min="0" max="100" step="1"><output class="ldp-color-picker-saturation-value"></output></label>
+					<label class="ldp-color-picker-slider"><span>明度</span><input class="ldp-color-picker-brightness" type="range" min="0" max="100" step="1"><output class="ldp-color-picker-brightness-value"></output></label>
+				</div>`;
 			modal.append(colorPickerPopover);
 		}
 		const colorPickerTitle = colorPickerPopover.querySelector('.ldp-color-picker-title');
@@ -27504,7 +27491,7 @@
 			if (target && copy) target.dataset.settingHelp = copy;
 		};
 		const setSettingRowHelp = (control, copy) => {
-			setSettingHelp(control && control.closest('.ldp-setting-row'), copy);
+			setSettingHelp(control?.closest('.ldp-setting-row'), copy);
 		};
 		setSettingRowHelp(imageScaleRange, '控制所有显示形态中帖子正文图片的显示大小。100% 是正常尺寸；调小能少占屏幕，调大方便看细节。修改后立即保存。');
 		setSettingRowHelp(lightboxOriginalByDefaultInput, '开启后，灯箱首次打开和切换图片时会自动请求原图；关闭后不会新请求原图，但本地已缓存原图时仍优先展示，否则沿用预览图。修改后立即保存。');
@@ -27625,11 +27612,11 @@
 			const topicMetadataFilled = fillTopicNavMetadata(topicData, sourceTopicNavMetadata);
 			const topicMetadataRemembered = rememberTopicNavMetadata(topicId, topicData, sourceTopicNavMetadata);
 			if (topicMetadataFilled && !topicMetadataRemembered) setCachedTopicData(topicId, topicData);
-			const cachedPosts = Array.isArray(topicData.post_stream && topicData.post_stream.posts)
+			const cachedPosts = Array.isArray(topicData.post_stream?.posts)
 				? topicData.post_stream.posts
 				: [];
 			const owner = topicData._opUsername
-				|| (topicData.details && topicData.details.created_by && topicData.details.created_by.username)
+				|| (topicData.details?.created_by && topicData.details.created_by.username)
 				|| (cachedPosts.find((post) => +post.post_number === 1) || {}).username
 				|| '';
 			const title = String(topicData.title || '').trim();
@@ -27705,7 +27692,7 @@
 		const rateLimitCooldownRemaining = () => {
 			try {
 				const state = postRequestScheduler.snapshot();
-				return Math.max(0, Number(state && state.cooldownRemaining) || 0);
+				return Math.max(0, Number(state?.cooldownRemaining) || 0);
 			} catch (error) {}
 			return 0;
 		};
@@ -27744,7 +27731,7 @@
 		const notificationState = { group: 'all', page: 0, token: 0, total: 0, hasNext: false, query: '' };
 		let notificationQueuedRequestKey = '';
 		const currentReaderRequestScheduler = () => (
-			readerShell.activeContext && readerShell.activeContext.postRequestScheduler
+			readerShell.activeContext?.postRequestScheduler
 		) || ACTIVE_READER_REQUEST_SCHEDULER || postRequestScheduler;
 		const historyState = { page: 0, query: '', multi: false, scope: 'page' };
 		const historySelection = new Set();
@@ -27906,14 +27893,14 @@
 					const selected = historySelection.has(Number(entry.topicId));
 					const targetPostNumber = Math.max(1, Number(entry.postNumber) || 1);
 					return `<div class="ldp-history-item ldp-collection-item${historyState.multi ? ' multi' : ''}${selected ? ' selected' : ''}" data-history-topic-id="${entry.topicId}" data-history-post-number="${targetPostNumber}" data-history-actor="${escAttr(entry.ownerUsername || '')}">
-            ${historyState.multi ? `<label class="ldp-history-select ldp-collection-select" data-ldp-tooltip-label="选择这条浏览历史">
-              <input class="ldp-history-select-input ldp-collection-select-input" type="checkbox" aria-label="选择《${escAttr(entry.title)}》"${selected ? ' checked' : ''}>
-            </label>` : ''}
-            ${collectionLinkMarkup('ldp-history-link', topicPageUrl(entry.topicId, targetPostNumber, true),
+						${historyState.multi ? `<label class="ldp-history-select ldp-collection-select" data-ldp-tooltip-label="选择这条浏览历史">
+							<input class="ldp-history-select-input ldp-collection-select-input" type="checkbox" aria-label="选择《${escAttr(entry.title)}》"${selected ? ' checked' : ''}>
+						</label>` : ''}
+						${collectionLinkMarkup('ldp-history-link', topicPageUrl(entry.topicId, targetPostNumber, true),
 							historyUserAvatar, entry.title,
 							`${entry.postsCount || 0} 帖 · ${discourseRelativeTime(historyEntrySortTime(entry))}`)}
-            ${historyState.multi ? '' : `<button class="ldp-history-delete ldp-collection-delete" type="button" aria-label="删除这条浏览历史">${icon('trash')}</button>`}
-          </div>`;
+						${historyState.multi ? '' : `<button class="ldp-history-delete ldp-collection-delete" type="button" aria-label="删除这条浏览历史">${icon('trash')}</button>`}
+					</div>`;
 				}).join('')
 				: `<div class="ldp-notification-empty">${historyState.query ? '没有匹配的浏览历史' : '暂无浏览历史'}</div>`;
 			hydrateHistoryAvatars(historyPanel.list, pageEntries, storedHistory);
@@ -27934,7 +27921,7 @@
 			renderHistoryPage();
 		};
 		const bookmarkAvatarHtml = (entry) => {
-			const user = entry && entry.user || {};
+			const user = entry?.user || {};
 			const avatar = persistentAvatarHtml(
 				user.avatar_template,
 				64,
@@ -27946,63 +27933,63 @@
 				: `<span class="ldp-notification-avatar ldp-notification-avatar-fallback">${icon('bookmark')}</span>`;
 		};
 		const bookmarkTarget = (entry) => ({
-			topicId: Number(entry && entry.topic_id) || 0,
-			postNumber: Math.max(1, Number(entry && entry.linked_post_number) || 1),
+			topicId: Number(entry?.topic_id) || 0,
+			postNumber: Math.max(1, Number(entry?.linked_post_number) || 1),
 		});
 		const reactionPageEntries = (result) => {
 			if (Array.isArray(result)) return result;
-			if (Array.isArray(result && result.user_reactions)) return result.user_reactions;
-			if (Array.isArray(result && result.reaction_users)) return result.reaction_users;
-			if (Array.isArray(result && result.reactions)) return result.reactions;
+			if (Array.isArray(result?.user_reactions)) return result.user_reactions;
+			if (Array.isArray(result?.reaction_users)) return result.reaction_users;
+			if (Array.isArray(result?.reactions)) return result.reactions;
 			return [];
 		};
 		const givenReactionRecord = (post, topic, reaction, id = 0, reactedAt = '', title = '') => {
-			const postId = Number(post && post.id) || 0;
-			const topicId = Number(post && post.topic_id || topic && topic.id) || 0;
+			const postId = Number(post?.id) || 0;
+			const topicId = Number(post?.topic_id || topic?.id) || 0;
 			return {
 				id: Number(id) || postId,
 				topicId,
 				postId,
-				postNumber: Math.max(1, Number(post && post.post_number) || 1),
+				postNumber: Math.max(1, Number(post?.post_number) || 1),
 				reaction,
-				title: String(post && post.topic_title || title || topic && topic.title || `帖子 #${topicId}`),
-				authorUsername: String(post && post.username || ''),
-				avatarTemplate: String(post && post.avatar_template || ''),
+				title: String(post?.topic_title || title || topic?.title || `帖子 #${topicId}`),
+				authorUsername: String(post?.username || ''),
+				avatarTemplate: String(post?.avatar_template || ''),
 				reactedAt: String(reactedAt || ''),
 			};
 		};
 		const normalizeGivenReaction = (entry) => {
-			const post = entry && entry.post || {};
+			const post = entry?.post || {};
 			const topic = post.topic || {};
 			const user = post.user || {};
-			const reactionData = entry && entry.reaction || {};
-			const id = Number(entry && entry.id) || 0;
-			const reaction = String(reactionData.reaction_value || entry && entry.reaction_value || '');
+			const reactionData = entry?.reaction || {};
+			const id = Number(entry?.id) || 0;
+			const reaction = String(reactionData.reaction_value || entry?.reaction_value || '');
 			const sourcePost = {
-				id: entry && entry.post_id || post.id,
-				topic_id: post.topic_id || topic.id || entry && entry.topic_id,
-				post_number: post.post_number || entry && entry.post_number,
-				topic_title: post.topic_title || topic.title || entry && entry.topic_title,
+				id: entry?.post_id || post.id,
+				topic_id: post.topic_id || topic.id || entry?.topic_id,
+				post_number: post.post_number || entry?.post_number,
+				topic_title: post.topic_title || topic.title || entry?.topic_title,
 				username: post.username || user.username,
 				avatar_template: post.avatar_template || user.avatar_template,
 			};
 			if (!id || !Number(sourcePost.topic_id) || !Number(sourcePost.id) || !reaction) return null;
-			return givenReactionRecord(sourcePost, null, reaction, id, entry && entry.created_at || reactionData.created_at);
+			return givenReactionRecord(sourcePost, null, reaction, id, entry?.created_at || reactionData.created_at);
 		};
 		const normalizeGivenLike = (entry) => {
-			const topicId = Number(entry && entry.topic_id) || 0;
-			const postId = Number(entry && entry.post_id) || 0;
-			if (Number(entry && entry.action_type) !== 1 || !topicId || !postId) return null;
+			const topicId = Number(entry?.topic_id) || 0;
+			const postId = Number(entry?.post_id) || 0;
+			if (Number(entry?.action_type) !== 1 || !topicId || !postId) return null;
 			return givenReactionRecord({ ...entry, id: postId }, null, 'heart', entry.id, entry.created_at, entry.title);
 		};
 		const givenReactionEntriesByPostId = (entries) => new Map((Array.isArray(entries) ? entries : [])
-			.map((entry) => [Number(entry && entry.postId), entry])
+			.map((entry) => [Number(entry?.postId), entry])
 			.filter(([postId]) => postId > 0));
 		const mergeGivenReactionOverrides = (entries) => {
 			const entriesByPostId = givenReactionEntriesByPostId(entries);
 			givenReactionOverrides.forEach((override, postId) => {
 				const serverEntry = entriesByPostId.get(postId);
-				if (override && Number(serverEntry && serverEntry.id) > 0 && serverEntry.reaction === override.reaction) {
+				if (override && Number(serverEntry?.id) > 0 && serverEntry.reaction === override.reaction) {
 					givenReactionOverrides.delete(postId);
 					return;
 				}
@@ -28013,22 +28000,22 @@
 				entriesByPostId.delete(postId);
 				if (override) entriesByPostId.set(postId, override);
 			});
-			return Array.from(entriesByPostId.values()).sort(compareGivenReactionRecords);
+			return [...entriesByPostId.values()].sort(compareGivenReactionRecords);
 		};
 		const confirmedGivenReactionRecord = (post, topic, reaction) => {
-			const postId = Number(post && post.id) || 0;
+			const postId = Number(post?.id) || 0;
 			return givenReactionRecord(post, topic, reaction, -postId, new Date().toISOString());
 		};
 		const rememberConfirmedGivenReaction = (post, topic) => {
-			const postId = Number(post && post.id) || 0;
+			const postId = Number(post?.id) || 0;
 			if (!postId) return false;
-			const current = post && post.current_user_reaction;
-			const reaction = String(current && current.id || '');
+			const current = post?.current_user_reaction;
+			const reaction = String(current?.id || '');
 			givenReactionOverrides.set(postId, reaction ? confirmedGivenReactionRecord(post, topic, reaction) : null);
 			return true;
 		};
 		const applyConfirmedGivenLike = (entries, post, topic, acted) => {
-			const postId = Number(post && post.id) || 0;
+			const postId = Number(post?.id) || 0;
 			if (!postId) return Array.isArray(entries) ? entries : [];
 			const entriesByPostId = givenReactionEntriesByPostId(entries);
 			const current = entriesByPostId.get(postId);
@@ -28037,14 +28024,14 @@
 			} else if (!acted && current && current.reaction === 'heart') {
 				entriesByPostId.delete(postId);
 			}
-			return Array.from(entriesByPostId.values()).sort(compareGivenReactionRecords);
+			return [...entriesByPostId.values()].sort(compareGivenReactionRecords);
 		};
 		const fetchGivenReactionPage = (username, beforeReactionUserId = 0) => {
 			const reactionModule = lookupDiscourseModule(
 				'discourse/plugins/discourse-reactions/discourse/models/discourse-reactions-custom-reaction'
 			);
-			const CustomReaction = reactionModule && reactionModule.default;
-			if (!CustomReaction || typeof CustomReaction.findReactions !== 'function') {
+			const CustomReaction = reactionModule?.default;
+			if (!CustomReaction || !isFunction(CustomReaction.findReactions)) {
 				return Promise.reject(new Error('Discourse 回应记录接口尚未就绪'));
 			}
 			return CustomReaction.findReactions('reactions', username, {
@@ -28067,7 +28054,7 @@
 				seenCursors.add(nextCursor);
 				cursor = nextCursor;
 			}
-			return Array.from(entriesById.values());
+			return [...entriesById.values()];
 		};
 		const reactionCollectionIsCurrent = (token) => token === bookmarksState.token &&
 			!bookmarksPanel.popover.hidden && bookmarksState.type === 'Reaction';
@@ -28076,7 +28063,7 @@
 			(result) => {
 				const records = reactionPageEntries(result);
 				const next = records.length >= GIVEN_REACTIONS_PAGE_SIZE && records.reduce((lowest, entry) => {
-					const id = Number(entry && entry.id) || 0;
+					const id = Number(entry?.id) || 0;
 					return id > 0 && (!lowest || id < lowest) ? id : lowest;
 				}, 0);
 				return [records, next || null];
@@ -28099,7 +28086,7 @@
 		const fetchAllGivenLikes = (username, token = bookmarksState.token) => collectPagedEntries(
 			(offset) => fetchGivenLikePage(username, offset),
 			(result, offset) => {
-				const records = Array.isArray(result && result.user_actions) ? result.user_actions : [];
+				const records = Array.isArray(result?.user_actions) ? result.user_actions : [];
 				return [records, records.length < GIVEN_LIKES_PAGE_SIZE ? null : offset + records.length];
 			},
 			normalizeGivenLike, (entry) => entry.postId, () => reactionCollectionIsCurrent(token)
@@ -28112,12 +28099,12 @@
 		};
 		const reactionAvatarHtml = (entry) => userCardAvatarHtml(
 			persistentAvatarHtml(
-				entry && entry.avatarTemplate,
+				entry?.avatarTemplate,
 				64,
 				'ldp-notification-avatar',
-				entry && entry.authorUsername || '?'
-			) || `<span class="ldp-notification-avatar ldp-notification-avatar-fallback">${esc(String(entry && entry.authorUsername || '?').slice(0, 1).toUpperCase())}</span>`,
-			entry && entry.authorUsername
+				entry?.authorUsername || '?'
+			) || `<span class="ldp-notification-avatar ldp-notification-avatar-fallback">${esc(String(entry?.authorUsername || '?').slice(0, 1).toUpperCase())}</span>`,
+			entry?.authorUsername
 		);
 		const bookmarkTypeEntries = () => bookmarksState.type === 'Reaction'
 			? reactionRecordEntries()
@@ -28126,10 +28113,10 @@
 			const isReaction = bookmarksState.type === 'Reaction';
 			const reactionTypeCounts = new Map();
 			if (isReaction) bookmarksState.reactionEntries.forEach((entry) => {
-				const reaction = String(entry && entry.reaction || '');
+				const reaction = String(entry?.reaction || '');
 				if (reaction) reactionTypeCounts.set(reaction, (reactionTypeCounts.get(reaction) || 0) + 1);
 			});
-			const availableReactionTypes = Array.from(reactionTypeCounts.keys());
+			const availableReactionTypes = [...reactionTypeCounts.keys()];
 			if (bookmarksState.reactionFilter && !availableReactionTypes.includes(bookmarksState.reactionFilter)) {
 				bookmarksState.reactionFilter = '';
 			}
@@ -28164,10 +28151,10 @@
 						const topicId = Number(entry.topicId);
 						const postNumber = Math.max(1, Number(entry.postNumber) || 1);
 						return `<div class="ldp-reaction-record ldp-collection-item" data-reaction-record data-reaction-topic-id="${topicId}" data-reaction-post-number="${postNumber}">
-              ${collectionLinkMarkup('ldp-bookmark-link', topicPageUrl(topicId, postNumber, true),
+							${collectionLinkMarkup('ldp-bookmark-link', topicPageUrl(topicId, postNumber, true),
 								reactionAvatarHtml(entry), entry.title || `帖子 #${entry.topicId}`,
 								`<span class="ldp-reaction-record-icon" role="img" aria-label="${escAttr(reaction)} 回应">${reactionIcon}</span>${esc(`回应 · 楼层 #${postNumber}${authorLabel} · ${discourseRelativeTime(entry.reactedAt)}`)}`, true)}
-            </div>`;
+						</div>`;
 					}).join('')
 					: `<div class="ldp-notification-empty">${bookmarksState.query
 						? '没有匹配的回应记录'
@@ -28182,14 +28169,14 @@
 					const postsLabel = Number(entry.highest_post_number) > 0 ? ` · ${Number(entry.highest_post_number)} 帖` : '';
 					const nameLabel = String(entry.name || '').trim() ? ` · ${String(entry.name).trim()}` : '';
 					return `<div class="ldp-bookmark-item ldp-collection-item${bookmarksState.multi ? ' multi' : ''}${selected ? ' selected' : ''}" data-bookmark-id="${bookmarkId}" data-bookmark-topic-id="${target.topicId}" data-bookmark-post-number="${target.postNumber}">
-            ${bookmarksState.multi ? `<label class="ldp-bookmark-select ldp-collection-select" data-ldp-tooltip-label="选择这条收藏">
-              <input class="ldp-bookmark-select-input ldp-collection-select-input" type="checkbox" aria-label="选择《${escAttr(entry.title || '收藏')}》"${selected ? ' checked' : ''}>
-            </label>` : ''}
-            ${collectionLinkMarkup('ldp-bookmark-link', topicPageUrl(target.topicId, target.postNumber, true),
+						${bookmarksState.multi ? `<label class="ldp-bookmark-select ldp-collection-select" data-ldp-tooltip-label="选择这条收藏">
+							<input class="ldp-bookmark-select-input ldp-collection-select-input" type="checkbox" aria-label="选择《${escAttr(entry.title || '收藏')}》"${selected ? ' checked' : ''}>
+						</label>` : ''}
+						${collectionLinkMarkup('ldp-bookmark-link', topicPageUrl(target.topicId, target.postNumber, true),
 							bookmarkAvatarHtml(entry), entry.title || `帖子 #${target.topicId}`,
 							`${typeLabel}${postsLabel}${nameLabel} · ${discourseRelativeTime(entry.created_at)}`)}
-            ${bookmarksState.multi ? '' : `<button class="ldp-bookmark-delete ldp-collection-delete" type="button" aria-label="取消这条收藏">${icon('trash')}</button>`}
-          </div>`;
+						${bookmarksState.multi ? '' : `<button class="ldp-bookmark-delete ldp-collection-delete" type="button" aria-label="取消这条收藏">${icon('trash')}</button>`}
+					</div>`;
 					}).join('')
 					: `<div class="ldp-notification-empty">${bookmarksState.query
 						? `没有匹配的${bookmarksState.type === 'Post' ? '楼层' : '帖子'}收藏`
@@ -28222,10 +28209,10 @@
 				});
 			},
 			(result, page) => {
-				const payload = result && result.user_bookmark_list || result || {};
+				const payload = result?.user_bookmark_list || result || {};
 				return [Array.isArray(payload.bookmarks) ? payload.bookmarks : [], payload.more_bookmarks_url ? page + 1 : null];
 			},
-			(entry) => Number(entry && entry.id) > 0 ? entry : null,
+			(entry) => Number(entry?.id) > 0 ? entry : null,
 			(entry) => Number(entry.id),
 			() => token === bookmarksState.token && !bookmarksPanel.popover.hidden
 		);
@@ -28314,7 +28301,7 @@
 			const target = bookmarkTarget(entry);
 			if (!activeCtx || Number(activeCtx.topicId) !== target.topicId) return;
 			const type = entry && entry.bookmarkable_type === 'Post' ? 'Post' : 'Topic';
-			syncReaderBookmarkState(activeCtx, type, entry && entry.bookmarkable_id, false, null, { persist: true });
+			syncReaderBookmarkState(activeCtx, type, entry?.bookmarkable_id, false, null, { persist: true });
 		};
 		const renderNotificationPage = (result, options = {}) => {
 			const visibleNotifications = result.notifications;
@@ -28348,7 +28335,7 @@
 		const loadNotificationPage = async (groupKey, page, options = {}) => {
 			const token = ++notificationState.token;
 			const force = options.force === true;
-			notificationState.group = Object.prototype.hasOwnProperty.call(NOTIFICATION_GROUPS, groupKey) ? groupKey : 'all';
+			notificationState.group = Object.hasOwn(NOTIFICATION_GROUPS, groupKey) ? groupKey : 'all';
 			notificationState.page = Math.max(0, Number(page) || 0);
 			syncTabSelection(notificationTabs, 'notificationGroup', notificationState.group);
 			if (notificationState.query) {
@@ -28400,7 +28387,7 @@
 			if (notificationLiveRefreshTimer) clearTimeout(notificationLiveRefreshTimer);
 			notificationLiveRefreshTimer = 0;
 			if (notificationLiveAppEvents && notificationLiveHandler &&
-					typeof notificationLiveAppEvents.off === 'function') {
+					isFunction(notificationLiveAppEvents.off)) {
 				try {
 					notificationLiveAppEvents.off('notifications:changed', readerShell, notificationLiveHandler);
 				} catch (error) {}
@@ -28425,7 +28412,7 @@
 			if (notificationLiveAppEvents && notificationLiveHandler) return true;
 			stopNotificationLiveEvents();
 			const appEvents = lookupDiscourse('service:app-events');
-			if (!appEvents || typeof appEvents.on !== 'function') return false;
+			if (!appEvents || !isFunction(appEvents.on)) return false;
 			const handler = () => applyNotificationLiveEvent();
 			try {
 				appEvents.on('notifications:changed', readerShell, handler);
@@ -28500,7 +28487,7 @@
 			syncReaderThemeSurfaces();
 			applyReaderVisualSettings();
 			const activeContext = readerShell.activeContext;
-			if (activeContext && activeContext.nativeComposerWindow) activeContext.nativeComposerWindow.syncLayer();
+			if (activeContext?.nativeComposerWindow) activeContext.nativeComposerWindow.syncLayer();
 			positionHeaderPopovers();
 			syncOpenSettingsControls(true);
 		};
@@ -28553,7 +28540,7 @@
 			READER_PORTAL_HOST?.style.setProperty('--ldp-post-font-size', postFontSize);
 			applyComposerFontScale(values.composer);
 			const activeContext = readerShell.activeContext;
-			if (activeContext && activeContext.nativeComposerWindow) {
+			if (activeContext?.nativeComposerWindow) {
 				activeContext.nativeComposerWindow.syncFont(values);
 			}
 		};
@@ -28566,7 +28553,7 @@
 		};
 		const applyInteractionColors = () => {
 			const surfaces = new Set([READER_PORTAL_HOST, overlay]);
-			Array.from(READER_PORTAL_HOST?.children || []).forEach((node) => surfaces.add(node));
+			[...READER_PORTAL_HOST?.children || []].forEach((node) => surfaces.add(node));
 			document.querySelectorAll('[data-ldp-reader-composer-root]').forEach((node) => surfaces.add(node));
 			surfaces.forEach((node) => applyAppearanceInteractionColors(node, activeAppearanceColors()));
 		};
@@ -28600,7 +28587,7 @@
 				overlay.style.setProperty(`${property}-radius`, `${values.replyLineRadius}px`);
 				readerElements('.ldp-children').forEach(syncNestedReplyBranches);
 				const activeContext = readerShell.activeContext;
-				if (activeContext && activeContext.floorPreview && activeContext.floorPreview.isOpen()) {
+				if (activeContext?.floorPreview && activeContext.floorPreview.isOpen()) {
 					scheduleFloorPreviewSync(activeContext);
 				}
 				return;
@@ -28630,7 +28617,7 @@
 				appearanceThemeColor(values, 'floorPreviewColor'));
 			overlay.style.setProperty('--ldp-floor-preview-height', `${values.floorPreviewHeight}px`);
 			const activeContext = readerShell.activeContext;
-			if (activeContext && activeContext.floorPreview && activeContext.floorPreview.isOpen()) {
+			if (activeContext?.floorPreview && activeContext.floorPreview.isOpen()) {
 				scheduleFloorPreviewSync(activeContext);
 			}
 		};
@@ -28690,23 +28677,23 @@
 		const fontValuesForScope = (scope = activeFontFamilyScope, readerValues = currentFontDraft()) => scope === 'host'
 			? PREFS
 			: readerValues;
-		const activeFontFamilyTrigger = () => Array.from(fontFamilyTriggers)
+		const activeFontFamilyTrigger = () => [...fontFamilyTriggers]
 			.find((trigger) => trigger.dataset.fontScope === activeFontFamilyScope);
 		const collectAvailableFontFamilies = (fonts, searchFields, fallbackNameField = '') => {
 			const entries = new Map();
-			Array.from(fonts || []).forEach((font) => {
+			[...fonts || []].forEach((font) => {
 				const name = normalizeCustomFontFamily(font && (font.family || font[fallbackNameField]));
 				if (!name) return;
 				const key = name.toLocaleLowerCase();
 				const entry = entries.get(key) || { name, search: new Set() };
 				searchFields.forEach((field) => {
-					if (font && font[field]) entry.search.add(String(font[field]));
+					if (font?.[field]) entry.search.add(String(font[field]));
 				});
 				entries.set(key, entry);
 			});
-			return Array.from(entries.values()).map((entry) => ({
+			return [...entries.values()].map((entry) => ({
 				name: entry.name,
-				search: Array.from(entry.search),
+				search: [...entry.search],
 			})).sort((left, right) => String(left.name || '').localeCompare(
 				String(right.name || ''), 'zh-CN', { sensitivity: 'base', numeric: true }
 			));
@@ -28868,7 +28855,7 @@
 		};
 		const requestLocalFontFamilies = () => {
 			if (localFontAccessState !== 'idle') return localFontAccessRequest;
-			if (typeof globalThis.queryLocalFonts !== 'function') {
+			if (!isFunction(globalThis.queryLocalFonts)) {
 				localFontAccessState = 'unsupported';
 				renderFontFamilyOptions();
 				return null;
@@ -28906,7 +28893,7 @@
 			positionFontFamilyMenu();
 			requestLocalFontFamilies();
 			fontFamilySearch.focus({ preventScroll: true });
-			if (document.fonts && document.fonts.ready) {
+			if (document.fonts?.ready) {
 				void Promise.resolve(document.fonts.ready).then(() => {
 					pageFontFamilies = collectPageFontFamilies();
 					renderFontFamilyOptions();
@@ -28930,7 +28917,7 @@
 				const scale = normalizeHostEmbeddedSizeScale(PREFS[config.pref]);
 				input.value = String(scale);
 				syncRangeVisual(input);
-				const output = Array.from(hostEmbeddedSizeValues)
+				const output = [...hostEmbeddedSizeValues]
 					.find((value) => value.dataset.hostEmbedSizeValue === input.dataset.hostEmbedSize);
 				if (output) {
 					output.value = `${scale}%`;
@@ -28953,10 +28940,10 @@
 				const scopeValues = host ? PREFS : values;
 				const scopeDefaults = host ? HOST_FONT_DEFAULTS : defaultValues;
 				const config = fontScopeConfig(scope);
-				const customInput = Array.from(fontFamilyCustomInputs).find((input) => input.dataset.fontScope === scope);
-				const weightSelect = Array.from(fontWeightSelects).find((select) => select.dataset.fontScope === scope);
-				const colorInput = Array.from(fontColorInputs).find((input) => input.dataset.fontScope === scope);
-				const colorValue = Array.from(fontColorValues).find((value) => value.dataset.fontScope === scope);
+				const customInput = [...fontFamilyCustomInputs].find((input) => input.dataset.fontScope === scope);
+				const weightSelect = [...fontWeightSelects].find((select) => select.dataset.fontScope === scope);
+				const colorInput = [...fontColorInputs].find((input) => input.dataset.fontScope === scope);
+				const colorValue = [...fontColorValues].find((value) => value.dataset.fontScope === scope);
 				const color = normalizeHexColor(scopeValues[config.color], scopeDefaults[config.color]);
 				if (normalizeFontFamily(scopeValues[config.family]) !== 'custom') fontFamilyManualEditing.delete(scope);
 				customInput.value = scopeValues[config.customFamily];
@@ -28964,7 +28951,7 @@
 				weightSelect.value = String(scopeValues[config.weight]);
 				colorInput.value = color || READER_THEME_VARIABLES[resolvedReaderThemeMode()]['--primary'];
 				colorValue.textContent = color ? color.toUpperCase() : '跟随主题';
-				const trigger = Array.from(fontFamilyTriggers).find((button) => button.dataset.fontScope === scope);
+				const trigger = [...fontFamilyTriggers].find((button) => button.dataset.fontScope === scope);
 				if (host) {
 					setSettingRowHelp(trigger,
 						`选择嵌入态 topic 列表标题、Label Card 和右下角信息共享的字体。默认“${FONT_FAMILY_OPTIONS[scopeDefaults[config.family]].label}”；支持页面字体、本机字体和手动输入。修改后立即保存。`);
@@ -29163,7 +29150,7 @@
 				const name = input.dataset.performanceKey;
 				const value = config[name];
 				if (value == null) return;
-				input.value = PERFORMANCE_LIMITS[name] && PERFORMANCE_LIMITS[name].integer
+				input.value = PERFORMANCE_LIMITS[name]?.integer
 					? String(value)
 					: String(Number(value.toFixed(2)));
 			});
@@ -29307,7 +29294,7 @@
 				const lifecycleEnd = event.pending ? at : Number(event.endedAt) || event.startedAt;
 				return lifecycleStart <= at && lifecycleEnd >= at - REQUEST_FLOW_TRACE_WINDOW_MS;
 			});
-			const sortedTypeStats = Array.from(typeStats.values()).map((stat) => {
+			const sortedTypeStats = [...typeStats.values()].map((stat) => {
 				stat.durations.sort((a, b) => a - b);
 				const index = stat.durations.length
 					? Math.min(stat.durations.length - 1, Math.ceil(stat.durations.length * .95) - 1)
@@ -29333,12 +29320,12 @@
 		};
 		const requestFlowBottleneckInfo = (snapshot, schedulerState) => {
 			const latest429 = snapshot.recent60.slice().reverse().find((event) => event.status === 429);
-			if (latest429 || (schedulerState && schedulerState.coolingDown)) {
+			if (latest429 || (schedulerState?.coolingDown)) {
 				const event = latest429 || snapshot.latestLimit;
-				const typeLabel = REQUEST_FLOW_TYPE_META[event && event.type] && REQUEST_FLOW_TYPE_META[event.type].label || '请求';
-				const wait = event && event.retryAfter
+				const typeLabel = REQUEST_FLOW_TYPE_META[event?.type] && REQUEST_FLOW_TYPE_META[event.type].label || '请求';
+				const wait = event?.retryAfter
 					? `，服务器要求等待 ${event.retryAfter} 秒`
-					: schedulerState && schedulerState.cooldownRemaining
+					: schedulerState?.cooldownRemaining
 						? `，约 ${Math.max(1, Math.ceil(schedulerState.cooldownRemaining / 1000))} 秒后继续`
 						: '';
 				return { level: 'danger', state: '服务器限流', detail: `${typeLabel}在最近一分钟收到 429${wait}；未启动的辅助和后台请求会让位。` };
@@ -29450,9 +29437,9 @@
 					return queue + permit + wire + anomaly;
 				}).join('');
 				return `<div class="ldp-request-flow-trace-lane" data-request-flow-source="${source}">
-          <span class="ldp-request-flow-trace-label">${label}</span>
-          <span class="ldp-request-flow-trace-track">${items}</span>
-        </div>`;
+					<span class="ldp-request-flow-trace-label">${label}</span>
+					<span class="ldp-request-flow-trace-track">${items}</span>
+				</div>`;
 			}).join('');
 		};
 		let requestFlowTimer = 0;
@@ -29509,10 +29496,10 @@
 							const caller = event.callSite || `${event.transport} 发起`;
 							const detail = `${requestFlowSourceLabel(event.source)} / ${typeLabel} · ${requestFlowTimingLabel(event, snapshot.at)} · ${issue.detail} · 发起点 ${caller}`;
 							return `<div class="ldp-request-flow-anomaly-row" data-level="${issue.level}" data-request-flow-type="${event.type}" data-ldp-tooltip-label="${escAttr(`${event.method} ${event.path} · ${detail}`)}">
-                <span class="ldp-request-flow-anomaly-time">${esc(formatRequestFlowTimestamp(event.endedAt || event.startedAt))}</span>
-                <span class="ldp-request-flow-anomaly-kind">${esc(issue.kind)}</span>
-                <span class="ldp-request-flow-anomaly-detail"><strong>${esc(`${event.method} ${event.path}`)}</strong><small>${esc(detail)}</small></span>
-              </div>`;
+								<span class="ldp-request-flow-anomaly-time">${esc(formatRequestFlowTimestamp(event.endedAt || event.startedAt))}</span>
+								<span class="ldp-request-flow-anomaly-kind">${esc(issue.kind)}</span>
+								<span class="ldp-request-flow-anomaly-detail"><strong>${esc(`${event.method} ${event.path}`)}</strong><small>${esc(detail)}</small></span>
+							</div>`;
 						}).join('')
 					: '<div class="ldp-request-flow-empty">最近 60 秒没有 HTTP 错误、网络中止、超时、慢响应或超过 1 秒的排队。</div>');
 			}
@@ -29520,9 +29507,9 @@
 				? snapshot.typeStats.map((stat) => {
 						const p95 = stat.p95 ? formatRequestFlowDuration(stat.p95) : '—';
 						return `<div class="ldp-request-flow-type-row" data-request-flow-type="${stat.type}">
-              <span class="ldp-request-flow-type-name"><i class="ldp-request-flow-dot"></i><strong>${esc(REQUEST_FLOW_TYPE_META[stat.type]?.label || stat.type)}</strong></span>
-              <span>${stat.count} 次</span><span>${p95}</span><span>${stat.issues || '—'}</span>
-            </div>`;
+							<span class="ldp-request-flow-type-name"><i class="ldp-request-flow-dot"></i><strong>${esc(REQUEST_FLOW_TYPE_META[stat.type]?.label || stat.type)}</strong></span>
+							<span>${stat.count} 次</span><span>${p95}</span><span>${stat.issues || '—'}</span>
+						</div>`;
 					}).join('')
 				: '<div class="ldp-request-flow-empty">还没有可统计的请求。</div>');
 			const recentLog = snapshot.session.slice(-60).reverse();
@@ -29535,13 +29522,13 @@
 						const caller = event.callSite || `${event.transport} 发起`;
 						const title = `${event.method} ${event.path}${priorityLabel ? ` · ${priorityLabel}优先级` : ''}${event.attempt > 1 ? ` · 第 ${event.attempt} 次尝试` : ''} · ${requestFlowTimingLabel(event, snapshot.at)} · 发起点 ${caller}`;
 						return `<div class="ldp-request-flow-log-row"${issue ? ` data-level="${issue.level}"` : ''} data-request-flow-type="${event.type}" data-ldp-tooltip-label="${escAttr(title)}">
-              <span>${esc(formatRequestFlowTimestamp(event.startedAt))}</span>
-              <span class="ldp-request-flow-source">${requestFlowSourceLabel(event.source)}</span>
-              <span class="ldp-request-flow-type-name"><i class="ldp-request-flow-dot"></i>${esc(typeLabel)}</span>
-              <span class="ldp-request-flow-status${event.status >= 400 || event.error ? ' is-error' : ''}">${status}</span>
-              <span class="ldp-request-flow-timing">${esc(requestFlowTimingLabel(event, snapshot.at))}</span>
-              <span class="ldp-request-flow-path">${esc(`${event.path} ← ${caller}`)}</span>
-            </div>`;
+							<span>${esc(formatRequestFlowTimestamp(event.startedAt))}</span>
+							<span class="ldp-request-flow-source">${requestFlowSourceLabel(event.source)}</span>
+							<span class="ldp-request-flow-type-name"><i class="ldp-request-flow-dot"></i>${esc(typeLabel)}</span>
+							<span class="ldp-request-flow-status${event.status >= 400 || event.error ? ' is-error' : ''}">${status}</span>
+							<span class="ldp-request-flow-timing">${esc(requestFlowTimingLabel(event, snapshot.at))}</span>
+							<span class="ldp-request-flow-path">${esc(`${event.path} ← ${caller}`)}</span>
+						</div>`;
 					}).join('')
 				: '<div class="ldp-request-flow-empty">打开帖子或操作宿主页面后，请求会按时间出现在这里。</div>');
 			const latestLimit = snapshot.latestLimit;
@@ -29552,9 +29539,9 @@
 					latestLimit.retryAfter && `Retry-After ${latestLimit.retryAfter} 秒`,
 				].filter(Boolean).join('，');
 				requestFlowObserved.textContent = `本页最近观测：${typeLabel}收到 429${details ? `（${details}）` : ''}。`;
-			} else if (latestLimit && latestLimit.serverLimit) {
+			} else if (latestLimit?.serverLimit) {
 				requestFlowObserved.textContent = `服务器最近返回：上限 ${latestLimit.serverLimit}${latestLimit.serverRemaining ? `，剩余 ${latestLimit.serverRemaining}` : ''}${latestLimit.serverReset ? `，重置 ${latestLimit.serverReset}` : ''}。`;
-			} else if (schedulerState && schedulerState.learnedRateLimit) {
+			} else if (schedulerState?.learnedRateLimit) {
 				requestFlowObserved.textContent = `所有实例已共享历史限流与有效策略：${schedulerState.shortWindowBudget} 次/10 秒、${schedulerState.longWindowBudget} 次/分钟、并发 ${schedulerState.globalMaxConcurrent} 路。`;
 			} else if (schedulerState) {
 				requestFlowObserved.textContent = `当前未收到 429 或服务器上限头；所有实例共同使用 ${schedulerState.shortWindowBudget} 次/10 秒、${schedulerState.longWindowBudget} 次/分钟、并发 ${schedulerState.globalMaxConcurrent} 路。`;
@@ -29583,7 +29570,7 @@
 			'readerMutationObserver', 'hostMutationObserver',
 		];
 		const disconnectResourceMonitorObservers = (keys = RESOURCE_MONITOR_OBSERVER_KEYS) => keys.forEach((key) => {
-			if (resourceMonitorState[key] && typeof resourceMonitorState[key].disconnect === 'function') {
+			if (isFunction(resourceMonitorState[key]?.disconnect)) {
 				resourceMonitorState[key].disconnect();
 			}
 			resourceMonitorState[key] = null;
@@ -29606,11 +29593,11 @@
 		resourceMonitorState.eventSequence = Number(resourceMonitorState.eventSequence) || 0;
 		resourceMonitorState.lastPruneAt = Number(resourceMonitorState.lastPruneAt) || 0;
 		readerShell.resourceMonitorState = resourceMonitorState;
-		const resourceMonitorLongTasksSupported = typeof window.PerformanceObserver === 'function' &&
+		const resourceMonitorLongTasksSupported = isFunction(window.PerformanceObserver) &&
 			(!Array.isArray(window.PerformanceObserver.supportedEntryTypes) ||
 				window.PerformanceObserver.supportedEntryTypes.includes('longtask'));
-		const resourceMonitorLongFramesSupported = typeof window.PerformanceObserver === 'function' &&
-			Array.from(window.PerformanceObserver.supportedEntryTypes || []).includes('long-animation-frame');
+		const resourceMonitorLongFramesSupported = isFunction(window.PerformanceObserver) &&
+			[...window.PerformanceObserver.supportedEntryTypes || []].includes('long-animation-frame');
 		const resourceMonitorNow = () => requestFlowNow();
 		const resourceMonitorTimestamp = (at) => {
 			const date = new Date(Number(at) || 0);
@@ -29637,7 +29624,7 @@
 				.slice(-240);
 		};
 		const resourceMonitorPushEvent = (event) => {
-			const at = Number(event && event.at);
+			const at = Number(event?.at);
 			if (!Number.isFinite(at)) return;
 			resourceMonitorState.events.push(Object.assign({
 				id: ++resourceMonitorState.eventSequence,
@@ -29734,9 +29721,9 @@
 			if (node === READER_PORTAL_HOST) return true;
 			return !!node.closest('.ldp-reader-portal-host,.ldp-overlay,.ldp-native-boost-menu,.ldp-lightbox,.ldp-user-card-fallback');
 		};
-		const resourceMonitorElementCount = (nodes, excludeReaderRoots = false) => Array.from(nodes || []).reduce((sum, node) => {
+		const resourceMonitorElementCount = (nodes, excludeReaderRoots = false) => [...nodes || []].reduce((sum, node) => {
 			if (!node || node.nodeType !== 1 || (excludeReaderRoots && resourceMonitorIsReaderRoot(node))) return sum;
-			return sum + 1 + (typeof node.getElementsByTagName === 'function' ? node.getElementsByTagName('*').length : 0);
+			return sum + 1 + (isFunction(node.getElementsByTagName) ? node.getElementsByTagName('*').length : 0);
 		}, 0);
 		const resourceMonitorHostDomCount = () => {
 			const total = document.getElementsByTagName('*').length;
@@ -29762,7 +29749,7 @@
 			});
 		};
 		const resourceMonitorRecordDroppedEntries = (entryType, options) => {
-			const dropped = Math.max(0, Number(options && options.droppedEntriesCount) || 0);
+			const dropped = Math.max(0, Number(options?.droppedEntriesCount) || 0);
 			if (!dropped) return;
 			const at = resourceMonitorNow();
 			resourceMonitorPushTimedEvent(at, {
@@ -29773,7 +29760,7 @@
 			});
 		};
 		const resourceMonitorScriptScope = (script) => {
-			const rawSource = String(script && script.sourceURL || '');
+			const rawSource = String(script?.sourceURL || '');
 			let source = rawSource;
 			try { source = decodeURIComponent(rawSource); } catch (error) {}
 			if (/Awesome LinuxDo Reader|更流畅的 LinuxDo 阅读器|katex@0\.16\.22|pinyin-pro@3\.18\.2|hls\.js@1\.6\.16/i.test(source)) return 'reader';
@@ -29785,9 +29772,9 @@
 			return 'shared';
 		};
 		const resourceMonitorScriptLabel = (script) => {
-			const functionName = String(script && script.sourceFunctionName || '').trim();
+			const functionName = String(script?.sourceFunctionName || '').trim();
 			if (functionName) return functionName.slice(0, 80);
-			const source = String(script && script.sourceURL || '');
+			const source = String(script?.sourceURL || '');
 			if (!source) return '匿名脚本';
 			try {
 				const url = new URL(source, location.href);
@@ -29798,8 +29785,8 @@
 		};
 		const requestResourceMonitorMemoryMeasurement = (at) => {
 			const memory = resourceMonitorState.memory;
-			const measure = window.performance && window.performance.measureUserAgentSpecificMemory;
-			if (typeof measure !== 'function') {
+			const measure = window.performance?.measureUserAgentSpecificMemory;
+			if (!isFunction(measure)) {
 				memory.status = 'unsupported';
 				return;
 			}
@@ -29814,7 +29801,7 @@
 			let measurement;
 			try { measurement = measure.call(window.performance); } catch (error) { measurement = Promise.reject(error); }
 			Promise.resolve(measurement).then((result) => {
-				const bytes = Number(result && result.bytes);
+				const bytes = Number(result?.bytes);
 				const measuredAt = resourceMonitorNow();
 				memory.pending = false;
 				if (!Number.isFinite(bytes)) {
@@ -29957,12 +29944,12 @@
 				? events.map((event) => {
 						const visibilityLabel = event.visibility === 'visible' ? '前台' : event.visibility === 'hidden' ? '后台' : '未知';
 						return `<div class="ldp-resource-monitor-event-row" role="listitem">
-              <time datetime="${escAttr(new Date(event.at).toISOString())}">${esc(resourceMonitorTimestamp(event.at))}</time>
-              <span class="ldp-resource-monitor-event-state" data-visibility="${escAttr(event.visibility)}">${visibilityLabel}</span>
-              <span class="ldp-resource-monitor-event-scope">${esc(resourceMonitorScopeLabel(event.scope))}</span>
-              <span class="ldp-resource-monitor-event-detail">${esc(event.detail)}</span>
-              <span class="ldp-resource-monitor-event-basis">${esc(event.basis)}</span>
-            </div>`;
+							<time datetime="${escAttr(new Date(event.at).toISOString())}">${esc(resourceMonitorTimestamp(event.at))}</time>
+							<span class="ldp-resource-monitor-event-state" data-visibility="${escAttr(event.visibility)}">${visibilityLabel}</span>
+							<span class="ldp-resource-monitor-event-scope">${esc(resourceMonitorScopeLabel(event.scope))}</span>
+							<span class="ldp-resource-monitor-event-detail">${esc(event.detail)}</span>
+							<span class="ldp-resource-monitor-event-basis">${esc(event.basis)}</span>
+						</div>`;
 					}).join('')
 				: '<div class="ldp-resource-monitor-event-empty">等待 Performance Timeline、Resource Timing、DOM 或可见性事件。</div>';
 		};
@@ -30209,7 +30196,7 @@
 								basis: 'Long Animation Frames',
 							});
 							const groups = new Map();
-							Array.from(entry.scripts || []).forEach((script) => {
+							[...entry.scripts || []].forEach((script) => {
 								const duration = Math.max(0, Number(script.duration) || 0);
 								if (!duration) return;
 								const scope = resourceMonitorScriptScope(script);
@@ -30231,7 +30218,7 @@
 							});
 						});
 					});
-			if (typeof window.MutationObserver === 'function') {
+			if (isFunction(window.MutationObserver)) {
 				try {
 					resourceMonitorState.mutationObserver = new window.MutationObserver((records) => {
 						resourceMonitorRecordMutations('reader', records.filter((record) => body.contains(record.target)));
@@ -30329,7 +30316,7 @@
 			flushPersistentCacheWrites();
 			await flushTopicSnapshotWrites();
 			const responseStatsRequest = storedResponseCacheStats();
-			const stats = await Promise.all(Array.from(cacheSizeEls).map(async (el) => ({
+			const stats = await Promise.all([...cacheSizeEls].map(async (el) => ({
 				el,
 				stat: await cacheTypeStats(el.dataset.cacheSize, responseStatsRequest),
 			})));
@@ -30341,7 +30328,7 @@
 			cacheRetentionEls.forEach((el) => {
 				el.textContent = cacheRetentionLabel(el.dataset.cacheRetention);
 			});
-			cacheClearBtn.disabled = !Array.from(cacheSelects).some((input) => input.checked);
+			cacheClearBtn.disabled = ![...cacheSelects].some((input) => input.checked);
 		};
 		settingHelpTooltip.id = 'ldp-setting-help-tooltip';
 		let activeSettingHelpTarget = null;
@@ -30444,23 +30431,23 @@
 			if (force) syncUserInfoTitleRefresh(true);
 			syncCurrentUserFromHost();
 			if (loadId !== userInfoLoadId) return;
-			const username = String(ME_USERNAME || ME_CURRENT_USER && ME_CURRENT_USER.username || '').trim();
+			const username = String(ME_USERNAME || ME_CURRENT_USER?.username || '').trim();
 			if (!username) {
 				userInfoContent.innerHTML = '<div class="ldp-user-info-error">当前未登录 LINUX DO，无法读取用户资料。</div>';
 				syncUserInfoTitleRefresh(false);
 				return;
 			}
 			const cachedUser = getCachedUserCard(username);
-			const cachedConnect = cachedUser && cachedUser._ldp_connect_trust || null;
+			const cachedConnect = cachedUser?._ldp_connect_trust || null;
 			syncUserInfoLastRefresh(Math.max(
 				Number(cachedUser && (cachedUser._ldp_user_info_checked_at || cachedUser._ldp_summary_checked_at) || 0),
-				Number(cachedConnect && cachedConnect.cachedAt || 0),
+				Number(cachedConnect?.cachedAt || 0),
 			));
 			if (cachedUser) {
 				renderSettingsUserInfo(
 					userInfoContent,
 					Object.assign({}, cachedUser, ME_CURRENT_USER || {}, { username }),
-					cachedConnect && cachedConnect.data,
+					cachedConnect?.data,
 					null,
 					{ refreshing: force, cachedAt: cachedUser._ldp_user_info_checked_at || cachedUser._ldp_summary_checked_at }
 				);
@@ -30476,19 +30463,19 @@
 			const user = Object.assign({}, cachedUser || {}, ME_CURRENT_USER || {}, profile || {}, { username });
 			const connectData = connectResult.status === 'fulfilled'
 				? connectResult.value
-				: cachedConnect && cachedConnect.data || null;
+				: cachedConnect?.data || null;
 			const connectError = connectResult.status === 'rejected' ? connectResult.reason : null;
 			if (connectResult.status === 'fulfilled') {
 				user._ldp_connect_trust = {
 					data: connectData,
-					cachedAt: Number(CONNECT_TRUST_CACHE && CONNECT_TRUST_CACHE.cachedAt || Date.now()),
+					cachedAt: Number(CONNECT_TRUST_CACHE?.cachedAt || Date.now()),
 				};
 			}
 			if (profileResult.status === 'fulfilled' || connectResult.status === 'fulfilled') {
 				setCachedUserCard(username, user, 0);
 				syncUserInfoLastRefresh(Math.max(
 					Number(user._ldp_user_info_checked_at || user._ldp_summary_checked_at || 0),
-					Number(user._ldp_connect_trust && user._ldp_connect_trust.cachedAt || 0),
+					Number(user._ldp_connect_trust?.cachedAt || 0),
 					Date.now(),
 				));
 			}
@@ -30502,14 +30489,14 @@
 				label: '字体设置', fields: FONT_PROFILE_VALUE_KEYS,
 				draft: currentFontDraft, saved: currentFontProfile,
 				reset: () => { fontDraft = currentFontProfile(); },
-				patch: () => ({ fontProfile: Object.assign({}, currentFontDraft()) }),
+				patch: () => ({ fontProfile: { ...currentFontDraft() } }),
 				apply: applyFontScales, sync: syncFontControls, beforeSave: closeFontFamilyMenu,
 			},
 			layout: {
 				label: '布局设置', fields: LAYOUT_REGION_KEYS,
 				draft: currentLayoutDraft, saved: currentLayoutRatios,
 				reset: () => { layoutDraft = currentLayoutRatios(); },
-				patch: () => ({ layoutProfile: Object.assign({}, currentLayoutDraft()) }),
+				patch: () => ({ layoutProfile: { ...currentLayoutDraft() } }),
 				apply: applyLayoutRatios, sync: syncLayoutControls,
 				changed: (draft, saved, field) => Math.abs(draft[field] - saved[field]) >= 0.01,
 				valid: () => layoutRatioTotal(currentLayoutDraft()) === 100,
@@ -30518,7 +30505,7 @@
 				label: '外观设置', fields: APPEARANCE_PROFILE_VALUE_KEYS,
 				draft: currentAppearanceDraft, saved: currentAppearanceProfile,
 				reset: () => { appearanceDraft = currentAppearanceProfile(); },
-				patch: () => ({ appearanceProfile: Object.assign({}, currentAppearanceDraft()) }),
+				patch: () => ({ appearanceProfile: { ...currentAppearanceDraft() } }),
 				apply: applyAppearanceColors, sync: syncAppearanceControls,
 			},
 			flash: {
@@ -30585,8 +30572,7 @@
 		const scrollSettingsNav = (direction) => {
 			if (!settingsNav) return;
 			const distance = Math.max(120, Math.round(settingsNav.clientHeight * .7));
-			const reduceMotion = typeof window.matchMedia === 'function' &&
-				window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+			const reduceMotion = prefersReducedMotion();
 			settingsNav.scrollBy({ top: direction * distance, behavior: reduceMotion ? 'auto' : 'smooth' });
 		};
 		let settingsRangeDragRow = null;
@@ -30843,7 +30829,7 @@
 			});
 			onShell(settingsPopover, 'pointermove', (event) => {
 				if (!settingsWindowDrag || event.pointerId !== settingsWindowDrag.pointerId) return;
-				const coalescedEvents = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [];
+				const coalescedEvents = isFunction(event.getCoalescedEvents) ? event.getCoalescedEvents() : [];
 				const latestEvent = coalescedEvents[coalescedEvents.length - 1] || event;
 				settingsWindowDrag.clientX = latestEvent.clientX;
 				settingsWindowDrag.clientY = latestEvent.clientY;
@@ -30870,7 +30856,7 @@
 			configFileInput.click();
 			});
 			onShell(configFileInput, 'change', async () => {
-			const file = configFileInput.files && configFileInput.files[0];
+			const file = configFileInput.files?.[0];
 			if (!file) return;
 			let importedPrefs;
 			try {
@@ -30897,10 +30883,10 @@
 			});
 			});
 			cacheSelects.forEach((input) => onShell(input, 'change', () => {
-			cacheClearBtn.disabled = !Array.from(cacheSelects).some((candidate) => candidate.checked);
+			cacheClearBtn.disabled = ![...cacheSelects].some((candidate) => candidate.checked);
 			}));
 			onShell(cacheClearBtn, 'click', async () => {
-			const selected = Array.from(cacheSelects).filter((input) => input.checked).map((input) => input.value);
+			const selected = [...cacheSelects].filter((input) => input.checked).map((input) => input.value);
 			if (!selected.length) return;
 			cacheClearBtn.disabled = true;
 			await clearSelectedCaches(selected);
@@ -30994,7 +30980,7 @@
 			const previousHtml = notificationPanel.markAll.innerHTML;
 			notificationPanel.markAll.innerHTML = `${icon('loader')}<span>处理中</span>`;
 			try {
-				const groupKey = Object.prototype.hasOwnProperty.call(NOTIFICATION_GROUPS, notificationState.group)
+				const groupKey = Object.hasOwn(NOTIFICATION_GROUPS, notificationState.group)
 					? notificationState.group
 					: 'all';
 				const group = NOTIFICATION_GROUPS[groupKey];
@@ -31174,7 +31160,7 @@
 				bookmarkTabDrag.moved = true;
 				bookmarkTabDrag.tab.classList.add('ldp-bookmark-tab-dragging');
 				event.preventDefault();
-				const siblings = Array.from(bookmarksTabList.children).filter((item) => item !== bookmarkTabDrag.tab);
+				const siblings = [...bookmarksTabList.children].filter((item) => item !== bookmarkTabDrag.tab);
 				const next = siblings.find((item) => {
 					const rect = item.getBoundingClientRect();
 					return event.clientX < rect.left + rect.width / 2;
@@ -31215,7 +31201,7 @@
 			}, renderBookmarksPage, 250);
 			readerShell.cancelBookmarksSearch = collectionSearchCancels.bookmarks;
 			onShell(bookmarksPanel.deleteSelected, 'click', async () => {
-			const bookmarkIds = Array.from(bookmarksSelection);
+			const bookmarkIds = [...bookmarksSelection];
 			if (!bookmarkIds.length || bookmarksPanel.deleteSelected.dataset.ldpRequestBusy === '1' ||
 				!window.confirm(`确定取消选中的 ${bookmarkIds.length} 条收藏吗？`)) return;
 			setReaderControlBusy(bookmarksPanel.deleteSelected, true);
@@ -31225,8 +31211,8 @@
 				bookmarksState.allIds.every((bookmarkId) => bookmarksSelection.has(bookmarkId));
 			try {
 				const bookmarkModule = lookupDiscourseModule('discourse/models/bookmark');
-				const Bookmark = bookmarkModule && bookmarkModule.default;
-				if (!Bookmark || typeof Bookmark.bulkOperation !== 'function') {
+				const Bookmark = bookmarkModule?.default;
+				if (!Bookmark || !isFunction(Bookmark.bulkOperation)) {
 					throw new Error('Discourse 收藏批处理接口尚未就绪');
 				}
 				await Bookmark.bulkOperation(
@@ -31408,15 +31394,16 @@
 			};
 			onShell(imageScaleRange, 'input', () => {
 			const next = normalizeImageScalePercent(imageScaleRange.value, currentImageScalePercent());
-			saveCurrentImageProfile(Object.assign({}, currentImageProfile(), {
+			saveCurrentImageProfile({
+				...currentImageProfile(),
 				preset: 'custom',
 				custom: next,
-			}));
+			});
 			syncImageScaleControls();
 			applyImageScale();
 			});
 			onShell(imageScaleReset, 'click', () => {
-			saveCurrentImageProfile(Object.assign({}, IMAGE_PROFILE_DEFAULT));
+			saveCurrentImageProfile({ ...IMAGE_PROFILE_DEFAULT });
 			syncImageScaleControls();
 			applyImageScale();
 			});
@@ -31448,7 +31435,7 @@
 			const option = event.target.closest('.ldp-font-family-option');
 			if (!option) return;
 			const config = fontScopeConfig();
-			const values = Object.assign({}, fontValuesForScope());
+			const values = { ...fontValuesForScope() };
 			if (option.dataset.fontKind === 'preset') {
 				values[config.family] = normalizeFontFamily(option.dataset.fontValue, values[config.family]);
 				values[config.customFamily] = '';
@@ -31469,14 +31456,14 @@
 			onShell(fontFamilyManualButton, 'click', () => {
 			const scope = activeFontFamilyScope;
 			const config = fontScopeConfig(scope);
-			const values = Object.assign({}, fontValuesForScope(scope), { [config.family]: 'custom' });
+			const values = { ...fontValuesForScope(scope), [config.family]: 'custom' };
 			fontFamilyManualEditing.add(scope);
 			if (scope === 'host') setPref(config.family, 'custom');
 			else setCurrentFontDraft(values);
 			closeFontFamilyMenu();
 			syncFontControls();
 			if (scope !== 'host') applyFontScales();
-			const input = Array.from(fontFamilyCustomInputs).find((candidate) => candidate.dataset.fontScope === scope);
+			const input = [...fontFamilyCustomInputs].find((candidate) => candidate.dataset.fontScope === scope);
 			input.focus();
 			input.select();
 			});
@@ -31490,7 +31477,7 @@
 			fontFamilyCustomInputs.forEach((input) => onShell(input, 'input', () => {
 			const scope = input.dataset.fontScope;
 			const config = fontScopeConfig(scope);
-			const values = Object.assign({}, fontValuesForScope(scope));
+			const values = { ...fontValuesForScope(scope) };
 			values[config.family] = 'custom';
 			values[config.customFamily] = normalizeCustomFontFamily(input.value, values[config.customFamily]);
 			if (scope === 'host') setPrefs({
@@ -31508,7 +31495,7 @@
 				onShell(input, eventName, () => {
 					const scope = input.dataset.fontScope;
 					const config = fontScopeConfig(scope);
-					const values = Object.assign({}, fontValuesForScope(scope));
+					const values = { ...fontValuesForScope(scope) };
 					const field = config[configField];
 					values[field] = normalizeValue(input.value, values[field]);
 					if (scope === 'host') setPref(field, values[field]);
@@ -31518,7 +31505,7 @@
 				});
 			}));
 			fontScaleSettings.forEach(({ input, key, normalize }) => onShell(input, 'input', () => {
-				const values = Object.assign({}, currentFontDraft());
+				const values = { ...currentFontDraft() };
 				values[key] = normalize(input.value, values[key]);
 				setCurrentFontDraft(values);
 				syncFontControls();
@@ -31551,7 +31538,7 @@
 				fontFamilyManualEditing.delete(scope);
 			}
 			if (host) setPrefs(patch);
-			else setCurrentFontDraft(Object.assign({}, currentFontDraft(), patch));
+			else setCurrentFontDraft({ ...currentFontDraft(), ...patch });
 			syncFontControls();
 			if (!host) applyFontScales();
 			}));
@@ -31559,7 +31546,7 @@
 			closeFontFamilyMenu();
 			fontFamilyManualEditing.clear();
 			setPrefs(HOST_FONT_DEFAULTS);
-			setCurrentFontDraft(Object.assign({}, currentFontDefaults()));
+			setCurrentFontDraft({ ...currentFontDefaults() });
 			syncFontControls();
 			applyFontScales();
 			});
@@ -31568,7 +31555,7 @@
 			onShell(input, 'input', () => {
 				const name = input.dataset.layoutRegion;
 				if (!LAYOUT_REGION_KEYS.includes(name)) return;
-				const ratios = Object.assign({}, currentLayoutDraft());
+				const ratios = { ...currentLayoutDraft() };
 				const desired = Number(input.value);
 				const maximum = 100 - LAYOUT_REGION_KEYS.reduce((sum, other) =>
 					sum + (other === name ? 0 : LAYOUT_MIN_RATIOS[other]), 0);
@@ -31582,7 +31569,7 @@
 			});
 			});
 			onShell(layoutResetBtn, 'click', () => {
-			setCurrentLayoutDraft(Object.assign({}, currentLayoutDefaults()));
+			setCurrentLayoutDraft({ ...currentLayoutDefaults() });
 			applyLayoutRatios();
 			syncLayoutControls();
 			});
@@ -31605,10 +31592,10 @@
 			syncReaderWindowControls();
 			});
 			const setAppearanceDraftValue = (key, value) => {
-				setCurrentAppearanceDraft(Object.assign({}, currentAppearanceDraft(), { [key]: value }));
+				setCurrentAppearanceDraft({ ...currentAppearanceDraft(), [key]: value });
 			};
 			const setAppearanceDraftValues = (values) => {
-				setCurrentAppearanceDraft(Object.assign({}, currentAppearanceDraft(), values));
+				setCurrentAppearanceDraft({ ...currentAppearanceDraft(), ...values });
 			};
 			appearanceGroupToggleInputs.forEach((input) => onShell(input, 'change', () => {
 				const key = input.dataset.appearanceGroupToggle;
@@ -31662,7 +31649,7 @@
 		ctx = {
 			topicId, op: null, topicData: null, loader, modal, commentsEl, commentsHeader, countEl, emptyEl, scrollRoot: body, performance,
 			readerSession,
-			isPostVoting: !!(cachedTopicPreview && cachedTopicPreview.is_post_voting),
+			isPostVoting: !!(cachedTopicPreview?.is_post_voting),
 			directRepliesByParent: new Map(), replyParentByPost: new Map(), tracker, totalPosts: 0, repliesIO: null, postRequestScheduler,
 			subReplyState: new Map(), // 楼中楼原始数据 + 已渲染数量的状态表
 			confirmedReadPostNumbers: new Set(),
@@ -31685,7 +31672,7 @@
 			streamTopSpacer: createStreamSpacer('top'), streamBottomSpacer: createStreamSpacer('bottom'),
 			streamResizeObserver: null, queueViewportTracker: null, streamWindowFrame: 0, floorPreviewSyncFrame: 0,
 			latestReplyAt: '', latestReplyTimestamp: 0,
-			topicBookmarked: !!(cachedTopicPreview && cachedTopicPreview.bookmarked),
+			topicBookmarked: !!(cachedTopicPreview?.bookmarked),
 			topicNotificationLevel: topicNotificationLevel(cachedTopicPreview),
 			topicSharedIssueBusy: false,
 			topicSharedIssueHostVisible: false,
@@ -31700,7 +31687,7 @@
 			? createReaderQueueViewportTracker(ctx, queueEntry)
 			: { observe() {}, unobserve() {}, sync() {}, stop() {} };
 		readerShell.activeContext = ctx;
-		if (typeof readerShell.refreshBookmarksPanel !== 'function') {
+		if (!isFunction(readerShell.refreshBookmarksPanel)) {
 			readerShell.refreshBookmarksPanel = (confirmedReaction = null) => {
 				clearBookmarksSelectionScope();
 				const hadCompleteReactionSnapshot = bookmarksState.reactionLoadedAt > 0;
@@ -31742,7 +31729,7 @@
 		const timeline = ctx.timeline = bindTopicTimeline(timelineEl, ctx);
 		const loadTopicEditorOptions = () => {
 			const site = lookupDiscourse('service:site');
-			const categories = Array.from(discourseModelValue(site, 'categories') || [])
+			const categories = [...discourseModelValue(site, 'categories') || []]
 				.filter((category) => category && +discourseModelValue(category, 'id') > 0 &&
 					discourseModelValue(category, 'name'))
 				.map((category) => ({
@@ -31777,9 +31764,9 @@
 			const status = form.querySelector('.ldp-topic-edit-status');
 			const originalTitle = String(topic.title || '').trim();
 			const originalCategoryId = Number(topic.category_id || topic.categoryId) || 0;
-			const originalLabelNames = Array.from(new Set(
+			const originalLabelNames = [...new Set(
 				(Array.isArray(topic.tags) ? topic.tags : []).map(topicNavText).map((name) => name.trim()).filter(Boolean),
-			));
+			)];
 			const labelsByKey = new Map();
 			const selectedLabelKeys = new Set();
 			const categoriesById = new Map();
@@ -31798,14 +31785,14 @@
 				labelsByKey.set(key, { id: null, name });
 				selectedLabelKeys.add(key);
 			});
-			const selectedLabels = () => Array.from(selectedLabelKeys)
+			const selectedLabels = () => [...selectedLabelKeys]
 				.map((key) => labelsByKey.get(key)).filter(Boolean);
 			const renderSelectedLabels = () => {
 				labelValues.innerHTML = selectedLabels().map((label) => `
-          <span class="ldp-topic-edit-label-chip">
-            <span>${esc(label.name)}</span>
-            <button class="ldp-topic-edit-label-remove" type="button" data-label-key="${escAttr(labelKey(label.name))}" aria-label="移除 label ${escAttr(label.name)}">${icon('x')}</button>
-          </span>`).join('');
+					<span class="ldp-topic-edit-label-chip">
+						<span>${esc(label.name)}</span>
+						<button class="ldp-topic-edit-label-remove" type="button" data-label-key="${escAttr(labelKey(label.name))}" aria-label="移除 label ${escAttr(label.name)}">${icon('x')}</button>
+					</span>`).join('');
 			};
 			const renderLabelOptions = (labels) => {
 				labelOptions.innerHTML = (labels || [])
@@ -31814,7 +31801,7 @@
 			const performLabelSearch = async (query, sequence) => {
 				const tagUtils = lookupDiscourse('service:tag-utils');
 				const siteSettings = lookupDiscourse('service:site-settings');
-				if (!tagUtils || typeof tagUtils.searchTags !== 'function' || !siteSettings) {
+				if (!tagUtils || !isFunction(tagUtils.searchTags) || !siteSettings) {
 					throw new Error('Discourse 标签搜索服务尚未就绪');
 				}
 				const selected = selectedLabels();
@@ -31829,14 +31816,14 @@
 				if (selectedIds.length) data.selected_tag_ids = selectedIds.slice(0, 100);
 				if (selectedNames.length) data.selected_tags = selectedNames.slice(0, 100);
 				const results = await tagUtils.searchTags('/tags/filter/search', data, (json) => {
-					const incoming = Array.isArray(json && json.results) ? json.results : [];
-					return typeof tagUtils.sortSearchResults === 'function'
+					const incoming = Array.isArray(json?.results) ? json.results : [];
+					return isFunction(tagUtils.sortSearchResults)
 						? tagUtils.sortSearchResults(incoming)
 						: incoming;
 				});
 				if (closed || sequence !== labelSearchSequence) return;
 				const labels = (Array.isArray(results) ? results : []).map((label) => ({
-					id: Number(label && label.id) || null,
+					id: Number(label?.id) || null,
 					name: String(label && (label.name || label.text) || '').trim(),
 				})).filter((label) => label.name);
 				labels.forEach((label) => labelsByKey.set(labelKey(label.name), label));
@@ -31846,7 +31833,7 @@
 				const { query, sequence } = pendingLabelSearch;
 				void performLabelSearch(query, sequence).catch((error) => {
 					if (!closed && sequence === labelSearchSequence) {
-						status.textContent = error && error.message ? error.message : '标签搜索失败，请重试';
+						status.textContent = error?.message ? error.message : '标签搜索失败，请重试';
 					}
 				});
 			};
@@ -31856,8 +31843,8 @@
 				const sequence = ++labelSearchSequence;
 				pendingLabelSearch = { query, sequence };
 				const runloopModule = lookupDiscourseModule('@ember/runloop');
-				const discourseDebounce = runloopModule && runloopModule.debounce;
-				if (typeof discourseDebounce !== 'function') {
+				const discourseDebounce = runloopModule?.debounce;
+				if (!isFunction(discourseDebounce)) {
 					status.textContent = 'Discourse 标签搜索服务尚未就绪';
 					return;
 				}
@@ -31902,11 +31889,11 @@
 					option.setAttribute('role', 'option');
 					option.setAttribute('aria-selected', +category.id === selectedCategoryId ? 'true' : 'false');
 					option.innerHTML = `
-            <span class="ldp-topic-edit-category-dot"></span>
-            <span class="ldp-topic-edit-category-copy ldp-picker-option-copy">
-              <strong>${esc(String(category.name || '未命名类别'))}</strong>
-              ${parent ? `<small>${esc(String(parent.name))}</small>` : '<small>一级类别</small>'}
-            </span>`;
+						<span class="ldp-topic-edit-category-dot"></span>
+						<span class="ldp-topic-edit-category-copy ldp-picker-option-copy">
+							<strong>${esc(String(category.name || '未命名类别'))}</strong>
+							${parent ? `<small>${esc(String(parent.name))}</small>` : '<small>一级类别</small>'}
+						</span>`;
 					if (/^[0-9a-f]{6}$/i.test(color)) {
 						option.querySelector('.ldp-topic-edit-category-dot').style.setProperty('--ldp-category-color', `#${color}`);
 					}
@@ -31999,8 +31986,8 @@
 				closed = true;
 				labelSearchSequence++;
 				const runloopModule = lookupDiscourseModule('@ember/runloop');
-				const cancelRunloop = runloopModule && runloopModule.cancel;
-				if (labelSearchDebounce && typeof cancelRunloop === 'function') cancelRunloop(labelSearchDebounce);
+				const cancelRunloop = runloopModule?.cancel;
+				if (labelSearchDebounce && isFunction(cancelRunloop)) cancelRunloop(labelSearchDebounce);
 				labelSearchDebounce = null;
 				closeCategoryMenu();
 				layer.hidden = true;
@@ -32043,8 +32030,8 @@
 				};
 				try {
 					const topicModule = lookupDiscourseModule('discourse/models/topic');
-					const Topic = topicModule && topicModule.default;
-					if (!Topic || typeof Topic.create !== 'function' || typeof Topic.update !== 'function') {
+					const Topic = topicModule?.default;
+					if (!Topic || !isFunction(Topic.create) || !isFunction(Topic.update)) {
 						throw new Error('Discourse 主题编辑接口尚未就绪');
 					}
 					const topicModel = Topic.create({
@@ -32065,7 +32052,7 @@
 					}, freshTopic || {});
 					updatedTopic.title = String(updatedTopic.title || nextTitle);
 					updatedTopic.fancy_title = String(
-						(freshTopic && freshTopic.fancy_title) || updatedTopic.fancy_title || updatedTopic.title,
+						(freshTopic?.fancy_title) || updatedTopic.fancy_title || updatedTopic.title,
 					);
 					updatedTopic.category_id = nextCategoryId;
 					updatedTopic.category_name = cleanTopicCategoryName(category.name);
@@ -32081,7 +32068,7 @@
 							? sourceTopicNavMetadata.categoryIconHtml : '',
 						tags: updatedTopic.tags.slice(),
 						tagIcons: (Array.isArray(sourceTopicNavMetadata.tagIcons) ? sourceTopicNavMetadata.tagIcons : [])
-							.filter((item) => updatedTopic.tags.includes(topicNavText(item && item.name))),
+							.filter((item) => updatedTopic.tags.includes(topicNavText(item?.name))),
 					};
 					sourceTopicNavMetadata = mergeTopicNavMetadata(topicNavMetadataOverride, cachedTopicNavMetadata(updatedTopic));
 					ctx.topicData = updatedTopic;
@@ -32093,7 +32080,7 @@
 					syncTopicActionControls(ctx);
 					showSelectionToast('帖子信息已更新');
 				} catch (error) {
-					status.textContent = error && error.message ? error.message : '保存失败，请重试';
+					status.textContent = error?.message ? error.message : '保存失败，请重试';
 					setBusy(false);
 				}
 			};
@@ -32157,7 +32144,7 @@
 				scheduleLabelSearch();
 			}).catch((error) => {
 				if (closed || topicEditorState !== state) return;
-				status.textContent = `类别和 label 加载失败：${error && error.message ? error.message : '请重试'}`;
+				status.textContent = `类别和 label 加载失败：${error?.message ? error.message : '请重试'}`;
 			});
 		};
 		onContext(readerElement('.ldp-topic-edit-trigger'), 'click', openTopicEditor);
@@ -32169,7 +32156,7 @@
 			);
 			const timelineViewport = embeddedReaderPostViewportState(ctx, timelinePostNumber);
 			return normalizeReaderHistoryViewport({
-				postNumber: Number(timelineViewport && timelineViewport.postNumber) || Number(viewport.postNumber) || 1,
+				postNumber: Number(timelineViewport?.postNumber) || Number(viewport.postNumber) || 1,
 				postOffset: timelineViewport ? timelineViewport.postOffset : viewport.postOffset,
 				scrollTop: Number.isFinite(Number(viewport.scrollTop)) ? Number(viewport.scrollTop) : body.scrollTop,
 			});
@@ -32255,7 +32242,7 @@
 			let state = done ? skipped ? 'partial' : 'done' : 'running';
 			let flow = '';
 			if (!done && loadHalted) {
-				const status = Number(loadHaltError && loadHaltError.status || 0);
+				const status = Number(loadHaltError?.status || 0);
 				state = 'error';
 				flow = ` · 已暂停${status ? ` HTTP ${status}` : ''}`;
 			} else if (!done && requestState && requestState.coolingDown) {
@@ -32355,7 +32342,7 @@
 			'acted', 'created', 'rebaked', 'recovered', 'revised',
 		]);
 		const refreshLivePostFromMessage = (payload) => {
-			const postId = Number(payload && payload.id || 0);
+			const postId = Number(payload?.id || 0);
 			if (!postId || livePostRefreshTimers.has(postId) || !sessionAcceptsWork() ||
 					document.visibilityState !== 'visible') return;
 			const messageType = String(payload.type || '');
@@ -32366,7 +32353,7 @@
 			}
 			const timer = setTimeout(async () => {
 				livePostRefreshTimers.delete(postId);
-				if (!sessionAcceptsWork() || typeof ctx.refreshPostById !== 'function') return;
+				if (!sessionAcceptsWork() || !isFunction(ctx.refreshPostById)) return;
 				const wasKnown = readerPostCopies(postId, ctx).length > 0;
 				const wasNearBottom = body.scrollHeight - body.scrollTop - body.clientHeight <= 120;
 				const previousHighestPostNumber = Math.max(0, +(ctx.totalPosts || 0));
@@ -32412,12 +32399,12 @@
 			if (latestReplyMessageSubscriptions.length || !ctx.topicData || !sessionAcceptsWork() ||
 					document.visibilityState !== 'visible') return;
 			const messageBus = lookupDiscourse('service:message-bus');
-			if (messageBus && typeof messageBus.subscribe === 'function' && typeof messageBus.unsubscribe === 'function') {
+			if (isFunction(messageBus?.subscribe) && isFunction(messageBus.unsubscribe)) {
 				const topicHandler = (message) => {
-					const payload = message && message.payload && typeof message.payload === 'object'
+					const payload = message?.payload && typeof message.payload === 'object'
 						? message.payload
 						: message;
-					const messageTopicId = Number(message && message.topic_id || payload && payload.topic_id || 0);
+					const messageTopicId = Number(message?.topic_id || payload?.topic_id || 0);
 					if (messageTopicId && messageTopicId !== +topicId) return;
 					refreshLivePostFromMessage(payload);
 				};
@@ -32464,7 +32451,7 @@
 				jumped = await ctx.timeline.jumpTo(targetPostNumber);
 				if (!jumped && sessionAcceptsWork()) {
 					const targetItem = ctx.streamItemMap.get(targetPostNumber);
-					if (ctx.onlyOp && !streamItemMatchesFilter(ctx, targetItem) && typeof onOnlyOpToggle === 'function') {
+					if (ctx.onlyOp && !streamItemMatchesFilter(ctx, targetItem) && isFunction(onOnlyOpToggle)) {
 						await onOnlyOpToggle();
 					} else {
 						ctx.streamWindowResetPending = true;
@@ -32517,7 +32504,7 @@
 				const freshHighestPostNumber = Math.max(0, +(freshTopic.highest_post_number || 0), +(freshTopic.posts_count || 0));
 				const postsByNumber = new Map();
 				postsFromPayload(freshTopic).forEach((post) => {
-					const postNumber = +(post && post.post_number || 0);
+					const postNumber = +(post?.post_number || 0);
 					if (!postNumber) return;
 					if (ctx.streamNodeMap.has(postNumber) || postNumber > previousHighestPostNumber) {
 						postsByNumber.set(postNumber, post);
@@ -32530,14 +32517,14 @@
 						priority: refreshPriority,
 					});
 					if (!sessionAcceptsWork()) return null;
-					const newer = page.filter((post) => +(post && post.post_number || 0) > fetchAfter);
+					const newer = page.filter((post) => +(post?.post_number || 0) > fetchAfter);
 					if (!newer.length) break;
 					newer.forEach((post) => postsByNumber.set(+post.post_number, post));
 					const nextAfter = newer.reduce((latest, post) => Math.max(latest, +(post.post_number || 0)), fetchAfter);
 					if (nextAfter <= fetchAfter) break;
 					fetchAfter = nextAfter;
 				}
-				const freshPosts = ingestLivePosts(Array.from(postsByNumber.values()), ctx);
+				const freshPosts = ingestLivePosts([...postsByNumber.values()], ctx);
 				ctx.topicData = freshTopic;
 				ctx.topicSharedIssueHostVisible = nativeTopicSharedIssueVisible(freshTopic);
 				ctx.isPostVoting = !!freshTopic.is_post_voting;
@@ -32566,7 +32553,7 @@
 					}
 				}
 				return {
-					posts: Array.from(postsByNumber.values()),
+					posts: [...postsByNumber.values()],
 					topic: freshTopic,
 				};
 			} catch (e) {
@@ -32584,7 +32571,7 @@
 			if (!sessionAcceptsWork()) return null;
 			loader.persistFetchedPosts(posts);
 			ingestLivePosts(posts, ctx, { refreshContent: true });
-			return posts.find((post) => +(post && post.post_number || 0) === +postNumber) || posts[0] || null;
+			return posts.find((post) => +(post?.post_number || 0) === +postNumber) || posts[0] || null;
 		};
 		ctx.refreshPostById = async (postId) => {
 			const targetPostId = Number(postId) || 0;
@@ -32626,12 +32613,12 @@
 					priority: POST_REQUEST_PRIORITY.visible,
 				});
 				const candidates = new Map();
-				(result && result.posts || []).forEach((post) => candidates.set(+post.post_number, post));
+				(result?.posts || []).forEach((post) => candidates.set(+post.post_number, post));
 				ctx.streamItems.forEach((item) => {
-					const post = item && item.node && item.node._ldpPostData;
+					const post = item?.node && item.node._ldpPostData;
 					if (post && +post.post_number > highestPostNumber) candidates.set(+post.post_number, post);
 				});
-				const created = Array.from(candidates.values())
+				const created = [...candidates.values()]
 					.filter((post) => +post.post_number > highestPostNumber)
 					.filter((post) => !ME_USERNAME || post.username === ME_USERNAME)
 					.filter((post) => parentPostNumber <= 1
@@ -32639,7 +32626,7 @@
 						: +(post.reply_to_post_number || 0) === parentPostNumber)
 					.sort((a, b) => +b.post_number - +a.post_number)[0];
 				if (created) {
-					if (ctx.loader && typeof ctx.loader.persistFetchedPosts === 'function') {
+					if (isFunction(ctx.loader?.persistFetchedPosts)) {
 						ctx.loader.persistFetchedPosts([created]);
 					}
 					clearLiveUpdateButton();
@@ -32651,7 +32638,7 @@
 		ctx.bindNativeComposerRefresh = () => {
 			if (handleNativeComposerPostRefresh) return true;
 			nativeAppEvents = lookupDiscourse('service:app-events');
-			if (!nativeAppEvents || typeof nativeAppEvents.on !== 'function') return false;
+			if (!nativeAppEvents || !isFunction(nativeAppEvents.on)) return false;
 			handleNativeComposerPostRefresh = () => {
 				const session = ctx.nativeComposerSession;
 				if (!session || session.refreshing || !sessionAcceptsWork()) return;
@@ -32749,7 +32736,7 @@
 			const suspended = suspendedNativeComposerHostTopicBus;
 			suspendedNativeComposerHostTopicBus = null;
 			if (!suspended || !suspended.topicController ||
-					typeof suspended.topicController.subscribe !== 'function') return;
+					!isFunction(suspended.topicController.subscribe)) return;
 			const currentModel = discourseModelValue(suspended.topicController, 'model');
 			const currentTopicId = +(discourseModelValue(currentModel, 'id') || 0);
 			if (currentTopicId !== suspended.hostTopicId) return;
@@ -32762,7 +32749,7 @@
 			const appEvents = session.composer && (
 				session.composer.appEvents || lookupDiscourse('service:app-events')
 			);
-			if (!appEvents || typeof appEvents.trigger !== 'function') return null;
+			if (!appEvents || !isFunction(appEvents.trigger)) return null;
 			const originalTrigger = appEvents.trigger;
 			const readerRefreshEvents = new Set([
 				'composer:created-post',
@@ -32781,7 +32768,7 @@
 			};
 			isolation.trigger = function (eventName, ...args) {
 				const name = String(eventName || '');
-				if (readerRefreshEvents.has(name) && typeof handleNativeComposerPostRefresh === 'function') {
+				if (readerRefreshEvents.has(name) && isFunction(handleNativeComposerPostRefresh)) {
 					handleNativeComposerPostRefresh();
 				}
 				if (suppressedEvents.has(name)) return this;
@@ -32793,8 +32780,8 @@
 				return null;
 			}
 			const discourseUrlModule = lookupDiscourseModule('discourse/lib/url');
-			const routeOwner = discourseUrlModule && discourseUrlModule.default;
-			if (routeOwner && typeof routeOwner.routeTo === 'function') {
+			const routeOwner = discourseUrlModule?.default;
+			if (isFunction(routeOwner?.routeTo)) {
 				const originalRouteTo = routeOwner.routeTo;
 				const guardedRouteTo = function (url, ...args) {
 					const route = extractTopicRouteFromUrl(String(url || ''));
@@ -32815,7 +32802,7 @@
 				suspendedNativeComposerHostTopicBus.topicController === topicController &&
 				suspendedNativeComposerHostTopicBus.hostTopicId === hostTopicId;
 			if (!alreadySuspended && hostTopicId === +ctx.topicId && topicController &&
-					typeof topicController.unsubscribe === 'function') {
+					isFunction(topicController.unsubscribe)) {
 				resumeReaderNativeComposerHostTopicBus();
 				try {
 					topicController.unsubscribe();
@@ -32835,8 +32822,8 @@
 		};
 		const submitReaderNativeReplyWithoutHostRefresh = (button) => {
 			const session = ctx.nativeComposerSession;
-			const composer = session && session.composer;
-			if (!button || button.disabled || !composer || typeof composer.save !== 'function') return false;
+			const composer = session?.composer;
+			if (!button || button.disabled || !composer || !isFunction(composer.save)) return false;
 			const isolation = isolateReaderNativeComposerFromHost();
 			try {
 				const saveResult = composer.save(true, { jump: false });
@@ -32893,9 +32880,9 @@
 		};
 		const visibleExpandedDefaultPosts = () => {
 			const rootRect = ctx.scrollRoot.getBoundingClientRect();
-			return Array.from(ctx.commentsEl.querySelectorAll(
+			return [...ctx.commentsEl.querySelectorAll(
 				':scope > .ldp-post.ldp-reply-collapsible:not(.ldp-nested-collapsed)',
-			)).map((post) => ({ post, rect: post.getBoundingClientRect() }))
+			)].map((post) => ({ post, rect: post.getBoundingClientRect() }))
 				.filter(({ post }) => isEscCollapsibleNestedReply(post))
 				.filter(({ rect }) => rect.bottom > rootRect.top && rect.top < rootRect.bottom &&
 					rect.right > rootRect.left && rect.left < rootRect.right)
@@ -32925,10 +32912,10 @@
 			const preserveShell = options.preserveShell === true;
 			if (!runtimeStopped) {
 				runtimeStopped = true;
-				if (queueEntry && typeof overlay._ldpCaptureHistoryViewport === 'function') {
+				if (queueEntry && isFunction(overlay._ldpCaptureHistoryViewport)) {
 					saveReaderQueueViewport(queueEntry.topicId, overlay._ldpCaptureHistoryViewport());
 				}
-				if (typeof overlay._ldpCloseCodePreview === 'function') overlay._ldpCloseCodePreview(false, true);
+				if (isFunction(overlay._ldpCloseCodePreview)) overlay._ldpCloseCodePreview(false, true);
 				if (preserveShell) {
 					const parkedCommentsHeader = parkReaderCommentsHeader(overlay, ctx.commentsHeader);
 					if (parkedCommentsHeader) readerShell.commentsHeader = parkedCommentsHeader;
@@ -32942,7 +32929,7 @@
 				nativeComposerRefreshTimer = 0;
 				releaseReaderNativeComposerHostIsolation();
 				resumeReaderNativeComposerHostTopicBus();
-				if (nativeAppEvents && handleNativeComposerPostRefresh && typeof nativeAppEvents.off === 'function') {
+				if (nativeAppEvents && handleNativeComposerPostRefresh && isFunction(nativeAppEvents.off)) {
 					nativeAppEvents.off('composer:created-post', handleNativeComposerPostRefresh);
 					nativeAppEvents.off('post:created', handleNativeComposerPostRefresh);
 				}
@@ -32953,8 +32940,8 @@
 						postRequestScheduler.destroy();
 					}],
 					['user card', hideFallbackUserCard],
-					['action dialog', () => ctx.readerActionDialog && ctx.readerActionDialog.close()],
-					['topic editor', () => topicEditorState && topicEditorState.close(true)],
+					['action dialog', () => ctx.readerActionDialog?.close()],
+					['topic editor', () => topicEditorState?.close(true)],
 					['composer window', () => ctx.nativeComposerWindow.destroy()],
 					['post actions', () => destroyActions && destroyActions()],
 					['read tracker', () => tracker.stop()],
@@ -32962,9 +32949,9 @@
 					['nested replies', () => ctx.repliesIO.disconnect()],
 					['media players', () => suspendReaderMedia(overlay)],
 					['detached media players', () => ctx.streamHydratedNodes.forEach((node) => suspendReaderMedia(node))],
-					['pending content hydration', () => Array.from(ctx.pendingPostHydrations)
+					['pending content hydration', () => [...ctx.pendingPostHydrations]
 						.forEach((node) => cancelPostContentHydration(node, ctx))],
-					['pending latex render', () => Array.from(ctx.pendingPostLatexRenders)
+					['pending latex render', () => [...ctx.pendingPostLatexRenders]
 						.forEach((node) => cancelPostLatexRender(node, ctx))],
 					['jump highlight', clearActiveJumpHighlight],
 					['stream viewport anchor', () => clearStreamViewportAnchor(ctx)],
@@ -33036,7 +33023,7 @@
 				if (overlayDisplay) overlay.style.setProperty('display', overlayDisplay, overlayDisplayPriority);
 				else overlay.style.removeProperty('display');
 			}
-			const link = source && source.closest('a[href]');
+			const link = source?.closest('a[href]');
 			const route = link && !link.classList.contains('ldp-open') && !shouldBypassReaderUrl(link.href)
 				? extractTopicRouteFromUrl(link.getAttribute('href') || link.href)
 				: null;
@@ -33057,7 +33044,7 @@
 		const syncReaderSwitchTarget = () => {
 			readerSwitchFrame = 0;
 			const target = popupCanSwitchTopic() ? readerTopicTargetAt(readerSwitchX, readerSwitchY) : null;
-			setReaderSwitchTarget(target && target.link);
+			setReaderSwitchTarget(target?.link);
 		};
 		const onReaderSwitchPointerMove = (event) => {
 			if (event.target !== overlay || event.pointerType === 'touch' || !popupCanSwitchTopic()) {
@@ -33134,7 +33121,7 @@
 				disarmReaderEscapeExit();
 				return;
 			}
-			if (typeof overlay._ldpCloseCodePreview === 'function') {
+			if (isFunction(overlay._ldpCloseCodePreview)) {
 				e.preventDefault();
 				e.stopImmediatePropagation();
 				disarmReaderEscapeExit();
@@ -33149,8 +33136,8 @@
 			const exitConfirmed = readerEscapeExitDeadline > Date.now();
 			disarmReaderEscapeExit();
 			const boostMenu = document.body?.querySelector(':scope > .ldp-native-boost-menu');
-			const boostEmojiPicker = Array.from(document.querySelectorAll('.emoji-picker')).find(nativeComposerVisible);
-			if (boostMenu && boostEmojiPicker && typeof boostMenu._ldpCloseEmojiPicker === 'function') {
+			const boostEmojiPicker = [...document.querySelectorAll('.emoji-picker')].find(nativeComposerVisible);
+			if (boostMenu && boostEmojiPicker && isFunction(boostMenu._ldpCloseEmojiPicker)) {
 				e.preventDefault();
 				e.stopImmediatePropagation();
 				boostMenu._ldpCloseEmojiPicker();
@@ -33158,7 +33145,7 @@
 			}
 			const nativeFloatingSurface = visibleNativeFloatingSurface();
 			if (nativeFloatingSurface) return;
-			if (boostMenu && typeof boostMenu._ldpClose === 'function') {
+			if (isFunction(boostMenu?._ldpClose)) {
 				e.preventDefault();
 				e.stopImmediatePropagation();
 				boostMenu._ldpClose();
@@ -33188,18 +33175,18 @@
 				ctx.readerActionDialog.close();
 				return;
 			}
-			if (typeof ctx.closeTransientActions === 'function' && ctx.closeTransientActions()) {
+			if (isFunction(ctx.closeTransientActions) && ctx.closeTransientActions()) {
 				consumeEvent(e);
 				return;
 			}
 			if (fallbackUserCardOpen()) {
 				consumeEvent(e);
-				if (typeof ctx.closeUserCardLayer === 'function') ctx.closeUserCardLayer();
-				else if (typeof ctx.closeUserCard === 'function') ctx.closeUserCard();
+				if (isFunction(ctx.closeUserCardLayer)) ctx.closeUserCardLayer();
+				else if (isFunction(ctx.closeUserCard)) ctx.closeUserCard();
 				else hideFallbackUserCard();
 				return;
 			}
-			if (ctx.floorPreview && ctx.floorPreview.isOpen() && ctx.floorPreview.isVisibleInViewport()) {
+			if (ctx.floorPreview?.isOpen() && ctx.floorPreview.isVisibleInViewport()) {
 				consumeEvent(e);
 				ctx.floorPreview.hide();
 				if (pickExpandedDefaultPost()) {
@@ -33249,7 +33236,7 @@
 				);
 				const refreshOnlyOp = ctx.onlyOp === true;
 				const topicCacheSnapshot = ctx.topicData;
-				if (typeof overlay._ldpPrepareTopicSwitch === 'function') {
+				if (isFunction(overlay._ldpPrepareTopicSwitch)) {
 					await overlay._ldpPrepareTopicSwitch();
 				}
 				await clearCurrentTopicCaches(topicId, topicCacheSnapshot);
@@ -33309,7 +33296,7 @@
 				}
 				return;
 			}
-			if (ctx.timeline && ctx.timeline.releaseJump) ctx.timeline.releaseJump();
+			if (ctx.timeline?.releaseJump) ctx.timeline.releaseJump();
 			const delta = e.deltaMode === 1
 				? e.deltaY * 40
 				: e.deltaMode === 2 ? e.deltaY * body.clientHeight : e.deltaY;
@@ -33380,8 +33367,8 @@
 					if (retry) {
 						pendingRetry = true;
 						loadHaltError = error || null;
-						const status = Number(error && error.status || 0);
-						const endpointRetryDelay = Math.max(0, Number(error && error.retryAt || 0) - Date.now());
+						const status = Number(error?.status || 0);
+						const endpointRetryDelay = Math.max(0, Number(error?.retryAt || 0) - Date.now());
 						if (pumpOnlyOp) onlyOpRetryStreak++;
 						retryDelay = status === 429 || error && error.name === 'AbortError'
 							? Math.max(250, endpointRetryDelay)
@@ -33413,7 +33400,7 @@
 					if (transient) {
 						pendingRetry = true;
 						if (pumpOnlyOp) onlyOpRetryStreak++;
-						const endpointRetryDelay = Math.max(0, Number(error && error.retryAt || 0) - Date.now());
+						const endpointRetryDelay = Math.max(0, Number(error?.retryAt || 0) - Date.now());
 						retryDelay = Math.min(
 							endpointRetryDelay > 0 ? READER_ENDPOINT_429_MAX_BLOCK_MS : 15000,
 							Math.max(
@@ -33485,7 +33472,7 @@
 			const end = Math.min(ctx.streamWindowEnd,
 				ctx.streamViewportBottomIndex + (backward ? 2 : lookahead + 1));
 			for (let index = start; index < end; index++) {
-				const node = items[index] && items[index].node;
+				const node = items[index]?.node;
 				if (!node || !node.isConnected || !hasStreamGap(node, backward)) continue;
 				return node;
 			}
@@ -33547,7 +33534,7 @@
 					} else attachPostBatch(sorted, ctx);
 					loadedCount += sorted.length;
 					const edgePost = sorted[backward ? 0 : sorted.length - 1];
-					const nextAnchorNum = +(edgePost && edgePost.post_number || 0);
+					const nextAnchorNum = +(edgePost?.post_number || 0);
 					const nextAnchor = ctx.streamNodeMap.get(nextAnchorNum);
 					const advanced = backward ? nextAnchorNum < anchorNum : nextAnchorNum > anchorNum;
 					if (!nextAnchorNum || !advanced || !nextAnchor || !hasGap(nextAnchor)) break;
@@ -33639,7 +33626,7 @@
 			const target = +postNumber || 0;
 			if (!target) return null;
 			return loader.cachedPosts.reduce((nearest, candidate) => {
-				const current = +(candidate && candidate.post_number || 0);
+				const current = +(candidate?.post_number || 0);
 				if (!current) return nearest;
 				if (!nearest) return candidate;
 				const nearestNumber = +(nearest.post_number || 0);
@@ -33858,7 +33845,7 @@
 			};
 			onContext(body, 'scroll', onBodyScroll, { passive: true });
 			onBodyTouchStart = () => {
-				if (ctx.timeline && ctx.timeline.releaseJump) ctx.timeline.releaseJump();
+				if (ctx.timeline?.releaseJump) ctx.timeline.releaseJump();
 				ctx.streamScrollDirection = 0;
 				captureStreamViewportAnchor(ctx);
 				ctx.releaseInitialPrecedingContent();
@@ -33866,14 +33853,14 @@
 			onContext(body, 'touchstart', onBodyTouchStart, { passive: true });
 			onReaderScrollKeyDown = (event) => {
 				if (['ArrowUp', 'PageUp', 'Home'].includes(event.key) || (event.key === ' ' && event.shiftKey)) {
-					if (ctx.timeline && ctx.timeline.releaseJump) ctx.timeline.releaseJump();
+					if (ctx.timeline?.releaseJump) ctx.timeline.releaseJump();
 					ctx.streamScrollDirection = -1;
 					captureStreamViewportAnchor(ctx);
 					clearInitialTargetHeadSpacer(ctx);
 					ctx.releaseInitialPrecedingContent();
 					scheduleGapLoad(true);
 				} else if (['ArrowDown', 'PageDown', 'End'].includes(event.key) || (event.key === ' ' && !event.shiftKey)) {
-					if (ctx.timeline && ctx.timeline.releaseJump) ctx.timeline.releaseJump();
+					if (ctx.timeline?.releaseJump) ctx.timeline.releaseJump();
 					ctx.streamScrollDirection = 1;
 					captureStreamViewportAnchor(ctx);
 				}
@@ -33902,7 +33889,7 @@
 			}
 			if (targetPostNumber > 1 && !targetLoaded && !cancelInitialTargetJump) {
 				const fallbackPost = nearestAvailablePost(targetPostNumber);
-				const fallbackPostNumber = +(fallbackPost && fallbackPost.post_number || 0);
+				const fallbackPostNumber = +(fallbackPost?.post_number || 0);
 				if (fallbackPostNumber) {
 					unavailableTargetPostNumber = targetPostNumber;
 					attachPostBatch([fallbackPost], ctx);
@@ -34080,25 +34067,25 @@
 			readerSession.state = 'failed';
 			overlay.classList.remove('ldp-initial-target-layout');
 			ctx.initialTargetPositionPending = false;
-			const endpointRateLimitedFailure = Number(err && err.status || 0) === 429 && err && err.rateLimitScope === 'endpoint';
-			const rateLimitedFailure = Number(err && err.status || 0) === 429 && !endpointRateLimitedFailure;
+			const endpointRateLimitedFailure = Number(err?.status || 0) === 429 && err && err.rateLimitScope === 'endpoint';
+			const rateLimitedFailure = Number(err?.status || 0) === 429 && !endpointRateLimitedFailure;
 			stopReaderRuntime({ preserveShell: true });
 			removeOwnedNode(maskEl);
 			const errorEl = makeElement('div');
 			errorEl.className = 'ldp-error';
 			errorEl.setAttribute('role', 'alert');
 			errorEl.innerHTML = `
-        <div class="ldp-error-message"></div>
-        <div class="ldp-error-actions">
-          <button class="ldp-error-retry" type="button">重新加载</button>
-          ${rateLimitedFailure ? `<a class="ldp-error-challenge" href="${BASE}/" target="_blank" rel="noopener" aria-label="在独立浮窗打开 LINUX DO 官网完成 Cloudflare 验证">打开 Cloudflare 验证</a>` : ''}
-          <button class="ldp-error-close" type="button">关闭阅读器</button>
-        </div>`;
+				<div class="ldp-error-message"></div>
+				<div class="ldp-error-actions">
+					<button class="ldp-error-retry" type="button">重新加载</button>
+					${rateLimitedFailure ? `<a class="ldp-error-challenge" href="${BASE}/" target="_blank" rel="noopener" aria-label="在独立浮窗打开 LINUX DO 官网完成 Cloudflare 验证">打开 Cloudflare 验证</a>` : ''}
+					<button class="ldp-error-close" type="button">关闭阅读器</button>
+				</div>`;
 			errorEl.querySelector('.ldp-error-message').textContent = rateLimitedFailure
 				? '请求过于频繁，阅读器已暂停加载。倒计时结束后将自动打开过盾浮窗，验证通过后浮窗会自动关闭。'
 				: endpointRateLimitedFailure
 					? '当前请求地址暂时返回 429，已只暂停该地址；其他阅读请求不受影响，请稍后重试。'
-				: `加载失败（${failedPhase}）：${err && err.message ? err.message : '未知错误'}`;
+				: `加载失败（${failedPhase}）：${err?.message ? err.message : '未知错误'}`;
 			body.replaceChildren(errorEl);
 			const retryButton = errorEl.querySelector('.ldp-error-retry');
 			const errorChallenge = errorEl.querySelector('.ldp-error-challenge');
@@ -34236,9 +34223,9 @@
 
 	function cloudflareChallengePageInfo(popup) {
 		try {
-			const popupDocument = popup && popup.document;
+			const popupDocument = popup?.document;
 			if (!popupDocument) return { accessible: false, challenge: false, ready: false, status: 0 };
-			const href = String(popup.location && popup.location.href || '');
+			const href = String(popup.location?.href || '');
 			const title = String(popupDocument.title || '');
 			const challenge = !!(
 				popup._cf_chl_opt ||
@@ -34247,14 +34234,14 @@
 				) ||
 				/^(?:Just a moment|请稍候)/i.test(title)
 			);
-			const navigation = popup.performance && popup.performance.getEntriesByType
+			const navigation = popup.performance?.getEntriesByType
 				? popup.performance.getEntriesByType('navigation')[0]
 				: null;
 			return {
 				accessible: true,
 				challenge,
 				ready: popupDocument.readyState === 'complete' && href !== 'about:blank',
-				status: Math.max(0, Number(navigation && navigation.responseStatus) || 0),
+				status: Math.max(0, Number(navigation?.responseStatus) || 0),
 			};
 		} catch (e) {
 			return { accessible: false, challenge: false, ready: false, status: 0 };
@@ -34263,7 +34250,7 @@
 
 	function cloudflareChallengePassed(popup) {
 		try {
-			const popupDocument = popup && popup.document;
+			const popupDocument = popup?.document;
 			if (!popupDocument) return false;
 			return !!popupDocument.querySelector('meta[name="discourse-base-uri"],#main-outlet');
 		} catch (e) {
@@ -34273,7 +34260,7 @@
 
 	function retryPendingReaderReadTracking() {
 		const tracker = CURRENT_OVERLAY && CURRENT_OVERLAY._ldpReaderShell?.activeContext?.tracker;
-		if (tracker && typeof tracker.retryPending === 'function') tracker.retryPending();
+		if (isFunction(tracker?.retryPending)) tracker.retryPending();
 	}
 
 	function completeCloudflareChallengePopup(message) {
@@ -34405,8 +34392,8 @@
 			sawChallenge: false,
 			verificationStarted: false,
 			verificationFailed: false,
-			verify: typeof options.verify === 'function' ? options.verify : null,
-			onFormSuccess: typeof options.onFormSuccess === 'function' ? options.onFormSuccess : null,
+			verify: isFunction(options.verify) ? options.verify : null,
+			onFormSuccess: isFunction(options.onFormSuccess) ? options.onFormSuccess : null,
 		};
 		cloudflareChallengePopupState = popupState;
 		try { popup.focus(); } catch (e) {}
@@ -34519,7 +34506,7 @@
 		let target = route ? { ...route, source: 'route', title: '' } : null;
 		if (!target) {
 			const firstHistoryTopic = orderedTopicHistory()[0];
-			const historyTopicId = Number(firstHistoryTopic && firstHistoryTopic.topicId);
+			const historyTopicId = Number(firstHistoryTopic?.topicId);
 			if (historyTopicId) {
 				target = {
 					topicId: historyTopicId,
@@ -34688,7 +34675,7 @@
 	function installDiscourseRouteChangeHandler() {
 		if (DISCOURSE_ROUTE_HANDLER_INSTALLED) return true;
 		const pluginApiModule = lookupDiscourseModule('discourse/lib/plugin-api');
-		if (!pluginApiModule || typeof pluginApiModule.withPluginApi !== 'function') return false;
+		if (!pluginApiModule || !isFunction(pluginApiModule.withPluginApi)) return false;
 		try {
 			pluginApiModule.withPluginApi((api) => {
 				api.onPageChange(() => {
@@ -34722,14 +34709,14 @@
 
 	function restoreHostTopicPointerAnchor(anchor) {
 		if (!anchor) return false;
-		let card = anchor.card && anchor.card.isConnected ? anchor.card : null;
+		let card = anchor.card?.isConnected ? anchor.card : null;
 		if (!card && anchor.topicId) {
 			const cardSelector = 'tr.topic-list-item,.topic-list-item,.latest-topic-list-item';
 			card = [...document.querySelectorAll(cardSelector)].find((candidate) => {
 				if (candidate.closest('.ldp-overlay')) return false;
 				const directId = candidate.dataset.topicId || candidate.getAttribute('data-topic-id');
 				const link = candidate.querySelector('a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],a[href*="/t/"]');
-				return String(directId || extractTopicRouteFromUrl(link && link.href)?.topicId || '') === anchor.topicId;
+				return String(directId || extractTopicRouteFromUrl(link?.href)?.topicId || '') === anchor.topicId;
 			}) || null;
 		}
 		if (!card) return false;
@@ -34793,7 +34780,7 @@
 		const readerQueueMetadata = readerQueueMetadataFromLink(a, route.topicId);
 		readerQueueMetadata.urlPostNumber = Math.max(0, Number(route.postNumber) || 0);
 		const hostTopicPointerAnchor = captureHostTopicPointerAnchor(e, route.topicId);
-		if (hostTopicPointerAnchor && typeof a.blur === 'function') a.blur();
+		if (hostTopicPointerAnchor && isFunction(a.blur)) a.blur();
 		consumeEvent(e);
 		AUTO_OPEN_SUPPRESSED_TOPIC_ID = '';
 		hideNativeReaderTrigger();
@@ -34810,8 +34797,8 @@
 
 	document.addEventListener('keydown', (event) => {
 		if (event.key !== 'F5') return false;
-		const readerShell = CURRENT_OVERLAY && CURRENT_OVERLAY._ldpReaderShell;
-		const readerWorkspace = readerShell && readerShell.readerWorkspace;
+		const readerShell = CURRENT_OVERLAY?._ldpReaderShell;
+		const readerWorkspace = readerShell?.readerWorkspace;
 		if (!readerWorkspace || !readerWorkspace.isEmbedded()) return false;
 		event.preventDefault();
 		event.stopImmediatePropagation();

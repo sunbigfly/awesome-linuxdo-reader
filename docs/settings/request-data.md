@@ -4,7 +4,7 @@ description: 查看 10 秒与 60 秒请求预算、队列、优先级、异常�
 feature_ids: ["MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
 source_anchors: ["REQUEST_FLOW_MAX_ENTRIES", "READER_ENDPOINT_429_BASE_BLOCK_MS", "LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY", "requestFlowPath"]
 since: 0.1.2
-version: 0.1.4
+version: 0.1.5
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-11-request-flow.png"]
