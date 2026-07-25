@@ -220,7 +220,7 @@
 		['--love-low', '#f7ddd5', '#472b25'],
 		['--d-link-color', '#2870b8', '#71b7ff'],
 		['--d-post-aside-background', '#f7f9fa', '#20262d'],
-		['--ldp-zebra-color', '#eafbea', '#1b2b21'],
+		['--ldp-zebra-color', '#f7f7f7', '#1b2b21'],
 		['--ldp-reply-line-color', '#47855f', '#78c295'],
 		['--ldp-quote-line-color', '#d7d7d7', '#46505a'],
 		['--ldp-divider-line-color', '#e5e5e5', '#343b44'],
@@ -237,8 +237,8 @@
 	));
 	const ACCENT_COLOR_DEFAULT = READER_THEME_VARIABLES.light['--tertiary'];
 	const LINK_COLOR_DEFAULT = READER_THEME_VARIABLES.light['--d-link-color'];
-	const ZEBRA_COLOR_DEFAULT = '#eafbea';
-	const LIST_ZEBRA_COLOR_DEFAULT = '#e5e7eb';
+	const ZEBRA_COLOR_DEFAULT = '#f7f7f7';
+	const LIST_ZEBRA_COLOR_DEFAULT = '#f7f7f7';
 	const ZEBRA_RADIUS_MIN = 0;
 	const ZEBRA_RADIUS_MAX = 16;
 	const ZEBRA_RADIUS_DEFAULT = 10;
