@@ -807,6 +807,7 @@
     .ldp-notification-avatar-fallback{display:flex;align-items:center;justify-content:center;
       color:var(--primary-medium,#666);font-size:var(--ldp-font-base,13px);font-weight:700;}
     .ldp-notification-copy{min-width:0;display:grid;gap:2px;}
+    .ldp-notification-title{font-size:var(--ldp-font-base,13px);font-weight:650;line-height:1.35;overflow-wrap:anywhere;}
     .ldp-notification-message-item .ldp-notification-title{display:flex;align-items:flex-start;gap:4px;
       font-size:var(--ldp-font-ui,12px);font-weight:600;line-height:1.35;overflow-wrap:anywhere;}
     .ldp-notification-type-icon{display:inline-flex;flex:none;margin-top:1px;color:var(--primary-medium,#777);}
