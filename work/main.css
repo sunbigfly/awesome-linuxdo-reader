@@ -2228,6 +2228,8 @@
     .ldp-content aside.onebox > article.onebox-body > :is(.aspect-image,.thumbnail),
     .ldp-content aside.onebox > article.onebox-body > :is(.aspect-image,.thumbnail) img,
     .ldp-content aside.onebox > article.onebox-body > img.thumbnail{display:none!important;}
+    .ldp-content aside.onebox[data-ldp-github-onebox-normalized="1"] .onebox-body :is(h3,p){
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .ldp-content aside.onebox .onebox-body h3{margin:0;font-size:1em;
       line-height:1.38;text-wrap:pretty;}
     .ldp-content aside.onebox .onebox-body h3 a{font-weight:650;text-decoration:none;}
