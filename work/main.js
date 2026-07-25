@@ -3340,13 +3340,44 @@
 		const forwardEdge = forwardButton.closest('.ldp-reader-history-edge');
 		const modal = overlay.querySelector('.ldp-modal');
 		const historyScope = createLifecycleScope();
+		let modalPointerBounds = null;
+		let backEdgeActive = false;
+		let forwardEdgeActive = false;
+		const setActiveEdges = (backActive, forwardActive) => {
+			if (backEdgeActive !== backActive) {
+				backEdgeActive = backActive;
+				backEdge?.classList.toggle('is-active', backActive);
+			}
+			if (forwardEdgeActive !== forwardActive) {
+				forwardEdgeActive = forwardActive;
+				forwardEdge?.classList.toggle('is-active', forwardActive);
+			}
+		};
 		const clearActiveEdge = () => {
-			backEdge?.classList.remove('is-active');
-			forwardEdge?.classList.remove('is-active');
+			setActiveEdges(false, false);
+		};
+		const invalidateModalPointerBounds = () => {
+			modalPointerBounds = null;
+		};
+		const refreshModalPointerBounds = () => {
+			const triggerPercent = normalizeHistoryEdgeTriggerPercent(PREFS.historyEdgeTriggerPercent);
+			if (triggerPercent <= 0) {
+				modalPointerBounds = { backLimit: 0, forwardLimit: 0, enabled: false };
+				return modalPointerBounds;
+			}
+			const rect = modal.getBoundingClientRect();
+			const triggerWidth = rect.width * triggerPercent / 100;
+			modalPointerBounds = {
+				backLimit: rect.left + triggerWidth,
+				forwardLimit: rect.right - triggerWidth,
+				enabled: true,
+			};
+			return modalPointerBounds;
 		};
 		const syncVisibilityPreference = () => {
 			const alwaysVisible = PREFS.historyButtonsAlwaysVisible === true;
 			overlay.classList.toggle('ldp-history-buttons-always-visible', alwaysVisible);
+			invalidateModalPointerBounds();
 			if (alwaysVisible) clearActiveEdge();
 		};
 		const onModalPointerMove = (event) => {
@@ -3354,20 +3385,39 @@
 				clearActiveEdge();
 				return;
 			}
+			const bounds = modalPointerBounds || refreshModalPointerBounds();
+			const nearBackEdge = bounds.enabled && event.clientX <= bounds.backLimit;
+			const nearForwardEdge = bounds.enabled && event.clientX >= bounds.forwardLimit;
 			const target = event.target instanceof Element ? event.target : null;
+			const overBackButton = !!target && backButton.contains(target);
+			const overForwardButton = !!target && forwardButton.contains(target);
+			if (!nearBackEdge && !nearForwardEdge && !overBackButton && !overForwardButton) {
+				clearActiveEdge();
+				return;
+			}
 			if (target?.closest('.ldp-settings-popover,.ldp-notifications-popover,.ldp-history-popover,.ldp-bookmarks-popover')) {
 				clearActiveEdge();
 				return;
 			}
-			const rect = modal.getBoundingClientRect();
-			const triggerWidth = rect.width * normalizeHistoryEdgeTriggerPercent(PREFS.historyEdgeTriggerPercent) / 100;
-			const overBackButton = target?.closest('.ldp-reader-history-back') === backButton;
-			const overForwardButton = target?.closest('.ldp-reader-history-forward') === forwardButton;
-			backEdge?.classList.toggle('is-active', triggerWidth > 0 && (event.clientX <= rect.left + triggerWidth || overBackButton));
-			forwardEdge?.classList.toggle('is-active', triggerWidth > 0 && (event.clientX >= rect.right - triggerWidth || overForwardButton));
+			setActiveEdges(
+				nearBackEdge || overBackButton,
+				nearForwardEdge || overForwardButton,
+			);
 		};
+		const onModalPointerEnter = (event) => {
+			if (PREFS.historyButtonsAlwaysVisible !== true &&
+					(!event.pointerType || event.pointerType === 'mouse')) refreshModalPointerBounds();
+		};
+		const onModalPointerLeave = () => {
+			clearActiveEdge();
+			invalidateModalPointerBounds();
+		};
+		if (modal) historyScope.listen(modal, 'pointerenter', onModalPointerEnter);
 		if (modal) historyScope.listen(modal, 'pointermove', onModalPointerMove);
-		if (modal) historyScope.listen(modal, 'pointerleave', clearActiveEdge);
+		if (modal) historyScope.listen(modal, 'pointerleave', onModalPointerLeave);
+		historyScope.listen(window, 'resize', invalidateModalPointerBounds);
+		historyScope.listen(overlay, 'ldp-reader-window-change', invalidateModalPointerBounds);
+		historyScope.listen(overlay, 'ldp-reader-workspace-change', invalidateModalPointerBounds);
 		overlay._ldpSyncHistoryButtonVisibilityPreference = syncVisibilityPreference;
 		syncVisibilityPreference();
 		backButton.setAttribute('aria-keyshortcuts', 'ArrowLeft');
@@ -23337,6 +23387,7 @@
 			if (shouldRestart) startImageQuoteCycle();
 		};
 		const onImageQuotePointerUpdate = (event) => {
+			if (!(event.target instanceof Element) || event.target.tagName !== 'IMG') return;
 			updateImageQuotePointer(event);
 		};
 		const onImageQuotePointerOut = (event) => {
@@ -25796,6 +25847,13 @@
 		const lensFloorElements = new Map();
 		const spareLensFloorElements = [];
 		const timelineScope = createLifecycleScope();
+		let renderedCurrent = 0;
+		let renderedTotal = 0;
+		let renderedProgress = NaN;
+		let renderedDateText = null;
+		let renderedRelativeText = null;
+		let renderedRelativeDisabled = null;
+		let renderedTimelineHidden = null;
 		let frame = 0;
 		let previewFrame = 0;
 		let jumpAnimationFrame = 0;
@@ -25908,10 +25966,9 @@
 					element.hidden = false;
 				}
 				const profile = timelineLensProfile(offset);
-				element.style.setProperty('--ldp-lens-offset', String(offset));
-				element.style.setProperty('--ldp-lens-scale', profile.scale.toFixed(4));
-				element.style.setProperty('--ldp-lens-opacity', profile.opacity.toFixed(4));
-				element.style.setProperty('--ldp-lens-shift-x', `${profile.shiftX.toFixed(2)}px`);
+				element.style.cssText =
+					`--ldp-lens-offset:${offset};--ldp-lens-scale:${profile.scale.toFixed(4)};` +
+					`--ldp-lens-opacity:${profile.opacity.toFixed(4)};--ldp-lens-shift-x:${profile.shiftX.toFixed(2)}px`;
 				element.classList.toggle('ldp-timeline-lens-selected', floor === selectedFloor);
 				element.classList.toggle('ldp-timeline-lens-focus', Math.abs(offset) < 0.001);
 			});
@@ -25922,23 +25979,49 @@
 			const total = totalPostCount();
 			const current = Math.max(1, Math.min(total, +postNumber || 1));
 			const progress = progressForPost(current);
-			timeline.style.setProperty('--ldp-timeline-progress', String(progress));
-			currentEl.textContent = String(current);
-			totalEl.textContent = String(total);
-			dateEl.textContent = timelineMonthLabel(createdAt);
-			dateEl.disabled = !dateEl.textContent;
+			const currentChanged = renderedCurrent !== current;
+			const totalChanged = renderedTotal !== total;
+			if (renderedProgress !== progress) {
+				renderedProgress = progress;
+				timeline.style.setProperty('--ldp-timeline-progress', String(progress));
+			}
+			if (currentChanged) currentEl.textContent = String(current);
+			if (totalChanged) totalEl.textContent = String(total);
+			const dateText = timelineMonthLabel(createdAt);
+			if (renderedDateText !== dateText) {
+				renderedDateText = dateText;
+				dateEl.textContent = dateText;
+				dateEl.disabled = !dateText;
+			}
 			const latestReplyAt = ctx.latestReplyAt || (ctx.topicData?.last_posted_at) || '';
-			relativeEl.textContent = latestReplyAt ? discourseRelativeTime(latestReplyAt) : '';
-			relativeEl.disabled = !latestReplyAt;
-			track.setAttribute('aria-valuemin', '1');
-			track.setAttribute('aria-valuemax', String(total));
-			track.setAttribute('aria-valuenow', String(current));
-			track.setAttribute('aria-valuetext', `第 ${current} 楼，共 ${total} 楼`);
+			const relativeText = latestReplyAt ? discourseRelativeTime(latestReplyAt) : '';
+			const relativeDisabled = !latestReplyAt;
+			if (renderedRelativeText !== relativeText || renderedRelativeDisabled !== relativeDisabled) {
+				renderedRelativeText = relativeText;
+				renderedRelativeDisabled = relativeDisabled;
+				relativeEl.textContent = relativeText;
+				relativeEl.disabled = relativeDisabled;
+			}
+			if (!renderedCurrent && !renderedTotal) track.setAttribute('aria-valuemin', '1');
+			if (totalChanged) track.setAttribute('aria-valuemax', String(total));
+			if (currentChanged) track.setAttribute('aria-valuenow', String(current));
+			if (currentChanged || totalChanged) {
+				track.setAttribute('aria-valuetext', `第 ${current} 楼，共 ${total} 楼`);
+			}
 			if (ctx.queueViewportTracker) ctx.queueViewportTracker.sync(current);
 			if (previewVisible) {
-				track.classList.toggle('ldp-timeline-previewing', previewTarget > 0 && previewTarget !== current);
+				const previewing = previewTarget > 0 && previewTarget !== current;
+				if (track.classList.contains('ldp-timeline-previewing') !== previewing) {
+					track.classList.toggle('ldp-timeline-previewing', previewing);
+				}
 			}
-			timeline.hidden = total <= 1;
+			const timelineHidden = total <= 1;
+			if (renderedTimelineHidden !== timelineHidden) {
+				renderedTimelineHidden = timelineHidden;
+				timeline.hidden = timelineHidden;
+			}
+			renderedCurrent = current;
+			renderedTotal = total;
 		};
 
 		const renderStablePosition = (postNumber, createdAt = '') => {
@@ -32232,7 +32315,8 @@
 		let previousGapFailureUntil = 0, nextGapFailureUntil = 0;
 		let onBodyScroll = null, onBodyTouchStart = null, onReaderScrollKeyDown = null;
 		let onVisibilityChange = null;
-		let scrollWorkFrame = 0, pendingGoingUp = false, filterPumpTimer = 0, onlyOpProgressTimer = 0;
+		let scrollWorkFrame = 0, wheelPreparationFrame = 0, wheelPreparedDirection = 0;
+		let pendingGoingUp = false, filterPumpTimer = 0, onlyOpProgressTimer = 0;
 		let onlyOpBatchStartedAt = 0, onlyOpRetryAt = 0, onlyOpRetryStreak = 0;
 		let onlyOpLastProgressAt = 0, onlyOpLastScanned = 0;
 		let destroyActions = null, stopTopicPresence = null, cancelInitialLatestRefresh = null, disposed = false, closePromise = null;
@@ -32998,9 +33082,12 @@
 				if (ctx.streamWindowFrame) cancelAnimationFrame(ctx.streamWindowFrame);
 				if (ctx.floorPreviewSyncFrame) cancelAnimationFrame(ctx.floorPreviewSyncFrame);
 				if (scrollWorkFrame) cancelAnimationFrame(scrollWorkFrame);
+				if (wheelPreparationFrame) cancelAnimationFrame(wheelPreparationFrame);
 				ctx.streamWindowFrame = 0;
 				ctx.floorPreviewSyncFrame = 0;
 				scrollWorkFrame = 0;
+				wheelPreparationFrame = 0;
+				wheelPreparedDirection = 0;
 				[cancelInitialLatestRefresh, cancelInitialNeighborPrefetch].forEach((cancel) => {
 					if (cancel) cancel();
 				});
@@ -33295,6 +33382,14 @@
 		onReaderCloseClick = () => close();
 		onContext(readerElement('.ldp-close'), 'click', onReaderCloseClick);
 		onContext(overlay, 'pointermove', onReaderSwitchPointerMove);
+		const markWheelScrollPrepared = (direction) => {
+			wheelPreparedDirection = direction;
+			if (wheelPreparationFrame) return;
+			wheelPreparationFrame = requestAnimationFrame(() => {
+				wheelPreparationFrame = 0;
+				wheelPreparedDirection = 0;
+			});
+		};
 		onOverlayClick = (e) => {
 			if (e.target !== overlay || !popupCanSwitchTopic()) return;
 			const target = readerTopicTargetAt(e.clientX, e.clientY);
@@ -33348,6 +33443,7 @@
 				ctx.streamScrollDirection = 1;
 				captureStreamViewportAnchor(ctx);
 			}
+			if (delta) markWheelScrollPrepared(delta < 0 ? -1 : 1);
 			if (body.contains(e.target)) return;
 			e.preventDefault();
 			body.scrollTop += delta;
@@ -33803,6 +33899,8 @@
 				if (!sessionAcceptsWork()) return;
 				const now = Date.now();
 				const nextScrollTop = body.scrollTop;
+				const reachedLiveReplyEnd = pendingLiveReplyCount > 0 &&
+					body.scrollHeight - nextScrollTop - body.clientHeight <= 80;
 				const rawDelta = nextScrollTop - lastScrollTop;
 				const elapsed = Math.max(16, now - lastScrollAt);
 				lastScrollTop = nextScrollTop;
@@ -33830,12 +33928,20 @@
 				}
 				if (delta && readerSession.state === 'active') ctx.viewportPersistenceEnabled = true;
 				const deltaDirection = delta < 0 ? -1 : delta > 0 ? 1 : 0;
+				const wheelAlreadyPrepared = !!deltaDirection && wheelPreparedDirection === deltaDirection;
+				if (wheelAlreadyPrepared) {
+					wheelPreparedDirection = 0;
+					if (wheelPreparationFrame) cancelAnimationFrame(wheelPreparationFrame);
+					wheelPreparationFrame = 0;
+				}
 				if (deltaDirection) {
 					ctx.streamScrollDirection = deltaDirection;
-					captureStreamViewportAnchor(ctx);
+					if (!wheelAlreadyPrepared) captureStreamViewportAnchor(ctx);
 					if (deltaDirection < 0) {
-						clearInitialTargetHeadSpacer(ctx);
-						ctx.releaseInitialPrecedingContent();
+						if (!wheelAlreadyPrepared) {
+							clearInitialTargetHeadSpacer(ctx);
+							ctx.releaseInitialPrecedingContent();
+						}
 					} else {
 						previousGapRetryCount = 0;
 					}
@@ -33847,9 +33953,7 @@
 					ctx.streamScrollVelocity = ctx.streamScrollVelocity * 0.55 + instantVelocity * 0.45;
 				}
 				ctx.streamLastScrollAt = now;
-				if (pendingLiveReplyCount > 0 && body.scrollHeight - nextScrollTop - body.clientHeight <= 80) {
-					clearLiveUpdateButton();
-				}
+				if (reachedLiveReplyEnd) clearLiveUpdateButton();
 				scheduleStreamWindowSync(ctx);
 				if (scrollWorkFrame) return;
 				scrollWorkFrame = requestAnimationFrame(() => {
