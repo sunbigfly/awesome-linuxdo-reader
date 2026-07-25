@@ -4,7 +4,7 @@ description: 使用时间轴、只看楼主、历史前后切换、多主题队�
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014"]
 source_anchors: ["LDP_READER_QUEUE_KEY", "ldp-only-op-toggle", "bindTopicTimeline", "createReaderHistoryNavigation", "historyEdgeTriggerPercent", "READ_THRESHOLD", "bindReaderTopicPresence", "renderTopicNavLinks", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
 since: 0.1.2
-version: 0.1.9
+version: 0.1.10
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-16-history.png", "/screenshots/guide-21-reading-queue.png"]

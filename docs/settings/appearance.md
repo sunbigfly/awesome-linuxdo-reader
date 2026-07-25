@@ -4,7 +4,7 @@ description: 配置主题模式、强调色、斑马纹、结构线、引用线�
 feature_ids: ["SET-001", "SET-009"]
 source_anchors: ["READER_THEME_MODES", "APPEARANCE_PROFILE_SETTING_KEYS"]
 since: 0.1.2
-version: 0.1.9
+version: 0.1.10
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-07-appearance-settings.png"]

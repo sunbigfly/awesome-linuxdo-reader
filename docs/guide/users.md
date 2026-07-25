@@ -4,7 +4,7 @@ description: 查看用户卡、资料、徽章、统计、关注列表和账号�
 feature_ids: ["MEDIA-007", "USER-001", "USER-002", "USER-003", "USER-004", "USER-005"]
 source_anchors: ["openUserAvatarViewer", "renderFallbackUserCard", "fetchUserProfileDetails", "renderUserCardFollowList", "runDirectUserCardAction", "renderSettingsUserInfo"]
 since: 0.1.2
-version: 0.1.9
+version: 0.1.10
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-25-user-card.png", "/screenshots/guide-02-settings-overview.png"]

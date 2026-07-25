@@ -4,7 +4,7 @@ description: 查看阅读器定位、能力摘要、当前版本、在线用户�
 feature_ids: ["REF-002", "REF-003"]
 source_anchors: ["@version", "READER_MANUAL_URL"]
 since: 0.1.2
-version: 0.1.9
+version: 0.1.10
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-14-about.png"]

@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["@version"]
 since: 0.1.2
-version: 0.1.9
+version: 0.1.10
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-14-about.png"]
@@ -15,6 +15,14 @@ screenshots: ["/screenshots/guide-14-about.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 0.1.10 — 楼层号视觉弱化与样式同步简化
+
+核验日期：2026-07-25。
+
+- 全面缩小普通楼层、父楼层、楼中楼及预览楼层的字号并弱化背景，降低楼层号的视觉权重。
+- 父楼层标记在 `@` 与 `#` 之间增加空格，改善紧凑标签的辨识度。
+- 正式样式资源改为无 SRI 的 GitHub `main` 分支 CSS，使样式与 userscript 可以在一次版本提交中同步。
 
 ## 0.1.9 — 通知样式资源修复
 

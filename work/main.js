@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      0.1.9
+// @version      0.1.10
 // @license      MIT
 // @description  面向 LINUX DO 的沉浸式增强阅读器，支持父回复预览、消息/历史/收藏、原图灯箱、主题布局、请求限流、缓存与 DOM 渲染管理。
 // @description:en An immersive LINUX DO reader with threaded context, community panels, image lightbox, layouts, request control, cache, and DOM rendering management.
@@ -18,7 +18,7 @@
 // @grant        unsafeWindow
 // @connect      connect.linux.do
 // @run-at       document-start
-// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@8ddeb17ffebb49841ca77a179b328a4a27e7dd31/work/main.css#sha256=42cdcb597d3e17f2d73185ad50d8907e15ddf4b59047883c2def7dd463cfa44c
+// @resource     ldpReaderStyles https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/main.css
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
@@ -30,7 +30,7 @@
 	const BASE = location.origin;
 	const PAGE_ROOT = document.documentElement;
 	const makeElement = (tagName) => document.createElement(tagName);
-	const READER_VERSION = '0.1.9';
+	const READER_VERSION = '0.1.10';
 	const HOST_PAGE_WINDOW = globalThis.unsafeWindow;
 	const TOPIC_CACHE_TTL = 90 * 1000;
 	const READ_THRESHOLD = 1500;
@@ -12481,7 +12481,7 @@
 		parentFloor.type = 'button';
 		parentFloor.dataset.targetPostNumber = String(parentNumber);
 		setLabel(parentFloor, `跳到父楼层 #${parentNumber}`);
-		parentFloor.textContent = `@#${parentNumber}`;
+		parentFloor.textContent = `@ #${parentNumber}`;
 		if (currentFloor) currentFloor.classList.add('ldp-current-floor');
 		head.insertBefore(parentFloor, currentFloor || null);
 	}
@@ -18506,7 +18506,7 @@
 			: '<div class="ldp-content cooked"></div>';
 		const replyToPostNumber = +(p.reply_to_post_number || 0);
 		const parentFloorHtml = options.showParentJump && isReply && replyToPostNumber
-				? `<button class="ldp-floor ldp-jump-parent" type="button" data-target-post-number="${replyToPostNumber}" aria-label="跳到父楼层 #${replyToPostNumber}">@#${replyToPostNumber}</button>`
+				? `<button class="ldp-floor ldp-jump-parent" type="button" data-target-post-number="${replyToPostNumber}" aria-label="跳到父楼层 #${replyToPostNumber}">@ #${replyToPostNumber}</button>`
 				: '';
 		const currentFloorHtml = options.nestedPreview
 				? `<button class="ldp-floor ldp-jump-self" type="button" data-target-post-number="${p.post_number}" data-parent-post-number="${replyToPostNumber || ''}" aria-label="跳到楼层 #${p.post_number}">#${p.post_number}</button>`

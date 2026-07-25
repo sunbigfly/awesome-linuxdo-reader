@@ -4,7 +4,7 @@ description: 理解父回复预览、楼中楼分页、正式楼层展开和已�
 feature_ids: ["READ-003", "READ-008", "READ-012"]
 source_anchors: ["SUB_REPLY_PAGE_SIZE", "loadReaderQuotedPost", "renderSolvedAnswerCard"]
 since: 0.1.2
-version: 0.1.9
+version: 0.1.10
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-18-thread-context.png", "/screenshots/guide-20-community-actions.png"]

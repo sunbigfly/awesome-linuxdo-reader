@@ -4,7 +4,7 @@ description: 设置桌面浮窗尺寸、坐标和拖拽缩放后的保存行为�
 feature_ids: ["SET-008"]
 source_anchors: ["readerWindowGeometryMarkup"]
 since: 0.1.2
-version: 0.1.9
+version: 0.1.10
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-06-window-settings.png"]

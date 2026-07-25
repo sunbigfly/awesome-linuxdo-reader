@@ -4,7 +4,7 @@ description: 查看当前版本所有用户可见功能、唯一编号、状态�
 feature_ids: ["REF-002"]
 source_anchors: ["@version"]
 since: 0.1.2
-version: 0.1.9
+version: 0.1.10
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-22-feature-catalog.png"]
@@ -32,7 +32,7 @@ const docLink = (document) => withBase(`/${document.replace(/\.md$/, '')}`)
 <div class="doc-meta">
   <span>{{ catalog.length }} 项功能</span>
   <span>{{ Object.keys(grouped).length }} 个分类</span>
-  <span>当前版本 0.1.9</span>
+  <span>当前版本 0.1.10</span>
   <span>核验日期 2026-07-24</span>
 </div>
 
