@@ -233,8 +233,8 @@
 	const SITE_DISPLAY_NAME = SITE_ADAPTER.name || location.hostname;
 	const SITE_LANGUAGE = SITE_ADAPTER === GENERIC_DISCOURSE_SITE_ADAPTER
 		? '' : SITE_ADAPTER.id === 'linux-do' ? 'zh-CN' : 'en';
-	function siteIsMarkedNonChinese() {
-		return !!SITE_LANGUAGE && !/^zh(?:[-_]|$)/i.test(SITE_LANGUAGE);
+	function siteAllowsBodyTranslation() {
+		return !/^zh(?:[-_]|$)/i.test(SITE_LANGUAGE);
 	}
 	const TOPIC_CACHE_TTL = 90 * 1000;
 	const READ_THRESHOLD = 1500;
@@ -2054,13 +2054,13 @@
 		const publishCache = (message) => {
 			try {
 				if (channel) channel.postMessage({ type: 'cache', contextId, message });
-			} catch (error) {}
+			} catch {}
 		};
 		const onChannelMessage = (event) => {
 			const data = event?.data;
 			if (data && data.type === 'cache' && data.contextId !== contextId) {
 				cacheListeners.forEach((listener) => {
-					try { listener(data.message || {}); } catch (error) {}
+					try { listener(data.message || {}); } catch {}
 				});
 			}
 			notifyWaiters();
@@ -2068,7 +2068,7 @@
 		try {
 			channel = new globalThis.BroadcastChannel(LDP_SHARED_REQUEST_CHANNEL);
 			channel.addEventListener('message', onChannelMessage);
-		} catch (error) {}
+		} catch {}
 		window.addEventListener('storage', onStorage);
 
 		return {
@@ -2133,7 +2133,7 @@
 					if (!state) return;
 					REQUEST_FLOW_AJAX_STATE.delete(xhr);
 					let headers = '';
-					try { headers = xhr.getAllResponseHeaders(); } catch (error) {}
+					try { headers = xhr.getAllResponseHeaders(); } catch {}
 					const finalUrl = finishResponseRequestFlow(
 						state.event,
 						xhr.responseURL || state.url,
@@ -2160,7 +2160,7 @@
 					buffered: !REQUEST_FLOW_RESOURCE_BUFFERED,
 				});
 				REQUEST_FLOW_RESOURCE_BUFFERED = true;
-			} catch (error) {}
+			} catch {}
 		}
 		return REQUEST_FLOW_AJAX_BOUND;
 	}
@@ -2347,7 +2347,7 @@
 			let request;
 			try {
 				request = indexedDB.open(LDP_RESPONSE_CACHE_DB_NAME, 1);
-			} catch (error) {
+			} catch {
 				finish(null);
 				return;
 			}
@@ -2384,7 +2384,7 @@
 				transaction.oncomplete = () => resolve(true);
 				transaction.onerror = transaction.onabort = () => resolve(false);
 				operation(transaction.objectStore(LDP_RESPONSE_CACHE_STORE));
-			} catch (error) {
+			} catch {
 				resolve(false);
 			}
 		});
@@ -2408,7 +2408,7 @@
 			parsed.searchParams.sort();
 			parsed.hash = '';
 			return parsed;
-		} catch (error) {
+		} catch {
 			return null;
 		}
 	}
@@ -2614,7 +2614,7 @@
 		const listeners = TOPIC_CACHE_SUBSCRIBERS.get(String(Number(topicId) || ''));
 		if (!listeners || !listeners.size || !topic) return;
 		listeners.forEach((listener) => {
-			try { listener(topic); } catch (error) {}
+			try { listener(topic); } catch {}
 		});
 	}
 
@@ -2645,7 +2645,7 @@
 				);
 				try {
 					store.put(finalEntry);
-				} catch (error) {
+				} catch {
 					finalEntry = null;
 					finalPayload = null;
 				}
@@ -3349,7 +3349,7 @@
 			const data = JSON.parse(localStorage.getItem(config.storageKey) || 'null');
 			if (!data || data.version !== PERSISTENT_CACHE_VERSION || !Array.isArray(data.entries)) return [];
 			return data.entries;
-		} catch (e) {
+		} catch {
 			return [];
 		}
 	}
@@ -3437,7 +3437,7 @@
 	}
 
 	function restorePersistentCaches() {
-		try { localStorage.removeItem(LDP_TOPIC_CACHE_KEY); } catch (error) {}
+		try { localStorage.removeItem(LDP_TOPIC_CACHE_KEY); } catch {}
 		['topicNavIcons', 'users', 'notifications'].forEach((key) => {
 			const cache = cacheMapForKey(key);
 			if (!cache) return;
@@ -3547,7 +3547,7 @@
 				Number(entry.viewedAt || 0) >= Date.now() - config.maxAge);
 			if (safe.length !== data.length) return writeTopicHistory(safe);
 			return safe;
-		} catch (e) {
+		} catch {
 			return [];
 		}
 	}
@@ -3942,7 +3942,7 @@
 			const payload = JSON.parse(localStorage.getItem(LDP_READER_QUEUE_KEY) || 'null');
 			storedEntries = Array.isArray(payload) ? payload : (Array.isArray(payload?.entries) ? payload.entries : []);
 			storedSurface = !Array.isArray(payload) && payload && payload.surface;
-		} catch (error) {
+		} catch {
 			return;
 		}
 		READER_QUEUE_SURFACE_STATE = normalizeReaderQueueSurfaceState(storedSurface);
@@ -5308,7 +5308,7 @@
 		try {
 			const text = JSON.stringify(value);
 			return text.length * 2;
-		} catch (e) {
+		} catch {
 			return 0;
 		}
 	}
@@ -5325,7 +5325,7 @@
 		let count = 0;
 		let bytes = 0;
 		let existingNames = [];
-		try { existingNames = await caches.keys(); } catch (error) { return { count, bytes, groups }; }
+		try { existingNames = await caches.keys(); } catch { return { count, bytes, groups }; }
 		for (const name of names.filter((entry) => existingNames.includes(entry))) {
 			try {
 				const storage = await caches.open(name);
@@ -5336,14 +5336,14 @@
 					if (!response) return;
 					let size = Number(response.headers.get('content-length'));
 					if (!(Number.isFinite(size) && size >= 0)) {
-						try { size = (await response.blob()).size; } catch (error) { size = 0; }
+						try { size = (await response.blob()).size; } catch { size = 0; }
 					}
 					groupBytes += size;
 				});
 				groups[name] = { count: requests.length, bytes: groupBytes };
 				count += groups[name].count;
 				bytes += groupBytes;
-			} catch (error) {}
+			} catch {}
 		}
 		return { count, bytes, groups };
 	}
@@ -5476,7 +5476,7 @@
 		mapKeys.forEach((key) => {
 			const storageKey = PERSISTENT_CACHE_CONFIG[key]?.storageKey;
 			if (!storageKey) return;
-			try { localStorage.removeItem(storageKey); } catch (e) {}
+			try { localStorage.removeItem(storageKey); } catch {}
 		});
 		if (selected.has('assets')) {
 			RESOURCE_CACHE_CLEARING = true;
@@ -5989,9 +5989,9 @@
 			if (selection && !candidates.includes(selection)) candidates.push(selection);
 		};
 		if (isFunction(READER_PORTAL_ROOT?.getSelection)) {
-			try { addCandidate(READER_PORTAL_ROOT.getSelection()); } catch (error) {}
+			try { addCandidate(READER_PORTAL_ROOT.getSelection()); } catch {}
 		}
-		try { addCandidate(window.getSelection()); } catch (error) {}
+		try { addCandidate(window.getSelection()); } catch {}
 		return candidates.find((selection) => selection.rangeCount > 0 && !selection.isCollapsed)
 			|| candidates.find((selection) => selection.rangeCount > 0)
 			|| candidates[0]
@@ -6947,7 +6947,7 @@
 				Object.assign(merged, performancePrefsPatch(PERFORMANCE_PRESETS[storedPreset], storedPreset));
 			}
 			return normalizeReaderPrefs(merged);
-		} catch (e) {
+		} catch {
 			return normalizeReaderPrefs({ ...DEFAULT_PREFS });
 		}
 	}
@@ -7008,7 +7008,7 @@
 
 	function setPrefs(patch) {
 		PREFS = normalizeReaderPrefs(Object.assign({}, PREFS, patch));
-		try { localStorage.setItem(LDP_PREF_KEY, JSON.stringify(PREFS)); } catch (e) {}
+		try { localStorage.setItem(LDP_PREF_KEY, JSON.stringify(PREFS)); } catch {}
 		if (Object.keys(patch).some((key) => /^(?:fontRendering|hostFont|hostEmbedded)/.test(key))) syncReaderFontRenderingState();
 	}
 
@@ -7018,7 +7018,7 @@
 			localStorage.setItem(LDP_PREF_KEY, JSON.stringify(normalized));
 			PREFS = normalized;
 			syncReaderFontRenderingState();
-		} catch (e) {
+		} catch {
 			showSelectionToast(failureMessage);
 			return;
 		}
@@ -7152,7 +7152,7 @@
 		try {
 			service[action]();
 			return true;
-		} catch (error) {
+		} catch {
 			return false;
 		} finally {
 			linuxDoThemeChangeInProgress = false;
@@ -7346,7 +7346,7 @@
 			const target = document.body || PAGE_ROOT;
 			const family = target && getComputedStyle(target).fontFamily;
 			return family && family !== 'inherit' ? family : 'inherit';
-		} catch (e) {
+		} catch {
 			return 'inherit';
 		}
 	}
@@ -7582,7 +7582,7 @@
 			if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id ||
 				!isFunction(chrome.runtime.sendMessage)) return null;
 			return chrome.runtime;
-		} catch (e) {
+		} catch {
 			return null;
 		}
 	}
@@ -7845,7 +7845,7 @@
 				const slugPart = categoryParts.find((part, index) => index !== idIndex && !/^\d+$/.test(part));
 				if (slugPart) categorySlug = decodeURIComponent(slugPart);
 			}
-		} catch (e) {}
+		} catch {}
 		const nameNode = link.querySelector('[data-category-name],.badge-category__name,.category-name');
 		const categoryText = (nameNode && (nameNode.dataset.categoryName || nameNode.textContent)) ||
 			link.dataset.categoryName || link.getAttribute('title') || link.textContent || '';
@@ -8384,7 +8384,7 @@
 				if (!blob) blob = await avatarResponseBlob(response, onProgress);
 				if (!blob.size || resourceCacheSignal.aborted) return source;
 				return cacheResourceObjectUrl(AVATAR_OBJECT_URL_CACHE, source, URL.createObjectURL(blob), 256);
-			} catch (error) {
+			} catch {
 				return source;
 			}
 		})();
@@ -8989,7 +8989,7 @@
 	function acquireSharedReaderRequestPermit(priority, signal, type, scheduler) {
 		if (!SHARED_REQUEST_COORDINATOR) return null;
 		let requestState = null;
-		try { requestState = scheduler?.snapshot(); } catch (error) {}
+		try { requestState = scheduler?.snapshot(); } catch {}
 		return SHARED_REQUEST_COORDINATOR.acquirePermit({
 			priority,
 			signal,
@@ -9118,7 +9118,7 @@
 			if (!/\\(?:frac|sum|sqrt|int|prod|lim|begin)|^[A-Za-z][^\n=]{0,40}=/.test(text)) return;
 			try {
 				katex.render(text, paragraph, { displayMode: true, throwOnError: false, strict: 'ignore' });
-			} catch (error) {}
+			} catch {}
 		});
 
 		const tokenPattern = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\s)(?:\\.|[^$\\])+?\$)/g;
@@ -9142,7 +9142,7 @@
 				try {
 					katex.render(info.tex, holder, { displayMode: info.displayMode, throwOnError: false, strict: 'ignore' });
 					fragment.appendChild(holder);
-				} catch (error) {
+				} catch {
 					fragment.appendChild(document.createTextNode(token));
 				}
 				lastIndex = offset + token.length;
@@ -9159,7 +9159,7 @@
 		const raw = notification?.data;
 		if (!raw) return {};
 		if (typeof raw === 'object') return raw;
-		try { return JSON.parse(raw); } catch (e) { return {}; }
+		try { return JSON.parse(raw); } catch { return {}; }
 	}
 
 	function notificationTypeName(notification) {
@@ -9265,7 +9265,7 @@
 				forms.push(normalizeSearchText(api.pinyin(source, {
 					pattern: 'first', toneType: 'none', nonZh: 'consecutive',
 				})));
-			} catch (e) {}
+			} catch {}
 		}
 		const result = [...new Set(forms.filter(Boolean))];
 		SEARCH_PINYIN_CACHE.set(source, result);
@@ -9638,7 +9638,7 @@
 				.sort((left, right) => Number(right.post_number) - Number(left.post_number));
 			if (replies.length !== info.count) return [notification];
 			return replies.map((post) => expandedReplyNotification(notification, post));
-		} catch (error) {
+		} catch {
 			return [notification];
 		}
 	}
@@ -11468,7 +11468,7 @@
 			frame.classList.add('ldp-bilibili-player');
 			frame.setAttribute('allow', 'fullscreen; picture-in-picture');
 			frame.setAttribute('allowfullscreen', '');
-		} catch (error) {}
+		} catch {}
 	}
 
 	function readerHlsSource(video) {
@@ -11479,7 +11479,7 @@
 			const type = String(candidate.getAttribute('type') || '').toLowerCase();
 			let isHls = /(?:vnd\.apple\.mpegurl|x-mpegurl)/.test(type);
 			if (!isHls) {
-				try { isHls = /\.m3u8$/i.test(new URL(source, BASE).pathname); } catch (error) {}
+				try { isHls = /\.m3u8$/i.test(new URL(source, BASE).pathname); } catch {}
 			}
 			if (isHls) return new URL(source, BASE).href;
 		}
@@ -11514,7 +11514,7 @@
 	function suspendReaderMedia(root) {
 		if (!root || !isFunction(root.querySelectorAll)) return;
 		root.querySelectorAll('video,audio').forEach((media) => {
-			try { media.pause(); } catch (error) {}
+			try { media.pause(); } catch {}
 		});
 		destroyReaderMedia(root);
 	}
@@ -11574,7 +11574,7 @@
 				setLabel(button, '复制文本');
 				button.disabled = false;
 			}, 1200);
-		} catch (error) {
+		} catch {
 			button.disabled = false;
 			showSelectionToast('复制失败，请重试');
 		}
@@ -11732,7 +11732,7 @@
 					const url = new URL(link.getAttribute('href') || '', BASE);
 					const match = url.origin === BASE && url.pathname.match(/^\/u\/([^/]+)\/?$/i);
 					username = match ? decodeURIComponent(match[1]) : '';
-				} catch (error) {}
+				} catch {}
 			}
 			if (!username) username = cleanUsernameValue(link.textContent);
 			if (!username) return;
@@ -12224,7 +12224,7 @@
 	function normalizedPostLinkUrl(value) {
 		try {
 			return new URL(String(value || '').trim(), BASE).href;
-		} catch (error) {
+		} catch {
 			return '';
 		}
 	}
@@ -12324,7 +12324,7 @@
 		try {
 			const entries = JSON.parse(localStorage.getItem(READER_TRANSLATION_CACHE_KEY) || '[]');
 			return new Map(Array.isArray(entries) ? entries.slice(-240) : []);
-		} catch (error) { return new Map(); }
+		} catch { return new Map(); }
 	};
 	const READER_TRANSLATION_CACHE = readReaderTranslationCache();
 	let readerTranslationCacheTimer = 0;
@@ -12336,11 +12336,11 @@
 			try {
 				localStorage.setItem(READER_TRANSLATION_CACHE_KEY, JSON.stringify(entries));
 				return;
-			} catch (error) {
+			} catch {
 				entries.splice(0, Math.min(20, entries.length));
 			}
 		}
-		try { localStorage.removeItem(READER_TRANSLATION_CACHE_KEY); } catch (error) {}
+		try { localStorage.removeItem(READER_TRANSLATION_CACHE_KEY); } catch {}
 	}
 	window.addEventListener('pagehide', persistReaderTranslationCache);
 	const READER_TRANSLATION_BLOCKS = 'p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th';
@@ -12406,7 +12406,7 @@
 	}
 
 	function createReaderTranslationController(ctx, button) {
-		if (!siteIsMarkedNonChinese()) {
+		if (!siteAllowsBodyTranslation()) {
 			button.hidden = true;
 			return { syncPost() {}, cycleMode() {}, destroy() {} };
 		}
@@ -15077,7 +15077,7 @@
 	/* ============ 3. 图片浏览器 ============ */
 	function absoluteImageUrl(src) {
 		try { return new URL(String(src || ''), location.href).href; }
-		catch (e) { return String(src || ''); }
+		catch { return String(src || ''); }
 	}
 
 	async function cachedEmojiImageSource(rawSource) {
@@ -15096,7 +15096,7 @@
 			return blob.size && !resourceCacheSignal.aborted
 				? cacheResourceObjectUrl(EMOJI_IMAGE_OBJECT_URL_CACHE, source, URL.createObjectURL(blob), 512)
 				: '';
-		} catch (error) {
+		} catch {
 			return '';
 		}
 	}
@@ -15129,7 +15129,7 @@
 				} finally {
 					resource.release();
 				}
-			} catch (error) {}
+			} catch {}
 		})();
 		return trackSingleFlightRequest(EMOJI_IMAGE_RESOURCE_REQUESTS, source, request);
 	}
@@ -15180,7 +15180,7 @@
 		try {
 			const storage = await caches.open(LDP_LIGHTBOX_IMAGE_CACHE_NAME);
 			await storage.delete(source);
-		} catch (error) {}
+		} catch {}
 	}
 
 	function comparableLightboxImageSource(value) {
@@ -15191,7 +15191,7 @@
 			const uploadHash = url.pathname.match(/(?:^|\/)([0-9a-f]{40})(?:\.[a-z0-9]+)?(?:$|\/)/i);
 			if (uploadHash) return `upload:${uploadHash[1].toLowerCase()}`;
 			return `${url.origin}${decodeURIComponent(url.pathname)}`;
-		} catch (error) {
+		} catch {
 			return String(source).split(/[?#]/, 1)[0];
 		}
 	}
@@ -15340,7 +15340,7 @@
 				comments: sourceTopicId === +ctx.topicId,
 			});
 			return true;
-		} catch (error) {
+		} catch {
 			showSelectionToast('引用源图片加载失败，请重试');
 			return false;
 		}
@@ -15461,7 +15461,7 @@
 	function lightboxImageDownloadName(item, index, blob) {
 		let sourceName = '';
 		try { sourceName = decodeURIComponent(new URL(item?.originalSrc || '', location.href).pathname.split('/').pop() || ''); }
-		catch (error) {}
+		catch {}
 		const mimeExtensions = {
 			'image/avif': 'avif', 'image/bmp': 'bmp', 'image/gif': 'gif', 'image/heic': 'heic',
 			'image/heif': 'heif', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/svg+xml': 'svg',
@@ -15472,7 +15472,7 @@
 			try {
 				const match = new URL(item?.originalSrc || '', location.href).pathname.match(/\.([a-z0-9]{2,5})$/i);
 				if (match) extension = match[1].toLowerCase();
-			} catch (error) {}
+			} catch {}
 		}
 		extension ||= 'img';
 		const stem = safeDownloadFilename(sourceName.replace(/\.[a-z0-9]{2,5}$/i, ''), `image-${index + 1}`);
@@ -15503,7 +15503,7 @@
 					const blob = await response.blob();
 					if (blob.size) return blob;
 				}
-			} catch (error) {}
+			} catch {}
 		}
 		const objectUrl = touchResourceObjectUrl(LIGHTBOX_IMAGE_OBJECT_URL_CACHE, source);
 		if (!objectUrl) return null;
@@ -15511,7 +15511,7 @@
 			const response = await trackedReaderFetch(objectUrl);
 			const blob = await response.blob();
 			return blob.size ? blob : null;
-		} catch (error) {
+		} catch {
 			return null;
 		}
 	}
@@ -15531,7 +15531,7 @@
 			if (!resourceCacheSignal.aborted) {
 				await storage.put(source, createPersistentResourceResponse(blob, contentType));
 			}
-		} catch (error) {}
+		} catch {}
 	}
 
 	async function fetchLightboxDownloadBlob(source, priority = POST_REQUEST_PRIORITY.auxiliary, options = {}) {
@@ -15926,7 +15926,7 @@
 			try {
 				const replies = await ctx.repliesIO.loadDirectReplies(parent);
 				includeReplies(replies);
-			} catch (error) {
+			} catch {
 				partial = true;
 			}
 		}
@@ -16216,7 +16216,7 @@
 				const key = new URL(source);
 				key.searchParams.set('__ldp_cached_thumbnail', '240-webp-v1');
 				return key.href;
-			} catch (error) {
+			} catch {
 				return '';
 			}
 		};
@@ -16227,7 +16227,7 @@
 			let bitmap;
 			try {
 				bitmap = await globalThis.createImageBitmap(blob, { resizeWidth: 240, resizeQuality: 'low' });
-			} catch (error) {
+			} catch {
 				// Some browser-supported image formats cannot be decoded by createImageBitmap.
 				// Keep the fetched image usable instead of leaving a permanently empty card.
 				return URL.createObjectURL(blob);
@@ -16291,7 +16291,7 @@
 				if (lightboxClosed || batchThumbnailUrls.has(item.key)) return;
 				try {
 					displayThumbnail(await createBatchThumbnail(item));
-				} catch (error) {
+				} catch {
 					if (image.isConnected && image.dataset.ldpBatchThumbKey === item.key) {
 						image.alt = '缩略图加载失败';
 						image.dataset.ldpBatchThumbState = 'failed';
@@ -16672,7 +16672,7 @@
 					: await ctx.timeline.jumpTo(postNumber, { acceptsWork });
 				if (!jumped || lightboxClosed) return;
 				close();
-			} catch (error) {
+			} catch {
 				showSelectionToast('无法定位到该楼层');
 			}
 		};
@@ -17056,7 +17056,7 @@
 						? `${currentIndex + 1} / ${items.length} · ${backward ? '前面' : '后续'}楼层暂未加载，请重试`
 						: `${currentIndex + 1} / ${items.length} · 本批没有图片，再翻一次继续查找`;
 				}
-			} catch (error) {
+			} catch {
 				if (!lightboxClosed) countEl.textContent = `查找${backward ? '上一张' : '下一张'}失败，请重试`;
 			} finally {
 				if (backward) exploringPrevious = false;
@@ -17215,7 +17215,7 @@
 					onSelectionChange: (selected) => setBatchItemSelected(item, itemIndex, selected),
 					onDownload: () => downloadLightboxItem(item, itemIndex),
 				});
-			} catch (error) {
+			} catch {
 				if (requestToken === batchPreviewRequestToken) showSelectionToast('缩略图加载失败，请重试');
 			}
 		};
@@ -17241,7 +17241,7 @@
 					return;
 				}
 				close();
-			} catch (error) {
+			} catch {
 				if (!lightboxClosed) countEl.textContent = `无法定位到第 #${postNumber} 楼，请重试`;
 			} finally {
 				jumpingToPost = false;
@@ -17762,7 +17762,7 @@
 
 		const growOnlyOpBatch = () => {
 			let requestState = null;
-			try { requestState = requestScheduler?.snapshot(); } catch (error) {}
+			try { requestState = requestScheduler?.snapshot(); } catch {}
 			const shortPressure = requestState
 				? Number(requestState.shortWindowCount || 0) / Math.max(1, Number(requestState.shortWindowBudget) || 1)
 				: 0;
@@ -18894,7 +18894,7 @@
 			const url = new URL(String(source || ''), location.href);
 			url.searchParams.set('_ldp_retry', String(Date.now()));
 			return url.href;
-		} catch (error) {
+		} catch {
 			return String(source || '');
 		}
 	}
@@ -19300,7 +19300,7 @@
 					DISCOURSE_MODULE_CACHE.set(name, module);
 					return module;
 				}
-			} catch (error) {}
+			} catch {}
 		}
 		return null;
 	}
@@ -19318,7 +19318,7 @@
 			const item = container.lookup(name) || null;
 			if (item) DISCOURSE_LOOKUP_CACHE.set(name, item);
 			return item;
-		} catch (error) {
+		} catch {
 			return null;
 		}
 	}
@@ -19458,7 +19458,7 @@
 			const url = new URL(String(href || ''), location.href);
 			if (url.origin !== location.origin) return false;
 			route = `${url.pathname}${url.search}${url.hash}`;
-		} catch (e) {
+		} catch {
 			return false;
 		}
 		const discourseUrlModule = lookupDiscourseModule('discourse/lib/url');
@@ -19468,7 +19468,7 @@
 			const transition = discourseUrl.routeTo(route);
 			if (isFunction(transition?.catch)) transition.catch(() => {});
 			return true;
-		} catch (e) {
+		} catch {
 			return false;
 		}
 	}
@@ -19479,7 +19479,7 @@
 		let url;
 		try {
 			url = new URL(link.getAttribute('href') || link.href || '', location.href);
-		} catch (error) {
+		} catch {
 			return false;
 		}
 		if (!/^https?:$/i.test(url.protocol) || url.origin !== location.origin) return false;
@@ -19503,7 +19503,7 @@
 				transition.catch(() => {});
 			}
 			return true;
-		} catch (e) {
+		} catch {
 			return false;
 		}
 	}
@@ -19675,7 +19675,7 @@
 		if (!entry || !entry.listeners) return;
 		entry.listeners.forEach((listener) => {
 			if (listener === skipListener) return;
-			try { listener(user, phase); } catch (e) {}
+			try { listener(user, phase); } catch {}
 		});
 	}
 
@@ -20980,7 +20980,7 @@
 		if (isFunction(onOpen)) onOpen(card._ldpUserData);
 		try {
 			await fetchUserCard(username, renderUser);
-		} catch (e) {
+		} catch {
 			if (!isCurrent()) return;
 			card._ldpUserData = { username };
 			card.innerHTML = `${userCardHomeHtml(username)}<div class="ldp-user-card-bio">用户信息加载失败</div>${options.actions === false ? '' : `${userCardActionsHtml({}, username)}<div class="ldp-user-card-action-status" role="status" aria-live="polite"></div>`}`;
@@ -21123,7 +21123,7 @@
 			capsule.style.removeProperty('transform');
 			try {
 				if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
-			} catch (e) {}
+			} catch {}
 		};
 		const renderInteraction = () => {
 			frame = 0;
@@ -21842,7 +21842,7 @@
 			};
 			hostScrollbar.classList.add('ldp-reader-host-scrollbar-dragging');
 			hostScrollbar.setPointerCapture(event.pointerId);
-			try { hostScrollbar.focus({ preventScroll: true }); } catch (e) { hostScrollbar.focus(); }
+			try { hostScrollbar.focus({ preventScroll: true }); } catch { hostScrollbar.focus(); }
 			scrollHostFromPointer(event.clientY);
 		};
 		const onHostScrollbarPointerMove = (event) => {
@@ -21858,7 +21858,7 @@
 				hostScrollbar.classList.remove('ldp-reader-host-scrollbar-dragging');
 				try {
 					if (hostScrollbar.hasPointerCapture(pointerId)) hostScrollbar.releasePointerCapture(pointerId);
-				} catch (e) {}
+				} catch {}
 			}
 		};
 		const onHostScrollbarKeyDown = (event) => {
@@ -22132,7 +22132,7 @@
 			setPref('listReaderEmbedWidth', embedWidth);
 			try {
 				if (resizeHandle?.hasPointerCapture(pointer.pointerId)) resizeHandle.releasePointerCapture(pointer.pointerId);
-			} catch (e) {}
+			} catch {}
 			pointer = null;
 			emitChange();
 		};
@@ -22227,7 +22227,7 @@
 		const elementInTopLayer = (element) => {
 			try {
 				return !!(element?.matches(':popover-open'));
-			} catch (error) {
+			} catch {
 				return false;
 			}
 		};
@@ -22235,7 +22235,7 @@
 			if (!element || !ownedTopLayerElements.delete(element)) return;
 			try {
 				if (elementInTopLayer(element) && isFunction(element.hidePopover)) element.hidePopover();
-			} catch (error) {}
+			} catch {}
 			element.removeAttribute('popover');
 			delete element.dataset.ldpReaderTopLayer;
 		};
@@ -22250,7 +22250,7 @@
 			try {
 				if (!elementInTopLayer(element)) element.showPopover();
 				return elementInTopLayer(element);
-			} catch (error) {
+			} catch {
 				releaseOwnedTopLayer(element);
 				return false;
 			}
@@ -22869,7 +22869,7 @@
 		} finally {
 			try {
 				composer.skipAutoSave = false;
-			} catch (error) {}
+			} catch {}
 		}
 	}
 
@@ -22912,7 +22912,7 @@
 			)].find((candidate) => composerElementAvailable(candidate) &&
 				!candidate.matches('[disabled],[aria-disabled="true"]'));
 			if (!input) return;
-			try { input.focus({ preventScroll: true }); } catch (error) { input.focus(); }
+			try { input.focus({ preventScroll: true }); } catch { input.focus(); }
 		});
 	}
 
@@ -23418,7 +23418,7 @@
 			try {
 				const result = nativeMenu.close(emojiMenuIdentifier);
 				if (isFunction(result?.catch)) result.catch(() => {});
-			} catch (e) {}
+			} catch {}
 		};
 		const placeEditorCursorAtEnd = () => {
 			editor.focus();
@@ -23535,7 +23535,7 @@
 				error.textContent = '';
 				placeEditorCursorAtEnd();
 				syncInput();
-			} catch (e) {
+			} catch {
 				error.textContent = '表情插入失败，请稍后重试';
 			}
 		};
@@ -23556,7 +23556,7 @@
 					content.dataset.ldpReaderTopLayer = 'portal';
 				}
 				if (!content.matches(':popover-open')) content.showPopover();
-			} catch (error) {
+			} catch {
 				if (ownsPopover) {
 					content.removeAttribute('popover');
 					delete content.dataset.ldpReaderTopLayer;
@@ -23648,7 +23648,7 @@
 						if (!closed) error.textContent = 'LinuxDo 原生表情组件尚未就绪，请稍后重试';
 					});
 				}
-			} catch (e) {
+			} catch {
 				error.textContent = 'LinuxDo 原生表情组件尚未就绪，请稍后重试';
 			}
 		};
@@ -24069,7 +24069,7 @@
 		try {
 			await writeSelectionQuoteToClipboard(url);
 			showSelectionToast(sharingPost ? `楼层 #${postNumber} 链接已复制到剪切板` : '帖子链接已复制到剪切板');
-		} catch (error) {
+		} catch {
 			showSelectionToast(sharingPost ? '复制楼层链接失败，请重试' : '复制链接失败，请重试');
 		}
 	}
@@ -24732,7 +24732,7 @@
 			try {
 				await writeSelectionQuoteToClipboard(raw);
 				showSelectionToast('引用已复制到剪切板');
-			} catch (error) {
+			} catch {
 				showSelectionToast('复制失败，请重试');
 			}
 			hideSelectionToolbar();
@@ -25925,7 +25925,7 @@
 						quote.append(bottomCollapse);
 					});
 					syncReaderQuoteLayout(quote, ctx);
-				} catch (error) {
+				} catch {
 					setLabel(quoteToggle, '完整引用加载失败，点击重试');
 				} finally {
 					quoteToggle.disabled = false;
@@ -26601,7 +26601,7 @@
 			const retryCount = +(transientRetryCounts.get(post) || 0) + 1;
 			transientRetryCounts.set(post, retryCount);
 			let requestState = null;
-			try { requestState = ctx.postRequestScheduler.snapshot(); } catch (error) {}
+			try { requestState = ctx.postRequestScheduler.snapshot(); } catch {}
 			const controllerWait = Math.max(
 				Number(requestState?.cooldownRemaining) || 0,
 				Number(requestState?.nextPermitDelay) || 0,
@@ -26732,7 +26732,7 @@
 					if (state.fetchAfter <= after || !pagePosts.length) break;
 				}
 				return state.all.length >= requiredCount;
-			} catch (error) {
+			} catch {
 				return false;
 			} finally {
 				state.loadingMore = false;
@@ -26985,7 +26985,7 @@
 			}
 			try {
 				await channelProxy.unsubscribe();
-			} catch (error) {}
+			} catch {}
 			if (presenceChannel === channelProxy) {
 				presenceChangeHandler = null;
 				presenceChannel = null;
@@ -27018,7 +27018,7 @@
 					return;
 				}
 				changeHandler();
-			} catch (error) {
+			} catch {
 				if (!stopped) render([]);
 				await unsubscribe(channelProxy, changeHandler);
 			}
@@ -27262,7 +27262,7 @@
 			topicNavMetadata: readerShell.topicNavMetadata || null,
 		};
 		if (!state.topicId) return;
-		try { sessionStorage.setItem(LDP_EMBEDDED_RELOAD_STATE_KEY, JSON.stringify(state)); } catch (e) {}
+		try { sessionStorage.setItem(LDP_EMBEDDED_RELOAD_STATE_KEY, JSON.stringify(state)); } catch {}
 	}
 
 	function readEmbeddedReaderReloadState({ consume = false } = {}) {
@@ -27270,9 +27270,9 @@
 		try {
 			state = JSON.parse(sessionStorage.getItem(LDP_EMBEDDED_RELOAD_STATE_KEY) || 'null');
 			if (consume) sessionStorage.removeItem(LDP_EMBEDDED_RELOAD_STATE_KEY);
-		} catch (e) {
+		} catch {
 			if (consume) {
-				try { sessionStorage.removeItem(LDP_EMBEDDED_RELOAD_STATE_KEY); } catch (storageError) {}
+				try { sessionStorage.removeItem(LDP_EMBEDDED_RELOAD_STATE_KEY); } catch {}
 			}
 			return null;
 		}
@@ -27794,7 +27794,7 @@
 							attachPostBatch(lastPosts.filter((post) => !ctx.streamNodeMap.has(+post.post_number)), ctx);
 							target = +lastPost.post_number;
 						}
-					} catch (error) {}
+					} catch {}
 				}
 				return completeBoundaryJump(target, true, { alignBottom: true });
 			})().finally(() => { endJumpPromise = null; });
@@ -27880,7 +27880,7 @@
 				spareLensFloorElements.length = 0;
 				lensTargetPostNumber = 0;
 				if (activePointerId && track.hasPointerCapture && track.hasPointerCapture(activePointerId)) {
-					try { track.releasePointerCapture(activePointerId); } catch (e) {}
+					try { track.releasePointerCapture(activePointerId); } catch {}
 				}
 				dragging = false;
 				activePointerId = 0;
@@ -29350,7 +29350,7 @@
 			try {
 				const state = postRequestScheduler.snapshot();
 				return Math.max(0, Number(state?.cooldownRemaining) || 0);
-			} catch (error) {}
+			} catch {}
 			return 0;
 		};
 		const syncRateLimitNotice = () => {
@@ -30076,7 +30076,7 @@
 					isFunction(notificationLiveAppEvents.off)) {
 				try {
 					notificationLiveAppEvents.off('notifications:changed', readerShell, notificationLiveHandler);
-				} catch (error) {}
+				} catch {}
 			}
 			notificationLiveAppEvents = null;
 			notificationLiveHandler = null;
@@ -30105,7 +30105,7 @@
 				notificationLiveAppEvents = appEvents;
 				notificationLiveHandler = handler;
 				return true;
-			} catch (error) {
+			} catch {
 				stopNotificationLiveEvents();
 				return false;
 			}
@@ -30389,7 +30389,7 @@
 				return collectAvailableFontFamilies(
 					document.fonts, ['family', 'style', 'weight', 'stretch']
 				);
-			} catch (e) { return []; }
+			} catch { return []; }
 		};
 		const syncFontFamilySelection = (values = currentFontDraft()) => {
 			fontFamilyTriggers.forEach((trigger) => {
@@ -31149,7 +31149,7 @@
 			if (!requestFlowChart || !requestFlowSection) return;
 			const snapshot = requestFlowSnapshot();
 			let schedulerState = null;
-			try { schedulerState = currentReaderRequestScheduler().snapshot(); } catch (error) {}
+			try { schedulerState = currentReaderRequestScheduler().snapshot(); } catch {}
 			const recent429 = snapshot.recent60.filter((event) => event.status === 429).length;
 			const metricValues = {
 				rate10: `${snapshot.recent10.length}次 · ${(snapshot.recent10.length / 10).toFixed(1)}/秒`,
@@ -31460,13 +31460,13 @@
 		const resourceMonitorScriptScope = (script) => {
 			const rawSource = String(script?.sourceURL || '');
 			let source = rawSource;
-			try { source = decodeURIComponent(rawSource); } catch (error) {}
+			try { source = decodeURIComponent(rawSource); } catch {}
 			if (/Awesome LinuxDo Reader|更流畅的 LinuxDo 阅读器|katex@0\.16\.22|pinyin-pro@3\.18\.2|hls\.js@1\.6\.16/i.test(source)) return 'reader';
 			try {
 				const url = new URL(rawSource, location.href);
 				if ((url.origin === BASE || /(?:^|\.)linux\.do$/i.test(url.hostname) || /(?:^|\.)ldstatic\.com$/i.test(url.hostname)) &&
 					/\/(?:assets|plugins|theme-javascripts)\/|\.(?:m?js)(?:$|[?#])/i.test(url.pathname)) return 'host';
-			} catch (error) {}
+			} catch {}
 			return 'shared';
 		};
 		const resourceMonitorScriptLabel = (script) => {
@@ -31477,7 +31477,7 @@
 			try {
 				const url = new URL(source, location.href);
 				return `${url.host}${url.pathname}`.slice(0, 100);
-			} catch (error) {
+			} catch {
 				return source.split(/[?#]/, 1)[0].slice(0, 100);
 			}
 		};
@@ -31708,7 +31708,7 @@
 				entry.kind === 'longtask' && entry.at >= at - 10000);
 			const longTaskDuration = recentLongTasks.reduce((sum, entry) => sum + entry.duration, 0);
 			let schedulerState = null;
-			try { schedulerState = currentReaderRequestScheduler().snapshot(); } catch (error) {}
+			try { schedulerState = currentReaderRequestScheduler().snapshot(); } catch {}
 			const recentReaderRequests = requestEvents
 				.filter((event) => event.scope === 'reader' && event.at >= at - 60000);
 			const readerTransfer = recentReaderRequests.reduce((sum, event) => sum + event.bytes, 0);
@@ -31849,7 +31849,7 @@
 				resourceMonitorState[key] = new window.PerformanceObserver(callback);
 				resourceMonitorState[key].observe({ type });
 				return true;
-			} catch (error) {
+			} catch {
 				resourceMonitorState[key] = null;
 				return false;
 			}
@@ -31932,7 +31932,7 @@
 						childList: true,
 						subtree: true,
 					});
-				} catch (error) {
+				} catch {
 					disconnectResourceMonitorObservers(['readerMutationObserver', 'hostMutationObserver']);
 				}
 			}
@@ -32407,7 +32407,7 @@
 			settingsPopover.classList.remove('ldp-settings-window-dragging');
 			try {
 				if (drag.handle.hasPointerCapture(drag.pointerId)) drag.handle.releasePointerCapture(drag.pointerId);
-			} catch (e) {}
+			} catch {}
 		};
 		const closeSettings = () => {
 			closeFontFamilyMenu();
@@ -32546,7 +32546,7 @@
 						bounds: settingsSurfaceBounds(),
 					};
 				settingsPopover.classList.add('ldp-settings-window-dragging');
-				try { row.setPointerCapture(event.pointerId); } catch (e) {}
+				try { row.setPointerCapture(event.pointerId); } catch {}
 				event.preventDefault();
 			});
 			onShell(settingsPopover, 'pointermove', (event) => {
@@ -32569,7 +32569,7 @@
 			try {
 				downloadReaderConfigExport();
 				showSelectionToast('设置配置已导出');
-			} catch (error) {
+			} catch {
 				showSelectionToast('导出失败，请重试');
 			}
 			});
@@ -32583,7 +32583,7 @@
 			let importedPrefs;
 			try {
 				importedPrefs = readerPrefsFromConfigExport(JSON.parse(await file.text()));
-			} catch (error) {
+			} catch {
 				showSelectionToast('配置文件无效，请选择由阅读器导出的 JSON 文件');
 				return;
 			}
@@ -32904,7 +32904,7 @@
 					startY: event.clientY,
 					moved: false,
 				};
-				try { tab.setPointerCapture(event.pointerId); } catch (e) {}
+				try { tab.setPointerCapture(event.pointerId); } catch {}
 			});
 			onShell(bookmarksTabList, 'pointermove', (event) => {
 				if (!bookmarkTabDrag || event.pointerId !== bookmarkTabDrag.pointerId) return;
@@ -33139,7 +33139,7 @@
 			settingsRangeDragRow = range.closest('.ldp-setting-row');
 			if (settingsRangeDragRow) settingsRangeDragRow.classList.add('ldp-range-drag-active');
 			settingsPopover.classList.add('ldp-range-dragging');
-			try { range.setPointerCapture(event.pointerId); } catch (e) {}
+			try { range.setPointerCapture(event.pointerId); } catch {}
 			});
 			onShell(settingsPopover, 'change', (event) => {
 			if (event.target.matches('input[type="color"]')) stopSettingsColorPick();
@@ -33805,7 +33805,7 @@
 					let freshTopic = null;
 					try {
 						freshTopic = await loader.refreshTopicData({ priority: POST_REQUEST_PRIORITY.visible });
-					} catch (refreshError) {}
+					} catch {}
 					const updatedTopic = Object.assign({}, ctx.topicData || {}, {
 						title: discourseModelValue(topicModel, 'title'),
 						fancy_title: discourseModelValue(topicModel, 'fancy_title'),
@@ -34008,7 +34008,7 @@
 			const batchFlow = done ? '' : ` · 批${Math.max(1, Number(loader.scanBatchSize) || 1)}`;
 			const skippedFlow = skipped ? ` · 缺失${skipped}` : '';
 			let requestState = null;
-			try { requestState = postRequestScheduler.snapshot(); } catch (error) {}
+			try { requestState = postRequestScheduler.snapshot(); } catch {}
 			let state = done ? skipped ? 'partial' : 'done' : 'running';
 			let flow = '';
 			if (!done && loadHalted) {
@@ -34096,7 +34096,7 @@
 			latestReplyEventTimer = 0;
 			if (latestReplyMessageBus) {
 				latestReplyMessageSubscriptions.forEach(({ channel, handler }) => {
-					try { latestReplyMessageBus.unsubscribe(channel, handler); } catch (e) {}
+					try { latestReplyMessageBus.unsubscribe(channel, handler); } catch {}
 				});
 			}
 			latestReplyMessageBus = null;
@@ -34161,7 +34161,7 @@
 						}
 						syncLiveUpdateButton();
 					}
-				} catch (error) {
+				} catch {
 					scheduleFullTopicRefresh();
 				}
 			}, 120);
@@ -34188,9 +34188,9 @@
 					latestReplyMessageBus = messageBus;
 					latestReplyMessageSubscriptions = subscriptions;
 					return;
-				} catch (e) {
+				} catch {
 					subscriptions.forEach(({ channel, handler }) => {
-						try { messageBus.unsubscribe(channel, handler); } catch (unsubscribeError) {}
+						try { messageBus.unsubscribe(channel, handler); } catch {}
 					});
 				}
 			}
@@ -34331,7 +34331,7 @@
 					posts: [...postsByNumber.values()],
 					topic: freshTopic,
 				};
-			} catch (e) {
+			} catch {
 				// Keep the last known timestamp when a background refresh fails.
 				return null;
 			} finally {
@@ -34509,11 +34509,11 @@
 			if (!isolation || isolation.released) return;
 			isolation.released = true;
 			if (isolation.appEvents && isolation.appEvents.trigger === isolation.trigger) {
-				try { isolation.appEvents.trigger = isolation.originalTrigger; } catch (error) {}
+				try { isolation.appEvents.trigger = isolation.originalTrigger; } catch {}
 			}
 			(isolation.routeGuards || []).forEach(({ owner, originalRouteTo, guardedRouteTo }) => {
 				if (owner.routeTo !== guardedRouteTo) return;
-				try { owner.routeTo = originalRouteTo; } catch (error) {}
+				try { owner.routeTo = originalRouteTo; } catch {}
 			});
 			if (nativeComposerHostIsolation === isolation) nativeComposerHostIsolation = null;
 		};
@@ -34525,7 +34525,7 @@
 			const currentModel = discourseModelValue(suspended.topicController, 'model');
 			const currentTopicId = +(discourseModelValue(currentModel, 'id') || 0);
 			if (currentTopicId !== suspended.hostTopicId) return;
-			try { suspended.topicController.subscribe(); } catch (error) {}
+			try { suspended.topicController.subscribe(); } catch {}
 		};
 		const isolateReaderNativeComposerFromHost = () => {
 			const session = ctx.nativeComposerSession;
@@ -34560,7 +34560,7 @@
 			};
 			try {
 				appEvents.trigger = isolation.trigger;
-			} catch (error) {
+			} catch {
 				return null;
 			}
 			const discourseUrlModule = lookupDiscourseModule('discourse/lib/url');
@@ -34577,7 +34577,7 @@
 					if (routeOwner.routeTo === guardedRouteTo) {
 						isolation.routeGuards.push({ owner: routeOwner, originalRouteTo, guardedRouteTo });
 					}
-				} catch (error) {}
+				} catch {}
 			}
 			const topicController = lookupDiscourse('controller:topic');
 			const hostModel = discourseModelValue(topicController, 'model');
@@ -34591,7 +34591,7 @@
 				try {
 					topicController.unsubscribe();
 					suspendedNativeComposerHostTopicBus = { topicController, hostTopicId };
-				} catch (error) {}
+				} catch {}
 			}
 			nativeComposerHostIsolation = isolation;
 			return isolation;
@@ -35348,7 +35348,7 @@
 					anchorNum = nextAnchorNum;
 				}
 				return loadedCount > 0;
-			} catch (e) {
+			} catch {
 				if (backward) {
 					previousGapFailureUntil = Date.now() + 3000;
 					retryDelay = 3100;
@@ -36031,7 +36031,7 @@
 	/* ============ 14. 接管帖子路由 ============ */
 	function shouldBypassReaderUrl(url) {
 		let u;
-		try { u = new URL(url, location.href); } catch (e) { return false; }
+		try { u = new URL(url, location.href); } catch { return false; }
 		return u.searchParams.has(NATIVE_BYPASS_PARAM);
 	}
 
@@ -36040,18 +36040,18 @@
 			const bypass = sessionStorage.getItem(NATIVE_BYPASS_TAB_KEY) === '1';
 			if (bypass) sessionStorage.removeItem(NATIVE_BYPASS_TAB_KEY);
 			return bypass;
-		} catch (e) {
+		} catch {
 			return false;
 		}
 	}
 
 	function openNativeTopicTab(url) {
 		let tab = null;
-		try { tab = window.open('about:blank', '_blank'); } catch (e) {}
+		try { tab = window.open('about:blank', '_blank'); } catch {}
 		if (!tab) return false;
-		try { tab.sessionStorage.setItem(NATIVE_BYPASS_TAB_KEY, '1'); } catch (e) {}
-		try { tab.opener = null; } catch (e) {}
-		try { tab.location.replace(url); } catch (e) { tab.location.href = url; }
+		try { tab.sessionStorage.setItem(NATIVE_BYPASS_TAB_KEY, '1'); } catch {}
+		try { tab.opener = null; } catch {}
+		try { tab.location.replace(url); } catch { tab.location.href = url; }
 		return true;
 	}
 
@@ -36065,7 +36065,7 @@
 		try {
 			const lease = JSON.parse(localStorage.getItem(LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY) || 'null');
 			return lease && typeof lease === 'object' ? lease : null;
-		} catch (e) {
+		} catch {
 			return null;
 		}
 	}
@@ -36079,29 +36079,29 @@
 			updatedAt: at,
 			expiresAt: at + ttl,
 		};
-		try { localStorage.setItem(LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY, JSON.stringify(lease)); } catch (e) {}
+		try { localStorage.setItem(LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY, JSON.stringify(lease)); } catch {}
 		return lease;
 	}
 
 	function releaseCloudflareChallengeLease() {
 		const lease = readCloudflareChallengeLease();
 		if (!lease || lease.owner !== cloudflareChallengeInstanceId) return;
-		try { localStorage.removeItem(LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY); } catch (e) {}
+		try { localStorage.removeItem(LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY); } catch {}
 	}
 
 	function onCloudflareChallengeLeaseChange(event) {
 		if (event.key === LDP_CLOUDFLARE_CHALLENGE_RESULT_KEY && event.newValue) {
 			let result = null;
-			try { result = JSON.parse(event.newValue); } catch (e) {}
+			try { result = JSON.parse(event.newValue); } catch {}
 			if (!result || result.owner !== cloudflareChallengeInstanceId) return;
-			try { localStorage.removeItem(LDP_CLOUDFLARE_CHALLENGE_RESULT_KEY); } catch (e) {}
+			try { localStorage.removeItem(LDP_CLOUDFLARE_CHALLENGE_RESULT_KEY); } catch {}
 			const state = cloudflareChallengePopupState;
 			if (state && state.owner === result.owner) verifyCloudflareChallengePopupState(state, result);
 			return;
 		}
 		if (event.key !== LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY || !event.newValue) return;
 		let lease = null;
-		try { lease = JSON.parse(event.newValue); } catch (e) {}
+		try { lease = JSON.parse(event.newValue); } catch {}
 		if (!lease || lease.owner === cloudflareChallengeInstanceId || lease.state !== 'passed') return;
 		const resetRate = resetReaderRateAfterChallenge();
 		retryPendingReaderReadTracking();
@@ -36137,7 +36137,7 @@
 				ready: popupDocument.readyState === 'complete' && href !== 'about:blank',
 				status: Math.max(0, Number(navigation?.responseStatus) || 0),
 			};
-		} catch (e) {
+		} catch {
 			return { accessible: false, challenge: false, ready: false, status: 0 };
 		}
 	}
@@ -36147,7 +36147,7 @@
 			const popupDocument = popup?.document;
 			if (!popupDocument) return false;
 			return !!popupDocument.querySelector('meta[name="discourse-base-uri"],#main-outlet');
-		} catch (e) {
+		} catch {
 			return false;
 		}
 	}
@@ -36161,11 +36161,11 @@
 		const resetRate = resetReaderRateAfterChallenge();
 		retryPendingReaderReadTracking();
 		writeCloudflareChallengeLease('passed', 10 * 1000);
-		try { cloudflareChallengePopup.close(); } catch (e) {}
+		try { cloudflareChallengePopup.close(); } catch {}
 		cloudflareChallengePopup = null;
 		cloudflareChallengePopupState = null;
 		stopCloudflareChallengePopupMonitor();
-		try { localStorage.removeItem(LDP_CLOUDFLARE_CHALLENGE_RESULT_KEY); } catch (e) {}
+		try { localStorage.removeItem(LDP_CLOUDFLARE_CHALLENGE_RESULT_KEY); } catch {}
 		if (message) showSelectionToast(message);
 		else if (resetRate) showSelectionToast('验证已通过，已重置请求流限速');
 	}
@@ -36209,7 +36209,7 @@
 			return false;
 		}
 		const target = 'ldp-cloudflare-challenge';
-		try { popup.name = target; } catch (e) {}
+		try { popup.name = target; } catch {}
 		const form = makeElement('form');
 		form.method = 'POST';
 		const challengeUrl = new URL(url, location.href);
@@ -36243,11 +36243,11 @@
 	function openCloudflareChallengePopup(url, options = {}) {
 		if (cloudflareChallengePopupState?.formParams &&
 			!cloudflareChallengePopupState.verificationFailed) {
-			try { cloudflareChallengePopup.focus(); } catch (e) {}
+			try { cloudflareChallengePopup.focus(); } catch {}
 			return true;
 		}
 		if (cloudflareChallengePopup && !cloudflareChallengePopup.closed) {
-			try { cloudflareChallengePopup.focus(); } catch (e) {}
+			try { cloudflareChallengePopup.focus(); } catch {}
 			return true;
 		}
 		const existingLease = readCloudflareChallengeLease();
@@ -36270,7 +36270,7 @@
 		let popup = null;
 		try {
 			popup = window.open(options.formParams ? 'about:blank' : url, 'ldp-cloudflare-challenge', features);
-		} catch (e) {}
+		} catch {}
 		if (!popup) {
 			releaseCloudflareChallengeLease();
 			showSelectionToast('验证浮窗被浏览器拦截，请允许本站弹出式窗口');
@@ -36290,7 +36290,7 @@
 			onFormSuccess: isFunction(options.onFormSuccess) ? options.onFormSuccess : null,
 		};
 		cloudflareChallengePopupState = popupState;
-		try { popup.focus(); } catch (e) {}
+		try { popup.focus(); } catch {}
 		if (popupState.formParams) {
 			showSelectionToast('请在浮窗完成验证；后端返回 2xx 前楼层仍保持未读');
 			void submitCloudflareChallengePost(popup, url, popupState.formParams, popupState).catch((error) => {
@@ -36351,12 +36351,12 @@
 			if (!u.searchParams.has(NATIVE_BYPASS_PARAM)) return;
 			u.searchParams.delete(NATIVE_BYPASS_PARAM);
 			history.replaceState(history.state, '', u.pathname + u.search + u.hash);
-		} catch (e) {}
+		} catch {}
 	}
 
 	function extractTopicRouteFromUrl(url) {
 		let u;
-		try { u = new URL(url, location.href); } catch (e) { return null; }
+		try { u = new URL(url, location.href); } catch { return null; }
 		if (/^https?:$/i.test(u.protocol) && u.origin !== BASE) return null;
 		const parts = u.pathname.split('/').filter(Boolean);
 		if (parts[0] !== 't') return null;
@@ -36619,7 +36619,7 @@
 					}, 0);
 				});
 			});
-		} catch (error) {
+		} catch {
 			return false;
 		}
 		DISCOURSE_ROUTE_HANDLER_INSTALLED = true;
