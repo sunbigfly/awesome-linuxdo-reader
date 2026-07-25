@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      0.1.5
+// @version      0.1.6
 // @license      MIT
 // @description  面向 LINUX DO 的沉浸式增强阅读器，支持父回复预览、消息/历史/收藏、原图灯箱、主题布局、请求限流、缓存与 DOM 渲染管理。
 // @description:en An immersive LINUX DO reader with threaded context, community panels, image lightbox, layouts, request control, cache, and DOM rendering management.
@@ -18,7 +18,7 @@
 // @grant        unsafeWindow
 // @connect      connect.linux.do
 // @run-at       document-start
-// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@ade05cf/work/main.css#sha256=add7644aee3da62de89eb7ef7a7459849e6d100358d7d032265e20ff021af2c6
+// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@c32a1f50d8c5b475cd157f2deac858c4bc938768/work/main.css#sha256=5036c8c8768f019a7dc1929e795618616e4ed72b6b7cc76c58980b6a7b8794c7
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
@@ -30,7 +30,7 @@
 	const BASE = location.origin;
 	const PAGE_ROOT = document.documentElement;
 	const makeElement = (tagName) => document.createElement(tagName);
-	const READER_VERSION = '0.1.5';
+	const READER_VERSION = '0.1.6';
 	const HOST_PAGE_WINDOW = globalThis.unsafeWindow;
 	const TOPIC_CACHE_TTL = 90 * 1000;
 	const READ_THRESHOLD = 1500;
@@ -27084,29 +27084,47 @@
 		);
 		const [bookmarksTabs, themeButtons] = readerElementsGroup(
 			'.ldp-bookmark-tab', '.ldp-settings-theme-button');
+		let settingsLayer = overlay.querySelector(':scope > .ldp-settings-layer');
+		if (!settingsLayer) {
+			settingsLayer = makeElement('div');
+			settingsLayer.className = 'ldp-settings-layer';
+			overlay.append(settingsLayer);
+		}
+		const settingsSurfaceHost = () => readerWorkspace.isEmbedded() ? settingsLayer : modal;
 		const settingsSurfaceBounds = () => {
-			const rect = modal.getBoundingClientRect();
-			const left = rect.left + modal.clientLeft;
-			const top = rect.top + modal.clientTop;
-			const width = modal.clientWidth;
-			const height = modal.clientHeight;
+			const host = settingsSurfaceHost();
+			const rect = host.getBoundingClientRect();
+			const left = rect.left + host.clientLeft;
+			const top = rect.top + host.clientTop;
+			const width = host.clientWidth;
+			const height = host.clientHeight;
 			return { left, top, width, height, right: left + width, bottom: top + height };
 		};
 		const settingsSurfaceIsCompact = () =>
 			settingsSurfaceBounds().width <= READER_WINDOW_COMPACT_WIDTH;
 		const syncReaderSurfaceDensity = () => {
-			const shortSurface = modal.clientHeight <= READER_SETTINGS_SHORT_HEIGHT;
+			const settingsHost = settingsSurfaceHost();
+			const shortSurface = settingsHost.clientHeight <= READER_SETTINGS_SHORT_HEIGHT;
 			modal.classList.toggle(
 				'ldp-settings-surface-short',
-				shortSurface,
+				settingsHost === modal && shortSurface,
 			);
-			modal.classList.toggle('ldp-reader-surface-short', shortSurface);
+			settingsLayer.classList.toggle(
+				'ldp-settings-surface-short',
+				settingsHost === settingsLayer && shortSurface,
+			);
+			modal.classList.toggle(
+				'ldp-reader-surface-short',
+				modal.clientHeight <= READER_SETTINGS_SHORT_HEIGHT,
+			);
 		};
 		if (notificationsPopover && notificationsPopover.parentElement !== overlay) overlay.append(notificationsPopover);
 		if (historyPanel.popover && historyPanel.popover.parentElement !== overlay) overlay.append(historyPanel.popover);
 		if (bookmarksPanel.popover && bookmarksPanel.popover.parentElement !== overlay) overlay.append(bookmarksPanel.popover);
-		if (settingsPopover && settingsPopover.parentElement !== modal) modal.append(settingsPopover);
-		if (settingHelpTooltip && settingHelpTooltip.parentElement !== modal) modal.append(settingHelpTooltip);
+		if (settingsPopover && settingsPopover.parentElement !== settingsSurfaceHost()) settingsSurfaceHost().append(settingsPopover);
+		if (settingHelpTooltip && settingHelpTooltip.parentElement !== settingsSurfaceHost()) {
+			settingsSurfaceHost().append(settingHelpTooltip);
+		}
 		syncReaderSurfaceDensity();
 		syncReaderThemeSurfaces();
 		const [
@@ -27125,7 +27143,9 @@
 		);
 		const [settingsTabs, settingsSections, fontFamilyTriggers, fontFamilyCustomInputs] = readerElementsGroup(
 			'.ldp-settings-tab', '.ldp-settings-section', '.ldp-font-family-trigger', '.ldp-font-family-custom');
-		if (fontFamilyMenu && fontFamilyMenu.parentElement !== modal) modal.append(fontFamilyMenu);
+		if (fontFamilyMenu && fontFamilyMenu.parentElement !== settingsSurfaceHost()) {
+			settingsSurfaceHost().append(fontFamilyMenu);
+		}
 		const [
 			interfaceFontScaleRange, interfaceFontScaleValue, fontScaleRange, fontScaleValue,
 			composerFontScaleRange, composerFontScaleValue, fontStatus, fontResetBtn, fontApplyBtn,
@@ -27242,7 +27262,7 @@
 		);
 		const colorPickerPresets = ['#F0FFF0', '#FFFFFF', '#E5E7EB', '#94A3B8', '#475569', '#111827',
 			'#47855F', '#22C55E', '#2563EB', '#7C3AED', '#D97706', '#DC2626'];
-		let colorPickerPopover = modal.querySelector(':scope > .ldp-color-picker-popover');
+		let colorPickerPopover = readerElement('.ldp-color-picker-popover');
 		if (!colorPickerPopover) {
 			colorPickerPopover = makeElement('div');
 			colorPickerPopover.className = 'ldp-color-picker-popover';
@@ -27264,8 +27284,22 @@
 					<label class="ldp-color-picker-slider"><span>饱和度</span><input class="ldp-color-picker-saturation" type="range" min="0" max="100" step="1"><output class="ldp-color-picker-saturation-value"></output></label>
 					<label class="ldp-color-picker-slider"><span>明度</span><input class="ldp-color-picker-brightness" type="range" min="0" max="100" step="1"><output class="ldp-color-picker-brightness-value"></output></label>
 				</div>`;
-			modal.append(colorPickerPopover);
+			settingsSurfaceHost().append(colorPickerPopover);
 		}
+		const syncSettingsSurfaceHost = () => {
+			const host = settingsSurfaceHost();
+			const hostChanged = settingsPopover.parentElement !== host;
+			[settingsPopover, settingHelpTooltip, fontFamilyMenu, colorPickerPopover].forEach((surface) => {
+				if (surface && surface.parentElement !== host) host.append(surface);
+			});
+			if (hostChanged) {
+				settingsPopover.style.removeProperty('left');
+				settingsPopover.style.removeProperty('top');
+				settingsPopover.style.removeProperty('transform');
+			}
+			syncReaderSurfaceDensity();
+		};
+		syncSettingsSurfaceHost();
 		const colorPickerTitle = colorPickerPopover.querySelector('.ldp-color-picker-title');
 		const colorPickerHexInput = colorPickerPopover.querySelector('.ldp-color-picker-hex');
 		const colorPickerPresetButtons = colorPickerPopover.querySelectorAll('.ldp-color-picker-preset');
@@ -30638,6 +30672,7 @@
 			moveSettingsWindowTo(rect.left, rect.top, rect.width, rect.height);
 		};
 		const syncSettingsSurfaceGeometry = ({ closeTransients = true } = {}) => {
+			syncSettingsSurfaceHost();
 			if (closeTransients) {
 				closeFontFamilyMenu();
 				closeColorPickerPopover();

@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["@version"]
 since: 0.1.2
-version: 0.1.5
+version: 0.1.6
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-14-about.png"]
@@ -15,6 +15,14 @@ screenshots: ["/screenshots/guide-14-about.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 0.1.6 — 设置面板页面级适配
+
+核验日期：2026-07-25。
+
+- 嵌入态设置面板改为悬浮于整个页面，不再被阅读器工作区宽度约束。
+- 设置面板、字体菜单、颜色选择器和帮助提示共用同一承载层，并在阅读形态切换时同步迁移。
+- 页面级承载层继续使用容器查询；窄视口保持顶部横向分类、单列内容和紧凑尺寸，浮窗与全屏仍按阅读器尺寸适配。
 
 ## 0.1.5 — 统一阅读器内核与事件驱动更新
 

@@ -4,7 +4,7 @@ description: 导出导入设置，理解本地数据范围，查看和安全清�
 feature_ids: ["COLLECT-004", "DATA-001", "DATA-002", "DATA-003", "DATA-004", "TROUBLE-004"]
 source_anchors: ["ldp-history-clear", "readerConfigExportPayload", "CACHE_TYPES", "clearCurrentTopicCaches", "PERSISTENT_CACHE_CONFIG", "replacePrefsAndReload"]
 since: 0.1.2
-version: 0.1.5
+version: 0.1.6
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-13-data-management.png"]
