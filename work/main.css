@@ -2225,24 +2225,9 @@
     .ldp-content aside.onebox > header.source a{min-width:0;overflow:hidden;color:inherit;
       text-overflow:ellipsis;white-space:nowrap;text-decoration:none;}
     .ldp-content aside.onebox > article.onebox-body{min-width:0;margin:0;}
-    .ldp-content aside.onebox:is(.githubfolder,.githubrepo,[data-onebox-src*="github.com"]){width:min(100%,680px);margin-inline:auto;cursor:pointer;}
-    .ldp-content aside.onebox:is(.githubfolder,.githubrepo,[data-onebox-src*="github.com"]) > article.onebox-body{
-      position:relative;display:grid;grid-template-columns:minmax(0,1fr);grid-auto-flow:row;
-      min-height:0;align-content:start;align-items:start;gap:2px;overflow:hidden;}
     .ldp-content aside.onebox > article.onebox-body > :is(.aspect-image,.thumbnail),
     .ldp-content aside.onebox > article.onebox-body > :is(.aspect-image,.thumbnail) img,
     .ldp-content aside.onebox > article.onebox-body > img.thumbnail{display:none!important;}
-    .ldp-content aside.onebox:is(.githubfolder,.githubrepo,[data-onebox-src*="github.com"]) > article.onebox-body > :has(img.thumbnail),
-    .ldp-content aside.onebox:is(.githubfolder,.githubrepo,[data-onebox-src*="github.com"]) > article.onebox-body :has(> img.thumbnail){
-      display:contents!important;}
-    .ldp-content aside.onebox:is(.githubfolder,.githubrepo,[data-onebox-src*="github.com"]) > article.onebox-body img.thumbnail{
-      display:none!important;}
-    .ldp-content aside.onebox:is(.githubfolder,.githubrepo,[data-onebox-src*="github.com"]) > article.onebox-body :is(h3,p,.onebox-metadata){
-      position:relative;z-index:1;grid-column:1;min-width:0;background:transparent;text-align:left;}
-    .ldp-content aside.onebox:is(.githubfolder,.githubrepo,[data-onebox-src*="github.com"]) > article.onebox-body > :has(h3){
-      position:relative;z-index:1;grid-column:1;min-width:0;justify-self:stretch;text-align:left;}
-    .ldp-content aside.onebox:is(.githubfolder,.githubrepo,[data-onebox-src*="github.com"]) > article.onebox-body > :has(h3) :is(h3,p,.onebox-metadata){
-      text-align:left;}
     .ldp-content aside.onebox .onebox-body h3{margin:0;font-size:1em;
       line-height:1.38;text-wrap:pretty;}
     .ldp-content aside.onebox .onebox-body h3 a{font-weight:650;text-decoration:none;}
@@ -2250,16 +2235,7 @@
     .ldp-content aside.onebox .onebox-body p{margin-top:6px;margin-bottom:0;color:var(--primary-medium,#666);
       font-size:.92em;line-height:1.5;}
     .ldp-content aside.onebox .onebox-metadata{margin:6px 0 0;color:var(--primary-medium,#777);font-size:.8em;}
-    .ldp-content aside.onebox:is(.githubfolder,.githubrepo,[data-onebox-src*="github.com"]) .onebox-body h3{
-      font-size:.88em;line-height:1.32;}
-    .ldp-content aside.onebox:is(.githubfolder,.githubrepo,[data-onebox-src*="github.com"]) .onebox-body p{
-      margin-top:2px;font-size:.8em;line-height:1.42;}
-    .ldp-content aside.onebox:is(.githubfolder,.githubrepo,[data-onebox-src*="github.com"]) .onebox-metadata{font-size:.72em;}
     .ldp-content aside.onebox .ldp-link-click-count{min-width:1.4em;height:1.4em;padding:0 .36em;font-size:.72em;}
-    @container ldp-reader (max-width:560px){
-      .ldp-content aside.onebox:is(.githubfolder,.githubrepo,[data-onebox-src*="github.com"]) > article.onebox-body{
-        overflow:visible;}
-    }
     .ldp-content hr{display:block;height:1px;margin:1em 0;padding:0;border:0;
       border-top:var(--ldp-divider-line-width,1px) solid var(--ldp-divider-line-color,#e5e5e5);}
     .ldp-content blockquote{box-sizing:border-box;margin:1em 0;padding:.75em 1em;
