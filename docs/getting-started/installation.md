@@ -4,7 +4,7 @@ description: 安装 userscript、确认启用状态、理解更新方式并排�
 feature_ids: ["CORE-001", "TROUBLE-001"]
 source_anchors: ["@downloadURL", "@match"]
 since: 0.1.2
-version: 0.1.6
+version: 0.1.7
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-01-reader-overview.png"]
@@ -45,7 +45,7 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
 
 - 想立即检查时，在 Tampermonkey 面板中对该脚本执行“检查更新”。
 - 更新后刷新 LINUX DO 页面，已打开页面不会自动替换正在运行的旧代码。
-- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `0.1.6`。
+- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `0.1.7`。
 
 ## 入口没有出现
 

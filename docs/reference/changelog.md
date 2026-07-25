@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["@version"]
 since: 0.1.2
-version: 0.1.6
+version: 0.1.7
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-14-about.png"]
@@ -15,6 +15,16 @@ screenshots: ["/screenshots/guide-14-about.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 0.1.7 — 阅读器全层性能强化
+
+核验日期：2026-07-25。
+
+- 保留单一 Reader Portal 与三形态共用内核，并统一设置、通知、历史、收藏等浮层的挂载、停放和销毁。
+- 强化变高虚拟列表、离屏正文脱水、时间轴索引复用、滚动锚点、宿主滚动几何缓存与媒体生命周期，减少无效 DOM、布局读取和后台工作。
+- 批量楼层渲染按主线程时间片主动让步；浮窗、设置和灯箱拖拽按帧合并几何更新。
+- 收窄宿主、Header、Composer、主题列表和元数据观察范围；页面隐藏时暂停预取、实时更新、延迟水合与重试，回到前台后闭环恢复。
+- 请求与资源诊断只在对应设置面板打开时启用详细取证，避免常驻调用栈与 Resource Timing 开销。
 
 ## 0.1.6 — 设置面板页面级适配
 

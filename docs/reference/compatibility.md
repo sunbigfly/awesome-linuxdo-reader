@@ -4,7 +4,7 @@ description: 当前站点、脚本权限、浏览器能力、外部依赖和已�
 feature_ids: ["DATA-005", "REF-001"]
 source_anchors: ["@grant", "@run-at"]
 since: 0.1.2
-version: 0.1.6
+version: 0.1.7
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-01-reader-overview.png"]
@@ -20,7 +20,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png"]
 
 | 项目 | 当前值 |
 | --- | --- |
-| 脚本版本 | `0.1.6` |
+| 脚本版本 | `0.1.7` |
 | 匹配站点 | `https://linux.do/*` |
 | 启动时机 | `document-start` |
 | GM 权限 | `GM_xmlhttpRequest`、`unsafeWindow` |

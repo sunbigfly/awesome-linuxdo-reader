@@ -4,7 +4,7 @@ description: 配置目标楼层闪烁提示和主题加载等待动画，并兼�
 feature_ids: ["SET-010", "SET-011"]
 source_anchors: ["jumpHighlightPrefsPatch", "READER_LOADING_ANIMATION_KEYS"]
 since: 0.1.2
-version: 0.1.6
+version: 0.1.7
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-08-motion-settings.png"]

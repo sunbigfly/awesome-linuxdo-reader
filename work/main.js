@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      0.1.6
+// @version      0.1.7
 // @license      MIT
 // @description  面向 LINUX DO 的沉浸式增强阅读器，支持父回复预览、消息/历史/收藏、原图灯箱、主题布局、请求限流、缓存与 DOM 渲染管理。
 // @description:en An immersive LINUX DO reader with threaded context, community panels, image lightbox, layouts, request control, cache, and DOM rendering management.
@@ -30,7 +30,7 @@
 	const BASE = location.origin;
 	const PAGE_ROOT = document.documentElement;
 	const makeElement = (tagName) => document.createElement(tagName);
-	const READER_VERSION = '0.1.6';
+	const READER_VERSION = '0.1.7';
 	const HOST_PAGE_WINDOW = globalThis.unsafeWindow;
 	const TOPIC_CACHE_TTL = 90 * 1000;
 	const READ_THRESHOLD = 1500;
@@ -534,6 +534,8 @@
 	const READER_QUEUE_PREFETCH_HEAD_POSTS = 40;
 	const READER_QUEUE_PREFETCH_BEFORE_POSTS = 80;
 	const READER_QUEUE_PREFETCH_MEDIA_CONCURRENCY = 2;
+	const READER_QUEUE_PREFETCH_IDLE_DELAY = 900;
+	const READER_QUEUE_PREFETCH_INTERACTION_SETTLE = 700;
 	const READER_QUEUE_DOCK_THRESHOLD_RATIO = .01;
 	const READER_LOADING_ANIMATION_KEYS = Object.freeze([
 		'portal', 'constellation', 'corridor', 'typewave', 'crystal',
@@ -594,11 +596,18 @@
 	const READER_QUEUE_BY_TOPIC = new Map();
 	let READER_QUEUE_ACTIVE_TOPIC_ID = '';
 	let READER_QUEUE_PREFETCH_RUNNING = false;
+	let READER_QUEUE_PREFETCH_TIMER = 0;
 	let READER_QUEUE_PERSIST_TIMER = 0;
 	let READER_QUEUE_RESTORING = false;
 	let READER_QUEUE_SURFACE_STATE = { x: null, y: null, dock: '' };
 	let SHARED_REQUEST_COORDINATOR = null;
 	let READER_PORTAL_HOST = null;
+	let READER_PORTAL_ROOT = null;
+	let READER_PORTAL_CONTEXT_HTML = null;
+	let READER_PORTAL_CONTEXT_BODY = null;
+	const READER_HOST_STYLE_CLONES = new Map();
+	let READER_HOST_STYLE_OBSERVER = null;
+	let READER_HOST_CONTEXT_OBSERVER = null;
 	let READER_ICON_TOOLTIP_CLEANUP = null;
 	if (INITIAL_TOPIC_ID) PAGE_ROOT.classList.add('ldp-route-takeover');
 
@@ -637,6 +646,8 @@
 	const REQUEST_FLOW_FETCH_META = Symbol('ldpRequestFlowFetchMeta');
 	const REQUEST_FLOW_AJAX_STATE = new WeakMap();
 	let REQUEST_FLOW_RESOURCE_OBSERVER = null;
+	let REQUEST_FLOW_RESOURCE_BUFFERED = false;
+	let REQUEST_FLOW_DETAILS_ACTIVE = false;
 	let REQUEST_FLOW_AJAX_BOUND = false;
 	const REQUEST_FLOW_TYPE_META = Object.freeze({
 		topic: Object.freeze({ label: '正文' }),
@@ -671,6 +682,7 @@
 	}
 
 	function requestFlowCallSite() {
+		if (!REQUEST_FLOW_DETAILS_ACTIVE) return '';
 		let stack = '';
 		try { stack = String(new Error().stack || ''); } catch (error) {}
 		const internalFrame = /\b(?:requestFlowCallSite|beginRequestFlow|trackedFetch|trackedSend|waitForReaderRequestPermit|requestCachedJSON|requestJSON|fetchJSON|runTask|apiSend)\b/;
@@ -1804,7 +1816,8 @@
 			}
 		}
 
-		if (!REQUEST_FLOW_RESOURCE_OBSERVER && isFunction(window.PerformanceObserver)) {
+		if (REQUEST_FLOW_DETAILS_ACTIVE && !REQUEST_FLOW_RESOURCE_OBSERVER &&
+				isFunction(window.PerformanceObserver)) {
 			try {
 				REQUEST_FLOW_RESOURCE_OBSERVER = new window.PerformanceObserver((list, _observer, options) => {
 					list.getEntries().forEach(recordResourceRequestFlow);
@@ -1812,10 +1825,24 @@
 					if (dropped) REQUEST_FLOW_RESOURCE_DROPS.push({ at: requestFlowNow(), count: dropped });
 					pruneRequestFlowEvents();
 				});
-				REQUEST_FLOW_RESOURCE_OBSERVER.observe({ type: 'resource', buffered: true });
+				REQUEST_FLOW_RESOURCE_OBSERVER.observe({
+					type: 'resource',
+					buffered: !REQUEST_FLOW_RESOURCE_BUFFERED,
+				});
+				REQUEST_FLOW_RESOURCE_BUFFERED = true;
 			} catch (error) {}
 		}
 		return REQUEST_FLOW_AJAX_BOUND;
+	}
+
+	function setRequestFlowDetailsActive(active) {
+		REQUEST_FLOW_DETAILS_ACTIVE = active === true;
+		if (REQUEST_FLOW_DETAILS_ACTIVE) {
+			installRequestFlowInstrumentation();
+			return;
+		}
+		if (REQUEST_FLOW_RESOURCE_OBSERVER) REQUEST_FLOW_RESOURCE_OBSERVER.disconnect();
+		REQUEST_FLOW_RESOURCE_OBSERVER = null;
 	}
 
 	function trackedReaderFetch(input, init = {}) {
@@ -3850,20 +3877,27 @@
 		if (bubble) {
 			['queued', 'loading', 'partial', 'ready', 'error']
 				.forEach((state) => bubble.classList.toggle(`is-${state}`, entry.loadState === state));
-			bubble.style.setProperty('--ldp-reader-queue-progress', `${progress * 3.6}deg`);
+			const progressValue = `${progress * 3.6}deg`;
+			if (bubble.style.getPropertyValue('--ldp-reader-queue-progress') !== progressValue) {
+				bubble.style.setProperty('--ldp-reader-queue-progress', progressValue);
+			}
 			bubble.classList.toggle('is-progress-complete', progress >= 100);
 			setLabel(bubble, `${entry.title}，${status}`);
-			bubble.dataset.ldpTooltipLabel = `${entry.title} · ${status}`;
+			const tooltipLabel = `${entry.title} · ${status}`;
+			if (bubble.dataset.ldpTooltipLabel !== tooltipLabel) bubble.dataset.ldpTooltipLabel = tooltipLabel;
 		}
 		const row = rail.querySelector(`.ldp-reader-queue-row[data-reader-queue-topic-id="${topicId}"]`);
 		if (row) {
 			const rowProgress = row.querySelector('.ldp-reader-queue-row-progress');
-			rowProgress?.style.setProperty('--ldp-reader-queue-progress', `${progress * 3.6}deg`);
+			const progressValue = `${progress * 3.6}deg`;
+			if (rowProgress?.style.getPropertyValue('--ldp-reader-queue-progress') !== progressValue) {
+				rowProgress?.style.setProperty('--ldp-reader-queue-progress', progressValue);
+			}
 			rowProgress?.classList.toggle('is-progress-complete', progress >= 100);
 			const titleNode = row.querySelector('.ldp-reader-queue-row-copy strong');
-			if (titleNode) titleNode.textContent = entry.title;
+			if (titleNode && titleNode.textContent !== entry.title) titleNode.textContent = entry.title;
 			const statusNode = row.querySelector('.ldp-reader-queue-row-copy small');
-			if (statusNode) statusNode.textContent = status;
+			if (statusNode && statusNode.textContent !== status) statusNode.textContent = status;
 		}
 	}
 
@@ -4363,6 +4397,7 @@
 			let after = 0;
 			const seenCursors = new Set();
 			while (known.length < expected) {
+				await waitForReaderQueuePrefetchIdle(controller);
 				const url = new URL(`${BASE}/posts/${parent.id}/replies.json`);
 				if (after > 0) url.searchParams.set('after', String(after));
 				let payload;
@@ -4430,6 +4465,21 @@
 		return [...sources];
 	}
 
+	function readerQueuePrefetchForegroundBusy() {
+		if (document.visibilityState !== 'visible') return true;
+		const ctx = CURRENT_OVERLAY?._ldpReaderShell?.activeContext;
+		if (!ctx) return false;
+		if (ctx.readerSession?.isCurrent('opening')) return true;
+		return Date.now() - +(ctx.streamLastScrollAt || 0) < READER_QUEUE_PREFETCH_INTERACTION_SETTLE;
+	}
+
+	async function waitForReaderQueuePrefetchIdle(controller) {
+		while (!controller.signal.aborted && readerQueuePrefetchForegroundBusy()) {
+			await waitForDelay(180);
+		}
+		if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+	}
+
 	async function prefetchReaderQueueMedia(entry, topic, posts, controller) {
 		await loadReactionEmojiRegistry();
 		if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -4444,7 +4494,7 @@
 		const worker = async () => {
 			while (cursor < candidates.length) {
 				const source = candidates[cursor++];
-				if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+				await waitForReaderQueuePrefetchIdle(controller);
 				try {
 					const cached = await cachedPersistentLightboxBlob(source);
 					if (cached) {
@@ -4496,6 +4546,7 @@
 		entry.error = '';
 		syncReaderQueueProgressSurface(entry);
 		try {
+			await waitForReaderQueuePrefetchIdle(controller);
 			let topic = getCachedTopicData(entry.topicId);
 			const cachedStream = topic?.post_stream && Array.isArray(topic.post_stream.stream)
 				? topic.post_stream.stream : [];
@@ -4521,6 +4572,7 @@
 			let missing = preloadStream.filter((postId) => !loadedIds.has(Number(postId)));
 			while (missing.length && READER_QUEUE_BY_TOPIC.has(String(entry.topicId)) &&
 					String(entry.topicId) !== READER_QUEUE_ACTIVE_TOPIC_ID) {
+				await waitForReaderQueuePrefetchIdle(controller);
 				const ids = missing.slice(0, READER_QUEUE_PREFETCH_BATCH_SIZE);
 				const query = ids.map((postId) => `post_ids[]=${encodeURIComponent(postId)}`).join('&');
 				const part = await fetchJSON(`${BASE}/t/${entry.topicId}/posts.json?${query}`, {
@@ -4572,24 +4624,45 @@
 		}
 	}
 
-	function scheduleReaderQueuePrefetch() {
-		if (READER_QUEUE_PREFETCH_RUNNING || !CURRENT_OVERLAY || !ACTIVE_READER_REQUEST_SCHEDULER) return;
-		const entry = READER_QUEUE_ENTRIES.find((candidate) =>
-			String(candidate.topicId) !== READER_QUEUE_ACTIVE_TOPIC_ID &&
-			candidate.loadState === 'queued' && !candidate.prefetchController
-		);
-		if (!entry) return;
-		READER_QUEUE_PREFETCH_RUNNING = true;
-		Promise.resolve(prefetchReaderQueueEntry(entry)).finally(() => {
-			READER_QUEUE_PREFETCH_RUNNING = false;
-			if (CURRENT_OVERLAY && ACTIVE_READER_REQUEST_SCHEDULER) {
-				setTimeout(scheduleReaderQueuePrefetch, 300);
+	function scheduleReaderQueuePrefetch(delay = READER_QUEUE_PREFETCH_IDLE_DELAY) {
+		if (READER_QUEUE_PREFETCH_RUNNING || READER_QUEUE_PREFETCH_TIMER ||
+				document.visibilityState !== 'visible' ||
+				!CURRENT_OVERLAY || !ACTIVE_READER_REQUEST_SCHEDULER) return;
+		READER_QUEUE_PREFETCH_TIMER = setTimeout(() => {
+			READER_QUEUE_PREFETCH_TIMER = 0;
+			if (document.visibilityState !== 'visible' ||
+					!CURRENT_OVERLAY || !ACTIVE_READER_REQUEST_SCHEDULER) return;
+			if (readerQueuePrefetchForegroundBusy()) {
+				scheduleReaderQueuePrefetch();
+				return;
 			}
-		});
+			const entry = READER_QUEUE_ENTRIES.find((candidate) =>
+				String(candidate.topicId) !== READER_QUEUE_ACTIVE_TOPIC_ID &&
+				candidate.loadState === 'queued' && !candidate.prefetchController
+			);
+			if (!entry) return;
+			READER_QUEUE_PREFETCH_RUNNING = true;
+			Promise.resolve(prefetchReaderQueueEntry(entry)).finally(() => {
+				READER_QUEUE_PREFETCH_RUNNING = false;
+				scheduleReaderQueuePrefetch(300);
+			});
+		}, Math.max(0, Number(delay) || 0));
 	}
+
+	function stopReaderQueuePrefetch() {
+		if (READER_QUEUE_PREFETCH_TIMER) clearTimeout(READER_QUEUE_PREFETCH_TIMER);
+		READER_QUEUE_PREFETCH_TIMER = 0;
+		READER_QUEUE_ENTRIES.forEach((entry) => entry.prefetchController?.abort());
+	}
+	document.addEventListener('visibilitychange', () => {
+		if (document.visibilityState === 'visible') scheduleReaderQueuePrefetch();
+		else stopReaderQueuePrefetch();
+	});
 
 	function createReaderQueueViewportTracker(ctx, entry) {
 		let progressSyncFrame = 0;
+		let viewportSyncTimer = 0;
+		let pendingPostNumber = 0;
 		const qualifies = (intersectionEntry) => {
 			if (!intersectionEntry.isIntersecting || intersectionEntry.intersectionRect.width <= 0) return false;
 			const nodeHeight = Math.max(1, intersectionEntry.boundingClientRect.height || 1);
@@ -4615,6 +4688,14 @@
 			});
 			if (readProgressChanged) scheduleProgressSync();
 		}, { root: ctx.scrollRoot, threshold: [0, .1, .3] });
+		const captureViewport = () => {
+			viewportSyncTimer = 0;
+			const postNumber = pendingPostNumber;
+			pendingPostNumber = 0;
+			if (String(ctx.topicId) !== String(entry.topicId) || !(postNumber > 0)) return;
+			const viewport = embeddedReaderPostViewportState(ctx, postNumber);
+			if (viewport) entry.viewport = normalizeReaderHistoryViewport(viewport);
+		};
 		return {
 			observe(node) {
 				if (node && !node.classList.contains('ldp-nested-preview')) observer.observe(node);
@@ -4624,13 +4705,16 @@
 				observer.unobserve(node);
 			},
 			sync(postNumber) {
-				const viewport = embeddedReaderPostViewportState(ctx, postNumber);
-				if (viewport) entry.viewport = normalizeReaderHistoryViewport(viewport);
-				syncReaderQueueProgressSurface(entry);
+				pendingPostNumber = Math.max(0, Number(postNumber) || 0);
+				if (viewportSyncTimer) clearTimeout(viewportSyncTimer);
+				viewportSyncTimer = setTimeout(captureViewport, 240);
 			},
 			stop() {
 				if (progressSyncFrame) cancelAnimationFrame(progressSyncFrame);
+				if (viewportSyncTimer) clearTimeout(viewportSyncTimer);
 				progressSyncFrame = 0;
+				viewportSyncTimer = 0;
+				captureViewport();
 				observer.disconnect();
 				flushReaderQueueReadProgress(entry);
 			},
@@ -5145,13 +5229,133 @@
 	}
 	ensureReaderStyleMounted();
 
+	function readerHostStyleSources() {
+		if (!document.head) return [];
+		return [...document.head.querySelectorAll('link[rel~="stylesheet"],style')].filter((source) =>
+			source !== style && source.dataset.ldpReaderShadow !== '1' && source.dataset.ldpHostStyle !== '1'
+		);
+	}
+
+	function readerHostStyleLoadsAfterReader(source) {
+		return !!(source && style.compareDocumentPosition(source) & Node.DOCUMENT_POSITION_FOLLOWING);
+	}
+
+	function insertReaderHostStyleClone(source, root, beforeNode) {
+		if (!source || !root) return;
+		const previous = READER_HOST_STYLE_CLONES.get(source);
+		const clone = source.cloneNode(true);
+		clone.removeAttribute('id');
+		clone.dataset.ldpHostStyle = '1';
+		if (previous?.isConnected) {
+			previous.replaceWith(clone);
+		} else {
+			const sources = readerHostStyleSources();
+			const sourceIndex = sources.indexOf(source);
+			const loadsAfterReader = readerHostStyleLoadsAfterReader(source);
+			const nextClone = sources.slice(sourceIndex + 1)
+				.filter((item) => readerHostStyleLoadsAfterReader(item) === loadsAfterReader)
+				.map((item) => READER_HOST_STYLE_CLONES.get(item))
+				.find((item) => item?.isConnected);
+			const shadowGuards = root.querySelector('style[data-ldp-reader-shadow-guards]');
+			const fallback = loadsAfterReader ? (shadowGuards || beforeNode?.nextSibling) : beforeNode;
+			root.insertBefore(clone, nextClone || fallback || root.firstChild);
+		}
+		READER_HOST_STYLE_CLONES.set(source, clone);
+	}
+
+	function cloneReaderHostStyles(root, beforeNode) {
+		if (!root || !document.head) return;
+		root.querySelectorAll('[data-ldp-host-style]').forEach((clone) => clone.remove());
+		READER_HOST_STYLE_CLONES.forEach((clone) => clone.remove());
+		READER_HOST_STYLE_CLONES.clear();
+		readerHostStyleSources().forEach((source) => insertReaderHostStyleClone(source, root, beforeNode));
+		if (READER_HOST_STYLE_OBSERVER) return;
+		READER_HOST_STYLE_OBSERVER = new MutationObserver((mutations) => {
+			const changed = new Set();
+			mutations.forEach((mutation) => {
+				if (mutation.type === 'attributes') {
+					changed.add(mutation.target);
+					return;
+				}
+				const styleOwner = mutation.target.nodeType === Node.ELEMENT_NODE && mutation.target.matches('style')
+					? mutation.target
+					: mutation.target.parentElement?.closest('style');
+				if (styleOwner) changed.add(styleOwner);
+				mutation.removedNodes.forEach((node) => {
+					const removed = node.nodeType === Node.ELEMENT_NODE && node.matches('link[rel~="stylesheet"],style')
+						? [node]
+						: [...node.querySelectorAll?.('link[rel~="stylesheet"],style') || []];
+					removed.forEach((source) => {
+						READER_HOST_STYLE_CLONES.get(source)?.remove();
+						READER_HOST_STYLE_CLONES.delete(source);
+					});
+				});
+				mutation.addedNodes.forEach((node) => {
+					const added = node.nodeType === Node.ELEMENT_NODE && node.matches('link[rel~="stylesheet"],style')
+						? [node]
+						: [...node.querySelectorAll?.('link[rel~="stylesheet"],style') || []];
+					added.forEach((source) => changed.add(source));
+				});
+			});
+			const shadowStyle = READER_PORTAL_ROOT?.querySelector('style[data-ldp-reader-shadow]');
+			if (!shadowStyle) return;
+			changed.forEach((source) => {
+				if (source === style) return;
+				if (!source.isConnected || !source.matches('link[rel~="stylesheet"],style')) {
+					READER_HOST_STYLE_CLONES.get(source)?.remove();
+					READER_HOST_STYLE_CLONES.delete(source);
+					return;
+				}
+				insertReaderHostStyleClone(source, READER_PORTAL_ROOT, shadowStyle);
+			});
+		});
+		READER_HOST_STYLE_OBSERVER.observe(document.head, {
+			subtree: true,
+			childList: true,
+			attributes: true,
+			attributeFilter: ['href', 'rel', 'media', 'disabled'],
+		});
+	}
+
+	function mirrorReaderHostAttributes(source, target, marker) {
+		if (!source || !target) return;
+		const sourceNames = new Set(source.getAttributeNames().filter((name) =>
+			name !== 'style' && !name.startsWith('data-ldp-')
+		));
+		target.getAttributeNames().forEach((name) => {
+			if (name !== marker && !sourceNames.has(name)) target.removeAttribute(name);
+		});
+		sourceNames.forEach((name) => {
+			const value = name === 'class'
+				? [...source.classList].filter((token) => !token.startsWith('ldp-')).join(' ')
+				: source.getAttribute(name);
+			if (target.getAttribute(name) !== value) target.setAttribute(name, value);
+		});
+		target.setAttribute(marker, '1');
+	}
+
+	function syncReaderHostContextAttributes() {
+		mirrorReaderHostAttributes(PAGE_ROOT, READER_PORTAL_CONTEXT_HTML, 'data-ldp-shadow-context-html');
+		mirrorReaderHostAttributes(document.body, READER_PORTAL_CONTEXT_BODY, 'data-ldp-shadow-context-body');
+	}
+
 	function destroyReaderPortal() {
+		if (READER_HOST_STYLE_OBSERVER) READER_HOST_STYLE_OBSERVER.disconnect();
+		if (READER_HOST_CONTEXT_OBSERVER) READER_HOST_CONTEXT_OBSERVER.disconnect();
+		READER_HOST_STYLE_OBSERVER = null;
+		READER_HOST_CONTEXT_OBSERVER = null;
 		if (READER_ICON_TOOLTIP_CLEANUP) READER_ICON_TOOLTIP_CLEANUP();
 		READER_ICON_TOOLTIP_CLEANUP = null;
+		READER_HOST_STYLE_CLONES.forEach((clone) => clone.remove());
+		READER_HOST_STYLE_CLONES.clear();
 		const host = READER_PORTAL_HOST;
-		if (host) releasePersistentAvatarImages(host);
-		if (host) host.replaceChildren();
+		const root = READER_PORTAL_ROOT;
+		if (root) releasePersistentAvatarImages(root);
+		if (root) root.replaceChildren();
 		READER_PORTAL_HOST = null;
+		READER_PORTAL_ROOT = null;
+		READER_PORTAL_CONTEXT_HTML = null;
+		READER_PORTAL_CONTEXT_BODY = null;
 		if (host) host.remove();
 	}
 
@@ -5177,10 +5381,44 @@
 		return true;
 	}
 
+	function ensureReaderHostContext(root) {
+		if (!root || !PAGE_ROOT || !document.body) return null;
+		let contextHtml = root.querySelector(':scope > html[data-ldp-shadow-context-html]');
+		if (!contextHtml) {
+			contextHtml = makeElement('html');
+			contextHtml.dataset.ldpShadowContextHtml = '1';
+			root.appendChild(contextHtml);
+		}
+		let contextBody = contextHtml.querySelector(':scope > body[data-ldp-shadow-context-body]');
+		if (!contextBody) {
+			contextBody = makeElement('body');
+			contextBody.dataset.ldpShadowContextBody = '1';
+			contextHtml.appendChild(contextBody);
+		}
+		READER_PORTAL_CONTEXT_HTML = contextHtml;
+		READER_PORTAL_CONTEXT_BODY = contextBody;
+		syncReaderHostContextAttributes();
+		[...root.childNodes].forEach((node) => {
+			if (node === contextHtml || node.nodeType !== Node.ELEMENT_NODE ||
+				node.matches('style,link[rel~="stylesheet"]')) return;
+			contextBody.appendChild(node);
+		});
+		if (!READER_HOST_CONTEXT_OBSERVER) {
+			READER_HOST_CONTEXT_OBSERVER = new MutationObserver((mutations) => {
+				if (mutations.some((mutation) => mutation.attributeName !== 'style')) {
+					syncReaderHostContextAttributes();
+				}
+			});
+			READER_HOST_CONTEXT_OBSERVER.observe(PAGE_ROOT, { attributes: true });
+			READER_HOST_CONTEXT_OBSERVER.observe(document.body, { attributes: true });
+		}
+		return contextBody;
+	}
+
 	function ensureReaderPortal() {
-		if (READER_PORTAL_HOST?.isConnected) return READER_PORTAL_HOST;
+		if (READER_PORTAL_HOST?.isConnected && READER_PORTAL_ROOT) return READER_PORTAL_ROOT;
 		if (!PAGE_ROOT || !document.body) return null;
-		if (READER_PORTAL_HOST) destroyReaderPortal();
+		if (READER_PORTAL_HOST || READER_PORTAL_ROOT) destroyReaderPortal();
 		let host = PAGE_ROOT.querySelector(':scope > .ldp-reader-portal-host');
 		if (!host) {
 			host = makeElement('div');
@@ -5188,25 +5426,44 @@
 			PAGE_ROOT.appendChild(host);
 		}
 		host.classList.add('sciapp-ldp-owned');
+		const root = host.shadowRoot || host.attachShadow({ mode: 'open' });
+		let shadowStyle = root.querySelector('style[data-ldp-reader-shadow]');
+		if (!shadowStyle) {
+			shadowStyle = style.cloneNode(true);
+			shadowStyle.dataset.ldpReaderShadow = '1';
+			root.prepend(shadowStyle);
+		}
+		let shadowGuards = root.querySelector('style[data-ldp-reader-shadow-guards]');
+		if (!shadowGuards) {
+			shadowGuards = makeElement('style');
+			shadowGuards.dataset.ldpReaderShadowGuards = '1';
+			shadowStyle.after(shadowGuards);
+		}
+		shadowGuards.textContent =
+			'[hidden]{display:none!important;}' +
+			'html[data-ldp-shadow-context-html],body[data-ldp-shadow-context-body]{display:contents!important;}';
+		cloneReaderHostStyles(root, shadowStyle);
+		READER_PORTAL_CONTEXT_BODY = ensureReaderHostContext(root);
 		READER_PORTAL_HOST = host;
+		READER_PORTAL_ROOT = root;
 		syncReaderFontRenderingState();
-		return host;
+		return root;
 	}
 
 	function appendReaderPortalNode(node) {
 		const root = ensureReaderPortal();
 		if (!root) throw new Error('reader portal unavailable');
-		root.appendChild(node);
+		(READER_PORTAL_CONTEXT_BODY || root).appendChild(node);
 		applyReaderThemeVariables(node);
 		return node;
 	}
 
 	function readerPortalQuery(selector) {
-		return (READER_PORTAL_HOST?.querySelector(selector)) || document.querySelector(selector);
+		return READER_PORTAL_ROOT?.querySelector(selector) || document.querySelector(selector);
 	}
 
 	function readerPortalQueryAll(selector) {
-		const nodes = READER_PORTAL_HOST ? [...READER_PORTAL_HOST.querySelectorAll(selector)] : [];
+		const nodes = READER_PORTAL_ROOT ? [...READER_PORTAL_ROOT.querySelectorAll(selector)] : [];
 		document.querySelectorAll(selector).forEach((node) => {
 			if (!nodes.includes(node)) nodes.push(node);
 		});
@@ -5221,15 +5478,16 @@
 		tooltip.className = 'ldp-reader-icon-tooltip ldp-transient-surface';
 		tooltip.setAttribute('role', 'tooltip');
 		tooltip.hidden = true;
-		root.appendChild(tooltip);
+		(READER_PORTAL_CONTEXT_BODY || root).appendChild(tooltip);
 		const tooltipScope = createLifecycleScope();
 		const on = (target, type, listener, options) =>
 			tooltipScope.listen(target, type, listener, options);
 		let activeControl = null;
 		const hide = () => {
+			if (!activeControl && tooltip.hidden && !tooltip.textContent) return;
 			activeControl = null;
-			tooltip.hidden = true;
-			tooltip.textContent = '';
+			setHidden(tooltip, true);
+			setText(tooltip, '');
 		};
 		const hasVisibleText = (control) => [...control.childNodes].some((node) => {
 			if (node.nodeType === Node.TEXT_NODE) return !!String(node.textContent || '').trim();
@@ -5289,10 +5547,10 @@
 			const match = resolvedMatch || tooltipControl(target);
 			if (!match) return;
 			activeControl = match.control;
-			tooltip.textContent = match.label;
+			setText(tooltip, match.label);
 			tooltip.classList.toggle('ldp-reader-history-tooltip', match.control.matches('.ldp-reader-history-nav'));
 			tooltip.classList.toggle('ldp-connect-help-tooltip', match.control.matches('.ldp-connect-metric'));
-			tooltip.hidden = false;
+			setHidden(tooltip, false);
 			position(match.control, pointerEvent);
 		};
 		const keepOpen = (control) => control && (control.matches(':hover') || control.matches(':focus-visible'));
@@ -5367,15 +5625,24 @@
 	}
 
 	function readerActiveElement() {
-		return document.activeElement;
+		let active = document.activeElement;
+		while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+		return active;
 	}
 
 	function readerSelection() {
-		try {
-			return window.getSelection();
-		} catch (error) {
-			return null;
+		const candidates = [];
+		const addCandidate = (selection) => {
+			if (selection && !candidates.includes(selection)) candidates.push(selection);
+		};
+		if (isFunction(READER_PORTAL_ROOT?.getSelection)) {
+			try { addCandidate(READER_PORTAL_ROOT.getSelection()); } catch (error) {}
 		}
+		try { addCandidate(window.getSelection()); } catch (error) {}
+		return candidates.find((selection) => selection.rangeCount > 0 && !selection.isCollapsed)
+			|| candidates.find((selection) => selection.rangeCount > 0)
+			|| candidates[0]
+			|| null;
 	}
 
 	function eventPathClosest(event, selector) {
@@ -5465,6 +5732,25 @@
 			},
 		};
 		return scope;
+	}
+
+	function createReaderSurfaceManager(overlay) {
+		const parking = document.createDocumentFragment();
+		return {
+			parking,
+			mount(surface, host = overlay) {
+				if (surface && host && surface.parentNode !== host) host.append(surface);
+				return surface;
+			},
+			park(surface) {
+				if (surface && surface.parentNode !== parking) parking.append(surface);
+				return surface;
+			},
+			destroy() {
+				releasePersistentAvatarImages(parking);
+				parking.replaceChildren();
+			},
+		};
 	}
 
 	function syncTabSelection(tabs, dataKey, selectedValue, roving = false) {
@@ -5593,13 +5879,29 @@
 		target.dispatchEvent(new CustomEvent('ldp-tooltip-refresh', { bubbles: true, composed: true }));
 	}
 	function setExpanded(target, expanded) {
-		target.setAttribute('aria-expanded', String(expanded));
+		const value = String(expanded);
+		if (target.getAttribute('aria-expanded') !== value) target.setAttribute('aria-expanded', value);
 	}
 	function setPressed(target, pressed) {
-		target.setAttribute('aria-pressed', String(pressed));
+		const value = String(pressed);
+		if (target.getAttribute('aria-pressed') !== value) target.setAttribute('aria-pressed', value);
 	}
 	function setLabel(target, label) {
-		target.setAttribute('aria-label', label);
+		if (target.getAttribute('aria-label') !== label) target.setAttribute('aria-label', label);
+	}
+	function setHidden(target, hidden) {
+		if (target && target.hidden !== hidden) target.hidden = hidden;
+	}
+	function setText(target, text) {
+		if (target && target.textContent !== text) target.textContent = text;
+	}
+	function setAttributeValue(target, name, value) {
+		const next = String(value);
+		if (target && target.getAttribute(name) !== next) target.setAttribute(name, next);
+	}
+	function setStyleValue(target, name, value) {
+		const next = String(value);
+		if (target && target.style.getPropertyValue(name) !== next) target.style.setProperty(name, next);
 	}
 	function isFunction(value) {
 		return typeof value === 'function';
@@ -6519,7 +6821,7 @@
 		const mode = normalizeReaderThemeMode(themeMode);
 		const ownPalette = readerUsesOwnThemePalette();
 		bindLinuxDoNativeThemeEvents();
-		[...READER_PORTAL_HOST?.children || []].forEach((node) =>
+		[...READER_PORTAL_CONTEXT_BODY?.children || []].forEach((node) =>
 			applyReaderThemeVariables(node, mode, ownPalette));
 		if (CURRENT_OVERLAY && !CURRENT_OVERLAY.isConnected) applyReaderThemeVariables(CURRENT_OVERLAY, mode, ownPalette);
 		document.querySelectorAll('[data-ldp-reader-composer-root]').forEach((node) => applyReaderThemeVariables(node, mode, ownPalette));
@@ -11393,8 +11695,7 @@
 			returnControl.textContent = source.nested ? '返回楼中楼' : '返回引用楼层';
 			hint.append(returnControl);
 		}
-		const hintRoot = ensureReaderPortal();
-		(hintRoot || document.body).append(hint);
+		appendReaderPortalNode(hint);
 		ctx.quoteHighlightState = {
 			marks,
 			lastMark,
@@ -12586,6 +12887,7 @@
 
 	function clearStreamViewportAnchor(ctx) {
 		if (!ctx) return;
+		ctx.streamViewportAnchorCapturePending = false;
 		ctx.streamViewportAnchorRestorePending = false;
 		ctx.streamViewportAnchor = null;
 		if (ctx.scrollRoot) ctx.scrollRoot.classList.remove('ldp-stream-viewport-anchor');
@@ -12593,6 +12895,7 @@
 
 	function captureStreamViewportAnchor(ctx) {
 		if (!ctx || !ctx.scrollRoot || !ctx.commentsEl || ctx.streamProgrammaticTarget) return null;
+		ctx.streamViewportAnchorCapturePending = false;
 		const marker = findStreamViewportAnchorMarker(ctx);
 		if (!marker) {
 			clearStreamViewportAnchor(ctx);
@@ -12611,6 +12914,10 @@
 		ctx.streamViewportAnchor = state;
 		ctx.scrollRoot.classList.add('ldp-stream-viewport-anchor');
 		return state;
+	}
+
+	function queueStreamViewportAnchorCapture(ctx) {
+		if (ctx && !ctx.streamProgrammaticTarget) ctx.streamViewportAnchorCapturePending = true;
 	}
 
 	function beginStreamViewportAnchorRestoreBatch(ctx) {
@@ -12925,7 +13232,8 @@
 
 	function pruneStreamHydratedContent(ctx, items, start, end) {
 		if (!ctx || !ctx.streamHydratedNodes || ctx.floorPreview?.isOpen()) return;
-		const warmBuffer = Math.min(24, Math.max(8, Math.ceil(streamPerformance(ctx).streamMaxItems / 4)));
+		const mountedSpan = Math.max(1, end - start);
+		const warmBuffer = Math.min(12, Math.max(4, Math.ceil(mountedSpan / 2)));
 		const warmStart = Math.max(0, start - warmBuffer);
 		const warmEnd = Math.min(items.length, end + warmBuffer);
 		[...ctx.streamHydratedNodes].forEach((post) => {
@@ -12939,13 +13247,24 @@
 		});
 	}
 
+	function streamWorkingSetSpan(ctx, total) {
+		const viewportItems = Math.ceil(
+			Math.max(1, Number(ctx?.scrollRoot?.clientHeight) || 0) / STREAM_ESTIMATED_HEIGHT,
+		);
+		return Math.min(
+			Math.max(0, Number(total) || 0),
+			streamPerformance(ctx).streamMaxItems,
+			Math.max(12, viewportItems + 8),
+		);
+	}
+
 	function hydrateStreamNavigationNeighborhood(ctx, postNumber) {
 		const targetItem = ctx?.streamItemMap && ctx.streamItemMap.get(+postNumber);
 		if (!targetItem) return;
 		const items = streamLayoutItems(ctx);
 		const targetIndex = ctx.onlyOp ? targetItem.layoutIndex : targetItem.index;
 		if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= items.length) return;
-		const span = Math.min(items.length, streamPerformance(ctx).streamMaxItems);
+		const span = streamWorkingSetSpan(ctx, items.length);
 		const beforeTarget = Math.min(targetIndex, Math.floor(span * 0.75));
 		let start = Math.max(0, targetIndex - beforeTarget);
 		const end = Math.min(items.length, start + span);
@@ -12966,8 +13285,19 @@
 			work.cancels.set(post, scheduleIdleWork(attempt, delay));
 			if (ctx?.[work.pendingSet]) ctx[work.pendingSet].add(post);
 		};
+		const waitForVisibility = () => {
+			const resume = () => {
+				if (document.visibilityState !== 'visible') return;
+				document.removeEventListener('visibilitychange', resume);
+				work.cancels.delete(post);
+				attempt();
+			};
+			document.addEventListener('visibilitychange', resume);
+			work.cancels.set(post, () => document.removeEventListener('visibilitychange', resume));
+		};
 		const attempt = () => {
 			if (!isPending() || !post.isConnected) return cancel();
+			if (document.visibilityState !== 'visible') return waitForVisibility();
 			if (streamScrollIsActive(ctx, settleMs)) return queue();
 			cancel();
 			run();
@@ -13132,7 +13462,7 @@
 				}
 				cursor = part.nextSibling;
 			});
-			if (document.visibilityState === 'visible') activateReaderMedia(node);
+			if (!wasConnected && document.visibilityState === 'visible') activateReaderMedia(node);
 			restoreReaderQuoteHighlightForPost(node, ctx);
 			if (node.dataset.ldpContentHydrated === '1' && node.dataset.ldpLatexRendered !== '1') {
 				schedulePostLatexRender(node, ctx);
@@ -13255,10 +13585,7 @@
 		const items = streamLayoutItems(ctx);
 		const layoutIndex = ctx.onlyOp ? item.layoutIndex : item.index;
 		rebuildStreamPrefix(ctx);
-		const span = Math.min(
-			streamPerformance(ctx).streamMaxItems,
-			Math.max(12, Math.ceil(ctx.scrollRoot.clientHeight / STREAM_PLACEHOLDER_MIN_HEIGHT) + 8)
-		);
+		const span = streamWorkingSetSpan(ctx, items.length);
 		const start = Math.max(0, Math.min(layoutIndex - Math.floor(span / 2), items.length - span));
 		const end = Math.min(items.length, start + span);
 		mountStreamRange(ctx, start, end);
@@ -13297,7 +13624,10 @@
 		const currentValid = ctx.streamMountedNodes.size > 0 && currentLength > 0 &&
 			currentStart >= 0 && currentEnd <= total;
 		if (!currentValid) return { start, end };
+		const desiredLength = Math.max(1, end - start);
 		const maxItems = Math.max(1, streamPerformance(ctx).streamMaxItems);
+		const retention = Math.min(8, Math.max(3, Math.ceil(desiredLength * .3)));
+		const stableLimit = Math.min(maxItems, desiredLength + retention);
 		const anchorOwner = ctx.streamViewportAnchor?.owner;
 		const anchorItem = anchorOwner?.isConnected
 			? ctx.streamItemMap.get(streamPostNumber(anchorOwner))
@@ -13307,7 +13637,7 @@
 			anchorIndex >= currentStart && anchorIndex < currentEnd;
 		const nextContainsAnchor = Number.isInteger(anchorIndex) && anchorIndex >= start && anchorIndex < end;
 		if (currentContainsAnchor && !nextContainsAnchor) {
-			const span = Math.min(maxItems, Math.max(1, currentLength, end - start));
+			const span = Math.min(maxItems, desiredLength + retention);
 			if (ctx.streamScrollDirection < 0) {
 				const trailingItems = Math.min(6, Math.max(2, Math.ceil(span * 0.1)));
 				end = Math.min(total, anchorIndex + trailingItems + 1);
@@ -13327,15 +13657,17 @@
 		}
 		const unionStart = Math.min(currentStart, start);
 		const unionEnd = Math.max(currentEnd, end);
-		if (unionEnd - unionStart <= maxItems) return { start: unionStart, end: unionEnd };
+		if (unionEnd - unionStart <= stableLimit) return { start: unionStart, end: unionEnd };
 
-		// A small overlap avoids churn while measured heights settle. Once the DOM
-		// budget is full, slide the window instead of retaining every visited floor.
+		// Keep only a small trailing overlap. The configured maximum remains a hard
+		// ceiling, not a target that gradually retains every visited floor.
 		if (start >= currentStart && end >= currentEnd) {
-			return { start: Math.max(0, unionEnd - maxItems), end: unionEnd };
+			const nextStart = Math.max(0, start - retention);
+			return { start: Math.max(0, end - maxItems, nextStart), end };
 		}
 		if (start <= currentStart && end <= currentEnd) {
-			return { start: unionStart, end: Math.min(total, unionStart + maxItems) };
+			const nextEnd = Math.min(total, end + retention);
+			return { start, end: Math.min(nextEnd, start + maxItems) };
 		}
 		return { start, end };
 	}
@@ -13360,6 +13692,8 @@
 		const beforeOverscan = overscan + (ctx.streamScrollDirection < 0 ? velocityLead : 0);
 		const afterOverscan = overscan + (ctx.streamScrollDirection > 0 ? velocityLead : 0);
 		const localTop = Math.max(0, ctx.scrollRoot.scrollTop - listOffset);
+		ctx.streamViewportLocalTop = localTop;
+		ctx.streamViewportHeight = viewportHeight;
 		ctx.streamViewportTopIndex = findStreamIndexAtOffset(ctx.streamPrefix, localTop);
 		ctx.streamViewportBottomIndex = findStreamIndexAtOffset(
 			ctx.streamPrefix,
@@ -13400,6 +13734,7 @@
 		if (!ctx || ctx.streamWindowFrame) return;
 		ctx.streamWindowFrame = requestAnimationFrame(() => {
 			ctx.streamWindowFrame = 0;
+			if (ctx.streamViewportAnchorCapturePending) captureStreamViewportAnchor(ctx);
 			syncStreamWindow(ctx);
 			// Defer geometry reads until the mounted window has completed a layout.
 			if (ctx.timeline) ctx.timeline.update();
@@ -13409,6 +13744,7 @@
 	function flushStreamWindow(ctx) {
 		if (ctx.streamWindowFrame) cancelAnimationFrame(ctx.streamWindowFrame);
 		ctx.streamWindowFrame = 0;
+		if (ctx.streamViewportAnchorCapturePending) captureStreamViewportAnchor(ctx);
 		syncStreamWindow(ctx);
 	}
 
@@ -14960,6 +15296,8 @@
 		let commentRequestToken = 0;
 		let commentTargetPost = null;
 		let commentsManuallyToggled = false;
+		let commentsResize = null;
+		let commentsResizeFrame = 0;
 		const initialPostNumber = +(items[initialIndex]?.postNumber) || 0;
 		let exploringPrevious = false;
 		let exploringNext = false;
@@ -16124,6 +16462,9 @@
 			batchThumbnailQueue.length = 0;
 			batchThumbnailUrls.forEach((source) => URL.revokeObjectURL(source));
 			batchThumbnailUrls.clear();
+			if (commentsResizeFrame) cancelAnimationFrame(commentsResizeFrame);
+			commentsResizeFrame = 0;
+			commentsResize = null;
 			imageTransform.destroy();
 			lb.remove();
 			lightboxScope.destroy();
@@ -16152,30 +16493,44 @@
 		commentsDescriptionToggle.addEventListener('click', () => {
 			commentsSource.open = !commentsSource.open;
 		});
-		let commentsResizePointerId = null;
-		commentsResizer.addEventListener('pointerdown', (event) => {
-			if (event.button !== 0 || lb.classList.contains('ldp-lb-comments-collapsed')) return;
-			commentsResizePointerId = event.pointerId;
-			commentsResizer.setPointerCapture(event.pointerId);
-			lb.classList.add('is-resizing-comments');
-			event.preventDefault();
-		});
-		commentsResizer.addEventListener('pointermove', (event) => {
-			if (commentsResizePointerId !== event.pointerId) return;
-			const mainRect = lb.querySelector('.ldp-lb-main').getBoundingClientRect();
-			if (!mainRect.width) return;
+		const renderCommentsResize = () => {
+			commentsResizeFrame = 0;
+			if (!commentsResize) return;
+			const { mainRect, clientX } = commentsResize;
 			const minimum = Math.min(
 				LIGHTBOX_COMMENTS_WIDTH_MAX,
 				Math.max(LIGHTBOX_COMMENTS_WIDTH_MIN, 240 / mainRect.width * 100)
 			);
 			applyCommentsWidth(Math.min(
 				LIGHTBOX_COMMENTS_WIDTH_MAX,
-				Math.max(minimum, (mainRect.right - event.clientX) / mainRect.width * 100)
+				Math.max(minimum, (mainRect.right - clientX) / mainRect.width * 100)
 			));
+		};
+		commentsResizer.addEventListener('pointerdown', (event) => {
+			if (event.button !== 0 || lb.classList.contains('ldp-lb-comments-collapsed')) return;
+			const mainRect = lb.querySelector('.ldp-lb-main').getBoundingClientRect();
+			if (!mainRect.width) return;
+			commentsResize = {
+				pointerId: event.pointerId,
+				mainRect,
+				clientX: event.clientX,
+			};
+			commentsResizer.setPointerCapture(event.pointerId);
+			lb.classList.add('is-resizing-comments');
+			event.preventDefault();
+		});
+		commentsResizer.addEventListener('pointermove', (event) => {
+			if (commentsResize?.pointerId !== event.pointerId) return;
+			commentsResize.clientX = event.clientX;
+			if (!commentsResizeFrame) commentsResizeFrame = requestAnimationFrame(renderCommentsResize);
 		});
 		const finishCommentsResize = (event) => {
-			if (commentsResizePointerId !== event.pointerId) return;
-			commentsResizePointerId = null;
+			if (commentsResize?.pointerId !== event.pointerId) return;
+			commentsResize.clientX = event.clientX;
+			if (commentsResizeFrame) cancelAnimationFrame(commentsResizeFrame);
+			commentsResizeFrame = 0;
+			renderCommentsResize();
+			commentsResize = null;
 			lb.classList.remove('is-resizing-comments');
 			applyCommentsWidth(commentsWidthPercent, true);
 		};
@@ -17308,6 +17663,42 @@
 		const batchOptions = { ...options, deferStreamSync: true };
 		const nodes = batch.map((post) => attachPost(post, ctx, batchOptions)).filter(Boolean);
 		syncKnownBoostIdentities(ctx, batch.map((post) => post?.username));
+		flushStreamPostBatch(
+			ctx,
+			options.syncStreamNow === true,
+			options.preserveViewportAnchor === true,
+		);
+		return nodes;
+	}
+
+	function yieldReaderRenderTask() {
+		if (isFunction(globalThis.scheduler?.yield)) return globalThis.scheduler.yield();
+		return new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	async function attachPostBatchCooperatively(posts, ctx, options = {}) {
+		const batch = Array.isArray(posts) ? posts : [];
+		if (!batch.length) return [];
+		const acceptsWork = isFunction(options.acceptsWork) ? options.acceptsWork : () => true;
+		const batchOptions = { ...options };
+		delete batchOptions.acceptsWork;
+		batchOptions.deferStreamSync = true;
+		const nodes = [];
+		const attachedPosts = [];
+		let sliceStartedAt = performance.now();
+		for (let index = 0; index < batch.length; index++) {
+			if (!acceptsWork()) return nodes;
+			const post = batch[index];
+			const node = attachPost(post, ctx, batchOptions);
+			if (node) nodes.push(node);
+			attachedPosts.push(post);
+			if ((index + 1) % 4 === 0 && performance.now() - sliceStartedAt >= 8) {
+				await yieldReaderRenderTask();
+				if (!acceptsWork()) return nodes;
+				sliceStartedAt = performance.now();
+			}
+		}
+		syncKnownBoostIdentities(ctx, attachedPosts.map((post) => post?.username));
 		flushStreamPostBatch(
 			ctx,
 			options.syncStreamNow === true,
@@ -19729,8 +20120,8 @@
 			const docked = managed() && next && next.top < READER_WINDOW_HANDLE_DOCK_THRESHOLD;
 			overlay.classList.toggle('ldp-window-handle-docked', !!docked);
 			if (!next) return;
-			overlay.style.setProperty('--ldp-reader-window-center-x', `${next.left + next.width / 2}px`);
-			overlay.style.setProperty('--ldp-reader-window-top', `${next.top}px`);
+			setStyleValue(overlay, '--ldp-reader-window-center-x', `${next.left + next.width / 2}px`);
+			setStyleValue(overlay, '--ldp-reader-window-top', `${next.top}px`);
 		};
 		const syncLockButton = () => {
 			const locked = isLocked();
@@ -19742,6 +20133,13 @@
 				lockButton.dataset.locked = String(locked);
 				lockButton.innerHTML = icon(locked ? 'lock' : 'unlock');
 			}
+		};
+		const applyGeometry = (next) => {
+			setStyleValue(modal, 'left', `${next.left}px`);
+			setStyleValue(modal, 'top', `${next.top}px`);
+			setStyleValue(modal, 'width', `${next.width}px`);
+			setStyleValue(modal, 'height', `${next.height}px`);
+			updateCapsulePlacement(next);
 		};
 		const animateLockButton = () => {
 			if (prefersReducedMotion()) return;
@@ -19761,18 +20159,13 @@
 			setLabel(pinButton, isPinned() ? '取消置顶浮窗' : '置顶浮窗');
 			if (!managed()) {
 				updateCapsulePlacement(null);
-				modal.style.removeProperty('left');
-				modal.style.removeProperty('top');
-				modal.style.removeProperty('width');
-				modal.style.removeProperty('height');
+				['left', 'top', 'width', 'height'].forEach((name) => {
+					if (modal.style.getPropertyValue(name)) modal.style.removeProperty(name);
+				});
 				return;
 			}
 			if (!state) state = { ...displayState };
-			modal.style.left = `${displayState.left}px`;
-			modal.style.top = `${displayState.top}px`;
-			modal.style.width = `${displayState.width}px`;
-			modal.style.height = `${displayState.height}px`;
-			updateCapsulePlacement(displayState);
+			applyGeometry(displayState);
 		};
 		const stopInteraction = () => {
 			if (!interaction) return;
@@ -19809,7 +20202,7 @@
 			if (direction.includes('n')) top = Math.min(bottom - READER_WINDOW_MIN_HEIGHT, Math.max(READER_WINDOW_MARGIN, start.top + dy));
 			if (direction.includes('s')) bottom = Math.max(top + READER_WINDOW_MIN_HEIGHT, Math.min(window.innerHeight - READER_WINDOW_MARGIN, bottom + dy));
 			state = clampState({ left, top, width: right - left, height: bottom - top });
-			apply();
+			applyGeometry(state);
 		};
 		const onPointerMove = (event) => {
 			if (!interaction || event.pointerId !== interaction.pointerId) return;
@@ -20105,6 +20498,7 @@
 		const cardSelector = 'tr.topic-list-item,.topic-list-item,.latest-topic-list-item,.search-result-topic,.fps-result';
 		const pendingCards = new Set();
 		let frame = 0;
+		let observerRoot = null;
 		const collect = (node) => {
 			const element = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
 			if (!element || element.closest('.ldp-overlay')) return;
@@ -20122,16 +20516,37 @@
 		const schedule = () => {
 			if (!frame && pendingCards.size) frame = requestAnimationFrame(flush);
 		};
-		document.querySelectorAll(cardSelector).forEach((card) => pendingCards.add(card));
-		schedule();
-		const observer = new MutationObserver((records) => {
+		let observer = null;
+		const syncObserverTargets = () => {
+			const nextRoot = document.querySelector('#main-outlet') ||
+				document.querySelector('.list-container,.topic-list,.latest-topic-list') ||
+				document.querySelector('#ember-app');
+			if (observerRoot === nextRoot && nextRoot?.isConnected) return;
+			observer.disconnect();
+			observer.observe(document.body, { childList: true });
+			if (nextRoot) {
+				let ancestor = nextRoot.parentElement;
+				while (ancestor && ancestor !== document.body) {
+					observer.observe(ancestor, { childList: true });
+					ancestor = ancestor.parentElement;
+				}
+				observer.observe(nextRoot, { childList: true, subtree: true });
+				collect(nextRoot);
+			}
+			observerRoot = nextRoot;
+		};
+		observer = new MutationObserver((records) => {
 			records.forEach((record) => {
+				if (record.target === document.body || !observerRoot?.isConnected ||
+						!observerRoot.contains(record.target)) syncObserverTargets();
 				collect(record.target);
 				record.addedNodes.forEach(collect);
 			});
 			schedule();
 		});
-		observer.observe(document.body, { childList: true, subtree: true });
+		syncObserverTargets();
+		document.querySelectorAll(cardSelector).forEach((card) => pendingCards.add(card));
+		schedule();
 		document.body._ldpReaderQueueButtonsObserver = observer;
 	}
 
@@ -20218,6 +20633,7 @@
 		let destroyed = false;
 		let embeddedHostRoots = new Map();
 		let embeddedHostObserver = null;
+		let embeddedHostObserverRoot = null;
 		let embeddedHostFrame = 0;
 		let embeddedHostCardFrame = 0;
 		const embeddedHostChangedCards = new Set();
@@ -20226,6 +20642,8 @@
 		let hostScrollbarResizeObserver = null;
 		let hostScrollbarPointer = null;
 		let hostScrollbarState = { maxScroll: 0, maxThumbTop: 0, thumbHeight: 0 };
+		let hostScrollbarGeometry = { viewportHeight: 1, scrollHeight: 1, maxScroll: 0, trackHeight: 1 };
+		let hostScrollbarGeometryDirty = true;
 		let hostTopButtonTimer = 0;
 		let hostTopCountdownTimer = 0;
 		let hostScrollTop = 0;
@@ -20259,6 +20677,12 @@
 			root.classList.toggle('ldp-reader-embed-resizing', !!active);
 			overlay.classList.toggle('ldp-reader-embed-resizing', !!active);
 		};
+		const hostPageScrollTop = (maxScroll = Number.POSITIVE_INFINITY) => {
+			const scrollingElement = document.scrollingElement || root;
+			return Math.min(maxScroll, Math.max(0, Number(
+				window.scrollY || scrollingElement?.scrollTop || 0,
+			)));
+		};
 		const pageScrollMetrics = () => {
 			const scrollingElement = document.scrollingElement || root;
 			const viewportHeight = Math.max(1, Number(window.innerHeight || root.clientHeight || 0));
@@ -20268,16 +20692,27 @@
 				Number(document.body?.scrollHeight || 0),
 			);
 			const maxScroll = Math.max(0, scrollHeight - viewportHeight);
-			const scrollTop = Math.min(maxScroll, Math.max(0, Number(
-				window.scrollY || scrollingElement?.scrollTop || 0,
-			)));
+			const scrollTop = hostPageScrollTop(maxScroll);
 			return { viewportHeight, scrollHeight, maxScroll, scrollTop };
 		};
 		const syncHostScrollbar = () => {
 			hostScrollbarFrame = 0;
 			if (destroyed || !embeddedMode() || !hostScrollbar || !hostScrollbarThumb) return;
-			const metrics = pageScrollMetrics();
-			const trackHeight = Math.max(1, hostScrollbar.clientHeight);
+			if (hostScrollbarGeometryDirty) {
+				const metrics = pageScrollMetrics();
+				hostScrollbarGeometry = {
+					viewportHeight: metrics.viewportHeight,
+					scrollHeight: metrics.scrollHeight,
+					maxScroll: metrics.maxScroll,
+					trackHeight: Math.max(1, hostScrollbar.clientHeight),
+				};
+				hostScrollbarGeometryDirty = false;
+			}
+			const metrics = {
+				...hostScrollbarGeometry,
+				scrollTop: hostPageScrollTop(hostScrollbarGeometry.maxScroll),
+			};
+			const trackHeight = metrics.trackHeight;
 			const thumbHeight = metrics.maxScroll > 0
 				? Math.min(trackHeight, Math.max(24, trackHeight * metrics.viewportHeight / metrics.scrollHeight))
 				: trackHeight;
@@ -20287,15 +20722,23 @@
 				: 0;
 			hostScrollbarState = { maxScroll: metrics.maxScroll, maxThumbTop, thumbHeight };
 			hostScrollbar.classList.toggle('ldp-reader-host-scrollbar-inactive', metrics.maxScroll <= 0);
-			hostScrollbar.setAttribute('aria-disabled', String(metrics.maxScroll <= 0));
-			hostScrollbar.setAttribute('aria-valuemax', String(Math.round(metrics.maxScroll)));
-			hostScrollbar.setAttribute('aria-valuenow', String(Math.round(metrics.scrollTop)));
-			hostScrollbarThumb.style.height = `${Math.round(thumbHeight * 100) / 100}px`;
-			hostScrollbarThumb.style.transform = `translateY(${Math.round(thumbTop * 100) / 100}px)`;
+			setAttributeValue(hostScrollbar, 'aria-disabled', metrics.maxScroll <= 0);
+			setAttributeValue(hostScrollbar, 'aria-valuemax', Math.round(metrics.maxScroll));
+			setAttributeValue(hostScrollbar, 'aria-valuenow', Math.round(metrics.scrollTop));
+			const nextHeight = `${Math.round(thumbHeight * 100) / 100}px`;
+			const nextTransform = `translateY(${Math.round(thumbTop * 100) / 100}px)`;
+			if (hostScrollbarThumb.style.height !== nextHeight) hostScrollbarThumb.style.height = nextHeight;
+			if (hostScrollbarThumb.style.transform !== nextTransform) {
+				hostScrollbarThumb.style.transform = nextTransform;
+			}
 		};
 		const scheduleHostScrollbarSync = () => {
 			if (hostScrollbarFrame || destroyed || !embeddedMode()) return;
 			hostScrollbarFrame = requestAnimationFrame(syncHostScrollbar);
+		};
+		const invalidateHostScrollbarGeometry = () => {
+			hostScrollbarGeometryDirty = true;
+			scheduleHostScrollbarSync();
 		};
 		const hideHostTopButton = () => {
 			if (hostTopButtonTimer) clearTimeout(hostTopButtonTimer);
@@ -20304,7 +20747,7 @@
 			hostTopCountdownTimer = 0;
 			if (hostTopButton) hostTopButton.hidden = true;
 		};
-		const resetHostUpwardScroll = (scrollTop = pageScrollMetrics().scrollTop) => {
+		const resetHostUpwardScroll = (scrollTop = hostPageScrollTop()) => {
 			hostScrollTop = scrollTop;
 			hostUpwardDistance = 0;
 			hostUpwardStartedAt = 0;
@@ -20322,8 +20765,7 @@
 		};
 		const showHostTopButton = () => {
 			if (!hostTopButton || !Number.isFinite(hostPointerClientX) || !Number.isFinite(hostPointerClientY)) return;
-			const metrics = pageScrollMetrics();
-			if (metrics.scrollTop <= 8) {
+			if (hostPageScrollTop() <= 8) {
 				hideHostTopButton();
 				return;
 			}
@@ -20358,7 +20800,9 @@
 		const onHostScroll = () => {
 			scheduleHostScrollbarSync();
 			if (!embeddedMode()) return;
-			const scrollTop = pageScrollMetrics().scrollTop;
+			const scrollTop = Math.max(0, Number(
+				window.scrollY || document.scrollingElement?.scrollTop || 0,
+			));
 			if (hostTopJumping) {
 				resetHostUpwardScroll(scrollTop);
 				return;
@@ -20398,10 +20842,12 @@
 		const startHostScrollbarSync = () => {
 			if (!hostScrollbar || !hostScrollbarThumb) return;
 			if (!hostScrollbarResizeObserver && isFunction(ResizeObserver)) {
-				hostScrollbarResizeObserver = new ResizeObserver(scheduleHostScrollbarSync);
+				hostScrollbarResizeObserver = new ResizeObserver(invalidateHostScrollbarGeometry);
 				hostScrollbarResizeObserver.observe(root);
 				if (document.body) hostScrollbarResizeObserver.observe(document.body);
+				hostScrollbarResizeObserver.observe(hostScrollbar);
 			}
+			hostScrollbarGeometryDirty = true;
 			resetHostUpwardScroll();
 			scheduleHostScrollbarSync();
 		};
@@ -20412,6 +20858,8 @@
 			hostScrollbarResizeObserver = null;
 			hostScrollbarPointer = null;
 			hostScrollbarState = { maxScroll: 0, maxThumbTop: 0, thumbHeight: 0 };
+			hostScrollbarGeometry = { viewportHeight: 1, scrollHeight: 1, maxScroll: 0, trackHeight: 1 };
+			hostScrollbarGeometryDirty = true;
 			hideHostTopButton();
 			resetHostUpwardScroll(0);
 			if (!hostScrollbar || !hostScrollbarThumb) return;
@@ -20437,6 +20885,7 @@
 			if (event.button !== 0 || !embeddedMode() || !hostScrollbar || !hostScrollbarThumb) return;
 			if (hostScrollbarFrame) cancelAnimationFrame(hostScrollbarFrame);
 			hostScrollbarFrame = 0;
+			hostScrollbarGeometryDirty = true;
 			syncHostScrollbar();
 			if (hostScrollbarState.maxScroll <= 0) return;
 			consumeEvent(event);
@@ -20486,6 +20935,28 @@
 			while (current?.parentElement && current.parentElement !== document.body) current = current.parentElement;
 			return current && current.parentElement === document.body ? current : null;
 		};
+		const syncEmbeddedHostObserverTargets = () => {
+			if (!embeddedHostObserver || !document.body) return;
+			const nextRoot = document.querySelector('#main-outlet') ||
+				document.querySelector('.list-container,.topic-list,.latest-topic-list') ||
+				document.querySelector('#ember-app');
+			if (embeddedHostObserverRoot === nextRoot && nextRoot?.isConnected) return;
+			embeddedHostObserver.disconnect();
+			embeddedHostObserver.observe(document.body, { childList: true });
+			if (nextRoot) {
+				let ancestor = nextRoot.parentElement;
+				while (ancestor && ancestor !== document.body) {
+					embeddedHostObserver.observe(ancestor, { childList: true });
+					ancestor = ancestor.parentElement;
+				}
+				embeddedHostObserver.observe(nextRoot, {
+					childList: true,
+					subtree: true,
+					characterData: true,
+				});
+			}
+			embeddedHostObserverRoot = nextRoot;
+		};
 		const syncEmbeddedHostRoots = () => {
 			embeddedHostFrame = 0;
 			if (destroyed || !document.body || !embeddedMode()) return;
@@ -20508,6 +20979,7 @@
 				if (role === 'shell') markNativeDoNotDisturbBadges(node);
 			});
 			embeddedHostRoots = nextRoots;
+			syncEmbeddedHostObserverTargets();
 		};
 		const scheduleEmbeddedHostRootSync = () => {
 			if (embeddedHostFrame || destroyed || !embeddedMode()) return;
@@ -20569,7 +21041,11 @@
 							if (card) scheduleEmbeddedHostCardSet([card], embeddedHostActivityCards);
 							return;
 						}
-						if (record.type === 'childList' && record.target === document.body) scheduleEmbeddedHostRootSync();
+						if (record.type === 'childList' && (
+							record.target === document.body ||
+							!embeddedHostObserverRoot?.isConnected ||
+							!embeddedHostObserverRoot.contains(record.target)
+						)) scheduleEmbeddedHostRootSync();
 						const changedNodes = record.type === 'childList'
 							? [...record.addedNodes, ...record.removedNodes]
 							: [];
@@ -20581,7 +21057,6 @@
 					});
 					scheduleEmbeddedHostCardSet(changedCards, embeddedHostChangedCards);
 				});
-				embeddedHostObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
 			}
 			syncEmbeddedHostRoots();
 		};
@@ -20594,6 +21069,7 @@
 			embeddedHostActivityCards.clear();
 			if (embeddedHostObserver) embeddedHostObserver.disconnect();
 			embeddedHostObserver = null;
+			embeddedHostObserverRoot = null;
 			clearNativeEmbeddedTopicEnhancements();
 			for (const node of embeddedHostRoots.keys()) node.removeAttribute('data-ldp-reader-host-root');
 			embeddedHostRoots = new Map();
@@ -21287,13 +21763,6 @@
 			observeComposer(nextComposer);
 			if (nativeComposerVisible(nextComposer)) open(nextComposer);
 		};
-		const composerMutationNodeIsRelevant = (node) => {
-			const element = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
-			return !!(element && (element.matches('#reply-control') || element.querySelector('#reply-control')));
-		};
-		const composerHostMutationIsRelevant = (mutation) => (
-			[...mutation.addedNodes, ...mutation.removedNodes].some(composerMutationNodeIsRelevant)
-		);
 		const syncLayer = () => {
 			if (!composer || !nativeComposerVisible(composer)) return false;
 			syncComposerRoot();
@@ -21327,11 +21796,34 @@
 			clearComposerRoot();
 			composer = null;
 		};
+		const syncComposerHostObserverTargets = () => {
+			if (!composerHostObserver || !document.body) return;
+			composerHostObserver.disconnect();
+			const nextComposer = document.querySelector('#reply-control');
+			if (!nextComposer) {
+				const bootstrapRoot = document.querySelector('#ember-app') || document.body;
+				composerHostObserver.observe(bootstrapRoot, { childList: true, subtree: true });
+				let bootstrapAncestor = bootstrapRoot.parentElement;
+				while (bootstrapAncestor) {
+					composerHostObserver.observe(bootstrapAncestor, { childList: true });
+					if (bootstrapAncestor === document.body) break;
+					bootstrapAncestor = bootstrapAncestor.parentElement;
+				}
+				return;
+			}
+			let ancestor = nextComposer.parentElement;
+			while (ancestor) {
+				composerHostObserver.observe(ancestor, { childList: true });
+				if (ancestor === document.body) break;
+				ancestor = ancestor.parentElement;
+			}
+		};
 		if (document.body) {
-			composerHostObserver = new MutationObserver((mutations) => {
-				if (mutations.some(composerHostMutationIsRelevant)) syncComposerElement();
+			composerHostObserver = new MutationObserver(() => {
+				syncComposerElement();
+				syncComposerHostObserverTargets();
 			});
-			composerHostObserver.observe(document.body, { childList: true, subtree: true });
+			syncComposerHostObserverTargets();
 		}
 		syncComposerElement();
 		window.addEventListener('resize', onWindowResize);
@@ -23221,7 +23713,7 @@
 		onAction(modal, 'pointerleave', clearActivePostActions);
 
 		const hideSelectionToolbar = () => {
-			selectionToolbar.hidden = true;
+			setHidden(selectionToolbar, true);
 			selectedQuote = null;
 		};
 
@@ -23249,7 +23741,7 @@
 			const rect = range.getBoundingClientRect();
 			if (!rect || (!rect.width && !rect.height)) return hideSelectionToolbar();
 			selectedQuote = { post, raw };
-			selectionToolbar.hidden = false;
+			setHidden(selectionToolbar, false);
 			const toolbarRect = selectionToolbar.getBoundingClientRect();
 			const left = Math.max(8, Math.min(
 				rect.right - toolbarRect.width,
@@ -23311,7 +23803,7 @@
 			imageQuoteHideTimer = 0;
 			imageQuoteTarget = null;
 			imageQuotePointerInside = false;
-			imageQuoteToolbar.hidden = true;
+			setHidden(imageQuoteToolbar, true);
 		};
 		const closeTransientActions = () => {
 			if (!selectionToolbar.hidden) {
@@ -25050,6 +25542,7 @@
 		const visiblePrefetchNodes = new Set();
 		let nestedPrefetchRunning = false;
 		let nestedPrefetchStopped = false;
+		let nestedPrefetchPaused = document.visibilityState !== 'visible';
 		let nestedPrefetchResumeTimer = 0;
 		const sessionActive = () => !ctx.readerSession || ctx.readerSession.isCurrent('opening', 'active');
 		const assertSessionActive = () => {
@@ -25072,7 +25565,8 @@
 		};
 
 		function scheduleNestedPrefetchDrain() {
-			if (nestedPrefetchStopped || nestedPrefetchResumeTimer || !pendingPrefetchNodes.size) return;
+			if (nestedPrefetchStopped || nestedPrefetchPaused ||
+					nestedPrefetchResumeTimer || !pendingPrefetchNodes.size) return;
 			const scrollAge = Date.now() - +(ctx.streamLastScrollAt || 0);
 			nestedPrefetchResumeTimer = setTimeout(() => {
 				nestedPrefetchResumeTimer = 0;
@@ -25081,14 +25575,15 @@
 		}
 
 		async function drainNestedPrefetchQueue() {
-			if (nestedPrefetchRunning || nestedPrefetchStopped) return;
+			if (nestedPrefetchRunning || nestedPrefetchStopped || nestedPrefetchPaused) return;
 			if (streamScrollIsActive(ctx, 220)) {
 				scheduleNestedPrefetchDrain();
 				return;
 			}
 			nestedPrefetchRunning = true;
 			try {
-				while (!nestedPrefetchStopped && sessionActive() && pendingPrefetchNodes.size) {
+				while (!nestedPrefetchStopped && !nestedPrefetchPaused &&
+						sessionActive() && pendingPrefetchNodes.size) {
 					if (streamScrollIsActive(ctx, 220)) {
 						scheduleNestedPrefetchDrain();
 						break;
@@ -25133,13 +25628,15 @@
 				}
 			} finally {
 				nestedPrefetchRunning = false;
-				if (!nestedPrefetchStopped && pendingPrefetchNodes.size) scheduleNestedPrefetchDrain();
+				if (!nestedPrefetchStopped && !nestedPrefetchPaused &&
+						pendingPrefetchNodes.size) scheduleNestedPrefetchDrain();
 			}
 		}
 
 		const enqueueNestedPrefetch = (post) => {
 			if (nestedPrefetchStopped || !sessionActive() || !post || !post.isConnected || fetchedNodes.has(post)) return;
 			pendingPrefetchNodes.add(post);
+			if (nestedPrefetchPaused) return;
 			drainNestedPrefetchQueue();
 		};
 
@@ -25431,6 +25928,15 @@
 		};
 		io.loadNextPage = (node, requiredCount) => loadNextReplyPages(node, requiredCount);
 		io.loadDirectReplies = loadDirectReplies;
+		io.setActive = (active) => {
+			nestedPrefetchPaused = active !== true;
+			if (nestedPrefetchPaused) {
+				if (nestedPrefetchResumeTimer) clearTimeout(nestedPrefetchResumeTimer);
+				nestedPrefetchResumeTimer = 0;
+				return;
+			}
+			if (pendingPrefetchNodes.size) scheduleNestedPrefetchDrain();
+		};
 		return io;
 	}
 	function syncCommentsHeaderPlacement(ctx) {
@@ -25440,27 +25946,39 @@
 		const firstPostMounted = firstPost && firstPost.parentElement === ctx.commentsEl &&
 			ctx.streamMountedNodes && ctx.streamMountedNodes.has(firstPost);
 		if (!firstPostMounted) {
-			ctx.commentsHeader.hidden = true;
+			setHidden(ctx.commentsHeader, true);
 			return;
 		}
 		const children = firstPost.querySelector(':scope > .ldp-children');
 		const childLoading = firstPost.querySelector(':scope > .ldp-sub-loading');
 		const footerActions = firstPost.querySelector(':scope > .ldp-topic-footer-actions');
+		let anchor = null;
 		if (footerActions) {
 			const replyEnd = childLoading || children;
 			if (replyEnd && footerActions.previousElementSibling !== replyEnd) {
 				firstPost.insertBefore(footerActions, replyEnd.nextSibling);
 			}
-			firstPost.insertBefore(ctx.commentsHeader, footerActions.nextSibling);
-		} else if (children) firstPost.insertBefore(ctx.commentsHeader, (childLoading || children).nextSibling);
-		else firstPost.appendChild(ctx.commentsHeader);
-		ctx.commentsHeader.hidden = false;
+			anchor = footerActions;
+		} else if (children) {
+			anchor = childLoading || children;
+		}
+		const correctlyPlaced = ctx.commentsHeader.parentElement === firstPost &&
+			(anchor
+				? ctx.commentsHeader.previousSibling === anchor
+				: ctx.commentsHeader.nextSibling === null);
+		if (!correctlyPlaced) {
+			firstPost.insertBefore(ctx.commentsHeader, anchor?.nextSibling || null);
+		}
+		setHidden(ctx.commentsHeader, false);
 	}
 
 	function updateCommentsHeader(ctx) {
 		const commentCount = Math.max(0, +(ctx?.totalPosts || 0) - 1);
-		if (ctx.countEl) ctx.countEl.textContent = `（${commentCount}）`;
-		if (ctx.emptyEl) ctx.emptyEl.style.display = ctx.totalPosts ? 'none' : '';
+		setText(ctx.countEl, `（${commentCount}）`);
+		if (ctx.emptyEl) {
+			const display = ctx.totalPosts ? 'none' : '';
+			if (ctx.emptyEl.style.display !== display) ctx.emptyEl.style.display = display;
+		}
 		syncCommentsHeaderPlacement(ctx);
 	}
 
@@ -26050,21 +26568,27 @@
 				return;
 			}
 			const layoutItems = streamLayoutItems(ctx);
-			const atScrollEnd = ctx.scrollRoot.scrollTop + ctx.scrollRoot.clientHeight >= ctx.scrollRoot.scrollHeight - 16;
-			const atLoadedEnd = atScrollEnd &&
+			const streamHeight = ctx.streamPrefix[layoutItems.length] || 0;
+			const atStreamEnd = +(ctx.streamViewportLocalTop || 0) +
+				+(ctx.streamViewportHeight || 0) >= streamHeight - 16;
+			const atLoadedEnd = atStreamEnd &&
 				lastLoadedPostNumber >= Math.max(1, ctx.totalPosts || 1);
 			if (atLoadedEnd) {
 				const lastTimelineItem = ctx.onlyOp ? layoutItems[layoutItems.length - 1] : null;
 				renderBoundaryPosition(lastTimelineItem ? lastTimelineItem.postNumber : totalPostCount());
 				return;
 			}
+			const viewportItem = layoutItems[Math.max(
+				0,
+				Math.min(layoutItems.length - 1, +(ctx.streamViewportTopIndex || 0)),
+			)];
+			const indexedOwnerNode = viewportItem?.node?.isConnected ? viewportItem.node : null;
 			const anchoredOwnerNode = ctx.streamViewportAnchor?.owner;
-			const visibleAnchor = anchoredOwnerNode?.isConnected
+			const visibleAnchor = indexedOwnerNode || anchoredOwnerNode?.isConnected
 				? null
 				: findTopVisibleStreamPost(ctx);
-			const visibleOwnerNode = anchoredOwnerNode?.isConnected
-				? anchoredOwnerNode
-				: visibleAnchor?.ownerNode;
+			const visibleOwnerNode = indexedOwnerNode ||
+				(anchoredOwnerNode?.isConnected ? anchoredOwnerNode : visibleAnchor?.ownerNode);
 			const visiblePostNumber = streamPostNumber(visibleOwnerNode);
 			const visibleItem = visiblePostNumber && ctx.streamItemMap.get(visiblePostNumber);
 			if (visiblePostNumber && (!ctx.onlyOp || streamItemMatchesFilter(ctx, visibleItem))) {
@@ -26093,7 +26617,11 @@
 		const setActive = (active) => {
 			if (relativeTimer) clearInterval(relativeTimer);
 			relativeTimer = 0;
-			if (!active) return;
+			if (!active) {
+				if (frame) cancelAnimationFrame(frame);
+				frame = 0;
+				return;
+			}
 			relativeTimer = setInterval(() => {
 				update();
 				refreshRelativeTimes();
@@ -26475,8 +27003,13 @@
 		const readerSessionId = ++READER_SESSION_SEQUENCE;
 		const reusingShell = !!reusableOverlay;
 		const overlay = reusableOverlay || makeElement('div');
-		const readerElement = (selector) => overlay.querySelector(selector);
-		const readerElements = (selector) => overlay.querySelectorAll(selector);
+		const readerDetachedSurfaceRoot = () => overlay._ldpReaderShell?.surfaceManager?.parking;
+		const readerElement = (selector) =>
+			overlay.querySelector(selector) || readerDetachedSurfaceRoot()?.querySelector(selector) || null;
+		const readerElements = (selector) => [
+			...overlay.querySelectorAll(selector),
+			...(readerDetachedSurfaceRoot()?.querySelectorAll(selector) || []),
+		];
 		const readerElementGroup = (...selectors) => selectors.map(readerElement);
 		const readerElementsGroup = (...selectors) => selectors.map(readerElements);
 		let readerOpenPhase = 'create-overlay';
@@ -27073,6 +27606,8 @@
 		const readerShell = reusingShell ? overlay._ldpReaderShell : {};
 		const shellScope = readerShell.lifecycleScope || createLifecycleScope();
 		readerShell.lifecycleScope = shellScope;
+		const surfaceManager = readerShell.surfaceManager || createReaderSurfaceManager(overlay);
+		readerShell.surfaceManager = surfaceManager;
 		const onShell = (target, type, listener, options) => shellScope.listen(target, type, listener, options);
 		const shouldRestoreHostTopicAnchor = !!hostTopicPointerAnchor && !directTopicRoute &&
 			readerPresentation(requestedReaderMode).embedded;
@@ -27186,6 +27721,9 @@
 		const settingsSurfaceIsCompact = () =>
 			settingsSurfaceBounds().width <= READER_WINDOW_COMPACT_WIDTH;
 		const syncReaderSurfaceDensity = () => {
+			const readerShort = modal.clientHeight <= READER_SETTINGS_SHORT_HEIGHT;
+			modal.classList.toggle('ldp-reader-surface-short', readerShort);
+			if (settingsPopover.hidden) return;
 			const settingsHost = settingsSurfaceHost();
 			const shortSurface = settingsHost.clientHeight <= READER_SETTINGS_SHORT_HEIGHT;
 			modal.classList.toggle(
@@ -27196,18 +27734,12 @@
 				'ldp-settings-surface-short',
 				settingsHost === settingsLayer && shortSurface,
 			);
-			modal.classList.toggle(
-				'ldp-reader-surface-short',
-				modal.clientHeight <= READER_SETTINGS_SHORT_HEIGHT,
-			);
 		};
-		if (notificationsPopover && notificationsPopover.parentElement !== overlay) overlay.append(notificationsPopover);
-		if (historyPanel.popover && historyPanel.popover.parentElement !== overlay) overlay.append(historyPanel.popover);
-		if (bookmarksPanel.popover && bookmarksPanel.popover.parentElement !== overlay) overlay.append(bookmarksPanel.popover);
-		if (settingsPopover && settingsPopover.parentElement !== settingsSurfaceHost()) settingsSurfaceHost().append(settingsPopover);
-		if (settingHelpTooltip && settingHelpTooltip.parentElement !== settingsSurfaceHost()) {
-			settingsSurfaceHost().append(settingHelpTooltip);
-		}
+		surfaceManager.mount(notificationsPopover);
+		surfaceManager.mount(historyPanel.popover);
+		surfaceManager.mount(bookmarksPanel.popover);
+		surfaceManager.mount(settingsPopover, settingsSurfaceHost());
+		surfaceManager.mount(settingHelpTooltip, settingsSurfaceHost());
 		syncReaderSurfaceDensity();
 		syncReaderThemeSurfaces();
 		const [
@@ -27226,9 +27758,7 @@
 		);
 		const [settingsTabs, settingsSections, fontFamilyTriggers, fontFamilyCustomInputs] = readerElementsGroup(
 			'.ldp-settings-tab', '.ldp-settings-section', '.ldp-font-family-trigger', '.ldp-font-family-custom');
-		if (fontFamilyMenu && fontFamilyMenu.parentElement !== settingsSurfaceHost()) {
-			settingsSurfaceHost().append(fontFamilyMenu);
-		}
+		surfaceManager.mount(fontFamilyMenu, settingsSurfaceHost());
 		const [
 			interfaceFontScaleRange, interfaceFontScaleValue, fontScaleRange, fontScaleValue,
 			composerFontScaleRange, composerFontScaleValue, fontStatus, fontResetBtn, fontApplyBtn,
@@ -27367,14 +27897,21 @@
 					<label class="ldp-color-picker-slider"><span>饱和度</span><input class="ldp-color-picker-saturation" type="range" min="0" max="100" step="1"><output class="ldp-color-picker-saturation-value"></output></label>
 					<label class="ldp-color-picker-slider"><span>明度</span><input class="ldp-color-picker-brightness" type="range" min="0" max="100" step="1"><output class="ldp-color-picker-brightness-value"></output></label>
 				</div>`;
-			settingsSurfaceHost().append(colorPickerPopover);
+			surfaceManager.mount(colorPickerPopover, settingsSurfaceHost());
 		}
-		const syncSettingsSurfaceHost = () => {
+		let lastSettingsSurfaceHost = settingsSurfaceHost();
+		const syncSettingsSurfaceHost = (allowParking = true) => {
 			const host = settingsSurfaceHost();
-			const hostChanged = settingsPopover.parentElement !== host;
-			[settingsPopover, settingHelpTooltip, fontFamilyMenu, colorPickerPopover].forEach((surface) => {
-				if (surface && surface.parentElement !== host) host.append(surface);
-			});
+			const surfaces = [settingsPopover, settingHelpTooltip, fontFamilyMenu, colorPickerPopover].filter(Boolean);
+			if (allowParking && settingsPopover.hidden) {
+				surfaces.forEach((surface) => surfaceManager.park(surface));
+				setHidden(settingsLayer, true);
+				return;
+			}
+			const hostChanged = lastSettingsSurfaceHost !== host;
+			surfaces.forEach((surface) => surfaceManager.mount(surface, host));
+			lastSettingsSurfaceHost = host;
+			setHidden(settingsLayer, host !== settingsLayer);
 			if (hostChanged) {
 				settingsPopover.style.removeProperty('left');
 				settingsPopover.style.removeProperty('top');
@@ -27382,7 +27919,10 @@
 			}
 			syncReaderSurfaceDensity();
 		};
-		syncSettingsSurfaceHost();
+		syncSettingsSurfaceHost(false);
+		queueMicrotask(() => {
+			if (settingsPopover.hidden) syncSettingsSurfaceHost();
+		});
 		const colorPickerTitle = colorPickerPopover.querySelector('.ldp-color-picker-title');
 		const colorPickerHexInput = colorPickerPopover.querySelector('.ldp-color-picker-hex');
 		const colorPickerPresetButtons = colorPickerPopover.querySelectorAll('.ldp-color-picker-preset');
@@ -27794,8 +28334,11 @@
 		};
 		const startTopicNavMetadataHydration = () => {
 			if (!directTopicRoute || topicNavMetadataHasIcons(sourceTopicNavMetadata) || !document.body) return;
+			const metadataRoot = document.querySelector('#main-outlet') ||
+				document.querySelector('#ember-app') ||
+				document.body;
 			topicNavMetadataObserver = new MutationObserver(queueTopicNavMetadataSync);
-			topicNavMetadataObserver.observe(document.body, { childList: true, subtree: true });
+			topicNavMetadataObserver.observe(metadataRoot, { childList: true, subtree: true });
 			topicNavMetadataStopTimer = setTimeout(stopTopicNavMetadataHydration, 5000);
 			queueTopicNavMetadataSync();
 		};
@@ -27817,8 +28360,10 @@
 			if (!rateLimitNotice || !rateLimitDetail) return;
 			const remaining = rateLimitCooldownRemaining();
 			if (remaining <= 0) {
-				rateLimitNotice.hidden = true;
-				delete rateLimitNotice.dataset.cooldownSeconds;
+				setHidden(rateLimitNotice, true);
+				if ('cooldownSeconds' in rateLimitNotice.dataset) {
+					delete rateLimitNotice.dataset.cooldownSeconds;
+				}
 				if (rateLimitChallengePending && rateLimitChallenge) {
 					rateLimitChallengePending = false;
 					openCloudflareChallengePopup(rateLimitChallenge.href);
@@ -27829,19 +28374,25 @@
 			const seconds = Math.max(1, Math.ceil(remaining / 1000));
 			if (rateLimitNotice.dataset.cooldownSeconds !== String(seconds)) {
 				rateLimitNotice.dataset.cooldownSeconds = String(seconds);
-				rateLimitDetail.textContent = `触发 429，正在等待 ${seconds} 秒；倒计时结束后将自动打开过盾浮窗。`;
+				setText(rateLimitDetail, `触发 429，正在等待 ${seconds} 秒；倒计时结束后将自动打开过盾浮窗。`);
 			}
-			rateLimitNotice.hidden = false;
+			setHidden(rateLimitNotice, false);
 		};
 		const stopRateLimitNotice = () => {
 			if (rateLimitNoticeTimer) clearInterval(rateLimitNoticeTimer);
 			rateLimitNoticeTimer = 0;
 			if (!rateLimitNotice) return;
-			rateLimitNotice.hidden = true;
-			delete rateLimitNotice.dataset.cooldownSeconds;
+			setHidden(rateLimitNotice, true);
+			if ('cooldownSeconds' in rateLimitNotice.dataset) delete rateLimitNotice.dataset.cooldownSeconds;
 		};
-		syncRateLimitNotice();
-		rateLimitNoticeTimer = setInterval(syncRateLimitNotice, 500);
+		const startRateLimitNotice = () => {
+			if (rateLimitNoticeTimer) clearInterval(rateLimitNoticeTimer);
+			rateLimitNoticeTimer = 0;
+			if (document.visibilityState !== 'visible') return;
+			syncRateLimitNotice();
+			rateLimitNoticeTimer = setInterval(syncRateLimitNotice, 1000);
+		};
+		startRateLimitNotice();
 		const loader = createLoader(topicId, postRequestScheduler, performance);
 		const initialTopicRequest = loader.init();
 
@@ -27885,7 +28436,7 @@
 		}
 		syncNotificationUnreadUi(ME_CURRENT_USER ? NOTIFICATION_UNREAD_COUNT : cachedUnreadNotificationCount());
 		const positionHeaderPopover = (button, popover) => {
-			if (!button || !popover || popover.hidden) return;
+			if (!button || !popover || popover.hidden || !popover.isConnected) return;
 			const buttonRect = button.getBoundingClientRect();
 			const popoverRect = popover.getBoundingClientRect();
 			const gap = 8;
@@ -27893,36 +28444,56 @@
 				buttonRect.right - popoverRect.width));
 			const below = buttonRect.bottom + gap;
 			const above = buttonRect.top - popoverRect.height - gap;
-			popover.style.left = `${Math.round(left)}px`;
-			popover.style.top = `${Math.round(
+			const nextLeft = `${Math.round(left)}px`;
+			const nextTop = `${Math.round(
 				below + popoverRect.height <= window.innerHeight - 12 || above < 12 ? below : above
 			)}px`;
+			if (popover.style.left !== nextLeft) popover.style.left = nextLeft;
+			if (popover.style.top !== nextTop) popover.style.top = nextTop;
 		};
-		const createCollectionPanelController = ({ toggle, popover, panel, state, close }) => ({
-			toggle,
-			popover,
-			position: () => positionHeaderPopover(toggle, popover),
-			open() {
-				popover.hidden = false;
-				setExpanded(toggle, true);
-			},
-			close() {
-				popover.hidden = true;
+		const createCollectionPanelController = ({ toggle, popover, panel, state, close }) => {
+			const mount = () => surfaceManager.mount(popover);
+			const park = () => {
+				setHidden(popover, true);
 				setExpanded(toggle, false);
-				close?.();
-			},
-			message(copy, error = false) {
-				releasePersistentAvatarImages(panel.list);
-				panel.list.innerHTML = `<div class="ldp-notification-${error ? 'error' : 'empty'}">${copy}</div>`;
-				panel.pagePrev.disabled = true;
-				panel.pageNext.disabled = true;
-			},
-			paging(totalPages, hasEntries = true, hasNext = state.hasNext) {
-				panel.pagePrev.disabled = state.page <= 0;
-				panel.pageNext.disabled = !hasNext;
-				panel.pageInfo.textContent = hasEntries ? `${state.page + 1} / ${Math.max(1, totalPages)}` : '暂无记录';
-			},
-		});
+				surfaceManager.park(popover);
+			};
+			return {
+				toggle,
+				popover,
+				position: () => positionHeaderPopover(toggle, popover),
+				open() {
+					mount();
+					setHidden(popover, false);
+					setExpanded(toggle, true);
+				},
+				close() {
+					const wasOpen = !popover.hidden;
+					setHidden(popover, true);
+					setExpanded(toggle, false);
+					surfaceManager.park(popover);
+					close?.();
+					if (wasOpen) {
+						releasePersistentAvatarImages(panel.list);
+						panel.list.replaceChildren();
+					}
+				},
+				park,
+				message(copy, error = false) {
+					releasePersistentAvatarImages(panel.list);
+					panel.list.innerHTML = `<div class="ldp-notification-${error ? 'error' : 'empty'}">${copy}</div>`;
+					panel.pagePrev.disabled = true;
+					panel.pageNext.disabled = true;
+				},
+				paging(totalPages, hasEntries = true, hasNext = state.hasNext) {
+					panel.pagePrev.disabled = state.page <= 0;
+					panel.pageNext.disabled = !hasNext;
+					setText(panel.pageInfo, hasEntries
+						? `${state.page + 1} / ${Math.max(1, totalPages)}`
+						: '暂无记录');
+				},
+			};
+		};
 		const notificationCollection = createCollectionPanelController({
 			toggle: notificationsBtn, popover: notificationsPopover, panel: notificationPanel, state: notificationState,
 		});
@@ -27949,6 +28520,7 @@
 		const positionBookmarksPopover = bookmarksCollection.position;
 		const closeBookmarks = bookmarksCollection.close;
 		const collectionPanels = [notificationCollection, historyCollection, bookmarksCollection];
+		collectionPanels.forEach((panel) => panel.park());
 		const positionHeaderPopovers = () => collectionPanels.forEach((panel) => panel.position());
 		const syncHistorySortToggle = () => {
 			const recentFirst = PREFS.historySortMode === 'recent-viewed';
@@ -28670,7 +29242,7 @@
 		};
 		const applyInteractionColors = () => {
 			const surfaces = new Set([READER_PORTAL_HOST, overlay]);
-			[...READER_PORTAL_HOST?.children || []].forEach((node) => surfaces.add(node));
+			[...READER_PORTAL_CONTEXT_BODY?.children || []].forEach((node) => surfaces.add(node));
 			document.querySelectorAll('[data-ldp-reader-composer-root]').forEach((node) => surfaces.add(node));
 			surfaces.forEach((node) => applyAppearanceInteractionColors(node, activeAppearanceColors()));
 		};
@@ -29667,10 +30239,12 @@
 		const stopRequestFlowUpdates = () => {
 			if (requestFlowTimer) clearInterval(requestFlowTimer);
 			requestFlowTimer = 0;
+			setRequestFlowDetailsActive(false);
 		};
 		const startRequestFlowUpdates = () => {
 			stopRequestFlowUpdates();
 			if (document.visibilityState !== 'visible') return;
+			setRequestFlowDetailsActive(true);
 			syncRequestFlowControls();
 			requestFlowTimer = setInterval(syncRequestFlowControls, 1000);
 		};
@@ -30337,13 +30911,22 @@
 					});
 			if (isFunction(window.MutationObserver)) {
 				try {
-					resourceMonitorState.mutationObserver = new window.MutationObserver((records) => {
-						resourceMonitorRecordMutations('reader', records.filter((record) => body.contains(record.target)));
+					resourceMonitorState.readerMutationObserver = new window.MutationObserver((records) => {
+						resourceMonitorRecordMutations('reader', records);
+					});
+					resourceMonitorState.readerMutationObserver.observe(READER_PORTAL_ROOT, {
+						childList: true,
+						subtree: true,
+					});
+					resourceMonitorState.hostMutationObserver = new window.MutationObserver((records) => {
 						resourceMonitorRecordMutations('host', records);
 					});
-					resourceMonitorState.mutationObserver.observe(PAGE_ROOT, { childList: true, subtree: true });
+					resourceMonitorState.hostMutationObserver.observe(PAGE_ROOT, {
+						childList: true,
+						subtree: true,
+					});
 				} catch (error) {
-					disconnectResourceMonitorObservers(['mutationObserver']);
+					disconnectResourceMonitorObservers(['readerMutationObserver', 'hostMutationObserver']);
 				}
 			}
 			syncResourceMonitorControls();
@@ -30669,7 +31252,7 @@
 			hideSettingHelp();
 			settingsRangeSaveReminderCategory = '';
 			settingsTabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.settingsPanel === name));
-			settingsSections.forEach((section) => { section.hidden = section.dataset.settingsPanel !== name; });
+			settingsSections.forEach((section) => setHidden(section, section.dataset.settingsPanel !== name));
 			if (name !== 'user') stopUserInfoLastRefreshTicker();
 			if (name === 'resource-monitor') startResourceMonitorUpdates();
 			else stopResourceMonitorUpdates();
@@ -30683,8 +31266,8 @@
 		const syncSettingsNavScrollHints = () => {
 			if (!settingsNav || !settingsNavScrollUp || !settingsNavScrollDown) return;
 			const maxScroll = Math.max(0, settingsNav.scrollHeight - settingsNav.clientHeight);
-			settingsNavScrollUp.hidden = maxScroll < 2 || settingsNav.scrollTop < 2;
-			settingsNavScrollDown.hidden = maxScroll < 2 || settingsNav.scrollTop >= maxScroll - 2;
+			setHidden(settingsNavScrollUp, maxScroll < 2 || settingsNav.scrollTop < 2);
+			setHidden(settingsNavScrollDown, maxScroll < 2 || settingsNav.scrollTop >= maxScroll - 2);
 		};
 		const scrollSettingsNav = (direction) => {
 			if (!settingsNav) return;
@@ -30709,8 +31292,8 @@
 				tab.classList.toggle('has-draft', count > 0);
 				setLabel(tab, count > 0 ? `${label}，${count} 项未保存` : label);
 				if (!badge) return;
-				badge.hidden = count <= 0;
-				badge.textContent = count > 99 ? '99+' : String(count);
+				setHidden(badge, count <= 0);
+				setText(badge, count > 99 ? '99+' : String(count));
 			});
 		}
 		const remindUnsavedRangeSetting = (range) => {
@@ -30744,9 +31327,9 @@
 				left: Math.round(Math.min(maximumLeft, Math.max(minimumLeft, left))),
 				top: Math.round(Math.min(maximumTop, Math.max(minimumTop, top))),
 			};
-			settingsPopover.style.left = `${position.left - bounds.left}px`;
-			settingsPopover.style.top = `${position.top - bounds.top}px`;
-			settingsPopover.style.transform = 'none';
+			setStyleValue(settingsPopover, 'left', `${position.left - bounds.left}px`);
+			setStyleValue(settingsPopover, 'top', `${position.top - bounds.top}px`);
+			setStyleValue(settingsPopover, 'transform', 'none');
 			return position;
 		};
 		const keepSettingsWindowVisible = () => {
@@ -30772,7 +31355,7 @@
 			if (!settingsWindowDrag) return;
 			const drag = settingsWindowDrag;
 			const margin = READER_SETTINGS_SURFACE_MARGIN;
-			const bounds = settingsSurfaceBounds();
+			const bounds = drag.bounds;
 			const minimumLeft = bounds.left + margin;
 			const minimumTop = bounds.top + margin;
 			const maximumLeft = Math.max(minimumLeft, bounds.right - drag.width - margin);
@@ -30818,7 +31401,8 @@
 			hideSettingHelp();
 			settingsRangeSaveReminderCategory = '';
 			fontFamilyManualEditing.clear();
-			settingsPopover.hidden = true;
+			setHidden(settingsPopover, true);
+			syncSettingsSurfaceHost();
 			setExpanded(settingsBtn, false);
 			resetSettingsDrafts();
 		};
@@ -30937,10 +31521,11 @@
 					clientX: event.clientX,
 					clientY: event.clientY,
 					startLeft: position.left,
-					startTop: position.top,
-					width: rect.width,
-					height: rect.height,
-				};
+						startTop: position.top,
+						width: rect.width,
+						height: rect.height,
+						bounds: settingsSurfaceBounds(),
+					};
 				settingsPopover.classList.add('ldp-settings-window-dragging');
 				try { row.setPointerCapture(event.pointerId); } catch (e) {}
 				event.preventDefault();
@@ -31436,9 +32021,10 @@
 				requestCloseSettings();
 				return;
 			}
-			settingsPopover.hidden = false;
+			setHidden(settingsPopover, false);
 			fontFamilyManualEditing.clear();
 			syncSettingsSurfaceGeometry({ closeTransients: false });
+			syncReaderThemeSurfaces();
 			setExpanded(settingsBtn, true);
 			settingsRangeSaveReminderCategory = '';
 			showSettingsPanel('user');
@@ -32286,9 +32872,10 @@
 			const currentPostNumber = Number(overlay._ldpCaptureHistoryPostNumber?.()) || targetPostNumber || 1;
 			rememberTopic(currentTopic, currentPostNumber, readerQueueEntry(topicId)?.seenPostNumbers);
 		};
-		const onWindowResize = () => {
+		let readerLayoutSyncFrame = 0;
+		const syncReaderWindowLayout = () => {
+			readerLayoutSyncFrame = 0;
 			syncReaderBackgroundMode();
-			applyReaderVisualSettings();
 			readerSurfaceController.syncOpenSettingsControls(true);
 			readerShell.syncSettingsSurfaceGeometry?.();
 			if (ctx.nativeComposerWindow) ctx.nativeComposerWindow.syncLayer();
@@ -32298,6 +32885,13 @@
 			ctx.streamNeedsRepair = true;
 			scheduleStreamWindowSync(ctx);
 		};
+		const onWindowResize = () => {
+			if (!readerLayoutSyncFrame) readerLayoutSyncFrame = requestAnimationFrame(syncReaderWindowLayout);
+		};
+		contextScope.add(() => {
+			if (readerLayoutSyncFrame) cancelAnimationFrame(readerLayoutSyncFrame);
+			readerLayoutSyncFrame = 0;
+		});
 		onContext(window, 'resize', onWindowResize);
 		onContext(overlay, 'ldp-reader-window-change', onWindowResize);
 
@@ -32398,10 +32992,12 @@
 			setLabel(onlyOpProgress, `只看楼主${done ? skipped ? '扫描结束但有缺失' : '扫描完成' : '压测中'}，已处理 ${scanned}/${total} 层，找到 ${found} 条楼主内容${skipped ? `，其中 ${skipped} 层未能取回` : ''}${batchFlow}${flow}`);
 			onlyOpProgress.setAttribute('data-ldp-tooltip-label', onlyOpProgress.getAttribute('aria-label'));
 		};
-		const startOnlyOpProgress = () => {
+		const startOnlyOpProgress = (resetBaseline = true) => {
 			stopOnlyOpProgress();
-			onlyOpLastProgressAt = Date.now();
-			onlyOpLastScanned = Math.max(0, +(loader.scanCursor || 0));
+			if (resetBaseline || !onlyOpLastProgressAt) {
+				onlyOpLastProgressAt = Date.now();
+				onlyOpLastScanned = Math.max(0, +(loader.scanCursor || 0));
+			}
 			syncOnlyOpProgress();
 			if (ctx.onlyOp && !done) {
 				onlyOpProgressTimer = setInterval(() => {
@@ -32411,7 +33007,7 @@
 							(!pendingRetry || retryDue) && Date.now() - onlyOpLastProgressAt >= 2000) {
 						pump({ maxBatches: 1, forceOnlyOpScan: true });
 					}
-				}, 250);
+				}, 500);
 			}
 		};
 		const prevLoadMisses = new Map();
@@ -32780,9 +33376,12 @@
 			if (!sessionAcceptsWork()) return;
 			const visible = document.visibilityState === 'visible';
 			ctx.timeline.setActive(visible);
+			ctx.repliesIO?.setActive?.(visible);
 			recordResourceMonitorVisibility();
 			if (!visible) {
 				stopLatestReplyUpdates();
+				stopRateLimitNotice();
+				stopOnlyOpProgress();
 				stopRequestFlowUpdates();
 				suspendReaderMedia(overlay);
 				ctx.streamHydratedNodes.forEach((node) => suspendReaderMedia(node));
@@ -32790,6 +33389,13 @@
 			}
 			ctx.streamMountedNodes.forEach((node) => activateReaderMedia(node));
 			startLatestReplyUpdates();
+			startRateLimitNotice();
+			if (ctx.onlyOp && !done) startOnlyOpProgress(false);
+			if (pendingRetry && !filterPumpTimer && !loading && !done && !loadHalted) {
+				onlyOpRetryAt = 0;
+				void pump({ maxBatches: 1, forceOnlyOpScan: ctx.onlyOp });
+			}
+			if (pendingGapDirection) scheduleGapLoad(pendingGapDirection < 0);
 			if (!settingsPopover.hidden && !resourceMonitorSection.hidden) startResourceMonitorUpdates();
 			if (!settingsPopover.hidden && !requestFlowSection.hidden) startRequestFlowUpdates();
 			ctx.timeline.update();
@@ -32804,6 +33410,7 @@
 		let readerEscapePointerX = Number.NaN;
 		let readerEscapePointerY = Number.NaN;
 		const disarmReaderEscapeExit = () => {
+			if (!readerEscapeExitDeadline && !readerEscapeExitTimer) return;
 			readerEscapeExitDeadline = 0;
 			if (readerEscapeExitTimer) clearTimeout(readerEscapeExitTimer);
 			readerEscapeExitTimer = 0;
@@ -33054,6 +33661,7 @@
 				}
 				[
 					['loader', () => loader.destroy()],
+					['reader queue prefetch', stopReaderQueuePrefetch],
 					['request scheduler', () => {
 						if (ACTIVE_READER_REQUEST_SCHEDULER === postRequestScheduler) ACTIVE_READER_REQUEST_SCHEDULER = null;
 						postRequestScheduler.destroy();
@@ -33125,6 +33733,7 @@
 				runReaderCleanup('reader window', () => readerShell.readerWindow.destroy());
 				runReaderCleanup('reader workspace', () => readerShell.readerWorkspace.destroy());
 				runReaderCleanup('reader queue surface', () => overlay._ldpDestroyReaderQueueSurface?.());
+				runReaderCleanup('surface manager', () => readerShell.surfaceManager.destroy());
 			}
 		};
 
@@ -33441,7 +34050,7 @@
 				scheduleGapLoad(true);
 			} else if (delta > 0) {
 				ctx.streamScrollDirection = 1;
-				captureStreamViewportAnchor(ctx);
+				queueStreamViewportAnchorCapture(ctx);
 			}
 			if (delta) markWheelScrollPrepared(delta < 0 ? -1 : 1);
 			if (body.contains(e.target)) return;
@@ -33450,7 +34059,7 @@
 		};
 		onContext(modal, 'wheel', onModalWheel, { passive: false });
 		onContext(document, 'pointerdown', onReaderEscapeExitInteraction, true);
-		onContext(document, 'scroll', onReaderEscapeExitInteraction, true);
+		onContext(document, 'scroll', onReaderEscapeExitInteraction, { capture: true, passive: true });
 		onContext(document, 'click', onNativeComposerSubmitClick, true);
 		onContext(document, 'keydown', onNativeComposerSubmitKeyDown, true);
 		onContext(document, 'click', onNativeComposerCloseClick, true);
@@ -33487,7 +34096,8 @@
 					});
 					if (!sessionAcceptsWork()) return;
 					if (posts.length) syncLoadingState('render');
-					attachPostBatch(posts, ctx);
+					await attachPostBatchCooperatively(posts, ctx, { acceptsWork: sessionAcceptsWork });
+					if (!sessionAcceptsWork()) return;
 					if (ctx.onlyOp) syncOnlyOpProgress();
 					if (fatal) {
 						loadHalted = true;
@@ -33561,6 +34171,10 @@
 						if (ctx.onlyOp) onlyOpRetryAt = Date.now() + retryDelay;
 						filterPumpTimer = setTimeout(() => {
 							filterPumpTimer = 0;
+							if (document.visibilityState !== 'visible') {
+								onlyOpRetryAt = Date.now();
+								return;
+							}
 							onlyOpRetryAt = 0;
 							if (sessionAcceptsWork()) {
 								pump({ maxBatches: 1, forceOnlyOpScan: ctx.onlyOp });
@@ -33708,7 +34322,7 @@
 			gapLoadTimer = setTimeout(() => {
 				gapLoadTimer = 0;
 				gapLoadDueAt = 0;
-				if (!sessionAcceptsWork()) return;
+				if (!sessionAcceptsWork() || document.visibilityState !== 'visible') return;
 				const nextDirection = pendingGapDirection;
 				const maxBatches = pendingGapBatches;
 				pendingGapDirection = 0;
@@ -33899,8 +34513,6 @@
 				if (!sessionAcceptsWork()) return;
 				const now = Date.now();
 				const nextScrollTop = body.scrollTop;
-				const reachedLiveReplyEnd = pendingLiveReplyCount > 0 &&
-					body.scrollHeight - nextScrollTop - body.clientHeight <= 80;
 				const rawDelta = nextScrollTop - lastScrollTop;
 				const elapsed = Math.max(16, now - lastScrollAt);
 				lastScrollTop = nextScrollTop;
@@ -33936,7 +34548,7 @@
 				}
 				if (deltaDirection) {
 					ctx.streamScrollDirection = deltaDirection;
-					if (!wheelAlreadyPrepared) captureStreamViewportAnchor(ctx);
+					if (!wheelAlreadyPrepared) queueStreamViewportAnchorCapture(ctx);
 					if (deltaDirection < 0) {
 						if (!wheelAlreadyPrepared) {
 							clearInitialTargetHeadSpacer(ctx);
@@ -33953,12 +34565,15 @@
 					ctx.streamScrollVelocity = ctx.streamScrollVelocity * 0.55 + instantVelocity * 0.45;
 				}
 				ctx.streamLastScrollAt = now;
-				if (reachedLiveReplyEnd) clearLiveUpdateButton();
 				scheduleStreamWindowSync(ctx);
 				if (scrollWorkFrame) return;
 				scrollWorkFrame = requestAnimationFrame(() => {
 					scrollWorkFrame = 0;
 					if (!sessionAcceptsWork()) return;
+					if (pendingLiveReplyCount > 0 &&
+							body.scrollHeight - body.scrollTop - body.clientHeight <= 80) {
+						clearLiveUpdateButton();
+					}
 					if (body.scrollTop <= 10 && !ctx.streamItemMap.has(1)) {
 						pendingGapDirection = 0;
 						pendingGapBatches = 1;
@@ -34742,28 +35357,48 @@
 		if (!document.body || document.body._ldpNativeReaderTriggerObserver) return;
 		const relevantSelector = '.d-header,.d-header-wrap,.d-header-icons,.current-user,' +
 			'.ldp-native-reader-trigger-item[data-ldp-portal="1"]';
-		const relevantContainerSelector = '.discourse-root,.d-header-wrap,header';
 		const mutationNodeIsRelevant = (node) => {
 			if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
-			if (node.matches(relevantSelector)) return true;
-			return node.matches(relevantContainerSelector) && !!node.querySelector(relevantSelector);
+			return node.matches(relevantSelector) || !!node.querySelector(relevantSelector);
 		};
-		const mutationIsRelevant = (mutation) => {
-			const target = mutation.target;
-			if (target && target.nodeType === Node.ELEMENT_NODE && target.closest(relevantSelector)) return true;
-			return [...mutation.addedNodes, ...mutation.removedNodes].some(mutationNodeIsRelevant);
-		};
+		let observedHeader = null;
 		let syncFrame = 0;
-		const observer = new MutationObserver((mutations) => {
-			if (!mutations.some(mutationIsRelevant) || syncFrame) return;
+		let observer = null;
+		const bindObserverTargets = () => {
+			const avatarHost = nativeReaderTriggerAvatarHost();
+			const nextHeader = avatarHost?.closest('.d-header-wrap,.d-header,header') ||
+				document.querySelector('.d-header-wrap,.d-header');
+			if (nextHeader === observedHeader && nextHeader?.isConnected) return;
+			observer.disconnect();
+			observedHeader = nextHeader || null;
+			if (!observedHeader) {
+				// Header bootstrap is short-lived; narrow to the header as soon as it appears.
+				observer.observe(document.body, { childList: true, subtree: true });
+				return;
+			}
+			observer.observe(observedHeader, { childList: true, subtree: true });
+			let ancestor = observedHeader.parentElement;
+			while (ancestor) {
+				observer.observe(ancestor, { childList: true });
+				if (ancestor === document.body) break;
+				ancestor = ancestor.parentElement;
+			}
+		};
+		observer = new MutationObserver((mutations) => {
+			const topologyChanged = !observedHeader?.isConnected || mutations.some((mutation) =>
+				mutation.target !== observedHeader && !observedHeader.contains(mutation.target));
+			const contentChanged = mutations.some((mutation) =>
+				[...mutation.addedNodes, ...mutation.removedNodes].some(mutationNodeIsRelevant));
+			if ((!topologyChanged && !contentChanged) || syncFrame) return;
 			syncFrame = requestAnimationFrame(() => {
 				syncFrame = 0;
+				bindObserverTargets();
 				const avatarHost = nativeReaderTriggerAvatarHost();
 				const item = document.querySelector('.ldp-native-reader-trigger-item[data-ldp-portal="1"]');
 				if (avatarHost && (!item || item.parentElement !== avatarHost)) syncNativeReaderTrigger();
 			});
 		});
-		observer.observe(document.body, { childList: true, subtree: true });
+		bindObserverTargets();
 		document.body._ldpNativeReaderTriggerObserver = observer;
 	}
 
@@ -34907,7 +35542,7 @@
 			});
 		}
 		const activeReaderWorkspace = CURRENT_OVERLAY && CURRENT_OVERLAY._ldpReaderShell?.readerWorkspace;
-		if (activeReaderWorkspace?.isEmbedded() && READER_PORTAL_HOST?.contains(a) &&
+		if (activeReaderWorkspace?.isEmbedded() && a.getRootNode() === READER_PORTAL_ROOT &&
 			!a.classList.contains('ldp-history-link') &&
 			!a.classList.contains('ldp-rate-limit-challenge') &&
 			!a.classList.contains('ldp-error-challenge') &&

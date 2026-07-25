@@ -4,7 +4,7 @@ description: 选择浮窗、全屏、嵌入或移动布局，理解多主题队�
 feature_ids: ["CORE-003", "CORE-004", "CORE-005", "CORE-006", "READ-001", "READ-002"]
 source_anchors: ["INITIAL_TOPIC_ID", "LIST_READER_MODES", "bypassReaderForThisTab", "LDP_READER_QUEUE_KEY", "stableStreamMountRange", "loadPostsByIds"]
 since: 0.1.2
-version: 0.1.6
+version: 0.1.7
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-05-layout-settings.png", "/screenshots/guide-21-reading-queue.png", "/screenshots/guide-09-performance-settings.png"]
