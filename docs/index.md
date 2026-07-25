@@ -2,8 +2,8 @@
 layout: home
 title: Awesome LinuxDo Reader 用户手册
 description: 从安装到进阶调优，完整掌握 Awesome LinuxDo Reader。
-feature_ids: ["CORE-001", "CORE-002", "CORE-004", "READ-001", "ACTION-001", "DATA-001"]
-source_anchors: ["@downloadURL", "ldp-native-reader-trigger", "LIST_READER_MODES", "stableStreamMountRange", "ldp-replybtn", "readerConfigExportPayload"]
+feature_ids: ["CORE-001", "CORE-002", "CORE-004", "CORE-007", "READ-001", "ACTION-001", "DATA-001"]
+source_anchors: ["@downloadURL", "ldp-native-reader-trigger", "LIST_READER_MODES", "DISCOURSE_SITE_ADAPTERS", "stableStreamMountRange", "ldp-replybtn", "readerConfigExportPayload"]
 since: 0.1.2
 version: 0.1.10
 status: current
@@ -13,7 +13,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png"]
 hero:
   name: Awesome LinuxDo Reader
   text: 正式用户手册
-  tagline: 在 LINUX DO 列表页内完成长帖阅读、上下文追踪与社区互动。
+  tagline: 在 LINUX DO 与多个 Discourse 社区中完成长帖阅读、上下文追踪与原站互动。
   image:
     src: /logo.png
     alt: Awesome LinuxDo Reader 标志
@@ -40,7 +40,7 @@ features:
   - icon: >-
       <!-- @license Lucide Icons v1.26.0 - ISC --><svg class="lucide lucide-messages-square" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"/></svg>
     title: 原生社区互动
-    details: 回复、点赞、回应、Boost、收藏、通知、分享、编辑、举报和权限操作。
+    details: 回复、点赞、收藏、通知等操作沿用原站；回应、Boost、投票等插件能力按站点自动显示或隐藏。
   - icon: >-
       <!-- @license Lucide Icons v1.26.0 - ISC --><svg class="lucide lucide-images" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 11-1.296-1.296a2.4 2.4 0 0 0-3.408 0L11 16"/><path d="M4 8a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2"/><circle cx="13" cy="7" r="1" fill="currentColor"/><rect x="8" y="2" width="14" height="14" rx="2"/></svg>
     title: 富内容呈现
@@ -57,7 +57,7 @@ features:
 
 ## 手册覆盖范围
 
-这套手册对应 userscript `0.1.10`，以当前源码和真实 LINUX DO 运行界面为事实源。功能目录记录了每项能力的源码锚点、版本、验证日期、截图和对应文档；自动检查会阻止“功能存在但没有文档”或“文档还指向旧版本”的变更。
+这套手册对应 userscript `0.1.10`，以当前源码为事实源，并以 LINUX DO 作为完整功能与截图基线。脚本还明确适配 8 个知名 Discourse 社区；功能目录记录了每项能力的源码锚点、版本、验证日期、截图和对应文档，自动检查会阻止“功能存在但没有文档”或“文档还指向旧版本”的变更。
 
 ::: tip 推荐路径
 第一次使用按“安装与更新 → 五分钟上手 → 界面总览”阅读。遇到加载、图片或限流问题，直接进入“故障排查”。
@@ -67,8 +67,9 @@ features:
 
 <p class="image-caption">阅读器可以保留宿主主题列表，同时在独立工作区中阅读完整主题。</p>
 
-## 先了解三个边界
+## 先了解四个边界
 
-1. 阅读器不接管账号体系，登录、权限、内容和互动结果都以 LINUX DO 原站为准。
+1. 阅读器不接管账号体系，登录、权限、内容和互动结果都以当前 Discourse 原站为准。
 2. 缓存清理只影响当前浏览器里的阅读器数据，不会删除原站帖子、消息、收藏或回应。
-3. 请求监控能说明当前页面观察到的活动，但浏览器不会提供单个 userscript 的绝对 CPU 或独占内存。
+3. LINUX DO 保持完整覆盖；其他站点缺少 Boost、Reactions、Post Voting 等插件时，对应入口会自动隐藏。
+4. 请求监控能说明当前页面观察到的活动，但浏览器不会提供单个 userscript 的绝对 CPU 或独占内存。

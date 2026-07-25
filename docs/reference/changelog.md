@@ -16,10 +16,13 @@ screenshots: ["/screenshots/guide-14-about.png"]
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
 
-## 0.1.10 — 楼层号视觉弱化与样式同步简化
+## 0.1.10 — 多站点适配与阅读体验持续优化
 
 核验日期：2026-07-25。
 
+- 在保持 LINUX DO 完整覆盖的前提下，新增 OpenAI Developer Community、Discourse Meta、Python Discussions、Swift Forums、Julia Discourse、Home Assistant Community、Arduino Forum 与 Rust Users Forum。
+- 新增 Discourse 运行态识别、站点适配层和插件能力检测；缺少 Boost、Reactions、Post Voting 等插件时自动隐藏对应功能。
+- 阅读器 Logo 改为自动读取当前站点公开配置、宿主 Header 或页面图标，加载失败时按候选顺序回退。
 - 全面缩小普通楼层、父楼层、楼中楼及预览楼层的字号并弱化背景，降低楼层号的视觉权重。
 - 父楼层标记在 `@` 与 `#` 之间增加空格，改善紧凑标签的辨识度。
 - 正式样式资源改为无 SRI 的 GitHub `main` 分支 CSS，使样式与 userscript 可以在一次版本提交中同步。

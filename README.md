@@ -122,9 +122,9 @@
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。
-3. 打开 [LINUX DO](https://linux.do/)，点击主题标题开始使用。
+3. 打开 [LINUX DO](https://linux.do/) 或其他已适配的 Discourse 社区，点击主题标题开始使用。
 
-当前项目版本为 `0.1.10`，脚本仅匹配 `https://linux.do/*`。
+当前项目版本为 `0.1.10`。脚本以 LINUX DO 为完整功能基线，并明确匹配 OpenAI Developer Community、Discourse Meta、Python Discussions、Swift Forums、Julia Discourse、Home Assistant Community、Arduino Forum 与 Rust Users Forum；完整范围和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
 ## 开发
 

@@ -1,8 +1,8 @@
 ---
 title: 安装与更新
 description: 安装 userscript、确认启用状态、理解更新方式并排查入口未出现。
-feature_ids: ["CORE-001", "TROUBLE-001"]
-source_anchors: ["@downloadURL", "@match"]
+feature_ids: ["CORE-001", "CORE-007", "TROUBLE-001"]
+source_anchors: ["@downloadURL", "@match", "DISCOURSE_SITE_ADAPTERS"]
 since: 0.1.2
 version: 0.1.10
 status: current
@@ -22,7 +22,7 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
 
 | 项目 | 要求 |
 | --- | --- |
-| 站点 | `https://linux.do/*` |
+| 站点 | 9 个明确匹配的 Discourse 社区，完整列表见[兼容性](/reference/compatibility) |
 | 登录 | 阅读公开内容不一定需要；消息、收藏、回复等能力需要对应账号权限 |
 | 脚本管理器 | Tampermonkey 或能够完整支持本脚本权限的兼容管理器 |
 | 浏览器能力 | 现代 Chromium、Firefox 或同等级浏览器；具体边界见[兼容性](/reference/compatibility) |
@@ -32,7 +32,7 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
 1. 安装并启用 Tampermonkey。
 2. 打开 [GreasyFork 脚本页](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader)。
 3. 选择“安装此脚本”，核对名称为 **Awesome LinuxDo Reader**。
-4. 打开或刷新 [LINUX DO](https://linux.do/)。
+4. 打开或刷新 [LINUX DO](https://linux.do/) 或其他已适配站点。
 5. 在主题列表顶部或主题链接附近确认阅读器入口已经出现。
 
 ::: warning 不要同时启用两个版本
@@ -44,14 +44,14 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
 脚本元数据包含 GreasyFork 的下载地址和元数据更新地址。更新频率由脚本管理器决定：
 
 - 想立即检查时，在 Tampermonkey 面板中对该脚本执行“检查更新”。
-- 更新后刷新 LINUX DO 页面，已打开页面不会自动替换正在运行的旧代码。
+- 更新后刷新当前 Discourse 页面，已打开页面不会自动替换正在运行的旧代码。
 - 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `0.1.10`。
 
 ## 入口没有出现
 
 按顺序检查：
 
-1. 当前地址是否以 `https://linux.do/` 开头。
+1. 当前地址是否位于[明确匹配的站点范围](/reference/compatibility#当前支持范围)。
 2. 脚本是否启用，且没有被浏览器的站点访问权限阻止。
 3. 页面是否在安装或更新后完整刷新。
 4. 是否同时启用了正式版和本地调试版。

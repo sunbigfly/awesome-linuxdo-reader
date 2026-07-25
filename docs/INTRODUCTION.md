@@ -4,19 +4,19 @@
 
 ## 一句话介绍
 
-面向 LINUX DO 的沉浸式增强阅读器，让长帖阅读、楼层跳转与社区互动在同一个连续界面中完成。
+以 LINUX DO 为完整功能基线、兼容多个知名 Discourse 社区的沉浸式增强阅读器，让长帖阅读、楼层跳转与原站互动在同一个连续界面中完成。
 
 ## 简短介绍
 
-Awesome LinuxDo Reader 是一款运行在浏览器 userscript 管理器中的 LINUX DO 增强阅读工具。它可以从主题列表直接打开完整帖子，在保留原站账号、内容和互动能力的同时，提供更连贯的楼层浏览、楼中楼关系、原图查看、历史导航和个性化布局。
+Awesome LinuxDo Reader 是一款运行在浏览器 userscript 管理器中的 Discourse 增强阅读工具。它以 LINUX DO 为完整覆盖基线，也适配多个知名 Discourse 社区；在保留原站账号、内容和互动能力的同时，提供更连贯的楼层浏览、楼中楼关系、原图查看、历史导航和个性化布局。
 
 ## 完整介绍
 
-Awesome LinuxDo Reader 面向频繁阅读长帖、跟进讨论和处理社区消息的 LINUX DO 用户。脚本将主题阅读组织为可配置的浮窗、全屏或移动端工作区，减少列表页与帖子页之间的往返，并保留回复、点赞、回应、收藏、通知、搜索和用户资料等常用操作。
+Awesome LinuxDo Reader 面向频繁阅读长帖、跟进讨论和处理社区消息的 Discourse 用户。脚本将主题阅读组织为可配置的浮窗、全屏或移动端工作区，减少列表页与帖子页之间的往返，并保留回复、点赞、收藏、通知、搜索和用户资料等常用操作；回应、Boost、Post Voting 等插件能力会按站点实际支持情况自动显示或隐藏。
 
 阅读器围绕长内容场景提供楼层关系、楼中楼、跳转提示、浏览历史、真实已读进度、原图灯箱、媒体播放与公式渲染。针对长帖和多标签页场景，它还提供 DOM 窗口化、缓存分层、共享请求调度、429 退避、性能配置和本地资源监控，尽量在阅读连贯性与站点负载之间取得平衡。
 
-项目以单一 userscript 源码维护，不接管账号体系，也不替代 LINUX DO 原站。站点数据和互动结果仍以原站为准。
+项目以单一 userscript 源码维护，不接管账号体系，也不替代任何适配站点。站点数据和互动结果仍以当前原站为准。
 
 ## 核心能力
 
@@ -38,8 +38,8 @@ Awesome LinuxDo Reader 面向频繁阅读长帖、跟进讨论和处理社区消
 
 | 项目 | 当前配置 |
 | --- | --- |
-| 匹配站点 | `https://linux.do/*` |
-| 脚本权限 | `GM_xmlhttpRequest`、`unsafeWindow` |
+| 匹配站点 | LINUX DO、OpenAI Developer Community、Discourse Meta、Python、Swift、Julia、Home Assistant、Arduino 与 Rust Users 社区 |
+| 脚本权限 | `GM_xmlhttpRequest`、`GM_getResourceText`、`unsafeWindow` |
 | 跨域连接 | `connect.linux.do` |
 | 外部依赖 | KaTeX、pinyin-pro、hls.js（jsDelivr） |
 | 数据位置 | 浏览器本地存储、Cache Storage 与 IndexedDB |
@@ -47,7 +47,7 @@ Awesome LinuxDo Reader 面向频繁阅读长帖、跟进讨论和处理社区消
 
 ## 推荐发布摘要
 
-在 LINUX DO 列表页直接阅读完整帖子，保留楼层关系、社区互动与真实已读进度，并提供原图灯箱、历史导航、个性布局和长帖性能治理。
+在 LINUX DO 与多个知名 Discourse 社区中直接阅读完整帖子，保留楼层关系、原站互动与真实已读进度，并提供原图灯箱、历史导航、个性布局和长帖性能治理。
 
 ## 品牌资料
 

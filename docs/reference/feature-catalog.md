@@ -27,7 +27,7 @@ const docLink = (document) => withBase(`/${document.replace(/\.md$/, '')}`)
 
 ![线上功能覆盖目录中的功能数量、分类、源码锚点和手册入口](/screenshots/guide-22-feature-catalog.png)
 
-<p class="image-caption">目录按分类展示 95 项当前能力，每项都可以回到对应手册页面。</p>
+<p class="image-caption">目录按分类展示 96 项当前能力，每项都可以回到对应手册页面。</p>
 
 <div class="doc-meta">
   <span>{{ catalog.length }} 项功能</span>

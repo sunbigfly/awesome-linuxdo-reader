@@ -112,6 +112,22 @@
     ]
   },
   {
+    "feature_id": "CORE-007",
+    "title": "多站点 Discourse 适配",
+    "category": "开始使用",
+    "description": "以 LINUX DO 为完整基线，在 8 个知名 Discourse 社区复用核心阅读能力，并按站点插件和版本自动隐藏不可用功能。",
+    "source_anchor": "DISCOURSE_SITE_ADAPTERS",
+    "since": "0.1.10",
+    "version": "0.1.10",
+    "status": "current",
+    "last_verified": "2026-07-25",
+    "screenshots": [],
+    "docs": [
+      "getting-started/installation.md",
+      "reference/compatibility.md"
+    ]
+  },
+  {
     "feature_id": "READ-001",
     "title": "虚拟化连续阅读流",
     "category": "阅读与导航",

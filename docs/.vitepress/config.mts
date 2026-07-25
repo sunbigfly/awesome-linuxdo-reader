@@ -8,7 +8,7 @@ export default defineConfig({
   lang: 'zh-CN',
   title: 'Awesome LinuxDo Reader',
   titleTemplate: ':title · 用户手册',
-  description: 'Awesome LinuxDo Reader 正式用户手册：安装、阅读、互动、个性化、性能与故障排查。',
+  description: 'Awesome LinuxDo Reader 正式用户手册：多站点 Discourse 安装、阅读、互动、个性化、性能与故障排查。',
   base,
   cleanUrls: true,
   lastUpdated: true,
@@ -174,7 +174,7 @@ export default defineConfig({
     lightModeSwitchTitle: '切换到明亮模式',
     darkModeSwitchTitle: '切换到暗色模式',
     footer: {
-      message: '非 LINUX DO 官方项目。站点数据与互动结果以原站为准。',
+      message: '非 LINUX DO 或其他适配社区的官方项目。站点数据与互动结果以原站为准。',
       copyright: 'Released under the MIT License.',
     },
   },
