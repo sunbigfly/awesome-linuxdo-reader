@@ -69,13 +69,13 @@
 		try {
 			const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(source) ? source : `https://${source}`);
 			return url.protocol === 'https:' && !url.username && !url.password ? url.hostname.toLowerCase() : '';
-		} catch (error) { return ''; }
+		} catch { return ''; }
 	}
 	function readCustomDiscourseSites() {
 		try {
 			const stored = globalThis.GM_getValue?.(CUSTOM_DISCOURSE_SITES_KEY, []);
 			return Array.isArray(stored) ? [...new Set(stored.map(normalizeCustomDiscourseHost).filter(Boolean))] : [];
-		} catch (error) { return []; }
+		} catch { return []; }
 	}
 	const CURRENT_SITE_HOST = location.hostname.toLowerCase();
 	if (!BUILTIN_DISCOURSE_HOSTS.has(CURRENT_SITE_HOST) &&
@@ -278,7 +278,7 @@
 		try {
 			const url = new URL(source, BASE);
 			return /^https?:$/i.test(url.protocol) ? url.href : '';
-		} catch (error) {
+		} catch {
 			return '';
 		}
 	}
@@ -433,9 +433,9 @@
 		window.addEventListener('storage', (event) => {
 			if (event.key !== LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY || !event.newValue) return;
 			let lease = null;
-			try { lease = JSON.parse(event.newValue); } catch (e) {}
+			try { lease = JSON.parse(event.newValue); } catch {}
 			if (lease && lease.owner === cloudflareChallengeReturnOwner && lease.state === 'passed') {
-				try { window.close(); } catch (e) {}
+				try { window.close(); } catch {}
 			}
 		});
 		const reportChallengePopupNavigation = () => {
@@ -449,7 +449,7 @@
 			if (challenge) {
 				try {
 					sessionStorage.setItem(LDP_CLOUDFLARE_CHALLENGE_SEEN_KEY, cloudflareChallengeReturnOwner);
-				} catch (e) {}
+				} catch {}
 				return;
 			}
 			const navigation = performance?.getEntriesByType
@@ -459,7 +459,7 @@
 			try {
 				challenged = sessionStorage.getItem(LDP_CLOUDFLARE_CHALLENGE_SEEN_KEY) === cloudflareChallengeReturnOwner;
 				sessionStorage.removeItem(LDP_CLOUDFLARE_CHALLENGE_SEEN_KEY);
-			} catch (e) {}
+			} catch {}
 			const result = {
 				owner: cloudflareChallengeReturnOwner,
 				status: Math.max(0, Number(navigation?.responseStatus) || 0),
@@ -468,7 +468,7 @@
 			};
 			try {
 				localStorage.setItem(LDP_CLOUDFLARE_CHALLENGE_RESULT_KEY, JSON.stringify(result));
-			} catch (e) {}
+			} catch {}
 		};
 		if (document.readyState === 'loading') {
 			document.addEventListener('DOMContentLoaded', reportChallengePopupNavigation, { once: true });
@@ -1016,7 +1016,7 @@
 	function requestFlowCallSite() {
 		if (!REQUEST_FLOW_DETAILS_ACTIVE) return '';
 		let stack = '';
-		try { stack = String(new Error().stack || ''); } catch (error) {}
+		try { stack = String(new Error().stack || ''); } catch {}
 		const internalFrame = /\b(?:requestFlowCallSite|beginRequestFlow|trackedFetch|trackedSend|waitForReaderRequestPermit|requestCachedJSON|requestJSON|fetchJSON|runTask|apiSend)\b/;
 		const frame = stack.split('\n').map((line) => line.trim()).find((line, index) =>
 			index > 0 && line && !internalFrame.test(line) && !/\b(?:native code|Promise\.then)\b/.test(line));
@@ -1027,7 +1027,7 @@
 			try {
 				const url = new URL(source);
 				return `${url.origin}${url.pathname}${locationSuffix}`;
-			} catch (error) {
+			} catch {
 				return source.split(/[?#]/, 1)[0] + locationSuffix;
 			}
 		}).replace(/^at\s+/, '').slice(0, 220);
@@ -1061,7 +1061,7 @@
 			const value = input && typeof input === 'object' && input.url ? input.url : input;
 			if (value == null || String(value) === '') return null;
 			return new URL(String(value), location.href);
-		} catch (error) {
+		} catch {
 			return null;
 		}
 	}
@@ -1312,7 +1312,7 @@
 		const successfulApiEvent = (hostApiEvent || readerApiEvent) && event.status >= 200 && event.status < 400;
 		let schedulerState = null;
 		if (SHARED_REQUEST_COORDINATOR && (successfulApiEvent || (hostApiEvent && event.status === 429))) {
-			try { schedulerState = ACTIVE_READER_REQUEST_SCHEDULER?.snapshot(); } catch (error) {}
+			try { schedulerState = ACTIVE_READER_REQUEST_SCHEDULER?.snapshot(); } catch {}
 		}
 		if (successfulApiEvent && SHARED_REQUEST_COORDINATOR && event.serverLimit) {
 			SHARED_REQUEST_COORDINATOR.noteServerLimits({
@@ -1402,7 +1402,7 @@
 			if (!contentType.includes('json')) return;
 			const payload = xhr.responseType === 'json' ? xhr.response : JSON.parse(xhr.responseText);
 			storeHostTopicResponse(event, url, payload);
-		} catch (error) {}
+		} catch {}
 	}
 
 	function recordResourceRequestFlow(entry) {
@@ -1559,7 +1559,7 @@
 		const readState = (at = Date.now()) => {
 			try {
 				return normalizeState(JSON.parse(localStorage.getItem(LDP_SHARED_REQUEST_STATE_KEY) || 'null'), at);
-			} catch (error) {
+			} catch {
 				return emptyState();
 			}
 		};
@@ -1575,8 +1575,8 @@
 				const state = readState(at);
 				const result = operation(state, at);
 				state.updatedAt = at;
-				try { localStorage.setItem(LDP_SHARED_REQUEST_STATE_KEY, JSON.stringify(state)); } catch (error) {}
-				try { if (channel) channel.postMessage({ type: 'updated', contextId }); } catch (error) {}
+				try { localStorage.setItem(LDP_SHARED_REQUEST_STATE_KEY, JSON.stringify(state)); } catch {}
+				try { if (channel) channel.postMessage({ type: 'updated', contextId }); } catch {}
 				notifyWaiters();
 				return result;
 			};
@@ -1877,8 +1877,7 @@
 			});
 		};
 
-		const resetRateLimits = () => {
-			return transact((state) => {
+		const resetRateLimits = () => transact((state) => {
 				[
 					'shortBudget',
 					'longBudget',
@@ -1895,7 +1894,6 @@
 				state.lastRateLimitWindow = '';
 				return true;
 			});
-		};
 
 		const noteServerLimits = (options = {}) => {
 			const rateTarget = Math.min(0.95, Math.max(0.5, Number(options.rateTarget) || 0.8));
