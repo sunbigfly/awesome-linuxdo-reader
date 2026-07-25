@@ -4256,6 +4256,43 @@
 		setLabel(toggle, `${previewExpanded ? '收纳' : '展开'}队列头像预览；拖动可移动，贴边可隐藏；悬停显示队列详情，共 ${count.textContent || 0} 篇`);
 	}
 
+	function applyReaderQueuePanelCollision(rail) {
+		const panel = rail?.querySelector('.ldp-reader-queue-panel');
+		const modal = rail?.closest('.ldp-modal');
+		const overlay = rail?.closest('.ldp-overlay');
+		if (!panel || panel.hidden || !modal || !overlay) return;
+		const gap = 10;
+		const modalRect = modal.getBoundingClientRect();
+		const railRect = rail.getBoundingClientRect();
+		const panelWidth = panel.offsetWidth, panelHeight = panel.offsetHeight;
+		if (!(panelWidth > 0) || !(panelHeight > 0)) return;
+		const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+		const minLeft = modalRect.left + gap, maxLeft = Math.max(minLeft, modalRect.right - gap - panelWidth);
+		const minTop = modalRect.top + gap, maxTop = Math.max(minTop, modalRect.bottom - gap - panelHeight);
+		const leftSpace = railRect.left - minLeft - gap;
+		const rightSpace = modalRect.right - gap - railRect.right - gap;
+		const openLeft = rail.classList.contains('is-docked-right') ||
+			(rightSpace < panelWidth && leftSpace > rightSpace);
+		const left = clamp(openLeft ? railRect.left - gap - panelWidth : railRect.right + gap, minLeft, maxLeft);
+		let top = clamp(railRect.top, minTop, maxTop);
+		const blockers = [...overlay.querySelectorAll(
+			':scope > .ldp-reader-window-capsule,.ldp-modal > .ldp-header,.ldp-rate-limit-notice:not([hidden])'
+		)].filter((element) => getComputedStyle(element).display !== 'none')
+			.map((element) => element.getBoundingClientRect()).concat(railRect)
+			.sort((first, second) => first.top - second.top);
+		for (const rect of blockers) {
+			if (left >= rect.right + gap || left + panelWidth <= rect.left - gap ||
+					top >= rect.bottom + gap || top + panelHeight <= rect.top - gap) continue;
+			const below = clamp(rect.bottom + gap, minTop, maxTop);
+			top = below + panelHeight <= modalRect.bottom - gap
+				? below : clamp(rect.top - gap - panelHeight, minTop, maxTop);
+		}
+		Object.assign(panel.style, {
+			left: `${Math.round(left - railRect.left)}px`, right: 'auto',
+			top: `${Math.round(top - railRect.top)}px`, bottom: 'auto',
+		});
+	}
+
 	function applyReaderQueueSurfacePosition(rail) {
 		if (!rail) return;
 		const modal = rail.closest('.ldp-modal');
@@ -4263,12 +4300,23 @@
 		const customized = readerQueueSurfaceStateCustomized(state);
 		rail.classList.toggle('is-docked-left', customized && state.dock === 'left');
 		rail.classList.toggle('is-docked-right', customized && state.dock === 'right');
+		const modalRect = modal?.getBoundingClientRect();
+		const toggleRect = rail.querySelector('.ldp-reader-queue-toggle')?.getBoundingClientRect();
+		const bubbles = rail.querySelector('.ldp-reader-queue-bubbles');
+		if (modalRect && toggleRect && bubbles) {
+			const spaceBelow = modalRect.bottom - toggleRect.bottom;
+			const previewHeight = Math.min(bubbles.scrollHeight,
+				Number.parseFloat(getComputedStyle(bubbles).maxHeight) || bubbles.scrollHeight);
+			rail.style.flexDirection = !rail.classList.contains('is-preview-collapsed') &&
+				spaceBelow < previewHeight && toggleRect.top - modalRect.top > spaceBelow ? 'column-reverse' : 'column';
+		}
 		if (!customized || !modal || rail.hidden) {
 			if (!customized) {
 				rail.style.removeProperty('left');
 				rail.style.removeProperty('top');
 				rail.style.removeProperty('bottom');
 			}
+			applyReaderQueuePanelCollision(rail);
 			return;
 		}
 		const maxLeft = Math.max(0, modal.clientWidth - rail.offsetWidth);
@@ -4276,6 +4324,7 @@
 		rail.style.left = `${Math.round(maxLeft * state.x)}px`;
 		rail.style.top = `${Math.round(maxTop * state.y)}px`;
 		rail.style.bottom = 'auto';
+		applyReaderQueuePanelCollision(rail);
 	}
 
 	function renderReaderQueueSurface(overlay) {
@@ -5040,6 +5089,7 @@
 		let hoverCloseTimer = 0;
 		let queueDrag = null;
 		let suppressToggleClickUntil = 0;
+		const schedulePanelPosition = () => requestAnimationFrame(() => applyReaderQueueSurfacePosition(rail));
 		const cancelPanelClose = () => {
 			if (hoverCloseTimer) clearTimeout(hoverCloseTimer);
 			hoverCloseTimer = 0;
@@ -5048,6 +5098,7 @@
 			cancelPanelClose();
 			panel.hidden = !open;
 			setExpanded(toggle, open);
+			if (open) schedulePanelPosition();
 		};
 		const schedulePanelClose = () => {
 			cancelPanelClose();
@@ -5061,6 +5112,7 @@
 			rail.classList.toggle('is-preview-collapsed', !expanded);
 			syncReaderQueueToggleState(rail);
 			if (expanded) requestAnimationFrame(() => syncReaderQueueScrollHint(rail));
+			if (!panel.hidden) schedulePanelPosition();
 		};
 		const finishQueueDrag = (event, cancelled = false) => {
 			if (!queueDrag || event.pointerId !== queueDrag.pointerId) return;
@@ -11165,7 +11217,8 @@
 
 	const SYSTEM_ACTION_LABELS = {
 		closed: '主题已关闭', opened: '主题已重新开放', archived: '主题已归档', unarchived: '主题已取消归档',
-		pinned: '主题已置顶', unpinned: '主题已取消置顶', autoclosed: '主题已自动关闭', split_topic: '帖子已拆分到新主题',
+		pinned: '主题已置顶', unpinned: '主题已取消置顶', autoclosed: '主题已自动关闭',
+		'autoclosed.enabled': '主题已自动关闭', 'autoclosed.disabled': '主题已自动重新开放', split_topic: '帖子已拆分到新主题',
 		merged: '主题已合并', moved: '帖子已移动', visible: '主题已公开', invisible: '主题已隐藏',
 		'visible.enabled': '主题已公开', 'visible.disabled': '主题已取消公开', renamed: '主题标题已修改', assigned: '已指定',
 	};
