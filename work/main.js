@@ -18,7 +18,7 @@
 // @grant        unsafeWindow
 // @connect      connect.linux.do
 // @run-at       document-start
-// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@b32c55af574a0da22bfecf48b44953b3e2548799/work/main.css#sha256=0ec9ad6445477dd4aef79f7e6d7418216bfd2b0fa8eb63c42dd33a5bcfac711e
+// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@8ddeb17ffebb49841ca77a179b328a4a27e7dd31/work/main.css#sha256=42cdcb597d3e17f2d73185ad50d8907e15ddf4b59047883c2def7dd463cfa44c
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
