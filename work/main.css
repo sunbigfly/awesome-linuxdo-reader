@@ -709,11 +709,15 @@
       border:1px solid var(--primary-low,#ddd);border-radius:8px;background:var(--secondary,#fff);
       color:var(--ldp-interface-font-color,var(--primary,#222));font-family:var(--ldp-interface-font-family,inherit);
       font-weight:var(--ldp-interface-font-weight,400);box-shadow:0 16px 46px rgba(0,0,0,.22);overflow:hidden;pointer-events:auto;}
-    .ldp-notification-tabs{display:flex;gap:2px;padding:8px;border-bottom:var(--ldp-divider-line-width,1px) solid var(--ldp-divider-line-color,#e5e5e5);}
-    .ldp-notification-tab{flex:1;min-width:0;border:none;border-radius:6px;padding:7px 5px;
-      background:transparent;color:inherit;font:inherit;font-size:var(--ldp-font-ui,12px);font-weight:650;cursor:pointer;}
-    .ldp-notification-tab:hover{background:var(--primary-very-low,#f3f3f3);}
-    .ldp-notification-tab.active{background:var(--primary-low,#e8e8e8);}
+    .ldp-notification-tabs{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;
+      margin:8px 10px 0;padding:2px;border-radius:6px;background:var(--primary-very-low,#f3f3f3);user-select:none;}
+    .ldp-notification-tab{display:inline-flex;width:100%;min-width:0;align-items:center;justify-content:center;gap:3px;
+      border:0;border-radius:4px;padding:6px 2px;background:transparent;color:var(--primary-medium,#777);
+      font:inherit;font-size:var(--ldp-font-xs,10px);font-weight:650;line-height:1;white-space:nowrap;cursor:pointer;}
+    .ldp-notification-tab .ldp-icon{width:12px;height:12px;stroke-width:2;}
+    .ldp-notification-tab:hover{color:var(--primary,#222);}
+    .ldp-notification-tab:focus-visible{outline:2px solid var(--tertiary,#47855f);outline-offset:-2px;}
+    .ldp-notification-tab.active{background:var(--secondary,#fff);color:var(--primary,#222);box-shadow:0 1px 2px rgba(0,0,0,.1);}
     .ldp-notification-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;
       min-height:30px;padding:5px 10px 0;color:var(--primary-medium,#777);font-size:var(--ldp-font-sm,11px);}
     .ldp-notification-mark-all{display:inline-flex;align-items:center;gap:5px;min-height:26px;padding:4px 7px;
@@ -785,22 +789,35 @@
       opacity:1;pointer-events:auto;}
     .ldp-collection-delete:hover,.ldp-collection-delete:focus-visible{border-color:var(--danger,#c94747);color:var(--danger,#c94747);}
     @media (hover:none){.ldp-collection-delete{opacity:1;pointer-events:auto;}}
-    .ldp-notification-date-label{padding:7px 12px 4px;color:var(--primary-medium,#777);
+    .ldp-notification-date-group{padding:0 8px 4px;}
+    .ldp-notification-date-label{padding:8px 4px 5px;color:var(--primary-medium,#777);
       font-size:var(--ldp-font-sm,11px);font-weight:700;}
     .ldp-notification-item{display:grid;grid-template-columns:34px minmax(0,1fr);gap:9px;
       align-items:start;padding:9px 12px;color:inherit;text-decoration:none;border-top:var(--ldp-divider-line-width,1px) solid var(--ldp-divider-line-color,#e5e5e5);}
-    .ldp-notification-date-group .ldp-notification-item:first-of-type{border-top:none;}
+    .ldp-notification-date-group .ldp-notification-item:not(.ldp-notification-message-item):first-of-type{border-top:none;}
     .ldp-notification-item:hover{background:var(--primary-very-low,#f5f5f5);color:inherit;}
     .ldp-notification-item.unread{background:color-mix(in srgb,var(--tertiary-low,#dbeeff) 36%,var(--secondary,#fff));}
+    .ldp-notification-message-item{grid-template-columns:36px minmax(0,1fr) auto;gap:8px;align-items:start;
+      margin:0 0 5px;padding:8px;border:1px solid var(--ldp-divider-line-color,#e5e5e5);border-radius:8px;
+      background:var(--secondary,#fff);}
+    .ldp-notification-date-label + .ldp-notification-message-item{margin-top:1px;}
+    .ldp-notification-message-item:hover{border-color:color-mix(in srgb,var(--primary-medium,#888) 28%,transparent);}
     .ldp-notification-avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;background:var(--primary-low,#ddd);}
+    .ldp-notification-message-item .ldp-notification-avatar{width:34px;height:34px;}
     .ldp-notification-avatar-fallback{display:flex;align-items:center;justify-content:center;
       color:var(--primary-medium,#666);font-size:var(--ldp-font-base,13px);font-weight:700;}
     .ldp-notification-copy{min-width:0;display:grid;gap:2px;}
-    .ldp-notification-title{font-size:var(--ldp-font-base,13px);font-weight:650;line-height:1.35;overflow-wrap:anywhere;}
-    .ldp-notification-footer{display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0;}
-    .ldp-notification-meta{font-size:var(--ldp-font-sm,11px);line-height:1.35;color:var(--primary-medium,#777);}
-    .ldp-notification-read-state{flex:none;color:var(--primary-medium,#777);font-size:var(--ldp-font-sm,11px);font-weight:650;line-height:1.35;white-space:nowrap;}
-    .ldp-notification-item.unread .ldp-notification-read-state{color:var(--tertiary,#47855f);}
+    .ldp-notification-message-item .ldp-notification-title{display:flex;align-items:flex-start;gap:4px;
+      font-size:var(--ldp-font-ui,12px);font-weight:600;line-height:1.35;overflow-wrap:anywhere;}
+    .ldp-notification-type-icon{display:inline-flex;flex:none;margin-top:1px;color:var(--primary-medium,#777);}
+    .ldp-notification-type-icon .ldp-icon{width:13px;height:13px;stroke-width:2;}
+    .ldp-notification-title-text{min-width:0;}
+    .ldp-notification-meta{font-size:var(--ldp-font-xs,10px);line-height:1.3;color:var(--primary-medium,#777);}
+    .ldp-notification-read-state{display:inline-flex;align-self:center;justify-content:center;min-width:28px;padding:3px 5px;
+      border-radius:999px;background:var(--primary-very-low,#f3f3f3);color:var(--primary-medium,#777);
+      font-size:var(--ldp-font-micro,9px);font-weight:650;line-height:1.2;white-space:nowrap;}
+    .ldp-notification-item.unread .ldp-notification-read-state{
+      background:color-mix(in srgb,var(--tertiary-low,#dbeeff) 72%,var(--secondary,#fff));color:var(--tertiary,#47855f);}
     .ldp-notification-empty,.ldp-notification-error{display:flex;min-height:148px;align-items:center;
       justify-content:center;padding:18px;text-align:center;color:var(--primary-medium,#777);font-size:var(--ldp-font-ui,12px);}
     .ldp-notification-error{color:var(--danger,#c44);}
