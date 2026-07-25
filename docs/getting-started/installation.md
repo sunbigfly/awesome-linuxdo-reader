@@ -32,7 +32,16 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
 1. 安装并启用 Tampermonkey。
 2. 打开 [GreasyFork 脚本页](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader)。
 3. 选择“安装此脚本”，核对名称为 **Awesome LinuxDo Reader**。
-4. 打开或刷新 [LINUX DO](https://linux.do/) 或其他已适配站点。
+4. 打开或刷新以下任一站点：
+   - [LINUX DO](https://linux.do/)
+   - [OpenAI Developer Community](https://community.openai.com/)
+   - [Discourse Meta](https://meta.discourse.org/)
+   - [Python Discussions](https://discuss.python.org/)
+   - [Swift Forums](https://forums.swift.org/)
+   - [Julia Discourse](https://discourse.julialang.org/)
+   - [Home Assistant Community](https://community.home-assistant.io/)
+   - [Arduino Forum](https://forum.arduino.cc/)
+   - [Rust Users Forum](https://users.rust-lang.org/)
 5. 在主题列表顶部或主题链接附近确认阅读器入口已经出现。
 
 ::: warning 不要同时启用两个版本
