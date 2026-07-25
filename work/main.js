@@ -18,7 +18,7 @@
 // @grant        unsafeWindow
 // @connect      connect.linux.do
 // @run-at       document-start
-// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@8fe12e77e61359fdcc20b85201169cb8fd6b2f76/work/main.css#sha256=57d186beb6f154a51e1febdfbdcfd79e437c2fce66744407f1c1870c2ee2bbc8
+// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@31f5d65ebc0d5e783689a2c694da5241de476356/work/main.css#sha256=5708dabd48452f43b68842d0a14de719da78f10d675619a042d862000acd3b20
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
@@ -11797,6 +11797,7 @@
 		template.innerHTML = String(value || '');
 		prepareReaderHashtags(template.content);
 		if (options.inlineOneboxes) prepareReaderInlineOneboxes(template.content);
+		prepareReaderOneboxes(template.content);
 		prepareReaderCodeBlocks(template.content);
 		prepareReaderMedia(template.content, { interactive: false });
 		return template.innerHTML;
@@ -11823,6 +11824,32 @@
 			const linkIcon = [...link.children].find((child) => child.matches('svg,.svg-icon'));
 			if (linkIcon) linkIcon.after(label);
 			else link.prepend(label);
+		});
+	}
+
+	function prepareReaderOneboxes(root) {
+		if (!root || !isFunction(root.querySelectorAll)) return;
+		const githubSelector = 'aside.onebox:is(.githubfolder,.githubrepo,[data-onebox-src*="github.com"])';
+		root.querySelectorAll(githubSelector).forEach((onebox) => {
+			if (onebox.dataset.ldpGithubOneboxNormalized === '1') return;
+			const header = onebox.querySelector(':scope > header.source');
+			const body = onebox.querySelector(':scope > article.onebox-body');
+			const title = body?.querySelector('h3');
+			if (!header || !body || !title) return;
+			const description = [...body.querySelectorAll('p')].find((paragraph) =>
+				!paragraph.matches('.onebox-metadata') && !paragraph.closest('.onebox-metadata')
+			);
+			const thumbnail = body.querySelector('img.thumbnail');
+			if (thumbnail) {
+				header.querySelectorAll(':scope > :is(img,.site-icon)').forEach((iconNode) => iconNode.remove());
+				thumbnail.className = 'site-icon ldp-github-onebox-logo';
+				thumbnail.removeAttribute('width');
+				thumbnail.removeAttribute('height');
+				thumbnail.alt = '';
+				header.prepend(thumbnail);
+			}
+			body.replaceChildren(title, ...(description ? [description] : []));
+			onebox.dataset.ldpGithubOneboxNormalized = '1';
 		});
 	}
 
@@ -11862,6 +11889,7 @@
 		prepareReaderHashtags(template.content);
 		prepareReaderUserMentions(template.content);
 		prepareReaderInlineOneboxes(template.content);
+		prepareReaderOneboxes(template.content);
 		prepareReaderCallouts(template.content);
 		prepareReaderPostQuotes(template.content);
 		prepareReaderCodeBlocks(template.content);
