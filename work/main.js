@@ -18,7 +18,7 @@
 // @grant        unsafeWindow
 // @connect      connect.linux.do
 // @run-at       document-start
-// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@c32a1f50d8c5b475cd157f2deac858c4bc938768/work/main.css#sha256=5036c8c8768f019a7dc1929e795618616e4ed72b6b7cc76c58980b6a7b8794c7
+// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@8fe12e77e61359fdcc20b85201169cb8fd6b2f76/work/main.css#sha256=57d186beb6f154a51e1febdfbdcfd79e437c2fce66744407f1c1870c2ee2bbc8
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
@@ -243,7 +243,7 @@
 	const ZEBRA_RADIUS_MAX = 16;
 	const ZEBRA_RADIUS_DEFAULT = 10;
 	const ZEBRA_RADIUS_STEP = 1;
-	const REPLY_LINE_COLOR_DEFAULT = '#47855f';
+	const REPLY_LINE_COLOR_DEFAULT = '#6dab85';
 	const LINE_WIDTH_MIN = 0.5;
 	const LINE_WIDTH_MAX = 4;
 	const LINE_WIDTH_STEP = 0.5;
@@ -256,7 +256,7 @@
 	const QUOTE_LINE_WIDTH_DEFAULT = 0.5;
 	const DIVIDER_LINE_COLOR_DEFAULT = '#e5e5e5';
 	const DIVIDER_LINE_WIDTH_DEFAULT = 0.5;
-	const FLOOR_PREVIEW_COLOR_DEFAULT = '#dc2626';
+	const FLOOR_PREVIEW_COLOR_DEFAULT = '#dba7a7';
 	const FLOOR_PREVIEW_COLOR_DARK_DEFAULT = '#f87171';
 	const FLOOR_PREVIEW_HEIGHT_MIN = 180;
 	const FLOOR_PREVIEW_HEIGHT_MAX = 720;
