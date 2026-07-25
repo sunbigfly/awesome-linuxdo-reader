@@ -21,6 +21,7 @@
 // @match        https://forum.arduino.cc/*
 // @match        https://users.rust-lang.org/*
 // @icon         https://cdn3.ldstatic.com/optimized/4X/6/a/6/6a6affc7b1ce8140279e959d32671304db06d5ab_2_512x512.png
+// @grant        GM_download
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getResourceText
 // @grant        unsafeWindow
@@ -768,7 +769,7 @@
 		...normalizeWindowGeometryPreferenceGroup({}, COMPOSER_WINDOW_PREFIX),
 		historySortMode: 'recent-viewed',
 		bookmarkTabOrder: BOOKMARK_TAB_TYPES,
-		historyButtonsAlwaysVisible: false,
+		historyButtonsAlwaysVisible: true,
 		historyEdgeTriggerPercent: HISTORY_EDGE_TRIGGER_DEFAULT,
 		loadingAnimation: 'random',
 		openTopicsAtFirstPost: false,
@@ -8509,14 +8510,15 @@
 				void activeOptions.onDownload();
 				return;
 			}
-			const link = makeElement('a');
-			link.href = displayedSource;
-			link.download = userAvatarDownloadFilename(activeHighResolutionSource || activePreviewSource, username, isBackground ? 'background' : 'avatar');
-			link.target = '_blank';
-			link.rel = 'noopener';
-			appendReaderPortalNode(link);
-			link.click();
-			link.remove();
+			try {
+				const source = activeHighResolutionSource || activePreviewSource || displayedSource;
+				triggerBrowserUrlDownload(
+					source,
+					userAvatarDownloadFilename(source, username, isBackground ? 'background' : 'avatar')
+				);
+			} catch (error) {
+				showSelectionToast(`${mediaLabel}下载失败：${error.message || '请重试'}`);
+			}
 		};
 		function onKey(event) {
 			if (!viewer.isConnected) return;
@@ -14982,6 +14984,31 @@
 		setTimeout(() => URL.revokeObjectURL(objectUrl), 60 * 1000);
 	}
 
+	function triggerBrowserUrlDownload(source, filename) {
+		const url = absoluteImageUrl(source);
+		if (!url) throw new Error('未找到可下载的文件地址');
+		const name = safeDownloadFilename(filename);
+		const browserDownload = globalThis.GM_download;
+		if (isFunction(browserDownload) && /^https?:/i.test(url)) {
+			browserDownload({
+				url,
+				name,
+				saveAs: false,
+				onerror: (details) => {
+					showSelectionToast(`浏览器下载失败：${details?.error || '请重试'}`);
+				},
+			});
+			return;
+		}
+		const link = makeElement('a');
+		link.href = url;
+		link.download = name;
+		link.hidden = true;
+		appendReaderPortalNode(link);
+		link.click();
+		link.remove();
+	}
+
 	async function cachedPersistentLightboxBlob(rawSource) {
 		const source = absoluteImageUrl(rawSource);
 		if (!source) return null;
@@ -15114,11 +15141,14 @@
 	async function downloadLightboxItem(item, index) {
 		try {
 			const missingOriginals = await lightboxMissingOriginalCount([item]);
-			const useOriginal = missingOriginals > 0 && globalThis.confirm(
-				'当前原图尚未缓存。\n\n确定：按阅读器限速获取并下载原图\n取消：下载当前最高缓存／预览质量'
+			const useOriginal = missingOriginals <= 0 || globalThis.confirm(
+				'当前原图尚未缓存。\n\n确定：交给浏览器下载器下载原图\n取消：交给浏览器下载器下载当前预览质量'
 			);
-			const blob = await lightboxImageDownloadBlob(item, { original: useOriginal });
-			triggerBrowserDownload(blob, lightboxImageDownloadName(item, index, blob).replace(/^\d+-/, ''));
+			const source = useOriginal ? item?.originalSrc : (item?.thumbSrc || item?.originalSrc);
+			triggerBrowserUrlDownload(
+				source,
+				lightboxImageDownloadName(item, index).replace(/^\d+-/, '')
+			);
 		} catch (error) {
 			showSelectionToast(`图片下载失败：${error.message || '请重试'}`);
 		}
