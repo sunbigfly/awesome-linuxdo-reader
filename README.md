@@ -4,7 +4,7 @@
 
 <h1 align="center">Awesome LinuxDo Reader</h1>
 
-<p align="center">面向 LINUX DO 的沉浸式增强阅读器，在不离开列表页的情况下完成阅读、回复与社区互动。</p>
+<p align="center">以 LINUX DO 为完整基线、兼容多个 Discourse 社区的沉浸式增强阅读器，在不离开列表页的情况下完成阅读、回复与原站互动。</p>
 
 <p align="center">
   <a href="https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js">安装脚本</a> ·
@@ -29,7 +29,8 @@
 - 列表页直接打开完整帖子，支持浮窗、全屏与移动端布局。
 - 保留楼层关系、楼中楼、跳转、浏览历史与真实已读进度。
 - 集成回复、点赞、回应、收藏、通知、搜索与用户资料等社区能力。
-- 提供原图灯箱、媒体播放、公式渲染、主题外观、缓存和性能设置。
+- 提供原图灯箱、非中文正文翻译、媒体播放、公式渲染、主题外观、缓存和性能设置。
+- 内置 21 个 Discourse 社区，并支持验证后添加自定义 HTTPS Discourse 站点。
 - 内置请求调度、429 退避、DOM 窗口化与本地资源监控。
 
 ## 核心体验
@@ -124,17 +125,30 @@
 2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。
 3. 打开或刷新以下任一站点：
    - [LINUX DO](https://linux.do/)
+   - [Brave Community](https://community.brave.com/)
+   - [Roblox Developer Forum](https://devforum.roblox.com/)
    - [OpenAI Developer Community](https://community.openai.com/)
+   - [Home Assistant Community](https://community.home-assistant.io/)
+   - [Cfx.re Forum](https://forum.cfx.re/)
+   - [Spiceworks Community](https://community.spiceworks.com/)
+   - [Arduino Forum](https://forum.arduino.cc/)
+   - [Unity Discussions](https://discussions.unity.com/)
+   - [Cloudflare Community](https://community.cloudflare.com/)
+   - [Epic Developer Community](https://forums.unrealengine.com/)
+   - [Obsidian Forum](https://forum.obsidian.md/)
+   - [Cursor Community](https://forum.cursor.com/)
+   - [Godot Forum](https://forum.godotengine.org/)
+   - [n8n Community](https://community.n8n.io/)
+   - [MikroTik Forum](https://forum.mikrotik.com/)
    - [Discourse Meta](https://meta.discourse.org/)
    - [Python Discussions](https://discuss.python.org/)
    - [Swift Forums](https://forums.swift.org/)
    - [Julia Discourse](https://discourse.julialang.org/)
-   - [Home Assistant Community](https://community.home-assistant.io/)
-   - [Arduino Forum](https://forum.arduino.cc/)
    - [Rust Users Forum](https://users.rust-lang.org/)
-4. 点击主题标题开始使用。
+4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 其他功能 → 自定义站点”中验证并添加。
+5. 点击主题标题开始使用。
 
-当前项目版本为 `0.1.10`。脚本以 LINUX DO 为完整功能基线，并明确匹配 OpenAI Developer Community、Discourse Meta、Python Discussions、Swift Forums、Julia Discourse、Home Assistant Community、Arduino Forum 与 Rust Users Forum；完整范围和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `0.1.11`。脚本以 LINUX DO 为完整功能基线，内置匹配 20 个其他 Discourse 社区，并允许用户验证后添加自定义 HTTPS Discourse 站点；完整范围和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
 ## 开发
 

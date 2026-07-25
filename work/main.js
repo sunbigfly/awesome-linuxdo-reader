@@ -2,32 +2,50 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      0.1.10
+// @version      0.1.11
 // @license      MIT
-// @description  面向 LINUX DO 与知名 Discourse 社区的沉浸式增强阅读器，支持父回复预览、消息/历史/收藏、原图灯箱、主题布局、请求限流、缓存与 DOM 渲染管理。
-// @description:en An immersive reader for LINUX DO and selected Discourse communities with threaded context, community panels, image lightbox, layouts, request control, cache, and DOM rendering management.
+// @description  面向 LINUX DO 与 Discourse 社区的沉浸式增强阅读器，支持长帖上下文、消息/历史/收藏、原图灯箱、非中文正文翻译、自定义站点与个性布局。
+// @description:en An immersive reader for LINUX DO and Discourse communities with threaded context, community panels, image lightbox, body translation, custom sites, and personalized layouts.
 // @author       sunbigfly
 // @homepageURL  https://github.com/sunbigfly/awesome-linuxdo-reader
 // @supportURL   https://github.com/sunbigfly/awesome-linuxdo-reader/issues
 // @downloadURL  https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js
 // @updateURL    https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.meta.js
 // @match        https://linux.do/*
+// @match        https://community.brave.com/*
+// @match        https://devforum.roblox.com/*
 // @match        https://community.openai.com/*
+// @match        https://community.home-assistant.io/*
+// @match        https://forum.cfx.re/*
+// @match        https://community.spiceworks.com/*
+// @match        https://forum.arduino.cc/*
+// @match        https://discussions.unity.com/*
+// @match        https://community.cloudflare.com/*
+// @match        https://forums.unrealengine.com/*
+// @match        https://forum.obsidian.md/*
+// @match        https://forum.cursor.com/*
+// @match        https://forum.godotengine.org/*
+// @match        https://community.n8n.io/*
+// @match        https://forum.mikrotik.com/*
 // @match        https://meta.discourse.org/*
 // @match        https://discuss.python.org/*
 // @match        https://forums.swift.org/*
 // @match        https://discourse.julialang.org/*
-// @match        https://community.home-assistant.io/*
-// @match        https://forum.arduino.cc/*
 // @match        https://users.rust-lang.org/*
+// @match        https://*/*
 // @icon         https://cdn3.ldstatic.com/optimized/4X/6/a/6/6a6affc7b1ce8140279e959d32671304db06d5ab_2_512x512.png
-// @grant        GM_download
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getResourceText
 // @grant        unsafeWindow
 // @connect      connect.linux.do
+// @connect      translate.googleapis.com
+// @connect      edge.microsoft.com
+// @connect      api-edge.cognitive.microsofttranslator.com
+// @connect      *
 // @run-at       document-start
-// @resource     ldpReaderStyles https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/main.css
+// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@290df520392549cad8ba30ebd3018bee4ca9169a/work/main.css#sha256=73bcc1511917ce35aa73c28afa0a81892aed5e7883acad804ab550818a17979d
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
@@ -36,18 +54,64 @@
 (function () {
 	'use strict';
 
+	const CUSTOM_DISCOURSE_SITES_KEY = 'awesome-linuxdo-reader:custom-discourse-sites:v1';
+	const BUILTIN_DISCOURSE_HOSTS = new Set([
+		'linux.do', 'community.brave.com', 'devforum.roblox.com', 'community.openai.com',
+		'community.home-assistant.io', 'forum.cfx.re', 'community.spiceworks.com', 'forum.arduino.cc',
+		'discussions.unity.com', 'community.cloudflare.com', 'forums.unrealengine.com', 'forum.obsidian.md',
+		'forum.cursor.com', 'forum.godotengine.org', 'community.n8n.io', 'forum.mikrotik.com',
+		'meta.discourse.org', 'discuss.python.org', 'forums.swift.org', 'discourse.julialang.org',
+		'users.rust-lang.org',
+	]);
+	function normalizeCustomDiscourseHost(value) {
+		const source = String(value || '').trim();
+		if (!source) return '';
+		try {
+			const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(source) ? source : `https://${source}`);
+			return url.protocol === 'https:' && !url.username && !url.password ? url.hostname.toLowerCase() : '';
+		} catch (error) { return ''; }
+	}
+	function readCustomDiscourseSites() {
+		try {
+			const stored = globalThis.GM_getValue?.(CUSTOM_DISCOURSE_SITES_KEY, []);
+			return Array.isArray(stored) ? [...new Set(stored.map(normalizeCustomDiscourseHost).filter(Boolean))] : [];
+		} catch (error) { return []; }
+	}
+	const CURRENT_SITE_HOST = location.hostname.toLowerCase();
+	if (!BUILTIN_DISCOURSE_HOSTS.has(CURRENT_SITE_HOST) &&
+		!readCustomDiscourseSites().includes(CURRENT_SITE_HOST)) return;
+	function writeCustomDiscourseSites(sites) {
+		const save = globalThis.GM_setValue;
+		if (typeof save !== 'function') throw new Error('脚本没有全局站点存储权限');
+		return Promise.resolve(save(CUSTOM_DISCOURSE_SITES_KEY, [...new Set(sites)].sort()));
+	}
+	function validateCustomDiscourseSite(host) {
+		const request = globalThis.GM_xmlhttpRequest;
+		if (typeof request !== 'function') return Promise.reject(new Error('脚本没有跨站检测权限'));
+		return new Promise((resolve, reject) => request({
+			method: 'GET', url: `https://${host}/site/basic-info.json`,
+			headers: { Accept: 'application/json' }, responseType: 'json', anonymous: true, timeout: 8000,
+			onload: (response) => {
+				const info = response.response;
+				if (response.status >= 200 && response.status < 300 && info?.title) resolve(info);
+				else reject(new Error('未检测到 Discourse'));
+			},
+			ontimeout: () => reject(new Error('检测超时，请稍后重试')),
+			onerror: () => reject(new Error('站点无法访问')),
+		}));
+	}
+
 	const BASE = location.origin;
 	const PAGE_ROOT = document.documentElement;
 	const makeElement = (tagName) => document.createElement(tagName);
-	const READER_VERSION = '0.1.10';
+	const READER_VERSION = '0.1.11';
 	const HOST_PAGE_WINDOW = globalThis.unsafeWindow;
 	const GENERIC_DISCOURSE_SITE_ADAPTER = Object.freeze({
 		id: 'discourse',
 		name: location.hostname,
 		capabilities: Object.freeze({ connect: false }),
 	});
-	// New hosts still require an explicit userscript @match (or a user-managed match);
-	// this table only carries site-specific overrides after the Discourse runtime gate passes.
+	// Built-in hosts carry display/capability overrides; user-added Discourse hosts use the generic adapter.
 	const DISCOURSE_SITE_ADAPTERS = Object.freeze({
 		'linux.do': Object.freeze({
 			id: 'linux-do',
@@ -66,6 +130,66 @@
 		'community.openai.com': Object.freeze({
 			id: 'openai-community',
 			name: 'OpenAI Community',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'community.brave.com': Object.freeze({
+			id: 'brave-community',
+			name: 'Brave Community',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'devforum.roblox.com': Object.freeze({
+			id: 'roblox-developer-forum',
+			name: 'Roblox Developer Forum',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'forum.cfx.re': Object.freeze({
+			id: 'cfx-forum',
+			name: 'Cfx.re Forum',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'community.spiceworks.com': Object.freeze({
+			id: 'spiceworks-community',
+			name: 'Spiceworks Community',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'discussions.unity.com': Object.freeze({
+			id: 'unity-discussions',
+			name: 'Unity Discussions',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'community.cloudflare.com': Object.freeze({
+			id: 'cloudflare-community',
+			name: 'Cloudflare Community',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'forums.unrealengine.com': Object.freeze({
+			id: 'epic-developer-community',
+			name: 'Epic Developer Community',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'forum.obsidian.md': Object.freeze({
+			id: 'obsidian-forum',
+			name: 'Obsidian Forum',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'forum.cursor.com': Object.freeze({
+			id: 'cursor-community',
+			name: 'Cursor Community',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'forum.godotengine.org': Object.freeze({
+			id: 'godot-forum',
+			name: 'Godot Forum',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'community.n8n.io': Object.freeze({
+			id: 'n8n-community',
+			name: 'n8n Community',
+			capabilities: Object.freeze({ connect: false }),
+		}),
+		'forum.mikrotik.com': Object.freeze({
+			id: 'mikrotik-forum',
+			name: 'MikroTik Forum',
 			capabilities: Object.freeze({ connect: false }),
 		}),
 		'meta.discourse.org': Object.freeze({
@@ -107,6 +231,11 @@
 	const SITE_ADAPTER = DISCOURSE_SITE_ADAPTERS[location.hostname.toLowerCase()] ||
 		GENERIC_DISCOURSE_SITE_ADAPTER;
 	const SITE_DISPLAY_NAME = SITE_ADAPTER.name || location.hostname;
+	const SITE_LANGUAGE = SITE_ADAPTER === GENERIC_DISCOURSE_SITE_ADAPTER
+		? '' : SITE_ADAPTER.id === 'linux-do' ? 'zh-CN' : 'en';
+	function siteIsMarkedNonChinese() {
+		return !!SITE_LANGUAGE && !/^zh(?:[-_]|$)/i.test(SITE_LANGUAGE);
+	}
 	const TOPIC_CACHE_TTL = 90 * 1000;
 	const READ_THRESHOLD = 1500;
 	const FLUSH_INTERVAL = 5000;
@@ -772,6 +901,7 @@
 		historyButtonsAlwaysVisible: true,
 		historyEdgeTriggerPercent: HISTORY_EDGE_TRIGGER_DEFAULT,
 		loadingAnimation: 'random',
+		translationMode: 'original',
 		openTopicsAtFirstPost: false,
 		expandNestedRepliesByDefault: true,
 		expandLeafNestedReplies: false,
@@ -6141,6 +6271,7 @@
 		monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
 		settings: '<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831 2.34 2.34 0 0 1 2.33-4.033 2.34 2.34 0 0 0 3.32-1.915z"/><circle cx="12" cy="12" r="3"/>',
 		headerSettings: '<path d="M4 6h5M13 6h7"/><circle cx="11" cy="6" r="2"/><path d="M4 12h10M18 12h2"/><circle cx="16" cy="12" r="2"/><path d="M4 18h2M10 18h10"/><circle cx="8" cy="18" r="2"/>',
+		languages: '<path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/>',
 		smile: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/>',
 		search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
 		flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/>',
@@ -6321,7 +6452,7 @@
 		['performance', 'rocket', '性能设置', '先控制“产生多少请求与 DOM”，再控制“请求何时启动”。主楼层取数与楼中楼自动请求属于需求来源；DOM 窗口只负责渲染；共享调度负责排队、双窗口预算、429 退避与恢复探测，但不会抵消过大的预取需求。设置在下次打开阅读器时生效。'],
 		['resource-monitor', 'monitor', '资源监控', '状态每秒快照，长任务、长帧脚本、DOM 变更、网络和前后台切换按浏览器原始事件记录到毫秒；标签页进入后台后继续取证，计时器被节流或冻结时保留真实空档，不补造样本。仅在本页内存保留最近 10 分钟。', '实时资源监控'],
 		['request-flow', 'activity', '请求数据', '同源标签页共享阅读器与 LINUX DO 宿主 API 的 10 秒/60 秒请求账本、优先级、活动槽、有效策略和限流状态；宿主请求发出后立即纳入账本，后续阅读器请求主动避让。当前页静态资源只用于网络观测，不消耗 API 配额。下方速率、类型、P95 与详细日志是当前标签页口径，只在本页内存保留最近 15 分钟、最多 1200 条；“全局”执行、排队和窗口来自共享账本。不会记录查询参数、请求正文、Cookie 或响应内容。'],
-		['other', 'wrench', '其他功能', '按历史导航、帖子打开、回复展示和 Boost 复制分类管理，修改后自动保存在当前浏览器。'],
+		['other', 'wrench', '其他功能', '管理自定义 Discourse 站点、历史导航、帖子打开、回复展示和 Boost 复制，修改后自动保存在当前浏览器。'],
 		['cache', 'database', '数据管理', '备份或恢复阅读器设置，并查看、清理当前浏览器保存的本地缓存。'],
 		['about', 'info', '关于', `专注于长帖阅读、楼层关系和原生社区操作的 ${SITE_DISPLAY_NAME} 阅读工作台。`],
 	];
@@ -6741,6 +6872,8 @@
 			historyButtonsAlwaysVisible: performancePrefs.historyButtonsAlwaysVisible === true,
 			historyEdgeTriggerPercent: normalizeHistoryEdgeTriggerPercent(performancePrefs.historyEdgeTriggerPercent),
 			loadingAnimation: normalizeReaderLoadingAnimation(performancePrefs.loadingAnimation),
+			translationMode: ['bilingual', 'translation'].includes(performancePrefs.translationMode)
+				? performancePrefs.translationMode : 'original',
 			openTopicsAtFirstPost: performancePrefs.openTopicsAtFirstPost === true,
 			expandNestedRepliesByDefault,
 			expandLeafNestedReplies,
@@ -8505,15 +8638,16 @@
 			viewer.remove();
 			if (dismissed && isFunction(onDismiss)) onDismiss();
 		};
-		const download = () => {
+		const download = async () => {
 			if (isFunction(activeOptions.onDownload)) {
 				void activeOptions.onDownload();
 				return;
 			}
 			try {
 				const source = activeHighResolutionSource || activePreviewSource || displayedSource;
-				triggerBrowserUrlDownload(
-					source,
+				const blob = await fetchLightboxDownloadBlob(source);
+				triggerBrowserDownload(
+					blob,
 					userAvatarDownloadFilename(source, username, isBackground ? 'background' : 'avatar')
 				);
 			} catch (error) {
@@ -12133,6 +12267,327 @@
 		activateReaderMedia(content);
 	}
 
+	/* ============ 正文翻译（KISS Translator 架构参考，独立实现） ============ */
+	const READER_TRANSLATION_CACHE_KEY = 'awesome-linuxdo-reader:translations:zh-CN:v1';
+	const readReaderTranslationCache = () => {
+		try {
+			const entries = JSON.parse(localStorage.getItem(READER_TRANSLATION_CACHE_KEY) || '[]');
+			return new Map(Array.isArray(entries) ? entries.slice(-240) : []);
+		} catch (error) { return new Map(); }
+	};
+	const READER_TRANSLATION_CACHE = readReaderTranslationCache();
+	let readerTranslationCacheTimer = 0;
+	function persistReaderTranslationCache() {
+		if (readerTranslationCacheTimer) clearTimeout(readerTranslationCacheTimer);
+		readerTranslationCacheTimer = 0;
+		const entries = [...READER_TRANSLATION_CACHE].slice(-240);
+		while (entries.length) {
+			try {
+				localStorage.setItem(READER_TRANSLATION_CACHE_KEY, JSON.stringify(entries));
+				return;
+			} catch (error) {
+				entries.splice(0, Math.min(20, entries.length));
+			}
+		}
+		try { localStorage.removeItem(READER_TRANSLATION_CACHE_KEY); } catch (error) {}
+	}
+	window.addEventListener('pagehide', persistReaderTranslationCache);
+	const READER_TRANSLATION_BLOCKS = 'p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th';
+	const READER_TRANSLATION_EXCLUDES =
+		'pre,code,kbd,samp,script,style,textarea,.onebox,.poll,.ldp-post-quote,.katex,.MathJax,.math,.ldp-translation-text';
+
+	function readerTranslationSourceText(node) {
+		if (!node) return '';
+		const clone = node.cloneNode(true);
+		clone.querySelectorAll(READER_TRANSLATION_EXCLUDES).forEach((item) => item.remove());
+		return String(clone.textContent || '').replace(/\s+/g, ' ').trim();
+	}
+
+	function readerTranslationBlocks(content) {
+		if (!content) return [];
+		const candidates = [...content.querySelectorAll(READER_TRANSLATION_BLOCKS)]
+			.filter((node) => !node.closest(READER_TRANSLATION_EXCLUDES));
+		return candidates.filter((node) => {
+			if (candidates.some((other) => other !== node && node.contains(other))) return false;
+			return readerTranslationSourceText(node).length > 1;
+		});
+	}
+
+	function readerTextIsChinese(text) {
+		const letters = text.match(/\p{L}/gu) || [];
+		const han = text.match(/\p{Script=Han}/gu) || [];
+		const kanaOrHangul = text.match(/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu) || [];
+		return han.length >= 4 && kanaOrHangul.length < 2 && han.length / Math.max(1, letters.length) >= 0.45;
+	}
+
+	function readerBlockNeedsTranslation(text) {
+		const letters = text.match(/\p{L}/gu) || [];
+		if (letters.length < 2 || readerTextIsChinese(text)) return false;
+		if (/^(?:RFC|ISO|IEC|IEEE|ECMA|W3C|WHATWG)\s*[-#:./]?\s*\d[\w./-]*$/i.test(text)) return false;
+		if (/^[\w.-]{1,32}(?:\(\))?$/.test(text) &&
+			(/[_-]/.test(text) || /^[A-Z\d.]+$/.test(text) || /[a-z][A-Z]/.test(text))) return false;
+		if (/[=±×÷∑∏∫√≈≠≤≥→←↔^]/.test(text) && letters.length / text.length < 0.45) return false;
+		if (/^(?:https?:\/\/|www\.|[@#])\S+$/i.test(text)) return false;
+		const words = text.match(/\p{L}+(?:['’.-]\p{L}+)*/gu) || [];
+		const sentenceLike = words.length >= 4 || text.length >= 32 || /[.!?。！？][”"'’)]?$/.test(text);
+		if (!sentenceLike) return false;
+		if (words.length <= 6 && words.length > 1 &&
+			words.every((word) => /^\p{Lu}[\p{Ll}\p{M}]*$/u.test(word))) return false;
+		return true;
+	}
+
+	function setReaderTranslationCache(text, translation) {
+		READER_TRANSLATION_CACHE.delete(text);
+		READER_TRANSLATION_CACHE.set(text, translation);
+		while (READER_TRANSLATION_CACHE.size > 240) {
+			READER_TRANSLATION_CACHE.delete(READER_TRANSLATION_CACHE.keys().next().value);
+		}
+		if (readerTranslationCacheTimer) clearTimeout(readerTranslationCacheTimer);
+		readerTranslationCacheTimer = setTimeout(persistReaderTranslationCache, 300);
+	}
+
+	function getReaderTranslationCache(text) {
+		const translation = READER_TRANSLATION_CACHE.get(text);
+		if (translation == null) return null;
+		READER_TRANSLATION_CACHE.delete(text);
+		READER_TRANSLATION_CACHE.set(text, translation);
+		return translation;
+	}
+
+	function createReaderTranslationController(ctx, button) {
+		if (!siteIsMarkedNonChinese()) {
+			button.hidden = true;
+			return { syncPost() {}, cycleMode() {}, destroy() {} };
+		}
+		const queue = new Map();
+		const requests = new Set();
+		let mode = ['bilingual', 'translation'].includes(PREFS.translationMode)
+			? PREFS.translationMode : 'original';
+		let active = mode !== 'original';
+		let draining = false;
+		let destroyed = false;
+		let lastRequestAt = 0;
+		let microsoftToken = '';
+		let microsoftTokenAt = 0;
+
+		const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+		const syncUi = () => {
+			const busy = draining && active;
+			button.classList.toggle('is-active', active);
+			button.classList.toggle('is-busy', busy);
+			button.setAttribute('aria-busy', String(busy));
+			setPressed(button, active);
+			setLabel(button, active
+				? `正文翻译：${mode === 'translation' ? '全译文' : '双语显示'}`
+				: '翻译正文');
+		};
+		const applyMode = () => {
+			ctx.commentsEl.classList.toggle('ldp-translation-active', active);
+			ctx.commentsEl.classList.toggle('ldp-translation-only', active && mode === 'translation');
+			syncUi();
+		};
+		const translationRequest = (requestOptions) => {
+			const request = globalThis.GM_xmlhttpRequest;
+			if (!isFunction(request)) return Promise.reject(new Error('油猴未提供跨域请求能力'));
+			return new Promise((resolve, reject) => {
+				let handle = null;
+				const finish = (callback, value) => {
+					if (handle) requests.delete(handle);
+					callback(value);
+				};
+				handle = request({
+					timeout: 20000,
+					...requestOptions,
+					onload: (response) => {
+						if (response.status >= 200 && response.status < 300) finish(resolve, response);
+						else finish(reject, new Error(`翻译服务返回 ${response.status || '未知状态'}`));
+					},
+					ontimeout: () => finish(reject, new Error('翻译请求超时')),
+					onabort: () => finish(reject, new Error('翻译请求已取消')),
+					onerror: () => finish(reject, new Error('翻译请求失败')),
+				});
+				if (handle) requests.add(handle);
+			});
+		};
+		const translateWithGoogle = async (texts) => {
+			const url = new URL('https://translate.googleapis.com/translate_a/t');
+			url.searchParams.set('client', 'dict-chrome-ex');
+			url.searchParams.set('sl', 'auto');
+			url.searchParams.set('tl', 'zh-CN');
+			texts.forEach((text) => url.searchParams.append('q', text));
+			const response = await translationRequest({ method: 'GET', url: url.href });
+			const payload = JSON.parse(response.responseText || '[]');
+			const translations = payload.map((item) => String(Array.isArray(item) ? item[0] || '' : ''));
+			if (translations.length !== texts.length || translations.some((text) => !text)) {
+				throw new Error('Google 返回的译文不完整');
+			}
+			return translations;
+		};
+		const microsoftAccessToken = async () => {
+			if (microsoftToken && Date.now() - microsoftTokenAt < 8 * MINUTE) return microsoftToken;
+			const response = await translationRequest({
+				method: 'GET',
+				url: 'https://edge.microsoft.com/translate/auth',
+			});
+			microsoftToken = String(response.responseText || '').trim();
+			microsoftTokenAt = Date.now();
+			if (!microsoftToken) throw new Error('Microsoft 未返回访问令牌');
+			return microsoftToken;
+		};
+		const translateWithMicrosoft = async (texts) => {
+			const token = await microsoftAccessToken();
+			const response = await translationRequest({
+				method: 'POST',
+				url: 'https://api-edge.cognitive.microsofttranslator.com/translate?api-version=3.0&to=zh-Hans',
+				headers: {
+					'Authorization': `Bearer ${token}`,
+					'Content-Type': 'application/json',
+				},
+				data: JSON.stringify(texts.map((text) => ({ Text: text }))),
+			});
+			const payload = JSON.parse(response.responseText || '[]');
+			const translations = payload.map((item) => String(item?.translations?.[0]?.text || ''));
+			if (translations.length !== texts.length || translations.some((text) => !text)) {
+				throw new Error('Microsoft 返回的译文不完整');
+			}
+			return translations;
+		};
+		const translateBatch = async (texts) => {
+			const largeBatch = texts.reduce((length, text) => length + text.length, 0) > 2800;
+			const providers = largeBatch
+				? [translateWithMicrosoft, translateWithGoogle]
+				: [translateWithGoogle, translateWithMicrosoft];
+			let failure = null;
+			for (let attempt = 0; attempt < providers.length && !destroyed; attempt++) {
+				const wait = Math.max(0, 850 - (Date.now() - lastRequestAt));
+				if (wait) await delay(wait);
+				lastRequestAt = Date.now();
+				try {
+					return await providers[attempt](texts);
+				} catch (error) {
+					failure = error;
+					if (attempt < providers.length - 1) await delay(1200 * (2 ** attempt));
+				}
+			}
+			throw failure || new Error('翻译服务不可用');
+		};
+		const attachTranslation = (node, source, translation) => {
+			if (!node || readerTranslationSourceText(node) !== source) return;
+			let original = node.querySelector(':scope > .ldp-translation-original');
+			let output = node.querySelector(':scope > .ldp-translation-text');
+			if (!original) {
+				original = makeElement('span');
+				original.className = 'ldp-translation-original';
+				while (node.firstChild) original.append(node.firstChild);
+				node.append(original);
+			}
+			if (!output) {
+				output = makeElement('span');
+				output.className = 'ldp-translation-text';
+				node.append(output);
+			}
+			node.classList.add('ldp-translation-source');
+			output.lang = 'zh-CN';
+			output.textContent = translation;
+		};
+		const queueBlock = (node) => {
+			const text = readerTranslationSourceText(node);
+			if (!readerBlockNeedsTranslation(text)) return;
+			const cached = getReaderTranslationCache(text);
+			if (cached != null) {
+				attachTranslation(node, text, cached);
+				return;
+			}
+			const entry = queue.get(text) || { text, nodes: new Set() };
+			entry.nodes.add(node);
+			queue.set(text, entry);
+		};
+		const nextBatch = () => {
+			const entries = [];
+			let characters = 0;
+			for (const entry of queue.values()) {
+				if (entries.length && (entries.length >= 20 || characters + entry.text.length > 3500)) break;
+				queue.delete(entry.text);
+				entries.push(entry);
+				characters += entry.text.length;
+			}
+			return entries;
+		};
+		const drain = async () => {
+			if (draining || destroyed || !active) return;
+			draining = true;
+			syncUi();
+			await delay(120);
+			try {
+				while (queue.size && active && !destroyed) {
+					const entries = nextBatch();
+					const translations = await translateBatch(entries.map((entry) => entry.text));
+					entries.forEach((entry, index) => {
+						const translation = translations[index];
+						setReaderTranslationCache(entry.text, translation);
+						entry.nodes.forEach((node) => attachTranslation(node, entry.text, translation));
+					});
+					syncUi();
+				}
+			} catch (error) {
+				showSelectionToast(`${error.message || '翻译失败'}，请稍后重试`);
+			} finally {
+				draining = false;
+				syncUi();
+			}
+		};
+		const syncPost = (post) => {
+			if (!post || destroyed) return;
+			const postData = post._ldpPostData || {};
+			const postType = +(postData.post_type == null ? 1 : postData.post_type);
+			const username = String(postData.username || post.dataset.username || '').toLocaleLowerCase();
+			if (postType !== 1 || postData.action_code || username === 'system' || username === 'discobot') return;
+			const content = post.querySelector(':scope > .ldp-content');
+			if (!content || post.dataset.ldpContentHydrated === '0') return;
+			const blocks = readerTranslationBlocks(content);
+			if (!active) return;
+			blocks.forEach(queueBlock);
+			applyMode();
+			void drain();
+		};
+		const syncMountedPosts = () => {
+			ctx.commentsEl.querySelectorAll('.ldp-post').forEach(syncPost);
+		};
+		const setMode = (nextMode) => {
+			setPref('translationMode', nextMode);
+			if (nextMode === 'original') {
+				active = false;
+				queue.clear();
+			} else {
+				active = true;
+				mode = nextMode === 'translation' ? 'translation' : 'bilingual';
+				syncMountedPosts();
+			}
+			applyMode();
+		};
+		const cycleMode = () => {
+			const nextMode = !active ? 'bilingual' : mode === 'bilingual' ? 'translation' : 'original';
+			setMode(nextMode);
+			showSelectionToast(nextMode === 'bilingual'
+				? '正文翻译：双语显示'
+				: nextMode === 'translation' ? '正文翻译：全译文' : '已恢复原文');
+		};
+		const destroy = () => {
+			destroyed = true;
+			active = false;
+			queue.clear();
+			requests.forEach((request) => request?.abort?.());
+			requests.clear();
+			ctx.commentsEl.classList.remove('ldp-translation-active', 'ldp-translation-only');
+			button.hidden = true;
+			button.classList.remove('is-active', 'is-busy');
+		};
+		button.hidden = false;
+		applyMode();
+		requestAnimationFrame(syncMountedPosts);
+		return { syncPost, cycleMode, destroy };
+	}
+
 	function renderNewUserBadge(postNode) {
 		if (!postNode) return;
 		const post = postNode._ldpPostData || {};
@@ -13474,6 +13929,7 @@
 		}
 
 		post.dataset.ldpContentHydrated = '1';
+		ctx?.translation?.syncPost(post);
 		if (ctx?.streamNodeMap && ctx.streamNodeMap.get(+post.dataset.postNumber) === post) {
 			if (ctx.streamHydratedNodes) ctx.streamHydratedNodes.add(post);
 		}
@@ -14984,31 +15440,6 @@
 		setTimeout(() => URL.revokeObjectURL(objectUrl), 60 * 1000);
 	}
 
-	function triggerBrowserUrlDownload(source, filename) {
-		const url = absoluteImageUrl(source);
-		if (!url) throw new Error('未找到可下载的文件地址');
-		const name = safeDownloadFilename(filename);
-		const browserDownload = globalThis.GM_download;
-		if (isFunction(browserDownload) && /^https?:/i.test(url)) {
-			browserDownload({
-				url,
-				name,
-				saveAs: false,
-				onerror: (details) => {
-					showSelectionToast(`浏览器下载失败：${details?.error || '请重试'}`);
-				},
-			});
-			return;
-		}
-		const link = makeElement('a');
-		link.href = url;
-		link.download = name;
-		link.hidden = true;
-		appendReaderPortalNode(link);
-		link.click();
-		link.remove();
-	}
-
 	async function cachedPersistentLightboxBlob(rawSource) {
 		const source = absoluteImageUrl(rawSource);
 		if (!source) return null;
@@ -15141,14 +15572,11 @@
 	async function downloadLightboxItem(item, index) {
 		try {
 			const missingOriginals = await lightboxMissingOriginalCount([item]);
-			const useOriginal = missingOriginals <= 0 || globalThis.confirm(
-				'当前原图尚未缓存。\n\n确定：交给浏览器下载器下载原图\n取消：交给浏览器下载器下载当前预览质量'
+			const useOriginal = missingOriginals > 0 && globalThis.confirm(
+				'当前原图尚未缓存。\n\n确定：按阅读器限速获取并下载原图\n取消：下载当前最高缓存／预览质量'
 			);
-			const source = useOriginal ? item?.originalSrc : (item?.thumbSrc || item?.originalSrc);
-			triggerBrowserUrlDownload(
-				source,
-				lightboxImageDownloadName(item, index).replace(/^\d+-/, '')
-			);
+			const blob = await lightboxImageDownloadBlob(item, { original: useOriginal });
+			triggerBrowserDownload(blob, lightboxImageDownloadName(item, index, blob).replace(/^\d+-/, ''));
 		} catch (error) {
 			showSelectionToast(`图片下载失败：${error.message || '请重试'}`);
 		}
@@ -18800,6 +19228,7 @@
 		if (isTopicStarter) syncTopicActionControls(ctx);
 		syncPostActionControls(node, ctx);
 		if (isReply || hiddenCollapsible) setNestedReplyCollapsed(node, collapseNested);
+		ctx?.translation?.syncPost(node);
 		return node;
 	}
 
@@ -23424,6 +23853,7 @@
 			if (Array.isArray(post.polls)) renderPostPolls(node, ctx);
 			renderPostSpecialContent(node, ctx);
 			syncPostActionControls(node, ctx);
+			ctx?.translation?.syncPost(node);
 		});
 		const mergedPost = streamNode?._ldpPostData || { ...post };
 		rememberPostData(ctx, mergedPost);
@@ -27622,6 +28052,7 @@
 							<div class="ldp-bookmarks-list ldp-notification-list"><div class="ldp-notification-empty">正在加载收藏…</div></div>
 							${popoverPagerMarkup('bookmarks')}
 						</div>
+						<button class="ldp-translate-toggle" type="button" aria-label="翻译正文" hidden>${icon('languages')}</button>
 						<button class="ldp-settings-toggle" type="button" aria-label="设置" aria-expanded="false">${icon('headerSettings')}<span>设置</span></button>
 						<div class="ldp-settings-popover" hidden>
 							<div class="ldp-settings-tabs">
@@ -27875,6 +28306,14 @@
 								</div>
 								<div class="ldp-settings-section" data-settings-panel="other" hidden>
 									<div class="ldp-settings-fields ldp-other-settings-fields">
+										${otherSettingGroupMarkup('custom-sites', '自定义站点', '仅支持 HTTPS Discourse 论坛；保存前会自动检测，其他网站无法使用。', `
+										<div class="ldp-custom-site-form">
+											<input class="ldp-boost-rule-control ldp-custom-site-input" type="text" inputmode="url" autocomplete="url" placeholder="论坛域名或网址">
+											<button class="ldp-config-action ldp-custom-site-add" type="button">${icon('plus')}<span>验证并添加</span></button>
+										</div>
+										<div class="ldp-custom-site-list" aria-label="已添加的自定义站点" hidden></div>
+										<small class="ldp-custom-site-status" role="status" aria-live="polite">输入域名即可，例如 forum.example.com。</small>
+											`)}
 										${otherSettingGroupMarkup('history', '历史导航', '控制历史前进、后退按钮的显示方式与历史列表顺序。', `
 										${settingSwitchesMarkup('history')}
 										<label class="ldp-setting-row ldp-setting-option-row ldp-history-edge-trigger-row">
@@ -28195,10 +28634,11 @@
 			'bulkActions', 'multi', 'multiDone', 'selectScope', 'selectToggle', 'deleteSelected', 'deleteSelectedLabel',
 		]);
 		const [
-			bookmarksReactionFilters, bookmarksTabList, settingsBtn, settingsPopover, settingsNav,
+			bookmarksReactionFilters, bookmarksTabList, translateBtn, settingsBtn, settingsPopover, settingsNav,
 			settingsNavScrollUp, settingsNavScrollDown, settingsPanel, settingsCloseBtn, settingHelpTooltip,
 		] = readerElementGroup(
-			'.ldp-reaction-filters', '.ldp-bookmark-tabs', '.ldp-settings-toggle', '.ldp-settings-popover',
+			'.ldp-reaction-filters', '.ldp-bookmark-tabs', '.ldp-translate-toggle',
+			'.ldp-settings-toggle', '.ldp-settings-popover',
 			'.ldp-settings-nav', '.ldp-settings-nav-scroll-up', '.ldp-settings-nav-scroll-down',
 			'.ldp-settings-panel', '.ldp-settings-close', '.ldp-setting-help-tooltip',
 		);
@@ -28356,7 +28796,8 @@
 			openTopicsAtFirstPostInput, expandNestedRepliesByDefaultInput, expandLeafNestedRepliesInput,
 			nestedReplyDisplayWarning, boostCopyModeSelect, boostCopyPrefixInput, boostCopyCounterMarkerInput,
 			boostCopyCounterStepInput, boostCopyFixedSuffixInput, boostCopyPreview, configExportBtn,
-			configImportBtn, configResetBtn, configFileInput, cacheClearBtn,
+			configImportBtn, configResetBtn, configFileInput, cacheClearBtn, customSiteInput,
+			customSiteAddBtn, customSiteList, customSiteStatus,
 		] = readerElementGroup(
 			'.ldp-flash-status', '.ldp-flash-apply', '.ldp-loading-animation-select',
 			'.ldp-loading-preview-stage', '.ldp-loading-settings-preview-label',
@@ -28367,6 +28808,7 @@
 			'.ldp-boost-copy-prefix', '.ldp-boost-copy-counter-marker', '.ldp-boost-copy-counter-step',
 			'.ldp-boost-copy-fixed-suffix', '.ldp-boost-copy-preview', '.ldp-config-export',
 			'.ldp-config-import', '.ldp-config-reset', '.ldp-config-file', '.ldp-cache-clear',
+			'.ldp-custom-site-input', '.ldp-custom-site-add', '.ldp-custom-site-list', '.ldp-custom-site-status',
 		);
 		const [
 			boostCopyCounterRows, boostCopyTextRows, cacheSelects, cacheSizeEls, cacheRetentionEls,
@@ -31498,7 +31940,18 @@
 				? `${firstResult} → ${applyBoostCopyRule(firstResult, prefs)}`
 				: firstResult;
 		};
+		const syncCustomSiteControls = () => {
+			const sites = readCustomDiscourseSites();
+			customSiteList.replaceChildren(...sites.map((host) => {
+				const item = makeElement('span');
+				item.className = 'ldp-custom-site-item';
+				item.innerHTML = `<span>${esc(host)}</span><button type="button" data-custom-site-remove="${escAttr(host)}" aria-label="移除 ${escAttr(host)}">${icon('x')}</button>`;
+				return item;
+			}));
+			customSiteList.hidden = !sites.length;
+		};
 		const syncOtherControls = () => {
+			syncCustomSiteControls();
 			const historyButtonsAlwaysVisible = PREFS.historyButtonsAlwaysVisible === true;
 			const historyEdgeTriggerPercent = normalizeHistoryEdgeTriggerPercent(PREFS.historyEdgeTriggerPercent);
 			historyButtonsAlwaysVisibleInput.checked = historyButtonsAlwaysVisible;
@@ -32168,6 +32621,39 @@
 			syncHistorySortToggle();
 			overlay._ldpRefreshReaderHistoryNavigation?.();
 			});
+			const addCustomSite = async () => {
+				const host = normalizeCustomDiscourseHost(customSiteInput.value);
+				if (!host || BUILTIN_DISCOURSE_HOSTS.has(host)) {
+					customSiteStatus.textContent = host
+						? `${host} 已内置支持，无需重复添加。`
+						: '请输入有效的 HTTPS 域名或网址。';
+					return;
+				}
+				customSiteAddBtn.disabled = true;
+				customSiteStatus.textContent = '正在检测 Discourse…';
+				try {
+					const info = await validateCustomDiscourseSite(host);
+					await writeCustomDiscourseSites([...readCustomDiscourseSites(), host]);
+					customSiteInput.value = '';
+					syncCustomSiteControls();
+					customSiteStatus.textContent = `已添加 ${info.title || host}，访问该站即可使用。`;
+				} catch (error) {
+					customSiteStatus.textContent = `${error.message || '检测失败'}；仅支持 Discourse 论坛。`;
+				} finally {
+					customSiteAddBtn.disabled = false;
+				}
+			};
+			onShell(customSiteAddBtn, 'click', addCustomSite);
+			onShell(customSiteInput, 'keydown', (event) => {
+				if (event.key === 'Enter') addCustomSite();
+			});
+			onShell(customSiteList, 'click', async (event) => {
+				const host = event.target.closest('[data-custom-site-remove]')?.dataset.customSiteRemove;
+				if (!host) return;
+				await writeCustomDiscourseSites(readCustomDiscourseSites().filter((site) => site !== host));
+				syncCustomSiteControls();
+				customSiteStatus.textContent = `已移除 ${host}。`;
+			});
 			const saveNestedReplyDisplayPreference = (changedInput) => {
 			let expandAll = expandNestedRepliesByDefaultInput.checked;
 			let expandLeaf = expandLeafNestedRepliesInput.checked;
@@ -32522,9 +33008,13 @@
 			});
 			bindFloatingSurfaceWheel(bookmarksPanel.popover);
 			themeButtons.forEach((button) => onShell(button, 'click', (event) => {
-			consumeEvent(event);
-			transitionReaderTheme(button.dataset.readerThemeMode);
+				consumeEvent(event);
+				transitionReaderTheme(button.dataset.readerThemeMode);
 			}));
+			onShell(translateBtn, 'click', (event) => {
+				consumeEvent(event);
+				readerShell.activeContext?.translation?.cycleMode();
+			});
 			onShell(settingsBtn, 'click', (e) => {
 			consumeEvent(e);
 			const nextHidden = !settingsPopover.hidden;
@@ -32906,6 +33396,7 @@
 			? createReaderQueueViewportTracker(ctx, queueEntry)
 			: { observe() {}, unobserve() {}, sync() {}, stop() {} };
 		readerShell.activeContext = ctx;
+		ctx.translation = createReaderTranslationController(ctx, translateBtn);
 		if (!isFunction(readerShell.refreshBookmarksPanel)) {
 			readerShell.refreshBookmarksPanel = (confirmedReaction = null) => {
 				clearBookmarksSelectionScope();
@@ -34192,6 +34683,7 @@
 					['read tracker', () => tracker.stop()],
 					['queue viewport tracker', () => ctx.queueViewportTracker.stop()],
 					['nested replies', () => ctx.repliesIO.disconnect()],
+					['body translation', () => ctx.translation.destroy()],
 					['media players', () => suspendReaderMedia(overlay)],
 					['detached media players', () => ctx.streamHydratedNodes.forEach((node) => suspendReaderMedia(node))],
 					['pending content hydration', () => [...ctx.pendingPostHydrations]

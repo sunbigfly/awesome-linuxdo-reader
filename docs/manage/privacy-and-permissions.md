@@ -1,10 +1,10 @@
 ---
 title: 隐私、权限与边界
 description: 理解 userscript 权限、外部依赖、本地存储、请求脱敏和账号数据边界。
-feature_ids: ["DATA-004", "DATA-005", "MONITOR-005", "TROUBLE-005"]
-source_anchors: ["PERSISTENT_CACHE_CONFIG", "@grant", "requestFlowPath", "@supportURL"]
+feature_ids: ["MEDIA-014", "DATA-004", "DATA-005", "MONITOR-005", "TROUBLE-005"]
+source_anchors: ["READER_TRANSLATION_CACHE_KEY", "PERSISTENT_CACHE_CONFIG", "@grant", "requestFlowPath", "@supportURL"]
 since: 0.1.2
-version: 0.1.10
+version: 0.1.11
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-14-about.png"]
@@ -18,14 +18,16 @@ screenshots: ["/screenshots/guide-14-about.png"]
 
 ## userscript 元数据
 
-当前 `0.1.10`：
+当前 `0.1.11`：
 
 | 字段 | 值 | 用途 |
 | --- | --- | --- |
-| `@match` | `https://linux.do/*` | 只在 LINUX DO 页面运行 |
-| `@grant` | `GM_xmlhttpRequest` | 获取允许的跨域公开资源 |
-| `@grant` | `unsafeWindow` | 与 LINUX DO 页面运行时协作 |
-| `@connect` | `connect.linux.do` | 访问 Connect 相关数据 |
+| `@match` | 21 个内置社区及 `https://*/*` | 允许内置站点和用户保存的自定义域名启动；其他站点会在业务初始化前退出 |
+| `@grant` | `GM_getValue`、`GM_setValue` | 跨站读取和保存用户验证过的自定义 Discourse 域名 |
+| `@grant` | `GM_xmlhttpRequest` | 检测自定义站点、获取允许的跨域公开资源，以及执行用户主动开启的正文翻译 |
+| `@grant` | `GM_getResourceText` | 读取发布版样式资源 |
+| `@grant` | `unsafeWindow` | 与当前 Discourse 页面运行时协作 |
+| `@connect` | `connect.linux.do`、翻译接口及 `*` | Connect 数据、Google / Microsoft 翻译，以及用户输入域名的 Discourse 检测 |
 | `@run-at` | `document-start` | 在 SPA 和页面初始化前建立必要边界 |
 
 安装时脚本管理器会展示权限。若未来新增 GM API 或跨域目标，项目必须同步更新源码、功能目录和本页。
@@ -42,7 +44,7 @@ screenshots: ["/screenshots/guide-14-about.png"]
 
 ## 本地数据
 
-当前浏览器会保存设置、历史、主题快照、用户卡、消息分页、通用响应以及部分头像/图片。存储按账号作用域和数据类型隔离、有最大容量和保留期。
+当前浏览器会保存设置、历史、主题快照、用户卡、消息分页、通用响应、最多 240 条正文译文以及部分头像/图片。存储按账号作用域和数据类型隔离、有最大容量和保留期。
 
 设置导出不包含历史、正文、API 响应、图片、Cookie 或账号凭据。
 
@@ -55,6 +57,13 @@ screenshots: ["/screenshots/guide-14-about.png"]
 资源和请求监控只在当前标签页内存中保留有限时间。请求路径会去除查询参数，不记录 Cookie、授权头、正文或响应内容。
 
 浏览器开发者工具、HAR、扩展后台日志可能包含更多敏感数据，不属于阅读器自身的脱敏保证。
+
+## 翻译与自定义站点请求
+
+- 只有用户主动切换到双语或全译文后，普通正文文本才会发送给 Google 或 Microsoft 翻译接口；Cookie、原站授权头和表单内容不会附带。
+- 翻译结果保存在当前站点的 `localStorage`，最多 240 条；它不进入设置导出。
+- 添加自定义站点时只向用户输入的 HTTPS 域名请求公开的 `/site/basic-info.json`，请求使用匿名模式，不附带当前论坛 Cookie。
+- 第三方翻译服务和目标论坛仍受各自隐私政策、可用性与地区网络限制约束。
 
 ## 截图与问题报告
 

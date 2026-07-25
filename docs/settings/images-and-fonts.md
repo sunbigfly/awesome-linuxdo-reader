@@ -4,7 +4,7 @@ description: 配置帖子图片比例、灯箱默认行为、字体渲染、宿�
 feature_ids: ["MEDIA-001", "MEDIA-003", "MEDIA-005", "SET-002", "SET-003", "SET-004", "SET-005", "SET-006"]
 source_anchors: ["IMAGE_SCALE_OPTIONS", "lightboxOriginalByDefault", "lightboxDescriptionHeight", "currentImageProfile", "image-lightbox", "font-rendering", "HOST_EMBED_SIZE_SETTINGS", "FONT_SCOPE_CONFIG", "queryLocalFonts"]
 since: 0.1.2
-version: 0.1.10
+version: 0.1.11
 status: current
 last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-04-font-settings.png", "/screenshots/guide-19-image-lightbox.png"]

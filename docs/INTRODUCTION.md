@@ -1,6 +1,6 @@
 # Awesome LinuxDo Reader 项目介绍
 
-本文集中维护可复用的对外介绍文案。当前版本：`0.1.10`。
+本文集中维护可复用的对外介绍文案。当前版本：`0.1.11`。
 
 ## 一句话介绍
 
@@ -8,7 +8,7 @@
 
 ## 简短介绍
 
-Awesome LinuxDo Reader 是一款运行在浏览器 userscript 管理器中的 Discourse 增强阅读工具。它以 LINUX DO 为完整覆盖基线，也适配多个知名 Discourse 社区；在保留原站账号、内容和互动能力的同时，提供更连贯的楼层浏览、楼中楼关系、原图查看、历史导航和个性化布局。
+Awesome LinuxDo Reader 是一款运行在浏览器 userscript 管理器中的 Discourse 增强阅读工具。它以 LINUX DO 为完整覆盖基线，也适配多个知名 Discourse 社区；在保留原站账号、内容和互动能力的同时，提供更连贯的楼层浏览、楼中楼关系、原图查看、非中文正文翻译、历史导航和个性化布局。
 
 ## 完整介绍
 
@@ -24,6 +24,7 @@ Awesome LinuxDo Reader 面向频繁阅读长帖、跟进讨论和处理社区消
 - 楼层导航：楼中楼、父回复预览、楼层跳转、时间线和浏览历史。
 - 社区互动：回复、点赞、回应、收藏、通知、搜索与用户资料。
 - 内容呈现：原图灯箱、图片评论、音视频播放、HLS 与 KaTeX 公式。
+- 跨语阅读：在已标记为非中文的内置社区中切换原文、双语和全译文。
 - 个性设置：主题、字体、布局、窗口、动效和多种显示形态配置。
 - 性能治理：DOM 窗口化、分层缓存、请求预算、429 退避和资源监控。
 
@@ -38,9 +39,9 @@ Awesome LinuxDo Reader 面向频繁阅读长帖、跟进讨论和处理社区消
 
 | 项目 | 当前配置 |
 | --- | --- |
-| 匹配站点 | LINUX DO、OpenAI Developer Community、Discourse Meta、Python、Swift、Julia、Home Assistant、Arduino 与 Rust Users 社区 |
-| 脚本权限 | `GM_xmlhttpRequest`、`GM_getResourceText`、`unsafeWindow` |
-| 跨域连接 | `connect.linux.do` |
+| 匹配站点 | LINUX DO、20 个其他内置 Discourse 社区，以及用户验证后添加的自定义 HTTPS Discourse 站点 |
+| 脚本权限 | `GM_getValue`、`GM_setValue`、`GM_xmlhttpRequest`、`GM_getResourceText`、`unsafeWindow` |
+| 跨域连接 | `connect.linux.do`、自定义站点检测，以及用户主动启用的 Google / Microsoft 翻译接口 |
 | 外部依赖 | KaTeX、pinyin-pro、hls.js（jsDelivr） |
 | 数据位置 | 浏览器本地存储、Cache Storage 与 IndexedDB |
 | 发布入口 | [GreasyFork 脚本页](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) |
@@ -53,6 +54,6 @@ Awesome LinuxDo Reader 面向频繁阅读长帖、跟进讨论和处理社区消
 
 - 项目名称：Awesome LinuxDo Reader
 - 中文名称：LinuxDo 增强阅读
-- 当前版本：0.1.10
+- 当前版本：0.1.11
 - Logo：[`assets/logo.png`](../assets/logo.png)
 - 开源许可：[MIT License](../LICENSE)

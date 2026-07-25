@@ -1,10 +1,10 @@
 ---
 title: 其他功能
-description: 配置历史按钮、边缘触发、历史排序、帖子起始楼层、二级回复展示和 Boost 复制。
-feature_ids: ["READ-007", "ACTION-006", "SET-016", "SET-017", "SET-018", "SET-019"]
-source_anchors: ["historyEdgeTriggerPercent", "BOOST_COPY_SETTING_ROWS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
+description: 添加自定义 Discourse 站点，并配置历史导航、帖子起始楼层、二级回复展示和 Boost 复制。
+feature_ids: ["CORE-007", "READ-007", "ACTION-006", "SET-016", "SET-017", "SET-018", "SET-019"]
+source_anchors: ["CUSTOM_DISCOURSE_SITES_KEY", "historyEdgeTriggerPercent", "BOOST_COPY_SETTING_ROWS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
 since: 0.1.2
-version: 0.1.10
+version: 0.1.11
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18-thread-context.png"]
@@ -15,6 +15,12 @@ screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18
 路径：**阅读器标题栏 → 设置 → 其他功能**。
 
 ![其他功能页中的历史导航、打开位置、回复展示和 Boost 复制](/screenshots/guide-12-other-features.png)
+
+## 自定义站点
+
+输入 HTTPS Discourse 论坛的域名或完整网址，点击“验证并添加”。阅读器会匿名访问该站点的 `/site/basic-info.json`；检测到 Discourse 公开站点信息后才会保存。已内置站点不需要重复添加，保存的域名可以在同一区域移除。
+
+自定义域名保存在脚本管理器的全局脚本存储中。添加后访问该站并完整刷新页面即可使用；若目标不是 Discourse、拒绝访问公开接口或请求超时，阅读器不会保存。
 
 ## 历史导航
 

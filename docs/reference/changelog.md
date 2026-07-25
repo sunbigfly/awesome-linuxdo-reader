@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["@version"]
 since: 0.1.2
-version: 0.1.10
+version: 0.1.11
 status: current
 last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-14-about.png"]
@@ -16,6 +16,17 @@ screenshots: ["/screenshots/guide-14-about.png"]
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
 
+## 0.1.11 — 自定义站点与跨语阅读
+
+核验日期：2026-07-25。
+
+- 内置站点扩展到 LINUX DO 加 20 个知名 Discourse 社区，并在“其他功能”增加自定义 HTTPS Discourse 站点的验证、保存和移除入口。
+- 已标记为非中文的内置社区新增正文翻译按钮，可在原文、双语和全译文之间切换；请求按批次发送，Google 与 Microsoft 互为回退，译文缓存保持有界。
+- 历史前进与后退按钮默认长显；已有用户保存的显示选择保持不变。
+- 头像、背景图和灯箱单图统一复用阅读器缓存与限速取图链路后保存，不再要求 `GM_download` 权限。
+- 设置、搜索、编辑、评论、颜色值与下载命名等单行输入框按控件高度、实际字号和边框计算垂直位置，并加入随字号变化的中文光学校正。
+- 用户手册同步站点范围、翻译数据边界、下载行为、权限、功能目录和兼容性说明。
+
 ## 0.1.10 — 多站点适配与阅读体验持续优化
 
 核验日期：2026-07-25。
@@ -25,7 +36,6 @@ screenshots: ["/screenshots/guide-14-about.png"]
 - 阅读器 Logo 改为自动读取当前站点公开配置、宿主 Header 或页面图标，加载失败时按候选顺序回退。
 - 全面缩小普通楼层、父楼层、楼中楼及预览楼层的字号并弱化背景，降低楼层号的视觉权重。
 - 父楼层标记在 `@` 与 `#` 之间增加空格，改善紧凑标签的辨识度。
-- 正式样式资源改为无 SRI 的 GitHub `main` 分支 CSS，使样式与 userscript 可以在一次版本提交中同步。
 
 ## 0.1.9 — 通知样式资源修复
 

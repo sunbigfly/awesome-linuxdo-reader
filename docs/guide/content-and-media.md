@@ -1,10 +1,10 @@
 ---
 title: 图片、媒体与富内容
 description: 使用原图灯箱、图片评论、下载、音视频、公式、投票和代码预览。
-feature_ids: ["READ-012", "MEDIA-001", "MEDIA-002", "MEDIA-003", "MEDIA-004", "MEDIA-005", "MEDIA-006", "MEDIA-007", "MEDIA-008", "MEDIA-009", "MEDIA-010", "MEDIA-011", "MEDIA-012", "MEDIA-013"]
-source_anchors: ["renderSolvedAnswerCard", "IMAGE_SCALE_OPTIONS", "openLightbox", "lightboxOriginalByDefault", "loadLightboxCommentTree", "lightboxDescriptionHeight", "batch-download", "openUserAvatarViewer", "bindReaderHls", "KATEX_VERSION", "renderReaderPoll", "data-reader-code-action", "readerMediaHtml", "prepareReaderOneboxes", "showReaderImageRetry"]
+feature_ids: ["READ-012", "MEDIA-001", "MEDIA-002", "MEDIA-003", "MEDIA-004", "MEDIA-005", "MEDIA-006", "MEDIA-007", "MEDIA-008", "MEDIA-009", "MEDIA-010", "MEDIA-011", "MEDIA-012", "MEDIA-013", "MEDIA-014"]
+source_anchors: ["renderSolvedAnswerCard", "IMAGE_SCALE_OPTIONS", "openLightbox", "lightboxOriginalByDefault", "loadLightboxCommentTree", "lightboxDescriptionHeight", "batch-download", "openUserAvatarViewer", "bindReaderHls", "KATEX_VERSION", "renderReaderPoll", "data-reader-code-action", "readerMediaHtml", "prepareReaderOneboxes", "showReaderImageRetry", "createReaderTranslationController"]
 since: 0.1.2
-version: 0.1.10
+version: 0.1.11
 status: current
 last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-25-user-card.png"]
@@ -46,7 +46,7 @@ screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19
 
 ## 下载
 
-- 单张下载获取当前可用的最佳图片资源。
+- 单张下载优先复用阅读器缓存；需要原图时，按阅读器限速获取后再保存。
 - 批量下载进入多选状态，再处理选中的图片。
 - 浏览器可能根据安全设置询问保存位置或拦截连续下载。
 
@@ -82,3 +82,16 @@ screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19
 主题链接卡片、内联 Onebox、SVG、Markdown 提示块、已解决答案和部分系统事件沿用阅读器统一内容样式。第三方 iframe 或嵌入内容仍受浏览器 CSP、跨域和原站策略约束。
 
 GitHub 仓库 Onebox 会整理为更紧凑的阅读结构：仓库缩略图移动到来源行，标题和说明保持单行节奏，并移除重复缩略图。点击卡片中的链接仍会打开原始 GitHub 页面，阅读器不会复制或改写仓库内容。
+
+## 非中文正文翻译
+
+已标记为非中文的内置社区会在标题栏显示翻译按钮。每次点击按以下顺序切换：
+
+1. 原文；
+2. 原文与中文译文并排的双语模式；
+3. 只显示中文译文；
+4. 回到原文。
+
+翻译只处理普通正文段落、列表、标题、引用和表格文字，会跳过代码、公式、投票、Onebox、表单以及过短或类似标识符的文本。请求按批次发送，优先使用 Google，较大批次或失败时回退 Microsoft；译文最多缓存 240 条到当前站点的 `localStorage`。关闭阅读器会取消尚未完成的请求。
+
+翻译是第三方机器翻译，可能存在遗漏或语义错误；涉及命令、金额、权限和安全操作时应切回原文核对。自定义站点未预设内容语言，因此暂不显示翻译按钮。
