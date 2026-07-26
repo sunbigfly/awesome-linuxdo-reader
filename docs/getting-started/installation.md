@@ -4,7 +4,7 @@ description: 安装 userscript、确认启用状态、理解更新方式并排�
 feature_ids: ["CORE-001", "CORE-007", "TROUBLE-001"]
 source_anchors: ["@downloadURL", "@match", "DISCOURSE_SITE_ADAPTERS"]
 since: 0.1.2
-version: 0.1.12
+version: 0.1.13
 status: current
 last_verified: 2026-07-26
 screenshots: ["/screenshots/guide-01-reader-overview.png"]
@@ -71,7 +71,7 @@ LINUX DO 保持完整功能覆盖。中文、英文及其他语言的标准 HTTP
 
 - 想立即检查时，在 Tampermonkey 面板中对该脚本执行“检查更新”。
 - 更新后刷新当前 Discourse 页面，已打开页面不会自动替换正在运行的旧代码。
-- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `0.1.12`。
+- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `0.1.13`。
 
 ## 入口没有出现
 

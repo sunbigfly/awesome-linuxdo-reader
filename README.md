@@ -150,7 +150,7 @@
 4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 其他功能 → 自定义站点”中验证并添加。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `0.1.12`。脚本对 LINUX DO 保持全面适配和完整功能回归，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。已标记为非中文的内置社区还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `0.1.13`。脚本对 LINUX DO 保持全面适配和完整功能回归，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。已标记为非中文的内置社区还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
 ## 开发
 

@@ -4,7 +4,7 @@ description: 导出、导入与恢复设置，查看六类本地缓存并按选�
 feature_ids: ["DATA-001", "DATA-002"]
 source_anchors: ["readerConfigExportPayload", "CACHE_TYPES"]
 since: 0.1.2
-version: 0.1.12
+version: 0.1.13
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-13-data-management.png"]

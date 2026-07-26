@@ -4,7 +4,7 @@ description: 添加自定义 Discourse 站点，并配置历史导航、帖子�
 feature_ids: ["CORE-007", "READ-007", "ACTION-006", "SET-016", "SET-017", "SET-018", "SET-019"]
 source_anchors: ["CUSTOM_DISCOURSE_SITES_KEY", "historyEdgeTriggerPercent", "BOOST_COPY_SETTING_ROWS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
 since: 0.1.2
-version: 0.1.12
+version: 0.1.13
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18-thread-context.png"]

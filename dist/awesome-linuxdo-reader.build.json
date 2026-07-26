@@ -2,18 +2,18 @@
   "schemaVersion": 1,
   "source": {
     "path": "work/main.js",
-    "bytes": 1669400,
-    "sha256": "176bbf1677fded43ba3ed13b55e9a766c6b134602d39fb69613bd20c57144ab1"
+    "bytes": 1665626,
+    "sha256": "70b43ea75109bc20922e6b345c273ba0be0d147f3b6c3371473391159dcf091b"
   },
   "metadata": {
     "bytes": 2971,
-    "sha256": "b7213dd98fad536f6be7d2403b5b4073ca6e60b666c5c3221c7584cb0d025d08"
+    "sha256": "68e516b65b482de15a30cab123f4684bae1f7c33041c9c7edf187a8824ae1d04"
   },
   "artifact": {
     "path": "dist/awesome-linuxdo-reader.user.js",
-    "bytes": 879821,
-    "gzipBytes": 297146,
-    "sha256": "db0a52981c86ee5b02d8e2b2e203e09b2c70eee65be278ef3c662269f0995fcb"
+    "bytes": 877789,
+    "gzipBytes": 297074,
+    "sha256": "700359d5bc08a89a39b3deccd2e3f2ec7cdf5c212a162896c1e309ae68360ba7"
   },
   "compiler": {
     "name": "esbuild",

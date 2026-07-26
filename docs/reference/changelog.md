@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["@version"]
 since: 0.1.2
-version: 0.1.12
+version: 0.1.13
 status: current
 last_verified: 2026-07-26
 screenshots: ["/screenshots/guide-14-about.png"]
@@ -15,6 +15,15 @@ screenshots: ["/screenshots/guide-14-about.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 0.1.13 — 通用适配与诊断链路精简
+
+核验日期：2026-07-26。
+
+- 统一内置 Discourse 站点适配器的构造方式，保持 LINUX DO 专属能力声明与其他社区的自动降级逻辑不变。
+- 正文翻译同时收集普通楼层内容与已解决摘要，跨语阅读时不再遗漏解决方案卡片中的正文。
+- 复用主题列表按钮与嵌入阅读器的主内容区观察器重定向逻辑，减少 SPA 页面切换时的重复观察代码。
+- 拆分请求流快照、瓶颈判断与资源健康状态计算，并精简等价条件分支，降低正式脚本体积和维护成本。
 
 ## 0.1.12 — 全站点适配与翻译说明
 
