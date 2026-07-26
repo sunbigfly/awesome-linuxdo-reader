@@ -2,11 +2,11 @@
 title: 回复与社区操作
 description: 在阅读器内回复、引用、点赞、回应、Boost、收藏、分享和执行权限操作。
 feature_ids: ["MEDIA-010", "ACTION-001", "ACTION-002", "ACTION-003", "ACTION-004", "ACTION-005", "ACTION-006", "ACTION-007", "ACTION-008", "ACTION-009", "ACTION-010", "ACTION-011", "ACTION-012", "ACTION-013"]
-source_anchors: ["renderReaderPoll", "ldp-replybtn", "data-selection-action=\"quote\"", "toggleReaderPostLike", "toggleReaderPostReaction", "renderBoostBubble", "BOOST_COPY_SETTING_ROWS", "toggleReaderBookmark", "name: 'share'", "TOPIC_NOTIFICATION_LEVELS", "openReaderReportDialog", "name: 'edit'", "composer:edited-post", "openReaderAssignDialog", "topicSharedIssueState"]
+source_anchors: ["renderReaderPoll", "ldp-replybtn", "data-selection-action=\"quote\"", "toggleReaderPostLike", "toggleReaderPostReaction", "renderBoostBubble", "quoteBoostInNativeReply", "BOOST_COPY_SETTING_ROWS", "toggleReaderBookmark", "name: 'share'", "TOPIC_NOTIFICATION_LEVELS", "openReaderReportDialog", "name: 'edit'", "composer:edited-post", "openReaderAssignDialog", "topicSharedIssueState"]
 since: 0.1.2
 version: 0.1.13
 status: current
-last_verified: 2026-07-25
+last_verified: 2026-07-26
 screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide-17-bookmarks-reactions.png", "/screenshots/guide-15-notifications-replies.png"]
 ---
 
@@ -45,6 +45,13 @@ screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide
 ## Boost
 
 Boost 气泡显示内容和参与用户。账号权限允许时可以发送、举报或进入相关原生操作。
+
+登录后，带用户名的 Boost 会显示 `@` 操作：
+
+1. 点击 `@` 后，阅读器打开该楼层的原生回复编辑器；
+2. 编辑器自动插入包含 Boost 正文的引用块，并在末尾加入原作者的 `@用户名`；
+3. 如果当前草稿已经提及该用户，阅读器只聚焦编辑器，不会重复插入；
+4. 自动填充只修改当前草稿，不会立即发送，也不会修改原 Boost。发送前请检查引用内容和目标用户。
 
 “设置 → 其他功能 → Boost 复制”只改变复制到剪贴板的文本：
 

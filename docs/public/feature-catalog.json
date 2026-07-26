@@ -669,12 +669,12 @@
     "feature_id": "ACTION-005",
     "title": "Boost",
     "category": "社区互动",
-    "description": "查看、发送和管理 Boost，并显示参与者。",
-    "source_anchor": "renderBoostBubble",
+    "description": "查看、发送和管理 Boost，显示参与者，并可把指定 Boost 引用到原生回复编辑器后提及作者。",
+    "source_anchor": "quoteBoostInNativeReply",
     "since": "0.1.2",
     "version": "0.1.13",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-26",
     "screenshots": [
       "assets/screenshots/guide-20-community-actions.png"
     ],
