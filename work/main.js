@@ -282,6 +282,7 @@
 		}
 	}
 	const READER_MANUAL_URL = 'https://sunbigfly.github.io/awesome-linuxdo-reader/';
+	const BOOST_MENTION_PROJECT_URL = 'https://greasyfork.org/zh-CN/scripts/580986-linux-do-boost-%E5%A2%9E%E5%BC%BA';
 	const EXTERNAL_FONT_RENDERING_MARKER = 'fr-init-once';
 	const FONT_RENDERING_PROJECT_URL = 'https://github.com/F9y4ng/GreasyFork-Scripts/';
 	const FONT_RENDERING_LICENSE_URL = 'https://github.com/F9y4ng/GreasyFork-Scripts/blob/master/LICENSE';
@@ -6192,6 +6193,7 @@
 		languages: '<path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/>',
 		smile: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/>',
 		search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+		at: '<path d="M12 2a10 10 0 1 0 5.8 18.2l-1.3-1.7A7.8 7.8 0 1 1 19.8 12v1.2c0 1.2-.5 1.8-1.4 1.8-.8 0-1.3-.5-1.3-1.5V8h-2v1A5 5 0 1 0 16 16c.7.8 1.6 1.2 2.7 1.2 2.1 0 3.3-1.5 3.3-4V12c0-5.5-4.5-10-10-10zm0 12.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" fill="currentColor" stroke="none" fill-rule="evenodd"/>',
 		flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/>',
 		link2: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
 		lightbulb: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.84.65-1.64 1.35-2.35a6 6 0 1 0-8.88 0c.7.71 1.17 1.51 1.35 2.35Z"/>',
@@ -12652,13 +12654,16 @@
 			: '';
 		const isOwnBoost = boostBelongsToCurrentUser(boost);
 		const signedIn = !!(ME_CURRENT_USER?.id || ME_USERNAME);
+		const mentionAction = signedIn && boost.username
+			? `<button class="ldp-boost-item-action ldp-boost-mention-action" type="button" aria-label="引用该 Boost 并 @${escAttr(boost.username)}">${icon('at')}</button>`
+			: '';
 		const itemAction = signedIn && boost.id
 			? (isOwnBoost
 				? `<button class="ldp-boost-item-action ldp-boost-delete-action" type="button" aria-label="删除自己的 Boost">${icon('trash')}</button>`
 				: `<button class="ldp-boost-item-action ldp-boost-report-action" type="button" aria-label="举报 @${escAttr(boost.username)} 的 Boost">${icon('flag')}</button>`)
 			: '';
 		const identities = renderBoostIdentities(boost, ctx);
-		return `<span class="ldp-boost-bubble${isOwnBoost ? ' ldp-boost-own' : ''}" data-boost-id="${escAttr(boost.id)}" data-boost-user="${escAttr(boost.username)}" data-boost-user-id="${escAttr(boost.userId)}" data-boost-admin="${boost.admin ? '1' : '0'}" data-boost-moderator="${boost.moderator ? '1' : '0'}" aria-label="${boost.username ? `@${escAttr(boost.username)} 的 Boost` : 'Boost'}">${avatarHtml}${identities}<span class="ldp-boost-cooked cooked">${readerMediaHtml(boost.cooked)}</span>${quickBoost}${itemAction}</span>`;
+		return `<span class="ldp-boost-bubble${isOwnBoost ? ' ldp-boost-own' : ''}" data-boost-id="${escAttr(boost.id)}" data-boost-user="${escAttr(boost.username)}" data-boost-user-id="${escAttr(boost.userId)}" data-boost-admin="${boost.admin ? '1' : '0'}" data-boost-moderator="${boost.moderator ? '1' : '0'}" aria-label="${boost.username ? `@${escAttr(boost.username)} 的 Boost` : 'Boost'}">${avatarHtml}${identities}<span class="ldp-boost-cooked cooked">${readerMediaHtml(boost.cooked)}</span>${quickBoost}${mentionAction}${itemAction}</span>`;
 	}
 
 	function renderBoostList(boosts, options = {}) {
@@ -12706,6 +12711,33 @@
 
 	function boostCopyRegExpEscape(value) {
 		return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	}
+
+	async function quoteBoostInNativeReply(bubble, post, ctx) {
+		const username = cleanUsernameValue(bubble?.dataset.boostUser);
+		const content = boostBubblePlainText(bubble);
+		if (!username || !content) {
+			showSelectionToast('无法读取该 Boost 的用户或内容');
+			return false;
+		}
+		if (!await tryOpenNativeReplyComposer(post, ctx)) return false;
+		const composer = lookupDiscourse('service:composer');
+		const reply = String(discourseModelValue(discourseModelValue(composer, 'model'), 'reply') || '');
+		const mentionPattern = new RegExp(
+			`(^|[^A-Za-z0-9_@-])@${boostCopyRegExpEscape(username)}(?=$|[^A-Za-z0-9_-])`, 'i'
+		);
+		if (mentionPattern.test(reply)) {
+			focusReaderNativeComposerInput(ctx);
+			showSelectionToast(`回复框中已有 @${username}`);
+			return true;
+		}
+		const quoteHeader = `${username}, post:${+post.dataset.postNumber}, topic:${+ctx.topicId}, username:${username}`;
+		const insertion = `[quote="${quoteHeader}"]\n${content}\n[/quote]\n\n@${username} `;
+		const appEvents = composer.appEvents || lookupDiscourse('service:app-events');
+		appEvents.trigger('composer:insert-block', insertion);
+		focusReaderNativeComposerInput(ctx);
+		showSelectionToast(`已引用 Boost 并 @${username}`);
+		return true;
 	}
 
 	function fitBoostCopyParts(prefix, base, suffix) {
@@ -26134,6 +26166,15 @@
 				return;
 			}
 			const boostDeleteAction = e.target.closest('.ldp-boost-delete-action');
+			const boostMentionAction = e.target.closest('.ldp-boost-mention-action');
+			if (boostMentionAction && !boostMentionAction.disabled) {
+				e.preventDefault();
+				const boostBubble = boostMentionAction.closest('.ldp-boost-bubble');
+				const username = cleanUsernameValue(boostBubble?.dataset.boostUser);
+				await runReaderActionOnce(ctx, `post:${postId}:boost-mention:${username.toLocaleLowerCase()}`,
+					() => quoteBoostInNativeReply(boostBubble, post, ctx));
+				return;
+			}
 			const boostItemAction = boostDeleteAction || e.target.closest('.ldp-boost-report-action');
 			if (boostItemAction && !boostItemAction.disabled) {
 				e.preventDefault();
@@ -28216,6 +28257,7 @@
 										<section class="ldp-about-credits" aria-labelledby="ldp-about-credits-title">
 											<strong id="ldp-about-credits-title">特别致谢</strong>
 											<p>字体渲染参数与实现思路参考 <a href="${FONT_RENDERING_PROJECT_URL}" target="_blank" rel="noopener">F9y4ng / GreasyFork-Scripts 的 Font Rendering</a>；感谢作者的长期维护。上游项目采用 <a href="${FONT_RENDERING_LICENSE_URL}" target="_blank" rel="noopener">GPL-3.0-only</a>。</p>
+											<p>Boost 引用与提及交互参考 <a href="${BOOST_MENTION_PROJECT_URL}" target="_blank" rel="noopener">ccc9527-c 的 Linux.do Boost 增强</a>；感谢作者以 MIT 许可分享实现思路。</p>
 										</section>
 									</div>
 								</div>
