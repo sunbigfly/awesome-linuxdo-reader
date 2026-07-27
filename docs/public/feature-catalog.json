@@ -268,12 +268,12 @@
     "feature_id": "READ-009",
     "title": "真实已读进度",
     "category": "阅读与导航",
-    "description": "正文成功预加载后只为可见或显式目标楼层上报已读，并通过批量、成功指纹、跨标签锁和原站计时抑制避免重复提交。",
+    "description": "正文成功预加载后先显示乐观已读，再按显式目标、可见楼层和后台候选的优先级批量上报；服务器确认后写入权威状态，并以成功指纹、跨标签锁和原站计时抑制避免重复提交。",
     "source_anchor": "READ_THRESHOLD",
     "since": "0.1.2",
     "version": "0.1.14",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-27",
     "screenshots": [],
     "docs": [
       "guide/navigation.md"
@@ -1140,12 +1140,12 @@
     "feature_id": "SET-005",
     "title": "宿主嵌入态尺寸",
     "category": "个性化设置",
-    "description": "调整宿主主题列表中的标题、头像、右下信息和 Label Card 大小。",
+    "description": "调整宿主主题列表中的标题、头像、右下信息和 Label Card 大小，新配置默认分别为 110%、80%、120% 和 100%。",
     "source_anchor": "HOST_EMBED_SIZE_SETTINGS",
     "since": "0.1.2",
     "version": "0.1.14",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-27",
     "screenshots": [
       "assets/screenshots/guide-04-font-settings.png"
     ],

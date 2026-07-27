@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "source": {
     "path": "work/main.js",
-    "bytes": 1757123,
-    "sha256": "a927d357ed5d0a9b5b6ba38763962da6e738bd3fec0b7885a34a0b9482857856"
+    "bytes": 1757096,
+    "sha256": "1ba5209f86884844303222fa84b5642d33cf4eeee57f0fcba86cdf8e7171b62e"
   },
   "metadata": {
     "bytes": 3004,
@@ -11,9 +11,9 @@
   },
   "artifact": {
     "path": "dist/awesome-linuxdo-reader.user.js",
-    "bytes": 935685,
-    "gzipBytes": 315831,
-    "sha256": "39f15a426087b1a5389e051a2aa1912058a6a605b362e5e6743604368a4441c4"
+    "bytes": 935749,
+    "gzipBytes": 315865,
+    "sha256": "3bbb4a10a0494d16ed258a4f8a03a8b238806d215c009716f2243a11df2ec6e8"
   },
   "compiler": {
     "name": "esbuild",

@@ -171,7 +171,6 @@
 	const READ_THRESHOLD = 1500;
 	const FLUSH_INTERVAL = 5000;
 	const READER_READ_BATCH_SIZE = 20;
-	const READER_READ_VISIBLE_INTERVAL = 15 * 1000;
 	const JUMP_HIGHLIGHT_DEFAULTS = Object.freeze({
 		color: '#0888cc',
 		radius: 10,
@@ -540,10 +539,10 @@
 	const HOST_EMBED_SIZE_MAX = 200;
 	const HOST_EMBED_SIZE_DEFAULT = 100;
 	const HOST_EMBED_SIZE_SETTINGS = Object.freeze({
-		title: Object.freeze({ pref: 'hostEmbeddedTitleScale', label: '主题标题', defaultScale: 105, properties: [['--ldp-host-topic-title-size', 15]] }),
-		avatar: Object.freeze({ pref: 'hostEmbeddedAvatarScale', label: '头像', defaultScale: 70, properties: [['--ldp-host-topic-avatar-size', 32], ['--ldp-host-topic-avatar-size-medium', 24], ['--ldp-host-topic-avatar-size-small', 20]] }),
-		stats: Object.freeze({ pref: 'hostEmbeddedStatsScale', label: '主题统计信息', defaultScale: 105, properties: [['--ldp-host-topic-stats-size', 10], ['--ldp-host-topic-stats-label-size', 9], ['--ldp-host-topic-stats-row-offset', -4]] }),
-		labelCard: Object.freeze({ pref: 'hostEmbeddedLabelCardScale', label: '标签卡片', defaultScale: 105, properties: [['--ldp-host-label-card-height', 22], ['--ldp-host-label-card-font-size', 11], ['--ldp-host-label-card-icon-size', 14], ['--ldp-host-label-card-gap', 3], ['--ldp-host-label-card-padding', 7]] }),
+		title: Object.freeze({ pref: 'hostEmbeddedTitleScale', label: '主题标题', defaultScale: 110, properties: [['--ldp-host-topic-title-size', 15]] }),
+		avatar: Object.freeze({ pref: 'hostEmbeddedAvatarScale', label: '头像', defaultScale: 80, properties: [['--ldp-host-topic-avatar-size', 32], ['--ldp-host-topic-avatar-size-medium', 24], ['--ldp-host-topic-avatar-size-small', 20]] }),
+		stats: Object.freeze({ pref: 'hostEmbeddedStatsScale', label: '主题统计信息', defaultScale: 120, properties: [['--ldp-host-topic-stats-size', 10], ['--ldp-host-topic-stats-label-size', 9], ['--ldp-host-topic-stats-row-offset', -4]] }),
+		labelCard: Object.freeze({ pref: 'hostEmbeddedLabelCardScale', label: '标签卡片', defaultScale: 100, properties: [['--ldp-host-label-card-height', 22], ['--ldp-host-label-card-font-size', 11], ['--ldp-host-label-card-icon-size', 14], ['--ldp-host-label-card-gap', 3], ['--ldp-host-label-card-padding', 7]] }),
 	});
 	const FONT_SCOPE_KEYS = Object.freeze(['interface', 'post', 'composer']);
 	const FONT_SCOPE_CONFIG = Object.freeze({
@@ -568,7 +567,7 @@
 	]);
 	const READER_FONT_DEFAULT = Object.freeze({
 		family: FONT_FAMILY_DEFAULT, customFamily: '', weight: FONT_WEIGHT_DEFAULT, interfaceColor: '', interface: 92,
-		postFamily: FONT_FAMILY_DEFAULT, postCustomFamily: '', postWeight: FONT_WEIGHT_DEFAULT, postColor: '', post: 95,
+		postFamily: FONT_FAMILY_DEFAULT, postCustomFamily: '', postWeight: FONT_WEIGHT_DEFAULT, postColor: '', post: 98,
 		composerFamily: FONT_FAMILY_DEFAULT, composerCustomFamily: '', composerWeight: FONT_WEIGHT_DEFAULT,
 		composerColor: '', composer: COMPOSER_FONT_SCALE_DEFAULT,
 	});
@@ -984,17 +983,6 @@
 			.slice(-15);
 		entries.push({ fingerprint, at: Date.now() });
 		try { localStorage.setItem(LDP_READER_READ_SUCCESS_KEY, JSON.stringify(entries)); } catch {}
-	}
-
-	function readerReadThrottleUntil() {
-		try {
-			const entries = JSON.parse(localStorage.getItem(LDP_READER_READ_SUCCESS_KEY) || '[]');
-			const latest = Math.max(0, ...(Array.isArray(entries) ? entries : [])
-				.map((entry) => Number(entry?.at) || 0));
-			return latest + READER_READ_VISIBLE_INTERVAL;
-		} catch {
-			return 0;
-		}
 	}
 
 	function requestFlowPath(url) {
@@ -17500,7 +17488,6 @@
 	async function sendReaderReadTimings(topicId, postNumbers, priority = POST_REQUEST_PRIORITY.visible) {
 		const requested = [...new Set(Array.from(postNumbers || []).map(Number).filter(Boolean))];
 		if (!requested.length) return [];
-		if (+extractTopicRouteFromUrl(location.href)?.topicId === +topicId) return [];
 		const state = readerReadState(topicId);
 		const alreadyConfirmed = requested.filter((postNumber) => state.confirmed.has(postNumber));
 		if (alreadyConfirmed.length) return alreadyConfirmed;
@@ -17514,13 +17501,6 @@
 		const send = async () => {
 			const fingerprint = readerReadRequestFingerprint(topicId, submitted);
 			if (readerReadRequestRecentlySucceeded(fingerprint)) return submitted;
-			const throttleUntil = readerReadThrottleUntil();
-			if (throttleUntil > Date.now()) {
-				const error = requestStatusError('已读接口正在合并限频', 429);
-				error.readThrottled = true;
-				error.retryAt = throttleUntil;
-				throw error;
-			}
 			const params = {};
 			submitted.forEach((postNumber) => { params[`timings[${postNumber}]`] = READ_THRESHOLD; });
 			params.topic_time = READ_THRESHOLD * submitted.length;
@@ -17549,7 +17529,7 @@
 		}
 	}
 
-	function createReadTracker(topicId, scrollRoot, onReadTracked) {
+	function createReadTracker(topicId, scrollRoot, onReadTracked, onReadPending) {
 		const pendingReadPostNumbers = new Set();
 		const priorityReadPostNumbers = new Set();
 		const readState = readerReadState(topicId);
@@ -17568,6 +17548,14 @@
 				console.warn('[LDP] sync local post read state failed', error);
 			}
 		};
+		const syncLocalPendingState = (postNumbers) => {
+			if (!isFunction(onReadPending)) return;
+			try {
+				onReadPending(postNumbers);
+			} catch (error) {
+				console.warn('[LDP] sync optimistic post read state failed', error);
+			}
+		};
 
 		const io = new IntersectionObserver((entries) => {
 			entries.forEach((en) => {
@@ -17580,9 +17568,7 @@
 				else viewportNodes.delete(en.target);
 				if (inViewport && started && !flushRunning && pendingReadPostNumbers.has(pn)) {
 					clearReadFlushTimer();
-					scheduleReadFlush();
-				} else if (!inViewport && started && !flushRunning && !hasVisiblePending()) {
-					clearReadFlushTimer();
+					scheduleReadFlush(0);
 				}
 				const onVisible = inViewport && pendingVisibleCallbacks.get(en.target);
 				if (onVisible) {
@@ -17601,7 +17587,7 @@
 			readFlushTimer = null;
 		};
 
-		const scheduleReadFlush = (delay = FLUSH_INTERVAL) => {
+		const scheduleReadFlush = (delay = 0) => {
 			if (readFlushTimer || !started || readRetryCount > 1 || !pendingReadPostNumbers.size ||
 					document.visibilityState !== 'visible') return;
 			const wait = Math.max(0, Number(delay) || 0, readRetryAt - Date.now());
@@ -17628,18 +17614,16 @@
 			}, new Map());
 			priorityReadPostNumbers.forEach((postNumber) => {
 				if (pendingReadPostNumbers.has(postNumber))
-					visiblePostPriorities.set(postNumber, 2);
+					visiblePostPriorities.set(postNumber, 3);
 			});
-			const visiblePending = [...pendingReadPostNumbers]
-				.filter((postNumber) => visiblePostPriorities.has(postNumber));
-			if (!visiblePending.length) return false;
-			const highestPriority = Math.max(...visiblePending.map((postNumber) =>
-				visiblePostPriorities.get(postNumber) || 0));
-			const submitted = visiblePending.filter((postNumber) =>
-				(visiblePostPriorities.get(postNumber) || 0) === highestPriority);
+			const submitted = [...pendingReadPostNumbers]
+				.sort((a, b) => (visiblePostPriorities.get(b) || 0) -
+					(visiblePostPriorities.get(a) || 0))
+				.slice(0, READER_READ_BATCH_SIZE);
+			const hasVisiblePost = submitted.some((postNumber) => visiblePostPriorities.has(postNumber));
 			const priority = Number.isFinite(options.priority)
 				? options.priority
-				: POST_REQUEST_PRIORITY.visible;
+				: hasVisiblePost ? POST_REQUEST_PRIORITY.visible : POST_REQUEST_PRIORITY.background;
 			flushRunning = true;
 			try {
 				const confirmed = await sendReaderReadTimings(topicId, submitted, priority);
@@ -17655,8 +17639,6 @@
 				if (error?.cloudflareMitigated) {
 					readRetryCount = 2;
 					readRetryAt = 0;
-				} else if (error?.readThrottled) {
-					readRetryAt = Number(error.retryAt) || Date.now() + FLUSH_INTERVAL;
 				} else {
 					readRetryCount++;
 					readRetryAt = Date.now() + FLUSH_INTERVAL;
@@ -17664,7 +17646,7 @@
 				return false;
 			} finally {
 				flushRunning = false;
-				if (started && hasVisiblePending()) scheduleReadFlush();
+				if (started && pendingReadPostNumbers.size) scheduleReadFlush();
 			}
 		};
 
@@ -17674,7 +17656,7 @@
 		const onVisibilityChange = () => {
 			if (!started) return;
 			if (document.visibilityState === 'visible') {
-				if (hasVisiblePending()) scheduleReadFlush();
+				if (pendingReadPostNumbers.size) scheduleReadFlush(0);
 				return;
 			}
 			clearReadFlushTimer();
@@ -17684,7 +17666,7 @@
 			preload(posts) {
 				const wasEmpty = !pendingReadPostNumbers.size;
 				const locallyConfirmed = [];
-				let added = false;
+				const newlyPending = [];
 				(Array.isArray(posts) ? posts : [posts]).forEach((post) => {
 					const postNumber = +(post?.post_number || post || 0);
 					if (!postNumber || post?.read === true || pendingReadPostNumbers.has(postNumber)) return;
@@ -17693,12 +17675,13 @@
 						return;
 					}
 					pendingReadPostNumbers.add(postNumber);
-					added = true;
+					newlyPending.push(postNumber);
 				});
 				if (locallyConfirmed.length) syncLocalReadState(locallyConfirmed);
-				if (added) {
+				if (newlyPending.length) {
+					syncLocalPendingState(newlyPending);
 					if (wasEmpty) { readRetryAt = 0; readRetryCount = 0; }
-					if (hasVisiblePending()) scheduleReadFlush();
+					scheduleReadFlush(0);
 				}
 			},
 			confirm(postNumbers) {
@@ -17720,9 +17703,7 @@
 				});
 				if (visible && priorityReadPostNumbers.size && started && !flushRunning) {
 					clearReadFlushTimer();
-					scheduleReadFlush();
-				} else if (!visible && started && !flushRunning && !hasVisiblePending()) {
-					clearReadFlushTimer();
+					scheduleReadFlush(0);
 				}
 			},
 			hasVisiblePending() {
@@ -17753,7 +17734,7 @@
 				if (started) return;
 				started = true;
 				document.addEventListener('visibilitychange', onVisibilityChange);
-				if (hasVisiblePending()) scheduleReadFlush();
+				if (pendingReadPostNumbers.size) scheduleReadFlush(0);
 			},
 			stop() {
 				if (!started) return;
@@ -19113,7 +19094,8 @@
 	function readerPostIsRead(post, ctx) {
 		if (!post) return false;
 		const postNumber = +(post.post_number || 0);
-		if (post.read === true || ctx?.confirmedReadPostNumbers?.has(postNumber)) return true;
+		if (post.read === true || ctx?.confirmedReadPostNumbers?.has(postNumber) ||
+				ctx?.optimisticReadPostNumbers?.has(postNumber)) return true;
 		const lastReadPostNumber = +(ctx?.topicData && ctx.topicData.last_read_post_number || 0);
 		return postNumber > 0 && lastReadPostNumber >= postNumber;
 	}
@@ -19139,7 +19121,8 @@
 		const marker = postNode.querySelector(':scope > .ldp-post-head > .ldp-post-read-state');
 		if (!marker) return;
 		const state = isRead ? 'read' : 'unread';
-		if (postNode._ldpPostData) postNode._ldpPostData.read = !!isRead;
+		if (postNode._ldpPostData && options.updatePostData !== false)
+			postNode._ldpPostData.read = !!isRead;
 		if (marker.dataset.readState === state || marker.dataset.readTransitionState === state) return;
 		const label = isRead ? '该楼层已读' : '该楼层未读';
 		const cancelTransition = () => {
@@ -19189,38 +19172,50 @@
 		applyState();
 	}
 
-	function syncConfirmedPostReadStateWhenVisible(node, ctx) {
+	function syncConfirmedPostReadStateWhenVisible(node, ctx, options = {}) {
 		if (!node) return;
-		const syncConfirmedState = () => syncPostReadState(node, true, { animate: true });
+		const syncConfirmedState = () => syncPostReadState(node, true, {
+			animate: true,
+			updatePostData: options.updatePostData,
+		});
 		const descendantRoot = node.closest('.ldp-descendant-replies-list');
 		if (readerPostNodeInViewport(node, descendantRoot || ctx?.scrollRoot)) {
 			syncConfirmedState();
 		} else if (descendantRoot) {
-			syncPostReadState(node, true);
+			syncPostReadState(node, true, { updatePostData: options.updatePostData });
 		} else if (ctx?.tracker && isFunction(ctx.tracker.runWhenVisible)) {
 			ctx.tracker.runWhenVisible(node, syncConfirmedState);
 		} else {
-			syncPostReadState(node, true);
+			syncPostReadState(node, true, { updatePostData: options.updatePostData });
 		}
 	}
 
-	function markReaderPostsRead(postNumbers, ctx) {
-		const confirmed = new Set((postNumbers || []).map(Number).filter(Boolean));
-		if (!confirmed.size || !ctx) return;
-		if (!ctx.confirmedReadPostNumbers) ctx.confirmedReadPostNumbers = new Set();
-		confirmed.forEach((postNumber) => ctx.confirmedReadPostNumbers.add(postNumber));
+	function markReaderPostsRead(postNumbers, ctx, options = {}) {
+		const readPostNumbers = new Set((postNumbers || []).map(Number).filter(Boolean));
+		if (!readPostNumbers.size || !ctx) return;
+		const optimistic = options.optimistic === true;
+		if (!ctx.optimisticReadPostNumbers) ctx.optimisticReadPostNumbers = new Set();
+		if (optimistic) {
+			readPostNumbers.forEach((postNumber) => ctx.optimisticReadPostNumbers.add(postNumber));
+		} else {
+			if (!ctx.confirmedReadPostNumbers) ctx.confirmedReadPostNumbers = new Set();
+			readPostNumbers.forEach((postNumber) => {
+				ctx.confirmedReadPostNumbers.add(postNumber);
+				ctx.optimisticReadPostNumbers.delete(postNumber);
+			});
+		}
 		const persistedPosts = new Map();
 		const syncPostData = (post) => {
-			if (!post || !confirmed.has(+(post.post_number || 0))) return;
+			if (optimistic || !post || !readPostNumbers.has(+(post.post_number || 0))) return;
 			post.read = true;
 			if (post.id) persistedPosts.set(+post.id, post);
 		};
 		const syncNode = (node) => {
 			const postNumber = +(node?.dataset && node.dataset.postNumber || 0);
-			if (!confirmed.has(postNumber)) return;
+			if (!readPostNumbers.has(postNumber)) return;
 			const postData = node._ldpPostData;
 			syncPostData(postData);
-			syncConfirmedPostReadStateWhenVisible(node, ctx);
+			syncConfirmedPostReadStateWhenVisible(node, ctx, { updatePostData: !optimistic });
 		};
 		if (ctx.modal) ctx.modal.querySelectorAll('.ldp-post').forEach(syncNode);
 		if (ctx.streamNodeMap) {
@@ -34304,16 +34299,19 @@
 		const contextScope = createLifecycleScope();
 		const onContext = (target, type, listener, options) => contextScope.listen(target, type, listener, options);
 		let ctx = null;
-		const tracker = createReadTracker(topicId, body, (postNumbers) => {
-			markReaderPostsRead(postNumbers, ctx);
-		});
+		const tracker = createReadTracker(
+			topicId,
+			body,
+			(postNumbers) => markReaderPostsRead(postNumbers, ctx),
+			(postNumbers) => markReaderPostsRead(postNumbers, ctx, { optimistic: true }),
+		);
 		ctx = {
 			topicId, op: null, topicData: null, loader, modal, commentsEl, commentsHeader, countEl, emptyEl, scrollRoot: body, performance,
 			readerSession,
 			isPostVoting: !!(cachedTopicPreview?.is_post_voting),
 			directRepliesByParent: new Map(), replyParentByPost: new Map(), tracker, totalPosts: 0, repliesIO: null, postRequestScheduler,
 			subReplyState: new Map(), // 楼中楼原始数据 + 已渲染数量的状态表
-			confirmedReadPostNumbers: new Set(),
+			confirmedReadPostNumbers: new Set(), optimisticReadPostNumbers: new Set(),
 			streamNodeMap: new Map(),
 			streamItems: [], streamItemMap: new Map(), streamPrefix: [0],
 			onlyOp: false, streamLayoutItems: [], streamLayoutDirty: true,

@@ -152,7 +152,7 @@
 
 当前项目版本为 `0.1.14`。脚本对 LINUX DO 保持全面适配和完整功能回归，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。已标记为非中文的内置社区还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
-0.1.14 新增可搜索并统一保存的分组设置中心、可拖动主帖操作列、二级回复完整讨论窗口、隐藏回复头像入口和 LDC 账户摘要；同时重做可见楼层已读上报的跨标签去重与限频，修复 Safari 会话、滚轮路由、二级回复跳转、操作状态同步和多项视觉细节。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+0.1.14 新增可搜索并统一保存的分组设置中心、可拖动主帖操作列、二级回复完整讨论窗口、隐藏回复头像入口和 LDC 账户摘要；同时重做预加载楼层的乐观已读显示、批量上报与跨标签去重，修复 Safari 会话、滚轮路由、二级回复跳转、操作状态同步和多项视觉细节。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 ## 开发
 
