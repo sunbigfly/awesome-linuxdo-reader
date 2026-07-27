@@ -1,8 +1,8 @@
 ---
 title: 布局、浮窗与外观
-description: 设置五区比例、浮窗位置、明暗主题、颜色、斑马纹和结构线。
+description: 分别设置普通与全屏五区比例，并配置浮窗位置、明暗主题、颜色、斑马纹和结构线。
 feature_ids: ["SET-001", "SET-007", "SET-008", "SET-009"]
-source_anchors: ["READER_THEME_MODES", "LAYOUT_REGION_KEYS", "readerWindowGeometryMarkup", "APPEARANCE_PROFILE_SETTING_KEYS"]
+source_anchors: ["READER_THEME_MODES", "LAYOUT_REGION_KEYS", "READER_FULLPAGE_LAYOUT_DEFAULT", "readerWindowGeometryMarkup", "APPEARANCE_PROFILE_SETTING_KEYS"]
 since: 0.1.2
 version: 0.1.14
 status: current
@@ -16,7 +16,7 @@ screenshots: ["/screenshots/guide-05-layout-settings.png", "/screenshots/guide-0
 
 ## 五区布局
 
-每种形态由五个横向区域组成：
+普通（嵌入/浮窗）与全屏分别保存一套由五个横向区域组成的布局：
 
 | 区域 | 最小值 | 作用 |
 | --- | ---: | --- |
@@ -26,15 +26,14 @@ screenshots: ["/screenshots/guide-05-layout-settings.png", "/screenshots/guide-0
 | 时间轴 | 6% | 楼层定位和日期 |
 | 右留白 | 0% | 时间轴外侧空间 |
 
-所有区域合计必须为 100%。编辑一个区域时，阅读器自动平衡其他可调区域；共享链按钮可让某一区域跨浮窗、全屏、移动保持一致。
+所有区域合计必须为 100%。编辑一个区域时，阅读器自动平衡其他可调区域；设置面板显示并保存当前阅读器形态的布局。
 
 默认值：
 
 | 形态 | 左留白 | 主帖 | 间距 | 时间轴 | 右留白 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 浮窗 | 10% | 72% | 3% | 10% | 5% |
-| 全屏 | 20% | 58% | 5% | 9% | 8% |
-| 移动 | 10% | 68% | 3% | 12% | 7% |
+| 普通（嵌入/浮窗） | 0% | 90% | 0% | 6% | 4% |
+| 全屏 | 15% | 70% | 5% | 8% | 2% |
 
 ![五区布局的比例、共享和应用状态](/screenshots/guide-05-layout-settings.png)
 

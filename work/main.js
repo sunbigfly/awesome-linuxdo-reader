@@ -522,6 +522,7 @@
 	});
 	const COMPOSER_WINDOW_PREFIX = 'composerWindow';
 	const READER_LAYOUT_DEFAULT = Object.freeze({ left: 0, main: 90, gap: 0, timeline: 6, right: 4 });
+	const READER_FULLPAGE_LAYOUT_DEFAULT = Object.freeze({ left: 15, main: 70, gap: 5, timeline: 8, right: 2 });
 	const FONT_FAMILY_DEFAULT = 'system';
 	const FONT_FAMILY_OPTIONS = Object.freeze({
 		site: Object.freeze({ label: '跟随原站', stack: 'inherit' }),
@@ -776,6 +777,7 @@
 		appearanceProfile: APPEARANCE_PROFILE_DEFAULT,
 		...performancePrefsPatch(BALANCED_PERFORMANCE, 'balanced'),
 		layoutProfile: READER_LAYOUT_DEFAULT,
+		fullpageLayoutProfile: READER_FULLPAGE_LAYOUT_DEFAULT,
 		...normalizeReaderWindowPreferenceGroup({}, 'readerWindow'),
 		listReaderMode: 'floating',
 		listReaderEmbedWidth: READER_EMBED_DEFAULT_WIDTH,
@@ -6810,6 +6812,10 @@
 			lightboxCommentsWidthPercent: normalizeLightboxCommentsWidth(performancePrefs.lightboxCommentsWidthPercent),
 			fontProfile: normalizeFontProfile(performancePrefs.fontProfile, READER_FONT_DEFAULT),
 			layoutProfile: normalizeLayoutRatios(performancePrefs.layoutProfile, READER_LAYOUT_DEFAULT),
+			fullpageLayoutProfile: normalizeLayoutRatios(
+				performancePrefs.fullpageLayoutProfile,
+				READER_FULLPAGE_LAYOUT_DEFAULT
+			),
 			appearanceProfile: normalizeAppearanceProfile(performancePrefs.appearanceProfile, APPEARANCE_PROFILE_DEFAULT),
 			themeMode: normalizeReaderThemeMode(performancePrefs.themeMode),
 			fontRenderingEnabled: performancePrefs.fontRenderingEnabled !== false,
@@ -6966,16 +6972,28 @@
 			!Array.isArray(payload.settings)
 			? Object.keys(payload.settings)
 			: [];
+		const importedSource = payload?.settings && typeof payload.settings === 'object' &&
+			!Array.isArray(payload.settings)
+			? { ...payload.settings }
+			: {};
+		const legacyLayoutProfile = schemaVersion === LDP_CONFIG_EXPORT_VERSION &&
+			!Object.hasOwn(importedSource, 'fullpageLayoutProfile') &&
+			payloadSettingKeys.every((key) => settingKeys.includes(key)) &&
+			settingKeys.every((key) => key === 'fullpageLayoutProfile' || Object.hasOwn(importedSource, key));
+		if (legacyLayoutProfile) {
+			importedSource.fullpageLayoutProfile = READER_FULLPAGE_LAYOUT_DEFAULT;
+		}
+		const importedSettingKeys = Object.keys(importedSource);
 		if (!payload || payload.format !== LDP_CONFIG_EXPORT_FORMAT ||
 			schemaVersion !== LDP_CONFIG_EXPORT_VERSION ||
 			!payload.settings || typeof payload.settings !== 'object' || Array.isArray(payload.settings) ||
 			Number(payload.settingsCount) !== payloadSettingKeys.length ||
-			payloadSettingKeys.some((key) => !settingKeys.includes(key)) ||
-			settingKeys.some((key) => !Object.hasOwn(payload.settings, key))) {
+			importedSettingKeys.some((key) => !settingKeys.includes(key)) ||
+			settingKeys.some((key) => !Object.hasOwn(importedSource, key))) {
 			throw new Error('invalid_config');
 		}
 		const importedSettings = settingKeys.reduce((settings, key) => {
-			if (Object.hasOwn(payload.settings, key)) settings[key] = payload.settings[key];
+			if (Object.hasOwn(importedSource, key)) settings[key] = importedSource[key];
 			return settings;
 		}, {});
 		return normalizeReaderPrefs(Object.assign({}, DEFAULT_PREFS, importedSettings));
@@ -7144,8 +7162,10 @@
 			['main', 'left', 'right', 'gap', 'timeline'].filter((name) => name !== editedName));
 	}
 
-	function currentLayoutRatios() {
-		return normalizeLayoutRatios(PREFS.layoutProfile, READER_LAYOUT_DEFAULT);
+	function currentLayoutRatios(fullPage = false) {
+		const defaults = fullPage ? READER_FULLPAGE_LAYOUT_DEFAULT : READER_LAYOUT_DEFAULT;
+		const profile = fullPage ? PREFS.fullpageLayoutProfile : PREFS.layoutProfile;
+		return normalizeLayoutRatios(profile, defaults);
 	}
 
 	function currentFontProfile() {
@@ -30870,7 +30890,8 @@
 		const syncReaderBackgroundMode = () => {
 			setPageScrollLocked(readerWorkspace.isFullPage() || window.innerWidth <= READER_WINDOW_COMPACT_WIDTH);
 		};
-		let layoutDraft = currentLayoutRatios();
+		let layoutDraftFullPage = readerWorkspace.isFullPage();
+		let layoutDraft = currentLayoutRatios(layoutDraftFullPage);
 		let fontSettingsScope = 'interface';
 		let fontDraft = currentFontProfile();
 		let appearanceDraft = currentAppearanceProfile();
@@ -30878,9 +30899,24 @@
 		const currentFontDraft = () => fontDraft;
 		const setCurrentFontDraft = (values) => { fontDraft = normalizeFontProfile(values, READER_FONT_DEFAULT); };
 		const currentFontDefaults = () => normalizeFontProfile(READER_FONT_DEFAULT);
+		const currentLayoutProfileKey = () => layoutDraftFullPage
+			? 'fullpageLayoutProfile'
+			: 'layoutProfile';
+		const currentLayoutProfileDefaults = () => layoutDraftFullPage
+			? READER_FULLPAGE_LAYOUT_DEFAULT
+			: READER_LAYOUT_DEFAULT;
+		const currentSavedLayoutRatios = () => currentLayoutRatios(layoutDraftFullPage);
+		const syncLayoutDraftMode = (force = false) => {
+			const fullPage = readerWorkspace.isFullPage();
+			if (!force && layoutDraftFullPage === fullPage) return;
+			layoutDraftFullPage = fullPage;
+			layoutDraft = currentLayoutRatios(fullPage);
+		};
 		const currentLayoutDraft = () => layoutDraft;
-		const setCurrentLayoutDraft = (values) => { layoutDraft = normalizeLayoutRatios(values, READER_LAYOUT_DEFAULT); };
-		const currentLayoutDefaults = () => normalizeLayoutRatios(READER_LAYOUT_DEFAULT);
+		const setCurrentLayoutDraft = (values) => {
+			layoutDraft = normalizeLayoutRatios(values, currentLayoutProfileDefaults());
+		};
+		const currentLayoutDefaults = () => normalizeLayoutRatios(currentLayoutProfileDefaults());
 		const currentAppearanceDraft = () => appearanceDraft;
 		const setCurrentAppearanceDraft = (values) => {
 			appearanceDraft = normalizeAppearanceProfile(values, APPEARANCE_PROFILE_DEFAULT);
@@ -30911,6 +30947,7 @@
 		const onReaderWorkspaceChange = () => {
 			syncLayoutBtn();
 			syncReaderPlacementUi();
+			syncLayoutDraftMode();
 			if (readerShell.syncSettingsSurfaceGeometry) readerShell.syncSettingsSurfaceGeometry();
 			else syncReaderSurfaceDensity();
 			syncReaderThemeSurfaces();
@@ -30944,6 +30981,8 @@
 		};
 		const fontSettingsSection = readerElement('[data-settings-panel="font"]');
 		const layoutSettingsSection = readerElement('[data-settings-panel="layout"]');
+		const layoutSettingsTitle = layoutSettingsSection.querySelector('.ldp-settings-title');
+		const layoutSettingsDescription = layoutSettingsSection.querySelector('.ldp-settings-description');
 		const appearanceSettingsSection = readerElement('[data-settings-panel="appearance"]');
 		const appearanceValuesChanged = () => {
 			const values = currentAppearanceDraft();
@@ -30977,8 +31016,10 @@
 				activeContext.nativeComposerWindow.syncFont(scaledValues);
 		};
 		const applyLayoutRatios = () => {
-			const previewing = !settingsPopover.hidden && !layoutSettingsSection.hidden;
-			const ratios = previewing ? currentLayoutDraft() : currentLayoutRatios();
+			const fullPage = readerWorkspace.isFullPage();
+			const previewing = !settingsPopover.hidden && !layoutSettingsSection.hidden &&
+				layoutDraftFullPage === fullPage;
+			const ratios = previewing ? currentLayoutDraft() : currentLayoutRatios(fullPage);
 			LAYOUT_REGION_KEYS.forEach((name) => {
 				overlay.style.setProperty(`--ldp-layout-${name}`, `${ratios[name]}%`);
 			});
@@ -31455,9 +31496,12 @@
 		};
 		const syncLayoutControls = () => {
 			const ratios = currentLayoutDraft();
-			const savedRatios = currentLayoutRatios();
+			const savedRatios = currentSavedLayoutRatios();
 			const defaultRatios = currentLayoutDefaults();
-			const profileLabel = '阅读器';
+			const profileLabel = layoutDraftFullPage ? '全屏' : '普通（嵌入/浮窗）';
+			setText(layoutSettingsTitle, `布局设置 · ${profileLabel}`);
+			setText(layoutSettingsDescription,
+				`当前检测为${profileLabel}形态；实时预览、保存和恢复默认只作用于该形态。`);
 			const remaining = Math.max(0, roundLayoutRatio(100 - layoutRatioTotal(ratios)));
 			layoutRatioInputs.forEach((input) => {
 				const name = input.dataset.layoutRegion;
@@ -31475,10 +31519,10 @@
 			layoutTotal.classList.toggle('balanced', remaining <= 0);
 			const changed = LAYOUT_REGION_KEYS.some((name) => Math.abs(ratios[name] - savedRatios[name]) >= 0.01);
 			layoutTotal.textContent = remaining > 0
-				? `${profileLabel}布局还剩 ${Number(remaining.toFixed(1))}% 未分配，必须分配完才能保存。`
+				? `当前形态：${profileLabel}。还剩 ${Number(remaining.toFixed(1))}% 未分配，必须分配完才能保存。`
 				: changed
-					? `${profileLabel}布局已分配 100%，正在实时预览，等待统一保存。`
-					: `${profileLabel}布局当前配置已应用。`;
+					? `当前形态：${profileLabel}。正在实时预览，只会保存该形态的布局。`
+					: `当前形态：${profileLabel}。当前配置已应用，只会保存该形态的布局。`;
 			layoutResetBtn.disabled = LAYOUT_REGION_KEYS.every((name) =>
 				Math.abs(ratios[name] - defaultRatios[name]) < 0.01
 			);
@@ -32930,9 +32974,9 @@
 			},
 			layout: {
 				label: '布局设置', fields: LAYOUT_REGION_KEYS,
-				draft: currentLayoutDraft, saved: currentLayoutRatios,
-				reset: () => { layoutDraft = currentLayoutRatios(); },
-				patch: () => ({ layoutProfile: { ...currentLayoutDraft() } }),
+				draft: currentLayoutDraft, saved: currentSavedLayoutRatios,
+				reset: () => { layoutDraft = currentSavedLayoutRatios(); },
+				patch: () => ({ [currentLayoutProfileKey()]: { ...currentLayoutDraft() } }),
 				apply: applyLayoutRatios, sync: syncLayoutControls,
 				changed: (draft, saved, field) => Math.abs(draft[field] - saved[field]) >= 0.01,
 				valid: () => layoutRatioTotal(currentLayoutDraft()) === 100,
@@ -33864,6 +33908,7 @@
 				requestCloseSettings();
 				return;
 			}
+			syncLayoutDraftMode(true);
 			setHidden(settingsPopover, false);
 			fontFamilyManualEditing.clear();
 			syncSettingsSurfaceGeometry({ closeTransients: false });

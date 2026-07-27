@@ -1,8 +1,8 @@
 ---
 title: 布局设置
-description: 逐项调整左右留白、正文区域、时间轴间距和楼层时间轴，并理解共享与自动平衡。
+description: 分别调整普通与全屏阅读器的左右留白、正文区域、时间轴间距和楼层时间轴。
 feature_ids: ["SET-007"]
-source_anchors: ["LAYOUT_REGION_KEYS"]
+source_anchors: ["LAYOUT_REGION_KEYS", "READER_LAYOUT_DEFAULT", "READER_FULLPAGE_LAYOUT_DEFAULT", "fullpageLayoutProfile"]
 since: 0.1.2
 version: 0.1.14
 status: current
@@ -14,7 +14,7 @@ screenshots: ["/screenshots/guide-05-layout-settings.png"]
 
 路径：**阅读器标题栏 → 设置 → 布局设置**。
 
-![布局设置页中的三种形态与五区比例](/screenshots/guide-05-layout-settings.png)
+![布局设置页中的当前形态与五区比例](/screenshots/guide-05-layout-settings.png)
 
 ## 五个区域
 
@@ -34,22 +34,23 @@ screenshots: ["/screenshots/guide-05-layout-settings.png"]
 
 | 形态 | 左留白 | 正文区域 | 间距 | 时间轴 | 右留白 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 全部形态的新默认值 | 6% | 86% | 0% | 8% | 0% |
+| 普通（嵌入/浮窗） | 0% | 90% | 0% | 6% | 4% |
+| 全屏 | 15% | 70% | 5% | 8% | 2% |
 
 ## 调整步骤
 
-1. 选择“浮窗 / 全屏 / 移动”。
+1. 先把阅读器切换到需要调整的普通（嵌入/浮窗）或全屏形态。
 2. 先调整正文区域宽度。
 3. 再调整时间轴，确保楼层号和日期完整。
 4. 用中间间距控制正文与时间轴的分隔。
 5. 最后分配左右留白。
 6. 点击底部“保存全部更改”。
 
-## 链状共享
+## 两套布局
 
-每一行右侧的链按钮只共享该区域，不是共享整套布局。
+普通（嵌入/浮窗）与全屏使用两套独立布局。打开设置时，面板会标明当前形态；实时预览、恢复默认和“保存全部更改”都只作用于这套布局。切换阅读器形态后，面板会载入另一套草稿和已保存值。
 
-例如，开启“时间轴”共享后，三种形态使用同一时间轴比例；左留白、主帖等仍可各自保存。共享项目变化时，当前形态的其余区域继续自动平衡。
+从缺少 `fullpageLayoutProfile` 的早期 0.1.14 配置文件导入时，阅读器会为全屏布局补入新默认值；其他字段仍按原有完整性规则校验。
 
 ## 判断是否合适
 

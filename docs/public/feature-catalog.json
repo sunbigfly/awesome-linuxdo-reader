@@ -1174,14 +1174,14 @@
   },
   {
     "feature_id": "SET-007",
-    "title": "五区布局与按字段共享",
+    "title": "普通与全屏五区布局",
     "category": "个性化设置",
-    "description": "为三种形态设置左留白、主帖、间距、时间轴、右留白比例并保持合计 100%。",
+    "description": "为普通（嵌入/浮窗）和全屏分别设置左留白、主帖、间距、时间轴、右留白比例并保持合计 100%。",
     "source_anchor": "LAYOUT_REGION_KEYS",
     "since": "0.1.2",
     "version": "0.1.14",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-07-27",
     "screenshots": [
       "assets/screenshots/guide-05-layout-settings.png"
     ],
