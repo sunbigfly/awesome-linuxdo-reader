@@ -24,6 +24,8 @@ screenshots: ["/screenshots/guide-25-user-card.png", "/screenshots/guide-02-sett
 
 缓存资料可能短暂显示旧值，联网成功后会刷新。用户资料最终以原站为准。
 
+用户头像旁的原站 Flair 徽章会先尝试把当前页面 SVG 符号安全内联，避免依赖外部图标运行时；图标无法解析或未通过净化时回退到内置盾牌图标，徽章名称和颜色仍会保留。
+
 ![阅读器用户卡中的资料、统计、关系操作和头像预览](/screenshots/guide-25-user-card.png)
 
 <p class="image-caption">点击楼层作者的用户名打开用户卡；统计卡片用于进入帖子、获赞和主题，底部按钮依次提供私信、通知和账号关系操作。</p>

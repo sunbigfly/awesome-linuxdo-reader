@@ -46,7 +46,7 @@
 // @connect      api-edge.cognitive.microsofttranslator.com
 // @connect      *
 // @run-at       document-start
-// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@66a2b6463c3b6fc3901ecc9364510fa9cf305a03/work/main.css#sha256=8bedb8d1ace3682eb44235ffd6f7b6d4371dbd93f16c7fad8854e63d827c7074
+// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@76e820b63f464545b25516ace9d8786677b3352e/work/main.css#sha256=d2ae1cbe838e95fb700177630757b589aef7da2e24a2a7645226671da5c748f6
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
@@ -709,6 +709,57 @@
 			],
 		},
 	};
+	const NOTIFICATION_TYPE_ICONS = Object.freeze({
+		mentioned: 'at',
+		replied: 'reply',
+		quoted: 'messageSquare',
+		posted: 'messageSquare',
+		group_mentioned: 'at',
+		liked: 'heart',
+		liked_consolidated: 'heart',
+		reaction: 'smile',
+		boost: 'rocket',
+		following: 'userPlus',
+		following_created_topic: 'messageSquare',
+		following_replied: 'reply',
+		watching_first_post: 'bell',
+		watching_category_or_tag: 'bell',
+		private_message: 'mail',
+		invited_to_private_message: 'userPlus',
+		group_message_summary: 'mail',
+		chat_mention: 'at',
+		chat_message: 'messageSquare',
+		chat_invitation: 'userPlus',
+		chat_group_mention: 'at',
+		chat_quoted: 'messageSquare',
+		chat_watched_thread: 'bell',
+		edited: 'pencil',
+		invitee_accepted: 'userPlus',
+		moved_post: 'cornerDownRight',
+		linked: 'link2',
+		granted_badge: 'award',
+		invited_to_topic: 'userPlus',
+		custom: 'bell',
+		topic_reminder: 'bell',
+		post_approved: 'check',
+		code_review_commit_approved: 'check',
+		membership_request_accepted: 'check',
+		membership_request_consolidated: 'userPlus',
+		bookmark_reminder: 'bookmark',
+		votes_released: 'hand',
+		event_reminder: 'bell',
+		event_invitation: 'mail',
+		assigned: 'userRound',
+		question_answer_user_commented: 'messageSquare',
+		new_features: 'lightbulb',
+		admin_problems: 'alertTriangle',
+		linked_consolidated: 'link2',
+		upcoming_change_available: 'alertTriangle',
+		upcoming_change_automatically_promoted: 'alertTriangle',
+		suggested_edit_created: 'pencil',
+		suggested_edit_accepted: 'check',
+		circles_activity: 'activity',
+	});
 	const PERSISTENT_CACHE_CONFIG = {
 		history: { storageKey: LDP_HISTORY_KEY, maxAge: 365 * DAY },
 		topics: { maxAge: 180 * DAY, maxEntries: 8, storedMaxEntries: 64, storedMaxBytes: 64 * 1024 * 1024 },
@@ -8007,6 +8058,20 @@
 		return color.startsWith('#') ? color : `#${color}`;
 	}
 
+	function userFlairIconHtml(iconId) {
+		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		svg.setAttribute('class', 'ldp-avatar-flair-icon');
+		svg.setAttribute('aria-hidden', 'true');
+		const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+		use.setAttribute('href', `#${iconId}`);
+		svg.appendChild(use);
+		if (inlineTopicNavSvgUses(svg)) {
+			const html = safeTopicNavIconHtml(svg.outerHTML);
+			if (html) return html;
+		}
+		return `<svg class="ldp-avatar-flair-icon" viewBox="0 0 24 24" aria-hidden="true">${ICONS.shieldHalved}</svg>`;
+	}
+
 	function userFlairHtml(user) {
 		const rawUrl = String(user && (
 			user.flair_url || user.flairUrl || user.avatar_flair_url || user.avatarFlairUrl
@@ -8028,7 +8093,7 @@
 		}
 		const iconId = rawUrl.replace(/^fa-/, '');
 		if (!/^[a-z0-9_-]+$/i.test(iconId)) return '';
-		return `<span class="ldp-avatar-flair" data-ldp-tooltip-label="${escAttr(label)}" aria-label="${escAttr(label)}"${styleAttr}><svg class="ldp-avatar-flair-icon" aria-hidden="true"><use href="#${escAttr(iconId)}"></use></svg></span>`;
+		return `<span class="ldp-avatar-flair" data-ldp-tooltip-label="${escAttr(label)}" aria-label="${escAttr(label)}"${styleAttr}>${userFlairIconHtml(iconId)}</span>`;
 	}
 
 	function avatarWithFlairHtml(avatarHtml, user) {
@@ -9098,10 +9163,16 @@
 		return String(notification?._ldp_type_label || notificationTypeName(notification) || '通知');
 	}
 
+	function notificationTypeGroupKey(notification) {
+		const typeName = notificationTypeName(notification);
+		return Object.entries(NOTIFICATION_GROUPS)
+			.find(([key, entry]) => key !== 'all' && entry.types.includes(typeName))?.[0] || 'all';
+	}
+
 	function notificationTypeIconName(notification) {
 		const typeName = notificationTypeName(notification);
-		const group = Object.values(NOTIFICATION_GROUPS).find((entry) => entry.types.includes(typeName));
-		return group?.icon || NOTIFICATION_GROUPS.all.icon;
+		return NOTIFICATION_TYPE_ICONS[typeName] ||
+			NOTIFICATION_GROUPS[notificationTypeGroupKey(notification)].icon;
 	}
 
 	function consolidatedReplyInfo(notification) {
@@ -9139,6 +9210,7 @@
 		const models = await Notification.initializeNotifications(source);
 		models.forEach((model, index) => {
 			const notification = notifications[index];
+			const modelData = notificationData(model);
 			const typeName = notificationTypeName(model);
 			const director = manager.getRenderDirector(typeName, model, currentUser, siteSettings, site);
 			const label = notificationPresentationText(director.label);
@@ -9146,37 +9218,69 @@
 			const description = notificationPresentationText(director.description);
 			const href = String(director.linkHref || '').trim();
 			notification._ldp_actor = cleanUsernameValue(
-				notificationData(model).display_username || notificationData(model).username || model.username
+				modelData.display_username || modelData.username || model.username
 			);
 			notification._ldp_type_label = typeLabel;
-			notification._ldp_summary = [label, typeLabel, description].filter(Boolean).join(' · ');
+			notification._ldp_summary = [label, description].filter(Boolean).join(' · ');
 			notification._ldp_href = href || discoursePageUrl('/my/notifications');
+			notification._ldp_target_topic_id = Math.max(
+				0,
+				Number(discourseModelValue(model, 'topic_id')) ||
+				Number(discourseModelValue(model, 'topicId')) ||
+				Number(modelData.topic_id) ||
+				0
+			);
+			notification._ldp_target_post_number = Math.max(
+				0,
+				Number(discourseModelValue(model, 'post_number')) ||
+				Number(discourseModelValue(model, 'postNumber')) ||
+				Number(modelData.post_number) ||
+				0
+			);
 		});
 		return notifications;
 	}
 
-	function notificationHref(notification) {
+	function notificationTopicTarget(notification) {
 		const presentedHref = String(notification?._ldp_href || '').trim();
-		const presentedRoute = extractTopicRouteFromUrl(presentedHref);
 		const data = notificationData(notification);
+		const presentedRoute = [
+			presentedHref,
+			data.post_url,
+			data.topic_url,
+			data.url,
+		].map((value) => extractTopicRouteFromUrl(String(value || ''))).find(Boolean);
 		const topicId = Math.max(
 			0,
 			Number(presentedRoute?.topicId) ||
+			Number(notification?._ldp_target_topic_id) ||
 			Number(notification?.topic_id) ||
 			Number(data.topic_id) ||
 			0
 		);
-		if (!topicId) return presentedHref || discoursePageUrl('/my/notifications');
+		if (!topicId) return null;
 		const postNumber = Math.max(
 			1,
 			Number(presentedRoute?.postNumber) ||
+			Number(notification?._ldp_target_post_number) ||
 			Number(notification?.post_number) ||
 			Number(data.post_number) ||
 			1
 		);
-		return topicPageUrl(topicId, postNumber) ||
-			presentedHref ||
-			discoursePageUrl('/my/notifications');
+		return { topicId, postNumber };
+	}
+
+	function notificationHref(notification) {
+		const target = notificationTopicTarget(notification);
+		if (target) return `${BASE}/t/${target.topicId}/${target.postNumber}`;
+		return String(notification?._ldp_href || discoursePageUrl('/my/notifications'));
+	}
+
+	function notificationTargetDataAttributes(notification) {
+		const target = notificationTopicTarget(notification);
+		return target
+			? ` data-notification-topic-id="${target.topicId}" data-notification-post-number="${target.postNumber}"`
+			: '';
 	}
 
 	function notificationSummary(notification) {
@@ -9672,11 +9776,11 @@
 			<section class="ldp-notification-date-group">
 				<div class="ldp-notification-date-label">${label}</div>
 				${items.map((notification) => `
-					<a class="ldp-notification-item ldp-notification-message-item${notification.read ? '' : ' unread'}" data-notification-id="${Math.max(0, Number(notification.id) || 0)}" data-notification-key="${escAttr(notificationDisplayIdentity(notification))}" data-notification-read-key="${escAttr(notificationReadIdentity(notification))}" data-notification-actor="${escAttr(notificationActor(notification))}" data-ldp-preserve-target-post="1" href="${escAttr(notificationHref(notification))}">
+					<a class="ldp-notification-item ldp-notification-message-item${notification.read ? '' : ' unread'}" data-notification-id="${Math.max(0, Number(notification.id) || 0)}" data-notification-key="${escAttr(notificationDisplayIdentity(notification))}" data-notification-read-key="${escAttr(notificationReadIdentity(notification))}" data-notification-actor="${escAttr(notificationActor(notification))}"${notificationTargetDataAttributes(notification)} data-ldp-preserve-target-post="1" href="${escAttr(notificationHref(notification))}">
 						${notificationAvatarHtml(notification)}
+						<span class="ldp-notification-type-icon" data-notification-group="${escAttr(notificationTypeGroupKey(notification))}">${icon(notificationTypeIconName(notification))}</span>
 						<span class="ldp-notification-copy">
 							<span class="ldp-notification-title">
-								<span class="ldp-notification-type-icon">${icon(notificationTypeIconName(notification))}</span>
 								<span class="ldp-notification-title-text">${esc(notificationSummary(notification))}</span>
 							</span>
 							<span class="ldp-notification-meta">${esc(discourseRelativeTime(notification.created_at))}</span>
@@ -30344,6 +30448,7 @@
 		});
 		const positionNotificationsPopover = notificationCollection.position;
 		const closeNotifications = notificationCollection.close;
+		readerShell.closeNotifications = closeNotifications;
 		const positionHistoryPopover = historyCollection.position;
 		const closeHistory = historyCollection.close;
 		const positionBookmarksPopover = bookmarksCollection.position;
@@ -37599,6 +37704,15 @@
 		}
 		const notificationItem = a.closest('.ldp-notification-item');
 		const refreshNotificationTarget = notificationItem?.classList.contains('ldp-notification-message-item') === true;
+		const notificationTopicId = refreshNotificationTarget
+			? Math.max(0, Number(notificationItem.dataset.notificationTopicId) || 0)
+			: 0;
+		const notificationPostNumber = refreshNotificationTarget
+			? Math.max(0, Number(notificationItem.dataset.notificationPostNumber) || 0)
+			: 0;
+		const notificationRoute = notificationTopicId
+			? { topicId: String(notificationTopicId), postNumber: notificationPostNumber }
+			: null;
 		const notificationId = markClickedNotificationRead(notificationItem);
 		if (notificationId > 0)
 			void apiSend(`${BASE}/notifications/mark-read`, 'PUT', { id: notificationId }, null, {
@@ -37614,8 +37728,26 @@
 			openEmbeddedReaderLinkInHost(e, a, activeReaderWorkspace)) return true;
 		if (a.classList.contains('ldp-open')) return false;
 		if (shouldBypassReaderUrl(a.href)) return false;
-		const route = extractTopicRouteFromUrl(a.getAttribute('href') || a.href);
+		const route = notificationRoute || extractTopicRouteFromUrl(a.getAttribute('href') || a.href);
 		if (!route) return false;
+		const activeReaderShell = CURRENT_OVERLAY?._ldpReaderShell;
+		const activeContext = activeReaderShell?.activeContext;
+		if (notificationRoute && notificationPostNumber > 0 &&
+				String(activeContext?.topicId || '') === String(notificationTopicId) &&
+				activeContext?.readerSession?.state === 'active' && activeContext.timeline) {
+			consumeEvent(e);
+			activeReaderShell.closeNotifications?.();
+			void activeContext.timeline.jumpTo(notificationPostNumber).then((jumped) => {
+				if (!jumped) openModal(notificationTopicId, {
+					targetPostNumber: notificationPostNumber,
+					refreshTargetBoosts: true,
+				});
+			}).catch(() => openModal(notificationTopicId, {
+				targetPostNumber: notificationPostNumber,
+				refreshTargetBoosts: true,
+			}));
+			return true;
+		}
 		const readerQueueMetadata = readerQueueMetadataFromLink(a, route.topicId);
 		readerQueueMetadata.urlPostNumber = Math.max(0, Number(route.postNumber) || 0);
 		const hostTopicPointerAnchor = captureHostTopicPointerAnchor(e, route.topicId);
