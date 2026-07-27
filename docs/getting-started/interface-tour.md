@@ -4,9 +4,9 @@ description: 认识宿主区、标题栏、阅读队列、阅读流、时间轴�
 feature_ids: ["CORE-002", "CORE-006", "READ-013", "MEDIA-014"]
 source_anchors: ["ldp-native-reader-trigger", "ldp-reader-queue", "ldp-meta-owner", "createReaderTranslationController"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-25
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-05-layout-settings.png"]
 ---
 
@@ -22,7 +22,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-0
 | 阅读流 | 主楼层、楼中楼、媒体和主题尾部操作 | 滚动、回复、互动、展开上下文 |
 | 时间轴 | 当前楼层、日期、总楼层与跳转位置 | 拖动或点击定位、回到顶部 |
 | 工具面板 | 七类消息、历史、收藏与回应 | 分类、检索、翻页、多选和回跳 |
-| 设置中心 | 13 个分类面板 | 个性化、性能调优、监控和数据管理 |
+| 设置中心 | 三组、14 个面板 | 搜索、统一保存、个性化、性能、日志和数据管理 |
 
 ## 标题栏
 
@@ -34,17 +34,17 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-0
 
 ## 阅读队列
 
-阅读队列按钮始终显示当前数量，空队列显示 `0`。普通打开主题不会自动入队；使用主题行加号明确加入后，浮层显示头像、实际阅读进度和后台预加载状态。桌面端可以拖动并贴边收纳；移动端使用紧凑按钮打开列表。完整说明见[阅读队列](/guide/reading-queue)。
+阅读队列按钮显示当前数量，空队列默认显示 `×` 并可关闭入口。普通打开主题不会自动入队；使用主题行加号明确加入后，浮层显示头像、实际阅读进度和后台预加载状态。桌面端可以拖动并贴边收纳；移动端使用紧凑按钮打开列表。完整说明见[阅读队列](/guide/reading-queue)。
 
 ## 设置中心
 
 ![设置中心中的布局设置和三种形态配置](/screenshots/guide-05-layout-settings.png)
 
-设置中心左侧有用户信息、图片、字体、布局、浮窗、外观、闪烁、性能、资源监控、请求数据、其他、数据管理和关于。底部的明、暗、系统按钮只切换阅读器主题。
+设置中心包含用户信息、图片、字体、布局、浮窗、外观、动画与提示、阅读与导航、帖子与回复、适用站点、性能、日志记录、数据管理和关于 14 个面板。桌面端按三组排列，设置页顶部可搜索，存在草稿时底部可统一保存；明、暗、系统按钮只切换阅读器主题。
 
 ## 键盘与无障碍
 
-- `Esc`：关闭当前灯箱、预览层或浮动面板。
+- `Esc`：先关闭当前大图查看器、预览层、完整讨论或浮动面板；默认需连续按两次才关闭阅读器本体。
 - 方向键：图片灯箱前后翻图；部分时间轴和分页控件也支持键盘。
 - 阅读队列：`ArrowUp` / `ArrowDown` 移动焦点，`Enter` 或空格切换文章，`Esc` 收起列表。
 - `+` / `-` / `0`：在图片预览中缩放或适应窗口。

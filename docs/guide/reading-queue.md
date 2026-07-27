@@ -4,9 +4,9 @@ description: 从主题列表建立多主题阅读队列，管理后台预加载�
 feature_ids: ["CORE-006"]
 source_anchors: ["LDP_READER_QUEUE_KEY", "ensureReaderQueueEntry", "readerQueueStatusText", "bindReaderQueueSurface", "prefetchReaderQueueEntry", "createReaderQueueViewportTracker", "autoDequeueReaderQueueEntry", "clearReaderQueueEntries"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-25
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-reading-queue-entry.png", "/screenshots/guide-13-data-management.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-16-history.png"]
 ---
 
@@ -38,7 +38,7 @@ screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-
 
 ## 认识队列浮层
 
-队列浮层在阅读工作区中始终可见。队列为空时按钮显示 `0`，展开后显示空列表；加入第一篇文章后，头像预览、进度和管理操作才会出现。
+队列浮层默认在阅读工作区中始终可见。队列为空时按钮显示 `×`，点击后可以关闭空队列入口；也可在“设置 → 阅读与导航”重新开启“队列为空时仍显示入口”。加入第一篇文章后，入口一定显示数量、头像预览、进度和管理操作。
 
 | 区域 | 显示内容 | 操作 |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-
 在桌面布局中，可以按住队列按钮拖动整个浮层：
 
 - 浮层只能移动到当前阅读工作区范围内；
-- 拖到距离左边或右边约 5% 的区域会自动贴边；
+- 拖到距离左边或右边约 1% 的区域会自动贴边；
 - 贴边后，未悬停且内部没有键盘焦点时会收纳；
 - 再次悬停、聚焦或拖离边缘即可展开；
 - 位置和贴边状态保存在当前浏览器中，刷新后继续使用。
@@ -154,12 +154,12 @@ screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-
 1. 先继续阅读当前主题，后台失败不会使当前正文失效。
 2. 展开完整列表，查看失败文章。
 3. 点击“重新预加载”。
-4. 如果再次失败，检查“设置 → 请求数据”中的错误、`429` 或冷却状态。
+4. 如果再次失败，检查“设置 → 日志记录 → 请求记录”中的错误、`429` 或冷却状态。
 5. 原生主题也打不开时，优先排查登录、权限、网络、帖子状态或 Cloudflare 验证。
 
 ![请求数据面板中的请求速率、异常、排队和冷却状态](/screenshots/guide-11-request-flow.png)
 
-<p class="image-caption">重新预加载仍失败时打开“设置 → 请求数据”，先查看失败请求、排队和冷却状态，再决定等待、重试或进入原生页面检查。</p>
+<p class="image-caption">重新预加载仍失败时打开“设置 → 日志记录 → 请求记录”，先查看失败请求、排队和冷却状态，再决定等待、重试或进入原生页面检查。</p>
 
 切换到失败主题后，阅读器仍会尝试按正常主题打开流程取得必要数据。
 

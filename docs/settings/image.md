@@ -1,12 +1,12 @@
 ---
 title: 图片设置
-description: 逐项配置灯箱评论、描述、原图策略和三种阅读形态的帖子图片比例。
+description: 逐项配置大图评论、说明、原图策略和三种阅读形态的正文图片大小。
 feature_ids: ["MEDIA-001", "MEDIA-003", "MEDIA-004", "MEDIA-005", "SET-002", "SET-003"]
 source_anchors: ["IMAGE_SCALE_OPTIONS", "lightboxOriginalByDefault", "loadLightboxCommentTree", "lightboxDescriptionHeight", "currentImageProfile", "image-lightbox"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19-image-lightbox.png"]
 ---
 
@@ -16,7 +16,7 @@ screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19
 
 ![图片设置页中的灯箱行为与帖子图片显示配置](/screenshots/guide-03-image-settings.png)
 
-## 灯箱行为
+## 大图查看器
 
 三个开关作用于下一次打开的图片灯箱：
 
@@ -38,9 +38,11 @@ screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19
 2. 拖动“图片比例”，或输入 50%–200% 的值。
 3. 需要三种形态共用时，点击右侧链状按钮。
 4. 查看草稿提示。
-5. 点击“确认应用”。
+5. 点击底部“保存全部更改”。
 
-比例只改变帖子正文中的显示尺寸，不会修改远端文件、灯箱原图、下载结果或宿主页面图片。
+比例只改变帖子正文中的显示尺寸，不会修改远端文件、大图原图、下载结果或原站页面图片。
+
+0.1.14 的新配置默认使用 50%。已经保存过有效比例的用户继续沿用原值，不会在升级时被覆盖。
 
 ## 共享与独立配置
 

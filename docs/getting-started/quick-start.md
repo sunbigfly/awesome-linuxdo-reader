@@ -4,7 +4,7 @@ description: 从主题列表打开阅读器，完成阅读、导航、互动和�
 feature_ids: ["CORE-002", "CORE-003", "CORE-006"]
 source_anchors: ["ldp-native-reader-trigger", "INITIAL_TOPIC_ID", "ensureReaderQueueEntry"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
 last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-01-reader-overview.png"]
@@ -18,7 +18,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png"]
 
 - 从普通主题标题进入时，默认优先使用链接携带的目标楼层。
 - 从消息、历史或收藏进入时，保留相应目标楼层。
-- 若启用了“打开帖子起始楼层号为 #1”，普通主题链接会从主楼层开始。
+- 若启用了“普通帖子从第 1 楼打开”，普通主题链接会从主楼层开始。
 
 也可以用页面顶部的阅读器入口恢复最近一次阅读的主题。
 

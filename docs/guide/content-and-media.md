@@ -4,7 +4,7 @@ description: 使用非中文正文翻译、原图灯箱、图片评论、下载�
 feature_ids: ["READ-012", "MEDIA-001", "MEDIA-002", "MEDIA-003", "MEDIA-004", "MEDIA-005", "MEDIA-006", "MEDIA-007", "MEDIA-008", "MEDIA-009", "MEDIA-010", "MEDIA-011", "MEDIA-012", "MEDIA-013", "MEDIA-014"]
 source_anchors: ["renderSolvedAnswerCard", "IMAGE_SCALE_OPTIONS", "openLightbox", "lightboxOriginalByDefault", "loadLightboxCommentTree", "lightboxDescriptionHeight", "batch-download", "openUserAvatarViewer", "bindReaderHls", "KATEX_VERSION", "renderReaderPoll", "data-reader-code-action", "readerMediaHtml", "prepareReaderOneboxes", "showReaderImageRetry", "createReaderTranslationController"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
 last_verified: 2026-07-26
 screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-25-user-card.png"]
@@ -76,6 +76,7 @@ screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19
 - KaTeX `0.16.22` 用于数学公式。
 - 投票支持选择、提交、更新、撤销和结果切换；权限与截止状态以原站为准。
 - 代码块支持复制和阅读器内预览；预览副本可以编辑并下载，本地编辑不会修改原帖。
+- 超过 10 行的代码块默认只显示前 10 行，并提供“展开全部 N 行”按钮；再次点击可收起，阅读器会尽量保持当前楼层和滚动位置不跳动。
 
 ## Onebox 与特殊内容
 

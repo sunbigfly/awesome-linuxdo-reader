@@ -4,7 +4,7 @@ description: 设置五区比例、浮窗位置、明暗主题、颜色、斑马�
 feature_ids: ["SET-001", "SET-007", "SET-008", "SET-009"]
 source_anchors: ["READER_THEME_MODES", "LAYOUT_REGION_KEYS", "readerWindowGeometryMarkup", "APPEARANCE_PROFILE_SETTING_KEYS"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
 last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-05-layout-settings.png", "/screenshots/guide-06-window-settings.png", "/screenshots/guide-07-appearance-settings.png"]
@@ -55,7 +55,7 @@ screenshots: ["/screenshots/guide-05-layout-settings.png", "/screenshots/guide-0
 - **暗**：使用阅读器暗色调色板；
 - **系统**：跟随 LINUX DO/操作系统的当前主题。
 
-切换立即生效，不需要点击“确认应用”。
+主题切换立即生效，不进入底部“保存全部更改”的草稿队列。
 
 ## 外观项目
 

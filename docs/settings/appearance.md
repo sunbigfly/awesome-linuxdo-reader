@@ -4,9 +4,9 @@ description: 配置主题模式、强调色、斑马纹、结构线、引用线�
 feature_ids: ["SET-001", "SET-009"]
 source_anchors: ["READER_THEME_MODES", "APPEARANCE_PROFILE_SETTING_KEYS"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-25
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-07-appearance-settings.png"]
 ---
 
@@ -60,7 +60,7 @@ screenshots: ["/screenshots/guide-07-appearance-settings.png"]
 4. 调整帖子背景和圆角。
 5. 开启结构颜色后，再设置关系线、引用线和分隔线。
 6. 检查楼中楼、引用、普通楼层和已解决答案。
-7. 点击“确认应用”。
+7. 点击底部“保存全部更改”。
 
 ## 共享规则
 

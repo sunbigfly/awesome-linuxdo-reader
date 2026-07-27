@@ -4,9 +4,9 @@ description: 设置桌面浮窗尺寸、坐标和拖拽缩放后的保存行为�
 feature_ids: ["SET-008"]
 source_anchors: ["readerWindowGeometryMarkup"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-06-window-settings.png"]
 ---
 
@@ -35,7 +35,7 @@ screenshots: ["/screenshots/guide-06-window-settings.png"]
 
 1. 输入宽度、高度、X、Y。
 2. 检查预览或状态提示。
-3. 点击“确认应用”。
+3. 点击底部“保存全部更改”。
 4. 切换到浮窗形态核对。
 
 ### 直接拖动浮窗

@@ -4,7 +4,7 @@ description: 按安装、打开、跳楼、图片、429、配置和缓存分类�
 feature_ids: ["CORE-005", "MEDIA-013", "DATA-003", "MONITOR-003", "MONITOR-004", "TROUBLE-001", "TROUBLE-002", "TROUBLE-003", "TROUBLE-004", "TROUBLE-005", "TROUBLE-006"]
 source_anchors: ["bypassReaderForThisTab", "showReaderImageRetry", "clearCurrentTopicCaches", "readerOpenFailureCanAutoRetry", "readerOpenAutoRetryDelay", "READER_ENDPOINT_429_BASE_BLOCK_MS", "LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY", "@match", "unavailablePostNumbers", "LIGHTBOX_IMAGE_RESOURCE_REQUESTS", "replacePrefsAndReload", "@supportURL"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
 last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-13-data-management.png"]
@@ -31,7 +31,7 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11
 2. 确认脚本和站点访问权限已启用。
 3. 安装/更新后完整刷新。
 4. 停用重复的正式版、本地版或同类接管脚本。
-5. 从脚本管理器确认版本为 `0.1.13`。
+5. 从脚本管理器确认版本为 `0.1.14`。
 
 ## 主题或楼层无法加载
 
@@ -56,7 +56,7 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11
 - 大多数不可恢复的 `4xx`：直接显示失败信息和“重新加载”；
 - 登录、权限、主题删除或 Cloudflare 验证：需要先处理对应原因。
 
-自动恢复持续出现时，不要同时重复点击刷新。先打开“设置 → 请求数据”查看请求类型、状态和冷却原因；最终失败后再使用错误页的“重新加载”手动重试。
+自动恢复持续出现时，不要同时重复点击刷新。先打开“设置 → 日志记录 → 请求记录”查看请求类型、状态和冷却原因；最终失败后再使用错误页的“重新加载”手动重试。
 
 ## 图片和媒体
 

@@ -2,11 +2,11 @@
 title: 楼层、时间轴与历史
 description: 使用时间轴、只看楼主、历史前后切换、多主题队列和实时阅读进度。
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014"]
-source_anchors: ["LDP_READER_QUEUE_KEY", "ldp-only-op-toggle", "bindTopicTimeline", "createReaderHistoryNavigation", "historyEdgeTriggerPercent", "READ_THRESHOLD", "bindReaderTopicPresence", "renderTopicNavLinks", "inlineTopicNavSvgUses", "LAST_READER_TOPIC_ROUTE_KEY", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
+source_anchors: ["LDP_READER_QUEUE_KEY", "ldp-only-op-toggle", "bindTopicTimeline", "createReaderHistoryNavigation", "historyEdgeTriggerPercent", "READ_THRESHOLD", "sendReaderReadTimings", "guardNativeReaderTimings", "bindReaderTopicPresence", "renderTopicNavLinks", "inlineTopicNavSvgUses", "LAST_READER_TOPIC_ROUTE_KEY", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-25
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-16-history.png", "/screenshots/guide-21-reading-queue.png"]
 ---
 
@@ -47,17 +47,28 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-1
 
 <p class="image-caption">历史面板显示保存的主题和最近位置；阅读器边缘的前后按钮沿同一条历史链切换，不按主题列表顺序切换。</p>
 
-“设置 → 其他功能 → 历史导航”提供：
+“设置 → 阅读与导航 → 历史前进与后退”提供：
 
-- 长显左右按钮；
-- 左右边缘触发区域，范围 0%–15%；
-- 最近点击排序或首次点击固定排序。
+- 始终显示前进和后退按钮；
+- 边缘唤出按钮范围，范围 0%–15%；
+- 最近打开排序或首次打开固定排序。
 
 边缘触发只控制按钮何时出现，不改变历史顺序。
 
 ## 真实已读进度
 
-阅读器在楼层进入有效阅读区域并达到阈值后更新已读状态，同时保存本地位置。滚动经过但未实际阅读的远处占位，不会简单地按最大楼层号全部标记。
+阅读器在楼层正文成功预加载后把它加入候选；只有候选楼层进入有效阅读区域或成为显式跳转目标时，才会提交已读并保存本地位置。滚动经过但未实际显示的远处占位不会按最大楼层号批量标记。
+
+0.1.14 的已读上报：
+
+- 每批最多提交 20 个楼层；
+- 优先处理当前可见的二级回复，再处理其他可见楼层；
+- 同一主题同一批成功请求在 60 秒内不会重复提交；
+- 可见请求之间至少保留 15 秒，并用浏览器锁避免多个标签页同时发送；
+- 阅读器打开时抑制原站 screen-track 对同一主题的重复计时；
+- 只有服务器确认成功后才更新本地已读，失败楼层保留待重试。
+
+这些约束减少 `/topics/timings` 重复请求和 `429` 风险，但不等于关闭已读上报。
 
 新回复到达时，主题活动与阅读器状态会同步；只有确认存在新楼层时，接近底部的阅读器才自动跟随，单纯刷新元数据不会改变滚动位置。消息跳转会等待目标进入虚拟窗口后再定位。
 

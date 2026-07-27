@@ -1,36 +1,46 @@
 ---
 title: 设置中心总览
-description: 理解 13 个设置面板、三种形态配置、共享字段、草稿与应用方式。
-feature_ids: ["USER-005", "SET-001"]
-source_anchors: ["renderSettingsUserInfo", "SETTINGS_PANEL_META", "READER_THEME_MODES"]
+description: 理解 14 个设置面板、分组导航、设置搜索、三种形态配置与统一保存方式。
+feature_ids: ["USER-005", "SET-001", "SET-020"]
+source_anchors: ["renderSettingsUserInfo", "SETTINGS_PANEL_META", "SETTINGS_NAV_GROUPS", "bindReaderPanelSearch", "saveAllSettingsDrafts", "READER_THEME_MODES"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-02-settings-overview.png"]
 ---
 
 # 设置中心总览
 
-点击阅读器标题栏的“设置”进入设置中心。左侧导航包含 13 个面板：
+点击阅读器标题栏的“设置”进入设置中心。0.1.14 将导航按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 14 个面板：
 
 | 面板 | 作用 |
 | --- | --- |
-| [用户信息](/settings/user-info) | 当前账号、社区统计、Connect 信任进度 |
-| [图片设置](/settings/image) | 正文图片比例和灯箱默认行为 |
-| [字体设置](/settings/font) | 渲染、宿主尺寸、界面/正文/回复字体 |
-| [布局设置](/settings/layout) | 左留白、主帖、间距、时间轴和右留白 |
-| [浮窗设置](/settings/window) | 浮窗宽高、坐标和编辑器窗口 |
-| [外观设置](/settings/appearance) | 主题颜色、斑马纹、结构线和楼层预览 |
-| [闪烁动效](/settings/motion) | 目标闪烁和等待区域动画 |
-| [性能设置](/settings/performance) | 取数、DOM 窗口、楼中楼预取和请求调度 |
-| [资源监控](/settings/resource-monitor) | 页面内存、长任务、DOM、媒体和网络趋势 |
-| [请求数据](/settings/request-data) | 请求速率、排队、P95、异常和 429 |
-| [其他功能](/settings/other) | 历史导航、打开位置、回复展示和 Boost 复制 |
+| [用户信息](/settings/user-info) | 当前账号、社区统计、Connect 信任进度和 LDC 账户数据 |
+| [图片设置](/settings/image) | 正文图片大小和大图查看器默认行为 |
+| [字体设置](/settings/font) | 字体显示优化、原站列表尺寸和界面/正文/回复字体 |
+| [布局设置](/settings/layout) | 左右留白、正文区域、时间轴和两者间距 |
+| [浮窗设置](/settings/window) | 浮窗宽高、位置、保持显示和锁定 |
+| [外观设置](/settings/appearance) | 按钮、链接、交替背景、关系线、分隔线和预览卡片 |
+| [动画与提示](/settings/motion) | 跳转楼层提示和帖子加载动画 |
+| [阅读与导航](/settings/other) | 队列入口、历史导航、帖子打开位置和退出方式 |
+| [帖子与回复](/settings/other) | 主帖操作列、二级回复显示位置和 Boost 复制 |
+| [适用站点](/settings/other) | 添加并管理其他 HTTPS Discourse 论坛 |
+| [性能设置](/settings/performance) | 楼层加载、页面保留范围、二级回复预加载和请求节奏 |
+| [日志记录](/settings/request-data) | 在请求记录和性能记录之间切换 |
 | [数据管理](/settings/data-management) | 配置导入导出、恢复默认和缓存清理 |
 | [关于](/settings/about) | 功能摘要、版本和项目入口 |
 
 ![设置中心完整导航、当前账号和 Connect 信任进度](/screenshots/guide-02-settings-overview.png)
+
+<p class="image-caption">截图展示设置中心的账号与配置结构；0.1.14 的导航名称、分组和搜索入口以本页文字及当前脚本为准。</p>
+
+## 分组与搜索
+
+- 桌面端导航按三组排列，滚动条替代旧的上下翻页按钮；窄屏仍使用横向导航。
+- 进入用户信息之外的设置页后，顶部会出现“搜索设置”输入框。
+- 搜索会匹配面板名称、设置标题、说明和常用功能词，并隐藏无关面板；清空搜索即可恢复全部项目。
+- 搜索结果为空时只显示空状态，不会删除、重置或保存任何设置。
 
 ## 三种配置形态
 
@@ -51,16 +61,18 @@ screenshots: ["/screenshots/guide-02-settings-overview.png"]
 - 布局共享某一区域时，其余区域会自动平衡，合计始终为 100%；
 - 草稿数量会显示在对应设置导航旁。
 
-## 应用与即时保存
+## 统一保存与即时设置
 
-- 图片、字体、布局、浮窗和外观使用草稿，点击“确认应用”后生效。
+- 图片、字体、布局、浮窗、外观和跳转提示中的草稿会实时预览。
+- 任一设置页产生草稿后，面板底部出现“保存全部更改”，同时显示未保存数量和涉及分类。
+- 点击一次即可提交全部草稿；若五区布局合计不是 100%，保存会停止并引导返回布局页。
 - 明、暗、系统主题切换立即生效。
 - 性能设置在下次打开阅读器时生效。
-- 其他开关和数据管理操作按控件说明即时执行或显示确认。
+- 阅读、交互、站点开关和数据管理操作按控件说明即时执行或显示确认。
 
 ## 设置窗口
 
-桌面端可以拖动设置窗口标题区域。调整颜色或滑块时，设置中心会弱化其他项目，减少误操作。窄屏下导航改为横向区域，并保留上下/左右滚动提示。
+桌面端可以拖动设置窗口标题区域或搜索栏空白处。输入框、按钮和搜索区域仍保持正常点击，不会误触拖动。窄屏下导航改为横向区域。
 
 ## 阅读每个设置页
 
@@ -68,7 +80,7 @@ screenshots: ["/screenshots/guide-02-settings-overview.png"]
 
 1. 从标题栏进入该面板的路径。
 2. 每个控件控制什么，以及可选范围。
-3. 修改是即时生效、确认应用，还是下次打开阅读器生效。
+3. 修改是即时生效、统一保存，还是下次打开阅读器生效。
 4. 浮窗、全屏和移动是否独立保存。
 5. 常见状态、错误判断和回退方法。
 

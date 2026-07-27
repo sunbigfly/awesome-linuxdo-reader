@@ -1,18 +1,18 @@
 ---
-title: 动效与其他功能
-description: 配置跳转闪烁、等待动画、历史导航、打开位置、回复展示和 Boost 复制。
+title: 动画、阅读与互动
+description: 配置跳转提示、加载动画、历史导航、退出方式、主帖操作列、完整讨论和 Boost 复制。
 feature_ids: ["READ-007", "READ-014", "ACTION-006", "SET-010", "SET-011", "SET-016", "SET-017", "SET-018", "SET-019"]
 source_anchors: ["historyEdgeTriggerPercent", "JUMP_HIGHLIGHT_SETTING_FIELDS", "BOOST_COPY_SETTING_ROWS", "jumpHighlightPrefsPatch", "READER_LOADING_ANIMATION_KEYS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-08-motion-settings.png", "/screenshots/guide-12-other-features.png", "/screenshots/guide-18-thread-context.png"]
 ---
 
-# 动效与其他功能
+# 动画、阅读与互动
 
-逐控件说明见[闪烁动效](/settings/motion)和[其他功能](/settings/other)。
+逐控件说明见[动画与提示](/settings/motion)和[阅读、帖子与适用站点](/settings/other)。
 
 ![闪烁提示和等待区域动画设置](/screenshots/guide-08-motion-settings.png)
 
@@ -28,9 +28,11 @@ screenshots: ["/screenshots/guide-08-motion-settings.png", "/screenshots/guide-1
 | 速率 | 0.5–2 次/秒 | 0.8 次/秒 |
 | 次数 | 1–6 次 | 2 次 |
 
-拖动时即时预览，确认后保存。边框宽度设为 0 可关闭轮廓。
+拖动时即时预览，通过底部“保存全部更改”统一保存。边框宽度设为 0 可关闭轮廓。
 
-## 等待区域动画
+## 加载动画
+
+0.1.14 的新配置默认使用“引文回声”；已经保存过的动画选择继续沿用。
 
 打开主题或切换队列时，可以使用随机模式或十种固定动画：入口、星群、回廊、字浪、晶体、页边批注、章节、引文回声、脚注和互动汇流。
 
@@ -38,29 +40,30 @@ screenshots: ["/screenshots/guide-08-motion-settings.png", "/screenshots/guide-1
 
 ## 历史导航
 
-- **长显左右按钮**：按钮始终显示。
-- **左右按钮触发区域**：鼠标进入两侧 0%–15% 区域时显示；0% 表示关闭。
-- **浏览历史排序**：最近点击倒序，或首次点击固定顺序。
+- **始终显示前进和后退按钮**：有可用历史时一直显示。
+- **边缘唤出按钮范围**：指针进入两侧 0%–15% 区域时显示；0% 表示关闭。
+- **历史列表排序**：最近打开倒序，或首次打开固定顺序。
 
 常显开启后，边缘触发设置不再决定按钮可见性。
 
 ## 帖子打开位置
 
-“打开帖子起始楼层号为 #1”只影响普通主题链接。消息、历史、收藏和明确楼层链接仍按其目标定位，避免丢失上下文。
+“普通帖子从第 1 楼打开”只影响普通主题链接。消息、历史、收藏和明确楼层链接仍按其目标定位，避免丢失上下文。“按两次 Esc 关闭阅读器”默认开启，临时面板会优先响应第一次 `Esc`。
 
 ## 回复展示
 
 ![父楼层下的二级回复和正式楼层展示](/screenshots/guide-18-thread-context.png)
 
-- 默认展开二级回复：在父楼层下展示直属回复。
-- 展开二级回复对应楼层：在主信息流正式位置完整展开。
+- 在父回复下展开二级回复：展示直接回复。
+- 启用“完整讨论”视图：递归阅读更深分支并记住窗口位置。
+- 从楼层列表隐藏二级回复：收纳为参与者头像标记，跳转仍可定位。
 
-两项同时打开时可能看到同一回复两次；全部关闭会失去二级回复的默认完整展示，因此阅读器会保留安全提示。
+完整讨论建立在父回复下展开之上；关闭前者时设置中心会同步处理关联开关，避免保留不可达配置。
 
 ## Boost 复制
 
 复制结果由三部分组成：
 
-`开头文字 + 原 Boost + 小尾巴`
+`前置文字 + 原 Boost + 末尾内容`
 
 小尾巴可以是数字递增或固定文字。数字模式可设置数字前内容和 1–99 的递增步长；固定尾巴、前缀等文本最多 16 字。结果预览不会发送任何内容。

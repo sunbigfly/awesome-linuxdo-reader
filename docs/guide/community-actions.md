@@ -1,12 +1,12 @@
 ---
 title: 回复与社区操作
-description: 在阅读器内回复、引用、点赞、回应、Boost、收藏、分享和执行权限操作。
-feature_ids: ["MEDIA-010", "ACTION-001", "ACTION-002", "ACTION-003", "ACTION-004", "ACTION-005", "ACTION-006", "ACTION-007", "ACTION-008", "ACTION-009", "ACTION-010", "ACTION-011", "ACTION-012", "ACTION-013"]
-source_anchors: ["renderReaderPoll", "ldp-replybtn", "data-selection-action=\"quote\"", "toggleReaderPostLike", "toggleReaderPostReaction", "renderBoostBubble", "quoteBoostInNativeReply", "BOOST_COPY_SETTING_ROWS", "toggleReaderBookmark", "name: 'share'", "TOPIC_NOTIFICATION_LEVELS", "openReaderReportDialog", "name: 'edit'", "composer:edited-post", "openReaderAssignDialog", "topicSharedIssueState"]
+description: 使用主帖操作列，并在阅读器内回复、引用、点赞、回应、Boost、收藏、分享和执行权限操作。
+feature_ids: ["MEDIA-010", "ACTION-001", "ACTION-002", "ACTION-003", "ACTION-004", "ACTION-005", "ACTION-006", "ACTION-007", "ACTION-008", "ACTION-009", "ACTION-010", "ACTION-011", "ACTION-012", "ACTION-013", "ACTION-014"]
+source_anchors: ["renderReaderPoll", "syncTopicActionRail", "ldp-replybtn", "data-selection-action=\"quote\"", "toggleReaderPostLike", "toggleReaderPostReaction", "renderBoostBubble", "quoteBoostInNativeReply", "BOOST_COPY_SETTING_ROWS", "toggleReaderBookmark", "name: 'share'", "TOPIC_NOTIFICATION_LEVELS", "openReaderReportDialog", "name: 'edit'", "composer:edited-post", "openReaderAssignDialog", "topicSharedIssueState"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-26
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide-17-bookmarks-reactions.png", "/screenshots/guide-15-notifications-replies.png"]
 ---
 
@@ -17,6 +17,28 @@ screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide
 ![楼中楼中的回应、点赞、回复、Boost 和主题底部操作](/screenshots/guide-20-community-actions.png)
 
 <p class="image-caption">先在楼层底部找到回复、点赞、回应和 Boost；主题级分享、收藏、通知和回复入口位于正文末尾。</p>
+
+## 主帖操作列
+
+0.1.14 默认在正文左侧显示主帖快捷操作列，集中提供：
+
+- 回到主题顶部；
+- 主帖点赞及计数；
+- 回复主题；
+- Boost（站点支持且账号可用时）；
+- 收藏主题；
+- 展开后的分享、通知和其他主题操作。
+
+点赞、收藏和 Boost 状态会与主帖正文及实时更新同步。操作列展开时会暂时避让历史按钮；接近左右边缘时只保留收纳按钮，悬停或聚焦后恢复。
+
+“设置 → 帖子与回复 → 主帖操作列”可以：
+
+1. 关闭“始终显示主帖操作列”；
+2. 锁定当前位置；
+3. 在未锁定时长按收纳按钮约 420 ms 后拖动；
+4. 恢复到正文左侧默认位置。
+
+拖动位置按阅读器尺寸保存，窗口缩放或形态变化时会重新限制在可用范围内。
 
 ## 回复与引用
 
@@ -53,7 +75,7 @@ Boost 气泡显示内容和参与用户。账号权限允许时可以发送、�
 3. 如果当前草稿已经提及该用户，阅读器只聚焦编辑器，不会重复插入；
 4. 自动填充只修改当前草稿，不会立即发送，也不会修改原 Boost。发送前请检查引用内容和目标用户。
 
-“设置 → 其他功能 → Boost 复制”只改变复制到剪贴板的文本：
+“设置 → 帖子与回复 → 复制 Boost 文本”只改变复制到剪贴板的文本：
 
 - 开头文字；
 - 数字递增模式及步长；

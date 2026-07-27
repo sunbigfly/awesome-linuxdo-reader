@@ -1,12 +1,12 @@
 ---
 title: 用户信息
-description: 查看当前账号资料、社区统计和 Connect 信任级别进度，并理解刷新与数据来源。
-feature_ids: ["USER-005"]
-source_anchors: ["renderSettingsUserInfo"]
+description: 查看当前账号资料、社区统计、Connect 信任进度和 LINUX DO Credit 账户数据。
+feature_ids: ["USER-005", "USER-006"]
+source_anchors: ["renderSettingsUserInfo", "fetchLinuxDoCreditUser", "settingsCreditHtml"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-02-settings-overview.png"]
 ---
 
@@ -14,7 +14,7 @@ screenshots: ["/screenshots/guide-02-settings-overview.png"]
 
 路径：**阅读器标题栏 → 设置 → 用户信息**。
 
-这个面板只用于查看当前登录账号的状态，不在这里修改昵称、头像、邮箱或权限。需要变更账号资料时，请回到 LINUX DO 原生页面。
+这个面板只用于查看当前登录账号的状态，不在这里修改昵称、头像、邮箱、权限或 LDC 资产。需要变更资料或执行交易时，请进入对应原站。
 
 ![设置中心用户信息页展示当前账号与 Connect 信任进度](/screenshots/guide-02-settings-overview.png)
 
@@ -32,9 +32,30 @@ screenshots: ["/screenshots/guide-02-settings-overview.png"]
 
 分子是当前值，分母是要求值。达到某一项不等于账号一定立即升级；最终等级由 LINUX DO 的原站规则和后台状态决定。
 
-## 基本信息标签
+## 用户信息标签
 
-“基本信息”汇总当前账号可公开读取的资料与社区统计。字段是否出现取决于原站返回值和当前账号权限；某项为空时，阅读器不会自行推断。
+“用户信息”汇总当前账号可公开读取的资料与社区统计。字段是否出现取决于原站返回值和当前账号权限；某项为空时，阅读器不会自行推断。
+
+## LDC 标签
+
+LINUX DO 站点新增“LDC”标签，用于只读展示 `credit.linux.do` 当前登录账号的数据：
+
+| 区域 | 内容 |
+| --- | --- |
+| 资产摘要 | 可用余额、社区余额、今日剩余额度 |
+| 积分与收支 | 未来积分、累计社区积分、收入、支出、流转和净收入 |
+| 支付与账户 | 支付分、支付等级、每日限额、支付密钥状态和管理员状态 |
+| 快捷入口 | LDC 首页、活动、积分和设置 |
+
+数据通过 LDC 登录会话读取并缓存 30 分钟。打开 `credit.linux.do` 后，脚本会在该站点更新最近一次成功缓存；设置中心也会按需联网刷新。
+
+以下情况不会用错误账号数据覆盖当前面板：
+
+- LDC 返回用户名与当前 LINUX DO 账号不一致；
+- LDC 登录或授权已失效；
+- 请求超时、网络失败或脚本没有跨站请求权限。
+
+联网失败时可以显示同账号最近一次成功缓存，并同时提示刷新失败；没有可用缓存时会提供“打开 LDC 同步”入口。所有资产和额度只用于查看，最终状态以 LDC 原站为准。
 
 ## 手动刷新
 
@@ -47,8 +68,10 @@ screenshots: ["/screenshots/guide-02-settings-overview.png"]
 ## 状态判断
 
 - **指标没有变化**：原站统计可能尚未结算，稍后再查。
-- **部分字段缺失**：先确认登录状态，再检查“请求数据”是否有权限错误。
+- **部分字段缺失**：先确认登录状态，再检查“日志记录 → 请求记录”是否有权限错误。
 - **全部内容为空**：刷新一次；仍为空时重新加载 LINUX DO 页面。
 - **与原站不一致**：以原站账号页为准，并清理“用户卡”缓存后复查。
+- **LDC 提示账号不一致**：分别确认 LINUX DO 和 LDC 当前登录账号，不要依赖旧缓存判断资产。
+- **LDC 提示授权失效**：先打开 LDC 完成登录，再回到设置中心刷新。
 
 此页显示真实账号数据。截图、录屏或提交问题时，请自行决定是否隐藏账号信息。

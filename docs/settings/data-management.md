@@ -4,9 +4,9 @@ description: 导出、导入与恢复设置，查看六类本地缓存并按选�
 feature_ids: ["DATA-001", "DATA-002"]
 source_anchors: ["readerConfigExportPayload", "CACHE_TYPES"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-13-data-management.png"]
 ---
 
@@ -20,14 +20,17 @@ screenshots: ["/screenshots/guide-13-data-management.png"]
 
 ### 导出设置
 
-导出文件包含规范化的阅读器配置，例如图片、灯箱、字体、布局、浮窗、外观、动效、性能和其他功能。
+导出文件包含当前版本规范化的图片、字体、布局、浮窗、外观、动画、性能、阅读和交互设置。
 
 不包含：
 
 - 登录凭据和 Cookie；
 - 帖子正文；
 - 浏览历史；
+- 阅读队列；
+- 其他适用站点；
 - 收藏、回应或原站账号数据；
+- LDC 账户数据和成功缓存；
 - API 响应缓存。
 
 ### 导入设置

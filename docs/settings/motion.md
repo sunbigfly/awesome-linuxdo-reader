@@ -1,18 +1,18 @@
 ---
-title: 闪烁动效
-description: 配置目标楼层闪烁提示和主题加载等待动画，并兼顾减少动态效果。
+title: 动画与提示
+description: 配置目标楼层提示和主题加载动画，并兼顾减少动态效果。
 feature_ids: ["SET-010", "SET-011"]
 source_anchors: ["jumpHighlightPrefsPatch", "READER_LOADING_ANIMATION_KEYS"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-08-motion-settings.png"]
 ---
 
-# 闪烁动效
+# 动画与提示
 
-路径：**阅读器标题栏 → 设置 → 闪烁动效**。
+路径：**阅读器标题栏 → 设置 → 动画与提示**。
 
 ![闪烁动效页中的颜色、轮廓、速率、次数和等待动画](/screenshots/guide-08-motion-settings.png)
 
@@ -30,7 +30,7 @@ screenshots: ["/screenshots/guide-08-motion-settings.png"]
 
 拖动参数时可查看预览。颜色应同时在明、暗主题下可辨认，但不要遮挡正文。
 
-## 等待区域动画
+## 加载动画
 
 主题打开、队列切换或数据尚未就绪时，可以选择：
 
@@ -48,6 +48,8 @@ screenshots: ["/screenshots/guide-08-motion-settings.png"]
 
 “换一个”只刷新预览，不会触发网络请求，也不会打开新主题。
 
+0.1.14 的新配置默认使用“引文回声”。已有用户已经选择过的加载动画继续沿用，不会在升级时重置。
+
 ## 减少动态效果
 
 浏览器或操作系统启用“减少动态效果”时，阅读器降低动画幅度和复杂度。若跳转提示仍令人不适：
@@ -59,4 +61,4 @@ screenshots: ["/screenshots/guide-08-motion-settings.png"]
 
 ## 何时生效
 
-确认保存后，下一次楼层跳转和下一次等待状态使用新配置。当前已经播放的动画不会从中途改用新样式。
+点击底部“保存全部更改”后，下一次楼层跳转使用新的提示配置。加载动画样式在选择后即时保存；当前已经播放的动画不会从中途改用新样式。

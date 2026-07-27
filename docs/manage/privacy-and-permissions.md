@@ -1,12 +1,12 @@
 ---
 title: 隐私、权限与边界
-description: 理解 userscript 权限、外部依赖、本地存储、请求脱敏和账号数据边界。
-feature_ids: ["MEDIA-014", "DATA-004", "DATA-005", "MONITOR-005", "TROUBLE-005"]
-source_anchors: ["READER_TRANSLATION_CACHE_KEY", "PERSISTENT_CACHE_CONFIG", "@grant", "requestFlowPath", "@supportURL"]
+description: 理解 userscript 权限、LDC 只读数据、外部依赖、本地存储、请求脱敏和账号数据边界。
+feature_ids: ["MEDIA-014", "USER-006", "DATA-004", "DATA-005", "MONITOR-005", "TROUBLE-005"]
+source_anchors: ["READER_TRANSLATION_CACHE_KEY", "LDC_USER_BRIDGE_CACHE_KEY", "fetchLinuxDoCreditUser", "PERSISTENT_CACHE_CONFIG", "@grant", "requestFlowPath", "@supportURL"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-24
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-14-about.png"]
 ---
 
@@ -18,16 +18,16 @@ screenshots: ["/screenshots/guide-14-about.png"]
 
 ## userscript 元数据
 
-当前 `0.1.13`：
+当前 `0.1.14`：
 
 | 字段 | 值 | 用途 |
 | --- | --- | --- |
 | `@match` | 21 个内置社区及 `https://*/*` | 允许内置站点和用户保存的自定义域名启动；其他站点会在业务初始化前退出 |
-| `@grant` | `GM_getValue`、`GM_setValue` | 跨站读取和保存用户验证过的自定义 Discourse 域名 |
-| `@grant` | `GM_xmlhttpRequest` | 检测自定义站点、获取允许的跨域公开资源，以及执行用户主动开启的正文翻译 |
+| `@grant` | `GM_getValue`、`GM_setValue` | 保存设置、自定义站点和同账号最近一次 LDC 成功缓存 |
+| `@grant` | `GM_xmlhttpRequest` | 检测自定义站点、读取 LDC 只读账户摘要、获取允许的跨域公开资源，以及执行用户主动开启的正文翻译 |
 | `@grant` | `GM_getResourceText` | 读取发布版样式资源 |
 | `@grant` | `unsafeWindow` | 与当前 Discourse 页面运行时协作 |
-| `@connect` | `connect.linux.do`、翻译接口及 `*` | Connect 数据、Google / Microsoft 翻译，以及用户输入域名的 Discourse 检测 |
+| `@connect` | `connect.linux.do`、翻译接口及 `*` | Connect、LDC、Google / Microsoft 翻译，以及用户输入域名的 Discourse 检测 |
 | `@run-at` | `document-start` | 在 SPA 和页面初始化前建立必要边界 |
 
 安装时脚本管理器会展示权限。若未来新增 GM API 或跨域目标，项目必须同步更新源码、功能目录和本页。
@@ -51,6 +51,8 @@ screenshots: ["/screenshots/guide-14-about.png"]
 ## 原站数据
 
 阅读器不创建独立账号体系。回复、点赞、回应、收藏、通知级别、用户关系、举报和管理操作会调用原站能力。成功提示后若状态重要，应在网络恢复时再次确认。
+
+LDC 面板只读取当前 `credit.linux.do` 登录会话返回的账户摘要，不包含支付密钥内容，也不会发起支付、转账或设置修改。脚本会核对 LDC 用户名与当前 LINUX DO 用户名；不一致时拒绝采用联网结果。最近一次同账号成功结果可在脚本存储中保留 30 分钟，设置导出不包含这份缓存。
 
 ## 监控数据
 

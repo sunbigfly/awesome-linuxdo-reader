@@ -1,36 +1,44 @@
 ---
-title: 其他功能
-description: 添加自定义 Discourse 站点，并配置历史导航、帖子起始楼层、二级回复展示和 Boost 复制。
-feature_ids: ["CORE-007", "READ-007", "ACTION-006", "SET-016", "SET-017", "SET-018", "SET-019"]
-source_anchors: ["CUSTOM_DISCOURSE_SITES_KEY", "historyEdgeTriggerPercent", "BOOST_COPY_SETTING_ROWS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
+title: 阅读、帖子与适用站点
+description: 配置队列入口、历史、退出、主帖操作列、完整讨论、Boost 复制和其他 Discourse 站点。
+feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "SET-016", "SET-017", "SET-018", "SET-019", "SET-021"]
+source_anchors: ["CUSTOM_DISCOURSE_SITES_KEY", "readerQueueAlwaysVisibleWhenEmpty", "historyEdgeTriggerPercent", "doubleEscapeToCloseReader", "syncTopicActionRail", "aggregateDescendantReplies", "openDescendantRepliesWindow", "BOOST_COPY_SETTING_ROWS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18-thread-context.png"]
 ---
 
-# 其他功能
+# 阅读、帖子与适用站点
 
-路径：**阅读器标题栏 → 设置 → 其他功能**。
+0.1.14 将原“其他功能”拆分为三个面板：
+
+- **阅读与导航**：队列入口、历史、帖子打开位置和退出方式；
+- **帖子与回复**：主帖操作列、二级回复显示位置和 Boost 复制；
+- **适用站点**：其他 HTTPS Discourse 论坛。
 
 ![其他功能页中的历史导航、打开位置、回复展示和 Boost 复制](/screenshots/guide-12-other-features.png)
 
-## 自定义站点
+## 阅读队列入口
 
-输入 HTTPS Discourse 论坛的域名或完整网址，点击“验证并添加”。阅读器会匿名访问该站点的 `/site/basic-info.json`；检测到 Discourse 公开站点信息后才会保存。已内置站点不需要重复添加，保存的域名可以在同一区域移除。
+“队列为空时仍显示入口”默认开启。空队列按钮显示关闭符号而不是文章数：
 
-自定义域名保存在脚本管理器的全局脚本存储中。添加后访问该站并完整刷新页面即可使用；若目标不是 Discourse、拒绝访问公开接口或请求超时，阅读器不会保存。
+- 点击入口仍可确认当前队列为空；
+- 点击右上角关闭操作会同时关闭面板并保存“空队列时隐藏”；
+- 加入第一篇文章后，入口不受该设置影响并恢复显示数量。
 
-## 历史导航
+## 历史导航与退出
 
 | 设置 | 可选值 | 结果 |
 | --- | --- | --- |
-| 长显左右按钮 | 开 / 关 | 开启后，上一条/下一条历史按钮始终显示 |
-| 左右按钮触发区域 | 0%–15% | 鼠标进入两侧区域时显示按钮；0% 关闭边缘触发 |
-| 浏览历史排序 | 最近点击 / 首次点击 | 决定历史列表与前后切换顺序 |
+| 始终显示前进和后退按钮 | 开 / 关 | 有可用历史时一直显示；关闭后由边缘唤出 |
+| 边缘唤出按钮范围 | 0%–15% | 指针进入两侧区域时显示按钮；0% 关闭边缘唤出 |
+| 历史列表排序 | 最近打开 / 首次打开 | 决定历史列表与前后切换顺序 |
+| 普通帖子从第 1 楼打开 | 开 / 关 | 只影响普通帖子链接 |
+| 按两次 Esc 关闭阅读器 | 开 / 关 | 开启后须在 1.5 秒内连续按两次；关闭后按一次即可 |
 
-常显开启后，边缘触发范围不再决定按钮可见性。历史为空或已到边界时，对应按钮禁用。
+完整讨论、父回复预览、大图查看器、代码预览和原生回复编辑器会先消费 `Esc`。只有这些临时层都已关闭时，双击退出规则才作用于阅读器本体。
 
 ## 帖子打开位置
 
@@ -42,27 +50,40 @@ screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18
 
 因此，这个开关不会破坏带楼层目标的回跳。
 
-## 二级回复展示
+## 主帖操作列
+
+“始终显示主帖操作列”默认开启；“锁定操作列位置”默认关闭。未锁定时长按操作列收纳按钮约 420 ms 后拖动，位置会保存；“恢复默认”将其放回正文左侧。
+
+操作列包含回顶、点赞、回复、Boost 和收藏，展开后补充分享、通知等主题操作。站点缺少某项插件或账号没有权限时，对应入口不会出现。
+
+## 二级回复显示位置
 
 ![父楼层下展开的二级回复、关系线和正式楼层](/screenshots/guide-18-thread-context.png)
 
-| 设置 | 位置 |
+| 设置 | 结果 |
 | --- | --- |
-| 默认展开二级回复 | 父楼层下的上下文区域 |
-| 展开二级回复对应楼层 | 主信息流中的正式楼层位置 |
+| 在父回复下展开二级回复 | 直接显示父回复收到的回复 |
+| 启用“完整讨论”视图 | 长分支提供独立的可拖动、可缩放讨论窗口 |
+| 从楼层列表隐藏二级回复 | 将正式楼层收纳为参与者头像标记，跳转仍可定位 |
 
-两项都开时，同一回复可能出现两次：一次表达父子关系，一次保留正式楼层位置。至少保留一种完整展开方式；设置中心会对可能丢失上下文的组合给出提示。
+完整讨论视图建立在父回复下展开之上。关闭父回复下展开时，设置中心会同步关闭完整讨论；关闭完整讨论时仍可保留普通直属回复分页。
 
 ## Boost 复制
 
 复制结果由三部分组成：
 
-`开头文字 + 原 Boost + 小尾巴`
+`前置文字 + 原 Boost + 末尾内容`
 
 1. 选择数字递增或固定文字。
 2. 数字模式设置 1–99 的步长，并填写数字前文字。
-3. 固定模式填写最多 16 字的小尾巴。
+3. 固定模式填写最多 16 字的末尾文字。
 4. 在预览中检查最终结果。
 5. 实际点击复制时才写入剪贴板。
 
 这个设置只改变复制文本，不会编辑、发送或覆盖原 Boost。
+
+## 其他适用站点
+
+输入 HTTPS Discourse 论坛的域名或完整网址，点击“验证并添加”。阅读器会匿名访问该站点的 `/site/basic-info.json`；检测到 Discourse 公开站点信息后才会保存。已内置站点不需要重复添加，保存的域名可以在同一区域移除。
+
+自定义域名保存在脚本管理器的全局脚本存储中。添加后访问该站并完整刷新页面即可使用；若目标不是 Discourse、拒绝访问公开接口或请求超时，阅读器不会保存。

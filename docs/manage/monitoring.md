@@ -4,15 +4,15 @@ description: 阅读资源趋势、请求脉络、429 状态和 Cloudflare 恢复
 feature_ids: ["MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
 source_anchors: ["RESOURCE_MONITOR_ROWS", "REQUEST_FLOW_MAX_ENTRIES", "READER_ENDPOINT_429_BASE_BLOCK_MS", "LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY", "requestFlowPath"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-10-resource-monitor.png", "/screenshots/guide-11-request-flow.png"]
 ---
 
 # 资源与请求监控
 
-两个面板都是当前页面内的临时观测工具，不会自动上传记录。
+0.1.14 将两类观测合并为“设置 → 日志记录”，通过“请求记录”和“性能记录”标签切换。记录都只存在于当前页面内存，不会自动上传。
 
 ## 实时资源监控
 
@@ -21,26 +21,26 @@ screenshots: ["/screenshots/guide-10-resource-monitor.png", "/screenshots/guide-
 | 指标 | 含义 |
 | --- | --- |
 | 页面内存估计 | 浏览器允许时的页面级估计，不能拆成单个脚本 |
-| 10 秒共享长任务 | 主线程长任务次数与累计时长 |
-| 阅读器 DOM | 阅读器外壳内全部节点 |
-| 主楼层 DOM | 已挂载与内存保留楼层 |
-| 楼中楼缓存 | 已建立状态的父楼层组 |
-| 正文媒体 DOM | 图片、音视频与 iframe |
-| 当前阅读器请求 | 执行中与排队 |
-| 60 秒阅读器网络 | 请求数与已知传输量 |
+| 最近 10 秒主线程卡顿 | 次数与累计耗时，包含原站与阅读器 |
+| 阅读器页面元素 | 阅读器外壳内全部节点 |
+| 楼层列表元素 | 当前显示与内存保留楼层 |
+| 二级回复缓存 | 已建立回复状态的父楼层组 |
+| 正文媒体元素 | 图片、音视频与内嵌页面 |
+| 当前网络请求 | 进行中与排队 |
+| 最近 60 秒网络 | 请求数与已知传输量 |
 
 ![资源监控中的基线、阅读器 DOM 和前后台事件](/screenshots/guide-10-resource-monitor.png)
 
 面板还提供：
 
 - 最近 60 秒前台/后台事件；
-- 阅读器、宿主/未标记、页面共享三种范围；
+- 阅读器、原站/未标记、页面共享三种范围；
 - 最近 10 分钟内存、DOM、保留楼层趋势；
 - 毫秒级 Performance Timeline、Resource Timing、DOM 和可见性事件。
 
 浏览器不会提供单个 userscript 的真实总 CPU 或独占内存。MutationRecord 没有原生时间戳，DOM 事件按观察器回调时状态记录。
 
-## 请求数据
+## 请求记录
 
 ![请求速率、脉络、类型、异常和限流边界](/screenshots/guide-11-request-flow.png)
 
@@ -55,9 +55,9 @@ screenshots: ["/screenshots/guide-10-resource-monitor.png", "/screenshots/guide-
 
 ## 来源与类型
 
-来源分为阅读器、宿主和浏览器资源。类型包括正文、楼中楼、头像、媒体、用户资料、收藏、消息、实时通道、在线状态、回应、搜索、已读上报和静态资源。
+来源分为阅读器、原站和浏览器资源。类型包括正文、二级回复、头像、媒体、用户资料、收藏、消息、实时通道、在线状态、回应、搜索、已读上报和静态资源。
 
-宿主 fetch/XHR 能纳入共享账本，但无法可靠确认脚本来源的活动保留为“宿主/未标记”或“页面共享”，不会强行归因。
+原站 fetch/XHR 能纳入共享账本，但无法可靠确认脚本来源的活动保留为“原站/未标记”或“页面共享”，不会强行归因。
 
 ## 429 与排队原因
 

@@ -1,32 +1,36 @@
 ---
-title: 请求数据
-description: 查看 10 秒与 60 秒请求预算、队列、优先级、异常、P95、429 和 Cloudflare 恢复状态。
-feature_ids: ["MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
-source_anchors: ["REQUEST_FLOW_MAX_ENTRIES", "READER_ENDPOINT_429_BASE_BLOCK_MS", "LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY", "requestFlowPath"]
+title: 日志记录
+description: 在请求记录和性能记录间切换，查看请求预算、异常、P95、页面元素、长任务和网络趋势。
+feature_ids: ["MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
+source_anchors: ["RESOURCE_MONITOR_ROWS", "REQUEST_FLOW_MAX_ENTRIES", "READER_ENDPOINT_429_BASE_BLOCK_MS", "LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY", "requestFlowPath"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-23
-screenshots: ["/screenshots/guide-11-request-flow.png"]
+last_verified: 2026-07-27
+screenshots: ["/screenshots/guide-11-request-flow.png", "/screenshots/guide-10-resource-monitor.png"]
 ---
 
-# 请求数据
+# 日志记录
 
-路径：**阅读器标题栏 → 设置 → 请求数据**。
+路径：**阅读器标题栏 → 设置 → 日志记录**。
+
+0.1.14 把原“请求数据”和“资源监控”合并到同一面板，通过顶部标签切换。两个标签都只保留当前页面内存中的诊断记录，不会自动上传。
 
 ![请求数据页中的速率、脉络、异常和 HTTP 状态](/screenshots/guide-11-request-flow.png)
 
-这个面板显示同源标签页共享的请求账本。它只记录诊断所需的请求类型、状态、时间和脱敏路径，不保存查询参数、正文、Cookie 或响应内容。
+## 请求记录
+
+请求标签显示同源标签页共享的请求账本。它只记录诊断所需的请求类型、状态、时间和脱敏路径，不保存查询参数、正文、Cookie 或响应内容。
 
 ## 顶部摘要
 
 | 指标 | 解释 |
 | --- | --- |
-| 本页 10 秒 | 当前标签页最近 10 秒请求次数和速率 |
-| 本页 60 秒 | 当前标签页最近 60 秒请求次数和速率 |
-| 本页 100ms 峰值 | 100 ms 桶内最高启动数量 |
-| 本页 60 秒传输 | 可观测到的传输量 |
-| 本页 60 秒异常 | 非预期状态或调度异常数量 |
+| 最近 10 秒请求 | 当前标签页最近 10 秒请求次数和速率 |
+| 最近 60 秒请求 | 当前标签页最近 60 秒请求次数和速率 |
+| 100ms 内峰值 | 100 ms 桶内最高启动数量 |
+| 最近 60 秒传输 | 可观测到的传输量 |
+| 最近 60 秒异常 | 非预期状态或调度异常数量 |
 
 这些值只代表可观测请求，不等于账号或站点的完整服务端配额。
 
@@ -72,3 +76,11 @@ screenshots: ["/screenshots/guide-11-request-flow.png"]
 ## 数据保留
 
 请求记录最多保留约 15 分钟、1200 条。页面刷新后内存账本不会作为永久日志恢复。提交问题时优先提供面板截图、发生时间和操作步骤，不要复制 Cookie 或完整请求头。
+
+## 性能记录
+
+![性能记录中的页面元素、楼层、网络和前后台趋势](/screenshots/guide-10-resource-monitor.png)
+
+性能标签每秒形成快照，记录页面内存估算、主线程卡顿、阅读器页面元素、楼层列表元素、二级回复缓存、媒体元素和网络趋势，并区分阅读器、原站/未标记和页面共享范围。
+
+浏览器不会提供单个 userscript 的真实总 CPU 或独占内存。性能记录只能说明当前页面观测到的变化，不能把原站脚本、浏览器布局或垃圾回收强行归因给阅读器。

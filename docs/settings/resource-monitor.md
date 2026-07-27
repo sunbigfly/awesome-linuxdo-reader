@@ -1,18 +1,18 @@
 ---
-title: 资源监控
-description: 阅读实时资源快照、前后台事件、DOM、长任务、长帧脚本、媒体与网络趋势。
+title: 性能记录明细
+description: 阅读日志面板中的性能快照、前后台事件、页面元素、主线程卡顿、媒体与网络趋势。
 feature_ids: ["MONITOR-001"]
 source_anchors: ["RESOURCE_MONITOR_ROWS"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-10-resource-monitor.png"]
 ---
 
-# 资源监控
+# 性能记录明细
 
-路径：**阅读器标题栏 → 设置 → 资源监控**。
+路径：**阅读器标题栏 → 设置 → 日志记录 → 性能记录**。
 
 ![资源监控页中的基线、前后台实测和资源指标](/screenshots/guide-10-resource-monitor.png)
 
@@ -33,9 +33,9 @@ screenshots: ["/screenshots/guide-10-resource-monitor.png"]
 
 | 行 | 含义 |
 | --- | --- |
-| 阅读器 | 阅读器 Shadow DOM、元数据和相关资源 |
-| 宿主 / 未标记 | LINUX DO 页面或无法可靠归因的活动 |
-| 页面共享 | 标签页级别、不能只归到阅读器或宿主的指标 |
+| 阅读器 | 阅读器页面元素、元数据和相关资源 |
+| 原站 / 未标记 | LINUX DO 页面或无法可靠归因的活动 |
+| 页面共享 | 标签页级别、不能只归到阅读器或原站的指标 |
 
 前台事件和后台事件分开统计。切到后台后，计时器可能被浏览器节流或冻结；监控会保留真实空档，不补造采样点。
 
@@ -54,8 +54,8 @@ screenshots: ["/screenshots/guide-10-resource-monitor.png"]
 1. 先建立至少 10 秒基线。
 2. 重现一次卡顿、滚动或媒体加载。
 3. 看“首次变化”确认时间点。
-4. 对比阅读器与宿主行。
-5. 再到“请求数据”核对同一时间段是否有请求峰值或限流。
+4. 对比阅读器与原站行。
+5. 切到“请求记录”核对同一时间段是否有请求峰值或限流。
 
 ## 保留范围
 

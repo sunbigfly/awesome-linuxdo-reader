@@ -1,12 +1,12 @@
 ---
 title: 完整设置参考
 description: 汇总全部设置项、范围、默认值、生效时机和数据影响。
-feature_ids: ["SET-012", "SET-013", "SET-014", "SET-015", "SET-016", "SET-017", "SET-018", "SET-019"]
-source_anchors: ["PERFORMANCE_SETTING_GROUPS", "streamOverscanViewports", "nestedPrefetchViewports", "requestMaxConcurrent", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
+feature_ids: ["SET-012", "SET-013", "SET-014", "SET-015", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
+source_anchors: ["PERFORMANCE_SETTING_GROUPS", "streamOverscanViewports", "nestedPrefetchViewports", "requestMaxConcurrent", "SETTINGS_NAV_GROUPS", "saveAllSettingsDrafts", "readerQueueAlwaysVisibleWhenEmpty", "doubleEscapeToCloseReader", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "aggregateDescendantReplies", "boostCopyMode"]
 since: 0.1.2
-version: 0.1.13
+version: 0.1.14
 status: current
-last_verified: 2026-07-25
+last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide-03-image-settings.png", "/screenshots/guide-04-font-settings.png", "/screenshots/guide-05-layout-settings.png", "/screenshots/guide-07-appearance-settings.png", "/screenshots/guide-09-performance-settings.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-13-data-management.png"]
 ---
 
@@ -14,28 +14,28 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 
 ![设置中心中的分类导航、当前用户信息和配置入口](/screenshots/guide-02-settings-overview.png)
 
-<p class="image-caption">设置中心按用户信息、图片、字体、布局、外观、性能、监控和数据管理分类；本页汇总各分类的范围与默认值。</p>
+<p class="image-caption">截图展示设置中心的主要配置入口；0.1.14 已改为三组、14 个面板，并支持搜索和统一保存。</p>
 
 ## 用户信息
 
-只读显示当前账号资料、社区统计和 Connect 信任级别进度。刷新按钮会重新请求权威数据。
+只读显示当前账号资料、社区统计、Connect 信任级别进度和 LDC 账户摘要。刷新按钮会重新请求权威数据。
 
 ## 图片设置
 
 | 设置 | 范围/选项 | 默认 | 生效 |
 | --- | --- | --- | --- |
-| 帖子图片比例 | 50%–200% | 100% | 确认应用 |
-| 默认展开图片评论 | 开/关 | 开 | 下次打开灯箱 |
-| 默认展开图片描述 | 开/关 | 开 | 下次打开灯箱 |
-| 灯箱默认原图 | 开/关 | 关 | 下次打开灯箱 |
+| 正文图片大小 | 50%–200% | 50% | 统一保存 |
+| 打开大图时展开评论 | 开/关 | 开 | 下次打开大图 |
+| 打开大图时展开图片说明 | 开/关 | 开 | 下次打开大图 |
+| 切换图片时优先加载原图 | 开/关 | 关 | 下次打开大图 |
 
 ## 字体设置
 
 | 设置 | 范围/选项 | 默认 |
 | --- | --- | --- |
-| 内置字体渲染 | 开/关 | 开 |
-| 扩展到宿主页面 | 开/关 | 开 |
-| 宿主标题/头像/统计/Label Card | 50%–200% | 105/70/105/105% |
+| 启用字体显示优化 | 开/关 | 开 |
+| 同时应用到原站页面 | 开/关 | 开 |
+| 嵌入阅读列表标题/头像/统计/标签卡片 | 50%–200% | 105/70/105/105% |
 | 字体 | 站点、系统、中文无衬线、衬线、等宽、自定义 | 系统 |
 | 字重 | 300/400/500/600 | 400 |
 | 颜色 | 跟随主题或自定义 | 跟随主题 |
@@ -43,8 +43,10 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 
 ## 布局与浮窗
 
-- 五区比例合计 100%，主帖最小 40%，时间轴最小 6%。
+- 五区比例合计 100%，正文区域最小 40%，楼层时间轴最小 6%。
+- 新默认比例为左侧留白 6%、正文区域 86%、正文与时间轴间距 0%、时间轴 8%、右侧留白 0%。
 - 浮窗最小 360 × 320 px。
+- 左右嵌入阅读默认宽度为当前浏览器宽度的 45%。
 - 浮窗、全屏、移动分别保存图片、字体、布局和外观。
 - 链按钮按字段共享，不是整页共享。
 
@@ -54,7 +56,7 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 
 明亮主题中，帖子斑马纹和宿主列表斑马纹默认均为 `#f7f7f7`，回复关系线默认为 `#6dab85`，楼层预览默认为 `#dba7a7`。已有自定义配置不会被版本更新强制覆盖。
 
-## 闪烁动效
+## 动画与提示
 
 - 闪烁圆角 0–24 px；
 - 边框 0–4 px；
@@ -78,19 +80,36 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 
 ## 资源监控与请求数据
 
-两页均为只读、内存内观测。资源趋势最多保留 10 分钟；请求数据最多保留 15 分钟、1200 条。不会把观测内容自动上传。
+“日志记录”面板在“请求记录”和“性能记录”两个标签之间切换。两者均为只读、内存内观测：资源趋势最多保留 10 分钟，请求记录最多保留 15 分钟、1200 条，不会自动上传。
 
-## 其他功能
+## 阅读与导航
 
 | 设置 | 选项 | 默认 |
 | --- | --- | --- |
-| 历史按钮常显 | 开/关 | 关 |
+| 队列为空时仍显示入口 | 开/关 | 开 |
+| 历史按钮常显 | 开/关 | 开 |
 | 边缘触发范围 | 0%–15% | 15% |
-| 历史排序 | 最近点击/首次点击 | 最近点击 |
+| 历史排序 | 最近打开/首次打开 | 最近打开 |
 | 普通主题从 #1 打开 | 开/关 | 关 |
+| 按两次 Esc 关闭阅读器 | 开/关 | 开 |
+
+## 帖子与回复
+
+| 设置 | 选项 | 默认 |
+| --- | --- | --- |
+| 始终显示主帖操作列 | 开/关 | 开 |
+| 锁定操作列位置 | 开/关 | 关 |
 | 父楼层下展开二级回复 | 开/关 | 开 |
-| 正式楼层展开二级回复 | 开/关 | 关 |
-| Boost 尾巴 | 数字递增/固定文字 | 数字递增 |
+| 启用“完整讨论”视图 | 开/关 | 开 |
+| 从楼层列表隐藏二级回复 | 开/关 | 开 |
+| Boost 末尾内容 | 数字递增/固定文字 | 数字递增 |
+
+## 搜索与保存
+
+- 设置搜索按面板名称、字段标题、说明和常用关键词筛选。
+- 图片、字体、布局、浮窗、外观和跳转提示草稿会实时预览。
+- 底部“保存全部更改”一次提交所有草稿；布局不是 100% 时拒绝保存。
+- 主题、性能、阅读与交互中的即时开关不进入草稿队列。
 
 ## 数据管理
 
