@@ -1112,6 +1112,7 @@
     .ldp-settings-fields{display:grid;gap:0;border-top:var(--ldp-divider-line-width,1px) solid var(--ldp-divider-line-color,#e5e5e5);}
     .ldp-setting-row{display:grid;grid-template-columns:88px minmax(0,1fr);align-items:center;gap:16px;
       margin:0;padding:13px 0;border-bottom:var(--ldp-divider-line-width,1px) solid var(--ldp-divider-line-color,#e5e5e5);font-size:var(--ldp-font-base,13px);}
+    .ldp-color-group > .ldp-settings-fields > .ldp-setting-row{grid-template-columns:136px minmax(0,1fr);}
     .ldp-setting-label{font-weight:650;white-space:nowrap;color:var(--primary-high,#333);}
     .ldp-setting-group{min-width:0;padding:10px 0 4px;border-bottom:var(--ldp-divider-line-width,1px) solid var(--ldp-divider-line-color,#e5e5e5);}
     .ldp-setting-group-title{padding:0 0 2px;color:var(--primary-high,#333);font-size:var(--ldp-font-base,13px);font-weight:700;line-height:1.35;}
