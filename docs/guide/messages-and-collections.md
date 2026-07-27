@@ -2,7 +2,7 @@
 title: 消息、历史与收藏
 description: 使用消息分类、检索、分页、历史管理以及收藏与回应中心。
 feature_ids: ["ACTION-004", "ACTION-007", "COLLECT-001", "COLLECT-002", "COLLECT-003", "COLLECT-004", "COLLECT-005", "COLLECT-006"]
-source_anchors: ["toggleReaderPostReaction", "toggleReaderBookmark", "NOTIFICATION_GROUPS", "notificationTypeIconName", "ldp-notification-mark-all", "renderHistoryPage", "ldp-history-clear", "BOOKMARK_TAB_LABELS", "ldp-bookmarks-multi"]
+source_anchors: ["toggleReaderPostReaction", "toggleReaderBookmark", "NOTIFICATION_GROUPS", "notificationTypeIconName", "notificationHref", "ldp-notification-mark-all", "renderHistoryPage", "ldp-history-clear", "BOOKMARK_TAB_LABELS", "ldp-bookmarks-multi"]
 since: 0.1.2
 version: 0.1.14
 status: current
@@ -35,6 +35,8 @@ screenshots: ["/screenshots/guide-15-notifications-replies.png", "/screenshots/g
 分类标签和每条消息都使用可访问的 Lucide 图标。消息卡片同时显示摘要、相对时间以及明确的“已读/未读”状态。
 
 每页最多 24 条。检索只筛选已经加载或缓存的消息；没有匹配不等于服务器上不存在。点击消息时，阅读器会打开目标主题、等待楼层挂载并定位。同一主题内的新目标楼层会在现有阅读器中直接跳转；Boost 通知会强制刷新目标附近数据，避免继续显示旧缓存。
+
+通知优先使用原站给出的展示链接；若该链接缺失或不能解析主题，阅读器会从通知本体及其 `data` 中提取 `topic_id`、`post_number`，重新生成目标地址。只有确实没有主题 ID 时才回退到原站通知页。
 
 “全部已读”会调用原站通知能力，影响账号状态。在具体分类中执行时只处理该分类支持的通知类型；单纯清理消息缓存不会把通知标记为已读。
 

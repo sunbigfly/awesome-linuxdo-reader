@@ -40,6 +40,7 @@
 // @grant        GM_getResourceText
 // @grant        unsafeWindow
 // @connect      connect.linux.do
+// @connect      credit.linux.do
 // @connect      translate.googleapis.com
 // @connect      edge.microsoft.com
 // @connect      api-edge.cognitive.microsofttranslator.com
@@ -9167,7 +9168,27 @@
 	}
 
 	function notificationHref(notification) {
-		return String(notification?._ldp_href || discoursePageUrl('/my/notifications'));
+		const presentedHref = String(notification?._ldp_href || '').trim();
+		const presentedRoute = extractTopicRouteFromUrl(presentedHref);
+		const data = notificationData(notification);
+		const topicId = Math.max(
+			0,
+			Number(presentedRoute?.topicId) ||
+			Number(notification?.topic_id) ||
+			Number(data.topic_id) ||
+			0
+		);
+		if (!topicId) return presentedHref || discoursePageUrl('/my/notifications');
+		const postNumber = Math.max(
+			1,
+			Number(presentedRoute?.postNumber) ||
+			Number(notification?.post_number) ||
+			Number(data.post_number) ||
+			1
+		);
+		return topicPageUrl(topicId, postNumber) ||
+			presentedHref ||
+			discoursePageUrl('/my/notifications');
 	}
 
 	function notificationSummary(notification) {

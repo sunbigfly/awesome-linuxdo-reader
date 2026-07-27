@@ -27,7 +27,7 @@ screenshots: ["/screenshots/guide-14-about.png"]
 | `@grant` | `GM_xmlhttpRequest` | 检测自定义站点、读取 LDC 只读账户摘要、获取允许的跨域公开资源，以及执行用户主动开启的正文翻译 |
 | `@grant` | `GM_getResourceText` | 读取发布版样式资源 |
 | `@grant` | `unsafeWindow` | 与当前 Discourse 页面运行时协作 |
-| `@connect` | `connect.linux.do`、翻译接口及 `*` | Connect、LDC、Google / Microsoft 翻译，以及用户输入域名的 Discourse 检测 |
+| `@connect` | `connect.linux.do`、`credit.linux.do`、翻译接口及 `*` | Connect、LDC 只读账户摘要、Google / Microsoft 翻译，以及用户输入域名的 Discourse 检测 |
 | `@run-at` | `document-start` | 在 SPA 和页面初始化前建立必要边界 |
 
 安装时脚本管理器会展示权限。若未来新增 GM API 或跨域目标，项目必须同步更新源码、功能目录和本页。
@@ -52,7 +52,7 @@ screenshots: ["/screenshots/guide-14-about.png"]
 
 阅读器不创建独立账号体系。回复、点赞、回应、收藏、通知级别、用户关系、举报和管理操作会调用原站能力。成功提示后若状态重要，应在网络恢复时再次确认。
 
-LDC 面板只读取当前 `credit.linux.do` 登录会话返回的账户摘要，不包含支付密钥内容，也不会发起支付、转账或设置修改。脚本会核对 LDC 用户名与当前 LINUX DO 用户名；不一致时拒绝采用联网结果。最近一次同账号成功结果可在脚本存储中保留 30 分钟，设置导出不包含这份缓存。
+LDC 面板通过显式声明的 `@connect credit.linux.do` 只读取当前登录会话返回的账户摘要，不包含支付密钥内容，也不会发起支付、转账或设置修改。脚本会核对 LDC 用户名与当前 LINUX DO 用户名；不一致时拒绝采用联网结果。最近一次同账号成功结果可在脚本存储中保留 30 分钟，设置导出不包含这份缓存。
 
 ## 监控数据
 

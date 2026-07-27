@@ -875,12 +875,12 @@
     "feature_id": "COLLECT-002",
     "title": "消息检索、翻页与全部已读",
     "category": "消息与收藏",
-    "description": "检索已加载消息、翻页、按当前类别标记已读，并精确跳转目标楼层或刷新 Boost 上下文。",
+    "description": "检索已加载消息、翻页、按当前类别标记已读；展示链接缺失时从通知数据重建主题与楼层目标，并刷新 Boost 上下文。",
     "source_anchor": "ldp-notification-mark-all",
     "since": "0.1.2",
     "version": "0.1.14",
     "status": "current",
-    "last_verified": "2026-07-25",
+    "last_verified": "2026-07-27",
     "screenshots": [
       "assets/screenshots/guide-15-notifications-replies.png"
     ],
