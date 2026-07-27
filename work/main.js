@@ -790,7 +790,7 @@
 		loadingAnimation: READER_LOADING_ANIMATION_DEFAULT,
 		translationMode: 'original',
 		openTopicsAtFirstPost: false,
-		doubleEscapeToCloseReader: true,
+		doubleEscapeToCloseReader: false,
 		topicActionRailVisible: true, topicActionRailFixed: false,
 		topicActionRailPosition: { x: 'left', y: .95 },
 		expandNestedRepliesByDefault: true,
@@ -4198,11 +4198,24 @@
 	function applyReaderQueueSurfacePosition(rail) {
 		if (!rail) return;
 		const modal = rail.closest('.ldp-modal');
+		const overlay = rail.closest('.ldp-overlay');
 		const state = normalizeReaderQueueSurfaceState(READER_QUEUE_SURFACE_STATE);
 		const customized = readerQueueSurfaceStateCustomized(state);
-		rail.classList.toggle('is-docked-left', customized && state.dock === 'left');
-		rail.classList.toggle('is-docked-right', customized && state.dock === 'right');
 		const modalRect = modal?.getBoundingClientRect();
+		const topicRailToggle = overlay?.classList.contains('ldp-fullpage') && modal?.clientWidth > 700
+			? overlay.querySelector('.ldp-topic-action-rail:not([hidden]) .ldp-topic-action-rail-toggle')
+			: null;
+		const topicRailToggleRect = topicRailToggle?.getBoundingClientRect();
+		const fullPageAlignedLeft = modalRect && topicRailToggleRect?.width
+			? Math.max(0, Math.min(
+				modal.clientWidth - rail.offsetWidth,
+				topicRailToggleRect.left + topicRailToggleRect.width / 2 -
+					modalRect.left - rail.offsetWidth / 2,
+			))
+			: null;
+		const fullPageXAligned = Number.isFinite(fullPageAlignedLeft);
+		rail.classList.toggle('is-docked-left', customized && !fullPageXAligned && state.dock === 'left');
+		rail.classList.toggle('is-docked-right', customized && !fullPageXAligned && state.dock === 'right');
 		const toggleRect = rail.querySelector('.ldp-reader-queue-toggle')?.getBoundingClientRect();
 		const bubbles = rail.querySelector('.ldp-reader-queue-bubbles');
 		if (modalRect && toggleRect && bubbles) {
@@ -4221,7 +4234,12 @@
 					const readerMain = modal.querySelector('.ldp-reader-main');
 					const leftTrack = readerMain ? Number.parseFloat(getComputedStyle(readerMain).gridTemplateColumns) : rail.offsetWidth;
 					const maxTop = Math.max(0, modal.clientHeight - rail.offsetHeight);
-					rail.style.left = `${Math.round(Math.max(0, (Math.max(leftTrack || 0, rail.offsetWidth) - rail.offsetWidth) / 2))}px`;
+					const defaultLeft = fullPageXAligned
+						? fullPageAlignedLeft
+						: (Math.max(leftTrack || 0, rail.offsetWidth) - rail.offsetWidth) / 2;
+					rail.style.left = `${Math.round(Math.max(0, Math.min(
+						modal.clientWidth - rail.offsetWidth, defaultLeft,
+					)))}px`;
 					rail.style.top = `${Math.round(maxTop * .12)}px`;
 					rail.style.bottom = 'auto';
 				}
@@ -4231,7 +4249,7 @@
 		}
 		const maxLeft = Math.max(0, modal.clientWidth - rail.offsetWidth);
 		const maxTop = Math.max(0, modal.clientHeight - rail.offsetHeight);
-		rail.style.left = `${Math.round(maxLeft * state.x)}px`;
+		rail.style.left = `${Math.round(fullPageXAligned ? fullPageAlignedLeft : maxLeft * state.x)}px`;
 		rail.style.top = `${Math.round(maxTop * state.y)}px`;
 		rail.style.bottom = 'auto';
 		applyReaderQueuePanelCollision(rail);
@@ -6523,7 +6541,7 @@
 		{ section: 'history', className: 'ldp-history-buttons-always-visible', label: '始终显示前进和后退按钮', description: '历史中有可前进或后退的帖子时一直显示按钮；开启后不再使用边缘唤出范围。' },
 		{ section: 'reader-queue', className: 'ldp-reader-queue-always-visible-empty', label: '队列为空时仍显示入口', description: '阅读队列没有帖子时仍显示入口；也可在队列图标右上角将其关闭。' },
 		{ section: 'topic-opening', className: 'ldp-open-topics-first-post', label: '普通帖子从第 1 楼打开', description: '普通帖子链接默认从主楼开始；消息、历史和收藏仍打开各自指定的楼层。' },
-		{ section: 'reader-exit', className: 'ldp-double-escape-close-reader', label: '按两次 Esc 关闭阅读器', description: '默认开启以防误触；关闭后，按一次 Esc 即可关闭阅读器。' },
+		{ section: 'reader-exit', className: 'ldp-double-escape-close-reader', label: '按两次 Esc 关闭阅读器', description: '开启后可防止误触；默认关闭，按一次 Esc 即可关闭阅读器。' },
 		{ section: 'topic-actions', className: 'ldp-topic-action-rail-visible-setting', label: '始终显示主帖操作列', description: '一直显示回到顶部、点赞、回复、Boost 和收藏；其他帖子功能仍可展开。' },
 		{ section: 'topic-actions', className: 'ldp-topic-action-rail-fixed-setting', label: '锁定操作列位置', description: '开启后不能拖动操作列；关闭后可长按收纳按钮并拖到其他位置。' },
 		{ section: 'replies', className: 'ldp-expand-nested-replies-default', label: '在父回复下展开二级回复', description: '默认在父楼层下直接显示它收到的回复；关闭时同时关闭“完整讨论”视图。' },
@@ -6841,7 +6859,7 @@
 			translationMode: ['bilingual', 'translation'].includes(performancePrefs.translationMode)
 				? performancePrefs.translationMode : 'original',
 			openTopicsAtFirstPost: performancePrefs.openTopicsAtFirstPost === true,
-			doubleEscapeToCloseReader: performancePrefs.doubleEscapeToCloseReader !== false,
+			doubleEscapeToCloseReader: performancePrefs.doubleEscapeToCloseReader === true,
 			topicActionRailVisible: performancePrefs.topicActionRailVisible !== false,
 				topicActionRailFixed: performancePrefs.topicActionRailFixed === true,
 				expandNestedRepliesByDefault,
@@ -24221,8 +24239,10 @@
 					parentJump.after(exactTimeLabel);
 				}
 			}
-			const actions = node.querySelector(':scope > .ldp-reactions .ldp-actions'), boost = actions?.querySelector('.ldp-boostbtn');
-			(boost || actions)?.insertAdjacentHTML(boost ? 'afterend' : 'beforeend', `<button class="ldp-btn ldp-descendant-replies-reroot" data-post-number="${number}" type="button" aria-label="聚焦经过 #${number} 的回复分支">${icon('gitBranch')}</button>`);
+			const actions = node.querySelector(':scope > .ldp-reactions .ldp-actions');
+			const branchAnchor = actions?.querySelector('.ldp-boostbtn') ||
+				actions?.querySelector('.ldp-replybtn') || actions?.querySelector('.ldp-like');
+			branchAnchor?.insertAdjacentHTML('afterend', `<button class="ldp-btn ldp-descendant-replies-reroot" data-post-number="${number}" type="button" aria-label="聚焦经过 #${number} 的回复分支">${icon('gitBranch')}</button>`);
 			if (branchTarget) {
 				const branchDepth = Number.isInteger(depth) ? depth : +(list.querySelector(`:scope > .ldp-post[data-post-number="${+post.reply_to_post_number}"]`)?.dataset.ldpBranchDepth ?? -1) + 1;
 				const indent = Math.min(4, Math.max(0, branchDepth)) * 12;
@@ -29363,6 +29383,34 @@
 		if (shouldRestoreHostTopicAnchor) PAGE_ROOT.classList.add('ldp-reader-host-anchor-restoring');
 		const readerWorkspace = readerShell.readerWorkspace || createReaderWorkspaceController(overlay, modal, directTopicRoute);
 		readerWorkspace.sync();
+		readerShell.syncFullPageHeaderAlignment = () => {
+			const header = readerElement('.ldp-header');
+			if (!header) return;
+			const titleActions = header.querySelector(':scope > .ldp-title-actions');
+			const headButtons = header.querySelector(':scope > .ldp-head-btns');
+			const content = readerElement('.ldp-comments');
+			const clearAlignment = () => {
+				header.style.removeProperty('--ldp-header-logo-inset');
+				header.style.removeProperty('padding-left');
+				header.style.removeProperty('padding-right');
+				titleActions?.style.removeProperty('right');
+				headButtons?.style.removeProperty('right');
+			};
+			if (!readerWorkspace.isFullPage() || !content) {
+				clearAlignment();
+				return;
+			}
+			const modalRect = modal.getBoundingClientRect();
+			const contentRect = content.getBoundingClientRect();
+			if (!(modalRect.width > 0) || !(contentRect.width > 0)) return;
+			const left = Math.max(0, Math.round(contentRect.left - modalRect.left));
+			const right = Math.max(0, Math.round(modalRect.right - contentRect.right));
+			header.style.setProperty('--ldp-header-logo-inset', `${left}px`);
+			header.style.paddingLeft = `${left}px`;
+			header.style.paddingRight = `${right}px`;
+			if (titleActions) titleActions.style.right = `${right}px`;
+			if (headButtons) headButtons.style.right = '0px';
+		};
 		if (shouldRestoreHostTopicAnchor) {
 			if (readerWorkspace.isEmbedded()) restoreHostTopicPointerAnchor(hostTopicPointerAnchor);
 			shellScope.raf(() => PAGE_ROOT.classList.remove('ldp-reader-host-anchor-restoring'));
@@ -30956,7 +31004,10 @@
 			if (activeContext?.nativeComposerWindow) activeContext.nativeComposerWindow.syncLayer();
 			positionHeaderPopovers();
 			syncOpenSettingsControls(true);
-			requestAnimationFrame(() => overlay._ldpSyncTopicActionRailPosition?.());
+			requestAnimationFrame(() => {
+				readerShell.syncFullPageHeaderAlignment?.();
+				overlay._ldpSyncTopicActionRailPosition?.();
+			});
 		};
 		if (!reusingShell) {
 			syncLayoutBtn();
@@ -31023,6 +31074,7 @@
 			LAYOUT_REGION_KEYS.forEach((name) => {
 				overlay.style.setProperty(`--ldp-layout-${name}`, `${ratios[name]}%`);
 			});
+			requestAnimationFrame(() => readerShell.syncFullPageHeaderAlignment?.());
 		};
 		const applyInteractionColors = () => {
 			const surfaces = new Set([READER_PORTAL_HOST, overlay]);
@@ -34288,6 +34340,8 @@
 				if (railRect.left < blockerRect.right + 8 && railRect.right + 8 > blockerRect.left && railRect.top < blockerRect.bottom + 8 && railRect.bottom + 8 > blockerRect.top) topicActionRail.style.left = `${Math.round(blockerRect.left > modalRect.left + modalRect.width / 2 ? Math.max(0, blockerRect.left - modalRect.left - topicActionRail.offsetWidth - 8) : Math.min(maxLeft, blockerRect.right - modalRect.left + 8))}px`;
 			});
 			const railLeft = Number.parseFloat(topicActionRail.style.left) || 0, dockThreshold = modal.clientWidth * READER_QUEUE_DOCK_THRESHOLD_RATIO; topicActionRail.classList.toggle('is-docked-left', railLeft <= dockThreshold); topicActionRail.classList.toggle('is-docked-right', maxLeft - railLeft <= dockThreshold);
+			readerShell.syncFullPageHeaderAlignment?.();
+			overlay._ldpSyncReaderQueuePosition?.();
 		};
 		ctx.syncTopicActionRail = (postNode = topicActionRail?._ldpRelatedPost) => {
 			if (!postNode) {

@@ -1432,7 +1432,7 @@
     "feature_id": "SET-021",
     "title": "阅读入口与退出偏好",
     "category": "其他设置",
-    "description": "控制空阅读队列入口是否常驻，并选择按一次或在 1.5 秒内按两次 Esc 关闭阅读器。",
+    "description": "控制空阅读队列入口是否常驻；默认按一次 Esc 关闭阅读器，也可改为 1.5 秒内按两次。",
     "source_anchor": "doubleEscapeToCloseReader",
     "since": "0.1.14",
     "version": "0.1.14",

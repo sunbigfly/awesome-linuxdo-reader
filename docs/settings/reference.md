@@ -91,7 +91,7 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 | 边缘触发范围 | 0%–15% | 15% |
 | 历史排序 | 最近打开/首次打开 | 最近打开 |
 | 普通主题从 #1 打开 | 开/关 | 关 |
-| 按两次 Esc 关闭阅读器 | 开/关 | 开 |
+| 按两次 Esc 关闭阅读器 | 开/关 | 关 |
 
 ## 帖子与回复
 
