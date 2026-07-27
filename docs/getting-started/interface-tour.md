@@ -4,7 +4,7 @@ description: 认识宿主区、标题栏、阅读队列、阅读流、时间轴�
 feature_ids: ["CORE-002", "CORE-006", "READ-013", "MEDIA-014"]
 source_anchors: ["ldp-native-reader-trigger", "ldp-reader-queue", "ldp-meta-owner", "createReaderTranslationController"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
 last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-05-layout-settings.png"]

@@ -1,0 +1,14 @@
+{
+  "name": "awesome-linuxdo-reader-greasyfork-split",
+  "version": "0.1.15",
+  "private": true,
+  "description": "Awesome LinuxDo Reader 的 Greasy Fork 主脚本、按需 Library 与非执行资源构建项目",
+  "scripts": {
+    "build": "node build-resources.cjs && node build-library.cjs",
+    "verify": "node verify-project.cjs",
+    "release": "node build-release.cjs"
+  },
+  "devDependencies": {
+    "@babel/parser": "7.29.7"
+  }
+}

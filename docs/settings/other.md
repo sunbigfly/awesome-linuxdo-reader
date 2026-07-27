@@ -2,17 +2,17 @@
 title: 阅读、帖子与适用站点
 description: 配置队列入口、历史、退出、主帖操作列、完整讨论、Boost 复制和其他 Discourse 站点。
 feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "SET-016", "SET-017", "SET-018", "SET-019", "SET-021"]
-source_anchors: ["CUSTOM_DISCOURSE_SITES_KEY", "readerQueueAlwaysVisibleWhenEmpty", "historyEdgeTriggerPercent", "doubleEscapeToCloseReader", "syncTopicActionRail", "aggregateDescendantReplies", "openDescendantRepliesWindow", "BOOST_COPY_SETTING_ROWS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
+source_anchors: ["CUSTOM_DISCOURSE_SITES_KEY", "readerQueueAlwaysVisibleWhenEmpty", "historyEdgeTriggerPercent", "doubleEscapeToCloseReader", "confirmNativeComposerClose", "syncTopicActionRail", "aggregateDescendantReplies", "openDescendantRepliesWindow", "BOOST_COPY_SETTING_ROWS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18-thread-context.png"]
 ---
 
 # 阅读、帖子与适用站点
 
-0.1.14 将原“其他功能”拆分为三个面板：
+设置中心将阅读与站点相关选项拆分为三个面板：
 
 - **阅读与导航**：队列入口、历史、帖子打开位置和退出方式；
 - **帖子与回复**：主帖操作列、二级回复显示位置和 Boost 复制；
@@ -37,8 +37,9 @@ screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18
 | 历史列表排序 | 最近打开 / 首次打开 | 决定历史列表与前后切换顺序 |
 | 普通帖子从第 1 楼打开 | 开 / 关 | 只影响普通帖子链接 |
 | 按两次 Esc 关闭阅读器 | 开 / 关 | 开启后须在 1.5 秒内连续按两次；关闭后按一次即可 |
+| 关闭原生回复窗口前再次确认 | 开 / 关 | 开启后，按 Esc、关闭或舍弃草稿须在 1.5 秒内重复同一操作 |
 
-0.1.14 新配置默认关闭“两次 Esc”，因此临时层都关闭后按一次 `Esc` 即退出阅读器。需要防止误触时再手动开启；已有明确保存值继续沿用。
+新配置默认关闭阅读器本体的“两次 Esc”，但默认开启原生回复窗口的关闭确认。前者决定临时层都关闭后如何退出阅读器，后者只保护未关闭的原生回复窗口；已有明确保存值继续沿用。
 
 完整讨论、父回复预览、大图查看器、代码预览和原生回复编辑器会先消费 `Esc`。只有这些临时层都已关闭时，双击退出规则才作用于阅读器本体。
 

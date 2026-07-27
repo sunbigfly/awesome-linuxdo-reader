@@ -150,13 +150,13 @@
 4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 适用站点 → 其他适用站点”中验证并添加。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `0.1.14`。脚本对 LINUX DO 保持全面适配和完整功能回归，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。已标记为非中文的内置社区还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `0.1.15`。脚本对 LINUX DO 保持全面适配和完整功能回归，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。已标记为非中文的内置社区还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
-0.1.14 新增可搜索并统一保存的分组设置中心、可拖动主帖操作列、二级回复完整讨论窗口、隐藏回复头像入口和 LDC 账户摘要；同时重做预加载楼层的乐观已读显示、批量上报与跨标签去重，修复 Safari 会话、滚轮路由、二级回复跳转、操作状态同步和多项视觉细节。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+0.1.15 重大升级消息中心、阅读位置恢复与主题交互工作区：通知和私信按真实数据源分类，历史与队列可恢复完整讨论及精确视口，时间轴支持楼层号直达，主帖操作列和图片评论补齐自定义回应；同时增强原生回复关闭确认、Boost 表情定位、LDC 面板和多项响应式布局。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 ## 开发
 
-`work/main.js` 是唯一业务源码，也是 GreasyFork 发布与仓库同步入口。`dist/awesome-linuxdo-reader.user.js` 是由固定版本工具生成的仓库直装产物，禁止直接编辑；由于 GreasyFork 不接受压缩代码，该文件不得上传到 GreasyFork。开发和调试始终修改源码，需要仓库直装产物时运行 `npm run userscript:build`。
+`work/main.js` 是唯一业务源码，也是当前 GreasyFork 发布与仓库同步入口。`dist/awesome-linuxdo-reader.user.js` 是由固定版本工具生成的仓库直装产物，禁止直接编辑；由于 GreasyFork 不接受压缩代码，该文件不得上传到 GreasyFork。开发和调试始终修改源码，需要仓库直装产物时运行 `npm run userscript:build`。`work/greasyfork-split/` 是可重复生成和校验的拆分发布工程，当前用于验证 Core Library 与静态资源边界，不会自动替代正式单文件脚本。
 
 ```text
 .
@@ -167,6 +167,7 @@
 ├── scripts/          跨平台开发工具入口
 ├── tools/            Rust 开发辅助工具源码
 ├── work/main.js      userscript 唯一业务源码
+├── work/greasyfork-split/  GreasyFork 拆分发布与校验工程
 ├── CONTRIBUTING.md   开发与验证规范
 ├── LICENSE           MIT 许可证
 └── README.md         项目入口

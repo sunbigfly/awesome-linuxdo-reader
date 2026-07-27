@@ -2,11 +2,11 @@
 title: 楼层、时间轴与历史
 description: 使用时间轴、只看楼主、历史前后切换、多主题队列和实时阅读进度。
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014"]
-source_anchors: ["LDP_READER_QUEUE_KEY", "ldp-only-op-toggle", "bindTopicTimeline", "createReaderHistoryNavigation", "historyEdgeTriggerPercent", "READ_THRESHOLD", "sendReaderReadTimings", "guardNativeReaderTimings", "bindReaderTopicPresence", "renderTopicNavLinks", "inlineTopicNavSvgUses", "LAST_READER_TOPIC_ROUTE_KEY", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
+source_anchors: ["LDP_READER_QUEUE_KEY", "ldp-only-op-toggle", "bindTopicTimeline", "normalizeReaderAnchorState", "createReaderHistoryNavigation", "historyEdgeTriggerPercent", "READ_THRESHOLD", "sendReaderReadTimings", "guardNativeReaderTimings", "bindReaderTopicPresence", "renderTopicNavLinks", "inlineTopicNavSvgUses", "LAST_READER_TOPIC_ROUTE_KEY", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-16-history.png", "/screenshots/guide-21-reading-queue.png"]
 ---
 
@@ -17,7 +17,9 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-1
 时间轴同步当前楼层、日期和主题总楼层：
 
 - 点击或拖动轨道可连续选择目标；
+- 点击 `#` 可输入楼层号，输入范围随主题总楼层更新；无效、超出范围或非整数输入不会提交；
 - 目标楼层未加载时，阅读器先补齐数据和虚拟窗口；
+- 跳转会等待最新目标的数据、挂载和可见位置稳定，旧请求不会在随后覆盖新目标；
 - 跳转完成后目标楼层按设置闪烁；
 - 滚动到已经加载内容的真实底部时，当前楼层会校准为主题总楼层；
 - 底部回顶按钮返回当前主题顶部，而不是宿主页面顶部。
@@ -41,7 +43,9 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-1
 
 ## 历史前后切换
 
-阅读器保存主题 ID、标题、最近阅读楼层、首次查看和最后查看时间。左右按钮按历史链前进或后退，并恢复对应位置。
+阅读器保存主题 ID、标题、最近阅读锚点、首次查看和最后查看时间。左右按钮按历史链前进或后退，并恢复对应位置。
+
+0.1.15 的阅读锚点不再只有楼层号，还会记录当前虚拟流视口及偏移、完整讨论窗口的根楼层与分支位置，以及仍有效的引用高亮。切换到另一个主题前会先捕获当前状态，返回时再按“分支上下文 → 目标楼层 → 精确偏移”的顺序恢复。
 
 ![浏览历史中的顺序、检索、目标位置和前后翻页](/screenshots/guide-16-history.png)
 
@@ -59,7 +63,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-1
 
 阅读器在楼层正文成功预加载后把它加入候选，并立即在当前阅读器中显示乐观已读，避免已经准备好的楼层继续显示为未读。这个状态只用于当前会话的界面和阅读排序，不会在服务器确认前写入帖子缓存的权威 `read` 字段。
 
-0.1.14 的已读上报：
+当前版本的已读上报：
 
 - 每批最多提交 20 个楼层；
 - 优先处理显式目标与当前可见楼层，其余已经成功预加载的候选使用后台优先级补充提交；
@@ -77,6 +81,8 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-1
 - 主题导航用于沿 LINUX DO 提供的前后主题关系移动；分类和标签 SVG 图标会先安全内联，无法解析或不安全的图标会被丢弃，不影响文字链接。
 - [阅读队列](/guide/reading-queue)用于准备接下来要读的多个主题，并在当前浏览器中跨刷新恢复。
 - 浏览历史用于跨会话恢复已读主题和位置。
+
+阅读队列与历史使用同一套锚点模型。队列切走当前主题时会保存完整位置；再次进入时，除非链接明确指定起始楼层，否则优先恢复完整讨论或主信息流视口。
 
 当地址栏在同一主题内从一个楼层路由变到另一个楼层路由时，已经打开的阅读器会直接跳到新楼层，不会重新创建整个阅读工作区。
 

@@ -2,11 +2,11 @@
 title: 图片、媒体与富内容
 description: 使用非中文正文翻译、原图灯箱、图片评论、下载、音视频、公式、投票和代码预览。
 feature_ids: ["READ-012", "MEDIA-001", "MEDIA-002", "MEDIA-003", "MEDIA-004", "MEDIA-005", "MEDIA-006", "MEDIA-007", "MEDIA-008", "MEDIA-009", "MEDIA-010", "MEDIA-011", "MEDIA-012", "MEDIA-013", "MEDIA-014"]
-source_anchors: ["renderSolvedAnswerCard", "IMAGE_SCALE_OPTIONS", "openLightbox", "lightboxOriginalByDefault", "loadLightboxCommentTree", "lightboxDescriptionHeight", "batch-download", "openUserAvatarViewer", "bindReaderHls", "KATEX_VERSION", "renderReaderPoll", "data-reader-code-action", "readerMediaHtml", "prepareReaderOneboxes", "showReaderImageRetry", "createReaderTranslationController"]
+source_anchors: ["renderSolvedAnswerCard", "IMAGE_SCALE_OPTIONS", "openLightbox", "lightboxOriginalByDefault", "loadLightboxTopicPosts", "loadLightboxCommentTree", "toggleLightboxReaction", "lightboxDescriptionHeight", "batch-download", "openUserAvatarViewer", "bindReaderHls", "KATEX_VERSION", "renderReaderPoll", "data-reader-code-action", "readerMediaHtml", "prepareReaderOneboxes", "showReaderImageRetry", "createReaderTranslationController"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-26
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-25-user-card.png"]
 ---
 
@@ -39,7 +39,8 @@ screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19
 
 - **原图**：默认先用预览图；可在设置中改成每次灯箱都优先取原图。
 - **描述**：可以展开、收起并拖动底边调整高度，状态会保存。
-- **关联评论**：评论面板按图片所在楼层查找直接关系；数据缺失时按需搜索主题。
+- **关联评论**：评论面板按图片所在楼层查找直接关系；数据缺失时按需补取主题楼层并建立评论树。
+- **评论回应**：在评论树中查看回应数量，点击当前回应可取消，打开回应选择器可切换；提交后与正文对应楼层同步。
 - **评论宽度**：拖动分隔线调整，允许范围为灯箱宽度的 18%–50%。
 
 原图或来源楼层加载失败时，灯箱会保留现有预览并给出重试/不可用状态。来源楼层 404 不一定意味着 CDN 图片已经失效。

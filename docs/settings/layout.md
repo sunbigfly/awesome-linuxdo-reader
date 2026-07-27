@@ -4,9 +4,9 @@ description: 分别调整普通与全屏阅读器的左右留白、正文区域�
 feature_ids: ["SET-007"]
 source_anchors: ["LAYOUT_REGION_KEYS", "READER_LAYOUT_DEFAULT", "READER_FULLPAGE_LAYOUT_DEFAULT", "fullpageLayoutProfile"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-05-layout-settings.png"]
 ---
 
@@ -25,7 +25,7 @@ screenshots: ["/screenshots/guide-05-layout-settings.png"]
 | 左留白 | 正文左侧呼吸空间 | 0% |
 | 正文区域 | 正文、二级回复和主题底部 | 40% |
 | 正文与时间轴间距 | 两个区域之间的距离 | 0% |
-| 楼层时间轴 | 楼层位置、日期和进度 | 6% |
+| 楼层时间轴 | 楼层位置、日期、楼层直达和进度 | 8% |
 | 右留白 | 时间轴外侧空间 | 0% |
 
 五项合计必须是 100%。拖动某一项时，阅读器自动从其他可调区域补偿，不会产生超出或不足 100% 的布局。
@@ -34,7 +34,7 @@ screenshots: ["/screenshots/guide-05-layout-settings.png"]
 
 | 形态 | 左留白 | 正文区域 | 间距 | 时间轴 | 右留白 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 普通（嵌入/浮窗） | 0% | 90% | 0% | 6% | 4% |
+| 普通（嵌入/浮窗） | 0% | 88% | 0% | 8% | 4% |
 | 全屏 | 15% | 70% | 5% | 8% | 2% |
 
 ## 调整步骤

@@ -56,6 +56,8 @@
 /work/*
 !/work/main.js
 !/work/main.css
+!/work/greasyfork-split/
+!/work/greasyfork-split/**
 
 !/dist/
 /dist/*

@@ -4,9 +4,9 @@ description: 查看当前账号资料、社区统计、Connect 信任进度和 L
 feature_ids: ["USER-005", "USER-006"]
 source_anchors: ["renderSettingsUserInfo", "fetchLinuxDoCreditUser", "settingsCreditHtml"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-02-settings-overview.png"]
 ---
 
@@ -46,6 +46,8 @@ LINUX DO 站点新增“LDC”标签，用于只读展示 `credit.linux.do` 当�
 | 积分与收支 | 未来积分、累计社区积分、收入、支出、流转和净收入 |
 | 支付与账户 | 支付分、支付等级、每日限额、支付密钥状态和管理员状态 |
 | 快捷入口 | LDC 首页、活动、积分和设置 |
+
+0.1.15 将这些信息改为更紧凑的指标卡：额度显示完成比例，异常或危险状态使用独立状态色，快捷入口固定在卡片底部。布局变化不改变数据来源，也不会在阅读器内执行支付或资产操作。
 
 数据通过 LDC 登录会话读取并缓存 30 分钟。打开 `credit.linux.do` 后，脚本会在该站点更新最近一次成功缓存；设置中心也会按需联网刷新。
 

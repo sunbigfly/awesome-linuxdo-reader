@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "sourceVersion": "0.1.15",
+  "limits": {
+    "greasyForkHardLimit": 2097152,
+    "projectExecutableCeiling": 2000000,
+    "newLibraryReviewThreshold": 1900000
+  },
+  "policy": {
+    "libraryStrategy": "on-demand",
+    "currentLibraries": [
+      "reader-core"
+    ],
+    "addLibraryWhen": [
+      "现有 Library 达到 1900000 bytes 后，新增功能会使其逼近项目闸门",
+      "出现高内聚、低耦合且足够大的独立模块，拆分能明显降低维护风险"
+    ],
+    "doNotSplitWhen": [
+      "只为单个小功能制造一个 Library",
+      "拆分后需要动态下载并 eval 执行",
+      "拆分会破坏现有闭包状态或启动顺序"
+    ]
+  },
+  "artifacts": {
+    "standaloneSource": "main.user.js",
+    "mainLoaderTemplate": "main-loader.template.user.js",
+    "coreLibrary": "reader-core.js",
+    "cssResource": "main.css",
+    "jsonResource": "reader-assets.json",
+    "svgResource": "icons.svg"
+  }
+}

@@ -4,9 +4,9 @@ description: 理解 userscript 权限、LDC 只读数据、外部依赖、本地
 feature_ids: ["MEDIA-014", "USER-006", "DATA-004", "DATA-005", "MONITOR-005", "TROUBLE-005"]
 source_anchors: ["READER_TRANSLATION_CACHE_KEY", "LDC_USER_BRIDGE_CACHE_KEY", "fetchLinuxDoCreditUser", "PERSISTENT_CACHE_CONFIG", "@grant", "requestFlowPath", "@supportURL"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-14-about.png"]
 ---
 
@@ -18,7 +18,7 @@ screenshots: ["/screenshots/guide-14-about.png"]
 
 ## userscript 元数据
 
-当前 `0.1.14`：
+当前 `0.1.15`：
 
 | 字段 | 值 | 用途 |
 | --- | --- | --- |

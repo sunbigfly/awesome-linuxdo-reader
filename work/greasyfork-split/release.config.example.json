@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "libraries": [
+    {
+      "name": "reader-core",
+      "file": "reader-core.js",
+      "url": "https://update.greasyfork.org/scripts/替换为实际ID/替换为实际文件名.js?version=替换为实际版本ID"
+    }
+  ]
+}

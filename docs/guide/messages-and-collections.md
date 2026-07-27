@@ -2,11 +2,11 @@
 title: 消息、历史与收藏
 description: 使用消息分类、检索、分页、历史管理以及收藏与回应中心。
 feature_ids: ["ACTION-004", "ACTION-007", "COLLECT-001", "COLLECT-002", "COLLECT-003", "COLLECT-004", "COLLECT-005", "COLLECT-006"]
-source_anchors: ["toggleReaderPostReaction", "toggleReaderBookmark", "NOTIFICATION_GROUPS", "notificationTypeIconName", "notificationHref", "ldp-notification-mark-all", "renderHistoryPage", "ldp-history-clear", "BOOKMARK_TAB_LABELS", "ldp-bookmarks-multi"]
+source_anchors: ["toggleReaderPostReaction", "toggleReaderBookmark", "NOTIFICATION_GROUPS", "normalizePrivateMessageTopic", "notificationTypeIconName", "notificationHref", "ldp-notification-mark-all", "renderHistoryPage", "ldp-history-clear", "BOOKMARK_TAB_LABELS", "ldp-bookmarks-multi"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-25
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-15-notifications-replies.png", "/screenshots/guide-16-history.png", "/screenshots/guide-17-bookmarks-reactions.png"]
 ---
 
@@ -16,35 +16,38 @@ screenshots: ["/screenshots/guide-15-notifications-replies.png", "/screenshots/g
 
 ## 消息
 
-消息面板分为七类：
+消息面板先区分“通知”和“私信”两种模式。通知模式按原站真实来源分为：
 
-| 分类 | 包含的常见通知 |
+| 分类 | 数据与常见内容 |
 | --- | --- |
-| 全部 | 当前账号可见的所有通知 |
-| 回复 | 提及、回复、引用、发帖和组提及 |
-| 点赞 | 点赞、合并点赞和回应 |
-| Boost | Boost 通知 |
-| 关注 | 关注关系、关注对象发帖或回复、首帖关注以及分类/标签关注 |
-| 私信 | 私信、私信邀请、群组摘要，以及聊天提及、消息、邀请、引用和关注会话 |
-| 其他 | 编辑、移动、链接、徽章、提醒、审核、指定和其他系统通知 |
+| 全部 | 原站通知流中的全部通知 |
+| 回复 | 用户动态中的回复和引用 |
+| 赞 | 用户动态中的点赞 |
+| @提及 | 用户动态中的个人或群组提及 |
+| 编辑 | 用户动态中的帖子编辑 |
+| 链接 | 用户动态中的普通和合并链接 |
+| Boosts | 当前账号收到的 Boost |
+| 回应 | 当前账号收到的 Reactions |
+
+私信模式提供最新、已发送、新、未读、归档和机器人聊天六类主题列表。每条私信显示参与者、标题、摘要、最后活动时间和“新 / 未读 / 已读”状态；未读主题优先定位到最后已读楼层之后，否则进入最新楼层。
 
 ![消息中心回复分类中的真实通知和目标回跳](/screenshots/guide-15-notifications-replies.png)
 
 <p class="image-caption">从标题栏打开消息中心，先选择消息类别，再点击具体通知；阅读器会进入对应主题并定位到目标楼层。</p>
 
-分类标签和每条消息都使用可访问的 Lucide 图标。每种通知类型优先使用自己的语义图标，例如提及使用 `@`、回复使用回箭头、点赞使用爱心、Boost 使用火箭；无法识别时才回退到所属分类图标。消息卡片把类型图标放在独立圆形栏位，并为回复、点赞、Boost、关注、私信和其他分类使用不同强调色，同时保留摘要、相对时间和明确的“已读/未读”状态。
+模式、分类标签和每条消息都使用可访问的 Lucide 图标。每种通知类型优先使用自己的语义图标，例如提及使用 `@`、回复使用回箭头、赞使用爱心、Boost 使用火箭；无法识别时才回退到所属分类图标。消息卡片把类型图标放在独立圆形栏位，并按类别使用不同强调色，同时保留摘要、最多两行正文摘录、相对时间和明确状态。
 
-每页最多 24 条。检索只筛选已经加载或缓存的消息；没有匹配不等于服务器上不存在。点击消息时，阅读器会打开目标主题、等待楼层挂载并定位。同一主题内的新目标楼层会在现有阅读器中直接跳转；Boost 通知会强制刷新目标附近数据，避免继续显示旧缓存。
+通知或私信每页使用对应来源的原站分页大小，通常为 20 或 30 条。检索只筛选已经加载或缓存的消息；没有匹配不等于服务器上不存在。点击消息时，阅读器会打开目标主题、等待楼层挂载并定位。同一主题内的新目标楼层会在现有阅读器中直接跳转；Boost 通知会强制刷新目标附近数据，避免继续显示旧缓存。
 
 通知优先从 Discourse 展示模型、展示链接、`post_url/topic_url/url`、通知本体及其 `data` 中归一化 `topic_id`、`post_number`，并把目标编号写入卡片。只有确实没有主题 ID 时才回退到原站通知页。
 
 若目标主题已经在当前阅读器中打开，点击通知会先关闭消息面板并直接调用现有时间轴跳到目标楼层；跳转失败时才重新打开目标主题。这样同主题通知不会无意义地重建整个阅读器。
 
-“全部已读”会调用原站通知能力，影响账号状态。在具体分类中执行时只处理该分类支持的通知类型；单纯清理消息缓存不会把通知标记为已读。
+“全部已读”只在通知模式调用原站通知能力，影响账号状态。合成的用户动态、Boost、回应和私信条目不会冒充原生通知 ID；只有能追溯到原生通知的项目才参与单条已读同步。单纯清理消息缓存不会把通知或私信标记为已读。
 
 ## 浏览历史
 
-历史是阅读器保存在当前浏览器中的主题访问记录，包括标题、主题 ID、最近楼层、首次查看和最后查看时间。
+历史是阅读器保存在当前浏览器中的主题访问记录，包括标题、主题 ID、最近视口、首次查看和最后查看时间。0.1.15 的位置状态还可包含完整讨论分支、分支内锚点和引用高亮。
 
 ![浏览历史列表、检索和目标阅读位置](/screenshots/guide-16-history.png)
 
@@ -57,7 +60,7 @@ screenshots: ["/screenshots/guide-15-notifications-replies.png", "/screenshots/g
 - 按最近点击或首次点击排序；
 - 多选本页/全部页记录并删除；
 - 清空全部历史；
-- 点击条目恢复目标楼层。
+- 点击条目恢复目标楼层、滚动偏移和仍有效的讨论上下文。
 
 删除历史不可撤销，但不会删除浏览器访问历史或 LINUX DO 账号记录。
 

@@ -2,11 +2,11 @@
 title: 回复与社区操作
 description: 使用主帖操作列，并在阅读器内回复、引用、点赞、回应、Boost、收藏、分享和执行权限操作。
 feature_ids: ["MEDIA-010", "ACTION-001", "ACTION-002", "ACTION-003", "ACTION-004", "ACTION-005", "ACTION-006", "ACTION-007", "ACTION-008", "ACTION-009", "ACTION-010", "ACTION-011", "ACTION-012", "ACTION-013", "ACTION-014"]
-source_anchors: ["renderReaderPoll", "syncTopicActionRail", "ldp-replybtn", "data-selection-action=\"quote\"", "toggleReaderPostLike", "toggleReaderPostReaction", "renderBoostBubble", "quoteBoostInNativeReply", "BOOST_COPY_SETTING_ROWS", "toggleReaderBookmark", "name: 'share'", "TOPIC_NOTIFICATION_LEVELS", "openReaderReportDialog", "name: 'edit'", "composer:edited-post", "openReaderAssignDialog", "topicSharedIssueState"]
+source_anchors: ["renderReaderPoll", "syncTopicActionRail", "renderPostReactions", "ldp-replybtn", "data-selection-action=\"quote\"", "toggleReaderPostLike", "toggleReaderPostReaction", "renderBoostBubble", "quoteBoostInNativeReply", "BOOST_COPY_SETTING_ROWS", "toggleReaderBookmark", "name: 'share'", "TOPIC_NOTIFICATION_LEVELS", "openReaderReportDialog", "name: 'edit'", "composer:edited-post", "openReaderAssignDialog", "topicSharedIssueState"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide-17-bookmarks-reactions.png", "/screenshots/guide-15-notifications-replies.png"]
 ---
 
@@ -20,7 +20,7 @@ screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide
 
 ## 主帖操作列
 
-0.1.14 默认在正文左侧显示主帖快捷操作列，集中提供：
+默认在正文左侧显示主帖快捷操作列，集中提供：
 
 - 回到主题顶部；
 - 主帖点赞及计数；
@@ -29,7 +29,7 @@ screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide
 - 收藏主题；
 - 展开后的分享、通知和其他主题操作。
 
-点赞、收藏和 Boost 状态会与主帖正文及实时更新同步。操作列展开时会暂时避让历史按钮；接近左右边缘时只保留收纳按钮，悬停或聚焦后恢复。
+点赞、回应、收藏和 Boost 状态会与主帖正文及实时更新同步。已有自定义回应时，爱心入口显示当前回应徽标；点击可取消当前回应，展开选择器可切换为其他回应。操作列展开时会暂时避让历史按钮；接近左右边缘时只保留收纳按钮，悬停或聚焦后恢复。
 
 “设置 → 帖子与回复 → 主帖操作列”可以：
 
@@ -53,6 +53,8 @@ screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide
 
 发送前仍应检查目标用户、引用范围和草稿内容。切换工作区形态时，编辑器窗口按浮窗、全屏、移动分别保存几何设置。
 
+“设置 → 阅读与导航 → 关闭原生回复窗口前再次确认”默认开启。开启后，按 `Esc`、关闭或舍弃草稿都需要在 1.5 秒内重复同一操作；这个保护只作用于原生回复窗口，不改变阅读器本体的退出偏好。
+
 编辑已有楼层时，阅读器使用与回复相同的宿主隔离提交链路。保存成功后会重新读取该楼层并就地刷新；如果编辑的是楼中楼回复，阅读器会重新聚焦对应的直属讨论，不会让宿主页面自行跳走。
 
 ## 点赞与回应
@@ -60,6 +62,7 @@ screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide
 - 点赞按钮切换当前账号的点赞状态，并同步计数。
 - 回应区域显示已注册的自定义表情、数量和自己的当前选择。
 - 再次点击自己的回应可取消；选择另一项时切换到新回应。
+- 主帖操作列与正文、二级回复和图片评论共用同一回应状态与选择器规则。
 - 回应中心的数据会与实时主题通道和权威楼层数据校准。
 
 ![收藏与回应中心展示真实原站记录](/screenshots/guide-17-bookmarks-reactions.png)

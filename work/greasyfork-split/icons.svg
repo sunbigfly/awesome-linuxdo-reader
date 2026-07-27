@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+	<defs>
+		<!-- ICONS -->
+		<symbol id="ldp-icon-activity" viewBox="0 0 24 24"><path d="M3 12h4l2-7 4 14 2-7h6"/></symbol>
+		<symbol id="ldp-icon-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
+		<symbol id="ldp-icon-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></symbol>
+		<symbol id="ldp-icon-type" viewBox="0 0 24 24"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></symbol>
+		<symbol id="ldp-icon-alertTriangle" viewBox="0 0 24 24"><path d="M21.73 18 13.73 4a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+		<symbol id="ldp-icon-bell" viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></symbol>
+		<symbol id="ldp-icon-headerBell" viewBox="0 0 24 24"><path d="M5 17h14c-1.3-1.6-2-3.8-2-7a5 5 0 0 0-10 0c0 3.2-.7 5.4-2 7Z"/><path d="M10 20a2 2 0 0 0 4 0"/></symbol>
+		<symbol id="ldp-icon-bellOff" viewBox="0 0 24 24"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 18H4a1 1 0 0 1-.74-1.673C4.59 14.956 6 13.499 6 9c0-.666.108-1.306.308-1.904"/><path d="M10.268 3.061A6 6 0 0 1 18 9a11.525 11.525 0 0 0 .52 3.882"/><path d="m2 2 20 20"/></symbol>
+		<symbol id="ldp-icon-bookmark" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></symbol>
+		<symbol id="ldp-icon-headerBookmark" viewBox="0 0 24 24"><path d="M6.5 4.5h11A1.5 1.5 0 0 1 19 6v14l-7-3.8L5 20V6a1.5 1.5 0 0 1 1.5-1.5Z"/></symbol>
+		<symbol id="ldp-icon-check" viewBox="0 0 24 24"><path d="m20 6-11 11-5-5"/></symbol>
+		<symbol id="ldp-icon-square" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/></symbol>
+		<symbol id="ldp-icon-squareCheck" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></symbol>
+		<symbol id="ldp-icon-circleX" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></symbol>
+		<symbol id="ldp-icon-arrowUp" viewBox="0 0 24 24"><path d="M12 17V7"/><path d="M7.5 11.5 12 7l4.5 4.5"/></symbol>
+		<symbol id="ldp-icon-chevronDown" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+		<symbol id="ldp-icon-chevronUp" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+		<symbol id="ldp-icon-chevronRight" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+		<symbol id="ldp-icon-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+		<symbol id="ldp-icon-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></symbol>
+		<symbol id="ldp-icon-externalLink" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+		<symbol id="ldp-icon-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+		<symbol id="ldp-icon-eyeOff" viewBox="0 0 24 24"><path d="M10.733 5.076A10.744 10.744 0 0 1 21.938 11.65a1 1 0 0 1 0 .696 10.8 10.8 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499A10.75 10.75 0 0 1 2.062 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></symbol>
+		<symbol id="ldp-icon-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+		<symbol id="ldp-icon-palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor" stroke="none"/><path d="M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.6-1.4-.4-.4-.6-.9-.6-1.4a2 2 0 0 1 2-2H17a5 5 0 0 0 5-5C22 5.7 17.5 2 12 2z"/></symbol>
+		<symbol id="ldp-icon-award" viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M15.5 13 17 22l-5-3-5 3 1.5-9"/></symbol>
+		<symbol id="ldp-icon-tag" viewBox="0 0 24 24"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor" stroke="none"/></symbol>
+		<symbol id="ldp-icon-heart" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/></symbol>
+		<symbol id="ldp-icon-hand" viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 9.5V6a2 2 0 0 0-4 0v8"/><path d="M6 14v-2a2 2 0 0 0-4 0v2a8 8 0 0 0 8 8h2c5.523 0 10-4.477 10-10V8a2 2 0 0 0-4 0v3"/></symbol>
+		<symbol id="ldp-icon-history" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+		<symbol id="ldp-icon-headerHistory" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v4.7l3.2 1.8"/></symbol>
+		<symbol id="ldp-icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+		<symbol id="ldp-icon-lock" viewBox="0 0 24 24"><rect width="14" height="10" x="5" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+		<symbol id="ldp-icon-unlock" viewBox="0 0 24 24"><rect width="14" height="10" x="5" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.9-1"/></symbol>
+		<symbol id="ldp-icon-pin" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M5 17h14"/><path d="m6 3 1 7-3 3h16l-3-3 1-7z"/></symbol>
+		<symbol id="ldp-icon-pencil" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+		<symbol id="ldp-icon-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></symbol>
+		<symbol id="ldp-icon-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5-5L7.4 3.6l3 3-3.8 3.8-3-3-2.3 2.3a4 4 0 0 0 5 5L15.6 24l4-4-8.7-9.3 3.8-4.4Z"/></symbol>
+		<symbol id="ldp-icon-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></symbol>
+		<symbol id="ldp-icon-maximize2" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="M9 21H3v-6"/><path d="m3 21 7-7"/></symbol>
+		<symbol id="ldp-icon-layoutGrid" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/><path d="M3 12h18"/></symbol>
+		<symbol id="ldp-icon-panelLeft" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
+		<symbol id="ldp-icon-panelRight" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
+		<symbol id="ldp-icon-floatingWindow" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/><path d="M7 7h.01"/><path d="M10 7h.01"/></symbol>
+		<symbol id="ldp-icon-messageSquare" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+		<symbol id="ldp-icon-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+		<symbol id="ldp-icon-minimize2" viewBox="0 0 24 24"><path d="M4 14h6v6"/><path d="m10 14-7 7"/><path d="M20 10h-6V4"/><path d="m14 10 7-7"/></symbol>
+		<symbol id="ldp-icon-cornerDownRight" viewBox="0 0 24 24"><path d="m15 10 4 4-4 4"/><path d="M5 4v7a3 3 0 0 0 3 3h11"/></symbol>
+		<symbol id="ldp-icon-reply" viewBox="0 0 24 24"><path d="m9 17-5-5 5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></symbol>
+		<symbol id="ldp-icon-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+		<symbol id="ldp-icon-rocket" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></symbol>
+		<symbol id="ldp-icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.42 1.42"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+		<symbol id="ldp-icon-moon" viewBox="0 0 24 24"><path d="M20.99 12.8A9 9 0 1 1 11.2 3.01 7 7 0 0 0 20.99 12.8Z"/></symbol>
+		<symbol id="ldp-icon-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></symbol>
+		<symbol id="ldp-icon-settings" viewBox="0 0 24 24"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831 2.34 2.34 0 0 1 2.33-4.033 2.34 2.34 0 0 0 3.32-1.915z"/><circle cx="12" cy="12" r="3"/></symbol>
+		<symbol id="ldp-icon-headerSettings" viewBox="0 0 24 24"><path d="M4 6h5M13 6h7"/><circle cx="11" cy="6" r="2"/><path d="M4 12h10M18 12h2"/><circle cx="16" cy="12" r="2"/><path d="M4 18h2M10 18h10"/><circle cx="8" cy="18" r="2"/></symbol>
+		<symbol id="ldp-icon-languages" viewBox="0 0 24 24"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></symbol>
+		<symbol id="ldp-icon-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></symbol>
+		<symbol id="ldp-icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+		<symbol id="ldp-icon-at" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 5.8 18.2l-1.3-1.7A7.8 7.8 0 1 1 19.8 12v1.2c0 1.2-.5 1.8-1.4 1.8-.8 0-1.3-.5-1.3-1.5V8h-2v1A5 5 0 1 0 16 16c.7.8 1.6 1.2 2.7 1.2 2.1 0 3.3-1.5 3.3-4V12c0-5.5-4.5-10-10-10zm0 12.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" fill="currentColor" stroke="none" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-icon-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></symbol>
+		<symbol id="ldp-icon-link2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+		<symbol id="ldp-icon-lightbulb" viewBox="0 0 24 24"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.84.65-1.64 1.35-2.35a6 6 0 1 0-8.88 0c.7.71 1.17 1.51 1.35 2.35Z"/></symbol>
+		<symbol id="ldp-icon-list" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></symbol>
+		<symbol id="ldp-icon-layers" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></symbol>
+		<symbol id="ldp-icon-gitBranch" viewBox="0 0 24 24"><path d="M6 3v12"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+		<symbol id="ldp-icon-listChecks" viewBox="0 0 24 24"><path d="m3 5 2 2 4-4"/><path d="M11 6h10"/><path d="m3 12 2 2 4-4"/><path d="M11 13h10"/><path d="m3 19 2 2 4-4"/><path d="M11 20h10"/></symbol>
+		<symbol id="ldp-icon-rotateCcw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+		<symbol id="ldp-icon-share2" viewBox="0 0 24 24"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/></symbol>
+		<symbol id="ldp-icon-shieldHalved" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.3 9.4 8 11 4.7-1.6 8-6 8-11V5l-8-3Z"/><path d="M12 2 4 5v6c0 5 3.3 9.4 8 11V2Z" fill="currentColor" stroke="none"/></symbol>
+		<symbol id="ldp-icon-userPlus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></symbol>
+		<symbol id="ldp-icon-userRound" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+		<symbol id="ldp-icon-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+		<!-- USER_CARD_BADGE_GLYPHS -->
+		<symbol id="ldp-badge-mail" viewBox="0 0 24 24"><path d="M2 5h20v14H2V5zm3 2 7 5 7-5H5zm15 2.3-8 5.5-8-5.5V17h16V9.3z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-flag" viewBox="0 0 24 24"><path d="M4 2h2v20H4V2zm3 2h13l-3 5 3 5H7V4z"/></symbol>
+		<symbol id="ldp-badge-at" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 5.8 18.2l-1.3-1.7A7.8 7.8 0 1 1 19.8 12v1.2c0 1.2-.5 1.8-1.4 1.8-.8 0-1.3-.5-1.3-1.5V8h-2v1A5 5 0 1 0 16 16c.7.8 1.6 1.2 2.7 1.2 2.1 0 3.3-1.5 3.3-4V12c0-5.5-4.5-10-10-10zm0 12.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-quote" viewBox="0 0 24 24"><path d="M3 5h8v8H7c0 3 1.3 4.8 4 5.5V21c-5.3-.8-8-4.2-8-10V5zm10 0h8v8h-4c0 3 1.3 4.8 4 5.5V21c-5.3-.8-8-4.2-8-10V5z"/></symbol>
+		<symbol id="ldp-badge-box" viewBox="0 0 24 24"><path d="m12 2 9 5v10l-9 5-9-5V7l9-5zm0 2.8L6.1 8 12 11.2 17.9 8 12 4.8zM5 9.7v6.1l6 3.3V13L5 9.7zm8 9.4 6-3.3V9.7L13 13v6.1z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-certificate" viewBox="0 0 24 24"><path d="M12 2a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm-3 7.2 2 2 4-4 1.5 1.5-5.5 5.5-3.5-3.5L9 9.2zM8 16l-2 6 6-2 6 2-2-6a9 9 0 0 1-8 0z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-code" viewBox="0 0 24 24"><path d="m8.5 6-6 6 6 6 1.7-1.7L5.9 12l4.3-4.3L8.5 6zm7 0-1.7 1.7 4.3 4.3-4.3 4.3 1.7 1.7 6-6-6-6zM13 3 9 21h2l4-18h-2z"/></symbol>
+		<symbol id="ldp-badge-seed" viewBox="0 0 24 24"><path d="M12 22v-8c-5-.3-8-3.2-8-8 4.8 0 7.2 1.6 8 4.7C12.8 7.6 15.2 6 20 6c0 4.8-3 7.7-8 8v8h-2z"/></symbol>
+		<symbol id="ldp-badge-hammer" viewBox="0 0 24 24"><path d="m4 3 7 7-3 3-7-7 3-3zm8 5 3-3 4 4-3 3 6 6-4 4-6-6-3 3-4-4 7-7z"/></symbol>
+		<symbol id="ldp-badge-calendar" viewBox="0 0 24 24"><path d="M3 4h3V2h2v2h8V2h2v2h3v18H3V4zm2 6v10h14V10H5zm0-4v2h14V6H5zm3 7h3v3H8v-3zm5 0h3v3h-3v-3z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-userplus" viewBox="0 0 24 24"><path d="M9 2a5 5 0 1 1 0 10A5 5 0 0 1 9 2zM1 22c0-5 2.8-8 8-8 3.4 0 5.8 1.3 7 3.6V15h2v3h3v2h-3v3h-2v-3.4c-.7-.2-1.5-.3-2.4-.3-1.5 0-2.7.9-3.1 2.7H1z"/></symbol>
+		<symbol id="ldp-badge-megaphone" viewBox="0 0 24 24"><path d="M3 10v4h3l3 3V7l-3 3H3zm7-3 9-3v16l-9-3V7zm-5 8h2l1.5 5H6.2L5 15z"/></symbol>
+		<symbol id="ldp-badge-heart" viewBox="0 0 24 24"><path d="M12 20.5 4.2 13C-.5 8.2 6.1 2.1 12 7.2 17.9 2.1 24.5 8.2 19.8 13L12 20.5z"/></symbol>
+		<symbol id="ldp-badge-eye" viewBox="0 0 24 24"><path d="M1.5 12s3.7-6 10.5-6 10.5 6 10.5 6-3.7 6-10.5 6S1.5 12 1.5 12zm10.5 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-pencil" viewBox="0 0 24 24"><path d="m4 16.5-.8 4.3 4.3-.8L19.8 7.7l-3.5-3.5L4 16.5zm13.4-13.4 1.4-1.4a1.6 1.6 0 0 1 2.2 0l1.3 1.3a1.6 1.6 0 0 1 0 2.2l-1.4 1.4-3.5-3.5z"/></symbol>
+		<symbol id="ldp-badge-document" viewBox="0 0 24 24"><path d="M5 2h9l5 5v15H5V2zm9 1.8V8h4.2L14 3.8zM8 12h8v-1.5H8V12zm0 4h8v-1.5H8V16zm0 4h6v-1.5H8V20z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-smile" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-4 7.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm8 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm-8.2 5h8.4c-.7 2.3-2.1 3.5-4.2 3.5s-3.5-1.2-4.2-3.5z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-crown" viewBox="0 0 24 24"><path d="m3 7 4.5 3L12 4l4.5 6L21 7l-2 12H5L3 7zm3.4 10h11.2l.5-3H5.9l.5 3z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-link" viewBox="0 0 24 24"><path d="M9.5 15.9 7.4 18a3 3 0 0 1-4.2-4.2l4-4a3 3 0 0 1 4.2 0l1 1-1.6 1.6-1-1a.8.8 0 0 0-1.1 0l-4 4a.8.8 0 0 0 1.1 1.1l2.1-2.1 1.6 1.5zm5-7.8L16.6 6a3 3 0 0 1 4.2 4.2l-4 4a3 3 0 0 1-4.2 0l-1-1 1.6-1.6 1 1a.8.8 0 0 0 1.1 0l4-4a.8.8 0 0 0-1.1-1.1l-2.1 2.1-1.6-1.5zM8.8 13.6l4.8-4.8 1.6 1.6-4.8 4.8-1.6-1.6z"/></symbol>
+		<symbol id="ldp-badge-chat" viewBox="0 0 24 24"><path d="M3 4h18v13H9l-5.5 4v-4H3V4zm4 5h10V7.5H7V9zm0 4h7v-1.5H7V13z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-check" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-2 14.5-4-4 1.8-1.8 2.2 2.2 6.2-6.2L18 8.5l-8 8z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-star" viewBox="0 0 24 24"><path d="m12 2.5 3 6.1 6.7 1-4.9 4.7 1.2 6.7-6-3.2-6 3.2 1.2-6.7-4.9-4.7 6.7-1 3-6.1z"/></symbol>
+		<symbol id="ldp-badge-shield" viewBox="0 0 24 24"><path d="M12 2 21 5v6c0 5.7-3.7 9.4-9 11-5.3-1.6-9-5.3-9-11V5l9-3zm0 3L6 7v4c0 3.9 2.2 6.5 6 8 3.8-1.5 6-4.1 6-8V7l-6-2z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-clock" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 5h-2v6l5 3 1-1.7-4-2.3V7z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-fire" viewBox="0 0 24 24"><path d="M13.5 2c1 4-1.5 5.2-1.5 8 0 1.1.7 2 1.7 2 1.8 0 2.5-2.1 2-4.2 3 2.4 4.3 5 3.7 8A7.5 7.5 0 0 1 5 15c-.3-3.4 1.5-6.5 5.1-9.4-.2 3.6 1.3 4.2 2 2.4.6-1.8.1-3.8 1.4-6z"/></symbol>
+		<symbol id="ldp-badge-book" viewBox="0 0 24 24"><path d="M3 4h7c1.2 0 2.2.4 3 1.2A4.1 4.1 0 0 1 16 4h5v15h-5c-1.2 0-2.2.5-3 1.5A3.8 3.8 0 0 0 10 19H3V4zm9 3.5A2.8 2.8 0 0 0 10 6H5v11h5c.7 0 1.4.2 2 .5v-10zm2 10c.6-.3 1.3-.5 2-.5h3V6h-3c-.8 0-1.5.5-2 1.5v10z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-gift" viewBox="0 0 24 24"><path d="M2 9h20v4h-1v9H3v-9H2V9zm3 4v7h6v-7H5zm8 0v7h6v-7h-6zM7.5 8C4 8 4 3 7 3c2 0 3.5 2.4 5 5H7.5zm9 0H12c1.5-2.6 3-5 5-5 3 0 3 5-.5 5z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-user" viewBox="0 0 24 24"><path d="M12 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10zM3 22c0-5 3.2-8 9-8s9 3 9 8H3z"/></symbol>
+		<symbol id="ldp-badge-dragon" viewBox="0 0 24 24"><path d="M3 17c2-6 5-10 10-12l-1 4c4-2 7-1 9 2l-4 1 3 3-5 1c-2 4-6 6-12 4l4-2-4-1zm8-4 2 2 2-3-4 1z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-crystal" viewBox="0 0 24 24"><path d="M12 2a8 8 0 0 1 5 14.2L20 22H4l3-5.8A8 8 0 0 1 12 2zm0 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm-4 14-1 2h10l-1-2H8z" fill-rule="evenodd"/></symbol>
+		<symbol id="ldp-badge-moon" viewBox="0 0 24 24"><path d="M16.5 2.5A10 10 0 1 0 21.5 17 8 8 0 0 1 16.5 2.5z"/></symbol>
+		<symbol id="ldp-badge-waves" viewBox="0 0 24 24"><path d="M2 7c3 0 3 2 6 2s3-2 6-2 3 2 6 2h2v3h-2c-3 0-3-2-6-2s-3 2-6 2-3-2-6-2V7zm0 7c3 0 3 2 6 2s3-2 6-2 3 2 6 2h2v3h-2c-3 0-3-2-6-2s-3 2-6 2-3-2-6-2v-3z"/></symbol>
+		<symbol id="ldp-badge-snake" viewBox="0 0 24 24"><path d="M18 3c3 0 4 2 4 4 0 3-2 4-5 4h-6c-1.5 0-2 .7-2 1.5S9.5 14 11 14h3c4 0 6 1.8 6 4.5S18 23 14 23H5v-3h9c1.8 0 3-.5 3-1.5S15.8 17 14 17h-3c-3.5 0-5-1.8-5-4.5S7.5 8 11 8h6c1.3 0 2-.4 2-1s-.7-1-2-1h-2V3h3zM4 17l-3-3 3-3v6z"/></symbol>
+		<symbol id="ldp-badge-horse" viewBox="0 0 24 24"><path d="M6 22v-7l3-4-1-5 5-4 1 4 5 2-1 6-4 2v6h-3v-7l3-2 1-3-4-1-4 7v6H6z"/></symbol>
+		<symbol id="ldp-badge-clover" viewBox="0 0 24 24"><path d="M12 11C8-1 0 3 5 10-2 8-1 18 8 15c-4 7 6 10 7 2 7 5 11-5 3-7 6-6-3-12-6 1zm0 3 2 8h-4l2-8z" fill-rule="evenodd"/></symbol>
+	</defs>
+</svg>

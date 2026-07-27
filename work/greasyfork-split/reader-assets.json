@@ -1,0 +1,1329 @@
+{
+  "schemaVersion": 1,
+  "sourceVersion": "0.1.15",
+  "source": {
+    "file": "main.user.js",
+    "bytes": 1790791,
+    "sha256": "6e306ede072debb097ef2e0bcb0589a74af587e88069161729b80eb8c6c82bf6"
+  },
+  "generation": {
+    "staticDeclarationCount": 25,
+    "staticDeclarationBytes": 40428,
+    "note": "字节数为候选声明初始值的毛收益，尚未扣除资源加载与访问代码。"
+  },
+  "templates": {
+    "READER_LOADING_ANIMATIONS": [
+      {
+        "key": "portal",
+        "label": "主题开卷",
+        "markup": "<div class=\"ldp-loading-visual-inner ldp-loader-portal\"><span data-copy=\"TOPIC\"></span><span data-copy=\"#1\"></span><span></span><span></span><span></span><span></span></div>"
+      },
+      {
+        "key": "constellation",
+        "label": "回帖脉络",
+        "markup": "<div class=\"ldp-loading-visual-inner ldp-loader-thread-index\"><span data-user=\"OP\" data-floor=\"#1\"></span><span data-user=\"↳ 回帖\" data-floor=\"#2\"></span><span data-user=\"↳ 二级回复\" data-floor=\"#6\"></span><span data-user=\"↳ 回帖\" data-floor=\"#9\"></span><span data-user=\"↳ 二级回复\" data-floor=\"#12\"></span><span data-user=\"↳ 继续回复\" data-floor=\"#18\"></span></div>"
+      },
+      {
+        "key": "corridor",
+        "label": "楼层时间轴",
+        "markup": "<div class=\"ldp-loading-visual-inner ldp-loader-floor-reel\"><span data-floor=\"#01\" data-time=\"首帖\"></span><span data-floor=\"#02\" data-time=\"回复\"></span><span data-floor=\"#03\" data-time=\"当前\"></span><span data-floor=\"#04\" data-time=\"回复\"></span><span data-floor=\"#05\" data-time=\"最新\"></span></div>"
+      },
+      {
+        "key": "typewave",
+        "label": "Markdown 解析",
+        "markup": "<div class=\"ldp-loading-visual-inner ldp-loader-typewave\"><span data-source=\"# 标题\"></span><span data-source=\"**重点**\"></span><span data-source=\"> 引用\"></span><span data-render=\"标题\"></span><span data-render=\"重点\"></span><span data-render=\"引用内容\"></span></div>"
+      },
+      {
+        "key": "crystal",
+        "label": "缓存回环",
+        "markup": "<div class=\"ldp-loading-visual-inner ldp-loader-cache-lanes\"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>"
+      },
+      {
+        "key": "marginalia",
+        "label": "只看楼主",
+        "markup": "<div class=\"ldp-loading-visual-inner ldp-loader-marginalia\"><span data-user=\"OP\" data-floor=\"#1\"></span><span data-user=\"佬友\" data-floor=\"#2\"></span><span data-user=\"OP\" data-floor=\"#7\"></span><span data-user=\"佬友\" data-floor=\"#8\"></span><span data-user=\"OP\" data-floor=\"#16\"></span></div>"
+      },
+      {
+        "key": "chapters",
+        "label": "分类标签",
+        "markup": "<div class=\"ldp-loading-visual-inner ldp-loader-index-fan\"><span data-index=\"01\" data-tag=\"类别\"></span><span data-index=\"02\" data-tag=\"标签\"></span><span data-index=\"03\" data-tag=\"楼主\"></span><span data-index=\"04\" data-tag=\"楼层\"></span><span data-index=\"05\" data-tag=\"回复\"></span></div>"
+      },
+      {
+        "key": "quoteecho",
+        "label": "社区信条",
+        "markup": "<div class=\"ldp-loading-visual-inner ldp-loader-quoteecho\"><span data-word=\"真诚\"></span><span data-word=\"友善\"></span><span data-word=\"团结\"></span><span data-word=\"专业\"></span></div>"
+      },
+      {
+        "key": "footnotes",
+        "label": "新回复抵达",
+        "markup": "<div class=\"ldp-loading-visual-inner ldp-loader-inbox-rain\"><span data-floor=\"#128\"></span><span data-floor=\"#129\"></span><span data-floor=\"#130\"></span><span data-floor=\"#131\"></span><span data-floor=\"#132\"></span></div>"
+      },
+      {
+        "key": "inkverse",
+        "label": "互动汇流",
+        "markup": "<div class=\"ldp-loading-visual-inner ldp-loader-inkverse\"><span data-action=\"赞\"></span><span data-action=\"Boost\"></span><span data-action=\"回应\"></span><span data-action=\"收藏\"></span></div>"
+      }
+    ],
+    "BOOST_COPY_SETTING_ROWS": [
+      {
+        "label": "末尾内容方式",
+        "control": "<select class=\"ldp-reader-select ldp-boost-copy-mode ldp-boost-rule-control\" aria-label=\"Boost 末尾内容方式\"><option value=\"counter\">递增数字</option><option value=\"text\">固定文字</option></select>"
+      },
+      {
+        "label": "前置文字",
+        "control": "<input class=\"ldp-boost-copy-prefix ldp-boost-rule-control\" type=\"text\" maxlength=\"16\" autocomplete=\"off\" placeholder=\"可选，例如：赞同：\" aria-label=\"Boost 前置文字\">"
+      },
+      {
+        "label": "数字前缀",
+        "className": " ldp-boost-counter-row",
+        "control": "<input class=\"ldp-boost-copy-counter-marker ldp-boost-rule-control\" type=\"text\" maxlength=\"16\" autocomplete=\"off\" placeholder=\"默认 +，也可填文字\" aria-label=\"Boost 数字前缀\">"
+      },
+      {
+        "label": "递增步长",
+        "className": " ldp-boost-counter-row",
+        "control": "<input class=\"ldp-boost-copy-counter-step ldp-boost-rule-control\" type=\"number\" min=\"1\" max=\"99\" step=\"1\" inputmode=\"numeric\" aria-label=\"Boost 递增步长\">"
+      },
+      {
+        "label": "固定末尾文字",
+        "className": " ldp-boost-text-row",
+        "hidden": true,
+        "control": "<input class=\"ldp-boost-copy-fixed-suffix ldp-boost-rule-control\" type=\"text\" maxlength=\"16\" autocomplete=\"off\" placeholder=\"例如：俺也一样\" aria-label=\"Boost 固定末尾文字\">"
+      }
+    ]
+  },
+  "copy": {
+    "NOTIFICATION_GROUPS": {
+      "all": {
+        "mode": "notifications",
+        "source": "notifications",
+        "label": "全部",
+        "icon": "bell",
+        "types": []
+      },
+      "replies": {
+        "mode": "notifications",
+        "source": "user-actions",
+        "label": "回复",
+        "icon": "reply",
+        "types": [
+          "replied",
+          "quoted"
+        ],
+        "actionTypes": [
+          6,
+          9
+        ],
+        "pageSize": 30
+      },
+      "likes": {
+        "mode": "notifications",
+        "source": "user-actions",
+        "label": "赞",
+        "icon": "heart",
+        "types": [
+          "liked",
+          "liked_consolidated"
+        ],
+        "actionTypes": [
+          2
+        ],
+        "pageSize": 30
+      },
+      "mentions": {
+        "mode": "notifications",
+        "source": "user-actions",
+        "label": "@提及",
+        "icon": "at",
+        "types": [
+          "mentioned",
+          "group_mentioned"
+        ],
+        "actionTypes": [
+          7
+        ],
+        "pageSize": 30
+      },
+      "edits": {
+        "mode": "notifications",
+        "source": "user-actions",
+        "label": "编辑",
+        "icon": "pencil",
+        "types": [
+          "edited"
+        ],
+        "actionTypes": [
+          11
+        ],
+        "pageSize": 30
+      },
+      "links": {
+        "mode": "notifications",
+        "source": "user-actions",
+        "label": "链接",
+        "icon": "link2",
+        "types": [
+          "linked",
+          "linked_consolidated"
+        ],
+        "actionTypes": [
+          17
+        ],
+        "pageSize": 30
+      },
+      "boosts": {
+        "mode": "notifications",
+        "source": "boosts-received",
+        "label": "Boosts",
+        "icon": "rocket",
+        "types": [
+          "boost"
+        ],
+        "pageSize": 20
+      },
+      "reactions": {
+        "mode": "notifications",
+        "source": "reactions-received",
+        "label": "回应",
+        "icon": "smile",
+        "types": [
+          "reaction"
+        ],
+        "pageSize": 20
+      },
+      "inbox": {
+        "mode": "messages",
+        "source": "private-messages",
+        "path": "private-messages",
+        "label": "最新",
+        "icon": "mail",
+        "pageSize": 30
+      },
+      "sent": {
+        "mode": "messages",
+        "source": "private-messages",
+        "path": "private-messages-sent",
+        "label": "已发送",
+        "icon": "reply",
+        "pageSize": 30
+      },
+      "newMessages": {
+        "mode": "messages",
+        "source": "private-messages",
+        "path": "private-messages-new",
+        "label": "新",
+        "icon": "plus",
+        "pageSize": 30
+      },
+      "unreadMessages": {
+        "mode": "messages",
+        "source": "private-messages",
+        "path": "private-messages-unread",
+        "label": "未读",
+        "icon": "bell",
+        "pageSize": 30
+      },
+      "archive": {
+        "mode": "messages",
+        "source": "private-messages",
+        "path": "private-messages-archive",
+        "label": "归档",
+        "icon": "database",
+        "pageSize": 30
+      },
+      "botMessages": {
+        "mode": "messages",
+        "source": "private-messages",
+        "path": "private-messages-warnings",
+        "label": "机器人聊天",
+        "icon": "messageSquare",
+        "pageSize": 30
+      }
+    },
+    "SYSTEM_ACTION_LABELS": {
+      "closed": "主题已关闭",
+      "opened": "主题已重新开放",
+      "archived": "主题已归档",
+      "unarchived": "主题已取消归档",
+      "pinned": "主题已置顶",
+      "unpinned": "主题已取消置顶",
+      "autoclosed": "主题已自动关闭",
+      "autoclosed.enabled": "主题已自动关闭",
+      "autoclosed.disabled": "主题已自动重新开放",
+      "split_topic": "帖子已拆分到新主题",
+      "merged": "主题已合并",
+      "moved": "帖子已移动",
+      "visible": "主题已公开",
+      "invisible": "主题已隐藏",
+      "visible.enabled": "主题已公开",
+      "visible.disabled": "主题已取消公开",
+      "renamed": "主题标题已修改",
+      "assigned": "已指定"
+    },
+    "READER_REPORT_COPY": {
+      "spam": {
+        "label": "垃圾信息",
+        "description": "广告、恶意推广或明显无关的内容。"
+      },
+      "inappropriate": {
+        "label": "不当内容",
+        "description": "违反社区文明交流规则的内容。"
+      },
+      "off_topic": {
+        "label": "偏离主题",
+        "description": "与当前主题无关，影响讨论阅读。"
+      },
+      "notify_moderators": {
+        "label": "通知管理人员",
+        "description": "需要管理人员结合补充说明进行判断。",
+        "requireMessage": true
+      }
+    },
+    "REQUEST_FLOW_TYPE_LABELS": {
+      "topic": "正文",
+      "nested": "二级回复",
+      "avatar": "头像",
+      "media": "图片媒体",
+      "user": "用户资料",
+      "bookmark": "收藏",
+      "notification": "消息",
+      "realtime": "实时通道",
+      "presence": "在线状态",
+      "reaction": "回应操作",
+      "search": "搜索",
+      "read": "已读上报",
+      "asset": "静态资源",
+      "other": "其他"
+    }
+  },
+  "config": {
+    "READER_THEME_VALUE_ROWS": [
+      [
+        "--secondary",
+        "#ffffff",
+        "#171b20"
+      ],
+      [
+        "--primary",
+        "#20252b",
+        "#e7edf3"
+      ],
+      [
+        "--primary-high",
+        "#333a42",
+        "#cbd4dc"
+      ],
+      [
+        "--primary-medium",
+        "#68737e",
+        "#98a4af"
+      ],
+      [
+        "--primary-low-mid",
+        "#b8c0c8",
+        "#4a5560"
+      ],
+      [
+        "--primary-low",
+        "#d7dde3",
+        "#39414a"
+      ],
+      [
+        "--primary-very-low",
+        "#f2f4f6",
+        "#242a31"
+      ],
+      [
+        "--secondary-low",
+        "#4b545d",
+        "#363c43"
+      ],
+      [
+        "--secondary-medium",
+        "#89929c",
+        "#7f8790"
+      ],
+      [
+        "--secondary-high",
+        "#dfe3e6",
+        "#c9d0d8"
+      ],
+      [
+        "--secondary-very-high",
+        "#f7f8f9",
+        "#e3e8ed"
+      ],
+      [
+        "--tertiary",
+        "#47855f",
+        "#78c295"
+      ],
+      [
+        "--tertiary-low",
+        "#dceee2",
+        "#223a2c"
+      ],
+      [
+        "--header_background",
+        "#ffffff",
+        "#171b20"
+      ],
+      [
+        "--header_primary",
+        "#20252b",
+        "#e7edf3"
+      ],
+      [
+        "--header_primary-low",
+        "#e7eaed",
+        "#2a3037"
+      ],
+      [
+        "--header_primary-low-mid",
+        "#b7bec6",
+        "#4a5560"
+      ],
+      [
+        "--header_primary-medium",
+        "#68737e",
+        "#98a4af"
+      ],
+      [
+        "--header_primary-high",
+        "#333a42",
+        "#cbd4dc"
+      ],
+      [
+        "--highlight",
+        "#fff0a8",
+        "#6b5a16"
+      ],
+      [
+        "--highlight-low",
+        "#fff8d8",
+        "#302b18"
+      ],
+      [
+        "--highlight-medium",
+        "#ffe47a",
+        "#8a7420"
+      ],
+      [
+        "--highlight-high",
+        "#806200",
+        "#ffe47a"
+      ],
+      [
+        "--quaternary",
+        "#d86645",
+        "#f08a67"
+      ],
+      [
+        "--danger",
+        "#c84545",
+        "#ff7b72"
+      ],
+      [
+        "--danger-low",
+        "#f7dddd",
+        "#44262a"
+      ],
+      [
+        "--danger-low-mid",
+        "#efb5b5",
+        "#6b353b"
+      ],
+      [
+        "--success",
+        "#47855f",
+        "#78c295"
+      ],
+      [
+        "--success-low",
+        "#dceee2",
+        "#223a2c"
+      ],
+      [
+        "--love",
+        "#dc6542",
+        "#ff8a65"
+      ],
+      [
+        "--love-low",
+        "#f7ddd5",
+        "#472b25"
+      ],
+      [
+        "--d-link-color",
+        "#2870b8",
+        "#71b7ff"
+      ],
+      [
+        "--d-post-aside-background",
+        "#f7f9fa",
+        "#20262d"
+      ],
+      [
+        "--ldp-zebra-color",
+        "#f7f7f7",
+        "#1b2b21"
+      ],
+      [
+        "--ldp-reply-line-color",
+        "#47855f",
+        "#78c295"
+      ],
+      [
+        "--ldp-quote-line-color",
+        "#d7d7d7",
+        "#46505a"
+      ],
+      [
+        "--ldp-divider-line-color",
+        "#e5e5e5",
+        "#343b44"
+      ],
+      [
+        "--ldp-request-metric-pine",
+        "#315f47",
+        "#86b49a"
+      ],
+      [
+        "--ldp-request-metric-navy",
+        "#365673",
+        "#8eacc8"
+      ],
+      [
+        "--ldp-request-metric-plum",
+        "#5e4b72",
+        "#b09bc4"
+      ],
+      [
+        "--ldp-request-metric-bronze",
+        "#72551f",
+        "#c5a36d"
+      ],
+      [
+        "--ldp-request-metric-wine",
+        "#743f47",
+        "#c7929a"
+      ]
+    ],
+    "PERFORMANCE_SETTING_GROUPS": [
+      {
+        "id": "main-request",
+        "title": "楼层数据加载",
+        "description": "设置每次从服务器加载多少楼层；只影响单批数据量，不等于页面同时显示的楼层数。",
+        "fields": [
+          {
+            "key": "pageSize",
+            "pref": "performancePageSize",
+            "presets": [
+              16,
+              40,
+              48
+            ],
+            "limits": {
+              "min": 12,
+              "max": 64,
+              "step": 1,
+              "integer": true
+            },
+            "title": "每次加载楼层数",
+            "unit": "个",
+            "inputMode": "numeric",
+            "description": "接近已加载内容边缘时，一次再取多少楼层；数值越大，等待次数越少，但单次下载和处理更重。",
+            "help": "阅读接近已加载内容边缘时，一次向服务器请求多少个楼层。它只决定单批响应大小，不改变页面同时保留的楼层数量。"
+          }
+        ]
+      },
+      {
+        "id": "dom",
+        "title": "页面楼层保留",
+        "description": "控制当前页面前后保留多少楼层；远处内容会卸载以节省内存，不会因此发起网络请求。",
+        "fields": [
+          {
+            "key": "streamOverscanViewports",
+            "pref": "performanceStreamOverscan",
+            "presets": [
+              0.35,
+              1.25,
+              2
+            ],
+            "limits": {
+              "min": 0.25,
+              "max": 3,
+              "step": 0.05
+            },
+            "title": "屏幕外预留范围",
+            "unit": "屏",
+            "inputMode": "decimal",
+            "description": "在当前可见区域前后额外保留多少屏内容；数值越大，快速滚动越不容易看到空白，但更占内存。",
+            "help": "在当前屏幕前后额外保留多少屏楼层元素。它只影响页面渲染和内存，不会发起楼层请求，并受“同时保留楼层上限”约束。"
+          },
+          {
+            "key": "streamMaxItems",
+            "pref": "performanceStreamMaxItems",
+            "presets": [
+              28,
+              72,
+              96
+            ],
+            "limits": {
+              "min": 24,
+              "max": 128,
+              "step": 1,
+              "integer": true
+            },
+            "title": "同时保留楼层上限",
+            "unit": "个",
+            "inputMode": "numeric",
+            "description": "页面同时保留的楼层数量上限；离当前阅读位置较远的楼层会卸载，滚回时再恢复。",
+            "help": "首次进入、滚动和跳转期间，页面最多同时保留多少个主楼层元素。远处楼层会从页面结构中卸载，并用等高占位保持滚动位置。"
+          }
+        ]
+      },
+      {
+        "id": "nested",
+        "title": "二级回复预加载",
+        "description": "父楼层接近屏幕时，自动加载它下面的直接回复。",
+        "fields": [
+          {
+            "key": "nestedPrefetchViewports",
+            "pref": "performanceNestedPrefetch",
+            "presets": [
+              0.35,
+              1.25,
+              2
+            ],
+            "limits": {
+              "min": 0,
+              "max": 3,
+              "step": 0.05
+            },
+            "title": "提前加载距离",
+            "unit": "屏",
+            "inputMode": "decimal",
+            "description": "0 表示父楼层进入屏幕后再加载；大于 0 表示提前对应屏数加载。每个父楼层首批最多加载 20 条直接回复。",
+            "help": "父楼层距离当前屏幕多远时开始加载直接回复。0 表示进入屏幕后加载；数值越大越早加载，也会更早产生网络请求。"
+          }
+        ]
+      },
+      {
+        "id": "request",
+        "title": "网络请求节奏",
+        "description": "帖子、楼层、二级回复、消息和用户资料共用这些限制；遇到原站操作或限流时会自动放慢。",
+        "fields": [
+          {
+            "key": "requestMaxConcurrent",
+            "pref": "performanceRequestConcurrency",
+            "presets": [
+              1,
+              3,
+              4
+            ],
+            "limits": {
+              "min": 1,
+              "max": 4,
+              "step": 1,
+              "integer": true
+            },
+            "title": "同时请求上限",
+            "unit": "路",
+            "inputMode": "numeric",
+            "description": "最多允许多少个阅读器请求同时进行；实际数量可能因多个页面、原站操作或限流而更低。",
+            "help": "阅读器网络请求同时进行的最高数量。多个脚本实例、原站操作、服务器限流和恢复状态只会继续降低实际数量。"
+          },
+          {
+            "key": "requestMinInterval",
+            "pref": "performanceRequestInterval",
+            "presets": [
+              220,
+              90,
+              80
+            ],
+            "limits": {
+              "min": 80,
+              "max": 500,
+              "step": 10,
+              "integer": true
+            },
+            "title": "请求最短间隔",
+            "unit": "ms",
+            "inputMode": "numeric",
+            "description": "正常情况下，两次请求开始之间至少间隔多久；原站繁忙或出现 429 时会自动延长。",
+            "help": "正常状态下两次阅读器请求开始的最短间隔。自适应调度可以延长它，且不会在恢复后一次性补发积压请求。"
+          },
+          {
+            "key": "requestRateTarget",
+            "pref": "performanceRequestRateTarget",
+            "presets": [
+              80,
+              80,
+              80
+            ],
+            "limits": {
+              "min": 50,
+              "max": 95,
+              "step": 1,
+              "integer": true
+            },
+            "title": "限流额度使用比例",
+            "unit": "%",
+            "inputMode": "numeric",
+            "description": "只使用服务器已探测请求额度的一部分，为原站操作保留余量；比例越低越保守。",
+            "help": "阅读器计划使用服务器 10 秒与 60 秒请求额度的比例。它只控制请求启动节奏，不改变每次加载楼层数或二级回复数量。"
+          }
+        ]
+      }
+    ],
+    "HOST_EMBED_SIZE_SETTINGS": {
+      "title": {
+        "pref": "hostEmbeddedTitleScale",
+        "label": "主题标题",
+        "defaultScale": 110,
+        "properties": [
+          [
+            "--ldp-host-topic-title-size",
+            15
+          ]
+        ]
+      },
+      "avatar": {
+        "pref": "hostEmbeddedAvatarScale",
+        "label": "头像",
+        "defaultScale": 80,
+        "properties": [
+          [
+            "--ldp-host-topic-avatar-size",
+            32
+          ],
+          [
+            "--ldp-host-topic-avatar-size-medium",
+            24
+          ],
+          [
+            "--ldp-host-topic-avatar-size-small",
+            20
+          ]
+        ]
+      },
+      "stats": {
+        "pref": "hostEmbeddedStatsScale",
+        "label": "主题统计信息",
+        "defaultScale": 120,
+        "properties": [
+          [
+            "--ldp-host-topic-stats-size",
+            10
+          ],
+          [
+            "--ldp-host-topic-stats-label-size",
+            9
+          ],
+          [
+            "--ldp-host-topic-stats-row-offset",
+            -4
+          ]
+        ]
+      },
+      "labelCard": {
+        "pref": "hostEmbeddedLabelCardScale",
+        "label": "标签卡片",
+        "defaultScale": 100,
+        "properties": [
+          [
+            "--ldp-host-label-card-height",
+            22
+          ],
+          [
+            "--ldp-host-label-card-font-size",
+            11
+          ],
+          [
+            "--ldp-host-label-card-icon-size",
+            14
+          ],
+          [
+            "--ldp-host-label-card-gap",
+            3
+          ],
+          [
+            "--ldp-host-label-card-padding",
+            7
+          ]
+        ]
+      }
+    },
+    "FONT_FAMILY_OPTIONS": {
+      "site": {
+        "label": "跟随原站",
+        "stack": "inherit"
+      },
+      "system": {
+        "label": "系统默认字体",
+        "stack": "system-ui,sans-serif"
+      },
+      "cjkSans": {
+        "label": "中文无衬线",
+        "stack": "\"Noto Sans CJK SC\",\"Microsoft YaHei\",\"PingFang SC\",system-ui,sans-serif"
+      },
+      "serif": {
+        "label": "衬线",
+        "stack": "\"Noto Serif CJK SC\",\"Songti SC\",SimSun,serif"
+      },
+      "monospace": {
+        "label": "等宽",
+        "stack": "ui-monospace,SFMono-Regular,Consolas,monospace"
+      },
+      "custom": {
+        "label": "自定义本机字体",
+        "stack": ""
+      }
+    },
+    "FONT_SCOPE_CONFIG": {
+      "interface": {
+        "label": "界面文字",
+        "family": "family",
+        "customFamily": "customFamily",
+        "weight": "weight",
+        "color": "interfaceColor",
+        "scale": "interface"
+      },
+      "post": {
+        "label": "帖子正文",
+        "family": "postFamily",
+        "customFamily": "postCustomFamily",
+        "weight": "postWeight",
+        "color": "postColor",
+        "scale": "post"
+      },
+      "composer": {
+        "label": "回复输入框",
+        "family": "composerFamily",
+        "customFamily": "composerCustomFamily",
+        "weight": "composerWeight",
+        "color": "composerColor",
+        "scale": "composer"
+      }
+    },
+    "APPEARANCE_COLOR_THEME_LIMITS": {
+      "accentColor": {
+        "saturationMax": 82,
+        "light": [
+          30,
+          55
+        ],
+        "dark": [
+          58,
+          78
+        ]
+      },
+      "linkColor": {
+        "saturationMax": 90,
+        "light": [
+          30,
+          55
+        ],
+        "dark": [
+          60,
+          80
+        ]
+      },
+      "zebraColor": {
+        "saturationMax": 70,
+        "light": [
+          92,
+          100
+        ],
+        "dark": [
+          10,
+          20
+        ]
+      },
+      "listZebraColor": {
+        "saturationMax": 38,
+        "light": [
+          88,
+          98
+        ],
+        "dark": [
+          10,
+          20
+        ]
+      },
+      "replyLineColor": {
+        "saturationMax": 76,
+        "light": [
+          30,
+          58
+        ],
+        "dark": [
+          55,
+          78
+        ]
+      },
+      "quoteLineColor": {
+        "saturationMax": 50,
+        "light": [
+          72,
+          92
+        ],
+        "dark": [
+          22,
+          42
+        ]
+      },
+      "dividerLineColor": {
+        "saturationMax": 40,
+        "light": [
+          80,
+          94
+        ],
+        "dark": [
+          18,
+          34
+        ]
+      },
+      "floorPreviewColor": {
+        "saturationMax": 88,
+        "light": [
+          35,
+          58
+        ],
+        "dark": [
+          58,
+          78
+        ]
+      }
+    },
+    "APPEARANCE_PROFILE_SETTING_KEYS": [
+      "accentColor",
+      "linkColor",
+      "zebraColor",
+      "zebraRadius",
+      "listZebraColor",
+      "structureColorsEnabled",
+      "replyLineColor",
+      "replyLineWidth",
+      "replyLineRadius",
+      "quoteLineColor",
+      "quoteLineWidth",
+      "dividerLineColor",
+      "dividerLineWidth",
+      "floorPreviewColor",
+      "floorPreviewHeight"
+    ],
+    "READER_PRESENTATIONS": {
+      "floating": {
+        "mode": "floating",
+        "floating": true,
+        "fullPage": false,
+        "embedded": false,
+        "side": ""
+      },
+      "fullpage": {
+        "mode": "fullpage",
+        "floating": false,
+        "fullPage": true,
+        "embedded": false,
+        "side": ""
+      },
+      "embed-left": {
+        "mode": "embed-left",
+        "floating": false,
+        "fullPage": false,
+        "embedded": true,
+        "side": "left"
+      },
+      "embed-right": {
+        "mode": "embed-right",
+        "floating": false,
+        "fullPage": false,
+        "embedded": true,
+        "side": "right"
+      }
+    },
+    "NOTIFICATION_TYPE_ICONS": {
+      "mentioned": "at",
+      "replied": "reply",
+      "quoted": "messageSquare",
+      "posted": "messageSquare",
+      "group_mentioned": "at",
+      "liked": "heart",
+      "liked_consolidated": "heart",
+      "reaction": "smile",
+      "boost": "rocket",
+      "following": "userPlus",
+      "following_created_topic": "messageSquare",
+      "following_replied": "reply",
+      "watching_first_post": "bell",
+      "watching_category_or_tag": "bell",
+      "private_message": "mail",
+      "invited_to_private_message": "userPlus",
+      "group_message_summary": "mail",
+      "chat_mention": "at",
+      "chat_message": "messageSquare",
+      "chat_invitation": "userPlus",
+      "chat_group_mention": "at",
+      "chat_quoted": "messageSquare",
+      "chat_watched_thread": "bell",
+      "edited": "pencil",
+      "invitee_accepted": "userPlus",
+      "moved_post": "cornerDownRight",
+      "linked": "link2",
+      "granted_badge": "award",
+      "invited_to_topic": "userPlus",
+      "custom": "bell",
+      "topic_reminder": "bell",
+      "post_approved": "check",
+      "code_review_commit_approved": "check",
+      "membership_request_accepted": "check",
+      "membership_request_consolidated": "userPlus",
+      "bookmark_reminder": "bookmark",
+      "votes_released": "hand",
+      "event_reminder": "bell",
+      "event_invitation": "mail",
+      "assigned": "userRound",
+      "question_answer_user_commented": "messageSquare",
+      "new_features": "lightbulb",
+      "admin_problems": "alertTriangle",
+      "linked_consolidated": "link2",
+      "upcoming_change_available": "alertTriangle",
+      "upcoming_change_automatically_promoted": "alertTriangle",
+      "suggested_edit_created": "pencil",
+      "suggested_edit_accepted": "check",
+      "circles_activity": "activity"
+    },
+    "CACHE_TYPES": [
+      {
+        "key": "history",
+        "label": "浏览历史",
+        "help": "勾选“浏览历史”后再点下方清理，会删除阅读器保存的主题、最近阅读楼层和查看时间；不会删除浏览器本身的访问历史。"
+      },
+      {
+        "key": "topics",
+        "label": "帖子与楼层内容",
+        "help": "勾选“帖子与楼层内容”后清理，会删除本机保存的帖子信息、楼层正文、回复关系、分类标签图标和相关接口数据；下次打开时会重新联网获取。"
+      },
+      {
+        "key": "users",
+        "label": "用户资料卡",
+        "help": "勾选“用户资料卡”后清理，会删除用户名、简介、徽章、用户组等资料快照和相关接口数据；头像仍归“头像、表情与原图”单独管理。"
+      },
+      {
+        "key": "notifications",
+        "label": "通知与消息",
+        "help": "勾选“通知与消息”后清理，会删除通知分页、已读状态、跳转位置和发送者摘要；头像资源保留，也不会删除站点账号里的真实消息。"
+      },
+      {
+        "key": "responses",
+        "label": "收藏、回应与其他数据",
+        "help": "勾选“收藏、回应与其他数据”后清理，会删除收藏列表、给出的回应与点赞、表情目录和其他通用接口结果；不会撤销站点上的真实收藏或回应。"
+      },
+      {
+        "key": "assets",
+        "label": "头像、表情与原图",
+        "help": "勾选“头像、表情与原图”后清理，会删除头像、Boost 表情和实际查看过的原图资源；不会删除帖子中的线上图片。"
+      }
+    ],
+    "APPEARANCE_SETTING_GROUPS": [
+      {
+        "id": "interaction",
+        "title": "按钮与链接",
+        "description": "控制按钮、选中状态、焦点、时间轴和正文链接，不改变错误、警告、成功等状态颜色。",
+        "sections": [
+          "interaction"
+        ]
+      },
+      {
+        "id": "background",
+        "title": "交替内容背景",
+        "description": "用浅色背景区分相邻楼层，以及嵌入阅读时的原站主题列表卡片。",
+        "sections": [
+          {
+            "id": "zebra",
+            "title": "交替楼层背景"
+          },
+          "list-zebra"
+        ]
+      },
+      {
+        "id": "structure",
+        "title": "关系线与分隔线",
+        "description": "分别控制回复连接线、引用线和界面分隔线；关闭后隐藏这些线条，已设置的样式会保留。",
+        "toggleKey": "structureColorsEnabled",
+        "toggleLabel": "显示关系线与分隔线",
+        "sections": [
+          {
+            "id": "reply-line",
+            "title": "回复连接线"
+          },
+          {
+            "id": "quote-line",
+            "title": "引用线"
+          },
+          {
+            "id": "divider-line",
+            "title": "界面分隔线"
+          }
+        ]
+      },
+      {
+        "id": "floor-preview",
+        "title": "上级回复预览卡片",
+        "description": "控制悬停上级楼层号后插入的预览卡片，不影响回复连接线和其他内容。",
+        "sections": [
+          "floor-preview"
+        ]
+      }
+    ],
+    "RESOURCE_MONITOR_ROWS": [
+      [
+        "heap",
+        "页面内存估计",
+        "浏览器提供的页面级估算；不能按脚本拆分"
+      ],
+      [
+        "longTasks",
+        "最近 10 秒主线程卡顿",
+        "次数 / 累计耗时；包含原站与阅读器"
+      ],
+      [
+        "dom",
+        "阅读器页面元素",
+        "阅读器外壳内全部节点"
+      ],
+      [
+        "floors",
+        "楼层列表元素",
+        "页面显示 / 内存保留"
+      ],
+      [
+        "nested",
+        "二级回复缓存",
+        "已建立回复状态的父楼层组"
+      ],
+      [
+        "media",
+        "正文媒体元素",
+        "图片、音视频与内嵌页面"
+      ],
+      [
+        "requests",
+        "当前网络请求",
+        "进行中 / 排队"
+      ],
+      [
+        "network",
+        "最近 60 秒网络",
+        "请求数 / 已知传输量"
+      ]
+    ],
+    "REQUEST_FLOW_RESPONSE_HEADERS": {
+      "rateLimitCode": [
+        "Discourse-Rate-Limit-Error-Code",
+        "X-Discourse-Rate-Limit-Error-Code"
+      ],
+      "retryAfter": [
+        "Retry-After"
+      ],
+      "serverLimit": [
+        "RateLimit-Limit",
+        "X-RateLimit-Limit"
+      ],
+      "serverRemaining": [
+        "RateLimit-Remaining",
+        "X-RateLimit-Remaining"
+      ],
+      "serverReset": [
+        "RateLimit-Reset",
+        "X-RateLimit-Reset"
+      ]
+    },
+    "DISCOURSE_CAPABILITY_FIELDS": {
+      "boosts": {
+        "post": [
+          "can_boost",
+          "boosts"
+        ]
+      },
+      "reactions": {
+        "post": [
+          "reactions",
+          "current_user_reaction",
+          "reaction_users_count"
+        ],
+        "topic": [
+          "valid_reactions"
+        ]
+      },
+      "postVoting": {
+        "post": [
+          "post_voting_vote_count",
+          "post_voting_user_voted_direction",
+          "post_voting_has_votes",
+          "comments_count",
+          "comments"
+        ],
+        "topic": [
+          "is_post_voting"
+        ]
+      },
+      "topicVoting": {
+        "topic": [
+          "can_vote",
+          "user_voted",
+          "vote_count"
+        ]
+      },
+      "categoryExperts": {
+        "user": [
+          "category_expert_endorsements"
+        ]
+      },
+      "follows": {
+        "user": [
+          "can_follow",
+          "is_followed",
+          "total_following",
+          "total_followers",
+          "following_count",
+          "follower_count"
+        ]
+      },
+      "sharedIssue": {
+        "topic": [
+          "shared_issue_visible",
+          "shared_issue_count",
+          "user_created_shared_issue"
+        ]
+      }
+    },
+    "USER_CARD_BADGE_EXACT_KINDS": {
+      "种子用户": "seed",
+      "龙行龘龘": "dragon",
+      "大预言家": "crystal",
+      "圆圆满满": "moon",
+      "浴火重生": "fire",
+      "海纳百川": "waves",
+      "一元复始": "clock",
+      "蛇来运转": "snake",
+      "破界者": "hammer",
+      "不二之选": "star",
+      "骐骥驰骋": "horse",
+      "幸运佬": "clover",
+      "金笔杆": "pencil",
+      "银笔杆": "pencil",
+      "铜笔杆": "pencil",
+      "文化宣导员": "megaphone",
+      "元气满满": "gift",
+      "基本用户": "user",
+      "成员": "user",
+      "活跃用户": "fire",
+      "领导者": "crown",
+      "阅读准则": "book",
+      "已认证": "certificate",
+      "已授权": "certificate",
+      "当月最佳新用户": "star",
+      "爱好者": "calendar",
+      "百尺竿头": "calendar",
+      "全年不落": "calendar",
+      "周年纪念日": "calendar",
+      "推广者": "userplus",
+      "活动家": "userplus",
+      "拥护者": "userplus",
+      "指导顾问": "check",
+      "无所不知": "check",
+      "解决方案机构": "check"
+    },
+    "POST_CONTEXT_ACTIONS": [
+      {
+        "name": "share",
+        "event": "post",
+        "action": "share",
+        "label": "复制楼层链接",
+        "icon": "link2"
+      },
+      {
+        "name": "report",
+        "event": "reader",
+        "action": "report",
+        "label": "举报",
+        "icon": "flag",
+        "capability": "canReport"
+      },
+      {
+        "name": "edit",
+        "event": "post",
+        "action": "edit",
+        "label": "编辑",
+        "icon": "pencil",
+        "capability": "canEdit"
+      },
+      {
+        "name": "bookmark",
+        "capability": "canBookmark"
+      },
+      {
+        "name": "delete",
+        "event": "post",
+        "action": "delete",
+        "label": "删除",
+        "icon": "trash",
+        "capability": "canDelete"
+      },
+      {
+        "name": "assign",
+        "event": "reader",
+        "action": "assign-post",
+        "label": "指定楼层负责人",
+        "icon": "userPlus",
+        "capability": "canAssign"
+      },
+      {
+        "name": "admin",
+        "event": "post",
+        "action": "admin",
+        "label": "管理楼层",
+        "icon": "wrench",
+        "capability": "canAdmin"
+      }
+    ],
+    "JUMP_HIGHLIGHT_LIMITS": {
+      "radius": {
+        "min": 0,
+        "max": 24,
+        "step": 1,
+        "integer": true
+      },
+      "borderWidth": {
+        "min": 0,
+        "max": 4,
+        "step": 1,
+        "integer": true
+      },
+      "rate": {
+        "min": 0.5,
+        "max": 2,
+        "step": 0.1,
+        "integer": false
+      },
+      "count": {
+        "min": 1,
+        "max": 6,
+        "step": 1,
+        "integer": true
+      }
+    }
+  },
+  "icons": {
+    "ICONS": {
+      "count": 73,
+      "idPrefix": "ldp-icon-"
+    },
+    "USER_CARD_BADGE_GLYPHS": {
+      "count": 35,
+      "idPrefix": "ldp-badge-"
+    }
+  }
+}

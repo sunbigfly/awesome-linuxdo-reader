@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "sourceVersion": "0.1.15",
+  "limits": {
+    "greasyForkHardLimit": 2097152,
+    "projectExecutableCeiling": 2000000
+  },
+  "files": {
+    "main.user.js": {
+      "role": "standaloneSourceBaseline",
+      "bytes": 1790791,
+      "sha256": "6e306ede072debb097ef2e0bcb0589a74af587e88069161729b80eb8c6c82bf6"
+    },
+    "reader-core.js": {
+      "role": "greasyForkLibrary",
+      "bytes": 1788802,
+      "sha256": "c1e30914c39c72e14cd1fb765b70d68bb0c5cc823bc2d207bbf09311757a3e71"
+    },
+    "main-loader.template.user.js": {
+      "role": "greasyForkMainScriptTemplate",
+      "bytes": 3176,
+      "sha256": "a9cf88d1d5e4acade63cb0157626d0061dcb54585b00af41c5e0375614336931"
+    }
+  }
+}

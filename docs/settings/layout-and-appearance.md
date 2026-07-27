@@ -4,9 +4,9 @@ description: 分别设置普通与全屏五区比例，并配置浮窗位置、�
 feature_ids: ["SET-001", "SET-007", "SET-008", "SET-009"]
 source_anchors: ["READER_THEME_MODES", "LAYOUT_REGION_KEYS", "READER_FULLPAGE_LAYOUT_DEFAULT", "readerWindowGeometryMarkup", "APPEARANCE_PROFILE_SETTING_KEYS"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-25
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-05-layout-settings.png", "/screenshots/guide-06-window-settings.png", "/screenshots/guide-07-appearance-settings.png"]
 ---
 
@@ -23,7 +23,7 @@ screenshots: ["/screenshots/guide-05-layout-settings.png", "/screenshots/guide-0
 | 左留白 | 0% | 正文左侧呼吸空间 |
 | 主帖 | 40% | 帖子正文和楼中楼 |
 | 中间间距 | 0% | 正文与时间轴间距 |
-| 时间轴 | 6% | 楼层定位和日期 |
+| 时间轴 | 8% | 楼层定位、楼层直达和日期 |
 | 右留白 | 0% | 时间轴外侧空间 |
 
 所有区域合计必须为 100%。编辑一个区域时，阅读器自动平衡其他可调区域；设置面板显示并保存当前阅读器形态的布局。
@@ -32,7 +32,7 @@ screenshots: ["/screenshots/guide-05-layout-settings.png", "/screenshots/guide-0
 
 | 形态 | 左留白 | 主帖 | 间距 | 时间轴 | 右留白 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 普通（嵌入/浮窗） | 0% | 90% | 0% | 6% | 4% |
+| 普通（嵌入/浮窗） | 0% | 88% | 0% | 8% | 4% |
 | 全屏 | 15% | 70% | 5% | 8% | 2% |
 
 ![五区布局的比例、共享和应用状态](/screenshots/guide-05-layout-settings.png)

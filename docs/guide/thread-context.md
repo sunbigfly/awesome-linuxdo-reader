@@ -2,11 +2,11 @@
 title: 二级回复、完整讨论与上下文
 description: 理解父回复预览、二级回复分页、完整讨论窗口、楼层收纳和已解决答案。
 feature_ids: ["READ-003", "READ-008", "READ-012", "READ-015"]
-source_anchors: ["SUB_REPLY_PAGE_SIZE", "loadReaderQuotedPost", "focusLiveNestedReply", "openDescendantRepliesWindow", "syncHiddenReplyRun", "renderSolvedAnswerCard"]
+source_anchors: ["SUB_REPLY_PAGE_SIZE", "loadReaderQuotedPost", "focusLiveNestedReply", "openDescendantRepliesWindow", "captureReaderAnchorState", "syncHiddenReplyRun", "renderSolvedAnswerCard"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-18-thread-context.png", "/screenshots/guide-20-community-actions.png"]
 ---
 
@@ -29,7 +29,7 @@ LINUX DO 的回复既有正式楼层号，也可能属于某个父楼层的直�
 
 ## 父回复下的二级回复
 
-0.1.14 默认先在父回复下预览 2 条直接回复；不存在更深层分支时最多显示 5 条。父楼层接近屏幕后才加载首批内容，后续数据继续服从共享请求调度。
+当前版本默认先在父回复下预览 2 条直接回复；不存在更深层分支时最多显示 5 条。父楼层接近屏幕后才加载首批内容，后续数据继续服从共享请求调度。
 
 “设置 → 帖子与回复 → 二级回复显示位置”控制三个关联行为：
 
@@ -46,9 +46,11 @@ LINUX DO 的回复既有正式楼层号，也可能属于某个父楼层的直�
 1. 按真实父子关系加载当前回复的全部后续分支，不只显示直属回复。
 2. 点击分支按钮可把某条回复设为新的讨论根，并显示从根到目标的关系路径。
 3. 窗口记录大小、位置、各分支阅读位置和已经打开过的分支；再次进入时优先恢复。
-4. 从消息、历史、时间轴或隐藏头像跳到二级回复时，阅读器会先打开对应讨论，再定位并高亮目标。
+4. 从消息、历史、时间轴、队列或隐藏头像跳到二级回复时，阅读器会先打开对应讨论，再定位并高亮目标。
 5. 实时收到的新回复会合并到已打开的分支；点赞、回应、Boost、回复和父回复预览仍可使用。
 6. 按 `Esc` 先关闭预览或返回上一层分支，再关闭完整讨论，不会直接退出整个阅读器。
+
+0.1.15 把完整讨论纳入统一阅读锚点：切换主题前保存讨论根、分支内首个可见楼层、滚动偏移和主信息流返回点；从历史或队列返回时恢复同一讨论位置，关闭窗口后再回到进入前的主信息流视口。目标楼层高度超过窗口时会对齐到可读起点，其余目标尽量居中。
 
 完整讨论中的父回复入口使用独立的蓝色提示块，当前楼层号保持在右侧。跳转成功时只强调入口图标，减少整块内容闪烁；启用“减少动态效果”后改为静态强调色。
 
@@ -58,7 +60,7 @@ LINUX DO 的回复既有正式楼层号，也可能属于某个父楼层的直�
 
 ![展开后的楼中楼、关系线、回应和回复入口](/screenshots/guide-20-community-actions.png)
 
-<p class="image-caption">截图展示二级回复中的原生互动入口；0.1.14 新增的完整讨论窗口和隐藏回复标记以当前脚本实际界面为准。</p>
+<p class="image-caption">截图展示二级回复中的原生互动入口；完整讨论窗口、精确位置恢复和隐藏回复标记以当前脚本实际界面为准。</p>
 
 ## 引用内容
 

@@ -4,9 +4,9 @@ description: 配置字体显示优化、嵌入阅读列表尺寸，以及界面�
 feature_ids: ["SET-004", "SET-005", "SET-006"]
 source_anchors: ["font-rendering", "HOST_EMBED_SIZE_SETTINGS", "FONT_SCOPE_CONFIG", "queryLocalFonts"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-25
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-04-font-settings.png"]
 ---
 
@@ -48,7 +48,7 @@ screenshots: ["/screenshots/guide-04-font-settings.png"]
 
 每个作用域都可以设置字体、字重、颜色和字号。调整正文不会强制改变界面；回复编辑器也可以保持更紧凑的字号。
 
-0.1.14 新配置的字号默认值为界面 92%、正文 98%、回复 80%。已有有效自定义值继续沿用。
+0.1.15 新配置的字号默认值为界面 92%、正文 95%、回复 80%。已有有效自定义值继续沿用。
 
 ## 字体选项
 

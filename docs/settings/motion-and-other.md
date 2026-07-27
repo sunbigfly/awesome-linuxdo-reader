@@ -2,11 +2,11 @@
 title: 动画、阅读与互动
 description: 配置跳转提示、加载动画、历史导航、退出方式、主帖操作列、完整讨论和 Boost 复制。
 feature_ids: ["READ-007", "READ-014", "ACTION-006", "SET-010", "SET-011", "SET-016", "SET-017", "SET-018", "SET-019"]
-source_anchors: ["historyEdgeTriggerPercent", "JUMP_HIGHLIGHT_SETTING_FIELDS", "BOOST_COPY_SETTING_ROWS", "jumpHighlightPrefsPatch", "READER_LOADING_ANIMATION_KEYS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
+source_anchors: ["historyEdgeTriggerPercent", "JUMP_HIGHLIGHT_SETTING_FIELDS", "BOOST_COPY_SETTING_ROWS", "jumpHighlightPrefsPatch", "READER_LOADING_ANIMATION_KEYS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "confirmNativeComposerClose", "expandNestedRepliesByDefault", "boostCopyMode"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-08-motion-settings.png", "/screenshots/guide-12-other-features.png", "/screenshots/guide-18-thread-context.png"]
 ---
 
@@ -32,7 +32,7 @@ screenshots: ["/screenshots/guide-08-motion-settings.png", "/screenshots/guide-1
 
 ## 加载动画
 
-0.1.14 的新配置默认使用“引文回声”；已经保存过的动画选择继续沿用。
+新配置默认使用“引文回声”；已经保存过的动画选择继续沿用。0.1.15 将动画结构集中到静态样式资源，并补齐减少动态效果时的静态呈现。
 
 打开主题或切换队列时，可以使用随机模式或十种固定动画：入口、星群、回廊、字浪、晶体、页边批注、章节、引文回声、脚注和互动汇流。
 
@@ -48,7 +48,7 @@ screenshots: ["/screenshots/guide-08-motion-settings.png", "/screenshots/guide-1
 
 ## 帖子打开位置
 
-“普通帖子从第 1 楼打开”只影响普通主题链接。消息、历史、收藏和明确楼层链接仍按其目标定位，避免丢失上下文。“按两次 Esc 关闭阅读器”默认关闭，因此临时面板都关闭后按一次 `Esc` 即退出；开启后才要求在 1.5 秒内按两次。
+“普通帖子从第 1 楼打开”只影响普通主题链接。消息、历史、收藏和明确楼层链接仍按其目标定位，避免丢失上下文。“按两次 Esc 关闭阅读器”默认关闭，因此临时面板都关闭后按一次 `Esc` 即退出；开启后才要求在 1.5 秒内按两次。“关闭原生回复窗口前再次确认”默认开启，只保护回复草稿窗口，和阅读器本体退出规则彼此独立。
 
 ## 回复展示
 

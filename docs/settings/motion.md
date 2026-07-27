@@ -4,9 +4,9 @@ description: 配置目标楼层提示和主题加载动画，并兼顾减少动�
 feature_ids: ["SET-010", "SET-011"]
 source_anchors: ["jumpHighlightPrefsPatch", "READER_LOADING_ANIMATION_KEYS"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-08-motion-settings.png"]
 ---
 
@@ -48,7 +48,7 @@ screenshots: ["/screenshots/guide-08-motion-settings.png"]
 
 “换一个”只刷新预览，不会触发网络请求，也不会打开新主题。
 
-0.1.14 的新配置默认使用“引文回声”。已有用户已经选择过的加载动画继续沿用，不会在升级时重置。
+新配置默认使用“引文回声”。0.1.15 将十种动画的结构样式集中到静态资源，并补齐减少动态效果时的静态呈现；已有用户已经选择过的加载动画继续沿用，不会在升级时重置。
 
 ## 减少动态效果
 

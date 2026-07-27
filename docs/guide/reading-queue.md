@@ -4,9 +4,9 @@ description: 从主题列表建立多主题阅读队列，管理后台预加载�
 feature_ids: ["CORE-006"]
 source_anchors: ["LDP_READER_QUEUE_KEY", "ensureReaderQueueEntry", "readerQueueStatusText", "bindReaderQueueSurface", "prefetchReaderQueueEntry", "createReaderQueueViewportTracker", "autoDequeueReaderQueueEntry", "clearReaderQueueEntries"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-reading-queue-entry.png", "/screenshots/guide-13-data-management.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-16-history.png"]
 ---
 
@@ -67,11 +67,12 @@ screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-
 
 ## 切换主题和恢复位置
 
-点击头像或完整列表中的文章行即可切换主题。切换前，阅读器会保存当前主题的楼层、楼层内偏移和滚动位置。
+点击头像或完整列表中的文章行即可切换主题。切换前，阅读器会保存当前主题的楼层、楼层内偏移和滚动位置；如果完整讨论窗口仍打开，还会保存讨论根、分支位置和主信息流返回点。
 
 再次回到该主题时：
 
 - 普通队列切换优先恢复上次视口；
+- 上次停留在完整讨论时，优先恢复对应分支和窗口内锚点；
 - 如果主题链接明确带有楼层号，则优先打开该楼层；
 - 如果启用了“普通主题从 #1 打开”，则从第 1 楼开始；
 - 已经取得的主题数据会优先复用，缺失部分再按需请求。

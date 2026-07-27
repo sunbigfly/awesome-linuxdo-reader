@@ -2,11 +2,11 @@
 title: 完整设置参考
 description: 汇总全部设置项、范围、默认值、生效时机和数据影响。
 feature_ids: ["SET-012", "SET-013", "SET-014", "SET-015", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
-source_anchors: ["PERFORMANCE_SETTING_GROUPS", "streamOverscanViewports", "nestedPrefetchViewports", "requestMaxConcurrent", "SETTINGS_NAV_GROUPS", "saveAllSettingsDrafts", "readerQueueAlwaysVisibleWhenEmpty", "doubleEscapeToCloseReader", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "aggregateDescendantReplies", "boostCopyMode"]
+source_anchors: ["PERFORMANCE_SETTING_GROUPS", "streamOverscanViewports", "nestedPrefetchViewports", "requestMaxConcurrent", "SETTINGS_NAV_GROUPS", "saveAllSettingsDrafts", "readerQueueAlwaysVisibleWhenEmpty", "doubleEscapeToCloseReader", "confirmNativeComposerClose", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "aggregateDescendantReplies", "boostCopyMode"]
 since: 0.1.2
-version: 0.1.14
+version: 0.1.15
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide-03-image-settings.png", "/screenshots/guide-04-font-settings.png", "/screenshots/guide-05-layout-settings.png", "/screenshots/guide-07-appearance-settings.png", "/screenshots/guide-09-performance-settings.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-13-data-management.png"]
 ---
 
@@ -14,7 +14,7 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 
 ![设置中心中的分类导航、当前用户信息和配置入口](/screenshots/guide-02-settings-overview.png)
 
-<p class="image-caption">截图展示设置中心的主要配置入口；0.1.14 已改为三组、14 个面板，并支持搜索和统一保存。</p>
+<p class="image-caption">截图展示设置中心的主要配置入口；当前版本按三组、14 个面板组织，并支持搜索和统一保存。</p>
 
 ## 用户信息
 
@@ -39,12 +39,12 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 | 字体 | 站点、系统、中文无衬线、衬线、等宽、自定义 | 系统 |
 | 字重 | 300/400/500/600 | 400 |
 | 颜色 | 跟随主题或自定义 | 跟随主题 |
-| 字号 | 50%–250% | 新配置界面/正文/回复为 92/98/80% |
+| 字号 | 50%–250% | 新配置界面/正文/回复为 92/95/80% |
 
 ## 布局与浮窗
 
 - 五区比例合计 100%，正文区域最小 40%，楼层时间轴最小 6%。
-- 普通（嵌入/浮窗）默认比例为 0% / 90% / 0% / 6% / 4%；全屏默认比例为 15% / 70% / 5% / 8% / 2%。
+- 普通（嵌入/浮窗）默认比例为 0% / 88% / 0% / 8% / 4%；全屏默认比例为 15% / 70% / 5% / 8% / 2%。
 - 浮窗最小 360 × 320 px。
 - 左右嵌入阅读默认宽度为当前浏览器宽度的 45%。
 - 布局按普通（嵌入/浮窗）与全屏分别保存；图片、字体和外观仍按各自设置范围保存。
@@ -92,6 +92,7 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 | 历史排序 | 最近打开/首次打开 | 最近打开 |
 | 普通主题从 #1 打开 | 开/关 | 关 |
 | 按两次 Esc 关闭阅读器 | 开/关 | 关 |
+| 关闭原生回复窗口前再次确认 | 开/关 | 开 |
 
 ## 帖子与回复
 
