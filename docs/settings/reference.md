@@ -2,7 +2,7 @@
 title: 完整设置参考
 description: 汇总全部设置项、范围、默认值、生效时机和数据影响。
 feature_ids: ["SET-012", "SET-013", "SET-014", "SET-015", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
-source_anchors: ["PERFORMANCE_SETTING_GROUPS", "streamOverscanViewports", "nestedPrefetchViewports", "requestMaxConcurrent", "SETTINGS_NAV_GROUPS", "saveAllSettingsDrafts", "readerQueueAlwaysVisibleWhenEmpty", "doubleEscapeToCloseReader", "confirmNativeComposerClose", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "aggregateDescendantReplies", "boostCopyMode"]
+source_anchors: ["PERFORMANCE_SETTING_GROUPS", "streamOverscanViewports", "nestedPrefetchViewports", "requestMaxConcurrent", "SETTINGS_NAV_GROUPS", "saveAllSettingsDrafts", "readerQueueAlwaysVisibleWhenEmpty", "doubleEscapeToCloseReader", "confirmNativeComposerClose", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "aggregateDescendantReplies", "inlineReplyTreeMaxDepth", "boostCopyMode"]
 since: 0.1.2
 version: 0.1.16
 status: current
@@ -101,6 +101,8 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 | 始终显示主帖操作列 | 开/关 | 开 |
 | 锁定操作列位置 | 开/关 | 关 |
 | 父楼层下展开二级回复 | 开/关 | 开 |
+| 启用树状评论 | 开/关（依赖上一开关） | 开 |
+| 树状嵌套层数 | 2–5 | 3 |
 | 启用“完整讨论”视图 | 开/关 | 开 |
 | 从楼层列表隐藏二级回复 | 开/关 | 开 |
 | Boost 末尾内容 | 数字递增/固定文字 | 数字递增 |

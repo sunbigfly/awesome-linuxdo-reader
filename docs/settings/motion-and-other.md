@@ -2,7 +2,7 @@
 title: 动画、阅读与互动
 description: 配置跳转提示、加载动画、历史导航、退出方式、主帖操作列、完整讨论和 Boost 复制。
 feature_ids: ["READ-007", "READ-014", "ACTION-006", "SET-010", "SET-011", "SET-016", "SET-017", "SET-018", "SET-019"]
-source_anchors: ["historyEdgeTriggerPercent", "JUMP_HIGHLIGHT_SETTING_FIELDS", "BOOST_COPY_SETTING_ROWS", "jumpHighlightPrefsPatch", "READER_LOADING_ANIMATION_KEYS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "confirmNativeComposerClose", "expandNestedRepliesByDefault", "boostCopyMode"]
+source_anchors: ["historyEdgeTriggerPercent", "JUMP_HIGHLIGHT_SETTING_FIELDS", "BOOST_COPY_SETTING_ROWS", "jumpHighlightPrefsPatch", "READER_LOADING_ANIMATION_KEYS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "confirmNativeComposerClose", "expandNestedRepliesByDefault", "inlineReplyTreeMaxDepth", "boostCopyMode"]
 since: 0.1.2
 version: 0.1.16
 status: current
@@ -54,11 +54,13 @@ screenshots: ["/screenshots/guide-08-motion-settings.png", "/screenshots/guide-1
 
 ![父楼层下的二级回复和正式楼层展示](/screenshots/guide-18-thread-context.png)
 
-- 在父回复下展开二级回复：展示直接回复。
+- 在父回复下展开二级回复：展示直接回复；关闭时树状评论不可用。
+- 启用树状评论：在二级下继续嵌套更深层回复（需先开启上一开关）。
+- 树状嵌套层数：2–5 层可选，默认 3；超出部分仍可走完整讨论。
 - 启用“完整讨论”视图：递归阅读更深分支并记住窗口位置。
 - 从楼层列表隐藏二级回复：收纳为参与者头像标记，跳转仍可定位。
 
-完整讨论建立在父回复下展开之上；关闭前者时设置中心会同步处理关联开关，避免保留不可达配置。
+完整讨论与树状评论都建立在父回复下展开之上；关闭前者时设置中心会同步处理关联开关，树状入口禁用，避免保留不可达配置。
 
 ## Boost 复制
 
