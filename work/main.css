@@ -1560,6 +1560,11 @@
     .ldp-reader-window-option{display:flex;align-items:center;gap:7px;font-size:var(--ldp-font-ui,12px);cursor:pointer;}
     .ldp-reader-window-option input{margin:0;}
     .ldp-setting-option-row{grid-template-columns:minmax(0,1fr) auto;cursor:pointer;}
+    .ldp-inline-reply-tree-enable-row.is-disabled{opacity:.55;cursor:not-allowed;}
+    .ldp-inline-reply-tree-enable-row.is-disabled .ldp-setting-switch input{cursor:not-allowed;}
+    .ldp-inline-reply-tree-depth-row{grid-template-columns:minmax(0,1fr) minmax(96px,132px);align-items:center;}
+    .ldp-inline-reply-tree-depth-row[hidden]{display:none;}
+    .ldp-inline-reply-tree-depth-row .ldp-inline-reply-tree-depth{width:100%;}
     .ldp-setting-option-copy{display:grid;gap:3px;min-width:0;}
     .ldp-setting-option-copy strong,.ldp-reader-action-option-copy strong{font-size:var(--ldp-font-base,13px);line-height:1.35;}
     .ldp-other-settings-fields{gap:14px;border-top:0;}
@@ -2662,6 +2667,12 @@
       --ldp-nested-branch-y:17px;--ldp-nested-parent-drop:34px;
       --ldp-nested-axis-left:3px;--ldp-nested-branch-width:15px;
       --ldp-nested-parent-head-width:15px;}
+    /* Deeper inline tree levels tighten indent so multi-level threads stay readable. */
+    .ldp-children .ldp-children{margin-left:14px;padding-left:14px;
+      --ldp-nested-parent-drop:28px;--ldp-nested-branch-width:12px;--ldp-nested-parent-head-width:12px;}
+    .ldp-post[data-ldp-nest-depth="2"] > .ldp-children,
+    .ldp-post[data-ldp-nest-depth="3"] > .ldp-children,
+    .ldp-post[data-ldp-nest-depth="4"] > .ldp-children{margin-left:12px;padding-left:12px;}
     .ldp-children-collapsed > .ldp-children{display:none;}
     .ldp-post.ldp-has-child-branches{overflow:visible;content-visibility:visible;}
     .ldp-post.ldp-has-child-branches.ldp-nested-branches-ready > .ldp-children::before{content:"";position:absolute;left:var(--ldp-nested-axis-left);
@@ -2680,10 +2691,12 @@
     .ldp-post.ldp-nested-branches-ready.ldp-parent-preview-linked > .ldp-children > .ldp-post::before,
     .ldp-post.ldp-nested-branches-ready.ldp-parent-preview-linked > .ldp-children > .ldp-post::after{display:none;}
     .ldp-children > .ldp-post{position:relative;overflow:visible;content-visibility:visible;}
-    .ldp-post.ldp-nested-branches-ready > .ldp-children > .ldp-post::before{content:"";position:absolute;left:calc(var(--ldp-nested-axis-left) - 18px);
+    /* line-left is measured per post (children-axis → post-local). Fallback keeps
+       the legacy padding-left:18 assumption for the first paint before JS measures. */
+    .ldp-post.ldp-nested-branches-ready > .ldp-children > .ldp-post::before{content:"";position:absolute;left:var(--ldp-nested-line-left,calc(var(--ldp-nested-axis-left) - var(--ldp-nested-gutter,18px)));
       top:0;bottom:0;border-left:var(--ldp-nested-line-width) solid var(--ldp-nested-line-color);
       pointer-events:none;}
-    .ldp-post.ldp-nested-branches-ready > .ldp-children > .ldp-post::after{content:"";position:absolute;left:calc(var(--ldp-nested-axis-left) - 18px);
+    .ldp-post.ldp-nested-branches-ready > .ldp-children > .ldp-post::after{content:"";position:absolute;left:var(--ldp-nested-line-left,calc(var(--ldp-nested-axis-left) - var(--ldp-nested-gutter,18px)));
       top:calc(var(--ldp-nested-branch-y) - var(--ldp-nested-turn-rise));
       width:calc(var(--ldp-nested-branch-width) - var(--ldp-nested-line-width));height:var(--ldp-nested-turn-rise);
       border-left:var(--ldp-nested-line-width) solid var(--ldp-nested-line-color);
@@ -2708,10 +2721,13 @@
     .ldp-children > .ldp-nested-preview{padding:5px 0 7px;line-height:1.5;border-bottom:none;
       contain-intrinsic-size:auto 96px;}
     .ldp-children > .ldp-nested-preview > .ldp-content{font-size:calc(var(--ldp-post-font-size,14px) * var(--ldp-nested-content-scale));}
-    .ldp-children > .ldp-nested-preview > :not(.ldp-content){zoom:var(--ldp-nested-component-scale);}
+    /* Exclude tree shells from zoom so deeper levels do not compound shrink. */
+    .ldp-children > .ldp-nested-preview > :not(.ldp-content):not(.ldp-children):not(.ldp-collapse-replies):not(.ldp-sub-loading):not(.ldp-sub-actions){zoom:var(--ldp-nested-component-scale);}
     .ldp-children > .ldp-nested-preview > .ldp-post-head{margin-bottom:0;flex-wrap:wrap;}
     .ldp-children > .ldp-nested-preview .ldp-user,
     .ldp-children > .ldp-nested-preview .ldp-time{opacity:.5;}
+    .ldp-children > .ldp-nested-preview > .ldp-collapse-replies{margin-top:2px;}
+    .ldp-nested-preview > .ldp-children > .ldp-nested-preview{--ldp-nested-content-scale:.95;--ldp-nested-component-scale:.93;}
     .ldp-floor.ldp-jump-self,.ldp-floor.ldp-jump-parent,.ldp-floor.ldp-jump-preview-self{border:none;cursor:pointer;margin-left:auto;
       padding:1px 5px;border-radius:5px;white-space:nowrap;line-height:1.35;}
     .ldp-floor.ldp-jump-parent{font-size:var(--ldp-font-sm,11px);font-weight:var(--ldp-reader-font-weight-base,400);color:var(--ldp-floor-preview-color,#9a5b13);background:color-mix(in srgb,var(--ldp-floor-preview-color,#9a5b13) 8%,transparent);}

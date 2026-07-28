@@ -831,6 +831,8 @@
 		expandNestedRepliesByDefault: true,
 		expandLeafNestedReplies: false,
 		aggregateDescendantReplies: true,
+		// 主信息流内联树最大深度：1=仅直属二级（旧行为），3=主楼下最多再嵌套两层
+		inlineReplyTreeMaxDepth: 3,
 		hideNestedReplyFloors: true,
 		...jumpHighlightPrefsPatch(JUMP_HIGHLIGHT_DEFAULTS),
 		boostCopyMode: BOOST_COPY_DEFAULTS.mode,
@@ -874,6 +876,9 @@
 	// --- 楼中楼分批加载 & 请求节流 相关配置 ---
 	const SUB_REPLY_PAGE_SIZE = 10;     // 楼中楼分页每页条数
 	const SUB_REPLY_FETCH_SIZE = 20;    // Discourse replies 接口单次返回上限
+	const INLINE_REPLY_TREE_MAX_DEPTH_MIN = 1;
+	const INLINE_REPLY_TREE_MAX_DEPTH_MAX = 5;
+	const INLINE_REPLY_TREE_MAX_DEPTH_DEFAULT = 3;
 	const REPLIES_HOVER_DELAY = 40;     // 楼层真正进入视口并短暂停留后触发抓取(ms)
 	const POST_REQUEST_MAX_429_RETRIES = 1;
 	const POST_REQUEST_429_BACKOFF = 1500;
@@ -5649,7 +5654,32 @@
 		console.error('[Awesome LinuxDo Reader] 静态样式资源为空，已停止初始化。');
 		return;
 	}
-	style.textContent = readerStaticStyle;
+	// Tree-depth CSS is appended here so fork/local builds work before the pinned
+	// @resource main.css on CDN is republished.
+	const inlineReplyTreeStyle = `
+		.ldp-children .ldp-children{margin-left:14px;padding-left:14px;
+			--ldp-nested-parent-drop:28px;--ldp-nested-branch-width:12px;--ldp-nested-parent-head-width:12px;}
+		.ldp-post[data-ldp-nest-depth="2"] > .ldp-children,
+		.ldp-post[data-ldp-nest-depth="3"] > .ldp-children,
+		.ldp-post[data-ldp-nest-depth="4"] > .ldp-children{margin-left:12px;padding-left:12px;}
+		/* Measured per-post line joint; overrides legacy axis-18px assumption. */
+		.ldp-post.ldp-nested-branches-ready > .ldp-children > .ldp-post::before,
+		.ldp-post.ldp-nested-branches-ready > .ldp-children > .ldp-post::after{
+			left:var(--ldp-nested-line-left,calc(var(--ldp-nested-axis-left) - var(--ldp-nested-gutter,18px)));}
+		/* Undo compact zoom on tree chrome so nested levels do not compound. */
+		.ldp-children > .ldp-nested-preview > .ldp-children,
+		.ldp-children > .ldp-nested-preview > .ldp-collapse-replies,
+		.ldp-children > .ldp-nested-preview > .ldp-sub-loading,
+		.ldp-children > .ldp-nested-preview > .ldp-sub-actions{zoom:1;}
+		.ldp-children > .ldp-nested-preview > .ldp-collapse-replies{margin-top:2px;}
+		.ldp-nested-preview > .ldp-children > .ldp-nested-preview{--ldp-nested-content-scale:.95;--ldp-nested-component-scale:.93;}
+		.ldp-inline-reply-tree-enable-row.is-disabled{opacity:.55;cursor:not-allowed;}
+		.ldp-inline-reply-tree-enable-row.is-disabled .ldp-setting-switch input{cursor:not-allowed;}
+		.ldp-inline-reply-tree-depth-row{grid-template-columns:minmax(0,1fr) minmax(96px,132px);align-items:center;}
+		.ldp-inline-reply-tree-depth-row[hidden]{display:none;}
+		.ldp-inline-reply-tree-depth-row .ldp-inline-reply-tree-depth{width:100%;}
+	`;
+	style.textContent = `${readerStaticStyle}\n${inlineReplyTreeStyle}`;
 	function ensureReaderStyleMounted() {
 		const target = document.head || PAGE_ROOT;
 		if (!target) return;
@@ -6707,6 +6737,37 @@
 		{ section: 'replies', className: 'ldp-hide-nested-reply-floors', label: '从楼层列表隐藏二级回复', description: '二级回复固定收纳到对应父楼层。', hidden: true },
 	];
 
+	const INLINE_REPLY_TREE_DEPTH_OPTIONS = Object.freeze([
+		{ value: 2, label: '2 层' },
+		{ value: 3, label: '3 层（默认）' },
+		{ value: 4, label: '4 层' },
+		{ value: 5, label: '5 层' },
+	]);
+	const INLINE_REPLY_TREE_ENABLED_DEFAULT = 3;
+
+	function inlineReplyTreeDepthSettingMarkup() {
+		const options = INLINE_REPLY_TREE_DEPTH_OPTIONS.map((option) =>
+			`<option value="${option.value}">${option.label}</option>`
+		).join('');
+		return `<label class="ldp-setting-row ldp-setting-option-row ldp-inline-reply-tree-enable-row">
+			<span class="ldp-setting-option-copy">
+				<strong>启用树状评论</strong>
+				<small>在二级回复下继续嵌套展示更深层回复。需先开启上方的「在父回复下展开二级回复」。</small>
+			</span>
+			<span class="ldp-setting-switch">
+				<input class="ldp-inline-reply-tree-enable" type="checkbox" role="switch" aria-label="启用树状评论">
+				<span class="ldp-setting-switch-track" aria-hidden="true"></span>
+			</span>
+		</label>
+		<label class="ldp-setting-row ldp-inline-reply-tree-depth-row">
+			<span class="ldp-setting-option-copy">
+				<strong>树状嵌套层数</strong>
+				<small>主信息流内最多展示的回复嵌套层数。超出后仍可打开「完整讨论」。</small>
+			</span>
+			<select class="ldp-reader-select ldp-inline-reply-tree-depth" aria-label="树状嵌套层数">${options}</select>
+		</label>`;
+	}
+
 	function settingSwitchMarkup(field) {
 		return `<label class="ldp-setting-row ldp-setting-option-row"${field.hidden ? ' hidden' : ''}>
 			<span class="ldp-setting-option-copy">
@@ -6965,6 +7026,31 @@
 		return [...stored, ...BOOKMARK_TAB_TYPES.filter((type) => !stored.includes(type))];
 	}
 
+	function normalizeInlineReplyTreeMaxDepth(value) {
+		const depth = Math.round(Number(value));
+		if (!Number.isFinite(depth)) return INLINE_REPLY_TREE_MAX_DEPTH_DEFAULT;
+		return Math.min(
+			INLINE_REPLY_TREE_MAX_DEPTH_MAX,
+			Math.max(INLINE_REPLY_TREE_MAX_DEPTH_MIN, depth),
+		);
+	}
+
+	function inlineReplyTreeMaxDepth() {
+		// Tree nesting requires inline secondary replies; otherwise stay at one level.
+		if (PREFS?.expandNestedRepliesByDefault !== true) return 1;
+		return normalizeInlineReplyTreeMaxDepth(PREFS?.inlineReplyTreeMaxDepth);
+	}
+
+	function inlineReplyTreeEnabled() {
+		return inlineReplyTreeMaxDepth() >= 2;
+	}
+
+	function postNestDepth(node, fallback = 0) {
+		if (!node) return Math.max(0, Number(fallback) || 0);
+		const raw = Number(node.dataset?.ldpNestDepth);
+		return Number.isFinite(raw) && raw >= 0 ? raw : Math.max(0, Number(fallback) || 0);
+	}
+
 	function normalizeReaderPrefs(prefs) {
 		const knownPrefs = Object.keys(DEFAULT_PREFS).reduce((result, key) => {
 			if (Object.hasOwn(prefs || {}, key)) result[key] = prefs[key];
@@ -7023,6 +7109,9 @@
 				expandNestedRepliesByDefault,
 				expandLeafNestedReplies,
 				aggregateDescendantReplies,
+				inlineReplyTreeMaxDepth: normalizeInlineReplyTreeMaxDepth(
+					performancePrefs.inlineReplyTreeMaxDepth,
+				),
 				hideNestedReplyFloors: performancePrefs.hideNestedReplyFloors === true,
 			...jumpHighlightPrefsPatch(jumpHighlight),
 			boostCopyMode: boostCopy.mode,
@@ -19027,8 +19116,14 @@
 		if (!num || !ctx) return null;
 		const streamNode = getStreamPostNode(ctx, num);
 		if (streamNode?.isConnected) return streamNode;
-		return (ctx.commentsEl?.querySelector(`:scope > .ldp-post[data-post-number="${num}"]`)) ||
-				null;
+		if (ctx.subReplyState) {
+			for (const state of ctx.subReplyState.values()) {
+				const cached = state?.nodeCache?.get(num);
+				if (cached?.isConnected) return cached;
+			}
+		}
+		// Nested tree nodes live under .ldp-children, not only as top-level stream posts.
+		return ctx.commentsEl?.querySelector(`.ldp-post[data-post-number="${num}"]`) || null;
 	}
 
 	function rememberLatestReplyTime(ctx, post, options = {}) {
@@ -19135,13 +19230,28 @@
 				`:scope > .ldp-post[data-post-number="${+p.post_number}"]`
 			);
 			if (existingNode) return existingNode;
+			const parentDepth = postNestDepth(parentNode, 0);
+			const nestDepth = Number.isFinite(Number(options.nestDepth))
+				? Math.max(0, Number(options.nestDepth))
+				: parentDepth + 1;
+			const maxDepth = inlineReplyTreeMaxDepth();
+			const allowNestedChildren = nestDepth < maxDepth;
 			const node = renderPost(p, renderAsReply, ctx, {
 				forceExpanded: true,
 				nestedPreview: true,
 				showParentJump: false,
+				nestDepth,
+				allowNestedChildren,
 			});
+			node.dataset.ldpNestDepth = String(nestDepth);
+			// Deeper than direct replies: keep the branch collapsed until the user opens it
+			// or a jump/focus path expands it. Depth-1 still follows expandNestedRepliesByDefault
+			// via the parent shell, not this node body.
+			if (allowNestedChildren && nestDepth >= 2 && +(p.reply_count || 0) > 0) {
+				node.classList.add('ldp-children-collapsed');
+			}
 			if (parentNode) {
-				if (!options.deferNestedSync) parentChildren.appendChild(node);
+				if (!options.deferNestedSync && parentChildren) parentChildren.appendChild(node);
 				bindPostMediaLayoutSync(node, ctx);
 				const streamNode = ctx.streamNodeMap.get(p.post_number);
 				if (streamNode) {
@@ -19161,6 +19271,9 @@
 						setNestedReplyCollapsed(streamNode, !keepJumpTargetExpanded);
 					}
 				}
+				if (allowNestedChildren && +(p.reply_count || 0) > 0 && ctx.repliesIO) {
+					ctx.repliesIO.observe(node);
+				}
 				if (!options.deferNestedSync) syncChildControls(parentNode);
 			}
 			if (parentNode) ctx.tracker.observe(node);
@@ -19177,7 +19290,9 @@
 			forceCollapsed: collapsedStreamReply,
 			showParentJump: isNestedReply,
 			deferContent: true,
+			nestDepth: 0,
 		});
+		node.dataset.ldpNestDepth = '0';
 		node.hidden = preferenceHidden;
 		insertStreamPost(ctx, node, p.post_number, {
 			deferSync: !!options.deferStreamSync,
@@ -19348,7 +19463,9 @@
 
 	function syncNestedReplyBranches(children) {
 		const posts = [...children.children].filter((node) => node.classList.contains('ldp-post'));
-		const parent = children.closest('.ldp-post');
+		const parent = children.parentElement?.classList?.contains('ldp-post')
+			? children.parentElement
+			: children.closest('.ldp-post');
 		const parentAvatar = parent?.querySelector(':scope > .ldp-post-head .ldp-avatar');
 		const railToggle = children.querySelector(':scope > .ldp-nested-rail-toggle');
 		const branchToggle = children.querySelector(':scope > .ldp-nested-branch-toggle');
@@ -19373,6 +19490,7 @@
 				clearCombinedParentPreviewLine(parent);
 				return;
 			}
+			// Rail sits just left of the parent avatar (legacy: avatar.left - 15).
 			let axisX = Math.round(avatarRect.left - childrenRect.left - 15);
 			let dropAnchorY = avatarRect.top + avatarRect.height / 2;
 			const parentLine = findParentPreviewLine(parent);
@@ -19383,7 +19501,9 @@
 				dropAnchorY = avatarRect.top + avatarRect.height / 2;
 			}
 			const firstChildAvatar = posts[0]?.querySelector(':scope > .ldp-post-head .ldp-avatar');
-			const firstChildX = firstChildAvatar ? Math.round(firstChildAvatar.getBoundingClientRect().left - childrenRect.left) : 18;
+			const firstChildX = firstChildAvatar
+				? Math.round(firstChildAvatar.getBoundingClientRect().left - childrenRect.left)
+				: Math.round(parseFloat(getComputedStyle(children).paddingLeft) || 18);
 			const firstBranchWidth = Math.max(0, firstChildX - axisX - branchGap);
 			const parentHeadWidth = Math.max(0, avatarRect.left - childrenRect.left - axisX - branchGap);
 			branchCanvasWidth = Math.max(1, Math.ceil(childrenRect.width));
@@ -19396,10 +19516,16 @@
 				if (!childAvatar) return null;
 				const childAvatarRect = childAvatar.getBoundingClientRect();
 				const postRect = post.getBoundingClientRect();
+				// Convert children-local axis into post-local left. The old CSS used
+				// `left: calc(axis - 18px)` assuming padding-left === 18; multi-depth
+				// gutters and zoomed heads break that constant, so measure instead.
+				const postOffsetX = postRect.left - childrenRect.left;
+				const lineLeft = Math.round(axisX - postOffsetX);
 				return {
 					branchY: Math.max(0, Math.round(childAvatarRect.top + childAvatarRect.height / 2 - postRect.top)),
-					branchWidth: Math.max(0, Math.round(childAvatarRect.left - childrenRect.left) - branchAxisX - branchGap),
+					branchWidth: Math.max(0, Math.round(childAvatarRect.left - childrenRect.left) - axisX - branchGap),
 					railY: Math.max(0, Math.round(childAvatarRect.top + childAvatarRect.height / 2 - childrenRect.top)),
+					lineLeft,
 				};
 			});
 			const groupedReady = parentPreviewLinked && branchMetrics.length === posts.length && branchMetrics.every(Boolean) &&
@@ -19409,11 +19535,17 @@
 			children.style.setProperty('--ldp-nested-branch-width', `${firstBranchWidth}px`);
 			children.style.setProperty('--ldp-nested-parent-drop', `${drop}px`);
 			children.style.setProperty('--ldp-nested-parent-head-width', `${parentHeadWidth}px`);
+			// Gutter used only as fallback when a post has not received --ldp-nested-line-left yet.
+			const gutter = Math.max(0, Math.round(
+				(posts[0]?.getBoundingClientRect().left || childrenRect.left) - childrenRect.left
+			));
+			children.style.setProperty('--ldp-nested-gutter', `${gutter || 18}px`);
 		} else {
 			children.style.removeProperty('--ldp-nested-axis-left');
 			children.style.removeProperty('--ldp-nested-branch-width');
 			children.style.removeProperty('--ldp-nested-parent-drop');
 			children.style.removeProperty('--ldp-nested-parent-head-width');
+			children.style.removeProperty('--ldp-nested-gutter');
 		}
 		const firstBranchMetric = branchMetrics.find(Boolean);
 		const lastBranchMetric = branchMetrics[branchMetrics.length - 1];
@@ -19456,16 +19588,21 @@
 			if (branchAxisX === null) {
 				post.style.removeProperty('--ldp-nested-branch-y');
 				post.style.removeProperty('--ldp-nested-branch-width');
+				post.style.removeProperty('--ldp-nested-line-left');
 			} else {
 				const metric = branchMetrics[index];
 				if (metric) {
 					post.style.setProperty('--ldp-nested-branch-y', `${metric.branchY}px`);
 					post.style.setProperty('--ldp-nested-branch-width', `${metric.branchWidth}px`);
+					post.style.setProperty('--ldp-nested-line-left', `${metric.lineLeft}px`);
 				} else {
 					post.style.removeProperty('--ldp-nested-branch-y');
 					post.style.removeProperty('--ldp-nested-branch-width');
+					post.style.removeProperty('--ldp-nested-line-left');
 				}
 			}
+			// Keep sibling trunk continuous: only the true last child stops at branch-y.
+			// Nested subtrees are indented on their own axis and must not cut the parent rail.
 			post.classList.toggle('ldp-nested-branch-last', index === posts.length - 1);
 			post.classList.toggle('ldp-nested-branch-single', posts.length === 1);
 		});
@@ -19476,8 +19613,6 @@
 
 	function scheduleNestedBranchSync(post, ctx) {
 		if (!post || !post.isConnected) return;
-		const parentNum = +(post.dataset.replyToPostNumber || 0);
-		const parent = parentNum && ctx && ctx.streamNodeMap && ctx.streamNodeMap.get(parentNum);
 		if (nestedBranchSyncFrames.has(post)) return;
 		const run = () => {
 			if (!post.isConnected) {
@@ -19489,12 +19624,34 @@
 				return;
 			}
 			nestedBranchSyncFrames.delete(post);
-			syncChildControls(post);
-			if (parent) syncChildControls(parent);
+			// Walk the open ancestor chain so each level remeasures after a deeper
+			// batch is spliced in (padding/zoom/height all affect the joint).
+			const chain = [];
+			let cursor = post;
+			const seen = new Set();
+			while (cursor && cursor.classList?.contains('ldp-post') && !seen.has(cursor)) {
+				seen.add(cursor);
+				chain.push(cursor);
+				const parentChildren = cursor.parentElement?.classList?.contains('ldp-children')
+					? cursor.parentElement
+					: null;
+				cursor = parentChildren?.parentElement?.classList?.contains('ldp-post')
+					? parentChildren.parentElement
+					: null;
+			}
+			chain.forEach((node) => syncChildControls(node));
 		};
+		// Double rAF: wait until the newly spliced DOM has real layout boxes
+		// before measuring avatars; a single frame often still sees width 0.
 		const handle = streamScrollIsActive(ctx, 100)
 			? setTimeout(run, 110)
-			: requestAnimationFrame(run);
+			: requestAnimationFrame(() => {
+				if (!post.isConnected) {
+					nestedBranchSyncFrames.delete(post);
+					return;
+				}
+				nestedBranchSyncFrames.set(post, requestAnimationFrame(run));
+			});
 		nestedBranchSyncFrames.set(post, handle);
 	}
 
@@ -19583,16 +19740,76 @@
 		});
 	}
 
+	function countRenderedChildReplies(post) {
+		const children = post?.querySelector(':scope > .ldp-children');
+		if (!children) return 0;
+		let renderedCount = 0;
+		for (const child of children.children) {
+			if (child.classList.contains('ldp-post')) renderedCount++;
+		}
+		return renderedCount;
+	}
+
+	function clearEmptyChildReplyShell(post, ctx = post?._ldpReaderContext) {
+		if (!post) return;
+		const postNumber = +(post.dataset.postNumber || 0);
+		post.classList.remove('ldp-children-collapsed', 'ldp-has-child-branches', 'ldp-nested-branches-ready');
+		clearCombinedParentPreviewLine(post);
+		post.querySelector(':scope > .ldp-collapse-replies')?.remove();
+		post.querySelector(':scope > .ldp-children')?.remove();
+		post.querySelector(':scope > .ldp-sub-loading')?.remove();
+		delete post.dataset.childReplyTotal;
+		if (post._ldpPostData && Object.hasOwn(post._ldpPostData, 'reply_count')) {
+			post._ldpPostData.reply_count = 0;
+		}
+		if (postNumber && ctx?.subReplyState) ctx.subReplyState.delete(postNumber);
+		if (postNumber && ctx?.directRepliesByParent) ctx.directRepliesByParent.delete(postNumber);
+		ctx?.repliesIO?.unobserve?.(post);
+	}
+
+	// After /replies fetch settles, align the expand control with actual direct replies.
+	// Discourse reply_count can be stale, include filtered descendants, or count hidden posts.
+	function reconcilePostChildReplyTotal(post, actualCount, ctx = post?._ldpReaderContext, options = {}) {
+		if (!post) return 0;
+		const renderedCount = countRenderedChildReplies(post);
+		const loadedCount = Math.max(0, Number(actualCount) || 0);
+		const hasMore = options.hasMore === true;
+		const total = hasMore
+			? Math.max(loadedCount, renderedCount, +(options.totalCount || 0), +(post.dataset.childReplyTotal || 0))
+			: Math.max(loadedCount, renderedCount);
+		if (total <= 0 && !hasMore) {
+			clearEmptyChildReplyShell(post, ctx);
+			return 0;
+		}
+		post.dataset.childReplyTotal = String(total);
+		if (post._ldpPostData && !hasMore) {
+			post._ldpPostData.reply_count = total;
+		}
+		syncChildControls(post);
+		if (total > 0 && ctx?.repliesIO) ctx.repliesIO.observe(post);
+		return total;
+	}
+
 	function syncChildControls(post) {
 		const children = post?.querySelector(':scope > .ldp-children');
 		const btn = post?.querySelector(':scope > .ldp-collapse-replies');
 		if (!children || !btn) return;
 		const collapsed = post.classList.contains('ldp-children-collapsed');
-		let renderedCount = 0;
-		for (const child of children.children) {
-			if (child.classList.contains('ldp-post')) renderedCount++;
+		const renderedCount = countRenderedChildReplies(post);
+		const ctx = post._ldpReaderContext;
+		const postNumber = +(post.dataset.postNumber || 0);
+		const state = postNumber && ctx?.subReplyState ? ctx.subReplyState.get(postNumber) : null;
+		// Prefer settled fetch results over optimistic reply_count baked into dataset.
+		const totalCount = state && state.hasMore === false
+			? Math.max(state.all?.length || 0, renderedCount)
+			: Math.max(
+				+(post.dataset.childReplyTotal || 0),
+				state?.all?.length || 0,
+				renderedCount,
+			);
+		if (state && state.hasMore === false && totalCount !== +(post.dataset.childReplyTotal || 0)) {
+			post.dataset.childReplyTotal = String(totalCount);
 		}
-		const totalCount = Math.max(+(post.dataset.childReplyTotal || 0), renderedCount);
 		const railToggle = children.querySelector(':scope > .ldp-nested-rail-toggle');
 		const branchToggle = children.querySelector(':scope > .ldp-nested-branch-toggle');
 		if (railToggle) {
@@ -19604,6 +19821,11 @@
 			setNestedReplyCollapsed(post, false);
 		}
 		if (!totalCount) {
+			// Settled empty: tear down phantom "展开 1 条回复" chrome.
+			if (state && state.hasMore === false) {
+				clearEmptyChildReplyShell(post, ctx);
+				return;
+			}
 			btn.classList.remove('show');
 			post.classList.remove('ldp-has-child-branches');
 			post.classList.remove('ldp-nested-branches-ready');
@@ -19646,7 +19868,7 @@
 					<button class="ldp-btn ldp-sub-page-btn ldp-descendant-replies-open" type="button" hidden>${icon('layers')}<span>查看完整讨论</span></button>
 				</div>
 			</div>
-			<div class="ldp-sub-loading">正在加载二级回复…</div>`;
+			<div class="ldp-sub-loading">正在加载回复…</div>`;
 	}
 
 	function readerPostIsRead(post, ctx) {
@@ -19848,22 +20070,33 @@
 		const readStateHtml = `<span class="ldp-post-read-state is-${readState}" data-read-state="${readState}" data-ldp-tooltip-label="${readStateLabel}" role="img" aria-label="${readStateLabel}">${postReadStateIconHtml(isRead)}</span>`;
 		const collapseNested = !options.forceExpanded &&
 			(hiddenCollapsible || !!options.forceCollapsed);
-		const allowChildReplies = !ctx.isPostVoting && !options.nestedPreview && p.reply_count > 0;
+		const nestDepth = Math.max(0, Number(options.nestDepth) || 0);
+		const maxInlineDepth = inlineReplyTreeMaxDepth();
+		// Compact nested previews may still host a child shell when the inline tree
+		// depth budget allows it (Scheme A). nestedPreview alone no longer blocks children.
+		const allowChildReplies = !ctx.isPostVoting &&
+			+(p.reply_count || 0) > 0 &&
+			nestDepth < maxInlineDepth &&
+			(!options.nestedPreview || options.allowNestedChildren === true);
 		const childRepliesHtml = allowChildReplies ? childReplyShellHtml(p.reply_count) : '';
+		// Depth 0 follows the existing default; depth >= 2 starts collapsed to limit DOM growth.
+		const collapseChildShell = allowChildReplies && (
+			nestDepth >= 2 ||
+			(nestDepth === 0 && (isTopicStarter || PREFS.expandNestedRepliesByDefault !== true))
+		);
 
 		const node = makeElement('div');
 		node.className = 'ldp-post' + (isReply ? ' ldp-reply ldp-reply-collapsible' : '') +
 				(hiddenCollapsible ? ' ldp-hidden-collapsible' : '') +
 				(options.nestedPreview ? ' ldp-nested-preview' : '') +
 				(collapseNested ? ' ldp-nested-collapsed' : '') +
-				(allowChildReplies && (isTopicStarter || PREFS.expandNestedRepliesByDefault !== true)
-					? ' ldp-children-collapsed'
-					: '');
+				(collapseChildShell ? ' ldp-children-collapsed' : '');
 		node.dataset.postId = p.id;
 		node.dataset.postNumber = p.post_number;
 		node.dataset.username = p.username || '';
 		node.dataset.createdAt = p.created_at || '';
 		node.dataset.ldpContentHydrated = deferContent ? '0' : '1';
+		node.dataset.ldpNestDepth = String(nestDepth);
 		node._ldpPostData = p;
 		node._ldpReaderContext = ctx;
 		if (replyToPostNumber) node.dataset.replyToPostNumber = replyToPostNumber;
@@ -24536,19 +24769,36 @@
 			? preferredParentNode
 			: findReplyListParent(postNumber, ctx);
 		if (!state || !parentNode) return;
-		if (parentNode.classList.contains('ldp-nested-preview')) return;
+		// Nested previews may host deeper tree shells when max depth allows it.
 		const children = parentNode.querySelector(':scope > .ldp-children');
 		if (!children) return;
+		const parentDepth = postNestDepth(parentNode, parentNode.classList.contains('ldp-nested-preview') ? 1 : 0);
+		const maxDepth = inlineReplyTreeMaxDepth();
+		const childDepth = parentDepth + 1;
 		const aggregate = PREFS.aggregateDescendantReplies === true;
 		const totalCount = Math.max(state.all.length, +(state.totalCount || 0));
-		const showAggregate = aggregate && (totalCount > 5 || state.all.some((reply) => [...(ctx.directRepliesByParent.get(+reply.post_number)?.values() || [])].some((child) => +child.reply_to_post_number === +reply.post_number)));
-		const pageSize = showAggregate ? 2 : (aggregate ? 5 : SUB_REPLY_PAGE_SIZE);
+		const hasGrandchildren = state.all.some((reply) =>
+			[...(ctx.directRepliesByParent.get(+reply.post_number)?.values() || [])]
+				.some((child) => +child.reply_to_post_number === +reply.post_number) ||
+			+(reply.reply_count || 0) > 0
+		);
+		// With an inline tree (maxDepth > 1), grandchildren no longer force the shallow
+		// aggregate preview on the root parent — the tree can show them in place.
+		const treeEnabled = maxDepth > 1;
+		const showAggregate = parentDepth === 0 && aggregate && (
+			treeEnabled
+				? totalCount > 8
+				: (totalCount > 5 || hasGrandchildren)
+		);
+		const pageSize = showAggregate
+			? 2
+			: (aggregate && parentDepth === 0 ? 5 : (parentDepth >= 1 ? Math.min(5, SUB_REPLY_PAGE_SIZE) : SUB_REPLY_PAGE_SIZE));
 		const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
 		state.pageIndex = Math.max(0, Math.min(pageCount - 1, +(state.pageIndex || 0) + pageDelta));
 		if (!state.nodeCache) state.nodeCache = new Map();
 		const start = state.pageIndex * pageSize;
 		const batch = state.all.slice(start, start + pageSize);
-		const renderKey = `${showAggregate ? 1 : 0}:${state.pageIndex}:${state.all.length}:${totalCount}:${state.loadingMore ? 1 : 0}:${batch.map((reply) => +(reply.post_number || 0)).join(',')}`;
+		const renderKey = `${showAggregate ? 1 : 0}:${maxDepth}:${childDepth}:${state.pageIndex}:${state.all.length}:${totalCount}:${state.loadingMore ? 1 : 0}:${batch.map((reply) => +(reply.post_number || 0)).join(',')}`;
 		const mountedReplies = [...children.children].filter((node) => node.classList.contains('ldp-post'));
 		if (state.renderedParent === parentNode && state.renderedKey === renderKey &&
 				mountedReplies.length === batch.length &&
@@ -24568,16 +24818,23 @@
 					nestedList: true,
 					preferredParentNode: parentNode,
 					deferNestedSync: true,
+					nestDepth: childDepth,
 				});
 				if (node) {
 					state.nodeCache.set(replyPostNumber, node);
 				}
+			} else {
+				node.dataset.ldpNestDepth = String(childDepth);
 			}
 			if (node) {
 				if (node._ldpPostData !== rp)
 					updateLivePostData(rp, ctx, { refreshContent: true });
 				state.nodeCache.set(replyPostNumber, node);
 				desiredNodes.push(node);
+				if (+(node.dataset.childReplyTotal || node._ldpPostData?.reply_count || 0) > 0 &&
+						childDepth < maxDepth && ctx.repliesIO) {
+					ctx.repliesIO.observe(node);
+				}
 			}
 		});
 		const actionEl = parentNode.querySelector(':scope > .ldp-children > .ldp-sub-actions');
@@ -24600,10 +24857,20 @@
 		const nextBtn = actionEl?.querySelector('.ldp-sub-page-next');
 		const infoEl = actionEl?.querySelector('.ldp-sub-page-info');
 		const aggregateBtn = actionEl?.querySelector('.ldp-descendant-replies-open');
+		// Full discussion remains available when the inline tree cannot go deeper, or when
+		// the root parent is still in aggregate preview mode.
+		const showFullDiscussion = !!aggregate && (
+			showAggregate ||
+			(hasGrandchildren && childDepth >= maxDepth)
+		);
 		[prevBtn, nextBtn, infoEl].forEach((control) => { if (control) control.hidden = showAggregate; });
-		if (aggregateBtn) aggregateBtn.hidden = !showAggregate;
+		if (aggregateBtn) aggregateBtn.hidden = !showFullDiscussion;
 		if (actionEl && actionEl.parentNode === children && actionEl.nextSibling) children.appendChild(actionEl);
-		if (showAggregate || pageCount > 1) {
+		// Do NOT force ldp-nested-branches-ready here: that class must wait for
+		// syncNestedReplyBranches to measure real avatar/axis geometry. Premature
+		// ready state paints lines with the CSS defaults (axis 3px, -18px gutter)
+		// and looks like a broken splice.
+		if (showFullDiscussion || (!showAggregate && pageCount > 1) || showAggregate) {
 			actionEl?.classList.add('show');
 			if (prevBtn) prevBtn.disabled = !!state.loadingMore || state.pageIndex <= 0;
 			if (nextBtn) nextBtn.disabled = !!state.loadingMore || state.pageIndex >= pageCount - 1;
@@ -25380,6 +25647,13 @@
 
 	function ensureLiveReplyShell(parentNode, totalCount, ctx) {
 		if (!parentNode) return null;
+		const parentDepth = postNestDepth(
+			parentNode,
+			parentNode.classList.contains('ldp-nested-preview') ? 1 : 0,
+		);
+		const maxDepth = inlineReplyTreeMaxDepth();
+		// Do not create a child shell past the configured inline tree budget.
+		if (parentDepth >= maxDepth) return parentNode.querySelector(':scope > .ldp-children');
 		const total = Math.max(1, +totalCount || 0);
 		parentNode.dataset.childReplyTotal = String(Math.max(+(parentNode.dataset.childReplyTotal || 0), total));
 		if (parentNode._ldpPostData) {
@@ -25398,7 +25672,9 @@
 		setNestedReplyCollapsed(parentNode, parentNode._ldpPostData?.hidden === true);
 		if (created) {
 			const isTopicStarter = +parentNode.dataset.postNumber === 1;
-			setChildRepliesCollapsed(parentNode, isTopicStarter || PREFS.expandNestedRepliesByDefault !== true);
+			const collapseByDefault = parentDepth >= 2 ||
+				(parentDepth === 0 && (isTopicStarter || PREFS.expandNestedRepliesByDefault !== true));
+			setChildRepliesCollapsed(parentNode, collapseByDefault);
 		}
 		if (ctx?.repliesIO) ctx.repliesIO.observe(parentNode);
 		syncChildControls(parentNode);
@@ -25413,7 +25689,7 @@
 		const previousAll = previous && Array.isArray(previous.all) ? previous.all : [];
 		const wasAlreadyKnown = previousAll.some((reply) => +(reply?.post_number || 0) === postNumber);
 		rememberPostData(ctx, post, parentNumber);
-		const parentNode = ctx.streamNodeMap.get(parentNumber);
+		const parentNode = findReplyListParent(parentNumber, ctx) || ctx.streamNodeMap.get(parentNumber);
 		if (!parentNode) return false;
 		const knownMap = ctx.directRepliesByParent.get(parentNumber);
 		const knownReplies = knownMap ? [...knownMap.values()] : [];
@@ -25474,8 +25750,52 @@
 		const mergedPost = streamNode?._ldpPostData || { ...post };
 		rememberPostData(ctx, mergedPost);
 		const replyCount = +(post.reply_count || 0);
-		if (replyCount > 0 && streamNode) ensureLiveReplyShell(streamNode, replyCount, ctx);
+		if (replyCount > 0) {
+			copies.forEach((node) => {
+				if (postNestDepth(node, node.classList.contains('ldp-nested-preview') ? 1 : 0) < inlineReplyTreeMaxDepth()) {
+					ensureLiveReplyShell(node, replyCount, ctx);
+				}
+			});
+		}
 		return true;
+	}
+
+	function resolveKnownPostData(ctx, postNumber, fallback = null) {
+		const number = +postNumber;
+		if (!number || !ctx) return fallback;
+		const streamData = ctx.streamNodeMap?.get(number)?._ldpPostData;
+		if (streamData) return streamData;
+		const nestedNode = findReplyListParent(number, ctx);
+		if (nestedNode?._ldpPostData) return nestedNode._ldpPostData;
+		if (ctx.directRepliesByParent) {
+			for (const replies of ctx.directRepliesByParent.values()) {
+				const found = replies?.get?.(number);
+				if (found) return found;
+			}
+		}
+		return fallback;
+	}
+
+	function buildNestedReplyAncestorChain(post, ctx) {
+		const targetNumber = +(post?.post_number || 0);
+		if (!targetNumber) return [];
+		const chain = [];
+		const seen = new Set();
+		let current = post;
+		let number = targetNumber;
+		for (let guard = 0; number > 0 && !seen.has(number) && guard < 32; guard++) {
+			seen.add(number);
+			chain.unshift(number);
+			const parentNumber = +(
+				current?.reply_to_post_number ||
+				ctx.replyParentByPost?.get(number) ||
+				0
+			);
+			if (!parentNumber) break;
+			number = parentNumber;
+			current = resolveKnownPostData(ctx, number);
+		}
+		return chain;
 	}
 
 	async function focusLiveNestedReply(post, ctx, options = {}) {
@@ -25487,32 +25807,78 @@
 			(!isFunction(options.acceptsWork) || options.acceptsWork());
 		if (!jumpStillCurrent()) return false;
 		if (ctx.cancelInitialTargetPosition) ctx.cancelInitialTargetPosition();
-		if (!ctx.streamNodeMap.has(parentNumber) && ctx.loadPost) {
-			await ctx.loadPost(parentNumber, { mount: true, ensureAround: true, scope: 'around' });
+		rememberPostData(ctx, post, parentNumber);
+		const chain = buildNestedReplyAncestorChain(post, ctx);
+		if (chain.length < 2) return false;
+		// Ensure the highest stream-mounted ancestor is available, then walk down the tree.
+		const rootNumber = chain[0];
+		if (!ctx.streamNodeMap.has(rootNumber) && ctx.loadPost) {
+			await ctx.loadPost(rootNumber, { mount: true, ensureAround: true, scope: 'around' });
 		}
 		if (!jumpStillCurrent()) return false;
-		const parentNode = getStreamPostNode(ctx, parentNumber, { mount: true }) ||
-			ctx.streamNodeMap.get(parentNumber);
+		let parentNode = getStreamPostNode(ctx, rootNumber, { mount: true }) ||
+			findReplyListParent(rootNumber, ctx) ||
+			ctx.streamNodeMap.get(rootNumber);
 		if (!parentNode) return false;
-		syncLiveNestedReply(post, ctx, { allowOpParent: true });
-		parentNode.classList.remove('ldp-children-collapsed');
-		setNestedReplyCollapsed(parentNode, false);
-		const state = ctx.subReplyState.get(parentNumber);
-		if (!state) return false;
-		const pageSize = SUB_REPLY_PAGE_SIZE;
-		const replyIndex = state.all.findIndex((reply) => +(reply?.post_number || 0) === postNumber);
-		state.pageIndex = replyIndex >= 0
-			? Math.floor(replyIndex / pageSize)
-			: Math.max(0, Math.ceil(state.all.length / pageSize) - 1);
-		state.renderedKey = '';
-		renderSubReplyBatch(parentNumber, ctx, 0, parentNode);
-		syncChildControls(parentNode);
-		const target = parentNode.querySelector(
-			`:scope > .ldp-children > .ldp-post[data-post-number="${postNumber}"]`
-		);
+		let target = null;
+		for (let index = 0; index < chain.length - 1; index++) {
+			if (!jumpStillCurrent()) return false;
+			const ancestorNumber = chain[index];
+			const childNumber = chain[index + 1];
+			const childPost = childNumber === postNumber
+				? post
+				: resolveKnownPostData(ctx, childNumber);
+			if (childPost) rememberPostData(ctx, childPost, ancestorNumber);
+			const ancestorData = parentNode._ldpPostData || resolveKnownPostData(ctx, ancestorNumber);
+			const expectedCount = Math.max(
+				+(parentNode.dataset.childReplyTotal || 0),
+				+(ancestorData?.reply_count || 0),
+				1,
+			);
+			ensureLiveReplyShell(parentNode, expectedCount, ctx);
+			parentNode.classList.remove('ldp-children-collapsed');
+			setNestedReplyCollapsed(parentNode, false);
+			if (ancestorData && ctx.repliesIO?.loadDirectReplies) {
+				try {
+					await ctx.repliesIO.loadDirectReplies(ancestorData, {
+						priority: POST_REQUEST_PRIORITY.visible,
+					});
+				} catch { /* keep best-effort path expansion */ }
+			}
+			if (!jumpStillCurrent() || !parentNode.isConnected) return false;
+			syncLiveNestedReply(childPost || { post_number: childNumber, reply_to_post_number: ancestorNumber }, ctx, {
+				allowOpParent: true,
+			});
+			const state = ctx.subReplyState.get(ancestorNumber);
+			if (state) {
+				const parentDepth = postNestDepth(parentNode, 0);
+				const pageSize = parentDepth >= 1
+					? Math.min(5, SUB_REPLY_PAGE_SIZE)
+					: (PREFS.aggregateDescendantReplies === true ? 5 : SUB_REPLY_PAGE_SIZE);
+				const replyIndex = state.all.findIndex((reply) => +(reply?.post_number || 0) === childNumber);
+				state.pageIndex = replyIndex >= 0
+					? Math.floor(replyIndex / pageSize)
+					: Math.max(0, Math.ceil(state.all.length / pageSize) - 1);
+				state.renderedKey = '';
+				renderSubReplyBatch(ancestorNumber, ctx, 0, parentNode);
+			}
+			syncChildControls(parentNode);
+			const childNode = parentNode.querySelector(
+				`:scope > .ldp-children > .ldp-post[data-post-number="${childNumber}"]`
+			);
+			if (!childNode) return false;
+			setNestedReplyCollapsed(childNode, false);
+			childNode.classList.remove('ldp-children-collapsed');
+			if (childNumber === postNumber) {
+				target = childNode;
+				break;
+			}
+			parentNode = childNode;
+		}
 		if (!target) return false;
 		syncPostActionControls(target, ctx);
-		if (!scrollToPost(parentNumber, ctx, {
+		const scrollParentNumber = +(target.dataset.replyToPostNumber || parentNumber || rootNumber);
+		if (!scrollToPost(scrollParentNumber, ctx, {
 			...PINNED_STREAM_SCROLL_OPTIONS,
 			visualNode: target,
 			highlightTarget: target,
@@ -27654,7 +28020,39 @@
 			if (collapseBtn) {
 				const post = collapseBtn.closest('.ldp-post');
 				if (preserveOnlyOpPostExpansion(post)) return;
-				setChildRepliesCollapsed(post, !post.classList.contains('ldp-children-collapsed'));
+				const willExpand = post.classList.contains('ldp-children-collapsed');
+				setChildRepliesCollapsed(post, !willExpand);
+				// Expanding an empty shell: fetch now; if API has no direct replies, chrome is removed.
+				if (willExpand && countRenderedChildReplies(post) === 0 && ctx.repliesIO) {
+					const postNumber = +(post.dataset.postNumber || 0);
+					const state = ctx.subReplyState.get(postNumber);
+					if (state && state.hasMore === false && !(state.all?.length)) {
+						reconcilePostChildReplyTotal(post, 0, ctx, { hasMore: false });
+						return;
+					}
+					void Promise.resolve(ctx.repliesIO.loadDirectReplies?.(post._ldpPostData || {
+						id: +post.dataset.postId,
+						post_number: postNumber,
+						reply_count: +(post.dataset.childReplyTotal || 0),
+					}, { priority: POST_REQUEST_PRIORITY.visible, force: true })
+					).then((replies) => {
+						if (!post.isConnected) return;
+						const list = Array.isArray(replies) ? replies : [];
+						const existing = ctx.subReplyState.get(postNumber);
+						ctx.subReplyState.set(postNumber, {
+							...existing,
+							all: mergeDirectReplies(list),
+							pageIndex: 0,
+							totalCount: list.length,
+							fetchedReplyCount: list.length,
+							hasMore: false,
+							loadingMore: false,
+							renderedKey: '',
+						});
+						if (list.length) renderSubReplyBatch(postNumber, ctx, 0, post);
+						reconcilePostChildReplyTotal(post, list.length, ctx, { hasMore: false });
+					}).catch(() => {});
+				}
 				return;
 		      }
 
@@ -28359,10 +28757,20 @@
 				: pageReplies.length;
 			state.fetchAfter = Math.max(after, nextAfter);
 			const previousTotalCount = after > 0 ? +(state.totalCount || 0) : 0;
-			const totalCount = Math.max(state.all.length, previousTotalCount, +(expectedCount || 0));
-			state.hasMore = nextAfter > after && pagePosts.length >= SUB_REPLY_FETCH_SIZE &&
-				state.fetchedReplyCount < totalCount;
-			state.totalCount = state.hasMore ? totalCount : state.all.length;
+			// Do not keep an optimistic expectedCount once the first page is short or empty of
+			// direct replies — that produces phantom "展开 1 条回复" controls.
+			const pageExhausted = !pagePosts.length || pagePosts.length < SUB_REPLY_FETCH_SIZE ||
+				nextAfter <= after;
+			const totalCount = pageExhausted && after === 0 && !pageReplies.length
+				? state.all.length
+				: Math.max(
+					state.all.length,
+					previousTotalCount,
+					pageExhausted ? state.all.length : +(expectedCount || 0),
+				);
+			state.hasMore = !pageExhausted && nextAfter > after && pagePosts.length >= SUB_REPLY_FETCH_SIZE &&
+				state.fetchedReplyCount < Math.max(totalCount, +(expectedCount || 0), 1);
+			state.totalCount = state.hasMore ? Math.max(totalCount, +(expectedCount || 0)) : state.all.length;
 			return pagePosts;
 		}
 
@@ -28397,7 +28805,16 @@
 			} finally {
 				state.loadingMore = false;
 				loadingEl?.classList.remove('show');
-				if (sessionActive() && post.isConnected) renderSubReplyBatch(postNumber, ctx, 0, post);
+				if (sessionActive() && post.isConnected) {
+					renderSubReplyBatch(postNumber, ctx, 0, post);
+					const settled = ctx.subReplyState.get(postNumber);
+					if (settled) {
+						reconcilePostChildReplyTotal(post, settled.all?.length || 0, ctx, {
+							hasMore: settled.hasMore === true,
+							totalCount: settled.totalCount,
+						});
+					}
+				}
 			}
 		}
 
@@ -28436,6 +28853,10 @@
 				if (!needsInitialFetch) {
 					loadingEl?.classList.remove('show');
 					emptyRetryCounts.delete(post);
+					reconcilePostChildReplyTotal(post, knownReplies.length, ctx, {
+						hasMore: false,
+						totalCount: knownReplies.length,
+					});
 					return true;
 				}
 			}
@@ -28460,6 +28881,15 @@
 					fetchedNodes.delete(post);
 					replyPagesByKey.delete(`${postId}:0`);
 					const retryCount = +(emptyRetryCounts.get(post) || 0);
+					// Still expect more pages of mixed/descendant payload — keep loading later.
+					if (nextState.hasMore === true && post.isConnected) {
+						ctx.subReplyState.set(postNumber, nextState);
+						reconcilePostChildReplyTotal(post, 0, ctx, {
+							hasMore: true,
+							totalCount: nextState.totalCount,
+						});
+						return false;
+					}
 					if (expectedCount > 0 && retryCount < 2 && post.isConnected) {
 						await clearStoredResponseCache({ tags: [`post:${postId}`] });
 						emptyRetryCounts.set(post, retryCount + 1);
@@ -28468,12 +28898,35 @@
 							enqueueNestedPrefetch(post);
 						}, 1200 * (retryCount + 1));
 						retryTimers.set(post, retryTimer);
+						// While retrying, keep chrome but do not claim settled replies.
+						ctx.subReplyState.set(postNumber, {
+							...nextState,
+							all: [],
+							totalCount: expectedCount,
+							hasMore: true,
+							loadingMore: false,
+						});
+						return false;
 					}
+					// Settled empty: strip phantom expand control.
+					emptyRetryCounts.delete(post);
+					ctx.subReplyState.set(postNumber, {
+						...nextState,
+						all: [],
+						totalCount: 0,
+						hasMore: false,
+						loadingMore: false,
+					});
+					reconcilePostChildReplyTotal(post, 0, ctx, { hasMore: false });
 					return false;
 				}
 				emptyRetryCounts.delete(post);
 				ctx.subReplyState.set(postNumber, nextState);
 				renderSubReplyBatch(postNumber, ctx, 0, post); // 首批只渲染当前分页条数
+				reconcilePostChildReplyTotal(post, nextState.all.length, ctx, {
+					hasMore: nextState.hasMore === true,
+					totalCount: nextState.totalCount,
+				});
 				return true;
 			} catch (e) {
 				loadingEl?.classList.remove('show');
@@ -30235,6 +30688,7 @@
 										${otherSettingGroupMarkup('topic-actions', '主帖操作列', '设置常用操作是否一直显示、是否锁定位置；未锁定时可长按收纳按钮拖动。', `${settingSwitchesMarkup('topic-actions')}<div class="ldp-setting-row ldp-setting-option-row ldp-topic-action-rail-reset-row"><span class="ldp-setting-option-copy"><strong>操作列默认位置</strong><small>恢复到正文左侧留白区域。</small></span><button class="ldp-config-action ldp-topic-action-rail-reset" type="button">${icon('rotateCcw')}<span>恢复默认</span></button></div>`)}
 										${otherSettingGroupMarkup('replies', '二级回复显示位置', '设置二级回复在父回复下、楼层列表中和“完整讨论”视图中的显示方式。', `
 										${settingSwitchesMarkup('replies')}
+										${inlineReplyTreeDepthSettingMarkup()}
 										<p class="ldp-nested-display-warning" role="status" aria-live="polite" hidden>同时在父回复下和楼层列表中展开时，同一条二级回复可能出现两次。</p>
 											`)}
 										<div${boostsAvailable ? '' : ' hidden'}>
@@ -30781,7 +31235,7 @@
 			jumpHighlightStatus, loadingAnimationSelect, loadingAnimationPreview,
 			loadingAnimationPreviewLabel, loadingAnimationReroll, historySortModeSelect,
 			historyButtonsAlwaysVisibleInput, readerQueueAlwaysVisibleWhenEmptyInput, historyEdgeTriggerRange, historyEdgeTriggerValue,
-			openTopicsAtFirstPostInput, doubleEscapeToCloseReaderInput, confirmNativeComposerCloseInput, topicActionRailVisibleInput, topicActionRailFixedInput, topicActionRailResetBtn, expandNestedRepliesByDefaultInput, expandLeafNestedRepliesInput, aggregateDescendantRepliesInput, hideNestedReplyFloorsInput,
+			openTopicsAtFirstPostInput, doubleEscapeToCloseReaderInput, confirmNativeComposerCloseInput, topicActionRailVisibleInput, topicActionRailFixedInput, topicActionRailResetBtn, expandNestedRepliesByDefaultInput, expandLeafNestedRepliesInput, aggregateDescendantRepliesInput, inlineReplyTreeEnableInput, inlineReplyTreeDepthSelect, hideNestedReplyFloorsInput,
 			nestedReplyDisplayWarning, boostCopyModeSelect, boostCopyPrefixInput, boostCopyCounterMarkerInput,
 			boostCopyCounterStepInput, boostCopyFixedSuffixInput, boostCopyPreview, configExportBtn,
 			configImportBtn, configResetBtn, configFileInput, cacheClearBtn, customSiteInput,
@@ -30792,12 +31246,13 @@
 			'.ldp-loading-preview-reroll', '.ldp-history-sort-mode', '.ldp-history-buttons-always-visible',
 			'.ldp-reader-queue-always-visible-empty', '.ldp-history-edge-trigger-range', '.ldp-history-edge-trigger-value',
 			'.ldp-open-topics-first-post', '.ldp-double-escape-close-reader', '.ldp-confirm-native-composer-close', '.ldp-topic-action-rail-visible-setting', '.ldp-topic-action-rail-fixed-setting', '.ldp-topic-action-rail-reset', '.ldp-expand-nested-replies-default',
-			'.ldp-expand-leaf-nested-replies', '.ldp-aggregate-descendant-replies', '.ldp-hide-nested-reply-floors', '.ldp-nested-display-warning', '.ldp-boost-copy-mode',
+			'.ldp-expand-leaf-nested-replies', '.ldp-aggregate-descendant-replies', '.ldp-inline-reply-tree-enable', '.ldp-inline-reply-tree-depth', '.ldp-hide-nested-reply-floors', '.ldp-nested-display-warning', '.ldp-boost-copy-mode',
 			'.ldp-boost-copy-prefix', '.ldp-boost-copy-counter-marker', '.ldp-boost-copy-counter-step',
 			'.ldp-boost-copy-fixed-suffix', '.ldp-boost-copy-preview', '.ldp-config-export',
 			'.ldp-config-import', '.ldp-config-reset', '.ldp-config-file', '.ldp-cache-clear',
 			'.ldp-custom-site-input', '.ldp-custom-site-add', '.ldp-custom-site-list', '.ldp-custom-site-status',
 		);
+		const inlineReplyTreeDepthRow = inlineReplyTreeDepthSelect?.closest('.ldp-inline-reply-tree-depth-row') || null;
 		const [
 			boostCopyCounterRows, boostCopyTextRows, cacheSelects, cacheSizeEls, cacheRetentionEls,
 			settingsColorInputs,
@@ -31120,9 +31575,15 @@
 		setSettingRowHelp(openTopicsAtFirstPostInput, '开启后，普通帖子链接会从 #1 主楼开始；消息、历史和收藏面板中的链接仍优先打开各自目标楼层。关闭后，所有链接都会尊重其中指定的楼层号。修改后立即保存。');
 		setSettingRowHelp(doubleEscapeToCloseReaderInput, '开启后，需要在 1.5 秒内连续按两次 Esc 才会关闭阅读器；关闭后，按一次 Esc 即可关闭。修改后立即保存。');
 		setSettingRowHelp(confirmNativeComposerCloseInput, '开启后，在阅读器内按 Esc、关闭或舍弃 LINUX DO 原生回复窗口时，需要在 1.5 秒内重复同一操作；关闭后，一次操作即可关闭。修改后立即保存。');
-		setSettingRowHelp(expandNestedRepliesByDefaultInput, '开启后，在每条父回复下默认展开它的直接二级回复；关闭时会同时关闭“完整讨论”视图。修改后立即保存并应用到当前帖子。');
+		setSettingRowHelp(expandNestedRepliesByDefaultInput, '开启后，在每条父回复下默认展开它的直接二级回复；关闭时会同时关闭“完整讨论”视图与树状评论。修改后立即保存并应用到当前帖子。');
 		setSettingRowHelp(expandLeafNestedRepliesInput, '开启后，二级回复在楼层列表中的对应位置默认完整展开；可与父回复下的二级回复同时显示，但至少要保留一种显示位置。修改后立即保存并应用到当前帖子。');
 		setSettingRowHelp(aggregateDescendantRepliesInput, '建立在“在父回复下展开二级回复”之上；开启时会按滚动位置预加载更深层回复，并提供“查看完整讨论”浮窗。修改后立即保存并应用到当前帖子。');
+		if (inlineReplyTreeEnableInput) {
+			setSettingRowHelp(inlineReplyTreeEnableInput, '需先开启「在父回复下展开二级回复」。关闭时仅显示一层直属二级回复；开启后可在 2–5 层之间选择主信息流嵌套深度。修改后立即保存并应用到当前帖子。');
+		}
+		if (inlineReplyTreeDepthSelect) {
+			setSettingRowHelp(inlineReplyTreeDepthSelect, '仅在启用树状评论后可选。层数从主楼下的直属回复算起；超出部分仍可通过「完整讨论」查看。修改后立即保存并应用到当前帖子。');
+		}
 		setSettingRowHelp(hideNestedReplyFloorsInput, '未启用“完整讨论”时，从楼层列表隐藏全部二级回复；启用后先保留未读二级回复，读过后再隐藏。时间轴、跳转和已读记录不受影响；跳转时会临时显示或打开对应讨论。修改后立即保存并应用到当前帖子。');
 		setSettingRowHelp(boostCopyModeSelect, '选择复制 Boost 时如何生成末尾内容：“递增数字”每次按设定步长增加，“固定文字”每次追加同一段文字。修改后立即保存。');
 		setSettingRowHelp(boostCopyPrefixInput, '填写复制结果开头的前置文字，例如“赞同：”。留空就直接从原 Boost 内容开始，最多 16 个字。修改后立即保存。');
@@ -34001,6 +34462,25 @@
 			expandLeafNestedRepliesInput.checked = PREFS.expandLeafNestedReplies === true;
 			aggregateDescendantRepliesInput.checked = PREFS.aggregateDescendantReplies === true;
 			aggregateDescendantRepliesInput.disabled = false;
+			{
+				const expandNestedOn = PREFS.expandNestedRepliesByDefault === true;
+				const storedDepth = normalizeInlineReplyTreeMaxDepth(PREFS.inlineReplyTreeMaxDepth);
+				const treeOn = expandNestedOn && storedDepth >= 2;
+				if (inlineReplyTreeEnableInput) {
+					inlineReplyTreeEnableInput.checked = treeOn;
+					inlineReplyTreeEnableInput.disabled = !expandNestedOn;
+					const enableRow = inlineReplyTreeEnableInput.closest('.ldp-inline-reply-tree-enable-row');
+					if (enableRow) enableRow.classList.toggle('is-disabled', !expandNestedOn);
+				}
+				if (inlineReplyTreeDepthSelect) {
+					const selectDepth = treeOn
+						? Math.max(2, storedDepth)
+						: Math.max(2, storedDepth >= 2 ? storedDepth : INLINE_REPLY_TREE_ENABLED_DEFAULT);
+					inlineReplyTreeDepthSelect.value = String(normalizeInlineReplyTreeMaxDepth(selectDepth));
+					inlineReplyTreeDepthSelect.disabled = !treeOn;
+				}
+				if (inlineReplyTreeDepthRow) inlineReplyTreeDepthRow.hidden = !treeOn;
+			}
 			hideNestedReplyFloorsInput.checked = PREFS.hideNestedReplyFloors === true;
 			nestedReplyDisplayWarning.hidden = !(PREFS.expandNestedRepliesByDefault && PREFS.expandLeafNestedReplies);
 			const boostCopy = boostCopyConfigFromPrefs(PREFS);
@@ -34761,12 +35241,21 @@
 				syncCustomSiteControls();
 				customSiteStatus.textContent = `已移除 ${host}。`;
 			});
+			const reapplyInlineReplyTreePreference = () => {
+				const ctx = readerShell.activeContext;
+				if (ctx?.subReplyState) {
+					ctx.subReplyState.forEach((state) => { state.pageIndex = 0; state.renderedKey = ''; });
+					ctx.subReplyState.forEach((state, postNumber) => renderSubReplyBatch(postNumber, ctx));
+				}
+				applyNestedReplyDisplayPreference(ctx);
+			};
 			const saveNestedReplyDisplayPreference = (changedInput) => {
 			const aggregate = PREFS.aggregateDescendantReplies === true;
 			let expandAll = expandNestedRepliesByDefaultInput.checked;
 			let expandLeaf = expandLeafNestedRepliesInput.checked;
 			if (changedInput === expandNestedRepliesByDefaultInput && !expandAll) expandLeaf = true;
 			else if (!aggregate && changedInput === expandLeafNestedRepliesInput && !expandLeaf) expandAll = true;
+			const treeWasActive = inlineReplyTreeEnabled();
 			setPrefs({
 				expandNestedRepliesByDefault: expandAll,
 				expandLeafNestedReplies: expandLeaf,
@@ -34774,9 +35263,42 @@
 			});
 			applyNestedReplyDisplayPreference(readerShell.activeContext);
 			syncOtherControls();
+			// Effective tree depth becomes 1 while secondary replies are off; re-render if that changed.
+			if (treeWasActive !== inlineReplyTreeEnabled()) reapplyInlineReplyTreePreference();
 			};
 			[expandNestedRepliesByDefaultInput, expandLeafNestedRepliesInput].forEach((input) =>
 				onShell(input, 'change', () => saveNestedReplyDisplayPreference(input)));
+			if (inlineReplyTreeEnableInput) {
+				onShell(inlineReplyTreeEnableInput, 'change', () => {
+					if (!PREFS.expandNestedRepliesByDefault) {
+						inlineReplyTreeEnableInput.checked = false;
+						syncOtherControls();
+						return;
+					}
+					const enabled = inlineReplyTreeEnableInput.checked;
+					const selectDepth = normalizeInlineReplyTreeMaxDepth(
+						inlineReplyTreeDepthSelect?.value || INLINE_REPLY_TREE_ENABLED_DEFAULT,
+					);
+					const nextDepth = enabled
+						? Math.max(2, selectDepth >= 2 ? selectDepth : INLINE_REPLY_TREE_ENABLED_DEFAULT)
+						: 1;
+					setPref('inlineReplyTreeMaxDepth', nextDepth);
+					reapplyInlineReplyTreePreference();
+					syncOtherControls();
+				});
+			}
+			if (inlineReplyTreeDepthSelect) {
+				onShell(inlineReplyTreeDepthSelect, 'change', () => {
+					if (!PREFS.expandNestedRepliesByDefault || !inlineReplyTreeEnableInput?.checked) {
+						syncOtherControls();
+						return;
+					}
+					const nextDepth = Math.max(2, normalizeInlineReplyTreeMaxDepth(inlineReplyTreeDepthSelect.value));
+					setPref('inlineReplyTreeMaxDepth', nextDepth);
+					reapplyInlineReplyTreePreference();
+					syncOtherControls();
+				});
+			}
 			const saveBoostCopyControls = () => {
 			setPrefs(boostCopyDraftFromControls());
 			syncOtherControls();

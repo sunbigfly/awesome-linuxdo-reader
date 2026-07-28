@@ -2,7 +2,7 @@
 title: 阅读、帖子与适用站点
 description: 配置队列入口、历史、退出、主帖操作列、完整讨论、Boost 复制和其他 Discourse 站点。
 feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "SET-016", "SET-017", "SET-018", "SET-019", "SET-021"]
-source_anchors: ["CUSTOM_DISCOURSE_SITES_KEY", "readerQueueAlwaysVisibleWhenEmpty", "historyEdgeTriggerPercent", "doubleEscapeToCloseReader", "confirmNativeComposerClose", "syncTopicActionRail", "aggregateDescendantReplies", "openDescendantRepliesWindow", "BOOST_COPY_SETTING_ROWS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
+source_anchors: ["CUSTOM_DISCOURSE_SITES_KEY", "readerQueueAlwaysVisibleWhenEmpty", "historyEdgeTriggerPercent", "doubleEscapeToCloseReader", "confirmNativeComposerClose", "syncTopicActionRail", "aggregateDescendantReplies", "openDescendantRepliesWindow", "BOOST_COPY_SETTING_ROWS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "inlineReplyTreeMaxDepth", "boostCopyMode"]
 since: 0.1.2
 version: 0.1.16
 status: current
@@ -65,11 +65,13 @@ screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18
 
 | 设置 | 结果 |
 | --- | --- |
-| 在父回复下展开二级回复 | 直接显示父回复收到的回复 |
+| 在父回复下展开二级回复 | 直接显示父回复收到的回复；关闭时树状评论不可用 |
+| 启用树状评论 | 在二级回复下继续嵌套展示更深层回复；仅当上一开关开启时可用 |
+| 树状嵌套层数 | 2–5 层（默认 3）；仅启用树状评论后显示，超出深度仍可走完整讨论 |
 | 启用“完整讨论”视图 | 长分支提供独立的可拖动、可缩放讨论窗口 |
 | 从楼层列表隐藏二级回复 | 将正式楼层收纳为参与者头像标记，跳转仍可定位 |
 
-完整讨论视图建立在父回复下展开之上。关闭父回复下展开时，设置中心会同步关闭完整讨论；关闭完整讨论时仍可保留普通直属回复分页。
+完整讨论与树状评论都建立在「在父回复下展开二级回复」之上。关闭父回复下展开时，设置中心会同步关闭完整讨论，树状开关禁用且主信息流按单层直属处理；关闭完整讨论时仍可保留普通直属回复与已开启的树状嵌套。
 
 ## Boost 复制
 
