@@ -4,7 +4,7 @@ description: 理解 14 个设置面板、分组导航、设置搜索、三种形
 feature_ids: ["USER-005", "SET-001", "SET-020"]
 source_anchors: ["renderSettingsUserInfo", "SETTINGS_PANEL_META", "SETTINGS_NAV_GROUPS", "bindReaderPanelSearch", "saveAllSettingsDrafts", "READER_THEME_MODES"]
 since: 0.1.2
-version: 0.1.15
+version: 0.1.16
 status: current
 last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-02-settings-overview.png"]

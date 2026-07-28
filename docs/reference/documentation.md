@@ -4,7 +4,7 @@ description: 规定功能目录、页面元数据、截图、版本同步和本�
 feature_ids: ["REF-002"]
 source_anchors: ["@version"]
 since: 0.1.2
-version: 0.1.15
+version: 0.1.16
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-23-documentation-maintenance.png"]

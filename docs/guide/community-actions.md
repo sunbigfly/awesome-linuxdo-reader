@@ -4,7 +4,7 @@ description: 使用主帖操作列，并在阅读器内回复、引用、点赞�
 feature_ids: ["MEDIA-010", "ACTION-001", "ACTION-002", "ACTION-003", "ACTION-004", "ACTION-005", "ACTION-006", "ACTION-007", "ACTION-008", "ACTION-009", "ACTION-010", "ACTION-011", "ACTION-012", "ACTION-013", "ACTION-014"]
 source_anchors: ["renderReaderPoll", "syncTopicActionRail", "renderPostReactions", "ldp-replybtn", "data-selection-action=\"quote\"", "toggleReaderPostLike", "toggleReaderPostReaction", "renderBoostBubble", "quoteBoostInNativeReply", "BOOST_COPY_SETTING_ROWS", "toggleReaderBookmark", "name: 'share'", "TOPIC_NOTIFICATION_LEVELS", "openReaderReportDialog", "name: 'edit'", "composer:edited-post", "openReaderAssignDialog", "topicSharedIssueState"]
 since: 0.1.2
-version: 0.1.15
+version: 0.1.16
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide-17-bookmarks-reactions.png", "/screenshots/guide-15-notifications-replies.png"]
@@ -64,6 +64,7 @@ screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide
 - 再次点击自己的回应可取消；选择另一项时切换到新回应。
 - 主帖操作列与正文、二级回复和图片评论共用同一回应状态与选择器规则。
 - 回应中心的数据会与实时主题通道和权威楼层数据校准。
+- 原站切换回应或在线更新可用表情时，阅读器会清理对应楼层/主题缓存、刷新表情注册表，并同步当前可见楼层和主帖操作列；已经展开的回应选择器保持打开。
 
 ![收藏与回应中心展示真实原站记录](/screenshots/guide-17-bookmarks-reactions.png)
 

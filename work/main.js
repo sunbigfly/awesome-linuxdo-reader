@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      0.1.15
+// @version      0.1.16
 // @license      MIT
 // @description  为 LINUX DO 深度适配、全面兼容标准 Discourse 站点的沉浸式增强阅读器，支持长帖上下文、原站互动、非中文正文翻译、自定义站点与个性布局。
 // @description:en Deeply adapted for LINUX DO and compatible with standard Discourse sites, with threaded reading, native interactions, body translation, custom sites, and personalized layouts.
@@ -44,7 +44,7 @@
 // @connect      api-edge.cognitive.microsofttranslator.com
 // @connect      *
 // @run-at       document-start
-// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@90b37ad87f7a234bfb9ff76db1d59768be9652e9/work/main.css#sha256=1d6e0c2c43fb87bde684fe978d3a13a414a6e7d216299e53a291193ddf24eef9
+// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@6f32c5f548d440963c1c0abb2160908b609f5aec/work/main.css#sha256=0738f4c1470861e1c7fcf29db5b8cb76f788896740492e2a2fc760c90691ff7e
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
@@ -118,7 +118,7 @@
 	const BASE = location.origin;
 	const PAGE_ROOT = document.documentElement;
 	const makeElement = (tagName) => document.createElement(tagName);
-	const READER_VERSION = '0.1.15';
+	const READER_VERSION = '0.1.16';
 	const HOST_PAGE_WINDOW = globalThis.unsafeWindow;
 	const discourseSiteAdapter = (id, name, capabilities = { connect: false }) => Object.freeze({
 		id, name, capabilities: Object.freeze(capabilities),
@@ -635,6 +635,9 @@
 	const READER_WINDOW_MIN_WIDTH = 360;
 	const READER_WINDOW_MIN_HEIGHT = 320;
 	const READER_WINDOW_COMPACT_WIDTH = 700;
+	const READER_TITLE_MIN_BASE_PX = 12;
+	const READER_META_MIN_BASE_PX = 9;
+	const READER_TOPIC_TAG_MIN_BASE_PX = 9.5;
 	const READER_WINDOW_MARGIN = 8;
 	const READER_SETTINGS_SURFACE_MARGIN = 8;
 	const READER_SETTINGS_SHORT_HEIGHT = 560;
@@ -4261,6 +4264,51 @@
 		setLabel(toggle, READER_QUEUE_ENTRIES.length ? `${previewExpanded ? '收纳' : '展开'}队列头像预览；拖动可移动，贴边可隐藏；悬停显示队列详情，共 ${READER_QUEUE_ENTRIES.length} 篇` : '关闭空阅读队列入口');
 	}
 
+	function readerQueueSurfaceBounds(rail) {
+		const modal = rail?.closest('.ldp-modal');
+		if (!modal) return null;
+		const modalRect = modal.getBoundingClientRect();
+		const headerRect = modal.querySelector(':scope > .ldp-header')?.getBoundingClientRect();
+		const maxTop = Math.max(0, modal.clientHeight - rail.offsetHeight);
+		return {
+			modal,
+			modalRect,
+			maxLeft: Math.max(0, modal.clientWidth - rail.offsetWidth),
+			maxTop,
+			minTop: Math.max(0, Math.min(maxTop, (headerRect?.bottom || modalRect.top) - modalRect.top)),
+		};
+	}
+
+	function readerQueueTopAvoidingTopicRail(rail, bounds, requestedTop) {
+		const overlay = rail?.closest('.ldp-overlay');
+		const topicRail = overlay?.classList.contains('ldp-fullpage') && bounds?.modal?.clientWidth > 700
+			? overlay.querySelector('.ldp-topic-action-rail:not([hidden])')
+			: null;
+		if (!topicRail) return requestedTop;
+		const topicRailRect = topicRail.getBoundingClientRect();
+		const topicTop = topicRailRect.top - bounds.modalRect.top;
+		const topicBottom = topicRailRect.bottom - bounds.modalRect.top;
+		const queueHeight = rail.offsetHeight;
+		const gap = Math.max(12, Math.round(
+			(rail.querySelector('.ldp-reader-queue-toggle')?.offsetHeight || 0) / 2
+		));
+		const clampTop = (top) => Math.max(bounds.minTop, Math.min(bounds.maxTop, top));
+		const isClear = (top) => top + queueHeight + gap <= topicTop || top >= topicBottom + gap;
+		const targetTop = clampTop(requestedTop);
+		if (isClear(targetTop)) return targetTop;
+		const defaultTop = clampTop(Math.max(bounds.minTop, bounds.maxTop * .12));
+		if (isClear(defaultTop)) return defaultTop;
+		const candidates = [
+			topicTop - gap - queueHeight,
+			topicBottom + gap,
+		].filter((top) => top >= bounds.minTop && top <= bounds.maxTop);
+		return candidates.length
+			? candidates.reduce((closest, top) =>
+				Math.abs(top - requestedTop) < Math.abs(closest - requestedTop) ? top : closest
+			)
+			: targetTop;
+	}
+
 	function applyReaderQueuePanelCollision(rail) {
 		const panel = rail?.querySelector('.ldp-reader-queue-panel');
 		const modal = rail?.closest('.ldp-modal');
@@ -4299,11 +4347,12 @@
 
 	function applyReaderQueueSurfacePosition(rail) {
 		if (!rail) return;
-		const modal = rail.closest('.ldp-modal');
+		const bounds = readerQueueSurfaceBounds(rail);
+		const modal = bounds?.modal;
 		const overlay = rail.closest('.ldp-overlay');
 		const state = normalizeReaderQueueSurfaceState(READER_QUEUE_SURFACE_STATE);
 		const customized = readerQueueSurfaceStateCustomized(state);
-		const modalRect = modal?.getBoundingClientRect();
+		const modalRect = bounds?.modalRect;
 		const topicRailToggle = overlay?.classList.contains('ldp-fullpage') && modal?.clientWidth > 700
 			? overlay.querySelector('.ldp-topic-action-rail:not([hidden]) .ldp-topic-action-rail-toggle')
 			: null;
@@ -4338,25 +4387,27 @@
 				if (modal && modal.clientWidth > 700) {
 					const readerMain = modal.querySelector('.ldp-reader-main');
 					const leftTrack = readerMain ? Number.parseFloat(getComputedStyle(readerMain).gridTemplateColumns) : rail.offsetWidth;
-					const maxTop = Math.max(0, modal.clientHeight - rail.offsetHeight);
+					const maxTop = bounds.maxTop;
 					const defaultLeft = fullPageXAligned
 						? fullPageAlignedLeft
 						: (Math.max(leftTrack || 0, rail.offsetWidth) - rail.offsetWidth) / 2;
 					rail.style.left = `${Math.round(Math.max(0, Math.min(
 						modal.clientWidth - rail.offsetWidth, defaultLeft,
 					)))}px`;
-					rail.style.top = `${Math.round(maxTop * .12)}px`;
+					rail.style.top = `${Math.round(readerQueueTopAvoidingTopicRail(
+						rail, bounds, Math.max(bounds.minTop, maxTop * .12),
+					))}px`;
 					rail.classList.add('is-runtime-positioned');
 				}
 			}
 			applyReaderQueuePanelCollision(rail);
 			return;
 		}
-		const maxLeft = Math.max(0, modal.clientWidth - rail.offsetWidth);
-		const maxTop = Math.max(0, modal.clientHeight - rail.offsetHeight);
 		rail.classList.add('is-runtime-positioned');
-		rail.style.left = `${Math.round(fullPageXAligned ? fullPageAlignedLeft : maxLeft * state.x)}px`;
-		rail.style.top = `${Math.round(maxTop * state.y)}px`;
+		rail.style.left = `${Math.round(fullPageXAligned ? fullPageAlignedLeft : bounds.maxLeft * state.x)}px`;
+		rail.style.top = `${Math.round(readerQueueTopAvoidingTopicRail(
+			rail, bounds, Math.max(bounds.minTop, bounds.maxTop * state.y),
+		))}px`;
 		applyReaderQueuePanelCollision(rail);
 	}
 
@@ -5162,21 +5213,19 @@
 				applyReaderQueueSurfacePosition(rail);
 				return;
 			}
-			const modal = rail.closest('.ldp-modal');
-			if (!modal) return;
-			const maxLeft = Math.max(0, modal.clientWidth - rail.offsetWidth);
-			const maxTop = Math.max(0, modal.clientHeight - rail.offsetHeight);
-			const left = Math.max(0, Math.min(maxLeft, Number.parseFloat(rail.style.left) || 0));
-			const top = Math.max(0, Math.min(maxTop, Number.parseFloat(rail.style.top) || 0));
+			const bounds = readerQueueSurfaceBounds(rail);
+			if (!bounds) return;
+			const left = Math.max(0, Math.min(bounds.maxLeft, Number.parseFloat(rail.style.left) || 0));
+			const top = Math.max(bounds.minTop, Math.min(bounds.maxTop, Number.parseFloat(rail.style.top) || 0));
 			const distanceLeft = left;
-			const distanceRight = maxLeft - left;
-			const dockThreshold = modal.clientWidth * READER_QUEUE_DOCK_THRESHOLD_RATIO;
+			const distanceRight = bounds.maxLeft - left;
+			const dockThreshold = bounds.modal.clientWidth * READER_QUEUE_DOCK_THRESHOLD_RATIO;
 			const dock = Math.min(distanceLeft, distanceRight) <= dockThreshold
 				? (distanceLeft <= distanceRight ? 'left' : 'right')
 				: '';
 			READER_QUEUE_SURFACE_STATE = normalizeReaderQueueSurfaceState({
-				x: maxLeft > 0 ? (dock === 'left' ? 0 : dock === 'right' ? 1 : left / maxLeft) : 0,
-				y: maxTop > 0 ? top / maxTop : 0,
+				x: bounds.maxLeft > 0 ? (dock === 'left' ? 0 : dock === 'right' ? 1 : left / bounds.maxLeft) : 0,
+				y: bounds.maxTop > 0 ? top / bounds.maxTop : 0,
 				dock,
 			});
 			applyReaderQueueSurfacePosition(rail);
@@ -5211,13 +5260,13 @@
 				rail.classList.remove('is-docked-left', 'is-docked-right', 'is-dock-revealed');
 				rail.classList.add('is-dragging');
 			}
-			const modal = rail.closest('.ldp-modal');
-			if (!modal) return;
-			const maxLeft = Math.max(0, modal.clientWidth - rail.offsetWidth);
-			const maxTop = Math.max(0, modal.clientHeight - rail.offsetHeight);
+			const bounds = readerQueueSurfaceBounds(rail);
+			if (!bounds) return;
+			const top = Math.max(bounds.minTop,
+				Math.min(bounds.maxTop, queueDrag.startTop + deltaY));
 			rail.classList.add('is-runtime-positioned');
-			rail.style.left = `${Math.round(Math.max(0, Math.min(maxLeft, queueDrag.startLeft + deltaX)))}px`;
-			rail.style.top = `${Math.round(Math.max(0, Math.min(maxTop, queueDrag.startTop + deltaY)))}px`;
+			rail.style.left = `${Math.round(Math.max(0, Math.min(bounds.maxLeft, queueDrag.startLeft + deltaX)))}px`;
+			rail.style.top = `${Math.round(top <= bounds.minTop + toggle.offsetHeight / 2 ? bounds.minTop : top)}px`;
 			event.preventDefault();
 		});
 		on(toggle, 'pointerup', (event) => finishQueueDrag(event));
@@ -9684,25 +9733,58 @@
 		return unread.size;
 	}
 
-	function decrementCurrentUserNotificationType(typeId) {
+	function setCurrentUserNotificationState(currentUser, values) {
+		if (!currentUser || !isFunction(currentUser.set)) return;
+		if (isFunction(currentUser.setProperties)) {
+			currentUser.setProperties(values);
+			return;
+		}
+		Object.entries(values).forEach(([key, value]) => currentUser.set(key, value));
+	}
+
+	function decrementCurrentUserNotificationType(typeId, highPriority = false) {
 		const currentUser = lookupDiscourse('service:current-user');
 		if (!currentUser || !isFunction(currentUser.set) || !(Number(typeId) > 0)) return;
 		const grouped = {
 			...(discourseModelValue(currentUser, 'grouped_unread_notifications') || {}),
 		};
 		const unreadCount = Number(grouped[typeId]) || 0;
-		if (unreadCount > 0) {
-			grouped[typeId] = unreadCount - 1;
-			currentUser.set('grouped_unread_notifications', grouped);
-		}
+		if (unreadCount > 0) grouped[typeId] = unreadCount - 1;
+		const normalUnread = Math.max(
+			0, Math.floor(Number(discourseModelValue(currentUser, 'unread_notifications')) || 0)
+		);
+		const highPriorityUnread = Math.max(
+			0, Math.floor(Number(discourseModelValue(currentUser, 'unread_high_priority_notifications')) || 0)
+		);
+		const nextNormalUnread = highPriority ? normalUnread : Math.max(0, normalUnread - 1);
+		const nextHighPriorityUnread = highPriority
+			? Math.max(0, highPriorityUnread - 1)
+			: highPriorityUnread;
+		const values = {
+			grouped_unread_notifications: grouped,
+			unread_notifications: nextNormalUnread,
+			unread_high_priority_notifications: nextHighPriorityUnread,
+			all_unread_notifications_count: nextNormalUnread + nextHighPriorityUnread,
+		};
+		if (discourseModelValue(currentUser, 'unread_notification_count') != null)
+			values.unread_notification_count = Math.max(
+				0, Math.floor(Number(discourseModelValue(currentUser, 'unread_notification_count')) || 0) - 1
+			);
+		setCurrentUserNotificationState(currentUser, values);
 	}
 
 	function syncCurrentUserNotificationsDismissed() {
 		const currentUser = lookupDiscourse('service:current-user');
 		if (!currentUser || !isFunction(currentUser.set)) return;
-		currentUser.set('all_unread_notifications_count', 0);
-		currentUser.set('unread_high_priority_notifications', 0);
-		currentUser.set('grouped_unread_notifications', {});
+		const values = {
+			all_unread_notifications_count: 0,
+			unread_notifications: 0,
+			unread_high_priority_notifications: 0,
+			grouped_unread_notifications: {},
+		};
+		if (discourseModelValue(currentUser, 'unread_notification_count') != null)
+			values.unread_notification_count = 0;
+		setCurrentUserNotificationState(currentUser, values);
 	}
 
 	function syncNotificationUnreadUi(count = NOTIFICATION_UNREAD_COUNT) {
@@ -9737,16 +9819,18 @@
 				!item.classList.contains('unread')) return 0;
 		const notificationKey = String(item.dataset.notificationReadKey || item.dataset.notificationKey || '');
 		let notificationTypeId = 0;
+		let notificationHighPriority = false;
 		let cacheChanged = false;
 		forEachCachedNotification((notification) => {
 			if (!notification || notification.read !== false ||
 					notificationReadIdentity(notification) !== notificationKey) return;
 			notification.read = true;
 			notificationTypeId ||= Number(notification.notification_type) || 0;
+			notificationHighPriority ||= notification.high_priority === true;
 			cacheChanged = true;
 		});
 		if (cacheChanged) schedulePersistentCacheWrite('notifications', 0);
-		decrementCurrentUserNotificationType(notificationTypeId);
+		decrementCurrentUserNotificationType(notificationTypeId, notificationHighPriority);
 		readerPortalQueryAll('.ldp-notification-item').forEach((notificationItem) => {
 			if (String(notificationItem.dataset.notificationReadKey || notificationItem.dataset.notificationKey || '') !==
 					notificationKey) return;
@@ -11257,21 +11341,41 @@
 	let reactionEmojiUrls = null;
 	let reactionEmojiImageSources = null;
 	let reactionEmojiHydration = null;
+	let reactionEmojiHydrationRefresh = false;
+	let reactionEmojiRegistryNetworkRequested = false;
 
-	function loadReactionEmojiRegistry() {
-		if (reactionEmojiUrls) return Promise.resolve(reactionEmojiUrls);
-		if (reactionEmojiHydration) return reactionEmojiHydration;
+	function loadReactionEmojiRegistry(options = {}) {
+		const refresh = options.refresh === true;
+		if (!refresh && reactionEmojiUrls) return Promise.resolve(reactionEmojiUrls);
+		if (reactionEmojiHydration) {
+			if (!refresh || reactionEmojiHydrationRefresh) return reactionEmojiHydration;
+			return reactionEmojiHydration.then(() => loadReactionEmojiRegistry({ refresh: true }));
+		}
 		const emojiStore = lookupDiscourse('service:emoji-store');
-		const ajaxModule = lookupDiscourseModule('discourse/lib/ajax');
 		const textModule = lookupDiscourseModule('discourse/lib/text');
-		const loadEmojis = emojiStore?.list
+		const previousUrls = reactionEmojiUrls;
+		const previousSources = reactionEmojiImageSources;
+		const requestLatestEmojis = () => {
+			reactionEmojiRegistryNetworkRequested = true;
+			return fetchJSON(`${BASE}/emojis.json`, {
+				key: 'reaction-emoji-registry',
+				priority: POST_REQUEST_PRIORITY.auxiliary,
+				cacheMode: 'refresh',
+				allowStaleOnError: false,
+				fetchOptions: discourseJSONFetchOptions(),
+			}).then((data) => {
+				if (emojiStore) emojiStore.list = data;
+				return data;
+			});
+		};
+		const loadEmojis = !refresh && emojiStore?.list
 			? Promise.resolve(emojiStore.list)
-			: emojiStore && ajaxModule && isFunction(ajaxModule.ajax)
-				? ajaxModule.ajax('/emojis.json').then((data) => {
-					emojiStore.list = data;
-					return data;
-				})
-				: Promise.reject(new Error('Discourse 表情服务尚未就绪'));
+			: isFunction(window.fetch)
+				? requestLatestEmojis()
+				: emojiStore?.list
+					? Promise.resolve(emojiStore.list)
+					: Promise.reject(new Error('Discourse 表情服务尚未就绪'));
+		reactionEmojiHydrationRefresh = refresh;
 		reactionEmojiHydration = loadEmojis.then((data) => {
 			const registry = new Map();
 			Object.values(data || {}).forEach((items) => {
@@ -11291,13 +11395,36 @@
 				.filter(Boolean));
 			return registry;
 		}).catch(() => {
-			reactionEmojiUrls = new Map();
-			reactionEmojiImageSources = new Set();
+			reactionEmojiUrls = previousUrls || new Map();
+			reactionEmojiImageSources = previousSources || new Set();
 			return reactionEmojiUrls;
 		}).finally(() => {
 			reactionEmojiHydration = null;
+			reactionEmojiHydrationRefresh = false;
 		});
 		return reactionEmojiHydration;
+	}
+
+	function configuredDiscourseReactionIds(topicData, reactions) {
+		const siteSettings = lookupDiscourse('service:site-settings');
+		const configuredValue = siteSettings?.discourse_reactions_enabled_reactions;
+		const configured = Array.isArray(configuredValue)
+			? configuredValue
+			: String(configuredValue || '').split('|');
+		const mainReaction = String(siteSettings?.discourse_reactions_reaction_for_like || '');
+		const topicReactions = Array.isArray(topicData?.valid_reactions)
+			? topicData.valid_reactions
+			: [];
+		const source = configured.some(Boolean)
+			? configured
+			: topicReactions.length
+				? topicReactions
+				: (reactions || []).map((item) => item?.id);
+		const ids = source.map((item) => String(
+			typeof item === 'string' ? item : (item && (item.id || item.name)) || ''
+		)).filter(Boolean);
+		if (mainReaction && !ids.includes(mainReaction)) ids.unshift(mainReaction);
+		return [...new Set(ids)];
 	}
 
 	function reactionLabel(id) {
@@ -11343,12 +11470,7 @@
 			return;
 		}
 		const reactions = Array.isArray(post.reactions) ? post.reactions : [];
-		const validSource = Array.isArray(ctx?.topicData && ctx.topicData.valid_reactions)
-			? ctx.topicData.valid_reactions
-			: reactions.map((item) => item.id);
-		const valid = validSource.map((item) => String(
-			typeof item === 'string' ? item : (item && (item.id || item.name)) || ''
-		)).filter(Boolean);
+		const valid = configuredDiscourseReactionIds(ctx?.topicData, reactions);
 		const renderedReactions = reactions.map((item) => ({ item, label: reactionLabel(item.id) }))
 			.filter((entry) => entry.label);
 		const renderedValid = valid.map((id) => ({ id, label: reactionLabel(id) }))
@@ -18839,13 +18961,14 @@
 		}
 	}
 
-	function syncHiddenReplyRun(run) {
+	function syncHiddenReplyRun(run, atEnd = false) {
 		if (!run.length) return null; const lead = run[0], markerClass = 'ldp-hidden-reply-marker';
 		let marker = lead.node.querySelector(`:scope > .${markerClass}`); const expanded = marker?.querySelector('.ldp-hidden-reply-list')?.hidden === false;
 		if (!marker) {
 			marker = makeElement('div'); marker.className = markerClass;
 			lead.node.prepend(marker);
 		}
+		lead.node.classList.toggle('ldp-hidden-replies-at-end', atEnd);
 		[...lead.node.children].forEach((child) => { if (child !== marker) child.hidden = true; });
 		marker.innerHTML = `<button class="ldp-btn ldp-hidden-reply-toggle" type="button" aria-expanded="${expanded}" aria-label="查看 ${run.length} 个隐藏回复"></button>
 			<div class="ldp-hidden-reply-list" role="list" ${expanded ? '' : 'hidden'}>${run.map(({ post }) => {
@@ -18860,14 +18983,15 @@
 		const collapseChildren = PREFS.expandNestedRepliesByDefault !== true;
 		const expandLeaf = PREFS.expandLeafNestedReplies === true;
 		let reindexFrom = null, hiddenRun = [];
-		const flushHiddenRun = () => {
-			const changed = syncHiddenReplyRun(hiddenRun);
+		const flushHiddenRun = (atEnd = false) => {
+			const changed = syncHiddenReplyRun(hiddenRun, atEnd);
 			if (changed != null) reindexFrom = reindexFrom == null ? changed : Math.min(reindexFrom, changed);
 			hiddenRun = [];
 		};
 		ctx.streamItems.forEach((item, index) => {
 			const node = item?.node;
 			if (!node) return;
+			node.classList.remove('ldp-hidden-replies-at-end');
 			const keepOnlyOpExpanded = !!(ctx.onlyOp && String(item.username || '') === String(ctx.op || ''));
 			const post = node._ldpPostData;
 			const parentNumber = +(post?.reply_to_post_number || node.dataset.replyToPostNumber || 0);
@@ -18887,7 +19011,7 @@
 			item.zebraExcluded = excluded;
 			reindexFrom = reindexFrom == null ? index : Math.min(reindexFrom, index);
 		});
-		flushHiddenRun();
+		flushHiddenRun(true);
 		if (forceZebra) reindexFrom = 0;
 		if (reindexFrom == null) return;
 		reindexStreamItems(ctx, reindexFrom);
@@ -21813,7 +21937,7 @@
 		const windowScope = createLifecycleScope();
 		const headerDragBlockedSelector = [
 			'a', 'button', 'input', 'select', 'textarea', 'label', 'summary', '[role="button"]',
-			'[contenteditable="true"]', '.ldp-title', '.ldp-meta-row', '.ldp-title-topic-row',
+			'[contenteditable="true"]', '.ldp-title-jump', '.ldp-meta-row', '.ldp-title-topic-row',
 			'.ldp-notifications-popover', '.ldp-history-popover', '.ldp-bookmarks-popover',
 			'.ldp-settings-popover', '.ldp-topic-edit-layer',
 		].join(',');
@@ -24523,6 +24647,7 @@
 		const readWindowState = () => { try { const value = globalThis.GM_getValue?.(LDP_REPLY_WINDOW_STATE_KEY, {}); return value && typeof value === 'object' && !Array.isArray(value) && !isFunction(value.then) ? value : {}; } catch { return {}; } };
 		const windowState = readWindowState();
 		const surfaceHost = inlineSurface ? ctx.modal.querySelector('.ldp-reader-main') : ctx.modal;
+		const resizeDirections = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 		if (!surfaceHost) return;
 		layer.className = `ldp-descendant-replies-layer ${inlineSurface ? 'ldp-descendant-replies-layer-inline' : 'ldp-descendant-replies-layer-centered'}`;
 		panel.className = `ldp-descendant-replies-window ${inlineSurface ? 'ldp-descendant-replies-inline' : 'ldp-descendant-replies-centered'}`;
@@ -24531,15 +24656,36 @@
 		);
 		panel.innerHTML = `<header class="ldp-descendant-replies-header">
 			<button class="ldp-btn ldp-author ldp-descendant-replies-close" type="button" aria-label="关闭完整讨论（Esc）">&lt;</button>
-			<button class="ldp-btn ldp-descendant-replies-back" type="button" aria-label="返回上一层" hidden>${icon('chevronRight')}</button>
 			<span class="ldp-author ldp-descendant-replies-title"></span>
 			<button class="ldp-btn ldp-descendant-replies-top" type="button" aria-label="回到完整讨论顶部">${icon('arrowUp')}</button>
-		</header><div class="ldp-descendant-replies-list"></div>`;
+		</header><div class="ldp-descendant-replies-list"></div>${inlineSurface ? '' : resizeDirections.map((direction) =>
+			`<span class="ldp-composer-resize-handle ldp-descendant-replies-resize-handle" data-resize="${direction}" aria-hidden="true"></span>`
+		).join('')}`;
 		if (!inlineSurface) ctx.modal.classList.add('ldp-descendant-replies-host-open');
 		layer.append(panel); surfaceHost.append(layer); ctx.replyThreadWindow = panel; bindFloatingSurfaceWheel(layer);
-		const header = panel.firstElementChild, list = panel.lastElementChild;
+		const header = panel.firstElementChild;
+		const list = panel.querySelector('.ldp-descendant-replies-list');
+		list.style.setProperty('--ldp-nested-content-scale', '.97');
+		list.style.setProperty('--ldp-nested-component-scale', '.95');
+		list.style.setProperty('--ldp-nested-component-gap', '7.6px');
+		list.style.paddingBlock = '5px 7px';
 		const title = header.querySelector('.ldp-descendant-replies-title');
-		const back = header.querySelector('.ldp-descendant-replies-back');
+		const closeButton = header.querySelector('.ldp-descendant-replies-close');
+		const outerReaderControls = inlineSurface ? [
+			ctx.modal.querySelector(':scope > .ldp-header'),
+			...ctx.modal.querySelectorAll(':scope > .ldp-reader-embed-resize,:scope > .ldp-reader-resize-handle'),
+		].filter(Boolean) : [];
+		const outerReaderControlZIndexes = new Map(outerReaderControls.map((control) => [
+			control,
+			[control.style.getPropertyValue('z-index'), control.style.getPropertyPriority('z-index')],
+		]));
+		outerReaderControls.forEach((control) => control.style.setProperty('z-index', '32'));
+		const restoreOuterReaderControls = () => {
+			outerReaderControlZIndexes.forEach(([value, priority], control) => {
+				if (value) control.style.setProperty('z-index', value, priority);
+				else control.style.removeProperty('z-index');
+			});
+		};
 		const readIO = isFunction(IntersectionObserver) ? new IntersectionObserver((entries) => entries.forEach((entry) => {
 			const visible = entry.isIntersecting && entry.intersectionRect.width > 0 &&
 				entry.intersectionRect.height > 0;
@@ -24583,9 +24729,153 @@
 		const persistWindowState = () => {
 			const point = captureWindowPoint();
 			if (point) (windowState.views ||= {})[viewKey()] = { at: Date.now(), ...point };
+			if (panelGeometryState) windowState.fullPageGeometry = {
+				left: Math.round(panelGeometryState.left),
+				top: Math.round(panelGeometryState.top),
+				width: Math.round(panelGeometryState.width),
+				height: Math.round(panelGeometryState.height),
+			};
 			windowState.views = Object.fromEntries(Object.entries(windowState.views || {}).sort((a, b) => +a[1].at - +b[1].at).slice(-128));
 			try { void Promise.resolve(globalThis.GM_setValue?.(LDP_REPLY_WINDOW_STATE_KEY, windowState)).catch(() => {}); } catch {}
 		};
+		let panelGeometryState = null, panelPointer = null, panelGeometryFrame = 0;
+		const panelGeometryLimits = () => {
+			const margin = Math.max(0, Math.min(16,
+				Math.floor((window.innerWidth - 1) / 2),
+				Math.floor((window.innerHeight - 1) / 2)));
+			const maxWidth = Math.max(1, window.innerWidth - margin * 2);
+			const maxHeight = Math.max(1, window.innerHeight - margin * 2);
+			return {
+				left: margin,
+				top: margin,
+				right: window.innerWidth - margin,
+				bottom: window.innerHeight - margin,
+				minWidth: Math.min(320, maxWidth),
+				minHeight: Math.min(240, maxHeight),
+				maxWidth,
+				maxHeight,
+			};
+		};
+		const defaultPanelGeometry = () => {
+			const rect = panel.getBoundingClientRect();
+			return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+		};
+		const normalizePanelGeometry = (next) => {
+			const bounds = panelGeometryLimits();
+			const fallback = defaultPanelGeometry();
+			const number = (value, fallbackValue) => Number.isFinite(Number(value)) ? Number(value) : fallbackValue;
+			const width = Math.max(bounds.minWidth, Math.min(bounds.maxWidth, number(next?.width, fallback.width)));
+			const height = Math.max(bounds.minHeight, Math.min(bounds.maxHeight, number(next?.height, fallback.height)));
+			return {
+				left: Math.max(bounds.left, Math.min(bounds.right - width, number(next?.left, fallback.left))),
+				top: Math.max(bounds.top, Math.min(bounds.bottom - height, number(next?.top, fallback.top))),
+				width,
+				height,
+			};
+		};
+		const applyPanelGeometry = (next) => {
+			if (inlineSurface) return;
+			panelGeometryState = normalizePanelGeometry(next);
+			panel.style.left = `${Math.round(panelGeometryState.left * 100) / 100}px`;
+			panel.style.top = `${Math.round(panelGeometryState.top * 100) / 100}px`;
+			panel.style.width = `${Math.round(panelGeometryState.width * 100) / 100}px`;
+			panel.style.height = `${Math.round(panelGeometryState.height * 100) / 100}px`;
+			panel.style.transform = 'none';
+		};
+		const resizePanelGeometry = (start, direction, deltaX, deltaY) => {
+			const bounds = panelGeometryLimits();
+			let left = start.left, top = start.top;
+			let right = start.left + start.width, bottom = start.top + start.height;
+			if (direction.includes('w')) left = Math.max(bounds.left, Math.min(right - bounds.minWidth, start.left + deltaX));
+			if (direction.includes('e')) right = Math.max(left + bounds.minWidth, Math.min(bounds.right, start.left + start.width + deltaX));
+			if (direction.includes('n')) top = Math.max(bounds.top, Math.min(bottom - bounds.minHeight, start.top + deltaY));
+			if (direction.includes('s')) bottom = Math.max(top + bounds.minHeight, Math.min(bounds.bottom, start.top + start.height + deltaY));
+			return { left, top, width: right - left, height: bottom - top };
+		};
+		const renderPanelPointer = () => {
+			panelGeometryFrame = 0;
+			if (!panelPointer) return;
+			const deltaX = panelPointer.clientX - panelPointer.startX;
+			const deltaY = panelPointer.clientY - panelPointer.startY;
+			if (panelPointer.mode === 'move') {
+				const bounds = panelGeometryLimits();
+				applyPanelGeometry({
+					...panelPointer.state,
+					left: Math.max(bounds.left, Math.min(
+						bounds.right - panelPointer.state.width,
+						panelPointer.state.left + deltaX,
+					)),
+					top: Math.max(bounds.top, Math.min(
+						bounds.bottom - panelPointer.state.height,
+						panelPointer.state.top + deltaY,
+					)),
+				});
+			} else {
+				applyPanelGeometry(resizePanelGeometry(panelPointer.state, panelPointer.mode, deltaX, deltaY));
+			}
+		};
+		const stopPanelPointer = (event, persist = true) => {
+			if (!panelPointer || event && event.pointerId !== panelPointer.pointerId) return;
+			if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+				panelPointer.clientX = event.clientX;
+				panelPointer.clientY = event.clientY;
+			}
+			if (panelGeometryFrame) {
+				cancelAnimationFrame(panelGeometryFrame);
+				panelGeometryFrame = 0;
+				renderPanelPointer();
+			}
+			const activePointer = panelPointer;
+			panelPointer = null;
+			try {
+				if (activePointer.target.hasPointerCapture(activePointer.pointerId))
+					activePointer.target.releasePointerCapture(activePointer.pointerId);
+			} catch {}
+			panel.classList.remove('ldp-descendant-replies-interacting');
+			if (persist) persistWindowState();
+		};
+		const onPanelPointerDown = (event) => {
+			if (inlineSurface || event.button !== 0 || !(event.target instanceof Element)) return;
+			const resizeHandle = event.target.closest('.ldp-descendant-replies-resize-handle');
+			const dragHeader = event.target.closest('.ldp-descendant-replies-header');
+			if (!resizeHandle && (!dragHeader || event.target.closest('button,a,input,select,textarea'))) return;
+			const target = resizeHandle || dragHeader;
+			panelGeometryState = normalizePanelGeometry(panelGeometryState || windowState.fullPageGeometry);
+			applyPanelGeometry(panelGeometryState);
+			panelPointer = {
+				pointerId: event.pointerId,
+				mode: resizeHandle?.dataset.resize || 'move',
+				startX: event.clientX,
+				startY: event.clientY,
+				clientX: event.clientX,
+				clientY: event.clientY,
+				state: { ...panelGeometryState },
+				target,
+			};
+			target.setPointerCapture(event.pointerId);
+			panel.classList.add('ldp-descendant-replies-interacting');
+			consumeEvent(event);
+		};
+		const onPanelPointerMove = (event) => {
+			if (!panelPointer || event.pointerId !== panelPointer.pointerId) return;
+			panelPointer.clientX = event.clientX;
+			panelPointer.clientY = event.clientY;
+			if (!panelGeometryFrame) panelGeometryFrame = requestAnimationFrame(renderPanelPointer);
+			event.preventDefault();
+		};
+		const onPanelViewportResize = () => {
+			if (!inlineSurface) applyPanelGeometry(panelGeometryState || windowState.fullPageGeometry);
+		};
+		if (!inlineSurface) {
+			header.style.cursor = 'move';
+			header.style.touchAction = 'none';
+			panel.addEventListener('pointerdown', onPanelPointerDown);
+			panel.addEventListener('pointermove', onPanelPointerMove);
+			['pointerup', 'pointercancel', 'lostpointercapture'].forEach((type) =>
+				panel.addEventListener(type, stopPanelPointer));
+			window.addEventListener('resize', onPanelViewportResize);
+			applyPanelGeometry(windowState.fullPageGeometry);
+		}
 		panel._ldpCaptureAnchorState = () => ({
 			rootPostNumber: +rootPost.post_number,
 			point: captureWindowPoint(),
@@ -24632,9 +24922,12 @@
 		};
 		const workspaceHost = ctx.modal.closest('.ldp-overlay');
 		let onWorkspaceChange = null;
-		const close = (restoreEntry = true) => { persistWindowState(); window.removeEventListener('pagehide', persistWindowState); if (onWorkspaceChange) workspaceHost?.removeEventListener('ldp-reader-workspace-change', onWorkspaceChange); token++; settleTarget(false); ctx.tracker.setVisible([...panel.querySelectorAll('.ldp-post')].map((node) => node.dataset.postNumber), false); readIO?.disconnect(); branchLineResizeObserver?.disconnect(); if (branchLineFrame) cancelAnimationFrame(branchLineFrame); const previewPost = panel.querySelector('.ldp-floor-preview')?._ldpRelatedPost; if (previewPost) ctx.floorPreview?.hide(previewPost); panel.querySelectorAll('.ldp-post').forEach((node) => ctx.tracker.unobserve(node)); layer.remove(); if (!inlineSurface) ctx.modal.classList.remove('ldp-descendant-replies-host-open'); if (ctx.replyThreadWindow === panel) ctx.replyThreadWindow = null; if (restoreEntry) requestAnimationFrame(restoreEntryPosition); };
-		onWorkspaceChange = () => close();
-		workspaceHost?.addEventListener('ldp-reader-workspace-change', onWorkspaceChange, { once: true });
+		const close = (restoreEntry = true) => { stopPanelPointer(null, false); persistWindowState(); window.removeEventListener('pagehide', persistWindowState); window.removeEventListener('resize', onPanelViewportResize); if (onWorkspaceChange) workspaceHost?.removeEventListener('ldp-reader-workspace-change', onWorkspaceChange); restoreOuterReaderControls(); token++; settleTarget(false); ctx.tracker.setVisible([...panel.querySelectorAll('.ldp-post')].map((node) => node.dataset.postNumber), false); readIO?.disconnect(); branchLineResizeObserver?.disconnect(); if (branchLineFrame) cancelAnimationFrame(branchLineFrame); const previewPost = panel.querySelector('.ldp-floor-preview')?._ldpRelatedPost; if (previewPost) ctx.floorPreview?.hide(previewPost); panel.querySelectorAll('.ldp-post').forEach((node) => ctx.tracker.unobserve(node)); layer.remove(); if (!inlineSurface) ctx.modal.classList.remove('ldp-descendant-replies-host-open'); if (ctx.replyThreadWindow === panel) ctx.replyThreadWindow = null; if (restoreEntry && !sourceControl?.isConnected) requestAnimationFrame(restoreEntryPosition); };
+		onWorkspaceChange = () => {
+			if (inlineSurface === !ctx.readerWorkspace?.isFullPage?.()) return;
+			close();
+		};
+		workspaceHost?.addEventListener('ldp-reader-workspace-change', onWorkspaceChange);
 		panel._ldpClose = close;
 		panel._ldpCloseFromEscape = () => close(returnViewportPostNumber > 0 || !skipEscapeReturn);
 		layer.addEventListener('click', (event) => {
@@ -24794,6 +25087,34 @@
 				setLabel(button, `${opened ? '已打开过；' : ''}聚焦 #${number} 下的回复分支，当前已加载 ${count} 条`);
 			});
 		};
+		const applyNestedReplySurfaceStyle = (node) => {
+			node.classList.add('ldp-descendant-reply-compact');
+			node.style.padding = '5px 0 7px';
+			node.style.lineHeight = '1.5';
+			node.style.borderBottom = 'none';
+			node.style.setProperty('contain-intrinsic-size', 'auto 96px');
+			const content = node.querySelector(':scope > .ldp-content');
+			if (content) {
+				content.style.fontSize = 'calc(var(--ldp-post-font-size,14px) * var(--ldp-nested-content-scale))';
+				content.style.paddingBlock = '12px';
+				if (content.firstElementChild) content.firstElementChild.style.marginTop = '0';
+				if (content.lastElementChild) content.lastElementChild.style.marginBottom = '0';
+			}
+			[...node.children].forEach((element) => {
+				if (element !== content) element.style.zoom = 'var(--ldp-nested-component-scale)';
+			});
+			const reactions = node.querySelector(':scope > .ldp-reactions');
+			if (reactions) reactions.style.marginTop = '0';
+			const postHead = node.querySelector(':scope > .ldp-post-head');
+			if (postHead) {
+				postHead.style.marginBottom = '0';
+				postHead.style.flexWrap = 'wrap';
+			}
+			const parentJump = node.querySelector(':scope > .ldp-post-head > .ldp-jump-parent');
+			if (parentJump) parentJump.style.marginLeft = '8px';
+			node.querySelectorAll(':scope > .ldp-post-head > .ldp-user,:scope > .ldp-post-head > .ldp-time')
+				.forEach((element) => { element.style.opacity = '.5'; });
+		};
 		const appendPost = (post, isRoot = false, depth = null) => {
 			const number = +post.post_number;
 			if (!number || known.has(number)) return null;
@@ -24803,6 +25124,7 @@
 			const node = renderPost({ ...post, reply_count: 0 }, !isRoot, ctx, { forceExpanded: true, showParentJump: !isRoot });
 			node._ldpPostData = post; node.classList.remove('ldp-reply-collapsible', 'ldp-nested-collapsed');
 			node.querySelectorAll(':scope > .ldp-nested-toggle,:scope > .ldp-nested-esc-hint,:scope > .ldp-collapse-replies,:scope > .ldp-children,:scope > .ldp-sub-loading').forEach((element) => element.remove());
+			applyNestedReplySurfaceStyle(node);
 			const parent = known.get(+post.reply_to_post_number);
 			const parentJump = node.querySelector(':scope > .ldp-post-head > .ldp-jump-parent');
 			const parentDisplayName = parent?.name || parent?.username || '';
@@ -24862,7 +25184,9 @@
 			const authorName = threadRoot.name || threadRoot.username || '';
 			title.textContent = `#${threadRoot.post_number} · ${authorName} · 查看完整讨论（${known.size}）`;
 			title.dataset.partial = partial ? '1' : '0';
-			if (stack.length > 1) setLabel(back, `返回分支 #${stack[stack.length - 2].root.post_number}`);
+			setLabel(closeButton, stack.length > 1
+				? `返回分支 #${stack[stack.length - 2].root.post_number}`
+				: '关闭完整讨论（Esc）');
 		};
 		const livePostTasks = new Map();
 		panel._ldpIngestLivePost = (post) => {
@@ -24914,7 +25238,7 @@
 			list.querySelectorAll('.ldp-post').forEach((node) => ctx.tracker.unobserve(node));
 			branchLineResizeObserver?.disconnect(); branchLineResizeObserver?.observe(list);
 			returnPoint = null;
-			known = new Map(); queue = []; back.hidden = stack.length < 2;
+			known = new Map(); queue = [];
 			list.replaceChildren();
 			lineage.forEach((post, index) => appendPost(post, index === 0, index));
 			appendPost(root, !lineage.length, lineage.length);
@@ -24949,9 +25273,12 @@
 			hoveredBranchNumber = 0; scheduleBranchLine();
 		});
 		panel.addEventListener('click', (event) => {
-			if (event.target.closest('.ldp-descendant-replies-close')) { consumeEvent(event); close(); return; }
+			if (event.target.closest('.ldp-descendant-replies-close')) {
+				consumeEvent(event);
+				if (!panel._ldpBack()) close();
+				return;
+			}
 			if (event.target.closest('.ldp-descendant-replies-top')) { consumeEvent(event); historyPoint = historyAnchor = null; list.scrollTo({ top: 0, behavior: 'auto' }); return; }
-			if (event.target.closest('.ldp-descendant-replies-back')) { consumeEvent(event); panel._ldpBack(); return; }
 			const returnButton = event.target.closest('.ldp-descendant-replies-return');
 			if (returnButton) {
 				consumeEvent(event);
@@ -25869,10 +26196,10 @@
 			if (open && root.getClientRects().length) reactionVisibilityObserver?.observe(root);
 			else reactionVisibilityObserver?.unobserve(root);
 		};
-		const hydrateReactionRegistry = () => {
-			if (reactionEmojiUrls) return Promise.resolve(reactionEmojiUrls);
+		const hydrateReactionRegistry = (refresh = false) => {
+			if (!refresh && reactionEmojiUrls) return Promise.resolve(reactionEmojiUrls);
 			if (reactionRegistryHydration) return reactionRegistryHydration;
-			reactionRegistryHydration = loadReactionEmojiRegistry().then(() => {
+			reactionRegistryHydration = loadReactionEmojiRegistry({ refresh }).then(() => {
 				if (!reactionEmojiUrls || !modal.isConnected ||
 					(ctx.readerSession && !ctx.readerSession.isCurrent('opening', 'active'))) return;
 				modal.querySelectorAll('.ldp-post').forEach((postNode) => {
@@ -25891,7 +26218,7 @@
 			}).finally(() => { reactionRegistryHydration = null; });
 			return reactionRegistryHydration;
 		};
-		hydrateReactionRegistry();
+		hydrateReactionRegistry(!reactionEmojiRegistryNetworkRequested);
 		if (isFunction(IntersectionObserver)) {
 			reactionVisibilityObserver = new IntersectionObserver((entries) => {
 				entries.forEach((entry) => {
@@ -28433,6 +28760,7 @@
 	function resetReaderTopicShell(overlay) {
 		const body = overlay?.querySelector('.ldp-body');
 		if (!body) return;
+		overlay.querySelector('.ldp-header')?.classList.remove('ldp-title-single-line');
 		const comments = body.querySelector('.ldp-comments');
 		parkReaderCommentsHeader(overlay);
 		const loadingTip = body.querySelector('.ldp-loading-tip');
@@ -28512,6 +28840,7 @@
 	let HOST_DOCUMENT_TITLE;
 	let AUTO_OPEN_SUPPRESSED_TOPIC_ID = bypassReaderForThisTab ? String(INITIAL_TOPIC_ID || '') : '';
 	let DISCOURSE_ROUTE_HANDLER_INSTALLED = false;
+	let DISCOURSE_UPDATE_EVENT_MONITOR = null;
 	let LAST_READER_TOPIC_ROUTE_KEY = '';
 
 	function syncReaderDocumentTitle(topicTitle) {
@@ -29539,8 +29868,12 @@
 								</div>
 							</div>
 							<div class="ldp-title-topic-row">
-								<div class="ldp-topic-tags" hidden></div>
-								<div class="ldp-topic-vote-slot" hidden></div>
+								<span class="ldp-title-topic-scroll-hint ldp-title-topic-scroll-hint-left" aria-hidden="true">‹</span>
+								<div class="ldp-title-topic-scroller" role="group" tabindex="0" aria-label="主题分类和标签，滚轮可横向浏览">
+									<div class="ldp-topic-tags" hidden></div>
+									<div class="ldp-topic-vote-slot" hidden></div>
+								</div>
+								<span class="ldp-title-topic-scroll-hint ldp-title-topic-scroll-hint-right" aria-hidden="true">›</span>
 							</div>
 						</div>
 					</div>
@@ -30135,6 +30468,20 @@
 		if (shouldRestoreHostTopicAnchor) PAGE_ROOT.classList.add('ldp-reader-host-anchor-restoring');
 		const readerWorkspace = readerShell.readerWorkspace || createReaderWorkspaceController(overlay, modal, directTopicRoute);
 		readerWorkspace.sync();
+		readerShell.syncReaderTitleActionAlignment = () => {
+			const header = readerElement('.ldp-header');
+			const titleJump = header?.querySelector('.ldp-title-jump');
+			const titleActions = header?.querySelector(':scope > .ldp-title-actions');
+			if (!titleJump || !titleActions) return;
+			titleActions.style.setProperty('--ldp-title-actions-align-y', '0px');
+			const visibleControl = Array.from(titleActions.children)
+				.find((control) => !control.hidden && getComputedStyle(control).display !== 'none');
+			const actionIcon = visibleControl?.querySelector('.ldp-icon');
+			if (!actionIcon) return;
+			const shift = titleJump.getBoundingClientRect().top - actionIcon.getBoundingClientRect().top;
+			titleActions.style.setProperty('--ldp-title-actions-align-y',
+				`${Math.round(shift * 2) / 2}px`);
+		};
 		readerShell.syncFullPageHeaderAlignment = () => {
 			const header = readerElement('.ldp-header');
 			if (!header) return;
@@ -30150,6 +30497,7 @@
 			};
 			if (!readerWorkspace.isFullPage() || !content) {
 				clearAlignment();
+				readerShell.syncReaderTitleActionAlignment();
 				return;
 			}
 			const modalRect = modal.getBoundingClientRect();
@@ -30162,6 +30510,7 @@
 			header.style.paddingRight = `${right}px`;
 			if (titleActions) titleActions.style.right = `${right}px`;
 			headButtons?.classList.add('is-content-aligned');
+			readerShell.syncReaderTitleActionAlignment();
 		};
 		if (shouldRestoreHostTopicAnchor) {
 			if (readerWorkspace.isEmbedded()) restoreHostTopicPointerAnchor(hostTopicPointerAnchor);
@@ -30217,6 +30566,22 @@
 		const liveUpdateDismissBtn = liveUpdateBtn.querySelector('.ldp-live-update-dismiss');
 		const timelineEl = readerElement('.ldp-topic-timeline');
 		const layoutBtn = readerElement('.ldp-layout-toggle');
+		const titleTopicRow = readerElement('.ldp-title-topic-row');
+		const titleTopicScroller = readerElement('.ldp-title-topic-scroller');
+		let titleTopicHintFrame = 0;
+			const syncTitleTopicScrollHints = () => {
+				titleTopicHintFrame = 0;
+				const hasOverflow = titleTopicScroller.scrollWidth > titleTopicRow.clientWidth + 1;
+				titleTopicRow.classList.toggle('has-overflow', hasOverflow);
+				const maxScrollLeft = Math.max(0, titleTopicScroller.scrollWidth - titleTopicScroller.clientWidth);
+				titleTopicRow.classList.toggle('can-scroll-left', hasOverflow && titleTopicScroller.scrollLeft > 1);
+			titleTopicRow.classList.toggle('can-scroll-right',
+				hasOverflow && titleTopicScroller.scrollLeft < maxScrollLeft - 1);
+		};
+		const queueTitleTopicScrollHints = () => {
+			if (titleTopicHintFrame) return;
+			titleTopicHintFrame = requestAnimationFrame(syncTitleTopicScrollHints);
+		};
 		const onlyOpBtn = readerElement('.ldp-only-op-toggle');
 		const onlyOpProgress = readerElement('.ldp-only-op-progress');
 		const onlyOpProgressValue = onlyOpProgress?.querySelector('.ldp-only-op-progress-value');
@@ -30811,14 +31176,27 @@
 		let topicNavMetadataStopTimer = 0;
 		let topicNavMetadataOverride = null;
 		let topicEditorState = null;
-		const stopTopicNavMetadataHydration = () => {
-			if (topicNavMetadataObserver) topicNavMetadataObserver.disconnect();
+			const stopTopicNavMetadataHydration = () => {
+				if (topicNavMetadataObserver) topicNavMetadataObserver.disconnect();
 			if (topicNavMetadataSyncFrame) cancelAnimationFrame(topicNavMetadataSyncFrame);
 			if (topicNavMetadataStopTimer) clearTimeout(topicNavMetadataStopTimer);
 			topicNavMetadataObserver = null;
 			topicNavMetadataSyncFrame = 0;
-			topicNavMetadataStopTimer = 0;
-		};
+				topicNavMetadataStopTimer = 0;
+			};
+			const syncReaderTitleDensity = () => {
+				const header = readerElement('.ldp-header');
+				const titleJump = header?.querySelector('.ldp-title-jump');
+				if (!header || !titleJump) return;
+				const range = document.createRange();
+				range.selectNodeContents(titleJump);
+				const rects = Array.from(range.getClientRects())
+					.filter((rect) => rect.width > 0 && rect.height > 0);
+				const firstTop = rects[0]?.top;
+				header.classList.toggle('ldp-title-single-line',
+					rects.length > 0 && rects.every((rect) => Math.abs(rect.top - firstTop) < 1));
+			};
+			readerShell.syncReaderTitleDensity = syncReaderTitleDensity;
 			const renderTopicShell = (topicData) => {
 				if (!topicData) return;
 				updateDiscourseCapabilityDiagnostics({ topic: topicData });
@@ -30873,6 +31251,9 @@
 			voteSlot.innerHTML = hasTopicVote
 				? `<button class="ldp-topic-vote${topicData.user_voted ? ' on' : ''}" type="button" data-topic-vote aria-pressed="${topicData.user_voted ? 'true' : 'false'}"${topicData.can_vote === false && !topicData.user_voted ? ' disabled' : ''}>▲ <span>${Math.max(0, +topicData.vote_count || 0)}</span> 票</button>`
 				: '';
+			syncReaderTitleDensity();
+			readerShell.syncReaderTitleActionAlignment();
+			queueTitleTopicScrollHints();
 		};
 		const syncTopicNavMetadataFromHost = () => {
 			if (topicNavMetadataOverride) return false;
@@ -31828,8 +32209,20 @@
 		const applyFontScales = () => {
 			const values = activeFontScaleProfile();
 			const displayScale = Math.min(1.1, Math.max(1, .73 + modal.clientWidth / 4000));
+			const headerWidthProgress = Math.min(1, Math.max(0,
+				(modal.clientWidth - READER_WINDOW_MIN_WIDTH) /
+				(READER_WINDOW_DEFAULT_WIDTH - READER_WINDOW_MIN_WIDTH)));
+			const interfaceScale = normalizeFontScale(values.interface) / 100;
+			const headerFontPixels = (minimum, maximum) =>
+				`${Math.round((minimum + (maximum - minimum) * headerWidthProgress) * interfaceScale * 10) / 10}px`;
 			const scaledValues = { ...values, interface: values.interface * displayScale, post: values.post * displayScale, composer: values.composer * displayScale };
 			overlay.style.setProperty('--ldp-reader-display-scale', String(displayScale));
+			overlay.style.setProperty('--ldp-reader-title-font-size',
+				headerFontPixels(READER_TITLE_MIN_BASE_PX, INTERFACE_FONT_TOKEN_BASES['--ldp-font-xl']));
+			overlay.style.setProperty('--ldp-reader-meta-font-size',
+				headerFontPixels(READER_META_MIN_BASE_PX, INTERFACE_FONT_TOKEN_BASES['--ldp-font-sm']));
+			overlay.style.setProperty('--ldp-reader-topic-tag-font-size',
+				headerFontPixels(READER_TOPIC_TAG_MIN_BASE_PX, INTERFACE_FONT_TOKEN_BASES['--ldp-font-sm']));
 			applyInterfaceFontScale(overlay.style, scaledValues.interface);
 			applyInterfaceFontScale(READER_PORTAL_HOST?.style, scaledValues.interface);
 			applyReaderFontAppearance(overlay.style, scaledValues);
@@ -31842,6 +32235,8 @@
 			const activeContext = readerShell.activeContext;
 			if (activeContext?.nativeComposerWindow)
 				activeContext.nativeComposerWindow.syncFont(scaledValues);
+			readerShell.syncReaderTitleDensity?.();
+			readerShell.syncReaderTitleActionAlignment?.();
 		};
 		const applyLayoutRatios = () => {
 			const fullPage = readerWorkspace.isFullPage();
@@ -35063,6 +35458,33 @@
 
 		const contextScope = createLifecycleScope();
 		const onContext = (target, type, listener, options) => contextScope.listen(target, type, listener, options);
+		contextScope.add(() => {
+			if (titleTopicHintFrame) cancelAnimationFrame(titleTopicHintFrame);
+			titleTopicHintFrame = 0;
+		});
+		onContext(titleTopicScroller, 'scroll', queueTitleTopicScrollHints, { passive: true });
+		if (typeof ResizeObserver === 'function') {
+			const titleTopicResizeObserver = new ResizeObserver(queueTitleTopicScrollHints);
+			titleTopicResizeObserver.observe(titleTopicRow);
+			titleTopicResizeObserver.observe(titleTopicScroller);
+			titleTopicResizeObserver.observe(readerElement('.ldp-topic-tags'));
+			contextScope.add(() => titleTopicResizeObserver.disconnect());
+		}
+		queueTitleTopicScrollHints();
+		const onTitleTopicWheel = (event) => {
+			const rawDelta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+			if (!rawDelta) return;
+			event.preventDefault();
+			event.stopPropagation();
+			const maxScrollLeft = titleTopicScroller.scrollWidth - titleTopicScroller.clientWidth;
+			if (maxScrollLeft <= 1) return;
+			const delta = event.deltaMode === 1
+				? rawDelta * 40
+				: event.deltaMode === 2 ? rawDelta * titleTopicScroller.clientWidth : rawDelta;
+			const nextScrollLeft = Math.min(maxScrollLeft, Math.max(0, titleTopicScroller.scrollLeft + delta));
+			titleTopicScroller.scrollLeft = nextScrollLeft;
+		};
+		onContext(titleTopicRow, 'wheel', onTitleTopicWheel, { passive: false });
 		let ctx = null;
 		const tracker = createReadTracker(
 			topicId,
@@ -35642,11 +36064,11 @@
 			rememberTopic(currentTopic, currentPostNumber, readerQueueEntry(topicId)?.seenPostNumbers);
 		};
 		let readerLayoutSyncFrame = 0;
-		const syncReaderWindowLayout = () => {
-			readerLayoutSyncFrame = 0;
-			syncReaderBackgroundMode();
-			applyFontScales();
-			readerSurfaceController.syncOpenSettingsControls(true);
+			const syncReaderWindowLayout = () => {
+				readerLayoutSyncFrame = 0;
+				syncReaderBackgroundMode();
+				applyFontScales();
+				readerSurfaceController.syncOpenSettingsControls(true);
 			readerShell.syncSettingsSurfaceGeometry?.();
 			if (ctx.nativeComposerWindow) ctx.nativeComposerWindow.syncLayer();
 			positionHeaderPopovers();
@@ -35665,6 +36087,8 @@
 		});
 		onContext(window, 'resize', onWindowResize);
 		onContext(overlay, 'ldp-reader-window-change', onWindowResize);
+		if (typeof ResizeObserver === 'function')
+			contextScope.observe(new ResizeObserver(onWindowResize), modal);
 
 		let loading = false, done = false, pendingRetry = false, loadHalted = false, loadHaltError = null;
 		let loadingPrev = false, loadingNext = false;
@@ -35684,7 +36108,7 @@
 		let pendingGoingUp = false, filterPumpTimer = 0, onlyOpProgressTimer = 0;
 		let onlyOpBatchStartedAt = 0, onlyOpRetryAt = 0, onlyOpRetryStreak = 0;
 		let onlyOpLastProgressAt = 0, onlyOpLastScanned = 0;
-		let destroyActions = null, stopTopicPresence = null, cancelInitialLatestRefresh = null, disposed = false, closePromise = null;
+		let destroyActions = null, stopTopicPresence = null, disposed = false, closePromise = null;
 		let cancelInitialNeighborPrefetch = null;
 		let failureRetryTimer = 0;
 		let nativeAppEvents = null;
@@ -36474,9 +36898,7 @@
 				scrollWorkFrame = 0;
 				wheelPreparationFrame = 0;
 				wheelPreparedDirection = 0;
-				[cancelInitialLatestRefresh, cancelInitialNeighborPrefetch].forEach((cancel) => {
-					if (cancel) cancel();
-				});
+				if (cancelInitialNeighborPrefetch) cancelInitialNeighborPrefetch();
 				[gapLoadTimer, filterPumpTimer].forEach((timer) => {
 					if (timer) clearTimeout(timer);
 				});
@@ -37257,15 +37679,7 @@
 						syncRenderedBoost(postNode, postNode._ldpPostData || {}, ctx);
 				});
 			}
-			if (sessionAcceptsWork()) {
-				if (loader.initializedFromCache) {
-					cancelInitialLatestRefresh = scheduleIdleWork(() => {
-						cancelInitialLatestRefresh = null;
-						refreshLatestReplyState();
-					}, 1400);
-				}
-				startLatestReplyUpdates();
-			}
+			if (sessionAcceptsWork()) startLatestReplyUpdates();
 			const titleBtn = readerElement('.ldp-title-jump');
 			let cancelInitialTargetJump = false;
 			ctx.cancelInitialTargetPosition = () => {
@@ -38337,10 +38751,14 @@
 		if (DISCOURSE_ROUTE_HANDLER_INSTALLED) return true;
 		const pluginApiModule = lookupDiscourseModule('discourse/lib/plugin-api');
 		if (!pluginApiModule || !isFunction(pluginApiModule.withPluginApi)) return false;
+		let lastRouteKey = currentHostRouteKey();
 		try {
 			pluginApiModule.withPluginApi((api) => {
 				api.onPageChange(() => {
 					setTimeout(() => {
+						const routeKey = currentHostRouteKey();
+						if (routeKey === lastRouteKey) return;
+						lastRouteKey = routeKey;
 						takeoverDirectTopicRoute().catch((error) => {
 							console.warn('[LDP] route signal takeover failed', error);
 						});
@@ -38351,6 +38769,128 @@
 			return false;
 		}
 		DISCOURSE_ROUTE_HANDLER_INSTALLED = true;
+		return true;
+	}
+
+	function refreshVisibleReaderReactions() {
+		const overlay = CURRENT_OVERLAY;
+		const ctx = overlay?._ldpReaderShell?.activeContext;
+		if (!overlay || !ctx || !ctx.readerSession?.isCurrent('opening', 'active')) return;
+		overlay.querySelectorAll('.ldp-post').forEach((postNode) => {
+			const wasExpanded = !!postNode.querySelector(
+				':scope > .ldp-reactions .ldp-reaction-picker:not([hidden])'
+			);
+			renderPostReactions(postNode, ctx);
+			if (!wasExpanded) return;
+			const root = postNode.querySelector(':scope > .ldp-reactions');
+			const picker = root?.querySelector('.ldp-reaction-picker');
+			const trigger = root?.querySelector('[data-reaction-picker]');
+			if (picker) picker.hidden = false;
+			if (trigger) setExpanded(trigger, true);
+		});
+		const rail = ctx.topicActionRail;
+		if (!rail?._ldpPostData) return;
+		const railLike = rail.querySelector('.ldp-like');
+		if (railLike)
+			syncReaderLikeButton(railLike, readerPostRailReactionAction(rail._ldpPostData, ctx));
+		renderPostReactions(rail, ctx, { collectLike: false, railPicker: true });
+		rail.querySelector(':scope > .ldp-reactions > .ldp-reaction-summary')?.remove();
+	}
+
+	function clearDiscourseEventResponseCache(tags) {
+		void clearStoredResponseCache({ tags }).catch((error) => {
+			console.warn('[LDP] Discourse event cache invalidation failed', error);
+		});
+	}
+
+	function installDiscourseUpdateEventMonitor() {
+		if (DISCOURSE_UPDATE_EVENT_MONITOR) return true;
+		const appEvents = lookupDiscourse('service:app-events');
+		const messageBus = lookupDiscourse('service:message-bus');
+		if (!appEvents || !isFunction(appEvents.on) ||
+				!messageBus || !isFunction(messageBus.subscribe)) return false;
+		const owner = document;
+		const bindings = [];
+		const bindAppEvent = (name, handler) => {
+			if (!appEvents || !isFunction(appEvents.on)) return;
+			appEvents.on(name, owner, handler);
+			bindings.push({ type: 'app', name, handler });
+		};
+		const clientSettingsHandler = (data) => {
+			const name = String(data?.name || '');
+			if (![
+				'discourse_reactions_enabled_reactions',
+				'discourse_reactions_reaction_for_like',
+			].includes(name)) return;
+			const siteSettings = lookupDiscourse('service:site-settings');
+			if (siteSettings) siteSettings[name] = data.value;
+			void loadReactionEmojiRegistry({ refresh: true }).then(refreshVisibleReaderReactions);
+		};
+		try {
+			messageBus.subscribe('/client_settings', clientSettingsHandler);
+			bindings.push({
+				type: 'message-bus',
+				name: '/client_settings',
+				handler: clientSettingsHandler,
+			});
+		} catch {
+			return false;
+		}
+		bindAppEvent('notifications:changed', () => {
+			expireNotificationFirstPageCaches();
+			clearDiscourseEventResponseCache(['notifications']);
+		});
+		bindAppEvent('bookmarks:changed', () => {
+			clearDiscourseEventResponseCache(['bookmarks']);
+			CURRENT_OVERLAY?._ldpReaderShell?.refreshBookmarksPanel?.();
+		});
+		bindAppEvent('discourse-reactions:reaction-toggled', (payload) => {
+			const post = payload?.post;
+			const postId = Number(post?.id || 0);
+			const topicId = Number(post?.topic_id || post?.topic?.id || 0);
+			const tags = ['reactions-given'];
+			if (postId) tags.push(`post:${postId}`);
+			if (topicId) tags.push(`topic:${topicId}`);
+			clearDiscourseEventResponseCache(tags);
+			const ctx = CURRENT_OVERLAY?._ldpReaderShell?.activeContext;
+			if (!postId || !ctx || topicId && topicId !== Number(ctx.topicId)) {
+				if (topicId) {
+					cancelTopicSnapshotWrites(topicId);
+					TOPIC_DATA_CACHE.delete(String(topicId));
+					HOST_TOPIC_DATA_CACHE.delete(String(topicId));
+				}
+				return;
+			}
+			ctx.loader?.persistFetchedPosts?.([post]);
+			ingestLivePosts([post], ctx, { refreshContent: true });
+			ctx.refreshBookmarksPanel?.({ post, topic: ctx.topicData });
+		});
+		bindAppEvent('post:created', (post) => {
+			const postId = Number(post?.id || 0);
+			const topicId = Number(post?.topic_id || post?.topic?.id || 0);
+			const tags = [];
+			if (postId) tags.push(`post:${postId}`);
+			if (topicId) tags.push(`topic:${topicId}`);
+			if (tags.length) clearDiscourseEventResponseCache(tags);
+			const activeTopicId = Number(CURRENT_OVERLAY?._ldpReaderShell?.activeContext?.topicId || 0);
+			if (topicId && topicId !== activeTopicId) {
+				cancelTopicSnapshotWrites(topicId);
+				TOPIC_DATA_CACHE.delete(String(topicId));
+				HOST_TOPIC_DATA_CACHE.delete(String(topicId));
+			}
+		});
+		bindAppEvent('composer:edited-post', () => {
+			const topicId = Number(extractTopicRouteFromUrl(location.href)?.topicId || 0);
+			if (!topicId) return;
+			clearDiscourseEventResponseCache([`topic:${topicId}`]);
+			const activeTopicId = Number(CURRENT_OVERLAY?._ldpReaderShell?.activeContext?.topicId || 0);
+			if (topicId === activeTopicId) return;
+			cancelTopicSnapshotWrites(topicId);
+			TOPIC_DATA_CACHE.delete(String(topicId));
+			HOST_TOPIC_DATA_CACHE.delete(String(topicId));
+		});
+		if (!bindings.length) return false;
+		DISCOURSE_UPDATE_EVENT_MONITOR = { appEvents, messageBus, bindings };
 		return true;
 	}
 
@@ -38476,6 +39016,10 @@
 				a = card.querySelector('a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],.link-top-line a[href*="/t/"],a[href*="/t/"]');
 		}
 		if (!a) return false;
+		const hostSearchMenu = a.closest('.search-menu');
+		if (hostSearchMenu && !hostSearchMenu.closest('.ldp-overlay,.ldp-reader-portal-host,.sciapp-ldp-owned') &&
+				!a.closest('.search-result-topic,.search-result-post'))
+			return false;
 		if (a.classList.contains('ldp-rate-limit-challenge') || a.classList.contains('ldp-error-challenge')) {
 			consumeEvent(e);
 			openCloudflareChallengePopup(a.href);
@@ -38578,6 +39122,11 @@
 		installReaderHostEventHandlers();
 		installRequestFlowInstrumentation();
 		void resolveSiteLogo();
+		if (!installDiscourseUpdateEventMonitor())
+			window.addEventListener('load', () => {
+				if (!installDiscourseUpdateEventMonitor())
+					console.warn('[LDP] Discourse update events unavailable');
+			}, { once: true });
 		if (!installDiscourseRouteChangeHandler())
 			window.addEventListener('load', () => {
 				if (!installDiscourseRouteChangeHandler())

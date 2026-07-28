@@ -2,9 +2,9 @@
 title: 楼层、时间轴与历史
 description: 使用时间轴、只看楼主、历史前后切换、多主题队列和实时阅读进度。
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014"]
-source_anchors: ["LDP_READER_QUEUE_KEY", "ldp-only-op-toggle", "bindTopicTimeline", "normalizeReaderAnchorState", "createReaderHistoryNavigation", "historyEdgeTriggerPercent", "READ_THRESHOLD", "sendReaderReadTimings", "guardNativeReaderTimings", "bindReaderTopicPresence", "renderTopicNavLinks", "inlineTopicNavSvgUses", "LAST_READER_TOPIC_ROUTE_KEY", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
+source_anchors: ["LDP_READER_QUEUE_KEY", "ldp-only-op-toggle", "bindTopicTimeline", "normalizeReaderAnchorState", "createReaderHistoryNavigation", "historyEdgeTriggerPercent", "READ_THRESHOLD", "sendReaderReadTimings", "guardNativeReaderTimings", "bindReaderTopicPresence", "installDiscourseUpdateEventMonitor", "renderTopicNavLinks", "inlineTopicNavSvgUses", "LAST_READER_TOPIC_ROUTE_KEY", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
 since: 0.1.2
-version: 0.1.15
+version: 0.1.16
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-16-history.png", "/screenshots/guide-21-reading-queue.png"]
@@ -74,7 +74,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-1
 
 这些约束让已预加载楼层尽快进入 `/topics/timings` 批次，同时用优先级、每批上限、成功指纹和跨标签锁减少重复请求。乐观已读不等于服务器已经确认；联网失败时最终状态仍以原站为准。
 
-新回复到达时，主题活动与阅读器状态会同步；只有确认存在新楼层时，接近底部的阅读器才自动跟随，单纯刷新元数据不会改变滚动位置。消息跳转会等待目标进入虚拟窗口后再定位。
+新回复到达时，主题活动与阅读器状态会同步；只有确认存在新楼层时，接近底部的阅读器才自动跟随，单纯刷新元数据不会改变滚动位置。原站创建或编辑帖子、切换回应时，阅读器还会让对应主题、楼层和回应缓存失效，当前主题则就地合并权威楼层。消息跳转会等待目标进入虚拟窗口后再定位。
 
 ## 相邻主题和队列
 
@@ -84,7 +84,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-1
 
 阅读队列与历史使用同一套锚点模型。队列切走当前主题时会保存完整位置；再次进入时，除非链接明确指定起始楼层，否则优先恢复完整讨论或主信息流视口。
 
-当地址栏在同一主题内从一个楼层路由变到另一个楼层路由时，已经打开的阅读器会直接跳到新楼层，不会重新创建整个阅读工作区。
+当地址栏在同一主题内从一个楼层路由变到另一个楼层路由时，已经打开的阅读器会直接跳到新楼层，不会重新创建整个阅读工作区。重复的 Discourse 页面变化信号会按当前路由去重；原站搜索菜单中只有真实主题或楼层结果会被接管，搜索建议及其他菜单链接保持原生行为。
 
 ![阅读队列中的当前主题、预加载状态和阅读进度](/screenshots/guide-21-reading-queue.png)
 

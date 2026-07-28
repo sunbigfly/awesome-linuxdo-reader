@@ -4,7 +4,7 @@ description: 在请求记录和性能记录间切换，查看请求预算、异�
 feature_ids: ["MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
 source_anchors: ["RESOURCE_MONITOR_ROWS", "REQUEST_FLOW_MAX_ENTRIES", "READER_ENDPOINT_429_BASE_BLOCK_MS", "LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY", "requestFlowPath"]
 since: 0.1.2
-version: 0.1.15
+version: 0.1.16
 status: current
 last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-11-request-flow.png", "/screenshots/guide-10-resource-monitor.png"]

@@ -1,6 +1,6 @@
 {
   "name": "awesome-linuxdo-reader-greasyfork-split",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "private": true,
   "description": "Awesome LinuxDo Reader 的 Greasy Fork 主脚本、按需 Library 与非执行资源构建项目",
   "scripts": {

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "0.1.15",
+  "sourceVersion": "0.1.16",
   "source": {
     "file": "main.user.js",
-    "bytes": 1790791,
-    "sha256": "6e306ede072debb097ef2e0bcb0589a74af587e88069161729b80eb8c6c82bf6"
+    "bytes": 1816292,
+    "sha256": "0f8415b8a96ec024924af4d6605a713a1352150107492991a346531429157688"
   },
   "generation": {
     "staticDeclarationCount": 25,

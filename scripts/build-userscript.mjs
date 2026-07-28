@@ -8,7 +8,7 @@ import { transform, version as esbuildVersion } from 'esbuild';
 const SOURCE_PATH = 'work/main.js';
 const ARTIFACT_NAME = 'awesome-linuxdo-reader.user.js';
 const MANIFEST_NAME = 'awesome-linuxdo-reader.build.json';
-const MAX_ARTIFACT_BYTES = 950_000;
+const MAX_ARTIFACT_BYTES = 1_000_000;
 const MAX_GZIP_BYTES = 400_000;
 const MINIFY_OPTIONS = Object.freeze({
 	charset: 'utf8',

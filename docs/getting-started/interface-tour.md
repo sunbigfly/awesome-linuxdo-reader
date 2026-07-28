@@ -2,11 +2,11 @@
 title: 界面总览
 description: 认识宿主区、标题栏、阅读队列、阅读流、时间轴、工具面板和设置中心。
 feature_ids: ["CORE-002", "CORE-006", "READ-013", "MEDIA-014"]
-source_anchors: ["ldp-native-reader-trigger", "ldp-reader-queue", "ldp-meta-owner", "createReaderTranslationController"]
+source_anchors: ["ldp-native-reader-trigger", "ldp-reader-queue", "ldp-meta-owner", "ldp-title-topic-scroller", "createReaderTranslationController"]
 since: 0.1.2
-version: 0.1.15
+version: 0.1.16
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-05-layout-settings.png"]
 ---
 
@@ -27,6 +27,8 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-0
 ## 标题栏
 
 标题栏左侧展示主题身份信息，右侧集中放置主题编辑入口、返回、原生页面、关闭、消息、历史、收藏、正文翻译和设置。翻译按钮只在已标记为非中文的内置社区显示；其他按钮也会按账号权限和主题能力决定是否出现。
+
+0.1.16 会根据阅读器宽度和“界面字号”设置动态调整标题、楼主、统计、分类与标签字号；标题可自然换行，右侧操作按钮会跟随首行文字精确对齐。分类和标签过多时不再挤压标题，而是在独立横向区域中浏览：左右提示表示仍有隐藏内容，鼠标滚轮或触控横向滑动可以继续查看；内容未溢出时提示自动隐藏。
 
 ## 阅读流与时间轴
 

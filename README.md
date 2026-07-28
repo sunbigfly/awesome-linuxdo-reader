@@ -150,9 +150,9 @@
 4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 适用站点 → 其他适用站点”中验证并添加。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `0.1.15`。脚本对 LINUX DO 保持全面适配和完整功能回归，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。已标记为非中文的内置社区还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `0.1.16`。脚本对 LINUX DO 保持全面适配和完整功能回归，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。已标记为非中文的内置社区还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
-0.1.15 重大升级消息中心、阅读位置恢复与主题交互工作区：通知和私信按真实数据源分类，历史与队列可恢复完整讨论及精确视口，时间轴支持楼层号直达，主帖操作列和图片评论补齐自定义回应；同时增强原生回复关闭确认、Boost 表情定位、LDC 面板和多项响应式布局。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+0.1.16 重点重构自适应标题栏和分类/标签浏览，阅读队列会避让标题栏与全屏主帖操作列；同时增强 Discourse 通知、收藏、回应及帖子变更的实时同步，并修复完整讨论返回、通知计数、末尾隐藏回复空白、路由重复接管和搜索菜单误接管。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 ## 开发
 

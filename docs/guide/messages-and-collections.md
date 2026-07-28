@@ -2,9 +2,9 @@
 title: 消息、历史与收藏
 description: 使用消息分类、检索、分页、历史管理以及收藏与回应中心。
 feature_ids: ["ACTION-004", "ACTION-007", "COLLECT-001", "COLLECT-002", "COLLECT-003", "COLLECT-004", "COLLECT-005", "COLLECT-006"]
-source_anchors: ["toggleReaderPostReaction", "toggleReaderBookmark", "NOTIFICATION_GROUPS", "normalizePrivateMessageTopic", "notificationTypeIconName", "notificationHref", "ldp-notification-mark-all", "renderHistoryPage", "ldp-history-clear", "BOOKMARK_TAB_LABELS", "ldp-bookmarks-multi"]
+source_anchors: ["toggleReaderPostReaction", "toggleReaderBookmark", "NOTIFICATION_GROUPS", "normalizePrivateMessageTopic", "notificationTypeIconName", "notificationHref", "ldp-notification-mark-all", "setCurrentUserNotificationState", "installDiscourseUpdateEventMonitor", "renderHistoryPage", "ldp-history-clear", "BOOKMARK_TAB_LABELS", "ldp-bookmarks-multi"]
 since: 0.1.2
-version: 0.1.15
+version: 0.1.16
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-15-notifications-replies.png", "/screenshots/guide-16-history.png", "/screenshots/guide-17-bookmarks-reactions.png"]
@@ -43,7 +43,9 @@ screenshots: ["/screenshots/guide-15-notifications-replies.png", "/screenshots/g
 
 若目标主题已经在当前阅读器中打开，点击通知会先关闭消息面板并直接调用现有时间轴跳到目标楼层；跳转失败时才重新打开目标主题。这样同主题通知不会无意义地重建整个阅读器。
 
-“全部已读”只在通知模式调用原站通知能力，影响账号状态。合成的用户动态、Boost、回应和私信条目不会冒充原生通知 ID；只有能追溯到原生通知的项目才参与单条已读同步。单纯清理消息缓存不会把通知或私信标记为已读。
+“全部已读”只在通知模式调用原站通知能力，影响账号状态。合成的用户动态、Boost、回应和私信条目不会冒充原生通知 ID；只有能追溯到原生通知的项目才参与单条已读同步。单条通知已读会同时扣减原站模型中的对应类型、普通或高优先级、总数及兼容计数；全部已读则一次清空这些计数，避免标题栏徽标继续显示旧值。单纯清理消息缓存不会把通知或私信标记为已读。
+
+阅读器还监听原站的通知和收藏变更事件：原生页面或其他已连接界面改变状态后，会使相关首屏缓存失效，并在再次打开面板时读取新数据；收藏面板已打开时会直接刷新。远端最终状态仍以 Discourse 返回结果为准。
 
 ## 浏览历史
 

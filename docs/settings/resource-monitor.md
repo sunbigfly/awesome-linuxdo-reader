@@ -4,7 +4,7 @@ description: 阅读日志面板中的性能快照、前后台事件、页面元�
 feature_ids: ["MONITOR-001"]
 source_anchors: ["RESOURCE_MONITOR_ROWS"]
 since: 0.1.2
-version: 0.1.15
+version: 0.1.16
 status: current
 last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-10-resource-monitor.png"]

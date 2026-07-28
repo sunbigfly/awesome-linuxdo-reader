@@ -4,7 +4,7 @@ description: 使用非中文正文翻译、原图灯箱、图片评论、下载�
 feature_ids: ["READ-012", "MEDIA-001", "MEDIA-002", "MEDIA-003", "MEDIA-004", "MEDIA-005", "MEDIA-006", "MEDIA-007", "MEDIA-008", "MEDIA-009", "MEDIA-010", "MEDIA-011", "MEDIA-012", "MEDIA-013", "MEDIA-014"]
 source_anchors: ["renderSolvedAnswerCard", "IMAGE_SCALE_OPTIONS", "openLightbox", "lightboxOriginalByDefault", "loadLightboxTopicPosts", "loadLightboxCommentTree", "toggleLightboxReaction", "lightboxDescriptionHeight", "batch-download", "openUserAvatarViewer", "bindReaderHls", "KATEX_VERSION", "renderReaderPoll", "data-reader-code-action", "readerMediaHtml", "prepareReaderOneboxes", "showReaderImageRetry", "createReaderTranslationController"]
 since: 0.1.2
-version: 0.1.15
+version: 0.1.16
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-25-user-card.png"]

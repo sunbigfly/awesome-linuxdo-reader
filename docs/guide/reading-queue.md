@@ -2,9 +2,9 @@
 title: 阅读队列
 description: 从主题列表建立多主题阅读队列，管理后台预加载、阅读进度、固定、清理、位置恢复与异常重试。
 feature_ids: ["CORE-006"]
-source_anchors: ["LDP_READER_QUEUE_KEY", "ensureReaderQueueEntry", "readerQueueStatusText", "bindReaderQueueSurface", "prefetchReaderQueueEntry", "createReaderQueueViewportTracker", "autoDequeueReaderQueueEntry", "clearReaderQueueEntries"]
+source_anchors: ["LDP_READER_QUEUE_KEY", "ensureReaderQueueEntry", "readerQueueStatusText", "bindReaderQueueSurface", "readerQueueSurfaceBounds", "readerQueueTopAvoidingTopicRail", "prefetchReaderQueueEntry", "createReaderQueueViewportTracker", "autoDequeueReaderQueueEntry", "clearReaderQueueEntries"]
 since: 0.1.2
-version: 0.1.15
+version: 0.1.16
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-reading-queue-entry.png", "/screenshots/guide-13-data-management.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-16-history.png"]
@@ -54,6 +54,7 @@ screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-
 在桌面布局中，可以按住队列按钮拖动整个浮层：
 
 - 浮层只能移动到当前阅读工作区范围内；
+- 浮层的顶部边界始终位于阅读器标题栏下方，拖动或恢复旧位置都不会盖住标题和操作按钮；
 - 拖到距离左边或右边约 1% 的区域会自动贴边；
 - 贴边后，未悬停且内部没有键盘焦点时会收纳；
 - 再次悬停、聚焦或拖离边缘即可展开；
@@ -63,7 +64,7 @@ screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-
 
 移动布局会隐藏纵向头像预览，仅保留紧凑的队列按钮和列表面板，避免占用正文宽度。
 
-全屏且宽度充足时，队列入口会跟随主帖操作列的收纳按钮横向居中；拖动操作列、修改全屏布局或调整窗口后都会重新对齐。队列自己的纵向位置和展开状态仍独立保存。
+全屏且宽度充足时，队列入口会跟随主帖操作列的收纳按钮横向居中，并检查两者的纵向占位；发生重叠时优先回到默认位置，再选择操作列上方或下方最近的可用位置。拖动操作列、修改全屏布局或调整窗口后都会重新计算，队列自己的纵向位置和展开状态仍独立保存。
 
 ## 切换主题和恢复位置
 

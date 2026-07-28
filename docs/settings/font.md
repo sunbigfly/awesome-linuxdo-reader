@@ -4,7 +4,7 @@ description: 配置字体显示优化、嵌入阅读列表尺寸，以及界面�
 feature_ids: ["SET-004", "SET-005", "SET-006"]
 source_anchors: ["font-rendering", "HOST_EMBED_SIZE_SETTINGS", "FONT_SCOPE_CONFIG", "queryLocalFonts"]
 since: 0.1.2
-version: 0.1.15
+version: 0.1.16
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-04-font-settings.png"]

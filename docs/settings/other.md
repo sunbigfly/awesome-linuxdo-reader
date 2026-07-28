@@ -4,7 +4,7 @@ description: 配置队列入口、历史、退出、主帖操作列、完整讨�
 feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "SET-016", "SET-017", "SET-018", "SET-019", "SET-021"]
 source_anchors: ["CUSTOM_DISCOURSE_SITES_KEY", "readerQueueAlwaysVisibleWhenEmpty", "historyEdgeTriggerPercent", "doubleEscapeToCloseReader", "confirmNativeComposerClose", "syncTopicActionRail", "aggregateDescendantReplies", "openDescendantRepliesWindow", "BOOST_COPY_SETTING_ROWS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
 since: 0.1.2
-version: 0.1.15
+version: 0.1.16
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18-thread-context.png"]

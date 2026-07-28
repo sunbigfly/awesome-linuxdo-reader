@@ -4,7 +4,7 @@ description: 配置目标楼层提示和主题加载动画，并兼顾减少动�
 feature_ids: ["SET-010", "SET-011"]
 source_anchors: ["jumpHighlightPrefsPatch", "READER_LOADING_ANIMATION_KEYS"]
 since: 0.1.2
-version: 0.1.15
+version: 0.1.16
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-08-motion-settings.png"]
