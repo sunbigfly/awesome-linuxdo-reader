@@ -12367,15 +12367,16 @@
 					toggle.type = 'button';
 					toggle.className = 'ldp-callout-toggle';
 					toggle.innerHTML = icon('chevronDown');
-					const setExpanded = (expanded) => {
+					const setCalloutExpanded = (expanded) => {
 						body.hidden = !expanded;
 						quote.classList.toggle('ldp-callout--collapsed', !expanded);
 						setExpanded(toggle, expanded);
 						setLabel(toggle, expanded ? '收起提示内容' : '展开提示内容');
 					};
-					toggle.addEventListener('click', () => setExpanded(toggle.getAttribute('aria-expanded') !== 'true'));
+					toggle.addEventListener('click', () =>
+						setCalloutExpanded(toggle.getAttribute('aria-expanded') !== 'true'));
 					quote.append(toggle);
-					setExpanded(match[2] === '+');
+					setCalloutExpanded(match[2] === '+');
 				}
 			}
 			const marker = makeElement('span');
