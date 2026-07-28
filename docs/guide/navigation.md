@@ -2,7 +2,7 @@
 title: 楼层、时间轴与历史
 description: 使用时间轴、只看楼主、历史前后切换、多主题队列和实时阅读进度。
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014"]
-source_anchors: ["LDP_READER_QUEUE_KEY", "ldp-only-op-toggle", "bindTopicTimeline", "normalizeReaderAnchorState", "createReaderHistoryNavigation", "historyEdgeTriggerPercent", "READ_THRESHOLD", "sendReaderReadTimings", "guardNativeReaderTimings", "bindReaderTopicPresence", "installDiscourseUpdateEventMonitor", "renderTopicNavLinks", "inlineTopicNavSvgUses", "LAST_READER_TOPIC_ROUTE_KEY", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
+source_anchors: ["LDP_READER_QUEUE_KEY", "ldp-only-op-toggle", "bindTopicTimeline", "normalizeReaderAnchorState", "createReaderHistoryNavigation", "handleReaderMouseHistoryButton", "historyEdgeTriggerPercent", "READ_THRESHOLD", "sendReaderReadTimings", "guardNativeReaderTimings", "bindReaderTopicPresence", "installDiscourseUpdateEventMonitor", "renderTopicNavLinks", "inlineTopicNavSvgUses", "LAST_READER_TOPIC_ROUTE_KEY", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
 since: 0.1.2
 version: 0.1.16
 status: current
@@ -44,6 +44,8 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-1
 ## 历史前后切换
 
 阅读器保存主题 ID、标题、最近阅读锚点、首次查看和最后查看时间。左右按钮按历史链前进或后退，并恢复对应位置。
+
+带侧键的鼠标可以直接使用“后退”键进入更早的阅读记录，使用“前进”键回到更新的阅读记录。阅读器打开时会拦截这两个按键的浏览器默认历史跳转；没有可用目标时只显示提示，不会离开当前页面。
 
 0.1.15 的阅读锚点不再只有楼层号，还会记录当前虚拟流视口及偏移、完整讨论窗口的根楼层与分支位置，以及仍有效的引用高亮。切换到另一个主题前会先捕获当前状态，返回时再按“分支上下文 → 目标楼层 → 精确偏移”的顺序恢复。
 

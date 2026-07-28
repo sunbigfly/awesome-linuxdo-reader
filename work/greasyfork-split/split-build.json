@@ -8,13 +8,13 @@
   "files": {
     "main.user.js": {
       "role": "standaloneSourceBaseline",
-      "bytes": 1816292,
-      "sha256": "0f8415b8a96ec024924af4d6605a713a1352150107492991a346531429157688"
+      "bytes": 1817184,
+      "sha256": "4068430857320cc01f6466b46b3544a72b5f889a9eae24cff60fa772d6c2ffac"
     },
     "reader-core.js": {
       "role": "greasyForkLibrary",
-      "bytes": 1814303,
-      "sha256": "6715fff10386418b8d3fb3b76a09c44d6172fc7197e055e59874136f7bb73d9d"
+      "bytes": 1815195,
+      "sha256": "8e3ea414b9079e4648580552573a89bcb94e468d2d841b516e459f554e0e50be"
     },
     "main-loader.template.user.js": {
       "role": "greasyForkMainScriptTemplate",

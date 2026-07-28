@@ -39105,10 +39105,29 @@
 		return true;
 	}
 
+	function handleReaderMouseHistoryButton(event) {
+		if (event.button !== 3 && event.button !== 4) return false;
+		const overlay = CURRENT_OVERLAY;
+		if (!overlay || !overlay.isConnected) return false;
+		event.preventDefault();
+		event.stopImmediatePropagation();
+		if (event.type !== 'mousedown') return true;
+		const backward = event.button === 3;
+		const button = overlay.querySelector(
+			backward ? '.ldp-reader-history-back' : '.ldp-reader-history-forward'
+		);
+		if (button && !button.hidden && !button.disabled) button.click();
+		else showSelectionToast(backward ? '没有更早的阅读记录' : '没有更新的阅读记录');
+		return true;
+	}
+
 	function installReaderHostEventHandlers() {
 		if (document._ldpReaderHostEventHandlersInstalled) return;
 		document._ldpReaderHostEventHandlersInstalled = true;
 		document.addEventListener('keydown', handleReaderHostRefreshShortcut, true);
+		document.addEventListener('mousedown', handleReaderMouseHistoryButton, true);
+		document.addEventListener('mouseup', handleReaderMouseHistoryButton, true);
+		document.addEventListener('auxclick', handleReaderMouseHistoryButton, true);
 		document.addEventListener('click', handleTopicLinkTrigger, true);
 	}
 

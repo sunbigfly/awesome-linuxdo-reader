@@ -217,7 +217,7 @@
     "feature_id": "READ-006",
     "title": "历史前进与后退",
     "category": "阅读与导航",
-    "description": "在阅读过的主题之间前进、后退，并恢复楼层、视口偏移、完整讨论分支和引用高亮。",
+    "description": "通过阅读器按钮或鼠标侧键在阅读过的主题之间前进、后退，并恢复楼层、视口偏移、完整讨论分支和引用高亮。",
     "source_anchor": "createReaderHistoryNavigation",
     "since": "0.1.2",
     "version": "0.1.16",

@@ -4,9 +4,9 @@
 
 ## 当前基线
 
-- `main.user.js`：从当前 `work/main.js` 按字节复制，0.1.16 基线为 1,816,292 bytes，暂未接入 Core 或新资源。
+- `main.user.js`：从当前 `work/main.js` 按字节复制，0.1.16 基线为 1,817,184 bytes，暂未接入 Core 或新资源。
 - `main.css`：从当前 `work/main.css` 按字节复制，0.1.16 基线为 419,911 bytes。
-- `reader-core.js`：由当前单一 IIFE 生成的 Core Library，0.1.16 为 1,814,303 bytes；加载后只注册命名空间，不会自动启动。
+- `reader-core.js`：由当前单一 IIFE 生成的 Core Library，0.1.16 为 1,815,195 bytes；加载后只注册命名空间，不会自动启动。
 - `reader-assets.json`：由 23 个纯字面量模板、文案和配置常量生成。
 - `icons.svg`：由 73 个通用图标和 35 个用户卡徽章图标生成，共 108 个 symbol。
 - `build-resources.cjs`：从 `main.user.js` 可重复生成并校验 JSON/SVG；不属于发布文件。

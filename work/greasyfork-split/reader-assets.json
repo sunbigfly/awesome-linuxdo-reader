@@ -3,8 +3,8 @@
   "sourceVersion": "0.1.16",
   "source": {
     "file": "main.user.js",
-    "bytes": 1816292,
-    "sha256": "0f8415b8a96ec024924af4d6605a713a1352150107492991a346531429157688"
+    "bytes": 1817184,
+    "sha256": "4068430857320cc01f6466b46b3544a72b5f889a9eae24cff60fa772d6c2ffac"
   },
   "generation": {
     "staticDeclarationCount": 25,
