@@ -27,11 +27,11 @@
   ],
   "publishedLoader": {
     "scriptId": 588185,
-    "versionId": 1895899,
-    "fixedBytes": 3729,
+    "versionId": 1895905,
+    "fixedBytes": 3815,
     "platformMetadata": "@downloadURL none",
-    "normalizedBytes": 3708,
-    "normalizedSha256": "d5e58f72ae5b2ff499b6bd7b41bce7d349a7587ea223921dd0e70699798de526",
+    "normalizedBytes": 3794,
+    "normalizedSha256": "5cf2acfa3538821d35a29459581be680870b4b808c2615ab380cb2b7778d71c7",
     "publicInstallHasDownloadUrl": true,
     "publicInstallHasUpdateUrl": true,
     "webhookResponse": 200
