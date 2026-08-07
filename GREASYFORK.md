@@ -30,7 +30,7 @@
 
 ## 安装
 
-> **发布状态：** GitHub 源码、用户手册与 Greasy Fork 脚本 588185 均已发布 Lite `1.0.0`。正式主脚本是 3,794 字节薄 Loader，固定加载 Core `1895870` 与 Features `1895872`；两个 Library 均带已核验的 SHA-256。
+> **发布状态：** GitHub 源码、用户手册与 Greasy Fork 脚本 588185 均已发布 Lite `1.0.1`。正式主脚本固定版本为 `1895932`，是 3,794 字节薄 Loader，固定加载 Core `1895921` 与 Features `1895924`；两个 Library 均带已核验的 SHA-256。
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/)、Violentmonkey 或兼容的 userscript 管理器。
 2. 在本页点击“安装此脚本”。
@@ -59,9 +59,9 @@
 4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 适用站点 → 其他适用站点”中验证并添加。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `1.0.0`。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `1.0.1`。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
-1.0.0 重点完成 Lite 模块化重构：业务逻辑、生命周期、请求、缓存与界面组件改由 TypeScript 模块维护；Greasy Fork 发布使用薄主 Loader 加两个可审查 Library，避开单文件 2 MB 上限且不压缩、不混淆。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+1.0.1 将工程、产物与 Webhook 同步路径无损正名为 `main-lite`，同时保留旧 `mian-lite` 兼容别名；1.0.0 完成的 Lite 模块化与三文件架构保持不变。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 ## 文档与支持
 

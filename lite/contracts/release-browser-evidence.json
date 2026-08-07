@@ -27,14 +27,16 @@
   ],
   "publishedLoader": {
     "scriptId": 588185,
-    "versionId": 1895905,
+    "versionId": 1895932,
     "fixedBytes": 3815,
+    "fixedSha256": "56e4766d7a8685aa8a4bfdfed85b63ac8c497f761325264de7f191e32e8bc679",
     "platformMetadata": "@downloadURL none",
     "normalizedBytes": 3794,
-    "normalizedSha256": "5cf2acfa3538821d35a29459581be680870b4b808c2615ab380cb2b7778d71c7",
+    "normalizedSha256": "8b1ac7799172508516ff009558dfab24e35e44ffa8fb548b092a50b1c5787ec5",
     "publicInstallHasDownloadUrl": true,
     "publicInstallHasUpdateUrl": true,
-    "webhookResponse": 200
+    "webhookResponse": 200,
+    "syncSource": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/main-lite.js"
   },
   "browserMatrix": {
     "accepted": true,

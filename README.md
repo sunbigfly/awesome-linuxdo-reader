@@ -123,7 +123,7 @@
 
 ## 安装
 
-> **发布状态：** GitHub 源码与用户手册已进入 Lite `1.0.1` 发布流程；Greasy Fork 脚本 588185 当前公开稳定版仍为 `1.0.0`，待新旧路径兼容验收和固定 Library 坐标核验完成后切换。
+> **发布状态：** GitHub 源码、用户手册与 Greasy Fork 脚本 588185 均已发布 Lite `1.0.1`。正式主脚本固定版本为 `1895932`，加载 Core `1895921` 与 Features `1895924`；三个 GitHub Webhook 同步源均已切换到 canonical `main-lite` 路径。
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。

@@ -70,7 +70,18 @@ npm run main-lite:greasyfork:check
 `release.config.json` 不进入 Git；其中没有凭据，但只作为首次发布草稿，不能用占位符
 冒充已发布状态。
 
-### v1.0.0 已发布坐标
+### v1.0.1 已发布坐标
+
+| 发布单元 | Greasy Fork | 固定版本 | 核验结果 |
+| --- | --- | --- | --- |
+| 主 Loader | [588185](https://greasyfork.org/scripts/588185) | `1895932` | Greasy Fork 固定文件 3,815 字节；移除平台加入的 `@downloadURL none` 后为 3,794 字节，SHA-256 `8b1ac7799172508516ff009558dfab24e35e44ffa8fb548b092a50b1c5787ec5` |
+| Core | [590254](https://greasyfork.org/scripts/590254) | `1895921` | 1,656,364 字节，SHA-256 `60dc23ad1611ddd466d785d96c6f3472d3e52cb2ef78fbd487ec2a4465da53c0` |
+| Features | [590255](https://greasyfork.org/scripts/590255) | `1895924` | 1,550,452 字节，SHA-256 `27910eb1c7bf064ba9899938ed87672ccd85ab63512a5f5e2fe79b53912529bb` |
+
+三个发布单元均保持 GitHub Webhook 模式，同步源已切换为 `work/main-lite.js`、
+`libraries/main-lite-core.js` 和 `libraries/main-lite-features.js`；切换后立即同步均确认没有内容变化。
+
+### v1.0.0 历史坐标
 
 | Library | Greasy Fork | 固定版本 |
 | --- | --- | --- |
@@ -80,7 +91,7 @@ npm run main-lite:greasyfork:check
 两项均已设置为从本仓库 `main` 分支的对应 Raw 文件进行 GitHub Webhook 同步；远端
 字节数和 SHA-256 已在浏览器同源环境复核，并记录于 `published-libraries.json`。
 
-### v1.0.0 主脚本发布基线
+### v1.0.0 主脚本历史基线
 
 主脚本 [588185](https://greasyfork.org/scripts/588185) 已于 2026-08-07 同步为
 v1.0.0，当前固定版本为 `1895905`。同步方式为 GitHub Webhook，源文件固定为：
