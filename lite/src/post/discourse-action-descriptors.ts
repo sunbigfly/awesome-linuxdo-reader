@@ -747,6 +747,17 @@ export class DiscourseActionDescriptors {
 	}): ActionMutationDescriptor<TResult, PreparedDiscourseActionPayload> {
 		const fields = Object.keys(input.changedFields).sort();
 		if (!fields.length) throw new Error('topic changedFields 不能为空');
+		const nativeChangedFields: Record<string, unknown> = {
+			...input.changedFields,
+			...(Array.isArray(input.changedFields.tags)
+				? {
+					tags: input.changedFields.tags.map((tag) =>
+						tag && typeof tag === 'object' && !Array.isArray(tag)
+							? { ...(tag as Readonly<Record<string, unknown>>) }
+							: tag),
+				}
+				: {}),
+		};
 		return descriptor({
 			operation: 'topic-edit',
 			targetType: 'topic',
@@ -755,7 +766,7 @@ export class DiscourseActionDescriptors {
 			payload: {
 				args: Object.freeze([
 					input.topic,
-					input.changedFields,
+					nativeChangedFields,
 					Object.freeze({ fastEdit: true }),
 				]),
 				result: Object.freeze({ source: 'argument', index: 0 }),

@@ -1,6 +1,6 @@
 /* Awesome LinuxDo Reader Lite stylesheet.
  * Generated only from lite/styles/*.css; do not edit generated outputs.
- * source-sha256: 4f092c66da31004b3c456633304631f4fecbd3f2acb9dad90e8deaa016b5abe5
+ * source-sha256: e1aba8606fea3b754891c7a6abb47244997790eb6f944aab89c387f8eb3539df
  */
 
 /* source: 00-foundation.css */
@@ -12520,7 +12520,7 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
  */
 .ldp-settings-popover {
   --ldp-settings-frozen-height: 75px;
-  --ldp-settings-sidebar-width: 160px;
+  --ldp-settings-sidebar-width: 184px;
   --ldp-font-micro: 9px;
   --ldp-font-xs: 10px;
   --ldp-font-sm: 11px;
@@ -12537,7 +12537,7 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   right: auto;
   z-index: 2147483606;
   display: grid;
-  width: 672px;
+  width: 696px;
   height: 520px;
   max-width: calc(100% - 32px);
   max-height: calc(100% - 32px);
@@ -16749,6 +16749,68 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   min-width: min(280px, 44cqi);
   align-items: center;
   gap: 9px;
+}
+.ldp-webdav-settings {
+	display: grid;
+	gap: 12px;
+}
+
+.ldp-webdav-field {
+	display: grid;
+	grid-template-columns: minmax(118px, .34fr) minmax(0, 1fr);
+	align-items: center;
+	gap: 12px;
+	padding: 8px 14px;
+}
+
+.ldp-webdav-field > strong {
+	font-size: var(--ldp-font-base, 12px);
+}
+
+.ldp-webdav-field > input,
+.ldp-webdav-interval {
+	width: 100%;
+	min-width: 0;
+	height: 34px;
+}
+
+.ldp-webdav-category-list {
+	display: grid;
+}
+
+.ldp-webdav-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.ldp-webdav-actions .is-primary {
+	border-color: var(--tertiary, #47855f);
+	background: var(--tertiary, #47855f);
+	color: var(--secondary, #fff);
+}
+
+.ldp-webdav-status {
+	display: block;
+	min-height: 1.5em;
+	color: var(--primary-medium, #777);
+	font-size: var(--ldp-font-sm, 11px);
+	line-height: 1.5;
+}
+
+.ldp-webdav-status[data-status-kind="error"] {
+	color: var(--danger, #c44);
+}
+
+.ldp-webdav-status[data-status-kind="success"] {
+	color: var(--success, #47855f);
+}
+
+@media (max-width: 700px) {
+	.ldp-webdav-field {
+		grid-template-columns: 1fr;
+		gap: 6px;
+	}
 }
 
 /* source: 80-motion.css */

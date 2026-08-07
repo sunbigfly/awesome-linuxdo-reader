@@ -5,6 +5,9 @@ import {
 	TranslationProviderRequests,
 	type UserscriptExternalRequestOptions,
 } from '../src/translation/translation-request-adapter.js';
+import {
+	discourseNativeCurrentUsername,
+} from '../src/discourse/native-host-api.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -156,6 +159,51 @@ assert(
 	environment.pageWindow === pageWindow &&
 	environment.discourseHost.lookup('service:message-bus') === messageBus,
 	'userscript 环境必须只通过 unsafeWindow 构造 Discourse 原生宿主桥',
+);
+let runtimeReadinessStep = 0;
+let runtimeReadinessNow = 0;
+const runtimeReadyEnvironment = new BrowserUserscriptEnvironment({
+	userscriptGlobal: {
+		unsafeWindow: {
+			moduleBroker: {
+				lookup(name: string): unknown {
+					if (
+						name === 'discourse/lib/ajax' &&
+						runtimeReadinessStep >= 1
+					) return { ajax: () => Promise.resolve({}) };
+					if (
+						name === 'discourse/models/user' &&
+						runtimeReadinessStep >= 2
+					) {
+						return {
+							default: {
+								current: () => ({ username: 'bigfly_sun' }),
+							},
+						};
+					}
+					return null;
+				},
+			},
+		},
+	},
+});
+await runtimeReadyEnvironment.waitForDiscourseRuntime(
+	new AbortController().signal,
+	{
+		timeoutMs: 100,
+		pollIntervalMs: 10,
+		now: () => runtimeReadinessNow,
+		delay: async (milliseconds) => {
+			runtimeReadinessNow += milliseconds;
+			runtimeReadinessStep += 1;
+		},
+	},
+);
+assert(
+	runtimeReadinessStep === 2 &&
+	discourseNativeCurrentUsername(runtimeReadyEnvironment.discourseHost) ===
+		'bigfly_sun',
+	'刷新启动必须同时等待原生 Ajax 与 current-user，不得用匿名作用域提前恢复队列',
 );
 assert(
 	environment.readScriptVersion() === '0.1.16',

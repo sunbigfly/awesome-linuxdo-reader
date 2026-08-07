@@ -20,6 +20,7 @@ import type {
 import {
 	normalizeReaderBookmarkTabOrder,
 	READER_BOOKMARK_TAB_ORDER,
+	sortReaderBookmarkRecords,
 	type ReaderBookmarkRecord,
 	type ReaderBookmarkSelectionScope,
 	type ReaderBookmarkTab,
@@ -127,6 +128,8 @@ export class ReaderBookmarkController {
 	#query = '';
 	#reactionFilter = '';
 	#bookmarkRecords: readonly ReaderBookmarkRecord[] =
+		Object.freeze([]);
+	#syncedBookmarkRecords: readonly ReaderBookmarkRecord[] =
 		Object.freeze([]);
 	#reactionRecords: readonly ReaderBookmarkRecord[] =
 		Object.freeze([]);
@@ -422,6 +425,21 @@ export class ReaderBookmarkController {
 		});
 	}
 
+	async syncBookmarkRecords(): Promise<readonly ReaderBookmarkRecord[]> {
+		const records = await this.#requests.loadBookmarks();
+		this.#bookmarkRecords = records;
+		this.#bookmarksLoaded = true;
+		this.#render();
+		return this.#mergedBookmarkRecords();
+	}
+
+	applySyncedBookmarkRecords(records: readonly ReaderBookmarkRecord[]): void {
+		this.#syncedBookmarkRecords = sortReaderBookmarkRecords(records.filter(
+			(entry) => entry.tab === 'Topic' || entry.tab === 'Post',
+		));
+		this.#render();
+	}
+
 	clearCache(): void {
 		if (this.scope.destroyed) return;
 		this.#cancelLoad();
@@ -511,7 +529,16 @@ export class ReaderBookmarkController {
 	#sourceRecords(): readonly ReaderBookmarkRecord[] {
 		return this.#tab === 'Reaction'
 			? this.#reactionRecords
-			: this.#bookmarkRecords.filter((entry) => entry.tab === this.#tab);
+			: this.#mergedBookmarkRecords().filter((entry) => entry.tab === this.#tab);
+	}
+
+	#mergedBookmarkRecords(): readonly ReaderBookmarkRecord[] {
+		const records = new Map<string, ReaderBookmarkRecord>();
+		for (const entry of this.#syncedBookmarkRecords) {
+			records.set(entry.identity, entry);
+		}
+		for (const entry of this.#bookmarkRecords) records.set(entry.identity, entry);
+		return sortReaderBookmarkRecords([...records.values()]);
 	}
 
 	#matchingRecords(): readonly ReaderBookmarkRecord[] {
@@ -545,6 +572,10 @@ export class ReaderBookmarkController {
 			this.#bookmarkRecords.filter((entry) =>
 				entry.bookmarkId === null || !removed.has(entry.bookmarkId)),
 		);
+		this.#syncedBookmarkRecords = Object.freeze(
+			this.#syncedBookmarkRecords.filter((entry) =>
+				entry.bookmarkId === null || !removed.has(entry.bookmarkId)),
+		);
 		for (const id of removed) this.#selection.delete(id);
 		this.#bookmarksLoaded = true;
 		this.#render();
@@ -563,6 +594,9 @@ export class ReaderBookmarkController {
 			this.#onError(cause);
 		}
 		if (source === 'bookmarks') this.#bookmarksLoaded = false;
+		if (source === 'bookmarks') {
+			this.#syncedBookmarkRecords = Object.freeze([]);
+		}
 		else this.#reactionsLoaded = false;
 		if (
 			!this.#open ||

@@ -1,6 +1,11 @@
 import {
 	BrowserDiscourseHostApiPort,
+	discourseNativeCurrentUserBindingAvailable,
 } from '../discourse/native-host-api.js';
+import { abortableDelay } from '../network/coordinated-request-client.js';
+import {
+	discourseNativeAjaxAvailable,
+} from '../network/discourse-native-read-transport.js';
 import {
 	BrowserPublicResourceHttpPort,
 	type BrowserPublicResourceRequestPort,
@@ -41,6 +46,11 @@ import {
 	objectRecord,
 	type UnknownRecord,
 } from '../kernel/value-record.js';
+import {
+	ReaderWebDavClient,
+	type ReaderWebDavRequestOptions,
+	type ReaderWebDavRequestPort,
+} from '../sync/reader-webdav-client.js';
 type HlsConstructor = {
 	new (): UnknownRecord;
 	readonly isSupported?: unknown;
@@ -59,6 +69,16 @@ export interface BrowserUserscriptValueStoragePort {
 
 export interface BrowserCreditBridgeHttpPort {
 	loadUserInfo(signal: AbortSignal): Promise<unknown>;
+}
+
+export interface BrowserUserscriptRuntimeReadinessOptions {
+	readonly timeoutMs?: number;
+	readonly pollIntervalMs?: number;
+	readonly now?: () => number;
+	readonly delay?: (
+		milliseconds: number,
+		signal: AbortSignal,
+	) => Promise<void>;
 }
 
 /**
@@ -83,6 +103,33 @@ export class BrowserUserscriptEnvironment {
 		this.#userscriptGlobal = userscriptGlobal;
 		this.pageWindow = pageWindow;
 		this.discourseHost = new BrowserDiscourseHostApiPort({ pageWindow });
+	}
+
+	async waitForDiscourseRuntime(
+		signal: AbortSignal,
+		options: BrowserUserscriptRuntimeReadinessOptions = {},
+	): Promise<void> {
+		const timeoutMs = Math.max(1, Math.floor(options.timeoutMs ?? 15_000));
+		const pollIntervalMs = Math.max(
+			1,
+			Math.floor(options.pollIntervalMs ?? 50),
+		);
+		const now = options.now ?? Date.now;
+		const delay = options.delay ?? abortableDelay;
+		const startedAt = now();
+		while (
+			!discourseNativeAjaxAvailable(this.discourseHost) ||
+			!discourseNativeCurrentUserBindingAvailable(this.discourseHost)
+		) {
+			if (signal.aborted) throw signal.reason;
+			const remaining = timeoutMs - (now() - startedAt);
+			if (remaining <= 0) {
+				throw new Error(
+					'Discourse 原生 Ajax/current-user 在启动期限内未就绪',
+				);
+			}
+			await delay(Math.min(pollIntervalMs, remaining), signal);
+		}
 	}
 
 	createExternalHttp(
@@ -110,6 +157,17 @@ export class BrowserUserscriptEnvironment {
 			requestOptions: BrowserDiscourseSiteProbeRequestOptions,
 		) => rawRequest.call(this.#userscriptGlobal, requestOptions);
 		return new BrowserDiscourseSiteProbe({ request });
+	}
+
+	createWebDavClient(): ReaderWebDavClient {
+		const rawRequest = this.#userscriptGlobal.GM_xmlhttpRequest;
+		if (typeof rawRequest !== 'function') {
+			throw new Error('GM_xmlhttpRequest 不可用，无法访问 WebDAV');
+		}
+		const request: ReaderWebDavRequestPort = (
+			requestOptions: ReaderWebDavRequestOptions,
+		) => rawRequest.call(this.#userscriptGlobal, requestOptions);
+		return new ReaderWebDavClient({ request });
 	}
 
 	createPublicResourceHttp(): BrowserPublicResourceHttpPort {

@@ -187,6 +187,10 @@ export class ReaderCustomSiteRepository {
 		return this.#write(sites.filter((site) => site !== host));
 	}
 
+	replaceExternal(values: readonly unknown[]): Promise<readonly string[]> {
+		return this.#write(values.map(String));
+	}
+
 	async #write(value: readonly string[]): Promise<readonly string[]> {
 		if (!this.#storage) {
 			throw new Error('脚本没有全局站点存储权限');

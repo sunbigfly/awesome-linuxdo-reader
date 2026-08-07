@@ -237,6 +237,17 @@ function resolveNativeAjax(host: DiscourseHostApiPort): ResolvedNativeAjax {
 	};
 }
 
+export function discourseNativeAjaxAvailable(
+	host: DiscourseHostApiPort,
+): boolean {
+	try {
+		resolveNativeAjax(host);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 export interface DiscourseNativeAjaxExecution {
 	readonly path: string;
 	readonly method: NativeAjaxOptions['type'];

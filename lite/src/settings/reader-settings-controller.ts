@@ -19,6 +19,7 @@ export type ReaderSettingsPanelId =
 	| 'sites'
 	| 'performance'
 	| 'logs'
+	| 'sync'
 	| 'cache'
 	| 'about';
 
@@ -129,6 +130,13 @@ const panels = [
 		keywords: ['网络', '流量', '429', '内存', 'cpu', 'dom', '监控'],
 	},
 	{
+		id: 'sync',
+		groupId: 'system-data',
+		title: 'WebDAV 同步',
+		description: '把选定的小数据记录通过标准 WebDAV 在不同浏览器间合并同步。',
+		keywords: ['webdav', '坚果云', '同步', '历史', '收藏', '队列', '定时'],
+	},
+	{
 		id: 'cache',
 		groupId: 'system-data',
 		title: '数据管理',
@@ -180,6 +188,7 @@ export const READER_SETTINGS_GROUPS = Object.freeze([
 			'sites',
 			'performance',
 			'logs',
+			'sync',
 			'cache',
 			'about',
 		] as const),

@@ -656,6 +656,16 @@ function discourseNativeCurrentUser(host: DiscourseHostApiPort): unknown {
 	return null;
 }
 
+export function discourseNativeCurrentUserBindingAvailable(
+	host: DiscourseHostApiPort,
+): boolean {
+	const currentUser = host.lookup('service:current-user');
+	if (currentUser !== null && currentUser !== undefined) return true;
+	const userModule = objectRecord(host.lookupModule('discourse/models/user'));
+	return [objectRecord(userModule?.default), userModule].some((owner) =>
+		typeof owner?.current === 'function');
+}
+
 /**
  * PostView 与动作能力共用的当前用户名读取入口。
  *

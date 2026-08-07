@@ -55,11 +55,11 @@ assert(
 	actions.querySelectorAll('.ldp-settings-toggle').length === 1 &&
 		surfaceHost.querySelectorAll('.ldp-settings-popover').length === 1 &&
 		surfaceHost.querySelectorAll('.ldp-settings-nav-group').length === 3 &&
-		surfaceHost.querySelectorAll('.ldp-settings-tab').length === 15 &&
+		surfaceHost.querySelectorAll('.ldp-settings-tab').length === 16 &&
 		surfaceHost.querySelector('.ldp-settings-nav > [data-settings-panel="user"]') ===
 			surfaceHost.querySelector('.ldp-settings-nav')?.firstElementChild &&
-		surfaceHost.querySelectorAll('.ldp-settings-section').length === 15,
-	'设置 View 必须只有一个 Shell 入口、一个弹层、独立用户入口、3 个分组和 15 个面板',
+		surfaceHost.querySelectorAll('.ldp-settings-section').length === 16,
+	'设置 View 必须只有一个 Shell 入口、一个弹层、独立用户入口、3 个分组和 16 个面板',
 );
 assert(
 	actions.querySelector(

@@ -49,6 +49,11 @@ const userscriptRequestCapabilities = new Map([
 		route: 'CoordinatedDiscourseSiteProbe -> DomainRequestGateway',
 		classification: 'central-site-probe',
 	}],
+	['createWebDavClient', {
+		member: 'GM_xmlhttpRequest',
+		route: 'ReaderWebDavCoordinator',
+		classification: 'central-webdav',
+	}],
 	['createPublicResourceHttp', {
 		member: 'fetch',
 		route: 'PublicResourceRequestAdapter -> DomainRequestGateway',

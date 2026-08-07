@@ -130,8 +130,19 @@ export interface ReaderOpenQueueSessionOptions {
 	readonly parentScope?: LifecycleScope;
 }
 
-interface ReaderQueueEntry {
+export interface ReaderQueueSyncEntry {
 	readonly topicId: DiscourseTopicId;
+	readonly title: string;
+	readonly href: string;
+	readonly avatarTemplate: string;
+	readonly avatarSource: string;
+	readonly ownerUsername: string;
+	readonly postNumber: DiscoursePostNumber | null;
+	readonly addedAt: number;
+	readonly pinned: boolean;
+}
+
+interface ReaderQueueEntry extends ReaderQueueSyncEntry {
 	title: string;
 	href: string;
 	avatarTemplate: string;
@@ -351,6 +362,7 @@ export class ReaderOpenQueueSession {
 	readonly #count: HTMLElement;
 	readonly #clear: HTMLButtonElement;
 	readonly #list: HTMLElement;
+	readonly #avatarIdentity = new WeakMap<HTMLElement, string>();
 	#surface: ReaderQueueSurfaceState;
 	#prefetchTail = Promise.resolve();
 	readonly #prefetching = new Set<DiscourseTopicId>();
@@ -563,6 +575,38 @@ export class ReaderOpenQueueSession {
 		return this.#entries.size;
 	}
 
+	syncEntries(): readonly ReaderQueueSyncEntry[] {
+		return Object.freeze([...this.#entries.values()]
+			.sort((left, right) => left.addedAt - right.addedAt ||
+				left.topicId - right.topicId)
+			.map((entry) => Object.freeze({
+				topicId: entry.topicId,
+				title: entry.title,
+				href: entry.href,
+				avatarTemplate: entry.avatarTemplate,
+				avatarSource: entry.avatarSource,
+				ownerUsername: entry.ownerUsername,
+				postNumber: entry.postNumber,
+				addedAt: entry.addedAt,
+				pinned: entry.pinned,
+			})));
+	}
+
+	replaceExternal(values: readonly unknown[]): void {
+		const entries = values.map((value) =>
+			normalizedEntry(value, this.#options.document.baseURI))
+			.filter((entry): entry is ReaderQueueEntry => entry !== null);
+		for (const [topicId, controller] of this.#prefetchControllers) {
+			if (!entries.some((entry) => entry.topicId === topicId)) {
+				controller.abort(new DOMException('队列已由 WebDAV 更新', 'AbortError'));
+			}
+		}
+		this.#entries.clear();
+		for (const entry of entries) this.#entries.set(entry.topicId, entry);
+		this.#persist();
+		this.sync();
+	}
+
 	sync(): void {
 		this.#syncNativeReaderTrigger();
 		const active = this.#options.currentTopicId();
@@ -607,6 +651,8 @@ export class ReaderOpenQueueSession {
 		if (queueChanged) {
 			const previousBubbleScrollTop = this.#bubbles.scrollTop;
 			const activeChanged = active !== this.#activeTopicId;
+			const bubbleAvatars = this.#avatarsByTopic(this.#bubbles);
+			const rowAvatars = this.#avatarsByTopic(this.#list);
 			this.#renderKey = renderKey;
 			this.#rail.hidden =
 				!entries.length &&
@@ -650,7 +696,12 @@ export class ReaderOpenQueueSession {
 					)}`;
 				bubble.setAttribute('aria-label', label);
 				bubble.dataset.ldpTooltipLabel = label;
-				this.#avatar(bubble, entry, history);
+				this.#avatar(
+					bubble,
+					entry,
+					history,
+					bubbleAvatars.get(entry.topicId),
+				);
 				bubble.append(node(this.#options.document, 'i'));
 				const remove = button(
 					this.#options.document,
@@ -672,7 +723,11 @@ export class ReaderOpenQueueSession {
 				return shell;
 			}));
 			this.#list.replaceChildren(
-				...entries.map((entry) => this.#row(entry, active)),
+				...entries.map((entry) => this.#row(
+					entry,
+					active,
+					rowAvatars.get(entry.topicId),
+				)),
 			);
 			this.#activeTopicId = active;
 			if (activeChanged) {
@@ -750,7 +805,11 @@ export class ReaderOpenQueueSession {
 		this.scope.destroy();
 	}
 
-	#row(entry: ReaderQueueEntry, active: DiscourseTopicId | null): HTMLElement {
+	#row(
+		entry: ReaderQueueEntry,
+		active: DiscourseTopicId | null,
+		reusableAvatar?: HTMLElement,
+	): HTMLElement {
 		const document = this.#options.document;
 		const row = node(document, 'article', 'ldp-reader-queue-row');
 		row.dataset.queueOpen = String(entry.topicId);
@@ -767,7 +826,7 @@ export class ReaderOpenQueueSession {
 			'--ldp-reader-queue-progress',
 			`${progressValue * 3.6}deg`,
 		);
-		this.#avatar(progress, entry, history);
+		this.#avatar(progress, entry, history, reusableAvatar);
 		const copy = node(document, 'span', 'ldp-reader-queue-row-copy');
 		const title = node(document, 'strong');
 		title.textContent = entry.title;
@@ -816,25 +875,36 @@ export class ReaderOpenQueueSession {
 		host: HTMLElement,
 		entry: ReaderQueueEntry,
 		history: ReaderOpenQueueHistoryEntry | null,
+		reusableAvatar?: HTMLElement,
 	): void {
+		const fallbackText =
+			(entry.ownerUsername || history?.ownerUsername || entry.title)
+				.trim().slice(0, 1).toUpperCase() ||
+			'?';
+		const template = entry.avatarTemplate || history?.avatarTemplate || '';
+		const source = entry.avatarSource ||
+			(template ? this.#options.avatarSource?.(template, 64) ?? '' : '');
+		const identity = JSON.stringify([fallbackText, source]);
+		if (
+			reusableAvatar &&
+			this.#avatarIdentity.get(reusableAvatar) === identity
+		) {
+			host.replaceChildren(reusableAvatar);
+			return;
+		}
 		const avatar = node(
 			this.#options.document,
 			'span',
 			'ldp-reader-queue-avatar',
 		);
+		this.#avatarIdentity.set(avatar, identity);
 		const fallback = node(
 			this.#options.document,
 			'span',
 			'ldp-reader-queue-avatar-fallback',
 		);
-		fallback.textContent =
-			(entry.ownerUsername || history?.ownerUsername || entry.title)
-				.trim().slice(0, 1).toUpperCase() ||
-			'?';
+		fallback.textContent = fallbackText;
 		avatar.append(fallback);
-		const template = entry.avatarTemplate || history?.avatarTemplate || '';
-		const source = entry.avatarSource ||
-			(template ? this.#options.avatarSource?.(template, 64) ?? '' : '');
 		if (source) {
 			const image = node(this.#options.document, 'img');
 			image.addEventListener('load', () => {
@@ -850,6 +920,20 @@ export class ReaderOpenQueueSession {
 			avatar.append(image);
 		}
 		host.replaceChildren(avatar);
+	}
+
+	#avatarsByTopic(container: HTMLElement): Map<DiscourseTopicId, HTMLElement> {
+		const avatars = new Map<DiscourseTopicId, HTMLElement>();
+		for (const host of container.querySelectorAll<HTMLElement>(
+			'[data-queue-open]',
+		)) {
+			const topicId = tryDiscourseTopicId(host.dataset.queueOpen);
+			const avatar = host.querySelector<HTMLElement>(
+				'.ldp-reader-queue-avatar',
+			);
+			if (topicId && avatar) avatars.set(topicId, avatar);
+		}
+		return avatars;
 	}
 
 	#click(event: Event): void {

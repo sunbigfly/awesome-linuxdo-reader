@@ -15,6 +15,15 @@ function assert(condition: unknown, message: string): asserts condition {
 
 const actions = new DiscourseActionDescriptors();
 const model = { id: 20 };
+const topicEditFields = Object.freeze({
+	title: 'next',
+	tags: Object.freeze([Object.freeze({ id: 8, name: 'label' })]),
+});
+const topicEdit = actions.topicEdit({
+	topicId: 4,
+	topic: model,
+	changedFields: topicEditFields,
+});
 const cases = [
 	actions.postLike({ postId: 20, post: model }),
 	actions.pollVote({ postId: 20, pollName: 'main', options: ['a'] }),
@@ -74,7 +83,7 @@ const cases = [
 	actions.sharedIssueToggle({ topicId: 4 }),
 	actions.notificationsMarkRead(),
 	actions.bookmarkBulkDelete({ bookmarkIds: [9, 8, 9] }),
-	actions.topicEdit({ topicId: 4, topic: model, changedFields: { title: 'next' } }),
+	topicEdit,
 	actions.composerSave({ sessionId: 'composer:1', mode: 'edit' }),
 	actions.notificationMarkRead({ notificationId: 11 }),
 ] as const;
@@ -130,6 +139,21 @@ const bulk = cases[25];
 assert(
 	bulk.targetId === '8,9' && bulk.variant === '8,9',
 	'批量书签 identity 必须排序去重',
+);
+const nativeTopicEditFieldValue = topicEdit.payload?.args?.[1];
+const nativeTopicEditFields = nativeTopicEditFieldValue as {
+	title: string;
+	tags: Array<{ name: string }>;
+};
+nativeTopicEditFields.title = 'normalized';
+nativeTopicEditFields.tags[0]!.name = 'normalized-label';
+assert(
+	nativeTopicEditFieldValue !== topicEditFields &&
+	nativeTopicEditFields.title === 'normalized' &&
+	nativeTopicEditFields.tags[0]?.name === 'normalized-label' &&
+	topicEditFields.title === 'next' &&
+	topicEditFields.tags[0]?.name === 'label',
+	'Topic.update 参数必须可就地规范化，且不得修改 canonical changedFields',
 );
 
 let rejectedEmptyAssignmentUsername = false;

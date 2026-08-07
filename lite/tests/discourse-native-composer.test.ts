@@ -33,6 +33,9 @@ const saveCalls: unknown[][] = [];
 const routed: string[] = [];
 const privateMessageOpenOptions: Record<string, unknown>[] = [];
 let closeCalls = 0;
+let discardDraftCalls = 0;
+let discardCloseCalls = 0;
+let clearStateCalls = 0;
 const service = {
 	model: null as ReturnType<typeof model> | null,
 	appEvents: {
@@ -64,6 +67,16 @@ const service = {
 			viewOpen: true,
 			composeState: 'open',
 		});
+	},
+	async destroyDraft() {
+		discardDraftCalls += 1;
+	},
+	close() {
+		discardCloseCalls += 1;
+		if (this.model) {
+			this.model.viewOpen = false;
+			this.model.composeState = 'closed';
+		}
 	},
 };
 const modelFactory = {
@@ -225,6 +238,18 @@ const { document: parsedDocument, window: parsedWindow } = parseHTML(`
 const document = parsedDocument as unknown as Document;
 const closeNotices: string[] = [];
 let closeGuardEnabled = true;
+const resetDiscardModel = (): void => {
+	service.model = model({
+		action: 'reply',
+		topic: model({ id: 10 }),
+		viewOpen: true,
+		composeState: 'open',
+		clearState() {
+			clearStateCalls += 1;
+		},
+	});
+};
+resetDiscardModel();
 coordinator.installCloseGuard({
 	document,
 	enabled: () => closeGuardEnabled,
@@ -241,10 +266,18 @@ const dispatchClick = (selector: string): Event => {
 assert(
 	dispatchClick('.toggle-save-and-close').defaultPrevented &&
 		dispatchClick('.discard-button').defaultPrevented &&
-		!dispatchClick('.discard-button').defaultPrevented &&
+		dispatchClick('.discard-button').defaultPrevented &&
 		closeNotices.join(',') ===
 			'再点一次关闭回复窗口,再点一次舍弃回复',
 	'Composer owner 必须按独立 action key 保护关闭/舍弃，不能由阅读队列监听原生按钮',
+);
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	discardDraftCalls === 1 &&
+		discardCloseCalls === 1 &&
+		clearStateCalls === 1,
+	'二次确认舍弃必须由 Composer owner 删除草稿后关闭，不得先落入宿主关闭链',
 );
 const dispatchEscape = (): Event => {
 	const event = new parsedWindow.Event('keydown', {
@@ -252,13 +285,22 @@ const dispatchEscape = (): Event => {
 		cancelable: true,
 	});
 	Object.defineProperty(event, 'key', { value: 'Escape' });
-	document.dispatchEvent(event);
+	document.querySelector<HTMLElement>('#reply-control')!.dispatchEvent(event);
 	return event;
 };
+resetDiscardModel();
 assert(
 	dispatchEscape().defaultPrevented &&
-		!dispatchEscape().defaultPrevented,
+		dispatchEscape().defaultPrevented,
 	'已打开 Composer 的 Esc 必须由 Composer owner 在期限内二次确认',
+);
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	Number(discardDraftCalls) === 2 &&
+	Number(discardCloseCalls) === 2 &&
+	Number(clearStateCalls) === 2,
+	'Esc 确认后必须直接舍弃草稿，不能让宿主先最小化 Composer',
 );
 assert(
 	dispatchClick('.toggle-save-and-close').defaultPrevented,
@@ -269,11 +311,28 @@ assert(
 	!dispatchClick('.toggle-save-and-close').defaultPrevented,
 	'关闭确认偏好关闭后必须把原生 Composer 事件完整放行',
 );
+resetDiscardModel();
+assert(
+	dispatchClick('.discard-button').defaultPrevented,
+	'关闭确认偏好关闭后，单击舍弃仍必须由 Composer owner 删除草稿',
+);
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	Number(discardDraftCalls) === 3 &&
+	Number(discardCloseCalls) === 3 &&
+	Number(clearStateCalls) === 3,
+	'单击舍弃必须执行 destroyDraft、clearState 和 close',
+);
 closeGuardEnabled = true;
 assert(
 	dispatchClick('.toggle-save-and-close').defaultPrevented,
 	'关闭确认偏好重新启用后不得继承停用前的确认期限',
 );
+service.model = priorReplyModel;
+service.model.viewOpen = true;
+service.model.composeState = 'open';
+Reflect.deleteProperty(service, 'close');
 const [firstConcurrent, secondConcurrent] = await Promise.all([
 	coordinator.openReply({ topic, post, initialRaw: '并发引用 A' }),
 	coordinator.openReply({

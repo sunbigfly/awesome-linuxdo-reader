@@ -1,0 +1,340 @@
+import { LifecycleScope } from '../kernel/lifecycle.js';
+import type { ReaderWebDavConfigRepository } from
+	'../sync/reader-webdav-config-repository.js';
+import type { ReaderWebDavCoordinator } from
+	'../sync/reader-webdav-coordinator.js';
+import {
+	READER_WEBDAV_CATEGORIES,
+	READER_WEBDAV_CATEGORY_LABELS,
+	normalizeReaderWebDavConfig,
+	validateReaderWebDavConfig,
+	type ReaderWebDavAutoSyncIntervalMinutes,
+	type ReaderWebDavCategory,
+} from '../sync/reader-webdav-model.js';
+import {
+	settingsButton,
+	settingsElement as element,
+	settingsOption,
+	settingsOptionRow,
+	settingsSection,
+	settingsSwitch,
+} from './reader-settings-dom.js';
+
+export interface ReaderWebDavSettingsFormOptions {
+	readonly document: Document;
+	readonly host: HTMLElement;
+	readonly repository: ReaderWebDavConfigRepository;
+	readonly coordinator: ReaderWebDavCoordinator;
+	readonly parentScope?: LifecycleScope;
+}
+
+function field(
+	document: Document,
+	labelText: string,
+	type: 'text' | 'password',
+	placeholder: string,
+): Readonly<{ root: HTMLElement; input: HTMLInputElement }> {
+	const root = element(document, 'label', 'ldp-webdav-field');
+	const label = element(document, 'strong');
+	label.textContent = labelText;
+	const input = element(document, 'input', 'ldp-boost-rule-control');
+	input.type = type;
+	input.placeholder = placeholder;
+	input.setAttribute('aria-label', labelText);
+	input.autocomplete = type === 'password' ? 'current-password' : 'off';
+	root.append(label, input);
+	return Object.freeze({ root, input });
+}
+
+/** WebDAV 配置、分类、手动动作和定时策略的唯一设置 DOM owner。 */
+export class ReaderWebDavSettingsForm {
+	readonly scope: LifecycleScope;
+	readonly #host: HTMLElement;
+	readonly #repository: ReaderWebDavConfigRepository;
+	readonly #coordinator: ReaderWebDavCoordinator;
+	readonly #endpoint: HTMLInputElement;
+	readonly #username: HTMLInputElement;
+	readonly #password: HTMLInputElement;
+	readonly #remotePath: HTMLInputElement;
+	readonly #autoSync: HTMLInputElement;
+	readonly #interval: HTMLSelectElement;
+	readonly #categories = new Map<ReaderWebDavCategory, HTMLInputElement>();
+	readonly #save: HTMLButtonElement;
+	readonly #test: HTMLButtonElement;
+	readonly #sync: HTMLButtonElement;
+	readonly #status: HTMLElement;
+	#operation: AbortController | null = null;
+
+	constructor(options: ReaderWebDavSettingsFormOptions) {
+		this.#host = options.host;
+		this.#repository = options.repository;
+		this.#coordinator = options.coordinator;
+		this.scope = LifecycleScope.ownedBy(options.parentScope);
+		const root = element(
+			options.document,
+			'div',
+			'ldp-settings-fields ldp-webdav-settings',
+		);
+		const connection = settingsSection(
+			options.document,
+			'连接与文件',
+			'兼容坚果云等标准 WebDAV；坚果云请使用应用密码。凭据仅保存在脚本专属存储，不写入远端文件。',
+			true,
+		);
+		const endpoint = field(
+			options.document,
+			'WebDAV 地址',
+			'text',
+			'https://dav.jianguoyun.com/dav/',
+		);
+		this.#endpoint = endpoint.input;
+		this.#endpoint.inputMode = 'url';
+		const username = field(options.document, '用户名', 'text', '账号邮箱');
+		this.#username = username.input;
+		this.#username.autocomplete = 'username';
+		const password = field(options.document, '应用密码', 'password', '应用密码');
+		this.#password = password.input;
+		const remotePath = field(
+			options.document,
+			'远端文件',
+			'text',
+			'ALR-Lite/v2/sync.json',
+		);
+		this.#remotePath = remotePath.input;
+		connection.append(
+			endpoint.root,
+			username.root,
+			password.root,
+			remotePath.root,
+		);
+
+		const content = settingsSection(
+			options.document,
+			'选择同步内容',
+			'每类独立开关；关闭的类别不会上传、下载或删除。正文、图片、附件与页面缓存永不上传。',
+			true,
+		);
+		const categoryList = element(
+			options.document,
+			'div',
+			'ldp-webdav-category-list',
+		);
+		for (const category of READER_WEBDAV_CATEGORIES) {
+			const control = settingsSwitch(
+				options.document,
+				`同步${READER_WEBDAV_CATEGORY_LABELS[category]}`,
+			);
+			this.#categories.set(category, control.input);
+			categoryList.append(settingsOptionRow(
+				options.document,
+				READER_WEBDAV_CATEGORY_LABELS[category],
+				this.#categoryDescription(category),
+				control.root,
+			));
+		}
+		content.append(categoryList);
+
+		const automatic = settingsSection(
+			options.document,
+			'定时同步',
+			'默认关闭；启用后仅在页面可见时执行，启动后等待 30 秒，再按所选间隔串行同步。',
+			true,
+		);
+		const autoControl = settingsSwitch(options.document, '启用定时同步');
+		this.#autoSync = autoControl.input;
+		automatic.append(settingsOptionRow(
+			options.document,
+			'启用定时同步',
+			'手动同步始终可用。',
+			autoControl.root,
+		));
+		this.#interval = element(
+			options.document,
+			'select',
+			'ldp-webdav-interval',
+		);
+		for (const [value, label] of [
+			['15', '每 15 分钟'],
+			['30', '每 30 分钟'],
+			['60', '每 1 小时'],
+			['180', '每 3 小时'],
+			['360', '每 6 小时'],
+		] as const) this.#interval.append(settingsOption(options.document, value, label));
+		automatic.append(settingsOptionRow(
+			options.document,
+			'同步间隔',
+			'坚果云按请求计数，建议 1 小时。',
+			this.#interval,
+		));
+
+		const actions = element(options.document, 'div', 'ldp-webdav-actions');
+		this.#save = settingsButton(
+			options.document,
+			'ldp-config-action',
+			'保存 WebDAV 设置',
+			'check',
+			'保存设置',
+		);
+		this.#test = settingsButton(
+			options.document,
+			'ldp-config-action',
+			'测试 WebDAV 连接',
+			'activity',
+			'测试连接',
+		);
+		this.#sync = settingsButton(
+			options.document,
+			'ldp-config-action is-primary',
+			'立即执行 WebDAV 合并同步',
+			'upload',
+			'立即同步',
+		);
+		actions.append(this.#save, this.#test, this.#sync);
+		this.#status = element(options.document, 'small', 'ldp-webdav-status');
+		this.#status.role = 'status';
+		this.#status.setAttribute('aria-live', 'polite');
+		root.append(connection, content, automatic, actions, this.#status);
+		this.#host.replaceChildren(root);
+
+		this.scope.listen(this.#autoSync, 'change', () => this.#syncIntervalState());
+		this.scope.listen(this.#save, 'click', () => void this.#saveConfig());
+		this.scope.listen(this.#test, 'click', () => void this.#run('test'));
+		this.scope.listen(this.#sync, 'click', () => void this.#run('sync'));
+		this.#repository.changes.subscribe((snapshot) => {
+			this.#renderStatus(snapshot.status.kind, snapshot.status.message);
+		}, this.scope);
+		this.scope.add(() => {
+			this.#operation?.abort(new Error('WebDAV 设置已关闭'));
+			this.#host.replaceChildren();
+		});
+		void this.#load();
+	}
+
+	destroy(): void {
+		this.scope.destroy();
+	}
+
+	#categoryDescription(category: ReaderWebDavCategory): string {
+		return ({
+			history: '主题、最近阅读楼层、已读楼层和查看时间。',
+			bookmarks: '收藏链接、标题及定位信息；不修改原站收藏。',
+			preferences: 'Lite 外观、布局、性能与阅读交互设置；不含 WebDAV 凭据。',
+			queue: '队列主题链接、固定状态和入口楼层；不含帖子正文。',
+			'topic-context': '最近阅读位置、讨论窗口锚点和全屏窗口几何。',
+			'custom-sites': '用户添加的其他 HTTPS Discourse 站点。',
+			'connect-history': '本机观察的 Connect 指标历史与服务器确认已读指纹。',
+		})[category];
+	}
+
+	async #load(): Promise<void> {
+		try {
+			const snapshot = await this.#repository.load();
+			if (this.scope.destroyed) return;
+			const config = snapshot.config;
+			this.#endpoint.value = config.endpoint;
+			this.#username.value = config.username;
+			this.#password.value = config.password;
+			this.#remotePath.value = config.remotePath;
+			this.#autoSync.checked = config.autoSyncEnabled;
+			for (const option of this.#interval.options) {
+				option.toggleAttribute(
+					'selected',
+					option.value === String(config.autoSyncIntervalMinutes),
+				);
+			}
+			for (const category of READER_WEBDAV_CATEGORIES) {
+				this.#categories.get(category)!.checked = config.categories[category];
+			}
+			this.#syncIntervalState();
+			this.#renderStatus(snapshot.status.kind, snapshot.status.message ||
+				'填写连接信息后先测试连接，再执行合并同步。');
+		} catch (cause) {
+			this.#renderStatus('error', cause instanceof Error
+				? cause.message
+				: 'WebDAV 设置读取失败');
+		}
+	}
+
+	#draft() {
+		return normalizeReaderWebDavConfig({
+			endpoint: this.#endpoint.value,
+			username: this.#username.value,
+			password: this.#password.value,
+			remotePath: this.#remotePath.value,
+			autoSyncEnabled: this.#autoSync.checked,
+			autoSyncIntervalMinutes: Number(
+				[...this.#interval.options].find((option) => option.selected)?.value ??
+				this.#interval.value,
+			) as
+				ReaderWebDavAutoSyncIntervalMinutes,
+			categories: Object.fromEntries(READER_WEBDAV_CATEGORIES.map(
+				(category) => [category, this.#categories.get(category)!.checked],
+			)),
+		});
+	}
+
+	async #saveConfig(): Promise<boolean> {
+		const config = this.#draft();
+		const issues = validateReaderWebDavConfig(config, {
+			requireCredentials: config.autoSyncEnabled,
+		});
+		if (issues.length) {
+			this.#renderStatus('error', issues[0]!);
+			return false;
+		}
+		await this.#repository.saveConfig(config);
+		this.#renderStatus('success', 'WebDAV 设置已保存。');
+		return true;
+	}
+
+	async #run(kind: 'test' | 'sync'): Promise<void> {
+		if (this.#operation || !(await this.#saveConfig())) return;
+		const issues = validateReaderWebDavConfig(this.#repository.snapshot.config, {
+			requireCredentials: true,
+		});
+		if (issues.length) {
+			this.#renderStatus('error', issues[0]!);
+			return;
+		}
+		const operation = new AbortController();
+		this.#operation = operation;
+		this.#setBusy(true);
+		this.#renderStatus('syncing', kind === 'test'
+			? '正在测试 WebDAV 连接…'
+			: '正在读取远端、合并并条件写入…');
+		try {
+			if (kind === 'test') {
+				await this.#coordinator.testConnection(operation.signal);
+				this.#renderStatus('success', '连接成功，WebDAV 账号和地址可用。');
+			} else {
+				await this.#coordinator.syncNow(operation.signal);
+			}
+		} catch (cause) {
+			if (!operation.signal.aborted) this.#renderStatus(
+				'error',
+				cause instanceof Error ? cause.message : 'WebDAV 操作失败',
+			);
+		} finally {
+			if (this.#operation === operation) {
+				this.#operation = null;
+				this.#setBusy(false);
+			}
+		}
+	}
+
+	#setBusy(busy: boolean): void {
+		for (const button of [this.#save, this.#test, this.#sync]) {
+			button.disabled = busy;
+			button.toggleAttribute('aria-busy', busy);
+		}
+	}
+
+	#syncIntervalState(): void {
+		this.#interval.disabled = !this.#autoSync.checked;
+	}
+
+	#renderStatus(kind: string, message: string): void {
+		this.#status.dataset.statusKind = kind;
+		this.#status.textContent = message;
+	}
+}

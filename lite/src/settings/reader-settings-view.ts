@@ -78,6 +78,7 @@ const panelIcons = Object.freeze<Record<ReaderSettingsPanelId, string>>({
 	sites: 'wrench',
 	performance: 'rocket',
 	logs: 'activity',
+	sync: 'upload',
 	cache: 'database',
 	about: 'info',
 });

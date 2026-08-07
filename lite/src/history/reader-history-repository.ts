@@ -52,6 +52,7 @@ export interface ReaderHistorySnapshot {
 		| 'fallback'
 		| 'initial'
 		| 'external-reload'
+		| 'external-sync'
 		| 'remember'
 		| 'forget'
 		| 'clear';
@@ -307,6 +308,20 @@ export class ReaderHistoryRepository {
 
 	clear(): ReaderHistorySnapshot {
 		return this.#persistAndCommit(Object.freeze([]), 'clear');
+	}
+
+	replaceExternal(values: readonly unknown[]): ReaderHistorySnapshot {
+		const cutoff = this.#now() - this.#maxAgeMs;
+		const entries: ReaderHistoryEntry[] = [];
+		const seen = new Set<DiscourseTopicId>();
+		for (const value of values) {
+			const entry = normalizeEntry(value);
+			if (!entry || entry.viewedAt < cutoff || seen.has(entry.topicId)) continue;
+			seen.add(entry.topicId);
+			entries.push(entry);
+		}
+		const persisted = this.#persist(Object.freeze(entries));
+		return this.#commit(persisted, 'external-sync');
 	}
 
 	#readAndCommit(

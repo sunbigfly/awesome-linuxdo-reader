@@ -325,12 +325,25 @@ import {
 	ReaderCustomSiteSettingsForm,
 } from '../settings/reader-custom-site-settings-form.js';
 import {
+	ReaderWebDavSettingsForm,
+} from '../settings/reader-webdav-settings-form.js';
+import {
 	CoordinatedDiscourseSiteProbe,
 	type ReaderDiscourseSiteProbeTransportPort,
 } from '../site/browser-discourse-site-probe.js';
 import type {
 	ReaderCustomSiteRepository,
 } from '../site/reader-custom-site-repository.js';
+import type { ReaderWebDavClient } from '../sync/reader-webdav-client.js';
+import type { ReaderWebDavConfigRepository } from
+	'../sync/reader-webdav-config-repository.js';
+import {
+	ReaderWebDavAutoSync,
+	ReaderWebDavCoordinator,
+} from '../sync/reader-webdav-coordinator.js';
+import {
+	createReaderWebDavCategoryPorts,
+} from '../sync/reader-webdav-category-ports.js';
 import {
 	ReaderPerformanceSettingsForm,
 	type ReaderPerformanceSettingsPreferencesAdapter,
@@ -991,6 +1004,13 @@ export interface ReaderBrowserRuntimeStageOptions<
 			| Readonly<{
 				readonly repository: ReaderCustomSiteRepository;
 				readonly probe: ReaderDiscourseSiteProbeTransportPort | null;
+			}>;
+		readonly webDav?:
+			| false
+			| Readonly<{
+				readonly client: ReaderWebDavClient;
+				readonly repository: ReaderWebDavConfigRepository;
+				readonly customSites: ReaderCustomSiteRepository;
 			}>;
 		readonly aboutContent?:
 			| false
@@ -6602,6 +6622,51 @@ export function createReaderBrowserRuntimeStage<
 					() => openQueue.refreshSurface(),
 					runtime.scope,
 				);
+			}
+			const webDavOptions = options.settings
+				? options.settings.webDav
+				: undefined;
+			if (webDavOptions && !settingsView) {
+				runtime.destroy();
+				throw new Error('WebDAV 设置需要启用唯一 Settings View');
+			}
+			if (settingsView && webDavOptions) {
+				const coordinator = new ReaderWebDavCoordinator({
+					client: webDavOptions.client,
+					repository: webDavOptions.repository,
+					categories: createReaderWebDavCategoryPorts({
+						history: runtime.history,
+						bookmarks: runtime.bookmarkController,
+						queue: openQueue,
+						preferences: {
+							read: context.readPreferences,
+							update: (patch) => {
+								context.updatePreferences!(patch);
+							},
+						},
+						topicContext: runtime.threadContextState,
+						customSites: webDavOptions.customSites,
+						connectHistory: runtime.connectHistory,
+					}),
+					hostname: () => options.runtime.document.location.hostname,
+					username: () => discourseNativeCurrentUsername(
+						options.runtime.host,
+					),
+				});
+				new ReaderWebDavSettingsForm({
+					document: options.runtime.document,
+					host: settingsView.panelHost('sync'),
+					repository: webDavOptions.repository,
+					coordinator,
+					parentScope: runtime.scope,
+				});
+				new ReaderWebDavAutoSync({
+					repository: webDavOptions.repository,
+					coordinator,
+					visibilityState: () =>
+						options.runtime.document.visibilityState,
+					parentScope: runtime.scope,
+				});
 			}
 			const notificationTrigger = shell.view.root
 				.querySelector<HTMLElement>('.ldp-notifications-toggle');

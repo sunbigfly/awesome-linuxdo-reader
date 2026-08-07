@@ -135,6 +135,10 @@ import {
 import {
 	isReaderCloudflareChallengeWindow,
 } from '../network/browser-shared-request-permit.js';
+import {
+	ReaderWebDavConfigRepository,
+} from '../sync/reader-webdav-config-repository.js';
+import type { ReaderWebDavClient } from '../sync/reader-webdav-client.js';
 
 const DEBUG_HANDLE_KEY = '__LDP_MAIN_LITE__';
 const LEGACY_DEBUG_HANDLE_KEY = '__LDP_MIAN_LITE__';
@@ -254,6 +258,10 @@ function createRuntimeStage(
 	customSites: Readonly<{
 		readonly repository: ReaderCustomSiteRepository;
 		readonly probe: ReaderDiscourseSiteProbeTransportPort | null;
+		readonly webDav: Readonly<{
+			readonly client: ReaderWebDavClient;
+			readonly repository: ReaderWebDavConfigRepository;
+		}> | null;
 	}>,
 ): ReaderApplicationStage<ReaderPreferences> {
 	let template: ReaderShellTemplate | null = null;
@@ -266,11 +274,15 @@ function createRuntimeStage(
 	return Object.freeze({
 		name: 'reader-userscript-runtime',
 		required: true,
-		setup(
+		async setup(
 			scope: LifecycleScope,
 			applicationContext:
 				ReaderApplicationContext<ReaderPreferences>,
 		) {
+			const readiness = scope.abortController(
+				new DOMException('main-lite runtime 启动已取消', 'AbortError'),
+			);
+			await environment.waitForDiscourseRuntime(readiness.signal);
 			const initialPreferences = applicationContext.readPreferences();
 			const replyTreePreferences =
 				new ReaderReplyTreePreferencesPreview(
@@ -701,6 +713,14 @@ function createRuntimeStage(
 		settings: {
 			view: { brandName: 'Awesome LinuxDo Reader' },
 			sitesForm: customSites,
+			...(customSites.webDav
+				? {
+					webDav: {
+						...customSites.webDav,
+						customSites: customSites.repository,
+					},
+				}
+				: {}),
 			aboutContent: {
 				version: scriptVersion,
 			},
@@ -966,14 +986,31 @@ export function startMainLiteUserscript(
 		return null;
 	}
 	if (existing) return existing as MainLiteUserscriptHandle;
+	const valueStorage = environment.createValueStorage();
 	const customSiteRepository = new ReaderCustomSiteRepository({
-		storage: environment.createValueStorage(),
+		storage: valueStorage,
 	});
 	let customSiteProbe: ReaderDiscourseSiteProbeTransportPort | null = null;
 	try {
 		customSiteProbe = environment.createDiscourseSiteProbe();
 	} catch {
 		// 缺少 GM_xmlhttpRequest 时仍允许内置站点启动；设置面板会说明不可添加。
+	}
+	let webDav: Readonly<{
+		readonly client: ReaderWebDavClient;
+		readonly repository: ReaderWebDavConfigRepository;
+	}> | null = null;
+	if (valueStorage) {
+		try {
+			webDav = Object.freeze({
+				client: environment.createWebDavClient(),
+				repository: new ReaderWebDavConfigRepository({
+					storage: valueStorage,
+				}),
+			});
+		} catch {
+			// 缺少 GM 跨站请求权限时不挂载 WebDAV 面板。
+		}
 	}
 	const preferences = createReaderPreferencesRepository({
 		environment: {
@@ -1026,6 +1063,7 @@ export function startMainLiteUserscript(
 				{
 					repository: customSiteRepository,
 					probe: customSiteProbe,
+					webDav,
 				},
 			),
 		],

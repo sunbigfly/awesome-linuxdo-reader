@@ -256,6 +256,12 @@ export class ReaderTopicContextStateRepository {
 		this.#persist();
 	}
 
+	replaceExternal(value: unknown): ReaderTopicContextStoredState {
+		this.#state = normalizedState(value, this.#maxViews);
+		this.#persist();
+		return this.#state;
+	}
+
 	async flush(): Promise<void> {
 		await this.#write;
 	}

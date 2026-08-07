@@ -8,6 +8,7 @@ import {
 	ReaderOpenQueueSession,
 	type ReaderOpenQueuePreferences,
 	type ReaderOpenQueueSessionOptions,
+	type ReaderQueuePrefetchProgress,
 } from '../src/queue/reader-open-queue-session.js';
 import {
 	readerAccountScopedStorageIdentity,
@@ -65,6 +66,9 @@ let preferences: ReaderOpenQueuePreferences = {
 let activeTopicId = discourseTopicId(42);
 const opened: number[] = [];
 const prefetched: number[] = [];
+const prefetchProgressReports: Array<(
+	progress: ReaderQueuePrefetchProgress,
+) => void> = [];
 const notices: string[] = [];
 const restoredAnchors: number[] = [];
 let closeCount = 0;
@@ -144,6 +148,7 @@ const queueOptions = {
 	prefetch: async (topicId, _postNumber, signal, report) => {
 		assert(!signal.aborted, '队列预加载必须接收可取消信号');
 		prefetched.push(topicId);
+		prefetchProgressReports.push(report);
 		if (topicId === failedPrefetchTopicId) throw new Error('prefetch');
 		report({
 			loadedCount: 9,
@@ -319,6 +324,9 @@ assert(
 const activeBubble = root.querySelector<HTMLButtonElement>(
 	'.ldp-reader-queue-bubble[data-reader-queue-topic-id="42"]',
 )!;
+const activeRow = root.querySelector<HTMLElement>(
+	'.ldp-reader-queue-row[data-queue-open="42"]',
+)!;
 assert(
 	activeBubble.getAttribute('aria-current') === 'true' &&
 	activeBubble.dataset.ldpTooltipLabel?.includes('测试主题') === true &&
@@ -332,16 +340,60 @@ assert(
 		?.textContent === 'O',
 	'左侧队列快捷链必须同步当前状态、提示、原生模板头像请求和稳定文字回退',
 );
-activeBubble.querySelector('img')?.dispatchEvent(
+const bubbleAvatarBeforeProgress = activeBubble.querySelector<HTMLElement>(
+	'.ldp-reader-queue-avatar',
+)!;
+const rowAvatarBeforeProgress = activeRow.querySelector<HTMLElement>(
+	'.ldp-reader-queue-avatar',
+)!;
+const imageBeforeProgress = bubbleAvatarBeforeProgress.querySelector<
+	HTMLImageElement
+>('img')!;
+imageBeforeProgress.dispatchEvent(new parsedWindow.Event('load'));
+activeTopicId = discourseTopicId(43);
+queue.sync();
+const reportPrefetchProgress = prefetchProgressReports[0];
+assert(reportPrefetchProgress, '测试必须捕获队列预加载进度回调');
+reportPrefetchProgress({
+	loadedCount: 4,
+	totalCount: 9,
+	nestedLoadedCount: 1,
+	nestedTotalCount: 3,
+	mediaLoadedCount: 1,
+	mediaTotalCount: 2,
+});
+const progressBubble = root.querySelector<HTMLButtonElement>(
+	'.ldp-reader-queue-bubble[data-reader-queue-topic-id="42"]',
+)!;
+const progressRow = root.querySelector<HTMLElement>(
+	'.ldp-reader-queue-row[data-queue-open="42"]',
+)!;
+assert(
+	progressBubble.querySelector('.ldp-reader-queue-avatar') ===
+		bubbleAvatarBeforeProgress &&
+	progressRow.querySelector('.ldp-reader-queue-avatar') ===
+		rowAvatarBeforeProgress &&
+	progressBubble.querySelector('img') === imageBeforeProgress &&
+	imageBeforeProgress.classList.contains('is-loaded') &&
+	progressBubble.getAttribute('aria-label')?.includes('正文 4/9') === true &&
+	progressBubble.dataset.ldpTooltipLabel?.includes('正文 4/9') === true &&
+	progressRow.querySelector('small')?.textContent.includes('正文 4/9') === true,
+	'预加载进度变化前后必须按 Topic 复用头像节点，只更新状态文字和 ARIA',
+);
+progressBubble.querySelector('img')?.dispatchEvent(
 	new parsedWindow.Event('error'),
 );
 assert(
-	activeBubble.querySelector('.ldp-reader-queue-avatar > img') === null &&
-	activeBubble.querySelector('.ldp-reader-queue-avatar-fallback')
+	progressBubble.querySelector('.ldp-reader-queue-avatar > img') === null &&
+	progressBubble.querySelector('.ldp-reader-queue-avatar-fallback')
 		?.textContent === 'O',
 	'头像请求失败后必须移除坏图并保留可见回退，不能留下空圆',
 );
-activeBubble.click();
+activeTopicId = discourseTopicId(42);
+queue.sync();
+root.querySelector<HTMLButtonElement>(
+	'.ldp-reader-queue-bubble[data-reader-queue-topic-id="42"]',
+)!.click();
 await Promise.resolve();
 await Promise.resolve();
 assert(

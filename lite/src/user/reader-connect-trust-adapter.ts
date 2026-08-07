@@ -613,6 +613,14 @@ export class ReaderConnectTrustHistoryAdapter
 		if (changed) this.#writeLocal(stored);
 	}
 
+	syncValue(): unknown {
+		return this.#readLocal();
+	}
+
+	replaceExternal(value: unknown): void {
+		this.#writeLocal(normalizeStoredHistory(value));
+	}
+
 	async load(
 		usernameValue: string,
 		metrics: Readonly<Record<string, unknown>>,

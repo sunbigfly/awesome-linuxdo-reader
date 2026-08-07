@@ -297,35 +297,53 @@ export class DiscourseComposerCoordinator {
 			? options.parentScope.child()
 			: this.scope.child();
 		const gate = new RepeatActionGate();
-		const block = (
-			event: Event,
-			key: string,
-			message: string,
-		): void => {
-			if (!options.enabled()) {
-				gate.clear();
-				return;
-			}
-			if (gate.confirm(key)) return;
+		const handledEvents = new WeakSet<Event>();
+		const consume = (event: Event): void => {
 			event.preventDefault();
 			event.stopImmediatePropagation();
-			options.notify?.(message);
 		};
-		scope.listen(options.document, 'click', (event) => {
+		const requiresConfirmation = (
+			key: string,
+			message: string,
+		): boolean => {
+			if (!options.enabled()) {
+				gate.clear();
+				return false;
+			}
+			if (gate.confirm(key)) return false;
+			options.notify?.(message);
+			return true;
+		};
+		const discardComposer = (event: Event): void => {
+			consume(event);
+			void this.discard().catch((error) => {
+				this.#onError(error);
+				options.notify?.('舍弃回复失败，请重试');
+			});
+		};
+		const onClick = (event: Event): void => {
+			if (handledEvents.has(event)) return;
 			const target = event.target as Element | null;
 			const control = target?.closest(
 				'#reply-control .toggle-save-and-close,' +
 				'#reply-control .discard-button',
 			);
 			if (!control) return;
-			const discard = control.classList.contains('discard-button');
-			block(
-				event,
-				discard ? 'composer:discard' : 'composer:close',
-				discard ? '再点一次舍弃回复' : '再点一次关闭回复窗口',
-			);
-		}, true);
-		scope.listen(options.document, 'keydown', (event) => {
+			handledEvents.add(event);
+			const shouldDiscard = control.classList.contains('discard-button');
+			if (requiresConfirmation(
+				shouldDiscard ? 'composer:discard' : 'composer:close',
+				shouldDiscard ? '再点一次舍弃回复' : '再点一次关闭回复窗口',
+			)) {
+				consume(event);
+				return;
+			}
+			if (shouldDiscard) {
+				discardComposer(event);
+			}
+		};
+		const onKeyDown = (event: Event): void => {
+			if (handledEvents.has(event)) return;
 			const keyboard = event as KeyboardEvent;
 			if (
 				keyboard.key !== 'Escape' ||
@@ -333,10 +351,88 @@ export class DiscourseComposerCoordinator {
 				keyboard.defaultPrevented ||
 				!this.isOpen()
 			) return;
-			block(keyboard, 'composer:escape', '再按一次 Esc 舍弃回复');
-		}, true);
+			handledEvents.add(event);
+			if (requiresConfirmation('composer:escape', '再按一次 Esc 舍弃回复')) {
+				consume(event);
+				return;
+			}
+			discardComposer(event);
+		};
+		const captureTarget = options.document.defaultView ?? options.document;
+		scope.listen(captureTarget, 'click', onClick, true);
+		scope.listen(captureTarget, 'keydown', onKeyDown, true);
+		if (captureTarget !== options.document) {
+			scope.listen(options.document, 'click', onClick, true);
+			scope.listen(options.document, 'keydown', onKeyDown, true);
+		}
 		scope.add(() => gate.clear());
 		return scope;
+	}
+
+	async discard(): Promise<void> {
+		this.#assertActive();
+		const composer = record(this.#host.lookup('service:composer'));
+		const model = modelValue(composer, 'model');
+		if (!composer || !record(model)) {
+			this.#session = null;
+			return;
+		}
+		const destroyDraft = composer.destroyDraft;
+		if (typeof destroyDraft !== 'function') {
+			throw new Error('Discourse composer.destroyDraft 尚未就绪');
+		}
+		const cleanupErrors: unknown[] = [];
+		try {
+			composer.skipAutoSave = true;
+			try {
+				const runloop = record(this.#host.lookupModule('@ember/runloop'));
+				const cancel = runloop?.cancel;
+				if (typeof cancel === 'function' && composer._saveDraftDebounce) {
+					cancel.call(runloop, composer._saveDraftDebounce);
+				}
+			} catch (error) {
+				cleanupErrors.push(error);
+			}
+			await destroyDraft.call(composer);
+			if (modelValue(composer, 'model') === model) {
+				const mutableModel = record(model);
+				try {
+					if (typeof mutableModel?.clearState === 'function') {
+						mutableModel.clearState.call(mutableModel);
+					}
+				} catch (error) {
+					cleanupErrors.push(error);
+				}
+				try {
+					if (typeof composer.close === 'function') composer.close.call(composer);
+				} catch (error) {
+					cleanupErrors.push(error);
+				}
+				try {
+					const appEvents = record(
+						composer.appEvents ?? this.#host.lookup('service:app-events'),
+					);
+					if (typeof appEvents?.trigger === 'function') {
+						appEvents.trigger.call(appEvents, 'composer:cancelled');
+					}
+				} catch (error) {
+					cleanupErrors.push(error);
+				}
+			}
+			this.#session = null;
+		} finally {
+			try {
+				composer.skipAutoSave = false;
+			} catch (error) {
+				cleanupErrors.push(error);
+			}
+		}
+		if (cleanupErrors.length) {
+			throw new AggregateError(
+				cleanupErrors,
+				'Discourse composer 舍弃后清理失败',
+			);
+		}
 	}
 
 	installSubmitGuard(
