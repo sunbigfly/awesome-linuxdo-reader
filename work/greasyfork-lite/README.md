@@ -73,6 +73,21 @@ npm run mian-lite:greasyfork:check
 两项均已设置为从本仓库 `main` 分支的对应 Raw 文件进行 GitHub Webhook 同步；远端
 字节数和 SHA-256 已在浏览器同源环境复核，并记录于 `published-libraries.json`。
 
+### v1.0.0 主脚本发布
+
+主脚本 [588185](https://greasyfork.org/scripts/588185) 已于 2026-08-07 同步为
+v1.0.0，固定版本为 `1895839`。同步方式为 GitHub Webhook，源文件固定为：
+
+```text
+https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/mian-lite.js
+```
+
+Greasy Fork 固定版本仅比仓库 Loader 多平台自动加入的 `@downloadURL none`；移除该行
+后为 3,708 字节，SHA-256 与仓库产物
+`056b0d1abfe03ce6fc280fa50861108484101d74215609ff0b1a7c0fd7a2a9df` 一致。
+公开安装 URL 仍由 Greasy Fork 注入 versionless `@downloadURL` 与 `.meta.js`
+`@updateURL`，可正常接收后续自动更新。
+
 ## 后续扩容
 
 `scripts/build-mian-lite-greasyfork.mjs` 中的 `libraryDefinitions` 是唯一的 Library
