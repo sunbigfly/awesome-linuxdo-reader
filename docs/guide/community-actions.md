@@ -7,14 +7,14 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-28
-screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide-17-bookmarks-reactions.png", "/screenshots/guide-15-notifications-replies.png"]
+screenshots: ["/screenshots/guide-20-community-actions-v1.0.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.0.0.png", "/screenshots/guide-15-notifications-replies-v1.0.0.png"]
 ---
 
 # 回复与社区操作
 
 阅读器调用 LINUX DO 的原生账号和接口能力。按钮是否出现、操作是否允许、最终计数和权限错误都以原站为准。
 
-![楼中楼中的回应、点赞、回复、Boost 和主题底部操作](/screenshots/guide-20-community-actions.png)
+![楼中楼中的回应、点赞、回复、Boost 和主题底部操作](/screenshots/guide-20-community-actions-v1.0.0.png)
 
 <p class="image-caption">先在楼层底部找到回复、点赞、回应和 Boost；主题级分享、收藏、通知和回复入口位于正文末尾。</p>
 
@@ -68,7 +68,7 @@ screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide
   两种模式不会同时发送两次请求，也不会把主回应重复显示在回应汇总中。
 - 原站切换回应或在线更新可用表情时，阅读器会清理对应楼层/主题缓存、刷新表情注册表，并同步当前可见楼层和主帖操作列；已经展开的回应选择器保持打开。
 
-![收藏与回应中心展示真实原站记录](/screenshots/guide-17-bookmarks-reactions.png)
+![收藏与回应中心展示真实原站记录](/screenshots/guide-17-bookmarks-reactions-v1.0.0.png)
 
 <p class="image-caption">点击标题栏的收藏与回应入口，可以核对当前账号已经点过的回应、主题书签和楼层书签。</p>
 
@@ -113,7 +113,7 @@ Boost 的举报类型；如果已经举报过或当前账号无权举报，会�
 
 主题底部的通知级别选择器沿用 Discourse 状态，例如正常、跟踪、关注和静音。修改后影响原站为当前账号发送通知的方式，不只是阅读器本地显示。
 
-![消息中心按不同通知类型分类展示消息](/screenshots/guide-15-notifications-replies.png)
+![消息中心按不同通知类型分类展示消息](/screenshots/guide-15-notifications-replies-v1.0.0.png)
 
 <p class="image-caption">通知设置生效后，从标题栏打开消息中心；使用顶部分类筛选通知，再点击消息返回目标楼层。</p>
 

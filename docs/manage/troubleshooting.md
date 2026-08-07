@@ -7,7 +7,7 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-28
-screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-13-data-management.png"]
+screenshots: ["/screenshots/guide-19-image-lightbox-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-13-data-management-v1.0.0.png"]
 ---
 
 # 故障排查
@@ -67,7 +67,7 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11
 
 ## 图片和媒体
 
-![灯箱保留预览、原图和关联评论入口](/screenshots/guide-19-image-lightbox.png)
+![灯箱保留预览、原图和关联评论入口](/screenshots/guide-19-image-lightbox-v1.0.0.png)
 
 - 预览能看、原图失败：原图地址可能过期、受权限限制或被跨域阻止。
 - 来源楼层 404：已有 CDN 图片仍可能可用，不应无限重试来源。
@@ -85,7 +85,7 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11
 
 ## 429 和 Cloudflare
 
-![请求数据面板中的异常、排队和恢复状态](/screenshots/guide-11-request-flow.png)
+![请求数据面板中的异常、排队和恢复状态](/screenshots/guide-11-request-flow-v1.0.0.png)
 
 1. 不要连续刷新或重复点击加载。
 2. 切回“均衡”或“省资源”。
@@ -97,7 +97,7 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11
 
 ## 配置恢复
 
-![配置导出、导入、恢复默认和缓存清理](/screenshots/guide-13-data-management.png)
+![配置导出、导入、恢复默认和缓存清理](/screenshots/guide-13-data-management-v1.0.0.png)
 
 顺序：
 

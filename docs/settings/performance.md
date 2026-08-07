@@ -7,14 +7,14 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-23
-screenshots: ["/screenshots/guide-09-performance-settings.png", "/screenshots/guide-11-request-flow.png"]
+screenshots: ["/screenshots/guide-09-performance-settings-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png"]
 ---
 
 # 性能与请求调度
 
 路径：**阅读器标题栏 → 设置 → 性能设置**。
 
-![性能设置页中的预设、主楼层批量和 DOM 窗口](/screenshots/guide-09-performance-settings.png)
+![性能设置页中的预设、主楼层批量和 DOM 窗口](/screenshots/guide-09-performance-settings-v1.0.0.png)
 
 性能设置按当前 Discourse API 管线分成三层：
 
@@ -82,7 +82,7 @@ screenshots: ["/screenshots/guide-09-performance-settings.png", "/screenshots/gu
 
 ## 429 与恢复
 
-![请求脉络、限流窗口和异常状态](/screenshots/guide-11-request-flow.png)
+![请求脉络、限流窗口和异常状态](/screenshots/guide-11-request-flow-v1.0.0.png)
 
 出现 429 时：
 

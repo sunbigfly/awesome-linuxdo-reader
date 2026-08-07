@@ -7,7 +7,7 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-31
-screenshots: ["/screenshots/guide-11-request-flow.png", "/screenshots/guide-10-resource-monitor.png"]
+screenshots: ["/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-10-resource-monitor-v1.0.0.png"]
 ---
 
 # 日志记录
@@ -16,7 +16,7 @@ screenshots: ["/screenshots/guide-11-request-flow.png", "/screenshots/guide-10-r
 
 0.1.14 把原“请求数据”和“资源监控”合并到同一面板，通过顶部标签切换。两个标签都只保留当前页面内存中的诊断记录，不会自动上传。
 
-![请求数据页中的速率、脉络、异常和 HTTP 状态](/screenshots/guide-11-request-flow.png)
+![请求数据页中的速率、脉络、异常和 HTTP 状态](/screenshots/guide-11-request-flow-v1.0.0.png)
 
 ## 请求记录
 
@@ -103,7 +103,7 @@ screenshots: ["/screenshots/guide-11-request-flow.png", "/screenshots/guide-10-r
 
 ## 性能记录
 
-![性能记录中的页面元素、楼层、网络和前后台趋势](/screenshots/guide-10-resource-monitor.png)
+![性能记录中的页面元素、楼层、网络和前后台趋势](/screenshots/guide-10-resource-monitor-v1.0.0.png)
 
 性能标签每秒形成快照，记录页面内存估算、主线程卡顿、阅读器页面元素、楼层列表元素、二级回复缓存、媒体元素和网络趋势，并区分阅读器、原站/未标记和页面共享范围。
 

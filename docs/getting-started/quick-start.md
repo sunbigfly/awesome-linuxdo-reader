@@ -7,7 +7,7 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-25
-screenshots: ["/screenshots/guide-01-reader-overview.png"]
+screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
 ---
 
 # 五分钟上手
@@ -33,7 +33,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png"]
 - 时间轴显示当前位置并支持跳到目标楼层；
 - 点击引用或父回复提示，可以预览上下文并回跳。
 
-![列表页右侧嵌入的阅读器、正文、时间轴和快捷入口](/screenshots/guide-01-reader-overview.png)
+![列表页右侧嵌入的阅读器、正文、时间轴和快捷入口](/screenshots/guide-01-reader-overview-v1.0.0.png)
 
 ## 3. 完成社区操作
 

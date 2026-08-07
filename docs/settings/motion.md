@@ -7,14 +7,14 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-30
-screenshots: ["/screenshots/guide-08-motion-settings.png"]
+screenshots: ["/screenshots/guide-08-motion-settings-v1.0.0.png"]
 ---
 
 # 动画与提示
 
 路径：**阅读器标题栏 → 设置 → 动画与提示**。
 
-![闪烁动效页中的颜色、轮廓、速率、次数和等待动画](/screenshots/guide-08-motion-settings.png)
+![闪烁动效页中的颜色、轮廓、速率、次数和等待动画](/screenshots/guide-08-motion-settings-v1.0.0.png)
 
 ## 目标楼层提示
 

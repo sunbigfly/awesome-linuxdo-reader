@@ -7,14 +7,14 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-28
-screenshots: ["/screenshots/guide-08-motion-settings.png", "/screenshots/guide-12-other-features.png", "/screenshots/guide-18-thread-context.png"]
+screenshots: ["/screenshots/guide-08-motion-settings-v1.0.0.png", "/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/guide-18-thread-context-v1.0.0.png"]
 ---
 
 # 动画、阅读与互动
 
 逐控件说明见[动画与提示](/settings/motion)和[阅读、帖子与适用站点](/settings/other)。
 
-![闪烁提示和等待区域动画设置](/screenshots/guide-08-motion-settings.png)
+![闪烁提示和等待区域动画设置](/screenshots/guide-08-motion-settings-v1.0.0.png)
 
 ## 目标楼层闪烁
 
@@ -52,7 +52,7 @@ screenshots: ["/screenshots/guide-08-motion-settings.png", "/screenshots/guide-1
 
 ## 回复展示
 
-![父楼层下的二级回复和正式楼层展示](/screenshots/guide-18-thread-context.png)
+![父楼层下的二级回复和正式楼层展示](/screenshots/guide-18-thread-context-v1.0.0.png)
 
 - 在父回复下展开二级回复：展示直接回复。
 - 启用深层回复阅读：允许继续阅读更深分支。

@@ -6,13 +6,13 @@ source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
 version: 1.0.0
 status: current
-last_verified: 2026-07-28
-screenshots: ["/screenshots/guide-14-about.png"]
+last_verified: 2026-08-07
+screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 ---
 
 # 更新记录
 
-![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about.png)
+![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.0.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
 
@@ -32,6 +32,12 @@ screenshots: ["/screenshots/guide-14-about.png"]
 - 应用启动、请求调度、缓存仓储、主题会话、虚拟流、阅读状态、原站互动、媒体、设置和生命周期拆分为显式 owner，减少旧单文件中的隐式共享状态。
 - 功能契约、请求入口审计、TypeScript 严格检查、CSS 所有权检查和确定性构建进入统一发布门禁；静态结果与真实浏览器、性能及回滚验收继续分开记录。
 - 用户手册、功能目录、package 版本与 userscript 元数据统一以 Lite `1.0.0` 为事实源。
+
+### 设置与手册
+
+- 设置中心以 15 个面板为正式基线，在“阅读与导航”和“帖子与回复”之间提供独立“快捷方式”面板。
+- 快捷方式覆盖浏览导航、阅读工具、界面面板、帖子操作、窗口与队列；每项最多保留 3 个绑定，并拒绝重复、浏览器保留键与无修饰键的单字母或数字。
+- 正式用户手册的界面截图全部重新取自 Windows Chrome；业务界面使用同一 Lite v1.0.0 本地构建，“关于”页由标记为 `1.0.0` 的本地验收加载器核对。发布结构、GitHub 源码、Greasy Fork 上传产物和本地测试版分别说明，不互相覆盖。
 
 ## 0.1.16 — 自适应标题栏与原站状态同步升级
 

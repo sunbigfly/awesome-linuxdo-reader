@@ -1,24 +1,25 @@
 ---
-title: 阅读、帖子与适用站点
-description: 配置队列入口、历史、退出、主帖操作列、完整讨论、Boost 复制和其他 Discourse 站点。
-feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "SET-016", "SET-017", "SET-018", "SET-019", "SET-021"]
-source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/app/reader-application.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-context-controller.ts","lite/src/post/boost-copy-rule.ts","lite/src/post/reader-topic-action-rail.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts","lite/src/settings/reader-reading-settings-form.ts"]
+title: 阅读、快捷方式、帖子与适用站点
+description: 配置队列入口、历史、退出、键盘与鼠标快捷方式、主帖操作列、完整讨论、Boost 复制和其他 Discourse 站点。
+feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
+source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/app/reader-application.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-context-controller.ts","lite/src/post/boost-copy-rule.ts","lite/src/post/reader-topic-action-rail.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts"]
 since: 0.1.2
 version: 1.0.0
 status: current
-last_verified: 2026-07-28
-screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18-thread-context.png"]
+last_verified: 2026-08-07
+screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/guide-18-thread-context-v1.0.0.png", "/screenshots/guide-26-reading-navigation-v1.0.0.png", "/screenshots/guide-27-shortcuts-v1.0.0.png", "/screenshots/guide-28-applicable-sites-v1.0.0.png"]
 ---
 
-# 阅读、帖子与适用站点
+# 阅读、快捷方式、帖子与适用站点
 
-设置中心将阅读与站点相关选项拆分为三个面板：
+设置中心将阅读与站点相关选项拆分为四个面板：
 
 - **阅读与导航**：队列入口、历史、帖子打开位置和退出方式；
+- **快捷方式**：为导航、阅读工具、面板、帖子操作、窗口和队列绑定键盘或鼠标操作；
 - **帖子与回复**：主帖操作列、二级回复显示位置和 Boost 复制；
 - **适用站点**：其他 HTTPS Discourse 论坛。
 
-![其他功能页中的历史导航、打开位置、回复展示和 Boost 复制](/screenshots/guide-12-other-features.png)
+![阅读与导航面板中的队列入口、历史、打开位置和退出设置](/screenshots/guide-26-reading-navigation-v1.0.0.png)
 
 ## 阅读队列入口
 
@@ -53,7 +54,23 @@ screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18
 
 因此，这个开关不会破坏带楼层目标的回跳。
 
+## 快捷方式
+
+![快捷方式面板中的键盘、滚轮和鼠标侧键绑定](/screenshots/guide-27-shortcuts-v1.0.0.png)
+
+快捷方式分为浏览导航、阅读工具、界面面板、帖子操作、窗口与队列五组。点击某个动作右侧的“添加”后，按下键盘组合键、滚轮、鼠标中键、后退键或前进键即可保存；“清空”“默认”和“全部恢复默认”分别管理单项或全部绑定。
+
+- 每个动作最多保留 3 个快捷方式；
+- 同一组合不能同时属于两个动作；
+- 浏览器常用保留键不会保存；
+- 单个字母或数字必须至少搭配 `Ctrl`、`Alt`、`Shift` 或 `Meta`，避免与论坛快捷键冲突；
+- 在输入框、编辑器或需要键盘操作的控件中，阅读器不会抢占普通输入。
+
+快捷方式修改会立即写入当前脚本配置，不进入底部的统一草稿队列。动作暂时不可用时只显示提示，不会改走另一项社区操作。
+
 ## 主帖操作列
+
+![帖子与回复面板中的主帖操作列和二级回复设置](/screenshots/guide-12-other-features-v1.0.0.png)
 
 “始终显示主帖操作列”默认开启；“锁定操作列位置”默认关闭。未锁定时长按操作列收纳按钮约 420 ms 后拖动，位置会保存；“恢复默认”将其放回正文左侧。
 
@@ -61,7 +78,7 @@ screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18
 
 ## 二级回复显示位置
 
-![父楼层下展开的二级回复、关系线和正式楼层](/screenshots/guide-18-thread-context.png)
+![父楼层下展开的二级回复、关系线和正式楼层](/screenshots/guide-18-thread-context-v1.0.0.png)
 
 | 设置 | 结果 |
 | --- | --- |
@@ -87,6 +104,8 @@ screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18
 这个设置只改变预填文本，不会自动发送或覆盖原 Boost。
 
 ## 其他适用站点
+
+![适用站点面板中的 HTTPS Discourse 论坛验证入口](/screenshots/guide-28-applicable-sites-v1.0.0.png)
 
 输入 HTTPS Discourse 论坛的域名或完整网址，点击“验证并添加”。阅读器会匿名访问该站点的 `/site/basic-info.json`；检测到 Discourse 公开站点信息后才会保存。已内置站点不需要重复添加，保存的域名可以在同一区域移除。
 

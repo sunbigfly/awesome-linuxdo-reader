@@ -7,7 +7,7 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-08-03
-screenshots: ["/screenshots/guide-22-feature-catalog.png"]
+screenshots: ["/screenshots/guide-22-feature-catalog-v1.0.0.png"]
 ---
 
 <script setup>
@@ -30,7 +30,7 @@ const latestVerified = catalog.reduce(
 
 本目录由 `docs/public/feature-catalog.json` 驱动，是“当前功能是否已经写入手册”的事实表。每项都有唯一编号、源码锚点、首次纳入目录版本、当前版本、状态、验证日期、截图和至少一篇对应文档。
 
-![线上功能覆盖目录中的功能数量、分类、源码锚点和手册入口](/screenshots/guide-22-feature-catalog.png)
+![线上功能覆盖目录中的功能数量、分类、源码锚点和手册入口](/screenshots/guide-22-feature-catalog-v1.0.0.png)
 
 <p class="image-caption">目录按分类展示当前能力，每项都可以回到对应手册页面。</p>
 

@@ -7,14 +7,14 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-28
-screenshots: ["/screenshots/guide-05-layout-settings.png"]
+screenshots: ["/screenshots/guide-05-layout-settings-v1.0.0.png"]
 ---
 
 # 布局设置
 
 路径：**阅读器标题栏 → 设置 → 布局设置**。
 
-![布局设置页中的当前形态与五区比例](/screenshots/guide-05-layout-settings.png)
+![布局设置页中的当前形态与五区比例](/screenshots/guide-05-layout-settings-v1.0.0.png)
 
 ## 五个区域
 

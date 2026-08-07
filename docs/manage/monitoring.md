@@ -7,7 +7,7 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-27
-screenshots: ["/screenshots/guide-10-resource-monitor.png", "/screenshots/guide-11-request-flow.png"]
+screenshots: ["/screenshots/guide-10-resource-monitor-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png"]
 ---
 
 # 资源与请求监控
@@ -29,7 +29,7 @@ screenshots: ["/screenshots/guide-10-resource-monitor.png", "/screenshots/guide-
 | 当前网络请求 | 进行中与排队 |
 | 最近 60 秒网络 | 请求数与已知传输量 |
 
-![资源监控中的基线、阅读器 DOM 和前后台事件](/screenshots/guide-10-resource-monitor.png)
+![资源监控中的基线、阅读器 DOM 和前后台事件](/screenshots/guide-10-resource-monitor-v1.0.0.png)
 
 面板还提供：
 
@@ -42,7 +42,7 @@ screenshots: ["/screenshots/guide-10-resource-monitor.png", "/screenshots/guide-
 
 ## 请求记录
 
-![请求速率、脉络、类型、异常和限流边界](/screenshots/guide-11-request-flow.png)
+![请求速率、脉络、类型、异常和限流边界](/screenshots/guide-11-request-flow-v1.0.0.png)
 
 摘要包含当前页：
 

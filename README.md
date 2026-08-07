@@ -17,8 +17,8 @@
 </p>
 
 <p align="center">
-  <a href="assets/screenshots/guide-01-reader-overview.png">
-    <img src="assets/screenshots/guide-01-reader-overview.png" alt="在 LINUX DO 列表页右侧打开完整增强阅读工作区" width="960">
+  <a href="assets/screenshots/guide-01-reader-overview-v1.0.0.png">
+    <img src="assets/screenshots/guide-01-reader-overview-v1.0.0.png" alt="在 LINUX DO 列表页右侧打开完整增强阅读工作区" width="960">
   </a>
 </p>
 
@@ -44,9 +44,9 @@
     <th width="33%">请求流与 429 控制</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/guide-19-image-lightbox.png"><img src="assets/screenshots/guide-19-image-lightbox.png" alt="在阅读器内查看帖子原图、图片序列和关联评论"></a></td>
-    <td><a href="assets/screenshots/guide-15-notifications-replies.png"><img src="assets/screenshots/guide-15-notifications-replies.png" alt="查看消息中心的回复分类和真实通知"></a></td>
-    <td><a href="assets/screenshots/guide-11-request-flow.png"><img src="assets/screenshots/guide-11-request-flow.png" alt="查看请求调度、限流边界和异常恢复状态"></a></td>
+    <td><a href="assets/screenshots/guide-19-image-lightbox-v1.0.0.png"><img src="assets/screenshots/guide-19-image-lightbox-v1.0.0.png" alt="在阅读器内查看帖子原图、图片序列和关联评论"></a></td>
+    <td><a href="assets/screenshots/guide-15-notifications-replies-v1.0.0.png"><img src="assets/screenshots/guide-15-notifications-replies-v1.0.0.png" alt="查看消息中心的回复分类和真实通知"></a></td>
+    <td><a href="assets/screenshots/guide-11-request-flow-v1.0.0.png"><img src="assets/screenshots/guide-11-request-flow-v1.0.0.png" alt="查看请求调度、限流边界和异常恢复状态"></a></td>
   </tr>
   <tr>
     <td>原图、图片序列与关联评论。</td>
@@ -68,8 +68,8 @@
     <th width="50%">楼中楼上下文</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/guide-01-reader-overview.png"><img src="assets/screenshots/guide-01-reader-overview.png" alt="列表页右侧嵌入阅读器工作区"></a></td>
-    <td><a href="assets/screenshots/guide-18-thread-context.png"><img src="assets/screenshots/guide-18-thread-context.png" alt="父楼层下展开楼中楼并保留关系线"></a></td>
+    <td><a href="assets/screenshots/guide-01-reader-overview-v1.0.0.png"><img src="assets/screenshots/guide-01-reader-overview-v1.0.0.png" alt="列表页右侧嵌入阅读器工作区"></a></td>
+    <td><a href="assets/screenshots/guide-18-thread-context-v1.0.0.png"><img src="assets/screenshots/guide-18-thread-context-v1.0.0.png" alt="父楼层下展开楼中楼并保留关系线"></a></td>
   </tr>
 </table>
 </details>
@@ -83,8 +83,8 @@
     <th width="50%">收藏与回应</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/guide-16-history.png"><img src="assets/screenshots/guide-16-history.png" alt="查看浏览历史和目标阅读位置"></a></td>
-    <td><a href="assets/screenshots/guide-17-bookmarks-reactions.png"><img src="assets/screenshots/guide-17-bookmarks-reactions.png" alt="查看收藏、书签与社区回应"></a></td>
+    <td><a href="assets/screenshots/guide-16-history-v1.0.0.png"><img src="assets/screenshots/guide-16-history-v1.0.0.png" alt="查看浏览历史和目标阅读位置"></a></td>
+    <td><a href="assets/screenshots/guide-17-bookmarks-reactions-v1.0.0.png"><img src="assets/screenshots/guide-17-bookmarks-reactions-v1.0.0.png" alt="查看收藏、书签与社区回应"></a></td>
   </tr>
 </table>
 </details>
@@ -99,9 +99,9 @@
     <th width="33%">布局设置</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/guide-02-settings-overview.png"><img src="assets/screenshots/guide-02-settings-overview.png" alt="查看当前账号信息、社区统计和 Connect 进度"></a></td>
-    <td><a href="assets/screenshots/guide-07-appearance-settings.png"><img src="assets/screenshots/guide-07-appearance-settings.png" alt="配置主题、颜色、背景和回复关系样式"></a></td>
-    <td><a href="assets/screenshots/guide-05-layout-settings.png"><img src="assets/screenshots/guide-05-layout-settings.png" alt="配置浮窗、全屏和移动模式布局"></a></td>
+    <td><a href="assets/screenshots/guide-02-settings-overview-v1.0.0.png"><img src="assets/screenshots/guide-02-settings-overview-v1.0.0.png" alt="查看当前账号信息、社区统计和 Connect 进度"></a></td>
+    <td><a href="assets/screenshots/guide-07-appearance-settings-v1.0.0.png"><img src="assets/screenshots/guide-07-appearance-settings-v1.0.0.png" alt="配置主题、颜色、背景和回复关系样式"></a></td>
+    <td><a href="assets/screenshots/guide-05-layout-settings-v1.0.0.png"><img src="assets/screenshots/guide-05-layout-settings-v1.0.0.png" alt="配置浮窗、全屏和移动模式布局"></a></td>
   </tr>
 </table>
 </details>
@@ -115,13 +115,15 @@
     <th width="50%">DOM 渲染管理</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/guide-13-data-management.png"><img src="assets/screenshots/guide-13-data-management.png" alt="按资源类型查看和管理本地缓存"></a></td>
-    <td><a href="assets/screenshots/guide-09-performance-settings.png"><img src="assets/screenshots/guide-09-performance-settings.png" alt="配置 DOM 挂载窗口、缓冲区与渲染上限"></a></td>
+    <td><a href="assets/screenshots/guide-13-data-management-v1.0.0.png"><img src="assets/screenshots/guide-13-data-management-v1.0.0.png" alt="按资源类型查看和管理本地缓存"></a></td>
+    <td><a href="assets/screenshots/guide-09-performance-settings-v1.0.0.png"><img src="assets/screenshots/guide-09-performance-settings-v1.0.0.png" alt="配置 DOM 挂载窗口、缓冲区与渲染上限"></a></td>
   </tr>
 </table>
 </details>
 
 ## 安装
+
+> **发布状态：** GitHub 源码与用户手册已切换到 Lite `1.0.0`；Greasy Fork 脚本 588185 目前仍保留 `0.1.16`，在浏览器矩阵、性能和回滚门禁完成前不会用尚未验收的主 Loader 覆盖。当前从 Greasy Fork 安装时，应以脚本页显示版本为准。
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。
@@ -157,6 +159,18 @@
 ## 开发
 
 v1.0.0 起，`lite/src/` 是唯一业务源码，`lite/styles/` 是样式事实源。`work/mian-lite.css`、`work/greasyfork-lite/libraries/` 与最终的 `work/mian-lite.js` 都是确定性发布产物，禁止直接编辑。Greasy Fork 只接收可读、未压缩的薄 Loader 和两个 Library；正式 Loader 通过固定版本 URL 与 SHA-256 引用 Library。切换前的旧版 working copy 保存在 `archive/legacy-main-2026-08-07/`，原 `work/main.js` 与 `work/main.css` 仅作旧版兼容参考。
+
+### 三条保留产物
+
+| 版本 | 保留内容 | 是否进入 GitHub | 用途 |
+| --- | --- | --- | --- |
+| GitHub 原版 | `lite/src/`、`lite/styles/`、测试、构建脚本、文档与可审查生成物 | 是 | 唯一源码事实源和完整开发历史 |
+| 本地测试版 | `work/mian-lite.local.js`、`work/local-debug.user.js`、`work/v1.0.0-acceptance.user.js` | 否，受 `.gitignore` 保护 | Tampermonkey 真实页面调试与 v1.0.0 截图验收 |
+| Greasy Fork 上传版 | `work/mian-lite.js` 薄 Loader、两个 Library 和 `work/mian-lite.css` | 是 | 通过发布门禁后由主脚本加载固定版本 Library |
+
+三条产物不会互相覆盖：本地测试版只从当前工作区加载；Greasy Fork Library 从
+GitHub Raw `main` 通过 Webhook 同步；用户只安装主脚本，不需要单独安装 Library。
+正式 Loader 必须在静态检查、真实浏览器、性能和回滚门禁都完成后生成和发布。
 
 ```text
 .

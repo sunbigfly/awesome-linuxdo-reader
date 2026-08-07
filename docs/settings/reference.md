@@ -2,19 +2,19 @@
 title: 完整设置参考
 description: 汇总全部设置项、范围、默认值、生效时机和数据影响。
 feature_ids: ["SET-012", "SET-013", "SET-014", "SET-015", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
-source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree.ts","lite/src/network/request-scheduler.ts","lite/src/dom/reply-tree-repository.ts","lite/src/post/boost-copy-rule.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-reading-settings-form.ts"]
+source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree.ts","lite/src/network/request-scheduler.ts","lite/src/dom/reply-tree-repository.ts","lite/src/post/boost-copy-rule.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts"]
 since: 0.1.2
 version: 1.0.0
 status: current
-last_verified: 2026-07-28
-screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide-03-image-settings.png", "/screenshots/guide-04-font-settings.png", "/screenshots/guide-05-layout-settings.png", "/screenshots/guide-07-appearance-settings.png", "/screenshots/guide-09-performance-settings.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-13-data-management.png"]
+last_verified: 2026-08-07
+screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png", "/screenshots/guide-03-image-settings-v1.0.0.png", "/screenshots/guide-04-font-settings-v1.0.0.png", "/screenshots/guide-05-layout-settings-v1.0.0.png", "/screenshots/guide-07-appearance-settings-v1.0.0.png", "/screenshots/guide-09-performance-settings-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-13-data-management-v1.0.0.png", "/screenshots/guide-27-shortcuts-v1.0.0.png", "/screenshots/guide-28-applicable-sites-v1.0.0.png"]
 ---
 
 # 完整设置参考
 
-![设置中心中的分类导航、当前用户信息和配置入口](/screenshots/guide-02-settings-overview.png)
+![设置中心中的分类导航、当前用户信息和配置入口](/screenshots/guide-02-settings-overview-v1.0.0.png)
 
-<p class="image-caption">截图展示设置中心的主要配置入口；当前版本按三组、14 个面板组织，并支持搜索和统一保存。</p>
+<p class="image-caption">截图展示设置中心的主要配置入口；当前版本按三组、15 个面板组织，并支持搜索、快捷方式和统一保存。</p>
 
 ## 用户信息
 
@@ -107,12 +107,28 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 | 从楼层列表隐藏二级回复 | 开/关 | 开 |
 | Boost 末尾内容 | 数字递增/固定文字 | 数字递增 |
 
+## 快捷方式
+
+![快捷方式面板中的分组、默认绑定和单项管理操作](/screenshots/guide-27-shortcuts-v1.0.0.png)
+
+- 五组动作：浏览导航、阅读工具、界面面板、帖子操作、窗口与队列；
+- 每项最多 3 个键盘、滚轮或鼠标按键绑定；
+- 同一组合、浏览器保留键、无修饰键的单字母或数字不会保存；
+- 单项支持添加、移除、清空和恢复默认，也可一次恢复全部默认；
+- 修改立即保存，不进入统一草稿队列。
+
+## 适用站点
+
+![适用站点面板中的自定义 HTTPS Discourse 验证入口](/screenshots/guide-28-applicable-sites-v1.0.0.png)
+
+输入域名或 HTTPS 网址后，阅读器只匿名检测公开站点信息；确认是 Discourse 后才保存。已内置站点不需要重复添加，验证失败或超时不会写入配置。
+
 ## 搜索与保存
 
 - 设置搜索按面板名称、字段标题、说明和常用关键词筛选。
 - 图片、字体、布局、浮窗、外观和跳转提示草稿会实时预览。
 - 底部“保存全部更改”一次提交所有草稿；布局不是 100% 时拒绝保存。
-- 主题、性能、阅读与交互中的即时开关不进入草稿队列。
+- 主题、性能、阅读、快捷方式与交互中的即时开关不进入草稿队列。
 
 ## 数据管理
 

@@ -22,6 +22,16 @@ npm run mian-lite:local-debug
 
 `mian-lite:local-debug` 会生成被仓库忽略的 `work/mian-lite.local.js`，并同步生成 `work/mian-lite.css`。首次在 Tampermonkey 安装本地文件后，需要开启“允许访问文件网址”；正式版和本地调试版不要同时启用。
 
+## 产物边界
+
+| 产物 | 路径 | 版本控制 | 约束 |
+| --- | --- | --- | --- |
+| GitHub 原版 | `lite/src/`、`lite/styles/`、测试与构建脚本 | 提交 | 只在源码事实源中开发 |
+| 本地测试版 | `work/mian-lite.local.js`、`work/local-debug.user.js`、`work/v1.0.0-acceptance.user.js` | 忽略 | 保留在本机，分别用于日常调试和带正式版本号的截图验收 |
+| Greasy Fork 上传版 | `work/mian-lite.js`、`work/greasyfork-lite/libraries/`、`work/mian-lite.css` | 提交 | 确定性生成、可读、不压缩，发布前完成全部门禁 |
+
+不要用正式上传版替代本地调试文件，也不要把本地绝对路径写入 GitHub 或 Greasy Fork。
+
 ## Greasy Fork Library 构建
 
 从 TypeScript 源码生成两个可读、未压缩的 Greasy Fork Library 与主 Loader 模板：
@@ -39,6 +49,10 @@ npm run mian-lite:greasyfork:check
 2. 在 Greasy Fork 分别创建两个 Library，配置从对应 GitHub raw URL 同步，并取得各自带 `version` 参数的固定版本 URL。
 3. 将 URL 写入被 Git 忽略的 `work/greasyfork-lite/release.config.json`，把 `lite/release-gate.json` 中的验收项与不可变 CSS URL更新为真实证据后运行 `npm run mian-lite:greasyfork:release`。
 4. 核对 `work/mian-lite.js` 的元数据、Library 远端字节和 SHA-256，再更新现有脚本 588185；不得上传旧版压缩产物或未固定版本的 Library URL。
+
+最终用户只安装脚本 588185。Core 和 Features Library 由主 Loader 的固定 `@require`
+自动加载，不单独提供安装入口。Library 的 GitHub Raw 同步方式为 Webhook；GitHub
+收到本仓库 `main` 推送后通知 Greasy Fork，平台再按每个 Library 的精确 Raw 路径同步。
 
 ## 验证
 

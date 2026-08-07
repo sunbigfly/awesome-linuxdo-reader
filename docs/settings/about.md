@@ -6,15 +6,15 @@ source_anchors: ["lite/userscript.meta.txt","lite/src/components/reader-image-fa
 since: 0.1.2
 version: 1.0.0
 status: current
-last_verified: 2026-08-03
-screenshots: ["/screenshots/guide-14-about.png"]
+last_verified: 2026-08-07
+screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 ---
 
 # 关于
 
 路径：**阅读器标题栏 → 设置 → 关于**。
 
-![关于页中的产品定位、能力摘要、版本和致谢](/screenshots/guide-14-about.png)
+![关于页中的产品定位、能力摘要、版本和致谢](/screenshots/guide-14-about-v1.0.0.png)
 
 ## 页面内容
 

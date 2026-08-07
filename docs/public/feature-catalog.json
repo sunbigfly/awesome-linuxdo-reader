@@ -10,7 +10,7 @@
     "status": "current",
     "last_verified": "2026-07-24",
     "screenshots": [
-      "assets/screenshots/guide-01-reader-overview.png"
+      "assets/screenshots/guide-01-reader-overview-v1.0.0.png"
     ],
     "docs": [
       "getting-started/installation.md"
@@ -27,8 +27,8 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-18-thread-context.png",
-      "assets/screenshots/guide-01-reader-overview.png"
+      "assets/screenshots/guide-18-thread-context-v1.0.0.png",
+      "assets/screenshots/guide-01-reader-overview-v1.0.0.png"
     ],
     "docs": [
       "getting-started/quick-start.md",
@@ -46,7 +46,7 @@
     "status": "current",
     "last_verified": "2026-07-28",
     "screenshots": [
-      "assets/screenshots/guide-01-reader-overview.png"
+      "assets/screenshots/guide-01-reader-overview-v1.0.0.png"
     ],
     "docs": [
       "getting-started/quick-start.md",
@@ -64,8 +64,8 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-05-layout-settings.png",
-      "assets/screenshots/guide-01-reader-overview.png"
+      "assets/screenshots/guide-05-layout-settings-v1.0.0.png",
+      "assets/screenshots/guide-01-reader-overview-v1.0.0.png"
     ],
     "docs": [
       "guide/reading-modes.md"
@@ -82,7 +82,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-21-reading-queue.png"
+      "assets/screenshots/guide-21-reading-queue-v1.0.0.png"
     ],
     "docs": [
       "guide/reading-modes.md",
@@ -100,8 +100,8 @@
     "status": "current",
     "last_verified": "2026-07-28",
     "screenshots": [
-      "assets/screenshots/guide-21-reading-queue.png",
-      "assets/screenshots/guide-24-reading-queue-entry.png"
+      "assets/screenshots/guide-21-reading-queue-v1.0.0.png",
+      "assets/screenshots/guide-24-reading-queue-entry-v1.0.0.png"
     ],
     "docs": [
       "getting-started/quick-start.md",
@@ -120,8 +120,10 @@
     "since": "0.1.10",
     "version": "1.0.0",
     "status": "current",
-    "last_verified": "2026-08-03",
-    "screenshots": [],
+    "last_verified": "2026-08-07",
+    "screenshots": [
+      "assets/screenshots/guide-28-applicable-sites-v1.0.0.png"
+    ],
     "docs": [
       "getting-started/installation.md",
       "settings/other.md",
@@ -139,7 +141,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-09-performance-settings.png"
+      "assets/screenshots/guide-09-performance-settings-v1.0.0.png"
     ],
     "docs": [
       "guide/reading-modes.md",
@@ -157,7 +159,7 @@
     "status": "current",
     "last_verified": "2026-07-24",
     "screenshots": [
-      "assets/screenshots/guide-01-reader-overview.png"
+      "assets/screenshots/guide-01-reader-overview-v1.0.0.png"
     ],
     "docs": [
       "guide/reading-modes.md",
@@ -175,7 +177,7 @@
     "status": "current",
     "last_verified": "2026-07-25",
     "screenshots": [
-      "assets/screenshots/guide-18-thread-context.png"
+      "assets/screenshots/guide-18-thread-context-v1.0.0.png"
     ],
     "docs": [
       "guide/thread-context.md"
@@ -207,7 +209,7 @@
     "status": "current",
     "last_verified": "2026-07-28",
     "screenshots": [
-      "assets/screenshots/guide-16-history.png"
+      "assets/screenshots/guide-16-history-v1.0.0.png"
     ],
     "docs": [
       "guide/navigation.md"
@@ -224,7 +226,7 @@
     "status": "current",
     "last_verified": "2026-07-28",
     "screenshots": [
-      "assets/screenshots/guide-16-history.png"
+      "assets/screenshots/guide-16-history-v1.0.0.png"
     ],
     "docs": [
       "guide/navigation.md"
@@ -258,7 +260,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-18-thread-context.png"
+      "assets/screenshots/guide-18-thread-context-v1.0.0.png"
     ],
     "docs": [
       "guide/thread-context.md"
@@ -398,8 +400,8 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-19-image-lightbox.png",
-      "assets/screenshots/guide-03-image-settings.png"
+      "assets/screenshots/guide-19-image-lightbox-v1.0.0.png",
+      "assets/screenshots/guide-03-image-settings-v1.0.0.png"
     ],
     "docs": [
       "guide/content-and-media.md",
@@ -418,7 +420,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-19-image-lightbox.png"
+      "assets/screenshots/guide-19-image-lightbox-v1.0.0.png"
     ],
     "docs": [
       "guide/content-and-media.md"
@@ -435,7 +437,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-19-image-lightbox.png"
+      "assets/screenshots/guide-19-image-lightbox-v1.0.0.png"
     ],
     "docs": [
       "guide/content-and-media.md",
@@ -454,7 +456,7 @@
     "status": "current",
     "last_verified": "2026-07-28",
     "screenshots": [
-      "assets/screenshots/guide-19-image-lightbox.png"
+      "assets/screenshots/guide-19-image-lightbox-v1.0.0.png"
     ],
     "docs": [
       "guide/content-and-media.md",
@@ -472,7 +474,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-19-image-lightbox.png"
+      "assets/screenshots/guide-19-image-lightbox-v1.0.0.png"
     ],
     "docs": [
       "guide/content-and-media.md",
@@ -491,7 +493,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-19-image-lightbox.png"
+      "assets/screenshots/guide-19-image-lightbox-v1.0.0.png"
     ],
     "docs": [
       "guide/content-and-media.md"
@@ -508,8 +510,8 @@
     "status": "current",
     "last_verified": "2026-08-03",
     "screenshots": [
-      "assets/screenshots/guide-02-settings-overview.png",
-      "assets/screenshots/guide-25-user-card.png"
+      "assets/screenshots/guide-02-settings-overview-v1.0.0.png",
+      "assets/screenshots/guide-25-user-card-v1.0.0.png"
     ],
     "docs": [
       "guide/content-and-media.md",
@@ -636,7 +638,7 @@
     "status": "current",
     "last_verified": "2026-07-25",
     "screenshots": [
-      "assets/screenshots/guide-20-community-actions.png"
+      "assets/screenshots/guide-20-community-actions-v1.0.0.png"
     ],
     "docs": [
       "guide/community-actions.md"
@@ -653,7 +655,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-20-community-actions.png"
+      "assets/screenshots/guide-20-community-actions-v1.0.0.png"
     ],
     "docs": [
       "guide/community-actions.md"
@@ -670,8 +672,8 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-17-bookmarks-reactions.png",
-      "assets/screenshots/guide-20-community-actions.png"
+      "assets/screenshots/guide-17-bookmarks-reactions-v1.0.0.png",
+      "assets/screenshots/guide-20-community-actions-v1.0.0.png"
     ],
     "docs": [
       "guide/community-actions.md"
@@ -688,8 +690,8 @@
     "status": "current",
     "last_verified": "2026-07-28",
     "screenshots": [
-      "assets/screenshots/guide-17-bookmarks-reactions.png",
-      "assets/screenshots/guide-20-community-actions.png"
+      "assets/screenshots/guide-17-bookmarks-reactions-v1.0.0.png",
+      "assets/screenshots/guide-20-community-actions-v1.0.0.png"
     ],
     "docs": [
       "guide/community-actions.md",
@@ -707,7 +709,7 @@
     "status": "current",
     "last_verified": "2026-07-26",
     "screenshots": [
-      "assets/screenshots/guide-20-community-actions.png"
+      "assets/screenshots/guide-20-community-actions-v1.0.0.png"
     ],
     "docs": [
       "guide/community-actions.md"
@@ -724,7 +726,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-20-community-actions.png"
+      "assets/screenshots/guide-20-community-actions-v1.0.0.png"
     ],
     "docs": [
       "guide/community-actions.md",
@@ -743,8 +745,8 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-17-bookmarks-reactions.png",
-      "assets/screenshots/guide-20-community-actions.png"
+      "assets/screenshots/guide-17-bookmarks-reactions-v1.0.0.png",
+      "assets/screenshots/guide-20-community-actions-v1.0.0.png"
     ],
     "docs": [
       "guide/community-actions.md",
@@ -762,7 +764,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-20-community-actions.png"
+      "assets/screenshots/guide-20-community-actions-v1.0.0.png"
     ],
     "docs": [
       "guide/community-actions.md"
@@ -779,7 +781,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-20-community-actions.png"
+      "assets/screenshots/guide-20-community-actions-v1.0.0.png"
     ],
     "docs": [
       "guide/community-actions.md"
@@ -796,7 +798,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-20-community-actions.png"
+      "assets/screenshots/guide-20-community-actions-v1.0.0.png"
     ],
     "docs": [
       "guide/community-actions.md"
@@ -813,7 +815,7 @@
     "status": "current",
     "last_verified": "2026-07-25",
     "screenshots": [
-      "assets/screenshots/guide-20-community-actions.png"
+      "assets/screenshots/guide-20-community-actions-v1.0.0.png"
     ],
     "docs": [
       "guide/community-actions.md"
@@ -830,7 +832,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-20-community-actions.png"
+      "assets/screenshots/guide-20-community-actions-v1.0.0.png"
     ],
     "docs": [
       "guide/community-actions.md"
@@ -847,7 +849,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-20-community-actions.png"
+      "assets/screenshots/guide-20-community-actions-v1.0.0.png"
     ],
     "docs": [
       "guide/community-actions.md"
@@ -880,7 +882,7 @@
     "status": "current",
     "last_verified": "2026-07-28",
     "screenshots": [
-      "assets/screenshots/guide-15-notifications-replies.png"
+      "assets/screenshots/guide-15-notifications-replies-v1.0.0.png"
     ],
     "docs": [
       "guide/messages-and-collections.md"
@@ -897,7 +899,7 @@
     "status": "current",
     "last_verified": "2026-07-28",
     "screenshots": [
-      "assets/screenshots/guide-15-notifications-replies.png"
+      "assets/screenshots/guide-15-notifications-replies-v1.0.0.png"
     ],
     "docs": [
       "guide/messages-and-collections.md"
@@ -914,7 +916,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-16-history.png"
+      "assets/screenshots/guide-16-history-v1.0.0.png"
     ],
     "docs": [
       "guide/messages-and-collections.md"
@@ -931,7 +933,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-16-history.png"
+      "assets/screenshots/guide-16-history-v1.0.0.png"
     ],
     "docs": [
       "guide/messages-and-collections.md",
@@ -949,7 +951,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-17-bookmarks-reactions.png"
+      "assets/screenshots/guide-17-bookmarks-reactions-v1.0.0.png"
     ],
     "docs": [
       "guide/messages-and-collections.md"
@@ -966,7 +968,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-17-bookmarks-reactions.png"
+      "assets/screenshots/guide-17-bookmarks-reactions-v1.0.0.png"
     ],
     "docs": [
       "guide/messages-and-collections.md"
@@ -983,8 +985,8 @@
     "status": "current",
     "last_verified": "2026-07-27",
     "screenshots": [
-      "assets/screenshots/guide-02-settings-overview.png",
-      "assets/screenshots/guide-25-user-card.png"
+      "assets/screenshots/guide-02-settings-overview-v1.0.0.png",
+      "assets/screenshots/guide-25-user-card-v1.0.0.png"
     ],
     "docs": [
       "guide/users.md"
@@ -1001,8 +1003,8 @@
     "status": "current",
     "last_verified": "2026-07-24",
     "screenshots": [
-      "assets/screenshots/guide-02-settings-overview.png",
-      "assets/screenshots/guide-25-user-card.png"
+      "assets/screenshots/guide-02-settings-overview-v1.0.0.png",
+      "assets/screenshots/guide-25-user-card-v1.0.0.png"
     ],
     "docs": [
       "guide/users.md"
@@ -1019,7 +1021,7 @@
     "status": "current",
     "last_verified": "2026-07-24",
     "screenshots": [
-      "assets/screenshots/guide-25-user-card.png"
+      "assets/screenshots/guide-25-user-card-v1.0.0.png"
     ],
     "docs": [
       "guide/users.md"
@@ -1036,7 +1038,7 @@
     "status": "current",
     "last_verified": "2026-07-24",
     "screenshots": [
-      "assets/screenshots/guide-25-user-card.png"
+      "assets/screenshots/guide-25-user-card-v1.0.0.png"
     ],
     "docs": [
       "guide/users.md"
@@ -1053,7 +1055,7 @@
     "status": "current",
     "last_verified": "2026-07-24",
     "screenshots": [
-      "assets/screenshots/guide-02-settings-overview.png"
+      "assets/screenshots/guide-02-settings-overview-v1.0.0.png"
     ],
     "docs": [
       "guide/users.md",
@@ -1088,7 +1090,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-07-appearance-settings.png"
+      "assets/screenshots/guide-07-appearance-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/overview.md",
@@ -1107,7 +1109,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-03-image-settings.png"
+      "assets/screenshots/guide-03-image-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/images-and-fonts.md",
@@ -1125,8 +1127,8 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-19-image-lightbox.png",
-      "assets/screenshots/guide-03-image-settings.png"
+      "assets/screenshots/guide-19-image-lightbox-v1.0.0.png",
+      "assets/screenshots/guide-03-image-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/images-and-fonts.md",
@@ -1144,7 +1146,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-04-font-settings.png"
+      "assets/screenshots/guide-04-font-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/images-and-fonts.md",
@@ -1162,7 +1164,7 @@
     "status": "current",
     "last_verified": "2026-07-27",
     "screenshots": [
-      "assets/screenshots/guide-04-font-settings.png"
+      "assets/screenshots/guide-04-font-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/images-and-fonts.md",
@@ -1180,7 +1182,7 @@
     "status": "current",
     "last_verified": "2026-07-25",
     "screenshots": [
-      "assets/screenshots/guide-04-font-settings.png"
+      "assets/screenshots/guide-04-font-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/images-and-fonts.md",
@@ -1198,7 +1200,7 @@
     "status": "current",
     "last_verified": "2026-07-27",
     "screenshots": [
-      "assets/screenshots/guide-05-layout-settings.png"
+      "assets/screenshots/guide-05-layout-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/layout-and-appearance.md",
@@ -1216,7 +1218,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-06-window-settings.png"
+      "assets/screenshots/guide-06-window-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/layout-and-appearance.md",
@@ -1234,7 +1236,7 @@
     "status": "current",
     "last_verified": "2026-07-25",
     "screenshots": [
-      "assets/screenshots/guide-07-appearance-settings.png"
+      "assets/screenshots/guide-07-appearance-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/layout-and-appearance.md",
@@ -1252,7 +1254,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-08-motion-settings.png"
+      "assets/screenshots/guide-08-motion-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/motion-and-other.md",
@@ -1270,7 +1272,7 @@
     "status": "current",
     "last_verified": "2026-07-28",
     "screenshots": [
-      "assets/screenshots/guide-08-motion-settings.png"
+      "assets/screenshots/guide-08-motion-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/motion-and-other.md",
@@ -1288,7 +1290,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-09-performance-settings.png"
+      "assets/screenshots/guide-09-performance-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/performance.md",
@@ -1306,7 +1308,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-09-performance-settings.png"
+      "assets/screenshots/guide-09-performance-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/performance.md",
@@ -1324,7 +1326,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-09-performance-settings.png"
+      "assets/screenshots/guide-09-performance-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/performance.md",
@@ -1342,8 +1344,8 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-11-request-flow.png",
-      "assets/screenshots/guide-09-performance-settings.png"
+      "assets/screenshots/guide-11-request-flow-v1.0.0.png",
+      "assets/screenshots/guide-09-performance-settings-v1.0.0.png"
     ],
     "docs": [
       "settings/performance.md",
@@ -1359,9 +1361,9 @@
     "since": "0.1.2",
     "version": "1.0.0",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-08-07",
     "screenshots": [
-      "assets/screenshots/guide-12-other-features.png"
+      "assets/screenshots/guide-26-reading-navigation-v1.0.0.png"
     ],
     "docs": [
       "settings/motion-and-other.md",
@@ -1378,9 +1380,9 @@
     "since": "0.1.2",
     "version": "1.0.0",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-08-07",
     "screenshots": [
-      "assets/screenshots/guide-12-other-features.png"
+      "assets/screenshots/guide-26-reading-navigation-v1.0.0.png"
     ],
     "docs": [
       "settings/motion-and-other.md",
@@ -1399,8 +1401,8 @@
     "status": "current",
     "last_verified": "2026-07-28",
     "screenshots": [
-      "assets/screenshots/guide-18-thread-context.png",
-      "assets/screenshots/guide-12-other-features.png"
+      "assets/screenshots/guide-18-thread-context-v1.0.0.png",
+      "assets/screenshots/guide-12-other-features-v1.0.0.png"
     ],
     "docs": [
       "settings/motion-and-other.md",
@@ -1419,7 +1421,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-12-other-features.png"
+      "assets/screenshots/guide-12-other-features-v1.0.0.png"
     ],
     "docs": [
       "settings/motion-and-other.md",
@@ -1431,16 +1433,20 @@
     "feature_id": "SET-020",
     "title": "设置分组、搜索与统一保存",
     "category": "个性化设置",
-    "description": "按三组浏览 14 个设置面板，按名称和说明搜索，并在底部一次保存全部实时预览草稿。",
+    "description": "按三组浏览 15 个设置面板，按名称和说明搜索，在独立面板管理键盘与鼠标快捷方式，并在底部一次保存全部实时预览草稿。",
     "source_anchor": "lite/src/settings/reader-settings-controller.ts",
     "since": "0.1.14",
     "version": "1.0.0",
     "status": "current",
-    "last_verified": "2026-07-27",
-    "screenshots": [],
+    "last_verified": "2026-08-07",
+    "screenshots": [
+      "assets/screenshots/guide-02-settings-overview-v1.0.0.png",
+      "assets/screenshots/guide-27-shortcuts-v1.0.0.png"
+    ],
     "docs": [
       "settings/overview.md",
-      "settings/reference.md"
+      "settings/reference.md",
+      "settings/other.md"
     ]
   },
   {
@@ -1452,8 +1458,10 @@
     "since": "0.1.14",
     "version": "1.0.0",
     "status": "current",
-    "last_verified": "2026-07-28",
-    "screenshots": [],
+    "last_verified": "2026-08-07",
+    "screenshots": [
+      "assets/screenshots/guide-26-reading-navigation-v1.0.0.png"
+    ],
     "docs": [
       "settings/other.md",
       "settings/reference.md"
@@ -1470,7 +1478,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-13-data-management.png"
+      "assets/screenshots/guide-13-data-management-v1.0.0.png"
     ],
     "docs": [
       "manage/data-and-cache.md",
@@ -1488,7 +1496,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-13-data-management.png"
+      "assets/screenshots/guide-13-data-management-v1.0.0.png"
     ],
     "docs": [
       "manage/data-and-cache.md",
@@ -1554,7 +1562,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-10-resource-monitor.png"
+      "assets/screenshots/guide-10-resource-monitor-v1.0.0.png"
     ],
     "docs": [
       "manage/monitoring.md",
@@ -1572,7 +1580,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-11-request-flow.png"
+      "assets/screenshots/guide-11-request-flow-v1.0.0.png"
     ],
     "docs": [
       "manage/monitoring.md",
@@ -1590,7 +1598,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-11-request-flow.png"
+      "assets/screenshots/guide-11-request-flow-v1.0.0.png"
     ],
     "docs": [
       "settings/performance.md",
@@ -1610,7 +1618,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-11-request-flow.png"
+      "assets/screenshots/guide-11-request-flow-v1.0.0.png"
     ],
     "docs": [
       "manage/monitoring.md",
@@ -1629,7 +1637,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-11-request-flow.png"
+      "assets/screenshots/guide-11-request-flow-v1.0.0.png"
     ],
     "docs": [
       "manage/monitoring.md",
@@ -1679,7 +1687,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-19-image-lightbox.png"
+      "assets/screenshots/guide-19-image-lightbox-v1.0.0.png"
     ],
     "docs": [
       "manage/troubleshooting.md"
@@ -1696,7 +1704,7 @@
     "status": "current",
     "last_verified": "2026-07-23",
     "screenshots": [
-      "assets/screenshots/guide-13-data-management.png"
+      "assets/screenshots/guide-13-data-management-v1.0.0.png"
     ],
     "docs": [
       "manage/data-and-cache.md",
@@ -1730,7 +1738,7 @@
     "status": "current",
     "last_verified": "2026-07-25",
     "screenshots": [
-      "assets/screenshots/guide-11-request-flow.png"
+      "assets/screenshots/guide-11-request-flow-v1.0.0.png"
     ],
     "docs": [
       "manage/troubleshooting.md"
@@ -1762,9 +1770,9 @@
     "status": "current",
     "last_verified": "2026-08-03",
     "screenshots": [
-      "assets/screenshots/guide-14-about.png",
-      "assets/screenshots/guide-22-feature-catalog.png",
-      "assets/screenshots/guide-23-documentation-maintenance.png"
+      "assets/screenshots/guide-14-about-v1.0.0.png",
+      "assets/screenshots/guide-22-feature-catalog-v1.0.0.png",
+      "assets/screenshots/guide-23-documentation-maintenance-v1.0.0.png"
     ],
     "docs": [
       "reference/feature-catalog.md",
@@ -1784,7 +1792,7 @@
     "status": "current",
     "last_verified": "2026-08-03",
     "screenshots": [
-      "assets/screenshots/guide-14-about.png"
+      "assets/screenshots/guide-14-about-v1.0.0.png"
     ],
     "docs": [
       "settings/about.md"

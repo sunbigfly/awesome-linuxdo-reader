@@ -7,7 +7,7 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-28
-screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-04-font-settings.png", "/screenshots/guide-19-image-lightbox.png"]
+screenshots: ["/screenshots/guide-03-image-settings-v1.0.0.png", "/screenshots/guide-04-font-settings-v1.0.0.png", "/screenshots/guide-19-image-lightbox-v1.0.0.png"]
 ---
 
 # 图片与字体
@@ -35,7 +35,7 @@ screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-04
 
 描述高度最小 56 px，默认 120 px。评论面板宽度默认 25%，允许 18%–50%。
 
-![灯箱中的原图、描述、关联评论和下载控件](/screenshots/guide-19-image-lightbox.png)
+![灯箱中的原图、描述、关联评论和下载控件](/screenshots/guide-19-image-lightbox-v1.0.0.png)
 
 ## 内置字体渲染
 

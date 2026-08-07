@@ -7,12 +7,12 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-08-03
-screenshots: ["/screenshots/guide-01-reader-overview.png"]
+screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
 ---
 
 # 兼容性
 
-![现代 Chromium 浏览器中的 LINUX DO 列表页和增强阅读工作区](/screenshots/guide-01-reader-overview.png)
+![现代 Chromium 浏览器中的 LINUX DO 列表页和增强阅读工作区](/screenshots/guide-01-reader-overview-v1.0.0.png)
 
 <p class="image-caption">桌面端浏览器可在保留宿主列表的同时运行增强阅读工作区；具体能力仍取决于浏览器、脚本管理器和站点权限。</p>
 

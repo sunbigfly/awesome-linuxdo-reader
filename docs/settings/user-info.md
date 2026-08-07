@@ -7,7 +7,7 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-28
-screenshots: ["/screenshots/guide-02-settings-overview.png"]
+screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png"]
 ---
 
 # 用户信息
@@ -16,7 +16,7 @@ screenshots: ["/screenshots/guide-02-settings-overview.png"]
 
 这个面板只用于查看当前登录账号的状态，不在这里修改昵称、头像、邮箱、权限或 LDC 资产。需要变更资料或执行交易时，请进入对应原站。
 
-![设置中心用户信息页展示当前账号与 Connect 信任进度](/screenshots/guide-02-settings-overview.png)
+![设置中心用户信息页展示当前账号与 Connect 信任进度](/screenshots/guide-02-settings-overview-v1.0.0.png)
 
 ## Connect 标签
 

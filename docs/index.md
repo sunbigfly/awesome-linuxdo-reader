@@ -8,7 +8,7 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-08-03
-screenshots: ["/screenshots/guide-01-reader-overview.png"]
+screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
 
 hero:
   name: Awesome LinuxDo Reader
@@ -65,7 +65,7 @@ features:
 第一次使用按“安装与更新 → 五分钟上手 → 界面总览”阅读。遇到加载、图片或限流问题，直接进入“故障排查”。
 :::
 
-![LINUX DO 列表页右侧嵌入阅读器的完整工作区](/screenshots/guide-01-reader-overview.png)
+![LINUX DO 列表页右侧嵌入阅读器的完整工作区](/screenshots/guide-01-reader-overview-v1.0.0.png)
 
 <p class="image-caption">阅读器可以保留宿主主题列表，同时在独立工作区中阅读完整主题。</p>
 

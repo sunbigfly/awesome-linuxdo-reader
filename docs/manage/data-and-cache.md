@@ -7,7 +7,7 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-30
-screenshots: ["/screenshots/guide-13-data-management.png"]
+screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
 ---
 
 # 数据、配置与缓存
@@ -55,7 +55,7 @@ screenshots: ["/screenshots/guide-13-data-management.png"]
 
 ## 六类缓存
 
-![数据管理中的缓存分类、保留期和选择性清理](/screenshots/guide-13-data-management.png)
+![数据管理中的缓存分类、保留期和选择性清理](/screenshots/guide-13-data-management-v1.0.0.png)
 
 | 类型 | 包含 | 不包含 |
 | --- | --- | --- |

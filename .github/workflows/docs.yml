@@ -6,20 +6,24 @@ on:
       - 'docs/**'
       - 'assets/**'
       - 'scripts/validate-docs.mjs'
+      - 'lite/**'
+      - 'work/mian-lite.css'
+      - 'work/greasyfork-lite/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/docs.yml'
-      - 'work/main.js'
   push:
     branches: [main]
     paths:
       - 'docs/**'
       - 'assets/**'
       - 'scripts/validate-docs.mjs'
+      - 'lite/**'
+      - 'work/mian-lite.css'
+      - 'work/greasyfork-lite/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/docs.yml'
-      - 'work/main.js'
   workflow_dispatch:
 
 permissions:

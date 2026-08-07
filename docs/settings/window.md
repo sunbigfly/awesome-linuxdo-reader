@@ -7,14 +7,14 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-27
-screenshots: ["/screenshots/guide-06-window-settings.png"]
+screenshots: ["/screenshots/guide-06-window-settings-v1.0.0.png"]
 ---
 
 # 浮窗设置
 
 路径：**阅读器标题栏 → 设置 → 浮窗设置**。
 
-![浮窗设置页中的宽高与左上角坐标](/screenshots/guide-06-window-settings.png)
+![浮窗设置页中的宽高与左上角坐标](/screenshots/guide-06-window-settings-v1.0.0.png)
 
 浮窗设置只决定桌面“浮窗阅读器”的几何位置。嵌入、全屏和移动形态不使用这些坐标。
 

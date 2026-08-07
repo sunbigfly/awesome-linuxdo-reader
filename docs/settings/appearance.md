@@ -7,14 +7,14 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-27
-screenshots: ["/screenshots/guide-07-appearance-settings.png"]
+screenshots: ["/screenshots/guide-07-appearance-settings-v1.0.0.png"]
 ---
 
 # 外观设置
 
 路径：**阅读器标题栏 → 设置 → 外观设置**。
 
-![外观设置页中的三种形态、主题颜色与结构参数](/screenshots/guide-07-appearance-settings.png)
+![外观设置页中的三种形态、主题颜色与结构参数](/screenshots/guide-07-appearance-settings-v1.0.0.png)
 
 ## 主题模式
 

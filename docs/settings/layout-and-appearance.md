@@ -7,7 +7,7 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-28
-screenshots: ["/screenshots/guide-05-layout-settings.png", "/screenshots/guide-06-window-settings.png", "/screenshots/guide-07-appearance-settings.png"]
+screenshots: ["/screenshots/guide-05-layout-settings-v1.0.0.png", "/screenshots/guide-06-window-settings-v1.0.0.png", "/screenshots/guide-07-appearance-settings-v1.0.0.png"]
 ---
 
 # 布局、浮窗与外观
@@ -35,7 +35,7 @@ screenshots: ["/screenshots/guide-05-layout-settings.png", "/screenshots/guide-0
 | 普通（嵌入/浮窗） | 0% | 88% | 0% | 8% | 4% |
 | 全屏 | 15% | 70% | 5% | 8% | 2% |
 
-![五区布局的比例、共享和应用状态](/screenshots/guide-05-layout-settings.png)
+![五区布局的比例、共享和应用状态](/screenshots/guide-05-layout-settings-v1.0.0.png)
 
 ## 浮窗
 
@@ -58,7 +58,7 @@ screenshots: ["/screenshots/guide-05-layout-settings.png", "/screenshots/guide-0
 
 ## 外观项目
 
-![外观设置中的浅色/暗色颜色与结构参数](/screenshots/guide-07-appearance-settings.png)
+![外观设置中的浅色/暗色颜色与结构参数](/screenshots/guide-07-appearance-settings-v1.0.0.png)
 
 按浮窗、全屏、移动分别设置：
 

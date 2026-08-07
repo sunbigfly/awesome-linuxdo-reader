@@ -1,18 +1,18 @@
 ---
 title: 设置中心总览
-description: 理解 14 个设置面板、分组导航、设置搜索、三种形态配置与统一保存方式。
+description: 理解 15 个设置面板、分组导航、设置搜索、快捷方式、三种形态配置与统一保存方式。
 feature_ids: ["USER-005", "SET-001", "SET-020"]
-source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/reader-preferences-schema.ts","lite/src/settings/reader-settings-controller.ts"]
+source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/reader-preferences-schema.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts"]
 since: 0.1.2
 version: 1.0.0
 status: current
-last_verified: 2026-07-27
-screenshots: ["/screenshots/guide-02-settings-overview.png"]
+last_verified: 2026-08-07
+screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png"]
 ---
 
 # 设置中心总览
 
-点击阅读器标题栏的“设置”进入设置中心。0.1.14 将导航按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 14 个面板：
+点击阅读器标题栏的“设置”进入设置中心。当前 v1.0.0 按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 15 个面板：
 
 | 面板 | 作用 |
 | --- | --- |
@@ -24,6 +24,7 @@ screenshots: ["/screenshots/guide-02-settings-overview.png"]
 | [外观设置](/settings/appearance) | 按钮、链接、交替背景、关系线、分隔线和预览卡片 |
 | [动画与提示](/settings/motion) | 跳转楼层提示和帖子加载动画 |
 | [阅读与导航](/settings/other) | 队列入口、历史导航、帖子打开位置和退出方式 |
+| [快捷方式](/settings/other#快捷方式) | 为浏览导航、阅读工具、面板、帖子操作、窗口和队列绑定键盘或鼠标操作 |
 | [帖子与回复](/settings/other) | 主帖操作列、二级回复显示位置和 Boost 复制 |
 | [适用站点](/settings/other) | 添加并管理其他 HTTPS Discourse 论坛 |
 | [性能设置](/settings/performance) | 楼层加载、页面保留范围、二级回复预加载和请求节奏 |
@@ -31,9 +32,9 @@ screenshots: ["/screenshots/guide-02-settings-overview.png"]
 | [数据管理](/settings/data-management) | 配置导入导出、恢复默认和缓存清理 |
 | [关于](/settings/about) | 功能摘要、版本和项目入口 |
 
-![设置中心完整导航、当前账号和 Connect 信任进度](/screenshots/guide-02-settings-overview.png)
+![设置中心完整导航、当前账号和 Connect 信任进度](/screenshots/guide-02-settings-overview-v1.0.0.png)
 
-<p class="image-caption">截图展示设置中心的账号与配置结构；0.1.14 的导航名称、分组和搜索入口以本页文字及当前脚本为准。</p>
+<p class="image-caption">截图展示 v1.0.0 设置中心的账号与 15 个配置入口；导航名称、分组和搜索入口以当前脚本为准。</p>
 
 ## 分组与搜索
 
@@ -68,7 +69,7 @@ screenshots: ["/screenshots/guide-02-settings-overview.png"]
 - 点击一次即可提交全部草稿；若五区布局合计不是 100%，保存会停止并引导返回布局页。
 - 明、暗、系统主题切换立即生效。
 - 性能设置在下次打开阅读器时生效。
-- 阅读、交互、站点开关和数据管理操作按控件说明即时执行或显示确认。
+- 阅读、快捷方式、交互、站点开关和数据管理操作按控件说明即时执行或显示确认。
 
 ## 设置窗口
 

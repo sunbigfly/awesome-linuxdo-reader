@@ -7,14 +7,14 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-07-28
-screenshots: ["/screenshots/guide-04-font-settings.png"]
+screenshots: ["/screenshots/guide-04-font-settings-v1.0.0.png"]
 ---
 
 # 字体设置
 
 路径：**阅读器标题栏 → 设置 → 字体设置**。
 
-![字体设置页中的渲染、宿主文字和分作用域字体控件](/screenshots/guide-04-font-settings.png)
+![字体设置页中的渲染、宿主文字和分作用域字体控件](/screenshots/guide-04-font-settings-v1.0.0.png)
 
 ## 字体显示优化
 

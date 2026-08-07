@@ -7,14 +7,14 @@ since: 0.1.2
 version: 1.0.0
 status: current
 last_verified: 2026-08-01
-screenshots: ["/screenshots/guide-13-data-management.png"]
+screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
 ---
 
 # 数据管理
 
 路径：**阅读器标题栏 → 设置 → 数据管理**。
 
-![数据管理页中的设置导出导入、恢复默认和缓存分类](/screenshots/guide-13-data-management.png)
+![数据管理页中的设置导出导入、恢复默认和缓存分类](/screenshots/guide-13-data-management-v1.0.0.png)
 
 ## 设置配置
 
