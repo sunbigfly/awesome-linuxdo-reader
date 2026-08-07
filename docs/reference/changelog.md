@@ -25,12 +25,14 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 - 业务源码切换到 `lite/src/` 的模块化 TypeScript 实现，样式切换到 `lite/styles/`；旧版 `main.js` 与 `main.css` working copy 已按日期和 SHA-256 非破坏性归档。
 - Greasy Fork 发布由单文件改为薄主 Loader 加 `mian-lite-core`、`mian-lite-features` 两个可读 Library；所有可执行上传单元保持未压缩、未混淆，并使用 2,000,000 字节项目闸门。
 - 两个 Library 先注册带稳定路径和源码哈希的模块工厂，主 Loader 在固定版本依赖全部到位后统一启动；不使用动态下载后 `eval`，也不绕过 Greasy Fork 更新链路。
+- 每个 Library 只保留一份 esbuild CommonJS helper；Core 为 1,655,882 字节，Features 为 1,550,448 字节，连同模板的项目自有 JS 总量为 3,209,486 字节，比优化前减少 191,081 字节。
 - Lite CSS 作为带不可变 Git 提交与 SHA-256 的 `@resource` 发布；KaTeX、pinyin-pro 与 hls.js 继续使用元数据声明的固定版本依赖。
 
 ### 架构与可靠性
 
 - 应用启动、请求调度、缓存仓储、主题会话、虚拟流、阅读状态、原站互动、媒体、设置和生命周期拆分为显式 owner，减少旧单文件中的隐式共享状态。
 - 功能契约、请求入口审计、TypeScript 严格检查、CSS 所有权检查和确定性构建进入统一发布门禁；静态结果与真实浏览器、性能及回滚验收继续分开记录。
+- 发布门禁新增脱敏浏览器证据契约，记录固定 Library 坐标、15 页设置矩阵、通知/私信、历史/收藏、时间轴、隐藏回复、错误捕获、5 轮资源趋势、旧版回滚与私密漏洞报告状态；不提交 Cookie、消息正文、HAR 或 Heap Snapshot。
 - 用户手册、功能目录、package 版本与 userscript 元数据统一以 Lite `1.0.0` 为事实源。
 
 ### 设置与手册

@@ -14,8 +14,8 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
 
 Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要先安装脚本管理器，再从 GreasyFork 安装正式版。
 
-::: warning 当前发布状态
-GitHub 源码与本手册已切换到 Lite `1.0.0`；Greasy Fork 脚本 588185 目前仍保留 `0.1.16`。在浏览器矩阵、性能和回滚门禁完成前，平台不会收到尚未验收的 v1.0.0 主 Loader；安装时请以 Greasy Fork 脚本页显示版本为准。
+::: tip 当前发布状态
+GitHub 源码、本手册与 Greasy Fork 脚本 588185 均已发布 Lite `1.0.0`。普通用户只安装主脚本；它会固定加载已经核验字节数与 SHA-256 的 Core `1895870` 和 Features `1895872`。
 :::
 
 ![安装并启用脚本后，LINUX DO 列表页与增强阅读工作区同时可用](/screenshots/guide-01-reader-overview-v1.0.0.png)
@@ -74,7 +74,7 @@ LINUX DO 保持完整功能覆盖。中文、英文及其他语言的标准 HTTP
 正式脚本由 GreasyFork 安装后，脚本管理器会记录对应的下载与更新地址；仓库源码不写入
 绕过 GreasyFork 的自定义 `updateURL`、`installURL` 或 `downloadURL`。更新频率由脚本管理器决定：
 
-v1.0.0 正式上线后，主脚本会通过 `@require` 自动加载同一发布版本的两个 Greasy Fork Library；
+v1.0.0 起，主脚本会通过 `@require` 自动加载同一发布版本的两个 Greasy Fork Library；
 Library 是正式脚本的一部分，无需单独安装。固定版本 URL 与完整性哈希用于避免更新期间混用不同版本。
 
 - 想立即检查时，在 Tampermonkey 面板中对该脚本执行“检查更新”。

@@ -1,42 +1,70 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/logo.png" alt="Awesome LinuxDo Reader" width="320">
+</p>
+
 # Awesome LinuxDo Reader
 
-为 LINUX DO 深度定制并保持完整功能覆盖，同时通过站点识别、适配层和能力检测兼容中文、英文及其他语言的标准 Discourse 社区。无需离开主题列表，即可完成长帖阅读、正文翻译、回复和原站互动。
+为 LINUX DO 深度定制并保持完整功能覆盖，同时通过站点识别与能力检测兼容中文、英文及其他语言的标准 Discourse 社区，在列表页内完成阅读、翻译、回复与原站互动。
 
-## 核心特性
+[安装脚本](https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js) · [在线用户手册](https://sunbigfly.github.io/awesome-linuxdo-reader/) · [GitHub 项目](https://github.com/sunbigfly/awesome-linuxdo-reader) · [问题反馈](https://github.com/sunbigfly/awesome-linuxdo-reader/issues)
 
-- **LINUX DO 全面适配**：消息、历史、收藏、回应、Boost、长帖、楼层关系和性能治理保持完整覆盖。
-- **标准 Discourse 站点通用**：中文、英文及其他语言站点均可使用；内置 21 个社区，其他 HTTPS Discourse 论坛可验证后添加。
-- **跨语正文翻译**：非中文内置社区支持原文、双语和简体中文译文切换，Google 与 Microsoft 翻译服务互为回退。
-- **连续阅读**：在列表页内打开完整主题，支持浮窗、全屏、左右嵌入和移动端布局。
-- **上下文导航**：支持楼中楼、父回复预览、时间轴、只看楼主、历史前后切换和多主题阅读队列。
-- **原站互动**：回复、点赞、收藏和通知沿用原站；Reactions、Boost、Post Voting 等入口按站点插件能力自动显示或隐藏。
-- **富内容与性能**：提供原图灯箱、图片评论、媒体播放、公式渲染、DOM 窗口化、分层缓存和 429 退避。
+![在 LINUX DO 列表页右侧打开完整增强阅读工作区](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-01-reader-overview-v1.0.0.png)
 
-## 已内置的部分社区
+## 功能
 
-LINUX DO、OpenAI Developer Community、Discourse Meta、Brave Community、Roblox Developer Forum、Home Assistant Community、Arduino Forum、Unity Discussions、Cloudflare Community、Epic Developer Community、Obsidian Forum、Cursor Community、Python Discussions、Swift Forums、Julia Discourse 和 Rust Users Forum 等。
+- LINUX DO 全面适配，消息、历史、收藏、回应、Boost、长帖与楼层关系等能力保持完整覆盖。
+- 中文、英文及其他语言的标准 Discourse 站点均可使用；插件、主题和权限差异由站点适配层与能力检测自动降级。
+- 列表页直接打开完整帖子，支持浮窗、全屏与移动端布局。
+- 保留楼层关系、楼中楼、跳转、浏览历史与真实已读进度。
+- 集成回复、点赞、回应、收藏、通知、搜索与用户资料等社区能力。
+- 为非中文内置社区提供原文、双语与全译文切换，并集成原图灯箱、媒体播放和公式渲染。
+- 内置 21 个社区；其他 HTTPS Discourse 论坛可验证后添加，非 Discourse 网站不会启动。
+- 内置请求调度、429 退避、DOM 窗口化与本地资源监控。
 
-完整站点列表、能力差异和自定义站点说明见[兼容性文档](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+## 核心体验
 
-## 翻译说明
+| 看图灯箱 | 消息中心 | 请求流与 429 控制 |
+| --- | --- | --- |
+| ![在阅读器内查看帖子原图、图片序列和关联评论](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-19-image-lightbox-v1.0.0.png) | ![查看消息中心的回复分类和真实通知](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-15-notifications-replies-v1.0.0.png) | ![查看请求调度、限流边界和异常恢复状态](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-11-request-flow-v1.0.0.png) |
+| 原图、图片序列与关联评论。 | 回复、点赞、私信与内容回跳。 | 共享账本、排队放行与退避恢复。 |
 
-站点适配不限内容语言。翻译按钮位于阅读器标题栏，只在已标记为非中文的内置社区显示，当前译文目标为简体中文。翻译会跳过代码、公式、投票、Onebox 和表单；只有用户主动切换到双语或全译文后，普通正文才会发送给第三方翻译服务。涉及命令、金额、权限和安全操作时，请切回原文核对。
+## 安装
 
-## 界面预览
+> **发布状态：** GitHub 源码、用户手册与 Greasy Fork 脚本 588185 均已发布 Lite `1.0.0`。正式主脚本是 3,794 字节薄 Loader，固定加载 Core `1895870` 与 Features `1895872`；两个 Library 均带已核验的 SHA-256。
 
-![增强阅读工作区](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-01-reader-overview.png)
-
-![消息中心](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-15-notifications-replies.png)
-
-![收藏与回应](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-17-bookmarks-reactions.png)
-
-## 使用
-
-1. 安装 Tampermonkey、Violentmonkey 或兼容的 userscript 管理器。
+1. 安装 [Tampermonkey](https://www.tampermonkey.net/)、Violentmonkey 或兼容的 userscript 管理器。
 2. 在本页点击“安装此脚本”。
-3. 打开 LINUX DO 或其他已内置的 Discourse 社区，点击主题标题开始使用。
-4. 其他 HTTPS Discourse 论坛可在“设置 → 其他功能 → 自定义站点”中验证并添加。
+3. 打开或刷新以下任一站点：
+   - [LINUX DO](https://linux.do/)
+   - [Brave Community](https://community.brave.com/)
+   - [Roblox Developer Forum](https://devforum.roblox.com/)
+   - [OpenAI Developer Community](https://community.openai.com/)
+   - [Home Assistant Community](https://community.home-assistant.io/)
+   - [Cfx.re Forum](https://forum.cfx.re/)
+   - [Spiceworks Community](https://community.spiceworks.com/)
+   - [Arduino Forum](https://forum.arduino.cc/)
+   - [Unity Discussions](https://discussions.unity.com/)
+   - [Cloudflare Community](https://community.cloudflare.com/)
+   - [Epic Developer Community](https://forums.unrealengine.com/)
+   - [Obsidian Forum](https://forum.obsidian.md/)
+   - [Cursor Community](https://forum.cursor.com/)
+   - [Godot Forum](https://forum.godotengine.org/)
+   - [n8n Community](https://community.n8n.io/)
+   - [MikroTik Forum](https://forum.mikrotik.com/)
+   - [Discourse Meta](https://meta.discourse.org/)
+   - [Python Discussions](https://discuss.python.org/)
+   - [Swift Forums](https://forums.swift.org/)
+   - [Julia Discourse](https://discourse.julialang.org/)
+   - [Rust Users Forum](https://users.rust-lang.org/)
+4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 适用站点 → 其他适用站点”中验证并添加。
+5. 点击主题标题开始使用。
+
+当前项目版本为 `1.0.0`。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+
+1.0.0 重点完成 Lite 模块化重构：业务逻辑、生命周期、请求、缓存与界面组件改由 TypeScript 模块维护；Greasy Fork 发布使用薄主 Loader 加两个可审查 Library，避开单文件 2 MB 上限且不压缩、不混淆。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+
+## 文档与支持
 
 [正式用户手册](https://sunbigfly.github.io/awesome-linuxdo-reader/) · [GitHub 项目](https://github.com/sunbigfly/awesome-linuxdo-reader) · [问题反馈](https://github.com/sunbigfly/awesome-linuxdo-reader/issues)
 
-许可证：MIT License
+许可证：[MIT License](https://github.com/sunbigfly/awesome-linuxdo-reader/blob/main/LICENSE)

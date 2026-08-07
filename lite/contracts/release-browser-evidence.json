@@ -25,6 +25,17 @@
       "sha256": "9935f4e593c5e469bb7dd953a43c41f2e36e0ed6dac56c16c966860c1cc54919"
     }
   ],
+  "publishedLoader": {
+    "scriptId": 588185,
+    "versionId": 1895899,
+    "fixedBytes": 3729,
+    "platformMetadata": "@downloadURL none",
+    "normalizedBytes": 3708,
+    "normalizedSha256": "d5e58f72ae5b2ff499b6bd7b41bce7d349a7587ea223921dd0e70699798de526",
+    "publicInstallHasDownloadUrl": true,
+    "publicInstallHasUpdateUrl": true,
+    "webhookResponse": 200
+  },
   "browserMatrix": {
     "accepted": true,
     "site": "https://linux.do",

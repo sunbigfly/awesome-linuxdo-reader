@@ -14,6 +14,7 @@ userscript 超过 2 MB 的问题。构建不压缩、不混淆、不缩短标识
 | `main-loader.template.user.js` | 等待填入固定 Greasy Fork Library URL 的薄主脚本模板 |
 | `build-manifest.json` | 模块数、编译器、字节数与 SHA-256 |
 | `published-libraries.json` | 已发布 Library 的真实 ID、固定 URL、同步 URL 与远端哈希 |
+| `lite/contracts/release-browser-evidence.json` | 脱敏浏览器矩阵、性能、回滚与安全渠道证据 |
 | `release.config.example.json` | 本地发布配置示例 |
 
 两个 Library 只注册模块工厂，不会自行启动；全部 `@require` 到位后，薄主 Loader
@@ -51,7 +52,7 @@ npm run mian-lite:greasyfork:check
    受版本控制的 `published-libraries.json`。
 5. 用第一阶段 Git 提交和当前 `work/mian-lite.css` SHA-256 填写
    `lite/release-gate.json.readerStylesUrl`。只有真实浏览器、性能和回滚证据均完成时，
-   才把对应门禁改为 `true`。
+   才登记 `lite/contracts/release-browser-evidence.json` 并把对应门禁改为 `true`。
 6. 生成最终薄 Loader：
 
    ```bash
@@ -80,7 +81,7 @@ npm run mian-lite:greasyfork:check
 ### v1.0.0 主脚本发布
 
 主脚本 [588185](https://greasyfork.org/scripts/588185) 已于 2026-08-07 同步为
-v1.0.0，固定版本为 `1895839`。同步方式为 GitHub Webhook，源文件固定为：
+v1.0.0，当前固定版本为 `1895899`。同步方式为 GitHub Webhook，源文件固定为：
 
 ```text
 https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/mian-lite.js
@@ -88,7 +89,7 @@ https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/mia
 
 Greasy Fork 固定版本仅比仓库 Loader 多平台自动加入的 `@downloadURL none`；移除该行
 后为 3,708 字节，SHA-256 与仓库产物
-`056b0d1abfe03ce6fc280fa50861108484101d74215609ff0b1a7c0fd7a2a9df` 一致。
+`d5e58f72ae5b2ff499b6bd7b41bce7d349a7587ea223921dd0e70699798de526` 一致。
 公开安装 URL 仍由 Greasy Fork 注入 versionless `@downloadURL` 与 `.meta.js`
 `@updateURL`，可正常接收后续自动更新。
 

@@ -15,7 +15,7 @@
     "sharedHelperDeclarations": 10
   },
   "modules": 238,
-  "projectTotalExecutableBytes": 3209486,
+  "projectTotalExecutableBytes": 3209572,
   "libraries": [
     {
       "name": "mian-lite-core",
@@ -36,7 +36,7 @@
   ],
   "loaderTemplate": {
     "file": "work/greasyfork-lite/main-loader.template.user.js",
-    "bytes": 3156,
-    "sha256": "8c512fb521bd253284ceb9bdd6d62809ee3f35b15ffa785d89445f5a85e0bfaa"
+    "bytes": 3242,
+    "sha256": "a0ab4f4e842a4ee4d5a4901a95e9f3f30780650406bd7ee591dec64adfdac600"
   }
 }
