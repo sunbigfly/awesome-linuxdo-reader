@@ -1,3 +1,5 @@
+import tseslint from 'typescript-eslint';
+
 export default [
   {
     ignores: [
@@ -65,7 +67,14 @@ export default [
   },
   {
     name: 'userscript-build-tool',
-    files: ['scripts/build-userscript.mjs', 'docs/.vitepress/config.mts'],
+    files: [
+      'eslint.config.mjs',
+      'scripts/audit-main-runtime.mjs',
+      'scripts/build-mian-lite.mjs',
+      'scripts/build-userscript.mjs',
+      'scripts/test-mian-lite.mjs',
+      'docs/.vitepress/config.mts',
+    ],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -81,6 +90,35 @@ export default [
       'no-undef': 'error',
       'no-unreachable': 'error',
       'valid-typeof': 'error',
+    },
+  },
+  {
+    name: 'mian-lite-typescript',
+    files: ['lite/src/**/*.ts', 'lite/tests/**/*.ts'],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tseslint.plugin,
+    },
+    rules: {
+      'no-dupe-keys': 'error',
+      'no-duplicate-case': 'error',
+      'no-undef': 'off',
+      'no-unreachable': 'error',
+      'valid-typeof': 'error',
+      '@typescript-eslint/consistent-type-imports': 'error',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+        },
+      ],
     },
   },
 ];

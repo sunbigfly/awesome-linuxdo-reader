@@ -1,13 +1,32 @@
 {
   "name": "awesome-linuxdo-reader",
-  "version": "0.1.16",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
+    "audit:main-requests": "node scripts/audit-main-requests.mjs",
+    "audit:main-runtime": "node scripts/audit-main-runtime.mjs",
+    "audit:lite-native-requests": "node scripts/audit-lite-native-requests.mjs",
+    "audit:lite-features": "node scripts/audit-lite-feature-migration.mjs",
+    "audit:lite-userscript": "node scripts/audit-mian-lite-userscript.mjs",
+    "audit:lite-userscript:local": "node scripts/audit-mian-lite-userscript.mjs --local-artifact",
     "userscript:build": "node scripts/build-userscript.mjs",
+    "mian-lite:build": "npm run mian-lite:verify && npm run docs:verify && npm run audit:main-runtime && npm run audit:main-requests -- --format json && node scripts/build-mian-lite.mjs",
+    "mian-lite:check": "npm run mian-lite:typecheck && npm run mian-lite:test && npm run audit:lite-native-requests && npm run audit:lite-features && npm run mian-lite:css:check && node scripts/build-mian-lite.mjs --check && npm run audit:lite-userscript && npm run mian-lite:greasyfork:check",
+    "mian-lite:css:audit": "node scripts/audit-mian-lite-css.mjs",
+    "mian-lite:css:build": "node scripts/build-mian-lite-css.mjs",
+    "mian-lite:css:check": "node scripts/build-mian-lite-css.mjs --check && npm run mian-lite:css:audit",
+    "mian-lite:greasyfork:build": "node scripts/build-mian-lite-greasyfork.mjs",
+    "mian-lite:greasyfork:check": "node scripts/build-mian-lite-greasyfork.mjs --check",
+    "mian-lite:greasyfork:release": "node scripts/build-mian-lite-greasyfork.mjs --config work/greasyfork-lite/release.config.json",
+    "mian-lite:local-debug": "npm run mian-lite:css:build && node scripts/build-mian-lite.mjs --local-debug",
+    "mian-lite:lint": "eslint eslint.config.mjs docs/.vitepress/config.mts scripts/audit-lite-native-requests.mjs scripts/audit-mian-lite-userscript.mjs scripts/audit-main-requests.mjs scripts/audit-main-runtime.mjs scripts/audit-mian-lite-css.mjs scripts/build-mian-lite-css.mjs scripts/build-mian-lite-greasyfork.mjs scripts/build-mian-lite.mjs scripts/test-mian-lite.mjs scripts/validate-docs.mjs \"lite/{src,tests}/**/*.ts\"",
+    "mian-lite:test": "node scripts/test-mian-lite.mjs",
+    "mian-lite:typecheck": "tsc --project tsconfig.mian-lite.json && tsc --project tsconfig.mian-lite-tests.json",
+    "mian-lite:verify": "npm run mian-lite:lint && npm run mian-lite:check",
     "docs:dev": "vitepress dev docs --host 127.0.0.1",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs --host 127.0.0.1",
@@ -15,7 +34,13 @@
     "docs:verify": "npm run docs:check && npm run docs:build"
   },
   "devDependencies": {
+    "@babel/parser": "^8.0.4",
+    "@babel/traverse": "^8.0.4",
     "esbuild": "0.25.12",
+    "eslint": "^10.8.0",
+    "linkedom": "^0.18.13",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.65.0",
     "vitepress": "1.6.4"
   },
   "overrides": {

@@ -1,10 +1,10 @@
 ---
 title: 楼层、时间轴与历史
 description: 使用时间轴、只看楼主、历史前后切换、多主题队列和实时阅读进度。
-feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014"]
-source_anchors: ["LDP_READER_QUEUE_KEY", "ldp-only-op-toggle", "bindTopicTimeline", "normalizeReaderAnchorState", "createReaderHistoryNavigation", "handleReaderMouseHistoryButton", "historyEdgeTriggerPercent", "READ_THRESHOLD", "sendReaderReadTimings", "guardNativeReaderTimings", "bindReaderTopicPresence", "installDiscourseUpdateEventMonitor", "renderTopicNavLinks", "inlineTopicNavSvgUses", "LAST_READER_TOPIC_ROUTE_KEY", "JUMP_HIGHLIGHT_SETTING_FIELDS"]
+feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014", "READ-016"]
+source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-only-op-controller.ts","lite/src/topic/reader-topic-navigation-controller.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/reading/read-state-controller.ts","lite/src/live/topic-live-controller.ts","lite/src/components/reader-icon.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/topic/reader-topic-header.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-16-history.png", "/screenshots/guide-21-reading-queue.png"]
@@ -78,9 +78,10 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-1
 
 新回复到达时，主题活动与阅读器状态会同步；只有确认存在新楼层时，接近底部的阅读器才自动跟随，单纯刷新元数据不会改变滚动位置。原站创建或编辑帖子、切换回应时，阅读器还会让对应主题、楼层和回应缓存失效，当前主题则就地合并权威楼层。消息跳转会等待目标进入虚拟窗口后再定位。
 
-## 相邻主题和队列
+## 主题分类、投票和队列
 
-- 主题导航用于沿 LINUX DO 提供的前后主题关系移动；分类和标签 SVG 图标会先安全内联，无法解析或不安全的图标会被丢弃，不影响文字链接。
+- 标题横向区域显示当前主题的父分类、分类和标签；SVG 图标会先安全内联，无法解析或不安全的图标会被丢弃，不影响文字链接。
+- 站点启用 Topic Voting 时，同一区域显示当前票数；登录用户可以投票或取消投票，提交期间入口保持禁用，结果以服务端返回为准。
 - [阅读队列](/guide/reading-queue)用于准备接下来要读的多个主题，并在当前浏览器中跨刷新恢复。
 - 浏览历史用于跨会话恢复已读主题和位置。
 

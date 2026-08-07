@@ -2,9 +2,9 @@
 title: 外观设置
 description: 配置主题模式、强调色、斑马纹、结构线、引用线、分隔线和楼层预览。
 feature_ids: ["SET-001", "SET-009"]
-source_anchors: ["READER_THEME_MODES", "APPEARANCE_PROFILE_SETTING_KEYS"]
+source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/appearance/reader-appearance-style-controller.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-07-appearance-settings.png"]

@@ -2,9 +2,9 @@
 title: 回复与社区操作
 description: 使用主帖操作列，并在阅读器内回复、引用、点赞、回应、Boost、收藏、分享和执行权限操作。
 feature_ids: ["MEDIA-010", "ACTION-001", "ACTION-002", "ACTION-003", "ACTION-004", "ACTION-005", "ACTION-006", "ACTION-007", "ACTION-008", "ACTION-009", "ACTION-010", "ACTION-011", "ACTION-012", "ACTION-013", "ACTION-014"]
-source_anchors: ["renderReaderPoll", "syncTopicActionRail", "renderPostReactions", "ldp-replybtn", "data-selection-action=\"quote\"", "toggleReaderPostLike", "toggleReaderPostReaction", "renderBoostBubble", "quoteBoostInNativeReply", "BOOST_COPY_SETTING_ROWS", "toggleReaderBookmark", "name: 'share'", "TOPIC_NOTIFICATION_LEVELS", "openReaderReportDialog", "name: 'edit'", "composer:edited-post", "openReaderAssignDialog", "topicSharedIssueState"]
+source_anchors: ["lite/src/media/reader-poll-model.ts","lite/src/app/reader-browser-runtime.ts","lite/src/post/reader-selection-quote-feature.ts","lite/src/post/boost-copy-rule.ts","lite/src/discourse/native-host-api.ts","lite/src/discourse/native-composer.ts","lite/src/post/reader-topic-shared-issue-coordinator.ts","lite/src/post/reader-topic-action-rail.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide-17-bookmarks-reactions.png", "/screenshots/guide-15-notifications-replies.png"]
@@ -64,6 +64,8 @@ screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide
 - 再次点击自己的回应可取消；选择另一项时切换到新回应。
 - 主帖操作列与正文、二级回复和图片评论共用同一回应状态与选择器规则。
 - 回应中心的数据会与实时主题通道和权威楼层数据校准。
+- 站点启用 Reactions 时，主点赞按钮就是站点配置的主回应；未启用时才调用原生点赞动作，
+  两种模式不会同时发送两次请求，也不会把主回应重复显示在回应汇总中。
 - 原站切换回应或在线更新可用表情时，阅读器会清理对应楼层/主题缓存、刷新表情注册表，并同步当前可见楼层和主帖操作列；已经展开的回应选择器保持打开。
 
 ![收藏与回应中心展示真实原站记录](/screenshots/guide-17-bookmarks-reactions.png)
@@ -74,6 +76,13 @@ screenshots: ["/screenshots/guide-20-community-actions.png", "/screenshots/guide
 
 Boost 气泡显示内容和参与用户。账号权限允许时可以发送、举报或进入相关原生操作。
 
+Boost 输入框里的表情按钮会打开站点原生表情选择器；选中的表情与普通文字一起计入 16 字
+上限，最多插入 5 个。关闭或切换楼层时，输入框和原生表情面板会一起收口。
+
+举报他人的 Boost 时，阅读器会实时读取当前账号的服务器权限，并只列出站点允许且适用于
+Boost 的举报类型；如果已经举报过或当前账号无权举报，会直接提示而不发送写请求。需要
+补充说明的类型不能为空。提交后请求直接进入 Discourse，失败时表单保留，可修改后重试。
+
 登录后，带用户名的 Boost 会显示 `@` 操作：
 
 1. 点击 `@` 后，阅读器打开该楼层的原生回复编辑器；
@@ -81,14 +90,14 @@ Boost 气泡显示内容和参与用户。账号权限允许时可以发送、�
 3. 如果当前草稿已经提及该用户，阅读器只聚焦编辑器，不会重复插入；
 4. 自动填充只修改当前草稿，不会立即发送，也不会修改原 Boost。发送前请检查引用内容和目标用户。
 
-“设置 → 帖子与回复 → 复制 Boost 文本”只改变复制到剪贴板的文本：
+“设置 → 帖子与回复 → 复制 Boost 文本”只改变从已有 Boost 预填到 Boost 输入框的文本：
 
 - 开头文字；
 - 数字递增模式及步长；
 - 固定尾巴模式；
 - 最终结果预览，尾巴最多 16 字。
 
-它不会修改原 Boost 内容。
+它不会修改原 Boost，也不会自动发送；预填后仍可继续编辑或取消。
 
 ## 收藏与分享
 
@@ -122,4 +131,13 @@ Boost 气泡显示内容和参与用户。账号权限允许时可以发送、�
 - 管理楼层；
 - 支持插件提供的“俺也一样”。
 
-删除、举报、指定和管理操作会先显示确认或表单。它们属于真实外部写入，不是本地预览；提交前应核对目标和理由。
+删除会先确认，举报和指定会打开统一表单，管理会打开 Discourse 原生管理菜单。它们属于
+真实外部写入，不是本地预览；提交前应核对目标和理由。编辑会先刷新目标楼层，再使用原生
+编辑器打开最新正文，避免用陈旧缓存覆盖新内容。
+
+主题、楼层与 Boost 举报共用同一表单、站点举报类型和说明校验；区别只在权限来源：
+主题与楼层直接使用 Discourse 原生 Post action，Boost 会先实时读取插件权限。主题入口
+位于 #1 正文末尾的主题操作区；嵌套、实时新增和回屏楼层不会使用另一套按钮或提交路径。
+删除成功后由同一帖子快照与回复树更新页面，不直接删除某个 DOM；指定主题和指定楼层共用
+同一表单及 Discourse 原生 TaskActions。管理菜单中的改作者、重建、Wiki、锁定等操作仍由
+Discourse 原生组件执行。

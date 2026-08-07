@@ -2,9 +2,9 @@
 title: 用户资料与关系
 description: 查看用户卡、资料、徽章、统计、关注列表和账号关系操作。
 feature_ids: ["MEDIA-007", "USER-001", "USER-002", "USER-003", "USER-004", "USER-005"]
-source_anchors: ["openUserAvatarViewer", "renderFallbackUserCard", "fetchUserProfileDetails", "renderUserCardFollowList", "runDirectUserCardAction", "renderSettingsUserInfo"]
+source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/discourse/native-request-descriptors.ts","lite/src/discourse/native-host-api.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-24
 screenshots: ["/screenshots/guide-25-user-card.png", "/screenshots/guide-02-settings-overview.png"]
@@ -54,7 +54,8 @@ screenshots: ["/screenshots/guide-25-user-card.png", "/screenshots/guide-02-sett
 - 发起私信；
 - 调整该用户的通知级别；
 - 静音；
-- 按时长忽略；
+- 按时长忽略；点击“忽略”后会关闭用户卡，并在统一操作表单中选择期限；
+- 在站点开放类别专家能力时认可用户；既有类别保持只读，新选择会与既有认可一起提交；
 - 其他站点开放的动作。
 
 这些操作会写入 LINUX DO 账号状态。阅读器会显示进行中和结果信息，但网络中断时仍应回到原站确认。

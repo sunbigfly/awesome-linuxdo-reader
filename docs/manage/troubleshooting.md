@@ -2,9 +2,9 @@
 title: 故障排查
 description: 按安装、打开、跳楼、图片、429、配置和缓存分类排查常见问题。
 feature_ids: ["CORE-005", "MEDIA-013", "DATA-003", "MONITOR-003", "MONITOR-004", "TROUBLE-001", "TROUBLE-002", "TROUBLE-003", "TROUBLE-004", "TROUBLE-005", "TROUBLE-006"]
-source_anchors: ["bypassReaderForThisTab", "showReaderImageRetry", "clearCurrentTopicCaches", "readerOpenFailureCanAutoRetry", "readerOpenAutoRetryDelay", "READER_ENDPOINT_429_BASE_BLOCK_MS", "LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY", "@match", "unavailablePostNumbers", "LIGHTBOX_IMAGE_RESOURCE_REQUESTS", "replacePrefsAndReload", "@supportURL"]
+source_anchors: ["lite/src/components/reader-icon.ts","lite/src/app/reader-browser-runtime.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/network/browser-shared-request-permit.ts","lite/userscript.meta.txt","lite/src/topic/topic-session.ts","lite/src/media/reader-topic-image-index.ts","lite/src/state/preferences-config-codec.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-13-data-management.png"]
@@ -27,11 +27,11 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11
 
 ## 入口没有出现
 
-1. 地址必须匹配 `https://linux.do/*`。
+1. 地址必须属于 LINUX DO、20 个内置社区，或已在“设置 → 适用站点 → 其他适用站点”验证并保存的 HTTPS Discourse 站点；具体范围见[安装与更新](/getting-started/installation#环境要求)。
 2. 确认脚本和站点访问权限已启用。
 3. 安装/更新后完整刷新。
 4. 停用重复的正式版、本地版或同类接管脚本。
-5. 从脚本管理器确认版本为 `0.1.16`。
+5. 从脚本管理器确认版本为 `1.0.0`。
 
 ## 主题或楼层无法加载
 
@@ -42,21 +42,28 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11
 
 目标楼层 404/410 时，阅读器把它记为当前会话不可用，避免反复请求。只看楼主或其他筛选可能隐藏目标；消息跳转会尝试解除不兼容过滤。
 
+在“设置 → 日志记录 → 请求记录 → 帖子与楼层诊断”中核对：
+
+- “虚拟窗口”显示离屏停放或惰性 DOM：属于正常资源控制，不是嵌套关系丢失；
+- “缓存”显示 canonical stream 正文缺口：等待同一补流链，不要先清空全部缓存；
+- “已删除楼层”列出楼层号：原站确认 404/410 后当前会话不会重复请求；
+- “网络”或“429 / Cloudflare”异常：按对应调度状态等待或完成验证。
+
 若仅一个主题异常，使用“数据管理”清理当前主题缓存，而不是清空全部历史。
 
 ## 打开中断与自动恢复
 
-主题信息、目标楼层或初始定位遇到短暂网络中断、超时、`408`、`425`、服务器 `5xx` 或可恢复的布局定位失败时，阅读器会保留外壳并自动重试。加载区会显示“载入暂时中断，正在自动重试”、恢复次数和倒计时。
+主题打开遇到短暂网络中断、超时或服务器 `5xx` 时，阅读器会保留外壳并自动重试。当前等待顺序为约 1 秒、2 秒，最多自动重试两次；新的打开事务、关闭阅读器或销毁运行时都会中止等待。
 
-自动恢复的等待基线依次为约 0.5、1.2、2.5、5 和 8 秒，后续仍以 8 秒为上限；如果服务器提供更晚的允许时间，则以该时间为准。关闭阅读器会取消当前等待。
+自动重试仍失败时，加载区保留分类后的恢复入口：“重新加载”复用原目标事务；Cloudflare 失败另提供手动验证链接；也可直接关闭阅读器。恢复过程不会刷新整页、清理缓存或伪造已加载楼层。
 
 以下情况不会走这条自动恢复链：
 
 - `429`：继续由请求调度和端点冷却处理，避免自动重试绕过退避；
-- 大多数不可恢复的 `4xx`：直接显示失败信息和“重新加载”；
+- 不可恢复的 `4xx`：直接显示失败信息和“重新加载”；
 - 登录、权限、主题删除或 Cloudflare 验证：需要先处理对应原因。
 
-自动恢复持续出现时，不要同时重复点击刷新。先打开“设置 → 日志记录 → 请求记录”查看请求类型、状态和冷却原因；最终失败后再使用错误页的“重新加载”手动重试。
+切换到新帖子失败时，原帖子会继续保留，失败页不会覆盖仍可阅读的 active Topic。自动恢复持续出现时，不要同时重复点击刷新；先打开“设置 → 日志记录 → 请求记录”查看请求类型、状态和冷却原因，最终失败后再使用错误页的“重新加载”。
 
 ## 图片和媒体
 
@@ -66,6 +73,13 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11
 - 来源楼层 404：已有 CDN 图片仍可能可用，不应无限重试来源。
 - HLS 失败：检查浏览器编码支持、媒体服务器和网络策略。
 - 公式缺失：检查 KaTeX 外部依赖是否加载。
+
+先打开“设置 → 日志记录 → 请求记录”的“图片与媒体诊断”：
+
+- “图片加载”只统计当前挂载楼层的真实失败和正在重试，并列出所属楼层；
+- “资源缓存”显示 canonical 图片目录完整度、本会话 Object URL 和持久 Blob 缓存状态；
+- “来源楼层”区分图片仍可访问但来源楼层已被 404/410 删除；
+- “音视频 / HLS”显示当前源、活动播放器和原生/Hls.js capability，并关联最近脱敏媒体请求错误。
 
 清理“头像与图片”缓存后重新打开；这不会删除线上图片。
 
@@ -89,10 +103,10 @@ screenshots: ["/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-11
 
 1. 导出当前设置。
 2. 只重置相关设置组或清理相关缓存。
-3. 刷新并复现。
+3. 让设置立即投影，或重新打开被清理的主题/面板后复现。
 4. 最后才使用“恢复全部默认”。
 
-恢复默认会覆盖阅读器设置，但不会删除原站账号数据。
+导入与恢复默认都先完整确认并一次写入；无效文件或取消不会形成部分设置。恢复默认会覆盖阅读器设置，但不会删除缓存、浏览历史或原站账号数据。
 
 ## 提交有效问题报告
 

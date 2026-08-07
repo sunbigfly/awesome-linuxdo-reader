@@ -2,11 +2,11 @@
 title: 图片、媒体与富内容
 description: 使用非中文正文翻译、原图灯箱、图片评论、下载、音视频、公式、投票和代码预览。
 feature_ids: ["READ-012", "MEDIA-001", "MEDIA-002", "MEDIA-003", "MEDIA-004", "MEDIA-005", "MEDIA-006", "MEDIA-007", "MEDIA-008", "MEDIA-009", "MEDIA-010", "MEDIA-011", "MEDIA-012", "MEDIA-013", "MEDIA-014"]
-source_anchors: ["renderSolvedAnswerCard", "IMAGE_SCALE_OPTIONS", "openLightbox", "lightboxOriginalByDefault", "loadLightboxTopicPosts", "loadLightboxCommentTree", "toggleLightboxReaction", "lightboxDescriptionHeight", "batch-download", "openUserAvatarViewer", "bindReaderHls", "KATEX_VERSION", "renderReaderPoll", "data-reader-code-action", "readerMediaHtml", "prepareReaderOneboxes", "showReaderImageRetry", "createReaderTranslationController"]
+source_anchors: ["lite/src/topic/reader-topic-special-content-feature.ts","lite/src/media/reader-image-scale.ts","lite/src/app/reader-browser-runtime.ts","lite/src/network/public-resource-request-adapter.ts","lite/src/media/reader-lightbox-controller.ts","lite/src/media/reader-image-download-service.ts","lite/src/user/discourse-native-user-port.ts","lite/src/media/reader-katex-controller.ts","lite/src/media/reader-poll-model.ts","lite/src/media/reader-cooked-content-feature.ts","lite/src/translation/reader-translation-controller.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
-last_verified: 2026-07-28
+last_verified: 2026-08-03
 screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19-image-lightbox.png", "/screenshots/guide-25-user-card.png"]
 ---
 
@@ -87,7 +87,7 @@ GitHub 仓库 Onebox 会整理为更紧凑的阅读结构：仓库缩略图移�
 
 ## 跨语正文翻译
 
-站点适配支持中文、英文及其他语言的标准 Discourse 社区，不受内容语言限制。当前翻译功能会将已标记为非中文的内置社区正文译为简体中文，并在阅读器标题栏显示翻译按钮，无需离开帖子或复制正文。每次点击按以下顺序切换：
+站点适配支持中文、英文及其他语言的标准 Discourse 社区，不受内容语言限制。当前翻译功能会在非中文内置社区和语言未知的自定义 Discourse 站点显示翻译按钮，将正文译为简体中文，无需离开帖子或复制正文；内置中文站点 LINUX DO 隐藏该入口。每次点击按以下顺序切换：
 
 1. 原文；
 2. 原文与中文译文并排的双语模式；
@@ -96,4 +96,4 @@ GitHub 仓库 Onebox 会整理为更紧凑的阅读结构：仓库缩略图移�
 
 翻译只处理普通正文段落、列表、标题、引用和表格文字，会跳过代码、公式、投票、Onebox、表单以及过短或类似标识符的文本。请求按批次发送，优先使用 Google，较大批次或失败时回退 Microsoft；译文最多缓存 240 条到当前站点的 `localStorage`。关闭阅读器会取消尚未完成的请求。
 
-翻译是第三方机器翻译，可能存在遗漏或语义错误；涉及命令、金额、权限和安全操作时应切回原文核对。自定义站点未预设内容语言，因此暂不显示翻译按钮。
+翻译是第三方机器翻译，可能存在遗漏或语义错误；涉及命令、金额、权限和安全操作时应切回原文核对。自定义站点没有可靠语言标记，入口仍会显示；中文自定义站点可保持原文模式，不触发第三方翻译请求。

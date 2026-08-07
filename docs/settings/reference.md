@@ -2,9 +2,9 @@
 title: 完整设置参考
 description: 汇总全部设置项、范围、默认值、生效时机和数据影响。
 feature_ids: ["SET-012", "SET-013", "SET-014", "SET-015", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
-source_anchors: ["PERFORMANCE_SETTING_GROUPS", "streamOverscanViewports", "nestedPrefetchViewports", "requestMaxConcurrent", "SETTINGS_NAV_GROUPS", "saveAllSettingsDrafts", "readerQueueAlwaysVisibleWhenEmpty", "doubleEscapeToCloseReader", "confirmNativeComposerClose", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "aggregateDescendantReplies", "boostCopyMode"]
+source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree.ts","lite/src/network/request-scheduler.ts","lite/src/dom/reply-tree-repository.ts","lite/src/post/boost-copy-rule.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-reading-settings-form.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide-03-image-settings.png", "/screenshots/guide-04-font-settings.png", "/screenshots/guide-05-layout-settings.png", "/screenshots/guide-07-appearance-settings.png", "/screenshots/guide-09-performance-settings.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-13-data-management.png"]
@@ -68,15 +68,16 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 
 | 设置 | 范围 | 默认 |
 | --- | --- | --- |
-| 每批请求主楼层 | 12–64 条 | 40 |
-| 视口外挂载缓冲 | 0.25–3 屏 | 1.25 |
-| 同时挂载主楼层 | 24–128 个 | 72 |
-| 楼中楼触发距离 | 0–3 屏 | 1.25 |
-| 配置并发上限 | 1–4 路 | 3 |
-| 启动间隔下限 | 80–500 ms | 90 |
-| 窗口预算目标占用 | 50%–95% | 80% |
+| 每批正文楼层 | 12–64 条 | 48 |
+| 视口外挂载缓冲 | 0.25–3 屏 | 1.5 |
+| 同时挂载楼层 | 24–128 个 | 80 |
+| API 提前加载距离 | 1–3 屏 | 2 |
+| 共享总并发上限 | 1–4 路 | 3 |
+| API 启动保护间隔 | 80–500 ms | 100 |
+| API 窗口预算比例 | 50%–95% | 85% |
 
-性能设置下次打开阅读器生效。
+正文 `post_ids[]` 当前批次与下一批预知最多双路，树状 `replies.json` 最多准备两个父楼；
+两者仍共用上表总并发、跨标签窗口、宿主请求计账和 429/Cloudflare 闸门。性能设置保存后立即生效。
 
 ## 资源监控与请求数据
 
@@ -101,7 +102,8 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 | 始终显示主帖操作列 | 开/关 | 开 |
 | 锁定操作列位置 | 开/关 | 关 |
 | 父楼层下展开二级回复 | 开/关 | 开 |
-| 启用“完整讨论”视图 | 开/关 | 开 |
+| 启用深层回复阅读 | 开/关 | 开 |
+| 深层回复展示方式 | 完整讨论/树状嵌套 2–5 层 | 完整讨论 |
 | 从楼层列表隐藏二级回复 | 开/关 | 开 |
 | Boost 末尾内容 | 数字递增/固定文字 | 数字递增 |
 
@@ -116,4 +118,4 @@ screenshots: ["/screenshots/guide-02-settings-overview.png", "/screenshots/guide
 
 - 配置导出/导入/恢复默认会处理设置，不包含帖子、历史或账号内容。
 - 缓存按六类统计和选择性清理。
-- 导入与恢复默认后刷新页面。
+- 导入与恢复默认先确认、一次写入并立即投影；各设置面板可单独恢复本范围。

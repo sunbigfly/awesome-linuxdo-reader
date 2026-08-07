@@ -2,9 +2,9 @@
 title: 阅读模式与工作区
 description: 选择浮窗、全屏、嵌入或移动布局，理解多主题队列和虚拟阅读流。
 feature_ids: ["CORE-003", "CORE-004", "CORE-005", "CORE-006", "READ-001", "READ-002"]
-source_anchors: ["INITIAL_TOPIC_ID", "LIST_READER_MODES", "bypassReaderForThisTab", "LDP_READER_QUEUE_KEY", "stableStreamMountRange", "loadPostsByIds"]
+source_anchors: ["lite/src/userscript/mian-lite-entry.ts","lite/src/shell/reader-workspace.ts","lite/src/components/reader-icon.ts","lite/src/queue/reader-open-queue-session.ts","lite/src/dom/reply-tree.ts","lite/src/topic/topic-session.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-05-layout-settings.png", "/screenshots/guide-21-reading-queue.png", "/screenshots/guide-09-performance-settings.png"]
@@ -46,7 +46,7 @@ screenshots: ["/screenshots/guide-01-reader-overview.png", "/screenshots/guide-0
 
 阅读器把“数据已经获取”和“节点正在 DOM 中挂载”分开：
 
-1. 接近数据边缘时，按设置中的“每批请求主楼层”补充数据。
+1. 接近数据边缘时，按设置中的“每批正文楼层数”消费当前批次，并可预知下一批。
 2. 只在视口前后保留一定屏数的节点。
 3. 超出挂载上限的远处楼层卸载，必要时保留高度占位。
 4. 回到相应位置时从内存或缓存重新渲染。

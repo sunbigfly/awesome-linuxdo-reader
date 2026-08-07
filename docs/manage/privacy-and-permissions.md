@@ -2,11 +2,11 @@
 title: 隐私、权限与边界
 description: 理解 userscript 权限、LDC 只读数据、外部依赖、本地存储、请求脱敏和账号数据边界。
 feature_ids: ["MEDIA-014", "USER-006", "DATA-004", "DATA-005", "MONITOR-005", "TROUBLE-005"]
-source_anchors: ["READER_TRANSLATION_CACHE_KEY", "LDC_USER_BRIDGE_CACHE_KEY", "fetchLinuxDoCreditUser", "PERSISTENT_CACHE_CONFIG", "@grant", "requestFlowPath", "@supportURL"]
+source_anchors: ["lite/src/translation/reader-translation-controller.ts","lite/src/translation/translation-request-adapter.ts","lite/src/cache/response-repository.ts","lite/src/userscript/browser-userscript-environment.ts","lite/src/network/request-observer.ts","lite/userscript.meta.txt"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
-last_verified: 2026-07-28
+last_verified: 2026-08-03
 screenshots: ["/screenshots/guide-14-about.png"]
 ---
 
@@ -14,11 +14,11 @@ screenshots: ["/screenshots/guide-14-about.png"]
 
 ![关于面板中的版本、第三方组件、许可证和项目边界信息](/screenshots/guide-14-about.png)
 
-<p class="image-caption">关于面板集中展示当前版本、第三方组件、许可证和项目入口；账号数据与互动结果仍以 LINUX DO 原站为准。</p>
+<p class="image-caption">关于面板集中展示当前版本、第三方参考项目和许可证；账号数据与互动结果仍以 LINUX DO 原站为准。</p>
 
 ## userscript 元数据
 
-当前 `0.1.16`：
+当前 `1.0.0`：
 
 | 字段 | 值 | 用途 |
 | --- | --- | --- |
@@ -77,4 +77,4 @@ LDC 面板通过显式声明的 `@connect credit.linux.do` 只读取当前登录
 - Cookie、Authorization、API key、响应正文；
 - 能推断账号身份的自定义设置或历史。
 
-安全问题按 [SECURITY.md](https://github.com/sunbigfly/awesome-linuxdo-reader/blob/main/SECURITY.md) 报告；普通问题使用 GitHub Issues。
+安全问题按 [SECURITY.md](https://github.com/sunbigfly/awesome-linuxdo-reader/blob/main/SECURITY.md) 报告：Security 页有 **Report a vulnerability** 时使用私密入口；没有入口时，公开 Issue 只能请求私密联络，不能附漏洞细节或敏感材料。普通问题使用 GitHub Issues。

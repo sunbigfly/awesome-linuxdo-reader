@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js">安装脚本</a> ·
   <a href="https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader">GreasyFork</a> ·
-  <a href="work/main.js">脚本源码</a> ·
+  <a href="lite/src/userscript/mian-lite-entry.ts">Lite 源码</a> ·
   <a href="https://sunbigfly.github.io/awesome-linuxdo-reader/">在线用户手册</a> ·
   <a href="docs/INTRODUCTION.md">项目介绍</a> ·
   <a href="CONTRIBUTING.md">参与开发</a> ·
@@ -150,13 +150,13 @@
 4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 适用站点 → 其他适用站点”中验证并添加。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `0.1.16`。脚本对 LINUX DO 保持全面适配和完整功能回归，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。已标记为非中文的内置社区还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `1.0.0`。脚本对 LINUX DO 保持全面适配，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
-0.1.16 重点重构自适应标题栏和分类/标签浏览，阅读队列会避让标题栏与全屏主帖操作列；同时增强 Discourse 通知、收藏、回应及帖子变更的实时同步，并修复完整讨论返回、通知计数、末尾隐藏回复空白、路由重复接管和搜索菜单误接管。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+1.0.0 重点完成 Lite 模块化重构：业务逻辑、生命周期、请求、缓存与界面组件改由 TypeScript 模块维护；Greasy Fork 发布使用薄主 Loader 加两个可审查 Library，避开单文件 2 MB 上限且不压缩、不混淆。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 ## 开发
 
-`work/main.js` 是唯一业务源码，也是当前 GreasyFork 发布与仓库同步入口。`dist/awesome-linuxdo-reader.user.js` 是由固定版本工具生成的仓库直装产物，禁止直接编辑；由于 GreasyFork 不接受压缩代码，该文件不得上传到 GreasyFork。开发和调试始终修改源码，需要仓库直装产物时运行 `npm run userscript:build`。`work/greasyfork-split/` 是可重复生成和校验的拆分发布工程，当前用于验证 Core Library 与静态资源边界，不会自动替代正式单文件脚本。
+v1.0.0 起，`lite/src/` 是唯一业务源码，`lite/styles/` 是样式事实源。`work/mian-lite.css`、`work/greasyfork-lite/libraries/` 与最终的 `work/mian-lite.js` 都是确定性发布产物，禁止直接编辑。Greasy Fork 只接收可读、未压缩的薄 Loader 和两个 Library；正式 Loader 通过固定版本 URL 与 SHA-256 引用 Library。切换前的旧版 working copy 保存在 `archive/legacy-main-2026-08-07/`，原 `work/main.js` 与 `work/main.css` 仅作旧版兼容参考。
 
 ```text
 .
@@ -164,10 +164,11 @@
 ├── assets/           品牌与文档资源
 ├── docs/             项目介绍和资料索引
 ├── dist/             仓库直装的压缩 userscript 与来源清单
+├── lite/             v1.0.0 TypeScript 业务源码、样式、契约与测试
 ├── scripts/          跨平台开发工具入口
 ├── tools/            Rust 开发辅助工具源码
-├── work/main.js      userscript 唯一业务源码
-├── work/greasyfork-split/  GreasyFork 拆分发布与校验工程
+├── work/greasyfork-lite/  Lite Greasy Fork Library 发布产物
+├── archive/legacy-main-2026-08-07/  旧版 main.js/main.css 只读归档
 ├── CONTRIBUTING.md   开发与验证规范
 ├── LICENSE           MIT 许可证
 └── README.md         项目入口

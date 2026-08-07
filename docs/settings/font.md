@@ -2,9 +2,9 @@
 title: 字体设置
 description: 配置字体显示优化、嵌入阅读列表尺寸，以及界面、正文和回复输入框的字体外观。
 feature_ids: ["SET-004", "SET-005", "SET-006"]
-source_anchors: ["font-rendering", "HOST_EMBED_SIZE_SETTINGS", "FONT_SCOPE_CONFIG", "queryLocalFonts"]
+source_anchors: ["lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-04-font-settings.png"]

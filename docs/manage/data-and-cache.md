@@ -2,11 +2,11 @@
 title: 数据、配置与缓存
 description: 导出导入设置，理解本地数据范围，查看和安全清理六类缓存。
 feature_ids: ["COLLECT-004", "DATA-001", "DATA-002", "DATA-003", "DATA-004", "TROUBLE-004"]
-source_anchors: ["ldp-history-clear", "readerConfigExportPayload", "CACHE_TYPES", "clearCurrentTopicCaches", "PERSISTENT_CACHE_CONFIG", "replacePrefsAndReload"]
+source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-07-30
 screenshots: ["/screenshots/guide-13-data-management.png"]
 ---
 
@@ -47,9 +47,11 @@ screenshots: ["/screenshots/guide-13-data-management.png"]
 - 只接受当前配置格式和版本结构；
 - 导入会规范化数值和缺失字段；
 - 无效文件不会部分写入；
-- 成功导入或恢复全部默认后刷新页面。
+- 导入和恢复全部默认都先经统一确认弹层；
+- 成功后由唯一偏好仓储一次写入并立即投影，无需依赖整页刷新。
 
 “恢复全部默认”会覆盖当前阅读器设置。它不会清理所有缓存，也不会改动原站账号。
+只恢复图片、字体、布局、外观或动效等一个范围时，使用对应设置面板自己的恢复按钮。
 
 ## 六类缓存
 
@@ -83,6 +85,6 @@ screenshots: ["/screenshots/guide-13-data-management.png"]
 2. 若只影响一个主题，优先清理当前主题缓存。
 3. 若用户卡或消息显示旧值，只清理相应类型。
 4. 只有配置本身异常时才恢复全部默认。
-5. 清理后刷新页面并重新复现。
+5. 清理后重新打开相关主题或面板并复现。
 
 不要把“清空全部历史”用于一般加载故障，因为历史是本地唯一的阅读路径记录。

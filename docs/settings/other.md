@@ -2,9 +2,9 @@
 title: 阅读、帖子与适用站点
 description: 配置队列入口、历史、退出、主帖操作列、完整讨论、Boost 复制和其他 Discourse 站点。
 feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "SET-016", "SET-017", "SET-018", "SET-019", "SET-021"]
-source_anchors: ["CUSTOM_DISCOURSE_SITES_KEY", "readerQueueAlwaysVisibleWhenEmpty", "historyEdgeTriggerPercent", "doubleEscapeToCloseReader", "confirmNativeComposerClose", "syncTopicActionRail", "aggregateDescendantReplies", "openDescendantRepliesWindow", "BOOST_COPY_SETTING_ROWS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "expandNestedRepliesByDefault", "boostCopyMode"]
+source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/app/reader-application.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-context-controller.ts","lite/src/post/boost-copy-rule.ts","lite/src/post/reader-topic-action-rail.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts","lite/src/settings/reader-reading-settings-form.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18-thread-context.png"]
@@ -66,10 +66,11 @@ screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18
 | 设置 | 结果 |
 | --- | --- |
 | 在父回复下展开二级回复 | 直接显示父回复收到的回复 |
-| 启用“完整讨论”视图 | 长分支提供独立的可拖动、可缩放讨论窗口 |
+| 启用深层回复阅读 | 允许使用完整讨论或主信息流树状嵌套 |
+| 深层回复展示方式 | 直接进入完整讨论，或先显示 2–5 层主信息流树状嵌套 |
 | 从楼层列表隐藏二级回复 | 将正式楼层收纳为参与者头像标记，跳转仍可定位 |
 
-完整讨论视图建立在父回复下展开之上。关闭父回复下展开时，设置中心会同步关闭完整讨论；关闭完整讨论时仍可保留普通直属回复分页。
+深层回复阅读建立在父回复下展开之上；关闭它仍可保留普通直属回复分页。主信息流超出所选深度后进入完整讨论；完整讨论按真实父子关系无限递归，窄窗口只停止继续缩进。默认继续使用完整讨论窗口，不改变已有用户的阅读方式。
 
 ## Boost 复制
 
@@ -81,9 +82,9 @@ screenshots: ["/screenshots/guide-12-other-features.png", "/screenshots/guide-18
 2. 数字模式设置 1–99 的步长，并填写数字前文字。
 3. 固定模式填写最多 16 字的末尾文字。
 4. 在预览中检查最终结果。
-5. 实际点击复制时才写入剪贴板。
+5. 实际点击复制时，才把结果预填到该楼层的 Boost 输入框。
 
-这个设置只改变复制文本，不会编辑、发送或覆盖原 Boost。
+这个设置只改变预填文本，不会自动发送或覆盖原 Boost。
 
 ## 其他适用站点
 

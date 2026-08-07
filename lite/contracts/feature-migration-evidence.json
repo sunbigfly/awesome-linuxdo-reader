@@ -1,0 +1,2217 @@
+{
+  "schemaVersion": 2,
+  "proofScope": "static-evidence-integrity-only",
+  "alignmentDecision": "not-evaluated",
+  "catalog": "docs/public/feature-catalog.json",
+  "features": {
+    "CORE-001": {
+      "evidenceKind": "artifact",
+      "implementationStatus": "partial",
+      "browserStatus": "pending",
+      "artifactOwners": [
+        "lite/userscript.meta.txt",
+        "scripts/build-mian-lite.mjs",
+        "scripts/audit-mian-lite-userscript.mjs",
+        "docs/getting-started/installation.md"
+      ],
+      "artifactChecks": [
+        "mian-lite:check",
+        "docs:verify",
+        "userscript:inspect",
+        "loader:verify"
+      ],
+      "note": "lite 元数据保持 GreasyFork 所需名称、命名空间、版本、匹配、权限、依赖和 document-start 边界；构建器禁止绕过 GreasyFork 的自定义 update/install/download URL。可执行 userscript audit 逐字段核对 main→Lite 元数据继承、Lite KaTeX CSS 增量、本地 loader 的依赖/路径，并可选核对已生成 local bundle 头，不再把台账字符串冒充 inspect/loader 证明。真实 GreasyFork 安装、管理器自动更新和更新后页面换代仍待浏览器/发布环境验收，因此保持 partial。"
+    },
+    "CORE-002": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/queue/reader-open-queue-session.ts",
+        "lite/src/userscript/reader-userscript-target-adapter.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-open-queue-session.test.ts",
+        "lite/tests/reader-userscript-target-adapter.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "列表主题行和 Header 的阅读入口由 ReaderOpenQueueSession 唯一扫描与挂载；真实 Topic/Post URL 只经 userscript target adapter 解析，空队列入口按热读偏好显示，MutationObserver 明确排除自身 rail 变更且保留真实列表增量扫描。列表加入入口已移除 Lite 自拟 26px 方按钮，恢复主线 20px 圆形、行 Hover/Focus/added 与无 Hover 设备显隐。入口直接打开当前目标或持久队列中的最近主题，失败不吞掉原队列项。真实 Discourse 列表选择器、点击接管与三种 Shell 像素仍待浏览器验收。"
+    },
+    "CORE-003": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/userscript/mian-lite-entry.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts",
+        "lite/src/userscript/reader-userscript-target-adapter.ts",
+        "lite/src/userscript/reader-userscript-application.ts",
+        "lite/src/userscript/reader-floating-host-target-controller.ts",
+        "lite/src/userscript/reader-host-topic-source-coordinator.ts",
+        "lite/src/queue/reader-open-queue-session.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-userscript-target-adapter.test.ts",
+        "lite/tests/reader-userscript-application.test.ts",
+        "lite/tests/reader-floating-host-target-controller.test.ts",
+        "lite/tests/reader-host-topic-source-coordinator.test.ts",
+        "lite/tests/reader-open-queue-session.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "实际 userscript entry/bootstrap 已把初始 Topic URL、Discourse 原生 plugin-api page-change、宿主搜索菜单和同源 Topic/Post 链接统一投到 runtime.openTarget；按 Topic/目标楼层去重重复路由信号，并保留修饰键、新标签、跨源与 ldp_native 原生绕过。非固定宽屏浮窗空白区又由唯一 FloatingHostTargetController 临时隐藏 overlay 后命中宿主 Topic，Hover 只投影宿主高亮，点击继续提交同一 runtime.openTarget；未命中才关闭 Reader，不建立第二导航器。ReaderOpenQueueSession 在列表行和 Header 挂唯一入口；HostTopicSourceCoordinator 通过 Discourse menu service 关闭来源 surface，并在成功打开后按原卡片几何恢复指针锚点。入口 epoch 阻止较早异步准备夺回较晚目标。真实 SPA、列表选择器、透传命中和像素仍待浏览器验收。"
+    },
+  "CORE-004": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/shell/reader-workspace.ts",
+        "lite/src/shell/reader-workspace-coordinator.ts",
+        "lite/src/userscript/reader-floating-host-target-controller.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-workspace.test.ts",
+        "lite/tests/reader-shell-workspace-stage.test.ts",
+        "lite/tests/reader-floating-host-target-controller.test.ts"
+      ],
+      "note": "浮窗、嵌入和全屏状态模型与 DOM 端口已静态闭环。非固定且大于 700px 的 floating 模式按主线临时隐藏 overlay、用 elementFromPoint 命中下方同源 Topic；Hover 高亮宿主目标，点击复用唯一 runtime.openTarget，空白才关闭。固定、触摸、紧凑视口、ldp_native 和非 Topic 链接均拒绝透传，销毁撤销 frame 与瞬态 class。真实多形态像素和命中验收未执行。"
+    },
+    "CORE-005": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/components/reader-icon.ts",
+        "lite/src/topic/reader-native-topic-route.ts",
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/reader-userscript-target-adapter.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-icon.test.ts",
+        "lite/tests/reader-native-topic-route.test.ts",
+        "lite/tests/reader-shell-template.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-userscript-target-adapter.test.ts"
+      ],
+      "note": "Header 的稳定原生主题入口由唯一 native-route URL 协议追加 ldp_native 标记，保留原 query/hash、拒绝跨源和非 HTTP(S)，并维持新标签与 opener 隔离。共享图标解析器优先复用已内联的 Discourse iconElement；document-start 时 sprite 尚不存在则立即使用同一 Lite SVG registry，避免 Shadow DOM 永久保留空 use，Shell、设置、队列和动作列不再各造空 span。userscript bootstrap 在任何 application、Shell、请求或事件订阅创建前消费标记并立即返回。真实图标像素、新标签与无 Reader DOM/Network 仍待浏览器验收。"
+    },
+    "CORE-006": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/queue/reader-open-queue-session.ts",
+        "lite/src/dom/floating-surface-wheel.ts",
+        "lite/src/topic/topic-session.ts",
+        "lite/src/media/reader-media-prefetch-service.ts",
+        "lite/src/network/public-resource-request-adapter.ts",
+        "lite/src/history/reader-history-repository.ts",
+        "lite/src/history/reader-history-navigation-controller.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-open-queue-session.test.ts",
+        "lite/tests/floating-surface-wheel.test.ts",
+        "lite/tests/topic-session.test.ts",
+        "lite/tests/reader-media-prefetch-service.test.ts",
+        "lite/tests/public-resource-request-adapter.test.ts",
+        "lite/tests/reader-history-repository.test.ts",
+        "lite/tests/reader-history-navigation-controller.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "ReaderOpenQueueSession 已统一队列 DOM、五态进度、序列化、固定项、拖拽百分比位置和成功后提交的切换事务；加入时通过 canonical TopicSession 预取最多 200 个正文根，再复用 TopicSession 唯一 20 条直属分页递归预加工子孙。图片候选由 ReaderMediaPrefetchService 从 canonical cooked、Boost 与宿主回应目录派生，实际 Blob 仍只进入 PublicResourceRequestAdapter 的中央 scheduler/single-flight/持久缓存；两路并发且每页/每图在当前 Reader 滚动或切帖时让行。失败保留正文、树和各层 partial 计数。主按钮只控制头像预览收纳，悬停详情面板使用 180ms 回滞；贴边揭示、末端翻转滚动提示、ArrowDown 首行焦点和相反方向预览均由同一 QueueSession 生命周期持有。主线 1200/900/700 container 尺寸、头像收纳 opacity/transform/pointer、贴边图标隐藏与 reduced-motion 已恢复。详情面板由同一 ResizeObserver 测量帧读取 Reader 容器、Header、轨道和面板尺寸，选择展开方向并投影 is-collision-positioned 回夹，不再只有轨道定位却让面板越界。队列详情滚轮复用主线门控的 floating-surface-wheel：内部祖先仍可沿方向滚动时不干预，到达边界才阻止默认行为，避免泄漏到 Reader 主滚动。切换前由 openTarget 捕获当前完整锚点，目标打开后复用 ReaderHistoryNavigationController 恢复 viewport、reply-window 与 quote 状态，不再只跳 postNumber。队列挂到 modal 定位上下文，位置由真实 Header/action rail 几何换算为百分比并保留用户拖拽值，避免固定像素和操作列重叠。Composer guard 已回到 DiscourseComposerCoordinator。真实三形态拖拽、Hover、前台让行、资源命中和刷新恢复仍待浏览器验收。"
+    },
+    "CORE-007": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/app/reader-application.ts",
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/post/post-action-capabilities.ts",
+        "lite/src/site/reader-custom-site-repository.ts",
+        "lite/src/site/browser-discourse-site-probe.ts",
+        "lite/src/settings/reader-custom-site-settings-form.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts",
+        "lite/src/userscript/reader-userscript-application.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-application.test.ts",
+        "lite/tests/discourse-native-host-api.test.ts",
+        "lite/tests/post-action-capabilities.test.ts",
+        "lite/tests/reader-custom-site.test.ts",
+        "lite/tests/reader-userscript-application.test.ts"
+      ],
+      "note": "运行时用原生 module bridge/DOM marker 识别 Discourse，并从当前站点模型与用户能力派生动作可见性，站内请求继续使用同一原生 host；metadata 保留内置站点匹配。自定义 HTTPS hostname 由唯一 repository 兼容保存，设置表单只经原生同源 probe 验证 Discourse 后写入；bootstrap 在创建 Reader 前执行 host 授权门，未授权站点不创建 application、请求或 DOM。站点插件矩阵和 21 站真实验收仍待浏览器执行。"
+    },
+    "READ-001": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/dom/reply-tree.ts",
+        "lite/src/stream/reply-tree-virtual-layout-controller.ts",
+        "lite/src/stream/virtual-root-layout.ts",
+        "lite/src/stream/virtual-stream-dom-controller.ts",
+        "lite/src/stream/virtual-stream-frame-controller.ts",
+        "lite/src/topic/reader-topic-dom-coordinator.ts",
+        "lite/src/topic/reader-topic-flow-controller.ts",
+        "lite/src/app/reader-performance-policy.ts"
+      ],
+      "tests": [
+        "lite/tests/reply-tree.test.ts",
+        "lite/tests/reply-tree-virtual-layout-controller.test.ts",
+        "lite/tests/virtual-root-layout.test.ts",
+        "lite/tests/virtual-stream-dom-controller.test.ts",
+        "lite/tests/virtual-stream-frame-controller.test.ts",
+        "lite/tests/reader-topic-dom-coordinator.test.ts",
+        "lite/tests/reader-topic-flow-controller.test.ts",
+        "lite/tests/reader-performance-policy.test.ts"
+      ],
+      "note": "根楼层窗口、完整祖先子树权重软预算、DOM 整树停放、测量合帧与锚点补偿已通过契约；后台 canonical stream 水合只写数据/拓扑，选中窗口提交前才惰性创建完整祖先分支 PostView。可见根永不因预算消失，真实快速滚动仍待验收。"
+    },
+    "READ-002": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/topic/topic-session.ts",
+        "lite/src/topic/topic-read-request-adapter.ts",
+        "lite/src/topic/reader-topic-flow-controller.ts",
+        "lite/src/app/reader-performance-policy.ts"
+      ],
+      "tests": [
+        "lite/tests/topic-session.test.ts",
+        "lite/tests/topic-read-request-adapter.test.ts",
+        "lite/tests/reader-topic-flow-controller.test.ts",
+        "lite/tests/reader-performance-policy.test.ts"
+      ],
+      "note": "post.id stream、双游标、缺口重试与原生批量读取已闭环；同一 flow 按当前 pageSize 顺序水合缓存/网络批次，近视口使用 visible、远处使用 background-prefetch，实时 stream 增长原地重开 cursor。"
+    },
+  "READ-003": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/dom/reply-tree-repository.ts",
+        "lite/src/dom/reply-tree-dom-owner.ts",
+        "lite/src/layout/branch-overlay.ts",
+        "lite/src/topic/reader-post-presentation.ts",
+        "lite/src/topic/reader-topic-dom-coordinator.ts",
+        "lite/src/topic/topic-read-request-adapter.ts"
+      ],
+      "tests": [
+        "lite/tests/reply-tree-repository.test.ts",
+        "lite/tests/dom-owner.test.ts",
+        "lite/tests/layout.test.ts",
+        "lite/tests/reader-post-presentation.test.ts",
+        "lite/tests/reader-branch-overlay-controller.test.ts",
+        "lite/tests/reader-topic-dom-coordinator.test.ts",
+        "lite/tests/topic-read-request-adapter.test.ts"
+      ],
+      "note": "父子拓扑、直属回复原生请求与完整讨论 canonical 子树投影已闭环。普通、嵌套、实时和回屏楼层由同一 ReaderPostPresentation 原地投影 canonical PostView；父楼层号直接进入唯一 navigation，不再插入父预览 DOM。主流 ReaderBranchOverlayController 已接入 Topic 虚拟帧提交：只读已挂载 PostView，直接从实际头像/容器几何统一写百分比锚点与 SVG，可见线/命中线分离，收纳只隐藏同一 replyList，不改拓扑；旧测试专用 layout anchor 已删除。真实长树滚动、三形态像素和完整讨论组合仍待验收。"
+    },
+    "READ-004": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/topic/reader-topic-only-op-controller.ts",
+        "lite/src/topic/reader-reply-tree-preferences.ts",
+        "lite/src/topic/reader-topic-dom-coordinator.ts",
+        "lite/src/topic/reader-topic-header.ts",
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-only-op-controller.test.ts",
+        "lite/tests/reader-reply-tree-preferences.test.ts",
+        "lite/tests/reader-topic-presentation.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "Header toggle、进度与唯一 TopicOnlyOpController 已接入真实 Topic scope。普通 TopicFlow 继续完整水合 Discourse post_stream，只看楼主只给 canonical ReplyTree 主流投影安装 username 谓词；楼主楼层平铺为虚拟根，非楼主目标经同一 revealAsFloor 临时揭示，关闭后原树立即恢复。旧 TopicSession onlyOpCursor/scanDone/onlyOpUsername 双轨扫描已删除；实时新增、缓存与导航不复制帖子、关系、请求或 cursor。真实长帖快速切换和三形态像素仍待浏览器验收。"
+    },
+    "READ-005": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/topic/reader-topic-navigation-controller.ts",
+        "lite/src/topic/reader-topic-timeline-controller.ts",
+        "lite/src/topic/reader-topic-timeline-view.ts",
+        "lite/src/topic/reader-topic-dom-coordinator.ts",
+        "lite/src/topic/reader-topic-scroll-adapter.ts",
+        "lite/src/stream/virtual-root-layout.ts",
+        "lite/src/topic/topic-session.ts",
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/queue/reader-open-queue-session.ts",
+        "lite/src/userscript/reader-userscript-target-adapter.ts",
+        "lite/src/userscript/reader-host-topic-source-coordinator.ts",
+        "lite/src/userscript/reader-userscript-application.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-navigation-controller.test.ts",
+        "lite/tests/reader-topic-timeline-controller.test.ts",
+        "lite/tests/reader-topic-timeline-view.test.ts",
+        "lite/tests/reader-topic-dom-coordinator.test.ts",
+        "lite/tests/reader-topic-scroll-adapter.test.ts",
+        "lite/tests/virtual-root-layout.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-open-queue-session.test.ts",
+        "lite/tests/reader-userscript-target-adapter.test.ts",
+        "lite/tests/reader-host-topic-source-coordinator.test.ts",
+        "lite/tests/reader-userscript-application.test.ts"
+      ],
+      "note": "所有来源共用唯一目标事务：TopicSession around 补流后，按 ReplyTree 祖先 root 的前缀偏移挂载虚拟窗口；ReaderTopicScrollAdapter 唯一读取滚动窗口、overscan、树状 DOM 预算、动态顶部 inset 和跳转动画。Timeline controller/View 统一总楼层、过滤序列、比例、pointer lens、键盘、楼层 dialog、ARIA、首末楼入口和 pending。Composer、Lightbox、实时新增、历史、通知/私信、宿主列表/Header 入口与 runtime.openTarget 均进入同一 navigation；宿主 source surface 关闭和指针锚点恢复由独立协调器完成，不新建跳转路径。真实快速滚动、动画手感与三形态像素仍待浏览器验收。"
+    },
+  "READ-006": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/history/reader-history-model.ts",
+        "lite/src/history/reader-history-repository.ts",
+        "lite/src/history/reader-history-navigation-controller.ts",
+        "lite/src/history/reader-history-panel-view.ts",
+        "lite/src/shell/reader-feedback-surface.ts",
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/browser-userscript-environment.ts",
+        "lite/src/topic/reader-topic-dom-coordinator.ts",
+        "lite/src/topic/reader-topic-navigation-controller.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-history-repository.test.ts",
+        "lite/tests/reader-history-navigation-controller.test.ts",
+        "lite/tests/reader-history-panel-view.test.ts",
+        "lite/tests/reader-feedback-surface.test.ts",
+        "lite/tests/reader-shell-template.test.ts",
+        "lite/tests/browser-userscript-environment.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-topic-dom-coordinator.test.ts"
+      ],
+      "note": "旧 linuxdo-enhanced-reader:history 数组协议、淘汰/累计已读/quota/排序与原子批量删除已归唯一仓储；controller 唯一拥有 back/forward/states/pending/epoch。历史列表 View 已复用稳定 Shell class，完成 20 条分页、pinyin-pro 搜索、排序偏好、多选范围、删除和定点 runtime.openTarget。确认与成功提示默认复用 application 唯一 ReaderFeedbackSurface。讨论根、首个可见楼层、双轴偏移与引用精确高亮已进入同一历史恢复事务，最终 viewport 恢复晚于引用导航，避免副作用改写历史当前位置；真实像素/返回位置仍未浏览器验收。"
+    },
+  "READ-007": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/history/reader-history-navigation-controller.ts",
+        "lite/src/history/reader-history-navigation-view.ts",
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/state/reader-preferences-schema.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-history-navigation-controller.test.ts",
+        "lite/tests/reader-history-navigation-view.test.ts",
+        "lite/tests/reader-shell-template.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts"
+      ],
+      "note": "Shell 已提供稳定左右 edge/button 命名锚点；唯一 View 只消费历史 controller 的 back/forward/pending，按 modal 实时宽度计算 0–15% 鼠标热区，隔离设置/通知/历史/收藏浮层，窗口与形态变化失效缓存，常显/热区偏好经 application 实时更新；按钮点击仍只调用 controller.navigate。真实像素、鼠标命中和三形态手感尚未浏览器验收。"
+    },
+  "READ-008": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/topic/reader-topic-context-controller.ts",
+        "lite/src/topic/reader-topic-context-surface.ts",
+        "lite/src/topic/reader-topic-navigation-controller.ts",
+        "lite/src/history/reader-history-model.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-context-controller.test.ts",
+        "lite/tests/reader-topic-context-surface.test.ts",
+        "lite/tests/reader-topic-navigation-controller.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "同 Topic 引用只从 canonical TopicSession 读取，父楼层号直接进入唯一 navigation，不再克隆父楼层预览 DOM。引用完整正文替换后复用现有媒体与翻译 feature 重同步；跳转从唯一 navigation 取得 canonical 元素，按忽略空白的原文精确匹配生成可切换 mark。高亮同时捕获来源楼层、父级、讨论窗口与主流 viewport，返回按钮只调用 runtime 的 navigation/discussion/history anchor 端口；状态随历史捕获/恢复。跨 Topic 引用保留 Discourse 原生链接语义，不手拼 endpoint。真实浏览器提示位置、返回手感与视觉尚未验收。"
+    },
+    "READ-009": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/reading/read-state-controller.ts",
+        "lite/src/reading/read-state-request-adapter.ts",
+        "lite/src/reading/read-viewport-adapter.ts",
+        "lite/src/topic/reader-post-presentation.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/read-state-controller.test.ts",
+        "lite/tests/read-state-request-adapter.test.ts",
+        "lite/tests/read-viewport-adapter.test.ts",
+        "lite/tests/reader-post-presentation.test.ts"
+      ],
+      "note": "可见候选、optimistic/confirmed、批量 flush 与原生 timings 已闭环。全部已挂载 PostView 只订阅同一 ReadStateController：未读圆点、已读原生 check SVG 与 625ms 中点/1450ms 兜底确认动画按主线投影；只有真实 Reader/完整讨论视口内且未启用 reduced-motion 的 optimistic 楼层才动画，实时重投、离屏、回屏、View/Topic 销毁均撤销旧 marker timer，不复制已读集合或 timings 请求。真实动画节奏、快速滚动与 screen-track 共存仍待浏览器验收。"
+    },
+    "READ-010": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/live/topic-live-controller.ts",
+        "lite/src/live/reader-topic-live-navigation-controller.ts",
+        "lite/src/live/reader-topic-live-navigation-view.ts",
+        "lite/src/topic/reader-topic-comments-header.ts",
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/discourse/native-message-bus.ts",
+        "lite/src/discourse/native-presence.ts"
+      ],
+      "tests": [
+        "lite/tests/topic-live-controller.test.ts",
+        "lite/tests/reader-topic-live-navigation-controller.test.ts",
+        "lite/tests/reader-topic-live-navigation-view.test.ts",
+        "lite/tests/reader-topic-comments-header.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/discourse-native-message-bus.test.ts",
+        "lite/tests/discourse-native-presence.test.ts"
+      ],
+      "note": "Topic/reactions 原生 MessageBus 已闭环；确认 created 且 canonical post 已提交后，独立实时导航 controller 按消息到达前的 atEnd 决定自动跟随或累计去重提示，跳转只走 message source 的唯一 navigation，失败保留可重试目标。稳定 Shell live-update 胶囊只投影计数/最早目标/jumping/dismissed；通知/私信面板以 application scope 独立消费 notifications:changed。首楼正文内的评论分界只读 canonical TopicSession 计数，在线用户只订阅 Discourse 原生 presence reply channel，过滤自己并复用原生头像/用户链接；切帖释放 channel 和 DOM。真实近底部滚动、Presence 页面像素与快速消息仍待浏览器验收。"
+    },
+    "READ-011": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/components/reader-icon.ts",
+        "lite/src/topic/reader-topic-header.ts",
+        "lite/src/userscript/reader-userscript-target-adapter.ts",
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/history/reader-history-navigation-controller.ts",
+        "lite/src/history/reader-history-navigation-view.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-icon.test.ts",
+        "lite/tests/reader-topic-presentation.test.ts",
+        "lite/tests/reader-userscript-target-adapter.test.ts",
+        "lite/tests/discourse-native-host-api.test.ts",
+        "lite/tests/reader-history-navigation-controller.test.ts",
+        "lite/tests/reader-history-navigation-view.test.ts"
+      ],
+      "note": "Header 从 canonical Topic 保留分类/等级/标签及其安全 icon 名，只用 Discourse 原生 presentation 生成链接和 iconElement；Shadow DOM 内的 use 只从同 document symbol 克隆并消毒。document-start 的标准 Reader 语义图标在 symbol 未就绪时统一回退到带 stroke 契约的 Lite registry，已有可见原生节点仍优先复用。同 Topic 楼层 URL 变化复用唯一 target/navigation 事务；历史前后继续由统一 History controller/View 提供。真实分类/标签 sprite、历史前后与三形态像素仍待浏览器验收。"
+    },
+    "READ-012": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/topic/reader-topic-special-content-feature.ts",
+        "lite/src/topic/reader-post-presentation.ts",
+        "lite/src/dom/post-view.ts",
+        "lite/src/topic/reader-topic-navigation-controller.ts",
+        "lite/src/topic/topic-read-request-adapter.ts",
+        "lite/src/discourse/native-request-descriptors.ts",
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/discourse/native-post-model-factory.ts",
+        "lite/src/post/discourse-action-descriptors.ts",
+        "lite/src/post/post-action-feature-commands.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-presentation.test.ts",
+        "lite/tests/reader-post-presentation.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/discourse-native-host-api.test.ts",
+        "lite/tests/topic-read-request-adapter.test.ts"
+      ],
+      "note": "accepted_answers、accepted_answer 与 canonical post 标记按 post_number 合并；已解决卡片、特殊 badges、notice、系统 action_code、Post Voting 和 Event 都只写 PostView.bodyLayer，不能成为回复树 sibling 或改变 branch SVG 拓扑。Post Voting 评论分页经中央 DomainRequestGateway 与原生 discourse/lib/ajax，投票、评论创建/投票和活动出席复用既有 PostActionController、descriptor、command 与 canonical TopicSession commit；活动只由唯一原生 model 工厂创建插件 Event model，不手拼报名或日历 endpoint。TopicSession 实时提交会原地重投已挂载视图。真实插件版本、翻译/媒体顺序和三形态像素仍待浏览器验收，但源码纵切已静态闭环。"
+    },
+    "READ-013": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/topic/reader-topic-header.ts",
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-presentation.test.ts",
+        "lite/tests/reader-shell-template.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/discourse-native-host-api.test.ts"
+      ],
+      "note": "标题、楼主、帖子/浏览/赞/用户统计、分类和标签只从 canonical TopicSession 归一化，并投到稳定 Shell Header host；TopicSession 更新原地刷新而不重建 Shell、扫描宿主 DOM或复制 Topic。分类/标签/用户路径只经 Discourse 原生 helper，图标从宿主 symbol 安全内联，标题点击和只看楼主控件分别进入唯一 navigation/projection controller。真实宽度换行、横向溢出和三形态像素仍待浏览器验收。"
+    },
+    "READ-014": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/topic/reader-topic-scroll-adapter.ts",
+        "lite/src/topic/reader-topic-navigation-preferences.ts",
+        "lite/src/settings/reader-motion-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/state/reader-preferences-schema.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-scroll-adapter.test.ts",
+        "lite/tests/reader-topic-navigation-preferences.test.ts",
+        "lite/tests/reader-motion-settings-form.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts"
+      ],
+      "note": "同一 Topic 只有一个高亮 owner；换目标、到期或销毁均清理 class、timer、首楼区域变量与 ResizeObserver，reduced-motion 缩短生命周期。颜色、圆角、边框、速率和次数由 application 实时偏好通道投影到唯一 Shell CSS owner，并与 timer 总生命周期共用快照；motion form 复用统一草稿、预览、单 revision 保存和放弃恢复。真实动画节奏与三形态像素仍待浏览器验收。"
+    },
+  "READ-015": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/topic/reader-topic-context-controller.ts",
+        "lite/src/topic/reader-topic-context-surface.ts",
+        "lite/src/topic/reader-topic-context-state.ts",
+        "lite/src/dom/reply-tree-dom-owner.ts",
+        "lite/src/history/reader-history-model.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-context-controller.test.ts",
+        "lite/tests/reader-topic-context-surface.test.ts",
+        "lite/tests/reader-topic-context-state.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-history-navigation-controller.test.ts"
+      ],
+      "note": "完整讨论由 TopicSession/ReplyTree canonical 状态派生，只创建当前 surface 的只读 entry 索引和 PostView 局部投影；不复制 post Map、分页、请求、树快照或动作状态。深层目标按祖先链开所属讨论，逐支收纳不改 canonical 树，MessageBus 新楼层实时进入；历史记录根楼层、首个可见楼层及双轴偏移。子树与投影查询为 O(n)。centered 窗口复用共享几何/pointer owner，旧 reply-window:v1 只持久化有界几何与讨论锚点；深树宽度由 canonical depth 派生，窄窗只在空白区横移，不扫描 DOM 猜关系。真实快速滚动、拖缩手感、层级线和三形态像素尚未浏览器验收。"
+    },
+  "READ-016": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/topic/reader-topic-header.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/post/topic-action-feature-commands.ts",
+        "lite/src/post/discourse-action-descriptors.ts",
+        "lite/src/post/post-action-controller.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-presentation.test.ts",
+        "lite/tests/topic-action-feature-commands.test.ts",
+        "lite/tests/discourse-action-descriptors.test.ts"
+      ],
+      "note": "Header 从 canonical Topic 投影 can_vote、user_voted 与 vote_count；点击经中央 descriptor、TopicActionFeatureCommands 和 PostActionController single-flight 提交 vote/unvote，并把权威结果回写同一 Topic。匿名态、禁用态、pending 与错误反馈保持独立，真实插件页面与三形态像素仍待浏览器验收。"
+    },
+  "COLLECT-001": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/notification/reader-notification-model.ts",
+        "lite/src/notification/discourse-notification-adapter.ts",
+        "lite/src/notification/reader-notification-controller.ts",
+        "lite/src/notification/reader-notification-panel-view.ts",
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/discourse/native-request-descriptors.ts",
+        "lite/src/network/domain-request-gateway.ts",
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-notification-feature.test.ts",
+        "lite/tests/discourse-native-host-api.test.ts",
+        "lite/tests/domain-request-gateway.test.ts",
+        "lite/tests/reader-shell-template.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "通知/私信双模式、8+6 分类目录、五类原生来源、cursor/offset/page 分页、原生 Notification presentation、摘要/摘录/状态归一化和现行 class View 已进入 application 唯一 runtime。所有读取经 DomainRequestGateway 与 discourse/lib/ajax，controller 只保留 32 页有界热缓存并在 notifications:changed 后失效/去抖刷新；408/425/5xx/网络/超时只在同一 load owner 等待 600ms 后重试一次，429 明确留给中央协调器。replied consolidated_count 通过 Discourse 原生 Topic around 目录完整拆分，数量不足或请求失败原样保留。真实端点、重试文案时序、头像与三形态像素仍待浏览器验收。"
+    },
+  "COLLECT-002": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/notification/reader-notification-controller.ts",
+        "lite/src/notification/reader-notification-panel-view.ts",
+        "lite/src/search/reader-search.ts",
+        "lite/src/post/notification-action-feature-commands.ts",
+        "lite/src/post/post-action-controller.ts",
+        "lite/src/post/discourse-action-descriptors.ts",
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/browser-userscript-environment.ts",
+        "lite/src/userscript/reader-userscript-application.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-notification-feature.test.ts",
+        "lite/tests/auxiliary-action-feature-commands.test.ts",
+        "lite/tests/post-action-controller.test.ts",
+        "lite/tests/discourse-action-descriptors.test.ts",
+        "lite/tests/discourse-native-host-api.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/browser-userscript-environment.test.ts",
+        "lite/tests/reader-userscript-application.test.ts"
+      ],
+      "note": "检索只消费已加载有界页缓存，mode/category 各自记忆，翻页由 controller 唯一拥有；历史与通知共用 userscript 注入的一份 pinyin-pro 全拼/首字母有界 LRU。原生单条/全部已读只走既有 ActionRequestAdapter/PostActionController/descriptor，并同步普通、高优先级、分组和总计数；Ctrl/Meta/中键或无 Reader target 时保留浏览器导航但仍按真实 notification ID 提交已读。全部已读由 controller 唯一 markingAll 状态阻止重复提交，View 投影 loader/处理中/busy 及主线成功/详细失败反馈。合成记录没有真实 ID 时绝不误写。真实新标签行为、按钮动画与服务端回声仍待浏览器验收。"
+    },
+  "COLLECT-003": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/history/reader-history-model.ts",
+        "lite/src/history/reader-history-repository.ts",
+        "lite/src/history/reader-history-panel-view.ts",
+        "lite/src/search/reader-search.ts",
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/browser-userscript-environment.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-history-repository.test.ts",
+        "lite/tests/reader-history-panel-view.test.ts",
+        "lite/tests/reader-shell-template.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/browser-userscript-environment.test.ts"
+      ],
+      "note": "旧 history key/数组协议由唯一 repository 兼容；Panel View 只消费 ordered repository，完成 recent/first 排序、20 条分页、原文与 pinyin-pro 全拼/首字母检索，并把目标楼层统一交给 runtime.openTarget。排序按钮按主线切换 history/pin 图标；无头像模板显示 history SVG，有模板失败才显示首字母；选择/删除以外的整行和修饰键点击均进入 Reader。真实三形态像素、点击手感和返回位置尚待浏览器验收。"
+    },
+  "COLLECT-004": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/history/reader-history-repository.ts",
+        "lite/src/history/reader-history-panel-view.ts",
+        "lite/src/shell/reader-feedback-surface.ts",
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-history-repository.test.ts",
+        "lite/tests/reader-history-panel-view.test.ts",
+        "lite/tests/reader-feedback-surface.test.ts",
+        "lite/tests/reader-shell-template.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "本页/全部结果多选、单条/批量/全部删除由 Panel View 提交给 repository 的 forgetMany/clear 原子持久事务；确认与成功提示复用 application 唯一 FeedbackSurface，选择集合会随 repository 变化修剪。真实确认焦点、三形态布局与大历史配额仍待浏览器验收。"
+    },
+  "COLLECT-005": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/bookmark/reader-bookmark-model.ts",
+        "lite/src/bookmark/discourse-bookmark-adapter.ts",
+        "lite/src/bookmark/reader-bookmark-controller.ts",
+        "lite/src/bookmark/reader-bookmark-panel-view.ts",
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/network/domain-request-gateway.ts",
+        "lite/src/search/reader-search.ts",
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/reader-userscript-application.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-bookmark-feature.test.ts",
+        "lite/tests/discourse-native-host-api.test.ts",
+        "lite/tests/domain-request-gateway.test.ts",
+        "lite/tests/request-identities.test.ts",
+        "lite/tests/reader-shell-template.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "Reaction/Topic/Post 三分类已收敛到 application 唯一 model/adapter/controller/View。收藏、user_actions 点赞和 CustomReaction.findReactions 三种原生来源逐页进入 DomainRequestGateway；同楼层自定义回应覆盖 heart。Controller 独占筛选、20 条分页、默认 tab 与顺序，View 只拥有 5px 拖动手势；链接保留目标楼层，选择/删除以外的整行和修饰键点击统一进入 runtime.openTarget。回应恢复原生 emoji、作者首字母/user-card，普通收藏无头像恢复 bookmark SVG，placeholder 和回应空态对齐主线；拼音搜索能力保留。来源事件按 tab 精确失效中央缓存。真实端点、表情失败、拖动手感和三形态像素仍待浏览器验收。"
+    },
+  "COLLECT-006": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/bookmark/reader-bookmark-controller.ts",
+        "lite/src/bookmark/reader-bookmark-panel-view.ts",
+        "lite/src/post/bookmark-action-feature-commands.ts",
+        "lite/src/post/post-action-controller.ts",
+        "lite/src/post/discourse-action-descriptors.ts",
+        "lite/src/post/discourse-action-transport.ts",
+        "lite/src/shell/reader-feedback-surface.ts",
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-bookmark-feature.test.ts",
+        "lite/tests/auxiliary-action-feature-commands.test.ts",
+        "lite/tests/post-action-controller.test.ts",
+        "lite/tests/discourse-action-descriptors.test.ts",
+        "lite/tests/discourse-action-transport.test.ts",
+        "lite/tests/reader-feedback-surface.test.ts",
+        "lite/tests/reader-shell-template.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "Topic/Post 收藏的单条、本页和全部结果选择由 controller 的 canonical bookmark ID 集合统一拥有；Reaction 明确禁用多选。单条删除复用 bookmark-api#delete，并与主线一致直接提交而不增加确认；批量删除复用 Discourse Bookmark.bulkOperation 并冻结确认发起时的 IDs。两者均经 BookmarkActionFeatureCommands/PostActionController 做结果校验、中央 bookmarks tag 失效和失败 reconcile，View 只投影 request busy/disabled 及主线成功/详细失败反馈。真实确认焦点、跨页大集合删除、按钮动画和宿主列表即时回声仍待浏览器验收。"
+    },
+    "MEDIA-001": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/media/reader-image-scale.ts",
+        "lite/src/media/reader-image-preferences.ts",
+        "lite/src/settings/reader-image-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts",
+        "lite/src/state/reader-preferences-schema.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-image-scale.test.ts",
+        "lite/tests/reader-image-settings-form.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts"
+      ],
+      "note": "旧 imageProfile 继续作为共享兼容字段，并新增浮窗/嵌入、全屏、移动/紧凑三份 profile 与共享开关；旧配置缺少新字段时自动把原值迁入三形态。唯一图片表单按当前编辑形态更新同一草稿，共享开启时同步全部 profile；application projection 从唯一 Workspace snapshot 选择 profile，模式/视口或偏好变化立即改 Reader root CSS 变量，不扫描图片或等待整体刷新。真实三形态比例视觉仍待浏览器验收。"
+    },
+  "MEDIA-002": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/media/reader-image-transform-controller.ts",
+        "lite/src/media/reader-lightbox-controller.ts",
+        "lite/src/media/reader-lightbox-view.ts",
+        "lite/src/media/reader-lightbox-feature.ts",
+        "lite/src/media/reader-topic-image-index.ts",
+        "lite/src/media/reader-topic-image-interaction.ts",
+        "lite/src/topic/reader-topic-navigation-controller.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-image-transform-controller.test.ts",
+        "lite/tests/reader-lightbox-controller.test.ts",
+        "lite/tests/reader-lightbox-view.test.ts",
+        "lite/tests/reader-lightbox-feature.test.ts",
+        "lite/tests/reader-topic-image-index.test.ts",
+        "lite/tests/reader-topic-image-interaction.test.ts",
+        "lite/tests/reader-topic-navigation-controller.test.ts"
+      ],
+      "note": "灯箱序列、缩放/平移、键盘、缩略图和 DOM surface 已由独立 owner 静态闭环；Topic cooked 图片点击只经一个委托入口。ReaderTopicImageIndex 现同时纳入正文和跨主题引用 cooked 图片，保持确定序列；首尾翻图只经 loadAdjacent 增量补一批相邻楼层，不再调用整帖 ensurePostStream。标准 Lightbox 继续复用同一 renderer/Post features/session/replies、Composer、资源和下载服务，跳回来源楼层仍进入通用导航 owner。真实边界翻图、引用图片与视觉未验收。"
+    },
+  "MEDIA-003": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/network/public-resource-request-adapter.ts",
+        "lite/src/media/reader-image-resource-service.ts",
+        "lite/src/network/domain-request-gateway.ts",
+        "lite/src/cache/response-repository.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/public-resource-request-adapter.test.ts",
+        "lite/tests/reader-image-resource-service.test.ts",
+        "lite/tests/domain-request-gateway.test.ts",
+        "lite/tests/response-repository.test.ts",
+        "lite/tests/browser-userscript-environment.test.ts"
+      ],
+      "note": "原图 Blob 已进入 application 唯一公共资源 adapter、中央 scheduler/single-flight 与 IndexedDB response cache；展示复用同一 ReaderImageResourceService/Object URL LRU，refresh 同时失效 Blob 和 URL。真实 CDN/CORS、缓存配额和灯箱交互仍未验收。"
+    },
+  "MEDIA-004": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/media/reader-lightbox-comment-model.ts",
+        "lite/src/media/reader-lightbox-comment-controller.ts",
+        "lite/src/media/reader-lightbox-comment-view.ts",
+        "lite/src/media/reader-lightbox-comment-form.ts",
+        "lite/src/media/reader-lightbox-image-quote.ts",
+        "lite/src/media/reader-lightbox-source-description.ts",
+        "lite/src/media/reader-lightbox-feature.ts",
+        "lite/src/discourse/native-composer.ts",
+        "lite/src/discourse/native-post-model-factory.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/topic/topic-session.ts",
+        "lite/src/dom/reply-tree-repository.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-lightbox-comment-controller.test.ts",
+        "lite/tests/reader-lightbox-comment-view.test.ts",
+        "lite/tests/reader-lightbox-image-quote.test.ts",
+        "lite/tests/reader-lightbox-feature.test.ts",
+        "lite/tests/discourse-native-composer.test.ts",
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/topic-session.test.ts",
+        "lite/tests/reply-tree-repository.test.ts"
+      ],
+      "note": "图片引用匹配、全帖补流、子孙投影和 MessageBus 后重投影已复用 canonical TopicSession/ReplyTree；标准 Lightbox 直接复用 Topic renderer/Post features/session/replies。当前 main.js 的来源说明、source reactions 与内联评论表单已成为硬门控：来源正文由 canonical post 纯派生；来源回应通过 ReaderPostActionFeature 的共享 reaction surface 复用同一目录、picker、pending 和原生 model；内联表单只拥有 target/draft/busy/validation，提交先以 replaceRaw 准备全应用唯一原生 Composer，再经 service:composer#save、PostActionController 与 TopicSession created ingress 完成闭环，不复制旧 /posts 直发、私有 post Map、关系快照或动作状态。真实 composer、reaction 插件、焦点和页面像素仍未验收。"
+    },
+    "MEDIA-005": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/media/reader-lightbox-controller.ts",
+        "lite/src/media/reader-lightbox-view.ts",
+        "lite/src/media/reader-lightbox-feature.ts",
+        "lite/src/media/reader-image-preferences.ts",
+        "lite/src/settings/reader-image-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-lightbox-controller.test.ts",
+        "lite/tests/reader-lightbox-view.test.ts",
+        "lite/tests/reader-lightbox-feature.test.ts",
+        "lite/tests/reader-image-settings-form.test.ts"
+      ],
+      "note": "图片描述继续由 canonical LightboxItem.alt 投影到唯一 description slot，空描述隐藏；展开状态由 lightbox controller 拥有，每次打开热读 application 偏好。ReaderImageSettingsForm 通过一次偏好事务保存默认展开与当前视口有界高度，ReaderImagePreferencesProjection 把高度写到灯箱继承设计变量且销毁精确恢复。真实长描述、切图与三形态布局仍待浏览器验收。"
+    },
+  "MEDIA-006": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/media/reader-image-download-service.ts",
+        "lite/src/media/reader-image-resource-service.ts",
+        "lite/src/media/reader-lightbox-batch-controller.ts",
+        "lite/src/media/reader-lightbox-batch-view.ts",
+        "lite/src/media/reader-compact-image-viewer.ts",
+        "lite/src/media/reader-topic-image-index.ts",
+        "lite/src/media/stored-zip.ts",
+        "lite/src/network/public-resource-request-adapter.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/topic/topic-session.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-image-download-service.test.ts",
+        "lite/tests/reader-image-resource-service.test.ts",
+        "lite/tests/reader-lightbox-batch-controller.test.ts",
+        "lite/tests/reader-lightbox-batch-view.test.ts",
+        "lite/tests/reader-compact-image-viewer.test.ts",
+        "lite/tests/reader-lightbox-feature.test.ts",
+        "lite/tests/reader-topic-image-index.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/public-resource-request-adapter.test.ts",
+        "lite/tests/topic-session.test.ts"
+      ],
+      "note": "单图与批量下载共用 Blob 取源、命名、保存端口和 STORE-only ZIP32；单图下载恢复主线原图确认、busy 与失败反馈。批量层只引用唯一 Lightbox sequence，打开即用 ReaderCompactImageViewer 预览首图，点击图片切换预览而非误改选择，第一层 Escape 关闭预览、第二层关闭批量层；归档名输入按主线隐藏。全帖范围继续经 canonical TopicSession，不复制 post Map、分页或请求。真实确认、像素交互和浏览器下载仍未验收。"
+    },
+    "MEDIA-007": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/user/discourse-native-user-port.ts",
+        "lite/src/user/reader-user-domain-session.ts",
+        "lite/src/user/reader-user-endorsement-adapter.ts",
+        "lite/src/user/reader-user-card-view.ts",
+        "lite/src/discourse/native-request-descriptors.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/media/reader-compact-image-viewer.ts",
+        "lite/src/media/reader-image-resource-service.ts",
+        "lite/src/media/reader-image-download-service.ts"
+      ],
+      "tests": [
+        "lite/tests/discourse-native-user-port.test.ts",
+        "lite/tests/reader-user-domain-session.test.ts",
+        "lite/tests/reader-user-endorsement-adapter.test.ts",
+        "lite/tests/reader-user-card-view.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-compact-image-viewer.test.ts"
+      ],
+      "note": "原生 User model 把头像、资料背景和用户卡背景投影为同一 canonical 用户 snapshot 的媒体描述符；头像同时保留 512 预览与 avatar-utils 1000 原图。唯一 UserCardView 只提交 openMedia 意图，BrowserRuntime 交给 ReaderCompactImageViewer 在用户卡旁锚定显示，复用公共原图、缩放、Flair 和下载服务；楼层头像点击先打开/保留同一用户卡，不再借用全屏帖子 Lightbox、合并帖子图片或补评论 stream。真实三类媒体、锚定、焦点恢复与三形态像素仍待浏览器验收。"
+    },
+  "MEDIA-008": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/media/reader-image-carousel-controller.ts",
+        "lite/src/media/reader-media-controller.ts",
+        "lite/src/media/reader-topic-media-feature.ts",
+        "lite/src/topic/reader-topic-dom-coordinator.ts",
+        "lite/src/userscript/browser-userscript-environment.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-image-carousel-controller.test.ts",
+        "lite/tests/browser-userscript-environment.test.ts",
+        "lite/tests/reader-media-controller.test.ts",
+        "lite/tests/reader-topic-media-feature.test.ts",
+        "lite/tests/reader-topic-dom-coordinator.test.ts"
+      ],
+      "note": "iframe、video/audio、HLS prepare/activate/suspend 生命周期已由唯一 owner 闭环；prepare 与主线一致移除 cooked 内全部 title，并设置 iframe/img lazy、media preload/playsinline 与 Bilibili autoplay off。document hidden 时立即 suspend 所有已知根，visible 时只恢复 active root；虚拟停放/回屏继续走同一生命周期。Discourse 多图轮播只重排直属 lightbox wrapper，不复制图片或请求。真实 HLS/轮播、页面切前后台与视觉仍未验收。"
+    },
+    "MEDIA-009": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/media/reader-katex-controller.ts",
+        "lite/src/media/reader-topic-media-feature.ts",
+        "lite/src/userscript/browser-userscript-environment.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-katex-controller.test.ts",
+        "lite/tests/reader-topic-media-feature.test.ts",
+        "lite/tests/browser-userscript-environment.test.ts"
+      ],
+      "note": "KaTeX 由唯一 controller 在 canonical PostView cooked 生命周期内渲染行内与块级公式；虚拟停放保留同一 DOM，重投前显式 release，错误公式保留原文且单个失败不撤掉帖子。JS/CSS 都由同版本固定 userscript 资源注入并由构建门禁校验；真实公式、字体、布局高度与快速滚动仍待浏览器验收。"
+    },
+  "MEDIA-010": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/media/reader-poll-model.ts",
+        "lite/src/media/reader-poll-feature.ts",
+        "lite/src/post/discourse-action-descriptors.ts",
+        "lite/src/post/post-action-feature-commands.ts",
+        "lite/src/post/post-action-controller.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-poll-feature.test.ts",
+        "lite/tests/discourse-action-descriptors.test.ts",
+        "lite/tests/discourse-action-transport.test.ts",
+        "lite/tests/post-action-feature-commands.test.ts",
+        "lite/tests/post-action-controller.test.ts"
+      ],
+      "note": "普通/多选/排序降级、关闭/用户组/结果规则、controller/view/PostView feature、canonical polls/polls_votes 和原生 poll-vote command 已闭环并进入生产 pipeline；投票和撤销 mutation 失败会显示动作专属反馈、释放 busy，并保持 authoritative savedVotes 不漂移。真实 Discourse Polls 插件版本、请求和 UI 尚未验收。"
+    },
+    "MEDIA-011": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/media/reader-cooked-content-feature.ts",
+        "lite/src/dom/floating-surface-wheel.ts",
+        "lite/src/components/reader-icon.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-cooked-content-feature.test.ts",
+        "lite/tests/floating-surface-wheel.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "ReaderCookedContentFeature 在所有 canonical PostView 与 solved bodyLayer 中统一包装代码块；超过十行时折叠，并由一份委托 handler 提供展开/收起、共享 Clipboard 复制、Shell 内预览、编辑副本和共享 Blob 下载。预览按钮已使用主线 maximize-2 图标，代码预览复用 floating-surface-wheel；尺寸变化只通知当前 Topic 唯一虚拟帧 owner。真实语法高亮、焦点、下载和快速滚动仍待浏览器验收。"
+    },
+    "MEDIA-012": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/media/reader-cooked-content-feature.ts",
+        "lite/src/components/reader-icon.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-cooked-content-feature.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "同一 cooked 流水线保留原始链接、Onebox 与 SVG，补齐主线 hashtag 本地图标、同源用户 mention user-card 语义，归一 inline onebox、GitHub repo 卡片和 Discourse link_counts，并投影 Markdown Callout。特殊 bodyLayer 复用主线 readerMediaHtml 的较窄范围：solved excerpt 有 inline onebox，所有特殊 cooked 有 hashtag/onebox/code，但不重复普通正文的关系或 click-count owner。真实复杂组合、链接行为和像素仍待浏览器验收。"
+    },
+  "MEDIA-013": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/media/reader-image-retry-controller.ts",
+        "lite/src/media/reader-topic-media-feature.ts",
+        "lite/src/topic/reader-topic-dom-coordinator.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-image-retry-controller.test.ts",
+        "lite/tests/reader-topic-media-feature.test.ts",
+        "lite/tests/reader-topic-dom-coordinator.test.ts"
+      ],
+      "note": "非 emoji 图片的失败监听、唯一重试按钮、原始 URL cache-busting、成功清理和 PostView 生命周期 release 已闭环；按钮已恢复主线 padding、radius、字体/颜色，以及请求期间 disabled/cursor/opacity。ReaderBrowserRuntime 已将唯一媒体 feature 接入普通、嵌套、实时和回屏 PostView。真实网络失败、图标和布局视觉仍未验收。"
+    },
+    "MEDIA-014": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/translation/reader-translation-controller.ts",
+        "lite/src/translation/reader-translation-button.ts",
+        "lite/src/translation/reader-translation-feature.ts",
+        "lite/src/translation/translation-request-adapter.ts",
+        "lite/src/translation/translation-text.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/site/reader-custom-site-repository.ts",
+        "lite/src/settings/reader-shortcut-settings-form.ts",
+        "lite/src/shell/reader-shortcut-controller.ts",
+        "lite/src/userscript/browser-userscript-environment.ts",
+        "lite/src/userscript/reader-userscript-application.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-translation-controller.test.ts",
+        "lite/tests/reader-translation-button.test.ts",
+        "lite/tests/reader-translation-feature.test.ts",
+        "lite/tests/translation-request-adapter.test.ts",
+        "lite/tests/translation-text.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-custom-site.test.ts",
+        "lite/tests/reader-shortcut-controller.test.ts",
+        "lite/tests/browser-userscript-environment.test.ts",
+        "lite/tests/reader-userscript-application.test.ts"
+      ],
+      "note": "文本判定、canonical PostView/完整讨论/已解决摘录 DOM、中央有界缓存、Google/Microsoft fallback、唯一 GM adapter 及 dynamic-surface feature 已闭环。站点 gate 已改为与主线 adapter 一致：仅内置中文 linux.do 隐藏，英文内置站和语言未知 generic Discourse 保留入口，不再误读 html lang。按钮、快捷键与命令共用 cycleMode，并恢复三模式反馈；请求失败恢复可见提示与 busy。真实外网、缓存回退、快捷键焦点和视觉仍待浏览器验收。"
+    },
+  "ACTION-001": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/discourse/native-composer.ts",
+        "lite/src/discourse/reader-native-composer-window.ts",
+        "lite/src/topic/reader-topic-core-bundle.ts",
+        "lite/src/topic/reader-topic-navigation-controller.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/discourse-native-composer.test.ts",
+        "lite/tests/reader-native-composer-window.test.ts",
+        "lite/tests/discourse-composer-events.test.ts",
+        "lite/tests/reader-topic-navigation-controller.test.ts",
+        "lite/tests/reader-post-action-feature.test.ts"
+      ],
+      "note": "ReaderBrowserRuntime 在 application scope 只创建一个 DiscourseComposerCoordinator，并以只读 Topic factory services 交给 Post features；ReaderPostActionFeature 仅在 canonical capability 明确允许时为普通、嵌套、实时/回屏和灯箱评论构造同一回复入口，点击只打开原生 Draft/model/composer，不手写提交 API。保存后只读订阅 composer:created-post/composer:edited-post/post:created：直接实体以 action-response 提交唯一 TopicSession，并在 DOM 首帧连接、实时输入 activate 之前订阅通用 ReaderTopicNavigationController；缺失实体时同 tick 合并为原生 load-last/refresh 但不猜聚焦目标，显式其他 Topic 被拒绝，随后 MessageBus 回声仍由 TopicSession 版本门去重。application 另只创建一份 ReaderNativeComposerWindowController 观察宿主 #reply-control，按当前主线投影持久几何、八向拖缩、键盘、Top Layer、外部菜单、滚轮隔离、字体与移动端模式；不复制 draft/model/save/request，纯位置帧不重复写尺寸/字号，关闭和销毁完整释放。没有迁移旧 appEvents.trigger、routeTo 或宿主 Topic controller monkey-patch。真实保存、跨形态焦点、高亮、输入法、Top Layer、拖缩和像素交互尚未验收。"
+    },
+    "ACTION-002": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/post/reader-selection-quote-feature.ts",
+        "lite/src/discourse/native-composer.ts",
+        "lite/src/userscript/browser-share-surface.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-selection-quote-feature.test.ts",
+        "lite/tests/discourse-native-composer.test.ts",
+        "lite/tests/browser-userscript-environment.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "Topic 引用已进入真实 runtime。每个 active Topic 只创建一份 ReaderSelectionQuoteFeature：文字只接受同一 .ldp-content 内的非空 Selection，从 TopicSession canonical post map 派生 username/post/topic BBCode；正文图片经同一 owner 的 350ms Hover toolbar、ReaderTopicImageIndex identity 与 readerLightboxImageQuoteRaw 派生原图引用。两类引用都交给 application 唯一 DiscourseComposerCoordinator，复制复用既有 userscript Clipboard 与 Shell FeedbackSurface；普通、嵌套、实时/回屏和完整讨论 PostView 没有独立 handler、图片扫描、请求、正文缓存或草稿。滚动、外点、切帖与销毁统一取消 toolbar/timer/frame；真实 Shadow DOM Selection、图片 Hover 周期、定位、剪贴板权限与原生 composer 插入仍待浏览器验收。"
+    },
+    "ACTION-013": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/post/reader-topic-shared-issue-coordinator.ts",
+        "lite/src/post/topic-action-feature-commands.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/discourse/native-post-model-factory.ts",
+        "lite/src/post/discourse-action-descriptors.ts",
+        "lite/src/post/post-action-controller.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-shared-issue-coordinator.test.ts",
+        "lite/tests/topic-action-feature-commands.test.ts",
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "“俺也一样”已进入真实 Topic runtime。ReaderTopicSharedIssueCoordinator 只从 canonical Topic、首帖作者、当前用户和原生 solved_allow_multiple_solutions 站点设置派生可见性/状态；唯一 PostView topicFooter 投影旧版首位按钮、人数、pressed、author disabled 与中央 pending。点击复用既有 shared-issue descriptor、PostActionController single-flight 和 TopicActionFeatureCommands；权威结果一次归并人数/用户状态，并在激活时把低通知级别提升到 tracking 而不降低高等级。403 只在当前 Topic 会话内抑制入口，不写持久坏缓存；普通、嵌套、实时/回屏和灯箱没有第二 handler。真实插件端点、403、通知回声与三形态像素仍待浏览器验收。"
+    },
+    "ACTION-014": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/post/reader-topic-action-rail.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/settings/reader-interaction-settings-form.ts",
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-action-rail.test.ts",
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/reader-interaction-settings-form.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "主帖快捷操作列已进入真实 Topic runtime。ReaderTopicActionRail 只拥有可见性、collapsed/compact/临时 expanded、420ms 长按拖动、比例位置和生命周期；回顶只调用唯一 Topic timeline，按钮内容由首帖 canonical 数据创建轻量 PostView 并交给既有 ReaderPostActionFeature，因此点赞/回应/回复/Boost/书签/分享/通知/共享问题/管理继续共用相同 capability、pending、mutation 和 reducer，不复制旧 syncTopicActionRail 的 HTML、handler 或请求。显示、锁定和恢复左侧默认锚点与 Boost 规则共用一份 interaction form 草稿和 application 偏好写事务，设置变更原地热投影，不要求整体刷新或清缓存。切帖会销毁 PostView、frame、timer、监听和 Shell 占位。真实三形态位置、贴边、拖动、回应 picker、与未来阅读队列的避让以及 Network 单次 mutation 仍待浏览器验收。"
+    },
+  "ACTION-003": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/post/post-action-capabilities.ts",
+        "lite/src/post/post-action-manifest-controller.ts",
+        "lite/src/discourse/native-post-model-factory.ts",
+        "lite/src/post/discourse-action-descriptors.ts",
+        "lite/src/post/discourse-action-transport.ts",
+        "lite/src/post/post-action-feature-commands.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/post-action-capabilities.test.ts",
+        "lite/tests/post-action-manifest-controller.test.ts",
+        "lite/tests/discourse-action-transport.test.ts",
+        "lite/tests/post-action-feature-commands.test.ts"
+      ],
+      "note": "点赞已进入真实 ReaderPostActionFeature runtime：所有 PostView 只投影一个 .ldp-like。安装 Discourse Reactions 时，按钮读取原生 site-settings 的 mainReaction，计数/acted 来自 canonical reactions/current_user_reaction，点击复用既有 reaction-toggle descriptor；无插件字段时才读取 actions_summary action id=2 并复用原生 likeAction.togglePromise。主回应从 reaction summary 去重，两个路径都进入同一 PostActionController pending、TopicSession authoritative commit 和 reactions-given 失效，不复制旧 DOM 多写或灯箱专用 handler。真实页面仍待浏览器验收。"
+    },
+    "ACTION-004": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/post/discourse-action-transport.ts",
+        "lite/src/post/post-action-feature-commands.ts",
+        "lite/src/post/post-action-manifest-controller.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/post/reader-topic-action-rail.ts",
+        "lite/src/discourse/native-post-model-factory.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/discourse-action-transport.test.ts",
+        "lite/tests/post-action-feature-commands.test.ts",
+        "lite/tests/post-action-manifest-controller.test.ts",
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/reader-topic-action-rail.test.ts"
+      ],
+      "note": "ReaderBrowserRuntime 每 Topic 只创建一份 ReaderPostActionFeature；正文、嵌套、Composer/MessageBus 实时新增、回屏、完整讨论、图片评论与主帖操作列共用同一 postFeatures 队列。主帖操作列用独立 PostView 投影同一完整动作清单，compact 只由 CSS 收纳，expanded 不复制按钮或 handler。回应目录只读原生 site-settings/text binding，不请求 /emojis.json；唯一原生 model 工厂订阅 Discourse /client_settings，先更新宿主 site-settings，再热重投所有已挂载普通、灯箱与主帖操作列视图，销毁时退订。所有视图共享 PostActionController pending、TopicSession authoritative commit、application composer 与 model factory。真实插件版本和三形态页面 UI 仍待浏览器验收，但源码纵切已静态闭环。"
+    },
+  "ACTION-005": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/post/post-action-feature-commands.ts",
+        "lite/src/post/discourse-action-descriptors.ts",
+        "lite/src/post/discourse-action-transport.ts",
+        "lite/src/discourse/native-post-model-factory.ts",
+        "lite/src/post/boost-report-access-adapter.ts",
+        "lite/src/shell/reader-report-form-surface.ts",
+        "lite/src/network/domain-request-gateway.ts",
+        "lite/src/discourse/native-host-api.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/post-action-feature-commands.test.ts",
+        "lite/tests/discourse-action-descriptors.test.ts",
+        "lite/tests/discourse-action-transport.test.ts",
+        "lite/tests/boost-report-access-adapter.test.ts",
+        "lite/tests/reader-report-form-surface.test.ts",
+        "lite/tests/domain-request-gateway.test.ts",
+        "lite/tests/discourse-native-host-api.test.ts"
+      ],
+      "note": "canonical can_boost capability 明确允许时，普通、嵌套、实时后插入、回屏和完整讨论 PostView 共用同一 Boost 入口；受控 16 字 composer 只读取原生 current-user/Topic/Post model，以正文指纹构造 boost-create identity，经统一 PostActionController、原生 create-boost transport 和 TopicSession authoritative commit 提交。canonical Boost list、复制预填、自己的删除和他人的举报入口均由同一 feature 投到 PostView 命名槽位。举报权限每次经 action-permission/no-store 中央链和具名原生插件 GET 读取，flag type/说明上限只取宿主 site/post-action-type，通用 Shell report surface 提交既有 boost-report descriptor/command。emoji 入口只经宿主 menu service/detached picker 打开，图片 URL 复用原生 text registry；统一 composer 管理 16 字、最多 5 个 emoji、IME、busy、raw 和 picker 关闭。真实插件页面交互仍待浏览器验收。"
+    },
+  "ACTION-006": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/post/boost-copy-rule.ts",
+        "lite/src/settings/reader-interaction-settings-form.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-interaction-settings-form.test.ts",
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "Boost 复制规则已收敛为不读 DOM、无隐藏计数器的纯函数；递增数字从输入正文现有尾巴推导，固定尾巴幂等，前缀/正文/尾巴按 Unicode codepoint 保持最终最多 16 字。帖子与回复 panel 只挂一份 ReaderInteractionSettingsForm，复用全局草稿、校验、外部 rebase、放弃和一次 application revision 保存；旧即时 setPrefs 未迁入。canonical Boost list 在普通、灯箱、后插入深层和回屏 PostView 共用既有 boost slot，气泡复制按点击时最新设置预填同一受控 Boost composer，emoji 图片 alt 进入正文；没有新增剪贴板或计数状态。真实插件页面像素与交互仍待浏览器验收。"
+    },
+    "ACTION-007": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/post/reader-bookmark-action-coordinator.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/post/post-action-feature-commands.ts",
+        "lite/src/post/topic-action-feature-commands.ts",
+        "lite/src/post/discourse-action-descriptors.ts",
+        "lite/src/post/bookmark-action-feature-commands.ts",
+        "lite/src/post/discourse-action-transport.ts",
+        "lite/src/bookmark/reader-bookmark-controller.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-bookmark-action-coordinator.test.ts",
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/post-action-feature-commands.test.ts",
+        "lite/tests/topic-action-feature-commands.test.ts",
+        "lite/tests/auxiliary-action-feature-commands.test.ts",
+        "lite/tests/reader-bookmark-feature.test.ts",
+        "lite/tests/discourse-action-descriptors.test.ts",
+        "lite/tests/discourse-action-transport.test.ts"
+      ],
+      "note": "Topic/Post 收藏现已进入真实 ReaderPostActionFeature：首帖只在既有 topicFooter 投影主题书签，普通、嵌套、实时/回屏、完整讨论和灯箱楼层共用同一楼层入口与 delegated handler。ReaderBookmarkActionCoordinator 是切换语义唯一 owner；create 只经 native-host-api 的 service:bookmark-api + BookmarkFormData，delete 复用既有 descriptor/controller/feature command。楼层缺 bookmark_id 时先用 TopicSession 强制刷新；主题缺 ID 时回退原生 Topic.deleteBookmarks。authoritative 结果只提交 TopicSession，bookmarks tag 与 bookmarks:changed 继续驱动同一收藏面板。静态实现与 133 个契约测试已通过；真实原生服务版本、按钮像素、错误提示和面板即时回声仍待浏览器验收。"
+    },
+    "ACTION-008": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/post/reader-share-action-coordinator.ts",
+        "lite/src/userscript/browser-share-surface.ts",
+        "lite/src/userscript/browser-userscript-environment.ts",
+        "lite/src/userscript/reader-userscript-application.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/discourse-native-host-api.test.ts",
+        "lite/tests/reader-share-action-coordinator.test.ts",
+        "lite/tests/browser-userscript-environment.test.ts",
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/reader-userscript-application.test.ts"
+      ],
+      "note": "主题分享与楼层精确链接已进入真实 ReaderPostActionFeature：每个普通、嵌套、实时/回屏、完整讨论和灯箱 PostView 都投影同一楼层复制入口；首帖保留 #1 精确链接，并只在既有 topicFooter 额外投影无楼层主题分享。URL 只由 native-host-api 的 discourse/lib/get-url 构造，Web Share/Clipboard 只由 userscript 浏览器能力桥绑定；ReaderShareActionCoordinator 独占 Topic/Post 语义和 single-flight。Web Share 取消静默，非取消错误或不支持时回退剪贴板，提示沿用旧版文案。没有新增请求、缓存、DOM 特例或动态楼层 handler；真实浏览器的原生分享、权限、剪贴板、按钮图标与提示仍待验收。"
+    },
+    "ACTION-009": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/discourse/native-post-model-factory.ts",
+        "lite/src/post/reader-topic-notification-coordinator.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/post/topic-action-feature-commands.ts",
+        "lite/src/post/discourse-action-descriptors.ts",
+        "lite/src/post/discourse-action-transport.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-notification-coordinator.test.ts",
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/topic-action-feature-commands.test.ts",
+        "lite/tests/discourse-action-descriptors.test.ts",
+        "lite/tests/discourse-action-transport.test.ts"
+      ],
+      "note": "主题通知级别已进入真实 ReaderPostActionFeature：只有首帖既有 topicFooter 投影常规/跟踪/关注/已屏蔽四级 select，匿名态保留禁用入口；普通、嵌套、实时/回屏、完整讨论和灯箱继续复用同一 PostView feature。ReaderTopicNotificationCoordinator 独占四级校验、无变化跳过与 Topic 级串行化；DiscourseNativePostModelFactory 统一构造 Topic/TopicDetails，写入只调用原生 TopicDetails.updateNotifications。pending 继续由 PostActionController 投影到首帖，选择中的级别从中央 command variant 显示，不建立 UI 状态副本；成功只由 TopicActionFeatureCommands 提交 canonical Topic，失败自动恢复原级别并复用统一提示。真实原生 model 版本、匿名/登录态、下拉像素、错误和跨 PostView 回声仍待浏览器验收。"
+    },
+  "ACTION-010": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/post/boost-report-access-adapter.ts",
+        "lite/src/shell/reader-report-form-surface.ts",
+        "lite/src/network/domain-request-gateway.ts",
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/discourse/native-post-model-factory.ts",
+        "lite/src/post/post-action-feature-commands.ts",
+        "lite/src/post/discourse-action-transport.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/boost-report-access-adapter.test.ts",
+        "lite/tests/reader-report-form-surface.test.ts",
+        "lite/tests/domain-request-gateway.test.ts",
+        "lite/tests/discourse-native-host-api.test.ts",
+        "lite/tests/post-action-feature-commands.test.ts",
+        "lite/tests/discourse-action-transport.test.ts"
+      ],
+      "note": "Boost、普通楼层与主题举报均已完成真实 runtime 纵切。非自己的 Boost 由唯一 PostView feature 显示入口；权限经中央 action-permission/no-store 与具名 Discourse 原生插件 GET 读取。普通楼层与主题首帖同一 feature 只在 canonical report capability allowed 时显示入口，并通过唯一 native Post model 的 actionByName.can_act 过滤 flag；#1 只在既有 PostView topicFooter 命名槽投影一次“举报主题”，同时按 Discourse 原生语义把 action.flagTopic 指向同一 Post model。site.flagTypes 及原生 MAX_MESSAGE_LENGTH 由宿主桥投影，Shell report surface 统一选项、必填说明、busy、焦点和错误重试，最终分别复用既有 boost-report/post-report descriptor/command。真实页面仍待浏览器验收。"
+    },
+    "ACTION-011": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/discourse/native-composer.ts",
+        "lite/src/post/reader-post-management-action-coordinator.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/post/post-action-feature-commands.ts",
+        "lite/src/post/topic-post-action-adapter.ts"
+      ],
+      "tests": [
+        "lite/tests/discourse-native-composer.test.ts",
+        "lite/tests/reader-post-management-action-coordinator.test.ts",
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/post-action-feature-commands.test.ts",
+        "lite/tests/topic-post-action-adapter.test.ts"
+      ],
+      "note": "编辑与删除已完成真实 runtime 纵切。所有 PostView 都只按 canonical edit/delete capability 投影入口；编辑先经 TopicSession 的中央 post-by-id refresh 取得最新 raw，再由唯一 DiscourseComposerCoordinator 以 Composer.EDIT 打开原生编辑器，同楼层 single-flight、其他 composer 冲突显式拒绝，保存事件继续进入既有 canonical 同步链。删除复用 Shell FeedbackSurface 确认、统一原生 Post model/current-user、post-delete descriptor、PostActionController 与 TopicPostActionAdapter；取消零 mutation，成功只由 TopicSession 墓碑/树/DOM owner 移除，不直接删 DOM。真实页面仍待浏览器验收。"
+    },
+    "ACTION-012": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/shell/reader-assignment-form-surface.ts",
+        "lite/src/post/reader-post-management-action-coordinator.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/post/post-action-feature-commands.ts",
+        "lite/src/post/discourse-action-transport.ts"
+      ],
+      "tests": [
+        "lite/tests/discourse-native-host-api.test.ts",
+        "lite/tests/reader-assignment-form-surface.test.ts",
+        "lite/tests/reader-post-management-action-coordinator.test.ts",
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/post-action-feature-commands.test.ts",
+        "lite/tests/discourse-action-transport.test.ts"
+      ],
+      "note": "指定与管理已完成真实 runtime 纵切。Post/Topic 指定共用唯一 ReaderAssignmentFormSurface 和 ReaderPostManagementActionCoordinator，表单统一校验、busy、焦点、Esc/Tab、错误重试；提交只调用已登记 service:task-actions#putAssignment，经同一 ActionController 分别回写 canonical Post/Topic，pending 通过显式 PostView presentation 投影。管理入口只把统一工厂的原生 Post model 交给 discourse admin-post-menu/controller，菜单权限和后续 mutation 不在 userscript 复制；scheduleRerender 回到中央 post refresh。真实页面仍待浏览器验收。"
+    },
+    "USER-001": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+		"lite/src/discourse/native-request-descriptors.ts",
+        "lite/src/user/discourse-native-user-port.ts",
+        "lite/src/user/reader-user-domain-session.ts",
+        "lite/src/user/reader-user-card-view.ts",
+		"lite/src/user/reader-user-profile-presentation.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/discourse-native-user-port.test.ts",
+        "lite/tests/reader-user-domain-session.test.ts",
+        "lite/tests/reader-user-card-view.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "application 唯一用户 session 通过 Discourse 原生 User.findByUsername 取得并冻结身份、头像、简介、头衔、网站、徽章、组、Flair 字段和关系能力；普通 profile 失败仅对 404 等非终止错误回退 forCard，abort/408/429/5xx 不放大请求。完整徽章通过登记的 /user-badges/:username.json 只读 descriptor 独立进入中央 gateway/cache，再与 featured grant 合并、去重和按主线顺序投影。唯一 UserCardView 用一份 data-user-card 委托覆盖 canonical PostView；头像/头衔 Flair、日期、安全 URL 与富文本简介共用 reader-user-profile-presentation，不复制清洗器。Hover prefetch、可见延迟、外点/Escape、焦点恢复、媒体和动作仍由同一 card/session 管理。真实徽章图片、Flair、Hover 手感、焦点和三形态像素仍待浏览器验收。"
+    },
+    "USER-002": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+		"lite/src/discourse/native-request-descriptors.ts",
+        "lite/src/user/discourse-native-user-port.ts",
+        "lite/src/user/reader-user-domain-session.ts",
+        "lite/src/user/reader-user-card-view.ts",
+        "lite/src/network/domain-request-gateway.ts",
+        "lite/src/cache/response-repository.ts"
+      ],
+      "tests": [
+        "lite/tests/discourse-native-user-port.test.ts",
+        "lite/tests/reader-user-domain-session.test.ts",
+        "lite/tests/reader-user-card-view.test.ts",
+        "lite/tests/domain-request-gateway.test.ts",
+        "lite/tests/response-repository.test.ts"
+      ],
+      "note": "基础资料先调用 Discourse 原生 User.findByUsername，summary() 补帖子、主题、获赞、阅读、访问和采纳；summary 没有核心统计且不是 abort/408/429/5xx 时，再通过登记的 /directory_items.json username 查询独立补齐帖子、主题、获赞和点赞。summary 的终止错误交回中央 gateway 形成可观测 partial，基础 profile 仍由 onBaseProfile 保留；完整徽章和目录统计使用独立 resource identity/cache slot，失败不会互相清空。所有结果只合并成可持久化纯数据，不保存原生 model、Promise、DOM、原始响应或 email。真实字段变体、错误响应和用户矩阵仍待浏览器验收。"
+    },
+  "USER-003": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/user/discourse-native-user-port.ts",
+        "lite/src/user/reader-user-domain-session.ts",
+        "lite/src/user/reader-user-card-view.ts",
+        "lite/src/network/domain-request-gateway.ts"
+      ],
+      "tests": [
+        "lite/tests/discourse-native-user-port.test.ts",
+        "lite/tests/reader-user-domain-session.test.ts",
+        "lite/tests/reader-user-card-view.test.ts",
+        "lite/tests/domain-request-gateway.test.ts"
+      ],
+      "note": "following/followers 只调用当前站点 discourse-follow 官方 route model；完整集合按 username+kind 进入中央 gateway/scheduler/429/ResponseRepository/IndexedDB，一份 session 在内存做共享搜索规范、有界分页、pageCount 和空集合记忆，搜索或翻页不追加请求。唯一 follow panel 对齐主线标题、检索 placeholder、总数/匹配数、空态、previous/next 与头像 Flair；普通点击保留 target=_blank 原生用户页，不被 Lite 提升为主卡。Hover 500ms 后用同一 session/user-prefetch 打开二级预览；预览、列表和根卡通过 breadcrumbs 回退但不覆盖 active root，不创建第二 controller/session/cache，请求晚到由 preview token 拒绝。真实权限、空/长列表、多级 Hover 手感及三形态像素尚未浏览器签署。"
+    },
+    "USER-004": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/user/discourse-native-user-port.ts",
+        "lite/src/user/reader-user-domain-session.ts",
+        "lite/src/user/reader-user-card-view.ts",
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/discourse/native-composer.ts",
+        "lite/src/post/discourse-action-descriptors.ts",
+        "lite/src/post/user-action-feature-commands.ts",
+        "lite/src/post/post-action-controller.ts",
+		"lite/src/shell/reader-choice-form-surface.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/discourse-native-user-port.test.ts",
+        "lite/tests/reader-user-domain-session.test.ts",
+        "lite/tests/reader-user-card-view.test.ts",
+        "lite/tests/discourse-native-host-api.test.ts",
+        "lite/tests/discourse-native-composer.test.ts",
+        "lite/tests/discourse-action-descriptors.test.ts",
+        "lite/tests/user-action-feature-commands.test.ts",
+		"lite/tests/post-action-controller.test.ts",
+		"lite/tests/reader-choice-form-surface.test.ts"
+      ],
+      "note": "用户 snapshot 从原生 User model 投影 follow、列表可见性、私信、静音、忽略、category_expert_endorsements 及各自动作权限，不根据 DOM 或 trust level 猜测；唯一 toolbar 按主线顺序投影私信、通知、认可、关注。follow/notification/ignore 的 pending、success 和详细 failure 进入 surface 内 aria-live 状态，失败恢复按钮；期限选择无法打开时不关闭用户卡。预览动作始终使用预览 profile/username，成功只更新同一 session canonical user，不把 active root 偷换为预览用户。认可候选与 mutation 继续经具名 descriptor、中央 gateway/ActionController 和共享 choice form；没有第二用户对象、表单、composer 或局部缓存。真实能力字段变体、写 mutation、菜单像素和焦点仍待浏览器验收。"
+    },
+    "USER-005": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/user/discourse-native-user-port.ts",
+        "lite/src/user/reader-user-domain-session.ts",
+        "lite/src/user/reader-connect-trust-adapter.ts",
+        "lite/src/user/reader-settings-user-view.ts",
+		"lite/src/user/reader-user-profile-presentation.ts",
+        "lite/src/settings/reader-settings-controller.ts",
+        "lite/src/translation/translation-request-adapter.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/discourse-native-user-port.test.ts",
+        "lite/tests/reader-user-domain-session.test.ts",
+        "lite/tests/reader-connect-trust-adapter.test.ts",
+        "lite/tests/reader-settings-user-view.test.ts",
+        "lite/tests/reader-settings-controller.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "ReaderBrowserRuntime 只创建一个用户 session；当前账号设置作为 application 第二投影复用用户卡 profile/community snapshot、身份缓存和诊断，切 tab 不发第二请求。用户信息按主线投影封面、头像/头衔 Flair、Lv、网站、安全富文本简介、加入/最近日期、浏览量、信任、群组、关注关系与点数，并移除 Lite 独有八项社区统计；不额外展示 email。Connect 与 Credit 共用外部摘要装载壳和中央 gateway/scheduler/429/ResponseRepository，但保留独立 endpoint/schema/账号 slot。Connect 只允许登记的凭据 GET，账号匹配后进入 5 分钟 fresh/24 小时 retain 缓存；下限危险、合规记录、超额成就和 reduced-motion 动效按主线结构投影。真实 Connect 登录态、错误页、三形态像素与跨域凭据仍待浏览器验收。"
+    },
+  "USER-006": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/translation/translation-request-adapter.ts",
+        "lite/src/userscript/browser-userscript-environment.ts",
+        "lite/src/user/reader-credit-account-adapter.ts",
+        "lite/src/user/reader-credit-account-bridge.ts",
+        "lite/src/user/reader-user-domain-session.ts",
+        "lite/src/user/reader-settings-user-view.ts",
+        "lite/src/settings/reader-settings-controller.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/translation-request-adapter.test.ts",
+        "lite/tests/browser-userscript-environment.test.ts",
+        "lite/tests/reader-credit-account-adapter.test.ts",
+        "lite/tests/reader-credit-account-bridge.test.ts",
+        "lite/tests/reader-user-domain-session.test.ts",
+        "lite/tests/reader-settings-user-view.test.ts",
+        "lite/tests/reader-settings-controller.test.ts",
+        "lite/tests/reader-settings-view.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "LDC 只读摘要只允许精确 GET https://credit.linux.do/api/v1/oauth/user-info，并经共享 userscript HTTP capability、中央 gateway/scheduler/429/ResponseRepository 与 30 分钟持久成功缓存；返回账号必须与当前 Discourse username 一致后才写缓存。credit.linux.do 独立同源桥不启动 Reader，成功继续写旧版 GM key、失败保留旧值。设置页独立 credit slot 按主线分离账号副标题与 Lv pill，今日额度保留剩余/每日上限及负数“无限制”分支，积分与收支、支付与账户各六项分组，缺省余额/每日限额保持 0/未设置；四个入口与失败登录说明均有明确语义。真实跨域凭据、同源桥、缓存升级/回滚和三形态像素尚未浏览器签署。"
+    },
+    "SET-001": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/appearance/reader-appearance-style-controller.ts",
+        "lite/src/appearance/reader-theme-controller.ts",
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/discourse/reader-native-composer-window.ts",
+        "lite/src/settings/reader-appearance-settings-form.ts",
+        "lite/src/settings/reader-settings-field-interaction.ts",
+        "lite/src/settings/reader-settings-help-surface.ts",
+        "lite/src/settings/reader-theme-settings-control.ts",
+        "lite/src/layout/branch-overlay.ts",
+        "lite/src/shell/embedded-host-appearance.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-appearance-settings-form.test.ts",
+        "lite/tests/reader-settings-field-interaction.test.ts",
+        "lite/tests/reader-settings-help-surface.test.ts",
+        "lite/tests/reader-theme-controller.test.ts",
+        "lite/tests/discourse-native-host-api.test.ts",
+        "lite/tests/reader-native-composer-window.test.ts",
+        "lite/tests/reader-branch-overlay-controller.test.ts",
+        "lite/tests/embedded-host-appearance.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "外观 profile、15 字段表单、草稿预览、单 revision 保存、Reader CSS 与 embedded host resolved 投影已收敛到唯一 appearance owner。主题控件除 Reader root 外，现通过类型化 HostThemePort 精确调用 Discourse interface-color 的 forceLightMode/forceDarkMode/useAutoMode，并成对订阅 interface-color:changed；外部事件只归一化偏好，不反向触发宿主形成回路。明暗两套 42 个主题 token 已按当前 main.css 补齐，危险、强调、链接和结构色不再回退到亮色；自定义 accent/accent-low/link 也热投影到原生 Composer 并在关闭时精确恢复。字段交互与帮助继续由 Settings Shell 的唯一 owner 委托处理，主题切换不会吞未保存预览草稿。真实宿主事件、Composer computed style、指针手感和三形态像素仍待浏览器验收。"
+    },
+    "SET-002": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/media/reader-image-scale.ts",
+        "lite/src/media/reader-image-preferences.ts",
+        "lite/src/settings/reader-image-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-image-scale.test.ts",
+        "lite/tests/reader-image-settings-form.test.ts"
+      ],
+      "note": "schema 在保留旧 imageProfile 的同时追加 imageProfilesShared 与浮窗、全屏、移动三份 profile；旧 72 字段配置默认共享并无损迁移，关闭共享后各形态独立规范化。ReaderImageSettingsForm 只用一个 mode selector、一个 profile editor 和一个草稿，不维护三套表单；保存产生一次 application revision，Workspace mode/紧凑断点和偏好事件共同驱动唯一 CSS 投影。正文与已解决摘录的非 emoji 图片现实际消费 --ldp-image-zoom，修复了此前控制器写值但渲染层无消费者的断链；共享关闭说明也明确为只修改当前形态。真实模式切换与像素比例仍待浏览器验收。"
+    },
+    "SET-003": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/media/reader-lightbox-controller.ts",
+        "lite/src/media/reader-lightbox-view.ts",
+        "lite/src/media/reader-lightbox-feature.ts",
+        "lite/src/media/reader-lightbox-geometry-controller.ts",
+        "lite/src/media/reader-image-preferences.ts",
+        "lite/src/settings/reader-image-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-lightbox-controller.test.ts",
+        "lite/tests/reader-lightbox-view.test.ts",
+        "lite/tests/reader-lightbox-feature.test.ts",
+        "lite/tests/reader-lightbox-geometry-controller.test.ts",
+        "lite/tests/reader-image-settings-form.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "灯箱评论能力与默认展开明确分离；评论、描述、原图三个默认值和描述高度/评论宽度由唯一图片表单纳入一个草稿与一次 application revision。三个开关每次打开灯箱时热读 canonical preferences，描述与评论布局值由 application scope 投影为继承设计变量；灯箱不再用局部 25% 声明遮蔽页面级评论宽度，25% 只作为 var 回退，打开后的几何 owner 仍可用 inline 值接管拖拽与持久化。真实重开、原图 Network、拖动和像素状态仍待浏览器验收。"
+    },
+  "SET-004": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/font/reader-font-style-controller.ts",
+        "lite/src/settings/reader-font-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-font-settings-form.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "内置字体渲染、是否扩展到宿主页、浏览器差异参数和外部 fr-init-once 工具让位已由唯一 font runtime 投影；外部状态变化不会吞未保存草稿。渲染 CSS 现同时消费 Reader、原生 Composer 与可选宿主 body 状态，补齐 mac smoothing，并对 code/kbd/Math/KaTeX/icon/glyph/Font Awesome/video.js 精确撤销 stroke 与 shadow，修复此前宿主开关和 Composer 状态只有属性没有渲染消费者的断链。真实 Chrome/Firefox/WebKit 文字效果和外部脚本共存仍待浏览器矩阵验收。"
+    },
+  "SET-005": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/font/reader-font-style-controller.ts",
+        "lite/src/settings/reader-font-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-font-settings-form.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "宿主主题标题、头像、统计和标签卡片的 50%–200% profile、默认 110/80/120/100、逐字段预览/恢复/保存及 page root CSS 投影已闭环；设置行文案已由 Lite 英文 Label Card 恢复为主线标签卡片。此前 evidence 误绑到嵌入宽度/拖动，现已按 catalog 的真实 SET-005 语义纠正；真实列表拥挤、截断和左右嵌入像素仍待验收。"
+    },
+  "SET-006": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/font/reader-font-style-controller.ts",
+        "lite/src/settings/reader-font-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-font-settings-form.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "界面、正文、回复和宿主四个作用域的字体家族/自定义本机字体/字重/颜色，以及前三者字号已收敛到一份对象草稿和唯一 CSS owner；本机字体只经浏览器原生 queryLocalFonts 显式触发、去重后进入共享 datalist。旧版分组字体菜单的焦点、授权状态和三形态像素仍待真实浏览器验收。"
+    },
+  "SET-007": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/settings/reader-numeric-settings-draft.ts",
+        "lite/src/layout/reader-layout-style-controller.ts",
+        "lite/src/settings/reader-layout-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-numeric-settings-draft.test.ts",
+        "lite/tests/reader-layout-settings-form.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "普通与全屏五区 profile、最小比例、旧优先序再平衡和合计 100% 已由 schema 统一；一份 mode-aware form 分别保留两种形态草稿，经唯一 layout runtime 实时投影五个 CSS 变量，并在一次 preference revision 内保存。外部偏好 rebase 只覆盖未本地修改字段，放弃/销毁清除 preview 并恢复持久值或接管前 inline 值。真实三形态滑杆、模式切换、锚定布局和像素零偏移仍待验收。"
+    },
+    "SET-008": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/shell/reader-workspace.ts",
+        "lite/src/shell/reader-workspace-coordinator.ts",
+        "lite/src/settings/reader-window-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-workspace.test.ts",
+        "lite/tests/reader-workspace-coordinator.test.ts",
+        "lite/tests/reader-window-settings-form.test.ts"
+      ],
+      "note": "浮窗几何、锁定、固定和八向缩放模型已闭环；Window form 只调用 Workspace 唯一几何 owner，字段修改、锁定、固定与恢复不会保存第二份布局状态。设置表面已恢复主线两个 category、2x2 宽高坐标、两项紧凑 checkbox、完整形态状态和无作用 reset disabled；测试覆盖 floating/fullpage/compact 三状态。真实像素、拖缩同步与指针矩阵仍待浏览器验收。"
+    },
+  "SET-009": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/appearance/reader-appearance-style-controller.ts",
+        "lite/src/settings/reader-appearance-settings-form.ts",
+        "lite/src/shell/embedded-host-appearance.ts",
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-appearance-settings-form.test.ts",
+        "lite/tests/embedded-host-appearance.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "强调/链接/斑马纹/回复线/引用线/分隔线/楼层预览共用 schema、对象草稿和唯一 CSS owner；结构色关闭只透明化结构颜色，不改树或 DOM，embedded host 消费同一 resolved profile。设置页已恢复主线四主组、四命名子组、说明与结构线 Header switch。BranchOverlay 消费同一回复线颜色/宽度/圆角，并把细可见线与最小 8px 透明命中热区分开；真实 SVG 命中和像素零偏移仍待 lite 浏览器验收。"
+    },
+  "SET-010": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/topic/reader-topic-navigation-preferences.ts",
+        "lite/src/topic/reader-topic-scroll-adapter.ts",
+        "lite/src/settings/reader-motion-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/app/reader-application.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-topic-navigation-preferences.test.ts",
+        "lite/tests/reader-motion-settings-form.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-application.test.ts"
+      ],
+      "note": "五项跳转闪烁参数已由 schema 归一化；motion form 复用对象草稿并只调用现有 navigation projection 预览 CSS，保存与加载动画合并为一次 application revision。字段已恢复主线 help、ARIA、ldp-flash class、output/value 格式和颜色值呈现。真实 class/token/timer 仍仅由 Topic scroll adapter 管理，设置页没有第二计时器或 DOM 扫描；真实浏览器动画和三形态像素仍待验收。"
+    },
+  "SET-011": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/motion/reader-loading-animation-view.ts",
+        "lite/src/settings/reader-motion-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/reader-userscript-application.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-motion-settings-form.test.ts",
+        "lite/tests/reader-shell.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "有序 schema 目录覆盖随机加十种固定样式；Shell scope 唯一 loading view 只订阅 opening/switching，不发请求、不扫 Post、不建 timer，并在 running/failed 隐藏。随机模式跨切帖避开上次结果，无关偏好更新不重抽；设置预览复用正式 renderer，换一个零写入，选择与高亮通过统一设置事务保存。十种正式构图、时长、关键帧、380px container 与 reduced-motion 已恢复；设置选择行、预览头和只在可见 loadmask 下生效的窄窗 Header 几何也已进入 CSS manifest 签名。运行时以 readerSession + navigation sequence 为门控，同 Topic 旧打开事务不能写恢复/历史或提前隐藏新遮罩。真实 lite 加载过程、帧节奏、低运动、低配置 long task 和三形态像素仍待浏览器验收。"
+    },
+  "SET-012": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/settings/reader-performance-settings-form.ts",
+        "lite/src/app/reader-performance-policy.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/topic/topic-session.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-performance-settings-form.test.ts",
+        "lite/tests/reader-performance-policy.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/topic-session.test.ts"
+      ],
+      "note": "性能预设与 pageSize 已进入唯一 ReaderPerformancePolicy；当前及后续 Topic 原地更新下一批大小且不移动 cursor。稳定 performance form 复用 schema 预设/范围并通过 Settings controller 单次保存，4 个预设、4 组 7 字段、逐项 help、116px 控制列和卡片间距均已与主线设置表面对齐；browser stage 由显式偏好投影挂到唯一 panelHost。真实长帖请求批次和设置像素仍待验收。"
+    },
+  "SET-013": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/dom/reply-tree.ts",
+        "lite/src/stream/reply-tree-virtual-layout-controller.ts",
+        "lite/src/stream/virtual-root-layout.ts",
+        "lite/src/topic/reader-topic-scroll-adapter.ts",
+        "lite/src/topic/reader-topic-navigation-preferences.ts",
+        "lite/src/topic/reader-topic-dom-coordinator.ts",
+        "lite/src/topic/reader-topic-flow-controller.ts",
+        "lite/src/app/reader-performance-policy.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/app/reader-application.ts",
+        "lite/src/settings/reader-performance-settings-form.ts",
+        "lite/src/state/reader-preferences-schema.ts"
+      ],
+      "tests": [
+        "lite/tests/reply-tree.test.ts",
+        "lite/tests/reply-tree-virtual-layout-controller.test.ts",
+        "lite/tests/virtual-root-layout.test.ts",
+        "lite/tests/reader-topic-scroll-adapter.test.ts",
+        "lite/tests/reader-topic-navigation-preferences.test.ts",
+        "lite/tests/reader-topic-dom-coordinator.test.ts",
+        "lite/tests/reader-topic-flow-controller.test.ts",
+        "lite/tests/reader-performance-policy.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-application.test.ts",
+        "lite/tests/reader-performance-settings-form.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts"
+      ],
+      "note": "前后屏窗口、偏好字段和 application 实时投影已接入：每个 scroll frame 读取最新 overscan 与挂载上限；上限按祖先 root 的完整已知子树权重扩展连续根区间，可见根在单树超限时软保留，绝不拆树或提升子楼层。离屏 canonical 楼层只保存数据/拓扑，进入窗口时才惰性创建祖先分支。同一根的子树权重改变时只失效该根旧实测高度，权重不变继续复用，避免远端 spacer 与后续根偏移滞后。performance form 已通过统一草稿/单次写入接入这些字段；真实快速滚动仍待验收。"
+    },
+  "SET-014": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/app/reader-performance-policy.ts",
+        "lite/src/settings/reader-performance-settings-form.ts",
+        "lite/src/topic/reader-topic-flow-controller.ts",
+        "lite/src/topic/reader-topic-dom-coordinator.ts",
+        "lite/src/topic/topic-session.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-performance-policy.test.ts",
+        "lite/tests/reader-performance-settings-form.test.ts",
+        "lite/tests/reader-topic-flow-controller.test.ts",
+        "lite/tests/reader-topic-dom-coordinator.test.ts",
+        "lite/tests/topic-session.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "嵌套预取屏数既决定 canonical stream 下一批的 visible/background-prefetch 紧迫度，也经 ReaderTopicDomCoordinator 的独立候选窗口决定哪些父楼进入 TopicSession.loadDirectReplies；候选复用 root/tree 虚拟坐标并按距视口中心排序，不扩大正文 DOM、不创建第二请求器。热缩小取消待发候选，恢复无需重建 Topic；同一 reply_count 记录已尝试/已完成版本，完整结果不逐帧重复，数量增长或未完整结果离窗再入可补取。请求仍复用 TopicSession single-flight、20 条直属分页、中央 adapter/scheduler/cache 和 idle canonical commit。真实 Network 半径、快滚和长树仍待验收。"
+    },
+  "SET-015": {
+    "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/network/request-scheduler.ts",
+        "lite/src/network/browser-shared-request-permit.ts",
+        "lite/src/network/coordinated-request-client.ts",
+        "lite/src/app/reader-data-runtime.ts",
+        "lite/src/app/reader-performance-policy.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/settings/reader-performance-settings-form.ts",
+        "lite/src/state/reader-preferences-schema.ts"
+      ],
+      "tests": [
+        "lite/tests/request-scheduler.test.ts",
+        "lite/tests/browser-shared-request-permit.test.ts",
+        "lite/tests/reader-performance-policy.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-performance-settings-form.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts"
+      ],
+      "note": "并发、最小间隔与 rate target 已由同一性能 snapshot 原地更新 scheduler 和跨标签 permit；保留 single-flight、排队 intent、活动 lease、事件窗口与 429 冷却，收紧不 abort 已发请求，放宽会唤醒原队列。performance form 只写偏好、不直接触碰请求 owner，并已恢复主线请求组及三字段说明；真实多标签/429 仍待验收。"
+    },
+    "SET-016": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/history/reader-history-navigation-view.ts",
+        "lite/src/history/reader-history-panel-view.ts",
+        "lite/src/settings/reader-reading-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-history-navigation-view.test.ts",
+        "lite/tests/reader-history-panel-view.test.ts",
+        "lite/tests/reader-reading-settings-form.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "历史按钮常显、0–15% 边缘范围和 first-viewed/recent-viewed 排序由唯一 schema 归一化，并通过 userscript bootstrap 的显式偏好投影原地更新 navigation/panel View；ReaderReadingSettingsForm 以一个 draft 合并七项、一次 application preference revision，外部变更只 rebase 未编辑字段。四组顺序、七行标题/帮助和两个排序标签已对齐主线；真实边缘命中与三形态按钮布局仍待浏览器验收。"
+    },
+    "SET-017": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/settings/reader-reading-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts",
+        "lite/src/userscript/reader-userscript-target-adapter.ts",
+        "lite/src/userscript/reader-userscript-application.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-reading-settings-form.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-userscript-target-adapter.test.ts",
+        "lite/tests/reader-userscript-application.test.ts"
+      ],
+      "note": "openTopicsAtFirstPost 由 application 实时读取并只投影普通链接与直达路由；消息/通知明确目标、data-reader-preserve-target 与旧 data-ldp-preserve-target-post 收藏类入口继续保留目标楼层，ldp-history-link 明确留给独立历史 owner。ReaderReadingSettingsForm 已接唯一偏好事务并热更新 runtime；真实点击和 SPA 路由仍待浏览器验收。"
+    },
+    "SET-018": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/dom/reply-tree-repository.ts",
+        "lite/src/topic/reader-reply-tree-preferences.ts",
+        "lite/src/topic/reader-topic-dom-coordinator.ts",
+        "lite/src/topic/reader-topic-context-surface.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/settings/reader-interaction-settings-form.ts",
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reply-tree-repository.test.ts",
+        "lite/tests/reader-reply-tree-preferences.test.ts",
+        "lite/tests/reader-topic-dom-coordinator.test.ts",
+        "lite/tests/reader-topic-context-surface.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-interaction-settings-form.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts"
+      ],
+      "note": "ReplyTreeRepository 独占 Discourse 父子关系与持久快照；ReaderReplyTreePresentation 只按热读偏好缓存派生主信息流根和 1–5 层显示投影，树内楼层只有一个 canonical PostView，超深楼层可停放或作为正式根显示，明确跳转会临时恢复目标而不改关系。ReaderInteractionSettingsForm 把直属展开、正式楼层、深层树、深度和隐藏策略纳入同一草稿/一次 preference revision；主线分组、字段、选项、帮助及两个兼容字段 hidden 已恢复，但不恢复重复 DOM。当前 Topic 收到偏好事件后原地重算根布局并热重挂虚拟窗口；收纳标记/参与者、完整讨论和委托来源仍读取同一 presentation。真实长帖快滚、设置切换、回复线和三形态像素仍待浏览器验收。"
+    },
+    "SET-019": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/post/boost-copy-rule.ts",
+        "lite/src/settings/reader-interaction-settings-form.ts",
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/discourse/native-host-api.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-interaction-settings-form.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/discourse-native-host-api.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "唯一纯规则覆盖递增数字/固定文字、前缀、marker、1–99 步长、Unicode 16 字和固定尾巴幂等；ReaderInteractionSettingsForm 通过全局草稿/校验/一次 revision 保存全部字段，外部偏好 rebase 不吞未保存值。宿主能力门优先读取 discourse_boosts_enabled、缺失时回退 create-boost module，未启用时隐藏设置组；预览恢复长度提示、逐行帮助、主线 rule-row 与横向 flex/ellipsis 几何，不再使用 Lite 自拟的输入框边框/底色。纯 hidden availability wrapper 已登记为 non-visual class。ReaderPostActionFeature 点击 canonical Boost 气泡时热读偏好并预填同一 composer，不写剪贴板、不维护计数器。真实表单像素、动态偏好和 composer 预填仍待浏览器验收。"
+    },
+    "SET-020": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/settings/reader-settings-controller.ts",
+        "lite/src/settings/reader-settings-view.ts",
+        "lite/src/settings/reader-settings-dom.ts",
+        "lite/src/settings/reader-numeric-settings-draft.ts",
+        "lite/src/settings/reader-object-settings-draft.ts",
+        "lite/src/settings/reader-theme-settings-control.ts",
+        "lite/src/settings/reader-window-settings-form.ts",
+        "lite/src/settings/reader-shortcut-settings-form.ts",
+        "lite/src/settings/reader-custom-site-settings-form.ts",
+        "lite/src/settings/reader-appearance-settings-form.ts",
+        "lite/src/settings/reader-font-settings-form.ts",
+        "lite/src/settings/reader-image-settings-form.ts",
+        "lite/src/settings/reader-interaction-settings-form.ts",
+        "lite/src/settings/reader-reading-settings-form.ts",
+        "lite/src/settings/reader-motion-settings-form.ts",
+        "lite/src/settings/reader-performance-settings-form.ts",
+        "lite/src/settings/reader-layout-settings-form.ts",
+        "lite/src/settings/reader-about-settings-content.ts",
+        "lite/src/layout/reader-layout-style-controller.ts",
+        "lite/src/shell/reader-feedback-surface.ts",
+        "lite/src/app/reader-application.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/reader-userscript-application.ts",
+        "lite/src/state/preferences-repository.ts",
+        "lite/src/state/reader-preferences-schema.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-settings-controller.test.ts",
+        "lite/tests/reader-settings-view.test.ts",
+        "lite/tests/reader-numeric-settings-draft.test.ts",
+        "lite/tests/reader-object-settings-draft.test.ts",
+        "lite/tests/reader-theme-controller.test.ts",
+        "lite/tests/reader-shortcut-controller.test.ts",
+        "lite/tests/reader-custom-site.test.ts",
+        "lite/tests/reader-appearance-settings-form.test.ts",
+        "lite/tests/reader-font-settings-form.test.ts",
+        "lite/tests/reader-image-settings-form.test.ts",
+        "lite/tests/reader-interaction-settings-form.test.ts",
+        "lite/tests/reader-reading-settings-form.test.ts",
+        "lite/tests/reader-motion-settings-form.test.ts",
+        "lite/tests/reader-performance-settings-form.test.ts",
+        "lite/tests/reader-layout-settings-form.test.ts",
+        "lite/tests/reader-about-settings-content.test.ts",
+        "lite/tests/reader-feedback-surface.test.ts",
+        "lite/tests/reader-application.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-userscript-application.test.ts",
+        "lite/tests/preferences-repository.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts"
+      ],
+      "note": "三个导航分组、十五个设置面板、静态元数据与实际 panelHost 文本搜索、跨领域草稿事务已收敛到唯一 controller。View 只批量提供稳定内容索引，过滤/active/空态仍由 controller 派生；面板完整简介已对齐主线，性能保留真实热更新说明。各领域均有唯一 form/content owner；全部可写领域先完整校验并检测顶层 patch 冲突，成功只经 ReaderApplicationContext.updatePreferences 写一次 revision。失败保留草稿，继续编辑、放弃关闭和保存关闭复用共享 FeedbackSurface；runtime scope 只装一份 controller/View。真实焦点、输入法、三形态像素和跨面板组合保存仍待浏览器验收。"
+    },
+    "SET-021": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/settings/reader-reading-settings-form.ts",
+        "lite/src/queue/reader-open-queue-session.ts",
+        "lite/src/discourse/native-composer.ts",
+        "lite/src/kernel/repeat-action-gate.ts",
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-reading-settings-form.test.ts",
+        "lite/tests/reader-open-queue-session.test.ts",
+        "lite/tests/discourse-native-composer.test.ts",
+        "lite/tests/repeat-action-gate.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "空队列入口、Reader 单/双 Esc 退出和原生 composer 关闭确认已进入 ReaderReadingSettingsForm 的同一全局草稿事务；四组顺序及三项退出/队列文案已对齐主线。ReaderOpenQueueSession 只拥有 Reader 退出；DiscourseComposerCoordinator 通过原生 composer model 判断打开态并独占关闭/舍弃按钮与 Esc guard。两者复用 RepeatActionGate 算法但保持独立实例和生命周期，每次交互热读应用偏好。序列化、重基、保存/放弃、原生模型和键盘路径均有契约测试，真实原生 composer DOM/焦点仍待浏览器验收。"
+    },
+    "DATA-001": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/preferences-config-codec.ts",
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/cache/reader-cache-management-surface.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/preferences-config-codec.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-cache-management-surface.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "设置配置保持 awesome-linuxdo-reader-settings/schema v5、完整 76 字段和唯一 normalize；未知字段拒绝，三组历史缺失字段只按登记规则迁移。Data surface 的包含/排除范围已与主线对齐，下载、文件解析、导入确认和恢复默认均有明确反馈；导入/恢复通过 application 唯一 updatePreferences 写同一 repository 并立即热投影，不复制主线整页 reload，确认说明准确保留历史/缓存与浮窗视口边界。真实文件选择、下载和页面热投影仍待浏览器验收。"
+    },
+    "DATA-002": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+		"lite/src/cache/browser-asset-cache.ts",
+        "lite/src/cache/reader-cache-management-surface.ts",
+        "lite/src/cache/response-repository.ts",
+        "lite/src/cache/indexeddb-response-cache-store.ts",
+        "lite/src/history/reader-history-repository.ts",
+        "lite/src/media/reader-image-resource-service.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+		"lite/tests/browser-asset-cache.test.ts",
+		"lite/tests/browser-userscript-environment.test.ts",
+        "lite/tests/reader-cache-management-surface.test.ts",
+        "lite/tests/response-repository.test.ts",
+        "lite/tests/indexeddb-response-cache-store.test.ts",
+        "lite/tests/reader-history-repository.test.ts",
+        "lite/tests/reader-image-resource-service.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "ReaderCacheManagementSurface 只消费 History、ResponseRepository 与 ReaderBrowserAssetCacheRepository 的冻结统计，统一投影历史、主题与楼层、用户、通知、其他响应和图片资产六类数量/字节，不直接读取 localStorage、IndexedDB、CacheStorage 或业务 Map。六行及清理按钮已接入统一 settings help；保留期和细分计数按 Lite 真实 policy/metadata 显示，不复制主线过期时长。BrowserUserscriptEnvironment 只暴露窄化 CacheStorage port；资产 repository 仅识别 main.js 已用的 avatars/emoji-images/lightbox-images 三个精确 cache name，32 条分批读取 content-length 或 Blob.size。选择清理对资产、响应、History 和 ObjectURL 独立尝试；store/repository invalidation report 不再吞持久失败，成功类别取消选择，失败类别保留并明确列名。真实浏览器配额、跨版本遗留缓存和大容量耗时仍待验收。"
+    },
+    "DATA-003": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/cache/reader-cache-management-surface.ts",
+        "lite/src/cache/response-repository.ts",
+        "lite/src/network/domain-request-gateway.ts",
+        "lite/src/network/public-resource-request-adapter.ts",
+        "lite/src/media/reader-image-resource-service.ts",
+        "lite/src/media/reader-topic-image-index.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-cache-management-surface.test.ts",
+        "lite/tests/response-repository.test.ts",
+        "lite/tests/domain-request-gateway.test.ts",
+        "lite/tests/public-resource-request-adapter.test.ts",
+        "lite/tests/reader-image-resource-service.test.ts",
+        "lite/tests/reader-topic-image-index.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "Header 当前主题刷新通过组合根执行单一重建事务：捕获 canonical History 视口锚点、Only-OP 与完整 discussion 状态，枚举当前 Topic 图片真源，按 topic tag 精确失效响应/快照，撤销匹配 Object URL，再用 forceRefresh 从原站重开并恢复。Domain/Public resource 与 Image service 提供逐源严格 report；旧缓存清理 partial 不阻断原站重开，但 Header/Data surface 会明确显示残留失败，不再伪装完整成功。损坏快照不要求全局清缓存且不制造第二请求路径。真实网络中断、图片 Cache Storage 和锚点像素恢复仍待浏览器验收。"
+    },
+    "DATA-004": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/cache/response-repository.ts",
+        "lite/src/cache/indexeddb-response-cache-store.ts",
+        "lite/src/cache/topic-snapshot-repository.ts"
+      ],
+      "tests": [
+        "lite/tests/response-repository.test.ts",
+        "lite/tests/indexeddb-response-cache-store.test.ts",
+        "lite/tests/topic-snapshot-repository.test.ts"
+      ],
+      "note": "Memory/IDB/Topic snapshot 分层保持唯一 ResponseRepository owner。Response store 增加单 readwrite transaction atomic merge；Repository 对同 id 本地写串行，并在持久化后广播跨标签失效。Topic snapshot 按 topic observedAt、逐 post/tombstone 版本、stream 与 tree 版本合并，较旧晚 flush 不再覆盖新 Topic 或丢楼层；expected count 只保留可信非零值。存储条目同时校验时间顺序及 exact policy tag set，坏 tree 先失效再写自愈值。交错双 repository 与冷恢复反例已覆盖，真实浏览器多标签 IDB 事务仍待验收。"
+    },
+    "DATA-005": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/userscript/browser-userscript-environment.ts",
+        "lite/src/userscript/reader-userscript-application.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts",
+        "lite/src/translation/translation-request-adapter.ts",
+        "lite/src/media/reader-media-controller.ts"
+      ],
+      "tests": [
+        "lite/tests/browser-userscript-environment.test.ts",
+        "lite/tests/reader-userscript-application.test.ts",
+        "lite/tests/translation-request-adapter.test.ts",
+        "lite/tests/reader-media-controller.test.ts"
+      ],
+      "note": "lite userscript 元数据与旧基线逐字段一致：21 个内置社区加通配 match、自定义 HTTPS 启动范围、unsafeWindow/GM 值存储/外部请求/CSS resource 权限、Connect/Credit/翻译与任意用户站点 connect 边界、document-start，以及固定 KaTeX 0.16.22、pinyin-pro 3.18.2、hls.js 1.6.16。Lite 额外把 KaTeX CSS 作为 resource 注入 Reader/Shadow root。BrowserUserscriptEnvironment 是唯一 GM/unsafeWindow/pinyin/resource 能力 owner，外部端口只接受登记 endpoint，普通 Discourse 请求继续走原生 ajax。新增可执行 userscript audit 锁定 main→Lite 继承、loader 与可选 local artifact，不再依赖名义检查项。安装权限提示、CSP 和三种依赖真实加载仍待浏览器验收。"
+    },
+    "MONITOR-001": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/monitor/reader-resource-monitor.ts",
+        "lite/src/app/reader-data-runtime.ts",
+        "lite/src/network/coordinated-request-client.ts",
+        "lite/src/network/request-observer.ts",
+        "lite/src/network/browser-request-observation.ts",
+        "lite/src/settings/reader-settings-view.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-resource-monitor.test.ts",
+        "lite/tests/reader-data-runtime.test.ts",
+        "lite/tests/coordinated-request-client.test.ts",
+        "lite/tests/request-observer.test.ts",
+        "lite/tests/browser-request-observation.test.ts",
+        "lite/tests/reader-settings-view.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "ReaderDataRuntime 持有 application 唯一 RequestObserver；中央 CoordinatedRequestClient 写入 Reader 排队/放行/启动/重试/响应事实，Discourse 原生 ajax 与 ResourceTiming 只补宿主或浏览器事实并对同一 Reader 请求去重。ReaderResourceMonitor 只读组合该账本、浏览器内存 API、Long Task/Long Animation Frame、Reader/原站 DOM、canonical Topic 拓扑与保留楼层、媒体和中央 scheduler，提供当前/平均/峰值、三条十分钟 SVG 趋势、最近 60 秒阅读器/原站/页面共享的前后台实测表、健康状态和带原始依据的事件记录。Reader DOM 位于 portal ShadowRoot 时，宿主计数与宿主 MutationObserver 只排除 document 内的 portal host，不再把 Shadow DOM 楼层从 document 总数重复扣除。十分钟趋势跨子页保留，但每次性能采集单独建立 10 快照基线，并恢复主线 DOM 增长 1000 且保留楼层增长 50 的联合告警。性能 observer/MutationObserver/timer 仅在性能页活动；请求页的 ResourceTiming/timer 使用可见期子 scope，后台释放、回屏单实例恢复、切页完整销毁。不 patch fetch/XHR、不发请求，也不冒充脚本独占 CPU/内存。真实 Chrome 内存权限、后台节流和压力基线仍待浏览器验收。"
+    },
+    "MONITOR-002": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/app/reader-data-runtime.ts",
+        "lite/src/network/request-scheduler.ts",
+        "lite/src/network/coordinated-request-client.ts",
+        "lite/src/network/request-observer.ts",
+        "lite/src/network/browser-request-observation.ts",
+        "lite/src/monitor/reader-resource-monitor.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-data-runtime.test.ts",
+        "lite/tests/request-scheduler.test.ts",
+        "lite/tests/coordinated-request-client.test.ts",
+        "lite/tests/request-observer.test.ts",
+        "lite/tests/browser-request-observation.test.ts",
+        "lite/tests/reader-resource-monitor.test.ts",
+        "lite/tests/reader-resource-monitor-request-window.test.ts"
+      ],
+      "note": "唯一 application 请求账本覆盖 Reader 中央 scheduler 的排队、共享 permit 放行、启动、有限重试、状态与错误，以及原站 ajax 和浏览器 ResourceTiming；同 URL/时段事实去重，不复制 fetch/XHR。账本按 startedAt/id 稳定排序，buffered ResourceTiming 晚回填不会冒充最新事件；Domain gateway 把 typed profile/namespace 作为稳定发起点，Native ajax 补入 Retry-After、限流错误码和标准/兼容 Limit/Remaining/Reset 头。日志 owner 对齐 10 秒/60 秒速率、边界对齐的 100ms 峰值、纯 permit 排队、生命周期与窗口相交的 trace、1800ms 慢响应、15s 卡住、至少 5 样本 P95、最近结束异常、资源占比、来源/类型/优先级/尝试/发起点、最近 60 条记录及主线限流说明；控制事件、Abort、HTTP 和网络错误有独立分级与说明。请求页后台只保留 application 账本，释放视图 observer/timer。真实长帖快滚、429、服务器限流头与后台页采样仍待浏览器验收。"
+    },
+    "MONITOR-003": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/network/browser-shared-request-permit.ts",
+        "lite/src/network/request-rate-limit-policy.ts",
+        "lite/src/network/request-scheduler.ts",
+        "lite/src/network/coordinated-request-client.ts",
+        "lite/src/network/browser-request-observation.ts",
+        "lite/src/network/discourse-native-read-transport.ts",
+        "lite/src/post/discourse-action-transport.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/monitor/reader-resource-monitor.ts"
+      ],
+      "tests": [
+        "lite/tests/browser-shared-request-permit.test.ts",
+        "lite/tests/request-rate-limit-policy.test.ts",
+        "lite/tests/coordinated-request-client.test.ts",
+        "lite/tests/browser-request-observation.test.ts",
+        "lite/tests/discourse-native-read-transport.test.ts",
+        "lite/tests/discourse-action-transport.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-resource-monitor.test.ts"
+      ],
+      "note": "BrowserSharedRequestPermit 在跨标签原子状态中保存每个 live context 的 policy，并按短/长预算最小、启动间隔最大、并发最小进行保守聚合；application 级 Discourse 原生 ajax observer 又把同源非媒体宿主 API 作为被动 lease/event 纳入同一 10/60 秒窗口，Reader scheduler 借用事实不重复记账。全局 429 保留具体 10 秒/60 秒窗口，按当前计数学习预算、降并发、设置服务器阻塞与十分钟 TTL；成功响应可读取标准及兼容 Limit/Remaining/Reset，冷却后只允许有界高优先恢复探针，稳定成功再小步放宽。未知 429 仍先由 Lite 端点熔断处理，只有确认或多路证据才升级为共享全局限制。快照公开实例数、下一许可等待、主导阻塞、学习状态与最近窗口；真实多标签竞争、服务器头和 429 节奏仍待浏览器验收。"
+    },
+    "MONITOR-004": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/network/browser-shared-request-permit.ts",
+        "lite/src/network/discourse-native-read-transport.ts",
+        "lite/src/network/coordinated-request-client.ts",
+        "lite/src/reading/read-state-controller.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/monitor/reader-resource-monitor.ts"
+      ],
+      "tests": [
+        "lite/tests/browser-shared-request-permit.test.ts",
+        "lite/tests/discourse-native-read-transport.test.ts",
+        "lite/tests/coordinated-request-client.test.ts",
+        "lite/tests/read-state-controller.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts",
+        "lite/tests/reader-resource-monitor.test.ts"
+      ],
+      "note": "原生 ajax transport 保留 cf-mitigated: challenge；CoordinatedRequestClient 把挑战与 429/普通失败分开，并只允许一次恢复探测。BrowserSharedRequestPermit 在现有原子 storage/lock/channel 状态内维护单一 active/passed lease：首个 owner 按可用屏幕居中打开 760x720、最小 420x520 的同源验证窗口并心跳，其他标签等待同一 lease；Discourse marker 确认通过后关闭窗口，完整清空短/长事件、cooldown/probe、learned/server budget、server block、rateLimited/credit/window/TTL，广播 passed 并由原逻辑请求重试一次。Runtime 根委托同时截获 rate-limit/error 两类手动验证链接，复用同一 permit promise 和 application AbortSignal，不再绕过租约另开普通标签。窗口被拦截、手动关闭、超时、中止、销毁或 owner 丢失都会释放租约/回收窗口；ReadStateController 在真实 2xx 前继续保留 pending 未读且停止自动循环。真实 Cloudflare 页面、弹窗权限、双屏坐标、后台冻结与多标签恢复仍待浏览器验收。"
+    },
+    "MONITOR-005": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/network/request-observer.ts",
+        "lite/src/network/browser-request-observation.ts",
+        "lite/src/monitor/reader-resource-monitor.ts"
+      ],
+      "tests": [
+        "lite/tests/request-observer.test.ts",
+        "lite/tests/browser-request-observation.test.ts",
+        "lite/tests/reader-resource-monitor.test.ts"
+      ],
+      "note": "RequestObserver 在唯一写入边界先去除 base 与目标 URL 的 username/password/query/hash；HTTP(S) href 限 512、显示 path 限 180，显式非 HTTP 事实只保留协议资源标签，ResourceTiming 的 data/blob 等非 HTTP 资源直接忽略。callsite URL 去查询与片段并限 220；control、wait、error、rate code 只接受安全诊断 code；Retry-After 与 Limit/Remaining/Reset 去换行、URL 查询并限 80。事件类型本身不接受正文、Cookie、Authorization、headers 或响应内容，请求面板始终用 textContent 投影。真实签名 URL、blob/data 资源、错误 stack 与 DOM/内存快照仍待浏览器验收。"
+    },
+    "TROUBLE-001": {
+      "evidenceKind": "artifact",
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "artifactOwners": [
+        "lite/userscript.meta.txt",
+        "docs/getting-started/installation.md",
+        "docs/manage/troubleshooting.md",
+        "docs/reference/compatibility.md"
+      ],
+      "artifactChecks": [
+        "docs:verify",
+        "userscript:inspect"
+      ],
+      "note": "安装与加载排查属于发布资产能力：唯一 userscript metadata 声明名称、版本、document-start、21 个内置站点及自定义 HTTPS 匹配边界；安装文档和故障排查按管理器安装/启用、内置或已验证自定义站点、版本与权限顺序给出检查路径，不再把非 LINUX DO 站点误判为不支持。兼容性文档说明浏览器和脚本管理器边界。真实 GreasyFork 安装与各管理器界面仍待浏览器验收。"
+    },
+    "TROUBLE-002": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/topic/topic-session.ts",
+        "lite/src/topic/reader-topic-navigation-controller.ts",
+        "lite/src/stream/virtual-stream-dom-controller.ts",
+        "lite/src/cache/response-repository.ts",
+        "lite/src/network/request-rate-limit-policy.ts",
+        "lite/src/monitor/reader-resource-monitor.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/topic-session.test.ts",
+        "lite/tests/reader-topic-navigation-controller.test.ts",
+        "lite/tests/virtual-stream-dom-controller.test.ts",
+        "lite/tests/response-repository.test.ts",
+        "lite/tests/request-rate-limit-policy.test.ts",
+        "lite/tests/reader-resource-monitor.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "TopicSession 分离 expected Topic 总数、post.id stream 索引缺口、已有索引的正文缺口与 404/410 明确 unavailable；后者以只读有序集合供诊断并在同一会话阻止重复请求，canonical ingress 恢复后自动移除，导航继续显式返回 unavailable。资源监控直接读取 canonical coverage、cache 启动来源、主流 DOM owner 的挂载/已准备/保留数量、脱敏请求账本和共享 permit，而不是扫描完整讨论副本或猜测树关系。“帖子与楼层诊断”先说明 stream 尚缺的楼层索引，再说明正文补流，并独立投影离屏停放/惰性 DOM、已删除楼层、普通网络错误、429/Cloudflare。真实长帖快滚、断网、404 和三形态视觉仍待浏览器验收。"
+    },
+    "TROUBLE-003": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/media/reader-topic-image-index.ts",
+        "lite/src/media/reader-image-resource-service.ts",
+        "lite/src/media/reader-image-retry-controller.ts",
+        "lite/src/media/reader-media-controller.ts",
+        "lite/src/media/reader-lightbox-feature.ts",
+        "lite/src/monitor/reader-resource-monitor.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-image-index.test.ts",
+        "lite/tests/reader-image-resource-service.test.ts",
+        "lite/tests/reader-image-retry-controller.test.ts",
+        "lite/tests/reader-media-controller.test.ts",
+        "lite/tests/reader-lightbox-feature.test.ts",
+        "lite/tests/reader-resource-monitor.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "图片目录保留来源楼层，原图/缓存/Blob 下载走唯一资源仓储，正文图片失败可重试，媒体 controller 区分 HLS 与普通资源，Lightbox 复用同一目录和资源服务。日志 owner 直接读取这些 owner 的只读 diagnostics、canonical 404/410 集合和脱敏 media 请求事实，统一显示可见失败/重试、跨源地址、目录完整度、Object URL/持久缓存、删除的来源楼层与 CDN/CORS/编码错误；HLS 支持只在当前挂载 video 的 canPlayType+ManagedMediaSource 成立或 Hls.js 支持时成立，并分列 HLS 源、原生可播和活动 Hls.js 实例，不再仅凭全局 API 假阳性。不建立第二份媒体请求、缓存或楼层状态。真实 HLS/CORS/失效源和三形态像素仍待浏览器验收。"
+    },
+    "TROUBLE-004": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/state/preferences-config-codec.ts",
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/state/preferences-repository.ts",
+        "lite/src/cache/reader-cache-management-surface.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/preferences-config-codec.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/preferences-repository.test.ts",
+        "lite/tests/reader-cache-management-surface.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "数据管理页直接复用 v5 canonical codec、唯一偏好 revision 仓储、唯一 FeedbackSurface 与 Blob 下载端口：导出只包含规范化设置，导入先完整校验再确认并一次写入，恢复全部默认也需确认；各领域表单继续负责按范围恢复。六类缓存选择性清理和当前主题精确重建仍复用 History/Response/Topic/图片 owner，不删除设置或原站账号状态；多 owner partial 失败保留对应选择。初始 Response/IndexedDB 统计读取失败由 surface 消化并显示六行失败，不形成 unhandled rejection；mutation 成功而随后统计失败时分别报告，不误写成清理/重建失败。无效文件和取消确认不会形成部分写入。真实文件选择、下载、存储拒绝、三形态热投影与视觉仍待浏览器验收。"
+    },
+    "TROUBLE-006": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/topic/topic-session.ts",
+        "lite/src/topic/reader-topic-navigation-controller.ts",
+        "lite/src/network/coordinated-request-client.ts",
+        "lite/src/network/browser-shared-request-permit.ts",
+        "lite/src/shell/reader-shell-recovery-view.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/topic-session.test.ts",
+        "lite/tests/reader-topic-navigation-controller.test.ts",
+        "lite/tests/coordinated-request-client.test.ts",
+        "lite/tests/browser-shared-request-permit.test.ts",
+        "lite/tests/reader-shell-recovery-view.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "楼层批次缺口已有有界重试，导航事务以 epoch 阻止慢失败拉回旧目标；协调请求明确区分 429、Cloudflare challenge 与普通错误。主题 Shell 对 timeout、network、408、425、5xx 按 1 秒、2 秒自动退避两次；Topic 已打开后的瞬态/布局定位失败只重试 navigation，不重建 Topic。新的打开事务、关闭或销毁会中止等待，429、Cloudflare 和不可恢复 4xx 不绕过中央限流。最终 Shell 失败由唯一恢复 View 分类显示，支持复用原请求手动重试、手动 Cloudflare 入口或关闭，不刷新页面、不清缓存；切换新 Topic 最终失败时，Runtime 从同一 topicFactory/canonical cache 重新装配上一 Topic，并由唯一 History owner 恢复锚点，只有旧 Topic 也无法恢复才显示 Recovery View。真实断网、408/425/5xx、后台冻结、popup、切帖像素与三形态视觉仍待浏览器验收。"
+    },
+    "TROUBLE-005": {
+      "evidenceKind": "artifact",
+      "implementationStatus": "partial",
+      "browserStatus": "pending",
+      "artifactOwners": [
+        "lite/userscript.meta.txt",
+        "SECURITY.md",
+        "docs/manage/troubleshooting.md",
+        "docs/manage/privacy-and-permissions.md"
+      ],
+      "artifactChecks": [
+        "docs:verify",
+        "userscript:inspect"
+      ],
+      "note": "userscript metadata 提供普通问题 supportURL，故障排查、隐私边界和 SECURITY.md 明确禁止提交 Cookie、Authorization、私信/通知正文、完整响应和可识别账号数据，并列出最小脱敏复现证据。Security 页显示 Report a vulnerability 时优先使用私密入口；入口不存在时，公开 Issue 只能留下不含漏洞细节的私密联络请求，不能上传敏感材料。2026-08-03 外部只读核对未在仓库 Security 页看到私密报告按钮，因此真实私密渠道仍未验收，保持 partial。"
+    },
+    "REF-001": {
+      "evidenceKind": "artifact",
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "artifactOwners": [
+        "lite/userscript.meta.txt",
+        "scripts/build-mian-lite.mjs",
+        "docs/reference/compatibility.md",
+        "docs/manage/privacy-and-permissions.md"
+      ],
+      "artifactChecks": [
+        "mian-lite:check",
+        "docs:verify",
+        "userscript:inspect"
+      ],
+      "note": "运行站点、document-start、GM 权限、跨域边界和固定外部依赖由唯一 Lite metadata 声明并逐字段对齐 main；21 个内置站点与已验证自定义 HTTPS Discourse 共享同一启动 gate。动态站点由 @connect * 承载，但 probe、Connect、Credit 和翻译端口继续固定用途；正文翻译 gate 与 main 一致，仅 LINUX DO 隐藏，其他内置和语言未知自定义站点显示。公开说明已清除相反旧文案。各浏览器、脚本管理器、CSP、插件和第三方站点真实组合仍属 browser pending。"
+    },
+    "REF-002": {
+      "evidenceKind": "artifact",
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "artifactOwners": [
+        "lite/userscript.meta.txt",
+        "scripts/validate-docs.mjs",
+        "docs/reference/feature-catalog.md",
+        "docs/reference/changelog.md",
+        "docs/reference/documentation.md",
+        "docs/settings/about.md"
+      ],
+      "artifactChecks": [
+        "docs:verify",
+        "userscript:inspect"
+      ],
+      "note": "main userscript @version 是唯一发布版本事实源；Lite metadata 由 userscript audit 对齐，文档校验器强制 38 个页面、103 项功能目录、package/package-lock 与 11 处公开当前版本文案同步。功能目录的数量、版本和最近核验日期改由 catalog 实时投影，不复制 97 项、固定日期或固定版本。运行时 About 不复制发布常量，而由 BrowserUserscriptEnvironment 读取 GM_info.script.version。浏览器中的目录与版本显示仍待验收。"
+    },
+    "REF-003": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/components/reader-image-fallback.ts",
+        "lite/src/settings/reader-about-settings-content.ts",
+        "lite/src/userscript/browser-userscript-environment.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-image-fallback.test.ts",
+        "lite/tests/reader-about-settings-content.test.ts",
+        "lite/tests/browser-userscript-environment.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "唯一 Settings View 的 about host 已挂载无状态 About content，在线用户手册使用 READER_MANUAL_URL 的原生新标签 anchor 并以 noopener noreferrer 隔离；身份、版本徽标、四项能力和三条第三方致谢/许可链接与 main 最终 DOM 等价，不增加文档曾虚构的本项目入口。Shell、设置导航与 About 的站点 Logo 复用共享首候选→同源 favicon→内联占位失败链。版本从 GM_info.script.version 读取，不维护第二份 runtime 常量。真实失败加载、点击、新标签和三形态像素仍待浏览器验收。"
+    }
+  }
+}

@@ -2,9 +2,9 @@
 title: 设置中心总览
 description: 理解 14 个设置面板、分组导航、设置搜索、三种形态配置与统一保存方式。
 feature_ids: ["USER-005", "SET-001", "SET-020"]
-source_anchors: ["renderSettingsUserInfo", "SETTINGS_PANEL_META", "SETTINGS_NAV_GROUPS", "bindReaderPanelSearch", "saveAllSettingsDrafts", "READER_THEME_MODES"]
+source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/reader-preferences-schema.ts","lite/src/settings/reader-settings-controller.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-02-settings-overview.png"]

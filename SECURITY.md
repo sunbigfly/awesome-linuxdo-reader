@@ -6,7 +6,7 @@
 
 ## 报告漏洞
 
-请通过仓库维护者提供的私密渠道报告安全问题，不要在公开 Issue 中披露可利用细节、凭据、Cookie、个人数据或完整请求响应。
+优先打开仓库的 [Security 页面](https://github.com/sunbigfly/awesome-linuxdo-reader/security)：如果页面显示 **Report a vulnerability**，请通过该入口提交私密报告。若页面没有私密报告入口，只能在普通 Issue 中留下“不含漏洞细节的私密联络请求”；不要公开披露可利用细节、凭据、Cookie、个人数据或完整请求响应，等待维护者提供私密渠道后再发送完整材料。
 
 报告应包含：
 

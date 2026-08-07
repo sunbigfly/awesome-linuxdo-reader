@@ -1,0 +1,348 @@
+/*
+ * Foundation owns design tokens, scoped normalization and accessibility.
+ * Components consume semantic tokens instead of repeating raw dimensions.
+ */
+:where([class^="ldp-"],[class*=" ldp-"])[hidden] {
+  display: none !important;
+}
+
+html.ldp-scroll-lock,
+html.ldp-scroll-lock body {
+  overflow: hidden !important;
+}
+
+html.ldp-reader-open {
+  overscroll-behavior: none;
+}
+
+html.ldp-route-takeover body > :not(.ldp-overlay):not(.ldp-reader-portal-host):not(.ldp-native-boost-menu):not(#reply-control):not(.composer-popup):not(#d-menu-portals):not(.fk-d-menu):not(.d-modal):not(.dialog-holder):not(#user-card):not(#group-card):not(.user-card):not(.group-card):not(.user-card-container) {
+  visibility: hidden !important;
+}
+
+html > .ldp-reader-portal-host {
+  display: contents !important;
+}
+
+:where(
+  .ldp-overlay,
+  .ldp-native-boost-menu,
+  .ldp-user-card-fallback,
+  .ldp-user-card-follow-panel,
+  .ldp-lightbox
+) {
+  --ldp-accent: var(--tertiary, #47855f);
+  --ldp-accent-soft: color-mix(in srgb, var(--ldp-accent) 12%, var(--secondary, #fff));
+  --ldp-accent-muted: color-mix(in srgb, var(--ldp-accent) 46%, var(--primary-medium, #777));
+  --ldp-canvas: var(--secondary, #fff);
+  --ldp-surface: color-mix(in srgb, var(--secondary, #fff) 96%, var(--primary, #222));
+  --ldp-surface-raised: color-mix(in srgb, var(--secondary, #fff) 99%, var(--primary, #222));
+  --ldp-surface-muted: var(--primary-very-low, #f5f5f5);
+  --ldp-ink: var(--primary, #222);
+  --ldp-ink-muted: var(--primary-medium, #777);
+  --ldp-border: var(--primary-low, #dedede);
+  --ldp-divider-line-color: color-mix(in srgb, var(--ldp-border) 88%, transparent);
+  --ldp-divider-line-width: 1px;
+  --ldp-focus-ring: 0 0 0 3px color-mix(in srgb, var(--ldp-accent) 18%, transparent);
+  --ldp-shadow-popover: 0 12px 34px rgba(0, 0, 0, .16);
+  --ldp-shadow-window: 0 18px 54px rgba(0, 0, 0, .18);
+  --ldp-radius-xs: 4px;
+  --ldp-radius-sm: 7px;
+  --ldp-radius-md: 10px;
+  --ldp-radius-lg: 14px;
+  --ldp-hit-min: 30px;
+  --ldp-control-height: 34px;
+  --ldp-avatar-size: 28px;
+  --ldp-thread-avatar-size: 28px;
+  --ldp-thread-head-gap: 8px;
+  --ldp-thread-body-offset: calc(
+    var(--ldp-thread-avatar-size) + var(--ldp-thread-head-gap)
+  );
+  --ldp-reply-line-color: color-mix(in srgb, var(--ldp-accent) 82%, var(--ldp-ink-muted));
+  --ldp-reply-line-width: 1.15px;
+  --ldp-reply-line-hit-width: 14px;
+  --ldp-reply-line-radius: 16px;
+  --ldp-motion-fast: 120ms;
+  --ldp-motion-base: 180ms;
+  --ldp-motion-slow: 260ms;
+  --ldp-ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ldp-ease-standard: cubic-bezier(.2, 0, 0, 1);
+  --ldp-font-micro: 9px;
+  --ldp-font-xs: 10px;
+  --ldp-font-sm: 11px;
+  --ldp-font-ui: 12px;
+  --ldp-font-base: 13px;
+  --ldp-font-md: 14px;
+  --ldp-font-lg: 15px;
+  --ldp-font-xl: 16px;
+  --ldp-font-2xl: 18px;
+  color: var(--ldp-interface-font-color, var(--ldp-ink));
+  font-family: var(--ldp-interface-font-family, inherit);
+  font-size: var(--ldp-font-base, 13px);
+  font-weight: var(--ldp-interface-font-weight, 400);
+  text-rendering: optimizeLegibility;
+}
+
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox)[data-ldp-theme="light"] {
+  --secondary: #ffffff;
+  --primary: #20252b;
+  --primary-high: #333a42;
+  --primary-medium: #68737e;
+  --primary-low-mid: #b8c0c8;
+  --primary-low: #d7dde3;
+  --primary-very-low: #f2f4f6;
+  --secondary-low: #4b545d;
+  --secondary-medium: #89929c;
+  --secondary-high: #dfe3e6;
+  --secondary-very-high: #f7f8f9;
+  --tertiary: #47855f;
+  --tertiary-low: #dceee2;
+  --header_background: #ffffff;
+  --header_primary: #20252b;
+  --header_primary-low: #e7eaed;
+  --header_primary-low-mid: #b7bec6;
+  --header_primary-medium: #68737e;
+  --header_primary-high: #333a42;
+  --highlight: #fff0a8;
+  --highlight-low: #fff8d8;
+  --highlight-medium: #ffe47a;
+  --highlight-high: #806200;
+  --quaternary: #d86645;
+  --danger: #c84545;
+  --danger-low: #f7dddd;
+  --danger-low-mid: #efb5b5;
+  --success: #47855f;
+  --success-low: #dceee2;
+  --love: #dc6542;
+  --love-low: #f7ddd5;
+  --d-link-color: #2870b8;
+  --d-post-aside-background: #f7f9fa;
+  --ldp-zebra-color: #f7f7f7;
+  --ldp-reply-line-color: #47855f;
+  --ldp-quote-line-color: #d7d7d7;
+  --ldp-divider-line-color: #e5e5e5;
+  --ldp-request-metric-pine: #315f47;
+  --ldp-request-metric-navy: #365673;
+  --ldp-request-metric-plum: #5e4b72;
+  --ldp-request-metric-bronze: #72551f;
+  --ldp-request-metric-wine: #743f47;
+  color-scheme: light;
+}
+
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox)[data-ldp-theme="dark"] {
+  --secondary: #171b20;
+  --primary: #e7edf3;
+  --primary-high: #cbd4dc;
+  --primary-medium: #98a4af;
+  --primary-low-mid: #4a5560;
+  --primary-low: #39414a;
+  --primary-very-low: #242a31;
+  --secondary-low: #363c43;
+  --secondary-medium: #7f8790;
+  --secondary-high: #c9d0d8;
+  --secondary-very-high: #e3e8ed;
+  --tertiary: #78c295;
+  --tertiary-low: #223a2c;
+  --header_background: #171b20;
+  --header_primary: #e7edf3;
+  --header_primary-low: #2a3037;
+  --header_primary-low-mid: #4a5560;
+  --header_primary-medium: #98a4af;
+  --header_primary-high: #cbd4dc;
+  --highlight: #6b5a16;
+  --highlight-low: #302b18;
+  --highlight-medium: #8a7420;
+  --highlight-high: #ffe47a;
+  --quaternary: #f08a67;
+  --danger: #ff7b72;
+  --danger-low: #44262a;
+  --danger-low-mid: #6b353b;
+  --success: #78c295;
+  --success-low: #223a2c;
+  --love: #ff8a65;
+  --love-low: #472b25;
+  --d-link-color: #71b7ff;
+  --d-post-aside-background: #20262d;
+  --ldp-zebra-color: #1b2b21;
+  --ldp-reply-line-color: #78c295;
+  --ldp-quote-line-color: #46505a;
+  --ldp-divider-line-color: #343b44;
+  --ldp-request-metric-pine: #86b49a;
+  --ldp-request-metric-navy: #8eacc8;
+  --ldp-request-metric-plum: #b09bc4;
+  --ldp-request-metric-bronze: #c5a36d;
+  --ldp-request-metric-wine: #c7929a;
+  color-scheme: dark;
+}
+
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox),
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox) *,
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox) *::before,
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox) *::after {
+  box-sizing: border-box;
+}
+
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox) :where(button,input,select,textarea) {
+  font: inherit;
+}
+
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox) :where(button,a,input,select,textarea,[tabindex]):focus-visible {
+  outline: 2px solid var(--ldp-accent);
+  outline-offset: 2px;
+}
+
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox) :where(a,button) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ldp-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  overflow: visible;
+  fill: currentColor;
+  color: inherit;
+  vertical-align: -.125em;
+  pointer-events: none;
+}
+
+.ldp-icon > use {
+  pointer-events: none;
+}
+
+.ldp-icon[data-ldp-reader-icon] {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ldp-icon-btn {
+  display: inline-flex;
+  width: var(--ldp-control-height);
+  height: var(--ldp-control-height);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ldp-radius-sm);
+  background: transparent;
+  color: var(--ldp-ink-muted);
+  cursor: pointer;
+  transition:
+    background-color var(--ldp-motion-fast) ease-out,
+    color var(--ldp-motion-fast) ease-out,
+    transform var(--ldp-motion-fast) ease-out;
+}
+
+.ldp-icon-btn:hover {
+  background: var(--ldp-surface-muted);
+  color: var(--ldp-ink);
+}
+
+.ldp-icon-btn:active {
+  transform: scale(.94);
+}
+
+.ldp-icon-btn:disabled {
+  opacity: .42;
+  cursor: default;
+  transform: none;
+}
+
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox),
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox) * {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ldp-ink-muted) 34%, transparent) transparent;
+}
+
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox)::-webkit-scrollbar,
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox) *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox)::-webkit-scrollbar-track,
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox) *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox)::-webkit-scrollbar-thumb,
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox) *::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ldp-ink-muted) 34%, transparent);
+}
+
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox)::-webkit-scrollbar-thumb:hover,
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox) *::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--ldp-ink-muted) 52%, transparent);
+}
+
+html[data-ldp-font-rendering="builtin"] {
+  --ldp-font-rendering-stroke: var(--ldp-font-rendering-stroke-runtime, .015px currentColor);
+  --ldp-font-rendering-shadow: var(--ldp-font-rendering-shadow-runtime, 0 0 .75px #7c7c7cdd);
+}
+
+html[data-ldp-font-mac-smoothing] {
+  --ldp-font-webkit-smoothing: antialiased;
+  --ldp-font-moz-smoothing: grayscale;
+}
+
+html > .ldp-reader-portal-host[data-ldp-font-rendering="builtin"],
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox)[data-ldp-font-rendering="builtin"],
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox)[data-ldp-font-rendering="builtin"] :where(*):not(i[class],pre,pre *,code,code *,kbd,kbd *,samp,samp *,mjx-container,mjx-container *,.katex,.katex *,svg,svg *,[class*="glyph" i],[class*="symbols" i],[class*="icon" i],[class*="fa-" i],[class*="vjs-" i]),
+html.ldp-reader-open[data-ldp-font-rendering="builtin"] :where([data-ldp-reader-composer-root],[data-ldp-reader-composer-overflow],#reply-control),
+html.ldp-reader-open[data-ldp-font-rendering="builtin"] :where([data-ldp-reader-composer-root],[data-ldp-reader-composer-overflow],#reply-control) :where(*):not(i[class],pre,pre *,code,code *,kbd,kbd *,samp,samp *,mjx-container,mjx-container *,.katex,.katex *,svg,svg *,[class*="glyph" i],[class*="symbols" i],[class*="icon" i],[class*="fa-" i],[class*="vjs-" i]),
+html[data-ldp-font-rendering="builtin"][data-ldp-font-rendering-host="true"] body,
+html[data-ldp-font-rendering="builtin"][data-ldp-font-rendering-host="true"] body :where(*):not(i[class],pre,pre *,code,code *,kbd,kbd *,samp,samp *,mjx-container,mjx-container *,.katex,.katex *,svg,svg *,[class*="glyph" i],[class*="symbols" i],[class*="icon" i],[class*="fa-" i],[class*="vjs-" i]) {
+  font-optical-sizing: auto;
+  font-kerning: auto;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: var(--ldp-font-webkit-smoothing);
+  -moz-osx-font-smoothing: var(--ldp-font-moz-smoothing);
+  -webkit-text-stroke: var(--ldp-font-rendering-stroke);
+  text-shadow: var(--ldp-font-rendering-shadow);
+}
+
+:where(.ldp-overlay,.ldp-native-boost-menu,.ldp-user-card-fallback,.ldp-lightbox)[data-ldp-font-rendering="builtin"] :is(i[class],pre,pre *,code,code *,kbd,kbd *,samp,samp *,mjx-container,mjx-container *,.katex,.katex *,svg,svg *,[class*="glyph" i],[class*="symbols" i],[class*="icon" i],[class*="fa-" i],[class*="vjs-" i]),
+html.ldp-reader-open[data-ldp-font-rendering="builtin"] :where([data-ldp-reader-composer-root],[data-ldp-reader-composer-overflow],#reply-control) :is(i[class],pre,pre *,code,code *,kbd,kbd *,samp,samp *,mjx-container,mjx-container *,.katex,.katex *,svg,svg *,[class*="glyph" i],[class*="symbols" i],[class*="icon" i],[class*="fa-" i],[class*="vjs-" i]),
+html[data-ldp-font-rendering="builtin"][data-ldp-font-rendering-host="true"] body :is(i[class],pre,pre *,code,code *,kbd,kbd *,samp,samp *,mjx-container,mjx-container *,.katex,.katex *,svg,svg *,[class*="glyph" i],[class*="symbols" i],[class*="icon" i],[class*="fa-" i],[class*="vjs-" i]) {
+  -webkit-text-stroke: 0 transparent;
+  text-shadow: none;
+}
+
+.ldp-structure-colors-disabled {
+  --ldp-divider-line-color: transparent;
+  --ldp-reply-line-color: color-mix(in srgb, var(--ldp-ink-muted) 34%, transparent);
+}
+
+.ldp-reader-hit-test-hidden {
+  display: none !important;
+}
+
+:is(
+  .ldp-overlay,
+  .ldp-settings-layer,
+  .ldp-native-boost-menu,
+  .ldp-user-card-fallback,
+  .ldp-user-card-follow-panel,
+  .ldp-lightbox
+) :is(input,textarea)[placeholder],
+.ldp-native-boost-menu .discourse-boosts__input {
+  font-size: var(--ldp-font-ui, 12px) !important;
+}
+
+:is(
+  .ldp-overlay,
+  .ldp-settings-layer,
+  .ldp-native-boost-menu,
+  .ldp-user-card-fallback,
+  .ldp-user-card-follow-panel,
+  .ldp-lightbox
+) :is(input,textarea)[placeholder]::placeholder,
+.ldp-native-boost-menu .discourse-boosts__input:empty::before {
+  font-size: inherit !important;
+  line-height: 1.2;
+}

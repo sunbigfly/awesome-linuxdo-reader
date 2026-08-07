@@ -2,9 +2,9 @@
 title: 用户信息
 description: 查看当前账号资料、社区统计、Connect 信任进度和 LINUX DO Credit 账户数据。
 feature_ids: ["USER-005", "USER-006"]
-source_anchors: ["renderSettingsUserInfo", "fetchLinuxDoCreditUser", "settingsCreditHtml"]
+source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/translation/translation-request-adapter.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-02-settings-overview.png"]

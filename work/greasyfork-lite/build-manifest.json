@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "sourceVersion": "1.0.0",
+  "entryModuleId": "src/userscript/mian-lite-entry.js",
+  "limits": {
+    "greasyForkHardLimit": 2097152,
+    "projectExecutableCeiling": 2000000
+  },
+  "compiler": {
+    "name": "esbuild",
+    "version": "0.25.12",
+    "transform": "TypeScript modules to readable CommonJS factories",
+    "minified": false
+  },
+  "modules": 238,
+  "libraries": [
+    {
+      "name": "mian-lite-core",
+      "file": "work/greasyfork-lite/libraries/mian-lite-core.js",
+      "description": "应用、数据、Discourse、Shell、主题、流与 userscript 运行核心",
+      "modules": 120,
+      "bytes": 1751268,
+      "sha256": "acd6c89d934095dcbba1d2092fb4ce06f6b6f49ea99efdb6f6a6859021c13fd4"
+    },
+    {
+      "name": "mian-lite-features",
+      "file": "work/greasyfork-lite/libraries/mian-lite-features.js",
+      "description": "媒体、互动、设置、用户、通知、监控与其他功能模块",
+      "modules": 118,
+      "bytes": 1644745,
+      "sha256": "4643a28a48148278c2923f687422026a2bc1ee34833da17947024cf6c6204bdb"
+    }
+  ],
+  "loaderTemplate": {
+    "file": "work/greasyfork-lite/main-loader.template.user.js",
+    "bytes": 3163,
+    "sha256": "58eb7f27439f6cc2c01b24443bd188ba9636abd692e769fc3275dc27c7abcac7"
+  }
+}

@@ -1,0 +1,1197 @@
+/*
+ * Reply tree owns only visual hierarchy. Topology and branch coordinates stay in JS.
+ * The child avatar starts at the parent avatar's visual right edge.
+ */
+.ldp-reply-tree {
+  position: relative;
+  min-width: 0;
+  margin-inline-start: var(--ldp-thread-avatar-size);
+  overflow: visible;
+}
+
+.ldp-reply-list {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  margin-inline-start: 0;
+}
+
+.ldp-tree-virtual-spacer {
+  width: 1px;
+  min-height: 0;
+  pointer-events: none;
+  contain: strict;
+}
+
+.ldp-post.ldp-virtual-ancestor-shell {
+  padding-block: 0;
+}
+
+.ldp-post.ldp-virtual-ancestor-shell::before {
+  display: block;
+  height: var(--ldp-virtual-own-size, 0);
+  content: "";
+  pointer-events: none;
+}
+
+.ldp-post.ldp-virtual-ancestor-shell > :is(.ldp-post-head, .ldp-post-body) {
+  display: none;
+}
+
+/*
+ * 快速滚动中新进入树窗口的楼层先只保留稳定高度；正文、动作和媒体在停滚后
+ * 小批水合。祖先 replyList 仍可承载已物化子节点，因此不能把整棵楼层 strict 隐藏。
+ */
+.ldp-virtual-root-list .ldp-post.ldp-post-projection-pending:not(
+  .ldp-virtual-ancestor-shell
+) {
+  padding-block: 0;
+}
+
+.ldp-virtual-root-list .ldp-post.ldp-post-projection-pending:not(
+  .ldp-virtual-ancestor-shell
+)::before {
+  display: block;
+  height: var(--ldp-virtual-own-size, 300px);
+  border-radius: var(--ldp-radius-sm);
+  background:
+    radial-gradient(
+      circle at calc(var(--ldp-thread-avatar-size) / 2) 24px,
+      var(--ldp-surface-muted) 0 calc(var(--ldp-thread-avatar-size) / 2),
+      transparent calc(var(--ldp-thread-avatar-size) / 2 + 1px)
+    ),
+    linear-gradient(var(--ldp-surface-muted), var(--ldp-surface-muted))
+      var(--ldp-thread-body-offset) 12px / min(28%, 180px) 14px no-repeat,
+    linear-gradient(var(--ldp-surface-muted), var(--ldp-surface-muted))
+      var(--ldp-thread-body-offset) 56px / min(72%, 680px) 12px no-repeat,
+    linear-gradient(var(--ldp-surface-muted), var(--ldp-surface-muted))
+      var(--ldp-thread-body-offset) 82px / min(54%, 520px) 12px no-repeat;
+  content: "";
+  opacity: .72;
+  pointer-events: none;
+}
+
+.ldp-virtual-root-list .ldp-post.ldp-post-projection-pending:not(
+  .ldp-virtual-ancestor-shell
+) > :is(.ldp-post-head, .ldp-post-body) {
+  display: none;
+}
+
+.ldp-reply-list > .ldp-post {
+  --ldp-post-inline: 0px;
+  padding: 5px 0 7px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  contain: layout style;
+}
+
+.ldp-reply-list > .ldp-post + .ldp-post {
+  margin-top: 1px;
+}
+
+.ldp-reply-list > .ldp-post > .ldp-post-head {
+  min-height: var(--ldp-thread-avatar-size);
+}
+
+.ldp-reply-list > .ldp-post > .ldp-post-body > .ldp-content {
+  margin-left: var(--ldp-thread-avatar-size);
+}
+
+.ldp-reply-list > .ldp-post > .ldp-post-body > :is(
+  .ldp-post-body-layer,
+  .ldp-boost-list,
+  .ldp-reactions,
+  .ldp-topic-footer-slot
+) {
+  margin-left: var(--ldp-thread-body-offset);
+}
+
+.ldp-branch-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity var(--ldp-motion-fast) linear;
+}
+
+.ldp-branch-paint-pending .ldp-branch-hit-path {
+  pointer-events: none;
+}
+
+/*
+ * 超长虚拟树使用逐楼层拼接的 thread line：每个已物化子节点只负责当前一段纵线
+ * 和进入头像的弯头，父楼层正文负责从头像下沿接到子列表。相邻楼层会拼成连续
+ * 主干，canonical 最后一个子节点在弯头处收尾；仍不创建贯穿几千楼的 SVG，
+ * 也不需要 JS 读取几何。
+ */
+.ldp-segmented-branches .ldp-branch-overlay {
+  display: none;
+}
+
+.ldp-segmented-branches .ldp-reply-list > .ldp-post:not(
+  .ldp-virtual-ancestor-shell
+)::after {
+  position: absolute;
+  z-index: 1;
+  top: -1px;
+  bottom: -1px;
+  left: calc(var(--ldp-thread-avatar-size) / -2);
+  width: 0;
+  height: auto;
+  border-left: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
+  content: "";
+  pointer-events: none;
+}
+
+/*
+ * main.js 的 nested rail toggle 在纵向主干上提供与收纳按钮相同的入口。
+ * 分段长树不恢复整棵 SVG；每个已物化楼层只覆盖自己的线段，透明命中带
+ * 与 SVG 回复线复用同一宽度，视觉线宽保持不变。
+ */
+.ldp-segmented-branches .ldp-reply-list > .ldp-post:not(
+  .ldp-virtual-ancestor-shell
+) > .ldp-reader-branch-rail-toggle {
+  position: absolute;
+  z-index: 3;
+  top: -1px;
+  bottom: -1px;
+  left: calc(var(--ldp-thread-avatar-size) / -2);
+  width: var(--ldp-reply-line-hit-width, 8px);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  transform: translateX(-50%);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.ldp-segmented-branches .ldp-reply-list >
+.ldp-post.ldp-segmented-branch-last:not(
+  .ldp-virtual-ancestor-shell
+) > .ldp-reader-branch-rail-toggle {
+  top: -6px;
+  bottom: auto;
+  height: max(
+    0px,
+    calc(
+      6px + var(--ldp-thread-avatar-size) / 2 -
+      var(--ldp-reply-line-radius)
+    )
+  );
+}
+
+.ldp-segmented-branches .ldp-reply-list >
+.ldp-post.ldp-segmented-branch-last:not(
+  .ldp-virtual-ancestor-shell
+)::after {
+  top: -6px;
+  bottom: auto;
+  height: max(
+    0px,
+    calc(
+      6px + var(--ldp-thread-avatar-size) / 2 -
+      var(--ldp-reply-line-radius)
+    )
+  );
+}
+
+.ldp-segmented-branches .ldp-reply-list > .ldp-post:not(
+  .ldp-virtual-ancestor-shell
+) > .ldp-post-head::before {
+  position: absolute;
+  z-index: 1;
+  top: -6px;
+  left: calc(var(--ldp-thread-avatar-size) / -2);
+  width: calc(var(--ldp-thread-avatar-size) / 2 - 5px);
+  height: calc(6px + var(--ldp-thread-avatar-size) / 2);
+  border-bottom: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
+  border-left: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
+  border-bottom-left-radius: var(--ldp-reply-line-radius);
+  content: "";
+  pointer-events: none;
+}
+
+.ldp-segmented-branches .ldp-post.ldp-has-child-branches:not(
+  .ldp-branch-parent-collapsed
+) > .ldp-post-body {
+  position: relative;
+}
+
+.ldp-segmented-branches .ldp-post.ldp-has-child-branches:not(
+  .ldp-branch-parent-collapsed
+) > .ldp-post-body::before {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--ldp-thread-avatar-size) / 2);
+  border-left: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
+  content: "";
+  pointer-events: none;
+}
+
+/*
+ * 每一级带“−”的父分支都把正文旁主干投影成同一折叠入口。命中带只覆盖
+ * 视觉线左右 4px，不改布局；圆形“−”以更高 z-index 接管重叠区域。
+ */
+.ldp-reader-branch-trunk-toggle {
+  display: none;
+}
+
+.ldp-segmented-branches .ldp-post.ldp-has-child-branches:not(
+  .ldp-branch-parent-collapsed
+) > .ldp-post-body > .ldp-reader-branch-trunk-toggle {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--ldp-thread-avatar-size) / 2);
+  display: block;
+  width: var(--ldp-reply-line-hit-width, 8px);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  transform: translateX(-50%);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.ldp-segmented-branches .ldp-post.ldp-has-child-branches:not(
+  .ldp-branch-parent-collapsed
+) > .ldp-post-body > .ldp-post-actions {
+  position: relative;
+}
+
+.ldp-segmented-branches .ldp-post-actions >
+.ldp-reader-branch-toggle {
+  top: 50%;
+  left: calc(
+    var(--ldp-thread-avatar-size) / -2 - var(--ldp-thread-head-gap)
+  );
+}
+
+.ldp-segmented-branches >
+.ldp-post[data-post-number="1"].ldp-has-child-branches >
+.ldp-reply-tree > .ldp-reader-branch-toggle {
+  top: -10px;
+  left: calc(var(--ldp-thread-avatar-size) / -2);
+}
+
+.ldp-segmented-branches > .ldp-post.ldp-has-child-branches >
+.ldp-reader-branch-toggle {
+  top: calc(20px + var(--ldp-thread-avatar-size));
+  left: calc(8px + var(--ldp-thread-avatar-size) / 2);
+}
+
+.ldp-segmented-branches .ldp-reply-list >
+.ldp-post.ldp-has-child-branches > .ldp-reader-branch-toggle {
+  top: calc(13px + var(--ldp-thread-avatar-size));
+  left: calc(var(--ldp-thread-avatar-size) / 2);
+}
+
+.ldp-nested-branch-toggle {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.ldp-branch-visible-path {
+  fill: none;
+  stroke: var(--ldp-reply-line-color);
+  stroke-width: var(--ldp-reply-line-width);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.ldp-branch-hit-path {
+  fill: none;
+  stroke: transparent;
+  stroke-width: var(--ldp-reply-line-hit-width);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.ldp-reply-controls {
+  display: contents;
+}
+
+/*
+ * 默认深度边界不是叶子：从父头像向下续一小段回复线，以“+”提供逐层揭示，
+ * 同一位置的文字入口复用完整讨论浮窗打开整条分支。
+ */
+.ldp-post.ldp-has-hidden-child-branches > .ldp-post-body {
+  position: relative;
+}
+
+.ldp-post.ldp-has-hidden-child-branches > .ldp-post-body::before {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--ldp-thread-avatar-size) / 2);
+  border-left: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
+  content: "";
+  pointer-events: none;
+}
+
+.ldp-hidden-branch-controls {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 32px;
+  align-items: center;
+}
+
+.ldp-hidden-branch-controls::before {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: calc(var(--ldp-thread-avatar-size) / -2);
+  height: 16px;
+  border-left: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
+  content: "";
+  pointer-events: none;
+}
+
+.ldp-hidden-branch-reveal {
+  top: 16px;
+  left: calc(var(--ldp-thread-avatar-size) / -2);
+}
+
+.ldp-hidden-branch-reveal > .ldp-icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
+}
+
+.ldp-hidden-branch-discussion {
+  gap: 5px;
+}
+
+.ldp-hidden-branch-discussion > .ldp-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.ldp-direct-reply-loading {
+  display: flex;
+  width: max-content;
+  max-width: calc(100% - var(--ldp-thread-body-offset, 32px));
+  align-items: center;
+  gap: 7px;
+  margin: 7px 0 7px var(--ldp-thread-body-offset, 32px);
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--ldp-accent) 24%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ldp-accent) 7%, var(--ldp-canvas));
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-sm);
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+.ldp-direct-reply-loading::before {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  border: 2px solid color-mix(in srgb, var(--ldp-accent) 24%, transparent);
+  border-top-color: var(--ldp-accent);
+  border-radius: 50%;
+  content: "";
+  animation: ldp-spin .9s linear infinite;
+}
+
+.ldp-direct-reply-loading[data-state="queued"]::before {
+  animation-play-state: paused;
+  opacity: .6;
+}
+
+.ldp-reader-branch-toggle,
+.ldp-collapse-replies,
+.ldp-reply-rail-control {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  padding: 0;
+  border: 1.25px solid var(--ldp-reply-line-color);
+  border-radius: 50%;
+  background: var(--ldp-reply-control-bg, var(--ldp-canvas));
+  color: var(--ldp-reply-line-color);
+  cursor: pointer;
+  font: 600 var(--ldp-font-ui)/1 var(--ldp-interface-font-family, inherit);
+  translate: -50% -50%;
+  pointer-events: auto;
+  transition:
+    background-color var(--ldp-motion-fast) ease-out,
+    color var(--ldp-motion-fast) ease-out,
+    transform var(--ldp-motion-fast) ease-out;
+}
+
+.ldp-reader-branch-toggle > .ldp-icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
+}
+
+/* 圆形符号外扩 4px 命中安全圈；与窄线重叠时仍由 z-index:4 的符号接管。 */
+.ldp-reader-branch-toggle::before {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  content: "";
+}
+
+.ldp-reader-branch-toggle:hover,
+.ldp-reader-branch-toggle:focus-visible {
+  background: var(--ldp-accent);
+  color: #fff;
+}
+
+.ldp-reader-branch-toggle:active {
+  transform: scale(.92);
+}
+
+.ldp-reader-branch-toggle[aria-expanded="false"] {
+	background: var(--ldp-accent-soft);
+}
+
+/*
+ * 点击某一级回复线只收纳发出该线的直接父楼层及其子树。按钮是父楼层
+ * 的直属节点，所以 replyTree 隐藏后仍保留与父标题同行的展开入口。
+ */
+.ldp-post.ldp-branch-parent-collapsed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-block: 4px !important;
+  font-size: var(--ldp-font-ui);
+}
+
+.ldp-post.ldp-branch-parent-collapsed > .ldp-comments-header {
+  width: 100%;
+  flex: 0 0 100%;
+  order: 3;
+}
+
+.ldp-post.ldp-branch-parent-collapsed > .ldp-reader-branch-toggle {
+  position: relative;
+  inset: auto !important;
+  display: grid;
+  flex: none;
+  margin: 0;
+  translate: none;
+}
+
+.ldp-post.ldp-branch-parent-collapsed > .ldp-post-head {
+  min-width: 0;
+  flex: 1;
+  gap: 6px;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: .86;
+}
+
+.ldp-post.ldp-branch-parent-collapsed > .ldp-post-head :is(
+  .ldp-avatar-link,
+  .ldp-avatar
+) {
+  width: var(--ldp-reader-author-font-size, var(--ldp-font-md));
+  height: var(--ldp-reader-author-font-size, var(--ldp-font-md));
+}
+
+.ldp-collapsed-branch-count {
+  flex: none;
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-ui);
+  white-space: nowrap;
+  opacity: .72;
+}
+
+/*
+ * 嵌套子分支收纳后，“+”就是该分支的代理头像。改由稳定 root 画入线，
+ * 并像普通头像一样在圆钮左侧留 5px 后终止；不能穿过“+”再连真实头像。
+ */
+.ldp-segmented-branches .ldp-reply-list >
+.ldp-post.ldp-branch-parent-collapsed:not(
+  .ldp-virtual-ancestor-shell
+)::before {
+  position: absolute;
+  z-index: 1;
+  top: -1px;
+  left: calc(var(--ldp-thread-avatar-size) / -2);
+  width: calc(var(--ldp-thread-avatar-size) / 2 - 5px);
+  height: calc(5px + var(--ldp-thread-avatar-size) / 2);
+  border-bottom: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
+  border-left: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
+  border-bottom-left-radius: var(--ldp-reply-line-radius);
+  content: "";
+  pointer-events: none;
+}
+
+.ldp-segmented-branches .ldp-reply-list >
+.ldp-post.ldp-branch-parent-collapsed:not(
+  .ldp-virtual-ancestor-shell
+) > .ldp-post-head::before {
+  display: none;
+}
+
+.ldp-post.ldp-branch-parent-collapsed > :is(
+  .ldp-post-body,
+  .ldp-reply-tree
+) {
+  display: none !important;
+}
+
+.ldp-nested-preview > .ldp-post-head {
+  flex-wrap: wrap;
+}
+
+.ldp-nested-preview > .ldp-post-head > .ldp-author {
+  max-width: min(30ch, 46%);
+}
+
+.ldp-nested-preview > .ldp-post-head > .ldp-user {
+  max-width: min(24ch, 30%);
+}
+
+.ldp-nested-preview > .ldp-post-head > .ldp-floor {
+  margin-left: 0;
+}
+
+.ldp-nested-preview > .ldp-post-head > .ldp-post-read-state {
+  margin-left: auto;
+}
+
+.ldp-nested-preview > .ldp-post-body > .ldp-content {
+  font-size: calc(var(--ldp-post-font-size, var(--ldp-font-md)) * var(--ldp-nested-content-scale, .96));
+}
+
+.ldp-nested-toggle {
+  position: relative;
+  z-index: 6;
+  display: none;
+  height: 24px;
+  align-items: center;
+  margin: 2px 0;
+  color: var(--tertiary, #47855f);
+  font-size: var(--ldp-font-ui);
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: middle;
+  pointer-events: auto;
+}
+
+.ldp-nested-esc-hint {
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  margin-left: 8px;
+  color: var(--primary-medium, #777);
+  font-size: var(--ldp-font-sm);
+  font-weight: 500;
+  line-height: 1;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.ldp-reply-collapsible > .ldp-nested-toggle {
+  display: inline-flex;
+}
+
+.ldp-post.ldp-nested-collapsed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0 !important;
+  cursor: pointer;
+  font-size: var(--ldp-font-ui);
+}
+
+.ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview) > .ldp-nested-toggle {
+  display: inline-flex;
+  flex: none;
+  margin: 0;
+  font-size: var(--ldp-font-ui);
+}
+
+.ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview)
+  > .ldp-nested-toggle .ldp-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.ldp-post.ldp-nested-collapsed > .ldp-post-head {
+  min-width: 0;
+  flex: 1;
+  gap: 6px;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview) .ldp-avatar {
+  width: 20px;
+  height: 20px;
+}
+
+.ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview)
+  :is(.ldp-author, .ldp-user, .ldp-time) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview)
+  > .ldp-post-head:has(.ldp-time:hover),
+.ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview) .ldp-time:hover {
+  overflow: visible;
+}
+
+.ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview)
+  :is(.ldp-user, .ldp-time),
+.ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview)
+  .ldp-floor:not(.ldp-jump-parent):not(.ldp-jump-self) {
+  font-size: var(--ldp-font-sm);
+  opacity: .55;
+}
+
+.ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview)
+  :is(.ldp-floor.ldp-jump-parent, .ldp-floor.ldp-jump-self) {
+  font-size: var(--ldp-font-sm);
+}
+
+.ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview)
+  .ldp-floor.ldp-body-floor {
+  background: color-mix(in srgb, var(--primary, #222) 3%, transparent);
+}
+
+.ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview)
+  :is(.ldp-op, .ldp-me) {
+  padding: 0 4px;
+  font-size: var(--ldp-font-xs);
+}
+
+.ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview) .ldp-new-user-badge {
+  min-height: 18px;
+  gap: 3px;
+  padding: 1px 5px 1px 4px;
+  font-size: var(--ldp-font-xs);
+}
+
+.ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview)
+  .ldp-new-user-badge .ldp-icon {
+  width: 11px;
+  height: 11px;
+}
+
+.ldp-sub-actions.show {
+  display: flex;
+}
+
+.ldp-sub-page-btn {
+  min-width: 0;
+  height: auto;
+  min-height: 24px;
+  padding: 4px 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ldp-accent);
+  font-size: var(--ldp-font-ui);
+  font-weight: 650;
+  opacity: .9;
+}
+
+.ldp-sub-page-btn:hover:not(:disabled) {
+  background: transparent;
+  color: var(--ldp-accent);
+  text-decoration: underline;
+  opacity: 1;
+}
+
+.ldp-sub-page-btn:active:not(:disabled) {
+  transform: none;
+}
+
+.ldp-sub-page-btn:disabled {
+  cursor: default;
+  opacity: .35;
+}
+
+.ldp-descendant-replies-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: auto;
+}
+
+.ldp-descendant-replies-layer-inline {
+  background: color-mix(in srgb, var(--ldp-surface-muted) 82%, var(--ldp-canvas));
+}
+
+.ldp-descendant-replies-layer-centered {
+  position: fixed;
+  z-index: 2147483590;
+}
+
+.ldp-descendant-replies-window {
+  position: absolute;
+  display: grid;
+  grid-template-rows: 46px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--ldp-border);
+  background: var(--ldp-canvas);
+}
+
+.ldp-descendant-replies-inline {
+  inset: 20px;
+  z-index: 31;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--ldp-radius-md);
+  box-shadow: none;
+}
+
+.ldp-descendant-replies-centered {
+  z-index: 2147483647;
+  top: 50%;
+  left: 50%;
+  width: min(960px, calc(100vw - 48px));
+  height: min(78vh, 720px);
+  min-width: 320px;
+  min-height: 240px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  border-radius: var(--ldp-radius-lg);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .24);
+  transform: translate(-50%, -50%);
+}
+
+.ldp-descendant-replies-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--ldp-border);
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-ui);
+  user-select: none;
+}
+
+.ldp-descendant-replies-close {
+  flex: none;
+}
+
+.ldp-descendant-replies-title {
+  min-width: 0;
+  max-width: none;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ldp-ink-muted);
+  font-weight: 600;
+}
+
+.ldp-descendant-replies-list {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 18px 16px 28px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.ldp-comments {
+  min-width: 0;
+}
+
+.ldp-descendant-replies-tree > .ldp-post {
+  width: var(--ldp-descendant-tree-width, 100%);
+  min-width: var(--ldp-descendant-tree-width, 100%);
+}
+
+.ldp-descendant-replies-tree .ldp-post {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 220px;
+}
+
+.ldp-descendant-replies-tree .ldp-post:has(
+  > .ldp-reply-tree > .ldp-reply-list > .ldp-post
+) {
+  content-visibility: visible;
+}
+
+.ldp-descendant-replies-tree .ldp-post-projection-pending {
+  min-block-size: 220px;
+}
+
+.ldp-descendant-tree-pannable { cursor: grab; }
+.ldp-descendant-tree-panning { cursor: grabbing; user-select: none; }
+
+.ldp-content aside.ldp-post-quote {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: auto !important;
+  max-height: none;
+  margin: 1em 0;
+  padding: 12px 14px;
+  overflow: visible;
+  border-left: var(--ldp-quote-line-emphasis-width, 5px) solid var(--ldp-quote-line-color, var(--ldp-border));
+  background: var(--ldp-surface-muted);
+}
+
+.ldp-content aside.ldp-post-quote > .ldp-quote-title {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding-right: 70px;
+  color: var(--ldp-ink-muted);
+  font-size: 1em;
+  line-height: 1.35;
+}
+
+.ldp-content aside.ldp-post-quote > .ldp-quote-title :is(img,.avatar) {
+  width: 24px !important;
+  height: 24px !important;
+  flex: none;
+  margin: 0 !important;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.ldp-content aside.ldp-post-quote > .ldp-quote-title a {
+  color: inherit;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.ldp-content aside.ldp-post-quote > blockquote {
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible !important;
+  border: 0;
+  background: transparent;
+}
+
+.ldp-quote-controls {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ldp-quote-controls :is(.ldp-quote-toggle,.ldp-quote-jump) {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ldp-ink-muted);
+  cursor: pointer;
+}
+
+.ldp-quote-controls :is(.ldp-quote-toggle,.ldp-quote-jump):hover {
+  background: color-mix(in srgb, var(--ldp-ink) 6%, transparent);
+  color: var(--ldp-ink);
+}
+
+.ldp-quote-controls .ldp-quote-jump {
+  background: var(--ldp-accent-soft);
+  color: var(--ldp-accent);
+}
+
+.ldp-content mark.ldp-quote-match {
+  padding: 0 .08em;
+  border-radius: 3px;
+  background: color-mix(in srgb, #ffd85a 68%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, #d09a00 20%, transparent);
+  color: inherit;
+  cursor: pointer;
+}
+
+.ldp-content mark.ldp-quote-match.ldp-quote-match-muted {
+  background: transparent;
+  box-shadow: none;
+  opacity: .62;
+}
+
+.ldp-quote-highlight-hint {
+  position: fixed;
+  z-index: 2147483646;
+  display: none;
+  height: auto;
+  min-height: 30px;
+  padding: 3px;
+  border: 1px solid var(--ldp-border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--ldp-canvas) 94%, transparent);
+  box-shadow: var(--ldp-shadow-popover);
+  backdrop-filter: blur(8px);
+}
+
+.ldp-quote-highlight-hint.ldp-quote-hint-visible {
+  display: flex;
+}
+
+.ldp-quote-highlight-hint button {
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ldp-ink);
+  cursor: pointer;
+}
+
+.ldp-quote-highlight-hint button:hover {
+  background: var(--ldp-accent-soft);
+  color: var(--ldp-accent);
+}
+
+.ldp-quote-highlight-return {
+  border-left: 1px solid var(--ldp-border) !important;
+  border-radius: 0 5px 5px 0 !important;
+}
+
+.ldp-post.ldp-has-child-branches {
+  --ldp-reply-control-bg: var(--ldp-canvas);
+}
+
+.ldp-branch-controls .ldp-branch-hit-path {
+  pointer-events: stroke;
+}
+
+.ldp-descendant-replies-top {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ldp-ink-muted);
+  cursor: pointer;
+}
+
+.ldp-descendant-replies-top:hover {
+  background: var(--ldp-surface-muted);
+  color: var(--ldp-accent);
+}
+
+.ldp-descendant-replies-open {
+  outline: none;
+  box-shadow: none;
+}
+
+.ldp-floor.ldp-jump-self {
+  min-height: 22px;
+  margin-left: auto;
+  padding: 1px 5px;
+  border: 0;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ldp-accent) 7%, transparent);
+  color: var(--ldp-accent);
+  cursor: pointer;
+  font-size: var(--ldp-font-sm);
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.ldp-floor.ldp-jump-self:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ldp-descendant-replies-resize-handle {
+  position: absolute;
+  z-index: 4;
+  display: block;
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.ldp-descendant-replies-resize-handle[data-resize="n"] { top: -6px; right: 16px; left: 16px; height: 12px; cursor: n-resize; }
+.ldp-descendant-replies-resize-handle[data-resize="s"] { right: 16px; bottom: -6px; left: 16px; height: 12px; cursor: s-resize; }
+.ldp-descendant-replies-resize-handle[data-resize="e"] { top: 16px; right: -6px; bottom: 16px; width: 12px; cursor: e-resize; }
+.ldp-descendant-replies-resize-handle[data-resize="w"] { top: 16px; bottom: 16px; left: -6px; width: 12px; cursor: w-resize; }
+.ldp-descendant-replies-resize-handle[data-resize="ne"] { top: -7px; right: -7px; width: 20px; height: 20px; cursor: ne-resize; }
+.ldp-descendant-replies-resize-handle[data-resize="nw"] { top: -7px; left: -7px; width: 20px; height: 20px; cursor: nw-resize; }
+.ldp-descendant-replies-resize-handle[data-resize="sw"] { bottom: -7px; left: -7px; width: 20px; height: 20px; cursor: sw-resize; }
+.ldp-descendant-replies-resize-handle[data-resize="se"] { right: -7px; bottom: -7px; width: 20px; height: 20px; cursor: se-resize; }
+
+.ldp-descendant-replies-interacting {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.ldp-descendant-replies-host-open {
+  z-index: 2147483590;
+  overflow: visible;
+  clip-path: none !important;
+}
+
+.ldp-discussion-root {
+  min-width: 0;
+  min-height: 0;
+}
+
+.ldp-quote-expanded > blockquote {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.ldp-quote-highlight-toggle {
+  display: grid;
+  min-width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ldp-ink-muted);
+  cursor: pointer;
+}
+
+.ldp-quote-highlight-toggle:hover {
+  background: var(--ldp-accent-soft);
+  color: var(--ldp-accent);
+}
+
+.ldp-content mark.ldp-quote-match-end {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #d09a00 24%, transparent),
+    0 0 0 3px color-mix(in srgb, #ffd85a 18%, transparent);
+}
+
+.ldp-hidden-reply-marker {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  width: 100%;
+  height: 18px;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 14px;
+  align-items: center;
+  column-gap: 4px;
+  color: var(--ldp-ink-muted);
+}
+
+/* 隐藏楼层分隔条已经自带唯一横线；状态由 marker owner 显式维护。 */
+.ldp-virtual-root-list > .ldp-post.ldp-before-hidden-reply-marker {
+  border-bottom-color: transparent;
+}
+
+.ldp-hidden-reply-marker::before {
+  height: var(--ldp-divider-line-width, 1px);
+  background: var(--ldp-divider-line-color);
+  content: "";
+}
+
+.ldp-hidden-reply-toggle {
+  display: grid;
+  width: 14px;
+  height: 18px;
+  place-items: center;
+  padding: 0;
+  color: inherit;
+}
+
+.ldp-hidden-reply-toggle::before {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-right: 7px solid currentColor;
+  border-bottom: 5px solid transparent;
+  content: "";
+}
+
+.ldp-hidden-reply-list {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  bottom: calc(50% + 7px);
+  display: flex;
+  max-width: min(70vw, 360px);
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  overflow-x: auto;
+  border: 1px solid var(--ldp-border);
+  border-radius: 999px;
+  background: var(--ldp-canvas);
+  box-shadow: var(--ldp-shadow-md);
+}
+
+.ldp-hidden-reply-avatar {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ldp-surface-muted);
+  color: var(--ldp-ink-muted);
+  cursor: pointer;
+}
+
+.ldp-hidden-reply-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ldp-hidden-reply-more {
+  height: 24px;
+  flex: none;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ldp-surface-muted);
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-xs);
+  white-space: nowrap;
+}

@@ -1,0 +1,367 @@
+{
+  "schemaVersion": 1,
+  "source": "work/main.js",
+  "callSites": [
+    {
+      "line": 11662,
+      "operation": "like-toggle",
+      "targetType": "post",
+      "variantSource": null,
+      "resultKind": "post-patch",
+      "native": {
+        "kind": "model-method",
+        "binding": "post.likeAction.togglePromise"
+      }
+    },
+    {
+      "line": 11725,
+      "operation": "poll-vote",
+      "targetType": "post",
+      "variantSource": "poll-name+mode",
+      "resultKind": "feature-patch",
+      "native": {
+        "kind": "native-ajax",
+        "binding": "discourse/lib/ajax#ajax"
+      }
+    },
+    {
+      "line": 12032,
+      "operation": "reaction-toggle",
+      "targetType": "post",
+      "variantSource": "reaction-id",
+      "resultKind": "authoritative-post",
+      "native": {
+        "kind": "module-function",
+        "binding": "discourse/plugins/discourse-reactions/discourse/models/discourse-reactions-custom-reaction#default.toggle"
+      }
+    },
+    {
+      "line": 17798,
+      "operation": "reply-create",
+      "targetType": "post",
+      "variantSource": "reply-to-post-number",
+      "resultKind": "created-post",
+      "native": {
+        "kind": "service-method",
+        "binding": "service:composer#save"
+      }
+    },
+    {
+      "line": 21268,
+      "operation": "category-expert-endorse",
+      "targetType": "user",
+      "variantSource": "category-ids",
+      "resultKind": "user-patch",
+      "native": {
+        "kind": "native-ajax",
+        "binding": "discourse/lib/ajax#ajax"
+      }
+    },
+    {
+      "line": 21307,
+      "operation": "user-notification-level",
+      "targetType": "user",
+      "variantSource": "level+expiry",
+      "resultKind": "user-patch",
+      "native": {
+        "kind": "model-method",
+        "binding": "user.updateNotificationLevel"
+      }
+    },
+    {
+      "line": 21364,
+      "operation": "user-follow-toggle",
+      "targetType": "user",
+      "variantSource": "follow-state",
+      "resultKind": "user-patch",
+      "native": {
+        "kind": "native-ajax",
+        "binding": "discourse/lib/ajax#ajax"
+      }
+    },
+    {
+      "line": 24607,
+      "operation": "composer-draft-discard",
+      "targetType": "composer-session",
+      "variantSource": null,
+      "resultKind": "no-content",
+      "native": {
+        "kind": "service-method",
+        "binding": "service:composer#destroyDraft"
+      }
+    },
+    {
+      "line": 25047,
+      "operation": "post-delete",
+      "targetType": "post",
+      "variantSource": null,
+      "resultKind": "post-deletion",
+      "native": {
+        "kind": "model-method",
+        "binding": "post.destroy"
+      }
+    },
+    {
+      "line": 25112,
+      "operation": "boost-delete",
+      "targetType": "boost",
+      "variantSource": null,
+      "resultKind": "post-patch",
+      "native": {
+        "kind": "native-ajax",
+        "binding": "discourse/lib/ajax#ajax"
+      }
+    },
+    {
+      "line": 25161,
+      "operation": "boost-report",
+      "targetType": "boost",
+      "variantSource": "flag-type",
+      "resultKind": "no-content",
+      "native": {
+        "kind": "native-ajax",
+        "binding": "discourse/lib/ajax#ajax"
+      }
+    },
+    {
+      "line": 25530,
+      "operation": "boost-create",
+      "targetType": "post",
+      "variantSource": "raw-fingerprint",
+      "resultKind": "authoritative-post",
+      "native": {
+        "kind": "module-function",
+        "binding": "discourse/plugins/discourse-boosts/discourse/lib/create-boost#default"
+      }
+    },
+    {
+      "line": 27159,
+      "operation": "bookmark-create",
+      "targetType": "bookmark-subject",
+      "variantSource": "subject-type",
+      "resultKind": "bookmark-patch",
+      "native": {
+        "kind": "service-method",
+        "binding": "service:bookmark-api#create"
+      }
+    },
+    {
+      "line": 27165,
+      "operation": "bookmark-delete",
+      "targetType": "bookmark",
+      "variantSource": null,
+      "resultKind": "no-content",
+      "native": {
+        "kind": "service-method",
+        "binding": "service:bookmark-api#delete"
+      }
+    },
+    {
+      "line": 27208,
+      "operation": "topic-bookmarks-delete",
+      "targetType": "topic",
+      "variantSource": null,
+      "resultKind": "topic-patch",
+      "native": {
+        "kind": "model-method",
+        "binding": "topic.deleteBookmarks"
+      }
+    },
+    {
+      "line": 27479,
+      "operation": "post-report",
+      "targetType": "post",
+      "variantSource": "flag-type",
+      "resultKind": "post-patch",
+      "native": {
+        "kind": "model-method",
+        "binding": "postAction.act"
+      }
+    },
+    {
+      "line": 27528,
+      "operation": "assignment-put",
+      "targetType": "assignment-target",
+      "variantSource": "target-type+username",
+      "resultKind": "subject-patch",
+      "native": {
+        "kind": "service-method",
+        "binding": "service:task-actions#putAssignment"
+      }
+    },
+    {
+      "line": 28773,
+      "operation": "topic-notification-level",
+      "targetType": "topic",
+      "variantSource": "level",
+      "resultKind": "topic-patch",
+      "native": {
+        "kind": "model-method",
+        "binding": "topicDetails.updateNotifications"
+      }
+    },
+    {
+      "line": 28825,
+      "operation": "post-voting-comment-create",
+      "targetType": "post",
+      "variantSource": null,
+      "resultKind": "feature-patch",
+      "native": {
+        "kind": "native-ajax",
+        "binding": "discourse/lib/ajax#ajax"
+      }
+    },
+    {
+      "line": 29084,
+      "operation": "topic-vote-toggle",
+      "targetType": "topic",
+      "variantSource": "vote-state",
+      "resultKind": "topic-patch",
+      "native": {
+        "kind": "native-ajax",
+        "binding": "discourse/lib/ajax#ajax"
+      }
+    },
+    {
+      "line": 29234,
+      "operation": "post-voting-vote",
+      "targetType": "post",
+      "variantSource": "direction+mode",
+      "resultKind": "authoritative-post",
+      "native": {
+        "kind": "module-function",
+        "binding": "discourse/plugins/discourse-post-voting/discourse/lib/post-voting-utilities#castVote|removeVote"
+      }
+    },
+    {
+      "line": 29276,
+      "operation": "post-voting-comment-vote",
+      "targetType": "comment",
+      "variantSource": "vote-state",
+      "resultKind": "feature-patch",
+      "native": {
+        "kind": "native-ajax",
+        "binding": "discourse/lib/ajax#ajax"
+      }
+    },
+    {
+      "line": 29321,
+      "operation": "event-attendance",
+      "targetType": "event",
+      "variantSource": "update+status",
+      "resultKind": "feature-patch",
+      "native": {
+        "kind": "service-method",
+        "binding": "service:discourse-post-event-api#updateEventAttendance|joinEvent"
+      }
+    },
+    {
+      "line": 29322,
+      "operation": "event-attendance",
+      "targetType": "event",
+      "variantSource": "join+status",
+      "resultKind": "feature-patch",
+      "native": {
+        "kind": "service-method",
+        "binding": "service:discourse-post-event-api#updateEventAttendance|joinEvent"
+      }
+    },
+    {
+      "line": 29409,
+      "operation": "shared-issue-toggle",
+      "targetType": "topic",
+      "variantSource": null,
+      "resultKind": "topic-patch",
+      "native": {
+        "kind": "native-ajax",
+        "binding": "discourse/lib/ajax#ajax"
+      }
+    },
+    {
+      "line": 36718,
+      "operation": "notification-mark-read",
+      "targetType": "notification-group",
+      "variantSource": "all",
+      "resultKind": "no-content",
+      "native": {
+        "kind": "native-ajax",
+        "binding": "discourse/lib/ajax#ajax"
+      }
+    },
+    {
+      "line": 36953,
+      "operation": "bookmark-bulk-delete",
+      "targetType": "bookmark-set",
+      "variantSource": "sorted-ids",
+      "resultKind": "collection-patch",
+      "native": {
+        "kind": "model-static",
+        "binding": "discourse/models/bookmark#default.bulkOperation"
+      }
+    },
+    {
+      "line": 37898,
+      "operation": "topic-edit",
+      "targetType": "topic",
+      "variantSource": "changed-fields",
+      "resultKind": "authoritative-topic",
+      "native": {
+        "kind": "model-static",
+        "binding": "discourse/models/topic#default.update"
+      }
+    },
+    {
+      "line": 38730,
+      "operation": "composer-save",
+      "targetType": "composer-session",
+      "variantSource": "create-or-edit",
+      "resultKind": "created-or-updated-post",
+      "native": {
+        "kind": "service-method",
+        "binding": "service:composer#save"
+      }
+    },
+    {
+      "line": 41070,
+      "operation": "notification-mark-read",
+      "targetType": "notification",
+      "variantSource": "single",
+      "resultKind": "no-content",
+      "native": {
+        "kind": "native-ajax",
+        "binding": "discourse/lib/ajax#ajax"
+      }
+    }
+  ],
+  "resultOwners": {
+    "like-toggle/post": "post",
+    "poll-vote/post": "post",
+    "reaction-toggle/post": "post",
+    "reply-create/post": "post",
+    "category-expert-endorse/user": "user",
+    "user-notification-level/user": "user",
+    "user-follow-toggle/user": "user",
+    "composer-draft-discard/composer-session": "composer",
+    "post-delete/post": "post",
+    "boost-delete/boost": "post",
+    "boost-report/boost": "post",
+    "boost-create/post": "post",
+    "bookmark-create/bookmark-subject": "subject",
+    "bookmark-delete/bookmark": "subject",
+    "topic-bookmarks-delete/topic": "topic",
+    "post-report/post": "post",
+    "assignment-put/assignment-target": "subject",
+    "topic-notification-level/topic": "topic",
+    "post-voting-comment-create/post": "post",
+    "topic-vote-toggle/topic": "topic",
+    "post-voting-vote/post": "post",
+    "post-voting-comment-vote/comment": "post",
+    "event-attendance/event": "post",
+    "shared-issue-toggle/topic": "topic",
+    "notification-mark-read/notification-group": "notification",
+    "bookmark-bulk-delete/bookmark-set": "bookmark-collection",
+    "topic-edit/topic": "topic",
+    "composer-save/composer-session": "composer",
+    "notification-mark-read/notification": "notification"
+  }
+}

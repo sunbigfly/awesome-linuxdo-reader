@@ -2,9 +2,9 @@
 title: 布局、浮窗与外观
 description: 分别设置普通与全屏五区比例，并配置浮窗位置、明暗主题、颜色、斑马纹和结构线。
 feature_ids: ["SET-001", "SET-007", "SET-008", "SET-009"]
-source_anchors: ["READER_THEME_MODES", "LAYOUT_REGION_KEYS", "READER_FULLPAGE_LAYOUT_DEFAULT", "readerWindowGeometryMarkup", "APPEARANCE_PROFILE_SETTING_KEYS"]
+source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/shell/reader-workspace.ts","lite/src/appearance/reader-appearance-style-controller.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-05-layout-settings.png", "/screenshots/guide-06-window-settings.png", "/screenshots/guide-07-appearance-settings.png"]

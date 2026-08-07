@@ -2,9 +2,9 @@
 title: 阅读队列
 description: 从主题列表建立多主题阅读队列，管理后台预加载、阅读进度、固定、清理、位置恢复与异常重试。
 feature_ids: ["CORE-006"]
-source_anchors: ["LDP_READER_QUEUE_KEY", "ensureReaderQueueEntry", "readerQueueStatusText", "bindReaderQueueSurface", "readerQueueSurfaceBounds", "readerQueueTopAvoidingTopicRail", "prefetchReaderQueueEntry", "createReaderQueueViewportTracker", "autoDequeueReaderQueueEntry", "clearReaderQueueEntries"]
+source_anchors: ["lite/src/queue/reader-open-queue-session.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-21-reading-queue.png", "/screenshots/guide-24-reading-queue-entry.png", "/screenshots/guide-13-data-management.png", "/screenshots/guide-11-request-flow.png", "/screenshots/guide-16-history.png"]

@@ -2,11 +2,11 @@
 title: 功能覆盖目录
 description: 查看当前版本所有用户可见功能、唯一编号、状态、验证日期和对应手册。
 feature_ids: ["REF-002"]
-source_anchors: ["@version"]
+source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
-last_verified: 2026-07-28
+last_verified: 2026-08-03
 screenshots: ["/screenshots/guide-22-feature-catalog.png"]
 ---
 
@@ -19,6 +19,11 @@ const grouped = catalog.reduce((result, feature) => {
   return result
 }, {})
 const docLink = (document) => withBase(`/${document.replace(/\.md$/, '')}`)
+const currentVersion = catalog[0]?.version || '未知'
+const latestVerified = catalog.reduce(
+  (latest, feature) => feature.last_verified > latest ? feature.last_verified : latest,
+  '',
+)
 </script>
 
 # 功能覆盖目录
@@ -27,13 +32,13 @@ const docLink = (document) => withBase(`/${document.replace(/\.md$/, '')}`)
 
 ![线上功能覆盖目录中的功能数量、分类、源码锚点和手册入口](/screenshots/guide-22-feature-catalog.png)
 
-<p class="image-caption">目录按分类展示 97 项当前能力，每项都可以回到对应手册页面。</p>
+<p class="image-caption">目录按分类展示当前能力，每项都可以回到对应手册页面。</p>
 
 <div class="doc-meta">
   <span>{{ catalog.length }} 项功能</span>
   <span>{{ Object.keys(grouped).length }} 个分类</span>
-  <span>当前版本 0.1.16</span>
-  <span>核验日期 2026-07-25</span>
+  <span>当前版本 {{ currentVersion }}</span>
+  <span>最近核验 {{ latestVerified }}</span>
 </div>
 
 <section v-for="(features, category) in grouped" :key="category" class="catalog-section">

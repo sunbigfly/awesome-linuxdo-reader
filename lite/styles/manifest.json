@@ -1,0 +1,720 @@
+{
+  "schemaVersion": 2,
+  "proofScope": "static-dom-css-ownership-only",
+  "alignmentDecision": "not-evaluated",
+  "componentContract": "docs/superpowers/specs/2026-08-01-mian-lite-frontend-component-matrix.md",
+  "sources": [
+    "00-foundation.css",
+    "10-workspace.css",
+    "20-shell.css",
+    "30-stream.css",
+    "40-reply-tree.css",
+    "45-composer.css",
+    "50-components.css",
+    "55-collections.css",
+    "60-media.css",
+    "70-settings.css",
+    "80-motion.css",
+    "90-responsive.css"
+  ],
+  "nonVisualRuntimeClasses": [
+    "ldp-aggregate-descendant-replies",
+    "ldp-bookmark-item",
+    "ldp-bookmark-select",
+    "ldp-bookmarks-multi",
+    "ldp-boost-settings-availability",
+    "ldp-confirm-native-composer-close",
+    "ldp-double-escape-close-reader",
+    "ldp-expand-leaf-nested-replies",
+    "ldp-expand-nested-replies-default",
+    "ldp-hide-nested-reply-floors",
+    "ldp-history-multi",
+    "ldp-history-select",
+    "ldp-history-buttons-always-visible-setting",
+    "ldp-font-rendering-settings",
+    "ldp-flash-color",
+    "ldp-flash-range",
+    "ldp-callout--abstract",
+    "ldp-callout--hint",
+    "ldp-callout--important",
+    "ldp-callout--info",
+    "ldp-callout--note",
+    "ldp-callout--summary",
+    "ldp-callout--tip",
+    "ldp-callout--tldr",
+    "ldp-callout--todo",
+    "ldp-host-embed-size-settings",
+    "ldp-image-profiles-shared",
+    "ldp-image-quote-toolbar",
+    "ldp-inline-reply-tree-row",
+    "ldp-lightbox-comments-expanded-default",
+    "ldp-lightbox-description-expanded-default",
+    "ldp-lightbox-original-default",
+    "ldp-new-user",
+    "ldp-open-topics-first-post",
+    "ldp-reader-queue-always-visible-empty",
+    "ldp-reader-window-lock-input",
+    "ldp-reader-window-pin-input",
+    "ldp-reader-window-settings",
+    "ldp-reply",
+    "ldp-custom-site-settings",
+    "ldp-shortcut-clear",
+    "ldp-shortcut-reset",
+    "ldp-shortcut-reset-all",
+    "ldp-system-post",
+    "ldp-topic-action-rail-fixed-setting",
+    "ldp-topic-action-rail-visible-setting",
+    "ldp-translation-source"
+  ],
+  "surfaces": [
+    {
+      "id": "workspace-window",
+      "owners": [
+        "lite/src/components/reader-icon.ts",
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/shell/reader-workspace.ts"
+      ],
+      "styles": [
+        "10-workspace.css",
+        "90-responsive.css"
+      ],
+      "tests": [
+        "lite/tests/reader-icon.test.ts",
+        "lite/tests/reader-shell-workspace-stage.test.ts",
+        "lite/tests/reader-workspace.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-overlay",
+        "ldp-modal",
+        "ldp-reader-window-capsule",
+        "ldp-reader-resize-handle"
+      ]
+    },
+    {
+      "id": "embedded-host",
+      "owners": [
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/shell/reader-workspace-coordinator.ts",
+        "lite/src/shell/embedded-host-root-controller.ts",
+        "lite/src/shell/embedded-host-topic-card-enhancement.ts",
+        "lite/src/shell/embedded-host-scrollbar.ts",
+        "lite/src/shell/embedded-host-top-shortcut.ts",
+        "lite/src/shell/embedded-host-appearance.ts",
+        "lite/src/shell/main-outlet-mutation-hub.ts"
+      ],
+      "styles": [
+        "10-workspace.css"
+      ],
+      "tests": [
+        "lite/tests/embedded-host-root-controller.test.ts",
+        "lite/tests/embedded-host-topic-card-enhancement.test.ts",
+        "lite/tests/embedded-host-scrollbar.test.ts",
+        "lite/tests/embedded-host-top-shortcut.test.ts",
+        "lite/tests/embedded-host-appearance.test.ts",
+        "lite/tests/main-outlet-mutation-hub.test.ts",
+        "lite/tests/reader-workspace-coordinator.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-reader-host-scrollbar",
+        "ldp-reader-host-scrollbar-thumb",
+        "ldp-reader-host-top",
+        "ldp-topic-stats-component",
+        "ldp-topic-stats-row",
+        "ldp-topic-stat",
+        "ldp-native-topic-title-tools"
+      ],
+      "styleSignatures": [
+        "html.ldp-reader-embedded-right body",
+        "box-shadow: none !important",
+        "margin-top: 0",
+        "transform: none",
+        "var(--ldp-host-topic-stats-label-size, var(--ldp-font-micro, 9px))"
+      ]
+    },
+    {
+      "id": "host-entry-and-queue",
+      "owners": [
+        "lite/src/queue/reader-open-queue-session.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/reader-floating-host-target-controller.ts",
+        "lite/src/userscript/reader-host-topic-source-coordinator.ts"
+      ],
+      "styles": [
+        "10-workspace.css",
+        "20-shell.css",
+        "50-components.css",
+        "90-responsive.css"
+      ],
+      "tests": [
+        "lite/tests/reader-open-queue-session.test.ts",
+        "lite/tests/reader-floating-host-target-controller.test.ts",
+        "lite/tests/reader-host-topic-source-coordinator.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-native-reader-trigger-item",
+        "ldp-native-reader-trigger",
+        "ldp-reader-queue-add",
+        "ldp-reader-queue",
+        "ldp-reader-queue-bubble",
+        "ldp-reader-queue-panel",
+        "ldp-reader-queue-row",
+        "ldp-reader-switch-ready",
+        "ldp-reader-switch-target",
+        "ldp-reader-queue-retry"
+      ],
+      "styleSignatures": [
+        ".ldp-reader-queue .ldp-reader-queue-panel.is-collision-positioned",
+        "translateY(-5px) scale(.94)",
+        ".ldp-reader-queue-add:is(:focus-visible, .is-added)",
+        "@container ldp-reader (max-width: 1200px)",
+        "@media (hover: none)"
+      ]
+    },
+    {
+      "id": "reader-shell",
+      "owners": [
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/shell/reader-shell-recovery-view.ts"
+      ],
+      "styles": [
+        "20-shell.css",
+        "90-responsive.css"
+      ],
+      "tests": [
+        "lite/tests/reader-shell-template.test.ts",
+        "lite/tests/reader-shell-recovery-view.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-header",
+        "ldp-head-btns",
+        "ldp-reader-main",
+        "ldp-topic-timeline",
+        "ldp-error",
+        "ldp-error-actions"
+      ],
+      "styleSignatures": [
+        "min-height: 220px;",
+        "color: var(--primary-medium, #666);",
+        ".ldp-topic-timeline-cursor.ldp-timeline-lens-composited",
+        ".ldp-topic-timeline-track:is(.ldp-timeline-hovering, .ldp-timeline-jumping)"
+      ]
+    },
+    {
+      "id": "topic-heading",
+      "owners": [
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/topic/reader-topic-header.ts",
+        "lite/src/topic/reader-topic-comments-header.ts"
+      ],
+      "styles": [
+        "20-shell.css",
+        "30-stream.css",
+        "90-responsive.css"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-presentation.test.ts",
+        "lite/tests/reader-topic-comments-header.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-title",
+        "ldp-meta",
+        "ldp-topic-tags",
+        "ldp-topic-vote-slot",
+        "ldp-topic-vote",
+        "ldp-topic-category",
+        "ldp-comments-header",
+        "ldp-comments-count",
+        "ldp-topic-presence"
+      ]
+    },
+    {
+      "id": "virtual-post-stream",
+      "owners": [
+        "lite/src/stream/virtual-stream-view.ts",
+		"lite/src/stream/virtual-stream-dom-controller.ts",
+        "lite/src/dom/post-view.ts",
+        "lite/src/topic/reader-post-presentation.ts",
+        "lite/src/topic/reader-topic-dom-coordinator.ts",
+        "lite/src/topic/reader-topic-flow-controller.ts"
+      ],
+      "styles": [
+        "30-stream.css",
+        "90-responsive.css"
+      ],
+      "tests": [
+        "lite/tests/virtual-stream-dom-controller.test.ts",
+        "lite/tests/reader-post-presentation.test.ts",
+        "lite/tests/reader-topic-flow-controller.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-virtual-stream",
+        "ldp-virtual-root-list",
+		"ldp-before-zebra",
+        "ldp-comments-empty",
+        "ldp-loading-tip",
+        "ldp-end-tip",
+        "ldp-post",
+        "ldp-post-head",
+        "ldp-post-body",
+        "ldp-content",
+        "ldp-post-read-state",
+        "ldp-post-read-state-icon"
+      ],
+      "styleSignatures": [
+        ".ldp-loading-tip.show",
+        ".ldp-end-tip.show",
+        "@keyframes ldp-spin",
+        "@keyframes ldp-post-read-confirm",
+        "animation: ldp-post-read-confirm 1.25s ease-in-out both;"
+      ]
+    },
+    {
+      "id": "reply-tree",
+      "owners": [
+        "lite/src/dom/post-view.ts",
+        "lite/src/dom/reply-tree-dom-owner.ts",
+        "lite/src/layout/branch-overlay.ts"
+      ],
+      "styles": [
+        "40-reply-tree.css",
+        "90-responsive.css"
+      ],
+      "tests": [
+        "lite/tests/dom-owner.test.ts",
+        "lite/tests/reader-branch-overlay-controller.test.ts",
+        "lite/tests/reply-tree-viewport-layout.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-reply-tree",
+        "ldp-reply-list",
+        "ldp-branch-overlay",
+        "ldp-branch-visible-path",
+        "ldp-branch-hit-path",
+        "ldp-segmented-branch-last"
+      ]
+    },
+    {
+      "id": "native-composer-window",
+      "owners": [
+        "lite/src/discourse/native-composer.ts",
+        "lite/src/discourse/reader-native-composer-window.ts",
+        "lite/src/userscript/mian-lite-bootstrap.ts"
+      ],
+      "styles": [
+        "45-composer.css"
+      ],
+      "tests": [
+        "lite/tests/discourse-native-composer.test.ts",
+        "lite/tests/reader-native-composer-window.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-composer-host-isolated",
+        "ldp-composer-window-interacting",
+        "ldp-composer-window-chrome",
+        "ldp-composer-drag-handle",
+        "ldp-composer-resize-handle",
+        "ldp-composer-wheel-layer"
+      ],
+      "styleSignatures": [
+        "#reply-control:not(.closed):not([data-ldp-reader-composer-positioned=\"1\"])",
+        "--ldp-composer-width",
+        "[data-ldp-reader-top-layer=\"portal\"][popover]",
+        "pointer-events: none;",
+        "@media (max-width: 760px)"
+      ]
+    },
+    {
+      "id": "thread-context",
+      "owners": [
+        "lite/src/topic/reader-topic-context-surface.ts"
+      ],
+      "styles": [
+        "40-reply-tree.css",
+        "90-responsive.css"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-context-surface.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-descendant-replies-window",
+        "ldp-descendant-replies-list",
+        "ldp-quote-match",
+        "ldp-hidden-reply-marker",
+		"ldp-before-hidden-reply-marker",
+        "ldp-hidden-reply-toggle",
+        "ldp-hidden-reply-list",
+        "ldp-hidden-reply-avatar",
+        "ldp-hidden-reply-more",
+        "ldp-reply-collapsible",
+        "ldp-nested-toggle",
+        "ldp-nested-esc-hint"
+      ],
+      "styleSignatures": [
+        ".ldp-reply-collapsible > .ldp-nested-toggle",
+        ".ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview) > .ldp-nested-toggle",
+        ".ldp-nested-esc-hint"
+      ]
+    },
+    {
+      "id": "post-actions",
+      "owners": [
+        "lite/src/dom/post-view.ts",
+        "lite/src/post/reader-post-action-feature.ts",
+        "lite/src/post/reader-selection-quote-feature.ts",
+        "lite/src/post/reader-topic-action-rail.ts"
+      ],
+      "styles": [
+        "20-shell.css",
+        "30-stream.css",
+        "50-components.css"
+      ],
+      "tests": [
+        "lite/tests/reader-post-action-feature.test.ts",
+        "lite/tests/reader-selection-quote-feature.test.ts",
+        "lite/tests/reader-topic-action-rail.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-reactions",
+        "ldp-actions",
+        "ldp-boost-list",
+        "ldp-boost-fallback-icon",
+        "ldp-boost-identities",
+        "ldp-boost-identity",
+        "ldp-boost-identity-me",
+        "ldp-boost-identity-admin",
+        "ldp-boost-identity-moderator",
+        "ldp-action-surface",
+        "ldp-selection-toolbar",
+        "ldp-topic-action-rail",
+		"ldp-topic-action-rail-expanded",
+        "ldp-topic-footer-actions"
+      ],
+      "styleSignatures": [
+        ".ldp-native-boost-menu {\n  pointer-events: auto;",
+        "z-index: 2147483610;",
+        "border-right: 1px solid var(--primary-low, #ddd);",
+        "bottom: calc(100% + 5px);",
+        "z-index: 3;"
+      ]
+    },
+    {
+      "id": "topic-special-content",
+      "owners": [
+        "lite/src/topic/reader-topic-special-content-feature.ts"
+      ],
+      "styles": [
+        "30-stream.css",
+        "90-responsive.css"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-presentation.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-solved-card",
+        "ldp-special-badges",
+        "ldp-pv-votes",
+        "ldp-pv-comments",
+        "ldp-event-card"
+      ]
+    },
+    {
+      "id": "collections-and-notifications",
+      "owners": [
+        "lite/src/shell/reader-shell-template.ts",
+        "lite/src/history/reader-history-panel-view.ts",
+        "lite/src/bookmark/reader-bookmark-panel-view.ts",
+        "lite/src/notification/reader-notification-panel-view.ts"
+      ],
+      "styles": [
+        "55-collections.css"
+      ],
+      "tests": [
+        "lite/tests/reader-history-panel-view.test.ts",
+        "lite/tests/reader-bookmark-feature.test.ts",
+        "lite/tests/reader-notification-feature.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-notifications-popover",
+        "ldp-history-popover",
+        "ldp-bookmarks-popover",
+        "ldp-collection-item",
+        "ldp-popover-search"
+      ],
+      "exclusiveRuntimeClasses": [
+        "ldp-collection-item",
+        "ldp-notification-item",
+        "ldp-notification-copy",
+        "ldp-notification-title",
+        "ldp-notification-meta",
+        "ldp-collection-delete",
+        "ldp-bookmark-link",
+        "ldp-history-link"
+      ]
+    },
+    {
+      "id": "feedback-and-action-dialogs",
+      "owners": [
+		"lite/src/shell/reader-action-surface-coordinator.ts",
+		"lite/src/shell/reader-action-form-support.ts",
+		"lite/src/shell/reader-choice-form-surface.ts",
+        "lite/src/shell/reader-feedback-surface.ts",
+        "lite/src/shell/reader-assignment-form-surface.ts",
+		"lite/src/shell/reader-report-form-surface.ts",
+		"lite/src/shell/reader-topic-edit-form-surface.ts"
+      ],
+      "styles": [
+        "50-components.css"
+      ],
+      "tests": [
+		"lite/tests/reader-action-surface-coordinator.test.ts",
+		"lite/tests/reader-choice-form-surface.test.ts",
+        "lite/tests/reader-feedback-surface.test.ts",
+        "lite/tests/reader-assignment-form-surface.test.ts",
+		"lite/tests/reader-report-form-surface.test.ts",
+		"lite/tests/reader-topic-edit-form-surface.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-reader-action-layer",
+        "ldp-reader-action-dialog",
+        "ldp-reader-confirm-dialog",
+        "ldp-reader-action-form"
+      ]
+    },
+    {
+      "id": "user-and-connect",
+      "owners": [
+        "lite/src/user/reader-user-card-view.ts",
+        "lite/src/user/reader-settings-user-view.ts"
+      ],
+      "styles": [
+        "50-components.css",
+        "70-settings.css"
+      ],
+      "tests": [
+        "lite/tests/reader-user-card-view.test.ts",
+        "lite/tests/reader-settings-user-view.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-user-card-fallback",
+        "ldp-user-card-follow-panel",
+		"ldp-user-card-follow-preview",
+        "ldp-user-card-head",
+        "ldp-connect-card",
+        "ldp-connect-metric"
+      ],
+      "styleSignatures": [
+        ".ldp-user-card-follow-panel {\n  pointer-events: auto;"
+      ]
+    },
+    {
+      "id": "media-and-lightbox",
+      "owners": [
+        "lite/src/media/reader-lightbox-view.ts",
+        "lite/src/media/reader-lightbox-batch-view.ts",
+        "lite/src/media/reader-compact-image-viewer.ts",
+        "lite/src/media/reader-image-carousel-controller.ts",
+        "lite/src/media/reader-poll-feature.ts",
+        "lite/src/media/reader-cooked-content-feature.ts"
+      ],
+      "styles": [
+        "60-media.css",
+        "80-motion.css",
+        "90-responsive.css"
+      ],
+      "tests": [
+        "lite/tests/reader-lightbox-view.test.ts",
+        "lite/tests/reader-lightbox-batch-view.test.ts",
+        "lite/tests/reader-compact-image-viewer.test.ts",
+        "lite/tests/reader-image-carousel-controller.test.ts",
+        "lite/tests/reader-poll-feature.test.ts",
+        "lite/tests/reader-cooked-content-feature.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-lightbox",
+        "ldp-lb-main",
+        "ldp-lb-batch-overlay",
+        "ldp-lb-batch-dialog",
+        "ldp-avatar-viewer",
+        "ldp-avatar-viewer-stage",
+        "ldp-media-carousel",
+        "ldp-media-carousel-track",
+        "ldp-media-carousel-controls",
+        "ldp-media-carousel-status",
+        "ldp-reader-poll",
+        "ldp-code-preview-layer"
+      ],
+      "styleSignatures": [
+        ".ldp-avatar-viewer {\n  pointer-events: auto;",
+        "position: absolute;",
+        "z-index: 12;",
+        "width: min(720px, calc(100vw - 32px));",
+        "background: #24272c;",
+        "background: rgba(10, 12, 16, .5);",
+        "outline: 2px solid #8cc7ff;",
+        "scroll-snap-type: x proximity;",
+        "content-visibility: visible;"
+      ]
+    },
+    {
+      "id": "settings-shell-and-forms",
+      "owners": [
+        "lite/src/settings/reader-settings-controller.ts",
+        "lite/src/settings/reader-settings-view.ts",
+        "lite/src/settings/reader-settings-dom.ts",
+        "lite/src/settings/reader-object-settings-draft.ts",
+        "lite/src/settings/reader-numeric-settings-draft.ts",
+        "lite/src/settings/reader-theme-settings-control.ts",
+        "lite/src/settings/reader-window-settings-form.ts",
+        "lite/src/settings/reader-shortcut-settings-form.ts",
+        "lite/src/settings/reader-custom-site-settings-form.ts",
+        "lite/src/settings/reader-layout-settings-form.ts",
+        "lite/src/settings/reader-performance-settings-form.ts",
+        "lite/src/settings/reader-motion-settings-form.ts",
+        "lite/src/settings/reader-image-settings-form.ts",
+        "lite/src/settings/reader-appearance-settings-form.ts",
+        "lite/src/settings/reader-font-settings-form.ts",
+        "lite/src/settings/reader-reading-settings-form.ts",
+        "lite/src/settings/reader-interaction-settings-form.ts",
+        "lite/src/settings/reader-about-settings-content.ts"
+      ],
+      "styles": [
+        "70-settings.css",
+        "90-responsive.css"
+      ],
+      "tests": [
+        "lite/tests/reader-settings-view.test.ts",
+        "lite/tests/reader-theme-controller.test.ts",
+        "lite/tests/reader-window-settings-form.test.ts",
+        "lite/tests/reader-shortcut-controller.test.ts",
+        "lite/tests/reader-custom-site.test.ts",
+        "lite/tests/reader-layout-settings-form.test.ts",
+        "lite/tests/reader-performance-settings-form.test.ts",
+        "lite/tests/reader-motion-settings-form.test.ts",
+        "lite/tests/reader-image-settings-form.test.ts",
+        "lite/tests/reader-appearance-settings-form.test.ts",
+        "lite/tests/reader-font-settings-form.test.ts",
+        "lite/tests/reader-reading-settings-form.test.ts",
+        "lite/tests/reader-interaction-settings-form.test.ts",
+        "lite/tests/reader-about-settings-content.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-settings-popover",
+        "ldp-settings-panel",
+        "ldp-settings-theme",
+        "ldp-reader-window-fields",
+        "ldp-reader-window-field",
+        "ldp-reader-window-input",
+        "ldp-reader-window-option",
+        "ldp-shortcut-settings",
+        "ldp-custom-site-form",
+        "ldp-setting-row",
+        "ldp-setting-switch",
+        "ldp-performance-control"
+      ],
+      "styleSignatures": [
+        ".ldp-reader-window-fields {\n  grid-template-columns: repeat(2, minmax(0, 1fr));",
+        ".ldp-performance-fields .ldp-setting-row {\n  grid-template-columns: minmax(0, 1fr) 116px;",
+        ".ldp-boost-rule-preview {\n  display: flex;",
+        ".ldp-boost-rule-preview .ldp-boost-copy-preview {",
+        ".ldp-settings-category-group[data-settings-category^=\"performance-\"]"
+      ]
+    },
+    {
+      "id": "resource-and-cache-management",
+      "owners": [
+        "lite/src/monitor/reader-resource-monitor.ts",
+        "lite/src/cache/reader-cache-management-surface.ts"
+      ],
+      "styles": [
+        "70-settings.css"
+      ],
+      "tests": [
+        "lite/tests/reader-resource-monitor.test.ts",
+        "lite/tests/reader-resource-monitor-request-window.test.ts",
+        "lite/tests/reader-cache-management-surface.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-resource-monitor",
+        "ldp-request-flow-summary",
+        "ldp-request-flow-block",
+        "ldp-request-flow-diagnostics",
+        "ldp-request-flow-limit",
+        "ldp-request-flow-observed",
+        "ldp-cache-list"
+      ],
+      "styleSignatures": [
+        ".ldp-request-flow-limit {",
+        ".ldp-request-flow-trace-anomaly[data-level=\"danger\"]",
+        ".ldp-request-flow-key {"
+      ]
+    },
+    {
+      "id": "loading-and-motion",
+      "owners": [
+        "lite/src/motion/reader-loading-animation-view.ts",
+        "lite/src/topic/reader-topic-factory.ts",
+        "lite/src/topic/reader-topic-core-bundle.ts",
+        "lite/src/topic/topic-session.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "styles": [
+        "20-shell.css",
+        "70-settings.css",
+        "80-motion.css",
+        "90-responsive.css"
+      ],
+      "tests": [
+        "lite/tests/reader-motion-settings-form.test.ts",
+        "lite/tests/topic-session.test.ts",
+        "lite/tests/reader-topic-factory.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "runtimeClasses": [
+        "ldp-loadmask",
+		"ldp-loadmask-visible",
+        "ldp-loading-stage",
+        "ldp-loading-copy",
+        "ldp-loading-status",
+        "ldp-loading-detail",
+        "ldp-loading-visual",
+        "ldp-loader-portal",
+        "ldp-loader-thread-index",
+        "ldp-loader-floor-reel",
+        "ldp-loader-typewave",
+        "ldp-loader-cache-lanes",
+        "ldp-loader-marginalia",
+        "ldp-loader-index-fan",
+        "ldp-loader-quoteecho",
+        "ldp-loader-inbox-rain",
+		"ldp-loader-inkverse"
+	  ],
+	  "styleSignatures": [
+		"[data-animation=\"portal\"]",
+		"@keyframes ldp-loader-topic-open",
+		"[data-animation=\"constellation\"]",
+		"@keyframes ldp-loader-thread-row",
+		"[data-animation=\"corridor\"]",
+		"@keyframes ldp-loader-reel-window",
+		"[data-animation=\"typewave\"]",
+		"@keyframes ldp-loader-markdown-render",
+		"[data-animation=\"crystal\"]",
+		"@keyframes ldp-loader-cache-packet",
+		"[data-animation=\"marginalia\"]",
+		"@keyframes ldp-loader-op-focus",
+		"[data-animation=\"chapters\"]",
+		"@keyframes ldp-loader-index-leaf",
+		"[data-animation=\"quoteecho\"]",
+		"@keyframes ldp-loader-creed-word-4",
+		"[data-animation=\"footnotes\"]",
+		"@keyframes ldp-loader-inbox-note",
+		"[data-animation=\"inkverse\"]",
+		"@keyframes ldp-loader-action-pulse",
+		"@container ldp-reader (max-width: 380px)",
+		"ldp-loader-reduced-breathe 2.5s",
+		".ldp-motion-choice-row {\n  grid-template-columns: 88px minmax(0, 240px);",
+		".ldp-overlay[aria-busy=\"true\"]",
+		".ldp-modal.ldp-loadmask-visible > .ldp-header"
+      ]
+    }
+  ]
+}

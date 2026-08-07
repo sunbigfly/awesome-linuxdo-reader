@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.mian-lite.json",
+  "compilerOptions": {
+    "skipLibCheck": true
+  },
+  "include": [
+    "lite/src/**/*.ts",
+    "lite/tests/**/*.ts"
+  ]
+}

@@ -2,9 +2,9 @@
 title: 五分钟上手
 description: 从主题列表打开阅读器，完成阅读、导航、互动和关闭工作区。
 feature_ids: ["CORE-002", "CORE-003", "CORE-006"]
-source_anchors: ["ldp-native-reader-trigger", "INITIAL_TOPIC_ID", "ensureReaderQueueEntry"]
+source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/userscript/mian-lite-entry.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-01-reader-overview.png"]

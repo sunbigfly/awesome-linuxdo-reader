@@ -2,11 +2,11 @@
 title: 日志记录
 description: 在请求记录和性能记录间切换，查看请求预算、异常、P95、页面元素、长任务和网络趋势。
 feature_ids: ["MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
-source_anchors: ["RESOURCE_MONITOR_ROWS", "REQUEST_FLOW_MAX_ENTRIES", "READER_ENDPOINT_429_BASE_BLOCK_MS", "LDP_CLOUDFLARE_CHALLENGE_LEASE_KEY", "requestFlowPath"]
+source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/request-observer.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-07-31
 screenshots: ["/screenshots/guide-11-request-flow.png", "/screenshots/guide-10-resource-monitor.png"]
 ---
 
@@ -20,7 +20,7 @@ screenshots: ["/screenshots/guide-11-request-flow.png", "/screenshots/guide-10-r
 
 ## 请求记录
 
-请求标签显示同源标签页共享的请求账本。它只记录诊断所需的请求类型、状态、时间和脱敏路径，不保存查询参数、正文、Cookie 或响应内容。
+请求标签显示当前标签页的唯一请求账本，并把多标签页共享 permit 的短/长窗口额度、活动数、排队数和冷却状态投影到同一摘要。它只记录诊断所需的请求类型、状态、时间和脱敏路径，不保存查询参数、正文、Cookie、Authorization 或响应内容。
 
 ## 顶部摘要
 
@@ -60,6 +60,30 @@ screenshots: ["/screenshots/guide-11-request-flow.png", "/screenshots/guide-10-r
 - 当前是否处于退避或恢复探测。
 
 多个阅读器实例会采用更严格的设置。LINUX DO 宿主页面自己的 API 活动也会纳入账本。
+
+## 帖子与楼层诊断
+
+请求记录同时从当前 Topic 的 canonical session、主流 DOM owner 和共享请求许可读取五组事实：
+
+- **缓存**：完整快照启动、网络/缓存已归并，或 canonical stream 仍缺多少正文；
+- **虚拟窗口**：当前挂载、已准备和 session 保留楼层数；离屏停放或惰性 DOM 不等于楼层丢失；
+- **已删除楼层**：仅列出已被 404/410 明确确认的楼层，并阻止当前会话重复请求；
+- **网络**：显示最近普通 HTTP、网络中止、慢响应，或中央调度器当前活动/排队；
+- **429 / Cloudflare**：显示共享冷却剩余时间和唯一验证窗口由哪个标签页持有。
+
+该诊断不从完整讨论浮窗的重复 PostView 统计主流挂载量，也不把“canonical 已保留但当前没有 DOM”判成缓存损坏。只有明确的正文缺口才继续走原补流链；仅离屏时无需刷新或清缓存。
+
+## 图片与媒体诊断
+
+同一请求记录页继续复用图片目录、图片重试、资源缓存、媒体 controller 和 canonical 楼层事实，不扫描完整讨论或创建第二份媒体状态：
+
+- 当前挂载楼层的失败图片、重试中数量、跨域失败和所属楼层；
+- 全帖图片目录是否完整、补齐失败批次、本会话 Object URL 使用量与持久 Blob 缓存是否启用；
+- 图片来源楼层是否已被 404/410 明确删除；
+- 当前 HLS 源、活动播放器、原生/Hls.js capability；
+- 最近一分钟脱敏媒体请求中的 HTTP、网络、CDN、CORS 或编码线索。
+
+虚拟流把音视频楼层停放后，活动播放器归零属于正常资源释放；只有同一楼层回屏后仍出现失败或请求错误才需要按诊断动作处理。
 
 ## 429 与 Cloudflare
 

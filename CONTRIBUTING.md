@@ -4,7 +4,8 @@
 
 ## 源码约定
 
-- `work/main.js` 是唯一业务源码与 GreasyFork 同步入口；`dist/awesome-linuxdo-reader.user.js` 只由构建脚本生成，不直接编辑，也不上传到 GreasyFork。
+- `lite/src/` 是唯一业务源码，`lite/styles/` 是样式事实源；`work/mian-lite.css`、`work/greasyfork-lite/libraries/` 与 `work/mian-lite.js` 都由脚本生成，不直接编辑。
+- `archive/legacy-main-2026-08-07/` 保存切换前的旧版 working copy；`work/main.js`、`work/main.css` 与 `work/greasyfork-split/` 只作旧版参考，不再作为 v1.0.0 发布入口。
 - 保持 userscript 元数据权限最小化。新增网络目标时检查 `@connect`，新增 GM API 时检查 `@grant`。
 - 兼容 LINUX DO 的 SPA 导航和动态 DOM；监听器、Observer、计时器、Object URL 与缓存必须有明确的生命周期。
 - 网络逻辑需要考虑超时、取消、并发、缓存、重试和 429 退避。
@@ -12,55 +13,42 @@
 
 ## 本地调试
 
-安装 [Rust 与 Cargo](https://rustup.rs/) 后，先执行项目自带的检查工具。首次运行会下载并编译锁定版本的 Rust 依赖，编译结果保存在系统临时目录：
+安装 Node.js 20 或更高版本并执行 `npm install`。Lite 的日常验证与本地调试使用：
 
 ```bash
-./scripts/userscript-dev --json doctor
-./scripts/userscript-dev --json inspect work/main.js
+npm run mian-lite:check
+npm run mian-lite:local-debug
 ```
 
-Windows PowerShell 使用 `.\scripts\userscript-dev.ps1`，参数与 Bash 入口相同。完整说明见 [`tools/userscript-dev/README.md`](tools/userscript-dev/README.md)。
+`mian-lite:local-debug` 会生成被仓库忽略的 `work/mian-lite.local.js`，并同步生成 `work/mian-lite.css`。首次在 Tampermonkey 安装本地文件后，需要开启“允许访问文件网址”；正式版和本地调试版不要同时启用。
 
-需要在 Tampermonkey 中实时读取本地源码时，生成被仓库忽略的调试加载器：
+## Greasy Fork Library 构建
+
+从 TypeScript 源码生成两个可读、未压缩的 Greasy Fork Library 与主 Loader 模板：
 
 ```bash
-./scripts/userscript-dev --json make-loader work/main.js --out work/local-debug.user.js
-./scripts/userscript-dev --json verify-loader work/local-debug.user.js --source work/main.js
+npm run mian-lite:greasyfork:build
+npm run mian-lite:greasyfork:check
 ```
 
-首次使用需在 Tampermonkey 中安装加载器，并开启“允许访问文件网址”。正式版和本地调试版不要同时启用。
-
-## 仓库直装产物
-
-安装依赖后，从唯一业务源码生成确定性的压缩 userscript：
-
-```bash
-npm run userscript:build
-```
-
-构建会逐字节保留 userscript 元数据，不改写对象属性、DOM class、协议字段或字符串；仅压缩发布产物中的局部标识符和语法，并关闭 tree shaking。构建同时强制检查原始体积不高于 950,000 字节、gzip 体积不高于 400,000 字节。`dist/awesome-linuxdo-reader.build.json` 记录源码、元数据、产物和编译器配置的 SHA-256，可用于确认产物对应的源码版本。
+构建把每个 TypeScript 模块转成保留路径与标识符的 CommonJS 工厂，按运行核心与功能域分配到两个 Library；不压缩、不混淆、不动态下载后执行。每个可执行产物必须低于 2,000,000 字节，`work/greasyfork-lite/build-manifest.json` 记录模块数、编译器版本、字节数与 SHA-256。
 
 ## GreasyFork 发布
 
-GreasyFork 禁止压缩或混淆代码，因此只发布 `work/main.js`，不得上传 `dist/awesome-linuxdo-reader.user.js`。仓库同步地址固定为：
-
-```text
-https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/main.js
-```
-
-发布前统一 userscript、运行常量、package 和手册版本，完成源码静态检查与真实浏览器回归，再在 GreasyFork 管理页同步或提交新版本。
+1. 先提交并推送 `lite/`、`work/mian-lite.css` 和 `work/greasyfork-lite/libraries/`，以 GitHub 不可变提交作为 CSS 与 Library 同步来源。
+2. 在 Greasy Fork 分别创建两个 Library，配置从对应 GitHub raw URL 同步，并取得各自带 `version` 参数的固定版本 URL。
+3. 将 URL 写入被 Git 忽略的 `work/greasyfork-lite/release.config.json`，把 `lite/release-gate.json` 中的验收项与不可变 CSS URL更新为真实证据后运行 `npm run mian-lite:greasyfork:release`。
+4. 核对 `work/mian-lite.js` 的元数据、Library 远端字节和 SHA-256，再更新现有脚本 588185；不得上传旧版压缩产物或未固定版本的 Library URL。
 
 ## 验证
 
-修改 JavaScript 后至少完成：
+发布前至少完成：
 
 ```bash
-./scripts/userscript-dev --json inspect work/main.js
-node --check work/main.js
-npx --yes eslint@9.39.1 work/main.js
-npm run userscript:build
-./scripts/userscript-dev --json inspect dist/awesome-linuxdo-reader.user.js
-node --check dist/awesome-linuxdo-reader.user.js
+npm run mian-lite:verify
+npm run mian-lite:local-debug
+npm run mian-lite:greasyfork:check
+npm run docs:verify
 ```
 
 交互、布局、视觉、性能和网络行为必须在真实浏览器中复现并检查。静态检查通过不等于浏览器验收通过。

@@ -2,9 +2,9 @@
 title: 图片设置
 description: 逐项配置大图评论、说明、原图策略和三种阅读形态的正文图片大小。
 feature_ids: ["MEDIA-001", "MEDIA-003", "MEDIA-004", "MEDIA-005", "SET-002", "SET-003"]
-source_anchors: ["IMAGE_SCALE_OPTIONS", "lightboxOriginalByDefault", "loadLightboxCommentTree", "lightboxDescriptionHeight", "currentImageProfile", "image-lightbox"]
+source_anchors: ["lite/src/media/reader-image-scale.ts","lite/src/network/public-resource-request-adapter.ts","lite/src/app/reader-browser-runtime.ts","lite/src/media/reader-lightbox-controller.ts","lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-03-image-settings.png", "/screenshots/guide-19-image-lightbox.png"]

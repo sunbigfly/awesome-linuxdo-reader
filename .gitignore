@@ -8,6 +8,8 @@
 !/eslint.config.mjs
 !/package.json
 !/package-lock.json
+!/tsconfig.mian-lite.json
+!/tsconfig.mian-lite-tests.json
 
 !/.github/
 /.github/*
@@ -40,6 +42,27 @@
 !/scripts/userscript-dev.ps1
 !/scripts/build-userscript.mjs
 !/scripts/validate-docs.mjs
+!/scripts/audit-main-runtime.mjs
+!/scripts/audit-main-requests.mjs
+!/scripts/audit-lite-feature-migration.mjs
+!/scripts/audit-lite-native-requests.mjs
+!/scripts/audit-mian-lite-css.mjs
+!/scripts/audit-mian-lite-userscript.mjs
+!/scripts/build-mian-lite.mjs
+!/scripts/build-mian-lite-css.mjs
+!/scripts/build-mian-lite-greasyfork.mjs
+!/scripts/test-mian-lite.mjs
+
+!/lite/
+!/lite/**
+/lite/tests/.artifacts/
+/lite/tests/output/
+/lite/tests/*.log
+
+!/archive/
+/archive/*
+!/archive/legacy-main-2026-08-07/
+!/archive/legacy-main-2026-08-07/**
 
 !/tools/
 /tools/*
@@ -56,6 +79,12 @@
 /work/*
 !/work/main.js
 !/work/main.css
+!/work/mian-lite.js
+!/work/mian-lite.css
+/work/mian-lite.debug.js
+!/work/greasyfork-lite/
+!/work/greasyfork-lite/**
+/work/greasyfork-lite/release.config.json
 !/work/greasyfork-split/
 !/work/greasyfork-split/**
 

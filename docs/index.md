@@ -3,11 +3,11 @@ layout: home
 title: Awesome LinuxDo Reader 用户手册
 description: LINUX DO 全面适配、兼容中英文及其他语言 Discourse 站点并支持正文翻译的 Awesome LinuxDo Reader 用户手册。
 feature_ids: ["CORE-001", "CORE-002", "CORE-004", "CORE-007", "READ-001", "ACTION-001", "DATA-001"]
-source_anchors: ["@version", "ldp-native-reader-trigger", "LIST_READER_MODES", "DISCOURSE_SITE_ADAPTERS", "stableStreamMountRange", "ldp-replybtn", "readerConfigExportPayload"]
+source_anchors: ["lite/userscript.meta.txt","lite/src/queue/reader-open-queue-session.ts","lite/src/shell/reader-workspace.ts","lite/src/app/reader-application.ts","lite/src/dom/reply-tree.ts","lite/src/app/reader-browser-runtime.ts","lite/src/state/preferences-config-codec.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
-last_verified: 2026-07-28
+last_verified: 2026-08-03
 screenshots: ["/screenshots/guide-01-reader-overview.png"]
 
 hero:
@@ -57,9 +57,9 @@ features:
 
 ## 手册覆盖范围
 
-这套手册对应 userscript `0.1.16`，以当前源码为事实源。LINUX DO 是完整功能和真实回归基线，消息、历史、收藏、互动、长帖、楼层关系与性能治理均保持全面适配；脚本也通过运行态识别、站点适配层和插件能力检测兼容中文、英文及其他语言的标准 Discourse 站点。
+这套手册对应 userscript `1.0.0`，以 `lite/src/` 与 `lite/styles/` 为事实源。LINUX DO 是完整功能基线，消息、历史、收藏、互动、长帖、楼层关系与性能治理均保持全面适配；脚本也通过运行态识别、站点适配层和插件能力检测兼容中文、英文及其他语言的标准 Discourse 站点。
 
-脚本内置 20 个其他知名 Discourse 社区，其他 HTTPS Discourse 论坛可验证后添加。站点适配本身不限制内容语言；已标记为非中文的内置社区另提供原文、双语和简体中文译文三种阅读状态。功能目录记录了每项能力的源码锚点、版本、验证日期、截图和对应文档。
+脚本内置 20 个其他知名 Discourse 社区，其他 HTTPS Discourse 论坛可验证后添加。站点适配本身不限制内容语言；除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点另提供原文、双语和简体中文译文三种阅读状态。功能目录记录了每项能力的源码锚点、版本、验证日期、截图和对应文档。
 
 ::: tip 推荐路径
 第一次使用按“安装与更新 → 五分钟上手 → 界面总览”阅读。遇到加载、图片或限流问题，直接进入“故障排查”。

@@ -1,6 +1,6 @@
 # Awesome LinuxDo Reader 项目介绍
 
-本文集中维护可复用的对外介绍文案。当前版本：`0.1.16`。
+本文集中维护可复用的对外介绍文案。当前版本：`1.0.0`。
 
 ## 一句话介绍
 
@@ -16,7 +16,7 @@ Awesome LinuxDo Reader 面向频繁阅读长帖、跟进讨论和处理社区消
 
 阅读器围绕长内容场景提供楼层关系、楼中楼、跳转提示、浏览历史、真实已读进度、原图灯箱、媒体播放与公式渲染。针对长帖和多标签页场景，它还提供 DOM 窗口化、缓存分层、共享请求调度、429 退避、性能配置和本地资源监控，尽量在阅读连贯性与站点负载之间取得平衡。
 
-项目以单一 userscript 源码维护，不接管账号体系，也不替代任何适配站点。站点数据和互动结果仍以当前原站为准。
+项目以模块化 TypeScript 源码维护，并通过 Greasy Fork 薄 Loader 与可审查 Library 发布；不接管账号体系，也不替代任何适配站点。站点数据和互动结果仍以当前原站为准。
 
 ## 核心能力
 
@@ -24,7 +24,7 @@ Awesome LinuxDo Reader 面向频繁阅读长帖、跟进讨论和处理社区消
 - 楼层导航：楼中楼、父回复预览、楼层跳转、时间线和浏览历史。
 - 社区互动：回复、点赞、回应、收藏、通知、搜索与用户资料。
 - 内容呈现：原图灯箱、图片评论、音视频播放、HLS 与 KaTeX 公式。
-- 跨语阅读：在已标记为非中文的内置社区中切换原文、双语和简体中文译文。
+- 跨语阅读：在非中文内置社区和语言未知的自定义 Discourse 站点切换原文、双语和简体中文译文。
 - 个性设置：主题、字体、布局、窗口、动效和多种显示形态配置。
 - 性能治理：DOM 窗口化、分层缓存、请求预算、429 退避和资源监控。
 
@@ -41,7 +41,7 @@ Awesome LinuxDo Reader 面向频繁阅读长帖、跟进讨论和处理社区消
 | --- | --- |
 | 匹配站点 | LINUX DO、20 个其他内置 Discourse 社区，以及用户验证后添加的自定义 HTTPS Discourse 站点 |
 | 脚本权限 | `GM_getValue`、`GM_setValue`、`GM_xmlhttpRequest`、`GM_getResourceText`、`unsafeWindow` |
-| 跨域连接 | `connect.linux.do`、自定义站点检测，以及用户主动启用的 Google / Microsoft 翻译接口 |
+| 跨域连接 | `connect.linux.do`、`credit.linux.do`、自定义站点检测，以及用户主动启用的 Google / Microsoft 翻译接口；动态站点由 `@connect *` 承载，业务端口按固定用途收窄 |
 | 外部依赖 | KaTeX、pinyin-pro、hls.js（jsDelivr） |
 | 数据位置 | 浏览器本地存储、Cache Storage 与 IndexedDB |
 | 发布入口 | [GreasyFork 脚本页](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) |
@@ -54,6 +54,6 @@ LINUX DO 全面适配，中文、英文及其他语言的标准 Discourse 站点
 
 - 项目名称：Awesome LinuxDo Reader
 - 中文名称：LinuxDo 增强阅读
-- 当前版本：0.1.16
+- 当前版本：1.0.0
 - Logo：[`assets/logo.png`](../assets/logo.png)
 - 开源许可：[MIT License](../LICENSE)

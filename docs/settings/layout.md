@@ -2,9 +2,9 @@
 title: 布局设置
 description: 分别调整普通与全屏阅读器的左右留白、正文区域、时间轴间距和楼层时间轴。
 feature_ids: ["SET-007"]
-source_anchors: ["LAYOUT_REGION_KEYS", "READER_LAYOUT_DEFAULT", "READER_FULLPAGE_LAYOUT_DEFAULT", "fullpageLayoutProfile"]
+source_anchors: ["lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-05-layout-settings.png"]

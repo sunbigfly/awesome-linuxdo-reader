@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const docsRoot = path.join(root, 'docs')
-const sourcePath = path.join(root, 'work/main.js')
+const liteMetadataPath = path.join(root, 'lite/userscript.meta.txt')
+const liteSourceRoot = path.join(root, 'lite/src')
+const packagePath = path.join(root, 'package.json')
+const packageLockPath = path.join(root, 'package-lock.json')
 const catalogPath = path.join(docsRoot, 'public/feature-catalog.json')
 const ignoredPages = new Set(['README.md', 'INTRODUCTION.md'])
 const emojiPattern = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u
@@ -106,11 +109,83 @@ function assetExists(reference, pageFile) {
   ].some(fs.existsSync)
 }
 
-if (!fs.existsSync(sourcePath)) errors.push('work/main.js: 源文件不存在')
+if (!fs.existsSync(liteMetadataPath)) errors.push('lite/userscript.meta.txt: 元数据不存在')
+if (!fs.existsSync(liteSourceRoot)) errors.push('lite/src: 业务源码目录不存在')
 if (!fs.existsSync(catalogPath)) errors.push('docs/public/feature-catalog.json: 功能目录不存在')
 
-const source = fs.existsSync(sourcePath) ? fs.readFileSync(sourcePath, 'utf8') : ''
+const liteMetadata = fs.existsSync(liteMetadataPath)
+  ? fs.readFileSync(liteMetadataPath, 'utf8')
+  : ''
+const liteSourceFiles = walk(liteSourceRoot, (file) => file.endsWith('.ts')).sort()
+const source = [
+  path.relative(root, liteMetadataPath).split(path.sep).join('/'),
+  liteMetadata,
+  ...liteSourceFiles.flatMap((file) => [
+    path.relative(root, file).split(path.sep).join('/'),
+    fs.readFileSync(file, 'utf8'),
+  ]),
+].join('\n')
 const version = sourceVersion(source)
+
+function jsonVersion(file, selector, label) {
+  if (!fs.existsSync(file)) {
+    errors.push(`${label}: 文件不存在`)
+    return ''
+  }
+  try {
+    return String(selector(JSON.parse(fs.readFileSync(file, 'utf8'))) || '')
+  } catch (error) {
+    errors.push(`${label}: JSON 无效：${error.message}`)
+    return ''
+  }
+}
+
+function requireCurrentVersionText(file, expected, label) {
+  if (!fs.existsSync(file)) {
+    errors.push(`${label}: 文件不存在`)
+    return
+  }
+  if (!fs.readFileSync(file, 'utf8').includes(expected)) {
+    errors.push(`${label}: 当前版本文案未同步为 ${version}`)
+  }
+}
+
+const liteMetadataVersion = sourceVersion(liteMetadata)
+if (liteMetadataVersion !== version) {
+  errors.push(`lite/userscript.meta.txt: version=${liteMetadataVersion || '空'}，当前脚本版本=${version || '未知'}`)
+}
+const packageVersion = jsonVersion(packagePath, (value) => value.version, 'package.json')
+if (packageVersion !== version) {
+  errors.push(`package.json: version=${packageVersion || '空'}，当前脚本版本=${version || '未知'}`)
+}
+const packageLockVersion = jsonVersion(packageLockPath, (value) => value.version, 'package-lock.json')
+const packageLockRootVersion = jsonVersion(
+  packageLockPath,
+  (value) => value.packages?.['']?.version,
+  'package-lock.json packages[""]',
+)
+if (packageLockVersion !== version || packageLockRootVersion !== version) {
+  errors.push(
+    `package-lock.json: version=${packageLockVersion || '空'}、root=${packageLockRootVersion || '空'}，当前脚本版本=${version || '未知'}`,
+  )
+}
+
+for (const [file, expected, label] of [
+  [path.join(root, 'README.md'), `当前项目版本为 \`${version}\``, 'README.md 当前版本'],
+  [path.join(root, 'README.md'), `${version} 重点`, 'README.md 当前版本摘要'],
+  [path.join(docsRoot, 'INTRODUCTION.md'), `当前版本：\`${version}\``, 'INTRODUCTION.md 当前版本'],
+  [path.join(docsRoot, 'INTRODUCTION.md'), `当前版本：${version}`, 'INTRODUCTION.md 品牌版本'],
+  [path.join(docsRoot, 'index.md'), `对应 userscript \`${version}\``, 'docs/index.md 当前版本'],
+  [path.join(docsRoot, 'getting-started/installation.md'), `当前对应 \`${version}\``, '安装页当前版本'],
+  [path.join(docsRoot, 'manage/troubleshooting.md'), `确认版本为 \`${version}\``, '故障页当前版本'],
+  [path.join(docsRoot, 'manage/privacy-and-permissions.md'), `当前 \`${version}\``, '隐私页当前版本'],
+  [path.join(docsRoot, 'reference/compatibility.md'), `| 脚本版本 | \`${version}\` |`, '兼容性页当前版本'],
+  [path.join(docsRoot, 'reference/changelog.md'), `## ${version} —`, '更新记录当前版本'],
+  [path.join(docsRoot, '.vitepress/config.mts'), `text: 'v${version}'`, '文档导航当前版本'],
+]) {
+  requireCurrentVersionText(file, expected, label)
+}
+
 const pages = walk(docsRoot, (file) => file.endsWith('.md') && !ignoredPages.has(relativeDocs(file)))
 const siteTextFiles = [
   ...pages,

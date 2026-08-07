@@ -2,11 +2,11 @@
 title: 动画与提示
 description: 配置目标楼层提示和主题加载动画，并兼顾减少动态效果。
 feature_ids: ["SET-010", "SET-011"]
-source_anchors: ["jumpHighlightPrefsPatch", "READER_LOADING_ANIMATION_KEYS"]
+source_anchors: ["lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
-last_verified: 2026-07-28
+last_verified: 2026-07-30
 screenshots: ["/screenshots/guide-08-motion-settings.png"]
 ---
 
@@ -61,4 +61,5 @@ screenshots: ["/screenshots/guide-08-motion-settings.png"]
 
 ## 何时生效
 
-点击底部“保存全部更改”后，下一次楼层跳转使用新的提示配置。加载动画样式在选择后即时保存；当前已经播放的动画不会从中途改用新样式。
+颜色、轮廓、速率、次数和加载动画都先进入当前设置草稿。点击底部“保存全部更改”后，
+它们在同一次设置更新中生效；“换一个”只改变本地预览，不会单独保存。

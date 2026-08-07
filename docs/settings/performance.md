@@ -1,10 +1,10 @@
 ---
 title: 性能与请求调度
-description: 调整主楼层批量、DOM 窗口、楼中楼预取、并发、请求间隔和预算目标。
+description: 按 Discourse 正文与直属回复 API 调整批量、预知请求、DOM 窗口和共享安全边界。
 feature_ids: ["READ-001", "READ-002", "SET-012", "SET-013", "SET-014", "SET-015", "MONITOR-003"]
-source_anchors: ["stableStreamMountRange", "loadPostsByIds", "PERFORMANCE_PRESETS", "streamOverscanViewports", "nestedPrefetchViewports", "requestMaxConcurrent", "READER_ENDPOINT_429_BASE_BLOCK_MS"]
+source_anchors: ["lite/src/dom/reply-tree.ts","lite/src/topic/topic-session.ts","lite/src/state/reader-preferences-schema.ts","lite/src/network/request-scheduler.ts","lite/src/network/browser-shared-request-permit.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-09-performance-settings.png", "/screenshots/guide-11-request-flow.png"]
@@ -16,36 +16,40 @@ screenshots: ["/screenshots/guide-09-performance-settings.png", "/screenshots/gu
 
 ![性能设置页中的预设、主楼层批量和 DOM 窗口](/screenshots/guide-09-performance-settings.png)
 
-性能设置把问题分成三层：
+性能设置按当前 Discourse API 管线分成三层：
 
-1. **需求来源**：主楼层批量和楼中楼预取会产生多少数据需求。
-2. **DOM 窗口**：同时渲染多少楼层。
-3. **共享调度**：请求何时启动、是否排队、何时因 429 退避。
+1. **正文批量**：`posts.json + post_ids[]` 顺序消费当前批次，并可低优先级预知下一批。
+2. **树状直属回复**：`posts/{id}/replies.json` 按父楼分页，邻近父楼最多两路候选。
+3. **DOM 窗口**：同时渲染多少楼层。
+4. **共享调度**：所有候选何时启动、是否排队、何时因 429 或 Cloudflare 停流。
 
 调度器不能抵消过大的预取需求；出现请求压力时，先减少需求，再降低并发。
 
 ## 预设
 
-| 参数 | 省资源 | 均衡（默认） | 低等待 |
+| 参数 | 省流 | 自动（默认） | 快速预取 |
 | --- | ---: | ---: | ---: |
-| 每批请求主楼层 | 16 | 40 | 48 |
-| 视口外挂载缓冲 | 0.35 屏 | 1.25 屏 | 2 屏 |
-| 同时挂载主楼层上限 | 28 | 72 | 96 |
-| 楼中楼触发距离 | 0.35 屏 | 1.25 屏 | 2 屏 |
-| 配置并发上限 | 1 | 3 | 4 |
-| 启动间隔下限 | 220 ms | 90 ms | 80 ms |
-| 窗口预算目标占用 | 80% | 80% | 80% |
+| 每批正文楼层 | 24 | 48 | 64 |
+| 视口外挂载缓冲 | 1 屏 | 1.5 屏 | 2 屏 |
+| 同时挂载楼层上限 | 48 | 80 | 96 |
+| API 提前加载距离 | 1.25 屏 | 2 屏 | 3 屏 |
+| 共享总并发上限 | 2 | 3 | 4 |
+| API 启动保护间隔 | 180 ms | 100 ms | 80 ms |
+| API 窗口预算占用 | 75% | 85% | 90% |
 
-任何手动改动都会进入“自定义”。设置在下次打开阅读器时生效。
+任何手动改动都会进入“自定义”。保存后当前与后续阅读器立即采用；已经启动的请求自然完成。
 
-## 主楼层取数
+## 正文批量取数
 
-“每批请求主楼层”允许 12–64 条。数值越大：
+“每批正文楼层数”允许 12–64 条。数值越大：
 
 - 数据边缘等待次数可能更少；
 - 单次下载、解析和缓存写入更重；
 - 不会增加同时挂载的 DOM 上限；
-- 不会绕过共享调度。
+- 只改变 `post_ids[]` 的单批数量，不会绕过共享调度。
+
+自动与快速预取会在当前批次进入 `topic-batch` 后，把 cursor 后一批作为可丢弃的后台候选。
+当前批次与预知批次最多双路；若预知失败或被队列丢弃，正常 cursor 接近时仍会重新加载。
 
 ## DOM 窗口
 
@@ -54,13 +58,14 @@ screenshots: ["/screenshots/guide-09-performance-settings.png", "/screenshots/gu
 
 快速滚动会按方向临时前探，但仍受硬上限约束。媒体较重的远处楼层可能更早退回占位。
 
-## 楼中楼自动请求
+## 正文与树状预知
 
-触发距离允许 0–3 屏：
+触发距离允许 1–3 屏：
 
-- 0：父楼层进入视口后请求；
-- 大于 0：提前相应屏数预取；
-- 首批每个父楼层最多取 20 条；
+- 正文批次接近这条水位时，从后台提升为可见请求；
+- 父楼或已展开树节点进入这条水位时，调用直属回复 API；
+- 每个父楼分页仍按后端固定页大小读取；
+- 自动与快速预取最多同时准备两个父楼，可见树状请求优先于正文与后台请求；
 - 后续页只在翻页时请求。
 
 ## 共享请求调度
@@ -69,9 +74,9 @@ screenshots: ["/screenshots/guide-09-performance-settings.png", "/screenshots/gu
 
 | 参数 | 范围 | 含义 |
 | --- | --- | --- |
-| 配置并发上限 | 1–4 路 | 天花板；多标签页、宿主活动和限流可继续降低 |
-| 启动间隔下限 | 80–500 ms | 正常状态的最快启动间隔 |
-| 窗口预算目标占用 | 50%–95% | 10 秒/60 秒探测边界的目标比例 |
+| 共享总并发上限 | 1–4 路 | 全站天花板；正文与树状车道各最多两路候选 |
+| API 启动保护间隔 | 80–500 ms | 正常状态的最快启动间隔 |
+| API 窗口预算比例 | 50%–95% | 10 秒/60 秒固定边界的目标比例 |
 
 多个阅读器实例采用更严格值。宿主页面自己的 API 请求也会纳入共享账本，阅读器主动避让。
 
@@ -87,4 +92,4 @@ screenshots: ["/screenshots/guide-09-performance-settings.png", "/screenshots/gu
 - 恢复探测成功后逐步提高节奏；
 - 多标签页共享状态，避免各自重复试探。
 
-不要仅为了“更快”把并发和预取同时调到最大。频繁 429 时先切回“均衡”或“省资源”，观察请求数据面板。
+不要仅为了“更快”把总并发和预取同时调到最大。频繁 429 时先切回“自动”或“省流”，观察请求数据面板。

@@ -2,9 +2,9 @@
 title: 动画、阅读与互动
 description: 配置跳转提示、加载动画、历史导航、退出方式、主帖操作列、完整讨论和 Boost 复制。
 feature_ids: ["READ-007", "READ-014", "ACTION-006", "SET-010", "SET-011", "SET-016", "SET-017", "SET-018", "SET-019"]
-source_anchors: ["historyEdgeTriggerPercent", "JUMP_HIGHLIGHT_SETTING_FIELDS", "BOOST_COPY_SETTING_ROWS", "jumpHighlightPrefsPatch", "READER_LOADING_ANIMATION_KEYS", "ldp-history-buttons-always-visible", "openTopicsAtFirstPost", "confirmNativeComposerClose", "expandNestedRepliesByDefault", "boostCopyMode"]
+source_anchors: ["lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/post/boost-copy-rule.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-08-motion-settings.png", "/screenshots/guide-12-other-features.png", "/screenshots/guide-18-thread-context.png"]
@@ -55,10 +55,11 @@ screenshots: ["/screenshots/guide-08-motion-settings.png", "/screenshots/guide-1
 ![父楼层下的二级回复和正式楼层展示](/screenshots/guide-18-thread-context.png)
 
 - 在父回复下展开二级回复：展示直接回复。
-- 启用“完整讨论”视图：递归阅读更深分支并记住窗口位置。
+- 启用深层回复阅读：允许继续阅读更深分支。
+- 深层回复展示方式：直接进入完整讨论，或先显示 2–5 层主信息流树状嵌套。
 - 从楼层列表隐藏二级回复：收纳为参与者头像标记，跳转仍可定位。
 
-完整讨论建立在父回复下展开之上；关闭前者时设置中心会同步处理关联开关，避免保留不可达配置。
+主信息流树状嵌套超出所选深度后仍由完整讨论兜底；完整讨论本身按真实父子关系无限递归，窗口变窄时只停止继续增加缩进。关闭父回复下展开时，设置中心会同步处理关联开关。
 
 ## Boost 复制
 
@@ -66,4 +67,4 @@ screenshots: ["/screenshots/guide-08-motion-settings.png", "/screenshots/guide-1
 
 `前置文字 + 原 Boost + 末尾内容`
 
-小尾巴可以是数字递增或固定文字。数字模式可设置数字前内容和 1–99 的递增步长；固定尾巴、前缀等文本最多 16 字。结果预览不会发送任何内容。
+小尾巴可以是数字递增或固定文字。数字模式可设置数字前内容和 1–99 的递增步长；固定尾巴、前缀等文本最多 16 字。点击 Boost 气泡的复制后，结果只会预填到 Boost 输入框，不会自动发送。

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "runtimeComplete": false,
+  "featureContractCoverageComplete": false,
+  "browserMatrixAccepted": false,
+  "performanceAccepted": false,
+  "rollbackVerified": false,
+  "readerStylesUrl": null
+}

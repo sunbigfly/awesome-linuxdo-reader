@@ -2,11 +2,11 @@
 title: 安装与更新
 description: 安装 userscript、确认启用状态、理解更新方式并排查入口未出现。
 feature_ids: ["CORE-001", "CORE-007", "TROUBLE-001"]
-source_anchors: ["@version", "@match", "DISCOURSE_SITE_ADAPTERS"]
+source_anchors: ["lite/userscript.meta.txt","lite/src/app/reader-application.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
-last_verified: 2026-07-28
+last_verified: 2026-08-03
 screenshots: ["/screenshots/guide-01-reader-overview.png"]
 ---
 
@@ -58,7 +58,7 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
 6. 在主题列表顶部或主题链接附近确认阅读器入口已经出现。
 
 ::: tip 站点与翻译能力
-LINUX DO 保持完整功能覆盖。中文、英文及其他语言的标准 HTTPS Discourse 论坛通过验证后即可使用核心阅读能力，站点未安装的 Boost、Reactions、Post Voting 等插件入口会自动隐藏。站点适配不限内容语言；已标记为非中文的内置社区还会显示译为简体中文的正文翻译按钮。
+LINUX DO 保持完整功能覆盖。中文、英文及其他语言的标准 HTTPS Discourse 论坛通过验证后即可使用核心阅读能力，站点未安装的 Boost、Reactions、Post Voting 等插件入口会自动隐藏。站点适配不限内容语言；除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点会显示译为简体中文的正文翻译按钮。
 :::
 
 ::: warning 不要同时启用两个版本
@@ -67,11 +67,15 @@ LINUX DO 保持完整功能覆盖。中文、英文及其他语言的标准 HTTP
 
 ## 自动更新
 
-脚本元数据包含 GreasyFork 的下载地址和元数据更新地址。更新频率由脚本管理器决定：
+正式脚本由 GreasyFork 安装后，脚本管理器会记录对应的下载与更新地址；仓库源码不写入
+绕过 GreasyFork 的自定义 `updateURL`、`installURL` 或 `downloadURL`。更新频率由脚本管理器决定：
+
+v1.0.0 的主脚本会通过 `@require` 自动加载同一发布版本的两个 Greasy Fork Library；
+Library 是正式脚本的一部分，无需单独安装。固定版本 URL 与完整性哈希用于避免更新期间混用不同版本。
 
 - 想立即检查时，在 Tampermonkey 面板中对该脚本执行“检查更新”。
 - 更新后刷新当前 Discourse 页面，已打开页面不会自动替换正在运行的旧代码。
-- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `0.1.16`。
+- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `1.0.0`。
 
 ## 入口没有出现
 

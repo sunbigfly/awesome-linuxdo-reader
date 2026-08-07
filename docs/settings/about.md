@@ -1,12 +1,12 @@
 ---
 title: 关于
-description: 查看阅读器定位、能力摘要、当前版本、在线用户手册、许可证和项目入口。
+description: 查看阅读器定位、能力摘要、当前版本、在线用户手册、第三方许可和特别致谢。
 feature_ids: ["REF-002", "REF-003"]
-source_anchors: ["@version", "READER_MANUAL_URL"]
+source_anchors: ["lite/userscript.meta.txt","lite/src/components/reader-image-fallback.ts"]
 since: 0.1.2
-version: 0.1.16
+version: 1.0.0
 status: current
-last_verified: 2026-07-26
+last_verified: 2026-08-03
 screenshots: ["/screenshots/guide-14-about.png"]
 ---
 
@@ -27,7 +27,7 @@ screenshots: ["/screenshots/guide-14-about.png"]
 - 长帖数据与性能能力；
 - 在线用户手册入口；
 - 第三方组件和特别致谢；
-- 许可证与项目入口。
+- 第三方参考项目、许可证与特别致谢。
 
 ## 打开在线用户手册
 
