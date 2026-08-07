@@ -1938,6 +1938,25 @@
       ],
       "note": "lite userscript 元数据与旧基线逐字段一致：21 个内置社区加通配 match、自定义 HTTPS 启动范围、unsafeWindow/GM 值存储/外部请求/CSS resource 权限、Connect/Credit/翻译与任意用户站点 connect 边界、document-start，以及固定 KaTeX 0.16.22、pinyin-pro 3.18.2、hls.js 1.6.16。Lite 额外把 KaTeX CSS 作为 resource 注入 Reader/Shadow root。BrowserUserscriptEnvironment 是唯一 GM/unsafeWindow/pinyin/resource 能力 owner，外部端口只接受登记 endpoint，普通 Discourse 请求继续走原生 ajax。新增可执行 userscript audit 锁定 main→Lite 继承、loader 与可选 local artifact，不再依赖名义检查项。安装权限提示、CSP 和三种依赖真实加载仍待浏览器验收。"
     },
+    "DATA-006": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/sync/reader-webdav-model.ts",
+        "lite/src/sync/reader-webdav-client.ts",
+        "lite/src/sync/reader-webdav-config-repository.ts",
+        "lite/src/sync/reader-webdav-coordinator.ts",
+        "lite/src/settings/reader-webdav-settings-form.ts",
+        "lite/src/app/reader-browser-runtime.ts",
+        "lite/src/userscript/main-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-webdav-model.test.ts",
+        "lite/tests/reader-webdav-sync.test.ts",
+        "lite/tests/reader-webdav-settings-form.test.ts"
+      ],
+      "note": "WebDAV 以 schema 2 的单一远端 JSON 文档按站点与账号作用域保存七类可选记录，客户端限制 HTTPS、2 MiB 文件、ETag 条件写入和逐级 MKCOL。Coordinator 用上次成功基线执行三方合并，以 tombstone 传播删除，冲突时重新读取并有限重试；只有条件写入成功才应用本地结果和更新基线。设置页默认关闭定时同步，支持 15 分钟至 6 小时串行调度，凭据仅保存于脚本专属存储且不进入远端文件、URL 或设置同步。双设备、并发冲突、删除传播、凭据边界与定时节奏已有静态测试，坚果云真实账号及跨浏览器显示仍待发布浏览器验收。"
+    },
     "MONITOR-001": {
       "implementationStatus": "static-complete",
       "browserStatus": "pending",

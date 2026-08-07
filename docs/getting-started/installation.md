@@ -4,9 +4,9 @@ description: 安装 userscript、确认启用状态、理解更新方式并排�
 feature_ids: ["CORE-001", "CORE-007", "TROUBLE-001"]
 source_anchors: ["lite/userscript.meta.txt","lite/src/app/reader-application.ts"]
 since: 0.1.2
-version: 1.0.1
+version: 1.1.0
 status: current
-last_verified: 2026-08-07
+last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
 ---
 
@@ -15,7 +15,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
 Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要先安装脚本管理器，再从 GreasyFork 安装正式版。
 
 ::: tip 当前发布状态
-GitHub 源码、本手册与 Greasy Fork 脚本 588185 均已发布 Lite `1.0.1`。普通用户只安装主脚本固定版本 `1895932`；它会加载已经核验字节数与 SHA-256 的 Core `1895921` 和 Features `1895924`。
+Lite `1.1.0` 源码与本手册正在准备发布；Greasy Fork 脚本 588185 当前公开稳定版仍为 `1.0.1`。1.0.1 主脚本固定版本为 `1895932`，加载 Core `1895921` 和 Features `1895924`。完成 1.1.0 的三文件同步与浏览器门禁后，本页再更新新的固定坐标。
 :::
 
 ![安装并启用脚本后，LINUX DO 列表页与增强阅读工作区同时可用](/screenshots/guide-01-reader-overview-v1.0.0.png)
@@ -79,7 +79,7 @@ Library 是正式脚本的一部分，无需单独安装。固定版本 URL 与�
 
 - 想立即检查时，在 Tampermonkey 面板中对该脚本执行“检查更新”。
 - 更新后刷新当前 Discourse 页面，已打开页面不会自动替换正在运行的旧代码。
-- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `1.0.1`。
+- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `1.1.0`。
 
 ## 三种保留版本
 

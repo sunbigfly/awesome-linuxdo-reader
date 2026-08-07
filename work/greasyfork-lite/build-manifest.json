@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "1.0.1",
+  "sourceVersion": "1.1.0",
   "entryModuleId": "src/userscript/main-lite-entry.js",
   "limits": {
     "greasyForkHardLimit": 2097152,
@@ -14,8 +14,8 @@
     "minified": false,
     "sharedHelperDeclarations": 10
   },
-  "modules": 238,
-  "projectTotalExecutableBytes": 3210058,
+  "modules": 244,
+  "projectTotalExecutableBytes": 3282518,
   "libraries": [
     {
       "name": "main-lite-core",
@@ -25,8 +25,8 @@
       ],
       "description": "应用、数据、Discourse、Shell、主题、流与 userscript 运行核心",
       "modules": 120,
-      "bytes": 1656364,
-      "sha256": "60dc23ad1611ddd466d785d96c6f3472d3e52cb2ef78fbd487ec2a4465da53c0"
+      "bytes": 1665405,
+      "sha256": "4f2b5b556da94f27e5d6e843f78d9fa24d44b36972fbf49afabf650e0c9a39a7"
     },
     {
       "name": "main-lite-features",
@@ -35,14 +35,14 @@
         "work/greasyfork-lite/libraries/mian-lite-features.js"
       ],
       "description": "媒体、互动、设置、用户、通知、监控与其他功能模块",
-      "modules": 118,
-      "bytes": 1550452,
-      "sha256": "27910eb1c7bf064ba9899938ed87672ccd85ab63512a5f5e2fe79b53912529bb"
+      "modules": 124,
+      "bytes": 1613871,
+      "sha256": "0825bad2bb9f925f9b8ed7f1dd9bfbcf3bf9fef37853fbf6c4618c95a7b94abe"
     }
   ],
   "loaderTemplate": {
     "file": "work/greasyfork-lite/main-loader.template.user.js",
     "bytes": 3242,
-    "sha256": "d8e4adb393f3c470db935a72347ed2652448ac2e098a25a553d9eb7b7dfdbf53"
+    "sha256": "8161a6adb6da116beed140789bb71e83279e221643a237c3b08e8d82fd3ec8ba"
   }
 }

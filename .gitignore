@@ -30,6 +30,7 @@
 !/assets/screenshots/
 /assets/screenshots/*
 !/assets/screenshots/*.png
+!/assets/screenshots/guide-29-webdav-sync-v1.1.0.svg
 /assets/screenshots/manual-*.png
 
 !/docs/

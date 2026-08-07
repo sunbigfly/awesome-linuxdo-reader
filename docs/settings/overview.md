@@ -1,18 +1,18 @@
 ---
 title: 设置中心总览
-description: 理解 15 个设置面板、分组导航、设置搜索、快捷方式、三种形态配置与统一保存方式。
-feature_ids: ["USER-005", "SET-001", "SET-020"]
-source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/reader-preferences-schema.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts"]
+description: 理解 16 个设置面板、分组导航、设置搜索、快捷方式、WebDAV 同步、三种形态配置与统一保存方式。
+feature_ids: ["USER-005", "SET-001", "SET-020", "DATA-006"]
+source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/reader-preferences-schema.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/settings/reader-webdav-settings-form.ts"]
 since: 0.1.2
-version: 1.0.1
+version: 1.1.0
 status: current
-last_verified: 2026-08-07
+last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png"]
 ---
 
 # 设置中心总览
 
-点击阅读器标题栏的“设置”进入设置中心。当前 v1.0.0 按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 15 个面板：
+点击阅读器标题栏的“设置”进入设置中心。当前 v1.1.0 按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 16 个面板：
 
 | 面板 | 作用 |
 | --- | --- |
@@ -30,11 +30,12 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png"]
 | [性能设置](/settings/performance) | 楼层加载、页面保留范围、二级回复预加载和请求节奏 |
 | [日志记录](/settings/request-data) | 在请求记录和性能记录之间切换 |
 | [数据管理](/settings/data-management) | 配置导入导出、恢复默认和缓存清理 |
+| [WebDAV 同步](/settings/webdav-sync) | 跨设备合并历史、收藏、设置、阅读队列和其他所选记录 |
 | [关于](/settings/about) | 功能摘要、版本和项目入口 |
 
 ![设置中心完整导航、当前账号和 Connect 信任进度](/screenshots/guide-02-settings-overview-v1.0.0.png)
 
-<p class="image-caption">截图展示 v1.0.0 设置中心的账号与 15 个配置入口；导航名称、分组和搜索入口以当前脚本为准。</p>
+<p class="image-caption">截图展示 v1.0.0 设置中心的基础导航；v1.1.0 在“数据管理”和“关于”之间新增 WebDAV 同步，当前共 16 个面板。</p>
 
 ## 分组与搜索
 

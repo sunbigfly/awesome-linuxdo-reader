@@ -1,12 +1,12 @@
 ---
 title: 数据、配置与缓存
-description: 导出导入设置，理解本地数据范围，查看和安全清理六类缓存。
-feature_ids: ["COLLECT-004", "DATA-001", "DATA-002", "DATA-003", "DATA-004", "TROUBLE-004"]
-source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts"]
+description: 导出导入设置，理解本地与 WebDAV 数据范围，查看和安全清理六类缓存。
+feature_ids: ["COLLECT-004", "DATA-001", "DATA-002", "DATA-003", "DATA-004", "DATA-006", "TROUBLE-004"]
+source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts","lite/src/sync/reader-webdav-coordinator.ts"]
 since: 0.1.2
-version: 1.0.1
+version: 1.1.0
 status: current
-last_verified: 2026-07-30
+last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
 ---
 
@@ -17,10 +17,18 @@ screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
 | 类型 | 示例 | 权威位置 | 清理结果 |
 | --- | --- | --- | --- |
 | 阅读器设置 | 图片比例、字体、布局、性能 | 当前浏览器 | 恢复显示和行为默认值 |
-| 阅读器本地数据 | 历史、主题快照、用户卡、消息分页 | 当前浏览器 | 下次需要时重新请求；历史无法自动恢复 |
+| 阅读器本地数据 | 历史、主题快照、用户卡、消息分页 | 当前浏览器；启用 WebDAV 后仅所选记录进入远端 JSON | 缓存可重建；已成功同步的所选记录可从远端合并恢复 |
 | 原站账号数据 | 帖子、消息、收藏、回应、已读状态 | LINUX DO | 只有对应业务操作才能改变 |
 
 缓存清理不会撤销原站收藏或回应，也不会删除帖子和真实消息。
+
+## WebDAV 跨设备记录
+
+1.1.0 起，设置中的 [WebDAV 同步](/settings/webdav-sync) 可在多个浏览器之间合并以下记录：浏览历史、收藏记录、设置配置、阅读队列、阅读位置与窗口状态、自定义适用站点和 Connect 本机观察历史。
+
+这条链路与缓存清理分开：正文、图片、附件、翻译结果、短期限流状态和页面缓存不会上传。同步不是整份覆盖；每轮先读取远端，以本机上次成功同步基线执行三方合并，并通过 ETag 条件写入。只有远端写入成功后才应用本机合并结果。
+
+定时同步默认关闭，可选 15 分钟到 6 小时；坚果云通常建议 1 小时。需要跨设备立即核对时，应在两端分别执行“立即同步”。
 
 ## 导出设置
 
@@ -87,4 +95,4 @@ screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
 4. 只有配置本身异常时才恢复全部默认。
 5. 清理后重新打开相关主题或面板并复现。
 
-不要把“清空全部历史”用于一般加载故障，因为历史是本地唯一的阅读路径记录。
+不要把“清空全部历史”用于一般加载故障。未启用 WebDAV 时，历史只有本地副本；启用后也应先确认最近一次同步成功，再执行会传播删除标记的业务删除。

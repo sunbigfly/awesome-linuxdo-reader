@@ -2,12 +2,12 @@
 layout: home
 title: Awesome LinuxDo Reader 用户手册
 description: LINUX DO 全面适配、兼容中英文及其他语言 Discourse 站点并支持正文翻译的 Awesome LinuxDo Reader 用户手册。
-feature_ids: ["CORE-001", "CORE-002", "CORE-004", "CORE-007", "READ-001", "ACTION-001", "DATA-001"]
-source_anchors: ["lite/userscript.meta.txt","lite/src/queue/reader-open-queue-session.ts","lite/src/shell/reader-workspace.ts","lite/src/app/reader-application.ts","lite/src/dom/reply-tree.ts","lite/src/app/reader-browser-runtime.ts","lite/src/state/preferences-config-codec.ts"]
+feature_ids: ["CORE-001", "CORE-002", "CORE-004", "CORE-007", "READ-001", "ACTION-001", "DATA-001", "DATA-006"]
+source_anchors: ["lite/userscript.meta.txt","lite/src/queue/reader-open-queue-session.ts","lite/src/shell/reader-workspace.ts","lite/src/app/reader-application.ts","lite/src/dom/reply-tree.ts","lite/src/app/reader-browser-runtime.ts","lite/src/state/preferences-config-codec.ts","lite/src/sync/reader-webdav-coordinator.ts"]
 since: 0.1.2
-version: 1.0.1
+version: 1.1.0
 status: current
-last_verified: 2026-08-03
+last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
 
 hero:
@@ -50,6 +50,10 @@ features:
     title: 精细个性化
     details: 图片、字体、五区布局、浮窗、明暗主题、结构颜色与跳转动效。
   - icon: >-
+      <!-- @license Lucide Icons v1.26.0 - ISC --><svg class="lucide lucide-cloud-upload" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 13v8"/><path d="m16 17-4-4-4 4"/><path d="M5.6 16.7A5 5 0 0 1 6 7a7 7 0 0 1 13.7 1.7A4.5 4.5 0 0 1 18.5 17H18"/></svg>
+    title: WebDAV 跨设备同步
+    details: 历史、收藏、设置、阅读队列和阅读位置等记录可独立选择，并以三方合并避免整份覆盖。
+  - icon: >-
       <!-- @license Lucide Icons v1.26.0 - ISC --><svg class="lucide lucide-shield-check" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
     title: 有界资源治理
     details: DOM 窗口、分层缓存、共享请求调度、429 退避、资源和请求监控。
@@ -57,7 +61,7 @@ features:
 
 ## 手册覆盖范围
 
-这套手册对应 userscript `1.0.1`，以 `lite/src/` 与 `lite/styles/` 为事实源。LINUX DO 是完整功能基线，消息、历史、收藏、互动、长帖、楼层关系与性能治理均保持全面适配；脚本也通过运行态识别、站点适配层和插件能力检测兼容中文、英文及其他语言的标准 Discourse 站点。
+这套手册对应 userscript `1.1.0`，以 `lite/src/` 与 `lite/styles/` 为事实源。LINUX DO 是完整功能基线，消息、历史、收藏、互动、长帖、楼层关系与性能治理均保持全面适配；脚本也通过运行态识别、站点适配层和插件能力检测兼容中文、英文及其他语言的标准 Discourse 站点。WebDAV 同步由用户主动配置并按类别启用，不上传正文、图片、附件或页面缓存。
 
 脚本内置 20 个其他知名 Discourse 社区，其他 HTTPS Discourse 论坛可验证后添加。站点适配本身不限制内容语言；除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点另提供原文、双语和简体中文译文三种阅读状态。功能目录记录了每项能力的源码锚点、版本、验证日期、截图和对应文档。
 

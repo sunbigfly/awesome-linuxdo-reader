@@ -4,9 +4,9 @@ description: 导出、导入与恢复设置，查看六类本地缓存并按选�
 feature_ids: ["DATA-001", "DATA-002"]
 source_anchors: ["lite/src/state/preferences-config-codec.ts","lite/src/cache/browser-asset-cache.ts"]
 since: 0.1.2
-version: 1.0.1
+version: 1.1.0
 status: current
-last_verified: 2026-08-01
+last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
 ---
 
@@ -88,3 +88,9 @@ screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
 | 从收藏中心移除 | 不影响 | 同步更新 | 会改变 |
 
 清理前先判断目标属于“配置”“缓存”还是“原站业务状态”，不要把三者混为一谈。
+
+## 与 WebDAV 的区别
+
+数据管理页只操作当前浏览器的设置导入导出与缓存；跨设备同步位于独立的 [WebDAV 同步](/settings/webdav-sync) 面板。WebDAV 可按类别合并历史、收藏、设置、阅读队列和阅读位置等记录，但不会上传正文、图片、附件或页面缓存。
+
+清理本地缓存不等于删除远端同步记录。若需要验证另一浏览器能否恢复队列，应先在来源浏览器完成一次成功同步，再在目标浏览器使用同一账号、地址和远端文件执行“立即同步”。

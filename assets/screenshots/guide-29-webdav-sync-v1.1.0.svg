@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="720" viewBox="0 0 1440 720" role="img" aria-labelledby="title desc">
+  <title id="title">WebDAV 跨设备合并同步流程</title>
+  <desc id="desc">设备 A 和设备 B 都先读取同一个 WebDAV JSON 文件，在本机执行三方合并，再以 ETag 条件写入；七类数据可分别选择，正文和缓存不会上传。</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fbf8"/>
+      <stop offset="1" stop-color="#edf5ef"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#173d29" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4f8b68"/>
+    </marker>
+  </defs>
+  <rect width="1440" height="720" rx="32" fill="url(#background)"/>
+  <text x="720" y="72" text-anchor="middle" font-family="system-ui, sans-serif" font-size="34" font-weight="700" fill="#193d2b">WebDAV 跨设备合并同步</text>
+  <text x="720" y="112" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20" fill="#547162">读取远端 → 三方合并 → ETag 条件写入；冲突时重新读取并重试</text>
+
+  <g>
+    <rect x="90" y="188" width="330" height="238" rx="24" fill="#ffffff" stroke="#c8ded0" stroke-width="2"/>
+    <rect x="1020" y="188" width="330" height="238" rx="24" fill="#ffffff" stroke="#c8ded0" stroke-width="2"/>
+    <rect x="525" y="168" width="390" height="278" rx="26" fill="#315f47"/>
+  </g>
+
+  <text x="255" y="238" text-anchor="middle" font-family="system-ui, sans-serif" font-size="27" font-weight="700" fill="#244d37">设备 A</text>
+  <text x="255" y="277" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#607a6b">当前浏览器的本地记录</text>
+  <text x="255" y="326" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#315f47">保留未同步的本机新增与删除</text>
+  <text x="255" y="362" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#315f47">只应用成功写入后的合并结果</text>
+
+  <text x="1185" y="238" text-anchor="middle" font-family="system-ui, sans-serif" font-size="27" font-weight="700" fill="#244d37">设备 B</text>
+  <text x="1185" y="277" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#607a6b">另一个浏览器的本地记录</text>
+  <text x="1185" y="326" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#315f47">首次同步默认与远端合并</text>
+  <text x="1185" y="362" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#315f47">不是整份覆盖，也不是仅上传增量</text>
+
+  <text x="720" y="225" text-anchor="middle" font-family="system-ui, sans-serif" font-size="28" font-weight="700" fill="#ffffff">WebDAV 远端文件</text>
+  <text x="720" y="267" text-anchor="middle" font-family="ui-monospace, monospace" font-size="20" fill="#d9ebdf">ALR-Lite/v2/sync.json</text>
+  <line x1="596" y1="298" x2="844" y2="298" stroke="#8fc3a4" stroke-width="2"/>
+  <text x="720" y="337" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#ffffff">一个带版本、设备和删除标记的 JSON 文档</text>
+  <text x="720" y="373" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#ffffff">凭据只保存在脚本专属存储，不写入文件</text>
+  <text x="720" y="409" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#ffffff">正文、图片、附件和页面缓存永不上传</text>
+
+  <path d="M 430 262 C 470 232, 490 232, 515 252" fill="none" stroke="#4f8b68" stroke-width="4" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <path d="M 925 252 C 950 232, 970 232, 1010 262" fill="none" stroke="#4f8b68" stroke-width="4" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+
+  <rect x="90" y="500" width="1260" height="150" rx="24" fill="#ffffff" stroke="#d5e5da" stroke-width="2"/>
+  <text x="125" y="542" font-family="system-ui, sans-serif" font-size="20" font-weight="700" fill="#244d37">七类独立开关</text>
+  <g font-family="system-ui, sans-serif" font-size="18" fill="#315f47">
+    <text x="125" y="586">浏览历史</text>
+    <text x="275" y="586">收藏记录</text>
+    <text x="425" y="586">设置配置</text>
+    <text x="575" y="586">阅读队列</text>
+    <text x="725" y="586">阅读位置与窗口状态</text>
+    <text x="975" y="586">自定义适用站点</text>
+    <text x="1170" y="586">Connect 历史</text>
+  </g>
+  <text x="125" y="625" font-family="system-ui, sans-serif" font-size="18" fill="#6a7f72">定时同步默认关闭；可选 15 分钟、30 分钟、1 小时、3 小时或 6 小时，坚果云建议 1 小时。</text>
+</svg>

@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.0.1
+// @version      1.1.0
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户、通知、监控与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.0.1 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.1.0 - main-lite-features
  * 媒体、互动、设置、用户、通知、监控与其他功能模块
  * Greasy Fork Library：可读、未压缩；由 TypeScript 源码确定性生成。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -72,7 +72,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.0.1",
+			sourceVersion: "1.1.0",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -110,7 +110,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.0.1") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.1.0") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -797,6 +797,7 @@
 		  #query = "";
 		  #reactionFilter = "";
 		  #bookmarkRecords = Object.freeze([]);
+		  #syncedBookmarkRecords = Object.freeze([]);
 		  #reactionRecords = Object.freeze([]);
 		  #bookmarksLoaded = false;
 		  #reactionsLoaded = false;
@@ -1053,6 +1054,19 @@
 		      reactions: this.#reactionRecords.length
 		    });
 		  }
+		  async syncBookmarkRecords() {
+		    const records = await this.#requests.loadBookmarks();
+		    this.#bookmarkRecords = records;
+		    this.#bookmarksLoaded = true;
+		    this.#render();
+		    return this.#mergedBookmarkRecords();
+		  }
+		  applySyncedBookmarkRecords(records) {
+		    this.#syncedBookmarkRecords = (0, import_reader_bookmark_model.sortReaderBookmarkRecords)(records.filter(
+		      (entry) => entry.tab === "Topic" || entry.tab === "Post"
+		    ));
+		    this.#render();
+		  }
 		  clearCache() {
 		    if (this.scope.destroyed) return;
 		    this.#cancelLoad();
@@ -1132,7 +1146,15 @@
 		    return this.#tab === "Reaction" ? this.#reactionsLoaded : this.#bookmarksLoaded;
 		  }
 		  #sourceRecords() {
-		    return this.#tab === "Reaction" ? this.#reactionRecords : this.#bookmarkRecords.filter((entry) => entry.tab === this.#tab);
+		    return this.#tab === "Reaction" ? this.#reactionRecords : this.#mergedBookmarkRecords().filter((entry) => entry.tab === this.#tab);
+		  }
+		  #mergedBookmarkRecords() {
+		    const records = /* @__PURE__ */ new Map();
+		    for (const entry of this.#syncedBookmarkRecords) {
+		      records.set(entry.identity, entry);
+		    }
+		    for (const entry of this.#bookmarkRecords) records.set(entry.identity, entry);
+		    return (0, import_reader_bookmark_model.sortReaderBookmarkRecords)([...records.values()]);
 		  }
 		  #matchingRecords() {
 		    return this.#sourceRecords().filter((entry) => (this.#tab !== "Reaction" || !this.#reactionFilter || entry.reaction === this.#reactionFilter) && (0, import_reader_search.readerSearchMatches)(
@@ -1155,6 +1177,9 @@
 		    this.#bookmarkRecords = Object.freeze(
 		      this.#bookmarkRecords.filter((entry) => entry.bookmarkId === null || !removed.has(entry.bookmarkId))
 		    );
+		    this.#syncedBookmarkRecords = Object.freeze(
+		      this.#syncedBookmarkRecords.filter((entry) => entry.bookmarkId === null || !removed.has(entry.bookmarkId))
+		    );
 		    for (const id of removed) this.#selection.delete(id);
 		    this.#bookmarksLoaded = true;
 		    this.#render();
@@ -1170,7 +1195,9 @@
 		      this.#onError(cause);
 		    }
 		    if (source === "bookmarks") this.#bookmarksLoaded = false;
-		    else this.#reactionsLoaded = false;
+		    if (source === "bookmarks") {
+		      this.#syncedBookmarkRecords = Object.freeze([]);
+		    } else this.#reactionsLoaded = false;
 		    if (!this.#open || this.#tab === "Reaction" !== (source === "reactions")) {
 		      return;
 		    }
@@ -1209,7 +1236,7 @@
 		    this.changes.emit(this.snapshot);
 		  }
 		}
-	}, "16cafa3dbedb380e8fbc27c92766887ae169bb8cf3d74932d924d9e6dff12fa3");
+	}, "0f743fd76155c7e83bb572330582ad41c935f8dda8c84c19f9c2013b048bc4a2");
 
 	/* Source: lite/src/bookmark/reader-bookmark-model.ts */
 	runtime.register("src/bookmark/reader-bookmark-model.js", function(module, exports, require) {
@@ -4394,6 +4421,19 @@
 		  clear() {
 		    return this.#persistAndCommit(Object.freeze([]), "clear");
 		  }
+		  replaceExternal(values) {
+		    const cutoff = this.#now() - this.#maxAgeMs;
+		    const entries = [];
+		    const seen = /* @__PURE__ */ new Set();
+		    for (const value of values) {
+		      const entry = normalizeEntry(value);
+		      if (!entry || entry.viewedAt < cutoff || seen.has(entry.topicId)) continue;
+		      seen.add(entry.topicId);
+		      entries.push(entry);
+		    }
+		    const persisted = this.#persist(Object.freeze(entries));
+		    return this.#commit(persisted, "external-sync");
+		  }
 		  #readAndCommit(source) {
 		    let raw;
 		    try {
@@ -4483,7 +4523,7 @@
 		    this.diagnostics.emit(Object.freeze({ code, cause }));
 		  }
 		}
-	}, "5953725cb7c75fa9c868010d6811f2f45f1816f995d2c4a2e5f626cc6339d812");
+	}, "147ed78984cc1a6075995d364524016b02c0f8312212ee2e9f1313ac79a218ee");
 
 	/* Source: lite/src/media/reader-compact-image-viewer.ts */
 	runtime.register("src/media/reader-compact-image-viewer.js", function(module, exports, require) {
@@ -16455,6 +16495,12 @@
 		  topicEdit(input) {
 		    const fields = Object.keys(input.changedFields).sort();
 		    if (!fields.length) throw new Error("topic changedFields 不能为空");
+		    const nativeChangedFields = {
+		      ...input.changedFields,
+		      ...Array.isArray(input.changedFields.tags) ? {
+		        tags: input.changedFields.tags.map((tag) => tag && typeof tag === "object" && !Array.isArray(tag) ? { ...tag } : tag)
+		      } : {}
+		    };
 		    return descriptor({
 		      operation: "topic-edit",
 		      targetType: "topic",
@@ -16463,7 +16509,7 @@
 		      payload: {
 		        args: Object.freeze([
 		          input.topic,
-		          input.changedFields,
+		          nativeChangedFields,
 		          Object.freeze({ fastEdit: true })
 		        ]),
 		        result: Object.freeze({ source: "argument", index: 0 })
@@ -16493,7 +16539,7 @@
 		    });
 		  }
 		}
-	}, "2cad789f2d7e0676ae76bf382dff4e97cb588ca37e65a0c660cc9ce7abfff468");
+	}, "139ff7b5a7a2511c8894edae80a102b7690b84753bb87e72d779221a8e5dcea7");
 
 	/* Source: lite/src/post/discourse-action-transport.ts */
 	runtime.register("src/post/discourse-action-transport.js", function(module, exports, require) {
@@ -22483,6 +22529,7 @@
 		  #count;
 		  #clear;
 		  #list;
+		  #avatarIdentity = /* @__PURE__ */ new WeakMap();
 		  #surface;
 		  #prefetchTail = Promise.resolve();
 		  #prefetching = /* @__PURE__ */ new Set();
@@ -22668,6 +22715,31 @@
 		  get size() {
 		    return this.#entries.size;
 		  }
+		  syncEntries() {
+		    return Object.freeze([...this.#entries.values()].sort((left, right) => left.addedAt - right.addedAt || left.topicId - right.topicId).map((entry) => Object.freeze({
+		      topicId: entry.topicId,
+		      title: entry.title,
+		      href: entry.href,
+		      avatarTemplate: entry.avatarTemplate,
+		      avatarSource: entry.avatarSource,
+		      ownerUsername: entry.ownerUsername,
+		      postNumber: entry.postNumber,
+		      addedAt: entry.addedAt,
+		      pinned: entry.pinned
+		    })));
+		  }
+		  replaceExternal(values) {
+		    const entries = values.map((value) => normalizedEntry(value, this.#options.document.baseURI)).filter((entry) => entry !== null);
+		    for (const [topicId, controller] of this.#prefetchControllers) {
+		      if (!entries.some((entry) => entry.topicId === topicId)) {
+		        controller.abort(new DOMException("队列已由 WebDAV 更新", "AbortError"));
+		      }
+		    }
+		    this.#entries.clear();
+		    for (const entry of entries) this.#entries.set(entry.topicId, entry);
+		    this.#persist();
+		    this.sync();
+		  }
 		  sync() {
 		    this.#syncNativeReaderTrigger();
 		    const active = this.#options.currentTopicId();
@@ -22708,6 +22780,8 @@
 		    if (queueChanged) {
 		      const previousBubbleScrollTop = this.#bubbles.scrollTop;
 		      const activeChanged = active !== this.#activeTopicId;
+		      const bubbleAvatars = this.#avatarsByTopic(this.#bubbles);
+		      const rowAvatars = this.#avatarsByTopic(this.#list);
 		      this.#renderKey = renderKey;
 		      this.#rail.hidden = !entries.length && !alwaysVisible;
 		      this.#rail.classList.toggle("is-empty", !entries.length);
@@ -22749,7 +22823,12 @@
 		        )}`;
 		        bubble.setAttribute("aria-label", label);
 		        bubble.dataset.ldpTooltipLabel = label;
-		        this.#avatar(bubble, entry, history);
+		        this.#avatar(
+		          bubble,
+		          entry,
+		          history,
+		          bubbleAvatars.get(entry.topicId)
+		        );
 		        bubble.append((0, import_html_element.htmlElement)(this.#options.document, "i"));
 		        const remove = button(
 		          this.#options.document,
@@ -22771,7 +22850,11 @@
 		        return shell;
 		      }));
 		      this.#list.replaceChildren(
-		        ...entries.map((entry) => this.#row(entry, active))
+		        ...entries.map((entry) => this.#row(
+		          entry,
+		          active,
+		          rowAvatars.get(entry.topicId)
+		        ))
 		      );
 		      this.#activeTopicId = active;
 		      if (activeChanged) {
@@ -22843,7 +22926,7 @@
 		  destroy() {
 		    this.scope.destroy();
 		  }
-		  #row(entry, active) {
+		  #row(entry, active, reusableAvatar) {
 		    const document = this.#options.document;
 		    const row = (0, import_html_element.htmlElement)(document, "article", "ldp-reader-queue-row");
 		    row.dataset.queueOpen = String(entry.topicId);
@@ -22860,7 +22943,7 @@
 		      "--ldp-reader-queue-progress",
 		      `${progressValue * 3.6}deg`
 		    );
-		    this.#avatar(progress, entry, history);
+		    this.#avatar(progress, entry, history, reusableAvatar);
 		    const copy = (0, import_html_element.htmlElement)(document, "span", "ldp-reader-queue-row-copy");
 		    const title = (0, import_html_element.htmlElement)(document, "strong");
 		    title.textContent = entry.title;
@@ -22902,21 +22985,28 @@
 		    row.append(progress, copy, actions);
 		    return row;
 		  }
-		  #avatar(host, entry, history) {
+		  #avatar(host, entry, history, reusableAvatar) {
+		    const fallbackText = (entry.ownerUsername || history?.ownerUsername || entry.title).trim().slice(0, 1).toUpperCase() || "?";
+		    const template = entry.avatarTemplate || history?.avatarTemplate || "";
+		    const source = entry.avatarSource || (template ? this.#options.avatarSource?.(template, 64) ?? "" : "");
+		    const identity = JSON.stringify([fallbackText, source]);
+		    if (reusableAvatar && this.#avatarIdentity.get(reusableAvatar) === identity) {
+		      host.replaceChildren(reusableAvatar);
+		      return;
+		    }
 		    const avatar = (0, import_html_element.htmlElement)(
 		      this.#options.document,
 		      "span",
 		      "ldp-reader-queue-avatar"
 		    );
+		    this.#avatarIdentity.set(avatar, identity);
 		    const fallback = (0, import_html_element.htmlElement)(
 		      this.#options.document,
 		      "span",
 		      "ldp-reader-queue-avatar-fallback"
 		    );
-		    fallback.textContent = (entry.ownerUsername || history?.ownerUsername || entry.title).trim().slice(0, 1).toUpperCase() || "?";
+		    fallback.textContent = fallbackText;
 		    avatar.append(fallback);
-		    const template = entry.avatarTemplate || history?.avatarTemplate || "";
-		    const source = entry.avatarSource || (template ? this.#options.avatarSource?.(template, 64) ?? "" : "");
 		    if (source) {
 		      const image = (0, import_html_element.htmlElement)(this.#options.document, "img");
 		      image.addEventListener("load", () => {
@@ -22932,6 +23022,19 @@
 		      avatar.append(image);
 		    }
 		    host.replaceChildren(avatar);
+		  }
+		  #avatarsByTopic(container) {
+		    const avatars = /* @__PURE__ */ new Map();
+		    for (const host of container.querySelectorAll(
+		      "[data-queue-open]"
+		    )) {
+		      const topicId = (0, import_identifiers.tryDiscourseTopicId)(host.dataset.queueOpen);
+		      const avatar = host.querySelector(
+		        ".ldp-reader-queue-avatar"
+		      );
+		      if (topicId && avatar) avatars.set(topicId, avatar);
+		    }
+		    return avatars;
 		  }
 		  #click(event) {
 		    const target = (0, import_event_target.eventElement)(event);
@@ -23724,7 +23827,7 @@
 		    }
 		  }
 		}
-	}, "83f404e0e3c65579fa549410f0476868301d33329e1a89b6a451dd637777244d");
+	}, "7b5ef2564340b1612e8f2bf20953e7fc837c18e240279f93e9d523078750dd23");
 
 	/* Source: lite/src/reading/read-state-controller.ts */
 	runtime.register("src/reading/read-state-controller.js", function(module, exports, require) {
@@ -29132,6 +29235,13 @@
 		    keywords: ["网络", "流量", "429", "内存", "cpu", "dom", "监控"]
 		  },
 		  {
+		    id: "sync",
+		    groupId: "system-data",
+		    title: "WebDAV 同步",
+		    description: "把选定的小数据记录通过标准 WebDAV 在不同浏览器间合并同步。",
+		    keywords: ["webdav", "坚果云", "同步", "历史", "收藏", "队列", "定时"]
+		  },
+		  {
 		    id: "cache",
 		    groupId: "system-data",
 		    title: "数据管理",
@@ -29181,6 +29291,7 @@
 		      "sites",
 		      "performance",
 		      "logs",
+		      "sync",
 		      "cache",
 		      "about"
 		    ])
@@ -29477,7 +29588,7 @@
 		    }
 		  }
 		}
-	}, "e68c3424e3abedf36af852544949ea9cca1aec37a61bbe7991f3359aa22639a6");
+	}, "a98efaaa50d9bf6a867b74ba0ea46dcd192795022b8a1b7fc5793e2f80d800bd");
 
 	/* Source: lite/src/settings/reader-settings-dom.ts */
 	runtime.register("src/settings/reader-settings-dom.js", function(module, exports, require) {
@@ -30320,6 +30431,7 @@
 		  sites: "wrench",
 		  performance: "rocket",
 		  logs: "activity",
+		  sync: "upload",
 		  cache: "database",
 		  about: "info"
 		});
@@ -31064,7 +31176,7 @@
 		    this.scope.add(() => target.removeEventListener(type, listener, options));
 		  }
 		}
-	}, "e893866a8fba921971f33a6c8ea86c9e91598545c6e63e9667bea04bf2bf1029");
+	}, "103eeaf591370945ad26fed11bbb07aeb8b13900a704e67a2d6c1f83fd8fc706");
 
 	/* Source: lite/src/settings/reader-shortcut-settings-form.ts */
 	runtime.register("src/settings/reader-shortcut-settings-form.js", function(module, exports, require) {
@@ -31418,6 +31530,300 @@
 		  }
 		}
 	}, "314a621cc535e556f34aeb6ea9462598cbc83779787d156ea93dfe53fba07c5c");
+
+	/* Source: lite/src/settings/reader-webdav-settings-form.ts */
+	runtime.register("src/settings/reader-webdav-settings-form.js", function(module, exports, require) {
+		var reader_webdav_settings_form_exports = {};
+		__export(reader_webdav_settings_form_exports, {
+		  ReaderWebDavSettingsForm: () => ReaderWebDavSettingsForm
+		});
+		module.exports = __toCommonJS(reader_webdav_settings_form_exports);
+		var import_lifecycle = require("../kernel/lifecycle.js");
+		var import_reader_webdav_model = require("../sync/reader-webdav-model.js");
+		var import_reader_settings_dom = require("./reader-settings-dom.js");
+		function field(document, labelText, type, placeholder) {
+		  const root = (0, import_reader_settings_dom.settingsElement)(document, "label", "ldp-webdav-field");
+		  const label = (0, import_reader_settings_dom.settingsElement)(document, "strong");
+		  label.textContent = labelText;
+		  const input = (0, import_reader_settings_dom.settingsElement)(document, "input", "ldp-boost-rule-control");
+		  input.type = type;
+		  input.placeholder = placeholder;
+		  input.setAttribute("aria-label", labelText);
+		  input.autocomplete = type === "password" ? "current-password" : "off";
+		  root.append(label, input);
+		  return Object.freeze({ root, input });
+		}
+		class ReaderWebDavSettingsForm {
+		  scope;
+		  #host;
+		  #repository;
+		  #coordinator;
+		  #endpoint;
+		  #username;
+		  #password;
+		  #remotePath;
+		  #autoSync;
+		  #interval;
+		  #categories = /* @__PURE__ */ new Map();
+		  #save;
+		  #test;
+		  #sync;
+		  #status;
+		  #operation = null;
+		  constructor(options) {
+		    this.#host = options.host;
+		    this.#repository = options.repository;
+		    this.#coordinator = options.coordinator;
+		    this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
+		    const root = (0, import_reader_settings_dom.settingsElement)(
+		      options.document,
+		      "div",
+		      "ldp-settings-fields ldp-webdav-settings"
+		    );
+		    const connection = (0, import_reader_settings_dom.settingsSection)(
+		      options.document,
+		      "连接与文件",
+		      "兼容坚果云等标准 WebDAV；坚果云请使用应用密码。凭据仅保存在脚本专属存储，不写入远端文件。",
+		      true
+		    );
+		    const endpoint = field(
+		      options.document,
+		      "WebDAV 地址",
+		      "text",
+		      "https://dav.jianguoyun.com/dav/"
+		    );
+		    this.#endpoint = endpoint.input;
+		    this.#endpoint.inputMode = "url";
+		    const username = field(options.document, "用户名", "text", "账号邮箱");
+		    this.#username = username.input;
+		    this.#username.autocomplete = "username";
+		    const password = field(options.document, "应用密码", "password", "应用密码");
+		    this.#password = password.input;
+		    const remotePath = field(
+		      options.document,
+		      "远端文件",
+		      "text",
+		      "ALR-Lite/v2/sync.json"
+		    );
+		    this.#remotePath = remotePath.input;
+		    connection.append(
+		      endpoint.root,
+		      username.root,
+		      password.root,
+		      remotePath.root
+		    );
+		    const content = (0, import_reader_settings_dom.settingsSection)(
+		      options.document,
+		      "选择同步内容",
+		      "每类独立开关；关闭的类别不会上传、下载或删除。正文、图片、附件与页面缓存永不上传。",
+		      true
+		    );
+		    const categoryList = (0, import_reader_settings_dom.settingsElement)(
+		      options.document,
+		      "div",
+		      "ldp-webdav-category-list"
+		    );
+		    for (const category of import_reader_webdav_model.READER_WEBDAV_CATEGORIES) {
+		      const control = (0, import_reader_settings_dom.settingsSwitch)(
+		        options.document,
+		        `同步${import_reader_webdav_model.READER_WEBDAV_CATEGORY_LABELS[category]}`
+		      );
+		      this.#categories.set(category, control.input);
+		      categoryList.append((0, import_reader_settings_dom.settingsOptionRow)(
+		        options.document,
+		        import_reader_webdav_model.READER_WEBDAV_CATEGORY_LABELS[category],
+		        this.#categoryDescription(category),
+		        control.root
+		      ));
+		    }
+		    content.append(categoryList);
+		    const automatic = (0, import_reader_settings_dom.settingsSection)(
+		      options.document,
+		      "定时同步",
+		      "默认关闭；启用后仅在页面可见时执行，启动后等待 30 秒，再按所选间隔串行同步。",
+		      true
+		    );
+		    const autoControl = (0, import_reader_settings_dom.settingsSwitch)(options.document, "启用定时同步");
+		    this.#autoSync = autoControl.input;
+		    automatic.append((0, import_reader_settings_dom.settingsOptionRow)(
+		      options.document,
+		      "启用定时同步",
+		      "手动同步始终可用。",
+		      autoControl.root
+		    ));
+		    this.#interval = (0, import_reader_settings_dom.settingsElement)(
+		      options.document,
+		      "select",
+		      "ldp-webdav-interval"
+		    );
+		    for (const [value, label] of [
+		      ["15", "每 15 分钟"],
+		      ["30", "每 30 分钟"],
+		      ["60", "每 1 小时"],
+		      ["180", "每 3 小时"],
+		      ["360", "每 6 小时"]
+		    ]) this.#interval.append((0, import_reader_settings_dom.settingsOption)(options.document, value, label));
+		    automatic.append((0, import_reader_settings_dom.settingsOptionRow)(
+		      options.document,
+		      "同步间隔",
+		      "坚果云按请求计数，建议 1 小时。",
+		      this.#interval
+		    ));
+		    const actions = (0, import_reader_settings_dom.settingsElement)(options.document, "div", "ldp-webdav-actions");
+		    this.#save = (0, import_reader_settings_dom.settingsButton)(
+		      options.document,
+		      "ldp-config-action",
+		      "保存 WebDAV 设置",
+		      "check",
+		      "保存设置"
+		    );
+		    this.#test = (0, import_reader_settings_dom.settingsButton)(
+		      options.document,
+		      "ldp-config-action",
+		      "测试 WebDAV 连接",
+		      "activity",
+		      "测试连接"
+		    );
+		    this.#sync = (0, import_reader_settings_dom.settingsButton)(
+		      options.document,
+		      "ldp-config-action is-primary",
+		      "立即执行 WebDAV 合并同步",
+		      "upload",
+		      "立即同步"
+		    );
+		    actions.append(this.#save, this.#test, this.#sync);
+		    this.#status = (0, import_reader_settings_dom.settingsElement)(options.document, "small", "ldp-webdav-status");
+		    this.#status.role = "status";
+		    this.#status.setAttribute("aria-live", "polite");
+		    root.append(connection, content, automatic, actions, this.#status);
+		    this.#host.replaceChildren(root);
+		    this.scope.listen(this.#autoSync, "change", () => this.#syncIntervalState());
+		    this.scope.listen(this.#save, "click", () => void this.#saveConfig());
+		    this.scope.listen(this.#test, "click", () => void this.#run("test"));
+		    this.scope.listen(this.#sync, "click", () => void this.#run("sync"));
+		    this.#repository.changes.subscribe((snapshot) => {
+		      this.#renderStatus(snapshot.status.kind, snapshot.status.message);
+		    }, this.scope);
+		    this.scope.add(() => {
+		      this.#operation?.abort(new Error("WebDAV 设置已关闭"));
+		      this.#host.replaceChildren();
+		    });
+		    void this.#load();
+		  }
+		  destroy() {
+		    this.scope.destroy();
+		  }
+		  #categoryDescription(category) {
+		    return {
+		      history: "主题、最近阅读楼层、已读楼层和查看时间。",
+		      bookmarks: "收藏链接、标题及定位信息；不修改原站收藏。",
+		      preferences: "Lite 外观、布局、性能与阅读交互设置；不含 WebDAV 凭据。",
+		      queue: "队列主题链接、固定状态和入口楼层；不含帖子正文。",
+		      "topic-context": "最近阅读位置、讨论窗口锚点和全屏窗口几何。",
+		      "custom-sites": "用户添加的其他 HTTPS Discourse 站点。",
+		      "connect-history": "本机观察的 Connect 指标历史与服务器确认已读指纹。"
+		    }[category];
+		  }
+		  async #load() {
+		    try {
+		      const snapshot = await this.#repository.load();
+		      if (this.scope.destroyed) return;
+		      const config = snapshot.config;
+		      this.#endpoint.value = config.endpoint;
+		      this.#username.value = config.username;
+		      this.#password.value = config.password;
+		      this.#remotePath.value = config.remotePath;
+		      this.#autoSync.checked = config.autoSyncEnabled;
+		      for (const option of this.#interval.options) {
+		        option.toggleAttribute(
+		          "selected",
+		          option.value === String(config.autoSyncIntervalMinutes)
+		        );
+		      }
+		      for (const category of import_reader_webdav_model.READER_WEBDAV_CATEGORIES) {
+		        this.#categories.get(category).checked = config.categories[category];
+		      }
+		      this.#syncIntervalState();
+		      this.#renderStatus(snapshot.status.kind, snapshot.status.message || "填写连接信息后先测试连接，再执行合并同步。");
+		    } catch (cause) {
+		      this.#renderStatus("error", cause instanceof Error ? cause.message : "WebDAV 设置读取失败");
+		    }
+		  }
+		  #draft() {
+		    return (0, import_reader_webdav_model.normalizeReaderWebDavConfig)({
+		      endpoint: this.#endpoint.value,
+		      username: this.#username.value,
+		      password: this.#password.value,
+		      remotePath: this.#remotePath.value,
+		      autoSyncEnabled: this.#autoSync.checked,
+		      autoSyncIntervalMinutes: Number(
+		        [...this.#interval.options].find((option) => option.selected)?.value ?? this.#interval.value
+		      ),
+		      categories: Object.fromEntries(import_reader_webdav_model.READER_WEBDAV_CATEGORIES.map(
+		        (category) => [category, this.#categories.get(category).checked]
+		      ))
+		    });
+		  }
+		  async #saveConfig() {
+		    const config = this.#draft();
+		    const issues = (0, import_reader_webdav_model.validateReaderWebDavConfig)(config, {
+		      requireCredentials: config.autoSyncEnabled
+		    });
+		    if (issues.length) {
+		      this.#renderStatus("error", issues[0]);
+		      return false;
+		    }
+		    await this.#repository.saveConfig(config);
+		    this.#renderStatus("success", "WebDAV 设置已保存。");
+		    return true;
+		  }
+		  async #run(kind) {
+		    if (this.#operation || !await this.#saveConfig()) return;
+		    const issues = (0, import_reader_webdav_model.validateReaderWebDavConfig)(this.#repository.snapshot.config, {
+		      requireCredentials: true
+		    });
+		    if (issues.length) {
+		      this.#renderStatus("error", issues[0]);
+		      return;
+		    }
+		    const operation = new AbortController();
+		    this.#operation = operation;
+		    this.#setBusy(true);
+		    this.#renderStatus("syncing", kind === "test" ? "正在测试 WebDAV 连接…" : "正在读取远端、合并并条件写入…");
+		    try {
+		      if (kind === "test") {
+		        await this.#coordinator.testConnection(operation.signal);
+		        this.#renderStatus("success", "连接成功，WebDAV 账号和地址可用。");
+		      } else {
+		        await this.#coordinator.syncNow(operation.signal);
+		      }
+		    } catch (cause) {
+		      if (!operation.signal.aborted) this.#renderStatus(
+		        "error",
+		        cause instanceof Error ? cause.message : "WebDAV 操作失败"
+		      );
+		    } finally {
+		      if (this.#operation === operation) {
+		        this.#operation = null;
+		        this.#setBusy(false);
+		      }
+		    }
+		  }
+		  #setBusy(busy) {
+		    for (const button of [this.#save, this.#test, this.#sync]) {
+		      button.disabled = busy;
+		      button.toggleAttribute("aria-busy", busy);
+		    }
+		  }
+		  #syncIntervalState() {
+		    this.#interval.disabled = !this.#autoSync.checked;
+		  }
+		  #renderStatus(kind, message) {
+		    this.#status.dataset.statusKind = kind;
+		    this.#status.textContent = message;
+		  }
+		}
+	}, "cfab0e7cbd712705100bc177b36fe5e45af5c01176fc38ca902af0a9f515e441");
 
 	/* Source: lite/src/settings/reader-window-settings-form.ts */
 	runtime.register("src/settings/reader-window-settings-form.js", function(module, exports, require) {
@@ -31962,6 +32368,9 @@
 		    if (!sites.includes(host)) return sites;
 		    return this.#write(sites.filter((site) => site !== host));
 		  }
+		  replaceExternal(values) {
+		    return this.#write(values.map(String));
+		  }
 		  async #write(value) {
 		    if (!this.#storage) {
 		      throw new Error("脚本没有全局站点存储权限");
@@ -31979,7 +32388,1229 @@
 		    return this.#sites;
 		  }
 		}
-	}, "e541fbf3d02915785e5035893bdc83f98818b24b2e6befdd80c48b0a13eb64f9");
+	}, "18a56ff2bf689e05b212cb4797804881a4edb5ba458c0f7fe6e25e6c24b7f1bd");
+
+	/* Source: lite/src/sync/reader-webdav-category-ports.ts */
+	runtime.register("src/sync/reader-webdav-category-ports.js", function(module, exports, require) {
+		var reader_webdav_category_ports_exports = {};
+		__export(reader_webdav_category_ports_exports, {
+		  createReaderWebDavCategoryPorts: () => createReaderWebDavCategoryPorts
+		});
+		module.exports = __toCommonJS(reader_webdav_category_ports_exports);
+		var import_identifiers = require("../discourse/identifiers.js");
+		function record(value) {
+		  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+		}
+		function localRecord(id, value) {
+		  return Object.freeze({ id, value });
+		}
+		function categoryPort(value) {
+		  return Object.freeze(value);
+		}
+		function number(value, fallback = 0) {
+		  const numeric = Number(value);
+		  return Number.isFinite(numeric) ? numeric : fallback;
+		}
+		function text(value) {
+		  return String(value ?? "").trim();
+		}
+		function historyValue(value) {
+		  const source = record(value);
+		  const topicId = (0, import_identifiers.tryDiscourseTopicId)(source?.topicId);
+		  const postNumber = (0, import_identifiers.tryDiscoursePostNumber)(source?.postNumber);
+		  if (!source || !topicId || !postNumber || number(source.viewedAt) <= 0) return null;
+		  const reads = [...new Set((Array.isArray(source.readPostNumbers) ? source.readPostNumbers : []).map(import_identifiers.tryDiscoursePostNumber).filter((entry) => entry !== null))].sort((left, right) => left - right);
+		  return Object.freeze({
+		    topicId,
+		    title: text(source.title) || `帖子 #${topicId}`,
+		    postsCount: Math.max(0, Math.floor(number(source.postsCount))),
+		    avatarTemplate: text(source.avatarTemplate),
+		    ownerUsername: text(source.ownerUsername),
+		    postNumber,
+		    readPostNumbers: Object.freeze(reads),
+		    firstViewedAt: number(source.firstViewedAt) || number(source.viewedAt),
+		    viewedAt: number(source.viewedAt)
+		  });
+		}
+		function mergeHistory(local, remote) {
+		  const left = historyValue(local);
+		  const right = historyValue(remote);
+		  if (!left) return right;
+		  if (!right) return left;
+		  const recent = left.viewedAt >= right.viewedAt ? left : right;
+		  return Object.freeze({
+		    ...recent,
+		    postsCount: Math.max(left.postsCount, right.postsCount),
+		    readPostNumbers: Object.freeze([.../* @__PURE__ */ new Set([
+		      ...left.readPostNumbers,
+		      ...right.readPostNumbers
+		    ])].sort((a, b) => a - b)),
+		    firstViewedAt: Math.min(left.firstViewedAt, right.firstViewedAt),
+		    viewedAt: Math.max(left.viewedAt, right.viewedAt)
+		  });
+		}
+		function queueValue(value) {
+		  const source = record(value);
+		  const topicId = (0, import_identifiers.tryDiscourseTopicId)(source?.topicId);
+		  if (!source || !topicId) return null;
+		  return Object.freeze({
+		    topicId,
+		    title: text(source.title) || `帖子 #${topicId}`,
+		    href: text(source.href) || `/t/${topicId}`,
+		    avatarTemplate: text(source.avatarTemplate),
+		    avatarSource: text(source.avatarSource),
+		    ownerUsername: text(source.ownerUsername),
+		    postNumber: (0, import_identifiers.tryDiscoursePostNumber)(source.postNumber),
+		    addedAt: Math.max(1, number(source.addedAt, 1)),
+		    pinned: source.pinned === true
+		  });
+		}
+		function mergeQueue(local, remote) {
+		  const left = queueValue(local);
+		  const right = queueValue(remote);
+		  if (!left) return right;
+		  if (!right) return left;
+		  return Object.freeze({
+		    ...right,
+		    ...left,
+		    title: left.title || right.title,
+		    href: left.href || right.href,
+		    avatarTemplate: left.avatarTemplate || right.avatarTemplate,
+		    avatarSource: left.avatarSource || right.avatarSource,
+		    ownerUsername: left.ownerUsername || right.ownerUsername,
+		    postNumber: left.postNumber ?? right.postNumber,
+		    addedAt: Math.min(left.addedAt, right.addedAt),
+		    pinned: left.pinned || right.pinned
+		  });
+		}
+		function bookmarkValue(value) {
+		  const source = record(value);
+		  const tab = source?.tab;
+		  const topicId = (0, import_identifiers.tryDiscourseTopicId)(source?.topicId);
+		  const postNumber = (0, import_identifiers.tryDiscoursePostNumber)(source?.postNumber);
+		  const identity = text(source?.identity);
+		  if (!source || tab !== "Topic" && tab !== "Post" || !topicId || !postNumber || !identity) return null;
+		  const rawBookmarkId = Number(source.bookmarkId);
+		  const bookmarkId = Number.isSafeInteger(rawBookmarkId) && rawBookmarkId > 0 ? rawBookmarkId : null;
+		  const postId = tab === "Post" ? (0, import_identifiers.tryDiscoursePostId)(source.postId) : null;
+		  const title = text(source.title) || `帖子 #${topicId}`;
+		  const authorUsername = text(source.authorUsername);
+		  const name = text(source.name);
+		  return Object.freeze({
+		    identity,
+		    tab,
+		    bookmarkId,
+		    topicId,
+		    postId,
+		    postNumber,
+		    title,
+		    authorUsername,
+		    avatarTemplate: text(source.avatarTemplate),
+		    createdAt: text(source.createdAt),
+		    name,
+		    highestPostNumber: Math.max(0, Math.floor(number(
+		      source.highestPostNumber
+		    ))),
+		    reaction: "",
+		    searchText: [
+		      title,
+		      name,
+		      authorUsername,
+		      `@${authorUsername}`,
+		      tab === "Post" ? `楼层 ${postNumber}` : "帖子"
+		    ].filter(Boolean).join(" ").toLocaleLowerCase()
+		  });
+		}
+		function bookmarkRemoteValue(value) {
+		  return Object.freeze({
+		    identity: value.identity,
+		    tab: value.tab,
+		    bookmarkId: value.bookmarkId,
+		    topicId: value.topicId,
+		    postId: value.postId,
+		    postNumber: value.postNumber,
+		    title: value.title,
+		    authorUsername: value.authorUsername,
+		    avatarTemplate: value.avatarTemplate,
+		    createdAt: value.createdAt,
+		    name: value.name,
+		    highestPostNumber: value.highestPostNumber
+		  });
+		}
+		function mergeBookmark(local, remote) {
+		  const left = bookmarkValue(local);
+		  const right = bookmarkValue(remote);
+		  if (!left) return remote;
+		  if (!right) return local;
+		  const leftAt = Date.parse(left.createdAt) || 0;
+		  const rightAt = Date.parse(right.createdAt) || 0;
+		  return bookmarkRemoteValue(leftAt >= rightAt ? left : right);
+		}
+		function mergeTopicContext(local, remote) {
+		  const left = record(local);
+		  const right = record(remote);
+		  if (!left) return remote;
+		  if (!right) return local;
+		  return number(left.at) >= number(right.at) ? local : remote;
+		}
+		function mergeConnectHistory(local, remote) {
+		  const left = record(local);
+		  const right = record(remote);
+		  if (!left) return remote;
+		  if (!right) return local;
+		  const leftDays = record(left.days) ?? {};
+		  const rightDays = record(right.days) ?? {};
+		  const days = { ...rightDays };
+		  for (const [day, rawMetrics] of Object.entries(leftDays)) {
+		    days[day] = Object.freeze({
+		      ...record(rightDays[day]) ?? {},
+		      ...record(rawMetrics) ?? {}
+		    });
+		  }
+		  const confirmedReads = Object.freeze({
+		    ...record(right.confirmedReads) ?? {},
+		    ...record(left.confirmedReads) ?? {}
+		  });
+		  const starts = [left.readTrackingStartedAt, right.readTrackingStartedAt].map(Number).filter(Number.isFinite);
+		  return Object.freeze({
+		    version: 1,
+		    days: Object.freeze(days),
+		    readTrackingStartedAt: starts.length ? Math.min(...starts) : null,
+		    confirmedReads
+		  });
+		}
+		function createReaderWebDavCategoryPorts(options) {
+		  const ports = [
+		    categoryPort({
+		      category: "history",
+		      initialStrategy: "merge",
+		      capture: () => options.history.snapshot.entries.map((entry) => localRecord(String(entry.topicId), entry)),
+		      mergeValues: mergeHistory,
+		      apply: (records) => options.history.replaceExternal(records.map((entry) => historyValue(entry.value)).filter((entry) => entry !== null).sort((left, right) => right.viewedAt - left.viewedAt))
+		    }),
+		    categoryPort({
+		      category: "preferences",
+		      initialStrategy: "remote",
+		      capture: () => Object.entries(options.preferences.read()).map(
+		        ([id, value]) => localRecord(id, value)
+		      ),
+		      mergeValues: (local) => local,
+		      apply: (records) => options.preferences.update(Object.fromEntries(
+		        records.map((entry) => [entry.id, entry.value])
+		      ))
+		    }),
+		    categoryPort({
+		      category: "topic-context",
+		      initialStrategy: "merge",
+		      capture: () => {
+		        const snapshot = options.topicContext.snapshot;
+		        return Object.freeze([
+		          ...snapshot.fullPageGeometry ? [localRecord("geometry", snapshot.fullPageGeometry)] : [],
+		          ...Object.entries(snapshot.views).map(([id, value]) => localRecord(`view:${id}`, value))
+		        ]);
+		      },
+		      mergeValues: mergeTopicContext,
+		      apply: (records) => options.topicContext.replaceExternal({
+		        fullPageGeometry: records.find((entry) => entry.id === "geometry")?.value ?? null,
+		        views: Object.fromEntries(records.filter((entry) => entry.id.startsWith("view:")).map((entry) => [entry.id.slice(5), entry.value]))
+		      })
+		    }),
+		    categoryPort({
+		      category: "custom-sites",
+		      initialStrategy: "merge",
+		      capture: async () => (await options.customSites.load()).map((host) => localRecord(host, host)),
+		      mergeValues: (local) => local,
+		      apply: (records) => options.customSites.replaceExternal(
+		        records.map((entry) => entry.value)
+		      )
+		    })
+		  ];
+		  if (options.queue) {
+		    ports.push(categoryPort({
+		      category: "queue",
+		      initialStrategy: "merge",
+		      capture: () => options.queue.syncEntries().map((entry) => localRecord(String(entry.topicId), entry)),
+		      mergeValues: mergeQueue,
+		      apply: (records) => options.queue.replaceExternal(records.map((entry) => queueValue(entry.value)).filter((entry) => entry !== null))
+		    }));
+		  }
+		  if (options.bookmarks) {
+		    ports.push(categoryPort({
+		      category: "bookmarks",
+		      initialStrategy: "merge",
+		      capture: async () => (await options.bookmarks.syncBookmarkRecords()).map((entry) => localRecord(entry.identity, bookmarkRemoteValue(entry))),
+		      mergeValues: mergeBookmark,
+		      apply: (records) => options.bookmarks.applySyncedBookmarkRecords(
+		        records.map((entry) => bookmarkValue(entry.value)).filter((entry) => entry !== null)
+		      )
+		    }));
+		  }
+		  if (options.connectHistory) {
+		    ports.push(categoryPort({
+		      category: "connect-history",
+		      initialStrategy: "merge",
+		      capture: () => [localRecord(
+		        "current",
+		        options.connectHistory.syncValue()
+		      )],
+		      mergeValues: mergeConnectHistory,
+		      apply: (records) => options.connectHistory.replaceExternal(
+		        records.find((entry) => entry.id === "current")?.value
+		      )
+		    }));
+		  }
+		  return Object.freeze(ports);
+		}
+	}, "2bbaef73ebb219ae9a8ae1d1bdb46ca17859cfe7df916870a7924980fc0c2311");
+
+	/* Source: lite/src/sync/reader-webdav-client.ts */
+	runtime.register("src/sync/reader-webdav-client.js", function(module, exports, require) {
+		var reader_webdav_client_exports = {};
+		__export(reader_webdav_client_exports, {
+		  ReaderWebDavClient: () => ReaderWebDavClient,
+		  ReaderWebDavError: () => ReaderWebDavError
+		});
+		module.exports = __toCommonJS(reader_webdav_client_exports);
+		var import_reader_webdav_model = require("./reader-webdav-model.js");
+		class ReaderWebDavError extends Error {
+		  code;
+		  status;
+		  constructor(code, message, status = 0) {
+		    super(message);
+		    this.name = "ReaderWebDavError";
+		    this.code = code;
+		    this.status = status;
+		  }
+		}
+		function headerValue(headers, name) {
+		  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		  return String(headers ?? "").match(
+		    new RegExp(`^${escaped}:\\s*(.+)$`, "im")
+		  )?.[1]?.trim() ?? "";
+		}
+		function encodedPath(path) {
+		  return path.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+		}
+		function targetUrl(config) {
+		  const path = (0, import_reader_webdav_model.normalizeReaderWebDavRemotePath)(config.remotePath);
+		  if (!path) throw new ReaderWebDavError(
+		    "unexpected",
+		    "WebDAV 远端路径无效"
+		  );
+		  return new URL(encodedPath(path), config.endpoint);
+		}
+		function statusError(status, operation) {
+		  if (status === 401) return new ReaderWebDavError(
+		    "auth",
+		    "WebDAV 认证失败，请检查用户名和应用密码",
+		    status
+		  );
+		  if (status === 403) return new ReaderWebDavError(
+		    "forbidden",
+		    `WebDAV 没有${operation}权限`,
+		    status
+		  );
+		  if (status === 404) return new ReaderWebDavError(
+		    "not-found",
+		    "WebDAV 目标不存在",
+		    status
+		  );
+		  if (status === 409 || status === 412) return new ReaderWebDavError(
+		    "conflict",
+		    "WebDAV 远端文件已被另一设备更新，请重试同步",
+		    status
+		  );
+		  if (status >= 500) return new ReaderWebDavError(
+		    "server",
+		    `WebDAV 服务暂时不可用（HTTP ${status}）`,
+		    status
+		  );
+		  return new ReaderWebDavError(
+		    "unexpected",
+		    `WebDAV ${operation}失败（HTTP ${status || 0}）`,
+		    status
+		  );
+		}
+		class ReaderWebDavClient {
+		  #request;
+		  #timeoutMs;
+		  #maxDocumentBytes;
+		  constructor(options) {
+		    this.#request = options.request;
+		    this.#timeoutMs = Math.max(
+		      3e3,
+		      Math.min(6e4, Math.round(options.timeoutMs ?? 15e3))
+		    );
+		    this.#maxDocumentBytes = Math.max(
+		      16384,
+		      Math.min(8 * 1024 * 1024, Math.round(
+		        options.maxDocumentBytes ?? 2 * 1024 * 1024
+		      ))
+		    );
+		  }
+		  async test(config, signal) {
+		    const response = await this.#execute(
+		      config,
+		      "PROPFIND",
+		      new URL(config.endpoint),
+		      { Depth: "0" },
+		      signal
+		    );
+		    if (response.status !== 200 && response.status !== 207) {
+		      throw statusError(response.status, "连接检测");
+		    }
+		  }
+		  async read(config, signal) {
+		    const response = await this.#execute(
+		      config,
+		      "GET",
+		      targetUrl(config),
+		      { Accept: "application/json" },
+		      signal
+		    );
+		    if (response.status === 404 || response.status === 409) return null;
+		    if (response.status < 200 || response.status >= 300) {
+		      throw statusError(response.status, "读取");
+		    }
+		    const text = String(response.responseText ?? "");
+		    if (new TextEncoder().encode(text).byteLength > this.#maxDocumentBytes) {
+		      throw new ReaderWebDavError(
+		        "unexpected",
+		        "WebDAV 同步文件超过 2 MiB 安全上限"
+		      );
+		    }
+		    const etag = headerValue(response.responseHeaders, "ETag");
+		    if (!etag) throw new ReaderWebDavError(
+		      "unexpected",
+		      "WebDAV 读取成功但服务器未返回 ETag，无法安全同步"
+		    );
+		    return Object.freeze({ text, etag });
+		  }
+		  async write(config, text, etag, signal) {
+		    if (new TextEncoder().encode(text).byteLength > this.#maxDocumentBytes) {
+		      throw new ReaderWebDavError(
+		        "unexpected",
+		        "WebDAV 同步文件超过 2 MiB 安全上限"
+		      );
+		    }
+		    if (!etag) await this.#ensureCollections(config, signal);
+		    const response = await this.#execute(
+		      config,
+		      "PUT",
+		      targetUrl(config),
+		      {
+		        "Content-Type": "application/json; charset=utf-8",
+		        ...etag ? { "If-Match": etag } : { "If-None-Match": "*" }
+		      },
+		      signal,
+		      text
+		    );
+		    if (![200, 201, 204].includes(response.status)) {
+		      throw statusError(response.status, "写入");
+		    }
+		    return headerValue(response.responseHeaders, "ETag");
+		  }
+		  async #ensureCollections(config, signal) {
+		    const segments = (0, import_reader_webdav_model.normalizeReaderWebDavRemotePath)(config.remotePath).split("/").slice(0, -1);
+		    let relative = "";
+		    for (const segment of segments) {
+		      relative += `${encodeURIComponent(segment)}/`;
+		      const response = await this.#execute(
+		        config,
+		        "MKCOL",
+		        new URL(relative, config.endpoint),
+		        {},
+		        signal
+		      );
+		      if (![200, 201, 204, 405].includes(response.status)) {
+		        throw statusError(response.status, "创建同步目录");
+		      }
+		    }
+		  }
+		  #execute(config, method, url, headers, signal, data) {
+		    if (signal.aborted) return Promise.reject(signal.reason);
+		    return new Promise((resolve, reject) => {
+		      let settled = false;
+		      let handle;
+		      const cleanup = () => signal.removeEventListener("abort", abort);
+		      const fail = (cause) => {
+		        if (settled) return;
+		        settled = true;
+		        cleanup();
+		        reject(cause);
+		      };
+		      const abort = () => {
+		        if (settled) return;
+		        settled = true;
+		        cleanup();
+		        try {
+		          handle?.abort?.();
+		        } finally {
+		          reject(signal.reason);
+		        }
+		      };
+		      signal.addEventListener("abort", abort, { once: true });
+		      try {
+		        handle = this.#request({
+		          method,
+		          url: url.href,
+		          headers,
+		          user: config.username,
+		          password: config.password,
+		          timeout: this.#timeoutMs,
+		          responseType: "text",
+		          ...data === void 0 ? {} : { data },
+		          onload: (response) => {
+		            if (settled) return;
+		            settled = true;
+		            cleanup();
+		            resolve(response);
+		          },
+		          onerror: () => fail(new ReaderWebDavError(
+		            "network",
+		            "WebDAV 网络连接失败"
+		          )),
+		          ontimeout: () => fail(new ReaderWebDavError(
+		            "timeout",
+		            "WebDAV 请求超时"
+		          )),
+		          onabort: () => {
+		            if (signal.aborted) abort();
+		            else fail(new ReaderWebDavError(
+		              "network",
+		              "WebDAV 请求已取消"
+		            ));
+		          }
+		        });
+		      } catch (cause) {
+		        settled = true;
+		        cleanup();
+		        reject(cause);
+		      }
+		    });
+		  }
+		}
+	}, "bf628f26ab4f3cd90377a23fb3e3464bf98c89e793d86f56a029dae926722a99");
+
+	/* Source: lite/src/sync/reader-webdav-config-repository.ts */
+	runtime.register("src/sync/reader-webdav-config-repository.js", function(module, exports, require) {
+		var reader_webdav_config_repository_exports = {};
+		__export(reader_webdav_config_repository_exports, {
+		  READER_WEBDAV_CONFIG_STORAGE_KEY: () => READER_WEBDAV_CONFIG_STORAGE_KEY,
+		  ReaderWebDavConfigRepository: () => ReaderWebDavConfigRepository
+		});
+		module.exports = __toCommonJS(reader_webdav_config_repository_exports);
+		var import_signal = require("../kernel/signal.js");
+		var import_reader_webdav_model = require("./reader-webdav-model.js");
+		const READER_WEBDAV_CONFIG_STORAGE_KEY = "awesome-linuxdo-reader:webdav:v2";
+		function record(value) {
+		  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+		}
+		function normalizedBaselines(value) {
+		  const scopes = record(value);
+		  const result = {};
+		  for (const [scopeId, rawBaseline] of Object.entries(scopes ?? {})) {
+		    if (!scopeId || scopeId.length > 240) continue;
+		    const source = record(rawBaseline);
+		    const baseline = {};
+		    for (const category of import_reader_webdav_model.READER_WEBDAV_CATEGORIES) {
+		      const rawRecords = record(source?.[category]);
+		      if (!rawRecords) continue;
+		      baseline[category] = Object.freeze(Object.fromEntries(
+		        Object.entries(rawRecords).filter(([id, state]) => Boolean(id) && typeof state === "string").map(([id, state]) => [id, state])
+		      ));
+		    }
+		    result[scopeId] = Object.freeze(baseline);
+		  }
+		  return Object.freeze(result);
+		}
+		function normalizedStatus(value) {
+		  const source = record(value);
+		  const kind = ["idle", "syncing", "success", "error"].includes(String(source?.kind)) ? source.kind : "idle";
+		  return Object.freeze({
+		    kind: kind === "syncing" ? "idle" : kind,
+		    message: String(source?.message ?? ""),
+		    at: Math.max(0, Number(source?.at) || 0)
+		  });
+		}
+		function defaultWriterId() {
+		  const random = globalThis.crypto?.randomUUID?.();
+		  return random ? `device:${random}` : `device:${Date.now()}`;
+		}
+		class ReaderWebDavConfigRepository {
+		  changes = new import_signal.Signal();
+		  #storage;
+		  #storageKey;
+		  #createWriterId;
+		  #snapshot = Object.freeze({
+		    loaded: false,
+		    config: (0, import_reader_webdav_model.createReaderWebDavDefaultConfig)(),
+		    writerId: "",
+		    baselines: Object.freeze({}),
+		    status: Object.freeze({ kind: "idle", message: "", at: 0 })
+		  });
+		  #loadPromise = null;
+		  #writeTail = Promise.resolve();
+		  constructor(options) {
+		    this.#storage = options.storage;
+		    this.#storageKey = options.storageKey ?? READER_WEBDAV_CONFIG_STORAGE_KEY;
+		    this.#createWriterId = options.createWriterId ?? defaultWriterId;
+		  }
+		  get snapshot() {
+		    return this.#snapshot;
+		  }
+		  async load() {
+		    if (this.#snapshot.loaded) return this.#snapshot;
+		    if (this.#loadPromise) return this.#loadPromise;
+		    this.#loadPromise = (async () => {
+		      const source = record(await this.#storage.getValue(this.#storageKey));
+		      this.#snapshot = Object.freeze({
+		        loaded: true,
+		        config: (0, import_reader_webdav_model.normalizeReaderWebDavConfig)(source?.config),
+		        writerId: String(source?.writerId ?? "").trim() || this.#createWriterId(),
+		        baselines: normalizedBaselines(source?.baselines),
+		        status: normalizedStatus(source?.status)
+		      });
+		      await this.#persist();
+		      this.changes.emit(this.#snapshot);
+		      return this.#snapshot;
+		    })();
+		    try {
+		      return await this.#loadPromise;
+		    } finally {
+		      this.#loadPromise = null;
+		    }
+		  }
+		  async saveConfig(value) {
+		    await this.load();
+		    this.#snapshot = Object.freeze({
+		      ...this.#snapshot,
+		      config: (0, import_reader_webdav_model.normalizeReaderWebDavConfig)(value)
+		    });
+		    await this.#persist();
+		    this.changes.emit(this.#snapshot);
+		    return this.#snapshot;
+		  }
+		  async saveBaseline(scopeId, baseline) {
+		    await this.load();
+		    this.#snapshot = Object.freeze({
+		      ...this.#snapshot,
+		      baselines: Object.freeze({
+		        ...this.#snapshot.baselines,
+		        [scopeId]: baseline
+		      })
+		    });
+		    await this.#persist();
+		    this.changes.emit(this.#snapshot);
+		    return this.#snapshot;
+		  }
+		  async saveStatus(status) {
+		    await this.load();
+		    this.#snapshot = Object.freeze({
+		      ...this.#snapshot,
+		      status: Object.freeze({ ...status })
+		    });
+		    await this.#persist();
+		    this.changes.emit(this.#snapshot);
+		    return this.#snapshot;
+		  }
+		  #persist() {
+		    const snapshot = this.#snapshot;
+		    const write = this.#writeTail.then(() => this.#storage.setValue(
+		      this.#storageKey,
+		      {
+		        version: 2,
+		        config: snapshot.config,
+		        writerId: snapshot.writerId,
+		        baselines: snapshot.baselines,
+		        status: snapshot.status
+		      }
+		    ));
+		    this.#writeTail = write.catch(() => {
+		    });
+		    return write;
+		  }
+		}
+	}, "99f164d036a645ddf986e144ad4560a3529384fbe184fead41ced65bf79d7c24");
+
+	/* Source: lite/src/sync/reader-webdav-coordinator.ts */
+	runtime.register("src/sync/reader-webdav-coordinator.js", function(module, exports, require) {
+		var reader_webdav_coordinator_exports = {};
+		__export(reader_webdav_coordinator_exports, {
+		  ReaderWebDavAutoSync: () => ReaderWebDavAutoSync,
+		  ReaderWebDavCoordinator: () => ReaderWebDavCoordinator
+		});
+		module.exports = __toCommonJS(reader_webdav_coordinator_exports);
+		var import_lifecycle = require("../kernel/lifecycle.js");
+		var import_reader_webdav_client = require("./reader-webdav-client.js");
+		var import_reader_webdav_model = require("./reader-webdav-model.js");
+		function errorMessage(cause) {
+		  if (cause instanceof Error && cause.message.trim()) return cause.message;
+		  return "WebDAV 同步失败";
+		}
+		function localFingerprint(records) {
+		  return (0, import_reader_webdav_model.readerWebDavFingerprint)([...records].map((entry) => ({ id: entry.id, value: entry.value })).sort((left, right) => left.id.localeCompare(right.id)));
+		}
+		function withScope(document, scopeId, scope, writerId, now) {
+		  return Object.freeze({
+		    ...document,
+		    updatedAt: now,
+		    writerId,
+		    scopes: Object.freeze({
+		      ...document.scopes,
+		      [scopeId]: scope
+		    })
+		  });
+		}
+		class ReaderWebDavCoordinator {
+		  #client;
+		  #repository;
+		  #categories;
+		  #hostname;
+		  #username;
+		  #now;
+		  #active = null;
+		  constructor(options) {
+		    this.#client = options.client;
+		    this.#repository = options.repository;
+		    this.#categories = new Map(options.categories.map((port) => [
+		      port.category,
+		      port
+		    ]));
+		    this.#hostname = options.hostname;
+		    this.#username = options.username;
+		    this.#now = options.now ?? Date.now;
+		  }
+		  async testConnection(signal = new AbortController().signal) {
+		    const snapshot = await this.#repository.load();
+		    const issues = (0, import_reader_webdav_model.validateReaderWebDavConfig)(snapshot.config, {
+		      requireCredentials: true
+		    });
+		    if (issues.length) throw new Error(issues[0]);
+		    await this.#client.test(snapshot.config, signal);
+		  }
+		  syncNow(signal = new AbortController().signal) {
+		    if (this.#active) return this.#active;
+		    const active = this.#synchronize(signal).finally(() => {
+		      if (this.#active === active) this.#active = null;
+		    });
+		    this.#active = active;
+		    return active;
+		  }
+		  async #synchronize(signal) {
+		    const startedAt = this.#now();
+		    await this.#repository.saveStatus(Object.freeze({
+		      kind: "syncing",
+		      message: "正在读取并合并 WebDAV 数据…",
+		      at: startedAt
+		    }));
+		    try {
+		      const snapshot = await this.#repository.load();
+		      const issues = (0, import_reader_webdav_model.validateReaderWebDavConfig)(snapshot.config, {
+		        requireCredentials: true
+		      });
+		      if (issues.length) throw new Error(issues[0]);
+		      const scopeId = (0, import_reader_webdav_model.readerWebDavRuntimeScopeId)(
+		        this.#hostname(),
+		        this.#username()
+		      );
+		      const selected = import_reader_webdav_model.READER_WEBDAV_CATEGORIES.filter((category) => snapshot.config.categories[category]).map((category) => this.#categories.get(category)).filter((port) => Boolean(port));
+		      if (!selected.length) throw new Error("所选同步内容当前不可用");
+		      let outcome = null;
+		      let nextBaseline = snapshot.baselines[scopeId] ?? Object.freeze({});
+		      let applyRecords = [];
+		      for (let attempt = 0; attempt < 3; attempt += 1) {
+		        if (signal.aborted) throw signal.reason;
+		        const remoteFile = await this.#client.read(snapshot.config, signal);
+		        const document = remoteFile ? (0, import_reader_webdav_model.normalizeReaderWebDavDocument)(JSON.parse(remoteFile.text)) : (0, import_reader_webdav_model.createReaderWebDavDocument)(snapshot.writerId, this.#now());
+		        const remoteScope = document.scopes[scopeId] ?? Object.freeze({
+		          categories: Object.freeze({})
+		        });
+		        const categories = { ...remoteScope.categories };
+		        const baseline = { ...nextBaseline };
+		        const pendingApply = [];
+		        let uploaded = 0;
+		        let imported = 0;
+		        let deleted = 0;
+		        let conflicts = 0;
+		        let changed = remoteFile === null;
+		        for (const port of selected) {
+		          const local = await port.capture();
+		          const reconciled = (0, import_reader_webdav_model.reconcileReaderWebDavRecords)({
+		            local,
+		            remote: remoteScope.categories[port.category]?.records ?? {},
+		            ...nextBaseline[port.category] === void 0 ? {} : { baseline: nextBaseline[port.category] },
+		            writerId: snapshot.writerId,
+		            now: this.#now(),
+		            initialStrategy: port.initialStrategy,
+		            mergeValues: port.mergeValues
+		          });
+		          categories[port.category] = Object.freeze({
+		            records: reconciled.records
+		          });
+		          baseline[port.category] = reconciled.baseline;
+		          pendingApply.push(Object.freeze({
+		            port,
+		            records: reconciled.active,
+		            captured: local
+		          }));
+		          changed ||= reconciled.changed;
+		          uploaded += reconciled.uploaded;
+		          imported += reconciled.imported;
+		          deleted += reconciled.deleted;
+		          conflicts += reconciled.conflicts;
+		        }
+		        const nextDocument = withScope(
+		          document,
+		          scopeId,
+		          Object.freeze({ categories: Object.freeze(categories) }),
+		          snapshot.writerId,
+		          this.#now()
+		        );
+		        try {
+		          if (changed) {
+		            await this.#client.write(
+		              snapshot.config,
+		              JSON.stringify(nextDocument),
+		              remoteFile?.etag ?? null,
+		              signal
+		            );
+		          }
+		          let localChangedDuringSync = false;
+		          for (const item of pendingApply) {
+		            const current = await item.port.capture();
+		            if (localFingerprint(current) !== localFingerprint(item.captured)) {
+		              localChangedDuringSync = true;
+		              break;
+		            }
+		          }
+		          if (localChangedDuringSync) {
+		            if (attempt < 2) continue;
+		            throw new Error(
+		              "同步期间本地数据持续变化，已保留本机内容，请稍后重试"
+		            );
+		          }
+		          nextBaseline = Object.freeze(baseline);
+		          applyRecords = Object.freeze(pendingApply);
+		          outcome = Object.freeze({
+		            uploaded,
+		            imported,
+		            deleted,
+		            conflicts,
+		            categories: selected.length,
+		            remoteCreated: remoteFile === null,
+		            at: this.#now()
+		          });
+		          break;
+		        } catch (cause) {
+		          if (cause instanceof import_reader_webdav_client.ReaderWebDavError && cause.code === "conflict" && attempt < 2) continue;
+		          throw cause;
+		        }
+		      }
+		      if (!outcome) throw new Error("WebDAV 文件持续冲突，请稍后重试");
+		      for (const item of applyRecords) await item.port.apply(item.records);
+		      await this.#repository.saveBaseline(scopeId, nextBaseline);
+		      const message = `同步完成：上传 ${outcome.uploaded}，下载 ${outcome.imported}，删除 ${outcome.deleted}，冲突 ${outcome.conflicts}`;
+		      await this.#repository.saveStatus(Object.freeze({
+		        kind: "success",
+		        message,
+		        at: outcome.at
+		      }));
+		      return outcome;
+		    } catch (cause) {
+		      await this.#repository.saveStatus(Object.freeze({
+		        kind: "error",
+		        message: errorMessage(cause),
+		        at: this.#now()
+		      }));
+		      throw cause;
+		    }
+		  }
+		}
+		class ReaderWebDavAutoSync {
+		  scope;
+		  #repository;
+		  #coordinator;
+		  #visibilityState;
+		  #startupDelayMs;
+		  #schedule;
+		  #cancel;
+		  #handle = null;
+		  #signature = "";
+		  #first = true;
+		  constructor(options) {
+		    this.#repository = options.repository;
+		    this.#coordinator = options.coordinator;
+		    this.#visibilityState = options.visibilityState;
+		    this.#startupDelayMs = Math.max(1e3, options.startupDelayMs ?? 3e4);
+		    this.#schedule = options.schedule ?? ((callback, delayMs) => setTimeout(callback, delayMs));
+		    this.#cancel = options.cancel ?? ((handle) => clearTimeout(handle));
+		    this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
+		    this.#repository.changes.subscribe(() => this.#refresh(), this.scope);
+		    this.scope.add(() => this.#clear());
+		    void this.#repository.load().then(() => this.#refresh());
+		  }
+		  #refresh() {
+		    if (this.scope.destroyed) return;
+		    const config = this.#repository.snapshot.config;
+		    const signature = `${config.autoSyncEnabled}:${config.autoSyncIntervalMinutes}`;
+		    if (signature === this.#signature) return;
+		    this.#signature = signature;
+		    this.#clear();
+		    if (!config.autoSyncEnabled) return;
+		    this.#arm(this.#first ? this.#startupDelayMs : config.autoSyncIntervalMinutes * 6e4);
+		    this.#first = false;
+		  }
+		  #arm(delayMs) {
+		    this.#handle = this.#schedule(() => {
+		      this.#handle = null;
+		      void this.#run();
+		    }, delayMs);
+		  }
+		  async #run() {
+		    if (this.scope.destroyed) return;
+		    const config = this.#repository.snapshot.config;
+		    if (!config.autoSyncEnabled) return;
+		    if (this.#visibilityState() === "visible") {
+		      try {
+		        await this.#coordinator.syncNow();
+		      } catch {
+		      }
+		    }
+		    if (!this.scope.destroyed && this.#repository.snapshot.config.autoSyncEnabled) {
+		      this.#arm(
+		        this.#repository.snapshot.config.autoSyncIntervalMinutes * 6e4
+		      );
+		    }
+		  }
+		  #clear() {
+		    if (this.#handle === null) return;
+		    this.#cancel(this.#handle);
+		    this.#handle = null;
+		  }
+		}
+	}, "b4e4e51622f724b93c3db07de075e922674c4634da392509a1eb51791a38fe05");
+
+	/* Source: lite/src/sync/reader-webdav-model.ts */
+	runtime.register("src/sync/reader-webdav-model.js", function(module, exports, require) {
+		var reader_webdav_model_exports = {};
+		__export(reader_webdav_model_exports, {
+		  READER_WEBDAV_CATEGORIES: () => READER_WEBDAV_CATEGORIES,
+		  READER_WEBDAV_CATEGORY_LABELS: () => READER_WEBDAV_CATEGORY_LABELS,
+		  READER_WEBDAV_DEFAULT_REMOTE_PATH: () => READER_WEBDAV_DEFAULT_REMOTE_PATH,
+		  READER_WEBDAV_FORMAT: () => READER_WEBDAV_FORMAT,
+		  READER_WEBDAV_SCHEMA_VERSION: () => READER_WEBDAV_SCHEMA_VERSION,
+		  createReaderWebDavCategorySelection: () => createReaderWebDavCategorySelection,
+		  createReaderWebDavDefaultConfig: () => createReaderWebDavDefaultConfig,
+		  createReaderWebDavDocument: () => createReaderWebDavDocument,
+		  normalizeReaderWebDavConfig: () => normalizeReaderWebDavConfig,
+		  normalizeReaderWebDavDocument: () => normalizeReaderWebDavDocument,
+		  normalizeReaderWebDavRemotePath: () => normalizeReaderWebDavRemotePath,
+		  readerWebDavFingerprint: () => readerWebDavFingerprint,
+		  readerWebDavRuntimeScopeId: () => readerWebDavRuntimeScopeId,
+		  reconcileReaderWebDavRecords: () => reconcileReaderWebDavRecords,
+		  validateReaderWebDavConfig: () => validateReaderWebDavConfig
+		});
+		module.exports = __toCommonJS(reader_webdav_model_exports);
+		const READER_WEBDAV_FORMAT = "awesome-linuxdo-reader-lite-webdav";
+		const READER_WEBDAV_SCHEMA_VERSION = 2;
+		const READER_WEBDAV_DEFAULT_REMOTE_PATH = "ALR-Lite/v2/sync.json";
+		const READER_WEBDAV_CATEGORIES = Object.freeze([
+		  "history",
+		  "bookmarks",
+		  "preferences",
+		  "queue",
+		  "topic-context",
+		  "custom-sites",
+		  "connect-history"
+		]);
+		const READER_WEBDAV_CATEGORY_LABELS = Object.freeze({
+		  history: "浏览历史",
+		  bookmarks: "收藏记录",
+		  preferences: "设置配置",
+		  queue: "阅读队列",
+		  "topic-context": "阅读位置与窗口状态",
+		  "custom-sites": "自定义适用站点",
+		  "connect-history": "Connect 本机观察历史"
+		});
+		const AUTO_SYNC_INTERVALS = /* @__PURE__ */ new Set([15, 30, 60, 180, 360]);
+		const MISSING_STATE = "missing";
+		const DELETED_STATE = "deleted";
+		function record(value) {
+		  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+		}
+		function timestamp(value) {
+		  const numeric = Number(value);
+		  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0;
+		}
+		function canonical(value) {
+		  if (value === null || typeof value !== "object") {
+		    return JSON.stringify(value) ?? "null";
+		  }
+		  if (Array.isArray(value)) {
+		    return `[${value.map(canonical).join(",")}]`;
+		  }
+		  return `{${Object.entries(value).filter(([, item]) => item !== void 0).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(",")}}`;
+		}
+		function readerWebDavFingerprint(value) {
+		  const source = canonical(value);
+		  let left = 2166136261;
+		  let right = 2654435769;
+		  for (let index = 0; index < source.length; index += 1) {
+		    const code = source.charCodeAt(index);
+		    left = Math.imul(left ^ code, 16777619) >>> 0;
+		    right = Math.imul(right ^ code, 2246822507) >>> 0;
+		  }
+		  return `${left.toString(16).padStart(8, "0")}${right.toString(16).padStart(8, "0")}`;
+		}
+		function valueState(value) {
+		  return `value:${readerWebDavFingerprint(value)}`;
+		}
+		function remoteState(value) {
+		  if (!value) return MISSING_STATE;
+		  return value.deleted ? DELETED_STATE : valueState(value.value);
+		}
+		function normalizedRecordId(value) {
+		  const source = String(value ?? "").trim();
+		  if (!source || source.length > 240 || /[\u0000-\u001f]/.test(source)) {
+		    return "";
+		  }
+		  return source;
+		}
+		function normalizeReaderWebDavRemotePath(value) {
+		  const segments = String(value ?? "").trim().replace(/^\/+|\/+$/g, "").split("/").map((segment) => segment.trim());
+		  if (segments.length < 2 || segments.some((segment) => !segment || segment === "." || segment === ".." || segment.length > 80)) return "";
+		  return segments.join("/");
+		}
+		function normalizedEndpoint(value) {
+		  try {
+		    const url = new URL(String(value ?? "").trim());
+		    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) return "";
+		    url.pathname = `${url.pathname.replace(/\/+$/g, "")}/`;
+		    return url.href;
+		  } catch {
+		    return "";
+		  }
+		}
+		function createReaderWebDavCategorySelection(value = null) {
+		  const source = record(value);
+		  return Object.freeze(Object.fromEntries(READER_WEBDAV_CATEGORIES.map(
+		    (category) => [category, source ? source[category] === true : ["history", "bookmarks", "queue"].includes(category)]
+		  )));
+		}
+		function createReaderWebDavDefaultConfig() {
+		  return Object.freeze({
+		    endpoint: "https://dav.jianguoyun.com/dav/",
+		    username: "",
+		    password: "",
+		    remotePath: READER_WEBDAV_DEFAULT_REMOTE_PATH,
+		    categories: createReaderWebDavCategorySelection(),
+		    autoSyncEnabled: false,
+		    autoSyncIntervalMinutes: 60
+		  });
+		}
+		function normalizeReaderWebDavConfig(value) {
+		  const source = record(value);
+		  if (!source) return createReaderWebDavDefaultConfig();
+		  const interval = Number(source?.autoSyncIntervalMinutes);
+		  return Object.freeze({
+		    endpoint: normalizedEndpoint(source?.endpoint),
+		    username: String(source?.username ?? "").trim(),
+		    password: String(source?.password ?? ""),
+		    remotePath: normalizeReaderWebDavRemotePath(source.remotePath),
+		    categories: createReaderWebDavCategorySelection(source?.categories),
+		    autoSyncEnabled: source?.autoSyncEnabled === true,
+		    autoSyncIntervalMinutes: AUTO_SYNC_INTERVALS.has(interval) ? interval : 60
+		  });
+		}
+		function validateReaderWebDavConfig(value, options = {}) {
+		  const issues = [];
+		  if (!normalizedEndpoint(value.endpoint)) issues.push("WebDAV 地址必须是 HTTPS");
+		  if (!normalizeReaderWebDavRemotePath(value.remotePath)) {
+		    issues.push("远端路径必须包含目录和文件名");
+		  }
+		  if (options.requireCredentials !== false) {
+		    if (!value.username.trim()) issues.push("请填写 WebDAV 用户名");
+		    if (!value.password) issues.push("请填写 WebDAV 应用密码");
+		  }
+		  if (!READER_WEBDAV_CATEGORIES.some((category) => value.categories[category])) {
+		    issues.push("至少选择一种同步内容");
+		  }
+		  return Object.freeze(issues);
+		}
+		function normalizeRemoteRecord(value) {
+		  const source = record(value);
+		  if (!source) return null;
+		  const deleted = source.deleted === true;
+		  if (!deleted && !Object.hasOwn(source, "value")) return null;
+		  return Object.freeze({
+		    changedAt: timestamp(source.changedAt),
+		    writerId: String(source.writerId ?? ""),
+		    deleted,
+		    ...deleted ? {} : { value: source.value }
+		  });
+		}
+		function normalizeRemoteCategory(value) {
+		  const source = record(value);
+		  const rawRecords = record(source?.records);
+		  const records = {};
+		  for (const [rawId, rawValue] of Object.entries(rawRecords ?? {})) {
+		    const id = normalizedRecordId(rawId);
+		    const item = normalizeRemoteRecord(rawValue);
+		    if (id && item) records[id] = item;
+		  }
+		  return Object.freeze({ records: Object.freeze(records) });
+		}
+		function createReaderWebDavDocument(writerId, now = Date.now()) {
+		  return Object.freeze({
+		    format: READER_WEBDAV_FORMAT,
+		    schemaVersion: READER_WEBDAV_SCHEMA_VERSION,
+		    updatedAt: now,
+		    writerId,
+		    scopes: Object.freeze({})
+		  });
+		}
+		function normalizeReaderWebDavDocument(value) {
+		  const source = record(value);
+		  if (source?.format !== READER_WEBDAV_FORMAT || source.schemaVersion !== READER_WEBDAV_SCHEMA_VERSION) throw new Error("远端同步文件格式或版本不受支持");
+		  const rawScopes = record(source.scopes);
+		  if (!rawScopes) throw new Error("远端同步文件缺少 scopes");
+		  const scopes = {};
+		  for (const [rawScopeId, rawScope] of Object.entries(rawScopes)) {
+		    const scopeId = normalizedRecordId(rawScopeId);
+		    const scopeSource = record(rawScope);
+		    const rawCategories = record(scopeSource?.categories);
+		    if (!scopeId || !rawCategories) continue;
+		    const categories = {};
+		    for (const category of READER_WEBDAV_CATEGORIES) {
+		      if (Object.hasOwn(rawCategories, category)) {
+		        categories[category] = normalizeRemoteCategory(
+		          rawCategories[category]
+		        );
+		      }
+		    }
+		    scopes[scopeId] = Object.freeze({
+		      categories: Object.freeze(categories)
+		    });
+		  }
+		  return Object.freeze({
+		    format: READER_WEBDAV_FORMAT,
+		    schemaVersion: READER_WEBDAV_SCHEMA_VERSION,
+		    updatedAt: timestamp(source.updatedAt),
+		    writerId: String(source.writerId ?? ""),
+		    scopes: Object.freeze(scopes)
+		  });
+		}
+		function localRecords(value) {
+		  const result = /* @__PURE__ */ new Map();
+		  for (const item of value) {
+		    const id = normalizedRecordId(item.id);
+		    if (id) result.set(id, Object.freeze({ id, value: item.value }));
+		  }
+		  return result;
+		}
+		function reconcileReaderWebDavRecords(options) {
+		  const local = localRecords(options.local);
+		  const next = {
+		    ...options.remote
+		  };
+		  const ids = /* @__PURE__ */ new Set([
+		    ...local.keys(),
+		    ...Object.keys(options.remote),
+		    ...Object.keys(options.baseline ?? {})
+		  ]);
+		  let uploaded = 0;
+		  let imported = 0;
+		  let deleted = 0;
+		  let conflicts = 0;
+		  for (const id of ids) {
+		    const localItem = local.get(id);
+		    const remoteItem = options.remote[id];
+		    const localState = localItem ? valueState(localItem.value) : MISSING_STATE;
+		    const currentRemoteState = remoteState(remoteItem);
+		    const baselineState = options.baseline?.[id];
+		    let chosen;
+		    let mergedValue;
+		    if (baselineState === void 0) {
+		      if (!remoteItem) chosen = "local";
+		      else if (!localItem || remoteItem.deleted) chosen = "remote";
+		      else if (options.initialStrategy === "remote") chosen = "remote";
+		      else {
+		        chosen = "merged";
+		        mergedValue = options.mergeValues(localItem.value, remoteItem.value);
+		      }
+		    } else {
+		      const localChanged = localState !== baselineState;
+		      const remoteChanged = currentRemoteState !== baselineState;
+		      if (!localChanged) chosen = "remote";
+		      else if (!remoteChanged) chosen = "local";
+		      else if (localState === currentRemoteState) chosen = "remote";
+		      else if (localItem && remoteItem && !remoteItem.deleted) {
+		        chosen = "merged";
+		        mergedValue = options.mergeValues(localItem.value, remoteItem.value);
+		        conflicts += 1;
+		      } else {
+		        chosen = "remote";
+		        conflicts += 1;
+		      }
+		    }
+		    if (chosen === "remote") {
+		      if (currentRemoteState !== localState) imported += 1;
+		      if (!remoteItem && baselineState !== void 0) {
+		        next[id] = Object.freeze({
+		          changedAt: options.now,
+		          writerId: options.writerId,
+		          deleted: true
+		        });
+		        deleted += 1;
+		      }
+		      continue;
+		    }
+		    const value = chosen === "merged" ? mergedValue : localItem?.value;
+		    if (value === void 0 && !localItem) {
+		      next[id] = Object.freeze({
+		        changedAt: options.now,
+		        writerId: options.writerId,
+		        deleted: true
+		      });
+		      deleted += 1;
+		      uploaded += 1;
+		      continue;
+		    }
+		    if (remoteState(remoteItem) !== valueState(value)) {
+		      next[id] = Object.freeze({
+		        changedAt: options.now,
+		        writerId: options.writerId,
+		        deleted: false,
+		        value
+		      });
+		      uploaded += 1;
+		    }
+		    if (chosen === "merged" && valueState(value) !== localState) imported += 1;
+		  }
+		  const active = Object.freeze(Object.entries(next).filter(([, item]) => !item.deleted).map(([id, item]) => Object.freeze({ id, value: item.value })).sort((left, right) => left.id.localeCompare(right.id)));
+		  const baseline = Object.freeze(Object.fromEntries(Object.entries(next).map(
+		    ([id, item]) => [id, remoteState(item)]
+		  )));
+		  return Object.freeze({
+		    records: Object.freeze(next),
+		    active,
+		    baseline,
+		    changed: canonical(next) !== canonical(options.remote),
+		    uploaded,
+		    imported,
+		    deleted,
+		    conflicts
+		  });
+		}
+		function readerWebDavRuntimeScopeId(hostname, username) {
+		  const host = String(hostname ?? "").trim().toLowerCase();
+		  const user = String(username ?? "").trim().toLowerCase();
+		  if (!host) throw new Error("当前站点身份不可用");
+		  if (!user) throw new Error("当前登录账号尚未就绪，请稍后重试");
+		  return `site:${host}|account:${user}`;
+		}
+	}, "e8541345bc2fd21b445e0d3d89557e77967b225280b02a5627611a1b30cc1937");
 
 	/* Source: lite/src/translation/reader-translation-button.ts */
 	runtime.register("src/translation/reader-translation-button.js", function(module, exports, require) {
@@ -33738,6 +35369,12 @@
 		    }
 		    if (changed) this.#writeLocal(stored);
 		  }
+		  syncValue() {
+		    return this.#readLocal();
+		  }
+		  replaceExternal(value) {
+		    this.#writeLocal(normalizeStoredHistory(value));
+		  }
 		  async load(usernameValue, metrics2, signal, refresh = false) {
 		    if (signal.aborted) throw signal.reason;
 		    const accountUsername = username(usernameValue);
@@ -33970,7 +35607,7 @@
 		    });
 		  }
 		}
-	}, "c81e74957412840c603e380cf448a6caf5e9734bb8f27f5ce0f3a9532a5e31a5");
+	}, "55260f6679832076f15467457987a979c98f5035ddde56d21962552fc445d174");
 
 	/* Source: lite/src/user/reader-credit-account-adapter.ts */
 	runtime.register("src/user/reader-credit-account-adapter.js", function(module, exports, require) {

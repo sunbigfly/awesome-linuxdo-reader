@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.0.1
+// @version      1.1.0
 // @description  Core runtime modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.0.1 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.1.0 - main-lite-core
  * 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
  * Greasy Fork Library：可读、未压缩；由 TypeScript 源码确定性生成。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -72,7 +72,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.0.1",
+			sourceVersion: "1.1.0",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -110,7 +110,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.0.1") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.1.0") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -517,7 +517,10 @@
 		var import_reader_window_settings_form = require("../settings/reader-window-settings-form.js");
 		var import_reader_shortcut_settings_form = require("../settings/reader-shortcut-settings-form.js");
 		var import_reader_custom_site_settings_form = require("../settings/reader-custom-site-settings-form.js");
+		var import_reader_webdav_settings_form = require("../settings/reader-webdav-settings-form.js");
 		var import_browser_discourse_site_probe = require("../site/browser-discourse-site-probe.js");
+		var import_reader_webdav_coordinator = require("../sync/reader-webdav-coordinator.js");
+		var import_reader_webdav_category_ports = require("../sync/reader-webdav-category-ports.js");
 		var import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js");
 		var import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js");
 		var import_reader_appearance_settings_form = require("../settings/reader-appearance-settings-form.js");
@@ -4933,6 +4936,48 @@
 		          runtime.scope
 		        );
 		      }
+		      const webDavOptions = options.settings ? options.settings.webDav : void 0;
+		      if (webDavOptions && !settingsView) {
+		        runtime.destroy();
+		        throw new Error("WebDAV 设置需要启用唯一 Settings View");
+		      }
+		      if (settingsView && webDavOptions) {
+		        const coordinator = new import_reader_webdav_coordinator.ReaderWebDavCoordinator({
+		          client: webDavOptions.client,
+		          repository: webDavOptions.repository,
+		          categories: (0, import_reader_webdav_category_ports.createReaderWebDavCategoryPorts)({
+		            history: runtime.history,
+		            bookmarks: runtime.bookmarkController,
+		            queue: openQueue,
+		            preferences: {
+		              read: context.readPreferences,
+		              update: (patch) => {
+		                context.updatePreferences(patch);
+		              }
+		            },
+		            topicContext: runtime.threadContextState,
+		            customSites: webDavOptions.customSites,
+		            connectHistory: runtime.connectHistory
+		          }),
+		          hostname: () => options.runtime.document.location.hostname,
+		          username: () => (0, import_native_host_api.discourseNativeCurrentUsername)(
+		            options.runtime.host
+		          )
+		        });
+		        new import_reader_webdav_settings_form.ReaderWebDavSettingsForm({
+		          document: options.runtime.document,
+		          host: settingsView.panelHost("sync"),
+		          repository: webDavOptions.repository,
+		          coordinator,
+		          parentScope: runtime.scope
+		        });
+		        new import_reader_webdav_coordinator.ReaderWebDavAutoSync({
+		          repository: webDavOptions.repository,
+		          coordinator,
+		          visibilityState: () => options.runtime.document.visibilityState,
+		          parentScope: runtime.scope
+		        });
+		      }
 		      const notificationTrigger = shell.view.root.querySelector(".ldp-notifications-toggle");
 		      const historyTrigger = shell.view.root.querySelector(".ldp-history-toggle");
 		      const bookmarkTrigger = shell.view.root.querySelector(".ldp-bookmarks-toggle");
@@ -5199,7 +5244,7 @@
 		    }
 		  });
 		}
-	}, "0d1eec717ec3ee7743024a7728b01b8bb08087e2ab89e8642e2b43e65288535a");
+	}, "1f6c65d897fa3d924000b66581b292d6b4e50f17c8b7e7588225552643a9c44b");
 
 	/* Source: lite/src/app/reader-data-runtime.ts */
 	runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -8781,36 +8826,132 @@
 		    this.#assertActive();
 		    const scope = options.parentScope ? options.parentScope.child() : this.scope.child();
 		    const gate = new import_repeat_action_gate.RepeatActionGate();
-		    const block = (event, key, message) => {
-		      if (!options.enabled()) {
-		        gate.clear();
-		        return;
-		      }
-		      if (gate.confirm(key)) return;
+		    const handledEvents = /* @__PURE__ */ new WeakSet();
+		    const consume = (event) => {
 		      event.preventDefault();
 		      event.stopImmediatePropagation();
-		      options.notify?.(message);
 		    };
-		    scope.listen(options.document, "click", (event) => {
+		    const requiresConfirmation = (key, message) => {
+		      if (!options.enabled()) {
+		        gate.clear();
+		        return false;
+		      }
+		      if (gate.confirm(key)) return false;
+		      options.notify?.(message);
+		      return true;
+		    };
+		    const discardComposer = (event) => {
+		      consume(event);
+		      void this.discard().catch((error) => {
+		        this.#onError(error);
+		        options.notify?.("舍弃回复失败，请重试");
+		      });
+		    };
+		    const onClick = (event) => {
+		      if (handledEvents.has(event)) return;
 		      const target = event.target;
 		      const control = target?.closest(
 		        "#reply-control .toggle-save-and-close,#reply-control .discard-button"
 		      );
 		      if (!control) return;
-		      const discard = control.classList.contains("discard-button");
-		      block(
-		        event,
-		        discard ? "composer:discard" : "composer:close",
-		        discard ? "再点一次舍弃回复" : "再点一次关闭回复窗口"
-		      );
-		    }, true);
-		    scope.listen(options.document, "keydown", (event) => {
+		      handledEvents.add(event);
+		      const shouldDiscard = control.classList.contains("discard-button");
+		      if (requiresConfirmation(
+		        shouldDiscard ? "composer:discard" : "composer:close",
+		        shouldDiscard ? "再点一次舍弃回复" : "再点一次关闭回复窗口"
+		      )) {
+		        consume(event);
+		        return;
+		      }
+		      if (shouldDiscard) {
+		        discardComposer(event);
+		      }
+		    };
+		    const onKeyDown = (event) => {
+		      if (handledEvents.has(event)) return;
 		      const keyboard = event;
 		      if (keyboard.key !== "Escape" || keyboard.repeat || keyboard.defaultPrevented || !this.isOpen()) return;
-		      block(keyboard, "composer:escape", "再按一次 Esc 舍弃回复");
-		    }, true);
+		      handledEvents.add(event);
+		      if (requiresConfirmation("composer:escape", "再按一次 Esc 舍弃回复")) {
+		        consume(event);
+		        return;
+		      }
+		      discardComposer(event);
+		    };
+		    const captureTarget = options.document.defaultView ?? options.document;
+		    scope.listen(captureTarget, "click", onClick, true);
+		    scope.listen(captureTarget, "keydown", onKeyDown, true);
+		    if (captureTarget !== options.document) {
+		      scope.listen(options.document, "click", onClick, true);
+		      scope.listen(options.document, "keydown", onKeyDown, true);
+		    }
 		    scope.add(() => gate.clear());
 		    return scope;
+		  }
+		  async discard() {
+		    this.#assertActive();
+		    const composer = (0, import_value_record.valueRecord)(this.#host.lookup("service:composer"));
+		    const model = modelValue(composer, "model");
+		    if (!composer || !(0, import_value_record.valueRecord)(model)) {
+		      this.#session = null;
+		      return;
+		    }
+		    const destroyDraft = composer.destroyDraft;
+		    if (typeof destroyDraft !== "function") {
+		      throw new Error("Discourse composer.destroyDraft 尚未就绪");
+		    }
+		    const cleanupErrors = [];
+		    try {
+		      composer.skipAutoSave = true;
+		      try {
+		        const runloop = (0, import_value_record.valueRecord)(this.#host.lookupModule("@ember/runloop"));
+		        const cancel = runloop?.cancel;
+		        if (typeof cancel === "function" && composer._saveDraftDebounce) {
+		          cancel.call(runloop, composer._saveDraftDebounce);
+		        }
+		      } catch (error) {
+		        cleanupErrors.push(error);
+		      }
+		      await destroyDraft.call(composer);
+		      if (modelValue(composer, "model") === model) {
+		        const mutableModel = (0, import_value_record.valueRecord)(model);
+		        try {
+		          if (typeof mutableModel?.clearState === "function") {
+		            mutableModel.clearState.call(mutableModel);
+		          }
+		        } catch (error) {
+		          cleanupErrors.push(error);
+		        }
+		        try {
+		          if (typeof composer.close === "function") composer.close.call(composer);
+		        } catch (error) {
+		          cleanupErrors.push(error);
+		        }
+		        try {
+		          const appEvents = (0, import_value_record.valueRecord)(
+		            composer.appEvents ?? this.#host.lookup("service:app-events")
+		          );
+		          if (typeof appEvents?.trigger === "function") {
+		            appEvents.trigger.call(appEvents, "composer:cancelled");
+		          }
+		        } catch (error) {
+		          cleanupErrors.push(error);
+		        }
+		      }
+		      this.#session = null;
+		    } finally {
+		      try {
+		        composer.skipAutoSave = false;
+		      } catch (error) {
+		        cleanupErrors.push(error);
+		      }
+		    }
+		    if (cleanupErrors.length) {
+		      throw new AggregateError(
+		        cleanupErrors,
+		        "Discourse composer 舍弃后清理失败"
+		      );
+		    }
 		  }
 		  installSubmitGuard(options) {
 		    this.#assertActive();
@@ -9616,7 +9757,7 @@
 		    }
 		  }
 		}
-	}, "f64feca21c21e3e1fc56a0a3a2027cbcf72e64b92a9a176873a89f9176ed6424");
+	}, "1b64696e58ec2d365441f16b05d352cf1075ea687d1b3ea4731ecfb88249846b");
 
 	/* Source: lite/src/discourse/native-host-api.ts */
 	runtime.register("src/discourse/native-host-api.js", function(module, exports, require) {
@@ -9629,6 +9770,7 @@
 		  discourseAvatarTemplateUrl: () => discourseAvatarTemplateUrl,
 		  discourseNativeAppEventSubscription: () => discourseNativeAppEventSubscription,
 		  discourseNativeBoostsAvailable: () => discourseNativeBoostsAvailable,
+		  discourseNativeCurrentUserBindingAvailable: () => discourseNativeCurrentUserBindingAvailable,
 		  discourseNativeCurrentUsername: () => discourseNativeCurrentUsername,
 		  discourseNativeEmojiMenu: () => discourseNativeEmojiMenu,
 		  discourseNativeEmojiUrl: () => discourseNativeEmojiUrl,
@@ -10033,6 +10175,12 @@
 		    }
 		  }
 		  return null;
+		}
+		function discourseNativeCurrentUserBindingAvailable(host) {
+		  const currentUser = host.lookup("service:current-user");
+		  if (currentUser !== null && currentUser !== void 0) return true;
+		  const userModule = (0, import_value_record.objectRecord)(host.lookupModule("discourse/models/user"));
+		  return [(0, import_value_record.objectRecord)(userModule?.default), userModule].some((owner) => typeof owner?.current === "function");
 		}
 		function discourseNativeCurrentUsername(host) {
 		  return String(
@@ -10870,7 +11018,7 @@
 		    return this.#container;
 		  }
 		}
-	}, "6a144563ed115fc2941a75cdd90316f563f5f2d21c89100efc1cd02cbf925133");
+	}, "5f1e07b9622a2ea4bb65748b245455b0fc66feb5f9402ac5b70e44c851a455e5");
 
 	/* Source: lite/src/discourse/native-message-bus.ts */
 	runtime.register("src/discourse/native-message-bus.js", function(module, exports, require) {
@@ -17144,6 +17292,7 @@
 		  BrowserDiscourseNativeAjaxPort: () => BrowserDiscourseNativeAjaxPort,
 		  BrowserDiscourseNativeMutationTransport: () => BrowserDiscourseNativeMutationTransport,
 		  BrowserDiscourseNativeReadTransport: () => BrowserDiscourseNativeReadTransport,
+		  discourseNativeAjaxAvailable: () => discourseNativeAjaxAvailable,
 		  discourseNativeFailureResponse: () => discourseNativeFailureResponse
 		});
 		module.exports = __toCommonJS(discourse_native_read_transport_exports);
@@ -17280,6 +17429,14 @@
 		    ajax: owner.ajax
 		  };
 		}
+		function discourseNativeAjaxAvailable(host) {
+		  try {
+		    resolveNativeAjax(host);
+		    return true;
+		  } catch {
+		    return false;
+		  }
+		}
 		async function executeNativeAjax(resolved, origin, input) {
 		  if (input.signal.aborted) throw input.signal.reason;
 		  const path = nativePath(input.path, origin);
@@ -17368,7 +17525,7 @@
 		    });
 		  }
 		}
-	}, "c185cd06db5d389310f304f6a9abbde0e01f34b7724ce60434df39a3eb2a5294");
+	}, "639260c3705122828389fa4963778609726b551915b58b346de62b4ee0b270f6");
 
 	/* Source: lite/src/network/domain-request-gateway.ts */
 	runtime.register("src/network/domain-request-gateway.js", function(module, exports, require) {
@@ -29998,6 +30155,11 @@
 		    }, this.#maxViews);
 		    this.#persist();
 		  }
+		  replaceExternal(value) {
+		    this.#state = normalizedState(value, this.#maxViews);
+		    this.#persist();
+		    return this.#state;
+		  }
 		  async flush() {
 		    await this.#write;
 		  }
@@ -30024,7 +30186,7 @@
 		    }
 		  });
 		}
-	}, "e8390a5c9d6d43cb53c2ac77745281410c0f35343f50813b35848074518c394e");
+	}, "9f024429af2d4fe1570b1e820d3a65516eb5108af753cae8ad821c881298be94");
 
 	/* Source: lite/src/topic/reader-topic-context-surface.ts */
 	runtime.register("src/topic/reader-topic-context-surface.js", function(module, exports, require) {
@@ -39416,12 +39578,15 @@
 		});
 		module.exports = __toCommonJS(browser_userscript_environment_exports);
 		var import_native_host_api = require("../discourse/native-host-api.js");
+		var import_coordinated_request_client = require("../network/coordinated-request-client.js");
+		var import_discourse_native_read_transport = require("../network/discourse-native-read-transport.js");
 		var import_public_resource_request_adapter = require("../network/public-resource-request-adapter.js");
 		var import_reader_search = require("../search/reader-search.js");
 		var import_translation_request_adapter = require("../translation/translation-request-adapter.js");
 		var import_browser_share_surface = require("./browser-share-surface.js");
 		var import_browser_discourse_site_probe = require("../site/browser-discourse-site-probe.js");
 		var import_value_record = require("../kernel/value-record.js");
+		var import_reader_webdav_client = require("../sync/reader-webdav-client.js");
 		class BrowserUserscriptEnvironment {
 		  #userscriptGlobal;
 		  pageWindow;
@@ -39436,6 +39601,26 @@
 		    this.#userscriptGlobal = userscriptGlobal;
 		    this.pageWindow = pageWindow;
 		    this.discourseHost = new import_native_host_api.BrowserDiscourseHostApiPort({ pageWindow });
+		  }
+		  async waitForDiscourseRuntime(signal, options = {}) {
+		    const timeoutMs = Math.max(1, Math.floor(options.timeoutMs ?? 15e3));
+		    const pollIntervalMs = Math.max(
+		      1,
+		      Math.floor(options.pollIntervalMs ?? 50)
+		    );
+		    const now = options.now ?? Date.now;
+		    const delay = options.delay ?? import_coordinated_request_client.abortableDelay;
+		    const startedAt = now();
+		    while (!(0, import_discourse_native_read_transport.discourseNativeAjaxAvailable)(this.discourseHost) || !(0, import_native_host_api.discourseNativeCurrentUserBindingAvailable)(this.discourseHost)) {
+		      if (signal.aborted) throw signal.reason;
+		      const remaining = timeoutMs - (now() - startedAt);
+		      if (remaining <= 0) {
+		        throw new Error(
+		          "Discourse 原生 Ajax/current-user 在启动期限内未就绪"
+		        );
+		      }
+		      await delay(Math.min(pollIntervalMs, remaining), signal);
+		    }
 		  }
 		  createExternalHttp(options = {}) {
 		    const rawRequest = this.#userscriptGlobal.GM_xmlhttpRequest;
@@ -39455,6 +39640,14 @@
 		    }
 		    const request = (requestOptions) => rawRequest.call(this.#userscriptGlobal, requestOptions);
 		    return new import_browser_discourse_site_probe.BrowserDiscourseSiteProbe({ request });
+		  }
+		  createWebDavClient() {
+		    const rawRequest = this.#userscriptGlobal.GM_xmlhttpRequest;
+		    if (typeof rawRequest !== "function") {
+		      throw new Error("GM_xmlhttpRequest 不可用，无法访问 WebDAV");
+		    }
+		    const request = (requestOptions) => rawRequest.call(this.#userscriptGlobal, requestOptions);
+		    return new import_reader_webdav_client.ReaderWebDavClient({ request });
 		  }
 		  createPublicResourceHttp() {
 		    const page = (0, import_value_record.objectRecord)(this.pageWindow);
@@ -39648,7 +39841,7 @@
 		    };
 		  }
 		}
-	}, "7bdcda0587a262e67c40a5085fe400e0b91d1fdd5d15eda81b812fdc7e4ef1e9");
+	}, "6f3de165942d7bf43142e7f3b938030155c244dcf1c8514c80a5917e0fb3329a");
 
 	/* Source: lite/src/userscript/main-lite-bootstrap.ts */
 	runtime.register("src/userscript/main-lite-bootstrap.js", function(module, exports, require) {
@@ -39690,6 +39883,7 @@
 		var import_reader_custom_site_repository = require("../site/reader-custom-site-repository.js");
 		var import_reader_embedded_reload_coordinator = require("./reader-embedded-reload-coordinator.js");
 		var import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js");
+		var import_reader_webdav_config_repository = require("../sync/reader-webdav-config-repository.js");
 		const DEBUG_HANDLE_KEY = "__LDP_MAIN_LITE__";
 		const LEGACY_DEBUG_HANDLE_KEY = "__LDP_MIAN_LITE__";
 		const STYLE_ID = "ldp-mian-lite-styles";
@@ -39760,7 +39954,11 @@
 		  return Object.freeze({
 		    name: "reader-userscript-runtime",
 		    required: true,
-		    setup(scope, applicationContext) {
+		    async setup(scope, applicationContext) {
+		      const readiness = scope.abortController(
+		        new DOMException("main-lite runtime 启动已取消", "AbortError")
+		      );
+		      await environment.waitForDiscourseRuntime(readiness.signal);
 		      const initialPreferences = applicationContext.readPreferences();
 		      const replyTreePreferences = new import_reader_reply_tree_preferences.ReaderReplyTreePreferencesPreview(
 		        import_reader_reply_tree_preferences.readerPreferencesReplyTreeAdapter.read(initialPreferences),
@@ -40145,6 +40343,12 @@
 		        settings: {
 		          view: { brandName: "Awesome LinuxDo Reader" },
 		          sitesForm: customSites,
+		          ...customSites.webDav ? {
+		            webDav: {
+		              ...customSites.webDav,
+		              customSites: customSites.repository
+		            }
+		          } : {},
 		          aboutContent: {
 		            version: scriptVersion
 		          },
@@ -40360,13 +40564,26 @@
 		    return null;
 		  }
 		  if (existing) return existing;
+		  const valueStorage = environment.createValueStorage();
 		  const customSiteRepository = new import_reader_custom_site_repository.ReaderCustomSiteRepository({
-		    storage: environment.createValueStorage()
+		    storage: valueStorage
 		  });
 		  let customSiteProbe = null;
 		  try {
 		    customSiteProbe = environment.createDiscourseSiteProbe();
 		  } catch {
+		  }
+		  let webDav = null;
+		  if (valueStorage) {
+		    try {
+		      webDav = Object.freeze({
+		        client: environment.createWebDavClient(),
+		        repository: new import_reader_webdav_config_repository.ReaderWebDavConfigRepository({
+		          storage: valueStorage
+		        })
+		      });
+		    } catch {
+		    }
 		  }
 		  const preferences = (0, import_reader_preferences_schema.createReaderPreferencesRepository)({
 		    environment: {
@@ -40416,7 +40633,8 @@
 		        state,
 		        {
 		          repository: customSiteRepository,
-		          probe: customSiteProbe
+		          probe: customSiteProbe,
+		          webDav
 		        }
 		      )
 		    ]
@@ -40464,7 +40682,7 @@
 		  return handle;
 		}
 		const startMianLiteUserscript = startMainLiteUserscript;
-	}, "c5701b9f64d2285bdcd0d8e3195b5754c703fab62dc8a36b52a0159706d97eb1");
+	}, "c2921dabb9d9413f5b3b26a9430e39a91bf315255a671d32c89cd2c1b42a8a4e");
 
 	/* Source: lite/src/userscript/main-lite-entry.ts */
 	runtime.register("src/userscript/main-lite-entry.js", function(module, exports, require) {

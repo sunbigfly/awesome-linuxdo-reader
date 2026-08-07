@@ -1,12 +1,12 @@
 ---
 title: 隐私、权限与边界
-description: 理解 userscript 权限、LDC 只读数据、外部依赖、本地存储、请求脱敏和账号数据边界。
-feature_ids: ["MEDIA-014", "USER-006", "DATA-004", "DATA-005", "MONITOR-005", "TROUBLE-005"]
-source_anchors: ["lite/src/translation/reader-translation-controller.ts","lite/src/translation/translation-request-adapter.ts","lite/src/cache/response-repository.ts","lite/src/userscript/browser-userscript-environment.ts","lite/src/network/request-observer.ts","lite/userscript.meta.txt"]
+description: 理解 userscript 权限、WebDAV 凭据与同步边界、LDC 只读数据、外部依赖、本地存储和请求脱敏。
+feature_ids: ["MEDIA-014", "USER-006", "DATA-004", "DATA-005", "DATA-006", "MONITOR-005", "TROUBLE-005"]
+source_anchors: ["lite/src/translation/reader-translation-controller.ts","lite/src/translation/translation-request-adapter.ts","lite/src/cache/response-repository.ts","lite/src/userscript/browser-userscript-environment.ts","lite/src/network/request-observer.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-config-repository.ts","lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.0.1
+version: 1.1.0
 status: current
-last_verified: 2026-08-03
+last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 ---
 
@@ -18,16 +18,16 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 
 ## userscript 元数据
 
-当前 `1.0.1`：
+当前 `1.1.0`：
 
 | 字段 | 值 | 用途 |
 | --- | --- | --- |
 | `@match` | 21 个内置社区及 `https://*/*` | 允许内置站点和用户保存的自定义域名启动；其他站点会在业务初始化前退出 |
 | `@grant` | `GM_getValue`、`GM_setValue` | 保存设置、自定义站点和同账号最近一次 LDC 成功缓存 |
-| `@grant` | `GM_xmlhttpRequest` | 检测自定义站点、读取 LDC 只读账户摘要、获取允许的跨域公开资源，以及执行用户主动开启的正文翻译 |
+| `@grant` | `GM_xmlhttpRequest` | 检测自定义站点、读取 LDC 只读账户摘要、访问用户配置的 HTTPS WebDAV、获取允许的跨域公开资源，以及执行用户主动开启的正文翻译 |
 | `@grant` | `GM_getResourceText` | 读取发布版样式资源 |
 | `@grant` | `unsafeWindow` | 与当前 Discourse 页面运行时协作 |
-| `@connect` | `connect.linux.do`、`credit.linux.do`、翻译接口及 `*` | Connect、LDC 只读账户摘要、Google / Microsoft 翻译，以及用户输入域名的 Discourse 检测 |
+| `@connect` | `connect.linux.do`、`credit.linux.do`、翻译接口及 `*` | Connect、LDC 只读账户摘要、Google / Microsoft 翻译、用户输入域名的 Discourse 检测，以及用户主动配置的 WebDAV 服务 |
 | `@run-at` | `document-start` | 在 SPA 和页面初始化前建立必要边界 |
 
 安装时脚本管理器会展示权限。若未来新增 GM API 或跨域目标，项目必须同步更新源码、功能目录和本页。
@@ -47,6 +47,14 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 当前浏览器会保存设置、历史、主题快照、用户卡、消息分页、通用响应、最多 240 条正文译文以及部分头像/图片。存储按账号作用域和数据类型隔离、有最大容量和保留期。
 
 设置导出不包含历史、正文、API 响应、图片、Cookie 或账号凭据。
+
+## WebDAV 数据与凭据
+
+WebDAV 默认关闭，只有用户填写 HTTPS 地址、账号、应用密码并选择类别后才会访问远端。账号和应用密码只保存在 userscript 专属存储，不进入远端 JSON、设置导出、同步的“设置配置”类别或请求 URL。
+
+远端文件只保存所选类别的结构化记录、更新时间、写入设备标识和删除标记。帖子正文、图片、附件、翻译结果、Cookie、Authorization、WebDAV 密码、页面缓存与短期限流状态永不上传。收藏同步只交换阅读器的链接和定位信息，不直接修改原站收藏状态。
+
+远端文件受 WebDAV 服务商账号安全和存储政策约束。应使用独立的第三方应用密码；停用同步时可以关闭定时同步并清空本机凭据，但删除远端文件会影响其他设备，需在服务商侧单独确认。
 
 ## 原站数据
 

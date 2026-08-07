@@ -35,7 +35,7 @@ export default defineConfig({
       { text: '维护与排障', link: '/manage/data-and-cache' },
       { text: '功能索引', link: '/reference/feature-catalog' },
       {
-        text: 'v1.0.1',
+        text: 'v1.1.0',
         items: [
           { text: '更新记录', link: '/reference/changelog' },
           { text: '兼容性', link: '/reference/compatibility' },
@@ -92,7 +92,8 @@ export default defineConfig({
             { text: '12 · 性能设置', link: '/settings/performance' },
             { text: '13 · 日志记录', link: '/settings/request-data' },
             { text: '14 · 数据管理', link: '/settings/data-management' },
-            { text: '15 · 关于', link: '/settings/about' },
+            { text: '15 · WebDAV 同步', link: '/settings/webdav-sync' },
+            { text: '16 · 关于', link: '/settings/about' },
           ],
         },
         {

@@ -1,12 +1,12 @@
 ---
 title: 界面总览
 description: 认识宿主区、标题栏、阅读队列、阅读流、时间轴、工具面板和设置中心。
-feature_ids: ["CORE-002", "CORE-006", "READ-013", "MEDIA-014"]
-source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-header.ts","lite/src/translation/reader-translation-controller.ts","lite/src/shell/reader-shortcut-controller.ts"]
+feature_ids: ["CORE-002", "CORE-006", "READ-013", "MEDIA-014", "DATA-006"]
+source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-header.ts","lite/src/translation/reader-translation-controller.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/settings/reader-webdav-settings-form.ts"]
 since: 0.1.2
-version: 1.0.1
+version: 1.1.0
 status: current
-last_verified: 2026-08-07
+last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png", "/screenshots/guide-05-layout-settings-v1.0.0.png"]
 ---
 
@@ -22,7 +22,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png", "/screenshots/
 | 阅读流 | 主楼层、楼中楼、媒体和主题尾部操作 | 滚动、回复、互动、展开上下文 |
 | 时间轴 | 当前楼层、日期、总楼层与跳转位置 | 拖动或点击定位、回到顶部 |
 | 工具面板 | 七类消息、历史、收藏与回应 | 分类、检索、翻页、多选和回跳 |
-| 设置中心 | 三组、15 个面板 | 搜索、快捷方式、统一保存、个性化、性能、日志和数据管理 |
+| 设置中心 | 三组、16 个面板 | 搜索、快捷方式、统一保存、个性化、性能、日志、数据管理和 WebDAV 同步 |
 
 ## 标题栏
 
@@ -42,7 +42,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png", "/screenshots/
 
 ![设置中心中的布局设置和三种形态配置](/screenshots/guide-05-layout-settings-v1.0.0.png)
 
-设置中心包含用户信息、图片、字体、布局、浮窗、外观、动画与提示、阅读与导航、快捷方式、帖子与回复、适用站点、性能、日志记录、数据管理和关于 15 个面板。桌面端按三组排列，设置页顶部可搜索，存在草稿时底部可统一保存；明、暗、系统按钮只切换阅读器主题。
+设置中心包含用户信息、图片、字体、布局、浮窗、外观、动画与提示、阅读与导航、快捷方式、帖子与回复、适用站点、性能、日志记录、数据管理、WebDAV 同步和关于 16 个面板。桌面端按三组排列，设置页顶部可搜索，存在草稿时底部可统一保存；明、暗、系统按钮只切换阅读器主题。WebDAV 面板的连接、分类和定时策略独立保存，不进入“保存全部更改”的界面草稿。
 
 ## 键盘与无障碍
 
