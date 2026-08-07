@@ -49,8 +49,8 @@
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
-// @require      https://update.greasyfork.org/scripts/590254/1895781/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1895781#sha256=8e4a3f656f5aeb4a2177e5effb9f3b4febb9e867ba4adb374d19f92eb23ffc37
-// @require      https://update.greasyfork.org/scripts/590255/1895832/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1895832#sha256=781c3534a561e9761202fa008ea833782e6c044f04c75f11eb474f2862cef813
+// @require      https://update.greasyfork.org/scripts/590254/1895870/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1895870#sha256=4dc79dc5f86305b30c85f8cf68a5af22f742ba48fa54a9dc0774ffc4139b73c5
+// @require      https://update.greasyfork.org/scripts/590255/1895872/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1895872#sha256=9935f4e593c5e469bb7dd953a43c41f2e36e0ed6dac56c16c966860c1cc54919
 // ==/UserScript==
 
 (function () {

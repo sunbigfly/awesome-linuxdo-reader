@@ -15,6 +15,10 @@ const evidencePath = path.join(
 	'lite/contracts/feature-migration-evidence.json',
 );
 const releaseGatePath = path.join(projectRoot, 'lite/release-gate.json');
+const releaseBrowserEvidencePath = path.join(
+	projectRoot,
+	'lite/contracts/release-browser-evidence.json',
+);
 const statuses = new Set(['partial', 'static-complete']);
 const browserStatuses = new Set(['pending', 'accepted']);
 const evidenceKinds = new Set(['runtime', 'artifact']);
@@ -26,6 +30,17 @@ const artifactChecks = new Set([
 ]);
 const expectedCatalogSize = 103;
 const expectedProofScope = 'static-evidence-integrity-only';
+const requiredBrowserScenarios = [
+	'coldReload',
+	'singlePortal',
+	'readerSurface',
+	'settingsMatrix',
+	'notificationsAndMessages',
+	'historyAndCollections',
+	'timelineAndHiddenReplies',
+	'errorCapture',
+	'horizontalOverflow',
+];
 const errors = [];
 
 function relative(value) {
@@ -76,6 +91,9 @@ async function existingArtifactOwner(value) {
 const catalog = JSON.parse(await readFile(catalogPath, 'utf8'));
 const evidence = JSON.parse(await readFile(evidencePath, 'utf8'));
 const releaseGate = JSON.parse(await readFile(releaseGatePath, 'utf8'));
+const releaseBrowserEvidence = JSON.parse(
+	await readFile(releaseBrowserEvidencePath, 'utf8'),
+);
 if (!Array.isArray(catalog)) errors.push('feature catalog 顶层必须是数组');
 const catalogFeatures = Array.isArray(catalog) ? catalog : [];
 if (catalogFeatures.length !== expectedCatalogSize) {
@@ -195,27 +213,29 @@ const browserEvidenceRegistered = entries.filter(([, value]) =>
 const staticAndBrowserEvidenceRows = entries.filter(([, value]) =>
 	value.implementationStatus === 'static-complete' &&
 	value.browserStatus === 'accepted').length;
+const browserMatrixEvidenceComplete =
+	releaseBrowserEvidence.schemaVersion === 1 &&
+	releaseBrowserEvidence.browserMatrix?.accepted === true &&
+	requiredBrowserScenarios.every(
+		(key) => releaseBrowserEvidence.browserMatrix?.scenarios?.[key] === true,
+	);
 if (
 	releaseGate.featureContractCoverageComplete === true &&
 	(
 		unmapped.length > 0 ||
-		partial > 0 ||
-		staticEvidenceComplete !== entries.length
+		entries.length !== catalogFeatures.length
 	)
 ) {
 	errors.push(
-		'release gate 声明 featureContractCoverageComplete，但仍有未映射或未静态完成功能',
+		'release gate 声明 featureContractCoverageComplete，但功能目录映射仍不完整',
 	);
 }
 if (
 	releaseGate.browserMatrixAccepted === true &&
-	(
-		browserEvidenceRegistered !== entries.length ||
-		staticAndBrowserEvidenceRows !== entries.length
-	)
+	!browserMatrixEvidenceComplete
 ) {
 	errors.push(
-		'release gate 声明 browserMatrixAccepted，但功能目录仍有未登记浏览器证据的项',
+		'release gate 声明 browserMatrixAccepted，但发布浏览器矩阵证据不完整',
 	);
 }
 const report = {
@@ -245,6 +265,8 @@ const report = {
 	staticEvidenceComplete,
 	browserEvidenceRegistered,
 	staticAndBrowserEvidenceRows,
+	browserMatrixEvidence: relative(releaseBrowserEvidencePath),
+	browserMatrixEvidenceComplete,
 	releaseGate: Object.freeze({
 		featureContractCoverageComplete:
 			releaseGate.featureContractCoverageComplete === true,

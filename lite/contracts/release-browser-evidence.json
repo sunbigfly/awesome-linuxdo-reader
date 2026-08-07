@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "releaseVersion": "1.0.0",
+  "capturedAt": "2026-08-07",
+  "scope": "sanitized-browser-release-evidence",
+  "acceptanceLoader": {
+    "file": "work/v1.0.0-acceptance.user.js",
+    "sha256": "e2daa73f61ce3361b9e06b5404aee35f3e91a7c48f078b3c8ca44a4a69878d8b",
+    "userConfirmedEnabled": true,
+    "coldReloaded": true
+  },
+  "libraries": [
+    {
+      "name": "mian-lite-core",
+      "scriptId": 590254,
+      "versionId": 1895870,
+      "bytes": 1655882,
+      "sha256": "4dc79dc5f86305b30c85f8cf68a5af22f742ba48fa54a9dc0774ffc4139b73c5"
+    },
+    {
+      "name": "mian-lite-features",
+      "scriptId": 590255,
+      "versionId": 1895872,
+      "bytes": 1550448,
+      "sha256": "9935f4e593c5e469bb7dd953a43c41f2e36e0ed6dac56c16c966860c1cc54919"
+    }
+  ],
+  "browserMatrix": {
+    "accepted": true,
+    "site": "https://linux.do",
+    "routeClass": "topic-list-with-reader",
+    "scenarios": {
+      "coldReload": true,
+      "singlePortal": true,
+      "readerSurface": true,
+      "settingsMatrix": true,
+      "notificationsAndMessages": true,
+      "historyAndCollections": true,
+      "timelineAndHiddenReplies": true,
+      "errorCapture": true,
+      "horizontalOverflow": true
+    },
+    "settingsPages": 15,
+    "settingsTransitionsPassed": 15,
+    "capturedErrorCount": 0,
+    "horizontalOverflowPixels": 0
+  },
+  "performance": {
+    "accepted": true,
+    "cycles": 5,
+    "portalCounts": [1, 1, 1, 1, 1],
+    "shadowNodeSamples": [6458, 6458, 6458, 6458, 6458],
+    "heapUsedSamples": [81203251, 80822157, 81720689, 80766118, 79939515],
+    "traceCls": 0,
+    "programmaticRequests": 2,
+    "httpFailures": 0,
+    "http429": 0,
+    "duplicateRequestPaths": 0,
+    "note": "五轮代表交互后 portal 与 Shadow DOM 节点保持恒定，heap 无阶梯上涨。页面 Console 的连接关闭与宿主 NaN 诊断在旧公开版基线中同样存在，未归因到 Lite。"
+  },
+  "rollback": {
+    "accepted": true,
+    "loaderScriptId": 588185,
+    "loaderVersionId": 1895839,
+    "loaderSha256": "056b0d1abfe03ce6fc280fa50861108484101d74215609ff0b1a7c0fd7a2a9df",
+    "coreVersionId": 1895781,
+    "coreSha256": "8e4a3f656f5aeb4a2177e5effb9f3b4febb9e867ba4adb374d19f92eb23ffc37",
+    "featuresVersionId": 1895832,
+    "featuresSha256": "781c3534a561e9761202fa008ea833782e6c044f04c75f11eb474f2862cef813",
+    "browserBaselineAccepted": true,
+    "baselineInpMilliseconds": 131
+  },
+  "security": {
+    "privateVulnerabilityReporting": true,
+    "verifiedState": "Disable private vulnerability reporting"
+  }
+}

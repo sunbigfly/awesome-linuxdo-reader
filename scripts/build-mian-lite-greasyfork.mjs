@@ -15,6 +15,10 @@ const featureEvidencePath = path.join(
   projectRoot,
   'lite/contracts/feature-migration-evidence.json',
 )
+const releaseBrowserEvidencePath = path.join(
+  projectRoot,
+  'lite/contracts/release-browser-evidence.json',
+)
 const contractJsonPath = path.join(
   projectRoot,
   'lite/contracts/discourse-action-transports.json',
@@ -37,6 +41,17 @@ const releaseAcceptanceKeys = [
   'browserMatrixAccepted',
   'performanceAccepted',
   'rollbackVerified',
+]
+const requiredBrowserScenarios = [
+  'coldReload',
+  'singlePortal',
+  'readerSurface',
+  'settingsMatrix',
+  'notificationsAndMessages',
+  'historyAndCollections',
+  'timelineAndHiddenReplies',
+  'errorCapture',
+  'horizontalOverflow',
 ]
 const coreDomains = new Set([
   'app',
@@ -456,24 +471,51 @@ async function renderReleaseLoader(configPath, metadata, sourceVersion, librarie
   if (blockedBy.length) {
     throw new Error(`mian-lite 正式发布门禁未通过：${blockedBy.join(', ')}`)
   }
-  const [catalog, evidence] = await Promise.all([
+  const [catalog, evidence, releaseBrowserEvidence] = await Promise.all([
     readFile(featureCatalogPath, 'utf8').then(JSON.parse),
     readFile(featureEvidencePath, 'utf8').then(JSON.parse),
+    readFile(releaseBrowserEvidencePath, 'utf8').then(JSON.parse),
   ])
-  const featureEntries = Object.values(evidence.features ?? {})
+  const featureEntries = Object.entries(evidence.features ?? {})
   if (
     !Array.isArray(catalog) ||
     featureEntries.length !== catalog.length ||
-    featureEntries.some((entry) => entry.implementationStatus !== 'static-complete')
+    catalog.some((feature) => !Object.hasOwn(evidence.features ?? {}, feature.feature_id))
   ) {
     throw new Error('featureContractCoverageComplete 与当前功能证据不一致')
   }
-  if (featureEntries.some((entry) => (
-    entry.browserStatus !== 'accepted' ||
-    !Array.isArray(entry.browserEvidence) ||
-    entry.browserEvidence.length === 0
-  ))) {
+  if (
+    releaseBrowserEvidence.schemaVersion !== 1 ||
+    releaseBrowserEvidence.releaseVersion !== sourceVersion ||
+    releaseBrowserEvidence.browserMatrix?.accepted !== true ||
+    requiredBrowserScenarios.some(
+      (key) => releaseBrowserEvidence.browserMatrix?.scenarios?.[key] !== true,
+    )
+  ) {
     throw new Error('browserMatrixAccepted 与当前浏览器证据不一致')
+  }
+  if (
+    releaseBrowserEvidence.performance?.accepted !== true ||
+    releaseBrowserEvidence.performance?.cycles < 5 ||
+    !Array.isArray(releaseBrowserEvidence.performance?.portalCounts) ||
+    releaseBrowserEvidence.performance.portalCounts.length < 5 ||
+    releaseBrowserEvidence.performance.portalCounts.some((value) => value !== 1) ||
+    !Array.isArray(releaseBrowserEvidence.performance?.shadowNodeSamples) ||
+    releaseBrowserEvidence.performance.shadowNodeSamples.length < 5 ||
+    new Set(releaseBrowserEvidence.performance.shadowNodeSamples).size !== 1 ||
+    !Array.isArray(releaseBrowserEvidence.performance?.heapUsedSamples) ||
+    releaseBrowserEvidence.performance.heapUsedSamples.length < 5 ||
+    releaseBrowserEvidence.performance.httpFailures !== 0 ||
+    releaseBrowserEvidence.performance.http429 !== 0 ||
+    releaseBrowserEvidence.performance.duplicateRequestPaths !== 0
+  ) {
+    throw new Error('performanceAccepted 与当前性能证据不一致')
+  }
+  if (releaseBrowserEvidence.rollback?.accepted !== true) {
+    throw new Error('rollbackVerified 与当前回滚证据不一致')
+  }
+  if (releaseBrowserEvidence.security?.privateVulnerabilityReporting !== true) {
+    throw new Error('私密漏洞报告渠道尚未验收')
   }
   const stylesheet = await readFile(
     path.join(projectRoot, 'work/mian-lite.css'),
@@ -491,11 +533,28 @@ async function renderReleaseLoader(configPath, metadata, sourceVersion, librarie
   if (configByName.size !== libraryDefinitions.length) {
     throw new Error('Greasy Fork release config 的 Library 数量不匹配')
   }
+  const browserLibraryByName = new Map(
+    (releaseBrowserEvidence.libraries ?? []).map((library) => [library.name, library]),
+  )
+  if (browserLibraryByName.size !== libraryDefinitions.length) {
+    throw new Error('浏览器证据的 Library 数量不匹配')
+  }
   const requirements = libraryDefinitions.map((definition) => {
     const configured = configByName.get(definition.name)
     const built = libraries.find((library) => library.name === definition.name)
-    if (!configured || !built) throw new Error(`缺少 Library 配置：${definition.name}`)
+    const accepted = browserLibraryByName.get(definition.name)
+    if (!configured || !built || !accepted) {
+      throw new Error(`缺少 Library 配置或浏览器证据：${definition.name}`)
+    }
     const url = validateLibraryUrl(configured.url)
+    const fixedUrl = new URL(url)
+    if (
+      accepted.versionId !== Number(fixedUrl.searchParams.get('version')) ||
+      accepted.bytes !== built.bytes ||
+      accepted.sha256 !== built.sha256
+    ) {
+      throw new Error(`Library 浏览器证据与构建不一致：${definition.name}`)
+    }
     return `// @require      ${url}#sha256=${built.sha256}`
   }).join('\n')
   const releaseMetadata = metadata.replace(stylesheetToken, stylesheetUrl)

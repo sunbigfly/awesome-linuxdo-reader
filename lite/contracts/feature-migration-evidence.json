@@ -7,12 +7,16 @@
     "CORE-001": {
       "evidenceKind": "artifact",
       "implementationStatus": "partial",
-      "browserStatus": "pending",
+      "browserStatus": "accepted",
+      "browserEvidence": [
+        "lite/contracts/release-browser-evidence.json#browserMatrix"
+      ],
       "artifactOwners": [
         "lite/userscript.meta.txt",
         "scripts/build-mian-lite.mjs",
         "scripts/audit-mian-lite-userscript.mjs",
-        "docs/getting-started/installation.md"
+        "docs/getting-started/installation.md",
+        "lite/contracts/release-browser-evidence.json"
       ],
       "artifactChecks": [
         "mian-lite:check",
@@ -20,7 +24,7 @@
         "userscript:inspect",
         "loader:verify"
       ],
-      "note": "lite 元数据保持 GreasyFork 所需名称、命名空间、版本、匹配、权限、依赖和 document-start 边界；构建器禁止绕过 GreasyFork 的自定义 update/install/download URL。可执行 userscript audit 逐字段核对 main→Lite 元数据继承、Lite KaTeX CSS 增量、本地 loader 的依赖/路径，并可选核对已生成 local bundle 头，不再把台账字符串冒充 inspect/loader 证明。真实 GreasyFork 安装、管理器自动更新和更新后页面换代仍待浏览器/发布环境验收，因此保持 partial。"
+      "note": "lite 元数据保持 GreasyFork 所需名称、命名空间、版本、匹配、权限、依赖和 document-start 边界；构建器禁止绕过 GreasyFork 的自定义 update/install/download URL。可执行 userscript audit 逐字段核对 main→Lite 元数据继承、Lite KaTeX CSS 增量、本地 loader 的依赖/路径，并可选核对已生成 local bundle 头，不再把台账字符串冒充 inspect/loader 证明。2026-08-07 已安装固定到 Core 1895870 与 Features 1895872 的三文件验收 Loader，并完成真实 linux.do 冷重载和代表交互；正式主 Loader 的自动更新后页面换代仍需在发布后复核，因此 implementationStatus 保持 partial。"
     },
     "CORE-002": {
       "implementationStatus": "static-complete",
@@ -2146,19 +2150,23 @@
     },
     "TROUBLE-005": {
       "evidenceKind": "artifact",
-      "implementationStatus": "partial",
-      "browserStatus": "pending",
+      "implementationStatus": "static-complete",
+      "browserStatus": "accepted",
+      "browserEvidence": [
+        "lite/contracts/release-browser-evidence.json#security"
+      ],
       "artifactOwners": [
         "lite/userscript.meta.txt",
         "SECURITY.md",
         "docs/manage/troubleshooting.md",
-        "docs/manage/privacy-and-permissions.md"
+        "docs/manage/privacy-and-permissions.md",
+        "lite/contracts/release-browser-evidence.json"
       ],
       "artifactChecks": [
         "docs:verify",
         "userscript:inspect"
       ],
-      "note": "userscript metadata 提供普通问题 supportURL，故障排查、隐私边界和 SECURITY.md 明确禁止提交 Cookie、Authorization、私信/通知正文、完整响应和可识别账号数据，并列出最小脱敏复现证据。Security 页显示 Report a vulnerability 时优先使用私密入口；入口不存在时，公开 Issue 只能留下不含漏洞细节的私密联络请求，不能上传敏感材料。2026-08-03 外部只读核对未在仓库 Security 页看到私密报告按钮，因此真实私密渠道仍未验收，保持 partial。"
+      "note": "userscript metadata 提供普通问题 supportURL，故障排查、隐私边界和 SECURITY.md 明确禁止提交 Cookie、Authorization、私信/通知正文、完整响应和可识别账号数据，并列出最小脱敏复现证据。2026-08-07 已在 GitHub 仓库 Advanced Security 中开启 Private vulnerability reporting，并以设置页显示 Disable private vulnerability reporting 复核启用状态；普通问题继续走公开 supportURL，敏感漏洞使用真实私密渠道。"
     },
     "REF-001": {
       "evidenceKind": "artifact",
