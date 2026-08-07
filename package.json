@@ -21,7 +21,7 @@
     "mian-lite:css:check": "node scripts/build-mian-lite-css.mjs --check && npm run mian-lite:css:audit",
     "mian-lite:greasyfork:build": "node scripts/build-mian-lite-greasyfork.mjs",
     "mian-lite:greasyfork:check": "node scripts/build-mian-lite-greasyfork.mjs --check",
-    "mian-lite:greasyfork:release": "node scripts/build-mian-lite-greasyfork.mjs --config work/greasyfork-lite/release.config.json",
+    "mian-lite:greasyfork:release": "node scripts/build-mian-lite-greasyfork.mjs --config work/greasyfork-lite/published-libraries.json",
     "mian-lite:local-debug": "npm run mian-lite:css:build && node scripts/build-mian-lite.mjs --local-debug",
     "mian-lite:lint": "eslint eslint.config.mjs docs/.vitepress/config.mts scripts/audit-lite-native-requests.mjs scripts/audit-mian-lite-userscript.mjs scripts/audit-main-requests.mjs scripts/audit-main-runtime.mjs scripts/audit-mian-lite-css.mjs scripts/build-mian-lite-css.mjs scripts/build-mian-lite-greasyfork.mjs scripts/build-mian-lite.mjs scripts/test-mian-lite.mjs scripts/validate-docs.mjs \"lite/{src,tests}/**/*.ts\"",
     "mian-lite:test": "node scripts/test-mian-lite.mjs",

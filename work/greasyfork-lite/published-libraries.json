@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "sourceVersion": "1.0.0",
+  "publishedAt": "2026-08-07",
+  "provider": "greasyfork",
+  "libraries": [
+    {
+      "name": "mian-lite-core",
+      "scriptId": 590254,
+      "versionId": 1895781,
+      "url": "https://update.greasyfork.org/scripts/590254/1895781/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1895781",
+      "syncUrl": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/mian-lite-core.js",
+      "bytes": 1751933,
+      "sha256": "8e4a3f656f5aeb4a2177e5effb9f3b4febb9e867ba4adb374d19f92eb23ffc37"
+    },
+    {
+      "name": "mian-lite-features",
+      "scriptId": 590255,
+      "versionId": 1895782,
+      "url": "https://update.greasyfork.org/scripts/590255/1895782/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1895782",
+      "syncUrl": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/mian-lite-features.js",
+      "bytes": 1645404,
+      "sha256": "2e7a07a50e0d2b4bf336d3029438063ec12b12eebc848e35e67284147bbc9dfa"
+    }
+  ]
+}

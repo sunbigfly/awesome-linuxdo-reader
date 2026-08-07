@@ -12,6 +12,7 @@ userscript 超过 2 MB 的问题。构建不压缩、不混淆、不缩短标识
 | `libraries/mian-lite-features.js` | 媒体、互动、设置、用户、通知、监控与其他功能模块 |
 | `main-loader.template.user.js` | 等待填入固定 Greasy Fork Library URL 的薄主脚本模板 |
 | `build-manifest.json` | 模块数、编译器、字节数与 SHA-256 |
+| `published-libraries.json` | 已发布 Library 的真实 ID、固定 URL、同步 URL 与远端哈希 |
 | `release.config.example.json` | 本地发布配置示例 |
 
 两个 Library 只注册模块工厂，不会自行启动；全部 `@require` 到位后，薄主 Loader
@@ -41,8 +42,9 @@ npm run mian-lite:greasyfork:check
 
 3. 同步成功后，从每个 Library 的“代码”页取得带 `version` 查询参数的固定版本 URL；
    不使用指向最新版的可变 URL。
-4. 复制 `release.config.example.json` 为被 Git 忽略的 `release.config.json`，填入两个
-   固定 URL。
+4. 首次发布前可复制 `release.config.example.json` 为被 Git 忽略的
+   `release.config.json` 做草稿验证；远端发布成功并完成哈希核对后，把真实坐标写入
+   受版本控制的 `published-libraries.json`。
 5. 用第一阶段 Git 提交和当前 `work/mian-lite.css` SHA-256 填写
    `lite/release-gate.json.readerStylesUrl`。只有真实浏览器、性能和回滚证据均完成时，
    才把对应门禁改为 `true`。
@@ -57,8 +59,19 @@ npm run mian-lite:greasyfork:check
    `work/mian-lite.js`。主脚本更新成功后，再复核安装文件的版本、两个固定 `@require`
    和 CSS `@resource`。
 
-`release.config.json` 不进入 Git；其中没有凭据，但 Library ID 与版本应以远端真实结果
-为准，不能提交占位符冒充已发布状态。
+`npm run mian-lite:greasyfork:release` 只读取已核验的 `published-libraries.json`。
+`release.config.json` 不进入 Git；其中没有凭据，但只作为首次发布草稿，不能用占位符
+冒充已发布状态。
+
+### v1.0.0 已发布坐标
+
+| Library | Greasy Fork | 固定版本 |
+| --- | --- | --- |
+| Core | [590254](https://greasyfork.org/scripts/590254) | `1895781` |
+| Features | [590255](https://greasyfork.org/scripts/590255) | `1895782` |
+
+两项均已设置为从本仓库 `main` 分支的对应 Raw 文件进行 GitHub Webhook 同步；远端
+字节数和 SHA-256 已在浏览器同源环境复核，并记录于 `published-libraries.json`。
 
 ## 后续扩容
 
