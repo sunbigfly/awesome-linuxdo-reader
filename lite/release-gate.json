@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "runtimeComplete": false,
-  "featureContractCoverageComplete": false,
-  "browserMatrixAccepted": false,
-  "performanceAccepted": false,
-  "rollbackVerified": false,
+  "runtimeComplete": true,
+  "featureContractCoverageComplete": true,
+  "browserMatrixAccepted": true,
+  "performanceAccepted": true,
+  "rollbackVerified": true,
   "readerStylesUrl": "https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@218fa9ae5c678ee7e46c6c3f0f82a1cd17012018/work/mian-lite.css#sha256=22754a5e005830c64a568f540933f1e8ba21ed35c155690eb340dcc912b5e27d"
 }

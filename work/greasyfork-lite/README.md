@@ -68,7 +68,7 @@ npm run mian-lite:greasyfork:check
 | Library | Greasy Fork | 固定版本 |
 | --- | --- | --- |
 | Core | [590254](https://greasyfork.org/scripts/590254) | `1895781` |
-| Features | [590255](https://greasyfork.org/scripts/590255) | `1895782` |
+| Features | [590255](https://greasyfork.org/scripts/590255) | `1895832` |
 
 两项均已设置为从本仓库 `main` 分支的对应 Raw 文件进行 GitHub Webhook 同步；远端
 字节数和 SHA-256 已在浏览器同源环境复核，并记录于 `published-libraries.json`。

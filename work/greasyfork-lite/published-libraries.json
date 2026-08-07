@@ -16,11 +16,11 @@
     {
       "name": "mian-lite-features",
       "scriptId": 590255,
-      "versionId": 1895782,
-      "url": "https://update.greasyfork.org/scripts/590255/1895782/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1895782",
+      "versionId": 1895832,
+      "url": "https://update.greasyfork.org/scripts/590255/1895832/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1895832",
       "syncUrl": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/mian-lite-features.js",
-      "bytes": 1645404,
-      "sha256": "2e7a07a50e0d2b4bf336d3029438063ec12b12eebc848e35e67284147bbc9dfa"
+      "bytes": 1645478,
+      "sha256": "781c3534a561e9761202fa008ea833782e6c044f04c75f11eb474f2862cef813"
     }
   ]
 }
