@@ -1,28 +1,28 @@
 {
   "schemaVersion": 1,
-  "releaseVersion": "1.0.0",
+  "releaseVersion": "1.0.1",
   "capturedAt": "2026-08-07",
   "scope": "sanitized-browser-release-evidence",
   "acceptanceLoader": {
-    "file": "work/v1.0.0-acceptance.user.js",
-    "sha256": "e2daa73f61ce3361b9e06b5404aee35f3e91a7c48f078b3c8ca44a4a69878d8b",
+    "file": "work/v1.0.1-acceptance.user.js",
+    "sha256": "f42bdac236d9ae93af07b73685f69fe8e5adaa8cefb901c65db2c6008f083814",
     "userConfirmedEnabled": true,
     "coldReloaded": true
   },
   "libraries": [
     {
-      "name": "mian-lite-core",
+      "name": "main-lite-core",
       "scriptId": 590254,
-      "versionId": 1895870,
-      "bytes": 1655882,
-      "sha256": "4dc79dc5f86305b30c85f8cf68a5af22f742ba48fa54a9dc0774ffc4139b73c5"
+      "versionId": 1895921,
+      "bytes": 1656364,
+      "sha256": "60dc23ad1611ddd466d785d96c6f3472d3e52cb2ef78fbd487ec2a4465da53c0"
     },
     {
-      "name": "mian-lite-features",
+      "name": "main-lite-features",
       "scriptId": 590255,
-      "versionId": 1895872,
-      "bytes": 1550448,
-      "sha256": "9935f4e593c5e469bb7dd953a43c41f2e36e0ed6dac56c16c966860c1cc54919"
+      "versionId": 1895924,
+      "bytes": 1550452,
+      "sha256": "27910eb1c7bf064ba9899938ed87672ccd85ab63512a5f5e2fe79b53912529bb"
     }
   ],
   "publishedLoader": {
@@ -60,14 +60,14 @@
     "accepted": true,
     "cycles": 5,
     "portalCounts": [1, 1, 1, 1, 1],
-    "shadowNodeSamples": [6458, 6458, 6458, 6458, 6458],
-    "heapUsedSamples": [81203251, 80822157, 81720689, 80766118, 79939515],
+    "shadowNodeSamples": [5974, 5974, 5974, 5974, 5974],
+    "heapUsedSamples": [89321728, 90453565, 90089913, 89293346, 90614888],
     "traceCls": 0,
-    "programmaticRequests": 2,
+    "programmaticRequests": 8,
     "httpFailures": 0,
     "http429": 0,
     "duplicateRequestPaths": 0,
-    "note": "五轮代表交互后 portal 与 Shadow DOM 节点保持恒定，heap 无阶梯上涨。页面 Console 的连接关闭与宿主 NaN 诊断在旧公开版基线中同样存在，未归因到 Lite。"
+    "note": "五轮设置、通知、历史与收藏开关后 portal 与 Shadow DOM 节点保持恒定，heap 波动约 1.5%，无阶梯上涨；8 条成功的一方 XHR/fetch 路径无重复，5 条面板关闭触发的 user_actions 主动取消不计失败。页面 Console 的 GTM 连接关闭、Cloudflare 请求和宿主 NaN 日志均未归因到 Lite。"
   },
   "rollback": {
     "accepted": true,

@@ -1,26 +1,26 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "1.0.0",
+  "sourceVersion": "1.0.1",
   "publishedAt": "2026-08-07",
   "provider": "greasyfork",
   "libraries": [
     {
-      "name": "mian-lite-core",
+      "name": "main-lite-core",
       "scriptId": 590254,
-      "versionId": 1895870,
-      "url": "https://update.greasyfork.org/scripts/590254/1895870/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1895870",
-      "syncUrl": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/mian-lite-core.js",
-      "bytes": 1655882,
-      "sha256": "4dc79dc5f86305b30c85f8cf68a5af22f742ba48fa54a9dc0774ffc4139b73c5"
+      "versionId": 1895921,
+      "url": "https://update.greasyfork.org/scripts/590254/1895921/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1895921",
+      "syncUrl": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/main-lite-core.js",
+      "bytes": 1656364,
+      "sha256": "60dc23ad1611ddd466d785d96c6f3472d3e52cb2ef78fbd487ec2a4465da53c0"
     },
     {
-      "name": "mian-lite-features",
+      "name": "main-lite-features",
       "scriptId": 590255,
-      "versionId": 1895872,
-      "url": "https://update.greasyfork.org/scripts/590255/1895872/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1895872",
-      "syncUrl": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/mian-lite-features.js",
-      "bytes": 1550448,
-      "sha256": "9935f4e593c5e469bb7dd953a43c41f2e36e0ed6dac56c16c966860c1cc54919"
+      "versionId": 1895924,
+      "url": "https://update.greasyfork.org/scripts/590255/1895924/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1895924",
+      "syncUrl": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/main-lite-features.js",
+      "bytes": 1550452,
+      "sha256": "27910eb1c7bf064ba9899938ed87672ccd85ab63512a5f5e2fe79b53912529bb"
     }
   ]
 }
