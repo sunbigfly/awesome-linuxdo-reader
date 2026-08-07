@@ -114,25 +114,36 @@
 		throw new Error('[mian-lite] Library 版本不匹配');
 	}
 
+	var __defProp = Object.defineProperty;
+	var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+	var __getOwnPropNames = Object.getOwnPropertyNames;
+	var __hasOwnProp = Object.prototype.hasOwnProperty;
+	var __export = (target, all) => {
+	  for (var name in all)
+	    __defProp(target, name, { get: all[name], enumerable: true });
+	};
+	var __copyProps = (to, from, except, desc) => {
+	  if (from && typeof from === "object" || typeof from === "function") {
+	    for (let key of __getOwnPropNames(from))
+	      if (!__hasOwnProp.call(to, key) && key !== except)
+	        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+	  }
+	  return to;
+	};
+	var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+	var __create = Object.create;
+	var __getProtoOf = Object.getPrototypeOf;
+	var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+	  // If the importer is in node compatibility mode or this is not an ESM
+	  // file that has been converted to a CommonJS file using a Babel-
+	  // compatible transform (i.e. "__esModule" has not been set), then set
+	  // "default" to the CommonJS "module.exports" for node compatibility.
+	  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+	  mod
+	));
+
 	/* Source: lite/src/appearance/reader-appearance-style-controller.ts */
 	runtime.register("src/appearance/reader-appearance-style-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_appearance_style_controller_exports = {};
 		__export(reader_appearance_style_controller_exports, {
 		  ReaderAppearanceStyleController: () => ReaderAppearanceStyleController,
@@ -389,23 +400,6 @@
 
 	/* Source: lite/src/appearance/reader-theme-controller.ts */
 	runtime.register("src/appearance/reader-theme-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_theme_controller_exports = {};
 		__export(reader_theme_controller_exports, {
 		  ReaderThemeController: () => ReaderThemeController,
@@ -508,23 +502,6 @@
 
 	/* Source: lite/src/bookmark/discourse-bookmark-adapter.ts */
 	runtime.register("src/bookmark/discourse-bookmark-adapter.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var discourse_bookmark_adapter_exports = {};
 		__export(discourse_bookmark_adapter_exports, {
 		  BrowserDiscourseBookmarkNativeState: () => import_native_host_api.BrowserDiscourseBookmarkNativeState,
@@ -776,23 +753,6 @@
 
 	/* Source: lite/src/bookmark/reader-bookmark-controller.ts */
 	runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_bookmark_controller_exports = {};
 		__export(reader_bookmark_controller_exports, {
 		  ReaderBookmarkController: () => ReaderBookmarkController
@@ -1253,23 +1213,6 @@
 
 	/* Source: lite/src/bookmark/reader-bookmark-model.ts */
 	runtime.register("src/bookmark/reader-bookmark-model.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_bookmark_model_exports = {};
 		__export(reader_bookmark_model_exports, {
 		  READER_BOOKMARK_TAB_LABELS: () => READER_BOOKMARK_TAB_LABELS,
@@ -1439,23 +1382,6 @@
 
 	/* Source: lite/src/bookmark/reader-bookmark-panel-view.ts */
 	runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_bookmark_panel_view_exports = {};
 		__export(reader_bookmark_panel_view_exports, {
 		  ReaderBookmarkPanelView: () => ReaderBookmarkPanelView
@@ -1986,23 +1912,6 @@
 
 	/* Source: lite/src/collection/reader-header-popover-position.ts */
 	runtime.register("src/collection/reader-header-popover-position.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_header_popover_position_exports = {};
 		__export(reader_header_popover_position_exports, {
 		  ReaderHeaderPopoverPosition: () => ReaderHeaderPopoverPosition,
@@ -2138,23 +2047,6 @@
 
 	/* Source: lite/src/components/reader-control-tooltip.ts */
 	runtime.register("src/components/reader-control-tooltip.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_control_tooltip_exports = {};
 		__export(reader_control_tooltip_exports, {
 		  ReaderControlTooltip: () => ReaderControlTooltip
@@ -2443,23 +2335,6 @@
 
 	/* Source: lite/src/components/reader-icon.ts */
 	runtime.register("src/components/reader-icon.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_icon_exports = {};
 		__export(reader_icon_exports, {
 		  createReaderIcon: () => createReaderIcon,
@@ -2608,23 +2483,6 @@
 
 	/* Source: lite/src/components/reader-image-fallback.ts */
 	runtime.register("src/components/reader-image-fallback.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_image_fallback_exports = {};
 		__export(reader_image_fallback_exports, {
 		  installReaderSiteLogoFallback: () => installReaderSiteLogoFallback,
@@ -2680,23 +2538,6 @@
 
 	/* Source: lite/src/font/reader-font-style-controller.ts */
 	runtime.register("src/font/reader-font-style-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_font_style_controller_exports = {};
 		__export(reader_font_style_controller_exports, {
 		  READER_FONT_SETTINGS_DEFAULT: () => READER_FONT_SETTINGS_DEFAULT,
@@ -3217,23 +3058,6 @@
 
 	/* Source: lite/src/history/reader-history-model.ts */
 	runtime.register("src/history/reader-history-model.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_history_model_exports = {};
 		__export(reader_history_model_exports, {
 		  normalizeReaderHistoryAnchorPoint: () => normalizeReaderHistoryAnchorPoint,
@@ -3369,23 +3193,6 @@
 
 	/* Source: lite/src/history/reader-history-navigation-controller.ts */
 	runtime.register("src/history/reader-history-navigation-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_history_navigation_controller_exports = {};
 		__export(reader_history_navigation_controller_exports, {
 		  ReaderHistoryNavigationController: () => ReaderHistoryNavigationController
@@ -3668,23 +3475,6 @@
 
 	/* Source: lite/src/history/reader-history-navigation-view.ts */
 	runtime.register("src/history/reader-history-navigation-view.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_history_navigation_view_exports = {};
 		__export(reader_history_navigation_view_exports, {
 		  ReaderHistoryNavigationView: () => ReaderHistoryNavigationView
@@ -3906,23 +3696,6 @@
 
 	/* Source: lite/src/history/reader-history-panel-view.ts */
 	runtime.register("src/history/reader-history-panel-view.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_history_panel_view_exports = {};
 		__export(reader_history_panel_view_exports, {
 		  ReaderHistoryPanelView: () => ReaderHistoryPanelView
@@ -4421,23 +4194,6 @@
 
 	/* Source: lite/src/history/reader-history-repository.ts */
 	runtime.register("src/history/reader-history-repository.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_history_repository_exports = {};
 		__export(reader_history_repository_exports, {
 		  READER_HISTORY_MAX_AGE_MS: () => READER_HISTORY_MAX_AGE_MS,
@@ -4731,23 +4487,6 @@
 
 	/* Source: lite/src/media/reader-compact-image-viewer.ts */
 	runtime.register("src/media/reader-compact-image-viewer.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_compact_image_viewer_exports = {};
 		__export(reader_compact_image_viewer_exports, {
 		  ReaderCompactImageViewer: () => ReaderCompactImageViewer
@@ -5177,23 +4916,6 @@
 
 	/* Source: lite/src/media/reader-cooked-content-feature.ts */
 	runtime.register("src/media/reader-cooked-content-feature.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_cooked_content_feature_exports = {};
 		__export(reader_cooked_content_feature_exports, {
 		  ReaderCookedContentFeature: () => ReaderCookedContentFeature
@@ -5988,23 +5710,6 @@
 
 	/* Source: lite/src/media/reader-image-carousel-controller.ts */
 	runtime.register("src/media/reader-image-carousel-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_image_carousel_controller_exports = {};
 		__export(reader_image_carousel_controller_exports, {
 		  ReaderImageCarouselController: () => ReaderImageCarouselController
@@ -6177,23 +5882,6 @@
 
 	/* Source: lite/src/media/reader-image-download-service.ts */
 	runtime.register("src/media/reader-image-download-service.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_image_download_service_exports = {};
 		__export(reader_image_download_service_exports, {
 		  BrowserBlobDownloadPort: () => BrowserBlobDownloadPort,
@@ -6359,23 +6047,6 @@
 
 	/* Source: lite/src/media/reader-image-preferences.ts */
 	runtime.register("src/media/reader-image-preferences.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_image_preferences_exports = {};
 		__export(reader_image_preferences_exports, {
 		  DEFAULT_READER_IMAGE_PREFERENCES: () => DEFAULT_READER_IMAGE_PREFERENCES,
@@ -6509,23 +6180,6 @@
 
 	/* Source: lite/src/media/reader-image-resource-service.ts */
 	runtime.register("src/media/reader-image-resource-service.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_image_resource_service_exports = {};
 		__export(reader_image_resource_service_exports, {
 		  ReaderImageResourceService: () => ReaderImageResourceService
@@ -6700,23 +6354,6 @@
 
 	/* Source: lite/src/media/reader-image-retry-controller.ts */
 	runtime.register("src/media/reader-image-retry-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_image_retry_controller_exports = {};
 		__export(reader_image_retry_controller_exports, {
 		  ReaderImageRetryController: () => ReaderImageRetryController,
@@ -6922,23 +6559,6 @@
 
 	/* Source: lite/src/media/reader-image-scale.ts */
 	runtime.register("src/media/reader-image-scale.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_image_scale_exports = {};
 		__export(reader_image_scale_exports, {
 		  READER_IMAGE_SCALE_MAX: () => READER_IMAGE_SCALE_MAX,
@@ -7017,23 +6637,6 @@
 
 	/* Source: lite/src/media/reader-image-transform-controller.ts */
 	runtime.register("src/media/reader-image-transform-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_image_transform_controller_exports = {};
 		__export(reader_image_transform_controller_exports, {
 		  ReaderImageTransformController: () => ReaderImageTransformController
@@ -7274,23 +6877,6 @@
 
 	/* Source: lite/src/media/reader-katex-controller.ts */
 	runtime.register("src/media/reader-katex-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_katex_controller_exports = {};
 		__export(reader_katex_controller_exports, {
 		  ReaderKatexController: () => ReaderKatexController,
@@ -7450,23 +7036,6 @@
 
 	/* Source: lite/src/media/reader-lightbox-batch-controller.ts */
 	runtime.register("src/media/reader-lightbox-batch-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_lightbox_batch_controller_exports = {};
 		__export(reader_lightbox_batch_controller_exports, {
 		  ReaderLightboxBatchController: () => ReaderLightboxBatchController
@@ -7722,23 +7291,6 @@
 
 	/* Source: lite/src/media/reader-lightbox-batch-view.ts */
 	runtime.register("src/media/reader-lightbox-batch-view.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_lightbox_batch_view_exports = {};
 		__export(reader_lightbox_batch_view_exports, {
 		  ReaderLightboxBatchView: () => ReaderLightboxBatchView
@@ -8135,23 +7687,6 @@
 
 	/* Source: lite/src/media/reader-lightbox-comment-controller.ts */
 	runtime.register("src/media/reader-lightbox-comment-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_lightbox_comment_controller_exports = {};
 		__export(reader_lightbox_comment_controller_exports, {
 		  ReaderLightboxCommentController: () => ReaderLightboxCommentController
@@ -8252,23 +7787,6 @@
 
 	/* Source: lite/src/media/reader-lightbox-comment-form.ts */
 	runtime.register("src/media/reader-lightbox-comment-form.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_lightbox_comment_form_exports = {};
 		__export(reader_lightbox_comment_form_exports, {
 		  ReaderLightboxCommentForm: () => ReaderLightboxCommentForm
@@ -8386,23 +7904,6 @@
 
 	/* Source: lite/src/media/reader-lightbox-comment-model.ts */
 	runtime.register("src/media/reader-lightbox-comment-model.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_lightbox_comment_model_exports = {};
 		__export(reader_lightbox_comment_model_exports, {
 		  ReaderLightboxCookedCommentMatcher: () => ReaderLightboxCookedCommentMatcher,
@@ -8570,23 +8071,6 @@
 
 	/* Source: lite/src/media/reader-lightbox-comment-view.ts */
 	runtime.register("src/media/reader-lightbox-comment-view.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_lightbox_comment_view_exports = {};
 		__export(reader_lightbox_comment_view_exports, {
 		  ReaderLightboxCommentView: () => ReaderLightboxCommentView
@@ -8784,23 +8268,6 @@
 
 	/* Source: lite/src/media/reader-lightbox-controller.ts */
 	runtime.register("src/media/reader-lightbox-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_lightbox_controller_exports = {};
 		__export(reader_lightbox_controller_exports, {
 		  ReaderLightboxController: () => ReaderLightboxController
@@ -8954,23 +8421,6 @@
 
 	/* Source: lite/src/media/reader-lightbox-feature.ts */
 	runtime.register("src/media/reader-lightbox-feature.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_lightbox_feature_exports = {};
 		__export(reader_lightbox_feature_exports, {
 		  ReaderLightboxFeature: () => ReaderLightboxFeature
@@ -9371,23 +8821,6 @@
 
 	/* Source: lite/src/media/reader-lightbox-geometry-controller.ts */
 	runtime.register("src/media/reader-lightbox-geometry-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_lightbox_geometry_controller_exports = {};
 		__export(reader_lightbox_geometry_controller_exports, {
 		  ReaderLightboxGeometryController: () => ReaderLightboxGeometryController,
@@ -9664,23 +9097,6 @@
 
 	/* Source: lite/src/media/reader-lightbox-image-quote.ts */
 	runtime.register("src/media/reader-lightbox-image-quote.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_lightbox_image_quote_exports = {};
 		__export(reader_lightbox_image_quote_exports, {
 		  readerLightboxImageOrderMarker: () => readerLightboxImageOrderMarker,
@@ -9714,23 +9130,6 @@
 
 	/* Source: lite/src/media/reader-lightbox-source-description.ts */
 	runtime.register("src/media/reader-lightbox-source-description.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_lightbox_source_description_exports = {};
 		__export(reader_lightbox_source_description_exports, {
 		  readerLightboxSourceDescription: () => readerLightboxSourceDescription
@@ -9763,23 +9162,6 @@
 
 	/* Source: lite/src/media/reader-lightbox-view.ts */
 	runtime.register("src/media/reader-lightbox-view.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_lightbox_view_exports = {};
 		__export(reader_lightbox_view_exports, {
 		  ReaderLightboxView: () => ReaderLightboxView
@@ -10389,23 +9771,6 @@
 
 	/* Source: lite/src/media/reader-media-controller.ts */
 	runtime.register("src/media/reader-media-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_media_controller_exports = {};
 		__export(reader_media_controller_exports, {
 		  ReaderMediaController: () => ReaderMediaController,
@@ -10566,23 +9931,6 @@
 
 	/* Source: lite/src/media/reader-media-prefetch-service.ts */
 	runtime.register("src/media/reader-media-prefetch-service.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_media_prefetch_service_exports = {};
 		__export(reader_media_prefetch_service_exports, {
 		  ReaderMediaPrefetchService: () => ReaderMediaPrefetchService
@@ -10690,23 +10038,6 @@
 
 	/* Source: lite/src/media/reader-poll-feature.ts */
 	runtime.register("src/media/reader-poll-feature.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_poll_feature_exports = {};
 		__export(reader_poll_feature_exports, {
 		  ReaderPollController: () => ReaderPollController,
@@ -11101,23 +10432,6 @@
 
 	/* Source: lite/src/media/reader-poll-model.ts */
 	runtime.register("src/media/reader-poll-model.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_poll_model_exports = {};
 		__export(reader_poll_model_exports, {
 		  readerPollNames: () => readerPollNames,
@@ -11248,23 +10562,6 @@
 
 	/* Source: lite/src/media/reader-topic-image-index.ts */
 	runtime.register("src/media/reader-topic-image-index.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_topic_image_index_exports = {};
 		__export(reader_topic_image_index_exports, {
 		  ReaderTopicImageIndex: () => ReaderTopicImageIndex,
@@ -11539,23 +10836,6 @@
 
 	/* Source: lite/src/media/reader-topic-image-interaction.ts */
 	runtime.register("src/media/reader-topic-image-interaction.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_topic_image_interaction_exports = {};
 		__export(reader_topic_image_interaction_exports, {
 		  ReaderTopicImageInteraction: () => ReaderTopicImageInteraction
@@ -11702,23 +10982,6 @@
 
 	/* Source: lite/src/media/reader-topic-media-feature.ts */
 	runtime.register("src/media/reader-topic-media-feature.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_topic_media_feature_exports = {};
 		__export(reader_topic_media_feature_exports, {
 		  ReaderTopicMediaFeature: () => ReaderTopicMediaFeature
@@ -11869,23 +11132,6 @@
 
 	/* Source: lite/src/media/stored-zip.ts */
 	runtime.register("src/media/stored-zip.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var stored_zip_exports = {};
 		__export(stored_zip_exports, {
 		  createStoredZip: () => createStoredZip,
@@ -11991,23 +11237,6 @@
 
 	/* Source: lite/src/monitor/reader-resource-monitor.ts */
 	runtime.register("src/monitor/reader-resource-monitor.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_resource_monitor_exports = {};
 		__export(reader_resource_monitor_exports, {
 		  ReaderResourceMonitor: () => ReaderResourceMonitor
@@ -14355,23 +13584,6 @@
 
 	/* Source: lite/src/motion/reader-loading-animation-view.ts */
 	runtime.register("src/motion/reader-loading-animation-view.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_loading_animation_view_exports = {};
 		__export(reader_loading_animation_view_exports, {
 		  READER_LOADING_ANIMATION_DEFINITIONS: () => READER_LOADING_ANIMATION_DEFINITIONS,
@@ -14662,23 +13874,6 @@
 
 	/* Source: lite/src/notification/discourse-notification-adapter.ts */
 	runtime.register("src/notification/discourse-notification-adapter.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var discourse_notification_adapter_exports = {};
 		__export(discourse_notification_adapter_exports, {
 		  BrowserDiscourseNotificationNativeState: () => import_native_host_api.BrowserDiscourseNotificationNativeState,
@@ -15057,23 +14252,6 @@
 
 	/* Source: lite/src/notification/reader-notification-controller.ts */
 	runtime.register("src/notification/reader-notification-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_notification_controller_exports = {};
 		__export(reader_notification_controller_exports, {
 		  ReaderNotificationController: () => ReaderNotificationController,
@@ -15710,23 +14888,6 @@
 
 	/* Source: lite/src/notification/reader-notification-model.ts */
 	runtime.register("src/notification/reader-notification-model.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_notification_model_exports = {};
 		__export(reader_notification_model_exports, {
 		  READER_NOTIFICATION_GROUPS: () => READER_NOTIFICATION_GROUPS,
@@ -16204,23 +15365,6 @@
 
 	/* Source: lite/src/notification/reader-notification-panel-view.ts */
 	runtime.register("src/notification/reader-notification-panel-view.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_notification_panel_view_exports = {};
 		__export(reader_notification_panel_view_exports, {
 		  ReaderNotificationPanelView: () => ReaderNotificationPanelView
@@ -16595,23 +15739,6 @@
 
 	/* Source: lite/src/post/action-request-adapter.ts */
 	runtime.register("src/post/action-request-adapter.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var action_request_adapter_exports = {};
 		__export(action_request_adapter_exports, {
 		  ActionRequestAdapter: () => ActionRequestAdapter
@@ -16669,23 +15796,6 @@
 
 	/* Source: lite/src/post/bookmark-action-feature-commands.ts */
 	runtime.register("src/post/bookmark-action-feature-commands.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var bookmark_action_feature_commands_exports = {};
 		__export(bookmark_action_feature_commands_exports, {
 		  BookmarkActionFeatureCommands: () => BookmarkActionFeatureCommands
@@ -16752,23 +15862,6 @@
 
 	/* Source: lite/src/post/boost-copy-rule.ts */
 	runtime.register("src/post/boost-copy-rule.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var boost_copy_rule_exports = {};
 		__export(boost_copy_rule_exports, {
 		  BOOST_COPY_MAX_LENGTH: () => import_reader_boost_copy_settings2.BOOST_COPY_MAX_LENGTH,
@@ -16839,23 +15932,6 @@
 
 	/* Source: lite/src/post/boost-report-access-adapter.ts */
 	runtime.register("src/post/boost-report-access-adapter.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var boost_report_access_adapter_exports = {};
 		__export(boost_report_access_adapter_exports, {
 		  BoostReportAccessAdapter: () => BoostReportAccessAdapter
@@ -16912,23 +15988,6 @@
 
 	/* Source: lite/src/post/discourse-action-descriptors.ts */
 	runtime.register("src/post/discourse-action-descriptors.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var discourse_action_descriptors_exports = {};
 		__export(discourse_action_descriptors_exports, {
 		  DiscourseActionDescriptors: () => DiscourseActionDescriptors,
@@ -17438,33 +16497,6 @@
 
 	/* Source: lite/src/post/discourse-action-transport.ts */
 	runtime.register("src/post/discourse-action-transport.js", function(module, exports, require) {
-		var __create = Object.create;
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __getProtoOf = Object.getPrototypeOf;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-		  // If the importer is in node compatibility mode or this is not an ESM
-		  // file that has been converted to a CommonJS file using a Babel-
-		  // compatible transform (i.e. "__esModule" has not been set), then set
-		  // "default" to the CommonJS "module.exports" for node compatibility.
-		  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-		  mod
-		));
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var discourse_action_transport_exports = {};
 		__export(discourse_action_transport_exports, {
 		  BrowserDiscourseNativeActionPort: () => BrowserDiscourseNativeActionPort,
@@ -17844,23 +16876,6 @@
 
 	/* Source: lite/src/post/notification-action-feature-commands.ts */
 	runtime.register("src/post/notification-action-feature-commands.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var notification_action_feature_commands_exports = {};
 		__export(notification_action_feature_commands_exports, {
 		  NotificationActionFeatureCommands: () => NotificationActionFeatureCommands
@@ -17906,23 +16921,6 @@
 
 	/* Source: lite/src/post/post-action-capabilities.ts */
 	runtime.register("src/post/post-action-capabilities.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var post_action_capabilities_exports = {};
 		__export(post_action_capabilities_exports, {
 		  derivePostActionCapabilities: () => derivePostActionCapabilities,
@@ -17997,23 +16995,6 @@
 
 	/* Source: lite/src/post/post-action-controller.ts */
 	runtime.register("src/post/post-action-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var post_action_controller_exports = {};
 		__export(post_action_controller_exports, {
 		  PostActionController: () => PostActionController,
@@ -18246,23 +17227,6 @@
 
 	/* Source: lite/src/post/post-action-feature-commands.ts */
 	runtime.register("src/post/post-action-feature-commands.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var post_action_feature_commands_exports = {};
 		__export(post_action_feature_commands_exports, {
 		  PostActionFeatureCommands: () => PostActionFeatureCommands
@@ -18609,23 +17573,6 @@
 
 	/* Source: lite/src/post/post-action-manifest-controller.ts */
 	runtime.register("src/post/post-action-manifest-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var post_action_manifest_controller_exports = {};
 		__export(post_action_manifest_controller_exports, {
 		  PostActionManifestController: () => PostActionManifestController
@@ -18743,23 +17690,6 @@
 
 	/* Source: lite/src/post/reader-bookmark-action-coordinator.ts */
 	runtime.register("src/post/reader-bookmark-action-coordinator.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_bookmark_action_coordinator_exports = {};
 		__export(reader_bookmark_action_coordinator_exports, {
 		  ReaderBookmarkActionCoordinator: () => ReaderBookmarkActionCoordinator
@@ -18898,23 +17828,6 @@
 
 	/* Source: lite/src/post/reader-post-action-feature.ts */
 	runtime.register("src/post/reader-post-action-feature.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_post_action_feature_exports = {};
 		__export(reader_post_action_feature_exports, {
 		  DiscoursePostReactionCatalog: () => DiscoursePostReactionCatalog,
@@ -21570,23 +20483,6 @@
 
 	/* Source: lite/src/post/reader-post-management-action-coordinator.ts */
 	runtime.register("src/post/reader-post-management-action-coordinator.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_post_management_action_coordinator_exports = {};
 		__export(reader_post_management_action_coordinator_exports, {
 		  ReaderPostManagementActionCoordinator: () => ReaderPostManagementActionCoordinator
@@ -21769,23 +20665,6 @@
 
 	/* Source: lite/src/post/reader-selection-quote-feature.ts */
 	runtime.register("src/post/reader-selection-quote-feature.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_selection_quote_feature_exports = {};
 		__export(reader_selection_quote_feature_exports, {
 		  ReaderSelectionQuoteFeature: () => ReaderSelectionQuoteFeature,
@@ -22304,23 +21183,6 @@
 
 	/* Source: lite/src/post/reader-share-action-coordinator.ts */
 	runtime.register("src/post/reader-share-action-coordinator.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_share_action_coordinator_exports = {};
 		__export(reader_share_action_coordinator_exports, {
 		  ReaderShareActionCoordinator: () => ReaderShareActionCoordinator
@@ -22418,23 +21280,6 @@
 
 	/* Source: lite/src/post/reader-topic-action-rail.ts */
 	runtime.register("src/post/reader-topic-action-rail.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_topic_action_rail_exports = {};
 		__export(reader_topic_action_rail_exports, {
 		  DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES: () => DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES,
@@ -22892,23 +21737,6 @@
 
 	/* Source: lite/src/post/reader-topic-notification-coordinator.ts */
 	runtime.register("src/post/reader-topic-notification-coordinator.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_topic_notification_coordinator_exports = {};
 		__export(reader_topic_notification_coordinator_exports, {
 		  READER_TOPIC_NOTIFICATION_LEVELS: () => READER_TOPIC_NOTIFICATION_LEVELS,
@@ -23010,23 +21838,6 @@
 
 	/* Source: lite/src/post/reader-topic-shared-issue-coordinator.ts */
 	runtime.register("src/post/reader-topic-shared-issue-coordinator.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_topic_shared_issue_coordinator_exports = {};
 		__export(reader_topic_shared_issue_coordinator_exports, {
 		  ReaderTopicSharedIssueCoordinator: () => ReaderTopicSharedIssueCoordinator
@@ -23143,23 +21954,6 @@
 
 	/* Source: lite/src/post/topic-action-feature-commands.ts */
 	runtime.register("src/post/topic-action-feature-commands.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var topic_action_feature_commands_exports = {};
 		__export(topic_action_feature_commands_exports, {
 		  TopicActionFeatureCommands: () => TopicActionFeatureCommands
@@ -23312,23 +22106,6 @@
 
 	/* Source: lite/src/post/topic-post-action-adapter.ts */
 	runtime.register("src/post/topic-post-action-adapter.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var topic_post_action_adapter_exports = {};
 		__export(topic_post_action_adapter_exports, {
 		  TopicPostActionAdapter: () => TopicPostActionAdapter
@@ -23449,23 +22226,6 @@
 
 	/* Source: lite/src/post/user-action-feature-commands.ts */
 	runtime.register("src/post/user-action-feature-commands.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var user_action_feature_commands_exports = {};
 		__export(user_action_feature_commands_exports, {
 		  UserActionFeatureCommands: () => UserActionFeatureCommands
@@ -23576,23 +22336,6 @@
 
 	/* Source: lite/src/queue/reader-open-queue-session.ts */
 	runtime.register("src/queue/reader-open-queue-session.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_open_queue_session_exports = {};
 		__export(reader_open_queue_session_exports, {
 		  READER_QUEUE_STORAGE_KEY: () => READER_QUEUE_STORAGE_KEY,
@@ -24985,23 +23728,6 @@
 
 	/* Source: lite/src/reading/read-state-controller.ts */
 	runtime.register("src/reading/read-state-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var read_state_controller_exports = {};
 		__export(read_state_controller_exports, {
 		  ReadStateController: () => ReadStateController,
@@ -25386,23 +24112,6 @@
 
 	/* Source: lite/src/reading/read-state-coordination.ts */
 	runtime.register("src/reading/read-state-coordination.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var read_state_coordination_exports = {};
 		__export(read_state_coordination_exports, {
 		  BroadcastReadStateChannel: () => BroadcastReadStateChannel,
@@ -25889,23 +24598,6 @@
 
 	/* Source: lite/src/reading/read-state-request-adapter.ts */
 	runtime.register("src/reading/read-state-request-adapter.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var read_state_request_adapter_exports = {};
 		__export(read_state_request_adapter_exports, {
 		  ReadStateRequestAdapter: () => ReadStateRequestAdapter
@@ -25965,23 +24657,6 @@
 
 	/* Source: lite/src/reading/read-viewport-adapter.ts */
 	runtime.register("src/reading/read-viewport-adapter.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var read_viewport_adapter_exports = {};
 		__export(read_viewport_adapter_exports, {
 		  ReadViewportAdapter: () => ReadViewportAdapter,
@@ -26170,23 +24845,6 @@
 
 	/* Source: lite/src/search/reader-search.ts */
 	runtime.register("src/search/reader-search.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_search_exports = {};
 		__export(reader_search_exports, {
 		  normalizeReaderSearchText: () => normalizeReaderSearchText,
@@ -26213,23 +24871,6 @@
 
 	/* Source: lite/src/settings/reader-about-settings-content.ts */
 	runtime.register("src/settings/reader-about-settings-content.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_about_settings_content_exports = {};
 		__export(reader_about_settings_content_exports, {
 		  READER_MANUAL_URL: () => READER_MANUAL_URL,
@@ -26458,23 +25099,6 @@
 
 	/* Source: lite/src/settings/reader-appearance-settings-form.ts */
 	runtime.register("src/settings/reader-appearance-settings-form.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_appearance_settings_form_exports = {};
 		__export(reader_appearance_settings_form_exports, {
 		  ReaderAppearanceSettingsForm: () => ReaderAppearanceSettingsForm
@@ -26910,23 +25534,6 @@
 
 	/* Source: lite/src/settings/reader-custom-site-settings-form.ts */
 	runtime.register("src/settings/reader-custom-site-settings-form.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_custom_site_settings_form_exports = {};
 		__export(reader_custom_site_settings_form_exports, {
 		  ReaderCustomSiteSettingsForm: () => ReaderCustomSiteSettingsForm
@@ -27140,23 +25747,6 @@
 
 	/* Source: lite/src/settings/reader-font-settings-form.ts */
 	runtime.register("src/settings/reader-font-settings-form.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_font_settings_form_exports = {};
 		__export(reader_font_settings_form_exports, {
 		  ReaderFontSettingsForm: () => ReaderFontSettingsForm
@@ -27839,23 +26429,6 @@
 
 	/* Source: lite/src/settings/reader-image-settings-form.ts */
 	runtime.register("src/settings/reader-image-settings-form.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_image_settings_form_exports = {};
 		__export(reader_image_settings_form_exports, {
 		  ReaderImageSettingsForm: () => ReaderImageSettingsForm
@@ -28258,23 +26831,6 @@
 
 	/* Source: lite/src/settings/reader-interaction-settings-form.ts */
 	runtime.register("src/settings/reader-interaction-settings-form.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_interaction_settings_form_exports = {};
 		__export(reader_interaction_settings_form_exports, {
 		  ReaderInteractionSettingsForm: () => ReaderInteractionSettingsForm
@@ -28849,23 +27405,6 @@
 
 	/* Source: lite/src/settings/reader-layout-settings-form.ts */
 	runtime.register("src/settings/reader-layout-settings-form.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_layout_settings_form_exports = {};
 		__export(reader_layout_settings_form_exports, {
 		  ReaderLayoutSettingsForm: () => ReaderLayoutSettingsForm
@@ -29154,23 +27693,6 @@
 
 	/* Source: lite/src/settings/reader-motion-settings-form.ts */
 	runtime.register("src/settings/reader-motion-settings-form.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_motion_settings_form_exports = {};
 		__export(reader_motion_settings_form_exports, {
 		  ReaderMotionSettingsForm: () => ReaderMotionSettingsForm,
@@ -29590,23 +28112,6 @@
 
 	/* Source: lite/src/settings/reader-numeric-settings-draft.ts */
 	runtime.register("src/settings/reader-numeric-settings-draft.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_numeric_settings_draft_exports = {};
 		__export(reader_numeric_settings_draft_exports, {
 		  ReaderNumericSettingsDraft: () => ReaderNumericSettingsDraft
@@ -29739,23 +28244,6 @@
 
 	/* Source: lite/src/settings/reader-object-settings-draft.ts */
 	runtime.register("src/settings/reader-object-settings-draft.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_object_settings_draft_exports = {};
 		__export(reader_object_settings_draft_exports, {
 		  ReaderObjectSettingsDraft: () => ReaderObjectSettingsDraft
@@ -29833,23 +28321,6 @@
 
 	/* Source: lite/src/settings/reader-performance-settings-form.ts */
 	runtime.register("src/settings/reader-performance-settings-form.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_performance_settings_form_exports = {};
 		__export(reader_performance_settings_form_exports, {
 		  ReaderPerformanceSettingsForm: () => ReaderPerformanceSettingsForm,
@@ -30196,23 +28667,6 @@
 
 	/* Source: lite/src/settings/reader-reading-settings-form.ts */
 	runtime.register("src/settings/reader-reading-settings-form.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_reading_settings_form_exports = {};
 		__export(reader_reading_settings_form_exports, {
 		  DEFAULT_READER_READING_SETTINGS: () => DEFAULT_READER_READING_SETTINGS,
@@ -30577,23 +29031,6 @@
 
 	/* Source: lite/src/settings/reader-settings-controller.ts */
 	runtime.register("src/settings/reader-settings-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_settings_controller_exports = {};
 		__export(reader_settings_controller_exports, {
 		  READER_SETTINGS_GROUPS: () => READER_SETTINGS_GROUPS,
@@ -31044,23 +29481,6 @@
 
 	/* Source: lite/src/settings/reader-settings-dom.ts */
 	runtime.register("src/settings/reader-settings-dom.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_settings_dom_exports = {};
 		__export(reader_settings_dom_exports, {
 		  settingsButton: () => settingsButton,
@@ -31191,23 +29611,6 @@
 
 	/* Source: lite/src/settings/reader-settings-field-interaction.ts */
 	runtime.register("src/settings/reader-settings-field-interaction.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_settings_field_interaction_exports = {};
 		__export(reader_settings_field_interaction_exports, {
 		  ReaderSettingsFieldInteraction: () => ReaderSettingsFieldInteraction,
@@ -31725,23 +30128,6 @@
 
 	/* Source: lite/src/settings/reader-settings-help-surface.ts */
 	runtime.register("src/settings/reader-settings-help-surface.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_settings_help_surface_exports = {};
 		__export(reader_settings_help_surface_exports, {
 		  ReaderSettingsHelpSurface: () => ReaderSettingsHelpSurface
@@ -31905,23 +30291,6 @@
 
 	/* Source: lite/src/settings/reader-settings-view.ts */
 	runtime.register("src/settings/reader-settings-view.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_settings_view_exports = {};
 		__export(reader_settings_view_exports, {
 		  ReaderSettingsView: () => ReaderSettingsView
@@ -32699,23 +31068,6 @@
 
 	/* Source: lite/src/settings/reader-shortcut-settings-form.ts */
 	runtime.register("src/settings/reader-shortcut-settings-form.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_shortcut_settings_form_exports = {};
 		__export(reader_shortcut_settings_form_exports, {
 		  ReaderShortcutSettingsForm: () => ReaderShortcutSettingsForm
@@ -32964,23 +31316,6 @@
 
 	/* Source: lite/src/settings/reader-theme-settings-control.ts */
 	runtime.register("src/settings/reader-theme-settings-control.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_theme_settings_control_exports = {};
 		__export(reader_theme_settings_control_exports, {
 		  ReaderThemeSettingsControl: () => ReaderThemeSettingsControl
@@ -33086,23 +31421,6 @@
 
 	/* Source: lite/src/settings/reader-window-settings-form.ts */
 	runtime.register("src/settings/reader-window-settings-form.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_window_settings_form_exports = {};
 		__export(reader_window_settings_form_exports, {
 		  ReaderWindowSettingsForm: () => ReaderWindowSettingsForm
@@ -33337,23 +31655,6 @@
 
 	/* Source: lite/src/site/browser-discourse-site-probe.ts */
 	runtime.register("src/site/browser-discourse-site-probe.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var browser_discourse_site_probe_exports = {};
 		__export(browser_discourse_site_probe_exports, {
 		  BrowserDiscourseSiteProbe: () => BrowserDiscourseSiteProbe,
@@ -33515,23 +31816,6 @@
 
 	/* Source: lite/src/site/reader-custom-site-repository.ts */
 	runtime.register("src/site/reader-custom-site-repository.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_custom_site_repository_exports = {};
 		__export(reader_custom_site_repository_exports, {
 		  READER_BUILTIN_DISCOURSE_HOSTS: () => READER_BUILTIN_DISCOURSE_HOSTS,
@@ -33699,23 +31983,6 @@
 
 	/* Source: lite/src/translation/reader-translation-button.ts */
 	runtime.register("src/translation/reader-translation-button.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_translation_button_exports = {};
 		__export(reader_translation_button_exports, {
 		  createReaderTranslationButton: () => createReaderTranslationButton
@@ -33769,23 +32036,6 @@
 
 	/* Source: lite/src/translation/reader-translation-controller.ts */
 	runtime.register("src/translation/reader-translation-controller.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_translation_controller_exports = {};
 		__export(reader_translation_controller_exports, {
 		  ReaderTranslationController: () => ReaderTranslationController
@@ -34104,23 +32354,6 @@
 
 	/* Source: lite/src/translation/reader-translation-feature.ts */
 	runtime.register("src/translation/reader-translation-feature.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_translation_feature_exports = {};
 		__export(reader_translation_feature_exports, {
 		  ReaderTranslationFeature: () => ReaderTranslationFeature
@@ -34181,23 +32414,6 @@
 
 	/* Source: lite/src/translation/translation-request-adapter.ts */
 	runtime.register("src/translation/translation-request-adapter.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var translation_request_adapter_exports = {};
 		__export(translation_request_adapter_exports, {
 		  BrowserUserscriptExternalHttpPort: () => BrowserUserscriptExternalHttpPort,
@@ -34526,23 +32742,6 @@
 
 	/* Source: lite/src/translation/translation-text.ts */
 	runtime.register("src/translation/translation-text.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var translation_text_exports = {};
 		__export(translation_text_exports, {
 		  READER_TRANSLATION_BLOCK_SELECTOR: () => READER_TRANSLATION_BLOCK_SELECTOR,
@@ -34613,23 +32812,6 @@
 
 	/* Source: lite/src/user/discourse-native-user-port.ts */
 	runtime.register("src/user/discourse-native-user-port.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var discourse_native_user_port_exports = {};
 		__export(discourse_native_user_port_exports, {
 		  BrowserDiscourseNativeUserPort: () => BrowserDiscourseNativeUserPort
@@ -35169,23 +33351,6 @@
 
 	/* Source: lite/src/user/reader-connect-trust-adapter.ts */
 	runtime.register("src/user/reader-connect-trust-adapter.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_connect_trust_adapter_exports = {};
 		__export(reader_connect_trust_adapter_exports, {
 		  ReaderConnectTrustAdapter: () => ReaderConnectTrustAdapter,
@@ -35809,23 +33974,6 @@
 
 	/* Source: lite/src/user/reader-credit-account-adapter.ts */
 	runtime.register("src/user/reader-credit-account-adapter.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_credit_account_adapter_exports = {};
 		__export(reader_credit_account_adapter_exports, {
 		  ReaderCreditAccountAdapter: () => ReaderCreditAccountAdapter
@@ -36005,23 +34153,6 @@
 
 	/* Source: lite/src/user/reader-credit-account-bridge.ts */
 	runtime.register("src/user/reader-credit-account-bridge.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_credit_account_bridge_exports = {};
 		__export(reader_credit_account_bridge_exports, {
 		  READER_CREDIT_BRIDGE_CACHE_KEY: () => READER_CREDIT_BRIDGE_CACHE_KEY,
@@ -36092,23 +34223,6 @@
 
 	/* Source: lite/src/user/reader-settings-user-view.ts */
 	runtime.register("src/user/reader-settings-user-view.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_settings_user_view_exports = {};
 		__export(reader_settings_user_view_exports, {
 		  ReaderSettingsUserView: () => ReaderSettingsUserView
@@ -37152,23 +35266,6 @@
 
 	/* Source: lite/src/user/reader-user-badge-icon.ts */
 	runtime.register("src/user/reader-user-badge-icon.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_user_badge_icon_exports = {};
 		__export(reader_user_badge_icon_exports, {
 		  createReaderUserBadgeIcon: () => createReaderUserBadgeIcon
@@ -37326,23 +35423,6 @@
 
 	/* Source: lite/src/user/reader-user-card-view.ts */
 	runtime.register("src/user/reader-user-card-view.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_user_card_view_exports = {};
 		__export(reader_user_card_view_exports, {
 		  ReaderUserCardView: () => ReaderUserCardView
@@ -39211,23 +37291,6 @@
 
 	/* Source: lite/src/user/reader-user-domain-session.ts */
 	runtime.register("src/user/reader-user-domain-session.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_user_domain_session_exports = {};
 		__export(reader_user_domain_session_exports, {
 		  ReaderUserDomainSession: () => ReaderUserDomainSession,
@@ -40091,23 +38154,6 @@
 
 	/* Source: lite/src/user/reader-user-endorsement-adapter.ts */
 	runtime.register("src/user/reader-user-endorsement-adapter.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_user_endorsement_adapter_exports = {};
 		__export(reader_user_endorsement_adapter_exports, {
 		  ReaderUserEndorsementAdapter: () => ReaderUserEndorsementAdapter
@@ -40192,23 +38238,6 @@
 
 	/* Source: lite/src/user/reader-user-profile-presentation.ts */
 	runtime.register("src/user/reader-user-profile-presentation.js", function(module, exports, require) {
-		var __defProp = Object.defineProperty;
-		var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-		var __getOwnPropNames = Object.getOwnPropertyNames;
-		var __hasOwnProp = Object.prototype.hasOwnProperty;
-		var __export = (target, all) => {
-		  for (var name in all)
-		    __defProp(target, name, { get: all[name], enumerable: true });
-		};
-		var __copyProps = (to, from, except, desc) => {
-		  if (from && typeof from === "object" || typeof from === "function") {
-		    for (let key of __getOwnPropNames(from))
-		      if (!__hasOwnProp.call(to, key) && key !== except)
-		        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-		  }
-		  return to;
-		};
-		var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 		var reader_user_profile_presentation_exports = {};
 		__export(reader_user_profile_presentation_exports, {
 		  appendReaderUserFlair: () => appendReaderUserFlair,

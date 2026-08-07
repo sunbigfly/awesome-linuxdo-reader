@@ -10,6 +10,11 @@ const projectRoot = path.resolve(scriptDirectory, '..')
 const sourceRoot = path.join(projectRoot, 'lite/src')
 const metadataPath = path.join(projectRoot, 'lite/userscript.meta.txt')
 const releaseGatePath = path.join(projectRoot, 'lite/release-gate.json')
+const featureCatalogPath = path.join(projectRoot, 'docs/public/feature-catalog.json')
+const featureEvidencePath = path.join(
+  projectRoot,
+  'lite/contracts/feature-migration-evidence.json',
+)
 const contractJsonPath = path.join(
   projectRoot,
   'lite/contracts/discourse-action-transports.json',
@@ -24,6 +29,7 @@ const entryModuleId = 'src/userscript/mian-lite-entry.js'
 const libraryMarker = '// __LDP_GREASYFORK_LIBRARY_REQUIREMENTS__'
 const stylesheetToken = '__LDP_READER_STYLES_URL__'
 const projectExecutableCeiling = 2_000_000
+const projectTotalExecutableCeiling = 3_300_000
 const greasyForkHardLimit = 2 * 1024 * 1024
 const releaseAcceptanceKeys = [
   'runtimeComplete',
@@ -136,7 +142,7 @@ function indent(value, prefix = '\t') {
     .join('\n')
 }
 
-function runtimeBootstrap(sourceVersion) {
+function runtimeBootstrap(sourceVersion, sharedHelpers) {
   return `
 \tconst root = globalThis;
 \tconst runtimeKey = ${JSON.stringify(runtimeKey)};
@@ -230,7 +236,35 @@ function runtimeBootstrap(sourceVersion) {
 \tif (runtime.schemaVersion !== 1 || runtime.sourceVersion !== ${JSON.stringify(sourceVersion)}) {
 \t\tthrow new Error('[mian-lite] Library 版本不匹配');
 \t}
+
+${indent(sharedHelpers)}
 `
+}
+
+function stripCommonJsHelpers(code, source) {
+  const ast = parse(code, { sourceType: 'script' })
+  const helpers = []
+  let helperEnd = 0
+  for (const node of ast.program.body) {
+    if (node.type !== 'VariableDeclaration') break
+    const names = node.declarations.map((declaration) =>
+      declaration.id.type === 'Identifier' ? declaration.id.name : '')
+    if (!names.length || names.some((name) => !name.startsWith('__'))) break
+    if (typeof node.start !== 'number' || typeof node.end !== 'number') {
+      throw new Error(`${source} 的 CommonJS helper 缺少源码位置`)
+    }
+    const declarationSource = code.slice(node.start, node.end)
+    for (const name of names) {
+      helpers.push(Object.freeze({ name, source: declarationSource }))
+    }
+    helperEnd = node.end
+  }
+  return Object.freeze({
+    code: helperEnd
+      ? code.slice(helperEnd).replace(/^\r?\n/, '')
+      : code,
+    helpers: Object.freeze(helpers),
+  })
 }
 
 async function compileModules() {
@@ -238,6 +272,8 @@ async function compileModules() {
     .filter((file) => file.endsWith('.ts'))
     .sort()
   const modules = []
+  const sharedHelperSources = new Map()
+  const sharedHelperOrder = []
   for (const file of sourceFiles) {
     const source = await readFile(file, 'utf8')
     const result = await transform(source, {
@@ -253,11 +289,25 @@ async function compileModules() {
     if (result.warnings.length) {
       throw new Error(`${file} 编译产生 ${result.warnings.length} 条警告`)
     }
+    const compiled = stripCommonJsHelpers(
+      result.code.trimEnd(),
+      slash(path.relative(projectRoot, file)),
+    )
+    for (const helper of compiled.helpers) {
+      const current = sharedHelperSources.get(helper.name)
+      if (current !== undefined && current !== helper.source) {
+        throw new Error(`esbuild helper ${helper.name} 在模块间不一致`)
+      }
+      if (current === undefined) {
+        sharedHelperSources.set(helper.name, helper.source)
+        sharedHelperOrder.push(helper.name)
+      }
+    }
     modules.push(Object.freeze({
       id: moduleIdForSource(file),
       source: slash(path.relative(projectRoot, file)),
       sourceHash: sha256(source),
-      code: result.code.trimEnd(),
+      code: compiled.code.trimEnd(),
     }))
   }
 
@@ -281,7 +331,12 @@ async function compileModules() {
       }
     }
   }
-  return modules
+  return Object.freeze({
+    modules: Object.freeze(modules),
+    sharedHelpers: sharedHelperOrder
+      .map((name) => sharedHelperSources.get(name))
+      .join('\n'),
+  })
 }
 
 function libraryForModule(module) {
@@ -301,7 +356,7 @@ function renderModule(module) {
   ].join('\n')
 }
 
-function renderLibrary(definition, modules, sourceVersion) {
+function renderLibrary(definition, modules, sourceVersion, sharedHelpers) {
   const body = modules.map(renderModule).join('\n\n')
   return [
     '// ==UserScript==',
@@ -326,7 +381,7 @@ function renderLibrary(definition, modules, sourceVersion) {
     ' */',
     '(function () {',
     "\t'use strict';",
-    runtimeBootstrap(sourceVersion).trimEnd(),
+    runtimeBootstrap(sourceVersion, sharedHelpers).trimEnd(),
     '',
     body,
     '',
@@ -401,6 +456,25 @@ async function renderReleaseLoader(configPath, metadata, sourceVersion, librarie
   if (blockedBy.length) {
     throw new Error(`mian-lite 正式发布门禁未通过：${blockedBy.join(', ')}`)
   }
+  const [catalog, evidence] = await Promise.all([
+    readFile(featureCatalogPath, 'utf8').then(JSON.parse),
+    readFile(featureEvidencePath, 'utf8').then(JSON.parse),
+  ])
+  const featureEntries = Object.values(evidence.features ?? {})
+  if (
+    !Array.isArray(catalog) ||
+    featureEntries.length !== catalog.length ||
+    featureEntries.some((entry) => entry.implementationStatus !== 'static-complete')
+  ) {
+    throw new Error('featureContractCoverageComplete 与当前功能证据不一致')
+  }
+  if (featureEntries.some((entry) => (
+    entry.browserStatus !== 'accepted' ||
+    !Array.isArray(entry.browserEvidence) ||
+    entry.browserEvidence.length === 0
+  ))) {
+    throw new Error('browserMatrixAccepted 与当前浏览器证据不一致')
+  }
   const stylesheet = await readFile(
     path.join(projectRoot, 'work/mian-lite.css'),
     'utf8',
@@ -452,21 +526,27 @@ async function emit(file, content, check) {
 const { check, config } = parseArguments(process.argv.slice(2))
 const metadata = await readFile(metadataPath, 'utf8')
 const sourceVersion = parseMetadataVersion(metadata)
-const modules = await compileModules()
+const { modules, sharedHelpers } = await compileModules()
 const libraries = []
+const generatedLibraries = []
 
 for (const definition of libraryDefinitions) {
   const libraryModules = modules.filter(
     (module) => libraryForModule(module) === definition,
   )
-  const content = renderLibrary(definition, libraryModules, sourceVersion)
+  const content = renderLibrary(
+    definition,
+    libraryModules,
+    sourceVersion,
+    sharedHelpers,
+  )
   parse(content, { sourceType: 'script' })
   const bytes = Buffer.byteLength(content)
   if (bytes > projectExecutableCeiling) {
     throw new Error(`${definition.name} 超过项目执行文件闸门：${bytes}`)
   }
   const outputPath = path.join(outputRoot, definition.file)
-  await emit(outputPath, content, check)
+  generatedLibraries.push(Object.freeze({ outputPath, content }))
   libraries.push(Object.freeze({
     name: definition.name,
     file: slash(path.relative(projectRoot, outputPath)),
@@ -479,6 +559,18 @@ for (const definition of libraryDefinitions) {
 
 const template = renderLoader(metadata, sourceVersion)
 parse(template, { sourceType: 'script' })
+const projectTotalExecutableBytes = libraries.reduce(
+  (total, library) => total + library.bytes,
+  Buffer.byteLength(template),
+)
+if (projectTotalExecutableBytes > projectTotalExecutableCeiling) {
+  throw new Error(
+    `Lite 项目自有可执行 JS 总量超过闸门：${projectTotalExecutableBytes}`,
+  )
+}
+for (const generated of generatedLibraries) {
+  await emit(generated.outputPath, generated.content, check)
+}
 await emit(templatePath, template, check)
 
 const exampleConfig = `${JSON.stringify({
@@ -497,14 +589,19 @@ const manifest = `${JSON.stringify({
   limits: {
     greasyForkHardLimit,
     projectExecutableCeiling,
+    projectTotalExecutableCeiling,
   },
   compiler: {
     name: 'esbuild',
     version: esbuildVersion,
-    transform: 'TypeScript modules to readable CommonJS factories',
+    transform: 'TypeScript modules to readable CommonJS factories with shared helpers',
     minified: false,
+    sharedHelperDeclarations: sharedHelpers
+      ? parse(sharedHelpers, { sourceType: 'script' }).program.body.length
+      : 0,
   },
   modules: modules.length,
+  projectTotalExecutableBytes,
   libraries,
   loaderTemplate: {
     file: slash(path.relative(projectRoot, templatePath)),
@@ -537,6 +634,7 @@ process.stdout.write(`${JSON.stringify({
   mode: check ? 'check' : 'build',
   sourceVersion,
   modules: modules.length,
+  projectTotalExecutableBytes,
   libraries,
   loaderTemplate: slash(path.relative(projectRoot, templatePath)),
   release,

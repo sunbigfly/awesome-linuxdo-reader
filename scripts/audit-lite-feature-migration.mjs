@@ -14,6 +14,7 @@ const evidencePath = path.join(
 	projectRoot,
 	'lite/contracts/feature-migration-evidence.json',
 );
+const releaseGatePath = path.join(projectRoot, 'lite/release-gate.json');
 const statuses = new Set(['partial', 'static-complete']);
 const browserStatuses = new Set(['pending', 'accepted']);
 const evidenceKinds = new Set(['runtime', 'artifact']);
@@ -74,6 +75,7 @@ async function existingArtifactOwner(value) {
 
 const catalog = JSON.parse(await readFile(catalogPath, 'utf8'));
 const evidence = JSON.parse(await readFile(evidencePath, 'utf8'));
+const releaseGate = JSON.parse(await readFile(releaseGatePath, 'utf8'));
 if (!Array.isArray(catalog)) errors.push('feature catalog 顶层必须是数组');
 const catalogFeatures = Array.isArray(catalog) ? catalog : [];
 if (catalogFeatures.length !== expectedCatalogSize) {
@@ -193,6 +195,29 @@ const browserEvidenceRegistered = entries.filter(([, value]) =>
 const staticAndBrowserEvidenceRows = entries.filter(([, value]) =>
 	value.implementationStatus === 'static-complete' &&
 	value.browserStatus === 'accepted').length;
+if (
+	releaseGate.featureContractCoverageComplete === true &&
+	(
+		unmapped.length > 0 ||
+		partial > 0 ||
+		staticEvidenceComplete !== entries.length
+	)
+) {
+	errors.push(
+		'release gate 声明 featureContractCoverageComplete，但仍有未映射或未静态完成功能',
+	);
+}
+if (
+	releaseGate.browserMatrixAccepted === true &&
+	(
+		browserEvidenceRegistered !== entries.length ||
+		staticAndBrowserEvidenceRows !== entries.length
+	)
+) {
+	errors.push(
+		'release gate 声明 browserMatrixAccepted，但功能目录仍有未登记浏览器证据的项',
+	);
+}
 const report = {
 	schemaVersion: 3,
 	evidenceSchemaVersion: evidence.schemaVersion,
@@ -220,6 +245,11 @@ const report = {
 	staticEvidenceComplete,
 	browserEvidenceRegistered,
 	staticAndBrowserEvidenceRows,
+	releaseGate: Object.freeze({
+		featureContractCoverageComplete:
+			releaseGate.featureContractCoverageComplete === true,
+		browserMatrixAccepted: releaseGate.browserMatrixAccepted === true,
+	}),
 	unmappedFeatureIds: unmapped,
 	errors,
 };

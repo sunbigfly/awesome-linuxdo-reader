@@ -14,7 +14,7 @@
     "audit:lite-userscript": "node scripts/audit-mian-lite-userscript.mjs",
     "audit:lite-userscript:local": "node scripts/audit-mian-lite-userscript.mjs --local-artifact",
     "userscript:build": "node scripts/build-userscript.mjs",
-    "mian-lite:build": "npm run mian-lite:verify && npm run docs:verify && npm run audit:main-runtime && npm run audit:main-requests -- --format json && node scripts/build-mian-lite.mjs",
+    "mian-lite:build": "npm run mian-lite:verify && npm run docs:verify && npm run audit:main-runtime && npm run audit:main-requests -- --format json && npm run mian-lite:greasyfork:build",
     "mian-lite:check": "npm run mian-lite:typecheck && npm run mian-lite:test && npm run audit:lite-native-requests && npm run audit:lite-features && npm run mian-lite:css:check && node scripts/build-mian-lite.mjs --check && npm run audit:lite-userscript && npm run mian-lite:greasyfork:check",
     "mian-lite:css:audit": "node scripts/audit-mian-lite-css.mjs",
     "mian-lite:css:build": "node scripts/build-mian-lite-css.mjs",

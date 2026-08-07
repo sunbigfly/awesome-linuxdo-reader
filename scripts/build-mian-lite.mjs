@@ -7,19 +7,10 @@ import { build, version as esbuildVersion } from 'esbuild';
 const SOURCE_PATH = 'lite/src/userscript/mian-lite-entry.ts';
 const BOOTSTRAP_PATH = 'lite/src/userscript/mian-lite-bootstrap.ts';
 const METADATA_PATH = 'lite/userscript.meta.txt';
-const RELEASE_GATE_PATH = 'lite/release-gate.json';
 const STYLESHEET_PATH = 'work/mian-lite.css';
-const OUTPUT_PATH = 'work/mian-lite.js';
 const DEBUG_OUTPUT_PATH = 'work/mian-lite.debug.js';
 const LOCAL_DEBUG_OUTPUT_PATH = 'work/mian-lite.local.js';
 const ADVISORY_OUTPUT_BYTES = 1_650_000;
-const REQUIRED_RELEASE_ACCEPTANCE = [
-	'runtimeComplete',
-	'featureContractCoverageComplete',
-	'browserMatrixAccepted',
-	'performanceAccepted',
-	'rollbackVerified',
-];
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, '..');
 const STYLE_RESOURCE_TOKEN = '__LDP_READER_STYLES_URL__';
@@ -33,34 +24,13 @@ function browserFileUrl(filePath) {
 		relativePath.split('/').map(encodeURIComponent).join('/');
 }
 
-function releaseStylesUrl(releaseGate, stylesheetSha256) {
-	const value = String(releaseGate.readerStylesUrl ?? '').trim();
-	const match = value.match(
-		/^https:\/\/cdn\.jsdelivr\.net\/gh\/sunbigfly\/awesome-linuxdo-reader@([0-9a-f]{40})\/work\/mian-lite\.css#sha256=([0-9a-f]{64})$/i,
-	);
-	if (!match) {
-		throw new Error(
-			`${RELEASE_GATE_PATH}.readerStylesUrl 必须是带 commit 与 sha256 的 ` +
-			'不可变 work/mian-lite.css jsDelivr URL',
-		);
-	}
-	if (match[2].toLowerCase() !== stylesheetSha256) {
-		throw new Error(
-			`${RELEASE_GATE_PATH}.readerStylesUrl 的 sha256 与当前 ` +
-			`${STYLESHEET_PATH} 不一致`,
-		);
-	}
-	return value;
-}
-
 function parseArgs(args) {
-	if (args.length === 0) return { mode: 'release' };
 	if (args.length === 1 && args[0] === '--check') return { mode: 'check' };
 	if (args.length === 1 && args[0] === '--debug') return { mode: 'debug' };
 	if (args.length === 1 && args[0] === '--local-debug') {
 		return { mode: 'local-debug' };
 	}
-	throw new Error('仅支持可选参数：--check、--debug 或 --local-debug');
+	throw new Error('必须指定 --check、--debug 或 --local-debug；正式发布使用 Greasy Fork 三文件构建');
 }
 
 const options = Object.freeze({
@@ -89,29 +59,12 @@ const stylesheet = await readFile(stylesheetFilePath, 'utf8');
 const stylesheetSha256 = createHash('sha256')
 	.update(stylesheet)
 	.digest('hex');
-const releaseGate = mode === 'release'
-	? JSON.parse(
-		await readFile(path.join(projectRoot, RELEASE_GATE_PATH), 'utf8'),
-	)
-	: null;
-if (releaseGate) {
-	const blockedBy = REQUIRED_RELEASE_ACCEPTANCE.filter(
-		(key) => releaseGate[key] !== true,
-	);
-	if (blockedBy.length) {
-		throw new Error(
-			`mian-lite 尚不可发布，release gate 未通过：${blockedBy.join(', ')}`,
-		);
-	}
-}
 if (!rawMetadata.includes(STYLE_RESOURCE_TOKEN)) {
 	throw new Error(
 		`${METADATA_PATH} 必须通过 ${STYLE_RESOURCE_TOKEN} 声明 Lite CSS`,
 	);
 }
-const readerStylesUrl = mode === 'release'
-	? releaseStylesUrl(releaseGate, stylesheetSha256)
-	: browserFileUrl(stylesheetFilePath);
+const readerStylesUrl = browserFileUrl(stylesheetFilePath);
 const metadata = rawMetadata.replace(STYLE_RESOURCE_TOKEN, readerStylesUrl);
 if (/work\/main\.css(?:[?#\s]|$)/i.test(metadata)) {
 	throw new Error(`${METADATA_PATH} 不得回退到 work/main.css`);
@@ -167,11 +120,7 @@ const banner =
 const artifact = `${metadata.trimEnd()}\n\n${banner}${outputFile.text}`;
 const bytes = Buffer.byteLength(artifact);
 
-if (mode === 'release') {
-	const outputFilePath = path.join(projectRoot, OUTPUT_PATH);
-	await mkdir(path.dirname(outputFilePath), { recursive: true });
-	await writeFile(outputFilePath, artifact);
-} else if (mode === 'debug') {
+if (mode === 'debug') {
 	const outputFilePath = path.join(projectRoot, DEBUG_OUTPUT_PATH);
 	await mkdir(path.dirname(outputFilePath), { recursive: true });
 	await writeFile(outputFilePath, artifact);
@@ -184,9 +133,7 @@ if (mode === 'release') {
 const outputPath =
 	mode === 'debug'
 		? DEBUG_OUTPUT_PATH
-		: mode === 'local-debug'
-			? LOCAL_DEBUG_OUTPUT_PATH
-			: OUTPUT_PATH;
+		: LOCAL_DEBUG_OUTPUT_PATH;
 process.stdout.write(
 	`${JSON.stringify({
 		schemaVersion: 1,
