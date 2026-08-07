@@ -50,12 +50,18 @@ const coreDomains = new Set([
 const libraryDefinitions = [
   Object.freeze({
     name: 'mian-lite-core',
+    title: 'Awesome LinuxDo Reader Lite Core Library',
+    titleZhCn: 'Awesome LinuxDo Reader Lite 核心库',
     file: 'libraries/mian-lite-core.js',
+    descriptionEn: 'Core runtime modules for Awesome LinuxDo Reader Lite.',
     description: '应用、数据、Discourse、Shell、主题、流与 userscript 运行核心',
   }),
   Object.freeze({
     name: 'mian-lite-features',
+    title: 'Awesome LinuxDo Reader Lite Features Library',
+    titleZhCn: 'Awesome LinuxDo Reader Lite 功能库',
     file: 'libraries/mian-lite-features.js',
+    descriptionEn: 'Feature modules for Awesome LinuxDo Reader Lite.',
     description: '媒体、互动、设置、用户、通知、监控与其他功能模块',
   }),
 ]
@@ -298,6 +304,21 @@ function renderModule(module) {
 function renderLibrary(definition, modules, sourceVersion) {
   const body = modules.map(renderModule).join('\n\n')
   return [
+    '// ==UserScript==',
+    `// @name         ${definition.title}`,
+    `// @name:zh-CN   ${definition.titleZhCn}`,
+    '// @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader',
+    `// @version      ${sourceVersion}`,
+    `// @description  ${definition.descriptionEn}`,
+    `// @description:zh-CN ${definition.description}`,
+    '// @author       sunbigfly',
+    '// @license      MIT',
+    '// @homepageURL  https://github.com/sunbigfly/awesome-linuxdo-reader',
+    '// @supportURL   https://github.com/sunbigfly/awesome-linuxdo-reader/issues',
+    '// @match        https://linux.do/*',
+    '// @grant        none',
+    '// ==/UserScript==',
+    '',
     `/* Awesome LinuxDo Reader Lite ${sourceVersion} - ${definition.name}`,
     ` * ${definition.description}`,
     ' * Greasy Fork Library：可读、未压缩；由 TypeScript 源码确定性生成。',

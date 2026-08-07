@@ -1,3 +1,18 @@
+// ==UserScript==
+// @name         Awesome LinuxDo Reader Lite Core Library
+// @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
+// @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
+// @version      1.0.0
+// @description  Core runtime modules for Awesome LinuxDo Reader Lite.
+// @description:zh-CN 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
+// @author       sunbigfly
+// @license      MIT
+// @homepageURL  https://github.com/sunbigfly/awesome-linuxdo-reader
+// @supportURL   https://github.com/sunbigfly/awesome-linuxdo-reader/issues
+// @match        https://linux.do/*
+// @grant        none
+// ==/UserScript==
+
 /* Awesome LinuxDo Reader Lite 1.0.0 - mian-lite-core
  * 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
  * Greasy Fork Library：可读、未压缩；由 TypeScript 源码确定性生成。

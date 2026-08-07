@@ -16,7 +16,9 @@ userscript 超过 2 MB 的问题。构建不压缩、不混淆、不缩短标识
 
 两个 Library 只注册模块工厂，不会自行启动；全部 `@require` 到位后，薄主 Loader
 才调用统一入口。跨 Library 依赖通过稳定模块路径解析，源文件路径和源码哈希保留
-在产物中，便于 Greasy Fork 用户审查。
+在产物中，便于 Greasy Fork 用户审查。每个 Library 都带独立的 Greasy Fork
+元数据头，但 Library 模式不会被用户直接安装；其中的 `@match` 仅满足平台首次创建
+时的元数据校验，实际运行站点仍完全由主 Loader 的元数据决定。
 
 ## 构建与校验
 
