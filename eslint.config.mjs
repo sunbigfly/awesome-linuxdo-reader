@@ -70,9 +70,9 @@ export default [
     files: [
       'eslint.config.mjs',
       'scripts/audit-main-runtime.mjs',
-      'scripts/build-mian-lite.mjs',
+      'scripts/build-main-lite.mjs',
       'scripts/build-userscript.mjs',
-      'scripts/test-mian-lite.mjs',
+      'scripts/test-main-lite.mjs',
       'docs/.vitepress/config.mts',
     ],
     languageOptions: {
@@ -93,7 +93,7 @@ export default [
     },
   },
   {
-    name: 'mian-lite-typescript',
+    name: 'main-lite-typescript',
     files: ['lite/src/**/*.ts', 'lite/tests/**/*.ts'],
     languageOptions: {
       parser: tseslint.parser,

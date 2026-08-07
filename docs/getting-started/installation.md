@@ -4,7 +4,7 @@ description: 安装 userscript、确认启用状态、理解更新方式并排�
 feature_ids: ["CORE-001", "CORE-007", "TROUBLE-001"]
 source_anchors: ["lite/userscript.meta.txt","lite/src/app/reader-application.ts"]
 since: 0.1.2
-version: 1.0.0
+version: 1.0.1
 status: current
 last_verified: 2026-08-07
 screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
@@ -79,14 +79,14 @@ Library 是正式脚本的一部分，无需单独安装。固定版本 URL 与�
 
 - 想立即检查时，在 Tampermonkey 面板中对该脚本执行“检查更新”。
 - 更新后刷新当前 Discourse 页面，已打开页面不会自动替换正在运行的旧代码。
-- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `1.0.0`。
+- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `1.0.1`。
 
 ## 三种保留版本
 
 | 版本 | 面向对象 | 更新来源 |
 | --- | --- | --- |
 | GitHub 原版 | 开发者与代码审查者 | `lite/src/`、`lite/styles/` 和构建脚本 |
-| 本地测试版 | 发布前真实页面调试 | 本机 `mian-lite.local.js`、`local-debug.user.js` 与 `v1.0.0-acceptance.user.js`，不会上传 |
+| 本地测试版 | 发布前真实页面调试 | 本机 `main-lite.local.js`、`local-debug.user.js` 与验收脚本，不会上传；旧 `mian-lite.local.js` 保留为兼容副本 |
 | Greasy Fork 上传版 | 普通用户 | 薄主 Loader 自动加载两个固定版本 Library |
 
 普通用户只安装 Greasy Fork 的 **Awesome LinuxDo Reader** 主脚本。页面上标注“库”的

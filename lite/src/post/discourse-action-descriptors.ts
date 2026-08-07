@@ -5,7 +5,7 @@ import type {
 	DiscourseNativeActionPayload,
 } from './discourse-action-transport.js';
 
-const preparedActionPayload = Symbol('mian-lite.discourse-action-payload');
+const preparedActionPayload = Symbol('main-lite.discourse-action-payload');
 
 export interface PreparedDiscourseActionPayload extends DiscourseNativeActionPayload {
 	readonly [preparedActionPayload]: string;

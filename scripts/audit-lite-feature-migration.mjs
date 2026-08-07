@@ -25,7 +25,7 @@ const evidenceKinds = new Set(['runtime', 'artifact']);
 const artifactChecks = new Set([
 	'docs:verify',
 	'loader:verify',
-	'mian-lite:check',
+	'main-lite:check',
 	'userscript:inspect',
 ]);
 const expectedCatalogSize = 103;

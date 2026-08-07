@@ -298,7 +298,7 @@
       "owners": [
         "lite/src/discourse/native-composer.ts",
         "lite/src/discourse/reader-native-composer-window.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "styles": [
         "45-composer.css"

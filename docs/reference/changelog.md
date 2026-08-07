@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.0.0
+version: 1.0.1
 status: current
 last_verified: 2026-08-07
 screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
@@ -15,6 +15,15 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.0.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.0.1 — `main-lite` 拼写兼容迁移
+
+核验日期：2026-08-07。
+
+- 源码入口、构建脚本、TypeScript 配置、npm 主命令以及 GitHub/Greasy Fork 生成物统一使用正确的 `main-lite` 拼写。
+- 原 `mian-lite:*` npm 命令、源码导入入口和生成物路径继续作为兼容别名；同类新旧发布文件由同一次确定性构建生成并要求逐字节一致，现有本地调试安装和 Greasy Fork Webhook 可平滑切换。
+- 页面内 1.0.0 已使用的 Portal、样式节点、嵌入刷新存储键和兼容性键保持不变；调试句柄同时暴露新旧名称，避免升级后出现重复界面或本地状态丢失。
+- 本次仅调整工程与发布命名，不改变用户界面和操作流程，因此继续复用 1.0.0 的真实 Windows Chrome 截图。
 
 ## 1.0.0 — Lite 模块化正式版
 

@@ -8,6 +8,8 @@
 !/eslint.config.mjs
 !/package.json
 !/package-lock.json
+!/tsconfig.main-lite.json
+!/tsconfig.main-lite-tests.json
 !/tsconfig.mian-lite.json
 !/tsconfig.mian-lite-tests.json
 
@@ -46,11 +48,17 @@
 !/scripts/audit-main-requests.mjs
 !/scripts/audit-lite-feature-migration.mjs
 !/scripts/audit-lite-native-requests.mjs
+!/scripts/audit-main-lite-css.mjs
+!/scripts/audit-main-lite-userscript.mjs
 !/scripts/audit-mian-lite-css.mjs
 !/scripts/audit-mian-lite-userscript.mjs
+!/scripts/build-main-lite.mjs
+!/scripts/build-main-lite-css.mjs
+!/scripts/build-main-lite-greasyfork.mjs
 !/scripts/build-mian-lite.mjs
 !/scripts/build-mian-lite-css.mjs
 !/scripts/build-mian-lite-greasyfork.mjs
+!/scripts/test-main-lite.mjs
 !/scripts/test-mian-lite.mjs
 
 !/lite/
@@ -79,8 +87,11 @@
 /work/*
 !/work/main.js
 !/work/main.css
+!/work/main-lite.js
+!/work/main-lite.css
 !/work/mian-lite.js
 !/work/mian-lite.css
+/work/main-lite.debug.js
 /work/mian-lite.debug.js
 !/work/greasyfork-lite/
 !/work/greasyfork-lite/**

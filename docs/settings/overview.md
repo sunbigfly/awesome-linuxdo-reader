@@ -4,7 +4,7 @@ description: 理解 15 个设置面板、分组导航、设置搜索、快捷方
 feature_ids: ["USER-005", "SET-001", "SET-020"]
 source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/reader-preferences-schema.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts"]
 since: 0.1.2
-version: 1.0.0
+version: 1.0.1
 status: current
 last_verified: 2026-08-07
 screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png"]

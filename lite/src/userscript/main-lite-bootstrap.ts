@@ -1,0 +1,1080 @@
+import {
+	createPreferencesStorageSyncStage,
+} from '../app/reader-application-stages.js';
+import type {
+	ReaderBrowserRuntime,
+} from '../app/reader-browser-runtime.js';
+import {
+	discourseNativeCurrentUsername,
+	discourseNativeBoostsAvailable,
+	discourseNativeIconRenderer,
+	discourseNativeSiteLogoUrl,
+	discourseNativeTheme,
+} from '../discourse/native-host-api.js';
+import type {
+	DiscourseComposerPostInput,
+	DiscourseComposerTopicInput,
+} from '../discourse/native-composer.js';
+import {
+	ReaderNativeComposerWindowController,
+} from '../discourse/reader-native-composer-window.js';
+import { resolveReaderIcon } from '../components/reader-icon.js';
+import type {
+	ReaderLightboxCommentPostInput,
+} from '../media/reader-lightbox-comment-model.js';
+import {
+	readerKatexStylesheet,
+} from '../media/reader-katex-controller.js';
+import {
+	readerPreferencesImageAdapter,
+} from '../media/reader-image-preferences.js';
+import type {
+	CanonicalActionPost,
+} from '../post/post-action-feature-commands.js';
+import {
+	readerPreferencesAppearanceAdapter,
+} from '../appearance/reader-appearance-style-controller.js';
+import {
+	readerPreferencesThemeAdapter,
+} from '../appearance/reader-theme-controller.js';
+import {
+	readerPreferencesFontAdapter,
+} from '../font/reader-font-style-controller.js';
+import {
+	readerPreferencesLayoutAdapter,
+} from '../layout/reader-layout-style-controller.js';
+import type {
+	ReaderApplication,
+	ReaderApplicationContext,
+	ReaderApplicationDiagnostic,
+	ReaderApplicationStage,
+	ReaderApplicationState,
+} from '../app/reader-application.js';
+import type {
+	LifecycleScope,
+} from '../kernel/lifecycle.js';
+import {
+	createReaderShellTemplate,
+	type ReaderShellTemplate,
+} from '../shell/reader-shell-template.js';
+import { ReaderSurfacePortal } from '../shell/reader-surface-portal.js';
+import {
+	readerPreferencesShortcutAdapter,
+} from '../shell/reader-shortcut-controller.js';
+import type {
+	ReaderWorkspaceMode,
+} from '../shell/reader-workspace.js';
+import {
+	EmbeddedHostTopicCardEnhancement,
+} from '../shell/embedded-host-topic-card-enhancement.js';
+import {
+	readerPreferencesMotionAdapter,
+} from '../settings/reader-motion-settings-form.js';
+import {
+	readerPreferencesBoostCopyAdapter,
+} from '../post/boost-copy-rule.js';
+import {
+	readerPreferencesTopicActionRailAdapter,
+} from '../post/reader-topic-action-rail.js';
+import {
+	readerPreferencesPerformanceSettingsAdapter,
+} from '../settings/reader-performance-settings-form.js';
+import {
+	readerPreferencesReadingSettingsAdapter,
+} from '../settings/reader-reading-settings-form.js';
+import {
+	ReaderPostReadViewportFeature,
+} from '../reading/read-viewport-adapter.js';
+import {
+	READER_PREFERENCES_STORAGE_KEY,
+	createReaderPreferencesConfigCodec,
+	createReaderPreferencesDefaults,
+	createReaderPreferencesRepository,
+	type ReaderPreferences,
+} from '../state/reader-preferences-schema.js';
+import {
+	createReaderPostPresentation,
+	createReaderPostReadStateFeature,
+	type ReaderPostPresentationPost,
+} from '../topic/reader-post-presentation.js';
+import {
+	translationTextFingerprint,
+} from '../translation/translation-text.js';
+import {
+	ReaderReplyTreePreferencesPreview,
+	readerPreferencesReplyTreeAdapter,
+} from '../topic/reader-reply-tree-preferences.js';
+import {
+	BrowserUserscriptEnvironment,
+} from './browser-userscript-environment.js';
+import {
+	createReaderUserscriptApplication,
+	createReaderUserscriptRuntimeStage,
+} from './reader-userscript-application.js';
+import {
+	readerUserscriptRouteKind,
+} from './reader-userscript-target-adapter.js';
+import {
+	consumeReaderNativeBypass,
+} from '../topic/reader-native-topic-route.js';
+import {
+	scheduleReaderCreditAccountBridge,
+} from '../user/reader-credit-account-bridge.js';
+import type {
+	ReaderDiscourseSiteProbeTransportPort,
+} from '../site/browser-discourse-site-probe.js';
+import {
+	ReaderCustomSiteRepository,
+	readerBuiltinDiscourseHost,
+	readerDiscourseSiteAllowsBodyTranslation,
+	readerDiscourseSiteDisplayName,
+} from '../site/reader-custom-site-repository.js';
+import {
+	ReaderEmbeddedReloadCoordinator,
+} from './reader-embedded-reload-coordinator.js';
+import {
+	isReaderCloudflareChallengeWindow,
+} from '../network/browser-shared-request-permit.js';
+
+const DEBUG_HANDLE_KEY = '__LDP_MAIN_LITE__';
+const LEGACY_DEBUG_HANDLE_KEY = '__LDP_MIAN_LITE__';
+// Stable 1.0.0 DOM/storage identities keep upgrades free of duplicate UI and state loss.
+const STYLE_ID = 'ldp-mian-lite-styles';
+const STYLE_RESOURCE = 'ldpReaderStyles';
+const KATEX_STYLE_RESOURCE = 'ldpKatexStyles';
+const KATEX_STYLESHEET_URL =
+	'https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css';
+
+type MainLitePost = ReaderPostPresentationPost
+	& DiscourseComposerPostInput
+	& ReaderLightboxCommentPostInput
+	& CanonicalActionPost
+	& Readonly<Record<string, unknown>>;
+
+interface MainLiteTopic extends DiscourseComposerTopicInput<MainLitePost> {
+	readonly [key: string]: unknown;
+}
+
+export interface MainLiteUserscriptHandle {
+	readonly application: ReaderApplication<ReaderPreferences>;
+	readonly started: Promise<ReaderApplicationState>;
+	readonly diagnostics: readonly ReaderApplicationDiagnostic[];
+	readonly runtime: ReaderBrowserRuntime<MainLiteTopic, MainLitePost> | null;
+	destroy(): void;
+}
+
+interface MutableMainLiteState {
+	runtime: ReaderBrowserRuntime<MainLiteTopic, MainLitePost> | null;
+	portal: ReaderSurfacePortal | null;
+	readonly diagnostics: ReaderApplicationDiagnostic[];
+}
+
+function pageRecord(value: unknown): Record<string, unknown> {
+	if (value === null || (
+		typeof value !== 'object' &&
+		typeof value !== 'function'
+	)) {
+		throw new Error('main-lite page window 不可用');
+	}
+	return value as Record<string, unknown>;
+}
+
+function theme(document: Document, window: Window): 'light' | 'dark' {
+	if (
+		document.documentElement.classList.contains('dark') ||
+		document.documentElement.dataset.colorScheme === 'dark'
+	) return 'dark';
+	return window.matchMedia?.('(prefers-color-scheme: dark)').matches
+		? 'dark'
+		: 'light';
+}
+
+function sourceId(window: Window): string {
+	const value = window.crypto?.randomUUID?.();
+	return value
+		? `main-lite:${value}`
+		: `main-lite:${Date.now()}`;
+}
+
+function createStyleStage(
+	environment: BrowserUserscriptEnvironment,
+	document: Document,
+	state: MutableMainLiteState,
+): ReaderApplicationStage<ReaderPreferences> {
+	return Object.freeze({
+		name: 'userscript-styles',
+		required: true,
+		async setup() {
+			const [css, katexCss] = await Promise.all([
+				environment.readTextResource(STYLE_RESOURCE),
+				environment.readTextResource(KATEX_STYLE_RESOURCE),
+			]);
+			document.getElementById(STYLE_ID)?.remove();
+			const style = document.createElement('style');
+			style.id = STYLE_ID;
+			const stylesheet =
+				`${css}\n${readerKatexStylesheet(
+					katexCss,
+					KATEX_STYLESHEET_URL,
+				)}`;
+			style.textContent = stylesheet;
+			let portal: ReaderSurfacePortal | null = null;
+			try {
+				portal = new ReaderSurfacePortal(document, stylesheet);
+				(document.head ?? document.documentElement).append(style);
+			} catch (cause) {
+				portal?.destroy();
+				style.remove();
+				throw cause;
+			}
+			state.portal = portal;
+			return () => {
+				portal.destroy();
+				if (state.portal === portal) state.portal = null;
+				style.remove();
+			};
+		},
+	});
+}
+
+function requestedMode(
+	preferences: Readonly<ReaderPreferences>,
+	routeKind: 'list' | 'direct-topic',
+): ReaderWorkspaceMode {
+	return routeKind === 'direct-topic'
+		? preferences.topicReaderMode
+		: preferences.listReaderMode;
+}
+
+function createRuntimeStage(
+	environment: BrowserUserscriptEnvironment,
+	document: Document,
+	window: Window,
+	state: MutableMainLiteState,
+	customSites: Readonly<{
+		readonly repository: ReaderCustomSiteRepository;
+		readonly probe: ReaderDiscourseSiteProbeTransportPort | null;
+	}>,
+): ReaderApplicationStage<ReaderPreferences> {
+	let template: ReaderShellTemplate | null = null;
+	const origin = document.location.origin;
+	const siteName = readerDiscourseSiteDisplayName(document.location.hostname);
+	const routeKind = readerUserscriptRouteKind(
+		document.location.href,
+		origin,
+	);
+	return Object.freeze({
+		name: 'reader-userscript-runtime',
+		required: true,
+		setup(
+			scope: LifecycleScope,
+			applicationContext:
+				ReaderApplicationContext<ReaderPreferences>,
+		) {
+			const initialPreferences = applicationContext.readPreferences();
+			const replyTreePreferences =
+				new ReaderReplyTreePreferencesPreview(
+					readerPreferencesReplyTreeAdapter.read(initialPreferences),
+					(error) => {
+						console.error('[main-lite:reply-tree-preview]', error);
+					},
+				);
+			scope.add(() => replyTreePreferences.destroy());
+			const preferencesEnvironment = Object.freeze({
+				viewportWidth: window.innerWidth,
+				viewportHeight: window.innerHeight,
+			});
+			const scriptVersion =
+				environment.readScriptVersion() ?? 'development';
+			const preferencesCodec = createReaderPreferencesConfigCodec({
+				environment: preferencesEnvironment,
+				scriptVersion,
+			});
+			const currentUsername = discourseNativeCurrentUsername(
+				environment.discourseHost,
+			);
+			const renderNativeIcon = discourseNativeIconRenderer(
+				environment.discourseHost,
+			);
+			const siteLogoCandidates = [
+				document.querySelector<HTMLImageElement>(
+					'.d-header #site-logo,.d-header img.logo-big,' +
+					'.d-header img.logo-small,.custom-logo-link img',
+				)?.currentSrc,
+				document.querySelector<HTMLLinkElement>(
+					'link[rel~="apple-touch-icon"]',
+				)?.href,
+				document.querySelector<HTMLLinkElement>(
+					'link[rel~="icon"]',
+				)?.href,
+			].filter((value): value is string => Boolean(value));
+			const siteLogoUrl = discourseNativeSiteLogoUrl(
+				environment.discourseHost,
+				origin,
+				siteLogoCandidates,
+			);
+			const renderIcon = (name: string, iconDocument: Document): Node => {
+				const nativeIcon = renderNativeIcon(name, iconDocument);
+				return resolveReaderIcon(iconDocument, name, nativeIcon);
+			};
+			const katex = environment.createKatexPort();
+			const hls = environment.createHlsPort();
+			const bodyTranslationAllowed =
+				readerDiscourseSiteAllowsBodyTranslation(
+					document.location.hostname,
+				);
+			let persistTranslationMode: ((
+				mode: ReaderPreferences['translationMode'],
+			) => void) | null = null;
+			const stage = createReaderUserscriptRuntimeStage<
+				ReaderPreferences,
+				MainLiteTopic,
+				MainLitePost
+			>({
+		environment,
+		shell: {
+			compatibilityKey: () => `${origin}:mian-lite:v1`,
+			createView: () => {
+				const portal = state.portal;
+				if (!portal) throw new Error('main-lite Shadow Portal 未就绪');
+				template = createReaderShellTemplate({
+					document,
+					mount: portal.root,
+					listModeAllowed: routeKind === 'list',
+					siteName,
+					homeUrl: `${origin}/`,
+					logoUrl: siteLogoUrl,
+					renderIcon,
+				});
+				return template.view;
+			},
+			createWorkspaceOptions: (_shell, context) => {
+				if (!template) throw new Error('main-lite Shell template 未创建');
+				const readPreferences = context.readPreferences;
+				const scrolling = () =>
+					document.scrollingElement ?? document.documentElement;
+				return {
+					document,
+					routeKind,
+					requestedMode: requestedMode(
+						readPreferences(),
+						routeKind,
+					),
+					embedWidth: readPreferences().listReaderEmbedWidth,
+					windowPreferences: readPreferences(),
+					elements: template.workspaceElements,
+					viewportTarget: window,
+					pointerTarget: document,
+					scrollTarget: window,
+					readViewport: () => ({
+						width: window.innerWidth,
+						height: window.innerHeight,
+					}),
+					hostScroll: {
+						read: () => ({
+							viewportHeight: window.innerHeight,
+							scrollHeight: scrolling().scrollHeight,
+							scrollTop: scrolling().scrollTop,
+						}),
+						scrollTo: (top) => window.scrollTo({
+							top,
+							behavior: 'auto',
+						}),
+					},
+					enhancements: new EmbeddedHostTopicCardEnhancement(
+						document,
+						environment.discourseHost,
+					),
+					readAppearance: () => {
+						const preferences = readPreferences();
+						const activeTheme = theme(document, window);
+						return {
+							profile: preferences.appearanceProfile,
+							theme: activeTheme,
+							defaultDividerLineColor:
+								activeTheme === 'dark'
+									? '#343b44'
+									: '#e5e5e5',
+							defaultDividerLineWidth: 0.5,
+						};
+					},
+					onPersistMode: (mode) => {
+						context.updatePreferences?.(
+							routeKind === 'direct-topic'
+								? {
+									topicReaderMode:
+										mode === 'fullpage'
+											? 'fullpage'
+											: 'floating',
+								}
+								: { listReaderMode: mode },
+						);
+					},
+					onPersistEmbedWidth: (listReaderEmbedWidth) => {
+						context.updatePreferences?.({ listReaderEmbedWidth });
+					},
+					onPersistWindow: (preferences) => {
+						context.updatePreferences?.({
+							readerWindowWidth: preferences.readerWindowWidth,
+							readerWindowHeight: preferences.readerWindowHeight,
+							readerWindowX: preferences.readerWindowX,
+							readerWindowY: preferences.readerWindowY,
+							readerWindowLocked: preferences.readerWindowLocked,
+							readerWindowPinned: preferences.readerWindowPinned,
+						});
+					},
+					createMutationObserver: (callback) =>
+						new MutationObserver(callback),
+					...(typeof ResizeObserver === 'function'
+						? {
+							createResizeObserver: (
+								callback: ResizeObserverCallback,
+							) => new ResizeObserver(callback),
+						}
+						: {}),
+					requestFrame: (callback) =>
+						window.requestAnimationFrame(callback),
+					cancelFrame: (id) => window.cancelAnimationFrame(id),
+				};
+			},
+		},
+		runtime: {
+			document,
+			renderIcon,
+			translationView: bodyTranslationAllowed ? {} : false,
+			storage: window.localStorage,
+			sourceId: sourceId(window),
+			locks: window.navigator.locks ?? null,
+			indexedDb: window.indexedDB ?? null,
+			storageEvents: window,
+			broadcastChannelFactory:
+				typeof BroadcastChannel === 'function'
+					? (name) => new BroadcastChannel(name)
+					: null,
+			permit: {
+				shortWindowMs: 10_000,
+				longWindowMs: 60_000,
+				shortBudget: 50,
+				longBudget: 200,
+				minIntervalMs:
+					initialPreferences.performanceRequestInterval,
+				maxConcurrent:
+					initialPreferences.performanceRequestConcurrency,
+			},
+			data: {
+				scheduler: {
+					maxConcurrent:
+						initialPreferences.performanceRequestConcurrency,
+					queueLimit: 160,
+					defaultTimeoutMs: 15_000,
+				},
+				rateLimit: {
+					evidenceWindowMs: 4_000,
+					maxEndpointEntries: 128,
+					retryAfterFallbackMs: 1_500,
+					baseUrl: origin,
+				},
+				responseMemoryMaxEntries: 96,
+				responseMemoryMaxBytes: 24 * 1024 * 1024,
+				responsePersistentMaxEntries: 600,
+				responsePersistentMaxBytes: 96 * 1024 * 1024,
+				responseOperationTimeoutMs: 5_000,
+				cacheFlightTtlMs: 30_000,
+				cacheFlightStaleMs: 45_000,
+			},
+				topic: {
+					authScope: currentUsername
+						? `account:${currentUsername}`
+						: `anonymous:${origin}`,
+				origin,
+					pageSize: initialPreferences.performancePageSize,
+					caches: {
+						topic: {
+							freshForMs: 30 * 60_000,
+							retainForMs: 7 * 24 * 60 * 60_000,
+							persist: true,
+						},
+						posts: {
+							freshForMs: 30 * 60_000,
+							retainForMs: 7 * 24 * 60 * 60_000,
+							persist: true,
+						},
+						nested: {
+							freshForMs: 30 * 60_000,
+							retainForMs: 7 * 24 * 60 * 60_000,
+							persist: true,
+						},
+						snapshot: {
+							freshForMs: 30 * 60_000,
+							retainForMs: 30 * 24 * 60 * 60_000,
+						},
+					},
+				},
+				timelineView: {
+					preferences: {
+						pageStep: initialPreferences.performancePageSize,
+					},
+				},
+				history: {
+					panelView: {
+						preferences: {
+							sortMode: initialPreferences.historySortMode,
+						},
+						topicHref: (entry) =>
+							`${origin}/t/${entry.topicId}/${entry.postNumber}`,
+						changeSortMode: (historySortMode) => {
+							applicationContext.updatePreferences?.({
+								historySortMode,
+							});
+						},
+					},
+				},
+				media: {
+					...(katex ? { katex } : {}),
+				...(hls ? { hls } : {}),
+				hasManagedMediaSource:
+					'ManagedMediaSource' in window,
+			},
+			lightbox: {
+				mount: () => template?.view.surfaceHost ?? document.body,
+			},
+			topicFactory: {
+				createDomOptions: (bundle, context, _root, services) => {
+					const presentation =
+						createReaderPostPresentation<MainLitePost>({
+							document,
+							presentation: services.presentation,
+							relativeTime: services.relativeTime,
+							readTopic: () => bundle.services.session.topic,
+							currentUsername: services.currentUsername,
+							renderIcon,
+						});
+					const readState = createReaderPostReadStateFeature<MainLitePost>({
+						readState: bundle.services.read,
+						parentScope: context.scope,
+						renderIcon,
+						prefersReducedMotion: () => Boolean(window.matchMedia?.(
+							'(prefers-reduced-motion: reduce)',
+						).matches),
+						isVisible: (view) => {
+							const postRoot = view.slots.root;
+							if (!postRoot.isConnected || !postRoot.getClientRects().length) {
+								return false;
+							}
+							const rect = postRoot.getBoundingClientRect();
+							const descendantRoot = postRoot.closest<HTMLElement>(
+								'.ldp-descendant-replies-list',
+							);
+							const scrollRoot = descendantRoot ?? template?.view.body;
+							const viewport = scrollRoot?.getBoundingClientRect() ?? {
+								top: 0,
+								right: window.innerWidth,
+								bottom: window.innerHeight,
+								left: 0,
+							};
+							return rect.bottom > viewport.top &&
+								rect.top < viewport.bottom &&
+								rect.right > viewport.left &&
+								rect.left < viewport.right;
+						},
+					});
+					const readViewport =
+						new ReaderPostReadViewportFeature<MainLitePost>({
+							controller: bundle.services.read,
+							document,
+							parentScope: context.scope,
+							rootFor: (postRoot) => {
+								const discussion = postRoot.closest<HTMLElement>(
+									'.ldp-descendant-replies-list',
+								);
+								if (discussion) return discussion;
+								if (postRoot.closest(
+									'.ldp-lb-comment-list,.ldp-topic-action-rail',
+								)) return false;
+								return template?.view.body ?? null;
+							},
+						});
+						return {
+							estimatedRootSize: 360,
+							identity: presentation.identity,
+							render: presentation.render,
+							postFeatures: Object.freeze([readViewport, readState]),
+							replyTreePreferences: {
+								read: () => replyTreePreferences.read(),
+								subscribe: (listener, preferenceScope) =>
+									replyTreePreferences.subscribe(
+										listener,
+										preferenceScope,
+									),
+							},
+						};
+				},
+			},
+			onTopicFeatureError: (diagnostic) => {
+				console.error(
+					`[main-lite:${diagnostic.feature}]`,
+					diagnostic.cause,
+				);
+			},
+		},
+		translation: {
+			fingerprint: (texts) => {
+				const subtle = window.crypto?.subtle;
+				if (!subtle) {
+					return Promise.reject(new Error('浏览器缺少 SubtleCrypto'));
+				}
+				return translationTextFingerprint(texts, subtle);
+			},
+			translationCache: {
+				kind: 'translations',
+				tags: ['translation:zh-CN'],
+				freshForMs: 30 * 24 * 60 * 60_000,
+				retainForMs: 180 * 24 * 60 * 60_000,
+				persist: true,
+			},
+			credentialCache: {
+				kind: 'translation-credentials',
+				tags: ['translation:credential'],
+				freshForMs: 8 * 60_000,
+				retainForMs: 8 * 60_000,
+				persist: false,
+			},
+		},
+		resources: {
+			baseUrl: origin,
+			cache: {
+				kind: 'images',
+				tags: ['images'],
+				freshForMs: 24 * 60 * 60_000,
+				retainForMs: 30 * 24 * 60 * 60_000,
+				persist: true,
+			},
+		},
+		selectPerformancePreferences: (preferences) => preferences,
+		performanceBudgetCeilings: { short: 50, long: 200 },
+		layout: readerPreferencesLayoutAdapter,
+		appearance: readerPreferencesAppearanceAdapter,
+		theme: {
+			preferences: readerPreferencesThemeAdapter,
+			hostTheme: discourseNativeTheme(environment.discourseHost),
+			system: {
+				readDark: () =>
+					Boolean(window.matchMedia?.(
+						'(prefers-color-scheme: dark)',
+					).matches),
+				subscribe: (listener, scope) => {
+					const query = window.matchMedia?.(
+						'(prefers-color-scheme: dark)',
+					);
+					if (!query) return () => {};
+					const onChange = () => listener(query.matches);
+					query.addEventListener('change', onChange);
+					const cleanup = () =>
+						query.removeEventListener('change', onChange);
+					scope.add(cleanup);
+					return cleanup;
+				},
+			},
+		},
+		font: readerPreferencesFontAdapter,
+		motion: {
+			...readerPreferencesMotionAdapter,
+			siteName,
+		},
+		image: readerPreferencesImageAdapter,
+		boostCopy: readerPreferencesBoostCopyAdapter,
+		topicActionRail: readerPreferencesTopicActionRailAdapter,
+		openQueue: {
+			read: (preferences) => Object.freeze({
+				openTopicsAtFirstPost:
+					preferences.openTopicsAtFirstPost,
+				readerQueueAlwaysVisibleWhenEmpty:
+						preferences.readerQueueAlwaysVisibleWhenEmpty,
+					doubleEscapeToCloseReader:
+						preferences.doubleEscapeToCloseReader,
+					confirmNativeComposerClose:
+						preferences.confirmNativeComposerClose,
+				}),
+			createPatch: (preferences) => preferences,
+		},
+		shortcuts: readerPreferencesShortcutAdapter,
+		settings: {
+			view: { brandName: 'Awesome LinuxDo Reader' },
+			sitesForm: customSites,
+			aboutContent: {
+				version: scriptVersion,
+			},
+			configuration: {
+				codec: preferencesCodec,
+				defaults: createReaderPreferencesDefaults(
+					preferencesEnvironment,
+				),
+			},
+			performanceForm: readerPreferencesPerformanceSettingsAdapter,
+			imageForm: readerPreferencesImageAdapter,
+			readingForm: readerPreferencesReadingSettingsAdapter,
+			interactionForm: {
+				boostCopy: readerPreferencesBoostCopyAdapter,
+				topicActionRail: readerPreferencesTopicActionRailAdapter,
+				replyTree: readerPreferencesReplyTreeAdapter,
+				replyTreePreview: replyTreePreferences,
+				boostsAvailable: discourseNativeBoostsAvailable(
+					environment.discourseHost,
+				),
+			},
+		},
+		selectHistoryNavigationPreferences: (preferences) => ({
+			edgeTriggerPercent: preferences.historyEdgeTriggerPercent,
+			buttonsAlwaysVisible: preferences.historyButtonsAlwaysVisible,
+		}),
+		selectHistoryPanelPreferences: (preferences) => ({
+			sortMode: preferences.historySortMode,
+		}),
+		selectBookmarkPreferences: (preferences) => ({
+			tabOrder: preferences.bookmarkTabOrder,
+		}),
+		selectTimelineViewPreferences: (preferences) => ({
+			pageStep: preferences.performancePageSize,
+		}),
+		...(bodyTranslationAllowed
+			? {
+				selectTranslationMode: (preferences: ReaderPreferences) =>
+					preferences.translationMode,
+				persistTranslationMode: (
+					translationMode: ReaderPreferences['translationMode'],
+				) => persistTranslationMode?.(translationMode),
+			}
+			: {}),
+		targets: {
+			selectOpenTopicsAtFirstPost: (preferences) =>
+				preferences.openTopicsAtFirstPost,
+			onError: (error) => {
+				console.error('[main-lite:target]', error);
+			},
+		},
+		onReady(runtime, context, _settings, _settingsView, _layout, appearance, font) {
+			state.runtime = runtime;
+			persistTranslationMode = (translationMode) => {
+				context.updatePreferences?.({ translationMode });
+			};
+			const portal = state.portal;
+			if (!portal) throw new Error('main-lite Shadow Portal 未就绪');
+			const embeddedReload = routeKind === 'list'
+				? new ReaderEmbeddedReloadCoordinator({
+					target: window,
+					storage: window.sessionStorage,
+					currentHostRoute: () =>
+						`${document.location.pathname}${document.location.search}${document.location.hash}`,
+					navigationType: () => {
+						const entry = window.performance
+							.getEntriesByType?.('navigation')[0] as
+								| PerformanceNavigationTiming
+								| undefined;
+						if (entry?.type) return entry.type;
+						const legacy = window.performance as Performance & Readonly<{
+							navigation?: Readonly<{ type?: number }>;
+						}>;
+						return legacy.navigation?.type === 1 ? 'reload' : null;
+					},
+					capture: () => {
+						const workspace = runtime.workspace.workspace.snapshot;
+						const topicId = runtime.shell.activeTopicId;
+						const active = runtime.shell.activeValue;
+						if (
+							!workspace.presentation.embedded ||
+							topicId === null ||
+							!active
+						) return null;
+						const anchor = runtime.historyNavigation.captureCurrent();
+						if (!anchor) return null;
+						return Object.freeze({
+							mode: workspace.presentation.mode,
+							topicId: Number(topicId),
+							anchor,
+							onlyOp: active.topicOnlyOp.snapshot.enabled,
+						});
+					},
+					restore: async (reload) => {
+						if (!runtime.workspace.setMode(reload.mode)) return false;
+						const opened = await runtime.openTarget({
+							topicId: reload.topicId,
+							postNumber: reload.anchor.viewport.postNumber,
+							source: 'restore',
+							alignment: 'nearest',
+						});
+						if (
+							opened.topic.status !== 'opened' &&
+							opened.topic.status !== 'reused'
+						) return false;
+						if (reload.onlyOp) {
+							opened.topic.value.topicOnlyOp.setEnabled(true);
+						}
+						await runtime.historyNavigation.restore(
+							reload.topicId,
+							reload.anchor,
+						);
+						return true;
+					},
+					parentScope: runtime.scope,
+					onError: (error) => {
+						console.error('[main-lite:embedded-reload]', error);
+					},
+				})
+				: null;
+			void (async () => {
+				if (await embeddedReload?.restore()) return;
+				if (
+					runtime.shell.activeTopicId !== null ||
+					!['embed-left', 'embed-right'].includes(
+						runtime.workspace.workspace.snapshot.requestedMode,
+					) ||
+					!runtime.workspace.workspace.snapshot.canEmbed
+				) return;
+				const recent = runtime.history.ordered('recent-viewed')[0] ?? null;
+				if (!recent) return;
+				const anchor = runtime.historyNavigation.snapshot.states[
+					String(recent.topicId)
+				] ?? null;
+				const opened = await runtime.openTarget({
+					topicId: recent.topicId,
+					postNumber: anchor?.viewport.postNumber ?? recent.postNumber,
+					source: 'restore',
+					alignment: 'nearest',
+				});
+				if (
+					anchor &&
+					(opened.topic.status === 'opened' ||
+						opened.topic.status === 'reused')
+				) {
+					await runtime.historyNavigation.restore(recent.topicId, anchor);
+				}
+			})().catch((error) => {
+				console.error('[main-lite:embedded-default-topic]', error);
+			});
+			const composerWindow = new ReaderNativeComposerWindowController({
+				document,
+				window,
+				mount: portal.root,
+				pageRoot: document.documentElement,
+				readPreferences: context.readPreferences,
+				preferenceChanges: context.preferenceChanges,
+				updatePreferences: (patch) => {
+					context.updatePreferences?.(patch);
+				},
+				readFontProfile: () =>
+					font?.snapshot.settings.fontProfile ??
+					context.readPreferences().fontProfile,
+				...(font
+					? {
+						fontChanges: {
+							subscribe(listener, scope) {
+								return font.changes.subscribe((snapshot) => {
+									listener(snapshot.settings.fontProfile);
+								}, scope);
+							},
+						},
+					}
+					: {}),
+				...(appearance
+					? {
+						readAppearance: () => appearance.snapshot.interaction,
+						appearanceChanges: {
+							subscribe(listener, scope) {
+								return appearance.changes.subscribe((snapshot) => {
+									listener(snapshot.interaction);
+								}, scope);
+							},
+						},
+					}
+					: {}),
+				createMutationObserver: (callback) =>
+					new MutationObserver(callback),
+				requestFrame: (callback) =>
+					window.requestAnimationFrame(callback),
+				cancelFrame: (frameId) =>
+					window.cancelAnimationFrame(frameId),
+				parentScope: runtime.scope,
+				onError: (error) => {
+					console.error('[main-lite:native-composer-window]', error);
+				},
+			});
+			const unbindComposerWindow = runtime.composer.bindWindow(
+				composerWindow,
+			);
+			// 只读预热宿主 service/module；不提前打开回复框或读取用户草稿。
+			runtime.composer.warmReply();
+			return () => {
+				unbindComposerWindow();
+				composerWindow.destroy();
+				embeddedReload?.destroy();
+				persistTranslationMode = null;
+				if (state.runtime === runtime) state.runtime = null;
+			};
+		},
+			});
+			return stage.setup(scope, applicationContext);
+		},
+	});
+}
+
+/**
+ * 最终 userscript entry 的唯一显式启动函数。
+ *
+ * 只有 `main-lite-entry.ts` 会调用它；其余模块保持 import-time 无副作用。
+ */
+export function startMainLiteUserscript(
+	userscriptGlobal: unknown = globalThis,
+): MainLiteUserscriptHandle | null {
+	const environment = new BrowserUserscriptEnvironment({
+		userscriptGlobal,
+	});
+	const page = pageRecord(environment.pageWindow);
+	const existing = page[DEBUG_HANDLE_KEY] ?? page[LEGACY_DEBUG_HANDLE_KEY];
+	const document = page.document as Document | undefined;
+	const window = environment.pageWindow as Window;
+	if (!document) throw new Error('main-lite document 不可用');
+	if (isReaderCloudflareChallengeWindow(window)) {
+		(existing as MainLiteUserscriptHandle | undefined)?.destroy?.();
+		return null;
+	}
+	if (document.location.hostname === 'credit.linux.do') {
+		scheduleReaderCreditAccountBridge(
+			window,
+			document,
+			environment.createValueStorage(),
+			environment.createCreditBridgeHttp(),
+			(cause) => console.warn('[main-lite] LDC 账户桥同步失败', cause),
+		);
+		return null;
+	}
+	if (consumeReaderNativeBypass(
+		document.location.href,
+		document.location.origin,
+		(cleanHref) => {
+			try {
+				window.history.replaceState(
+					window.history.state,
+					'',
+					cleanHref,
+				);
+			} catch {
+				// 地址栏清理失败也不能反向启动 Reader。
+			}
+		},
+	)) {
+		(existing as MainLiteUserscriptHandle | undefined)?.destroy?.();
+		return null;
+	}
+	if (existing) return existing as MainLiteUserscriptHandle;
+	const customSiteRepository = new ReaderCustomSiteRepository({
+		storage: environment.createValueStorage(),
+	});
+	let customSiteProbe: ReaderDiscourseSiteProbeTransportPort | null = null;
+	try {
+		customSiteProbe = environment.createDiscourseSiteProbe();
+	} catch {
+		// 缺少 GM_xmlhttpRequest 时仍允许内置站点启动；设置面板会说明不可添加。
+	}
+	const preferences = createReaderPreferencesRepository({
+		environment: {
+			viewportWidth: window.innerWidth,
+			viewportHeight: window.innerHeight,
+		},
+		storage: window.localStorage,
+	});
+	const state: MutableMainLiteState = {
+		runtime: null,
+		portal: null,
+		diagnostics: [],
+	};
+	const onWindowKeyDown = (event: KeyboardEvent): void => {
+		state.runtime?.shell.activeValue?.topicContextSurface
+			.handleEscape(event);
+	};
+	window.addEventListener('keydown', onWindowKeyDown, true);
+	const application = createReaderUserscriptApplication({
+		environment,
+		document,
+		window,
+		preferences,
+		authorizeHost: async (hostname, signal) => {
+			if (readerBuiltinDiscourseHost(hostname)) return true;
+			if (signal.aborted) return false;
+			try {
+				const allowed =
+					await customSiteRepository.allows(hostname);
+				return !signal.aborted && allowed;
+			} catch {
+				return false;
+			}
+		},
+		stages: [
+			createPreferencesStorageSyncStage({
+				key: READER_PREFERENCES_STORAGE_KEY,
+				window,
+				repository: preferences,
+				onError: (cause) => {
+					console.error('[main-lite:preferences-sync]', cause);
+				},
+			}),
+			createStyleStage(environment, document, state),
+			createRuntimeStage(
+				environment,
+				document,
+				window,
+				state,
+				{
+					repository: customSiteRepository,
+					probe: customSiteProbe,
+				},
+			),
+		],
+	});
+	application.diagnostics.subscribe((diagnostic) => {
+		state.diagnostics.push(diagnostic);
+		console.error(
+			`[main-lite:${diagnostic.stage}]`,
+			diagnostic.cause,
+		);
+	});
+	const started = application.start();
+	const handle: MainLiteUserscriptHandle = Object.freeze({
+		application,
+		started,
+		get diagnostics() {
+			return Object.freeze([...state.diagnostics]);
+		},
+		get runtime() {
+			return state.runtime;
+		},
+		destroy() {
+			window.removeEventListener('keydown', onWindowKeyDown, true);
+			application.destroy();
+			if (page[DEBUG_HANDLE_KEY] === handle) {
+				delete page[DEBUG_HANDLE_KEY];
+			}
+			if (page[LEGACY_DEBUG_HANDLE_KEY] === handle) {
+				delete page[LEGACY_DEBUG_HANDLE_KEY];
+			}
+		},
+	});
+	Object.defineProperty(page, DEBUG_HANDLE_KEY, {
+		configurable: true,
+		enumerable: false,
+		value: handle,
+		writable: false,
+	});
+	Object.defineProperty(page, LEGACY_DEBUG_HANDLE_KEY, {
+		configurable: true,
+		enumerable: false,
+		value: handle,
+		writable: false,
+	});
+	return handle;
+}
+
+/** @deprecated 仅用于兼容 1.0.0 及更早的拼写。 */
+export type MianLiteUserscriptHandle = MainLiteUserscriptHandle;
+
+/** @deprecated 请改用 startMainLiteUserscript。 */
+export const startMianLiteUserscript = startMainLiteUserscript;

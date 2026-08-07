@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js">安装脚本</a> ·
   <a href="https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader">GreasyFork</a> ·
-  <a href="lite/src/userscript/mian-lite-entry.ts">Lite 源码</a> ·
+  <a href="lite/src/userscript/main-lite-entry.ts">Lite 源码</a> ·
   <a href="https://sunbigfly.github.io/awesome-linuxdo-reader/">在线用户手册</a> ·
   <a href="docs/INTRODUCTION.md">项目介绍</a> ·
   <a href="CONTRIBUTING.md">参与开发</a> ·
@@ -123,7 +123,7 @@
 
 ## 安装
 
-> **发布状态：** GitHub 源码、用户手册与 Greasy Fork 脚本 588185 均已发布 Lite `1.0.0`。正式主脚本是 3,794 字节薄 Loader，固定加载 Core `1895870` 与 Features `1895872`；两个 Library 均带已核验的 SHA-256。
+> **发布状态：** GitHub 源码与用户手册已进入 Lite `1.0.1` 发布流程；Greasy Fork 脚本 588185 当前公开稳定版仍为 `1.0.0`，待新旧路径兼容验收和固定 Library 坐标核验完成后切换。
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。
@@ -152,21 +152,21 @@
 4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 适用站点 → 其他适用站点”中验证并添加。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `1.0.0`。脚本对 LINUX DO 保持全面适配，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `1.0.1`。脚本对 LINUX DO 保持全面适配，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
-1.0.0 重点完成 Lite 模块化重构：业务逻辑、生命周期、请求、缓存与界面组件改由 TypeScript 模块维护；Greasy Fork 发布使用薄主 Loader 加两个可审查 Library，避开单文件 2 MB 上限且不压缩、不混淆。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+1.0.1 重点将工程和发布路径无损正名为 `main-lite`，并保留旧 `mian-lite` 命令、源码入口与逐字节一致的产物兼容副本；1.0.0 完成的 Lite 模块化与 Greasy Fork 三文件架构保持不变。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 ## 开发
 
-v1.0.0 起，`lite/src/` 是唯一业务源码，`lite/styles/` 是样式事实源。`work/mian-lite.css`、`work/greasyfork-lite/libraries/` 与最终的 `work/mian-lite.js` 都是确定性发布产物，禁止直接编辑。Greasy Fork 只接收可读、未压缩的薄 Loader 和两个 Library；正式 Loader 通过固定版本 URL 与 SHA-256 引用 Library。切换前的旧版 working copy 保存在 `archive/legacy-main-2026-08-07/`，原 `work/main.js` 与 `work/main.css` 仅作旧版兼容参考。
+v1.0.0 起，`lite/src/` 是唯一业务源码，`lite/styles/` 是样式事实源；v1.0.1 起 canonical 生成物统一为 `work/main-lite.css`、`work/greasyfork-lite/libraries/main-lite-*.js` 与 `work/main-lite.js`。这些文件均由确定性构建生成，禁止直接编辑。Greasy Fork 只接收可读、未压缩的薄 Loader 和两个 Library；正式 Loader 通过固定版本 URL 与 SHA-256 引用 Library。旧 `mian-lite` 路径在迁移期保留逐字节一致的兼容副本，切换前的旧版 working copy 保存在 `archive/legacy-main-2026-08-07/`，原 `work/main.js` 与 `work/main.css` 仅作旧版兼容参考。
 
 ### 三条保留产物
 
 | 版本 | 保留内容 | 是否进入 GitHub | 用途 |
 | --- | --- | --- | --- |
 | GitHub 原版 | `lite/src/`、`lite/styles/`、测试、构建脚本、文档与可审查生成物 | 是 | 唯一源码事实源和完整开发历史 |
-| 本地测试版 | `work/mian-lite.local.js`、`work/local-debug.user.js`、`work/v1.0.0-acceptance.user.js` | 否，受 `.gitignore` 保护 | Tampermonkey 真实页面调试与 v1.0.0 截图验收 |
-| Greasy Fork 上传版 | `work/mian-lite.js` 薄 Loader、两个 Library 和 `work/mian-lite.css` | 是 | 通过发布门禁后由主脚本加载固定版本 Library |
+| 本地测试版 | `work/main-lite.local.js`、`work/local-debug.user.js` 与验收脚本 | 否，受 `.gitignore` 保护 | Tampermonkey 真实页面调试；旧 `mian-lite.local.js` 保留兼容 |
+| Greasy Fork 上传版 | `work/main-lite.js` 薄 Loader、两个 `main-lite-*` Library 和 `work/main-lite.css` | 是 | 通过发布门禁后由主脚本加载固定版本 Library；迁移期同时生成旧路径副本 |
 
 三条产物不会互相覆盖：本地测试版只从当前工作区加载；Greasy Fork Library 从
 GitHub Raw `main` 通过 Webhook 同步；用户只安装主脚本，不需要单独安装 Library。
@@ -178,7 +178,7 @@ GitHub Raw `main` 通过 Webhook 同步；用户只安装主脚本，不需要�
 ├── assets/           品牌与文档资源
 ├── docs/             项目介绍和资料索引
 ├── dist/             仓库直装的压缩 userscript 与来源清单
-├── lite/             v1.0.0 TypeScript 业务源码、样式、契约与测试
+├── lite/             v1.0.1 TypeScript 业务源码、样式、契约与测试
 ├── scripts/          跨平台开发工具入口
 ├── tools/            Rust 开发辅助工具源码
 ├── work/greasyfork-lite/  Lite Greasy Fork Library 发布产物

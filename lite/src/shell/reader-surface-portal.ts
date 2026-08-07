@@ -1,3 +1,4 @@
+// 1.0.0 DOM identity is intentionally stable to avoid duplicate portals during upgrade.
 const PORTAL_ID = 'ldp-mian-lite-portal';
 
 /**

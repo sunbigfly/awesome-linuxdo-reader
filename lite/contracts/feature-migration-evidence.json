@@ -13,13 +13,13 @@
       ],
       "artifactOwners": [
         "lite/userscript.meta.txt",
-        "scripts/build-mian-lite.mjs",
-        "scripts/audit-mian-lite-userscript.mjs",
+        "scripts/build-main-lite.mjs",
+        "scripts/audit-main-lite-userscript.mjs",
         "docs/getting-started/installation.md",
         "lite/contracts/release-browser-evidence.json"
       ],
       "artifactChecks": [
-        "mian-lite:check",
+        "main-lite:check",
         "docs:verify",
         "userscript:inspect",
         "loader:verify"
@@ -45,8 +45,8 @@
       "implementationStatus": "static-complete",
       "browserStatus": "pending",
       "owners": [
-        "lite/src/userscript/mian-lite-entry.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts",
+        "lite/src/userscript/main-lite-entry.ts",
+        "lite/src/userscript/main-lite-bootstrap.ts",
         "lite/src/userscript/reader-userscript-target-adapter.ts",
         "lite/src/userscript/reader-userscript-application.ts",
         "lite/src/userscript/reader-floating-host-target-controller.ts",
@@ -88,7 +88,7 @@
         "lite/src/shell/reader-shell-template.ts",
         "lite/src/app/reader-browser-runtime.ts",
         "lite/src/userscript/reader-userscript-target-adapter.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reader-icon.test.ts",
@@ -134,7 +134,7 @@
         "lite/src/site/reader-custom-site-repository.ts",
         "lite/src/site/browser-discourse-site-probe.ts",
         "lite/src/settings/reader-custom-site-settings-form.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts",
+        "lite/src/userscript/main-lite-bootstrap.ts",
         "lite/src/userscript/reader-userscript-application.ts"
       ],
       "tests": [
@@ -637,7 +637,7 @@
         "lite/src/media/reader-image-preferences.ts",
         "lite/src/settings/reader-image-settings-form.ts",
         "lite/src/app/reader-browser-runtime.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts",
+        "lite/src/userscript/main-lite-bootstrap.ts",
         "lite/src/state/reader-preferences-schema.ts"
       ],
       "tests": [
@@ -804,7 +804,7 @@
         "lite/src/media/reader-topic-media-feature.ts",
         "lite/src/topic/reader-topic-dom-coordinator.ts",
         "lite/src/userscript/browser-userscript-environment.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reader-browser-runtime.test.ts",
@@ -823,7 +823,7 @@
         "lite/src/media/reader-katex-controller.ts",
         "lite/src/media/reader-topic-media-feature.ts",
         "lite/src/userscript/browser-userscript-environment.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reader-katex-controller.test.ts",
@@ -913,7 +913,7 @@
         "lite/src/shell/reader-shortcut-controller.ts",
         "lite/src/userscript/browser-userscript-environment.ts",
         "lite/src/userscript/reader-userscript-application.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reader-translation-controller.test.ts",
@@ -939,7 +939,7 @@
         "lite/src/topic/reader-topic-core-bundle.ts",
         "lite/src/topic/reader-topic-navigation-controller.ts",
         "lite/src/post/reader-post-action-feature.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reader-browser-runtime.test.ts",
@@ -997,7 +997,7 @@
         "lite/src/settings/reader-interaction-settings-form.ts",
         "lite/src/state/reader-preferences-schema.ts",
         "lite/src/app/reader-browser-runtime.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reader-topic-action-rail.test.ts",
@@ -1088,7 +1088,7 @@
         "lite/src/settings/reader-interaction-settings-form.ts",
         "lite/src/post/reader-post-action-feature.ts",
         "lite/src/app/reader-browser-runtime.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reader-interaction-settings-form.test.ts",
@@ -1352,7 +1352,7 @@
         "lite/src/user/reader-settings-user-view.ts",
         "lite/src/settings/reader-settings-controller.ts",
         "lite/src/app/reader-browser-runtime.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/translation-request-adapter.test.ts",
@@ -1383,7 +1383,7 @@
         "lite/src/layout/branch-overlay.ts",
         "lite/src/shell/embedded-host-appearance.ts",
         "lite/src/app/reader-browser-runtime.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reader-preferences-schema.test.ts",
@@ -1408,7 +1408,7 @@
         "lite/src/media/reader-image-preferences.ts",
         "lite/src/settings/reader-image-settings-form.ts",
         "lite/src/app/reader-browser-runtime.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reader-preferences-schema.test.ts",
@@ -1429,7 +1429,7 @@
         "lite/src/media/reader-image-preferences.ts",
         "lite/src/settings/reader-image-settings-form.ts",
         "lite/src/app/reader-browser-runtime.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reader-preferences-schema.test.ts",
@@ -1687,7 +1687,7 @@
         "lite/src/history/reader-history-panel-view.ts",
         "lite/src/settings/reader-reading-settings-form.ts",
         "lite/src/app/reader-browser-runtime.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reader-preferences-schema.test.ts",
@@ -1705,7 +1705,7 @@
         "lite/src/state/reader-preferences-schema.ts",
         "lite/src/settings/reader-reading-settings-form.ts",
         "lite/src/app/reader-browser-runtime.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts",
+        "lite/src/userscript/main-lite-bootstrap.ts",
         "lite/src/userscript/reader-userscript-target-adapter.ts",
         "lite/src/userscript/reader-userscript-application.ts"
       ],
@@ -1729,7 +1729,7 @@
         "lite/src/app/reader-browser-runtime.ts",
         "lite/src/settings/reader-interaction-settings-form.ts",
         "lite/src/state/reader-preferences-schema.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reply-tree-repository.test.ts",
@@ -1752,7 +1752,7 @@
         "lite/src/post/reader-post-action-feature.ts",
         "lite/src/discourse/native-host-api.ts",
         "lite/src/app/reader-browser-runtime.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reader-interaction-settings-form.test.ts",
@@ -1848,7 +1848,7 @@
         "lite/src/state/reader-preferences-schema.ts",
         "lite/src/cache/reader-cache-management-surface.ts",
         "lite/src/app/reader-browser-runtime.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/preferences-config-codec.test.ts",
@@ -1926,7 +1926,7 @@
       "owners": [
         "lite/src/userscript/browser-userscript-environment.ts",
         "lite/src/userscript/reader-userscript-application.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts",
+        "lite/src/userscript/main-lite-bootstrap.ts",
         "lite/src/translation/translation-request-adapter.ts",
         "lite/src/media/reader-media-controller.ts"
       ],
@@ -2116,7 +2116,7 @@
         "lite/src/state/preferences-repository.ts",
         "lite/src/cache/reader-cache-management-surface.ts",
         "lite/src/app/reader-browser-runtime.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/preferences-config-codec.test.ts",
@@ -2174,12 +2174,12 @@
       "browserStatus": "pending",
       "artifactOwners": [
         "lite/userscript.meta.txt",
-        "scripts/build-mian-lite.mjs",
+        "scripts/build-main-lite.mjs",
         "docs/reference/compatibility.md",
         "docs/manage/privacy-and-permissions.md"
       ],
       "artifactChecks": [
-        "mian-lite:check",
+        "main-lite:check",
         "docs:verify",
         "userscript:inspect"
       ],
@@ -2211,7 +2211,7 @@
         "lite/src/settings/reader-about-settings-content.ts",
         "lite/src/userscript/browser-userscript-environment.ts",
         "lite/src/app/reader-browser-runtime.ts",
-        "lite/src/userscript/mian-lite-bootstrap.ts"
+        "lite/src/userscript/main-lite-bootstrap.ts"
       ],
       "tests": [
         "lite/tests/reader-image-fallback.test.ts",

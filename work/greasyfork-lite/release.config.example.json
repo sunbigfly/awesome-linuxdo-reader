@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "libraries": [
     {
-      "name": "mian-lite-core",
-      "url": "https://update.greasyfork.org/scripts/REPLACE_WITH_MIAN_LITE_CORE_ID/REPLACE_WITH_FILE.js?version=REPLACE_WITH_VERSION_ID"
+      "name": "main-lite-core",
+      "url": "https://update.greasyfork.org/scripts/REPLACE_WITH_MAIN_LITE_CORE_ID/REPLACE_WITH_FILE.js?version=REPLACE_WITH_VERSION_ID"
     },
     {
-      "name": "mian-lite-features",
-      "url": "https://update.greasyfork.org/scripts/REPLACE_WITH_MIAN_LITE_FEATURES_ID/REPLACE_WITH_FILE.js?version=REPLACE_WITH_VERSION_ID"
+      "name": "main-lite-features",
+      "url": "https://update.greasyfork.org/scripts/REPLACE_WITH_MAIN_LITE_FEATURES_ID/REPLACE_WITH_FILE.js?version=REPLACE_WITH_VERSION_ID"
     }
   ]
 }

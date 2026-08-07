@@ -4,7 +4,7 @@ description: 理解父回复预览、树状嵌套、完整讨论窗口、楼层�
 feature_ids: ["READ-003", "READ-008", "READ-012", "READ-015"]
 source_anchors: ["lite/src/dom/reply-tree-repository.ts","lite/src/topic/reader-topic-context-controller.ts","lite/src/topic/reader-topic-special-content-feature.ts"]
 since: 0.1.2
-version: 1.0.0
+version: 1.0.1
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-18-thread-context-v1.0.0.png", "/screenshots/guide-20-community-actions-v1.0.0.png"]

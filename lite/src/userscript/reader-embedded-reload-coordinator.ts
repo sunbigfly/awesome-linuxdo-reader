@@ -8,6 +8,7 @@ import {
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import type { ReaderWorkspaceMode } from '../shell/reader-workspace.js';
 
+// Keep the 1.0.0 key so embedded reload state survives the spelling migration.
 const DEFAULT_STORAGE_KEY = 'ldp:mian-lite:embedded-reload:v1';
 const DEFAULT_TTL_MS = 30_000;
 

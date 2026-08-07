@@ -9,8 +9,8 @@ userscript 超过 2 MB 的问题。构建不压缩、不混淆、不缩短标识
 
 | 路径 | 用途 |
 | --- | --- |
-| `libraries/mian-lite-core.js` | 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心 |
-| `libraries/mian-lite-features.js` | 媒体、互动、设置、用户、通知、监控与其他功能模块 |
+| `libraries/main-lite-core.js` | 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心 |
+| `libraries/main-lite-features.js` | 媒体、互动、设置、用户、通知、监控与其他功能模块 |
 | `main-loader.template.user.js` | 等待填入固定 Greasy Fork Library URL 的薄主脚本模板 |
 | `build-manifest.json` | 模块数、编译器、字节数与 SHA-256 |
 | `published-libraries.json` | 已发布 Library 的真实 ID、固定 URL、同步 URL 与远端哈希 |
@@ -29,20 +29,22 @@ userscript 超过 2 MB 的问题。构建不压缩、不混淆、不缩短标识
 ## 构建与校验
 
 ```bash
-npm run mian-lite:greasyfork:build
-npm run mian-lite:greasyfork:check
+npm run main-lite:greasyfork:build
+npm run main-lite:greasyfork:check
 ```
 
 不要直接编辑生成文件。修改 `lite/src/`、Lite 元数据或发布脚本后重新构建。
 
+1.0.1 的 canonical 路径统一使用 `main-lite`。构建同时保留 `mian-lite` 旧拼写的 Library、CSS 和 Loader 兼容副本，且检查时要求新旧文件逐字节一致；Webhook 全部切换到新路径并复核后，旧路径才可在后续版本评估移除。
+
 ## 两阶段发布
 
-1. 先提交并推送 `lite/`、`work/mian-lite.css`、本目录 Library 与 manifest。
+1. 先提交并推送 `lite/`、`work/main-lite.css`、本目录 Library 与 manifest。
 2. 在 Greasy Fork 创建两个 JavaScript Library，并分别配置从以下 GitHub 地址同步：
 
    ```text
-   https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/mian-lite-core.js
-   https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/mian-lite-features.js
+   https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/main-lite-core.js
+   https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/main-lite-features.js
    ```
 
 3. 同步成功后，从每个 Library 的“代码”页取得带 `version` 查询参数的固定版本 URL；
@@ -50,21 +52,21 @@ npm run mian-lite:greasyfork:check
 4. 首次发布前可复制 `release.config.example.json` 为被 Git 忽略的
    `release.config.json` 做草稿验证；远端发布成功并完成哈希核对后，把真实坐标写入
    受版本控制的 `published-libraries.json`。
-5. 用第一阶段 Git 提交和当前 `work/mian-lite.css` SHA-256 填写
+5. 用第一阶段 Git 提交和当前 `work/main-lite.css` SHA-256 填写
    `lite/release-gate.json.readerStylesUrl`。只有真实浏览器、性能和回滚证据均完成时，
    才登记 `lite/contracts/release-browser-evidence.json` 并把对应门禁改为 `true`。
 6. 生成最终薄 Loader：
 
    ```bash
-   npm run mian-lite:greasyfork:release
+   npm run main-lite:greasyfork:release
    ```
 
 7. 逐字节核对 Greasy Fork 远端 Library 与 manifest 哈希，再把现有脚本
    [588185](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 的同步源切到
-   `work/mian-lite.js`。主脚本更新成功后，再复核安装文件的版本、两个固定 `@require`
+   `work/main-lite.js`。主脚本更新成功后，再复核安装文件的版本、两个固定 `@require`
    和 CSS `@resource`。
 
-`npm run mian-lite:greasyfork:release` 只读取已核验的 `published-libraries.json`。
+`npm run main-lite:greasyfork:release` 只读取已核验的 `published-libraries.json`。
 `release.config.json` 不进入 Git；其中没有凭据，但只作为首次发布草稿，不能用占位符
 冒充已发布状态。
 
@@ -78,7 +80,7 @@ npm run mian-lite:greasyfork:check
 两项均已设置为从本仓库 `main` 分支的对应 Raw 文件进行 GitHub Webhook 同步；远端
 字节数和 SHA-256 已在浏览器同源环境复核，并记录于 `published-libraries.json`。
 
-### v1.0.0 主脚本发布
+### v1.0.0 主脚本发布基线
 
 主脚本 [588185](https://greasyfork.org/scripts/588185) 已于 2026-08-07 同步为
 v1.0.0，当前固定版本为 `1895905`。同步方式为 GitHub Webhook，源文件固定为：
@@ -95,7 +97,7 @@ Greasy Fork 固定版本仅比仓库 Loader 多平台自动加入的 `@downloadU
 
 ## 后续扩容
 
-`scripts/build-mian-lite-greasyfork.mjs` 中的 `libraryDefinitions` 是唯一的 Library
+`scripts/build-main-lite-greasyfork.mjs` 中的 `libraryDefinitions` 是唯一的 Library
 清单，Loader 的 `@require`、运行时完整性检查、release config 和 manifest 都由它
 派生。某个 Library 接近 2,000,000 字节项目闸门时：
 

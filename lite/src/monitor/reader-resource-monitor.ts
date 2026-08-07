@@ -1626,7 +1626,7 @@ export class ReaderResourceMonitor {
 	#scriptScope(sourceUrl: unknown): ResourceEvidenceScope {
 		const source = String(sourceUrl ?? '');
 		if (
-			/Awesome LinuxDo Reader|mian-lite|katex@0\.16\.22|pinyin-pro@3\.18\.2|hls\.js@1\.6\.16/i.test(source)
+			/Awesome LinuxDo Reader|main-lite|mian-lite|katex@0\.16\.22|pinyin-pro@3\.18\.2|hls\.js@1\.6\.16/i.test(source)
 		) return 'reader';
 		try {
 			const url = new URL(source, this.#options.document.baseURI);

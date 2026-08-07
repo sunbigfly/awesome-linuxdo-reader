@@ -4,7 +4,7 @@ description: 导出导入设置，理解本地数据范围，查看和安全清�
 feature_ids: ["COLLECT-004", "DATA-001", "DATA-002", "DATA-003", "DATA-004", "TROUBLE-004"]
 source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts"]
 since: 0.1.2
-version: 1.0.0
+version: 1.0.1
 status: current
 last_verified: 2026-07-30
 screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
