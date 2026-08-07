@@ -27,13 +27,13 @@
       "file": "work/greasyfork-lite/libraries/mian-lite-features.js",
       "description": "媒体、互动、设置、用户、通知、监控与其他功能模块",
       "modules": 118,
-      "bytes": 1645404,
-      "sha256": "2e7a07a50e0d2b4bf336d3029438063ec12b12eebc848e35e67284147bbc9dfa"
+      "bytes": 1645478,
+      "sha256": "781c3534a561e9761202fa008ea833782e6c044f04c75f11eb474f2862cef813"
     }
   ],
   "loaderTemplate": {
     "file": "work/greasyfork-lite/main-loader.template.user.js",
-    "bytes": 3163,
-    "sha256": "58eb7f27439f6cc2c01b24443bd188ba9636abd692e769fc3275dc27c7abcac7"
+    "bytes": 3156,
+    "sha256": "8c512fb521bd253284ceb9bdd6d62809ee3f35b15ffa785d89445f5a85e0bfaa"
   }
 }

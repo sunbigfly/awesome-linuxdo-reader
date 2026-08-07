@@ -769,7 +769,10 @@ export class ReaderNotificationController {
 		this.#backgroundWarmPending = false;
 		const epoch = ++this.#backgroundWarmEpoch;
 		try {
-			for (const group of ['all', 'inbox'] as const) {
+			const groups = this.#native.username().trim()
+				? (['all', 'inbox'] as const)
+				: (['all'] as const);
+			for (const group of groups) {
 				if (this.scope.destroyed || epoch !== this.#backgroundWarmEpoch) return;
 				try {
 					const page = await this.#requests.load(group, 0, {

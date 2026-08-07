@@ -358,7 +358,7 @@ function renderLoader(metadata, sourceVersion, requirements = libraryMarker) {
   return `${withLibraries.trimEnd()}\n\n` + [
     '(function () {',
     "\t'use strict';",
-    `\tconst runtime = globalThis[${JSON.stringify(runtimeKey)}];`,
+    `\tconst runtime = window.${runtimeKey};`,
     '\tif (!runtime || runtime.schemaVersion !== 1 ||',
     `\t\truntime.sourceVersion !== ${JSON.stringify(sourceVersion)}) {`,
     "\t\tthrow new Error('[mian-lite] Greasy Fork Library 缺失或版本不匹配');",

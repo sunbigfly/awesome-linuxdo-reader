@@ -54,7 +54,7 @@
 
 (function () {
 	'use strict';
-	const runtime = globalThis["__AWESOME_LINUXDO_READER_LITE_MODULE_RUNTIME__"];
+	const runtime = window.__AWESOME_LINUXDO_READER_LITE_MODULE_RUNTIME__;
 	if (!runtime || runtime.schemaVersion !== 1 ||
 		runtime.sourceVersion !== "1.0.0") {
 		throw new Error('[mian-lite] Greasy Fork Library 缺失或版本不匹配');

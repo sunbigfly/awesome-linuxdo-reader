@@ -15656,7 +15656,8 @@
 		    this.#backgroundWarmPending = false;
 		    const epoch = ++this.#backgroundWarmEpoch;
 		    try {
-		      for (const group of ["all", "inbox"]) {
+		      const groups = this.#native.username().trim() ? ["all", "inbox"] : ["all"];
+		      for (const group of groups) {
 		        if (this.scope.destroyed || epoch !== this.#backgroundWarmEpoch) return;
 		        try {
 		          const page = await this.#requests.load(group, 0, {
@@ -15705,7 +15706,7 @@
 		    this.changes.emit(this.snapshot).forEach(this.#onError);
 		  }
 		}
-	}, "38983c5ade2f7381510fc3de67674685bf63c6ae3b36c20831dbe7c6729b7a16");
+	}, "5149eb03e3b15f9d25bfc35081fb183cbfa584e7b245fcec0a203833a94ac861");
 
 	/* Source: lite/src/notification/reader-notification-model.ts */
 	runtime.register("src/notification/reader-notification-model.js", function(module, exports, require) {

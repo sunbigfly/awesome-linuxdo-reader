@@ -47,9 +47,10 @@ class FakeNotificationNative implements ReaderNotificationNativeStatePort {
 	unread = 2;
 	allReadCommits = 0;
 	readCommits = 0;
+	currentUsername = 'viewer';
 
 	username(): string {
-		return 'viewer';
+		return this.currentUsername;
 	}
 
 	unreadCount(): number {
@@ -367,6 +368,71 @@ assert(
 	'打开通知面板必须直接复用后台预热的首屏，不得重复请求',
 );
 warmController.destroy();
+
+const deferredIdentityNative = new FakeNotificationNative();
+deferredIdentityNative.currentUsername = '';
+const deferredWarmCallbacks = new Map<number, () => void>();
+const deferredWarmLoads: string[] = [];
+const deferredWarmErrors: unknown[] = [];
+let deferredWarmScheduleId = 0;
+const deferredWarmController = new ReaderNotificationController({
+	requests: {
+		async load(
+			group: ReaderNotificationGroupKey,
+			page: number,
+			options?: Parameters<DiscourseNotificationRequestAdapter['load']>[2],
+		) {
+			deferredWarmLoads.push(
+				`${group}:${page}:${String(options?.background)}`,
+			);
+			return {
+				group,
+				page,
+				records: Object.freeze([]),
+				total: 0,
+				hasNext: false,
+				nextCursor: null,
+			};
+		},
+	} as unknown as DiscourseNotificationRequestAdapter,
+	native: deferredIdentityNative,
+	actions: {} as PostActionController,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+	backgroundWarmDelayMs: 0,
+	schedule(callback) {
+		const id = ++deferredWarmScheduleId;
+		deferredWarmCallbacks.set(id, callback);
+		return id;
+	},
+	cancel(handle) {
+		deferredWarmCallbacks.delete(Number(handle));
+	},
+	onError(cause) {
+		deferredWarmErrors.push(cause);
+	},
+});
+for (const callback of [...deferredWarmCallbacks.values()]) callback();
+deferredWarmCallbacks.clear();
+await flushMicrotasks();
+assert(
+	deferredWarmLoads.join(',') === 'all:0:true' &&
+	deferredWarmErrors.length === 0,
+	'登录用户名尚未就绪时只能预热公共通知，不得请求私信或报告启动错误',
+);
+deferredIdentityNative.currentUsername = 'viewer';
+deferredIdentityNative.emitChanged();
+await flushMicrotasks();
+for (const callback of [...deferredWarmCallbacks.values()]) callback();
+deferredWarmCallbacks.clear();
+await flushMicrotasks();
+assert(
+	deferredWarmLoads.join(',') ===
+		'all:0:true,all:0:true,inbox:0:true' &&
+	deferredWarmErrors.length === 0,
+	'登录身份就绪并收到原生变更后必须补齐通知与私信预热',
+);
+deferredWarmController.destroy();
 
 const incompleteGateway = new FakeGateway();
 const incompleteAjax: ReaderNotificationNativeAjaxPort = {
