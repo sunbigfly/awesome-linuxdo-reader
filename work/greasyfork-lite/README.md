@@ -70,6 +70,17 @@ npm run main-lite:greasyfork:check
 `release.config.json` 不进入 Git；其中没有凭据，但只作为首次发布草稿，不能用占位符
 冒充已发布状态。
 
+### v1.1.1 发布中坐标
+
+| 发布单元 | Greasy Fork | 固定版本 | 核验结果 |
+| --- | --- | --- | --- |
+| 主 Loader | [588185](https://greasyfork.org/scripts/588185) | 待 Webhook 同步 | 仓库 Loader 3,794 字节，SHA-256 `6a77c4f530b2689b3c7d26706861a2228e920d6b3873c49a17b032c82a71d7c0` |
+| Core | [590254](https://greasyfork.org/scripts/590254) | `1896700` | 1,667,425 字节，SHA-256 `ebeef3251350931f86fd18079a493d9d32db70fa576857f435681975c8336dc9` |
+| Features | [590255](https://greasyfork.org/scripts/590255) | `1896702` | 1,614,858 字节，SHA-256 `60ac5665a39c0745bf942b0ed5224917fcfe00486166ad9e047d050b8a21ebd0` |
+
+两个 Library 已通过 GitHub Webhook 同步，并在 `update.greasyfork.org` 固定版本 URL
+逐字节核验；主 Loader 固定坐标将在正式 Loader 推送并由 Webhook 创建版本后回填。
+
 ### v1.1.0 已发布坐标
 
 | 发布单元 | Greasy Fork | 固定版本 | 核验结果 |
