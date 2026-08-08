@@ -15,7 +15,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
 Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要先安装脚本管理器，再从 GreasyFork 安装正式版。
 
 ::: tip 当前发布状态
-Lite `1.1.0` 源码与本手册正在准备发布；Greasy Fork 脚本 588185 当前公开稳定版仍为 `1.0.1`。1.0.1 主脚本固定版本为 `1895932`，加载 Core `1895921` 和 Features `1895924`。完成 1.1.0 的三文件同步与浏览器门禁后，本页再更新新的固定坐标。
+Lite `1.1.0` 已发布到 Greasy Fork。脚本 588185 的主 Loader 固定版本为 `1896519`，加载 Core `1896235` 和 Features `1896236`；三文件固定坐标、SHA-256、16 页设置矩阵和五轮性能门禁均已核验。
 :::
 
 ![安装并启用脚本后，LINUX DO 列表页与增强阅读工作区同时可用](/screenshots/guide-01-reader-overview-v1.0.0.png)

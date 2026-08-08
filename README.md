@@ -123,7 +123,7 @@
 
 ## 安装
 
-> **发布状态：** Lite `1.1.0` 源码与用户手册正在准备发布；当前 Greasy Fork 公开稳定版仍为 `1.0.1`。1.0.1 主脚本固定版本为 `1895932`，加载 Core `1895921` 与 Features `1895924`。完成 1.1.0 的 Library 同步、浏览器矩阵和性能验收前，不把新版本标记为已发布。
+> **发布状态：** Lite `1.1.0` 已发布到 Greasy Fork。主 Loader 固定版本为 `1896519`，加载 Core `1896235` 与 Features `1896236`；三文件坐标、SHA-256、16 页设置矩阵和五轮性能门禁均已核验。
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。

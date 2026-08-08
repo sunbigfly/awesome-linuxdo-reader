@@ -70,14 +70,15 @@ npm run main-lite:greasyfork:check
 `release.config.json` 不进入 Git；其中没有凭据，但只作为首次发布草稿，不能用占位符
 冒充已发布状态。
 
-### v1.1.0 Library 已发布坐标
+### v1.1.0 已发布坐标
 
 | 发布单元 | Greasy Fork | 固定版本 | 核验结果 |
 | --- | --- | --- | --- |
+| 主 Loader | [588185](https://greasyfork.org/scripts/588185) | `1896519` | 固定文件 3,815 字节，SHA-256 `df17e8830bd03c5b7ba26c5551f3e7082f07b71499cc2afe25e370e65f896220`；移除平台加入的 `@downloadURL none` 后为 3,794 字节，SHA-256 `af454fdb6032514ef9fe05d47ad84d3c2d86403d1e27b8ede741e6cfa5847e00` |
 | Core | [590254](https://greasyfork.org/scripts/590254) | `1896235` | 1,665,405 字节，SHA-256 `4f2b5b556da94f27e5d6e843f78d9fa24d44b36972fbf49afabf650e0c9a39a7` |
 | Features | [590255](https://greasyfork.org/scripts/590255) | `1896236` | 1,613,871 字节，SHA-256 `0825bad2bb9f925f9b8ed7f1dd9bfbcf3bf9fef37853fbf6c4618c95a7b94abe` |
 
-两个固定文件的 `@version`、字节数和 SHA-256 已在 `update.greasyfork.org` 同源环境核验为 v1.1.0，且与本地构建产物完全一致。主 Loader 仍等待三文件版浏览器矩阵与性能门禁，不把 Library 发布冒充完整版本发布。
+三个固定文件的 `@version`、字节数和 SHA-256 已在 `update.greasyfork.org` 同源环境核验为 v1.1.0；主 Loader 归一化后与仓库产物逐字节一致，16 页设置矩阵与五轮性能门禁均已通过。
 
 ### v1.0.1 已发布坐标
 

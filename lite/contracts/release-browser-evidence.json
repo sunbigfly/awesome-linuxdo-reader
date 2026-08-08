@@ -25,6 +25,20 @@
       "sha256": "0825bad2bb9f925f9b8ed7f1dd9bfbcf3bf9fef37853fbf6c4618c95a7b94abe"
     }
   ],
+  "publishedLoader": {
+    "scriptId": 588185,
+    "versionId": 1896519,
+    "fixedUrl": "https://update.greasyfork.org/scripts/588185/1896519/Awesome%20LinuxDo%20Reader.user.js",
+    "fixedBytes": 3815,
+    "fixedSha256": "df17e8830bd03c5b7ba26c5551f3e7082f07b71499cc2afe25e370e65f896220",
+    "platformMetadata": "@downloadURL none",
+    "normalizedBytes": 3794,
+    "normalizedSha256": "af454fdb6032514ef9fe05d47ad84d3c2d86403d1e27b8ede741e6cfa5847e00",
+    "publicInstallHasDownloadUrl": true,
+    "publicInstallHasUpdateUrl": true,
+    "webhookVersionCreated": true,
+    "syncSource": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/main-lite.js"
+  },
   "browserMatrix": {
     "accepted": true,
     "site": "https://linux.do",
