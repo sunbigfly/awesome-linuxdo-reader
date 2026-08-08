@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.1.0
+// @version      1.1.1
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户、通知、监控与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.1.0 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.1.1 - main-lite-features
  * 媒体、互动、设置、用户、通知、监控与其他功能模块
  * Greasy Fork Library：可读、未压缩；由 TypeScript 源码确定性生成。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -72,7 +72,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.1.0",
+			sourceVersion: "1.1.1",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -110,7 +110,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.1.0") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.1.1") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -18125,7 +18125,17 @@
 		      if (!this.#onReactionClick(event)) return;
 		      event.stopImmediatePropagation();
 		    }, true);
-		    this.scope.listen(this.#document, "click", (event) => this.#onClick(event));
+		    const interactionClicks = /* @__PURE__ */ new WeakSet();
+		    if (interactionRoot !== this.#document) {
+		      this.scope.listen(interactionRoot, "click", (event) => {
+		        interactionClicks.add(event);
+		        this.#onClick(event);
+		      });
+		    }
+		    this.scope.listen(this.#document, "click", (event) => {
+		      if (interactionClicks.has(event)) return;
+		      this.#onClick(event);
+		    });
 		    this.scope.listen(this.#document, "pointerdown", (event) => {
 		      this.#boostPointerDownOwned = false;
 		      if (!this.#boostMenu || this.#boostMenu.hidden) return;
@@ -20525,7 +20535,7 @@
 		    this.#syncReactionPickerVisibility(binding);
 		  }
 		}
-	}, "4cbba5fe7216916ef35b3433bc879106d0ac5b4aba052be08b914e3a795557ef");
+	}, "ad0e7f3c1d2c2e2a1b1dbd43fb1ad75d4f4128d05894cba92b1927e18f73c5a3");
 
 	/* Source: lite/src/post/reader-post-management-action-coordinator.ts */
 	runtime.register("src/post/reader-post-management-action-coordinator.js", function(module, exports, require) {
@@ -21378,7 +21388,9 @@
 		  };
 		  const sync = () => {
 		    if (project() || pending || scope.destroyed) return;
-		    const request = Promise.resolve().then(() => options.loadStarter()).then(() => {
+		    const request = Promise.resolve().then(() => options.waitUntilReady?.()).then(async () => {
+		      if (project() || scope.destroyed) return;
+		      await options.loadStarter();
 		      project();
 		    }).catch((cause) => {
 		      if (!scope.destroyed) onError(cause);
@@ -21388,7 +21400,7 @@
 		    pending = request;
 		  };
 		  options.subscribe(sync, scope);
-		  if (options.deferLoadUntilChange !== true) sync();
+		  sync();
 		  return () => scope.destroy();
 		}
 		function clampRatio(value, fallback) {
@@ -21473,10 +21485,25 @@
 		    this.host.append(this.topButton, this.toggleButton);
 		    this.#mount.append(this.host);
 		    this.scope.listen(this.host, "click", (event) => this.#onClick(event));
-		    this.scope.listen(this.#document, "click", (event) => {
+		    const interactionRoot = this.#shellRoot.getRootNode();
+		    const ownedClicks = /* @__PURE__ */ new WeakSet();
+		    const collapseExpandedFromOutside = (event) => {
 		      if (!this.#expanded) return;
 		      if ((0, import_event_target.eventPathIncludes)(event, this.host)) return;
 		      this.#applyMode("compact", false);
+		    };
+		    if (interactionRoot !== this.#document) {
+		      this.scope.listen(interactionRoot, "click", (event) => {
+		        if ((0, import_event_target.eventPathIncludes)(event, this.host)) {
+		          ownedClicks.add(event);
+		          return;
+		        }
+		        collapseExpandedFromOutside(event);
+		      });
+		    }
+		    this.scope.listen(this.#document, "click", (event) => {
+		      if (ownedClicks.has(event)) return;
+		      collapseExpandedFromOutside(event);
 		    });
 		    this.scope.listen(this.host, "pointerdown", (event) => {
 		      this.#onPointerDown(event);
@@ -21779,7 +21806,7 @@
 		    });
 		  }
 		}
-	}, "e2920fb5403bbd57b46b92e82e4aa0c3241a40d11da3e1dba7ee21b0b2201ae9");
+	}, "e474496df9e2311bdd49f28661022b7d6c048267d7ea0b9a20bbd8c8f5764f3f");
 
 	/* Source: lite/src/post/reader-topic-notification-coordinator.ts */
 	runtime.register("src/post/reader-topic-notification-coordinator.js", function(module, exports, require) {

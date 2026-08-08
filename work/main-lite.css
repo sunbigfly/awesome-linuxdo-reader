@@ -1,6 +1,6 @@
 /* Awesome LinuxDo Reader Lite stylesheet.
  * Generated only from lite/styles/*.css; do not edit generated outputs.
- * source-sha256: e1aba8606fea3b754891c7a6abb47244997790eb6f944aab89c387f8eb3539df
+ * source-sha256: f234a458873c5c8f4f0e58a290de23d9225d97b58d2b6b6c2d1fc8397aa60354
  */
 
 /* source: 00-foundation.css */
@@ -3918,12 +3918,15 @@ html.ldp-reader-workspace :is(
   left: calc((100% - var(--ldp-topic-rail-width, 38px)) * var(--ldp-topic-rail-x, 0));
   z-index: 24;
   display: flex;
+  width: calc(var(--ldp-control-height) + 4px);
   flex-direction: column;
+  align-items: flex-start;
   gap: 2px;
   padding: 2px;
   border: 0;
   background: transparent;
   box-shadow: none;
+  overflow: visible;
   transition: transform var(--ldp-motion-base) var(--ldp-ease-out);
 }
 

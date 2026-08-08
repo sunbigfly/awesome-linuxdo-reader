@@ -79,12 +79,12 @@ export interface ReaderTopicActionRailPostFeature<TPost> {
 export interface ReaderTopicActionRailStarterBindingOptions<TPost> {
 	readonly readStarter: () => TPost | undefined;
 	readonly loadStarter: () => Promise<unknown>;
+	readonly waitUntilReady?: () => Promise<unknown>;
 	readonly subscribe: (
 		listener: () => void,
 		scope: LifecycleScope,
 	) => Cleanup;
 	readonly update: (post: TPost) => void;
-	readonly deferLoadUntilChange?: boolean;
 	readonly parentScope?: LifecycleScope;
 	readonly onError?: (cause: unknown) => void;
 }
@@ -92,8 +92,9 @@ export interface ReaderTopicActionRailStarterBindingOptions<TPost> {
 /**
  * 中间楼层冷启动时，首帖可能不在首批 canonical cache。
  *
- * 绑定只补一条精确首帖请求；session commit 会优先投影已到达的首帖，飞行中的请求
- * 不会因其他楼层变化而重复发出。销毁后不得再把迟到结果挂回旧 Topic。
+ * 绑定先等待 canonical session 初始化；快照恢复不会产生 commit，因此初始化结束后必须
+ * 主动复查首帖，缺失时只补一条精确请求。飞行中的请求不会因其他楼层变化而重复发出，
+ * 销毁后也不得把迟到结果挂回旧 Topic。
  */
 export function bindReaderTopicActionRailStarter<TPost>(
 	options: ReaderTopicActionRailStarterBindingOptions<TPost>,
@@ -116,8 +117,10 @@ export function bindReaderTopicActionRailStarter<TPost>(
 	const sync = (): void => {
 		if (project() || pending || scope.destroyed) return;
 		const request = Promise.resolve()
-			.then(() => options.loadStarter())
-			.then(() => {
+			.then(() => options.waitUntilReady?.())
+			.then(async () => {
+				if (project() || scope.destroyed) return;
+				await options.loadStarter();
 				project();
 			})
 			.catch((cause) => {
@@ -130,7 +133,7 @@ export function bindReaderTopicActionRailStarter<TPost>(
 	};
 
 	options.subscribe(sync, scope);
-	if (options.deferLoadUntilChange !== true) sync();
+	sync();
 	return () => scope.destroy();
 }
 
@@ -266,10 +269,25 @@ export class ReaderTopicActionRail<TPost> {
 		this.#mount.append(this.host);
 
 		this.scope.listen(this.host, 'click', (event) => this.#onClick(event));
-		this.scope.listen(this.#document, 'click', (event) => {
+		const interactionRoot = this.#shellRoot.getRootNode();
+		const ownedClicks = new WeakSet<Event>();
+		const collapseExpandedFromOutside = (event: Event): void => {
 			if (!this.#expanded) return;
 			if (eventPathIncludes(event, this.host)) return;
 			this.#applyMode('compact', false);
+		};
+		if (interactionRoot !== this.#document) {
+			this.scope.listen(interactionRoot, 'click', (event) => {
+				if (eventPathIncludes(event, this.host)) {
+					ownedClicks.add(event);
+					return;
+				}
+				collapseExpandedFromOutside(event);
+			});
+		}
+		this.scope.listen(this.#document, 'click', (event) => {
+			if (ownedClicks.has(event)) return;
+			collapseExpandedFromOutside(event);
 		});
 		this.scope.listen(this.host, 'pointerdown', (event) => {
 			this.#onPointerDown(event as PointerEvent);

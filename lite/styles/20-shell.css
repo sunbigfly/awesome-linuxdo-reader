@@ -2053,12 +2053,15 @@
   left: calc((100% - var(--ldp-topic-rail-width, 38px)) * var(--ldp-topic-rail-x, 0));
   z-index: 24;
   display: flex;
+  width: calc(var(--ldp-control-height) + 4px);
   flex-direction: column;
+  align-items: flex-start;
   gap: 2px;
   padding: 2px;
   border: 0;
   background: transparent;
   box-shadow: none;
+  overflow: visible;
   transition: transform var(--ldp-motion-base) var(--ldp-ease-out);
 }
 

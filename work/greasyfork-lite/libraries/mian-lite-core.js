@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.1.0
+// @version      1.1.1
 // @description  Core runtime modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.1.0 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.1.1 - main-lite-core
  * 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
  * Greasy Fork Library：可读、未压缩；由 TypeScript 源码确定性生成。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -72,7 +72,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.1.0",
+			sourceVersion: "1.1.1",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -110,7 +110,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.1.0") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.1.1") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -2151,7 +2151,7 @@
 		                scope: "single",
 		                advanceCursor: false
 		              }),
-		              deferLoadUntilChange: true,
+		              waitUntilReady: () => bundle.services.session.init(),
 		              subscribe: (listener, scope) => bundle.services.session.changes.subscribe(
 		                listener,
 		                scope
@@ -5244,7 +5244,7 @@
 		    }
 		  });
 		}
-	}, "1f6c65d897fa3d924000b66581b292d6b4e50f17c8b7e7588225552643a9c44b");
+	}, "6fa71a43907334d1612c7092f80c0360723bc7f1e12d505aaca10391ecc0c42e");
 
 	/* Source: lite/src/app/reader-data-runtime.ts */
 	runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -40993,17 +40993,38 @@
 		  )?.getAttribute("href") ?? "";
 		  return href.match(/\/t\/(?:[^/]+\/)?(\d+)(?:\/|$)/)?.[1] ?? "";
 		}
-		function sourceSurface(target) {
+		function sourceElement(target) {
 		  const anchorSource = target.anchor.closest(SOURCE_SELECTOR);
 		  const markerSource = target.sourceElement?.closest(
 		    SOURCE_SELECTOR
 		  ) ?? null;
-		  const source = anchorSource ?? markerSource;
+		  return anchorSource ?? markerSource;
+		}
+		function sourceSurface(source) {
 		  if (!source || source.closest(OWNED_SELECTOR)) return null;
 		  return source.matches(SURFACE_SELECTOR) ? source : source.closest(SURFACE_SELECTOR) ?? source.querySelector(SURFACE_SELECTOR) ?? source;
 		}
 		function surfaceClosed(surface) {
-		  return !surface.isConnected || surface.hidden === true || surface.getAttribute("aria-hidden") === "true";
+		  if (!surface.isConnected || surface.hidden === true || surface.getAttribute("aria-hidden") === "true") return true;
+		  const view = surface.ownerDocument.defaultView;
+		  if (typeof view?.getComputedStyle !== "function") return false;
+		  try {
+		    const style = view.getComputedStyle(surface);
+		    return style.display === "none" || style.visibility === "hidden";
+		  } catch {
+		    return false;
+		  }
+		}
+		function openSourceSurfaces(document) {
+		  const seen = /* @__PURE__ */ new Set();
+		  const result = [];
+		  for (const source of document.querySelectorAll(SOURCE_SELECTOR)) {
+		    const surface = sourceSurface(source);
+		    if (!surface || seen.has(surface) || surfaceClosed(surface)) continue;
+		    seen.add(surface);
+		    result.push(Object.freeze({ source, surface }));
+		  }
+		  return Object.freeze(result);
 		}
 		class ReaderHostTopicSourceCoordinator {
 		  scope;
@@ -41011,12 +41032,22 @@
 		  #host;
 		  #anchors = /* @__PURE__ */ new WeakMap();
 		  #restoringTargets = /* @__PURE__ */ new Set();
+		  #closingOpenSurfaces = null;
 		  constructor(options) {
 		    this.#document = options.document;
 		    this.#host = options.host;
 		    this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
+		    const readerRoot = options.readerRoot;
+		    const isEmbedded = options.isEmbedded;
+		    if (readerRoot && isEmbedded) {
+		      this.scope.listen(readerRoot, "pointerdown", () => {
+		        if (this.scope.destroyed || !isEmbedded()) return;
+		        void this.closeOpenSurfaces();
+		      }, true);
+		    }
 		    this.scope.add(() => {
 		      this.#restoringTargets.clear();
+		      this.#closingOpenSurfaces = null;
 		      this.#document.documentElement.classList.remove(
 		        "ldp-reader-host-anchor-restoring"
 		      );
@@ -41035,6 +41066,19 @@
 		      if (typeof blur === "function") blur.call(target.anchor);
 		    }
 		    await this.#closeSourceSurface(target);
+		  }
+		  closeOpenSurfaces() {
+		    if (this.scope.destroyed) return Promise.resolve();
+		    if (this.#closingOpenSurfaces) return this.#closingOpenSurfaces;
+		    const closing = this.#closeOpenSourceSurfaces().catch(() => {
+		    });
+		    this.#closingOpenSurfaces = closing;
+		    void closing.then(() => {
+		      if (this.#closingOpenSurfaces === closing) {
+		        this.#closingOpenSurfaces = null;
+		      }
+		    });
+		    return closing;
 		  }
 		  async settle(target, opened) {
 		    const anchor = this.#anchors.get(target) ?? null;
@@ -41104,8 +41148,18 @@
 		    );
 		  }
 		  async #closeSourceSurface(target) {
-		    const surface = sourceSurface(target);
+		    const source = sourceElement(target);
+		    const surface = sourceSurface(source);
 		    if (!surface || surfaceClosed(surface)) return;
+		    await this.#closeSurface(surface, source);
+		  }
+		  async #closeOpenSourceSurfaces() {
+		    for (const { source, surface } of openSourceSurfaces(this.#document)) {
+		      if (this.scope.destroyed) return;
+		      await this.#closeSurface(surface, source);
+		    }
+		  }
+		  async #closeSurface(surface, source) {
 		    const identifier = surface.matches(".fk-d-menu") ? String(surface.dataset.identifier ?? "").trim() : "";
 		    if (identifier) {
 		      const close = (0, import_native_host_api.discourseNativeMenuCloser)(this.#host);
@@ -41136,7 +41190,6 @@
 		      )
 		    ) ?? null;
 		    if (!trigger) {
-		      const source = target.anchor.closest(SOURCE_SELECTOR) ?? target.sourceElement?.closest(SOURCE_SELECTOR) ?? null;
 		      const selector = source?.classList.contains("search-menu") ? ".d-header-icons .search-dropdown" : source?.classList.contains("user-menu") ? ".d-header-icons .current-user" : source ? ".d-header-icons .hamburger-dropdown,.hamburger-dropdown" : "";
 		      if (selector) {
 		        const candidates = [
@@ -41189,7 +41242,7 @@
 		    });
 		  }
 		}
-	}, "2bb62d9110ac5b8a7056ef71807c9ac910202b4060dd5fb1126e7244a7978908");
+	}, "54da6eb46a64b56fbbc912bb38f329790d833b921800f746de735d514621f67a");
 
 	/* Source: lite/src/userscript/reader-userscript-application.ts */
 	runtime.register("src/userscript/reader-userscript-application.js", function(module, exports, require) {
@@ -41404,6 +41457,8 @@
 		          hostSource = new import_reader_host_topic_source_coordinator.ReaderHostTopicSourceCoordinator({
 		            document: options.runtime.document,
 		            host: options.environment.discourseHost,
+		            readerRoot: runtime.shell.view.root,
+		            isEmbedded: () => runtime.workspace.workspace.snapshot.presentation.embedded,
 		            parentScope: runtime.scope
 		          });
 		          targetAdapter = new import_reader_userscript_target_adapter.ReaderUserscriptTargetAdapter({
@@ -41462,7 +41517,7 @@
 		    }
 		  });
 		}
-	}, "3f6e2baf57b004554369eb5074d66ac3839ded2cc8fb53f19228db44a5623351");
+	}, "74691f35d28d2f35221a00bfe0734342e8b02fef7f6c72337520d6c51b3f2c7c");
 
 	/* Source: lite/src/userscript/reader-userscript-target-adapter.ts */
 	runtime.register("src/userscript/reader-userscript-target-adapter.js", function(module, exports, require) {

@@ -1132,6 +1132,81 @@ assert(
 		'edit:2,delete:2,assign-post:2,admin:2:true,assign-topic:1',
 	'所有管理入口必须只委托统一 coordinator，不能恢复散落的 DOM handler',
 );
+const shadowActionPortal = document.createElement('div');
+document.body.append(shadowActionPortal);
+const shadowActionRoot = shadowActionPortal.attachShadow({ mode: 'open' });
+const shadowActionHost = document.createElement('main');
+shadowActionRoot.append(shadowActionHost);
+const shadowManagementRequests: string[] = [];
+const shadowMessageBusHandlers = new Map<string, (message: unknown) => void>();
+const shadowHost: DiscourseHostApiPort = {
+	lookup(name) {
+		if (name !== 'service:message-bus') return host.lookup(name);
+		return {
+			subscribe(channel: string, handler: (message: unknown) => void) {
+				shadowMessageBusHandlers.set(channel, handler);
+			},
+			unsubscribe(channel: string, handler: (message: unknown) => void) {
+				if (shadowMessageBusHandlers.get(channel) === handler) {
+					shadowMessageBusHandlers.delete(channel);
+				}
+			},
+		};
+	},
+	lookupModule(name) {
+		return host.lookupModule(name);
+	},
+};
+const shadowModels = new DiscourseNativePostModelFactory(shadowHost);
+const shadowFeature = new ReaderPostActionFeature<TestTopic, TestPost>({
+	document,
+	surfaceHost: shadowActionHost,
+	topic: () => topic,
+	actions,
+	commands,
+	descriptors: new DiscourseActionDescriptors(),
+	models: shadowModels,
+	reactions: new DiscoursePostReactionCatalog(shadowModels),
+	capabilityInput: (post) => ({
+		post,
+		topic,
+		currentUser: { id: 99, username: 'viewer' },
+		currentUsername: 'viewer',
+		plugins: { boosts: true, reactions: true },
+	}),
+	topicActionRail: true,
+	management: {
+		async openEdit(post) {
+			shadowManagementRequests.push(`edit:${post.id}`);
+			return true;
+		},
+		async deletePost() { return true; },
+		async assignPost() { return true; },
+		async assignTopic() { return true; },
+		async openAdmin() { return true; },
+	},
+});
+const shadowRailView = new PostView(document, {
+	postId: comment.id,
+	postNumber: comment.post_number,
+	username: comment.username,
+});
+shadowRailView.slots.root.classList.add('ldp-topic-action-rail-post');
+shadowActionHost.append(shadowRailView.slots.root);
+shadowFeature.afterRender(comment, shadowRailView);
+shadowFeature.setTopicActionRailExpanded(shadowRailView, true);
+const shadowEditButton = shadowRailView.slots.actions
+	.querySelector<HTMLButtonElement>('[data-post-edit]');
+assert(shadowEditButton, 'ShadowRoot 收纳箱必须投影可编辑楼层动作');
+click(shadowEditButton);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert(
+	shadowManagementRequests.join(',') === 'edit:2',
+	'ShadowRoot 收纳箱动作必须在自身 interaction root 委托，不能等到 document retarget 后丢失目标',
+);
+shadowRailView.destroy();
+shadowFeature.destroy();
+shadowActionPortal.remove();
 const managementOrder = [
 	...regular.slots.actions.querySelectorAll<HTMLButtonElement>(
 		':scope > .ldp-actions > .ldp-context-actions-slot > button',

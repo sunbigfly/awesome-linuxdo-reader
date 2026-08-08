@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.1.0
+version: 1.1.1
 status: current
 last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
@@ -15,6 +15,22 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.0.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.1.1 — 嵌入交互与收纳箱恢复
+
+核验日期：2026-08-08。
+
+### 修复
+
+- 嵌入态点击阅读器控件时，先通过 Discourse 原生菜单服务或触发器收起宿主搜索与头像抽屉，避免宿主抽屉继续覆盖阅读器并争抢交互。
+- 收纳箱全展开后，帖子编辑等动作改在阅读器 ShadowRoot 的真实交互根委托；内部点击不再被 document 侧误判成外部点击而提前收纳。
+- 大刷新或从深楼层快照恢复时，主帖收纳箱会等待 canonical session 初始化后主动复查首帖；即使快照恢复不产生 session commit，也能精确补载并显示操作列。
+- 操作列补充稳定宽度与可见溢出边界，展开动作不再被紧凑容器裁切。
+
+### 发布状态
+
+- `1.1.1` 三文件固定坐标正在同步；完成前继续保留 `1.1.0` Loader `1896519`、Core `1896235` 与 Features `1896236` 作为公开回滚基线。
+- 本次补丁不改变 WebDAV 数据结构，也不包含回复入口去重；发布同步不重复 `1.1.0` 的完整浏览器矩阵与性能门禁。
 
 ## 1.1.0 — WebDAV 跨设备同步与运行可靠性
 

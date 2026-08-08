@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.1.0
+// @version      1.1.1
 // @license      MIT
 // @description  为 LINUX DO 深度定制并保持完整功能覆盖，同时通过站点识别与能力检测兼容中文、英文及其他语言的标准 Discourse 社区，在列表页内完成阅读、翻译、回复与原站互动。
 // @description:en Deeply customized for LINUX DO with complete feature coverage, while site detection and capability checks support standard Discourse communities in any language for in-list reading, translation, replies, and native interactions.

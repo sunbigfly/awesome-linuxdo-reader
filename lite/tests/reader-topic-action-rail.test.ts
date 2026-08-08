@@ -21,13 +21,19 @@ interface TestPost {
 
 const { document: parsedDocument, window: parsedWindow } = parseHTML(
 	'<!doctype html><html><body>' +
-		'<section class="ldp-root"><main class="ldp-modal"></main></section>' +
+		'<div id="reader-portal"></div>' +
 	'</body></html>',
 );
 const document = parsedDocument as unknown as Document;
 const EventConstructor = parsedWindow.Event as unknown as typeof Event;
-const mount = document.querySelector<HTMLElement>('.ldp-modal');
-const shellRoot = document.querySelector<HTMLElement>('.ldp-root');
+const portal = document.querySelector<HTMLElement>('#reader-portal')!;
+const portalRoot = portal.attachShadow({ mode: 'open' });
+const shellRoot = document.createElement('section');
+shellRoot.className = 'ldp-root';
+const mount = document.createElement('main');
+mount.className = 'ldp-modal';
+shellRoot.append(mount);
+portalRoot.append(shellRoot);
 assert(mount && shellRoot, '测试 DOM 缺少操作列挂载点');
 
 let preferences: ReaderTopicActionRailPreferences = Object.freeze({
@@ -205,30 +211,72 @@ assert(
 );
 starterBinding();
 
-const deferredStarterChanges = new Signal<void>();
-let deferredStarterLoads = 0;
-const deferredStarterBinding = bindReaderTopicActionRailStarter<TestPost>({
-	readStarter: () => undefined,
+const committedStarter = Object.freeze({
+	id: 101,
+	post_number: 1,
+	username: 'committed-starter',
+	created_at: '2026-08-08T00:00:00.000Z',
+	revision: 1,
+});
+const committedStarterChanges = new Signal<void>();
+let committedStarterLoads = 0;
+const committedStarterProjections: TestPost[] = [];
+const committedStarterBinding = bindReaderTopicActionRailStarter({
+	readStarter: () => committedStarter,
 	loadStarter: async () => {
-		deferredStarterLoads += 1;
+		committedStarterLoads += 1;
 	},
-	deferLoadUntilChange: true,
 	subscribe: (listener, scope) =>
-		deferredStarterChanges.subscribe(listener, scope),
-	update() {},
+		committedStarterChanges.subscribe(listener, scope),
+	update: (post) => committedStarterProjections.push(post),
+});
+assert(
+	committedStarterLoads === 0 &&
+		committedStarterProjections.length === 1 &&
+		committedStarterProjections[0] === committedStarter,
+	'大刷新绑定收纳箱时若 canonical 首帖已经提交，必须立即投影且不得重复补载',
+);
+committedStarterBinding();
+
+let restoredStarter: TestPost | undefined;
+let restoreReady: (() => void) | undefined;
+const restoredSessionReady = new Promise<void>((resolve) => {
+	restoreReady = resolve;
+});
+const restoredStarterChanges = new Signal<void>();
+let restoredStarterLoads = 0;
+const restoredStarterProjections: TestPost[] = [];
+const restoredStarterBinding = bindReaderTopicActionRailStarter<TestPost>({
+	readStarter: () => restoredStarter,
+	waitUntilReady: () => restoredSessionReady,
+	loadStarter: async () => {
+		restoredStarterLoads += 1;
+		restoredStarter = Object.freeze({
+			id: 102,
+			post_number: 1,
+			username: 'restored-starter',
+			created_at: '2026-08-08T00:01:00.000Z',
+			revision: 1,
+		});
+	},
+	subscribe: (listener, scope) =>
+		restoredStarterChanges.subscribe(listener, scope),
+	update: (post) => restoredStarterProjections.push(post),
 });
 await Promise.resolve();
 assert(
-	deferredStarterLoads === 0,
-	'Topic 初始化前绑定主帖操作列时不得抢在 canonical 首包前补载首帖',
+	restoredStarterLoads === 0 && restoredStarterProjections.length === 0,
+	'Topic 初始化完成前绑定主帖操作列时不得抢在 canonical 恢复前补载首帖',
 );
-deferredStarterChanges.emit();
-await Promise.resolve();
+restoreReady?.();
+await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
-	Number(deferredStarterLoads) === 1,
-	'首个 session commit 后仍缺首帖时必须保留一次精确补载',
+	Number(restoredStarterLoads) === 1 &&
+		Number(restoredStarterProjections.length) === 1 &&
+		restoredStarterProjections[0] === restoredStarter,
+	'完整深楼层快照不产生 session commit 时，初始化结束后仍必须精确补载并投影首帖',
 );
-deferredStarterBinding();
+restoredStarterBinding();
 
 function pointer(
 	target: EventTarget,
@@ -373,6 +421,16 @@ assert(
 	rail.toggleButton.getAttribute('aria-expanded') === 'true' &&
 	reactionExpandedStates.at(-1) === true,
 	'compact 操作列必须可展开完整动作并同步常显回应列表',
+);
+const expandedAction = rail.host.querySelector<HTMLElement>('.ldp-like')!;
+let expandedActionClicks = 0;
+expandedAction.addEventListener('click', () => {
+	expandedActionClicks += 1;
+});
+click(expandedAction);
+assert(
+	expandedActionClicks === 1 && rail.host.classList.contains('is-expanded'),
+	'ShadowRoot 内收纳箱动作必须先归 rail 所有，不能被 document 外部点击路径误收纳',
 );
 const retargetedInternalClick = new EventConstructor('click', {
 	bubbles: true,

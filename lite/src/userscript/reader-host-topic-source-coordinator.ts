@@ -10,6 +10,8 @@ import type {
 export interface ReaderHostTopicSourceCoordinatorOptions {
 	readonly document: Document;
 	readonly host: DiscourseHostApiPort;
+	readonly readerRoot?: HTMLElement;
+	readonly isEmbedded?: () => boolean;
 	readonly parentScope?: LifecycleScope;
 }
 
@@ -43,12 +45,17 @@ function topicIdFromCard(card: Element): string {
 	return href.match(/\/t\/(?:[^/]+\/)?(\d+)(?:\/|$)/)?.[1] ?? '';
 }
 
-function sourceSurface(target: ReaderUserscriptInterceptedTarget): HTMLElement | null {
+function sourceElement(
+	target: ReaderUserscriptInterceptedTarget,
+): HTMLElement | null {
 	const anchorSource = target.anchor.closest<HTMLElement>(SOURCE_SELECTOR);
 	const markerSource = target.sourceElement?.closest<HTMLElement>(
 		SOURCE_SELECTOR,
 	) ?? null;
-	const source = anchorSource ?? markerSource;
+	return anchorSource ?? markerSource;
+}
+
+function sourceSurface(source: HTMLElement | null): HTMLElement | null {
 	if (!source || source.closest(OWNED_SELECTOR)) return null;
 	return source.matches(SURFACE_SELECTOR)
 		? source
@@ -58,17 +65,48 @@ function sourceSurface(target: ReaderUserscriptInterceptedTarget): HTMLElement |
 }
 
 function surfaceClosed(surface: HTMLElement): boolean {
-	return !surface.isConnected ||
+	if (
+		!surface.isConnected ||
 		surface.hidden === true ||
-		surface.getAttribute('aria-hidden') === 'true';
+		surface.getAttribute('aria-hidden') === 'true'
+	) return true;
+	const view = surface.ownerDocument.defaultView;
+	if (typeof view?.getComputedStyle !== 'function') return false;
+	try {
+		const style = view.getComputedStyle(surface);
+		return style.display === 'none' || style.visibility === 'hidden';
+	} catch {
+		return false;
+	}
+}
+
+function openSourceSurfaces(
+	document: Document,
+): readonly Readonly<{
+	readonly source: HTMLElement;
+	readonly surface: HTMLElement;
+}>[] {
+	const seen = new Set<HTMLElement>();
+	const result: Array<Readonly<{
+		source: HTMLElement;
+		surface: HTMLElement;
+	}>> = [];
+	for (const source of document.querySelectorAll<HTMLElement>(SOURCE_SELECTOR)) {
+		const surface = sourceSurface(source);
+		if (!surface || seen.has(surface) || surfaceClosed(surface)) continue;
+		seen.add(surface);
+		result.push(Object.freeze({ source, surface }));
+	}
+	return Object.freeze(result);
 }
 
 /**
- * 宿主 Topic 点击来源的唯一交互协调器。
+ * 宿主临时浮层与 Reader 接管之间的唯一交互协调器。
  *
  * 它只持有一次点击的短命几何锚点：打开前优先通过 Discourse 原生 menu service 关闭来源
- * 浮层，打开成功后按同一 Topic 卡片恢复指针位置。它不读取 Topic 数据、不发请求、不保存
- * 阅读锚点，也不参与 Reader 内部导航状态。
+ * 浮层，打开成功后按同一 Topic 卡片恢复指针位置；嵌入态把交互焦点切回 Reader 时也先
+ * 关闭仍打开的宿主临时浮层。它不读取 Topic 数据、不发请求、不保存阅读锚点，也不参与
+ * Reader 内部导航状态。
  */
 export class ReaderHostTopicSourceCoordinator {
 	readonly scope: LifecycleScope;
@@ -79,13 +117,23 @@ export class ReaderHostTopicSourceCoordinator {
 		HostTopicPointerAnchor
 	>();
 	readonly #restoringTargets = new Set<ReaderUserscriptInterceptedTarget>();
+	#closingOpenSurfaces: Promise<void> | null = null;
 
 	constructor(options: ReaderHostTopicSourceCoordinatorOptions) {
 		this.#document = options.document;
 		this.#host = options.host;
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
+		const readerRoot = options.readerRoot;
+		const isEmbedded = options.isEmbedded;
+		if (readerRoot && isEmbedded) {
+			this.scope.listen(readerRoot, 'pointerdown', () => {
+				if (this.scope.destroyed || !isEmbedded()) return;
+				void this.closeOpenSurfaces();
+			}, true);
+		}
 		this.scope.add(() => {
 			this.#restoringTargets.clear();
+			this.#closingOpenSurfaces = null;
 			this.#document.documentElement.classList.remove(
 				'ldp-reader-host-anchor-restoring',
 			);
@@ -105,6 +153,21 @@ export class ReaderHostTopicSourceCoordinator {
 			if (typeof blur === 'function') blur.call(target.anchor);
 		}
 		await this.#closeSourceSurface(target);
+	}
+
+	closeOpenSurfaces(): Promise<void> {
+		if (this.scope.destroyed) return Promise.resolve();
+		if (this.#closingOpenSurfaces) return this.#closingOpenSurfaces;
+		const closing = this.#closeOpenSourceSurfaces().catch(() => {
+			// 宿主临时浮层关闭是 best-effort，不能阻断 Reader 自己的交互。
+		});
+		this.#closingOpenSurfaces = closing;
+		void closing.then(() => {
+			if (this.#closingOpenSurfaces === closing) {
+				this.#closingOpenSurfaces = null;
+			}
+		});
+		return closing;
 	}
 
 	async settle(
@@ -199,8 +262,23 @@ export class ReaderHostTopicSourceCoordinator {
 	async #closeSourceSurface(
 		target: ReaderUserscriptInterceptedTarget,
 	): Promise<void> {
-		const surface = sourceSurface(target);
+		const source = sourceElement(target);
+		const surface = sourceSurface(source);
 		if (!surface || surfaceClosed(surface)) return;
+		await this.#closeSurface(surface, source);
+	}
+
+	async #closeOpenSourceSurfaces(): Promise<void> {
+		for (const { source, surface } of openSourceSurfaces(this.#document)) {
+			if (this.scope.destroyed) return;
+			await this.#closeSurface(surface, source);
+		}
+	}
+
+	async #closeSurface(
+		surface: HTMLElement,
+		source: HTMLElement | null,
+	): Promise<void> {
 		const identifier = surface.matches('.fk-d-menu')
 			? String(surface.dataset.identifier ?? '').trim()
 			: '';
@@ -237,9 +315,6 @@ export class ReaderHostTopicSourceCoordinator {
 			),
 		) ?? null;
 		if (!trigger) {
-			const source = target.anchor.closest<HTMLElement>(SOURCE_SELECTOR) ??
-				target.sourceElement?.closest<HTMLElement>(SOURCE_SELECTOR) ??
-				null;
 			const selector = source?.classList.contains('search-menu')
 				? '.d-header-icons .search-dropdown'
 				: source?.classList.contains('user-menu')

@@ -17,6 +17,7 @@ const { document: parsedDocument, window: parsedWindow } = parseHTML(`
 		<body>
 			<div class="d-header-icons">
 				<button class="search-dropdown" aria-expanded="true"></button>
+				<button class="current-user" aria-expanded="true" aria-controls="user-menu"></button>
 			</div>
 			<table>
 				<tbody>
@@ -30,6 +31,8 @@ const { document: parsedDocument, window: parsedWindow } = parseHTML(`
 					<a id="menu-topic" href="/t/example/43">搜索主题</a>
 				</div>
 			</div>
+			<div id="user-menu" class="menu-panel user-menu">用户菜单</div>
+			<div id="reader-root"><button id="reader-control">Reader 控件</button></div>
 		</body>
 	</html>
 `);
@@ -58,7 +61,18 @@ const scrollDeltas: number[] = [];
 };
 
 let menuCloseCalls = 0;
+let userMenuCloseCalls = 0;
+let embedded = false;
 const menu = document.querySelector<HTMLElement>('.fk-d-menu')!;
+const userMenu = document.querySelector<HTMLElement>('#user-menu')!;
+const userMenuTrigger = document.querySelector<HTMLButtonElement>(
+	'.current-user',
+)!;
+userMenuTrigger.addEventListener('click', () => {
+	userMenuCloseCalls += 1;
+	userMenu.hidden = true;
+	userMenuTrigger.setAttribute('aria-expanded', 'false');
+});
 const host = {
 	lookup(name: string): unknown {
 		return name === 'service:menu'
@@ -81,6 +95,8 @@ const host = {
 const coordinator = new ReaderHostTopicSourceCoordinator({
 	document,
 	host,
+	readerRoot: document.querySelector<HTMLElement>('#reader-root')!,
+	isEmbedded: () => embedded,
 });
 
 const target = Object.freeze({
@@ -140,6 +156,26 @@ assert(
 		menu.hidden &&
 		!await coordinator.settle(menuTarget, false),
 	'宿主搜索浮层必须优先走 Discourse menu service，失败打开不得恢复伪锚点',
+);
+
+menu.hidden = false;
+document.querySelector<HTMLElement>('#reader-control')!.dispatchEvent(
+	new parsedWindow.Event('pointerdown', { bubbles: true }),
+);
+await Promise.resolve();
+assert(
+	menuCloseCalls === 1 && !menu.hidden && !userMenu.hidden,
+	'非嵌入态 Reader 交互不得改写宿主临时浮层生命周期',
+);
+embedded = true;
+document.querySelector<HTMLElement>('#reader-control')!.dispatchEvent(
+	new parsedWindow.Event('pointerdown', { bubbles: true }),
+);
+await coordinator.closeOpenSurfaces();
+assert(
+	Number(menuCloseCalls) === 2 && menu.hidden &&
+	userMenuCloseCalls === 1 && userMenu.hidden,
+	'嵌入态切回 Reader 交互必须通过宿主 service 或原生 trigger 收起搜索与头像浮层',
 );
 
 coordinator.destroy();

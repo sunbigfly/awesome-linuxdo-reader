@@ -3081,7 +3081,8 @@ export class ReaderBrowserRuntime<
 									scope: 'single',
 									advanceCursor: false,
 								}),
-							deferLoadUntilChange: true,
+							waitUntilReady: () =>
+								bundle.services.session.init(),
 							subscribe: (listener, scope) =>
 								bundle.services.session.changes.subscribe(
 									listener,

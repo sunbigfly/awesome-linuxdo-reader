@@ -123,7 +123,7 @@
 
 ## 安装
 
-> **发布状态：** Lite `1.1.0` 已发布到 Greasy Fork。主 Loader 固定版本为 `1896519`，加载 Core `1896235` 与 Features `1896236`；三文件坐标、SHA-256、16 页设置矩阵和五轮性能门禁均已核验。
+> **发布状态：** Lite `1.1.1` 三文件版本正在同步；当前公开回滚基线仍为 `1.1.0`，完成后将在更新记录中补齐 Loader、Core 与 Features 的固定坐标和 SHA-256。
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。
@@ -152,9 +152,9 @@
 4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 适用站点 → 其他适用站点”中验证并添加。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `1.1.0`。脚本对 LINUX DO 保持全面适配，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `1.1.1`。脚本对 LINUX DO 保持全面适配，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
-1.1.0 重点新增 WebDAV 跨设备合并同步：历史、收藏、设置、阅读队列、阅读位置、自定义站点和 Connect 本机观察历史均可独立选择，支持手动与定时同步；正文、图片、附件和页面缓存不会上传。同步使用 ETag、三方合并和删除标记，不以任一设备整份覆盖另一端。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+1.1.1 重点修复嵌入阅读器与宿主搜索、头像抽屉之间的交互竞争，恢复收纳箱展开后的帖子动作，并确保大刷新或从深楼层恢复时主帖收纳箱能够可靠加载。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 ## 开发
 
@@ -178,7 +178,7 @@ GitHub Raw `main` 通过 Webhook 同步；用户只安装主脚本，不需要�
 ├── assets/           品牌与文档资源
 ├── docs/             项目介绍和资料索引
 ├── dist/             仓库直装的压缩 userscript 与来源清单
-├── lite/             v1.1.0 TypeScript 业务源码、样式、契约与测试
+├── lite/             v1.1.1 TypeScript 业务源码、样式、契约与测试
 ├── scripts/          跨平台开发工具入口
 ├── tools/            Rust 开发辅助工具源码
 ├── work/greasyfork-lite/  Lite Greasy Fork Library 发布产物

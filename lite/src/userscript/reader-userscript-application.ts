@@ -561,6 +561,9 @@ export function createReaderUserscriptRuntimeStage<
 					hostSource = new ReaderHostTopicSourceCoordinator({
 						document: options.runtime.document,
 						host: options.environment.discourseHost,
+						readerRoot: runtime.shell.view.root,
+						isEmbedded: () =>
+							runtime.workspace.workspace.snapshot.presentation.embedded,
 						parentScope: runtime.scope,
 					});
 					targetAdapter = new ReaderUserscriptTargetAdapter({

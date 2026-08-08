@@ -4,7 +4,7 @@ description: 理解 16 个设置面板、分组导航、设置搜索、快捷方
 feature_ids: ["USER-005", "SET-001", "SET-020", "DATA-006"]
 source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/reader-preferences-schema.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/settings/reader-webdav-settings-form.ts"]
 since: 0.1.2
-version: 1.1.0
+version: 1.1.1
 status: current
 last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png"]
@@ -12,7 +12,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png"]
 
 # 设置中心总览
 
-点击阅读器标题栏的“设置”进入设置中心。当前 v1.1.0 按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 16 个面板：
+点击阅读器标题栏的“设置”进入设置中心。当前 v1.1.1 按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 16 个面板：
 
 | 面板 | 作用 |
 | --- | --- |

@@ -566,7 +566,17 @@ export class ReaderPostActionFeature<
 			if (!this.#onReactionClick(event)) return;
 			event.stopImmediatePropagation();
 		}, true);
-		this.scope.listen(this.#document, 'click', (event) => this.#onClick(event));
+		const interactionClicks = new WeakSet<Event>();
+		if (interactionRoot !== this.#document) {
+			this.scope.listen(interactionRoot, 'click', (event) => {
+				interactionClicks.add(event);
+				this.#onClick(event);
+			});
+		}
+		this.scope.listen(this.#document, 'click', (event) => {
+			if (interactionClicks.has(event)) return;
+			this.#onClick(event);
+		});
 		this.scope.listen(this.#document, 'pointerdown', (event) => {
 			this.#boostPointerDownOwned = false;
 			if (!this.#boostMenu || this.#boostMenu.hidden) return;

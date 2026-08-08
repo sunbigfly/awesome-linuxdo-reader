@@ -4,7 +4,7 @@ description: 选择浮窗、全屏、嵌入或移动布局，理解多主题队�
 feature_ids: ["CORE-003", "CORE-004", "CORE-005", "CORE-006", "READ-001", "READ-002"]
 source_anchors: ["lite/src/userscript/main-lite-entry.ts","lite/src/shell/reader-workspace.ts","lite/src/components/reader-icon.ts","lite/src/queue/reader-open-queue-session.ts","lite/src/dom/reply-tree.ts","lite/src/topic/topic-session.ts"]
 since: 0.1.2
-version: 1.1.0
+version: 1.1.1
 status: current
 last_verified: 2026-07-25
 screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png", "/screenshots/guide-05-layout-settings-v1.0.0.png", "/screenshots/guide-21-reading-queue-v1.0.0.png", "/screenshots/guide-09-performance-settings-v1.0.0.png"]

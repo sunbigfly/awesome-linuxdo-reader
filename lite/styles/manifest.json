@@ -394,7 +394,8 @@
         "z-index: 2147483610;",
         "border-right: 1px solid var(--primary-low, #ddd);",
         "bottom: calc(100% + 5px);",
-        "z-index: 3;"
+        "z-index: 3;",
+        "width: calc(var(--ldp-control-height) + 4px);"
       ]
     },
     {
