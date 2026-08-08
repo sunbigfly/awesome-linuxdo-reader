@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "runtimeComplete": true,
   "featureContractCoverageComplete": true,
-  "browserMatrixAccepted": false,
-  "performanceAccepted": false,
+  "browserMatrixAccepted": true,
+  "performanceAccepted": true,
   "rollbackVerified": true,
   "readerStylesUrl": "https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@a6976696e7e142be5e76dc2cca7e401bad019e27/work/main-lite.css#sha256=c0c1917e9db9ceacb2cc607665ba4c38f93dcb041c973b83d497fd08963d0341"
 }

@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "releaseVersion": "1.0.1",
-  "capturedAt": "2026-08-07",
+  "releaseVersion": "1.1.0",
+  "capturedAt": "2026-08-08T10:35:58+08:00",
   "scope": "sanitized-browser-release-evidence",
   "acceptanceLoader": {
-    "file": "work/v1.0.1-acceptance.user.js",
-    "sha256": "f42bdac236d9ae93af07b73685f69fe8e5adaa8cefb901c65db2c6008f083814",
+    "file": "work/v1.1.0-acceptance.user.js",
+    "sha256": "7c5a91b3242aed7dc418325166ffc497a989dc1070a895da5292de71ea048ea3",
     "userConfirmedEnabled": true,
     "coldReloaded": true
   },
@@ -13,31 +13,18 @@
     {
       "name": "main-lite-core",
       "scriptId": 590254,
-      "versionId": 1895921,
-      "bytes": 1656364,
-      "sha256": "60dc23ad1611ddd466d785d96c6f3472d3e52cb2ef78fbd487ec2a4465da53c0"
+      "versionId": 1896235,
+      "bytes": 1665405,
+      "sha256": "4f2b5b556da94f27e5d6e843f78d9fa24d44b36972fbf49afabf650e0c9a39a7"
     },
     {
       "name": "main-lite-features",
       "scriptId": 590255,
-      "versionId": 1895924,
-      "bytes": 1550452,
-      "sha256": "27910eb1c7bf064ba9899938ed87672ccd85ab63512a5f5e2fe79b53912529bb"
+      "versionId": 1896236,
+      "bytes": 1613871,
+      "sha256": "0825bad2bb9f925f9b8ed7f1dd9bfbcf3bf9fef37853fbf6c4618c95a7b94abe"
     }
   ],
-  "publishedLoader": {
-    "scriptId": 588185,
-    "versionId": 1895932,
-    "fixedBytes": 3815,
-    "fixedSha256": "56e4766d7a8685aa8a4bfdfed85b63ac8c497f761325264de7f191e32e8bc679",
-    "platformMetadata": "@downloadURL none",
-    "normalizedBytes": 3794,
-    "normalizedSha256": "8b1ac7799172508516ff009558dfab24e35e44ffa8fb548b092a50b1c5787ec5",
-    "publicInstallHasDownloadUrl": true,
-    "publicInstallHasUpdateUrl": true,
-    "webhookResponse": 200,
-    "syncSource": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/main-lite.js"
-  },
   "browserMatrix": {
     "accepted": true,
     "site": "https://linux.do",
@@ -53,23 +40,27 @@
       "errorCapture": true,
       "horizontalOverflow": true
     },
-    "settingsPages": 15,
-    "settingsTransitionsPassed": 15,
+    "settingsPages": 16,
+    "settingsTransitionsPassed": 16,
     "capturedErrorCount": 0,
+    "nonLitePageErrorCount": 4,
     "horizontalOverflowPixels": 0
   },
   "performance": {
     "accepted": true,
     "cycles": 5,
     "portalCounts": [1, 1, 1, 1, 1],
-    "shadowNodeSamples": [5974, 5974, 5974, 5974, 5974],
-    "heapUsedSamples": [89321728, 90453565, 90089913, 89293346, 90614888],
-    "traceCls": 0,
-    "programmaticRequests": 8,
+    "shadowNodeSamples": [6017, 6017, 6017, 6017, 6017],
+    "heapUsedSamples": [72719334, 70839466, 73075663, 70666330, 71993132],
+    "heapSpan": 2409333,
+    "traceCls": 0.0423,
+    "interactionLongTasks": 33,
+    "interactionLongTaskMaxMilliseconds": 96,
+    "programmaticRequests": 0,
     "httpFailures": 0,
     "http429": 0,
     "duplicateRequestPaths": 0,
-    "note": "五轮设置、通知、历史与收藏开关后 portal 与 Shadow DOM 节点保持恒定，heap 波动约 1.5%，无阶梯上涨；8 条成功的一方 XHR/fetch 路径无重复，5 条面板关闭触发的 user_actions 主动取消不计失败。页面 Console 的 GTM 连接关闭、Cloudflare 请求和宿主 NaN 日志均未归因到 Lite。"
+    "note": "9222 中仅启用 v1.1.0 三文件验收版。五轮设置、通知、历史与收藏开关后 portal 始终为 1，Shadow DOM 节点恒定为 6017，heap 波动 2409333 bytes 且无阶梯上涨；交互窗口 33 个 long task 的最大值为 96ms，CLS 为 0.0423，无 HTTP 失败、429 或重复请求路径。页面捕获到 4 个非 Lite error，Lite error、unhandledrejection 与 console.error 均为 0。"
   },
   "rollback": {
     "accepted": true,
