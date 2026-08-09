@@ -28,8 +28,10 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 
 ### 发布状态
 
-- `1.2.3` 本地源码和两套审查产物已生成；尚未提交、推送或同步 Greasy Fork。
-- 当前公开稳定版仍为 `1.2.1`，其固定三文件坐标继续作为回滚基线。
+- `1.2.3` 已发布到 Greasy Fork：主 Loader 固定版本为 `1897714`，加载 Core `1897707` 与 Features `1897709`。
+- 固定 Loader 原始文件为 3,815 字节，SHA-256 `cd9eb04a81e40e6b108251db362b3883f75a43a38e23752b4b72c45280797c4f`；移除平台加入的 `@downloadURL none` 后为 3,794 字节，SHA-256 `9ff81d027133c407cd3a7d9df2e34d530dec563ccc439c835685aa6d0edb3ae6`，与仓库 Loader 逐字节一致。
+- Core 为 1,594,066 字节，SHA-256 `7494f406be1cf585ed5d0e9c8e92b1bc5fee38a6805720502329868c6b5a6a27`；Features 为 1,631,159 字节，SHA-256 `12be5667f51327bb8776955aa058cbe56cbd9afa70dc702829463cca089171d5`；CSS 固定到 Git `cf398703`，448,993 字节，SHA-256 `0348e18154ce56f4edd34d160dea6a375f37d8fc6d0ce19ce80b1941117d69f7`。
+- 源码与分包产物各 204 个 Lite 测试文件、相关 ESLint、手册检查、确定性构建和三文件一致性检查均已通过；发布阶段没有重复执行浏览器矩阵或性能门禁。`1.2.1` 固定三文件继续作为公开回滚基线。
 
 ## 1.2.1 — Composer 与分支交互修复
 
