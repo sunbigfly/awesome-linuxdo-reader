@@ -30,6 +30,11 @@ import {
 export interface ReaderUserCardViewOptions {
 	readonly document: Document;
 	readonly root: HTMLElement;
+	readonly hoverDelegates?: readonly Readonly<{
+		readonly root: EventTarget;
+		readonly selector: string;
+		readonly capture?: boolean;
+	}>[];
 	readonly session: ReaderUserDomainSession;
 	readonly userHref: (username: string) => string;
 	readonly avatarSource?: (template: string, size: number) => string;
@@ -223,12 +228,28 @@ export class ReaderUserCardView {
 		this.scope.listen(options.root, 'click', (event) => {
 			this.#onRootClick(event as MouseEvent);
 		});
-		this.scope.listen(options.root, 'mouseover', (event) => {
-			this.#onRootMouseOver(event as MouseEvent);
-		});
-		this.scope.listen(options.root, 'mouseout', (event) => {
-			this.#onRootMouseOut(event as MouseEvent);
-		});
+		const listenForHover = (
+			root: EventTarget,
+			selector: string,
+			capture = false,
+		): void => {
+			this.scope.listen(root, 'mouseover', (event) => {
+				this.#onRootMouseOver(event as MouseEvent, selector);
+			}, capture);
+			this.scope.listen(root, 'mouseout', (event) => {
+				this.#onRootMouseOut(event as MouseEvent, selector);
+			}, capture);
+		};
+		listenForHover(options.root, '[data-user-card]');
+		for (const delegate of options.hoverDelegates ?? []) {
+			const selector = delegate.selector.trim();
+			if (!selector) continue;
+			listenForHover(
+				delegate.root,
+				selector,
+				delegate.capture === true,
+			);
+		}
 		this.scope.listen(this.element, 'click', (event) => {
 			this.#onCardClick(event as MouseEvent);
 		});
@@ -445,8 +466,11 @@ export class ReaderUserCardView {
 		}
 	}
 
-	#onRootMouseOver(event: MouseEvent): void {
-		const target = closestTarget<HTMLElement>(event, '[data-user-card]');
+	#onRootMouseOver(
+		event: MouseEvent,
+		selector: string,
+	): void {
+		const target = closestTarget<HTMLElement>(event, selector);
 		if (!target || this.element.contains(target)) {
 			return;
 		}
@@ -481,8 +505,11 @@ export class ReaderUserCardView {
 		}, this.#hoverShowDelayMs);
 	}
 
-	#onRootMouseOut(event: MouseEvent): void {
-		const target = closestTarget<HTMLElement>(event, '[data-user-card]');
+	#onRootMouseOut(
+		event: MouseEvent,
+		selector: string,
+	): void {
+		const target = closestTarget<HTMLElement>(event, selector);
 		if (!target || this.element.contains(target)) {
 			return;
 		}

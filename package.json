@@ -1,6 +1,6 @@
 {
   "name": "awesome-linuxdo-reader",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -26,7 +26,7 @@
     "main-lite:greasyfork:check": "node scripts/build-main-lite-greasyfork.mjs --check",
     "main-lite:greasyfork:local-test": "node scripts/build-main-lite-greasyfork.mjs --local-test",
     "main-lite:greasyfork:release": "node scripts/build-main-lite-greasyfork.mjs --config work/greasyfork-lite/published-libraries.json",
-    "main-lite:local-debug": "npm run main-lite:css:build && node scripts/build-main-lite.mjs --local-debug && npm run main-lite:greasyfork:local-test",
+    "main-lite:local-debug": "npm run main-lite:css:build && node scripts/build-main-lite.mjs --local-debug && npm run main-lite:greasyfork:local-test && npm run audit:lite-userscript:local",
     "main-lite:lint": "eslint eslint.config.mjs docs/.vitepress/config.mts scripts/audit-lite-native-requests.mjs scripts/audit-main-lite-userscript.mjs scripts/audit-main-requests.mjs scripts/audit-main-runtime.mjs scripts/audit-main-lite-css.mjs scripts/build-main-lite-css.mjs scripts/build-main-lite-greasyfork.mjs scripts/build-main-lite.mjs scripts/test-main-lite.mjs scripts/validate-docs.mjs \"lite/{src,tests}/**/*.ts\"",
     "main-lite:test": "node scripts/test-main-lite.mjs",
     "main-lite:typecheck": "tsc --project tsconfig.main-lite.json && tsc --project tsconfig.main-lite-tests.json",

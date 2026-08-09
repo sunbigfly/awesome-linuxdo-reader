@@ -20,7 +20,7 @@ npm run main-lite:check
 npm run main-lite:local-debug
 ```
 
-`main-lite:local-debug` 会生成被仓库忽略的 `work/main-lite.local.js`，并同步生成 `work/main-lite.css`。首次在 Tampermonkey 安装本地文件后，需要开启“允许访问文件网址”；正式版和本地调试版不要同时启用。
+`main-lite:local-debug` 会生成被仓库忽略的 `work/main-lite.local.js`、`work/local-debug.user.js` 与 `work/main-lite.css`，并在结束前反向核验实际文件字节。本地 Loader 的版本、JS、CSS 和三文件 Library URL 都带当前内容指纹；每次构建后重新导入 `work/local-debug.user.js`，脚本管理器就不会沿用旧的 `@require` / `@resource` 字节。首次安装还需要开启“允许访问文件网址”；正式版和本地调试版不要同时启用。
 
 为避免破坏既有自动化，1.0.1 仍保留同名 `mian-lite:*` npm 兼容命令，并生成逐字节一致的旧拼写产物副本；新开发、文档和同步源统一使用 `main-lite`。
 

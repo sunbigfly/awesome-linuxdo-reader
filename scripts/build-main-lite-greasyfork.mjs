@@ -175,6 +175,16 @@ function browserFileUrl(filePath) {
   return `file:///${drive.toUpperCase()}:/${encodedPath}`
 }
 
+function contentAddressedFileUrl(filePath, digest) {
+  if (!/^[0-9a-f]{64}$/.test(digest)) {
+    throw new Error('本地资源 SHA-256 无效')
+  }
+  const url = new URL(browserFileUrl(filePath))
+  url.searchParams.set('v', digest)
+  url.hash = `sha256=${digest}`
+  return url.href
+}
+
 function replaceMetadataLine(source, key, value) {
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const pattern = new RegExp(`^//\\s+${escapedKey}\\s+.*$`, 'm')
@@ -541,14 +551,19 @@ function renderLoader(metadata, sourceVersion, requirements = libraryMarker) {
   ].join('\n')
 }
 
-function renderLocalTestLoader(metadata, sourceVersion, libraries) {
+function renderLocalTestLoader(
+  metadata,
+  sourceVersion,
+  libraries,
+  stylesheetDigest,
+) {
   const requirements = libraries.map((library) => {
     const libraryPath = path.join(projectRoot, library.file)
-    return `// @require      ${browserFileUrl(libraryPath)}`
+    return `// @require      ${contentAddressedFileUrl(libraryPath, library.sha256)}`
   }).join('\n')
   let localMetadata = metadata.replace(
     stylesheetToken,
-    browserFileUrl(stylesheetPath),
+    contentAddressedFileUrl(stylesheetPath, stylesheetDigest),
   )
   localMetadata = replaceMetadataLine(
     localMetadata,
@@ -563,7 +578,7 @@ function renderLocalTestLoader(metadata, sourceVersion, libraries) {
   localMetadata = replaceMetadataLine(
     localMetadata,
     '@version',
-    `${sourceVersion}-local-three-part`,
+    '__LDP_LOCAL_THREE_PART_VERSION__',
   )
   localMetadata = replaceMetadataLine(
     localMetadata,
@@ -579,7 +594,15 @@ function renderLocalTestLoader(metadata, sourceVersion, libraries) {
     '// ==/UserScript==',
     '// @updateURL     none\n// @downloadURL   none\n// ==/UserScript==',
   )
-  const output = renderLoader(localMetadata, sourceVersion, requirements)
+  const versionlessOutput = renderLoader(
+    localMetadata,
+    sourceVersion,
+    requirements,
+  )
+  const output = versionlessOutput.replace(
+    '__LDP_LOCAL_THREE_PART_VERSION__',
+    `${sourceVersion}-local-three-part.${sha256(versionlessOutput).slice(0, 12)}`,
+  )
   if (/https:\/\/update\.greasyfork\.org\/scripts\//.test(output)) {
     throw new Error('三文件本地测试 Loader 不得引用远端项目 Library')
   }
@@ -888,6 +911,7 @@ if (localTest) {
     metadata,
     sourceVersion,
     libraries,
+    sha256(localStylesheet),
   )
   parse(localTestLoader, { sourceType: 'script' })
   await emit(localTestOutputPath, localTestLoader, false)

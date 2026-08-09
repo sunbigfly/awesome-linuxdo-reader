@@ -64,6 +64,7 @@
     "ldp-system-post",
     "ldp-topic-action-rail-fixed-setting",
     "ldp-topic-action-rail-visible-setting",
+    "ldp-translation-loading",
     "ldp-translation-source"
   ],
   "surfaces": [

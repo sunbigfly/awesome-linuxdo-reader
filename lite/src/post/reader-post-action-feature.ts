@@ -378,7 +378,49 @@ function boostBubblePlainText(
 	for (const image of copy.querySelectorAll<HTMLImageElement>('img[alt]')) {
 		image.replaceWith(document.createTextNode(image.alt));
 	}
-	return String(copy.textContent ?? '').replace(/\s+/g, ' ').trim();
+	return String(copy.innerText || copy.textContent || '')
+		.replace(/\u00a0/g, ' ')
+		.replace(/\r\n?/g, '\n')
+		.replace(/\n{3,}/g, '\n\n')
+		.trim();
+}
+
+function boostQuoteRichHtml(
+	document: Document,
+	input: Readonly<{
+		readonly username: string;
+		readonly content: string;
+		readonly postNumber: number;
+		readonly topicId: number;
+	}>,
+): string {
+	const container = document.createElement('div');
+	const quote = document.createElement('aside');
+	quote.className = 'quote';
+	quote.dataset.username = input.username;
+	quote.dataset.post = String(input.postNumber);
+	quote.dataset.topic = String(input.topicId);
+	const title = document.createElement('div');
+	title.className = 'title';
+	const source = document.createElement('a');
+	source.href = `/t/topic/${input.topicId}/${input.postNumber}`;
+	source.textContent = input.username;
+	title.append(source, ':');
+	const blockquote = document.createElement('blockquote');
+	for (const block of input.content.split(/\n{2,}/)) {
+		const paragraph = document.createElement('p');
+		const lines = block.split('\n');
+		for (const [index, line] of lines.entries()) {
+			if (index > 0) paragraph.append(document.createElement('br'));
+			paragraph.append(document.createTextNode(line));
+		}
+		blockquote.append(paragraph);
+	}
+	quote.append(title, blockquote);
+	const mention = document.createElement('p');
+	mention.textContent = `@${input.username}\u00a0`;
+	container.append(quote, mention);
+	return container.innerHTML;
 }
 
 /**
@@ -2705,13 +2747,22 @@ export class ReaderPostActionFeature<
 			const topicId = Number(topic.id);
 			const quoteHeader =
 				`${username}, post:${postNumber}, topic:${topicId}, username:${username}`;
-			await this.#composer.openReply({
+			const session = await this.#composer.openReply({
 				topic,
 				post: binding.post,
 				initialRaw:
 					`[quote="${quoteHeader}"]\n${content}\n[/quote]\n\n@${username} `,
+				initialRichHtml: boostQuoteRichHtml(this.#document, {
+					username,
+					content,
+					postNumber,
+					topicId,
+				}),
+				dedupeMention: username,
 			});
-			this.#notify(`已引用 Boost 并 @${username}`);
+			this.#notify(session.insertionSkipped === 'duplicate-mention'
+				? `回复框中已有 @${username}`
+				: `已引用 Boost 并 @${username}`);
 		} catch (cause) {
 			this.#reportActionFailure('引用 Boost 失败', cause);
 		} finally {

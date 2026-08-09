@@ -1289,6 +1289,12 @@ button.ldp-floor:hover {
   background: var(--ldp-surface-raised);
 }
 
+.ldp-post.ldp-has-boosts > .ldp-post-body:has(
+  > .ldp-post-body-layer > .ldp-solved-card
+) > .ldp-boost-list {
+  margin-top: 10px;
+}
+
 .ldp-solved-head {
   display: flex;
   align-items: center;

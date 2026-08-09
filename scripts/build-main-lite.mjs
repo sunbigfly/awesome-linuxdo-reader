@@ -10,6 +10,7 @@ const METADATA_PATH = 'lite/userscript.meta.txt';
 const STYLESHEET_PATH = 'work/main-lite.css';
 const DEBUG_OUTPUT_PATHS = ['work/main-lite.debug.js', 'work/mian-lite.debug.js'];
 const LOCAL_DEBUG_OUTPUT_PATHS = ['work/main-lite.local.js', 'work/mian-lite.local.js'];
+const LOCAL_DEBUG_LOADER_PATH = 'work/local-debug.user.js';
 const ADVISORY_OUTPUT_BYTES = 1_650_000;
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, '..');
@@ -22,6 +23,50 @@ function browserFileUrl(filePath) {
 	const [, drive, relativePath] = windowsMount;
 	return `file:///${drive.toUpperCase()}:/` +
 		relativePath.split('/').map(encodeURIComponent).join('/');
+}
+
+function sha256(value) {
+	return createHash('sha256').update(value).digest('hex');
+}
+
+function contentAddressedFileUrl(filePath, digest) {
+	if (!/^[0-9a-f]{64}$/.test(digest)) {
+		throw new Error('本地资源 SHA-256 无效');
+	}
+	const url = new URL(browserFileUrl(filePath));
+	url.searchParams.set('v', digest);
+	url.hash = `sha256=${digest}`;
+	return url.href;
+}
+
+function renderLocalDebugLoader(metadata, bundlePath, bundleDigest) {
+	const inherited = metadata.split(/\r?\n/).filter((line) => {
+		const match = line.match(/^\/\/\s+@(\S+)/);
+		if (!match) return false;
+		const key = match[1].toLowerCase();
+		return !(
+			key === 'name' ||
+			key.startsWith('name:') ||
+			key === 'description' ||
+			key.startsWith('description:') ||
+			key === 'version' ||
+			key === 'downloadurl' ||
+			key === 'installurl' ||
+			key === 'updateurl'
+		);
+	});
+	return [
+		'// ==UserScript==',
+		'// @name         Awesome LinuxDo Reader（本地调试）',
+		`// @version      0.0.0-local.${bundleDigest.slice(0, 12)}`,
+		'// @description  从本地内容指纹资源加载；重新构建后刷新页面生效',
+		...inherited,
+		'// @updateURL    none',
+		'// @downloadURL  none',
+		`// @require      ${contentAddressedFileUrl(bundlePath, bundleDigest)}`,
+		'// ==/UserScript==',
+		'',
+	].join('\n');
 }
 
 function parseArgs(args) {
@@ -56,15 +101,16 @@ const rawMetadata = await readFile(
 const bootstrap = await readFile(path.join(projectRoot, BOOTSTRAP_PATH), 'utf8');
 const stylesheetFilePath = path.join(projectRoot, STYLESHEET_PATH);
 const stylesheet = await readFile(stylesheetFilePath, 'utf8');
-const stylesheetSha256 = createHash('sha256')
-	.update(stylesheet)
-	.digest('hex');
+const stylesheetSha256 = sha256(stylesheet);
 if (!rawMetadata.includes(STYLE_RESOURCE_TOKEN)) {
 	throw new Error(
 		`${METADATA_PATH} 必须通过 ${STYLE_RESOURCE_TOKEN} 声明 Lite CSS`,
 	);
 }
-const readerStylesUrl = browserFileUrl(stylesheetFilePath);
+const readerStylesUrl = contentAddressedFileUrl(
+	stylesheetFilePath,
+	stylesheetSha256,
+);
 const metadata = rawMetadata.replace(STYLE_RESOURCE_TOKEN, readerStylesUrl);
 if (/work\/main\.css(?:[?#\s]|$)/i.test(metadata)) {
 	throw new Error(`${METADATA_PATH} 不得回退到 work/main.css`);
@@ -119,6 +165,8 @@ const banner =
 	'/* DEVELOPMENT ARCHITECTURE BUNDLE: compatibility gate 未完成，不接管现有 userscript。 */\n';
 const artifact = `${metadata.trimEnd()}\n\n${banner}${outputFile.text}`;
 const bytes = Buffer.byteLength(artifact);
+const artifactSha256 = sha256(artifact);
+let localDebugLoader = null;
 
 if (mode === 'debug') {
 	await Promise.all(DEBUG_OUTPUT_PATHS.map(async (outputPath) => {
@@ -132,6 +180,14 @@ if (mode === 'debug') {
 		await mkdir(path.dirname(outputFilePath), { recursive: true });
 		await writeFile(outputFilePath, artifact);
 	}));
+	const loaderFilePath = path.join(projectRoot, LOCAL_DEBUG_LOADER_PATH);
+	localDebugLoader = renderLocalDebugLoader(
+		metadata,
+		path.join(projectRoot, LOCAL_DEBUG_OUTPUT_PATHS[0]),
+		artifactSha256,
+	);
+	await mkdir(path.dirname(loaderFilePath), { recursive: true });
+	await writeFile(loaderFilePath, localDebugLoader);
 }
 
 const outputPaths =
@@ -146,6 +202,7 @@ process.stdout.write(
 		output: outputPaths[0],
 		compatibilityOutputs: outputPaths.slice(1),
 		bytes,
+		sha256: artifactSha256,
 		advisoryBytes: ADVISORY_OUTPUT_BYTES,
 		advisoryOverageBytes: Math.max(
 			0,
@@ -156,6 +213,13 @@ process.stdout.write(
 			resource: readerStylesUrl,
 			sha256: stylesheetSha256,
 		},
+		localLoader: localDebugLoader === null
+			? null
+			: {
+				file: LOCAL_DEBUG_LOADER_PATH,
+				bytes: Buffer.byteLength(localDebugLoader),
+				sha256: sha256(localDebugLoader),
+			},
 		compiler: { name: 'esbuild', version: esbuildVersion },
 	})}\n`,
 );

@@ -682,6 +682,34 @@ const segmentedOpViews = [1, 2].map((postNumber) => {
 	return view;
 });
 segmentedOpOwner.sync(new Set([1]));
+let segmentedOpGeometryReads = 0;
+const countSegmentedOpGeometryRead = (): void => {
+	segmentedOpGeometryReads += 1;
+};
+setRect(
+	segmentedOpViews[0]!.slots.replyTree,
+	rect(100, 300, 900, 500),
+	false,
+	countSegmentedOpGeometryRead,
+);
+setRect(
+	segmentedOpViews[1]!.slots.root,
+	rect(100, 360, 900, 100),
+	false,
+	countSegmentedOpGeometryRead,
+);
+setRect(
+	segmentedOpViews[1]!.slots.actions,
+	rect(140, 430, 300, 30),
+	false,
+	countSegmentedOpGeometryRead,
+);
+setRect(
+	segmentedOpViews[1]!.slots.replyTree,
+	rect(128, 460, 872, 0),
+	false,
+	countSegmentedOpGeometryRead,
+);
 const segmentedOpController = new ReaderBranchOverlayController({
 	domOwner: segmentedOpOwner,
 	renderMode: 'segmented-css',
@@ -691,8 +719,34 @@ const segmentedOpToggle = segmentedOpViews[0]!.slots.root.querySelector<HTMLElem
 	'.ldp-reader-branch-toggle[data-reader-branch-toggle="1"]',
 );
 assert(
-	segmentedOpToggle?.parentElement === segmentedOpViews[0]!.slots.replyTree,
-	'#1 楼展开态收纳按钮必须锚定到回复树顶部，交由 CSS 放在首个子回复上方 10px',
+	segmentedOpToggle?.parentElement === segmentedOpViews[0]!.slots.replyTree &&
+		segmentedOpToggle.style.top === '45px' &&
+		segmentedOpGeometryReads === 4,
+	'#1 楼展开态收纳按钮必须按首个子回复实位和普通动作行尾距动态定位，且每批只做常数次几何读取',
+);
+setRect(
+	segmentedOpViews[1]!.slots.root,
+	rect(100, 400, 900, 100),
+	false,
+	countSegmentedOpGeometryRead,
+);
+setRect(
+	segmentedOpViews[1]!.slots.actions,
+	rect(140, 470, 300, 30),
+	false,
+	countSegmentedOpGeometryRead,
+);
+setRect(
+	segmentedOpViews[1]!.slots.replyTree,
+	rect(128, 500, 872, 0),
+	false,
+	countSegmentedOpGeometryRead,
+);
+segmentedOpController.paint();
+assert(
+	segmentedOpToggle.style.top === '85px' &&
+		segmentedOpGeometryReads === 8,
+	'首个子回复前插入高度后，#1 楼“−”必须跟随真实子楼层移动，不能保留固定 top',
 );
 segmentedOpToggle?.click();
 assert(

@@ -493,6 +493,17 @@ export class ReaderBranchOverlayController {
 				lastChildByParent.set(parentPostNumber, lastChildPostNumber);
 			}
 		}
+		/*
+		 * #1 楼没有留在正文末尾的普通动作行，不能直接复用其他父楼层
+		 * “动作行中心”这个 CSS 锚点。只在本批次写 DOM 前读取首个已物化
+		 * 子楼层，用它自己的普通动作行到 replyTree 的实际尾距反推 #1 的
+		 * “−”位置。复杂正文、引用展开、编辑和虚拟 spacer 改变高度后都会
+		 * 跟随；每批固定 4 次几何读取，不随楼层数增长。
+		 */
+		const segmentedRootToggleTop = this.#measureSegmentedRootToggleTop(
+			views,
+			childrenByParent,
+		);
 		let paintedBranches = 0;
 		for (const view of views) {
 			const parentPostNumber = this.#domOwner.topology.parentOf(
@@ -520,9 +531,18 @@ export class ReaderBranchOverlayController {
 			}
 			const owned = this.#own(view);
 			this.#syncSegmentedRailToggles(owned, children);
-			/* 位置完全由结构化 CSS 锚点拥有，不能保留上一次 SVG 几何内联值。 */
+			/* 普通分支由结构化 CSS 锚点拥有；#1 只保留最新稳定的动态 top。 */
 			if (owned.toggle.style.left) owned.toggle.style.removeProperty('left');
-			if (owned.toggle.style.top) owned.toggle.style.removeProperty('top');
+			if (view.postNumber !== 1 && owned.toggle.style.top) {
+				owned.toggle.style.removeProperty('top');
+			}
+			if (view.postNumber === 1 && segmentedRootToggleTop !== null) {
+				this.#setStyle(
+					owned.toggle,
+					'top',
+					`${segmentedRootToggleTop}px`,
+				);
+			}
 			if (owned.toggle.hidden) owned.toggle.hidden = false;
 			this.#syncCollapsed(view, owned.toggle);
 			if (this.#isCollapsed(view.postNumber)) continue;
@@ -531,6 +551,56 @@ export class ReaderBranchOverlayController {
 			).length;
 		}
 		return Object.freeze({ paintedBranches });
+	}
+
+	#measureSegmentedRootToggleTop(
+		views: readonly PostViewPort[],
+		childrenByParent: ReadonlyMap<PostNumber, readonly PostViewPort[]>,
+	): number | null {
+		const rootView = views.find((view) => view.postNumber === 1);
+		if (
+			!rootView?.slots.root.isConnected ||
+			this.#isCollapsed(rootView.postNumber)
+		) return null;
+		const childByRoot = new Map(
+			(childrenByParent.get(rootView.postNumber) ?? []).map((child) => [
+				child.slots.root,
+				child,
+			] as const),
+		);
+		let firstChild: PostViewPort | null = null;
+		for (const element of rootView.slots.replyList.children) {
+			const child = childByRoot.get(element as HTMLElement);
+			if (
+				child?.slots.root.isConnected &&
+				!child.slots.root.classList.contains('ldp-virtual-ancestor-shell')
+			) {
+				firstChild = child;
+				break;
+			}
+		}
+		if (!firstChild) return null;
+		const rootReplyTreeRect = rootView.slots.replyTree.getBoundingClientRect();
+		const childRootRect = firstChild.slots.root.getBoundingClientRect();
+		const childActionsRect = firstChild.slots.actions.getBoundingClientRect();
+		const childReplyTreeRect = firstChild.slots.replyTree.getBoundingClientRect();
+		if (
+			!finiteRect(rootReplyTreeRect) ||
+			!finiteRect(childRootRect) ||
+			!finiteRect(childActionsRect) ||
+			!finiteRect(childReplyTreeRect) ||
+			childActionsRect.height <= 0
+		) return null;
+		const ordinaryToggleCenterY =
+			childActionsRect.top + childActionsRect.height / 2;
+		const ordinaryTailDistance =
+			childReplyTreeRect.top - ordinaryToggleCenterY;
+		if (!Number.isFinite(ordinaryTailDistance) || ordinaryTailDistance < 0) {
+			return null;
+		}
+		const top =
+			childRootRect.top - rootReplyTreeRect.top - ordinaryTailDistance;
+		return Number.isFinite(top) ? top : null;
 	}
 
 	toggle(postNumber: PostNumber): void {

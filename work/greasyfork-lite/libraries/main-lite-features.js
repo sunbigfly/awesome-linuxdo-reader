@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.2.0
+// @version      1.2.1
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户、通知、监控与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.2.0 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.2.1 - main-lite-features
  * 媒体、互动、设置、用户、通知、监控与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.2.0",
+			sourceVersion: "1.2.1",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.0") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.1") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -13872,7 +13872,29 @@
 		  const copy = cooked.cloneNode(!0);
 		  for (const image of copy.querySelectorAll("img[alt]"))
 		    image.replaceWith(document.createTextNode(image.alt));
-		  return String(copy.textContent ?? "").replace(/\s+/g, " ").trim();
+		  return String(copy.innerText || copy.textContent || "").replace(/\u00a0/g, " ").replace(/\r\n?/g, `
+		`).replace(/\n{3,}/g, `
+
+		`).trim();
+		}
+		function boostQuoteRichHtml(document, input) {
+		  const container = document.createElement("div"), quote = document.createElement("aside");
+		  quote.className = "quote", quote.dataset.username = input.username, quote.dataset.post = String(input.postNumber), quote.dataset.topic = String(input.topicId);
+		  const title = document.createElement("div");
+		  title.className = "title";
+		  const source = document.createElement("a");
+		  source.href = `/t/topic/${input.topicId}/${input.postNumber}`, source.textContent = input.username, title.append(source, ":");
+		  const blockquote = document.createElement("blockquote");
+		  for (const block of input.content.split(/\n{2,}/)) {
+		    const paragraph = document.createElement("p"), lines = block.split(`
+		`);
+		    for (const [index, line] of lines.entries())
+		      index > 0 && paragraph.append(document.createElement("br")), paragraph.append(document.createTextNode(line));
+		    blockquote.append(paragraph);
+		  }
+		  quote.append(title, blockquote);
+		  const mention = document.createElement("p");
+		  return mention.textContent = `@${input.username} `, container.append(quote, mention), container.innerHTML;
 		}
 		class DiscoursePostReactionCatalog {
 		  #models;
@@ -15034,16 +15056,23 @@
 		    }
 		    button.disabled = !0, button.setAttribute("aria-busy", "true");
 		    try {
-		      const topic = this.#topic(), postNumber = Number(binding.post.post_number), topicId = Number(topic.id), quoteHeader = `${username}, post:${postNumber}, topic:${topicId}, username:${username}`;
-		      await this.#composer.openReply({
+		      const topic = this.#topic(), postNumber = Number(binding.post.post_number), topicId = Number(topic.id), quoteHeader = `${username}, post:${postNumber}, topic:${topicId}, username:${username}`, session = await this.#composer.openReply({
 		        topic,
 		        post: binding.post,
 		        initialRaw: `[quote="${quoteHeader}"]
 		${content}
 		[/quote]
 
-		@${username} `
-		      }), this.#notify(`已引用 Boost 并 @${username}`);
+		@${username} `,
+		        initialRichHtml: boostQuoteRichHtml(this.#document, {
+		          username,
+		          content,
+		          postNumber,
+		          topicId
+		        }),
+		        dedupeMention: username
+		      });
+		      this.#notify(session.insertionSkipped === "duplicate-mention" ? `回复框中已有 @${username}` : `已引用 Boost 并 @${username}`);
 		    } catch (cause) {
 		      this.#reportActionFailure("引用 Boost 失败", cause);
 		    } finally {
@@ -15549,7 +15578,7 @@
 		    !binding || !binding.root.classList.contains("ldp-topic-action-rail-post") || (binding.persistentOpen = expanded, binding.open = expanded, expanded && !binding.contextHydrated && (binding.contextHydrated = !0, this.#renderActions(binding)), this.#clearReactionHoverTimers(binding.slot), this.#syncReactionPickerVisibility(binding));
 		  }
 		}
-	}, "ad0e7f3c1d2c2e2a1b1dbd43fb1ad75d4f4128d05894cba92b1927e18f73c5a3");
+	}, "c67943bb6f70df83f38fdb44529c3f31c6dc87918acc8cf95e250c41ce35e284");
 
 	/* Source: lite/src/post/reader-post-management-action-coordinator.ts */
 	runtime.register("src/post/reader-post-management-action-coordinator.js", function(module, exports, require) {
@@ -30337,11 +30366,24 @@
 		      handle
 		    )), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.element = options.document.createElement("section"), this.element.className = "ldp-user-card-fallback", this.element.hidden = !0, this.element.tabIndex = -1, this.element.setAttribute("role", "dialog"), this.element.setAttribute("aria-label", "用户资料"), this.element.setAttribute("aria-live", "polite"), options.root.append(this.element), this.followPanel = options.document.createElement("section"), this.followPanel.className = "ldp-user-card-follow-panel", this.followPanel.hidden = !0, this.followPanel.setAttribute("aria-label", "关注人员列表"), options.root.append(this.followPanel), this.followPreview = options.document.createElement("section"), this.followPreview.className = "ldp-user-card-fallback ldp-user-card-follow-preview", this.followPreview.hidden = !0, this.followPreview.tabIndex = -1, this.followPreview.setAttribute("role", "dialog"), this.followPreview.setAttribute("aria-label", "关注用户预览"), options.root.append(this.followPreview), this.scope.listen(options.root, "click", (event) => {
 		      this.#onRootClick(event);
-		    }), this.scope.listen(options.root, "mouseover", (event) => {
-		      this.#onRootMouseOver(event);
-		    }), this.scope.listen(options.root, "mouseout", (event) => {
-		      this.#onRootMouseOut(event);
-		    }), this.scope.listen(this.element, "click", (event) => {
+		    });
+		    const listenForHover = (root, selector, capture = !1) => {
+		      this.scope.listen(root, "mouseover", (event) => {
+		        this.#onRootMouseOver(event, selector);
+		      }, capture), this.scope.listen(root, "mouseout", (event) => {
+		        this.#onRootMouseOut(event, selector);
+		      }, capture);
+		    };
+		    listenForHover(options.root, "[data-user-card]");
+		    for (const delegate of options.hoverDelegates ?? []) {
+		      const selector = delegate.selector.trim();
+		      selector && listenForHover(
+		        delegate.root,
+		        selector,
+		        delegate.capture === !0
+		      );
+		    }
+		    this.scope.listen(this.element, "click", (event) => {
 		      this.#onCardClick(event);
 		    }), this.scope.listen(this.followPanel, "click", (event) => {
 		      this.#onFollowClick(event);
@@ -30454,8 +30496,8 @@
 		      !this.scope.destroyed && token === this.#mediaToken && this.#onError(cause);
 		    }
 		  }
-		  #onRootMouseOver(event) {
-		    const target = closestTarget(event, "[data-user-card]");
+		  #onRootMouseOver(event, selector) {
+		    const target = closestTarget(event, selector);
 		    if (!target || this.element.contains(target))
 		      return;
 		    if (this.followPanel.contains(target)) {
@@ -30478,8 +30520,8 @@
 		      this.#showTimer = null, !(token !== this.#hoverToken || !target.isConnected) && this.open(username, target);
 		    }, this.#hoverShowDelayMs);
 		  }
-		  #onRootMouseOut(event) {
-		    const target = closestTarget(event, "[data-user-card]");
+		  #onRootMouseOut(event, selector) {
+		    const target = closestTarget(event, selector);
 		    if (!target || this.element.contains(target))
 		      return;
 		    if (this.followPanel.contains(target)) {
@@ -31543,7 +31585,7 @@
 		    }));
 		  }
 		}
-	}, "7c1f37f24c90f1b7896b366fc262a2bf82a10f9af311ff51341da0e768c2dc93");
+	}, "c7e7d984f8bfdcf4f8d6f08e783227ab118b14d71f9c94d9fcacf606efb39b35");
 
 	/* Source: lite/src/user/reader-user-domain-session.ts */
 	runtime.register("src/user/reader-user-domain-session.js", function(module, exports, require) {

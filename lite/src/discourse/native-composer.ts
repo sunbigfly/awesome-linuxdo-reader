@@ -37,6 +37,8 @@ export interface DiscourseComposerReplyInput<
 	readonly topic: TTopic;
 	readonly post: TPost;
 	readonly initialRaw?: string;
+	readonly initialRichHtml?: string;
+	readonly dedupeMention?: string;
 	readonly replaceRaw?: boolean;
 }
 
@@ -53,6 +55,7 @@ export interface DiscourseComposerSession {
 	readonly parentPostNumber: DiscoursePostNumber;
 	readonly reused: boolean;
 	readonly model: object;
+	readonly insertionSkipped?: 'duplicate-mention';
 }
 
 type TrackedDiscourseComposerSession = DiscourseComposerSession & Readonly<{
@@ -170,6 +173,45 @@ function normalizedDraftKey(value: unknown): string {
 	return normalized;
 }
 
+function normalizedMentionUsername(value: unknown): string {
+	return String(value ?? '').trim().replace(/^@+/, '');
+}
+
+function rawMentionsUsername(raw: string, usernameValue: unknown): boolean {
+	const username = normalizedMentionUsername(usernameValue);
+	if (!raw || !username) return false;
+	const escaped = username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	return new RegExp(
+		`(^|[^A-Za-z0-9_@-])@${escaped}(?=$|[^A-Za-z0-9_-])`,
+		'i',
+	).test(raw);
+}
+
+function composerTextInsertion(
+	currentValue: unknown,
+	blockValue: unknown,
+	startValue: number,
+	endValue: number,
+): Readonly<{
+	readonly next: string;
+	readonly inserted: string;
+	readonly cursor: number;
+}> {
+	const current = String(currentValue ?? '');
+	const start = Math.min(Math.max(0, startValue), current.length);
+	const end = Math.min(Math.max(start, endValue), current.length);
+	const before = current.slice(0, start);
+	const after = current.slice(end);
+	let inserted = String(blockValue ?? '').trim();
+	if (before && !/\s$/.test(before)) inserted = `\n\n${inserted}`;
+	if (after && !/^\s/.test(after)) inserted += '\n\n';
+	return Object.freeze({
+		next: `${before}${inserted}${after}`,
+		inserted,
+		cursor: before.length + inserted.length,
+	});
+}
+
 function composerRequestKey<
 	TTopic extends DiscourseComposerTopicInput<TPost>,
 	TPost extends DiscourseComposerPostInput,
@@ -182,6 +224,8 @@ function composerRequestKey<
 		post.postId,
 		post.postNumber,
 		String(input.initialRaw ?? '').trim(),
+		String(input.initialRichHtml ?? '').trim(),
+		normalizedMentionUsername(input.dedupeMention),
 		input.replaceRaw === true,
 	]);
 }
@@ -598,6 +642,8 @@ export class DiscourseComposerCoordinator {
 		const currentAction = modelValue(currentModel, 'action');
 		const currentReply = String(modelValue(currentModel, 'reply') ?? '');
 		const initialRaw = String(input.initialRaw ?? '').trim();
+		const initialRichHtml = String(input.initialRichHtml ?? '').trim();
+		const dedupeMention = normalizedMentionUsername(input.dedupeMention);
 		const sameTopicReply = currentOpen &&
 			currentTopicId === topicId &&
 			currentAction === replyAction;
@@ -607,14 +653,26 @@ export class DiscourseComposerCoordinator {
 				'post',
 				postReference.postNumber === 1 ? null : postModel,
 			);
-			if (initialRaw && input.replaceRaw === true) {
+			this.#presentComposerWindow();
+			const duplicateMention = input.replaceRaw !== true &&
+				initialRaw &&
+				rawMentionsUsername(currentReply, dedupeMention);
+			if (duplicateMention) {
+				// 已有草稿保留原样；调用方仍会拿到同一 Composer session。
+			} else if (initialRaw && input.replaceRaw === true) {
 				setModelValue(currentModel, 'reply', initialRaw);
 			} else if (initialRaw) {
-				const trigger = appEvents.trigger;
-				if (typeof trigger !== 'function') {
-					throw new Error('Discourse app-events 缺少 composer insert-block');
+				const composerInput = await this.#waitForComposerInput(640);
+				if (this.#document && !composerInput) {
+					throw new Error('Discourse 原生回复编辑器未就绪');
 				}
-				trigger.call(appEvents, 'composer:insert-block', initialRaw);
+				this.#insertComposerBlock(
+					appEvents,
+					currentModel,
+					initialRaw,
+					initialRichHtml,
+					composerInput,
+				);
 			}
 			const session: TrackedDiscourseComposerSession = Object.freeze({
 				topicId,
@@ -622,9 +680,11 @@ export class DiscourseComposerCoordinator {
 				action: 'reply',
 				reused: true,
 				model: currentModel as object,
+				...(duplicateMention
+					? { insertionSkipped: 'duplicate-mention' as const }
+					: {}),
 			});
 			this.#session = session;
-			this.#presentComposerWindow();
 			this.#focusComposerInput();
 			return session;
 		}
@@ -644,6 +704,8 @@ export class DiscourseComposerCoordinator {
 		}
 		const key = normalizedDraftKey(input.topic.draft_key);
 		const sequence = normalizedDraftSequence(input.topic.draft_sequence);
+		let insertAfterOpen = false;
+		let insertionSkipped: 'duplicate-mention' | undefined;
 		const options: MutableRecord = {
 			action: replyAction,
 			draftKey: key,
@@ -659,16 +721,45 @@ export class DiscourseComposerCoordinator {
 			options.draftSequence = normalizedDraftSequence(
 				draftResult.draft_sequence ?? sequence,
 			);
-			options.reply = input.replaceRaw === true
-				? initialRaw
-				: `${draft.reply}${initialRaw ? `\n${initialRaw}` : ''}`;
+			if (
+				input.replaceRaw !== true &&
+				initialRaw &&
+				rawMentionsUsername(draft.reply, dedupeMention)
+			) {
+				options.reply = draft.reply;
+				insertionSkipped = 'duplicate-mention';
+			} else if (input.replaceRaw === true) {
+				options.reply = initialRaw;
+			} else if (initialRaw && initialRichHtml) {
+				options.reply = draft.reply;
+				insertAfterOpen = true;
+			} else {
+				options.reply = `${draft.reply}${initialRaw ? `\n${initialRaw}` : ''}`;
+			}
 			if (draft.whisper !== undefined) options.whisper = draft.whisper;
 		} else if (initialRaw) {
 			if (input.replaceRaw === true) options.reply = initialRaw;
+			else if (initialRichHtml) insertAfterOpen = true;
 			else options.quote = initialRaw;
 		}
 		if (currentReply && currentOpen && currentTopicId === topicId) {
-			options.reply = `${currentReply}${initialRaw ? `\n${initialRaw}` : ''}`;
+			if (
+				input.replaceRaw !== true &&
+				initialRaw &&
+				rawMentionsUsername(currentReply, dedupeMention)
+			) {
+				options.reply = currentReply;
+				insertAfterOpen = false;
+				insertionSkipped = 'duplicate-mention';
+			} else if (input.replaceRaw === true) {
+				options.reply = initialRaw;
+				insertAfterOpen = false;
+			} else if (initialRaw && initialRichHtml) {
+				options.reply = currentReply;
+				insertAfterOpen = true;
+			} else {
+				options.reply = `${currentReply}${initialRaw ? `\n${initialRaw}` : ''}`;
+			}
 			delete options.quote;
 		}
 		await composer.open.call(composer, options);
@@ -678,15 +769,31 @@ export class DiscourseComposerCoordinator {
 		}
 		const model = modelValue(composer, 'model');
 		if (!record(model)) throw new Error('Discourse composer.open 未生成 model');
+		this.#presentComposerWindow();
+		if (insertAfterOpen && initialRaw) {
+			const composerInput = await this.#waitForComposerInput(
+				this.#composerOpenTimeoutMs,
+			);
+			if (this.#document && !composerInput) {
+				throw new Error('Discourse 原生回复编辑器未就绪');
+			}
+			this.#insertComposerBlock(
+				appEvents,
+				model,
+				initialRaw,
+				initialRichHtml,
+				composerInput,
+			);
+		}
 		const session: TrackedDiscourseComposerSession = Object.freeze({
 			topicId,
 			parentPostNumber: postReference.postNumber,
 			action: 'reply',
 			reused: false,
 			model: model as object,
+			...(insertionSkipped ? { insertionSkipped } : {}),
 		});
 		this.#session = session;
-		this.#presentComposerWindow();
 		this.#focusComposerInput();
 		return session;
 	}
@@ -747,17 +854,63 @@ export class DiscourseComposerCoordinator {
 		return false;
 	}
 
+	#composerInput(): HTMLElement | null {
+		const document = this.#document;
+		if (!document || !this.#composerPopupAvailable()) return null;
+		const selector =
+			'#reply-control textarea.d-editor-input,' +
+			'#reply-control input.d-editor-input,' +
+			'#reply-control .ProseMirror.d-editor-input[contenteditable="true"],' +
+			'#reply-control [contenteditable="true"].d-editor-input,' +
+			'#reply-control [role="textbox"][contenteditable="true"],' +
+			'#reply-control .ProseMirror[contenteditable="true"],' +
+			'#reply-control textarea';
+		const available = (candidate: HTMLElement): boolean => {
+			if (
+				!candidate.isConnected ||
+				candidate.hidden ||
+				candidate.style.display === 'none' ||
+				candidate.style.visibility === 'hidden' ||
+				candidate.matches(
+					'[disabled],[aria-disabled="true"],[aria-hidden="true"],.hidden,.d-none',
+				) ||
+				candidate.closest('[hidden],[aria-hidden="true"],.hidden,.d-none')
+			) return false;
+			const view = document.defaultView;
+			if (typeof view?.getComputedStyle === 'function') {
+				const style = view.getComputedStyle(candidate);
+				if (style.display === 'none' || style.visibility === 'hidden') return false;
+				if (
+					typeof candidate.getClientRects === 'function' &&
+					candidate.getClientRects().length === 0
+				) return false;
+			}
+			return true;
+		};
+		const active = document.activeElement as HTMLElement | null;
+		if (active?.matches(selector) && available(active)) return active;
+		return [...document.querySelectorAll<HTMLElement>(selector)].find(available) ?? null;
+	}
+
+	async #waitForComposerInput(timeoutMs: number): Promise<HTMLElement | null> {
+		if (!this.#document) return null;
+		const deadline = Date.now() + Math.max(0, timeoutMs);
+		do {
+			const input = this.#composerInput();
+			if (input) return input;
+			if (Date.now() >= deadline) return null;
+			await this.#waitForDelay(80);
+			this.#assertActive();
+		} while (Date.now() <= deadline);
+		return null;
+	}
+
 	#focusComposerInput(): void {
 		const document = this.#document;
 		if (!document) return;
 		const focus = (): void => {
 			if (!this.#composerPopupAvailable()) return;
-			const input = [...document.querySelectorAll<HTMLElement>(
-				'#reply-control textarea.d-editor-input,' +
-				'#reply-control textarea,' +
-				'#reply-control .ProseMirror[contenteditable="true"]',
-			)].find((candidate) =>
-				!candidate.matches('[disabled],[aria-disabled="true"]'));
+			const input = this.#composerInput();
 			if (!input) return;
 			try {
 				input.focus({ preventScroll: true });
@@ -768,6 +921,218 @@ export class DiscourseComposerCoordinator {
 		const viewport = document.defaultView;
 		if (viewport?.requestAnimationFrame) viewport.requestAnimationFrame(focus);
 		else queueMicrotask(focus);
+	}
+
+	#insertComposerBlock(
+		appEvents: MutableRecord,
+		model: unknown,
+		raw: string,
+		richHtml: string,
+		composerInput: HTMLElement | null = this.#composerInput(),
+	): void {
+		const richEditor = richHtml && composerInput?.matches(
+			'.ProseMirror[contenteditable="true"]',
+		)
+			? composerInput
+			: null;
+		if (richEditor) {
+			if (this.#insertRichText(richEditor, richHtml, raw)) return;
+			throw new Error('Discourse 富文本 Composer 引用插入失败');
+		}
+		if (composerInput?.matches('textarea,input.d-editor-input')) {
+			this.#insertTextControlBlock(
+				composerInput as HTMLTextAreaElement | HTMLInputElement,
+				model,
+				raw,
+			);
+			return;
+		}
+		const trigger = appEvents.trigger;
+		if (typeof trigger !== 'function') {
+			throw new Error('Discourse app-events 缺少 composer insert-block');
+		}
+		trigger.call(appEvents, 'composer:insert-block', raw);
+	}
+
+	#insertTextControlBlock(
+		editor: HTMLTextAreaElement | HTMLInputElement,
+		model: unknown,
+		raw: string,
+	): void {
+		const modelRaw = String(modelValue(model, 'reply') ?? '');
+		const current = editor.value || modelRaw;
+		const wasFocused = editor.ownerDocument.activeElement === editor;
+		let start = Number.isInteger(editor.selectionStart)
+			? Number(editor.selectionStart)
+			: current.length;
+		let end = Number.isInteger(editor.selectionEnd)
+			? Number(editor.selectionEnd)
+			: start;
+		if (!wasFocused && current && start === 0 && end === 0) {
+			start = current.length;
+			end = current.length;
+		}
+		const insertion = composerTextInsertion(
+			current,
+			raw,
+			start,
+			end,
+		);
+		editor.focus();
+		this.#setTextControlValue(editor, insertion.next);
+		this.#dispatchTextControlInput(editor, insertion.inserted);
+		setModelValue(model, 'reply', insertion.next);
+		try {
+			editor.setSelectionRange(insertion.cursor, insertion.cursor);
+		} catch {
+			// 非标准文本控件宿主仍可通过 model/value 完成写入。
+		}
+		if (
+			String(modelValue(model, 'reply') ?? '') !== insertion.next ||
+			editor.value !== insertion.next
+		) {
+			throw new Error('Discourse Markdown Composer 引用插入失败');
+		}
+	}
+
+	#setTextControlValue(
+		editor: HTMLTextAreaElement | HTMLInputElement,
+		value: string,
+	): void {
+		try {
+			editor.value = value;
+			if (editor.value === value) return;
+		} catch {
+			// 宿主可能代理 value；继续调用原生 prototype setter。
+		}
+		const view = editor.ownerDocument.defaultView;
+		for (const prototype of [
+			view?.HTMLTextAreaElement?.prototype,
+			view?.HTMLInputElement?.prototype,
+			Object.getPrototypeOf(editor) as object | null,
+		]) {
+			if (!prototype) continue;
+			const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+			if (!setter) continue;
+			try {
+				setter.call(editor, value);
+				if (editor.value === value) return;
+			} catch {
+				// 尝试下一个原生 prototype。
+			}
+		}
+		throw new Error('Discourse Markdown Composer value 不可写');
+	}
+
+	#dispatchTextControlInput(
+		editor: HTMLTextAreaElement | HTMLInputElement,
+		inserted: string,
+	): void {
+		const view = editor.ownerDocument.defaultView;
+		const InputEventConstructor = view?.InputEvent;
+		if (typeof InputEventConstructor === 'function') {
+			try {
+				editor.dispatchEvent(new InputEventConstructor('input', {
+					bubbles: true,
+					inputType: 'insertText',
+					data: inserted,
+				}));
+			} catch {
+				this.#dispatchComposerInput(editor);
+			}
+		} else {
+			this.#dispatchComposerInput(editor);
+		}
+		const change = editor.ownerDocument.createEvent('Event');
+		change.initEvent('change', true, false);
+		editor.dispatchEvent(change);
+	}
+
+	#insertRichText(editor: HTMLElement, html: string, raw: string): boolean {
+		const document = this.#document;
+		if (!document) return false;
+		try {
+			editor.focus({ preventScroll: true });
+		} catch {
+			editor.focus();
+		}
+		const view = document.defaultView;
+		const DataTransferConstructor = view?.DataTransfer;
+		const ClipboardEventConstructor = view?.ClipboardEvent;
+		if (
+			typeof DataTransferConstructor === 'function' &&
+			typeof ClipboardEventConstructor === 'function'
+		) {
+			try {
+				const before = editor.innerHTML;
+				const data = new DataTransferConstructor();
+				data.setData('text/html', html);
+				data.setData('text/plain', raw);
+				data.setData('text/markdown', raw);
+				const event = new ClipboardEventConstructor('paste', {
+					bubbles: true,
+					cancelable: true,
+					clipboardData: data,
+				});
+				editor.dispatchEvent(event);
+				if (editor.innerHTML !== before) return true;
+			} catch {
+				// 部分浏览器不允许构造带 clipboardData 的事件，继续走本地 HTML 兜底。
+			}
+		}
+		const execute = document.execCommand;
+		if (typeof execute === 'function') {
+			try {
+				const before = editor.innerHTML;
+				if (
+					execute.call(document, 'insertHTML', false, html) &&
+					editor.innerHTML !== before
+				) {
+					this.#dispatchComposerInput(editor);
+					return true;
+				}
+			} catch {
+				// execCommand 已逐步废弃；不可用时继续走 Selection/Range。
+			}
+		}
+		const selection = document.getSelection?.() ?? view?.getSelection?.() ?? null;
+		if (!selection) return false;
+		let range: Range;
+		if (
+			selection.rangeCount > 0 &&
+			editor.contains(selection.anchorNode)
+		) {
+			range = selection.getRangeAt(0);
+		} else {
+			range = document.createRange();
+			range.selectNodeContents(editor);
+			range.collapse(false);
+			selection.removeAllRanges();
+			selection.addRange(range);
+		}
+		try {
+			const before = editor.innerHTML;
+			range.deleteContents();
+			const fragment = range.createContextualFragment(html);
+			const last = fragment.lastChild;
+			range.insertNode(fragment);
+			if (last) {
+				range.setStartAfter(last);
+				range.collapse(true);
+				selection.removeAllRanges();
+				selection.addRange(range);
+			}
+			this.#dispatchComposerInput(editor);
+			return editor.innerHTML !== before;
+		} catch {
+			return false;
+		}
+	}
+
+	#dispatchComposerInput(editor: HTMLElement): void {
+		const event = editor.ownerDocument.createEvent('Event');
+		event.initEvent('input', true, false);
+		editor.dispatchEvent(event);
 	}
 
 	async #openEdit<

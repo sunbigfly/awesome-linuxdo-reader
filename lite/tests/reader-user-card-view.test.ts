@@ -976,12 +976,27 @@ hoverAnchor.href = '/u/hover-user';
 hoverAnchor.dataset.userCard = 'hover-user';
 hoverRoot.append(hoverAnchor);
 document.body.append(hoverRoot);
+document.documentElement.classList.add('ldp-reader-workspace');
+const hostTopicList = document.createElement('table');
+hostTopicList.innerHTML = '<tbody><tr class="topic-list-item">' +
+	'<td class="posters"><a href="/u/host-user" data-user-card="host-user">' +
+	'<img class="avatar"></a></td></tr></tbody>';
+document.body.append(hostTopicList);
+const hostHoverAnchor = hostTopicList.querySelector<HTMLElement>(
+	'[data-user-card="host-user"]',
+)!;
 let timerId = 0;
 const timers = new Map<number, { callback: () => void; delayMs: number }>();
 const previewToggles: string[] = [];
 const hoverView = new ReaderUserCardView({
 	document,
 	root: hoverRoot,
+	hoverDelegates: Object.freeze([Object.freeze({
+		root: document,
+		selector: 'html.ldp-reader-workspace .topic-list-item ' +
+			'.posters [data-user-card]',
+		capture: true,
+	})]),
 	session: hoverSession,
 	userHref: (username) => `/u/${username}`,
 	schedule: (callback, delayMs) => {
@@ -1156,9 +1171,31 @@ assert(
 );
 runDelay(180);
 assert(hoverView.element.hidden, 'Hover 回滞到期必须释放唯一用户卡投影');
+const hostHoverEvent = new constructors.Event('mouseover', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperty(hostHoverEvent, 'relatedTarget', { value: null });
+hostHoverAnchor.dispatchEvent(hostHoverEvent);
+assert(
+	[...timers.values()].map((timer) => timer.delayMs).sort().join(',') ===
+		'250,500' && hoverView.element.hidden,
+	'宿主 Topic posters 头像必须由 document delegate 接入同一 Hover 用户卡',
+);
+runDelay(250);
+for (let index = 0; index < 4; index += 1) await Promise.resolve();
+runDelay(500);
+for (let index = 0; index < 4; index += 1) await Promise.resolve();
+assert(
+	!hoverView.element.hidden &&
+		String(hoverSession.activeUsername) === 'host-user',
+	'宿主 Topic posters 头像必须复用 canonical session 与唯一用户卡 surface',
+);
 hoverView.destroy();
 hoverSession.destroy();
 hoverRoot.remove();
+hostTopicList.remove();
+document.documentElement.classList.remove('ldp-reader-workspace');
 
 const staleViewGateway: ReaderUserRequestGateway = {
 	async loadUserResource<T>(input: UserResourceRequest<T>): Promise<T> {

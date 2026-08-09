@@ -537,6 +537,10 @@ import {
 } from './reader-performance-policy.js';
 
 const readerSurfaceOnlyCloseEvents = new WeakSet<Event>();
+const hostTopicUserCardSelector =
+	'html.ldp-reader-workspace ' +
+	':is(.topic-list-item,.latest-topic-list-item) ' +
+	':is(.posters,.topic-poster) [data-user-card]';
 
 export type ReaderBrowserTopicContext<
 	TTopic extends DiscourseComposerTopicInput<TPost>,
@@ -1910,6 +1914,11 @@ export class ReaderBrowserRuntime<
 			this.userCardView = new ReaderUserCardView({
 				document: options.document,
 				root: this.shell.view.surfaceHost,
+				hoverDelegates: Object.freeze([Object.freeze({
+					root: options.document,
+					selector: hostTopicUserCardSelector,
+					capture: true,
+				})]),
 				session: this.users,
 				userHref: (username) =>
 					this.userNative.requestIdentity(username),

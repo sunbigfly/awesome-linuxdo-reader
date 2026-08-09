@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.2.0
+// @version      1.2.1
 // @description  Core runtime modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.2.0 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.2.1 - main-lite-core
  * 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.2.0",
+			sourceVersion: "1.2.1",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.0") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.1") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -373,7 +373,7 @@
 		});
 		module.exports = __toCommonJS(reader_browser_runtime_exports);
 		var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_cache_management_surface = require("../cache/reader-cache-management-surface.js"), import_browser_asset_cache = require("../cache/browser-asset-cache.js"), import_discourse_application_cache_invalidation = require("../cache/discourse-application-cache-invalidation.js"), import_native_composer = require("../discourse/native-composer.js"), import_reader_control_tooltip = require("../components/reader-control-tooltip.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_native_post_model_factory = require("../discourse/native-post-model-factory.js"), import_native_presence = require("../discourse/native-presence.js"), import_identifiers = require("../discourse/identifiers.js"), import_reader_history_navigation_controller = require("../history/reader-history-navigation-controller.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_history_navigation_view = require("../history/reader-history-navigation-view.js"), import_reader_history_panel_view = require("../history/reader-history-panel-view.js"), import_discourse_bookmark_adapter = require("../bookmark/discourse-bookmark-adapter.js"), import_reader_bookmark_controller = require("../bookmark/reader-bookmark-controller.js"), import_reader_bookmark_panel_view = require("../bookmark/reader-bookmark-panel-view.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_reader_topic_live_navigation_controller = require("../live/reader-topic-live-navigation-controller.js"), import_reader_resource_monitor = require("../monitor/reader-resource-monitor.js"), import_browser_request_observation = require("../network/browser-request-observation.js"), import_reader_topic_live_navigation_view = require("../live/reader-topic-live-navigation-view.js"), import_reader_rate_limit_notice = require("../shell/reader-rate-limit-notice.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_reader_image_download_service = require("../media/reader-image-download-service.js"), import_reader_image_resource_service = require("../media/reader-image-resource-service.js"), import_reader_media_prefetch_service = require("../media/reader-media-prefetch-service.js"), import_reader_topic_image_index = require("../media/reader-topic-image-index.js"), import_reader_topic_image_interaction = require("../media/reader-topic-image-interaction.js"), import_reader_lightbox_feature = require("../media/reader-lightbox-feature.js"), import_reader_compact_image_viewer = require("../media/reader-compact-image-viewer.js"), import_reader_topic_media_feature = require("../media/reader-topic-media-feature.js"), import_reader_media_controller = require("../media/reader-media-controller.js"), import_reader_cooked_content_feature = require("../media/reader-cooked-content-feature.js"), import_reader_poll_feature = require("../media/reader-poll-feature.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js"), import_discourse_native_read_transport = require("../network/discourse-native-read-transport.js"), import_public_resource_request_adapter = require("../network/public-resource-request-adapter.js"), import_discourse_native_user_port = require("../user/discourse-native-user-port.js"), import_reader_user_domain_session = require("../user/reader-user-domain-session.js"), import_reader_credit_account_adapter = require("../user/reader-credit-account-adapter.js"), import_reader_connect_trust_adapter = require("../user/reader-connect-trust-adapter.js"), import_reader_user_endorsement_adapter = require("../user/reader-user-endorsement-adapter.js"), import_reader_user_card_view = require("../user/reader-user-card-view.js"), import_reader_settings_user_view = require("../user/reader-settings-user-view.js"), import_discourse_notification_adapter = require("../notification/discourse-notification-adapter.js"), import_reader_notification_controller = require("../notification/reader-notification-controller.js"), import_reader_notification_panel_view = require("../notification/reader-notification-panel-view.js"), import_action_request_adapter = require("../post/action-request-adapter.js"), import_discourse_action_transport = require("../post/discourse-action-transport.js"), import_post_action_controller = require("../post/post-action-controller.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_post_action_feature_commands = require("../post/post-action-feature-commands.js"), import_user_action_feature_commands = require("../post/user-action-feature-commands.js"), import_reader_post_action_feature = require("../post/reader-post-action-feature.js"), import_reader_bookmark_action_coordinator = require("../post/reader-bookmark-action-coordinator.js"), import_reader_share_action_coordinator = require("../post/reader-share-action-coordinator.js"), import_reader_topic_notification_coordinator = require("../post/reader-topic-notification-coordinator.js"), import_reader_topic_shared_issue_coordinator = require("../post/reader-topic-shared-issue-coordinator.js"), import_topic_action_feature_commands = require("../post/topic-action-feature-commands.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_post_management_action_coordinator = require("../post/reader-post-management-action-coordinator.js"), import_reader_selection_quote_feature = require("../post/reader-selection-quote-feature.js"), import_reader_workspace_coordinator = require("../shell/reader-workspace-coordinator.js"), import_reader_feedback_surface = require("../shell/reader-feedback-surface.js"), import_reader_action_surface_coordinator = require("../shell/reader-action-surface-coordinator.js"), import_reader_exclusive_panel_coordinator = require("../shell/reader-exclusive-panel-coordinator.js"), import_reader_shell_recovery_view = require("../shell/reader-shell-recovery-view.js"), import_reader_report_form_surface = require("../shell/reader-report-form-surface.js"), import_reader_assignment_form_surface = require("../shell/reader-assignment-form-surface.js"), import_reader_choice_form_surface = require("../shell/reader-choice-form-surface.js"), import_reader_topic_edit_form_surface = require("../shell/reader-topic-edit-form-surface.js"), import_reader_settings_controller = require("../settings/reader-settings-controller.js"), import_reader_settings_view = require("../settings/reader-settings-view.js"), import_reader_theme_settings_control = require("../settings/reader-theme-settings-control.js"), import_reader_window_settings_form = require("../settings/reader-window-settings-form.js"), import_reader_shortcut_settings_form = require("../settings/reader-shortcut-settings-form.js"), import_reader_custom_site_settings_form = require("../settings/reader-custom-site-settings-form.js"), import_reader_webdav_settings_form = require("../settings/reader-webdav-settings-form.js"), import_browser_discourse_site_probe = require("../site/browser-discourse-site-probe.js"), import_reader_webdav_coordinator = require("../sync/reader-webdav-coordinator.js"), import_reader_webdav_category_ports = require("../sync/reader-webdav-category-ports.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_translation_settings_form = require("../settings/reader-translation-settings-form.js"), import_reader_appearance_settings_form = require("../settings/reader-appearance-settings-form.js"), import_reader_font_settings_form = require("../settings/reader-font-settings-form.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_reader_layout_settings_form = require("../settings/reader-layout-settings-form.js"), import_reader_interaction_settings_form = require("../settings/reader-interaction-settings-form.js"), import_reader_image_settings_form = require("../settings/reader-image-settings-form.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_reader_about_settings_content = require("../settings/reader-about-settings-content.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_loading_animation_view = require("../motion/reader-loading-animation-view.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_topic_factory = require("../topic/reader-topic-factory.js"), import_reader_topic_navigation_controller = require("../topic/reader-topic-navigation-controller.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_topic_flow_controller = require("../topic/reader-topic-flow-controller.js"), import_reader_topic_navigation_preferences = require("../topic/reader-topic-navigation-preferences.js"), import_reader_topic_scroll_adapter = require("../topic/reader-topic-scroll-adapter.js"), import_reader_topic_timeline_controller = require("../topic/reader-topic-timeline-controller.js"), import_reader_topic_timeline_view = require("../topic/reader-topic-timeline-view.js"), import_reader_topic_header = require("../topic/reader-topic-header.js"), import_reader_topic_edit_controller = require("../topic/reader-topic-edit-controller.js"), import_reader_topic_comments_header = require("../topic/reader-topic-comments-header.js"), import_reader_topic_only_op_controller = require("../topic/reader-topic-only-op-controller.js"), import_reader_topic_special_content_feature = require("../topic/reader-topic-special-content-feature.js"), import_reader_topic_context_controller = require("../topic/reader-topic-context-controller.js"), import_reader_topic_context_surface = require("../topic/reader-topic-context-surface.js"), import_reader_topic_context_state = require("../topic/reader-topic-context-state.js"), import_topic_session = require("../topic/topic-session.js"), import_reader_translation_feature = require("../translation/reader-translation-feature.js"), import_translation_request_adapter = require("../translation/translation-request-adapter.js"), import_reader_data_runtime = require("./reader-data-runtime.js"), import_reader_performance_policy = require("./reader-performance-policy.js");
-		const readerSurfaceOnlyCloseEvents = /* @__PURE__ */ new WeakSet();
+		const readerSurfaceOnlyCloseEvents = /* @__PURE__ */ new WeakSet(), hostTopicUserCardSelector = "html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item) :is(.posters,.topic-poster) [data-user-card]";
 		function readerReportOptions(document, flagTypes, availableNames, appliesTo) {
 		  return Object.freeze(flagTypes.filter(
 		    (flag) => flag.enabled && availableNames.has(flag.nameKey) && (!flag.appliesTo.length || flag.appliesTo.includes(appliesTo))
@@ -990,6 +990,11 @@
 		      }), this.userCardView = new import_reader_user_card_view.ReaderUserCardView({
 		        document: options.document,
 		        root: this.shell.view.surfaceHost,
+		        hoverDelegates: Object.freeze([Object.freeze({
+		          root: options.document,
+		          selector: hostTopicUserCardSelector,
+		          capture: !0
+		        })]),
 		        session: this.users,
 		        userHref: (username) => this.userNative.requestIdentity(username),
 		        avatarSource: (template, size) => this.userNative.avatarSource(template, size),
@@ -4406,7 +4411,7 @@
 		    }
 		  });
 		}
-	}, "f71dab949e04e2af88ea2f56485bd23823e441ab9445e026c2cd3156e3086070");
+	}, "242134885a504323a6162d264632ef1cd9318b8fcee2af6f0aa00e9da44739d0");
 
 	/* Source: lite/src/app/reader-data-runtime.ts */
 	runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -7253,6 +7258,31 @@
 		  if (!normalized) throw new Error("Topic 缺少 draft_key");
 		  return normalized;
 		}
+		function normalizedMentionUsername(value) {
+		  return String(value ?? "").trim().replace(/^@+/, "");
+		}
+		function rawMentionsUsername(raw, usernameValue) {
+		  const username = normalizedMentionUsername(usernameValue);
+		  if (!raw || !username) return !1;
+		  const escaped = username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		  return new RegExp(
+		    `(^|[^A-Za-z0-9_@-])@${escaped}(?=$|[^A-Za-z0-9_-])`,
+		    "i"
+		  ).test(raw);
+		}
+		function composerTextInsertion(currentValue, blockValue, startValue, endValue) {
+		  const current = String(currentValue ?? ""), start = Math.min(Math.max(0, startValue), current.length), end = Math.min(Math.max(start, endValue), current.length), before = current.slice(0, start), after = current.slice(end);
+		  let inserted = String(blockValue ?? "").trim();
+		  return before && !/\s$/.test(before) && (inserted = `
+
+		${inserted}`), after && !/^\s/.test(after) && (inserted += `
+
+		`), Object.freeze({
+		    next: `${before}${inserted}${after}`,
+		    inserted,
+		    cursor: before.length + inserted.length
+		  });
+		}
 		function composerRequestKey(input) {
 		  const topicId = (0, import_identifiers.discourseTopicId)(input.topic.id), post = (0, import_identifiers.discoursePostReference)(input.post);
 		  return JSON.stringify([
@@ -7261,6 +7291,8 @@
 		    post.postId,
 		    post.postNumber,
 		    String(input.initialRaw ?? "").trim(),
+		    String(input.initialRichHtml ?? "").trim(),
+		    normalizedMentionUsername(input.dedupeMention),
 		    input.replaceRaw === !0
 		  ]);
 		}
@@ -7504,28 +7536,39 @@
 		      appEvents,
 		      replyAction,
 		      draft: Draft
-		    } = this.#replyRuntime(), topicModel = this.#models.createTopic(input.topic), postModel = this.#models.createPost(input.topic, input.post, topicModel), currentModel = modelValue(composer, "model"), currentTopicId = composerModelTopicId(currentModel), currentOpen = modelValue(currentModel, "viewOpen") === !0 || String(modelValue(currentModel, "composeState") ?? "").toLowerCase() === "open", currentAction = modelValue(currentModel, "action"), currentReply = String(modelValue(currentModel, "reply") ?? ""), initialRaw = String(input.initialRaw ?? "").trim();
+		    } = this.#replyRuntime(), topicModel = this.#models.createTopic(input.topic), postModel = this.#models.createPost(input.topic, input.post, topicModel), currentModel = modelValue(composer, "model"), currentTopicId = composerModelTopicId(currentModel), currentOpen = modelValue(currentModel, "viewOpen") === !0 || String(modelValue(currentModel, "composeState") ?? "").toLowerCase() === "open", currentAction = modelValue(currentModel, "action"), currentReply = String(modelValue(currentModel, "reply") ?? ""), initialRaw = String(input.initialRaw ?? "").trim(), initialRichHtml = String(input.initialRichHtml ?? "").trim(), dedupeMention = normalizedMentionUsername(input.dedupeMention);
 		    if (currentOpen && currentTopicId === topicId && currentAction === replyAction && await this.#waitForComposerPopup(640)) {
-		      if (setModelValue(
+		      setModelValue(
 		        currentModel,
 		        "post",
 		        postReference.postNumber === 1 ? null : postModel
-		      ), initialRaw && input.replaceRaw === !0)
-		        setModelValue(currentModel, "reply", initialRaw);
-		      else if (initialRaw) {
-		        const trigger = appEvents.trigger;
-		        if (typeof trigger != "function")
-		          throw new Error("Discourse app-events 缺少 composer insert-block");
-		        trigger.call(appEvents, "composer:insert-block", initialRaw);
+		      ), this.#presentComposerWindow();
+		      const duplicateMention = input.replaceRaw !== !0 && initialRaw && rawMentionsUsername(currentReply, dedupeMention);
+		      if (!duplicateMention) {
+		        if (initialRaw && input.replaceRaw === !0)
+		          setModelValue(currentModel, "reply", initialRaw);
+		        else if (initialRaw) {
+		          const composerInput = await this.#waitForComposerInput(640);
+		          if (this.#document && !composerInput)
+		            throw new Error("Discourse 原生回复编辑器未就绪");
+		          this.#insertComposerBlock(
+		            appEvents,
+		            currentModel,
+		            initialRaw,
+		            initialRichHtml,
+		            composerInput
+		          );
+		        }
 		      }
 		      const session2 = Object.freeze({
 		        topicId,
 		        parentPostNumber: postReference.postNumber,
 		        action: "reply",
 		        reused: !0,
-		        model: currentModel
+		        model: currentModel,
+		        ...duplicateMention ? { insertionSkipped: "duplicate-mention" } : {}
 		      });
-		      return this.#session = session2, this.#presentComposerWindow(), this.#focusComposerInput(), session2;
+		      return this.#session = session2, this.#focusComposerInput(), session2;
 		    }
 		    if (currentOpen) {
 		      const popupAvailable = this.#composerPopupAvailable();
@@ -7536,7 +7579,9 @@
 		          "Discourse 原生 composer 正在处理另一项编辑，请先完成或关闭"
 		        );
 		    }
-		    const key = normalizedDraftKey(input.topic.draft_key), sequence = normalizedDraftSequence(input.topic.draft_sequence), options = {
+		    const key = normalizedDraftKey(input.topic.draft_key), sequence = normalizedDraftSequence(input.topic.draft_sequence);
+		    let insertAfterOpen = !1, insertionSkipped;
+		    const options = {
 		      action: replyAction,
 		      draftKey: key,
 		      draftSequence: sequence,
@@ -7547,22 +7592,37 @@
 		      const draft = parseDraft(draftResult.draft);
 		      options.draftSequence = normalizedDraftSequence(
 		        draftResult.draft_sequence ?? sequence
-		      ), options.reply = input.replaceRaw === !0 ? initialRaw : `${draft.reply}${initialRaw ? `
+		      ), input.replaceRaw !== !0 && initialRaw && rawMentionsUsername(draft.reply, dedupeMention) ? (options.reply = draft.reply, insertionSkipped = "duplicate-mention") : input.replaceRaw === !0 ? options.reply = initialRaw : initialRaw && initialRichHtml ? (options.reply = draft.reply, insertAfterOpen = !0) : options.reply = `${draft.reply}${initialRaw ? `
 		${initialRaw}` : ""}`, draft.whisper !== void 0 && (options.whisper = draft.whisper);
-		    } else initialRaw && (input.replaceRaw === !0 ? options.reply = initialRaw : options.quote = initialRaw);
-		    if (currentReply && currentOpen && currentTopicId === topicId && (options.reply = `${currentReply}${initialRaw ? `
+		    } else initialRaw && (input.replaceRaw === !0 ? options.reply = initialRaw : initialRichHtml ? insertAfterOpen = !0 : options.quote = initialRaw);
+		    if (currentReply && currentOpen && currentTopicId === topicId && (input.replaceRaw !== !0 && initialRaw && rawMentionsUsername(currentReply, dedupeMention) ? (options.reply = currentReply, insertAfterOpen = !1, insertionSkipped = "duplicate-mention") : input.replaceRaw === !0 ? (options.reply = initialRaw, insertAfterOpen = !1) : initialRaw && initialRichHtml ? (options.reply = currentReply, insertAfterOpen = !0) : options.reply = `${currentReply}${initialRaw ? `
 		${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer, options), this.#assertActive(), !await this.#waitForComposerPopup(this.#composerOpenTimeoutMs))
 		      throw new Error("Discourse 原生回复浮窗未显示");
 		    const model = modelValue(composer, "model");
 		    if (!(0, import_value_record.valueRecord)(model)) throw new Error("Discourse composer.open 未生成 model");
+		    if (this.#presentComposerWindow(), insertAfterOpen && initialRaw) {
+		      const composerInput = await this.#waitForComposerInput(
+		        this.#composerOpenTimeoutMs
+		      );
+		      if (this.#document && !composerInput)
+		        throw new Error("Discourse 原生回复编辑器未就绪");
+		      this.#insertComposerBlock(
+		        appEvents,
+		        model,
+		        initialRaw,
+		        initialRichHtml,
+		        composerInput
+		      );
+		    }
 		    const session = Object.freeze({
 		      topicId,
 		      parentPostNumber: postReference.postNumber,
 		      action: "reply",
 		      reused: !1,
-		      model
+		      model,
+		      ...insertionSkipped ? { insertionSkipped } : {}
 		    });
-		    return this.#session = session, this.#presentComposerWindow(), this.#focusComposerInput(), session;
+		    return this.#session = session, this.#focusComposerInput(), session;
 		  }
 		  #replyRuntime() {
 		    const composer = (0, import_value_record.valueRecord)(this.#host.lookup("service:composer")), appEvents = (0, import_value_record.valueRecord)(
@@ -7601,14 +7661,39 @@
 		    } while (Date.now() <= deadline);
 		    return !1;
 		  }
+		  #composerInput() {
+		    const document = this.#document;
+		    if (!document || !this.#composerPopupAvailable()) return null;
+		    const selector = '#reply-control textarea.d-editor-input,#reply-control input.d-editor-input,#reply-control .ProseMirror.d-editor-input[contenteditable="true"],#reply-control [contenteditable="true"].d-editor-input,#reply-control [role="textbox"][contenteditable="true"],#reply-control .ProseMirror[contenteditable="true"],#reply-control textarea', available = (candidate) => {
+		      if (!candidate.isConnected || candidate.hidden || candidate.style.display === "none" || candidate.style.visibility === "hidden" || candidate.matches(
+		        '[disabled],[aria-disabled="true"],[aria-hidden="true"],.hidden,.d-none'
+		      ) || candidate.closest('[hidden],[aria-hidden="true"],.hidden,.d-none')) return !1;
+		      const view = document.defaultView;
+		      if (typeof view?.getComputedStyle == "function") {
+		        const style = view.getComputedStyle(candidate);
+		        if (style.display === "none" || style.visibility === "hidden" || typeof candidate.getClientRects == "function" && candidate.getClientRects().length === 0) return !1;
+		      }
+		      return !0;
+		    }, active = document.activeElement;
+		    return active?.matches(selector) && available(active) ? active : [...document.querySelectorAll(selector)].find(available) ?? null;
+		  }
+		  async #waitForComposerInput(timeoutMs) {
+		    if (!this.#document) return null;
+		    const deadline = Date.now() + Math.max(0, timeoutMs);
+		    do {
+		      const input = this.#composerInput();
+		      if (input) return input;
+		      if (Date.now() >= deadline) return null;
+		      await this.#waitForDelay(80), this.#assertActive();
+		    } while (Date.now() <= deadline);
+		    return null;
+		  }
 		  #focusComposerInput() {
 		    const document = this.#document;
 		    if (!document) return;
 		    const focus = () => {
 		      if (!this.#composerPopupAvailable()) return;
-		      const input = [...document.querySelectorAll(
-		        '#reply-control textarea.d-editor-input,#reply-control textarea,#reply-control .ProseMirror[contenteditable="true"]'
-		      )].find((candidate) => !candidate.matches('[disabled],[aria-disabled="true"]'));
+		      const input = this.#composerInput();
 		      if (input)
 		        try {
 		          input.focus({ preventScroll: !0 });
@@ -7617,6 +7702,129 @@
 		        }
 		    }, viewport = document.defaultView;
 		    viewport?.requestAnimationFrame ? viewport.requestAnimationFrame(focus) : queueMicrotask(focus);
+		  }
+		  #insertComposerBlock(appEvents, model, raw, richHtml, composerInput = this.#composerInput()) {
+		    const richEditor = richHtml && composerInput?.matches(
+		      '.ProseMirror[contenteditable="true"]'
+		    ) ? composerInput : null;
+		    if (richEditor) {
+		      if (this.#insertRichText(richEditor, richHtml, raw)) return;
+		      throw new Error("Discourse 富文本 Composer 引用插入失败");
+		    }
+		    if (composerInput?.matches("textarea,input.d-editor-input")) {
+		      this.#insertTextControlBlock(
+		        composerInput,
+		        model,
+		        raw
+		      );
+		      return;
+		    }
+		    const trigger = appEvents.trigger;
+		    if (typeof trigger != "function")
+		      throw new Error("Discourse app-events 缺少 composer insert-block");
+		    trigger.call(appEvents, "composer:insert-block", raw);
+		  }
+		  #insertTextControlBlock(editor, model, raw) {
+		    const modelRaw = String(modelValue(model, "reply") ?? ""), current = editor.value || modelRaw, wasFocused = editor.ownerDocument.activeElement === editor;
+		    let start = Number.isInteger(editor.selectionStart) ? Number(editor.selectionStart) : current.length, end = Number.isInteger(editor.selectionEnd) ? Number(editor.selectionEnd) : start;
+		    !wasFocused && current && start === 0 && end === 0 && (start = current.length, end = current.length);
+		    const insertion = composerTextInsertion(
+		      current,
+		      raw,
+		      start,
+		      end
+		    );
+		    editor.focus(), this.#setTextControlValue(editor, insertion.next), this.#dispatchTextControlInput(editor, insertion.inserted), setModelValue(model, "reply", insertion.next);
+		    try {
+		      editor.setSelectionRange(insertion.cursor, insertion.cursor);
+		    } catch {
+		    }
+		    if (String(modelValue(model, "reply") ?? "") !== insertion.next || editor.value !== insertion.next)
+		      throw new Error("Discourse Markdown Composer 引用插入失败");
+		  }
+		  #setTextControlValue(editor, value) {
+		    try {
+		      if (editor.value = value, editor.value === value) return;
+		    } catch {
+		    }
+		    const view = editor.ownerDocument.defaultView;
+		    for (const prototype of [
+		      view?.HTMLTextAreaElement?.prototype,
+		      view?.HTMLInputElement?.prototype,
+		      Object.getPrototypeOf(editor)
+		    ]) {
+		      if (!prototype) continue;
+		      const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+		      if (setter)
+		        try {
+		          if (setter.call(editor, value), editor.value === value) return;
+		        } catch {
+		        }
+		    }
+		    throw new Error("Discourse Markdown Composer value 不可写");
+		  }
+		  #dispatchTextControlInput(editor, inserted) {
+		    const InputEventConstructor = editor.ownerDocument.defaultView?.InputEvent;
+		    if (typeof InputEventConstructor == "function")
+		      try {
+		        editor.dispatchEvent(new InputEventConstructor("input", {
+		          bubbles: !0,
+		          inputType: "insertText",
+		          data: inserted
+		        }));
+		      } catch {
+		        this.#dispatchComposerInput(editor);
+		      }
+		    else
+		      this.#dispatchComposerInput(editor);
+		    const change = editor.ownerDocument.createEvent("Event");
+		    change.initEvent("change", !0, !1), editor.dispatchEvent(change);
+		  }
+		  #insertRichText(editor, html, raw) {
+		    const document = this.#document;
+		    if (!document) return !1;
+		    try {
+		      editor.focus({ preventScroll: !0 });
+		    } catch {
+		      editor.focus();
+		    }
+		    const view = document.defaultView, DataTransferConstructor = view?.DataTransfer, ClipboardEventConstructor = view?.ClipboardEvent;
+		    if (typeof DataTransferConstructor == "function" && typeof ClipboardEventConstructor == "function")
+		      try {
+		        const before = editor.innerHTML, data = new DataTransferConstructor();
+		        data.setData("text/html", html), data.setData("text/plain", raw), data.setData("text/markdown", raw);
+		        const event = new ClipboardEventConstructor("paste", {
+		          bubbles: !0,
+		          cancelable: !0,
+		          clipboardData: data
+		        });
+		        if (editor.dispatchEvent(event), editor.innerHTML !== before) return !0;
+		      } catch {
+		      }
+		    const execute = document.execCommand;
+		    if (typeof execute == "function")
+		      try {
+		        const before = editor.innerHTML;
+		        if (execute.call(document, "insertHTML", !1, html) && editor.innerHTML !== before)
+		          return this.#dispatchComposerInput(editor), !0;
+		      } catch {
+		      }
+		    const selection = document.getSelection?.() ?? view?.getSelection?.() ?? null;
+		    if (!selection) return !1;
+		    let range;
+		    selection.rangeCount > 0 && editor.contains(selection.anchorNode) ? range = selection.getRangeAt(0) : (range = document.createRange(), range.selectNodeContents(editor), range.collapse(!1), selection.removeAllRanges(), selection.addRange(range));
+		    try {
+		      const before = editor.innerHTML;
+		      range.deleteContents();
+		      const fragment = range.createContextualFragment(html), last = fragment.lastChild;
+		      return range.insertNode(fragment), last && (range.setStartAfter(last), range.collapse(!0), selection.removeAllRanges(), selection.addRange(range)), this.#dispatchComposerInput(editor), editor.innerHTML !== before;
+		    } catch {
+		      return !1;
+		    }
+		  }
+		  #dispatchComposerInput(editor) {
+		    const event = editor.ownerDocument.createEvent("Event");
+		    event.initEvent("input", !0, !1), editor.dispatchEvent(event);
 		  }
 		  async #openEdit(input) {
 		    const topicId = (0, import_identifiers.discourseTopicId)(input.topic.id), postReference = (0, import_identifiers.discoursePostReference)(input.post);
@@ -8032,7 +8240,7 @@
 		      throw new Error("DiscourseComposerTopicSyncController 已销毁");
 		  }
 		}
-	}, "1b64696e58ec2d365441f16b05d352cf1075ea687d1b3ea4731ecfb88249846b");
+	}, "1dd2d50e83bf13551eb9224bc0a65c78840dba3be96e8dda9db10b6b29464bcd");
 
 	/* Source: lite/src/discourse/native-host-api.ts */
 	runtime.register("src/discourse/native-host-api.js", function(module, exports, require) {
@@ -11649,6 +11857,10 @@
 		      const lastChildPostNumber = this.#domOwner.topology.childrenOf?.(parentPostNumber)?.at(-1) ?? [...mountedChildren].sort((left, right) => left.postNumber - right.postNumber).at(-1)?.postNumber;
 		      lastChildPostNumber !== void 0 && lastChildByParent.set(parentPostNumber, lastChildPostNumber);
 		    }
+		    const segmentedRootToggleTop = this.#measureSegmentedRootToggleTop(
+		      views,
+		      childrenByParent
+		    );
 		    let paintedBranches = 0;
 		    for (const view of views) {
 		      const parentPostNumber = this.#domOwner.topology.parentOf(
@@ -11669,11 +11881,41 @@
 		        continue;
 		      }
 		      const owned = this.#own(view);
-		      this.#syncSegmentedRailToggles(owned, children), owned.toggle.style.left && owned.toggle.style.removeProperty("left"), owned.toggle.style.top && owned.toggle.style.removeProperty("top"), owned.toggle.hidden && (owned.toggle.hidden = !1), this.#syncCollapsed(view, owned.toggle), !this.#isCollapsed(view.postNumber) && (paintedBranches += children.filter(
+		      this.#syncSegmentedRailToggles(owned, children), owned.toggle.style.left && owned.toggle.style.removeProperty("left"), view.postNumber !== 1 && owned.toggle.style.top && owned.toggle.style.removeProperty("top"), view.postNumber === 1 && segmentedRootToggleTop !== null && this.#setStyle(
+		        owned.toggle,
+		        "top",
+		        `${segmentedRootToggleTop}px`
+		      ), owned.toggle.hidden && (owned.toggle.hidden = !1), this.#syncCollapsed(view, owned.toggle), !this.#isCollapsed(view.postNumber) && (paintedBranches += children.filter(
 		        (child) => !child.slots.root.classList.contains("ldp-virtual-ancestor-shell")
 		      ).length);
 		    }
 		    return Object.freeze({ paintedBranches });
+		  }
+		  #measureSegmentedRootToggleTop(views, childrenByParent) {
+		    const rootView = views.find((view) => view.postNumber === 1);
+		    if (!rootView?.slots.root.isConnected || this.#isCollapsed(rootView.postNumber)) return null;
+		    const childByRoot = new Map(
+		      (childrenByParent.get(rootView.postNumber) ?? []).map((child) => [
+		        child.slots.root,
+		        child
+		      ])
+		    );
+		    let firstChild = null;
+		    for (const element of rootView.slots.replyList.children) {
+		      const child = childByRoot.get(element);
+		      if (child?.slots.root.isConnected && !child.slots.root.classList.contains("ldp-virtual-ancestor-shell")) {
+		        firstChild = child;
+		        break;
+		      }
+		    }
+		    if (!firstChild) return null;
+		    const rootReplyTreeRect = rootView.slots.replyTree.getBoundingClientRect(), childRootRect = firstChild.slots.root.getBoundingClientRect(), childActionsRect = firstChild.slots.actions.getBoundingClientRect(), childReplyTreeRect = firstChild.slots.replyTree.getBoundingClientRect();
+		    if (!finiteRect(rootReplyTreeRect) || !finiteRect(childRootRect) || !finiteRect(childActionsRect) || !finiteRect(childReplyTreeRect) || childActionsRect.height <= 0) return null;
+		    const ordinaryToggleCenterY = childActionsRect.top + childActionsRect.height / 2, ordinaryTailDistance = childReplyTreeRect.top - ordinaryToggleCenterY;
+		    if (!Number.isFinite(ordinaryTailDistance) || ordinaryTailDistance < 0)
+		      return null;
+		    const top = childRootRect.top - rootReplyTreeRect.top - ordinaryTailDistance;
+		    return Number.isFinite(top) ? top : null;
 		  }
 		  toggle(postNumber) {
 		    if (this.scope.destroyed) return;
@@ -11914,7 +12156,7 @@
 		    slots.replyList.hidden = !1, this.#setClass(slots.root, "ldp-has-child-branches", !1), this.#setClass(slots.root, "ldp-branch-parent-collapsed", !1), this.#setClass(slots.root, "ldp-segmented-branch-last", !1), this.#clearPaths(slots), owned.toggle.remove(), owned.count.remove(), owned.trunkToggle?.remove(), this.#clearRailToggles(owned), slots.replyControls.classList.remove("ldp-branch-controls");
 		  }
 		}
-	}, "8f53ab43386e9aa607d50b85cacb73f32773085b14c389414db30ab341a7694d");
+	}, "454d387511638ec7108df44be2bf8411859286b566e535375e9c50d63271ff2f");
 
 	/* Source: lite/src/layout/reader-layout-style-controller.ts */
 	runtime.register("src/layout/reader-layout-style-controller.js", function(module, exports, require) {

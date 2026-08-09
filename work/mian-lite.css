@@ -1,6 +1,6 @@
 /* Awesome LinuxDo Reader Lite stylesheet.
  * Generated only from lite/styles/*.css; do not edit generated outputs.
- * source-sha256: 2f13f1e407571c0d353478b027b3f64e28f96a160262b00ee41aaa68c04e3717
+ * source-sha256: 79b8c4e302e0ac227477b0779aadf413f6c729fd609aa920dd6b664c53d70b5a
  */
 
 /* source: 00-foundation.css */
@@ -5566,6 +5566,12 @@ button.ldp-floor:hover {
   background: var(--ldp-surface-raised);
 }
 
+.ldp-post.ldp-has-boosts > .ldp-post-body:has(
+  > .ldp-post-body-layer > .ldp-solved-card
+) > .ldp-boost-list {
+  margin-top: 10px;
+}
+
 .ldp-solved-head {
   display: flex;
   align-items: center;
@@ -6408,6 +6414,10 @@ button.ldp-floor:hover {
  * 主干，canonical 最后一个子节点在弯头处收尾；仍不创建贯穿几千楼的 SVG，
  * 也不需要 JS 读取几何。
  */
+.ldp-segmented-branches {
+  --ldp-branch-avatar-gap: 5px;
+}
+
 .ldp-segmented-branches .ldp-branch-overlay {
   display: none;
 }
@@ -6489,7 +6499,9 @@ button.ldp-floor:hover {
   z-index: 1;
   top: -6px;
   left: calc(var(--ldp-thread-avatar-size) / -2);
-  width: calc(var(--ldp-thread-avatar-size) / 2 - 5px);
+  width: calc(
+    var(--ldp-thread-avatar-size) / 2 - var(--ldp-branch-avatar-gap)
+  );
   height: calc(6px + var(--ldp-thread-avatar-size) / 2);
   border-bottom: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
   border-left: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
@@ -6509,7 +6521,7 @@ button.ldp-floor:hover {
 ) > .ldp-post-body::before {
   position: absolute;
   z-index: 1;
-  top: 0;
+  top: var(--ldp-branch-avatar-gap);
   bottom: 0;
   left: calc(var(--ldp-thread-avatar-size) / 2);
   border-left: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
@@ -6530,7 +6542,7 @@ button.ldp-floor:hover {
 ) > .ldp-post-body > .ldp-reader-branch-trunk-toggle {
   position: absolute;
   z-index: 3;
-  top: 0;
+  top: var(--ldp-branch-avatar-gap);
   bottom: 0;
   left: calc(var(--ldp-thread-avatar-size) / 2);
   display: block;
@@ -6563,7 +6575,6 @@ button.ldp-floor:hover {
 .ldp-segmented-branches >
 .ldp-post[data-post-number="1"].ldp-has-child-branches >
 .ldp-reply-tree > .ldp-reader-branch-toggle {
-  top: -10px;
   left: calc(var(--ldp-thread-avatar-size) / -2);
 }
 

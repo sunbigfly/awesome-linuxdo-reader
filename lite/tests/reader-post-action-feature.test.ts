@@ -329,10 +329,10 @@ const comment: TestPost = {
 	reaction_users_count: 2,
 	boosts: [{
 		id: 20,
-		raw: '原 Boost',
+		raw: '原 Boo\n续',
 		cooked:
-			'<p>原 <strong>Boost</strong>' +
-			'<img class="emoji" alt="😄" src="/emoji.png"></p>',
+			'<p>原 <strong>Boo</strong>' +
+			'<img class="emoji" alt="😄" src="/emoji.png"><br>续</p>',
 		user: {
 			username: 'booster',
 			name: 'Booster',
@@ -361,6 +361,7 @@ const commands = new PostActionFeatureCommands(
 );
 const composerInputs: DiscourseComposerReplyInput<TestTopic, TestPost>[] = [];
 let rejectNextComposer = false;
+let skipNextComposerInsertion = false;
 let deleteConfirmations = 0;
 let approveBoostDelete = false;
 const notices: string[] = [];
@@ -565,11 +566,16 @@ const feature = new ReaderPostActionFeature<TestTopic, TestPost>({
 				rejectNextComposer = false;
 				throw new Error('composer down');
 			}
+			const insertionSkipped = skipNextComposerInsertion;
+			skipNextComposerInsertion = false;
 			return {
 				topicId: discourseTopicId(10),
 				parentPostNumber: discoursePostNumber(input.post.post_number),
 				reused: false,
 				model: {},
+				...(insertionSkipped
+					? { insertionSkipped: 'duplicate-mention' as const }
+					: {}),
 			};
 		},
 	},
@@ -1294,9 +1300,9 @@ assert(
 	'Boost composer 必须属于 Shell surfaceHost，继承唯一外观和字体投影',
 );
 assert(
-	copiedBoostEditor.textContent === '同意：原 Boost😄+2' &&
-	copiedBoostMenu.querySelector('.ldp-native-boost-count')?.textContent ===
-		'13/16',
+	copiedBoostEditor.textContent === '同意：原 Boo😄 续+2' &&
+		copiedBoostMenu.querySelector('.ldp-native-boost-count')?.textContent ===
+			'13/16',
 	'Boost 气泡复制必须按当前规则预填同一受控 composer，不能写第二份剪贴板/计数状态',
 );
 const emojiButton = copiedBoostMenu.querySelector<HTMLButtonElement>(
@@ -1393,7 +1399,7 @@ click(regular.slots.boost.querySelector<HTMLButtonElement>(
 	'button[data-boost-copy]',
 )!);
 assert(
-	String(copiedBoostEditor.textContent) === '原 Boost😄俺也一样',
+	String(copiedBoostEditor.textContent) === '原 Boo😄 续俺也一样',
 	'已挂载 PostView 的复制动作必须在点击时热读取统一设置，不依赖重建楼层 DOM',
 );
 document.dispatchEvent(new parsedWindow.Event('scroll'));
@@ -1401,28 +1407,50 @@ click(regular.slots.boost.querySelector<HTMLButtonElement>(
 	'button[data-boost-mention]',
 )!);
 await Promise.resolve();
+const boostQuoteRichHtml = composerInputs[0]?.initialRichHtml ?? '';
+const { document: boostQuoteDocument } = parseHTML(
+	`<!doctype html><html><body>${boostQuoteRichHtml}</body></html>`,
+);
+const boostQuote = boostQuoteDocument.querySelector<HTMLElement>('aside.quote');
 assert(
 	composerInputs.length === 1 &&
 		composerInputs[0]?.post === comment &&
-		composerInputs[0]?.initialRaw ===
-			'[quote="booster, post:2, topic:10, username:booster"]\n' +
-			'原 Boost😄\n[/quote]\n\n@booster ',
-	'Boost 引用动作必须复用原生 composer，并一次插入楼层引用与 @ 用户',
+			composerInputs[0]?.initialRaw ===
+				'[quote="booster, post:2, topic:10, username:booster"]\n' +
+				'原 Boo😄\n续\n[/quote]\n\n@booster ' &&
+			composerInputs[0]?.dedupeMention === 'booster' &&
+			boostQuote?.dataset.username === 'booster' &&
+			boostQuote.dataset.post === '2' &&
+			boostQuote.dataset.topic === '10' &&
+			boostQuote.querySelector('blockquote')?.innerHTML ===
+				'<p>原 Boo😄<br>续</p>' &&
+			boostQuote.nextElementSibling?.textContent === '@booster\u00a0',
+	'Boost 引用动作必须同时提供 Markdown 与富文本引用，并保留多行内容和重复提及身份',
+);
+skipNextComposerInsertion = true;
+click(regular.slots.boost.querySelector<HTMLButtonElement>(
+	'button[data-boost-mention]',
+)!);
+await Promise.resolve();
+assert(
+	Number(composerInputs.length) === 2 &&
+		notices.at(-1) === '回复框中已有 @booster',
+	'草稿已提及 Boost 用户时必须聚焦原 Composer，不得重复插入引用或误报成功',
 );
 click(regular.slots.actions.querySelector<HTMLButtonElement>('[data-post-reply]')!);
 await Promise.resolve();
 assert(
-	Number(composerInputs.length) === 2 &&
-	composerInputs[1]?.topic === topic &&
-	composerInputs[1]?.post === comment,
+	Number(composerInputs.length) === 3 &&
+	composerInputs[2]?.topic === topic &&
+	composerInputs[2]?.post === comment,
 	'普通/嵌套/实时/回屏与灯箱评论的回复入口必须复用注入的同一原生 composer',
 );
 click(topicReplyButton);
 await Promise.resolve();
 assert(
-	Number(composerInputs.length) === 3 &&
-		composerInputs[2]?.topic === topic &&
-		composerInputs[2]?.post === source,
+	Number(composerInputs.length) === 4 &&
+		composerInputs[3]?.topic === topic &&
+		composerInputs[3]?.post === source,
 	'主题首帖 footer 的回复入口必须复用同一 Composer owner，并以首帖作为回复目标',
 );
 rejectNextComposer = true;
@@ -1431,7 +1459,7 @@ click(regular.slots.boost.querySelector<HTMLButtonElement>(
 )!);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
-	Number(composerInputs.length) === 4 &&
+	Number(composerInputs.length) === 5 &&
 		notices.at(-1) === '引用 Boost 失败：composer down',
 	'Boost 引用打开 Composer 失败时必须给用户可见反馈，不能只写诊断',
 );
@@ -1441,7 +1469,7 @@ click(regular.slots.actions.querySelector<HTMLButtonElement>(
 )!);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
-	Number(composerInputs.length) === 5 &&
+	Number(composerInputs.length) === 6 &&
 		notices.at(-1) === '打开回复编辑器失败：composer down',
 	'楼层回复打开 Composer 失败时必须给用户可见反馈，不能静默失败',
 );

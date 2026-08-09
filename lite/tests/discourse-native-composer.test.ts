@@ -29,6 +29,7 @@ function model(attributes: Record<string, unknown>): TestModel {
 const draftCalls: string[] = [];
 const openOptions: Record<string, unknown>[] = [];
 const inserted: string[] = [];
+const richInsertions: string[] = [];
 const saveCalls: unknown[][] = [];
 const routed: string[] = [];
 const privateMessageOpenOptions: Record<string, unknown>[] = [];
@@ -147,6 +148,41 @@ const errors: unknown[] = [];
 const { document: composerWindowDocument } = parseHTML(
 	'<!doctype html><html><body><section id="reply-control" class="closed"></section></body></html>',
 );
+const composerWindowView = composerWindowDocument.defaultView;
+assert(composerWindowView, 'Composer 测试窗口必须可用');
+class TestDataTransfer {
+	readonly #values = new Map<string, string>();
+
+	setData(type: string, value: string): void {
+		this.#values.set(type, value);
+	}
+
+	getData(type: string): string {
+		return this.#values.get(type) ?? '';
+	}
+}
+class TestClipboardEvent extends composerWindowView.Event {
+	constructor(
+		type: string,
+		init: EventInit & Readonly<{ clipboardData?: unknown }>,
+	) {
+		super(type, init);
+		Reflect.set(this, 'clipboardData', init.clipboardData ?? null);
+	}
+}
+Reflect.set(composerWindowView, 'DataTransfer', TestDataTransfer);
+Reflect.set(composerWindowView, 'ClipboardEvent', TestClipboardEvent);
+Reflect.set(
+	composerWindowDocument,
+	'execCommand',
+	(command: string, _showUi: boolean, value: string) => {
+		if (command !== 'insertHTML') return false;
+		richInsertions.push(value);
+		composerWindowDocument.querySelector<HTMLElement>('.ProseMirror')
+			?.insertAdjacentHTML('beforeend', value);
+		return true;
+	},
+);
 const presentedComposerWindows: HTMLElement[] = [];
 const coordinator = new DiscourseComposerCoordinator({
 	host,
@@ -169,7 +205,9 @@ assert(
 		Number(presentedComposerWindows.length) === 0,
 	'回复预热只能解析宿主 service/module，不能读取 draft、打开 Composer 或创建窗口',
 );
-composerWindowDocument.querySelector('#reply-control')?.classList.remove('closed');
+const initialReplyControl = composerWindowDocument.querySelector('#reply-control')!;
+initialReplyControl.classList.remove('closed');
+initialReplyControl.innerHTML = '<textarea class="d-editor-input"></textarea>';
 const [opened, sameOpened] = await Promise.all([
 	coordinator.openReply({ topic, post, initialRaw: '图片引用' }),
 	coordinator.openReply({ topic, post, initialRaw: '图片引用' }),
@@ -193,7 +231,10 @@ const reused = await coordinator.openReply({
 assert(
 	reused.reused &&
 	reused.parentPostNumber === 3 &&
-	inserted.join(',') === 'composer:insert-block:第二张图' &&
+	service.model?.reply === '已有草稿\n图片引用\n\n第二张图' &&
+	composerWindowDocument.querySelector<HTMLTextAreaElement>('textarea')?.value ===
+		'已有草稿\n图片引用\n\n第二张图' &&
+	inserted.length === 0 &&
 	service.model?.post &&
 	(service.model.post as TestModel).post_number === 3,
 	'同 Topic 已打开回复必须复用原生 composer 并更新目标/插入块',
@@ -201,6 +242,43 @@ assert(
 assert(
 	Number(presentedComposerWindows.length) === 2,
 	'复用已打开 Composer 时也必须显式把原生窗口交给唯一浮窗 owner，不能等待偶发 DOM mutation',
+);
+composerWindowDocument.querySelector('#reply-control')!.innerHTML =
+	'<div class="ProseMirror" contenteditable="true"></div>';
+const richEditor = composerWindowDocument.querySelector<HTMLElement>('.ProseMirror')!;
+richEditor.addEventListener('paste', (event) => {
+	event.preventDefault();
+});
+const richReused = await coordinator.openReply({
+	topic,
+	post: { ...post, id: 22, post_number: 4 },
+	initialRaw: '[quote="booster, post:4, topic:10"]\n正文\n[/quote]\n\n@booster ',
+	initialRichHtml:
+		'<aside class="quote" data-username="booster" data-post="4" data-topic="10">' +
+		'<blockquote><p>正文</p></blockquote></aside><p>@booster&nbsp;</p>',
+	dedupeMention: 'booster',
+});
+assert(
+	richReused.reused &&
+		richInsertions.length === 1 &&
+		richInsertions[0]?.includes('data-username="booster"') &&
+		richEditor.innerHTML.includes('data-username="booster"') &&
+		inserted.length === 0,
+	'ProseMirror 拦截但未消费合成 paste 时必须继续插入结构化引用，不能空白误报成功',
+);
+if (service.model) service.model.reply = '已有草稿\n@booster 已存在';
+const duplicateMention = await coordinator.openReply({
+	topic,
+	post: { ...post, id: 22, post_number: 4 },
+	initialRaw: '[quote="booster, post:4, topic:10"]\n正文\n[/quote]\n\n@booster ',
+	initialRichHtml: '<aside class="quote"><blockquote>正文</blockquote></aside>',
+	dedupeMention: '@booster',
+});
+assert(
+	duplicateMention.insertionSkipped === 'duplicate-mention' &&
+		richInsertions.length === 1 &&
+		inserted.length === 0,
+	'草稿已有完整 @ 用户时必须跳过 Markdown/富文本双通道插入',
 );
 const replaced = await coordinator.openReply({
 	topic,
@@ -211,9 +289,95 @@ const replaced = await coordinator.openReply({
 assert(
 	replaced.reused &&
 	service.model?.reply === '灯箱内联评论正文' &&
-	inserted.join(',') === 'composer:insert-block:第二张图',
+	inserted.length === 0,
 	'内联评论提交必须原子替换原生 composer raw，不能混入已有草稿或重复 insert-block',
 );
+
+const { document: delayedInputParsedDocument } = parseHTML(
+	'<!doctype html><html><body><section id="reply-control" class="closed"></section></body></html>',
+);
+const delayedInputDocument = delayedInputParsedDocument as unknown as Document;
+const delayedInputView = delayedInputDocument.defaultView;
+assert(delayedInputView, '延迟 Composer 测试窗口必须可用');
+Reflect.set(delayedInputView, 'getComputedStyle', (element: Element) => ({
+	display: (element as HTMLElement).style.display || 'block',
+	visibility: (element as HTMLElement).style.visibility || 'visible',
+}) as CSSStyleDeclaration);
+const delayedInsertions: string[] = [];
+const delayedInputService = {
+	model: null as ReturnType<typeof model> | null,
+	appEvents: {
+		trigger(name: string, value: string) {
+			if (delayedInputDocument.querySelector('textarea,.ProseMirror')) {
+				delayedInsertions.push(`${name}:${value}`);
+			}
+		},
+	},
+	async open(options: Record<string, unknown>) {
+		delayedInputDocument.querySelector('#reply-control')?.classList.remove('closed');
+		this.model = model({
+			...options,
+			topic: (options.post as TestModel | undefined)?.topic ?? options.topic,
+			viewOpen: true,
+			composeState: 'open',
+		});
+	},
+};
+const delayedInputHost: DiscourseHostApiPort = {
+	lookup(name) {
+		return name === 'service:composer'
+			? delayedInputService
+			: name === 'service:app-events'
+				? delayedInputService.appEvents
+				: null;
+	},
+	lookupModule(name) {
+		return modules[name] ?? null;
+	},
+};
+let delayedInputWaits = 0;
+let delayedInputPresented = false;
+const delayedInputCoordinator = new DiscourseComposerCoordinator({
+	host: delayedInputHost,
+	document: delayedInputDocument,
+	composerOpenTimeoutMs: 200,
+	waitForDelay: async () => {
+		delayedInputWaits += 1;
+		delayedInputDocument.querySelector('#reply-control')!.innerHTML =
+			'<div class="ProseMirror d-editor-input" contenteditable="true" ' +
+			'style="display:none"></div><textarea class="d-editor-input"></textarea>';
+		const textarea = delayedInputDocument.querySelector('textarea')!;
+		Reflect.set(textarea, 'getClientRects', () =>
+			delayedInputPresented ? [{}] : []);
+	},
+});
+delayedInputCoordinator.bindWindow({
+	open(element) {
+		delayedInputPresented = Boolean(element);
+		return delayedInputPresented;
+	},
+});
+const delayedInputSession = await delayedInputCoordinator.openReply({
+	topic,
+	post,
+	initialRaw: '[quote="booster"]正文[/quote]\n\n@booster ',
+	initialRichHtml: '<aside class="quote"><blockquote>正文</blockquote></aside>',
+});
+const delayedExpectedRaw =
+	'已有草稿\n\n[quote="booster"]正文[/quote]\n\n@booster';
+assert(
+	!delayedInputSession.reused &&
+		delayedInputPresented &&
+		delayedInputWaits === 1 &&
+		delayedInsertions.length === 0 &&
+		delayedInputService.model?.reply === delayedExpectedRaw &&
+		delayedInputDocument.querySelector<HTMLTextAreaElement>('textarea')?.value ===
+			delayedExpectedRaw &&
+		delayedInputDocument.querySelector<HTMLElement>('.ProseMirror')?.innerHTML === '',
+	'新建 Composer 必须先交给窗口 owner 显示，再选择可见文本控件并写入 model/value',
+);
+delayedInputCoordinator.destroy();
+
 const priorReplyModel = service.model;
 const postTopicOnlyModel = model({
 	action: 'reply',
