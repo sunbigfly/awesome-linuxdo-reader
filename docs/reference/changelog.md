@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.2.3
+version: 1.2.4
 status: current
 last_verified: 2026-08-09
 screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
@@ -15,6 +15,21 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.0.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.2.4 — 表情回应总数校准
+
+核验日期：2026-08-09。
+
+### 交互修复
+
+- 宿主主题列表的回应统计改为汇总楼主全部表情回应的 `count`，不再只显示单一回应或旧聚合字段。
+- 主帖收纳箱的主回应按钮使用同一汇总规则，继续标记当前用户选择的非主表情回应。
+- 数据缺少回应明细数组时仍兼容 `reaction_users_count`，避免旧版或不同站点模型显示为空。
+
+### 发布状态
+
+- `1.2.4` 本地源码和两套审查产物已生成；尚未提交、推送或同步 Greasy Fork。
+- 当前公开稳定版仍为 `1.2.3`，其固定三文件坐标继续作为回滚基线。
 
 ## 1.2.3 — 三文件构建语义一致性修复
 

@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.2.3
+// @version      1.2.4
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户、通知、监控与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.2.3 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.2.4 - main-lite-features
  * 媒体、互动、设置、用户、通知、监控与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.2.3",
+			sourceVersion: "1.2.4",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.3") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.4") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -14342,11 +14342,14 @@
 		      return;
 		    }
 		    let actions = slot.querySelector(":scope > .ldp-actions");
-		    const like = binding.snapshot.entries.find((entry) => entry.name === "like"), reactions = binding.snapshot.entries.find((entry) => entry.name === "reactions"), reply = binding.snapshot.entries.find((entry) => entry.name === "reply"), boost = binding.snapshot.entries.find((entry) => entry.name === "boost"), report = binding.snapshot.entries.find((entry) => entry.name === "report"), share = binding.snapshot.entries.find((entry) => entry.name === "share"), bookmark = binding.snapshot.entries.find((entry) => entry.name === "bookmark"), edit = binding.snapshot.entries.find((entry) => entry.name === "edit"), remove = binding.snapshot.entries.find((entry) => entry.name === "delete"), assign = binding.snapshot.entries.find((entry) => entry.name === "assign"), admin = binding.snapshot.entries.find((entry) => entry.name === "admin"), likeValue = this.#likeValue(binding.post), postBookmarked = this.#bookmarked(
-		      binding.post
-		    ), showLike = like?.decision !== "unknown" && (!!likeValue.reaction || this.#nativeLikeAction(binding.post) !== null), showReply = !!this.#composer && reply?.decision === "allowed", showBoost = boost?.decision === "allowed", topicActionRail = binding.root.classList.contains(
+		    const like = binding.snapshot.entries.find((entry) => entry.name === "like"), reactions = binding.snapshot.entries.find((entry) => entry.name === "reactions"), reply = binding.snapshot.entries.find((entry) => entry.name === "reply"), boost = binding.snapshot.entries.find((entry) => entry.name === "boost"), report = binding.snapshot.entries.find((entry) => entry.name === "report"), share = binding.snapshot.entries.find((entry) => entry.name === "share"), bookmark = binding.snapshot.entries.find((entry) => entry.name === "bookmark"), edit = binding.snapshot.entries.find((entry) => entry.name === "edit"), remove = binding.snapshot.entries.find((entry) => entry.name === "delete"), assign = binding.snapshot.entries.find((entry) => entry.name === "assign"), admin = binding.snapshot.entries.find((entry) => entry.name === "admin"), topicActionRail = binding.root.classList.contains(
 		      "ldp-topic-action-rail-post"
-		    ), showReport = !!this.#requestPostReport && (report?.decision === "allowed" || topicActionRail && report?.decision === "unknown") && (binding.view.postNumber !== 1 || topicActionRail), showShare = !!this.#shares && share?.decision === "allowed", showBookmark = !!this.#bookmarks && bookmark?.decision === "allowed" && binding.view.postNumber !== 1, showEdit = !!this.#management && edit?.decision === "allowed", showDelete = !!this.#management && remove?.decision === "allowed", showAssign = !!this.#management && assign?.decision === "allowed", showAdmin = !!this.#management && admin?.decision === "allowed";
+		    ), likeValue = this.#likeValue(
+		      binding.post,
+		      topicActionRail
+		    ), postBookmarked = this.#bookmarked(
+		      binding.post
+		    ), showLike = like?.decision !== "unknown" && (!!likeValue.reaction || this.#nativeLikeAction(binding.post) !== null), showReply = !!this.#composer && reply?.decision === "allowed", showBoost = boost?.decision === "allowed", showReport = !!this.#requestPostReport && (report?.decision === "allowed" || topicActionRail && report?.decision === "unknown") && (binding.view.postNumber !== 1 || topicActionRail), showShare = !!this.#shares && share?.decision === "allowed", showBookmark = !!this.#bookmarks && bookmark?.decision === "allowed" && binding.view.postNumber !== 1, showEdit = !!this.#management && edit?.decision === "allowed", showDelete = !!this.#management && remove?.decision === "allowed", showAssign = !!this.#management && assign?.decision === "allowed", showAdmin = !!this.#management && admin?.decision === "allowed";
 		    if (!showLike && !showReply && !showBoost && !showShare && !showReport && !showBookmark && !showEdit && !showDelete && !showAssign && !showAdmin) {
 		      actions?.remove(), this.#boostBinding === binding && this.#closeBoost();
 		      return;
@@ -14500,13 +14503,13 @@
 		  #bookmarked(value) {
 		    return value.bookmarked === !0 || Number.isSafeInteger(Number(value.bookmark_id)) && Number(value.bookmark_id) > 0;
 		  }
-		  #likeValue(post) {
+		  #likeValue(post, aggregateReactions = !1) {
 		    const primaryReaction = this.#primaryReaction(post);
 		    if (primaryReaction) {
-		      const reaction = postReactions(post).find((entry) => entry.id === primaryReaction);
+		      const reactions = postReactions(post), reaction = reactions.find((entry) => entry.id === primaryReaction);
 		      return Object.freeze({
 		        acted: reactionId((0, import_value_record.valueRecord)(post.current_user_reaction)?.id) === primaryReaction,
-		        count: reaction?.count ?? 0,
+		        count: aggregateReactions ? reactions.reduce((total, entry) => total + entry.count, 0) : reaction?.count ?? 0,
 		        reaction: primaryReaction
 		      });
 		    }
@@ -15578,7 +15581,7 @@ ${content}
 		    !binding || !binding.root.classList.contains("ldp-topic-action-rail-post") || (binding.persistentOpen = expanded, binding.open = expanded, expanded && !binding.contextHydrated && (binding.contextHydrated = !0, this.#renderActions(binding)), this.#clearReactionHoverTimers(binding.slot), this.#syncReactionPickerVisibility(binding));
 		  }
 		}
-	}, "c67943bb6f70df83f38fdb44529c3f31c6dc87918acc8cf95e250c41ce35e284");
+	}, "3bff721651e43aba8ecea7653da00f9d642fad44efb51894a7dab95cf2dee306");
 
 	/* Source: lite/src/post/reader-post-management-action-coordinator.ts */
 	runtime.register("src/post/reader-post-management-action-coordinator.js", function(module, exports, require) {

@@ -33,6 +33,21 @@ function modelArray(value: unknown): readonly unknown[] {
 	}
 }
 
+function reactionCountTotal(value: unknown): number | null {
+	const reactions = modelValue(value, 'reactions');
+	const source = record(reactions);
+	if (
+		!Array.isArray(reactions) &&
+		typeof source?.toArray !== 'function'
+	) return null;
+	return modelArray(reactions).reduce<number>((total, reaction) => {
+		const count = Number(modelValue(reaction, 'count'));
+		return Number.isFinite(count) && count > 0
+			? total + Math.trunc(count)
+			: total;
+	}, 0);
+}
+
 function markup(node: Node): string {
 	return node.nodeType === 1
 		? (node as Element).outerHTML
@@ -320,8 +335,10 @@ implements EmbeddedHostEnhancementPort {
 				if (!topicId || counts.has(topicId)) continue;
 				const reactions = modelValue(topic, 'op_reactions_data') ??
 					modelValue(topic, 'opReactionsData');
+				const total = reactionCountTotal(reactions);
 				const raw = reactions
-					? modelValue(reactions, 'reaction_users_count') ??
+					? total ??
+						modelValue(reactions, 'reaction_users_count') ??
 						modelValue(reactions, 'reactionUsersCount')
 					: modelValue(topic, 'op_like_count') ??
 						modelValue(topic, 'opLikeCount');

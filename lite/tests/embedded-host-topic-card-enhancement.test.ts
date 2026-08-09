@@ -21,13 +21,24 @@ const { document: parsedDocument } = parseHTML(
 	'</tr></tbody></table></body></html>',
 );
 const document = parsedDocument as unknown as Document;
+const topicModel: {
+	id: number;
+	op_reactions_data: unknown;
+} = {
+	id: 42,
+	op_reactions_data: {
+		reactions: [
+			{ id: 'heart', count: 61 },
+			{ id: '+1', count: 10 },
+			{ id: 'clap', count: 1 },
+		],
+		reaction_users_count: 9,
+	},
+};
 const routeController = {
 	model: {
 		list: {
-			topics: [{
-				id: 42,
-				op_reactions_data: { reaction_users_count: 9 },
-			}],
+			topics: [topicModel],
 		},
 	},
 };
@@ -56,10 +67,17 @@ assert(
 	component?.querySelector('.ldp-topic-stat--reply .ldp-topic-stat-value')
 		?.textContent === '7' &&
 	component.querySelector('.ldp-topic-stat--response .ldp-topic-stat-value')
-		?.textContent === '9' &&
+		?.textContent === '72' &&
 	card.querySelector('.ldp-native-topic-title-tools')?.textContent
 		?.includes('免打扰'),
-	'宿主增强必须从原生单元格/model 投影两行统计并组合标题工具',
+	'宿主增强必须汇总 OP 的所有表情 count，并组合标题工具',
+);
+topicModel.op_reactions_data = { reaction_users_count: 9 };
+enhancement.syncCards(Object.freeze([card]));
+assert(
+	component.querySelector('.ldp-topic-stat--response .ldp-topic-stat-value')
+		?.textContent === '9',
+	'缺少 reactions 明细数组时必须兼容旧 reaction_users_count 字段',
 );
 const activity = card.querySelector<HTMLElement>('.activity .relative-date')!;
 activity.textContent = '刚刚';

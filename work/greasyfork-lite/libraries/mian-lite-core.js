@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.2.3
+// @version      1.2.4
 // @description  Core runtime modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.2.3 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.2.4 - main-lite-core
  * 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.2.3",
+			sourceVersion: "1.2.4",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.3") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.4") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -16302,6 +16302,13 @@ ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer,
 		    return Object.freeze([]);
 		  }
 		}
+		function reactionCountTotal(value) {
+		  const reactions = modelValue(value, "reactions"), source = (0, import_value_record.valueRecord)(reactions);
+		  return !Array.isArray(reactions) && typeof source?.toArray != "function" ? null : modelArray(reactions).reduce((total, reaction) => {
+		    const count = Number(modelValue(reaction, "count"));
+		    return Number.isFinite(count) && count > 0 ? total + Math.trunc(count) : total;
+		  }, 0);
+		}
 		function markup(node) {
 		  return node.nodeType === 1 ? node.outerHTML : String(node.textContent ?? "");
 		}
@@ -16466,7 +16473,7 @@ ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer,
 		      for (const topic of topics) {
 		        const topicId = String(modelValue(topic, "id") ?? "").trim();
 		        if (!topicId || counts.has(topicId)) continue;
-		        const reactions = modelValue(topic, "op_reactions_data") ?? modelValue(topic, "opReactionsData"), raw = reactions ? modelValue(reactions, "reaction_users_count") ?? modelValue(reactions, "reactionUsersCount") : modelValue(topic, "op_like_count") ?? modelValue(topic, "opLikeCount"), numeric = Number(raw);
+		        const reactions = modelValue(topic, "op_reactions_data") ?? modelValue(topic, "opReactionsData"), total = reactionCountTotal(reactions), raw = reactions ? total ?? modelValue(reactions, "reaction_users_count") ?? modelValue(reactions, "reactionUsersCount") : modelValue(topic, "op_like_count") ?? modelValue(topic, "opLikeCount"), numeric = Number(raw);
 		        counts.set(
 		          topicId,
 		          Number.isFinite(numeric) && numeric >= 0 ? Math.trunc(numeric) : null
@@ -16479,7 +16486,7 @@ ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer,
 		    return (link?.getAttribute("href") ?? "").match(/\/t\/(?:[^/]+\/)?(\d+)(?:\/|$)/)?.[1] ?? "";
 		  }
 		}
-	}, "a739020cf3536dc1c5b1644ed635803abb696b758d4742f1c12e5990c654fc12");
+	}, "96ff0f2957f479f86458eb259126825fb29c138e3f1a20aa49b1a0ead2eebd74");
 
 	/* Source: lite/src/shell/main-outlet-mutation-hub.ts */
 	runtime.register("src/shell/main-outlet-mutation-hub.js", function(module, exports, require) {

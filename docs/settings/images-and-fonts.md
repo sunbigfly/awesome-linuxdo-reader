@@ -4,7 +4,7 @@ description: 配置帖子图片比例、灯箱默认行为、字体渲染、宿�
 feature_ids: ["MEDIA-001", "MEDIA-003", "MEDIA-005", "SET-002", "SET-003", "SET-004", "SET-005", "SET-006"]
 source_anchors: ["lite/src/media/reader-image-scale.ts","lite/src/network/public-resource-request-adapter.ts","lite/src/media/reader-lightbox-controller.ts","lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
-version: 1.2.3
+version: 1.2.4
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-03-image-settings-v1.0.0.png", "/screenshots/guide-04-font-settings-v1.0.0.png", "/screenshots/guide-19-image-lightbox-v1.0.0.png"]

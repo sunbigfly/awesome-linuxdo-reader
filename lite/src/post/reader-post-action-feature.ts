@@ -1325,7 +1325,13 @@ export class ReaderPostActionFeature<
 			entry.name === 'assign');
 		const admin = binding.snapshot.entries.find((entry) =>
 			entry.name === 'admin');
-		const likeValue = this.#likeValue(binding.post as UnknownRecord);
+		const topicActionRail = binding.root.classList.contains(
+			'ldp-topic-action-rail-post',
+		);
+		const likeValue = this.#likeValue(
+			binding.post as UnknownRecord,
+			topicActionRail,
+		);
 		const postBookmarked = this.#bookmarked(
 			binding.post as UnknownRecord,
 		);
@@ -1337,9 +1343,6 @@ export class ReaderPostActionFeature<
 			);
 		const showReply = !!this.#composer && reply?.decision === 'allowed';
 		const showBoost = boost?.decision === 'allowed';
-		const topicActionRail = binding.root.classList.contains(
-			'ldp-topic-action-rail-post',
-		);
 		const showReport =
 			!!this.#requestPostReport &&
 			(
@@ -1664,16 +1667,22 @@ export class ReaderPostActionFeature<
 			);
 	}
 
-	#likeValue(post: UnknownRecord): PostLikeValue {
+	#likeValue(
+		post: UnknownRecord,
+		aggregateReactions = false,
+	): PostLikeValue {
 		const primaryReaction = this.#primaryReaction(post);
 		if (primaryReaction) {
-			const reaction = postReactions(post).find((entry) =>
+			const reactions = postReactions(post);
+			const reaction = reactions.find((entry) =>
 				entry.id === primaryReaction);
 			return Object.freeze({
 				acted:
 					reactionId(record(post.current_user_reaction)?.id) ===
 					primaryReaction,
-				count: reaction?.count ?? 0,
+				count: aggregateReactions
+					? reactions.reduce((total, entry) => total + entry.count, 0)
+					: reaction?.count ?? 0,
 				reaction: primaryReaction,
 			});
 		}

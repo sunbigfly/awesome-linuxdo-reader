@@ -716,10 +716,11 @@ feature.afterRender({
 	reaction_users_count: 3,
 }, railView);
 assert(
+	railLike.querySelector('.ldp-like-count')?.textContent === '3' &&
 	railView.slots.actions.querySelector<HTMLImageElement>(
 		'.ldp-topic-action-rail-reaction-badge img.emoji',
 	)?.getAttribute('src') === '/emoji/laughing.png',
-	'主帖收纳箱必须在唯一主回应按钮上标记当前非主表情回应',
+	'主帖收纳箱主按钮必须汇总所有表情 count，并标记当前非主表情回应',
 );
 feature.setTopicActionRailExpanded(railView, false);
 assert(

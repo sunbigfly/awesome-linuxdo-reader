@@ -4,7 +4,7 @@ description: 按 Discourse 正文与直属回复 API 调整批量、预知请求
 feature_ids: ["READ-001", "READ-002", "SET-012", "SET-013", "SET-014", "SET-015", "MONITOR-003"]
 source_anchors: ["lite/src/dom/reply-tree.ts","lite/src/topic/topic-session.ts","lite/src/state/reader-preferences-schema.ts","lite/src/network/request-scheduler.ts","lite/src/network/browser-shared-request-permit.ts"]
 since: 0.1.2
-version: 1.2.3
+version: 1.2.4
 status: current
 last_verified: 2026-07-23
 screenshots: ["/screenshots/guide-09-performance-settings-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png"]
