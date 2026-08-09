@@ -227,6 +227,35 @@ function indent(value, prefix = '\t') {
     .join('\n')
 }
 
+function indentJavaScript(value, prefix = '\t') {
+  const ast = parse(value, { sourceType: 'script' })
+  const templateRanges = []
+  const nodes = [ast.program]
+  while (nodes.length) {
+    const node = nodes.pop()
+    if (!node || typeof node !== 'object') continue
+    if (node.type === 'TemplateElement' &&
+      typeof node.start === 'number' && typeof node.end === 'number') {
+      templateRanges.push([node.start, node.end])
+    }
+    for (const child of Object.values(node)) {
+      if (Array.isArray(child)) nodes.push(...child)
+      else if (child && typeof child === 'object') nodes.push(child)
+    }
+  }
+  let lineStart = 0
+  return value
+    .split('\n')
+    .map((line) => {
+      const startsInsideTemplate = templateRanges.some(([start, end]) =>
+        start < lineStart && lineStart <= end && value[lineStart - 1] === '\n')
+      lineStart += line.length + 1
+      if (!line || startsInsideTemplate) return line
+      return `${prefix}${line}`
+    })
+    .join('\n')
+}
+
 function runtimeBootstrap(sourceVersion, sharedHelpers) {
   return `
 \tconst root = globalThis;
@@ -478,7 +507,7 @@ function renderModule(module) {
   return [
     `\t/* Source: ${module.source} */`,
     `\truntime.register(${JSON.stringify(module.id)}, function(module, exports, require) {`,
-    indent(module.code, '\t\t'),
+    indentJavaScript(module.code, '\t\t'),
     `\t}, ${JSON.stringify(module.sourceHash)});`,
   ].join('\n')
 }

@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.2.1
+// @version      1.2.3
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户、通知、监控与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.2.1 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.2.3 - main-lite-features
  * 媒体、互动、设置、用户、通知、监控与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.2.1",
+			sourceVersion: "1.2.3",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.1") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.3") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -3509,24 +3509,24 @@
 		    this.#activeScope = localScope, this.#activeDismiss = options.onDismiss ?? null, this.#restoreFocusOnRelease = !1;
 		    const capturedReturnFocus = options.anchor ?? (0, import_event_target.deepActiveElement)(this.#document), isImage = options.kind === "image", label = options.kind === "avatar" ? "头像" : options.kind === "background" ? "背景图" : "图片", root = this.#document.createElement("div");
 		    root.className = `ldp-avatar-viewer${options.kind === "background" ? " is-background" : isImage ? " is-image" : ""}`, root.setAttribute("role", "dialog"), root.setAttribute("aria-label", options.item.alt || `${label}预览`), root.innerHTML = `
-					<div class="ldp-avatar-viewer-toolbar" role="toolbar" aria-label="${label}工具">
-						<label class="ldp-avatar-viewer-selection" hidden><input type="checkbox"><span></span></label>
-						<div class="ldp-avatar-viewer-progress is-indeterminate" role="progressbar" aria-label="${label}原图加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuetext="正在加载${label}原图" hidden>
-							<span class="ldp-avatar-viewer-progress-track" aria-hidden="true"><span class="ldp-avatar-viewer-progress-fill"></span></span>
-							<span class="ldp-avatar-viewer-progress-value">原图加载中</span>
-						</div>
-						<button class="ldp-lb-btn" type="button" data-avatar-viewer-action="zoom-out" aria-label="缩小（-）" hidden></button>
-						<button class="ldp-lb-btn ldp-avatar-viewer-zoom-value" type="button" data-avatar-viewer-action="zoom-reset" aria-label="恢复 100%" hidden>100%</button>
-						<button class="ldp-lb-btn" type="button" data-avatar-viewer-action="zoom-in" aria-label="放大（+）" hidden></button>
-						<button class="ldp-lb-btn" type="button" data-avatar-viewer-action="download" aria-label="下载当前${label}"></button>
-						<button class="ldp-lb-btn" type="button" data-avatar-viewer-action="close" aria-label="关闭${label}预览（Esc）"></button>
-					</div>
-					<div class="ldp-avatar-viewer-stage">
-						<button class="ldp-avatar-viewer-nav ldp-avatar-viewer-prev" type="button" data-avatar-viewer-action="previous" aria-label="上一张（←）" hidden></button>
-						<img class="ldp-avatar-viewer-image" alt="" draggable="false" decoding="async" hidden>
-						<button class="ldp-avatar-viewer-nav ldp-avatar-viewer-next" type="button" data-avatar-viewer-action="next" aria-label="下一张（→）" hidden></button>
-						<div class="ldp-avatar-viewer-status" role="status" aria-live="polite">正在加载${label}…</div>
-					</div>`, this.#mount.append(root), this.#root = root;
+			<div class="ldp-avatar-viewer-toolbar" role="toolbar" aria-label="${label}工具">
+				<label class="ldp-avatar-viewer-selection" hidden><input type="checkbox"><span></span></label>
+				<div class="ldp-avatar-viewer-progress is-indeterminate" role="progressbar" aria-label="${label}原图加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuetext="正在加载${label}原图" hidden>
+					<span class="ldp-avatar-viewer-progress-track" aria-hidden="true"><span class="ldp-avatar-viewer-progress-fill"></span></span>
+					<span class="ldp-avatar-viewer-progress-value">原图加载中</span>
+				</div>
+				<button class="ldp-lb-btn" type="button" data-avatar-viewer-action="zoom-out" aria-label="缩小（-）" hidden></button>
+				<button class="ldp-lb-btn ldp-avatar-viewer-zoom-value" type="button" data-avatar-viewer-action="zoom-reset" aria-label="恢复 100%" hidden>100%</button>
+				<button class="ldp-lb-btn" type="button" data-avatar-viewer-action="zoom-in" aria-label="放大（+）" hidden></button>
+				<button class="ldp-lb-btn" type="button" data-avatar-viewer-action="download" aria-label="下载当前${label}"></button>
+				<button class="ldp-lb-btn" type="button" data-avatar-viewer-action="close" aria-label="关闭${label}预览（Esc）"></button>
+			</div>
+			<div class="ldp-avatar-viewer-stage">
+				<button class="ldp-avatar-viewer-nav ldp-avatar-viewer-prev" type="button" data-avatar-viewer-action="previous" aria-label="上一张（←）" hidden></button>
+				<img class="ldp-avatar-viewer-image" alt="" draggable="false" decoding="async" hidden>
+				<button class="ldp-avatar-viewer-nav ldp-avatar-viewer-next" type="button" data-avatar-viewer-action="next" aria-label="下一张（→）" hidden></button>
+				<div class="ldp-avatar-viewer-status" role="status" aria-live="polite">正在加载${label}…</div>
+			</div>`, this.#mount.append(root), this.#root = root;
 		    const stage = required(root, ".ldp-avatar-viewer-stage"), image = required(root, ".ldp-avatar-viewer-image"), status = required(root, ".ldp-avatar-viewer-status"), progress = required(root, ".ldp-avatar-viewer-progress"), download = required(
 		      root,
 		      '[data-avatar-viewer-action="download"]'
@@ -4031,7 +4031,7 @@
 		    for (const pre of root.querySelectorAll("pre")) {
 		      if (pre.closest(".ldp-code-block")) continue;
 		      const lineCount = (pre.textContent ?? "").replace(/\n$/, "").split(`
-		`).length, block = this.#document.createElement("div");
+`).length, block = this.#document.createElement("div");
 		      block.className = "ldp-code-block";
 		      const actions = this.#document.createElement("div");
 		      actions.className = "ldp-code-block-actions", actions.append(
@@ -5467,21 +5467,21 @@
 		    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
 		    const root = options.document.createElement("div");
 		    root.className = "ldp-lb-batch-overlay", root.hidden = !0, root.innerHTML = `
-					<section class="ldp-lb-batch-dialog" role="dialog" aria-modal="true" aria-label="批量下载图片">
-						<div class="ldp-lb-batch-head"><strong>批量下载</strong><button class="ldp-lb-btn ldp-lb-batch-close" type="button" aria-label="关闭批量下载"></button></div>
-						<label class="ldp-lb-batch-name" hidden><span>名称</span><input type="text" maxlength="120" aria-label="ZIP 文件名称"></label>
-						<div class="ldp-lb-batch-tools">
-							<div class="ldp-lb-batch-scope" role="tablist" aria-label="批量下载范围"></div>
-							<button class="ldp-lb-batch-select-all" type="button" aria-pressed="false"><span>全选</span></button>
-							<span class="ldp-lb-batch-count">已选 0 / 0</span>
-						</div>
-						<div class="ldp-lb-batch-grid"></div>
-						<div class="ldp-lb-batch-progress" hidden>
-							<div class="ldp-lb-batch-progress-copy"><span>准备下载…</span><span>0%</span></div>
-							<div class="ldp-lb-batch-progress-track" role="progressbar" aria-label="批量下载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="ldp-lb-batch-progress-fill"></span></div>
-						</div>
-						<div class="ldp-lb-batch-actions"><span class="ldp-lb-batch-status"></span><button class="ldp-lb-batch-cancel" type="button">取消</button><button class="ldp-lb-batch-download" type="button" disabled>打包下载</button></div>
-					</section>`, options.mount.append(root), this.slots = Object.freeze({
+			<section class="ldp-lb-batch-dialog" role="dialog" aria-modal="true" aria-label="批量下载图片">
+				<div class="ldp-lb-batch-head"><strong>批量下载</strong><button class="ldp-lb-btn ldp-lb-batch-close" type="button" aria-label="关闭批量下载"></button></div>
+				<label class="ldp-lb-batch-name" hidden><span>名称</span><input type="text" maxlength="120" aria-label="ZIP 文件名称"></label>
+				<div class="ldp-lb-batch-tools">
+					<div class="ldp-lb-batch-scope" role="tablist" aria-label="批量下载范围"></div>
+					<button class="ldp-lb-batch-select-all" type="button" aria-pressed="false"><span>全选</span></button>
+					<span class="ldp-lb-batch-count">已选 0 / 0</span>
+				</div>
+				<div class="ldp-lb-batch-grid"></div>
+				<div class="ldp-lb-batch-progress" hidden>
+					<div class="ldp-lb-batch-progress-copy"><span>准备下载…</span><span>0%</span></div>
+					<div class="ldp-lb-batch-progress-track" role="progressbar" aria-label="批量下载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="ldp-lb-batch-progress-fill"></span></div>
+				</div>
+				<div class="ldp-lb-batch-actions"><span class="ldp-lb-batch-status"></span><button class="ldp-lb-batch-cancel" type="button">取消</button><button class="ldp-lb-batch-download" type="button" disabled>打包下载</button></div>
+			</section>`, options.mount.append(root), this.slots = Object.freeze({
 		      root,
 		      scope: required(root, ".ldp-lb-batch-scope"),
 		      grid: required(root, ".ldp-lb-batch-grid"),
@@ -6819,10 +6819,10 @@
 		  if (!source) throw new Error("图片引用缺少 originalSrc");
 		  const alt = String(input.alt ?? "图片").replace(/\\/g, "\\\\").replace(/\[/g, "\\[").replace(/\]/g, "\\]");
 		  return `[quote="${username}, post:${postNumber}, topic:${topicId}"]
-		![${alt}${readerLightboxImageOrderMarker(input.image.imageOrder)}](<${source}>)
-		[/quote]
+![${alt}${readerLightboxImageOrderMarker(input.image.imageOrder)}](<${source}>)
+[/quote]
 
-		`;
+`;
 		}
 	}, "f922cfe57fee50466a585bc262b829fcb1d6e949191a90a5c9cf19591f522f70");
 
@@ -6912,53 +6912,53 @@
 		    }), this.#previousFocus = options.returnFocus ?? (0, import_event_target.deepActiveElement)(options.document), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
 		    const root = options.document.createElement("div");
 		    root.className = "ldp-lightbox", root.setAttribute("role", "dialog"), root.setAttribute("aria-modal", "true"), root.setAttribute("aria-label", "图片预览"), root.innerHTML = `
-					<div class="ldp-lb-toolbar">
-						<span class="ldp-lb-count"></span>
-						<div class="ldp-lb-tools" role="toolbar" aria-label="图片工具">
-							<button class="ldp-lb-btn" type="button" data-lb-action="zoom-out" aria-label="缩小（-）"></button>
-							<button class="ldp-lb-btn ldp-lb-zoom-value" type="button" data-lb-action="reset" aria-label="适应窗口（0）">100%</button>
-							<button class="ldp-lb-btn" type="button" data-lb-action="zoom-in" aria-label="放大（+）"></button>
-							<button class="ldp-lb-btn" type="button" data-lb-action="reset" aria-label="适应窗口（0）"></button>
-							<button class="ldp-lb-btn" type="button" data-lb-action="view-original" aria-label="查看原图"></button>
-							<button class="ldp-lb-btn" type="button" data-lb-action="download" aria-label="下载当前图片"></button>
-							<button class="ldp-lb-btn" type="button" data-lb-action="batch-download" aria-label="批量下载图片"></button>
-							<button class="ldp-lb-btn" type="button" data-lb-action="jump-to-post" aria-label="跳到楼层"></button>
+			<div class="ldp-lb-toolbar">
+				<span class="ldp-lb-count"></span>
+				<div class="ldp-lb-tools" role="toolbar" aria-label="图片工具">
+					<button class="ldp-lb-btn" type="button" data-lb-action="zoom-out" aria-label="缩小（-）"></button>
+					<button class="ldp-lb-btn ldp-lb-zoom-value" type="button" data-lb-action="reset" aria-label="适应窗口（0）">100%</button>
+					<button class="ldp-lb-btn" type="button" data-lb-action="zoom-in" aria-label="放大（+）"></button>
+					<button class="ldp-lb-btn" type="button" data-lb-action="reset" aria-label="适应窗口（0）"></button>
+					<button class="ldp-lb-btn" type="button" data-lb-action="view-original" aria-label="查看原图"></button>
+					<button class="ldp-lb-btn" type="button" data-lb-action="download" aria-label="下载当前图片"></button>
+					<button class="ldp-lb-btn" type="button" data-lb-action="batch-download" aria-label="批量下载图片"></button>
+					<button class="ldp-lb-btn" type="button" data-lb-action="jump-to-post" aria-label="跳到楼层"></button>
+				</div>
+				<button class="ldp-lb-btn ldp-lb-comments-toggle" type="button" data-lb-action="toggle-comments" aria-label="展开图片评论" aria-expanded="false"><span class="ldp-lb-comments-count">0</span></button>
+				<button class="ldp-lb-btn ldp-lb-close" type="button" data-lb-action="close" aria-label="关闭图片预览（Esc）"></button>
+			</div>
+			<div class="ldp-lb-main">
+				<button class="ldp-lb-nav ldp-lb-prev" type="button" aria-label="上一张（←）"></button>
+				<div class="ldp-lb-stage">
+					<div class="ldp-lb-canvas"><img class="ldp-lb-image" alt="" draggable="false" hidden></div>
+					<div class="ldp-lb-status" role="status" aria-live="polite"><span>正在加载预览…</span><button class="ldp-lb-retry" type="button" hidden>重试</button></div>
+				</div>
+				<button class="ldp-lb-nav ldp-lb-next" type="button" aria-label="下一张（→）"></button>
+				<aside class="ldp-lb-comments" aria-label="图片评论">
+					<button class="ldp-lb-comments-resizer" type="button" role="separator" aria-orientation="vertical" aria-label="调整图片评论区宽度"></button>
+					<div class="ldp-lb-comments-inner">
+						<div class="ldp-lb-comments-head"><strong>评论</strong><span>（0）</span><button class="ldp-lb-description-toggle" type="button" aria-label="展开图片描述" aria-expanded="false"></button></div>
+						<details class="ldp-lb-source" hidden><summary>图片描述</summary><div class="ldp-lb-source-text"></div></details>
+						<div class="ldp-lb-source-reactions" hidden><div class="ldp-reactions"></div></div>
+						<div class="ldp-lb-comments-body">
+							<div class="ldp-lb-comments-status" role="status" aria-live="polite">正在查找这张图片的评论…</div>
+							<div class="ldp-lb-comments-empty" hidden><span>还没有人评论这张图片</span><button class="ldp-lb-add" type="button">添加第一个评论</button></div>
+							<div class="ldp-lb-comment-list"></div>
 						</div>
-						<button class="ldp-lb-btn ldp-lb-comments-toggle" type="button" data-lb-action="toggle-comments" aria-label="展开图片评论" aria-expanded="false"><span class="ldp-lb-comments-count">0</span></button>
-						<button class="ldp-lb-btn ldp-lb-close" type="button" data-lb-action="close" aria-label="关闭图片预览（Esc）"></button>
+						<form class="ldp-lb-comment-form" hidden>
+							<div class="ldp-lb-comment-target"></div>
+							<textarea class="ldp-lb-comment-input" maxlength="32000" required></textarea>
+							<label class="ldp-lb-comment-image-option"><input type="checkbox">同时引用当前图片</label>
+							<div class="ldp-lb-comment-error" role="alert"></div>
+							<div class="ldp-lb-comment-actions"><button class="ldp-lb-comment-cancel" type="button">取消</button><button class="ldp-lb-comment-submit" type="submit">发送</button></div>
+						</form>
 					</div>
-					<div class="ldp-lb-main">
-						<button class="ldp-lb-nav ldp-lb-prev" type="button" aria-label="上一张（←）"></button>
-						<div class="ldp-lb-stage">
-							<div class="ldp-lb-canvas"><img class="ldp-lb-image" alt="" draggable="false" hidden></div>
-							<div class="ldp-lb-status" role="status" aria-live="polite"><span>正在加载预览…</span><button class="ldp-lb-retry" type="button" hidden>重试</button></div>
-						</div>
-						<button class="ldp-lb-nav ldp-lb-next" type="button" aria-label="下一张（→）"></button>
-						<aside class="ldp-lb-comments" aria-label="图片评论">
-							<button class="ldp-lb-comments-resizer" type="button" role="separator" aria-orientation="vertical" aria-label="调整图片评论区宽度"></button>
-							<div class="ldp-lb-comments-inner">
-								<div class="ldp-lb-comments-head"><strong>评论</strong><span>（0）</span><button class="ldp-lb-description-toggle" type="button" aria-label="展开图片描述" aria-expanded="false"></button></div>
-								<details class="ldp-lb-source" hidden><summary>图片描述</summary><div class="ldp-lb-source-text"></div></details>
-								<div class="ldp-lb-source-reactions" hidden><div class="ldp-reactions"></div></div>
-								<div class="ldp-lb-comments-body">
-									<div class="ldp-lb-comments-status" role="status" aria-live="polite">正在查找这张图片的评论…</div>
-									<div class="ldp-lb-comments-empty" hidden><span>还没有人评论这张图片</span><button class="ldp-lb-add" type="button">添加第一个评论</button></div>
-									<div class="ldp-lb-comment-list"></div>
-								</div>
-								<form class="ldp-lb-comment-form" hidden>
-									<div class="ldp-lb-comment-target"></div>
-									<textarea class="ldp-lb-comment-input" maxlength="32000" required></textarea>
-									<label class="ldp-lb-comment-image-option"><input type="checkbox">同时引用当前图片</label>
-									<div class="ldp-lb-comment-error" role="alert"></div>
-									<div class="ldp-lb-comment-actions"><button class="ldp-lb-comment-cancel" type="button">取消</button><button class="ldp-lb-comment-submit" type="submit">发送</button></div>
-								</form>
-							</div>
-						</aside>
-					</div>
-					<div class="ldp-lb-filmstrip" hidden>
-						<div class="ldp-lb-strip-progress" aria-hidden="true"><span></span></div>
-						<div class="ldp-lb-thumbs" role="listbox" aria-label="图片缩略图"></div>
-					</div>`, options.mount.append(root);
+				</aside>
+			</div>
+			<div class="ldp-lb-filmstrip" hidden>
+				<div class="ldp-lb-strip-progress" aria-hidden="true"><span></span></div>
+				<div class="ldp-lb-thumbs" role="listbox" aria-label="图片缩略图"></div>
+			</div>`, options.mount.append(root);
 		    const stage = required(root, ".ldp-lb-stage"), image = required(root, ".ldp-lb-image"), comments = required(root, ".ldp-lb-comments"), commentsResizer = required(
 		      root,
 		      ".ldp-lb-comments-resizer"
@@ -13873,9 +13873,9 @@
 		  for (const image of copy.querySelectorAll("img[alt]"))
 		    image.replaceWith(document.createTextNode(image.alt));
 		  return String(copy.innerText || copy.textContent || "").replace(/\u00a0/g, " ").replace(/\r\n?/g, `
-		`).replace(/\n{3,}/g, `
+`).replace(/\n{3,}/g, `
 
-		`).trim();
+`).trim();
 		}
 		function boostQuoteRichHtml(document, input) {
 		  const container = document.createElement("div"), quote = document.createElement("aside");
@@ -13887,7 +13887,7 @@
 		  const blockquote = document.createElement("blockquote");
 		  for (const block of input.content.split(/\n{2,}/)) {
 		    const paragraph = document.createElement("p"), lines = block.split(`
-		`);
+`);
 		    for (const [index, line] of lines.entries())
 		      index > 0 && paragraph.append(document.createElement("br")), paragraph.append(document.createTextNode(line));
 		    blockquote.append(paragraph);
@@ -15060,10 +15060,10 @@
 		        topic,
 		        post: binding.post,
 		        initialRaw: `[quote="${quoteHeader}"]
-		${content}
-		[/quote]
+${content}
+[/quote]
 
-		@${username} `,
+@${username} `,
 		        initialRichHtml: boostQuoteRichHtml(this.#document, {
 		          username,
 		          content,
@@ -15768,10 +15768,10 @@
 		function readerSelectionQuoteRaw(input) {
 		  const topicId = (0, import_identifiers.discourseTopicId)(input.topicId), post = (0, import_identifiers.discoursePostReference)(input.post), username = String(input.post.username ?? "").replace(/^@/, "").trim(), text = String(input.selectedText ?? "").trim();
 		  return !username || !text ? "" : `[quote="${username}, post:${post.postNumber}, topic:${topicId}"]
-		${text}
-		[/quote]
+${text}
+[/quote]
 
-		`;
+`;
 		}
 		class ReaderSelectionQuoteFeature {
 		  scope;
@@ -32779,7 +32779,7 @@
 	/* Source: node_modules/@xsai/generate-text/dist/index.js */
 	runtime.register("vendor/xsai-generate-text.js", function(module, exports, require) {
 		var y=Object.defineProperty;var C=Object.getOwnPropertyDescriptor;var E=Object.getOwnPropertyNames;var J=Object.prototype.hasOwnProperty;var A=(e,t)=>{for(var s in t)y(e,s,{get:t[s],enumerable:!0})},L=(e,t,s,o)=>{if(t&&typeof t=="object"||typeof t=="function")for(let n of E(t))!J.call(e,n)&&n!==s&&y(e,n,{get:()=>t[n],enumerable:!(o=C(t,n))||o.enumerable});return e};var q=e=>L(y({},"__esModule",{value:!0}),e);var B={};A(B,{generateText:()=>k});module.exports=q(B);var l=class extends Error{response;constructor(t,s,o){super(t,{cause:o}),this.name="XSAIError",this.response=s}},U=e=>e.replace(/[A-Z]/g,t=>`_${t.toLowerCase()}`),F=e=>Object.fromEntries(Object.entries(e).map(([t,s])=>[U(t),s])),g=e=>Object.fromEntries(Object.entries(e).filter(([,t])=>t!==void 0));var b=e=>JSON.stringify(F(g({...e,abortSignal:void 0,apiKey:void 0,baseURL:void 0,fetch:void 0,headers:void 0}))),w=(e,t)=>g({Authorization:t!==void 0?`Bearer ${t}`:void 0,...e}),S=(e,t)=>{let s=t.toString();return new URL(e,s.endsWith("/")?s:`${s}/`)},T=async e=>{if(!e.ok)throw new l(`Remote sent ${e.status} response: ${await e.text()}`,e);if(!e.body)throw new l("Response body is empty from remote server",e);if(!(e.body instanceof ReadableStream))throw new l(`Expected Response body to be a ReadableStream, but got ${String(e.body)}; Content Type is ${e.headers.get("Content-Type")}`,e);return e},x=async e=>{let t=await e.text();try{return JSON.parse(t)}catch(s){throw new l(`Failed to parse response, response body: ${t}`,e,s)}},v=async e=>{let t=await e();for(;t instanceof Function;)t=await t();return t};var _=async e=>(e.fetch??globalThis.fetch)(S("chat/completions",e.baseURL),{body:b({...e,tools:e.tools?.map(({execute:t,...s})=>s)}),headers:w({"Content-Type":"application/json",...e.headers},e.apiKey),method:"POST",signal:e.abortSignal}).then(T),R=({finishReason:e,maxSteps:t,stepsLength:s,toolCallsLength:o})=>{if(s===0)return"initial";if(s<t){if(o>0&&e==="tool_calls")return"tool-result";if(!["error","length"].includes(e))return"continue"}return"done"},M=e=>typeof e=="string"||Array.isArray(e)&&e.every(t=>!!(typeof t=="object"&&"type"in t&&["file","image_url","input_audio","text"].includes(t.type)))?e:JSON.stringify(e),j=async({abortSignal:e,messages:t,toolCall:s,tools:o})=>{let n=o?.find(i=>i.function.name===s.function.name);if(!n){let i=o?.map(r=>r.function.name),f=i==null||i.length===0?"No tools are available":`Available tools: ${i.join(", ")}`;throw new Error(`Model tried to call unavailable tool "${s.function.name}", ${f}.`)}if(s.function.name==null)throw new Error(`Missing toolCall.function.name: ${JSON.stringify(s)}`);if(s.function.arguments==null)throw new Error(`Missing toolCall.function.arguments: ${JSON.stringify(s)}`);let c=JSON.parse(s.function.arguments.trim()||"{}"),u=M(await n.execute(c,{abortSignal:e,messages:t,toolCallId:s.id})),m={args:s.function.arguments,toolCallId:s.id,toolCallType:s.type,toolName:s.function.name},p={args:c,result:u,toolCallId:s.id,toolName:s.function.name},a={content:u,role:"tool",tool_call_id:s.id};return{completionToolCall:m,completionToolResult:p,message:a}};var O=async e=>_({...e,maxSteps:void 0,steps:void 0,stream:!1}).then(x).then(async t=>{let{choices:s,usage:o}=t;if(!s?.length)throw new Error(`No choices returned, response body: ${JSON.stringify(t)}`);let n=structuredClone(e.messages),c=e.steps?structuredClone(e.steps):[],u=[],m=[],{finish_reason:p,message:a}=s[0],i=a?.tool_calls??[],f=R({finishReason:p,maxSteps:e.maxSteps??1,stepsLength:c.length,toolCallsLength:i.length});if(n.push(a),p!=="stop"&&f!=="done"&&i.length>0){let h=await Promise.all(i.map(async d=>j({abortSignal:e.abortSignal,messages:n,toolCall:d,tools:e.tools})));for(let{completionToolCall:d,completionToolResult:$,message:N}of h)u.push(d),m.push($),n.push(N)}let r={finishReason:p,stepType:f,text:Array.isArray(a.content)?a.content.filter(h=>h.type==="text").map(h=>h.text).join(`
-		`):a.content,toolCalls:u,toolResults:m,usage:o};return c.push(r),e.onStepFinish&&await e.onStepFinish(r),r.finishReason==="stop"||r.stepType==="done"?{finishReason:r.finishReason,messages:n,reasoningText:a.reasoning??a.reasoning_content,steps:c,text:r.text,toolCalls:r.toolCalls,toolResults:r.toolResults,usage:r.usage}:async()=>O({...e,messages:n,steps:c})}),k=async e=>v(async()=>O(e));
+`):a.content,toolCalls:u,toolResults:m,usage:o};return c.push(r),e.onStepFinish&&await e.onStepFinish(r),r.finishReason==="stop"||r.stepType==="done"?{finishReason:r.finishReason,messages:n,reasoningText:a.reasoning??a.reasoning_content,steps:c,text:r.text,toolCalls:r.toolCalls,toolResults:r.toolResults,usage:r.usage}:async()=>O({...e,messages:n,steps:c})}),k=async e=>v(async()=>O(e));
 	}, "452ae601a03465851041656497ea03d6b87a9011c8fb49ff6c10f1c6251ce0dd");
 
 	runtime.markLibrary("main-lite-features");

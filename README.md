@@ -152,9 +152,9 @@
 4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 适用站点 → 其他适用站点”中验证并添加。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `1.2.1`。脚本对 LINUX DO 保持全面适配，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `1.2.3`。脚本对 LINUX DO 保持全面适配，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
-1.2.1 重点修复 Boost 引用在富文本与 Markdown Composer 中的插入和重复提及问题，统一宿主主题列表头像的用户卡，并校准主帖分支收纳控件与特殊内容间距。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+1.2.3 重点修复 Greasy Fork 三文件构建对模板字符串换行语义的破坏，并新增直接运行 Core、Features 产物的完整契约门，避免本地源码版与线上分包版行为分叉。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 ## 开发
 
@@ -178,7 +178,7 @@ GitHub Raw `main` 通过 Webhook 同步；用户只安装主脚本，不需要�
 ├── assets/           品牌与文档资源
 ├── docs/             项目介绍和资料索引
 ├── dist/             仓库直装的压缩 userscript 与来源清单
-├── lite/             v1.2.1 TypeScript 业务源码、样式、契约与测试
+├── lite/             v1.2.3 TypeScript 业务源码、样式、契约与测试
 ├── scripts/          跨平台开发工具入口
 ├── tools/            Rust 开发辅助工具源码
 ├── work/greasyfork-lite/  Lite Greasy Fork Library 发布产物

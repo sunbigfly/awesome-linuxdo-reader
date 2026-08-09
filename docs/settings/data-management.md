@@ -4,7 +4,7 @@ description: 导出、导入与恢复设置，查看六类本地缓存并按选�
 feature_ids: ["DATA-001", "DATA-002"]
 source_anchors: ["lite/src/state/preferences-config-codec.ts","lite/src/cache/browser-asset-cache.ts"]
 since: 0.1.2
-version: 1.2.1
+version: 1.2.3
 status: current
 last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]

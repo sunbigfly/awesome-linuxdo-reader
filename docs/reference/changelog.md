@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.2.1
+version: 1.2.3
 status: current
 last_verified: 2026-08-09
 screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
@@ -15,6 +15,21 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.0.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.2.3 — 三文件构建语义一致性修复
+
+核验日期：2026-08-09。
+
+### 构建修复
+
+- Greasy Fork Core、Features 构建不再把代码排版缩进写入模板字符串的真实换行，恢复 Boost `@` 提及、Markdown 引用和 Composer 草稿等多行文本与源码版一致的语义。
+- 新增三文件产物契约门，直接从实际生成的 Core、Features 模块 runtime 运行全部 Lite 契约测试；源码单文件测试、构建成功、bytes 或 SHA-256 一致均不能替代该门。
+- 本地调试、三文件检查、构建和正式生成命令统一接入分包契约门；开发与发布 Skill 同步规定 `--consistency-only` 不能跳过它。
+
+### 发布状态
+
+- `1.2.3` 本地源码和两套审查产物已生成；尚未提交、推送或同步 Greasy Fork。
+- 当前公开稳定版仍为 `1.2.1`，其固定三文件坐标继续作为回滚基线。
 
 ## 1.2.1 — Composer 与分支交互修复
 

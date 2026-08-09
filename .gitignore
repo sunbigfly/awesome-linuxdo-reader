@@ -60,6 +60,7 @@
 !/scripts/build-mian-lite-css.mjs
 !/scripts/build-mian-lite-greasyfork.mjs
 !/scripts/test-main-lite.mjs
+!/scripts/test-main-lite-greasyfork.mjs
 !/scripts/test-mian-lite.mjs
 
 !/lite/

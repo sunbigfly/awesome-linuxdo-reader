@@ -4,7 +4,7 @@ description: 使用非中文正文翻译、原图灯箱、图片评论、下载�
 feature_ids: ["READ-012", "MEDIA-001", "MEDIA-002", "MEDIA-003", "MEDIA-004", "MEDIA-005", "MEDIA-006", "MEDIA-007", "MEDIA-008", "MEDIA-009", "MEDIA-010", "MEDIA-011", "MEDIA-012", "MEDIA-013", "MEDIA-014"]
 source_anchors: ["lite/src/topic/reader-topic-special-content-feature.ts","lite/src/media/reader-image-scale.ts","lite/src/app/reader-browser-runtime.ts","lite/src/network/public-resource-request-adapter.ts","lite/src/media/reader-lightbox-controller.ts","lite/src/media/reader-image-download-service.ts","lite/src/user/discourse-native-user-port.ts","lite/src/media/reader-katex-controller.ts","lite/src/media/reader-poll-model.ts","lite/src/media/reader-cooked-content-feature.ts","lite/src/translation/reader-translation-controller.ts"]
 since: 0.1.2
-version: 1.2.1
+version: 1.2.3
 status: current
 last_verified: 2026-08-03
 screenshots: ["/screenshots/guide-03-image-settings-v1.0.0.png", "/screenshots/guide-19-image-lightbox-v1.0.0.png", "/screenshots/guide-25-user-card-v1.0.0.png"]

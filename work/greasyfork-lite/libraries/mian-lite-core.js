@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.2.1
+// @version      1.2.3
 // @description  Core runtime modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.2.1 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.2.3 - main-lite-core
  * 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.2.1",
+			sourceVersion: "1.2.3",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.1") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.3") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -6017,7 +6017,7 @@
 		        const payload = configuration.codec.export(configuration.read()), filename = configuration.filename?.(payload) ?? `awesome-linuxdo-reader-settings-${payload.exportedAt.slice(0, 10)}.json`;
 		        await configuration.saveTextFile(
 		          `${JSON.stringify(payload, null, 2)}
-		`,
+`,
 		          filename
 		        ), this.#setConfigStatus(`已导出 ${payload.settingsCount} 项设置。`), this.#options.notify?.("设置配置已导出");
 		      } catch (cause) {
@@ -7275,9 +7275,9 @@
 		  let inserted = String(blockValue ?? "").trim();
 		  return before && !/\s$/.test(before) && (inserted = `
 
-		${inserted}`), after && !/^\s/.test(after) && (inserted += `
+${inserted}`), after && !/^\s/.test(after) && (inserted += `
 
-		`), Object.freeze({
+`), Object.freeze({
 		    next: `${before}${inserted}${after}`,
 		    inserted,
 		    cursor: before.length + inserted.length
@@ -7593,10 +7593,10 @@
 		      options.draftSequence = normalizedDraftSequence(
 		        draftResult.draft_sequence ?? sequence
 		      ), input.replaceRaw !== !0 && initialRaw && rawMentionsUsername(draft.reply, dedupeMention) ? (options.reply = draft.reply, insertionSkipped = "duplicate-mention") : input.replaceRaw === !0 ? options.reply = initialRaw : initialRaw && initialRichHtml ? (options.reply = draft.reply, insertAfterOpen = !0) : options.reply = `${draft.reply}${initialRaw ? `
-		${initialRaw}` : ""}`, draft.whisper !== void 0 && (options.whisper = draft.whisper);
+${initialRaw}` : ""}`, draft.whisper !== void 0 && (options.whisper = draft.whisper);
 		    } else initialRaw && (input.replaceRaw === !0 ? options.reply = initialRaw : initialRichHtml ? insertAfterOpen = !0 : options.quote = initialRaw);
 		    if (currentReply && currentOpen && currentTopicId === topicId && (input.replaceRaw !== !0 && initialRaw && rawMentionsUsername(currentReply, dedupeMention) ? (options.reply = currentReply, insertAfterOpen = !1, insertionSkipped = "duplicate-mention") : input.replaceRaw === !0 ? (options.reply = initialRaw, insertAfterOpen = !1) : initialRaw && initialRichHtml ? (options.reply = currentReply, insertAfterOpen = !0) : options.reply = `${currentReply}${initialRaw ? `
-		${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer, options), this.#assertActive(), !await this.#waitForComposerPopup(this.#composerOpenTimeoutMs))
+${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer, options), this.#assertActive(), !await this.#waitForComposerPopup(this.#composerOpenTimeoutMs))
 		      throw new Error("Discourse 原生回复浮窗未显示");
 		    const model = modelValue(composer, "model");
 		    if (!(0, import_value_record.valueRecord)(model)) throw new Error("Discourse composer.open 未生成 model");
@@ -29490,7 +29490,7 @@
 		  if (!timestamp) return "";
 		  const date = new Date(timestamp);
 		  return Number.isFinite(date.getTime()) ? `${date.getFullYear()} 年
-		${date.getMonth() + 1} 月 ${date.getDate()} 日` : "";
+${date.getMonth() + 1} 月 ${date.getDate()} 日` : "";
 		}
 		function pointerCoordinate(event) {
 		  const value = Number(event.clientY);
@@ -31383,7 +31383,7 @@
 		      const style = document.createElement("style");
 		      style.id = STYLE_ID;
 		      const stylesheet = `${css}
-		${(0, import_reader_katex_controller.readerKatexStylesheet)(
+${(0, import_reader_katex_controller.readerKatexStylesheet)(
 		        katexCss,
 		        KATEX_STYLESHEET_URL
 		      )}`;
