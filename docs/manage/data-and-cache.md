@@ -4,7 +4,7 @@ description: 导出导入设置，理解本地与 WebDAV 数据范围，查看�
 feature_ids: ["COLLECT-004", "DATA-001", "DATA-002", "DATA-003", "DATA-004", "DATA-006", "TROUBLE-004"]
 source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts","lite/src/sync/reader-webdav-coordinator.ts"]
 since: 0.1.2
-version: 1.1.1
+version: 1.2.0
 status: current
 last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
@@ -24,9 +24,9 @@ screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
 
 ## WebDAV 跨设备记录
 
-1.1.0 起，设置中的 [WebDAV 同步](/settings/webdav-sync) 可在多个浏览器之间合并以下记录：浏览历史、收藏记录、设置配置、阅读队列、阅读位置与窗口状态、自定义适用站点和 Connect 本机观察历史。
+1.1.0 起，设置中的 [WebDAV 同步](/settings/webdav-sync) 可在多个浏览器之间合并浏览历史、收藏记录、设置配置、阅读队列、阅读位置与窗口状态、自定义适用站点和 Connect 本机观察历史；1.2.0 起另可独立同步 AI 翻译服务集合与已翻译 Section 缓存。
 
-这条链路与缓存清理分开：正文、图片、附件、翻译结果、短期限流状态和页面缓存不会上传。同步不是整份覆盖；每轮先读取远端，以本机上次成功同步基线执行三方合并，并通过 ETag 条件写入。只有远端写入成功后才应用本机合并结果。
+这条链路与缓存清理分开：正文、图片、附件、短期限流状态和页面缓存不会上传；译文缓存只在单独勾选后同步且不含原文，翻译 API Key 只以 WebDAV 应用密码加密后的载荷出现。同步不是整份覆盖；每轮先读取远端，以本机上次成功同步基线执行三方合并，并通过 ETag 条件写入。只有远端写入成功后才应用本机合并结果。
 
 定时同步默认关闭，可选 15 分钟到 6 小时；坚果云通常建议 1 小时。需要跨设备立即核对时，应在两端分别执行“立即同步”。
 

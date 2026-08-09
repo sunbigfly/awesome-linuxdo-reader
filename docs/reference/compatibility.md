@@ -4,7 +4,7 @@ description: LINUX DO 全面适配、中英文及其他语言 Discourse 站点�
 feature_ids: ["CORE-007", "DATA-005", "REF-001"]
 source_anchors: ["lite/src/app/reader-application.ts","lite/src/userscript/browser-userscript-environment.ts","lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.1.1
+version: 1.2.0
 status: current
 last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
@@ -22,11 +22,11 @@ LINUX DO 是完整功能与真实回归基线。中文、英文及其他语言�
 
 | 项目 | 当前值 |
 | --- | --- |
-| 脚本版本 | `1.1.1` |
+| 脚本版本 | `1.2.0` |
 | 匹配站点 | LINUX DO 全面适配；20 个其他社区内置支持；其余标准 HTTPS Discourse 站点可验证后添加 |
 | 启动时机 | `document-start` |
 | GM 权限 | `GM_getValue`、`GM_setValue`、`GM_xmlhttpRequest`、`GM_getResourceText`、`unsafeWindow` |
-| 跨域连接 | `connect.linux.do`、`credit.linux.do`、用户输入站点的 `/site/basic-info.json`、用户配置的 HTTPS WebDAV、Google / Microsoft 翻译接口；元数据以 `@connect *` 承载动态目标，业务端口仍按固定用途收窄 |
+| 跨域连接 | `connect.linux.do`、`credit.linux.do`、用户输入站点的 `/site/basic-info.json`、用户配置的 HTTPS WebDAV、Google / Microsoft 或用户配置的 OpenAI 兼容翻译接口；元数据以 `@connect *` 承载动态目标，业务端口仍按固定用途收窄 |
 | 外部依赖 | KaTeX 0.16.22、pinyin-pro 3.18.2、hls.js 1.6.16 |
 | 发布渠道 | GreasyFork |
 
@@ -58,7 +58,7 @@ LINUX DO 是完整功能与真实回归基线。中文、英文及其他语言�
 
 脚本同时声明 `https://*/*`，以便用户保存的自定义域名能够启动；未命中内置列表或用户列表时会在业务初始化前退出。添加自定义站点时会匿名请求该域名的 `/site/basic-info.json`，只有检测到 Discourse 站点信息才保存。站点 Logo 从 Discourse 公开站点信息、宿主 Header 或页面图标中自动选择。
 
-站点适配不限制内容语言。正文翻译对非中文内置社区和语言未知的自定义 Discourse 站点开放，译文目标为简体中文；LINUX DO 作为内置中文站点隐藏翻译入口。Google / Microsoft 翻译接口不可用时，原文阅读不受影响。
+站点适配不限制内容语言。正文翻译对非中文内置社区和语言未知的自定义 Discourse 站点开放，译文目标为简体中文；LINUX DO 作为内置中文站点隐藏翻译入口。未配置 API Key 时使用 Google / Microsoft 公共接口；配置有效 Key 与模型后使用当前 OpenAI 兼容服务。翻译服务不可用时，原文阅读不受影响。
 
 ## 浏览器
 
@@ -81,7 +81,7 @@ LINUX DO 是完整功能与真实回归基线。中文、英文及其他语言�
 | hls.js 或媒体编码 | HLS/特定媒体不能播放 |
 | KaTeX | 公式不能增强渲染 |
 | pinyin-pro | 依赖拼音的检索辅助降级 |
-| Google / Microsoft 翻译接口 | 正文翻译提示失败，原文继续可读 |
+| Google / Microsoft 或 OpenAI 兼容翻译接口 | 正文翻译提示失败，原文继续可读 |
 | WebDAV 服务、权限或 ETag | 本轮同步提示失败并保留本机记录，普通阅读不受影响 |
 | 原站插件/权限 | Boost、Reactions、Post Voting、Solved、指定和管理等对应入口自动隐藏 |
 

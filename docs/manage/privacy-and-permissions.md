@@ -4,7 +4,7 @@ description: 理解 userscript 权限、WebDAV 凭据与同步边界、LDC 只�
 feature_ids: ["MEDIA-014", "USER-006", "DATA-004", "DATA-005", "DATA-006", "MONITOR-005", "TROUBLE-005"]
 source_anchors: ["lite/src/translation/reader-translation-controller.ts","lite/src/translation/translation-request-adapter.ts","lite/src/cache/response-repository.ts","lite/src/userscript/browser-userscript-environment.ts","lite/src/network/request-observer.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-config-repository.ts","lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.1.1
+version: 1.2.0
 status: current
 last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
@@ -18,7 +18,7 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 
 ## userscript 元数据
 
-当前 `1.1.1`：
+当前 `1.2.0`：
 
 | 字段 | 值 | 用途 |
 | --- | --- | --- |
@@ -27,7 +27,7 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 | `@grant` | `GM_xmlhttpRequest` | 检测自定义站点、读取 LDC 只读账户摘要、访问用户配置的 HTTPS WebDAV、获取允许的跨域公开资源，以及执行用户主动开启的正文翻译 |
 | `@grant` | `GM_getResourceText` | 读取发布版样式资源 |
 | `@grant` | `unsafeWindow` | 与当前 Discourse 页面运行时协作 |
-| `@connect` | `connect.linux.do`、`credit.linux.do`、翻译接口及 `*` | Connect、LDC 只读账户摘要、Google / Microsoft 翻译、用户输入域名的 Discourse 检测，以及用户主动配置的 WebDAV 服务 |
+| `@connect` | `connect.linux.do`、`credit.linux.do`、翻译接口及 `*` | Connect、LDC 只读账户摘要、Google / Microsoft 或用户配置的 OpenAI 兼容翻译、用户输入域名的 Discourse 检测，以及用户主动配置的 WebDAV 服务 |
 | `@run-at` | `document-start` | 在 SPA 和页面初始化前建立必要边界 |
 
 安装时脚本管理器会展示权限。若未来新增 GM API 或跨域目标，项目必须同步更新源码、功能目录和本页。
@@ -50,9 +50,9 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 
 ## WebDAV 数据与凭据
 
-WebDAV 默认关闭，只有用户填写 HTTPS 地址、账号、应用密码并选择类别后才会访问远端。账号和应用密码只保存在 userscript 专属存储，不进入远端 JSON、设置导出、同步的“设置配置”类别或请求 URL。
+WebDAV 默认关闭，只有用户填写 HTTPS 地址、账号、应用密码并选择类别后才会访问远端。WebDAV 账号和应用密码只保存在 userscript 专属存储，不进入远端 JSON、设置导出、同步的“设置配置”类别或请求 URL。
 
-远端文件只保存所选类别的结构化记录、更新时间、写入设备标识和删除标记。帖子正文、图片、附件、翻译结果、Cookie、Authorization、WebDAV 密码、页面缓存与短期限流状态永不上传。收藏同步只交换阅读器的链接和定位信息，不直接修改原站收藏状态。
+远端文件只保存所选类别的结构化记录、更新时间、写入设备标识和删除标记。帖子正文、图片、附件、Cookie、Authorization、WebDAV 密码、页面缓存与短期限流状态永不上传。AI 翻译服务集合和已翻译 Section 缓存默认关闭：前者只在单独启用时写入 URL、模型、参数及使用 WebDAV 应用密码加密的 API Key，后者不包含原文。收藏同步只交换阅读器的链接和定位信息，不直接修改原站收藏状态。
 
 远端文件受 WebDAV 服务商账号安全和存储政策约束。应使用独立的第三方应用密码；停用同步时可以关闭定时同步并清空本机凭据，但删除远端文件会影响其他设备，需在服务商侧单独确认。
 
@@ -70,8 +70,9 @@ LDC 面板通过显式声明的 `@connect credit.linux.do` 只读取当前登录
 
 ## 翻译与自定义站点请求
 
-- 只有用户主动切换到双语或全译文后，普通正文文本才会发送给 Google 或 Microsoft 翻译接口；Cookie、原站授权头和表单内容不会附带。
-- 翻译结果保存在当前站点的 `localStorage`，最多 240 条；它不进入设置导出。
+- 只有用户主动切换到双语或全译文后，普通正文文本才会发送给 Google / Microsoft 公共接口或用户选择的 OpenAI 兼容服务；Cookie、原站授权头和表单内容不会附带。
+- 译文进入最多 240 条的中央 Section 缓存，不进入设置导出；只有用户单独启用 WebDAV 的“已翻译 Section 缓存”类别后才跨设备同步，且不携带原文。
+- 翻译 API Key 保存在脚本专属配置；启用 WebDAV 的“AI 翻译服务集合”时，Key 使用当前 WebDAV 应用密码经 PBKDF2 派生密钥后加密，其他配置明文同步。更换应用密码后，旧设备需使用加密时的密码才能解密。
 - 添加自定义站点时只向用户输入的 HTTPS 域名请求公开的 `/site/basic-info.json`，请求使用匿名模式，不附带当前论坛 Cookie。
 - 第三方翻译服务和目标论坛仍受各自隐私政策、可用性与地区网络限制约束。
 

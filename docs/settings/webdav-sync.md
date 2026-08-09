@@ -4,7 +4,7 @@ description: 使用坚果云等标准 WebDAV 在设备之间合并同步历史�
 feature_ids: ["DATA-006"]
 source_anchors: ["lite/src/settings/reader-webdav-settings-form.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-client.ts"]
 since: 1.1.0
-version: 1.1.1
+version: 1.2.0
 status: current
 last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-29-webdav-sync-v1.1.0.svg"]
@@ -33,7 +33,7 @@ WebDAV 用一个小型 JSON 文件在多个浏览器之间交换本地记录。�
 
 ## 可选同步内容
 
-七类数据分别开关，关闭的类别不会上传、下载或删除：
+九类数据分别开关，关闭的类别不会上传、下载或删除：
 
 | 类别 | 同步内容 | 明确不包含 |
 | --- | --- | --- |
@@ -44,8 +44,10 @@ WebDAV 用一个小型 JSON 文件在多个浏览器之间交换本地记录。�
 | 阅读位置与窗口状态 | 最近位置、讨论窗口锚点和全屏窗口几何 | 页面 DOM |
 | 自定义适用站点 | 用户添加的 HTTPS Discourse 站点 | 登录会话 |
 | Connect 本机观察历史 | Connect 指标历史和服务器确认已读指纹 | Cookie 与接口响应正文 |
+| AI 翻译服务集合 | API URL、模型、温度、思考等级、RPM / TPM、动画与 Prompt；API Key 使用 WebDAV 应用密码加密 | WebDAV 密码、未加密 API Key |
+| 已翻译 Section 缓存 | 最近使用的译文 Section | 原文、页面 DOM |
 
-帖子正文、图片、附件、翻译结果、短期限流状态和页面缓存永不进入 WebDAV 文件。默认只启用浏览历史、收藏记录和阅读队列；可按需要再打开设置配置等类别。
+帖子正文、图片、附件、短期限流状态和页面缓存永不进入 WebDAV 文件。默认只启用浏览历史、收藏记录和阅读队列；翻译服务集合与译文缓存必须分别主动开启。应用密码变化会导致已有加密 API Key 无法解密，应先在原配置完成同步并记录旧密码对应关系。
 
 ## 手动同步与首次同步
 
@@ -71,5 +73,6 @@ WebDAV 用一个小型 JSON 文件在多个浏览器之间交换本地记录。�
 - `412`：远端在本轮同步期间被其他设备更新，阅读器会重新读取并重试；持续出现时稍后再同步。
 - 新设备没有记录：确认两端连接到同一个地址、账号和远端文件，并且对应类别在两端都已开启。
 - 清空后记录消失：区分“只清了本地缓存”与“成功同步过删除”。前者可从远端恢复；后者会传播删除标记。
+- 翻译 API Key 解密失败：确认当前 WebDAV 应用密码与加密该配置时一致；阅读器不会把无法解密的 Key 当成空值覆盖远端。
 
 修改远端路径相当于切换到另一份同步文件，不会自动迁移旧路径内容。更换账号或路径前先在现有配置执行一次成功同步，并记录原路径以便回退。

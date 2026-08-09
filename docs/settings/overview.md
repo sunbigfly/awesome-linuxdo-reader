@@ -1,10 +1,10 @@
 ---
 title: 设置中心总览
-description: 理解 16 个设置面板、分组导航、设置搜索、快捷方式、WebDAV 同步、三种形态配置与统一保存方式。
+description: 理解 17 个设置面板、分组导航、翻译服务、快捷方式、WebDAV 同步、三种形态配置与统一保存方式。
 feature_ids: ["USER-005", "SET-001", "SET-020", "DATA-006"]
 source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/reader-preferences-schema.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/settings/reader-webdav-settings-form.ts"]
 since: 0.1.2
-version: 1.1.1
+version: 1.2.0
 status: current
 last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png"]
@@ -12,7 +12,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png"]
 
 # 设置中心总览
 
-点击阅读器标题栏的“设置”进入设置中心。当前 v1.1.1 按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 16 个面板：
+点击阅读器标题栏的“设置”进入设置中心。当前 v1.2.0 按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 17 个面板：
 
 | 面板 | 作用 |
 | --- | --- |
@@ -24,6 +24,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png"]
 | [外观设置](/settings/appearance) | 按钮、链接、交替背景、关系线、分隔线和预览卡片 |
 | [动画与提示](/settings/motion) | 跳转楼层提示和帖子加载动画 |
 | [阅读与导航](/settings/other) | 队列入口、历史导航、帖子打开位置和退出方式 |
+| [翻译设置](/guide/content-and-media#跨语正文翻译) | 公共翻译开关，以及 OpenAI 兼容 API URL、Key、模型、限额和 Prompt |
 | [快捷方式](/settings/other#快捷方式) | 为浏览导航、阅读工具、面板、帖子操作、窗口和队列绑定键盘或鼠标操作 |
 | [帖子与回复](/settings/other) | 主帖操作列、二级回复显示位置和 Boost 复制 |
 | [适用站点](/settings/other) | 添加并管理其他 HTTPS Discourse 论坛 |
@@ -35,7 +36,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png"]
 
 ![设置中心完整导航、当前账号和 Connect 信任进度](/screenshots/guide-02-settings-overview-v1.0.0.png)
 
-<p class="image-caption">截图展示 v1.0.0 设置中心的基础导航；v1.1.0 在“数据管理”和“关于”之间新增 WebDAV 同步，当前共 16 个面板。</p>
+<p class="image-caption">截图展示 v1.0.0 设置中心的基础导航；v1.1.0 新增 WebDAV 同步，v1.2.0 新增翻译设置，当前共 17 个面板。</p>
 
 ## 分组与搜索
 

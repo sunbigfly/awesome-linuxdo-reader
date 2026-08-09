@@ -5,7 +5,7 @@ description: LINUX DO 全面适配、兼容中英文及其他语言 Discourse �
 feature_ids: ["CORE-001", "CORE-002", "CORE-004", "CORE-007", "READ-001", "ACTION-001", "DATA-001", "DATA-006"]
 source_anchors: ["lite/userscript.meta.txt","lite/src/queue/reader-open-queue-session.ts","lite/src/shell/reader-workspace.ts","lite/src/app/reader-application.ts","lite/src/dom/reply-tree.ts","lite/src/app/reader-browser-runtime.ts","lite/src/state/preferences-config-codec.ts","lite/src/sync/reader-webdav-coordinator.ts"]
 since: 0.1.2
-version: 1.1.1
+version: 1.2.0
 status: current
 last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
@@ -61,7 +61,7 @@ features:
 
 ## 手册覆盖范围
 
-这套手册对应 userscript `1.1.1`，以 `lite/src/` 与 `lite/styles/` 为事实源。LINUX DO 是完整功能基线，消息、历史、收藏、互动、长帖、楼层关系与性能治理均保持全面适配；脚本也通过运行态识别、站点适配层和插件能力检测兼容中文、英文及其他语言的标准 Discourse 站点。WebDAV 同步由用户主动配置并按类别启用，不上传正文、图片、附件或页面缓存。
+这套手册对应 userscript `1.2.0`，以 `lite/src/` 与 `lite/styles/` 为事实源。LINUX DO 是完整功能基线，消息、历史、收藏、互动、长帖、楼层关系与性能治理均保持全面适配；脚本也通过运行态识别、站点适配层和插件能力检测兼容中文、英文及其他语言的标准 Discourse 站点。WebDAV 同步由用户主动配置并按类别启用，不上传正文、图片、附件或页面缓存；翻译配置与译文 Section 缓存只有单独勾选后才会同步。
 
 脚本内置 20 个其他知名 Discourse 社区，其他 HTTPS Discourse 论坛可验证后添加。站点适配本身不限制内容语言；除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点另提供原文、双语和简体中文译文三种阅读状态。功能目录记录了每项能力的源码锚点、版本、验证日期、截图和对应文档。
 
@@ -78,5 +78,5 @@ features:
 1. 阅读器不接管账号体系，登录、权限、内容和互动结果都以当前 Discourse 原站为准。
 2. 缓存清理只影响当前浏览器里的阅读器数据，不会删除原站帖子、消息、收藏或回应。
 3. LINUX DO 保持完整覆盖；其他站点缺少 Boost、Reactions、Post Voting 等插件时，对应入口会自动隐藏。
-4. 正文翻译只在用户主动开启后发送待翻译文本，并使用第三方 Google / Microsoft 翻译接口。
+4. 正文翻译只在用户主动开启后发送待翻译文本；未配置 Key 时使用第三方 Google / Microsoft 接口，配置后使用用户选择的 OpenAI 兼容服务。
 5. 请求监控能说明当前页面观察到的活动，但浏览器不会提供单个 userscript 的绝对 CPU 或独占内存。
