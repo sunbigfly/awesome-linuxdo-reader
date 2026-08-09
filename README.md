@@ -123,7 +123,7 @@
 
 ## 安装
 
-> **发布状态：** Lite `1.2.4` 已发布到 Greasy Fork。主 Loader 固定版本为 `1897749`，加载 Core `1897745` 与 Features `1897747`；三文件固定坐标、字节数和 SHA-256 均已核验。
+> **发布状态：** Lite `1.2.5` 已发布到 Greasy Fork。主 Loader 固定版本为 `1897778`，加载 Core `1897774` 与 Features `1897776`；三文件与 CSS 固定坐标、字节数和 SHA-256 均已核验。
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。
@@ -152,9 +152,9 @@
 4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 适用站点 → 其他适用站点”中验证并添加。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `1.2.4`。脚本对 LINUX DO 保持全面适配，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `1.2.5`。脚本对 LINUX DO 保持全面适配，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
-1.2.4 重点校准主题列表与主帖收纳箱的回应总数：统一汇总所有表情回应的计数，同时兼容只提供旧聚合字段的 Discourse 数据。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+1.2.5 重点为帖子相对时间补充 Discourse 原生具体时间，并分别校准窄阅读器和嵌套回复预览中的悬停展示位置，避免时间浮层溢出或错位。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 ## 开发
 
@@ -178,7 +178,7 @@ GitHub Raw `main` 通过 Webhook 同步；用户只安装主脚本，不需要�
 ├── assets/           品牌与文档资源
 ├── docs/             项目介绍和资料索引
 ├── dist/             仓库直装的压缩 userscript 与来源清单
-├── lite/             v1.2.4 TypeScript 业务源码、样式、契约与测试
+├── lite/             v1.2.5 TypeScript 业务源码、样式、契约与测试
 ├── scripts/          跨平台开发工具入口
 ├── tools/            Rust 开发辅助工具源码
 ├── work/greasyfork-lite/  Lite Greasy Fork Library 发布产物

@@ -4,7 +4,7 @@ description: 设置桌面浮窗尺寸、坐标和拖拽缩放后的保存行为�
 feature_ids: ["SET-008"]
 source_anchors: ["lite/src/shell/reader-workspace.ts"]
 since: 0.1.2
-version: 1.2.4
+version: 1.2.5
 status: current
 last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-06-window-settings-v1.0.0.png"]

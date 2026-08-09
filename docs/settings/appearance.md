@@ -4,7 +4,7 @@ description: 配置主题模式、强调色、斑马纹、结构线、引用线�
 feature_ids: ["SET-001", "SET-009"]
 source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/appearance/reader-appearance-style-controller.ts"]
 since: 0.1.2
-version: 1.2.4
+version: 1.2.5
 status: current
 last_verified: 2026-07-27
 screenshots: ["/screenshots/guide-07-appearance-settings-v1.0.0.png"]

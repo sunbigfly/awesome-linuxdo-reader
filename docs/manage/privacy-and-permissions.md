@@ -4,7 +4,7 @@ description: 理解 userscript 权限、WebDAV 凭据与同步边界、LDC 只�
 feature_ids: ["MEDIA-014", "USER-006", "DATA-004", "DATA-005", "DATA-006", "MONITOR-005", "TROUBLE-005"]
 source_anchors: ["lite/src/translation/reader-translation-controller.ts","lite/src/translation/translation-request-adapter.ts","lite/src/cache/response-repository.ts","lite/src/userscript/browser-userscript-environment.ts","lite/src/network/request-observer.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-config-repository.ts","lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.2.4
+version: 1.2.5
 status: current
 last_verified: 2026-08-08
 screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
@@ -18,7 +18,7 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 
 ## userscript 元数据
 
-当前 `1.2.4`：
+当前 `1.2.5`：
 
 | 字段 | 值 | 用途 |
 | --- | --- | --- |

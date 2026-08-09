@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.2.4
+version: 1.2.5
 status: current
 last_verified: 2026-08-09
 screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
@@ -15,6 +15,23 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.0.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.2.5 — 帖子具体时间展示
+
+核验日期：2026-08-09。
+
+### 交互改进
+
+- 帖子的相对时间悬停信息复用 Discourse 原生 `longDate` formatter，不再另写一套具体日期格式。
+- 窄阅读器把具体时间显示为定位在时间下方的紧凑浮层，避免超出阅读器边界或遮挡同一行信息。
+- 嵌套回复预览中的具体时间改为就地排布，避免预览卡片内的浮层脱离回复头部。
+
+### 发布状态
+
+- `1.2.5` 已发布到 Greasy Fork：主 Loader 固定版本为 `1897778`，加载 Core `1897774` 与 Features `1897776`。
+- 固定 Loader 原始文件为 3,815 字节，SHA-256 `ef3667b61ec08f4d2effa6785b100d57f8252b86631a5afc742f8bf64bec0d26`；移除平台加入的 `@downloadURL none` 后为 3,794 字节，SHA-256 `45782a588ef6e79eef771014450f38ba8858b5c88c2cb349e3d2fd20532ff985`，与仓库 Loader 逐字节一致。
+- Core 为 1,595,702 字节，SHA-256 `39dcc7a44c441ff8644984e908ff93aa41a3fdd757072c2e7f85ce0ad838d5c1`；Features 为 1,631,330 字节，SHA-256 `f61355857736fe1bc73b4d3d7e84cf5055bc2d390834d4452109dfa94cb971ce`；CSS 固定到 Git `3caf8237d91b97a2d90747db748cf9524dcbfda2`，449,576 字节，SHA-256 `4602b5396a2e1fcf788d05a7a6a3e24b63940259225e73898858cacf6f6fd125`。
+- 源码与分包产物各 204 个 Lite 契约文件、相关 ESLint、39 页与 104 项功能索引的手册检查均已通过；发布阶段复用了同一快照的分包门禁。`1.2.4` 固定三文件继续作为公开回滚基线。
 
 ## 1.2.4 — 表情回应总数校准
 

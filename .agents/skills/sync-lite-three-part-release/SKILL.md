@@ -61,6 +61,33 @@ description: "在当前 awesome-linuxdo-reader 仓库完成一次已验证 Lite 
 - 公开版本轮询前 30 秒使用 2 秒间隔，之后使用 5 秒间隔，总计最多 60 秒，发现目标版本立即停止；Pages 只等待最终 C 对应的一次工作流。
 - 浏览器不是远端坐标的默认读取路径。优先使用 GitHub API、Greasy Fork API 和 `update.greasyfork.org`；只有 API 与公开分发端都不可用，或确需修改同步设置时才进入浏览器。
 
+## 并行子代理编排（不改变 A/B/C 语义）
+
+可以用 subagent 并行独立的只读准备和核验，以减少正常路径等待；每次启动子代理都必须显式指定 `model: gpt-5.6-luna`、`reasoning: max`（或工具对应的 `reasoning_effort: max`），不得依赖默认模型/推理级别，也不得用其他模型替代。子代理共享当前工作树，主代理先记录 dirty 基线并负责路径锁和冲突协调。
+
+- 主代理独占文件写入冲突协调、`git add`、`git commit`、`git push`，以及 Greasy Fork 管理页的任何写入；这些动作即使子代理具备凭据也不能委托。
+- 子代理默认只读：可读源码、manifest、GitHub API/Raw、Greasy Fork 公开 API/分发文件并返回证据，但不能修改共享生成物、发布配置或状态文件。确需写文件时，主代理必须先分配 exact path 白名单；各子代理的白名单不得重叠，且子代理不得在该白名单之外改名、删除、暂存或写入。没有明确白名单时只返回补丁建议，不落盘。
+- 子代理不得执行 `checkout`、`reset`、`rebase`、`merge`、`git add/commit/push` 或 Greasy Fork 管理写入；读操作的结果必须带路径/URL、UTC 时间、版本或提交、bytes、SHA-256/规范化规则和失败原因，不打印凭据。
+
+正常路径可按以下三组并行准备，主代理在依赖屏障处汇合结果：
+
+| 子代理 | 可并行时机 | 只读职责与交付物 |
+| --- | --- | --- |
+| 手册一致性/待更新字段审计 | A 前；B 后可再读一次最终坐标 | 审核 README、`docs/`、变更记录、安装链接、版本和待回填字段；返回 exact path、旧值、目标值和是否需要 C，不直接改跨文件手册。 |
+| GitHub/Greasy Fork 远端核验 | A 前查基线；A 后查变化的 Library/CSS；B 后查主 Loader | 批量读取分支/提交、Library `version ID`、`created_at`、固定 Raw/分发文件 bytes 和 SHA-256，并在 B 后计算 Loader 原始与去平台元数据后的规范化 SHA-256；不打开管理页。 |
+| 发布证据整理 | 与上述只读任务同批；A/B 后接收新坐标继续整理 | 将快照收据、manifest、固定 URL、版本 ID、bytes、哈希、时间和 Pages/公开页结果整理成主代理可审阅的 C 证据清单；默认不写证据文件。 |
+
+若需要多次远端查询，子代理应在同一阶段批量发起独立请求；主代理只等待该阶段所需结果，不重复已通过的契约门。子代理可提前准备下一阶段的检查命令或证据模板，但不能把准备结果当作批准、提交或发布结果。
+
+以下不可并行的因果链是硬屏障，子代理只能在屏障前准备输入、在屏障后做独立只读核验，不能跨屏障写入：
+
+```text
+A push → Library version IDs/bytes/SHA-256 → published config/CSS immutable commit
+→ 最终 Loader build → B push → Loader version ID/raw+normalized SHA-256 → C
+```
+
+其中，A/B/C 仍分别遵守后文的审批包、白名单、普通 push、实时远端 SHA 和恢复点规则：只有 A push 成功并取得 Library/CSS 不可变证据后，主代理才能更新 `published-libraries.json`/CSS 坐标并生成最终 Loader；只有最终 Loader 构建核对通过后，主代理才能执行 B push；只有 B 后取得主 Loader version ID 及原始/规范化哈希，才能由主代理写入并推送 C 的手册/发布证据。任何子代理都不能缩短、重排或合并这条链。
+
 ## 授权、批次与恢复点
 
 开始时只声明一次目标版本、变更范围、排除项、一致性证据和完成条件。安全的本地读取与只读检查可直接执行；提交、push、Greasy Fork 写入或其他外部写入必须先展示以下审批包并等待一次明确确认：
