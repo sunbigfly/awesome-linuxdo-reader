@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.2.3
+// @version      1.2.4
 // @license      MIT
 // @description  为 LINUX DO 深度定制并保持完整功能覆盖，同时通过站点识别与能力检测兼容中文、英文及其他语言的标准 Discourse 社区，在列表页内完成阅读、翻译、回复与原站互动。
 // @description:en Deeply customized for LINUX DO with complete feature coverage, while site detection and capability checks support standard Discourse communities in any language for in-list reading, translation, replies, and native interactions.
@@ -49,15 +49,15 @@
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
-// @require      https://update.greasyfork.org/scripts/590254/1897707/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1897707#sha256=7494f406be1cf585ed5d0e9c8e92b1bc5fee38a6805720502329868c6b5a6a27
-// @require      https://update.greasyfork.org/scripts/590255/1897709/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1897709#sha256=12be5667f51327bb8776955aa058cbe56cbd9afa70dc702829463cca089171d5
+// @require      https://update.greasyfork.org/scripts/590254/1897745/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1897745#sha256=29c44aaed64b1591114f29cc849f0f5e879c77b88a7192ddb93851389474b77a
+// @require      https://update.greasyfork.org/scripts/590255/1897747/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1897747#sha256=bef258db76a0457fd0f420a0545b37891334ab2b2631d49867321792d18eaeb7
 // ==/UserScript==
 
 (function () {
 	'use strict';
 	const runtime = window.__AWESOME_LINUXDO_READER_LITE_MODULE_RUNTIME__;
 	if (!runtime || runtime.schemaVersion !== 1 ||
-		runtime.sourceVersion !== "1.2.3") {
+		runtime.sourceVersion !== "1.2.4") {
 		throw new Error('[main-lite] Greasy Fork Library 缺失或版本不匹配');
 	}
 	runtime.start("src/userscript/main-lite-entry.js", ["main-lite-core","main-lite-features"]);
