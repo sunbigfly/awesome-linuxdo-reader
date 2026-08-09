@@ -4,9 +4,9 @@ description: 查看用户卡、资料、徽章、统计、关注列表和账号�
 feature_ids: ["MEDIA-007", "USER-001", "USER-002", "USER-003", "USER-004", "USER-005"]
 source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/discourse/native-request-descriptors.ts","lite/src/discourse/native-host-api.ts"]
 since: 0.1.2
-version: 1.2.0
+version: 1.2.1
 status: current
-last_verified: 2026-07-24
+last_verified: 2026-08-09
 screenshots: ["/screenshots/guide-25-user-card-v1.0.0.png", "/screenshots/guide-02-settings-overview-v1.0.0.png"]
 ---
 
@@ -21,6 +21,8 @@ screenshots: ["/screenshots/guide-25-user-card-v1.0.0.png", "/screenshots/guide-
 - 加入时间、访问和发帖等社区统计；
 - 关注、粉丝和相关列表；
 - 账号允许的关系操作。
+
+阅读器开启时，在宿主主题列表悬停参与者头像也会进入同一张阅读器用户卡；不会再同时唤起宿主卡片与另一套资料交互。
 
 缓存资料可能短暂显示旧值，联网成功后会刷新。用户资料最终以原站为准。
 

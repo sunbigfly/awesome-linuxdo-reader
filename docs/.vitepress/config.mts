@@ -35,7 +35,7 @@ export default defineConfig({
       { text: '维护与排障', link: '/manage/data-and-cache' },
       { text: '功能索引', link: '/reference/feature-catalog' },
       {
-        text: 'v1.2.0',
+        text: 'v1.2.1',
         items: [
           { text: '更新记录', link: '/reference/changelog' },
           { text: '兼容性', link: '/reference/compatibility' },

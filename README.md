@@ -123,7 +123,7 @@
 
 ## 安装
 
-> **发布状态：** Lite `1.2.0` 已发布到 Greasy Fork。主 Loader 固定版本为 `1897520`，加载 Core `1897517` 与 Features `1897519`；三文件固定坐标、字节数和 SHA-256 均已核验。
+> **发布状态：** Lite `1.2.1` 已发布到 Greasy Fork。主 Loader 固定版本为 `1897662`，加载 Core `1897653` 与 Features `1897656`；三文件固定坐标、字节数和 SHA-256 均已核验。
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。
@@ -152,9 +152,9 @@
 4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 适用站点 → 其他适用站点”中验证并添加。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `1.2.0`。脚本对 LINUX DO 保持全面适配，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `1.2.1`。脚本对 LINUX DO 保持全面适配，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
-1.2.0 重点新增 OpenAI 兼容翻译服务集合、模型与限额设置，扩展 WebDAV 的加密翻译配置和译文缓存同步，并加固通知、缓存、宿主交互及长帖锚点恢复。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+1.2.1 重点修复 Boost 引用在富文本与 Markdown Composer 中的插入和重复提及问题，统一宿主主题列表头像的用户卡，并校准主帖分支收纳控件与特殊内容间距。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 ## 开发
 
@@ -178,7 +178,7 @@ GitHub Raw `main` 通过 Webhook 同步；用户只安装主脚本，不需要�
 ├── assets/           品牌与文档资源
 ├── docs/             项目介绍和资料索引
 ├── dist/             仓库直装的压缩 userscript 与来源清单
-├── lite/             v1.2.0 TypeScript 业务源码、样式、契约与测试
+├── lite/             v1.2.1 TypeScript 业务源码、样式、契约与测试
 ├── scripts/          跨平台开发工具入口
 ├── tools/            Rust 开发辅助工具源码
 ├── work/greasyfork-lite/  Lite Greasy Fork Library 发布产物

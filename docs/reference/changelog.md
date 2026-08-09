@@ -4,9 +4,9 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.2.0
+version: 1.2.1
 status: current
-last_verified: 2026-08-08
+last_verified: 2026-08-09
 screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 ---
 
@@ -15,6 +15,25 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.0.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.2.1 — Composer 与分支交互修复
+
+核验日期：2026-08-09。
+
+### 交互修复
+
+- Boost 的 `@` 引用同时适配 Discourse Markdown 与富文本 Composer，保留多行内容和引用结构；草稿已经提及目标用户时只聚焦编辑器，不再重复插入。
+- 阅读器开启时，宿主主题列表的参与者头像悬停统一打开阅读器用户卡，避免宿主卡片与阅读器资料交互竞争。
+- 主帖关系线上的分支收纳开关改用首个直属回复的实时几何位置，正文、引用、编辑或虚拟占位改变高度后仍保持对齐；该开关只负责收纳，不作为重复回复入口。
+- 校准已解决答案卡片与 Boost 列表的间距，并把翻译加载态纳入 CSS 使用审计，避免状态类误报为未使用样式。
+- 本地调试 Loader、单文件版和三文件版改用内容指纹 URL；审计会反向核对指纹与文件内容，减少浏览器继续复用旧调试产物。
+
+### 发布状态
+
+- `1.2.1` 已发布到 Greasy Fork：主 Loader 固定版本为 `1897662`，加载 Core `1897653` 与 Features `1897656`。
+- 固定 Loader 原始文件为 3,815 字节，SHA-256 `773fc7508f2259b9a77c83e547a7aaf04062b07682b09d69db5ae72a4dd1fd4a`；移除平台加入的 `@downloadURL none` 后为 3,794 字节，SHA-256 `66c89d08a9236deadc4673f0003ed1bcc2cc3ed25a81344220d6748532bc2c3b`，与仓库 Loader 逐字节一致。
+- Core 为 1,594,080 字节，SHA-256 `0c8146588acf63453b18002b539c8f35b369e15975b62db54699ac939d676b84`；Features 为 1,631,347 字节，SHA-256 `a898198bd59dfc879db78291e248be741609c965c7679ad16d5567cdc304a4bc`；CSS 固定到 Git `cf398703`，448,993 字节，SHA-256 `0348e18154ce56f4edd34d160dea6a375f37d8fc6d0ce19ce80b1941117d69f7`。
+- 204 个 Lite 测试文件、相关 ESLint、CSS 审计、确定性构建和 Greasy Fork 一致性检查均已通过；发布阶段没有重复执行浏览器矩阵或性能门禁。`1.2.0` 固定三文件继续作为公开回滚基线。
 
 ## 1.2.0 — 自定义 AI 翻译与同步链路加固
 

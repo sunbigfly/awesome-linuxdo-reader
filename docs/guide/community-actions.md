@@ -4,9 +4,9 @@ description: 使用主帖操作列，并在阅读器内回复、引用、点赞�
 feature_ids: ["MEDIA-010", "ACTION-001", "ACTION-002", "ACTION-003", "ACTION-004", "ACTION-005", "ACTION-006", "ACTION-007", "ACTION-008", "ACTION-009", "ACTION-010", "ACTION-011", "ACTION-012", "ACTION-013", "ACTION-014"]
 source_anchors: ["lite/src/media/reader-poll-model.ts","lite/src/app/reader-browser-runtime.ts","lite/src/post/reader-selection-quote-feature.ts","lite/src/post/boost-copy-rule.ts","lite/src/discourse/native-host-api.ts","lite/src/discourse/native-composer.ts","lite/src/post/reader-topic-shared-issue-coordinator.ts","lite/src/post/reader-topic-action-rail.ts"]
 since: 0.1.2
-version: 1.2.0
+version: 1.2.1
 status: current
-last_verified: 2026-07-28
+last_verified: 2026-08-09
 screenshots: ["/screenshots/guide-20-community-actions-v1.0.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.0.0.png", "/screenshots/guide-15-notifications-replies-v1.0.0.png"]
 ---
 
@@ -87,8 +87,9 @@ Boost 的举报类型；如果已经举报过或当前账号无权举报，会�
 
 1. 点击 `@` 后，阅读器打开该楼层的原生回复编辑器；
 2. 编辑器自动插入包含 Boost 正文的引用块，并在末尾加入原作者的 `@用户名`；
-3. 如果当前草稿已经提及该用户，阅读器只聚焦编辑器，不会重复插入；
-4. 自动填充只修改当前草稿，不会立即发送，也不会修改原 Boost。发送前请检查引用内容和目标用户。
+3. Markdown 与富文本 Composer 都使用各自的原生插入方式，多行 Boost 会保留换行和引用结构；
+4. 如果当前草稿已经提及该用户，阅读器只聚焦编辑器，不会重复插入；
+5. 自动填充只修改当前草稿，不会立即发送，也不会修改原 Boost。发送前请检查引用内容和目标用户。
 
 “设置 → 帖子与回复 → 复制 Boost 文本”只改变从已有 Boost 预填到 Boost 输入框的文本：
 

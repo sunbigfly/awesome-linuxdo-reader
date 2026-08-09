@@ -81,6 +81,19 @@ Library 与待发布文件完全相同。快速调试版和三文件本地测试
 `release.config.json` 不进入 Git；其中没有凭据，但只作为首次发布草稿，不能用占位符
 冒充已发布状态。
 
+### v1.2.1 已发布坐标
+
+| 发布单元 | Greasy Fork | 固定版本 | 核验结果 |
+| --- | --- | --- | --- |
+| 主 Loader | [588185](https://greasyfork.org/scripts/588185) | `1897662` | 固定文件 3,815 字节，SHA-256 `773fc7508f2259b9a77c83e547a7aaf04062b07682b09d69db5ae72a4dd1fd4a`；移除平台加入的 `@downloadURL none` 后为 3,794 字节，SHA-256 `66c89d08a9236deadc4673f0003ed1bcc2cc3ed25a81344220d6748532bc2c3b` |
+| Core | [590254](https://greasyfork.org/scripts/590254) | `1897653` | 1,594,080 字节，SHA-256 `0c8146588acf63453b18002b539c8f35b369e15975b62db54699ac939d676b84` |
+| Features | [590255](https://greasyfork.org/scripts/590255) | `1897656` | 1,631,347 字节，SHA-256 `a898198bd59dfc879db78291e248be741609c965c7679ad16d5567cdc304a4bc` |
+
+三个发布单元均已通过 GitHub Webhook 同步，并在 `update.greasyfork.org` 固定版本 URL
+逐字节核验；versionless 安装文件与元数据均已更新为 v1.2.1。CSS 固定到 Git
+`cf398703c1e8c1c900c1eaca103d29bdb027050f`，448,993 字节，SHA-256
+`0348e18154ce56f4edd34d160dea6a375f37d8fc6d0ce19ce80b1941117d69f7`。
+
 ### v1.2.0 已发布坐标
 
 | 发布单元 | Greasy Fork | 固定版本 | 核验结果 |

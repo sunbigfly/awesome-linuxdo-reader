@@ -4,9 +4,9 @@ description: 理解父回复预览、树状嵌套、完整讨论窗口、楼层�
 feature_ids: ["READ-003", "READ-008", "READ-012", "READ-015"]
 source_anchors: ["lite/src/dom/reply-tree-repository.ts","lite/src/topic/reader-topic-context-controller.ts","lite/src/topic/reader-topic-special-content-feature.ts"]
 since: 0.1.2
-version: 1.2.0
+version: 1.2.1
 status: current
-last_verified: 2026-07-28
+last_verified: 2026-08-09
 screenshots: ["/screenshots/guide-18-thread-context-v1.0.0.png", "/screenshots/guide-20-community-actions-v1.0.0.png"]
 ---
 
@@ -39,6 +39,8 @@ LINUX DO 的回复既有正式楼层号，也可能属于某个父楼层的直�
 - **从楼层列表隐藏二级回复**：把二级回复固定收纳到对应父楼层，避免正文列表重复。
 
 楼层列表中的连续二级回复会折叠为一条细分隔标记。展开标记可查看参与者头像，点击头像会直接打开该回复所属的完整讨论。如果折叠段正好位于主题末尾，阅读器会同时移除其后的空高度占位，避免尾部出现无法解释的大块空白。
+
+主帖存在直属分支时，左侧关系线上的“−”是该分支唯一的收纳开关，不是第二个回复按钮。它按首个直属回复的实际位置动态对齐；正文、引用或异步内容改变高度后也会重新计算，点击后只收起或展开该分支。
 
 ## 完整讨论窗口
 
