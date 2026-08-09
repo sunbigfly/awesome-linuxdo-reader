@@ -579,6 +579,7 @@ function createRuntimeStage(
 							document,
 							presentation: services.presentation,
 							relativeTime: services.relativeTime,
+							exactTime: services.exactTime,
 							readTopic: () => bundle.services.session.topic,
 							currentUsername: services.currentUsername,
 							renderIcon,

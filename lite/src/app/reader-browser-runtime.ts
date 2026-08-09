@@ -3,6 +3,7 @@ import {
 	discourseNativeBoostsAvailable,
 	discourseNativeEmojiMenu,
 	discourseNativeEmojiUrl,
+	discourseNativeExactTimeFormatter,
 	discourseNativeFlagCatalog,
 	discourseNativeHostRouteRefresh,
 	discourseNativeJqueryModule,
@@ -15,6 +16,7 @@ import {
 	BrowserDiscourseBookmarkNativeState,
 	BrowserDiscourseNotificationNativeState,
 	type DiscourseHostApiPort,
+	type DiscourseNativeExactTimeFormatter,
 	type DiscourseNativeFlagType,
 	type DiscourseNativeRelativeTimeFormatter,
 	type DiscourseNativeTopicPresentationPort,
@@ -590,6 +592,7 @@ export interface ReaderBrowserTopicFactoryServices {
 	readonly composer: DiscourseComposerCoordinator;
 	readonly presentation: DiscourseNativeTopicPresentationPort;
 	readonly relativeTime: DiscourseNativeRelativeTimeFormatter;
+	readonly exactTime: DiscourseNativeExactTimeFormatter;
 	readonly currentUsername: string;
 }
 
@@ -2256,6 +2259,8 @@ export class ReaderBrowserRuntime<
 				options.document.baseURI;
 			const nativeRelativeTime =
 				discourseNativeRelativeTimeFormatter(options.host);
+			const nativeExactTime =
+				discourseNativeExactTimeFormatter(options.host);
 			const nativeTopicPresentation =
 				discourseNativeTopicPresentation(options.host);
 			const nativeTopicEditCatalog =
@@ -2716,6 +2721,7 @@ export class ReaderBrowserRuntime<
 							composer: this.composer,
 							presentation: nativeTopicPresentation,
 							relativeTime: nativeRelativeTime,
+							exactTime: nativeExactTime,
 							currentUsername,
 							}),
 					);

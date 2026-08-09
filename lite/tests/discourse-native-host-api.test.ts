@@ -7,6 +7,7 @@ import {
 	discourseNativeCurrentUserBindingAvailable,
 	discourseNativeEmojiUrl,
 	discourseNativeEmojiMenu,
+	discourseNativeExactTimeFormatter,
 	discourseNativeFlagCatalog,
 	discourseNativeHostRouteRefresh,
 	discourseNativeCurrentUsername,
@@ -368,12 +369,21 @@ try {
 assert(emptyLookupRejected, '宿主 service 名称不能为空');
 
 let relativeAgeCalls = 0;
+let longDateCalls = 0;
 const timeHost = new BrowserDiscourseHostApiPort({
 	pageWindow: {
 		moduleBroker: {
 			lookup(name: string): unknown {
 				if (name !== 'discourse/lib/formatter') return null;
 				return {
+					longDate(date: Date) {
+						longDateCalls += 1;
+						assert(
+							date instanceof Date,
+							'具体时间必须把有效 Date 交给 Discourse formatter',
+						);
+						return '2026年7月30日 08:00';
+					},
 					relativeAge(date: Date, options: Readonly<Record<string, unknown>>) {
 						relativeAgeCalls += 1;
 						assert(
@@ -390,11 +400,15 @@ const timeHost = new BrowserDiscourseHostApiPort({
 	},
 });
 const formatRelative = discourseNativeRelativeTimeFormatter(timeHost);
+const formatExact = discourseNativeExactTimeFormatter(timeHost);
 assert(
 	formatRelative('2026-07-30T00:00:00.000Z') === '刚刚' &&
 	formatRelative('invalid') === '' &&
-	relativeAgeCalls === 1,
-	'时间轴相对时间只能经原生 formatter，非法时间不得手写降级文案',
+	formatExact('2026-07-30T00:00:00.000Z') === '2026年7月30日 08:00' &&
+	formatExact('invalid') === '' &&
+	relativeAgeCalls === 1 &&
+	longDateCalls === 1,
+	'相对与具体时间只能经原生 formatter，非法时间不得手写降级文案',
 );
 
 let formatterReady = false;

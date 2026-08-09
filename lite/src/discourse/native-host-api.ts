@@ -243,6 +243,10 @@ export type DiscourseNativeRelativeTimeFormatter = (
 	timestamp: string,
 ) => string;
 
+export type DiscourseNativeExactTimeFormatter = (
+	timestamp: string,
+) => string;
+
 export interface DiscourseNativeTopicPresentationPort {
 	avatarSource(template: string, size: number): string;
 	categoryName?(categoryId: number): string;
@@ -1091,6 +1095,37 @@ export function discourseNativeRelativeTimeFormatter(
 				format: 'medium-with-ago',
 				wrapInSpan: false,
 			}) ?? '');
+		} catch {
+			return '';
+		}
+	};
+}
+
+/**
+ * 帖子时间 View 对 Discourse 原生具体时间 formatter 的唯一窄适配。
+ *
+ * 缺少模块或输入无效时返回空字符串；不手写第二套日期格式，也不读取页面 DOM。
+ */
+export function discourseNativeExactTimeFormatter(
+	host: DiscourseHostApiPort,
+): DiscourseNativeExactTimeFormatter {
+	let owner: UnknownRecord | null = null;
+	return (timestamp) => {
+		const date = new Date(timestamp);
+		if (!Number.isFinite(date.getTime())) return '';
+		if (!owner || typeof owner.longDate !== 'function') {
+			const module = objectRecord(
+				host.lookupModule('discourse/lib/formatter'),
+			);
+			const defaultExport = objectRecord(module?.default);
+			owner = typeof module?.longDate === 'function'
+				? module
+				: defaultExport;
+		}
+		const longDate = owner?.longDate;
+		if (typeof longDate !== 'function') return '';
+		try {
+			return String(longDate.call(owner, date) ?? '');
 		} catch {
 			return '';
 		}

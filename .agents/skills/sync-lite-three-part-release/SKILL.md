@@ -1,11 +1,11 @@
 ---
 name: sync-lite-three-part-release
-description: "在当前 awesome-linuxdo-reader 仓库完成一次已验证 Lite 变更的三块一致性同步：GitHub 源码与版本说明、Greasy Fork 薄 Loader + Core + Features 三文件链、当前版本用户手册与 GitHub Pages。用户说‘同步三大块’‘发布 Lite’‘更新 Greasy Fork 三文件版’‘提交并同步 Lite 发布’‘补齐线上发布坐标’‘发布网络恢复后继续’‘检查三块是否对齐’或‘完成发布对齐’时使用；仅适用于本仓库，不重复功能、浏览器或性能验收。"
+description: "在当前 awesome-linuxdo-reader 仓库完成一次已验证 Lite 变更的三块一致性同步：GitHub 源码与版本说明、Greasy Fork 薄 Loader + Core + Features 三文件链及公开介绍页、当前版本用户手册与 GitHub Pages。用户说‘同步三大块’‘发布 Lite’‘更新 Greasy Fork 三文件版’‘提交并同步 Lite 发布’‘补齐线上发布坐标’‘发布网络恢复后继续’‘检查三块是否对齐’或‘完成发布对齐’时使用；仅适用于本仓库，同一产物快照复用开发阶段门禁，不重复功能、浏览器或性能验收。"
 ---
 
 # 同步 Lite 三大发布块
 
-把一次 Lite 变更同步到三个发布面，同时保留 Greasy Fork 三文件架构的固定版本、哈希和回滚证据。只更新实际变化的 Library，不因一次局部变更盲目重传全部产物。
+把一次 Lite 变更同步到三个发布面，同时保留 Greasy Fork 三文件架构的固定版本、哈希和回滚证据。只更新实际变化的 Library，不因一次局部变更盲目重传全部产物；同一字节快照的重型门禁只执行一次。
 
 ## 固定边界
 
@@ -13,7 +13,7 @@ description: "在当前 awesome-linuxdo-reader 仓库完成一次已验证 Lite 
 2. 读取仓库当前 `AGENTS.md`（如有）、`package.json`、Lite 构建器和发布坐标；不要加载旧版 `work/main.js` 开发 Skill。
 3. 把“三大块”固定为：
    - GitHub：业务源码、确定性产物、版本/发布说明；
-   - Greasy Fork：薄 Loader、Core Library、Features Library；
+   - Greasy Fork：薄 Loader、Core Library、Features Library，以及主脚本公开介绍页；
    - 用户手册：`docs/`、截图、变更记录和 GitHub Pages。
 4. 把 CSS 视为 `work/main-lite.css` 固定哈希 `@resource`，不是第四个 Greasy Fork 可执行单元。
 5. 把 `lite/src/`、`lite/styles/` 和 `lite/userscript.meta.txt` 视为事实源；不要直接手改 `work/main-lite.js`、`work/main-lite.css` 或 `work/greasyfork-lite/libraries/*.js`。
@@ -21,8 +21,9 @@ description: "在当前 awesome-linuxdo-reader 仓库完成一次已验证 Lite 
 7. 永不提交 `work/greasyfork-lite/release.config.json`、凭据、Cookie、Token、本机路径或被忽略的验收副本。
 8. 只有用户确认发布批次后才执行 push、Greasy Fork 设置修改和立即同步；只要求准备时停在本地验证结果。
 9. 1.0.1 迁移期必须保留 `mian-lite:*` 命令和同名生成物兼容别名；canonical 与旧拼写的 Loader、CSS、Core、Features 必须由同一次构建生成且逐字节一致。所有新文档、GitHub Raw URL 与 Greasy Fork 同步源使用 `main-lite`。
-10. 把“提交/同步”视为功能验证已经完成。本 Skill 不重复 ESLint、源码单文件测试、浏览器矩阵、性能门禁或主观界面验收；但必须执行实际 Core、Features 分包产物的契约门，避免构建转换改变运行语义。
-11. 开发阶段必须已经运行 `npm run main-lite:local-debug`，生成单文件和三文件本地审查版；本 Skill 不重新生成开发调试产物，只在取得不可变发布坐标后生成并复核最终 Loader。
+10. 把“提交/同步”视为功能验证已经完成。本 Skill 不重复 ESLint、源码单文件测试、浏览器矩阵、性能门禁或主观界面验收；实际 Core、Features 分包产物的契约门必须有当前快照的成功收据，但同一快照不得重复执行。
+11. 开发阶段必须已经运行 `npm run main-lite:local-debug`，生成单文件和三文件本地审查版；该命令已包含实际分包产物契约测试。本 Skill 记录并复用其当前快照收据，不重新生成开发调试产物，只在取得不可变发布坐标后生成并复核最终 Loader。
+12. Greasy Fork 主脚本公开介绍页不是 GitHub README，GitHub Webhook 只同步代码，不会自动更新该正文。介绍页更新是独立外部写入，必须列入审批包；发布完成前必须从公开页面回读目标版本与最终坐标，不能用代码更新时间代替。
 
 ## 先判定影响面
 
@@ -34,6 +35,7 @@ description: "在当前 awesome-linuxdo-reader 仓库完成一次已验证 Lite 
 | `lite/styles/**` | `work/main-lite.css`、Loader | 先推送 CSS，再把 `readerStylesUrl` 固定到包含该 CSS 的 Git 提交 |
 | userscript 元数据或构建器 | 两个 Library、Loader | 依 manifest 判定 Library；重建 Loader |
 | `docs/**`、截图、说明 | 用户手册 | 不因纯文档变更生成 Greasy Fork 新版本 |
+| Greasy Fork 公开介绍 | 主脚本介绍正文 | 取得最终 Loader/Core/Features ID 后只更新一次并公开回读 |
 | 发布坐标或状态记录 | Loader | 先核验远端 Library，再生成 Loader |
 
 读取当前坐标与证据时，以这些文件为准：
@@ -42,6 +44,7 @@ description: "在当前 awesome-linuxdo-reader 仓库完成一次已验证 Lite 
 - `work/greasyfork-lite/build-manifest.json`
 - `lite/release-gate.json`
 - `work/greasyfork-lite/README.md`
+- Greasy Fork 主脚本公开页正文（只作线上回读证据，不是 GitHub README 的替代事实源）
 
 ## 快路径与耗时预算
 
@@ -51,9 +54,11 @@ description: "在当前 awesome-linuxdo-reader 仓库完成一次已验证 Lite 
 - 只有 Library 或 CSS 变化时才需要 A；只有 Loader 内容变化时才需要 B；只有线上固定 ID 或公开证据需要入库时才需要 C。跳过空批次，纯文档保持单次提交。
 - Library/CSS 与 Loader 都变化时，A → 远端固定坐标 → B 是安全下限，不能并成一次 push；C 只记录最终线上证据，不夹带可执行文件。
 - 不在 B 写“发布中”“待 Webhook”之类临时 README、安装说明或手册文案；B 只提交发布配置和最终 Loader，取得主 Loader ID 后在 C 一次写成最终状态。
-- 本地发布检查尽量合并到一个 shell 调用；远端 API、Raw 和固定文件读取按阶段各批量查询一次。已有成功证据不重复运行，不展示完整生成文件 diff。
+- 本地发布检查尽量合并到一个 shell 调用；远端 API、Raw 和固定文件读取按阶段各批量查询一次。不展示完整生成文件 diff。
+- 为分包契约门记录“快照收据”：目标版本、Core SHA-256、Features SHA-256、CSS SHA-256、构建器与契约测试脚本的 Git blob ID，以及成功命令。当前发布会话内这些值完全相同就复用收据；任一值变化、收据缺失或上次执行中断时才运行一次 `npm run main-lite:greasyfork:check`。不要为了“更保险”在发布前后重复执行。
+- 最终坐标构建正常路径只运行一次写入构建，再做 `cmp`、元数据和 SHA-256 常量时间核对；只有构建器或事实源在收据后变化、写入被中断、产物哈希变化或核对失败时，才补一次 `--check` 或分包契约测试。
 - 已配置的 Greasy Fork Webhook 默认视为可靠触发器，不例行打开管理页、查询 GitHub delivery 或深挖源码页面。记录 push UTC 时间后，用 WebSearch/官方公开 API 查看目标版本的 `created_at` 或分发端 `Last-Modified` 已更新即可确认触发；只有更新时间在轮询窗口内未变化时才排查 Webhook。
-- 公开版本轮询使用 5 秒间隔、最多 60 秒，发现目标版本立即停止；Pages 只等待最终 C 对应的一次工作流。
+- 公开版本轮询前 30 秒使用 2 秒间隔，之后使用 5 秒间隔，总计最多 60 秒，发现目标版本立即停止；Pages 只等待最终 C 对应的一次工作流。
 - 浏览器不是远端坐标的默认读取路径。优先使用 GitHub API、Greasy Fork API 和 `update.greasyfork.org`；只有 API 与公开分发端都不可用，或确需修改同步设置时才进入浏览器。
 
 ## 授权、批次与恢复点
@@ -61,7 +66,7 @@ description: "在当前 awesome-linuxdo-reader 仓库完成一次已验证 Lite 
 开始时只声明一次目标版本、变更范围、排除项、一致性证据和完成条件。安全的本地读取与只读检查可直接执行；提交、push、Greasy Fork 写入或其他外部写入必须先展示以下审批包并等待一次明确确认：
 
 - 各提交批次的 exact paths 与目的；
-- 外部目标，如 `origin/<branch>`、Greasy Fork Loader/Core/Features 脚本；
+- 外部目标，如 `origin/<branch>`、Greasy Fork Loader/Core/Features 脚本和主脚本公开介绍页；
 - 保留不动的 dirty 路径；
 - 收益、主要风险和回滚点。
 
@@ -71,7 +76,7 @@ description: "在当前 awesome-linuxdo-reader 仓库完成一次已验证 Lite 
 | --- | --- | --- |
 | A：远端基线 | 事实源、变化的 Library/manifest、CSS、必要说明 | 必须先取得不可变 Git/Library 坐标时 |
 | B：正式发布 | 发布配置、Library/CSS 坐标和最终 Loader | 发布主 Loader 前 |
-| C：线上证据 | 公开 version ID、远端 bytes/SHA-256 和 Pages 状态 | 线上核验后确有证据文件变化时 |
+| C：线上证据 | 公开 version ID、远端 bytes/SHA-256、Greasy Fork 介绍页最终正文和 Pages 状态 | 主 Loader ID 成立，且线上核验后确有证据或介绍页变化时 |
 
 跳过空批次；没有不可变坐标依赖时合并 A、B。纯文档变更只提交并同步文档，不构建或重发 Greasy Fork。批次 C 不得夹带可执行产物变化，也不得因此主动重发 Greasy Fork。
 
@@ -103,10 +108,15 @@ git diff --stat
 - 本地审查：`work/main-lite.local.js` 与 `work/main-lite.greasyfork.local.user.js` 存在，三文件 Loader 只用 `file://` 引用本地 Core、Features 和 CSS；
 - 手册：版本、安装链接、固定发布坐标和“已发布/准备中”状态不冲突。
 
-此时只检查事实源对应的 Library、模板、manifest 与兼容别名，不提前校验尚未取得的新 CSS/Library 远端坐标：
+此时只检查事实源对应的 Library、模板、manifest 与兼容别名，不提前校验尚未取得的新 CSS/Library 远端坐标。先从开发阶段 `main-lite:local-debug` 的成功输出记录快照收据；若当前会话没有收据，或当前哈希/blob ID 与收据不同，仅运行一次：
 
 ```bash
 npm run main-lite:greasyfork:check
+```
+
+随后无论是否复用收据，都只做低成本字节与哈希核对：
+
+```bash
 cmp work/greasyfork-lite/libraries/main-lite-core.js \
   work/greasyfork-lite/libraries/mian-lite-core.js
 cmp work/greasyfork-lite/libraries/main-lite-features.js \
@@ -117,7 +127,7 @@ sha256sum work/main-lite.js \
   work/main-lite.css
 ```
 
-`main-lite:greasyfork:check` 必须包含并通过 `main-lite:greasyfork:test`。该测试直接从待发布 Core、Features 的模块 runtime 运行完整 Lite 契约；失败时停止发布，不能以源码测试、哈希一致或人工检查替代。
+`main-lite:greasyfork:check` 已包含 `main-lite:greasyfork:test`。该测试直接从待发布 Core、Features 的模块 runtime 运行完整 Lite 契约；失败时停止发布，不能以源码测试、哈希一致或人工检查替代。快照相同只复用已通过的收据，不再次运行这两个命令。
 
 用 `git diff -- work/greasyfork-lite/libraries/ work/greasyfork-lite/build-manifest.json` 判断哪一个 Library 变化。若两库都没变化，不创建新的 Library 版本。
 
@@ -175,23 +185,24 @@ push 被拒绝时停止；瞬时网络失败按恢复点续传，不重新提交
 4. 在同一个进程中下载所有固定文件，计算 bytes 和 SHA-256，并要求与本地生成文件完全一致。
 5. 把真实 `scriptId`、`versionId`、固定 URL、bytes 和 SHA-256 写入 `published-libraries.json`；最终 README 坐标留到 C 一次写入，不增加“发布中”过渡提交。
 
-API 未生成版本时按 5 秒间隔轮询，最多 60 秒。`api.greasyfork.org` 与 `update.greasyfork.org` 都不可用时才考虑浏览器；首次出现 Cloudflare 403 或挑战页就停止浏览器路径，不反复挑战。远端不一致、版本未生成或脚本 ID 不明确时停止，不伪造发布坐标。
+API 未生成版本时前 30 秒按 2 秒间隔、之后按 5 秒间隔轮询，总计最多 60 秒。`api.greasyfork.org` 与 `update.greasyfork.org` 都不可用时才考虑浏览器；首次出现 Cloudflare 403 或挑战页就停止浏览器路径，不反复挑战。远端不一致、版本未生成或脚本 ID 不明确时停止，不伪造发布坐标。
 
 ## 5. 生成并核对最终 Loader
 
-远端 Library 与 CSS 的不可变坐标成立后，使用同一个权威构建器生成最终 Loader；`--consistency-only` 只跳过历史浏览器、性能和功能验收，不能跳过分包产物契约门：
+远端 Library 与 CSS 的不可变坐标成立后，使用同一个权威构建器生成最终 Loader。正常路径只执行一次写入构建：
 
 ```bash
-npm run main-lite:greasyfork:test
 node scripts/build-main-lite-greasyfork.mjs \
   --config work/greasyfork-lite/published-libraries.json \
   --consistency-only
-node scripts/build-main-lite-greasyfork.mjs \
-  --check \
-  --config work/greasyfork-lite/published-libraries.json \
-  --consistency-only
-npm run main-lite:greasyfork:test
 ```
+
+构建后立即重新计算 Core、Features、CSS SHA-256 并与快照收据比较：
+
+- Core、Features 哈希未变化：分包字节仍是已通过契约门的同一快照，不再运行 `main-lite:greasyfork:test`；
+- Core 或 Features 哈希变化：收据失效，停止发布并对新产物只运行一次 `npm run main-lite:greasyfork:check`；
+- 构建器或事实源在收据后变化、写入过程被中断、兼容副本不一致或 Loader 核对失败：只补一次同参数 `--check`，不要固定执行 build + check 双编译；
+- `--consistency-only` 只跳过历史浏览器、性能和功能验收，不能创建“无需分包契约门”的例外。
 
 随后核对：
 
@@ -226,6 +237,8 @@ https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/mai
 - versionless 公开 `.user.js` 应包含 Greasy Fork 注入的 `@downloadURL` 与 `@updateURL`，`.meta.js` 的版本应等于目标版本；分发端短暂滞后时用 cache-buster 按 5 秒间隔轮询，最多 60 秒；
 - 纯文档提交未误生成新的主脚本版本。
 
+取得主 Loader 固定 version ID 后，按已批准范围只更新一次 Greasy Fork 主脚本公开介绍页，使其至少包含目标版本和最终 Loader/Core/Features ID。不要假设 GitHub README 或 Webhook 会更新这段正文。保存后从无需登录的公开页回读，并确认不存在旧“当前项目版本”或旧发布坐标；该回读和代码 `created_at` 是两项独立证据。若审批包未包含介绍页写入，停止并单独请求确认，不能宣称 Greasy Fork 已完整同步。
+
 把公开 Loader 的固定 version ID、原始 bytes/SHA-256、移除 Greasy Fork 平台元数据后的 bytes/SHA-256，以及三文件固定坐标写入发布证据。若这一步产生文件变化，执行批次 C：
 
 1. 先确认暂存差异中 `work/main-lite.js`、两个 Library 和 `work/main-lite.css` 均未变化；
@@ -253,6 +266,7 @@ npm run docs:check
 - 任务前 dirty 路径仍被保留，且没有进入任何提交；
 - Loader/Core/Features 与 CSS 的本地、GitHub、Greasy Fork bytes/SHA-256 满足各自规范化规则；
 - 公开主脚本和两个 Library 的固定 version ID 已记录；
+- Greasy Fork 主脚本公开介绍页已回读为目标版本和最终三文件坐标，不再展示旧版本；
 - 手册源码已推送，版本与发布坐标一致；GitHub Pages 在线状态单独报告。
 
 交付时按顺序报告：
@@ -260,5 +274,5 @@ npm run docs:check
 1. 用户可见结果和版本；
 2. GitHub 提交、远端 `main` 与保留 dirty 路径；
 3. Loader/Core/Features/CSS 的 bytes、SHA-256 和固定版本；
-4. Greasy Fork 主脚本版本、同步源和公开更新时间；
+4. Greasy Fork 主脚本版本、同步源、公开更新时间和介绍页回读版本；
 5. 手册版本、Pages 状态和任何尚未对齐项。

@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.2.4
+// @version      1.2.5
 // @description  Core runtime modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.2.4 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.2.5 - main-lite-core
  * 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.2.4",
+			sourceVersion: "1.2.5",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.4") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.2.5") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -1238,7 +1238,7 @@
 		        onReady: topicReady,
 		        createDomOptions,
 		        ...topicFactoryOptions
-		      } = options.topicFactory, topicBaseUrl = options.topic.origin ?? options.data.rateLimit.baseUrl ?? options.document.baseURI, nativeRelativeTime = (0, import_native_host_api.discourseNativeRelativeTimeFormatter)(options.host), nativeTopicPresentation = (0, import_native_host_api.discourseNativeTopicPresentation)(options.host), nativeTopicEditCatalog = (0, import_native_host_api.discourseNativeTopicEditCatalog)(options.host), nativePresence = new import_native_presence.BrowserDiscoursePresencePort(options.host), nativeTopicLinks = (0, import_native_host_api.discourseNativeTopicLinks)(options.host, topicBaseUrl), nativeFlagCatalog = (0, import_native_host_api.discourseNativeFlagCatalog)(options.host), nativeEmojiMenu = (0, import_native_host_api.discourseNativeEmojiMenu)(options.host), nativeAdminMenu = (0, import_native_host_api.discourseNativePostAdminMenu)(options.host), nativePostModels = new import_native_post_model_factory.DiscourseNativePostModelFactory(options.host), nativeBookmarkForm = new import_native_host_api.BrowserDiscourseNativeBookmarkForm(options.host);
+		      } = options.topicFactory, topicBaseUrl = options.topic.origin ?? options.data.rateLimit.baseUrl ?? options.document.baseURI, nativeRelativeTime = (0, import_native_host_api.discourseNativeRelativeTimeFormatter)(options.host), nativeExactTime = (0, import_native_host_api.discourseNativeExactTimeFormatter)(options.host), nativeTopicPresentation = (0, import_native_host_api.discourseNativeTopicPresentation)(options.host), nativeTopicEditCatalog = (0, import_native_host_api.discourseNativeTopicEditCatalog)(options.host), nativePresence = new import_native_presence.BrowserDiscoursePresencePort(options.host), nativeTopicLinks = (0, import_native_host_api.discourseNativeTopicLinks)(options.host, topicBaseUrl), nativeFlagCatalog = (0, import_native_host_api.discourseNativeFlagCatalog)(options.host), nativeEmojiMenu = (0, import_native_host_api.discourseNativeEmojiMenu)(options.host), nativeAdminMenu = (0, import_native_host_api.discourseNativePostAdminMenu)(options.host), nativePostModels = new import_native_post_model_factory.DiscourseNativePostModelFactory(options.host), nativeBookmarkForm = new import_native_host_api.BrowserDiscourseNativeBookmarkForm(options.host);
 		      this.postReactions = new import_reader_post_action_feature.DiscoursePostReactionCatalog(
 		        nativePostModels
 		      );
@@ -1507,6 +1507,7 @@
 		              composer: this.composer,
 		              presentation: nativeTopicPresentation,
 		              relativeTime: nativeRelativeTime,
+		              exactTime: nativeExactTime,
 		              currentUsername
 		            })
 		          ), replyTreePresentation = domOptions.replyTreePresentation ?? new import_reader_reply_tree_preferences.ReaderReplyTreePresentation(
@@ -4411,7 +4412,7 @@
 		    }
 		  });
 		}
-	}, "242134885a504323a6162d264632ef1cd9318b8fcee2af6f0aa00e9da44739d0");
+	}, "2bccf4ac3939e9f1ccff8c0fee015b4a8fc1964d3dde19af6a08c53391d98b27");
 
 	/* Source: lite/src/app/reader-data-runtime.ts */
 	runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -8257,6 +8258,7 @@ ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer,
 		  discourseNativeCurrentUsername: () => discourseNativeCurrentUsername,
 		  discourseNativeEmojiMenu: () => discourseNativeEmojiMenu,
 		  discourseNativeEmojiUrl: () => discourseNativeEmojiUrl,
+		  discourseNativeExactTimeFormatter: () => discourseNativeExactTimeFormatter,
 		  discourseNativeFlagCatalog: () => discourseNativeFlagCatalog,
 		  discourseNativeFollowRoute: () => discourseNativeFollowRoute,
 		  discourseNativeHostRouteRefresh: () => discourseNativeHostRouteRefresh,
@@ -8846,6 +8848,26 @@ ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer,
 		    }
 		  };
 		}
+		function discourseNativeExactTimeFormatter(host) {
+		  let owner = null;
+		  return (timestamp) => {
+		    const date = new Date(timestamp);
+		    if (!Number.isFinite(date.getTime())) return "";
+		    if (!owner || typeof owner.longDate != "function") {
+		      const module2 = (0, import_value_record.objectRecord)(
+		        host.lookupModule("discourse/lib/formatter")
+		      ), defaultExport = (0, import_value_record.objectRecord)(module2?.default);
+		      owner = typeof module2?.longDate == "function" ? module2 : defaultExport;
+		    }
+		    const longDate = owner?.longDate;
+		    if (typeof longDate != "function") return "";
+		    try {
+		      return String(longDate.call(owner, date) ?? "");
+		    } catch {
+		      return "";
+		    }
+		  };
+		}
 		function discourseNativeTopicPresentation(host) {
 		  const urlModule = (0, import_value_record.objectRecord)(host.lookupModule("discourse/lib/url")), urlDefault = (0, import_value_record.objectRecord)(urlModule?.default), urlOwner = typeof urlModule?.getCategoryAndTagUrl == "function" ? urlModule : urlDefault, avatarModule = (0, import_value_record.objectRecord)(
 		    host.lookupModule("discourse/lib/avatar-utils")
@@ -9303,7 +9325,7 @@ ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer,
 		    return this.#container = urlContainer ?? fallbackContainer, this.#container;
 		  }
 		}
-	}, "4b90913f70e98f314f22efa90d04b1f49a420dedf6867f401e39ea27037d7a63");
+	}, "581b372afdc0d8ab06b1fe0455dc51f60ad88f39e753ff2aa85733839388b109");
 
 	/* Source: lite/src/discourse/native-message-bus.ts */
 	runtime.register("src/discourse/native-message-bus.js", function(module, exports, require) {
@@ -23228,6 +23250,8 @@ ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer,
 		      if (relative) {
 		        const time = options.document.createElement("span");
 		        time.className = "ldp-time";
+		        const exact = options.exactTime(createdAt);
+		        exact && (time.dataset.exactTime = exact);
 		        const label = options.document.createElement("span");
 		        label.className = "ldp-time-relative", label.textContent = `· ${relative}`, time.append(label), header.append(time);
 		      }
@@ -23250,7 +23274,7 @@ ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer,
 		    }
 		  });
 		}
-	}, "ae3d6cebf33c374c649123f0936216e9fd29eec92a17c883bba920c654305fbd");
+	}, "be77abfe8459e6f8ee0e42bb5c174727f95d11a9d6fe9026609444f949014596");
 
 	/* Source: lite/src/topic/reader-post-view-projector.ts */
 	runtime.register("src/topic/reader-post-view-projector.js", function(module, exports, require) {
@@ -31660,6 +31684,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 		                document,
 		                presentation: services.presentation,
 		                relativeTime: services.relativeTime,
+		                exactTime: services.exactTime,
 		                readTopic: () => bundle.services.session.topic,
 		                currentUsername: services.currentUsername,
 		                renderIcon
@@ -32095,7 +32120,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 		  }), handle;
 		}
 		const startMianLiteUserscript = startMainLiteUserscript;
-	}, "f8a6a3dad02f01d572329db2ed01a29cbd226c47343959adf244187afa7fefdc");
+	}, "43efc41b5c51f4998343189aad44022ce12e8251e0441642c4d3f6ea5b408a3a");
 
 	/* Source: lite/src/userscript/main-lite-entry.ts */
 	runtime.register("src/userscript/main-lite-entry.js", function(module, exports, require) {

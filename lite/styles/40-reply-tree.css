@@ -596,6 +596,12 @@
   margin-left: auto;
 }
 
+.ldp-nested-preview > .ldp-post-head > .ldp-time[data-exact-time]::after {
+  position: static;
+  margin-left: 6px;
+  transform: none;
+}
+
 .ldp-nested-preview > .ldp-post-body > .ldp-content {
   font-size: calc(var(--ldp-post-font-size, var(--ldp-font-md)) * var(--ldp-nested-content-scale, .96));
 }

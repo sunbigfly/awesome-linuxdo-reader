@@ -1,6 +1,6 @@
 /* Awesome LinuxDo Reader Lite stylesheet.
  * Generated only from lite/styles/*.css; do not edit generated outputs.
- * source-sha256: 79b8c4e302e0ac227477b0779aadf413f6c729fd609aa920dd6b664c53d70b5a
+ * source-sha256: 1a6a800c23451fa4301900397fe63acfbcc7bdbcbb83ad1d072c7bf01ffe60a4
  */
 
 /* source: 00-foundation.css */
@@ -6874,6 +6874,12 @@ button.ldp-floor:hover {
 
 .ldp-nested-preview > .ldp-post-head > .ldp-post-read-state {
   margin-left: auto;
+}
+
+.ldp-nested-preview > .ldp-post-head > .ldp-time[data-exact-time]::after {
+  position: static;
+  margin-left: 6px;
+  transform: none;
 }
 
 .ldp-nested-preview > .ldp-post-body > .ldp-content {
@@ -18178,6 +18184,26 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 @container ldp-reader (max-width: 480px) {
+  .ldp-time[data-exact-time]::after {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    bottom: auto;
+    left: auto;
+    box-sizing: border-box;
+    padding: 4px 7px;
+    border: 0;
+    border-radius: 7px;
+    background: rgb(28 28 28 / 86%);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 18%);
+    color: #fff;
+    font-size: var(--ldp-font-ui);
+    font-weight: 500;
+    line-height: 1.35;
+    opacity: 1;
+    transform: none;
+  }
+
   .ldp-header {
     --ldp-header-logo-inset: 8px;
     --ldp-header-reserved-right: 8px;

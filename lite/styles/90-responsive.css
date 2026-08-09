@@ -435,6 +435,26 @@
 }
 
 @container ldp-reader (max-width: 480px) {
+  .ldp-time[data-exact-time]::after {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    bottom: auto;
+    left: auto;
+    box-sizing: border-box;
+    padding: 4px 7px;
+    border: 0;
+    border-radius: 7px;
+    background: rgb(28 28 28 / 86%);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 18%);
+    color: #fff;
+    font-size: var(--ldp-font-ui);
+    font-weight: 500;
+    line-height: 1.35;
+    opacity: 1;
+    transform: none;
+  }
+
   .ldp-header {
     --ldp-header-logo-inset: 8px;
     --ldp-header-reserved-right: 8px;

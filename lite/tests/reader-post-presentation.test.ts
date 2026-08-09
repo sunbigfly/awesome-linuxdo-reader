@@ -42,6 +42,7 @@ const renderer = createReaderPostPresentation({
 		userHref: (username) => `/u/${username}`,
 	},
 	relativeTime: () => '2 小时前',
+	exactTime: () => '2026年7月30日 08:00',
 	readTopic: () => topic,
 	currentUsername: 'owner',
 	renderIcon,
@@ -77,13 +78,15 @@ assert(
 assert(
 	root.slots.header.querySelector('.ldp-time-relative')?.textContent ===
 		'· 2 小时前' &&
-		root.slots.header.querySelector('.ldp-body-floor')?.textContent === '#1' &&
+	root.slots.header.querySelector<HTMLElement>('.ldp-time')?.dataset.exactTime ===
+		'2026年7月30日 08:00' &&
+	root.slots.header.querySelector('.ldp-body-floor')?.textContent === '#1' &&
 		root.slots.header.querySelector('.ldp-post-read-state')
 			?.getAttribute('data-read-state') === 'read' &&
 		root.slots.header.querySelector(
 			'.ldp-post-read-state .ldp-icon[data-icon="check"][data-ldp-reader-icon]',
 		),
-	'时间、楼层与已读 SVG 状态必须只投影 canonical post',
+	'相对/具体时间、楼层与已读 SVG 状态必须只投影 canonical post',
 );
 
 const childPost = {

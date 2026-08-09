@@ -1,4 +1,5 @@
 import type {
+	DiscourseNativeExactTimeFormatter,
 	DiscourseNativeRelativeTimeFormatter,
 	DiscourseNativeTopicPresentationPort,
 } from '../discourse/native-host-api.js';
@@ -36,6 +37,7 @@ export interface ReaderPostPresentationOptions {
 	readonly document: Document;
 	readonly presentation: DiscourseNativeTopicPresentationPort;
 	readonly relativeTime: DiscourseNativeRelativeTimeFormatter;
+	readonly exactTime: DiscourseNativeExactTimeFormatter;
 	readonly readTopic: () => unknown;
 	readonly currentUsername?: string;
 	readonly renderIcon?: (name: string, document: Document) => Node | null;
@@ -436,6 +438,8 @@ export function createReaderPostPresentation<
 			if (relative) {
 				const time = options.document.createElement('span');
 				time.className = 'ldp-time';
+				const exact = options.exactTime(createdAt);
+				if (exact) time.dataset.exactTime = exact;
 				const label = options.document.createElement('span');
 				label.className = 'ldp-time-relative';
 				label.textContent = `· ${relative}`;
