@@ -4,7 +4,11 @@ import {
 	type ResponseCacheInvalidation,
 	type ResponseCacheStore,
 } from '../src/cache/response-repository.js';
-import { TopicSnapshotRepository } from '../src/cache/topic-snapshot-repository.js';
+import {
+	TopicSnapshotRepository,
+	type StoredTopicSnapshot,
+} from '../src/cache/topic-snapshot-repository.js';
+import { discoursePostIds } from '../src/discourse/identifiers.js';
 import { ReplyTreeRepository } from '../src/dom/reply-tree-repository.js';
 import {
 	TopicSession,
@@ -498,6 +502,120 @@ assert(
 	'fresh 完整快照重复打开不得后台请求 Topic JSON 或楼层',
 );
 freshSession.destroy();
+
+const repairStore = new MemoryStore();
+const repairSnapshot: StoredTopicSnapshot<TestTopic, TestPost> = {
+	schemaVersion: 2,
+	topicId: '10',
+	authScope: 'account:repair',
+	savedAt: now,
+	updatedAt: now,
+	expectedPostCount: 2,
+	topicObservedAt: now,
+	topicSource: 'topic-json',
+	topic: {
+		...topic,
+		posts_count: 2,
+		post_stream: {
+			stream: [101, 102],
+			posts: [root(101, 1)],
+		},
+	},
+	streamObservedAt: now,
+	streamPostIds: discoursePostIds([101, 102]),
+	posts: [
+		{
+			postNumber: 1,
+			observedAt: now,
+			source: 'topic-json',
+			value: root(101, 1),
+		},
+		{
+			postNumber: 2,
+			observedAt: now,
+			source: 'topic-json',
+			value: reply(102, 2, 1),
+		},
+	],
+	tree: {
+		schemaVersion: 2,
+		topicId: '10',
+		savedAt: now,
+		expectedPostCount: 2,
+		tree: {
+			revision: 1,
+			relations: [
+				{ postNumber: 1, parentPostNumber: null },
+				{ postNumber: 2, parentPostNumber: null },
+			],
+		},
+		versions: [
+			{ postNumber: 1, observedAt: now, source: 'topic-json' },
+			{ postNumber: 2, observedAt: now, source: 'topic-json' },
+		],
+	},
+};
+repairStore.entries.set('account:repair|snapshot:topic:10', {
+	schemaVersion: 1,
+	id: 'account:repair|snapshot:topic:10',
+	kind: 'topics',
+	tags: ['topic:10'],
+	storedAt: now,
+	expiresAt: now + 10_000,
+	bytes: 1_000,
+	value: repairSnapshot,
+});
+const repairResponses = new ResponseRepository({
+	store: repairStore,
+	maxMemoryEntries: 8,
+	maxMemoryBytes: 100_000,
+	now: () => now,
+});
+let invalidCachedTrees = 0;
+const repairSnapshots = new TopicSnapshotRepository<TestTopic, TestPost>({
+	responseRepository: repairResponses,
+	topicId: 10,
+	authScope: 'account:repair',
+	freshForMs: 1_000,
+	retainForMs: 10_000,
+	now: () => now,
+	onInvalidTreeSnapshot: () => {
+		invalidCachedTrees += 1;
+	},
+});
+const repairTrees = new ReplyTreeRepository(10, repairSnapshots.replyTreeSnapshotStore(), {
+	now: () => now,
+});
+const repairRequests = new FakeTopicRequests(topic);
+const repairSession = new TopicSession({
+	topicId: 10,
+	requests: repairRequests,
+	snapshots: repairSnapshots,
+	replies: repairTrees,
+	pageSize: 2,
+	refreshCachedInBackground: false,
+	now: () => now,
+	wait: async () => {},
+});
+await repairSession.init();
+assert(
+	repairSession.initializedFromCache &&
+		repairRequests.topicCalls === 0 &&
+		invalidCachedTrees === 1 &&
+		repairTrees.topology.parentOf(2) === 1,
+	'fresh 缓存的正文/树关系冲突必须丢弃坏树并从同一正文快照重建，不能依赖用户清缓存或额外网络请求',
+);
+await repairSession.flush();
+const healedRepairSnapshot = repairStore.entries.get(
+	'account:repair|snapshot:topic:10',
+)?.value as StoredTopicSnapshot<TestTopic, TestPost> | undefined;
+assert(
+	healedRepairSnapshot?.tree?.tree.relations.find(
+		(relation) => relation.postNumber === 2,
+	)?.parentPostNumber === 1,
+	'语义冲突缓存重建后必须持久化已修复的 canonical 父子关系',
+);
+repairSession.destroy();
 
 now += 1_001;
 const staleRequests = new FakeTopicRequests(topic);

@@ -15,14 +15,14 @@ const groupedPanelIds = READER_SETTINGS_GROUPS.flatMap(
 );
 assert(
 	READER_SETTINGS_GROUPS.length === 3 &&
-	READER_SETTINGS_PANELS.length === 16 &&
-	new Set(groupedPanelIds).size === 15 &&
+	READER_SETTINGS_PANELS.length === 17 &&
+	new Set(groupedPanelIds).size === 16 &&
 	!new Set<ReaderSettingsPanelId>(groupedPanelIds).has('user') &&
 	groupedPanelIds.join(',') === READER_SETTINGS_PANELS
 		.filter((panel) => panel.id !== 'user')
 		.map((panel) => panel.id)
 		.join(','),
-	'用户入口必须独立于三个设置分组，十五个设置页保持无重复稳定顺序',
+	'用户入口必须独立于三个设置分组，十六个设置页保持无重复稳定顺序',
 );
 assert(
 	READER_SETTINGS_PANELS.find((panel) => panel.id === 'logs')
@@ -82,7 +82,7 @@ assert(
 );
 controller.setQuery('');
 assert(
-	readSettingsSnapshot().visiblePanelIds.length === 16 &&
+	readSettingsSnapshot().visiblePanelIds.length === 17 &&
 	readSettingsSnapshot().activePanelId === 'image',
 	'清空搜索必须恢复完整目录和稳定首个设置面板',
 );

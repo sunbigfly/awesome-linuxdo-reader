@@ -12,6 +12,8 @@ export type RequestContractProfile =
 	| 'nested-visible'
 	| 'user-card-interactive'
 	| 'translation-visible'
+	| 'translation-access'
+	| 'translation-prefetch'
 	| 'notification-visible'
 	| 'collection-visible'
 	| 'resource-visible'
@@ -136,6 +138,26 @@ const PROFILES: Readonly<Record<RequestContractProfile, RequestProfileContract>>
 		defaultCacheMode: 'default',
 		allowedCacheModes: cacheModes('default', 'refresh'),
 		defaultTimeoutMs: 20_000,
+		max429Retries: 0,
+		maxChallengeRetries: 1,
+	}),
+	'translation-access': Object.freeze({
+		priority: 'interactive',
+		lifecycle: 'surface',
+		droppable: false,
+		defaultCacheMode: 'no-store',
+		allowedCacheModes: cacheModes('no-store'),
+		defaultTimeoutMs: 20_000,
+		max429Retries: 1,
+		maxChallengeRetries: 1,
+	}),
+	'translation-prefetch': Object.freeze({
+		priority: 'prefetch',
+		lifecycle: 'surface',
+		droppable: true,
+		defaultCacheMode: 'default',
+		allowedCacheModes: cacheModes('default', 'refresh'),
+		defaultTimeoutMs: 30_000,
 		max429Retries: 0,
 		maxChallengeRetries: 1,
 	}),

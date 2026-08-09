@@ -86,6 +86,10 @@
   contain: layout style;
 }
 
+.ldp-reply-list > .ldp-post.ldp-virtual-ancestor-shell {
+  padding-block: 0;
+}
+
 .ldp-reply-list > .ldp-post + .ldp-post {
   margin-top: 1px;
 }

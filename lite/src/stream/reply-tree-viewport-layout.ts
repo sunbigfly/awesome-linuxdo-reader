@@ -305,13 +305,153 @@ export class ReplyTreeViewportLayout {
 				),
 			}));
 		}
+		const rootVirtualInsets = this.#externalizeWindowEdgeSpacers(
+			rootWindow,
+			content,
+			shells,
+			ownSizes,
+			childLayouts,
+		);
 		return Object.freeze({
 			mountedPostNumbers: mounted,
 			contentPostNumbers: content,
 			shellPostNumbers: shells,
 			ownSizes,
+			rootVirtualInsets,
 			childLayouts,
 		});
+	}
+
+	/**
+	 * 窗口首尾之外的 DFS 高度属于流级占位，不应留在递归 replyList 内穿过视口。
+	 * 这里只改占位的归属；正文集合、祖先闭包和半屏物化分段均保持不变。
+	 */
+	#externalizeWindowEdgeSpacers(
+		rootWindow: VirtualRootWindow,
+		content: ReadonlySet<PostNumber>,
+		shells: ReadonlySet<PostNumber>,
+		ownSizes: Map<PostNumber, number>,
+		childLayouts: Map<PostNumber, Readonly<{
+			readonly postNumbers: readonly PostNumber[];
+			readonly beforeSizes: readonly number[];
+			readonly afterSize: number;
+		}>>,
+	): ReadonlyMap<PostNumber, Readonly<{
+		readonly beforeSize: number;
+		readonly afterSize: number;
+	}>> {
+		const firstRoot = rootWindow.postNumbers[0];
+		const lastRoot = rootWindow.postNumbers.at(-1);
+		const edgeRoots = new Set(
+			[firstRoot, lastRoot].filter(
+				(postNumber): postNumber is PostNumber => postNumber !== undefined,
+			),
+		);
+		const insets = new Map<PostNumber, Readonly<{
+			readonly beforeSize: number;
+			readonly afterSize: number;
+		}>>();
+		for (const rootPostNumber of edgeRoots) {
+			const branch = this.#branch(rootPostNumber);
+			let firstIndex = Number.POSITIVE_INFINITY;
+			let lastIndex = -1;
+			for (const postNumber of content) {
+				const index = branch.indexByPost.get(postNumber);
+				if (index === undefined) continue;
+				firstIndex = Math.min(firstIndex, index);
+				lastIndex = Math.max(lastIndex, index);
+			}
+			if (lastIndex < 0) continue;
+			const prefix = this.#branchPrefix(branch);
+			const beforeSize = rootPostNumber === firstRoot
+				? prefix[firstIndex] ?? 0
+				: 0;
+			const afterSize = rootPostNumber === lastRoot
+				? Math.max(
+					0,
+					(prefix.at(-1) ?? 0) - (prefix[lastIndex + 1] ?? 0),
+				)
+				: 0;
+			if (beforeSize > 0) {
+				this.#trimLeadingPath(
+					branch,
+					firstIndex,
+					shells,
+					ownSizes,
+					childLayouts,
+				);
+			}
+			if (afterSize > 0) {
+				this.#trimTrailingPath(branch, lastIndex, childLayouts);
+			}
+			if (beforeSize > 0 || afterSize > 0) {
+				insets.set(rootPostNumber, Object.freeze({ beforeSize, afterSize }));
+			}
+		}
+		return insets;
+	}
+
+	#trimLeadingPath(
+		branch: BranchProjection,
+		entryIndex: number,
+		shells: ReadonlySet<PostNumber>,
+		ownSizes: Map<PostNumber, number>,
+		childLayouts: Map<PostNumber, Readonly<{
+			readonly postNumbers: readonly PostNumber[];
+			readonly beforeSizes: readonly number[];
+			readonly afterSize: number;
+		}>>,
+	): void {
+		const path = this.#entryPath(branch, entryIndex);
+		for (let index = 0; index + 1 < path.length; index += 1) {
+			const parentPostNumber = path[index]!;
+			const childPostNumber = path[index + 1]!;
+			if (shells.has(parentPostNumber)) ownSizes.set(parentPostNumber, 0);
+			const layout = childLayouts.get(parentPostNumber);
+			const childIndex = layout?.postNumbers.indexOf(childPostNumber) ?? -1;
+			if (!layout || childIndex < 0 || layout.beforeSizes[childIndex] === 0) {
+				continue;
+			}
+			const beforeSizes = [...layout.beforeSizes];
+			beforeSizes[childIndex] = 0;
+			childLayouts.set(parentPostNumber, Object.freeze({
+				...layout,
+				beforeSizes: Object.freeze(beforeSizes),
+			}));
+		}
+	}
+
+	#trimTrailingPath(
+		branch: BranchProjection,
+		entryIndex: number,
+		childLayouts: Map<PostNumber, Readonly<{
+			readonly postNumbers: readonly PostNumber[];
+			readonly beforeSizes: readonly number[];
+			readonly afterSize: number;
+		}>>,
+	): void {
+		for (const postNumber of this.#entryPath(branch, entryIndex)) {
+			const layout = childLayouts.get(postNumber);
+			if (!layout || layout.afterSize === 0) continue;
+			childLayouts.set(postNumber, Object.freeze({
+				...layout,
+				afterSize: 0,
+			}));
+		}
+	}
+
+	#entryPath(branch: BranchProjection, entryIndex: number): readonly PostNumber[] {
+		const path: PostNumber[] = [];
+		let entry: BranchEntry | undefined = branch.entries[entryIndex];
+		while (entry) {
+			path.push(entry.postNumber);
+			if (entry.parentPostNumber === null) break;
+			const parentIndex = branch.indexByPost.get(entry.parentPostNumber);
+			entry = parentIndex === undefined
+				? undefined
+				: branch.entries[parentIndex];
+		}
+		return Object.freeze(path.reverse());
 	}
 
 	offsetOf(postNumber: PostNumber): number | undefined {

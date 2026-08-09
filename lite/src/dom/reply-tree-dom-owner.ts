@@ -14,6 +14,11 @@ export interface ReplyTreeDomMountPlan {
 	readonly contentPostNumbers: ReadonlySet<PostNumber>;
 	readonly shellPostNumbers: ReadonlySet<PostNumber>;
 	readonly ownSizes: ReadonlyMap<PostNumber, number>;
+	/** 窗口边缘子树占位已提升到根级 spacer，根实测时仍需补回。 */
+	readonly rootVirtualInsets?: ReadonlyMap<PostNumber, Readonly<{
+		readonly beforeSize: number;
+		readonly afterSize: number;
+	}>>;
 	readonly childLayouts: ReadonlyMap<PostNumber, Readonly<{
 		readonly postNumbers: readonly PostNumber[];
 		readonly beforeSizes: readonly number[];

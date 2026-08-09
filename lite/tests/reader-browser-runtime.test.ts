@@ -364,6 +364,7 @@ const nativeCalls: Array<{
 	readonly options: Readonly<Record<string, unknown>>;
 }> = [];
 let externalTranslationCalls = 0;
+const translationErrors: string[] = [];
 const subscriptions = new Map<string, (message: unknown) => void>();
 const appEventSubscriptions = new Map<
 	string,
@@ -674,6 +675,9 @@ const stage = createReaderBrowserRuntimeStage<TestPreferences, TestTopic, TestPo
 		translationView: {
 			startupDelayMs: 0,
 			delay: async () => {},
+			onError: (error) => translationErrors.push(
+				error instanceof Error ? error.message : String(error),
+			),
 		},
 		resources: {
 			http: {
@@ -1283,8 +1287,8 @@ assert(
 	shellRoot.querySelector('.ldp-translate-toggle') &&
 	shellRoot.querySelector('.ldp-translation-text')
 		?.textContent?.startsWith('运行时译文') &&
-	externalTranslationCalls === 1,
-	`翻译偏好必须挂入唯一 Shell 控件，并让首帧 PostView 经共享 request gateway 动态同步：${
+		externalTranslationCalls === 2,
+	`翻译偏好必须挂入唯一 Shell 控件，并让首帧 PostView 经独立翻译任务 owner 动态同步：${
 		activeRuntime.translationFeature?.controller.mode ?? 'missing'
 	}/${externalTranslationCalls}/${
 		shellRoot.querySelector('.ldp-translation-text')?.textContent ?? 'none'
@@ -1529,16 +1533,16 @@ assert(
 assert(
 	document.querySelector('[data-post-number="3"] .ldp-translation-text')
 		?.textContent?.startsWith('运行时译文') &&
-	Number(externalTranslationCalls) === 2,
+		Number(externalTranslationCalls) === 3,
 	`实时/Composer 新 PostView 必须自动进入同一个翻译 feature，不能依赖全局 Observer 或切帖重扫：${
 		externalTranslationCalls
-	}/${activeRuntime.translationFeature?.controller.snapshot().queued ?? -1}/${
+	}/${JSON.stringify(activeRuntime.translationFeature?.controller.snapshot())}/${
 		document.querySelector('[data-post-number="3"] .ldp-content')
 			?.textContent ?? 'missing'
 	}/${
 		document.querySelector('[data-post-number="3"] .ldp-translation-text')
 			?.textContent ?? 'none'
-	}`,
+	}/${translationErrors.join('|')}`,
 );
 assert(
 	document.querySelector('[data-post-number="3"] .ldp-replybtn') &&
@@ -1622,8 +1626,8 @@ assert(
 			new AbortController().signal,
 		)
 	)[0] === '运行时译文' &&
-	Number(externalTranslationCalls) === 3,
-	'翻译必须复用 application DataRuntime gateway，且不能混入 Discourse 原生端口',
+		Number(externalTranslationCalls) === 4,
+	'翻译必须使用 application 级独立后台任务 owner，且不能混入 Discourse 原生端口',
 );
 opened.value.topicContext.closeDiscussion();
 opened.value.topicLightbox?.close();

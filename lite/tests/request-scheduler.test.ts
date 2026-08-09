@@ -121,7 +121,7 @@ const standardSecond = deferred<void>();
 const laneStarts: string[] = [];
 const laneRequest = (
 	key: string,
-	lane: 'topic-batch' | 'nested-replies' | 'user-card' | 'standard',
+	lane: 'topic-batch' | 'nested-replies' | 'user-card' | 'translation' | 'standard',
 	priority: 'interactive' | 'nested' | 'visible' | 'background',
 	hold: Readonly<{ promise: Promise<void> }>,
 ) => laneScheduler.schedule({ key, lane, priority }, async () => {
@@ -182,6 +182,36 @@ topicBatchSecond.resolve();
 standardSecond.resolve();
 await Promise.all(lanePromises);
 laneScheduler.destroy();
+
+const translationScheduler = new RequestScheduler({
+	maxConcurrent: 6,
+	queueLimit: 8,
+	defaultTimeoutMs: 1000,
+});
+const translationHolds = Array.from({ length: 6 }, () => deferred<void>());
+let translationActive = 0;
+let translationMaxActive = 0;
+const translationRequests = translationHolds.map(
+	(hold, index) => translationScheduler.schedule({
+		key: `translation-${index}`,
+		lane: 'translation',
+		priority: 'visible',
+	}, async () => {
+		translationActive += 1;
+		translationMaxActive = Math.max(translationMaxActive, translationActive);
+		await hold.promise;
+		translationActive -= 1;
+	}),
+);
+await nextTask();
+assert(
+	translationMaxActive === 6 &&
+		translationScheduler.snapshot().activeByLane.translation === 6,
+	'翻译车道必须为五路预加载和一路滚动可见正文提供六个有界并发槽',
+);
+translationHolds.forEach((hold) => hold.resolve());
+await Promise.all(translationRequests);
+translationScheduler.destroy();
 
 const cancellationScheduler = new RequestScheduler({
 	maxConcurrent: 1,

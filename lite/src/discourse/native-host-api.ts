@@ -642,8 +642,8 @@ type BookmarkFormDataConstructor = new (bookmark: object) => object;
 function discourseNativeCurrentUser(host: DiscourseHostApiPort): unknown {
 	const serviceUser = host.lookup('service:current-user');
 	if (serviceUser) return serviceUser;
-	const userModule = objectRecord(host.lookupModule('discourse/models/user'));
-	for (const owner of [objectRecord(userModule?.default), userModule]) {
+	const userModule = valueRecord(host.lookupModule('discourse/models/user'));
+	for (const owner of [valueRecord(userModule?.default), userModule]) {
 		const current = owner?.current;
 		if (typeof current !== 'function') continue;
 		try {
@@ -661,8 +661,8 @@ export function discourseNativeCurrentUserBindingAvailable(
 ): boolean {
 	const currentUser = host.lookup('service:current-user');
 	if (currentUser !== null && currentUser !== undefined) return true;
-	const userModule = objectRecord(host.lookupModule('discourse/models/user'));
-	return [objectRecord(userModule?.default), userModule].some((owner) =>
+	const userModule = valueRecord(host.lookupModule('discourse/models/user'));
+	return [valueRecord(userModule?.default), userModule].some((owner) =>
 		typeof owner?.current === 'function');
 }
 

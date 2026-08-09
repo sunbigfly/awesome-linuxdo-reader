@@ -120,6 +120,17 @@ function sameTarget(
 	);
 }
 
+function readRecordKey(record: ReaderNotificationRecord): string | null {
+	if (record.sourceNotificationId === null || record.target === null) return null;
+	return [
+		record.sourceNotificationId,
+		record.group,
+		record.target.topicId,
+		record.target.postNumber,
+		record.actor.toLocaleLowerCase(),
+	].join(':');
+}
+
 /**
  * 通知/私信集合的 application 级唯一状态与命令 owner。
  *
@@ -147,6 +158,7 @@ export class ReaderNotificationController {
 	readonly #searchForms: ReaderSearchFormsPort;
 	readonly #onError: (cause: unknown) => void;
 	readonly #pages = new Map<string, CachedNotificationPage>();
+	readonly #readRecordKeys = new Set<string>();
 	readonly #groups: Record<ReaderNotificationMode, ReaderNotificationGroupKey> = {
 		notifications: 'all',
 		messages: 'inbox',
@@ -248,6 +260,7 @@ export class ReaderNotificationController {
 			this.#backgroundWarm = null;
 			this.#backgroundWarmEpoch += 1;
 			this.#pages.clear();
+			this.#readRecordKeys.clear();
 			this.changes.clear();
 		});
 		this.#scheduleBackgroundWarm();
@@ -305,6 +318,7 @@ export class ReaderNotificationController {
 		this.#backgroundWarmPending = false;
 		this.#nativeRefreshPending = false;
 		this.#pages.clear();
+		this.#readRecordKeys.clear();
 		this.#records = Object.freeze([]);
 		this.#total = 0;
 		this.#hasNext = false;
@@ -431,10 +445,22 @@ export class ReaderNotificationController {
 		) {
 			return;
 		}
-		await this.#actions.dispatch(this.#commands.markRead(
-			notificationId,
-			this.#descriptors.notificationMarkRead({ notificationId }),
-		));
+		const childScoped = this.#childReadSourceIds().has(notificationId);
+		if (childScoped) {
+			this.#setReadRecordState(record, true);
+			if (!this.#allSourceRecordsRead(notificationId)) return;
+		}
+		try {
+			await this.#actions.dispatch(this.#commands.markRead(
+				notificationId,
+				this.#descriptors.notificationMarkRead({ notificationId }),
+			));
+		} catch (cause) {
+			if (childScoped && !this.scope.destroyed) {
+				this.#setReadRecordState(record, false);
+			}
+			throw cause;
+		}
 	}
 
 	async openRecord(record: ReaderNotificationRecord): Promise<void> {
@@ -534,12 +560,13 @@ export class ReaderNotificationController {
 
 	#cachePage(page: ReaderNotificationPage): void {
 		const key = pageKey(page.group, page.page);
-		const inherited = page.group === 'all'
+		const nativeRecords = page.group === 'all'
+			? page.records
+			: this.#inheritNativeState(page.records);
+		const records = this.#inheritReadRecordState(nativeRecords);
+		const inherited = records === page.records
 			? page
-			: Object.freeze({
-				...page,
-				records: this.#inheritNativeState(page.records),
-			});
+			: Object.freeze({ ...page, records });
 		this.#pages.delete(key);
 		this.#pages.set(key, Object.freeze({
 			page: inherited,
@@ -552,6 +579,109 @@ export class ReaderNotificationController {
 		}
 	}
 
+	#rememberReadRecord(record: ReaderNotificationRecord): void {
+		const key = readRecordKey(record);
+		if (key === null) return;
+		this.#readRecordKeys.delete(key);
+		this.#readRecordKeys.add(key);
+		const maxRecords = Math.max(64, this.#maxCachedPages * 64);
+		while (this.#readRecordKeys.size > maxRecords) {
+			const oldest = this.#readRecordKeys.values().next().value;
+			if (oldest === undefined) break;
+			this.#readRecordKeys.delete(oldest);
+		}
+	}
+
+	#childReadSourceIds(
+		additionalRecords: readonly ReaderNotificationRecord[] = Object.freeze([]),
+	): ReadonlySet<number> {
+		const keys = new Map<number, Set<string>>();
+		const records = [
+			...[...this.#pages.values()].flatMap((entry) => entry.page.records),
+			...additionalRecords,
+		];
+		for (const record of records) {
+			const notificationId = record.sourceNotificationId;
+			const key = readRecordKey(record);
+			if (notificationId === null || key === null) continue;
+			const sourceKeys = keys.get(notificationId) ?? new Set<string>();
+			sourceKeys.add(key);
+			keys.set(notificationId, sourceKeys);
+		}
+		return new Set(
+			[...keys].filter(([, sourceKeys]) => sourceKeys.size > 1)
+				.map(([notificationId]) => notificationId),
+		);
+	}
+
+	#inheritReadRecordState(
+		records: readonly ReaderNotificationRecord[],
+	): readonly ReaderNotificationRecord[] {
+		let changed = false;
+		const childReadSources = this.#childReadSourceIds(records);
+		const inherited = records.map((record) => {
+			const key = readRecordKey(record);
+			if (record.read === true) {
+				this.#rememberReadRecord(record);
+				return record;
+			}
+			if (
+				record.sourceNotificationId === null ||
+				!childReadSources.has(record.sourceNotificationId) ||
+				key === null ||
+				!this.#readRecordKeys.has(key)
+			) return record;
+			changed = true;
+			return Object.freeze({
+				...record,
+				read: true,
+				stateLabel: '已读',
+			});
+		});
+		return changed ? Object.freeze(inherited) : records;
+	}
+
+	#setReadRecordState(
+		record: ReaderNotificationRecord,
+		read: boolean,
+	): void {
+		const targetKey = readRecordKey(record);
+		if (targetKey === null) return;
+		if (read) this.#rememberReadRecord(record);
+		else this.#readRecordKeys.delete(targetKey);
+		for (const [key, entry] of [...this.#pages]) {
+			let changed = false;
+			const records = Object.freeze(entry.page.records.map((candidate) => {
+				if (readRecordKey(candidate) !== targetKey) return candidate;
+				changed = true;
+				return Object.freeze({
+					...candidate,
+					read,
+					stateLabel: read ? '已读' : '未读',
+				});
+			}));
+			if (!changed) continue;
+			this.#pages.set(key, Object.freeze({
+				...entry,
+				page: Object.freeze({ ...entry.page, records }),
+			}));
+		}
+		this.#renderFromCache();
+	}
+
+	#allSourceRecordsRead(notificationId: number): boolean {
+		const states = new Map<string, boolean>();
+		for (const entry of this.#pages.values()) {
+			for (const record of entry.page.records) {
+				if (record.sourceNotificationId !== notificationId) continue;
+				const key = readRecordKey(record);
+				if (key === null) continue;
+				states.set(key, (states.get(key) ?? true) && record.read === true);
+			}
+		}
+		return states.size > 0 && [...states.values()].every(Boolean);
+	}
+
 	#inheritNativeState(
 		records: readonly ReaderNotificationRecord[],
 	): readonly ReaderNotificationRecord[] {
@@ -561,15 +691,23 @@ export class ReaderNotificationController {
 			.filter((record) => record.sourceNotificationId !== null);
 		if (!nativeRecords.length) return records;
 		return Object.freeze(records.map((record) => {
-			if (record.sourceNotificationId !== null) return record;
 			const candidates = nativeRecords.filter((native) =>
 				native.group === record.group &&
 				sameTarget(native, record));
 			const actor = record.actor.toLocaleLowerCase();
 			const match = candidates.find((native) =>
-				native.actor.toLocaleLowerCase() === actor) ??
-				(candidates.length === 1 ? candidates[0] : null);
-			if (!match) return record;
+				native.actor.toLocaleLowerCase() === actor) ?? null;
+			if (!match) {
+				if (record.sourceNotificationId === null) return record;
+				return Object.freeze({
+					...record,
+					sourceNotificationId: null,
+					notificationTypeId: null,
+					highPriority: false,
+					read: null,
+					stateLabel: '',
+				});
+			}
 			return Object.freeze({
 				...record,
 				sourceNotificationId: match.sourceNotificationId,
@@ -586,7 +724,9 @@ export class ReaderNotificationController {
 	#inheritAllSyntheticPages(): void {
 		for (const [key, entry] of [...this.#pages]) {
 			if (key.startsWith('all:')) continue;
-			const records = this.#inheritNativeState(entry.page.records);
+			const records = this.#inheritReadRecordState(
+				this.#inheritNativeState(entry.page.records),
+			);
 			if (records === entry.page.records) continue;
 			this.#pages.set(key, Object.freeze({
 				...entry,
@@ -655,14 +795,15 @@ export class ReaderNotificationController {
 
 	#commitAllRead(): void {
 		for (const [key, entry] of [...this.#pages]) {
-			const records = Object.freeze(entry.page.records.map((record) =>
-				record.sourceNotificationId === null
-					? record
-					: Object.freeze({
-						...record,
-						read: true,
-						stateLabel: '已读',
-					})));
+			const records = Object.freeze(entry.page.records.map((record) => {
+				if (record.sourceNotificationId === null) return record;
+				this.#rememberReadRecord(record);
+				return Object.freeze({
+					...record,
+					read: true,
+					stateLabel: '已读',
+				});
+			}));
 			this.#pages.set(key, Object.freeze({
 				...entry,
 				page: Object.freeze({ ...entry.page, records }),
@@ -683,6 +824,7 @@ export class ReaderNotificationController {
 			const records = Object.freeze(entry.page.records.map((record) => {
 				if (record.sourceNotificationId !== notificationId) return record;
 				changed = true;
+				this.#rememberReadRecord(record);
 				return Object.freeze({
 					...record,
 					read: true,

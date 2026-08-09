@@ -14,6 +14,8 @@ import {
 import {
 	READER_NOTIFICATION_GROUP_ORDER,
 	READER_NOTIFICATION_GROUPS,
+	normalizeNativeNotification,
+	normalizeUserActionNotification,
 	type ReaderNotificationGroupKey,
 	type ReaderNotificationPresentedRecord,
 } from '../src/notification/reader-notification-model.js';
@@ -99,8 +101,10 @@ class FakeNotificationNative implements ReaderNotificationNativeStatePort {
 	}
 }
 
+let consolidatedReplyCount = 2;
+
 function payloadFor(path: string): unknown {
-	if (path.startsWith('/t/42.json?post_number=3')) {
+	if (path.startsWith('/t/42.json?post_number=')) {
 		return {
 			post_stream: {
 				posts: [{
@@ -117,7 +121,21 @@ function payloadFor(path: string): unknown {
 					username: 'alice',
 					avatar_template: '/u/alice/{size}.png',
 					created_at: '2026-07-30T01:00:00.000Z',
-				}],
+				}, ...(consolidatedReplyCount > 2 ? [{
+					id: 301,
+					post_number: 4,
+					reply_to_post_number: 1,
+					username: 'carol',
+					avatar_template: '/u/carol/{size}.png',
+					created_at: '2026-07-30T01:01:00.000Z',
+				}] : []), ...(consolidatedReplyCount > 3 ? [{
+					id: 302,
+					post_number: 5,
+					reply_to_post_number: 1,
+					username: 'dave',
+					avatar_template: '/u/dave/{size}.png',
+					created_at: '2026-07-30T01:02:00.000Z',
+				}] : [])],
 			},
 		};
 	}
@@ -129,11 +147,11 @@ function payloadFor(path: string): unknown {
 				read: false,
 				created_at: '2026-07-30T01:00:00.000Z',
 				topic_id: 42,
-				post_number: 3,
+				post_number: consolidatedReplyCount + 1,
 				data: {
 					display_username: 'alice',
 					topic_title: '测试主题',
-					consolidated_count: 2,
+					consolidated_count: consolidatedReplyCount,
 					reply_to_post_number: 1,
 				},
 			}],
@@ -563,6 +581,75 @@ assert(
 );
 rateLimitController.destroy();
 
+const consolidatedLike = normalizeNativeNotification({
+	id: 701,
+	notification_type: 5,
+	read: false,
+	created_at: '2026-07-30T02:00:00.000Z',
+}, {
+	actor: 'alice',
+	typeName: 'liked_consolidated',
+	typeLabel: '赞',
+	summary: '多人赞了你的帖子',
+	topicId: 42,
+	postNumber: 3,
+}, 'all');
+const likeActions = Object.freeze([
+	normalizeUserActionNotification({
+		action_type: 2,
+		post_id: 300,
+		acting_user_id: 9,
+		acting_username: 'alice',
+		created_at: '2026-07-30T02:00:00.000Z',
+		topic_id: 42,
+		post_number: 3,
+		title: '测试主题',
+	}, 'likes'),
+	normalizeUserActionNotification({
+		action_type: 2,
+		post_id: 300,
+		acting_user_id: 10,
+		acting_username: 'bob',
+		created_at: '2026-07-30T01:59:00.000Z',
+		topic_id: 42,
+		post_number: 3,
+		title: '测试主题',
+	}, 'likes'),
+]);
+const associationController = new ReaderNotificationController({
+	requests: {
+		authScope: requests.authScope,
+		async load(group: ReaderNotificationGroupKey, page: number) {
+			const records = group === 'all'
+				? Object.freeze([consolidatedLike])
+				: group === 'likes' ? likeActions : Object.freeze([]);
+			return {
+				group,
+				page,
+				records,
+				total: records.length,
+				hasNext: false,
+				nextCursor: null,
+			};
+		},
+	} as unknown as DiscourseNotificationRequestAdapter,
+	native,
+	actions,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+});
+await associationController.open();
+await associationController.selectGroup('likes');
+const linkedLikes = new Map(associationController.snapshot.records.map((record) => [
+	record.actor,
+	record.sourceNotificationId,
+]));
+assert(
+	linkedLikes.get('alice') === 701 && linkedLikes.get('bob') === null,
+	'聚合通知只能继承 actor 精确匹配的原生 ID，不能把单候选强套给其他子记录',
+);
+associationController.destroy();
+
 const invalidations: string[][] = [];
 const targets: Array<Readonly<Record<string, unknown>>> = [];
 let targetOpened = true;
@@ -685,14 +772,27 @@ assert(
 	'目标 Topic 或楼层未真正打开时必须保留消息面板和未读状态，不能把分派当成功',
 );
 targetOpened = true;
+const mutationsBeforeFirstChildRead = mutationDescriptors.length;
 await controller.markRecordRead(inheritedReply);
 assert(
-	mutationDescriptors.at(-1)?.operation === 'notification-mark-read' &&
-	native.readCommits === 1 &&
+	mutationDescriptors.length === mutationsBeforeFirstChildRead &&
+	Number(native.readCommits) === 0 &&
 	controller.snapshot.records[0]?.read === true &&
-	Number(controller.snapshot.unreadCount) === 1,
-	'单条已读必须走统一 action controller，并同步所有缓存副本与 current-user',
+	Number(controller.snapshot.unreadCount) === 2,
+	'合并通知的首个子记录只能更新子级状态，不能提前提交父通知',
 );
+await controller.selectGroup('all');
+await controller.markRecordRead(
+	controller.snapshot.records.find((record) => record.target?.postNumber === 2)!,
+);
+assert(
+	mutationDescriptors.at(-1)?.operation === 'notification-mark-read' &&
+	Number(native.readCommits) === 1 &&
+	controller.snapshot.records.every((record) => record.read === true) &&
+	Number(controller.snapshot.unreadCount) === 1,
+	'最后一个未读子记录完成后才可提交父通知并同步 current-user',
+);
+await controller.selectGroup('replies');
 await controller.openRecord(controller.snapshot.records[0]!);
 assert(
 	targets.at(-1)?.topicId === 42 &&
@@ -703,6 +803,7 @@ assert(
 );
 
 await controller.open();
+consolidatedReplyCount = 4;
 native.unread = 3;
 native.emitChanged();
 await flushMicrotasks();
@@ -715,6 +816,33 @@ assert(
 for (const callback of [...scheduled.values()]) callback();
 scheduled.clear();
 await flushMicrotasks();
+await controller.selectGroup('all');
+const refreshedReplies = new Map(controller.snapshot.records.map((record) => [
+	record.target?.postNumber ?? 0,
+	record.read,
+]));
+assert(
+	refreshedReplies.size === 4 &&
+	refreshedReplies.get(2) === true &&
+	refreshedReplies.get(3) === true &&
+	refreshedReplies.get(4) === false &&
+	refreshedReplies.get(5) === false,
+	'同一合并通知收到新回复后，旧拆分条目必须保持已读且新条目保持未读',
+);
+const mutationsBeforePartialRead = mutationDescriptors.length;
+await controller.markRecordRead(
+	controller.snapshot.records.find((record) => record.target?.postNumber === 4)!,
+);
+const partiallyReadReplies = new Map(controller.snapshot.records.map((record) => [
+	record.target?.postNumber ?? 0,
+	record.read,
+]));
+assert(
+	mutationDescriptors.length === mutationsBeforePartialRead &&
+	partiallyReadReplies.get(4) === true &&
+	partiallyReadReplies.get(5) === false,
+	'同一父通知的多个未读子记录必须逐条已读，最后一条之前不得提前提交父通知',
+);
 
 const { document: parsedDocument } = parseHTML(
 	'<!doctype html><html><body></body></html>',

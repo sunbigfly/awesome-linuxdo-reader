@@ -353,6 +353,12 @@ import {
 	type ReaderReadingSettingsPreferencesAdapter,
 } from '../settings/reader-reading-settings-form.js';
 import {
+	ReaderTranslationSettingsForm,
+} from '../settings/reader-translation-settings-form.js';
+import type {
+	ReaderTranslationConfigRepository,
+} from '../translation/reader-translation-config.js';
+import {
 	ReaderAppearanceSettingsForm,
 } from '../settings/reader-appearance-settings-form.js';
 import {
@@ -986,6 +992,11 @@ export interface ReaderBrowserRuntimeStageOptions<
 		readonly readingForm?:
 			| false
 			| ReaderReadingSettingsPreferencesAdapter<TPreferences>;
+		readonly translationForm?:
+			| false
+			| Readonly<{
+				readonly repository: ReaderTranslationConfigRepository;
+			}>;
 		readonly interactionForm?:
 			| false
 			| Readonly<{
@@ -2086,6 +2097,7 @@ export class ReaderBrowserRuntime<
 					gateway: this.data.gateway,
 				})
 				: null;
+			this.scope.add(() => this.translationRequests?.destroy());
 			if (options.translationView === false) {
 				this.translationFeature = null;
 			} else if (!this.translationRequests) {
@@ -3146,7 +3158,7 @@ export class ReaderBrowserRuntime<
 									this.translationFeature?.syncPost(
 										view.slots.root,
 									);
-									notifyTopicLayoutChanged();
+								notifyTopicLayoutChanged();
 								},
 								parentScope: context.scope,
 							onError: (cause) => reportTopicFeature(
@@ -3415,6 +3427,50 @@ export class ReaderBrowserRuntime<
 								'Topic context surface 装配时 presentation 尚未就绪',
 							);
 						}
+						const translationGeneration =
+							this.translationFeature?.activateTopic(context.topicId);
+						context.scope.add(() =>
+							this.translationFeature?.deactivateTopic(
+								context.topicId,
+								translationGeneration,
+							));
+						let translationWindowPostNumbers = new Set<number>();
+						const updateTranslationWindow = (): void => {
+							const posts = [...translationWindowPostNumbers]
+								.map((postNumber) =>
+									value.services.session.postByNumber(postNumber))
+								.filter((post): post is TPost => post !== undefined);
+							this.translationFeature?.updatePreloadWindow(
+								context.topicId,
+								posts,
+								translationGeneration,
+							);
+						};
+						value.dom.windowChanges.subscribe((commit) => {
+							translationWindowPostNumbers = new Set([
+								...commit.tree.mountedRoots,
+								...commit.tree.mountedReplies,
+							]);
+							updateTranslationWindow();
+							this.translationFeature?.syncMountedPosts();
+						}, context.scope);
+						value.services.session.changes.subscribe((commit) => {
+							let changedWindow = false;
+							for (const postNumber of commit.changedPostNumbers) {
+								const post = value.services.session.postByNumber(postNumber);
+								const parentPostNumber = tryDiscoursePostNumber(
+									post?.reply_to_post_number,
+								);
+								if (
+									!translationWindowPostNumbers.has(postNumber) &&
+									(parentPostNumber === null ||
+										!translationWindowPostNumbers.has(parentPostNumber))
+								) continue;
+								translationWindowPostNumbers.add(postNumber);
+								changedWindow = true;
+							}
+							if (changedWindow) updateTranslationWindow();
+						}, context.scope);
 							const navigation = new ReaderTopicNavigationController<TPost>({
 							session: value.services.session,
 							dom: value.dom,
@@ -5917,6 +5973,24 @@ export function createReaderBrowserRuntimeStage<
 					parentScope: runtime.scope,
 				});
 			}
+			const translationFormOptions = options.settings
+				? options.settings.translationForm
+				: undefined;
+			if (translationFormOptions && (!settingsView || !runtime.translationRequests)) {
+				runtime.destroy();
+				throw new Error(
+					'翻译设置 form 需要启用 Settings View 与 TranslationRequestAdapter',
+				);
+			}
+			if (settingsView && translationFormOptions && runtime.translationRequests) {
+				new ReaderTranslationSettingsForm({
+					document: options.runtime.document,
+					host: settingsView.panelHost('translation'),
+					repository: translationFormOptions.repository,
+					access: runtime.translationRequests,
+					parentScope: runtime.scope,
+				});
+			}
 			const interactionFormOptions = options.settings
 				? options.settings.interactionForm
 				: undefined;
@@ -6627,6 +6701,9 @@ export function createReaderBrowserRuntimeStage<
 			const webDavOptions = options.settings
 				? options.settings.webDav
 				: undefined;
+			const translationOptions = options.settings
+				? options.settings.translationForm
+				: undefined;
 			if (webDavOptions && !settingsView) {
 				runtime.destroy();
 				throw new Error('WebDAV 设置需要启用唯一 Settings View');
@@ -6648,6 +6725,15 @@ export function createReaderBrowserRuntimeStage<
 						topicContext: runtime.threadContextState,
 						customSites: webDavOptions.customSites,
 						connectHistory: runtime.connectHistory,
+						translation: translationOptions
+							? translationOptions.repository
+							: null,
+						translationCache: options.runtime.translation
+							? {
+								responses: runtime.data.responses,
+								cache: options.runtime.translation.translationCache,
+							}
+							: null,
 					}),
 					hostname: () => options.runtime.document.location.hostname,
 					username: () => discourseNativeCurrentUsername(
@@ -6659,6 +6745,13 @@ export function createReaderBrowserRuntimeStage<
 					host: settingsView.panelHost('sync'),
 					repository: webDavOptions.repository,
 					coordinator,
+					...(discourseNativeCurrentUsername(options.runtime.host)
+						? {}
+						: {
+							unavailableReason:
+								'当前未登录 Discourse，WebDAV 同步不可用。' +
+								'请先登录并刷新页面。',
+						}),
 					parentScope: runtime.scope,
 				});
 				new ReaderWebDavAutoSync({

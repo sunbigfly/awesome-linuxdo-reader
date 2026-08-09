@@ -275,10 +275,10 @@ assert(
 clock += 16;
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 flushPendingFrame();
-assert(
-	adapter.lastUserScrollAt() === 284,
-	'scrollend 后孤立的布局 scroll 不得延长已经结束的用户会话',
-);
+	assert(
+		adapter.lastUserScrollAt() === 284 && userScrollIntents === 1,
+		'scrollend 后由停稳锁自身写入的 scroll 不得延长或重启用户会话',
+	);
 observerCallback.value?.([{
 	target: scrollRoot,
 	blockSize: 420,
@@ -450,11 +450,24 @@ scrollRoot.scrollTop = 340;
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('wheel'));
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scrollend'));
-stopUserScrollIntents();
 assert(
 	scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
 	'销毁回归必须先留下一个活动的停稳视野锁',
 );
+const scrollOnlyIntentsBefore = userScrollIntents;
+scrollRoot.scrollTop = 360;
+scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
+assert(
+	!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		userScrollIntents === scrollOnlyIntentsBefore + 1,
+	'原生 scrollbar 的 scroll-only 输入必须取得用户滚动所有权并同步释放停稳锁',
+);
+scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scrollend'));
+assert(
+	scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
+	'scroll-only 用户会话结束后必须在新位置重新建立停稳锚点',
+);
+stopUserScrollIntents();
 adapter.destroy();
 assert(
 	adapter.scope.destroyed &&

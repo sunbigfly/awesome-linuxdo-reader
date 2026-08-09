@@ -25,6 +25,7 @@ export interface ReaderWebDavSettingsFormOptions {
 	readonly host: HTMLElement;
 	readonly repository: ReaderWebDavConfigRepository;
 	readonly coordinator: ReaderWebDavCoordinator;
+	readonly unavailableReason?: string;
 	readonly parentScope?: LifecycleScope;
 }
 
@@ -63,12 +64,17 @@ export class ReaderWebDavSettingsForm {
 	readonly #test: HTMLButtonElement;
 	readonly #sync: HTMLButtonElement;
 	readonly #status: HTMLElement;
+	readonly #controls: readonly (
+		HTMLInputElement | HTMLSelectElement | HTMLButtonElement
+	)[];
+	readonly #unavailableReason: string;
 	#operation: AbortController | null = null;
 
 	constructor(options: ReaderWebDavSettingsFormOptions) {
 		this.#host = options.host;
 		this.#repository = options.repository;
 		this.#coordinator = options.coordinator;
+		this.#unavailableReason = options.unavailableReason?.trim() ?? '';
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		const root = element(
 			options.document,
@@ -78,7 +84,7 @@ export class ReaderWebDavSettingsForm {
 		const connection = settingsSection(
 			options.document,
 			'连接与文件',
-			'兼容坚果云等标准 WebDAV；坚果云请使用应用密码。凭据仅保存在脚本专属存储，不写入远端文件。',
+			'兼容坚果云等标准 WebDAV；坚果云请使用应用密码。WebDAV 连接凭据仅保存在脚本专属存储，不写入远端文件。',
 			true,
 		);
 		const endpoint = field(
@@ -111,7 +117,7 @@ export class ReaderWebDavSettingsForm {
 		const content = settingsSection(
 			options.document,
 			'选择同步内容',
-			'每类独立开关；关闭的类别不会上传、下载或删除。正文、图片、附件与页面缓存永不上传。',
+			'每类独立开关；关闭的类别不会上传、下载或删除。帖子原文、图片、附件与普通页面缓存不上传；译文只在单独勾选后同步。',
 			true,
 		);
 		const categoryList = element(
@@ -194,6 +200,15 @@ export class ReaderWebDavSettingsForm {
 		this.#status.role = 'status';
 		this.#status.setAttribute('aria-live', 'polite');
 		root.append(connection, content, automatic, actions, this.#status);
+		this.#controls = Object.freeze([
+			...root.querySelectorAll<
+				HTMLInputElement | HTMLSelectElement | HTMLButtonElement
+			>('input, select, button'),
+		]);
+		this.#syncIntervalState();
+		if (this.#unavailableReason) {
+			this.#renderStatus('error', this.#unavailableReason);
+		}
 		this.#host.replaceChildren(root);
 
 		this.scope.listen(this.#autoSync, 'change', () => this.#syncIntervalState());
@@ -201,7 +216,10 @@ export class ReaderWebDavSettingsForm {
 		this.scope.listen(this.#test, 'click', () => void this.#run('test'));
 		this.scope.listen(this.#sync, 'click', () => void this.#run('sync'));
 		this.#repository.changes.subscribe((snapshot) => {
-			this.#renderStatus(snapshot.status.kind, snapshot.status.message);
+			this.#renderStatus(
+				this.#unavailableReason ? 'error' : snapshot.status.kind,
+				this.#unavailableReason || snapshot.status.message,
+			);
 		}, this.scope);
 		this.scope.add(() => {
 			this.#operation?.abort(new Error('WebDAV 设置已关闭'));
@@ -223,6 +241,8 @@ export class ReaderWebDavSettingsForm {
 			'topic-context': '最近阅读位置、讨论窗口锚点和全屏窗口几何。',
 			'custom-sites': '用户添加的其他 HTTPS Discourse 站点。',
 			'connect-history': '本机观察的 Connect 指标历史与服务器确认已读指纹。',
+			translation: '可包含任意数量的 URL、模型、思考等级与 Prompt；只加密每个 URL 对应的 API Key。',
+			'translation-cache': '最近使用的已翻译正文 Section；普通同步并合并写回中央缓存，不包含原文。',
 		})[category];
 	}
 
@@ -246,12 +266,15 @@ export class ReaderWebDavSettingsForm {
 				this.#categories.get(category)!.checked = config.categories[category];
 			}
 			this.#syncIntervalState();
-			this.#renderStatus(snapshot.status.kind, snapshot.status.message ||
-				'填写连接信息后先测试连接，再执行合并同步。');
+			this.#renderStatus(
+				this.#unavailableReason ? 'error' : snapshot.status.kind,
+				this.#unavailableReason || snapshot.status.message ||
+					'填写连接信息后先测试连接，再执行合并同步。',
+			);
 		} catch (cause) {
-			this.#renderStatus('error', cause instanceof Error
-				? cause.message
-				: 'WebDAV 设置读取失败');
+			this.#renderStatus('error', this.#unavailableReason || (
+				cause instanceof Error ? cause.message : 'WebDAV 设置读取失败'
+			));
 		}
 	}
 
@@ -274,6 +297,10 @@ export class ReaderWebDavSettingsForm {
 	}
 
 	async #saveConfig(): Promise<boolean> {
+		if (this.#unavailableReason) {
+			this.#renderStatus('error', this.#unavailableReason);
+			return false;
+		}
 		const config = this.#draft();
 		const issues = validateReaderWebDavConfig(config, {
 			requireCredentials: config.autoSyncEnabled,
@@ -330,6 +357,10 @@ export class ReaderWebDavSettingsForm {
 	}
 
 	#syncIntervalState(): void {
+		if (this.#unavailableReason) {
+			for (const control of this.#controls) control.disabled = true;
+			return;
+		}
 		this.#interval.disabled = !this.#autoSync.checked;
 	}
 

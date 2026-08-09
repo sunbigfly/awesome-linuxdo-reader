@@ -211,6 +211,7 @@ const EMPTY_REQUEST_LANE_COUNTS: RequestSchedulerSnapshot['activeByLane'] =
 		'topic-batch': 0,
 		'nested-replies': 0,
 		'user-card': 0,
+		translation: 0,
 		standard: 0,
 	});
 

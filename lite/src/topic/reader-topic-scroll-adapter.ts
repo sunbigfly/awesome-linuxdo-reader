@@ -250,6 +250,7 @@ export class ReaderTopicScrollAdapter {
 	#lastUserScrollAt = 0;
 	#userScrollSessionActive = false;
 	#stationaryAnchor: StationaryViewportAnchor | null = null;
+	#stationaryScrollWriteOffset: number | null = null;
 	#stationaryMutationObserver: ReaderTopicMutationObserverPort | null = null;
 	#stationaryResizeObserver: ResizeObserver | null = null;
 
@@ -348,6 +349,7 @@ export class ReaderTopicScrollAdapter {
 			this.#scrollRoot,
 			'scroll',
 			() => {
+				this.#claimScrollOnlyUserInput();
 				this.#markUserScrollProgress();
 				/*
 				 * scroll 事件发生时上一虚拟帧可能刚改完 DOM；在这里同步读取
@@ -488,8 +490,9 @@ export class ReaderTopicScrollAdapter {
 				this.#pendingScrollOffset + delta,
 			);
 		}
-		this.#scrollRoot.scrollTop =
-			this.#pendingScrollOffset ?? this.#scrollOffset;
+		this.#writeScrollRootOffset(
+			this.#pendingScrollOffset ?? this.#scrollOffset,
+		);
 		this.#restoreStationaryViewport();
 	}
 
@@ -583,7 +586,7 @@ export class ReaderTopicScrollAdapter {
 		this.#scrollOffsetDirty = false;
 		this.#lastUserScrollAt = 0;
 		this.#userScrollSessionActive = false;
-		this.#scrollRoot.scrollTop = this.#scrollOffset;
+		this.#writeScrollRootOffset(this.#scrollOffset);
 	}
 
 	#focus(target: HTMLElement): void {
@@ -732,6 +735,7 @@ export class ReaderTopicScrollAdapter {
 
 	#releaseStationaryViewport(): void {
 		this.#stationaryAnchor = null;
+		this.#stationaryScrollWriteOffset = null;
 		this.#stationaryMutationObserver?.disconnect();
 		this.#stationaryResizeObserver?.disconnect();
 		this.#scrollRoot.classList.remove('ldp-stream-viewport-anchor');
@@ -776,7 +780,30 @@ export class ReaderTopicScrollAdapter {
 		this.#scrollOffset = nextOffset;
 		this.#pendingScrollOffset = nextOffset;
 		this.#scrollOffsetDirty = false;
-		this.#scrollRoot.scrollTop = nextOffset;
+		this.#writeScrollRootOffset(nextOffset);
+	}
+
+	#writeScrollRootOffset(offset: number): void {
+		if (this.#stationaryAnchor) this.#stationaryScrollWriteOffset = offset;
+		this.#scrollRoot.scrollTop = offset;
+	}
+
+	#claimScrollOnlyUserInput(): void {
+		if (!this.#stationaryAnchor || this.#userScrollSessionActive) return;
+		const actualOffset = finiteNonNegative(this.#scrollRoot.scrollTop);
+		const internalOffset = this.#stationaryScrollWriteOffset;
+		this.#stationaryScrollWriteOffset = null;
+		if (
+			internalOffset !== null &&
+			Math.abs(actualOffset - internalOffset) < 0.5
+		) return;
+		/*
+		 * 浮窗的原生 scrollbar 拖动只派发 scroll，不一定先派发
+		 * wheel/touch/key。停稳锁已关闭 Chromium overflow anchoring，因此此时
+		 * 任何未匹配内部写入的 scroll 都是新的外部滚动所有权；必须先解锁，
+		 * 否则 ResizeObserver 会把 thumb 拖动反向写回成来回跳动。
+		 */
+		this.#markUserScrollIntent();
 	}
 
 	#scheduleScrollCommit(): void {

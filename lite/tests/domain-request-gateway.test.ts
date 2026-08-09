@@ -244,9 +244,27 @@ await gateway.translate(translationInput);
 assert(
 	translationTransportCalls === 1 &&
 		client.calls.at(-1)?.priority === 'visible' &&
+		client.calls.at(-1)?.lane === 'translation' &&
 		client.calls.at(-1)?.key.includes('batch-a') &&
 		!client.calls.at(-1)?.key.includes('正文原文'),
-	'翻译必须复用中央 visible/cache/single-flight 链，且 key 只能保存指纹',
+	'翻译必须复用中央 visible/cache/single-flight 双路车道，且 key 只能保存指纹',
+);
+const sectionCache = {
+	provider: 'ai-section-v1',
+	textFingerprint: 'sha256:section-a',
+	sourceLanguage: 'auto',
+	targetLanguage: 'zh-CN',
+	cache: translationInput.cache,
+} as const;
+assert(
+	await gateway.cachedTranslation<string>(sectionCache) === null,
+	'未翻译的 section 不得伪造缓存命中',
+);
+await gateway.cacheTranslation(sectionCache, '单段译文');
+assert(
+	await gateway.cachedTranslation<string>(sectionCache) === '单段译文' &&
+	!client.calls.some((call) => call.key.includes('section-a')),
+	'section 缓存必须通过中央 ResponseRepository 直接读写，不得为命中项发起网络请求',
 );
 
 const aborted = new AbortController();

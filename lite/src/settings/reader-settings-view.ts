@@ -72,6 +72,7 @@ const panelIcons = Object.freeze<Record<ReaderSettingsPanelId, string>>({
 	appearance: 'palette',
 	flash: 'lightbulb',
 	reading: 'history',
+	translation: 'languages',
 	shortcuts: 'settings',
 	interaction: 'git-branch',
 	user: 'user-round',

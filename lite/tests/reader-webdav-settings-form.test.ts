@@ -54,12 +54,14 @@ const interval = host.querySelector<HTMLSelectElement>(
 	'.ldp-webdav-interval',
 )!;
 assert(
-	categorySwitches.length === 7 &&
+	categorySwitches.length === 9 &&
 	categorySwitches.filter((input) => input.checked).length === 3 &&
 	interval.disabled &&
-	host.textContent?.includes('正文、图片、附件与页面缓存永不上传') &&
+	host.textContent?.includes('译文只在单独勾选后同步') &&
+	host.textContent?.includes('AI 翻译服务集合（Key 加密）') &&
+	host.textContent?.includes('只加密每个 URL 对应的 API Key') &&
 	host.textContent?.includes('立即同步'),
-	`WebDAV 设置必须提供七类独立开关、默认关闭定时同步和明确不上载范围：` +
+	`WebDAV 设置必须提供九类独立开关、加密翻译设置与译文缓存、默认关闭定时同步：` +
 		`switches=${categorySwitches.length}, checked=${
 			categorySwitches.filter((input) => input.checked).length
 		}, intervalDisabled=${String(interval.disabled)}, text=${host.textContent}`,
@@ -102,3 +104,31 @@ assert(
 
 form.destroy();
 assert(!host.children.length, '销毁 WebDAV 表单必须清空唯一 DOM owner');
+
+const unavailableForm = new ReaderWebDavSettingsForm({
+	document,
+	host,
+	repository,
+	coordinator,
+	unavailableReason:
+		'当前未登录 Discourse，WebDAV 同步不可用。请先登录并刷新页面。',
+});
+await Promise.resolve();
+await Promise.resolve();
+await new Promise<void>((resolve) => setTimeout(resolve, 0));
+const unavailableControls = [...host.querySelectorAll<
+	HTMLInputElement | HTMLSelectElement | HTMLButtonElement
+>('input, select, button')];
+assert(
+	unavailableControls.length > 0 &&
+		unavailableControls.every((control) => control.disabled) &&
+	host.querySelector('.ldp-webdav-status')?.textContent?.includes(
+		'当前未登录 Discourse，WebDAV 同步不可用。请先登录并刷新页面。',
+	),
+	`未登录 Discourse 时必须禁用整个 WebDAV 表单并显示操作指引：controls=${
+		unavailableControls.length
+	}, enabled=${unavailableControls.filter((control) => !control.disabled).length}, ` +
+		`status=${host.querySelector('.ldp-webdav-status')?.textContent}`,
+);
+unavailableForm.destroy();
+assert(!host.children.length, '不可用 WebDAV 表单销毁后必须清空唯一 DOM owner');

@@ -1035,7 +1035,7 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   width: min(360px, calc(100vw - 24px));
   max-height: min(480px, calc(100vh - 24px));
   box-sizing: border-box;
-  overflow: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
   border: 1px solid var(--ldp-border);
   border-radius: 10px;
@@ -1087,7 +1087,8 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 .ldp-user-card-fallback.open {
-  display: block;
+  display: flex;
+  flex-direction: column;
 }
 
 .ldp-user-card-fallback.is-loading {
@@ -1219,13 +1220,13 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 .ldp-user-card-fallback:has(.ldp-user-card-badges) {
-  max-height: min(520px, calc(100vh - 24px));
+  max-height: calc(100vh - 20px);
 }
 
 .ldp-user-card-background {
   display: block;
   width: calc(100% + 24px);
-  height: 120px;
+  height: clamp(72px, 15vh, 120px);
   margin: -12px -12px 12px;
   overflow: hidden;
   padding: 0;
@@ -1247,6 +1248,10 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   margin-top: 0;
   padding: 0 44px 0 0;
   background: none;
+}
+
+.ldp-user-card-fallback.open > :not(.ldp-user-card-bio) {
+  flex: none;
 }
 
 .ldp-user-card-avatar-trigger {
@@ -1381,10 +1386,14 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 .ldp-user-card-bio {
+  min-height: 36px;
+  flex: 1 1 auto;
   max-height: 96px;
   margin: 8px 0;
   padding: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   color: var(--ldp-ink-muted);
   font-size: var(--ldp-font-ui);
   line-height: 1.5;
@@ -1934,6 +1943,30 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 
 .ldp-user-card-action-status:not(:empty) {
   margin-top: 7px;
+}
+
+@media (max-height: 620px) {
+  .ldp-user-card-bio {
+    max-height: 72px;
+  }
+
+  .ldp-user-profile-facts.is-card {
+    margin-bottom: 4px;
+  }
+
+  .ldp-user-card-groups,
+  .ldp-user-card-follow-stats,
+  .ldp-user-card-badges {
+    margin-block: 3px;
+  }
+
+  .ldp-user-card-stats {
+    margin-block: 5px;
+  }
+
+  .ldp-user-card-actions {
+    margin: 5px 0 3px;
+  }
 }
 
 .ldp-action-surface {

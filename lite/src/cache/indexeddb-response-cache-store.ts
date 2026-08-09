@@ -218,6 +218,19 @@ export class IndexedDbResponseCacheStore implements ResponseCacheStore {
 	}
 
 	async records(): Promise<readonly ResponseCacheRecord[]> {
+		const entries = await this.snapshotEntries();
+		return Object.freeze(entries.map((entry) =>
+			Object.freeze({
+				id: entry.id,
+				kind: entry.kind,
+				tags: Object.freeze([...entry.tags]),
+				storedAt: entry.storedAt,
+				expiresAt: entry.expiresAt,
+				bytes: Math.max(0, Number(entry.bytes) || 0),
+			})));
+	}
+
+	async snapshotEntries(): Promise<readonly ResponseCacheEntry[]> {
 		const result = await this.#transaction<ResponseCacheEntry[]>(
 			'readonly',
 			[],
@@ -235,15 +248,10 @@ export class IndexedDbResponseCacheStore implements ResponseCacheStore {
 			this.#report(error);
 			throw error;
 		}
-		return Object.freeze(result.value.map((entry) =>
-			Object.freeze({
-				id: entry.id,
-				kind: entry.kind,
-				tags: Object.freeze([...entry.tags]),
-				storedAt: entry.storedAt,
-				expiresAt: entry.expiresAt,
-				bytes: Math.max(0, Number(entry.bytes) || 0),
-			})));
+		return Object.freeze(result.value.map((entry) => Object.freeze({
+			...entry,
+			tags: Object.freeze([...entry.tags]),
+		})));
 	}
 
 	async prune(forceQuotaRecovery = false): Promise<void> {

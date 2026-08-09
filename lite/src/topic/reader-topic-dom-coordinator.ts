@@ -233,6 +233,10 @@ export class ReaderTopicDomCoordinator<
 		replyTree?: number;
 	}>();
 	readonly #pendingOwnSizePostNumbers = new Set<PostNumber>();
+	#rootVirtualInsets: ReadonlyMap<PostNumber, Readonly<{
+		readonly beforeSize: number;
+		readonly afterSize: number;
+	}>> = new Map();
 	#mountedPostNumbers: ReadonlySet<PostNumber> = new Set();
 	#activeContentPostNumbers: ReadonlySet<PostNumber> = new Set();
 	#nextContentPostNumbers: ReadonlySet<PostNumber> = new Set();
@@ -358,11 +362,17 @@ export class ReaderTopicDomCoordinator<
 			shouldApplyScrollCompensation: () => false,
 			shouldDeferMeasurements: () => false,
 			resolveRootBlockSize: (target, observedBlockSize) => {
+				const postNumber = Number(target.getAttribute('data-post-number'));
+				const inset = Number.isSafeInteger(postNumber)
+					? this.#rootVirtualInsets.get(postNumber)
+					: undefined;
+				const virtualBlockSize = observedBlockSize +
+					(inset?.beforeSize ?? 0) + (inset?.afterSize ?? 0);
 				const marker = target.nextElementSibling as HTMLElement | null;
 				return marker?.nodeType === 1 &&
 					marker.classList.contains('ldp-hidden-reply-marker')
-					? observedBlockSize + HIDDEN_REPLY_MARKER_BLOCK_SIZE
-					: observedBlockSize;
+					? virtualBlockSize + HIDDEN_REPLY_MARKER_BLOCK_SIZE
+					: virtualBlockSize;
 			},
 			onCommit: (commit) => {
 				for (const error of this.windowChanges.emit(commit)) {
@@ -909,6 +919,7 @@ export class ReaderTopicDomCoordinator<
 				plan = this.#treeViewport.plan(window, input);
 			}
 		}
+		this.#rootVirtualInsets = plan.rootVirtualInsets ?? new Map();
 		this.#mountedPostNumbers = plan.mountedPostNumbers;
 		this.#nextContentPostNumbers = plan.contentPostNumbers;
 		for (const postNumber of plan.mountedPostNumbers) {

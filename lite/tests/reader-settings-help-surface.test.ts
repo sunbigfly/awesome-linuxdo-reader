@@ -101,6 +101,20 @@ assert(
 	help.tooltip.style.top === '98px',
 	'Hover 必须找到整行帮助目标、建立 ARIA 并按主线优先上方/不足时下翻定位',
 );
+automatic.querySelector('input')!.dispatchEvent(
+	new window.Event('pointerdown', { bubbles: true }),
+);
+assert(
+	help.tooltip.hidden && !automatic.hasAttribute('aria-describedby'),
+	'开始操作字段时必须立即收起帮助，不能遮挡原生下拉或其他交互层',
+);
+automatic.querySelector('input')!.dispatchEvent(
+	new window.Event('focusin', { bubbles: true }),
+);
+assert(
+	help.tooltip.hidden && !automatic.hasAttribute('aria-describedby'),
+	'Pointer 操作触发的 focusin 必须持续受抑制，不能在原生下拉打开前回弹',
+);
 point(explicit, 'pointerover', automatic.querySelector('input'));
 assert(
 	String(help.tooltip.textContent) === '明确帮助文本' &&
@@ -124,6 +138,13 @@ assert(
 	String(help.tooltip.style.top) === '432px',
 	'键盘 focus 必须与 Hover 共用同一帮助 DOM，并在右边界内回夹',
 );
+explicit.dispatchEvent(new window.Event('keydown', { bubbles: true }));
+assert(
+	help.tooltip.hidden && !explicit.hasAttribute('aria-describedby'),
+	'键盘开始操作字段时也必须收起帮助，不能遮挡展开内容',
+);
+point(explicit, 'pointerout', null);
+explicit.dispatchEvent(new window.Event('focusin', { bubbles: true }));
 const portalHost = document.createElement('div');
 Object.defineProperty(portalHost, 'shadowRoot', {
 	value: { activeElement: explicit },

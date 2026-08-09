@@ -1349,6 +1349,16 @@ export class TopicSession<
 		]);
 		this.#restoreIndexes();
 		const snapshot = this.#snapshots.snapshot();
+		this.#replies.setExpectedPostCount(snapshot.expectedPostCount);
+		const cachedPosts = this.#snapshots.posts();
+		if (this.#replies.coverage().knownPostCount < cachedPosts.length) {
+			const repairedTree = this.#replies.ingest(
+				cachedPosts,
+				'loader-batch',
+				{ observedAt: snapshot.updatedAt },
+			);
+			for (const error of repairedTree.listenerErrors) this.#onError(error);
+		}
 		const restoredStreamCount = this.#streamPostIds.reduce(
 			(count, postId) => count + (this.#postById.has(postId) ? 1 : 0),
 			0,

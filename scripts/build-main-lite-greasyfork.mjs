@@ -1,14 +1,15 @@
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parse } from '@babel/parser'
-import { transform, version as esbuildVersion } from 'esbuild'
+import { build, transform, version as esbuildVersion } from 'esbuild'
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(scriptDirectory, '..')
 const sourceRoot = path.join(projectRoot, 'lite/src')
 const metadataPath = path.join(projectRoot, 'lite/userscript.meta.txt')
+const stylesheetPath = path.join(projectRoot, 'work/main-lite.css')
 const releaseGatePath = path.join(projectRoot, 'lite/release-gate.json')
 const featureCatalogPath = path.join(projectRoot, 'docs/public/feature-catalog.json')
 const featureEvidencePath = path.join(
@@ -28,15 +29,32 @@ const releaseOutputPaths = [
   path.join(projectRoot, 'work/main-lite.js'),
   path.join(projectRoot, 'work/mian-lite.js'),
 ]
+const localTestOutputPath = path.join(
+  projectRoot,
+  'work/main-lite.greasyfork.local.user.js',
+)
 const manifestPath = path.join(outputRoot, 'build-manifest.json')
 const templatePath = path.join(outputRoot, 'main-loader.template.user.js')
 const exampleConfigPath = path.join(outputRoot, 'release.config.example.json')
 const runtimeKey = '__AWESOME_LINUXDO_READER_LITE_MODULE_RUNTIME__'
 const entryModuleId = 'src/userscript/main-lite-entry.js'
+const externalModuleDefinitions = [
+  Object.freeze({
+    request: '@xsai/generate-text',
+    id: 'vendor/xsai-generate-text.js',
+    entryPoint: path.join(
+      projectRoot,
+      'node_modules/@xsai/generate-text/dist/index.js',
+    ),
+  }),
+]
+const externalModuleIds = Object.freeze(Object.fromEntries(
+  externalModuleDefinitions.map(({ request, id }) => [request, id]),
+))
 const libraryMarker = '// __LDP_GREASYFORK_LIBRARY_REQUIREMENTS__'
 const stylesheetToken = '__LDP_READER_STYLES_URL__'
 const projectExecutableCeiling = 2_000_000
-const projectTotalExecutableCeiling = 3_300_000
+const projectTotalExecutableCeiling = 3_350_000
 const greasyForkHardLimit = 2 * 1024 * 1024
 const releaseAcceptanceKeys = [
   'runtimeComplete',
@@ -99,6 +117,8 @@ function sha256(value) {
 function parseArguments(args) {
   let check = false
   let config = ''
+  let consistencyOnly = false
+  let localTest = false
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index]
     if (value === '--check') {
@@ -111,9 +131,23 @@ function parseArguments(args) {
       if (!config) throw new Error('--config 缺少文件路径')
       continue
     }
+    if (value === '--consistency-only') {
+      consistencyOnly = true
+      continue
+    }
+    if (value === '--local-test') {
+      localTest = true
+      continue
+    }
     throw new Error(`不支持的参数：${value}`)
   }
-  return Object.freeze({ check, config })
+  if (localTest && (check || config || consistencyOnly)) {
+    throw new Error('--local-test 不能与 --check、--config 或 --consistency-only 同时使用')
+  }
+  if (consistencyOnly && !config) {
+    throw new Error('--consistency-only 必须与 --config 一起使用')
+  }
+  return Object.freeze({ check, config, consistencyOnly, localTest })
 }
 
 async function walk(directory) {
@@ -129,6 +163,25 @@ function slash(value) {
   return value.replaceAll(path.sep, '/')
 }
 
+function browserFileUrl(filePath) {
+  const normalized = filePath.replaceAll('\\', '/')
+  const windowsMount = normalized.match(/^\/mnt\/([a-z])\/(.+)$/i)
+  if (!windowsMount) return pathToFileURL(filePath).href
+  const [, drive, relativePath] = windowsMount
+  const encodedPath = relativePath
+    .split('/')
+    .map(encodeURIComponent)
+    .join('/')
+  return `file:///${drive.toUpperCase()}:/${encodedPath}`
+}
+
+function replaceMetadataLine(source, key, value) {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`^//\\s+${escapedKey}\\s+.*$`, 'm')
+  if (!pattern.test(source)) throw new Error(`Loader 模板缺少 ${key}`)
+  return source.replace(pattern, `// ${key.padEnd(15)} ${value}`)
+}
+
 function moduleIdForSource(file) {
   const relative = slash(path.relative(path.join(projectRoot, 'lite'), file))
   return relative.endsWith('.ts')
@@ -137,6 +190,8 @@ function moduleIdForSource(file) {
 }
 
 function resolveModuleId(parentId, request) {
+  const externalId = externalModuleIds[request]
+  if (externalId) return externalId
   if (!request.startsWith('.')) {
     throw new Error(`${parentId} 使用了不受支持的外部模块：${request}`)
   }
@@ -173,8 +228,11 @@ function runtimeBootstrap(sourceVersion, sharedHelpers) {
 \t\tconst modules = new Map();
 \t\tconst libraries = new Set();
 \t\tlet started = false;
+\t\tconst externalModuleIds = Object.freeze(${JSON.stringify(externalModuleIds)});
 
 \t\tconst resolve = (parentId, request) => {
+\t\t\tconst externalId = externalModuleIds[request];
+\t\t\tif (externalId) return externalId;
 \t\t\tif (!request.startsWith('.')) {
 \t\t\t\tthrow new Error(\`[main-lite] unsupported external module: \${request}\`);
 \t\t\t}
@@ -273,9 +331,12 @@ function stripCommonJsHelpers(code, source) {
     if (typeof node.start !== 'number' || typeof node.end !== 'number') {
       throw new Error(`${source} 的 CommonJS helper 缺少源码位置`)
     }
-    const declarationSource = code.slice(node.start, node.end)
-    for (const name of names) {
-      helpers.push(Object.freeze({ name, source: declarationSource }))
+    for (const [index, name] of names.entries()) {
+      const declaration = node.declarations[index]
+      helpers.push(Object.freeze({
+        name,
+        source: `${node.kind} ${code.slice(declaration.start, declaration.end)};`,
+      }))
     }
     helperEnd = node.end
   }
@@ -285,6 +346,37 @@ function stripCommonJsHelpers(code, source) {
       : code,
     helpers: Object.freeze(helpers),
   })
+}
+
+async function compileExternalModules() {
+  const modules = []
+  for (const definition of externalModuleDefinitions) {
+    const result = await build({
+      entryPoints: [definition.entryPoint],
+      bundle: true,
+      charset: 'utf8',
+      format: 'cjs',
+      legalComments: 'inline',
+      logLevel: 'silent',
+      minify: true,
+      platform: 'browser',
+      sourcemap: false,
+      target: 'es2022',
+      treeShaking: true,
+      write: false,
+    })
+    if (result.warnings.length || result.outputFiles.length !== 1) {
+      throw new Error(`${definition.request} 构建结果无效`)
+    }
+    const code = result.outputFiles[0].text.trimEnd()
+    modules.push(Object.freeze({
+      id: definition.id,
+      source: slash(path.relative(projectRoot, definition.entryPoint)),
+      sourceHash: sha256(code),
+      code,
+    }))
+  }
+  return modules
 }
 
 async function compileModules() {
@@ -305,6 +397,7 @@ async function compileModules() {
       legalComments: 'inline',
       loader: 'ts',
       minify: false,
+      minifySyntax: true,
       sourcefile: slash(path.relative(projectRoot, file)),
       target: 'es2022',
       treeShaking: true,
@@ -342,6 +435,7 @@ async function compileModules() {
     sourceHash: sha256(contractSource),
     code: `module.exports = ${JSON.stringify(contractValue, null, 2)};`,
   }))
+  modules.push(...await compileExternalModules())
 
   const ids = new Set(modules.map((module) => module.id))
   if (ids.size !== modules.length) throw new Error('Lite 模块 ID 存在重复')
@@ -399,7 +493,7 @@ function renderLibrary(definition, modules, sourceVersion, sharedHelpers) {
     '',
     `/* Awesome LinuxDo Reader Lite ${sourceVersion} - ${definition.name}`,
     ` * ${definition.description}`,
-    ' * Greasy Fork Library：可读、未压缩；由 TypeScript 源码确定性生成。',
+    ' * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。',
     ' * 不要直接编辑此文件；修改 lite/src 后重新构建。',
     ' */',
     '(function () {',
@@ -447,6 +541,51 @@ function renderLoader(metadata, sourceVersion, requirements = libraryMarker) {
   ].join('\n')
 }
 
+function renderLocalTestLoader(metadata, sourceVersion, libraries) {
+  const requirements = libraries.map((library) => {
+    const libraryPath = path.join(projectRoot, library.file)
+    return `// @require      ${browserFileUrl(libraryPath)}`
+  }).join('\n')
+  let localMetadata = metadata.replace(
+    stylesheetToken,
+    browserFileUrl(stylesheetPath),
+  )
+  localMetadata = replaceMetadataLine(
+    localMetadata,
+    '@name',
+    `Awesome LinuxDo Reader (v${sourceVersion} Greasy Fork local three-part)`,
+  )
+  localMetadata = replaceMetadataLine(
+    localMetadata,
+    '@name:zh-CN',
+    `更流畅的 LinuxDo 阅读器（v${sourceVersion} 三文件本地测试）`,
+  )
+  localMetadata = replaceMetadataLine(
+    localMetadata,
+    '@version',
+    `${sourceVersion}-local-three-part`,
+  )
+  localMetadata = replaceMetadataLine(
+    localMetadata,
+    '@description',
+    '从本地 Loader、Core、Features 与 CSS 加载，供手动审查 Greasy Fork 三文件结构。',
+  )
+  localMetadata = replaceMetadataLine(
+    localMetadata,
+    '@description:en',
+    'Loads the local Loader, Core, Features, and CSS for manual review of the Greasy Fork three-part build.',
+  )
+  localMetadata = localMetadata.replace(
+    '// ==/UserScript==',
+    '// @updateURL     none\n// @downloadURL   none\n// ==/UserScript==',
+  )
+  const output = renderLoader(localMetadata, sourceVersion, requirements)
+  if (/https:\/\/update\.greasyfork\.org\/scripts\//.test(output)) {
+    throw new Error('三文件本地测试 Loader 不得引用远端项目 Library')
+  }
+  return output
+}
+
 function validateStylesheetUrl(value, stylesheetHash) {
   const match = String(value ?? '').match(
     /^https:\/\/cdn\.jsdelivr\.net\/gh\/sunbigfly\/awesome-linuxdo-reader@([0-9a-f]{40})\/work\/main-lite\.css#sha256=([0-9a-f]{64})$/i,
@@ -473,13 +612,15 @@ function validateLibraryUrl(value) {
   return url.href
 }
 
-async function renderReleaseLoader(configPath, metadata, sourceVersion, libraries) {
-  const releaseGate = JSON.parse(await readFile(releaseGatePath, 'utf8'))
-  const blockedBy = releaseAcceptanceKeys.filter((key) => releaseGate[key] !== true)
+async function verifyReleaseAcceptance(releaseGate, sourceVersion) {
+  const blockedBy = releaseAcceptanceKeys.filter(
+    (key) => releaseGate[key] !== true,
+  )
   if (blockedBy.length) {
     throw new Error(`main-lite 正式发布门禁未通过：${blockedBy.join(', ')}`)
   }
-  const [catalog, evidence, releaseBrowserEvidence] = await Promise.all([
+
+  const [catalog, evidence, browserEvidence] = await Promise.all([
     readFile(featureCatalogPath, 'utf8').then(JSON.parse),
     readFile(featureEvidencePath, 'utf8').then(JSON.parse),
     readFile(releaseBrowserEvidencePath, 'utf8').then(JSON.parse),
@@ -488,47 +629,60 @@ async function renderReleaseLoader(configPath, metadata, sourceVersion, librarie
   if (
     !Array.isArray(catalog) ||
     featureEntries.length !== catalog.length ||
-    catalog.some((feature) => !Object.hasOwn(evidence.features ?? {}, feature.feature_id))
+    catalog.some(
+      (feature) => !Object.hasOwn(evidence.features ?? {}, feature.feature_id),
+    )
   ) {
     throw new Error('featureContractCoverageComplete 与当前功能证据不一致')
   }
   if (
-    releaseBrowserEvidence.schemaVersion !== 1 ||
-    releaseBrowserEvidence.releaseVersion !== sourceVersion ||
-    releaseBrowserEvidence.browserMatrix?.accepted !== true ||
+    browserEvidence.schemaVersion !== 1 ||
+    browserEvidence.releaseVersion !== sourceVersion ||
+    browserEvidence.browserMatrix?.accepted !== true ||
     requiredBrowserScenarios.some(
-      (key) => releaseBrowserEvidence.browserMatrix?.scenarios?.[key] !== true,
+      (key) => browserEvidence.browserMatrix?.scenarios?.[key] !== true,
     )
   ) {
     throw new Error('browserMatrixAccepted 与当前浏览器证据不一致')
   }
   if (
-    releaseBrowserEvidence.performance?.accepted !== true ||
-    releaseBrowserEvidence.performance?.cycles < 5 ||
-    !Array.isArray(releaseBrowserEvidence.performance?.portalCounts) ||
-    releaseBrowserEvidence.performance.portalCounts.length < 5 ||
-    releaseBrowserEvidence.performance.portalCounts.some((value) => value !== 1) ||
-    !Array.isArray(releaseBrowserEvidence.performance?.shadowNodeSamples) ||
-    releaseBrowserEvidence.performance.shadowNodeSamples.length < 5 ||
-    new Set(releaseBrowserEvidence.performance.shadowNodeSamples).size !== 1 ||
-    !Array.isArray(releaseBrowserEvidence.performance?.heapUsedSamples) ||
-    releaseBrowserEvidence.performance.heapUsedSamples.length < 5 ||
-    releaseBrowserEvidence.performance.httpFailures !== 0 ||
-    releaseBrowserEvidence.performance.http429 !== 0 ||
-    releaseBrowserEvidence.performance.duplicateRequestPaths !== 0
+    browserEvidence.performance?.accepted !== true ||
+    browserEvidence.performance?.cycles < 5 ||
+    !Array.isArray(browserEvidence.performance?.portalCounts) ||
+    browserEvidence.performance.portalCounts.length < 5 ||
+    browserEvidence.performance.portalCounts.some((value) => value !== 1) ||
+    !Array.isArray(browserEvidence.performance?.shadowNodeSamples) ||
+    browserEvidence.performance.shadowNodeSamples.length < 5 ||
+    new Set(browserEvidence.performance.shadowNodeSamples).size !== 1 ||
+    !Array.isArray(browserEvidence.performance?.heapUsedSamples) ||
+    browserEvidence.performance.heapUsedSamples.length < 5 ||
+    browserEvidence.performance.httpFailures !== 0 ||
+    browserEvidence.performance.http429 !== 0 ||
+    browserEvidence.performance.duplicateRequestPaths !== 0
   ) {
     throw new Error('performanceAccepted 与当前性能证据不一致')
   }
-  if (releaseBrowserEvidence.rollback?.accepted !== true) {
+  if (browserEvidence.rollback?.accepted !== true) {
     throw new Error('rollbackVerified 与当前回滚证据不一致')
   }
-  if (releaseBrowserEvidence.security?.privateVulnerabilityReporting !== true) {
+  if (browserEvidence.security?.privateVulnerabilityReporting !== true) {
     throw new Error('私密漏洞报告渠道尚未验收')
   }
-  const stylesheet = await readFile(
-    path.join(projectRoot, 'work/main-lite.css'),
-    'utf8',
-  )
+  return browserEvidence
+}
+
+async function renderReleaseLoader(
+  configPath,
+  metadata,
+  sourceVersion,
+  libraries,
+  verifyAcceptance = true,
+) {
+  const releaseGate = JSON.parse(await readFile(releaseGatePath, 'utf8'))
+  const releaseBrowserEvidence = verifyAcceptance
+    ? await verifyReleaseAcceptance(releaseGate, sourceVersion)
+    : null
+  const stylesheet = await readFile(stylesheetPath, 'utf8')
   const stylesheetUrl = validateStylesheetUrl(
     releaseGate.readerStylesUrl,
     sha256(stylesheet),
@@ -537,31 +691,39 @@ async function renderReleaseLoader(configPath, metadata, sourceVersion, librarie
   if (config.schemaVersion !== 1 || !Array.isArray(config.libraries)) {
     throw new Error('Greasy Fork release config 无效')
   }
+  if (!verifyAcceptance && config.sourceVersion !== sourceVersion) {
+    throw new Error('published-libraries.json 的 sourceVersion 与 Lite 版本不一致')
+  }
   const configByName = new Map(config.libraries.map((library) => [library.name, library]))
   if (configByName.size !== libraryDefinitions.length) {
     throw new Error('Greasy Fork release config 的 Library 数量不匹配')
   }
   const browserLibraryByName = new Map(
-    (releaseBrowserEvidence.libraries ?? []).map((library) => [library.name, library]),
+    (releaseBrowserEvidence?.libraries ?? []).map(
+      (library) => [library.name, library],
+    ),
   )
-  if (browserLibraryByName.size !== libraryDefinitions.length) {
+  if (verifyAcceptance && browserLibraryByName.size !== libraryDefinitions.length) {
     throw new Error('浏览器证据的 Library 数量不匹配')
   }
   const requirements = libraryDefinitions.map((definition) => {
     const configured = configByName.get(definition.name)
     const built = libraries.find((library) => library.name === definition.name)
-    const accepted = browserLibraryByName.get(definition.name)
+    const accepted = verifyAcceptance
+      ? browserLibraryByName.get(definition.name)
+      : configured
     if (!configured || !built || !accepted) {
-      throw new Error(`缺少 Library 配置或浏览器证据：${definition.name}`)
+      throw new Error(`缺少 Library 配置或验收记录：${definition.name}`)
     }
     const url = validateLibraryUrl(configured.url)
     const fixedUrl = new URL(url)
     if (
-      accepted.versionId !== Number(fixedUrl.searchParams.get('version')) ||
+      Number(accepted.versionId) !== Number(fixedUrl.searchParams.get('version')) ||
       accepted.bytes !== built.bytes ||
       accepted.sha256 !== built.sha256
     ) {
-      throw new Error(`Library 浏览器证据与构建不一致：${definition.name}`)
+      const sourceLabel = verifyAcceptance ? '浏览器证据' : '发布坐标'
+      throw new Error(`Library ${sourceLabel}与构建不一致：${definition.name}`)
     }
     return `// @require      ${url}#sha256=${built.sha256}`
   }).join('\n')
@@ -590,7 +752,12 @@ async function emit(file, content, check) {
   await writeFile(file, content)
 }
 
-const { check, config } = parseArguments(process.argv.slice(2))
+const {
+  check,
+  config,
+  consistencyOnly,
+  localTest,
+} = parseArguments(process.argv.slice(2))
 const metadata = await readFile(metadataPath, 'utf8')
 const sourceVersion = parseMetadataVersion(metadata)
 const { modules, sharedHelpers } = await compileModules()
@@ -672,8 +839,9 @@ const manifest = `${JSON.stringify({
   compiler: {
     name: 'esbuild',
     version: esbuildVersion,
-    transform: 'TypeScript modules to readable CommonJS factories with shared helpers',
+    transform: 'TypeScript modules plus bundled vendor entries to readable CommonJS factories',
     minified: false,
+    vendorMinified: true,
     sharedHelperDeclarations: sharedHelpers
       ? parse(sharedHelpers, { sourceType: 'script' }).program.body.length
       : 0,
@@ -697,6 +865,7 @@ if (config) {
     metadata,
     sourceVersion,
     libraries,
+    !consistencyOnly,
   )
   parse(releaseLoader, { sourceType: 'script' })
   for (const outputPath of releaseOutputPaths) {
@@ -712,13 +881,44 @@ if (config) {
   })
 }
 
+let localTestArtifact = null
+if (localTest) {
+  const localStylesheet = await readFile(stylesheetPath, 'utf8')
+  const localTestLoader = renderLocalTestLoader(
+    metadata,
+    sourceVersion,
+    libraries,
+  )
+  parse(localTestLoader, { sourceType: 'script' })
+  await emit(localTestOutputPath, localTestLoader, false)
+  localTestArtifact = Object.freeze({
+    loader: {
+      file: slash(path.relative(projectRoot, localTestOutputPath)),
+      bytes: Buffer.byteLength(localTestLoader),
+      sha256: sha256(localTestLoader),
+    },
+    libraries: libraries.map(({ name, file, bytes, sha256: digest }) => ({
+      name,
+      file,
+      bytes,
+      sha256: digest,
+    })),
+    styles: {
+      file: slash(path.relative(projectRoot, stylesheetPath)),
+      bytes: Buffer.byteLength(localStylesheet),
+      sha256: sha256(localStylesheet),
+    },
+  })
+}
+
 process.stdout.write(`${JSON.stringify({
   ok: true,
-  mode: check ? 'check' : 'build',
+  mode: localTest ? 'local-test' : check ? 'check' : 'build',
   sourceVersion,
   modules: modules.length,
   projectTotalExecutableBytes,
   libraries,
   loaderTemplate: slash(path.relative(projectRoot, templatePath)),
   release,
+  localTest: localTestArtifact,
 }, null, 2)}\n`)

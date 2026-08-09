@@ -243,6 +243,25 @@ function text(model: unknown, key: string): string {
 	return String(value(model, key) ?? '').trim();
 }
 
+function exposesBioFields(model: unknown): boolean {
+	return [
+		'bio_excerpt',
+		'bioExcerpt',
+		'bio_raw',
+		'bioRaw',
+	].some((key) => value(model, key) !== undefined);
+}
+
+function bioText(
+	model: unknown,
+	fallbackModel: unknown,
+	key: 'bio_excerpt' | 'bio_raw',
+): string {
+	const camelKey = key === 'bio_excerpt' ? 'bioExcerpt' : 'bioRaw';
+	return text(model, key) || text(model, camelKey) ||
+		text(fallbackModel, key) || text(fallbackModel, camelKey);
+}
+
 function count(model: unknown, key: string): number | null {
 	const candidate = value(model, key);
 	if (candidate === null || candidate === undefined || candidate === '') return null;
@@ -470,6 +489,7 @@ function project(
 	supplementalErrorStatus: number | null,
 	presentation: DiscourseNativeTopicPresentationPort,
 	categoryExpertsOverride: boolean,
+	bioModel: unknown = model,
 ): ReaderUserProfileResource {
 	const identity = Object.freeze({
 		id: count(model, 'id'),
@@ -490,8 +510,8 @@ function project(
 	return Object.freeze({
 		identity,
 		profile: Object.freeze({
-			bioExcerpt: text(model, 'bio_excerpt'),
-			bioRaw: text(model, 'bio_raw'),
+			bioExcerpt: bioText(model, bioModel, 'bio_excerpt'),
+			bioRaw: bioText(model, bioModel, 'bio_raw'),
 			title: text(model, 'title') || text(model, 'flair_name'),
 			location: text(model, 'location'),
 			website: text(model, 'website'),
@@ -742,6 +762,24 @@ export class BrowserDiscourseNativeUserPort implements DiscourseNativeUserPort {
 				);
 			}
 			if (request.signal.aborted) throw request.signal.reason;
+			let bioModel = model;
+			if (!exposesBioFields(model)) {
+				try {
+					bioModel = await awaitConsumer(
+						this.#userModel().findByUsername(normalizedUsername, {
+							forCard: true,
+						}),
+						request.signal,
+					);
+				} catch {
+					if (request.signal.aborted) throw request.signal.reason;
+					/*
+					 * 已有基础资料可用时，Card serializer 仅负责补齐简介；
+					 * 它失败不能反向抹掉整张用户卡。
+					 */
+					bioModel = model;
+				}
+			}
 			let summary: unknown = null;
 			let supplementalStatus: ReaderUserProfileResource['supplementalStatus'] =
 				'unavailable';
@@ -754,6 +792,7 @@ export class BrowserDiscourseNativeUserPort implements DiscourseNativeUserPort {
 					null,
 					this.#presentation,
 					this.#categoryExpertsOverride,
+					bioModel,
 				));
 			} catch {
 				// 渐进投影 consumer 失败不能破坏权威 profile/summary 请求。
@@ -788,6 +827,7 @@ export class BrowserDiscourseNativeUserPort implements DiscourseNativeUserPort {
 					supplementalErrorStatus,
 					this.#presentation,
 					this.#categoryExpertsOverride,
+					bioModel,
 				),
 			});
 		} catch (error) {

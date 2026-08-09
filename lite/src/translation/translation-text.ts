@@ -1,8 +1,20 @@
 export const READER_TRANSLATION_BLOCK_SELECTOR =
-	'p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th';
+	'p,li,blockquote,h1,h2,h3,h4,h5,h6,summary,figcaption,td,th';
 export const READER_TRANSLATION_EXCLUDE_SELECTOR =
 	'pre,code,kbd,samp,script,style,textarea,.onebox,.poll,.ldp-post-quote,' +
 	'.katex,.MathJax,.math,.ldp-translation-text';
+export const READER_TRANSLATION_PROTECT_SELECTOR =
+	'a,pre,code,kbd,samp,script,style,textarea,button,input,select,img,svg,' +
+	'video,audio,iframe,.onebox,.poll,.katex,.MathJax,.math';
+
+const PROTECTED_TEXT_PATTERN =
+	/(?:https?:\/\/|www\.)[^\s<>]+|@[\p{L}\p{N}_][\p{L}\p{N}_.-]{0,63}/giu;
+const PROTECTED_TOKEN_PATTERN = /⟦(\d+)⟧/g;
+
+export interface TranslationTextPlan {
+	readonly text: string;
+	readonly protectedNodes: readonly Node[];
+}
 
 export interface TranslationDigestPort {
 	digest(
@@ -11,12 +23,105 @@ export interface TranslationDigestPort {
 	): Promise<ArrayBuffer>;
 }
 
+function protectedClone(node: Node): Node {
+	const clone = node.cloneNode(true);
+	if (clone.nodeType === 1) {
+		const root = clone as Element;
+		root.removeAttribute('id');
+		root.querySelectorAll('[id]').forEach((item) => item.removeAttribute('id'));
+	}
+	return clone;
+}
+
+export function translationTextPlan(node: Element | null): TranslationTextPlan {
+	if (!node) return Object.freeze({ text: '', protectedNodes: Object.freeze([]) });
+	const protectedNodes: Node[] = [];
+	const protect = (value: Node): string => {
+		const index = protectedNodes.length;
+		protectedNodes.push(protectedClone(value));
+		return `⟦${index}⟧`;
+	};
+	const visitText = (value: Text): string => {
+		const source = String(value.data ?? '');
+		let output = '';
+		let offset = 0;
+		for (const match of source.matchAll(PROTECTED_TEXT_PATTERN)) {
+			const start = match.index ?? 0;
+			output += source.slice(offset, start);
+			output += protect(value.ownerDocument.createTextNode(match[0]));
+			offset = start + match[0].length;
+		}
+		return output + source.slice(offset);
+	};
+	const visit = (value: Node): string => {
+		if (value.nodeType === 3) return visitText(value as Text);
+		if (value.nodeType !== 1) return '';
+		const element = value as Element;
+		if (element.matches('.ldp-translation-text')) return '';
+		if (element.matches(READER_TRANSLATION_PROTECT_SELECTOR)) {
+			return protect(element);
+		}
+		return [...element.childNodes].map(visit).join('');
+	};
+	const text = [...node.childNodes].map(visit).join('')
+		.replace(/\s+/g, ' ')
+		.trim();
+	return Object.freeze({
+		text,
+		protectedNodes: Object.freeze(protectedNodes),
+	});
+}
+
 export function translationSourceText(node: Element | null): string {
-	if (!node) return '';
-	const clone = node.cloneNode(true) as Element;
-	clone.querySelectorAll(READER_TRANSLATION_EXCLUDE_SELECTOR)
-		.forEach((item) => item.remove());
-	return String(clone.textContent ?? '').replace(/\s+/g, ' ').trim();
+	return translationTextPlan(node).text;
+}
+
+export function renderTranslationText(
+	node: Element,
+	translation: string,
+): DocumentFragment | null {
+	const plan = translationTextPlan(node);
+	if (!translationProtectedTokensMatch(plan.text, translation)) return null;
+	const counts = Array.from({ length: plan.protectedNodes.length }, () => 0);
+	for (const match of translation.matchAll(PROTECTED_TOKEN_PATTERN)) {
+		const index = Number(match[1]);
+		if (!Number.isSafeInteger(index) || index < 0 || index >= counts.length) {
+			return null;
+		}
+		counts[index] = (counts[index] ?? 0) + 1;
+	}
+	if (counts.some((count) => count !== 1)) return null;
+	const fragment = node.ownerDocument.createDocumentFragment();
+	let offset = 0;
+	for (const match of translation.matchAll(PROTECTED_TOKEN_PATTERN)) {
+		const start = match.index ?? 0;
+		if (start > offset) {
+			fragment.append(node.ownerDocument.createTextNode(
+				translation.slice(offset, start),
+			));
+		}
+		fragment.append(plan.protectedNodes[Number(match[1])]!.cloneNode(true));
+		offset = start + match[0].length;
+	}
+	if (offset < translation.length) {
+		fragment.append(node.ownerDocument.createTextNode(translation.slice(offset)));
+	}
+	return fragment;
+}
+
+export function translationProtectedTokensMatch(
+	source: string,
+	translation: string,
+): boolean {
+	const tokens = (value: string): readonly string[] => Object.freeze(
+		[...String(value).matchAll(PROTECTED_TOKEN_PATTERN)]
+			.map((match) => match[0])
+			.sort(),
+	);
+	const expected = tokens(source);
+	const actual = tokens(translation);
+	return expected.length === actual.length &&
+		expected.every((token, index) => token === actual[index]);
 }
 
 export function translationBlocks(content: ParentNode | null): readonly Element[] {
@@ -29,6 +134,19 @@ export function translationBlocks(content: ParentNode | null): readonly Element[
 		}
 		return translationSourceText(node).length > 1;
 	}));
+}
+
+export function translationTextsFromHtml(
+	document: Document,
+	htmlValue: unknown,
+): readonly string[] {
+	const html = String(htmlValue ?? '').trim();
+	if (!html) return Object.freeze([]);
+	const template = document.createElement('template');
+	template.innerHTML = html;
+	return Object.freeze(translationBlocks(template.content)
+		.map(translationSourceText)
+		.filter(translationBlockNeedsTranslation));
 }
 
 export function translationTextIsChinese(text: string): boolean {

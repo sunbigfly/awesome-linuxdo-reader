@@ -1,10 +1,13 @@
 {
   "name": "awesome-linuxdo-reader",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@xsai/generate-text": "0.4.4"
   },
   "scripts": {
     "audit:main-requests": "node scripts/audit-main-requests.mjs",
@@ -21,8 +24,9 @@
     "main-lite:css:check": "node scripts/build-main-lite-css.mjs --check && npm run main-lite:css:audit",
     "main-lite:greasyfork:build": "node scripts/build-main-lite-greasyfork.mjs",
     "main-lite:greasyfork:check": "node scripts/build-main-lite-greasyfork.mjs --check",
+    "main-lite:greasyfork:local-test": "node scripts/build-main-lite-greasyfork.mjs --local-test",
     "main-lite:greasyfork:release": "node scripts/build-main-lite-greasyfork.mjs --config work/greasyfork-lite/published-libraries.json",
-    "main-lite:local-debug": "npm run main-lite:css:build && node scripts/build-main-lite.mjs --local-debug",
+    "main-lite:local-debug": "npm run main-lite:css:build && node scripts/build-main-lite.mjs --local-debug && npm run main-lite:greasyfork:local-test",
     "main-lite:lint": "eslint eslint.config.mjs docs/.vitepress/config.mts scripts/audit-lite-native-requests.mjs scripts/audit-main-lite-userscript.mjs scripts/audit-main-requests.mjs scripts/audit-main-runtime.mjs scripts/audit-main-lite-css.mjs scripts/build-main-lite-css.mjs scripts/build-main-lite-greasyfork.mjs scripts/build-main-lite.mjs scripts/test-main-lite.mjs scripts/validate-docs.mjs \"lite/{src,tests}/**/*.ts\"",
     "main-lite:test": "node scripts/test-main-lite.mjs",
     "main-lite:typecheck": "tsc --project tsconfig.main-lite.json && tsc --project tsconfig.main-lite-tests.json",
@@ -34,6 +38,7 @@
     "mian-lite:css:check": "npm run main-lite:css:check",
     "mian-lite:greasyfork:build": "npm run main-lite:greasyfork:build",
     "mian-lite:greasyfork:check": "npm run main-lite:greasyfork:check",
+    "mian-lite:greasyfork:local-test": "npm run main-lite:greasyfork:local-test",
     "mian-lite:greasyfork:release": "npm run main-lite:greasyfork:release",
     "mian-lite:local-debug": "npm run main-lite:local-debug",
     "mian-lite:lint": "npm run main-lite:lint",

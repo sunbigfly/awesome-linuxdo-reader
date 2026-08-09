@@ -86,6 +86,8 @@ const profiles: readonly RequestContractProfile[] = [
 	'nested-visible',
 	'user-card-interactive',
 	'translation-visible',
+	'translation-access',
+	'translation-prefetch',
 	'notification-visible',
 	'collection-visible',
 	'resource-visible',

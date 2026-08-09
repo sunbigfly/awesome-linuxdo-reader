@@ -162,6 +162,18 @@ const variantFieldsModel = {
 	summary: () => Promise.resolve({ topics_entered: 33 }),
 };
 
+const modelWithoutBioFields = {
+	get(key: string): unknown {
+		if ([
+			'bio_excerpt',
+			'bioExcerpt',
+			'bio_raw',
+			'bioRaw',
+		].includes(key)) return undefined;
+		return model.get(key);
+	},
+};
+
 class NativeUser {
 	static findByUsername(
 		username: string,
@@ -170,6 +182,9 @@ class NativeUser {
 		requestedUsername = username;
 		profileRequests.push({ username, forCard: options?.forCard === true });
 		if (username === 'pending') return pending.promise;
+		if (username === 'bio-model-fallback' && options?.forCard !== true) {
+			return Promise.resolve(modelWithoutBioFields);
+		}
 		if (username === 'card-fallback' && options?.forCard !== true) {
 			return Promise.reject({ status: 404 });
 		}
@@ -393,6 +408,19 @@ assert(
 		profileRequests.some((request) =>
 			request.username === 'card-fallback' && request.forCard),
 	'完整资料遇到可回退错误时必须继续调用原生 forCard model',
+);
+const bioFallbackResponse = await port.requestProfile({
+	username: 'bio-model-fallback',
+	signal: new AbortController().signal,
+});
+assert(
+	bioFallbackResponse.ok &&
+		bioFallbackResponse.value.profile.bioExcerpt === '简介' &&
+		profileRequests.filter((request) =>
+			request.username === 'bio-model-fallback').length === 2 &&
+		profileRequests.some((request) =>
+			request.username === 'bio-model-fallback' && request.forCard),
+	'完整资料模型未暴露简介字段时必须用原生 forCard model 补齐，不能渲染空白简介区',
 );
 const serverFailureResponse = await port.requestProfile({
 	username: 'server-error',

@@ -32,6 +32,7 @@ export class ReaderSettingsHelpSurface {
 	#activeTarget: HTMLElement | null = null;
 	#hoveringTarget = false;
 	#hideFrame = 0;
+	#interactionTarget: HTMLElement | null = null;
 
 	constructor(options: ReaderSettingsHelpSurfaceOptions) {
 		this.#document = options.document;
@@ -62,14 +63,21 @@ export class ReaderSettingsHelpSurface {
 			const target = this.#helpTarget(event);
 			if (
 				!target ||
+				target === this.#interactionTarget ||
 				(domNode(pointer.relatedTarget) &&
 					target.contains(pointer.relatedTarget))
 			) return;
+			this.#interactionTarget = null;
 			this.#hoveringTarget = true;
 			this.show(target);
 		});
 		this.scope.listen(this.#popover, 'pointerout', (event) => {
 			const pointer = event as PointerEvent;
+			if (
+				this.#interactionTarget &&
+				(!domNode(pointer.relatedTarget) ||
+					!this.#interactionTarget.contains(pointer.relatedTarget))
+			) this.#interactionTarget = null;
 			const active = this.#activeTarget;
 			if (!active) return;
 			if (
@@ -81,12 +89,22 @@ export class ReaderSettingsHelpSurface {
 		});
 		this.scope.listen(this.#popover, 'focusin', (event) => {
 			const target = this.#helpTarget(event);
-			if (target) this.show(target);
+			if (target && target !== this.#interactionTarget) this.show(target);
 		});
 		this.scope.listen(this.#popover, 'focusout', () => {
 			this.#scheduleHide();
 		});
+		this.scope.listen(this.#popover, 'pointerdown', (event) => {
+			this.#interactionTarget = this.#helpTarget(event);
+			if (!this.#interactionTarget) return;
+			this.close();
+		});
+		this.scope.listen(this.#popover, 'keydown', (event) => {
+			this.#interactionTarget = this.#helpTarget(event);
+			if (this.#interactionTarget) this.close();
+		});
 		this.scope.add(() => {
+			this.#interactionTarget = null;
 			this.close();
 			this.#tooltip.remove();
 		});

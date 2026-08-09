@@ -101,6 +101,10 @@ import {
 	translationTextFingerprint,
 } from '../translation/translation-text.js';
 import {
+	ReaderTranslationConfigRepository,
+	readerTranslationActiveProfile,
+} from '../translation/reader-translation-config.js';
+import {
 	ReaderReplyTreePreferencesPreview,
 	readerPreferencesReplyTreeAdapter,
 } from '../topic/reader-reply-tree-preferences.js';
@@ -258,6 +262,7 @@ function createRuntimeStage(
 	customSites: Readonly<{
 		readonly repository: ReaderCustomSiteRepository;
 		readonly probe: ReaderDiscourseSiteProbeTransportPort | null;
+		readonly translation: ReaderTranslationConfigRepository | null;
 		readonly webDav: Readonly<{
 			readonly client: ReaderWebDavClient;
 			readonly repository: ReaderWebDavConfigRepository;
@@ -453,7 +458,24 @@ function createRuntimeStage(
 		runtime: {
 			document,
 			renderIcon,
-			translationView: bodyTranslationAllowed ? {} : false,
+			translationView: bodyTranslationAllowed
+				? customSites.translation
+					? {
+						initialAnimation:
+							readerTranslationActiveProfile(
+								customSites.translation.snapshot.config,
+							).animation,
+						subscribeAnimation: (listener, animationScope) => {
+							customSites.translation!.changes.subscribe(
+								(snapshot) => listener(readerTranslationActiveProfile(
+									snapshot.config,
+								).animation),
+								animationScope,
+							);
+						},
+					}
+					: {}
+				: false,
 			storage: window.localStorage,
 			sourceId: sourceId(window),
 			locks: window.navigator.locks ?? null,
@@ -630,6 +652,12 @@ function createRuntimeStage(
 			},
 		},
 		translation: {
+			...(customSites.translation
+				? {
+					readConfig: async () =>
+						(await customSites.translation!.load()).config,
+				}
+				: {}),
 			fingerprint: (texts) => {
 				const subtle = window.crypto?.subtle;
 				if (!subtle) {
@@ -731,6 +759,13 @@ function createRuntimeStage(
 				),
 			},
 			performanceForm: readerPreferencesPerformanceSettingsAdapter,
+			...(customSites.translation
+				? {
+					translationForm: {
+						repository: customSites.translation,
+					},
+				}
+				: {}),
 			imageForm: readerPreferencesImageAdapter,
 			readingForm: readerPreferencesReadingSettingsAdapter,
 			interactionForm: {
@@ -990,6 +1025,9 @@ export function startMainLiteUserscript(
 	const customSiteRepository = new ReaderCustomSiteRepository({
 		storage: valueStorage,
 	});
+	const translation = valueStorage
+		? new ReaderTranslationConfigRepository({ storage: valueStorage })
+		: null;
 	let customSiteProbe: ReaderDiscourseSiteProbeTransportPort | null = null;
 	try {
 		customSiteProbe = environment.createDiscourseSiteProbe();
@@ -1063,6 +1101,7 @@ export function startMainLiteUserscript(
 				{
 					repository: customSiteRepository,
 					probe: customSiteProbe,
+					translation,
 					webDav,
 				},
 			),

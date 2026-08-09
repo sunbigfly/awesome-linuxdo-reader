@@ -13,6 +13,7 @@ export type ReaderSettingsPanelId =
 	| 'appearance'
 	| 'flash'
 	| 'reading'
+	| 'translation'
 	| 'shortcuts'
 	| 'interaction'
 	| 'user'
@@ -86,6 +87,13 @@ const panels = [
 		title: '阅读与导航',
 		description: '管理阅读队列、历史导航、帖子打开位置与阅读器退出方式。',
 		keywords: ['队列', '历史', '边缘', '楼层', 'esc'],
+	},
+	{
+		id: 'translation',
+		groupId: 'reading-interaction',
+		title: '翻译设置',
+		description: '配置 OpenAI 兼容的 API URL、Key、模型、思考等级与 Prompt；Key 留空时继续使用公共翻译。',
+		keywords: ['翻译', 'ai', 'openai', 'api', 'key', '模型', '思考', 'prompt', '预加载'],
 	},
 	{
 		id: 'shortcuts',
@@ -177,6 +185,7 @@ export const READER_SETTINGS_GROUPS = Object.freeze([
 		label: '阅读与交互',
 		panelIds: Object.freeze([
 			'reading',
+			'translation',
 			'shortcuts',
 			'interaction',
 		] as const),

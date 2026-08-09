@@ -104,7 +104,17 @@ export class VirtualStreamDomController {
 			.filter((postNumber) => !connectedAfter.has(postNumber));
 		this.#connectedRoots = connectedAfter;
 		this.#committed = true;
-		this.streamView.setSpacerSizes(window.beforeSpacer, window.afterSpacer);
+		const firstRootInset = window.postNumbers[0] === undefined
+			? undefined
+			: mountPlan?.rootVirtualInsets?.get(window.postNumbers[0]);
+		const lastRootPostNumber = window.postNumbers.at(-1);
+		const lastRootInset = lastRootPostNumber === undefined
+			? undefined
+			: mountPlan?.rootVirtualInsets?.get(lastRootPostNumber);
+		this.streamView.setSpacerSizes(
+			window.beforeSpacer + (firstRootInset?.beforeSize ?? 0),
+			window.afterSpacer + (lastRootInset?.afterSize ?? 0),
+		);
 		return Object.freeze({
 			window,
 			tree,

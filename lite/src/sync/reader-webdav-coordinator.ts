@@ -20,6 +20,7 @@ import {
 	type ReaderWebDavInitialStrategy,
 	type ReaderWebDavLocalRecord,
 	type ReaderWebDavRemoteCategory,
+	type ReaderWebDavRemoteRecord,
 	type ReaderWebDavRemoteScope,
 } from './reader-webdav-model.js';
 
@@ -30,6 +31,21 @@ export interface ReaderWebDavCategoryPort {
 		Promise<readonly ReaderWebDavLocalRecord[]>;
 	mergeValues(local: unknown, remote: unknown): unknown;
 	apply(records: readonly ReaderWebDavLocalRecord[]): unknown | Promise<unknown>;
+	decodeRemoteRecords?(
+		records: Readonly<Record<string, ReaderWebDavRemoteRecord>>,
+		context: ReaderWebDavCategoryTransformContext,
+	): Readonly<Record<string, ReaderWebDavRemoteRecord>> |
+		Promise<Readonly<Record<string, ReaderWebDavRemoteRecord>>>;
+	encodeRemoteRecords?(
+		records: Readonly<Record<string, ReaderWebDavRemoteRecord>>,
+		context: ReaderWebDavCategoryTransformContext,
+	): Readonly<Record<string, ReaderWebDavRemoteRecord>> |
+		Promise<Readonly<Record<string, ReaderWebDavRemoteRecord>>>;
+}
+
+export interface ReaderWebDavCategoryTransformContext {
+	readonly secret: string;
+	readonly scopeId: string;
 }
 
 export interface ReaderWebDavSyncResult {
@@ -148,6 +164,11 @@ export class ReaderWebDavCoordinator {
 				.map((category) => this.#categories.get(category))
 				.filter((port): port is ReaderWebDavCategoryPort => Boolean(port));
 			if (!selected.length) throw new Error('所选同步内容当前不可用');
+			const transformContext: ReaderWebDavCategoryTransformContext =
+				Object.freeze({
+					secret: snapshot.config.password,
+					scopeId,
+				});
 			let outcome: ReaderWebDavSyncResult | null = null;
 			let nextBaseline: ReaderWebDavBaseline =
 				snapshot.baselines[scopeId] ?? Object.freeze({});
@@ -186,9 +207,17 @@ export class ReaderWebDavCoordinator {
 				let changed = remoteFile === null;
 				for (const port of selected) {
 					const local = await port.capture();
+					const remoteRecords =
+						remoteScope.categories[port.category]?.records ?? {};
+					const decodedRemoteRecords = port.decodeRemoteRecords
+						? await port.decodeRemoteRecords(
+							remoteRecords,
+							transformContext,
+						)
+						: remoteRecords;
 					const reconciled = reconcileReaderWebDavRecords({
 						local,
-						remote: remoteScope.categories[port.category]?.records ?? {},
+						remote: decodedRemoteRecords,
 						...(nextBaseline[port.category] === undefined
 							? {}
 							: { baseline: nextBaseline[port.category] }),
@@ -197,8 +226,17 @@ export class ReaderWebDavCoordinator {
 						initialStrategy: port.initialStrategy,
 						mergeValues: port.mergeValues,
 					});
+					const encodedRecords = reconciled.changed &&
+						port.encodeRemoteRecords
+						? await port.encodeRemoteRecords(
+							reconciled.records,
+							transformContext,
+						)
+						: reconciled.changed
+							? reconciled.records
+							: remoteRecords;
 					categories[port.category] = Object.freeze({
-						records: reconciled.records,
+						records: encodedRecords,
 					});
 					baseline[port.category] = reconciled.baseline;
 					pendingApply.push(Object.freeze({

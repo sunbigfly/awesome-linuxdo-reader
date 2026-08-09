@@ -21,10 +21,27 @@ import type { ReaderTopicContextStateRepository } from
 	'../topic/reader-topic-context-state.js';
 import type { ReaderConnectTrustHistoryAdapter } from
 	'../user/reader-connect-trust-adapter.js';
+import type { ResponseRepository } from '../cache/response-repository.js';
+import type { DomainResponseCacheSettings } from
+	'../network/domain-request-gateway.js';
+import {
+	createReaderTranslationDefaultConfig,
+	normalizeReaderTranslationConfig,
+	type ReaderTranslationConfig,
+	type ReaderTranslationConfigRepository,
+} from '../translation/reader-translation-config.js';
 import type {
 	ReaderWebDavCategoryPort,
+	ReaderWebDavCategoryTransformContext,
 } from './reader-webdav-coordinator.js';
-import type { ReaderWebDavLocalRecord } from './reader-webdav-model.js';
+import type {
+	ReaderWebDavLocalRecord,
+	ReaderWebDavRemoteRecord,
+} from './reader-webdav-model.js';
+import {
+	decryptReaderWebDavSecret,
+	encryptReaderWebDavSecret,
+} from './reader-webdav-secret-codec.js';
 
 type UnknownRecord = Readonly<Record<string, unknown>>;
 
@@ -238,6 +255,241 @@ function mergeConnectHistory(local: unknown, remote: unknown): unknown {
 	});
 }
 
+const TRANSLATION_SECTION_CACHE_ID_PREFIX = 'reader-translation-section?';
+const TRANSLATION_CACHE_RECORD_ID = 'sections';
+const TRANSLATION_CACHE_MAX_SECTIONS = 240;
+const TRANSLATION_CACHE_MAX_PLAINTEXT_BYTES = 720 * 1024;
+
+interface TranslationCacheSyncEntry {
+	readonly id: string;
+	readonly translation: string;
+	readonly storedAt: number;
+}
+
+function translationCacheEntry(value: unknown): TranslationCacheSyncEntry | null {
+	const source = record(value);
+	const id = text(source?.id);
+	const translation = String(source?.translation ?? '').trim();
+	const storedAt = number(source?.storedAt, -1);
+	if (
+		!id.startsWith(TRANSLATION_SECTION_CACHE_ID_PREFIX) ||
+		id.length > 240 ||
+		!translation ||
+		storedAt < 0
+	) return null;
+	return Object.freeze({ id, translation, storedAt });
+}
+
+function translationCachePayload(value: unknown): Readonly<{
+	readonly version: 1;
+	readonly sections: readonly TranslationCacheSyncEntry[];
+}> {
+	const source = record(value);
+	const candidates = (Array.isArray(source?.sections)
+		? source.sections
+		: [])
+		.map(translationCacheEntry)
+		.filter((entry): entry is TranslationCacheSyncEntry => entry !== null)
+		.sort((left, right) =>
+			right.storedAt - left.storedAt || left.id.localeCompare(right.id));
+	const unique = new Map<string, TranslationCacheSyncEntry>();
+	for (const entry of candidates) {
+		const current = unique.get(entry.id);
+		if (!current || entry.storedAt > current.storedAt) unique.set(entry.id, entry);
+	}
+	const sections: TranslationCacheSyncEntry[] = [];
+	const encoder = new TextEncoder();
+	let payloadBytes = encoder.encode('{"version":1,"sections":[]}').byteLength;
+	for (const entry of unique.values()) {
+		if (sections.length >= TRANSLATION_CACHE_MAX_SECTIONS) break;
+		const entryBytes = encoder.encode(JSON.stringify(entry)).byteLength;
+		const nextBytes = payloadBytes + entryBytes + (sections.length ? 1 : 0);
+		if (nextBytes > TRANSLATION_CACHE_MAX_PLAINTEXT_BYTES) continue;
+		sections.push(entry);
+		payloadBytes = nextBytes;
+	}
+	return Object.freeze({
+		version: 1,
+		sections: Object.freeze(sections),
+	});
+}
+
+function mergeTranslationCache(local: unknown, remote: unknown): unknown {
+	return translationCachePayload({
+		sections: [
+			...translationCachePayload(local).sections,
+			...translationCachePayload(remote).sections,
+		],
+	});
+}
+
+function encryptedTranslationKeyAssociatedData(
+	context: ReaderWebDavCategoryTransformContext,
+	recordId: string,
+	baseUrls: readonly string[],
+): string {
+	return `awesome-linuxdo-reader-lite-webdav|translation-key|${
+		context.scopeId}|${recordId}|${JSON.stringify(baseUrls)}|v2`;
+}
+
+async function encodeTranslationConfigRecords(
+	records: Readonly<Record<string, ReaderWebDavRemoteRecord>>,
+	context: ReaderWebDavCategoryTransformContext,
+): Promise<Readonly<Record<string, ReaderWebDavRemoteRecord>>> {
+	const entries = await Promise.all(Object.entries(records).map(
+		async ([id, item]) => {
+			if (item.deleted) return [id, item] as const;
+			const config = normalizeReaderTranslationConfig(item.value);
+			const baseUrls = config.profiles.map((profile) => profile.baseUrl);
+			const apiKeys = config.profiles.map((profile) => profile.apiKey);
+			const profiles = config.profiles.map((profile) => Object.freeze({
+				baseUrl: profile.baseUrl,
+				model: profile.model,
+				prompt: profile.prompt,
+				temperature: profile.temperature,
+				reasoningEffort: profile.reasoningEffort,
+				requestsPerMinute: profile.requestsPerMinute,
+				tokensPerMinute: profile.tokensPerMinute,
+				animation: profile.animation,
+			}));
+			const value = Object.freeze({
+				version: 3,
+				activeBaseUrl: config.activeBaseUrl,
+				profiles: Object.freeze(profiles),
+				encryptedApiKeys: apiKeys.some(Boolean)
+					? await encryptReaderWebDavSecret(
+						apiKeys,
+						context.secret,
+						encryptedTranslationKeyAssociatedData(context, id, baseUrls),
+					)
+					: '',
+			});
+			return [id, Object.freeze({ ...item, value })] as const;
+		},
+	));
+	return Object.freeze(Object.fromEntries(entries));
+}
+
+async function decodeTranslationConfigRecords(
+	records: Readonly<Record<string, ReaderWebDavRemoteRecord>>,
+	context: ReaderWebDavCategoryTransformContext,
+): Promise<Readonly<Record<string, ReaderWebDavRemoteRecord>>> {
+	const entries = await Promise.all(Object.entries(records).map(
+		async ([id, item]) => {
+			if (item.deleted) return [id, item] as const;
+			const source = record(item.value);
+			if (!source || !Array.isArray(source.profiles)) {
+				throw new Error('WebDAV 翻译服务集合格式无效');
+			}
+			const baseUrls = source.profiles.map((rawProfile) =>
+				text(record(rawProfile)?.baseUrl));
+			const decryptedKeys = source.encryptedApiKeys
+				? await decryptReaderWebDavSecret(
+					source.encryptedApiKeys,
+					context.secret,
+					encryptedTranslationKeyAssociatedData(context, id, baseUrls),
+				)
+				: [];
+			if (!Array.isArray(decryptedKeys)) {
+				throw new Error('WebDAV 翻译 API Key 集合格式无效');
+			}
+			const profiles: unknown[] = [];
+			for (const [index, rawProfile] of source.profiles.entries()) {
+				const profile = record(rawProfile);
+				const baseUrl = baseUrls[index]!;
+				if (!profile || !baseUrl) {
+					throw new Error('WebDAV 翻译服务项格式无效');
+				}
+				profiles.push({
+					baseUrl,
+					apiKey: String(decryptedKeys[index] ?? ''),
+					model: text(profile.model),
+					prompt: String(profile.prompt ?? ''),
+					temperature: number(profile.temperature, 0.1),
+					reasoningEffort: text(profile.reasoningEffort),
+					requestsPerMinute: number(profile.requestsPerMinute, 0),
+					tokensPerMinute: number(profile.tokensPerMinute, 0),
+					animation: text(profile.animation),
+				});
+			}
+			const value: ReaderTranslationConfig = normalizeReaderTranslationConfig({
+				profiles,
+				activeBaseUrl: source.activeBaseUrl,
+			});
+			return [id, Object.freeze({ ...item, value })] as const;
+		},
+	));
+	return Object.freeze(Object.fromEntries(entries));
+}
+
+export function createReaderWebDavTranslationCategoryPort(
+	repository: ReaderTranslationConfigRepository,
+): ReaderWebDavCategoryPort {
+	return categoryPort({
+		category: 'translation',
+		initialStrategy: 'remote',
+		capture: async () => [localRecord(
+			'current',
+			(await repository.load()).config,
+		)],
+		mergeValues: (local) => local,
+		apply: (records) => repository.saveConfig(normalizeReaderTranslationConfig(
+			records.find((entry) => entry.id === 'current')?.value ??
+				createReaderTranslationDefaultConfig(),
+		)),
+		decodeRemoteRecords: (records, context) =>
+			decodeTranslationConfigRecords(records, context),
+		encodeRemoteRecords: (records, context) =>
+			encodeTranslationConfigRecords(records, context),
+	});
+}
+
+export interface ReaderWebDavTranslationCacheCategoryPortOptions {
+	readonly responses: Pick<ResponseRepository, 'entries' | 'restore'>;
+	readonly cache: DomainResponseCacheSettings;
+}
+
+export function createReaderWebDavTranslationCacheCategoryPort(
+	options: ReaderWebDavTranslationCacheCategoryPortOptions,
+): ReaderWebDavCategoryPort {
+	return categoryPort({
+		category: 'translation-cache',
+		initialStrategy: 'merge',
+		capture: async () => {
+			const entries = await options.responses.entries({
+				kinds: [options.cache.kind],
+				tags: options.cache.tags,
+			});
+			return [localRecord(
+				TRANSLATION_CACHE_RECORD_ID,
+				translationCachePayload({
+					sections: entries.map((entry) => ({
+						id: entry.id,
+						translation: typeof entry.value === 'string'
+							? entry.value
+							: '',
+						storedAt: entry.storedAt,
+					})),
+				}),
+			)];
+		},
+		mergeValues: mergeTranslationCache,
+		apply: async (records) => {
+			const payload = translationCachePayload(records.find((entry) =>
+				entry.id === TRANSLATION_CACHE_RECORD_ID)?.value);
+			await Promise.all(payload.sections.map((entry) =>
+				options.responses.restore({
+					id: entry.id,
+					kind: options.cache.kind,
+					tags: options.cache.tags,
+					freshForMs: options.cache.freshForMs,
+					retainForMs: options.cache.retainForMs,
+					persist: options.cache.persist,
+				}, entry.translation, entry.storedAt)));
+		},
+	});
+}
+
 export interface ReaderWebDavCategoryPortsOptions<TPreferences extends object> {
 	readonly history: ReaderHistoryRepository;
 	readonly bookmarks: ReaderBookmarkController | null;
@@ -249,6 +501,10 @@ export interface ReaderWebDavCategoryPortsOptions<TPreferences extends object> {
 	readonly topicContext: ReaderTopicContextStateRepository;
 	readonly customSites: ReaderCustomSiteRepository;
 	readonly connectHistory: ReaderConnectTrustHistoryAdapter | null;
+	readonly translation: ReaderTranslationConfigRepository | null;
+	readonly translationCache:
+		| ReaderWebDavTranslationCacheCategoryPortOptions
+		| null;
 }
 
 export function createReaderWebDavCategoryPorts<TPreferences extends object>(
@@ -346,6 +602,14 @@ export function createReaderWebDavCategoryPorts<TPreferences extends object>(
 				records.find((entry) => entry.id === 'current')?.value,
 			),
 		}));
+	}
+	if (options.translation) {
+		ports.push(createReaderWebDavTranslationCategoryPort(options.translation));
+	}
+	if (options.translationCache) {
+		ports.push(createReaderWebDavTranslationCacheCategoryPort(
+			options.translationCache,
+		));
 	}
 	return Object.freeze(ports);
 }

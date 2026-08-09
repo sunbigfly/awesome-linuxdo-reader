@@ -35,6 +35,17 @@ npm run main-lite:greasyfork:check
 
 不要直接编辑生成文件。修改 `lite/src/`、Lite 元数据或发布脚本后重新构建。
 
+每次 Lite 变更使用统一入口生成两套本地审查产物：
+
+```bash
+npm run main-lite:local-debug
+```
+
+该命令先生成单文件 `work/main-lite.local.js`，再由同一个 Greasy Fork 构建器生成
+Core、Features 和 `work/main-lite.greasyfork.local.user.js`。三文件本地 Loader 使用
+`file://` 引用本仓库 Core、Features 与 CSS，并禁用自身更新；因此手动审查的两个
+Library 与待发布文件完全相同。快速调试版和三文件本地测试版不可同时启用。
+
 1.0.1 的 canonical 路径统一使用 `main-lite`。构建同时保留 `mian-lite` 旧拼写的 Library、CSS 和 Loader 兼容副本，且检查时要求新旧文件逐字节一致；Webhook 全部切换到新路径并复核后，旧路径才可在后续版本评估移除。
 
 ## 两阶段发布

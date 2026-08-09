@@ -12,10 +12,25 @@ import {
 	type ReaderWebDavCategoryPort,
 } from '../src/sync/reader-webdav-coordinator.js';
 import {
+	createReaderWebDavTranslationCacheCategoryPort,
+	createReaderWebDavTranslationCategoryPort,
+} from '../src/sync/reader-webdav-category-ports.js';
+import {
+	ResponseRepository,
+	type ResponseCacheEntry,
+	type ResponseCacheInvalidation,
+	type ResponseCacheStore,
+} from '../src/cache/response-repository.js';
+import {
 	createReaderWebDavCategorySelection,
 	normalizeReaderWebDavConfig,
 	type ReaderWebDavLocalRecord,
 } from '../src/sync/reader-webdav-model.js';
+import {
+	ReaderTranslationConfigRepository,
+	normalizeReaderTranslationConfig,
+	readerTranslationActiveProfile,
+} from '../src/translation/reader-translation-config.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -28,6 +43,29 @@ class MemoryValueStorage implements ReaderWebDavConfigStoragePort {
 	}
 	async setValue(_key: string, value: unknown): Promise<void> {
 		this.value = structuredClone(value);
+	}
+}
+
+class MemoryResponseStore implements ResponseCacheStore {
+	readonly values = new Map<string, ResponseCacheEntry>();
+	async read(id: string): Promise<ResponseCacheEntry | null> {
+		return this.values.get(id) ?? null;
+	}
+	async write(entry: ResponseCacheEntry): Promise<void> {
+		this.values.set(entry.id, entry);
+	}
+	async invalidate(query: ResponseCacheInvalidation): Promise<void> {
+		for (const [id, entry] of this.values) {
+			if (
+				query.all ||
+				query.ids?.includes(id) ||
+				query.kinds?.includes(entry.kind) ||
+				query.tags?.some((tag) => entry.tags.includes(tag))
+			) this.values.delete(id);
+		}
+	}
+	async snapshotEntries(): Promise<readonly ResponseCacheEntry[]> {
+		return Object.freeze([...this.values.values()]);
 	}
 }
 
@@ -263,3 +301,217 @@ assert(
 	'一次自动同步结束后必须按用户所选间隔继续调度',
 );
 autoSync.scope.destroy();
+
+async function translationWebDavRepository(
+	writerId: string,
+	password: string,
+	categories: unknown = { translation: true },
+): Promise<ReaderWebDavConfigRepository> {
+	const result = new ReaderWebDavConfigRepository({
+		storage: new MemoryValueStorage(),
+		createWriterId: () => writerId,
+	});
+	await result.load();
+	await result.saveConfig(normalizeReaderWebDavConfig({
+		endpoint: 'https://dav.example.test/dav/',
+		username: 'webdav-account@example.test',
+		password,
+		remotePath: 'ALR-Lite/v2/sync.json',
+		categories: createReaderWebDavCategorySelection(categories),
+		autoSyncEnabled: false,
+		autoSyncIntervalMinutes: 60,
+	}));
+	return result;
+}
+
+async function translationRepository(
+	apiKey = '',
+): Promise<ReaderTranslationConfigRepository> {
+	const result = new ReaderTranslationConfigRepository({
+		storage: new MemoryValueStorage(),
+	});
+	await result.load();
+	if (apiKey) await result.saveConfig(normalizeReaderTranslationConfig({
+		baseUrl: 'https://api.example.com/v1/',
+		apiKey,
+		model: 'translation-model',
+		prompt: '使用社区术语，保留占位符。',
+		temperature: 0.1,
+		reasoningEffort: 'low',
+		requestsPerMinute: 120,
+		tokensPerMinute: 500_000,
+	}));
+	return result;
+}
+
+const encryptedServer = new MemoryWebDavServer();
+const encryptedClient = new ReaderWebDavClient({ request: encryptedServer.request });
+const translationA = await translationRepository('sk-encrypted-remote-test');
+const translationB = await translationRepository();
+const primaryTranslationProfile = readerTranslationActiveProfile(
+	translationA.snapshot.config,
+);
+await translationA.saveConfig(normalizeReaderTranslationConfig({
+	activeBaseUrl: primaryTranslationProfile.baseUrl,
+	animation: 'fade',
+	profiles: [
+		primaryTranslationProfile,
+		{
+			...primaryTranslationProfile,
+			baseUrl: 'https://second.example.com/v1/',
+			apiKey: 'sk-second-encrypted-test',
+			model: 'second-translation-model',
+			animation: 'blur',
+		},
+	],
+}));
+const translationRepositoryA = await translationWebDavRepository(
+	'translation-device-a',
+	'shared-webdav-password',
+);
+const translationRepositoryB = await translationWebDavRepository(
+	'translation-device-b',
+	'shared-webdav-password',
+);
+const translationCoordinatorA = new ReaderWebDavCoordinator({
+	client: encryptedClient,
+	repository: translationRepositoryA,
+	categories: [createReaderWebDavTranslationCategoryPort(translationA)],
+	hostname: () => 'linux.do',
+	username: () => 'reader-account',
+});
+const translationCoordinatorB = new ReaderWebDavCoordinator({
+	client: encryptedClient,
+	repository: translationRepositoryB,
+	categories: [createReaderWebDavTranslationCategoryPort(translationB)],
+	hostname: () => 'linux.do',
+	username: () => 'reader-account',
+});
+const encryptedUpload = await translationCoordinatorA.syncNow();
+assert(
+	encryptedUpload.uploaded === 1 &&
+	!String(encryptedServer.text).includes('sk-encrypted-remote-test') &&
+	!String(encryptedServer.text).includes('sk-second-encrypted-test') &&
+	String(encryptedServer.text).includes('translation-model') &&
+	String(encryptedServer.text).includes('"requestsPerMinute":120') &&
+	String(encryptedServer.text).includes('"tokensPerMinute":500000') &&
+	String(encryptedServer.text).includes('https://api.example.com/v1/') &&
+	String(encryptedServer.text).includes('https://second.example.com/v1/') &&
+	String(encryptedServer.text).includes('AES-256-GCM'),
+	'AI 翻译服务集合必须明文同步 URL 与参数，但每个 URL 对应的 API Key 只能出现标准密文封装',
+);
+const encryptedDownload = await translationCoordinatorB.syncNow();
+const downloadedProfile = readerTranslationActiveProfile(
+	translationB.snapshot.config,
+);
+assert(
+	encryptedDownload.imported === 1 &&
+	translationB.snapshot.config.profiles.length === 2 &&
+	downloadedProfile.apiKey === 'sk-encrypted-remote-test' &&
+	downloadedProfile.model === 'translation-model' &&
+	downloadedProfile.reasoningEffort === 'low' &&
+	downloadedProfile.requestsPerMinute === 120 &&
+	downloadedProfile.tokensPerMinute === 500_000 &&
+	translationB.snapshot.config.profiles.some((profile) =>
+		profile.baseUrl === 'https://second.example.com/v1/' &&
+		profile.apiKey === 'sk-second-encrypted-test' &&
+		profile.animation === 'blur'),
+	'使用相同 WebDAV 应用密码的另一设备必须解密并应用完整 AI 翻译设置',
+);
+
+const translationCachePolicy = Object.freeze({
+	kind: 'translations',
+	tags: Object.freeze(['translation:zh-CN']),
+	freshForMs: 30 * 24 * 60 * 60_000,
+	retainForMs: 180 * 24 * 60 * 60_000,
+	persist: true,
+});
+const cacheEntryId = 'reader-translation-section?' +
+	'provider=ai-section-v1&sourceLanguage=auto&targetLanguage=zh-CN&' +
+	'textFingerprint=sha256%3Asection-webdav';
+const cacheA = new ResponseRepository({
+	store: new MemoryResponseStore(),
+	maxMemoryEntries: 32,
+	maxMemoryBytes: 1_000_000,
+	now: () => 30_000,
+});
+const cacheB = new ResponseRepository({
+	store: new MemoryResponseStore(),
+	maxMemoryEntries: 32,
+	maxMemoryBytes: 1_000_000,
+	now: () => 40_000,
+});
+await cacheA.write({ id: cacheEntryId, ...translationCachePolicy }, '跨设备复用的译文');
+const cacheServer = new MemoryWebDavServer();
+const cacheClient = new ReaderWebDavClient({ request: cacheServer.request });
+const cacheCoordinatorA = new ReaderWebDavCoordinator({
+	client: cacheClient,
+	repository: await translationWebDavRepository(
+		'translation-cache-device-a',
+		'shared-webdav-password',
+		{ 'translation-cache': true },
+	),
+	categories: [createReaderWebDavTranslationCacheCategoryPort({
+		responses: cacheA,
+		cache: translationCachePolicy,
+	})],
+	hostname: () => 'linux.do',
+	username: () => 'reader-account',
+});
+const cacheCoordinatorB = new ReaderWebDavCoordinator({
+	client: cacheClient,
+	repository: await translationWebDavRepository(
+		'translation-cache-device-b',
+		'shared-webdav-password',
+		{ 'translation-cache': true },
+	),
+	categories: [createReaderWebDavTranslationCacheCategoryPort({
+		responses: cacheB,
+		cache: translationCachePolicy,
+	})],
+	hostname: () => 'linux.do',
+	username: () => 'reader-account',
+});
+await cacheCoordinatorA.syncNow();
+assert(
+	!String(cacheServer.text).includes('AES-256-GCM') &&
+	String(cacheServer.text).includes('跨设备复用的译文') &&
+	String(cacheServer.text).includes(cacheEntryId),
+	'已翻译 Section 必须作为独立普通 WebDAV 分类上传，只有翻译 URL 对应的 Key 才允许加密',
+);
+const cacheDownload = await cacheCoordinatorB.syncNow();
+const importedTranslation = await cacheB.read<string>({
+	id: cacheEntryId,
+	...translationCachePolicy,
+});
+assert(
+	cacheDownload.imported === 1 &&
+	importedTranslation.value === '跨设备复用的译文',
+	'另一设备同步后必须把已翻译 Section 写回中央 ResponseRepository 并直接命中',
+);
+
+const translationWrongPassword = await translationRepository('local-key-preserved');
+const wrongPasswordCoordinator = new ReaderWebDavCoordinator({
+	client: encryptedClient,
+	repository: await translationWebDavRepository(
+		'translation-device-c',
+		'wrong-webdav-password',
+	),
+	categories: [createReaderWebDavTranslationCategoryPort(
+		translationWrongPassword,
+	)],
+	hostname: () => 'linux.do',
+	username: () => 'reader-account',
+});
+let decryptionFailed = false;
+try {
+	await wrongPasswordCoordinator.syncNow();
+} catch {
+	decryptionFailed = true;
+}
+assert(
+	decryptionFailed &&
+	readerTranslationActiveProfile(translationWrongPassword.snapshot.config).apiKey ===
+		'local-key-preserved',
+	'应用密码不匹配时必须拒绝同步并保留本机翻译密钥，不能覆盖或降级成明文',
+);

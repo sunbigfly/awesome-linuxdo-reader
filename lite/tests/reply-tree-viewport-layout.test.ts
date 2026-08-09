@@ -71,12 +71,15 @@ assert(
 	'物理锚点候选必须只保留真实视口相交节点，不能扫描整个 overscan/祖先闭包',
 );
 const rootChildren = middle.childLayouts.get(1);
+const middleInsets = middle.rootVirtualInsets?.get(1);
 assert(
 	rootChildren !== undefined &&
 		rootChildren.postNumbers.length <= 24 &&
-		rootChildren.beforeSizes.some((size) => size > 0) &&
-		rootChildren.afterSize > 0,
-	'树中部窗口必须用前后子树占位保持完整滚动高度',
+		rootChildren.beforeSizes.every((size) => size === 0) &&
+		rootChildren.afterSize === 0 &&
+		(middleInsets?.beforeSize ?? 0) > 0 &&
+		(middleInsets?.afterSize ?? 0) > 0,
+	'树中部窗口必须把边缘子树高度提升到根级 spacer，不能让递归占位穿过可见正文',
 );
 const measuredRootLayout = new VirtualRootLayout(100, true);
 measuredRootLayout.setRoots(presentation.rootBranches());
@@ -116,8 +119,8 @@ const variableTopology = new ReplyTreeTopology();
 variableTopology.commit([
 	{ postNumber: 1, parentPostNumber: null },
 	{ postNumber: 2, parentPostNumber: 1 },
-	{ postNumber: 3, parentPostNumber: 1 },
-	{ postNumber: 4, parentPostNumber: 1 },
+	{ postNumber: 3, parentPostNumber: 2 },
+	{ postNumber: 4, parentPostNumber: 3 },
 ]);
 const variablePresentation = new ReaderReplyTreePresentation(
 	variableTopology,
@@ -146,11 +149,16 @@ const variablePlan = variableViewport.plan(
 );
 assert(
 	variablePlan.shellPostNumbers.has(1) &&
-		variablePlan.ownSizes.get(1) === 500 &&
-		variablePlan.childLayouts.get(1)?.beforeSizes[0] === 700 &&
-		variablePlan.childLayouts.get(1)?.afterSize === 100 &&
+		variablePlan.shellPostNumbers.has(2) &&
+		variablePlan.ownSizes.get(1) === 0 &&
+		variablePlan.ownSizes.get(2) === 0 &&
+		variablePlan.childLayouts.get(1)?.beforeSizes[0] === 0 &&
+		variablePlan.childLayouts.get(2)?.beforeSizes[0] === 0 &&
+		variablePlan.childLayouts.get(1)?.afterSize === 0 &&
+		variablePlan.rootVirtualInsets?.get(1)?.beforeSize === 1_200 &&
+		variablePlan.rootVirtualInsets?.get(1)?.afterSize === 100 &&
 		variableViewport.offsetOf(3) === 1_200,
-	'正文退成祖先壳后必须沿用节点实测高度计算 own-size、DFS 坐标与前后 spacer，不能重新退回固定估算',
+	'多层祖先的窗口外高度必须递归提升到根级 spacer，同时保留实测 DFS 坐标',
 );
 variableViewport.measureOwnSize(2, 800);
 assert(
@@ -273,10 +281,13 @@ const nestedMiddle = nestedViewport.plan(
 );
 assert(
 	nestedMiddle.shellPostNumbers.size >= 2 &&
-		[...nestedMiddle.childLayouts.values()].some((layout) =>
-			layout.beforeSizes.some((size) => size > 0) || layout.afterSize > 0
+		(nestedMiddle.rootVirtualInsets?.get(1)?.beforeSize ?? 0) > 0 &&
+		(nestedMiddle.rootVirtualInsets?.get(1)?.afterSize ?? 0) > 0 &&
+		[...nestedMiddle.childLayouts.values()].every((layout) =>
+			layout.beforeSizes.every((size) => size === 0) &&
+			layout.afterSize === 0
 		),
-	'多层树窗口必须保留真实祖先链并用嵌套 spacer 代替窗口外子树',
+	'多层树窗口必须保留真实祖先链，并递归外提窗口边缘留白而不是只处理直接父级',
 );
 
 const moderateTopology = new ReplyTreeTopology();
@@ -312,8 +323,8 @@ const moderatePlan = moderateViewport.plan(
 assert(
 	moderatePlan.contentPostNumbers.size <= 24 &&
 		moderatePlan.mountedPostNumbers.size <= 25 &&
-		moderatePlan.childLayouts.get(1)?.beforeSizes.some((size) => size > 0) &&
-		(moderatePlan.childLayouts.get(1)?.afterSize ?? 0) > 0,
+		(moderatePlan.rootVirtualInsets?.get(1)?.beforeSize ?? 0) > 0 &&
+		(moderatePlan.rootVirtualInsets?.get(1)?.afterSize ?? 0) > 0,
 	'中等规模树也必须服从统一 DFS 窗口，不能以原子挂载绕过 DOM 预算',
 );
 
@@ -336,7 +347,9 @@ assert(
 	'DOM owner 不得把节点窗口重新扩张为完整可见根分支',
 );
 assert(
-	rootList.querySelectorAll('.ldp-tree-virtual-spacer').length >= 2,
-	'DOM owner 必须把省略的前后子树落实为不可交互占位层',
+	rootList.querySelectorAll('.ldp-tree-virtual-spacer').length === 0 &&
+		rootList.querySelector<HTMLElement>('[data-post-number="1"]')
+			?.style.getPropertyValue('--ldp-virtual-own-size') === '0px',
+	'DOM owner 不得在单根窗口内重新插入已提升的前后留白或祖先自身占位',
 );
 owner.destroy();

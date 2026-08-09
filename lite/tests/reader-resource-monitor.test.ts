@@ -110,6 +110,7 @@ const monitor = new ReaderResourceMonitor({
 			'topic-batch': 0,
 			'nested-replies': 1,
 			'user-card': 0,
+			translation: 0,
 			standard: 0,
 		},
 		queuedByLane: {
@@ -117,6 +118,7 @@ const monitor = new ReaderResourceMonitor({
 			'topic-batch': 1,
 			'nested-replies': 2,
 			'user-card': 1,
+			translation: 0,
 			standard: 0,
 		},
 	}),

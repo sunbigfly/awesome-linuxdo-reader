@@ -7,8 +7,10 @@ import {
 	ReaderTranslationController,
 	type ReaderTranslationMode,
 	type ReaderTranslationPostMetadata,
+	type ReaderTranslationPreloadPost,
 } from './reader-translation-controller.js';
 import type { TranslationBatchPort } from './translation-request-adapter.js';
+import type { ReaderTranslationAnimation } from './reader-translation-config.js';
 
 export interface ReaderTranslationFeatureOptions {
 	readonly document: Document;
@@ -16,6 +18,11 @@ export interface ReaderTranslationFeatureOptions {
 	readonly buttonHost: HTMLElement;
 	readonly surfaces: () => readonly HTMLElement[];
 	readonly initialMode: ReaderTranslationMode;
+	readonly initialAnimation?: ReaderTranslationAnimation;
+	readonly subscribeAnimation?: (
+		listener: (animation: ReaderTranslationAnimation) => void,
+		scope: LifecycleScope,
+	) => void;
 	readonly persistMode?: (mode: ReaderTranslationMode) => void;
 	readonly readPost?: (post: HTMLElement) => ReaderTranslationPostMetadata;
 	readonly renderIcon?: (document: Document) => Node;
@@ -40,14 +47,19 @@ export class ReaderTranslationFeature {
 	readonly scope: LifecycleScope;
 	readonly controller: ReaderTranslationController;
 	readonly button: ReaderTranslationButton;
+	readonly #document: Document;
 
 	constructor(options: ReaderTranslationFeatureOptions) {
+		this.#document = options.document;
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		try {
 			this.controller = new ReaderTranslationController({
 				translator: options.translator,
 				surfaces: options.surfaces,
 				initialMode: options.initialMode,
+				...(options.initialAnimation === undefined
+					? {}
+					: { initialAnimation: options.initialAnimation }),
 				...(options.persistMode === undefined
 					? {}
 					: { persistMode: options.persistMode }),
@@ -60,6 +72,10 @@ export class ReaderTranslationFeature {
 				...(options.notify === undefined ? {} : { notify: options.notify }),
 				parentScope: this.scope,
 			});
+			options.subscribeAnimation?.(
+				(animation) => this.controller.setAnimation(animation),
+				this.scope,
+			);
 			this.button = createReaderTranslationButton({
 				document: options.document,
 				controller: this.controller,
@@ -77,6 +93,31 @@ export class ReaderTranslationFeature {
 			this.scope.destroy();
 			throw error;
 		}
+	}
+
+	preloadPosts(posts: readonly ReaderTranslationPreloadPost[]): void {
+		this.controller.preloadPosts(this.#document, posts);
+	}
+
+	activateTopic(topicId: string | number): number {
+		return this.controller.activateTopic(topicId);
+	}
+
+	updatePreloadWindow(
+		topicId: string | number,
+		posts: readonly ReaderTranslationPreloadPost[],
+		generation?: number,
+	): void {
+		this.controller.updatePreloadWindow(
+			this.#document,
+			topicId,
+			posts,
+			generation,
+		);
+	}
+
+	deactivateTopic(topicId: string | number, generation?: number): void {
+		this.controller.deactivateTopic(topicId, generation);
 	}
 
 	syncMountedPosts(): void {

@@ -206,3 +206,55 @@ await repository.flush();
 rootProjection.destroy();
 domOwner.destroy();
 streamView.destroy();
+
+const edgeRepository = new ReplyTreeRepository(13, {
+	load: async () => null,
+	save: async () => {},
+});
+edgeRepository.ingest([{ post_number: 1, reply_to_post_number: null }], 'topic-json');
+const edgeLayout = new VirtualRootLayout(100);
+edgeLayout.setRoots([1]);
+const edgeStreamView = new VirtualStreamView(document);
+document.body.append(edgeStreamView.slots.root);
+const edgeDomOwner = new ReplyTreeDomOwner(
+	edgeRepository.topology,
+	edgeStreamView.slots.rootList,
+);
+edgeDomOwner.register(new PostView(document, {
+	postId: 2_001,
+	postNumber: 1,
+	username: 'edge-reader',
+}), false);
+const edgeVirtualDom = new VirtualStreamDomController(
+	edgeRepository,
+	edgeLayout,
+	edgeStreamView,
+	edgeDomOwner,
+	{
+		prepareRoots: () => ({
+			mountedPostNumbers: new Set([1]),
+			contentPostNumbers: new Set([1]),
+			shellPostNumbers: new Set(),
+			ownSizes: new Map([[1, 100]]),
+			rootVirtualInsets: new Map([[
+				1,
+				{ beforeSize: 25, afterSize: 35 },
+			]]),
+			childLayouts: new Map(),
+		}),
+	},
+);
+edgeVirtualDom.commit({
+	scrollOffset: 0,
+	viewportSize: 100,
+	overscanBeforeScreens: 0,
+	overscanAfterScreens: 0,
+});
+assert(
+	edgeStreamView.slots.beforeSpacer.style.blockSize === '25px' &&
+		edgeStreamView.slots.afterSpacer.style.blockSize === '35px',
+	'树窗口边缘高度必须由既有流级 spacer 承接，不能重新留在递归回复 DOM 内',
+);
+await edgeRepository.flush();
+edgeDomOwner.destroy();
+edgeStreamView.destroy();

@@ -4,6 +4,7 @@ import {
 	BrowserDiscourseNotificationNativeState,
 	BrowserDiscourseHostApiPort,
 	discourseNativeBoostsAvailable,
+	discourseNativeCurrentUserBindingAvailable,
 	discourseNativeEmojiUrl,
 	discourseNativeEmojiMenu,
 	discourseNativeFlagCatalog,
@@ -314,6 +315,39 @@ assert(
 	new BrowserDiscourseBookmarkNativeState(modelCurrentUserHost).username() ===
 		'SwitchedModelViewer',
 	'收藏与回应桥必须复用同一 current-user/User.current 兼容入口，不能把已登录用户误判为匿名',
+);
+
+let classCurrentUser: unknown = null;
+class DiscourseUserModel {
+	static current(): unknown {
+		return classCurrentUser;
+	}
+}
+const classCurrentUserHost = new BrowserDiscourseHostApiPort({
+	pageWindow: {
+		require(name: string): unknown {
+			return name === 'discourse/models/user'
+				? { default: DiscourseUserModel }
+				: null;
+		},
+		Discourse: {
+			__container__: {
+				lookup(): null {
+					return null;
+				},
+			},
+		},
+	},
+});
+assert(
+	discourseNativeCurrentUserBindingAvailable(classCurrentUserHost) &&
+		discourseNativeCurrentUsername(classCurrentUserHost) === '',
+	'匿名页必须接受 Discourse 函数类导出的 User.current binding，不能卡住 runtime readiness',
+);
+classCurrentUser = Object.freeze({ username: 'SignedInLater' });
+assert(
+	discourseNativeCurrentUsername(classCurrentUserHost) === 'SignedInLater',
+	'函数类导出的 User.current 必须继续实时反映后续登录会话',
 );
 
 let nonDiscourseRejected = false;

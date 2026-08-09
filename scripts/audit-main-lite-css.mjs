@@ -541,6 +541,10 @@ const requiredLayoutContracts = [
 		/\.ldp-virtual-stream\s*\{[^}]*overflow-anchor:\s*auto\s*;/s,
 	],
 	[
+		'floating virtual stream excluded from duplicate native anchoring',
+		/\.ldp-overlay\.ldp-window-managed:not\(\.ldp-fullpage\):not\(\.ldp-reader-embedded\)[^{]*\.ldp-virtual-stream\s*\{[^}]*overflow-anchor:\s*none\s*;/s,
+	],
+	[
 		'virtual spacers excluded from anchoring',
 		/\.ldp-virtual-spacer\s*\{[^}]*overflow-anchor:\s*none\s*;/s,
 	],

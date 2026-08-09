@@ -152,9 +152,11 @@ function mergePostEntity<TPost extends ReplyTreePostInput>(
 	return Object.freeze(merged) as TPost;
 }
 
-function validTreeSnapshot(
+function validTreeSnapshot<TPost extends ReplyTreePostInput>(
 	value: unknown,
 	topicId: string,
+	posts: readonly StoredTopicPost<TPost>[],
+	removedPostNumbers: ReadonlySet<PostNumber>,
 	onInvalid: (error: unknown) => void,
 ): StoredReplyTreeSnapshot | null {
 	if (value === null || value === undefined) return null;
@@ -213,7 +215,40 @@ function validTreeSnapshot(
 	}
 	if (valid) {
 		try {
-			new ReplyTreeTopology().replace(candidate.tree!);
+			const topology = new ReplyTreeTopology();
+			topology.replace(candidate.tree!);
+			for (const entry of posts) {
+				const rawParentPostNumber = entry.value.reply_to_post_number;
+				const parentPostNumber =
+					rawParentPostNumber === undefined ||
+						rawParentPostNumber === null ||
+						rawParentPostNumber === ''
+						? null
+						: tryDiscoursePostNumber(rawParentPostNumber);
+				if (parentPostNumber === null && !(
+					rawParentPostNumber === undefined ||
+					rawParentPostNumber === null ||
+					rawParentPostNumber === ''
+				)) {
+					throw new Error(
+						`Topic ${topicId} 楼层 #${entry.postNumber} 的缓存父楼层无效`,
+					);
+				}
+				const storedParentPostNumber = topology.parentOf(entry.postNumber);
+				const parentWasRemoved = parentPostNumber !== null &&
+					removedPostNumbers.has(parentPostNumber);
+				if (
+					storedParentPostNumber === undefined ||
+					(
+						storedParentPostNumber !== parentPostNumber &&
+						!parentWasRemoved
+					)
+				) {
+					throw new Error(
+						`Topic ${topicId} 楼层 #${entry.postNumber} 的正文与回复树缓存关系不一致`,
+					);
+				}
+			}
 			return value as StoredReplyTreeSnapshot;
 		} catch (error) {
 			onInvalid(error);
@@ -758,6 +793,9 @@ export class TopicSnapshotRepository<
 		if (value.topic !== null && topicSource === null) {
 			throw new Error(`Topic ${this.topicId} 的正文来源无效`);
 		}
+		const normalizedPosts = Object.freeze(
+			[...posts.values()].sort((left, right) => left.postNumber - right.postNumber),
+		);
 		return Object.freeze({
 			schemaVersion: 2,
 			topicId: this.topicId,
@@ -773,14 +811,18 @@ export class TopicSnapshotRepository<
 				normalizeStreamPostIds(value.streamPostIds)
 					.filter((postId) => !blockedStreamPostIds.has(postId)),
 			),
-			posts: Object.freeze(
-				[...posts.values()].sort((left, right) => left.postNumber - right.postNumber),
-			),
+			posts: normalizedPosts,
 			removedPosts: Object.freeze(
 				[...removedPosts.values()]
 					.sort((left, right) => left.postNumber - right.postNumber),
 			),
-			tree: validTreeSnapshot(value.tree, this.topicId, this.#onInvalidTreeSnapshot),
+			tree: validTreeSnapshot(
+				value.tree,
+				this.topicId,
+				normalizedPosts,
+				new Set(removedPosts.keys()),
+				this.#onInvalidTreeSnapshot,
+			),
 		});
 	}
 

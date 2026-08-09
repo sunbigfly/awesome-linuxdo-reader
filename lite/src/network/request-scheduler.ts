@@ -17,6 +17,7 @@ export type RequestLane =
 	| 'topic-batch'
 	| 'nested-replies'
 	| 'user-card'
+	| 'translation'
 	| 'standard';
 
 const REQUEST_LANES: readonly RequestLane[] = Object.freeze([
@@ -24,6 +25,7 @@ const REQUEST_LANES: readonly RequestLane[] = Object.freeze([
 	'topic-batch',
 	'nested-replies',
 	'user-card',
+	'translation',
 	'standard',
 ]);
 
@@ -34,6 +36,8 @@ const LANE_CONCURRENCY_CAP: Readonly<Record<RequestLane, number>> = Object.freez
 	/* replies.json 最多并行两个父楼；全局 permit 仍统一约束启动间隔与额度。 */
 	'nested-replies': 2,
 	'user-card': 2,
+	/* 五路预加载之外为滚动到眼前的正文预留一路；共享 permit 仍限制启动。 */
+	translation: 6,
 	standard: 1,
 });
 

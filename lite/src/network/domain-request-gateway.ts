@@ -129,6 +129,18 @@ export interface TranslationRequest<T> extends DomainRequestExecution<T> {
 	readonly textFingerprint: string;
 	readonly sourceLanguage: string;
 	readonly targetLanguage: string;
+	readonly profile?:
+		| 'translation-visible'
+		| 'translation-access'
+		| 'translation-prefetch';
+}
+
+export interface TranslationCacheLookup {
+	readonly provider: string;
+	readonly textFingerprint: string;
+	readonly sourceLanguage: string;
+	readonly targetLanguage: string;
+	readonly cache: DomainResponseCacheSettings;
 }
 
 export interface ResourceRequest<T> extends DomainRequestExecution<T> {
@@ -279,8 +291,8 @@ export class DomainRequestGateway {
 	translate<T>(input: TranslationRequest<T>): Promise<T> {
 		return this.#execute({
 			...input,
-			profile: 'translation-visible',
-			lane: 'standard',
+			profile: input.profile ?? 'translation-visible',
+			lane: 'translation',
 			namespace: 'reader-translation',
 			identity: translationRequestIdentity(input),
 		});
@@ -316,6 +328,24 @@ export class DomainRequestGateway {
 		return cached.state === 'miss' ? null : cached.value as T;
 	}
 
+	async cachedTranslation<T>(
+		input: TranslationCacheLookup,
+	): Promise<T | null> {
+		const contract = this.#translationCacheContract(input);
+		const cached = await this.#responses.read<T>(
+			cachePolicy(contract, input.cache),
+		);
+		return cached.state === 'miss' ? null : cached.value as T;
+	}
+
+	cacheTranslation<T>(
+		input: TranslationCacheLookup,
+		value: T,
+	): Promise<void> {
+		const contract = this.#translationCacheContract(input);
+		return this.#responses.write(cachePolicy(contract, input.cache), value);
+	}
+
 	invalidateResource(input: ResourceCacheLookup): Promise<void> {
 		return this.#responses.invalidate({
 			ids: [this.#resourceContract(input).cacheKey],
@@ -334,6 +364,13 @@ export class DomainRequestGateway {
 		return createRequestContract('resource-visible', {
 			namespace: 'reader-resource',
 			identity: resourceRequestIdentity(input),
+		});
+	}
+
+	#translationCacheContract(input: TranslationCacheLookup) {
+		return createRequestContract('translation-visible', {
+			namespace: 'reader-translation-section',
+			identity: translationRequestIdentity(input),
 		});
 	}
 

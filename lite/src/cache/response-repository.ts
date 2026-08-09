@@ -76,6 +76,7 @@ export interface ResponseCacheStore {
 		update: (current: ResponseCacheEntry | null) => ResponseCacheEntry<T>,
 	): Promise<ResponseCacheEntry<T> | null>;
 	records?(): Promise<readonly ResponseCacheRecord[]>;
+	snapshotEntries?(): Promise<readonly ResponseCacheEntry[]>;
 }
 
 export interface ResponseCacheMutationPort {
@@ -461,6 +462,43 @@ export class ResponseRepository {
 		if (this.#writes.get(policy.id) === write) this.#writes.delete(policy.id);
 	}
 
+	/** WebDAV 等受控迁移入口：仅在远端版本更新时保留原 storedAt 写回。 */
+	async restore<T>(
+		rawPolicy: ResponseCachePolicy,
+		value: T,
+		storedAtValue: number,
+	): Promise<void> {
+		const policy = normalizePolicy(rawPolicy);
+		const storedAt = Math.max(0, Math.floor(storedAtValue));
+		if (!Number.isSafeInteger(storedAt) || storedAt + policy.retainForMs <= this.#now()) {
+			return;
+		}
+		const current = await this.read<T>(policy);
+		if ((current.storedAt ?? -1) >= storedAt) return;
+		const entry: ResponseCacheEntry<T> = Object.freeze({
+			schemaVersion: 1,
+			id: policy.id,
+			kind: policy.kind,
+			tags: policy.tags,
+			storedAt,
+			expiresAt: storedAt + policy.retainForMs,
+			bytes: Math.max(0, this.#estimateBytes(value)),
+			value,
+		});
+		this.#remember(entry);
+		if (!policy.persist) return;
+		const previous = this.#writes.get(policy.id) ?? Promise.resolve();
+		const write = previous
+			.catch(() => {})
+			.then(() => this.#store.write(entry))
+			.catch((error) => {
+				this.#onPersistenceError(error);
+			});
+		this.#writes.set(policy.id, write);
+		await write;
+		if (this.#writes.get(policy.id) === write) this.#writes.delete(policy.id);
+	}
+
 	async merge<T>(
 		rawPolicy: ResponseCachePolicy,
 		incoming: T,
@@ -637,6 +675,45 @@ export class ResponseRepository {
 			}));
 		}
 		return Object.freeze([...records.values()]);
+	}
+
+	/**
+	 * 仅供受控的数据迁移 owner 导出仍在保留期内的完整缓存记录。
+	 * UI 目录继续使用 records()，避免普通调用方接触响应正文。
+	 */
+	async entries(
+		query: ResponseCacheInvalidation,
+	): Promise<readonly ResponseCacheEntry[]> {
+		if (this.#writes.size) await Promise.all(this.#writes.values());
+		let persistent: readonly ResponseCacheEntry[] = [];
+		try {
+			persistent = await this.#store.snapshotEntries?.() ?? [];
+		} catch (error) {
+			this.#onPersistenceError(error);
+			throw error;
+		}
+		const now = this.#now();
+		const entries = new Map<string, ResponseCacheEntry>();
+		for (const entry of persistent) {
+			if (
+				entry.schemaVersion !== 1 ||
+				!matchesInvalidation(entry, query) ||
+				!Number.isFinite(entry.expiresAt) ||
+				entry.expiresAt <= now
+			) continue;
+			entries.set(entry.id, entry);
+		}
+		for (const entry of this.#memory.values()) {
+			if (!matchesInvalidation(entry, query) || entry.expiresAt <= now) continue;
+			entries.set(entry.id, entry);
+		}
+		return Object.freeze([...entries.values()]
+			.sort((left, right) =>
+				right.storedAt - left.storedAt || left.id.localeCompare(right.id))
+			.map((entry) => Object.freeze({
+				...entry,
+				tags: Object.freeze([...entry.tags]),
+			})));
 	}
 
 	#validEntry(entry: ResponseCacheEntry, policy: ResponseCachePolicy): boolean {
