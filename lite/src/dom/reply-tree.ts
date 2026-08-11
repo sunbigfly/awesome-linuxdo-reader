@@ -46,6 +46,7 @@ export class ReplyTreeTopology {
 	#parentByPost = new Map<PostNumber, PostNumber | null>();
 	#childrenByParent = new Map<PostNumber, Set<PostNumber>>();
 	#subtreePostCountByPost = new Map<PostNumber, number>();
+	#snapshotCache: ReplyTreeSnapshot | null = null;
 
 	get revision(): number {
 		return this.#revision;
@@ -182,6 +183,7 @@ export class ReplyTreeTopology {
 			this.#childrenByParent,
 		);
 		this.#revision += 1;
+		this.#snapshotCache = null;
 		return Object.freeze({
 			revision: this.#revision,
 			changedPostNumbers: Object.freeze(sorted(changed)),
@@ -219,6 +221,7 @@ export class ReplyTreeTopology {
 			this.#childrenByParent,
 		);
 		this.#revision += 1;
+		this.#snapshotCache = null;
 		return Object.freeze({
 			revision: this.#revision,
 			changedPostNumbers: Object.freeze(sorted([postNumber, ...directChildren])),
@@ -262,6 +265,7 @@ export class ReplyTreeTopology {
 			this.#childrenByParent,
 		);
 		this.#revision = Math.max(this.#revision + 1, snapshot.revision);
+		this.#snapshotCache = null;
 		return Object.freeze({
 			revision: this.#revision,
 			changedPostNumbers: Object.freeze(sorted(changed)),
@@ -270,16 +274,18 @@ export class ReplyTreeTopology {
 	}
 
 	snapshot(): ReplyTreeSnapshot {
+		if (this.#snapshotCache) return this.#snapshotCache;
 		const relations = sorted(this.#parentByPost.keys()).map((postNumber) =>
 			Object.freeze({
 				postNumber,
 				parentPostNumber: this.#parentByPost.get(postNumber) ?? null,
 			}),
 		);
-		return Object.freeze({
+		this.#snapshotCache = Object.freeze({
 			revision: this.#revision,
 			relations: Object.freeze(relations),
 		});
+		return this.#snapshotCache;
 	}
 
 	#buildChildren(

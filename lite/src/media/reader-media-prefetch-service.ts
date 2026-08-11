@@ -102,11 +102,13 @@ export class ReaderMediaPrefetchService {
 				const template = this.#document.createElement('template');
 				template.innerHTML = cooked;
 				for (const image of template.content.querySelectorAll('img')) {
-					add(
-						image.getAttribute('src') ||
-						image.getAttribute('data-src') ||
+					const source = [
+						image.getAttribute('src'),
+						image.getAttribute('data-src'),
 						image.getAttribute('data-large-src'),
-					);
+					].map((value) => absoluteHttpSource(value, this.#baseUrl))
+						.find(Boolean);
+					if (source) sources.add(source);
 				}
 			}
 			for (const source of reactionSources?.(post) ?? []) add(source);

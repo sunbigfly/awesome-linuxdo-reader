@@ -198,7 +198,6 @@ const feature = new ReaderSelectionQuoteFeature({
 		frame = null;
 	},
 	imageQuoteShowDelayMs: 0,
-	imageQuoteHideDelayMs: 0,
 	imageQuoteCycleMs: 60_000,
 	onError: (cause) => {
 		errors.push(cause);
@@ -313,10 +312,47 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 flushFrame();
 assert(
 	feature.imageToolbar.hidden === false &&
-		feature.imageToolbar.style.left === '1068px' &&
-		feature.imageToolbar.style.top === '738px',
-	'图片 Hover 到期后必须复用 viewport 回夹规则投影同一 action surface',
+		feature.imageToolbar.style.left === '1076px' &&
+		feature.imageToolbar.style.top === '746px',
+	'图片 Hover 到期后必须用 4px 可抵达间距复用 viewport 回夹规则投影同一 action surface',
 );
+const nativeImageSetTimeout = globalThis.setTimeout;
+const nativeImageClearTimeout = globalThis.clearTimeout;
+let imageHideDelay = -1;
+let imageHideHandle: ReturnType<typeof setTimeout> | null = null;
+try {
+	globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+		imageHideDelay = Number(args[1] ?? 0);
+		imageHideHandle = 41 as unknown as ReturnType<typeof setTimeout>;
+		return imageHideHandle;
+	}) as typeof setTimeout;
+	globalThis.clearTimeout = ((...args: Parameters<typeof clearTimeout>) => {
+		if (args[0] === imageHideHandle) {
+			imageHideHandle = null;
+			return;
+		}
+		nativeImageClearTimeout(args[0]);
+	}) as typeof clearTimeout;
+	const pointerOut = new (document.defaultView as unknown as {
+		Event: typeof Event;
+	}).Event('pointerout', { bubbles: true });
+	Object.defineProperty(pointerOut, 'relatedTarget', { value: null });
+	image.dispatchEvent(pointerOut);
+	assert(
+		imageHideDelay >= 400 && imageHideHandle !== null,
+		`离开图片后必须保留足够的工具栏抵达时间：${imageHideDelay}`,
+	);
+	feature.imageToolbar.dispatchEvent(new (document.defaultView as unknown as {
+		Event: typeof Event;
+	}).Event('pointerenter'));
+	assert(
+		imageHideHandle === null && !feature.imageToolbar.hidden,
+		'鼠标进入图片引用工具栏必须接管 hover 并取消待执行隐藏',
+	);
+} finally {
+	globalThis.setTimeout = nativeImageSetTimeout;
+	globalThis.clearTimeout = nativeImageClearTimeout;
+}
 feature.imageToolbar.querySelector<HTMLButtonElement>(
 	'button[data-image-quote-action="quote"]',
 )!.click();

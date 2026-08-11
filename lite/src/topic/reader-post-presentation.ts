@@ -377,6 +377,10 @@ export function createReaderPostPresentation<
 	options: ReaderPostPresentationOptions,
 ): ReaderPostPresentation<TPost> {
 	const currentUsername = text(options.currentUsername);
+	const exactTimeByView = new WeakMap<
+		PostView,
+		Readonly<{ timestamp: string; value: string }>
+	>();
 	const presentation: ReaderPostPresentation<TPost> = {
 		identity(postValue: TPost): PostViewIdentity {
 			const post = record(postValue);
@@ -438,7 +442,16 @@ export function createReaderPostPresentation<
 			if (relative) {
 				const time = options.document.createElement('span');
 				time.className = 'ldp-time';
-				const exact = options.exactTime(createdAt);
+				const cachedExact = exactTimeByView.get(view);
+				const exact = cachedExact?.timestamp === createdAt
+					? cachedExact.value
+					: options.exactTime(createdAt);
+				if (exact && cachedExact?.timestamp !== createdAt) {
+					exactTimeByView.set(view, Object.freeze({
+						timestamp: createdAt,
+						value: exact,
+					}));
+				}
 				if (exact) time.dataset.exactTime = exact;
 				const label = options.document.createElement('span');
 				label.className = 'ldp-time-relative';

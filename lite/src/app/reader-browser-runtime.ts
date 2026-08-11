@@ -22,6 +22,9 @@ import {
 	type DiscourseNativeTopicPresentationPort,
 } from '../discourse/native-host-api.js';
 import {
+	discourseNativeTargetFailureIsDefinitive,
+} from '../discourse/native-request-descriptors.js';
+import {
 	ReaderCacheManagementSurface,
 	type ReaderCacheCategory,
 	type ReaderCurrentTopicRefreshResult,
@@ -36,6 +39,10 @@ import {
 import type {
 	PreferencesConfigCodec,
 } from '../state/preferences-config-codec.js';
+import {
+	ReaderSettingsConfigCodec,
+	ReaderSettingsConfigManager,
+} from '../state/reader-settings-config-manager.js';
 import {
 	DiscourseComposerCoordinator,
 	DiscourseComposerHostIsolation,
@@ -66,6 +73,8 @@ import {
 import {
 	normalizeReaderHistoryAnchorState,
 	type ReaderHistoryAnchorState,
+	type ReaderHistoryQuoteHighlightState,
+	type ReaderHistoryQuoteSource,
 } from '../history/reader-history-model.js';
 import {
 	ReaderHistoryRepository,
@@ -172,6 +181,7 @@ import type {
 } from '../media/reader-poll-model.js';
 import {
 	BrowserSharedRequestPermit,
+	browserCloudflareChallengeHref,
 	type BrowserSharedRequestPermitOptions,
 } from '../network/browser-shared-request-permit.js';
 import { abortableDelay } from '../network/coordinated-request-client.js';
@@ -389,6 +399,7 @@ import {
 	type ReaderImagePreferencesAdapter,
 } from '../media/reader-image-preferences.js';
 import {
+	DEFAULT_READER_REPLY_TREE_PREFERENCES,
 	ReaderReplyTreePresentation,
 	type ReaderReplyTreePreferencesAdapter,
 	type ReaderReplyTreePreferencesPreviewPort,
@@ -400,6 +411,25 @@ import {
 	ReaderOpenQueueSession,
 	type ReaderOpenQueuePreferencesAdapter,
 } from '../queue/reader-open-queue-session.js';
+import {
+	readerTopicDownloadCoverage,
+	readerTopicDownloadLocalArchivePlan,
+	selectReaderTopicDownloadPosts,
+} from '../queue/reader-topic-download-manager.js';
+import {
+	createReaderTopicOfflineDocument,
+	hydrateReaderTopicOfflineDocumentWindow,
+	prioritizeReaderTopicOfflineTargetCandidates,
+	readerTopicOfflineQuoteTargets,
+	type ReaderTopicOfflineDocument,
+} from '../archive/reader-topic-offline-document.js';
+import {
+	ReaderTopicOfflineArtifactRepository,
+} from '../archive/reader-topic-offline-artifact-repository.js';
+import {
+	prepareReaderCookedCallouts,
+} from '../media/reader-cooked-content-feature.js';
+import { ReaderKatexController } from '../media/reader-katex-controller.js';
 import {
 	ReaderShortcutController,
 	readerShortcutBindingFromEvent,
@@ -443,6 +473,7 @@ import {
 	type ReaderTopicNavigationSource,
 } from '../topic/reader-topic-navigation-controller.js';
 import {
+	openReaderNativeTopicTab,
 	readerNativeTopicHref,
 } from '../topic/reader-native-topic-route.js';
 import {
@@ -461,6 +492,9 @@ import {
 	type ReaderTopicScrollAdapterOptions,
 } from '../topic/reader-topic-scroll-adapter.js';
 import {
+	ReaderTopicLocalArchiveFeature,
+} from '../topic/reader-topic-local-archive-feature.js';
+import {
 	ReaderTopicTimelineController,
 } from '../topic/reader-topic-timeline-controller.js';
 import {
@@ -471,6 +505,8 @@ import {
 } from '../topic/reader-topic-timeline-view.js';
 import {
 	clearReaderTopicHostIdentityCache,
+	normalizeReaderTopicHeader,
+	readerTopicOwnerUsername,
 	readerTopicHostIdentityCacheStats,
 	ReaderTopicHeaderController,
 	ReaderTopicHeaderView,
@@ -533,6 +569,7 @@ import {
 } from './reader-data-runtime.js';
 import {
 	readBrowserPerformanceCapabilities,
+	readerBulkBackgroundRequestHasHeadroom,
 	ReaderPerformancePolicy,
 	type ReaderPerformancePreferences,
 	type ReaderPerformanceSnapshot,
@@ -728,6 +765,7 @@ export interface ReaderBrowserTargetRequest {
 	readonly focus?: boolean;
 	readonly highlight?: boolean;
 	readonly forceRefresh?: boolean;
+	readonly quoteHighlight?: ReaderHistoryQuoteHighlightState;
 }
 
 export interface ReaderBrowserNotificationOptions extends Omit<
@@ -866,6 +904,8 @@ export interface ReaderBrowserRuntimeOptions<
 	readonly bookmarks?: false | ReaderBrowserBookmarkOptions;
 	readonly boostCopy?: false | ReaderBrowserBoostCopyOptions;
 	readonly topicActionRail?: false | ReaderTopicActionRailPreferencesPort;
+	readonly downloadCurrentTopic?: () => void | Promise<void>;
+	readonly openTopicDownloadManager?: () => void | Promise<void>;
 	readonly searchForms?: ReaderSearchFormsPort;
 	readonly timelineView?: false | ReaderBrowserTimelineViewOptions;
 	readonly history?: ReaderBrowserHistoryOptions;
@@ -1044,6 +1084,9 @@ export interface ReaderBrowserRuntimeStageOptions<
 					'export' | 'import'
 				>;
 				readonly defaults: Readonly<TPreferences>;
+				readonly customSites: ReaderCustomSiteRepository;
+				readonly translation: ReaderTranslationConfigRepository | null;
+				readonly webDav: ReaderWebDavConfigRepository | null;
 			}>;
 	}>;
 	readonly selectHistoryNavigationPreferences?: (
@@ -1528,15 +1571,12 @@ export class ReaderBrowserRuntime<
 			: null;
 		let challengeHref = '';
 		try {
-			const url = new URL(
-				'/',
+			challengeHref = browserCloudflareChallengeHref(
 				options.topic.origin ??
 					options.data.rateLimit.baseUrl ??
 					options.document.baseURI,
+				options.document.location?.href ?? options.document.baseURI,
 			);
-			if (['http:', 'https:'].includes(url.protocol)) {
-				challengeHref = url.href;
-			}
 		} catch {
 			// 非 HTTP(S) 测试文档不提供手动验证入口。
 		}
@@ -1573,6 +1613,25 @@ export class ReaderBrowserRuntime<
 					: {}),
 				parentScope: this.scope,
 			});
+			const openNative = this.shell.view.root
+				.querySelector<HTMLAnchorElement>('a.ldp-open');
+			const browserWindow = options.document.defaultView;
+			if (openNative && browserWindow) {
+				const openNativeTopic = (event: Event): void => {
+					const pointer = event as MouseEvent;
+					if (
+						(event.type === 'click' && pointer.button !== 0) ||
+						(event.type === 'auxclick' && pointer.button !== 1) ||
+						!openNative.href ||
+						openNative.hidden ||
+						!openReaderNativeTopicTab(browserWindow, openNative.href)
+					) return;
+					event.preventDefault();
+					event.stopPropagation();
+				};
+				this.scope.listen(openNative, 'click', openNativeTopic);
+				this.scope.listen(openNative, 'auxclick', openNativeTopic);
+			}
 			this.feedback = new ReaderFeedbackSurface({
 				document: options.document,
 				root: this.shell.view.surfaceHost,
@@ -1682,6 +1741,9 @@ export class ReaderBrowserRuntime<
 						? {
 							challenge: {
 								origin: challengeOrigin,
+								redirectHref:
+									options.document.location?.href ??
+									options.document.baseURI,
 								verify: async (signal: AbortSignal) => {
 									const response = await this.nativeAjax.request<unknown>({
 										path: '/session/current.json',
@@ -1689,7 +1751,13 @@ export class ReaderBrowserRuntime<
 										signal,
 										noStore: true,
 									});
-									return response.ok && response.cloudflareMitigated !== true;
+									/*
+									 * 普通 Discourse 429 只说明站点仍在限流，不代表 Cloudflare
+									 * challenge 仍存在。这里只验证过盾状态；原有请求管线继续
+									 * 独立处理 Retry-After，不能因此把已通过的浮窗退回 required。
+									 */
+									return response.status >= 100 &&
+										response.cloudflareMitigated !== true;
 								},
 								screen: challengeWindow.screen,
 								open: (
@@ -1776,6 +1844,9 @@ export class ReaderBrowserRuntime<
 					currentTopicId: () => this.shell.activeTopicId === null
 						? documentTopicId(options.document)
 						: Number(this.shell.activeTopicId),
+					onPostChanged: (post) => {
+						this.shell.activeValue?.services.live.ingestPostDelta(post);
+					},
 					parentScope: this.scope,
 					onError: (cause) => reportTopicFeature(
 						this.shell.activeTopicId ?? 0,
@@ -3091,6 +3162,15 @@ export class ReaderBrowserRuntime<
 									);
 								}
 							},
+							...(options.downloadCurrentTopic
+								? { downloadCurrentTopic: options.downloadCurrentTopic }
+								: {}),
+							...(options.openTopicDownloadManager
+								? {
+									openTopicDownloadManager:
+										options.openTopicDownloadManager,
+								}
+								: {}),
 							parentScope: context.scope,
 							onError: (cause) => reportTopicFeature(
 								context.topicId,
@@ -3215,11 +3295,16 @@ export class ReaderBrowserRuntime<
 										const status = Number(
 											(error as { readonly status?: unknown })?.status,
 										);
-										if (
-											error instanceof DOMException &&
-											error.name === 'AbortError'
-										) throw error;
-										if ([401, 403, 429].includes(status)) throw error;
+											if (
+												error instanceof DOMException &&
+												error.name === 'AbortError'
+											) throw error;
+											if (discourseNativeTargetFailureIsDefinitive({
+												endpoint: candidate.endpoint,
+												scope: targetOptions.scope,
+												status,
+											})) return null;
+											if ([401, 403, 429].includes(status)) throw error;
 									}
 								}
 								if (lastError) throw lastError;
@@ -3232,6 +3317,12 @@ export class ReaderBrowserRuntime<
 								cause,
 							),
 						});
+					const topicScroll = new ReaderTopicScrollAdapter({
+						...options.navigation,
+						scrollRoot: this.shell.view.body,
+						viewportChangeTarget: this.shell.view.root,
+						parentScope: context.scope,
+					});
 					const topicContextFeature =
 						new ReaderTopicContextFeature<TPost>({
 							document: options.document,
@@ -3246,6 +3337,7 @@ export class ReaderBrowserRuntime<
 								nativeTopicPresentation.avatarSource(template, size),
 							scrollRoot: this.shell.view.body,
 							quoteHintHost: this.shell.view.surfaceHost,
+							notify: (message) => this.feedback.show(message),
 							navigate: () =>
 								topicNavigations.get(context.scope) ?? null,
 							target: {
@@ -3262,6 +3354,14 @@ export class ReaderBrowserRuntime<
 							onRevealNextReplyLevel: (postNumber) =>
 								topicDoms.get(context.scope)
 									?.revealNextReplyLevel(postNumber) ?? false,
+							revealQuoteTarget: (target, mode) => {
+								if (typeof target.getBoundingClientRect !== 'function') return;
+								topicScroll.alignPost(target, {
+									source: mode === 'match' ? 'quote-match' : 'quote',
+									alignment: mode === 'match' ? 'nearest' : 'start',
+									highlight: mode === 'floor',
+								});
+							},
 							parentScope: context.scope,
 							onError: (cause) => reportTopicFeature(
 								context.topicId,
@@ -3269,7 +3369,7 @@ export class ReaderBrowserRuntime<
 								cause,
 							),
 						});
-					const topicCommentsHeader =
+						const topicCommentsHeader =
 						new ReaderTopicCommentsHeader<TTopic, TPost>({
 							document: options.document,
 							topicId: context.topicId,
@@ -3286,14 +3386,15 @@ export class ReaderBrowserRuntime<
 								'topic-header',
 								cause,
 							),
-						});
-					const topicScroll = new ReaderTopicScrollAdapter({
-						...options.navigation,
-						scrollRoot: this.shell.view.body,
-						viewportChangeTarget: this.shell.view.root,
-						parentScope: context.scope,
-					});
-					context.scope.add(
+							});
+						const topicLocalArchive =
+							new ReaderTopicLocalArchiveFeature<TPost>({
+								document: options.document,
+								topicRoot: root,
+								session: bundle.services.session,
+								parentScope: context.scope,
+							});
+						context.scope.add(
 						bundle.services.snapshots.setPersistenceDelayReader(
 							(minimumIdleMs) =>
 								topicScroll.remainingUserIdleMs(minimumIdleMs),
@@ -3345,8 +3446,9 @@ export class ReaderBrowserRuntime<
 								'ReaderBrowserRuntime 已拥有唯一 ReaderTopicPollFeature',
 							);
 						}
-						const postFeatures = Object.freeze([
-							topicCookedContent,
+							const postFeatures = Object.freeze([
+								topicLocalArchive,
+								topicCookedContent,
 							topicPoll,
 							topicSpecialContent,
 						topicContextFeature,
@@ -3486,9 +3588,20 @@ export class ReaderBrowserRuntime<
 							}
 							if (changedWindow) updateTranslationWindow();
 						}, context.scope);
-							const navigation = new ReaderTopicNavigationController<TPost>({
+						let contextSurface: ReaderTopicContextSurface<TPost> | null = null;
+						const navigation = new ReaderTopicNavigationController<TPost>({
 							session: value.services.session,
 							dom: value.dom,
+							hidden: {
+								isHidden: (postNumber) =>
+									value.dom.isPostHidden(postNumber),
+								async revealPost(postNumber) {
+									const surface = contextSurface;
+									return surface
+										? surface.revealDiscussionPost(postNumber)
+										: null;
+								},
+							},
 							listenUserScrollIntent: (listener) =>
 								value.dom.listenUserScrollIntent(listener),
 						parentScope: context.scope,
@@ -3520,7 +3633,7 @@ export class ReaderBrowserRuntime<
 								),
 							});
 						topicFlows.set(context.scope, topicFlow);
-						const contextSurface =
+						contextSurface =
 							new ReaderTopicContextSurface<TPost>({
 								document: options.document,
 									controller: features.topicContext,
@@ -3568,29 +3681,7 @@ export class ReaderBrowserRuntime<
 								});
 							},
 							restore: async (source) => {
-								if (source.topicId !== context.topicId) {
-									return false;
-								}
-								const result = await navigation.navigate({
-									postNumber: source.postNumber,
-									source: 'quote',
-									alignment: 'nearest',
-									highlight: true,
-								});
-								if (result.status !== 'revealed') return false;
-								const navigationRevision = navigation.revision;
-								if (source.anchor?.replyWindow) {
-									await contextSurface.restoreDiscussionState(
-										source.anchor.replyWindow,
-									);
-								} else {
-									features.topicContext.closeDiscussion();
-								}
-								if (!navigation.isCurrent(navigationRevision)) return false;
-								return source.anchor === null ||
-									value.dom.restoreViewportAnchor(
-										source.anchor.viewport,
-									);
+								return this.#restoreQuoteSource(source);
 							},
 						});
 						this.translationFeature?.syncMountedPosts();
@@ -4149,7 +4240,7 @@ export class ReaderBrowserRuntime<
 						}
 						return this.#historyOpenResult(result);
 					},
-					restoreAnchor: async (topicId, anchor) => {
+					restoreAnchor: async (topicId, anchor, restoreOptions) => {
 						const value = this.shell.activeValue;
 						if (
 							this.shell.activeTopicId !== topicId ||
@@ -4163,7 +4254,7 @@ export class ReaderBrowserRuntime<
 							postNumber: anchor.viewport.postNumber,
 							source: 'history',
 							alignment: 'nearest',
-							highlight: true,
+							highlight: restoreOptions?.highlight !== false,
 						});
 						if (result.status !== 'revealed') {
 							throw new Error(
@@ -4172,8 +4263,10 @@ export class ReaderBrowserRuntime<
 							}
 							const navigationRevision = value.topicNavigation.revision;
 							if (anchor.replyWindow) {
-							await value.topicContextSurface
+								await value.topicContextSurface
 									.restoreDiscussionState(anchor.replyWindow);
+							} else {
+								value.topicContext.closeDiscussion();
 							}
 							if (!value.topicNavigation.isCurrent(navigationRevision)) return;
 							if (
@@ -4598,12 +4691,29 @@ export class ReaderBrowserRuntime<
 						if (
 							canonicalParent !== null &&
 							canonicalParent !== undefined &&
-							canonicalParent > 1
+							canonicalParent > 1 &&
+							!navigation.element?.closest(
+								'.ldp-descendant-replies-layer',
+							)
 						) {
 							await result.value.topicContext.openDiscussion(
 								request.postNumber,
 							);
 							if (!transactionIsCurrent()) return superseded();
+						}
+						if (request.quoteHighlight) {
+							const quoteMatched = navigation.element
+								? result.value.topicContextFeature
+									.applyRevealedQuoteHighlight(
+										request.quoteHighlight,
+										navigation.element,
+									)
+								: false;
+							if (!quoteMatched) {
+								this.feedback.show(
+									`目的地内容已修改；已定位到楼层 #${request.postNumber}`,
+								);
+							}
 						}
 					}
 					return Object.freeze({ topic: result, navigation });
@@ -4680,6 +4790,64 @@ export class ReaderBrowserRuntime<
 		this.historyNavigation.captureCurrent();
 		this.#closeApplicationSurfaces();
 		return this.shell.closeTopic();
+	}
+
+	async #restoreQuoteSource(
+		source: ReaderHistoryQuoteSource,
+	): Promise<boolean> {
+		if (this.#destroyed || this.scope.destroyed) return false;
+		const topicId = discourseTopicId(source.topicId);
+		const anchor = source.anchor === null
+			? null
+			: normalizeReaderHistoryAnchorState(source.anchor);
+		const active = this.shell.activeValue;
+		if (this.shell.activeTopicId === topicId && active) {
+			if (anchor) {
+				await this.historyNavigation.restore(topicId, anchor, {
+					highlight: false,
+				});
+				const restored = this.shell.activeValue;
+				if (restored) this.#highlightQuoteSource(restored, source);
+				return true;
+			}
+			const navigation = await active.topicNavigation.navigate({
+				postNumber: source.postNumber,
+				source: 'quote',
+				alignment: 'nearest',
+				highlight: true,
+			});
+			return navigation.status === 'revealed';
+		}
+		const opened = await this.openTarget({
+			topicId,
+			postNumber: anchor?.viewport.postNumber ?? source.postNumber,
+			source: 'quote',
+			alignment: 'nearest',
+			highlight: anchor === null,
+		});
+		if (
+			opened.topic.status !== 'opened' && opened.topic.status !== 'reused'
+		) {
+			return false;
+		}
+		if (!anchor) return opened.navigation?.status === 'revealed';
+		await this.historyNavigation.restore(topicId, anchor, {
+			highlight: false,
+		});
+		const restored = this.shell.activeValue;
+		if (restored) this.#highlightQuoteSource(restored, source);
+		return true;
+	}
+
+	#highlightQuoteSource(
+		value: ReaderBrowserTopicContext<TTopic, TPost>,
+		source: ReaderHistoryQuoteSource,
+	): void {
+		if (
+			source.anchor?.replyWindow &&
+			value.topicContextSurface.highlightDiscussionPost(source.postNumber)
+		) return;
+		value.dom.highlightPost(source.postNumber);
 	}
 
 	readerSurfaceOpen(): boolean {
@@ -4779,12 +4947,15 @@ export class ReaderBrowserRuntime<
 		if (this.#manualChallengePromise || this.scope.destroyed) return;
 		const promise = this.permit.resolveCloudflareChallenge({
 			href,
-			signal: this.#manualChallengeController.signal,
-			focus: true,
-		}).then(async (passed) => {
-			if (this.scope.destroyed) return passed;
-			if (passed) await this.data.client.resetRateLimits();
-			this.feedback.show(
+				signal: this.#manualChallengeController.signal,
+				focus: true,
+			}).then(async (passed) => {
+				if (this.scope.destroyed) return passed;
+				if (passed) {
+					await this.data.client.resetRateLimits();
+					await this.rateLimitNotice.refresh();
+				}
+				this.feedback.show(
 				passed
 					? 'Cloudflare 验证已通过，请求已回到原有有序管线'
 					: '验证浮窗未完成；请允许弹出窗口后重试',
@@ -5399,7 +5570,7 @@ export function createReaderBrowserRuntimeStage<
 					}),
 				})
 				: rawLightbox;
-			const loadingAnimation = motionPreferences
+				const loadingAnimation = motionPreferences
 				? new ReaderLoadingAnimationView({
 					document: options.runtime.document,
 					host: shell.view.body,
@@ -5409,9 +5580,11 @@ export function createReaderBrowserRuntimeStage<
 					).loadingAnimation,
 					siteName: motionPreferences.siteName,
 					parentScope: shell.scope,
-				})
-				: null;
-			const runtime = new ReaderBrowserRuntime<TTopic, TPost>({
+					})
+					: null;
+				let downloadCurrentTopic: (() => void) | null = null;
+				let openTopicDownloadManager: (() => void) | null = null;
+				const runtime = new ReaderBrowserRuntime<TTopic, TPost>({
 					...options.runtime,
 				...(performancePolicy === null
 					? {}
@@ -5425,10 +5598,17 @@ export function createReaderBrowserRuntimeStage<
 					: { translationView }),
 				...(lightbox === undefined ? {} : { lightbox }),
 				...(boostCopy === undefined ? {} : { boostCopy }),
-				...(topicActionRail === undefined
-					? {}
-					: { topicActionRail }),
-					shell,
+					...(topicActionRail === undefined
+						? {}
+						: { topicActionRail }),
+					...(options.openQueue && options.runtime.resources
+						? {
+							downloadCurrentTopic: () => downloadCurrentTopic?.(),
+							openTopicDownloadManager: () =>
+								openTopicDownloadManager?.(),
+						}
+						: {}),
+						shell,
 					workspace,
 					...(loadingAnimation
 						? { loadingProgress: loadingAnimation }
@@ -6106,19 +6286,34 @@ export function createReaderBrowserRuntimeStage<
 				options.settings && options.settings.configuration
 					? options.settings.configuration
 					: null;
+			const configurationManager = configuration
+				? new ReaderSettingsConfigManager<TPreferences>({
+					codec: new ReaderSettingsConfigCodec(configuration.codec),
+					defaults: configuration.defaults,
+					preferences: {
+						read: context.readPreferences,
+						update: (preferences) => {
+							context.updatePreferences!(preferences);
+						},
+					},
+					customSites: configuration.customSites,
+					translation: configuration.translation,
+					webDav: configuration.webDav,
+				})
+				: null;
 			const cacheSurface = settingsView
 				? new ReaderCacheManagementSurface<TPreferences>({
 					document: options.runtime.document,
 					host: settingsView.panelHost('cache'),
-					...(configuration
+					...(configurationManager
 						? {
 							configuration: {
-								codec: configuration.codec,
-								defaults: configuration.defaults,
-								read: context.readPreferences,
-								update: (preferences: Readonly<TPreferences>) => {
-									context.updatePreferences!(preferences);
-								},
+								export: () => configurationManager.export(),
+								prepare: (payload: unknown) =>
+									configurationManager.prepare(payload),
+								apply: (prepared) =>
+									configurationManager.apply(prepared),
+								reset: () => configurationManager.reset(),
 								confirm: (request) =>
 									runtime.feedback.confirm(request),
 								saveTextFile: (
@@ -6278,7 +6473,8 @@ export function createReaderBrowserRuntimeStage<
 					schedulerSnapshot: () =>
 						runtime.data.client.scheduler.snapshot(),
 					permitSnapshot: () => runtime.permit.snapshot(),
-						topicSnapshot: () => {
+					performancePolicySnapshot: () => runtime.performance,
+					topicSnapshot: () => {
 							const active = runtime.shell.activeValue;
 							const session = active?.services.session;
 							const coverage = session?.postStreamCoverage();
@@ -6490,13 +6686,51 @@ export function createReaderBrowserRuntimeStage<
 				}
 				if (signal.aborted) throw signal.reason;
 			};
+			const waitForTopicDownloadIdle = async (
+				signal: AbortSignal,
+			): Promise<void> => {
+				while (
+					!signal.aborted &&
+					options.runtime.document.visibilityState === 'visible' &&
+					queuePrefetchForegroundBusy()
+				) {
+					await abortableDelay(180, signal);
+				}
+				if (signal.aborted) throw signal.reason;
+			};
+			const waitForTopicDownloadRequestHeadroom = async (
+				signal: AbortSignal,
+				nestedReplies = false,
+			): Promise<void> => {
+				while (!signal.aborted) {
+					await waitForTopicDownloadIdle(signal);
+					const snapshot = await runtime.permit.snapshot();
+					if (
+						snapshot.challengeState === 'idle' &&
+						readerBulkBackgroundRequestHasHeadroom(snapshot, nestedReplies)
+					) return;
+					const delayMs = snapshot.nextPermitDelay > 0
+						? Math.max(180, Math.min(1_000, snapshot.nextPermitDelay))
+						: 360;
+					await abortableDelay(delayMs, signal);
+				}
+				throw signal.reason;
+			};
+			const topicDownloadRequestMustPause = (error: unknown): boolean =>
+				runtime.data.client.requestResume(error) !== null;
 			const queueTopicPresentation = queuePreferences
 				? discourseNativeTopicPresentation(options.runtime.host)
 				: null;
+			const topicOfflineArtifacts = runtime.blobDownloads
+				? new ReaderTopicOfflineArtifactRepository(runtime.data.responses)
+				: null;
+			const topicDownloadQuoteEndpointPreferences = new Map<number, string>();
+			const topicDownloadUnavailableQuoteTargets = new Set<string>();
 			const openQueue = queuePreferences
 				? new ReaderOpenQueueSession({
 					document: options.runtime.document,
 					root: shell.view.modal,
+					workspaceRoot: shell.view.root,
 					storage: options.runtime.storage,
 					authScope: options.runtime.topic.authScope,
 					target: runtime,
@@ -6541,7 +6775,7 @@ export function createReaderBrowserRuntimeStage<
 						try {
 							await abortableDelay(900, abort.signal);
 							await waitForQueuePrefetchIdle(abort.signal);
-							await bundle.session.init();
+							await bundle.services.session.init({ background: true });
 							const session = bundle.services.session;
 							const stream = [...session.streamPostIds()];
 							const targetPost = postNumber
@@ -6587,25 +6821,37 @@ export function createReaderBrowserRuntimeStage<
 							} else if (stream.length > 200) {
 								ids = stream.slice(0, 200);
 							}
+							let loadedCount = stream.reduce(
+								(count, postId) => count + Number(Boolean(
+									session.postById(Number(postId)),
+								)),
+								0,
+							);
 							for (
 								let offset = 0;
 								offset < ids.length;
 								offset += session.pageSize
 							) {
+								const batch = ids.slice(offset, offset + session.pageSize);
+								const loadedBefore = batch.reduce(
+									(count, postId) => count + Number(Boolean(
+										session.postById(Number(postId)),
+									)),
+									0,
+								);
 								await session.loadPostsByIds(
-									ids.slice(
-										offset,
-										offset + session.pageSize,
-									),
+									batch,
 									{ background: true, maxAttempts: 1 },
 								);
+								const loadedAfter = batch.reduce(
+									(count, postId) => count + Number(Boolean(
+										session.postById(Number(postId)),
+									)),
+									0,
+								);
+								loadedCount += loadedAfter - loadedBefore;
 								report({
-									loadedCount: stream.reduce(
-										(count, postId) => count + Number(Boolean(
-											session.postById(Number(postId)),
-										)),
-										0,
-									),
+									loadedCount,
 									totalCount: stream.length,
 								});
 							}
@@ -6653,7 +6899,7 @@ export function createReaderBrowserRuntimeStage<
 									complete: true,
 								});
 							await session.flush();
-							const loadedCount = stream.reduce(
+							loadedCount = stream.reduce(
 								(count, postId) => count + Number(Boolean(
 									session.postById(Number(postId)),
 								)),
@@ -6675,6 +6921,577 @@ export function createReaderBrowserRuntimeStage<
 							scope.destroy();
 						}
 					},
+					...(runtime.blobDownloads
+						? {
+								topicDownloads: {
+									downloads: runtime.blobDownloads,
+									requestResume: (error) =>
+										runtime.data.client.requestResume(error),
+									mount: shell.view.modal,
+									floating: true,
+									positionAnchor: () =>
+										runtime.shell.activeValue?.topicActionRail
+											?.downloadHistoryButton ?? null,
+									confirmRemoval: async (context, host) => {
+										const requestedAt = Number(
+											context.localDownloadRequestedAt,
+										);
+										const localDownload = requestedAt > 0
+											? `曾于 ${new Date(requestedAt).toLocaleString(
+												'zh-CN',
+											)} 触发浏览器下载`
+											: 'Reader 未记录曾触发本地下载';
+										const choice = await runtime.feedback.choose({
+											title: '移除 Topic 下载记录？',
+											message: context.hasCachedHtml
+												? '请选择是否同时删除 Reader 缓存中的离线 HTML。'
+												: '该记录没有可清理的 Reader 缓存 HTML。',
+											details: Object.freeze([
+												Object.freeze({
+													label: 'Reader 缓存 HTML',
+													value: context.hasCachedHtml ? '已保存' : '未找到',
+												}),
+												Object.freeze({
+													label: '本地下载',
+													value: localDownload,
+												}),
+												...(context.filename
+													? [Object.freeze({
+														label: '文件名',
+														value: context.filename,
+													})]
+													: []),
+											]),
+											note: '受浏览器安全限制，Reader 无法检查本地文件是否仍存在，' +
+												'也无法删除下载目录中的文件；如需删除请手动处理。',
+											cancelLabel: '取消',
+											...(context.hasCachedHtml
+												? { secondaryLabel: '仅移除记录' }
+												: {}),
+											confirmLabel: context.hasCachedHtml
+												? '记录和缓存都删除'
+												: '移除记录',
+											icon: 'trash',
+										}, host);
+										if (choice === 'confirm') return 'remove-record-and-cache';
+										if (choice === 'secondary') return 'remove-record';
+										return 'cancel';
+									},
+									confirmBulkRemoval: async (contexts, host) => {
+										const cachedCount = contexts.filter((context) =>
+											context.hasCachedHtml).length;
+										const downloadedCount = contexts.filter((context) =>
+											context.localDownloadRequestedAt > 0).length;
+										const choice = await runtime.feedback.choose({
+											title: `移除 ${contexts.length} 条 Topic 下载记录？`,
+											message: cachedCount
+												? '请选择是否同时删除这些记录在 Reader 中缓存的离线 HTML。'
+												: '所选记录没有可清理的 Reader 缓存 HTML。',
+											details: Object.freeze([
+												Object.freeze({
+													label: '下载记录',
+													value: `${contexts.length} 条`,
+												}),
+												Object.freeze({
+													label: 'Reader 缓存 HTML',
+													value: `${cachedCount} 份`,
+												}),
+												Object.freeze({
+													label: '曾触发本地下载',
+													value: `${downloadedCount} 条`,
+												}),
+											]),
+											note: 'Reader 无法检查或删除下载目录中的本地文件；' +
+												'如需删除，请在文件管理器中手动处理。',
+											cancelLabel: '取消',
+											...(cachedCount > 0
+												? { secondaryLabel: '仅移除记录' }
+												: {}),
+											confirmLabel: cachedCount > 0
+												? '记录和缓存都删除'
+												: '移除记录',
+											icon: 'trash',
+										}, host);
+										if (choice === 'confirm') return 'remove-record-and-cache';
+										if (choice === 'secondary') return 'remove-record';
+										return 'cancel';
+									},
+									hydrateHtmlWindow:
+										hydrateReaderTopicOfflineDocumentWindow,
+									...(topicOfflineArtifacts
+										? { artifacts: topicOfflineArtifacts }
+										: {}),
+									worker: async (
+										topicId,
+										fallbackTitle,
+										signal,
+										report,
+										selection,
+									) => {
+										const scope = runtime.scope.child();
+						const abort = scope.abortController(
+							new DOMException('Topic 后台下载已释放', 'AbortError'),
+							signal,
+						);
+						let backgroundNetworkRequestCount = 0;
+						const beforeDownloadNetwork = async (
+							networkSignal: AbortSignal,
+							nestedReplies = false,
+						): Promise<void> => {
+							await waitForTopicDownloadRequestHeadroom(
+								networkSignal,
+								nestedReplies,
+							);
+							backgroundNetworkRequestCount += 1;
+						};
+						const bundle = runtime.data.createTopicBundle<TTopic, TPost>({
+										topicId,
+										scope,
+										signal: abort.signal,
+										mount: () => () => {},
+									}, {
+										...options.runtime.topic,
+										host: options.runtime.host,
+										nativeAjax: runtime.nativeAjax,
+										});
+										try {
+							report({
+								phase: 'loading-topic',
+								detail: '正在读取 Topic 与本地存档',
+							});
+							await waitForTopicDownloadIdle(abort.signal);
+							const topic = await bundle.services.session.init({
+								background: true,
+								beforeNetwork: beforeDownloadNetwork,
+							});
+										const session = bundle.services.session;
+										const cachedAtStart = session.cachedPosts();
+										const streamCoverageAtStart = session.postStreamCoverage();
+										const archiveAtStart = session.localArchiveState();
+										const localArchivePlan = readerTopicDownloadLocalArchivePlan({
+											topicStatus: archiveAtStart.topic?.status,
+											cachedPostCount: cachedAtStart.length,
+											expectedPostCount: streamCoverageAtStart.expectedPostCount,
+											streamPostCount: streamCoverageAtStart.streamPostCount,
+											missingStreamPostCount: streamCoverageAtStart.missingPostCount,
+											streamComplete: streamCoverageAtStart.complete,
+										});
+										let streamComplete = false;
+										let missingCanonicalPostCount = 0;
+										let repliesComplete = false;
+										if (localArchivePlan) {
+											streamComplete = localArchivePlan.streamComplete;
+											missingCanonicalPostCount =
+												localArchivePlan.missingCanonicalPostCount;
+											report({
+												phase: 'loading-replies',
+												completed: localArchivePlan.completed,
+												total: localArchivePlan.total,
+												detail:
+													`正在整理 ${archiveAtStart.topic?.status ?? 404} 本地缓存 ` +
+													`${localArchivePlan.completed}/${localArchivePlan.total}`,
+											});
+										} else {
+								const stream = await session.ensurePostStream({
+									background: true,
+									maxAttempts: 2,
+									beforeNetwork: beforeDownloadNetwork,
+									beforeBatch: () =>
+										waitForTopicDownloadIdle(abort.signal),
+												onProgress: (progress) => report({
+													phase: 'loading-posts',
+													completed: progress.loadedCount,
+													total: progress.totalCount,
+													detail:
+														`正文已就绪 ${progress.loadedCount}/` +
+														`${progress.totalCount || '?'} · 本轮复用缓存 ` +
+														`${Math.min(cachedAtStart.length, progress.loadedCount)} · ` +
+														`后台联网 ${backgroundNetworkRequestCount}`,
+												}),
+											});
+											streamComplete = stream.complete;
+											missingCanonicalPostCount = stream.missingPostIds.length;
+											const canonicalPosts = session.cachedPosts();
+											report({
+												phase: 'loading-replies',
+												completed: canonicalPosts.length,
+												total: canonicalPosts.length,
+												detail:
+													`已从 canonical 正文整理回复关系 ` +
+													`${canonicalPosts.length}/${canonicalPosts.length} · ` +
+													`后台联网 ${backgroundNetworkRequestCount}`,
+											});
+											/*
+											 * 完整 post_stream 已包含当前账号可见的全部楼层以及
+											 * reply_to_post_number。离线文档直接用这组 canonical 字段建树；
+											 * 此处再逐父楼请求 direct-replies 只会重复传输同一批正文，且大帖
+											 * 会迅速把 /posts/:id/replies.json 顶到 429。正常阅读和讨论浮窗的
+											 * 按需补齐仍由 TopicSession 负责，下载快速路径不再重复联网。
+											 */
+											repliesComplete = stream.complete;
+										}
+										const topicRecord = topic as Readonly<Record<string, unknown>>;
+										const specialContentWarnings: string[] = [];
+										if (topicRecord.is_post_voting === true && !localArchivePlan) {
+											const record = (
+												value: unknown,
+											): Readonly<Record<string, unknown>> | null =>
+												value !== null && typeof value === 'object' &&
+												!Array.isArray(value)
+													? value as Readonly<Record<string, unknown>>
+													: null;
+											const votingPosts = session.cachedPosts().filter((post) => {
+												const source = post as Readonly<Record<string, unknown>>;
+												const loaded = Array.isArray(source.post_voting_comments)
+													? source.post_voting_comments.length
+													: Array.isArray(source.comments)
+														? source.comments.length
+														: 0;
+												return Math.max(0, Number(source.comments_count) || 0) > loaded;
+											});
+											for (const [postIndex, post] of votingPosts.entries()) {
+												const source = post as Readonly<Record<string, unknown>>;
+												const postId = Number(source.id);
+												const postNumber = Number(source.post_number);
+												const expectedComments = Math.max(
+													0,
+													Number(source.comments_count) || 0,
+												);
+												if (!Number.isSafeInteger(postId) || postId < 1) continue;
+												const current = Array.isArray(source.post_voting_comments)
+													? source.post_voting_comments
+													: Array.isArray(source.comments) ? source.comments : [];
+												const merged = new Map<number, Readonly<Record<string, unknown>>>();
+												for (const value of current) {
+													const candidate = record(value);
+													const id = Number(candidate?.id);
+													if (candidate && Number.isSafeInteger(id) && id > 0) {
+														merged.set(id, Object.freeze({ ...candidate }));
+													}
+												}
+												try {
+													let pages = 0;
+													while (merged.size < expectedComments && pages < 100) {
+														pages += 1;
+														await waitForTopicDownloadIdle(abort.signal);
+														report({
+															phase: 'loading-replies',
+															completed: postIndex,
+															total: votingPosts.length,
+															detail:
+																`正在补齐楼层 #${postNumber} 的投票评论 · ` +
+																`后台联网 ${backgroundNetworkRequestCount}`,
+														});
+														const afterCommentId = Math.max(0, ...merged.keys());
+														const payload = await bundle.services.requests
+															.loadPostVotingComments<unknown>(postId, {
+																afterCommentId,
+																refresh: true,
+																background: true,
+																beforeNetwork: beforeDownloadNetwork,
+															});
+														const payloadRecord = record(payload);
+														const incoming = Array.isArray(payload)
+															? payload
+															: Array.isArray(payloadRecord?.comments)
+																? payloadRecord.comments
+																: [];
+														let added = 0;
+														for (const value of incoming) {
+															const candidate = record(value);
+															const id = Number(candidate?.id);
+															if (
+																candidate && Number.isSafeInteger(id) && id > 0 &&
+																!merged.has(id)
+															) added += 1;
+															if (candidate && Number.isSafeInteger(id) && id > 0) {
+																merged.set(id, Object.freeze({ ...candidate }));
+															}
+														}
+														if (!added) break;
+													}
+													session.ingestPosts([Object.freeze({
+														...source,
+														post_voting_comments: Object.freeze([...merged.values()]),
+													}) as unknown as TPost], 'action-response');
+													if (merged.size < expectedComments) {
+														specialContentWarnings.push(
+															`楼层 #${postNumber} 投票评论仅保存 ` +
+															`${merged.size}/${expectedComments}`,
+														);
+													}
+												} catch (error) {
+													if (topicDownloadRequestMustPause(error)) throw error;
+													specialContentWarnings.push(
+														`楼层 #${postNumber} 投票评论未能补齐`,
+													);
+												}
+											}
+										}
+										const archive = session.localArchiveState();
+										const archived = archive.topic !== null || archive.posts.length > 0;
+										const coverage = readerTopicDownloadCoverage({
+											selectionMode: selection.mode,
+											streamComplete,
+											missingCanonicalPostCount,
+											repliesComplete,
+											archived,
+										});
+										await session.flush();
+										const availablePosts = session.cachedPosts();
+										const selected = selectReaderTopicDownloadPosts(
+											availablePosts,
+											selection,
+											selection.mode === 'op'
+												? readerTopicOwnerUsername(topic, availablePosts)
+												: '',
+										);
+										const contextPosts = selected.posts;
+										const contextPostNumbers = new Set(contextPosts.map((post) =>
+											Number(post.post_number)));
+										const availablePostByNumber = new Map(availablePosts.map((post) =>
+											[Number(post.post_number), post] as const));
+										const quotedPosts = new Map<string, Readonly<{
+											readonly topicId: number;
+											readonly post: TPost;
+										}>>();
+										const quotePayloadPosts = new Map<string, TPost>();
+											const quoteTargets = readerTopicOfflineQuoteTargets(
+											options.runtime.document,
+											Number(topicId),
+											contextPosts,
+											);
+											let missingQuoteTargetCount = 0;
+											for (const [quoteIndex, target] of quoteTargets.entries()) {
+											if (
+													target.topicId === Number(topicId) &&
+													contextPostNumbers.has(target.postNumber)
+												) continue;
+												const quoteKey = `${target.topicId}:${target.postNumber}`;
+												if (
+													target.topicId === Number(topicId) &&
+													streamComplete &&
+													missingCanonicalPostCount === 0 &&
+													!availablePostByNumber.has(target.postNumber)
+												) {
+													missingQuoteTargetCount += 1;
+													continue;
+												}
+												report({
+												phase: 'loading-replies',
+												completed: quoteIndex,
+												total: quoteTargets.length,
+												detail:
+													`正在补齐引用正文 ${quoteIndex + 1}/${quoteTargets.length} · ` +
+													`后台联网 ${backgroundNetworkRequestCount}`,
+											});
+												let quotedPost = target.topicId === Number(topicId)
+												? availablePostByNumber.get(target.postNumber) ?? null
+												: quotePayloadPosts.get(quoteKey) ?? null;
+												if (
+													!quotedPost &&
+													!localArchivePlan &&
+													!topicDownloadUnavailableQuoteTargets.has(quoteKey)
+												) {
+												await waitForTopicDownloadIdle(abort.signal);
+												const targetOptions = {
+													scope: 'single' as const,
+													background: true,
+													beforeNetwork: beforeDownloadNetwork,
+												};
+												const candidates = prioritizeReaderTopicOfflineTargetCandidates(
+													bundle.services.requests.targetCandidates(
+														target.postNumber,
+														targetOptions,
+														target.topicId,
+													),
+													topicDownloadQuoteEndpointPreferences.get(target.topicId),
+												);
+												for (const candidate of candidates) {
+													try {
+														const payload = await bundle.services.requests
+															.loadTargetCandidate<unknown>(
+																candidate,
+																target.postNumber,
+											targetOptions,
+											target.topicId,
+										);
+														for (const post of discoursePostsFromPayload<TPost>(payload)) {
+															const postNumber = Number(post.post_number);
+															if (!Number.isSafeInteger(postNumber) || postNumber < 1) continue;
+															quotePayloadPosts.set(
+																`${target.topicId}:${postNumber}`,
+																post,
+															);
+														}
+														quotedPost = quotePayloadPosts.get(quoteKey) ?? null;
+														if (quotedPost) {
+															topicDownloadQuoteEndpointPreferences.set(
+																target.topicId,
+																candidate.endpoint,
+															);
+															break;
+														}
+													} catch (error) {
+														if (
+															error instanceof DOMException &&
+															error.name === 'AbortError'
+														) throw error;
+														if (topicDownloadRequestMustPause(error)) throw error;
+															const status = Number(
+																(error as { readonly status?: unknown })?.status,
+															);
+															if (discourseNativeTargetFailureIsDefinitive({
+																endpoint: candidate.endpoint,
+																scope: targetOptions.scope,
+																status,
+															})) {
+																topicDownloadUnavailableQuoteTargets.add(quoteKey);
+																break;
+															}
+															if ([401, 403].includes(status)) break;
+													}
+												}
+											}
+								if (quotedPost) {
+									topicDownloadUnavailableQuoteTargets.delete(quoteKey);
+								quotedPosts.set(
+									quoteKey,
+													Object.freeze({ topicId: target.topicId, post: quotedPost }),
+												);
+											} else {
+												missingQuoteTargetCount += 1;
+											}
+										}
+										if (missingQuoteTargetCount > 0) {
+											specialContentWarnings.push(
+												`${missingQuoteTargetCount} 个引用正文未能补齐`,
+											);
+										}
+										let selectedExpectedPostCount =
+											session.postStreamCoverage().expectedPostCount;
+										const selectedComplete = coverage.complete &&
+											specialContentWarnings.length === 0;
+										const filenameScope = selected.filenameScope;
+										if (selection.mode !== 'all') {
+											selectedExpectedPostCount = selected.expectedPostCount;
+										}
+										report({
+											phase: 'serializing',
+											completed: selection.mode === 'all'
+												? contextPosts.length
+												: selected.expectedPostCount,
+											total: selectedExpectedPostCount,
+											detail: [
+												selection.mode === 'all'
+													? '正在生成单文件离线 HTML'
+													: `正在生成离线 HTML · 已准备 ${contextPosts.length} 楼讨论上下文`,
+																coverage.warning,
+																...specialContentWarnings,
+															].filter(Boolean).join(' · '),
+														});
+										const title = String(
+											topicRecord.fancy_title ?? topicRecord.title ?? fallbackTitle,
+										).replace(/<[^>]+>/g, '').trim() || fallbackTitle;
+										const rootNode = runtime.shell.view.root.getRootNode() as ParentNode;
+										const readerRoot = runtime.shell.view.root;
+										const readerStyleProperties: Record<string, string> = {};
+										for (let index = 0; index < readerRoot.style.length; index += 1) {
+											const name = readerRoot.style.item(index);
+											if (!name.startsWith('--')) continue;
+											readerStyleProperties[name] =
+												readerRoot.style.getPropertyValue(name);
+										}
+										const stylesheet = rootNode.querySelector<HTMLStyleElement>(
+											'style[data-ldp-reader-shadow]',
+										)?.textContent ?? options.runtime.document
+											.getElementById('ldp-mian-lite-styles')?.textContent ?? '';
+										const replyTreePreferences = interactionFormOptions
+											? interactionFormOptions.replyTree.read(
+												context.readPreferences(),
+											)
+											: DEFAULT_READER_REPLY_TREE_PREFERENCES;
+										const header = normalizeReaderTopicHeader(
+											topic,
+											contextPosts,
+											queueTopicPresentation!,
+											topicId,
+										);
+										const logo = runtime.shell.view.root
+											.querySelector<HTMLImageElement>('.ldp-logo');
+										const offlineKatex = options.runtime.media?.katex
+											? new ReaderKatexController({
+													document: options.runtime.document,
+													katex: options.runtime.media.katex,
+												})
+											: null;
+										const prepareCooked = (cooked: string): string => {
+											const host = options.runtime.document.createElement('div');
+											host.className = 'ldp-content cooked';
+											host.innerHTML = cooked;
+											prepareReaderCookedCallouts(options.runtime.document, host);
+											offlineKatex?.render(host);
+											return host.innerHTML;
+										};
+										let artifact: ReaderTopicOfflineDocument;
+										try {
+											artifact = createReaderTopicOfflineDocument({
+											topicId,
+											title,
+											sourceUrl: new URL(
+												`/t/${topicId}`,
+												options.runtime.document.baseURI,
+											).href,
+											topic,
+											posts: contextPosts,
+											quotedPosts: Object.freeze([...quotedPosts.values()]),
+											...(selection.mode !== 'all' && selected.mainPostNumbers
+												? {
+														mainPostNumbers: selected.mainPostNumbers,
+														projectionMode: selection.mode,
+													}
+												: {}),
+											expectedPostCount: selectedExpectedPostCount,
+											complete: selectedComplete,
+											archive,
+											inlineReplyTreeMaxDepth:
+												replyTreePreferences.inlineReplyTreeMaxDepth,
+											header,
+											siteLogoUrl: logo?.currentSrc || logo?.src || '',
+											reactionEmojiUrl: (reactionId) =>
+												discourseNativeEmojiUrl(options.runtime.host, reactionId),
+											presentation: Object.freeze({
+												theme: readerRoot.dataset.ldpTheme === 'dark'
+													? 'dark'
+													: 'light',
+												styleProperties: Object.freeze(readerStyleProperties),
+												structureColorsDisabled: readerRoot.classList.contains(
+													'ldp-structure-colors-disabled',
+												),
+											}),
+											stylesheet,
+											prepareCooked,
+											});
+										} finally {
+											offlineKatex?.destroy();
+										}
+										return filenameScope
+											? Object.freeze({
+												...artifact,
+												filename: artifact.filename.replace(
+													/-lite-offline\.html$/,
+													`-${filenameScope}-lite-offline.html`,
+												),
+											})
+											: artifact;
+									} finally {
+										await bundle.prepareClose?.('close');
+										scope.destroy();
+									}
+								},
+							},
+						}
+						: {}),
 					closeReader: () => runtime.close(),
 					composerOpen: () => runtime.composer.isOpen(),
 					readerLightboxOpen: () => Boolean(
@@ -6702,9 +7519,19 @@ export function createReaderBrowserRuntimeStage<
 					notify: (message) => runtime.feedback.show(message),
 					parentScope: runtime.scope,
 				})
-				: null;
-			if (openQueue) {
-				const syncOpenQueue = (): void => openQueue.sync();
+					: null;
+				if (openQueue) {
+					downloadCurrentTopic = () => {
+						openQueue.downloadCurrentTopic();
+					};
+					openTopicDownloadManager = () => {
+						openQueue.openTopicDownloadManager();
+					};
+					runtime.scope.add(() => {
+						downloadCurrentTopic = null;
+						openTopicDownloadManager = null;
+					});
+					const syncOpenQueue = (): void => openQueue.sync();
 				runtime.shell.changes.subscribe(syncOpenQueue, runtime.scope);
 				runtime.history.changes.subscribe(syncOpenQueue, runtime.scope);
 				context.preferenceChanges.subscribe(syncOpenQueue, runtime.scope);
@@ -6749,26 +7576,32 @@ export function createReaderBrowserRuntimeStage<
 								cache: options.runtime.translation.translationCache,
 							}
 							: null,
+						offlineTopics: topicOfflineArtifacts,
 					}),
 					hostname: () => options.runtime.document.location.hostname,
 					username: () => discourseNativeCurrentUsername(
 						options.runtime.host,
 					),
 				});
-				new ReaderWebDavSettingsForm({
+				const webDavSettingsForm = new ReaderWebDavSettingsForm({
 					document: options.runtime.document,
 					host: settingsView.panelHost('sync'),
 					repository: webDavOptions.repository,
 					coordinator,
-					...(discourseNativeCurrentUsername(options.runtime.host)
-						? {}
-						: {
-							unavailableReason:
+					unavailableReason: () =>
+						discourseNativeCurrentUsername(options.runtime.host)
+							? ''
+							: (
 								'当前未登录 Discourse，WebDAV 同步不可用。' +
-								'请先登录并刷新页面。',
-						}),
+								'请先登录并刷新页面。'
+							),
 					parentScope: runtime.scope,
 				});
+				settingsView.changes.subscribe((snapshot) => {
+					if (snapshot.open && snapshot.activePanelId === 'sync') {
+						webDavSettingsForm.refreshAvailability();
+					}
+				}, runtime.scope);
 				new ReaderWebDavAutoSync({
 					repository: webDavOptions.repository,
 					coordinator,

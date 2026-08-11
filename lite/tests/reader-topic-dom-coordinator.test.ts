@@ -309,6 +309,12 @@ coordinator.visibleRootChanges.subscribe((change) => {
 });
 
 await coordinator.initialize();
+const originalLayoutWindow = coordinator.layout.window.bind(coordinator.layout);
+let layoutWindowCalls = 0;
+coordinator.layout.window = (input) => {
+	layoutWindowCalls += 1;
+	return originalLayoutWindow(input);
+};
 const scheduledBeforeScroll = scheduledFrames;
 scrollListener.value?.();
 assert(
@@ -321,8 +327,9 @@ const stableVisibleRootChanges = visibleRoots.length;
 coordinator.flushNow();
 assert(
 	projectionSyncs === stableProjectionSyncs &&
-		visibleRoots.length === stableVisibleRootChanges,
-	'同一 DFS 窗口内的纯滚动不得重复同步关系控件或发布相同时间轴楼层',
+		visibleRoots.length === stableVisibleRootChanges &&
+		layoutWindowCalls === 2,
+	'同一半屏候选窗内每帧只能计算一次主虚拟窗口，不能为直属回复预取重复规划同一窗口',
 );
 const root = topicHost.querySelector<HTMLElement>('[data-post-number="1"]')!;
 const child = topicHost.querySelector<HTMLElement>('[data-post-number="2"]')!;
@@ -597,6 +604,10 @@ assert(
 	!topicHost.querySelector<HTMLElement>('[data-post-number="3"]')?.isConnected &&
 		replies.topology.parentOf(3) === 2,
 	'设置降为一层后必须热停放深层 DOM，但 canonical 父子关系不得丢失',
+);
+assert(
+	coordinator.isPostHidden(3),
+	'主信息流停放的 canonical 楼层必须能被统一导航识别并转交完整讨论',
 );
 assert(
 	coordinator.revealNextReplyLevel(2) &&
@@ -922,6 +933,8 @@ hydrationScrollOffset = 300;
 hydrationScrollListener.value?.();
 hydrationCoordinator.flushNow();
 const pendingChild = hydrationCoordinator.domOwner.view(2)?.slots.root;
+const hiddenAncestor = hydrationCoordinator.domOwner.view(1)?.slots.root;
+if (!hiddenAncestor) throw new Error('祖先骨架未挂载');
 assert(
 	pendingChild?.classList.contains('ldp-post-projection-pending') === false &&
 		hydrationRenderCounts.get(2) === 1 &&
@@ -930,6 +943,23 @@ assert(
 		hydrationNodeEvents.includes('attach:2') &&
 		projectionTasks.size === 0,
 	'快速滚动进入新窗口时必须同步创建完整正文并激活动作、媒体和已读观察',
+);
+assert(
+	hiddenAncestor.classList.contains('ldp-virtual-ancestor-shell'),
+	'回归根楼层用例必须先形成仅承载可见子树的祖先骨架',
+);
+const revealedAncestor = hydrationCoordinator.revealPost(1, {
+	source: 'quote',
+	alignment: 'nearest',
+	highlight: false,
+});
+assert(
+	revealedAncestor?.mounted === true &&
+		hydrationScrollOffset === 0 &&
+		!hiddenAncestor.classList.contains('ldp-virtual-ancestor-shell') &&
+		hiddenAncestor.querySelector('.ldp-content')?.textContent === 'root' &&
+		hydrationNodeEvents.at(-1) === 'attach:1',
+	'引用跳回树根 #1 时必须先把已连接的祖先骨架实体化，再交给精确高亮定位',
 );
 hydrationCoordinator.destroy();
 assert(
@@ -1102,5 +1132,186 @@ assert(
 		fastLaneCalls.join(',') === '1,2,3,4,5,6',
 	'滚动换窗必须撤销旧视口三棵在途树，并立即把新视口从上到下送入同一收费站',
 );
+fastLaneScrollOffset = 0;
+fastLaneNow += 16;
+fastLaneScrollListener.value?.();
+fastLaneCoordinator.flushNow();
+runFastLaneTasks();
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	fastLaneAborts.join(',') === '1,2,3,4,5,6' &&
+		fastLaneCalls.join(',') === '1,2,3,4,5,6,1,2,3',
+	'快速反向滚动必须对称撤销前向窗口请求，并立即恢复当前可见树的三槽快车道',
+);
 fastLaneCoordinator.destroy();
+await Promise.resolve();
+
+const { document: stableNearbyDocumentSource } = parseHTML(
+	'<!doctype html><html><body><main id="stable-nearby-topic"></main></body></html>',
+);
+const stableNearbyDocument = stableNearbyDocumentSource as unknown as Document;
+const stableNearbyHost = stableNearbyDocument.querySelector<HTMLElement>(
+	'#stable-nearby-topic',
+)!;
+const stableNearbyChanges = new Signal<TopicSessionCommit>();
+const stableNearbyPosts = new Map<number, TestPost>(
+	Array.from({ length: 5 }, (_, index) => {
+		const postNumber = index + 1;
+		return [postNumber, Object.freeze({
+			id: 800 + postNumber,
+			post_number: postNumber,
+			reply_to_post_number: null,
+			username: `stable-nearby-${postNumber}`,
+			cooked: `stable-nearby-${postNumber}`,
+			...(postNumber === 5 ? { reply_count: 1 } : {}),
+		})] as const;
+	}),
+);
+const stableNearbyReplies = new ReplyTreeRepository(80, {
+	async load() {
+		return null;
+	},
+	async save() {},
+});
+const stableNearbyCalls: number[] = [];
+const stableNearbyAborts: number[] = [];
+let stableNearbyScrollOffset = 0;
+let stableNearbyScreens = 1;
+let stableNearbyTaskSequence = 0;
+const stableNearbyTasks = new Map<number, () => void>();
+const stableNearbyScrollListener = {
+	value: null as (() => void) | null,
+};
+const stableNearbyCoordinator = new ReaderTopicDomCoordinator({
+	document: stableNearbyDocument,
+	topicHost: stableNearbyHost,
+	session: {
+		changes: stableNearbyChanges,
+		async init() {
+			stableNearbyReplies.ingest([...stableNearbyPosts.values()], 'topic-json');
+			return Object.freeze({ id: 80 });
+		},
+		cachedPosts: () => Object.freeze([...stableNearbyPosts.values()]),
+		postByNumber: (postNumber) => stableNearbyPosts.get(postNumber),
+		async next() {
+			return Object.freeze({
+				posts: Object.freeze([]),
+				done: true,
+				retry: false,
+				fatal: false,
+				missingPostIds: Object.freeze([]),
+			});
+		},
+		loadDirectReplies(
+			postNumber: number,
+			options?: Readonly<{ readonly signal?: AbortSignal }>,
+		) {
+			stableNearbyCalls.push(postNumber);
+			return new Promise<never>((_resolve, reject) => {
+				const signal = options?.signal;
+				const abort = (): void => {
+					stableNearbyAborts.push(postNumber);
+					reject(signal?.reason);
+				};
+				if (signal?.aborted) abort();
+				else signal?.addEventListener('abort', abort, { once: true });
+			});
+		},
+	},
+	replies: stableNearbyReplies,
+	estimatedRootSize: 100,
+	scroll: {
+		readWindowInput: () => ({
+			scrollOffset: stableNearbyScrollOffset,
+			viewportSize: 250,
+			overscanBeforeScreens: 0,
+			overscanAfterScreens: 0,
+		}),
+		lastUserScrollAt: () => 0,
+		applyScrollCompensation() {},
+		listenScroll(listener) {
+			stableNearbyScrollListener.value = listener;
+			return () => {
+				if (stableNearbyScrollListener.value === listener) {
+					stableNearbyScrollListener.value = null;
+				}
+			};
+		},
+		writeScrollOffset(offset) {
+			stableNearbyScrollOffset = offset;
+		},
+		alignPost() {},
+	},
+	identity: (post) => ({
+		postId: post.id,
+		postNumber: post.post_number,
+		username: post.username,
+	}),
+	render(post, view) {
+		view.slots.content.textContent = post.cooked;
+	},
+	observerFactory: () => ({
+		observe() {},
+		unobserve() {},
+		disconnect() {},
+	}),
+	frameScheduler: {
+		request: () => 1,
+		cancel() {},
+	},
+	directReplyPrefetchScheduler: {
+		schedule(callback) {
+			const handle = ++stableNearbyTaskSequence;
+			stableNearbyTasks.set(handle, callback);
+			return handle;
+		},
+		cancel(handle) {
+			stableNearbyTasks.delete(Number(handle));
+		},
+	},
+	readDirectReplyPrefetchScreens: () => stableNearbyScreens,
+	readDirectReplyPrefetchIdleMs: () => 0,
+	now: () => 20_000,
+});
+const flushStableNearbyTasks = (): void => {
+	for (const [handle, callback] of [...stableNearbyTasks]) {
+		stableNearbyTasks.delete(handle);
+		callback();
+	}
+};
+await stableNearbyCoordinator.initialize();
+flushStableNearbyTasks();
+assert(
+	stableNearbyCalls.join(',') === '5',
+	'可见楼层无需树请求时，应利用近邻槽预取仍在下一屏内的直属回复',
+);
+stableNearbyScreens = 0;
+stableNearbyCoordinator.flushNow();
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	stableNearbyAborts.join(',') === '5',
+	'预取范围热缩小时，即使可见集合不变，也必须取消已离开新候选窗的在途近邻请求',
+);
+stableNearbyCalls.length = 0;
+stableNearbyAborts.length = 0;
+stableNearbyScreens = 1;
+stableNearbyCoordinator.flushNow();
+flushStableNearbyTasks();
+assert(
+	stableNearbyCalls.join(',') === '5',
+	'预取范围热恢复后必须允许同一 canonical 树重新进入近邻队列',
+);
+stableNearbyScrollOffset = 100;
+stableNearbyScrollListener.value?.();
+stableNearbyCoordinator.flushNow();
+flushStableNearbyTasks();
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	stableNearbyCalls.join(',') === '5' && stableNearbyAborts.length === 0,
+	'可见集合变化但没有新的前台树请求时，仍在候选窗内的近邻预取不得取消重发',
+);
+stableNearbyCoordinator.destroy();
 await Promise.resolve();

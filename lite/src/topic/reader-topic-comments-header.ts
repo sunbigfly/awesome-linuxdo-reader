@@ -149,7 +149,7 @@ export class ReaderTopicCommentsHeader<
 	}
 
 	#refreshCount(): void {
-		if (!this.#count?.isConnected) return;
+		if (!this.#count) return;
 		const count = commentCount(
 			this.#session.topic,
 			this.#session.cachedPosts(),

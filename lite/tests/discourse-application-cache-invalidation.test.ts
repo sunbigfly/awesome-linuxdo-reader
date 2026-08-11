@@ -35,6 +35,7 @@ const composerEvents: DiscourseComposerEventSource = {
 	},
 };
 const invalidations: string[][] = [];
+const postChanges: Readonly<Record<string, unknown>>[] = [];
 const errors: unknown[] = [];
 const coordinator = new DiscourseApplicationCacheInvalidationCoordinator({
 	host: {
@@ -48,6 +49,7 @@ const coordinator = new DiscourseApplicationCacheInvalidationCoordinator({
 		},
 	},
 	currentTopicId: () => 77,
+	onPostChanged: (post) => postChanges.push(post),
 	onError: (cause) => errors.push(cause),
 });
 
@@ -73,6 +75,12 @@ assert(
 			'post:420,post:421,reactions-given,topic:42,topic:43,topic:77',
 	'application owner 必须把 reaction/created/edited 同 tick 合并成任意 Topic 的精确 cache tags',
 );
+assert(
+	postChanges.length === 1 &&
+	Number(postChanges[0]?.id) === 420 &&
+	Number(postChanges[0]?.topic_id) === 42,
+	'携带完整 post model 的宿主回应事件必须同步交给当前 Topic canonical owner，不能只失效缓存',
+);
 assert(errors.length === 0, '正常 cache invalidation 不得产生诊断');
 
 coordinator.destroy();
@@ -88,6 +96,8 @@ for (const listener of composerListeners) {
 }
 await coordinator.flush();
 assert(
-	invalidations.length === 1 && composerListeners.size === 0,
+	invalidations.length === 1 &&
+	postChanges.length === 1 &&
+	composerListeners.size === 0,
 	'destroy 必须同时解除 app-events 与私有 Composer event source',
 );

@@ -25,7 +25,7 @@ export interface ReaderWebDavSettingsFormOptions {
 	readonly host: HTMLElement;
 	readonly repository: ReaderWebDavConfigRepository;
 	readonly coordinator: ReaderWebDavCoordinator;
-	readonly unavailableReason?: string;
+	readonly unavailableReason?: string | (() => string);
 	readonly parentScope?: LifecycleScope;
 }
 
@@ -67,14 +67,17 @@ export class ReaderWebDavSettingsForm {
 	readonly #controls: readonly (
 		HTMLInputElement | HTMLSelectElement | HTMLButtonElement
 	)[];
-	readonly #unavailableReason: string;
+	readonly #unavailableReason: () => string;
 	#operation: AbortController | null = null;
 
 	constructor(options: ReaderWebDavSettingsFormOptions) {
 		this.#host = options.host;
 		this.#repository = options.repository;
 		this.#coordinator = options.coordinator;
-		this.#unavailableReason = options.unavailableReason?.trim() ?? '';
+		const unavailableReasonSource = options.unavailableReason;
+		this.#unavailableReason = typeof unavailableReasonSource === 'function'
+			? () => unavailableReasonSource().trim()
+			: () => unavailableReasonSource?.trim() ?? '';
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		const root = element(
 			options.document,
@@ -117,7 +120,7 @@ export class ReaderWebDavSettingsForm {
 		const content = settingsSection(
 			options.document,
 			'选择同步内容',
-			'每类独立开关；关闭的类别不会上传、下载或删除。帖子原文、图片、附件与普通页面缓存不上传；译文只在单独勾选后同步。',
+			'每类独立开关；关闭的类别不会上传、下载或删除。普通页面缓存、图片与附件不上传；离线 Topic HTML 和译文只在各自单独勾选后同步。离线 HTML 作为独立文件存入你的 WebDAV。',
 			true,
 		);
 		const categoryList = element(
@@ -206,8 +209,9 @@ export class ReaderWebDavSettingsForm {
 			>('input, select, button'),
 		]);
 		this.#syncIntervalState();
-		if (this.#unavailableReason) {
-			this.#renderStatus('error', this.#unavailableReason);
+		const unavailableReason = this.#unavailableReason();
+		if (unavailableReason) {
+			this.#renderStatus('error', unavailableReason);
 		}
 		this.#host.replaceChildren(root);
 
@@ -216,9 +220,10 @@ export class ReaderWebDavSettingsForm {
 		this.scope.listen(this.#test, 'click', () => void this.#run('test'));
 		this.scope.listen(this.#sync, 'click', () => void this.#run('sync'));
 		this.#repository.changes.subscribe((snapshot) => {
+			const unavailableReason = this.#unavailableReason();
 			this.#renderStatus(
-				this.#unavailableReason ? 'error' : snapshot.status.kind,
-				this.#unavailableReason || snapshot.status.message,
+				unavailableReason ? 'error' : snapshot.status.kind,
+				unavailableReason || snapshot.status.message,
 			);
 		}, this.scope);
 		this.scope.add(() => {
@@ -232,6 +237,18 @@ export class ReaderWebDavSettingsForm {
 		this.scope.destroy();
 	}
 
+	/** 设置页重新显示时刷新 Discourse 会话门禁，避免固化启动阶段的匿名快照。 */
+	refreshAvailability(): void {
+		if (this.scope.destroyed) return;
+		const unavailableReason = this.#unavailableReason();
+		this.#syncIntervalState();
+		this.#renderStatus(
+			unavailableReason ? 'error' : this.#repository.snapshot.status.kind,
+			unavailableReason || this.#repository.snapshot.status.message ||
+				'填写连接信息后先测试连接，再执行合并同步。',
+		);
+	}
+
 	#categoryDescription(category: ReaderWebDavCategory): string {
 		return ({
 			history: '主题、最近阅读楼层、已读楼层和查看时间。',
@@ -243,6 +260,7 @@ export class ReaderWebDavSettingsForm {
 			'connect-history': '本机观察的 Connect 指标历史与服务器确认已读指纹。',
 			translation: '可包含任意数量的 URL、模型、思考等级与 Prompt；只加密每个 URL 对应的 API Key。',
 			'translation-cache': '最近使用的已翻译正文 Section；普通同步并合并写回中央缓存，不包含原文。',
+			'offline-topics': '下载历史与完整离线 HTML；默认关闭。每个 Topic 以独立明文 HTML 文件存入你的 WebDAV，不占用 2 MiB 主同步文件；图片与附件仍保留原 URL。',
 		})[category];
 	}
 
@@ -266,13 +284,14 @@ export class ReaderWebDavSettingsForm {
 				this.#categories.get(category)!.checked = config.categories[category];
 			}
 			this.#syncIntervalState();
+			const unavailableReason = this.#unavailableReason();
 			this.#renderStatus(
-				this.#unavailableReason ? 'error' : snapshot.status.kind,
-				this.#unavailableReason || snapshot.status.message ||
+				unavailableReason ? 'error' : snapshot.status.kind,
+				unavailableReason || snapshot.status.message ||
 					'填写连接信息后先测试连接，再执行合并同步。',
 			);
 		} catch (cause) {
-			this.#renderStatus('error', this.#unavailableReason || (
+			this.#renderStatus('error', this.#unavailableReason() || (
 				cause instanceof Error ? cause.message : 'WebDAV 设置读取失败'
 			));
 		}
@@ -297,8 +316,9 @@ export class ReaderWebDavSettingsForm {
 	}
 
 	async #saveConfig(): Promise<boolean> {
-		if (this.#unavailableReason) {
-			this.#renderStatus('error', this.#unavailableReason);
+		const unavailableReason = this.#unavailableReason();
+		if (unavailableReason) {
+			this.#renderStatus('error', unavailableReason);
 			return false;
 		}
 		const config = this.#draft();
@@ -350,18 +370,21 @@ export class ReaderWebDavSettingsForm {
 	}
 
 	#setBusy(busy: boolean): void {
+		const unavailable = Boolean(this.#unavailableReason());
 		for (const button of [this.#save, this.#test, this.#sync]) {
-			button.disabled = busy;
+			button.disabled = busy || unavailable;
 			button.toggleAttribute('aria-busy', busy);
 		}
 	}
 
 	#syncIntervalState(): void {
-		if (this.#unavailableReason) {
-			for (const control of this.#controls) control.disabled = true;
+		const unavailable = Boolean(this.#unavailableReason());
+		for (const control of this.#controls) control.disabled = unavailable;
+		if (unavailable) {
 			return;
 		}
 		this.#interval.disabled = !this.#autoSync.checked;
+		this.#setBusy(Boolean(this.#operation));
 	}
 
 	#renderStatus(kind: string, message: string): void {

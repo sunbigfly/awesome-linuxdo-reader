@@ -121,6 +121,7 @@ export class ReaderTopicContextController<
 		ReaderTopicContextControllerOptions<TPost>['loadCrossTopicQuotedPost'];
 	readonly #onError: (error: unknown) => void;
 	readonly #quotedPosts = new Map<string, TPost>();
+	readonly #unavailableQuotedPostKeys = new Set<string>();
 	readonly #collapsedPostNumbers = new Set<DiscoursePostNumber>();
 	readonly #discussionContextualParents = new Map<
 		DiscoursePostNumber,
@@ -148,6 +149,7 @@ export class ReaderTopicContextController<
 			this.#collapsedPostNumbers.clear();
 			this.#discussionContextualParents.clear();
 			this.#quotedPosts.clear();
+			this.#unavailableQuotedPostKeys.clear();
 			this.changes.clear();
 		});
 	}
@@ -192,13 +194,19 @@ export class ReaderTopicContextController<
 		if (topicId !== this.topicId) {
 			const cached = this.#quotedPosts.get(key);
 			if (cached) return cached;
+			if (this.#unavailableQuotedPostKeys.has(key)) return null;
 			if (!this.#loadCrossTopicQuotedPost) return null;
 			try {
 				const post = await this.#loadCrossTopicQuotedPost(
 					topicId,
 					postNumber,
 				);
-				if (this.scope.destroyed || !post) return null;
+				if (this.scope.destroyed) return null;
+				if (!post) {
+					this.#unavailableQuotedPostKeys.add(key);
+					return null;
+				}
+				this.#unavailableQuotedPostKeys.delete(key);
 				this.#quotedPosts.set(key, post);
 				return post;
 			} catch (error) {
@@ -259,6 +267,7 @@ export class ReaderTopicContextController<
 			}
 		} catch (error) {
 			if (epoch === this.#discussionEpoch && !this.scope.destroyed) {
+				this.#discussionBranchPartial = true;
 				this.#onError(error);
 			}
 		}
@@ -287,7 +296,7 @@ export class ReaderTopicContextController<
 				if (epoch !== this.#discussionEpoch || this.scope.destroyed) {
 					return this.snapshot();
 				}
-				this.#discussionBranchPartial = !result.complete;
+				this.#discussionBranchPartial ||= !result.complete;
 				for (const relation of result.contextualReplyRelations) {
 					const parentPostNumber = discoursePostNumber(
 						relation.parentPostNumber,
@@ -389,6 +398,14 @@ export class ReaderTopicContextController<
 					epoch === this.#discussionEpoch && !this.scope.destroyed,
 			},
 		);
+		if (
+			!resolution.complete &&
+			epoch === this.#discussionEpoch &&
+			!this.scope.destroyed
+		) {
+			this.#discussionBranchPartial = true;
+		}
+		if (resolution.error !== undefined) this.#onError(resolution.error);
 		return resolution.rootPostNumber;
 	}
 

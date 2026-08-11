@@ -153,6 +153,8 @@ export class ReaderTopicOnlyOpController<
 			this.#enabled && owner
 				? Object.freeze({
 					key: `only-op:${owner}`,
+					hideDescendantMatches: true,
+					ancestorBoundaryPostNumber: 1,
 					matches: (postNumber: PostNumber) =>
 						text(this.#session.postByNumber(postNumber)?.username) ===
 							owner,

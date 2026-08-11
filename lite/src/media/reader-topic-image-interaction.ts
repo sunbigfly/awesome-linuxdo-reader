@@ -139,7 +139,6 @@ export class ReaderTopicImageInteraction {
 		image: HTMLImageElement,
 		quote: HTMLElement,
 	): void {
-		if (!this.#loadQuotedPost) return;
 		const topicId = Number(quote.dataset.topic) || this.#currentTopicId;
 		const postNumber = Number(quote.dataset.post);
 		if (
@@ -150,41 +149,54 @@ export class ReaderTopicImageInteraction {
 		event.stopPropagation();
 		const returnFocus = this.#returnFocusTarget(image);
 		const request = Promise.resolve()
-			.then(() => this.#loadQuotedPost!(topicId, postNumber))
-			.then((sourcePost) => {
-				if (this.scope.destroyed || !sourcePost) {
-					throw new Error('引用源图片楼层不可用');
-				}
+			.then(async () => {
 				if (!this.#images.itemsForPost) {
 					throw new Error('图片目录缺少引用源解析端口');
 				}
-				const items = this.#images.itemsForPost(sourcePost, topicId);
-				if (!items.length) throw new Error('引用源楼层没有可预览图片');
-				const source = readerComparableImageSource(
-					image.closest<HTMLAnchorElement>('a.lightbox,a[href]')
-						?.getAttribute('href') ??
-					image.getAttribute('data-large-src') ??
-					image.getAttribute('src') ??
-					'',
+				const body = quote.querySelector<HTMLElement>(
+					':scope > blockquote',
 				);
-				let initialIndex = items.findIndex((item) =>
-					readerComparableImageSource(item.originalSrc) === source);
-				if (initialIndex < 0) {
-					const body = quote.querySelector(':scope > blockquote');
-					const excerptImages = body
-						? [...body.querySelectorAll<HTMLImageElement>('img')]
-						: [];
-					initialIndex = Math.max(
-						0,
-						Math.min(items.length - 1, excerptImages.indexOf(image)),
-					);
+				let items: readonly ReaderLightboxItem[] = body
+					? this.#images.itemsForPost({
+						topic_id: topicId,
+						post_number: postNumber,
+						cooked: body.innerHTML,
+					}, topicId)
+					: Object.freeze([]);
+				let sourceAvailable = false;
+				if (this.#loadQuotedPost) {
+					try {
+						const sourcePost = await this.#loadQuotedPost(
+							topicId,
+							postNumber,
+						);
+						if (this.scope.destroyed) return;
+						if (sourcePost) {
+							sourceAvailable = true;
+							const sourceItems = this.#images.itemsForPost(
+								sourcePost,
+								topicId,
+							);
+							if (sourceItems.length) items = sourceItems;
+						}
+					} catch (error) {
+						if (!items.length) throw error;
+					}
 				}
+				if (this.scope.destroyed) return;
+				if (!items.length) throw new Error('引用中没有可预览图片');
+				const initialIndex = this.#quotedImageIndex(
+					items,
+					image,
+					body,
+				);
 				return this.#open(Object.freeze({
 					item: items[initialIndex]!,
 					items,
 					initialIndex,
 					returnFocus,
-					commentsEnabled: topicId === this.#currentTopicId,
+					commentsEnabled:
+						sourceAvailable && topicId === this.#currentTopicId,
 					includeTopicImages: false,
 				}));
 			})
@@ -195,6 +207,36 @@ export class ReaderTopicImageInteraction {
 				if (this.#opening === request) this.#opening = null;
 			});
 		this.#opening = request;
+	}
+
+	#quotedImageIndex(
+		items: readonly ReaderLightboxItem[],
+		image: HTMLImageElement,
+		body: HTMLElement | null,
+	): number {
+		const rawSource =
+			image.closest<HTMLAnchorElement>('a.lightbox,a[href]')
+				?.getAttribute('href') ??
+			image.getAttribute('data-large-src') ??
+			image.getAttribute('src') ??
+			'';
+		let absoluteSource = rawSource;
+		try {
+			absoluteSource = new URL(rawSource, items[0]?.originalSrc).href;
+		} catch {
+			// 坏 URL 继续使用原值；目录 identity 仍可尝试稳定比较。
+		}
+		const source = readerComparableImageSource(absoluteSource);
+		const matched = items.findIndex((item) =>
+			readerComparableImageSource(item.originalSrc) === source);
+		if (matched >= 0) return matched;
+		const excerptImages = body
+			? [...body.querySelectorAll<HTMLImageElement>('img')]
+			: [];
+		return Math.max(
+			0,
+			Math.min(items.length - 1, excerptImages.indexOf(image)),
+		);
 	}
 
 	#returnFocusTarget(image: HTMLImageElement): HTMLElement {

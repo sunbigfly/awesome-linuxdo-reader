@@ -47,6 +47,8 @@ const DEFAULTS = Object.freeze({
 	requestRateTargetPercent: 85,
 });
 
+const BULK_BACKGROUND_REQUEST_BUDGET_SHARE = 0.5;
+
 function finiteRange(
 	value: number,
 	fallback: number,
@@ -73,6 +75,45 @@ function positiveInteger(value: number, name: string): number {
 		throw new RangeError(`${name} 必须是正安全整数`);
 	}
 	return normalized;
+}
+
+/**
+ * 大批量后台读取只使用当前共享窗口的一部分，给用户操作和原站自身请求保留余量。
+ *
+ * 这里只读取中央 permit 的实际计数与动态预算，不维护第二份计时器或请求账本。
+ */
+export function readerBulkBackgroundRequestHasHeadroom(input: Readonly<{
+	readonly shortBudget: number;
+	readonly longBudget: number;
+	readonly shortCount: number;
+	readonly longCount: number;
+}>, nestedReplies = false): boolean {
+	const shortLimit = Math.max(
+		1,
+		Math.min(
+			Math.floor(
+				positiveInteger(input.shortBudget, 'shortBudget') *
+				BULK_BACKGROUND_REQUEST_BUDGET_SHARE,
+			),
+			nestedReplies ? 8 : Number.MAX_SAFE_INTEGER,
+		),
+	);
+	const longLimit = Math.max(
+		1,
+		Math.min(
+			Math.floor(
+				positiveInteger(input.longBudget, 'longBudget') *
+				BULK_BACKGROUND_REQUEST_BUDGET_SHARE,
+			),
+			nestedReplies ? 24 : Number.MAX_SAFE_INTEGER,
+		),
+	);
+	const normalizedCount = (value: number): number =>
+		Number.isFinite(value) && value >= 0
+			? Math.floor(value)
+			: Number.MAX_SAFE_INTEGER;
+	return normalizedCount(input.shortCount) < shortLimit &&
+		normalizedCount(input.longCount) < longLimit;
 }
 
 function positiveFinite(value: unknown): number | undefined {

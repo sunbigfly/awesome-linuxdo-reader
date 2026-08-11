@@ -160,7 +160,7 @@ function cloudflareMitigatedFromError(error: unknown): boolean {
 	return record?.cloudflareMitigated === true ||
 		response?.cloudflareMitigated === true ||
 		xhr?.cloudflareMitigated === true ||
-		responseHeader(error, 'cf-mitigated')?.toLowerCase() === 'challenge' ||
+		responseHeader(error, 'cf-mitigated')?.trim().toLowerCase() === 'challenge' ||
 		cloudflareChallengeHtml(error);
 }
 

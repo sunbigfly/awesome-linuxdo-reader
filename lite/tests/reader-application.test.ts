@@ -286,6 +286,62 @@ assert(
 );
 assert(observerDisconnected === 1, '宿主识别完成后必须释放 observer');
 
+const quietLoad = { current: null as (() => void) | null };
+let quietObserverDisconnected = 0;
+let quietTimerCleared = 0;
+const quietHost = new BrowserDiscourseHostPort({
+	moduleLookup: () => null,
+	document: {
+		documentElement: {} as HTMLElement,
+		querySelector: () => null,
+	} as unknown as Document,
+	window: {
+		addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+			if (type === 'load' && typeof listener === 'function') {
+				quietLoad.current = listener as () => void;
+			}
+		},
+		removeEventListener: () => {},
+		setTimeout: () => 1,
+		clearTimeout: () => {
+			quietTimerCleared += 1;
+		},
+	} as unknown as Window,
+	createObserver: () => ({
+		observe() {},
+		disconnect() {
+			quietObserverDisconnected += 1;
+		},
+	}),
+});
+const quietHostWait = quietHost.waitForHost(new AbortController().signal);
+quietLoad.current?.();
+assert(
+	await quietHostWait === null &&
+		quietObserverDisconnected === 1 &&
+		quietTimerCleared === 1,
+	'普通页面 load 后仍无 Discourse 证据时必须立即停止全页观察',
+);
+
+let completedObserverCreated = 0;
+const completedHost = new BrowserDiscourseHostPort({
+	moduleLookup: () => null,
+	document: {
+		readyState: 'complete',
+		querySelector: () => null,
+	} as unknown as Document,
+	window: {} as Window,
+	createObserver: () => {
+		completedObserverCreated += 1;
+		return { observe() {}, disconnect() {} };
+	},
+});
+assert(
+	await completedHost.waitForHost(new AbortController().signal) === null &&
+		completedObserverCreated === 0,
+	'较晚注入普通页面时必须在同步识别后退出，不能再创建观察器',
+);
+
 const lateCleanup = deferred<void | (() => void)>();
 let lateCleanupCount = 0;
 const lateCleanupApplication = new ReaderApplication({

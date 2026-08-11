@@ -33,6 +33,8 @@ interface TestPost extends DiscourseTopicPostInput {
 	readonly cooked: string;
 	readonly boosts?: readonly Readonly<Record<string, unknown>>[];
 	readonly can_boost?: boolean;
+	readonly reactions?: readonly Readonly<Record<string, unknown>>[];
+	readonly reaction_users_count?: number;
 }
 
 class FakeMessageBus implements TopicMessageBusPort {
@@ -123,6 +125,38 @@ const normalized = normalizeTopicLiveMessage({
 assert(
 	normalized.kind === 'post' && normalized.postId === 105 && normalized.created,
 	'created MessageBus 事件归一化错误',
+);
+for (const messageType of ['acted', 'rebaked', 'recovered', 'revised'] as const) {
+	const result = normalizeTopicLiveMessage({
+		payload: { type: messageType, post_id: 105, topic_id: 10 },
+	}, 10);
+	assert(
+		result.kind === 'post' && result.postId === 105 && !result.created,
+		`${messageType} 必须明确落到目标楼层刷新 consumer`,
+	);
+}
+for (const messageType of ['deleted', 'destroyed'] as const) {
+	const result = normalizeTopicLiveMessage({
+		payload: { type: messageType, post_id: 105, topic_id: 10 },
+	}, 10);
+	assert(
+		result.kind === 'post-delete' && result.postId === 105,
+		`${messageType} 必须明确落到 canonical 删除 consumer`,
+	);
+}
+assert(
+	normalizeTopicLiveMessage({ payload: { type: 'read', topic_id: 10 } }, 10).kind ===
+		'ignore',
+	'read 回声必须显式忽略，不能误触发帖子或 Topic 请求',
+);
+const normalizedReaction = normalizeTopicLiveMessage({
+	payload: { post_id: 105, topic_id: 10, reactions: ['heart'] },
+}, 10);
+assert(
+	normalizedReaction.kind === 'post' &&
+		normalizedReaction.postId === 105 &&
+		!normalizedReaction.created,
+	'插件 reactions channel 必须明确落到目标楼层刷新 consumer',
 );
 assert(
 	normalizeTopicLiveMessage({ topic_id: 99, payload: { type: 'created', id: 1 } }, 10).kind ===
@@ -278,6 +312,37 @@ assert(
 		posts.get(101)?.can_boost === true,
 	'其他用户的 boost_removed 必须移除气泡，但不能改变当前用户的创建能力',
 );
+const reactionLoadsBeforeDelta = loadCalls.length;
+const reactionRefreshesBeforeDelta = topicRefreshes;
+assert(controller.ingestPostDelta({
+	id: 101,
+	topic_id: 10,
+	post_number: 1,
+	reactions: [{ id: 'heart', count: 1 }],
+	reaction_users_count: 1,
+}), '携带完整 post model 的宿主事件必须命中已加载 canonical 楼层');
+await controller.flush();
+assert(
+	posts.get(101)?.reactions?.[0]?.id === 'heart' &&
+	posts.get(101)?.reaction_users_count === 1 &&
+	loadCalls.length === reactionLoadsBeforeDelta &&
+	topicRefreshes === reactionRefreshesBeforeDelta &&
+	changes.at(-1)?.kind === 'post',
+	'完整 post delta 必须直接更新 canonical/cache/UI change，不能新增 Topic/Post 请求',
+);
+const reactionLoadsBeforeMessage = loadCalls.length;
+bus.emit('/topic/10/reactions', {
+	payload: { post_id: 101, reactions: ['heart'], topic_id: 10 },
+});
+timers.runAll();
+await controller.flush();
+assert(
+	loadCalls.length === reactionLoadsBeforeMessage + 1 &&
+	loadCalls.at(-1)?.postId === 101 &&
+	topicRefreshes === reactionRefreshesBeforeDelta,
+	'只有 reaction 名称而没有权威计数的服务端事件必须复用既有单帖刷新，不能扩散成整帖请求',
+);
+const createdLoadsBefore = loadCalls.length;
 bus.emit('/topic/10', { payload: { type: 'created', id: 105, topic_id: 10 } });
 bus.emit('/topic/10', { payload: { type: 'created', post_id: 105, topic_id: 10 } });
 bus.emit('/topic/10', { payload: { type: 'created', id: 105, topic_id: 10 } });
@@ -285,8 +350,8 @@ bus.emit('/topic/10', { payload: { type: 'revised', id: 105, topic_id: 10 } });
 assert(timers.callbacks.size === 1, '同 post.id 实时事件必须合并为一个 timer');
 timers.runAll();
 await controller.flush();
-assert(loadCalls.length === 1, '同 post.id 去抖后只能请求一次');
-assert(loadCalls[0]?.options.created === true, '未知 created 必须通知 TopicSession 追加 stream');
+assert(loadCalls.length === createdLoadsBefore + 1, '同 post.id 去抖后只能请求一次');
+assert(loadCalls.at(-1)?.options.created === true, '未知 created 必须通知 TopicSession 追加 stream');
 assert(
 	invalidations.some((tags) => tags.join(',') === 'topic:10,post:105'),
 	'单帖实时刷新必须精确失效 topic/post tag',
@@ -370,27 +435,46 @@ class PartialFailureBus extends FakeMessageBus {
 }
 
 const failingBus = new PartialFailureBus();
+const partialTimers = new ManualTimers();
+const partialLoads: number[] = [];
+const partialErrors: unknown[] = [];
 const failingController = new TopicLiveController({
 	topicId: 10,
 	messageBus: failingBus,
 	session: {
 		topicId: discourseTopicId(10),
 		postById: () => undefined,
-		loadPostById: async () => null,
+		loadPostById: async (postId) => {
+			partialLoads.push(postId);
+			return null;
+		},
 		removePostById: () => ({ removedPostNumbers: [] }),
 		refresh: async () => ({ revision: 1 }),
 	},
+	postDelayMs: 0,
+	setTimer: partialTimers.set,
+	clearTimer: partialTimers.clear,
+	onError: (error) => partialErrors.push(error),
 });
-assert(!failingController.start(), '部分订阅失败时 start 必须失败');
+assert(failingController.start(), '可选 reactions channel 失败时必须保留标准 Topic 实时订阅');
 assert(
-	failingBus.unsubscriptions.join(',') === '/topic/10',
-	'部分订阅失败必须回滚已成功 channel',
+	(failingBus.handlers.get('/topic/10')?.size ?? 0) === 1 &&
+	(failingBus.handlers.get('/topic/10/reactions')?.size ?? 0) === 0 &&
+	failingBus.unsubscriptions.length === 0 &&
+	partialErrors.length === 1,
+	'可选 channel 失败只能留下诊断，不能回滚承载 acted/created/revised 的标准 channel',
 );
-assert(
-	[...failingBus.handlers.values()].every((handlers) => handlers.size === 0),
-	'订阅回滚后不得遗留 handler',
-);
+failingBus.emit('/topic/10', {
+	payload: { type: 'acted', id: 102, topic_id: 10 },
+});
+partialTimers.runAll();
+await failingController.flush();
+assert(partialLoads.join(',') === '102', '标准 Topic channel 必须继续消费帖子状态事件');
 failingController.destroy();
+assert(
+	(failingBus.handlers.get('/topic/10')?.size ?? 0) === 0,
+	'降级实时订阅销毁后不得遗留标准 channel handler',
+);
 
 const fallbackBus = new FakeMessageBus();
 const fallbackTimers = new ManualTimers();

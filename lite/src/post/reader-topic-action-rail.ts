@@ -3,7 +3,7 @@ import type {
 	PostViewIdentity,
 } from '../dom/post-view.js';
 import { createReaderIcon } from '../components/reader-icon.js';
-import { eventPathIncludes } from '../dom/event-target.js';
+import { eventPath, eventPathIncludes } from '../dom/event-target.js';
 import { htmlElement as element } from '../dom/html-element.js';
 import {
 	LifecycleScope,
@@ -12,7 +12,12 @@ import {
 import type {
 	ReaderPreferences,
 	ReaderTopicActionRailPosition,
+	ReaderTopicActionRailPositions,
 } from '../state/reader-preferences-schema.js';
+import {
+	readerWorkspacePositionMode,
+	type ReaderWorkspacePositionMode,
+} from '../shell/reader-workspace.js';
 import { ReaderPostViewProjector } from '../topic/reader-post-view-projector.js';
 
 const TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX = 2;
@@ -21,15 +26,22 @@ export interface ReaderTopicActionRailPreferences {
 	readonly visible: boolean;
 	readonly fixed: boolean;
 	readonly mode: 'collapsed' | 'compact';
-	readonly position: ReaderTopicActionRailPosition;
+	readonly positions: ReaderTopicActionRailPositions;
 }
+
+const DEFAULT_TOPIC_ACTION_RAIL_POSITION =
+	Object.freeze<ReaderTopicActionRailPosition>({ x: 'left', y: 0.95 });
 
 export const DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES =
 	Object.freeze<ReaderTopicActionRailPreferences>({
 		visible: true,
 		fixed: false,
 		mode: 'compact',
-		position: Object.freeze({ x: 'left', y: 0.95 }),
+		positions: Object.freeze({
+			floating: DEFAULT_TOPIC_ACTION_RAIL_POSITION,
+			fullpage: DEFAULT_TOPIC_ACTION_RAIL_POSITION,
+			embedded: DEFAULT_TOPIC_ACTION_RAIL_POSITION,
+		}),
 	});
 
 export interface ReaderTopicActionRailPreferencesAdapter<
@@ -50,13 +62,13 @@ export const readerPreferencesTopicActionRailAdapter = Object.freeze<
 		visible: preferences.topicActionRailVisible,
 		fixed: preferences.topicActionRailFixed,
 		mode: preferences.topicActionRailMode,
-		position: preferences.topicActionRailPosition,
+		positions: preferences.topicActionRailPositions,
 	}),
 	createPatch: (preferences) => Object.freeze({
 		topicActionRailVisible: preferences.visible,
 		topicActionRailFixed: preferences.fixed,
 		topicActionRailMode: preferences.mode,
-		topicActionRailPosition: preferences.position,
+		topicActionRailPositions: preferences.positions,
 	}),
 });
 
@@ -145,6 +157,8 @@ export interface ReaderTopicActionRailOptions<TPost> {
 	readonly actions: ReaderTopicActionRailPostFeature<TPost>;
 	readonly preferences: ReaderTopicActionRailPreferencesPort;
 	readonly jumpToTop: () => void | Promise<void>;
+	readonly downloadCurrentTopic?: () => void | Promise<void>;
+	readonly openTopicDownloadManager?: () => void | Promise<void>;
 	readonly requestFrame?: (callback: FrameRequestCallback) => number;
 	readonly cancelFrame?: (id: number) => void;
 	readonly createResizeObserver?: (
@@ -162,6 +176,7 @@ export interface ReaderTopicActionRailOptions<TPost> {
 
 interface DragState {
 	readonly pointerId: number;
+	readonly positionMode: ReaderWorkspacePositionMode;
 	readonly startX: number;
 	readonly startY: number;
 	readonly left: number;
@@ -179,6 +194,31 @@ function icon(document: Document, name: string): SVGSVGElement {
 	return createReaderIcon(document, name);
 }
 
+const INTERACTIVE_OUTSIDE_TARGET = [
+	'button',
+	'a[href]',
+	'input',
+	'select',
+	'textarea',
+	'summary',
+	'[role="button"]',
+	'[role="link"]',
+	'[contenteditable="true"]',
+].join(',');
+
+function eventTargetsInteractiveControl(event: Event): boolean {
+	return eventPath(event).some((target) => {
+		if (
+			target === null ||
+			typeof target !== 'object' ||
+			(target as Node).nodeType !== 1
+		) return false;
+		const element = target as Element;
+		return element.matches(INTERACTIVE_OUTSIDE_TARGET) ||
+			element.closest(INTERACTIVE_OUTSIDE_TARGET) !== null;
+	});
+}
+
 /**
  * 主帖快捷操作列只拥有 rail 的位置、三态展开和拖动生命周期。
  *
@@ -190,6 +230,8 @@ export class ReaderTopicActionRail<TPost> {
 	readonly host: HTMLElement;
 	readonly topButton: HTMLButtonElement;
 	readonly toggleButton: HTMLButtonElement;
+	readonly downloadButton: HTMLButtonElement | null;
+	readonly downloadHistoryButton: HTMLButtonElement | null;
 	readonly #document: Document;
 	readonly #mount: HTMLElement;
 	readonly #shellRoot: HTMLElement;
@@ -197,6 +239,8 @@ export class ReaderTopicActionRail<TPost> {
 	readonly #actions: ReaderTopicActionRailPostFeature<TPost>;
 	readonly #preferences: ReaderTopicActionRailPreferencesPort;
 	readonly #jumpToTop: () => void | Promise<void>;
+	readonly #downloadCurrentTopic: (() => void | Promise<void>) | null;
+	readonly #openTopicDownloadManager: (() => void | Promise<void>) | null;
 	readonly #requestFrame: (callback: FrameRequestCallback) => number;
 	readonly #cancelFrame: (id: number) => void;
 	readonly #scheduleTimer: (callback: () => void, delayMs: number) => number;
@@ -227,6 +271,8 @@ export class ReaderTopicActionRail<TPost> {
 		this.#actions = options.actions;
 		this.#preferences = options.preferences;
 		this.#jumpToTop = options.jumpToTop;
+		this.#downloadCurrentTopic = options.downloadCurrentTopic ?? null;
+		this.#openTopicDownloadManager = options.openTopicDownloadManager ?? null;
 		this.#now = options.now ?? Date.now;
 		const window = this.#document.defaultView;
 		this.#requestFrame = options.requestFrame ??
@@ -265,7 +311,24 @@ export class ReaderTopicActionRail<TPost> {
 			'layers',
 		);
 		this.toggleButton.setAttribute('aria-expanded', 'false');
-		this.host.append(this.topButton, this.toggleButton);
+		this.downloadButton = this.#downloadCurrentTopic
+			? this.#button(
+				'ldp-topic-action-rail-download',
+				'下载当前 Topic 为离线 HTML',
+				'download',
+				)
+			: null;
+		this.downloadHistoryButton = this.#openTopicDownloadManager
+			? this.#button(
+				'ldp-topic-action-rail-download-history',
+				'查看 Topic 下载历史',
+				'history',
+			)
+			: null;
+		this.host.append(this.topButton);
+		if (this.downloadButton) this.host.append(this.downloadButton);
+		if (this.downloadHistoryButton) this.host.append(this.downloadHistoryButton);
+		this.host.append(this.toggleButton);
 		this.#mount.append(this.host);
 
 		this.scope.listen(this.host, 'click', (event) => this.#onClick(event));
@@ -273,7 +336,9 @@ export class ReaderTopicActionRail<TPost> {
 		const ownedClicks = new WeakSet<Event>();
 		const collapseExpandedFromOutside = (event: Event): void => {
 			if (!this.#expanded) return;
+			if (event.defaultPrevented) return;
 			if (eventPathIncludes(event, this.host)) return;
+			if (eventTargetsInteractiveControl(event)) return;
 			this.#applyMode('compact', false);
 		};
 		if (interactionRoot !== this.#document) {
@@ -304,6 +369,9 @@ export class ReaderTopicActionRail<TPost> {
 		if (window) {
 			this.scope.listen(window, 'resize', () => this.#queuePosition());
 		}
+		this.scope.listen(this.#shellRoot, 'ldp-reader-workspace-change', () => {
+			this.#queuePosition();
+		});
 		const createResizeObserver = options.createResizeObserver ??
 			(window?.ResizeObserver
 				? (callback: ResizeObserverCallback) =>
@@ -424,6 +492,20 @@ export class ReaderTopicActionRail<TPost> {
 				this.#run(this.#jumpToTop);
 				return;
 			}
+		if (target?.closest('.ldp-topic-action-rail-download')) {
+			event.preventDefault();
+			/* 下载管理浮窗锚定历史按钮；先展开 rail，保证锚点可见且可定位。 */
+			this.#applyMode('expanded', false);
+			if (this.#downloadCurrentTopic) this.#run(this.#downloadCurrentTopic);
+			return;
+		}
+		if (target?.closest('.ldp-topic-action-rail-download-history')) {
+			event.preventDefault();
+			if (this.#openTopicDownloadManager) {
+				this.#run(this.#openTopicDownloadManager);
+			}
+			return;
+		}
 		if (!target?.closest('.ldp-topic-action-rail-toggle')) return;
 		event.preventDefault();
 		const next = this.host.classList.contains('is-collapsed')
@@ -451,6 +533,12 @@ export class ReaderTopicActionRail<TPost> {
 			'aria-expanded',
 			String(this.#expanded),
 		);
+		if (this.downloadButton) {
+			this.downloadButton.hidden = mode === 'collapsed';
+		}
+		if (this.downloadHistoryButton) {
+			this.downloadHistoryButton.hidden = !this.#expanded;
+		}
 		this.toggleButton.setAttribute(
 			'aria-label',
 			`${mode === 'collapsed'
@@ -463,7 +551,7 @@ export class ReaderTopicActionRail<TPost> {
 		);
 		this.toggleButton.replaceChildren(icon(
 			this.#document,
-			this.#expanded ? 'chevron-down' : 'layers',
+			'layers',
 		));
 		if (this.#view) {
 			this.#actions.setTopicActionRailExpanded?.(
@@ -500,7 +588,7 @@ export class ReaderTopicActionRail<TPost> {
 
 	#position(): void {
 		if (this.host.hidden || this.#drag) return;
-		const position = this.#settings.position;
+		const position = this.#settings.positions[this.#positionMode()];
 		const width = Math.max(1, this.host.offsetWidth);
 		const height = Math.max(1, this.host.offsetHeight);
 		const toggleOffset =
@@ -560,6 +648,7 @@ export class ReaderTopicActionRail<TPost> {
 			const mountRect = this.#mount.getBoundingClientRect();
 			this.#drag = Object.freeze({
 				pointerId,
+				positionMode: this.#positionMode(),
 				startX,
 				startY,
 				left: hostRect.left - mountRect.left,
@@ -597,8 +686,16 @@ export class ReaderTopicActionRail<TPost> {
 			1,
 			this.#mount.clientHeight - this.toggleButton.offsetHeight,
 		);
+		const left = Math.max(
+			0,
+			Math.min(maxLeft, Number.parseFloat(this.host.style.left)),
+		);
 		const nextPosition = Object.freeze({
-			x: clampRatio(Number.parseFloat(this.host.style.left) / maxLeft, 0),
+			x: left <= TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX
+				? 'left' as const
+				: maxLeft - left <= TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX
+					? 'right' as const
+					: clampRatio(left / maxLeft, 0),
 			y: clampRatio(
 				(
 					Number.parseFloat(this.host.style.top) +
@@ -611,15 +708,25 @@ export class ReaderTopicActionRail<TPost> {
 		this.host.classList.remove('is-dragging');
 		this.host.style.removeProperty('left');
 		this.host.style.removeProperty('top');
+		const positions = Object.freeze({
+			...this.#settings.positions,
+			[drag.positionMode]: nextPosition,
+		});
 		this.#settings = Object.freeze({
 			...this.#settings,
-			position: nextPosition,
+			positions,
 		});
 		this.#suppressClickUntil = this.#now() + 300;
 		this.#run(() => this.#preferences.update({
-			position: nextPosition,
+			positions,
 		}));
 		this.#queuePosition();
+	}
+
+	#positionMode(): ReaderWorkspacePositionMode {
+		return readerWorkspacePositionMode(
+			this.#shellRoot.dataset.readerWorkspaceMode,
+		);
 	}
 
 	#clearHold(): void {

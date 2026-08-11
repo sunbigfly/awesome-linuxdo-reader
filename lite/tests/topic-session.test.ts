@@ -80,18 +80,30 @@ interface TestTopic extends DiscourseTopicPayload<TestPost> {
 
 class FakeTopicRequests implements TopicSessionReadPort {
 	topic: TestTopic;
+	topicError: unknown = null;
 	readonly batchCalls: number[][] = [];
 	readonly batchOptions: TopicPostsLoadOptions[] = [];
 	readonly postByIdCalls: number[] = [];
 	readonly postByIdOptions: TopicPostsLoadOptions[] = [];
 	readonly targetCalls: string[] = [];
 	readonly batches = new Map<string, unknown>();
+	readonly batchWaits = new Map<string, Promise<void>>();
 	readonly batchErrors = new Map<string, unknown>();
+	readonly promotions: Array<Readonly<{
+		readonly postIds: readonly number[];
+		readonly options: TopicPostsLoadOptions;
+	}>> = [];
 	readonly targets = new Map<string, unknown>();
 	readonly nested = new Map<string, unknown>();
+	readonly nestedWaits = new Map<string, Promise<void>>();
 	readonly nestedErrors = new Map<string, unknown>();
 	readonly nestedFailures = new Map<string, number>();
 	readonly nestedCalls: string[] = [];
+	readonly nestedOptions: NestedRepliesLoadOptions[] = [];
+	readonly nestedPromotions: Array<Readonly<{
+		readonly parentPostNumber: number;
+		readonly options: NestedRepliesLoadOptions;
+	}>> = [];
 	readonly topicOptions: TopicLoadOptions[] = [];
 	topicCalls = 0;
 
@@ -102,6 +114,7 @@ class FakeTopicRequests implements TopicSessionReadPort {
 	async loadTopic<T>(options: TopicLoadOptions = {}): Promise<T> {
 		this.topicCalls += 1;
 		this.topicOptions.push(options);
+		if (this.topicError !== null) throw this.topicError;
 		return this.topic as T;
 	}
 
@@ -112,11 +125,23 @@ class FakeTopicRequests implements TopicSessionReadPort {
 		this.batchCalls.push([...postIds]);
 		this.batchOptions.push(options);
 		const key = [...postIds].sort((left, right) => left - right).join(',');
+		await this.batchWaits.get(key);
 		const error = this.batchErrors.get(key);
 		if (error !== undefined) throw error;
 		return (this.batches.get(key) ?? {
 			post_stream: { posts: [] },
 		}) as T;
+	}
+
+	promotePostsByIds(
+		postIds: readonly number[],
+		options: TopicPostsLoadOptions = {},
+	): boolean {
+		this.promotions.push(Object.freeze({
+			postIds: Object.freeze([...postIds]),
+			options: Object.freeze({ ...options }),
+		}));
+		return true;
 	}
 
 	async loadPostById<T>(
@@ -136,6 +161,8 @@ class FakeTopicRequests implements TopicSessionReadPort {
 	): Promise<T> {
 		const key = `${parentPostNumber}:${Number(options.after ?? 0)}`;
 		this.nestedCalls.push(key);
+		this.nestedOptions.push(options);
+		await this.nestedWaits.get(key);
 		const error = this.nestedErrors.get(key);
 		if (error !== undefined) throw error;
 		const failures = this.nestedFailures.get(key) ?? 0;
@@ -144,6 +171,17 @@ class FakeTopicRequests implements TopicSessionReadPort {
 			throw new Error(`nested failure: ${key}`);
 		}
 		return (this.nested.get(key) ?? []) as T;
+	}
+
+	promoteNestedReplies(
+		parentPostNumber: number,
+		options: NestedRepliesLoadOptions = {},
+	): boolean {
+		this.nestedPromotions.push(Object.freeze({
+			parentPostNumber,
+			options: Object.freeze({ ...options }),
+		}));
+		return true;
 	}
 
 	targetCandidates(
@@ -237,20 +275,58 @@ const session = new TopicSession({
 	wait: async () => {},
 });
 
-await session.init();
+const topicBeforeNetwork = (signal: AbortSignal): void => {
+	void signal;
+};
+await session.init({ beforeNetwork: topicBeforeNetwork });
 assert(requests.topicCalls === 1, '无快照冷启必须请求一次 Topic JSON');
+const initialCachedPosts = session.cachedPosts();
 assert(
-	requests.topicOptions[0]?.refresh === false,
+	initialCachedPosts === session.cachedPosts() &&
+		initialCachedPosts.map((post) => post.post_number).join(',') === '1',
+	'同一 canonical revision 的 cachedPosts 必须复用冻结排序快照，避免每个订阅者重复复制整表',
+);
+assert(
+	requests.topicOptions[0]?.refresh === false &&
+		requests.topicOptions[0]?.beforeNetwork === topicBeforeNetwork,
 	'冷启缺快照时仍必须先复用跨标签 fresh Topic 响应缓存',
 );
 assert(session.streamPostIds().join(',') === '101,102,103', 'TopicSession 必须持有 post.id stream');
-const ahead = await session.prefetchAhead(1, { background: true });
+const readAllSnapshotPosts = snapshots.posts.bind(snapshots);
+let snapshotFullScanCount = 0;
+Object.defineProperty(snapshots, 'posts', {
+	configurable: true,
+	value: () => {
+		snapshotFullScanCount += 1;
+		return readAllSnapshotPosts();
+	},
+});
+const batchBeforeNetwork = (signal: AbortSignal): void => {
+	void signal;
+};
+const ahead = await session.prefetchAhead(1, {
+	background: true,
+	beforeNetwork: batchBeforeNetwork,
+});
 assert(
 	requests.batchCalls[0]?.join(',') === '103' &&
 		requests.batchOptions[0]?.background === true &&
+		requests.batchOptions[0]?.beforeNetwork === batchBeforeNetwork &&
 		ahead[0]?.posts[0]?.post_number === 3 &&
-		!session.loadDone,
-	'预知正文必须用 cursor 后一批 post_ids 后台取数，且不得提前推进顺序游标',
+		!session.loadDone &&
+		snapshotFullScanCount === 0,
+	'预知正文必须用 cursor 后一批 post_ids 后台取数、增量刷新 canonical 索引，且不得提前推进顺序游标',
+);
+Object.defineProperty(snapshots, 'posts', {
+	configurable: true,
+	value: readAllSnapshotPosts,
+});
+const prefetchedCachedPosts = session.cachedPosts();
+assert(
+	prefetchedCachedPosts !== initialCachedPosts &&
+		prefetchedCachedPosts === session.cachedPosts() &&
+		prefetchedCachedPosts.map((post) => post.post_number).join(',') === '1,3',
+	'预加载提交必须失效 cachedPosts 快照，随后同一 revision 继续复用新排序结果',
 );
 let signalBatchCommitReached!: () => void;
 let releaseBatchCommit!: () => void;
@@ -277,13 +353,262 @@ assert(
 	firstBatch.posts.map((post) => post.post_number).join(',') === '1,2',
 	'批次结果必须按 stream post.id 顺序返回对应楼层',
 );
+const firstBatchCachedPosts = session.cachedPosts();
+assert(
+	firstBatchCachedPosts !== prefetchedCachedPosts &&
+		firstBatchCachedPosts === session.cachedPosts() &&
+		firstBatchCachedPosts.map((post) => post.post_number).join(',') === '1,2,3',
+	'canonical 提交必须只失效一次 cachedPosts 快照，并为同批所有订阅者复用新排序结果',
+);
 assert(requests.batchCalls[1]?.join(',') === '102', '已缓存 post.id 不得重复请求');
 assert(trees.topology.parentOf(2) === 1, 'loader 批次必须进入唯一回复拓扑');
 
 const secondBatch = await session.next();
 assert(secondBatch.posts[0]?.post_number === 3 && secondBatch.done, '第二批必须完成 stream');
 
-const batchCallsBeforeRefresh = requests.batchCalls.length;
+const lookaheadStore = new MemoryStore();
+const lookaheadResponses = new ResponseRepository({
+	store: lookaheadStore,
+	maxMemoryEntries: 16,
+	maxMemoryBytes: 100_000,
+	now: () => 275,
+});
+const lookaheadSnapshots = new TopicSnapshotRepository<TestTopic, TestPost>({
+	responseRepository: lookaheadResponses,
+	topicId: 11,
+	authScope: 'account:test',
+	freshForMs: 1_000,
+	retainForMs: 10_000,
+	now: () => 275,
+});
+const lookaheadTrees = new ReplyTreeRepository(
+	11,
+	lookaheadSnapshots.replyTreeSnapshotStore(),
+	{ now: () => 275 },
+);
+const lookaheadPosts = Array.from({ length: 6 }, (_, index): TestPost => ({
+	id: 201 + index,
+	topic_id: 11,
+	post_number: 1 + index,
+	reply_to_post_number: null,
+	username: 'member',
+	cooked: `lookahead-${index + 1}`,
+}));
+const lookaheadRequests = new FakeTopicRequests({
+	id: 11,
+	slug: 'lookahead',
+	posts_count: 6,
+	post_stream: {
+		stream: lookaheadPosts.map((post) => post.id),
+		posts: lookaheadPosts.slice(0, 2),
+	},
+});
+lookaheadRequests.batches.set('203,204', {
+	post_stream: { posts: lookaheadPosts.slice(2, 4) },
+});
+lookaheadRequests.batches.set('205,206', {
+	post_stream: { posts: lookaheadPosts.slice(4, 6) },
+});
+const lookaheadSession = new TopicSession({
+	topicId: 11,
+	requests: lookaheadRequests,
+	snapshots: lookaheadSnapshots,
+	replies: lookaheadTrees,
+	pageSize: 2,
+	refreshCachedInBackground: false,
+	now: () => 275,
+	wait: async () => {},
+});
+await lookaheadSession.init();
+const cachedLookaheadBatch = lookaheadSession.next();
+const closestLookahead = lookaheadSession.prefetchAhead(1, { background: true });
+await Promise.all([cachedLookaheadBatch, closestLookahead]);
+assert(
+	lookaheadRequests.batchCalls[0]?.join(',') === '203,204',
+	'缓存命中推进 cursor 后，预加载必须优先填最近未消费批次，不能跳到更远批次',
+);
+const streamProgress: string[] = [];
+const completedLookaheadStream = await lookaheadSession.ensurePostStream({
+	background: true,
+	maxAttempts: 1,
+	onProgress(progress) {
+		streamProgress.push(
+			`${progress.loadedCount}/${progress.totalCount}/${progress.missingCount}`,
+		);
+	},
+});
+assert(
+	completedLookaheadStream.complete &&
+		streamProgress.join(',') === '4/6/2,6/6/0',
+	'全帖补流进度只能在实际覆盖度变化时发布，不能为每个已缓存批次重复全量扫描',
+);
+	lookaheadSession.destroy();
+
+	const promotionStore = new MemoryStore();
+	const promotionResponses = new ResponseRepository({
+		store: promotionStore,
+		maxMemoryEntries: 16,
+		maxMemoryBytes: 100_000,
+		now: () => 280,
+	});
+	const promotionSnapshots = new TopicSnapshotRepository<TestTopic, TestPost>({
+		responseRepository: promotionResponses,
+		topicId: 12,
+		authScope: 'account:test',
+		freshForMs: 1_000,
+		retainForMs: 10_000,
+		now: () => 280,
+	});
+	const promotionPosts: readonly TestPost[] = Object.freeze([
+		Object.freeze({ ...root(301, 1), topic_id: 12 }),
+		Object.freeze({ ...root(302, 2, 'member'), topic_id: 12 }),
+		Object.freeze({ ...root(303, 3, 'member'), topic_id: 12 }),
+	]);
+	const promotionRequests = new FakeTopicRequests({
+		id: 12,
+		slug: 'promotion',
+		posts_count: 3,
+		post_stream: {
+			stream: promotionPosts.map((post) => post.id),
+			posts: promotionPosts.slice(0, 1),
+		},
+	});
+	promotionRequests.batches.set('302,303', {
+		post_stream: { posts: promotionPosts.slice(1) },
+	});
+	let releasePromotionBatch!: () => void;
+	promotionRequests.batchWaits.set('302,303', new Promise<void>((resolve) => {
+		releasePromotionBatch = resolve;
+	}));
+	const promotionSession = new TopicSession({
+		topicId: 12,
+		requests: promotionRequests,
+		snapshots: promotionSnapshots,
+		replies: new ReplyTreeRepository(
+			12,
+			promotionSnapshots.replyTreeSnapshotStore(),
+			{ now: () => 280 },
+		),
+		pageSize: 2,
+		refreshCachedInBackground: false,
+		now: () => 280,
+		wait: async () => {},
+	});
+	await promotionSession.init({ background: true });
+	assert(
+		promotionRequests.topicOptions[0]?.background === true &&
+			promotionRequests.topicOptions[0]?.refresh === false,
+		'队列和下载的冷 Topic 初始化必须保持后台 profile，不能占用可见请求预算',
+	);
+	const backgroundBatch = promotionSession.loadPostsByIds(
+		[302, 303],
+		{ background: true, maxAttempts: 1 },
+	);
+	await flushMicrotasks();
+	const visibleJoin = promotionSession.loadPostsByIds(
+		[302],
+		{ priority: 'nested', maxAttempts: 1 },
+	);
+	await flushMicrotasks();
+	assert(
+		promotionRequests.batchCalls.length === 1 &&
+			promotionRequests.promotions.length === 1 &&
+			promotionRequests.promotions[0]?.postIds.join(',') === '302,303' &&
+			promotionRequests.promotions[0]?.options.priority === 'nested',
+		'可见消费者加入后台批次时必须晋升完整单飞 identity，且不得复制 transport',
+	);
+	releasePromotionBatch();
+	const [backgroundResult, visibleResult] = await Promise.all([
+		backgroundBatch,
+		visibleJoin,
+	]);
+	assert(
+		backgroundResult.posts.length === 2 &&
+			visibleResult.posts[0]?.id === 302 &&
+			promotionRequests.batchCalls.length === 1,
+		'后台到可见的晋升必须保留双方结果和一次网络传输语义',
+	);
+	promotionSession.destroy();
+
+	const streamPromotionSnapshots = new TopicSnapshotRepository<TestTopic, TestPost>({
+		responseRepository: promotionResponses,
+		topicId: 13,
+		authScope: 'account:test',
+		freshForMs: 1_000,
+		retainForMs: 10_000,
+		now: () => 285,
+	});
+	const streamPromotionPosts: readonly TestPost[] = Object.freeze(
+		Array.from({ length: 4 }, (_, index) => Object.freeze({
+			...root(401 + index, 1 + index, index ? 'member' : 'op'),
+			topic_id: 13,
+		})),
+	);
+	const streamPromotionRequests = new FakeTopicRequests({
+		id: 13,
+		slug: 'stream-promotion',
+		posts_count: 4,
+		post_stream: {
+			stream: streamPromotionPosts.map((post) => post.id),
+			posts: streamPromotionPosts.slice(0, 1),
+		},
+	});
+	streamPromotionRequests.batches.set('402', {
+		post_stream: { posts: streamPromotionPosts.slice(1, 2) },
+	});
+	streamPromotionRequests.batches.set('403,404', {
+		post_stream: { posts: streamPromotionPosts.slice(2) },
+	});
+	let releaseStreamPromotion!: () => void;
+	streamPromotionRequests.batchWaits.set('402', new Promise<void>((resolve) => {
+		releaseStreamPromotion = resolve;
+	}));
+	const streamPromotionSession = new TopicSession({
+		topicId: 13,
+		requests: streamPromotionRequests,
+		snapshots: streamPromotionSnapshots,
+		replies: new ReplyTreeRepository(
+			13,
+			streamPromotionSnapshots.replyTreeSnapshotStore(),
+			{ now: () => 285 },
+		),
+		pageSize: 2,
+		refreshCachedInBackground: false,
+		now: () => 285,
+		wait: async () => {},
+	});
+	await streamPromotionSession.init({ background: true });
+	const backgroundStream = streamPromotionSession.ensurePostStream({
+		background: true,
+		maxAttempts: 1,
+	});
+	await flushMicrotasks();
+	const visibleStream = streamPromotionSession.ensurePostStream({
+		background: false,
+		priority: 'nested',
+		maxAttempts: 2,
+	});
+	await flushMicrotasks();
+	assert(
+		backgroundStream === visibleStream &&
+			streamPromotionRequests.promotions[0]?.postIds.join(',') === '402' &&
+			streamPromotionRequests.promotions[0]?.options.priority === 'nested' &&
+			streamPromotionRequests.promotions[0]?.options.background === false,
+		'可见全帖功能加入后台补流时必须原地晋升当前批次并保持顶层 single-flight',
+	);
+	releaseStreamPromotion();
+	const promotedStream = await visibleStream;
+	assert(
+		promotedStream.complete &&
+			streamPromotionRequests.batchCalls.join('|') === '402|403,404' &&
+			streamPromotionRequests.batchOptions[0]?.background === true &&
+			streamPromotionRequests.batchOptions[1]?.background === false &&
+			streamPromotionRequests.batchOptions[1]?.priority === 'nested',
+		'全帖补流晋升后，后续批次必须继承可见优先级而不能继续后台排队',
+	);
+	streamPromotionSession.destroy();
+
+	const batchCallsBeforeRefresh = requests.batchCalls.length;
 requests.batches.set('103', {
 	post_stream: {
 		posts: [Object.freeze({ ...root(103, 3, 'member'), cooked: 'refreshed' })],
@@ -334,6 +659,38 @@ assert(
 	'目标楼层必须按 adapter 候选顺序 fallback',
 );
 assert(trees.topology.parentOf(4) === 3, '目标刷新关系必须提交唯一拓扑');
+requests.targets.set('/target/4/second', { post_stream: { posts: [] } });
+now = 405;
+const targetCallsBeforeArchivedFloor = requests.targetCalls.length;
+const archivedFloor = await session.loadTarget(4, {
+	scope: 'single',
+	forceRefresh: true,
+});
+assert(
+	archivedFloor[0]?.cooked === 'reply-4' &&
+		requests.targetCalls.length === targetCallsBeforeArchivedFloor + 1 &&
+		session.localArchiveState().posts[0]?.postNumber === 4 &&
+		session.localArchiveState().posts[0]?.status === 404,
+	`已缓存楼层后来明确 404 时必须返回旧正文，并把它标为只读本地引用存档：${
+		JSON.stringify({
+			posts: archivedFloor.map((post) => ({
+				postNumber: post.post_number,
+				cooked: post.cooked,
+			})),
+			archive: session.localArchiveState(),
+			targetCalls: requests.targetCalls,
+		})
+	}`,
+);
+session.ingestPosts(
+	[reply(104, 4, 3, 'member', 'restored-floor')],
+	'target-refresh',
+	410,
+);
+assert(
+	session.localArchiveState().posts.length === 0,
+	'更新鲜的权威楼层恢复后必须撤销本地引用标记',
+);
 requests.targets.set('/target/99/first', notFound);
 requests.targets.set('/target/99/second', { post_stream: { posts: [] } });
 const targetCallsBeforeUnavailable = requests.targetCalls.length;
@@ -344,8 +701,8 @@ assert(
 );
 await session.loadTarget(99, { scope: 'single' });
 assert(
-	requests.targetCalls.length === targetCallsBeforeUnavailable + 2,
-	'已确认 unavailable 的楼层在同一会话不得继续重复请求',
+	requests.targetCalls.length === targetCallsBeforeUnavailable + 1,
+	'canonical by-number 404 后必须立即负缓存，既不访问 Topic fallback，也不在同一会话重复请求',
 );
 const restoredUnavailable = reply(199, 99, 1, 'member', 'restored-after-404');
 session.ingestPosts([restoredUnavailable], 'message-bus', 440);
@@ -854,11 +1211,15 @@ const contextualNestedParent = Object.freeze({
 	reply_count: 1,
 });
 const contextualCanonicalParent = Object.freeze(reply(510, 10, 1));
+const promotionNestedParent = Object.freeze({
+	...reply(511, 11, 1),
+	reply_count: 1,
+});
 const nestedRequests = new FakeTopicRequests({
 	...topic,
-	posts_count: 29,
+	posts_count: 30,
 	post_stream: {
-		stream: [501, 502, 503, 505, 506, 507, 508, 509, 510],
+		stream: [501, 502, 503, 505, 506, 507, 508, 509, 510, 511],
 		posts: [
 			root(501, 1),
 			nestedParent,
@@ -868,6 +1229,7 @@ const nestedRequests = new FakeTopicRequests({
 			abortableNestedParent,
 			contextualNestedParent,
 			contextualCanonicalParent,
+			promotionNestedParent,
 		],
 	},
 });
@@ -908,6 +1270,10 @@ nestedRequests.nested.set('8:0', [Object.freeze({
 nestedRequests.nested.set('9:0', [Object.freeze({
 	...reply(633, 13, 10),
 	reply_count: 0,
+})]);
+nestedRequests.nested.set('11:0', [Object.freeze({
+	...reply(634, 134, 11),
+	reply_to_post_number: undefined,
 })]);
 nestedRequests.nestedFailures.set('6:0', 1);
 const nestedSession = new TopicSession({
@@ -950,19 +1316,56 @@ assert(
 	'已满足父楼声明数量时必须直接复用 canonical 树/帖子缓存',
 );
 let nestedPagePermits = 0;
+const nestedBeforeNetwork = (signal: AbortSignal): void => {
+	void signal;
+};
 const paginatedNestedResult = await nestedSession.loadDirectReplies(5, {
 	expectedCount: 21,
+	beforeNetwork: nestedBeforeNetwork,
 	beforePage: () => {
 		nestedPagePermits += 1;
 	},
 });
 assert(
 	paginatedNestedResult.complete &&
-		paginatedNestedResult.pageCount === 2 &&
-		nestedPagePermits === 2 &&
-		nestedRequests.nestedCalls.slice(1).join(',') === '5:0,5:119' &&
+	paginatedNestedResult.pageCount === 2 &&
+	nestedPagePermits === 2 &&
+	nestedRequests.nestedCalls.slice(1).join(',') === '5:0,5:119' &&
+	nestedRequests.nestedOptions.slice(1, 3).every(
+		(options) => options.beforeNetwork === nestedBeforeNetwork,
+	) &&
 		paginatedNestedResult.posts.length === 21,
 	'Discourse 直属回复首批恰好 20 条时必须继续按 after 翻页，不能套用普通楼层 pageSize 提前截断',
+);
+let releaseNestedPromotion!: () => void;
+nestedRequests.nestedWaits.set('11:0', new Promise<void>((resolve) => {
+	releaseNestedPromotion = resolve;
+}));
+const backgroundNestedPromotion = nestedSession.loadDirectReplies(11, {
+	background: true,
+	expectedCount: 1,
+});
+await flushMicrotasks();
+const visibleNestedPromotion = nestedSession.loadDirectReplies(11, {
+	background: false,
+	expectedCount: 1,
+});
+await flushMicrotasks();
+assert(
+	backgroundNestedPromotion === visibleNestedPromotion &&
+		nestedRequests.nestedCalls.filter((key) => key === '11:0').length === 1 &&
+		nestedRequests.nestedPromotions[0]?.parentPostNumber === 11 &&
+		nestedRequests.nestedPromotions[0]?.options.parentPostId === 511 &&
+		nestedRequests.nestedPromotions[0]?.options.after === 0 &&
+		nestedRequests.nestedPromotions[0]?.options.background === false,
+	'可见讨论加入后台直属回复页时必须按 parent/after 精确晋升同一 single-flight',
+);
+releaseNestedPromotion();
+const promotedNestedResult = await visibleNestedPromotion;
+assert(
+	promotedNestedResult.posts[0]?.post_number === 134 &&
+		nestedRequests.nestedCalls.filter((key) => key === '11:0').length === 1,
+	'直属回复晋升不得复制 endpoint，也不得改变 canonical 结果',
 );
 const retriedNestedResult = await nestedSession.loadDirectReplies(6, {
 	expectedCount: 1,
@@ -1001,8 +1404,12 @@ assert(
 	'直属回复提交闸门放行后必须继续走同一 canonical ingest，不得丢失响应或另造缓存',
 );
 let signalAbortableCommitReached!: () => void;
+let releaseAbortableCommit!: () => void;
 const abortableCommitReached = new Promise<void>((resolve) => {
 	signalAbortableCommitReached = resolve;
+});
+const abortableCommitPermit = new Promise<void>((resolve) => {
+	releaseAbortableCommit = resolve;
 });
 const directReplyController = new AbortController();
 const abortableNestedLoad = nestedSession.loadDirectReplies(8, {
@@ -1010,7 +1417,7 @@ const abortableNestedLoad = nestedSession.loadDirectReplies(8, {
 	signal: directReplyController.signal,
 	beforeCommit: () => {
 		signalAbortableCommitReached();
-		return new Promise<void>(() => {});
+		return abortableCommitPermit;
 	},
 });
 await abortableCommitReached;
@@ -1024,27 +1431,38 @@ try {
 } catch (error) {
 	abortableNestedError = error;
 }
+releaseAbortableCommit();
 const recoveredDiscussionBranch = await discussionJoiningViewportPrefetch;
 assert(
 	abortableNestedError instanceof DOMException &&
 		abortableNestedError.name === 'AbortError' &&
+		nestedRequests.nestedCalls.filter((key) => key === '8:0').length === 1 &&
 		recoveredDiscussionBranch.complete &&
 		recoveredDiscussionBranch.loadedReplyCount === 1 &&
 		nestedTrees.topology.parentOf(132) === 8 &&
 		nestedSession.postByNumber(132)?.post_number === 132,
-	'滚动取消必须终止预取消费者；已加入同一 single-flight 的完整讨论必须以前台生命周期重试并完成水合',
+	'滚动只能取消预取消费者自己的等待；完整讨论加入后必须保住同一 single-flight，不能重发 replies endpoint',
 );
+const nestedBranchProgress: Array<Readonly<{
+	processedCount: number;
+	totalCount: number;
+}>> = [];
 const nestedBranchResult = await nestedSession.loadReplyBranches([5], {
 	background: true,
+	onProgress: (progress) => nestedBranchProgress.push(progress),
 });
 assert(
 	nestedBranchResult.complete &&
-		nestedBranchResult.parentPostNumbers.join(',') === '5,100' &&
-		nestedBranchResult.expectedReplyCount === 22 &&
-		nestedBranchResult.loadedReplyCount === 22 &&
+	nestedBranchResult.parentPostNumbers.join(',') === '5,100' &&
+	nestedBranchResult.expectedReplyCount === 22 &&
+	nestedBranchResult.loadedReplyCount === 22 &&
 		nestedRequests.nestedCalls.at(-1) === '100:0' &&
-		nestedTrees.topology.parentOf(121) === 100,
-	'完整讨论与阅读队列必须复用 TopicSession 唯一递归分支水合，继续发现子父楼并提交同一回复树',
+		nestedTrees.topology.parentOf(121) === 100 &&
+		nestedBranchProgress[0]?.processedCount === 0 &&
+		nestedBranchProgress.at(-1)?.totalCount === 23 &&
+		nestedBranchProgress.at(-1)?.processedCount ===
+			nestedBranchProgress.at(-1)?.totalCount,
+	'完整讨论与阅读队列必须复用 TopicSession 唯一递归分支水合，去重已排队楼层，继续发现子父楼并报告真实进度',
 );
 const contextualBranchResult = await nestedSession.loadReplyBranches([9], {
 	background: false,
@@ -1143,6 +1561,111 @@ assert(
 		throttleRequests.targetCalls.join(',') === '/target/9/first',
 	'目标楼层收到 429 后不得继续尝试备用 endpoint，避免同一状态被候选循环放大',
 );
+
+let archiveSessionNow = 900;
+const archiveSessionStore = new MemoryStore();
+const archiveSessionResponses = () => new ResponseRepository({
+	store: archiveSessionStore,
+	maxMemoryEntries: 8,
+	maxMemoryBytes: 100_000,
+	now: () => archiveSessionNow,
+});
+const archivedTopic: TestTopic = {
+	...topic,
+	posts_count: 4,
+	post_stream: {
+		stream: [701, 702, 703],
+		posts: [root(701, 1), reply(702, 2, 1)],
+	},
+};
+const archiveSeed = new TopicSnapshotRepository<TestTopic, TestPost>({
+	responseRepository: archiveSessionResponses(),
+	topicId: 10,
+	authScope: 'account:session-archive',
+	freshForMs: 10,
+	retainForMs: 20,
+	now: () => archiveSessionNow,
+});
+archiveSeed.ingest({
+	source: 'topic-json',
+	observedAt: 100,
+	expectedPostCount: 4,
+	topic: archivedTopic,
+	streamPostIds: [701, 702, 703],
+	posts: archivedTopic.post_stream.posts,
+});
+await archiveSeed.flush();
+const unavailableTopicRequests = new FakeTopicRequests(archivedTopic);
+unavailableTopicRequests.topicError = Object.assign(
+	new Error('topic removed'),
+	{ status: 404 },
+);
+const unavailableTopicSnapshots = new TopicSnapshotRepository<TestTopic, TestPost>({
+	responseRepository: archiveSessionResponses(),
+	topicId: 10,
+	authScope: 'account:session-archive',
+	freshForMs: 10,
+	retainForMs: 20,
+	now: () => archiveSessionNow,
+});
+const unavailableTopicSession = new TopicSession({
+	topicId: 10,
+	requests: unavailableTopicRequests,
+	snapshots: unavailableTopicSnapshots,
+	replies: new ReplyTreeRepository(
+		10,
+		unavailableTopicSnapshots.replyTreeSnapshotStore(),
+		{ now: () => archiveSessionNow },
+	),
+	pageSize: 2,
+	refreshCachedInBackground: false,
+	now: () => archiveSessionNow,
+	wait: async () => {},
+});
+const unavailableTopic = await unavailableTopicSession.init();
+assert(
+	unavailableTopic === archivedTopic &&
+		unavailableTopicSession.cachedPosts().length === 2 &&
+		unavailableTopicSession.localArchiveState().topic?.status === 404 &&
+		unavailableTopicRequests.topicCalls === 1,
+	'不完整缓存 Topic 后来 404 时必须保留已浏览正文并完成打开，而不是落入失败页',
+);
+await unavailableTopicSession.flush();
+unavailableTopicSession.destroy();
+
+archiveSessionNow = 1_000_000;
+const permanentTopicSnapshots = new TopicSnapshotRepository<TestTopic, TestPost>({
+	responseRepository: archiveSessionResponses(),
+	topicId: 10,
+	authScope: 'account:session-archive',
+	freshForMs: 10,
+	retainForMs: 20,
+	now: () => archiveSessionNow,
+});
+const permanentTopicRequests = new FakeTopicRequests(archivedTopic);
+const permanentTopicSession = new TopicSession({
+	topicId: 10,
+	requests: permanentTopicRequests,
+	snapshots: permanentTopicSnapshots,
+	replies: new ReplyTreeRepository(
+		10,
+		permanentTopicSnapshots.replyTreeSnapshotStore(),
+		{ now: () => archiveSessionNow },
+	),
+	pageSize: 2,
+	refreshCachedInBackground: true,
+	now: () => archiveSessionNow,
+	wait: async () => {},
+});
+await permanentTopicSession.init();
+assert(
+	permanentTopicSession.initializedFromCache &&
+		permanentTopicSession.cachedPosts().length === 2 &&
+		permanentTopicSession.localArchiveState().topic?.status === 404 &&
+		permanentTopicRequests.topicCalls === 0,
+	'历史、消息等统一打开入口冷启永久存档时必须直接恢复正文，且不得重复请求已 404 Topic',
+);
+permanentTopicSession.destroy();
 
 session.destroy();
 try {

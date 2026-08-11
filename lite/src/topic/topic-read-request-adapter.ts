@@ -26,8 +26,24 @@ import type {
 
 export interface TopicReadRequestPort {
 	loadTopicPosts<T>(input: TopicPostsRequest<T>): Promise<T>;
+	promoteTopicPosts?(input: Readonly<{
+		authScope: string;
+		topicId: string | number;
+		postIds: readonly number[];
+		profile?: TopicPostsRequest<unknown>['profile'];
+		cacheMode?: 'default' | 'refresh';
+	}>): boolean;
 	loadTopicTarget<T>(input: TopicTargetRequest<T>): Promise<T>;
 	loadNestedReplies<T>(input: NestedRepliesRequest<T>): Promise<T>;
+	promoteNestedReplies?(input: Readonly<{
+		authScope: string;
+		topicId: string | number;
+		parentPostNumber: number;
+		parentPostId?: number;
+		after?: number;
+		profile?: NestedRepliesRequest<unknown>['profile'];
+		cacheMode?: 'default' | 'refresh';
+	}>): boolean;
 	loadCollectionPage<T>(input: CollectionPageRequest<T>): Promise<T>;
 }
 
@@ -54,28 +70,34 @@ export interface TopicTargetCandidate {
 	readonly url: string;
 }
 
-export interface TopicTargetLoadOptions {
+export interface TopicNetworkLoadOptions {
+	/** response cache miss 后、真正联网前的共享预算闸门。 */
+	readonly beforeNetwork?: (signal: AbortSignal) => void | Promise<void>;
+}
+
+export interface TopicTargetLoadOptions extends TopicNetworkLoadOptions {
 	readonly scope: TopicTargetScope;
 	readonly slug?: string;
 	readonly refresh?: boolean;
+	readonly background?: boolean;
 }
 
-export interface TopicPostsLoadOptions {
+export interface TopicPostsLoadOptions extends TopicNetworkLoadOptions {
 	readonly background?: boolean;
 	readonly priority?: 'visible' | 'nested';
 	readonly refresh?: boolean;
 }
 
-export interface TopicPostByIdLoadOptions {
+export interface TopicPostByIdLoadOptions extends TopicNetworkLoadOptions {
 	readonly background?: boolean;
 }
 
-export interface TopicLoadOptions {
+export interface TopicLoadOptions extends TopicNetworkLoadOptions {
 	readonly background?: boolean;
 	readonly refresh?: boolean;
 }
 
-export interface NestedRepliesLoadOptions {
+export interface NestedRepliesLoadOptions extends TopicNetworkLoadOptions {
 	readonly parentPostId?: number;
 	readonly after?: number;
 	readonly background?: boolean;
@@ -83,9 +105,10 @@ export interface NestedRepliesLoadOptions {
 	readonly signal?: AbortSignal;
 }
 
-export interface PostVotingCommentsLoadOptions {
+export interface PostVotingCommentsLoadOptions extends TopicNetworkLoadOptions {
 	readonly afterCommentId?: number;
 	readonly refresh?: boolean;
+	readonly background?: boolean;
 }
 
 function cacheWithPostIds(
@@ -181,6 +204,9 @@ export class TopicReadRequestAdapter {
 			profile: options.background ? 'background-prefetch' : 'topic-visible',
 			input: descriptor.path,
 			signal: this.#signal,
+			...(options.beforeNetwork === undefined
+				? {}
+				: { beforeNetwork: options.beforeNetwork }),
 			cacheMode: options.refresh === true ? 'refresh' : 'default',
 			cache: this.#caches.topic,
 			transport: (input) => this.#transport.request<T>({
@@ -209,15 +235,34 @@ export class TopicReadRequestAdapter {
 				? 'background-prefetch'
 				: options.priority === 'nested' ? 'nested-visible' : 'topic-visible',
 			input: descriptor.path,
-				signal: this.#signal,
-				cacheMode: options.refresh ? 'refresh' : 'default',
-				cache: cacheWithPostIds(this.#caches.posts, postIds),
+			signal: this.#signal,
+			...(options.beforeNetwork === undefined
+				? {}
+				: { beforeNetwork: options.beforeNetwork }),
+			cacheMode: options.refresh ? 'refresh' : 'default',
+			cache: cacheWithPostIds(this.#caches.posts, postIds),
 			transport: (input) => this.#transport.request<T>({
 				descriptor,
 				signal: input.signal,
 				attempt: input.attempt,
 			}),
 		});
+	}
+
+	promotePostsByIds(
+		rawPostIds: readonly number[],
+		options: TopicPostsLoadOptions = {},
+	): boolean {
+		const postIds = discoursePostIds(rawPostIds);
+		return this.#gateway.promoteTopicPosts?.({
+			authScope: this.authScope,
+			topicId: this.topicId,
+			postIds,
+			profile: options.background
+				? 'background-prefetch'
+				: options.priority === 'nested' ? 'nested-visible' : 'topic-visible',
+			cacheMode: options.refresh ? 'refresh' : 'default',
+		}) ?? false;
 	}
 
 	loadPostById<T>(
@@ -236,9 +281,12 @@ export class TopicReadRequestAdapter {
 			postId,
 			profile: options.background ? 'background-prefetch' : 'topic-visible',
 			input: descriptor.path,
-				signal: this.#signal,
-				cacheMode: 'refresh',
-				cache: cacheWithPostIds(this.#caches.posts, [postId]),
+			signal: this.#signal,
+			...(options.beforeNetwork === undefined
+				? {}
+				: { beforeNetwork: options.beforeNetwork }),
+			cacheMode: 'refresh',
+			cache: cacheWithPostIds(this.#caches.posts, [postId]),
 			allowStaleOnError: false,
 			transport: (input) => this.#transport.request<T>({
 				descriptor,
@@ -270,8 +318,14 @@ export class TopicReadRequestAdapter {
 			collection: `post-voting-comments:${postId}`,
 			page: afterCommentId,
 			cursor: afterCommentId,
+			profile: options.background
+				? 'background-prefetch'
+				: 'collection-visible',
 			input: descriptor.path,
 			signal: this.#signal,
+			...(options.beforeNetwork === undefined
+				? {}
+				: { beforeNetwork: options.beforeNetwork }),
 			cacheMode: options.refresh ? 'refresh' : 'default',
 			cache: cacheWithPostIds(this.#caches.posts, [postId]),
 			transport: (input) => this.#transport.request<T>({
@@ -326,8 +380,12 @@ export class TopicReadRequestAdapter {
 			topicId,
 			operation: `target:${options.scope}:${candidate.endpoint}`,
 			postNumber,
+			profile: options.background ? 'background-prefetch' : 'topic-visible',
 			input: candidate.url,
 			signal: this.#signal,
+			...(options.beforeNetwork === undefined
+				? {}
+				: { beforeNetwork: options.beforeNetwork }),
 			cacheMode: refresh ? 'refresh' : 'default',
 			cache: cacheForTopic(this.#caches.posts, topicId),
 			allowStaleOnError: !refresh,
@@ -360,7 +418,7 @@ export class TopicReadRequestAdapter {
 			this.#signal,
 			options.signal,
 		);
-		return this.#gateway.loadNestedReplies({
+		return this.#gateway.loadNestedReplies<T>({
 			authScope: this.authScope,
 			topicId: this.topicId,
 			parentPostNumber,
@@ -368,14 +426,37 @@ export class TopicReadRequestAdapter {
 			after,
 			profile: options.background ? 'background-prefetch' : 'nested-visible',
 			input: descriptor.path,
-				signal: requestLifetime.signal,
-				cacheMode: options.refresh ? 'refresh' : 'default',
-				cache: cacheWithPostIds(this.#caches.nested, [parentPostId]),
+			signal: requestLifetime.signal,
+			...(options.beforeNetwork === undefined
+				? {}
+				: { beforeNetwork: options.beforeNetwork }),
+			cacheMode: options.refresh ? 'refresh' : 'default',
+			cache: cacheWithPostIds(this.#caches.nested, [parentPostId]),
 			transport: (input) => this.#transport.request<T>({
 				descriptor,
 				signal: input.signal,
 				attempt: input.attempt,
 			}),
 		}).finally(() => requestLifetime.dispose());
+	}
+
+	promoteNestedReplies(
+		rawParentPostNumber: number,
+		options: NestedRepliesLoadOptions = {},
+	): boolean {
+		const parentPostNumber = discoursePostNumber(rawParentPostNumber);
+		const parentPostId = options.parentPostId === undefined
+			? undefined
+			: discoursePostId(options.parentPostId);
+		if (parentPostId === undefined) return false;
+		return this.#gateway.promoteNestedReplies?.({
+			authScope: this.authScope,
+			topicId: this.topicId,
+			parentPostNumber,
+			parentPostId,
+			after: discourseReplyCursor(options.after),
+			profile: options.background ? 'background-prefetch' : 'nested-visible',
+			cacheMode: options.refresh ? 'refresh' : 'default',
+		}) ?? false;
 	}
 }

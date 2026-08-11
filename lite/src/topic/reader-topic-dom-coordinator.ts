@@ -96,6 +96,7 @@ export interface ReaderTopicRevealOptions {
 	readonly viewportOffset?: number;
 	readonly focus?: boolean;
 	readonly highlight?: boolean;
+	readonly degradedRootPostNumber?: PostNumber;
 }
 
 export interface ReaderTopicRevealResult {
@@ -125,6 +126,7 @@ export interface ReaderTopicScrollPort {
 	listenUserScrollIntent?(listener: () => void): Cleanup;
 	writeScrollOffset(offset: number): void;
 	alignPost(element: HTMLElement, options: ReaderTopicRevealOptions): void;
+	highlightPost?(element: HTMLElement): void;
 	readVisibleViewportAnchor?(
 		elements: readonly HTMLElement[],
 	): ReaderTopicViewportAnchor | null;
@@ -241,6 +243,7 @@ export class ReaderTopicDomCoordinator<
 	#activeContentPostNumbers: ReadonlySet<PostNumber> = new Set();
 	#nextContentPostNumbers: ReadonlySet<PostNumber> = new Set();
 	#directReplyPrefetchCandidatePostNumbers: ReadonlySet<PostNumber> = new Set();
+	#directReplyPrefetchOrderedCandidates: readonly PostNumber[] = Object.freeze([]);
 	#directReplyVisiblePostNumbers: ReadonlySet<PostNumber> = new Set();
 	#directReplyVisibleKey = '';
 	#directReplyPrefetchCandidateKey = '';
@@ -545,6 +548,7 @@ export class ReaderTopicDomCoordinator<
 			this.#directReplyPrefetchedExpectedCounts.clear();
 			this.#directReplyPrefetchAttemptedExpectedCounts.clear();
 			this.#directReplyPrefetchCandidatePostNumbers = new Set();
+			this.#directReplyPrefetchOrderedCandidates = Object.freeze([]);
 			this.#directReplyVisiblePostNumbers = new Set();
 			this.#directReplyVisibleKey = '';
 			for (const postNumber of this.#activeContentPostNumbers) {
@@ -774,6 +778,33 @@ export class ReaderTopicDomCoordinator<
 		return true;
 	}
 
+	/** 只闪烁已挂载楼层，不改变当前视口几何。 */
+	highlightPost(rawPostNumber: number): boolean {
+		this.#assertActive();
+		const postNumber = discoursePostReference({
+			post_number: rawPostNumber,
+		}).postNumber;
+		const element = this.domOwner.view(postNumber)?.slots.root;
+		if (
+			!element?.isConnected ||
+			element.classList.contains('ldp-virtual-ancestor-shell') ||
+			element.classList.contains('ldp-post-projection-pending') ||
+			!this.#scroll.highlightPost
+		) return false;
+		this.#scroll.highlightPost(element);
+		return true;
+	}
+
+	/** 当前 canonical 楼层被主信息流投影停放时，交由完整讨论 surface 揭示。 */
+	isPostHidden(rawPostNumber: number): boolean {
+		this.#assertActive();
+		const postNumber = discoursePostReference({
+			post_number: rawPostNumber,
+		}).postNumber;
+		return this.replyTreePresentation.canonical.has(postNumber) &&
+			this.replyTreePresentation.rootOf(postNumber) === undefined;
+	}
+
 	revealPost(
 		rawPostNumber: number,
 		options: ReaderTopicRevealOptions,
@@ -785,6 +816,18 @@ export class ReaderTopicDomCoordinator<
 		let rootPostNumber = this.domOwner.topology.rootOf(postNumber);
 		if (
 			rootPostNumber === undefined &&
+			options.degradedRootPostNumber !== undefined
+		) {
+			this.replyTreePresentation.revealDegradedBranch(
+				options.degradedRootPostNumber,
+				postNumber,
+			);
+			this.#rootProjection.syncRoots();
+			this.#syncProjectionFeatures();
+			rootPostNumber = this.domOwner.topology.rootOf(postNumber);
+		}
+		if (
+			rootPostNumber === undefined &&
 			this.replyTreePresentation.revealAsFloor(postNumber)
 		) {
 			this.#rootProjection.syncRoots();
@@ -792,9 +835,11 @@ export class ReaderTopicDomCoordinator<
 			this.#syncProjectionFeatures();
 		}
 		if (rootPostNumber === undefined) return null;
-		const wasConnected =
-			this.domOwner.view(postNumber)?.slots.root.isConnected === true;
-		if (!wasConnected) {
+		const currentRoot = this.domOwner.view(postNumber)?.slots.root;
+		const wasMaterialized = currentRoot?.isConnected === true &&
+			!currentRoot.classList.contains('ldp-virtual-ancestor-shell') &&
+			!currentRoot.classList.contains('ldp-post-projection-pending');
+		if (!wasMaterialized) {
 			const offset = this.#treeViewport.offsetOf(postNumber) ??
 				this.layout.offsetOf(rootPostNumber);
 			if (offset === undefined) return null;
@@ -802,13 +847,17 @@ export class ReaderTopicDomCoordinator<
 			this.frame.flushNow();
 		}
 		const element = this.domOwner.view(postNumber)?.slots.root;
-		if (!element?.isConnected) return null;
+		if (
+			!element?.isConnected ||
+			element.classList.contains('ldp-virtual-ancestor-shell') ||
+			element.classList.contains('ldp-post-projection-pending')
+		) return null;
 		this.#scroll.alignPost(element, options);
 		return Object.freeze({
 			postNumber,
 			rootPostNumber,
 			element,
-			mounted: !wasConnected,
+			mounted: !wasMaterialized,
 		});
 	}
 
@@ -1127,49 +1176,62 @@ export class ReaderTopicDomCoordinator<
 		const candidatesChanged =
 			candidateKey !== this.#directReplyPrefetchCandidateKey;
 		this.#directReplyPrefetchCandidateKey = candidateKey;
-		const prefetchInput: VirtualWindowInput = Object.freeze({
-			scrollOffset: input.scrollOffset,
-			viewportSize: input.viewportSize,
-			overscanBeforeScreens: beforeScreens,
-			overscanAfterScreens: afterScreens,
-		});
-		const rootWindow = this.layout.window(prefetchInput);
-		const plan = this.#treeViewport.plan(rootWindow, prefetchInput);
+		if (candidatesChanged) {
+			const prefetchInput: VirtualWindowInput = Object.freeze({
+				scrollOffset: input.scrollOffset,
+				viewportSize: input.viewportSize,
+				overscanBeforeScreens: beforeScreens,
+				overscanAfterScreens: afterScreens,
+			});
+			const rootWindow = this.layout.window(prefetchInput);
+			const plan = this.#treeViewport.plan(rootWindow, prefetchInput);
+			const candidateOffsets = new Map(
+				[...plan.contentPostNumbers].map((postNumber) => [
+					postNumber,
+					this.#treeViewport.offsetOf(postNumber) ?? 0,
+				] as const),
+			);
+			this.#directReplyPrefetchOrderedCandidates = Object.freeze(
+				[...plan.contentPostNumbers].sort((left, right) =>
+					(candidateOffsets.get(left) ?? 0) -
+						(candidateOffsets.get(right) ?? 0) ||
+					left - right),
+			);
+			const previousCandidates =
+				this.#directReplyPrefetchCandidatePostNumbers;
+			this.#directReplyPrefetchCandidatePostNumbers = new Set(
+				this.#directReplyPrefetchOrderedCandidates,
+			);
+			for (const postNumber of previousCandidates) {
+				if (!this.#directReplyPrefetchCandidatePostNumbers.has(postNumber)) {
+					this.#directReplyPrefetchAttemptedExpectedCounts.delete(postNumber);
+				}
+			}
+		}
 		const visiblePostNumbers = new Set(
 			this.#treeViewport.visiblePostNumbers.filter(
-				(postNumber) => plan.contentPostNumbers.has(postNumber),
+				(postNumber) =>
+					this.#directReplyPrefetchCandidatePostNumbers.has(postNumber),
 			),
 		);
 		const visibleKey = [...visiblePostNumbers].join(',');
-		if (visibleKey !== this.#directReplyVisibleKey) {
+		const visibleChanged = visibleKey !== this.#directReplyVisibleKey;
+		if (visibleChanged) {
 			this.#directReplyVisibleKey = visibleKey;
-			this.#abortDirectReplyRequestsOutside(visiblePostNumbers);
+		}
+		if (candidatesChanged || visibleChanged) {
+			this.#abortDirectReplyRequestsOutside(
+				this.#directReplyPrefetchCandidatePostNumbers,
+				visiblePostNumbers,
+			);
 		}
 		this.#directReplyVisiblePostNumbers = visiblePostNumbers;
-		const candidateOffsets = new Map(
-			[...plan.contentPostNumbers].map((postNumber) => [
-				postNumber,
-				this.#treeViewport.offsetOf(postNumber) ?? 0,
-			] as const),
-		);
-		const orderedCandidates = [...plan.contentPostNumbers].sort(
-			(left, right) => {
-				const visibleOrder = Number(!visiblePostNumbers.has(left)) -
-					Number(!visiblePostNumbers.has(right));
-				const leftOffset = candidateOffsets.get(left) ?? 0;
-				const rightOffset = candidateOffsets.get(right) ?? 0;
-				return visibleOrder || leftOffset - rightOffset || left - right;
-			},
-		);
-		const previousCandidates = this.#directReplyPrefetchCandidatePostNumbers;
-		this.#directReplyPrefetchCandidatePostNumbers = new Set(
-			orderedCandidates,
-		);
-		for (const postNumber of previousCandidates) {
-			if (!this.#directReplyPrefetchCandidatePostNumbers.has(postNumber)) {
-				this.#directReplyPrefetchAttemptedExpectedCounts.delete(postNumber);
-			}
-		}
+		const orderedCandidates = [
+			...this.#directReplyPrefetchOrderedCandidates.filter((postNumber) =>
+				visiblePostNumbers.has(postNumber)),
+			...this.#directReplyPrefetchOrderedCandidates.filter((postNumber) =>
+				!visiblePostNumbers.has(postNumber)),
+		];
 		const stillQueued = orderedCandidates.filter(
 			(postNumber) => this.#queuedDirectReplyPrefetches.has(postNumber),
 		);
@@ -1194,27 +1256,28 @@ export class ReaderTopicDomCoordinator<
 	}
 
 	#prefetchDirectReplies(postNumber: PostNumber, schedule = true): void {
-		const loadDirectReplies = this.#session.loadDirectReplies;
 		if (
-			!loadDirectReplies ||
 			this.#directReplyPrefetches.has(postNumber) ||
 			this.#queuedDirectReplyPrefetches.has(postNumber) ||
-			this.scope.destroyed
-		) return;
-		const post = this.#session.postByNumber(postNumber);
-		const expectedCount = Number(post?.reply_count ?? 0);
-		if (
-			!Number.isSafeInteger(expectedCount) ||
-			expectedCount <= 0 ||
-			Math.max(
-				this.#directReplyPrefetchedExpectedCounts.get(postNumber) ?? 0,
-				this.#directReplyPrefetchAttemptedExpectedCounts.get(postNumber) ?? 0,
-			) >=
-				expectedCount
+			this.scope.destroyed ||
+			!this.#directReplyPrefetchRequired(postNumber)
 		) return;
 		this.#queuedDirectReplyPrefetches.add(postNumber);
 		this.#syncDirectReplyLoadingIndicators();
 		if (schedule) this.#scheduleDirectReplyPrefetchFlush();
+	}
+
+	#directReplyPrefetchRequired(postNumber: PostNumber): boolean {
+		if (!this.#session.loadDirectReplies) return false;
+		const expectedCount = Number(
+			this.#session.postByNumber(postNumber)?.reply_count ?? 0,
+		);
+		return Number.isSafeInteger(expectedCount) &&
+			expectedCount > 0 &&
+			Math.max(
+				this.#directReplyPrefetchedExpectedCounts.get(postNumber) ?? 0,
+				this.#directReplyPrefetchAttemptedExpectedCounts.get(postNumber) ?? 0,
+			) < expectedCount;
 	}
 
 	#scheduleDirectReplyPrefetchFlush(minimumDelayMs = 0): void {
@@ -1356,18 +1419,32 @@ export class ReaderTopicDomCoordinator<
 	}
 
 	#abortDirectReplyRequestsOutside(
+		candidatePostNumbers: ReadonlySet<PostNumber>,
 		visiblePostNumbers: ReadonlySet<PostNumber>,
 	): void {
+		const visibleRequestPending = [...visiblePostNumbers].some(
+			(postNumber) => this.#directReplyPrefetchRequired(postNumber),
+		);
 		for (const [postNumber, request] of this.#directReplyPrefetches) {
-			if (
-				visiblePostNumbers.has(postNumber) &&
-				request.lane === 'visible'
-			) continue;
+			if (visibleRequestPending) {
+				if (
+					visiblePostNumbers.has(postNumber) &&
+					request.lane === 'visible'
+				) continue;
+			} else if (candidatePostNumbers.has(postNumber)) {
+				/*
+				 * 可见集合变化但没有新的前台树缺口时，保留仍在候选窗内的
+				 * 近邻 single-flight；否则小幅滚动会反复取消并重发同一页。
+				 */
+				continue;
+			}
 			this.#directReplyPrefetches.delete(postNumber);
 			if (!request.controller.signal.aborted) {
 				request.controller.abort(new DOMException(
 					visiblePostNumbers.has(postNumber)
 						? `树状回复 #${postNumber} 升级为可见快车道`
+						: candidatePostNumbers.has(postNumber)
+							? `树状回复 #${postNumber} 为可见快车道让位`
 						: `树状回复 #${postNumber} 已滚出当前视口`,
 					'AbortError',
 				));

@@ -8,6 +8,7 @@ import {
 	ReaderOpenQueueSession,
 	type ReaderOpenQueuePreferences,
 	type ReaderOpenQueueSessionOptions,
+	type ReaderQueuePrefetchResult,
 	type ReaderQueuePrefetchProgress,
 } from '../src/queue/reader-open-queue-session.js';
 import {
@@ -56,6 +57,7 @@ const { document: parsedDocument, window: parsedWindow } = parseHTML(`
 `);
 const document = parsedDocument as unknown as Document;
 const root = document.querySelector<HTMLElement>('#root')!;
+root.dataset.readerWorkspaceMode = 'floating';
 const storage = new MemoryStorage();
 let preferences: ReaderOpenQueuePreferences = {
 	openTopicsAtFirstPost: false,
@@ -69,6 +71,8 @@ const prefetched: number[] = [];
 const prefetchProgressReports: Array<(
 	progress: ReaderQueuePrefetchProgress,
 ) => void> = [];
+const queueDownloadedTopics: number[] = [];
+const queueSavedFiles: string[] = [];
 const notices: string[] = [];
 const restoredAnchors: number[] = [];
 let closeCount = 0;
@@ -92,6 +96,7 @@ const resizeObserver = {
 const queueOptions = {
 	document,
 	root,
+	workspaceRoot: root,
 	storage,
 	target: {
 		async openTarget(request) {
@@ -168,6 +173,36 @@ const queueOptions = {
 			complete: true,
 		};
 	},
+	topicDownloads: {
+		mount: root,
+		floating: true,
+		worker: async (topicId, title, signal, report) => {
+			assert(!signal.aborted, '队列下载必须接收可取消信号');
+			queueDownloadedTopics.push(topicId);
+			report({
+				phase: 'loading-posts',
+				completed: 9,
+				total: 9,
+			});
+			return Object.freeze({
+				html: `<!doctype html><title>${title}</title>`,
+				filename: `topic-${topicId}.html`,
+				postCount: 9,
+				expectedPostCount: 9,
+				complete: true,
+			});
+		},
+		downloads: {
+			save: (_blob, filename) => {
+				queueSavedFiles.push(filename);
+			},
+		},
+		requestFrame: (callback) => {
+			callback(0);
+			return 0;
+		},
+		cancelFrame: () => {},
+	},
 	closeReader: () => {
 		closeCount += 1;
 	},
@@ -192,6 +227,11 @@ const queueOptions = {
 		resizeCallback = callback;
 		return resizeObserver;
 	},
+	requestFrame: (callback) => {
+		callback(0);
+		return 0;
+	},
+	cancelFrame: () => {},
 } satisfies ReaderOpenQueueSessionOptions;
 const queue = new ReaderOpenQueueSession(queueOptions);
 const rect = (
@@ -214,12 +254,14 @@ let rootLayoutReads = 0;
 let headerLayoutReads = 0;
 let actionLayoutReads = 0;
 let queueLayoutReads = 0;
+let rootWidth = 1_000;
+let rootHeight = 800;
 const layoutReads = (): number =>
 	rootLayoutReads + headerLayoutReads + actionLayoutReads + queueLayoutReads;
 Object.defineProperty(root, 'getBoundingClientRect', {
 	value: () => {
 		rootLayoutReads += 1;
-		return rect(0, 0, 1_000, 800);
+		return rect(0, 0, rootWidth, rootHeight);
 	},
 });
 Object.defineProperty(
@@ -262,7 +304,11 @@ assert(
 		) === 2 &&
 		root.querySelector('.ldp-reader-queue')
 			?.classList.contains('is-docked-title'),
-	'队列默认必须吸附在真实标题底边，并与收纳箱共用同一 X 轴中心线',
+	`队列默认必须吸附在真实标题底边，并与收纳箱共用同一 X 轴中心线：top=${
+		root.querySelector<HTMLElement>('.ldp-reader-queue')!.style.top
+	} left=${root.querySelector<HTMLElement>('.ldp-reader-queue')!.style.left} class=${
+		root.querySelector<HTMLElement>('.ldp-reader-queue')!.className
+	}`,
 );
 const readsAfterRefresh = layoutReads();
 resizeCallback([], resizeObserver);
@@ -327,6 +373,52 @@ const activeBubble = root.querySelector<HTMLButtonElement>(
 const activeRow = root.querySelector<HTMLElement>(
 	'.ldp-reader-queue-row[data-queue-open="42"]',
 )!;
+	const topicDownloadManager = root.querySelector<HTMLElement>(
+		'.ldp-topic-download-manager.is-floating',
+	)!;
+	assert(
+		topicDownloadManager.hidden &&
+			activeRow.querySelector('[data-queue-download]') === null &&
+			root.querySelector('.ldp-reader-queue-download-current') === null,
+		'Topic 下载不得混入阅读队列，独立管理浮窗默认隐藏',
+	);
+	assert(
+		queue.openTopicDownloadManager() &&
+			!topicDownloadManager.hidden &&
+			topicDownloadManager.classList.contains('is-open'),
+		'收纳箱展开后的下载历史入口必须打开独立浮窗',
+	);
+	queue.downloadCurrentTopic();
+	assert(
+		topicDownloadManager.classList.contains('is-open') &&
+			queueDownloadedTopics.length === 0 &&
+			topicDownloadManager.querySelector<HTMLSelectElement>(
+				'.ldp-topic-download-selection-mode',
+			)?.value === 'all',
+		'点击常显下载图标必须先打开范围选项，默认全部楼层且不得提前启动任务',
+	);
+	topicDownloadManager.querySelector<HTMLButtonElement>(
+		'.ldp-topic-download-current',
+	)!.click();
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	assert(
+		queueDownloadedTopics.join(',') === '42' &&
+			queueSavedFiles.length === 0 &&
+			topicDownloadManager.classList.contains('is-open') &&
+		root.querySelector(
+			'.ldp-topic-download-task.is-ready[data-topic-id="42"]',
+		) !== null,
+		'确认下载范围后必须异步进入独立管理浮窗并只保存历史，不得自动触发本地文件下载',
+	);
+	topicDownloadManager.querySelector<HTMLButtonElement>(
+		'[data-topic-download-action="save"][data-topic-id="42"]',
+	)!.click();
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	assert(
+		queueSavedFiles.join(',') === 'topic-42.html',
+		'只有点击下载历史记录中的下载按钮，才允许把 HTML 保存到本地',
+	);
 assert(
 	activeBubble.getAttribute('aria-current') === 'true' &&
 	activeBubble.dataset.ldpTooltipLabel?.includes('测试主题') === true &&
@@ -453,6 +545,30 @@ const queueToggle = root.querySelector<HTMLButtonElement>(
 const queuePanel = root.querySelector<HTMLElement>(
 	'.ldp-reader-queue-panel',
 )!;
+const pointer = (
+	type: string,
+	pointerId: number,
+	clientX: number,
+	clientY = 0,
+	pointerType = 'mouse',
+): Event => {
+	const event = new parsedWindow.Event(type, {
+		bubbles: type !== 'pointerenter' && type !== 'pointerleave',
+	});
+	Object.defineProperties(event, {
+		button: { value: 0 },
+		pointerId: { value: pointerId },
+		clientX: { value: clientX },
+		clientY: { value: clientY },
+		pointerType: { value: pointerType },
+	});
+	return event;
+};
+const pressQueueToggle = (pointerId: number): void => {
+	queueToggle.dispatchEvent(pointer('pointerdown', pointerId, 20));
+	document.dispatchEvent(pointer('pointerup', pointerId, 20));
+	queueToggle.click();
+};
 Object.defineProperties(queuePanel, {
 	offsetWidth: { configurable: true, value: 330 },
 	offsetHeight: { configurable: true, value: 300 },
@@ -487,11 +603,11 @@ assert(
 		!root.querySelector('.ldp-reader-queue')?.classList.contains(
 			'is-preview-collapsed',
 		) &&
-		queueToggle.getAttribute('aria-pressed') === 'true' &&
+		queueToggle.getAttribute('aria-pressed') === 'false' &&
 		[...root.querySelectorAll('.ldp-reader-queue-bubble')].every((bubble) =>
 			bubble.querySelector('.ldp-reader-queue-avatar') !== null
 		),
-	'队列默认必须展开与条目等量的左侧头像快捷链，不能只在详情面板保留头像',
+	'队列默认必须展开与条目等量的左侧头像快捷链，主按钮尚未固定打开详情面板',
 );
 const queueScrollHint = root.querySelector<HTMLButtonElement>(
 	'.ldp-reader-queue-scroll-hint',
@@ -516,25 +632,89 @@ assert(
 		queueScrollHint.querySelector('[data-icon="chevron-up"]') !== null,
 	'队列滚到底后提示必须翻转并能返回顶部',
 );
-queueToggle.click();
+pressQueueToggle(101);
 assert(
-	root.querySelector('.ldp-reader-queue')?.classList.contains(
-		'is-preview-collapsed',
-	) === true &&
+	!queuePanel.hidden &&
+		queueToggle.getAttribute('aria-expanded') === 'true' &&
+		queueToggle.getAttribute('aria-pressed') === 'true',
+	'单击收纳箱必须直接打开并固定详情面板',
+);
+root.querySelector<HTMLElement>('.ldp-reader-queue')!.dispatchEvent(
+	new parsedWindow.Event('pointerleave'),
+);
+await new Promise((resolve) => setTimeout(resolve, 220));
+assert(
+	!queuePanel.hidden && queueToggle.getAttribute('aria-pressed') === 'true',
+	'单击固定后的收纳箱不得在指针移出时自动关闭',
+);
+pressQueueToggle(102);
+assert(
+	queuePanel.hidden &&
+		queueToggle.getAttribute('aria-expanded') === 'false' &&
 		queueToggle.getAttribute('aria-pressed') === 'false',
-	'点击队列主按钮必须收纳头像预览，而不是误切换详情面板',
+	'再次单击收纳箱必须关闭详情面板',
 );
-queueToggle.click();
-assert(
-	!root.querySelector('.ldp-reader-queue')?.classList.contains(
-		'is-preview-collapsed',
-	) &&
-		queueToggle.getAttribute('aria-pressed') === 'true' &&
-		root.querySelectorAll('.ldp-reader-queue-bubble-shell').length === 2,
-	'再次点击队列主按钮必须恢复完整头像快捷链，不能只恢复详情面板',
-);
-queueToggle.click();
-queueToggle.dispatchEvent(new parsedWindow.Event('pointerenter'));
+const queueRail = root.querySelector<HTMLElement>('.ldp-reader-queue')!;
+const nativeQueueSetTimeout = globalThis.setTimeout;
+const nativeQueueClearTimeout = globalThis.clearTimeout;
+let queuePanelTimerDelay = -1;
+let queuePanelTimerHandle: ReturnType<typeof setTimeout> | null = null;
+let queuePanelTimerCallback: (() => void) | null = null;
+try {
+	globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+		queuePanelTimerDelay = Number(args[1] ?? 0);
+		queuePanelTimerCallback = typeof args[0] === 'function'
+			? args[0] as () => void
+			: null;
+		queuePanelTimerHandle = 73 as unknown as ReturnType<typeof setTimeout>;
+		return queuePanelTimerHandle;
+	}) as typeof setTimeout;
+	globalThis.clearTimeout = ((...args: Parameters<typeof clearTimeout>) => {
+		if (args[0] === queuePanelTimerHandle) {
+			queuePanelTimerHandle = null;
+			queuePanelTimerCallback = null;
+			return;
+		}
+		nativeQueueClearTimeout(args[0]);
+	}) as typeof clearTimeout;
+	queueToggle.dispatchEvent(pointer('pointerenter', 103, 20, 0, 'touch'));
+	assert(
+		queuePanel.hidden && queuePanelTimerHandle === null,
+		'触屏 pointerenter 不得抢先展开收纳箱或产生点击前闪烁',
+	);
+	queueToggle.dispatchEvent(pointer('pointerenter', 104, 20));
+	assert(
+		queuePanel.hidden &&
+			queuePanelTimerDelay >= 150 &&
+			queuePanelTimerCallback !== null,
+		`鼠标悬停必须先经过短暂意图延迟，不能扫过即遮住正文：${queuePanelTimerDelay}`,
+	);
+	queueToggle.dispatchEvent(pointer('pointerleave', 104, 20));
+	assert(
+		queuePanel.hidden && queuePanelTimerHandle === null,
+		'鼠标在意图延迟内移出图标必须取消预览',
+	);
+	queueToggle.dispatchEvent(pointer('pointerenter', 105, 20));
+	const openPreview = queuePanelTimerCallback as (() => void) | null;
+	openPreview?.();
+	assert(
+		!queuePanel.hidden && queueToggle.getAttribute('aria-pressed') === 'false',
+		'悬停意图成立后必须只预览面板，不能误固定打开',
+	);
+	queueRail.dispatchEvent(pointer('pointerleave', 106, 0));
+	assert(
+		queuePanelTimerDelay >= 400 && queuePanelTimerHandle !== null,
+		`收纳箱侧栏到详情面板必须保留足够的鼠标交接时间：${queuePanelTimerDelay}`,
+	);
+	queuePanel.dispatchEvent(pointer('pointerenter', 107, 0));
+	assert(
+		queuePanelTimerHandle === null && !queuePanel.hidden,
+		'鼠标进入收纳箱详情面板必须直接接管 hover 并取消待执行关闭',
+	);
+} finally {
+	globalThis.setTimeout = nativeQueueSetTimeout;
+	globalThis.clearTimeout = nativeQueueClearTimeout;
+}
 const row = root.querySelector<HTMLElement>(
 	'.ldp-reader-queue-row[data-queue-open="42"]',
 )!;
@@ -549,7 +729,7 @@ assert(
 	!queuePanel.hidden &&
 		queueToggle.getAttribute('aria-expanded') === 'true' &&
 		row.textContent?.includes('已读 2/9') &&
-		queueIconActions.length >= 8 &&
+			queueIconActions.length >= 8 &&
 		queueIconActions.every((action) =>
 			action.querySelector('svg[data-ldp-reader-icon]') !== null
 		) &&
@@ -758,24 +938,17 @@ assert(
 const toggle = root.querySelector<HTMLButtonElement>(
 	'.ldp-reader-queue-toggle',
 )!;
-const pointer = (
-	type: string,
-	pointerId: number,
-	clientX: number,
-): Event => {
-	const event = new parsedWindow.Event(type, { bubbles: true });
-	Object.defineProperties(event, {
-		button: { value: 0 },
-		pointerId: { value: pointerId },
-		clientX: { value: clientX },
-		clientY: { value: 0 },
-	});
-	return event;
-};
-toggle.dispatchEvent(new parsedWindow.Event('pointerenter'));
 assert(
-	!root.querySelector<HTMLElement>('.ldp-reader-queue-panel')!.hidden,
-	'队列图标 hover 后必须正常展示详情面板',
+	!root.querySelector<HTMLElement>('.ldp-reader-queue')!.hidden &&
+		toggle.querySelector('b')?.textContent === '0' &&
+		toggle.getAttribute('aria-label')?.includes('队列 0 篇') === true,
+	'空阅读队列入口必须常显真实数字 0，不能伪装成关闭符号或依赖悬停',
+);
+pressQueueToggle(107);
+assert(
+	!root.querySelector<HTMLElement>('.ldp-reader-queue-panel')!.hidden &&
+		preferences.readerQueueAlwaysVisibleWhenEmpty,
+	'单击空队列必须打开收纳箱，不能顺手关闭常显入口偏好',
 );
 toggle.dispatchEvent(pointer('pointerdown', 5, 20));
 document.dispatchEvent(pointer('pointermove', 5, 3));
@@ -790,6 +963,72 @@ document.dispatchEvent(pointer('pointerup', 6, 2));
 assert(
 	root.querySelector('.ldp-reader-queue')?.classList.contains('is-docked-left'),
 	'队列距左边 2px 时必须触发吸附',
+);
+const floatingQueueSnapshot = JSON.parse(
+	storage.getItem(READER_QUEUE_STORAGE_KEY) ?? 'null',
+) as {
+	version: number;
+	surfaces: Record<string, { x: number; y: number; dock: string }>;
+};
+assert(
+	floatingQueueSnapshot.version === 2 &&
+		floatingQueueSnapshot.surfaces.floating?.dock === 'left' &&
+		floatingQueueSnapshot.surfaces.fullpage?.dock === 'title' &&
+		floatingQueueSnapshot.surfaces.embedded?.dock === 'title',
+	'浮窗拖动必须只写浮窗队列位置，另外两个形态保留各自槽位',
+);
+root.dataset.readerWorkspaceMode = 'fullpage';
+root.dispatchEvent(new parsedWindow.Event('ldp-reader-workspace-change'));
+assert(
+	root.querySelector('.ldp-reader-queue')?.classList.contains('is-docked-title') &&
+		!root.querySelector('.ldp-reader-queue')?.classList.contains('is-docked-left'),
+	'切到全屏必须恢复全屏队列位置，不能沿用浮窗贴边状态',
+);
+toggle.dispatchEvent(pointer('pointerdown', 20, 20, 96));
+document.dispatchEvent(pointer('pointermove', 20, 500, 400));
+document.dispatchEvent(pointer('pointerup', 20, 500, 400));
+const fullpageQueueSnapshot = JSON.parse(
+	storage.getItem(READER_QUEUE_STORAGE_KEY) ?? 'null',
+) as {
+	surfaces: Record<string, { x: number; y: number; dock: string }>;
+};
+const fullpageQueuePosition = fullpageQueueSnapshot.surfaces.fullpage!;
+assert(
+	fullpageQueueSnapshot.surfaces.floating?.dock === 'left' &&
+		fullpageQueuePosition.dock === '' &&
+		fullpageQueuePosition.x > 0.52 &&
+		fullpageQueuePosition.x < 0.53 &&
+		fullpageQueueSnapshot.surfaces.embedded?.dock === 'title',
+	'全屏拖动必须只保存全屏的 X/Y 比例位置，浮窗与嵌入互不受影响',
+);
+rootWidth = 1_500;
+rootHeight = 1_200;
+queue.refreshSurface();
+const resizedQueue = root.querySelector<HTMLElement>('.ldp-reader-queue')!;
+const resizedX = (
+	Number.parseFloat(resizedQueue.style.left) / 100 * rootWidth
+) / (rootWidth - 40);
+const resizedY = (
+	Number.parseFloat(resizedQueue.style.top) / 100 * rootHeight
+) / (rootHeight - 120);
+assert(
+	Math.abs(resizedX - fullpageQueuePosition.x) < 0.001 &&
+		Math.abs(resizedY - fullpageQueuePosition.y) < 0.001,
+	'队列容器宽高变化时必须按保存的 X/Y 比例重新定位',
+);
+root.dataset.readerWorkspaceMode = 'embed-right';
+root.dispatchEvent(new parsedWindow.Event('ldp-reader-workspace-change'));
+assert(
+	root.querySelector('.ldp-reader-queue')?.classList.contains('is-docked-title'),
+	'左右嵌入必须共享第三份独立队列位置',
+);
+rootWidth = 1_000;
+rootHeight = 800;
+root.dataset.readerWorkspaceMode = 'floating';
+root.dispatchEvent(new parsedWindow.Event('ldp-reader-workspace-change'));
+assert(
+	root.querySelector('.ldp-reader-queue')?.classList.contains('is-docked-left'),
+	'切回浮窗必须恢复原浮窗锚点',
 );
 toggle.dispatchEvent(pointer('pointerdown', 7, 20));
 assert(
@@ -814,7 +1053,8 @@ assert(
 	readsAfterPointerMoves === readsAfterPointerDown,
 	'队列拖拽必须复用 pointerdown 几何快照，pointermove 只投影且不得同步读取布局',
 );
-toggle.dispatchEvent(new parsedWindow.Event('pointerenter'));
+toggle.dispatchEvent(pointer('pointerenter', 108, 20));
+await new Promise((resolve) => setTimeout(resolve, 200));
 const panel = root.querySelector<HTMLElement>('.ldp-reader-queue-panel')!;
 const panelClose = panel.querySelector<HTMLButtonElement>(
 	'.ldp-reader-queue-close',
@@ -844,6 +1084,129 @@ assert(
 		),
 	'队列会话销毁必须释放自有 DOM、入口和宿主标记',
 );
+
+const { document: parsedClearDocument } = parseHTML(`
+	<!doctype html>
+	<html>
+		<head><base href="https://linux.do/latest"></head>
+		<body>
+			<div class="topic-list-item">
+				<a class="raw-topic-link" href="/t/clear-one/71">待清理主题一</a>
+			</div>
+			<div class="topic-list-item">
+				<a class="raw-topic-link" href="/t/clear-two/72">待清理主题二</a>
+			</div>
+			<main id="clear-root"><header class="ldp-header"></header></main>
+		</body>
+	</html>
+`);
+const clearDocument = parsedClearDocument as unknown as Document;
+const clearRoot = clearDocument.querySelector<HTMLElement>('#clear-root')!;
+const clearQueue = new ReaderOpenQueueSession({
+	...queueOptions,
+	document: clearDocument,
+	root: clearRoot,
+	storage: new MemoryStorage(),
+	currentTopicId: () => null,
+	historyEntry: () => null,
+	topicDownloads: {
+		...queueOptions.topicDownloads,
+		mount: clearRoot,
+	},
+});
+for (const add of clearDocument.querySelectorAll<HTMLButtonElement>(
+	'.ldp-reader-queue-add',
+)) add.click();
+clearRoot.querySelector<HTMLButtonElement>('[data-queue-pin="71"]')!.click();
+const clearUnpinned = clearRoot.querySelector<HTMLButtonElement>(
+	'.ldp-reader-queue-clear',
+)!;
+clearUnpinned.click();
+assert(
+	clearQueue.size === 2 &&
+		clearUnpinned.classList.contains('is-confirming') &&
+		clearUnpinned.getAttribute('aria-label') === '确认移除 1 篇未固定主题' &&
+		notices.at(-1) === '再点一次垃圾桶，移除 1 篇未固定主题',
+	'批量清理第一次点击必须只进入明确的二次确认，不能立即丢失队列',
+);
+clearUnpinned.click();
+assert(
+	Number(clearQueue.size) === 1 &&
+		clearRoot.querySelector('[data-queue-open="71"]') !== null &&
+		clearRoot.querySelector('[data-queue-open="72"]') === null &&
+		!clearUnpinned.classList.contains('is-confirming'),
+	'批量清理二次确认后只能移除未固定主题，并保留固定主题',
+);
+clearQueue.destroy();
+
+const { document: parsedRaceDocument } = parseHTML(`
+	<!doctype html>
+	<html>
+		<head><base href="https://linux.do/latest"></head>
+		<body>
+			<header><ul class="d-header-icons"><li class="current-user"></li></ul></header>
+			<div class="topic-list-item">
+				<a class="raw-topic-link" href="/t/race/77">竞态主题</a>
+			</div>
+			<main id="race-root">
+				<header class="ldp-header"></header>
+				<aside class="ldp-topic-action-rail"></aside>
+			</main>
+		</body>
+	</html>
+`);
+const raceDocument = parsedRaceDocument as unknown as Document;
+const raceRoot = raceDocument.querySelector<HTMLElement>('#race-root')!;
+const racePrefetchResolvers: Array<(
+	result: ReaderQueuePrefetchResult,
+) => void> = [];
+const racePrefetchSignals: AbortSignal[] = [];
+const raceResult = Object.freeze({
+	loadedCount: 1,
+	totalCount: 1,
+	complete: true,
+});
+const raceQueue = new ReaderOpenQueueSession({
+	...queueOptions,
+	document: raceDocument,
+	root: raceRoot,
+	storage: new MemoryStorage(),
+	currentTopicId: () => null,
+	historyEntry: () => null,
+	prefetch: (_topicId, _postNumber, signal) => new Promise((resolve) => {
+		racePrefetchSignals.push(signal);
+		racePrefetchResolvers.push(resolve);
+	}),
+});
+const raceAdd = raceDocument.querySelector<HTMLButtonElement>(
+	'.ldp-reader-queue-add',
+)!;
+raceAdd.click();
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	racePrefetchResolvers.length === 1,
+	'竞态测试必须先启动第一轮队列预加载',
+);
+raceAdd.click();
+raceAdd.click();
+const replacementRaceRow = raceRoot.querySelector<HTMLElement>(
+	'.ldp-reader-queue-row[data-queue-open="77"]',
+)!;
+racePrefetchResolvers[0]!(raceResult);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	assert(
+		Number(racePrefetchResolvers.length) === 2 &&
+		racePrefetchSignals[0]?.aborted === true &&
+		racePrefetchSignals[1]?.aborted === false &&
+		raceRoot.querySelector(
+			'.ldp-reader-queue-row[data-queue-open="77"]',
+		) === replacementRaceRow,
+	'旧预加载结束不得清除重加 Topic 的新任务标记或触发无意义 DOM 重绘',
+);
+raceQueue.destroy();
+racePrefetchResolvers[1]!(raceResult);
+await Promise.resolve();
 
 storage.setItem(READER_QUEUE_STORAGE_KEY, JSON.stringify({
 	version: 1,

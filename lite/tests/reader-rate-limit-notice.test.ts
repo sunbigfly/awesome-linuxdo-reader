@@ -24,13 +24,21 @@ let snapshot: ReaderRateLimitNoticeSnapshot = {
 const notice = new ReaderRateLimitNotice({
 	document,
 	elements: { root, detail, challenge },
-	challengeHref: 'https://linux.do/',
+	challengeHref:
+		'https://linux.do/challenge?redirect=https%3A%2F%2Flinux.do%2Ft%2F1',
 	snapshot: async () => snapshot,
 	intervalMs: 60_000,
 });
 await notice.refresh();
 assert(root.hidden, '没有活动验证时不得显示旧式 cooldown 提示');
-assert(challenge.href === 'https://linux.do/', '手动验证入口必须使用主站根地址');
+assert(
+	new URL(challenge.href).pathname === '/challenge' &&
+		decodeURIComponent(
+			new URL(challenge.href).searchParams.get('redirect') ?? '',
+		) ===
+			'https://linux.do/t/1',
+	'手动验证入口必须使用站点原生 GET challenge 并保留同源回跳',
+);
 
 snapshot = {
 	challengeState: 'required',

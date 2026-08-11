@@ -17,6 +17,9 @@
     "80-motion.css",
     "90-responsive.css"
   ],
+  "embeddedStyleRuntimeFiles": [
+    "lite/src/archive/reader-topic-offline-document.ts"
+  ],
   "nonVisualRuntimeClasses": [
     "ldp-aggregate-descendant-replies",
     "ldp-bookmark-item",
@@ -309,12 +312,10 @@
         "lite/tests/reader-native-composer-window.test.ts"
       ],
       "runtimeClasses": [
-        "ldp-composer-host-isolated",
         "ldp-composer-window-interacting",
         "ldp-composer-window-chrome",
         "ldp-composer-drag-handle",
-        "ldp-composer-resize-handle",
-        "ldp-composer-wheel-layer"
+        "ldp-composer-resize-handle"
       ],
       "styleSignatures": [
         "#reply-control:not(.closed):not([data-ldp-reader-composer-positioned=\"1\"])",
@@ -351,6 +352,7 @@
         "ldp-nested-esc-hint"
       ],
       "styleSignatures": [
+        ".ldp-descendant-replies-tree.ldp-segmented-branches .ldp-post",
         ".ldp-reply-collapsible > .ldp-nested-toggle",
         ".ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview) > .ldp-nested-toggle",
         ".ldp-nested-esc-hint"
@@ -384,6 +386,7 @@
         "ldp-boost-identity-me",
         "ldp-boost-identity-admin",
         "ldp-boost-identity-moderator",
+        "ldp-boost-quick-actions-open",
         "ldp-action-surface",
         "ldp-selection-toolbar",
         "ldp-topic-action-rail",
@@ -395,6 +398,9 @@
         "z-index: 2147483610;",
         "border-right: 1px solid var(--primary-low, #ddd);",
         "bottom: calc(100% + 5px);",
+        ".ldp-boost-quick-actions {\n  position: absolute;\n  bottom: calc(100% + 3px);",
+        ".ldp-boost-bubble.ldp-boost-quick-actions-open > .ldp-boost-quick-actions",
+        "> .ldp-boost-quick-actions\n  > .ldp-boost-item-action {\n  pointer-events: auto;",
         "z-index: 3;",
         "width: calc(var(--ldp-control-height) + 4px);"
       ]

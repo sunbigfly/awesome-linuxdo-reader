@@ -17,6 +17,7 @@ export interface DiscourseApplicationCacheInvalidationOptions {
 		}): void | Promise<void>;
 	}>;
 	readonly currentTopicId: () => number | null;
+	readonly onPostChanged?: (post: Readonly<Record<string, unknown>>) => void;
 	readonly parentScope?: LifecycleScope;
 	readonly onError?: (cause: unknown) => void;
 }
@@ -51,11 +52,16 @@ function postIdentity(value: unknown): Readonly<{
 	});
 }
 
+function eventPost(value: unknown): Readonly<Record<string, unknown>> | null {
+	const envelope = record(value);
+	return record(envelope?.post) ?? envelope;
+}
+
 /**
  * application 生命周期内任意 Topic 帖子更新的唯一 cache invalidation owner。
  *
- * 当前 Topic 的实时 ingest 仍由 TopicLive/Composer controller 拥有；本类只把宿主事件映射
- * 为 ResponseRepository tags，使内存、IDB 与跨标签广播沿既有 cache 事务一起失效。
+ * 携带完整 Post model 的回应事件先交给当前 TopicLive consumer；所有宿主事件同时映射为
+ * ResponseRepository tags，使内存、IDB 与跨标签广播沿既有 cache 事务一起失效。
  */
 export class DiscourseApplicationCacheInvalidationCoordinator {
 	readonly scope: LifecycleScope;
@@ -105,7 +111,15 @@ export class DiscourseApplicationCacheInvalidationCoordinator {
 
 	#bindReactionEvents(): void {
 		const listener = (payload?: unknown): void => {
-			const identity = postIdentity(payload);
+			const post = eventPost(payload);
+			const identity = postIdentity(post ?? payload);
+			if (post) {
+				try {
+					this.#options.onPostChanged?.(post);
+				} catch (cause) {
+					this.#report(cause);
+				}
+			}
 			this.#queue(['reactions-given'], identity);
 		};
 		this.scope.add(discourseNativeAppEventSubscription(

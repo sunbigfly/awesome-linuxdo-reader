@@ -1,4 +1,8 @@
 import type { DiscourseHostApiPort } from '../discourse/native-host-api.js';
+import {
+	BrowserDiscourseTopicNotificationLevelMutationPort,
+	type DiscourseTopicNotificationLevelMutationPort,
+} from '../discourse/native-topic-notification-action.js';
 import { valueRecord as record } from '../kernel/value-record.js';
 import type { EmbeddedHostEnhancementPort } from './embedded-host-root-controller.js';
 
@@ -30,6 +34,16 @@ function modelArray(value: unknown): readonly unknown[] {
 		return Array.isArray(result) ? result : Object.freeze([]);
 	} catch {
 		return Object.freeze([]);
+	}
+}
+
+function setModelValue(value: unknown, key: string, next: unknown): void {
+	const source = record(value);
+	const setter = source?.set;
+	if (typeof setter === 'function') {
+		setter.call(value, key, next);
+	} else if (source) {
+		source[key] = next;
 	}
 }
 
@@ -70,6 +84,31 @@ function directChild(line: Element, node: Element): Element | null {
 	return current?.parentElement === line ? current : null;
 }
 
+function normalizedLabel(value: unknown): string {
+	return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function nativeDndLabel(node: Element): boolean {
+	const labels = [
+		node.textContent,
+		node.getAttribute('aria-label'),
+		node.getAttribute('title'),
+		node.getAttribute('data-tooltip'),
+		node.getAttribute('data-tippy-content'),
+	].map(normalizedLabel).filter(Boolean);
+	return labels.some((label) =>
+		label.includes('免打扰') ||
+		label.includes('静音') ||
+		/\b(?:mute|muted|unmute)\b/i.test(label)
+	);
+}
+
+export interface EmbeddedHostTopicCardEnhancementOptions {
+	readonly notifications?: DiscourseTopicNotificationLevelMutationPort;
+	readonly notify?: (message: string) => void;
+	readonly onError?: (cause: unknown) => void;
+}
+
 /**
  * embedded 宿主 Topic 行的唯一装饰 owner。
  *
@@ -80,11 +119,22 @@ export class EmbeddedHostTopicCardEnhancement
 implements EmbeddedHostEnhancementPort {
 	readonly #document: Document;
 	readonly #host: DiscourseHostApiPort;
+	readonly #notifications: DiscourseTopicNotificationLevelMutationPort;
+	readonly #notify: (message: string) => void;
+	readonly #onError: (cause: unknown) => void;
 	readonly #roots = new Set<Element>();
 
-	constructor(document: Document, host: DiscourseHostApiPort) {
+	constructor(
+		document: Document,
+		host: DiscourseHostApiPort,
+		options: EmbeddedHostTopicCardEnhancementOptions = {},
+	) {
 		this.#document = document;
 		this.#host = host;
+		this.#notifications = options.notifications ??
+			new BrowserDiscourseTopicNotificationLevelMutationPort(host);
+		this.#notify = options.notify ?? (() => {});
+		this.#onError = options.onError ?? (() => {});
 	}
 
 	syncRoot(root: Element): void {
@@ -125,11 +175,15 @@ implements EmbeddedHostEnhancementPort {
 	}
 
 	syncCards(cards: readonly Element[]): void {
-		const reactions = this.#reactionCounts();
+		const topicModels = this.#topicModels();
+		const reactions = this.#reactionCounts(topicModels);
 		for (const card of cards) {
 			if (!card.matches(CARD_SELECTOR) || card.closest('.ldp-overlay')) continue;
 			this.#markDateCells(card);
-			this.#groupTitleTools(card);
+			this.#groupTitleTools(
+				card,
+				this.#topicInput(card, topicModels),
+			);
 			this.#syncStats(card, reactions);
 		}
 	}
@@ -145,6 +199,9 @@ implements EmbeddedHostEnhancementPort {
 		for (const component of root.querySelectorAll(
 			'.ldp-topic-stats-component',
 		)) component.remove();
+		for (const button of root.querySelectorAll(
+			'[data-ldp-owned-native-dnd]',
+		)) button.remove();
 		for (const group of root.querySelectorAll(
 			'.ldp-native-topic-title-tools',
 		)) group.replaceWith(...[...group.childNodes]);
@@ -170,11 +227,7 @@ implements EmbeddedHostEnhancementPort {
 		let component = posts.querySelector<HTMLElement>(
 			':scope > .ldp-topic-stats-component',
 		);
-		const topicId = String(
-			(card as HTMLElement).dataset.topicId ??
-			card.getAttribute('data-topic-id') ??
-			this.#topicId(card.querySelector(TOPIC_LINK_SELECTOR)),
-		);
+		const topicId = this.#cardTopicId(card);
 		const responseCount = topicId && reactions.has(topicId)
 			? reactions.get(topicId)
 			: null;
@@ -266,26 +319,31 @@ implements EmbeddedHostEnhancementPort {
 		}
 	}
 
-	#groupTitleTools(card: Element): void {
-		const controls = [...card.querySelectorAll<HTMLElement>(
+	#groupTitleTools(card: Element, topic: unknown): void {
+		const line = card.querySelector<HTMLElement>('.link-top-line');
+		if (!line) return;
+		const controls = [...line.querySelectorAll<HTMLElement>(
 			'a,button,[role="button"]',
 		)];
-		const normalized = (node: Element): string =>
-			String(node.textContent ?? '').replace(/\s+/g, ' ').trim();
-		const direct = controls.find((node) => normalized(node) === '免打扰');
+		const direct = controls.find((node) =>
+			!node.matches(TOPIC_LINK_SELECTOR) && nativeDndLabel(node)
+		);
 		const fallback = direct
 			? null
-			: [...card.querySelectorAll<HTMLElement>('span')]
-				.find((node) => normalized(node) === '免打扰');
-		const dnd = direct ?? fallback?.closest<HTMLElement>(
+			: [...line.querySelectorAll<HTMLElement>('span')]
+				.find((node) =>
+					!node.closest(TOPIC_LINK_SELECTOR) && nativeDndLabel(node)
+				);
+		let dnd = direct ?? fallback?.closest<HTMLElement>(
 			'a,button,[role="button"]',
 		) ?? fallback;
+		if (!dnd && topic && this.#currentUsername()) {
+			dnd = this.#createDndButton(line, topic);
+		}
 		if (!dnd) return;
 		dnd.dataset.ldpNativeDnd = 'true';
-		const line = dnd.closest('.link-top-line');
-		if (!line || !card.contains(line)) return;
 		const expert = [...line.querySelectorAll<HTMLElement>('*')]
-			.find((node) => normalized(node) === '专家回应');
+			.find((node) => normalizedLabel(node.textContent) === '专家回应');
 		if (!expert) return;
 		const startNode = directChild(line, expert);
 		const endNode = directChild(line, dnd);
@@ -304,8 +362,60 @@ implements EmbeddedHostEnhancementPort {
 		group.append(...children.slice(start, end + 1));
 	}
 
-	#reactionCounts(): ReadonlyMap<string, number | null> {
-		const counts = new Map<string, number | null>();
+	#createDndButton(line: HTMLElement, topic: unknown): HTMLButtonElement {
+		const button = this.#document.createElement('button');
+		button.type = 'button';
+		button.dataset.ldpOwnedNativeDnd = 'true';
+		button.dataset.ldpNativeDnd = 'true';
+		button.setAttribute('aria-label', '将此话题设为免打扰');
+		button.setAttribute('aria-pressed', 'false');
+		button.title = '免打扰';
+		button.addEventListener('click', (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			void this.#muteTopic(button, topic);
+		});
+		line.append(button);
+		return button;
+	}
+
+	async #muteTopic(button: HTMLButtonElement, topic: unknown): Promise<void> {
+		if (
+			button.dataset.ldpNativeDndPending === 'true' ||
+			button.getAttribute('aria-pressed') === 'true'
+		) return;
+		button.dataset.ldpNativeDndPending = 'true';
+		button.disabled = true;
+		button.setAttribute('aria-busy', 'true');
+		try {
+			await this.#notifications.setLevel(topic, 0);
+			setModelValue(topic, 'notification_level', 0);
+			const details = modelValue(topic, 'details');
+			if (details) setModelValue(details, 'notification_level', 0);
+			button.dataset.ldpNativeDndActive = 'true';
+			button.setAttribute('aria-pressed', 'true');
+			button.setAttribute('aria-label', '此话题已设为免打扰');
+			button.title = '已设为免打扰';
+			this.#notify('已将话题设为免打扰');
+		} catch (cause) {
+			this.#onError(cause);
+			this.#notify('设置免打扰失败，请稍后重试');
+		} finally {
+			delete button.dataset.ldpNativeDndPending;
+			button.disabled = false;
+			button.removeAttribute('aria-busy');
+		}
+	}
+
+	#currentUsername(): string {
+		return normalizedLabel(modelValue(
+			this.#host.lookup('service:current-user'),
+			'username',
+		));
+	}
+
+	#topicModels(): ReadonlyMap<string, unknown> {
+		const result = new Map<string, unknown>();
 		const router = this.#host.lookup('service:router');
 		const routeName = String(
 			modelValue(router, 'currentRouteName') ?? '',
@@ -332,26 +442,63 @@ implements EmbeddedHostEnhancementPort {
 			);
 			for (const topic of topics) {
 				const topicId = String(modelValue(topic, 'id') ?? '').trim();
-				if (!topicId || counts.has(topicId)) continue;
-				const reactions = modelValue(topic, 'op_reactions_data') ??
-					modelValue(topic, 'opReactionsData');
-				const total = reactionCountTotal(reactions);
-				const raw = reactions
-					? total ??
-						modelValue(reactions, 'reaction_users_count') ??
-						modelValue(reactions, 'reactionUsersCount')
-					: modelValue(topic, 'op_like_count') ??
-						modelValue(topic, 'opLikeCount');
-				const numeric = Number(raw);
-				counts.set(
-					topicId,
-					Number.isFinite(numeric) && numeric >= 0
-						? Math.trunc(numeric)
-						: null,
-				);
+				if (!topicId || result.has(topicId)) continue;
+				result.set(topicId, topic);
 			}
 		}
+		return result;
+	}
+
+	#reactionCounts(
+		topics: ReadonlyMap<string, unknown>,
+	): ReadonlyMap<string, number | null> {
+		const counts = new Map<string, number | null>();
+		for (const [topicId, topic] of topics) {
+			const reactions = modelValue(topic, 'op_reactions_data') ??
+				modelValue(topic, 'opReactionsData');
+			const total = reactionCountTotal(reactions);
+			const raw = reactions
+				? total ??
+					modelValue(reactions, 'reaction_users_count') ??
+					modelValue(reactions, 'reactionUsersCount')
+				: modelValue(topic, 'op_like_count') ??
+					modelValue(topic, 'opLikeCount');
+			const numeric = Number(raw);
+			counts.set(
+				topicId,
+				Number.isFinite(numeric) && numeric >= 0
+					? Math.trunc(numeric)
+					: null,
+			);
+		}
 		return counts;
+	}
+
+	#topicInput(
+		card: Element,
+		topics: ReadonlyMap<string, unknown>,
+	): unknown {
+		const topicId = this.#cardTopicId(card);
+		if (!topicId) return null;
+		const model = topics.get(topicId);
+		if (model) return model;
+		const numericId = Number(topicId);
+		if (!Number.isSafeInteger(numericId) || numericId < 1) return null;
+		const link = card.querySelector<HTMLElement>(TOPIC_LINK_SELECTOR);
+		return Object.freeze({
+			id: numericId,
+			title: normalizedLabel(link?.textContent),
+			slug: 'topic',
+			notification_level: 1,
+		});
+	}
+
+	#cardTopicId(card: Element): string {
+		return String(
+			(card as HTMLElement).dataset.topicId ??
+			card.getAttribute('data-topic-id') ??
+			this.#topicId(card.querySelector(TOPIC_LINK_SELECTOR)),
+		).trim();
 	}
 
 	#topicId(link: Element | null): string {

@@ -259,6 +259,27 @@
 	border-radius: var(--ldp-jump-highlight-radius, 10px);
 }
 
+/*
+ * 完整讨论的嵌套楼层默认为直角树节点。定位闪烁改由独立视觉层承载，
+ * 复用主阅读流的圆角与动画，并在头像左侧留出一小段呼吸空间，不改树布局。
+ */
+.ldp-descendant-replies-tree .ldp-post.ldp-jump-highlight:not([data-post-number="1"]) {
+	isolation: isolate;
+	border-radius: var(--ldp-jump-highlight-radius, 10px);
+	animation: none;
+}
+
+.ldp-descendant-replies-tree .ldp-post.ldp-jump-highlight:not([data-post-number="1"])::before {
+	content: "";
+	position: absolute;
+	z-index: -1;
+	inset: 0 0 0 -8px;
+	border-radius: var(--ldp-jump-highlight-radius, 10px);
+	pointer-events: none;
+	animation: ldp-jump-pulse var(--ldp-jump-highlight-duration, 1250ms)
+		ease-in-out var(--ldp-jump-highlight-count, 2);
+}
+
 .ldp-jump-highlight:not(.ldp-post[data-post-number="1"]) {
 	animation: ldp-jump-pulse var(--ldp-jump-highlight-duration, 1250ms)
 		ease-in-out var(--ldp-jump-highlight-count, 2);
@@ -338,6 +359,20 @@
 
 @media (prefers-reduced-motion: reduce) {
 	.ldp-jump-highlight:not(.ldp-post[data-post-number="1"]) {
+		animation: none;
+		background: color-mix(
+			in srgb,
+			var(--ldp-jump-highlight-color, #0888cc) 34%,
+			transparent
+		);
+		box-shadow: inset 0 0 0 var(--ldp-jump-highlight-border-width, 1px)
+			var(--ldp-jump-highlight-color, #0888cc);
+	}
+	.ldp-descendant-replies-tree .ldp-post.ldp-jump-highlight:not([data-post-number="1"]) {
+		background: transparent;
+		box-shadow: none;
+	}
+	.ldp-descendant-replies-tree .ldp-post.ldp-jump-highlight:not([data-post-number="1"])::before {
 		animation: none;
 		background: color-mix(
 			in srgb,

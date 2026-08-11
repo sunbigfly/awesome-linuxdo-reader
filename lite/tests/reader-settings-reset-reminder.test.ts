@@ -1,0 +1,107 @@
+import {
+	READER_SETTINGS_RESET_REMINDER_STORAGE_KEY,
+	showReaderSettingsResetReminder,
+} from '../src/settings/reader-settings-reset-reminder.js';
+import type {
+	ReaderConfirmRequest,
+} from '../src/shell/reader-feedback-surface.js';
+
+function assert(condition: unknown, message: string): asserts condition {
+	if (!condition) throw new Error(message);
+}
+
+class MemoryStorage implements Pick<Storage, 'getItem' | 'setItem'> {
+	readonly values = new Map<string, string>();
+
+	getItem(key: string): string | null {
+		return this.values.get(key) ?? null;
+	}
+
+	setItem(key: string, value: string): void {
+		this.values.set(key, value);
+	}
+}
+
+const preferencesStorageKey = 'reader-preferences';
+const defaults = Object.freeze({ theme: 'system', depth: 3 });
+
+const freshStorage = new MemoryStorage();
+let freshConfirmations = 0;
+const freshResult = await showReaderSettingsResetReminder({
+	storage: freshStorage,
+	preferencesStorageKey,
+	defaults,
+	update: () => {
+		throw new Error('新用户不得恢复设置');
+	},
+	feedback: {
+		confirm: async () => {
+			freshConfirmations += 1;
+			return true;
+		},
+		show: () => {},
+	},
+	campaign: 'settings-v1',
+});
+assert(
+	freshResult === 'skipped' &&
+	freshConfirmations === 0 &&
+	freshStorage.getItem(READER_SETTINGS_RESET_REMINDER_STORAGE_KEY) ===
+		'settings-v1',
+	'新用户必须静默锁定当前 campaign，不能在首次安装时提示恢复默认',
+);
+
+const storage = new MemoryStorage();
+storage.setItem(preferencesStorageKey, JSON.stringify({ depth: 8 }));
+const confirmations: ReaderConfirmRequest[] = [];
+const updates: Readonly<typeof defaults>[] = [];
+const notices: string[] = [];
+let confirm = false;
+const options = {
+	storage,
+	preferencesStorageKey,
+	defaults,
+	update: (preferences: Readonly<typeof defaults>) => {
+		updates.push(preferences);
+	},
+	feedback: {
+		confirm: async (request: ReaderConfirmRequest) => {
+			confirmations.push(request);
+			return confirm;
+		},
+		show: (message: string) => notices.push(message),
+	},
+};
+
+assert(
+	await showReaderSettingsResetReminder({
+		...options,
+		campaign: 'settings-v1',
+	}) === 'kept' &&
+	confirmations.length === 1 &&
+	confirmations[0]?.confirmLabel === '恢复默认值' &&
+	confirmations[0]?.cancelLabel === '保留当前设置' &&
+	updates.length === 0,
+	'老用户在新 campaign 首次启动必须只收到一次可保留当前设置的恢复提示',
+);
+assert(
+	await showReaderSettingsResetReminder({
+		...options,
+		campaign: 'settings-v1',
+	}) === 'skipped' &&
+	confirmations.length === 1,
+	'同一 campaign 后续启动必须保持锁定，不能重复提示',
+);
+
+confirm = true;
+assert(
+	await showReaderSettingsResetReminder({
+		...options,
+		campaign: 'settings-v2',
+	}) === 'reset' &&
+	Number(confirmations.length) === 2 &&
+	Number(updates.length) === 1 &&
+	updates[0] === defaults &&
+	notices.at(-1) === '全部设置已恢复默认',
+	'递增 campaign 必须为下一次大改动解锁提示，并在确认后写入同一份 schema 默认值',
+);

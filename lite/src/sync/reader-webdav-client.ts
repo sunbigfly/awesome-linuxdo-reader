@@ -83,8 +83,11 @@ function encodedPath(path: string): string {
 	return path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
 }
 
-function targetUrl(config: ReaderWebDavConfig): URL {
-	const path = normalizeReaderWebDavRemotePath(config.remotePath);
+function targetUrl(
+	config: ReaderWebDavConfig,
+	remotePath: unknown = config.remotePath,
+): URL {
+	const path = normalizeReaderWebDavRemotePath(remotePath);
 	if (!path) throw new ReaderWebDavError(
 		'unexpected',
 		'WebDAV 远端路径无效',
@@ -110,7 +113,7 @@ function statusError(status: number, operation: string): ReaderWebDavError {
 	);
 	if (status === 409 || status === 412) return new ReaderWebDavError(
 		'conflict',
-		'WebDAV 远端文件已被另一设备更新，请重试同步',
+		'WebDAV 远端文件版本已变化，请重新读取后重试',
 		status,
 	);
 	if (status >= 500) return new ReaderWebDavError(
@@ -172,7 +175,11 @@ export class ReaderWebDavClient {
 			config,
 			'GET',
 			targetUrl(config),
-			{ Accept: 'application/json' },
+			{
+				Accept: 'application/json',
+				'Cache-Control': 'no-cache',
+				Pragma: 'no-cache',
+			},
 			signal,
 		);
 		if (response.status === 404 || response.status === 409) return null;
@@ -206,7 +213,7 @@ export class ReaderWebDavClient {
 				'WebDAV 同步文件超过 2 MiB 安全上限',
 			);
 		}
-		if (!etag) await this.#ensureCollections(config, signal);
+		if (!etag) await this.#ensureCollections(config, config.remotePath, signal);
 		const response = await this.#execute(
 			config,
 			'PUT',
@@ -224,12 +231,80 @@ export class ReaderWebDavClient {
 		return headerValue(response.responseHeaders, 'ETag');
 	}
 
+	/**
+	 * 读取主同步文件之外的独立对象。离线 Topic HTML 使用内容寻址文件，
+	 * 不受主 sync.json 的 2 MiB 安全上限约束；完整性由上层清单的
+	 * byteLength 与 SHA-256 再校验。
+	 */
+	async readObject(
+		config: ReaderWebDavConfig,
+		remotePath: string,
+		signal: AbortSignal,
+	): Promise<ReaderWebDavReadResult | null> {
+		const response = await this.#execute(
+			config,
+			'GET',
+			targetUrl(config, remotePath),
+			{
+				Accept: 'text/html, application/json;q=0.9, */*;q=0.1',
+				'Cache-Control': 'no-cache',
+				Pragma: 'no-cache',
+			},
+			signal,
+		);
+		if (response.status === 404 || response.status === 409) return null;
+		if (response.status < 200 || response.status >= 300) {
+			throw statusError(response.status, '读取离线对象');
+		}
+		const etag = headerValue(response.responseHeaders, 'ETag');
+		if (!etag) throw new ReaderWebDavError(
+			'unexpected',
+			'WebDAV 离线对象读取成功但服务器未返回 ETag',
+		);
+		return Object.freeze({
+			text: String(response.responseText ?? ''),
+			etag,
+		});
+	}
+
+	/** 条件写入独立对象；内容对象用 null ETag 只允许首次创建。 */
+	async writeObject(
+		config: ReaderWebDavConfig,
+		remotePath: string,
+		text: string,
+		etag: string | null,
+		contentType: string,
+		signal: AbortSignal,
+	): Promise<string> {
+		if (!etag) await this.#ensureCollections(config, remotePath, signal);
+		const response = await this.#execute(
+			config,
+			'PUT',
+			targetUrl(config, remotePath),
+			{
+				'Content-Type': contentType,
+				...(etag ? { 'If-Match': etag } : { 'If-None-Match': '*' }),
+			},
+			signal,
+			text,
+		);
+		if (![200, 201, 204].includes(response.status)) {
+			throw statusError(response.status, '写入离线对象');
+		}
+		return headerValue(response.responseHeaders, 'ETag');
+	}
+
 	async #ensureCollections(
 		config: ReaderWebDavConfig,
+		remotePath: string,
 		signal: AbortSignal,
 	): Promise<void> {
-		const segments = normalizeReaderWebDavRemotePath(config.remotePath)
-			.split('/').slice(0, -1);
+		const normalized = normalizeReaderWebDavRemotePath(remotePath);
+		if (!normalized) throw new ReaderWebDavError(
+			'unexpected',
+			'WebDAV 离线对象路径无效',
+		);
+		const segments = normalized.split('/').slice(0, -1);
 		let relative = '';
 		for (const segment of segments) {
 			relative += `${encodeURIComponent(segment)}/`;

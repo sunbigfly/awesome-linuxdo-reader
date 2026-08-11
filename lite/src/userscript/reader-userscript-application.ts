@@ -60,7 +60,7 @@ export interface ReaderUserscriptApplicationOptions<TPreferences extends object>
 	readonly window: Window;
 	readonly preferences: ReaderApplicationPreferencesPort<TPreferences>;
 	readonly stages: readonly ReaderApplicationStage<TPreferences>[];
-	readonly authorizeHost?: (
+	readonly isVerifiedHost?: (
 		hostname: string,
 		signal: AbortSignal,
 	) => boolean | Promise<boolean>;
@@ -286,8 +286,9 @@ export function createReaderUserscriptRouteChangePort(
 /**
  * userscript 启动链的唯一 application 工厂。
  *
- * 宿主检测与后续请求共享同一个 BrowserDiscourseHostApiPort；DOM marker 只用于识别，
- * 不会创建探测请求。函数本身无副作用，调用者仍须显式 start/destroy。
+ * 所有 HTTPS host 都先做本地 Discourse 识别；DOM marker 只用于识别，不会创建探测
+ * 请求。已验证站点列表只在本地识别失败后兜底，不再作为未知域名的前置白名单。
+ * 函数本身无副作用，调用者仍须显式 start/destroy。
  */
 export function createReaderUserscriptApplication<TPreferences extends object>(
 	options: ReaderUserscriptApplicationOptions<TPreferences>,
@@ -303,20 +304,22 @@ export function createReaderUserscriptApplication<TPreferences extends object>(
 			? {}
 			: { createObserver: options.createHostObserver }),
 	});
-	const host = options.authorizeHost
+	const host = options.isVerifiedHost
 		? Object.freeze({
 			async waitForHost(signal: AbortSignal) {
+				const detected = await detectedHost.waitForHost(signal);
+				if (detected || signal.aborted) return detected;
 				const hostname = String(
 					options.document.location?.hostname ??
 					options.window.location?.hostname ??
 					'',
 				).trim();
-				const authorized = await options.authorizeHost!(
+				const verified = await options.isVerifiedHost!(
 					hostname,
 					signal,
 				);
-				if (!authorized || signal.aborted) return null;
-				return detectedHost.waitForHost(signal);
+				if (!verified || signal.aborted) return null;
+				return Object.freeze({ detection: 'verified-site' as const });
 			},
 		})
 		: detectedHost;
@@ -577,6 +580,11 @@ export function createReaderUserscriptRuntimeStage<
 						routeChanges: createReaderUserscriptRouteChangePort(
 							options.environment.discourseHost,
 						),
+						serviceWorkerMessages:
+							options.runtime.document.defaultView?.navigator
+								.serviceWorker ?? null,
+						interceptServiceWorkerTopicTargets: () =>
+							runtime.workspace.workspace.snapshot.presentation.embedded,
 						readOpenTopicsAtFirstPost: () =>
 							targetOptions.selectOpenTopicsAtFirstPost?.(
 								context.readPreferences(),

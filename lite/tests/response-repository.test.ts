@@ -416,3 +416,91 @@ for (const invalidEntry of [
 		'旧策略标签、非字符串标签和逆序时间戳不得进入 memory LRU 或缓存目录',
 	);
 }
+
+invalidStore.entries.set(cachePolicy.id, {
+	...store.writes[0]!,
+	schemaVersion: 0,
+} as unknown as ResponseCacheEntry);
+let incompatibleCacheLoads = 0;
+const upgradedCacheValue = await invalidRepository.getOrLoad(
+	cachePolicy,
+	async () => {
+		incompatibleCacheLoads += 1;
+		return { version: 6 };
+	},
+);
+assert(
+	upgradedCacheValue.version === 6 &&
+		incompatibleCacheLoads === 1 &&
+		invalidStore.entries.get(cachePolicy.id)?.schemaVersion === 1 &&
+		(invalidStore.entries.get(cachePolicy.id)?.value as { version?: unknown })
+			.version === 6,
+	'用户实际读取到不兼容缓存时必须自动重取并回写当前 schema，不能要求手动清缓存',
+);
+
+let permanentNow = 1_000;
+const permanentStore = new MemoryStore();
+const permanentRepository = new ResponseRepository({
+	store: permanentStore,
+	maxMemoryEntries: 2,
+	maxMemoryBytes: 1_000,
+	now: () => permanentNow,
+});
+const permanentPolicy: ResponseCachePolicy = {
+	id: 'account:1|topic-archive:10',
+	kind: 'topics',
+	tags: ['topic:10', 'topic-local-archive'],
+	freshForMs: 10,
+	retainForMs: 20,
+	persist: true,
+	permanent: true,
+};
+await permanentRepository.write(permanentPolicy, { body: 'cached topic body' });
+const permanentEntry = permanentStore.entries.get(permanentPolicy.id);
+assert(
+	permanentEntry?.permanent === true &&
+		permanentEntry.expiresAt === Number.MAX_SAFE_INTEGER,
+	'用户确认保留的本地 Topic 存档必须以永久缓存记录写入',
+);
+permanentNow = 10_000_000;
+const permanentRead = await permanentRepository.read<{ body: string }>(permanentPolicy);
+assert(
+	permanentRead.state === 'stale' &&
+		permanentRead.value?.body === 'cached topic body' &&
+		(await permanentRepository.entries({ ids: [permanentPolicy.id] })).length === 1 &&
+		(await permanentRepository.records())[0]?.permanent === true,
+	'永久 Topic 存档超过普通 retainForMs 后仍必须可读、可导出并可在管理目录识别',
+);
+
+const hotMemoryStore = new MemoryStore();
+const hotMemoryRepository = new ResponseRepository({
+	store: hotMemoryStore,
+	maxMemoryEntries: 2,
+	maxMemoryBytes: 100,
+	estimateBytes: (value) => Number(
+		(value as { readonly bytes?: unknown } | null)?.bytes ?? 0,
+	),
+	now: () => permanentNow,
+});
+const hotPolicy = (id: string): ResponseCachePolicy => ({
+	id,
+	kind: 'hot',
+	tags: ['hot'],
+	freshForMs: 100,
+	retainForMs: 1_000,
+	persist: true,
+});
+await hotMemoryRepository.write(hotPolicy('hot-1'), { bytes: 40 });
+await hotMemoryRepository.write(hotPolicy('hot-2'), { bytes: 40 });
+await hotMemoryRepository.write(
+	{ ...permanentPolicy, id: 'large-archive' },
+	{ bytes: 90 },
+);
+assert(
+	hotMemoryRepository.memoryStats().entries === 2 &&
+		hotMemoryRepository.memoryStats().bytes === 80 &&
+		(await hotMemoryRepository.read(hotPolicy('hot-1'))).state === 'fresh' &&
+		(await hotMemoryRepository.read(hotPolicy('hot-2'))).state === 'fresh' &&
+		hotMemoryStore.entries.has('large-archive'),
+	'大永久存档只能保留在持久层，不能驱逐普通热点响应并放大后续滚动请求',
+);

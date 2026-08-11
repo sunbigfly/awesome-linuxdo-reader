@@ -144,13 +144,14 @@ interface RequestTask<T> {
 	readonly externalSignal: AbortSignal | undefined;
 	readonly operation: (signal: AbortSignal) => Promise<T>;
 	readonly onStart: ((timing: RequestScheduleTiming) => void) | undefined;
-	readonly droppable: boolean;
+	droppable: boolean;
 	readonly promise: Promise<T>;
 	readonly resolve: (value: T) => void;
 	readonly reject: (error: unknown) => void;
 	state: 'queued' | 'permit' | 'active' | 'done';
 	controller: AbortController | null;
 	externalAbort: (() => void) | null;
+	permitRestart: boolean;
 }
 
 function positiveInteger(value: number, name: string): number {
@@ -190,6 +191,7 @@ export class RequestScheduler {
 	#pumpQueued = false;
 	#permitPending = false;
 	#permitLane: RequestLane | null = null;
+	#permitTask: RequestTask<unknown> | null = null;
 	#disposed = false;
 
 	constructor(options: RequestSchedulerOptions) {
@@ -214,13 +216,8 @@ export class RequestScheduler {
 		}
 		const existing = this.#tasksByKey.get(key);
 		if (existing && !existing.externalSignal?.aborted) {
-			if (
-				existing.state === 'queued' &&
-				PRIORITY_WEIGHT[priority] < PRIORITY_WEIGHT[existing.priority]
-			) {
-				existing.priority = priority;
-				this.#queuePump();
-			}
+			if (options.droppable !== true) existing.droppable = false;
+			this.#promoteTask(existing, priority);
 			return existing.promise as Promise<T>;
 		}
 		if (options.signal?.aborted) {
@@ -230,10 +227,19 @@ export class RequestScheduler {
 			const evicted = options.droppable === true
 				? null
 				: this.#evictLowerPriorityDroppable(priority);
-			if (!evicted) {
+			if (
+				!evicted &&
+				!this.#preemptDroppablePermit({
+					priority,
+					lane,
+					droppable: options.droppable === true,
+				})
+			) {
 				return Promise.reject(new RequestControlError('queue-limit'));
 			}
-			this.#finish(evicted, new RequestControlError('queue-limit'));
+			if (evicted) {
+				this.#finish(evicted, new RequestControlError('queue-limit'));
+			}
 		}
 
 		let resolve!: (value: T) => void;
@@ -259,6 +265,7 @@ export class RequestScheduler {
 			state: 'queued',
 			controller: null,
 			externalAbort: null,
+			permitRestart: false,
 		};
 		if (task.externalSignal) {
 			task.externalAbort = () => {
@@ -273,6 +280,7 @@ export class RequestScheduler {
 		}
 		this.#tasksByKey.set(key, task as RequestTask<unknown>);
 		this.#queue.push(task as RequestTask<unknown>);
+		this.#preemptDroppablePermit(task as RequestTask<unknown>);
 		this.#queuePump();
 		return promise;
 	}
@@ -299,18 +307,15 @@ export class RequestScheduler {
 		this.#queuePump();
 	}
 
-	promoteQueued(key: string, priority: RequestPriority): boolean {
+	promoteQueued(
+		key: string,
+		priority: RequestPriority,
+		droppable?: boolean,
+	): boolean {
 		const task = this.#tasksByKey.get(String(key));
-		if (
-			!task ||
-			task.state !== 'queued' ||
-			PRIORITY_WEIGHT[priority] >= PRIORITY_WEIGHT[task.priority]
-		) {
-			return false;
-		}
-		task.priority = priority;
-		this.#queuePump();
-		return true;
+		if (!task) return false;
+		if (droppable === false) task.droppable = false;
+		return this.#promoteTask(task, priority);
 	}
 
 	snapshot(): RequestSchedulerSnapshot {
@@ -359,7 +364,7 @@ export class RequestScheduler {
 		this.#sortQueue();
 		while (this.#activeCount < this.#maxConcurrent && this.#queue.length) {
 			const nextIndex = this.#queue.findIndex((candidate) =>
-				this.#laneCanStart(candidate.lane));
+				this.#taskCanStart(candidate));
 			if (nextIndex < 0) return;
 			const [task] = this.#queue.splice(nextIndex, 1);
 			if (!task) return;
@@ -376,6 +381,7 @@ export class RequestScheduler {
 			task.state = 'permit';
 			this.#permitPending = true;
 			this.#permitLane = task.lane;
+			this.#permitTask = task;
 			const permitPromise = Promise.resolve().then(() => this.#startGate!.acquire({
 				key: task.key,
 				priority: task.priority,
@@ -399,8 +405,7 @@ export class RequestScheduler {
 				);
 			});
 			void Promise.race([permitPromise, permitAbort]).then((permit) => {
-				this.#permitPending = false;
-				this.#permitLane = null;
+				this.#clearPermitTask(task);
 				try {
 					if (this.#disposed || controller.signal.aborted) {
 						this.#releasePermit(permit);
@@ -413,9 +418,24 @@ export class RequestScheduler {
 					this.#queuePump();
 				}
 			}, (error) => {
-				this.#permitPending = false;
-				this.#permitLane = null;
-				if (task.state !== 'done') this.#finish(task, error);
+				this.#clearPermitTask(task);
+				if (
+					task.permitRestart &&
+					!this.#disposed &&
+					!task.externalSignal?.aborted
+				) {
+					task.permitRestart = false;
+					task.state = 'queued';
+					task.controller = null;
+					this.#queue.push(task);
+				} else if (task.state !== 'done') {
+					this.#finish(
+						task,
+						this.#disposed
+							? new RequestControlError('context-closed')
+							: error,
+					);
+				}
 				this.#queuePump();
 			});
 			break;
@@ -430,13 +450,68 @@ export class RequestScheduler {
 		);
 	}
 
+	#promoteTask(task: RequestTask<unknown>, priority: RequestPriority): boolean {
+		if (
+			(task.state !== 'queued' && task.state !== 'permit') ||
+			PRIORITY_WEIGHT[priority] >= PRIORITY_WEIGHT[task.priority]
+		) return false;
+		task.priority = priority;
+		if (task.state === 'permit') {
+			task.permitRestart = true;
+			task.controller?.abort(new RequestControlError('cancelled'));
+		} else {
+			this.#queuePump();
+		}
+		return true;
+	}
+
+	#preemptDroppablePermit(
+		incoming: Pick<RequestTask<unknown>, 'priority' | 'lane' | 'droppable'>,
+	): boolean {
+		const waiting = this.#permitTask;
+		const controller = waiting?.controller;
+		if (
+			incoming.droppable ||
+			!waiting ||
+			!waiting.droppable ||
+			waiting.state !== 'permit' ||
+			!controller ||
+			controller.signal.aborted ||
+			this.#activeCount >= this.#maxConcurrent ||
+			!this.#taskCanStart(incoming) ||
+			PRIORITY_WEIGHT[incoming.priority] >= PRIORITY_WEIGHT[waiting.priority]
+		) return false;
+		waiting.permitRestart = false;
+		controller.abort(new RequestControlError('cancelled'));
+		return true;
+	}
+
+	#clearPermitTask(task: RequestTask<unknown>): void {
+		if (this.#permitTask !== task) return;
+		this.#permitPending = false;
+		this.#permitLane = null;
+		this.#permitTask = null;
+	}
+
 	#waitingCount(): number {
 		return this.#queue.length + (this.#permitPending ? 1 : 0);
 	}
 
-	#laneCanStart(lane: RequestLane): boolean {
-		const cap = Math.min(this.#maxConcurrent, LANE_CONCURRENCY_CAP[lane]);
-		return (this.#activeByLane.get(lane) ?? 0) < cap;
+	#taskCanStart(
+		task: Pick<RequestTask<unknown>, 'lane' | 'priority'>,
+	): boolean {
+		let cap = Math.min(
+			this.#maxConcurrent,
+			LANE_CONCURRENCY_CAP[task.lane],
+		);
+		/*
+		 * 两条可丢弃 post_ids 补流并行会把同一站点推入 Cloudflare challenge；
+		 * 后台只占一槽，可见 Topic 仍按原双槽上限越过它并行。
+		 */
+		if (task.lane === 'topic-batch' && task.priority === 'background') {
+			cap = Math.min(cap, 1);
+		}
+		return (this.#activeByLane.get(task.lane) ?? 0) < cap;
 	}
 
 	#laneCounts(
@@ -470,6 +545,7 @@ export class RequestScheduler {
 	): Promise<void> {
 		task.state = 'active';
 		task.controller = controller;
+		task.permitRestart = false;
 		this.#activeCount += 1;
 		this.#activeByLane.set(
 			task.lane,
@@ -542,6 +618,7 @@ export class RequestScheduler {
 		}
 		task.externalAbort = null;
 		task.controller = null;
+		task.permitRestart = false;
 		if (this.#tasksByKey.get(task.key) === task) this.#tasksByKey.delete(task.key);
 		if (error !== undefined) task.reject(error);
 	}

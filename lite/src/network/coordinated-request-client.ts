@@ -19,6 +19,7 @@ export interface SharedRequestPermitPort extends RequestStartGate {
 	noteRateLimit(decision: RateLimitDecision): void | Promise<void>;
 	noteCloudflareChallenge?(input: {
 		readonly href: string;
+		readonly force?: boolean;
 	}): void | Promise<void>;
 	resetRateLimits?(): void | Promise<void>;
 	resolveCloudflareChallenge?(input: {
@@ -82,7 +83,17 @@ interface LogicalRequest<T> {
 	unabortableConsumer: boolean;
 	settled: boolean;
 	priority: RequestPriority;
+	droppable: boolean;
+	max429Retries: number;
+	maxChallengeRetries: number;
 	currentAttemptKey: string;
+}
+
+export interface CoordinatedRequestPromotion {
+	readonly priority: RequestPriority;
+	readonly droppable: boolean;
+	readonly max429Retries?: number;
+	readonly maxChallengeRetries?: number;
 }
 
 const PRIORITY_WEIGHT: Readonly<Record<RequestPriority, number>> = Object.freeze({
@@ -141,6 +152,25 @@ export class RequestStatusError extends Error {
 	}
 }
 
+/**
+ * 共享 Cloudflare owner 已接管但本轮验证尚未通过。
+ *
+ * href 只供中央 client 重新加入同一个 challenge lease；业务 owner 不应读取它自行
+ * 打开窗口或探测会话。
+ */
+export class RequestCloudflareChallengeError extends RequestStatusError {
+	readonly href: string;
+
+	constructor(status: number, href: string) {
+		super(status, {
+			cloudflareMitigated: true,
+			kind: 'cloudflare',
+		});
+		this.name = 'RequestCloudflareChallengeError';
+		this.href = String(href);
+	}
+}
+
 export class RequestChallengeWaitSuppressedError extends Error {
 	readonly code = 'challenge-superseded';
 	readonly cloudflareMitigated = true;
@@ -160,6 +190,27 @@ export class RequestRateLimitError extends RequestStatusError {
 		this.decision = decision;
 	}
 }
+
+/**
+ * 长任务在单个后台请求收到 429 后，只能复用中央 Retry-After 决策暂停自身。
+ * 真正的下一次请求仍需重新进入 scheduler/shared permit，不能由长任务直接放行。
+ */
+export interface CoordinatedRateLimitResume {
+	readonly decision: RateLimitDecision;
+	readonly waitMs: number;
+	wait(signal: AbortSignal): Promise<void>;
+}
+
+/** 长任务只能使用中央 client 签发的恢复凭据，不能自行解析 429 或 Cloudflare。 */
+export type CoordinatedRequestResume =
+	| Readonly<CoordinatedRateLimitResume & {
+		readonly kind: 'rate-limit';
+	}>
+	| Readonly<{
+		readonly kind: 'cloudflare-challenge';
+		readonly waitMs: 0;
+		wait(signal: AbortSignal): Promise<void>;
+	}>;
 
 function nonNegativeInteger(value: number, name: string): number {
 	if (!Number.isSafeInteger(value) || value < 0) {
@@ -243,12 +294,14 @@ export class CoordinatedRequestClient {
 		}
 		const existing = this.#requests.get(key);
 		if (existing && !existing.controller.signal.aborted) {
-			if (PRIORITY_WEIGHT[priority] < PRIORITY_WEIGHT[existing.priority]) {
-				existing.priority = priority;
-				if (existing.currentAttemptKey) {
-					this.scheduler.promoteQueued(existing.currentAttemptKey, priority);
-				}
-			}
+			this.#promoteLogical(existing, {
+				priority,
+				droppable: options.droppable === true,
+				max429Retries:
+					options.max429Retries ?? this.#defaultMax429Retries,
+				maxChallengeRetries:
+					options.maxChallengeRetries ?? this.#defaultMaxChallengeRetries,
+			});
 			return this.#join(existing as LogicalRequest<T>, options.signal);
 		}
 		const controller = new AbortController();
@@ -259,6 +312,9 @@ export class CoordinatedRequestClient {
 			unabortableConsumer: false,
 			settled: false,
 			priority,
+			droppable: options.droppable === true,
+			max429Retries: 0,
+			maxChallengeRetries: 0,
 			currentAttemptKey: '',
 		};
 		const promise = this.#run(logical, options, transport).finally(() => {
@@ -268,6 +324,17 @@ export class CoordinatedRequestClient {
 		(logical as { promise: Promise<T> }).promise = promise;
 		this.#requests.set(key, logical as LogicalRequest<unknown>);
 		return this.#join(logical, options.signal);
+	}
+
+	promote(keyValue: string, promotion: CoordinatedRequestPromotion): boolean {
+		const key = String(keyValue).trim();
+		if (!key || this.#disposed) return false;
+		const logical = this.#requests.get(key);
+		if (!logical || logical.controller.signal.aborted || logical.settled) {
+			return false;
+		}
+		this.#promoteLogical(logical, promotion);
+		return true;
 	}
 
 	#join<T>(logical: LogicalRequest<T>, signal?: AbortSignal): Promise<T> {
@@ -320,6 +387,61 @@ export class CoordinatedRequestClient {
 		this.scheduler.applyRuntimePolicy(policy);
 	}
 
+	/**
+	 * 把中央 429 错误投影成长任务可等待的续传凭据。
+	 *
+	 * 使用 retryAt 计算剩余时间，避免错误沿调用栈返回后再次等待完整 Retry-After；
+	 * 等待结束只允许长任务重新排队，绝不替代下一次请求的 scheduler/shared permit。
+	 */
+	rateLimitResume(error: unknown): CoordinatedRateLimitResume | null {
+		if (this.#disposed || !(error instanceof RequestRateLimitError)) return null;
+		const waitMs = Math.max(
+			0,
+			Math.ceil(error.decision.retryAt - this.#now()),
+		);
+		return Object.freeze({
+			decision: error.decision,
+			waitMs,
+			wait: (signal: AbortSignal) => this.#delay(waitMs, signal),
+		});
+	}
+
+	/**
+	 * 把长任务中断统一投影为可取消恢复凭据。
+	 *
+	 * 普通 429 复用 Retry-After；Cloudflare 只等待共享 challenge lease，不在长任务
+	 * 内重放探针、打开第二个窗口或绕过 scheduler。
+	 */
+	requestResume(error: unknown): CoordinatedRequestResume | null {
+		const rateLimit = this.rateLimitResume(error);
+		if (rateLimit) {
+			return Object.freeze({
+				...rateLimit,
+				kind: 'rate-limit' as const,
+			});
+		}
+		if (
+			this.#disposed ||
+			!(error instanceof RequestCloudflareChallengeError) ||
+			!this.permitPort.resolveCloudflareChallenge
+		) return null;
+		const resolve = this.permitPort.resolveCloudflareChallenge.bind(
+			this.permitPort,
+		);
+		return Object.freeze({
+			kind: 'cloudflare-challenge' as const,
+			waitMs: 0 as const,
+			wait: async (signal: AbortSignal): Promise<void> => {
+				if (signal.aborted) throw signal.reason;
+				const passed = await resolve({
+					href: error.href,
+					signal,
+				});
+				if (!passed) throw error;
+			},
+		});
+	}
+
 	/** 清除本实例的 429 范围判定证据；共享固定窗口与已记录启动次数原样保留。 */
 	async resetRateLimits(): Promise<void> {
 		this.rateLimitPolicy.reset();
@@ -341,11 +463,11 @@ export class CoordinatedRequestClient {
 		transport: (input: RequestTransportInput) => Promise<RequestTransportResponse<T>>,
 	): Promise<T> {
 		const method = String(options.method ?? 'GET').toUpperCase();
-		const max429Retries = nonNegativeInteger(
+		logical.max429Retries = nonNegativeInteger(
 			options.max429Retries ?? this.#defaultMax429Retries,
 			'max429Retries',
 		);
-		const maxChallengeRetries = nonNegativeInteger(
+		logical.maxChallengeRetries = nonNegativeInteger(
 			options.maxChallengeRetries ?? this.#defaultMaxChallengeRetries,
 			'maxChallengeRetries',
 		);
@@ -372,7 +494,7 @@ export class CoordinatedRequestClient {
 						lane: options.lane ?? 'standard',
 						...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
 						signal: logical.controller.signal,
-						...(options.droppable === undefined ? {} : { droppable: options.droppable }),
+						droppable: logical.droppable,
 						onStart: (timing) => {
 							observationStarted = true;
 							attemptWaitReason = timing.waitReason;
@@ -464,7 +586,7 @@ export class CoordinatedRequestClient {
 				try {
 					if (
 						this.permitPort.resolveCloudflareChallenge &&
-						challengeRetries < maxChallengeRetries
+							challengeRetries < logical.maxChallengeRetries
 						) {
 							/*
 							 * 浏览器端口在共享锁内只允许本轮首个后台响应当选自动 owner；
@@ -477,11 +599,20 @@ export class CoordinatedRequestClient {
 					} else {
 						await this.permitPort.noteCloudflareChallenge?.({
 							href: String(options.input),
+							force: challengeRetries > 0,
 						});
 					}
 				} catch (error) {
 					if (logical.controller.signal.aborted) throw error;
 					this.#onCoordinationError(error);
+					try {
+						await this.permitPort.noteCloudflareChallenge?.({
+							href: String(options.input),
+							force: challengeRetries > 0,
+						});
+					} catch (fallbackError) {
+						this.#onCoordinationError(fallbackError);
+					}
 				}
 				if (passed) {
 					/*
@@ -497,10 +628,10 @@ export class CoordinatedRequestClient {
 				 * 结束当前逻辑请求，不能再掉进普通 429 的 Retry-After 分支；否则
 				 * 同一请求会在过盾失败后额外重试，并被上层分页循环继续放大。
 				 */
-				throw new RequestStatusError(response.status, {
-					cloudflareMitigated: true,
-					kind: 'cloudflare',
-				});
+				throw new RequestCloudflareChallengeError(
+					response.status,
+					String(options.input),
+				);
 			}
 			if (response.status === 429) {
 				const decision = this.rateLimitPolicy.noteRateLimit({
@@ -528,7 +659,7 @@ export class CoordinatedRequestClient {
 						'nested',
 						'visible',
 					].includes(logical.priority) &&
-					rateLimitRetries < max429Retries;
+					rateLimitRetries < logical.max429Retries;
 				if (!retryEligible) throw new RequestRateLimitError(decision);
 				rateLimitRetries += 1;
 				await this.#delay(decision.waitMs, logical.controller.signal);
@@ -540,6 +671,41 @@ export class CoordinatedRequestClient {
 				});
 			}
 			return response.value;
+		}
+	}
+
+	#promoteLogical(
+		logical: LogicalRequest<unknown>,
+		promotion: CoordinatedRequestPromotion,
+	): void {
+		logical.droppable = logical.droppable && promotion.droppable;
+		if (promotion.max429Retries !== undefined) {
+			logical.max429Retries = Math.max(
+				logical.max429Retries,
+				nonNegativeInteger(promotion.max429Retries, 'max429Retries'),
+			);
+		}
+		if (promotion.maxChallengeRetries !== undefined) {
+			logical.maxChallengeRetries = Math.max(
+				logical.maxChallengeRetries,
+				nonNegativeInteger(
+					promotion.maxChallengeRetries,
+					'maxChallengeRetries',
+				),
+			);
+		}
+		if (
+			PRIORITY_WEIGHT[promotion.priority] <
+			PRIORITY_WEIGHT[logical.priority]
+		) {
+			logical.priority = promotion.priority;
+		}
+		if (logical.currentAttemptKey) {
+			this.scheduler.promoteQueued(
+				logical.currentAttemptKey,
+				logical.priority,
+				logical.droppable,
+			);
 		}
 	}
 

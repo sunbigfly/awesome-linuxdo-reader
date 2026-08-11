@@ -5,6 +5,7 @@ import {
 import type { ReaderLightboxItem } from '../src/media/reader-lightbox-controller.js';
 import type {
 	ReaderLightboxOriginalSourcePort,
+	ReaderLightboxResolvedSource,
 } from '../src/media/reader-lightbox-view.js';
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -57,8 +58,8 @@ const avatar: ReaderLightboxItem = Object.freeze({
 	originalSrc: 'https://linux.do/avatar/1000.png',
 	alt: 'Alice 的头像',
 });
-let resolveOriginal!: (source: string) => void;
-const originalPromise = new Promise<string>((resolve) => {
+let resolveOriginal!: (source: ReaderLightboxResolvedSource) => void;
+const originalPromise = new Promise<ReaderLightboxResolvedSource>((resolve) => {
 	resolveOriginal = resolve;
 });
 const sourceCalls: string[] = [];
@@ -111,7 +112,10 @@ assert(
 	'头像必须使用锚定紧凑 surface、先投影轻量预览和 Flair，并经共享资源端口加载 1000px 原图',
 );
 avatarImage.dispatchEvent(new window.Event('load'));
-resolveOriginal('blob:https://linux.do/avatar-original');
+resolveOriginal(Object.freeze({
+	source: 'blob:https://linux.do/avatar-original',
+	original: true,
+}));
 await tick();
 assert(
 	avatarImage.src === 'blob:https://linux.do/avatar-original',

@@ -60,20 +60,32 @@ assert(
 			.every((row) => Boolean(row.dataset.settingHelp)) &&
 		host.querySelector('[data-performance-key="pageSize"]')
 			?.closest<HTMLElement>('.ldp-setting-row')?.dataset.settingHelp ===
-			'Discourse posts.json 的单批 post_ids 数量。当前批次保持顺序，下一批可作为低优先级预知请求并行下载；两者共享缓存、游标和限流许可。' &&
+			'Discourse posts.json 的单批 post_ids 目标上限。进入近窗时最多排入两批最近缺口，后台始终单槽启动；眼前缺口会提升并复用同一请求。缓存、游标与全站限流许可保持共享；当前生效批次见性能记录。' &&
 		host.querySelector('[data-performance-key="streamMaxItems"]')
 			?.closest<HTMLElement>('.ldp-setting-row')
 			?.querySelector('.ldp-performance-copy strong')?.textContent ===
-			'同时保留楼层上限' &&
+			'同时保留楼层目标上限' &&
 		host.querySelector('[data-performance-key="streamOverscanViewports"]')
 			?.closest<HTMLElement>('.ldp-setting-row')?.dataset.settingHelp ===
-			'在当前屏幕前后额外保留多少屏楼层元素；树内与一级楼层共用同一窗口，并受“同时保留楼层上限”约束。' &&
+			'在当前屏幕前后额外保留多少屏楼层元素；树内与一级楼层共用同一窗口，并受“同时保留楼层目标上限”约束。' &&
 		host.querySelector('[data-performance-key="nestedPrefetchViewports"]')
 			?.closest<HTMLElement>('.ldp-setting-row')?.dataset.settingHelp ===
-			'同一距离同时用于正文 post_ids 批次提升和父楼 replies.json 候选。树状近邻最多并行两个父楼；增加距离只提前网络取数，不扩大正文 DOM 窗口。' &&
+			'同一目标距离用于正文 post_ids 批次提升和父楼 replies.json 候选。后台正文单槽启动，树状车道最多两路；增加距离只提前网络取数，不扩大正文 DOM 窗口，运行时可按网络状态下调，当前生效距离见性能记录。' &&
 		host.querySelector('[data-settings-category="performance-request"]')
 			?.querySelector('.ldp-settings-category-head small')?.textContent ===
-			'正文、树状回复、原站请求和其他阅读器标签共用一份启动账本；这里设置总天花板。' &&
+			'这里设置阅读器请求的目标天花板；实际并发和启动间隔还受设备、网络、跨标签许可、原站活动与 429 限制，并在请求记录显示。' &&
+		host.querySelector('[data-performance-preset="low"]')
+			?.getAttribute('data-setting-help')?.includes('后台正文仍为单槽') &&
+		host.querySelector('.ldp-performance-status')?.textContent
+			?.includes('正文每批不超过 48 楼') &&
+		host.querySelector('.ldp-performance-status')?.textContent
+			?.includes('后台正文单槽') &&
+		host.querySelector('.ldp-performance-status')?.textContent
+			?.includes('树状最多 2 路') &&
+		host.querySelector('.ldp-performance-status')?.textContent
+			?.includes('生效批次与 DOM 上限见性能记录') &&
+		host.querySelector('.ldp-performance-status')?.textContent
+			?.includes('实际并发、间隔和排队见请求记录') &&
 		controller.snapshot.draftCount === 0,
 	'性能 form 必须复用旧设计语言呈现 4 个预设、4 组 7 字段，并从规范化偏好初始化',
 );

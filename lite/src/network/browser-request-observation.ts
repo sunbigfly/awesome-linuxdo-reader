@@ -60,8 +60,12 @@ function ajaxResponseHeader(response: JQueryAjaxResponse, name: string): string 
 
 function ajaxFinish(response: JQueryAjaxResponse): RequestObservationFinish {
 	const status = Number(response.status);
+	const cloudflareMitigated =
+		ajaxResponseHeader(response, 'cf-mitigated').trim().toLowerCase() ===
+		'challenge';
 	return Object.freeze({
 		...(Number.isFinite(status) && status >= 0 ? { status } : {}),
+		cloudflareMitigated,
 		rateLimitCode:
 			ajaxResponseHeader(response, 'Discourse-Rate-Limit-Error-Code') ||
 			ajaxResponseHeader(response, 'X-Discourse-Rate-Limit-Error-Code'),
@@ -124,7 +128,9 @@ export class DiscourseNativeAjaxObservationAdapter {
 			readonly hostLease: BrowserSharedHostRequestLease | null;
 			readonly sharedResponse: Readonly<{
 				readonly source: 'host' | 'reader';
+				readonly href: string;
 				readonly recoveryProbe: boolean;
+				readonly blockOnCloudflareChallenge: boolean;
 			}> | null;
 		}>();
 		const borrowedIds = new Set<number>();
@@ -184,7 +190,9 @@ export class DiscourseNativeAjaxObservationAdapter {
 				sharedResponse: sharedApiResponse && event
 					? Object.freeze({
 						source: event.source === 'reader' ? 'reader' : 'host',
+						href: event.href,
 						recoveryProbe: event.recoveryProbe,
+						blockOnCloudflareChallenge: event.type !== 'read',
 					})
 					: null,
 			});
@@ -209,6 +217,8 @@ export class DiscourseNativeAjaxObservationAdapter {
 					this.#hostRequestBudget.noteObservedResponse({
 						...current.sharedResponse,
 						status: finish.status ?? 0,
+						cloudflareMitigated:
+							finish.cloudflareMitigated === true,
 						retryAfter: finish.retryAfter ?? '',
 						rateLimitCode: finish.rateLimitCode ?? '',
 						serverLimit: finish.serverLimit ?? '',

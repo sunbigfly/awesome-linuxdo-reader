@@ -25,8 +25,8 @@ export interface ReaderCustomSiteSettingsFormOptions {
 /**
  * “适用站点”面板的唯一 DOM owner。
  *
- * 表单只发出验证/增删命令；规范化、持久化和 host gate 均共享 repository，
- * 跨站请求则只能通过固定 endpoint 的 probe。
+ * 表单只发出验证/增删命令；规范化、持久化和已验证站点兜底共享 repository，
+ * 跨站请求则只能通过固定 endpoint 的 probe。标准 Discourse 站点无需手动添加。
  */
 export class ReaderCustomSiteSettingsForm {
 	readonly scope: LifecycleScope;
@@ -64,7 +64,7 @@ export class ReaderCustomSiteSettingsForm {
 		title.textContent = '其他适用站点';
 		const description = element(options.document, 'small');
 		description.textContent =
-			'添加其他 HTTPS Discourse 论坛；保存前只会匿名检测公开站点信息。';
+			'标准 HTTPS Discourse 会自动识别；这里只添加自动识别失败的兼容兜底站点。';
 		head.append(title, description);
 		const form = element(
 			options.document,
@@ -144,17 +144,17 @@ export class ReaderCustomSiteSettingsForm {
 			this.#renderSites(sites);
 			if (!this.#repository.writable) {
 				this.#status.textContent =
-					'脚本没有全局站点存储权限，当前只能使用内置站点。';
+					'自动识别仍可使用；脚本没有权限保存兼容兜底站点。';
 				this.#input.disabled = true;
 				this.#add.disabled = true;
 			} else if (!this.#probe) {
 				this.#status.textContent =
-					'脚本没有跨站检测权限，暂时不能添加站点。';
+					'自动识别仍可使用；脚本没有权限验证兼容兜底站点。';
 				this.#input.disabled = true;
 				this.#add.disabled = true;
 			} else {
 				this.#status.textContent =
-					'输入域名即可，例如 forum.example.com。';
+					'通常无需添加；深度定制论坛识别失败时再输入域名。';
 			}
 		} catch (cause) {
 			if (this.scope.destroyed) return;
@@ -183,7 +183,7 @@ export class ReaderCustomSiteSettingsForm {
 			return;
 		}
 		if (this.#repository.snapshot.includes(host)) {
-			this.#status.textContent = `${host} 已在适用站点列表中。`;
+			this.#status.textContent = `${host} 已在兼容兜底列表中。`;
 			return;
 		}
 		const epoch = ++this.#epoch;
@@ -200,7 +200,7 @@ export class ReaderCustomSiteSettingsForm {
 			if (this.scope.destroyed || epoch !== this.#epoch) return;
 			this.#input.value = '';
 			this.#status.textContent =
-				`已添加 ${info.title || host}，访问该站即可使用。`;
+				`已添加 ${info.title || host}；自动识别失败时将用它兜底启动。`;
 		} catch (cause) {
 			if (
 				this.scope.destroyed ||

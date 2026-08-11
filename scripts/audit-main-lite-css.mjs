@@ -14,6 +14,12 @@ const styleManifestPath = path.join(styleRoot, 'manifest.json');
 const stylesheetPath = path.join(projectRoot, 'work/main-lite.css');
 const referenceRuntimePath = path.join(projectRoot, 'work/main.js');
 const expectedProofScope = 'static-dom-css-ownership-only';
+const styleManifest = JSON.parse(await readFile(styleManifestPath, 'utf8'));
+const embeddedStyleRuntimeFiles = new Set(
+	Array.isArray(styleManifest.embeddedStyleRuntimeFiles)
+		? styleManifest.embeddedStyleRuntimeFiles.map((value) => String(value))
+		: [],
+);
 
 async function collectFiles(directory) {
 	const entries = await readdir(directory, { withFileTypes: true });
@@ -260,11 +266,13 @@ const runtimeClassGroups = [];
 for (const file of await collectFiles(sourceRoot)) {
 	const source = await readFile(file, 'utf8');
 	for (const className of runtimeClasses(source)) sourceClasses.add(className);
-	runtimeClassGroups.push(...collectRuntimeClassGroups(file, source));
+	const relativeFile = path.relative(projectRoot, file).replaceAll('\\', '/');
+	if (!embeddedStyleRuntimeFiles.has(relativeFile)) {
+		runtimeClassGroups.push(...collectRuntimeClassGroups(file, source));
+	}
 }
 const stylesheet = await readFile(stylesheetPath, 'utf8');
 const referenceRuntime = await readFile(referenceRuntimePath, 'utf8');
-const styleManifest = JSON.parse(await readFile(styleManifestPath, 'utf8'));
 if (styleManifest.proofScope !== expectedProofScope) {
 	throw new Error(`frontend manifest proofScope 必须为 ${expectedProofScope}`);
 }
@@ -660,6 +668,7 @@ process.stdout.write(`${JSON.stringify({
 	runtimeClassTokenCount: runtimeClassTokens.size,
 	unstyledRuntimeClassCount: unstyledRuntimeClasses.length,
 	nonVisualRuntimeClassCount: nonVisualRuntimeClasses.size,
+	embeddedStyleRuntimeFileCount: embeddedStyleRuntimeFiles.size,
 	declaredFrontendSurfaceCount: surfaceContracts.length,
 	frontendSurfaceEvidenceErrorCount: surfaceContractErrors.length,
 	sourceOnlyCount: sourceOnly.length,

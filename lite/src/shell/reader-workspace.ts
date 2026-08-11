@@ -8,6 +8,19 @@ export type ReaderWorkspaceMode =
 	| 'embed-left'
 	| 'embed-right';
 
+export type ReaderWorkspacePositionMode =
+	| 'floating'
+	| 'fullpage'
+	| 'embedded';
+
+export function readerWorkspacePositionMode(
+	mode: ReaderWorkspaceMode | string | null | undefined,
+): ReaderWorkspacePositionMode {
+	if (mode === 'fullpage') return 'fullpage';
+	if (mode === 'embed-left' || mode === 'embed-right') return 'embedded';
+	return 'floating';
+}
+
 export interface ReaderWorkspacePresentation {
 	readonly mode: ReaderWorkspaceMode;
 	readonly floating: boolean;

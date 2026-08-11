@@ -67,6 +67,20 @@ export interface DiscourseNativeTargetCandidate {
 	readonly descriptor: DiscourseNativeReadDescriptor;
 }
 
+/**
+ * 单楼层的 canonical by-number 已明确 404/410 后，其余 Topic 路由不会让该楼层恢复。
+ * 继续 fallback 只会制造无效请求，并可能把 Cloudflare challenge 误判成普通限流。
+ */
+export function discourseNativeTargetFailureIsDefinitive(input: Readonly<{
+	readonly endpoint: DiscourseNativeTargetEndpoint;
+	readonly scope: 'single' | 'around';
+	readonly status: number;
+}>): boolean {
+	return input.scope === 'single' &&
+		input.endpoint === 'post-by-number' &&
+		(input.status === 404 || input.status === 410);
+}
+
 export interface DiscourseNativeTopicReadInput {
 	readonly basePath?: string;
 	readonly topicId: string | number;

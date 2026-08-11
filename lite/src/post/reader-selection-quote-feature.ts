@@ -79,6 +79,9 @@ function eventElement(event: Event): Element | null {
 		: null;
 }
 
+const IMAGE_QUOTE_POINTER_GAP_PX = 4;
+const IMAGE_QUOTE_HIDE_GRACE_MS = 480;
+
 function defaultSelection(document: Document, root: HTMLElement): Selection | null {
 	const candidates: Selection[] = [];
 	const add = (value: Selection | null | undefined): void => {
@@ -201,7 +204,7 @@ export class ReaderSelectionQuoteFeature<
 		);
 		this.#imageHideDelayMs = Math.max(
 			0,
-			Number(options.imageQuoteHideDelayMs ?? 140) || 0,
+			Number(options.imageQuoteHideDelayMs ?? IMAGE_QUOTE_HIDE_GRACE_MS) || 0,
 		);
 		this.#imageCycleMs = Math.max(
 			0,
@@ -502,8 +505,13 @@ export class ReaderSelectionQuoteFeature<
 		this.#clearImageCycleTimers();
 		const related = event.relatedTarget;
 		if (
-			related instanceof Node &&
-			(this.imageToolbar === related || this.imageToolbar.contains(related))
+			related !== null &&
+			typeof related === 'object' &&
+			typeof (related as Node).nodeType === 'number' &&
+			(
+				this.imageToolbar === related ||
+				this.imageToolbar.contains(related as Node)
+			)
 		) return;
 		this.#scheduleImageHide();
 	}
@@ -552,7 +560,7 @@ export class ReaderSelectionQuoteFeature<
 		const view = this.#document.defaultView;
 		const width = view?.innerWidth ?? this.#document.documentElement.clientWidth;
 		const height = view?.innerHeight ?? this.#document.documentElement.clientHeight;
-		const gap = 12;
+		const gap = IMAGE_QUOTE_POINTER_GAP_PX;
 		const edge = 8;
 		let left = this.#imagePointerX + gap;
 		let top = this.#imagePointerY + gap;

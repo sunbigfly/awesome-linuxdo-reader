@@ -15,7 +15,7 @@ export type ReaderApplicationState =
 	| 'destroyed';
 
 export interface DiscourseHostDescriptor {
-	readonly detection: 'native-module' | 'dom-marker';
+	readonly detection: 'native-module' | 'dom-marker' | 'verified-site';
 }
 
 export interface DiscourseHostPort {
@@ -297,6 +297,7 @@ export class BrowserDiscourseHostPort implements DiscourseHostPort {
 		const immediate = detectDiscourseHost(this.#moduleLookup, this.#document);
 		if (immediate) return Promise.resolve(immediate);
 		if (signal.aborted) return Promise.reject(abortError(signal.reason));
+		if (this.#document.readyState === 'complete') return Promise.resolve(null);
 		return new Promise((resolve, reject) => {
 			let settled = false;
 			let timer = 0;
@@ -304,7 +305,7 @@ export class BrowserDiscourseHostPort implements DiscourseHostPort {
 			const cleanup = (): void => {
 				if (timer) this.#window.clearTimeout(timer);
 				observer?.disconnect();
-				this.#window.removeEventListener('load', check);
+				this.#window.removeEventListener('load', onLoad);
 				signal.removeEventListener('abort', onAbort);
 			};
 			const finish = (value: DiscourseHostDescriptor | null): void => {
@@ -313,9 +314,13 @@ export class BrowserDiscourseHostPort implements DiscourseHostPort {
 				cleanup();
 				resolve(value);
 			};
-			const check = (): void => {
+			const check = (): DiscourseHostDescriptor | null => {
 				const detected = detectDiscourseHost(this.#moduleLookup, this.#document);
 				if (detected) finish(detected);
+				return detected;
+			};
+			const onLoad = (): void => {
+				finish(check());
 			};
 			const onAbort = (): void => {
 				if (settled) return;
@@ -327,7 +332,7 @@ export class BrowserDiscourseHostPort implements DiscourseHostPort {
 				childList: true,
 				subtree: true,
 			});
-			this.#window.addEventListener('load', check);
+			this.#window.addEventListener('load', onLoad);
 			signal.addEventListener('abort', onAbort, { once: true });
 			timer = this.#window.setTimeout(() => {
 				finish(detectDiscourseHost(this.#moduleLookup, this.#document));

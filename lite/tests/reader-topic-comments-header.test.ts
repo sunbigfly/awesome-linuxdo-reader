@@ -63,17 +63,18 @@ const rootPost = new PostView(document, {
 	postNumber: 1,
 	username: 'op',
 });
-document.body.append(rootPost.slots.root);
 feature.afterRender(posts[0]!, rootPost);
 const header = rootPost.slots.root.querySelector<HTMLElement>(
 	':scope > .ldp-comments-header',
 );
 assert(
+	rootPost.slots.root.isConnected === false &&
 	header?.previousElementSibling === rootPost.slots.replyTree &&
 	header.nextElementSibling === null &&
 	header.querySelector('.ldp-comments-count')?.textContent === '（2）',
-	'评论区标题必须锚定在楼主树状子回复之后、普通根评论之前，并读取 canonical 总数',
+	'评论区标题必须在 PostView 挂载前投影 canonical 总数，并锚定在楼主树状子回复之后',
 );
+document.body.append(rootPost.slots.root);
 presenceListener([
 	{
 		username: 'me',

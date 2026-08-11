@@ -9,6 +9,7 @@ import {
 import {
 	discoursePostId,
 	discoursePostNumber,
+	discourseTopicId,
 } from '../src/discourse/identifiers.js';
 import { Signal } from '../src/kernel/signal.js';
 import {
@@ -91,6 +92,12 @@ interface TestPost extends DiscourseTopicPostInput, CanonicalActionPost {
 	readonly accepted_answer?: boolean;
 	readonly avatar_template?: string;
 	readonly name?: string;
+	readonly reactions?: readonly Readonly<{
+		readonly id: string;
+		readonly count: number;
+	}>[];
+	readonly current_user_reaction?: Readonly<{ readonly id: string }> | null;
+	readonly reaction_users_count?: number;
 }
 
 interface TestTopic extends DiscourseTopicPayload<TestPost> {
@@ -143,9 +150,19 @@ interface TestPreferences {
 	readonly topicActionRailVisible: boolean;
 	readonly topicActionRailFixed: boolean;
 	readonly topicActionRailMode: 'collapsed' | 'compact';
-	readonly topicActionRailPosition: Readonly<{
-		readonly x: 'left' | 'right' | number;
-		readonly y: number;
+	readonly topicActionRailPositions: Readonly<{
+		readonly floating: Readonly<{
+			readonly x: 'left' | 'right' | number;
+			readonly y: number;
+		}>;
+		readonly fullpage: Readonly<{
+			readonly x: 'left' | 'right' | number;
+			readonly y: number;
+		}>;
+		readonly embedded: Readonly<{
+			readonly x: 'left' | 'right' | number;
+			readonly y: number;
+		}>;
 	}>;
 }
 
@@ -189,7 +206,11 @@ const initialPreferences: Readonly<TestPreferences> = Object.freeze({
 	topicActionRailVisible: true,
 	topicActionRailFixed: false,
 	topicActionRailMode: 'compact',
-	topicActionRailPosition: Object.freeze({ x: 'left', y: 0.95 }),
+	topicActionRailPositions: Object.freeze({
+		floating: Object.freeze({ x: 'left', y: 0.95 }),
+		fullpage: Object.freeze({ x: 'left', y: 0.95 }),
+		embedded: Object.freeze({ x: 'left', y: 0.95 }),
+	}),
 });
 let activePreferences = initialPreferences;
 const preferenceChanges = new Signal<{
@@ -371,12 +392,24 @@ const appEventSubscriptions = new Map<
 	Set<(payload?: unknown) => void>
 >();
 const appEvents = {
-	on(eventName: string, handler: (payload?: unknown) => void) {
+	on(
+		eventName: string,
+		ownerOrHandler: unknown,
+		maybeHandler?: (payload?: unknown) => void,
+	) {
+		const handler = maybeHandler ??
+			(ownerOrHandler as (payload?: unknown) => void);
 		const handlers = appEventSubscriptions.get(eventName) ?? new Set();
 		handlers.add(handler);
 		appEventSubscriptions.set(eventName, handlers);
 	},
-	off(eventName: string, handler: (payload?: unknown) => void) {
+	off(
+		eventName: string,
+		ownerOrHandler: unknown,
+		maybeHandler?: (payload?: unknown) => void,
+	) {
+		const handler = maybeHandler ??
+			(ownerOrHandler as (payload?: unknown) => void);
 		const handlers = appEventSubscriptions.get(eventName);
 		handlers?.delete(handler);
 		if (!handlers?.size) appEventSubscriptions.delete(eventName);
@@ -424,6 +457,7 @@ let topic12Attempts = 0;
 let topic14Attempts = 0;
 let topic14RefreshFailure = false;
 let topic15Attempts = 0;
+let challengeVerificationRateLimited = false;
 const openRetryDelays: number[] = [];
 const nativeHost = {
 	lookup(name: string): unknown {
@@ -470,9 +504,12 @@ const nativeHost = {
 		if (name !== 'discourse/lib/ajax') return null;
 		nativeAjaxLookups += 1;
 		return {
-			ajax(path: string, options: Readonly<Record<string, unknown>>) {
-				nativeCalls.push({ path, options });
-				if (path.startsWith('/t/13.json?')) {
+				ajax(path: string, options: Readonly<Record<string, unknown>>) {
+					nativeCalls.push({ path, options });
+					if (path === '/session/current.json' && challengeVerificationRateLimited) {
+						return Promise.reject({ status: 429 });
+					}
+					if (path.startsWith('/t/13.json?')) {
 					return topic13Gate.promise;
 				}
 				if (path.startsWith('/t/12.json?')) {
@@ -887,13 +924,13 @@ const stage = createReaderBrowserRuntimeStage<TestPreferences, TestTopic, TestPo
 			visible: preferences.topicActionRailVisible,
 			fixed: preferences.topicActionRailFixed,
 			mode: preferences.topicActionRailMode,
-			position: preferences.topicActionRailPosition,
+			positions: preferences.topicActionRailPositions,
 		}),
 		createPatch: (rail) => ({
 			topicActionRailVisible: rail.visible,
 			topicActionRailFixed: rail.fixed,
 			topicActionRailMode: rail.mode,
-			topicActionRailPosition: rail.position,
+			topicActionRailPositions: rail.positions,
 		}),
 	},
 	selectNavigationPreferences: (preferences) => preferences,
@@ -960,6 +997,7 @@ application.diagnostics.subscribe((diagnostic) => {
 const originalWindowOpen = parsedWindow.open;
 let manualChallengeOpened = 0;
 let manualChallengeClosed = 0;
+let manualChallengeOpenedHref = '';
 const { document: challengeDocument } = parseHTML(
 	'<!doctype html><html><head><title>LINUX DO</title></head>' +
 	'<body><main id="main-outlet"></main></body></html>',
@@ -972,8 +1010,9 @@ Object.defineProperty(challengeDocument, 'contentType', {
 });
 Object.defineProperty(parsedWindow, 'open', {
 	configurable: true,
-	value: () => {
+	value: (url: string) => {
 		manualChallengeOpened += 1;
+		manualChallengeOpenedHref = url;
 		return {
 			closed: false,
 			document: challengeDocument,
@@ -1005,6 +1044,27 @@ assert(
 const manualChallengeLink = document.querySelector<HTMLAnchorElement>(
 	'.ldp-rate-limit-challenge',
 )!;
+const manualChallengeNotice = document.querySelector<HTMLElement>(
+	'.ldp-rate-limit-notice',
+)!;
+const manualChallengeUrl = new URL(manualChallengeLink.href);
+assert(
+	manualChallengeUrl.pathname === '/challenge' &&
+		decodeURIComponent(
+			manualChallengeUrl.searchParams.get('redirect') ?? '',
+		) === 'https://linux.do/',
+	'人工入口必须使用站点原生 GET challenge，并为原生导航保留安全回跳',
+);
+const challengeRuntime = runtime as ReaderBrowserRuntime<TestTopic, TestPost>;
+await challengeRuntime.permit.noteCloudflareChallenge({
+	href: 'https://linux.do/t/10.json',
+});
+await challengeRuntime.rateLimitNotice.refresh();
+assert(
+	!manualChallengeNotice.hidden,
+	'人工过盾前必须显示 Cloudflare 硬闸门提示',
+);
+challengeVerificationRateLimited = true;
 const manualChallengeNativeNavigation = manualChallengeLink.dispatchEvent(
 	new parsedWindow.Event('click', {
 		bubbles: true,
@@ -1012,13 +1072,15 @@ const manualChallengeNativeNavigation = manualChallengeLink.dispatchEvent(
 	}),
 );
 await new Promise((resolve) => setTimeout(resolve, 280));
+challengeVerificationRateLimited = false;
 assert(
 	!manualChallengeNativeNavigation &&
-		manualChallengeOpened === 1 &&
-		manualChallengeClosed === 1 &&
-		(await (runtime as ReaderBrowserRuntime<TestTopic, TestPost>)
-			.permit.snapshot()).challengeState === 'passed',
-	'手动 Cloudflare 链接必须阻止普通新标签导航，复用 application 唯一验证租约并在通过后关闭浮窗',
+		manualChallengeOpened === 0 &&
+		manualChallengeOpenedHref === '' &&
+		manualChallengeClosed === 0 &&
+		(await challengeRuntime.permit.snapshot()).challengeState === 'passed' &&
+		manualChallengeNotice.hidden,
+	'普通 429 不得冒充未过盾；原生探针已确认通行时必须零开窗解闸并立即隐藏提示',
 );
 Object.defineProperty(parsedWindow, 'open', {
 	configurable: true,
@@ -1549,6 +1611,38 @@ assert(
 	document.querySelector('[data-post-number="3"] .ldp-reaction-summary'),
 	'Composer/MessageBus 后插入楼层必须经同一 PostAction feature 获得回复与回应入口',
 );
+const nativeCallsBeforeReactionEvent = nativeCalls.length;
+appEvents.trigger('discourse-reactions:reaction-toggled', {
+	post: Object.freeze({
+		...opened.value.services.session.postByNumber(2)!,
+		reactions: Object.freeze([
+			Object.freeze({ id: 'heart', count: 2 }),
+		]),
+		reaction_users_count: 2,
+	}),
+});
+await activeRuntime.applicationCacheInvalidation.flush();
+assert(
+	Number(
+		opened.value.services.session.postByNumber(2)?.reactions?.[0]?.count,
+	) === 2 &&
+	document.querySelector(
+		'[data-post-number="2"] ' +
+			'.ldp-reaction-chip[data-reaction="heart"] b',
+	)?.textContent === '2' &&
+	nativeCalls.length === nativeCallsBeforeReactionEvent,
+	'携带完整 Post model 的宿主回应事件必须后台直写 canonical、持久缓存与复用 DOM，不能新增请求：' +
+		JSON.stringify({
+			canonicalCount:
+				opened.value.services.session.postByNumber(2)?.reactions?.[0]?.count,
+			domCount: document.querySelector(
+				'[data-post-number="2"] ' +
+					'.ldp-reaction-chip[data-reaction="heart"] b',
+			)?.textContent ?? null,
+			nativeCallsBeforeReactionEvent,
+			nativeCallsAfterReactionEvent: nativeCalls.length,
+		}),
+);
 assert(
 	Number(opened.value.topicTimeline.snapshot.totalPostCount) === 3 &&
 	Number(opened.value.topicTimeline.snapshot.currentPostNumber) === 1,
@@ -1557,8 +1651,7 @@ assert(
 document.querySelector<HTMLElement>('[data-post-number="3"]')
 	?.querySelector<HTMLButtonElement>('[data-reader-context-quote="jump"]')
 	?.click();
-await Promise.resolve();
-await Promise.resolve();
+for (let index = 0; index < 4; index += 1) await Promise.resolve();
 const capturedQuoteHighlight =
 	opened.value.topicContextFeature.captureQuoteHighlightState();
 assert(
@@ -1609,6 +1702,33 @@ assert(
 		.some((entry) => entry.postNumber === 4),
 	'消息/通知/链接命中深层楼层时必须在 canonical 导航补流后打开所属完整讨论，而不是留在隐藏正式楼层',
 );
+opened.value.topicContext.closeDiscussion();
+opened.value.topicOnlyOp.setEnabled(true);
+const mainPost4Count = (): number => [
+	...shellRoot.querySelectorAll<HTMLElement>('[data-post-number="4"]'),
+].filter((postRoot) =>
+	!postRoot.closest('.ldp-descendant-replies-layer')
+).length;
+assert(
+	opened.value.dom.isPostHidden(4) && mainPost4Count() === 0,
+	'隐藏目标回归必须先确认楼层已从只看楼主的正式主流投影停放',
+);
+const hiddenDeepTarget = await activeRuntime.openTarget({
+	topicId: 10,
+	postNumber: 4,
+	source: 'notification',
+});
+assert(
+	hiddenDeepTarget.navigation?.status === 'revealed' &&
+		hiddenDeepTarget.navigation.element?.closest(
+			'.ldp-descendant-replies-layer',
+		) !== null &&
+		opened.value.topicContext.snapshot().discussion?.rootPostNumber === 3 &&
+		opened.value.dom.replyTreePresentation.rootOf(4) === undefined &&
+		mainPost4Count() === 0,
+	'跳转到当前投影隐藏的楼层时，必须只在完整讨论内定位，不能把目标插回正式楼层造成双重结构',
+);
+opened.value.topicOnlyOp.setEnabled(false);
 const topicNativeCall = nativeCalls.find((call) => call.path.startsWith('/t/10.json?'));
 assert(
 	topicNativeCall?.options.type === 'GET' &&
@@ -1839,15 +1959,92 @@ assert(
 	) === true,
 	'Topic prepareClose 完成 timings flush 后必须把唯一 ReadState confirmed 集合汇入历史，不能只依赖初始 post.read',
 );
-const openedNext = await activeRuntime.open(11);
+const openedNextTarget = await activeRuntime.openTarget({
+	topicId: 11,
+	postNumber: 1,
+	source: 'quote',
+	alignment: 'nearest',
+	highlight: false,
+	forceRefresh: true,
+	quoteHighlight: Object.freeze({
+		postNumber: discoursePostNumber(1),
+		text: 'next-content',
+		active: true,
+		source: Object.freeze({
+			topicId: discourseTopicId(10),
+			postNumber: discoursePostNumber(3),
+			parentPostNumber: discoursePostNumber(1),
+			nested: false,
+			anchor: Object.freeze({
+				viewport: physicalHistoryAnchor.viewport,
+				replyWindow: capturedDiscussionState,
+				quoteHighlight: null,
+			}),
+		}),
+	}),
+});
+const openedNext = openedNextTarget.topic;
 assert(
 	openedNext.status === 'opened' &&
+	openedNextTarget.navigation?.status === 'revealed' &&
+	shellRoot.querySelector('[data-post-number="1"] mark.ldp-quote-match')
+		?.textContent === 'next-content' &&
+	!shellRoot.querySelector('[data-post-number="1"]')
+		?.classList.contains('ldp-jump-highlight') &&
 	String(activeRuntime.workspace.workspace.snapshot.presentation.mode) ===
 		'embed-right' &&
 	openedNext.value.topicImages !== firstTopicImages &&
 	nativeCalls.some((call) => call.path.startsWith('/t/11.json?')) &&
 		nativeAjaxLookups === 1,
-	'关闭后的列表入口必须能重开 Reader、恢复请求的嵌入模式，并复用 application 唯一原生 ajax 端口',
+	`跨 Topic 引用必须重开 Reader、定位正确楼层、将匹配摘录滚入视野且不误闪整个楼层：${JSON.stringify({
+		status: openedNext.status,
+		navigation: openedNextTarget.navigation?.status,
+		match: shellRoot.querySelector('[data-post-number="1"] mark.ldp-quote-match')
+			?.textContent,
+		floorHighlight: shellRoot.querySelector('[data-post-number="1"]')
+			?.classList.contains('ldp-jump-highlight'),
+		mode: activeRuntime.workspace.workspace.snapshot.presentation.mode,
+		imagesChanged: openedNext.status === 'opened' &&
+			openedNext.value.topicImages !== firstTopicImages,
+		topicRequest: nativeCalls.some((call) => call.path.startsWith('/t/11.json?')),
+		nativeAjaxLookups,
+	})}`,
+);
+const crossTopicQuoteReturn = shellRoot.querySelector<HTMLButtonElement>(
+	'.ldp-quote-highlight-return',
+);
+assert(
+	crossTopicQuoteReturn?.textContent === '返回引用楼层',
+	'跨 Topic 引用高亮必须显示明确的返回引用处入口',
+);
+const changedQuoteTarget = await activeRuntime.openTarget({
+	topicId: 11,
+	postNumber: 1,
+	source: 'quote',
+	alignment: 'nearest',
+	highlight: false,
+	forceRefresh: true,
+	quoteHighlight: Object.freeze({
+		postNumber: discoursePostNumber(1),
+		text: 'stale quoted content',
+		active: true,
+		source: null,
+	}),
+});
+const changedQuoteFeedback = shellRoot.querySelector(
+	'.ldp-selection-toast',
+)?.textContent ?? '';
+assert(
+	(changedQuoteTarget.topic.status === 'opened' ||
+		changedQuoteTarget.topic.status === 'reused') &&
+	changedQuoteTarget.navigation?.status === 'revealed' &&
+	shellRoot.querySelector('[data-post-number="1"]')
+		?.classList.contains('ldp-jump-highlight') &&
+	!shellRoot.querySelector('[data-post-number="1"] mark.ldp-quote-match') &&
+	changedQuoteFeedback.includes(
+		'目的地内容已修改；已定位到楼层 #1',
+	),
+	'跨 Topic 引用文字失配时必须保留正确楼层与楼层高亮，并明确提示目的地内容已修改',
 );
 activeRuntime.workspace.setMode('floating');
 assert(
@@ -2232,6 +2429,120 @@ assert(
 	})}`,
 );
 (settingsView as ReaderSettingsView<TestPreferences>).close();
+const finalQuoteTarget = await activeRuntime.openTarget({
+	topicId: 11,
+	postNumber: 1,
+	source: 'quote',
+	alignment: 'nearest',
+	highlight: false,
+	quoteHighlight: Object.freeze({
+		postNumber: discoursePostNumber(1),
+		text: 'next-content',
+		active: true,
+		source: Object.freeze({
+			topicId: discourseTopicId(10),
+			postNumber: discoursePostNumber(3),
+			parentPostNumber: discoursePostNumber(1),
+			nested: false,
+			anchor: Object.freeze({
+				viewport: physicalHistoryAnchor.viewport,
+				replyWindow: capturedDiscussionState,
+				quoteHighlight: null,
+			}),
+		}),
+	}),
+});
+const finalQuoteReturn = shellRoot.querySelector<HTMLButtonElement>(
+	'.ldp-quote-highlight-return',
+);
+assert(
+	(finalQuoteTarget.topic.status === 'opened' ||
+		finalQuoteTarget.topic.status === 'reused') &&
+	finalQuoteTarget.navigation?.status === 'revealed' &&
+	finalQuoteReturn?.textContent === '返回引用楼层',
+	'最终运行时的跨 Topic 引用必须挂载可操作的返回入口',
+);
+finalQuoteReturn.click();
+for (let turn = 0; turn < 2_000; turn += 1) {
+	if (
+		activeRuntime.shell.activeTopicId === 10 &&
+		activeRuntime.shell.activeValue?.topicContext.snapshot().discussion
+			?.rootPostNumber === 2
+	) break;
+	await new Promise((resolve) => setTimeout(resolve, 1));
+}
+const returnedQuoteAnchor = activeRuntime.shell.activeValue
+	?.dom.captureViewportAnchor();
+assert(
+	activeRuntime.shell.activeTopicId === 10 &&
+	activeRuntime.shell.activeValue?.topicContext.snapshot().discussion
+		?.rootPostNumber === 2 &&
+	returnedQuoteAnchor?.postNumber === physicalHistoryAnchor.viewport.postNumber &&
+	returnedQuoteAnchor.postOffset === physicalHistoryAnchor.viewport.postOffset,
+	`跨 Topic 返回引用处必须恢复来源讨论浮窗与原可见视野锚点，不得只跳到楼层顶部：${JSON.stringify({
+		topicId: activeRuntime.shell.activeTopicId,
+		discussionRoot:
+			activeRuntime.shell.activeValue?.topicContext.snapshot().discussion
+				?.rootPostNumber,
+		returnedQuoteAnchor,
+		expectedViewport: physicalHistoryAnchor.viewport,
+	})}`,
+);
+const semanticSourceTarget = await activeRuntime.openTarget({
+	topicId: 11,
+	postNumber: 1,
+	source: 'quote',
+	alignment: 'nearest',
+	highlight: false,
+	quoteHighlight: Object.freeze({
+		postNumber: discoursePostNumber(1),
+		text: 'next-content',
+		active: true,
+		source: Object.freeze({
+			topicId: discourseTopicId(10),
+			postNumber: discoursePostNumber(1),
+			parentPostNumber: null,
+			nested: false,
+			anchor: Object.freeze({
+				viewport: Object.freeze({
+					postNumber: discoursePostNumber(2),
+					postOffset: 0,
+					scrollTop: 0,
+				}),
+				replyWindow: null,
+				quoteHighlight: null,
+			}),
+		}),
+	}),
+});
+const semanticSourceReturn = shellRoot.querySelector<HTMLButtonElement>(
+	'.ldp-quote-highlight-return',
+);
+assert(
+	semanticSourceTarget.navigation?.status === 'revealed' &&
+		semanticSourceReturn !== null,
+	'语义来源与物理锚点分离回归必须先建立可返回的跨 Topic 引用',
+);
+semanticSourceReturn.click();
+for (let turn = 0; turn < 2_000; turn += 1) {
+	if (
+		activeRuntime.shell.activeTopicId === 10 &&
+		activeRuntime.shell.activeValue?.topicContext.snapshot().discussion === null
+	) break;
+	await new Promise((resolve) => setTimeout(resolve, 1));
+}
+const semanticSourceRoot = shellRoot.querySelector<HTMLElement>(
+	'[data-post-number="1"]',
+);
+const physicalAnchorRoot = shellRoot.querySelector<HTMLElement>(
+	'[data-post-number="2"]',
+);
+assert(
+	activeRuntime.shell.activeValue?.topicTimeline.snapshot.currentPostNumber === 2 &&
+		semanticSourceRoot?.classList.contains('ldp-jump-highlight') &&
+		!physicalAnchorRoot?.classList.contains('ldp-jump-highlight'),
+	'引用从 #1 跳出后返回时，必须静默恢复 #2 的物理视野并只闪烁语义来源 #1',
+);
 await activeRuntime.close();
 application.destroy();
 let settingsAfterDestroyRejected = false;

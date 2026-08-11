@@ -23,17 +23,25 @@ import {
 	userRequestIdentity,
 } from './request-identities.js';
 import type {
+	CoordinatedRequestPromotion,
 	CoordinatedRequestOptions,
 	RequestTransportInput,
 	RequestTransportResponse,
 } from './coordinated-request-client.js';
-import type { RequestLane } from './request-scheduler.js';
+import type {
+	RequestLane,
+	RequestPriority,
+} from './request-scheduler.js';
 
 export interface CoordinatedRequestPort {
 	request<T>(
 		options: CoordinatedRequestOptions,
 		transport: (input: RequestTransportInput) => Promise<RequestTransportResponse<T>>,
 	): Promise<T>;
+	promote?(
+		key: string,
+		promotion: CoordinatedRequestPromotion,
+	): boolean;
 }
 
 export interface DomainResponseCacheSettings {
@@ -48,6 +56,8 @@ export interface DomainRequestExecution<T> {
 	readonly input: string | URL;
 	readonly signal: AbortSignal;
 	readonly method?: string;
+	/** 仅在 response cache miss、即将进入中央 client 时调用。 */
+	readonly beforeNetwork?: (signal: AbortSignal) => void | Promise<void>;
 	readonly cacheMode?: ResponseCacheMode;
 	readonly timeoutMs?: number;
 	readonly cache?: DomainResponseCacheSettings;
@@ -98,6 +108,7 @@ export interface CollectionPageRequest<T> extends DomainRequestExecution<T> {
 	readonly page: number;
 	readonly cursor?: string | number;
 	readonly variant?: string;
+	readonly profile?: 'collection-visible' | 'background-prefetch';
 }
 
 export interface ActionRequest<T> extends DomainRequestExecution<T> {
@@ -173,6 +184,21 @@ interface ExecuteInput<T> extends DomainRequestExecution<T> {
 	readonly identity: Readonly<Record<string, RequestIdentityValue>>;
 }
 
+interface DomainRequestExecutionState {
+	contract: RequestContractDescriptor;
+	consumers: number;
+	started: boolean;
+}
+
+const PRIORITY_WEIGHT: Readonly<Record<RequestPriority, number>> = Object.freeze({
+	critical: 0,
+	interactive: 1,
+	nested: 2,
+	visible: 3,
+	prefetch: 4,
+	background: 5,
+});
+
 function cachePolicy(
 	contract: RequestContractDescriptor,
 	settings: DomainResponseCacheSettings,
@@ -195,6 +221,7 @@ function cachePolicy(
 export class DomainRequestGateway {
 	readonly #client: CoordinatedRequestPort;
 	readonly #responses: ResponseRepository;
+	readonly #executions = new Map<string, DomainRequestExecutionState>();
 
 	constructor(client: CoordinatedRequestPort, responses: ResponseRepository) {
 		this.#client = client;
@@ -216,9 +243,7 @@ export class DomainRequestGateway {
 			...input,
 			profile: input.profile ?? 'topic-visible',
 			lane: 'topic-batch',
-			namespace: input.profile === 'background-prefetch'
-				? 'topic-background'
-				: 'topic-target',
+			namespace: 'topic-target',
 			identity: topicRequestIdentity(input),
 		});
 	}
@@ -228,11 +253,51 @@ export class DomainRequestGateway {
 			...input,
 			profile: input.profile ?? 'nested-visible',
 			lane: 'nested-replies',
-			namespace: input.profile === 'background-prefetch'
-				? 'topic-nested-background'
-				: 'topic-nested',
+			namespace: 'topic-nested',
 			identity: nestedRequestIdentity(input),
 		});
+	}
+
+	promoteTopicPosts(input: Readonly<{
+		authScope: string;
+		topicId: string | number;
+		postIds: readonly number[];
+		profile?: TopicPostsRequest<unknown>['profile'];
+		cacheMode?: ResponseCacheMode;
+	}>): boolean {
+		const contract = createRequestContract(
+			input.profile ?? 'topic-visible',
+			{
+				namespace: 'topic-posts',
+				identity: topicPostsRequestIdentity(input),
+				...(input.cacheMode === undefined
+					? {}
+					: { cacheMode: input.cacheMode }),
+			},
+		);
+		return this.#promoteExecution(contract);
+	}
+
+	promoteNestedReplies(input: Readonly<{
+		authScope: string;
+		topicId: string | number;
+		parentPostNumber: number;
+		parentPostId?: number;
+		after?: number;
+		profile?: NestedRepliesRequest<unknown>['profile'];
+		cacheMode?: ResponseCacheMode;
+	}>): boolean {
+		const contract = createRequestContract(
+			input.profile ?? 'nested-visible',
+			{
+				namespace: 'topic-nested',
+				identity: nestedRequestIdentity(input),
+				...(input.cacheMode === undefined
+					? {}
+					: { cacheMode: input.cacheMode }),
+			},
+		);
+		return this.#promoteExecution(contract);
 	}
 
 	loadNotificationPage<T>(input: NotificationPageRequest<T>): Promise<T> {
@@ -248,7 +313,7 @@ export class DomainRequestGateway {
 	loadCollectionPage<T>(input: CollectionPageRequest<T>): Promise<T> {
 		return this.#execute({
 			...input,
-			profile: 'collection-visible',
+			profile: input.profile ?? 'collection-visible',
 			lane: 'standard',
 			namespace: 'reader-collection',
 			identity: collectionRequestIdentity(input),
@@ -382,46 +447,152 @@ export class DomainRequestGateway {
 			...(input.cacheMode === undefined ? {} : { cacheMode: input.cacheMode }),
 			...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
 		});
-		const requestOptions: CoordinatedRequestOptions = {
-			key: contract.key,
-			input: input.input,
+		if (contract.cacheMode !== 'no-store' && !input.cache) {
+			return Promise.reject(new Error(`${input.profile} 缺少 response cache settings`));
+		}
+		const execution = this.#acquireExecution(contract);
+		const network = async (signal: AbortSignal): Promise<T> => {
+			if (
+				input.beforeNetwork &&
+				execution.contract.priority === 'background'
+			) {
+				await input.beforeNetwork(signal);
+				if (signal.aborted) throw signal.reason;
+			}
+			execution.started = true;
+			const effective = execution.contract;
+			const requestOptions: CoordinatedRequestOptions = {
+				key: effective.key,
+				input: input.input,
+				priority: effective.priority,
+				lane: input.lane,
+				timeoutMs: effective.timeoutMs,
+				droppable: effective.droppable,
+				max429Retries: effective.max429Retries,
+				maxChallengeRetries: effective.maxChallengeRetries,
+				blockOnCloudflareChallenge:
+					effective.blockOnCloudflareChallenge !== false,
+				suppressAfterChallengeWait:
+					effective.suppressAfterChallengeWait === true,
+				callSite:
+					`${effective.profile} / ${input.namespace} / ${input.lane}`,
+				...(input.method === undefined ? {} : { method: input.method }),
+			};
+			return this.#client.request(
+				{ ...requestOptions, signal },
+				input.transport,
+			);
+		};
+		const result = contract.cacheMode === 'no-store'
+			? network(input.signal)
+			: this.#responses.getOrLoad(
+				cachePolicy(contract, input.cache!),
+				network,
+				{
+					cacheMode: contract.cacheMode,
+					signal: input.signal,
+					...(input.allowStaleOnError === undefined
+						? {}
+						: { allowStaleOnError: input.allowStaleOnError }),
+					...(input.canFallback === undefined
+						? {}
+						: { canFallback: input.canFallback }),
+					...(input.mapStaleFallback === undefined
+						? {}
+						: { mapStaleFallback: input.mapStaleFallback }),
+				},
+			);
+		return result.finally(() => this.#releaseExecution(contract.key, execution));
+	}
+
+	#acquireExecution(
+		contract: RequestContractDescriptor,
+	): DomainRequestExecutionState {
+		const existing = this.#executions.get(contract.key);
+		if (existing) {
+			existing.consumers += 1;
+			this.#upgradeExecution(existing, contract);
+			return existing;
+		}
+		const created: DomainRequestExecutionState = {
+			contract,
+			consumers: 1,
+			started: false,
+		};
+		this.#executions.set(contract.key, created);
+		return created;
+	}
+
+	#promoteExecution(contract: RequestContractDescriptor): boolean {
+		const execution = this.#executions.get(contract.key);
+		if (execution) {
+			this.#upgradeExecution(execution, contract);
+			return true;
+		}
+		return this.#client.promote?.(
+			contract.key,
+			this.#requestPromotion(contract),
+		) ?? false;
+	}
+
+	#upgradeExecution(
+		execution: DomainRequestExecutionState,
+		incoming: RequestContractDescriptor,
+	): void {
+		const current = execution.contract;
+		const incomingWins =
+			PRIORITY_WEIGHT[incoming.priority] < PRIORITY_WEIGHT[current.priority];
+		const winner = incomingWins ? incoming : current;
+		const merged = Object.freeze({
+			...winner,
+			droppable: current.droppable && incoming.droppable,
+			max429Retries: Math.max(
+				current.max429Retries,
+				incoming.max429Retries,
+			),
+			maxChallengeRetries: Math.max(
+				current.maxChallengeRetries,
+				incoming.maxChallengeRetries,
+			),
+			timeoutMs: Math.min(current.timeoutMs, incoming.timeoutMs),
+		});
+		const changed =
+			merged.priority !== current.priority ||
+			merged.droppable !== current.droppable ||
+			merged.max429Retries !== current.max429Retries ||
+			merged.maxChallengeRetries !== current.maxChallengeRetries ||
+			merged.timeoutMs !== current.timeoutMs;
+		if (!changed) return;
+		execution.contract = merged;
+		if (execution.started) {
+			this.#client.promote?.(
+				merged.key,
+				this.#requestPromotion(merged),
+			);
+		}
+	}
+
+	#requestPromotion(
+		contract: RequestContractDescriptor,
+	): CoordinatedRequestPromotion {
+		return Object.freeze({
 			priority: contract.priority,
-			lane: input.lane,
-			timeoutMs: contract.timeoutMs,
 			droppable: contract.droppable,
 			max429Retries: contract.max429Retries,
 			maxChallengeRetries: contract.maxChallengeRetries,
-			blockOnCloudflareChallenge:
-				contract.blockOnCloudflareChallenge !== false,
-			suppressAfterChallengeWait:
-				contract.suppressAfterChallengeWait === true,
-			callSite: `${contract.profile} / ${input.namespace} / ${input.lane}`,
-			...(input.method === undefined ? {} : { method: input.method }),
-		};
-		const network = (signal: AbortSignal): Promise<T> => this.#client.request(
-			{ ...requestOptions, signal },
-			input.transport,
-		);
-		if (contract.cacheMode === 'no-store') return network(input.signal);
-		if (!input.cache) {
-			return Promise.reject(new Error(`${input.profile} 缺少 response cache settings`));
+		});
+	}
+
+	#releaseExecution(
+		key: string,
+		execution: DomainRequestExecutionState,
+	): void {
+		execution.consumers = Math.max(0, execution.consumers - 1);
+		if (
+			execution.consumers === 0 &&
+			this.#executions.get(key) === execution
+		) {
+			this.#executions.delete(key);
 		}
-		return this.#responses.getOrLoad(
-			cachePolicy(contract, input.cache),
-			network,
-			{
-				cacheMode: contract.cacheMode,
-				signal: input.signal,
-				...(input.allowStaleOnError === undefined
-					? {}
-					: { allowStaleOnError: input.allowStaleOnError }),
-				...(input.canFallback === undefined
-					? {}
-					: { canFallback: input.canFallback }),
-				...(input.mapStaleFallback === undefined
-					? {}
-					: { mapStaleFallback: input.mapStaleFallback }),
-			},
-		);
 	}
 }

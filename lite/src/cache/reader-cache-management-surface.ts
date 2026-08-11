@@ -18,9 +18,10 @@ import {
 	settingsSection,
 } from '../settings/reader-settings-dom.js';
 import type {
-	PreferencesConfigCodec,
-	PreferencesConfigPayload,
-} from '../state/preferences-config-codec.js';
+	ReaderPreparedSettingsConfig,
+	ReaderSettingsConfigApplyResult,
+	ReaderSettingsConfigPayload,
+} from '../state/reader-settings-config-manager.js';
 
 export type ReaderCacheCategory =
 	| 'history'
@@ -33,13 +34,14 @@ export type ReaderCacheCategory =
 export interface ReaderConfigurationManagementPort<
 	TPreferences extends object,
 > {
-	readonly codec: Pick<
-		PreferencesConfigCodec<TPreferences>,
-		'export' | 'import'
-	>;
-	readonly defaults: Readonly<TPreferences>;
-	readonly read: () => Readonly<TPreferences>;
-	readonly update: (preferences: Readonly<TPreferences>) => void;
+	readonly export: () => Promise<ReaderSettingsConfigPayload>;
+	readonly prepare: (
+		payload: unknown,
+	) => ReaderPreparedSettingsConfig<TPreferences>;
+	readonly apply: (
+		prepared: ReaderPreparedSettingsConfig<TPreferences>,
+	) => Promise<ReaderSettingsConfigApplyResult>;
+	readonly reset: () => Promise<ReaderSettingsConfigApplyResult>;
 	readonly confirm: (request: Readonly<{
 		readonly title: string;
 		readonly message: string;
@@ -52,7 +54,7 @@ export interface ReaderConfigurationManagementPort<
 		content: string,
 		filename: string,
 	) => void | Promise<void>;
-	readonly filename?: (payload: PreferencesConfigPayload) => string;
+	readonly filename?: (payload: ReaderSettingsConfigPayload) => string;
 }
 
 export interface ReaderCacheManagementSurfaceOptions<
@@ -353,7 +355,7 @@ export class ReaderCacheManagementSurface<
 			const configSection = settingsSection(
 				document,
 				'导入与导出设置',
-				'配置文件包含当前版本的图片、字体、布局、浮窗、外观、动画、性能、阅读和交互设置，仅支持当前设置结构；不包含阅读队列、浏览历史、其他适用站点、帖子内容、缓存或账号数据。导入或恢复默认后会立即应用到当前阅读器。',
+				'配置文件包含当前偏好（性能项仅保存目标值）、其他适用站点、翻译规则与 WebDAV 非敏感选项；导入后仍按当前设备、网络与 429 状态自适应。生效策略、请求与性能记录、阅读队列、浏览历史、帖子内容、缓存和账号数据不会写入文件；翻译 API Key、WebDAV 用户名和密码始终排除。',
 				true,
 			);
 			configSection.dataset.settingCategory = 'config-management';
@@ -743,7 +745,7 @@ export class ReaderCacheManagementSurface<
 		this.#setBusy(true, '正在导出设置…');
 		this.#setConfigStatus('正在导出设置…');
 		try {
-			const payload = configuration.codec.export(configuration.read());
+			const payload = await configuration.export();
 			const filename = configuration.filename?.(payload) ??
 				`awesome-linuxdo-reader-settings-${
 					payload.exportedAt.slice(0, 10)
@@ -752,7 +754,10 @@ export class ReaderCacheManagementSurface<
 				`${JSON.stringify(payload, null, 2)}\n`,
 				filename,
 			);
-			this.#setConfigStatus(`已导出 ${payload.settingsCount} 项设置。`);
+			this.#setConfigStatus(
+				`已导出 ${payload.settingsCount} 项偏好及安全扩展配置；` +
+					'性能项为目标值，不含运行时策略与日志。',
+			);
 			this.#options.notify?.('设置配置已导出');
 		} catch (cause) {
 			this.#options.onError?.(cause);
@@ -768,9 +773,9 @@ export class ReaderCacheManagementSurface<
 		if (!configuration || !file || this.#busy) return;
 		this.#setBusy(true);
 		try {
-			let imported: Readonly<TPreferences>;
+			let imported: ReaderPreparedSettingsConfig<TPreferences>;
 			try {
-				imported = configuration.codec.import(
+				imported = configuration.prepare(
 					JSON.parse(await file.text()),
 				);
 			} catch (cause) {
@@ -783,7 +788,18 @@ export class ReaderCacheManagementSurface<
 			const confirmed = await configuration.confirm({
 				title: '导入这份设置配置？',
 				message: `将使用“${file.name}”覆盖当前阅读器设置。`,
-				note: '浏览历史和缓存不会改变；浮窗尺寸与位置会自动限制在当前屏幕范围内，保存后立即应用。',
+				note: imported.includesPortableSections
+					? (
+						'性能目标会立即应用，并继续按当前设备、网络与 429 状态自适应；' +
+						'生效策略和请求/性能记录不会从文件导入。API Key、WebDAV 用户名和密码不会从文件导入；' +
+						'仅复用本机同地址已有凭据，新 WebDAV 地址会关闭定时同步。' +
+						'浏览历史、阅读队列和缓存不会改变。'
+					)
+					: (
+						'这是旧版配置，只覆盖阅读器偏好（含性能目标）；性能目标会立即应用并继续自适应，' +
+						'生效策略和请求/性能记录不会从文件导入。其他适用站点、翻译和 ' +
+						'WebDAV 设置保持不变。浏览历史、阅读队列和缓存不会改变。'
+					),
 				confirmLabel: '导入设置',
 				tone: 'primary',
 				icon: 'upload',
@@ -792,12 +808,25 @@ export class ReaderCacheManagementSurface<
 			this.#status.textContent = '正在导入设置…';
 			this.#setConfigStatus('正在导入设置…');
 			try {
-				configuration.update(imported);
-				this.#setConfigStatus('导入完成，当前阅读器已应用新设置。');
+				const result = await configuration.apply(imported);
+				const skipped = result.skippedSections.length
+					? `；当前环境跳过 ${result.skippedSections.join('、')}`
+					: '';
+				const autoSync = result.webDavAutoSyncDisabled
+					? '；WebDAV 缺少本机同地址凭据，定时同步已关闭'
+					: '';
+				this.#setConfigStatus(
+					`导入完成，已应用 ${result.settingsCount} 项偏好（性能项为目标值）` +
+						`${skipped}${autoSync}。`,
+				);
 				this.#options.notify?.('设置配置已导入');
 			} catch (cause) {
 				this.#options.onError?.(cause);
-				this.#setConfigStatus('导入失败，当前设置保持不变。');
+				this.#setConfigStatus(
+					cause instanceof Error && cause.message.includes('回滚不完整')
+						? '导入失败，部分设置可能未恢复；请重新打开设置逐项核对。'
+						: '导入失败，当前设置保持不变。',
+				);
 			}
 		} catch (cause) {
 			this.#options.onError?.(cause);
@@ -814,8 +843,8 @@ export class ReaderCacheManagementSurface<
 		try {
 			const confirmed = await configuration.confirm({
 				title: '恢复全部默认设置？',
-				message: '图片、字体、布局、浮窗、外观、动效、性能、阅读和交互设置都会恢复默认。',
-				note: '浏览历史、帖子缓存和账号数据不会被删除。',
+				message: '当前偏好（含性能目标）、其他适用站点、翻译和 WebDAV 设置都会恢复默认。',
+				note: '性能项恢复推荐目标，运行时仍会自适应；请求/性能记录不会被删除。翻译 API Key、WebDAV 用户名和密码会从本机设置中清除；浏览历史、阅读队列、帖子缓存和账号数据不会被删除。',
 				confirmLabel: '恢复全部默认',
 				tone: 'danger',
 				icon: 'rotate-ccw',
@@ -823,12 +852,18 @@ export class ReaderCacheManagementSurface<
 			if (!confirmed || this.scope.destroyed) return;
 			this.#status.textContent = '正在恢复默认设置…';
 			this.#setConfigStatus('正在恢复默认设置…');
-			configuration.update(configuration.defaults);
-			this.#setConfigStatus('全部设置已恢复默认。');
+			await configuration.reset();
+			this.#setConfigStatus(
+				'全部设置已恢复默认；性能项将继续按运行环境自适应。',
+			);
 			this.#options.notify?.('全部设置已恢复默认');
 		} catch (cause) {
 			this.#options.onError?.(cause);
-			this.#setConfigStatus('恢复失败，当前设置保持不变。');
+			this.#setConfigStatus(
+				cause instanceof Error && cause.message.includes('回滚不完整')
+					? '恢复失败，部分设置可能未恢复；请重新打开设置逐项核对。'
+					: '恢复失败，当前设置保持不变。',
+			);
 		} finally {
 			this.#setBusy(false);
 		}

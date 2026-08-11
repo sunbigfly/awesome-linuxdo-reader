@@ -17,10 +17,22 @@
 }
 
 .ldp-tree-virtual-spacer {
-  width: 1px;
+  position: relative;
+  width: 100%;
   min-height: 0;
   pointer-events: none;
-  contain: strict;
+  contain: size layout style;
+}
+
+/* 长帖只物化视口附近楼层时，占位区仍须延续当前父分支的主干线。 */
+.ldp-segmented-branches .ldp-reply-list > .ldp-tree-virtual-spacer::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--ldp-thread-avatar-size) / -2);
+  border-left: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
+  content: "";
+  pointer-events: none;
 }
 
 .ldp-post.ldp-virtual-ancestor-shell {
@@ -864,6 +876,17 @@
   content-visibility: visible;
 }
 
+/*
+ * Segmented reply rails intentionally extend into the child post's negative
+ * inline space. `content-visibility: auto` adds paint containment and clips
+ * that incoming bend/rail inside the complete-discussion window. The window
+ * already bounds materialized posts with shells, so segmented trees keep the
+ * posts paint-visible and preserve the standard reply-line geometry.
+ */
+.ldp-descendant-replies-tree.ldp-segmented-branches .ldp-post {
+  content-visibility: visible;
+}
+
 .ldp-descendant-replies-tree .ldp-post-projection-pending {
   min-block-size: 220px;
 }
@@ -912,10 +935,10 @@
 }
 
 .ldp-content aside.ldp-post-quote > blockquote {
-  max-height: none;
+  max-height: 220px;
   margin: 0;
   padding: 0;
-  overflow: visible !important;
+  overflow: hidden !important;
   border: 0;
   background: transparent;
 }
@@ -1002,6 +1025,32 @@
 .ldp-quote-highlight-return {
   border-left: 1px solid var(--ldp-border) !important;
   border-radius: 0 5px 5px 0 !important;
+}
+
+.ldp-post-head > .ldp-quote-return-entry {
+  width: auto;
+  min-width: 0;
+  height: 26px;
+  flex: none;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--ldp-accent) 22%, transparent);
+  border-radius: 999px;
+  background: var(--ldp-accent-soft);
+  color: var(--ldp-accent);
+  font-size: var(--ldp-font-sm);
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ldp-post-head > .ldp-quote-return-entry:hover {
+  background: color-mix(in srgb, var(--ldp-accent) 17%, var(--ldp-canvas));
+  color: var(--ldp-accent);
+}
+
+.ldp-post-head > .ldp-quote-return-entry:disabled {
+  cursor: wait;
+  opacity: .64;
 }
 
 .ldp-post.ldp-has-child-branches {

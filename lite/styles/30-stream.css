@@ -182,6 +182,22 @@
   white-space: nowrap;
 }
 
+.ldp-topic-local-archive-notice {
+  margin: 8px 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--ldp-warning, #d97706) 34%, transparent);
+  border-left-width: 4px;
+  border-radius: var(--ldp-radius-md);
+  background: color-mix(in srgb, var(--ldp-warning, #d97706) 9%, var(--ldp-canvas));
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-ui);
+  line-height: 1.55;
+}
+
+.ldp-topic-local-archive-notice[hidden] {
+  display: none;
+}
+
 .ldp-post {
   --ldp-post-inline: 16px;
   position: relative;
@@ -190,6 +206,28 @@
   padding: 12px var(--ldp-post-inline);
   color: var(--ldp-ink);
   contain: layout style;
+}
+
+.ldp-post-local-archive-note {
+  margin: 0 0 10px;
+  padding: 7px 10px;
+  border-left: 3px solid color-mix(in srgb, var(--ldp-warning, #d97706) 58%, transparent);
+  background: color-mix(in srgb, var(--ldp-warning, #d97706) 7%, transparent);
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-ui);
+  line-height: 1.45;
+}
+
+.ldp-post.is-local-archive-post > .ldp-post-body > .ldp-content {
+  padding-left: 12px;
+  border-left: 2px solid color-mix(in srgb, var(--ldp-ink-muted) 22%, transparent);
+}
+
+.ldp-topic-runtime.is-local-archive-topic .ldp-post-actions,
+.ldp-topic-runtime.is-local-archive-topic .ldp-topic-footer-slot,
+.ldp-post.is-local-archive-post > .ldp-post-body > .ldp-post-actions,
+.ldp-post.is-local-archive-post > .ldp-post-body > .ldp-topic-footer-slot {
+  display: none;
 }
 
 .ldp-virtual-root-list > .ldp-post {
@@ -862,12 +900,11 @@ button.ldp-floor:hover {
     visibility var(--ldp-motion-fast) step-end;
 }
 
-.ldp-boost-bubble:hover > .ldp-boost-quick-actions,
+.ldp-boost-bubble.ldp-boost-quick-actions-open > .ldp-boost-quick-actions,
 .ldp-boost-bubble:focus-within > .ldp-boost-quick-actions {
   visibility: visible;
   opacity: 1;
   transform: translateX(-50%);
-  pointer-events: auto;
   transition:
     opacity var(--ldp-motion-fast) ease-out,
     transform var(--ldp-motion-fast) ease-out,
@@ -1695,7 +1732,6 @@ button.ldp-floor:hover {
   justify-content: center;
   margin-left: 0;
   padding: 2px;
-  visibility: visible;
   overflow: visible;
   border: 0;
   border-radius: 50%;
@@ -1703,12 +1739,20 @@ button.ldp-floor:hover {
   color: var(--ldp-ink-muted);
   cursor: pointer;
   opacity: .72;
-  pointer-events: auto;
   transform: none;
   transition:
     opacity var(--ldp-motion-fast) ease-out,
     color var(--ldp-motion-fast) ease-out,
     background-color var(--ldp-motion-fast) ease-out;
+}
+
+.ldp-boost-bubble.ldp-boost-quick-actions-open
+  > .ldp-boost-quick-actions
+  > .ldp-boost-item-action,
+.ldp-boost-bubble:focus-within
+  > .ldp-boost-quick-actions
+  > .ldp-boost-item-action {
+  pointer-events: auto;
 }
 
 .ldp-boost-item-action .ldp-icon {
@@ -1734,8 +1778,7 @@ button.ldp-floor:hover {
 }
 
 @media (hover: none) {
-  .ldp-boost-quick-actions,
-  .ldp-boost-bubble:hover > .ldp-boost-quick-actions {
+  .ldp-boost-quick-actions {
     position: static;
     bottom: auto;
     left: auto;

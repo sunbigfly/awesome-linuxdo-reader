@@ -21,6 +21,8 @@ import type { ReaderTopicContextStateRepository } from
 	'../topic/reader-topic-context-state.js';
 import type { ReaderConnectTrustHistoryAdapter } from
 	'../user/reader-connect-trust-adapter.js';
+import type { ReaderTopicOfflineArtifactStore } from
+	'../archive/reader-topic-offline-artifact-repository.js';
 import type { ResponseRepository } from '../cache/response-repository.js';
 import type { DomainResponseCacheSettings } from
 	'../network/domain-request-gateway.js';
@@ -42,6 +44,8 @@ import {
 	decryptReaderWebDavSecret,
 	encryptReaderWebDavSecret,
 } from './reader-webdav-secret-codec.js';
+import { createReaderWebDavOfflineTopicCategoryPort } from
+	'./reader-webdav-offline-topic-port.js';
 
 type UnknownRecord = Readonly<Record<string, unknown>>;
 
@@ -505,6 +509,7 @@ export interface ReaderWebDavCategoryPortsOptions<TPreferences extends object> {
 	readonly translationCache:
 		| ReaderWebDavTranslationCacheCategoryPortOptions
 		| null;
+	readonly offlineTopics: ReaderTopicOfflineArtifactStore | null;
 }
 
 export function createReaderWebDavCategoryPorts<TPreferences extends object>(
@@ -609,6 +614,11 @@ export function createReaderWebDavCategoryPorts<TPreferences extends object>(
 	if (options.translationCache) {
 		ports.push(createReaderWebDavTranslationCacheCategoryPort(
 			options.translationCache,
+		));
+	}
+	if (options.offlineTopics) {
+		ports.push(createReaderWebDavOfflineTopicCategoryPort(
+			options.offlineTopics,
 		));
 	}
 	return Object.freeze(ports);

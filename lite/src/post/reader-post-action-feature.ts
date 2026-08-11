@@ -209,6 +209,9 @@ interface BoostEditorStats {
 
 const BOOST_EMOJI_MENU_IDENTIFIER = 'ldp-native-boost-emoji-picker';
 const BOOST_SURFACE_OWNED_EVENTS = new WeakSet<Event>();
+const BOOST_QUICK_ACTION_OPEN_DELAY_MS = 180;
+const BOOST_QUICK_ACTION_SWITCH_DELAY_MS = 250;
+const BOOST_QUICK_ACTION_CLOSE_DELAY_MS = 500;
 const HOST_RUNTIME_READY_RETRY_DELAYS = Object.freeze([
 	120,
 	360,
@@ -223,6 +226,12 @@ const BOOST_GRAPHEME_SEGMENTER = new Intl.Segmenter('und', {
 });
 const BOOST_TEXT_EMOJI_PATTERN =
 	/[\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3]/u;
+
+function domNode(value: unknown): value is Node {
+	return value !== null &&
+		typeof value === 'object' &&
+		typeof (value as Node).nodeType === 'number';
+}
 
 function boostTextStats(value: unknown): Readonly<{
 	readonly raw: string;
@@ -245,7 +254,6 @@ interface BoundReactionState<TPost> {
 	readonly manifest: PostActionManifestController;
 	post: TPost;
 	open: boolean;
-	persistentOpen: boolean;
 	snapshot: PostActionViewManifestSnapshot;
 }
 
@@ -542,6 +550,10 @@ export class ReaderPostActionFeature<
 	readonly #reactionHoverCloseTimers = new Map<HTMLElement, number>();
 	readonly #capabilityRefreshes = new Map<number, Promise<void>>();
 	readonly #capabilityRefreshAttempts = new Set<number>();
+	#boostQuickActionBubble: HTMLElement | null = null;
+	#boostQuickActionCandidate: HTMLElement | null = null;
+	#boostQuickActionOpenTimer: number | null = null;
+	#boostQuickActionCloseTimer: number | null = null;
 	#boostMenu: HTMLElement | null = null;
 	#boostBinding: BoundPostAction<TPost> | null = null;
 	#boostAnchor: HTMLElement | null = null;
@@ -651,12 +663,24 @@ export class ReaderPostActionFeature<
 			passive: true,
 		});
 		this.scope.listen(interactionRoot, 'pointerover', (event) => {
+			this.#onBoostQuickActionPointerOver(event as PointerEvent);
 			this.#onReactionPointerOver(event as PointerEvent);
 		}, { passive: true });
 		this.scope.listen(interactionRoot, 'pointerout', (event) => {
+			this.#onBoostQuickActionPointerOut(event as PointerEvent);
 			this.#onReactionPointerOut(event as PointerEvent);
 		}, { passive: true });
-		this.scope.listen(interactionRoot, 'focusin', hydrateContextActions);
+		this.scope.listen(interactionRoot, 'focusin', (event) => {
+			hydrateContextActions(event);
+			const bubble = this.#ownedBoostQuickActionBubble(eventElement(event));
+			if (
+				bubble &&
+				this.#boostQuickActionBubble &&
+				this.#boostQuickActionBubble !== bubble
+			) {
+				this.#closeBoostQuickActions();
+			}
+		});
 		this.scope.listen(this.#document, 'change', (event) => {
 			this.#onChange(event);
 		});
@@ -678,6 +702,7 @@ export class ReaderPostActionFeature<
 			keyboard.stopImmediatePropagation();
 		});
 		this.scope.listen(this.#document, 'scroll', (event) => {
+			if (!this.#boostMenu || this.#boostMenu.hidden) return;
 			const target = eventElement(event);
 			if (
 				target &&
@@ -706,6 +731,7 @@ export class ReaderPostActionFeature<
 		}));
 		this.scope.add(() => {
 			this.#cancelHostRuntimeReadyRetry();
+			this.#closeBoostQuickActions();
 			this.#clearReactionHoverTimers();
 			this.#closeBoost();
 			for (const binding of this.#byRoot.values()) {
@@ -741,7 +767,6 @@ export class ReaderPostActionFeature<
 			manifest,
 			post,
 			open: false,
-			persistentOpen: false,
 			contextHydrated: this.#eagerContextActions,
 			snapshot: manifest.snapshot(),
 			unbind: null,
@@ -754,6 +779,14 @@ export class ReaderPostActionFeature<
 		});
 		view.scope.add(() => {
 			this.#byRoot.delete(view.slots.root);
+			if (
+				(this.#boostQuickActionBubble &&
+					view.slots.root.contains(this.#boostQuickActionBubble)) ||
+				(this.#boostQuickActionCandidate &&
+					view.slots.root.contains(this.#boostQuickActionCandidate))
+			) {
+				this.#closeBoostQuickActions();
+			}
 			if (this.#boostBinding === binding) this.#closeBoost();
 		});
 		this.#refreshMissingPostCapabilities(post);
@@ -824,7 +857,6 @@ export class ReaderPostActionFeature<
 			manifest,
 			post,
 			open: false,
-			persistentOpen: false,
 			snapshot: manifest.snapshot(),
 		};
 		this.#byRoot.set(host, binding);
@@ -1128,6 +1160,14 @@ export class ReaderPostActionFeature<
 
 	#renderBoostList(binding: BoundPostAction<TPost>): void {
 		const slot = binding.view.slots.boost;
+		if (
+			(this.#boostQuickActionBubble &&
+				slot.contains(this.#boostQuickActionBubble)) ||
+			(this.#boostQuickActionCandidate &&
+				slot.contains(this.#boostQuickActionCandidate))
+		) {
+			this.#closeBoostQuickActions();
+		}
 		if (
 			this.#boostBinding === binding &&
 			this.#boostAnchor &&
@@ -3289,6 +3329,117 @@ export class ReaderPostActionFeature<
 		this.#closeAll();
 	}
 
+	#ownedBoostQuickActionBubble(target: Element | null): HTMLElement | null {
+		const bubble = target?.closest<HTMLElement>('.ldp-boost-bubble') ?? null;
+		if (
+			!bubble ||
+			!bubble.querySelector(':scope > .ldp-boost-quick-actions')
+		) return null;
+		const root = bubble.closest<HTMLElement>('.ldp-post');
+		const binding = root ? this.#byRoot.get(root) : undefined;
+		return binding?.kind === 'post' &&
+			binding.view.slots.boost.contains(bubble)
+			? bubble
+			: null;
+	}
+
+	#clearBoostQuickActionOpenTimer(): void {
+		if (this.#boostQuickActionOpenTimer !== null) {
+			this.#cancelSchedule(this.#boostQuickActionOpenTimer);
+			this.#boostQuickActionOpenTimer = null;
+		}
+		this.#boostQuickActionCandidate = null;
+	}
+
+	#clearBoostQuickActionCloseTimer(): void {
+		if (this.#boostQuickActionCloseTimer === null) return;
+		this.#cancelSchedule(this.#boostQuickActionCloseTimer);
+		this.#boostQuickActionCloseTimer = null;
+	}
+
+	#activateBoostQuickActions(bubble: HTMLElement): void {
+		if (this.#boostQuickActionBubble !== bubble) {
+			this.#boostQuickActionBubble?.classList.remove(
+				'ldp-boost-quick-actions-open',
+			);
+			this.#boostQuickActionBubble = bubble;
+		}
+		bubble.classList.add('ldp-boost-quick-actions-open');
+	}
+
+	#scheduleBoostQuickActionOpen(bubble: HTMLElement): void {
+		this.#clearBoostQuickActionCloseTimer();
+		if (this.#boostQuickActionBubble === bubble) {
+			this.#clearBoostQuickActionOpenTimer();
+			return;
+		}
+		if (
+			this.#boostQuickActionCandidate === bubble &&
+			this.#boostQuickActionOpenTimer !== null
+		) return;
+		this.#clearBoostQuickActionOpenTimer();
+		this.#boostQuickActionCandidate = bubble;
+		const delay = this.#boostQuickActionBubble
+			? BOOST_QUICK_ACTION_SWITCH_DELAY_MS
+			: BOOST_QUICK_ACTION_OPEN_DELAY_MS;
+		this.#boostQuickActionOpenTimer = this.#schedule(() => {
+			this.#boostQuickActionOpenTimer = null;
+			const candidate = this.#boostQuickActionCandidate;
+			this.#boostQuickActionCandidate = null;
+			if (
+				!candidate?.isConnected ||
+				this.#ownedBoostQuickActionBubble(candidate) !== candidate
+			) return;
+			this.#activateBoostQuickActions(candidate);
+		}, delay);
+	}
+
+	#scheduleBoostQuickActionClose(): void {
+		this.#clearBoostQuickActionOpenTimer();
+		if (
+			!this.#boostQuickActionBubble ||
+			this.#boostQuickActionCloseTimer !== null
+		) return;
+		this.#boostQuickActionCloseTimer = this.#schedule(() => {
+			this.#boostQuickActionCloseTimer = null;
+			const active = this.#boostQuickActionBubble;
+			this.#boostQuickActionBubble = null;
+			active?.classList.remove('ldp-boost-quick-actions-open');
+		}, BOOST_QUICK_ACTION_CLOSE_DELAY_MS);
+	}
+
+	#closeBoostQuickActions(): void {
+		this.#clearBoostQuickActionOpenTimer();
+		this.#clearBoostQuickActionCloseTimer();
+		this.#boostQuickActionBubble?.classList.remove(
+			'ldp-boost-quick-actions-open',
+		);
+		this.#boostQuickActionBubble = null;
+	}
+
+	#onBoostQuickActionPointerOver(event: PointerEvent): void {
+		if (this.#eagerContextActions) return;
+		const bubble = this.#ownedBoostQuickActionBubble(eventElement(event));
+		if (!bubble) return;
+		this.#scheduleBoostQuickActionOpen(bubble);
+	}
+
+	#onBoostQuickActionPointerOut(event: PointerEvent): void {
+		if (this.#eagerContextActions) return;
+		if (
+			!this.#boostQuickActionBubble &&
+			!this.#boostQuickActionCandidate
+		) return;
+		const reference =
+			this.#boostQuickActionBubble ?? this.#boostQuickActionCandidate;
+		const list = reference?.parentElement;
+		if (
+			domNode(event.relatedTarget) &&
+			list?.contains(event.relatedTarget)
+		) return;
+		this.#scheduleBoostQuickActionClose();
+	}
+
 	#onReactionPointerOver(event: PointerEvent): void {
 		const target = eventElement(event);
 		const reactions = target?.closest<HTMLElement>('.ldp-reactions');
@@ -3343,7 +3494,7 @@ export class ReaderPostActionFeature<
 			'.ldp-post,.ldp-lb-source-reactions',
 		);
 		const binding = post ? this.#byRoot.get(post) : undefined;
-		if (!binding || !binding.open || binding.persistentOpen) return;
+		if (!binding || !binding.open) return;
 		this.#reactionHoverCloseTimers.set(reactions, this.#schedule(() => {
 			this.#reactionHoverCloseTimers.delete(reactions);
 			if (!binding.open) return;
@@ -3525,7 +3676,7 @@ export class ReaderPostActionFeature<
 	): void {
 		const postId = Number(binding.post.id);
 		if (this.#actionPending(postId, 'reactions')) return;
-		binding.open = binding.persistentOpen;
+		binding.open = false;
 		const snapshots = this.#projectReaction(postId, reaction);
 		try {
 			const native = this.#models.createContext(this.#topic(), binding.post);
@@ -3612,8 +3763,7 @@ export class ReaderPostActionFeature<
 		for (const binding of this.#byRoot.values()) {
 			if (
 				binding === except ||
-				!binding.open ||
-				binding.persistentOpen
+				!binding.open
 			) continue;
 			closed = true;
 			binding.open = false;
@@ -3628,8 +3778,7 @@ export class ReaderPostActionFeature<
 			!binding ||
 			!binding.root.classList.contains('ldp-topic-action-rail-post')
 		) return;
-		binding.persistentOpen = expanded;
-		binding.open = expanded;
+		binding.open = false;
 		if (expanded && !binding.contextHydrated) {
 			binding.contextHydrated = true;
 			this.#renderActions(binding);

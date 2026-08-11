@@ -110,7 +110,10 @@ const view = new ReaderLightboxBatchView({
 	downloads,
 	originalSources: {
 		async load(selected) {
-			return selected.originalSrc;
+			return Object.freeze({
+				source: selected.originalSrc,
+				original: true,
+			});
 		},
 	},
 	confirmOriginal: (missing, total) => {

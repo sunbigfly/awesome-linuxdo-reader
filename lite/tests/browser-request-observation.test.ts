@@ -27,7 +27,10 @@ let hostBudgetStarts = 0;
 let hostBudgetReleases = 0;
 const sharedResponses: Array<Readonly<{
 	readonly source: 'host' | 'reader';
+	readonly href?: string;
 	readonly status: number;
+	readonly cloudflareMitigated?: boolean;
+	readonly blockOnCloudflareChallenge?: boolean;
 }>> = [];
 const ajaxAdapter = new DiscourseNativeAjaxObservationAdapter({
 	observer,
@@ -81,6 +84,24 @@ assert(
 	'ajaxComplete 必须结束同一事实并读取 Retry-After 与标准限流响应头',
 );
 
+const challengedXhr = {
+	status: 403,
+	getResponseHeader: (name: string) =>
+		name.toLowerCase() === 'cf-mitigated' ? '  ChAlLeNgE ' : '',
+};
+send({}, challengedXhr, { url: '/post_actions', type: 'POST' });
+complete({}, challengedXhr);
+assert(
+	observer.snapshot.events.at(-1)?.cloudflareMitigated === true &&
+		sharedResponses[1]?.source === 'host' &&
+		sharedResponses[1]?.href === 'https://linux.do/post_actions' &&
+		sharedResponses[1]?.cloudflareMitigated === true &&
+		sharedResponses[1]?.blockOnCloudflareChallenge === true &&
+		Number(hostBudgetStarts) === 2 &&
+		Number(hostBudgetReleases) === 2,
+	'宿主 Ajax 必须从任意 4xx 的 cf-mitigated: challenge 建立同源过盾事实',
+);
+
 const readerId = observer.begin({
 	href: '/t/30.json?token=private',
 	method: 'GET',
@@ -97,7 +118,7 @@ send({}, readerXhr, {
 	type: 'GET',
 });
 assert(
-	observer.snapshot.events.length === 2 &&
+	observer.snapshot.events.length === 3 &&
 		observer.snapshot.events.at(-1)?.id === readerId &&
 		observer.snapshot.events.at(-1)?.href ===
 			'https://linux.do/t/30.json',
@@ -106,10 +127,10 @@ assert(
 complete({}, readerXhr);
 assert(
 	observer.snapshot.events.at(-1)?.status === 200 &&
-		hostBudgetStarts === 1 &&
-		hostBudgetReleases === 1 &&
-		sharedResponses[1]?.source === 'reader' &&
-		sharedResponses[1]?.status === 200,
+		Number(hostBudgetStarts) === 2 &&
+		Number(hostBudgetReleases) === 2 &&
+		sharedResponses[2]?.source === 'reader' &&
+		sharedResponses[2]?.status === 200,
 	'复用的 Reader 事实必须继续吸收原生响应状态，且不得重复占用共享预算',
 );
 
@@ -148,9 +169,9 @@ const presenceXhr = { status: 200, getResponseHeader: () => '' };
 send({}, presenceXhr, { url: '/presence/update', type: 'POST' });
 complete({}, presenceXhr);
 assert(
-	hostBudgetStarts === 1 &&
-		hostBudgetReleases === 1 &&
-		sharedResponses.length === 4 &&
+	Number(hostBudgetStarts) === 2 &&
+		Number(hostBudgetReleases) === 2 &&
+		sharedResponses.length === 5 &&
 		observer.snapshot.events.at(-2)?.type === 'realtime' &&
 		observer.snapshot.events.at(-1)?.type === 'presence',
 	'服务器入站 MessageBus/Presence 与宿主媒体只能被动接收和观测，不得消耗 Reader REST 预算',

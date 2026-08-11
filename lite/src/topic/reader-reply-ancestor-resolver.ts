@@ -18,9 +18,11 @@ export interface ReaderReplyAncestorSession<TPost> {
 }
 
 export interface ReaderReplyAncestorResolution {
+	/** 完整时为真实根；断链时为已确认可用的最高楼层。 */
 	readonly rootPostNumber: DiscoursePostNumber;
 	readonly complete: boolean;
 	readonly loadedPostNumbers: readonly DiscoursePostNumber[];
+	readonly error?: unknown;
 }
 
 export interface ReaderReplyAncestorResolveOptions {
@@ -51,10 +53,11 @@ export async function resolveReaderReplyAncestors<
 	const seen = new Set<DiscoursePostNumber>();
 	const loadedPostNumbers: DiscoursePostNumber[] = [];
 	let current = targetPostNumber;
+	let availableRoot = targetPostNumber;
 	for (let depth = 0; depth < maxDepth; depth += 1) {
 		if (!isActive()) {
 			return Object.freeze({
-				rootPostNumber: current,
+				rootPostNumber: availableRoot,
 				complete: false,
 				loadedPostNumbers: Object.freeze(loadedPostNumbers),
 			});
@@ -65,21 +68,31 @@ export async function resolveReaderReplyAncestors<
 		seen.add(current);
 		let post = session.postByNumber(current);
 		if (!post) {
-			await session.loadTarget(current, {
-				scope: 'single',
-				advanceCursor: false,
-			});
+			try {
+				await session.loadTarget(current, {
+					scope: 'single',
+					advanceCursor: false,
+				});
+			} catch (error) {
+				return Object.freeze({
+					rootPostNumber: availableRoot,
+					complete: false,
+					loadedPostNumbers: Object.freeze(loadedPostNumbers),
+					...(isActive() ? { error } : {}),
+				});
+			}
 			if (!isActive()) continue;
 			post = session.postByNumber(current);
 			if (!post) {
 				return Object.freeze({
-					rootPostNumber: current,
+					rootPostNumber: availableRoot,
 					complete: false,
 					loadedPostNumbers: Object.freeze(loadedPostNumbers),
 				});
 			}
 			loadedPostNumbers.push(current);
 		}
+		availableRoot = current;
 		const parent = discoursePostReference(post).replyToPostNumber;
 		if (parent === null || parent === stopBeforePostNumber) {
 			return Object.freeze({
@@ -91,7 +104,7 @@ export async function resolveReaderReplyAncestors<
 		current = discoursePostNumber(parent);
 	}
 	return Object.freeze({
-		rootPostNumber: current,
+		rootPostNumber: availableRoot,
 		complete: false,
 		loadedPostNumbers: Object.freeze(loadedPostNumbers),
 	});

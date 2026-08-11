@@ -70,6 +70,10 @@ const render = (suffix: string): HTMLImageElement => {
 		`<div class="lightbox-wrapper"><a class="lightbox"><img src="/${suffix}-1.png"></a></div>` +
 		`<div class="lightbox-wrapper"><a class="lightbox"><img src="/${suffix}-2.png"></a></div>` +
 		`</div>` +
+		`<aside class="quote" data-topic="2" data-post="3"><blockquote>` +
+		`<a href="/uploads/default/original/1X/${suffix}-quote.png">[image]</a>` +
+		`<a class="not-image" href="/t/not-an-image">[image]</a>` +
+		`</blockquote></aside>` +
 		`<video><source src="/${suffix}.m3u8" type="application/x-mpegURL"></video>`;
 	const video = view.slots.content.querySelector<HTMLVideoElement>('video')!;
 	Object.defineProperty(video, 'pause', { value: () => { pauses += 1; } });
@@ -90,8 +94,13 @@ assert(
 	Number(playersCreated) === 1 &&
 	Number(formulasRendered) === 1 &&
 	view.slots.content.querySelector('.katex')?.textContent === 'first_{2}' &&
-	view.slots.content.querySelector('.ldp-media-carousel-status')?.textContent === '1 / 2',
-	'树节点进入内容预热窗口后必须从同一媒体组合层准备 HLS、图片轮播与 KaTeX',
+	view.slots.content.querySelector('.ldp-media-carousel-status')?.textContent === '1 / 2' &&
+	view.slots.content.querySelector(
+		'aside.quote .lightbox-wrapper > a.lightbox > img[alt="引用图片"]',
+	)?.getAttribute('src') ===
+		'https://linux.do/uploads/default/original/1X/first-quote.png' &&
+	view.slots.content.querySelector('.not-image')?.textContent === '[image]',
+	'树节点进入内容预热窗口后必须从同一媒体组合层准备 HLS、图片轮播、引用图占位符与 KaTeX',
 );
 firstImage.dispatchEvent(new window.Event('error'));
 assert(
@@ -105,9 +114,24 @@ assert(
 		Number(playersCreated) === 2 &&
 		Number(formulasRendered) === 2 &&
 	view.slots.content.querySelector('.ldp-media-carousel-status')?.textContent === '1 / 2' &&
+	view.slots.content.querySelector(
+		'aside.quote img[src$="/second-quote.png"]',
+	) !== null &&
 	!firstImage.isConnected &&
 	view.slots.body.querySelectorAll('.ldp-image-retry').length === 0,
 	'重新 render 前必须释放旧播放器/图片按钮，之后只准备当前 cooked',
+);
+const dynamicQuoteBody = view.slots.content.querySelector<HTMLElement>(
+	'aside.quote > blockquote',
+)!;
+dynamicQuoteBody.innerHTML =
+	'<a href="/uploads/default/original/1X/dynamic-quote.webp">[image]</a>';
+feature.refresh(view);
+assert(
+	dynamicQuoteBody.querySelector(
+		'.lightbox-wrapper > a.lightbox > img[src$="/dynamic-quote.webp"]',
+	) !== null,
+	'引用摘录在展开或收起后动态重建时，媒体 refresh 必须再次恢复图片节点',
 );
 
 feature.detachRoot(view.slots.root, 1);

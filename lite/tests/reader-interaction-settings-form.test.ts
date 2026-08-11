@@ -293,7 +293,10 @@ assert(
 
 preferences = Object.freeze({
 	...preferences,
-	topicActionRailPosition: Object.freeze({ x: 0.4, y: 0.5 }),
+	topicActionRailPositions: Object.freeze({
+		...preferences.topicActionRailPositions,
+		floating: Object.freeze({ x: 0.4, y: 0.5 }),
+	}),
 });
 changes.emit(preferences);
 const railVisible = host.querySelector<HTMLInputElement>(
@@ -328,9 +331,10 @@ assert(
 		railSaved.count === 3 &&
 		Number(updates) === 3 &&
 		!preferences.topicActionRailVisible &&
-		preferences.topicActionRailFixed &&
-		preferences.topicActionRailPosition.x === 'left' &&
-		preferences.topicActionRailPosition.y === 0.95,
+	preferences.topicActionRailFixed &&
+	Object.values(preferences.topicActionRailPositions).every((position) =>
+		position.x === 'left' && position.y === 0.95
+	),
 	'操作列设置必须与 Boost 规则复用一次 Settings/application 写事务',
 );
 

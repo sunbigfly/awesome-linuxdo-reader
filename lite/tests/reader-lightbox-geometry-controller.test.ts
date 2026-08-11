@@ -127,6 +127,11 @@ function pointer(
 
 pointer('pointerdown', { pointerId: 7, clientX: 750 });
 pointer('pointermove', { pointerId: 7, clientX: 600 });
+assert(
+	root.classList.contains('is-resizing-comments') &&
+	controller.commentsWidthPercent === 40,
+	'评论宽度拖动期间必须持有统一 resizing 状态，供分隔线与右切图按钮共用即时几何',
+);
 pointer('pointerup', { pointerId: 7, clientX: 600 });
 assert(
 	controller.commentsWidthPercent === 40 &&

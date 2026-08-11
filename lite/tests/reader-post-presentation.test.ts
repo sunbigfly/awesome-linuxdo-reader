@@ -32,6 +32,8 @@ const topic = {
 	_opUsername: '',
 	details: { created_by: { username: 'owner' } },
 };
+let relativeTimeCalls = 0;
+let exactTimeCalls = 0;
 const renderer = createReaderPostPresentation({
 	document,
 	presentation: {
@@ -41,8 +43,14 @@ const renderer = createReaderPostPresentation({
 		tagHref: () => '',
 		userHref: (username) => `/u/${username}`,
 	},
-	relativeTime: () => '2 小时前',
-	exactTime: () => '2026年7月30日 08:00',
+	relativeTime: () => {
+		relativeTimeCalls += 1;
+		return '2 小时前';
+	},
+	exactTime: () => {
+		exactTimeCalls += 1;
+		return '2026年7月30日 08:00';
+	},
 	readTopic: () => topic,
 	currentUsername: 'owner',
 	renderIcon,
@@ -87,6 +95,14 @@ assert(
 			'.ldp-post-read-state .ldp-icon[data-icon="check"][data-ldp-reader-icon]',
 		),
 	'相对/具体时间、楼层与已读 SVG 状态必须只投影 canonical post',
+);
+renderer.render(rootPost, root);
+assert(
+	relativeTimeCalls === 2 &&
+		exactTimeCalls === 1 &&
+	root.slots.header.querySelector<HTMLElement>('.ldp-time')?.dataset.exactTime ===
+		'2026年7月30日 08:00',
+	'同一 PostView 重投影必须刷新相对时间，但不得重复格式化不变的具体时间',
 );
 
 const childPost = {

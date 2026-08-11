@@ -35,6 +35,7 @@ const frozenHeader = document.querySelector<HTMLElement>('.ldp-header')!;
 const scrollRoot = document.querySelector<HTMLElement>('.scroll-root')!;
 const first = document.querySelector<HTMLElement>('[data-post-number="1"]')!;
 const second = document.querySelector<HTMLElement>('[data-post-number="2"]')!;
+const firstBody = first.querySelector<HTMLElement>('.ldp-post-body')!;
 const reactions = first.querySelector<HTMLElement>('.ldp-reactions')!;
 let scrollRootRectReads = 0;
 let scrollHeightReads = 0;
@@ -67,11 +68,21 @@ let secondRect = rect(80, 100);
 Object.defineProperties(first, {
 	getBoundingClientRect: { value: () => rect(150, 300) },
 });
+let firstBodyRectReads = 0;
+Object.defineProperties(firstBody, {
+	getBoundingClientRect: {
+		value: () => {
+			firstBodyRectReads += 1;
+			return rect(150, 230);
+		},
+	},
+});
 Object.defineProperties(second, {
 	getBoundingClientRect: { value: () => secondRect },
 });
+let reactionsRect = rect(250, 50);
 Object.defineProperties(reactions, {
-	getBoundingClientRect: { value: () => rect(250, 50) },
+	getBoundingClientRect: { value: () => reactionsRect },
 });
 let focusCalls = 0;
 Object.defineProperty(second, 'focus', {
@@ -396,6 +407,23 @@ assert(
 	'超长目标同时覆盖可见区上下边界时 nearest 必须保持当前位置',
 );
 
+const quoteMatch = document.createElement('mark');
+quoteMatch.className = 'ldp-quote-match';
+second.append(quoteMatch);
+Object.defineProperty(quoteMatch, 'getBoundingClientRect', {
+	value: () => rect(540, 20),
+});
+adapter.alignPost(quoteMatch, {
+	source: 'quote-match',
+	alignment: 'nearest',
+	highlight: false,
+});
+assert(
+	Number(scrollRoot.scrollTop) === 660 &&
+		!quoteMatch.classList.contains('ldp-jump-highlight'),
+	'超长楼层已覆盖视口时，引用命中片段仍必须单独滚进可见区且不闪整个楼层',
+);
+
 adapter.writeScrollOffset(440);
 secondRect = rect(300, 100);
 adapter.alignPost(second, {
@@ -419,6 +447,7 @@ assert(
 	first.classList.contains('ldp-jump-highlight') &&
 	first.style.getPropertyValue('--ldp-first-post-jump-highlight-height') ===
 		'150px' &&
+	Number(firstBodyRectReads) === 0 &&
 	observed.has(first) &&
 	observed.has(reactions) &&
 	cancelled === 1,
@@ -432,6 +461,17 @@ assert(
 	observerDisconnects >= 1,
 	'高亮到期必须释放 class、首楼变量与 ResizeObserver',
 );
+reactionsRect = rect(0, 0);
+adapter.highlightPost(first);
+assert(
+	first.classList.contains('ldp-jump-highlight') &&
+	first.style.getPropertyValue('--ldp-first-post-jump-highlight-height') ===
+		'230px' &&
+	Number(firstBodyRectReads) === 1 &&
+	observed.has(firstBody),
+	'主帖操作列隐藏回应区时，#1 闪烁必须退回正文边界，不能生成零高视觉层或覆盖后续回复',
+);
+scheduled.value?.callback();
 
 adapter.writeScrollOffset(500);
 secondRect = rect(300, 28);

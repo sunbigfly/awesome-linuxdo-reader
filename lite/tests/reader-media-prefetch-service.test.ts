@@ -38,6 +38,7 @@ const result = await service.prefetch({
 	posts: [{
 		cooked: [
 			'<p><img src="/a.png"><img data-src="/b.png"></p>',
+			'<img src="data:image/gif;base64,AA==" data-src="/lazy.png">',
 			'<img src="data:image/png;base64,AA==">',
 		].join(''),
 		boosts: [{ cooked: '<img data-large-src="/boost.png">' }],
@@ -62,20 +63,21 @@ assert(
 		'https://forum.example/a.png',
 		'https://forum.example/b.png',
 		'https://forum.example/boost.png',
+		'https://forum.example/lazy.png',
 	].sort().join(',') &&
 	calls.every((call) => call.profile === 'resource-prefetch'),
 	'媒体预取必须去重正文、Boost 与宿主回应图片，并只进入中央 resource-prefetch profile',
 );
 assert(
-	result.loadedCount === 3 &&
-	result.totalCount === 4 &&
+	result.loadedCount === 4 &&
+	result.totalCount === 5 &&
 	result.failedCount === 1 &&
 	!result.complete &&
-	idleChecks === 4 &&
+	idleChecks === 5 &&
 	maxActive === 2 &&
-	progress[0] === '0/4/0' &&
-	progress.at(-1) === '3/4/1',
-	'媒体预取必须限制两路并发、逐资源让行并持续报告 partial 覆盖度',
+	progress[0] === '0/5/0' &&
+	progress.at(-1) === '4/5/1',
+	'媒体预取必须兼容 lazy 占位图、限制两路并发、逐资源让行并持续报告 partial 覆盖度',
 );
 
 const aborted = new AbortController();

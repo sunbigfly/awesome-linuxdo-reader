@@ -21,7 +21,7 @@ function rect(top: number, left: number, width: number, height: number): DOMRect
 
 const { document: parsedDocument, window } = parseHTML(
 	'<!doctype html><html><body><section class="ldp-overlay">' +
-	'<button class="ldp-reader-history-nav" aria-label="后退"></button>' +
+	'<button class="ldp-reader-history-nav" aria-label="后退" title="后退"></button>' +
 	'<button class="ldp-settings-tab" aria-label="设置分组"></button>' +
 	'<button class="ldp-topic-timeline-track" aria-label="时间轴"></button>' +
 	'<button class="ldp-avatar-flair" data-ldp-tooltip-label="贡献者"></button>' +
@@ -72,9 +72,10 @@ assert(
 	!tooltip.element.hidden &&
 		tooltip.element.textContent === '后退' &&
 		tooltip.element.classList.contains('ldp-reader-history-tooltip') &&
+		!history.hasAttribute('title') &&
 		tooltip.element.style.left === '100px' &&
 		tooltip.element.style.top === '70px',
-	'图标控件必须由唯一 tooltip owner 读取 aria-label、套用历史宽度类并在视口内定位',
+	'图标控件必须由唯一 tooltip owner 读取 aria-label、移除原生 title、套用历史宽度类并在视口内定位',
 );
 
 const excludedHover = new window.Event('pointerover', { bubbles: true });
@@ -102,6 +103,35 @@ assert(
 		badge.getAttribute('aria-label') === '贡献者',
 	'复制反馈到期后必须恢复原始 tooltip/无障碍文案',
 );
+
+history.dispatchEvent(hover);
+const querySelector = document.querySelector.bind(document);
+let historyHoverQueries = 0;
+Object.defineProperty(document, 'querySelector', {
+	configurable: true,
+	value: (selector: string) => {
+		if (selector === '.ldp-reader-history-nav:hover') {
+			historyHoverQueries += 1;
+			return history;
+		}
+		return querySelector(selector);
+	},
+});
+document.dispatchEvent(new window.Event('scroll'));
+assert(
+	historyHoverQueries === 1 && !tooltip.element.hidden,
+	'活动历史导航在滚动时必须继续复核 hover 并重定位提示',
+);
+tooltip.close();
+document.dispatchEvent(new window.Event('scroll'));
+assert(
+	historyHoverQueries === 1,
+	'没有活动 tooltip 时，普通阅读滚动不得执行历史导航 :hover 查询',
+);
+Object.defineProperty(document, 'querySelector', {
+	configurable: true,
+	value: querySelector,
+});
 
 tooltip.destroy();
 assert(

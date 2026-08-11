@@ -18,6 +18,32 @@ import {
 	type ReaderKatexPort,
 } from './reader-katex-controller.js';
 
+const QUOTED_IMAGE_PLACEHOLDER = /^\[\s*image\s*\]$/i;
+const IMAGE_PATH = /\.(?:avif|bmp|gif|jpe?g|png|svg|tiff?|webp)$/i;
+
+function quotedImageSource(link: HTMLAnchorElement, baseUrl: string): string {
+	if (!QUOTED_IMAGE_PLACEHOLDER.test(link.textContent?.trim() ?? '')) return '';
+	const href = String(link.getAttribute('href') ?? '').trim();
+	if (!href) return '';
+	try {
+		const source = new URL(href, baseUrl);
+		if (source.protocol === 'blob:' || source.protocol === 'data:') {
+			return source.href;
+		}
+		if (source.protocol !== 'http:' && source.protocol !== 'https:') return '';
+		if (
+			!link.classList.contains('lightbox') &&
+			!IMAGE_PATH.test(source.pathname) &&
+			!/(?:^|\/)(?:uploads|secure-media-uploads)(?:\/|$)/i.test(
+				source.pathname,
+			)
+		) return '';
+		return source.href;
+	} catch {
+		return '';
+	}
+}
+
 export interface ReaderTopicMediaFeatureOptions {
 	readonly document: Document;
 	readonly baseUrl: string;
@@ -50,6 +76,8 @@ implements ReaderTopicPostFeature<TPost> {
 	readonly carousels: ReaderImageCarouselController;
 	readonly images: ReaderImageRetryController;
 	readonly katex: ReaderKatexController;
+	readonly #document: Document;
+	readonly #baseUrl: string;
 	readonly #boundViews = new WeakSet<PostView>();
 	readonly #activeRoots = new Set<HTMLElement>();
 	readonly #knownRoots = new Set<HTMLElement>();
@@ -59,6 +87,8 @@ implements ReaderTopicPostFeature<TPost> {
 	readonly #cancel: (handle: unknown) => void;
 
 	constructor(options: ReaderTopicMediaFeatureOptions) {
+		this.#document = options.document;
+		this.#baseUrl = new URL(options.baseUrl).href;
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		this.#suspendDelayMs = Number.isFinite(options.suspendDelayMs)
 			? Math.max(0, Number(options.suspendDelayMs))
@@ -148,6 +178,7 @@ implements ReaderTopicPostFeature<TPost> {
 
 	refresh(view: PostView): void {
 		if (!this.#activeRoots.has(view.slots.root)) return;
+		this.#prepareQuotedImages(view.slots.body);
 		this.katex.render(view.slots.body);
 		this.carousels.prepare(view.slots.body);
 		this.media.prepare(view.slots.body);
@@ -161,6 +192,7 @@ implements ReaderTopicPostFeature<TPost> {
 		this.#activeRoots.add(root);
 		const body = root.querySelector<HTMLElement>(':scope > .ldp-post-body');
 		if (!body) return;
+		this.#prepareQuotedImages(body);
 		this.katex.render(body);
 		this.carousels.prepare(body);
 		this.media.prepare(body);
@@ -185,6 +217,31 @@ implements ReaderTopicPostFeature<TPost> {
 
 	destroy(): void {
 		this.scope.destroy();
+	}
+
+	#prepareQuotedImages(root: ParentNode): void {
+		for (const link of root.querySelectorAll<HTMLAnchorElement>(
+			'.ldp-content.cooked aside.quote > blockquote a[href]',
+		)) {
+			const source = quotedImageSource(link, this.#baseUrl);
+			if (!source) continue;
+			const image = this.#document.createElement('img');
+			const title = String(link.getAttribute('title') ?? '').trim();
+			image.src = source;
+			image.alt = title && !QUOTED_IMAGE_PLACEHOLDER.test(title)
+				? title
+				: '引用图片';
+			image.loading = 'lazy';
+			image.decoding = 'async';
+			link.classList.add('lightbox');
+			link.replaceChildren(image);
+			if (!link.parentElement?.classList.contains('lightbox-wrapper')) {
+				const wrapper = this.#document.createElement('span');
+				wrapper.className = 'lightbox-wrapper';
+				link.replaceWith(wrapper);
+				wrapper.append(link);
+			}
+		}
 	}
 
 	#cancelPendingSuspend(root: HTMLElement): void {

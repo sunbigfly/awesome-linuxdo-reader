@@ -29,11 +29,16 @@ import type {
 	ReaderLightboxCommentFormSlots,
 } from './reader-lightbox-comment-form.js';
 
+export interface ReaderLightboxResolvedSource {
+	readonly source: string;
+	readonly original: boolean;
+}
+
 export interface ReaderLightboxOriginalSourcePort {
 	load(
 		item: ReaderLightboxItem,
 		options: Readonly<{ readonly refresh: boolean; readonly cachedOnly: boolean }>,
-	): Promise<string | null>;
+	): Promise<ReaderLightboxResolvedSource | null>;
 }
 
 export interface ReaderLightboxViewSlots {
@@ -426,7 +431,7 @@ export class ReaderLightboxView {
 		this.slots.comments.hidden = !this.#commentsEnabled;
 		this.slots.root.classList.toggle(
 			'ldp-lb-comments-collapsed',
-			!snapshot.commentsExpanded,
+			!this.#commentsEnabled || !snapshot.commentsExpanded,
 		);
 		this.#commentsToggle.setAttribute(
 			'aria-expanded',
@@ -544,22 +549,30 @@ export class ReaderLightboxView {
 			this.#retry.hidden = true;
 		}
 		try {
-			const source = await this.#originalSources.load(item, { refresh, cachedOnly });
-			if (!this.#isCurrent(token, item) || cachedOnly && !source) return;
-			if (!source) throw new Error('原图暂不可用');
+			const resolved = await this.#originalSources.load(item, {
+				refresh,
+				cachedOnly,
+			});
+			if (!this.#isCurrent(token, item) || cachedOnly && !resolved) return;
+			if (!resolved) throw new Error('原图及后备图片暂不可用');
 			this.slots.image.onload = () => {
 				if (!this.#isCurrent(token, item)) return;
 				this.slots.image.hidden = false;
 				this.#status.hidden = true;
-				this.#viewOriginal.disabled = true;
-				buttonLabel(this.#viewOriginal, '当前已是原图');
+				this.#viewOriginal.disabled = resolved.original;
+				buttonLabel(
+					this.#viewOriginal,
+					resolved.original
+						? '当前已是原图'
+						: '当前为降级图，重新检查原图',
+				);
 				this.transform.render();
 			};
 			this.slots.image.onerror = () => {
 				if (!this.#isCurrent(token, item)) return;
 				this.#originalFailure();
 			};
-			this.slots.image.src = source;
+			this.slots.image.src = resolved.source;
 		} catch (error) {
 			if (!this.#isCurrent(token, item) || cachedOnly) return;
 			this.#onError(error);

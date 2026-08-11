@@ -402,7 +402,7 @@ const { document: parsedDocument, window: parsedWindow } = parseHTML(`
 const document = parsedDocument as unknown as Document;
 const closeNotices: string[] = [];
 let closeGuardEnabled = true;
-const resetDiscardModel = (): void => {
+const resetDiscardModel = async (): Promise<void> => {
 	service.model = model({
 		action: 'reply',
 		topic: model({ id: 10 }),
@@ -412,8 +412,8 @@ const resetDiscardModel = (): void => {
 			clearStateCalls += 1;
 		},
 	});
+	await coordinator.openReply({ topic, post });
 };
-resetDiscardModel();
 coordinator.installCloseGuard({
 	document,
 	enabled: () => closeGuardEnabled,
@@ -427,9 +427,29 @@ const dispatchClick = (selector: string): Event => {
 	document.querySelector<HTMLElement>(selector)!.dispatchEvent(event);
 	return event;
 };
+service.model = model({
+	action: 'createTopic',
+	viewOpen: true,
+	composeState: 'open',
+});
+closeGuardEnabled = false;
+const nativeDiscardBaseline = Object.freeze({
+	draft: discardDraftCalls,
+	close: discardCloseCalls,
+	clear: clearStateCalls,
+});
+assert(
+	!dispatchClick('.discard-button').defaultPrevented &&
+	discardDraftCalls === nativeDiscardBaseline.draft &&
+	discardCloseCalls === nativeDiscardBaseline.close &&
+	clearStateCalls === nativeDiscardBaseline.clear,
+	'宿主自行打开的新建话题 Composer 必须保留原生舍弃链，不能误用 Reader 回复草稿清理',
+);
+closeGuardEnabled = true;
+await resetDiscardModel();
 assert(
 	dispatchClick('.toggle-save-and-close').defaultPrevented &&
-		dispatchClick('.discard-button').defaultPrevented &&
+	dispatchClick('.discard-button').defaultPrevented &&
 		dispatchClick('.discard-button').defaultPrevented &&
 		closeNotices.join(',') ===
 			'再点一次关闭回复窗口,再点一次舍弃回复',
@@ -452,10 +472,10 @@ const dispatchEscape = (): Event => {
 	document.querySelector<HTMLElement>('#reply-control')!.dispatchEvent(event);
 	return event;
 };
-resetDiscardModel();
+await resetDiscardModel();
 assert(
 	dispatchEscape().defaultPrevented &&
-		dispatchEscape().defaultPrevented,
+	dispatchEscape().defaultPrevented,
 	'已打开 Composer 的 Esc 必须由 Composer owner 在期限内二次确认',
 );
 await Promise.resolve();
@@ -475,7 +495,7 @@ assert(
 	!dispatchClick('.toggle-save-and-close').defaultPrevented,
 	'关闭确认偏好关闭后必须把原生 Composer 事件完整放行',
 );
-resetDiscardModel();
+await resetDiscardModel();
 assert(
 	dispatchClick('.discard-button').defaultPrevented,
 	'关闭确认偏好关闭后，单击舍弃仍必须由 Composer owner 删除草稿',

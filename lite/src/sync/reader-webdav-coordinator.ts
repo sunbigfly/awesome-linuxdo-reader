@@ -1,4 +1,5 @@
 import { LifecycleScope } from '../kernel/lifecycle.js';
+import { abortableDelay } from '../network/coordinated-request-client.js';
 import {
 	ReaderWebDavError,
 	type ReaderWebDavClient,
@@ -16,6 +17,7 @@ import {
 	validateReaderWebDavConfig,
 	type ReaderWebDavBaseline,
 	type ReaderWebDavCategory,
+	type ReaderWebDavConfig,
 	type ReaderWebDavDocument,
 	type ReaderWebDavInitialStrategy,
 	type ReaderWebDavLocalRecord,
@@ -41,11 +43,38 @@ export interface ReaderWebDavCategoryPort {
 		context: ReaderWebDavCategoryTransformContext,
 	): Readonly<Record<string, ReaderWebDavRemoteRecord>> |
 		Promise<Readonly<Record<string, ReaderWebDavRemoteRecord>>>;
+	/** 大对象类别使用独立清单/对象事务，不写入主 sync.json。 */
+	synchronizeStandalone?(
+		context: ReaderWebDavStandaloneCategorySyncContext,
+	): Promise<ReaderWebDavStandaloneCategorySyncResult>;
 }
 
 export interface ReaderWebDavCategoryTransformContext {
 	readonly secret: string;
 	readonly scopeId: string;
+}
+
+export interface ReaderWebDavStandaloneCategorySyncContext {
+	readonly client: ReaderWebDavClient;
+	readonly config: ReaderWebDavConfig;
+	readonly signal: AbortSignal;
+	readonly scopeId: string;
+	readonly writerId: string;
+	readonly baseline?: Readonly<Record<string, string>>;
+	readonly now: () => number;
+	readonly retryDelay: (
+		milliseconds: number,
+		signal: AbortSignal,
+	) => Promise<void>;
+}
+
+export interface ReaderWebDavStandaloneCategorySyncResult {
+	readonly baseline: Readonly<Record<string, string>>;
+	readonly uploaded: number;
+	readonly imported: number;
+	readonly deleted: number;
+	readonly conflicts: number;
+	readonly remoteCreated: boolean;
 }
 
 export interface ReaderWebDavSyncResult {
@@ -65,7 +94,13 @@ export interface ReaderWebDavCoordinatorOptions {
 	readonly hostname: () => string;
 	readonly username: () => string;
 	readonly now?: () => number;
+	readonly retryDelay?: (
+		milliseconds: number,
+		signal: AbortSignal,
+	) => Promise<void>;
 }
+
+const CONFLICT_RETRY_DELAYS_MS = Object.freeze([250, 750]);
 
 function errorMessage(cause: unknown): string {
 	if (cause instanceof Error && cause.message.trim()) return cause.message;
@@ -110,6 +145,10 @@ export class ReaderWebDavCoordinator {
 	readonly #hostname: () => string;
 	readonly #username: () => string;
 	readonly #now: () => number;
+	readonly #retryDelay: (
+		milliseconds: number,
+		signal: AbortSignal,
+	) => Promise<void>;
 	#active: Promise<ReaderWebDavSyncResult> | null = null;
 
 	constructor(options: ReaderWebDavCoordinatorOptions) {
@@ -122,6 +161,7 @@ export class ReaderWebDavCoordinator {
 		this.#hostname = options.hostname;
 		this.#username = options.username;
 		this.#now = options.now ?? Date.now;
+		this.#retryDelay = options.retryDelay ?? abortableDelay;
 	}
 
 	async testConnection(signal = new AbortController().signal): Promise<void> {
@@ -164,6 +204,10 @@ export class ReaderWebDavCoordinator {
 				.map((category) => this.#categories.get(category))
 				.filter((port): port is ReaderWebDavCategoryPort => Boolean(port));
 			if (!selected.length) throw new Error('所选同步内容当前不可用');
+			const regularSelected = selected.filter((port) =>
+				!port.synchronizeStandalone);
+			const standaloneSelected = selected.filter((port) =>
+				Boolean(port.synchronizeStandalone));
 			const transformContext: ReaderWebDavCategoryTransformContext =
 				Object.freeze({
 					secret: snapshot.config.password,
@@ -204,8 +248,10 @@ export class ReaderWebDavCoordinator {
 				let imported = 0;
 				let deleted = 0;
 				let conflicts = 0;
-				let changed = remoteFile === null;
-				for (const port of selected) {
+				// 独立大对象类别不依赖主 sync.json；仅选离线 Topic 时不要
+				// 为了跑一轮同步而额外创建一份空主文件。
+				let changed = remoteFile === null && regularSelected.length > 0;
+				for (const port of regularSelected) {
 					const local = await port.capture();
 					const remoteRecords =
 						remoteScope.categories[port.category]?.records ?? {};
@@ -291,30 +337,73 @@ export class ReaderWebDavCoordinator {
 						deleted,
 						conflicts,
 						categories: selected.length,
-						remoteCreated: remoteFile === null,
+						remoteCreated: remoteFile === null && changed,
 						at: this.#now(),
 					});
 					break;
 				} catch (cause) {
 					if (
 						cause instanceof ReaderWebDavError &&
-						cause.code === 'conflict' &&
-						attempt < 2
-					) continue;
+						cause.code === 'conflict'
+					) {
+						if (attempt < CONFLICT_RETRY_DELAYS_MS.length) {
+							await this.#retryDelay(
+								CONFLICT_RETRY_DELAYS_MS[attempt]!,
+								signal,
+							);
+							continue;
+						}
+						throw new ReaderWebDavError(
+							'conflict',
+							'WebDAV 远端版本持续变化，已保留本机数据；' +
+								'请稍后重试，并检查其他标签页或设备是否正在同步',
+							cause.status,
+						);
+					}
 					throw cause;
 				}
 			}
 			if (!outcome) throw new Error('WebDAV 文件持续冲突，请稍后重试');
 			for (const item of applyRecords) await item.port.apply(item.records);
 			await this.#repository.saveBaseline(scopeId, nextBaseline);
-			const message = `同步完成：上传 ${outcome.uploaded}，下载 ${outcome.imported}` +
-				`，删除 ${outcome.deleted}，冲突 ${outcome.conflicts}`;
+			let aggregate = outcome;
+			for (const port of standaloneSelected) {
+				const standalone = await port.synchronizeStandalone!({
+					client: this.#client,
+					config: snapshot.config,
+					signal,
+					scopeId,
+					writerId: snapshot.writerId,
+					...(nextBaseline[port.category] === undefined
+						? {}
+						: { baseline: nextBaseline[port.category] }),
+					now: this.#now,
+					retryDelay: this.#retryDelay,
+				});
+				nextBaseline = Object.freeze({
+					...nextBaseline,
+					[port.category]: standalone.baseline,
+				});
+				await this.#repository.saveBaseline(scopeId, nextBaseline);
+				aggregate = Object.freeze({
+					...aggregate,
+					uploaded: aggregate.uploaded + standalone.uploaded,
+					imported: aggregate.imported + standalone.imported,
+					deleted: aggregate.deleted + standalone.deleted,
+					conflicts: aggregate.conflicts + standalone.conflicts,
+					remoteCreated:
+						aggregate.remoteCreated || standalone.remoteCreated,
+					at: this.#now(),
+				});
+			}
+			const message = `同步完成：上传 ${aggregate.uploaded}，下载 ${aggregate.imported}` +
+				`，删除 ${aggregate.deleted}，冲突 ${aggregate.conflicts}`;
 			await this.#repository.saveStatus(Object.freeze({
 				kind: 'success',
 				message,
-				at: outcome.at,
+				at: aggregate.at,
 			}));
-			return outcome;
+			return aggregate;
 		} catch (cause) {
 			await this.#repository.saveStatus(Object.freeze({
 				kind: 'error',

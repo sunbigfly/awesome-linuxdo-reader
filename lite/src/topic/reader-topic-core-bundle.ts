@@ -402,7 +402,11 @@ export function createReaderTopicCoreBundle<
 		services,
 		activate: () => {
 			preload(session.cachedPosts());
-			live.start();
+			live.setActive(true, {
+				refresh:
+					session.initializedFromCache &&
+					session.localArchiveState().topic === null,
+			});
 			try {
 				composerEvents.start();
 			} catch (cause) {

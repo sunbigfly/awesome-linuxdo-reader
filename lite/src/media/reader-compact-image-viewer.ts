@@ -274,12 +274,12 @@ export class ReaderCompactImageViewer {
 			void this.#originalSources.load(options.item, {
 				refresh: false,
 				cachedOnly: false,
-			}).then((source) => {
-				if (localScope.destroyed || !source) {
+			}).then((resolved) => {
+				if (localScope.destroyed || !resolved) {
 					if (!localScope.destroyed) progress.hidden = true;
 					return;
 				}
-				showSource(source, true);
+				showSource(resolved.source, true);
 			}).catch((cause: unknown) => {
 				if (localScope.destroyed) return;
 				progress.hidden = true;

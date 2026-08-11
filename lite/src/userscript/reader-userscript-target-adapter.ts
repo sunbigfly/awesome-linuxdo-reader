@@ -26,6 +26,19 @@ export interface ReaderUserscriptRouteChangePort {
 	subscribe(handler: () => void): Cleanup;
 }
 
+export interface ReaderUserscriptServiceWorkerMessagePort {
+	addEventListener(
+		type: 'message',
+		listener: EventListener,
+		options?: boolean | AddEventListenerOptions,
+	): void;
+	removeEventListener(
+		type: 'message',
+		listener: EventListener,
+		options?: boolean | EventListenerOptions,
+	): void;
+}
+
 export interface ReaderUserscriptTargetOpenResult {
 	readonly topic: Readonly<{
 		readonly status: 'opened' | 'reused' | 'superseded' | 'failed';
@@ -57,6 +70,8 @@ export interface ReaderUserscriptTargetAdapterOptions {
 	readonly currentUrl: () => string;
 	readonly target: ReaderUserscriptTargetOpenPort;
 	readonly routeChanges?: ReaderUserscriptRouteChangePort | null;
+	readonly serviceWorkerMessages?: ReaderUserscriptServiceWorkerMessagePort | null;
+	readonly interceptServiceWorkerTopicTargets?: () => boolean;
 	readonly readOpenTopicsAtFirstPost?: () => boolean;
 	readonly openInitialRoute?: boolean;
 	readonly interceptTopicLinks?: boolean;
@@ -277,14 +292,34 @@ export class ReaderUserscriptTargetAdapter {
 				this.#report(error);
 			}
 		}
+		if (options.serviceWorkerMessages) {
+			const listener: EventListener = (event) => {
+				this.#handleServiceWorkerMessage(event);
+			};
+			options.serviceWorkerMessages.addEventListener(
+				'message',
+				listener,
+				true,
+			);
+			this.scope.add(() => {
+				options.serviceWorkerMessages?.removeEventListener(
+					'message',
+					listener,
+					true,
+				);
+			});
+		}
 		this.scope.add(() => {
 			this.#routeEpoch += 1;
 			this.#targetEpoch += 1;
 			this.#lastRouteKey = '';
 		});
-		this.ready = options.openInitialRoute === false
-			? Promise.resolve(false)
-			: this.syncCurrentRoute({ force: true });
+		if (options.openInitialRoute === false) {
+			this.#rememberCurrentRoute();
+			this.ready = Promise.resolve(false);
+		} else {
+			this.ready = this.syncCurrentRoute({ force: true });
+		}
 	}
 
 	async syncCurrentRoute(
@@ -382,6 +417,39 @@ export class ReaderUserscriptTargetAdapter {
 		});
 	}
 
+	#handleServiceWorkerMessage(event: Event): void {
+		if (this.scope.destroyed) return;
+		try {
+			if (this.#options.interceptServiceWorkerTopicTargets?.() !== true) {
+				return;
+			}
+		} catch (error) {
+			this.#report(error);
+			return;
+		}
+		const data = (event as MessageEvent<unknown>).data;
+		if (data === null || typeof data !== 'object') return;
+		const targetUrl = String(
+			(data as Readonly<Record<string, unknown>>).url ?? '',
+		).trim();
+		if (!targetUrl) return;
+		const currentUrl = this.#currentUrl();
+		if (!currentUrl) return;
+		const route = parseReaderUserscriptTopicRoute(targetUrl, currentUrl);
+		if (!route || route.bypassReader) return;
+		event.preventDefault();
+		event.stopPropagation();
+		event.stopImmediatePropagation();
+		this.#targetEpoch += 1;
+		void this.#open({
+			topicId: route.topicId,
+			...(route.postNumber === null
+				? {}
+				: { postNumber: route.postNumber }),
+			source: 'notification',
+		});
+	}
+
 	#linkTarget(anchor: Element): ReaderLinkTarget | null {
 		const currentUrl = this.#currentUrl();
 		if (!currentUrl) return null;
@@ -417,6 +485,16 @@ export class ReaderUserscriptTargetAdapter {
 			this.#report(error);
 			return route.postNumber;
 		}
+	}
+
+	#rememberCurrentRoute(): void {
+		const currentUrl = this.#currentUrl();
+		if (!currentUrl) return;
+		const route = parseReaderUserscriptTopicRoute(currentUrl, currentUrl);
+		if (!route || route.bypassReader) return;
+		this.#lastRouteKey = `${route.topicId}:${
+			this.#ordinaryPostNumber(route) ?? 0
+		}`;
 	}
 
 	#currentUrl(): string | null {

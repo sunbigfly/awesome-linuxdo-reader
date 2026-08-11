@@ -365,6 +365,13 @@ export class DiscourseComposerCoordinator {
 				options.notify?.('舍弃回复失败，请重试');
 			});
 		};
+		const ownsActiveComposer = (): boolean => {
+			const session = this.#session;
+			const composer = record(this.#host.lookup('service:composer'));
+			return Boolean(
+				session && modelValue(composer, 'model') === session.model,
+			);
+		};
 		const onClick = (event: Event): void => {
 			if (handledEvents.has(event)) return;
 			const target = event.target as Element | null;
@@ -382,7 +389,7 @@ export class DiscourseComposerCoordinator {
 				consume(event);
 				return;
 			}
-			if (shouldDiscard) {
+			if (shouldDiscard && ownsActiveComposer()) {
 				discardComposer(event);
 			}
 		};
@@ -400,7 +407,7 @@ export class DiscourseComposerCoordinator {
 				consume(event);
 				return;
 			}
-			discardComposer(event);
+			if (ownsActiveComposer()) discardComposer(event);
 		};
 		const captureTarget = options.document.defaultView ?? options.document;
 		scope.listen(captureTarget, 'click', onClick, true);

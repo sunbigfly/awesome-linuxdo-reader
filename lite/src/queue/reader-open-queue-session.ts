@@ -14,6 +14,10 @@ import { htmlElement as node } from '../dom/html-element.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import { RepeatActionGate } from '../kernel/repeat-action-gate.js';
 import {
+	readerWorkspacePositionMode,
+	type ReaderWorkspacePositionMode,
+} from '../shell/reader-workspace.js';
+import {
 	readReaderAccountScopedString,
 	readerAccountScopedStorageIdentity,
 	type ReaderAccountScopedStorageIdentity,
@@ -25,10 +29,17 @@ import {
 	parseReaderUserscriptTopicRoute,
 	type ReaderUserscriptTargetOpenPort,
 } from '../userscript/reader-userscript-target-adapter.js';
+import {
+	ReaderTopicDownloadManager,
+	type ReaderTopicDownloadManagerOptions,
+} from './reader-topic-download-manager.js';
 
 export const READER_QUEUE_STORAGE_KEY =
 	'linuxdo-enhanced-reader:reader-queue:v1';
 const READER_QUEUE_DOCK_THRESHOLD_PX = 2;
+const READER_QUEUE_PANEL_SHOW_DELAY_MS = 180;
+const READER_QUEUE_PANEL_HIDE_GRACE_MS = 480;
+const READER_QUEUE_CLEAR_CONFIRM_MS = 3_000;
 
 export interface ReaderOpenQueuePreferences {
 	readonly openTopicsAtFirstPost: boolean;
@@ -85,6 +96,7 @@ export interface ReaderQueuePrefetchProgress {
 export interface ReaderOpenQueueSessionOptions {
 	readonly document: Document;
 	readonly root: HTMLElement;
+	readonly workspaceRoot?: HTMLElement;
 	readonly storage: Pick<Storage, 'getItem' | 'setItem'> &
 		Partial<Pick<Storage, 'removeItem'>>;
 	readonly storageKey?: string;
@@ -119,6 +131,11 @@ export interface ReaderOpenQueueSessionOptions {
 		patch: Partial<ReaderOpenQueuePreferences>,
 	) => void | Promise<unknown>;
 	readonly notify?: (message: string) => void;
+	readonly topicDownloads?: Omit<
+		ReaderTopicDownloadManagerOptions,
+		'document' | 'mount' | 'currentTopic' | 'geometryStorage' |
+		'notify' | 'parentScope'
+	> & Readonly<{ readonly mount?: HTMLElement }>;
 	readonly createMutationObserver?: (
 		callback: MutationCallback,
 	) => MutationObserver;
@@ -166,6 +183,11 @@ interface ReaderQueueSurfaceState {
 	y: number;
 	dock: '' | 'left' | 'right' | 'top' | 'bottom' | 'title';
 }
+
+type ReaderQueueSurfacePositions = Record<
+	ReaderWorkspacePositionMode,
+	ReaderQueueSurfaceState
+>;
 
 interface ReaderQueueSurfaceRect {
 	readonly left: number;
@@ -265,6 +287,32 @@ function normalizedSurface(value: unknown): ReaderQueueSurfaceState {
 	};
 }
 
+function normalizedSurfaces(
+	value: unknown,
+	legacyValue: unknown,
+): ReaderQueueSurfacePositions {
+	const source = value && typeof value === 'object'
+		? value as Record<string, unknown>
+		: {};
+	return {
+		floating: normalizedSurface(
+			Object.hasOwn(source, 'floating') ? source.floating : legacyValue,
+		),
+		fullpage: normalizedSurface(
+			Object.hasOwn(source, 'fullpage') ? source.fullpage : legacyValue,
+		),
+		embedded: normalizedSurface(
+			Object.hasOwn(source, 'embedded') ? source.embedded : legacyValue,
+		),
+	};
+}
+
+function defaultSurface(surface: ReaderQueueSurfaceState): boolean {
+	return surface.x === 0.02 &&
+		surface.y === 0.12 &&
+		surface.dock === 'title';
+}
+
 function normalizedEntry(value: unknown, baseUrl: string): ReaderQueueEntry | null {
 	if (!value || typeof value !== 'object') return null;
 	const source = value as Record<string, unknown>;
@@ -350,6 +398,7 @@ function queueStatus(
 export class ReaderOpenQueueSession {
 	readonly scope: LifecycleScope;
 	readonly #options: ReaderOpenQueueSessionOptions;
+	readonly #workspaceRoot: HTMLElement;
 	readonly #storageKey: string;
 	readonly #accountStorage: ReaderAccountScopedStorageIdentity | null;
 	readonly #entries = new Map<DiscourseTopicId, ReaderQueueEntry>();
@@ -362,8 +411,9 @@ export class ReaderOpenQueueSession {
 	readonly #count: HTMLElement;
 	readonly #clear: HTMLButtonElement;
 	readonly #list: HTMLElement;
+	readonly #downloadManager: ReaderTopicDownloadManager | null;
 	readonly #avatarIdentity = new WeakMap<HTMLElement, string>();
-	#surface: ReaderQueueSurfaceState;
+	readonly #surfaces: ReaderQueueSurfacePositions;
 	#prefetchTail = Promise.resolve();
 	readonly #prefetching = new Set<DiscourseTopicId>();
 	readonly #prefetchControllers = new Map<DiscourseTopicId, AbortController>();
@@ -376,6 +426,7 @@ export class ReaderOpenQueueSession {
 	readonly #observedSurfaceElements = new WeakSet<Element>();
 	#scanQueued = false;
 	#panelOpen = false;
+	#panelPinned = false;
 	#renderKey = '';
 	#surfaceFrame = 0;
 	#dragFrame = 0;
@@ -383,13 +434,20 @@ export class ReaderOpenQueueSession {
 	#dragGeometry: ReaderQueueSurfaceGeometry | null = null;
 	#dragging = false;
 	#suppressToggleClick = false;
+	#closePinnedPanelOnClick = false;
+	#hoverOpenTimer = 0;
 	#hoverCloseTimer = 0;
+	#clearConfirmTimer = 0;
+	#clearConfirmationPending = false;
 	#activeTopicId: DiscourseTopicId | null = null;
 	#nativeTriggerItem: HTMLElement | null = null;
 	#nativeTriggerButton: HTMLButtonElement | null = null;
 
 	constructor(options: ReaderOpenQueueSessionOptions) {
 		this.#options = options;
+		this.#workspaceRoot = options.workspaceRoot ??
+			options.root.closest<HTMLElement>('[data-reader-workspace-mode]') ??
+			options.root;
 		this.#accountStorage = options.storageKey === undefined &&
 			options.authScope !== undefined
 			? readerAccountScopedStorageIdentity(
@@ -415,7 +473,7 @@ export class ReaderOpenQueueSession {
 		});
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		const restored = this.#restore();
-		this.#surface = restored.surface;
+		this.#surfaces = restored.surfaces;
 		for (const entry of restored.entries) this.#entries.set(entry.topicId, entry);
 		const document = options.document;
 		this.#rail = node(document, 'aside', 'ldp-reader-queue');
@@ -426,7 +484,7 @@ export class ReaderOpenQueueSession {
 			'layers',
 		);
 		this.#toggle.setAttribute('aria-expanded', 'false');
-		this.#toggle.setAttribute('aria-pressed', 'true');
+		this.#toggle.setAttribute('aria-pressed', 'false');
 		this.#toggle.setAttribute('aria-haspopup', 'listbox');
 		this.#badge = node(document, 'b');
 		this.#toggle.append(this.#badge);
@@ -459,11 +517,35 @@ export class ReaderOpenQueueSession {
 			'关闭阅读队列',
 			'x',
 		);
-		head.append(title, this.#count, this.#clear, close);
+		head.append(title, this.#count);
+		head.append(this.#clear, close);
 		this.#list = node(document, 'div', 'ldp-reader-queue-list');
 		this.#list.setAttribute('role', 'listbox');
 		this.#list.setAttribute('aria-label', '队列文章');
 		this.#panel.append(head, this.#list);
+		this.#downloadManager = options.topicDownloads
+			? new ReaderTopicDownloadManager({
+					...options.topicDownloads,
+					document,
+					mount: options.topicDownloads.mount ?? this.#panel,
+					geometryStorage: options.storage,
+					currentTopic: () => {
+						const topicId = this.#options.currentTopicId();
+						if (!topicId) return null;
+						const entry = this.#entries.get(topicId);
+						const history = this.#options.historyEntry(topicId);
+						return Object.freeze({
+							topicId,
+							title: entry?.title || history?.title || `Topic #${topicId}`,
+						});
+					},
+					...(options.notify ? { notify: options.notify } : {}),
+					parentScope: this.scope,
+				})
+			: null;
+		this.#downloadManager?.changes.subscribe(() => {
+			this.#scheduleSurfaceMeasure();
+		}, this.scope);
 		this.#rail.append(
 			this.#toggle,
 			this.#bubbles,
@@ -471,6 +553,14 @@ export class ReaderOpenQueueSession {
 			this.#panel,
 		);
 		options.root.append(this.#rail);
+		this.scope.listen(
+			this.#workspaceRoot,
+			'ldp-reader-workspace-change',
+			() => {
+				this.#cancelSurfaceFrames();
+				this.#scheduleSurfaceMeasure();
+			},
+		);
 		this.#resizeObserver = options.createResizeObserver?.(() =>
 			this.#scheduleSurfaceMeasure())
 			?? (typeof ResizeObserver === 'function'
@@ -489,7 +579,9 @@ export class ReaderOpenQueueSession {
 		this.scope.add(() => this.#closeGate.clear());
 		this.scope.add(() => {
 			this.#resizeObserver?.disconnect();
+			this.#cancelPanelPreview();
 			this.#cancelPanelClose();
+			this.#resetClearConfirmation();
 			this.#cancelSurfaceFrames();
 			if (this.#syncFrame) this.#cancelFrame(this.#syncFrame);
 			this.#syncFrame = 0;
@@ -501,18 +593,23 @@ export class ReaderOpenQueueSession {
 			);
 		});
 		this.scope.listen(this.#rail, 'click', (event) => this.#click(event));
-		this.scope.listen(this.#toggle, 'pointerenter', () => {
-			if (!this.#dragging) this.#setPanelOpen(true);
-		});
+		this.scope.listen(this.#toggle, 'pointerenter', (event) =>
+			this.#schedulePanelPreview(event as PointerEvent));
+		this.scope.listen(this.#toggle, 'pointerleave', () =>
+			this.#cancelPanelPreview());
 		this.scope.listen(this.#rail, 'pointerenter', () => {
 			this.#rail.classList.add('is-dock-revealed');
 			this.#cancelPanelClose();
 		});
 		this.scope.listen(this.#rail, 'pointerleave', () => {
 			this.#rail.classList.remove('is-dock-revealed');
+			this.#cancelPanelPreview();
 			this.#schedulePanelClose();
 		});
 		this.scope.listen(this.#panel, 'focusin', () => this.#cancelPanelClose());
+		this.scope.listen(this.#panel, 'pointerenter', () => {
+			this.#cancelPanelClose();
+		});
 		this.scope.listen(this.#panel, 'focusout', (event) => {
 			const next = (event as FocusEvent).relatedTarget;
 			if (
@@ -575,6 +672,12 @@ export class ReaderOpenQueueSession {
 		return this.#entries.size;
 	}
 
+	get #surface(): ReaderQueueSurfaceState {
+		return this.#surfaces[readerWorkspacePositionMode(
+			this.#workspaceRoot.dataset.readerWorkspaceMode,
+		)];
+	}
+
 	syncEntries(): readonly ReaderQueueSyncEntry[] {
 		return Object.freeze([...this.#entries.values()]
 			.sort((left, right) => left.addedAt - right.addedAt ||
@@ -610,6 +713,7 @@ export class ReaderOpenQueueSession {
 	sync(): void {
 		this.#syncNativeReaderTrigger();
 		const active = this.#options.currentTopicId();
+		this.#downloadManager?.syncCurrent();
 		const entries = [...this.#entries.values()]
 			.sort((left, right) =>
 				Number(right.pinned) - Number(left.pinned) ||
@@ -654,12 +758,10 @@ export class ReaderOpenQueueSession {
 			const bubbleAvatars = this.#avatarsByTopic(this.#bubbles);
 			const rowAvatars = this.#avatarsByTopic(this.#list);
 			this.#renderKey = renderKey;
-			this.#rail.hidden =
-				!entries.length &&
-				!alwaysVisible;
+			this.#syncRailPresence();
 			this.#rail.classList.toggle('is-empty', !entries.length);
-			this.#badge.textContent = String(entries.length || '×');
 			this.#count.textContent = `${entries.length} 篇`;
+			this.#resetClearConfirmation();
 			this.#clear.disabled = !entries.some((entry) => !entry.pinned);
 			this.#bubbles.replaceChildren(...entries.map((entry) => {
 				const shell = node(
@@ -782,23 +884,35 @@ export class ReaderOpenQueueSession {
 		}
 	}
 
+	#syncRailPresence(): void {
+		const alwaysVisible = this.#options.readPreferences()
+			.readerQueueAlwaysVisibleWhenEmpty;
+		this.#rail.hidden = !this.#entries.size && !alwaysVisible;
+		this.#badge.textContent = String(this.#entries.size);
+	}
+
+	downloadCurrentTopic(): boolean {
+		const prepared = this.#downloadManager?.prepareCurrentDownload() ?? false;
+		if (prepared) this.#options.notify?.('请选择下载范围后开始后台下载');
+		return prepared;
+	}
+
+	openTopicDownloadManager(): boolean {
+		return this.#downloadManager?.openManager() ?? false;
+	}
+
 	refreshSurface(): void {
 		this.#scheduleSurfaceMeasure();
 	}
 
 	toggle(): void {
 		if (this.scope.destroyed || this.#rail.hidden) return;
-		if (!this.#entries.size) {
+		if (this.#panelPinned) {
 			this.#setPanelOpen(false);
-			void this.#options.updatePreferences({
-				readerQueueAlwaysVisibleWhenEmpty: false,
-			});
-			this.sync();
 			return;
 		}
-		this.#setPreviewExpanded(
-			this.#rail.classList.contains('is-preview-collapsed'),
-		);
+		this.#panelPinned = true;
+		this.#setPanelOpen(true);
 	}
 
 	destroy(): void {
@@ -940,7 +1054,7 @@ export class ReaderOpenQueueSession {
 		const target = eventElement(event);
 		const action = target?.closest<HTMLElement>(
 			'[data-queue-open],[data-queue-pin],[data-queue-remove],' +
-			'[data-queue-retry],' +
+				'[data-queue-retry],' +
 			'.ldp-reader-queue-clear,.ldp-reader-queue-close,' +
 			'.ldp-reader-queue-toggle,.ldp-reader-queue-scroll-hint',
 		);
@@ -972,22 +1086,35 @@ export class ReaderOpenQueueSession {
 		if (action === this.#toggle) {
 			if (this.#suppressToggleClick) {
 				this.#suppressToggleClick = false;
+				this.#closePinnedPanelOnClick = false;
+				return;
+			}
+			if (this.#closePinnedPanelOnClick) {
+				this.#closePinnedPanelOnClick = false;
 				return;
 			}
 			this.toggle();
 			return;
 		}
 		if (action.classList.contains('ldp-reader-queue-close')) {
-			if (!this.#entries.size) {
-				void this.#options.updatePreferences({
-					readerQueueAlwaysVisibleWhenEmpty: false,
-				});
-			}
 			this.#setPanelOpen(false);
-			this.sync();
 			return;
 		}
 		if (action === this.#clear) {
+			const removable = [...this.#entries.values()]
+				.filter((entry) => !entry.pinned);
+			if (!removable.length) {
+				this.#resetClearConfirmation();
+				return;
+			}
+			if (!this.#clearConfirmationPending) {
+				this.#armClearConfirmation(removable.length);
+				this.#options.notify?.(
+					`再点一次垃圾桶，移除 ${removable.length} 篇未固定主题`,
+				);
+				return;
+			}
+			this.#resetClearConfirmation();
 			for (const [topicId, entry] of this.#entries) {
 				if (!entry.pinned) this.#remove(topicId);
 			}
@@ -1151,8 +1278,10 @@ export class ReaderOpenQueueSession {
 
 	#drag(event: PointerEvent): void {
 		if (event.button !== 0) return;
-		// pointerenter 会先展开面板；拖动入口不能因此被自己的 hover 状态锁死。
+		this.#cancelPanelPreview();
+		// hover 预览可能已经展开；拖动入口不能因此被面板状态锁死。
 		// pointerdown 先收起，再用稳定 rail 几何开始拖动。
+		this.#closePinnedPanelOnClick = this.#panelPinned;
 		this.#setPanelOpen(false);
 		this.#cancelSurfaceFrames();
 		const geometry = this.#measureSurface();
@@ -1175,6 +1304,7 @@ export class ReaderOpenQueueSession {
 				moved = true;
 				this.#dragging = true;
 				this.#suppressToggleClick = true;
+				this.#closePinnedPanelOnClick = false;
 				this.#setPanelOpen(false);
 				this.#rail.classList.remove(
 					'is-docked-left',
@@ -1226,6 +1356,9 @@ export class ReaderOpenQueueSession {
 		const finish = (next: PointerEvent): void => {
 			if (next.pointerId !== event.pointerId) return;
 			cleanup();
+			if (moved || next.type !== 'pointerup') {
+				this.#closePinnedPanelOnClick = false;
+			}
 			this.#dragging = false;
 			this.#rail.classList.remove('is-dragging');
 			if (this.#toggle.hasPointerCapture?.(event.pointerId)) {
@@ -1252,11 +1385,34 @@ export class ReaderOpenQueueSession {
 	}
 
 	#setPanelOpen(open: boolean): void {
+		this.#cancelPanelPreview();
 		this.#cancelPanelClose();
+		if (!open) this.#panelPinned = false;
 		this.#panelOpen = open;
 		this.#panel.hidden = !open;
 		this.#toggle.setAttribute('aria-expanded', String(open));
+		this.#syncToggleState();
 		if (open) this.#scheduleSurfaceMeasure();
+	}
+
+	#cancelPanelPreview(): void {
+		if (this.#hoverOpenTimer) clearTimeout(this.#hoverOpenTimer);
+		this.#hoverOpenTimer = 0;
+	}
+
+	#schedulePanelPreview(event: PointerEvent): void {
+		this.#cancelPanelPreview();
+		if (
+			event.pointerType === 'touch' ||
+			this.#dragging ||
+			this.#panelOpen ||
+			this.scope.destroyed
+		) return;
+		this.#hoverOpenTimer = setTimeout(() => {
+			this.#hoverOpenTimer = 0;
+			if (this.#dragging || this.scope.destroyed) return;
+			this.#setPanelOpen(true);
+		}, READER_QUEUE_PANEL_SHOW_DELAY_MS);
 	}
 
 	#cancelPanelClose(): void {
@@ -1266,29 +1422,52 @@ export class ReaderOpenQueueSession {
 
 	#schedulePanelClose(): void {
 		this.#cancelPanelClose();
+		if (this.#panelPinned) return;
 		const active = deepActiveElement(this.#options.document);
 		if (active && this.#panel.contains(active)) return;
 		this.#hoverCloseTimer = setTimeout(() => {
 			this.#hoverCloseTimer = 0;
+			if (this.#panelPinned) return;
 			this.#setPanelOpen(false);
-		}, 180);
+		}, READER_QUEUE_PANEL_HIDE_GRACE_MS);
 	}
 
-	#setPreviewExpanded(expanded: boolean): void {
-		this.#rail.classList.toggle('is-preview-collapsed', !expanded);
-		this.#syncToggleState();
-		if (expanded) this.#requestFrame(() => this.#syncScrollHint());
-		if (this.#panelOpen) this.#scheduleSurfaceMeasure();
+	#armClearConfirmation(count: number): void {
+		this.#resetClearConfirmation();
+		this.#clearConfirmationPending = true;
+		this.#clear.classList.add('is-confirming');
+		const label = `确认移除 ${count} 篇未固定主题`;
+		this.#clear.setAttribute('aria-label', label);
+		this.#clear.dataset.ldpTooltipLabel = label;
+		this.#clearConfirmTimer = setTimeout(() => {
+			this.#clearConfirmTimer = 0;
+			this.#resetClearConfirmation();
+		}, READER_QUEUE_CLEAR_CONFIRM_MS);
+	}
+
+	#resetClearConfirmation(): void {
+		if (this.#clearConfirmTimer) clearTimeout(this.#clearConfirmTimer);
+		this.#clearConfirmTimer = 0;
+		this.#clearConfirmationPending = false;
+		this.#clear.classList.remove('is-confirming');
+		this.#clear.setAttribute('aria-label', '移除未固定主题');
+		delete this.#clear.dataset.ldpTooltipLabel;
 	}
 
 	#syncToggleState(): void {
-		const expanded = !this.#rail.classList.contains('is-preview-collapsed');
-		this.#toggle.setAttribute('aria-pressed', String(expanded));
+		this.#toggle.setAttribute('aria-pressed', String(this.#panelPinned));
+		const action = this.#panelPinned
+			? '关闭收纳箱'
+			: this.#panelOpen
+				? '固定打开收纳箱'
+				: '打开收纳箱';
 		this.#toggle.setAttribute(
 			'aria-label',
 			this.#entries.size
-				? `${expanded ? '收纳' : '展开'}队列头像预览；拖动可移动，贴边可隐藏；悬停显示队列详情，共 ${this.#entries.size} 篇`
-				: '关闭空阅读队列入口',
+				? `${action}；长按拖动可移动，贴边可隐藏；悬停可预览，共 ${this.#entries.size} 篇`
+				: this.#downloadManager
+					? `${action}，可下载或管理当前 Topic；队列 0 篇`
+					: `${action}；当前 0 篇`,
 		);
 	}
 
@@ -1660,9 +1839,9 @@ export class ReaderOpenQueueSession {
 				);
 			})
 			.finally(() => {
-				this.#prefetching.delete(topicId);
 				if (this.#prefetchControllers.get(topicId) === controller) {
 					this.#prefetchControllers.delete(topicId);
+					this.#prefetching.delete(topicId);
 				}
 				if (!this.scope.destroyed) this.sync();
 			});
@@ -1854,7 +2033,7 @@ export class ReaderOpenQueueSession {
 
 	#restore(): Readonly<{
 		entries: readonly ReaderQueueEntry[];
-		surface: ReaderQueueSurfaceState;
+		surfaces: ReaderQueueSurfacePositions;
 	}> {
 		try {
 			const stored = this.#accountStorage
@@ -1878,44 +2057,44 @@ export class ReaderOpenQueueSession {
 					.filter((entry): entry is ReaderQueueEntry => entry !== null)
 				: [];
 			const unique = new Map(entries.map((entry) => [entry.topicId, entry]));
-			const surface = value && !Array.isArray(value) &&
+			const record = value && !Array.isArray(value) &&
 				typeof value === 'object'
-				? normalizedSurface(
-					(value as Record<string, unknown>).surface,
-				)
-				: normalizedSurface(null);
-			return { entries: [...unique.values()], surface };
+				? value as Record<string, unknown>
+				: {};
+			const surfaces = normalizedSurfaces(
+				record.surfaces,
+				record.surface,
+			);
+			return { entries: [...unique.values()], surfaces };
 		} catch {
-			return { entries: [], surface: normalizedSurface(null) };
+			return { entries: [], surfaces: normalizedSurfaces(null, null) };
 		}
 	}
 
-		#persist(): void {
-			try {
-				const entries = [...this.#entries.values()];
-				if (
-					!entries.length &&
-					this.#surface.x === 0.02 &&
-					this.#surface.y === 0.12 &&
-					this.#surface.dock === 'title' &&
-					this.#options.storage.removeItem &&
-					!this.#accountStorage
-				) {
-					this.#options.storage.removeItem(this.#storageKey);
-					return;
-				}
-				this.#options.storage.setItem(
-					this.#storageKey,
-					JSON.stringify({
-						version: 1,
-						entries,
-						surface: this.#surface,
-					}),
-				);
-			} catch (error) {
-				this.#options.notify?.(
-					`阅读队列保存失败：${String(error)}`,
-				);
+	#persist(): void {
+		try {
+			const entries = [...this.#entries.values()];
+			if (
+				!entries.length &&
+				Object.values(this.#surfaces).every(defaultSurface) &&
+				this.#options.storage.removeItem &&
+				!this.#accountStorage
+			) {
+				this.#options.storage.removeItem(this.#storageKey);
+				return;
 			}
+			this.#options.storage.setItem(
+				this.#storageKey,
+				JSON.stringify({
+					version: 2,
+					entries,
+					surfaces: this.#surfaces,
+				}),
+			);
+		} catch (error) {
+			this.#options.notify?.(
+				`阅读队列保存失败：${String(error)}`,
+			);
 		}
+	}
 }

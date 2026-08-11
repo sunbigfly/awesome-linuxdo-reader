@@ -69,6 +69,24 @@ Object.defineProperties(window, {
 	innerWidth: { configurable: true, value: 1_000 },
 	innerHeight: { configurable: true, value: 800 },
 });
+const nativeGetComputedStyle = window.getComputedStyle?.bind(window);
+let stageUnpositionedComposer = false;
+Object.defineProperty(window, 'getComputedStyle', {
+	configurable: true,
+	value: (element: Element) => {
+		if (
+			stageUnpositionedComposer &&
+			element.id === 'reply-control' &&
+			!(element as HTMLElement).dataset.ldpReaderComposerPositioned
+		) {
+			return { display: 'block', visibility: 'hidden' };
+		}
+		return nativeGetComputedStyle?.(element) ?? {
+			display: 'block',
+			visibility: 'visible',
+		};
+	},
+});
 
 let preferences: Readonly<ReaderPreferences> = Object.freeze({
 	...defaults,
@@ -166,10 +184,28 @@ const controller = new ReaderNativeComposerWindowController({
 const composer = document.querySelector<HTMLElement>('#reply-control')!;
 const composerRoot = document.querySelector<HTMLElement>('#ember-app')!;
 assert(
-	!document.documentElement.classList.contains('ldp-composer-host-isolated') &&
 	!composer.dataset.ldpReaderComposerPositioned,
 	'关闭的宿主 Composer 不得占用 Reader top-layer 或窗口几何',
 );
+
+stageUnpositionedComposer = true;
+composer.classList.remove('closed');
+controller.sync();
+assert(
+	composer.dataset.ldpReaderComposerPositioned === '1' &&
+	topLayers.has(composer),
+	'宿主自行打开新建、回复、编辑或私信 Composer 时，Reader 的防闪隐藏不得阻断窗口接管与 top-layer 提升',
+);
+stageUnpositionedComposer = false;
+composer.classList.add('closed');
+controller.sync();
+assert(
+	!composer.dataset.ldpReaderComposerPositioned &&
+	topLayers.size === 0,
+	'宿主自行打开的 Composer 关闭后必须释放 Reader 窗口状态',
+);
+fontReads = 0;
+patches.length = 0;
 
 composer.classList.remove('closed');
 assert(
@@ -178,18 +214,28 @@ assert(
 );
 flushFrames();
 const chrome = document.querySelector<HTMLElement>('.ldp-composer-window-chrome')!;
-const wheelLayer = document.querySelector<HTMLElement>('.ldp-composer-wheel-layer')!;
 assert(
-	document.documentElement.classList.contains('ldp-composer-host-isolated') &&
 	composer.dataset.ldpReaderComposerPositioned === '1' &&
 	composer.style.translate === '100px 90px' &&
 	composer.style.getPropertyValue('--ldp-composer-width') === '700px' &&
 	composer.style.getPropertyValue('--ldp-composer-height') === '500px' &&
 	chrome && !chrome.hidden &&
 	chrome.querySelectorAll('[data-resize]').length === 8 &&
-	wheelLayer && !wheelLayer.hidden &&
 	topLayers.has(composer) && topLayers.has(chrome),
-	'打开 Composer 必须一次投影窗口、八向拖缩、滚轮隔离和 top-layer，而不是复制草稿 DOM',
+	'打开 Composer 必须一次投影窗口、八向拖缩、内部滚轮隔离和 top-layer，而不是复制草稿 DOM',
+);
+const backgroundWheel = new (window as unknown as { Event: typeof Event }).Event(
+	'wheel',
+	{ bubbles: true, cancelable: true },
+);
+Object.defineProperty(backgroundWheel, 'deltaY', { value: 120 });
+Object.defineProperty(backgroundWheel, 'deltaX', { value: 0 });
+Object.defineProperty(backgroundWheel, 'deltaMode', { value: 0 });
+document.body.dispatchEvent(backgroundWheel);
+assert(
+	!backgroundWheel.defaultPrevented &&
+	!document.querySelector('.ldp-composer-wheel-layer'),
+	'Composer 打开后不得创建透明事件层或阻止宿主区域的原生滚动',
 );
 assert(
 	composerRoot.style.getPropertyValue('--tertiary') === '#47855f' &&
@@ -277,22 +323,20 @@ const restoredTertiaryPriority =
 		? restoredTertiaryPriorityReader.getPropertyPriority('--tertiary')
 		: /!important\s*$/i.test(restoredTertiary) ? 'important' : '';
 assert(
-	!document.documentElement.classList.contains('ldp-composer-host-isolated') &&
 	!composer.dataset.ldpReaderComposerPositioned &&
 	!composer.hasAttribute('popover') &&
 	restoredTertiary.replace(/\s*!important\s*$/i, '') === '#123456' &&
 	restoredTertiaryPriority === 'important' &&
 	!composerRoot.style.getPropertyValue('--tertiary-low') &&
 	!composerRoot.style.getPropertyValue('--d-link-color') &&
-	chrome.hidden && wheelLayer.hidden &&
+	chrome.hidden &&
 	topLayers.size === 0,
-	'关闭 Composer 必须完整释放宿主隔离、几何、top-layer 和交互遮罩',
+	'关闭 Composer 必须完整释放几何、top-layer 和窗口状态',
 );
 
 parentScope.destroy();
 assert(
 	!document.querySelector('.ldp-composer-window-chrome') &&
-	!document.querySelector('.ldp-composer-wheel-layer') &&
 	observers.every((observer) => observer.disconnected) &&
 	frames.size === 0 && timers.size === 0,
 	'application scope 销毁必须回收 Composer 的 DOM、Observer、frame 和 timer',

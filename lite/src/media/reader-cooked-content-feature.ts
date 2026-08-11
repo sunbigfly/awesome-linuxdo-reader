@@ -163,6 +163,98 @@ function extractAfter(
 	return fragment;
 }
 
+export function setReaderCookedCalloutExpanded(
+	document: Document,
+	quote: HTMLElement,
+	body: HTMLElement,
+	toggle: HTMLButtonElement,
+	expanded: boolean,
+): void {
+	body.hidden = !expanded;
+	quote.classList.toggle('ldp-callout--collapsed', !expanded);
+	toggle.setAttribute('aria-expanded', String(expanded));
+	toggle.setAttribute(
+		'aria-label',
+		expanded ? '收起提示内容' : '展开提示内容',
+	);
+	toggle.replaceChildren(createReaderIcon(
+		document,
+		expanded ? 'chevron-up' : 'chevron-down',
+	));
+}
+
+/** 在线 Reader 与离线快照共用同一 Callout DOM 变换。 */
+export function prepareReaderCookedCallouts(
+	document: Document,
+	root: HTMLElement,
+): number {
+	let changed = 0;
+	for (const quote of root.querySelectorAll<HTMLElement>('blockquote')) {
+		if (quote.classList.contains('ldp-callout')) continue;
+		const firstBlock = quote.firstElementChild as HTMLElement | null;
+		if (!firstBlock) continue;
+		const walker = document.createTreeWalker(firstBlock, 4);
+		let markerNode: Text | null = null;
+		while (walker.nextNode()) {
+			const candidate = walker.currentNode as Text;
+			if ((candidate.nodeValue ?? '').trim()) {
+				markerNode = candidate;
+				break;
+			}
+		}
+		if (!markerNode) continue;
+		const match = (markerNode.nodeValue ?? '').match(
+			/^\s*\[!([a-z][a-z0-9_-]*)\]([+-])?\s*/i,
+		);
+		const type = match?.[1]?.toLowerCase() ?? '';
+		const calloutType = CALLOUT_TYPES[type];
+		if (!match || !calloutType) continue;
+		markerNode.nodeValue = (markerNode.nodeValue ?? '').slice(match[0].length);
+		quote.classList.add('ldp-callout', calloutType.className);
+		if (match[2]) {
+			const body = document.createElement('div');
+			body.className = 'ldp-callout-body';
+			const firstBreak = firstBlock.querySelector('br');
+			if (firstBreak) {
+				body.append(extractAfter(document, firstBreak, firstBlock));
+				firstBreak.remove();
+			}
+			let sibling = firstBlock.nextSibling;
+			while (sibling) {
+				const next = sibling.nextSibling;
+				body.append(sibling);
+				sibling = next;
+			}
+			if ((body.textContent ?? '').trim() || body.querySelector('*')) {
+				quote.classList.add('ldp-callout--foldable');
+				quote.append(body);
+				const toggle = button(
+					document,
+					'ldp-callout-toggle',
+					'readerCalloutAction',
+					'toggle',
+					'展开提示内容',
+					'chevron-down',
+				);
+				quote.append(toggle);
+				setReaderCookedCalloutExpanded(
+					document,
+					quote,
+					body,
+					toggle,
+					match[2] === '+',
+				);
+			}
+		}
+		const marker = document.createElement('span');
+		marker.className = 'ldp-callout-icon';
+		marker.append(createReaderIcon(document, calloutType.iconName));
+		quote.prepend(marker);
+		changed += 1;
+	}
+	return changed;
+}
+
 /**
  * cooked DOM 的唯一增强流水线。
  *
@@ -419,76 +511,7 @@ implements ReaderTopicPostFeature<TPost> {
 	}
 
 	#prepareCallouts(root: HTMLElement): void {
-		for (const quote of root.querySelectorAll<HTMLElement>('blockquote')) {
-			if (quote.classList.contains('ldp-callout')) continue;
-			const firstBlock = quote.firstElementChild as HTMLElement | null;
-			if (!firstBlock) continue;
-			const walker = this.#document.createTreeWalker(firstBlock, 4);
-			let markerNode: Text | null = null;
-			while (walker.nextNode()) {
-				const candidate = walker.currentNode as Text;
-				if ((candidate.nodeValue ?? '').trim()) {
-					markerNode = candidate;
-					break;
-				}
-			}
-			if (!markerNode) continue;
-			const match = (markerNode.nodeValue ?? '').match(
-				/^\s*\[!([a-z][a-z0-9_-]*)\]([+-])?\s*/i,
-			);
-			const type = match?.[1]?.toLowerCase() ?? '';
-			const calloutType = CALLOUT_TYPES[type];
-			if (!match || !calloutType) continue;
-			markerNode.nodeValue = (markerNode.nodeValue ?? '').slice(
-				match[0].length,
-			);
-			quote.classList.add('ldp-callout', calloutType.className);
-			if (match[2]) {
-				const body = this.#document.createElement('div');
-				body.className = 'ldp-callout-body';
-				const firstBreak = firstBlock.querySelector('br');
-				if (firstBreak) {
-					body.append(extractAfter(
-						this.#document,
-						firstBreak,
-						firstBlock,
-					));
-					firstBreak.remove();
-				}
-				let sibling = firstBlock.nextSibling;
-				while (sibling) {
-					const next = sibling.nextSibling;
-					body.append(sibling);
-					sibling = next;
-				}
-				if ((body.textContent ?? '').trim() || body.querySelector('*')) {
-					quote.classList.add('ldp-callout--foldable');
-					quote.append(body);
-					const toggle = button(
-						this.#document,
-						'ldp-callout-toggle',
-						'readerCalloutAction',
-						'toggle',
-						'展开提示内容',
-						'chevron-down',
-					);
-					quote.append(toggle);
-					this.#setCalloutExpanded(
-						quote,
-						body,
-						toggle,
-						match[2] === '+',
-					);
-				}
-			}
-			const marker = this.#document.createElement('span');
-			marker.className = 'ldp-callout-icon';
-			marker.append(createReaderIcon(
-				this.#document,
-				calloutType.iconName,
-			));
-			quote.prepend(marker);
-		}
+		prepareReaderCookedCallouts(this.#document, root);
 	}
 
 	#prepareCodeBlocks(root: HTMLElement): void {
@@ -638,17 +661,13 @@ implements ReaderTopicPostFeature<TPost> {
 		toggle: HTMLButtonElement,
 		expanded: boolean,
 	): void {
-		body.hidden = !expanded;
-		quote.classList.toggle('ldp-callout--collapsed', !expanded);
-		toggle.setAttribute('aria-expanded', String(expanded));
-		toggle.setAttribute(
-			'aria-label',
-			expanded ? '收起提示内容' : '展开提示内容',
-		);
-		toggle.replaceChildren(createReaderIcon(
+		setReaderCookedCalloutExpanded(
 			this.#document,
-			expanded ? 'chevron-up' : 'chevron-down',
-		));
+			quote,
+			body,
+			toggle,
+			expanded,
+		);
 	}
 
 	#toggleCodeBlock(block: HTMLElement): void {

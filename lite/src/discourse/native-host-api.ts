@@ -742,7 +742,8 @@ export function discourseNativeUserActionBinding(
 	const user = createRecord.call(
 		store,
 		'user',
-		Object.freeze({ username }),
+		/* Ember Data 会在 createRecord 期间向属性袋补入 store 等内部字段。 */
+		{ username },
 	);
 	const actingUser = host.lookup('service:current-user');
 	if (!objectRecord(user) || !objectRecord(actingUser)) {

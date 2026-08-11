@@ -9,6 +9,8 @@ export interface ResponseCachePolicy {
 	readonly freshForMs: number;
 	readonly retainForMs: number;
 	readonly persist: boolean;
+	/** 仅供用户明确保留的本地存档；不会按时间或自动容量清理。 */
+	readonly permanent?: boolean;
 }
 
 export interface ResponseCacheEntry<T = unknown> {
@@ -20,6 +22,7 @@ export interface ResponseCacheEntry<T = unknown> {
 	readonly expiresAt: number;
 	readonly bytes: number;
 	readonly value: T;
+	readonly permanent?: true;
 }
 
 export interface ResponseCacheInvalidation {
@@ -61,7 +64,7 @@ export class ResponseCacheInvalidationError extends AggregateError {
 export type ResponseCacheRecord = Readonly<
 	Pick<
 		ResponseCacheEntry,
-		'id' | 'kind' | 'tags' | 'storedAt' | 'expiresAt' | 'bytes'
+		'id' | 'kind' | 'tags' | 'storedAt' | 'expiresAt' | 'bytes' | 'permanent'
 	>
 >;
 
@@ -228,9 +231,10 @@ function normalizePolicy(policy: ResponseCachePolicy): ResponseCachePolicy {
 			[...new Set(policy.tags.map(String).map((tag) => tag.trim()).filter(Boolean))].sort(),
 		),
 		freshForMs,
-		retainForMs,
-		persist: policy.persist,
-	});
+			retainForMs,
+			persist: policy.persist,
+			...(policy.permanent === true ? { permanent: true } : {}),
+		});
 }
 
 function defaultEstimateBytes(value: unknown): number {
@@ -335,8 +339,47 @@ export class ResponseRepository {
 			return Object.freeze({ state: 'miss' });
 		}
 		const age = Math.max(0, this.#now() - entry.storedAt);
-		if (age > policy.retainForMs || entry.expiresAt <= this.#now()) {
+		if (
+			entry.permanent !== true &&
+			(age > policy.retainForMs || entry.expiresAt <= this.#now())
+		) {
 			await this.#invalidateWithReport({ ids: [policy.id] }, true);
+			return Object.freeze({ state: 'miss' });
+		}
+		return Object.freeze({
+			state: age <= policy.freshForMs ? 'fresh' : 'stale',
+			value: entry.value as T,
+			storedAt: entry.storedAt,
+		});
+	}
+
+	/**
+	 * 只从持久层读取，不接受当前标签页的 memory LRU 回退。
+	 *
+	 * 下载存档等用户明确保留的数据必须用它确认 IndexedDB 已真正提交；
+	 * 普通响应仍使用 read() 的容错路径，持久层故障不会扩大成正文请求失败。
+	 */
+	async readPersistent<T>(
+		rawPolicy: ResponseCachePolicy,
+	): Promise<ResponseCacheRead<T>> {
+		const policy = normalizePolicy(rawPolicy);
+		const pending = this.#writes.get(policy.id);
+		if (pending) await pending;
+		let entry: ResponseCacheEntry | null;
+		try {
+			entry = await this.#store.read(policy.id);
+		} catch (error) {
+			this.#onPersistenceError(error);
+			throw error;
+		}
+		if (!entry || !this.#validEntry(entry, policy)) {
+			return Object.freeze({ state: 'miss' });
+		}
+		const age = Math.max(0, this.#now() - entry.storedAt);
+		if (
+			entry.permanent !== true &&
+			(age > policy.retainForMs || entry.expiresAt <= this.#now())
+		) {
 			return Object.freeze({ state: 'miss' });
 		}
 		return Object.freeze({
@@ -444,9 +487,12 @@ export class ResponseRepository {
 			kind: policy.kind,
 			tags: policy.tags,
 			storedAt,
-			expiresAt: storedAt + policy.retainForMs,
+			expiresAt: policy.permanent === true
+				? Number.MAX_SAFE_INTEGER
+				: storedAt + policy.retainForMs,
 			bytes: Math.max(0, this.#estimateBytes(value)),
 			value,
+			...(policy.permanent === true ? { permanent: true as const } : {}),
 		});
 		this.#remember(entry);
 		if (!policy.persist) return;
@@ -470,7 +516,13 @@ export class ResponseRepository {
 	): Promise<void> {
 		const policy = normalizePolicy(rawPolicy);
 		const storedAt = Math.max(0, Math.floor(storedAtValue));
-		if (!Number.isSafeInteger(storedAt) || storedAt + policy.retainForMs <= this.#now()) {
+		if (
+			!Number.isSafeInteger(storedAt) ||
+			(
+				policy.permanent !== true &&
+				storedAt + policy.retainForMs <= this.#now()
+			)
+		) {
 			return;
 		}
 		const current = await this.read<T>(policy);
@@ -481,9 +533,12 @@ export class ResponseRepository {
 			kind: policy.kind,
 			tags: policy.tags,
 			storedAt,
-			expiresAt: storedAt + policy.retainForMs,
+			expiresAt: policy.permanent === true
+				? Number.MAX_SAFE_INTEGER
+				: storedAt + policy.retainForMs,
 			bytes: Math.max(0, this.#estimateBytes(value)),
 			value,
+			...(policy.permanent === true ? { permanent: true as const } : {}),
 		});
 		this.#remember(entry);
 		if (!policy.persist) return;
@@ -519,10 +574,13 @@ export class ResponseRepository {
 			expiresAt: 0,
 			bytes: Math.max(0, this.#estimateBytes(localValue)),
 			value: localValue,
+			...(policy.permanent === true ? { permanent: true as const } : {}),
 		});
 		committed = Object.freeze({
 			...committed,
-			expiresAt: committed.storedAt + policy.retainForMs,
+			expiresAt: policy.permanent === true
+				? Number.MAX_SAFE_INTEGER
+				: committed.storedAt + policy.retainForMs,
 		});
 		this.#remember(committed);
 		if (!policy.persist) return committed.value;
@@ -549,9 +607,14 @@ export class ResponseRepository {
 								kind: policy.kind,
 								tags: policy.tags,
 								storedAt,
-								expiresAt: storedAt + policy.retainForMs,
+								expiresAt: policy.permanent === true
+									? Number.MAX_SAFE_INTEGER
+									: storedAt + policy.retainForMs,
 								bytes: Math.max(0, this.#estimateBytes(value)),
 								value,
+								...(policy.permanent === true
+									? { permanent: true as const }
+									: {}),
 							});
 						},
 					);
@@ -671,7 +734,8 @@ export class ResponseRepository {
 				tags: entry.tags,
 				storedAt: entry.storedAt,
 				expiresAt: entry.expiresAt,
-				bytes: entry.bytes,
+					bytes: entry.bytes,
+					...(entry.permanent === true ? { permanent: true as const } : {}),
 			}));
 		}
 		return Object.freeze([...records.values()]);
@@ -698,13 +762,16 @@ export class ResponseRepository {
 			if (
 				entry.schemaVersion !== 1 ||
 				!matchesInvalidation(entry, query) ||
-				!Number.isFinite(entry.expiresAt) ||
-				entry.expiresAt <= now
+					!Number.isFinite(entry.expiresAt) ||
+					(entry.permanent !== true && entry.expiresAt <= now)
 			) continue;
 			entries.set(entry.id, entry);
 		}
 		for (const entry of this.#memory.values()) {
-			if (!matchesInvalidation(entry, query) || entry.expiresAt <= now) continue;
+			if (
+				!matchesInvalidation(entry, query) ||
+				(entry.permanent !== true && entry.expiresAt <= now)
+			) continue;
 			entries.set(entry.id, entry);
 		}
 		return Object.freeze([...entries.values()]
@@ -731,6 +798,7 @@ export class ResponseRepository {
 			entry.expiresAt >= entry.storedAt &&
 			Number.isFinite(entry.bytes) &&
 			entry.bytes >= 0 &&
+			(entry.permanent === true) === (policy.permanent === true) &&
 			tags !== null &&
 			tags.length === policy.tags.length &&
 			tags.every((tag, index) => tag === policy.tags[index])
@@ -874,6 +942,9 @@ export class ResponseRepository {
 
 	#remember(entry: ResponseCacheEntry): void {
 		this.#memory.delete(entry.id);
+		if (entry.permanent === true && entry.bytes > this.#maxMemoryBytes) {
+			return;
+		}
 		this.#memory.set(entry.id, entry);
 		let bytes = 0;
 		for (const value of this.#memory.values()) bytes += value.bytes;
@@ -881,10 +952,16 @@ export class ResponseRepository {
 			this.#memory.size > this.#maxMemoryEntries ||
 			(bytes > this.#maxMemoryBytes && this.#memory.size > 1)
 		) {
-			const oldestId = this.#memory.keys().next().value;
-			if (oldestId === undefined) break;
-			const oldest = this.#memory.get(oldestId);
-			this.#memory.delete(oldestId);
+			let evictedId: string | undefined;
+			for (const [id, value] of this.#memory) {
+				if (value.permanent !== true) continue;
+				evictedId = id;
+				break;
+			}
+			evictedId ??= this.#memory.keys().next().value;
+			if (evictedId === undefined) break;
+			const oldest = this.#memory.get(evictedId);
+			this.#memory.delete(evictedId);
 			bytes -= oldest?.bytes ?? 0;
 		}
 	}

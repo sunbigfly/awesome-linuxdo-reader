@@ -170,7 +170,7 @@ export interface ReaderPreferences {
 	readonly topicActionRailVisible: boolean;
 	readonly topicActionRailFixed: boolean;
 	readonly topicActionRailMode: 'collapsed' | 'compact';
-	readonly topicActionRailPosition: ReaderTopicActionRailPosition;
+	readonly topicActionRailPositions: ReaderTopicActionRailPositions;
 	readonly expandNestedRepliesByDefault: boolean;
 	readonly expandLeafNestedReplies: boolean;
 	readonly aggregateDescendantReplies: boolean;
@@ -191,6 +191,12 @@ export interface ReaderPreferences {
 export interface ReaderTopicActionRailPosition {
 	readonly x: 'left' | 'right' | number;
 	readonly y: number;
+}
+
+export interface ReaderTopicActionRailPositions {
+	readonly floating: ReaderTopicActionRailPosition;
+	readonly fullpage: ReaderTopicActionRailPosition;
+	readonly embedded: ReaderTopicActionRailPosition;
 }
 
 type BookmarkTabType = 'Reaction' | 'Topic' | 'Post';
@@ -562,6 +568,25 @@ function normalizeTopicActionRailPosition(
 		y: Number.isFinite(numericY)
 			? Math.max(0, Math.min(1, numericY))
 			: 0.95,
+	});
+}
+
+function normalizeTopicActionRailPositions(
+	value: unknown,
+	legacyValue: unknown,
+): ReaderTopicActionRailPositions {
+	const source = plainRecord(value);
+	const legacy = normalizeTopicActionRailPosition(legacyValue);
+	return Object.freeze({
+		floating: Object.hasOwn(source, 'floating')
+			? normalizeTopicActionRailPosition(source.floating)
+			: legacy,
+		fullpage: Object.hasOwn(source, 'fullpage')
+			? normalizeTopicActionRailPosition(source.fullpage)
+			: legacy,
+		embedded: Object.hasOwn(source, 'embedded')
+			? normalizeTopicActionRailPosition(source.embedded)
+			: legacy,
 	});
 }
 
@@ -1316,7 +1341,11 @@ export function createReaderPreferencesDefaults(
 		topicActionRailVisible: true,
 		topicActionRailFixed: false,
 		topicActionRailMode: 'compact',
-		topicActionRailPosition: Object.freeze({ x: 'left', y: 0.95 }),
+		topicActionRailPositions: Object.freeze({
+			floating: Object.freeze({ x: 'left', y: 0.95 }),
+			fullpage: Object.freeze({ x: 'left', y: 0.95 }),
+			embedded: Object.freeze({ x: 'left', y: 0.95 }),
+		}),
 		expandNestedRepliesByDefault: true,
 		expandLeafNestedReplies: false,
 		aggregateDescendantReplies: true,
@@ -1520,8 +1549,11 @@ export function normalizeReaderPreferences(
 		topicActionRailMode: source.topicActionRailMode === 'collapsed'
 			? 'collapsed'
 			: 'compact',
-		topicActionRailPosition: normalizeTopicActionRailPosition(
-			source.topicActionRailPosition,
+		topicActionRailPositions: normalizeTopicActionRailPositions(
+			Object.hasOwn(value, 'topicActionRailPositions')
+				? source.topicActionRailPositions
+				: null,
+			value.topicActionRailPosition,
 		),
 		expandNestedRepliesByDefault,
 		expandLeafNestedReplies,

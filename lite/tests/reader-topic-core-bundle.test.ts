@@ -116,6 +116,7 @@ const topic: TestTopic = Object.freeze({
 		posts,
 	}),
 });
+let topicResponse = topic;
 const nativeCalls: Array<{
 	readonly path: string;
 	readonly options: Readonly<Record<string, unknown>>;
@@ -156,7 +157,9 @@ const host = {
 					});
 				}
 				return Promise.resolve(
-					path.startsWith('/t/10.json?') ? topic : Object.freeze({}),
+					path.startsWith('/t/10.json?')
+						? topicResponse
+						: Object.freeze({}),
 				);
 			},
 		};
@@ -184,6 +187,7 @@ const bundle = createReaderTopicCoreBundle<TestTopic, TestPost>({
 	responses,
 	authScope: 'account:test',
 	pageSize: 20,
+	liveTopicDelayMs: 0,
 	caches: {
 		topic: { freshForMs: 1_000, retainForMs: 60_000, persist: true },
 		posts: { freshForMs: 1_000, retainForMs: 60_000, persist: true },
@@ -288,3 +292,74 @@ assert(
 deactivate?.();
 assert(subscriptions.size === 0, 'Topic deactivate 必须退订全部原生 MessageBus 频道');
 scope.destroy();
+
+const restoredScope = new LifecycleScope();
+const restoredController = new AbortController();
+const restoredBundle = createReaderTopicCoreBundle<TestTopic, TestPost>({
+	topicId: discourseTopicId(10),
+	scope: restoredScope,
+	signal: restoredController.signal,
+	mount() {
+		return () => {};
+	},
+}, {
+	host,
+	gateway,
+	responses,
+	authScope: 'account:test',
+	pageSize: 20,
+	liveTopicDelayMs: 0,
+	refreshCachedInBackground: false,
+	caches: {
+		topic: { freshForMs: 1_000, retainForMs: 60_000, persist: true },
+		posts: { freshForMs: 1_000, retainForMs: 60_000, persist: true },
+		nested: { freshForMs: 1_000, retainForMs: 60_000, persist: true },
+		snapshot: { freshForMs: 1_000, retainForMs: 60_000 },
+	},
+	now: Date.now,
+});
+const topicRequestCount = (): number => nativeCalls.filter((call) =>
+	call.path.startsWith('/t/10.json?')).length;
+const beforeRestoreTopicRequests = topicRequestCount();
+await restoredBundle.session.init();
+assert(
+	restoredBundle.services.session.initializedFromCache &&
+		topicRequestCount() === beforeRestoreTopicRequests &&
+		restoredBundle.session.postByNumber(3) === undefined,
+	'历史恢复必须先采用完整本地快照，复现订阅前新回复尚未进入缓存的窗口：' +
+		JSON.stringify({
+			initializedFromCache:
+				restoredBundle.services.session.initializedFromCache,
+			beforeRestoreTopicRequests,
+			afterRestoreTopicRequests: topicRequestCount(),
+			post3: restoredBundle.session.postByNumber(3)?.id ?? null,
+		}),
+);
+const newPost: TestPost = Object.freeze({
+	id: 103,
+	topic_id: 10,
+	post_number: 3,
+	reply_to_post_number: 2,
+	username: 'late-reply',
+	cooked: '<p>loaded after history restore</p>',
+});
+topicResponse = Object.freeze({
+	...topic,
+	posts_count: 3,
+	post_stream: Object.freeze({
+		stream: Object.freeze([101, 102, 103]),
+		posts: Object.freeze([...posts, newPost]),
+	}),
+});
+const restoredDeactivate = restoredBundle.activate?.();
+await new Promise<void>((resolve) => setTimeout(resolve, 0));
+await restoredBundle.services.live.flush();
+assert(
+	topicRequestCount() === beforeRestoreTopicRequests + 1 &&
+		restoredBundle.session.postByNumber(3)?.id === 103 &&
+		restoredBundle.replies.topology.parentOf(3) === 2,
+	'历史缓存激活后必须先订阅再补偿刷新 Topic，把漏过的服务器回复提交回 canonical 缓存与回复树',
+);
+await restoredBundle.prepareClose?.('close');
+restoredDeactivate?.();
+restoredScope.destroy();

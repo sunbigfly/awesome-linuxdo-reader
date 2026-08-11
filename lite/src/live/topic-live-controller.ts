@@ -299,28 +299,37 @@ export class TopicLiveController<
 		const handler = (message: unknown): void => {
 			this.#handleMessage(message);
 		};
-		const subscriptions = [
-			{ channel: `/topic/${this.topicId}`, handler },
-			{ channel: `/topic/${this.topicId}/reactions`, handler },
-		];
-		const subscribed: typeof subscriptions = [];
+		const topicSubscription = {
+			channel: `/topic/${this.topicId}`,
+			handler,
+		};
 		try {
-			for (const subscription of subscriptions) {
-				this.#messageBus.subscribe(subscription.channel, subscription.handler);
-				subscribed.push(subscription);
-			}
+			this.#messageBus.subscribe(
+				topicSubscription.channel,
+				topicSubscription.handler,
+			);
 		} catch (error) {
-			for (const subscription of subscribed.reverse()) {
-				try {
-					this.#messageBus.unsubscribe(subscription.channel, subscription.handler);
-				} catch (cleanupError) {
-					this.#onError(cleanupError);
-				}
-			}
 			this.#onError(error);
 			return false;
 		}
-		this.#subscriptions.push(...subscriptions);
+		this.#subscriptions.push(topicSubscription);
+		const reactionSubscription = {
+			channel: `/topic/${this.topicId}/reactions`,
+			handler,
+		};
+		try {
+			this.#messageBus.subscribe(
+				reactionSubscription.channel,
+				reactionSubscription.handler,
+			);
+			this.#subscriptions.push(reactionSubscription);
+		} catch (error) {
+			/*
+			 * 插件专用 channel 是增强项；Discourse 同时会在标准 Topic channel
+			 * 发布 acted。增强订阅失败不得回滚主实时链。
+			 */
+			this.#onError(error);
+		}
 		this.#activationEpoch += 1;
 		this.#active = true;
 		return true;
@@ -346,6 +355,49 @@ export class TopicLiveController<
 			this.#fullRefreshTimer = 0;
 			this.#track(this.#refreshTopic(epoch));
 		}, this.#topicDelayMs);
+	}
+
+	/**
+	 * 宿主 app-event 已携带完整 Post model 时直接提交当前 canonical。
+	 * 这里只消费已加载楼层，不创建 stream、不发请求；缺少权威字段的 MessageBus
+	 * 事件继续沿既有单帖刷新路径处理。
+	 */
+	ingestPostDelta(value: unknown): boolean {
+		if (!this.#active || this.#closed) return false;
+		const ingest = this.#session.ingestPosts;
+		const delta = objectRecord(value);
+		const postId = tryDiscoursePostId(delta?.id);
+		if (!ingest || !delta || postId === null) return false;
+		const current = this.#session.postById(postId);
+		if (!current) return false;
+		const currentRecord = current as Readonly<Record<string, unknown>>;
+		const topicId = tryDiscourseTopicId(
+			delta.topic_id ?? currentRecord.topic_id,
+		);
+		if (topicId !== this.topicId) return false;
+		const next = Object.freeze({
+			...currentRecord,
+			...delta,
+		}) as unknown as TPost;
+		try {
+			ingest.call(this.#session, [next], 'message-bus');
+			const canonical = this.#session.postById(postId) ?? next;
+			this.#emit(Object.freeze({
+				kind: 'post',
+				postId,
+				post: canonical,
+				created: false,
+				wasKnown: true,
+			}));
+			this.#track(this.#invalidate([
+				`topic:${this.topicId}`,
+				`post:${postId}`,
+			]));
+			return true;
+		} catch (error) {
+			this.#onError(error);
+			return false;
+		}
 	}
 
 	async flush(): Promise<void> {

@@ -757,18 +757,36 @@ html.ldp-reader-workspace .link-top-line [data-ldp-native-dnd] {
   transform: none;
 }
 
+html.ldp-reader-workspace .link-top-line [data-ldp-owned-native-dnd] {
+  opacity: 0;
+  border-color: transparent !important;
+  background: transparent !important;
+  color: transparent !important;
+  cursor: pointer;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+html.ldp-reader-workspace .link-top-line [data-ldp-owned-native-dnd]:focus-visible {
+  opacity: 1;
+}
+
 html.ldp-reader-workspace :is(
   tr.topic-list-item,
   .topic-list-item,
   .latest-topic-list-item
 ):hover .link-top-line [data-ldp-native-dnd] {
+  visibility: visible !important;
+  opacity: 1 !important;
   border-color: transparent !important;
   background: transparent !important;
   color: transparent !important;
+  pointer-events: auto !important;
   box-shadow: none !important;
   text-shadow: none !important;
 }
 
+html.ldp-reader-workspace .link-top-line [data-ldp-owned-native-dnd]::before,
 html.ldp-reader-workspace :is(
   tr.topic-list-item,
   .topic-list-item,

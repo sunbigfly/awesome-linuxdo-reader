@@ -1,5 +1,6 @@
 import {
 	ReaderWebDavClient,
+	type ReaderWebDavRequestResponse,
 	type ReaderWebDavRequestOptions,
 } from '../src/sync/reader-webdav-client.js';
 import {
@@ -73,6 +74,8 @@ class MemoryWebDavServer {
 	text: string | null = null;
 	version = 0;
 	failRead = false;
+	conflictsRemaining = 0;
+	cachedRead: ReaderWebDavRequestResponse | null = null;
 	readonly requests: ReaderWebDavRequestOptions[] = [];
 
 	request = (options: ReaderWebDavRequestOptions): { abort(): void } => {
@@ -91,15 +94,26 @@ class MemoryWebDavServer {
 					options.onload({ status: 503 });
 					return;
 				}
-				if (this.text === null) {
-					options.onload({ status: 404 });
+				const bypassCache = options.headers['Cache-Control'] === 'no-cache' &&
+					options.headers.Pragma === 'no-cache';
+				if (!bypassCache && this.cachedRead) {
+					options.onload(this.cachedRead);
 					return;
 				}
-				options.onload({
-					status: 200,
-					responseText: this.text,
-					responseHeaders: `ETag: "v${this.version}"`,
-				});
+				this.cachedRead = this.text === null
+					? Object.freeze({ status: 404 })
+					: Object.freeze({
+						status: 200,
+						responseText: this.text,
+						responseHeaders: `ETag: "v${this.version}"`,
+					});
+				options.onload(this.cachedRead);
+				return;
+			}
+			if (this.conflictsRemaining > 0) {
+				this.conflictsRemaining -= 1;
+				this.version += 1;
+				options.onload({ status: 412 });
 				return;
 			}
 			const expected = this.text === null
@@ -120,12 +134,15 @@ class MemoryWebDavServer {
 	};
 }
 
-function queueRecords(ids: readonly number[]): readonly ReaderWebDavLocalRecord[] {
+function queueRecords(
+	ids: readonly number[],
+	titleSuffix = '',
+): readonly ReaderWebDavLocalRecord[] {
 	return Object.freeze(ids.map((topicId) => Object.freeze({
 		id: String(topicId),
 		value: Object.freeze({
 			topicId,
-			title: `Topic ${topicId}`,
+			title: `Topic ${topicId}${titleSuffix}`,
 			href: `/t/${topicId}`,
 			addedAt: 1_000 + topicId,
 			pinned: false,
@@ -175,6 +192,7 @@ const stateA = { records: queueRecords([1, 2, 3, 4]), applies: 0 };
 const stateB = { records: queueRecords([]), applies: 0 };
 const repositoryA = await repository('device-a');
 const repositoryB = await repository('device-b');
+const retryDelays: number[] = [];
 const coordinatorA = new ReaderWebDavCoordinator({
 	client,
 	repository: repositoryA,
@@ -185,6 +203,9 @@ const coordinatorA = new ReaderWebDavCoordinator({
 		let now = 10_000;
 		return () => ++now;
 	})(),
+	retryDelay: async (milliseconds) => {
+		retryDelays.push(milliseconds);
+	},
 });
 const coordinatorB = new ReaderWebDavCoordinator({
 	client,
@@ -218,6 +239,30 @@ assert(
 	'WebDAV 凭据不得进入远端文档、URL 或显式请求头',
 );
 
+const putsAfterCreate = server.requests.filter((request) =>
+	request.method === 'PUT').length;
+const repeat = await coordinatorA.syncNow();
+assert(
+	repeat.uploaded === 0 &&
+	server.requests.filter((request) => request.method === 'PUT').length ===
+		putsAfterCreate &&
+	server.requests.filter((request) => request.method === 'GET').every((request) =>
+		request.headers['Cache-Control'] === 'no-cache' &&
+		request.headers.Pragma === 'no-cache'),
+	'首次创建后立即再次同步必须绕过旧 GET/404 缓存，并在无变化时跳过 PUT',
+);
+
+stateA.records = queueRecords([1, 2, 3, 4], ' updated');
+server.conflictsRemaining = 2;
+const recoveredConflict = await coordinatorA.syncNow();
+assert(
+	recoveredConflict.uploaded === 4 &&
+	retryDelays.join(',') === '250,750',
+	`远端版本瞬时变化时必须退避后重新读取并成功写入：uploaded=${
+		recoveredConflict.uploaded
+	}, delays=${retryDelays.join(',')}`,
+);
+
 const download = await coordinatorB.syncNow();
 assert(
 	download.imported === 4 &&
@@ -239,6 +284,20 @@ assert(
 
 stateA.records = queueRecords([9]);
 const applyCountBeforeFailure = stateA.applies;
+server.conflictsRemaining = 3;
+let persistentConflictMessage = '';
+try {
+	await coordinatorA.syncNow();
+} catch (cause) {
+	persistentConflictMessage = cause instanceof Error ? cause.message : '';
+}
+assert(
+	persistentConflictMessage.includes('远端版本持续变化') &&
+	persistentConflictMessage.includes('其他标签页或设备') &&
+	stateA.records[0]?.id === '9' &&
+	stateA.applies === applyCountBeforeFailure,
+	'重试耗尽必须说明可能的并发来源并保留本机数据，不能断言另一设备已更新',
+);
 server.failRead = true;
 let failed = false;
 try {

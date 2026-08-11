@@ -69,7 +69,7 @@ assert(
 		await repository.allows('linux.do') &&
 		await repository.allows('forum.example.com') &&
 		!await repository.allows('unknown.example'),
-	'仓储必须去重、过滤内置/不安全值，并为启动 gate 提供同一允许判断',
+	'仓储必须去重、过滤内置/不安全值，并为已验证站点兜底提供同一判断',
 );
 await repository.add('another.example');
 assert(
@@ -192,7 +192,7 @@ await new Promise<void>((resolve) => setTimeout(resolve, 0));
 assert(
 	!uiRepository.snapshot.length &&
 		!host.querySelector('[data-custom-site-remove]'),
-	'设置面板移除动作必须同步共享 host gate snapshot，不能只删视觉标签',
+	'设置面板移除动作必须同步已验证站点兜底 snapshot，不能只删视觉标签',
 );
 form.destroy();
 assert(

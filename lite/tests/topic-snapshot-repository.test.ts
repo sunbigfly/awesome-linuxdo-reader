@@ -388,7 +388,13 @@ delayedRead.resolve({
 	value: cachedSnapshot,
 });
 const raceRestore = await pendingRestore;
-assert(raceRestore?.addedPostNumbers.join(',') === '1,3', '缓存只能补齐未知楼层');
+assert(
+	raceRestore?.addedPostNumbers.join(',') === '1,3',
+	`缓存只能补齐未知楼层：${JSON.stringify({
+		added: raceRestore?.addedPostNumbers,
+		posts: raceTopics.posts().map((post) => post.post_number),
+	})}`,
+);
 assert(raceTopics.post(2)?.cooked === 'live', '旧缓存不得覆盖恢复期间到达的实时正文');
 
 const treeRestore = raceTrees.restore();
@@ -659,3 +665,216 @@ await malformedRemovalTopics.restore();
 assert(malformedRemovalTopics.post(2) === undefined, '冲突墓碑必须保持保守删除状态');
 assert(malformedRemovalTopics.streamPostIds().length === 0, '冲突墓碑必须过滤双方 post.id');
 assert(malformedRemovalDiagnostics === 1, '墓碑 post.id 冲突必须留下一个诊断');
+
+let archiveClock = 1_000;
+const archiveStore = new MemoryStore();
+const archiveResponses = () => new ResponseRepository({
+	store: archiveStore,
+	maxMemoryEntries: 8,
+	maxMemoryBytes: 100_000,
+	now: () => archiveClock,
+});
+const archiveTopics = new TopicSnapshotRepository<TestTopic, TestPost>({
+	responseRepository: archiveResponses(),
+	topicId: 90,
+	authScope: 'account:archive',
+	freshForMs: 10,
+	retainForMs: 20,
+	now: () => archiveClock,
+});
+archiveTopics.ingest({
+	source: 'topic-json',
+	observedAt: 100,
+	expectedPostCount: 2,
+	topic: { title: 'archived topic' },
+	streamPostIds: [901, 902],
+	posts: [
+		{
+			id: 901,
+			post_number: 1,
+			reply_to_post_number: null,
+			cooked: 'cached root',
+		},
+		{
+			id: 902,
+			post_number: 2,
+			reply_to_post_number: 1,
+			cooked: 'cached reply',
+		},
+	],
+});
+assert(
+	archiveTopics.markTopicUnavailable(404, archiveClock) &&
+		archiveTopics.markPostUnavailable(2, 410, archiveClock),
+	'只有已有 Topic/楼层正文才能进入本地永久存档',
+);
+await archiveTopics.flush();
+const archiveEntry = archiveStore.entries.get(
+	'account:archive|snapshot:topic-archive:90',
+);
+assert(
+	archiveEntry?.permanent === true &&
+		archiveEntry.expiresAt === Number.MAX_SAFE_INTEGER,
+	'404 Topic 快照必须切换到独立永久 policy，不能继续受普通缓存期限约束',
+);
+
+let invalidArchiveTreeCount = 0;
+const invalidArchiveId = 'account:archive|snapshot:topic-archive:91';
+const archivedSnapshot = archiveEntry!.value as StoredTopicSnapshot<TestTopic, TestPost>;
+archiveStore.entries.set(invalidArchiveId, Object.freeze({
+	...archiveEntry!,
+	id: invalidArchiveId,
+	tags: Object.freeze(['topic-local-archive', 'topic:91']),
+	value: Object.freeze({
+		...archivedSnapshot,
+		topicId: '91',
+		tree: Object.freeze({ schemaVersion: 2, topicId: '91' }),
+	}),
+}));
+const invalidArchive = new TopicSnapshotRepository<TestTopic, TestPost>({
+	responseRepository: archiveResponses(),
+	topicId: 91,
+	authScope: 'account:archive',
+	freshForMs: 10,
+	retainForMs: 20,
+	now: () => archiveClock,
+	onInvalidTreeSnapshot: () => {
+		invalidArchiveTreeCount += 1;
+	},
+});
+await invalidArchive.restore();
+await invalidArchive.flush();
+const healedArchive = new TopicSnapshotRepository<TestTopic, TestPost>({
+	responseRepository: archiveResponses(),
+	topicId: 91,
+	authScope: 'account:archive',
+	freshForMs: 10,
+	retainForMs: 20,
+	now: () => archiveClock,
+	onInvalidTreeSnapshot: () => {
+		invalidArchiveTreeCount += 1;
+	},
+});
+const healedArchiveRestore = await healedArchive.restore();
+assert(
+	invalidArchiveTreeCount === 1 &&
+		healedArchiveRestore?.snapshot.tree === null &&
+		archiveStore.entries.get(invalidArchiveId)?.permanent === true,
+	'永久快照坏树必须失效并一次净化同一 archive policy，不能误删普通 policy 后重复诊断',
+);
+
+const staleArchiveId = 'account:archive|snapshot:topic-archive:92';
+const recoveredRegularId = 'account:archive|snapshot:topic:92';
+const staleArchiveSnapshot = Object.freeze({
+	...archivedSnapshot,
+	topicId: '92',
+	updatedAt: 1_000,
+	topic: Object.freeze({ title: 'stale archived topic' }),
+	unavailableTopic: Object.freeze({ status: 404 as const, confirmedAt: 1_000 }),
+	unavailablePosts: Object.freeze([]),
+});
+const recoveredRegularSnapshot = Object.freeze({
+	...staleArchiveSnapshot,
+	updatedAt: 1_100,
+	topicObservedAt: 1_100,
+	topic: Object.freeze({ title: 'recovered regular topic' }),
+	posts: Object.freeze(staleArchiveSnapshot.posts.map((entry) => Object.freeze({
+		...entry,
+		observedAt: 1_100,
+		source: 'target-refresh' as const,
+	}))),
+	unavailableTopic: null,
+	unavailablePosts: Object.freeze([]),
+});
+archiveStore.entries.set(staleArchiveId, Object.freeze({
+	...archiveEntry!,
+	id: staleArchiveId,
+	tags: Object.freeze(['topic-local-archive', 'topic:92']),
+	storedAt: 1_000,
+	value: staleArchiveSnapshot,
+}));
+const { permanent: _archivePermanent, ...regularEntryBase } = archiveEntry!;
+archiveStore.entries.set(recoveredRegularId, Object.freeze({
+	...regularEntryBase,
+	id: recoveredRegularId,
+	tags: Object.freeze(['topic:92']),
+	storedAt: 1_100,
+	expiresAt: 1_120,
+	value: recoveredRegularSnapshot,
+}));
+archiveClock = 1_100;
+const recoveredRegular = new TopicSnapshotRepository<TestTopic, TestPost>({
+	responseRepository: archiveResponses(),
+	topicId: 92,
+	authScope: 'account:archive',
+	freshForMs: 10,
+	retainForMs: 20,
+	now: () => archiveClock,
+});
+await recoveredRegular.restore();
+assert(
+	recoveredRegular.topic()?.title === 'recovered regular topic' &&
+		!recoveredRegular.hasLocalArchive() &&
+		!archiveStore.entries.has(staleArchiveId) &&
+		archiveStore.entries.has(recoveredRegularId),
+	'残留的旧永久存档不得压住更新的普通快照，也不得让冷启错误跳过后续刷新',
+);
+
+archiveClock = 1_000_000;
+const archiveCold = new TopicSnapshotRepository<TestTopic, TestPost>({
+	responseRepository: archiveResponses(),
+	topicId: 90,
+	authScope: 'account:archive',
+	freshForMs: 10,
+	retainForMs: 20,
+	now: () => archiveClock,
+});
+await archiveCold.restore();
+assert(
+	archiveCold.topic()?.title === 'archived topic' &&
+		archiveCold.post(2)?.cooked === 'cached reply' &&
+		archiveCold.localArchiveState().topic?.status === 404 &&
+		archiveCold.localArchiveState().posts[0]?.status === 410 &&
+		archiveCold.isFresh(),
+	'超过普通缓存期限冷启后仍必须恢复 Topic 全文、楼层引用和失效标记',
+);
+
+archiveClock += 1;
+archiveCold.ingest({
+	source: 'target-refresh',
+	observedAt: archiveClock,
+	topic: { title: 'restored topic' },
+	posts: [
+		{
+			id: 901,
+			post_number: 1,
+			reply_to_post_number: null,
+			cooked: 'restored root',
+		},
+		{
+			id: 902,
+			post_number: 2,
+			reply_to_post_number: 1,
+			cooked: 'restored reply',
+		},
+	],
+});
+await archiveCold.flush();
+assert(
+	!archiveCold.hasLocalArchive() &&
+		!archiveStore.entries.has('account:archive|snapshot:topic-archive:90') &&
+		archiveStore.entries.has('account:archive|snapshot:topic:90'),
+	'更新鲜的权威 Topic/楼层响应必须退出存档状态并恢复普通缓存 policy',
+);
+
+archiveClock += 1;
+archiveCold.markPostUnavailable(2, 404, archiveClock);
+await archiveCold.flush();
+archiveClock += 1;
+archiveCold.removePost(2, 902, 'action-response', archiveClock);
+await archiveCold.flush();
+assert(
+	archiveCold.localArchiveState().posts.length === 0 &&
+		!archiveStore.entries.has('account:archive|snapshot:topic-archive:90'),
+	'权威删除楼层时必须同步删除对应的本地引用标记，不能留下空永久存档',
+);

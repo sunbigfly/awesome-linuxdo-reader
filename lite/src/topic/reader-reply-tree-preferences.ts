@@ -36,6 +36,8 @@ export interface ReaderReplyTreePreferencesPreviewPort {
 }
 
 export interface ReaderReplyTreePresentationTopology {
+	readonly postFilterKey: string | null;
+	postFilterMatches(postNumber: PostNumber): boolean;
 	parentOf(postNumber: PostNumber): PostNumber | null | undefined;
 	childrenOf(postNumber: PostNumber): readonly PostNumber[];
 	hiddenDirectChildrenOf(postNumber: PostNumber): readonly PostNumber[];
@@ -49,6 +51,10 @@ export interface ReaderReplyTreePresentationTopology {
 
 export interface ReaderReplyTreePostFilter {
 	readonly key: string;
+	/** 已命中楼层的后代再次命中时，只保留较高的那个入口。 */
+	readonly hideDescendantMatches?: boolean;
+	/** 遇到该祖先即停止去重；楼主 #1 不应吞掉全帖楼主回复。 */
+	readonly ancestorBoundaryPostNumber?: PostNumber;
 	matches(postNumber: PostNumber): boolean;
 }
 
@@ -168,6 +174,8 @@ implements ReaderReplyTreePresentationTopology {
 	readonly #canonicalCoverageComplete: () => boolean;
 	readonly #revealedFloors = new Set<PostNumber>();
 	readonly #revealedParents = new Set<PostNumber>();
+	readonly #degradedFloorRoots = new Set<PostNumber>();
+	#degradedFloorCanonicalRevision = -1;
 	#postFilter: ReaderReplyTreePostFilter | null = null;
 	#projectionRevision = 0;
 	#cachedCanonicalRevision = -1;
@@ -200,6 +208,14 @@ implements ReaderReplyTreePresentationTopology {
 		return `${this.#activeCanonicalRevision()}:` +
 			`${Number(this.#activeCanonicalCoverageComplete())}:` +
 			`${this.#projectionRevision}`;
+	}
+
+	get postFilterKey(): string | null {
+		return this.#postFilter?.key ?? null;
+	}
+
+	postFilterMatches(postNumber: PostNumber): boolean {
+		return this.#postFilter?.matches(postNumber) ?? true;
 	}
 
 	/**
@@ -246,6 +262,8 @@ implements ReaderReplyTreePresentationTopology {
 			this.#preferences = next;
 			this.#revealedFloors.clear();
 			this.#revealedParents.clear();
+			this.#degradedFloorRoots.clear();
+			this.#degradedFloorCanonicalRevision = -1;
 			this.#projectionRevision += 1;
 		}
 		return changed;
@@ -258,6 +276,8 @@ implements ReaderReplyTreePresentationTopology {
 		this.#postFilter = filter;
 		this.#revealedFloors.clear();
 		this.#revealedParents.clear();
+		this.#degradedFloorRoots.clear();
+		this.#degradedFloorCanonicalRevision = -1;
 		this.#projectionRevision += 1;
 		return true;
 	}
@@ -277,15 +297,73 @@ implements ReaderReplyTreePresentationTopology {
 		return true;
 	}
 
+	/**
+	 * canonical 父链在某个不可读楼层处断开时，把最高可用祖先投影成临时根，并沿已确认
+	 * 的真实 parent 关系揭示到目标。只修改短生命周期显示投影，不伪造 canonical 关系。
+	 */
+	revealDegradedBranch(
+		rootPostNumber: PostNumber,
+		targetPostNumber: PostNumber,
+	): boolean {
+		const canonical = this.#activeCanonical();
+		if (
+			!canonical.has(rootPostNumber) ||
+			!canonical.has(targetPostNumber) ||
+			canonical.depthOf(rootPostNumber) !== undefined
+		) {
+			return false;
+		}
+		const parents: PostNumber[] = [];
+		const seen = new Set<PostNumber>([targetPostNumber]);
+		let current = targetPostNumber;
+		while (current !== rootPostNumber) {
+			const parent = canonical.parentOf(current);
+			if (parent === undefined || parent === null || seen.has(parent)) {
+				return false;
+			}
+			parents.push(parent);
+			seen.add(parent);
+			current = parent;
+		}
+		let changed = false;
+		if (!this.#degradedFloorRoots.has(rootPostNumber)) {
+			this.#degradedFloorRoots.add(rootPostNumber);
+			changed = true;
+		}
+		if (!this.#revealedFloors.has(rootPostNumber)) {
+			this.#revealedFloors.add(rootPostNumber);
+			changed = true;
+		}
+		for (const parent of parents) {
+			if (parent === targetPostNumber || this.#revealedParents.has(parent)) {
+				continue;
+			}
+			this.#revealedParents.add(parent);
+			changed = true;
+		}
+		this.#degradedFloorCanonicalRevision = this.#activeCanonicalRevision();
+		if (changed) this.#projectionRevision += 1;
+		return changed;
+	}
+
 	parentOf(postNumber: PostNumber): PostNumber | null | undefined {
 		const canonical = this.#activeCanonical();
 		const canonicalDepth = canonical.depthOf(postNumber);
-		if (canonicalDepth === undefined) return undefined;
-		if (this.#isRevealedFloor(postNumber, canonicalDepth)) return null;
+		const degradedPath = this.#degradedFloorPath(postNumber, canonical);
+		const projectedDepth = degradedPath?.depth ?? canonicalDepth;
+		if (projectedDepth === undefined) {
+			return this.#postFilter && this.#matchesPostFilter(postNumber)
+				? null
+				: undefined;
+		}
+		if (
+			degradedPath?.depth === 0 ||
+			this.#isRevealedFloor(postNumber, canonicalDepth)
+		) return null;
 		if (!this.#matchesPostFilter(postNumber)) return undefined;
 		if (this.#postFilter) return null;
-		if (canonicalDepth === 0) return null;
-		if (this.#isInlineVisible(postNumber, canonicalDepth)) {
+		if (projectedDepth === 0) return null;
+		if (this.#isInlineVisible(postNumber, projectedDepth)) {
 			return canonical.parentOf(postNumber);
 		}
 		return this.#showAsFloor() ? null : undefined;
@@ -294,7 +372,7 @@ implements ReaderReplyTreePresentationTopology {
 	childrenOf(postNumber: PostNumber): readonly PostNumber[] {
 		const canonical = this.#activeCanonical();
 		if (this.#postFilter) return Object.freeze([]);
-		const parentDepth = canonical.depthOf(postNumber);
+		const parentDepth = this.#projectedDepth(postNumber, canonical);
 		if (
 			parentDepth === undefined ||
 			!this.#isInlineVisible(postNumber, parentDepth) ||
@@ -323,10 +401,10 @@ implements ReaderReplyTreePresentationTopology {
 	revealNextLevel(postNumber: PostNumber): boolean {
 		if (this.#postFilter) return false;
 		const canonical = this.#activeCanonical();
-		const canonicalDepth = canonical.depthOf(postNumber);
+		const projectedDepth = this.#projectedDepth(postNumber, canonical);
 		if (
-			canonicalDepth === undefined ||
-			!this.#isInlineVisible(postNumber, canonicalDepth) ||
+			projectedDepth === undefined ||
+			!this.#isInlineVisible(postNumber, projectedDepth) ||
 			this.#revealedParents.has(postNumber) ||
 			this.hiddenDirectChildrenOf(postNumber).length === 0
 		) return false;
@@ -342,13 +420,23 @@ implements ReaderReplyTreePresentationTopology {
 	}
 
 	depthOf(postNumber: PostNumber): number | undefined {
-		const canonicalDepth = this.#activeCanonical().depthOf(postNumber);
-		if (canonicalDepth === undefined) return undefined;
-		if (this.#isRevealedFloor(postNumber, canonicalDepth)) return 0;
+		const canonical = this.#activeCanonical();
+		const canonicalDepth = canonical.depthOf(postNumber);
+		const degradedPath = this.#degradedFloorPath(postNumber, canonical);
+		const projectedDepth = degradedPath?.depth ?? canonicalDepth;
+		if (projectedDepth === undefined) {
+			return this.#postFilter && this.#matchesPostFilter(postNumber)
+				? 0
+				: undefined;
+		}
+		if (
+			degradedPath?.depth === 0 ||
+			this.#isRevealedFloor(postNumber, canonicalDepth)
+		) return 0;
 		if (!this.#matchesPostFilter(postNumber)) return undefined;
 		if (this.#postFilter) return 0;
-		if (this.#isInlineVisible(postNumber, canonicalDepth)) {
-			return canonicalDepth;
+		if (this.#isInlineVisible(postNumber, projectedDepth)) {
+			return projectedDepth;
 		}
 		return this.#showAsFloor() ? 0 : undefined;
 	}
@@ -356,12 +444,21 @@ implements ReaderReplyTreePresentationTopology {
 	rootOf(postNumber: PostNumber): PostNumber | undefined {
 		const canonical = this.#activeCanonical();
 		const canonicalDepth = canonical.depthOf(postNumber);
-		if (canonicalDepth === undefined) return undefined;
-		if (this.#isRevealedFloor(postNumber, canonicalDepth)) return postNumber;
+		const degradedPath = this.#degradedFloorPath(postNumber, canonical);
+		const projectedDepth = degradedPath?.depth ?? canonicalDepth;
+		if (projectedDepth === undefined) {
+			return this.#postFilter && this.#matchesPostFilter(postNumber)
+				? postNumber
+				: undefined;
+		}
+		if (
+			degradedPath?.depth === 0 ||
+			this.#isRevealedFloor(postNumber, canonicalDepth)
+		) return postNumber;
 		if (!this.#matchesPostFilter(postNumber)) return undefined;
 		if (this.#postFilter) return postNumber;
-		if (this.#isInlineVisible(postNumber, canonicalDepth)) {
-			return canonical.rootOf(postNumber);
+		if (this.#isInlineVisible(postNumber, projectedDepth)) {
+			return degradedPath?.rootPostNumber ?? canonical.rootOf(postNumber);
 		}
 		return this.#showAsFloor() ? postNumber : undefined;
 	}
@@ -475,8 +572,59 @@ implements ReaderReplyTreePresentationTopology {
 			!this.#preferences.hideNestedReplyFloors;
 	}
 
-	#isRevealedFloor(postNumber: PostNumber, canonicalDepth: number): boolean {
+	#syncDegradedFloorRoots(canonical: ReplyTreeTopology): void {
+		const revision = this.#activeCanonicalRevision();
+		if (revision === this.#degradedFloorCanonicalRevision) return;
+		for (const rootPostNumber of [...this.#degradedFloorRoots]) {
+			if (canonical.depthOf(rootPostNumber) === undefined) continue;
+			this.#degradedFloorRoots.delete(rootPostNumber);
+			this.#revealedFloors.delete(rootPostNumber);
+		}
+		this.#degradedFloorCanonicalRevision = revision;
+	}
+
+	#degradedFloorPath(
+		postNumber: PostNumber,
+		canonical: ReplyTreeTopology,
+	): Readonly<{
+		readonly rootPostNumber: PostNumber;
+		readonly depth: number;
+	}> | undefined {
+		this.#syncDegradedFloorRoots(canonical);
+		if (!this.#degradedFloorRoots.size || !canonical.has(postNumber)) {
+			return undefined;
+		}
+		const seen = new Set<PostNumber>();
+		let current = postNumber;
+		let depth = 0;
+		while (!seen.has(current)) {
+			if (this.#degradedFloorRoots.has(current)) {
+				return Object.freeze({ rootPostNumber: current, depth });
+			}
+			seen.add(current);
+			const parent = canonical.parentOf(current);
+			if (parent === undefined || parent === null) return undefined;
+			current = parent;
+			depth += 1;
+		}
+		return undefined;
+	}
+
+	#projectedDepth(
+		postNumber: PostNumber,
+		canonical: ReplyTreeTopology,
+	): number | undefined {
+		return this.#degradedFloorPath(postNumber, canonical)?.depth ??
+			canonical.depthOf(postNumber);
+	}
+
+	#isRevealedFloor(
+		postNumber: PostNumber,
+		canonicalDepth: number | undefined,
+	): boolean {
+		if (this.#degradedFloorRoots.has(postNumber)) return true;
 		if (!this.#revealedFloors.has(postNumber)) return false;
+		if (canonicalDepth === undefined) return false;
 		if (
 			this.#postFilter &&
 			!this.#matchesPostFilter(postNumber)
@@ -486,20 +634,35 @@ implements ReaderReplyTreePresentationTopology {
 		return false;
 	}
 
-	#isInlineVisible(postNumber: PostNumber, canonicalDepth: number): boolean {
-		if (canonicalDepth <= inlineDepth(this.#preferences)) return true;
-		const parentPostNumber = this.#activeCanonical().parentOf(postNumber);
+	#isInlineVisible(postNumber: PostNumber, projectedDepth: number): boolean {
+		if (projectedDepth <= inlineDepth(this.#preferences)) return true;
+		const canonical = this.#activeCanonical();
+		const parentPostNumber = canonical.parentOf(postNumber);
 		if (
 			parentPostNumber === undefined ||
 			parentPostNumber === null ||
 			!this.#revealedParents.has(parentPostNumber)
 		) return false;
-		const parentDepth = this.#activeCanonical().depthOf(parentPostNumber);
+		const parentDepth = this.#projectedDepth(parentPostNumber, canonical);
 		return parentDepth !== undefined &&
 			this.#isInlineVisible(parentPostNumber, parentDepth);
 	}
 
 	#matchesPostFilter(postNumber: PostNumber): boolean {
-		return this.#postFilter?.matches(postNumber) ?? true;
+		const filter = this.#postFilter;
+		if (!filter) return true;
+		if (!filter.matches(postNumber)) return false;
+		if (!filter.hideDescendantMatches) return true;
+		const canonical = this.#activeCanonical();
+		const seen = new Set<PostNumber>([postNumber]);
+		let parent = canonical.parentOf(postNumber);
+		while (parent !== undefined && parent !== null && !seen.has(parent)) {
+			if (parent === filter.ancestorBoundaryPostNumber) return true;
+			if (filter.matches(parent)) return false;
+			seen.add(parent);
+			parent = canonical.parentOf(parent);
+		}
+		// 父链尚未补齐时保留楼层；关系提交后过滤投影会再次失效并重算。
+		return true;
 	}
 }

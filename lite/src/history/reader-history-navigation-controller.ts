@@ -23,6 +23,10 @@ export interface ReaderHistoryOpenResult {
 	readonly cause?: unknown;
 }
 
+export interface ReaderHistoryRestoreOptions {
+	readonly highlight?: boolean;
+}
+
 export interface ReaderHistoryNavigationPort {
 	activeTopicId(): number | null;
 	captureAnchor(): ReaderHistoryAnchorState | null;
@@ -30,6 +34,7 @@ export interface ReaderHistoryNavigationPort {
 	restoreAnchor(
 		topicId: DiscourseTopicId,
 		anchor: ReaderHistoryAnchorState,
+		options?: ReaderHistoryRestoreOptions,
 	): void | Promise<void>;
 }
 
@@ -244,6 +249,7 @@ export class ReaderHistoryNavigationController {
 	async restore(
 		topicIdValue: unknown,
 		value: unknown,
+		options: ReaderHistoryRestoreOptions = {},
 	): Promise<ReaderHistoryAnchorState> {
 		this.#assertActive();
 		const topicId = discourseTopicId(topicIdValue);
@@ -256,7 +262,7 @@ export class ReaderHistoryNavigationController {
 			throw new Error(`历史目标 Topic ${topicId} 未处于 active 状态`);
 		}
 		try {
-			await this.#port.restoreAnchor(topicId, anchor);
+			await this.#port.restoreAnchor(topicId, anchor, options);
 		} catch (cause) {
 			this.#onError(cause);
 			throw cause;

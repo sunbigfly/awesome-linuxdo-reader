@@ -439,6 +439,7 @@ const isolated = feature.open({
 		originalSrc: 'https://linux.do/user-avatar.png',
 		alt: '用户头像',
 	}],
+	commentsExpanded: true,
 	commentsEnabled: false,
 	includeTopicImages: false,
 	batchEnabled: false,
@@ -446,7 +447,13 @@ const isolated = feature.open({
 assert(
 	isolated.sequence.snapshot().items.length === 1 &&
 	isolated.sequence.snapshot().current.key === 'user:avatar' &&
+	isolated.sequence.snapshot().commentsExpanded &&
+	isolated.view.geometry.commentsWidthPercent === 36 &&
+	isolated.view.slots.root.style.getPropertyValue(
+		'--ldp-lb-comments-width-preferred',
+	) === '36%' &&
 	isolated.view.slots.comments.hidden &&
+	isolated.view.slots.root.classList.contains('ldp-lb-comments-collapsed') &&
 	isolated.batch === null &&
 	isolated.batchView === null &&
 	isolated.view.slots.root
@@ -454,7 +461,7 @@ assert(
 	isolated.view.slots.root
 		.querySelector<HTMLElement>('[data-lb-action="batch-download"]')?.hidden &&
 	Number(imageIndexLoads) === 1,
-	'用户媒体必须复用同一 Lightbox 生命周期，同时隔离帖子图片、评论补流与批量面板',
+	'独立媒体必须保留已持久化的评论宽度，但隐藏评论并强制收起几何，不让宽度影响导航定位',
 );
 feature.close();
 assert(

@@ -40,6 +40,22 @@ export interface StoredTopicPostRemoval {
 	readonly source: DiscourseIngestSource;
 }
 
+export type TopicLocalArchiveStatus = 403 | 404 | 410;
+
+export interface StoredTopicUnavailable {
+	readonly status: TopicLocalArchiveStatus;
+	readonly confirmedAt: number;
+}
+
+export interface StoredTopicPostUnavailable extends StoredTopicUnavailable {
+	readonly postNumber: PostNumber;
+}
+
+export interface TopicLocalArchiveState {
+	readonly topic: StoredTopicUnavailable | null;
+	readonly posts: readonly StoredTopicPostUnavailable[];
+}
+
 export interface StoredTopicSnapshot<
 	TTopic = unknown,
 	TPost extends ReplyTreePostInput = ReplyTreePostInput,
@@ -57,6 +73,8 @@ export interface StoredTopicSnapshot<
 	readonly streamPostIds: readonly DiscoursePostId[];
 	readonly posts: readonly StoredTopicPost<TPost>[];
 	readonly removedPosts?: readonly StoredTopicPostRemoval[];
+	readonly unavailableTopic?: StoredTopicUnavailable | null;
+	readonly unavailablePosts?: readonly StoredTopicPostUnavailable[];
 	readonly tree: StoredReplyTreeSnapshot | null;
 }
 
@@ -128,6 +146,14 @@ function finiteTimestamp(value: unknown, name: string): number {
 		throw new RangeError(`${name} 必须是非负有限时间戳`);
 	}
 	return numeric;
+}
+
+function localArchiveStatus(value: unknown): TopicLocalArchiveStatus {
+	const status = Number(value);
+	if (status !== 403 && status !== 404 && status !== 410) {
+		throw new RangeError('本地存档状态必须是 403、404 或 410');
+	}
+	return status;
 }
 
 function normalizeStreamPostIds(
@@ -273,6 +299,7 @@ export class TopicSnapshotRepository<
 	readonly authScope: string;
 	readonly #responses: ResponseRepository;
 	readonly #policy: ResponseCachePolicy;
+	readonly #archivePolicy: ResponseCachePolicy;
 	readonly #now: () => number;
 	readonly #persistenceIdleMs: number;
 	readonly #persistenceWait: (delayMs: number) => Promise<void>;
@@ -280,7 +307,9 @@ export class TopicSnapshotRepository<
 	readonly #onInvalidTreeSnapshot: (error: unknown) => void;
 	readonly #posts = new Map<PostNumber, StoredTopicPost<TPost>>();
 	readonly #removedPosts = new Map<PostNumber, StoredTopicPostRemoval>();
+	readonly #unavailablePosts = new Map<PostNumber, StoredTopicPostUnavailable>();
 	#topic: TTopic | null = null;
+	#unavailableTopic: StoredTopicUnavailable | null = null;
 	#topicObservedAt = 0;
 	#topicSource: DiscourseIngestSource | null = null;
 	#streamPostIds: readonly DiscoursePostId[] = Object.freeze([]);
@@ -293,6 +322,7 @@ export class TopicSnapshotRepository<
 	#persisting: Promise<void> | null = null;
 	#persistenceReadyAt = 0;
 	#readPersistenceDelayMs: TopicSnapshotPersistenceDelayReader = () => 0;
+	#archiveRecordKnown = false;
 
 	constructor(options: TopicSnapshotRepositoryOptions) {
 		const topicId = String(discourseTopicId(options.topicId));
@@ -316,6 +346,15 @@ export class TopicSnapshotRepository<
 			freshForMs: finiteTimestamp(options.freshForMs, 'freshForMs'),
 			retainForMs: finiteTimestamp(options.retainForMs, 'retainForMs'),
 			persist: true,
+		});
+		this.#archivePolicy = Object.freeze({
+			id: `${authScope}|snapshot:topic-archive:${topicId}`,
+			kind: 'topics',
+			tags: Object.freeze([`topic:${topicId}`, 'topic-local-archive']),
+			freshForMs: finiteTimestamp(options.freshForMs, 'freshForMs'),
+			retainForMs: finiteTimestamp(options.retainForMs, 'retainForMs'),
+			persist: true,
+			permanent: true,
 		});
 		if (this.#policy.retainForMs < this.#policy.freshForMs) {
 			throw new RangeError('retainForMs 不能小于 freshForMs');
@@ -341,6 +380,13 @@ export class TopicSnapshotRepository<
 			this.#topicObservedAt = observedAt;
 			this.#topicSource = input.source;
 			topicChanged = true;
+			if (
+				this.#unavailableTopic &&
+				observedAt >= this.#unavailableTopic.confirmedAt
+			) {
+				this.#unavailableTopic = null;
+				topicChanged = true;
+			}
 		}
 		if (
 			input.streamPostIds !== undefined &&
@@ -417,6 +463,10 @@ export class TopicSnapshotRepository<
 			if (current && current.value === post && current.observedAt === observedAt) continue;
 			const value = mergePostEntity(current?.value, post);
 			this.#removedPosts.delete(postNumber);
+			const unavailable = this.#unavailablePosts.get(postNumber);
+			if (unavailable && observedAt >= unavailable.confirmedAt) {
+				this.#unavailablePosts.delete(postNumber);
+			}
 			this.#posts.set(postNumber, Object.freeze({
 				postNumber,
 				observedAt,
@@ -438,6 +488,61 @@ export class TopicSnapshotRepository<
 			topicChanged,
 			streamChanged,
 		});
+	}
+
+	markTopicUnavailable(
+		rawStatus: number,
+		confirmedAt = this.#now(),
+	): boolean {
+		if (this.#topic === null && this.#posts.size === 0) return false;
+		const next = Object.freeze({
+			status: localArchiveStatus(rawStatus),
+			confirmedAt: finiteTimestamp(confirmedAt, 'confirmedAt'),
+		});
+		if (
+			this.#unavailableTopic &&
+			this.#unavailableTopic.confirmedAt > next.confirmedAt
+		) return false;
+		this.#unavailableTopic = next;
+		this.#archiveRecordKnown = true;
+		this.#updatedAt = Math.max(this.#updatedAt, next.confirmedAt);
+		this.#queuePersistence();
+		return true;
+	}
+
+	markPostUnavailable(
+		rawPostNumber: number,
+		rawStatus: number,
+		confirmedAt = this.#now(),
+	): boolean {
+		const postNumber = tryDiscoursePostNumber(rawPostNumber);
+		if (postNumber === null || !this.#posts.has(postNumber)) return false;
+		const next: StoredTopicPostUnavailable = Object.freeze({
+			postNumber,
+			status: localArchiveStatus(rawStatus),
+			confirmedAt: finiteTimestamp(confirmedAt, 'confirmedAt'),
+		});
+		const current = this.#unavailablePosts.get(postNumber);
+		if (current && current.confirmedAt > next.confirmedAt) return false;
+		this.#unavailablePosts.set(postNumber, next);
+		this.#archiveRecordKnown = true;
+		this.#updatedAt = Math.max(this.#updatedAt, next.confirmedAt);
+		this.#queuePersistence();
+		return true;
+	}
+
+	localArchiveState(): TopicLocalArchiveState {
+		return Object.freeze({
+			topic: this.#unavailableTopic,
+			posts: Object.freeze(
+				[...this.#unavailablePosts.values()]
+					.sort((left, right) => left.postNumber - right.postNumber),
+			),
+		});
+	}
+
+	hasLocalArchive(): boolean {
+		return this.#unavailableTopic !== null || this.#unavailablePosts.size > 0;
 	}
 
 	removePost(
@@ -469,6 +574,7 @@ export class TopicSnapshotRepository<
 			return Object.freeze({ removed: false, postNumber, postId, streamChanged: false });
 		}
 		this.#posts.delete(postNumber);
+		this.#unavailablePosts.delete(postNumber);
 		this.#removedPosts.set(postNumber, next);
 		const nextStream = this.#streamPostIds.filter((candidate) => candidate !== postId);
 		const streamChanged = nextStream.length !== this.#streamPostIds.length;
@@ -517,6 +623,7 @@ export class TopicSnapshotRepository<
 	}
 
 	isFresh(now = this.#now()): boolean {
+		if (this.#unavailableTopic !== null) return true;
 		if (!(this.#updatedAt > 0)) return false;
 		return Math.max(0, finiteTimestamp(now, 'now') - this.#updatedAt) <=
 			this.#policy.freshForMs;
@@ -542,6 +649,11 @@ export class TopicSnapshotRepository<
 				[...this.#removedPosts.values()]
 					.sort((left, right) => left.postNumber - right.postNumber),
 			),
+			unavailableTopic: this.#unavailableTopic,
+			unavailablePosts: Object.freeze(
+				[...this.#unavailablePosts.values()]
+					.sort((left, right) => left.postNumber - right.postNumber),
+			),
 			tree: this.#tree,
 		});
 	}
@@ -558,11 +670,11 @@ export class TopicSnapshotRepository<
 					throw new Error(`回复树快照 Topic ${topicId} 与仓储 ${this.topicId} 不匹配`);
 				}
 				this.#tree = snapshot;
-					this.#expectedPostCount = Math.max(
-						this.#expectedPostCount,
-						snapshot.expectedPostCount,
-					);
-					this.#queuePersistence();
+				this.#expectedPostCount = Math.max(
+					this.#expectedPostCount,
+					snapshot.expectedPostCount,
+				);
+				this.#queuePersistence();
 				await this.flush();
 			},
 		});
@@ -582,7 +694,10 @@ export class TopicSnapshotRepository<
 	 * rollback 边界，因此直接覆盖刚被清空的同 Topic 快照。
 	 */
 	persistCurrentSnapshot(): Promise<void> {
-		return this.#responses.write(this.#policy, this.snapshot());
+		return this.#responses.write(
+			this.hasLocalArchive() ? this.#archivePolicy : this.#policy,
+			this.snapshot(),
+		);
 	}
 
 	setPersistenceDelayReader(
@@ -597,16 +712,52 @@ export class TopicSnapshotRepository<
 	}
 
 	async #restoreFromCache(): Promise<TopicSnapshotRestoreResult<TTopic, TPost> | null> {
-		const cached = await this.#responses.read<StoredTopicSnapshot<TTopic, TPost>>(this.#policy);
-		if (cached.state === 'miss' || cached.value === undefined) return null;
-		let stored: StoredTopicSnapshot<TTopic, TPost>;
-		try {
-			stored = this.#normalizeStoredSnapshot(cached.value);
-		} catch (error) {
-			this.#onInvalidSnapshot(error);
-			await this.#responses.invalidate({ ids: [this.#policy.id] });
-			return null;
-		}
+		const read = async (
+			policy: ResponseCachePolicy,
+		): Promise<Readonly<{
+			policy: ResponseCachePolicy;
+			cached: Awaited<ReturnType<ResponseRepository['read']>> & {
+				readonly value: StoredTopicSnapshot<TTopic, TPost>;
+			};
+			stored: StoredTopicSnapshot<TTopic, TPost>;
+		}> | null> => {
+			const cached = await this.#responses.read<StoredTopicSnapshot<TTopic, TPost>>(
+				policy,
+			);
+			if (cached.state === 'miss' || cached.value === undefined) return null;
+			try {
+				const stored = this.#normalizeStoredSnapshot(cached.value);
+				if (policy === this.#archivePolicy && !(
+					stored.unavailableTopic || stored.unavailablePosts?.length
+				)) {
+					throw new Error(`Topic ${this.topicId} 的永久存档缺少失效标记`);
+				}
+				return Object.freeze({
+					policy,
+					cached: cached as Awaited<ReturnType<ResponseRepository['read']>> & {
+						readonly value: StoredTopicSnapshot<TTopic, TPost>;
+					},
+					stored,
+				});
+			} catch (error) {
+				this.#onInvalidSnapshot(error);
+				await this.#responses.invalidate({ ids: [policy.id] });
+				return null;
+			}
+		};
+		const [archived, regular] = await Promise.all([
+			read(this.#archivePolicy),
+			read(this.#policy),
+		]);
+		const restored = archived && regular
+			? archived.stored.updatedAt >= regular.stored.updatedAt
+				? archived
+				: regular
+			: archived ?? regular;
+		if (!restored) return null;
+		const { cached, policy: restoredPolicy, stored } = restored;
+		this.#archiveRecordKnown = archived !== null;
+		const staleArchive = archived !== null && restored === regular;
 		const discardedInvalidTree =
 			cached.value.tree !== null &&
 			cached.value.tree !== undefined &&
@@ -614,10 +765,12 @@ export class TopicSnapshotRepository<
 
 		const hadLocalState = this.#topic !== null || this.#posts.size > 0 ||
 			this.#removedPosts.size > 0 ||
-			this.#streamPostIds.length > 0 || this.#tree !== null;
+			this.#streamPostIds.length > 0 || this.#tree !== null ||
+			this.hasLocalArchive();
 		let topicFilled = false;
 		let streamFilled = false;
 		let removalFilled = false;
+		let availabilityFilled = false;
 		const addedPostNumbers: number[] = [];
 		if (this.#topic === null && stored.topic !== null) {
 			this.#topic = stored.topic;
@@ -662,6 +815,25 @@ export class TopicSnapshotRepository<
 			this.#posts.set(entry.postNumber, entry);
 			addedPostNumbers.push(entry.postNumber);
 		}
+		if (
+			stored.unavailableTopic &&
+			(
+				!this.#unavailableTopic ||
+				stored.unavailableTopic.confirmedAt >=
+					this.#unavailableTopic.confirmedAt
+			)
+		) {
+			this.#unavailableTopic = stored.unavailableTopic;
+			availabilityFilled = true;
+		}
+		for (const unavailable of stored.unavailablePosts ?? []) {
+			if (!this.#posts.has(unavailable.postNumber)) continue;
+			const current = this.#unavailablePosts.get(unavailable.postNumber);
+			if (current && current.confirmedAt > unavailable.confirmedAt) continue;
+			this.#unavailablePosts.set(unavailable.postNumber, unavailable);
+			availabilityFilled = true;
+		}
+		if (this.hasLocalArchive()) this.#archiveRecordKnown = true;
 		if (this.#tree === null && stored.tree !== null) this.#tree = stored.tree;
 		const blockedStoredPostCount = stored.posts.filter((entry) =>
 			this.#removedPosts.has(entry.postNumber)).length;
@@ -671,16 +843,26 @@ export class TopicSnapshotRepository<
 		);
 		this.#updatedAt = Math.max(this.#updatedAt, stored.updatedAt);
 		if (discardedInvalidTree) {
-			await this.#responses.invalidate({ ids: [this.#policy.id] });
+			await this.#responses.invalidate({ ids: [restoredPolicy.id] });
 		}
 		if (
 			discardedInvalidTree ||
 			(
 				hadLocalState &&
-				(topicFilled || streamFilled || removalFilled || addedPostNumbers.length)
+					(
+						topicFilled || streamFilled || removalFilled ||
+						availabilityFilled || addedPostNumbers.length
+					)
 			)
 		) {
 			this.#queuePersistence();
+		}
+		if (staleArchive) {
+			const cleanup = await this.#responses.invalidateWithReport({
+				ids: [this.#archivePolicy.id],
+			});
+			this.#archiveRecordKnown = !cleanup.complete;
+			if (!cleanup.complete) this.#queuePersistence();
 		}
 		return Object.freeze({
 			snapshot: stored,
@@ -699,8 +881,9 @@ export class TopicSnapshotRepository<
 			value.topicId !== this.topicId ||
 			value.authScope !== this.authScope ||
 			!Array.isArray(value.posts) ||
-			(value.removedPosts !== undefined && !Array.isArray(value.removedPosts)) ||
-			!Array.isArray(value.streamPostIds)
+				(value.removedPosts !== undefined && !Array.isArray(value.removedPosts)) ||
+				(value.unavailablePosts !== undefined && !Array.isArray(value.unavailablePosts)) ||
+				!Array.isArray(value.streamPostIds)
 		) {
 			throw new Error(`Topic ${this.topicId} 的正文快照身份或 schema 无效`);
 		}
@@ -796,6 +979,38 @@ export class TopicSnapshotRepository<
 		const normalizedPosts = Object.freeze(
 			[...posts.values()].sort((left, right) => left.postNumber - right.postNumber),
 		);
+		const unavailableTopic = value.unavailableTopic
+			? Object.freeze({
+				status: localArchiveStatus(value.unavailableTopic.status),
+				confirmedAt: finiteTimestamp(
+					value.unavailableTopic.confirmedAt,
+					'unavailableTopic.confirmedAt',
+				),
+			})
+			: null;
+		const unavailablePosts = new Map<PostNumber, StoredTopicPostUnavailable>();
+		for (const rawUnavailable of value.unavailablePosts ?? []) {
+			try {
+				const postNumber = tryDiscoursePostNumber(rawUnavailable?.postNumber);
+				if (postNumber === null || !posts.has(postNumber)) continue;
+				const unavailable: StoredTopicPostUnavailable = Object.freeze({
+					postNumber,
+					status: localArchiveStatus(rawUnavailable.status),
+					confirmedAt: finiteTimestamp(
+						rawUnavailable.confirmedAt,
+						'unavailablePost.confirmedAt',
+					),
+				});
+				const post = posts.get(postNumber)!;
+				if (post.observedAt > unavailable.confirmedAt) continue;
+				const current = unavailablePosts.get(postNumber);
+				if (!current || current.confirmedAt <= unavailable.confirmedAt) {
+					unavailablePosts.set(postNumber, unavailable);
+				}
+			} catch (error) {
+				this.#onInvalidSnapshot(error);
+			}
+		}
 		return Object.freeze({
 			schemaVersion: 2,
 			topicId: this.topicId,
@@ -814,6 +1029,14 @@ export class TopicSnapshotRepository<
 			posts: normalizedPosts,
 			removedPosts: Object.freeze(
 				[...removedPosts.values()]
+					.sort((left, right) => left.postNumber - right.postNumber),
+			),
+			unavailableTopic:
+				unavailableTopic && unavailableTopic.confirmedAt >= value.topicObservedAt
+					? unavailableTopic
+					: null,
+			unavailablePosts: Object.freeze(
+				[...unavailablePosts.values()]
 					.sort((left, right) => left.postNumber - right.postNumber),
 			),
 			tree: validTreeSnapshot(
@@ -887,6 +1110,24 @@ export class TopicSnapshotRepository<
 			[...removals.values()].map((removal) => removal.postId),
 		);
 		const incomingStateWins = incoming.updatedAt >= stored.updatedAt;
+		const unavailableTopic = [stored.unavailableTopic, incoming.unavailableTopic]
+			.filter((value): value is StoredTopicUnavailable => value !== null && value !== undefined)
+			.sort((left, right) => right.confirmedAt - left.confirmedAt)[0] ?? null;
+		const unavailablePosts = new Map<PostNumber, StoredTopicPostUnavailable>();
+		for (const snapshot of [stored, incoming]) {
+			for (const unavailable of snapshot.unavailablePosts ?? []) {
+				const current = unavailablePosts.get(unavailable.postNumber);
+				if (!current || current.confirmedAt <= unavailable.confirmedAt) {
+					unavailablePosts.set(unavailable.postNumber, unavailable);
+				}
+			}
+		}
+		for (const [postNumber, unavailable] of unavailablePosts) {
+			const post = posts.get(postNumber);
+			if (!post || post.observedAt > unavailable.confirmedAt) {
+				unavailablePosts.delete(postNumber);
+			}
+		}
 		const tree = !stored.tree
 			? incoming.tree
 			: !incoming.tree
@@ -921,6 +1162,14 @@ export class TopicSnapshotRepository<
 				[...removals.values()].sort(
 					(left, right) => left.postNumber - right.postNumber,
 				),
+			),
+			unavailableTopic:
+				unavailableTopic && unavailableTopic.confirmedAt >= topicObservedAt
+					? unavailableTopic
+					: null,
+			unavailablePosts: Object.freeze(
+				[...unavailablePosts.values()]
+					.sort((left, right) => left.postNumber - right.postNumber),
 			),
 			tree,
 		});
@@ -960,12 +1209,23 @@ export class TopicSnapshotRepository<
 					await this.#waitForPersistenceWindow();
 					if (!this.#pendingWrite) continue;
 					this.#pendingWrite = false;
+					const snapshot = this.snapshot();
+					const archived = Boolean(
+						snapshot.unavailableTopic || snapshot.unavailablePosts?.length,
+					);
+					const policy = archived ? this.#archivePolicy : this.#policy;
 					await this.#responses.merge(
-						this.#policy,
-						this.snapshot(),
+						policy,
+						snapshot,
 						(stored, incoming) =>
 							this.#mergeStoredSnapshots(stored, incoming),
 					);
+					if (archived) {
+						this.#archiveRecordKnown = true;
+					} else if (this.#archiveRecordKnown) {
+						await this.#responses.invalidate({ ids: [this.#archivePolicy.id] });
+						this.#archiveRecordKnown = false;
+					}
 				}
 			})
 			.finally(() => {

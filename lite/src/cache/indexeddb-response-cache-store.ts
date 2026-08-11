@@ -59,17 +59,24 @@ export function selectResponseCachePruneIds(
 		if (
 			entry.schemaVersion !== 1 ||
 			!Number.isFinite(entry.expiresAt) ||
-			entry.expiresAt <= options.now
+			(entry.permanent !== true && entry.expiresAt <= options.now)
 		) {
 			remove.add(entry.id);
 			continue;
 		}
-		retainedEntries += 1;
-		retainedBytes += Math.max(0, Number(entry.bytes) || 0);
+		/*
+		 * 永久存档由用户显式保留，既不能自动删除，也不能反向挤占普通响应缓存预算；
+		 * 否则单个大 Topic 存档会让每轮 prune 清空全部可淘汰热缓存。
+		 */
+		if (entry.permanent !== true) {
+			retainedEntries += 1;
+			retainedBytes += Math.max(0, Number(entry.bytes) || 0);
+		}
 	}
 	for (const entry of sorted) {
 		if (remove.has(entry.id)) continue;
 		if (retainedEntries <= options.maxEntries && retainedBytes <= options.maxBytes) break;
+		if (entry.permanent === true) continue;
 		remove.add(entry.id);
 		retainedEntries -= 1;
 		retainedBytes -= Math.max(0, Number(entry.bytes) || 0);
@@ -225,8 +232,9 @@ export class IndexedDbResponseCacheStore implements ResponseCacheStore {
 				kind: entry.kind,
 				tags: Object.freeze([...entry.tags]),
 				storedAt: entry.storedAt,
-				expiresAt: entry.expiresAt,
-				bytes: Math.max(0, Number(entry.bytes) || 0),
+					expiresAt: entry.expiresAt,
+					bytes: Math.max(0, Number(entry.bytes) || 0),
+					...(entry.permanent === true ? { permanent: true as const } : {}),
 			})));
 	}
 
@@ -264,7 +272,7 @@ export class IndexedDbResponseCacheStore implements ResponseCacheStore {
 		const pruneIds = ids.length
 			? ids
 			: forceQuotaRecovery
-				? [...entries]
+					? [...entries].filter((entry) => entry.permanent !== true)
 				.sort((left, right) => left.storedAt - right.storedAt)
 				.slice(0, Math.max(1, Math.ceil(entries.length / 4)))
 				.map((entry) => entry.id)

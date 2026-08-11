@@ -26,6 +26,7 @@ html > .ldp-reader-portal-host {
 :where(
   .ldp-overlay,
   .ldp-native-boost-menu,
+	.ldp-topic-download-floating-host,
   .ldp-user-card-fallback,
   .ldp-user-card-follow-panel,
   .ldp-lightbox

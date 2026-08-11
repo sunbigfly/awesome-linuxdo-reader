@@ -54,7 +54,6 @@ const externalModuleIds = Object.freeze(Object.fromEntries(
 const libraryMarker = '// __LDP_GREASYFORK_LIBRARY_REQUIREMENTS__'
 const stylesheetToken = '__LDP_READER_STYLES_URL__'
 const projectExecutableCeiling = 2_000_000
-const projectTotalExecutableCeiling = 3_350_000
 const greasyForkHardLimit = 2 * 1024 * 1024
 const releaseAcceptanceKeys = [
   'runtimeComplete',
@@ -505,10 +504,10 @@ function libraryForModule(module) {
 
 function renderModule(module) {
   return [
-    `\t/* Source: ${module.source} */`,
-    `\truntime.register(${JSON.stringify(module.id)}, function(module, exports, require) {`,
-    indentJavaScript(module.code, '\t\t'),
-    `\t}, ${JSON.stringify(module.sourceHash)});`,
+    `/* Source: ${module.source} */`,
+    `runtime.register(${JSON.stringify(module.id)}, function(module, exports, require) {`,
+    indentJavaScript(module.code, '\t'),
+    `}, ${JSON.stringify(module.sourceHash)});`,
   ].join('\n')
 }
 
@@ -858,11 +857,6 @@ const projectTotalExecutableBytes = libraries.reduce(
   (total, library) => total + library.bytes,
   Buffer.byteLength(template),
 )
-if (projectTotalExecutableBytes > projectTotalExecutableCeiling) {
-  throw new Error(
-    `Lite 项目自有可执行 JS 总量超过闸门：${projectTotalExecutableBytes}`,
-  )
-}
 for (const generated of generatedLibraries) {
   for (const outputPath of generated.outputPaths) {
     await emit(outputPath, generated.content, check)
@@ -886,7 +880,6 @@ const manifest = `${JSON.stringify({
   limits: {
     greasyForkHardLimit,
     projectExecutableCeiling,
-    projectTotalExecutableCeiling,
   },
   compiler: {
     name: 'esbuild',

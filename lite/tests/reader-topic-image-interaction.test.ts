@@ -45,6 +45,7 @@ const cooked = `
 	<p><img src="/uploads/default/original/1X/first.png" alt="first"></p>
 	<p><img class="emoji" src="/images/emoji/smile.png"></p>
 	<aside class="quote" data-topic="11" data-post="9"><blockquote><img src="/uploads/default/original/1X/quote.png"></blockquote></aside>
+	<aside class="quote" data-topic="10" data-post="10"><blockquote><a href="/uploads/default/original/1X/quote-fallback.png"><img src="/uploads/default/original/1X/quote-fallback.png" alt="引用兜底图"></a></blockquote></aside>
 	<p><a class="lightbox" href="/uploads/default/original/1X/second.png"><img src="/uploads/default/optimized/1X/second.png" alt="second"></a></p>
 `;
 const posts: readonly TestPost[] = Object.freeze([
@@ -111,6 +112,7 @@ const interaction = new ReaderTopicImageInteraction({
 	currentTopicId: 10,
 	loadQuotedPost: async (topicId, postNumber) => {
 		quotedLoads.push(`${topicId}:${postNumber}`);
+		if (postNumber === 10) throw new Error('引用源楼层已删除');
 		return {
 			id: 9,
 			topic_id: topicId,
@@ -127,8 +129,9 @@ const interaction = new ReaderTopicImageInteraction({
 	},
 	onError: (error) => errors.push(error),
 });
-const contentImages = view.slots.content.querySelectorAll<HTMLImageElement>('img');
-const second = contentImages[3]!;
+const second = view.slots.content.querySelector<HTMLImageElement>(
+	'img[alt="second"]',
+)!;
 const opened = click(window, second);
 await Promise.resolve();
 assert(
@@ -150,7 +153,9 @@ await Promise.resolve();
 await Promise.resolve();
 await Promise.resolve();
 
-const quote = contentImages[2]!;
+const quote = view.slots.content.querySelector<HTMLImageElement>(
+	'aside.quote[data-post="9"] img',
+)!;
 click(window, quote);
 await Promise.resolve();
 await Promise.resolve();
@@ -178,15 +183,39 @@ assert(
 releaseOpen();
 await opening;
 await new Promise((resolve) => setTimeout(resolve, 0));
+const fallbackQuote = view.slots.content.querySelector<HTMLImageElement>(
+	'aside.quote[data-post="10"] img',
+)!;
+click(window, fallbackQuote);
+for (let turn = 0; turn < 6; turn += 1) await Promise.resolve();
+assert(
+	quotedLoads.join(',') === '11:9,10:10' &&
+	Number(requests.length) === 3 &&
+	requests[2]?.item.topicId === 10 &&
+	requests[2]?.item.sourcePostNumber === 10 &&
+	requests[2]?.item.alt === '引用兜底图' &&
+	requests[2]?.items.length === 1 &&
+	requests[2]?.returnFocus === fallbackQuote.closest('a') &&
+	requests[2]?.commentsEnabled === false &&
+	requests[2]?.includeTopicImages === false &&
+	errors.length === 0,
+	`引用源楼层 404 或已删除时必须直接用引用块现有图片打开灯箱；实际=${JSON.stringify({
+		quotedLoads,
+		requestCount: requests.length,
+		request: requests[2],
+		errors: errors.map((error) => String(error)),
+	})}`,
+);
+await new Promise((resolve) => setTimeout(resolve, 0));
 const nestedImage = additionalView.slots.content.querySelector('img')!;
 click(window, nestedImage);
 await Promise.resolve();
 await Promise.resolve();
 await Promise.resolve();
 assert(
-	Number(requests.length) === 3 &&
-	requests[2]?.item.sourcePostNumber === 2 &&
-	requests[2]?.item.alt === 'third',
+	Number(requests.length) === 4 &&
+	requests[3]?.item.sourcePostNumber === 2 &&
+	requests[3]?.item.alt === 'third',
 	`完整讨论等附加投影 host 必须复用同一图片委托入口打开 Lightbox；实际=${JSON.stringify({
 		requestCount: requests.length,
 		lastRequest: requests.at(-1),
@@ -196,7 +225,7 @@ assert(
 click(window, second, { ctrlKey: true });
 await Promise.resolve();
 assert(
-	Number(requests.length) === 3 && errors.length === 0,
+	Number(requests.length) === 4 && errors.length === 0,
 	'emoji 或带修饰键点击必须保留原页面语义，不进入 Lightbox',
 );
 

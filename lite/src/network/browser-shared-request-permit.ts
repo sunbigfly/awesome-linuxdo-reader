@@ -80,6 +80,7 @@ export interface BrowserCloudflareChallengeWindow {
 
 export interface BrowserCloudflareChallengeOptions {
 	readonly origin: string;
+	readonly redirectHref?: string;
 	readonly open: (
 		url: string,
 		name: string,
@@ -92,6 +93,7 @@ export interface BrowserCloudflareChallengeOptions {
 	readonly leaseTtlMs?: number;
 	readonly passedTtlMs?: number;
 	readonly pollIntervalMs?: number;
+	readonly verifyIntervalMs?: number;
 	readonly maxWaitMs?: number;
 	readonly screen?: Readonly<{
 		readonly availWidth?: number;
@@ -168,7 +170,10 @@ export interface BrowserSharedHostRequestLease {
 
 export interface BrowserSharedObservedResponse {
 	readonly source: 'host' | 'reader';
+	readonly href?: string;
 	readonly status: number;
+	readonly cloudflareMitigated?: boolean;
+	readonly blockOnCloudflareChallenge?: boolean;
 	readonly retryAfter?: string;
 	readonly rateLimitCode?: string;
 	readonly serverLimit?: string;
@@ -349,6 +354,42 @@ function challengeHrefMatchesOrigin(href: string, origin: string): boolean {
 	}
 }
 
+/**
+ * LINUX.DO 使用站点原生 GET challenge；其他受支持 Discourse 继续打开站点首页，
+ * 避免假设它们也安装了同名路由。回跳只允许同源页面，且阻断 challenge 自循环。
+ */
+export function browserCloudflareChallengeHref(
+	originValue: string,
+	redirectHref?: string,
+): string {
+	const origin = challengeOrigin(originValue);
+	let redirect = new URL('/', origin);
+	try {
+		const candidate = new URL(String(redirectHref ?? ''), `${origin}/`);
+		if (
+			candidate.origin === origin &&
+			['http:', 'https:'].includes(candidate.protocol) &&
+			!/^\/challenge(?:\/|$)/i.test(candidate.pathname)
+		) {
+			candidate.username = '';
+			candidate.password = '';
+			redirect = candidate;
+		}
+	} catch {
+		// 非法或跨源回跳统一退回站点首页。
+	}
+	const challenge = new URL(
+		new URL(origin).hostname.toLowerCase() === 'linux.do'
+			? '/challenge'
+			: '/',
+		origin,
+	);
+	if (challenge.pathname === '/challenge') {
+		challenge.searchParams.set('redirect', redirect.href);
+	}
+	return challenge.href;
+}
+
 function inspectChallengeWindow(
 	popup: BrowserCloudflareChallengeWindow,
 ): 'pending' | 'passed' {
@@ -357,14 +398,24 @@ function inspectChallengeWindow(
 		if (!document) return 'pending';
 		const challenged = Boolean(
 			document.querySelector(
-				'script[src*="/cdn-cgi/challenge-platform/"],#challenge-running',
+				'script[src*="/cdn-cgi/challenge-platform/"],#challenge-running,' +
+					'iframe[src*="challenges.cloudflare.com"],' +
+					'.cf-turnstile,input[name="cf-turnstile-response"]',
 			) ||
 			/^(?:Just a moment|请稍候)/i.test(String(document.title ?? '')),
 		);
 		if (challenged) return 'pending';
-		return document.querySelector(
-			'meta[name="discourse-base-uri"],#main-outlet',
-		)
+		if (document.querySelector(
+			'meta[name="discourse-base-uri"],meta[name="generator"],' +
+				'#main-outlet,.d-header',
+		)) return 'passed';
+		const href = String(popup.location?.href ?? '');
+		const location = new URL(href);
+		return ['http:', 'https:'].includes(location.protocol) &&
+			!/^\/challenge(?:\/|$)/i.test(location.pathname) &&
+			!/^\/cdn-cgi\/challenge-platform(?:\/|$)/i.test(location.pathname) &&
+			document.readyState !== 'loading' &&
+			Boolean(document.body)
 			? 'passed'
 			: 'pending';
 	} catch {
@@ -421,9 +472,11 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 	readonly #onError: (error: unknown) => void;
 	readonly #challenge: BrowserCloudflareChallengeOptions | null;
 	readonly #challengeOrigin: string;
+	readonly #challengeHref: string;
 	readonly #challengeLeaseTtlMs: number;
 	readonly #challengePassedTtlMs: number;
 	readonly #challengePollIntervalMs: number;
+	readonly #challengeVerifyIntervalMs: number;
 	readonly #challengeMaxWaitMs: number;
 	readonly #inspectChallenge: (
 		popup: BrowserCloudflareChallengeWindow,
@@ -466,6 +519,12 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		this.#challengeOrigin = this.#challenge
 			? challengeOrigin(this.#challenge.origin)
 			: '';
+		this.#challengeHref = this.#challenge
+			? browserCloudflareChallengeHref(
+				this.#challengeOrigin,
+				this.#challenge.redirectHref,
+			)
+			: '';
 		this.#challengeLeaseTtlMs = positiveInteger(
 			this.#challenge?.leaseTtlMs,
 			15_000,
@@ -480,6 +539,11 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			this.#challenge?.pollIntervalMs,
 			250,
 			'challenge.pollIntervalMs',
+		);
+		this.#challengeVerifyIntervalMs = positiveInteger(
+			this.#challenge?.verifyIntervalMs,
+			1_000,
+			'challenge.verifyIntervalMs',
 		);
 		this.#challengeMaxWaitMs = positiveInteger(
 			this.#challenge?.maxWaitMs,
@@ -574,11 +638,23 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 	}
 
 	noteObservedResponse(input: BrowserSharedObservedResponse): void {
-		/* 响应头和 429 由 RequestObserver 留证，不反向改写共享启动策略。 */
-		void input;
+		/*
+		 * 宿主 Ajax 不经过 CoordinatedRequestClient；只有权威 cf-mitigated
+		 * challenge 信号可以把它接入同一硬闸门。普通 4xx/429 仍只留证。
+		 */
+		if (
+			input.source !== 'host' ||
+			input.cloudflareMitigated !== true ||
+			input.blockOnCloudflareChallenge === false ||
+			!input.href
+		) return;
+		void this.noteCloudflareChallenge({ href: input.href }).catch(this.#onError);
 	}
 
-	async noteCloudflareChallenge(input: { readonly href: string }): Promise<void> {
+	async noteCloudflareChallenge(input: {
+		readonly href: string;
+		readonly force?: boolean;
+	}): Promise<void> {
 		this.#assertOpen();
 		if (
 			!this.#challenge ||
@@ -590,7 +666,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			 * 迟到响应。本入口只允许建立/刷新 required 硬闸门，绝不打开窗口。
 			 */
 			if (
-				state.challenge?.state === 'passed' ||
+				(state.challenge?.state === 'passed' && input.force !== true) ||
 				(
 					state.challenge?.state === 'active' &&
 					!state.challenge.required
@@ -843,6 +919,10 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 				continue;
 			}
 			try {
+				if (await this.#challengePassesProbe(signal)) {
+					await this.#completeChallengeLease();
+					return true;
+				}
 				return await this.#ownChallengeWindow(signal, startedAt);
 			} catch (error) {
 				try {
@@ -902,7 +982,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		if (!this.#challengeWindow || this.#challengeWindow.closed === true) {
 			try {
 				this.#challengeWindow = challenge.open(
-					`${this.#challengeOrigin}/`,
+					this.#challengeHref,
 					READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME,
 					browserCloudflareChallengeFeatures(challenge.screen),
 				);
@@ -916,7 +996,13 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			await this.#releaseChallengeLease();
 			return false;
 		}
-		const onPopupLoad: EventListener = () => this.#wake();
+		let popupLoaded = false;
+		let verifyDelayMs = this.#challengeVerifyIntervalMs;
+		let nextVerifyAt = this.#now() + verifyDelayMs;
+		const onPopupLoad: EventListener = () => {
+			popupLoaded = true;
+			this.#wake();
+		};
 		popup.addEventListener?.('load', onPopupLoad);
 		this.#focusChallengeWindow();
 		try {
@@ -927,20 +1013,31 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 				if (signal.aborted) throw this.#abortReason(signal);
 				if (popup.closed === true) {
 					this.#challengeWindow = null;
+					if (await this.#challengePassesProbe(signal)) {
+						await this.#completeChallengeLease();
+						return true;
+					}
 					await this.#releaseChallengeLease();
 					return false;
 				}
-				if (this.#inspectChallenge(popup) === 'passed') {
-					let verified = true;
-					if (this.#verifyChallenge) {
-						try {
-							verified = await this.#verifyChallenge(signal);
-						} catch (error) {
-							if (signal.aborted) throw error;
-							this.#onError(error);
-							verified = false;
-						}
+				const inspectedPassed = this.#inspectChallenge(popup) === 'passed';
+				const probeDue = Boolean(this.#verifyChallenge) &&
+					(inspectedPassed || popupLoaded || this.#now() >= nextVerifyAt);
+				if (inspectedPassed && !this.#verifyChallenge) {
+					await this.#completeChallengeLease();
+					try {
+						popup.close?.();
+					} catch {
+						// 验证已完成，窗口关闭失败不回滚请求速率恢复。
 					}
+					this.#challengeWindow = null;
+					return true;
+				}
+				if (probeDue) {
+					popupLoaded = false;
+					const verified = await this.#challengePassesProbe(signal);
+					verifyDelayMs = Math.min(10_000, verifyDelayMs * 2);
+					nextVerifyAt = this.#now() + verifyDelayMs;
 					if (verified) {
 						await this.#completeChallengeLease();
 						try {
@@ -951,8 +1048,6 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 						this.#challengeWindow = null;
 						return true;
 					}
-					await this.#releaseChallengeLease();
-					return false;
 				}
 				const owned = await this.#transact((state, now) => {
 					if (
@@ -979,6 +1074,16 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 				}
 				await this.#wait(this.#challengePollIntervalMs, signal);
 			}
+			if (await this.#challengePassesProbe(signal)) {
+				await this.#completeChallengeLease();
+				try {
+					popup.close?.();
+				} catch {
+					// 最终探针已确认通行，窗口关闭失败不回滚硬闸门。
+				}
+				this.#challengeWindow = null;
+				return true;
+			}
 			try {
 				popup.close?.();
 			} catch {
@@ -989,6 +1094,17 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			return false;
 		} finally {
 			popup.removeEventListener?.('load', onPopupLoad);
+		}
+	}
+
+	async #challengePassesProbe(signal: AbortSignal): Promise<boolean> {
+		if (!this.#verifyChallenge) return false;
+		try {
+			return await this.#verifyChallenge(signal);
+		} catch (error) {
+			if (signal.aborted) throw error;
+			this.#onError(error);
+			return false;
 		}
 	}
 

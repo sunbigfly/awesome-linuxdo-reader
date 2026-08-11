@@ -53,16 +53,25 @@ const categorySwitches = [...host.querySelectorAll<HTMLInputElement>(
 const interval = host.querySelector<HTMLSelectElement>(
 	'.ldp-webdav-interval',
 )!;
+const offlineTopicSwitch = host.querySelector<HTMLInputElement>(
+	'input[aria-label="同步离线 Topic 下载（HTML 正文）"]',
+);
 assert(
-	categorySwitches.length === 9 &&
+	categorySwitches.length === 10 &&
 	categorySwitches.filter((input) => input.checked).length === 3 &&
+	offlineTopicSwitch?.checked === false &&
 	interval.disabled &&
-	host.textContent?.includes('译文只在单独勾选后同步') &&
+	host.textContent?.includes('离线 Topic HTML 和译文只在各自单独勾选后同步') &&
+	host.textContent?.includes('每个 Topic 以独立明文 HTML 文件存入你的 WebDAV') &&
+	host.textContent?.includes('图片与附件仍保留原 URL') &&
 	host.textContent?.includes('AI 翻译服务集合（Key 加密）') &&
 	host.textContent?.includes('只加密每个 URL 对应的 API Key') &&
+	host.textContent?.includes('离线 Topic 下载（HTML 正文）') &&
 	host.textContent?.includes('立即同步'),
-	`WebDAV 设置必须提供九类独立开关、加密翻译设置与译文缓存、默认关闭定时同步：` +
-		`switches=${categorySwitches.length}, checked=${
+	`WebDAV 设置必须提供十类独立开关、离线 Topic、加密翻译设置与译文缓存，并默认关闭定时同步：` +
+		`switches=${categorySwitches.length}, offline=${String(
+			offlineTopicSwitch?.checked,
+		)}, checked=${
 			categorySwitches.filter((input) => input.checked).length
 		}, intervalDisabled=${String(interval.disabled)}, text=${host.textContent}`,
 );
@@ -105,13 +114,15 @@ assert(
 form.destroy();
 assert(!host.children.length, '销毁 WebDAV 表单必须清空唯一 DOM owner');
 
+let signedIn = false;
 const unavailableForm = new ReaderWebDavSettingsForm({
 	document,
 	host,
 	repository,
 	coordinator,
-	unavailableReason:
-		'当前未登录 Discourse，WebDAV 同步不可用。请先登录并刷新页面。',
+	unavailableReason: () => signedIn
+		? ''
+		: '当前未登录 Discourse，WebDAV 同步不可用。请先登录并刷新页面。',
 });
 await Promise.resolve();
 await Promise.resolve();
@@ -129,6 +140,26 @@ assert(
 		unavailableControls.length
 	}, enabled=${unavailableControls.filter((control) => !control.disabled).length}, ` +
 		`status=${host.querySelector('.ldp-webdav-status')?.textContent}`,
+);
+signedIn = true;
+unavailableForm.refreshAvailability();
+const restoredControls = [...host.querySelectorAll<
+	HTMLInputElement | HTMLSelectElement | HTMLButtonElement
+>('input, select, button')];
+assert(
+	restoredControls.every((control) => !control.disabled) &&
+	!host.querySelector('.ldp-webdav-status')?.textContent?.includes(
+		'当前未登录 Discourse',
+	),
+	`Discourse 会话在启动后恢复时必须重新启用 WebDAV：disabled=${
+		restoredControls.filter((control) => control.disabled).length
+	}, status=${host.querySelector('.ldp-webdav-status')?.textContent}`,
+);
+signedIn = false;
+unavailableForm.refreshAvailability();
+assert(
+	restoredControls.every((control) => control.disabled),
+	'Discourse 会话退出后再次显示设置页时必须恢复 WebDAV 门禁',
 );
 unavailableForm.destroy();
 assert(!host.children.length, '不可用 WebDAV 表单销毁后必须清空唯一 DOM owner');

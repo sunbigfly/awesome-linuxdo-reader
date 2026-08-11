@@ -41,31 +41,42 @@ export interface ReplyTreeDomCommit {
 	readonly missingParents: readonly PostNumber[];
 }
 
+function directPostNumber(element: Element): number | null {
+	const raw = element.getAttribute('data-post-number');
+	if (raw === null) return null;
+	const postNumber = Number(raw);
+	return Number.isSafeInteger(postNumber) ? postNumber : null;
+}
+
 function insertPostInOrder(container: HTMLElement, view: PostViewPort): void {
 	const root = view.slots.root;
 	if (root.parentElement === container) {
-		const directPosts = Array.from(container.children).filter((candidate) =>
-			Number.isSafeInteger(Number(candidate.getAttribute('data-post-number')))
-		);
-		const index = directPosts.indexOf(root);
-		if (index >= 0) {
-			const previousPostNumber = Number(
-				directPosts[index - 1]?.getAttribute('data-post-number'),
-			);
-			const nextPostNumber = Number(
-				directPosts[index + 1]?.getAttribute('data-post-number'),
-			);
-			if (
-				(!Number.isSafeInteger(previousPostNumber) ||
-					previousPostNumber < view.postNumber) &&
-				(!Number.isSafeInteger(nextPostNumber) ||
-					nextPostNumber > view.postNumber)
-			) return;
+		let previousPostNumber: number | null = null;
+		for (
+			let previous = root.previousElementSibling;
+			previous;
+			previous = previous.previousElementSibling
+		) {
+			previousPostNumber = directPostNumber(previous);
+			if (previousPostNumber !== null) break;
 		}
+		let nextPostNumber: number | null = null;
+		for (
+			let next = root.nextElementSibling;
+			next;
+			next = next.nextElementSibling
+		) {
+			nextPostNumber = directPostNumber(next);
+			if (nextPostNumber !== null) break;
+		}
+		if (
+			(previousPostNumber === null || previousPostNumber < view.postNumber) &&
+			(nextPostNumber === null || nextPostNumber > view.postNumber)
+		) return;
 	}
 	const next = Array.from(container.children).find((candidate) => {
-		const postNumber = Number(candidate.getAttribute('data-post-number'));
-		return Number.isSafeInteger(postNumber) && postNumber > view.postNumber;
+		const postNumber = directPostNumber(candidate);
+		return postNumber !== null && postNumber > view.postNumber;
 	});
 	container.insertBefore(root, next ?? null);
 }

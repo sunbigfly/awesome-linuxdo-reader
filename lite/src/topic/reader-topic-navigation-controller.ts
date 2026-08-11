@@ -68,9 +68,18 @@ export interface ReaderTopicNavigationDomPort {
 	): ReaderTopicRevealResult | null;
 }
 
+export interface ReaderTopicHiddenNavigationPort {
+	isHidden(postNumber: number): boolean;
+	revealPost(
+		postNumber: number,
+		options: ReaderTopicRevealOptions,
+	): Promise<ReaderTopicRevealResult | null>;
+}
+
 export interface ReaderTopicNavigationControllerOptions<TPost> {
 	readonly session: ReaderTopicNavigationSession<TPost>;
 	readonly dom: ReaderTopicNavigationDomPort;
+	readonly hidden?: ReaderTopicHiddenNavigationPort;
 	readonly listenUserScrollIntent?: (listener: () => void) => Cleanup;
 	readonly parentScope?: LifecycleScope;
 	readonly onError?: (error: unknown) => void;
@@ -90,12 +99,14 @@ export class ReaderTopicNavigationController<
 	readonly changes = new Signal<ReaderTopicNavigationResult>();
 	readonly #session: ReaderTopicNavigationSession<TPost>;
 	readonly #dom: ReaderTopicNavigationDomPort;
+	readonly #hidden: ReaderTopicHiddenNavigationPort | null;
 	readonly #onError: (error: unknown) => void;
 	#epoch = 0;
 
 	constructor(options: ReaderTopicNavigationControllerOptions<TPost>) {
 		this.#session = options.session;
 		this.#dom = options.dom;
+		this.#hidden = options.hidden ?? null;
 		this.#onError = options.onError ?? (() => {});
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		if (options.listenUserScrollIntent) {
@@ -148,14 +159,27 @@ export class ReaderTopicNavigationController<
 					'unavailable',
 				));
 			}
-			await resolveReaderReplyAncestors(this.#session, postNumber, {
-				isActive: () => epoch === this.#epoch && !this.scope.destroyed,
-			});
+			const ancestorResolution = await resolveReaderReplyAncestors(
+				this.#session,
+				postNumber,
+				{
+					isActive: () => epoch === this.#epoch && !this.scope.destroyed,
+				},
+			);
 			if (epoch !== this.#epoch || this.scope.destroyed) {
 				return this.#result(request, postNumber, 'superseded');
 			}
-			const reveal = this.#dom.revealPost(postNumber, {
+			if (ancestorResolution.error !== undefined) {
+				this.#onError(ancestorResolution.error);
+			}
+			const revealOptions: ReaderTopicRevealOptions = {
 				source: request.source,
+				...(!ancestorResolution.complete
+					? {
+						degradedRootPostNumber:
+							ancestorResolution.rootPostNumber,
+					}
+					: {}),
 				...(request.alignment === undefined
 					? {}
 					: { alignment: request.alignment }),
@@ -163,7 +187,13 @@ export class ReaderTopicNavigationController<
 				...(request.highlight === undefined
 					? {}
 					: { highlight: request.highlight }),
-			});
+			};
+			const reveal = this.#hidden?.isHidden(postNumber)
+				? await this.#hidden.revealPost(postNumber, revealOptions)
+				: this.#dom.revealPost(postNumber, revealOptions);
+			if (epoch !== this.#epoch || this.scope.destroyed) {
+				return this.#result(request, postNumber, 'superseded');
+			}
 			if (!reveal) {
 				return this.#emit(this.#result(
 					request,

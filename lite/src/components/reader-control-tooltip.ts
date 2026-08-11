@@ -174,6 +174,12 @@ export class ReaderControlTooltip {
 			});
 		});
 		this.scope.listen(root, 'scroll', () => {
+			const active = this.#activeControl;
+			if (!active) return;
+			if (!active.matches('.ldp-reader-history-nav')) {
+				this.close();
+				return;
+			}
 			const hovered = this.#queryHoveredHistoryControl(root);
 			const match = this.#match(hovered);
 			if (match) this.#show(match);
@@ -249,6 +255,8 @@ export class ReaderControlTooltip {
 	}
 
 	#show(match: TooltipMatch, pointer: PointerEvent | null = null): void {
+		/* 统一浮层已接管文案，避免长时间 hover 后浏览器再叠一层原生 title。 */
+		match.control.removeAttribute('title');
 		this.#activeControl = match.control;
 		this.element.textContent = match.label;
 		this.element.classList.toggle(

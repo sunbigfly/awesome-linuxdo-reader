@@ -14,6 +14,53 @@ const { document: parsedDocument } = parseHTML(
 );
 const document = parsedDocument as unknown as Document;
 
+const { document: parsedCachedDocument } = parseHTML(
+	'<!doctype html><html><body></body></html>',
+);
+const cachedDocument = parsedCachedDocument as unknown as Document;
+const createCachedElement = cachedDocument.createElementNS.bind(cachedDocument);
+let cachedAttributeWrites = 0;
+Object.defineProperty(cachedDocument, 'createElementNS', {
+	configurable: true,
+	value: (namespace: string | null, qualifiedName: string) => {
+		const created = createCachedElement(namespace, qualifiedName);
+		const setAttribute = created.setAttribute.bind(created);
+		Object.defineProperty(created, 'setAttribute', {
+			configurable: true,
+			value: (name: string, value: string) => {
+				cachedAttributeWrites += 1;
+				setAttribute(name, value);
+			},
+		});
+		return created;
+	},
+});
+const firstCachedIcon = createReaderIcon(cachedDocument, 'activity');
+const firstCachedAttributeWrites = cachedAttributeWrites;
+firstCachedIcon.classList.add('caller-mutated');
+firstCachedIcon.querySelector('path')?.setAttribute('d', 'caller-mutated');
+const secondCachedIcon = createReaderIcon(cachedDocument, 'activity');
+assert(
+	firstCachedAttributeWrites > 0 &&
+		cachedAttributeWrites - firstCachedAttributeWrites <= 1 &&
+		firstCachedIcon !== secondCachedIcon &&
+		!secondCachedIcon.classList.contains('caller-mutated') &&
+		secondCachedIcon.querySelector('path')?.getAttribute('d') ===
+			'M3 12h4l2-7 4 14 2-7h6',
+	'同一 document/语义图标必须复用不可逃逸模板并返回隔离克隆，不能重复解析 SVG 或泄漏调用方修改',
+);
+const extraClassIcon = createReaderIcon(
+	cachedDocument,
+	'activity',
+	'extra-one extra-two',
+);
+assert(
+	extraClassIcon.classList.contains('extra-one') &&
+		extraClassIcon.classList.contains('extra-two') &&
+		!secondCachedIcon.classList.contains('extra-one'),
+	'调用方附加图标 class 必须只写入当前克隆，不能污染缓存模板或其他实例',
+);
+
 const unresolved = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
 use.setAttribute('href', '#table-columns');

@@ -112,6 +112,9 @@ function eventNode(value: EventTarget | null): Node | null {
 		: null;
 }
 
+const USER_CARD_POINTER_GAP_PX = 4;
+const USER_CARD_HIDE_GRACE_MS = 480;
+
 /**
  * application 级唯一用户卡 DOM owner。
  *
@@ -195,7 +198,7 @@ export class ReaderUserCardView {
 		);
 		this.#hoverHideDelayMs = this.#delay(
 			options.hoverHideDelayMs,
-			180,
+			USER_CARD_HIDE_GRACE_MS,
 			'hoverHideDelayMs',
 		);
 		this.#schedule = options.schedule ??
@@ -1231,18 +1234,23 @@ export class ReaderUserCardView {
 		const stats = element(this.#document, 'div', 'ldp-user-card-stats');
 		for (const [label, value, path] of [
 			['帖子', profile.community.postCount, 'activity/replies'],
-			['获赞', profile.community.likesReceived, 'activity/likes-received'],
+			['获赞', profile.community.likesReceived, null],
 			['主题', profile.community.topicCount, 'activity/topics'],
 		] as const) {
-			const item = this.#document.createElement('a');
+			const item = this.#document.createElement(path ? 'a' : 'div');
 			item.className = 'ldp-user-card-stat';
-			item.href = activityHref(
-				this.#userHref,
-				profile.identity.username,
-				path,
-				this.#document.baseURI,
-			);
-			item.setAttribute('aria-label', `查看${label}`);
+			if (path) {
+				(item as HTMLAnchorElement).href = activityHref(
+					this.#userHref,
+					profile.identity.username,
+					path,
+					this.#document.baseURI,
+				);
+				item.setAttribute('aria-label', `查看${label}`);
+			} else {
+				/* Discourse 没有可公开查看任意用户“获赞明细”的活动路由。 */
+				item.setAttribute('aria-label', label);
+			}
 			item.append(
 				element(this.#document, 'strong', '', metric(value)),
 				element(this.#document, 'span', '', label),
@@ -2144,7 +2152,7 @@ export class ReaderUserCardView {
 			return;
 		}
 		const margin = 10;
-		const gap = 8;
+		const gap = USER_CARD_POINTER_GAP_PX;
 		this.followPanel.style.removeProperty('max-height');
 		this.element.style.removeProperty('max-height');
 		const panelWidth = panel.width || 320;
@@ -2179,7 +2187,7 @@ export class ReaderUserCardView {
 		const viewportHeight = viewport?.innerHeight ??
 			this.#document.documentElement.clientHeight;
 		const margin = 10;
-		const gap = 8;
+		const gap = USER_CARD_POINTER_GAP_PX;
 		const previewWidth = preview.width || this.followPreview.offsetWidth || 320;
 		const previewHeight = Math.min(
 			preview.height || this.followPreview.offsetHeight || 220,
@@ -2260,7 +2268,7 @@ export class ReaderUserCardView {
 		}
 		this.element.style.removeProperty('max-height');
 		const margin = 10;
-		const gap = 8;
+		const gap = USER_CARD_POINTER_GAP_PX;
 		const cardWidth = card.width || this.element.offsetWidth || 300;
 		const cardHeight = Math.min(
 			card.height || this.element.offsetHeight || 220,
@@ -2281,6 +2289,11 @@ export class ReaderUserCardView {
 	}
 
 	#queuePosition(): void {
+		if (
+			!this.#open &&
+			this.followPanel.hidden &&
+			this.followPreview.hidden
+		) return;
 		const viewport = this.#document.defaultView;
 		if (!viewport || typeof viewport.requestAnimationFrame !== 'function') {
 			this.#position();

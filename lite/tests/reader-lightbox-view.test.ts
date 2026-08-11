@@ -83,11 +83,17 @@ const sourceCalls: Array<{
 	readonly refresh: boolean;
 	readonly cachedOnly: boolean;
 }> = [];
+let degradeOriginal = false;
 const sources: ReaderLightboxOriginalSourcePort = {
 	async load(selected, options) {
 		sourceCalls.push({ key: selected.key, ...options });
 		if (options.cachedOnly) return null;
-		return selected.originalSrc;
+		return Object.freeze({
+			source: degradeOriginal
+				? `https://linux.do/fallback/${selected.key}.jpg`
+				: selected.originalSrc,
+			original: !degradeOriginal,
+		});
 	},
 };
 const jumps: string[] = [];
@@ -246,6 +252,21 @@ assert(
 	'原图动作必须复用注入仓储，且只更新当前图片',
 );
 view.slots.image.dispatchEvent(new window.Event('load'));
+
+degradeOriginal = true;
+click(window, view.slots.root.querySelectorAll<HTMLElement>('.ldp-lb-thumb')[1]!);
+click(window, original);
+await tick();
+assert(
+	view.slots.image.src === 'https://linux.do/fallback/second.jpg',
+	'原图确认不可用后必须展示资源 owner 返回的最佳后备图',
+);
+view.slots.image.dispatchEvent(new window.Event('load'));
+assert(
+	!original.hasAttribute('disabled') &&
+		original.getAttribute('title') === '当前为降级图，重新检查原图',
+	'后备图不得标成原图，并必须保留重新检查 original 的入口',
+);
 
 const focusable = [...view.slots.root.querySelectorAll<HTMLElement>(
 	'a[href],button:not(:disabled),input:not(:disabled),' +

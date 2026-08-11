@@ -79,12 +79,17 @@ assert(
 );
 let stageSetups = 0;
 let stageCleanups = 0;
+let verifiedHostChecks = 0;
 const application = createReaderUserscriptApplication({
 	environment,
 	document,
 	window,
 	preferences: {
 		load: () => ({ value: Object.freeze({ enabled: true }) }),
+	},
+	isVerifiedHost: () => {
+		verifiedHostChecks += 1;
+		return false;
 	},
 	stages: [{
 		name: 'userscript-contract',
@@ -103,8 +108,8 @@ const application = createReaderUserscriptApplication({
 });
 assert(await application.start() === 'running', 'userscript application 必须进入 running');
 assert(
-	moduleLookups === 1 && stageSetups === 1,
-	'启动识别必须复用成功 module cache 且 stage 只能安装一次',
+	moduleLookups === 1 && verifiedHostChecks === 0 && stageSetups === 1,
+	'自动识别必须先于已验证站点兜底，成功后只能安装一次 stage',
 );
 assert(
 	application.start() === application.start(),
@@ -113,31 +118,66 @@ assert(
 application.destroy();
 assert(stageCleanups === 1, 'userscript application destroy 必须释放全部 stage');
 
-let deniedStageSetups = 0;
-const lookupsBeforeDeniedHost = moduleLookups;
-const deniedApplication = createReaderUserscriptApplication({
-	environment,
-	document,
-	window,
+const {
+	document: fallbackParsedDocument,
+	window: fallbackParsedWindow,
+} = parseHTML('<!doctype html><html><head></head><body></body></html>');
+Object.defineProperty(fallbackParsedDocument, 'location', {
+	configurable: true,
+	value: { hostname: 'forum.unknown.example' },
+});
+Object.defineProperty(fallbackParsedWindow, 'location', {
+	configurable: true,
+	value: { hostname: 'forum.unknown.example' },
+});
+let fallbackModuleLookups = 0;
+const fallbackEnvironment = new BrowserUserscriptEnvironment({
+	userscriptGlobal: {
+		unsafeWindow: {
+			moduleBroker: {
+				lookup() {
+					fallbackModuleLookups += 1;
+					return null;
+				},
+			},
+		},
+	},
+});
+let fallbackStageSetups = 0;
+let fallbackHostChecks = 0;
+const fallbackApplication = createReaderUserscriptApplication({
+	environment: fallbackEnvironment,
+	document: fallbackParsedDocument as unknown as Document,
+	window: fallbackParsedWindow as unknown as Window,
 	preferences: {
 		load: () => ({ value: Object.freeze({ enabled: true }) }),
 	},
-	authorizeHost: async () => false,
+	hostTimeoutMs: 1,
+	createHostObserver: () => ({ observe() {}, disconnect() {} }),
+	isVerifiedHost: (hostname) => {
+		fallbackHostChecks += 1;
+		return hostname === 'forum.unknown.example';
+	},
 	stages: [{
-		name: 'denied-host-must-not-install',
+		name: 'verified-host-fallback',
 		required: true,
-		setup() {
-			deniedStageSetups += 1;
+		setup(_scope, context) {
+			fallbackStageSetups += 1;
+			assert(
+				context.host.detection === 'verified-site',
+				'已验证站点兜底必须与自动识别来源保持可区分',
+			);
 		},
 	}],
 });
 assert(
-	await deniedApplication.start() === 'skipped' &&
-		deniedStageSetups === 0 &&
-		moduleLookups === lookupsBeforeDeniedHost,
-	'站点授权 gate 必须先于 Discourse 探测与任何 stage，未登记 host 应安静跳过',
+	await fallbackApplication.start() === 'running' &&
+		fallbackModuleLookups >= 1 &&
+		fallbackHostChecks === 1 &&
+		fallbackStageSetups === 1,
+	'未知域名必须先自动识别，失败后才允许已验证站点兜底启动',
 );
-deniedApplication.destroy();
+fallbackApplication.destroy();
 
 let nativePageChange: (() => void) | null = null;
 let nativePageCleanup = 0;

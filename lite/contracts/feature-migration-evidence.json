@@ -1846,6 +1846,7 @@
       "owners": [
         "lite/src/state/preferences-config-codec.ts",
         "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/state/reader-settings-config-manager.ts",
         "lite/src/cache/reader-cache-management-surface.ts",
         "lite/src/app/reader-browser-runtime.ts",
         "lite/src/userscript/main-lite-bootstrap.ts"
@@ -1853,10 +1854,11 @@
       "tests": [
         "lite/tests/preferences-config-codec.test.ts",
         "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-settings-config-manager.test.ts",
         "lite/tests/reader-cache-management-surface.test.ts",
         "lite/tests/reader-browser-runtime.test.ts"
       ],
-      "note": "设置配置保持 awesome-linuxdo-reader-settings/schema v5、完整 76 字段和唯一 normalize；未知字段拒绝，三组历史缺失字段只按登记规则迁移。Data surface 的包含/排除范围已与主线对齐，下载、文件解析、导入确认和恢复默认均有明确反馈；导入/恢复通过 application 唯一 updatePreferences 写同一 repository 并立即热投影，不复制主线整页 reload，确认说明准确保留历史/缓存与浮窗视口边界。真实文件选择、下载和页面热投影仍待浏览器验收。"
+      "note": "设置导出升级为 awesome-linuxdo-reader-settings/schema v6 安全组合格式：76 项偏好继续复用唯一 defaults/normalize，并加入其他适用站点、脱密翻译规则和 WebDAV 非敏感选项；翻译 API Key、WebDAV 用户名与密码有结构级排除和伪造字段拒绝。旧 v5 文件仍只导入 canonical 偏好。组合提交按独立仓储依次写入并在失败时逆序恢复；同 URL 翻译 Key 可复用本机值，WebDAV 地址变化或缺少同地址凭据时清凭据并关闭定时同步。恢复全部默认覆盖四类设置但不删除队列、历史、缓存或原站数据。真实文件选择、下载和页面热投影仍待浏览器验收。"
     },
     "DATA-002": {
       "implementationStatus": "static-complete",
@@ -2132,6 +2134,7 @@
       "owners": [
         "lite/src/state/preferences-config-codec.ts",
         "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/state/reader-settings-config-manager.ts",
         "lite/src/state/preferences-repository.ts",
         "lite/src/cache/reader-cache-management-surface.ts",
         "lite/src/app/reader-browser-runtime.ts",
@@ -2140,11 +2143,12 @@
       "tests": [
         "lite/tests/preferences-config-codec.test.ts",
         "lite/tests/reader-preferences-schema.test.ts",
+        "lite/tests/reader-settings-config-manager.test.ts",
         "lite/tests/preferences-repository.test.ts",
         "lite/tests/reader-cache-management-surface.test.ts",
         "lite/tests/reader-browser-runtime.test.ts"
       ],
-      "note": "数据管理页直接复用 v5 canonical codec、唯一偏好 revision 仓储、唯一 FeedbackSurface 与 Blob 下载端口：导出只包含规范化设置，导入先完整校验再确认并一次写入，恢复全部默认也需确认；各领域表单继续负责按范围恢复。六类缓存选择性清理和当前主题精确重建仍复用 History/Response/Topic/图片 owner，不删除设置或原站账号状态；多 owner partial 失败保留对应选择。初始 Response/IndexedDB 统计读取失败由 surface 消化并显示六行失败，不形成 unhandled rejection；mutation 成功而随后统计失败时分别报告，不误写成清理/重建失败。无效文件和取消确认不会形成部分写入。真实文件选择、下载、存储拒绝、三形态热投影与视觉仍待浏览器验收。"
+      "note": "数据管理页通过 v6 安全组合 manager 复用 canonical 偏好 codec、独立站点/翻译/WebDAV 仓储、唯一 FeedbackSurface 与 Blob 下载端口：文件不含翻译或 WebDAV 凭据，旧 v5 只覆盖偏好；导入先完整校验再确认，跨仓储失败逆序回滚，恢复全部默认明确清除本机配置凭据。各领域表单继续负责按范围恢复。六类缓存选择性清理和当前主题精确重建仍复用 History/Response/Topic/图片 owner，不删除设置或原站账号状态；多 owner partial 失败保留对应选择。初始 Response/IndexedDB 统计读取失败由 surface 消化并显示六行失败，不形成 unhandled rejection；mutation 成功而随后统计失败时分别报告。真实文件选择、下载、存储拒绝、三形态热投影与视觉仍待浏览器验收。"
     },
     "TROUBLE-006": {
       "implementationStatus": "static-complete",

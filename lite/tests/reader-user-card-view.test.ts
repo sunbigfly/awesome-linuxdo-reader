@@ -404,13 +404,16 @@ assert(
 		view.element.querySelector<HTMLAnchorElement>(
 			'.ldp-user-card-stat[aria-label="查看帖子"]',
 		)?.href.endsWith('/u/alice/activity/replies') &&
-		view.element.querySelector<HTMLAnchorElement>(
-			'.ldp-user-card-stat[aria-label="查看获赞"]',
-		)?.href.endsWith('/u/alice/activity/likes-received') &&
+		view.element.querySelector<HTMLElement>(
+			'.ldp-user-card-stat[aria-label="获赞"]',
+		)?.tagName === 'DIV' &&
+		!view.element.querySelector<HTMLElement>(
+			'.ldp-user-card-stat[aria-label="获赞"]',
+		)?.hasAttribute('href') &&
 		view.element.querySelector<HTMLAnchorElement>(
 			'.ldp-user-card-stat[aria-label="查看主题"]',
 		)?.href.endsWith('/u/alice/activity/topics'),
-	'姓名、统计活动链接和底部附加字段必须与 main.js 用户卡 DOM 契约一致',
+	'帖子/主题必须使用 Discourse 公开活动路由，获赞不得伪造不存在的公开明细入口',
 );
 const bio = view.element.querySelector<HTMLElement>('.ldp-user-card-bio')!;
 const bioLink = bio.querySelector<HTMLAnchorElement>('a')!;
@@ -777,12 +780,14 @@ const reviewAlice = document.createElement('button');
 const reviewBob = document.createElement('button');
 reviewRoot.append(reviewAlice, reviewBob);
 document.body.append(reviewRoot);
+let userCardPositionFrames = 0;
 Object.defineProperties(window, {
 	innerWidth: { configurable: true, value: 1_000 },
 	innerHeight: { configurable: true, value: 1_000 },
 	requestAnimationFrame: {
 		configurable: true,
 		value: (callback: FrameRequestCallback) => {
+			userCardPositionFrames += 1;
 			queueMicrotask(() => callback(0));
 			return 1;
 		},
@@ -799,6 +804,13 @@ const reviewView = new ReaderUserCardView({
 	userHref: (username) => `/u/${username}`,
 	toggleFollow: () => slowToggle,
 });
+const closedPositionFrames = userCardPositionFrames;
+document.dispatchEvent(new constructors.Event('scroll', { bubbles: true }));
+await Promise.resolve();
+assert(
+	userCardPositionFrames === closedPositionFrames,
+	'全部用户卡表面关闭时，document scroll 不得继续排空定位帧',
+);
 await reviewView.open('alice', reviewAlice);
 click(reviewView.element.querySelector('[data-user-follow-toggle]')!);
 await Promise.resolve();
@@ -974,6 +986,17 @@ const hoverRoot = document.createElement('div');
 const hoverAnchor = document.createElement('a');
 hoverAnchor.href = '/u/hover-user';
 hoverAnchor.dataset.userCard = 'hover-user';
+Object.defineProperty(hoverAnchor, 'getBoundingClientRect', {
+	configurable: true,
+	value: () => ({
+		left: 100,
+		right: 140,
+		top: 100,
+		bottom: 120,
+		width: 40,
+		height: 20,
+	}),
+});
 hoverRoot.append(hoverAnchor);
 document.body.append(hoverRoot);
 document.documentElement.classList.add('ldp-reader-workspace');
@@ -1017,6 +1040,17 @@ const hoverView = new ReaderUserCardView({
 		}), 'action-response');
 	},
 });
+Object.defineProperty(hoverView.element, 'getBoundingClientRect', {
+	configurable: true,
+	value: () => ({
+		left: 0,
+		right: 300,
+		top: 0,
+		bottom: 220,
+		width: 300,
+		height: 220,
+	}),
+});
 const hoverEvent = new constructors.Event('mouseover', {
 	bubbles: true,
 	cancelable: true,
@@ -1045,8 +1079,11 @@ assert(
 runDelay(500);
 for (let index = 0; index < 4; index += 1) await Promise.resolve();
 assert(
-	!hoverView.element.hidden && hoverSession.activeUsername === 'hover-user',
-	'500ms 阶段必须复用已预取 snapshot 激活唯一用户卡 surface',
+	!hoverView.element.hidden && hoverSession.activeUsername === 'hover-user' &&
+	hoverView.element.style.top === '124px',
+	`500ms 阶段必须复用已预取 snapshot，并用 4px 可抵达间距激活唯一用户卡 surface：${
+		hoverView.element.style.top
+	}`,
 );
 	click(hoverView.element.querySelector('[data-user-follow-kind="followers"]')!);
 	await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -1166,10 +1203,21 @@ const hoverOut = new constructors.Event('mouseout', {
 Object.defineProperty(hoverOut, 'relatedTarget', { value: null });
 hoverAnchor.dispatchEvent(hoverOut);
 assert(
-	[...timers.values()].some((timer) => timer.delayMs === 180),
-	'离开锚点必须按主线保留 180ms 回滞，允许指针进入卡片',
+	[...timers.values()].some((timer) => timer.delayMs >= 400),
+	'离开锚点必须保留足够回滞，允许指针进入卡片',
 );
-runDelay(180);
+hoverView.element.dispatchEvent(new constructors.Event('mouseenter'));
+assert(
+	![...timers.values()].some((timer) => timer.delayMs >= 400) &&
+	!hoverView.element.hidden,
+	'鼠标进入用户卡必须接管 hover 并取消待执行隐藏',
+);
+hoverView.element.dispatchEvent(new constructors.Event('mouseleave'));
+assert(
+	[...timers.values()].some((timer) => timer.delayMs >= 400),
+	'离开用户卡后必须重新建立唯一隐藏任务',
+);
+runDelay(480);
 assert(hoverView.element.hidden, 'Hover 回滞到期必须释放唯一用户卡投影');
 const hostHoverEvent = new constructors.Event('mouseover', {
 	bubbles: true,

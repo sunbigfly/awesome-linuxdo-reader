@@ -26,11 +26,19 @@ assert(
 );
 assert(
 	READER_SETTINGS_PANELS.find((panel) => panel.id === 'logs')
+		?.description.includes('优先级、升级复用、取消和 429') &&
+	READER_SETTINGS_PANELS.find((panel) => panel.id === 'logs')
+		?.description.includes('自适应后的运行策略') &&
+	READER_SETTINGS_PANELS.find((panel) => panel.id === 'logs')
 		?.description.includes('不保存查询参数、请求正文、Cookie、响应内容或个人数据') &&
+	READER_SETTINGS_PANELS.find((panel) => panel.id === 'performance')
+		?.description.includes('目标上限') &&
+	READER_SETTINGS_PANELS.find((panel) => panel.id === 'performance')
+		?.description.includes('自适应下调') &&
 	READER_SETTINGS_PANELS.find((panel) => panel.id === 'interaction')
 		?.description ===
 			'管理主帖操作列、二级回复显示位置与 Boost 文本复制规则。',
-	'设置目录的用户可见标题与简介必须对齐主脚本，性能热更新说明除外',
+	'设置目录的用户可见标题与简介必须区分性能目标、生效日志与隐私边界',
 );
 
 interface Preferences {

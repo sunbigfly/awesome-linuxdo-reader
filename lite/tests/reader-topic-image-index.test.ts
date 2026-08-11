@@ -26,7 +26,7 @@ const first: TestPost = {
 	topic_id: 10,
 	post_number: 1,
 	cooked: `
-		<p><a class="lightbox" href="/uploads/default/original/1X/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"><img src="/uploads/default/optimized/1X/a_2_690x388.png" alt="正文图"></a></p>
+		<p><a class="lightbox" href="/uploads/default/original/1X/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png" data-download-href="/uploads/short-url/original-a.png?dl=1"><img src="/uploads/default/optimized/1X/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_2_690x388.png" srcset="/uploads/default/optimized/1X/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_2_690x388.png, /uploads/default/optimized/1X/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_2_1035x582.png 1.5x, /uploads/default/optimized/1X/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_2_1380x776.png 2x" alt="正文图"></a></p>
 		<p><img class="emoji" src="/images/emoji/twitter/smile.png"></p>
 		<p><img class="avatar" src="/user_avatar/linux.do/demo/48/1_2.png"></p>
 		<aside class="quote"><img src="/uploads/default/original/1X/quote.png"></aside>
@@ -38,14 +38,14 @@ const second: TestPost = {
 	topic_id: 10,
 	post_number: 2,
 	cooked: `
-		<p><img src="/uploads/default/optimized/2X/b.png?width=690" data-large-src="/uploads/default/original/2X/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.webp" alt="第二张"></p>
+		<p><img src="/uploads/default/optimized/2X/b.png?width=690" data-orig-src="/uploads/default/original/2X/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.webp" alt="第二张"></p>
 	`,
 };
 const wrongTopic: TestPost = {
 	id: 3,
 	topic_id: 11,
 	post_number: 3,
-	cooked: '<img src="/uploads/default/original/3X/wrong.png">',
+	cooked: '<img src="/uploads/default/optimized/3X/cccccccccccccccccccccccccccccccccccccccc_2_690x388.png" srcset="/uploads/default/optimized/3X/cccccccccccccccccccccccccccccccccccccccc_2_690x388.png, /uploads/default/optimized/3X/cccccccccccccccccccccccccccccccccccccccc_2_1380x776.png 2x">',
 };
 let posts: readonly TestPost[] = [first, second, wrongTopic];
 const changes = new Signal<void>();
@@ -102,6 +102,19 @@ assert(
 	initial.items[0]?.sourcePostNumber === 1 &&
 	initial.items[0]?.alt === '正文图' &&
 	initial.items[0]?.originalSrc.includes('/original/1X/') &&
+	initial.items[0]?.previewSrc.endsWith(
+		'/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_2_1380x776.png',
+	) &&
+	initial.items[0]?.originalFallbackCount === 1 &&
+	initial.items[0]?.fallbackSrcs?.[0]?.endsWith(
+		'/uploads/short-url/original-a.png?dl=1',
+	) &&
+	initial.items[0]?.fallbackSrcs?.[1]?.endsWith(
+		'/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_2_1380x776.png',
+	) &&
+	initial.items[0]?.fallbackSrcs?.at(-1)?.endsWith(
+		'/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_2_690x388.png',
+	) &&
 	initial.items[1]?.sourcePostNumber === 2 &&
 	initial.items[1]?.originalSrc.endsWith('.webp') &&
 	!initial.complete,
@@ -131,8 +144,11 @@ assert(
 	quotedItems.length === 1 &&
 	quotedItems[0]?.topicId === 11 &&
 	quotedItems[0]?.sourcePostNumber === 3 &&
-	quotedItems[0]?.originalSrc.endsWith('/3X/wrong.png'),
-	'引用源解析端口必须能解释指定 Topic 的独立楼层，但不得污染当前 Topic 快照',
+	quotedItems[0]?.originalSrc.endsWith(
+		'/original/3X/cccccccccccccccccccccccccccccccccccccccc.png',
+	) &&
+	quotedItems[0]?.fallbackSrcs?.[0]?.endsWith('_2_1380x776.png'),
+	'缺少显式 original 时必须先推导并检查原图，再按 srcset 从大到小降级，且不得污染当前 Topic 快照',
 );
 const adjacent = await index.loadAdjacent(1, 2);
 assert(

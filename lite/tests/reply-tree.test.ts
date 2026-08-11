@@ -24,6 +24,16 @@ assertArray(initial.changedPostNumbers, [1, 2, 3, 4], '乱序事务应完整提�
 assertArray(topology.childrenOf(1), [2], '#1 的直属子楼层错误');
 assertArray(topology.childrenOf(2), [3], '#2 的直属子楼层错误');
 assertArray(topology.childrenOf(3), [4], '#3 的直属子楼层错误');
+const initialSnapshot = topology.snapshot();
+assert(
+	initialSnapshot === topology.snapshot(),
+	'同一 topology revision 必须复用冻结关系快照，避免重复排序整棵回复树',
+);
+const unchanged = topology.commit([{ postNumber: 4, parentPostNumber: 3 }]);
+assert(
+	unchanged.revision === initial.revision && topology.snapshot() === initialSnapshot,
+	'幂等事务不得失效 topology 快照缓存',
+);
 
 const reparent = topology.commit([{ postNumber: 4, parentPostNumber: 2 }]);
 assert(reparent.revision === 2, '改父事务应递增 revision');
@@ -33,6 +43,11 @@ assertArray(topology.childrenOf(2), [3, 4], '改父后直属子楼层应按楼�
 assertArray(topology.childrenOf(3), [], '旧父楼层不应保留幽灵子节点');
 assert(topology.subtreePostCountOf(1) === 4, '祖先子树权重必须包含全部已知子孙');
 assert(topology.subtreePostCountOf(2) === 3, '中间节点子树权重必须包含自身');
+const reparentSnapshot = topology.snapshot();
+assert(
+	reparentSnapshot !== initialSnapshot && reparentSnapshot === topology.snapshot(),
+	'关系变更必须只失效一次 topology 快照并为同 revision 复用新结果',
+);
 assert(
 	topology.rootBranches().length === 1 &&
 	topology.rootBranches()[0]?.postNumber === 1 &&

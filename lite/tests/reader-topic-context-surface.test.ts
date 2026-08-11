@@ -88,7 +88,8 @@ const posts: TestPost[] = [
 		// 归属于当前可见分支末端，不能在祖先与末端各生成一份。
 		reply_count: 2,
 		username: 'branch',
-		cooked: '<p>canonical parent full content</p>',
+		cooked: '<h2><strong>canonical parent</strong> full content</h2>' +
+			'<img src="/uploads/default/original/quote-full.png" alt="quote full">',
 	},
 	{
 		id: 103,
@@ -109,6 +110,7 @@ const posts: TestPost[] = [
 	},
 ];
 const changes = new Signal<unknown>();
+let sessionPostByNumberCalls = 0;
 const replies = new ReplyTreeRepository(10, {
 	async load() {
 		return null;
@@ -121,8 +123,10 @@ const session: ReaderTopicContextSessionPort<TestPost> = {
 	topicId: discourseTopicId(10),
 	changes,
 	cachedPosts: () => posts,
-	postByNumber: (postNumber) =>
-		posts.find((post) => post.post_number === postNumber),
+	postByNumber: (postNumber) => {
+		sessionPostByNumberCalls += 1;
+		return posts.find((post) => post.post_number === postNumber);
+	},
 	postStreamCoverage: () => ({
 		complete: true,
 		expectedPostCount: posts.length,
@@ -164,17 +168,47 @@ const navigated: number[] = [];
 const openedQuoteTargets: Array<Readonly<{
 	readonly topicId: number;
 	readonly postNumber: number;
+	readonly source: 'quote';
+	readonly alignment: 'nearest';
+	readonly highlight: false;
+	readonly forceRefresh: true;
+	readonly quoteHighlight: Readonly<{
+		readonly postNumber: number;
+		readonly text: string;
+		readonly active: boolean;
+		readonly source: Readonly<{
+			readonly topicId: number;
+			readonly postNumber: number;
+			readonly anchor: Readonly<{
+				readonly viewport: Readonly<{
+					readonly scrollTop: number;
+				}>;
+			}> | null;
+		}> | null;
+	}>;
 }>> = [];
 let navigationGate: Promise<void> | null = null;
+const navigationStatuses: string[] = [];
+const navigationRetryDelays: number[] = [];
+let navigationRevision = 0;
+let cancelNavigationDuringRetryDelay = false;
 const mainViews = new Map<number, PostView>();
 const navigation = {
+	get revision() {
+		return navigationRevision;
+	},
+	isCurrent(revision: number) {
+		return revision === navigationRevision;
+	},
 	async navigate(input: { readonly postNumber: number }) {
+		navigationRevision += 1;
 		navigated.push(input.postNumber);
 		await navigationGate;
+		const status = navigationStatuses.shift() ?? 'revealed';
 		const element = mainViews.get(input.postNumber)?.slots.root;
 		return {
-			status: 'revealed',
-			...(element ? { element } : {}),
+			status,
+			...(status === 'revealed' && element ? { element } : {}),
 		};
 	},
 };
@@ -183,6 +217,11 @@ const quoteBodyChanges: Array<Readonly<{
 	readonly state: 'expanded' | 'collapsed';
 }>> = [];
 const revealedReplyLevels: number[] = [];
+const notices: string[] = [];
+const revealedQuoteTargets: Array<Readonly<{
+	readonly target: HTMLElement;
+	readonly mode: 'match' | 'floor';
+}>> = [];
 const feature = new ReaderTopicContextFeature<TestPost>({
 	document,
 	controller,
@@ -202,6 +241,17 @@ const feature = new ReaderTopicContextFeature<TestPost>({
 		revealedReplyLevels.push(postNumber);
 		return true;
 	},
+	revealQuoteTarget: (target, mode) => {
+		revealedQuoteTargets.push(Object.freeze({ target, mode }));
+	},
+	navigationRetryDelay: async (delayMs) => {
+		navigationRetryDelays.push(delayMs);
+		if (cancelNavigationDuringRetryDelay) {
+			cancelNavigationDuringRetryDelay = false;
+			navigationRevision += 1;
+		}
+	},
+	notify: (message) => notices.push(message),
 	parentScope: scope,
 	onError: (error) => errors.push(error),
 });
@@ -295,6 +345,12 @@ Object.defineProperty(collapsibleLeaf.slots.root, 'getBoundingClientRect', {
 collapsibleFeature.afterRender(posts[3]!, collapsibleLeaf);
 main.append(collapsibleLeaf.slots.root);
 collapsibleFeature.attachRoot(collapsibleLeaf.slots.root, 4);
+sessionPostByNumberCalls = 0;
+collapsibleFeature.syncProjection();
+assert(
+	sessionPostByNumberCalls === 1,
+	'同一投影同步必须只查询已挂载叶子楼层一次，不能让关系控件与根回复折叠重复读取 canonical 帖子',
+);
 const collapsibleToggle = collapsibleLeaf.slots.root.querySelector<HTMLElement>(
 	'[data-reader-context-collapse-reply]',
 );
@@ -356,6 +412,39 @@ assert(
 collapsibleFeature.detachRoot(duplicateLeaf.slots.root);
 duplicateLeaf.destroy();
 duplicateLayer.remove();
+collapsiblePresentation.setPostFilter(Object.freeze({
+	key: 'only-op:op',
+	hideDescendantMatches: true,
+	ancestorBoundaryPostNumber: 1,
+	matches: (postNumber: number) => postNumber === 4,
+}));
+collapsibleFeature.syncProjection();
+const onlyOpDiscussionButton =
+	collapsibleLeaf.slots.root.querySelector<HTMLButtonElement>(
+		'[data-reader-context-discussion]',
+	);
+if (!onlyOpDiscussionButton) {
+	throw new Error('只看楼主的完整讨论入口未投影');
+}
+assert(
+	!collapsibleLeaf.slots.root.classList.contains('ldp-reply-collapsible') &&
+		!collapsibleLeaf.slots.root.querySelector(
+			'[data-reader-context-collapse-reply]',
+		) &&
+		!collapsibleLeaf.slots.root.querySelector('.ldp-nested-esc-hint') &&
+		onlyOpDiscussionButton.textContent?.includes('查看完整讨论'),
+	'只看楼主中的楼主回复必须去掉折叠与 Esc 收起提示，并在帖子下方提供完整讨论入口',
+);
+onlyOpDiscussionButton.click();
+for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+assert(
+	controller.snapshot().discussion?.rootPostNumber === 2 &&
+		controller.snapshot().discussion?.targetPostNumber === 4 &&
+		controller.snapshot().discussion?.entries
+			.map((entry) => entry.postNumber).join(',') === '2,3,4',
+	'只看楼主的完整讨论入口必须递归找到主题正文之下的唯一祖先，并投影该祖先的全部子孙',
+);
+controller.closeDiscussion();
 collapsibleFeature.detachRoot(collapsibleLeaf.slots.root);
 collapsibleLeaf.destroy();
 let workspaceSnapshot = {
@@ -581,6 +670,8 @@ const batchedFeature = new ReaderTopicContextFeature<TestPost>({
 	controller,
 	replies,
 	presentation: {
+		postFilterKey: null,
+		postFilterMatches: () => true,
 		parentOf: () => null,
 		childrenOf: () => Object.freeze([]),
 		hiddenDirectChildrenOf: () => Object.freeze([]),
@@ -761,12 +852,38 @@ assert(
 const quoteToggle = childRoot.querySelector<HTMLButtonElement>(
 	'[data-reader-context-quote="toggle"]',
 )!;
+const collapsedQuoteBody = childRoot.querySelector<HTMLElement>(
+	'.ldp-post-quote blockquote',
+);
+const collapsedQuoteHtml = collapsedQuoteBody?.innerHTML;
+const collapsedQuoteImage = collapsedQuoteBody?.querySelector('img');
+assert(
+	collapsedQuoteBody?.textContent === 'canonical parent full content' &&
+		collapsedQuoteBody.querySelector(':scope > h2 > strong')?.textContent ===
+			'canonical parent' &&
+		collapsedQuoteBody.closest('.ldp-post-quote')?.getAttribute(
+			'data-ldp-quote-hydrated',
+		) === '1' &&
+		collapsedQuoteBody.closest('.ldp-post-quote')?.getAttribute(
+			'data-ldp-quote-expanded',
+		) === '0' &&
+		collapsedQuoteImage?.getAttribute('src') ===
+			'/uploads/default/original/quote-full.png' &&
+		!collapsedQuoteBody.closest('.ldp-post-quote')?.classList.contains(
+			'ldp-quote-expanded',
+		),
+	'引用折叠态必须直接保留完整 canonical cooked 与 Markdown 语义，只由折叠状态裁切显示',
+);
 quoteToggle.click();
 await Promise.resolve();
 await Promise.resolve();
 assert(
 	childRoot.querySelector('.ldp-post-quote blockquote')?.textContent ===
 		'canonical parent full content' &&
+	childRoot.querySelector('.ldp-post-quote blockquote')?.innerHTML ===
+		collapsedQuoteHtml &&
+	childRoot.querySelector('.ldp-post-quote blockquote img') ===
+		collapsedQuoteImage &&
 	quoteToggle.getAttribute('aria-expanded') === 'true' &&
 	quoteBodyChanges.at(-1)?.postNumber === 3 &&
 	quoteBodyChanges.at(-1)?.state === 'expanded',
@@ -780,30 +897,101 @@ quoteToggle.click();
 await Promise.resolve();
 assert(
 	childRoot.querySelector('.ldp-post-quote blockquote')?.textContent ===
-		'canonical parent' &&
+		'canonical parent full content' &&
+		childRoot.querySelector('.ldp-post-quote blockquote')?.innerHTML ===
+			collapsedQuoteHtml &&
+		childRoot.querySelector('.ldp-post-quote blockquote img') ===
+			collapsedQuoteImage &&
+		childRoot.querySelector(
+			'.ldp-post-quote blockquote > h2 > strong',
+		)?.textContent === 'canonical parent' &&
+		!childRoot.querySelector('.ldp-post-quote')?.classList.contains(
+			'ldp-quote-expanded',
+		) &&
+		childRoot.querySelector('.ldp-post-quote')?.getAttribute(
+			'data-ldp-quote-expanded',
+		) === '0' &&
 	quoteBodyChanges.at(-1)?.state === 'collapsed',
-	'引用收起必须恢复当前楼层原摘录、通知 feature 重同步并保持同一 DOM 锚点',
+	'引用收起必须只切换裁切状态，不得替换完整 cooked DOM，并通知 feature 重同步',
 );
 childRoot.querySelector<HTMLButtonElement>(
 	'[data-reader-context-quote="jump"]',
 )?.click();
-await Promise.resolve();
-await Promise.resolve();
+for (let index = 0; index < 4; index += 1) await Promise.resolve();
 const highlighted = mainViews.get(2)?.slots.content.querySelector<HTMLElement>(
 	'mark.ldp-quote-match',
 );
+const visibleQuoteReturn = mainViews.get(2)?.slots.root
+	.querySelector<HTMLButtonElement>('[data-reader-context-quote-return]');
 assert(
 	highlighted?.textContent === 'canonical parent' &&
+	visibleQuoteReturn?.textContent === '← 返回引用处' &&
+	revealedQuoteTargets.at(-1)?.target === highlighted &&
+	revealedQuoteTargets.at(-1)?.mode === 'match' &&
 	feature.captureQuoteHighlightState()?.postNumber === 2 &&
 	feature.captureQuoteHighlightState()?.source?.postNumber === 3 &&
 	feature.captureQuoteHighlightState()?.source?.parentPostNumber === 2 &&
 	feature.captureQuoteHighlightState()?.source?.nested === true &&
 	feature.captureQuoteHighlightState()?.source?.anchor?.viewport.scrollTop ===
 		240,
-	`引用跳转必须在 navigation 揭示的 canonical PostView 内精确标出原文并进入可持久化状态：${
+	`引用跳转必须精确标出原文、在目标楼层直接显示返回入口，并进入可持久化状态：${
 		JSON.stringify(errors.map((error) => String(error)))
 	} / ${mainViews.get(2)?.slots.content.innerHTML ?? ''}`,
 );
+const quoteHint = document.body.querySelector<HTMLElement>(
+	'.ldp-quote-highlight-hint',
+);
+assert(highlighted && quoteHint, '引用高亮必须生成可交互的就近操作浮层');
+Object.defineProperty(highlighted, 'getBoundingClientRect', {
+	configurable: true,
+	value: () => box(260, 180, 100, 20),
+});
+Object.defineProperty(quoteHint, 'getBoundingClientRect', {
+	configurable: true,
+	value: () => box(0, 0, 220, 36),
+});
+const nativeSetTimeout = globalThis.setTimeout;
+const nativeClearTimeout = globalThis.clearTimeout;
+let quoteHintHideDelay = -1;
+let quoteHintHideHandle: ReturnType<typeof setTimeout> | null = null;
+try {
+	globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+		quoteHintHideDelay = Number(args[1] ?? 0);
+		quoteHintHideHandle = 1 as unknown as ReturnType<typeof setTimeout>;
+		return quoteHintHideHandle;
+	}) as typeof setTimeout;
+	globalThis.clearTimeout = ((...args: Parameters<typeof clearTimeout>) => {
+		if (args[0] === quoteHintHideHandle) quoteHintHideHandle = null;
+	}) as typeof clearTimeout;
+	const quoteHover = new window.Event('mouseenter', {
+		bubbles: false,
+		cancelable: true,
+	});
+	Object.defineProperties(quoteHover, {
+		clientX: { value: 310 },
+		clientY: { value: 180 },
+	});
+	highlighted.dispatchEvent(quoteHover);
+	assert(
+		quoteHint.classList.contains('ldp-quote-hint-visible') &&
+			quoteHint.style.top === '140px',
+		`引用浮层必须贴近鼠标锚点，避免跨越空白区时丢失 hover：${quoteHint.style.top}`,
+	);
+	highlighted.dispatchEvent(new window.Event('mouseleave'));
+	assert(
+		quoteHintHideDelay >= 400 && quoteHintHideHandle !== null,
+		`离开高亮文本后必须保留足够的浮层抵达时间：${quoteHintHideDelay}`,
+	);
+	quoteHint.dispatchEvent(new window.Event('mouseenter'));
+	assert(
+		quoteHintHideHandle === null &&
+			quoteHint.classList.contains('ldp-quote-hint-visible'),
+		'鼠标进入引用浮层必须接管 hover，取消待执行的隐藏动作',
+	);
+} finally {
+	globalThis.setTimeout = nativeSetTimeout;
+	globalThis.clearTimeout = nativeClearTimeout;
+}
 const crossTopicJump = mainViews.get(4)?.slots.root
 	.querySelector<HTMLButtonElement>('[data-reader-context-quote="jump"]');
 assert(
@@ -816,12 +1004,21 @@ await Promise.resolve();
 await Promise.resolve();
 assert(
 	openedQuoteTargets.at(-1)?.topicId === 11 &&
-	openedQuoteTargets.at(-1)?.postNumber === 7,
-	'跨主题普通引用必须交给唯一 runtime target 打开目标 topic 楼层',
+	openedQuoteTargets.at(-1)?.postNumber === 7 &&
+	openedQuoteTargets.at(-1)?.source === 'quote' &&
+	openedQuoteTargets.at(-1)?.alignment === 'nearest' &&
+	openedQuoteTargets.at(-1)?.highlight === false &&
+	openedQuoteTargets.at(-1)?.forceRefresh === true &&
+	openedQuoteTargets.at(-1)?.quoteHighlight.postNumber === 7 &&
+	openedQuoteTargets.at(-1)?.quoteHighlight.text === 'remote excerpt' &&
+	openedQuoteTargets.at(-1)?.quoteHighlight.active === true &&
+	openedQuoteTargets.at(-1)?.quoteHighlight.source?.topicId === 10 &&
+	openedQuoteTargets.at(-1)?.quoteHighlight.source?.postNumber === 4 &&
+	openedQuoteTargets.at(-1)?.quoteHighlight.source?.anchor?.viewport
+		.scrollTop === 240,
+	'跨主题普通引用必须把目标楼层、引用摘录与完整来源锚点一起交给 runtime target',
 );
-document.querySelector<HTMLButtonElement>(
-	'.ldp-quote-highlight-return',
-)?.click();
+visibleQuoteReturn.click();
 await Promise.resolve();
 await Promise.resolve();
 assert(
@@ -835,17 +1032,76 @@ assert(
 	feature.captureQuoteHighlightState()?.active === false,
 	'点击引用匹配区域必须切换高亮状态并同步历史模型',
 );
+const restorableQuoteHighlight = feature.captureQuoteHighlightState();
 assert(
 	await feature.restoreQuoteHighlightState(
-		feature.captureQuoteHighlightState(),
+		restorableQuoteHighlight,
 	) &&
 	mainViews.get(2)?.slots.content.querySelector(
 		'mark.ldp-quote-match.ldp-quote-match-muted',
 	),
 	'引用高亮历史恢复必须复用唯一 navigation 并恢复精确文本与 active 状态',
 );
+const changedDestination = mainViews.get(2)?.slots.content;
+if (!changedDestination) throw new Error('引用目标正文缺失');
+changedDestination.textContent = 'destination changed';
+childRoot.querySelector<HTMLButtonElement>(
+	'[data-reader-context-quote="jump"]',
+)?.click();
+for (let index = 0; index < 4; index += 1) await Promise.resolve();
+assert(
+	navigated.at(-1) === 2 &&
+	notices.at(-1) === '目的地内容已修改；已定位到楼层 #2' &&
+	revealedQuoteTargets.at(-1)?.target === mainViews.get(2)?.slots.root &&
+	revealedQuoteTargets.at(-1)?.mode === 'floor' &&
+	!changedDestination.querySelector('mark.ldp-quote-match') &&
+	mainViews.get(2)?.slots.root.querySelector(
+		'[data-reader-context-quote-return]',
+	)?.textContent === '← 返回引用处' &&
+	feature.captureQuoteHighlightState()?.source?.postNumber === 3,
+	'同 Topic 引用文字失配时必须仍保留目标楼层的返回入口与来源锚点，再闪烁楼层并明确提示',
+);
+changedDestination.innerHTML = '<p>canonical parent full content</p>';
+assert(
+	await feature.restoreQuoteHighlightState(restorableQuoteHighlight),
+	'失配提示用例结束后必须恢复引用状态，供销毁竞态继续验证',
+);
+const navigationCountBeforeRetry = navigated.length;
+navigationStatuses.push('unresolved-tree', 'unresolved-tree', 'revealed');
+childRoot.querySelector<HTMLButtonElement>(
+	'[data-reader-context-quote="jump"]',
+)?.click();
+for (let index = 0; index < 8; index += 1) await Promise.resolve();
+assert(
+	navigated.length === navigationCountBeforeRetry + 3 &&
+	navigationRetryDelays.slice(-2).join(',') === '1000,2000' &&
+	mainViews.get(2)?.slots.content.querySelector('mark.ldp-quote-match')
+		?.textContent === 'canonical parent',
+	'同 Topic 引用的回复树暂未挂载时必须按 1 秒、2 秒有界重试，并在成功后继续精确高亮',
+);
+navigationStatuses.push('unavailable');
+childRoot.querySelector<HTMLButtonElement>(
+	'[data-reader-context-quote="jump"]',
+)?.click();
+for (let index = 0; index < 4; index += 1) await Promise.resolve();
+assert(
+	notices.at(-1) === '目的地楼层 #2 不存在或当前不可访问',
+	'同 Topic 引用目标不可用时必须明确提示，不能静默结束',
+);
+const navigationCountBeforeCancellation = navigated.length;
+navigationStatuses.push('unresolved-tree');
+cancelNavigationDuringRetryDelay = true;
+childRoot.querySelector<HTMLButtonElement>(
+	'[data-reader-context-quote="jump"]',
+)?.click();
+for (let index = 0; index < 4; index += 1) await Promise.resolve();
+assert(
+	navigated.length === navigationCountBeforeCancellation + 1 &&
+	notices.at(-1) === '楼层跳转已取消；检测到新的定位或滚动操作',
+	'同 Topic 引用在重试等待期间被新定位或用户滚动取消时不得再次拉回，并必须明确说明原因',
+);
 
-await controller.openDiscussion(4);
+const hiddenDiscussionReveal = await surface.revealDiscussionPost(4);
 const discussionLayer = modal.querySelector<HTMLElement>(
 	'.ldp-descendant-replies-layer',
 )!;
@@ -858,6 +1114,24 @@ const discussionChild = discussionLayer.querySelector<HTMLElement>(
 const discussionDeep = discussionLayer.querySelector<HTMLElement>(
 	'[data-post-number="4"]',
 )!;
+assert(
+	hiddenDiscussionReveal?.rootPostNumber === 2 &&
+		hiddenDiscussionReveal.element === discussionDeep &&
+		hiddenDiscussionReveal.mounted,
+	'隐藏目标必须由完整讨论 surface 返回真实目标元素，供统一导航定位且不改写主信息流投影',
+);
+highlightedTargets.length = 0;
+assert(
+	surface.highlightDiscussionPost(4) &&
+		highlightedTargets.join(',') === '4',
+	'引用返回必须能只闪烁完整讨论中的语义来源楼层，不重新定位浮窗视野',
+);
+assert(
+	discussionRoot.querySelector(
+		'[data-reader-context-quote-return]',
+	)?.textContent === '← 返回引用处',
+	'引用目标进入完整讨论浮窗后，可见的楼层副本也必须直接带有返回引用处入口',
+);
 const discussionChildAvatar = discussionChild.querySelector<HTMLElement>(
 	'[data-reader-avatar]',
 )!;
@@ -871,11 +1145,15 @@ const longBranchOverlay = discussionRoot.querySelector<SVGElement>(
 )!;
 assert(
 	longBranchPaint.paintedBranches === 2 &&
-		Boolean(longBranchOverlay.querySelector(
-			'.ldp-branch-visible-path[d]',
+		stableDiscussionList.classList.contains('ldp-segmented-branches') &&
+		longBranchOverlay.hasAttribute('hidden') &&
+		Boolean(discussionRoot.querySelector(
+			'.ldp-reader-branch-trunk-toggle',
 		)) &&
-		Number.parseFloat(longBranchOverlay.style.height) > 2_048,
-	'完整讨论正文展开把父子头像撑开超过 2048px 后，仍必须保留 canonical SVG 回复线',
+		Boolean(discussionChild.querySelector(
+			'.ldp-reader-branch-rail-toggle',
+		)),
+	'完整讨论必须复用主阅读流的连续分段回复线，长正文和虚拟加载不能截断父子线',
 );
 Object.defineProperty(discussionChildAvatar, 'getBoundingClientRect', {
 	configurable: true,

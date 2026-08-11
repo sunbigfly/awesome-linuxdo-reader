@@ -58,6 +58,19 @@ assert(
 	branchResolution.complete && branchResolution.rootPostNumber === 9,
 	'完整讨论必须可在 OP 之前停止，把直属回复作为局部讨论根而不复制另一套遍历逻辑',
 );
+const orphanTarget = new Map<number, TestPost>([
+	[62, { id: 1062, post_number: 62, reply_to_post_number: 41 }],
+]);
+const orphanResolution = await resolveReaderReplyAncestors({
+	postByNumber: (postNumber) => orphanTarget.get(postNumber),
+	async loadTarget() {
+		return [];
+	},
+}, 62, { stopBeforePostNumber: 1 });
+assert(
+	!orphanResolution.complete && orphanResolution.rootPostNumber === 62,
+	'父回复已删除或不可读时，祖先解析必须回退到最高可用楼层，不能把缺失父楼当成可打开的根',
+);
 let active = true;
 const cancelled = await resolveReaderReplyAncestors({
 	postByNumber: () => undefined,

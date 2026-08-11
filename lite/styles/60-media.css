@@ -648,18 +648,20 @@
   max-height: calc(100vh - 176px);
   border-radius: 4px;
   transform:
-    translate3d(var(--ldp-lb-pan-x, 0), var(--ldp-lb-pan-y, 0), 0)
+    translate(var(--ldp-lb-pan-x, 0), var(--ldp-lb-pan-y, 0))
     scale(var(--ldp-lb-scale, 1));
   transform-origin: center;
   user-select: none;
   -webkit-user-drag: none;
   touch-action: none;
-  will-change: transform;
   cursor: zoom-in;
 }
 
 .ldp-lb-image.is-zoomed { cursor: grab; }
-.ldp-lb-image.is-dragging { cursor: grabbing; }
+.ldp-lb-image.is-dragging {
+  will-change: transform;
+  cursor: grabbing;
+}
 
 .ldp-lb-prev,
 .ldp-lb-next {
@@ -768,6 +770,10 @@
 .ldp-lightbox.is-resizing-comments * {
   cursor: col-resize !important;
   user-select: none !important;
+}
+
+.ldp-lightbox.is-resizing-comments .ldp-lb-comments {
+  transition: none;
 }
 
 .ldp-lb-comments-inner {
@@ -1476,11 +1482,13 @@
 .ldp-avatar-viewer.is-image .ldp-avatar-viewer-image {
   transform: translate(var(--ldp-avatar-pan-x, 0), var(--ldp-avatar-pan-y, 0)) scale(var(--ldp-avatar-scale, 1));
   transform-origin: center;
-  will-change: transform;
 }
 
 .ldp-avatar-viewer.is-image .ldp-avatar-viewer-image.is-zoomed { cursor: grab; }
-.ldp-avatar-viewer.is-image .ldp-avatar-viewer-image.is-dragging { cursor: grabbing; }
+.ldp-avatar-viewer.is-image .ldp-avatar-viewer-image.is-dragging {
+  will-change: transform;
+  cursor: grabbing;
+}
 
 .ldp-avatar-viewer.is-image :is(.ldp-avatar-viewer-progress,.ldp-avatar-viewer-status) {
   color: rgba(255, 255, 255, .72);

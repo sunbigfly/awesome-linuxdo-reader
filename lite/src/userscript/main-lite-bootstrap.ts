@@ -83,6 +83,9 @@ import {
 	readerPreferencesReadingSettingsAdapter,
 } from '../settings/reader-reading-settings-form.js';
 import {
+	showReaderSettingsResetReminder,
+} from '../settings/reader-settings-reset-reminder.js';
+import {
 	ReaderPostReadViewportFeature,
 } from '../reading/read-viewport-adapter.js';
 import {
@@ -120,6 +123,7 @@ import {
 } from './reader-userscript-target-adapter.js';
 import {
 	consumeReaderNativeBypass,
+	consumeReaderNativeTabBypass,
 } from '../topic/reader-native-topic-route.js';
 import {
 	scheduleReaderCreditAccountBridge,
@@ -259,6 +263,7 @@ function createRuntimeStage(
 	document: Document,
 	window: Window,
 	state: MutableMainLiteState,
+	suppressInitialTopicOpen: boolean,
 	customSites: Readonly<{
 		readonly repository: ReaderCustomSiteRepository;
 		readonly probe: ReaderDiscourseSiteProbeTransportPort | null;
@@ -307,6 +312,9 @@ function createRuntimeStage(
 				environment: preferencesEnvironment,
 				scriptVersion,
 			});
+			const preferencesDefaults = createReaderPreferencesDefaults(
+				preferencesEnvironment,
+			);
 			const currentUsername = discourseNativeCurrentUsername(
 				environment.discourseHost,
 			);
@@ -401,6 +409,16 @@ function createRuntimeStage(
 					enhancements: new EmbeddedHostTopicCardEnhancement(
 						document,
 						environment.discourseHost,
+						{
+							notify: (message) =>
+								state.runtime?.feedback.show(message),
+							onError: (cause) => {
+								console.error(
+									'[main-lite:host-topic-notification]',
+									cause,
+								);
+							},
+						},
 					),
 					readAppearance: () => {
 						const preferences = readPreferences();
@@ -755,9 +773,10 @@ function createRuntimeStage(
 			},
 			configuration: {
 				codec: preferencesCodec,
-				defaults: createReaderPreferencesDefaults(
-					preferencesEnvironment,
-				),
+				defaults: preferencesDefaults,
+				customSites: customSites.repository,
+				translation: customSites.translation,
+				webDav: customSites.webDav?.repository ?? null,
 			},
 			performanceForm: readerPreferencesPerformanceSettingsAdapter,
 			...(customSites.translation
@@ -802,6 +821,7 @@ function createRuntimeStage(
 			}
 			: {}),
 		targets: {
+			openInitialRoute: !suppressInitialTopicOpen,
 			selectOpenTopicsAtFirstPost: (preferences) =>
 				preferences.openTopicsAtFirstPost,
 			onError: (error) => {
@@ -813,6 +833,35 @@ function createRuntimeStage(
 			persistTranslationMode = (translationMode) => {
 				context.updatePreferences?.({ translationMode });
 			};
+			let settingsResetReminderChecked = false;
+			const checkSettingsResetReminder = (): void => {
+				if (
+					settingsResetReminderChecked ||
+					!['opening', 'running', 'failed'].includes(runtime.shell.state)
+				) return;
+				settingsResetReminderChecked = true;
+				void showReaderSettingsResetReminder({
+					storage: window.localStorage,
+					preferencesStorageKey: READER_PREFERENCES_STORAGE_KEY,
+					defaults: preferencesDefaults,
+					update: (preferences) => {
+						if (!context.updatePreferences) {
+							throw new Error('偏好写端口不可用');
+						}
+						context.updatePreferences(preferences);
+					},
+					feedback: runtime.feedback,
+					isActive: () => !runtime.scope.destroyed,
+					onError: (error) => {
+						console.error('[main-lite:settings-reset-reminder]', error);
+					},
+				});
+			};
+			runtime.shell.changes.subscribe(
+				checkSettingsResetReminder,
+				runtime.scope,
+			);
+			checkSettingsResetReminder();
 			const portal = state.portal;
 			if (!portal) throw new Error('main-lite Shadow Portal 未就绪');
 			const embeddedReload = routeKind === 'list'
@@ -1003,7 +1052,8 @@ export function startMainLiteUserscript(
 		);
 		return null;
 	}
-	if (consumeReaderNativeBypass(
+	const bypassNativeTab = consumeReaderNativeTabBypass(window);
+	const bypassNativeUrl = consumeReaderNativeBypass(
 		document.location.href,
 		document.location.origin,
 		(cleanHref) => {
@@ -1017,11 +1067,14 @@ export function startMainLiteUserscript(
 				// 地址栏清理失败也不能反向启动 Reader。
 			}
 		},
-	)) {
+	);
+	const suppressInitialTopicOpen = bypassNativeTab || bypassNativeUrl;
+	if (suppressInitialTopicOpen) {
 		(existing as MainLiteUserscriptHandle | undefined)?.destroy?.();
-		return null;
 	}
-	if (existing) return existing as MainLiteUserscriptHandle;
+	if (existing && !suppressInitialTopicOpen) {
+		return existing as MainLiteUserscriptHandle;
+	}
 	const valueStorage = environment.createValueStorage();
 	const customSiteRepository = new ReaderCustomSiteRepository({
 		storage: valueStorage,
@@ -1073,13 +1126,13 @@ export function startMainLiteUserscript(
 		document,
 		window,
 		preferences,
-		authorizeHost: async (hostname, signal) => {
+		isVerifiedHost: async (hostname, signal) => {
 			if (readerBuiltinDiscourseHost(hostname)) return true;
 			if (signal.aborted) return false;
 			try {
-				const allowed =
+				const verified =
 					await customSiteRepository.allows(hostname);
-				return !signal.aborted && allowed;
+				return !signal.aborted && verified;
 			} catch {
 				return false;
 			}
@@ -1099,6 +1152,7 @@ export function startMainLiteUserscript(
 				document,
 				window,
 				state,
+				suppressInitialTopicOpen,
 				{
 					repository: customSiteRepository,
 					probe: customSiteProbe,

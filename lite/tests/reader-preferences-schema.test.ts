@@ -79,7 +79,7 @@ const expectedKeys = [
 	'topicActionRailVisible',
 	'topicActionRailFixed',
 	'topicActionRailMode',
-	'topicActionRailPosition',
+	'topicActionRailPositions',
 	'expandNestedRepliesByDefault',
 	'expandLeafNestedReplies',
 	'aggregateDescendantReplies',
@@ -209,6 +209,7 @@ const normalized = normalizeReaderPreferences({
 		closeReader: ['Escape', 'Escape', 'Alt+Escape', 'Shift+Escape'],
 	},
 	topicActionRailMode: 'expanded',
+	topicActionRailPositions: undefined,
 	topicActionRailPosition: railPosition,
 	expandNestedRepliesByDefault: false,
 	expandLeafNestedReplies: false,
@@ -301,9 +302,27 @@ assert(
 );
 assert(
 	normalized.topicActionRailMode === 'compact' &&
-	normalized.topicActionRailPosition.x === 'left' &&
-	normalized.topicActionRailPosition.y === 1,
-	'动作列 mode 必须保持旧版 collapsed/compact 语义，并归一化位置比例',
+	Object.values(normalized.topicActionRailPositions).every((position) =>
+		position.x === 'left' && position.y === 1
+	),
+	'动作列 mode 必须保持旧版语义，并把旧单位置无损迁移到三个形态槽位',
+);
+const independentRailPositions = normalizeReaderPreferences({
+	...defaults,
+	topicActionRailPositions: {
+		floating: { x: 0.2, y: 0.3 },
+		fullpage: { x: 'right', y: 0.4 },
+		embedded: { x: 0.6, y: 0.7 },
+	},
+}, environment).topicActionRailPositions;
+assert(
+	independentRailPositions.floating.x === 0.2 &&
+		independentRailPositions.floating.y === 0.3 &&
+		independentRailPositions.fullpage.x === 'right' &&
+		independentRailPositions.fullpage.y === 0.4 &&
+		independentRailPositions.embedded.x === 0.6 &&
+		independentRailPositions.embedded.y === 0.7,
+	'浮窗、全屏和嵌入操作列位置必须分别归一化并持久化，互不覆盖',
 );
 assert(
 	normalized.expandNestedRepliesByDefault === true &&

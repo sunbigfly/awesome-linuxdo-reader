@@ -221,8 +221,13 @@ const host: DiscourseHostApiPort = {
 		if (name === 'service:current-user') return actingUser;
 		if (name === 'service:store') {
 			return {
-				createRecord(type: string, attributes: { username: string }) {
+				createRecord(
+					type: string,
+					attributes: { username: string; store?: unknown },
+				) {
 					assert(type === 'user', 'action model 只能创建原生 User');
+					/* Ember Data 会扩展传入属性；冻结该对象会触发真实页面的 TypeError。 */
+					attributes.store = this;
 					actionUsername = attributes.username;
 					return actionModel;
 				},

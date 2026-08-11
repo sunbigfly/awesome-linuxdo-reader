@@ -13,6 +13,8 @@ const { document: parsedDocument, window: parsedWindow } = parseHTML(
 const document = parsedDocument as unknown as Document;
 const window = parsedWindow as unknown as Window;
 const root = document.querySelector<HTMLElement>('#root')!;
+const localRoot = document.createElement('section');
+root.append(localRoot);
 const origin = document.querySelector<HTMLButtonElement>('#origin')!;
 let focusedElement: HTMLElement | null = null;
 Object.defineProperty(document, 'activeElement', {
@@ -146,6 +148,19 @@ assert(
 		!root.querySelector('.ldp-reader-confirm-layer'),
 	'次要操作必须返回 secondary 并释放 dialog DOM',
 );
+
+const localChoice = surface.choose({
+	title: '局部确认',
+	message: '确认层必须受局部浮窗约束',
+}, localRoot);
+assert(
+	localRoot.querySelector(':scope > .ldp-reader-confirm-layer') !== null &&
+		root.querySelectorAll('.ldp-reader-confirm-layer').length === 1,
+	'choose 必须允许把确认层挂载到调用方拥有的局部浮窗内部',
+);
+localRoot.querySelector<HTMLButtonElement>('.ldp-reader-action-cancel')!.click();
+flushFocus();
+assert(await localChoice === 'cancel', '局部确认取消后必须正常释放 Promise');
 
 surface.show('第一条提示');
 const firstToast = root.querySelector('.ldp-selection-toast');

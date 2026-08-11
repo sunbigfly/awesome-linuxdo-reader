@@ -138,6 +138,15 @@ const monitor = new ReaderResourceMonitor({
 		nextPermitDelay: 0,
 		blockingReason: '',
 	}),
+	performancePolicySnapshot: () => ({
+		pageSize: 36,
+		streamOverscanScreens: 1.25,
+		streamMaxMountedPostCount: 64,
+		nestedPrefetchScreens: 1.375,
+		requestMaxConcurrent: 3,
+		requestMinIntervalMs: 120,
+		requestRateTargetPercent: 85,
+	}),
 	topicSnapshot: () => ({
 		topicId: 9,
 		mountedFloors: 2,
@@ -234,13 +243,29 @@ assert(
 		host.querySelector('.ldp-request-flow-window')
 			?.textContent?.includes('额度 6/40') &&
 		host.querySelector('.ldp-request-flow-window')
-			?.textContent?.includes('本页槽 1/3') &&
+			?.textContent?.includes('本页生效槽 1/3') &&
 		host.querySelector('.ldp-request-flow-window')
 			?.textContent?.includes('队列 4/20') &&
 		host.querySelector('.ldp-request-flow-window')
-			?.textContent?.includes('共享上限 3') &&
+			?.textContent?.includes('后台正文单槽') &&
 		host.querySelector('.ldp-request-flow-window')
-			?.textContent?.includes('间隔 80ms') &&
+			?.textContent?.includes('正文批次 0/1') &&
+		host.querySelector('.ldp-request-flow-window')
+			?.textContent?.includes('翻译 0/0') &&
+		host.querySelector('.ldp-request-flow-window')
+			?.textContent?.includes('共享生效上限 3') &&
+		host.querySelector('.ldp-request-flow-window')
+			?.textContent?.includes('生效间隔 80ms') &&
+		host.querySelector('[data-resource-monitor-row="requests"] small')
+			?.textContent?.includes('不是设置目标值') &&
+		host.querySelector('[data-resource-monitor-row="floors"] small')
+			?.textContent?.includes('不等于持久缓存总量') &&
+		host.querySelector('.ldp-request-flow-log-block .ldp-request-flow-block-head')
+			?.textContent?.includes('优先级、升级与取消') &&
+		host.querySelector(
+			'[data-settings-log-panel="request"] .ldp-request-flow-limit',
+		)
+			?.textContent?.includes('可见缺口会提升并复用已有同键请求') &&
 		host.querySelector('.ldp-request-flow-trace-permit') !== null &&
 		host.querySelector('.ldp-request-flow-diagnostic-block')
 			?.textContent?.includes('canonical stream 仍缺 1 条正文') &&
@@ -322,6 +347,14 @@ assert(
 			document.documentElement.querySelectorAll('*').length &&
 		host.querySelectorAll('.ldp-resource-monitor-trend-row').length === 3 &&
 		host.querySelectorAll('.ldp-resource-monitor-scope-row').length === 3 &&
+		host.querySelector('[data-resource-monitor-policy]')
+			?.textContent?.includes('正文批次 36 楼') &&
+		host.querySelector('[data-resource-monitor-policy]')
+			?.textContent?.includes('DOM 最多 64 楼') &&
+		host.querySelector('[data-resource-monitor-policy]')
+			?.textContent?.includes('API 提前 1.38 屏') &&
+		host.querySelector('[data-resource-monitor-policy]')
+			?.textContent?.includes('本页请求策略上限 3 路 / 120ms') &&
 		host.querySelector(
 			'[data-resource-monitor-chart="retainedFloors"] polyline',
 		)?.getAttribute('points')?.includes('240.0') === true,

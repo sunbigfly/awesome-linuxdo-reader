@@ -1,4 +1,5 @@
 import {
+	readerBulkBackgroundRequestHasHeadroom,
 	ReaderPerformancePolicy,
 } from '../src/app/reader-performance-policy.js';
 
@@ -80,6 +81,50 @@ assert(
 		fallbackTarget.requestShortBudget === 42 &&
 		fallbackTarget.requestLongBudget === 170,
 	'缺失请求目标必须回到为原站保留 15% 余量的 API 默认预算',
+);
+
+assert(
+	readerBulkBackgroundRequestHasHeadroom({
+		shortBudget: 42,
+		longBudget: 170,
+		shortCount: 20,
+		longCount: 84,
+	}) &&
+	!readerBulkBackgroundRequestHasHeadroom({
+		shortBudget: 42,
+		longBudget: 170,
+		shortCount: 21,
+		longCount: 84,
+	}) &&
+	!readerBulkBackgroundRequestHasHeadroom({
+		shortBudget: 42,
+		longBudget: 170,
+		shortCount: 20,
+		longCount: 85,
+	}),
+	'大批量后台读取必须复用动态共享预算并在 10s/60s 窗口各保留一半余量',
+);
+
+assert(
+	readerBulkBackgroundRequestHasHeadroom({
+		shortBudget: 42,
+		longBudget: 170,
+		shortCount: 7,
+		longCount: 23,
+	}, true) &&
+	!readerBulkBackgroundRequestHasHeadroom({
+		shortBudget: 42,
+		longBudget: 170,
+		shortCount: 8,
+		longCount: 23,
+	}, true) &&
+	!readerBulkBackgroundRequestHasHeadroom({
+		shortBudget: 42,
+		longBudget: 170,
+		shortCount: 7,
+		longCount: 24,
+	}, true),
+	'Topic 下载的直属回复缓存未命中必须复用共享账本并限制为 8/10s、24/60s',
 );
 
 const constrained = new ReaderPerformancePolicy({

@@ -33,12 +33,16 @@ const reveals: Array<Readonly<{
 	postNumber: number;
 	source: string;
 	alignment: string | undefined;
+	degradedRootPostNumber: number | undefined;
 }>> = [];
+const hiddenReveals: number[] = [];
+const hiddenPostNumbers = new Set<number>([6]);
 const delayed = {
 	resolve: undefined as (() => void) | undefined,
 	reject: undefined as ((error: unknown) => void) | undefined,
 };
 const errors: unknown[] = [];
+const missingAncestorError = new Error('ancestor unavailable');
 const userScrollIntent = {
 	value: null as (() => void) | null,
 };
@@ -63,7 +67,10 @@ const navigation = new ReaderTopicNavigationController<TestPost>({
 					delayed.reject = reject;
 				});
 			}
-			if (postNumber !== 404) posts.set(postNumber, post(postNumber));
+			if (postNumber === 70) throw missingAncestorError;
+			if (postNumber !== 404 && postNumber !== 41) {
+				posts.set(postNumber, post(postNumber));
+			}
 			return posts.has(postNumber)
 				? Object.freeze([posts.get(postNumber)!])
 				: Object.freeze([]);
@@ -75,6 +82,7 @@ const navigation = new ReaderTopicNavigationController<TestPost>({
 				postNumber,
 				source: options.source,
 				alignment: options.alignment,
+				degradedRootPostNumber: options.degradedRootPostNumber,
 			});
 			if (postNumber === 7) return null;
 			return Object.freeze({
@@ -82,6 +90,19 @@ const navigation = new ReaderTopicNavigationController<TestPost>({
 				rootPostNumber: postNumber === 1 ? 1 : 1,
 				element: {} as HTMLElement,
 				mounted: postNumber !== 1,
+			});
+		},
+	},
+	hidden: {
+		isHidden: (postNumber) => hiddenPostNumbers.has(postNumber),
+		async revealPost(postNumber) {
+			hiddenReveals.push(postNumber);
+			return Object.freeze({
+				postNumber,
+				rootPostNumber: 1,
+				element: { dataset: { postNumber: String(postNumber) } } as
+					unknown as HTMLElement,
+				mounted: true,
 			});
 		},
 	},
@@ -124,6 +145,19 @@ assert(
 	'缺失目标必须先经 TopicSession around 补流，再揭示 canonical 树节点',
 );
 
+const hidden = await navigation.navigate({
+	postNumber: 6,
+	source: 'quote',
+	highlight: true,
+});
+assert(
+	hidden.status === 'revealed' &&
+		hidden.element?.dataset.postNumber === '6' &&
+		hiddenReveals.join(',') === '6' &&
+		!reveals.some((entry) => entry.postNumber === 6),
+	'主投影隐藏的目标必须只在完整讨论端口揭示，不能再交给正文 DOM 提升成正式楼层',
+);
+
 const unavailable = await navigation.navigate({
 	postNumber: 404,
 	source: 'message',
@@ -142,6 +176,51 @@ const unresolved = await navigation.navigate({
 assert(
 	unresolved.status === 'unresolved-tree',
 	'正文存在但拓扑/DOM 未形成时必须保持 unresolved，不能降级成根楼层',
+);
+
+posts.set(62, Object.freeze({
+	id: 162,
+	topic_id: 10,
+	post_number: 62,
+	reply_to_post_number: 41,
+}));
+posts.set(63, Object.freeze({
+	id: 163,
+	topic_id: 10,
+	post_number: 63,
+	reply_to_post_number: 62,
+}));
+posts.set(64, Object.freeze({
+	id: 164,
+	topic_id: 10,
+	post_number: 64,
+	reply_to_post_number: 63,
+}));
+const degradedMissingAncestor = await navigation.navigate({
+	postNumber: 64,
+	source: 'quote',
+});
+assert(
+	degradedMissingAncestor.status === 'revealed' &&
+	reveals.at(-1)?.postNumber === 64 &&
+	reveals.at(-1)?.degradedRootPostNumber === 62,
+	'祖先楼层不存在时必须把最高可用祖先交给 DOM 投影降级，不能丢掉其下已确认链条',
+);
+posts.set(71, Object.freeze({
+	id: 171,
+	topic_id: 10,
+	post_number: 71,
+	reply_to_post_number: 70,
+}));
+const degradedFailedAncestor = await navigation.navigate({
+	postNumber: 71,
+	source: 'quote',
+});
+assert(
+	degradedFailedAncestor.status === 'revealed' &&
+	reveals.at(-1)?.degradedRootPostNumber === 71 &&
+	errors.includes(missingAncestorError),
+	'祖先补载报错时必须记录诊断并降级到最高可用楼层，不能让目标导航整体失败',
 );
 
 const slowRequest: ReaderTopicNavigationRequest = {

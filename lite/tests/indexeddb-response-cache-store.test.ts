@@ -48,6 +48,32 @@ assert(
 	).length === 0,
 	'未过期且未超限时不得误删缓存项',
 );
+const permanent = Object.freeze({
+	...entry('permanent', 1, 2, 500),
+	permanent: true as const,
+});
+assert(
+	selectResponseCachePruneIds(
+		[
+			permanent,
+			entry('expired-normal', 2, 3, 10),
+			entry('old-normal', 3, 1_000, 100),
+		],
+		{ now: 100, maxEntries: 1, maxBytes: 50 },
+	).join(',') === 'expired-normal,old-normal',
+	'自动过期与容量清理只能淘汰普通缓存，不得删除永久 Topic 存档',
+);
+assert(
+	selectResponseCachePruneIds(
+		[
+			permanent,
+			entry('ordinary-a', 3, 1_000, 40),
+			entry('ordinary-b', 4, 1_000, 40),
+		],
+		{ now: 100, maxEntries: 2, maxBytes: 100 },
+	).length === 0,
+	'永久存档不得占用普通缓存预算并把仍在预算内的热响应全部挤出',
+);
 
 const errors: unknown[] = [];
 const unavailable = new IndexedDbResponseCacheStore({

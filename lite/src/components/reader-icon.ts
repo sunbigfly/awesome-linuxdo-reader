@@ -84,8 +84,29 @@ const ICON_MARKUP = Object.freeze<Record<string, string>>({
 	wrench: '<path d="M14.7 6.3a4 4 0 0 0-5-5L7.4 3.6l3 3-3.8 3.8-3-3-2.3 2.3a4 4 0 0 0 5 5L15.6 24l4-4-8.7-9.3 3.8-4.4Z"/>',
 });
 
+const ICON_TEMPLATES = new WeakMap<
+	Document,
+	Map<string, SVGSVGElement>
+>();
+
 export function hasReaderIcon(name: string): boolean {
 	return Boolean(ICON_PATHS[name] || ICON_MARKUP[name]);
+}
+
+/**
+ * 为离线单文件等没有可用 Document 的自包含表面生成同源 SVG。
+ * 只接受 Reader 内置语义名，避免把动态宿主片段写入离线 HTML。
+ */
+export function readerIconSvgMarkup(name: string): string {
+	const pathData = ICON_PATHS[name];
+	const markup = ICON_MARKUP[name];
+	if (!pathData && !markup) throw new Error(`未知 Reader 图标：${name}`);
+	const content = pathData
+		? `<path d="${pathData}"></path>`
+		: markup!;
+	return `<svg class="ldp-icon ldp-icon-${name}" data-icon="${name}" ` +
+		'data-ldp-reader-icon="" viewBox="0 0 24 24" aria-hidden="true" ' +
+		`focusable="false">${content}</svg>`;
 }
 
 function selfContainedNativeIcon(node: Node): boolean {
@@ -115,26 +136,36 @@ export function createReaderIcon(
 	const pathData = ICON_PATHS[name];
 	const markup = ICON_MARKUP[name];
 	if (!pathData && !markup) throw new Error(`未知 Reader 图标：${name}`);
-	const svg = document.createElementNS(
-		SVG_NAMESPACE,
-		'svg',
-	) as SVGSVGElement;
-	svg.classList.add('ldp-icon');
-	svg.classList.add(`ldp-icon-${name}`);
+	let templates = ICON_TEMPLATES.get(document);
+	if (!templates) {
+		templates = new Map();
+		ICON_TEMPLATES.set(document, templates);
+	}
+	let template = templates.get(name);
+	if (!template) {
+		template = document.createElementNS(
+			SVG_NAMESPACE,
+			'svg',
+		) as SVGSVGElement;
+		template.classList.add('ldp-icon');
+		template.classList.add(`ldp-icon-${name}`);
+		template.dataset.icon = name;
+		template.dataset.ldpReaderIcon = '';
+		template.setAttribute('viewBox', '0 0 24 24');
+		template.setAttribute('aria-hidden', 'true');
+		template.setAttribute('focusable', 'false');
+		if (pathData) {
+			const path = document.createElementNS(SVG_NAMESPACE, 'path');
+			path.setAttribute('d', pathData);
+			template.append(path);
+		} else {
+			template.innerHTML = markup!;
+		}
+		templates.set(name, template);
+	}
+	const svg = template.cloneNode(true) as SVGSVGElement;
 	for (const className of extraClass.split(/\s+/).filter(Boolean)) {
 		svg.classList.add(className);
-	}
-	svg.dataset.icon = name;
-	svg.dataset.ldpReaderIcon = '';
-	svg.setAttribute('viewBox', '0 0 24 24');
-	svg.setAttribute('aria-hidden', 'true');
-	svg.setAttribute('focusable', 'false');
-	if (pathData) {
-		const path = document.createElementNS(SVG_NAMESPACE, 'path');
-		path.setAttribute('d', pathData);
-		svg.append(path);
-	} else {
-		svg.innerHTML = markup!;
 	}
 	return svg;
 }

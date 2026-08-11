@@ -39,7 +39,11 @@ history.remember({ topicId: 3, title: 'three', postNumber: 6 });
 let activeTopicId = 3;
 let capturedPostNumber = 6;
 const openedTopics: number[] = [];
-const restored: Array<Readonly<{ topicId: number; postNumber: number }>> = [];
+const restored: Array<Readonly<{
+	topicId: number;
+	postNumber: number;
+	highlight: boolean | undefined;
+}>> = [];
 let delayedOpen:
 	| {
 		readonly topicId: number;
@@ -71,10 +75,11 @@ const controller = new ReaderHistoryNavigationController({
 			activeTopicId = topicId;
 			return Object.freeze({ status: 'opened', topicId });
 		},
-		restoreAnchor(topicId, anchor) {
+		restoreAnchor(topicId, anchor, options) {
 			restored.push(Object.freeze({
 				topicId,
 				postNumber: anchor.viewport.postNumber,
+				highlight: options?.highlight,
 			}));
 			capturedPostNumber = anchor.viewport.postNumber;
 		},
@@ -176,11 +181,12 @@ assert(
 await controller.restore(3, {
 	viewport: { postNumber: 6, postOffset: 18, scrollTop: 300 },
 	replyWindow: { rootPostNumber: 6, point: { number: 6, offset: 4 } },
-});
+}, { highlight: false });
 assert(
 	restored.at(-1)?.postNumber === 6 &&
+		restored.at(-1)?.highlight === false &&
 		controller.snapshot.states['3']?.replyWindow?.rootPostNumber === 6,
-	'队列等外部导航入口必须复用同一完整锚点恢复端口，不能只跳 postNumber',
+	'队列等外部导航入口必须复用同一完整锚点恢复端口，并允许语义调用方静默恢复几何锚点',
 );
 controller.destroy();
 assert(controller.scope.destroyed, '销毁必须释放历史导航 signal/lifecycle');

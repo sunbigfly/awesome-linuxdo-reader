@@ -163,6 +163,12 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   animation: ldp-reader-confirm-in .18s cubic-bezier(.22, 1, .36, 1);
 }
 
+.ldp-reader-confirm-dialog:has(.ldp-reader-confirm-details) {
+  width: fit-content;
+  min-width: min(380px, 100%);
+  max-width: min(680px, 100%);
+}
+
 .ldp-reader-action-head {
   display: flex;
   min-height: 46px;
@@ -253,9 +259,9 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 .ldp-reader-confirm-details li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
   gap: 12px;
   padding: 6px 8px;
   border-radius: 6px;
@@ -264,12 +270,20 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   line-height: 1.4;
 }
 
-.ldp-reader-confirm-details strong {
-  font-size: inherit;
+.ldp-reader-confirm-details li > span {
   white-space: nowrap;
 }
 
+.ldp-reader-confirm-details strong {
+  min-width: 0;
+  font-size: inherit;
+  overflow-wrap: anywhere;
+  text-align: right;
+  white-space: normal;
+}
+
 .ldp-reader-confirm-dialog .ldp-reader-action-footer {
+  flex-wrap: wrap;
   padding: 0 18px 18px;
   border-top: 0;
 }

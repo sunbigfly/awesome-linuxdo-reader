@@ -2,6 +2,8 @@ import {
 	RequestControlError,
 	RequestScheduler,
 	RequestTimeoutError,
+	type RequestStartGate,
+	type RequestStartPermit,
 } from '../src/network/request-scheduler.js';
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -11,12 +13,71 @@ function assert(condition: unknown, message: string): asserts condition {
 function deferred<T>(): {
 	readonly promise: Promise<T>;
 	readonly resolve: (value: T) => void;
+	readonly reject: (error: unknown) => void;
 } {
 	let resolve!: (value: T) => void;
-	const promise = new Promise<T>((done) => {
+	let reject!: (error: unknown) => void;
+	const promise = new Promise<T>((done, fail) => {
 		resolve = done;
+		reject = fail;
 	});
-	return { promise, resolve };
+	return { promise, resolve, reject };
+}
+
+interface ControlledGateAttempt {
+	readonly key: string;
+	readonly priority: string;
+	readonly signal: AbortSignal;
+	readonly grant: () => void;
+	readonly aborted: () => boolean;
+}
+
+function controlledStartGate(): Readonly<{
+	gate: RequestStartGate;
+	attempts: ControlledGateAttempt[];
+	releaseCount: () => number;
+}> {
+	const attempts: ControlledGateAttempt[] = [];
+	let releaseCount = 0;
+	const gate: RequestStartGate = {
+		acquire(input) {
+			let aborted = false;
+			let settled = false;
+			let grant!: () => void;
+			const promise = new Promise<RequestStartPermit>((resolve, reject) => {
+				const onAbort = (): void => {
+					if (settled) return;
+					settled = true;
+					aborted = true;
+					reject(input.signal.reason);
+				};
+				input.signal.addEventListener('abort', onAbort, { once: true });
+				grant = () => {
+					if (settled) return;
+					settled = true;
+					input.signal.removeEventListener('abort', onAbort);
+					resolve({
+						release() {
+							releaseCount += 1;
+						},
+					});
+				};
+			});
+			attempts.push(Object.freeze({
+				key: input.key,
+				priority: input.priority,
+				signal: input.signal,
+				grant,
+				aborted: () => aborted,
+			}));
+			return promise;
+		},
+	};
+	return Object.freeze({
+		gate,
+		attempts,
+		releaseCount: () => releaseCount,
+	});
 }
 
 async function nextTask(): Promise<void> {
@@ -105,6 +166,68 @@ assert(
 	'hover 用户卡必须插队；自动请求中可见树状回复必须先于普通楼层',
 );
 treeFirstScheduler.destroy();
+
+const backgroundTopicScheduler = new RequestScheduler({
+	maxConcurrent: 3,
+	queueLimit: 4,
+	defaultTimeoutMs: 1000,
+});
+const backgroundTopicHolds = Array.from({ length: 3 }, () => deferred<void>());
+const backgroundTopicStarts: number[] = [];
+const backgroundTopicRequests = backgroundTopicHolds.map(
+	(hold, index) => backgroundTopicScheduler.schedule({
+		key: `background-topic-${index}`,
+		lane: 'topic-batch',
+		priority: 'background',
+		droppable: true,
+	}, async () => {
+		backgroundTopicStarts.push(index);
+		await hold.promise;
+	}),
+);
+await nextTask();
+assert(
+	backgroundTopicStarts.join(',') === '0' &&
+		backgroundTopicScheduler.snapshot().activeByLane['topic-batch'] === 1,
+	'后台 post_ids 批次必须单槽启动，避免两个可丢弃补流同时触发 Cloudflare challenge',
+);
+const visibleTopicHold = deferred<void>();
+let visibleTopicStarted = false;
+const visibleTopicRequest = backgroundTopicScheduler.schedule({
+	key: 'visible-topic',
+	lane: 'topic-batch',
+	priority: 'visible',
+}, async () => {
+	visibleTopicStarted = true;
+	await visibleTopicHold.promise;
+});
+await nextTask();
+assert(
+	visibleTopicStarted &&
+		backgroundTopicScheduler.snapshot().activeByLane['topic-batch'] === 2 &&
+		backgroundTopicStarts.join(',') === '0',
+	'后台单槽不得占掉 Topic 车道第二槽；滚动到眼前的可见批次仍须立即并行',
+);
+visibleTopicHold.resolve();
+await visibleTopicRequest;
+await nextTask();
+assert(
+	backgroundTopicStarts.join(',') === '0',
+	'可见批次结束后，已有后台批次未完成时不得再启动第二条后台补流',
+);
+backgroundTopicHolds[0]!.resolve();
+await nextTask();
+await nextTask();
+assert(
+	backgroundTopicStarts.join(',') === '0,1',
+	'后台 Topic 槽释放后必须继续原 FIFO 补流，不能丢弃后续批次',
+);
+backgroundTopicHolds[1]!.resolve();
+await nextTask();
+await nextTask();
+backgroundTopicHolds[2]!.resolve();
+await Promise.all(backgroundTopicRequests);
+backgroundTopicScheduler.destroy();
 
 const laneScheduler = new RequestScheduler({
 	maxConcurrent: 4,
@@ -430,6 +553,91 @@ latePermit.resolve({
 });
 await nextTask();
 assert(latePermitReleased, '销毁后晚到 permit 必须立即释放');
+
+const preemptGate = controlledStartGate();
+const preemptScheduler = new RequestScheduler({
+	maxConcurrent: 2,
+	queueLimit: 1,
+	defaultTimeoutMs: 1000,
+	startGate: preemptGate.gate,
+});
+let backgroundTransportCount = 0;
+let visibleTransportCount = 0;
+const preemptedBackground = preemptScheduler.schedule({
+	key: 'permit-background',
+	priority: 'background',
+	droppable: true,
+}, async () => {
+	backgroundTransportCount += 1;
+});
+const preemptedBackgroundError = preemptedBackground.catch((error) => error);
+await nextTask();
+const overtakingVisible = preemptScheduler.schedule({
+	key: 'permit-visible',
+	priority: 'visible',
+	droppable: false,
+}, async () => {
+	visibleTransportCount += 1;
+	return 'visible';
+});
+for (let index = 0; index < 8; index += 1) await nextTask();
+assert(
+	preemptGate.attempts.map((attempt) => `${attempt.key}:${attempt.priority}`).join(',') ===
+		'permit-background:background,permit-visible:visible' &&
+		preemptGate.attempts[0]?.aborted() === true,
+	'不可丢的可见请求必须取消正在等待共享许可的低优先级可丢预取并先行取号',
+);
+preemptGate.attempts[1]!.grant();
+assert(await overtakingVisible === 'visible', '抢占后可见请求必须正常完成');
+const preemptedError = await preemptedBackgroundError;
+assert(
+	preemptedError instanceof RequestControlError &&
+		preemptedError.code === 'cancelled' &&
+		backgroundTransportCount === 0 &&
+		visibleTransportCount === 1 &&
+		preemptGate.releaseCount() === 1,
+	'被抢占预取不得迟到启动 transport；可见 permit 必须且只能释放一次',
+);
+preemptScheduler.destroy();
+
+const promotionGate = controlledStartGate();
+const promotionScheduler = new RequestScheduler({
+	maxConcurrent: 1,
+	queueLimit: 2,
+	defaultTimeoutMs: 1000,
+	startGate: promotionGate.gate,
+});
+let promotedTransportCount = 0;
+const permitBackground = promotionScheduler.schedule({
+	key: 'permit-shared',
+	priority: 'background',
+	droppable: true,
+}, async () => {
+	promotedTransportCount += 1;
+	return 'shared';
+});
+await nextTask();
+const permitVisible = promotionScheduler.schedule({
+	key: 'permit-shared',
+	priority: 'visible',
+	droppable: false,
+}, async () => 'must-not-run');
+assert(permitBackground === permitVisible, '等待 permit 的同 key 升级仍必须复用原 Promise');
+for (let index = 0; index < 8; index += 1) await nextTask();
+assert(
+	promotionGate.attempts.map((attempt) => attempt.priority).join(',') ===
+		'background,visible' &&
+		promotionGate.attempts[0]?.aborted() === true,
+	'同 key 可见消费者加入时必须用新优先级重新登记共享 intent',
+);
+promotionGate.attempts[1]!.grant();
+assert(
+	await permitVisible === 'shared' &&
+		promotedTransportCount === 1 &&
+		promotionGate.releaseCount() === 1,
+	'permit 阶段升优先级不得复制 transport 或 permit',
+);
+promotionScheduler.destroy();
 
 let releaseErrors = 0;
 const throwingReleaseScheduler = new RequestScheduler({

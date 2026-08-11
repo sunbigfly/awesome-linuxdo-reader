@@ -142,7 +142,8 @@ export class BrowserPublicResourceHttpPort implements PublicResourceHttpPort {
 			serverRemaining: response.headers.get('X-RateLimit-Remaining'),
 			serverReset: response.headers.get('X-RateLimit-Reset'),
 			cloudflareMitigated:
-				response.headers.get('cf-mitigated')?.toLowerCase() === 'challenge',
+				response.headers.get('cf-mitigated')?.trim().toLowerCase() ===
+				'challenge',
 		};
 	}
 }

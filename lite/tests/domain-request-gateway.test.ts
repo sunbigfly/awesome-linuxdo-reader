@@ -9,6 +9,7 @@ import {
 	type CoordinatedRequestPort,
 } from '../src/network/domain-request-gateway.js';
 import type {
+	CoordinatedRequestPromotion,
 	CoordinatedRequestOptions,
 	RequestTransportInput,
 	RequestTransportResponse,
@@ -43,8 +44,39 @@ class MemoryStore implements ResponseCacheStore {
 	}
 }
 
+class ControlledReadStore extends MemoryStore {
+	readonly readStarted: Promise<void>;
+	readonly #readGate: Promise<void>;
+	#signalReadStarted!: () => void;
+	#releaseRead!: () => void;
+
+	constructor() {
+		super();
+		this.readStarted = new Promise<void>((resolve) => {
+			this.#signalReadStarted = resolve;
+		});
+		this.#readGate = new Promise<void>((resolve) => {
+			this.#releaseRead = resolve;
+		});
+	}
+
+	override async read(id: string): Promise<ResponseCacheEntry | null> {
+		this.#signalReadStarted();
+		await this.#readGate;
+		return super.read(id);
+	}
+
+	releaseRead(): void {
+		this.#releaseRead();
+	}
+}
+
 class FakeClient implements CoordinatedRequestPort {
 	readonly calls: CoordinatedRequestOptions[] = [];
+	readonly promotions: Array<Readonly<{
+		readonly key: string;
+		readonly promotion: CoordinatedRequestPromotion;
+	}>> = [];
 
 	async request<T>(
 		options: CoordinatedRequestOptions,
@@ -53,6 +85,11 @@ class FakeClient implements CoordinatedRequestPort {
 		this.calls.push(options);
 		const response = await transport({ signal: options.signal ?? new AbortController().signal, attempt: 1 });
 		return response.value;
+	}
+
+	promote(key: string, promotion: CoordinatedRequestPromotion): boolean {
+		this.promotions.push(Object.freeze({ key, promotion }));
+		return true;
 	}
 }
 
@@ -113,6 +150,126 @@ assert(
 	'Topic loader 必须进入可见优先级和 post_ids 批量车道',
 );
 
+let bulkBeforeNetworkCalls = 0;
+let bulkTransportCalls = 0;
+const bulkInput = {
+	...topicInput,
+	topicId: 12,
+	postIds: [120],
+	profile: 'background-prefetch' as const,
+	cache: { ...cache, tags: ['topic:12'] },
+	beforeNetwork: () => {
+		bulkBeforeNetworkCalls += 1;
+	},
+	transport: async () => {
+		bulkTransportCalls += 1;
+		return {
+			ok: true,
+			status: 200,
+			value: { version: bulkTransportCalls },
+		} as const;
+	},
+};
+await gateway.loadTopicPosts(bulkInput);
+await gateway.loadTopicPosts(bulkInput);
+assert(
+	bulkBeforeNetworkCalls === 1 && bulkTransportCalls === 1,
+	'后台余量闸门只能在 response cache miss 后调用；fresh cache 命中不得等待或重复联网',
+);
+
+const controlledStore = new ControlledReadStore();
+const promotionClient = new FakeClient();
+const promotionGateway = new DomainRequestGateway(
+	promotionClient,
+	new ResponseRepository({
+		store: controlledStore,
+		maxMemoryEntries: 8,
+		maxMemoryBytes: 100_000,
+		now: () => 1_000,
+	}),
+);
+let promotedTransportCalls = 0;
+let promotedBeforeNetworkCalls = 0;
+const promotedInput = {
+	authScope: 'account:test',
+	topicId: 20,
+	postIds: [201, 202],
+	input: '/t/20/posts.json?post_ids[]=201&post_ids[]=202',
+	signal: controller.signal,
+	cache: { ...cache, tags: ['topic:20'] },
+	transport: async () => {
+		promotedTransportCalls += 1;
+		return { ok: true, status: 200, value: { promoted: true } };
+	},
+} as const;
+const backgroundPromotion = promotionGateway.loadTopicPosts({
+	...promotedInput,
+	profile: 'background-prefetch',
+	beforeNetwork: () => {
+		promotedBeforeNetworkCalls += 1;
+	},
+});
+await controlledStore.readStarted;
+const visiblePromotion = promotionGateway.loadTopicPosts({
+	...promotedInput,
+	profile: 'topic-visible',
+});
+controlledStore.releaseRead();
+const promotedResults = await Promise.all([
+	backgroundPromotion,
+	visiblePromotion,
+]);
+assert(
+	promotedResults.every((result) => result.promoted) &&
+		promotedTransportCalls === 1 &&
+		promotedBeforeNetworkCalls === 0 &&
+		promotionClient.calls.length === 1 &&
+		promotionClient.calls[0]?.priority === 'visible' &&
+		promotionClient.calls[0]?.droppable === false &&
+		promotionClient.calls[0]?.max429Retries === 1,
+	'缓存读取期加入的可见消费者必须在单次 transport 前晋升后台契约，并跳过批量后台余量等待',
+);
+let releaseNestedPromotion!: () => void;
+const nestedPromotionGate = new Promise<void>((resolve) => {
+	releaseNestedPromotion = resolve;
+});
+const activeNestedPromotion = promotionGateway.loadNestedReplies({
+	authScope: 'account:test',
+	topicId: 20,
+	parentPostNumber: 8,
+	parentPostId: 208,
+	after: 20,
+	profile: 'background-prefetch',
+	input: '/posts/208/replies.json?after=20',
+	signal: controller.signal,
+	cache: { ...cache, tags: ['topic:20', 'post:208'] },
+	transport: async () => {
+		await nestedPromotionGate;
+		return { ok: true, status: 200, value: [] };
+	},
+});
+for (let index = 0; index < 12 && promotionClient.calls.length < 2; index += 1) {
+	await Promise.resolve();
+}
+assert(
+	promotionGateway.promoteNestedReplies({
+		authScope: 'account:test',
+		topicId: 20,
+		parentPostNumber: 8,
+		parentPostId: 208,
+		after: 20,
+		profile: 'nested-visible',
+	}) &&
+		promotionClient.promotions[0]?.key.includes('parentPostId=208') &&
+		promotionClient.promotions[0]?.key.includes('after=20') &&
+		promotionClient.promotions[0]?.promotion.priority === 'nested' &&
+		promotionClient.promotions[0]?.promotion.droppable === false &&
+		promotionClient.promotions[0]?.promotion.max429Retries === 1,
+	'已进入 transport 的后台直属回复必须按完整页 identity 晋升为不可丢 nested 契约',
+);
+releaseNestedPromotion();
+await activeNestedPromotion;
+
 await gateway.loadNestedReplies({
 	authScope: 'account:test',
 	topicId: 10,
@@ -160,6 +317,25 @@ assert(
 	client.calls.at(-1)?.key.includes('collection=bookmarks') &&
 	client.calls.at(-1)?.key.includes('page=1'),
 	'收藏/回应页必须通过独立 collection-visible 身份进入中央请求链',
+);
+
+await gateway.loadCollectionPage({
+	authScope: 'account:test',
+	collection: 'post-voting-comments:80',
+	page: 91,
+	cursor: 91,
+	profile: 'background-prefetch',
+	input: '/post_voting/comments?post_id=80&last_comment_id=91',
+	signal: controller.signal,
+	cache: { ...cache, kind: 'posts', tags: ['topic:10', 'post:80'] },
+	transport: async () => ({ ok: true, status: 200, value: [] }),
+});
+assert(
+	client.calls.at(-1)?.priority === 'background' &&
+		client.calls.at(-1)?.droppable === true &&
+		client.calls.at(-1)?.max429Retries === 0 &&
+		client.calls.at(-1)?.lane === 'standard',
+	'下载附加正文必须与其他后台读取共用 background 契约、统一 scheduler 和零本地重放策略',
 );
 
 await gateway.mutate({

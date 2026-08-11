@@ -118,8 +118,8 @@ function normalizedSites(value: unknown): readonly string[] {
 /**
  * 自定义 Discourse host 列表的唯一持久化 owner。
  *
- * 它只保存规范化 hostname；验证请求由独立 probe 完成，运行时 host gate 与设置面板
- * 共享同一份 load/snapshot，避免一边允许启动、一边显示另一份列表。
+ * 它只保存规范化 hostname；验证请求由独立 probe 完成。自动识别失败时，运行时把这份
+ * 已验证列表作为兜底，设置面板与启动链共享同一份 load/snapshot。
  */
 export class ReaderCustomSiteRepository {
 	readonly changes = new Signal<readonly string[]>();

@@ -2,6 +2,9 @@ import { LifecycleScope } from '../kernel/lifecycle.js';
 import type {
 	PublicResourceRequestAdapter,
 } from '../network/public-resource-request-adapter.js';
+import {
+	RequestStatusError,
+} from '../network/coordinated-request-client.js';
 import type {
 	ResponseCacheInvalidationReport,
 } from '../cache/response-repository.js';
@@ -10,6 +13,7 @@ import type {
 } from './reader-lightbox-controller.js';
 import type {
 	ReaderLightboxOriginalSourcePort,
+	ReaderLightboxResolvedSource,
 } from './reader-lightbox-view.js';
 
 export interface ObjectUrlPort {
@@ -71,6 +75,16 @@ function waitForConsumer<T>(operation: Promise<T>, signal?: AbortSignal): Promis
 	});
 }
 
+function canDegrade(error: unknown): boolean {
+	return error instanceof RequestStatusError && [
+		'authentication',
+		'forbidden',
+		'not-found',
+		'validation',
+		'client',
+	].includes(error.kind);
+}
+
 /**
  * 图片 Blob 与 Object URL 的唯一 owner。
  *
@@ -97,21 +111,52 @@ export class ReaderImageResourceService implements ReaderLightboxOriginalSourceP
 	async load(
 		item: ReaderLightboxItem,
 		options: Readonly<{ readonly refresh: boolean; readonly cachedOnly: boolean }>,
-	): Promise<string | null> {
+	): Promise<ReaderLightboxResolvedSource | null> {
 		this.#assertActive();
-		const source = this.#resources.normalize(item.originalSrc);
+		const candidates = this.#candidateSources(item);
+		const original = candidates[0]![0];
 		if (options.refresh) {
-			await this.#resources.invalidate(source);
-			this.#deleteObjectUrl(source);
+			await this.#resources.invalidate(original);
+			this.#deleteObjectUrl(original);
 		}
-		const blob = options.cachedOnly
-			? await this.#resources.cached(source)
-			: await this.#resources.load(source, {
-				signal: this.#lifecycle.signal,
-				...(options.refresh ? { cacheMode: 'refresh' as const } : {}),
-			});
-		if (!blob?.size || this.scope.destroyed) return null;
-		return this.#objectUrl(source, blob);
+		if (options.cachedOnly) {
+			for (const [source, isOriginal] of candidates) {
+				if (!isOriginal) break;
+				const blob = await this.#resources.cached(source);
+				if (!blob?.size) continue;
+				if (this.scope.destroyed) return null;
+				return this.#resolvedSource(source, blob, true);
+			}
+			return null;
+		}
+		const failures: unknown[] = [];
+		for (const [source, isOriginal] of candidates) {
+			try {
+				const blob = await this.#resources.load(source, {
+					signal: this.#lifecycle.signal,
+					...(options.refresh && source === original
+						? { cacheMode: 'refresh' as const }
+						: {}),
+				});
+				if (!blob.size) {
+					failures.push(new Error(`图片内容为空：${source}`));
+					continue;
+				}
+				if (this.scope.destroyed) return null;
+				return this.#resolvedSource(
+					source,
+					blob,
+					isOriginal,
+				);
+			} catch (error) {
+				if (this.#lifecycle.signal.aborted) {
+					throw this.#lifecycle.signal.reason;
+				}
+				if (!canDegrade(error)) throw error;
+				failures.push(error);
+			}
+		}
+		throw new AggregateError(failures, '原图及逐级后备图片均不可用');
 	}
 
 	async blob(
@@ -193,6 +238,35 @@ export class ReaderImageResourceService implements ReaderLightboxOriginalSourceP
 
 	destroy(): void {
 		this.scope.destroy();
+	}
+
+	#candidateSources(item: ReaderLightboxItem): readonly (readonly [string, boolean])[] {
+		const seen = new Set<string>();
+		const sources: Array<readonly [string, boolean]> = [];
+		const originalCount = 1 + Number(item.originalFallbackCount ?? 0);
+		const candidates = [
+			item.originalSrc,
+			...(item.fallbackSrcs ?? []),
+			item.previewSrc,
+		];
+		for (const [index, candidate] of candidates.entries()) {
+			const source = this.#resources.normalize(candidate);
+			if (seen.has(source)) continue;
+			seen.add(source);
+			sources.push(Object.freeze([source, index < originalCount]));
+		}
+		return Object.freeze(sources);
+	}
+
+	#resolvedSource(
+		source: string,
+		blob: Blob,
+		original: boolean,
+	): ReaderLightboxResolvedSource {
+		return Object.freeze({
+			source: this.#objectUrl(source, blob),
+			original,
+		});
 	}
 
 	#objectUrl(source: string, blob: Blob): string {

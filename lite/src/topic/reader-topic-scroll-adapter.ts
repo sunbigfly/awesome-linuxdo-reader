@@ -150,18 +150,39 @@ export class ReaderTopicJumpHighlightController {
 		const actions = target.querySelector<HTMLElement>(
 			':scope > .ldp-post-body .ldp-reactions, :scope > .ldp-reactions',
 		);
-		if (!actions) return null;
 		const targetRect = target.getBoundingClientRect();
-		const actionsRect = actions.getBoundingClientRect();
+		if (actions) {
+			const actionsRect = actions.getBoundingClientRect();
+			if (actionsRect.height > 0 && actionsRect.bottom > targetRect.top) {
+				this.#setFirstPostRegion(target, targetRect, actionsRect);
+				return actions;
+			}
+		}
+		const body = target.querySelector<HTMLElement>(
+			':scope > .ldp-post-body',
+		);
+		if (!body) return null;
+		this.#setFirstPostRegion(
+			target,
+			targetRect,
+			body.getBoundingClientRect(),
+		);
+		return body;
+	}
+
+	#setFirstPostRegion(
+		target: HTMLElement,
+		targetRect: DOMRect,
+		boundaryRect: DOMRect,
+	): void {
 		const height = Math.min(
 			targetRect.height,
-			Math.max(0, actionsRect.bottom - targetRect.top),
+			Math.max(0, boundaryRect.bottom - targetRect.top),
 		);
 		target.style.setProperty(
 			'--ldp-first-post-jump-highlight-height',
 			`${Math.ceil(height)}px`,
 		);
-		return actions;
 	}
 
 	#clearTarget(target: HTMLElement): void {
@@ -573,6 +594,10 @@ export class ReaderTopicScrollAdapter {
 		}
 		if (options.focus) this.#focus(target);
 		if (options.highlight !== false) this.highlight.highlight(target);
+	}
+
+	highlightPost(target: HTMLElement): void {
+		if (target.isConnected) this.highlight.highlight(target);
 	}
 
 	destroy(): void {

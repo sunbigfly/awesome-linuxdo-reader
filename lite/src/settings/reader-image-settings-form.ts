@@ -223,7 +223,7 @@ export class ReaderImageSettingsForm<TPreferences extends object> {
 		lightbox.append(settingsOptionRow(
 			document,
 			'默认请求原图',
-			'关闭后仍可复用已有原图缓存或手动查看原图。',
+			'开启后先请求 original 原图；确认不可用时才按高清候选逐级降级。关闭后仍可复用已有原图缓存或手动查看原图。',
 			originalSwitch.root,
 		));
 		const commentsSwitch = settingsSwitch(

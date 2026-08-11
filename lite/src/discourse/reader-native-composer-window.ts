@@ -309,7 +309,6 @@ export class ReaderNativeComposerWindowController {
 	#floatingObserver: Pick<MutationObserver, 'observe' | 'disconnect'> | null = null;
 	#overflowLayers: HTMLElement[] = [];
 	#chrome: HTMLElement | null = null;
-	#wheelLayer: HTMLElement | null = null;
 	#geometry: ReaderNativeComposerGeometry | null = null;
 	#pointer: ComposerPointerState | null = null;
 	#pointerX = 0;
@@ -456,7 +455,14 @@ export class ReaderNativeComposerWindowController {
 		if (!composer || !this.#composerAvailable()) return false;
 		try {
 			const style = this.#window.getComputedStyle?.(composer);
-			if (style?.display === 'none' || style?.visibility === 'hidden') {
+			const stagedByReader =
+				style?.visibility === 'hidden' &&
+				this.#pageRoot.classList.contains('ldp-reader-open') &&
+				!composer.dataset.ldpReaderComposerPositioned;
+			if (
+				style?.display === 'none' ||
+				(style?.visibility === 'hidden' && !stagedByReader)
+			) {
 				return false;
 			}
 		} catch {
@@ -533,15 +539,12 @@ export class ReaderNativeComposerWindowController {
 		const composer = this.#composer;
 		if (!composer) return;
 		this.#ensureChrome();
-		this.#ensureWheelLayer();
 		this.#syncComposerRoot();
 		this.#applyGeometry(this.#geometry ?? this.#preferredGeometry());
 		if (composer.classList.contains('fullscreen')) {
 			this.#stopPointer();
 			composer.style.removeProperty('translate');
 		}
-		this.#pageRoot.classList.add('ldp-composer-host-isolated');
-		if (this.#wheelLayer) this.#wheelLayer.hidden = false;
 		this.#syncTopLayers();
 		this.#scheduleOverflow();
 	}
@@ -550,8 +553,6 @@ export class ReaderNativeComposerWindowController {
 		this.#stopPointer();
 		this.#persistGeometry();
 		this.#releaseTopLayers();
-		this.#pageRoot.classList.remove('ldp-composer-host-isolated');
-		if (this.#wheelLayer) this.#wheelLayer.hidden = true;
 		if (this.#chrome) this.#chrome.hidden = true;
 		this.#geometry = null;
 		this.#clearGeometry();
@@ -607,19 +608,6 @@ export class ReaderNativeComposerWindowController {
 		}
 		composer.style.removeProperty('--ldp-composer-font-size');
 		composer.style.removeProperty('translate');
-	}
-
-	#ensureWheelLayer(): HTMLElement {
-		if (this.#wheelLayer) return this.#wheelLayer;
-		const layer = this.#document.createElement('div');
-		layer.className = 'ldp-composer-wheel-layer sciapp-ldp-owned';
-		layer.hidden = true;
-		this.#mount.append(layer);
-		this.scope.listen(layer, 'wheel', (event) => {
-			containFloatingSurfaceWheel(layer, event as WheelEvent);
-		}, { capture: true, passive: false });
-		this.#wheelLayer = layer;
-		return layer;
 	}
 
 	#ensureChrome(): HTMLElement {
@@ -1178,16 +1166,13 @@ export class ReaderNativeComposerWindowController {
 		if (this.#persistTimer) this.#clearTimer(this.#persistTimer);
 		this.#persistTimer = 0;
 		this.#pageRoot.classList.remove(
-			'ldp-composer-host-isolated',
 			'ldp-composer-window-interacting',
 		);
 		this.#clearGeometry();
 		this.#clearOverflow();
 		this.#clearComposerRoot();
 		this.#chrome?.remove();
-		this.#wheelLayer?.remove();
 		this.#chrome = null;
-		this.#wheelLayer = null;
 		this.#composer = null;
 		this.#geometry = null;
 	}

@@ -744,8 +744,8 @@ setRect(
 );
 segmentedOpController.paint();
 assert(
-	segmentedOpToggle.style.top === '85px' &&
-		segmentedOpGeometryReads === 8,
+	String(segmentedOpToggle.style.top) === '85px' &&
+		Number(segmentedOpGeometryReads) === 8,
 	'首个子回复前插入高度后，#1 楼“−”必须跟随真实子楼层移动，不能保留固定 top',
 );
 segmentedOpToggle?.click();

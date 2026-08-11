@@ -74,6 +74,8 @@ interface ReaderTopicContextWorkspacePort {
 }
 
 export interface ReaderTopicContextNavigationPort {
+	readonly revision?: number;
+	isCurrent?(revision: number): boolean;
 	navigate(input: Readonly<{
 		readonly postNumber: number;
 		readonly source: string;
@@ -85,6 +87,13 @@ export interface ReaderTopicContextNavigationPort {
 	}>>;
 }
 
+type ReaderTopicContextNavigationRequest = Parameters<
+	ReaderTopicContextNavigationPort['navigate']
+>[0];
+type ReaderTopicContextNavigationResult = Awaited<ReturnType<
+	ReaderTopicContextNavigationPort['navigate']
+>>;
+
 export interface ReaderTopicContextTargetPort {
 	open(input: Readonly<{
 		readonly topicId: number;
@@ -92,6 +101,8 @@ export interface ReaderTopicContextTargetPort {
 		readonly source: 'quote';
 		readonly alignment: 'nearest';
 		readonly highlight: false;
+		readonly forceRefresh: true;
+		readonly quoteHighlight: ReaderHistoryQuoteHighlightState;
 	}>): Promise<void>;
 }
 
@@ -110,6 +121,8 @@ export interface ReaderTopicContextFeatureOptions<
 	readonly presentationChanges?: Signal<TopicSessionCommit>;
 	readonly presentation?: Pick<
 		ReaderReplyTreePresentationTopology,
+		| 'postFilterKey'
+		| 'postFilterMatches'
 		| 'parentOf'
 		| 'childrenOf'
 		| 'hiddenDirectChildrenOf'
@@ -129,7 +142,13 @@ export interface ReaderTopicContextFeatureOptions<
 		state: 'expanded' | 'collapsed',
 	) => void;
 	readonly onRevealNextReplyLevel?: (postNumber: DiscoursePostNumber) => boolean;
+	readonly revealQuoteTarget?: (
+		target: HTMLElement,
+		mode: 'match' | 'floor',
+	) => void;
+	readonly navigationRetryDelay?: (delayMs: number) => Promise<void>;
 	readonly quoteHintHost?: HTMLElement;
+	readonly notify?: (message: string) => void;
 	readonly parentScope?: LifecycleScope;
 	readonly onError?: (error: unknown) => void;
 }
@@ -187,6 +206,8 @@ function button(
 }
 
 const HIDDEN_REPLY_MATERIALIZE_BATCH_SIZE = 100;
+const QUOTE_HINT_POINTER_GAP_PX = 4;
+const QUOTE_HINT_HIDE_GRACE_MS = 480;
 
 function postCooked(post: DiscourseTopicPostInput): string {
 	return String(
@@ -326,7 +347,12 @@ export class ReaderTopicContextFeature<
 	readonly #onRevealNextReplyLevel:
 		| ReaderTopicContextFeatureOptions<TPost>['onRevealNextReplyLevel']
 		| undefined;
+	readonly #revealQuoteTarget:
+		| ReaderTopicContextFeatureOptions<TPost>['revealQuoteTarget']
+		| undefined;
+	readonly #navigationRetryDelay: (delayMs: number) => Promise<void>;
 	readonly #quoteHintHost: HTMLElement;
+	readonly #notify: (message: string) => void;
 	readonly #onError: (error: unknown) => void;
 	readonly #rootCleanups = new WeakMap<HTMLElement, Cleanup>();
 	readonly #viewByRoot = new WeakMap<HTMLElement, PostView>();
@@ -336,14 +362,17 @@ export class ReaderTopicContextFeature<
 	readonly #rootsByPostNumber =
 		new Map<DiscoursePostNumber, Set<HTMLElement>>();
 	readonly #collapsedRootReplies = new Set<DiscoursePostNumber>();
-	readonly #quoteExcerptByElement = new WeakMap<HTMLElement, string>();
+	readonly #quoteJumpExcerptByElement = new WeakMap<HTMLElement, string>();
+	readonly #quotePostLoads = new Map<string, Promise<TPost | null>>();
 	readonly #expandedQuoteKeys = new Set<string>();
 	#quoteSourcePort: ReaderTopicQuoteSourcePort | null = null;
 	#quoteHighlight: ReaderHistoryQuoteHighlightState | null = null;
 	#quoteHighlightMarks: readonly HTMLElement[] = Object.freeze([]);
 	#quoteHighlightHint: HTMLElement | null = null;
+	readonly #quoteReturnEntries = new Set<HTMLButtonElement>();
 	#quoteHintHideTimer: ReturnType<typeof setTimeout> | null = null;
 	#quotePositionEpoch = 0;
+	#quoteJumpEpoch = 0;
 
 	constructor(options: ReaderTopicContextFeatureOptions<TPost>) {
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
@@ -358,10 +387,14 @@ export class ReaderTopicContextFeature<
 		this.#renderIcon = options.renderIcon;
 		this.#onQuoteBodyChanged = options.onQuoteBodyChanged;
 		this.#onRevealNextReplyLevel = options.onRevealNextReplyLevel;
+		this.#revealQuoteTarget = options.revealQuoteTarget;
+		this.#navigationRetryDelay = options.navigationRetryDelay ??
+			((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)));
 		this.#quoteHintHost =
 			options.quoteHintHost ??
 			options.document.body ??
 			options.document.documentElement;
+		this.#notify = options.notify ?? (() => {});
 		this.#onError = options.onError ?? (() => {});
 		(options.presentationChanges ?? this.#replies.changes).subscribe(() => {
 			for (const roots of this.#rootsByPostNumber.values()) {
@@ -369,6 +402,7 @@ export class ReaderTopicContextFeature<
 			}
 		}, this.scope);
 		this.scope.add(() => {
+			this.#quoteJumpEpoch += 1;
 			this.#quotePositionEpoch += 1;
 			this.#scrollRoot.classList.remove('ldp-quote-positioning');
 			for (const roots of this.#rootsByPostNumber.values()) {
@@ -376,6 +410,7 @@ export class ReaderTopicContextFeature<
 			}
 			this.#rootsByPostNumber.clear();
 			this.#collapsedRootReplies.clear();
+			this.#quotePostLoads.clear();
 			this.#expandedQuoteKeys.clear();
 			this.#clearQuoteHighlight();
 		});
@@ -390,6 +425,9 @@ export class ReaderTopicContextFeature<
 			post,
 		);
 		const highlight = this.#quoteHighlight;
+		if (highlight?.postNumber === view.postNumber && highlight.source) {
+			this.#mountQuoteReturnEntry(view.slots.root, highlight.source);
+		}
 		if (
 			highlight?.postNumber === view.postNumber &&
 			this.#quoteHighlightMarks.every((mark) => !mark.parentNode)
@@ -430,6 +468,12 @@ export class ReaderTopicContextFeature<
 				).forEach((control) => control.remove());
 			}
 			root.removeEventListener('click', onClick);
+			for (const entry of root.querySelectorAll<HTMLButtonElement>(
+				'[data-reader-context-quote-return]',
+			)) {
+				this.#quoteReturnEntries.delete(entry);
+				entry.remove();
+			}
 			this.#rootCleanups.delete(root);
 			const current = this.#rootsByPostNumber.get(postNumber);
 			current?.delete(root);
@@ -437,6 +481,10 @@ export class ReaderTopicContextFeature<
 		};
 		this.#rootCleanups.set(root, cleanup);
 		this.#syncMountedTree(root);
+		const highlight = this.#quoteHighlight;
+		if (highlight?.postNumber === postNumber && highlight.source) {
+			this.#mountQuoteReturnEntry(root, highlight.source);
+		}
 	}
 
 	detachRoot(root: HTMLElement): void {
@@ -511,6 +559,22 @@ export class ReaderTopicContextFeature<
 		return this.#quoteHighlight;
 	}
 
+	applyRevealedQuoteHighlight(
+		state: ReaderHistoryQuoteHighlightState,
+		postRoot: HTMLElement,
+	): boolean {
+		if (postRoot.dataset.postNumber !== String(state.postNumber)) return false;
+		const matched = this.#applyQuoteHighlight(
+			postRoot,
+			state.text,
+			state.active,
+			state.source,
+			true,
+		);
+		if (!matched) this.#revealQuoteTarget?.(postRoot, 'floor');
+		return matched;
+	}
+
 	async restoreQuoteHighlightState(
 		state: ReaderHistoryQuoteHighlightState | null,
 	): Promise<boolean> {
@@ -528,12 +592,7 @@ export class ReaderTopicContextFeature<
 		});
 		if (this.scope.destroyed) return false;
 		if (result.status !== 'revealed' || !result.element) return false;
-		return this.#applyQuoteHighlight(
-			result.element,
-			state.text,
-			state.active,
-			state.source,
-		);
+		return this.applyRevealedQuoteHighlight(state, result.element);
 	}
 
 	#icon(
@@ -558,11 +617,15 @@ export class ReaderTopicContextFeature<
 			);
 			if (
 				!Number.isSafeInteger(targetPostNumber) ||
-				targetPostNumber < 1
+				targetPostNumber < 1 ||
+				!Number.isSafeInteger(targetTopicId) ||
+				targetTopicId < 1
 			) {
 				continue;
 			}
-			this.#quoteExcerptByElement.set(quote, body.innerHTML);
+			if (!this.#quoteJumpExcerptByElement.has(quote)) {
+				this.#quoteJumpExcerptByElement.set(quote, body.innerHTML);
+			}
 			let controls = title.querySelector<HTMLElement>(
 				':scope > .quote-controls',
 			);
@@ -575,10 +638,12 @@ export class ReaderTopicContextFeature<
 				.forEach((control) => control.remove());
 			const key = `${sourcePostNumber}:${targetTopicId}:${targetPostNumber}`;
 			const expanded = this.#expandedQuoteKeys.has(key);
+			quote.classList.toggle('ldp-quote-expanded', expanded);
+			quote.dataset.ldpQuoteExpanded = expanded ? '1' : '0';
 			const toggle = button(
 				this.#document,
 				'ldp-quote-toggle',
-				expanded ? '恢复引用摘录' : '展开完整引用',
+				expanded ? '收起引用' : '展开完整引用',
 			);
 			toggle.dataset.readerContextQuote = 'toggle';
 			toggle.dataset.quoteKey = key;
@@ -599,13 +664,100 @@ export class ReaderTopicContextFeature<
 			jump.dataset.targetTopicId = String(targetTopicId);
 			jump.append(this.#icon('arrow-up'));
 			controls.append(jump);
-			if (expanded) {
-				const fullPost = this.#controller.quotedPost(
-					targetTopicId,
-					targetPostNumber,
-				);
-				if (fullPost) body.innerHTML = postCooked(fullPost);
+			const fullPost = this.#controller.quotedPost(
+				targetTopicId,
+				targetPostNumber,
+			);
+			if (fullPost) {
+				this.#applyQuotePost(quote, body, fullPost);
+				continue;
 			}
+			void this.#hydrateQuoteBody(
+				view,
+				quote,
+				body,
+				key,
+				targetTopicId,
+				targetPostNumber,
+			).catch((error) => {
+				if (!this.scope.destroyed) this.#onError(error);
+			});
+		}
+	}
+
+	#applyQuotePost(
+		quote: HTMLElement,
+		body: HTMLElement,
+		fullPost: TPost,
+	): boolean {
+		const cooked = postCooked(fullPost);
+		quote.dataset.ldpQuoteHydrated = '1';
+		if (body.innerHTML === cooked) return false;
+		body.innerHTML = cooked;
+		return true;
+	}
+
+	async #hydrateQuoteBody(
+		view: PostView,
+		quote: HTMLElement,
+		body: HTMLElement,
+		key: string,
+		targetTopicId: number,
+		targetPostNumber: number,
+	): Promise<void> {
+		const fullPost = await this.#loadQuotePost(
+			targetTopicId,
+			targetPostNumber,
+		);
+		if (
+			!fullPost ||
+			this.scope.destroyed ||
+			this.#viewByRoot.get(view.slots.root) !== view ||
+			!view.slots.content.contains(quote) ||
+			quote.querySelector(':scope > blockquote') !== body
+		) {
+			return;
+		}
+		if (!this.#applyQuotePost(quote, body, fullPost)) return;
+		this.#notifyQuoteBodyChanged(
+			view.slots.root,
+			this.#expandedQuoteKeys.has(key) ? 'expanded' : 'collapsed',
+		);
+	}
+
+	async #loadQuotePost(
+		targetTopicId: number,
+		targetPostNumber: number,
+	): Promise<TPost | null> {
+		const cached = this.#controller.quotedPost(
+			targetTopicId,
+			targetPostNumber,
+		);
+		if (cached) return cached;
+		const key = `${targetTopicId}:${targetPostNumber}`;
+		const pending = this.#quotePostLoads.get(key);
+		if (pending) return pending;
+		const request = this.#requestQuotePost(
+			key,
+			targetTopicId,
+			targetPostNumber,
+		);
+		this.#quotePostLoads.set(key, request);
+		return request;
+	}
+
+	async #requestQuotePost(
+		key: string,
+		targetTopicId: number,
+		targetPostNumber: number,
+	): Promise<TPost | null> {
+		try {
+			return await this.#controller.loadQuotedPost(
+				targetTopicId,
+				targetPostNumber,
+			);
+		} finally {
+			this.#quotePostLoads.delete(key);
 		}
 	}
 
@@ -636,6 +788,7 @@ export class ReaderTopicContextFeature<
 			.forEach((control) => control.remove());
 		root.classList.remove('ldp-has-hidden-child-branches');
 		const parent = this.#replies.topology.parentOf(postNumber);
+		const onlyOpPost = this.#isOnlyOpPost(postNumber);
 		const currentFloor = header?.querySelector<HTMLElement>(
 			':scope > :is(.ldp-body-floor,[data-reader-context-self])',
 		);
@@ -708,11 +861,15 @@ export class ReaderTopicContextFeature<
 			replyControls.append(controls);
 		}
 		const discussionOwner = this.#discussionBranchOwner(postNumber);
+		const onlyOpDiscussion = onlyOpPost &&
+			parent !== undefined &&
+			parent !== null &&
+			!insideDiscussion;
 		const hasParkedDiscussion = postNumber > 1 &&
 			!insideDiscussion &&
 			discussionOwner === postNumber &&
 			this.#branchHasParkedDiscussion(postNumber, post);
-		if (replyControls && hasParkedDiscussion) {
+		if (replyControls && (onlyOpDiscussion || hasParkedDiscussion)) {
 			const discussionButton = button(
 				this.#document,
 				'ldp-btn ldp-sub-page-btn ldp-descendant-replies-open',
@@ -745,6 +902,7 @@ export class ReaderTopicContextFeature<
 		const nestedPreview = root.classList.contains('ldp-nested-preview');
 		const streamReply =
 			canonicalReply &&
+			!this.#isOnlyOpPost(postNumber) &&
 			!root.closest('.ldp-descendant-replies-layer') &&
 			(projectedParent === null || nestedPreview);
 		const collapseControlVisible =
@@ -833,6 +991,11 @@ export class ReaderTopicContextFeature<
 		if (hint) hint.textContent = 'Esc 收起';
 	}
 
+	#isOnlyOpPost(postNumber: DiscoursePostNumber): boolean {
+		return this.#presentation?.postFilterKey?.startsWith('only-op:') === true &&
+			this.#presentation.postFilterMatches(postNumber);
+	}
+
 	/**
 	 * 一条连续可见树只允许一个完整讨论入口。
 	 *
@@ -911,15 +1074,16 @@ export class ReaderTopicContextFeature<
 			const postNumber = discoursePostNumber(
 				postRoot.dataset.postNumber,
 			);
+			const post = this.#controller.postByNumber(postNumber) ?? null;
 			this.#syncRelationshipControls(
 				postRoot,
 				postNumber,
-				this.#controller.postByNumber(postNumber) ?? null,
+				post,
 			);
 			this.#syncRootReplyCollapse(
 				postRoot,
 				postNumber,
-				this.#controller.postByNumber(postNumber) ?? null,
+				post,
 			);
 			if (postRoot.closest('.ldp-descendant-replies-layer')) continue;
 			this.#syncHiddenReplyMarker(postRoot, postNumber);
@@ -1252,24 +1416,9 @@ export class ReaderTopicContextFeature<
 			const targetTopicId = Number(
 				quoteAction.dataset.targetTopicId ?? this.#controller.topicId,
 			);
-			if (targetTopicId !== this.#controller.topicId) {
-				if (!this.#target) {
-					throw new Error('跨主题引用跳转时 target 尚未就绪');
-				}
-				await this.#target.open({
-					topicId: targetTopicId,
-					postNumber: targetPostNumber,
-					source: 'quote',
-					alignment: 'nearest',
-					highlight: false,
-				});
-				return;
-			}
-			const navigation = this.#navigate();
-			if (!navigation) throw new Error('引用跳转时 navigation 尚未就绪');
 			const quote = quoteAction.closest<HTMLElement>('.ldp-post-quote');
 			const excerptHtml = quote
-				? this.#quoteExcerptByElement.get(quote) ?? ''
+					? this.#quoteJumpExcerptByElement.get(quote) ?? ''
 				: '';
 			const excerpt = quoteExcerptText(this.#document, excerptHtml);
 			const rawParentPostNumber =
@@ -1288,19 +1437,59 @@ export class ReaderTopicContextFeature<
 				anchor:
 					this.#quoteSourcePort?.captureAnchor() ?? null,
 			});
-			const result = await navigation.navigate({
+			const quoteHighlight = Object.freeze({
+				postNumber: targetPostNumber,
+				text: excerpt,
+				active: true,
+				source,
+			});
+			if (targetTopicId !== this.#controller.topicId) {
+				if (!this.#target) {
+					throw new Error('跨主题引用跳转时 target 尚未就绪');
+				}
+				await this.#target.open({
+					topicId: targetTopicId,
+					postNumber: targetPostNumber,
+					source: 'quote',
+					alignment: 'nearest',
+					highlight: false,
+					forceRefresh: true,
+					quoteHighlight,
+				});
+				return;
+			}
+			const navigation = this.#navigate();
+			if (!navigation) throw new Error('引用跳转时 navigation 尚未就绪');
+			const jumpEpoch = ++this.#quoteJumpEpoch;
+			const result = await this.#navigateQuoteWithRetry(navigation, {
 				postNumber: targetPostNumber,
 				source: 'quote',
 				alignment: 'nearest',
 				highlight: false,
-			});
-			if (!this.#isActiveRoot(root)) return;
-			if (result.status === 'revealed' && result.element && excerpt) {
-				this.#applyQuoteHighlight(
-					result.element,
-					excerpt,
-					true,
-					source,
+			}, root, jumpEpoch);
+			if (!result || !this.#isActiveRoot(root)) return;
+			if (result.status !== 'revealed') {
+				if (result.status === 'unavailable') {
+					this.#notify(
+						`目的地楼层 #${targetPostNumber} 不存在或当前不可访问`,
+					);
+				} else if (result.status === 'superseded') {
+					this.#notify('楼层跳转已取消；检测到新的定位或滚动操作');
+				} else if (result.status === 'unresolved-tree') {
+					this.#notify(
+						`目的地楼层 #${targetPostNumber} 的回复树暂未完成挂载；请稍后重试`,
+					);
+				} else {
+					this.#notify(`目的地楼层 #${targetPostNumber} 定位失败`);
+				}
+				return;
+			}
+			if (
+				result.element &&
+				!this.applyRevealedQuoteHighlight(quoteHighlight, result.element)
+			) {
+				this.#notify(
+					`目的地内容已修改；已定位到楼层 #${targetPostNumber}`,
 				);
 			}
 			return;
@@ -1312,7 +1501,6 @@ export class ReaderTopicContextFeature<
 		const expanded = this.#expandedQuoteKeys.has(key);
 		const anchorRoot = postRoot ?? root;
 		if (expanded) {
-			body.innerHTML = this.#quoteExcerptByElement.get(quote) ?? body.innerHTML;
 			this.#expandedQuoteKeys.delete(key);
 			quote.dataset.ldpQuoteExpanded = '0';
 			quote.classList.remove('ldp-quote-expanded');
@@ -1326,7 +1514,7 @@ export class ReaderTopicContextFeature<
 				quoteAction.dataset.targetTopicId ?? this.#controller.topicId,
 			);
 			try {
-				const fullPost = await this.#controller.loadQuotedPost(
+				const fullPost = await this.#loadQuotePost(
 					targetTopicId,
 					targetPostNumber,
 				);
@@ -1344,12 +1532,12 @@ export class ReaderTopicContextFeature<
 					);
 					return;
 				}
-				body.innerHTML = postCooked(fullPost);
+				this.#applyQuotePost(quote, body, fullPost);
 				this.#expandedQuoteKeys.add(key);
 				quote.dataset.ldpQuoteExpanded = '1';
 				quote.classList.add('ldp-quote-expanded');
 				quoteAction.setAttribute('aria-expanded', 'true');
-				quoteAction.setAttribute('aria-label', '恢复引用摘录');
+				quoteAction.setAttribute('aria-label', '收起引用');
 				quoteAction.replaceChildren(this.#icon('chevron-up'));
 				this.#notifyQuoteBodyChanged(anchorRoot, 'expanded');
 			} finally {
@@ -1362,6 +1550,60 @@ export class ReaderTopicContextFeature<
 		return !this.scope.destroyed &&
 			this.#rootCleanups.has(root) &&
 			root.isConnected;
+	}
+
+	async #navigateQuoteWithRetry(
+		navigation: ReaderTopicContextNavigationPort,
+		request: ReaderTopicContextNavigationRequest,
+		root: HTMLElement,
+		jumpEpoch: number,
+	): Promise<ReaderTopicContextNavigationResult | null> {
+		for (let attempt = 0; ; attempt += 1) {
+			let result: ReaderTopicContextNavigationResult;
+			try {
+				result = await navigation.navigate(request);
+			} catch (error) {
+				if (
+					this.#isActiveRoot(root) &&
+					jumpEpoch === this.#quoteJumpEpoch
+				) {
+					this.#notify(
+						`目的地楼层 #${request.postNumber} 定位失败；请稍后重试`,
+					);
+				}
+				throw error;
+			}
+			if (
+				!this.#isActiveRoot(root) ||
+				jumpEpoch !== this.#quoteJumpEpoch
+			) {
+				return null;
+			}
+			if (result.status !== 'unresolved-tree' || attempt >= 2) {
+				return result;
+			}
+			this.#notify(
+				`目标楼层定位暂时失败，${attempt + 1} 秒后自动重试一次`,
+			);
+			const navigationRevision = navigation.revision;
+			await this.#navigationRetryDelay((attempt + 1) * 1_000);
+			if (
+				!this.#isActiveRoot(root) ||
+				jumpEpoch !== this.#quoteJumpEpoch
+			) {
+				return null;
+			}
+			if (
+				navigationRevision !== undefined &&
+				navigation.isCurrent &&
+				!navigation.isCurrent(navigationRevision)
+			) {
+				return Object.freeze({
+					...result,
+					status: 'superseded',
+				});
+			}
+		}
 	}
 
 	#notifyQuoteBodyChanged(
@@ -1378,8 +1620,17 @@ export class ReaderTopicContextFeature<
 		text: string,
 		active: boolean,
 		source: ReaderHistoryQuoteSource | null = null,
+		revealMatch = false,
 	): boolean {
 		this.#clearQuoteHighlight();
+		const postNumber = discoursePostNumber(postRoot.dataset.postNumber);
+		this.#quoteHighlight = Object.freeze({
+			postNumber,
+			text,
+			source,
+			active,
+		});
+		if (source) this.#syncQuoteReturnEntries(postRoot, postNumber, source);
 		const content = postRoot.querySelector<HTMLElement>(
 			':scope > .ldp-post-body > .ldp-content',
 		);
@@ -1388,13 +1639,6 @@ export class ReaderTopicContextFeature<
 		const marks = markQuoteTextMatch(this.#document, content, text);
 		releasePositioning();
 		if (!marks.length) return false;
-		const postNumber = discoursePostNumber(postRoot.dataset.postNumber);
-		this.#quoteHighlight = Object.freeze({
-			postNumber,
-			text,
-			source,
-			active,
-		});
 		this.#quoteHighlightMarks = marks;
 		const lastMark = marks.at(-1);
 		lastMark?.classList.add('ldp-quote-match-end');
@@ -1423,6 +1667,9 @@ export class ReaderTopicContextFeature<
 				source.nested ? '返回二级回复' : '返回引用楼层',
 			);
 			hint.append(returnButton);
+			this.#bindQuoteReturn(returnButton, source, () => {
+				hint.classList.remove('ldp-quote-hint-visible');
+			});
 		}
 		this.#quoteHintHost.append(hint);
 		this.#quoteHighlightHint = hint;
@@ -1473,7 +1720,7 @@ export class ReaderTopicContextFeature<
 				? event.clientY
 				: markRect.top;
 			const edge = 8;
-			const gap = 10;
+			const gap = QUOTE_HINT_POINTER_GAP_PX;
 			const left = Math.max(
 				edge,
 				Math.min(
@@ -1501,7 +1748,7 @@ export class ReaderTopicContextFeature<
 					return;
 				}
 				hint.classList.remove('ldp-quote-hint-visible');
-			}, 160);
+			}, QUOTE_HINT_HIDE_GRACE_MS);
 		};
 		toggle.addEventListener('click', toggleActive);
 		hint.addEventListener('mouseenter', cancelHintHide);
@@ -1516,47 +1763,91 @@ export class ReaderTopicContextFeature<
 		lastMark?.addEventListener('keydown', (event) => {
 			if (event.key === 'Enter' || event.key === ' ') toggleActive(event);
 		});
-			if (returnButton && source) {
-				returnButton.addEventListener('click', (event) => {
-					event.preventDefault();
-					event.stopPropagation();
-					const sourcePort = this.#quoteSourcePort;
-					if (returnButton.disabled || !sourcePort) return;
-					returnButton.disabled = true;
-					const original = returnButton.textContent;
-					returnButton.textContent = '返回中…';
-					void sourcePort.restore(source)
-						.then((restored) => {
-							if (
-								this.scope.destroyed ||
-								this.#quoteHighlightHint !== hint
-							) {
-								return;
-							}
-							if (!restored) throw new Error('引用来源暂不可用');
-							hint.classList.remove('ldp-quote-hint-visible');
-						})
-						.catch((error) => {
-							if (
-								!this.scope.destroyed &&
-								this.#quoteHighlightHint === hint
-							) {
-								this.#onError(error);
-							}
-						})
-					.finally(() => {
-						if (!returnButton?.isConnected) return;
-						returnButton.disabled = false;
-						returnButton.textContent = original;
-					});
-			});
-		}
 		for (const mark of marks) {
 			mark.classList.toggle('ldp-quote-match-muted', !active);
 			mark.addEventListener('click', toggleActive);
 		}
 		setActive(active);
+		if (revealMatch) {
+			const firstMark = marks[0];
+			if (firstMark) this.#revealQuoteTarget?.(firstMark, 'match');
+		}
 		return true;
+	}
+
+	#syncQuoteReturnEntries(
+		postRoot: HTMLElement,
+		postNumber: DiscoursePostNumber,
+		source: ReaderHistoryQuoteSource,
+	): void {
+		const roots = new Set<HTMLElement>([
+			postRoot,
+			...(this.#rootsByPostNumber.get(postNumber) ?? []),
+		]);
+		for (const root of roots) this.#mountQuoteReturnEntry(root, source);
+	}
+
+	#mountQuoteReturnEntry(
+		postRoot: HTMLElement,
+		source: ReaderHistoryQuoteSource,
+	): void {
+		if (!this.#quoteSourcePort) return;
+		const header = postRoot.querySelector<HTMLElement>(
+			':scope > .ldp-post-head',
+		);
+		if (!header) return;
+		const existing = header.querySelector<HTMLButtonElement>(
+			':scope > [data-reader-context-quote-return]',
+		);
+		if (existing) {
+			this.#quoteReturnEntries.add(existing);
+			return;
+		}
+		const label = source.nested ? '返回二级回复' : '返回引用楼层';
+		const entry = button(
+			this.#document,
+			'ldp-btn ldp-quote-return-entry',
+			label,
+			'← 返回引用处',
+		);
+		entry.dataset.readerContextQuoteReturn = '1';
+		const floor = header.querySelector<HTMLElement>(
+			':scope > :is(.ldp-body-floor,[data-reader-context-self])',
+		);
+		if (floor) floor.insertAdjacentElement('afterend', entry);
+		else header.append(entry);
+		this.#quoteReturnEntries.add(entry);
+		this.#bindQuoteReturn(entry, source);
+	}
+
+	#bindQuoteReturn(
+		control: HTMLButtonElement,
+		source: ReaderHistoryQuoteSource,
+		onRestored: () => void = () => {},
+	): void {
+		control.addEventListener('click', (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			const sourcePort = this.#quoteSourcePort;
+			if (control.disabled || !sourcePort) return;
+			control.disabled = true;
+			const original = control.textContent;
+			control.textContent = '返回中…';
+			void sourcePort.restore(source)
+				.then((restored) => {
+					if (this.scope.destroyed) return;
+					if (!restored) throw new Error('引用来源暂不可用');
+					onRestored();
+				})
+				.catch((error) => {
+					if (!this.scope.destroyed) this.#onError(error);
+				})
+				.finally(() => {
+					if (!control.isConnected) return;
+					control.disabled = false;
+					control.textContent = original;
+				});
+		});
 	}
 
 	#beginQuotePositioning(): () => void {
@@ -1583,6 +1874,8 @@ export class ReaderTopicContextFeature<
 		}
 		this.#quoteHighlightHint?.remove();
 		this.#quoteHighlightHint = null;
+		for (const entry of this.#quoteReturnEntries) entry.remove();
+		this.#quoteReturnEntries.clear();
 		for (const mark of this.#quoteHighlightMarks) {
 			if (!mark.parentNode) continue;
 			const parent = mark.parentNode;
@@ -1843,7 +2136,7 @@ export class ReaderTopicContextSurface<
 		);
 		this.discussionBranchOverlay = new ReaderBranchOverlayController({
 			domOwner: this.discussionDomOwner,
-			allowLongBranchSpans: true,
+			renderMode: 'segmented-css',
 			onToggleBranch: (postNumber) => {
 				this.#controller.toggleDiscussionBranch(postNumber);
 			},
@@ -2123,6 +2416,55 @@ export class ReaderTopicContextSurface<
 				}),
 		});
 		this.#applyPendingRestorePoint();
+	}
+
+	/**
+	 * 在完整讨论局部投影中揭示目标；不会把停放楼层提升进主信息流。
+	 */
+	async revealDiscussionPost(
+		postNumberValue: unknown,
+	): Promise<Readonly<{
+		readonly postNumber: DiscoursePostNumber;
+		readonly rootPostNumber: DiscoursePostNumber;
+		readonly element: HTMLElement;
+		readonly mounted: boolean;
+	}> | null> {
+		if (this.scope.destroyed) {
+			throw new Error('完整讨论 surface 已销毁');
+		}
+		const postNumber = discoursePostNumber(postNumberValue);
+		const previous = this.discussionDomOwner.view(postNumber)?.slots.root;
+		const wasMounted = previous?.isConnected === true;
+		const snapshot = await this.#controller.openDiscussion(postNumber, {
+			targetPostNumber: postNumber,
+		});
+		if (this.scope.destroyed) return null;
+		const discussion = snapshot.discussion;
+		const target = this.discussionDomOwner.view(postNumber)?.slots.root;
+		if (
+			!discussion ||
+			!target?.isConnected ||
+			target.classList.contains('ldp-post-projection-pending')
+		) return null;
+		return Object.freeze({
+			postNumber,
+			rootPostNumber: discussion.rootPostNumber,
+			element: target,
+			mounted: !wasMounted,
+		});
+	}
+
+	/** 只闪烁完整讨论中已挂载的楼层，不移动浮窗滚动位置。 */
+	highlightDiscussionPost(postNumberValue: unknown): boolean {
+		if (this.scope.destroyed) return false;
+		const postNumber = discoursePostNumber(postNumberValue);
+		const target = this.discussionDomOwner.view(postNumber)?.slots.root;
+		if (
+			!target?.isConnected ||
+			target.classList.contains('ldp-post-projection-pending')
+		) return false;
+		this.#highlight(target);
+		return true;
 	}
 
 	destroy(): void {

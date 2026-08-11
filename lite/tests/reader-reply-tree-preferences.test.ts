@@ -132,22 +132,59 @@ const usernames = new Map([
 assert(
 	presentation.setPostFilter(Object.freeze({
 		key: 'only-op:op',
+		hideDescendantMatches: true,
+		ancestorBoundaryPostNumber: 1,
 		matches: (postNumber: number) => usernames.get(postNumber) === 'op',
 	})) &&
-	JSON.stringify(presentation.roots()) === '[1,3,5]' &&
+	JSON.stringify(presentation.roots()) === '[1,3]' &&
 	presentation.parentOf(3) === null &&
+	presentation.rootOf(5) === undefined &&
 	presentation.childrenOf(1).length === 0 &&
 	presentation.hiddenDirectChildrenOf(1).length === 0 &&
 	presentation.rootOf(2) === undefined &&
 	presentation.revealAsFloor(2) &&
 	presentation.rootOf(2) === 2,
-	'只看楼主必须只过滤唯一根投影、把楼主楼层平铺，并允许目标非楼主楼层临时揭示',
+	'只看楼主必须只过滤唯一根投影、隐藏已有可见楼主祖先的后代楼主，并允许目标非楼主楼层临时揭示',
 );
 assert(
 	presentation.setPostFilter(null) &&
 	presentation.rootOf(2) === 1 &&
 	canonical.parentOf(2) === 1,
 	'关闭只看楼主必须立即恢复同一 canonical 树，不能保留第二套过滤关系',
+);
+
+const onlyOpBranches = new ReplyTreeTopology();
+onlyOpBranches.commit([
+	{ postNumber: 1, parentPostNumber: null },
+	{ postNumber: 2, parentPostNumber: 1 },
+	{ postNumber: 3, parentPostNumber: 2 },
+	{ postNumber: 4, parentPostNumber: 3 },
+	{ postNumber: 5, parentPostNumber: 4 },
+	{ postNumber: 6, parentPostNumber: 2 },
+	{ postNumber: 7, parentPostNumber: 6 },
+	{ postNumber: 8, parentPostNumber: 9 },
+]);
+const onlyOpPresentation = new ReaderReplyTreePresentation(onlyOpBranches);
+const onlyOpPostNumbers = new Set([1, 3, 5, 7, 8]);
+onlyOpPresentation.setPostFilter(Object.freeze({
+	key: 'only-op:op',
+	hideDescendantMatches: true,
+	ancestorBoundaryPostNumber: 1,
+	matches: (postNumber: number) => onlyOpPostNumbers.has(postNumber),
+}));
+assert(
+	JSON.stringify(onlyOpPresentation.roots()) === '[1,3,7,8]' &&
+		onlyOpPresentation.rootOf(5) === undefined &&
+		onlyOpPresentation.rootOf(7) === 7 &&
+		onlyOpPresentation.rootOf(8) === 8,
+	'只看楼主去重只能隐藏可见楼主的严格后代；同根兄弟分支与父链未补齐的楼主必须保留',
+);
+onlyOpBranches.commit([{ postNumber: 9, parentPostNumber: 4 }]);
+onlyOpPresentation.invalidatePostFilter();
+assert(
+	JSON.stringify(onlyOpPresentation.roots()) === '[1,3,7]' &&
+		onlyOpPresentation.rootOf(8) === undefined,
+	'父链补齐后必须重算只看楼主去重，再隐藏已证明位于可见楼主子树的后代',
 );
 
 const incrementalCanonical = new ReplyTreeTopology();
@@ -280,6 +317,38 @@ assert(
 		JSON.stringify(livePresentation.roots()) === '[1]' &&
 		livePresentation.parentOf(2) === 1,
 	'停滚后必须一次切到最新 canonical 关系，不能遗失实时父子更新',
+);
+
+const orphanCanonical = new ReplyTreeTopology();
+orphanCanonical.commit([
+	{ postNumber: 62, parentPostNumber: 41 },
+	{ postNumber: 63, parentPostNumber: 62 },
+	{ postNumber: 64, parentPostNumber: 63 },
+]);
+const orphanPresentation = new ReaderReplyTreePresentation(orphanCanonical, {
+	expandNestedRepliesByDefault: true,
+	aggregateDescendantReplies: true,
+	inlineReplyTreeMaxDepth: 1,
+	hideNestedReplyFloors: true,
+});
+assert(
+	orphanCanonical.rootOf(64) === undefined &&
+	orphanPresentation.revealDegradedBranch(62, 64) &&
+	JSON.stringify(orphanPresentation.roots()) === '[62]' &&
+	orphanPresentation.parentOf(62) === null &&
+	orphanPresentation.parentOf(63) === 62 &&
+	orphanPresentation.parentOf(64) === 63 &&
+	orphanPresentation.rootOf(64) === 62 &&
+	orphanPresentation.depthOf(64) === 2 &&
+	orphanPresentation.rootBranches()[0]?.subtreePostCount === 3,
+	'缺失祖先必须只把最高可用楼层降级成临时根，并保留到目标的完整 canonical 子链',
+);
+orphanCanonical.commit([{ postNumber: 41, parentPostNumber: null }]);
+assert(
+	JSON.stringify(orphanPresentation.roots()) === '[41]' &&
+	orphanPresentation.parentOf(62) === 41 &&
+	orphanPresentation.rootOf(64) === 41,
+	'缺失祖先后来补齐时必须自动撤销临时根并重新接回真实 canonical 链',
 );
 
 const largeCanonical = new ReplyTreeTopology();

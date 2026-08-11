@@ -14,6 +14,7 @@ export const READER_WEBDAV_CATEGORIES = Object.freeze([
 	'connect-history',
 	'translation',
 	'translation-cache',
+	'offline-topics',
 ] as const);
 
 export type ReaderWebDavCategory =
@@ -31,6 +32,7 @@ export const READER_WEBDAV_CATEGORY_LABELS = Object.freeze<Readonly<
 	'connect-history': 'Connect 本机观察历史',
 	translation: 'AI 翻译服务集合（Key 加密）',
 	'translation-cache': '已翻译 Section 缓存',
+	'offline-topics': '离线 Topic 下载（HTML 正文）',
 });
 
 export type ReaderWebDavAutoSyncIntervalMinutes =

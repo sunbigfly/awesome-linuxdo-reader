@@ -107,9 +107,16 @@ function click(element: Element): void {
 	element.dispatchEvent(event);
 }
 
-function pointerOver(element: Element): void {
+function pointerOver(
+	element: Element,
+	relatedTarget: Node | null = null,
+): void {
 	const event = document.createEvent('Event');
 	event.initEvent('pointerover', true, true);
+	Object.defineProperty(event, 'relatedTarget', {
+		configurable: true,
+		value: relatedTarget,
+	});
 	element.dispatchEvent(event);
 }
 
@@ -119,9 +126,16 @@ function pointerDown(element: Element): void {
 	element.dispatchEvent(event);
 }
 
-function pointerOut(element: Element): void {
+function pointerOut(
+	element: Element,
+	relatedTarget: Node | null = null,
+): void {
 	const event = document.createEvent('Event');
 	event.initEvent('pointerout', true, true);
+	Object.defineProperty(event, 'relatedTarget', {
+		configurable: true,
+		value: relatedTarget,
+	});
 	element.dispatchEvent(event);
 }
 
@@ -589,6 +603,21 @@ const feature = new ReaderPostActionFeature<TestTopic, TestPost>({
 	},
 });
 
+let closedBoostScrollPathReads = 0;
+const closedBoostScroll = new parsedWindow.Event('scroll');
+Object.defineProperty(closedBoostScroll, 'composedPath', {
+	configurable: true,
+	value: () => {
+		closedBoostScrollPathReads += 1;
+		return [];
+	},
+});
+document.dispatchEvent(closedBoostScroll);
+assert(
+	closedBoostScrollPathReads === 0,
+	'Boost composer 关闭时正文滚动不得解析事件路径或安排无效定位工作',
+);
+
 function openReactionPicker(root: Element): void {
 	const trigger = root.querySelector<HTMLElement>('[data-reaction-picker]');
 	assert(trigger, '回应 surface 必须存在 picker 入口');
@@ -681,6 +710,13 @@ assert(
 	railView.slots.actions.querySelector('[data-post-bookmark]'),
 	'主帖收纳箱首次展开必须立即补齐楼层链接、举报和收藏等上下文动作，不能等待第二次 hover',
 );
+assert(
+	railLike.getAttribute('aria-expanded') === 'false' &&
+		railView.slots.actions.querySelector<HTMLElement>('.ldp-reaction-picker')
+			?.hidden,
+	'主帖收纳箱展开时回应列表必须保持收起，等待主回应按钮 hover',
+);
+openReactionPicker(railView.slots.actions);
 const railReactionButtons = [...railView.slots.actions.querySelectorAll<
 	HTMLButtonElement
 >('.ldp-reaction-picker [data-reaction]')];
@@ -695,16 +731,16 @@ assert(
 		railReactionOrder === 'heart,laughing' &&
 		railReactionButtons[0]?.querySelector('b')?.textContent === '2' &&
 		railReactionButtons[1]?.querySelector('b')?.textContent === '',
-	'主帖收纳箱展开后必须常显按现有回应数排序的表情列表，并保留零计数占位；' +
+	'主帖收纳箱展开后 hover 必须显示按现有回应数排序的表情列表，并保留零计数占位；' +
 		`expanded=${railLike.getAttribute('aria-expanded')};` +
 		`order=${railReactionOrder};counts=${railReactionCounts}`,
 );
-pointerOut(railLike);
+closeReactionPicker(railView.slots.actions);
 assert(
-	Number(scheduled.size) === 0 &&
-		!railView.slots.actions.querySelector<HTMLElement>('.ldp-reaction-picker')
+	railLike.getAttribute('aria-expanded') === 'false' &&
+		railView.slots.actions.querySelector<HTMLElement>('.ldp-reaction-picker')
 			?.hidden,
-	'主帖收纳箱展开态的表情列表不得因移出或滚动生命周期自动收起',
+	'主帖收纳箱展开态的表情列表必须在 hover 离开后自动收起',
 );
 feature.afterRender({
 	...comment,
@@ -728,7 +764,7 @@ assert(
 		?.hidden &&
 		railView.slots.actions.querySelector('[data-reaction-picker]')
 		?.getAttribute('aria-expanded') === 'false',
-	'只有收纳箱自身切回常显/收纳态时才关闭常显表情列表',
+	'收纳箱切回常显/收纳态时必须保持表情列表关闭',
 );
 const sourceView = new PostView(document, {
 	postId: source.id,
@@ -890,6 +926,49 @@ assert(
 		'[data-post-share]',
 	),
 	'普通、嵌套、实时、回屏和灯箱 PostView 必须由同一 feature 按需水合低频动作',
+);
+const boostQuickActions = regularBoost.querySelector<HTMLElement>(
+	':scope > .ldp-boost-quick-actions',
+)!;
+const boostQuickAction = boostQuickActions.querySelector<HTMLButtonElement>(
+	'.ldp-boost-item-action',
+)!;
+const beforeBoostQuickOpen = new Set(scheduled.keys());
+pointerOver(regularBoost);
+const boostQuickOpen = [...scheduled].find(([handle]) =>
+	!beforeBoostQuickOpen.has(handle));
+assert(
+	boostQuickOpen &&
+		!regularBoost.classList.contains('ldp-boost-quick-actions-open'),
+	'Boost 悬停必须先经过独立状态门，不能由绝对定位快捷层扩张父胶囊 hover 命中区',
+);
+scheduled.delete(boostQuickOpen[0]);
+boostQuickOpen[1]();
+assert(
+	regularBoost.classList.contains('ldp-boost-quick-actions-open'),
+	'Boost 快捷层必须在悬停门后建立唯一活动胶囊',
+);
+const beforeBoostBridgeClose = new Set(scheduled.keys());
+pointerOut(regular.slots.boost, document.body);
+const boostBridgeClose = [...scheduled].find(([handle]) =>
+	!beforeBoostBridgeClose.has(handle));
+assert(boostBridgeClose, '离开 Boost 组必须建立有界关闭任务');
+pointerOver(boostQuickAction, document.body);
+assert(
+	!scheduled.has(boostBridgeClose[0]) &&
+		regularBoost.classList.contains('ldp-boost-quick-actions-open'),
+	'从 Boost 胶囊移向组外快捷层时必须取消关闭任务，保留按钮可点击路径',
+);
+const beforeBoostQuickClose = new Set(scheduled.keys());
+pointerOut(boostQuickAction, document.body);
+const boostQuickClose = [...scheduled].find(([handle]) =>
+	!beforeBoostQuickClose.has(handle));
+assert(boostQuickClose, '离开 Boost 快捷层必须重新建立关闭任务');
+scheduled.delete(boostQuickClose[0]);
+boostQuickClose[1]();
+assert(
+	!regularBoost.classList.contains('ldp-boost-quick-actions-open'),
+	'Boost 快捷层离开延迟结束后必须关闭，不能留下跨楼层遮挡层',
 );
 const hoverTrigger = regular.slots.actions.querySelector<HTMLElement>(
 	'[data-reaction-picker]',
@@ -1884,6 +1963,20 @@ assert(
 	primaryReactionLike?.dataset.reaction === 'heart' &&
 		primaryReactionLike.querySelector('.ldp-like-count')?.textContent === '2',
 	'安装 reactions 插件时主点赞必须映射站点配置的 main reaction 及其计数',
+);
+feature.afterRender({
+	...session.postById(2)!,
+	reactions: [{ id: 'heart', count: 4 }],
+	reaction_users_count: 4,
+}, regular);
+assert(
+	primaryReactionLike.querySelector('.ldp-like-count')?.textContent === '4',
+	'后台事件重投同一 PostView 时，即使动作 capability 未变化也必须刷新回应计数',
+);
+feature.afterRender(session.postById(2)!, regular);
+assert(
+	primaryReactionLike.querySelector('.ldp-like-count')?.textContent === '2',
+	'同一 PostView 必须继续接受后续 canonical 回投，不能把事件值冻结在 binding 缓存',
 );
 const primaryReactionSettled = new Promise<void>((resolve) => {
 	const unsubscribe = actions.events.subscribe((event) => {

@@ -52,6 +52,16 @@ export interface ReaderResourceTopicSnapshot {
 	readonly mediaDiagnostics: ReaderResourceMediaSnapshot;
 }
 
+export interface ReaderResourcePerformancePolicySnapshot {
+	readonly pageSize: number;
+	readonly streamOverscanScreens: number;
+	readonly streamMaxMountedPostCount: number;
+	readonly nestedPrefetchScreens: number;
+	readonly requestMaxConcurrent: number;
+	readonly requestMinIntervalMs: number;
+	readonly requestRateTargetPercent: number;
+}
+
 export interface ReaderResourceMonitorOptions {
 	readonly document: Document;
 	readonly host: HTMLElement;
@@ -61,6 +71,8 @@ export interface ReaderResourceMonitorOptions {
 	readonly permitSnapshot: () =>
 		Promise<BrowserSharedRequestPermitSnapshot | null>;
 	readonly topicSnapshot: () => ReaderResourceTopicSnapshot;
+	readonly performancePolicySnapshot?: () =>
+		ReaderResourcePerformancePolicySnapshot | null;
 	readonly performance?: Performance | null;
 	readonly createPerformanceObserver?: (
 		callback: PerformanceObserverCallback,
@@ -255,7 +267,7 @@ const METRICS: readonly MetricDefinition[] = Object.freeze([
 	{
 		id: 'floors',
 		label: '楼层保留',
-		detail: '已挂载 / canonical session 保留',
+		detail: '已挂载 / 当前帖子会话保留（不等于持久缓存总量）',
 		values: (sample) => [sample.mountedFloors, sample.retainedFloors],
 		format: ([mounted, retained]) =>
 			`${Math.round(mounted ?? 0)} / ${Math.round(retained ?? 0)} 个`,
@@ -277,7 +289,7 @@ const METRICS: readonly MetricDefinition[] = Object.freeze([
 	{
 		id: 'requests',
 		label: '请求调度',
-		detail: '中央 scheduler 活动 / 排队',
+		detail: '当前生效调度器活动 / 排队（不是设置目标值）',
 		values: (sample) => [sample.activeRequests, sample.queuedRequests],
 		format: ([active, queued]) =>
 			`${Math.round(active ?? 0)} / ${Math.round(queued ?? 0)} 条`,
@@ -304,6 +316,13 @@ function formatDuration(milliseconds: number): string {
 	return value < 1_000
 		? `${Math.round(value)} ms`
 		: `${(value / 1_000).toFixed(value < 10_000 ? 1 : 0)} s`;
+}
+
+function formatPolicyNumber(raw: number): string {
+	const value = Number(raw);
+	return Number.isFinite(value)
+		? String(Number(value.toFixed(2)))
+		: '—';
 }
 
 function formatRequestTimestamp(raw: number): string {
@@ -603,6 +622,7 @@ export class ReaderResourceMonitor {
 	readonly #healthState: HTMLElement;
 	readonly #healthDetail: HTMLElement;
 	readonly #updated: HTMLElement;
+	readonly #performancePolicy: HTMLElement;
 	readonly #rows = new Map<string, HTMLElement>();
 	readonly #trendWindow: HTMLElement;
 	readonly #trendRows = new Map<
@@ -739,6 +759,21 @@ export class ReaderResourceMonitor {
 			this.#healthState,
 			this.#healthDetail,
 			this.#updated,
+		);
+		const performancePolicyBlock = settingsElement(
+			document,
+			'section',
+			'ldp-request-flow-limit',
+		);
+		const performancePolicyTitle = settingsElement(document, 'h4');
+		performancePolicyTitle.textContent = '当前生效性能策略';
+		performancePolicyBlock.dataset.resourceMonitorPolicyBlock = '';
+		this.#performancePolicy = settingsElement(document, 'p');
+		this.#performancePolicy.dataset.resourceMonitorPolicy = '';
+		this.#performancePolicy.textContent = '等待性能快照。';
+		performancePolicyBlock.append(
+			performancePolicyTitle,
+			this.#performancePolicy,
 		);
 		const table = settingsElement(
 			document,
@@ -956,6 +991,7 @@ export class ReaderResourceMonitor {
 			'无法确认来源的内存与主线程事件记为“页面共享”，不以推算冒充独占数据。';
 		performancePanel.append(
 			this.#health,
+			performancePolicyBlock,
 			evidence,
 			table,
 			trends,
@@ -1170,7 +1206,7 @@ export class ReaderResourceMonitor {
 		logTitle.textContent = '毫秒请求记录';
 		const logHint = settingsElement(document, 'span');
 		logHint.textContent =
-			'仅保留脱敏路径；不保存查询参数、正文、Cookie、授权头或响应内容';
+			'显示车道、优先级、升级与取消；路径已脱敏，不保存查询参数、正文、Cookie、授权头或响应内容';
 		logHead.append(logTitle, logHint);
 		this.#requestLog = settingsElement(
 			document,
@@ -1199,6 +1235,16 @@ export class ReaderResourceMonitor {
 		);
 		this.#requestObserved.textContent =
 			'当前还没有观察到服务器限流信息。';
+		const laneRules = settingsElement(document, 'p');
+		const laneRulesLabel = settingsElement(document, 'strong');
+		laneRulesLabel.textContent = '当前阅读器规则：';
+		laneRules.append(
+			laneRulesLabel,
+			document.createTextNode(
+				'后台 post_ids 正文单槽；可见缺口会提升并复用已有同键请求，需要新批次时可在总预算允许下占用第二个正文槽；' +
+					'树状回复最多两槽。所有车道继续共用本页与跨标签全局预算。',
+			),
+		);
 		const publicLimit = settingsElement(document, 'p');
 		const publicLimitLabel = settingsElement(document, 'strong');
 		publicLimitLabel.textContent = 'Discourse 公开默认：';
@@ -1206,7 +1252,7 @@ export class ReaderResourceMonitor {
 			publicLimitLabel,
 			document.createTextNode(
 				'动态应用请求默认 50 次/10 秒、200 次/分钟；头像、CSS 等静态资源默认 200 次/10 秒。' +
-				'站点管理员、插件或反向代理可以覆盖这些数字。Topic 批量正文与直属回复共用动态请求窗口，' +
+				'站点管理员、插件或反向代理可以覆盖这些数字。正文 post_ids[] 批次与直属回复共用动态请求窗口，' +
 				'阅读器只按实际载荷把它们分为不同并发车道，不虚构独立服务器额度。',
 			),
 		);
@@ -1230,6 +1276,7 @@ export class ReaderResourceMonitor {
 		limitBlock.append(
 			limitTitle,
 			this.#requestObserved,
+			laneRules,
 			publicLimit,
 			limitBoundary,
 		);
@@ -1917,6 +1964,16 @@ export class ReaderResourceMonitor {
 			`最近快照 ${new Date(current.at).toLocaleTimeString()} · ` +
 			`${current.visibility === 'visible' ? '前台' : '后台'} · ` +
 			'仅内存保留';
+		const performancePolicy =
+			this.#options.performancePolicySnapshot?.() ?? null;
+		this.#performancePolicy.textContent = performancePolicy
+			? `已含设备与网络自适应：正文批次 ${performancePolicy.pageSize} 楼 · ` +
+				`DOM 最多 ${performancePolicy.streamMaxMountedPostCount} 楼 · ` +
+				`屏外预留 ${formatPolicyNumber(performancePolicy.streamOverscanScreens)} 屏 · ` +
+				`API 提前 ${formatPolicyNumber(performancePolicy.nestedPrefetchScreens)} 屏 · ` +
+				`本页请求策略上限 ${performancePolicy.requestMaxConcurrent} 路 / ${performancePolicy.requestMinIntervalMs}ms · ` +
+				`窗口目标 ${performancePolicy.requestRateTargetPercent}%；跨标签与服务器实时约束见请求记录。`
+			: '当前运行环境未提供性能策略快照；下方仍显示实际 DOM、请求与主线程记录。';
 		this.#renderTrendCharts(current);
 		this.#renderEvidence(current, requestEvents);
 	}
@@ -2242,7 +2299,8 @@ export class ReaderResourceMonitor {
 			['交互', 'user-card'],
 			['控制', 'control'],
 			['树状', 'nested-replies'],
-			['Topic', 'topic-batch'],
+			['正文批次', 'topic-batch'],
+			['翻译', 'translation'],
 			['其他', 'standard'],
 		] as const).map(([label, lane]) =>
 			`${label} ${current.requestActiveByLane[lane]}/${
@@ -2251,13 +2309,14 @@ export class ReaderResourceMonitor {
 		this.#requestWindow.textContent =
 			`近 10 秒 ${recent10.length} 已发出 · 排队 ${queued} · ` +
 			`实时 ${liveRunning} 运行 · ${liveQueued} 排队 · ` +
-			`本页槽 ${current.activeRequests}/${current.requestMaxConcurrent} · ` +
+			`本页生效槽 ${current.activeRequests}/${current.requestMaxConcurrent} · ` +
 			`队列 ${current.queuedRequests}/${current.requestQueueLimit} · ` +
-			`${laneStatus} · ` +
-			`共享 ${current.sharedActiveRequests}/${current.sharedQueuedRequests} · ` +
+			'规则 后台正文单槽 · 总预算允许时可见缺口可用第 2 正文槽 · 树状最多 2 槽 · ' +
+			`车道运行/排队：${laneStatus} · ` +
+			`跨标签共享 ${current.sharedActiveRequests} 运行 / ${current.sharedQueuedRequests} 排队 · ` +
 			`实例 ${current.sharedInstances || 1} · ` +
-			`共享上限 ${current.sharedMaxConcurrent} · ` +
-			`间隔 ${current.sharedMinIntervalMs}ms` +
+			`共享生效上限 ${current.sharedMaxConcurrent} · ` +
+			`生效间隔 ${current.sharedMinIntervalMs}ms` +
 			`${current.sharedCoordinationMode === 'best-effort'
 				? '（协调降级）'
 				: ''} · ` +

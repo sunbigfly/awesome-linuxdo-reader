@@ -1,5 +1,8 @@
 import {
 	consumeReaderNativeBypass,
+	consumeReaderNativeTabBypass,
+	openReaderNativeTopicTab,
+	READER_NATIVE_BYPASS_TAB_KEY,
 	readerNativeBypassCleanHref,
 	readerNativeTopicHref,
 } from '../src/topic/reader-native-topic-route.js';
@@ -45,4 +48,47 @@ assert(
 		throw new Error('普通 URL 不得触发 replace');
 	}),
 	'普通 Topic URL 必须继续进入 Reader',
+);
+
+const tabStorage = new Map<string, string>();
+let openedUrl = '';
+let opener: unknown = {};
+const nativeTab = {
+	sessionStorage: {
+		getItem: (key: string) => tabStorage.get(key) ?? null,
+		setItem: (key: string, value: string) => tabStorage.set(key, value),
+		removeItem: (key: string) => tabStorage.delete(key),
+	},
+	open(value: string, target: string) {
+		assert(value === 'about:blank' && target === '_blank',
+			'原生入口必须同步创建独立空白标签');
+		return {
+			sessionStorage: this.sessionStorage,
+			get opener() {
+				return opener;
+			},
+			set opener(value: unknown) {
+				opener = value;
+			},
+			location: {
+				href: '',
+				replace(value: string) {
+					openedUrl = value;
+				},
+			},
+		};
+	},
+};
+assert(
+	openReaderNativeTopicTab(nativeTab, nativeHref) &&
+	openedUrl === nativeHref &&
+	opener === null &&
+	tabStorage.get(READER_NATIVE_BYPASS_TAB_KEY) === '1',
+	'打开原帖必须先在目标标签写入一次性绕过信号，再隔离 opener 并导航',
+);
+assert(
+	consumeReaderNativeTabBypass(nativeTab) &&
+	!tabStorage.has(READER_NATIVE_BYPASS_TAB_KEY) &&
+	!consumeReaderNativeTabBypass(nativeTab),
+	'目标标签必须只消费一次 sessionStorage 绕过信号，后续普通导航恢复 Reader',
 );

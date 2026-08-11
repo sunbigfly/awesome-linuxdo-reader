@@ -4,6 +4,8 @@ import type { ReaderLightboxImageReference } from './reader-lightbox-comment-mod
 
 export interface ReaderLightboxItem extends ReaderLightboxImageReference {
 	readonly previewSrc: string;
+	readonly fallbackSrcs?: readonly string[];
+	readonly originalFallbackCount?: number;
 	readonly alt: string;
 }
 
@@ -34,6 +36,18 @@ function normalizedItem(item: ReaderLightboxItem): ReaderLightboxItem {
 	const topicId = Number(item.topicId);
 	const sourcePostNumber = Number(item.sourcePostNumber);
 	const imageOrder = Number(item.imageOrder);
+	const seenSources = new Set([originalSrc]);
+	const fallbackSrcs = Object.freeze((item.fallbackSrcs ?? [])
+		.map((source) => String(source ?? '').trim())
+		.filter((source) => {
+			if (!source || seenSources.has(source)) return false;
+			seenSources.add(source);
+			return true;
+		}));
+	const originalFallbackCount = Math.min(
+		fallbackSrcs.length,
+		Math.max(0, Math.trunc(Number(item.originalFallbackCount) || 0)),
+	);
 	if (!key || !previewSrc || !originalSrc) {
 		throw new Error('灯箱图片缺少 key/previewSrc/originalSrc');
 	}
@@ -50,6 +64,8 @@ function normalizedItem(item: ReaderLightboxItem): ReaderLightboxItem {
 		key,
 		previewSrc,
 		originalSrc,
+		...(fallbackSrcs.length ? { fallbackSrcs } : {}),
+		...(originalFallbackCount ? { originalFallbackCount } : {}),
 		topicId,
 		sourcePostNumber,
 		imageOrder,
@@ -72,9 +88,16 @@ function normalizedItems(items: readonly ReaderLightboxItem[]): readonly ReaderL
 }
 
 function sameItem(left: ReaderLightboxItem, right: ReaderLightboxItem): boolean {
+	const leftFallbacks = left.fallbackSrcs ?? [];
+	const rightFallbacks = right.fallbackSrcs ?? [];
 	return left.key === right.key &&
 		left.previewSrc === right.previewSrc &&
 		left.originalSrc === right.originalSrc &&
+		(left.originalFallbackCount ?? 0) ===
+			(right.originalFallbackCount ?? 0) &&
+		leftFallbacks.length === rightFallbacks.length &&
+		leftFallbacks.every((source, index) =>
+			source === rightFallbacks[index]) &&
 		left.topicId === right.topicId &&
 		left.sourcePostNumber === right.sourcePostNumber &&
 		left.imageOrder === right.imageOrder &&

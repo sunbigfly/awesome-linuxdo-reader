@@ -3,6 +3,7 @@ import {
 	READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME,
 	READER_REQUEST_PERMIT_STORAGE_KEY,
 	browserCloudflareChallengeFeatures,
+	browserCloudflareChallengeHref,
 	isReaderCloudflareChallengeWindow,
 } from '../src/network/browser-shared-request-permit.js';
 import type { RateLimitDecision } from '../src/network/request-rate-limit-policy.js';
@@ -108,6 +109,29 @@ assert(
 	}) ===
 		'popup=yes,width=420,height=520,left=0,top=0,resizable=yes,scrollbars=yes',
 	'极小屏幕必须使用主线最小验证窗并把负坐标夹到零',
+);
+
+const challengeHref = new URL(browserCloudflareChallengeHref(
+	'https://linux.do/path-that-must-be-ignored',
+	'https://linux.do/t/topic/1033928?filter=latest#post_2',
+));
+assert(
+	challengeHref.pathname === '/challenge' &&
+		challengeHref.searchParams.get('redirect') ===
+			'https://linux.do/t/topic/1033928?filter=latest#post_2' &&
+	new URL(browserCloudflareChallengeHref(
+		'https://linux.do',
+		'https://example.com/escape',
+	)).searchParams.get('redirect') === 'https://linux.do/' &&
+	new URL(browserCloudflareChallengeHref(
+		'https://linux.do',
+		'https://linux.do/challenge?redirect=https://linux.do/t/1',
+	)).searchParams.get('redirect') === 'https://linux.do/' &&
+	browserCloudflareChallengeHref(
+		'https://meta.discourse.org',
+		'https://meta.discourse.org/t/example/1',
+	) === 'https://meta.discourse.org/',
+	'LINUX.DO 必须使用同源 GET /challenge 并安全回跳；其他 Discourse 保留首页验证',
 );
 
 function permitOptions(
@@ -471,6 +495,38 @@ assert(
 		fixedAfterSignals.blockingReason === '10s',
 	'429、成功响应头和旧恢复入口都不得学习、降并发或清空固定预防窗口',
 );
+
+const observedChallengePermit = new BrowserSharedRequestPermit({
+	...permitOptions(new MemoryStorage(), new LockQueue(), 'host-challenge'),
+	challenge: {
+		origin: 'https://linux.do',
+		open: () => null,
+	},
+});
+observedChallengePermit.noteObservedResponse({
+	source: 'host',
+	href: 'https://linux.do/topics/timings',
+	status: 403,
+	cloudflareMitigated: true,
+	blockOnCloudflareChallenge: false,
+});
+await delay(0);
+assert(
+	(await observedChallengePermit.snapshot()).challengeState === 'idle',
+	'宿主非关键读状态写入被盾时仍必须只结束自身，不能冻结正常阅读请求',
+);
+observedChallengePermit.noteObservedResponse({
+	source: 'host',
+	href: 'https://linux.do/post_actions',
+	status: 418,
+	cloudflareMitigated: true,
+});
+await delay(0);
+assert(
+	(await observedChallengePermit.snapshot()).challengeState === 'required',
+	'宿主任意 4xx 的 cf-mitigated challenge 必须接入共享硬闸门而不自行开窗',
+);
+observedChallengePermit.destroy();
 let fixedGranted = false;
 const fixedPending = fixedPermit.acquire({
 	key: 'fixed-window-next',
@@ -688,7 +744,9 @@ const challengeOptions = (
 			new MemoryBroadcastChannel(challengeChannels) as unknown as BroadcastChannel,
 	challenge: {
 		origin: 'https://linux.do',
-		open: () => {
+		redirectHref: 'https://linux.do/t/topic/1033928?filter=latest#post_2',
+		open: (url: string) => {
+			challengeOpenedHrefs.push(url);
 			onOpen();
 			return challengeWindow;
 		},
@@ -699,6 +757,7 @@ const challengeOptions = (
 			passedTtlMs: 200,
 	},
 });
+const challengeOpenedHrefs: string[] = [];
 const challengeFirst = new BrowserSharedRequestPermit(
 	challengeOptions('challenge-a', () => {
 		challengeOpenedByFirst += 1;
@@ -736,6 +795,9 @@ const secondChallenge = challengeSecond.resolveCloudflareChallenge({
 await delay(40);
 assert(
 	challengeOpenedByFirst + challengeOpenedBySecond === 1 &&
+		new URL(challengeOpenedHrefs[0] ?? '').pathname === '/challenge' &&
+		new URL(challengeOpenedHrefs[0] ?? '').searchParams.get('redirect') ===
+			'https://linux.do/t/topic/1033928?filter=latest#post_2' &&
 		challengeWindowFocused === 0 &&
 		(await challengeSecond.snapshot()).challengeState === 'active',
 	'多个标签页并发 429 时只能有一个自动 owner 打开一个窗口，且不得自动抢焦点',
@@ -799,10 +861,26 @@ assert(
 		passedSnapshot.longCount === 2,
 	'验证通过必须保留过盾前真实启动记录，并让恢复请求重新进入同一固定窗口',
 );
+await challengeSecond.noteCloudflareChallenge({
+	href: 'https://linux.do/t/2.json',
+});
+assert(
+	(await challengeSecond.snapshot()).challengeState === 'passed',
+	'过盾前已在途的迟到 challenge 响应必须继续由 passed 短窗口吸收',
+);
+await challengeSecond.noteCloudflareChallenge({
+	href: 'https://linux.do/t/2.json',
+	force: true,
+});
+assert(
+	(await challengeSecond.snapshot()).challengeState === 'required',
+	'过盾后的恢复请求再次被盾时必须开启新硬闸门，不能被 passed 短窗口吞掉',
+);
 challengeFirst.destroy();
 challengeSecond.destroy();
 
 let verificationClosed = false;
+let verificationOpened = 0;
 const verificationPopup = {
 	get closed() {
 		return verificationClosed;
@@ -817,7 +895,10 @@ const verificationPermit = new BrowserSharedRequestPermit({
 	...permitOptions(new MemoryStorage(), new LockQueue(), 'challenge-verification'),
 	challenge: {
 		origin: 'https://linux.do',
-		open: () => verificationPopup,
+		open: () => {
+			verificationOpened += 1;
+			return verificationPopup;
+		},
 		inspect: () => 'passed',
 		verify: async () => {
 			verificationCalls += 1;
@@ -834,15 +915,69 @@ const verifiedChallenge = await verificationPermit.resolveCloudflareChallenge({
 	focus: true,
 });
 assert(
-	verifiedChallenge && verificationCalls === 1 && verificationClosed,
-	`原生验证探针成功后必须自动解闸并关闭浮窗，无需用户读取或再次确认 JSON：${JSON.stringify({
+	verifiedChallenge &&
+		verificationCalls === 1 &&
+		verificationOpened === 0 &&
+		!verificationClosed,
+	`过盾状态已经恢复时必须先用原生探针清掉陈旧硬闸门，不得再打开验证窗：${JSON.stringify({
 		verifiedChallenge,
 		verificationCalls,
+		verificationOpened,
 		verificationClosed,
 		state: (await verificationPermit.snapshot()).challengeState,
 	})}`,
 );
 verificationPermit.destroy();
+
+let opaquePopupClosed = false;
+let opaquePopupOpened = 0;
+let opaqueVerificationCalls = 0;
+const opaquePopupPermit = new BrowserSharedRequestPermit({
+	...permitOptions(new MemoryStorage(), new LockQueue(), 'challenge-opaque-popup'),
+	challenge: {
+		origin: 'https://linux.do',
+		open: () => {
+			opaquePopupOpened += 1;
+			return {
+				get closed() {
+					return opaquePopupClosed;
+				},
+				close() {
+					opaquePopupClosed = true;
+				},
+			};
+		},
+		inspect: () => 'pending',
+		verify: async () => {
+			opaqueVerificationCalls += 1;
+			return opaqueVerificationCalls >= 2;
+		},
+		pollIntervalMs: 5,
+		verifyIntervalMs: 25,
+		leaseTtlMs: 10_000,
+		maxWaitMs: 15_000,
+	},
+});
+const opaquePopupChallenge = await opaquePopupPermit.resolveCloudflareChallenge({
+	href: 'https://linux.do/t/opaque-popup.json',
+	signal: new AbortController().signal,
+	focus: true,
+});
+assert(
+	opaquePopupChallenge &&
+		opaquePopupOpened === 1 &&
+		opaqueVerificationCalls === 2 &&
+		opaquePopupClosed &&
+		(await opaquePopupPermit.snapshot()).challengeState === 'passed',
+	`验证窗口已回到正常页面但 WindowProxy 不可读时，独立同源探针必须确认通行、关闭窗口并解闸：${JSON.stringify({
+		opaquePopupChallenge,
+		opaquePopupOpened,
+		opaqueVerificationCalls,
+		opaquePopupClosed,
+		state: (await opaquePopupPermit.snapshot()).challengeState,
+	})}`,
+);
+opaquePopupPermit.destroy();
 
 let closedChallengeWindow = false;
 let closedChallengeOpens = 0;

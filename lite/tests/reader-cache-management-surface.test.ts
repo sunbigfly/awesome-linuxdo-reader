@@ -16,6 +16,10 @@ import type {
 import {
 	PreferencesConfigCodec,
 } from '../src/state/preferences-config-codec.js';
+import {
+	READER_SETTINGS_CONFIG_EXPORT_VERSION,
+	ReaderSettingsConfigCodec,
+} from '../src/state/reader-settings-config-manager.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -40,25 +44,33 @@ const applicationCacheClears: string[][] = [];
 interface TestPreferences {
 	readonly theme: string;
 	readonly density: number;
+	readonly performancePageSize: number;
 }
 const defaults: Readonly<TestPreferences> = Object.freeze({
 	theme: 'system',
 	density: 1,
+	performancePageSize: 48,
 });
 const codec = new PreferencesConfigCodec<TestPreferences>({
-	format: 'reader-test-settings',
-	schemaVersion: 1,
+	format: 'awesome-linuxdo-reader-settings',
+	schemaVersion: 5,
 	scriptVersion: 'test',
 	defaults,
 	normalize: (input) => Object.freeze({
 		theme: String(input.theme ?? 'system'),
 		density: Number(input.density ?? 1),
+		performancePageSize: Math.max(
+			12,
+			Math.min(64, Number(input.performancePageSize ?? 48)),
+		),
 	}),
 	now: () => new Date('2026-07-30T00:00:00.000Z'),
 });
+const settingsCodec = new ReaderSettingsConfigCodec(codec);
 let preferences: Readonly<TestPreferences> = Object.freeze({
 	theme: 'dark',
 	density: 2,
+	performancePageSize: 64,
 });
 const savedFiles: Array<Readonly<{ content: string; filename: string }>> = [];
 const confirmations: Array<Readonly<{
@@ -90,12 +102,41 @@ const surface = new ReaderCacheManagementSurface({
 	host,
 	headerActions: actions,
 	configuration: {
-		codec,
-		defaults,
-		read: () => preferences,
-		update: (next) => {
-			preferences = Object.freeze({ ...next });
-	},
+		export: async () => settingsCodec.export({
+			preferences,
+			customSites: ['forum.example.com'],
+			translation: null,
+			webDav: null,
+		}),
+		prepare: (payload) => settingsCodec.import(payload),
+		apply: async (prepared) => {
+			preferences = Object.freeze({ ...prepared.preferences });
+			return Object.freeze({
+				sourceVersion: prepared.sourceVersion,
+				settingsCount: prepared.settingsCount,
+				customSitesApplied: prepared.includesPortableSections,
+				translationApplied: false,
+				webDavApplied: false,
+				preservedTranslationApiKeys: 0,
+				preservedWebDavCredentials: false,
+				webDavAutoSyncDisabled: false,
+				skippedSections: Object.freeze([]),
+			});
+		},
+		reset: async () => {
+			preferences = defaults;
+			return Object.freeze({
+				sourceVersion: READER_SETTINGS_CONFIG_EXPORT_VERSION,
+				settingsCount: Object.keys(defaults).length,
+				customSitesApplied: true,
+				translationApplied: true,
+				webDavApplied: true,
+				preservedTranslationApiKeys: 0,
+				preservedWebDavCredentials: false,
+				webDavAutoSyncDisabled: false,
+				skippedSections: Object.freeze([]),
+			});
+		},
 		confirm: (request) => {
 			confirmations.push(request);
 			const gate = confirmationGate;
@@ -212,7 +253,7 @@ assert(
 	host.querySelector<HTMLElement>(
 			'[data-setting-category="config-management"] header small',
 		)?.textContent ===
-			'配置文件包含当前版本的图片、字体、布局、浮窗、外观、动画、性能、阅读和交互设置，仅支持当前设置结构；不包含阅读队列、浏览历史、其他适用站点、帖子内容、缓存或账号数据。导入或恢复默认后会立即应用到当前阅读器。' &&
+			'配置文件包含当前偏好（性能项仅保存目标值）、其他适用站点、翻译规则与 WebDAV 非敏感选项；导入后仍按当前设备、网络与 429 状态自适应。生效策略、请求与性能记录、阅读队列、浏览历史、帖子内容、缓存和账号数据不会写入文件；翻译 API Key、WebDAV 用户名和密码始终排除。' &&
 		host.querySelector<HTMLElement>('[data-cache-size="topics"]')
 			?.textContent?.includes('1 个主题') &&
 		host.querySelector<HTMLElement>('[data-cache-size="topics"]')
@@ -245,14 +286,46 @@ assert(
 
 host.querySelector<HTMLButtonElement>('.ldp-config-export')!.click();
 await new Promise((resolve) => setTimeout(resolve, 0));
+const savedConfig = JSON.parse(savedFiles[0]!.content) as Readonly<{
+	readonly schemaVersion: number;
+	readonly settings: Readonly<Record<string, unknown>>;
+	readonly customSites: readonly string[];
+}>;
 assert(
 	savedFiles[0]?.filename ===
 		'awesome-linuxdo-reader-settings-2026-07-30.json' &&
-		JSON.parse(savedFiles[0]!.content).settings.theme === 'dark',
-	'配置导出必须复用唯一 codec 并通过组合根下载端口保存 JSON',
+		savedConfig.settings.theme === 'dark' &&
+		savedConfig.settings.performancePageSize === 64 &&
+		savedConfig.schemaVersion ===
+			READER_SETTINGS_CONFIG_EXPORT_VERSION &&
+		savedConfig.customSites[0] === 'forum.example.com' &&
+		!savedFiles[0]!.content.includes('"apiKey":') &&
+		host.querySelector<HTMLElement>('.ldp-config-status')?.textContent ===
+			'已导出 3 项偏好及安全扩展配置；性能项为目标值，不含运行时策略与日志。',
+	'配置导出必须复用唯一 codec、往返性能目标并通过组合根下载端口保存 JSON',
+);
+assert(
+	JSON.stringify(Object.keys(savedConfig).sort()) === JSON.stringify([
+		'customSites',
+		'exportedAt',
+		'format',
+		'omittedSecrets',
+		'schemaVersion',
+		'scriptVersion',
+		'settings',
+		'settingsCount',
+		'translation',
+		'webDav',
+	].sort()),
+	'导出文件只能包含持久设置与安全扩展，不能夹带生效策略或请求/性能记录',
 );
 
-const importPayload = codec.export({ theme: 'light', density: 3 });
+const importPayload = settingsCodec.export({
+	preferences: { theme: 'light', density: 3, performancePageSize: 24 },
+	customSites: ['forum.example.com'],
+	translation: null,
+	webDav: null,
+});
 const fileInput = host.querySelector<HTMLInputElement>('.ldp-config-file')!;
 Object.defineProperty(fileInput, 'files', {
 	configurable: true,
@@ -266,13 +339,41 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
 	preferences.theme === 'light' &&
 		preferences.density === 3 &&
+		preferences.performancePageSize === 24 &&
 		confirmations[0]?.title === '导入这份设置配置？' &&
 		confirmations[0]?.message ===
 			'将使用“import.json”覆盖当前阅读器设置。' &&
 		confirmations[0]?.note ===
-			'浏览历史和缓存不会改变；浮窗尺寸与位置会自动限制在当前屏幕范围内，保存后立即应用。' &&
-		confirmations[0]?.confirmLabel === '导入设置',
-	'配置导入必须先经 codec 校验和唯一确认 surface，再一次写入完整偏好',
+			'性能目标会立即应用，并继续按当前设备、网络与 429 状态自适应；生效策略和请求/性能记录不会从文件导入。API Key、WebDAV 用户名和密码不会从文件导入；仅复用本机同地址已有凭据，新 WebDAV 地址会关闭定时同步。浏览历史、阅读队列和缓存不会改变。' &&
+		confirmations[0]?.confirmLabel === '导入设置' &&
+		host.querySelector<HTMLElement>('.ldp-config-status')?.textContent ===
+			'导入完成，已应用 3 项偏好（性能项为目标值）。',
+	'配置导入必须先经 codec 校验和唯一确认 surface，再一次写入含性能目标的完整偏好',
+);
+
+let runtimeLogRejected = false;
+try {
+	settingsCodec.import({ ...importPayload, requestLog: [] });
+} catch (error) {
+	runtimeLogRejected = error instanceof Error && error.message === 'invalid_config';
+}
+let effectivePolicyRejected = false;
+try {
+	settingsCodec.import({
+		...importPayload,
+		settingsCount: importPayload.settingsCount + 1,
+		settings: {
+			...importPayload.settings,
+			effectivePerformancePageSize: 12,
+		},
+	});
+} catch (error) {
+	effectivePolicyRejected = error instanceof Error &&
+		error.message === 'invalid_config';
+}
+assert(
+	runtimeLogRejected && effectivePolicyRejected,
+	'导入必须拒绝请求日志和自适应后的生效策略，只接受持久性能目标',
 );
 
 host.querySelector<HTMLButtonElement>('.ldp-config-reset')!.click();
@@ -280,10 +381,15 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
 	preferences.theme === defaults.theme &&
 		preferences.density === defaults.density &&
+		preferences.performancePageSize === defaults.performancePageSize &&
 		confirmations[1]?.title === '恢复全部默认设置？' &&
 		confirmations[1]?.message ===
-			'图片、字体、布局、浮窗、外观、动效、性能、阅读和交互设置都会恢复默认。' &&
-		confirmations[1]?.confirmLabel === '恢复全部默认',
+			'当前偏好（含性能目标）、其他适用站点、翻译和 WebDAV 设置都会恢复默认。' &&
+		confirmations[1]?.note ===
+			'性能项恢复推荐目标，运行时仍会自适应；请求/性能记录不会被删除。翻译 API Key、WebDAV 用户名和密码会从本机设置中清除；浏览历史、阅读队列、帖子缓存和账号数据不会被删除。' &&
+		confirmations[1]?.confirmLabel === '恢复全部默认' &&
+		host.querySelector<HTMLElement>('.ldp-config-status')?.textContent ===
+			'全部设置已恢复默认；性能项将继续按运行环境自适应。',
 	'恢复全部默认必须确认后写回 schema 默认值且不触碰缓存',
 );
 

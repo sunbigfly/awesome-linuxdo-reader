@@ -1,6 +1,7 @@
 import { ReaderImageResourceService } from '../src/media/reader-image-resource-service.js';
 import type { ReaderLightboxItem } from '../src/media/reader-lightbox-controller.js';
 import type { PublicResourceRequestAdapter } from '../src/network/public-resource-request-adapter.js';
+import { RequestStatusError } from '../src/network/coordinated-request-client.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -23,11 +24,45 @@ const second: ReaderLightboxItem = {
 	originalSrc: 'https://linux.do/b.png',
 	alt: 'B',
 };
+const recursiveFallback: ReaderLightboxItem = {
+	...first,
+	key: '10:1:2',
+	imageOrder: 2,
+	previewSrc: 'https://linux.do/c-small.png',
+	originalSrc: 'https://linux.do/c-original.png',
+	fallbackSrcs: Object.freeze([
+		'https://linux.do/c-original-download.png?dl=1',
+		'https://linux.do/c-large.png',
+		'https://linux.do/c-medium.png',
+	]),
+	originalFallbackCount: 1,
+	alt: 'C',
+};
+const alternateOriginal: ReaderLightboxItem = {
+	...first,
+	key: '10:1:3',
+	imageOrder: 3,
+	previewSrc: 'https://linux.do/d-small.png',
+	originalSrc: 'https://cdn.linux.do/d-original.png',
+	fallbackSrcs: Object.freeze([
+		'https://linux.do/uploads/short-url/d.png?dl=1',
+	]),
+	originalFallbackCount: 1,
+	alt: 'D',
+};
 const blobs = new Map<string, Blob>();
 blobs.set(first.previewSrc, new Blob(['preview-a'], { type: 'image/png' }));
 blobs.set(first.originalSrc, new Blob(['original-a'], { type: 'image/png' }));
 blobs.set(second.previewSrc, new Blob(['preview-b'], { type: 'image/png' }));
 blobs.set(second.originalSrc, new Blob(['original-b'], { type: 'image/png' }));
+blobs.set(
+	recursiveFallback.fallbackSrcs![2]!,
+	new Blob(['medium-c'], { type: 'image/png' }),
+);
+blobs.set(
+	alternateOriginal.fallbackSrcs![0]!,
+	new Blob(['original-d'], { type: 'image/png' }),
+);
 const cache = new Map<string, Blob>();
 const invalidated: string[] = [];
 const calls: string[] = [];
@@ -41,7 +76,7 @@ const resources = {
 		const normalized = normalize(source);
 		calls.push(normalized);
 		const blob = blobs.get(normalized);
-		if (!blob) throw new Error('missing');
+		if (!blob) throw new RequestStatusError(404);
 		cache.set(normalized, blob);
 		return blob;
 	},
@@ -82,8 +117,10 @@ const service = new ReaderImageResourceService({
 const firstSource = await service.load(first, { refresh: false, cachedOnly: false });
 const repeatedSource = await service.load(first, { refresh: false, cachedOnly: true });
 assert(
-	firstSource === 'blob:test-1' &&
-	repeatedSource === firstSource &&
+	firstSource?.source === 'blob:test-1' &&
+	firstSource.original &&
+	repeatedSource?.source === firstSource.source &&
+	repeatedSource.original &&
 	calls.length === 1,
 	'原图展示与 cachedOnly 必须复用同一 Blob/Object URL',
 );
@@ -93,6 +130,34 @@ assert(
 	service.diagnostics().objectUrls === 1 &&
 	service.diagnostics().objectUrlLimit === 1,
 	'Object URL LRU 超限时必须由唯一资源 owner 回收',
+);
+const alternateCallStart = calls.length;
+const alternate = await service.load(alternateOriginal, {
+	refresh: false,
+	cachedOnly: false,
+});
+assert(
+	alternate?.source === 'blob:test-3' &&
+		alternate.original &&
+		calls.slice(alternateCallStart).join(',') === [
+			alternateOriginal.originalSrc,
+			...alternateOriginal.fallbackSrcs!,
+		].join(','),
+	'主 CDN original 不可用时必须继续检查同一原图的下载来源，成功后仍标记为原图',
+);
+const fallbackCallStart = calls.length;
+const degraded = await service.load(recursiveFallback, {
+	refresh: false,
+	cachedOnly: false,
+});
+assert(
+	degraded?.source === 'blob:test-4' &&
+		!degraded.original &&
+		calls.slice(fallbackCallStart).join(',') === [
+			recursiveFallback.originalSrc,
+			...recursiveFallback.fallbackSrcs!,
+		].join(','),
+	'original 与较大后备源确认不存在后，必须按候选顺序递归降级到首个可用图片',
 );
 cache.delete(first.originalSrc);
 const fallback = await service.blob(first);
@@ -124,7 +189,7 @@ assert(
 	'主题图片失效必须先去重，再向当前主题重建事务返回精确缓存报告',
 );
 service.destroy();
-assert(revoked.includes('blob:test-2'), '销毁资源服务必须回收剩余 Object URL');
+assert(revoked.includes('blob:test-4'), '销毁资源服务必须回收剩余 Object URL');
 
 let resolveShared!: (blob: Blob) => void;
 let rejectShared!: (error: unknown) => void;
@@ -190,7 +255,9 @@ assert(
 resolveShared(new Blob(['shared-image'], { type: 'image/png' }));
 const visibleResult = await visible;
 assert(
-	visibleResult.value === 'blob:shared' && visibleResult.error === null,
+	visibleResult.value?.source === 'blob:shared' &&
+		visibleResult.value.original &&
+		visibleResult.error === null,
 	'下载取消后仍在等待的灯箱显示消费者必须能收到共享 Blob',
 );
 sharedService.destroy();

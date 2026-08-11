@@ -30,6 +30,7 @@ const portal = document.querySelector<HTMLElement>('#reader-portal')!;
 const portalRoot = portal.attachShadow({ mode: 'open' });
 const shellRoot = document.createElement('section');
 shellRoot.className = 'ldp-root';
+shellRoot.dataset.readerWorkspaceMode = 'floating';
 const mount = document.createElement('main');
 mount.className = 'ldp-modal';
 shellRoot.append(mount);
@@ -40,7 +41,11 @@ let preferences: ReaderTopicActionRailPreferences = Object.freeze({
 	visible: true,
 	fixed: false,
 	mode: 'compact',
-	position: Object.freeze({ x: 'left', y: 0.95 }),
+	positions: Object.freeze({
+		floating: Object.freeze({ x: 'left', y: 0.95 }),
+		fullpage: Object.freeze({ x: 'right', y: 0.25 }),
+		embedded: Object.freeze({ x: 0.5, y: 0.5 }),
+	}),
 });
 const preferenceChanges = new Signal<ReaderTopicActionRailPreferences>();
 const patches: Array<Partial<ReaderTopicActionRailPreferences>> = [];
@@ -52,6 +57,8 @@ let nextFrame = 1;
 let nextTimer = 1;
 let now = 1_000;
 let jumpCount = 0;
+let downloadCount = 0;
+let downloadHistoryCount = 0;
 let rejectJump = false;
 let rejectPreferenceUpdate = false;
 let resizeCallback: ResizeObserverCallback = () => {};
@@ -109,6 +116,12 @@ const rail = new ReaderTopicActionRail<TestPost>({
 		jumpToTop: () => {
 			if (rejectJump) throw new Error('回顶同步失败');
 			jumpCount += 1;
+		},
+		downloadCurrentTopic: () => {
+			downloadCount += 1;
+		},
+		openTopicDownloadManager: () => {
+			downloadHistoryCount += 1;
 		},
 	requestFrame: (callback) => {
 		const id = nextFrame;
@@ -337,11 +350,15 @@ assert(
 		renderedAsRail[0] === true,
 	'操作列必须复用唯一 PostView 动作投影，不复制动作 DOM',
 );
-assert(
-	rail.topButton.querySelector('svg[data-icon="arrow-up"]') !== null &&
-	rail.toggleButton.querySelector('svg[data-icon="layers"]') !== null,
-	'主帖操作列回顶和收纳按钮必须使用自足 SVG，不能留下截图中的空白热区',
-);
+	assert(
+		rail.topButton.querySelector('svg[data-icon="arrow-up"]') !== null &&
+		rail.toggleButton.querySelector('svg[data-icon="layers"]') !== null &&
+		rail.downloadButton?.querySelector('svg[data-icon="download"]') !== null &&
+		rail.downloadHistoryButton?.querySelector('svg[data-icon="history"]') !== null &&
+			rail.downloadButton?.hidden === false &&
+			rail.downloadHistoryButton?.hidden === true,
+		'常显模式必须显示下载图标，下载历史仅在展开后显示',
+	);
 assert(
 	rail.host.style.getPropertyValue('--ldp-topic-rail-y') === '0.95' &&
 	rail.host.classList.contains('is-default-left') &&
@@ -351,7 +368,10 @@ assert(
 const maximumRailLeft = 500 - 40;
 preferences = Object.freeze({
 	...preferences,
-	position: Object.freeze({ x: 2 / maximumRailLeft, y: 0.95 }),
+	positions: Object.freeze({
+		...preferences.positions,
+		floating: Object.freeze({ x: 2 / maximumRailLeft, y: 0.95 }),
+	}),
 });
 preferenceChanges.emit(preferences);
 flushFrames();
@@ -361,7 +381,10 @@ assert(
 );
 preferences = Object.freeze({
 	...preferences,
-	position: Object.freeze({ x: 3 / maximumRailLeft, y: 0.95 }),
+	positions: Object.freeze({
+		...preferences.positions,
+		floating: Object.freeze({ x: 3 / maximumRailLeft, y: 0.95 }),
+	}),
 });
 preferenceChanges.emit(preferences);
 flushFrames();
@@ -371,7 +394,10 @@ assert(
 );
 preferences = Object.freeze({
 	...preferences,
-	position: Object.freeze({ x: 1 - 2 / maximumRailLeft, y: 0.95 }),
+	positions: Object.freeze({
+		...preferences.positions,
+		floating: Object.freeze({ x: 1 - 2 / maximumRailLeft, y: 0.95 }),
+	}),
 });
 preferenceChanges.emit(preferences);
 flushFrames();
@@ -381,7 +407,10 @@ assert(
 );
 preferences = Object.freeze({
 	...preferences,
-	position: Object.freeze({ x: 1 - 3 / maximumRailLeft, y: 0.95 }),
+	positions: Object.freeze({
+		...preferences.positions,
+		floating: Object.freeze({ x: 1 - 3 / maximumRailLeft, y: 0.95 }),
+	}),
 });
 preferenceChanges.emit(preferences);
 flushFrames();
@@ -391,12 +420,46 @@ assert(
 );
 preferences = Object.freeze({
 	...preferences,
-	position: Object.freeze({ x: 'left', y: 0.95 }),
+	positions: Object.freeze({
+		...preferences.positions,
+		floating: Object.freeze({ x: 'left', y: 0.95 }),
+	}),
 });
 preferenceChanges.emit(preferences);
 flushFrames();
 resizeCallback([], {} as ResizeObserver);
 assert(frameCallbacks.size === 1, '容器变化必须立即排队重算冻结操作区几何');
+flushFrames();
+
+shellRoot.dataset.readerWorkspaceMode = 'fullpage';
+shellRoot.dispatchEvent(new EventConstructor('ldp-reader-workspace-change'));
+flushFrames();
+assert(
+	rail.host.style.getPropertyValue('--ldp-topic-rail-y') === '0.25' &&
+		rail.host.classList.contains('is-default-right'),
+	'切到全屏必须恢复全屏自己的比例位置，不能沿用浮窗位置',
+);
+shellRoot.dataset.readerWorkspaceMode = 'embed-left';
+shellRoot.dispatchEvent(new EventConstructor('ldp-reader-workspace-change'));
+flushFrames();
+assert(
+	rail.host.style.getPropertyValue('--ldp-topic-rail-x') === '0.5' &&
+		rail.host.style.getPropertyValue('--ldp-topic-rail-y') === '0.5',
+	'左右嵌入必须共享独立于浮窗和全屏的嵌入位置槽位',
+);
+setNumberProperty(mount, 'clientWidth', 900);
+setNumberProperty(mount, 'clientHeight', 900);
+resizeCallback([], {} as ResizeObserver);
+flushFrames();
+assert(
+	rail.host.style.getPropertyValue('--ldp-topic-rail-x') === '0.5' &&
+		rail.host.style.getPropertyValue('--ldp-topic-rail-y') === '0.5',
+	'容器宽高变化后必须保留 X/Y 比例锚点并重新投影',
+);
+setNumberProperty(mount, 'clientWidth', 500);
+setNumberProperty(mount, 'clientHeight', 600);
+shellRoot.dataset.readerWorkspaceMode = 'floating';
+shellRoot.dispatchEvent(new EventConstructor('ldp-reader-workspace-change'));
 flushFrames();
 
 const firstView = rail.view;
@@ -412,15 +475,48 @@ assert(
 	'同一主帖更新必须复用 PostView 并重投影唯一动作状态',
 );
 
-click(rail.topButton);
-assert(jumpCount === 1, '回顶按钮必须只调用统一 timeline 跳转端口');
-click(rail.toggleButton);
+	click(rail.topButton);
+	assert(jumpCount === 1, '回顶按钮必须只调用统一 timeline 跳转端口');
+	click(rail.downloadButton!);
+	assert(
+		downloadCount === 1 && rail.host.classList.contains('is-expanded') &&
+			Boolean(rail.downloadHistoryButton?.hidden) === false,
+		'常显下载图标必须先展开下载历史锚点，再把独立下载范围浮窗停靠到其旁边',
+	);
+	click(mount);
+	assert(
+		!rail.host.classList.contains('is-expanded'),
+		'下载范围浮窗开启后，操作列仍可由外部空白恢复常显状态',
+	);
+	click(rail.toggleButton);
+	assert(
+		rail.host.classList.contains('is-expanded') &&
+		shellRoot.classList.contains('ldp-topic-action-rail-expanded') &&
+		rail.toggleButton.getAttribute('aria-expanded') === 'true' &&
+		rail.toggleButton.querySelector('svg[data-icon="layers"]') !== null &&
+			rail.downloadHistoryButton !== null &&
+			Boolean(rail.downloadHistoryButton.hidden) === false &&
+		reactionExpandedStates.at(-1) === true,
+		'compact 操作列必须可展开完整动作并同步常显回应列表',
+	);
+click(rail.downloadHistoryButton!);
 assert(
-	rail.host.classList.contains('is-expanded') &&
-	shellRoot.classList.contains('ldp-topic-action-rail-expanded') &&
-	rail.toggleButton.getAttribute('aria-expanded') === 'true' &&
-	reactionExpandedStates.at(-1) === true,
-	'compact 操作列必须可展开完整动作并同步常显回应列表',
+	downloadHistoryCount === 1 && rail.host.classList.contains('is-expanded'),
+	'展开后的下载历史入口必须打开独立管理浮窗且不收起操作列',
+);
+const retargetedHistoryClick = new EventConstructor('click', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperty(retargetedHistoryClick, 'composedPath', {
+	configurable: true,
+	value: () => [portal, document],
+});
+retargetedHistoryClick.preventDefault();
+document.dispatchEvent(retargetedHistoryClick);
+assert(
+	downloadHistoryCount === 1 && rail.host.classList.contains('is-expanded'),
+	'已被下载历史入口处理的点击即使在外层被重定向，也必须保持展开',
 );
 const expandedAction = rail.host.querySelector<HTMLElement>('.ldp-like')!;
 let expandedActionClicks = 0;
@@ -446,6 +542,16 @@ assert(
 	rail.toggleButton.getAttribute('aria-expanded') === 'true',
 	'ShadowRoot 内部点击被 document retarget 后仍必须由 composedPath 识别为操作列内部事件',
 );
+const outsideIconAction = document.createElement('button');
+outsideIconAction.className = 'ldp-outside-icon-action';
+outsideIconAction.append(document.createElement('svg'));
+mount.append(outsideIconAction);
+click(outsideIconAction.querySelector('svg')!);
+assert(
+	rail.host.classList.contains('is-expanded') &&
+	rail.toggleButton.getAttribute('aria-expanded') === 'true',
+	'收纳箱展开后点击正文或其他功能图标不得触发自动收纳',
+);
 click(mount!);
 assert(
 	!rail.host.classList.contains('is-expanded') &&
@@ -456,18 +562,22 @@ assert(
 );
 click(rail.toggleButton);
 click(rail.toggleButton);
-assert(
-	rail.host.classList.contains('is-collapsed') &&
-	patches.some((patch) => patch.mode === 'collapsed') &&
-	reactionExpandedStates.at(-1) === false,
-	'展开态再次收纳必须持久化 collapsed 模式并关闭常显回应列表',
-);
-click(rail.toggleButton);
-assert(
-	!rail.host.classList.contains('is-collapsed') &&
-	patches.some((patch) => patch.mode === 'compact'),
-	'collapsed 模式必须可恢复为 compact',
-);
+	assert(
+		rail.host.classList.contains('is-collapsed') &&
+			rail.topButton.hidden === false &&
+			rail.downloadButton?.hidden === true &&
+			rail.toggleButton.hidden === false &&
+		patches.some((patch) => patch.mode === 'collapsed') &&
+		reactionExpandedStates.at(-1) === false,
+		'展开态再次收纳必须只保留回顶和展开控制，并持久化 collapsed 模式',
+	);
+	click(rail.toggleButton);
+	assert(
+		!rail.host.classList.contains('is-collapsed') &&
+			rail.downloadButton?.hidden === false &&
+		patches.some((patch) => patch.mode === 'compact'),
+		'collapsed 模式必须可恢复为带下载入口的 compact',
+	);
 
 pointer(rail.toggleButton, 'pointerdown', {
 	pointerId: 7,
@@ -489,17 +599,56 @@ pointer(document, 'pointerup', {
 	clientX: 110,
 	clientY: 70,
 });
-const positionPatch = [...patches].reverse().find((patch) => patch.position);
+const positionPatch = [...patches].reverse().find((patch) => patch.positions);
+const floatingPosition = positionPatch?.positions?.floating;
 assert(
-	positionPatch?.position &&
-	typeof positionPatch.position.x === 'number' &&
-	positionPatch.position.x > 0.43 &&
-	positionPatch.position.x < 0.44 &&
-	positionPatch.position.y > 0.66 &&
-	positionPatch.position.y < 0.67 &&
+	floatingPosition &&
+	typeof floatingPosition.x === 'number' &&
+	floatingPosition.x > 0.43 &&
+	floatingPosition.x < 0.44 &&
+	floatingPosition.y > 0.66 &&
+	floatingPosition.y < 0.67 &&
+	positionPatch?.positions?.fullpage.x === 'right' &&
+	positionPatch.positions.fullpage.y === 0.25 &&
+	positionPatch.positions.embedded.x === 0.5 &&
+	positionPatch.positions.embedded.y === 0.5 &&
 	!rail.host.classList.contains('is-dragging'),
-	'拖动结束必须持久化相对挂载容器的位置比例并清理临时态',
+	'浮窗拖动必须只持久化浮窗比例位置，并保留另外两个形态槽位',
 );
+
+shellRoot.dataset.readerWorkspaceMode = 'fullpage';
+shellRoot.dispatchEvent(new EventConstructor('ldp-reader-workspace-change'));
+flushFrames();
+pointer(rail.toggleButton, 'pointerdown', {
+	pointerId: 10,
+	clientX: 10,
+	clientY: 20,
+});
+const fullpageHold = [...timerCallbacks.values()][0];
+timerCallbacks.clear();
+fullpageHold?.();
+pointer(document, 'pointermove', {
+	pointerId: 10,
+	clientX: -90,
+	clientY: 70,
+});
+pointer(document, 'pointerup', {
+	pointerId: 10,
+	clientX: -90,
+	clientY: 70,
+});
+const fullpagePatch = [...patches].reverse().find((patch) =>
+	patch.positions?.fullpage.x === 'left'
+);
+assert(
+	fullpagePatch?.positions?.fullpage.x === 'left' &&
+		fullpagePatch.positions.floating === floatingPosition &&
+		fullpagePatch.positions.embedded.x === 0.5,
+	'全屏拖动必须只写全屏槽位，贴边时保存稳定边缘锚点',
+);
+shellRoot.dataset.readerWorkspaceMode = 'floating';
+shellRoot.dispatchEvent(new EventConstructor('ldp-reader-workspace-change'));
+flushFrames();
 
 now += 301;
 preferences = Object.freeze({ ...preferences, visible: false });

@@ -1,5 +1,6 @@
 import {
 	CoordinatedRequestClient,
+	RequestCloudflareChallengeError,
 	RequestChallengeWaitSuppressedError,
 	RequestRateLimitError,
 	RequestStatusError,
@@ -32,6 +33,7 @@ class FakePermitPort implements SharedRequestPermitPort {
 	readonly rateLimitWindows: string[] = [];
 	challengePasses = false;
 	challengeNotes = 0;
+	readonly challengeNoteForces: boolean[] = [];
 	challengeResolutions = 0;
 	readonly challengeFocusRequests: boolean[] = [];
 	rateLimitResets = 0;
@@ -65,8 +67,9 @@ class FakePermitPort implements SharedRequestPermitPort {
 		this.rateLimitWindows.push(decision.window);
 	}
 
-	noteCloudflareChallenge(): void {
+	noteCloudflareChallenge(input: { readonly force?: boolean }): void {
 		this.challengeNotes += 1;
+		this.challengeNoteForces.push(input.force === true);
 	}
 
 	async resolveCloudflareChallenge(input: { readonly focus?: boolean }): Promise<boolean> {
@@ -329,6 +332,66 @@ assert(
 );
 challenge429Client.destroy();
 
+const repeatedChallengePermit = new FakePermitPort();
+repeatedChallengePermit.challengePasses = true;
+const repeatedChallengeClient = new CoordinatedRequestClient({
+	scheduler: {
+		maxConcurrent: 1,
+		queueLimit: 2,
+		defaultTimeoutMs: 1_000,
+	},
+	rateLimitPolicy: policy(),
+	permitPort: repeatedChallengePermit,
+});
+let repeatedChallengeAttempts = 0;
+let repeatedChallengeError: unknown = null;
+try {
+	await repeatedChallengeClient.request(
+		{
+			key: 'challenge-recovery-still-blocked',
+			input: 'https://linux.do/post_actions',
+			method: 'POST',
+			priority: 'interactive',
+		},
+		async () => {
+			repeatedChallengeAttempts += 1;
+			return {
+				ok: false,
+				status: 418,
+				value: '',
+				cloudflareMitigated: true,
+			};
+		},
+	);
+} catch (error) {
+	repeatedChallengeError = error;
+}
+assert(
+	repeatedChallengeError instanceof RequestCloudflareChallengeError &&
+	repeatedChallengeError instanceof RequestStatusError &&
+		repeatedChallengeError.kind === 'cloudflare' &&
+		repeatedChallengeAttempts === 2 &&
+		repeatedChallengePermit.challengeResolutions === 1 &&
+		repeatedChallengePermit.challengeNotes === 1 &&
+		repeatedChallengePermit.challengeNoteForces[0] === true,
+	'过盾后的唯一恢复请求再次被拦截时必须强制建立新硬闸门，不能被 passed 短窗口吞掉',
+);
+const longTaskChallengeResume = repeatedChallengeClient.requestResume(
+	repeatedChallengeError,
+);
+assert(
+	longTaskChallengeResume?.kind === 'cloudflare-challenge' &&
+		longTaskChallengeResume.waitMs === 0,
+	'Cloudflare owner 未通过时必须只由中央 client 签发长任务恢复凭据',
+);
+await longTaskChallengeResume?.wait(new AbortController().signal);
+assert(
+	Number(repeatedChallengePermit.challengeResolutions) === 2 &&
+		repeatedChallengePermit.challengeFocusRequests.at(-1) === false,
+	'长任务恢复只能重新加入共享 challenge lease，不得自行请求焦点或另开验证流',
+);
+repeatedChallengeClient.destroy();
+
 const singleFlightResponse = deferred<RequestTransportResponse<string>>();
 let singleFlightExecutions = 0;
 const first = client.request(
@@ -439,14 +502,21 @@ assert(
 );
 
 const endpointPermit = new FakePermitPort();
+let endpointNow = 20_000;
+const endpointResumeDelays: number[] = [];
 const endpointClient = new CoordinatedRequestClient({
 	scheduler: {
 		maxConcurrent: 1,
 		queueLimit: 2,
 		defaultTimeoutMs: 1000,
 	},
-	rateLimitPolicy: policy(),
+	rateLimitPolicy: policy(() => endpointNow),
 	permitPort: endpointPermit,
+	now: () => endpointNow,
+	delay: async (milliseconds) => {
+		endpointResumeDelays.push(milliseconds);
+		endpointNow += milliseconds;
+	},
 });
 const endpointUrl = 'https://linux.do/t/999/posts.json?post_ids%5B%5D=2';
 let endpointTransportCalls = 0;
@@ -471,6 +541,27 @@ assert(
 	endpointError instanceof RequestRateLimitError &&
 		endpointError.decision.scope === 'endpoint',
 	'单端点未知 429 必须返回 endpoint 范围错误',
+);
+const endpointResume = endpointClient.rateLimitResume(endpointError);
+const endpointRequestResume = endpointClient.requestResume(endpointError);
+assert(
+	endpointResume?.decision === (endpointError as RequestRateLimitError).decision &&
+		endpointResume.waitMs === 1_500 &&
+		endpointRequestResume?.kind === 'rate-limit' &&
+		endpointRequestResume.decision ===
+			(endpointError as RequestRateLimitError).decision &&
+		endpointClient.rateLimitResume(
+			Object.assign(new Error('HTTP 429'), { status: 429 }),
+		) === null &&
+		endpointClient.requestResume(
+			Object.assign(new Error('HTTP 429'), { status: 429 }),
+		) === null,
+	'长任务续传只能接受中央 RequestRateLimitError，不能重新解析状态码或错误文案',
+);
+await endpointResume?.wait(new AbortController().signal);
+assert(
+	endpointResumeDelays.join(',') === '1500' && endpointNow === 21_500,
+	'长任务必须复用中央 Retry-After 剩余时间与可取消等待实现',
 );
 assert(
 	await endpointClient.request(
@@ -704,3 +795,61 @@ assert(
 blockerResponse.resolve({ ok: true, status: 200, value: 'released' });
 assert(await blocker === 'released', '前置请求必须正常收口');
 fastLaneClient.destroy();
+
+const promotionPermit = new FakePermitPort();
+const promotionClient = new CoordinatedRequestClient({
+	scheduler: {
+		maxConcurrent: 1,
+		queueLimit: 2,
+		defaultTimeoutMs: 1_000,
+	},
+	rateLimitPolicy: policy(),
+	permitPort: promotionPermit,
+	delay: async () => {},
+	defaultMax429Retries: 0,
+});
+const firstPromotionResponse = deferred<RequestTransportResponse<string>>();
+let promotionAttempts = 0;
+const promotedRequest = promotionClient.request(
+	{
+		key: 'topic-posts:promotion',
+		input: 'https://linux.do/t/20/posts.json',
+		priority: 'background',
+		droppable: true,
+		max429Retries: 0,
+	},
+	async ({ attempt }) => {
+		promotionAttempts += 1;
+		if (attempt === 0) return firstPromotionResponse.promise;
+		return { ok: true, status: 200, value: 'visible-result' };
+	},
+);
+for (let index = 0; index < 12 && promotionAttempts === 0; index += 1) {
+	await Promise.resolve();
+}
+assert(
+	promotionAttempts === 1 && promotionClient.promote('topic-posts:promotion', {
+		priority: 'visible',
+		droppable: false,
+		max429Retries: 1,
+	}),
+	'后台请求已经启动后仍必须允许可见消费者原地晋升逻辑契约',
+);
+firstPromotionResponse.resolve({
+	ok: false,
+	status: 429,
+	value: '',
+	retryAfter: '0',
+});
+	assert(
+		await promotedRequest === 'visible-result' &&
+			Number(promotionAttempts) === 2 &&
+		promotionPermit.acquired === 2 &&
+		promotionPermit.released === 2 &&
+		!promotionClient.promote('topic-posts:promotion', {
+			priority: 'visible',
+			droppable: false,
+		}),
+	'晋升后的同一请求必须获得可见 429 有限重试预算，且结束后不得遗留可晋升状态',
+);
+promotionClient.destroy();

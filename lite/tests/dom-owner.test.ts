@@ -87,6 +87,24 @@ assert(
 assert(initial.parked.length === 0, '完整拓扑不应产生停放楼层');
 assert(views.get(4)!.slots.root.dataset.ldpNestDepth === '2', '递归深度未同步到楼层 DOM');
 
+const rootSpacer = document.createElement('div');
+rootSpacer.className = 'ldp-tree-virtual-spacer';
+rootList.insertBefore(rootSpacer, views.get(3)!.slots.root);
+topology.commit([
+	{ postNumber: 4, parentPostNumber: 2 },
+	{ postNumber: 3, parentPostNumber: null },
+	{ postNumber: 2, parentPostNumber: 1 },
+	{ postNumber: 1, parentPostNumber: null },
+	{ postNumber: 99, parentPostNumber: null },
+]);
+owner.sync();
+assert(
+	views.get(1)!.slots.root.nextElementSibling === rootSpacer &&
+		rootSpacer.nextElementSibling === views.get(3)!.slots.root,
+	'已有序根楼层必须跳过虚拟 spacer 保持相邻关系，不得误移动或删除占位节点',
+);
+rootSpacer.remove();
+
 const virtualPlan = (rootAfterSize: number): ReplyTreeDomMountPlan => ({
 	mountedPostNumbers: new Set([1, 2, 3, 4]),
 	contentPostNumbers: new Set([1, 2, 3, 4]),

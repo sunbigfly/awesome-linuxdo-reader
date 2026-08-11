@@ -354,12 +354,16 @@ Object.defineProperty(session, 'loadReplyBranches', {
 const quoted = await controller.loadQuotedPost(10, 3);
 const crossTopicQuoted = await controller.loadQuotedPost(11, 3);
 const cachedCrossTopicQuoted = await controller.loadQuotedPost(11, 3);
+const missingCrossTopicQuoted = await controller.loadQuotedPost(12, 4);
+const cachedMissingCrossTopicQuoted = await controller.loadQuotedPost(12, 4);
 assert(
 	quoted?.post_number === 3 &&
 	crossTopicQuoted?.topic_id === 11 &&
 	cachedCrossTopicQuoted === crossTopicQuoted &&
-	crossTopicQuoteLoads === 1,
-	'同 Topic 引用必须复用 TopicSession；跨 Topic 引用必须经统一 loader 且按目标楼层复用结果',
+	missingCrossTopicQuoted === null &&
+	cachedMissingCrossTopicQuoted === null &&
+	crossTopicQuoteLoads === 2,
+	'同 Topic 引用必须复用 TopicSession；跨 Topic 引用的正文与明确缺失结果都只能在当前上下文会话加载一次',
 );
 
 let releaseDiscussion!: () => void;
@@ -414,3 +418,57 @@ assert(
 	await lateQuote === null && errors.length === 0,
 	'Topic owner 销毁后的晚到引用补齐必须静默丢弃，不能污染下一 Topic 的诊断',
 );
+
+const orphanPost: TestPost = Object.freeze({
+	id: 1062,
+	topic_id: 62,
+	post_number: 62,
+	reply_to_post_number: 41,
+	username: 'op',
+	cooked: '<p>orphan reply</p>',
+	reply_count: 0,
+});
+const orphanReplies = new ReplyTreeRepository(62, {
+	async load() {
+		return null;
+	},
+	async save() {},
+});
+orphanReplies.setExpectedPostCount(1);
+orphanReplies.ingest([orphanPost], 'topic-json', { observedAt: 1 });
+const orphanChanges = new Signal<unknown>();
+const orphanErrors: unknown[] = [];
+const orphanController = new ReaderTopicContextController({
+	session: {
+		topicId: discourseTopicId(62),
+		changes: orphanChanges,
+		cachedPosts: () => Object.freeze([orphanPost]),
+		postByNumber: (postNumber) =>
+			postNumber === orphanPost.post_number ? orphanPost : undefined,
+		postStreamCoverage: () => ({
+			complete: true,
+			expectedPostCount: 1,
+			streamPostCount: 1,
+			missingPostCount: 0,
+		}),
+		async loadTarget() {
+			throw new Error('父楼不可读');
+		},
+		async ensurePostStream() {
+			return Object.freeze({ complete: true, failedBatchCount: 0 });
+		},
+	},
+	replies: orphanReplies,
+	onError: (error) => orphanErrors.push(error),
+});
+const orphanDiscussion = await orphanController.openDiscussion(62);
+assert(
+	orphanDiscussion.discussion?.rootPostNumber === 62 &&
+		orphanDiscussion.discussion.targetPostNumber === 62 &&
+		orphanDiscussion.discussion.entries
+			.map((entry) => entry.postNumber).join(',') === '62' &&
+		orphanDiscussion.discussion.partial &&
+		orphanErrors.length === 1,
+	'父回复已删除、不可读或补载报错时，完整讨论入口仍必须打开可用子树，并标记为不完整',
+);
+orphanController.destroy();

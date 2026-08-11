@@ -161,25 +161,77 @@ function isFloorImage(image: HTMLImageElement): boolean {
 	return !/\/user_avatar\//i.test(source);
 }
 
-function originalSource(image: HTMLImageElement, baseUrl: string): string {
+function distinctSources(
+	values: readonly unknown[],
+	baseUrl: string,
+): readonly string[] {
+	return Object.freeze([...new Set(values
+		.map((value) => absoluteUrl(value, baseUrl))
+		.filter((source) => source))]);
+}
+
+function derivedOriginalSource(source: string): string {
+	const derived = source.replace(
+		/\/optimized\/(.+)_2_\d+x\d+(\.[a-z0-9]+)(?:[?#].*)?$/i,
+		'/original/$1$2',
+	);
+	return derived === source ? '' : derived;
+}
+
+function imageSources(
+	image: HTMLImageElement,
+	baseUrl: string,
+): Readonly<{
+	readonly originalSrc: string;
+	readonly previewSrc: string;
+	readonly fallbackSrcs: readonly string[];
+	readonly originalFallbackCount: number;
+}> | null {
 	const anchor = image.closest<HTMLAnchorElement>('a.lightbox,a[href]');
 	const href = anchor?.getAttribute('href') ?? '';
-	if (
-		href &&
-		(
-			anchor?.classList.contains('lightbox') ||
-			/\.(?:avif|bmp|gif|jpe?g|png|svg|tiff?|webp)(?:[?#]|$)/i.test(href)
-		)
-	) {
-		const source = absoluteUrl(href, baseUrl);
-		if (source) return source;
-	}
-	return absoluteUrl(
-		image.getAttribute('data-large-src') ??
-		image.getAttribute('src') ??
-		'',
-		baseUrl,
-	);
+	const lightboxHref = href && (
+		anchor?.classList.contains('lightbox') ||
+		/\.(?:avif|bmp|gif|jpe?g|png|svg|tiff?|webp)(?:[?#]|$)/i.test(href)
+	) ? href : '';
+	const dataOriginal = image.getAttribute('data-orig-src') ?? '';
+	const dataLarge = image.getAttribute('data-large-src') ?? '';
+	const srcset = String(image.getAttribute('srcset') ?? '').trim();
+	const responsive = distinctSources([
+		...(
+			srcset && !srcset.toLowerCase().startsWith('data:')
+				? srcset.split(',').map((entry) =>
+					entry.trim().split(/\s+/, 1)[0]).reverse()
+				: []
+		),
+		image.currentSrc,
+		image.getAttribute('src'),
+	], baseUrl);
+	const potentialFallbacks = distinctSources([dataLarge, ...responsive], baseUrl);
+	const originals = distinctSources([
+		lightboxHref,
+		anchor?.classList.contains('lightbox')
+			? anchor.getAttribute('data-download-href')
+			: '',
+		dataOriginal,
+		...potentialFallbacks.filter((source) => source.includes('/original/')),
+		...potentialFallbacks.map(derivedOriginalSource),
+	], baseUrl);
+	const ordinaryFallbacks = potentialFallbacks.filter((source) =>
+		!originals.includes(source));
+	const originalSrc = originals[0] ?? ordinaryFallbacks[0] ?? '';
+	if (!originalSrc) return null;
+	const current = absoluteUrl(image.currentSrc, baseUrl);
+	const previewSrc = current || responsive[0] || originalSrc;
+	const originalFallbacks = originals.slice(1);
+	return Object.freeze({
+		originalSrc,
+		previewSrc,
+		fallbackSrcs: Object.freeze([
+			...originalFallbacks,
+			...(originals.length ? ordinaryFallbacks : ordinaryFallbacks.slice(1)),
+		]),
+		originalFallbackCount: originalFallbacks.length,
+	});
 }
 
 function itemOrder(left: ReaderLightboxItem, right: ReaderLightboxItem): number {
@@ -397,24 +449,26 @@ export class ReaderTopicImageIndex<
 		imageOrder: number,
 		topicId = this.#topicId,
 	): ReaderLightboxItem | null {
-		const originalSrc = originalSource(image, this.#baseUrl);
-		if (!originalSrc) return null;
-		const previewSrc = absoluteUrl(
-			image.getAttribute('src') ?? originalSrc,
-			this.#baseUrl,
-		) || originalSrc;
+		const sources = imageSources(image, this.#baseUrl);
+		if (!sources) return null;
 		return Object.freeze({
 			key: readerLightboxItemKey({
 				topicId,
 				sourcePostNumber,
 				imageOrder,
-				originalSrc,
+				originalSrc: sources.originalSrc,
 			}),
 			topicId,
 			sourcePostNumber,
 			imageOrder,
-			previewSrc,
-			originalSrc,
+			previewSrc: sources.previewSrc,
+			originalSrc: sources.originalSrc,
+			...(sources.fallbackSrcs.length
+				? { fallbackSrcs: sources.fallbackSrcs }
+				: {}),
+			...(sources.originalFallbackCount
+				? { originalFallbackCount: sources.originalFallbackCount }
+				: {}),
 			alt: String(image.getAttribute('alt') ?? '').trim(),
 		});
 	}

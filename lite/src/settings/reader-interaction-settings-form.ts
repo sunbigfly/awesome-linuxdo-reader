@@ -130,7 +130,7 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 			this.#boostCopy.read(options.readPreferences()),
 		);
 		this.#railDraft = new ReaderObjectSettingsDraft(
-			['visible', 'fixed', 'mode', 'position'],
+			['visible', 'fixed', 'mode', 'positions'],
 			this.#topicActionRail.read(options.readPreferences()),
 		);
 		this.#treeDraft = new ReaderObjectSettingsDraft(
@@ -299,7 +299,7 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 		railSection.append(settingsOptionRow(
 			document,
 			'操作列默认位置',
-			'恢复到正文左侧留白区域。',
+			'恢复浮窗、全屏和嵌入三种形态的位置。',
 			this.#railPositionReset,
 			'ldp-topic-action-rail-reset-row',
 		));
@@ -443,8 +443,8 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 		});
 		this.scope.listen(this.#railPositionReset, 'click', () => {
 			this.#railDraft.set(
-				'position',
-				DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.position,
+				'positions',
+				DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.positions,
 			);
 			this.#afterEdit();
 		});
@@ -665,13 +665,17 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 		const tree = normalizeReaderReplyTreePreferences(
 			this.#treeDraft.read(),
 		);
+		const railPositionsDefault = (
+			['floating', 'fullpage', 'embedded'] as const
+		).every((mode) =>
+			rail.positions[mode].x ===
+				DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.positions[mode].x &&
+			rail.positions[mode].y ===
+				DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.positions[mode].y
+		);
 		this.#railVisible.checked = rail.visible;
 		this.#railFixed.checked = rail.fixed;
-		this.#railPositionReset.disabled =
-			rail.position.x ===
-				DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.position.x &&
-			rail.position.y ===
-				DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.position.y;
+		this.#railPositionReset.disabled = railPositionsDefault;
 		this.#expandNested.checked =
 			tree.expandNestedRepliesByDefault;
 		this.#expandLeaf.checked = tree.expandLeafNestedReplies;
@@ -715,13 +719,10 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 		this.#reset.disabled =
 			BOOST_COPY_SETTING_NAMES.every((name) =>
 				Object.is(value[name], DEFAULT_BOOST_COPY_SETTINGS[name])) &&
-			rail.visible === DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.visible &&
-			rail.fixed === DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.fixed &&
-			rail.mode === DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.mode &&
-			rail.position.x ===
-				DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.position.x &&
-			rail.position.y ===
-				DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.position.y &&
+				rail.visible === DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.visible &&
+				rail.fixed === DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.fixed &&
+				rail.mode === DEFAULT_TOPIC_ACTION_RAIL_PREFERENCES.mode &&
+				railPositionsDefault &&
 			(
 				Object.keys(DEFAULT_READER_REPLY_TREE_PREFERENCES) as
 					ReaderReplyTreeSettingName[]

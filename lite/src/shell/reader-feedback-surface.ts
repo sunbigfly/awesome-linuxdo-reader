@@ -102,7 +102,10 @@ export class ReaderFeedbackSurface {
 		return this.choose(request).then((choice) => choice === 'confirm');
 	}
 
-	choose(request: ReaderChoiceRequest): Promise<ReaderConfirmChoice> {
+	choose(
+		request: ReaderChoiceRequest,
+		root: HTMLElement = this.#root,
+	): Promise<ReaderConfirmChoice> {
 		this.#assertActive();
 		const previousFocus = this.#confirmation?.previousFocus ??
 			(deepActiveElement(this.#document) as HTMLElement | null);
@@ -266,7 +269,7 @@ export class ReaderFeedbackSurface {
 				containFloatingSurfaceWheel(layer, event as WheelEvent), {
 					passive: false,
 				});
-			this.#root.append(layer);
+			root.append(layer);
 			this.#focusSoon(() => {
 				if (layer.isConnected) cancel.focus({ preventScroll: true });
 			});

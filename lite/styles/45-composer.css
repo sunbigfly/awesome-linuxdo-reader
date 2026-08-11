@@ -1,8 +1,4 @@
 /* Discourse 原生 Composer 的 Reader 窗口外壳；draft/model/save 继续由宿主拥有。 */
-html.ldp-composer-host-isolated body > :not(.ldp-native-boost-menu):not(#reply-control):not(.composer-popup):not(#d-menu-portals):not(.fk-d-menu):not(.d-modal):not(.dialog-holder):not(#user-card):not(#group-card):not(.user-card):not(.group-card):not(.user-card-container) {
-  visibility: hidden !important;
-}
-
 html.ldp-reader-open body > [data-ldp-reader-composer-root] {
   position: relative !important;
   z-index: 2147483604 !important;
@@ -418,13 +414,6 @@ html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] :is(.fk-d-me
 html.ldp-composer-window-interacting,
 html.ldp-composer-window-interacting * {
   user-select: none !important;
-}
-
-.ldp-composer-wheel-layer {
-  position: fixed;
-  z-index: 2147483590;
-  inset: 0;
-  pointer-events: auto;
 }
 
 @media (max-width: 760px) {

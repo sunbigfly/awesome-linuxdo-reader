@@ -4,6 +4,7 @@ import {
 	parseReaderUserscriptTopicRoute,
 	readerUserscriptRouteKind,
 	type ReaderUserscriptRouteChangePort,
+	type ReaderUserscriptServiceWorkerMessagePort,
 } from '../src/userscript/reader-userscript-target-adapter.js';
 import type {
 	ReaderBrowserTargetRequest,
@@ -346,3 +347,131 @@ assert(
 	'异步消息已读/菜单关闭必须先于导航，且较早准备结果不能在较晚目标后夺回视口',
 );
 preparedAdapter.destroy();
+
+const suppressedRequests: ReaderBrowserTargetRequest[] = [];
+let suppressedCurrentUrl = 'https://linux.do/t/native-entry/32';
+let suppressedRouteHandler: (() => void) | null = null;
+const suppressedAdapter = new ReaderUserscriptTargetAdapter({
+	document: preparedDocument,
+	currentUrl: () => suppressedCurrentUrl,
+	target: {
+		async openTarget(request) {
+			suppressedRequests.push(request);
+			return {
+				topic: { status: 'opened' },
+				navigation: null,
+			};
+		},
+	},
+	routeChanges: {
+		subscribe(handler) {
+			suppressedRouteHandler = handler;
+			return () => {
+				suppressedRouteHandler = null;
+			};
+		},
+	},
+	openInitialRoute: false,
+});
+assert(
+	await suppressedAdapter.ready === false && suppressedRequests.length === 0,
+	'原帖旁路只禁止初始 Topic 自动接管，application 与宿主入口必须继续装配',
+);
+invoke(suppressedRouteHandler);
+await Promise.resolve();
+assert(
+	suppressedRequests.length === 0,
+	'同一路由的宿主启动 page-change 信号不得撤销原帖初始旁路',
+);
+suppressedCurrentUrl = 'https://linux.do/t/next-topic/33';
+invoke(suppressedRouteHandler);
+await Promise.resolve();
+assert(
+	Number(suppressedRequests.length) === 1 &&
+	suppressedRequests[0]?.topicId === 33 &&
+	suppressedRequests[0]?.source === 'restore',
+	'离开旁路原帖后的真实 Topic 路由仍须恢复正常 Reader 接管',
+);
+suppressedAdapter.destroy();
+
+let serviceWorkerListener: EventListener | null = null;
+let serviceWorkerCapture = false;
+let serviceWorkerCleanups = 0;
+let embedded = true;
+const serviceWorkerRequests: ReaderBrowserTargetRequest[] = [];
+const serviceWorkerMessages: ReaderUserscriptServiceWorkerMessagePort = {
+	addEventListener(_type, listener, options) {
+		serviceWorkerListener = listener;
+		serviceWorkerCapture = options === true ||
+			(typeof options === 'object' && options.capture === true);
+	},
+	removeEventListener(_type, listener) {
+		if (serviceWorkerListener !== listener) return;
+		serviceWorkerListener = null;
+		serviceWorkerCleanups += 1;
+	},
+};
+const serviceWorkerAdapter = new ReaderUserscriptTargetAdapter({
+	document: preparedDocument,
+	currentUrl: () => baseUrl,
+	target: {
+		async openTarget(request) {
+			serviceWorkerRequests.push(request);
+			return {
+				topic: { status: 'opened' },
+				navigation: { status: 'revealed' },
+			};
+		},
+	},
+	serviceWorkerMessages,
+	interceptServiceWorkerTopicTargets: () => embedded,
+	openInitialRoute: false,
+});
+function serviceWorkerMessage(url: string): Readonly<{
+	readonly event: Event;
+	readonly immediatePropagationStopped: boolean;
+}> {
+	const event = new (preparedWindow as unknown as {
+		Event: typeof Event;
+	}).Event('message', { cancelable: true });
+	Object.defineProperty(event, 'data', { value: { url } });
+	let immediatePropagationStopped = false;
+	Object.defineProperty(event, 'stopImmediatePropagation', {
+		value() {
+			immediatePropagationStopped = true;
+		},
+	});
+	serviceWorkerListener?.(event);
+	return Object.freeze({
+		event,
+		get immediatePropagationStopped() {
+			return immediatePropagationStopped;
+		},
+	});
+}
+const embeddedNotification = serviceWorkerMessage('/t/example/34/18');
+await Promise.resolve();
+assert(
+	serviceWorkerCapture &&
+		embeddedNotification.event.defaultPrevented &&
+		embeddedNotification.immediatePropagationStopped &&
+		serviceWorkerRequests.length === 1 &&
+		serviceWorkerRequests[0]?.topicId === 34 &&
+		serviceWorkerRequests[0]?.postNumber === 18 &&
+		serviceWorkerRequests[0]?.source === 'notification',
+	'嵌入态必须在宿主监听器前截流 Service Worker Topic 消息，并由 Reader 保留楼层打开',
+);
+embedded = false;
+const floatingNotification = serviceWorkerMessage('/t/example/35/19');
+await Promise.resolve();
+assert(
+	!floatingNotification.event.defaultPrevented &&
+		!floatingNotification.immediatePropagationStopped &&
+		serviceWorkerRequests.length === 1,
+	'非嵌入态必须保留 Discourse 对浏览器通知消息的原生跳转行为',
+);
+serviceWorkerAdapter.destroy();
+assert(
+	serviceWorkerListener === null && serviceWorkerCleanups === 1,
+	'Service Worker 消息截流必须随目标适配器销毁而释放',
+);

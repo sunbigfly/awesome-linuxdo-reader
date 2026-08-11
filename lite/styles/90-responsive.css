@@ -91,11 +91,6 @@
     max-height: none;
   }
 
-  .ldp-reader-queue-bubbles,
-  .ldp-reader-queue-scroll-hint {
-    display: none !important;
-  }
-
   .ldp-reader-queue-panel {
     top: auto;
     bottom: 0;
@@ -845,5 +840,39 @@
 
   .ldp-lb-batch-grid {
     grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .ldp-reader-queue {
+    --ldp-reader-queue-rail-size: 44px;
+    --ldp-reader-queue-toggle-size: 44px;
+    --ldp-reader-queue-avatar-size: 44px;
+    --ldp-reader-queue-scroll-size: 44px;
+  }
+
+  .ldp-reader-queue-bubble-remove {
+    display: none;
+  }
+
+  .ldp-reader-queue-row {
+    min-height: 64px;
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+  }
+
+  .ldp-reader-queue-row-progress {
+    width: 44px;
+    height: 44px;
+  }
+
+  .ldp-reader-queue-panel :is(
+    .ldp-reader-queue-close,
+    .ldp-reader-queue-clear,
+    .ldp-reader-queue-pin,
+    .ldp-reader-queue-remove,
+    .ldp-reader-queue-retry
+  ) {
+    width: 40px;
+    height: 40px;
   }
 }
