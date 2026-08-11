@@ -2,9 +2,9 @@
 title: 回复与社区操作
 description: 使用主帖操作列，并在阅读器内回复、引用、点赞、回应、Boost、收藏、分享和执行权限操作。
 feature_ids: ["MEDIA-010", "ACTION-001", "ACTION-002", "ACTION-003", "ACTION-004", "ACTION-005", "ACTION-006", "ACTION-007", "ACTION-008", "ACTION-009", "ACTION-010", "ACTION-011", "ACTION-012", "ACTION-013", "ACTION-014"]
-source_anchors: ["lite/src/media/reader-poll-model.ts","lite/src/app/reader-browser-runtime.ts","lite/src/post/reader-selection-quote-feature.ts","lite/src/post/boost-copy-rule.ts","lite/src/discourse/native-host-api.ts","lite/src/discourse/native-composer.ts","lite/src/post/reader-topic-shared-issue-coordinator.ts","lite/src/post/reader-topic-action-rail.ts"]
+source_anchors: ["lite/src/media/reader-poll-model.ts","lite/src/app/reader-browser-runtime.ts","lite/src/post/reader-post-action-feature.ts","lite/src/post/reader-selection-quote-feature.ts","lite/src/post/boost-copy-rule.ts","lite/src/discourse/native-host-api.ts","lite/src/discourse/native-composer.ts","lite/src/post/reader-topic-shared-issue-coordinator.ts","lite/src/post/reader-topic-action-rail.ts"]
 since: 0.1.2
-version: 1.3.0
+version: 1.3.1
 status: current
 last_verified: 2026-08-09
 screenshots: ["/screenshots/guide-20-community-actions-v1.0.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.0.0.png", "/screenshots/guide-15-notifications-replies-v1.0.0.png"]
@@ -76,8 +76,9 @@ screenshots: ["/screenshots/guide-20-community-actions-v1.0.0.png", "/screenshot
 
 Boost 气泡显示内容和参与用户。账号权限允许时可以发送、举报或进入相关原生操作。
 
-Boost 输入框里的表情按钮会打开站点原生表情选择器；选中的表情与普通文字一起计入 16 字
-上限，最多插入 5 个。关闭或切换楼层时，输入框和原生表情面板会一起收口。
+Boost 输入框里的表情按钮会打开站点原生表情选择器；面板会显示在阅读器上方，不受浮窗
+层级遮挡。选中的表情与普通文字一起计入 16 字上限，最多插入 5 个；关闭或切换楼层时，
+输入框和原生表情面板会一起收口。
 
 举报他人的 Boost 时，阅读器会实时读取当前账号的服务器权限，并只列出站点允许且适用于
 Boost 的举报类型；如果已经举报过或当前账号无权举报，会直接提示而不发送写请求。需要

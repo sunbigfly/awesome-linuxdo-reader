@@ -125,7 +125,7 @@
 
 ## 安装
 
-> **发布状态：** Lite `1.3.0` 已发布：Loader `588185 / 1899377`、Core `590254 / 1899370`、Features `590255 / 1899372`；CSS 固定到 Git `5ca40cf`，完整校验值见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+> **发布状态：** Lite `1.3.1` 已发布：Loader `588185 / 1899428`、Core `590254 / 1899419`、Features `590255 / 1899422`；CSS 继续固定到 Git `5ca40cf`，完整校验值见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。
@@ -154,9 +154,9 @@
 4. 其他标准 HTTPS Discourse 论坛会自动识别；只有深度定制站点识别失败时，才需在“设置 → 适用站点 → 其他适用站点”中验证添加为兼容兜底。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `1.3.0`。脚本对 LINUX DO 保持全面适配，同时自动识别中文、英文及其他语言的标准 HTTPS Discourse 社区；深度定制站点仍可验证添加为兼容兜底。除内置中文站点 LINUX DO 外，其他 Discourse 社区还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `1.3.1`。脚本对 LINUX DO 保持全面适配，同时自动识别中文、英文及其他语言的标准 HTTPS Discourse 社区；深度定制站点仍可验证添加为兼容兜底。除内置中文站点 LINUX DO 外，其他 Discourse 社区还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
-1.3.0 重点是可独立打开的离线 Topic HTML、下载历史与可选 WebDAV 同步，并将设置导出、导入、恢复默认收敛为排除秘密字段的安全组合事务；同时补齐标准 Discourse 自动识别、队列、灯箱、引用跳转和请求恢复细节。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+1.3.1 重点是为已有设置的用户重新投放一次“建议恢复默认值”提示，确保新版设置与默认值能够完整生效；同时修复 Boost 输入框调用宿主表情选择器时被阅读器层遮挡的问题。新用户保持静默，选择保留当前设置也不会改动任何值。1.3.0 的离线 Topic、安全配置、WebDAV 分类同步和阅读体验改进保持不变，完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 ## 开发
 
@@ -180,7 +180,7 @@ GitHub Raw `main` 通过 Webhook 同步；用户只安装主脚本，不需要�
 ├── assets/           品牌与文档资源
 ├── docs/             项目介绍和资料索引
 ├── dist/             仓库直装的压缩 userscript 与来源清单
-├── lite/             v1.3.0 TypeScript 业务源码、样式、契约与测试
+├── lite/             v1.3.1 TypeScript 业务源码、样式、契约与测试
 ├── scripts/          跨平台开发工具入口
 ├── tools/            Rust 开发辅助工具源码
 ├── work/greasyfork-lite/  Lite Greasy Fork Library 发布产物

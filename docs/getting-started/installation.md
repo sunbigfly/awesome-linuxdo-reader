@@ -4,7 +4,7 @@ description: 安装 userscript、确认启用状态、理解更新方式并排�
 feature_ids: ["CORE-001", "CORE-007", "TROUBLE-001"]
 source_anchors: ["lite/userscript.meta.txt","lite/src/app/reader-application.ts"]
 since: 0.1.2
-version: 1.3.0
+version: 1.3.1
 status: current
 last_verified: 2026-08-11
 screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png"]
@@ -15,12 +15,12 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png"]
 Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要先安装脚本管理器，再从 GreasyFork 安装正式版。
 
 ::: tip 当前发布状态
-Lite `1.3.0` 已发布，普通用户只需安装主脚本。
+Lite `1.3.1` 已发布，普通用户只需安装主脚本。
 
-- **Loader**：脚本 `588185`，固定版本 `1899377`；平台文件 3,815 字节，SHA-256 `cb977d5f6f392d8e99bc5640055bf16be94408fe065900d7ad865dceb777f2f6`。移除 Greasy Fork 注入的 `@downloadURL none` 后为 3,794 字节，SHA-256 `3e4c975eb214efed857992963c59d730ab67c32ea8779d639f278c6ba326bc7b`，与仓库 Loader 一致。
-- **Core**：脚本 `590254`，固定版本 `1899370`；1,682,450 字节，SHA-256 `c3ee925dd30dcf7f831fe0e9d393556db9f1fb1429d7e62ba193f9a56dde7b91`。
-- **Features**：脚本 `590255`，固定版本 `1899372`；1,839,648 字节，SHA-256 `fa426f71facd50d81e60aa2cb5c7c3ff0a3e11c627d8f372f758b118edbf1345`。
-- **CSS**：固定到 Git `5ca40cf3025951dbcb94edde29ebb59083c2bb4f`；472,279 字节，SHA-256 `f438522f298ca3a15363685bd8ef5e33e1a5b17c57e801784018a0fbf418a3b4`。
+- **Loader**：脚本 `588185`，固定版本 `1899428`；平台文件 3,815 字节，SHA-256 `f318841bd36569a6eb2154ce8ddb0ba707146f66b2e761938156e83cd3ee0f6d`。移除 Greasy Fork 注入的 `@downloadURL none` 后为 3,794 字节，SHA-256 `9c20d6b707321cf1e928b7fff24e6e379501a08d27a0ac63cfa082315edabdf6`，与仓库 Loader 一致。
+- **Core**：脚本 `590254`，固定版本 `1899419`；1,682,561 字节，SHA-256 `4a5a9a0f67214f7b696f107ee3dfd0d628fa9328c0d8470ee41eb6bbc7396154`。
+- **Features**：脚本 `590255`，固定版本 `1899422`；1,841,067 字节，SHA-256 `e1919d8b5ec69c62cb9f875621ca0e69d6274f3f8600ac2b0f62e1aed69364e9`。
+- **CSS**：继续固定到 Git `5ca40cf3025951dbcb94edde29ebb59083c2bb4f`；472,279 字节，SHA-256 `f438522f298ca3a15363685bd8ef5e33e1a5b17c57e801784018a0fbf418a3b4`。
 :::
 
 ![安装并启用脚本后，LINUX DO 列表页与增强阅读工作区同时可用](/screenshots/guide-01-reader-overview-v1.3.0.png)
@@ -84,7 +84,7 @@ Library 是正式脚本的一部分，无需单独安装。固定版本 URL 与�
 
 - 想立即检查时，在 Tampermonkey 面板中对该脚本执行“检查更新”。
 - 更新后刷新当前 Discourse 页面，已打开页面不会自动替换正在运行的旧代码。
-- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `1.3.0`。正式发布后，线上版本应与本页“当前发布状态”一致。
+- 在“设置 → 关于”或脚本管理器中确认版本；本手册当前对应 `1.3.1`。正式发布后，线上版本应与本页“当前发布状态”一致。
 
 ## 三种保留版本
 

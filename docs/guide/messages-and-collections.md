@@ -4,7 +4,7 @@ description: 使用消息分类、检索、分页、历史管理以及收藏与�
 feature_ids: ["ACTION-004", "ACTION-007", "COLLECT-001", "COLLECT-002", "COLLECT-003", "COLLECT-004", "COLLECT-005", "COLLECT-006"]
 source_anchors: ["lite/src/app/reader-browser-runtime.ts","lite/src/discourse/native-host-api.ts","lite/src/notification/reader-notification-model.ts","lite/src/notification/reader-notification-controller.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-repository.ts","lite/src/bookmark/reader-bookmark-model.ts","lite/src/bookmark/reader-bookmark-controller.ts"]
 since: 0.1.2
-version: 1.3.0
+version: 1.3.1
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-15-notifications-replies-v1.0.0.png", "/screenshots/guide-16-history-v1.0.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.0.0.png"]

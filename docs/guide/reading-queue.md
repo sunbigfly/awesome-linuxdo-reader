@@ -4,7 +4,7 @@ description: 从主题列表建立多主题阅读队列，管理后台预加载�
 feature_ids: ["CORE-006"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts"]
 since: 0.1.2
-version: 1.3.0
+version: 1.3.1
 status: current
 last_verified: 2026-07-28
 screenshots: ["/screenshots/guide-21-reading-queue-v1.0.0.png", "/screenshots/guide-24-reading-queue-entry-v1.0.0.png", "/screenshots/guide-13-data-management-v1.3.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-16-history-v1.0.0.png"]

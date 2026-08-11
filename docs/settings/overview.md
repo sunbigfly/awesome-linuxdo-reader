@@ -4,7 +4,7 @@ description: 理解 17 个设置面板、分组导航、安全配置管理、Web
 feature_ids: ["USER-005", "SET-001", "SET-020", "DATA-001", "DATA-006", "DATA-007"]
 source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/reader-preferences-schema.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/settings/reader-webdav-settings-form.ts","lite/src/state/reader-settings-config-manager.ts"]
 since: 0.1.2
-version: 1.3.0
+version: 1.3.1
 status: current
 last_verified: 2026-08-11
 screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png"]

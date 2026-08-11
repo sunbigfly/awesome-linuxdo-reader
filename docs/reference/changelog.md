@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.3.0
+version: 1.3.1
 status: current
 last_verified: 2026-08-11
 screenshots: ["/screenshots/guide-14-about-v1.3.0.png"]
@@ -15,6 +15,26 @@ screenshots: ["/screenshots/guide-14-about-v1.3.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.3.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.3.1 — 设置体验与 Boost 表情修复
+
+核验日期：2026-08-11。
+
+### 体验修正
+
+- 为已有设置的用户递增一次设置提醒 campaign，确保升级前打开过测试版或先前构建、已经写入旧提示锁的用户仍能收到一次“建议恢复默认值”提醒。
+- 新用户首次安装继续静默写入当前提示锁，不显示无意义的恢复确认；已有用户选择“保留当前设置”时也不会改动任何值。
+- 确认恢复仍只写入当前偏好默认值，不删除浏览历史、离线 Topic 下载、帖子缓存或账号数据；同一 campaign 展示前即锁定，后续启动不会重复打扰。
+- 修复 Boost 输入框调用宿主 Emoji Picker 后面板被 Reader 层遮挡的问题；宿主菜单现在沿用原生回复浮窗的浏览器顶层规则，并在 Boost 关闭时完整归还。
+- 对齐当前 Discourse 菜单服务的稳定分组标识，避免同一 Boost 表情面板出现重复或关闭失配。
+
+### 发布状态
+
+- `1.3.1` 已发布到 Greasy Fork：主 Loader 固定版本为 `1899428`，加载 Core `1899419` 与 Features `1899422`。
+- 固定 Loader 原始文件为 3,815 字节，SHA-256 `f318841bd36569a6eb2154ce8ddb0ba707146f66b2e761938156e83cd3ee0f6d`；移除平台加入的 `@downloadURL none` 后为 3,794 字节，SHA-256 `9c20d6b707321cf1e928b7fff24e6e379501a08d27a0ac63cfa082315edabdf6`，与仓库 Loader 逐字节一致。
+- Core 为 1,682,561 字节，SHA-256 `4a5a9a0f67214f7b696f107ee3dfd0d628fa9328c0d8470ee41eb6bbc7396154`；Features 为 1,841,067 字节，SHA-256 `e1919d8b5ec69c62cb9f875621ca0e69d6274f3f8600ac2b0f62e1aed69364e9`。
+- CSS 没有变化，继续固定到 Git `5ca40cf3025951dbcb94edde29ebb59083c2bb4f`：472,279 字节，SHA-256 `f438522f298ca3a15363685bd8ef5e33e1a5b17c57e801784018a0fbf418a3b4`。
+- 本次改动的 ESLint、211 个源码与分包契约文件、40 个手册页面及 105 项功能索引检查均已通过。
 
 ## 1.3.0 — 离线 Topic 与安全配置
 

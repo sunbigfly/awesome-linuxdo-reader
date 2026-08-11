@@ -4,7 +4,7 @@ description: 导出、导入与恢复设置，查看六类本地缓存并按选�
 feature_ids: ["DATA-001", "DATA-002", "DATA-007"]
 source_anchors: ["lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.3.0
+version: 1.3.1
 status: current
 last_verified: 2026-08-11
 screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png", "/screenshots/guide-30-settings-update-reminder-v1.3.0.png"]
@@ -52,9 +52,9 @@ v7 导出文件包含当前版本规范化的图片、字体、布局、浮窗�
 
 该操作经确认后覆盖偏好、其他适用站点、翻译和 WebDAV 设置并立即投影，同时清除本机翻译 API Key、WebDAV 用户名与密码。它不会删除阅读队列、浏览历史或缓存，也不会撤销原站收藏、回应或通知状态。若只需恢复某一类设置，进入对应面板使用该面板自己的“恢复默认”。
 
-v1.3.0 首次打开已有设置的阅读器时，会显示一次“大版本设置更新”提示。选择“保留当前设置”不会改动任何值；选择“恢复默认值”也只重置设置，不删除历史、下载记录、帖子缓存或账号数据。
+v1.3.1 会为已有设置的用户重新解锁一次“大版本设置更新”提示，避免升级前已打开过测试版或先前构建时提前消耗提示锁。选择“保留当前设置”不会改动任何值；选择“恢复默认值”也只重置设置，不删除历史、下载记录、帖子缓存或账号数据。新用户首次安装仍保持静默。
 
-![v1.3.0 首次运行时的一次性设置更新提示](/screenshots/guide-30-settings-update-reminder-v1.3.0.png)
+![一次性设置更新提示；界面与文案在 v1.3.1 保持不变](/screenshots/guide-30-settings-update-reminder-v1.3.0.png)
 
 ## 本地缓存
 
