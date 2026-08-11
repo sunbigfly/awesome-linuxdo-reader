@@ -2,8 +2,8 @@
 
 该目录把 `lite/src/` 确定性构建成 Greasy Fork 可接受的可读发布单元，解决单个
 userscript 超过 2 MB 的问题。构建不压缩、不混淆、不缩短标识符，也不下载后
-`eval`；每个可执行文件使用 2,000,000 字节项目闸门，Loader 与两个 Library 的
-项目自有 JS 总量另受 3,300,000 字节闸门约束。
+`eval`；每个可执行文件使用 2,000,000 字节项目闸门，并同时低于 Greasy Fork 的
+2 MiB 硬限制。
 
 ## 产物
 
@@ -80,6 +80,19 @@ Library 与待发布文件完全相同。快速调试版和三文件本地测试
 `npm run main-lite:greasyfork:release` 只读取已核验的 `published-libraries.json`。
 `release.config.json` 不进入 Git；其中没有凭据，但只作为首次发布草稿，不能用占位符
 冒充已发布状态。
+
+### v1.3.0 已发布坐标
+
+| 发布单元 | Greasy Fork | 固定版本 | 核验结果 |
+| --- | --- | --- | --- |
+| 主 Loader | [588185](https://greasyfork.org/scripts/588185) | `1899377` | 固定文件 3,815 字节，SHA-256 `cb977d5f6f392d8e99bc5640055bf16be94408fe065900d7ad865dceb777f2f6`；移除平台加入的 `@downloadURL none` 后为 3,794 字节，SHA-256 `3e4c975eb214efed857992963c59d730ab67c32ea8779d639f278c6ba326bc7b` |
+| Core | [590254](https://greasyfork.org/scripts/590254) | `1899370` | 1,682,450 字节，SHA-256 `c3ee925dd30dcf7f831fe0e9d393556db9f1fb1429d7e62ba193f9a56dde7b91` |
+| Features | [590255](https://greasyfork.org/scripts/590255) | `1899372` | 1,839,648 字节，SHA-256 `fa426f71facd50d81e60aa2cb5c7c3ff0a3e11c627d8f372f758b118edbf1345` |
+
+三个发布单元均已通过 GitHub Webhook 同步，并在 `update.greasyfork.org` 固定版本 URL
+逐字节核验；versionless 安装文件与元数据均已更新为 v1.3.0。CSS 固定到 Git
+`5ca40cf3025951dbcb94edde29ebb59083c2bb4f`，472,279 字节，SHA-256
+`f438522f298ca3a15363685bd8ef5e33e1a5b17c57e801784018a0fbf418a3b4`。
 
 ### v1.2.5 已发布坐标
 

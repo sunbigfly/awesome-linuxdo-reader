@@ -1,13 +1,13 @@
 ---
 title: WebDAV 同步
 description: 使用坚果云等标准 WebDAV 在设备之间合并同步历史、收藏、设置、阅读队列和其他有价值的本地记录。
-feature_ids: ["DATA-006"]
-source_anchors: ["lite/src/settings/reader-webdav-settings-form.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-client.ts"]
+feature_ids: ["DATA-006", "DATA-007"]
+source_anchors: ["lite/src/settings/reader-webdav-settings-form.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts"]
 since: 1.1.0
-version: 1.2.5
+version: 1.3.0
 status: current
-last_verified: 2026-08-08
-screenshots: ["/screenshots/guide-29-webdav-sync-v1.1.0.svg"]
+last_verified: 2026-08-11
+screenshots: ["/screenshots/guide-29-webdav-sync-v1.1.0.svg", "/screenshots/guide-32-webdav-sync-v1.3.0.png"]
 ---
 
 # WebDAV 同步
@@ -16,7 +16,11 @@ screenshots: ["/screenshots/guide-29-webdav-sync-v1.1.0.svg"]
 
 ![设备 A、WebDAV 远端文件与设备 B 之间的合并同步流程](/screenshots/guide-29-webdav-sync-v1.1.0.svg)
 
-WebDAV 用一个小型 JSON 文件在多个浏览器之间交换本地记录。同步会先读取远端文件，以本机上次成功同步的基线执行三方合并，再通过 ETag 条件写入；不是拿某一端整份覆盖另一端，也不是只上传本机新增。远端在同步期间被其他设备修改时，阅读器会重新读取并重试，不会把 412 冲突当成成功。
+WebDAV 用一个小型 JSON 文件在多个浏览器之间交换普通本地记录。离线 Topic 是独立的大对象类别：本地仍保存“下载元数据 + 完整 HTML”的离线 Artifact；远端使用轻量清单和每个 Topic 独立的 HTML 对象，不把正文塞进主 `sync.json`。两条链路都会先读取远端，以本机上次成功同步的基线执行三方合并，再通过 ETag 条件写入；不是拿某一端整份覆盖另一端，也不是只上传本机新增。远端在同步期间被其他设备修改时，阅读器会重新读取并重试，不会把 412 冲突当成成功。
+
+![WebDAV 同步内容中的离线 Topic 独立开关](/screenshots/guide-32-webdav-sync-v1.3.0.png)
+
+<p class="image-caption">凭据区未进入截图；离线 Topic 默认关闭，开启后才同步完整明文 HTML。</p>
 
 ## 坚果云配置
 
@@ -33,7 +37,7 @@ WebDAV 用一个小型 JSON 文件在多个浏览器之间交换本地记录。�
 
 ## 可选同步内容
 
-九类数据分别开关，关闭的类别不会上传、下载或删除：
+十类数据分别开关，关闭的类别不会上传、下载或删除：
 
 | 类别 | 同步内容 | 明确不包含 |
 | --- | --- | --- |
@@ -46,8 +50,9 @@ WebDAV 用一个小型 JSON 文件在多个浏览器之间交换本地记录。�
 | Connect 本机观察历史 | Connect 指标历史和服务器确认已读指纹 | Cookie 与接口响应正文 |
 | AI 翻译服务集合 | API URL、模型、温度、思考等级、RPM / TPM、动画与 Prompt；API Key 使用 WebDAV 应用密码加密 | WebDAV 密码、未加密 API Key |
 | 已翻译 Section 缓存 | 最近使用的译文 Section | 原文、页面 DOM |
+| 离线 Topic 下载（HTML 正文） | 下载历史、完整离线 HTML 与选择范围；清单和 HTML 分开存放 | 图片和附件二进制、Cookie、页面缓存 |
 
-帖子正文、图片、附件、短期限流状态和页面缓存永不进入 WebDAV 文件。默认只启用浏览历史、收藏记录和阅读队列；翻译服务集合与译文缓存必须分别主动开启。应用密码变化会导致已有加密 API Key 无法解密，应先在原配置完成同步并记录旧密码对应关系。
+普通帖子正文、图片、附件、短期限流状态和页面缓存不会进入 WebDAV；只有主动开启“离线 Topic 下载”时，已下载的完整 HTML 才会作为独立明文文件上传到用户自己的 WebDAV。HTML 中的图片与附件仍是原 URL，不复制资源二进制。默认只启用浏览历史、收藏记录和阅读队列；离线 Topic、翻译服务集合与译文缓存必须分别主动开启。应用密码变化会导致已有加密 API Key 无法解密，应先在原配置完成同步并记录旧密码对应关系。
 
 ## 手动同步与首次同步
 
@@ -74,5 +79,6 @@ WebDAV 用一个小型 JSON 文件在多个浏览器之间交换本地记录。�
 - 新设备没有记录：确认两端连接到同一个地址、账号和远端文件，并且对应类别在两端都已开启。
 - 清空后记录消失：区分“只清了本地缓存”与“成功同步过删除”。前者可从远端恢复；后者会传播删除标记。
 - 翻译 API Key 解密失败：确认当前 WebDAV 应用密码与加密该配置时一致；阅读器不会把无法解密的 Key 当成空值覆盖远端。
+- 离线 Topic 恢复失败：确认两端都开启“离线 Topic 下载”，并检查远端 `offline-topics` 目录中的清单和对应 HTML 对象是否都存在；对象缺失或 SHA-256 不匹配时，阅读器会报错并保留本机副本。
 
 修改远端路径相当于切换到另一份同步文件，不会自动迁移旧路径内容。更换账号或路径前先在现有配置执行一次成功同步，并记录原路径以便回退。

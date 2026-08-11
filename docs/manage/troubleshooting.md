@@ -2,12 +2,12 @@
 title: 故障排查
 description: 按安装、打开、跳楼、图片、429、配置和缓存分类排查常见问题。
 feature_ids: ["CORE-005", "MEDIA-013", "DATA-003", "MONITOR-003", "MONITOR-004", "TROUBLE-001", "TROUBLE-002", "TROUBLE-003", "TROUBLE-004", "TROUBLE-005", "TROUBLE-006"]
-source_anchors: ["lite/src/components/reader-icon.ts","lite/src/app/reader-browser-runtime.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/network/browser-shared-request-permit.ts","lite/userscript.meta.txt","lite/src/topic/topic-session.ts","lite/src/media/reader-topic-image-index.ts","lite/src/state/preferences-config-codec.ts"]
+source_anchors: ["lite/src/components/reader-icon.ts","lite/src/app/reader-browser-runtime.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/network/browser-shared-request-permit.ts","lite/userscript.meta.txt","lite/src/topic/topic-session.ts","lite/src/media/reader-topic-image-index.ts","lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
-last_verified: 2026-08-09
-screenshots: ["/screenshots/guide-19-image-lightbox-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-13-data-management-v1.0.0.png"]
+last_verified: 2026-08-11
+screenshots: ["/screenshots/guide-19-image-lightbox-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-13-data-management-v1.3.0.png"]
 ---
 
 # 故障排查
@@ -27,11 +27,11 @@ screenshots: ["/screenshots/guide-19-image-lightbox-v1.0.0.png", "/screenshots/g
 
 ## 入口没有出现
 
-1. 地址必须属于 LINUX DO、20 个内置社区，或已在“设置 → 适用站点 → 其他适用站点”验证并保存的 HTTPS Discourse 站点；具体范围见[安装与更新](/getting-started/installation#环境要求)。
+1. 地址必须属于 LINUX DO、20 个其他内置社区、可自动识别的标准 HTTPS Discourse，或已经验证保存的深度定制站点；具体范围见[安装与更新](/getting-started/installation#环境要求)。
 2. 确认脚本和站点访问权限已启用。
 3. 安装/更新后完整刷新。
 4. 停用重复的正式版、本地版或同类接管脚本。
-5. 从脚本管理器确认版本为 `1.2.5`。
+5. 从脚本管理器确认版本为 `1.3.0`。
 
 ## 主题或楼层无法加载
 
@@ -97,7 +97,7 @@ screenshots: ["/screenshots/guide-19-image-lightbox-v1.0.0.png", "/screenshots/g
 
 ## 配置恢复
 
-![配置导出、导入、恢复默认和缓存清理](/screenshots/guide-13-data-management-v1.0.0.png)
+![配置导出、导入、恢复默认和缓存清理](/screenshots/guide-13-data-management-v1.3.0.png)
 
 顺序：
 
@@ -106,7 +106,7 @@ screenshots: ["/screenshots/guide-19-image-lightbox-v1.0.0.png", "/screenshots/g
 3. 让设置立即投影，或重新打开被清理的主题/面板后复现。
 4. 最后才使用“恢复全部默认”。
 
-导入与恢复默认都先完整确认并一次写入；无效文件或取消不会形成部分设置。恢复默认会覆盖阅读器设置，但不会删除缓存、浏览历史或原站账号数据。
+导入与恢复默认都先完整确认；组合写入失败时会恢复已经写入的设置，无效文件或取消不会形成部分结果。恢复默认会覆盖偏好、其他适用站点、翻译和 WebDAV 设置并清除其中的本机凭据，但不会删除阅读队列、缓存、浏览历史或原站账号数据。
 
 ## 提交有效问题报告
 

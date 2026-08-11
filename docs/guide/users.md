@@ -4,10 +4,10 @@ description: 查看用户卡、资料、徽章、统计、关注列表和账号�
 feature_ids: ["MEDIA-007", "USER-001", "USER-002", "USER-003", "USER-004", "USER-005"]
 source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/discourse/native-request-descriptors.ts","lite/src/discourse/native-host-api.ts"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
 last_verified: 2026-08-09
-screenshots: ["/screenshots/guide-25-user-card-v1.0.0.png", "/screenshots/guide-02-settings-overview-v1.0.0.png"]
+screenshots: ["/screenshots/guide-25-user-card-v1.0.0.png", "/screenshots/guide-02-settings-overview-v1.3.0.png"]
 ---
 
 # 用户资料与关系
@@ -66,7 +66,7 @@ screenshots: ["/screenshots/guide-25-user-card-v1.0.0.png", "/screenshots/guide-
 
 “设置 → 用户信息”集中展示当前登录账号、社区统计以及 Connect 信任级别升级进度，并允许手动刷新。
 
-![设置中心的当前账号信息、社区统计和 Connect 进度](/screenshots/guide-02-settings-overview-v1.0.0.png)
+![设置中心的当前账号信息、社区统计和 Connect 进度](/screenshots/guide-02-settings-overview-v1.3.0.png)
 
 <p class="image-caption">查看自己的账号时打开“设置 → 用户信息”，切换 Connect 与基本信息标签，并用右上角刷新按钮重新取得资料。</p>
 

@@ -4,15 +4,15 @@ description: LINUX DO 全面适配、中英文及其他语言 Discourse 站点�
 feature_ids: ["CORE-007", "DATA-005", "REF-001"]
 source_anchors: ["lite/src/app/reader-application.ts","lite/src/userscript/browser-userscript-environment.ts","lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
-last_verified: 2026-08-09
-screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
+last_verified: 2026-08-11
+screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png"]
 ---
 
 # 兼容性
 
-![现代 Chromium 浏览器中的 LINUX DO 列表页和增强阅读工作区](/screenshots/guide-01-reader-overview-v1.0.0.png)
+![现代 Chromium 浏览器中的 LINUX DO 列表页和增强阅读工作区](/screenshots/guide-01-reader-overview-v1.3.0.png)
 
 <p class="image-caption">桌面端浏览器可在保留宿主列表的同时运行增强阅读工作区；具体能力仍取决于浏览器、脚本管理器和站点权限。</p>
 
@@ -22,8 +22,8 @@ LINUX DO 是完整功能与真实回归基线。中文、英文及其他语言�
 
 | 项目 | 当前值 |
 | --- | --- |
-| 脚本版本 | `1.2.5` |
-| 匹配站点 | LINUX DO 全面适配；20 个其他社区内置支持；其余标准 HTTPS Discourse 站点可验证后添加 |
+| 脚本版本 | `1.3.0` |
+| 匹配站点 | LINUX DO 全面适配；20 个其他社区内置支持；其余标准 HTTPS Discourse 自动识别，深度定制站点可验证添加为兜底 |
 | 启动时机 | `document-start` |
 | GM 权限 | `GM_getValue`、`GM_setValue`、`GM_xmlhttpRequest`、`GM_getResourceText`、`unsafeWindow` |
 | 跨域连接 | `connect.linux.do`、`credit.linux.do`、用户输入站点的 `/site/basic-info.json`、用户配置的 HTTPS WebDAV、Google / Microsoft 或用户配置的 OpenAI 兼容翻译接口；元数据以 `@connect *` 承载动态目标，业务端口仍按固定用途收窄 |
@@ -56,7 +56,7 @@ LINUX DO 是完整功能与真实回归基线。中文、英文及其他语言�
 | Julia Discourse | `https://discourse.julialang.org/*` | Discourse 核心能力，插件功能按站点检测 |
 | Rust Users Forum | `https://users.rust-lang.org/*` | Discourse 核心能力，插件功能按站点检测 |
 
-脚本同时声明 `https://*/*`，以便用户保存的自定义域名能够启动；未命中内置列表或用户列表时会在业务初始化前退出。添加自定义站点时会匿名请求该域名的 `/site/basic-info.json`，只有检测到 Discourse 站点信息才保存。站点 Logo 从 Discourse 公开站点信息、宿主 Header 或页面图标中自动选择。
+脚本同时声明 `https://*/*`，在未知域名上只通过 Discourse 原生模块和页面 DOM 标志做本地识别，不发送站点探测请求；识别成功后才初始化阅读器，普通网站在页面加载完成后仍无证据便静默退出。用户保存的自定义域名不再是前置白名单，只在自动识别失败时作为已验证兜底。手动添加时会匿名请求该域名的 `/site/basic-info.json`，只有检测到 Discourse 站点信息才保存。站点 Logo 从 Discourse 公开站点信息、宿主 Header 或页面图标中自动选择。
 
 站点适配不限制内容语言。正文翻译对非中文内置社区和语言未知的自定义 Discourse 站点开放，译文目标为简体中文；LINUX DO 作为内置中文站点隐藏翻译入口。未配置 API Key 时使用 Google / Microsoft 公共接口；配置有效 Key 与模型后使用当前 OpenAI 兼容服务。翻译服务不可用时，原文阅读不受影响。
 

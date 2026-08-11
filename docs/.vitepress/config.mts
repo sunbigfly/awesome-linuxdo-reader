@@ -35,7 +35,7 @@ export default defineConfig({
       { text: '维护与排障', link: '/manage/data-and-cache' },
       { text: '功能索引', link: '/reference/feature-catalog' },
       {
-        text: 'v1.2.5',
+        text: 'v1.3.0',
         items: [
           { text: '更新记录', link: '/reference/changelog' },
           { text: '兼容性', link: '/reference/compatibility' },
@@ -59,6 +59,7 @@ export default defineConfig({
           items: [
             { text: '阅读模式与工作区', link: '/guide/reading-modes' },
             { text: '阅读队列', link: '/guide/reading-queue' },
+            { text: '离线 Topic', link: '/guide/offline-topic' },
             { text: '楼层、时间轴与历史', link: '/guide/navigation' },
             { text: '二级回复与完整讨论', link: '/guide/thread-context' },
             { text: '图片、媒体与富内容', link: '/guide/content-and-media' },

@@ -4,9 +4,9 @@ description: 查看当前版本所有用户可见功能、唯一编号、状态�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
-last_verified: 2026-08-03
+last_verified: 2026-08-11
 screenshots: ["/screenshots/guide-22-feature-catalog-v1.0.0.png"]
 ---
 

@@ -4,10 +4,10 @@ description: 使用时间轴、只看楼主、历史前后切换、多主题队�
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014", "READ-016"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-only-op-controller.ts","lite/src/topic/reader-topic-navigation-controller.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/reading/read-state-controller.ts","lite/src/live/topic-live-controller.ts","lite/src/components/reader-icon.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/topic/reader-topic-header.ts"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
 last_verified: 2026-07-28
-screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png", "/screenshots/guide-16-history-v1.0.0.png", "/screenshots/guide-21-reading-queue-v1.0.0.png"]
+screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png", "/screenshots/guide-16-history-v1.0.0.png", "/screenshots/guide-21-reading-queue-v1.0.0.png"]
 ---
 
 # 楼层、时间轴与历史
@@ -26,7 +26,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png", "/screenshots/
 
 大量楼层快速跳转需要经过“获取数据 → 挂载目标 → 定位”的顺序。不要在第一次等待时连续重复点击，否则会产生互相覆盖的目标。
 
-![阅读工作区右侧时间轴、当前楼层和回顶入口](/screenshots/guide-01-reader-overview-v1.0.0.png)
+![阅读工作区右侧时间轴、当前楼层和回顶入口](/screenshots/guide-01-reader-overview-v1.3.0.png)
 
 <p class="image-caption">时间轴位于阅读工作区右侧：拖动滑块选择楼层，观察当前楼层与日期，底部按钮返回主题顶部。</p>
 

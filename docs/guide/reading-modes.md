@@ -4,10 +4,10 @@ description: 选择浮窗、全屏、嵌入或移动布局，理解多主题队�
 feature_ids: ["CORE-003", "CORE-004", "CORE-005", "CORE-006", "READ-001", "READ-002"]
 source_anchors: ["lite/src/userscript/main-lite-entry.ts","lite/src/shell/reader-workspace.ts","lite/src/components/reader-icon.ts","lite/src/queue/reader-open-queue-session.ts","lite/src/dom/reply-tree.ts","lite/src/topic/topic-session.ts"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
 last_verified: 2026-07-25
-screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png", "/screenshots/guide-05-layout-settings-v1.0.0.png", "/screenshots/guide-21-reading-queue-v1.0.0.png", "/screenshots/guide-09-performance-settings-v1.0.0.png"]
+screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png", "/screenshots/guide-05-layout-settings-v1.0.0.png", "/screenshots/guide-21-reading-queue-v1.0.0.png", "/screenshots/guide-09-performance-settings-v1.0.0.png"]
 ---
 
 # 阅读模式与工作区
@@ -24,7 +24,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png", "/screenshots/
 
 主题原始路由只使用浮窗接管；列表页可以切换浮窗、全屏和左右嵌入。布局按钮的实际可用项会随当前路由和窗口宽度变化。
 
-![列表页与右侧嵌入阅读工作区同时显示](/screenshots/guide-01-reader-overview-v1.0.0.png)
+![列表页与右侧嵌入阅读工作区同时显示](/screenshots/guide-01-reader-overview-v1.3.0.png)
 
 <p class="image-caption">在列表页打开主题后，从阅读器标题栏切换浮窗、全屏或左右嵌入；嵌入模式会保留另一侧主题列表。</p>
 

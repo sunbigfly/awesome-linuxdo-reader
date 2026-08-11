@@ -17,8 +17,8 @@
 </p>
 
 <p align="center">
-  <a href="assets/screenshots/guide-01-reader-overview-v1.0.0.png">
-    <img src="assets/screenshots/guide-01-reader-overview-v1.0.0.png" alt="在 LINUX DO 列表页右侧打开完整增强阅读工作区" width="960">
+  <a href="assets/screenshots/guide-01-reader-overview-v1.3.0.png">
+    <img src="assets/screenshots/guide-01-reader-overview-v1.3.0.png" alt="在 LINUX DO 列表页右侧打开完整增强阅读工作区" width="960">
   </a>
 </p>
 
@@ -32,26 +32,28 @@
 - 保留楼层关系、楼中楼、跳转、浏览历史与真实已读进度。
 - 集成回复、点赞、回应、收藏、通知、搜索与用户资料等社区能力。
 - 为非中文内置社区提供原文、双语与全译文切换，并集成原图灯箱、媒体播放和公式渲染。
-- 内置 21 个社区；其他 HTTPS Discourse 论坛可验证后添加，非 Discourse 网站不会启动。
+- 后台下载全部、楼主或自选楼层，生成可搜索、可跳转的独立离线 HTML；下载历史可选同步到 WebDAV。
+- 设置导出、导入与恢复默认覆盖组合配置，并始终排除翻译 API Key、WebDAV 用户名和密码。
+- 内置 21 个社区；其他标准 HTTPS Discourse 论坛自动识别，深度定制站点可验证添加为兜底，非 Discourse 网站不会启动。
 - 内置请求调度、429 退避、DOM 窗口化与本地资源监控。
 
 ## 核心体验
 
 <table>
   <tr>
-    <th width="33%">看图灯箱</th>
-    <th width="33%">消息中心</th>
-    <th width="33%">请求流与 429 控制</th>
+    <th width="33%">离线 Topic</th>
+    <th width="33%">安全配置管理</th>
+    <th width="33%">WebDAV 分类同步</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/guide-19-image-lightbox-v1.0.0.png"><img src="assets/screenshots/guide-19-image-lightbox-v1.0.0.png" alt="在阅读器内查看帖子原图、图片序列和关联评论"></a></td>
-    <td><a href="assets/screenshots/guide-15-notifications-replies-v1.0.0.png"><img src="assets/screenshots/guide-15-notifications-replies-v1.0.0.png" alt="查看消息中心的回复分类和真实通知"></a></td>
-    <td><a href="assets/screenshots/guide-11-request-flow-v1.0.0.png"><img src="assets/screenshots/guide-11-request-flow-v1.0.0.png" alt="查看请求调度、限流边界和异常恢复状态"></a></td>
+    <td><a href="assets/screenshots/guide-31-topic-download-v1.3.0.png"><img src="assets/screenshots/guide-31-topic-download-v1.3.0.png" alt="选择下载范围并管理 Topic 离线 HTML"></a></td>
+    <td><a href="assets/screenshots/guide-13-data-management-v1.3.0.png"><img src="assets/screenshots/guide-13-data-management-v1.3.0.png" alt="安全导出、导入和恢复组合设置"></a></td>
+    <td><a href="assets/screenshots/guide-32-webdav-sync-v1.3.0.png"><img src="assets/screenshots/guide-32-webdav-sync-v1.3.0.png" alt="按类别选择 WebDAV 同步内容"></a></td>
   </tr>
   <tr>
-    <td>原图、图片序列与关联评论。</td>
-    <td>回复、点赞、私信与内容回跳。</td>
-    <td>共享账本、排队放行与退避恢复。</td>
+    <td>后台补齐、离线查看与下载历史。</td>
+    <td>秘密字段永不进入配置导出。</td>
+    <td>普通记录三方合并，离线 HTML 独立存放。</td>
   </tr>
 </table>
 
@@ -68,7 +70,7 @@
     <th width="50%">楼中楼上下文</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/guide-01-reader-overview-v1.0.0.png"><img src="assets/screenshots/guide-01-reader-overview-v1.0.0.png" alt="列表页右侧嵌入阅读器工作区"></a></td>
+    <td><a href="assets/screenshots/guide-01-reader-overview-v1.3.0.png"><img src="assets/screenshots/guide-01-reader-overview-v1.3.0.png" alt="列表页右侧嵌入阅读器工作区"></a></td>
     <td><a href="assets/screenshots/guide-18-thread-context-v1.0.0.png"><img src="assets/screenshots/guide-18-thread-context-v1.0.0.png" alt="父楼层下展开楼中楼并保留关系线"></a></td>
   </tr>
 </table>
@@ -99,7 +101,7 @@
     <th width="33%">布局设置</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/guide-02-settings-overview-v1.0.0.png"><img src="assets/screenshots/guide-02-settings-overview-v1.0.0.png" alt="查看当前账号信息、社区统计和 Connect 进度"></a></td>
+    <td><a href="assets/screenshots/guide-02-settings-overview-v1.3.0.png"><img src="assets/screenshots/guide-02-settings-overview-v1.3.0.png" alt="查看当前账号信息、社区统计和 Connect 进度"></a></td>
     <td><a href="assets/screenshots/guide-07-appearance-settings-v1.0.0.png"><img src="assets/screenshots/guide-07-appearance-settings-v1.0.0.png" alt="配置主题、颜色、背景和回复关系样式"></a></td>
     <td><a href="assets/screenshots/guide-05-layout-settings-v1.0.0.png"><img src="assets/screenshots/guide-05-layout-settings-v1.0.0.png" alt="配置浮窗、全屏和移动模式布局"></a></td>
   </tr>
@@ -115,7 +117,7 @@
     <th width="50%">DOM 渲染管理</th>
   </tr>
   <tr>
-    <td><a href="assets/screenshots/guide-13-data-management-v1.0.0.png"><img src="assets/screenshots/guide-13-data-management-v1.0.0.png" alt="按资源类型查看和管理本地缓存"></a></td>
+    <td><a href="assets/screenshots/guide-13-data-management-v1.3.0.png"><img src="assets/screenshots/guide-13-data-management-v1.3.0.png" alt="按资源类型查看和管理本地缓存"></a></td>
     <td><a href="assets/screenshots/guide-09-performance-settings-v1.0.0.png"><img src="assets/screenshots/guide-09-performance-settings-v1.0.0.png" alt="配置 DOM 挂载窗口、缓冲区与渲染上限"></a></td>
   </tr>
 </table>
@@ -123,7 +125,7 @@
 
 ## 安装
 
-> **发布状态：** Lite `1.2.5` 已发布到 Greasy Fork。主 Loader 固定版本为 `1897778`，加载 Core `1897774` 与 Features `1897776`；三文件与 CSS 固定坐标、字节数和 SHA-256 均已核验。
+> **发布状态：** Lite `1.3.0` 已发布：Loader `588185 / 1899377`、Core `590254 / 1899370`、Features `590255 / 1899372`；CSS 固定到 Git `5ca40cf`，完整校验值见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。
@@ -149,12 +151,12 @@
    - [Swift Forums](https://forums.swift.org/)
    - [Julia Discourse](https://discourse.julialang.org/)
    - [Rust Users Forum](https://users.rust-lang.org/)
-4. 其他 HTTPS Discourse 论坛可在阅读器“设置 → 适用站点 → 其他适用站点”中验证并添加。
+4. 其他标准 HTTPS Discourse 论坛会自动识别；只有深度定制站点识别失败时，才需在“设置 → 适用站点 → 其他适用站点”中验证添加为兼容兜底。
 5. 点击主题标题开始使用。
 
-当前项目版本为 `1.2.5`。脚本对 LINUX DO 保持全面适配，同时兼容中文、英文及其他语言的标准 Discourse 社区；其他 HTTPS Discourse 论坛可验证后添加。除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
+当前项目版本为 `1.3.0`。脚本对 LINUX DO 保持全面适配，同时自动识别中文、英文及其他语言的标准 HTTPS Discourse 社区；深度定制站点仍可验证添加为兼容兜底。除内置中文站点 LINUX DO 外，其他 Discourse 社区还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
-1.2.5 重点为帖子相对时间补充 Discourse 原生具体时间，并分别校准窄阅读器和嵌套回复预览中的悬停展示位置，避免时间浮层溢出或错位。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+1.3.0 重点是可独立打开的离线 Topic HTML、下载历史与可选 WebDAV 同步，并将设置导出、导入、恢复默认收敛为排除秘密字段的安全组合事务；同时补齐标准 Discourse 自动识别、队列、灯箱、引用跳转和请求恢复细节。完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
 
 ## 开发
 
@@ -178,7 +180,7 @@ GitHub Raw `main` 通过 Webhook 同步；用户只安装主脚本，不需要�
 ├── assets/           品牌与文档资源
 ├── docs/             项目介绍和资料索引
 ├── dist/             仓库直装的压缩 userscript 与来源清单
-├── lite/             v1.2.5 TypeScript 业务源码、样式、契约与测试
+├── lite/             v1.3.0 TypeScript 业务源码、样式、契约与测试
 ├── scripts/          跨平台开发工具入口
 ├── tools/            Rust 开发辅助工具源码
 ├── work/greasyfork-lite/  Lite Greasy Fork Library 发布产物

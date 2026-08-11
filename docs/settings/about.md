@@ -4,17 +4,17 @@ description: 查看阅读器定位、能力摘要、当前版本、在线用户�
 feature_ids: ["REF-002", "REF-003"]
 source_anchors: ["lite/userscript.meta.txt","lite/src/components/reader-image-fallback.ts"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
-last_verified: 2026-08-07
-screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
+last_verified: 2026-08-11
+screenshots: ["/screenshots/guide-14-about-v1.3.0.png"]
 ---
 
 # 关于
 
 路径：**阅读器标题栏 → 设置 → 关于**。
 
-![关于页中的产品定位、能力摘要、版本和致谢](/screenshots/guide-14-about-v1.0.0.png)
+![关于页中的产品定位、能力摘要、版本和致谢](/screenshots/guide-14-about-v1.3.0.png)
 
 ## 页面内容
 
@@ -26,8 +26,7 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 - 原生社区互动；
 - 长帖数据与性能能力；
 - 在线用户手册入口；
-- 第三方组件和特别致谢；
-- 第三方参考项目、许可证与特别致谢。
+- 第三方组件、参考项目、许可证与特别致谢。
 
 ## 打开在线用户手册
 

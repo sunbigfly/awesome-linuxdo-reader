@@ -4,10 +4,10 @@ description: 从主题列表打开阅读器，完成阅读、导航、互动和�
 feature_ids: ["CORE-002", "CORE-003", "CORE-006"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/userscript/main-lite-entry.ts"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
 last_verified: 2026-07-25
-screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
+screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png"]
 ---
 
 # 五分钟上手
@@ -33,7 +33,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
 - 时间轴显示当前位置并支持跳到目标楼层；
 - 点击引用或父回复提示，可以预览上下文并回跳。
 
-![列表页右侧嵌入的阅读器、正文、时间轴和快捷入口](/screenshots/guide-01-reader-overview-v1.0.0.png)
+![列表页右侧嵌入的阅读器、正文、时间轴和快捷入口](/screenshots/guide-01-reader-overview-v1.3.0.png)
 
 ## 3. 完成社区操作
 

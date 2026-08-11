@@ -1,26 +1,26 @@
 ---
 title: 数据管理
 description: 导出、导入与恢复设置，查看六类本地缓存并按选择范围清理。
-feature_ids: ["DATA-001", "DATA-002"]
-source_anchors: ["lite/src/state/preferences-config-codec.ts","lite/src/cache/browser-asset-cache.ts"]
+feature_ids: ["DATA-001", "DATA-002", "DATA-007"]
+source_anchors: ["lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
-last_verified: 2026-08-08
-screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
+last_verified: 2026-08-11
+screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png", "/screenshots/guide-30-settings-update-reminder-v1.3.0.png"]
 ---
 
 # 数据管理
 
 路径：**阅读器标题栏 → 设置 → 数据管理**。
 
-![数据管理页中的设置导出导入、恢复默认和缓存分类](/screenshots/guide-13-data-management-v1.0.0.png)
+![数据管理页中的设置导出导入、恢复默认和缓存分类](/screenshots/guide-13-data-management-v1.3.0.png)
 
 ## 设置配置
 
 ### 导出设置
 
-导出文件包含当前版本规范化的图片、字体、布局、浮窗、外观、动画、性能、阅读和交互设置。
+v7 导出文件包含当前版本规范化的图片、字体、布局、浮窗、外观、动画、性能、阅读和交互偏好，以及其他适用站点、翻译规则和 WebDAV 非敏感选项；仍兼容导入旧 v6 文件，新增的离线 Topic 同步开关会保持关闭。
 
 不包含：
 
@@ -28,26 +28,33 @@ screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
 - 帖子正文；
 - 浏览历史；
 - 阅读队列；
-- 其他适用站点；
 - 收藏、回应或原站账号数据；
 - LDC 账户数据和成功缓存；
 - API 响应缓存。
+
+翻译 API Key、WebDAV 用户名和密码始终排除，不会以明文进入配置文件。
 
 ### 导入设置
 
 1. 先导出当前设置作为备份。
 2. 点击“导入设置”并选择配置文件。
-3. 核对格式和版本提示。
+3. 核对格式和版本提示；v6 会恢复安全组合设置，旧 v5 文件只恢复偏好。
 4. 确认导入。
-5. 确认后由统一偏好仓储一次写入，并立即投影到当前阅读器。
+5. 确认后由组合配置事务依次写入各自仓储，并立即投影到当前阅读器。
 
-无效字段会被规范化或拒绝；无效文件和取消确认都不会产生部分设置。导入不会把另一个浏览器的登录状态带到当前浏览器。
+无效字段会被规范化或拒绝；无效文件和取消确认都不会产生部分设置。任一步写入失败时，会逆序恢复已经写入的仓储。导入不会把另一个浏览器的登录状态或秘密凭据带到当前浏览器。
+
+同 URL 的翻译服务会复用本机已有 API Key。WebDAV 地址相同且本机已有用户名、密码时会复用；地址变化或缺少凭据时，连接凭据保持为空并自动关闭定时同步。
 
 0.1.14 新增独立的全屏布局字段。导入同版本、字段完整但尚未包含该字段的早期配置时，会自动补入全屏默认布局；其他缺失字段或版本不匹配仍会拒绝导入。
 
 ### 恢复全部默认
 
-该操作经确认后覆盖当前阅读器设置并立即投影。它不等于清理缓存，也不会撤销原站收藏、回应或通知状态。若只需恢复某一类设置，进入图片、字体、布局、外观、动效等对应面板，使用该面板自己的“恢复默认”。
+该操作经确认后覆盖偏好、其他适用站点、翻译和 WebDAV 设置并立即投影，同时清除本机翻译 API Key、WebDAV 用户名与密码。它不会删除阅读队列、浏览历史或缓存，也不会撤销原站收藏、回应或通知状态。若只需恢复某一类设置，进入对应面板使用该面板自己的“恢复默认”。
+
+v1.3.0 首次打开已有设置的阅读器时，会显示一次“大版本设置更新”提示。选择“保留当前设置”不会改动任何值；选择“恢复默认值”也只重置设置，不删除历史、下载记录、帖子缓存或账号数据。
+
+![v1.3.0 首次运行时的一次性设置更新提示](/screenshots/guide-30-settings-update-reminder-v1.3.0.png)
 
 ## 本地缓存
 
@@ -91,6 +98,6 @@ screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
 
 ## 与 WebDAV 的区别
 
-数据管理页只操作当前浏览器的设置导入导出与缓存；跨设备同步位于独立的 [WebDAV 同步](/settings/webdav-sync) 面板。WebDAV 可按类别合并历史、收藏、设置、阅读队列和阅读位置等记录，但不会上传正文、图片、附件或页面缓存。
+数据管理页只操作当前浏览器的设置导入导出与缓存；跨设备同步位于独立的 [WebDAV 同步](/settings/webdav-sync) 面板。WebDAV 可按类别合并历史、收藏、设置、阅读队列和阅读位置等记录。普通正文、图片、附件和页面缓存不会上传；只有用户单独开启“离线 Topic 下载”后，本地已下载的完整 HTML 才以独立对象同步。
 
 清理本地缓存不等于删除远端同步记录。若需要验证另一浏览器能否恢复队列，应先在来源浏览器完成一次成功同步，再在目标浏览器使用同一账号、地址和远端文件执行“立即同步”。

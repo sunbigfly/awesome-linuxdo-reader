@@ -4,17 +4,44 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
-last_verified: 2026-08-09
-screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
+last_verified: 2026-08-11
+screenshots: ["/screenshots/guide-14-about-v1.3.0.png"]
 ---
 
 # 更新记录
 
-![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.0.0.png)
+![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.3.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.3.0 — 离线 Topic 与安全配置
+
+核验日期：2026-08-11。
+
+### 新增特性
+
+- 新增 Topic 下载窗口，可按全部楼层、只看楼主或自定义楼层在后台补齐正文；完成后可离线查看、保存独立 HTML，并搜索或批量管理下载历史。
+- 离线 HTML 保留楼层跳转、只看楼主、回复分支、引用、回应、富内容与下载时的阅读外观；Topic 已删除、隐藏或不可访问但仍有本地正文时，会降级导出并标明完整性。
+- WebDAV 增加默认关闭的“离线 Topic 下载”类别，以轻量清单和独立明文 HTML 对象同步，不占用 2 MiB 主同步文件；对象 SHA-256、ETag 冲突和本机副本保护进入同一合并链。
+- 设置导出、导入与恢复默认升级为组合配置事务，覆盖偏好、适用站点、翻译和 WebDAV 非敏感规则；翻译 API Key、WebDAV 用户名与密码始终排除，失败时逆序回滚。
+- 已有设置的用户首次进入 v1.3.0 时会收到一次性默认值更新提醒，可选择保留当前设置或仅重置设置。
+
+### 兼容与交互
+
+- 标准 HTTPS Discourse 站点改用本地运行态与 DOM 证据自动识别；深度定制站点仍可验证添加为兜底，非 Discourse 页面保持静默。
+- 阅读队列补齐头像气泡、触控与清空状态投影；图片灯箱导航对齐评论分隔边界；引用跳转同时滚动并高亮目标，包括跨 Topic 与首帖来源。
+- 缺失回复祖先时保留最高可用讨论链；帖子具体时间、评论计数、缓存恢复、429 等待和跨标签页请求协调继续收敛到可恢复状态。
+- 主题通知级别改由 Discourse 原生动作提交并回读，避免自定义请求与宿主状态分叉。
+
+### 文档与发布状态
+
+- 用户手册更新到 1.3.0，新增离线 Topic 专页，并从真实 LINUX DO 页面重新采集阅读器、设置、数据管理、更新提醒、下载窗口和 WebDAV 类别等关键截图。
+- `1.3.0` 已发布到 Greasy Fork：主 Loader 固定版本为 `1899377`，加载 Core `1899370` 与 Features `1899372`。
+- 固定 Loader 原始文件为 3,815 字节，SHA-256 `cb977d5f6f392d8e99bc5640055bf16be94408fe065900d7ad865dceb777f2f6`；移除平台加入的 `@downloadURL none` 后为 3,794 字节，SHA-256 `3e4c975eb214efed857992963c59d730ab67c32ea8779d639f278c6ba326bc7b`，与仓库 Loader 逐字节一致。
+- Core 为 1,682,450 字节，SHA-256 `c3ee925dd30dcf7f831fe0e9d393556db9f1fb1429d7e62ba193f9a56dde7b91`；Features 为 1,839,648 字节，SHA-256 `fa426f71facd50d81e60aa2cb5c7c3ff0a3e11c627d8f372f758b118edbf1345`；CSS 固定到 Git `5ca40cf3025951dbcb94edde29ebb59083c2bb4f`，472,279 字节，SHA-256 `f438522f298ca3a15363685bd8ef5e33e1a5b17c57e801784018a0fbf418a3b4`。
+- 同一快照的 211 个分包契约文件、40 个手册页面与 105 项功能索引检查均已通过；发布阶段复用了已完成的浏览器与性能门禁。
 
 ## 1.2.5 — 帖子具体时间展示
 

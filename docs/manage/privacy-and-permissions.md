@@ -1,28 +1,28 @@
 ---
 title: 隐私、权限与边界
 description: 理解 userscript 权限、WebDAV 凭据与同步边界、LDC 只读数据、外部依赖、本地存储和请求脱敏。
-feature_ids: ["MEDIA-014", "USER-006", "DATA-004", "DATA-005", "DATA-006", "MONITOR-005", "TROUBLE-005"]
-source_anchors: ["lite/src/translation/reader-translation-controller.ts","lite/src/translation/translation-request-adapter.ts","lite/src/cache/response-repository.ts","lite/src/userscript/browser-userscript-environment.ts","lite/src/network/request-observer.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-config-repository.ts","lite/userscript.meta.txt"]
+feature_ids: ["MEDIA-014", "USER-006", "DATA-004", "DATA-005", "DATA-006", "DATA-007", "MONITOR-005", "TROUBLE-005"]
+source_anchors: ["lite/src/translation/reader-translation-controller.ts","lite/src/translation/translation-request-adapter.ts","lite/src/cache/response-repository.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/userscript/browser-userscript-environment.ts","lite/src/network/request-observer.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-config-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
-last_verified: 2026-08-08
-screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
+last_verified: 2026-08-11
+screenshots: ["/screenshots/guide-14-about-v1.3.0.png"]
 ---
 
 # 隐私、权限与边界
 
-![关于面板中的版本、第三方组件、许可证和项目边界信息](/screenshots/guide-14-about-v1.0.0.png)
+![关于面板中的版本、第三方组件、许可证和项目边界信息](/screenshots/guide-14-about-v1.3.0.png)
 
 <p class="image-caption">关于面板集中展示当前版本、第三方参考项目和许可证；账号数据与互动结果仍以 LINUX DO 原站为准。</p>
 
 ## userscript 元数据
 
-当前 `1.2.5`：
+当前 `1.3.0`：
 
 | 字段 | 值 | 用途 |
 | --- | --- | --- |
-| `@match` | 21 个内置社区及 `https://*/*` | 允许内置站点和用户保存的自定义域名启动；其他站点会在业务初始化前退出 |
+| `@match` | 21 个内置社区及 `https://*/*` | 在所有 HTTPS 页面进行无网络的轻量 Discourse 识别；成功才初始化阅读器，失败静默退出 |
 | `@grant` | `GM_getValue`、`GM_setValue` | 保存设置、自定义站点和同账号最近一次 LDC 成功缓存 |
 | `@grant` | `GM_xmlhttpRequest` | 检测自定义站点、读取 LDC 只读账户摘要、访问用户配置的 HTTPS WebDAV、获取允许的跨域公开资源，以及执行用户主动开启的正文翻译 |
 | `@grant` | `GM_getResourceText` | 读取发布版样式资源 |
@@ -46,13 +46,13 @@ screenshots: ["/screenshots/guide-14-about-v1.0.0.png"]
 
 当前浏览器会保存设置、历史、主题快照、用户卡、消息分页、通用响应、最多 240 条正文译文以及部分头像/图片。存储按账号作用域和数据类型隔离、有最大容量和保留期。
 
-设置导出不包含历史、正文、API 响应、图片、Cookie 或账号凭据。
+设置导出可以包含其他适用站点、翻译和 WebDAV 的非敏感规则，但不包含历史、正文、API 响应、图片、Cookie、翻译 API Key、WebDAV 用户名、密码或原站账号凭据。
 
 ## WebDAV 数据与凭据
 
 WebDAV 默认关闭，只有用户填写 HTTPS 地址、账号、应用密码并选择类别后才会访问远端。WebDAV 账号和应用密码只保存在 userscript 专属存储，不进入远端 JSON、设置导出、同步的“设置配置”类别或请求 URL。
 
-远端文件只保存所选类别的结构化记录、更新时间、写入设备标识和删除标记。帖子正文、图片、附件、Cookie、Authorization、WebDAV 密码、页面缓存与短期限流状态永不上传。AI 翻译服务集合和已翻译 Section 缓存默认关闭：前者只在单独启用时写入 URL、模型、参数及使用 WebDAV 应用密码加密的 API Key，后者不包含原文。收藏同步只交换阅读器的链接和定位信息，不直接修改原站收藏状态。
+远端主同步文件只保存所选普通类别的结构化记录、更新时间、写入设备标识和删除标记。Cookie、Authorization、WebDAV 密码、页面缓存与短期限流状态永不上传。离线 Topic、AI 翻译服务集合和已翻译 Section 缓存默认关闭：离线 Topic 只在单独启用时上传轻量清单和每个 Topic 的完整明文 HTML，图片与附件仍保留原 URL；翻译服务只写入 URL、模型、参数及使用 WebDAV 应用密码加密的 API Key；译文缓存不包含原文。收藏同步只交换阅读器的链接和定位信息，不直接修改原站收藏状态。
 
 远端文件受 WebDAV 服务商账号安全和存储政策约束。应使用独立的第三方应用密码；停用同步时可以关闭定时同步并清空本机凭据，但删除远端文件会影响其他设备，需在服务商侧单独确认。
 
@@ -73,7 +73,7 @@ LDC 面板通过显式声明的 `@connect credit.linux.do` 只读取当前登录
 - 只有用户主动切换到双语或全译文后，普通正文文本才会发送给 Google / Microsoft 公共接口或用户选择的 OpenAI 兼容服务；Cookie、原站授权头和表单内容不会附带。
 - 译文进入最多 240 条的中央 Section 缓存，不进入设置导出；只有用户单独启用 WebDAV 的“已翻译 Section 缓存”类别后才跨设备同步，且不携带原文。
 - 翻译 API Key 保存在脚本专属配置；启用 WebDAV 的“AI 翻译服务集合”时，Key 使用当前 WebDAV 应用密码经 PBKDF2 派生密钥后加密，其他配置明文同步。更换应用密码后，旧设备需使用加密时的密码才能解密。
-- 添加自定义站点时只向用户输入的 HTTPS 域名请求公开的 `/site/basic-info.json`，请求使用匿名模式，不附带当前论坛 Cookie。
+- 自动识别未知站点只检查当前页面的 Discourse 原生模块和 DOM 标志，不发送网络请求；只有用户主动添加兼容兜底站点时，才向输入的 HTTPS 域名匿名请求公开的 `/site/basic-info.json`，且不附带当前论坛 Cookie。
 - 第三方翻译服务和目标论坛仍受各自隐私政策、可用性与地区网络限制约束。
 
 ## 截图与问题报告

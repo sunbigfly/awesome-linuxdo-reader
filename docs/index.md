@@ -2,13 +2,13 @@
 layout: home
 title: Awesome LinuxDo Reader 用户手册
 description: LINUX DO 全面适配、兼容中英文及其他语言 Discourse 站点并支持正文翻译的 Awesome LinuxDo Reader 用户手册。
-feature_ids: ["CORE-001", "CORE-002", "CORE-004", "CORE-007", "READ-001", "ACTION-001", "DATA-001", "DATA-006"]
-source_anchors: ["lite/userscript.meta.txt","lite/src/queue/reader-open-queue-session.ts","lite/src/shell/reader-workspace.ts","lite/src/app/reader-application.ts","lite/src/dom/reply-tree.ts","lite/src/app/reader-browser-runtime.ts","lite/src/state/preferences-config-codec.ts","lite/src/sync/reader-webdav-coordinator.ts"]
+feature_ids: ["CORE-001", "CORE-002", "CORE-004", "CORE-007", "READ-001", "ACTION-001", "DATA-001", "DATA-006", "DATA-007"]
+source_anchors: ["lite/userscript.meta.txt","lite/src/queue/reader-open-queue-session.ts","lite/src/shell/reader-workspace.ts","lite/src/app/reader-application.ts","lite/src/dom/reply-tree.ts","lite/src/app/reader-browser-runtime.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/queue/reader-topic-download-manager.ts"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
-last_verified: 2026-08-09
-screenshots: ["/screenshots/guide-01-reader-overview-v1.0.0.png"]
+last_verified: 2026-08-11
+screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png"]
 
 hero:
   name: Awesome LinuxDo Reader
@@ -52,7 +52,11 @@ features:
   - icon: >-
       <!-- @license Lucide Icons v1.26.0 - ISC --><svg class="lucide lucide-cloud-upload" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 13v8"/><path d="m16 17-4-4-4 4"/><path d="M5.6 16.7A5 5 0 0 1 6 7a7 7 0 0 1 13.7 1.7A4.5 4.5 0 0 1 18.5 17H18"/></svg>
     title: WebDAV 跨设备同步
-    details: 历史、收藏、设置、阅读队列和阅读位置等记录可独立选择，并以三方合并避免整份覆盖。
+    details: 历史、收藏、设置、阅读队列、阅读位置与离线 Topic 等记录可独立选择，并以三方合并避免整份覆盖。
+  - icon: >-
+      <!-- @license Lucide Icons v1.26.0 - ISC --><svg class="lucide lucide-download" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+    title: 离线 Topic 阅读
+    details: 后台补齐全部、楼主或自选楼层，生成可搜索、可跳转并可选同步到 WebDAV 的独立 HTML。
   - icon: >-
       <!-- @license Lucide Icons v1.26.0 - ISC --><svg class="lucide lucide-shield-check" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
     title: 有界资源治理
@@ -61,19 +65,19 @@ features:
 
 ## 手册覆盖范围
 
-这套手册对应 userscript `1.2.5`，以 `lite/src/` 与 `lite/styles/` 为事实源。LINUX DO 是完整功能基线，消息、历史、收藏、互动、长帖、楼层关系与性能治理均保持全面适配；脚本也通过运行态识别、站点适配层和插件能力检测兼容中文、英文及其他语言的标准 Discourse 站点。WebDAV 同步由用户主动配置并按类别启用，不上传正文、图片、附件或页面缓存；翻译配置与译文 Section 缓存只有单独勾选后才会同步。
+这套手册对应 userscript `1.3.0`，以 `lite/src/` 与 `lite/styles/` 为事实源。LINUX DO 是完整功能基线，消息、历史、收藏、互动、长帖、楼层关系与性能治理均保持全面适配；脚本也通过运行态识别、站点适配层和插件能力检测兼容中文、英文及其他语言的标准 Discourse 站点。WebDAV 同步由用户主动配置并按类别启用；普通缓存不上传，只有单独开启“离线 Topic 下载”后，完整 HTML 才会作为独立明文对象同步。
 
-脚本内置 20 个其他知名 Discourse 社区，其他 HTTPS Discourse 论坛可验证后添加。站点适配本身不限制内容语言；除内置中文站点 LINUX DO 外，其他内置社区和语言未知的自定义 Discourse 站点另提供原文、双语和简体中文译文三种阅读状态。功能目录记录了每项能力的源码锚点、版本、验证日期、截图和对应文档。
+脚本内置 20 个其他知名 Discourse 社区，并会在任意 HTTPS 域名上以本地运行态和 DOM 证据自动识别标准 Discourse；深度定制站点可验证添加为兼容兜底。站点适配本身不限制内容语言；除内置中文站点 LINUX DO 外，其他 Discourse 社区另提供原文、双语和简体中文译文三种阅读状态。功能目录记录了每项能力的源码锚点、版本、验证日期、截图和对应文档。
 
 ::: tip 推荐路径
 第一次使用按“安装与更新 → 五分钟上手 → 界面总览”阅读。遇到加载、图片或限流问题，直接进入“故障排查”。
 :::
 
-![LINUX DO 列表页右侧嵌入阅读器的完整工作区](/screenshots/guide-01-reader-overview-v1.0.0.png)
+![LINUX DO 列表页右侧嵌入阅读器的完整工作区](/screenshots/guide-01-reader-overview-v1.3.0.png)
 
 <p class="image-caption">阅读器可以保留宿主主题列表，同时在独立工作区中阅读完整主题。</p>
 
-## 先了解四个边界
+## 先了解五个边界
 
 1. 阅读器不接管账号体系，登录、权限、内容和互动结果都以当前 Discourse 原站为准。
 2. 缓存清理只影响当前浏览器里的阅读器数据，不会删除原站帖子、消息、收藏或回应。

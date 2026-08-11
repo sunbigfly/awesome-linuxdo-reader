@@ -1,18 +1,18 @@
 ---
 title: 完整设置参考
 description: 汇总全部设置项、范围、默认值、生效时机和数据影响。
-feature_ids: ["SET-012", "SET-013", "SET-014", "SET-015", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021", "DATA-006"]
-source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree.ts","lite/src/network/request-scheduler.ts","lite/src/dom/reply-tree-repository.ts","lite/src/post/boost-copy-rule.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/sync/reader-webdav-model.ts"]
+feature_ids: ["SET-012", "SET-013", "SET-014", "SET-015", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021", "DATA-006", "DATA-007"]
+source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree.ts","lite/src/network/request-scheduler.ts","lite/src/dom/reply-tree-repository.ts","lite/src/post/boost-copy-rule.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
-last_verified: 2026-08-08
-screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png", "/screenshots/guide-03-image-settings-v1.0.0.png", "/screenshots/guide-04-font-settings-v1.0.0.png", "/screenshots/guide-05-layout-settings-v1.0.0.png", "/screenshots/guide-07-appearance-settings-v1.0.0.png", "/screenshots/guide-09-performance-settings-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-13-data-management-v1.0.0.png", "/screenshots/guide-27-shortcuts-v1.0.0.png", "/screenshots/guide-28-applicable-sites-v1.0.0.png"]
+last_verified: 2026-08-11
+screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png", "/screenshots/guide-03-image-settings-v1.0.0.png", "/screenshots/guide-04-font-settings-v1.0.0.png", "/screenshots/guide-05-layout-settings-v1.0.0.png", "/screenshots/guide-07-appearance-settings-v1.0.0.png", "/screenshots/guide-09-performance-settings-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-13-data-management-v1.3.0.png", "/screenshots/guide-27-shortcuts-v1.0.0.png", "/screenshots/guide-28-applicable-sites-v1.0.0.png", "/screenshots/guide-32-webdav-sync-v1.3.0.png"]
 ---
 
 # 完整设置参考
 
-![设置中心中的分类导航、当前用户信息和配置入口](/screenshots/guide-02-settings-overview-v1.0.0.png)
+![设置中心中的分类导航、当前用户信息和配置入口](/screenshots/guide-02-settings-overview-v1.3.0.png)
 
 <p class="image-caption">截图展示设置中心的基础配置入口；当前版本按三组、17 个面板组织，并支持搜索、翻译设置、快捷方式、WebDAV 同步和统一保存。</p>
 
@@ -86,11 +86,12 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png", "/screenshot
 
 - 服务地址必须是 HTTPS；坚果云默认地址为 `https://dav.jianguoyun.com/dav/`，使用账号邮箱和第三方应用密码。
 - 默认远端文件为 `ALR-Lite/v2/sync.json`。
-- 浏览历史、收藏记录、设置配置、阅读队列、阅读位置与窗口状态、自定义适用站点、Connect 本机观察历史、AI 翻译服务集合和已翻译 Section 缓存共九类独立开关。
+- 浏览历史、收藏记录、设置配置、阅读队列、阅读位置与窗口状态、自定义适用站点、Connect 本机观察历史、AI 翻译服务集合、已翻译 Section 缓存和离线 Topic 下载共十类独立开关。
 - 定时同步默认关闭，可选 15 分钟、30 分钟、1 小时、3 小时和 6 小时。
-- 手动同步使用三方合并与 ETag 条件写入；正文、图片、附件和页面缓存永不上传。翻译 API Key 仅在启用对应类别时以 WebDAV 应用密码加密后写入。
+- 手动同步使用三方合并与 ETag 条件写入；普通正文、图片、附件和页面缓存不会上传。只有单独启用离线 Topic 类别时，完整 HTML 才按 Topic 独立上传；翻译 API Key 仅在启用对应类别时以 WebDAV 应用密码加密后写入。
 
 完整的首次同步、删除传播与故障判断见 [WebDAV 同步](/settings/webdav-sync)。
+离线 HTML 的范围选择、查看与本地删除边界见 [离线 Topic 下载](/guide/offline-topic)。
 | API 启动保护间隔 | 80–500 ms | 100 |
 | API 窗口预算比例 | 50%–95% | 85% |
 
@@ -139,7 +140,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.0.0.png", "/screenshot
 
 ![适用站点面板中的自定义 HTTPS Discourse 验证入口](/screenshots/guide-28-applicable-sites-v1.0.0.png)
 
-输入域名或 HTTPS 网址后，阅读器只匿名检测公开站点信息；确认是 Discourse 后才保存。已内置站点不需要重复添加，验证失败或超时不会写入配置。
+标准 HTTPS Discourse 会自动识别。只有深度定制站点识别失败时才需输入域名或 HTTPS 网址；阅读器只匿名检测公开站点信息，确认是 Discourse 后保存为兼容兜底。已内置站点不需要重复添加，验证失败或超时不会写入配置。
 
 ## 搜索与保存
 

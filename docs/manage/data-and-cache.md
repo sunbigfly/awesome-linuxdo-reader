@@ -1,13 +1,13 @@
 ---
 title: 数据、配置与缓存
 description: 导出导入设置，理解本地与 WebDAV 数据范围，查看和安全清理六类缓存。
-feature_ids: ["COLLECT-004", "DATA-001", "DATA-002", "DATA-003", "DATA-004", "DATA-006", "TROUBLE-004"]
-source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts","lite/src/sync/reader-webdav-coordinator.ts"]
+feature_ids: ["COLLECT-004", "DATA-001", "DATA-002", "DATA-003", "DATA-004", "DATA-006", "DATA-007", "TROUBLE-004"]
+source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
-last_verified: 2026-08-08
-screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
+last_verified: 2026-08-11
+screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png"]
 ---
 
 # 数据、配置与缓存
@@ -17,16 +17,16 @@ screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
 | 类型 | 示例 | 权威位置 | 清理结果 |
 | --- | --- | --- | --- |
 | 阅读器设置 | 图片比例、字体、布局、性能 | 当前浏览器 | 恢复显示和行为默认值 |
-| 阅读器本地数据 | 历史、主题快照、用户卡、消息分页 | 当前浏览器；启用 WebDAV 后仅所选记录进入远端 JSON | 缓存可重建；已成功同步的所选记录可从远端合并恢复 |
+| 阅读器本地数据 | 历史、主题快照、用户卡、消息分页、离线 Topic Artifact | 当前浏览器；启用 WebDAV 后普通记录进入远端 JSON，离线 Topic 使用独立清单和 HTML 对象 | 缓存可重建；已成功同步的所选记录和离线 HTML 可从远端合并恢复 |
 | 原站账号数据 | 帖子、消息、收藏、回应、已读状态 | LINUX DO | 只有对应业务操作才能改变 |
 
 缓存清理不会撤销原站收藏或回应，也不会删除帖子和真实消息。
 
 ## WebDAV 跨设备记录
 
-1.1.0 起，设置中的 [WebDAV 同步](/settings/webdav-sync) 可在多个浏览器之间合并浏览历史、收藏记录、设置配置、阅读队列、阅读位置与窗口状态、自定义适用站点和 Connect 本机观察历史；1.2.0 起另可独立同步 AI 翻译服务集合与已翻译 Section 缓存。
+1.1.0 起，设置中的 [WebDAV 同步](/settings/webdav-sync) 可在多个浏览器之间合并浏览历史、收藏记录、设置配置、阅读队列、阅读位置与窗口状态、自定义适用站点和 Connect 本机观察历史；1.2.0 起另可独立同步 AI 翻译服务集合与已翻译 Section 缓存。1.3.0 再增加默认关闭的“离线 Topic 下载”：本地仍使用元数据和完整 HTML 组成的专用 Artifact，远端按轻量清单与独立 HTML 对象保存。下载、离线查看和删除范围见[离线 Topic 下载](/guide/offline-topic)。
 
-这条链路与缓存清理分开：正文、图片、附件、短期限流状态和页面缓存不会上传；译文缓存只在单独勾选后同步且不含原文，翻译 API Key 只以 WebDAV 应用密码加密后的载荷出现。同步不是整份覆盖；每轮先读取远端，以本机上次成功同步基线执行三方合并，并通过 ETag 条件写入。只有远端写入成功后才应用本机合并结果。
+这条链路与缓存清理分开：普通正文、图片、附件、短期限流状态和页面缓存不会上传；离线 Topic 只有单独勾选后才上传完整明文 HTML，图片和附件仍保留原 URL；译文缓存只在单独勾选后同步且不含原文，翻译 API Key 只以 WebDAV 应用密码加密后的载荷出现。同步不是整份覆盖；每轮先读取远端，以本机上次成功同步基线执行三方合并，并通过 ETag 条件写入。只有远端写入成功后才应用本机合并结果。
 
 定时同步默认关闭，可选 15 分钟到 6 小时；坚果云通常建议 1 小时。需要跨设备立即核对时，应在两端分别执行“立即同步”。
 
@@ -40,30 +40,34 @@ screenshots: ["/screenshots/guide-13-data-management-v1.0.0.png"]
 - 跳转闪烁和等待动画；
 - 性能、主题与其他开关；
 - 规范化后的共享/独立形态配置。
+- 其他适用站点；
+- 翻译服务的 URL、模型、Prompt、速率和动画等非敏感规则；
+- WebDAV 地址、远端路径、同步类别、间隔和开关等非敏感选项。
 
 不包含：
 
 - 浏览历史；
 - 帖子正文或 API 响应；
 - 图片、头像和表情资源；
-- Cookie、凭据或账号资料。
+- Cookie、账号资料、翻译 API Key、WebDAV 用户名或密码。
 
 导入前建议先导出当前配置作为回退。
 
 ## 导入和恢复默认
 
-- 只接受当前配置格式和版本结构；
+- v7 文件包含安全组合设置，同时继续接受旧 v6 组合文件和 v5 偏好文件；
 - 导入会规范化数值和缺失字段；
-- 无效文件不会部分写入；
+- 无效文件不会部分写入；任一仓储写入失败时会逆序恢复已写设置；
 - 导入和恢复全部默认都先经统一确认弹层；
-- 成功后由唯一偏好仓储一次写入并立即投影，无需依赖整页刷新。
+- 同 URL 的翻译 API Key 可继续复用本机值；WebDAV 地址变化或本机没有同地址凭据时会清空连接凭据并关闭定时同步；
+- 成功后立即投影，无需依赖整页刷新。
 
-“恢复全部默认”会覆盖当前阅读器设置。它不会清理所有缓存，也不会改动原站账号。
+“恢复全部默认”会覆盖偏好、其他适用站点、翻译和 WebDAV 设置，并清除本机翻译 API Key 与 WebDAV 用户名、密码。它不会删除阅读队列、浏览历史、缓存或改动原站账号。
 只恢复图片、字体、布局、外观或动效等一个范围时，使用对应设置面板自己的恢复按钮。
 
 ## 六类缓存
 
-![数据管理中的缓存分类、保留期和选择性清理](/screenshots/guide-13-data-management-v1.0.0.png)
+![数据管理中的缓存分类、保留期和选择性清理](/screenshots/guide-13-data-management-v1.3.0.png)
 
 | 类型 | 包含 | 不包含 |
 | --- | --- | --- |

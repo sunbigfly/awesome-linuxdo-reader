@@ -4,10 +4,10 @@ description: 从主题列表建立多主题阅读队列，管理后台预加载�
 feature_ids: ["CORE-006"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts"]
 since: 0.1.2
-version: 1.2.5
+version: 1.3.0
 status: current
 last_verified: 2026-07-28
-screenshots: ["/screenshots/guide-21-reading-queue-v1.0.0.png", "/screenshots/guide-24-reading-queue-entry-v1.0.0.png", "/screenshots/guide-13-data-management-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-16-history-v1.0.0.png"]
+screenshots: ["/screenshots/guide-21-reading-queue-v1.0.0.png", "/screenshots/guide-24-reading-queue-entry-v1.0.0.png", "/screenshots/guide-13-data-management-v1.3.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-16-history-v1.0.0.png"]
 ---
 
 # 阅读队列
@@ -140,7 +140,7 @@ screenshots: ["/screenshots/guide-21-reading-queue-v1.0.0.png", "/screenshots/gu
 
 正文、楼中楼和图片由各自的缓存系统管理。清空队列与清理缓存是两个独立操作。
 
-![数据管理中的缓存统计、清理和本地数据入口](/screenshots/guide-13-data-management-v1.0.0.png)
+![数据管理中的缓存统计、清理和本地数据入口](/screenshots/guide-13-data-management-v1.3.0.png)
 
 <p class="image-caption">需要释放空间时进入“设置 → 数据管理”；这里清理的是正文和资源缓存，不等同于从阅读队列移除文章。</p>
 
