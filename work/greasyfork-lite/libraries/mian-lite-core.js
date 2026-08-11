@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.3.0
+// @version      1.3.1
 // @description  Core runtime modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.3.0 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.3.1 - main-lite-core
  * 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.3.0",
+			sourceVersion: "1.3.1",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.3.0") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.3.1") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -9410,6 +9410,7 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	        throw new Error("emoji menu identifier/context 不能为空");
 	      await Promise.resolve(show.call(menu, anchor, {
 	        identifier,
+	        groupIdentifier: identifier,
 	        component,
 	        modalForMobile: !1,
 	        strategy: "fixed",
@@ -10022,7 +10023,7 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	    return this.#container = urlContainer ?? fallbackContainer, this.#container;
 	  }
 	}
-}, "8ac33fbf90c81fceefe5f8f1a3c45572505d3bf40409ab66e77f656683899be0");
+}, "e604ebb94db5ea5c86eaa0715d6c79b7453fef8f284a2639ea0c32e9948659fe");
 
 /* Source: lite/src/discourse/native-message-bus.ts */
 runtime.register("src/discourse/native-message-bus.js", function(module, exports, require) {
@@ -10710,6 +10711,7 @@ runtime.register("src/discourse/reader-native-composer-window.js", function(modu
 	  discourseNativeFloatingSurfaceVisible: () => discourseNativeFloatingSurfaceVisible,
 	  normalizeReaderNativeComposerGeometry: () => normalizeReaderNativeComposerGeometry,
 	  readerNativeComposerFontPixels: () => readerNativeComposerFontPixels,
+	  readerNativeTopLayerPort: () => readerNativeTopLayerPort,
 	  visibleDiscourseNativeFloatingSurface: () => visibleDiscourseNativeFloatingSurface
 	});
 	module.exports = __toCommonJS(reader_native_composer_window_exports);
@@ -10819,7 +10821,7 @@ runtime.register("src/discourse/reader-native-composer-window.js", function(modu
 	  ), automatic = 12 + Math.min(widthProgress, heightProgress) * 4, ratio = finite(profile.composer, import_reader_preferences_schema.READER_FONT_DEFAULT.composer) / import_reader_preferences_schema.READER_FONT_DEFAULT.composer;
 	  return Math.round(clamp(automatic * ratio, 8, 40) * 100) / 100;
 	}
-	function nativeTopLayerPort() {
+	function readerNativeTopLayerPort() {
 	  return Object.freeze({
 	    isOpen: (element) => {
 	      try {
@@ -10869,7 +10871,7 @@ runtime.register("src/discourse/reader-native-composer-window.js", function(modu
 	  #persistTimer = 0;
 	  #destroyed = !1;
 	  constructor(options) {
-	    this.#document = options.document, this.#window = options.window, this.#mount = options.mount, this.#pageRoot = options.pageRoot ?? options.document.documentElement, this.#readPreferences = options.readPreferences, this.#updatePreferences = options.updatePreferences ?? null, this.#readFontProfile = options.readFontProfile ?? (() => this.#readPreferences().fontProfile), this.#readAppearance = options.readAppearance ?? null, this.#createMutationObserver = options.createMutationObserver ?? ((callback) => new MutationObserver(callback)), this.#requestFrame = options.requestFrame ?? ((callback) => this.#window.requestAnimationFrame(callback)), this.#cancelFrame = options.cancelFrame ?? ((frameId) => this.#window.cancelAnimationFrame(frameId)), this.#setTimer = options.setTimer ?? ((callback, milliseconds) => this.#window.setTimeout(callback, milliseconds)), this.#clearTimer = options.clearTimer ?? ((timerId) => this.#window.clearTimeout(timerId)), this.#topLayer = options.topLayer ?? nativeTopLayerPort(), this.#onError = options.onError ?? (() => {
+	    this.#document = options.document, this.#window = options.window, this.#mount = options.mount, this.#pageRoot = options.pageRoot ?? options.document.documentElement, this.#readPreferences = options.readPreferences, this.#updatePreferences = options.updatePreferences ?? null, this.#readFontProfile = options.readFontProfile ?? (() => this.#readPreferences().fontProfile), this.#readAppearance = options.readAppearance ?? null, this.#createMutationObserver = options.createMutationObserver ?? ((callback) => new MutationObserver(callback)), this.#requestFrame = options.requestFrame ?? ((callback) => this.#window.requestAnimationFrame(callback)), this.#cancelFrame = options.cancelFrame ?? ((frameId) => this.#window.cancelAnimationFrame(frameId)), this.#setTimer = options.setTimer ?? ((callback, milliseconds) => this.#window.setTimeout(callback, milliseconds)), this.#clearTimer = options.clearTimer ?? ((timerId) => this.#window.clearTimeout(timerId)), this.#topLayer = options.topLayer ?? readerNativeTopLayerPort(), this.#onError = options.onError ?? (() => {
 	    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.scope.add(() => this.#teardown()), this.scope.listen(this.#window, "resize", () => {
 	      this.#stopPointer(), this.#geometry ? this.#applyGeometry(this.#geometry) : this.#scheduleChrome(), this.#syncTopLayers(), this.#scheduleOverflow();
 	    }), options.preferenceChanges.subscribe(() => {
@@ -11333,7 +11335,7 @@ runtime.register("src/discourse/reader-native-composer-window.js", function(modu
 	    }
 	  }
 	}
-}, "c462073f6eca24787c0d7cbc069c4c9e7c74db26a4696d75f3182228f4b82aea");
+}, "d674a438db35fb347aa846080f5daf9be522cab21542eae7a11a226266457c9b");
 
 /* Source: lite/src/dom/event-target.ts */
 runtime.register("src/dom/event-target.js", function(module, exports, require) {

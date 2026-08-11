@@ -257,7 +257,7 @@ export function readerNativeComposerFontPixels(
 	return Math.round(clamp(automatic * ratio, 8, 40) * 100) / 100;
 }
 
-function nativeTopLayerPort(): ReaderNativeComposerTopLayerPort {
+export function readerNativeTopLayerPort(): ReaderNativeComposerTopLayerPort {
 	return Object.freeze({
 		isOpen: (element: HTMLElement) => {
 			try {
@@ -340,7 +340,7 @@ export class ReaderNativeComposerWindowController {
 			this.#window.setTimeout(callback, milliseconds));
 		this.#clearTimer = options.clearTimer ?? ((timerId) =>
 			this.#window.clearTimeout(timerId));
-		this.#topLayer = options.topLayer ?? nativeTopLayerPort();
+		this.#topLayer = options.topLayer ?? readerNativeTopLayerPort();
 		this.#onError = options.onError ?? (() => {});
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		this.scope.add(() => this.#teardown());

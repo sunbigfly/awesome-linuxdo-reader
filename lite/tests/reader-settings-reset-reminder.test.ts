@@ -1,4 +1,5 @@
 import {
+	READER_SETTINGS_RESET_REMINDER_CAMPAIGN,
 	READER_SETTINGS_RESET_REMINDER_STORAGE_KEY,
 	showReaderSettingsResetReminder,
 } from '../src/settings/reader-settings-reset-reminder.js';
@@ -41,13 +42,12 @@ const freshResult = await showReaderSettingsResetReminder({
 		},
 		show: () => {},
 	},
-	campaign: 'settings-v1',
 });
 assert(
 	freshResult === 'skipped' &&
 	freshConfirmations === 0 &&
 	freshStorage.getItem(READER_SETTINGS_RESET_REMINDER_STORAGE_KEY) ===
-		'settings-v1',
+		READER_SETTINGS_RESET_REMINDER_CAMPAIGN,
 	'新用户必须静默锁定当前 campaign，不能在首次安装时提示恢复默认',
 );
 
@@ -74,21 +74,18 @@ const options = {
 };
 
 assert(
-	await showReaderSettingsResetReminder({
-		...options,
-		campaign: 'settings-v1',
-	}) === 'kept' &&
+	await showReaderSettingsResetReminder(options) === 'kept' &&
 	confirmations.length === 1 &&
+	confirmations[0]?.message.includes('完整应用新版体验') === true &&
 	confirmations[0]?.confirmLabel === '恢复默认值' &&
 	confirmations[0]?.cancelLabel === '保留当前设置' &&
+	storage.getItem(READER_SETTINGS_RESET_REMINDER_STORAGE_KEY) ===
+		READER_SETTINGS_RESET_REMINDER_CAMPAIGN &&
 	updates.length === 0,
-	'老用户在新 campaign 首次启动必须只收到一次可保留当前设置的恢复提示',
+	'老用户在 1.3.1 campaign 首次启动必须只收到一次可保留当前设置的体验提示',
 );
 assert(
-	await showReaderSettingsResetReminder({
-		...options,
-		campaign: 'settings-v1',
-	}) === 'skipped' &&
+	await showReaderSettingsResetReminder(options) === 'skipped' &&
 	confirmations.length === 1,
 	'同一 campaign 后续启动必须保持锁定，不能重复提示',
 );
@@ -97,7 +94,7 @@ confirm = true;
 assert(
 	await showReaderSettingsResetReminder({
 		...options,
-		campaign: 'settings-v2',
+		campaign: `${READER_SETTINGS_RESET_REMINDER_CAMPAIGN}-next`,
 	}) === 'reset' &&
 	Number(confirmations.length) === 2 &&
 	Number(updates.length) === 1 &&

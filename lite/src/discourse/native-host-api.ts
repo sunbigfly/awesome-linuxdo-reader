@@ -869,6 +869,7 @@ export function discourseNativeEmojiMenu(
 			}
 			await Promise.resolve(show.call(menu, anchor, {
 				identifier,
+				groupIdentifier: identifier,
 				component,
 				modalForMobile: false,
 				strategy: 'fixed',

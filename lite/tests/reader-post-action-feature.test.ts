@@ -405,6 +405,7 @@ let positionBoostEmoji:
 	| undefined;
 let boostEmojiShows = 0;
 let boostEmojiCloses = 0;
+const boostEmojiTopLayers = new Set<HTMLElement>();
 let scheduledId = 0;
 const scheduled = new Map<number, () => void>();
 let boostCopySettings: BoostCopySettings = {
@@ -464,6 +465,15 @@ const feature = new ReaderPostActionFeature<TestTopic, TestPost>({
 		},
 		close() {
 			boostEmojiCloses += 1;
+		},
+	},
+	topLayer: {
+		isOpen: (element) => boostEmojiTopLayers.has(element),
+		show: (element) => {
+			boostEmojiTopLayers.add(element);
+		},
+		hide: (element) => {
+			boostEmojiTopLayers.delete(element);
 		},
 	},
 	confirmBoostDelete: () => {
@@ -1406,6 +1416,10 @@ assert(
 const boostEmojiPicker = document.createElement('div');
 boostEmojiPicker.className = 'emoji-picker';
 boostEmojiPicker.append(document.createElement('div'));
+const boostEmojiSurface = document.createElement('div');
+boostEmojiSurface.className = 'fk-d-menu';
+boostEmojiSurface.dataset.identifier = 'ldp-native-boost-emoji-picker';
+boostEmojiSurface.append(boostEmojiPicker);
 Object.defineProperties(document.documentElement, {
 	clientWidth: { configurable: true, value: 640 },
 	clientHeight: { configurable: true, value: 240 },
@@ -1439,14 +1453,17 @@ copiedBoostMenu.getBoundingClientRect = () => ({
 	height: 40,
 	toJSON: () => ({}),
 });
-document.body.append(boostEmojiPicker);
+document.body.append(boostEmojiSurface);
 positionBoostEmoji?.(boostEmojiPicker);
 assert(
 	boostEmojiPicker.classList.contains('ldp-boost-picker-constrained') &&
 		boostEmojiPicker.style.height === '224px' &&
 		boostEmojiPicker.style.getPropertyValue('--ldp-boost-picker-top') ===
-			'8px',
-	'高于 Reader/viewport 可用区的原生 emoji picker 必须复用既有 constrained CSS 并夹入边界',
+			'8px' &&
+		boostEmojiSurface.getAttribute('popover') === 'manual' &&
+		boostEmojiSurface.dataset.ldpReaderTopLayer === 'portal' &&
+		boostEmojiTopLayers.has(boostEmojiSurface),
+	'原生 emoji picker 必须进入与回复浮窗一致的 top layer，再复用 constrained CSS 夹入 Reader 边界',
 );
 boostEmojiPicker.dispatchEvent(new parsedWindow.Event('scroll', {
 	bubbles: true,
@@ -1455,16 +1472,19 @@ assert(
 	!copiedBoostMenu.hidden,
 	'Boost 内部 emoji picker 滚动不得被 document capture listener 误判为阅读流滚动并关闭 composer',
 );
-boostEmojiPicker.remove();
+boostEmojiSurface.remove();
 const detachedCopyAnchor =
 	regular.slots.boost.querySelector<HTMLElement>('[data-boost-copy]')!;
 feature.afterRender(comment, regular);
 assert(
 	copiedBoostMenu.hidden &&
 		!detachedCopyAnchor.isConnected &&
+		!boostEmojiTopLayers.has(boostEmojiSurface) &&
+		!boostEmojiSurface.hasAttribute('popover') &&
+		!boostEmojiSurface.dataset.ldpReaderTopLayer &&
 		regular.slots.actions.querySelector('[data-post-boost]')
 			?.getAttribute('aria-expanded') === 'false',
-	'canonical 重投替换 Boost copy anchor 前必须收口唯一 composer，不能遗留脱离 DOM 的 anchor 或错误 ARIA',
+	'canonical 重投替换 Boost copy anchor 前必须收口 composer、宿主 top layer 与 ARIA，不能遗留脱离 DOM 的 owner',
 );
 document.dispatchEvent(new parsedWindow.Event('scroll'));
 assert(boostEmojiCloses > 0, '关闭 Boost composer 必须同步关闭原生 emoji surface');

@@ -806,6 +806,7 @@ const emojiData = emojiShowInput?.data as Readonly<Record<string, unknown>>;
 emojiMenu.close('boost-picker');
 assert(
 	emojiShowInput?.identifier === 'boost-picker' &&
+		emojiShowInput.groupIdentifier === 'boost-picker' &&
 		emojiShowInput.strategy === 'fixed' &&
 		emojiData.context === 'boost' &&
 		selectedEmoji === 'smile' &&

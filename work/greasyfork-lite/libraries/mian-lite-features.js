@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.3.0
+// @version      1.3.1
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户、通知、监控与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.3.0 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.3.1 - main-lite-features
  * 媒体、互动、设置、用户、通知、监控与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.3.0",
+			sourceVersion: "1.3.1",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.3.0") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.3.1") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -16382,7 +16382,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	  ReaderPostActionFeature: () => ReaderPostActionFeature
 	});
 	module.exports = __toCommonJS(reader_post_action_feature_exports);
-	var import_cache_identity = require("../cache/cache-identity.js"), import_event_target = require("../dom/event-target.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_value_record = require("../kernel/value-record.js"), import_reader_icon = require("../components/reader-icon.js"), import_post_action_manifest_controller = require("./post-action-manifest-controller.js"), import_boost_copy_rule = require("./boost-copy-rule.js"), import_reader_topic_notification_coordinator = require("./reader-topic-notification-coordinator.js"), import_reader_topic_header = require("../topic/reader-topic-header.js");
+	var import_cache_identity = require("../cache/cache-identity.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_event_target = require("../dom/event-target.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_value_record = require("../kernel/value-record.js"), import_reader_icon = require("../components/reader-icon.js"), import_post_action_manifest_controller = require("./post-action-manifest-controller.js"), import_boost_copy_rule = require("./boost-copy-rule.js"), import_reader_topic_notification_coordinator = require("./reader-topic-notification-coordinator.js"), import_reader_topic_header = require("../topic/reader-topic-header.js");
 	const BOOST_IDENTITY_CLASS_BY_TYPE = Object.freeze({
 	  me: "ldp-boost-identity-me",
 	  op: "ldp-boost-identity-op",
@@ -16532,6 +16532,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	  #currentUsernameFallback;
 	  #readBoostCopySettings;
 	  #emojiMenu;
+	  #topLayer;
 	  #confirmBoostDelete;
 	  #requestBoostReport;
 	  #requestPostReport;
@@ -16566,12 +16567,13 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	  #boostPreviousEditorHtml = "";
 	  #boostGeneration = 0;
 	  #boostPositionFrame = null;
+	  #boostEmojiTopLayer = null;
 	  #hostRuntimeReadyTimer = null;
 	  #hostRuntimeReadyAttempt = 0;
 	  #hostRuntimeRetryNeeded = !1;
 	  #boostDeleting = /* @__PURE__ */ new Set();
 	  constructor(options) {
-	    this.#document = options.document, this.#surfaceHost = options.surfaceHost ?? options.document.body ?? options.document.documentElement, this.#topic = options.topic, this.#actions = options.actions, this.#commands = options.commands, this.#descriptors = options.descriptors, this.#models = options.models, this.#reactions = options.reactions, this.#capabilityInput = options.capabilityInput, this.#topicActionRail = options.topicActionRail === !0, this.#refreshMissingCapabilities = options.refreshMissingCapabilities ?? null, this.#presentation = options.presentation ?? null, this.#currentUsernameFallback = String(options.currentUsername ?? "").trim().toLocaleLowerCase(), this.#readBoostCopySettings = options.readBoostCopySettings ?? null, this.#emojiMenu = options.emojiMenu ?? null, this.#confirmBoostDelete = options.confirmBoostDelete ?? null, this.#requestBoostReport = options.reportBoost ?? null, this.#requestPostReport = options.reportPost ?? null, this.#bookmarks = options.bookmarks ?? null, this.#shares = options.shares ?? null, this.#topicNotifications = options.topicNotifications ?? null, this.#sharedIssue = options.sharedIssue ?? null, this.#management = options.management ?? null, this.#notify = options.notify ?? (() => {
+	    this.#document = options.document, this.#surfaceHost = options.surfaceHost ?? options.document.body ?? options.document.documentElement, this.#topic = options.topic, this.#actions = options.actions, this.#commands = options.commands, this.#descriptors = options.descriptors, this.#models = options.models, this.#reactions = options.reactions, this.#capabilityInput = options.capabilityInput, this.#topicActionRail = options.topicActionRail === !0, this.#refreshMissingCapabilities = options.refreshMissingCapabilities ?? null, this.#presentation = options.presentation ?? null, this.#currentUsernameFallback = String(options.currentUsername ?? "").trim().toLocaleLowerCase(), this.#readBoostCopySettings = options.readBoostCopySettings ?? null, this.#emojiMenu = options.emojiMenu ?? null, this.#topLayer = options.topLayer ?? (0, import_reader_native_composer_window.readerNativeTopLayerPort)(), this.#confirmBoostDelete = options.confirmBoostDelete ?? null, this.#requestBoostReport = options.reportBoost ?? null, this.#requestPostReport = options.reportPost ?? null, this.#bookmarks = options.bookmarks ?? null, this.#shares = options.shares ?? null, this.#topicNotifications = options.topicNotifications ?? null, this.#sharedIssue = options.sharedIssue ?? null, this.#management = options.management ?? null, this.#notify = options.notify ?? (() => {
 	    }), this.#composer = options.composer ?? null, this.#renderIcon = options.renderIcon ?? null;
 	    const defaultView = this.#document.defaultView;
 	    this.#eagerContextActions = !!defaultView?.matchMedia?.("(hover: none)").matches, this.#schedule = options.schedule ?? ((callback, delayMs) => defaultView ? defaultView.setTimeout(callback, delayMs) : globalThis.setTimeout(callback, delayMs)), this.#cancelSchedule = options.cancelSchedule ?? ((handle) => {
@@ -17472,7 +17474,9 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	  #positionBoostEmojiPicker(content) {
 	    const menu = this.#boostMenu;
 	    if (!menu || menu.hidden || !content.isConnected) return;
-	    content.classList.add("ldp-boost-picker-positioned");
+	    this.#promoteBoostEmojiTopLayer(
+	      content.closest(".fk-d-menu") ?? content
+	    ), content.classList.add("ldp-boost-picker-positioned");
 	    const viewport = this.#document.documentElement, readerRect = this.#boostBinding?.view.slots.root.closest(
 	      ".ldp-modal"
 	    )?.getBoundingClientRect(), menuRect = menu.getBoundingClientRect(), padding = 8, gap = 8, leftBound = Math.max(padding, readerRect?.left ?? padding), rightBound = Math.min(
@@ -17518,6 +17522,29 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	      "--ldp-boost-picker-top",
 	      `${Math.round(top)}px`
 	    );
+	  }
+	  #promoteBoostEmojiTopLayer(content) {
+	    if (this.#boostEmojiTopLayer && this.#boostEmojiTopLayer !== content && this.#releaseBoostEmojiTopLayer(), !(content.hasAttribute("popover") && this.#boostEmojiTopLayer !== content)) {
+	      this.#boostEmojiTopLayer !== content && (content.setAttribute("popover", "manual"), content.dataset.ldpReaderTopLayer = "portal", this.#boostEmojiTopLayer = content);
+	      try {
+	        if (this.#topLayer.isOpen(content) || this.#topLayer.show(content), this.#topLayer.isOpen(content)) return;
+	      } catch (cause) {
+	        this.#onError(cause);
+	      }
+	      this.#releaseBoostEmojiTopLayer();
+	    }
+	  }
+	  #releaseBoostEmojiTopLayer() {
+	    const content = this.#boostEmojiTopLayer;
+	    if (content) {
+	      this.#boostEmojiTopLayer = null;
+	      try {
+	        this.#topLayer.isOpen(content) && this.#topLayer.hide(content);
+	      } catch (cause) {
+	        this.#onError(cause);
+	      }
+	      content.removeAttribute("popover"), delete content.dataset.ldpReaderTopLayer;
+	    }
 	  }
 	  #openBoost(binding, anchor, initialRaw = "") {
 	    if (this.#boostAnchor === anchor && this.#boostMenu && !this.#boostMenu.hidden) {
@@ -17587,7 +17614,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	    const anchor = this.#boostAnchor, closed = !!(anchor || this.#boostMenu && !this.#boostMenu.hidden || this.#document.querySelector(
 	      `[data-identifier="${BOOST_EMOJI_MENU_IDENTIFIER}"]`
 	    )), defaultView = this.#document.defaultView;
-	    return this.#boostPositionFrame !== null && typeof defaultView?.cancelAnimationFrame == "function" && defaultView.cancelAnimationFrame(this.#boostPositionFrame), this.#boostPositionFrame = null, this.#boostGeneration += 1, this.#boostBinding = null, this.#boostAnchor = null, this.#boostSubmitting = !1, this.#boostComposing = !1, this.#boostPointerDownOwned = !1, this.#boostPreviousEditorHtml = "", this.#emojiMenu?.close(BOOST_EMOJI_MENU_IDENTIFIER), this.#boostMenu && (this.#boostMenu.hidden = !0, this.#boostMenu.removeAttribute("aria-busy")), anchor?.setAttribute("aria-expanded", "false"), closed;
+	    return this.#boostPositionFrame !== null && typeof defaultView?.cancelAnimationFrame == "function" && defaultView.cancelAnimationFrame(this.#boostPositionFrame), this.#boostPositionFrame = null, this.#boostGeneration += 1, this.#boostBinding = null, this.#boostAnchor = null, this.#boostSubmitting = !1, this.#boostComposing = !1, this.#boostPointerDownOwned = !1, this.#boostPreviousEditorHtml = "", this.#releaseBoostEmojiTopLayer(), this.#emojiMenu?.close(BOOST_EMOJI_MENU_IDENTIFIER), this.#boostMenu && (this.#boostMenu.hidden = !0, this.#boostMenu.removeAttribute("aria-busy")), anchor?.setAttribute("aria-expanded", "false"), closed;
 	  }
 	  async #submitBoost() {
 	    const menu = this.#boostMenu, binding = this.#boostBinding;
@@ -18240,7 +18267,7 @@ ${content}
 	    !binding || !binding.root.classList.contains("ldp-topic-action-rail-post") || (binding.open = !1, expanded && !binding.contextHydrated && (binding.contextHydrated = !0, this.#renderActions(binding)), this.#clearReactionHoverTimers(binding.slot), this.#syncReactionPickerVisibility(binding));
 	  }
 	}
-}, "dabaa3a64186c965aed3bcfb27bd2299123c0676b4a8f0f9462afaa06b52595f");
+}, "0889d23a78776ae20653bf783e629f48b5055ab23675c25f3bde29740103a95e");
 
 /* Source: lite/src/post/reader-post-management-action-coordinator.ts */
 runtime.register("src/post/reader-post-management-action-coordinator.js", function(module, exports, require) {
@@ -27017,7 +27044,7 @@ runtime.register("src/settings/reader-settings-reset-reminder.js", function(modu
 	  showReaderSettingsResetReminder: () => showReaderSettingsResetReminder
 	});
 	module.exports = __toCommonJS(reader_settings_reset_reminder_exports);
-	const READER_SETTINGS_RESET_REMINDER_STORAGE_KEY = "linuxdo-enhanced-reader:settings-reset-reminder", READER_SETTINGS_RESET_REMINDER_CAMPAIGN = "settings-contract-2026-08";
+	const READER_SETTINGS_RESET_REMINDER_STORAGE_KEY = "linuxdo-enhanced-reader:settings-reset-reminder", READER_SETTINGS_RESET_REMINDER_CAMPAIGN = "settings-contract-2026-08-r2";
 	function nonEmpty(value, name) {
 	  const normalized = String(value).trim();
 	  if (!normalized) throw new Error(`${name} 不能为空`);
@@ -27069,7 +27096,7 @@ runtime.register("src/settings/reader-settings-reset-reminder.js", function(modu
 	    return "failed";
 	  }
 	}
-}, "adcdf20047ba6ff05c963a73617b4e72d76ad8db1943edae4f8e818b87fe13c8");
+}, "fe100d20146e09c91554357a2f8c0cf416f1e9b7763eb78e60201f3bc6815816");
 
 /* Source: lite/src/settings/reader-settings-view.ts */
 runtime.register("src/settings/reader-settings-view.js", function(module, exports, require) {

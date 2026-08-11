@@ -5,6 +5,10 @@ import type {
 } from '../discourse/native-composer.js';
 import { sharedCacheIdToken } from '../cache/cache-identity.js';
 import type { DiscourseNativePostModelFactory } from '../discourse/native-post-model-factory.js';
+import {
+	readerNativeTopLayerPort,
+	type ReaderNativeComposerTopLayerPort,
+} from '../discourse/reader-native-composer-window.js';
 import type {
 	DiscourseNativeEmojiMenuPort,
 	DiscourseNativeTopicPresentationPort,
@@ -109,6 +113,7 @@ export interface ReaderPostActionFeatureOptions<
 	readonly currentUsername?: string;
 	readonly readBoostCopySettings?: () => BoostCopySettings;
 	readonly emojiMenu?: DiscourseNativeEmojiMenuPort;
+	readonly topLayer?: ReaderNativeComposerTopLayerPort;
 	readonly confirmBoostDelete?: (boost: Readonly<{
 		readonly boostId: number;
 		readonly username: string;
@@ -507,6 +512,7 @@ export class ReaderPostActionFeature<
 		| (() => BoostCopySettings)
 		| null;
 	readonly #emojiMenu: DiscourseNativeEmojiMenuPort | null;
+	readonly #topLayer: ReaderNativeComposerTopLayerPort;
 	readonly #confirmBoostDelete:
 		| NonNullable<
 			ReaderPostActionFeatureOptions<TTopic, TPost>[
@@ -563,6 +569,7 @@ export class ReaderPostActionFeature<
 	#boostPreviousEditorHtml = '';
 	#boostGeneration = 0;
 	#boostPositionFrame: number | null = null;
+	#boostEmojiTopLayer: HTMLElement | null = null;
 	#hostRuntimeReadyTimer: number | null = null;
 	#hostRuntimeReadyAttempt = 0;
 	#hostRuntimeRetryNeeded = false;
@@ -590,6 +597,7 @@ export class ReaderPostActionFeature<
 			.toLocaleLowerCase();
 		this.#readBoostCopySettings = options.readBoostCopySettings ?? null;
 		this.#emojiMenu = options.emojiMenu ?? null;
+		this.#topLayer = options.topLayer ?? readerNativeTopLayerPort();
 		this.#confirmBoostDelete = options.confirmBoostDelete ?? null;
 		this.#requestBoostReport = options.reportBoost ?? null;
 		this.#requestPostReport = options.reportPost ?? null;
@@ -2410,6 +2418,9 @@ export class ReaderPostActionFeature<
 	#positionBoostEmojiPicker(content: HTMLElement): void {
 		const menu = this.#boostMenu;
 		if (!menu || menu.hidden || !content.isConnected) return;
+		this.#promoteBoostEmojiTopLayer(
+			content.closest<HTMLElement>('.fk-d-menu') ?? content,
+		);
 		content.classList.add('ldp-boost-picker-positioned');
 		const viewport = this.#document.documentElement;
 		const reader = this.#boostBinding?.view.slots.root.closest<HTMLElement>(
@@ -2481,6 +2492,41 @@ export class ReaderPostActionFeature<
 			'--ldp-boost-picker-top',
 			`${Math.round(top)}px`,
 		);
+	}
+
+	#promoteBoostEmojiTopLayer(content: HTMLElement): void {
+		if (this.#boostEmojiTopLayer && this.#boostEmojiTopLayer !== content) {
+			this.#releaseBoostEmojiTopLayer();
+		}
+		if (
+			content.hasAttribute('popover') &&
+			this.#boostEmojiTopLayer !== content
+		) return;
+		if (this.#boostEmojiTopLayer !== content) {
+			content.setAttribute('popover', 'manual');
+			content.dataset.ldpReaderTopLayer = 'portal';
+			this.#boostEmojiTopLayer = content;
+		}
+		try {
+			if (!this.#topLayer.isOpen(content)) this.#topLayer.show(content);
+			if (this.#topLayer.isOpen(content)) return;
+		} catch (cause) {
+			this.#onError(cause);
+		}
+		this.#releaseBoostEmojiTopLayer();
+	}
+
+	#releaseBoostEmojiTopLayer(): void {
+		const content = this.#boostEmojiTopLayer;
+		if (!content) return;
+		this.#boostEmojiTopLayer = null;
+		try {
+			if (this.#topLayer.isOpen(content)) this.#topLayer.hide(content);
+		} catch (cause) {
+			this.#onError(cause);
+		}
+		content.removeAttribute('popover');
+		delete content.dataset.ldpReaderTopLayer;
 	}
 
 	#openBoost(
@@ -2654,6 +2700,7 @@ export class ReaderPostActionFeature<
 		this.#boostComposing = false;
 		this.#boostPointerDownOwned = false;
 		this.#boostPreviousEditorHtml = '';
+		this.#releaseBoostEmojiTopLayer();
 		this.#emojiMenu?.close(BOOST_EMOJI_MENU_IDENTIFIER);
 		if (this.#boostMenu) {
 			this.#boostMenu.hidden = true;
