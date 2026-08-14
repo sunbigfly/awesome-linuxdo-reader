@@ -322,7 +322,6 @@
 	const LDP_CONFIG_EXPORT_VERSION = 5;
 	const LDP_HISTORY_KEY = 'linuxdo-enhanced-reader:history';
 	const LDP_READER_QUEUE_KEY = 'linuxdo-enhanced-reader:reader-queue:v1';
-	const LDP_REPLY_BRANCH_STATE_KEY = 'linuxdo-enhanced-reader:reply-branches:v1';
 	const LDP_REPLY_WINDOW_STATE_KEY = 'linuxdo-enhanced-reader:reply-window:v1';
 	const LDP_TOPIC_CACHE_KEY = 'linuxdo-enhanced-reader:cache:topics';
 	const LDP_TOPIC_NAV_ICON_CACHE_KEY = 'linuxdo-enhanced-reader:cache:topic-nav-icons';
@@ -342,8 +341,14 @@
 	const LDP_LIGHTBOX_IMAGE_CACHE_NAME = 'linuxdo-enhanced-reader:lightbox-images:v1';
 	const LDP_RESPONSE_CACHE_DB_NAME = 'linuxdo-enhanced-reader:responses:v1';
 	const LDP_RESPONSE_CACHE_STORE = 'responses';
+	const RESPONSE_CACHE_OPERATION_TIMEOUT = 5000;
 	const PERSISTENT_CACHE_VERSION = 1;
 	const TOPIC_SNAPSHOT_VERSION = 1;
+	// v2 不再接受“只有计数、没有子楼层编号”的关系条目；旧快照自动失效并按需重建。
+	const NESTED_REPLY_SNAPSHOT_VERSION = 2;
+	const NESTED_REPLY_SNAPSHOT_KEY = '_ldpNestedReplyCache';
+	const NESTED_REPLY_CACHE_MAX_PARENTS = 512;
+	const NESTED_REPLY_CACHE_MAX_CHILDREN = 1000;
 	const TOPIC_SNAPSHOT_WRITE_DELAY = 750;
 	const TOPIC_SNAPSHOT_WRITE_MAX_DELAY = 3000;
 	const MINUTE = 60 * 1000;
@@ -462,20 +467,20 @@
 			description: '控制当前页面前后保留多少楼层；远处内容会卸载以节省内存，不会因此发起网络请求。',
 			fields: [
 				{ key: 'streamOverscanViewports', pref: 'performanceStreamOverscan', presets: [0.35, 1.25, 2], limits: { min: 0.25, max: 3, step: 0.05 }, title: '屏幕外预留范围', unit: '屏', inputMode: 'decimal',
-					description: '在当前可见区域前后额外保留多少屏内容；数值越大，快速滚动越不容易看到空白，但更占内存。',
-					help: '在当前屏幕前后额外保留多少屏楼层元素。它只影响页面渲染和内存，不会发起楼层请求，并受“同时保留楼层上限”约束。' },
+					description: '在当前可见区域前后额外保留多少屏内容；树状回复开启时不会低于它的预加载距离。',
+					help: '在当前屏幕前后额外保留多少屏楼层元素。树状回复开启时会与树预加载距离取较大值，并受“同时保留楼层上限”约束。' },
 				{ key: 'streamMaxItems', pref: 'performanceStreamMaxItems', presets: [28, 72, 96], limits: { min: 24, max: 128, step: 1, integer: true }, title: '同时保留楼层上限', unit: '个', inputMode: 'numeric',
 					description: '页面同时保留的楼层数量上限；离当前阅读位置较远的楼层会卸载，滚回时再恢复。',
 					help: '首次进入、滚动和跳转期间，页面最多同时保留多少个主楼层元素。远处楼层会从页面结构中卸载，并用等高占位保持滚动位置。' },
 			],
 		},
 		{
-			id: 'nested', title: '二级回复预加载',
-			description: '父楼层接近屏幕时，自动加载它下面的直接回复。',
+			id: 'nested', title: '树状回复预加载',
+			description: '父楼层或已展开的树节点接近屏幕时，自动加载它下面的直接回复。',
 			fields: [
-				{ key: 'nestedPrefetchViewports', pref: 'performanceNestedPrefetch', presets: [0.35, 1.25, 2], limits: { min: 0, max: 3, step: 0.05 }, title: '提前加载距离', unit: '屏', inputMode: 'decimal',
-					description: '0 表示父楼层进入屏幕后再加载；大于 0 表示提前对应屏数加载。每个父楼层首批最多加载 20 条直接回复。',
-					help: '父楼层距离当前屏幕多远时开始加载直接回复。0 表示进入屏幕后加载；数值越大越早加载，也会更早产生网络请求。' },
+				{ key: 'nestedPrefetchViewports', pref: 'performanceNestedPrefetch', presets: [1, 1.25, 2], limits: { min: 1, max: 3, step: 0.05 }, title: '提前加载距离', unit: '屏', inputMode: 'decimal',
+					description: '在树节点进入屏幕前后至少一屏开始请求并预渲染；每个节点首批最多加载 20 条直接回复。',
+					help: '父楼层和树中后续节点距离当前屏幕多远时开始加载直接回复。最少保留前后一屏；数值越大越早请求并创建嵌套 DOM。' },
 			],
 		},
 		{
@@ -666,6 +671,7 @@
 	const NOTIFICATION_PAGE_SIZE = 24;
 	const NOTIFICATION_CACHE_FRESH_FOR = MINUTE;
 	const NOTIFICATION_LIVE_REFRESH_DEBOUNCE = 240;
+	const NOTIFICATION_REACTION_REQUEST_TIMEOUT = 30000;
 	const LIGHTBOX_COMMENT_RELATION_CACHE_FRESH_FOR = 10 * MINUTE;
 	const HISTORY_PAGE_SIZE = 20;
 	const BOOKMARKS_PAGE_SIZE = 20;
@@ -786,11 +792,87 @@
 	const READER_QUEUE_PREFETCH_IDLE_DELAY = 900;
 	const READER_QUEUE_PREFETCH_INTERACTION_SETTLE = 700;
 	const READER_QUEUE_DOCK_THRESHOLD_RATIO = .01;
+	const TOPIC_ACTION_RAIL_MODES = Object.freeze(['collapsed', 'compact', 'expanded']);
 	const READER_LOADING_ANIMATION_KEYS = Object.freeze([
 		'portal', 'constellation', 'corridor', 'typewave', 'crystal',
 		'marginalia', 'chapters', 'quoteecho', 'footnotes', 'inkverse',
 	]);
 	const READER_LOADING_ANIMATION_DEFAULT = 'quoteecho';
+	const READER_SHORTCUT_GROUPS = Object.freeze([
+		{ id: 'navigation', title: '浏览导航', description: '在阅读历史和当前帖子的关键位置之间移动。', actions: [
+			{ id: 'historyBack', label: '上一条阅读历史', description: '切换到上一条帖子并保存当前位置。', defaults: ['ArrowLeft', 'Mouse3'], selector: '.ldp-reader-history-back' },
+			{ id: 'historyForward', label: '下一条阅读历史', description: '切换到下一条帖子并恢复阅读位置。', defaults: ['ArrowRight', 'Mouse4'], selector: '.ldp-reader-history-forward' },
+			{ id: 'topicTop', label: '回到帖子开头', description: '跳到主楼。', defaults: ['Home'], selector: '.ldp-topic-timeline-top,.ldp-title-jump' },
+			{ id: 'topicBottom', label: '跳到帖子末尾', description: '跳到当前帖子最后可见楼层。', defaults: ['End'], selector: '.ldp-topic-timeline-relative' },
+			{ id: 'floorJump', label: '跳到指定楼层', description: '打开楼层号输入框。', defaults: [], selector: '.ldp-topic-timeline-jump' },
+			{ id: 'discussionHorizontalScroll', label: '完整讨论横向滚动', description: '树状层级超出宽度时，按滚轮方向左右查看。', defaults: ['Shift+Wheel'], special: 'discussionHorizontalScroll' },
+		] },
+		{ id: 'reading', title: '阅读工具', description: '切换阅读过滤、翻译和内容刷新。', actions: [
+			{ id: 'onlyAuthor', label: '只看楼主', description: '切换只看楼主模式。', defaults: [], selector: '.ldp-only-op-toggle' },
+			{ id: 'translate', label: '切换正文翻译', description: '在原文、双语和译文模式之间切换。', defaults: [], selector: '.ldp-translate-toggle' },
+			{ id: 'refreshTopic', label: '刷新当前帖子', description: '清除当前帖子缓存并重新加载。', defaults: [], selector: '.ldp-reader-refresh' },
+			{ id: 'refreshHost', label: '刷新嵌入原站', description: '嵌入阅读时刷新后方的原站列表。', defaults: ['F5'], special: 'refreshHost' },
+			{ id: 'openOriginal', label: '打开原帖', description: '在新标签页打开原站帖子。', defaults: [], selector: '.ldp-open' },
+		] },
+		{ id: 'panels', title: '界面面板', description: '快速打开阅读器里的常用信息面板。', actions: [
+			{ id: 'settings', label: '设置', description: '打开设置面板。', defaults: ['Ctrl+Comma'], selector: '.ldp-settings-toggle' },
+			{ id: 'notifications', label: '消息', description: '打开或关闭通知与私信面板。', defaults: [], selector: '.ldp-notifications-toggle' },
+			{ id: 'historyPanel', label: '浏览历史面板', description: '打开或关闭浏览历史列表。', defaults: [], selector: '.ldp-history-toggle' },
+			{ id: 'bookmarksPanel', label: '收藏与回应面板', description: '打开或关闭收藏与回应列表。', defaults: [], selector: '.ldp-bookmarks-toggle' },
+		] },
+		{ id: 'topicActions', title: '帖子操作', description: '复用主帖操作列，不复制点赞、回复或收藏逻辑。', actions: [
+			{ id: 'likeTopic', label: '点赞主帖', description: '点赞或取消点赞当前主帖。', defaults: [], selector: '.ldp-topic-action-rail .ldp-like,.ldp-post[data-post-number="1"] .ldp-like' },
+			{ id: 'replyTopic', label: '回复主题', description: '打开当前主题的回复编辑器。', defaults: [], selector: '.ldp-topic-action-rail .ldp-replybtn,.ldp-post[data-post-number="1"] .ldp-replybtn' },
+			{ id: 'bookmarkTopic', label: '收藏主题', description: '收藏或编辑当前主题收藏。', defaults: [], selector: '.ldp-topic-action-rail .ldp-topic-bookmark,[data-topic-action="bookmark"]' },
+		] },
+		{ id: 'window', title: '窗口与队列', description: '控制阅读器窗口、阅读队列与退出。', actions: [
+			{ id: 'toggleFullscreen', label: '全屏／浮窗切换', description: '在全屏阅读与浮窗阅读之间切换。', defaults: [], special: 'toggleFullscreen' },
+			{ id: 'toggleQueue', label: '阅读队列', description: '展开或收起阅读队列。', defaults: [], selector: '.ldp-reader-queue-toggle' },
+			{ id: 'closeReader', label: '关闭阅读器', description: '遵循“连续两次关闭”安全设置退出阅读器。', defaults: ['Escape'], special: 'closeReader' },
+		] },
+	]);
+	const READER_SHORTCUT_ACTIONS = Object.freeze(READER_SHORTCUT_GROUPS.flatMap((group) => group.actions));
+	const READER_SHORTCUT_DEFAULTS = Object.freeze(Object.fromEntries(
+		READER_SHORTCUT_ACTIONS.map((action) => [action.id, Object.freeze([...action.defaults])])
+	));
+	const READER_SHORTCUT_MODIFIERS = Object.freeze(['Ctrl', 'Alt', 'Shift', 'Meta']);
+	const READER_SHORTCUT_RESERVED = new Set([
+		'Ctrl+KeyD', 'Ctrl+KeyF', 'Ctrl+KeyH', 'Ctrl+KeyJ', 'Ctrl+KeyL', 'Ctrl+KeyN',
+		'Ctrl+KeyO', 'Ctrl+KeyP', 'Ctrl+KeyR', 'Ctrl+KeyS', 'Ctrl+KeyT', 'Ctrl+KeyU',
+		'Ctrl+KeyW', 'Ctrl+Tab', 'Ctrl+Shift+KeyN', 'Ctrl+Shift+KeyT', 'Ctrl+Shift+Tab',
+		'Alt+ArrowLeft', 'Alt+ArrowRight', 'Alt+F4', 'Alt+Home',
+		'Meta+Comma', 'Meta+KeyF', 'Meta+KeyL', 'Meta+KeyN', 'Meta+KeyP', 'Meta+KeyQ',
+		'Meta+KeyR', 'Meta+KeyS', 'Meta+KeyT', 'Meta+KeyW', 'Shift+Meta+KeyT',
+		'F11', 'F12',
+	]);
+
+	function normalizeReaderShortcutBinding(value) {
+		const parts = String(value || '').split('+').map((part) => part.trim()).filter(Boolean);
+		const code = parts.pop() || '';
+		if (!/^(?:[A-Za-z][A-Za-z0-9]*|Mouse(?:1|3|4|[5-9]))$/.test(code) ||
+				/^(?:Control|Alt|Shift|Meta)(?:Left|Right)?$/.test(code)) return '';
+		const modifiers = READER_SHORTCUT_MODIFIERS.filter((modifier) => parts.includes(modifier));
+		if (parts.some((part) => !READER_SHORTCUT_MODIFIERS.includes(part))) return '';
+		return [...modifiers, code].join('+');
+	}
+
+	function normalizeReaderShortcutBindings(value) {
+		const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+		const bindings = {};
+		const used = new Set();
+		READER_SHORTCUT_ACTIONS.forEach((action) => {
+			const candidates = Object.hasOwn(source, action.id) && Array.isArray(source[action.id])
+				? source[action.id] : READER_SHORTCUT_DEFAULTS[action.id];
+			bindings[action.id] = [...new Set(candidates.map(normalizeReaderShortcutBinding).filter(Boolean))]
+				.filter((binding) => {
+					if (used.has(binding)) return false;
+					used.add(binding);
+					return true;
+				}).slice(0, 3);
+		});
+		return bindings;
+	}
+
 	const DEFAULT_PREFS = {
 		topicReaderMode: 'fullpage',
 		imageProfile: IMAGE_PROFILE_DEFAULT,
@@ -826,11 +908,13 @@
 		openTopicsAtFirstPost: false,
 		doubleEscapeToCloseReader: false,
 		confirmNativeComposerClose: true,
-		topicActionRailVisible: true, topicActionRailFixed: false,
+		readerShortcutBindings: normalizeReaderShortcutBindings(READER_SHORTCUT_DEFAULTS),
+		topicActionRailVisible: true, topicActionRailFixed: false, topicActionRailMode: 'compact',
 		topicActionRailPosition: { x: 'left', y: .95 },
 		expandNestedRepliesByDefault: true,
 		expandLeafNestedReplies: false,
 		aggregateDescendantReplies: true,
+		inlineReplyTreeMaxDepth: 1,
 		hideNestedReplyFloors: true,
 		...jumpHighlightPrefsPatch(JUMP_HIGHLIGHT_DEFAULTS),
 		boostCopyMode: BOOST_COPY_DEFAULTS.mode,
@@ -874,10 +958,15 @@
 	// --- 楼中楼分批加载 & 请求节流 相关配置 ---
 	const SUB_REPLY_PAGE_SIZE = 10;     // 楼中楼分页每页条数
 	const SUB_REPLY_FETCH_SIZE = 20;    // Discourse replies 接口单次返回上限
+	const INLINE_REPLY_TREE_MAX_DEPTH = 5;
 	const REPLIES_HOVER_DELAY = 40;     // 楼层真正进入视口并短暂停留后触发抓取(ms)
+	const NESTED_REPLY_RENDER_SETTLE = 180;
+	const NESTED_REPLY_RENDER_IDLE_TIMEOUT = 700;
 	const POST_REQUEST_MAX_429_RETRIES = 1;
 	const POST_REQUEST_429_BACKOFF = 1500;
 	const POST_REQUEST_TIMEOUT = 15000;
+	const READER_OPEN_TASK_TIMEOUT = POST_REQUEST_TIMEOUT + 5000;
+	const READER_OPEN_AUTO_RETRY_LIMIT = 3;
 	const READER_REQUEST_QUEUE_LIMIT = 24;
 	const READER_REQUEST_CONCURRENCY_RECOVERY_SUCCESSES = 6;
 	const READER_REQUEST_RATE_PROBE_SUCCESSES = 6;
@@ -2288,12 +2377,14 @@
 		let pendingRequest;
 		pendingRequest = new Promise((resolve) => {
 			let settled = false;
+			let timeout = 0;
 			const finish = (db) => {
 				if (settled) {
 					if (db) db.close();
 					return;
 				}
 				settled = true;
+				if (timeout) clearTimeout(timeout);
 				resolve(db);
 			};
 			let request;
@@ -2321,6 +2412,7 @@
 			};
 			request.onerror = () => finish(null);
 			request.onblocked = () => finish(null);
+			timeout = setTimeout(() => finish(null), RESPONSE_CACHE_OPERATION_TIMEOUT);
 		});
 		responseCacheDbRequest = pendingRequest;
 		pendingRequest.then((db) => {
@@ -2331,13 +2423,25 @@
 
 	function runResponseCacheTransaction(db, mode, operation) {
 		return new Promise((resolve) => {
+			let settled = false;
+			let transaction = null;
+			const finish = (result) => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timeout);
+				resolve(result);
+			};
+			const timeout = setTimeout(() => {
+				try { transaction?.abort(); } catch {}
+				finish(false);
+			}, RESPONSE_CACHE_OPERATION_TIMEOUT);
 			try {
-				const transaction = db.transaction(LDP_RESPONSE_CACHE_STORE, mode);
-				transaction.oncomplete = () => resolve(true);
-				transaction.onerror = transaction.onabort = () => resolve(false);
+				transaction = db.transaction(LDP_RESPONSE_CACHE_STORE, mode);
+				transaction.oncomplete = () => finish(true);
+				transaction.onerror = transaction.onabort = () => finish(false);
 				operation(transaction.objectStore(LDP_RESPONSE_CACHE_STORE));
 			} catch {
-				resolve(false);
+				finish(false);
 			}
 		});
 	}
@@ -2539,6 +2643,160 @@
 		return topic?.post_stream || {};
 	}
 
+	function normalizeNestedReplySnapshotEntry(value) {
+		if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+		const parentPostNumber = Math.max(0, Number(value.parentPostNumber) || 0);
+		if (!parentPostNumber) return null;
+		const postNumbers = [...new Set((Array.isArray(value.postNumbers) ? value.postNumbers : [])
+			.map(Number).filter((number) => number > 0 && number !== parentPostNumber))]
+			.sort((a, b) => a - b)
+			.slice(0, NESTED_REPLY_CACHE_MAX_CHILDREN);
+		if (!postNumbers.length) return null;
+		const totalCount = Math.max(postNumbers.length, Number(value.totalCount) || 0);
+		return {
+			parentPostNumber,
+			parentPostId: Math.max(0, Number(value.parentPostId) || 0),
+			postNumbers,
+			totalCount,
+			complete: value.complete === true && postNumbers.length >= totalCount,
+			fetchAfter: Math.max(0, Number(value.fetchAfter) || postNumbers.at(-1) || 0),
+			updatedAt: Math.max(0, Number(value.updatedAt) || 0),
+		};
+	}
+
+	function topicNestedReplySnapshot(topic, create = false) {
+		if (!topic || typeof topic !== 'object') return null;
+		const current = topic[NESTED_REPLY_SNAPSHOT_KEY];
+		if (current?.version === NESTED_REPLY_SNAPSHOT_VERSION &&
+				current.parents && typeof current.parents === 'object' && !Array.isArray(current.parents)) {
+			return current;
+		}
+		if (!create) return null;
+		const snapshot = {
+			version: NESTED_REPLY_SNAPSHOT_VERSION,
+			updatedAt: 0,
+			parents: {},
+		};
+		topic[NESTED_REPLY_SNAPSHOT_KEY] = snapshot;
+		return snapshot;
+	}
+
+	function trimTopicNestedReplySnapshot(snapshot) {
+		const entries = Object.entries(snapshot?.parents || {});
+		if (entries.length <= NESTED_REPLY_CACHE_MAX_PARENTS) return;
+		entries
+			.sort((a, b) => +(b[1]?.updatedAt || 0) - +(a[1]?.updatedAt || 0))
+			.slice(NESTED_REPLY_CACHE_MAX_PARENTS)
+			.forEach(([key]) => delete snapshot.parents[key]);
+	}
+
+	function mergeTopicNestedReplySnapshot(targetTopic, sourceTopic) {
+		if (!targetTopic || typeof targetTopic !== 'object') return false;
+		const source = topicNestedReplySnapshot(sourceTopic);
+		if (!source) return false;
+		const target = topicNestedReplySnapshot(targetTopic, true);
+		let changed = false;
+		Object.values(source.parents).forEach((rawEntry) => {
+			const incoming = normalizeNestedReplySnapshotEntry(rawEntry);
+			if (!incoming) return;
+			const key = String(incoming.parentPostNumber);
+			const existing = normalizeNestedReplySnapshotEntry(target.parents[key]);
+			const incomingReplaces = incoming.complete &&
+				incoming.updatedAt >= +(existing?.updatedAt || 0);
+			const existingReplaces = existing?.complete &&
+				+(existing.updatedAt || 0) > incoming.updatedAt;
+			const postNumbers = (incomingReplaces
+				? incoming.postNumbers
+				: existingReplaces
+					? existing.postNumbers
+					: [...new Set([
+						...(existing?.postNumbers || []),
+						...incoming.postNumbers,
+					])].sort((a, b) => a - b)
+			).slice(0, NESTED_REPLY_CACHE_MAX_CHILDREN);
+			const totalCount = incomingReplaces
+				? Math.max(postNumbers.length, incoming.totalCount)
+				: existingReplaces
+					? Math.max(postNumbers.length, existing.totalCount)
+					: Math.max(postNumbers.length, +(existing?.totalCount || 0), incoming.totalCount);
+			const complete = incomingReplaces || existingReplaces
+				? postNumbers.length >= totalCount
+				: !!(existing?.complete || incoming.complete) && postNumbers.length >= totalCount;
+			const next = {
+				parentPostNumber: incoming.parentPostNumber,
+				parentPostId: incoming.parentPostId || existing?.parentPostId || 0,
+				postNumbers,
+				totalCount,
+				complete,
+				fetchAfter: Math.max(+(existing?.fetchAfter || 0), incoming.fetchAfter),
+				updatedAt: Math.max(+(existing?.updatedAt || 0), incoming.updatedAt),
+			};
+			if (JSON.stringify(existing) === JSON.stringify(next)) return;
+			target.parents[key] = next;
+			changed = true;
+		});
+		if (!changed) return false;
+		target.updatedAt = Math.max(+(target.updatedAt || 0), +(source.updatedAt || 0), Date.now());
+		trimTopicNestedReplySnapshot(target);
+		return true;
+	}
+
+	function recordTopicNestedReplySnapshot(topic, parentPost, replies, options = {}) {
+		const parentPostNumber = Math.max(0, Number(
+			parentPost?.post_number || parentPost?.dataset?.postNumber || options.parentPostNumber
+		) || 0);
+		if (!topic || !parentPostNumber) return false;
+		const snapshot = topicNestedReplySnapshot(topic, true);
+		const key = String(parentPostNumber);
+		const existing = normalizeNestedReplySnapshotEntry(snapshot.parents[key]);
+		const incomingNumbers = (Array.isArray(replies) ? replies : [])
+			.filter((reply) => +(reply?.reply_to_post_number || parentPostNumber) === parentPostNumber)
+			.map((reply) => +(reply?.post_number || 0))
+			.filter(Boolean);
+		const postNumbers = [...new Set([
+			...(options.replace === true ? [] : existing?.postNumbers || []),
+			...incomingNumbers,
+		])].sort((a, b) => a - b).slice(0, NESTED_REPLY_CACHE_MAX_CHILDREN);
+		// reply_count 只能证明“可能存在回复”，不能证明父子关系。没有至少一个
+		// 已确认子楼层编号时不落盘，避免坏快照在刷新后反复制造空树。
+		if (!postNumbers.length) {
+			if (existing && options.replace === true && !(Number(options.totalCount) > 0)) {
+				delete snapshot.parents[key];
+				snapshot.updatedAt = Date.now();
+				return true;
+			}
+			return false;
+		}
+		const totalCount = Math.max(
+			postNumbers.length,
+			Number(options.totalCount) || 0,
+			Number(parentPost?.reply_count || parentPost?.dataset?.childReplyTotal) || 0,
+		);
+		const now = Date.now();
+		const next = {
+			parentPostNumber,
+			parentPostId: Math.max(0, Number(
+				parentPost?.id || parentPost?.dataset?.postId || options.parentPostId
+			) || 0),
+			postNumbers,
+			totalCount,
+			complete: !!(options.complete === true ||
+				options.replace !== true && existing?.complete) &&
+				postNumbers.length >= totalCount,
+			fetchAfter: Math.max(
+				Number(options.fetchAfter) || 0,
+				Number(existing?.fetchAfter) || 0,
+				postNumbers.at(-1) || 0,
+			),
+			updatedAt: now,
+		};
+		if (existing && JSON.stringify({ ...existing, updatedAt: now }) === JSON.stringify(next)) return false;
+		snapshot.parents[key] = next;
+		snapshot.updatedAt = now;
+		trimTopicNestedReplySnapshot(snapshot);
+		return true;
+	}
+
 	function estimateTopicSnapshotBytes(topic) {
 		const postStream = topicPostStream(topic);
 		const posts = Array.isArray(postStream.posts) ? postStream.posts : [];
@@ -2550,6 +2808,10 @@
 			['cooked', 'raw', 'name', 'username', 'display_username', 'avatar_template'].forEach((key) => {
 				bytes += String(post[key] || '').length * 2;
 			});
+		});
+		const nestedSnapshot = topicNestedReplySnapshot(topic);
+		Object.values(nestedSnapshot?.parents || {}).forEach((entry) => {
+			bytes += 128 + (Array.isArray(entry?.postNumbers) ? entry.postNumbers.length * 8 : 0);
 		});
 		return bytes;
 	}
@@ -2693,10 +2955,10 @@
 	function mergeMissingSnapshotPosts(targetTopic, sourceTopic) {
 		const targetStream = targetTopic?.post_stream;
 		const sourceStream = sourceTopic?.post_stream;
-		if (!targetStream || !sourceStream) return false;
+		let changed = mergeTopicNestedReplySnapshot(targetTopic, sourceTopic);
+		if (!targetStream || !sourceStream) return changed;
 		const current = Array.isArray(targetStream.posts) ? targetStream.posts : [];
 		const indexes = new Map(current.map((post, index) => [Number(post?.id), index]));
-		let changed = false;
 		(Array.isArray(sourceStream.posts) ? sourceStream.posts : []).forEach((post) => {
 			const postId = Number(post?.id);
 			if (!postId || indexes.has(postId)) return;
@@ -3605,6 +3867,7 @@
 		return {
 			number,
 			scrollTop: Math.max(0, Number(value.scrollTop) || 0),
+			scrollLeft: Math.max(0, Number(value.scrollLeft) || 0),
 			offset: Number.isFinite(Number(value.offset)) ? Number(value.offset) : 12,
 		};
 	}
@@ -3804,8 +4067,6 @@
 		historyScope.listen(overlay, 'ldp-reader-workspace-change', invalidateModalPointerBounds);
 		overlay._ldpSyncHistoryButtonVisibilityPreference = syncVisibilityPreference;
 		syncVisibilityPreference();
-		backButton.setAttribute('aria-keyshortcuts', 'ArrowLeft');
-		forwardButton.setAttribute('aria-keyshortcuts', 'ArrowRight');
 		const topicTitle = (targetTopicId) =>
 			readTopicHistory().find((item) => Number(item.topicId) === Number(targetTopicId))?.title ||
 				`帖子 #${targetTopicId}`;
@@ -3864,18 +4125,6 @@
 		historyScope.listen(forwardButton, 'click', () => navigate('forward'));
 		historyScope.listen(backButton, 'pointerenter', onBackHover);
 		historyScope.listen(forwardButton, 'pointerenter', onForwardHover);
-		const onHistoryKeyDown = (event) => {
-			if (CURRENT_OVERLAY !== overlay || !overlay.isConnected || event.defaultPrevented || event.isComposing ||
-				event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || readerPortalQuery('.ldp-lightbox')) return;
-			const button = event.key === 'ArrowLeft' ? backButton : event.key === 'ArrowRight' ? forwardButton : null;
-			if (!button || button.hidden || button.disabled) return;
-			const target = event.target instanceof Element ? event.target : null;
-			if (target && target !== document.body && target !== PAGE_ROOT && !overlay.contains(target)) return;
-			if (target && (target.isContentEditable || target.closest('input,textarea,select,.ldp-topic-timeline-track'))) return;
-			consumeEvent(event);
-			button.click();
-		};
-		historyScope.listen(document, 'keydown', onHistoryKeyDown);
 		const refreshNavigationOrder = () => {
 			const nextNavigation = createReaderHistoryNavigation(topicId);
 			navigation.back = nextNavigation.back;
@@ -5609,7 +5858,18 @@
 		cancelTopicSnapshotWrites(topicId);
 		HOST_TOPIC_DATA_CACHE.delete(key);
 		TOPIC_DATA_CACHE.delete(key);
-		if (tags.length) await clearStoredResponseCache({ tags });
+		if (tags.length) {
+			try {
+				await waitForReaderOpenTask(
+					clearStoredResponseCache({ tags }),
+					'清理当前帖子缓存超时',
+					RESPONSE_CACHE_OPERATION_TIMEOUT * 3,
+				);
+			} catch (error) {
+				if (Number(error?.status || 0) !== 408) throw error;
+				console.warn('[LINUX DO reader] current topic cache cleanup timed out; continuing refresh', error);
+			}
+		}
 	}
 
 	restorePersistentCaches();
@@ -6548,6 +6808,32 @@
 		</section>`;
 	}
 
+	function readerShortcutSettingsMarkup() {
+		const groups = READER_SHORTCUT_GROUPS.map((group) => otherSettingGroupMarkup(
+			`shortcuts-${group.id}`, group.title, group.description,
+			group.actions.map((action) => `
+				<div class="ldp-setting-row ldp-shortcut-row" data-shortcut-action="${action.id}">
+					<span class="ldp-setting-option-copy">
+						<strong>${action.label}</strong>
+						<small>${action.description}</small>
+					</span>
+					<span class="ldp-shortcut-control">
+						<span class="ldp-shortcut-bindings"></span>
+						<span class="ldp-shortcut-actions">
+							<button class="ldp-config-action ldp-shortcut-record" type="button" data-shortcut-record="${action.id}"><span>添加</span></button>
+							<button class="ldp-config-action ldp-shortcut-clear" type="button" data-shortcut-clear="${action.id}" aria-label="清空全部绑定" title="清空全部绑定">${icon('trash')}<span>清空</span></button>
+							<button class="ldp-config-action ldp-shortcut-reset" type="button" data-shortcut-reset="${action.id}" aria-label="恢复默认快捷方式" title="恢复默认快捷方式">${icon('rotateCcw')}<span>默认</span></button>
+						</span>
+					</span>
+				</div>`).join('')
+		)).join('');
+		return `${groups}
+			<div class="ldp-shortcut-footer">
+				<span class="ldp-shortcut-status" role="status" aria-live="polite">点击“添加”，再按键盘组合键、滚轮或鼠标中键、前进键、后退键；每项最多 3 个。</span>
+				<button class="ldp-config-action ldp-shortcut-reset-all" type="button">${icon('rotateCcw')}<span>全部恢复默认</span></button>
+			</div>`;
+	}
+
 	function performanceSettingsMarkup() {
 		return PERFORMANCE_SETTING_GROUPS.map((group) => settingsCategoryMarkup(
 			`performance-${group.id}`, group.title, group.description,
@@ -6571,9 +6857,10 @@
 		['appearance', 'palette', '外观设置', '调整按钮与链接、交替背景、关系线、分隔线和上级回复预览卡片。'],
 		['flash', 'lightbulb', '动画与提示', '设置跳转到指定楼层时的闪烁提示，以及打开或切换帖子时的加载动画。'],
 		['reading', 'headerHistory', '阅读与导航', '管理阅读队列、历史导航、帖子打开位置与阅读器退出方式。'],
+		['shortcuts', 'settings', '快捷方式', '按业务设置键盘、修饰键与鼠标快捷方式，并在保存前检查冲突。'],
 		['interaction', 'gitBranch', '帖子与回复', '管理主帖操作列、二级回复显示位置与 Boost 文本复制规则。'],
 		['sites', 'wrench', '适用站点', '添加并管理可以启用增强阅读器的其他 HTTPS Discourse 论坛。'],
-		['performance', 'rocket', '性能设置', '控制每次加载楼层数、页面保留范围、二级回复预加载和网络请求节奏；下次打开阅读器生效。'],
+		['performance', 'rocket', '性能设置', '控制每次加载楼层数、页面保留范围、树状回复预加载和网络请求节奏；下次打开阅读器生效。'],
 		['logs', 'activity', '日志记录', '在请求记录与性能记录之间切换；所有记录仅保留在当前页面内存中，不保存查询参数、请求正文、Cookie、响应内容或个人数据。'],
 		['cache', 'database', '数据管理', '导入或导出阅读器设置，并查看、清理当前浏览器保存的本地缓存。'],
 		['about', 'info', '关于', `专注于长帖阅读、楼层关系和原生社区操作的 ${SITE_DISPLAY_NAME} 阅读工作台。`],
@@ -6581,7 +6868,7 @@
 
 	const SETTINGS_NAV_GROUPS = [
 		['显示与布局', ['image', 'font', 'layout', 'window', 'appearance', 'flash']],
-		['阅读与交互', ['reading', 'interaction']],
+		['阅读与交互', ['reading', 'shortcuts', 'interaction']],
 		['系统与数据', ['sites', 'performance', 'logs', 'cache', 'about']],
 	];
 
@@ -6699,11 +6986,11 @@
 		{ section: 'topic-opening', className: 'ldp-open-topics-first-post', label: '普通帖子从第 1 楼打开', description: '普通帖子链接默认从主楼开始；消息、历史和收藏仍打开各自指定的楼层。' },
 		{ section: 'reader-exit', className: 'ldp-double-escape-close-reader', label: '按两次 Esc 关闭阅读器', description: '开启后可防止误触；默认关闭，按一次 Esc 即可关闭阅读器。' },
 		{ section: 'reader-exit', className: 'ldp-confirm-native-composer-close', label: '关闭原生回复窗口前再次确认', description: '开启后，在阅读器内按 Esc、关闭或舍弃时，需要在 1.5 秒内重复同一操作。' },
-		{ section: 'topic-actions', className: 'ldp-topic-action-rail-visible-setting', label: '始终显示主帖操作列', description: '一直显示回到顶部、点赞、回复、Boost 和收藏；其他帖子功能仍可展开。' },
+		{ section: 'topic-actions', className: 'ldp-topic-action-rail-visible-setting', label: '显示主帖操作列', description: '显示回到顶部和收纳按钮；全展开时点击外部或重新载入会退回常显。' },
 		{ section: 'topic-actions', className: 'ldp-topic-action-rail-fixed-setting', label: '锁定操作列位置', description: '开启后不能拖动操作列；关闭后可长按收纳按钮并拖到其他位置。' },
 		{ section: 'replies', className: 'ldp-expand-nested-replies-default', label: '在父回复下展开二级回复', description: '默认在父楼层下直接显示它收到的回复；关闭时同时关闭“完整讨论”视图。' },
 		{ section: 'replies', className: 'ldp-expand-leaf-nested-replies', label: '在楼层列表中展开二级回复', description: '二级回复出现在楼层列表时默认显示完整正文；关闭时必须保留上面的父回复展开方式。', hidden: true },
-		{ section: 'replies', className: 'ldp-aggregate-descendant-replies', label: '启用“完整讨论”视图', description: '在父回复下预览直接回复，并可打开包含后续回复的完整讨论。' },
+		{ section: 'replies', className: 'ldp-aggregate-descendant-replies', label: '启用深层回复阅读', description: '可在主信息流嵌套阅读，并用无限树状完整讨论继续更深回复。' },
 		{ section: 'replies', className: 'ldp-hide-nested-reply-floors', label: '从楼层列表隐藏二级回复', description: '二级回复固定收纳到对应父楼层。', hidden: true },
 	];
 
@@ -6723,6 +7010,16 @@
 	function settingSwitchesMarkup(section) {
 		return SETTING_SWITCH_FIELDS.filter((field) => field.section === section)
 			.map(settingSwitchMarkup).join('');
+	}
+
+	function inlineReplyTreeSettingMarkup() {
+		return `<label class="ldp-setting-row ldp-setting-option-row ldp-inline-reply-tree-row">
+			<span class="ldp-setting-option-copy"><strong>深层回复展示方式</strong><small>主信息流超出所选深度后，用无限树状完整讨论继续阅读。</small></span>
+			<select class="ldp-reader-select ldp-inline-reply-tree-depth" aria-label="深层回复展示方式">
+				<option value="1">完整讨论窗口</option>
+				${[2, 3, 4, 5].map((depth) => `<option value="${depth}">树状嵌套 · ${depth} 层</option>`).join('')}
+			</select>
+		</label>`;
 	}
 
 	const BOOST_COPY_SETTING_ROWS = [
@@ -6953,6 +7250,20 @@
 		return READER_THEME_MODES.includes(value) ? value : 'system';
 	}
 
+	function normalizeInlineReplyTreeMaxDepth(value) {
+		return Math.min(INLINE_REPLY_TREE_MAX_DEPTH, Math.max(1, Number.parseInt(value, 10) || 1));
+	}
+
+	function inlineReplyTreeMaxDepth() {
+		return PREFS?.aggregateDescendantReplies === true && PREFS.expandNestedRepliesByDefault === true
+			? normalizeInlineReplyTreeMaxDepth(PREFS.inlineReplyTreeMaxDepth) : 1;
+	}
+
+	function postNestDepth(node, fallback = 0) {
+		const depth = Number(node?.dataset?.ldpNestDepth);
+		return Number.isFinite(depth) && depth >= 0 ? depth : Math.max(0, +fallback || 0);
+	}
+
 	function normalizeReaderLoadingAnimation(value) {
 		return value === 'random' || READER_LOADING_ANIMATION_KEYS.includes(value)
 			? value : READER_LOADING_ANIMATION_DEFAULT;
@@ -7018,11 +7329,15 @@
 			openTopicsAtFirstPost: performancePrefs.openTopicsAtFirstPost === true,
 			doubleEscapeToCloseReader: performancePrefs.doubleEscapeToCloseReader === true,
 			confirmNativeComposerClose: performancePrefs.confirmNativeComposerClose !== false,
+			readerShortcutBindings: normalizeReaderShortcutBindings(performancePrefs.readerShortcutBindings),
 			topicActionRailVisible: performancePrefs.topicActionRailVisible !== false,
 				topicActionRailFixed: performancePrefs.topicActionRailFixed === true,
+				topicActionRailMode: performancePrefs.topicActionRailMode === 'collapsed'
+					? 'collapsed' : 'compact',
 				expandNestedRepliesByDefault,
 				expandLeafNestedReplies,
 				aggregateDescendantReplies,
+				inlineReplyTreeMaxDepth: normalizeInlineReplyTreeMaxDepth(performancePrefs.inlineReplyTreeMaxDepth),
 				hideNestedReplyFloors: performancePrefs.hideNestedReplyFloors === true,
 			...jumpHighlightPrefsPatch(jumpHighlight),
 			boostCopyMode: boostCopy.mode,
@@ -7169,6 +7484,19 @@
 				importedSource.fullpageLayoutProfile = READER_FULLPAGE_LAYOUT_DEFAULT;
 			importedSource.confirmNativeComposerClose = true;
 		}
+		const legacyInteractionSettings = ['readerShortcutBindings', 'topicActionRailMode', 'inlineReplyTreeMaxDepth'];
+		const legacyInteractionPreferences = schemaVersion === LDP_CONFIG_EXPORT_VERSION &&
+			payloadSettingKeys.every((key) => settingKeys.includes(key)) &&
+			settingKeys.every((key) => legacyInteractionSettings.includes(key) ||
+				Object.hasOwn(importedSource, key));
+		if (legacyInteractionPreferences) {
+			if (!Object.hasOwn(importedSource, 'readerShortcutBindings'))
+				importedSource.readerShortcutBindings = normalizeReaderShortcutBindings(READER_SHORTCUT_DEFAULTS);
+			if (!Object.hasOwn(importedSource, 'topicActionRailMode'))
+				importedSource.topicActionRailMode = 'compact';
+			if (!Object.hasOwn(importedSource, 'inlineReplyTreeMaxDepth'))
+				importedSource.inlineReplyTreeMaxDepth = DEFAULT_PREFS.inlineReplyTreeMaxDepth;
+		}
 		const importedSettingKeys = Object.keys(importedSource);
 		if (!payload || payload.format !== LDP_CONFIG_EXPORT_FORMAT ||
 			schemaVersion !== LDP_CONFIG_EXPORT_VERSION ||
@@ -7192,6 +7520,56 @@
 
 	function setPref(key, value) {
 		setPrefs({ [key]: value });
+	}
+
+	function readerShortcutBindingFromEvent(event) {
+		const mouse = /^mouse|auxclick/.test(event.type);
+		const wheel = event.type === 'wheel';
+		const code = wheel
+			? 'Wheel'
+			: mouse
+			? event.button === 1 || event.button >= 3 ? `Mouse${event.button}` : ''
+			: event.code;
+		if (!code || (!mouse && !wheel && /^(?:Control|Alt|Shift|Meta)(?:Left|Right)?$/.test(code))) return '';
+		return normalizeReaderShortcutBinding([
+			event.ctrlKey && 'Ctrl', event.altKey && 'Alt', event.shiftKey && 'Shift', event.metaKey && 'Meta', code,
+		].filter(Boolean).join('+'));
+	}
+
+	function readerShortcutBindingLabel(binding) {
+		const labels = {
+			Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Meta',
+			ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓',
+			Home: 'Home', End: 'End', PageUp: 'Page Up', PageDown: 'Page Down',
+			Space: '空格', Escape: 'Esc', Enter: 'Enter', Tab: 'Tab',
+			Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'",
+			BracketLeft: '[', BracketRight: ']', Backslash: '\\', Minus: '-', Equal: '=', Backquote: '`',
+			Mouse1: '鼠标中键', Mouse3: '鼠标后退键', Mouse4: '鼠标前进键',
+			Wheel: '滚轮',
+		};
+		return String(binding || '').split('+').map((part) =>
+			labels[part] || (/^Key[A-Z]$/.test(part) ? part.slice(3) :
+				/^Digit\d$/.test(part) ? part.slice(5) :
+					/^Mouse\d+$/.test(part) ? `鼠标键 ${Number(part.slice(5)) + 1}` : part)
+		).join(' + ');
+	}
+
+	function readerShortcutOwner(binding, exceptActionId = '') {
+		return READER_SHORTCUT_ACTIONS.find((action) =>
+			action.id !== exceptActionId && (PREFS.readerShortcutBindings[action.id] || []).includes(binding)
+		);
+	}
+
+	function readerShortcutBindingIssue(binding, actionId = '') {
+		const owner = readerShortcutOwner(binding, actionId);
+		if (owner) return `${readerShortcutBindingLabel(binding)} 已绑定“${owner.label}”，请先移除或改用其他组合。`;
+		if (READER_SHORTCUT_RESERVED.has(binding))
+			return `${readerShortcutBindingLabel(binding)} 通常由浏览器占用，无法保证生效，请换一个组合。`;
+		const parts = binding.split('+');
+		const code = parts[parts.length - 1];
+		if (parts.length === 1 && /^(?:Key[A-Z]|Digit\d)$/.test(code))
+			return '单个字母或数字容易与论坛快捷键冲突，请至少加入 Ctrl、Alt、Shift 或 Meta。';
+		return '';
 	}
 
 	const READER_SYSTEM_THEME_QUERY = isFunction(window.matchMedia)
@@ -9158,6 +9536,7 @@
 					key: options.key || `reader:${url}`,
 					priority,
 					callSite: requestCallSite,
+					timeoutMs: options.timeoutMs,
 				});
 			const queuedAt = requestFlowNow();
 			const requestScope = createRequestAbortScope(fetchOptions.signal);
@@ -9166,7 +9545,7 @@
 			try {
 				sharedPermit = await acquireSharedReaderRequestPermit(
 					priority, requestScope.signal, requestType, scheduler);
-				requestScope.startTimeout();
+				requestScope.startTimeout(options.timeoutMs);
 				const res = await trackedReaderFetch(url, {
 					...fetchOptions,
 					signal: requestScope.signal,
@@ -10153,6 +10532,16 @@
 		});
 	}
 
+	function notificationRequestCanAutoRetry(error) {
+		const status = Number(error?.status || 0);
+		if (status === 429) return false;
+		if (status === 408 || status === 425 || status >= 500) return true;
+		const name = String(error?.name || '');
+		const message = String(error?.message || '');
+		return name === 'TimeoutError' || name === 'TypeError' ||
+			/failed to fetch|network|timeout|timed out|请求超时/i.test(message);
+	}
+
 	async function fetchNotificationPage(groupKey, page, options = {}) {
 		const safeGroupKey = Object.hasOwn(NOTIFICATION_GROUPS, groupKey) ? groupKey : 'all';
 		const group = NOTIFICATION_GROUPS[safeGroupKey];
@@ -10212,8 +10601,11 @@
 			const query = params.toString();
 			const data = await fetchJSON(`${endpoint}${query ? `?${query}` : ''}`, {
 				key: `notifications:${cacheKey}`,
-				priority: POST_REQUEST_PRIORITY.auxiliary,
+				priority: POST_REQUEST_PRIORITY.visible,
 				cacheMode: options.force ? 'refresh' : 'default',
+				timeoutMs: group.source === 'reactions-received'
+					? NOTIFICATION_REACTION_REQUEST_TIMEOUT
+					: POST_REQUEST_TIMEOUT,
 			});
 			const pickedEntries = pickEntries(data);
 			const rawEntries = Array.isArray(pickedEntries)
@@ -10461,7 +10853,7 @@
 			const timeout = setTimeout(() => {
 				timedOut = true;
 				controller.abort();
-			}, POST_REQUEST_TIMEOUT);
+			}, task.timeoutMs);
 			task.state = 'active';
 			task.controller = controller;
 			activeCount++;
@@ -10691,6 +11083,9 @@
 				keepSharedPermit: false,
 				controlRecorded: false,
 				controlReason: '',
+				timeoutMs: Number.isFinite(requestOptions.timeoutMs)
+					? Math.max(1, requestOptions.timeoutMs)
+					: POST_REQUEST_TIMEOUT,
 				resolve: resolveTask,
 				reject: rejectTask,
 				promise,
@@ -11926,11 +12321,12 @@
 		const topicPosts = postsFromPayload(ctx.topicData);
 		if (!card) {
 			card = makeElement('section');
-			card.className = 'ldp-solved-card';
+			card.className = 'ldp-solved-card ldp-post-body-layer';
 			const content = postNode.querySelector(':scope > .ldp-content');
 			if (!content) return;
 			content.after(card);
 		}
+		card.classList.add('ldp-post-body-layer');
 		card.innerHTML = `<div class="ldp-solved-head">${icon('check')}<span>${answers.length > 1 ? `已解决 · ${answers.length} 个答案` : '已解决'}</span></div>${answers.map((answer) => {
 			const postNumber = +answer.post_number;
 			const acceptedNode = ctx.streamNodeMap?.get(postNumber);
@@ -11960,6 +12356,7 @@
 			</div>`;
 		}).join('')}`;
 		ctx?.translation?.syncPost(postNode);
+		if (postNode.isConnected) scheduleNestedBranchSync(postNode, ctx);
 	}
 
 	function prepareReaderImageCarousels(root) {
@@ -12519,7 +12916,7 @@
 			const height = Math.max(Math.round(measured), STREAM_PLACEHOLDER_MIN_HEIGHT);
 			if (Math.abs(height - item.height) >= 1) {
 				item.height = height;
-				const index = ctx.onlyOp && Number.isInteger(item.layoutIndex) ? item.layoutIndex : item.index;
+				const index = streamItemLayoutIndex(ctx, item);
 				markStreamPrefixDirty(ctx, index);
 				ctx.streamNeedsRepair = true;
 			}
@@ -12998,6 +13395,8 @@
 		let microsoftTokenAt = 0;
 
 		const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+		const translationSurfaces = () => [ctx.commentsEl, ctx.replyThreadWindow]
+			.filter((surface, index, surfaces) => surface && surfaces.indexOf(surface) === index);
 		const syncUi = () => {
 			const busy = draining && active;
 			button.classList.toggle('is-active', active);
@@ -13009,8 +13408,10 @@
 				: '翻译正文');
 		};
 		const applyMode = () => {
-			ctx.commentsEl.classList.toggle('ldp-translation-active', active);
-			ctx.commentsEl.classList.toggle('ldp-translation-only', active && mode === 'translation');
+			translationSurfaces().forEach((surface) => {
+				surface.classList.toggle('ldp-translation-active', active);
+				surface.classList.toggle('ldp-translation-only', active && mode === 'translation');
+			});
 			syncUi();
 		};
 		const translationRequest = (requestOptions) => {
@@ -13181,7 +13582,8 @@
 			void drain();
 		};
 		const syncMountedPosts = () => {
-			ctx.commentsEl.querySelectorAll('.ldp-post').forEach(syncPost);
+			translationSurfaces().forEach((surface) =>
+				surface.querySelectorAll('.ldp-post').forEach(syncPost));
 		};
 		const setMode = (nextMode) => {
 			setPref('translationMode', nextMode);
@@ -13208,7 +13610,8 @@
 			queue.clear();
 			requests.forEach((request) => request?.abort?.());
 			requests.clear();
-			ctx.commentsEl.classList.remove('ldp-translation-active', 'ldp-translation-only');
+			translationSurfaces().forEach((surface) =>
+				surface.classList.remove('ldp-translation-active', 'ldp-translation-only'));
 			button.hidden = true;
 			button.classList.remove('is-active', 'is-busy');
 		};
@@ -13258,12 +13661,18 @@
 		renderPostReactions(postNode, ctx);
 		renderPostEvent(postNode);
 		renderPostVoting(postNode, ctx);
+		postNode?.querySelectorAll(
+			':scope > .ldp-solved-card, :scope > .ldp-event-card, :scope > .ldp-special-badges, ' +
+			':scope > .ldp-special-notice, :scope > .ldp-system-action'
+		).forEach((layer) => layer.classList.add('ldp-post-body-layer'));
 		const post = postNode?._ldpPostData || {};
 		if (post.accepted_answer && ctx && ctx.streamNodeMap) {
 			const firstPost = ctx.streamNodeMap.get(1);
 			if (firstPost && firstPost !== postNode) renderSolvedAnswerCard(firstPost, ctx);
 		}
 		hydratePersistentAvatarImages(postNode);
+		bindPostMediaLayoutSync(postNode, ctx);
+		if (postNode?.isConnected) scheduleNestedBranchSync(postNode, ctx);
 	}
 
 	function comparePostVotingStreamItems(left, right) {
@@ -13718,7 +14127,8 @@
 		const showBoostButton = canShowBoostButton(post);
 		let boostButton = actions.querySelector('.ldp-boostbtn');
 		const canCreateBoostButton = postNode === ctx?.topicActionRail ||
-			ctx?.streamNodeMap?.get(+(postNode.dataset.postNumber || 0)) === postNode;
+			ctx?.streamNodeMap?.get(+(postNode.dataset.postNumber || 0)) === postNode ||
+			postNode.classList.contains('ldp-nested-preview');
 		if (showBoostButton && !boostButton && canCreateBoostButton) {
 			const holder = makeElement('template');
 			holder.innerHTML = `<button class="ldp-btn ldp-boostbtn" type="button" aria-label="boost">${icon('rocket')}</button>`;
@@ -13734,6 +14144,35 @@
 			syncPostActionControls(postNode, ctx);
 		});
 		if (ctx.topicActionRail) { ctx.topicActionRail._ldpPostData = ctx.streamNodeMap?.get(1)?._ldpPostData || ctx.topicActionRail._ldpPostData; syncPostActionControls(ctx.topicActionRail, ctx); }
+	}
+
+	function refreshMissingLivePostCapabilities(post, ctx) {
+		const postId = +(post?.id || 0);
+		const postNumber = +(post?.post_number || 0);
+		if (!postId || !postNumber || Object.hasOwn(post, 'can_boost') ||
+				!ME_USERNAME || post.username === ME_USERNAME ||
+				post.hidden || post.deleted_at ||
+				+(post.post_type == null ? 1 : post.post_type) !== 1 ||
+				!hasDiscourseCapability('boosts', { post }) ||
+				!isFunction(ctx?.refreshPostByNumber))
+			return;
+		if (!ctx.postActionCapabilityRequests) ctx.postActionCapabilityRequests = new Map();
+		if (!ctx.postActionCapabilityAttempts) ctx.postActionCapabilityAttempts = new Set();
+		if (ctx.postActionCapabilityRequests.has(postId) ||
+				ctx.postActionCapabilityAttempts.has(postId))
+			return;
+		ctx.postActionCapabilityAttempts.add(postId);
+		// Boost 插件只在 TopicView 预加载 boosts 关联后序列化 can_boost。
+		// 因此用 around 主题响应补权威权限，不能从插件存在性或单帖响应推断。
+		const request = Promise.resolve(ctx.refreshPostByNumber(postNumber, {
+			scope: 'around',
+			priority: POST_REQUEST_PRIORITY.auxiliary,
+			skipCapabilityRefresh: true,
+			targetOnly: true,
+		}))
+			.catch(() => null)
+			.finally(() => ctx.postActionCapabilityRequests.delete(postId));
+		ctx.postActionCapabilityRequests.set(postId, request);
 	}
 
 	function topicActionPostNodes(ctx) {
@@ -13794,6 +14233,18 @@
 		});
 	}
 
+	function syncParentJumpControl(post, ctx = post?._ldpReaderContext) {
+		const parentFloor = post?.querySelector(':scope > .ldp-post-head > .ldp-jump-parent');
+		if (!parentFloor) return;
+		const parentNumber = +parentFloor.dataset.targetPostNumber || 0;
+		const label = matchesOnlyOpFilter(ctx, post.dataset.username)
+			? `查看父楼层 #${parentNumber} 到当前楼层的完整讨论`
+			: post.classList.contains('ldp-nested-collapsed')
+				? `展开楼层并预览父楼层 #${parentNumber}`
+				: `跳到父楼层 #${parentNumber}`;
+		setLabel(parentFloor, label);
+	}
+
 	function ensureParentJumpControl(post, parentNumber) {
 		const head = post.querySelector(':scope > .ldp-post-head');
 		if (!head || head.querySelector(':scope > .ldp-jump-parent')) return;
@@ -13802,10 +14253,10 @@
 		parentFloor.className = 'ldp-floor ldp-jump-parent';
 		parentFloor.type = 'button';
 		parentFloor.dataset.targetPostNumber = String(parentNumber);
-		setLabel(parentFloor, `跳到父楼层 #${parentNumber}`);
 		parentFloor.textContent = `@ #${parentNumber}`;
 		if (currentFloor) currentFloor.classList.add('ldp-current-floor');
 		head.insertBefore(parentFloor, currentFloor || null);
+		syncParentJumpControl(post);
 	}
 
 	function ensureStreamNestedReplyPresentation(post, parentPostNumber) {
@@ -13839,6 +14290,7 @@
 		item.zebraExcluded = excluded;
 		reindexStreamItems(ctx, Math.max(0, item.index));
 		if (ctx.onlyOp) invalidateStreamLayout(ctx);
+		else if (streamLayoutUsesFilter(ctx)) invalidateStreamLayout(ctx);
 		else markStreamPrefixDirty(ctx, Math.max(0, item.index));
 		refreshStreamZebra(ctx);
 		scheduleStreamWindowSync(ctx);
@@ -13846,7 +14298,9 @@
 
 	function setNestedReplyCollapsed(post, collapsed, options = {}) {
 		if (!post || (!post.classList.contains('ldp-reply-collapsible') &&
-				!post.classList.contains('ldp-hidden-collapsible'))) return;
+				!post.classList.contains('ldp-hidden-collapsible') &&
+				!post.classList.contains('ldp-reddit-comment-collapsible'))) return;
+		const wasCollapsed = post.classList.contains('ldp-nested-collapsed');
 		if (collapsed) {
 			let line = null;
 			let preview = post.previousElementSibling;
@@ -13859,25 +14313,51 @@
 		}
 		if (collapsed) post.querySelector(':scope > .ldp-nested-esc-hint')?.remove();
 		post.classList.toggle('ldp-nested-collapsed', collapsed);
+		const ownChildren = post.querySelector(':scope > .ldp-children');
+		if (collapsed) {
+			clearNestedReplyBranches(ownChildren);
+		} else if (ownChildren && !post.classList.contains('ldp-children-collapsed')) {
+			syncNestedReplyBranches(ownChildren);
+		}
 		syncCollapsedNestedReplyZebra(post, options);
-		const parentFloor = post.querySelector(':scope > .ldp-post-head > .ldp-jump-parent');
-		if (parentFloor) {
-			const parentNumber = +parentFloor.dataset.targetPostNumber || 0;
-			setLabel(parentFloor, collapsed
-					? `展开楼层并预览父楼层 #${parentNumber}`
-					: `跳到父楼层 #${parentNumber}`);
+		syncParentJumpControl(post);
+		syncRedditReplyControl(post, 'post');
+		if (ownChildren && wasCollapsed !== !!collapsed) {
+			if (collapsed) post._ldpReaderContext?.repliesIO?.unobserve(post);
+			else reconcileNestedReplyNode(post, post._ldpReaderContext);
 		}
-		const btn = post.querySelector(':scope > .ldp-nested-toggle');
-		if (!btn) return;
-		const postNumber = post.dataset.postNumber || '';
-		const controlKey = `${collapsed ? 'collapsed' : 'open'}:${postNumber}`;
-		if (btn.dataset.nestedControlKey !== controlKey) {
-			btn.dataset.nestedControlKey = controlKey;
-			setExpanded(btn, collapsed ? 'false' : 'true');
-			setLabel(btn, collapsed ? `展开楼层 #${postNumber}` : `收起楼层 #${postNumber}`);
-			btn.innerHTML = `${icon(collapsed ? 'chevronRight' : 'chevronDown')}<span>${collapsed ? '展开' : '收起'}</span>`;
-		}
+		const parentPost = post.parentElement?.closest('.ldp-post');
+		if (parentPost) scheduleNestedBranchSync(parentPost, post._ldpReaderContext);
 		setNestedReplyEscapeHint(post, !collapsed && isEscCollapsibleNestedReply(post));
+	}
+
+	function setRedditCommentCollapsed(post, collapsed, options = {}) {
+		if (!post) return false;
+		if (collapsed) {
+			post.classList.add('ldp-reddit-comment-collapsible');
+			let toggle = post.querySelector(':scope > .ldp-nested-toggle');
+			if (!toggle) {
+				ensureNestedReplyToggle(post, post.firstChild);
+				toggle = post.querySelector(':scope > .ldp-nested-toggle');
+				if (toggle) toggle.dataset.ldpRedditCollapseToggle = '1';
+			}
+			if (options.user === true) post.dataset.ldpUserNestedCollapsed = '1';
+		} else if (options.user === true) {
+			delete post.dataset.ldpUserNestedCollapsed;
+		}
+		setNestedReplyCollapsed(post, collapsed, options);
+		if (!collapsed) {
+			const toggle = post.querySelector(':scope > .ldp-nested-toggle');
+			const removeToggle = toggle?.dataset.ldpRedditCollapseToggle === '1';
+			post.querySelector(':scope > .ldp-nested-esc-hint')?.remove();
+			post.classList.remove('ldp-reddit-comment-collapsible');
+			if (removeToggle) toggle.remove();
+			else if (toggle) {
+				delete toggle.dataset.replyControlKey;
+				syncRedditReplyControl(post, 'post');
+			}
+		}
+		return true;
 	}
 
 	function setNestedReplyEscapeHint(post, visible) {
@@ -13895,6 +14375,21 @@
 			toggle.insertAdjacentElement('afterend', hint);
 		}
 		hint.textContent = 'Esc 收起';
+	}
+
+	function syncNestedReplyCollapseControls(post, visible) {
+		if (!post || (!post.classList.contains('ldp-reply-collapsible') &&
+				!post.classList.contains('ldp-hidden-collapsible') &&
+				!post.classList.contains('ldp-reddit-comment-collapsible'))) return;
+		if (!visible) {
+			post.querySelector(':scope > .ldp-nested-toggle')?.remove();
+			post.querySelector(':scope > .ldp-nested-esc-hint')?.remove();
+			return;
+		}
+		ensureNestedReplyToggle(post, post.firstChild);
+		syncRedditReplyControl(post, 'post');
+		setNestedReplyEscapeHint(post,
+			!post.classList.contains('ldp-nested-collapsed') && isEscCollapsibleNestedReply(post));
 	}
 
 	function alignCollapsedFloorPreview(preview, post, collapsedBottom, ctx) {
@@ -13916,14 +14411,22 @@
 		scheduleStreamWindowSync(ctx);
 	}
 
+	function matchesOnlyOpFilter(ctx, username) {
+		return !!ctx?.onlyOp && !!ctx.op && String(username || '') === String(ctx.op);
+	}
+
 	function keepOnlyOpPostExpanded(post, ctx) {
-		if (!post || !ctx || !ctx.onlyOp || !ctx.op ||
-				post._ldpPostData?.hidden || String(post.dataset.username || '') !== String(ctx.op)) return;
+		if (!post || post._ldpPostData?.hidden ||
+				!matchesOnlyOpFilter(ctx, post.dataset.username)) return false;
 		setNestedReplyCollapsed(post, false);
-		if (post.classList.contains('ldp-children-collapsed')) {
+		syncNestedReplyCollapseControls(post, false);
+		if (post.dataset.ldpUserChildrenCollapsed === '1') {
+			setChildRepliesCollapsed(post, true);
+		} else if (post.classList.contains('ldp-children-collapsed')) {
 			post.classList.remove('ldp-children-collapsed');
 			syncChildControls(post);
 		}
+		return true;
 	}
 
 	let activeJumpHighlight = null;
@@ -13960,17 +14463,19 @@
 		target.classList.remove('ldp-jump-highlight');
 		target.style.removeProperty('--ldp-first-post-jump-highlight-height');
 		const firstPostReactions = syncFirstPostJumpHighlightRegion(target);
+		const regionAnchor = firstPostReactions;
 		void target.offsetWidth;
 		target.dataset.jumpHighlightToken = token;
 		target.classList.add('ldp-jump-highlight');
 		let resizeObserver = null;
-		if (firstPostReactions && isFunction(ResizeObserver)) {
+		if (regionAnchor && isFunction(ResizeObserver)) {
 			resizeObserver = new ResizeObserver(() => {
-				if (target.isConnected && target.dataset.jumpHighlightToken === token)
+				if (target.isConnected && target.dataset.jumpHighlightToken === token) {
 					syncFirstPostJumpHighlightRegion(target);
+				}
 			});
 			resizeObserver.observe(target);
-			resizeObserver.observe(firstPostReactions);
+			resizeObserver.observe(regionAnchor);
 		}
 		const config = jumpHighlightConfigFromPrefs(PREFS);
 		const reducedMotion = prefersReducedMotion();
@@ -14035,6 +14540,26 @@
 	function waitForDelay(delay) {
 		return new Promise((resolve) => {
 			setTimeout(resolve, delay);
+		});
+	}
+
+	function waitForReaderOpenTask(task, message, timeout = READER_OPEN_TASK_TIMEOUT) {
+		let timer = 0;
+		return new Promise((resolve, reject) => {
+			let settled = false;
+			const finish = (callback, value) => {
+				if (settled) return;
+				settled = true;
+				if (timer) clearTimeout(timer);
+				callback(value);
+			};
+			timer = setTimeout(() => {
+				finish(reject, requestTimeoutError(message || '阅读器载入超时'));
+			}, Math.max(1, Number(timeout) || READER_OPEN_TASK_TIMEOUT));
+			Promise.resolve(task).then(
+				(value) => finish(resolve, value),
+				(error) => finish(reject, error),
+			);
 		});
 	}
 
@@ -14173,6 +14698,7 @@
 		const viewportEdge = rootRect.top + 1;
 		const candidates = [visible.marker, owner, ...owner.querySelectorAll(
 			':scope > .ldp-post-head, :scope > .ldp-content > *, :scope > .ldp-reactions, ' +
+			':scope > .ldp-post-body-layer, :scope > .ldp-post-body-layer > *, ' +
 			':scope > .ldp-boost-list > .ldp-boost-bubble, :scope > .ldp-children > .ldp-post, ' +
 			':scope > .ldp-children > .ldp-post > .ldp-post-head, :scope > .ldp-sub-actions'
 		)];
@@ -14312,14 +14838,54 @@
 		if (!ctx.streamBottomSpacer.isConnected) ctx.commentsEl.appendChild(ctx.streamBottomSpacer);
 	}
 
+	function inlineReplyTreeOwnsStreamFloors(ctx) {
+		return !!ctx && !ctx.onlyOp && !ctx.isPostVoting && inlineReplyTreeMaxDepth() > 1;
+	}
+
+	function nestedReplyStreamOwnerItem(ctx, item) {
+		if (!inlineReplyTreeOwnsStreamFloors(ctx) || !item?.node ||
+				item.node._ldpPostData?.hidden === true) return null;
+		const postNumber = +(item.postNumber || item.node.dataset.postNumber || 0);
+		let parentNumber = +(item.node._ldpPostData?.reply_to_post_number ||
+			ctx.replyParentByPost?.get(postNumber) || 0);
+		const seen = new Set(postNumber ? [postNumber] : []);
+		for (let depth = 0; parentNumber > 0 && depth < 64; depth++) {
+			if (seen.has(parentNumber)) return null;
+			seen.add(parentNumber);
+			const ownerItem = ctx.streamItemMap?.get(parentNumber);
+			if (ownerItem) return ownerItem;
+			const parentPost = ctx.directRepliesByParent?.get(
+				ctx.replyParentByPost?.get(parentNumber)
+			)?.get(parentNumber);
+			parentNumber = +(parentPost?.reply_to_post_number ||
+				ctx.replyParentByPost?.get(parentNumber) || 0);
+		}
+		return null;
+	}
+
+	function streamLayoutUsesFilter(ctx) {
+		return !!ctx && (ctx.onlyOp || inlineReplyTreeOwnsStreamFloors(ctx));
+	}
+
 	function streamItemMatchesFilter(ctx, item) {
-		if (!ctx || !ctx.onlyOp) return true;
-		return !!item && !!ctx.op && String(item.username || '') === String(ctx.op);
+		if (!ctx || !item) return false;
+		if (ctx.onlyOp) return matchesOnlyOpFilter(ctx, item.username);
+		return !nestedReplyStreamOwnerItem(ctx, item);
+	}
+
+	function streamItemLayoutIndex(ctx, item) {
+		if (!item) return -1;
+		return streamLayoutUsesFilter(ctx) ? +(item.layoutIndex ?? -1) : +item.index;
 	}
 
 	function streamLayoutItems(ctx) {
-		if (!ctx || !ctx.onlyOp) return (ctx?.streamItems) || [];
+		if (!ctx) return [];
+		if (!streamLayoutUsesFilter(ctx)) return ctx.streamItems || [];
 		if (!ctx.streamLayoutDirty && Array.isArray(ctx.streamLayoutItems)) return ctx.streamLayoutItems;
+		ctx.streamItems.forEach((item) => {
+			item.layoutIndex = -1;
+			item.layoutZebraIndex = -1;
+		});
 		const items = ctx.streamItems.filter((item) => streamItemMatchesFilter(ctx, item));
 		let zebraIndex = 0;
 		items.forEach((item, index) => {
@@ -14401,7 +14967,7 @@
 				}
 				if (Math.abs(height - item.height) < 1) return;
 				item.height = height;
-				markStreamPrefixDirty(ctx, ctx.onlyOp ? item.layoutIndex : item.index);
+				markStreamPrefixDirty(ctx, streamItemLayoutIndex(ctx, item));
 				changed = true;
 			});
 			if (!changed) return;
@@ -14475,6 +15041,9 @@
 			return true;
 		}
 		const postData = post._ldpPostData || {};
+		// 关系快照和实时事件可能只有楼层元数据。缺少 cooked 时保留骨架，
+		// 由调用方补取完整楼层；绝不能把“尚未取得正文”渲染成空正文。
+		if (postData.cooked == null) return false;
 		const content = post.querySelector(':scope > .ldp-content');
 		if (!content) return false;
 
@@ -14553,8 +15122,8 @@
 		[...ctx.streamHydratedNodes].forEach((post) => {
 			if (!post || post.isConnected) return;
 			const item = ctx.streamItemMap.get(streamPostNumber(post));
-			const index = item && (ctx.onlyOp ? item.layoutIndex : item.index);
-			const participates = item && (!ctx.onlyOp || streamItemMatchesFilter(ctx, item));
+			const index = streamItemLayoutIndex(ctx, item);
+			const participates = item && streamItemMatchesFilter(ctx, item);
 			if (!participates || !Number.isInteger(index) || index < warmStart || index >= warmEnd) {
 				dehydratePostContent(post, ctx);
 			}
@@ -14576,7 +15145,7 @@
 		const targetItem = ctx?.streamItemMap && ctx.streamItemMap.get(+postNumber);
 		if (!targetItem) return;
 		const items = streamLayoutItems(ctx);
-		const targetIndex = ctx.onlyOp ? targetItem.layoutIndex : targetItem.index;
+		const targetIndex = streamItemLayoutIndex(ctx, targetItem);
 		if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= items.length) return;
 		const span = streamWorkingSetSpan(ctx, items.length);
 		const beforeTarget = Math.min(targetIndex, Math.floor(span * 0.75));
@@ -14638,9 +15207,7 @@
 		const idleEnd = Math.min(end - 1, priorityEnd + 3);
 		const initialTargetPostNumber = +(ctx.initialTargetHydrationBoundary || 0);
 		const initialTargetItem = initialTargetPostNumber && ctx.streamItemMap.get(initialTargetPostNumber);
-		const initialTargetIndex = initialTargetItem
-			? (ctx.onlyOp ? initialTargetItem.layoutIndex : initialTargetItem.index)
-			: -1;
+		const initialTargetIndex = streamItemLayoutIndex(ctx, initialTargetItem);
 		beginStreamViewportAnchorRestoreBatch(ctx);
 		try {
 			for (let index = idleStart; index <= idleEnd; index++) {
@@ -14700,7 +15267,7 @@
 		return tryOwnedNodeMutation(() => parent.replaceChild(nextNode, currentNode));
 	}
 
-	function mountStreamRange(ctx, start, end) {
+	function mountStreamRange(ctx, start, end, options = {}) {
 		if (!ctx || !ctx.streamItems || !ctx.commentsEl) return;
 		ensureStreamScaffold(ctx);
 		rebuildStreamPrefix(ctx);
@@ -14718,6 +15285,7 @@
 		if (ctx.streamMountedItemCount === total &&
 				ctx.streamWindowStart === start && ctx.streamWindowEnd === end &&
 				ctx.streamMountedNodes.size === end - start && rangeEndpointsConnected) {
+			if (options.refreshSameRange === false) return;
 			refreshStreamZebra(ctx, items.slice(start, end).map((item) => item.node));
 			updateStreamSpacerHeights(ctx, start, end);
 			syncCommentsHeaderPlacement(ctx);
@@ -14729,7 +15297,7 @@
 		const activePost = ctx.commentsEl.contains(activeElement) && activeElement.closest('.ldp-post');
 		if (activePost) {
 			const activeItem = ctx.streamItemMap.get(streamPostNumber(activePost));
-			const activeIndex = activeItem && (ctx.onlyOp ? activeItem.layoutIndex : activeItem.index);
+			const activeIndex = streamItemLayoutIndex(ctx, activeItem);
 			if (activeItem && (activeIndex < start || activeIndex >= end) && activeElement.blur) {
 				activeElement.blur();
 			}
@@ -14737,6 +15305,7 @@
 
 		const rangeItems = items.slice(start, end);
 		const desired = new Set(rangeItems.map((item) => item.node));
+		let releasedNestedTree = false;
 		[...ctx.streamMountedNodes].forEach((node) => {
 			if (desired.has(node)) return;
 			ctx.streamResizeObserver.unobserve(node);
@@ -14751,6 +15320,7 @@
 			suspendReaderMedia(node);
 			const bundle = ctx.floorPreview ? ctx.floorPreview.getBundleForPost(node) : [node];
 			bundle.forEach((part) => removeOwnedNode(part, ctx.commentsEl));
+			releasedNestedTree = releaseDetachedNestedReplyDom(node, ctx) || releasedNestedTree;
 			if (node.querySelector(':scope > .ldp-content :is(video,audio,iframe),:scope > .ldp-content .ldp-media-carousel')) {
 				dehydratePostContent(node, ctx);
 			}
@@ -14762,8 +15332,6 @@
 		rangeItems.forEach((item) => {
 			const node = item.node;
 			const wasConnected = node.parentElement === ctx.commentsEl;
-			const deferPreTargetWork = ctx.initialTargetPrecedingContentDeferred &&
-				+item.postNumber < +(ctx.initialTargetHydrationBoundary || 0);
 			if (!wasConnected) node.classList.remove('ldp-nested-branches-ready');
 			keepOnlyOpPostExpanded(node, ctx);
 			ctx.streamMountedNodes.add(node);
@@ -14788,9 +15356,7 @@
 				ctx.tracker.observe(node);
 				if (ctx.queueViewportTracker) ctx.queueViewportTracker.observe(node);
 				forEachDirectNestedPost(node, (child) => ctx.tracker.observe(child));
-				if (!deferPreTargetWork && node.dataset.childReplyTotal && ctx.repliesIO && ctx.repliesIO.observe) {
-					ctx.repliesIO.observe(node);
-				}
+				reconcileNestedReplyNode(node, ctx);
 				const renderedChildren = node.querySelector(':scope > .ldp-children > .ldp-post');
 				if (renderedChildren) scheduleNestedBranchSync(node, ctx);
 			}
@@ -14804,6 +15370,7 @@
 		syncCommentsHeaderPlacement(ctx);
 		if (ctx.floorPreview?.isOpen()) scheduleFloorPreviewSync(ctx);
 		restoreStreamViewportAnchor(ctx);
+		if (releasedNestedTree) applyNestedReplyDisplayPreference(ctx);
 	}
 
 	function streamPerformance(ctx) {
@@ -14898,7 +15465,7 @@
 		const item = ctx?.streamItemMap && ctx.streamItemMap.get(+postNumber);
 		if (!item || !item.node || !streamItemMatchesFilter(ctx, item)) return null;
 		const items = streamLayoutItems(ctx);
-		const layoutIndex = ctx.onlyOp ? item.layoutIndex : item.index;
+		const layoutIndex = streamItemLayoutIndex(ctx, item);
 		rebuildStreamPrefix(ctx);
 		const span = streamWorkingSetSpan(ctx, items.length);
 		const start = Math.max(0, Math.min(layoutIndex - Math.floor(span / 2), items.length - span));
@@ -14947,7 +15514,7 @@
 		const anchorItem = anchorOwner?.isConnected
 			? ctx.streamItemMap.get(streamPostNumber(anchorOwner))
 			: null;
-		const anchorIndex = anchorItem && (ctx.onlyOp ? anchorItem.layoutIndex : anchorItem.index);
+		const anchorIndex = streamItemLayoutIndex(ctx, anchorItem);
 		const currentContainsAnchor = Number.isInteger(anchorIndex) &&
 			anchorIndex >= currentStart && anchorIndex < currentEnd;
 		const nextContainsAnchor = Number.isInteger(anchorIndex) && anchorIndex >= start && anchorIndex < end;
@@ -14999,7 +15566,13 @@
 		const listOffset = getStreamListOffset(ctx);
 		const viewportHeight = Math.max(ctx.scrollRoot.clientHeight, 1);
 		const performance = streamPerformance(ctx);
-		const overscan = viewportHeight * performance.streamOverscanViewports;
+		const treeOverscanViewports = inlineReplyTreeMaxDepth() > 1
+			? Math.max(1, performance.nestedPrefetchViewports)
+			: 0;
+		const overscan = viewportHeight * Math.max(
+			performance.streamOverscanViewports,
+			treeOverscanViewports,
+		);
 		const velocityLead = Math.min(
 			viewportHeight * 2,
 			Math.max(0, Number(ctx.streamScrollVelocity) || 0) * 700
@@ -15030,8 +15603,14 @@
 		);
 		start = stableRange.start;
 		end = stableRange.end;
-		const needsRepair = ctx.streamNeedsRepair || start !== ctx.streamWindowStart || end !== ctx.streamWindowEnd;
-		mountStreamRange(ctx, start, end);
+		const layoutNeedsRepair = ctx.streamNeedsRepair;
+		const needsRepair = layoutNeedsRepair ||
+			start !== ctx.streamWindowStart || end !== ctx.streamWindowEnd;
+		mountStreamRange(ctx, start, end, {
+			// 滚动帧仍更新邻近正文 hydration，但窗口和布局都没变化时，
+			// 不重复执行斑马纹、占位、评论头与锚点几何维护。
+			refreshSameRange: layoutNeedsRepair,
+		});
 		ctx.streamNeedsRepair = false;
 		if (needsRepair) {
 			repairBlankStreamViewport(ctx, start, end);
@@ -15373,6 +15952,9 @@
 			body.innerHTML = `<div class="ldp-floor-preview-tip">${esc(`还没加载到 #${postNumber}`)}</div>`;
 		}
 		const relatedPost = anchor.closest('.ldp-post');
+		const previewFloor = preview.querySelector('.ldp-jump-preview-self');
+		if (previewFloor && matchesOnlyOpFilter(ctx, relatedPost?.dataset.username))
+			setLabel(previewFloor, `查看父楼层 #${postNumber} 到当前楼层的完整讨论`);
 		if (isFunction(options.beforePlace)) options.beforePlace();
 		if (!canShowFloorPreview(anchor)) return;
 		setNestedReplyEscapeHint(relatedPost, isEscCollapsibleNestedReply(relatedPost));
@@ -15474,6 +16056,14 @@
 				const targetPostNumber = +floorBtn.dataset.targetPostNumber;
 				if (!targetPostNumber) return;
 				floorBtn.blur();
+				const sourcePost = bundlePost(bundle);
+				const sourcePostNumber = +(sourcePost?.dataset.postNumber || 0);
+				if (sourcePostNumber > 0 && matchesOnlyOpFilter(ctx, sourcePost.dataset.username)) {
+					const returnControl = bundle.anchor;
+					hideBundle(bundle);
+					await openAggregateReplyTarget(sourcePostNumber, ctx, { returnControl });
+					return;
+				}
 				clearJumpBackLinks(ctx);
 				await ctx.timeline.jumpTo(targetPostNumber);
 			});
@@ -17222,13 +17812,19 @@
 				}
 				if (!ctx.lightboxImageCommentPosts) ctx.lightboxImageCommentPosts = new Map();
 				ctx.lightboxImageCommentPosts.set(+created.post_number, created);
-				if (targetPost?.id) {
-					targetPost.reply_count = Math.max(0, +(targetPost.reply_count || 0)) + 1;
-					persistReaderPostState(ctx, targetPost);
-				}
 				rememberPostData(ctx, created, targetPostNumber);
 				ctx.loader.persistFetchedPosts([created]);
-				ingestLivePosts([created], ctx, { refreshContent: true });
+				ingestLivePosts([created], ctx, {
+					refreshContent: true,
+					newPostNumbers: new Set([+created.post_number]),
+				});
+				if (targetPost?.id) {
+					targetPost.reply_count = Math.max(
+						+(targetPost.reply_count || 0),
+						+(ctx.subReplyState.get(targetPostNumber)?.totalCount || 0),
+					);
+					persistReaderPostState(ctx, targetPost);
+				}
 				ctx.totalPosts = Math.max(+(ctx.totalPosts || 0), +created.post_number);
 				let state = commentCache.get(item.key);
 				if (!state) state = await loadLightboxCommentTree(item, ctx);
@@ -18410,20 +19006,77 @@
 			return changed;
 		};
 
-		const persistFetchedPosts = (posts) => {
-			if (!Array.isArray(posts) || !posts.length) return;
-			const entry = TOPIC_DATA_CACHE.get(String(topicId));
-			const persistedTopic = (entry?.topic) || topic;
-			if (!persistedTopic) return;
-			const changed = appendMissingTopicPosts(persistedTopic, posts);
-			if (topic && topic !== persistedTopic) appendMissingTopicPosts(topic, posts);
-			if (changed) setCachedTopicData(topicId, persistedTopic);
-		};
+			const persistFetchedPosts = (posts) => {
+				if (!Array.isArray(posts) || !posts.length) return;
+				cachePosts(posts);
+				const entry = TOPIC_DATA_CACHE.get(String(topicId));
+				const persistedTopic = (entry?.topic) || topic;
+				if (!persistedTopic) return;
+				let changed = appendMissingTopicPosts(persistedTopic, posts);
+				const repliesByParent = new Map();
+				posts.forEach((post) => {
+					const parentPostNumber = +(post?.reply_to_post_number || 0);
+					if (!parentPostNumber) return;
+					if (!repliesByParent.has(parentPostNumber))
+						repliesByParent.set(parentPostNumber, []);
+					repliesByParent.get(parentPostNumber).push(post);
+				});
+				repliesByParent.forEach((replies, parentPostNumber) => {
+					const parentPost = postByNumber.get(parentPostNumber) || {
+						post_number: parentPostNumber,
+					};
+					changed = recordTopicNestedReplySnapshot(
+						persistedTopic,
+						parentPost,
+						replies,
+						{
+							totalCount: Math.max(0, +(parentPost.reply_count || 0)),
+							complete: false,
+							fetchAfter: replyPageCursor(replies),
+						},
+					) || changed;
+				});
+				if (topic && topic !== persistedTopic) {
+					appendMissingTopicPosts(topic, posts);
+					repliesByParent.forEach((replies, parentPostNumber) => {
+						const parentPost = postByNumber.get(parentPostNumber) || {
+							post_number: parentPostNumber,
+						};
+						recordTopicNestedReplySnapshot(
+							topic,
+							parentPost,
+							replies,
+							{
+								totalCount: Math.max(0, +(parentPost.reply_count || 0)),
+								complete: false,
+								fetchAfter: replyPageCursor(replies),
+							},
+						);
+					});
+				}
+				if (changed) setCachedTopicData(topicId, persistedTopic);
+			};
 
-		const persistViewedPostNumbers = (postNumbers) => {
-			const posts = [...new Set((postNumbers || []).map(Number).filter(Boolean))]
-				.map((postNumber) => postByNumber.get(postNumber))
-				.filter(Boolean);
+			const persistNestedReplies = (parentPost, replies, options = {}) => {
+				const batch = Array.isArray(replies) ? replies.filter(Boolean) : [];
+				const entry = TOPIC_DATA_CACHE.get(String(topicId));
+				const persistedTopic = (entry?.topic) || topic;
+				if (!persistedTopic) return;
+				let changed = appendMissingTopicPosts(persistedTopic, batch);
+				changed = recordTopicNestedReplySnapshot(
+					persistedTopic, parentPost, batch, options
+				) || changed;
+				if (topic && topic !== persistedTopic) {
+					appendMissingTopicPosts(topic, batch);
+					recordTopicNestedReplySnapshot(topic, parentPost, batch, options);
+				}
+				if (changed) setCachedTopicData(topicId, persistedTopic);
+			};
+
+			const persistViewedPostNumbers = (postNumbers) => {
+				const posts = [...new Set((postNumbers || []).map(Number).filter(Boolean))]
+					.map((postNumber) => postByNumber.get(postNumber))
+					.filter(Boolean);
 			persistFetchedPosts(posts);
 		};
 
@@ -18451,13 +19104,14 @@
 		const syncTopicCacheData = (incomingTopic) => {
 			if (!incomingTopic) return;
 			const incoming = normalizeTopicData(incomingTopic);
-			cachePosts(incoming.posts);
-			if (incomingTopic === topic) return;
-			if (!topic) return;
-			appendMissingTopicPosts(topic, incoming.posts);
-			Object.keys(incomingTopic).forEach((key) => {
-				if (key !== 'post_stream') topic[key] = incomingTopic[key];
-			});
+				cachePosts(incoming.posts);
+				if (incomingTopic === topic) return;
+				if (!topic) return;
+				mergeMissingSnapshotPosts(topic, incomingTopic);
+				Object.keys(incomingTopic).forEach((key) => {
+					if (key !== 'post_stream' && key !== NESTED_REPLY_SNAPSHOT_KEY)
+						topic[key] = incomingTopic[key];
+				});
 			if (incoming.stream.length >= stream.length) {
 				stream = incoming.stream.slice();
 				streamIndexById = new Map(stream.map((id, index) => [id, index]));
@@ -18488,7 +19142,7 @@
 					const entry = TOPIC_DATA_CACHE.get(String(topicId));
 					const previousTopic = (entry?.topic) || topic;
 					if (previousTopic?.post_stream) {
-						appendMissingTopicPosts(data, previousTopic.post_stream.posts);
+						mergeMissingSnapshotPosts(data, previousTopic);
 					}
 					normalizeTopicData(data);
 					setCachedTopicData(topicId, data, {
@@ -18818,9 +19472,9 @@
 			init, next, loadPostsByIds, loadPost,
 			loadBeforePost: (postNumber, options) => loadRelativePosts(postNumber, 'before', options),
 			loadAfterPost: (postNumber, options) => loadRelativePosts(postNumber, 'after', options),
-			loadLastPost: (options) => loadRelativePosts(0, 'last', options),
-			refreshTopicData,
-			persistViewedPostNumbers, persistFetchedPosts,
+				loadLastPost: (options) => loadRelativePosts(0, 'last', options),
+				refreshTopicData,
+				persistViewedPostNumbers, persistFetchedPosts, persistNestedReplies,
 			destroy() {
 				stopTopicCacheSync();
 				stopTopicCacheSync = () => {};
@@ -18873,6 +19527,7 @@
 	function insertStreamPost(ctx, node, postNumber, options = {}) {
 		const current = +postNumber;
 		if (!current || ctx.streamItemMap.has(current)) return;
+		const filteredLayout = streamLayoutUsesFilter(ctx);
 		let low = 0;
 		let high = ctx.streamItems.length;
 		const compare = (item) => {
@@ -18891,7 +19546,8 @@
 			STREAM_ESTIMATED_HEIGHT,
 			postContentPlaceholderHeight(node._ldpPostData) + 72
 		);
-		if (ctx.streamMountedNodes.size && ctx.streamWindowEnd > ctx.streamWindowStart) {
+		if (!filteredLayout && ctx.streamMountedNodes.size &&
+				ctx.streamWindowEnd > ctx.streamWindowStart) {
 			if (low < ctx.streamWindowStart) {
 				ctx.streamWindowStart++;
 				ctx.streamWindowEnd++;
@@ -18916,7 +19572,11 @@
 		} else {
 			reindexStreamItems(ctx, low);
 		}
-		if (ctx.onlyOp) invalidateStreamLayout(ctx);
+		if (filteredLayout) {
+			ctx.streamWindowResetPending = true;
+			ctx.streamMountedItemCount = -1;
+			invalidateStreamLayout(ctx);
+		}
 		else markStreamPrefixDirty(ctx, low);
 		ctx.streamNeedsRepair = true;
 		ensureStreamScaffold(ctx);
@@ -18929,7 +19589,11 @@
 		reindexStreamItems(ctx, dirtyFrom);
 		ctx.streamPendingReindexFrom = null;
 		refreshStreamZebra(ctx);
-		if (ctx.onlyOp) invalidateStreamLayout(ctx);
+		if (streamLayoutUsesFilter(ctx)) {
+			ctx.streamWindowResetPending = true;
+			ctx.streamMountedItemCount = -1;
+			invalidateStreamLayout(ctx);
+		}
 		else markStreamPrefixDirty(ctx, dirtyFrom);
 		if (syncNow) {
 			const keepMountedWindow = preserveViewportAnchor && ctx.streamViewportAnchor &&
@@ -18952,61 +19616,162 @@
 
 	function refreshStreamZebra(ctx, nodes = null) {
 		if (!ctx || !ctx.commentsEl) return;
-		if (ctx.onlyOp) streamLayoutItems(ctx);
+		if (streamLayoutUsesFilter(ctx)) streamLayoutItems(ctx);
 		const targets = nodes || ctx.commentsEl.children;
 		for (const node of targets) {
 			if (!node.classList.contains('ldp-post')) continue;
 			const item = ctx.streamItemMap?.get(streamPostNumber(node));
-			const zebraIndex = item ? (ctx.onlyOp ? item.layoutZebraIndex : item.zebraIndex) : -1;
+			const zebraIndex = item
+				? (streamLayoutUsesFilter(ctx) ? item.layoutZebraIndex : item.zebraIndex)
+				: -1;
 			node.classList.toggle('ldp-zebra-alt', zebraIndex >= 0 && zebraIndex % 2 === 1);
 		}
 	}
 
-	function syncHiddenReplyRun(run, atEnd = false) {
+	function syncHiddenReplyRun(run, atEnd = false, showMarker = true) {
 		if (!run.length) return null; const lead = run[0], markerClass = 'ldp-hidden-reply-marker';
+		if (!showMarker) {
+			let changed = null;
+			run.forEach(({ item, node, index }) => {
+				if (!node.hidden || item.hiddenReplyMarker === true || item.hiddenReplyFloor !== true)
+					changed = changed == null ? index : Math.min(changed, index);
+				node.querySelector(`:scope > .${markerClass}`)?.remove();
+				node.hidden = true;
+				node.classList.remove('ldp-zebra-alt', 'ldp-hidden-replies-at-end');
+				item.hiddenReplyMarker = false;
+				item.hiddenReplyFloor = true;
+				item.height = 0;
+			});
+			return changed;
+		}
 		let marker = lead.node.querySelector(`:scope > .${markerClass}`); const expanded = marker?.querySelector('.ldp-hidden-reply-list')?.hidden === false;
 		if (!marker) {
 			marker = makeElement('div'); marker.className = markerClass;
 			lead.node.prepend(marker);
 		}
-		lead.node.classList.toggle('ldp-hidden-replies-at-end', atEnd);
-		[...lead.node.children].forEach((child) => { if (child !== marker) child.hidden = true; });
 		marker.innerHTML = `<button class="ldp-btn ldp-hidden-reply-toggle" type="button" aria-expanded="${expanded}" aria-label="查看 ${run.length} 个隐藏回复"></button>
 			<div class="ldp-hidden-reply-list" role="list" ${expanded ? '' : 'hidden'}>${run.map(({ post }) => {
 				const name = post.name || post.username || `#${post.post_number}`, src = avatarUrl(post.avatar_template, 24); return `<button class="ldp-hidden-reply-avatar" role="listitem" data-post-number="${+post.post_number}" type="button" aria-label="跳到 ${escAttr(name)} #${+post.post_number}">${src ? `<img src="${escAttr(src)}" alt="">` : esc(name.slice(0, 1))}</button>`;
 			}).join('')}</div>`; let changed = null; run.forEach(({ item, node, index }, offset) => {
-			const isLead = offset === 0, hidden = !isLead; if (node.hidden !== hidden || item.hiddenReplyMarker !== isLead) changed = changed == null ? index : Math.min(changed, index);
-			node.hidden = hidden; node.classList.remove('ldp-zebra-alt'); item.hiddenReplyMarker = isLead; item.height = isLead ? 18 : 0; }); return changed;
+			const isLead = offset === 0, hidden = !isLead; if (node.hidden !== hidden || item.hiddenReplyMarker !== isLead || item.hiddenReplyFloor !== true) changed = changed == null ? index : Math.min(changed, index);
+			if (!isLead) node.querySelector(`:scope > .${markerClass}`)?.remove();
+			node.hidden = hidden; node.classList.remove('ldp-zebra-alt'); node.classList.toggle('ldp-hidden-replies-at-end', isLead && atEnd); item.hiddenReplyMarker = isLead; item.hiddenReplyFloor = true; item.height = isLead ? 18 : 0; }); return changed;
+	}
+
+	function restoreHiddenReplyFloor(item, node, index) {
+		const marker = node.querySelector(':scope > .ldp-hidden-reply-marker');
+		if (!marker && item.hiddenReplyFloor !== true && item.hiddenReplyMarker !== true) return null;
+		marker?.remove();
+		node.hidden = false;
+		node.classList.remove('ldp-hidden-replies-at-end');
+		item.hiddenReplyMarker = false;
+		item.hiddenReplyFloor = false;
+		item.height = Math.max(
+			STREAM_ESTIMATED_HEIGHT,
+			postContentPlaceholderHeight(node._ldpPostData) + 72
+		);
+		return index;
+	}
+
+	function postDescendsFromKnownAncestor(ctx, post, ancestorPostNumbers) {
+		const postNumber = +(post?.post_number || 0);
+		let parentNumber = +(post?.reply_to_post_number ||
+			ctx?.replyParentByPost?.get(postNumber) || 0);
+		const seen = new Set(postNumber ? [postNumber] : []);
+		for (let depth = 0; parentNumber > 0 && depth < 64; depth++) {
+			if (ancestorPostNumbers.has(parentNumber)) return true;
+			if (seen.has(parentNumber)) return false;
+			seen.add(parentNumber);
+			const parentPost = ctx?.streamNodeMap?.get(parentNumber)?._ldpPostData;
+			parentNumber = +(parentPost?.reply_to_post_number ||
+				ctx?.replyParentByPost?.get(parentNumber) || 0);
+		}
+		return false;
+	}
+
+	function scheduleNestedReplyDisplaySync(ctx) {
+		if (!ctx || !Array.isArray(ctx.streamItems) || ctx.nestedReplyDisplaySyncQueued) return;
+		ctx.nestedReplyDisplaySyncQueued = true;
+		queueMicrotask(() => {
+			if (!ctx.nestedReplyDisplaySyncQueued) return;
+			ctx.nestedReplyDisplaySyncQueued = false;
+			if (ctx.readerSession &&
+					!ctx.readerSession.isCurrent('opening', 'active')) return;
+			applyNestedReplyDisplayPreference(ctx);
+		});
 	}
 
 	function applyNestedReplyDisplayPreference(ctx, forceZebra = false) {
 		if (!ctx || !Array.isArray(ctx.streamItems)) return;
+		ctx.nestedReplyDisplaySyncQueued = false;
 		const collapseChildren = PREFS.expandNestedRepliesByDefault !== true;
 		const expandLeaf = PREFS.expandLeafNestedReplies === true;
+		const treeMode = inlineReplyTreeOwnsStreamFloors(ctx);
+		const hideNestedFloors = treeMode || PREFS.hideNestedReplyFloors === true;
+		const items = ctx.onlyOp
+			? ctx.streamItems.filter((item) => streamItemMatchesFilter(ctx, item))
+			: ctx.streamItems;
+		const keptOnlyOpPostNumbers = new Set();
 		let reindexFrom = null, hiddenRun = [];
 		const flushHiddenRun = (atEnd = false) => {
-			const changed = syncHiddenReplyRun(hiddenRun, atEnd);
+			const changed = syncHiddenReplyRun(hiddenRun, atEnd, !treeMode);
 			if (changed != null) reindexFrom = reindexFrom == null ? changed : Math.min(reindexFrom, changed);
 			hiddenRun = [];
 		};
-		ctx.streamItems.forEach((item, index) => {
+		items.forEach((item) => {
 			const node = item?.node;
 			if (!node) return;
+			const index = item.index;
 			node.classList.remove('ldp-hidden-replies-at-end');
-			const keepOnlyOpExpanded = !!(ctx.onlyOp && String(item.username || '') === String(ctx.op || ''));
+			syncParentJumpControl(node, ctx);
+			const keepOnlyOpExpanded = matchesOnlyOpFilter(ctx, item.username);
 			const post = node._ldpPostData;
 			const parentNumber = +(post?.reply_to_post_number || node.dataset.replyToPostNumber || 0);
 			const isNestedFloor = !!(post && parentNumber > 0);
-			const hideFloor = isNestedFloor && !post.hidden;
+			const treeParent = treeMode && parentNumber
+				? findReplyListParent(parentNumber, ctx) : null;
+			const treeOwnerItem = treeMode ? nestedReplyStreamOwnerItem(ctx, item) : null;
+			const treeOwnsFloor = !treeMode || !!treeOwnerItem;
+			const treeRendersFloor = treeMode && !!treeParent?.querySelector(
+				`:scope > .ldp-children > .ldp-post[data-post-number="${+post?.post_number}"]`
+			);
+			if (treeOwnsFloor && ctx.streamViewportAnchor?.owner === node) {
+				const replacement = treeRendersFloor
+					? treeParent.querySelector(
+						`:scope > .ldp-children > .ldp-post[data-post-number="${+post?.post_number}"]`
+					)
+					: treeOwnerItem?.node?.isConnected ? treeOwnerItem.node : null;
+				if (replacement) {
+					ctx.streamViewportAnchor.marker =
+						replacement.querySelector(':scope > .ldp-post-head') || replacement;
+					ctx.streamViewportAnchor.owner = streamOwnerPostNode(ctx, replacement);
+				}
+			}
+			const hideFloor = !post?.hidden && (ctx.onlyOp
+				// Keep the first OP representative of each proven reply branch.
+				? postDescendsFromKnownAncestor(ctx, post, keptOnlyOpPostNumbers)
+				: hideNestedFloors && isNestedFloor && treeOwnsFloor);
 			if (hideFloor) hiddenRun.push({ item, node, post, index });
-			else flushHiddenRun();
-			if (+(node.dataset.childReplyTotal || 0) > 0) {
-				setChildRepliesCollapsed(node, keepOnlyOpExpanded ? false : collapseChildren);
+			else {
+				flushHiddenRun();
+				if (!post?.hidden) {
+					const changed = restoreHiddenReplyFloor(item, node, index);
+					if (changed != null) reindexFrom = reindexFrom == null ? changed : Math.min(reindexFrom, changed);
+				}
+				if (ctx.onlyOp && post?.post_number) keptOnlyOpPostNumbers.add(+post.post_number);
+			}
+			if (treeMode && hideFloor) {
+				ctx.repliesIO?.unobserve(node);
+				releaseNestedReplyDom(node, ctx, true);
+			} else if (+(node.dataset.childReplyTotal || 0) > 0) {
+				setChildRepliesCollapsed(node, node.dataset.ldpUserChildrenCollapsed === '1' ||
+					(keepOnlyOpExpanded ? false : collapseChildren));
 			}
 			const isLeafNestedReply = !!(post && node.classList.contains('ldp-reply-collapsible') &&
 				!post.hidden && !(+post.reply_count > 0));
 			const collapsed = !expandLeaf && !keepOnlyOpExpanded;
 			if (isLeafNestedReply) setNestedReplyCollapsed(node, collapsed, { deferZebraSync: true });
+			syncNestedReplyCollapseControls(node, !keepOnlyOpExpanded);
 			const excluded = !!post?.hidden || hideFloor || (isLeafNestedReply && collapsed);
 			if (item.zebraExcluded === excluded) return;
 			item.zebraExcluded = excluded;
@@ -19016,8 +19781,69 @@
 		if (forceZebra) reindexFrom = 0;
 		if (reindexFrom == null) return;
 		reindexStreamItems(ctx, reindexFrom);
-		if (ctx.onlyOp) invalidateStreamLayout(ctx);
+		if (streamLayoutUsesFilter(ctx)) invalidateStreamLayout(ctx);
 		else markStreamPrefixDirty(ctx, reindexFrom);
+		refreshStreamZebra(ctx);
+		scheduleStreamWindowSync(ctx);
+	}
+
+	function syncNestedTreeOwnedFloors(ctx, parentNode, postNumbers, ownedNumbers = postNumbers) {
+		const treeMode = inlineReplyTreeOwnsStreamFloors(ctx);
+		if (!treeMode || ctx?.onlyOp || !parentNode) {
+			scheduleNestedReplyDisplaySync(ctx);
+			return;
+		}
+		const renderedPosts = new Map(
+			[...parentNode.querySelectorAll(':scope > .ldp-children > .ldp-post[data-post-number]')]
+				.map((node) => [+node.dataset.postNumber, node])
+				.filter(([postNumber]) => postNumber > 0)
+		);
+		const ownedPostNumbers = new Set(ownedNumbers.map(Number).filter(Boolean));
+		let reindexFrom = null;
+		[...new Set(postNumbers)].forEach((postNumber) => {
+			const number = +postNumber;
+			const item = ctx.streamItemMap?.get(number);
+			const node = item?.node;
+			const post = node?._ldpPostData;
+			if (!item || !node || !post || post.hidden) return;
+			syncParentJumpControl(node, ctx);
+			const treeNode = renderedPosts.get(number);
+			const treeOwnsFloor = ownedPostNumbers.has(number);
+			if (treeOwnsFloor) {
+				if (ctx.streamViewportAnchor?.owner === node) {
+					const replacement = treeNode || parentNode;
+					const replacementMarker =
+						replacement.querySelector(':scope > .ldp-post-head') || replacement;
+					ctx.streamViewportAnchor.marker = replacementMarker;
+					ctx.streamViewportAnchor.owner = streamOwnerPostNode(ctx, replacement);
+				}
+				ctx.repliesIO?.unobserve(node);
+				releaseNestedReplyDom(node, ctx, true);
+			}
+			const changed = treeOwnsFloor
+				? syncHiddenReplyRun([{ item, node, post, index: item.index }], false, false)
+				: restoreHiddenReplyFloor(item, node, item.index);
+			if (changed != null)
+				reindexFrom = reindexFrom == null ? changed : Math.min(reindexFrom, changed);
+			const isLeafNestedReply = node.classList.contains('ldp-reply-collapsible') &&
+				!(+post.reply_count > 0);
+			if (!treeOwnsFloor && isLeafNestedReply) {
+				setNestedReplyCollapsed(node, PREFS.expandLeafNestedReplies !== true, {
+					deferZebraSync: true,
+				});
+			}
+			syncNestedReplyCollapseControls(node, true);
+			const excluded = treeOwnsFloor ||
+				isLeafNestedReply && node.classList.contains('ldp-nested-collapsed');
+			if (item.zebraExcluded !== excluded) {
+				item.zebraExcluded = excluded;
+				reindexFrom = reindexFrom == null
+					? item.index : Math.min(reindexFrom, item.index);
+			}
+		});
+		if (reindexFrom == null) return;
+		reindexStreamItems(ctx, reindexFrom);
+		invalidateStreamLayout(ctx);
 		refreshStreamZebra(ctx);
 		scheduleStreamWindowSync(ctx);
 	}
@@ -19025,10 +19851,17 @@
 	function findReplyListParent(postNumber, ctx) {
 		const num = +postNumber;
 		if (!num || !ctx) return null;
+		const nestedNode = ctx.commentsEl?.querySelector(
+			`.ldp-post.ldp-nested-preview[data-post-number="${num}"]`
+		);
+		if (nestedNode) return nestedNode;
 		const streamNode = getStreamPostNode(ctx, num);
 		if (streamNode?.isConnected) return streamNode;
-		return (ctx.commentsEl?.querySelector(`:scope > .ldp-post[data-post-number="${num}"]`)) ||
-				null;
+		for (const state of ctx.subReplyState?.values?.() || []) {
+			const cached = state?.nodeCache?.get(num);
+			if (cached?.isConnected) return cached;
+		}
+		return ctx.commentsEl?.querySelector(`.ldp-post[data-post-number="${num}"]`) || null;
 	}
 
 	function rememberLatestReplyTime(ctx, post, options = {}) {
@@ -19041,28 +19874,190 @@
 		if (ctx.timeline) ctx.timeline.update();
 	}
 
-	function rememberPostData(ctx, post, parentHint = 0) {
-		const postNumber = +(post?.post_number || 0);
-		if (!ctx || !postNumber) return 0;
-		const knownParentNumber = +(ctx.replyParentByPost?.get(postNumber) || 0);
-		const parentNumber = +(post.reply_to_post_number || parentHint || knownParentNumber || 0);
-		if (!parentNumber) return 0;
-		if (!post.reply_to_post_number) post.reply_to_post_number = parentNumber;
-		if (ctx.replyParentByPost) ctx.replyParentByPost.set(postNumber, parentNumber);
-		let replies = ctx.directRepliesByParent.get(parentNumber);
-		if (!replies) {
-			replies = new Map();
-			ctx.directRepliesByParent.set(parentNumber, replies);
+	function syncNestedReplyStateFromRelations(ctx, parentPostNumber, options = {}) {
+		const parentNumber = +parentPostNumber;
+		if (!ctx || !parentNumber) return null;
+		const replies = mergeDirectReplies(
+			[...(ctx?.directRepliesByParent?.get(parentNumber)?.values() || [])]
+		);
+		const previous = ctx.subReplyState.get(parentNumber);
+		if (!replies.length && !previous) return null;
+		const parentNode = ctx.streamNodeMap?.get(parentNumber);
+		const parentDeclaredTotal = Math.max(
+			+(parentNode?.dataset.childReplyTotal || 0),
+			+(parentNode?._ldpPostData?.reply_count || 0),
+		);
+		const optionDeclaredTotal = Math.max(0, Number(options.totalCount) || 0);
+		const previousTotalKnown = previous?.totalCountKnown === true ||
+			previous?.hasMore === false ||
+			+(previous?.totalCount || 0) > +(previous?.all?.length || 0);
+		const previousDeclaredTotal = previousTotalKnown
+			? Math.max(0, +(previous?.totalCount || 0)) : 0;
+		const declaredTotal = Math.max(
+			parentDeclaredTotal,
+			optionDeclaredTotal,
+			previousDeclaredTotal,
+		);
+		const complete = options.complete === true ||
+			options.complete !== false && previous?.hasMore === false;
+		const totalCountKnown = complete || parentDeclaredTotal > 0 ||
+			optionDeclaredTotal > 0 || previousTotalKnown;
+		const state = previous || {};
+		Object.assign(state, {
+			all: replies,
+			pageIndex: Math.max(0, +(previous?.pageIndex || 0)),
+			nodeCache: previous?.nodeCache || new Map(),
+			renderedKey: previous?.renderedKey || '',
+			renderedParent: previous?.renderedParent || null,
+			totalCount: complete ? replies.length : Math.max(replies.length, declaredTotal),
+			totalCountKnown,
+			fetchedReplyCount: Math.max(replies.length, +(previous?.fetchedReplyCount || 0)),
+			fetchAfter: Math.max(replyPageCursor(replies), +(previous?.fetchAfter || 0)),
+			hasMore: complete ? false :
+				totalCountKnown ? declaredTotal > replies.length : true,
+			loadingMore: false,
+		});
+		ctx.subReplyState.set(parentNumber, state);
+		return state;
+	}
+
+	function commitNestedReplyRelations(ctx, posts, options = {}) {
+		const batch = Array.isArray(posts) ? posts : [posts];
+		const parentHint = Math.max(0, +(options.parentHint || 0));
+		const affectedParents = new Set();
+		const states = new Map();
+		let firstParentNumber = 0;
+		let relationshipChanged = false;
+		if (!ctx) return { firstParentNumber, affectedParents, states, relationshipChanged };
+		batch.forEach((post) => {
+			const postNumber = +(post?.post_number || 0);
+			if (!postNumber) return;
+			const knownParentNumber = +(ctx.replyParentByPost?.get(postNumber) || 0);
+			const parentNumber = +(post.reply_to_post_number || parentHint || knownParentNumber || 0);
+			if (!parentNumber || parentNumber === postNumber) return;
+			if (!firstParentNumber) firstParentNumber = parentNumber;
+			if (!post.reply_to_post_number) post.reply_to_post_number = parentNumber;
+			if (knownParentNumber && knownParentNumber !== parentNumber) {
+				const previousParentReplies = ctx.directRepliesByParent.get(knownParentNumber);
+				if (previousParentReplies?.delete(postNumber)) {
+					affectedParents.add(knownParentNumber);
+					relationshipChanged = true;
+				}
+			}
+			ctx.replyParentByPost?.set(postNumber, parentNumber);
+			let replies = ctx.directRepliesByParent.get(parentNumber);
+			if (!replies) {
+				replies = new Map();
+				ctx.directRepliesByParent.set(parentNumber, replies);
+			}
+			const previousPost = replies.get(postNumber);
+			const storedPost = previousPost && previousPost !== post
+				? Object.assign({}, previousPost, post)
+				: post;
+			replies.set(postNumber, storedPost);
+			const relationAdded = !previousPost || knownParentNumber !== parentNumber;
+			if (previousPost !== storedPost || relationAdded ||
+					!ctx.subReplyState.has(parentNumber)) {
+				affectedParents.add(parentNumber);
+			}
+			if (relationAdded) relationshipChanged = true;
+		});
+		affectedParents.forEach((parentNumber) => {
+			const state = syncNestedReplyStateFromRelations(ctx, parentNumber, {
+				totalCount: parentNumber === parentHint ? options.totalCount : 0,
+				complete: parentNumber === parentHint ? options.complete : undefined,
+			});
+			if (state) states.set(parentNumber, state);
+			if (options.render === false) return;
+			const parentNode = findReplyListParent(parentNumber, ctx);
+			if (parentNode?.isConnected)
+				reconcileNestedReplyNode(parentNode, ctx);
+		});
+		if (relationshipChanged && inlineReplyTreeOwnsStreamFloors(ctx)) {
+			ctx.streamWindowResetPending = true;
+			ctx.streamMountedItemCount = -1;
+			invalidateStreamLayout(ctx);
 		}
-		replies.set(postNumber, post);
-		return parentNumber;
+		if (relationshipChanged && options.syncDisplay !== false)
+			scheduleNestedReplyDisplaySync(ctx);
+		return { firstParentNumber, affectedParents, states, relationshipChanged };
+	}
+
+	function rememberPostData(ctx, post, parentHint = 0) {
+		return commitNestedReplyRelations(ctx, post, { parentHint }).firstParentNumber;
+	}
+
+	function restoreNestedReplySnapshot(ctx, topic) {
+		const snapshot = topicNestedReplySnapshot(topic);
+		if (!ctx || !snapshot) return 0;
+		const posts = postsFromPayload(topic);
+		const postsByNumber = new Map(
+			posts.filter((post) => +(post?.post_number || 0) > 0)
+				.map((post) => [+post.post_number, post])
+		);
+		let restored = 0;
+		Object.values(snapshot.parents).forEach((rawEntry) => {
+			const entry = normalizeNestedReplySnapshotEntry(rawEntry);
+			if (!entry) return;
+			const parentPost = postsByNumber.get(entry.parentPostNumber);
+			const replies = entry.postNumbers
+				.map((postNumber) => postsByNumber.get(postNumber))
+				.filter((post) => post &&
+					+(post.reply_to_post_number || entry.parentPostNumber) === entry.parentPostNumber);
+			commitNestedReplyRelations(ctx, replies, {
+				parentHint: entry.parentPostNumber,
+				render: false,
+				syncDisplay: false,
+			});
+			const knownReplies = mergeDirectReplies(
+				[...(ctx.directRepliesByParent.get(entry.parentPostNumber)?.values() || [])],
+			);
+			const totalCount = Math.max(
+				knownReplies.length,
+				entry.totalCount,
+				+(parentPost?.reply_count || 0),
+			);
+			// 快照可能比主题列表中的父帖更新。先回填直属回复数，使父帖首次渲染
+			// 就创建树容器；即使回复正文尚未缓存，观察器也能继续补取。
+			if (parentPost && totalCount > +(parentPost.reply_count || 0))
+				parentPost.reply_count = totalCount;
+			if (!knownReplies.length && totalCount > 0) return;
+			const complete = entry.complete && knownReplies.length >= totalCount;
+			ctx.subReplyState.set(entry.parentPostNumber, {
+				all: knownReplies,
+				pageIndex: 0,
+				nodeCache: new Map(),
+				renderedKey: '',
+				renderedParent: null,
+				totalCount,
+				totalCountKnown: complete || totalCount > knownReplies.length ||
+					+(parentPost?.reply_count || 0) > 0,
+				fetchedReplyCount: knownReplies.length,
+				fetchAfter: Math.max(entry.fetchAfter, replyPageCursor(knownReplies)),
+				hasMore: !complete,
+				loadingMore: false,
+				fromSnapshot: true,
+			});
+			restored++;
+		});
+		return restored;
+	}
+
+	function persistNestedPostBatch(ctx, posts) {
+		if (!isFunction(ctx?.loader?.persistFetchedPosts)) return;
+		const nestedPosts = (Array.isArray(posts) ? posts : [])
+			.filter((post) => +(post?.reply_to_post_number || 0) > 0);
+		if (nestedPosts.length) ctx.loader.persistFetchedPosts(nestedPosts);
 	}
 
 	function attachPostBatch(posts, ctx, options = {}) {
 		const batch = Array.isArray(posts) ? posts : [];
 		if (!batch.length) return [];
 		ctx.tracker.preload(batch);
-		const batchOptions = { ...options, deferStreamSync: true };
+		persistNestedPostBatch(ctx, batch);
+		if (options.relationsCommitted !== true)
+			commitNestedReplyRelations(ctx, batch, { render: false, syncDisplay: false });
+		const batchOptions = { ...options, deferStreamSync: true, relationsCommitted: true };
 		const nodes = batch.map((post) => attachPost(post, ctx, batchOptions)).filter(Boolean);
 		syncKnownBoostIdentities(ctx, batch.map((post) => post?.username));
 		applyNestedReplyDisplayPreference(ctx);
@@ -19083,10 +20078,14 @@
 		const batch = Array.isArray(posts) ? posts : [];
 		if (!batch.length) return [];
 		ctx.tracker.preload(batch);
+		persistNestedPostBatch(ctx, batch);
+		if (options.relationsCommitted !== true)
+			commitNestedReplyRelations(ctx, batch, { render: false, syncDisplay: false });
 		const acceptsWork = isFunction(options.acceptsWork) ? options.acceptsWork : () => true;
 		const batchOptions = { ...options };
 		delete batchOptions.acceptsWork;
 		batchOptions.deferStreamSync = true;
+		batchOptions.relationsCommitted = true;
 		const nodes = [];
 		const attachedPosts = [];
 		let sliceStartedAt = performance.now();
@@ -19113,7 +20112,9 @@
 	}
 
 	function attachPost(p, ctx, options = {}) {
-		const rememberedParentNum = rememberPostData(ctx, p);
+		const rememberedParentNum = options.relationsCommitted === true
+			? +(p?.reply_to_post_number || ctx.replyParentByPost?.get(+p?.post_number) || 0)
+			: rememberPostData(ctx, p);
 		rememberLatestReplyTime(ctx, p);
 		const fromNestedList = !!options.nestedList;
 		const parentNum = +(p.reply_to_post_number || rememberedParentNum || 0);
@@ -19135,10 +20136,16 @@
 				`:scope > .ldp-post[data-post-number="${+p.post_number}"]`
 			);
 			if (existingNode) return existingNode;
+			const nestDepth = Number.isFinite(+options.nestDepth)
+				? Math.max(0, +options.nestDepth) : postNestDepth(parentNode) + 1;
 			const node = renderPost(p, renderAsReply, ctx, {
 				forceExpanded: true,
 				nestedPreview: true,
 				showParentJump: false,
+				nestDepth,
+				// 树节点与当前分支批次一起完成正文渲染；只有关系快照缺少
+				// cooked 时才保留骨架并精确补取该楼层。
+				deferContent: p.cooked == null,
 			});
 			if (parentNode) {
 				if (!options.deferNestedSync) parentChildren.appendChild(node);
@@ -19154,9 +20161,6 @@
 						setNestedReplyCollapsed(streamNode, true);
 					} else if (!streamIsNestedReply || p.reply_count > 0) {
 						setNestedReplyCollapsed(streamNode, false);
-						if (p.reply_count > 0) {
-							ctx.repliesIO.observe(streamNode);
-						}
 					} else {
 						setNestedReplyCollapsed(streamNode, !keepJumpTargetExpanded);
 					}
@@ -19170,7 +20174,6 @@
 		if (ctx.streamNodeMap.has(+p.post_number)) return ctx.streamNodeMap.get(+p.post_number) || null;
 
 		const hiddenStreamPost = !!p.hidden;
-		const preferenceHidden = isNestedReply && parentNum > 0;
 		const collapsedStreamReply = hiddenStreamPost || !!(isNestedReply && !(p.reply_count > 0) &&
 			PREFS.expandLeafNestedReplies !== true);
 		const node = renderPost(p, renderAsReply, ctx, {
@@ -19178,185 +20181,61 @@
 			showParentJump: isNestedReply,
 			deferContent: true,
 		});
-		node.hidden = preferenceHidden;
 		insertStreamPost(ctx, node, p.post_number, {
 			deferSync: !!options.deferStreamSync,
-			zebraExcluded: hiddenStreamPost || collapsedStreamReply || preferenceHidden,
+			zebraExcluded: hiddenStreamPost || collapsedStreamReply,
 		});
 		bindPostMediaLayoutSync(node, ctx);
 		ctx.streamNodeMap.set(+p.post_number, node);
-		if (preferenceHidden) ctx.streamItemMap.get(+p.post_number).height = 0;
 		ctx.tracker.observe(node);
 		if (ctx.queueViewportTracker) ctx.queueViewportTracker.observe(node);
+		reconcileNestedReplyNode(node, ctx);
 		if (+p.post_number === 1) syncCommentsHeaderPlacement(ctx);
 		return node;
 	}
 
-	let threadGroupGradientSerial = 0;
-
-	function findParentPreviewLine(post) {
-		const line = post?.previousElementSibling;
-		return line && line.classList.contains('ldp-floor-preview-link') ? line : null;
-	}
-
-	function clearCombinedParentPreviewLine(post) {
-		const line = findParentPreviewLine(post);
-		if (line) {
-			line.classList.remove('ldp-floor-preview-link-grouped');
-			line.querySelector(':scope > .ldp-thread-group-svg')?.remove();
+	function clearNestedReplyBranches(children) {
+		if (!children) return;
+		const parent = children.closest('.ldp-post');
+		parent?.classList.remove('ldp-nested-branches-ready');
+		children.style.removeProperty('--ldp-nested-axis-left');
+		children.style.removeProperty('--ldp-nested-branch-width');
+		children.style.removeProperty('--ldp-nested-parent-drop');
+		children.style.removeProperty('--ldp-nested-parent-head-width');
+		const railToggle = children.querySelector(':scope > .ldp-nested-rail-toggle');
+		if (railToggle) {
+			railToggle.style.removeProperty('left');
+			railToggle.style.removeProperty('top');
+			railToggle.style.removeProperty('height');
 		}
-		if (post) {
-			post.querySelector(':scope > .ldp-thread-group-svg')?.remove();
-			post.classList.remove('ldp-parent-preview-linked');
+		const branchToggle = children.querySelector(':scope > .ldp-nested-branch-toggle');
+		if (branchToggle) {
+			branchToggle.removeAttribute('viewBox');
+			branchToggle.style.removeProperty('top');
+			branchToggle.style.removeProperty('width');
+			branchToggle.style.removeProperty('height');
+			branchToggle.querySelector(':scope > .ldp-nested-branch-hit-path')?.removeAttribute('d');
 		}
-	}
-
-	function syncGroupedParentPreviewLine(line, parent, posts) {
-		const preview = line?.previousElementSibling;
-		if (!line || !line.classList.contains('open') || !preview || !preview.classList.contains('ldp-floor-preview')) return false;
-		const parentAvatar = parent?.querySelector(':scope > .ldp-post-head .ldp-avatar');
-		const childAvatars = posts.map((post) => post.querySelector(':scope > .ldp-post-head .ldp-avatar'));
-		const previewAvatar = preview.querySelector(':scope > .ldp-post-head .ldp-avatar');
-		if (!parentAvatar || !previewAvatar || childAvatars.some((avatar) => !avatar)) return false;
-		const layerRect = parent.getBoundingClientRect();
-		const previewRect = preview.getBoundingClientRect();
-		const previewAvatarRect = previewAvatar.getBoundingClientRect();
-		const points = [{
-			x: previewRect.left - layerRect.left,
-			y: previewAvatarRect.top + previewAvatarRect.height / 2 - layerRect.top,
-		}];
-		[parentAvatar, ...childAvatars].forEach((avatar) => {
-			const rect = avatar.getBoundingClientRect();
-			points.push({
-				x: rect.left - layerRect.left,
-				y: rect.top + rect.height / 2 - layerRect.top,
-			});
+		children.querySelectorAll(':scope > .ldp-post').forEach((post) => {
+			post.style.removeProperty('--ldp-nested-branch-y');
+			post.style.removeProperty('--ldp-nested-branch-width');
+			post.classList.remove('ldp-nested-branch-last', 'ldp-nested-branch-single');
 		});
-		if (points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))) return false;
-		const lineStyle = getComputedStyle(line);
-		const radius = normalizeReplyLineRadius(parseFloat(lineStyle.getPropertyValue('--ldp-reply-line-radius')));
-		const lineWidth = normalizeLineWidth(parseFloat(lineStyle.getPropertyValue('--ldp-reply-line-width')), REPLY_LINE_WIDTH_DEFAULT);
-		const linePadding = Math.ceil(lineWidth / 2) + 1;
-		const branchGap = 5;
-		const axisX = Math.min(...points.map((point) => point.x)) - radius;
-		const minX = Math.floor(axisX - linePadding);
-		const maxX = Math.ceil(Math.max(...points.map((point) => point.x)) + linePadding);
-		const minY = Math.floor(points[0].y - linePadding);
-		const maxY = Math.ceil(points[points.length - 1].y + linePadding);
-		const width = Math.max(1, maxX - minX);
-		const height = Math.max(1, maxY - minY);
-		const localX = (value) => Math.round(value - minX);
-		const localY = (value) => Math.round(value - minY);
-		const trunkX = localX(axisX);
-		const topY = localY(points[0].y);
-		const bottomY = localY(points[points.length - 1].y - radius);
-		const curveEndX = localX(axisX + radius);
-		const topCurveStartY = localY(points[0].y + radius);
-		const solidPathParts = [
-			`M ${trunkX} ${topCurveStartY} V ${bottomY}`,
-			`M ${trunkX} ${topCurveStartY} Q ${trunkX} ${topY} ${curveEndX} ${topY}`,
-		];
-		const topBranchEndX = localX(points[0].x - branchGap);
-		const branchPathParts = [{
-			d: `M ${curveEndX} ${topY} H ${topBranchEndX}`,
-			reverse: topBranchEndX < curveEndX,
-			startX: curveEndX,
-			endX: topBranchEndX,
-			y: topY,
-		}];
-		points.slice(1).forEach((point) => {
-			const y = localY(point.y);
-			solidPathParts.push(`M ${trunkX} ${localY(point.y - radius)} Q ${trunkX} ${y} ${curveEndX} ${y}`);
-			const branchEndX = localX(point.x - branchGap);
-			branchPathParts.push({
-				d: `M ${curveEndX} ${y} H ${branchEndX}`,
-				reverse: branchEndX < curveEndX,
-				startX: curveEndX,
-				endX: branchEndX,
-				y,
-			});
-		});
-		const pathParts = [{ d: solidPathParts.join(' '), branch: false, reverse: false },
-			...branchPathParts.map((part) => ({ ...part, branch: true }))];
-		let svg = parent.querySelector(':scope > .ldp-thread-group-svg');
-		if (!svg) {
-			svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-			svg.classList.add('ldp-thread-group-svg');
-			svg.setAttribute('aria-hidden', 'true');
-			parent.appendChild(svg);
-		}
-		svg.style.left = `${minX}px`;
-		svg.style.top = `${minY}px`;
-		svg.style.width = `${width}px`;
-		svg.style.height = `${height}px`;
-		svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-		let defs = svg.querySelector(':scope > .ldp-thread-group-defs');
-		if (!defs) {
-			defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-			defs.classList.add('ldp-thread-group-defs');
-			svg.insertBefore(defs, svg.firstChild);
-		}
-		const gradients = [...defs.querySelectorAll(':scope > .ldp-thread-group-gradient')];
-		while (gradients.length < branchPathParts.length) {
-			const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
-			gradient.classList.add('ldp-thread-group-gradient');
-			gradient.id = `ldp-thread-group-gradient-${++threadGroupGradientSerial}`;
-			gradient.setAttribute('gradientUnits', 'userSpaceOnUse');
-			[0, 1, 1].forEach((offset, index) => {
-				const stop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
-				stop.setAttribute('offset', String(offset));
-				stop.setAttribute('stop-color', 'currentColor');
-				stop.setAttribute('stop-opacity', index === 2 ? '0' : '1');
-				gradient.appendChild(stop);
-			});
-			defs.appendChild(gradient);
-			gradients.push(gradient);
-		}
-		while (gradients.length > branchPathParts.length) gradients.pop().remove();
-		const paths = [...svg.querySelectorAll(':scope > .ldp-thread-group-path')];
-		while (paths.length < pathParts.length) {
-			const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-			path.classList.add('ldp-thread-group-path');
-			svg.appendChild(path);
-			paths.push(path);
-		}
-		while (paths.length > pathParts.length) paths.pop().remove();
-		let branchGradientIndex = 0;
-		paths.forEach((path, index) => {
-			const part = pathParts[index];
-			path.classList.toggle('ldp-thread-group-branch', part.branch);
-			path.classList.toggle('ldp-thread-group-branch-reverse', part.reverse);
-			path.setAttribute('d', part.d);
-			if (!part.branch) {
-				path.style.removeProperty('stroke');
-				return;
-			}
-			const gradient = gradients[branchGradientIndex++];
-			const branchLength = Math.max(1, Math.abs(part.endX - part.startX));
-			const fadeStart = Math.max(0, 1 - 12 / branchLength);
-			gradient.setAttribute('x1', String(part.startX));
-			gradient.setAttribute('x2', String(part.endX));
-			gradient.setAttribute('y1', String(part.y));
-			gradient.setAttribute('y2', String(part.y));
-			gradient.children[1].setAttribute('offset', String(fadeStart));
-			path.style.stroke = `url(#${gradient.id})`;
-		});
-		line.classList.add('ldp-floor-preview-link-grouped');
-		parent.classList.add('ldp-parent-preview-linked');
-		return true;
 	}
 
 	function syncNestedReplyBranches(children) {
-		const posts = [...children.children].filter((node) => node.classList.contains('ldp-post'));
+		const posts = [...children.children].filter((node) =>
+			node.classList.contains('ldp-post') && !node.hidden && node.getClientRects().length);
 		const parent = children.closest('.ldp-post');
 		const parentAvatar = parent?.querySelector(':scope > .ldp-post-head .ldp-avatar');
+		const childBranchAnchor = (post) => post.classList.contains('ldp-reddit-comment-collapsible') &&
+			post.classList.contains('ldp-nested-collapsed')
+			? post.querySelector(':scope > .ldp-nested-toggle')
+			: post.querySelector(':scope > .ldp-post-head .ldp-avatar');
 		const railToggle = children.querySelector(':scope > .ldp-nested-rail-toggle');
 		const branchToggle = children.querySelector(':scope > .ldp-nested-branch-toggle');
 		if (!parent || !parentAvatar || !posts.length || !children.isConnected) {
-			if (parent) {
-				parent.classList.remove('ldp-nested-branches-ready');
-				clearCombinedParentPreviewLine(parent);
-			}
+			clearNestedReplyBranches(children);
 			return;
 		}
 		const branchGap = 5;
@@ -19369,21 +20248,14 @@
 			const childrenRect = children.getBoundingClientRect();
 			const avatarRect = parentAvatar.getBoundingClientRect();
 			if (!childrenRect.width || !avatarRect.width || !avatarRect.height) {
-				parent.classList.remove('ldp-nested-branches-ready');
-				clearCombinedParentPreviewLine(parent);
+				clearNestedReplyBranches(children);
 				return;
 			}
-			let axisX = Math.round(avatarRect.left - childrenRect.left - 15);
-			let dropAnchorY = avatarRect.top + avatarRect.height / 2;
-			const parentLine = findParentPreviewLine(parent);
-			const parentAxisX = parentLine && parseFloat(parentLine.style.getPropertyValue('--ldp-parent-axis-left'));
-			const parentPreviewLinked = !!parentLine && parentLine.classList.contains('open') && Number.isFinite(parentAxisX);
-			if (parentPreviewLinked) {
-				axisX = Math.round(parentLine.getBoundingClientRect().left + parentAxisX - childrenRect.left);
-				dropAnchorY = avatarRect.top + avatarRect.height / 2;
-			}
-			const firstChildAvatar = posts[0]?.querySelector(':scope > .ldp-post-head .ldp-avatar');
-			const firstChildX = firstChildAvatar ? Math.round(firstChildAvatar.getBoundingClientRect().left - childrenRect.left) : 18;
+			const axisX = Math.round(avatarRect.left + avatarRect.width / 2 - childrenRect.left);
+			const dropAnchorY = avatarRect.bottom + 1;
+			const firstChildAnchor = childBranchAnchor(posts[0]);
+			const firstChildX = firstChildAnchor
+				? Math.round(firstChildAnchor.getBoundingClientRect().left - childrenRect.left) : 18;
 			const firstBranchWidth = Math.max(0, firstChildX - axisX - branchGap);
 			const parentHeadWidth = Math.max(0, avatarRect.left - childrenRect.left - axisX - branchGap);
 			branchCanvasWidth = Math.max(1, Math.ceil(childrenRect.width));
@@ -19392,19 +20264,17 @@
 			railTop = -drop;
 			branchAxisX = axisX;
 			branchMetrics = posts.map((post) => {
-				const childAvatar = post.querySelector(':scope > .ldp-post-head .ldp-avatar');
-				if (!childAvatar) return null;
-				const childAvatarRect = childAvatar.getBoundingClientRect();
+				const childAnchor = childBranchAnchor(post);
+				if (!childAnchor) return null;
+				const childAnchorRect = childAnchor.getBoundingClientRect();
+				if (!childAnchorRect.width || !childAnchorRect.height) return null;
 				const postRect = post.getBoundingClientRect();
 				return {
-					branchY: Math.max(0, Math.round(childAvatarRect.top + childAvatarRect.height / 2 - postRect.top)),
-					branchWidth: Math.max(0, Math.round(childAvatarRect.left - childrenRect.left) - branchAxisX - branchGap),
-					railY: Math.max(0, Math.round(childAvatarRect.top + childAvatarRect.height / 2 - childrenRect.top)),
+					branchY: Math.max(0, Math.round(childAnchorRect.top + childAnchorRect.height / 2 - postRect.top)),
+					branchWidth: Math.max(0, Math.round(childAnchorRect.left - childrenRect.left) - branchAxisX - branchGap),
+					railY: Math.max(0, Math.round(childAnchorRect.top + childAnchorRect.height / 2 - childrenRect.top)),
 				};
 			});
-			const groupedReady = parentPreviewLinked && branchMetrics.length === posts.length && branchMetrics.every(Boolean) &&
-				syncGroupedParentPreviewLine(parentLine, parent, posts);
-			if (!groupedReady) clearCombinedParentPreviewLine(parent);
 			children.style.setProperty('--ldp-nested-axis-left', `${axisX}px`);
 			children.style.setProperty('--ldp-nested-branch-width', `${firstBranchWidth}px`);
 			children.style.setProperty('--ldp-nested-parent-drop', `${drop}px`);
@@ -19418,7 +20288,8 @@
 		const firstBranchMetric = branchMetrics.find(Boolean);
 		const lastBranchMetric = branchMetrics[branchMetrics.length - 1];
 		if (railToggle && branchAxisX !== null && firstBranchMetric && lastBranchMetric) {
-			railToggle.style.left = `${branchAxisX - 10}px`;
+			const railWidth = railToggle.getBoundingClientRect().width || 12;
+			railToggle.style.left = `${branchAxisX - railWidth / 2}px`;
 			railToggle.style.top = `${railTop}px`;
 			railToggle.style.height = `${Math.max(24, lastBranchMetric.railY - 15 - railTop)}px`;
 		} else if (railToggle) {
@@ -19472,30 +20343,60 @@
 		parent.classList.toggle('ldp-nested-branches-ready', branchMetrics.length === posts.length && branchMetrics.every(Boolean));
 	}
 
-	const nestedBranchSyncFrames = new WeakMap();
+	function cancelNestedBranchSync(ctx) {
+		const state = ctx?.nestedBranchSyncState;
+		if (!state) return;
+		if (state.frame) cancelAnimationFrame(state.frame);
+		if (state.timer) clearTimeout(state.timer);
+		state.frame = 0;
+		state.timer = 0;
+		state.posts.clear();
+	}
 
 	function scheduleNestedBranchSync(post, ctx) {
-		if (!post || !post.isConnected) return;
-		const parentNum = +(post.dataset.replyToPostNumber || 0);
-		const parent = parentNum && ctx && ctx.streamNodeMap && ctx.streamNodeMap.get(parentNum);
-		if (nestedBranchSyncFrames.has(post)) return;
-		const run = () => {
-			if (!post.isConnected) {
-				nestedBranchSyncFrames.delete(post);
+		if (!post || !post.isConnected || !ctx) return;
+		if (!ctx.nestedBranchSyncState) {
+			ctx.nestedBranchSyncState = {
+				posts: new Set(),
+				frame: 0,
+				timer: 0,
+			};
+		}
+		const state = ctx.nestedBranchSyncState;
+		state.posts.add(post);
+		if (state.frame || state.timer) return;
+		const schedule = () => {
+			state.timer = 0;
+			if (streamScrollIsActive(ctx, NESTED_REPLY_RENDER_SETTLE)) {
+				state.timer = setTimeout(schedule, NESTED_REPLY_RENDER_SETTLE);
 				return;
 			}
-			if (streamScrollIsActive(ctx, 100)) {
-				nestedBranchSyncFrames.set(post, setTimeout(run, 110));
-				return;
-			}
-			nestedBranchSyncFrames.delete(post);
-			syncChildControls(post);
-			if (parent) syncChildControls(parent);
+			state.frame = requestAnimationFrame(() => {
+				state.frame = 0;
+				if (document.visibilityState !== 'visible' ||
+						streamScrollIsActive(ctx, NESTED_REPLY_RENDER_SETTLE)) {
+					state.timer = setTimeout(schedule, document.visibilityState === 'visible'
+						? NESTED_REPLY_RENDER_SETTLE : NESTED_REPLY_RENDER_IDLE_TIMEOUT);
+					return;
+				}
+				const affected = new Set();
+				state.posts.forEach((node) => {
+					let current = node;
+					while (current?.isConnected && !affected.has(current)) {
+						affected.add(current);
+						current = current.parentElement?.closest('.ldp-post') || null;
+					}
+				});
+				state.posts.clear();
+				[...affected]
+					.sort((a, b) => postNestDepth(b) - postNestDepth(a))
+					.forEach((node) => {
+						if (node.getClientRects().length) syncChildControls(node);
+					});
+				if (state.posts.size) scheduleNestedBranchSync([...state.posts][0], ctx);
+			});
 		};
-		const handle = streamScrollIsActive(ctx, 100)
-			? setTimeout(run, 110)
-			: requestAnimationFrame(run);
-		nestedBranchSyncFrames.set(post, handle);
+		schedule();
 	}
 
 	function retryableReaderImageUrl(source) {
@@ -19549,14 +20450,20 @@
 	function bindPostMediaLayoutSync(post, ctx) {
 		const content = post.querySelector(':scope > .ldp-content');
 		if (!content) return;
-		content.querySelectorAll('iframe').forEach((frame) => {
-			frame.loading = 'lazy';
+		const surfaces = [
+			content,
+			...post.querySelectorAll(':scope > .ldp-post-body-layer'),
+		];
+		surfaces.forEach((surface) => {
+			surface.querySelectorAll('iframe').forEach((frame) => {
+				frame.loading = 'lazy';
+			});
+			surface.querySelectorAll('video').forEach((video) => {
+				if (!video.hasAttribute('preload')) video.preload = 'metadata';
+			});
+			activateReaderMedia(surface);
 		});
-		content.querySelectorAll('video').forEach((video) => {
-			if (!video.hasAttribute('preload')) video.preload = 'metadata';
-		});
-		activateReaderMedia(content);
-		content.querySelectorAll('img').forEach((img) => {
+		surfaces.flatMap((surface) => [...surface.querySelectorAll('img')]).forEach((img) => {
 			if (img.dataset.ldpLayoutSyncBound === '1') return;
 			img.dataset.ldpLayoutSyncBound = '1';
 			if (!img.classList.contains('emoji')) {
@@ -19585,14 +20492,24 @@
 
 	function syncChildControls(post) {
 		const children = post?.querySelector(':scope > .ldp-children');
-		const btn = post?.querySelector(':scope > .ldp-collapse-replies');
-		if (!children || !btn) return;
+		if (!children) return;
 		const collapsed = post.classList.contains('ldp-children-collapsed');
 		let renderedCount = 0;
 		for (const child of children.children) {
 			if (child.classList.contains('ldp-post')) renderedCount++;
 		}
-		const totalCount = Math.max(+(post.dataset.childReplyTotal || 0), renderedCount);
+		let btn = post.querySelector(':scope > .ldp-collapse-replies');
+		if (!btn && renderedCount) {
+			btn = makeElement('button');
+			btn.className = 'ldp-btn ldp-collapse-replies';
+			btn.type = 'button';
+			btn.setAttribute('aria-expanded', 'true');
+			post.insertBefore(btn, children);
+		}
+		if (!btn) return;
+		const declaredCount = +(post.dataset.childReplyTotal || 0);
+		const totalCount = Math.max(declaredCount, renderedCount);
+		if (renderedCount > declaredCount) post.dataset.childReplyTotal = String(renderedCount);
 		const railToggle = children.querySelector(':scope > .ldp-nested-rail-toggle');
 		const branchToggle = children.querySelector(':scope > .ldp-nested-branch-toggle');
 		if (railToggle) {
@@ -19600,14 +20517,16 @@
 			setLabel(railToggle, railLabel);
 			if (branchToggle) branchToggle.dataset.ldpTooltipLabel = railLabel;
 		}
-		if (renderedCount && post.classList.contains('ldp-reply') && !post._ldpPostData?.hidden) {
+		if (renderedCount && post.classList.contains('ldp-reply') && !post._ldpPostData?.hidden &&
+				post.dataset.ldpUserNestedCollapsed !== '1') {
 			setNestedReplyCollapsed(post, false);
 		}
-		if (!totalCount) {
+		if (post.querySelector(':scope > .ldp-nested-toggle'))
+			syncRedditReplyControl(post, 'post');
+		if (!renderedCount) {
 			btn.classList.remove('show');
 			post.classList.remove('ldp-has-child-branches');
 			post.classList.remove('ldp-nested-branches-ready');
-			clearCombinedParentPreviewLine(post);
 			delete btn.dataset.replyControlKey;
 			return;
 		}
@@ -19615,22 +20534,130 @@
 		post.classList.toggle('ldp-has-child-branches', showBranches);
 		if (!showBranches) {
 			post.classList.remove('ldp-nested-branches-ready');
-			clearCombinedParentPreviewLine(post);
 		}
 		btn.classList.add('show');
-		const controlKey = `${collapsed ? 'collapsed' : 'open'}:${totalCount}`;
+		if (!collapsed) syncNestedReplyBranches(children);
+		syncRedditReplyControl(post, 'children', totalCount);
+	}
+
+	function syncRedditReplyControl(post, type, count = 0) {
+		if (!post) return;
+		const ownPost = type === 'post';
+		const btn = post.querySelector(ownPost
+			? ':scope > .ldp-nested-toggle' : ':scope > .ldp-collapse-replies');
+		if (!btn) return;
+		const collapsed = post.classList.contains(ownPost
+			? 'ldp-nested-collapsed' : 'ldp-children-collapsed');
+		const redditStyle = post.classList.contains('ldp-nested-preview');
+		const redditCommentCollapse = ownPost &&
+			post.classList.contains('ldp-reddit-comment-collapsible');
+		if (ownPost && redditStyle && !redditCommentCollapse) {
+			btn.remove();
+			post.querySelector(':scope > .ldp-nested-collapsed-count')?.remove();
+			return;
+		}
+		const renderedDescendants = ownPost
+			? post.querySelectorAll(':scope > .ldp-children .ldp-nested-preview').length : 0;
+		const totalCount = ownPost
+			? Math.max(1 + renderedDescendants, 1 + +(post.dataset.childReplyTotal || 0))
+			: Math.max(0, +count || 0);
+		const controlKey = `${type}:${collapsed ? 'collapsed' : 'open'}:${totalCount}`;
 		if (btn.dataset.replyControlKey !== controlKey) {
 			btn.dataset.replyControlKey = controlKey;
 			setExpanded(btn, collapsed ? 'false' : 'true');
-			btn.innerHTML = `${icon(collapsed ? 'chevronRight' : 'chevronDown')}<span>${collapsed ? `展开 ${totalCount} 条回复` : `收起 ${totalCount} 条回复`}</span>`;
+			setLabel(btn, collapsed
+				? `展开 ${totalCount} 条回复`
+				: ownPost ? `收起楼层 #${post.dataset.postNumber || ''}` : `收起 ${totalCount} 条回复`);
+			btn.innerHTML = redditCommentCollapse
+				? icon(collapsed ? 'plus' : 'minus')
+				: ownPost
+				? `${icon(collapsed ? 'chevronRight' : 'chevronDown')}<span>${collapsed ? '展开' : '收起'}</span>`
+				: `${icon(collapsed ? 'plus' : 'minus')}${collapsed ? `<span>${totalCount} 条回复</span>` : ''}`;
 		}
-		if (!collapsed) syncNestedReplyBranches(children);
+		if (ownPost) {
+			return;
+		}
+		const railControl = !collapsed;
+		btn.classList.toggle('ldp-reply-rail-control', railControl);
+		btn.classList.toggle('ldp-reply-more-control', collapsed);
+		if (!railControl) {
+			const childX = parseFloat(post.style.getPropertyValue('--ldp-nested-first-child-x') || '');
+			const childY = parseFloat(post.style.getPropertyValue('--ldp-nested-first-child-y') || '');
+			const anchored = Number.isFinite(childX) && Number.isFinite(childY);
+			btn.classList.toggle('ldp-reply-more-anchored', anchored);
+			if (anchored) {
+				btn.style.left = `${childX - 8}px`;
+				btn.style.top = `${childY - 8}px`;
+			} else {
+				btn.style.removeProperty('left');
+				btn.style.removeProperty('top');
+			}
+			return;
+		}
+		btn.classList.remove('ldp-reply-more-anchored');
+		const avatarRect = post.querySelector(':scope > .ldp-post-head .ldp-avatar')?.getBoundingClientRect();
+		const iconRowRect = post.querySelector(':scope > .ldp-reactions')?.getBoundingClientRect();
+		const contentRect = post.dataset.postNumber === '1'
+			? post.querySelector(':scope > .ldp-content')?.getBoundingClientRect()
+			: null;
+		const actionRowY = iconRowRect?.height
+			? iconRowRect.top + iconRowRect.height / 2
+			: contentRect?.bottom;
+		const bodyBottom = [...post.querySelectorAll(
+			':scope > .ldp-content, :scope > .ldp-post-body-layer'
+		)].reduce((bottom, layer) => {
+			const rect = layer.getBoundingClientRect();
+			return rect.height ? Math.max(bottom, rect.bottom) : bottom;
+		}, Number.NEGATIVE_INFINITY);
+		const controlY = Number.isFinite(bodyBottom)
+			? Math.max(Number.isFinite(actionRowY) ? actionRowY : bodyBottom, bodyBottom)
+			: actionRowY;
+		const postRect = post.getBoundingClientRect();
+		if (!avatarRect || !Number.isFinite(controlY)) return;
+		const children = post.querySelector(':scope > .ldp-children');
+		const childrenRect = children?.getBoundingClientRect();
+		const childAxis = parseFloat(children?.style.getPropertyValue('--ldp-nested-axis-left') || '');
+		const ownAxis = childrenRect?.width && Number.isFinite(childAxis)
+			? Math.round(childrenRect.left + childAxis - postRect.left)
+			: Math.round(avatarRect.left + avatarRect.width / 2 - postRect.left);
+		post.style.setProperty('--ldp-nested-own-axis', `${ownAxis}px`);
+		btn.style.left = `${ownAxis - 8}px`;
+		btn.style.top = `${Math.max(0, Math.round(controlY - postRect.top - 8))}px`;
 	}
 
-	function setChildRepliesCollapsed(post, collapsed) {
+	function setChildRepliesCollapsed(post, collapsed, options = {}) {
 		if (!post) return;
+		const wasCollapsed = post.classList.contains('ldp-children-collapsed');
+		if (collapsed) {
+			const firstChildAvatar = post.querySelector(':scope > .ldp-children > .ldp-post > .ldp-post-head .ldp-avatar');
+			const postRect = post.getBoundingClientRect();
+			const avatarRect = firstChildAvatar?.getBoundingClientRect();
+			if (avatarRect?.width) {
+				const childX = Math.round(avatarRect.left + avatarRect.width / 2 - postRect.left);
+				const childY = Math.round(avatarRect.top + avatarRect.height / 2 - postRect.top);
+				post.style.setProperty('--ldp-nested-first-child-x', `${childX}px`);
+				post.style.setProperty('--ldp-nested-first-child-y', `${childY}px`);
+				post.style.setProperty('--ldp-nested-collapsed-min-height', `${childY + 20}px`);
+			}
+		}
+		const hasChildAnchor = Number.isFinite(
+			parseFloat(post.style.getPropertyValue('--ldp-nested-first-child-x') || '')
+		) && Number.isFinite(
+			parseFloat(post.style.getPropertyValue('--ldp-nested-first-child-y') || '')
+		);
+		post.classList.toggle('ldp-child-collapse-anchored', !!collapsed && hasChildAnchor);
+		if (options.user === true) {
+			if (collapsed) post.dataset.ldpUserChildrenCollapsed = '1';
+			else delete post.dataset.ldpUserChildrenCollapsed;
+		}
 		post.classList.toggle('ldp-children-collapsed', !!collapsed);
 		syncChildControls(post);
+		if (collapsed) {
+			post._ldpReaderContext?.repliesIO?.unobserve(post);
+		} else {
+			if (wasCollapsed) reconcileNestedReplyNode(post, post._ldpReaderContext);
+			scheduleNestedBranchSync(post, post._ldpReaderContext);
+		}
 	}
 
 	/* ============ 7. 渲染单条 ============ */
@@ -19848,28 +20875,32 @@
 		const readStateHtml = `<span class="ldp-post-read-state is-${readState}" data-read-state="${readState}" data-ldp-tooltip-label="${readStateLabel}" role="img" aria-label="${readStateLabel}">${postReadStateIconHtml(isRead)}</span>`;
 		const collapseNested = !options.forceExpanded &&
 			(hiddenCollapsible || !!options.forceCollapsed);
-		const allowChildReplies = !ctx.isPostVoting && !options.nestedPreview && p.reply_count > 0;
+		const nestDepth = Math.max(0, +options.nestDepth || 0);
+		const allowChildReplies = !ctx.isPostVoting && +(p.reply_count || 0) > 0 &&
+			(options.unlimitedReplyTree === true ||
+				!options.nestedPreview || nestDepth < inlineReplyTreeMaxDepth());
 		const childRepliesHtml = allowChildReplies ? childReplyShellHtml(p.reply_count) : '';
+		const collapseChildShell = allowChildReplies && options.unlimitedReplyTree !== true && (nestDepth >= 2 ||
+			(nestDepth === 0 && (isTopicStarter || PREFS.expandNestedRepliesByDefault !== true)));
 
 		const node = makeElement('div');
 		node.className = 'ldp-post' + (isReply ? ' ldp-reply ldp-reply-collapsible' : '') +
 				(hiddenCollapsible ? ' ldp-hidden-collapsible' : '') +
 				(options.nestedPreview ? ' ldp-nested-preview' : '') +
 				(collapseNested ? ' ldp-nested-collapsed' : '') +
-				(allowChildReplies && (isTopicStarter || PREFS.expandNestedRepliesByDefault !== true)
-					? ' ldp-children-collapsed'
-					: '');
+				(collapseChildShell ? ' ldp-children-collapsed' : '');
 		node.dataset.postId = p.id;
 		node.dataset.postNumber = p.post_number;
 		node.dataset.username = p.username || '';
 		node.dataset.createdAt = p.created_at || '';
 		node.dataset.ldpContentHydrated = deferContent ? '0' : '1';
+		node.dataset.ldpNestDepth = String(nestDepth);
 		node._ldpPostData = p;
 		node._ldpReaderContext = ctx;
 		if (replyToPostNumber) node.dataset.replyToPostNumber = replyToPostNumber;
 		if (allowChildReplies) node.dataset.childReplyTotal = String(p.reply_count);
 		node.innerHTML = `
-			${isReply || hiddenCollapsible ? '<button class="ldp-btn ldp-nested-toggle" type="button"></button>' : ''}
+			${(isReply && !options.nestedPreview) || hiddenCollapsible ? '<button class="ldp-btn ldp-nested-toggle" type="button"></button>' : ''}
 			<div class="ldp-post-head">
 				${avatar ? `<button class="ldp-user-link ldp-avatar-link" type="button" data-user-avatar-preview data-tooltip ${userCardAttr} aria-label="查看 ${escAttr(p.name || p.username)} 的头像原图">${avatar}</button>` : ''}
 				<a class="ldp-user-link ldp-author" href="${profileUrl}" target="_blank" rel="noopener" ${userCardAttr}>${esc(p.name || p.username)}</a>
@@ -19881,6 +20912,7 @@
 				${parentFloorHtml}${currentFloorHtml}${readStateHtml}
 			</div>
 			${contentHtml}
+			${boostListHtml}
 			<div class="ldp-reactions">
 				<div class="ldp-actions">
 					<button class="ldp-btn ldp-like ${acted ? 'liked' : ''}"
@@ -19890,10 +20922,10 @@
 					${compactPostActionsHtml(p, ctx)}
 				</div>
 			</div>
-			${boostListHtml}
 			${childRepliesHtml}
 			${isTopicStarter ? topicFooterActionsHtml(p, ctx) : ''}
 		`;
+		syncParentJumpControl(node, ctx);
 		if (deferConfirmedReadAnimation) syncConfirmedPostReadStateWhenVisible(node, ctx);
 		if (!deferContent) {
 			const content = node.querySelector(':scope > .ldp-content');
@@ -23936,30 +24968,62 @@
 			destroyReaderMedia(item.node);
 			ctx.streamHydratedNodes.delete(item.node);
 			ctx.streamItems.splice(index, 1);
-			ctx.streamItemMap.delete(postNumber);
-			ctx.streamNodeMap.delete(postNumber);
-			ctx.streamMountedNodes.delete(item.node);
-			reindexStreamItems(ctx, Math.max(0, index));
-			invalidateStreamLayout(ctx);
+				ctx.streamItemMap.delete(postNumber);
+				ctx.streamNodeMap.delete(postNumber);
+				ctx.streamMountedNodes.delete(item.node);
+				reindexStreamItems(ctx, Math.max(0, index));
+				ctx.streamWindowResetPending = true;
+				ctx.streamMountedItemCount = -1;
+				invalidateStreamLayout(ctx);
 			scheduleStreamWindowSync(ctx);
 		}
 		const replies = parentNumber && ctx.directRepliesByParent.get(parentNumber);
-		if (replies) replies.delete(postNumber);
+		if (replies) {
+			replies.delete(postNumber);
+			if (!replies.size) ctx.directRepliesByParent.delete(parentNumber);
+		}
+		ctx.replyParentByPost.delete(postNumber);
 		const state = parentNumber && ctx.subReplyState.get(parentNumber);
-		const parentNode = parentNumber && ctx.streamNodeMap.get(parentNumber);
+		const parentNode = parentNumber && findReplyListParent(parentNumber, ctx);
 		if (state) {
 			state.all = state.all.filter((reply) => +reply.post_number !== postNumber);
-			if (state.nodeCache) state.nodeCache.delete(postNumber);
-			state.totalCount = Math.max(0, state.totalCount - 1);
-			state.renderedKey = '';
-			if (parentNode?.isConnected) renderSubReplyBatch(parentNumber, ctx, 0, parentNode);
-		}
-		if (parentNode) {
-			const total = Math.max(0, +(parentNode.dataset.childReplyTotal || 0) - 1);
-			parentNode.dataset.childReplyTotal = String(total);
-			if (parentNode._ldpPostData) parentNode._ldpPostData.reply_count = total;
-			syncChildControls(parentNode);
-		}
+				if (state.nodeCache) state.nodeCache.delete(postNumber);
+				state.totalCount = Math.max(0, state.totalCount - 1);
+				state.renderedKey = '';
+				if (parentNode?.isConnected) reconcileNestedReplyNode(parentNode, ctx);
+			}
+			if (parentNode) {
+				const total = state
+					? Math.max(0, +(state.totalCount || 0))
+					: Math.max(0, +(parentNode.dataset.childReplyTotal || 0) - 1);
+				const parentCopies = new Set(readerPostCopies(
+					+parentNode.dataset.postId,
+					ctx,
+					true,
+				));
+				parentCopies.add(parentNode);
+				parentCopies.forEach((copy) => {
+					copy.dataset.childReplyTotal = String(total);
+					if (copy._ldpPostData) copy._ldpPostData.reply_count = total;
+					syncChildControls(copy);
+				});
+			}
+			if (state && parentNode) {
+				ctx.loader?.persistNestedReplies?.(
+					parentNode._ldpPostData || {
+						id: +parentNode.dataset.postId || 0,
+						post_number: parentNumber,
+						reply_count: state.totalCount,
+					},
+					state.all,
+					{
+						totalCount: state.totalCount,
+						complete: state.hasMore === false,
+						replace: true,
+						fetchAfter: state.fetchAfter,
+					},
+				);
+			}
 		const cacheEntry = TOPIC_DATA_CACHE.get(String(ctx.topicId));
 		const cachedTopic = (cacheEntry?.topic) || ctx.topicData;
 		if (cachedTopic?.post_stream && Array.isArray(cachedTopic.post_stream.posts)) {
@@ -24008,7 +25072,7 @@
 		holder.innerHTML = renderBoostList(postData.boosts, { canQuickBoost: canShowBoostButton(postData), ctx });
 		const next = holder.content.firstElementChild;
 		if (current && next) current.replaceWith(next);
-		else if (next) post.insertBefore(next, post.querySelector(':scope > .ldp-collapse-replies'));
+		else if (next) post.insertBefore(next, post.querySelector(':scope > .ldp-reactions'));
 		hydratePersistentAvatarImages(post);
 		const actions = post.querySelector(':scope > .ldp-reactions .ldp-actions');
 		const boostButton = actions?.querySelector('.ldp-boostbtn');
@@ -24529,51 +25593,324 @@
 		return true;
 	}
 
+	function nestedReplyWorkQueue(ctx) {
+		if (!ctx.nestedReplyRenderQueue) {
+			ctx.nestedReplyRenderQueue = {
+				items: new Map(),
+				cancel: null,
+				timer: 0,
+			};
+		}
+		return ctx.nestedReplyRenderQueue;
+	}
+
+	function cancelNestedReplyRenderQueue(ctx) {
+		const state = ctx?.nestedReplyRenderQueue;
+		if (!state) return;
+		if (state.cancel) state.cancel();
+		if (state.timer) clearTimeout(state.timer);
+		state.cancel = null;
+		state.timer = 0;
+		state.items.clear();
+	}
+
+	function releaseNestedReplyDom(root, ctx, allowConnectedRoot = false) {
+		if (!root || !ctx?.subReplyState ||
+				root.isConnected && allowConnectedRoot !== true) return false;
+		const nodes = [...root.querySelectorAll('.ldp-post.ldp-nested-preview')];
+		const rootPostNumber = +root.dataset.postNumber;
+		const ownsRootState = rootPostNumber > 0 &&
+			ctx.subReplyState.get(rootPostNumber)?.renderedParent === root;
+		if (!nodes.length && !ownsRootState) return false;
+		const nodeSet = new Set(nodes);
+		const postNumbers = new Set(nodes.map((node) => +node.dataset.postNumber).filter(Boolean));
+		if (rootPostNumber) postNumbers.add(rootPostNumber);
+		ctx.subReplyState.forEach((state, parentPostNumber) => {
+			if (state?.nodeCache) {
+				state.nodeCache.forEach((node, postNumber) => {
+					if (!nodeSet.has(node)) return;
+					state.nodeCache.delete(postNumber);
+				});
+			}
+			if (nodeSet.has(state?.renderedParent) ||
+					state?.renderedParent === root ||
+					allowConnectedRoot !== true && postNumbers.has(+parentPostNumber)) {
+				state.renderedParent = null;
+				state.renderedKey = '';
+			}
+		});
+		for (let index = nodes.length - 1; index >= 0; index--) {
+			const node = nodes[index];
+			ctx.tracker?.unobserve(node);
+			ctx.repliesIO?.unobserve(node);
+			cancelPostContentHydration(node, ctx);
+			cancelPostLatexRender(node, ctx);
+			destroyReaderMedia(node);
+			releasePersistentAvatarImages(node);
+			removeOwnedNode(node);
+		}
+		return true;
+	}
+
+	function releaseDetachedNestedReplyDom(root, ctx) {
+		return releaseNestedReplyDom(root, ctx, false);
+	}
+
+	function queueNestedReplyWork(ctx) {
+		const state = nestedReplyWorkQueue(ctx);
+		if (state.cancel || state.timer || !state.items.size) return;
+		const run = () => {
+			state.cancel = null;
+			state.timer = 0;
+			if (document.visibilityState !== 'visible') {
+				state.timer = setTimeout(
+					() => queueNestedReplyWork(ctx),
+					NESTED_REPLY_RENDER_IDLE_TIMEOUT,
+				);
+				return;
+			}
+			// 关系树只提交轻量骨架，正文和回复线仍各自延迟处理。优先处理最靠近
+			// 当前视口的分支；旧的 idle 队列会在连续滚动时逐项等待超时，造成
+			// 数据已到但树结构仍长期平铺。
+			const rootRect = ctx.scrollRoot?.getBoundingClientRect();
+			let next = null;
+			let nearestDistance = Infinity;
+			state.items.forEach((preferredParentNode, postNumber) => {
+				const parentNode = preferredParentNode?.isConnected
+					? preferredParentNode
+					: findReplyListParent(postNumber, ctx);
+				if (!parentNode?.isConnected) {
+					state.items.delete(postNumber);
+					return;
+				}
+				const rect = parentNode.getBoundingClientRect();
+				const distance = !rootRect ? 0 :
+					rect.bottom < rootRect.top ? rootRect.top - rect.bottom :
+						rect.top > rootRect.bottom ? rect.top - rootRect.bottom : 0;
+				if (distance < nearestDistance) {
+					nearestDistance = distance;
+					next = [postNumber, parentNode];
+				}
+			});
+			if (next) {
+				if (nearestDistance > 0 &&
+						streamScrollIsActive(ctx, NESTED_REPLY_RENDER_SETTLE)) {
+					state.timer = setTimeout(() => {
+						state.timer = 0;
+						queueNestedReplyWork(ctx);
+					}, NESTED_REPLY_RENDER_SETTLE);
+					return;
+				}
+				state.items.delete(next[0]);
+				renderSubReplyBatch(next[0], ctx, 0, next[1]);
+			}
+			queueNestedReplyWork(ctx);
+		};
+		if (isFunction(requestAnimationFrame)) {
+			const id = requestAnimationFrame(run);
+			state.cancel = () => {
+				if (isFunction(cancelAnimationFrame)) cancelAnimationFrame(id);
+			};
+		} else {
+			state.timer = setTimeout(run, 16);
+		}
+	}
+
+	function scheduleNestedReplyRender(postNumber, ctx, preferredParentNode = null) {
+		const number = +postNumber;
+		if (!ctx || !number) return;
+		nestedReplyWorkQueue(ctx).items.set(number, preferredParentNode);
+		queueNestedReplyWork(ctx);
+	}
+
+	function scheduleNestedPostHydration(post, ctx) {
+		if (!post || post.dataset.ldpContentHydrated !== '0' ||
+				post.dataset.ldpContentLoadFailed === '1') return;
+		void hydrateNestedPostContent(post, ctx);
+	}
+
+	function showNestedPostContentRetry(post, ctx) {
+		if (!post?.isConnected || post.dataset.ldpContentHydrated !== '0') return;
+		post.dataset.ldpContentLoadFailed = '1';
+		const content = post.querySelector(':scope > .ldp-content');
+		if (!content) return;
+		content.classList.remove('ldp-content-pending');
+		content.style.removeProperty('--ldp-content-placeholder-height');
+		content.removeAttribute('aria-busy');
+		const retry = makeElement('button');
+		retry.type = 'button';
+		retry.className = 'ldp-btn ldp-sub-page-btn';
+		retry.textContent = '正文加载失败，点击重试';
+		retry.addEventListener('click', () => {
+			retry.disabled = true;
+			retry.textContent = '正在重新加载正文…';
+			void hydrateNestedPostContent(post, ctx, { forceRefresh: true });
+		}, { once: true });
+		content.replaceChildren(retry);
+	}
+
+	async function hydrateNestedPostContent(post, ctx, options = {}) {
+		if (!post || post.dataset.ldpContentHydrated !== '0') return true;
+		if (post.dataset.ldpContentLoadFailed === '1' && options.forceRefresh !== true) return false;
+		if (post._ldpPostData?.cooked != null) return hydratePostContent(post, ctx);
+		const postNumber = +post.dataset.postNumber;
+		if (!postNumber || !ctx?.loader?.loadPost) {
+			showNestedPostContentRetry(post, ctx);
+			return false;
+		}
+		if (!ctx.nestedPostContentRequests) ctx.nestedPostContentRequests = new Map();
+		const pending = ctx.nestedPostContentRequests.get(postNumber);
+		if (pending) return pending;
+		delete post.dataset.ldpContentLoadFailed;
+		const postId = +post.dataset.postId;
+		const request = (async () => {
+			try {
+				const posts = postId
+					? postsFromPayload(await fetchJSON(`${BASE}/posts/${postId}.json`, {
+						scheduler: ctx.postRequestScheduler,
+						cacheMode: 'refresh',
+						fetchOptions: discourseJSONFetchOptions(),
+						key: `nested-content:${postId}`,
+						priority: POST_REQUEST_PRIORITY.nested,
+						timeoutMs: 12000,
+					}))
+					: await ctx.loader.loadPost(postNumber, {
+						advanceCursor: false,
+						forceRefresh: options.forceRefresh !== false,
+						priority: POST_REQUEST_PRIORITY.nested,
+					});
+				const fullPost = posts.find((item) =>
+					+item?.post_number === postNumber && item.cooked != null
+				);
+				if (!fullPost) throw new Error('nested post content unavailable');
+				ctx.loader.persistFetchedPosts([fullPost]);
+				rememberPostData(ctx, fullPost, +post.dataset.replyToPostNumber || 0);
+				ctx.subReplyState?.forEach((state) => {
+					const index = state?.all?.findIndex((item) => +item?.post_number === postNumber) ?? -1;
+					if (index >= 0) state.all[index] = Object.assign(state.all[index], fullPost);
+				});
+				const copies = new Set(readerPostCopies(fullPost.id, ctx, true));
+				copies.add(post);
+				copies.forEach((copy) => {
+					copy._ldpPostData = Object.assign(copy._ldpPostData || {}, fullPost);
+					delete copy.dataset.ldpContentLoadFailed;
+					if (copy.isConnected && copy.dataset.ldpContentHydrated === '0')
+						hydratePostContent(copy, ctx);
+				});
+				return true;
+			} catch {
+				const copies = new Set(postId ? readerPostCopies(postId, ctx, true) : []);
+				copies.add(post);
+				copies.forEach((copy) => showNestedPostContentRetry(copy, ctx));
+				return false;
+			} finally {
+				ctx.nestedPostContentRequests.delete(postNumber);
+			}
+		})();
+		ctx.nestedPostContentRequests.set(postNumber, request);
+		return request;
+	}
+
 	/* ============ 9. 楼中楼分批渲染 ============ */
+	function nestedReplyRenderPlan(parentNode, state, ctx) {
+		const parentDepth = postNestDepth(
+			parentNode,
+			parentNode?.classList.contains('ldp-nested-preview') ? 1 : 0,
+		);
+		const maxDepth = inlineReplyTreeMaxDepth();
+		const aggregate = PREFS.aggregateDescendantReplies === true;
+		const totalCount = Math.max(+(state?.all?.length || 0), +(state?.totalCount || 0));
+		const hasGrandchildren = !!state?.all?.some((reply) =>
+			+(reply?.reply_count || 0) > 0 ||
+			[...(ctx?.directRepliesByParent?.get(+reply?.post_number)?.values() || [])]
+				.some((child) => +child.reply_to_post_number === +reply.post_number)
+		);
+		const treeEnabled = maxDepth > 1;
+			const showAggregate = parentDepth === 0 && aggregate && !treeEnabled &&
+				(totalCount > 5 || hasGrandchildren);
+			const continuousTree = treeEnabled && aggregate;
+			return {
+				parentDepth,
+				maxDepth,
+				aggregate,
+				continuousTree,
+				totalCount,
+				hasGrandchildren,
+				showAggregate,
+				pageSize: continuousTree ? Math.max(1, totalCount) :
+					showAggregate ? 2 :
+					(parentDepth > 0 || aggregate
+						? Math.min(5, SUB_REPLY_PAGE_SIZE)
+						: SUB_REPLY_PAGE_SIZE),
+		};
+	}
+
 	function renderSubReplyBatch(postNumber, ctx, pageDelta = 0, preferredParentNode = null) {
 		const state = ctx.subReplyState.get(postNumber);
-		const parentNode = preferredParentNode?.isConnected && +preferredParentNode.dataset.postNumber === +postNumber
-			? preferredParentNode
-			: findReplyListParent(postNumber, ctx);
+		const canonicalParentNode = findReplyListParent(postNumber, ctx);
+		const parentNode = canonicalParentNode ||
+			(preferredParentNode?.isConnected && +preferredParentNode.dataset.postNumber === +postNumber
+				? preferredParentNode
+				: null);
 		if (!state || !parentNode) return;
-		if (parentNode.classList.contains('ldp-nested-preview')) return;
+		const {
+			parentDepth,
+				maxDepth,
+				aggregate,
+				continuousTree,
+				totalCount,
+			hasGrandchildren,
+			showAggregate,
+			pageSize,
+		} = nestedReplyRenderPlan(parentNode, state, ctx);
+		if (parentNode.classList.contains('ldp-nested-preview') && parentDepth >= maxDepth) return;
 		const children = parentNode.querySelector(':scope > .ldp-children');
 		if (!children) return;
-		const aggregate = PREFS.aggregateDescendantReplies === true;
-		const totalCount = Math.max(state.all.length, +(state.totalCount || 0));
-		const showAggregate = aggregate && (totalCount > 5 || state.all.some((reply) => [...(ctx.directRepliesByParent.get(+reply.post_number)?.values() || [])].some((child) => +child.reply_to_post_number === +reply.post_number)));
-		const pageSize = showAggregate ? 2 : (aggregate ? 5 : SUB_REPLY_PAGE_SIZE);
 		const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
 		state.pageIndex = Math.max(0, Math.min(pageCount - 1, +(state.pageIndex || 0) + pageDelta));
 		if (!state.nodeCache) state.nodeCache = new Map();
 		const start = state.pageIndex * pageSize;
 		const batch = state.all.slice(start, start + pageSize);
-		const renderKey = `${showAggregate ? 1 : 0}:${state.pageIndex}:${state.all.length}:${totalCount}:${state.loadingMore ? 1 : 0}:${batch.map((reply) => +(reply.post_number || 0)).join(',')}`;
+		const childDepth = parentDepth + 1;
+		const renderKey = `${showAggregate ? 1 : 0}:${maxDepth}:${childDepth}:${state.pageIndex}:${state.all.length}:${totalCount}:${state.loadingMore ? 1 : 0}:${batch.map((reply) => +(reply.post_number || 0)).join(',')}`;
 		const mountedReplies = [...children.children].filter((node) => node.classList.contains('ldp-post'));
-		if (state.renderedParent === parentNode && state.renderedKey === renderKey &&
-				mountedReplies.length === batch.length &&
-				mountedReplies.every((node, index) => +node.dataset.postNumber === +(batch[index]?.post_number || 0))) {
-			return;
-		}
+			if (state.renderedParent === parentNode && state.renderedKey === renderKey &&
+					mountedReplies.length === batch.length &&
+					mountedReplies.every((node, index) => +node.dataset.postNumber === +(batch[index]?.post_number || 0))) {
+				mountedReplies.forEach((node) => scheduleNestedPostHydration(node, ctx));
+				captureStreamViewportAnchor(ctx);
+				syncNestedTreeOwnedFloors(
+					ctx,
+					parentNode,
+					state.all.map((reply) => +reply.post_number),
+				);
+				restoreStreamViewportAnchor(ctx);
+				return;
+			}
+		captureStreamViewportAnchor(ctx);
 		parentNode.classList.remove('ldp-nested-branches-ready');
-		clearCombinedParentPreviewLine(parentNode);
 		const mountedByPostNumber = new Map(mountedReplies.map((node) => [+node.dataset.postNumber, node]));
 		const desiredNodes = [];
 		batch.forEach((rp) => {
 			if (!rp.reply_to_post_number) rp.reply_to_post_number = postNumber;
 			const replyPostNumber = +rp.post_number;
-			let node = mountedByPostNumber.get(replyPostNumber) || state.nodeCache.get(replyPostNumber);
+			const cachedNode = state.nodeCache.get(replyPostNumber);
+			let node = mountedByPostNumber.get(replyPostNumber) ||
+				(!cachedNode?.parentNode || cachedNode.parentNode === children ? cachedNode : null);
 			if (!node) {
 				node = attachPost(rp, ctx, {
 					nestedList: true,
 					preferredParentNode: parentNode,
 					deferNestedSync: true,
+					nestDepth: childDepth,
+					relationsCommitted: true,
 				});
 				if (node) {
 					state.nodeCache.set(replyPostNumber, node);
 				}
 			}
 			if (node) {
+				node.dataset.ldpNestDepth = String(childDepth);
 				if (node._ldpPostData !== rp)
 					updateLivePostData(rp, ctx, { refreshContent: true });
 				state.nodeCache.set(replyPostNumber, node);
@@ -24582,28 +25919,39 @@
 		});
 		const actionEl = parentNode.querySelector(':scope > .ldp-children > .ldp-sub-actions');
 		const desiredSet = new Set(desiredNodes);
+		let releasedNestedBranch = false;
 		mountedReplies.forEach((node) => {
 			if (desiredSet.has(node)) return;
 			state.nodeCache.set(+node.dataset.postNumber, node);
+			releasedNestedBranch = releaseNestedReplyDom(node, ctx, true) ||
+				releasedNestedBranch;
 			removeOwnedNode(node, children);
 		});
 		let before = actionEl || null;
 		for (let index = desiredNodes.length - 1; index >= 0; index--) {
-			const node = desiredNodes[index];
-			if (node.nextSibling !== before) children.insertBefore(node, before);
-			ctx.tracker.observe(node);
-			hydratePersistentAvatarImages(node);
-			before = node;
-		}
+				const node = desiredNodes[index];
+				if (node.nextSibling !== before) children.insertBefore(node, before);
+				ctx.tracker.observe(node);
+				hydratePersistentAvatarImages(node, POST_REQUEST_PRIORITY.nested);
+				scheduleNestedPostHydration(node, ctx);
+				before = node;
+			}
+		desiredNodes.forEach((node) => {
+			reconcileNestedReplyNode(node, ctx);
+		});
 		parentNode.dataset.childReplyTotal = String(Math.max(+(parentNode.dataset.childReplyTotal || 0), state.all.length));
 		const prevBtn = actionEl?.querySelector('.ldp-sub-page-prev');
 		const nextBtn = actionEl?.querySelector('.ldp-sub-page-next');
 		const infoEl = actionEl?.querySelector('.ldp-sub-page-info');
 		const aggregateBtn = actionEl?.querySelector('.ldp-descendant-replies-open');
-		[prevBtn, nextBtn, infoEl].forEach((control) => { if (control) control.hidden = showAggregate; });
-		if (aggregateBtn) aggregateBtn.hidden = !showAggregate;
+		const showFullDiscussion = aggregate && (showAggregate ||
+			hasGrandchildren && childDepth >= maxDepth);
+			[prevBtn, nextBtn, infoEl].forEach((control) => {
+				if (control) control.hidden = continuousTree || showFullDiscussion;
+			});
+		if (aggregateBtn) aggregateBtn.hidden = !showFullDiscussion;
 		if (actionEl && actionEl.parentNode === children && actionEl.nextSibling) children.appendChild(actionEl);
-		if (showAggregate || pageCount > 1) {
+		if (showFullDiscussion || pageCount > 1) {
 			actionEl?.classList.add('show');
 			if (prevBtn) prevBtn.disabled = !!state.loadingMore || state.pageIndex <= 0;
 			if (nextBtn) nextBtn.disabled = !!state.loadingMore || state.pageIndex >= pageCount - 1;
@@ -24612,6 +25960,14 @@
 		state.renderedParent = parentNode;
 		state.renderedKey = renderKey;
 		scheduleNestedBranchSync(parentNode, ctx);
+		// 关系状态持续拥有主流中的直属回复；这里在当前页 DOM 提交后同步
+		// 已挂载副本和视口锚点，父节点虚拟卸载也不会再把回复恢复成平铺楼层。
+		syncNestedTreeOwnedFloors(ctx, parentNode, [
+			...state.all.map((reply) => +reply.post_number),
+			...mountedReplies.map((node) => +node.dataset.postNumber),
+		], state.all.map((reply) => +reply.post_number));
+		if (releasedNestedBranch) scheduleNestedReplyDisplaySync(ctx);
+		restoreStreamViewportAnchor(ctx);
 	}
 
 	function openDescendantRepliesWindow(rootPost, ctx, targetPostNumber = 0, {
@@ -24652,6 +26008,24 @@
 		if (!surfaceHost) return;
 		layer.className = `ldp-descendant-replies-layer ${inlineSurface ? 'ldp-descendant-replies-layer-inline' : 'ldp-descendant-replies-layer-centered'}`;
 		panel.className = `ldp-descendant-replies-window ${inlineSurface ? 'ldp-descendant-replies-inline' : 'ldp-descendant-replies-centered'}`;
+		if (!inlineSurface) {
+			layer.addEventListener('wheel', (event) => {
+				if (event.target !== layer) return;
+				const deltaX = event.deltaMode === 1
+					? event.deltaX * 40
+					: event.deltaMode === 2 ? event.deltaX * ctx.scrollRoot.clientWidth : event.deltaX;
+				const deltaY = event.deltaMode === 1
+					? event.deltaY * 40
+					: event.deltaMode === 2 ? event.deltaY * ctx.scrollRoot.clientHeight : event.deltaY;
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				ctx.scrollRoot.scrollBy({
+					left: deltaX,
+					top: deltaY,
+					behavior: 'auto',
+				});
+			}, { passive: false });
+		}
 		panel.dataset.returnPostNumber = String(
 			sourcePost?.dataset.postNumber || returnViewportPostNumber || rootPost.post_number
 		);
@@ -24666,6 +26040,7 @@
 		layer.append(panel); surfaceHost.append(layer); ctx.replyThreadWindow = panel; bindFloatingSurfaceWheel(layer);
 		const header = panel.firstElementChild;
 		const list = panel.querySelector('.ldp-descendant-replies-list');
+		list.classList.add('ldp-comments', 'ldp-descendant-replies-tree');
 		list.style.setProperty('--ldp-nested-content-scale', '.97');
 		list.style.setProperty('--ldp-nested-component-scale', '.95');
 		list.style.setProperty('--ldp-nested-component-gap', '7.6px');
@@ -24693,37 +26068,20 @@
 			if (visible && !hydratePostContent(entry.target, ctx)) return;
 			ctx.tracker.setVisible([entry.target.dataset.postNumber], visible);
 		}), { root: list, threshold: 0 }) : null;
-		const openedScope = `${CURRENT_SITE_HOST || location.host}:${ctx.topicId}`;
-		const readOpenedBranchState = () => {
-			try {
-				const value = globalThis.GM_getValue?.(LDP_REPLY_BRANCH_STATE_KEY, {});
-				return value && typeof value === 'object' && !Array.isArray(value) && !isFunction(value.then)
-					? { ...value } : {};
-			} catch { return {}; }
-		};
-		const openedEntry = readOpenedBranchState()[openedScope];
-		const openedBranches = new Set((Array.isArray(openedEntry?.posts) ? openedEntry.posts : [])
-			.map(Number).filter((number) => Number.isInteger(number) && number > 0).slice(-512));
-		let openedBranchesDirty = false;
-		const persistOpenedBranches = () => {
-			const state = readOpenedBranchState();
-			state[openedScope] = { at: Date.now(), posts: [...openedBranches].slice(-512) };
-			const bounded = Object.fromEntries(Object.entries(state)
-				.filter(([, entry]) => entry && Number.isFinite(+entry.at) && Array.isArray(entry.posts))
-				.sort((first, second) => +first[1].at - +second[1].at).slice(-64));
-			try { void Promise.resolve(globalThis.GM_setValue?.(LDP_REPLY_BRANCH_STATE_KEY, bounded)).catch(() => {}); } catch {}
-		};
 		const initialRestorePoint = normalizeReaderAnchorPoint(restorePoint);
-		let token = 0, stack = [], known = new Map(), queue = [], loading = false, returnPoint = null, historyPoint = initialRestorePoint, historyAnchor = null, threadRoot = rootPost, branchTarget = null;
-		let branchLineSvg = null, branchLineFrame = 0, hoveredBranchNumber = 0, branchLineResizeObserver = null;
-		const viewKey = () => `${CURRENT_SITE_HOST || location.host}:${ctx.topicId}:${+threadRoot.post_number}:${+branchTarget?.post_number || 0}`;
+		let token = 0, known = new Map(), queue = [], loading = false;
+		let historyPoint = initialRestorePoint, historyAnchor = null;
+		let treeResizeObserver = null, treeWidthFrame = 0;
+		let treePan = null, suppressTreeClick = false;
+		const viewKey = () => `${CURRENT_SITE_HOST || location.host}:${ctx.topicId}:${+rootPost.post_number}:0`;
 		const captureWindowPoint = () => {
 			const listRect = list.getBoundingClientRect();
-			const anchor = [...list.querySelectorAll(':scope > .ldp-post')]
+				const anchor = [...list.querySelectorAll('.ldp-post')]
 				.find((node) => node.getBoundingClientRect().bottom > listRect.top);
 			return anchor ? {
 				number: +anchor.dataset.postNumber,
 				scrollTop: Math.max(0, Number(list.scrollTop) || 0),
+				scrollLeft: Math.max(0, Number(list.scrollLeft) || 0),
 				offset: anchor.getBoundingClientRect().top - listRect.top,
 			} : null;
 		};
@@ -24921,16 +26279,77 @@
 			if (restoreViewportEntry()) return;
 			scrollToPost(+panel.dataset.returnPostNumber, ctx, returnScrollOptions);
 		};
+		const restoreMainReplyTree = () => {
+			if (ctx.readerSession && !ctx.readerSession.isCurrent('opening', 'active')) return false;
+			const rootPostNumber = +rootPost.post_number;
+			let parentNode = findReplyListParent(rootPostNumber, ctx);
+			if (!parentNode?.isConnected) {
+				const rootItem = ctx.streamItemMap?.get(rootPostNumber);
+				const ownerItem = nestedReplyStreamOwnerItem(ctx, rootItem) || rootItem;
+				if (ownerItem?.postNumber)
+					mountStreamPost(ctx, ownerItem.postNumber);
+				parentNode = findReplyListParent(rootPostNumber, ctx);
+			}
+			if (!parentNode?.isConnected) return false;
+			const state = ctx.subReplyState.get(rootPostNumber);
+			const knownCount = ctx.directRepliesByParent.get(rootPostNumber)?.size || 0;
+			const totalCount = Math.max(
+				knownCount,
+				+(state?.totalCount || 0),
+				+(parentNode.dataset.childReplyTotal || 0),
+				+(parentNode._ldpPostData?.reply_count || 0),
+			);
+			if (!(totalCount > 0)) return true;
+			ensureLiveReplyShell(parentNode, totalCount, ctx);
+			ctx.repliesIO.unobserve(parentNode);
+			reconcileNestedReplyNode(parentNode, ctx);
+			return true;
+		};
 		const workspaceHost = ctx.modal.closest('.ldp-overlay');
 		let onWorkspaceChange = null;
-		const close = (restoreEntry = true) => { stopPanelPointer(null, false); persistWindowState(); window.removeEventListener('pagehide', persistWindowState); window.removeEventListener('resize', onPanelViewportResize); if (onWorkspaceChange) workspaceHost?.removeEventListener('ldp-reader-workspace-change', onWorkspaceChange); restoreOuterReaderControls(); token++; settleTarget(false); ctx.tracker.setVisible([...panel.querySelectorAll('.ldp-post')].map((node) => node.dataset.postNumber), false); readIO?.disconnect(); branchLineResizeObserver?.disconnect(); if (branchLineFrame) cancelAnimationFrame(branchLineFrame); const previewPost = panel.querySelector('.ldp-floor-preview')?._ldpRelatedPost; if (previewPost) ctx.floorPreview?.hide(previewPost); panel.querySelectorAll('.ldp-post').forEach((node) => ctx.tracker.unobserve(node)); layer.remove(); if (!inlineSurface) ctx.modal.classList.remove('ldp-descendant-replies-host-open'); if (ctx.replyThreadWindow === panel) ctx.replyThreadWindow = null; if (restoreEntry && !sourceControl?.isConnected) requestAnimationFrame(restoreEntryPosition); };
+		const close = (restoreEntry = true) => {
+			stopPanelPointer(null, false);
+			persistWindowState();
+			window.removeEventListener('pagehide', persistWindowState);
+			window.removeEventListener('resize', onPanelViewportResize);
+			if (onWorkspaceChange)
+				workspaceHost?.removeEventListener('ldp-reader-workspace-change', onWorkspaceChange);
+			restoreOuterReaderControls();
+			token++;
+			settleTarget(false);
+			ctx.tracker.setVisible(
+				[...panel.querySelectorAll('.ldp-post')].map((node) => node.dataset.postNumber),
+				false,
+			);
+			readIO?.disconnect();
+			treeResizeObserver?.disconnect();
+			if (treeWidthFrame) cancelAnimationFrame(treeWidthFrame);
+			const previewPost = panel.querySelector('.ldp-floor-preview')?._ldpRelatedPost;
+			if (previewPost) ctx.floorPreview?.hide(previewPost);
+			panel.querySelectorAll('.ldp-post').forEach((node) => ctx.tracker.unobserve(node));
+			layer.remove();
+			if (!inlineSurface) ctx.modal.classList.remove('ldp-descendant-replies-host-open');
+			if (ctx.replyThreadWindow === panel) ctx.replyThreadWindow = null;
+			const restoreEntryAfterTree = restoreEntry && !sourceControl?.isConnected;
+			const maxRestoreAttempts = inlineReplyTreeMaxDepth() + 2;
+			const restoreAfterClose = (attempt = 0) => {
+				if (!restoreMainReplyTree() && attempt < maxRestoreAttempts) {
+					requestAnimationFrame(() => restoreAfterClose(attempt + 1));
+					return;
+				}
+				if (restoreEntryAfterTree) restoreEntryPosition();
+			};
+			requestAnimationFrame(restoreAfterClose);
+		};
 		onWorkspaceChange = () => {
 			if (inlineSurface === !ctx.readerWorkspace?.isFullPage?.()) return;
 			close();
 		};
 		workspaceHost?.addEventListener('ldp-reader-workspace-change', onWorkspaceChange);
 		panel._ldpClose = close;
-		panel._ldpCloseFromEscape = () => close(returnViewportPostNumber > 0 || !skipEscapeReturn);
+		panel._ldpCloseFromEscape = () => close(
+			inlineSurface && (returnViewportPostNumber > 0 || !skipEscapeReturn)
+		);
 		layer.addEventListener('click', (event) => {
 			if (event.target !== layer) return;
 			const readerTitle = !inlineSurface && ctx.modal.querySelector('.ldp-title-jump');
@@ -24945,6 +26364,7 @@
 			close();
 		});
 		const positionTargetInView = (target) => {
+			syncTreeWidth();
 			const listRect = list.getBoundingClientRect(), targetRect = target.getBoundingClientRect();
 			const inset = 12;
 			const targetFits = targetRect.height <= Math.max(0, listRect.height - inset * 2);
@@ -24953,13 +26373,20 @@
 				: listRect.top + inset;
 			const offset = targetRect.top - desiredTop;
 			if (Math.abs(offset) >= .5) list.scrollTop += offset;
+			const horizontalSpace = Math.max(0, listRect.width - inset * 2);
+			if (targetRect.left < listRect.left + inset)
+				list.scrollLeft += targetRect.left - listRect.left - inset;
+			else if (targetRect.width <= horizontalSpace && targetRect.right > listRect.right - inset)
+				list.scrollLeft += targetRect.right - listRect.right + inset;
 			const positionedRect = target.getBoundingClientRect();
 			historyAnchor = { target, offset: positionedRect.top - listRect.top };
 			return positionedRect.bottom > listRect.top + 1 && positionedRect.top < listRect.bottom - 1;
 		};
+		const targetFloorHighlight = (target) =>
+			target?.querySelector(':scope > .ldp-post-head > .ldp-floor') || target;
 		const focusTarget = () => {
 			if (!targetPostNumber) return false;
-			const target = list.querySelector(`:scope > .ldp-post[data-post-number="${+targetPostNumber}"]`);
+			const target = list.querySelector(`.ldp-post[data-post-number="${+targetPostNumber}"]`);
 			if (!target) return false;
 			hydratePostContent(target, ctx);
 			positionTargetInView(target);
@@ -24970,7 +26397,7 @@
 					return;
 				}
 				const visible = positionTargetInView(target);
-				keepJumpHighlightUntilSettled(target);
+				keepJumpHighlightUntilSettled(targetFloorHighlight(target));
 				settleTarget(visible);
 			});
 			return true;
@@ -24983,14 +26410,15 @@
 		};
 		const restoreHistoryPoint = () => {
 			if (!historyPoint) return false;
-			const target = list.querySelector(`:scope > .ldp-post[data-post-number="${historyPoint.number}"]`);
+			const target = list.querySelector(`.ldp-post[data-post-number="${historyPoint.number}"]`);
 			if (!target) return false;
-			const point = historyPoint; historyPoint = null; if (targetPostNumber) { targetPostNumber = 0; settleTarget(true); } list.scrollTop = point.scrollTop;
+			const point = historyPoint; historyPoint = null; if (targetPostNumber) { targetPostNumber = 0; settleTarget(true); } syncTreeWidth(); list.scrollTop = point.scrollTop;
+			if (Number.isFinite(Number(point.scrollLeft))) list.scrollLeft = Math.max(0, Number(point.scrollLeft));
 			historyAnchor = { target, offset: point.offset };
 			requestAnimationFrame(() => {
 				if (!target.isConnected) return;
 				syncHistoryAnchor();
-				keepJumpHighlightUntilSettled(target);
+				keepJumpHighlightUntilSettled(targetFloorHighlight(target));
 			});
 			return true;
 		};
@@ -25005,156 +26433,129 @@
 			}
 			return posts;
 		};
-		const replyPath = (post) => {
-			const path = [], seen = new Set(); let current = post;
-			while (current && !seen.has(+current.post_number)) {
-				const number = +current.post_number; seen.add(number); path.unshift(current);
-				current = known.get(parentOf(current, number));
+		const syncTreeWidth = () => {
+			treeWidthFrame = 0;
+			if (!list.isConnected) return;
+			const style = getComputedStyle(list);
+			const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+			const baseWidth = Math.max(320, list.clientWidth - padding);
+			const maxDepth = [...list.querySelectorAll('.ldp-post[data-ldp-nest-depth]')]
+				.reduce((depth, node) => Math.max(depth, +node.dataset.ldpNestDepth || 0), 0);
+			const visibleDepth = Math.max(0, Math.floor((baseWidth - 320) / 28));
+			const overflowDepth = Math.max(0, maxDepth - visibleDepth);
+			list.style.setProperty('--ldp-descendant-tree-width', `${Math.ceil(baseWidth + overflowDepth * 28)}px`);
+			list.querySelectorAll('.ldp-descendant-tree-indent-capped')
+				.forEach((node) => node.classList.remove('ldp-descendant-tree-indent-capped'));
+			list.classList.toggle('ldp-descendant-tree-pannable', overflowDepth > 0);
+		};
+		const stopTreePan = (event = null) => {
+			if (!treePan || event && event.pointerId !== treePan.pointerId) return;
+			const active = treePan;
+			treePan = null;
+			list.classList.remove('ldp-descendant-tree-panning');
+			try {
+				if (list.hasPointerCapture(active.pointerId)) list.releasePointerCapture(active.pointerId);
+			} catch {}
+			if (active.moved) {
+				suppressTreeClick = true;
+				requestAnimationFrame(() => { suppressTreeClick = false; });
 			}
-			return path;
 		};
-		const branchDescendantNumbers = (postNumber) => {
-			const target = known.get(+postNumber), numbers = new Set(target ? [+postNumber] : []);
-			if (!target) return numbers;
-			known.forEach((post, number) => {
-				const seen = new Set();
-				for (let parent = parentOf(post, +number); parent && !seen.has(parent); parent = parentOf(known.get(parent), parent)) {
-					if (parent === +postNumber) { numbers.add(+number); break; }
-					seen.add(parent);
-				}
-			});
-			return numbers;
-		};
-		const branchPostNumbers = (postNumber) => {
-			const target = known.get(+postNumber), numbers = new Set();
-			if (!target) return numbers;
-			replyPath(target).forEach((post) => numbers.add(+post.post_number));
-			branchDescendantNumbers(postNumber).forEach((number) => numbers.add(number));
-			return numbers;
-		};
-		const branchPosts = (postNumber) => [...branchPostNumbers(postNumber)]
-			.map((number) => known.get(number)).filter(Boolean);
-		const svgNode = (name) => document.createElementNS('http://www.w3.org/2000/svg', name);
-		const drawBranchLine = (postNumber) => {
-			branchLineSvg?.remove(); branchLineSvg = null;
-			const numbers = branchPostNumbers(postNumber);
-			if (numbers.size < 2 || !list.isConnected) return;
-			const listRect = list.getBoundingClientRect(), height = Math.max(list.scrollHeight, list.clientHeight);
-			const points = new Map();
-			numbers.forEach((number) => {
-				const avatar = list.querySelector(`:scope > .ldp-post[data-post-number="${number}"] > .ldp-post-head .ldp-avatar`);
-				if (avatar) { const rect = avatar.getBoundingClientRect(); points.set(number, { x: rect.left - listRect.left, y: rect.top + rect.height / 2 - listRect.top + list.scrollTop }); }
-			});
-			if (points.size < 2) return;
-			const svg = svgNode('svg'), defs = svgNode('defs');
-			svg.classList.add('ldp-thread-group-svg'); svg.setAttribute('aria-hidden', 'true');
-			svg.style.setProperty('--ldp-thread-group-height', `${height}px`);
-			svg.setAttribute('viewBox', `0 0 ${Math.max(1, list.clientWidth)} ${height}`);
-			const branchGap = 5, fadeLength = 12;
-			const radius = normalizeReplyLineRadius(parseFloat(getComputedStyle(list).getPropertyValue('--ldp-reply-line-radius')));
-			const addPath = (d, stroke = '') => { const path = svgNode('path'); path.classList.add('ldp-thread-group-path'); path.setAttribute('d', d); if (stroke) path.style.stroke = stroke; svg.appendChild(path); };
-			const addBranch = (x1, x2, y) => {
-				const gradient = svgNode('linearGradient'), id = `ldp-thread-group-gradient-${++threadGroupGradientSerial}`;
-				gradient.id = id; gradient.setAttribute('gradientUnits', 'userSpaceOnUse');
-				gradient.setAttribute('x1', x1); gradient.setAttribute('x2', x2); gradient.setAttribute('y1', y); gradient.setAttribute('y2', y);
-				[0, Math.max(0, 1 - fadeLength / Math.max(1, Math.abs(x2 - x1))), 1].forEach((offset, index) => {
-					const stop = svgNode('stop'); stop.setAttribute('offset', offset); stop.setAttribute('stop-color', 'currentColor'); stop.setAttribute('stop-opacity', index === 2 ? '0' : '1'); gradient.appendChild(stop);
-				});
-				defs.appendChild(gradient); addPath(`M ${x1} ${y} H ${x2}`, `url(#${id})`);
+		const onTreePanPointerDown = (event) => {
+			if (event.button !== 0 || event.pointerType && event.pointerType !== 'mouse' ||
+					!list.classList.contains('ldp-descendant-tree-pannable') ||
+					!(event.target instanceof Element) ||
+					event.target.closest('button,a,input,select,textarea,[contenteditable="true"],[role="button"],.ldp-post-head,.ldp-content,.ldp-reactions,.ldp-boost-list,.ldp-floor-preview,.ldp-sub-actions,.ldp-topic-footer-actions,img,video,audio,canvas,pre,code')) return;
+			treePan = {
+				pointerId: event.pointerId,
+				startX: event.clientX,
+				scrollLeft: list.scrollLeft,
+				moved: false,
 			};
-			svg.appendChild(defs);
-        const ordered = [...points.values()].sort((a, b) => a.y - b.y);
-        const axis = Math.min(...ordered.map((point) => point.x)) - radius - branchGap - fadeLength, first = ordered[0], last = ordered[ordered.length - 1];
-        const paths = [`M ${axis} ${first.y + radius} V ${last.y - radius}`, `M ${axis} ${first.y + radius} Q ${axis} ${first.y} ${axis + radius} ${first.y}`];
-        ordered.slice(1).forEach((point) => paths.push(`M ${axis} ${point.y - radius} Q ${axis} ${point.y} ${axis + radius} ${point.y}`));
-        addPath(paths.join(' ')); ordered.forEach((point) => addBranch(axis + radius, point.x - branchGap, point.y));
-			if (svg.querySelector('path')) { list.prepend(svg); branchLineSvg = svg; }
+			list.setPointerCapture(event.pointerId);
 		};
-		const scheduleBranchLine = (postNumber = hoveredBranchNumber || +branchTarget?.post_number || 0) => {
-			if (branchLineFrame) cancelAnimationFrame(branchLineFrame);
-			branchLineFrame = requestAnimationFrame(() => { branchLineFrame = 0; drawBranchLine(postNumber); });
+		const onTreePanPointerMove = (event) => {
+			if (!treePan || event.pointerId !== treePan.pointerId) return;
+			const deltaX = event.clientX - treePan.startX;
+			if (!treePan.moved && Math.abs(deltaX) < 3) return;
+			treePan.moved = true;
+			list.classList.add('ldp-descendant-tree-panning');
+			list.scrollLeft = treePan.scrollLeft - deltaX;
+			event.preventDefault();
+		};
+		const scheduleTreeWidthSync = () => {
+			if (!treeWidthFrame) treeWidthFrame = requestAnimationFrame(syncTreeWidth);
 		};
 		if (isFunction(ResizeObserver)) {
-			branchLineResizeObserver = new ResizeObserver(() => { syncHistoryAnchor(); scheduleBranchLine(); }); branchLineResizeObserver.observe(list);
+			treeResizeObserver = new ResizeObserver(() => {
+				syncHistoryAnchor();
+				scheduleTreeWidthSync();
+			});
+			treeResizeObserver.observe(list);
 		}
-		const syncBranchControls = () => {
-			if (openedBranchesDirty) { openedBranchesDirty = false; persistOpenedBranches(); }
-			list.querySelectorAll('.ldp-descendant-replies-reroot').forEach((button) => {
-				const number = +button.dataset.postNumber;
-				const count = branchDescendantNumbers(number).size, opened = openedBranches.has(number);
-				button.hidden = +branchTarget?.post_number === number;
-				button.innerHTML = `${icon('gitBranch')}<span>${count}${opened ? ' ✓' : ''}</span>`;
-				button.classList.toggle('was-opened', opened);
-				setLabel(button, `${opened ? '已打开过；' : ''}聚焦 #${number} 下的回复分支，当前已加载 ${count} 条`);
-			});
-		};
-		const applyNestedReplySurfaceStyle = (node) => {
-			node.classList.add('ldp-descendant-reply-compact');
-			node.style.padding = '5px 0 7px';
-			node.style.lineHeight = '1.5';
-			node.style.borderBottom = 'none';
-			node.style.setProperty('contain-intrinsic-size', 'auto 96px');
-			const content = node.querySelector(':scope > .ldp-content');
-			if (content) {
-				content.style.fontSize = 'calc(var(--ldp-post-font-size,14px) * var(--ldp-nested-content-scale))';
-				content.style.paddingBlock = '12px';
-				if (content.firstElementChild) content.firstElementChild.style.marginTop = '0';
-				if (content.lastElementChild) content.lastElementChild.style.marginBottom = '0';
-			}
-			[...node.children].forEach((element) => {
-				if (element !== content) element.style.zoom = 'var(--ldp-nested-component-scale)';
-			});
-			const reactions = node.querySelector(':scope > .ldp-reactions');
-			if (reactions) reactions.style.marginTop = '0';
-			const postHead = node.querySelector(':scope > .ldp-post-head');
-			if (postHead) {
-				postHead.style.marginBottom = '0';
-				postHead.style.flexWrap = 'wrap';
-			}
-			const parentJump = node.querySelector(':scope > .ldp-post-head > .ldp-jump-parent');
-			if (parentJump) parentJump.style.marginLeft = '8px';
-			node.querySelectorAll(':scope > .ldp-post-head > .ldp-user,:scope > .ldp-post-head > .ldp-time')
-				.forEach((element) => { element.style.opacity = '.5'; });
+		list.addEventListener('pointerdown', onTreePanPointerDown);
+		list.addEventListener('pointermove', onTreePanPointerMove);
+		['pointerup', 'pointercancel', 'lostpointercapture'].forEach((type) =>
+			list.addEventListener(type, stopTreePan));
+		list.addEventListener('click', (event) => {
+			if (!suppressTreeClick) return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+		}, true);
+		const ensureDiscussionChildContainer = (parentNode) => {
+			let children = parentNode?.querySelector(':scope > .ldp-children');
+			if (children) return children;
+			const total = Math.max(1, +(parentNode?.dataset.childReplyTotal || 0),
+				+(parentNode?._ldpPostData?.reply_count || 0));
+			parentNode.dataset.childReplyTotal = String(total);
+			if (parentNode._ldpPostData)
+				parentNode._ldpPostData.reply_count = Math.max(+(parentNode._ldpPostData.reply_count || 0), total);
+			const holder = makeElement('template');
+			holder.innerHTML = childReplyShellHtml(total);
+			const [collapse, nextChildren, loading] = holder.content.children;
+			const footer = parentNode.querySelector(':scope > .ldp-topic-footer-actions');
+			[collapse, nextChildren, loading].forEach((node) => parentNode.insertBefore(node, footer || null));
+			nextChildren.querySelector(':scope > .ldp-sub-actions')?.remove();
+			parentNode.classList.remove('ldp-children-collapsed');
+			syncChildControls(parentNode);
+			return nextChildren;
 		};
 		const appendPost = (post, isRoot = false, depth = null) => {
 			const number = +post.post_number;
 			if (!number || known.has(number)) return null;
+			const parentNumber = parentOf(post, number);
+			const parentNode = !isRoot && parentNumber
+				? list.querySelector(`.ldp-post[data-post-number="${parentNumber}"]`)
+				: null;
+			if (!isRoot && !parentNode) return null;
+			const treeDepth = isRoot
+				? 0
+				: Number.isInteger(depth) ? Math.max(1, depth) : postNestDepth(parentNode) + 1;
 			known.set(number, post);
-			if (branchTarget && (number === +branchTarget.post_number || depth === null) &&
-					!openedBranches.has(number)) { openedBranches.add(number); openedBranchesDirty = true; }
-			const node = renderPost({ ...post, reply_count: 0 }, !isRoot, ctx, { forceExpanded: true, showParentJump: !isRoot });
-			node._ldpPostData = post; node.classList.remove('ldp-reply-collapsible', 'ldp-nested-collapsed');
-			node.querySelectorAll(':scope > .ldp-nested-toggle,:scope > .ldp-nested-esc-hint,:scope > .ldp-collapse-replies,:scope > .ldp-children,:scope > .ldp-sub-loading').forEach((element) => element.remove());
-			applyNestedReplySurfaceStyle(node);
-			const parent = known.get(+post.reply_to_post_number);
-			const parentJump = node.querySelector(':scope > .ldp-post-head > .ldp-jump-parent');
-			const parentDisplayName = parent?.name || parent?.username || '';
-			if (parent && parentJump) {
-				parentJump.innerHTML = `${icon('info')}<span></span>`;
-				parentJump.lastElementChild.textContent = `#${+parent.post_number} ${parentDisplayName}`;
-				setLabel(parentJump, `在回复浮窗内跳到 ${parentDisplayName} 的楼层 #${+parent.post_number}`);
-				const time = node.querySelector(':scope > .ldp-post-head > .ldp-time[data-exact-time]');
-				const exactTime = time?.dataset.exactTime;
-				if (exactTime) {
-					const exactTimeLabel = makeElement('span');
-					exactTimeLabel.className = 'ldp-reply-exact-time';
-					exactTimeLabel.textContent = exactTime;
-					exactTimeLabel.setAttribute('aria-hidden', 'true');
-					parentJump.after(exactTimeLabel);
-				}
+			const node = renderPost(post, !isRoot, ctx, {
+				forceExpanded: true,
+				nestedPreview: !isRoot,
+				showParentJump: false,
+				nestDepth: treeDepth,
+				unlimitedReplyTree: true,
+			});
+			node._ldpPostData = post;
+			node.classList.remove('ldp-reply-collapsible', 'ldp-nested-collapsed', 'ldp-children-collapsed');
+			node.dataset.ldpNestDepth = String(treeDepth);
+			node.querySelectorAll(':scope > .ldp-nested-toggle,:scope > .ldp-nested-esc-hint')
+				.forEach((element) => element.remove());
+			node.querySelector(':scope > .ldp-children > .ldp-sub-actions')?.remove();
+			const container = parentNode ? ensureDiscussionChildContainer(parentNode) : list;
+			const before = [...container.children]
+				.find((item) => item.classList.contains('ldp-post') && +item.dataset.postNumber > number);
+			container.insertBefore(node, before || null);
+			treeResizeObserver?.observe(node);
+			bindPostMediaLayoutSync(node, ctx);
+			if (parentNode) {
+				syncChildControls(parentNode);
+				scheduleNestedBranchSync(parentNode, ctx);
 			}
-			const actions = node.querySelector(':scope > .ldp-reactions .ldp-actions');
-			const branchAnchor = actions?.querySelector('.ldp-boostbtn') ||
-				actions?.querySelector('.ldp-replybtn') || actions?.querySelector('.ldp-like');
-			branchAnchor?.insertAdjacentHTML('afterend', `<button class="ldp-btn ldp-descendant-replies-reroot" data-post-number="${number}" type="button" aria-label="聚焦经过 #${number} 的回复分支">${icon('gitBranch')}</button>`);
-			if (branchTarget) {
-				const branchDepth = Number.isInteger(depth) ? depth : +(list.querySelector(`:scope > .ldp-post[data-post-number="${+post.reply_to_post_number}"]`)?.dataset.ldpBranchDepth ?? -1) + 1;
-				const indent = Math.min(4, Math.max(0, branchDepth)) * 12;
-				node.dataset.ldpBranchDepth = String(branchDepth);
-				node.style.setProperty('--ldp-descendant-branch-indent', `${indent}px`);
-			}
-			const before = [...list.querySelectorAll(':scope > .ldp-post')].find((item) => +item.dataset.postNumber > number);
-			list.insertBefore(node, before || null); branchLineResizeObserver?.observe(node); bindPostMediaLayoutSync(node, ctx);
+			scheduleTreeWidthSync();
 			hydratePersistentAvatarImages(node, POST_REQUEST_PRIORITY.visible);
 			if (readerPostIsRead(post, ctx)) syncPostReadState(node, true);
 			else if (readIO) readIO.observe(node); else if (hydratePostContent(node, ctx)) ctx.tracker.observe(node);
@@ -25170,8 +26571,6 @@
 					const children = await ctx.repliesIO.loadDirectReplies(parent, { priority: POST_REQUEST_PRIORITY.visible });
 					if (current !== token) return;
 					children.forEach((child) => appendPost(child));
-					syncBranchControls();
-					scheduleBranchLine();
 					restoreHistoryPoint(); focusTarget();
 				}
 				catch { partial = true; }
@@ -25182,22 +26581,20 @@
 			if (!focusTarget() && targetPostNumber && !queue.length) settleTarget(false);
 		};
 		const syncTitle = (partial = false) => {
-			const authorName = threadRoot.name || threadRoot.username || '';
-			title.textContent = `#${threadRoot.post_number} · ${authorName} · 查看完整讨论（${known.size}）`;
+			const authorName = rootPost.name || rootPost.username || '';
+			title.textContent = `#${rootPost.post_number} · ${authorName} · 查看完整讨论（${known.size}）`;
 			title.dataset.partial = partial ? '1' : '0';
-			setLabel(closeButton, stack.length > 1
-				? `返回分支 #${stack[stack.length - 2].root.post_number}`
-				: '关闭完整讨论（Esc）');
+			setLabel(closeButton, '关闭完整讨论（Esc）');
 		};
 		const livePostTasks = new Map();
 		panel._ldpIngestLivePost = (post) => {
 			const number = +post?.post_number;
 			if (!number || known.has(number)) return Promise.resolve(false);
 			if (livePostTasks.has(number)) return livePostTasks.get(number);
-			const current = token, scopeNumber = +(branchTarget || threadRoot)?.post_number;
+			const current = token, scopeNumber = +rootPost.post_number;
 			const task = (async () => {
 				const path = [], seen = new Set([number]); let child = post;
-				for (let guard = 0; child && guard < 32; guard++) {
+				while (child) {
 					const parentNumber = parentOf(child) || (scopeNumber === 1 ? 1 : 0);
 					if (parentNumber === scopeNumber) { path.unshift(child); break; }
 					if (!parentNumber || seen.has(parentNumber)) return false;
@@ -25214,120 +26611,29 @@
 				if (!path.length || (parentOf(path[0]) || (scopeNumber === 1 ? 1 : 0)) !== scopeNumber) return false;
 				const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight <= 120;
 				const listRect = list.getBoundingClientRect();
-				const anchor = nearBottom ? null : [...list.querySelectorAll(':scope > .ldp-post')]
+				const anchor = nearBottom ? null : [...list.querySelectorAll('.ldp-post')]
 					.find((node) => node.getBoundingClientRect().bottom > listRect.top);
 				const offset = anchor?.getBoundingClientRect().top - listRect.top;
 				path.forEach((item) => appendPost(item));
 				if (anchor && Number.isFinite(offset)) { historyAnchor = { target: anchor, offset }; syncHistoryAnchor(); }
-				syncBranchControls(); syncTitle(title.textContent.includes('（部分）')); scheduleBranchLine();
+				syncTitle(title.dataset.partial === '1');
 				if (nearBottom) requestAnimationFrame(() => { if (current === token) list.scrollTop = list.scrollHeight; });
 				return true;
 			})().finally(() => livePostTasks.delete(number));
 			livePostTasks.set(number, task);
 			return task;
 		};
-		const snapshotFrame = () => { const frame = stack[stack.length - 1]; if (frame) frame.posts = [...known.values()]; };
-		const renderThread = (root, push = true, lineage = [], seedPosts = []) => {
-			if (push) {
-				const trail = [...(stack[stack.length - 1]?.trail || [])], number = +root.post_number;
-				if (trail.at(-1) !== number) trail.push(number);
-				stack.push({ root, lineage: [...lineage], posts: [...seedPosts], trail });
-			}
-			token++; branchTarget = lineage.length ? root : null; threadRoot = lineage[0] || root; loading = false; historyAnchor = null;
-			if (!historyPoint && !targetPostNumber) historyPoint = windowState.views?.[viewKey()] || null;
-			readIO?.disconnect();
-			list.querySelectorAll('.ldp-post').forEach((node) => ctx.tracker.unobserve(node));
-			branchLineResizeObserver?.disconnect(); branchLineResizeObserver?.observe(list);
-			returnPoint = null;
-			known = new Map(); queue = [];
-			list.replaceChildren();
-			lineage.forEach((post, index) => appendPost(post, index === 0, index));
-			appendPost(root, !lineage.length, lineage.length);
-			[...seedPosts].sort((a, b) => +a.post_number - +b.post_number).forEach((post) => appendPost(post));
-			const loadedChildren = new Map();
-			known.forEach((post) => { const parent = parentOf(post); if (known.has(parent)) loadedChildren.set(parent, (loadedChildren.get(parent) || 0) + 1); });
-			queue = [...branchDescendantNumbers(root.post_number)].map((number) => known.get(number))
-				.filter((post) => +post.reply_count > (loadedChildren.get(+post.post_number) || 0));
-			syncBranchControls();
-			hoveredBranchNumber = 0; scheduleBranchLine();
-			syncTitle();
-			const positioned = historyPoint ? restoreHistoryPoint() : focusTarget();
-			if (queue.length || !positioned) void loadMore();
-		};
-		panel._ldpBack = () => {
-			if (stack.length < 2) return false;
-			snapshotFrame(); persistWindowState();
-			stack.pop(); const previous = stack[stack.length - 1];
-			historyPoint = previous.returnPoint || null; previous.returnPoint = null;
-			renderThread(previous.root, false, previous.lineage, previous.posts); return true;
-		};
 		['wheel', 'pointerdown', 'touchstart', 'keydown'].forEach((type) => list.addEventListener(type, () => { historyAnchor = null; }, { passive: true }));
-		list.addEventListener('scroll', () => { scheduleBranchLine(); if (list.scrollTop + list.clientHeight * 2 >= list.scrollHeight) void loadMore(); }, { passive: true });
-		panel.addEventListener('pointerover', (event) => {
-			const button = event.target.closest?.('.ldp-descendant-replies-reroot');
-			if (!button || button.contains(event.relatedTarget)) return;
-			hoveredBranchNumber = +button.dataset.postNumber; scheduleBranchLine(hoveredBranchNumber);
-		});
-		panel.addEventListener('pointerout', (event) => {
-			const button = event.target.closest?.('.ldp-descendant-replies-reroot');
-			if (!button || button.contains(event.relatedTarget)) return;
-			hoveredBranchNumber = 0; scheduleBranchLine();
-		});
+		list.addEventListener('scroll', () => {
+			if (list.scrollTop + list.clientHeight * 2 >= list.scrollHeight) void loadMore();
+		}, { passive: true });
 		panel.addEventListener('click', (event) => {
 			if (event.target.closest('.ldp-descendant-replies-close')) {
 				consumeEvent(event);
-				if (!panel._ldpBack()) close();
+				close();
 				return;
 			}
 			if (event.target.closest('.ldp-descendant-replies-top')) { consumeEvent(event); historyPoint = historyAnchor = null; list.scrollTo({ top: 0, behavior: 'auto' }); return; }
-			const returnButton = event.target.closest('.ldp-descendant-replies-return');
-			if (returnButton) {
-				consumeEvent(event);
-				const source = returnPoint?.source, scrollTop = returnPoint?.scrollTop;
-				returnButton.remove(); returnPoint = null;
-				if (Number.isFinite(scrollTop)) list.scrollTo({ top: scrollTop, behavior: 'auto' });
-				if (source?.isConnected) keepJumpHighlightUntilSettled(source);
-				return;
-			}
-			const parentJump = event.target.closest('.ldp-jump-parent');
-			if (parentJump) {
-				consumeEvent(event);
-				const source = parentJump.closest('.ldp-post');
-				ctx.floorPreview?.hide(source);
-				const target = list.querySelector(`:scope > .ldp-post[data-post-number="${+parentJump.dataset.targetPostNumber}"]`);
-				if (!target) return;
-				list.querySelector('.ldp-descendant-replies-return')?.remove();
-				returnPoint = { source, scrollTop: list.scrollTop };
-				target.querySelector(':scope > .ldp-post-head > .ldp-body-floor')?.insertAdjacentHTML('afterend', `<button class="ldp-btn ldp-floor ldp-descendant-replies-return" type="button" aria-label="返回刚才的位置 #${+source.dataset.postNumber}">↳ 返回 #${+source.dataset.postNumber}</button>`);
-				const targetTop = list.scrollTop + target.getBoundingClientRect().top - list.getBoundingClientRect().top;
-				list.scrollTo({ top: Math.max(0, targetTop - 12), behavior: 'auto' });
-				keepJumpHighlightUntilSettled(target);
-				return;
-			}
-			const reroot = event.target.closest('.ldp-descendant-replies-reroot');
-			if (reroot) {
-				consumeEvent(event); const number = +reroot.dataset.postNumber, next = known.get(number);
-				if (next) {
-					const path = replyPath(next);
-					if (+path[0]?.post_number !== +threadRoot.post_number ||
-						path.some((post, index) => index && parentOf(post) !== +path[index - 1].post_number)) return;
-					const wasOpened = openedBranches.has(number), descendants = branchDescendantNumbers(number);
-					const seedPosts = branchPosts(number), savedPoint = windowState.views?.[
-						`${CURRENT_SITE_HOST || location.host}:${ctx.topicId}:${+threadRoot.post_number}:${number}`
-					];
-					const firstUnread = wasOpened && !savedPoint && seedPosts
-						.filter((post) => descendants.has(+post.post_number) && !readerPostIsRead(post, ctx))
-						.sort((a, b) => +a.post_number - +b.post_number)[0];
-					branchDescendantNumbers(number).forEach((member) => {
-						if (!openedBranches.has(member)) { openedBranches.add(member); openedBranchesDirty = true; }
-					});
-					const source = reroot.closest('.ldp-post'), current = stack[stack.length - 1];
-					if (source && current) current.returnPoint = { number, scrollTop: list.scrollTop, offset: source.getBoundingClientRect().top - list.getBoundingClientRect().top };
-					snapshotFrame(); persistWindowState();
-					historyPoint = savedPoint || { number: +(firstUnread?.post_number || number), scrollTop: 0, offset: 12 };
-					renderThread(next, true, path.length > 1 ? path.slice(0, -1) : [next], seedPosts);
-				}
-			}
 		});
 		const initialPosts = cachedDescendantPosts(rootPost.post_number);
 		if (continueAfterInlineReplies && !windowState.views?.[viewKey()]) {
@@ -25338,7 +26644,21 @@
 				historyPoint = { number: +firstUnshownReply.post_number, scrollTop: 0, offset: 12 };
 			}
 		}
-		renderThread(rootPost, true, [], initialPosts);
+		token++;
+		if (!historyPoint && !targetPostNumber) historyPoint = windowState.views?.[viewKey()] || null;
+		appendPost(rootPost, true, 0);
+		initialPosts.sort((a, b) => +a.post_number - +b.post_number).forEach((post) => appendPost(post));
+		const loadedChildren = new Map();
+		known.forEach((post) => {
+			const parent = parentOf(post);
+			if (known.has(parent)) loadedChildren.set(parent, (loadedChildren.get(parent) || 0) + 1);
+		});
+		queue = [...known.values()]
+			.filter((post) => +post.reply_count > (loadedChildren.get(+post.post_number) || 0));
+		scheduleTreeWidthSync();
+		syncTitle();
+		const positioned = historyPoint ? restoreHistoryPoint() : focusTarget();
+		if (queue.length || !positioned) void loadMore();
 		return targetReady;
 	}
 
@@ -25380,6 +26700,10 @@
 
 	function ensureLiveReplyShell(parentNode, totalCount, ctx) {
 		if (!parentNode) return null;
+		const parentDepth = postNestDepth(parentNode,
+			parentNode.classList.contains('ldp-nested-preview') ? 1 : 0);
+		if (parentDepth >= inlineReplyTreeMaxDepth())
+			return parentNode.querySelector(':scope > .ldp-children');
 		const total = Math.max(1, +totalCount || 0);
 		parentNode.dataset.childReplyTotal = String(Math.max(+(parentNode.dataset.childReplyTotal || 0), total));
 		if (parentNode._ldpPostData) {
@@ -25398,11 +26722,60 @@
 		setNestedReplyCollapsed(parentNode, parentNode._ldpPostData?.hidden === true);
 		if (created) {
 			const isTopicStarter = +parentNode.dataset.postNumber === 1;
-			setChildRepliesCollapsed(parentNode, isTopicStarter || PREFS.expandNestedRepliesByDefault !== true);
+			setChildRepliesCollapsed(parentNode, parentDepth >= 2 ||
+				parentDepth === 0 && (isTopicStarter || PREFS.expandNestedRepliesByDefault !== true));
 		}
-		if (ctx?.repliesIO) ctx.repliesIO.observe(parentNode);
 		syncChildControls(parentNode);
 		return children;
+	}
+
+	function nestedReplyKnownTotal(parentNode, ctx) {
+		const parentNumber = +(parentNode?.dataset.postNumber || 0);
+		if (!parentNumber || !ctx) return 0;
+		const state = ctx.subReplyState.get(parentNumber);
+		return Math.max(
+			+(parentNode.dataset.childReplyTotal || 0),
+			+(parentNode._ldpPostData?.reply_count || 0),
+			+(state?.totalCount || 0),
+			+(state?.all?.length || 0),
+			ctx.directRepliesByParent.get(parentNumber)?.size || 0,
+		);
+	}
+
+	function reconcileNestedReplyNode(parentNode, ctx, options = {}) {
+		const parentNumber = +(parentNode?.dataset.postNumber || 0);
+		const totalCount = nestedReplyKnownTotal(parentNode, ctx);
+		if (!parentNumber || !totalCount || !parentNode.isConnected) return false;
+		const parentDepth = postNestDepth(
+			parentNode,
+			parentNode.classList.contains('ldp-nested-preview') ? 1 : 0,
+		);
+		const state = ctx.subReplyState.get(parentNumber);
+		if (parentNode.classList.contains('ldp-nested-preview') &&
+				parentDepth >= inlineReplyTreeMaxDepth()) {
+			if (!state?.all?.length) return false;
+			state.renderedParent = parentNode;
+			state.renderedKey = `capped:${inlineReplyTreeMaxDepth()}:${state.all.length}`;
+			captureStreamViewportAnchor(ctx);
+			syncNestedTreeOwnedFloors(
+				ctx,
+				parentNode,
+				state.all.map((reply) => +reply.post_number),
+			);
+			restoreStreamViewportAnchor(ctx);
+			return true;
+		}
+		ensureLiveReplyShell(parentNode, totalCount, ctx);
+		const branchExpanded = !parentNode.hidden &&
+			!parentNode.classList.contains('ldp-nested-collapsed') &&
+			!parentNode.classList.contains('ldp-children-collapsed');
+		if (branchExpanded && options.render !== false && state?.all?.length)
+			scheduleNestedReplyRender(parentNumber, ctx, parentNode);
+		const needsRequest = !state?.all?.length ||
+			state.hasMore !== false && state.all.length < totalCount;
+		if (branchExpanded && options.observe !== false && needsRequest)
+			ctx.repliesIO?.observe(parentNode);
+		return true;
 	}
 
 	function syncLiveNestedReply(post, ctx, options = {}) {
@@ -25411,41 +26784,60 @@
 		if (!ctx || !postNumber || parentNumber < 1) return false;
 		const previous = ctx.subReplyState.get(parentNumber);
 		const previousAll = previous && Array.isArray(previous.all) ? previous.all : [];
-		const wasAlreadyKnown = previousAll.some((reply) => +(reply?.post_number || 0) === postNumber);
-		rememberPostData(ctx, post, parentNumber);
-		const parentNode = ctx.streamNodeMap.get(parentNumber);
-		if (!parentNode) return false;
+		if (options.relationsCommitted !== true)
+			rememberPostData(ctx, post, parentNumber);
+		const parentNode = (inlineReplyTreeMaxDepth() > 1 && findReplyListParent(parentNumber, ctx)) ||
+			ctx.streamNodeMap.get(parentNumber);
+		const parentPost = parentNode?._ldpPostData ||
+			postsFromPayload(ctx.topicData).find((item) => +item?.post_number === parentNumber) ||
+			ctx.loader?.cachedPosts?.find((item) => +item?.post_number === parentNumber) ||
+			null;
 		const knownMap = ctx.directRepliesByParent.get(parentNumber);
 		const knownReplies = knownMap ? [...knownMap.values()] : [];
 		const merged = mergeDirectReplies(previousAll, knownReplies, [post]);
 		const previousTotal = Math.max(previousAll.length, +(previous?.totalCount || 0));
-		const pageSize = SUB_REPLY_PAGE_SIZE;
+		const pageSize = parentNode
+			? nestedReplyRenderPlan(parentNode, previous || { all: merged }, ctx).pageSize
+			: SUB_REPLY_PAGE_SIZE;
 		const previousPageCount = Math.max(1, Math.ceil(previousTotal / pageSize));
 		const wasOnLastPage = !previous || +(previous.pageIndex || 0) >= previousPageCount - 1;
-		const totalCount = Math.max(
+		const declaredTotal = Math.max(
 			merged.length,
-			previousTotal + (options.incrementTotal === true && !wasAlreadyKnown ? 1 : 0),
-			+(parentNode.dataset.childReplyTotal || 0),
-			+(parentNode._ldpPostData?.reply_count || 0),
+			previousTotal,
+			+(options.totalCountHint || 0),
+			+(parentNode?.dataset.childReplyTotal || 0),
+			+(parentPost?.reply_count || 0),
 		);
-		ensureLiveReplyShell(parentNode, totalCount, ctx);
-		const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+		const complete = previous?.hasMore === false && declaredTotal <= merged.length;
+		const state = syncNestedReplyStateFromRelations(ctx, parentNumber, {
+			totalCount: declaredTotal,
+			complete,
+		});
+		if (!state) return false;
+		if (parentNode) ensureLiveReplyShell(parentNode, state.totalCount, ctx);
+		const pageCount = Math.max(1, Math.ceil(state.totalCount / pageSize));
 		const liveReplyIndex = merged.findIndex((reply) => +(reply?.post_number || 0) === postNumber);
 		const liveReplyPage = liveReplyIndex >= 0 ? Math.floor(liveReplyIndex / pageSize) : pageCount - 1;
-		const state = {
-			all: merged,
-			pageIndex: wasOnLastPage ? liveReplyPage : +(previous?.pageIndex || 0),
-			nodeCache: previous?.nodeCache,
-			renderedKey: '',
-			renderedParent: previous?.renderedParent,
-			totalCount,
-			fetchedReplyCount: Math.max(merged.length, +(previous?.fetchedReplyCount || 0)),
-			fetchAfter: Math.max(postNumber, +(previous?.fetchAfter || 0)),
-			hasMore: totalCount > merged.length || !!(previous?.hasMore),
-			loadingMore: false,
-		};
-		ctx.subReplyState.set(parentNumber, state);
-		if (parentNode.isConnected) renderSubReplyBatch(parentNumber, ctx, 0, parentNode);
+		state.pageIndex = wasOnLastPage ? liveReplyPage : +(previous?.pageIndex || 0);
+		state.renderedKey = '';
+		state.fetchedReplyCount = Math.max(merged.length, +(previous?.fetchedReplyCount || 0));
+		state.fetchAfter = Math.max(postNumber, +(previous?.fetchAfter || 0));
+		state.loadingMore = false;
+		ctx.loader?.persistNestedReplies?.(
+			parentPost || {
+				id: +parentNode?.dataset.postId || 0,
+				post_number: parentNumber,
+				reply_count: state.totalCount,
+			},
+			state.all,
+			{
+				totalCount: state.totalCount,
+				complete: state.hasMore === false,
+				replace: state.hasMore === false,
+				fetchAfter: state.fetchAfter,
+			},
+		);
+		if (parentNode?.isConnected) reconcileNestedReplyNode(parentNode, ctx);
 		return true;
 	}
 
@@ -25461,10 +26853,12 @@
 			syncPostReadState(node, readerPostIsRead(node._ldpPostData, ctx));
 			const content = node.querySelector(':scope > .ldp-content');
 			if (options.refreshContent === true && content && post.cooked != null) {
-				setPostCookedContent(content, post.cooked, node._ldpPostData.link_counts);
-				content.classList.remove('ldp-content-pending');
-				content.removeAttribute('aria-busy');
-				bindPostMediaLayoutSync(node, ctx);
+				delete node.dataset.ldpContentLoadFailed;
+				if (node.dataset.ldpContentHydrated === '0') hydratePostContent(node, ctx);
+				else {
+					setPostCookedContent(content, post.cooked, node._ldpPostData.link_counts);
+					bindPostMediaLayoutSync(node, ctx);
+				}
 			}
 			if (Array.isArray(post.polls)) renderPostPolls(node, ctx);
 			renderPostSpecialContent(node, ctx);
@@ -25472,10 +26866,27 @@
 			ctx?.translation?.syncPost(node);
 		});
 		const mergedPost = streamNode?._ldpPostData || { ...post };
-		rememberPostData(ctx, mergedPost);
+		if (options.relationsCommitted !== true)
+			rememberPostData(ctx, mergedPost);
 		const replyCount = +(post.reply_count || 0);
-		if (replyCount > 0 && streamNode) ensureLiveReplyShell(streamNode, replyCount, ctx);
+		if (replyCount > 0) copies.forEach((node) => reconcileNestedReplyNode(node, ctx));
 		return true;
+	}
+
+	function nestedReplyAncestorChain(post, ctx) {
+		const known = knownLightboxPosts(ctx);
+		const chain = [], seen = new Set();
+		let current = post, number = +(post?.post_number || 0);
+		if (number) known.set(number, post);
+		while (number > 0 && !seen.has(number) && chain.length < 32) {
+			seen.add(number);
+			chain.unshift(number);
+			const parent = +(current?.reply_to_post_number || ctx.replyParentByPost?.get(number) || 0);
+			if (!parent) break;
+			number = parent;
+			current = known.get(number);
+		}
+		return { chain, known };
 	}
 
 	async function focusLiveNestedReply(post, ctx, options = {}) {
@@ -25487,32 +26898,56 @@
 			(!isFunction(options.acceptsWork) || options.acceptsWork());
 		if (!jumpStillCurrent()) return false;
 		if (ctx.cancelInitialTargetPosition) ctx.cancelInitialTargetPosition();
-		if (!ctx.streamNodeMap.has(parentNumber) && ctx.loadPost) {
-			await ctx.loadPost(parentNumber, { mount: true, ensureAround: true, scope: 'around' });
+		rememberPostData(ctx, post, parentNumber);
+		const { chain, known } = nestedReplyAncestorChain(post, ctx);
+		if (chain.length < 2 || chain.length - 1 > inlineReplyTreeMaxDepth()) return false;
+		const rootNumber = chain[0];
+		if (!ctx.streamNodeMap.has(rootNumber) && ctx.loadPost) {
+			await ctx.loadPost(rootNumber, { mount: true, ensureAround: true, scope: 'around' });
 		}
 		if (!jumpStillCurrent()) return false;
-		const parentNode = getStreamPostNode(ctx, parentNumber, { mount: true }) ||
-			ctx.streamNodeMap.get(parentNumber);
+		let parentNode = getStreamPostNode(ctx, rootNumber, { mount: true }) ||
+			ctx.streamNodeMap.get(rootNumber);
 		if (!parentNode) return false;
-		syncLiveNestedReply(post, ctx, { allowOpParent: true });
-		parentNode.classList.remove('ldp-children-collapsed');
-		setNestedReplyCollapsed(parentNode, false);
-		const state = ctx.subReplyState.get(parentNumber);
-		if (!state) return false;
-		const pageSize = SUB_REPLY_PAGE_SIZE;
-		const replyIndex = state.all.findIndex((reply) => +(reply?.post_number || 0) === postNumber);
-		state.pageIndex = replyIndex >= 0
-			? Math.floor(replyIndex / pageSize)
-			: Math.max(0, Math.ceil(state.all.length / pageSize) - 1);
-		state.renderedKey = '';
-		renderSubReplyBatch(parentNumber, ctx, 0, parentNode);
-		syncChildControls(parentNode);
-		const target = parentNode.querySelector(
-			`:scope > .ldp-children > .ldp-post[data-post-number="${postNumber}"]`
-		);
+		let target = null;
+		for (let index = 0; index < chain.length - 1; index++) {
+			if (!jumpStillCurrent()) return false;
+			const ancestorNumber = chain[index], childNumber = chain[index + 1];
+			const childPost = childNumber === postNumber ? post : known.get(childNumber);
+			const ancestorPost = parentNode._ldpPostData || known.get(ancestorNumber);
+			if (ancestorPost) {
+				try {
+					(await ctx.repliesIO?.loadDirectReplies(ancestorPost, {
+						priority: POST_REQUEST_PRIORITY.visible,
+					}) || []).forEach((reply) => known.set(+reply.post_number, reply));
+				} catch {}
+			}
+			const resolvedChild = childPost || known.get(childNumber);
+			if (!resolvedChild) return false;
+			ensureLiveReplyShell(parentNode, Math.max(1, +(ancestorPost?.reply_count || 0)), ctx);
+			parentNode.classList.remove('ldp-children-collapsed');
+			setNestedReplyCollapsed(parentNode, false);
+			syncLiveNestedReply(resolvedChild, ctx, { allowOpParent: true });
+			const state = ctx.subReplyState.get(ancestorNumber);
+			if (!state) return false;
+			const pageSize = nestedReplyRenderPlan(parentNode, state, ctx).pageSize;
+			const replyIndex = state.all.findIndex((reply) => +reply.post_number === childNumber);
+			state.pageIndex = replyIndex >= 0 ? Math.floor(replyIndex / pageSize) : 0;
+			state.renderedKey = '';
+			renderSubReplyBatch(ancestorNumber, ctx, 0, parentNode);
+			syncChildControls(parentNode);
+			const childNode = parentNode.querySelector(
+				`:scope > .ldp-children > .ldp-post[data-post-number="${childNumber}"]`
+			);
+			if (!childNode) return false;
+			childNode.classList.remove('ldp-children-collapsed');
+			setNestedReplyCollapsed(childNode, false);
+			if (childNumber === postNumber) target = childNode;
+			parentNode = childNode;
+		}
 		if (!target) return false;
 		syncPostActionControls(target, ctx);
-		if (!scrollToPost(parentNumber, ctx, {
+		if (!scrollToPost(+(target.dataset.replyToPostNumber || parentNumber), ctx, {
 			...PINNED_STREAM_SCROLL_OPTIONS,
 			visualNode: target,
 			highlightTarget: target,
@@ -25566,19 +27001,61 @@
 	}
 
 	function ingestLivePosts(posts, ctx, options = {}) {
-		const ordered = (Array.isArray(posts) ? posts : [])
-			.filter((post) => post?.id && post.post_number)
+		const ordered = [...new Map(
+			(Array.isArray(posts) ? posts : [])
+				.filter((post) => post?.id && post.post_number)
+				.map((post) => [+post.post_number, post])
+		).values()]
 			.sort((a, b) => +(a.post_number || 0) - +(b.post_number || 0));
 		if (!ordered.length) return [];
+		const newPostNumbers = new Set(
+			[...(options.newPostNumbers || [])].map(Number).filter(Boolean)
+		);
+		const newReplyCountsByParent = new Map();
+		const previousTotalsByParent = new Map();
+		ordered.forEach((post) => {
+			const postNumber = +(post?.post_number || 0);
+			const parentNumber = +(post?.reply_to_post_number || 0);
+			if (!newPostNumbers.has(postNumber) || !parentNumber) return;
+			newReplyCountsByParent.set(
+				parentNumber,
+				+(newReplyCountsByParent.get(parentNumber) || 0) + 1,
+			);
+			if (previousTotalsByParent.has(parentNumber)) return;
+			const state = ctx.subReplyState.get(parentNumber);
+			const knownReplies = ctx.directRepliesByParent.get(parentNumber);
+			const parentNode = findReplyListParent(parentNumber, ctx) ||
+				ctx.streamNodeMap.get(parentNumber);
+			const parentPost = parentNode?._ldpPostData ||
+				postsFromPayload(ctx.topicData).find((item) => +item?.post_number === parentNumber) ||
+				ctx.loader?.cachedPosts?.find((item) => +item?.post_number === parentNumber);
+			previousTotalsByParent.set(parentNumber, Math.max(
+				+(state?.totalCount || 0),
+				Array.isArray(state?.all) ? state.all.length : 0,
+				knownReplies?.size || 0,
+				+(parentNode?.dataset.childReplyTotal || 0),
+				+(parentPost?.reply_count || 0),
+			));
+		});
+		commitNestedReplyRelations(ctx, ordered);
 		const fresh = [];
 		ordered.forEach((post) => {
-			if (!updateLivePostData(post, ctx, options)) fresh.push(post);
+			if (!updateLivePostData(post, ctx, {
+				...options,
+				relationsCommitted: true,
+			})) fresh.push(post);
 		});
-		if (fresh.length) attachPostBatch(fresh, ctx, { syncStreamNow: true });
-		const freshPostNumbers = new Set(fresh.map((post) => +(post.post_number || 0)));
+		if (fresh.length) attachPostBatch(fresh, ctx, {
+			syncStreamNow: true,
+			relationsCommitted: true,
+		});
 		ordered.forEach((post) => syncLiveNestedReply(post, ctx, {
-			incrementTotal: freshPostNumbers.has(+(post.post_number || 0)),
+			totalCountHint: +(previousTotalsByParent.get(+post.reply_to_post_number) || 0) +
+				+(newReplyCountsByParent.get(+post.reply_to_post_number) || 0),
+			relationsCommitted: true,
 		}));
+		if (options.skipCapabilityRefresh !== true)
+			ordered.forEach((post) => refreshMissingLivePostCapabilities(post, ctx));
 		if (ctx.isPostVoting) {
 			ctx.streamItems.sort(comparePostVotingStreamItems);
 			reindexStreamItems(ctx, 0);
@@ -27415,10 +28892,49 @@
 		onAction(userCardEventRoot, 'click', onPortalAvatarPreviewClick, true);
 
 		const preserveOnlyOpPostExpansion = (post) => {
-			const preserve = ctx.onlyOp && !post._ldpPostData?.hidden &&
-				String(post.dataset.username || '') === String(ctx.op || '');
+			const preserve = !post._ldpPostData?.hidden &&
+				matchesOnlyOpFilter(ctx, post.dataset.username);
 			if (preserve) keepOnlyOpPostExpanded(post, ctx);
 			return preserve;
+		};
+		const toggleNestedPostFromControl = (post, collapse = !post.classList.contains('ldp-nested-collapsed')) => {
+			if (preserveOnlyOpPostExpansion(post)) return false;
+			if (post.classList.contains('ldp-reddit-comment-collapsible')) {
+				if (collapse) delete post.dataset.ldpJumpExpanded;
+				setRedditCommentCollapsed(post, collapse, { user: true });
+				if (collapse) floorPreview.hide(post);
+				return true;
+			}
+			if (collapse) {
+				delete post.dataset.ldpJumpExpanded;
+				post.dataset.ldpUserNestedCollapsed = '1';
+			} else delete post.dataset.ldpUserNestedCollapsed;
+			setNestedReplyCollapsed(post, collapse);
+			if (collapse) floorPreview.hide(post);
+			return true;
+		};
+		const collapseRedditCommentFromControl = (post) => {
+			if (!post || preserveOnlyOpPostExpansion(post)) return false;
+			const replyScrollRoot = post.closest('.ldp-descendant-replies-list') || ctx.scrollRoot;
+			if (replyScrollRoot !== ctx.scrollRoot) {
+				setRedditCommentCollapsed(post, true, { user: true });
+				return true;
+			}
+			const positionAnchor = post.querySelector(':scope > .ldp-post-head') || post;
+			const rootRect = ctx.scrollRoot.getBoundingClientRect();
+			const owner = streamOwnerPostNode(ctx, post) || post;
+			clearStreamViewportAnchor(ctx);
+			ctx.streamViewportAnchor = {
+				marker: positionAnchor,
+				offset: positionAnchor.getBoundingClientRect().top - rootRect.top,
+				owner,
+				ownerOffset: owner.getBoundingClientRect().top - rootRect.top,
+			};
+			ctx.scrollRoot.classList.add('ldp-stream-viewport-anchor');
+			setRedditCommentCollapsed(post, true, { user: true });
+			restoreStreamViewportAnchor(ctx);
+			scheduleStreamWindowSync(ctx);
+			return true;
 		};
 		const readerActionHandlers = {
 			report: (post) => openReaderReportDialog(post, ctx),
@@ -27586,52 +29102,25 @@
 	      if (nestedRailToggle) {
 	        e.preventDefault();
 	        const post = nestedRailToggle.closest('.ldp-post');
-	        if (preserveOnlyOpPostExpansion(post)) return;
-	        const rootRect = ctx.scrollRoot.getBoundingClientRect();
-	        const parentContent = post.querySelector(':scope > .ldp-content');
-	        const parentReactions = post.querySelector(':scope > .ldp-reactions');
-	        const parentBodyEnd = parentReactions && parentReactions.getClientRects().length
-	          ? parentReactions
-	          : (parentContent || post);
-	        const expandedContentRect = (parentContent || parentBodyEnd).getBoundingClientRect();
-	        const expandedBodyEndRect = parentBodyEnd.getBoundingClientRect();
-	        const parentBodyEndVisible = expandedBodyEndRect.bottom >= rootRect.top && expandedBodyEndRect.bottom <= rootRect.bottom;
-	        setChildRepliesCollapsed(post, true);
-	        const collapsedContentRect = (parentContent || post).getBoundingClientRect();
-	        if (parentBodyEndVisible) {
-	          const topOffset = collapsedContentRect.top - expandedContentRect.top;
-	          if (Math.abs(topOffset) >= 1) {
-	            const previousScrollTop = ctx.scrollRoot.scrollTop;
-	            ctx.scrollRoot.scrollTop += topOffset;
-	            markStreamInternalScroll(ctx, previousScrollTop);
-	            scheduleStreamWindowSync(ctx);
-	          }
-	          return;
-	        }
-	        const parentPostNumber = streamPostNumber(post);
-	        scrollToPost(parentPostNumber, ctx, {
-	          ...PINNED_STREAM_SCROLL_OPTIONS,
-	          visualNode: parentBodyEnd,
-	          alignBottomCenter: true,
-	          highlight: false,
-	        });
+	        collapseRedditCommentFromControl(post);
 	        return;
 	      }
 
 	      const nestedToggle = e.target.closest('.ldp-nested-toggle');
 	      if (nestedToggle) {
 	        const post = nestedToggle.closest('.ldp-post');
-	        if (preserveOnlyOpPostExpansion(post)) return;
-	        const willCollapse = !post.classList.contains('ldp-nested-collapsed');
-	        if (willCollapse) delete post.dataset.ldpJumpExpanded;
-	        setNestedReplyCollapsed(post, willCollapse);
-	        if (willCollapse) floorPreview.hide(post);
+	        toggleNestedPostFromControl(post);
 	        return;
 	      }
 
 	      const rowToggleTarget = e.target.closest('.ldp-post.ldp-nested-collapsed');
 	      if (rowToggleTarget && !e.target.closest('a,button,input,textarea,select,label')) {
-	        setNestedReplyCollapsed(rowToggleTarget, false);
+	        if (rowToggleTarget.classList.contains('ldp-reddit-comment-collapsible'))
+	          setRedditCommentCollapsed(rowToggleTarget, false, { user: true });
+	        else {
+	          delete rowToggleTarget.dataset.ldpUserNestedCollapsed;
+	          setNestedReplyCollapsed(rowToggleTarget, false);
+	        }
 	        return;
 	      }
 
@@ -27653,8 +29142,11 @@
 		      const collapseBtn = e.target.closest('.ldp-collapse-replies');
 			if (collapseBtn) {
 				const post = collapseBtn.closest('.ldp-post');
-				if (preserveOnlyOpPostExpansion(post)) return;
-				setChildRepliesCollapsed(post, !post.classList.contains('ldp-children-collapsed'));
+				if (post.classList.contains('ldp-children-collapsed')) {
+					setChildRepliesCollapsed(post, false, { user: true });
+					return;
+				}
+				collapseRedditCommentFromControl(post);
 				return;
 		      }
 
@@ -27674,7 +29166,7 @@
 				const direction = pageBtn.classList.contains('ldp-sub-page-next') ? 1 : -1;
 				if (direction > 0) {
 					const state = ctx.subReplyState.get(postNumber);
-					const pageSize = SUB_REPLY_PAGE_SIZE;
+					const pageSize = nestedReplyRenderPlan(post, state, ctx).pageSize;
 					const targetPage = +(state?.pageIndex || 0) + 1;
 					const requiredCount = Math.min(+(state?.totalCount || 0), (targetPage + 1) * pageSize);
 					if (state && +(state.fetchedReplyCount || 0) < requiredCount && state.hasMore !== false) {
@@ -27953,6 +29445,22 @@
 				const quoteHighlight = quoteJump ? quoteHighlightFromJump(jumpBtn, ctx) : null;
 				jumpBtn.blur();
 				if (!targetPostNumber) return;
+				if (jumpBtn.classList.contains('ldp-jump-parent') && postNumber > 0 &&
+						matchesOnlyOpFilter(ctx, post.dataset.username)) {
+					if (jumpBtn.getAttribute('aria-busy') === 'true') return;
+					jumpBtn.setAttribute('aria-busy', 'true');
+					setLabel(jumpBtn, `正在打开父楼层 #${targetPostNumber} 到当前楼层的完整讨论`);
+					try {
+						await openAggregateReplyTarget(postNumber, ctx, {
+							returnControl: jumpBtn,
+						});
+					} finally {
+						jumpBtn.removeAttribute('aria-busy');
+						if (jumpBtn.isConnected)
+							setLabel(jumpBtn, `查看父楼层 #${targetPostNumber} 到当前楼层的完整讨论`);
+					}
+					return;
+				}
 				if (jumpBtn.classList.contains('ldp-jump-parent') &&
 						post && post.classList.contains('ldp-nested-collapsed')) {
 					if (jumpBtn.getAttribute('aria-busy') === 'true') return;
@@ -27977,9 +29485,8 @@
 						});
 					} finally {
 						jumpBtn.removeAttribute('aria-busy');
-						if (jumpBtn.isConnected && post.classList.contains('ldp-nested-collapsed')) {
-							setLabel(jumpBtn, `展开楼层并预览父楼层 #${targetPostNumber}`);
-						}
+						if (jumpBtn.isConnected && post.classList.contains('ldp-nested-collapsed'))
+							syncParentJumpControl(post, ctx);
 						requestAnimationFrame(() => ctx.scrollRoot.classList.remove('ldp-floor-preview-positioning'));
 					}
 					return;
@@ -28111,7 +29618,7 @@
 		};
 	}
 
-	/* ============ 11. 楼中楼补全（分批渲染 + 节流 + 停顿检测） ============ */
+	/* ============ 11. 楼中楼补全（关系提交 + 分批渲染 + 请求节流） ============ */
 	function directRepliesForParent(replies, postNumber) {
 		const parent = +postNumber;
 		const posts = Array.isArray(replies) ? replies : postsFromPayload(replies);
@@ -28120,7 +29627,7 @@
 			const replyTo = +(rawReplyTo || 0);
 			// /posts/:id/replies.json is already scoped to this post. LinuxDo can
 			// omit reply_to_post_number here, but an explicit different parent is a
-			// descendant and must stay out of this two-level reply component.
+			// deeper descendant and must stay out of this parent's direct-child set.
 			return !replyTo || replyTo === parent;
 		});
 	}
@@ -28144,14 +29651,15 @@
 
 	function createRepliesIO(ctx) {
 		const fetchedNodes = new WeakSet();
+		const fetchedNodeExpectedCounts = new WeakMap();
 		const hoverTimers = new WeakMap();
 		const hoverTimerNodes = new Set();
-		const emptyRetryCounts = new WeakMap();
+		const incompleteRetryCounts = new WeakMap();
 		const transientRetryCounts = new WeakMap();
 		const retryTimers = new Map();
 		const replyPagesByKey = new Map();
 		const pendingReplyPageStarts = new Map();
-		const completeDirectReplyPostIds = new Set();
+		const completeDirectReplyExpectedCounts = new Map();
 		const pendingPrefetchNodes = new Set();
 		const visiblePrefetchNodes = new Set();
 		let nestedPrefetchRunning = false;
@@ -28165,7 +29673,7 @@
 
 		const replyRequestKey = (postId, after = 0) => `replies:${postId}:${Math.max(0, +after || 0)}`;
 
-		const cancelNestedPrefetch = (post, cancelQueued = true) => {
+		const cancelNestedPrefetch = (post) => {
 			if (!post) return;
 			if (hoverTimers.has(post)) clearTimeout(hoverTimers.get(post));
 			hoverTimers.delete(post);
@@ -28175,33 +29683,78 @@
 			visiblePrefetchNodes.delete(post);
 			transientRetryCounts.delete(post);
 			pendingPrefetchNodes.delete(post);
-			if (cancelQueued) ctx.postRequestScheduler.cancelQueued(replyRequestKey(post.dataset.postId, 0));
+		};
+
+		const persistNestedState = (post, state) => {
+			if (!post || !state || !isFunction(ctx.loader?.persistNestedReplies)) return;
+			ctx.loader.persistNestedReplies(
+				post._ldpPostData || {
+					id: +post.dataset.postId || 0,
+					post_number: +post.dataset.postNumber || 0,
+					reply_count: +post.dataset.childReplyTotal || 0,
+				},
+				state.all,
+				{
+					totalCount: state.totalCount,
+					complete: state.hasMore === false,
+					replace: state.hasMore === false,
+					fetchAfter: state.fetchAfter,
+				},
+			);
+		};
+
+		const setNestedReplyLoadingMessage = (post, message = '正在加载二级回复…') => {
+			const loadingEl = post?.querySelector(':scope > .ldp-sub-loading');
+			if (!loadingEl) return null;
+			loadingEl.replaceChildren(document.createTextNode(message));
+			loadingEl.classList.add('show');
+			return loadingEl;
+		};
+
+		const hideNestedReplyLoading = (post) => {
+			const loadingEl = post?.querySelector(':scope > .ldp-sub-loading');
+			if (!loadingEl) return;
+			loadingEl.classList.remove('show');
+			loadingEl.replaceChildren(document.createTextNode('正在加载二级回复…'));
+		};
+
+		const showNestedReplyLoadRetry = (post, message = '二级回复加载失败') => {
+			const loadingEl = post?.querySelector(':scope > .ldp-sub-loading');
+			if (!loadingEl || !post?.isConnected) return;
+			const retry = makeElement('button');
+			retry.type = 'button';
+			retry.className = 'ldp-btn ldp-sub-page-btn';
+			retry.textContent = `${message}，点击重试`;
+			retry.addEventListener('click', () => {
+				retry.disabled = true;
+				retry.textContent = '正在重新加载二级回复…';
+				fetchedNodes.delete(post);
+				fetchedNodeExpectedCounts.delete(post);
+				incompleteRetryCounts.delete(post);
+				replyPagesByKey.delete(`${post.dataset.postId}:0`);
+				void clearStoredResponseCache({
+					tags: [`post:${post.dataset.postId}`],
+				}).finally(() => enqueueNestedPrefetch(post));
+			}, { once: true });
+			loadingEl.replaceChildren(retry);
+			loadingEl.classList.add('show');
 		};
 
 		function scheduleNestedPrefetchDrain() {
 			if (nestedPrefetchStopped || nestedPrefetchPaused ||
 					nestedPrefetchResumeTimer || !pendingPrefetchNodes.size) return;
-			const scrollAge = Date.now() - +(ctx.streamLastScrollAt || 0);
 			nestedPrefetchResumeTimer = setTimeout(() => {
 				nestedPrefetchResumeTimer = 0;
 				if (sessionActive()) drainNestedPrefetchQueue();
-			}, Math.max(120, 240 - scrollAge));
+			}, 0);
 		}
 
 		async function drainNestedPrefetchQueue() {
 			if (nestedPrefetchRunning || nestedPrefetchStopped || nestedPrefetchPaused) return;
-			if (streamScrollIsActive(ctx, 220)) {
-				scheduleNestedPrefetchDrain();
-				return;
-			}
 			nestedPrefetchRunning = true;
 			try {
 				while (!nestedPrefetchStopped && !nestedPrefetchPaused &&
 						sessionActive() && pendingPrefetchNodes.size) {
-					if (streamScrollIsActive(ctx, 220)) {
-						scheduleNestedPrefetchDrain();
-						break;
-					}
 					const candidates = [...pendingPrefetchNodes]
 						.filter((node) => node?.isConnected);
 					let post = candidates[0] || null;
@@ -28239,6 +29792,7 @@
 						);
 						if (transient) scheduleNestedPrefetchRetry(post, error);
 					}
+					break;
 				}
 			} finally {
 				nestedPrefetchRunning = false;
@@ -28251,7 +29805,7 @@
 			if (nestedPrefetchStopped || !sessionActive() || !post || !post.isConnected || fetchedNodes.has(post)) return;
 			pendingPrefetchNodes.add(post);
 			if (nestedPrefetchPaused) return;
-			drainNestedPrefetchQueue();
+			scheduleNestedPrefetchDrain();
 		};
 
 		function scheduleNestedPrefetchRetry(post, cause = null) {
@@ -28314,6 +29868,26 @@
 			}
 		}
 
+		const syncCompleteDirectRepliesState = (parentPost, replies) => {
+			const postNumber = +(parentPost?.post_number || 0);
+			const merged = mergeDirectReplies(replies);
+			if (!postNumber || !merged.length) return null;
+			const committed = commitNestedReplyRelations(ctx, merged, {
+				parentHint: postNumber,
+				totalCount: merged.length,
+				complete: true,
+			});
+			const nextState = committed.states.get(postNumber) ||
+				syncNestedReplyStateFromRelations(ctx, postNumber, {
+					totalCount: merged.length,
+					complete: true,
+				});
+			if (!nextState) return null;
+			const parentNode = findReplyListParent(postNumber, ctx);
+			if (parentNode?.isConnected) reconcileNestedReplyNode(parentNode, ctx);
+			return nextState;
+		};
+
 		async function loadDirectReplies(post, options = {}) {
 			assertSessionActive();
 			const postId = +(post?.id || 0);
@@ -28322,7 +29896,14 @@
 			const knownMap = ctx.directRepliesByParent.get(postNumber);
 			let merged = mergeDirectReplies(knownMap ? [...knownMap.values()] : []);
 			const expected = Math.max(0, +(post.reply_count || 0));
-			if ((options.force !== true || completeDirectReplyPostIds.has(postId)) && expected <= merged.length) return merged;
+			const completedExpected = completeDirectReplyExpectedCounts.get(postId);
+			const endpointExhausted = Number.isFinite(completedExpected) &&
+				completedExpected >= expected;
+			if ((options.force !== true || endpointExhausted) &&
+					(expected <= merged.length || endpointExhausted)) {
+				syncCompleteDirectRepliesState(post, merged);
+				return merged;
+			}
 			let after = 0;
 			const seenCursors = new Set();
 			do {
@@ -28334,47 +29915,87 @@
 				);
 				const pagePosts = postsFromPayload(payload);
 				const direct = directRepliesForParent(pagePosts, postNumber);
-				direct.forEach((reply) => rememberPostData(ctx, reply, postNumber));
+				commitNestedReplyRelations(ctx, direct, {
+					parentHint: postNumber,
+					render: false,
+					syncDisplay: false,
+				});
 				ctx.loader.persistFetchedPosts(direct);
 				merged = mergeDirectReplies(merged, direct);
 				const nextAfter = replyPageCursor(pagePosts);
 				if (!pagePosts.length || pagePosts.length < SUB_REPLY_FETCH_SIZE ||
 						nextAfter <= after || seenCursors.has(nextAfter)) break;
-				seenCursors.add(nextAfter);
-				after = nextAfter;
-			} while (!expected || merged.length < expected);
-			completeDirectReplyPostIds.add(postId);
-			return merged;
-		}
+					seenCursors.add(nextAfter);
+					after = nextAfter;
+				} while (!expected || merged.length < expected);
+				const complete = expected === 0 || merged.length >= expected;
+				if (complete)
+					completeDirectReplyExpectedCounts.set(postId, expected);
+				if (complete) {
+					syncCompleteDirectRepliesState(post, merged);
+				} else {
+					const nextState = syncNestedReplyStateFromRelations(ctx, postNumber, {
+						totalCount: expected,
+						complete: false,
+					});
+					const parentNode = findReplyListParent(postNumber, ctx);
+					if (nextState && parentNode?.isConnected)
+						reconcileNestedReplyNode(parentNode, ctx);
+				}
+				ctx.loader.persistNestedReplies(post, merged, {
+					totalCount: Math.max(expected, merged.length),
+					complete,
+					replace: complete,
+					fetchAfter: replyPageCursor(merged),
+				});
+				return merged;
+			}
 
 		function mergeReplyPageIntoState(state, payload, postNumber, expectedCount, after = 0) {
 			const pagePosts = postsFromPayload(payload);
 			const pageReplies = directRepliesForParent(pagePosts, postNumber);
 			const nextAfter = replyPageCursor(pagePosts);
-			pageReplies.forEach((reply) => rememberPostData(ctx, reply, postNumber));
+			commitNestedReplyRelations(ctx, pageReplies, {
+				parentHint: postNumber,
+				render: false,
+				syncDisplay: false,
+			});
 			ctx.loader.persistFetchedPosts(pageReplies);
-			state.all = mergeDirectReplies(state.all, pageReplies);
-			state.fetchedReplyCount = after > 0
-				? +(state.fetchedReplyCount || 0) + pageReplies.length
-				: pageReplies.length;
+			const committedReplies = ctx.directRepliesByParent.get(postNumber);
+			state.all = mergeDirectReplies(
+				state.all,
+				committedReplies ? [...committedReplies.values()] : [],
+				pageReplies,
+			);
+			// 分页边界可能重复返回上一页末尾。完成判定必须按唯一直属楼层
+			// 计算，不能累加响应条数，否则会在仍缺回复时提前停止补全。
+			state.fetchedReplyCount = state.all.length;
 			state.fetchAfter = Math.max(after, nextAfter);
-			const previousTotalCount = after > 0 ? +(state.totalCount || 0) : 0;
+			const previousTotalCount = after > 0 || state.totalCountKnown === true
+				? +(state.totalCount || 0)
+				: 0;
 			const totalCount = Math.max(state.all.length, previousTotalCount, +(expectedCount || 0));
 			state.hasMore = nextAfter > after && pagePosts.length >= SUB_REPLY_FETCH_SIZE &&
 				state.fetchedReplyCount < totalCount;
-			state.totalCount = state.hasMore ? totalCount : state.all.length;
+			state.totalCount = totalCount;
+			state.totalCountKnown = state.totalCountKnown === true ||
+				+(expectedCount || 0) > 0 || state.hasMore === false;
 			return pagePosts;
 		}
 
-		async function loadNextReplyPages(post, requiredCount) {
+		async function loadNextReplyPages(post, requiredCount, options = {}) {
 			if (!sessionActive()) return false;
 			const postNumber = +(post && post.dataset.postNumber || 0);
 			const state = ctx.subReplyState.get(postNumber);
 			if (!postNumber || !state || state.loadingMore || state.hasMore === false) return false;
+			const priority = Number.isFinite(options.priority)
+				? options.priority : POST_REQUEST_PRIORITY.scroll;
 			const loadingEl = post.querySelector(':scope > .ldp-sub-loading');
 			state.loadingMore = true;
 			loadingEl?.classList.add('show');
 			renderSubReplyBatch(postNumber, ctx, 0, post);
+			let loadError = null;
+			let endpointIncomplete = false;
 			try {
 				while (state.hasMore !== false && +(state.fetchedReplyCount || 0) < requiredCount) {
 					const after = +(state.fetchAfter || 0);
@@ -28383,23 +30004,71 @@
 						break;
 					}
 					const payload = await fetchReplyPage(post.dataset.postId, after, {
-						priority: POST_REQUEST_PRIORITY.scroll,
+						priority,
 					});
-					if (!sessionActive() || !post.isConnected) return false;
+					if (!sessionActive()) return false;
 					const pagePosts = mergeReplyPageIntoState(
 						state, payload, postNumber, post.dataset.childReplyTotal, after
 					);
+					persistNestedState(post, state);
+					if (post.isConnected) renderSubReplyBatch(postNumber, ctx, 0, post);
+					// 连续树不显示分页控件，但网络和 DOM 仍按服务端页渐进提交。
+					// 让出主线程后 IntersectionObserver 才能及时撤销已离开预取区的分支。
+					await yieldReaderRenderTask();
+					if (!sessionActive()) return false;
+					if (options.stopWhenOutsidePrefetch === true &&
+							state.hasMore !== false &&
+							+(state.fetchedReplyCount || 0) < requiredCount &&
+							(!post.isConnected || !visiblePrefetchNodes.has(post)))
+						return false;
 					if (state.fetchAfter <= after || !pagePosts.length) break;
 				}
+				const declaredTotal = Math.max(
+					+(post.dataset.childReplyTotal || 0),
+					+(state.totalCount || 0),
+				);
+				endpointIncomplete = state.hasMore === false &&
+					state.all.length < declaredTotal;
+				if (endpointIncomplete) {
+					state.hasMore = true;
+					state.totalCount = declaredTotal;
+					fetchedNodes.delete(post);
+					fetchedNodeExpectedCounts.delete(post);
+					replyPagesByKey.delete(`${post.dataset.postId}:0`);
+				} else if (state.hasMore === false && state.all.length) {
+					completeDirectReplyExpectedCounts.set(
+						+post.dataset.postId,
+						declaredTotal,
+					);
+				}
 				return state.all.length >= requiredCount;
-			} catch {
-				return false;
-			} finally {
-				state.loadingMore = false;
-				loadingEl?.classList.remove('show');
-				if (sessionActive() && post.isConnected) renderSubReplyBatch(postNumber, ctx, 0, post);
+				} catch (error) {
+					loadError = error;
+					return false;
+				} finally {
+					state.loadingMore = false;
+					persistNestedState(post, state);
+					if (sessionActive() && post.isConnected)
+						renderSubReplyBatch(postNumber, ctx, 0, post);
+					if (endpointIncomplete && sessionActive() && post.isConnected) {
+						showNestedReplyLoadRetry(post, '服务端暂未返回全部二级回复');
+					} else if (loadError && sessionActive() && post.isConnected && loadingEl) {
+						const retry = makeElement('button');
+						retry.type = 'button';
+						retry.className = 'ldp-btn ldp-sub-page-btn';
+						retry.textContent = '后续二级回复加载失败，点击重试';
+						retry.addEventListener('click', () => {
+							retry.disabled = true;
+							retry.textContent = '正在重新加载后续二级回复…';
+							void loadNextReplyPages(post, requiredCount, options);
+						}, { once: true });
+						loadingEl.replaceChildren(retry);
+						loadingEl.classList.add('show');
+					} else {
+						loadingEl?.classList.remove('show');
+					}
+				}
 			}
-		}
 
 		async function loadRepliesFor(post, priority = POST_REQUEST_PRIORITY.nested) {
 			if (!sessionActive()) return false;
@@ -28407,45 +30076,37 @@
 			const postNumber = +(post && post.dataset.postNumber);
 			if (!postId || fetchedNodes.has(post)) return false;
 			fetchedNodes.add(post);
-			const loadingEl = post.querySelector(':scope > .ldp-sub-loading');
-			loadingEl?.classList.add('show');
+			setNestedReplyLoadingMessage(post);
 			const expectedCount = +(post.dataset.childReplyTotal || 0);
 			const knownReplyMap = ctx.directRepliesByParent.get(postNumber);
 			const knownReplies = knownReplyMap ? [...knownReplyMap.values()] : [];
 			if (knownReplies.length) {
-				const previousState = ctx.subReplyState.get(postNumber);
-				const knownComplete = knownReplies.length >= expectedCount;
-				const previousHasCursor = +(previousState?.fetchAfter || 0) > 0;
-				const needsInitialFetch = !knownComplete && !previousHasCursor &&
-					(!previousState || previousState.hasMore !== false);
-				ctx.subReplyState.set(postNumber, {
-					...previousState,
-					all: mergeDirectReplies(knownReplies),
-					pageIndex: +(previousState?.pageIndex || 0),
-					totalCount: previousState && previousState.hasMore === false
-						? Math.max(knownReplies.length, +(previousState.totalCount || 0))
-						: Math.max(expectedCount, knownReplies.length),
-					fetchedReplyCount: knownComplete
-						? knownReplies.length
-						: +(previousState?.fetchedReplyCount || 0),
-					fetchAfter: +(previousState?.fetchAfter || 0),
-					hasMore: knownComplete ? false : previousState ? previousState.hasMore !== false : true,
-					loadingMore: needsInitialFetch,
+				const completedExpected = completeDirectReplyExpectedCounts.get(+postId);
+				const endpointExhausted = Number.isFinite(completedExpected) &&
+					completedExpected >= expectedCount;
+				const knownComplete = knownReplies.length >= expectedCount || endpointExhausted;
+				// 服务端声明数比关系快照大时，快照的旧 complete/hasMore=false
+				// 不能阻止补取；重新抓首批后再由真实响应收敛完整性。
+				const needsInitialFetch = !knownComplete;
+				const restoredState = syncNestedReplyStateFromRelations(ctx, postNumber, {
+					totalCount: expectedCount,
+					complete: knownComplete ? true : false,
 				});
-				renderSubReplyBatch(postNumber, ctx, 0, post);
+				if (restoredState) {
+					restoredState.loadingMore = needsInitialFetch;
+					persistNestedState(post, restoredState);
+					reconcileNestedReplyNode(post, ctx, { observe: false });
+				}
 				if (!needsInitialFetch) {
-					loadingEl?.classList.remove('show');
-					emptyRetryCounts.delete(post);
+					fetchedNodeExpectedCounts.set(post, expectedCount);
+					hideNestedReplyLoading(post);
+					incompleteRetryCounts.delete(post);
 					return true;
 				}
 			}
 			try {
 				const replies = await fetchReplyPage(postId, 0, { priority });
 				if (!sessionActive()) return false;
-				if (!post.isConnected) {
-					fetchedNodes.delete(post);
-					return false;
-				}
 				const previousState = ctx.subReplyState.get(postNumber);
 				const nextState = {
 					...previousState,
@@ -28455,34 +30116,80 @@
 				};
 				mergeReplyPageIntoState(nextState, replies, postNumber, expectedCount);
 				const directReplies = nextState.all;
-				loadingEl?.classList.remove('show');
-				if (!directReplies.length) {
+				const declaredTotal = Math.max(expectedCount, +(nextState.totalCount || 0));
+				const endpointIncomplete = declaredTotal > directReplies.length &&
+					nextState.hasMore === false;
+				if (endpointIncomplete) {
+					nextState.hasMore = true;
+					nextState.totalCount = Math.max(declaredTotal, directReplies.length);
+					nextState.totalCountKnown = true;
+				}
+				ctx.subReplyState.set(postNumber, nextState);
+				persistNestedState(post, nextState);
+				if (post.isConnected)
+					reconcileNestedReplyNode(post, ctx, { observe: false });
+				if (endpointIncomplete) {
 					fetchedNodes.delete(post);
+					fetchedNodeExpectedCounts.delete(post);
 					replyPagesByKey.delete(`${postId}:0`);
-					const retryCount = +(emptyRetryCounts.get(post) || 0);
-					if (expectedCount > 0 && retryCount < 2 && post.isConnected) {
+					const retryCount = +(incompleteRetryCounts.get(post) || 0);
+					if (retryCount < 2 && post.isConnected) {
 						await clearStoredResponseCache({ tags: [`post:${postId}`] });
-						emptyRetryCounts.set(post, retryCount + 1);
+						incompleteRetryCounts.set(post, retryCount + 1);
+						const received = directReplies.length
+							? `仅取到 ${directReplies.length}/${expectedCount} 个二级回复`
+							: '暂未取到二级回复';
+						setNestedReplyLoadingMessage(
+							post,
+							`${received}，正在进行第 ${retryCount + 1} 次重试…`,
+						);
 						const retryTimer = setTimeout(() => {
 							retryTimers.delete(post);
 							enqueueNestedPrefetch(post);
 						}, 1200 * (retryCount + 1));
 						retryTimers.set(post, retryTimer);
+					} else {
+						showNestedReplyLoadRetry(
+							post,
+							directReplies.length
+								? `服务端暂时只返回 ${directReplies.length}/${expectedCount} 个二级回复`
+								: '暂未取到二级回复',
+						);
 					}
 					return false;
 				}
-				emptyRetryCounts.delete(post);
-				ctx.subReplyState.set(postNumber, nextState);
-				renderSubReplyBatch(postNumber, ctx, 0, post); // 首批只渲染当前分页条数
-				return true;
-			} catch (e) {
-				loadingEl?.classList.remove('show');
-				const state = ctx.subReplyState.get(postNumber);
-				if (state) {
-					state.loadingMore = false;
-					renderSubReplyBatch(postNumber, ctx, 0, post);
+				const renderPlan = nestedReplyRenderPlan(post, nextState, ctx);
+				if (renderPlan.continuousTree && nextState.hasMore !== false) {
+					const requiredCount = Math.max(
+						expectedCount,
+						+(nextState.totalCount || 0),
+						directReplies.length,
+					);
+					const loadedAll = await loadNextReplyPages(post, requiredCount, {
+						priority,
+						stopWhenOutsidePrefetch: true,
+					});
+					if (!loadedAll) {
+						fetchedNodes.delete(post);
+						fetchedNodeExpectedCounts.delete(post);
+						return false;
+					}
 				}
+				if (nextState.hasMore === false)
+					completeDirectReplyExpectedCounts.set(+postId, expectedCount);
+				fetchedNodeExpectedCounts.set(post, expectedCount);
+				incompleteRetryCounts.delete(post);
+				hideNestedReplyLoading(post);
+				return true;
+				} catch (e) {
+					const state = ctx.subReplyState.get(postNumber);
+					if (state) {
+						state.loadingMore = false;
+						reconcileNestedReplyNode(post, ctx, { observe: false });
+					}
+				showNestedReplyLoadRetry(post);
 				fetchedNodes.delete(post); // 失败允许该 DOM 副本下次进入视口重试
+				fetchedNodeExpectedCounts.delete(post);
 				replyPagesByKey.delete(`${postId}:0`);
 				throw e;
 			}
@@ -28501,10 +30208,13 @@
 		};
 
 		const nestedPrefetchPixels = Math.round(
-			Math.max(ctx.scrollRoot.clientHeight, window.innerHeight * 0.5) *
-			streamPerformance(ctx).nestedPrefetchViewports
+			// IntersectionObserver 的 rootMargin 创建后不会随阅读器缩放更新。
+			// “一屏”以阅读器自身视口为准，避免小浮窗按整个浏览器高度
+			// 提前请求并组织过多不可见树节点。
+			Math.max(1, ctx.scrollRoot.clientHeight || window.innerHeight) *
+			Math.max(1, streamPerformance(ctx).nestedPrefetchViewports)
 		);
-		const io = new IntersectionObserver((entries) => {
+		const onReplyIntersection = (entries) => {
 			if (!sessionActive()) return;
 			entries.forEach((en) => {
 				if (!en.target.dataset.postId) return;
@@ -28517,30 +30227,72 @@
 					cancelNestedPrefetch(en.target);
 				}
 			});
-		}, { root: ctx.scrollRoot, rootMargin: `${nestedPrefetchPixels}px 0px ${nestedPrefetchPixels}px 0px`, threshold: 0.01 });
-		const nativeObserve = io.observe.bind(io);
-		io.observe = (node) => {
-			if (!node || fetchedNodes.has(node) || !(+(node.dataset.childReplyTotal || 0) > 0)) return;
-			nativeObserve(node);
 		};
-		const nativeUnobserve = io.unobserve.bind(io);
-		io.unobserve = (node) => {
-			cancelNestedPrefetch(node);
-			nativeUnobserve(node);
-		};
-		const nativeDisconnect = io.disconnect.bind(io);
-		io.disconnect = () => {
-			nestedPrefetchStopped = true;
-			if (nestedPrefetchResumeTimer) clearTimeout(nestedPrefetchResumeTimer);
-			nestedPrefetchResumeTimer = 0;
-			new Set([...hoverTimerNodes, ...retryTimers.keys()]).forEach((node) => cancelNestedPrefetch(node, false));
-			pendingPrefetchNodes.clear();
-			visiblePrefetchNodes.clear();
-			replyPagesByKey.clear();
-			pendingReplyPageStarts.clear();
-			completeDirectReplyPostIds.clear();
-			nativeDisconnect();
-		};
+		const io = new IntersectionObserver(onReplyIntersection, {
+			root: ctx.scrollRoot,
+			rootMargin: `${nestedPrefetchPixels}px 0px ${nestedPrefetchPixels}px 0px`,
+			threshold: 0.01,
+		});
+		const nestedIo = new IntersectionObserver(onReplyIntersection, {
+			root: ctx.scrollRoot,
+			rootMargin: `${nestedPrefetchPixels}px 0px ${nestedPrefetchPixels}px 0px`,
+			threshold: 0.01,
+		});
+			const nativeObserve = io.observe.bind(io);
+			const nestedObserve = nestedIo.observe.bind(nestedIo);
+			io.observe = (node) => {
+				if (!node) return;
+				const postNumber = +node.dataset.postNumber;
+				const state = ctx.subReplyState.get(postNumber);
+				const knownReplies = ctx.directRepliesByParent.get(postNumber);
+				const knownTotal = Math.max(
+					+(node.dataset.childReplyTotal || 0),
+					+(node._ldpPostData?.reply_count || 0),
+					+(state?.totalCount || 0),
+					Array.isArray(state?.all) ? state.all.length : 0,
+					knownReplies?.size || 0,
+				);
+				if (!(knownTotal > 0)) return;
+				if (!(+(node.dataset.childReplyTotal || 0) > 0) ||
+						!node.querySelector(':scope > .ldp-children')) {
+					ensureLiveReplyShell(node, knownTotal, ctx);
+				}
+				if (!(+(node.dataset.childReplyTotal || 0) > 0)) return;
+				if (fetchedNodes.has(node)) {
+					const fetchedExpected = fetchedNodeExpectedCounts.get(node);
+					if (Number.isFinite(fetchedExpected) && fetchedExpected <
+							+(node.dataset.childReplyTotal || 0)) {
+						fetchedNodes.delete(node);
+						fetchedNodeExpectedCounts.delete(node);
+					} else {
+						if (state) reconcileNestedReplyNode(node, ctx, { observe: false });
+						return;
+					}
+				}
+				if (postNestDepth(node) > 0) nestedObserve(node);
+				else nativeObserve(node);
+			};
+			const nativeUnobserve = io.unobserve.bind(io);
+			io.unobserve = (node) => {
+				cancelNestedPrefetch(node);
+				nativeUnobserve(node);
+				nestedIo.unobserve(node);
+			};
+			const nativeDisconnect = io.disconnect.bind(io);
+			io.disconnect = () => {
+				nestedPrefetchStopped = true;
+				if (nestedPrefetchResumeTimer) clearTimeout(nestedPrefetchResumeTimer);
+				nestedPrefetchResumeTimer = 0;
+				new Set([...hoverTimerNodes, ...retryTimers.keys()])
+					.forEach((node) => cancelNestedPrefetch(node));
+				pendingPrefetchNodes.clear();
+				visiblePrefetchNodes.clear();
+				replyPagesByKey.clear();
+				pendingReplyPageStarts.clear();
+				completeDirectReplyExpectedCounts.clear();
+				nativeDisconnect();
+				nestedIo.disconnect();
+			};
 		io.loadNextPage = (node, requiredCount) => loadNextReplyPages(node, requiredCount);
 		io.loadDirectReplies = loadDirectReplies;
 		io.setActive = (active) => {
@@ -29436,12 +31188,16 @@
 			const targetPost = hiddenTarget?._ldpPostData || suppliedTargetPost;
 			const nestedTarget = +(targetPost?.reply_to_post_number || 0) > 0;
 			if (nestedTarget) {
-				const opened = PREFS.aggregateDescendantReplies && options.forceNested !== true
-					? await openAggregateReplyTarget(targetPostNumber, ctx, { returnViewport })
-					: await focusLiveNestedReply(targetPost, ctx, {
+				let opened = false;
+				if (inlineReplyTreeMaxDepth() > 1 || options.forceNested === true ||
+						PREFS.aggregateDescendantReplies !== true) {
+					opened = await focusLiveNestedReply(targetPost, ctx, {
 						navigationSequence,
 						acceptsWork: options.acceptsWork,
 					});
+				}
+				if (!opened && PREFS.aggregateDescendantReplies)
+					opened = await openAggregateReplyTarget(targetPostNumber, ctx, { returnViewport });
 				if (!jumpStillCurrent()) return false;
 				sync();
 				return opened;
@@ -29813,18 +31569,20 @@
 		];
 		const readerElementGroup = (...selectors) => selectors.map(readerElement);
 		const readerElementsGroup = (...selectors) => selectors.map(readerElements);
-		let readerOpenPhase = 'create-overlay';
-		const setReaderOpenPhase = (phase) => {
-			readerOpenPhase = phase;
-		};
 		const readerSession = {
 			id: readerSessionId,
 			state: 'opening',
+			phase: 'create-overlay',
 			isCurrent(...allowedStates) {
 				if (ACTIVE_READER_SESSION_ID !== readerSessionId || CURRENT_OVERLAY !== overlay || !overlay.isConnected)
 					return false;
 				return !allowedStates.length || allowedStates.includes(this.state);
 			},
+		};
+		let readerOpenPhase = readerSession.phase;
+		const setReaderOpenPhase = (phase) => {
+			readerOpenPhase = phase;
+			readerSession.phase = phase;
 		};
 		ACTIVE_READER_SESSION_ID = readerSessionId;
 		if (!reusingShell) {
@@ -29838,10 +31596,10 @@
 				<div class="ldp-reader-placement-control" hidden>
 					<span class="ldp-reader-placement-divider" aria-hidden="true"></span>
 					<div class="ldp-reader-placement-strip" role="group" aria-label="切换阅读器显示方式" hidden>
-						<button class="ldp-reader-placement-option" type="button" data-reader-placement="embed-left" data-reader-placement-label="嵌入左侧" aria-label="嵌入左侧">${icon('panelLeft')}</button>
-						<button class="ldp-reader-placement-option" type="button" data-reader-placement="embed-right" data-reader-placement-label="嵌入右侧" aria-label="嵌入右侧">${icon('panelRight')}</button>
-						<button class="ldp-reader-placement-option" type="button" data-reader-placement="floating" data-reader-placement-label="浮窗阅读器" aria-label="浮窗阅读器">${icon('floatingWindow')}</button>
-						<button class="ldp-reader-placement-option" type="button" data-reader-placement="fullpage" data-reader-placement-label="全屏阅读器" aria-label="全屏阅读器">${icon('maximize2')}</button>
+						<button class="ldp-reader-placement-option" type="button" data-reader-placement="embed-left" data-tooltip aria-label="嵌入左侧">${icon('panelLeft')}</button>
+						<button class="ldp-reader-placement-option" type="button" data-reader-placement="embed-right" data-tooltip aria-label="嵌入右侧">${icon('panelRight')}</button>
+						<button class="ldp-reader-placement-option" type="button" data-reader-placement="floating" data-tooltip aria-label="浮窗阅读器">${icon('floatingWindow')}</button>
+						<button class="ldp-reader-placement-option" type="button" data-reader-placement="fullpage" data-tooltip aria-label="全屏阅读器">${icon('maximize2')}</button>
 					</div>
 				</div>
 			</div>
@@ -30230,11 +31988,17 @@
 										${otherSettingGroupMarkup('reader-exit', '关闭窗口', '设置阅读器和 LINUX DO 原生回复窗口是否需要连续操作两次才能关闭。', settingSwitchesMarkup('reader-exit'))}
 									</div>
 								</div>
+								<div class="ldp-settings-section" data-settings-panel="shortcuts" hidden>
+									<div class="ldp-settings-fields ldp-other-settings-fields ldp-shortcut-settings">
+										${readerShortcutSettingsMarkup()}
+									</div>
+								</div>
 								<div class="ldp-settings-section" data-settings-panel="interaction" hidden>
 									<div class="ldp-settings-fields ldp-other-settings-fields">
-										${otherSettingGroupMarkup('topic-actions', '主帖操作列', '设置常用操作是否一直显示、是否锁定位置；未锁定时可长按收纳按钮拖动。', `${settingSwitchesMarkup('topic-actions')}<div class="ldp-setting-row ldp-setting-option-row ldp-topic-action-rail-reset-row"><span class="ldp-setting-option-copy"><strong>操作列默认位置</strong><small>恢复到正文左侧留白区域。</small></span><button class="ldp-config-action ldp-topic-action-rail-reset" type="button">${icon('rotateCcw')}<span>恢复默认</span></button></div>`)}
+										${otherSettingGroupMarkup('topic-actions', '主帖操作列', '全收纳与常显状态会保留；全部弹出是临时状态，点击外部或重新载入后退回常显。', `${settingSwitchesMarkup('topic-actions')}<div class="ldp-setting-row ldp-setting-option-row ldp-topic-action-rail-reset-row"><span class="ldp-setting-option-copy"><strong>操作列默认位置</strong><small>恢复到正文左侧留白区域。</small></span><button class="ldp-config-action ldp-topic-action-rail-reset" type="button">${icon('rotateCcw')}<span>恢复默认</span></button></div>`)}
 										${otherSettingGroupMarkup('replies', '二级回复显示位置', '设置二级回复在父回复下、楼层列表中和“完整讨论”视图中的显示方式。', `
 										${settingSwitchesMarkup('replies')}
+										${inlineReplyTreeSettingMarkup()}
 										<p class="ldp-nested-display-warning" role="status" aria-live="polite" hidden>同时在父回复下和楼层列表中展开时，同一条二级回复可能出现两次。</p>
 											`)}
 										<div${boostsAvailable ? '' : ' hidden'}>
@@ -30479,7 +32243,21 @@
 				.find((control) => !control.hidden && getComputedStyle(control).display !== 'none');
 			const actionIcon = visibleControl?.querySelector('.ldp-icon');
 			if (!actionIcon) return;
-			const shift = titleJump.getBoundingClientRect().top - actionIcon.getBoundingClientRect().top;
+			const titleRange = document.createRange();
+			titleRange.selectNodeContents(titleJump);
+			const titleTextRect = Array.from(titleRange.getClientRects())
+				.find((rect) => rect.width > 0 && rect.height > 0);
+			const actionGraphicTop = Array.from(titleActions.querySelectorAll(
+				'.ldp-icon :is(path,circle,ellipse,line,polyline,polygon,rect,use)'
+			)).reduce((top, graphic) => {
+				const rect = graphic.getBoundingClientRect();
+				return rect.width > 0 && rect.height > 0 ? Math.min(top, rect.top) : top;
+			}, Infinity);
+			const titleTop = titleTextRect?.top ?? titleJump.getBoundingClientRect().top;
+			const actionTop = Number.isFinite(actionGraphicTop)
+				? actionGraphicTop
+				: actionIcon.getBoundingClientRect().top;
+			const shift = titleTop - actionTop;
 			titleActions.style.setProperty('--ldp-title-actions-align-y',
 				`${Math.round(shift * 2) / 2}px`);
 		};
@@ -30536,7 +32314,12 @@
 			const isTarget = options.target === true && targetPostNumber > 1;
 			const cachedCount = Math.max(0, Number(options.cachedCount) || 0);
 			const missingCount = Math.max(0, Number(options.missingCount) || 0);
-			const copy = state === 'cache'
+			const copy = state === 'prepare'
+				? {
+					status: isTarget ? '正在准备目标楼层' : '正在准备帖子数据',
+					detail: cachedTopicPreview ? '正在检查帖子缓存…' : '正在读取主题信息…',
+				}
+				: state === 'cache'
 				? {
 					status: isTarget ? '正在读取目标楼层缓存' : '正在读取帖子缓存',
 					detail: cachedCount ? `已读取 ${cachedCount} 条缓存，正在恢复楼层…` : '正在恢复已缓存楼层…',
@@ -30555,10 +32338,7 @@
 			if (loadingTarget) loadingTarget.textContent = isTarget ? `#${targetPostNumber}` : '';
 			if (loadingStage) setLabel(loadingStage, `${copy.status}，${copy.detail.replace('…', '')}`);
 		};
-		const cachedTargetAvailable = targetPostNumber <= 1 || !!(cachedTopicPreview?.post_stream &&
-			Array.isArray(cachedTopicPreview.post_stream.posts) &&
-			cachedTopicPreview.post_stream.posts.some((post) => +post.post_number === targetPostNumber));
-		syncLoadingState(cachedTopicPreview && cachedTargetAvailable ? 'cache' : 'network', {
+		syncLoadingState('prepare', {
 			target: targetPostNumber > 1,
 		});
 		const endTip = readerElement('.ldp-end-tip');
@@ -30781,7 +32561,7 @@
 			jumpHighlightStatus, loadingAnimationSelect, loadingAnimationPreview,
 			loadingAnimationPreviewLabel, loadingAnimationReroll, historySortModeSelect,
 			historyButtonsAlwaysVisibleInput, readerQueueAlwaysVisibleWhenEmptyInput, historyEdgeTriggerRange, historyEdgeTriggerValue,
-			openTopicsAtFirstPostInput, doubleEscapeToCloseReaderInput, confirmNativeComposerCloseInput, topicActionRailVisibleInput, topicActionRailFixedInput, topicActionRailResetBtn, expandNestedRepliesByDefaultInput, expandLeafNestedRepliesInput, aggregateDescendantRepliesInput, hideNestedReplyFloorsInput,
+			openTopicsAtFirstPostInput, doubleEscapeToCloseReaderInput, confirmNativeComposerCloseInput, topicActionRailVisibleInput, topicActionRailFixedInput, topicActionRailResetBtn, expandNestedRepliesByDefaultInput, expandLeafNestedRepliesInput, aggregateDescendantRepliesInput, inlineReplyTreeDepthSelect, hideNestedReplyFloorsInput,
 			nestedReplyDisplayWarning, boostCopyModeSelect, boostCopyPrefixInput, boostCopyCounterMarkerInput,
 			boostCopyCounterStepInput, boostCopyFixedSuffixInput, boostCopyPreview, configExportBtn,
 			configImportBtn, configResetBtn, configFileInput, cacheClearBtn, customSiteInput,
@@ -30792,7 +32572,7 @@
 			'.ldp-loading-preview-reroll', '.ldp-history-sort-mode', '.ldp-history-buttons-always-visible',
 			'.ldp-reader-queue-always-visible-empty', '.ldp-history-edge-trigger-range', '.ldp-history-edge-trigger-value',
 			'.ldp-open-topics-first-post', '.ldp-double-escape-close-reader', '.ldp-confirm-native-composer-close', '.ldp-topic-action-rail-visible-setting', '.ldp-topic-action-rail-fixed-setting', '.ldp-topic-action-rail-reset', '.ldp-expand-nested-replies-default',
-			'.ldp-expand-leaf-nested-replies', '.ldp-aggregate-descendant-replies', '.ldp-hide-nested-reply-floors', '.ldp-nested-display-warning', '.ldp-boost-copy-mode',
+			'.ldp-expand-leaf-nested-replies', '.ldp-aggregate-descendant-replies', '.ldp-inline-reply-tree-depth', '.ldp-hide-nested-reply-floors', '.ldp-nested-display-warning', '.ldp-boost-copy-mode',
 			'.ldp-boost-copy-prefix', '.ldp-boost-copy-counter-marker', '.ldp-boost-copy-counter-step',
 			'.ldp-boost-copy-fixed-suffix', '.ldp-boost-copy-preview', '.ldp-config-export',
 			'.ldp-config-import', '.ldp-config-reset', '.ldp-config-file', '.ldp-cache-clear',
@@ -30805,6 +32585,34 @@
 			'.ldp-boost-counter-row', '.ldp-boost-text-row', '.ldp-cache-select', '[data-cache-size]',
 			'[data-cache-retention]', '.ldp-color-control input[type="color"]',
 		);
+		const shortcutSettings = readerElement('.ldp-settings-section[data-settings-panel="shortcuts"]');
+		const shortcutStatus = shortcutSettings?.querySelector('.ldp-shortcut-status');
+		const stopShortcutRecording = () => {
+			shortcutSettings?.querySelectorAll('.ldp-shortcut-record.is-recording').forEach((button) => {
+				button.classList.remove('is-recording');
+				button.querySelector('span').textContent = '添加';
+			});
+		};
+		const syncShortcutControls = () => {
+			if (!shortcutSettings) return;
+			READER_SHORTCUT_ACTIONS.forEach((action) => {
+				const row = shortcutSettings.querySelector(`[data-shortcut-action="${action.id}"]`);
+				const bindings = PREFS.readerShortcutBindings[action.id] || [];
+				row.querySelector('.ldp-shortcut-bindings').innerHTML = bindings.length
+					? bindings.map((binding) => `<button class="ldp-shortcut-chip" type="button" data-shortcut-remove="${action.id}" data-shortcut-binding="${escAttr(binding)}" aria-label="移除 ${escAttr(readerShortcutBindingLabel(binding))}"><span>${esc(readerShortcutBindingLabel(binding))}</span>${icon('x')}</button>`).join('')
+					: '<span class="ldp-shortcut-unbound">未绑定</span>';
+				row.querySelector('.ldp-shortcut-clear').disabled = !bindings.length;
+				row.querySelector('.ldp-shortcut-record').disabled = bindings.length >= 3;
+				row.querySelector('.ldp-shortcut-reset').disabled =
+					JSON.stringify(bindings) === JSON.stringify(READER_SHORTCUT_DEFAULTS[action.id]);
+			});
+		};
+		const saveShortcutBindings = (next, message) => {
+			setPref('readerShortcutBindings', next);
+			stopShortcutRecording();
+			syncShortcutControls();
+			shortcutStatus.textContent = message;
+		};
 		const colorPickerPresets = ['#F0FFF0', '#FFFFFF', '#E5E7EB', '#94A3B8', '#475569', '#111827',
 			'#47855F', '#22C55E', '#2563EB', '#7C3AED', '#D97706', '#DC2626'];
 		let colorPickerPopover = readerElement('.ldp-color-picker-popover');
@@ -31120,9 +32928,10 @@
 		setSettingRowHelp(openTopicsAtFirstPostInput, '开启后，普通帖子链接会从 #1 主楼开始；消息、历史和收藏面板中的链接仍优先打开各自目标楼层。关闭后，所有链接都会尊重其中指定的楼层号。修改后立即保存。');
 		setSettingRowHelp(doubleEscapeToCloseReaderInput, '开启后，需要在 1.5 秒内连续按两次 Esc 才会关闭阅读器；关闭后，按一次 Esc 即可关闭。修改后立即保存。');
 		setSettingRowHelp(confirmNativeComposerCloseInput, '开启后，在阅读器内按 Esc、关闭或舍弃 LINUX DO 原生回复窗口时，需要在 1.5 秒内重复同一操作；关闭后，一次操作即可关闭。修改后立即保存。');
-		setSettingRowHelp(expandNestedRepliesByDefaultInput, '开启后，在每条父回复下默认展开它的直接二级回复；关闭时会同时关闭“完整讨论”视图。修改后立即保存并应用到当前帖子。');
+		setSettingRowHelp(expandNestedRepliesByDefaultInput, '开启后，在每条父回复下默认展开直属回复；关闭时会同时关闭深层回复阅读。修改后立即保存并应用到当前帖子。');
 		setSettingRowHelp(expandLeafNestedRepliesInput, '开启后，二级回复在楼层列表中的对应位置默认完整展开；可与父回复下的二级回复同时显示，但至少要保留一种显示位置。修改后立即保存并应用到当前帖子。');
-		setSettingRowHelp(aggregateDescendantRepliesInput, '建立在“在父回复下展开二级回复”之上；开启时会按滚动位置预加载更深层回复，并提供“查看完整讨论”浮窗。修改后立即保存并应用到当前帖子。');
+		setSettingRowHelp(aggregateDescendantRepliesInput, '建立在“在父回复下展开二级回复”之上；开启后可选择直接进入完整讨论，或先在主信息流树状嵌套。修改后立即保存并应用到当前帖子。');
+		setSettingRowHelp(inlineReplyTreeDepthSelect, '修改后立即重建当前预加载范围内的回复树；主信息流按所选深度像 Reddit 一样继续缩进，超出深度后可进入完整讨论。');
 		setSettingRowHelp(hideNestedReplyFloorsInput, '未启用“完整讨论”时，从楼层列表隐藏全部二级回复；启用后先保留未读二级回复，读过后再隐藏。时间轴、跳转和已读记录不受影响；跳转时会临时显示或打开对应讨论。修改后立即保存并应用到当前帖子。');
 		setSettingRowHelp(boostCopyModeSelect, '选择复制 Boost 时如何生成末尾内容：“递增数字”每次按设定步长增加，“固定文字”每次追加同一段文字。修改后立即保存。');
 		setSettingRowHelp(boostCopyPrefixInput, '填写复制结果开头的前置文字，例如“赞同：”。留空就直接从原 Boost 内容开始，最多 16 个字。修改后立即保存。');
@@ -31535,7 +33344,7 @@
 						</label>` : ''}
 						${collectionLinkMarkup('ldp-history-link', topicPageUrl(entry.topicId, targetPostNumber, true),
 							historyUserAvatar, entry.title,
-							`${entry.postsCount || 0} 帖 · ${discourseRelativeTime(historyEntrySortTime(entry))}`)}
+							`${entry.postsCount || 0} 帖 · #${targetPostNumber} · ${discourseRelativeTime(historyEntrySortTime(entry))}`)}
 						${historyState.multi ? '' : `<button class="ldp-history-delete ldp-collection-delete" type="button" aria-label="删除这条浏览历史">${icon('trash')}</button>`}
 					</div>`;
 				}).join('')
@@ -31751,7 +33560,10 @@
 				const reaction = String(entry?.reaction || '');
 				if (reaction) reactionTypeCounts.set(reaction, (reactionTypeCounts.get(reaction) || 0) + 1);
 			});
-			const availableReactionTypes = [...reactionTypeCounts.keys()];
+			const availableReactionTypes = [...reactionTypeCounts.keys()].sort((left, right) =>
+				(reactionTypeCounts.get(right) || 0) - (reactionTypeCounts.get(left) || 0) ||
+				left.localeCompare(right)
+			);
 			if (bookmarksState.reactionFilter && !availableReactionTypes.includes(bookmarksState.reactionFilter)) {
 				bookmarksState.reactionFilter = '';
 			}
@@ -32017,9 +33829,21 @@
 			if (!cached)
 				notificationCollection.message('正在加载消息…');
 			try {
-				const result = await fetchNotificationPage(notificationState.group, notificationState.page, {
-					force: force || !!cached,
-				});
+				let result = null;
+				for (let attempt = 0; attempt < 2; attempt++) {
+					try {
+						result = await fetchNotificationPage(notificationState.group, notificationState.page, {
+							force: force || !!cached,
+						});
+						break;
+					} catch (error) {
+						if (attempt > 0 || !notificationRequestCanAutoRetry(error)) throw error;
+						if (token !== notificationState.token || notificationsPopover.hidden) return;
+						if (!cached) notificationCollection.message('消息加载暂时中断，正在自动重试…');
+						await waitForDelay(600);
+						if (token !== notificationState.token || notificationsPopover.hidden) return;
+					}
+				}
 				if (token !== notificationState.token || notificationsPopover.hidden) return;
 				renderNotificationPage(result);
 			} catch (error) {
@@ -32189,11 +34013,11 @@
 		const applyImageScale = () => {
 			overlay.style.setProperty('--ldp-image-zoom', String(currentImageScalePercent() / 100));
 		};
-		const fontSettingsSection = readerElement('[data-settings-panel="font"]');
-		const layoutSettingsSection = readerElement('[data-settings-panel="layout"]');
+		const fontSettingsSection = readerElement('.ldp-settings-section[data-settings-panel="font"]');
+		const layoutSettingsSection = readerElement('.ldp-settings-section[data-settings-panel="layout"]');
 		const layoutSettingsTitle = layoutSettingsSection.querySelector('.ldp-settings-title');
 		const layoutSettingsDescription = layoutSettingsSection.querySelector('.ldp-settings-description');
-		const appearanceSettingsSection = readerElement('[data-settings-panel="appearance"]');
+		const appearanceSettingsSection = readerElement('.ldp-settings-section[data-settings-panel="appearance"]');
 		const appearanceValuesChanged = () => {
 			const values = currentAppearanceDraft();
 			const saved = currentAppearanceProfile();
@@ -32861,7 +34685,7 @@
 			});
 			performanceResetBtn.disabled = preset === 'balanced';
 			const presetLabels = { low: '省资源', balanced: '均衡', high: '减少等待', custom: '自定义' };
-			const nextConfig = `每次加载 ${config.pageSize} 个楼层 · 页面保留不超过 ${config.streamMaxItems} 个楼层 · 二级回复提前 ${config.nestedPrefetchViewports} 屏 · 限流额度 ${config.requestRateTarget}%`;
+			const nextConfig = `每次加载 ${config.pageSize} 个楼层 · 页面保留不超过 ${config.streamMaxItems} 个楼层 · 树状回复提前 ${config.nestedPrefetchViewports} 屏 · 限流额度 ${config.requestRateTarget}%`;
 			const requestState = currentReaderRequestScheduler().snapshot();
 			const windowStatus = `请求额度 ${requestState.shortWindowBudget} 次/10 秒、${requestState.longWindowBudget} 次/分钟`;
 			const runtimeStatus = requestState.endpointCoolingDown && !requestState.coolingDown
@@ -34001,6 +35825,9 @@
 			expandLeafNestedRepliesInput.checked = PREFS.expandLeafNestedReplies === true;
 			aggregateDescendantRepliesInput.checked = PREFS.aggregateDescendantReplies === true;
 			aggregateDescendantRepliesInput.disabled = false;
+			inlineReplyTreeDepthSelect.value = String(normalizeInlineReplyTreeMaxDepth(PREFS.inlineReplyTreeMaxDepth));
+			inlineReplyTreeDepthSelect.disabled = !PREFS.aggregateDescendantReplies ||
+				!PREFS.expandNestedRepliesByDefault;
 			hideNestedReplyFloorsInput.checked = PREFS.hideNestedReplyFloors === true;
 			nestedReplyDisplayWarning.hidden = !(PREFS.expandNestedRepliesByDefault && PREFS.expandLeafNestedReplies);
 			const boostCopy = boostCopyConfigFromPrefs(PREFS);
@@ -34269,6 +36096,7 @@
 			appearance: '斑马线',
 			flash: '动效',
 			reading: '其他设置 队列 历史 导航 打开 退出',
+			shortcuts: '快捷键 热键 键盘 鼠标 侧键 ctrl alt shift meta esc 冲突',
 			interaction: '其他设置 主贴 操作 回复 楼中楼 boost 复制',
 			sites: '其他设置 自定义 站点 论坛 discourse',
 			performance: 'dom 窗口预算 并发',
@@ -34301,7 +36129,7 @@
 		const syncSettingsPageControls = () => [
 			syncImageScaleControls, syncFontControls, syncLayoutControls, syncReaderWindowControls,
 			syncAppearanceControls, syncJumpHighlightControls, syncLoadingAnimationControls,
-			syncPerformanceControls, syncOtherControls, syncCacheControls,
+			syncPerformanceControls, syncOtherControls, syncShortcutControls, syncCacheControls,
 		].forEach((sync) => sync());
 		const showSettingsPanel = (name) => {
 			closeFontFamilyMenu();
@@ -34450,6 +36278,7 @@
 			} catch {}
 		};
 		const closeSettings = () => {
+			stopShortcutRecording();
 			closeFontFamilyMenu();
 			stopSettingsRangeDrag();
 			stopSettingsColorPick();
@@ -34532,6 +36361,59 @@
 			settingsTabs.forEach((tab) => {
 			onShell(tab, 'click', () => showSettingsPanel(tab.dataset.settingsPanel || 'image'));
 			});
+			onShell(shortcutSettings, 'click', (event) => {
+				const record = event.target.closest('[data-shortcut-record]');
+				const clear = event.target.closest('[data-shortcut-clear]');
+				const reset = event.target.closest('[data-shortcut-reset]');
+				const remove = event.target.closest('[data-shortcut-remove]');
+				if (record) {
+					const alreadyRecording = record.classList.contains('is-recording');
+					stopShortcutRecording();
+					if (!alreadyRecording) {
+						record.classList.add('is-recording');
+						record.querySelector('span').textContent = '请按键…';
+						shortcutStatus.textContent = '正在录制：可同时按 Ctrl、Alt、Shift 或 Meta；也支持滚轮、鼠标中键、后退键和前进键。再次点击可取消。';
+					}
+					return;
+				}
+				const actionId = clear?.dataset.shortcutClear || reset?.dataset.shortcutReset || remove?.dataset.shortcutRemove;
+				if (!actionId) return;
+				const next = { ...PREFS.readerShortcutBindings };
+				if (clear) next[actionId] = [];
+				else if (reset) {
+					const conflict = READER_SHORTCUT_DEFAULTS[actionId]
+						.map((binding) => readerShortcutOwner(binding, actionId))
+						.find(Boolean);
+					if (conflict) {
+						shortcutStatus.textContent = `默认按键与“${conflict.label}”冲突，请先清空对应绑定。`;
+						return;
+					}
+					next[actionId] = [...READER_SHORTCUT_DEFAULTS[actionId]];
+				}
+				else next[actionId] = (next[actionId] || []).filter((binding) => binding !== remove.dataset.shortcutBinding);
+				saveShortcutBindings(next, clear ? '已清空快捷方式' : reset ? '已恢复该动作的默认快捷方式' : '已移除快捷方式');
+			});
+			onShell(shortcutSettings, 'ldp-shortcut-captured', (event) => {
+				const actionId = event.detail?.actionId;
+				const binding = event.detail?.binding;
+				if (!actionId || !binding) return;
+				const issue = readerShortcutBindingIssue(binding, actionId);
+				if (issue) {
+					shortcutStatus.textContent = issue;
+					return;
+				}
+				const current = PREFS.readerShortcutBindings[actionId] || [];
+				if (current.includes(binding)) {
+					shortcutStatus.textContent = `${readerShortcutBindingLabel(binding)} 已在当前动作中。`;
+					return;
+				}
+				saveShortcutBindings({
+					...PREFS.readerShortcutBindings,
+					[actionId]: [...current, binding],
+				}, `已绑定 ${readerShortcutBindingLabel(binding)}`);
+			});
+			onShell(shortcutSettings.querySelector('.ldp-shortcut-reset-all'), 'click', () =>
+				saveShortcutBindings(READER_SHORTCUT_DEFAULTS, '已恢复全部默认快捷方式'));
 			settingsLogTabs.forEach((tab) => onShell(tab, 'click', () => showSettingsLogPanel(tab.dataset.settingsLogTab)));
 			bindReaderPanelSearch(settingsSearchInput, settingsSearchClear, () => { applySettingsSearch(); settingsPanel.scrollTop = 0; });
 			onShell(settingsSaveAllBtn, 'click', () => {
@@ -34688,6 +36570,41 @@
 			syncJumpHighlightControls();
 			};
 			jumpHighlightInputs.forEach((input) => onShell(input, 'input', previewJumpHighlightControls));
+			const reapplyInlineReplyTreePreference = () => {
+				const ctx = readerShell.activeContext;
+				if (!ctx?.subReplyState) return;
+				if (inlineReplyTreeMaxDepth() > 1) ctx.replyThreadWindow?._ldpClose?.();
+				cancelNestedReplyRenderQueue(ctx);
+				const cachedNodes = new Set();
+				ctx.subReplyState.forEach((state) => state.nodeCache?.forEach((node) => cachedNodes.add(node)));
+				cachedNodes.forEach((node) => {
+					ctx.tracker?.unobserve(node);
+					ctx.repliesIO?.unobserve(node);
+					cancelPostContentHydration(node, ctx);
+					cancelPostLatexRender(node, ctx);
+					destroyReaderMedia(node);
+					removeOwnedNode(node);
+				});
+				ctx.subReplyState.forEach((state) => {
+					state.nodeCache = new Map();
+					state.pageIndex = 0;
+					state.renderedParent = null;
+					state.renderedKey = '';
+				});
+				ctx.streamWindowResetPending = true;
+				ctx.streamMountedItemCount = -1;
+				invalidateStreamLayout(ctx);
+				applyNestedReplyDisplayPreference(ctx);
+				// 设置热更新后重新挂载当前虚拟窗口内的父楼层；观察器按预加载范围
+				// 恢复缓存树或发起缺失请求，避免遍历全部历史状态并等待整体刷新。
+				[...(ctx.streamMountedNodes || [])].forEach((parentNode) => {
+					if (!parentNode?.isConnected) return;
+					ctx.repliesIO?.unobserve(parentNode);
+					reconcileNestedReplyNode(parentNode, ctx);
+				});
+				ctx.streamNeedsRepair = true;
+				scheduleStreamWindowSync(ctx);
+			};
 			[
 				[historyButtonsAlwaysVisibleInput, (checked) => setPref('historyButtonsAlwaysVisible', checked), syncOtherControls],
 				[readerQueueAlwaysVisibleWhenEmptyInput, (checked) => setPref('readerQueueAlwaysVisibleWhenEmpty', checked), syncOtherControls],
@@ -34701,9 +36618,7 @@
 						aggregateDescendantReplies: checked,
 						expandNestedRepliesByDefault: checked ? true : PREFS.expandNestedRepliesByDefault,
 					});
-					readerShell.activeContext?.subReplyState.forEach((state) => { state.pageIndex = 0; state.renderedKey = ''; });
-					readerShell.activeContext?.subReplyState.forEach((state, postNumber) => renderSubReplyBatch(postNumber, readerShell.activeContext));
-					applyNestedReplyDisplayPreference(readerShell.activeContext);
+					reapplyInlineReplyTreePreference();
 				}, syncOtherControls],
 				[hideNestedReplyFloorsInput, (checked) => { setPref('hideNestedReplyFloors', checked); applyNestedReplyDisplayPreference(readerShell.activeContext, true); }, syncOtherControls],
 				[lightboxOriginalByDefaultInput, (checked) => setPref('lightboxOriginalByDefault', checked)],
@@ -34727,6 +36642,11 @@
 			syncOtherControls();
 			syncHistorySortToggle();
 			overlay._ldpRefreshReaderHistoryNavigation?.();
+			});
+			onShell(inlineReplyTreeDepthSelect, 'change', () => {
+				setPref('inlineReplyTreeMaxDepth', inlineReplyTreeDepthSelect.value);
+				reapplyInlineReplyTreePreference();
+				syncOtherControls();
 			});
 			const addCustomSite = async () => {
 				const host = normalizeCustomDiscourseHost(customSiteInput.value);
@@ -34772,7 +36692,7 @@
 				expandLeafNestedReplies: expandLeaf,
 				aggregateDescendantReplies: expandAll && aggregate,
 			});
-			applyNestedReplyDisplayPreference(readerShell.activeContext);
+			reapplyInlineReplyTreePreference();
 			syncOtherControls();
 			};
 			[expandNestedRepliesByDefaultInput, expandLeafNestedRepliesInput].forEach((input) =>
@@ -35496,13 +37416,16 @@
 		ctx = {
 			topicId, op: null, topicData: null, loader, modal, commentsEl, commentsHeader, countEl, emptyEl, scrollRoot: body, performance,
 			readerSession,
-			isPostVoting: !!(cachedTopicPreview?.is_post_voting),
-			directRepliesByParent: new Map(), replyParentByPost: new Map(), tracker, totalPosts: 0, repliesIO: null, postRequestScheduler,
-			subReplyState: new Map(), // 楼中楼原始数据 + 已渲染数量的状态表
-			confirmedReadPostNumbers: new Set(), optimisticReadPostNumbers: new Set(),
+				isPostVoting: !!(cachedTopicPreview?.is_post_voting),
+				directRepliesByParent: new Map(), replyParentByPost: new Map(), tracker, totalPosts: 0, repliesIO: null, postRequestScheduler,
+				postActionCapabilityRequests: new Map(), postActionCapabilityAttempts: new Set(),
+				subReplyState: new Map(), // 楼中楼原始数据 + 已渲染数量的状态表
+				nestedReplyRenderQueue: null, nestedPostContentRequests: new Map(), nestedBranchSyncState: null,
+				confirmedReadPostNumbers: new Set(), optimisticReadPostNumbers: new Set(),
 			streamNodeMap: new Map(),
 			streamItems: [], streamItemMap: new Map(), streamPrefix: [0],
-			onlyOp: false, streamLayoutItems: [], streamLayoutDirty: true,
+			onlyOp: false, nestedReplyDisplaySyncQueued: false,
+			streamLayoutItems: [], streamLayoutDirty: true,
 			streamPrefixDirty: true, streamPrefixDirtyFrom: 0,
 			streamNeedsRepair: true, streamPendingReindexFrom: null,
 			streamWindowStart: 0, streamWindowEnd: 0, streamMountedItemCount: 0,
@@ -35537,6 +37460,7 @@
 		guardNativeReaderTimings();
 		const topicActionRail = ctx.topicActionRail = readerElement('.ldp-topic-action-rail'); topicActionRail.hidden = true; topicActionRail.classList.remove('is-dragging'); topicActionRail._ldpRelatedPost = null; overlay.classList.remove('ldp-topic-action-rail-visible');
 		let topicRailHoldTimer = 0, topicRailDrag = null, topicRailSuppressClickUntil = 0;
+		let topicActionRailMode = PREFS.topicActionRailMode === 'collapsed' ? 'collapsed' : 'compact';
 		const positionTopicActionRail = () => {
 			if (!topicActionRail || topicActionRail.hidden) return;
 			const position = PREFS.topicActionRailPosition || {};
@@ -35570,6 +37494,24 @@
 			readerShell.syncFullPageHeaderAlignment?.();
 			overlay._ldpSyncReaderQueuePosition?.();
 		};
+		const applyTopicActionRailMode = (nextMode) => {
+			topicActionRailMode = TOPIC_ACTION_RAIL_MODES.includes(nextMode) ? nextMode : 'compact';
+			const collapsed = topicActionRailMode === 'collapsed', expanded = topicActionRailMode === 'expanded';
+			const persistedMode = collapsed ? 'collapsed' : 'compact';
+			if (PREFS.topicActionRailMode !== persistedMode) setPref('topicActionRailMode', persistedMode);
+			topicActionRail.classList.toggle('is-collapsed', collapsed);
+			topicActionRail.classList.toggle('is-expanded', expanded);
+			const more = topicActionRail.querySelector('.ldp-topic-action-more');
+			if (more) more.hidden = !expanded;
+			const toggle = topicActionRail.querySelector('.ldp-topic-action-rail-toggle');
+			if (toggle) {
+				setExpanded(toggle, expanded);
+				toggle.dataset.railMode = topicActionRailMode;
+				setLabel(toggle, `${collapsed ? '显示常用主题操作' : expanded ? '全部收纳主题操作' : '展开全部主题操作'}；${PREFS.topicActionRailFixed ? '位置已固定' : '长按拖动'}`);
+				toggle.innerHTML = icon(expanded ? 'chevronDown' : 'layers');
+			}
+			requestAnimationFrame(positionTopicActionRail);
+		};
 		ctx.syncTopicActionRail = (postNode = topicActionRail?._ldpRelatedPost) => {
 			if (!postNode) {
 				const starter = postsFromPayload(ctx.topicData).concat(loader.cachedPosts).find((post) => +post?.post_number === 1);
@@ -35578,12 +37520,29 @@
 				return;
 			}
 			const post = postNode?._ldpPostData; if (!topicActionRail || !post) return;
-			const like = readerPostRailReactionAction(post, ctx), expanded = topicActionRail.classList.contains('is-expanded');
+			const like = readerPostRailReactionAction(post, ctx);
+			const railMode = topicActionRailMode;
+			const collapsed = railMode === 'collapsed', expanded = railMode === 'expanded';
+			topicActionRail.classList.toggle('is-collapsed', collapsed);
+			topicActionRail.classList.toggle('is-expanded', expanded);
 			topicActionRail._ldpRelatedPost = postNode; topicActionRail._ldpPostData = post; topicActionRail.hidden = PREFS.topicActionRailVisible !== true; overlay.classList.toggle('ldp-topic-action-rail-visible', !topicActionRail.hidden);
-			topicActionRail.innerHTML = `<button class="ldp-topic-action-rail-top" type="button" aria-label="回到顶部">${icon('arrowUp')}</button><div class="ldp-reactions"><div class="ldp-actions"><button class="ldp-btn ldp-like${like.acted ? ' liked' : ''}" data-acted="${like.acted ? '1' : '0'}"${like.reaction ? ` data-reaction="${escAttr(like.reaction)}"` : ''} aria-label="${escAttr(like.label || (like.acted ? '取消点赞' : '点赞'))}"${like.can_act || like.acted ? '' : ' disabled'}>${icon('heart')}<span class="ldp-like-count">${like.count || 0}</span></button><button class="ldp-btn ldp-replybtn" type="button" aria-label="回复主题">${icon('reply')}</button>${canShowBoostButton(post) ? `<button class="ldp-btn ldp-boostbtn" type="button" aria-label="boost">${icon('rocket')}</button>` : ''}<button class="ldp-btn ldp-topic-bookmark" type="button" data-topic-action="bookmark" aria-label="收藏本帖">${icon('bookmark')}</button></div></div><div class="ldp-topic-action-more"${expanded ? '' : ' hidden'}>${postContextActionsHtml(post, ctx)}${topicFooterActionsHtml(post, ctx)}</div><button class="ldp-topic-action-rail-toggle" type="button" aria-label="${expanded ? '收纳' : '展开'}其他主题操作；${PREFS.topicActionRailFixed ? '位置已固定' : '长按拖动'}" aria-expanded="${expanded}">${icon(expanded ? 'chevronDown' : 'layers')}</button>`;
+			const toggleLabel = collapsed ? '显示常用主题操作' : expanded ? '全部收纳主题操作' : '展开全部主题操作';
+			topicActionRail.innerHTML = `<button class="ldp-topic-action-rail-top" type="button" aria-label="回到顶部">${icon('arrowUp')}</button><div class="ldp-reactions"><div class="ldp-actions"><button class="ldp-btn ldp-like${like.acted ? ' liked' : ''}" data-acted="${like.acted ? '1' : '0'}"${like.reaction ? ` data-reaction="${escAttr(like.reaction)}"` : ''} aria-label="${escAttr(like.label || (like.acted ? '取消点赞' : '点赞'))}"${like.can_act || like.acted ? '' : ' disabled'}>${icon('heart')}<span class="ldp-like-count">${like.count || 0}</span></button><button class="ldp-btn ldp-replybtn" type="button" aria-label="回复主题">${icon('reply')}</button>${canShowBoostButton(post) ? `<button class="ldp-btn ldp-boostbtn" type="button" aria-label="boost">${icon('rocket')}</button>` : ''}<button class="ldp-btn ldp-topic-bookmark" type="button" data-topic-action="bookmark" aria-label="收藏本帖">${icon('bookmark')}</button></div></div><div class="ldp-topic-action-more"${expanded ? '' : ' hidden'}>${postContextActionsHtml(post, ctx)}${topicFooterActionsHtml(post, ctx)}</div><button class="ldp-topic-action-rail-toggle" type="button" aria-label="${toggleLabel}；${PREFS.topicActionRailFixed ? '位置已固定' : '长按拖动'}" aria-expanded="${expanded}" data-rail-mode="${railMode}">${icon(expanded ? 'chevronDown' : 'layers')}</button>`;
 			renderPostReactions(topicActionRail, ctx, { collectLike: false, railPicker: true }); topicActionRail.querySelector(':scope > .ldp-reactions > .ldp-reaction-summary')?.remove(); syncPostActionControls(topicActionRail, ctx); syncTopicActionControls(ctx); requestAnimationFrame(() => { positionTopicActionRail(); requestAnimationFrame(positionTopicActionRail); });
 		};
-		onContext(topicActionRail, 'click', (event) => { if (Date.now() < topicRailSuppressClickUntil) return consumeEvent(event); if (event.target.closest('.ldp-topic-action-rail-top')) ctx.timeline.jumpToStart(); const toggle = event.target.closest('.ldp-topic-action-rail-toggle'); if (!toggle) return; const expanded = topicActionRail.classList.toggle('is-expanded'); topicActionRail.querySelector('.ldp-topic-action-more').hidden = !expanded; setExpanded(toggle, expanded); setLabel(toggle, `${expanded ? '收纳' : '展开'}其他主题操作；${PREFS.topicActionRailFixed ? '位置已固定' : '长按拖动'}`); toggle.innerHTML = icon(expanded ? 'chevronDown' : 'layers'); requestAnimationFrame(positionTopicActionRail); });
+		onContext(topicActionRail, 'click', (event) => {
+			if (Date.now() < topicRailSuppressClickUntil) return consumeEvent(event);
+			if (event.target.closest('.ldp-topic-action-rail-top')) ctx.timeline.jumpToStart();
+			const toggle = event.target.closest('.ldp-topic-action-rail-toggle');
+			if (!toggle) return;
+			const nextMode = topicActionRailMode === 'collapsed'
+				? 'compact' : topicActionRailMode === 'compact' ? 'expanded' : 'collapsed';
+			applyTopicActionRailMode(nextMode);
+		});
+		onContext(document, 'pointerdown', (event) => {
+			if (topicActionRailMode !== 'expanded' || event.composedPath().includes(topicActionRail)) return;
+			applyTopicActionRailMode('compact');
+		}, true);
 		onContext(topicActionRail, 'pointerdown', (event) => { if (event.button || PREFS.topicActionRailFixed || !event.target.closest('.ldp-topic-action-rail-toggle')) return; clearTimeout(topicRailHoldTimer); topicRailHoldTimer = contextScope.timer(() => { topicRailDrag = { id: event.pointerId, x: event.clientX, y: event.clientY, left: Number.parseFloat(topicActionRail.style.left) || 0, top: Number.parseFloat(topicActionRail.style.top) || 0 }; topicActionRail.classList.add('is-dragging'); }, 420); });
 		onContext(document, 'pointermove', (event) => { if (!topicRailDrag || event.pointerId !== topicRailDrag.id) return; const maxLeft = Math.max(0, modal.clientWidth - topicActionRail.offsetWidth), maxTop = Math.max(0, modal.clientHeight - topicActionRail.offsetHeight); topicActionRail.style.left = `${Math.round(Math.max(0, Math.min(maxLeft, topicRailDrag.left + event.clientX - topicRailDrag.x)))}px`; topicActionRail.style.top = `${Math.round(Math.max(0, Math.min(maxTop, topicRailDrag.top + event.clientY - topicRailDrag.y)))}px`; event.preventDefault(); }, true);
 		const finishTopicRailDrag = (event) => { clearTimeout(topicRailHoldTimer); if (!topicRailDrag || event.pointerId !== topicRailDrag.id) return; const maxLeft = Math.max(1, modal.clientWidth - topicActionRail.offsetWidth), toggle = topicActionRail.querySelector('.ldp-topic-action-rail-toggle'), toggleMaxTop = Math.max(1, modal.clientHeight - (toggle?.offsetHeight || 0)); setPref('topicActionRailPosition', { x: (Number.parseFloat(topicActionRail.style.left) || 0) / maxLeft, y: ((Number.parseFloat(topicActionRail.style.top) || 0) + (toggle?.offsetTop || 0)) / toggleMaxTop }); topicRailDrag = null; topicActionRail.classList.remove('is-dragging'); topicRailSuppressClickUntil = Date.now() + 300; positionTopicActionRail(); };
@@ -36219,8 +38178,7 @@
 			ctx.initialTargetPrecedingContentDeferred = false;
 			ctx.streamMountedNodes.forEach((node) => {
 				if (+node.dataset.postNumber >= +(ctx.initialTargetHydrationBoundary || 0)) return;
-				if (node.dataset.childReplyTotal && ctx.repliesIO && ctx.repliesIO.observe)
-					ctx.repliesIO.observe(node);
+				reconcileNestedReplyNode(node, ctx);
 			});
 			scheduleStreamWindowSync(ctx);
 		};
@@ -36267,7 +38225,9 @@
 				const wasNearBottom = body.scrollHeight - body.scrollTop - body.clientHeight <= 120;
 				const previousHighestPostNumber = Math.max(0, +(ctx.totalPosts || 0));
 				try {
-					const post = await ctx.refreshPostById(postId);
+					const post = await ctx.refreshPostById(postId, {
+						newPost: messageType === 'created' && !wasKnown,
+					});
 					if (!post || !sessionAcceptsWork()) return;
 					const postNumber = Math.max(0, Number(post.post_number) || 0);
 					const newlyAdded = messageType === 'created' && !wasKnown && postNumber > previousHighestPostNumber;
@@ -36431,11 +38391,16 @@
 					if (nextAfter <= fetchAfter) break;
 					fetchAfter = nextAfter;
 				}
-				const hasNewPostCandidates = [...postsByNumber.keys()]
-					.some((postNumber) => postNumber > previousHighestPostNumber);
+				const newPostNumbers = new Set(
+					[...postsByNumber.keys()]
+						.filter((postNumber) => postNumber > previousHighestPostNumber)
+				);
+				const hasNewPostCandidates = newPostNumbers.size > 0;
 				const wasNearBottom = hasNewPostCandidates &&
 					body.scrollHeight - body.scrollTop - body.clientHeight <= 120;
-				const freshPosts = ingestLivePosts([...postsByNumber.values()], ctx);
+				const freshPosts = ingestLivePosts([...postsByNumber.values()], ctx, {
+					newPostNumbers,
+				});
 				freshPosts.forEach((post) => { void ctx.replyThreadWindow?._ldpIngestLivePost?.(post); });
 				ctx.topicData = freshTopic;
 				ctx.topicSharedIssueHostVisible = nativeTopicSharedIssueVisible(freshTopic);
@@ -36474,17 +38439,25 @@
 				latestReplyRefreshRunning = false;
 			}
 		};
-		ctx.refreshPostByNumber = async (postNumber) => {
+		ctx.refreshPostByNumber = async (postNumber, options = {}) => {
 			const posts = await loader.loadPost(+postNumber, {
-				priority: POST_REQUEST_PRIORITY.target,
+				priority: Number.isFinite(options.priority)
+					? options.priority
+					: POST_REQUEST_PRIORITY.target,
+				scope: options.scope === 'around' ? 'around' : 'single',
 				forceRefresh: true,
 			});
 			if (!sessionAcceptsWork()) return null;
 			loader.persistFetchedPosts(posts);
-			ingestLivePosts(posts, ctx, { refreshContent: true });
-			return posts.find((post) => +(post?.post_number || 0) === +postNumber) || posts[0] || null;
+			const targetPost = posts.find((post) => +(post?.post_number || 0) === +postNumber) || posts[0] || null;
+			const ingestedPosts = options.targetOnly === true && targetPost ? [targetPost] : posts;
+			ingestLivePosts(ingestedPosts, ctx, {
+				refreshContent: true,
+				skipCapabilityRefresh: options.skipCapabilityRefresh === true,
+			});
+			return targetPost;
 		};
-		ctx.refreshPostById = async (postId) => {
+		ctx.refreshPostById = async (postId, options = {}) => {
 			const targetPostId = Number(postId) || 0;
 			if (!targetPostId) return null;
 			const post = await fetchJSON(`${BASE}/posts/${targetPostId}.json`, {
@@ -36497,7 +38470,12 @@
 			});
 			if (!sessionAcceptsWork() || !post || +post.id !== targetPostId || !post.post_number) return null;
 			loader.persistFetchedPosts([post]);
-			ingestLivePosts([post], ctx, { refreshContent: true });
+			ingestLivePosts([post], ctx, {
+				refreshContent: true,
+				newPostNumbers: options.newPost === true
+					? new Set([+post.post_number])
+					: undefined,
+			});
 			return post;
 		};
 		ctx.refreshNativeComposerSession = async (session) => {
@@ -36615,10 +38593,10 @@
 			readerEscapeExitTimer = 0;
 			readerPortalQuery('.ldp-selection-toast[data-ldp-reader-exit-hint]')?.remove();
 		};
-		const armReaderEscapeExit = () => {
+		const armReaderEscapeExit = (shortcutLabel = 'Esc') => {
 			disarmReaderEscapeExit();
 			readerEscapeExitDeadline = Date.now() + readerEscapeExitWindow;
-			showSelectionToast('再按一次 Esc 退出阅读器');
+			showSelectionToast(`再按一次 ${shortcutLabel} 退出阅读器`);
 			const toast = readerPortalQuery('.ldp-selection-toast');
 			if (toast) toast.dataset.ldpReaderExitHint = '1';
 			readerEscapeExitTimer = setTimeout(disarmReaderEscapeExit, readerEscapeExitWindow);
@@ -36873,9 +38851,11 @@
 					['composer window', () => ctx.nativeComposerWindow.destroy()],
 					['post actions', () => destroyActions && destroyActions()],
 					['read tracker', () => tracker.stop()],
-					['queue viewport tracker', () => ctx.queueViewportTracker.stop()],
-					['nested replies', () => ctx.repliesIO.disconnect()],
-					['descendant replies window', () => ctx.replyThreadWindow?._ldpClose?.()],
+						['queue viewport tracker', () => ctx.queueViewportTracker.stop()],
+						['nested replies', () => ctx.repliesIO.disconnect()],
+						['nested render queue', () => cancelNestedReplyRenderQueue(ctx)],
+						['nested branch geometry', () => cancelNestedBranchSync(ctx)],
+						['descendant replies window', () => ctx.replyThreadWindow?._ldpClose?.()],
 					['body translation', () => ctx.translation.destroy()],
 					['media players', () => suspendReaderMedia(overlay)],
 					['detached media players', () => ctx.streamHydratedNodes.forEach((node) => suspendReaderMedia(node))],
@@ -36915,7 +38895,8 @@
 				[ctx.streamItems, ctx.streamLayoutItems].forEach((items) => { items.length = 0; });
 				[ctx.streamItemMap, ctx.streamMountedNodes, ctx.streamHydratedNodes, ctx.pendingPostHydrations,
 					ctx.pendingPostLatexRenders, ctx.streamNodeMap, ctx.subReplyState, ctx.directRepliesByParent,
-					ctx.confirmedReadPostNumbers,
+					ctx.nestedPostContentRequests, ctx.confirmedReadPostNumbers,
+					ctx.postActionCapabilityRequests, ctx.postActionCapabilityAttempts,
 					ctx.replyParentByPost].forEach((collection) => collection.clear());
 			}
 			if (!preserveShell && !shellStopped) {
@@ -37011,7 +38992,15 @@
 			disposeHistoryNavigation();
 			overlay._ldpCaptureHistoryViewport = () => null;
 			overlay._ldpCaptureHistoryPostNumber = () => 1;
-			prepareTopicSwitchPromise = draftSavePromise;
+			prepareTopicSwitchPromise = waitForReaderOpenTask(
+				draftSavePromise,
+				'保存回复草稿超时',
+				RESPONSE_CACHE_OPERATION_TIMEOUT,
+			).catch((error) => {
+				if (Number(error?.status || 0) !== 408) throw error;
+				console.warn('[LINUX DO reader] native composer draft save timed out; continuing topic switch', error);
+				return false;
+			});
 			return prepareTopicSwitchPromise;
 		};
 
@@ -37049,8 +39038,15 @@
 		};
 		overlay._ldpDispose = () => close({ suppressNavigation: true, preserveDocumentTitle: true });
 		overlay._ldpPrepareTopicSwitch = prepareTopicSwitch;
-		function onEsc(e) {
-			if (e.key !== 'Escape') {
+		overlay._ldpShortcutClose = (shortcutLabel = '快捷键') => {
+			const confirmed = readerEscapeExitDeadline > Date.now();
+			disarmReaderEscapeExit();
+			if (!PREFS.doubleEscapeToCloseReader || confirmed) close();
+			else armReaderEscapeExit(shortcutLabel);
+			return true;
+		};
+		function onEsc(e, shortcutBinding = readerShortcutBindingFromEvent(e)) {
+			if (!(PREFS.readerShortcutBindings.closeReader || []).includes(shortcutBinding)) {
 				disarmReaderEscapeExit();
 				return;
 			}
@@ -37105,7 +39101,7 @@
 			}
 			if (ctx.replyThreadWindow?.isConnected) {
 				consumeEvent(e);
-				if (!ctx.replyThreadWindow._ldpBack?.()) (ctx.replyThreadWindow._ldpCloseFromEscape || ctx.replyThreadWindow._ldpClose)?.();
+				(ctx.replyThreadWindow._ldpCloseFromEscape || ctx.replyThreadWindow._ldpClose)?.();
 				return;
 			}
 			if (isFunction(overlay._ldpCloseCodePreview)) {
@@ -37167,8 +39163,12 @@
 			e.preventDefault();
 			e.stopImmediatePropagation();
 			if (!PREFS.doubleEscapeToCloseReader || exitConfirmed) close();
-			else armReaderEscapeExit();
+			else armReaderEscapeExit(readerShortcutBindingLabel(shortcutBinding));
 		}
+		overlay._ldpHandleCloseShortcut = (event, binding) => {
+			onEsc(event, binding);
+			return true;
+		};
 		const readerRefreshBtn = readerElement('.ldp-reader-refresh');
 		readerRefreshBtn.disabled = readerSession.state !== 'active';
 		onReaderRefreshClick = async () => {
@@ -37420,10 +39420,10 @@
 			if (!num || (backward && num <= 1) || gapMissBlocked(misses, num)) return false;
 			const item = ctx.streamItemMap.get(num);
 			const lastPostNumber = Math.max(1, ctx.totalPosts || 1);
-			if (ctx.onlyOp) {
-				const layoutItems = streamLayoutItems(ctx);
-				const boundary = layoutItems[backward ? 0 : layoutItems.length - 1];
-				const loaded = ctx.streamItems[backward ? 0 : ctx.streamItems.length - 1];
+				if (streamLayoutUsesFilter(ctx)) {
+					const layoutItems = streamLayoutItems(ctx);
+					const boundary = layoutItems[backward ? 0 : layoutItems.length - 1];
+					const loaded = ctx.streamItems[backward ? 0 : ctx.streamItems.length - 1];
 				return item && item === boundary && loaded &&
 					(backward ? loaded.postNumber > 1 : loaded.postNumber < lastPostNumber);
 			}
@@ -37616,6 +39616,7 @@
 			if (!sessionAcceptsWork() || onlyOpBtn.disabled || !ctx.op) return;
 			clearStreamViewportAnchor(ctx);
 			ctx.onlyOp = !ctx.onlyOp;
+			applyNestedReplyDisplayPreference(ctx);
 			pendingRetry = false;
 			done = ctx.onlyOp ? loader.scanDone : loader.loadDone;
 			if (!ctx.onlyOp && filterPumpTimer) {
@@ -37649,14 +39650,21 @@
 
 		try {
 			setReaderOpenPhase('load-topic');
-			const topic = await initialTopicRequest;
+			const topic = await waitForReaderOpenTask(
+				initialTopicRequest,
+				'读取主题数据超时',
+			);
 			if (!sessionAcceptsWork()) return;
 			setReaderOpenPhase('initialize-topic');
-			ctx.topicData = topic;
-			tracker.preload(postsFromPayload(topic));
-			ctx.topicSharedIssueHostVisible = !loader.initializedFromCache && nativeTopicSharedIssueVisible(topic);
-			postsFromPayload(topic).forEach((post) => rememberPostData(ctx, post));
-			ctx.isPostVoting = !!topic.is_post_voting;
+				ctx.topicData = topic;
+				tracker.preload(postsFromPayload(topic));
+				ctx.topicSharedIssueHostVisible = !loader.initializedFromCache && nativeTopicSharedIssueVisible(topic);
+				commitNestedReplyRelations(ctx, postsFromPayload(topic), {
+					render: false,
+					syncDisplay: false,
+				});
+				restoreNestedReplySnapshot(ctx, topic);
+				ctx.isPostVoting = !!topic.is_post_voting;
 			ctx.topicBookmarked = !!topic.bookmarked;
 			ctx.topicNotificationLevel = topicNotificationLevel(topic);
 			ctx.latestReplyAt = String(topic.last_posted_at || '');
@@ -37849,32 +39857,44 @@
 			setReaderOpenPhase('load-target-post');
 			let targetLoaded = false;
 			const syncTargetLoadingSource = (source) => syncLoadingState(source, { target: true });
-			targetLoaded = await ctx.loadPost(Math.max(1, targetPostNumber), {
-				priority: POST_REQUEST_PRIORITY.target,
-				onSource: syncTargetLoadingSource,
-			});
-			if (targetPostNumber > 1 && !targetLoaded) {
-				targetLoaded = await ctx.loadPost(targetPostNumber, {
+			targetLoaded = await waitForReaderOpenTask(
+				ctx.loadPost(Math.max(1, targetPostNumber), {
+					priority: POST_REQUEST_PRIORITY.target,
 					onSource: syncTargetLoadingSource,
-					scope: 'around',
-				});
+				}),
+				'读取目标楼层超时',
+			);
+			if (targetPostNumber > 1 && !targetLoaded) {
+				targetLoaded = await waitForReaderOpenTask(
+					ctx.loadPost(targetPostNumber, {
+						onSource: syncTargetLoadingSource,
+						scope: 'around',
+					}),
+					'读取目标楼层附近内容超时',
+				);
 			}
 			if (targetPostNumber > 1 && !targetLoaded && !cancelInitialTargetJump) {
-				targetLoaded = await ctx.loadPost(targetPostNumber, {
-					priority: POST_REQUEST_PRIORITY.target,
-					forceRefresh: true,
-					onSource: syncTargetLoadingSource,
-				});
+				targetLoaded = await waitForReaderOpenTask(
+					ctx.loadPost(targetPostNumber, {
+						priority: POST_REQUEST_PRIORITY.target,
+						forceRefresh: true,
+						onSource: syncTargetLoadingSource,
+					}),
+					'重新请求目标楼层超时',
+				);
 			}
 			if (refreshTargetBoosts && targetPostNumber > 0 && !cancelInitialTargetJump) {
 				setReaderOpenPhase('load-target-boosts');
-				targetLoaded = await ctx.loadPost(targetPostNumber, {
-					ensureAround: true,
-					priority: POST_REQUEST_PRIORITY.target,
-					forceRefresh: true,
-					onSource: syncTargetLoadingSource,
-					scope: 'around',
-				}) || targetLoaded;
+				targetLoaded = await waitForReaderOpenTask(
+					ctx.loadPost(targetPostNumber, {
+						ensureAround: true,
+						priority: POST_REQUEST_PRIORITY.target,
+						forceRefresh: true,
+						onSource: syncTargetLoadingSource,
+						scope: 'around',
+					}),
+					'刷新目标楼层 Boost 数据超时',
+				) || targetLoaded;
 				if (!sessionAcceptsWork()) return;
 				const targetPostNode = ctx.streamNodeMap.get(targetPostNumber);
 				if (targetPostNode) {
@@ -37902,12 +39922,15 @@
 			}
 			if (targetPostNumber > 1 && targetLoaded && !cancelInitialTargetJump && !refreshTargetBoosts) {
 				setReaderOpenPhase('load-target-neighborhood');
-				await ctx.loadPost(targetPostNumber, {
-					ensureAround: true,
-					priority: POST_REQUEST_PRIORITY.visible,
-					onSource: syncTargetLoadingSource,
-					scope: 'around',
-				});
+				await waitForReaderOpenTask(
+					ctx.loadPost(targetPostNumber, {
+						ensureAround: true,
+						priority: POST_REQUEST_PRIORITY.visible,
+						onSource: syncTargetLoadingSource,
+						scope: 'around',
+					}),
+					'补全目标楼层附近内容超时',
+				);
 				if (!sessionAcceptsWork()) return;
 			}
 			const targetPostNode = ctx.streamNodeMap.get(targetPostNumber);
@@ -37915,7 +39938,10 @@
 				+(targetPostNode?._ldpPostData?.reply_to_post_number || 0) > 0
 				? targetPostNumber : 0;
 			if (targetPostNumber <= 1 && !targetLoaded) {
-				await pump({ maxBatches: 1, persistFetchedPosts: true });
+				await waitForReaderOpenTask(
+					pump({ maxBatches: 1, persistFetchedPosts: true }),
+					'加载首批楼层超时',
+				);
 			}
 			// The batch path normally mounts on the next animation frame. Flush the
 			// first window before removing the mask so opening never exposes a blank frame.
@@ -38003,7 +40029,7 @@
 			if (aggregateTargetPostNumber && !await ctx.timeline.jumpTo(aggregateTargetPostNumber, {
 				targetPost: targetPostNode?._ldpPostData,
 			})) {
-				throw new Error(`目标楼层 #${aggregateTargetPostNumber} 完整讨论定位失败，请重试`);
+				throw new Error(`目标楼层 #${aggregateTargetPostNumber} 深层回复定位失败，请重试`);
 			}
 			if (!sessionAcceptsWork()) return;
 			if (settleTargetJump && !aggregateTargetPostNumber) {
@@ -38055,15 +40081,16 @@
 				autoDequeueReaderQueueEntry(previousQueueTopicId);
 			}
 			readerRefreshBtn.disabled = false;
-			if (initialQuoteSourceTarget) await returnToReaderQuoteSource(initialQuoteSourceTarget, ctx);
 			ctx.timeline.update();
 			removeOwnedNode(maskEl);
+			if (initialQuoteSourceTarget) await returnToReaderQuoteSource(initialQuoteSourceTarget, ctx);
 			if (restoreState?.replyWindow && sessionAcceptsWork()) {
 				try {
+					const replyWindow = restoreState.replyWindow;
 					ctx.replyThreadWindow?._ldpClose?.(false);
-					await openAggregateReplyTarget(restoreState.replyWindow.rootPostNumber, ctx, {
+					await openAggregateReplyTarget(replyWindow.rootPostNumber, ctx, {
 						returnViewport: restoreViewport,
-						restorePoint: restoreState.replyWindow.point,
+						restorePoint: replyWindow.point,
 					});
 				} catch (error) {
 					console.warn('[LDP] reader discussion restore failed', error);
@@ -38077,7 +40104,8 @@
 			if (disposed || openRequestId !== READER_OPEN_REQUEST_SEQUENCE ||
 					!readerSession.isCurrent('opening') || !overlay.isConnected) return;
 			const failedPhase = readerOpenPhase;
-			const canAutoRetry = readerOpenFailureCanAutoRetry(err, failedPhase);
+			const canAutoRetry = autoRetryAttempt < READER_OPEN_AUTO_RETRY_LIMIT &&
+				readerOpenFailureCanAutoRetry(err, failedPhase);
 			if (canAutoRetry) {
 				const nextAutoRetryAttempt = autoRetryAttempt + 1;
 				const retryDelay = readerOpenAutoRetryDelay(nextAutoRetryAttempt, err);
@@ -39094,41 +41122,110 @@
 		return true;
 	}
 
-	function handleReaderHostRefreshShortcut(event) {
-		if (event.key !== 'F5') return false;
-		const readerShell = CURRENT_OVERLAY?._ldpReaderShell;
-		const readerWorkspace = readerShell?.readerWorkspace;
-		if (!readerWorkspace || !readerWorkspace.isEmbedded()) return false;
-		event.preventDefault();
-		event.stopImmediatePropagation();
-		if (!refreshDiscourseHostRoute())
-			showSelectionToast(`${SITE_ADAPTER.name} 原站刷新暂不可用，请稍后重试`);
+	let READER_SHORTCUT_MOUSE_GUARD = null;
+	function scrollCompleteDiscussionHorizontally(overlay, event) {
+		const list = event.target instanceof Element
+			? event.target.closest('.ldp-descendant-replies-list')
+			: null;
+		if (!list || !overlay.contains(list) || list.scrollWidth <= list.clientWidth + 1) return false;
+		const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+		if (!delta) return false;
+		const scale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? list.clientWidth : 1;
+		list.scrollLeft += delta * scale;
 		return true;
 	}
 
-	function handleReaderMouseHistoryButton(event) {
-		if (event.button !== 3 && event.button !== 4) return false;
+	function executeReaderShortcut(actionId, overlay, binding, event) {
+		const action = READER_SHORTCUT_ACTIONS.find((candidate) => candidate.id === actionId);
+		if (!action) return false;
+		if (action.special === 'discussionHorizontalScroll')
+			return scrollCompleteDiscussionHorizontally(overlay, event);
+		if (action.special === 'closeReader')
+			return isFunction(overlay._ldpHandleCloseShortcut)
+				? !!overlay._ldpHandleCloseShortcut(event, binding)
+				: !!overlay._ldpShortcutClose?.(readerShortcutBindingLabel(binding));
+		if (action.special === 'toggleFullscreen') {
+			const current = overlay.dataset.readerWorkspaceMode;
+			const target = current === 'fullpage' ? 'floating' : 'fullpage';
+			const control = overlay.querySelector(`[data-reader-placement="${target}"]`);
+			if (control && !control.disabled) { control.click(); return true; }
+			return false;
+		}
+		if (action.special === 'refreshHost') return refreshDiscourseHostRoute();
+		const control = [...overlay.querySelectorAll(action.selector)]
+			.find((candidate) => !candidate.disabled && !candidate.hidden && !candidate.closest('[hidden]'));
+		if (!control) return false;
+		control.click();
+		return true;
+	}
+
+	function readerShortcutContextBlocked(event, overlay) {
+		const target = event.target instanceof Element ? event.target : null;
+		if (event.isComposing || target?.closest('input,textarea,select,[contenteditable="true"],[role="dialog"]')) return true;
+		if (nativeComposerVisible(document.querySelector('#reply-control'))) return true;
+		if (event.type === 'keydown' &&
+				target?.closest('button,a[href],[role="button"],[role="slider"],[role="tab"],[role="menuitem"]')) return true;
+		return !!overlay.querySelector(
+			'.ldp-settings-popover:not([hidden]),.ldp-reader-action-layer,.ldp-lightbox,.ldp-code-preview-layer'
+		);
+	}
+
+	function handleReaderShortcutEvent(event) {
 		const overlay = CURRENT_OVERLAY;
 		if (!overlay || !overlay.isConnected) return false;
+		if (event.type !== 'mousedown' && READER_SHORTCUT_MOUSE_GUARD &&
+				event.button === READER_SHORTCUT_MOUSE_GUARD.button &&
+				Date.now() < READER_SHORTCUT_MOUSE_GUARD.until) {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			return true;
+		}
+		const recorder = readerPortalQuery('.ldp-settings-popover:not([hidden]) .ldp-shortcut-record.is-recording');
+		const binding = readerShortcutBindingFromEvent(event);
+		if (recorder) {
+			if (!binding) return false;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			if (event.type === 'mousedown')
+				READER_SHORTCUT_MOUSE_GUARD = { button: event.button, until: Date.now() + 800 };
+			recorder.dispatchEvent(new CustomEvent('ldp-shortcut-captured', {
+				bubbles: true,
+				detail: { actionId: recorder.dataset.shortcutRecord, binding },
+			}));
+			return true;
+		}
+		if (!binding || event.repeat) return false;
+		const action = READER_SHORTCUT_ACTIONS.find((candidate) =>
+			(PREFS.readerShortcutBindings[candidate.id] || []).includes(binding)
+		);
+		if (!action) return false;
+		if (action.special === 'refreshHost' &&
+				!overlay._ldpReaderShell?.readerWorkspace?.isEmbedded()) return false;
+		if (action.special === 'discussionHorizontalScroll') {
+			if (!executeReaderShortcut(action.id, overlay, binding, event)) return false;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			return true;
+		}
+		const blocked = readerShortcutContextBlocked(event, overlay);
+		if (blocked && event.type === 'keydown') return false;
 		event.preventDefault();
 		event.stopImmediatePropagation();
-		if (event.type !== 'mousedown') return true;
-		const backward = event.button === 3;
-		const button = overlay.querySelector(
-			backward ? '.ldp-reader-history-back' : '.ldp-reader-history-forward'
-		);
-		if (button && !button.hidden && !button.disabled) button.click();
-		else showSelectionToast(backward ? '没有更早的阅读记录' : '没有更新的阅读记录');
+		if (event.type === 'mousedown')
+			READER_SHORTCUT_MOUSE_GUARD = { button: event.button, until: Date.now() + 800 };
+		if (!blocked && !executeReaderShortcut(action.id, overlay, binding, event))
+			showSelectionToast(`“${action.label}”当前不可用`);
 		return true;
 	}
 
 	function installReaderHostEventHandlers() {
 		if (document._ldpReaderHostEventHandlersInstalled) return;
 		document._ldpReaderHostEventHandlersInstalled = true;
-		document.addEventListener('keydown', handleReaderHostRefreshShortcut, true);
-		document.addEventListener('mousedown', handleReaderMouseHistoryButton, true);
-		document.addEventListener('mouseup', handleReaderMouseHistoryButton, true);
-		document.addEventListener('auxclick', handleReaderMouseHistoryButton, true);
+		document.addEventListener('keydown', handleReaderShortcutEvent, true);
+		document.addEventListener('mousedown', handleReaderShortcutEvent, true);
+		document.addEventListener('mouseup', handleReaderShortcutEvent, true);
+		document.addEventListener('auxclick', handleReaderShortcutEvent, true);
+		document.addEventListener('wheel', handleReaderShortcutEvent, { capture: true, passive: false });
 		document.addEventListener('click', handleTopicLinkTrigger, true);
 	}
 
