@@ -66,6 +66,11 @@ function selectionMode(value: unknown): 'all' | 'op' | 'custom' {
 	return value === 'op' || value === 'custom' ? value : 'all';
 }
 
+function archiveStatus(value: unknown): 403 | 404 | 410 | null {
+	const status = Number(value);
+	return status === 403 || status === 404 || status === 410 ? status : null;
+}
+
 function metadata(value: unknown): ReaderTopicOfflineArtifactMetadata | null {
 	const source = record(value);
 	const id = topicId(source?.topicId);
@@ -87,6 +92,7 @@ function metadata(value: unknown): ReaderTopicOfflineArtifactMetadata | null {
 			Math.floor(Number(source.expectedPostCount) || 0),
 		),
 		complete: source.complete === true,
+		archiveStatus: archiveStatus(source.archiveStatus),
 		createdAt: timestamp(source.createdAt),
 		finishedAt: timestamp(source.finishedAt),
 		localDownloadRequestedAt: timestamp(source.localDownloadRequestedAt),
@@ -248,6 +254,9 @@ async function decodeRemoteRecords(
 		const reference = remoteValue(item.value, context);
 		if (!reference) {
 			throw new Error(`WebDAV 离线 Topic #${id} 清单记录无效`);
+		}
+		if (String(reference.topicId) !== id) {
+			throw new Error(`WebDAV 离线 Topic #${id} 清单记录身份不一致`);
 		}
 		const localArtifact = localById.get(id);
 		let html = '';

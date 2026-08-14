@@ -1,12 +1,12 @@
 ---
 title: 阅读、快捷方式、帖子与适用站点
 description: 配置队列入口、历史、退出、键盘与鼠标快捷方式、主帖操作列、完整讨论、Boost 复制和其他 Discourse 站点。
-feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
-source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/app/reader-application.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-context-controller.ts","lite/src/post/boost-copy-rule.ts","lite/src/post/reader-topic-action-rail.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts"]
+feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "COLLECT-007", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
+source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/app/reader-application.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-context-controller.ts","lite/src/post/boost-copy-rule.ts","lite/src/post/reader-topic-action-rail.ts","lite/src/collection/reader-unwanted-topic-filter.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts"]
 since: 0.1.2
 version: 1.3.1
 status: current
-last_verified: 2026-08-07
+last_verified: 2026-08-14
 screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/guide-18-thread-context-v1.0.0.png", "/screenshots/guide-26-reading-navigation-v1.0.0.png", "/screenshots/guide-27-shortcuts-v1.0.0.png", "/screenshots/guide-28-applicable-sites-v1.0.0.png"]
 ---
 
@@ -48,11 +48,11 @@ screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/g
 
 “打开帖子起始楼层号为 #1”只影响普通主题链接：
 
-- 开启：从主题首帖开始；
+- 开启（默认）：从主题首帖开始；
 - 关闭：优先恢复最近阅读位置；
 - 消息、收藏、历史和明确楼层链接：始终按目标楼层定位。
 
-因此，这个开关不会破坏带楼层目标的回跳。
+因此，这个开关不会破坏消息、收藏、历史和明确楼层目标的回跳。
 
 ## 快捷方式
 
@@ -75,6 +75,14 @@ screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/g
 “始终显示主帖操作列”默认开启；“锁定操作列位置”默认关闭。未锁定时长按操作列收纳按钮约 420 ms 后拖动，位置会保存；“恢复默认”将其放回正文左侧。
 
 操作列包含回顶、点赞、回复、Boost 和收藏，展开后补充分享、通知等主题操作。站点缺少某项插件或账号没有权限时，对应入口不会出现。
+
+展开操作列后，“不想看”位于“岁月史书”右侧。列表页点击免打扰会把对应 Topic 收进此浮窗并立即从列表移除；它不会修改原站通知级别。
+
+## 免打扰与自动过滤
+
+打开“不想看”浮窗后，点击标题栏齿轮进入“免打扰与自动过滤”；设置仍在同一个浮窗内，点击返回回到 Topic 列表。左侧切换规则类别，右侧卡片区只读展示当前规则，区域固定高度并独立滚动；可搜索、高亮并定位卡片，悬停后删除。手动免打扰始终可用。
+
+新增类别、Label、OP 或楼层用户时会自动查询宿主，只有选择合法候选后才能加入；同名用户需根据唯一用户名和 ID 二次选择。字符匹配可指定 `title`、`category`、`label`、`user` 或 `topic`，支持普通包含与正则表达式。保存后会立即重扫当前 Topic 列表和已挂载楼层，不需要刷新页面。主题命中后会进入“不想看”历史；同时命中多项时会记录全部原因，类别命中可在历史中显示并筛选。历史列表还支持基于当前搜索、标签和类别筛选结果进行批量恢复。楼层用户命中只隐藏该用户的楼层本体并保留回复树。
 
 ## 二级回复显示位置
 

@@ -232,7 +232,7 @@
   }
 
   .ldp-title-jump {
-    display: block;
+    display: inline;
     min-width: 0;
     overflow: visible;
     text-overflow: clip;
@@ -240,12 +240,12 @@
   }
 
   .ldp-title-actions {
-    --ldp-header-action-gap: 6px;
+    --ldp-header-action-gap: 3px;
     top: calc(6px + var(--ldp-window-capsule-rail, 0px));
     right: 8px;
   }
 
-  .ldp-title-actions :is(.ldp-topic-edit-trigger,.ldp-open) {
+  .ldp-title-actions > .ldp-header-actions-toggle {
     width: 26px;
     height: 26px;
     flex-basis: 26px;
@@ -309,6 +309,7 @@
   }
 
   .ldp-reader-refresh.ldp-icon-btn,
+  .ldp-open.ldp-icon-btn,
   .ldp-close.ldp-icon-btn {
     width: 26px;
     height: 26px;
@@ -555,12 +556,12 @@
   }
 
   .ldp-title-actions {
-    --ldp-header-action-gap: 4px;
+    --ldp-header-action-gap: 3px;
     top: calc(7px + var(--ldp-window-capsule-rail, 0px));
     right: 8px;
   }
 
-  .ldp-title-actions :is(.ldp-topic-edit-trigger,.ldp-open) {
+  .ldp-title-actions > .ldp-header-actions-toggle {
     width: 24px;
     height: 24px;
     flex-basis: 24px;
@@ -575,6 +576,7 @@
     .ldp-translate-toggle,
     .ldp-settings-toggle,
     .ldp-reader-refresh.ldp-icon-btn,
+    .ldp-open.ldp-icon-btn,
     .ldp-close.ldp-icon-btn
   ) {
     width: 24px;
@@ -621,7 +623,7 @@
     width: 100%;
     height: auto;
     min-height: 0;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     padding: 0 44px 0 8px;
     border-right: 0;
@@ -629,6 +631,11 @@
   }
 
   .ldp-settings-brand {
+    display: contents;
+  }
+
+  .ldp-settings-brand-logo,
+  .ldp-settings-brand-name {
     display: none;
   }
 
@@ -637,6 +644,8 @@
   }
 
   .ldp-settings-nav {
+    grid-column: 2;
+    grid-row: 1;
     min-width: 0;
     min-height: 0;
     flex: none;
@@ -681,6 +690,8 @@
   }
 
   .ldp-settings-footer {
+    grid-column: 3;
+    grid-row: 1;
     margin: 0;
     padding: 8px 0 8px 8px;
     border-top: 0;
@@ -692,8 +703,22 @@
   }
 
   .ldp-settings-search-shell {
-    margin: 0 -14px;
-    padding-inline: 14px 48px;
+    position: static;
+    grid-column: 1;
+    grid-row: 1;
+    width: 30px;
+    padding: 0 4px 0 0;
+  }
+
+  .ldp-settings-search-shell:is(
+    :focus-within,
+    :has(.ldp-settings-search-clear:not([hidden]))
+  ) {
+    position: static;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: auto;
+    padding: 0 0 4px;
   }
 
   .ldp-settings-draft-bar {
@@ -844,6 +869,20 @@
 }
 
 @media (hover: none) and (pointer: coarse) {
+	.ldp-user-observation-user-actions > button,
+	.ldp-reader-floating-window-back,
+	.ldp-reader-floating-window-add,
+	.ldp-reader-floating-window-pin,
+	.ldp-reader-floating-window-close {
+		width: 40px;
+		height: 40px;
+	}
+
+	.ldp-reader-floating-window-tab {
+		height: 40px;
+		flex-basis: clamp(124px, 28%, 156px);
+	}
+
   .ldp-reader-queue {
     --ldp-reader-queue-rail-size: 44px;
     --ldp-reader-queue-toggle-size: 44px;

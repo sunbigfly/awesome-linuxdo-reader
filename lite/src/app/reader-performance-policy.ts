@@ -48,6 +48,9 @@ const DEFAULTS = Object.freeze({
 });
 
 const BULK_BACKGROUND_REQUEST_BUDGET_SHARE = 0.5;
+const QUEUE_PREFETCH_REQUEST_BUDGET_SHARE = 0.25;
+const QUEUE_PREFETCH_SHORT_REQUEST_LIMIT = 4;
+const QUEUE_PREFETCH_LONG_REQUEST_LIMIT = 8;
 
 function finiteRange(
 	value: number,
@@ -106,6 +109,47 @@ export function readerBulkBackgroundRequestHasHeadroom(input: Readonly<{
 				BULK_BACKGROUND_REQUEST_BUDGET_SHARE,
 			),
 			nestedReplies ? 24 : Number.MAX_SAFE_INTEGER,
+		),
+	);
+	const normalizedCount = (value: number): number =>
+		Number.isFinite(value) && value >= 0
+			? Math.floor(value)
+			: Number.MAX_SAFE_INTEGER;
+	return normalizedCount(input.shortCount) < shortLimit &&
+		normalizedCount(input.longCount) < longLimit;
+}
+
+/**
+ * 阅读队列预加载只使用共享请求账本中的保守后台份额。
+ *
+ * Topic、帖子批次、直属回复与媒体预取都可能由同一个队列任务连续产生；这里不维护
+ * 第二份计时器，只让队列在中央 10s/60s 计数低于 4/8 时继续，给原站请求和用户
+ * 主动打开保留至少三次近期浏览器实测余量。
+ */
+export function readerQueuePrefetchRequestHasHeadroom(input: Readonly<{
+	readonly shortBudget: number;
+	readonly longBudget: number;
+	readonly shortCount: number;
+	readonly longCount: number;
+}>): boolean {
+	const shortLimit = Math.max(
+		1,
+		Math.min(
+			Math.floor(
+				positiveInteger(input.shortBudget, 'shortBudget') *
+				QUEUE_PREFETCH_REQUEST_BUDGET_SHARE,
+			),
+			QUEUE_PREFETCH_SHORT_REQUEST_LIMIT,
+		),
+	);
+	const longLimit = Math.max(
+		1,
+		Math.min(
+			Math.floor(
+				positiveInteger(input.longBudget, 'longBudget') *
+				QUEUE_PREFETCH_REQUEST_BUDGET_SHARE,
+			),
+			QUEUE_PREFETCH_LONG_REQUEST_LIMIT,
 		),
 	);
 	const normalizedCount = (value: number): number =>

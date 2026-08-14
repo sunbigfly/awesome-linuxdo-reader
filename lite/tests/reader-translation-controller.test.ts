@@ -71,8 +71,9 @@ assert(
 	comments.querySelectorAll('.ldp-translation-enter').length === 2 &&
 	comments.querySelectorAll('.ldp-translation-segment').length >= 4 &&
 	comments.dataset.translationAnimation === 'fade' &&
+	comments.dataset.translationTheme === 'quote' &&
 	visibleDelays.length === 0,
-	'主正文与已解决摘录必须渐进写入并播放默认逐词动画，可见翻译不得承担预加载启动延迟',
+	'主正文与已解决摘录必须使用默认引用主题并播放逐词动画，可见翻译不得承担预加载启动延迟',
 );
 assert(
 	comments.querySelector('.ldp-translation-text a.mention')
@@ -82,11 +83,72 @@ assert(
 	)?.textContent === '@alice',
 	'翻译显示必须恢复原 @ mention 链接而不是把它压成纯文本',
 );
+const offlineProjection = document.createElement('div');
+offlineProjection.innerHTML = '<p>This is the main English paragraph for ' +
+	'<a class="mention" href="/u/alice">@alice</a> and translation.</p>';
+assert(
+	controller.projectKnownTranslations(offlineProjection) === 1 &&
+		offlineProjection.querySelector('.ldp-translation-original') !== null &&
+		offlineProjection.querySelector('.ldp-translation-text a.mention')
+			?.getAttribute('href') === '/u/alice',
+	'离线 cooked 必须复用已完成译文并保留受保护链接，不能触发第二套翻译实现',
+);
+const offlineTranslationBatchCount = translator.batches.length;
+const offlineProgress: string[] = [];
+const preparedOfflineTranslations = await controller.prepareOfflineTranslations(
+	document,
+	Object.freeze([
+		Object.freeze({
+			post_type: 1,
+			username: 'member',
+			cooked: '<p>This is the main English paragraph for ' +
+				'<a class="mention" href="/u/alice">@alice</a> and translation.</p>',
+		}),
+		Object.freeze({
+			post_type: 1,
+			username: 'unmounted',
+			cooked: '<p>This unmounted floor must be translated for the full ' +
+				'offline Topic download.</p>',
+		}),
+	]),
+	new AbortController().signal,
+	{
+		onProgress: (completed, total) => offlineProgress.push(
+			`${completed}/${total}`,
+		),
+	},
+);
+assert(
+	preparedOfflineTranslations.size === 2 &&
+		translator.batches.length === offlineTranslationBatchCount + 1 &&
+		translator.batches.at(-1)?.length === 1 &&
+		offlineProgress.join(',') === '1/2,2/2',
+	'全文下载必须复用已知译文并只补译尚未挂载的全部楼层 Section',
+);
+const completeOfflineProjection = document.createElement('div');
+completeOfflineProjection.innerHTML =
+	'<p>This unmounted floor must be translated for the full offline Topic download.</p>';
+assert(
+	controller.projectOfflineTranslations(
+		completeOfflineProjection,
+		preparedOfflineTranslations,
+	) === 1 &&
+		completeOfflineProjection.querySelector('.ldp-translation-text')
+			?.textContent?.startsWith('译：') === true,
+	'全文下载补齐的译文必须可由同一 DOM owner 写入离线 cooked',
+);
 controller.setAnimation('blur');
 assert(
 	String(comments.dataset.translationAnimation) === 'blur' &&
 	comments.querySelectorAll('.ldp-translation-segment').length === 0,
 	'切换译文动画必须立即投影到已登记 surface，并释放上一轮临时逐词 DOM',
+);
+controller.setTheme('dividing-line');
+assert(
+	controller.theme === 'dividing-line' &&
+	comments.dataset.translationTheme === 'dividing-line' &&
+	discussion.dataset.translationTheme === 'dividing-line',
+	'切换译文主题必须立即投影到全部已登记 surface',
 );
 assert(
 	comments.classList.contains('ldp-translation-active') &&
@@ -116,6 +178,14 @@ assert(
 	notices.join(',') ===
 		'正文翻译：双语显示,正文翻译：全译文,已恢复原文',
 	'模式切换必须统一持久化并恢复原文 class',
+);
+const originalOfflineProjection = document.createElement('div');
+originalOfflineProjection.innerHTML = '<p>This is the main English paragraph for ' +
+	'<a class="mention" href="/u/alice">@alice</a> and translation.</p>';
+assert(
+	controller.projectKnownTranslations(originalOfflineProjection) === 0 &&
+		originalOfflineProjection.querySelector('.ldp-translation-text') === null,
+	'原文设置下的离线 cooked 不得夹带译文投影',
 );
 controller.destroy();
 assert(

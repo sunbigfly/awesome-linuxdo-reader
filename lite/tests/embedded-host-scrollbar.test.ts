@@ -49,6 +49,8 @@ let metrics = {
 	scrollTop: 100,
 };
 const scrollTargets: number[] = [];
+let fullMetricReads = 0;
+let scrollTopReads = 0;
 const scrollTarget = document.createElement('div');
 const resizeTargets: Element[] = [];
 let resizeCallback: ResizeObserverCallback = () => {};
@@ -66,7 +68,14 @@ const controller = new EmbeddedHostScrollbarController({
 	thumb,
 	scrollTarget,
 	scroll: {
-		read: () => metrics,
+		read: () => {
+			fullMetricReads += 1;
+			return metrics;
+		},
+		readScrollTop: () => {
+			scrollTopReads += 1;
+			return metrics.scrollTop;
+		},
 		scrollTo(top) {
 			scrollTargets.push(top);
 			metrics = { ...metrics, scrollTop: top };
@@ -108,6 +117,10 @@ metrics = { ...metrics, scrollTop: 250 };
 scrollTarget.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 flushFrames();
 assert(String(thumb.style.transform) === 'translateY(100px)', '宿主 scroll 必须单帧同步 thumb');
+assert(
+	fullMetricReads === 1 && scrollTopReads === 1,
+	'普通滚动帧必须只读 scrollTop，不能重复读取 scrollHeight 触发整页布局',
+);
 
 const dispatchPointer = (
 	type: string,

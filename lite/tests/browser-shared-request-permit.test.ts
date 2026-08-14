@@ -1,12 +1,15 @@
 import {
 	BrowserSharedRequestPermit,
+	READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS,
 	READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME,
 	READER_REQUEST_PERMIT_STORAGE_KEY,
 	browserCloudflareChallengeFeatures,
 	browserCloudflareChallengeHref,
 	isReaderCloudflareChallengeWindow,
+	monitorReaderCloudflareChallengeWindow,
 } from '../src/network/browser-shared-request-permit.js';
 import type { RateLimitDecision } from '../src/network/request-rate-limit-policy.js';
+import { RequestStartDeferredError } from '../src/network/request-scheduler.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -85,12 +88,75 @@ function delay(milliseconds: number): Promise<void> {
 }
 
 assert(
+	READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS === 2_500,
+	'后台预取必须保留足够的宿主空闲窗口，避免过盾恢复后重新形成 Topic 请求突发',
+);
+
+assert(
 	isReaderCloudflareChallengeWindow({
 		name: READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME,
 	}) &&
 		!isReaderCloudflareChallengeWindow({ name: 'ordinary-topic-window' }),
 	'Cloudflare 验证窗口必须有稳定身份，供 userscript 启动前阻断递归 Reader',
 );
+
+const challengeWindowStorage = new MemoryStorage();
+const challengeWindowNow = 1_000;
+challengeWindowStorage.setItem(
+	READER_REQUEST_PERMIT_STORAGE_KEY,
+	JSON.stringify({
+		challenge: {
+			ownerId: 'reader-owner',
+			state: 'active',
+			required: false,
+			expiresAt: challengeWindowNow + 10_000,
+		},
+	}),
+);
+const selfClosingChallengeWindowMonitor: {
+	check: (() => void) | null;
+} = { check: null };
+let selfClosingChallengeWindowClosed = 0;
+let selfClosingChallengeWindowMonitorCancelled = 0;
+const stopChallengeWindowMonitor = monitorReaderCloudflareChallengeWindow({
+	storage: challengeWindowStorage,
+	close: () => {
+		selfClosingChallengeWindowClosed += 1;
+	},
+	now: () => challengeWindowNow,
+	schedule: (callback) => {
+		selfClosingChallengeWindowMonitor.check = callback;
+		return 'challenge-window-monitor';
+	},
+	cancel: (handle) => {
+		if (handle === 'challenge-window-monitor') {
+			selfClosingChallengeWindowMonitorCancelled += 1;
+		}
+	},
+});
+assert(
+	selfClosingChallengeWindowClosed === 0 &&
+		selfClosingChallengeWindowMonitor.check !== null,
+	'共享过盾横幅仍为 active 时，Reader 命名浮窗必须继续等待人工验证',
+);
+challengeWindowStorage.setItem(
+	READER_REQUEST_PERMIT_STORAGE_KEY,
+	JSON.stringify({
+		challenge: {
+			ownerId: 'reader-owner',
+			state: 'passed',
+			required: false,
+			expiresAt: challengeWindowNow + 10_000,
+		},
+	}),
+);
+selfClosingChallengeWindowMonitor.check?.();
+assert(
+	Number(selfClosingChallengeWindowClosed) === 1 &&
+		Number(selfClosingChallengeWindowMonitorCancelled) === 1,
+	'共享过盾横幅消失后，challenge 页必须自行关闭并停止轮询',
+);
+stopChallengeWindowMonitor();
 
 assert(
 	browserCloudflareChallengeFeatures({
@@ -153,6 +219,8 @@ function permitOptions(
 		maxConcurrent: 1,
 		intentTtlMs: 2_000,
 		permitTtlMs: 2_000,
+		rateLimitJitterRatio: 0,
+		random: () => 0,
 	};
 }
 
@@ -214,6 +282,97 @@ const second = await secondPromise;
 assert(secondGranted, '前一 lease 释放后，下一 context 必须继续取得许可');
 second.release();
 
+const backgroundStorage = new MemoryStorage();
+const backgroundLocks = new LockQueue();
+const backgroundOwner = new BrowserSharedRequestPermit({
+	...permitOptions(backgroundStorage, backgroundLocks, 'background-owner'),
+	maxConcurrent: 3,
+	backgroundIdleIntervalMs: 60,
+	backgroundMaxDeferMs: 500,
+});
+const firstBackground = await backgroundOwner.acquire({
+	key: 'background-first',
+	priority: 'background',
+	signal: new AbortController().signal,
+});
+let secondBackgroundGranted = false;
+const secondBackgroundPromise = backgroundOwner.acquire({
+	key: 'background-second',
+	priority: 'background',
+	signal: new AbortController().signal,
+}).then((permit) => {
+	secondBackgroundGranted = true;
+	return permit;
+});
+await delay(20);
+assert(
+	!secondBackgroundGranted,
+	'后台历史必须全局单飞，不能利用普通并发槽叠加分页请求',
+);
+firstBackground.release();
+await delay(20);
+assert(
+	!secondBackgroundGranted,
+	'后台历史释放单飞槽后仍须等待空闲间隔，不能立即续扫下一页',
+);
+const visibleDuringBackgroundWait = await backgroundOwner.acquire({
+	key: 'visible-during-background-wait',
+	priority: 'visible',
+	signal: new AbortController().signal,
+});
+visibleDuringBackgroundWait.release();
+const secondBackground = await secondBackgroundPromise;
+secondBackground.release();
+backgroundOwner.destroy();
+
+const fairBackgroundStorage = new MemoryStorage();
+const fairBackgroundLocks = new LockQueue();
+const fairBackgroundOwner = new BrowserSharedRequestPermit({
+	...permitOptions(
+		fairBackgroundStorage,
+		fairBackgroundLocks,
+		'fair-background-owner',
+	),
+	maxConcurrent: 3,
+	backgroundIdleIntervalMs: 1_000,
+	backgroundMaxDeferMs: 70,
+});
+const fairBackgroundSeed = await fairBackgroundOwner.acquire({
+	key: 'fair-background-seed',
+	priority: 'visible',
+	signal: new AbortController().signal,
+});
+fairBackgroundSeed.release();
+const fairBackgroundStartedAt = Date.now();
+let fairBackgroundGranted = false;
+const fairBackgroundPromise = fairBackgroundOwner.acquire({
+	key: 'fair-background',
+	priority: 'background',
+	signal: new AbortController().signal,
+}).then((permit) => {
+	fairBackgroundGranted = true;
+	return permit;
+});
+await delay(15);
+const visibleBeforeFairBackground = await fairBackgroundOwner.acquire({
+	key: 'visible-before-fair-background',
+	priority: 'visible',
+	signal: new AbortController().signal,
+});
+await delay(70);
+assert(
+	!fairBackgroundGranted,
+	'最大让路时间不得让后台越过仍在活动的前台请求',
+);
+visibleBeforeFairBackground.release();
+const fairBackground = await fairBackgroundPromise;
+assert(
+	Date.now() - fairBackgroundStartedAt < 500,
+	'前台持续流量结束后，后台必须在最大让路时间到期时取得单次许可',
+);
+fairBackground.release();
+fairBackgroundOwner.destroy();
+
 const held = await firstOwner.acquire({
 	key: 'held',
 	priority: 'visible',
@@ -249,19 +408,121 @@ const rateLimit = Object.freeze<RateLimitDecision>({
 	fingerprint: 'GET:https://linux.do/t/1.json',
 	route: 'GET:https://linux.do/t/:id.json',
 	window: 'unknown',
+	authoritative: true,
 });
 await firstOwner.noteRateLimit(rateLimit);
 const after429StartedAt = Date.now();
 const after429 = await secondOwner.acquire({
 	key: 'after-429',
 	priority: 'critical',
+	rateLimitRoute: 'GET:https://linux.do/notifications.json',
 	signal: new AbortController().signal,
 });
 assert(
-	Date.now() - after429StartedAt < 25,
-	'单次 429 不得生成跨请求 cooldown；其他请求继续由固定窗口判断',
+	Date.now() - after429StartedAt >= 25 &&
+		after429.recoveryProbe === true &&
+		after429.waitReason === 'rate-limit',
+	'权威全局 429 必须跨标签等待，并只放行一个恢复探针',
 );
 after429.release();
+let globalFollowerGranted = false;
+const globalFollowerPromise = firstOwner.acquire({
+	key: 'after-429-follower',
+	priority: 'critical',
+	rateLimitRoute: 'GET:https://linux.do/categories.json',
+	signal: new AbortController().signal,
+}).then((permit) => {
+	globalFollowerGranted = true;
+	return permit;
+});
+await delay(20);
+assert(
+	!globalFollowerGranted,
+	'全局恢复探针完成前不得让其他标签形成追赶突发',
+);
+await secondOwner.noteRateLimitProbeResult({
+	route: 'GET:https://linux.do/notifications.json',
+	recovered: true,
+});
+const globalFollower = await globalFollowerPromise;
+globalFollower.release();
+
+const endpointStorage = new MemoryStorage();
+const endpointLocks = new LockQueue();
+const endpointFirst = new BrowserSharedRequestPermit({
+	...permitOptions(endpointStorage, endpointLocks, 'endpoint-a'),
+	maxConcurrent: 2,
+});
+const endpointSecond = new BrowserSharedRequestPermit({
+	...permitOptions(endpointStorage, endpointLocks, 'endpoint-b'),
+	maxConcurrent: 2,
+});
+const endpointRoute = 'GET:https://linux.do/t/:id/posts.json?post_ids%5B%5D';
+const endpointDecision = (): RateLimitDecision => Object.freeze({
+	scope: 'endpoint',
+	waitMs: 30,
+	retryAt: Date.now() + 30,
+	fingerprint: 'GET:https://linux.do/t/1/posts.json?post_ids%5B%5D=2',
+	route: endpointRoute,
+	window: 'unknown',
+	authoritative: false,
+});
+await endpointFirst.noteRateLimit(endpointDecision());
+const firstUnknownEndpointStartedAt = Date.now();
+const firstUnknownEndpoint = await endpointSecond.acquire({
+	key: 'endpoint-first-unknown',
+	priority: 'visible',
+	rateLimitRoute: endpointRoute,
+	signal: new AbortController().signal,
+});
+assert(
+	Date.now() - firstUnknownEndpointStartedAt < 25 &&
+		firstUnknownEndpoint.recoveryProbe !== true,
+	'单个无权威等待头的端点 429 只能留证，不能误伤下一次请求',
+);
+firstUnknownEndpoint.release();
+await endpointFirst.noteRateLimit(endpointDecision());
+let endpointDeferred: RequestStartDeferredError | null = null;
+try {
+	await endpointSecond.acquire({
+		key: 'endpoint-repeated',
+		priority: 'critical',
+		rateLimitRoute: endpointRoute,
+		signal: new AbortController().signal,
+	});
+} catch (error) {
+	if (error instanceof RequestStartDeferredError) endpointDeferred = error;
+}
+const unrelatedDuringEndpointGate = await endpointFirst.acquire({
+	key: 'endpoint-unrelated',
+	priority: 'visible',
+	rateLimitRoute: 'GET:https://linux.do/notifications.json',
+	signal: new AbortController().signal,
+});
+assert(
+	endpointDeferred?.reason === 'rate-limit' &&
+		unrelatedDuringEndpointGate.recoveryProbe !== true,
+	'重复端点 429 必须把当前任务退回 scheduler，不能让队首 intent 卡住无关请求',
+);
+unrelatedDuringEndpointGate.release();
+await delay(endpointDeferred?.waitMs ?? 0);
+const repeatedEndpoint = await endpointSecond.acquire({
+	key: 'endpoint-repeated-probe',
+	priority: 'critical',
+	rateLimitRoute: endpointRoute,
+	signal: new AbortController().signal,
+});
+assert(
+	repeatedEndpoint.recoveryProbe === true,
+	'同一路由窗口内第二次 429 必须升级为共享端点熔断并单探针恢复',
+);
+repeatedEndpoint.release();
+await endpointSecond.noteRateLimitProbeResult({
+	route: endpointRoute,
+	recovered: true,
+});
+endpointFirst.destroy();
+endpointSecond.destroy();
 
 assert(
 	storage.getItem(READER_REQUEST_PERMIT_STORAGE_KEY) !== null,
@@ -503,6 +764,40 @@ const observedChallengePermit = new BrowserSharedRequestPermit({
 		open: () => null,
 	},
 });
+
+const observedRateLimitPermit = new BrowserSharedRequestPermit({
+	...permitOptions(new MemoryStorage(), new LockQueue(), 'host-rate-limit'),
+	challenge: {
+		origin: 'https://linux.do',
+		open: () => null,
+	},
+});
+observedRateLimitPermit.noteObservedResponse({
+	source: 'host',
+	href: 'https://linux.do/chat/api/me/channels',
+	method: 'GET',
+	status: 429,
+});
+await delay(0);
+assert(
+	(await observedRateLimitPermit.snapshot()).blockingReason !== 'rate-limit',
+	'单个无权威头的宿主端点 429 只留证，不得过早冻结全站',
+);
+observedRateLimitPermit.noteObservedResponse({
+	source: 'host',
+	href: 'https://linux.do/u/example.json',
+	method: 'GET',
+	status: 429,
+});
+await delay(0);
+const observedRateLimitSnapshot = await observedRateLimitPermit.snapshot();
+assert(
+	observedRateLimitSnapshot.blockingReason === 'rate-limit' &&
+		observedRateLimitSnapshot.nextPermitDelay >= 1_000,
+	'宿主不同路由在证据窗口内同时 429 必须升级为共享全局冷却',
+);
+observedRateLimitPermit.destroy();
+
 observedChallengePermit.noteObservedResponse({
 	source: 'host',
 	href: 'https://linux.do/topics/timings',
@@ -672,6 +967,159 @@ assert(
 );
 reconcileFirst.destroy();
 reconcileSecond.destroy();
+
+const concurrentProbeStorage = new MemoryStorage();
+concurrentProbeStorage.setItem(READER_REQUEST_PERMIT_STORAGE_KEY, JSON.stringify({
+	schemaVersion: 1,
+	updatedAt: reconcileNow,
+	events: [],
+	intents: [],
+	active: [],
+	policies: [],
+	challenge: {
+		ownerId: '',
+		state: 'active',
+		required: true,
+		automaticAttempted: true,
+		updatedAt: reconcileNow,
+		expiresAt: reconcileNow + 10_000,
+	},
+}));
+let concurrentProbeCalls = 0;
+let concurrentProbeOpens = 0;
+let startConcurrentProbe = (): void => {};
+const concurrentProbeStarted = new Promise<void>((resolve) => {
+	startConcurrentProbe = resolve;
+});
+let finishConcurrentProbe = (_passed: boolean): void => {};
+const concurrentProbeGate = new Promise<boolean>((resolve) => {
+	finishConcurrentProbe = resolve;
+});
+const concurrentProbePermit = new BrowserSharedRequestPermit({
+	...permitOptions(
+		concurrentProbeStorage,
+		new LockQueue(),
+		'challenge-concurrent-probe',
+	),
+	now: () => reconcileNow,
+	challenge: {
+		origin: 'https://linux.do',
+		open: () => {
+			concurrentProbeOpens += 1;
+			return null;
+		},
+		verify: async () => {
+			concurrentProbeCalls += 1;
+			startConcurrentProbe();
+			return concurrentProbeGate;
+		},
+	},
+});
+const concurrentReconcile = concurrentProbePermit.reconcileCloudflareChallenge();
+await concurrentProbeStarted;
+const concurrentResolve = concurrentProbePermit.resolveCloudflareChallenge({
+	href: 'https://linux.do/t/482293/posts.json',
+	signal: new AbortController().signal,
+	focus: true,
+});
+await delay(0);
+assert(
+	concurrentProbeCalls === 1,
+	'重载 reconcile 与新 challenge 响应并发时必须复用同一个 session 探针',
+);
+finishConcurrentProbe(true);
+assert(
+	(await concurrentReconcile) &&
+		(await concurrentResolve) &&
+		concurrentProbeCalls === 1 &&
+		concurrentProbeOpens === 0 &&
+		(await concurrentProbePermit.snapshot()).challengeState === 'passed',
+	'共享 session 探针通过后，所有等待者必须共同解闸且不得打开额外验证窗',
+);
+concurrentProbePermit.destroy();
+
+const sharedProbeCooldownStorage = new MemoryStorage();
+const sharedProbeCooldownNow = 520_000;
+sharedProbeCooldownStorage.setItem(
+	READER_REQUEST_PERMIT_STORAGE_KEY,
+	JSON.stringify({
+		schemaVersion: 1,
+		updatedAt: sharedProbeCooldownNow,
+		events: [],
+		intents: [],
+		active: [],
+		policies: [],
+		challenge: {
+			ownerId: '',
+			state: 'active',
+			required: true,
+			automaticAttempted: true,
+			updatedAt: sharedProbeCooldownNow,
+			expiresAt: sharedProbeCooldownNow + 10_000,
+		},
+	}),
+);
+const sharedProbeCooldownLocks = new LockQueue();
+let sharedProbeCooldownClock = sharedProbeCooldownNow;
+let sharedProbeCooldownCalls = 0;
+let sharedProbeCooldownOpens = 0;
+let sharedProbeCooldownPassed = false;
+const sharedProbeCooldownOptions = (sourceId: string) => ({
+	...permitOptions(
+		sharedProbeCooldownStorage,
+		sharedProbeCooldownLocks,
+		sourceId,
+	),
+	now: () => sharedProbeCooldownClock,
+	challenge: {
+		origin: 'https://linux.do',
+		open: () => {
+			sharedProbeCooldownOpens += 1;
+			return null;
+		},
+		verify: async () => {
+			sharedProbeCooldownCalls += 1;
+			return sharedProbeCooldownPassed;
+		},
+		verifyIntervalMs: 25,
+	},
+});
+const sharedProbeCooldownFirst = new BrowserSharedRequestPermit(
+	sharedProbeCooldownOptions('challenge-cooldown-a'),
+);
+const sharedProbeCooldownSecond = new BrowserSharedRequestPermit(
+	sharedProbeCooldownOptions('challenge-cooldown-b'),
+);
+assert(
+	!await sharedProbeCooldownFirst.reconcileCloudflareChallenge() &&
+		sharedProbeCooldownCalls === 1,
+	'同一 challenge 世代的首个恢复入口必须只发出一次 session 探针',
+);
+assert(
+	!await sharedProbeCooldownSecond.resolveCloudflareChallenge({
+		href: 'https://linux.do/t/shared-probe-cooldown.json',
+		signal: new AbortController().signal,
+		focus: true,
+	}) &&
+		sharedProbeCooldownCalls === 1 &&
+		sharedProbeCooldownOpens === 1,
+	'前一探针失败后，其他标签的快速人工入口必须命中共享冷却，不能重复请求 session',
+);
+sharedProbeCooldownClock += 51;
+sharedProbeCooldownPassed = true;
+assert(
+	await sharedProbeCooldownSecond.resolveCloudflareChallenge({
+		href: 'https://linux.do/t/shared-probe-cooldown.json',
+		signal: new AbortController().signal,
+		focus: true,
+	}) &&
+		Number(sharedProbeCooldownCalls) === 2 &&
+		sharedProbeCooldownOpens === 1 &&
+		(await sharedProbeCooldownSecond.snapshot()).challengeState === 'passed',
+	'共享退避到期后必须允许唯一探针确认过盾，并直接解闸而不重开验证窗',
+);
+sharedProbeCooldownFirst.destroy();
+sharedProbeCooldownSecond.destroy();
 
 const failedReconcileStorage = new MemoryStorage();
 failedReconcileStorage.setItem(READER_REQUEST_PERMIT_STORAGE_KEY, JSON.stringify({

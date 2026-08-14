@@ -2,7 +2,7 @@
 title: 阅读模式与工作区
 description: 选择浮窗、全屏、嵌入或移动布局，理解多主题队列和虚拟阅读流。
 feature_ids: ["CORE-003", "CORE-004", "CORE-005", "CORE-006", "READ-001", "READ-002"]
-source_anchors: ["lite/src/userscript/main-lite-entry.ts","lite/src/shell/reader-workspace.ts","lite/src/components/reader-icon.ts","lite/src/queue/reader-open-queue-session.ts","lite/src/dom/reply-tree.ts","lite/src/topic/topic-session.ts"]
+source_anchors: ["lite/src/userscript/main-lite-bootstrap.ts","lite/src/discourse/native-host-api.ts","lite/src/state/reader-preferences-schema.ts","lite/src/shell/reader-workspace.ts","lite/src/components/reader-icon.ts","lite/src/queue/reader-open-queue-session.ts","lite/src/dom/reply-tree.ts","lite/src/topic/topic-session.ts"]
 since: 0.1.2
 version: 1.3.1
 status: current
@@ -22,7 +22,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png", "/screenshots/
 | 右侧嵌入 | 列表在左、阅读器在右 | 适合边筛选主题边阅读 |
 | 移动 | 窄屏、触控设备或纵向窗口 | 使用移动配置和紧凑控件，减少横向依赖 |
 
-主题原始路由只使用浮窗接管；列表页可以切换浮窗、全屏和左右嵌入。布局按钮的实际可用项会随当前路由和窗口宽度变化。
+主题原始路由只使用浮窗接管；列表页可以切换浮窗、全屏和左右嵌入，新配置默认使用右侧嵌入。进入左右嵌入时，阅读器会把宿主站点主题强制切换为侧栏画笔入口中的 `Default`；主题实际变化时页面只刷新一次。布局按钮的实际可用项会随当前路由和窗口宽度变化。
 
 ![列表页与右侧嵌入阅读工作区同时显示](/screenshots/guide-01-reader-overview-v1.3.0.png)
 

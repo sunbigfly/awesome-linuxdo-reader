@@ -1,9 +1,14 @@
 import {
+	normalizeReaderWebDavDocument,
 	reconcileReaderWebDavRecords,
 	type ReaderWebDavBaseline,
 	type ReaderWebDavLocalRecord,
 	type ReaderWebDavRemoteRecord,
 } from '../src/sync/reader-webdav-model.js';
+import {
+	mergeReaderWebDavConnectHistoryValues,
+	mergeReaderWebDavHistoryValues,
+} from '../src/sync/reader-webdav-category-ports.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -86,6 +91,24 @@ assert(
 	'设备 A 再同步必须接收设备 B 的四个删除，而不是复活旧队列',
 );
 
+const stableDelete = reconcileReaderWebDavRecords({
+	local: [],
+	remote: deviceBDelete.records,
+	baseline: deviceBDelete.baseline,
+	writerId: 'device-b',
+	now: 50_000,
+	initialStrategy: 'merge',
+	mergeValues: mergeQueue,
+});
+assert(
+	!stableDelete.changed &&
+	stableDelete.uploaded === 0 &&
+	stableDelete.imported === 0 &&
+	stableDelete.deleted === 0 &&
+	JSON.stringify(stableDelete.records) === JSON.stringify(deviceBDelete.records),
+	'本机已删除且远端已有墓碑时必须保持稳定，不能每轮重写墓碑并重复计入上传或删除',
+);
+
 const baseline: ReaderWebDavBaseline['queue'] = Object.freeze({
 	'8': deviceAUpload.baseline['1']!,
 });
@@ -157,4 +180,150 @@ assert(
 	merged.tags?.join(',') === 'local,remote' &&
 	merged.viewedAt === 90,
 	'并发活动记录必须通过分类合并器生成一个确定结果',
+);
+
+const mergedLegacyHistory = mergeReaderWebDavHistoryValues(
+	Object.freeze({
+		topicId: 42,
+		title: '较新的旧客户端记录',
+		postsCount: 3,
+		postNumber: 3,
+		readPostNumbers: [1, 3],
+		firstViewedAt: 100,
+		viewedAt: 300,
+	}),
+	Object.freeze({
+		topicId: 42,
+		title: '较早的完整记录',
+		postsCount: 2,
+		topicSubtitle: '2 帖 · 20 浏览',
+		categoryId: 7,
+		categoryName: '开发调优',
+		tags: ['Reader', 'OpenAI'],
+		viewport: {
+			postNumber: 2,
+			postOffset: 12,
+			scrollTop: 480,
+			scrollRange: 1_200,
+			scrollRatio: 0.4,
+		},
+		postNumber: 2,
+		readPostNumbers: [2],
+		firstViewedAt: 50,
+		viewedAt: 200,
+	}),
+) as Readonly<{
+	topicSubtitle: string;
+	categoryId: number | null;
+	categoryName: string;
+	tags: readonly string[];
+	viewport: Readonly<{ scrollRatio?: number }> | null;
+	postNumber: number;
+	readPostNumbers: readonly number[];
+	firstViewedAt: number;
+	viewedAt: number;
+}>;
+assert(
+	mergedLegacyHistory.postNumber === 3 &&
+	mergedLegacyHistory.readPostNumbers.join(',') === '1,2,3' &&
+	mergedLegacyHistory.firstViewedAt === 50 &&
+	mergedLegacyHistory.viewedAt === 300 &&
+	mergedLegacyHistory.topicSubtitle === '2 帖 · 20 浏览' &&
+	mergedLegacyHistory.categoryId === 7 &&
+	mergedLegacyHistory.categoryName === '开发调优' &&
+	mergedLegacyHistory.tags.join(',') === 'Reader,OpenAI' &&
+	mergedLegacyHistory.viewport?.scrollRatio === 0.4,
+	'WebDAV 合并较新旧客户端记录时必须保留较早完整记录的元数据与高度锚点',
+);
+
+const mergedConnectHistory = mergeReaderWebDavConnectHistoryValues(
+	Object.freeze({
+		version: 1,
+		days: Object.freeze({
+			'2026-08-13': Object.freeze({
+				'likes-given': Object.freeze({
+					first: 12,
+					last: 30,
+					firstObservedAt: 200,
+					lastObservedAt: 400,
+				}),
+			}),
+		}),
+		readTrackingStartedAt: 200,
+		confirmedReads: Object.freeze({ '42:7': 300 }),
+	}),
+	Object.freeze({
+		version: 1,
+		days: Object.freeze({
+			'2026-08-13': Object.freeze({
+				'likes-given': Object.freeze({
+					first: 10,
+					last: 20,
+					firstObservedAt: 100,
+					lastObservedAt: 250,
+				}),
+			}),
+		}),
+		readTrackingStartedAt: 100,
+		confirmedReads: Object.freeze({ '42:7': 250, '42:8': 350 }),
+	}),
+) as Readonly<{
+	days: Readonly<{
+		[day: string]: Readonly<{
+			[key: string]: Readonly<{
+				first: number;
+				last: number;
+				firstObservedAt: number;
+				lastObservedAt: number;
+			}>;
+		}>;
+	}>;
+	readTrackingStartedAt: number;
+	confirmedReads: Readonly<Record<string, number>>;
+}>;
+const mergedConnectSample = mergedConnectHistory.days['2026-08-13']
+	?.['likes-given'];
+assert(
+	mergedConnectSample?.first === 10 &&
+	mergedConnectSample.last === 30 &&
+	mergedConnectSample.firstObservedAt === 100 &&
+	mergedConnectSample.lastObservedAt === 400 &&
+	mergedConnectHistory.readTrackingStartedAt === 100 &&
+	mergedConnectHistory.confirmedReads['42:7'] === 250 &&
+	mergedConnectHistory.confirmedReads['42:8'] === 350,
+	'Connect 历史必须按观察时间合并首末样本并单调合并已确认阅读，不能由本机浅覆盖远端数据',
+);
+
+const prototypeDocument = normalizeReaderWebDavDocument(JSON.parse(`{
+	"format":"awesome-linuxdo-reader-lite-webdav",
+	"schemaVersion":2,
+	"updatedAt":1,
+	"writerId":"remote",
+	"scopes":{
+		"__proto__":{"categories":{}},
+		"site:linux.do|account:reader":{"categories":{"queue":{"records":{
+			"__proto__":{"changedAt":1,"writerId":"remote","deleted":false,"value":{"topicId":1}}
+		}}}}
+	}
+}`));
+const prototypeRecords = prototypeDocument.scopes[
+	'site:linux.do|account:reader'
+]?.categories.queue?.records;
+const prototypeReconcile = reconcileReaderWebDavRecords({
+	local: [Object.freeze({ id: '__proto__', value: 'local-record' })],
+	remote: {},
+	writerId: 'device-safe-map',
+	now: 1,
+	initialStrategy: 'merge',
+	mergeValues: (local) => local,
+});
+assert(
+	Object.getPrototypeOf(prototypeDocument.scopes) === null &&
+	Object.hasOwn(prototypeDocument.scopes, '__proto__') &&
+	prototypeRecords !== undefined &&
+	Object.getPrototypeOf(prototypeRecords) === null &&
+	Object.hasOwn(prototypeRecords, '__proto__') &&
+	Object.getPrototypeOf(prototypeReconcile.records) === null &&
+	prototypeReconcile.active[0]?.id === '__proto__',
+	'WebDAV 远端 scope 与记录 ID 必须写入无原型字典，保留合法字符串键且不能污染对象原型',
 );

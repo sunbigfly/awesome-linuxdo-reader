@@ -39,10 +39,12 @@ function assert(condition: unknown, message: string): asserts condition {
 
 class MemoryValueStorage implements ReaderWebDavConfigStoragePort {
 	value: unknown = null;
+	writes = 0;
 	async getValue(): Promise<unknown> {
 		return this.value;
 	}
 	async setValue(_key: string, value: unknown): Promise<void> {
+		this.writes += 1;
 		this.value = structuredClone(value);
 	}
 }
@@ -75,12 +77,25 @@ class MemoryWebDavServer {
 	version = 0;
 	failRead = false;
 	conflictsRemaining = 0;
+	blockNextRead = false;
 	cachedRead: ReaderWebDavRequestResponse | null = null;
 	readonly requests: ReaderWebDavRequestOptions[] = [];
+	#releaseRead: (() => void) | null = null;
+
+	get readBlocked(): boolean {
+		return this.#releaseRead !== null;
+	}
+
+	releaseRead(): void {
+		const release = this.#releaseRead;
+		if (!release) throw new Error('当前没有等待释放的 WebDAV 读取');
+		this.#releaseRead = null;
+		release();
+	}
 
 	request = (options: ReaderWebDavRequestOptions): { abort(): void } => {
 		this.requests.push(options);
-		queueMicrotask(() => {
+		queueMicrotask(async () => {
 			if (options.method === 'MKCOL') {
 				options.onload({ status: 405 });
 				return;
@@ -90,6 +105,12 @@ class MemoryWebDavServer {
 				return;
 			}
 			if (options.method === 'GET') {
+				if (this.blockNextRead) {
+					this.blockNextRead = false;
+					await new Promise<void>((resolve) => {
+						this.#releaseRead = resolve;
+					});
+				}
 				if (this.failRead) {
 					options.onload({ status: 503 });
 					return;
@@ -157,6 +178,10 @@ function queuePort(state: {
 	return Object.freeze({
 		category: 'queue',
 		initialStrategy: 'merge',
+		validateRecord: (id: string, value: unknown) => {
+			const source = value as Readonly<{ topicId?: unknown }> | null;
+			return String(source?.topicId ?? '') === id;
+		},
 		capture: () => state.records,
 		mergeValues: (local: unknown) => local,
 		apply: (records: readonly ReaderWebDavLocalRecord[]) => {
@@ -185,6 +210,26 @@ async function repository(
 	}));
 	return result;
 }
+
+const deduplicatedBaselineStorage = new MemoryValueStorage();
+const deduplicatedBaselineRepository = new ReaderWebDavConfigRepository({
+	storage: deduplicatedBaselineStorage,
+	createWriterId: () => 'baseline-dedup-device',
+});
+await deduplicatedBaselineRepository.load();
+await deduplicatedBaselineRepository.saveBaseline('target:dedup', Object.freeze({
+	queue: Object.freeze({ '1': 'value:first' }),
+}));
+const writesAfterFirstBaseline = deduplicatedBaselineStorage.writes;
+const firstBaselineSnapshot = deduplicatedBaselineRepository.snapshot;
+await deduplicatedBaselineRepository.saveBaseline('target:dedup', Object.freeze({
+	queue: Object.freeze({ '1': 'value:first' }),
+}));
+assert(
+	deduplicatedBaselineStorage.writes === writesAfterFirstBaseline &&
+	deduplicatedBaselineRepository.snapshot === firstBaselineSnapshot,
+	'语义相同的 WebDAV 基线必须跳过 GM 存储写入和变更广播',
+);
 
 const server = new MemoryWebDavServer();
 const client = new ReaderWebDavClient({ request: server.request });
@@ -221,7 +266,7 @@ const coordinatorB = new ReaderWebDavCoordinator({
 
 const upload = await coordinatorA.syncNow();
 assert(
-	upload.uploaded === 4 && stateA.records.length === 4,
+	upload.uploaded === 4 && stateA.records.length === 4 && stateA.applies === 0,
 	'完整同步链必须把设备 A 的四个队列上传并保留本机',
 );
 assert(
@@ -241,15 +286,104 @@ assert(
 
 const putsAfterCreate = server.requests.filter((request) =>
 	request.method === 'PUT').length;
+const appliesBeforeRepeat = stateA.applies;
 const repeat = await coordinatorA.syncNow();
 assert(
 	repeat.uploaded === 0 &&
+	stateA.applies === appliesBeforeRepeat &&
 	server.requests.filter((request) => request.method === 'PUT').length ===
 		putsAfterCreate &&
 	server.requests.filter((request) => request.method === 'GET').every((request) =>
 		request.headers['Cache-Control'] === 'no-cache' &&
 		request.headers.Pragma === 'no-cache'),
 	'首次创建后立即再次同步必须绕过旧 GET/404 缓存，并在无变化时跳过 PUT',
+);
+
+const reconfiguredServer = new MemoryWebDavServer();
+const reconfiguredRepository = await repository('reconfigured-device');
+const reconfiguredState = { records: queueRecords([88]), applies: 0 };
+const reconfiguredCoordinator = new ReaderWebDavCoordinator({
+	client: new ReaderWebDavClient({ request: reconfiguredServer.request }),
+	repository: reconfiguredRepository,
+	categories: [queuePort(reconfiguredState)],
+	hostname: () => 'linux.do',
+	username: () => 'reader-account',
+});
+reconfiguredServer.blockNextRead = true;
+const oldTargetSync = reconfiguredCoordinator.syncNow();
+while (!reconfiguredServer.readBlocked) await Promise.resolve();
+await reconfiguredRepository.saveConfig(normalizeReaderWebDavConfig({
+	...reconfiguredRepository.snapshot.config,
+	remotePath: 'ALR-Lite/v2/reconfigured.json',
+}));
+assert(
+	reconfiguredRepository.snapshot.status.kind === 'idle' &&
+	reconfiguredRepository.snapshot.status.message.includes('尚未使用当前配置同步'),
+	'连接目标变化时必须清除旧目标同步状态，不能把旧成功或错误展示为当前配置结果',
+);
+const newTargetSync = reconfiguredCoordinator.syncNow();
+reconfiguredServer.releaseRead();
+await Promise.all([oldTargetSync, newTargetSync]);
+const reconfiguredReads = reconfiguredServer.requests.filter((request) =>
+	request.method === 'GET');
+assert(
+	newTargetSync !== oldTargetSync &&
+	reconfiguredReads.length === 2 &&
+	reconfiguredReads[0]?.url.endsWith('/ALR-Lite/v2/sync.json') &&
+	reconfiguredReads[1]?.url.endsWith('/ALR-Lite/v2/reconfigured.json'),
+	'同步进行中修改连接配置后再次同步，必须等待旧事务并按新目标完整执行，不能复用旧目标结果',
+);
+
+const identityServer = new MemoryWebDavServer();
+identityServer.text = JSON.stringify({
+	format: 'awesome-linuxdo-reader-lite-webdav',
+	schemaVersion: 2,
+	updatedAt: 1,
+	writerId: 'remote-device',
+	scopes: {
+		'site:linux.do|account:reader-account': {
+			categories: {
+				queue: {
+					records: {
+						'99': {
+							changedAt: 1,
+							writerId: 'remote-device',
+							deleted: false,
+							value: {
+								topicId: 100,
+								title: '错误绑定的 Topic',
+								href: '/t/100',
+								addedAt: 1,
+								pinned: false,
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+});
+identityServer.version = 1;
+const identityState = { records: queueRecords([]), applies: 0 };
+const identityCoordinator = new ReaderWebDavCoordinator({
+	client: new ReaderWebDavClient({ request: identityServer.request }),
+	repository: await repository('identity-device'),
+	categories: [queuePort(identityState)],
+	hostname: () => 'linux.do',
+	username: () => 'reader-account',
+});
+let identityFailure = '';
+try {
+	await identityCoordinator.syncNow();
+} catch (cause) {
+	identityFailure = cause instanceof Error ? cause.message : '';
+}
+assert(
+	identityFailure.includes('身份不一致') &&
+	identityState.records.length === 0 &&
+	identityState.applies === 0 &&
+	!identityServer.requests.some((request) => request.method === 'PUT'),
+	'主同步记录键与载荷业务身份不一致时必须在写入和本地应用前拒绝整轮事务',
 );
 
 stateA.records = queueRecords([1, 2, 3, 4], ' updated');
@@ -270,6 +404,28 @@ assert(
 	'另一个空白浏览器同步后必须实际应用四个阅读队列',
 );
 
+const releaseCacheClear = await coordinatorB.acquireLocalCacheClear(['queue']);
+stateB.records = Object.freeze([]);
+const requestCountDuringCacheClear = server.requests.length;
+let cacheClearSyncSettled = false;
+const restoreAfterCacheClear = coordinatorB.syncNow().then((result) => {
+	cacheClearSyncSettled = true;
+	return result;
+});
+await Promise.resolve();
+assert(
+	!cacheClearSyncSettled && server.requests.length === requestCountDuringCacheClear,
+	'本机缓存清理事务释放前，手动或定时 WebDAV 同步都不得读取半清理状态',
+);
+releaseCacheClear();
+const restoredCache = await restoreAfterCacheClear;
+assert(
+	restoredCache.imported === 4 &&
+	restoredCache.deleted === 0 &&
+	stateB.records.map((entry) => entry.id).join(',') === '1,2,3,4',
+	'解除同步基线后清空本机缓存，下一次同步必须从远端恢复而不是写入删除墓碑',
+);
+
 stateB.records = Object.freeze([]);
 const remove = await coordinatorB.syncNow();
 assert(
@@ -280,6 +436,47 @@ const receiveRemove = await coordinatorA.syncNow();
 assert(
 	receiveRemove.imported === 4 && Number(stateA.records.length) === 0,
 	'另一浏览器必须应用远端删除，不能复活四个旧队列',
+);
+
+const targetIsolationState = {
+	records: queueRecords([77]),
+	applies: 0,
+};
+const targetIsolationRepository = await repository('target-isolation-device');
+const firstTargetServer = new MemoryWebDavServer();
+await new ReaderWebDavCoordinator({
+	client: new ReaderWebDavClient({ request: firstTargetServer.request }),
+	repository: targetIsolationRepository,
+	categories: [queuePort(targetIsolationState)],
+	hostname: () => 'linux.do',
+	username: () => 'reader-account',
+}).syncNow();
+await targetIsolationRepository.saveConfig(normalizeReaderWebDavConfig({
+	...targetIsolationRepository.snapshot.config,
+	endpoint: 'https://dav-second.example.test/dav/',
+}));
+const secondTargetServer = new MemoryWebDavServer();
+const firstSyncToSecondTarget = await new ReaderWebDavCoordinator({
+	client: new ReaderWebDavClient({ request: secondTargetServer.request }),
+	repository: targetIsolationRepository,
+	categories: [queuePort(targetIsolationState)],
+	hostname: () => 'linux.do',
+	username: () => 'reader-account',
+}).syncNow();
+assert(
+	firstSyncToSecondTarget.uploaded === 1 &&
+	firstSyncToSecondTarget.deleted === 0 &&
+	targetIsolationState.records[0]?.id === '77' &&
+	Object.keys(targetIsolationRepository.snapshot.baselines).length === 2,
+	'切换 WebDAV 服务、账号或远端文件后必须使用独立基线，不能把新空目标误判成远端删除',
+);
+await targetIsolationRepository.forgetBaselineCategories(['queue']);
+assert(
+	Object.keys(targetIsolationRepository.snapshot.baselines).length === 2 &&
+	Object.values(targetIsolationRepository.snapshot.baselines).every(
+		(baseline) => baseline.queue === undefined,
+	),
+	'本机缓存清理必须解除所有历史 WebDAV 目标的对应基线，不能只修当前地址',
 );
 
 stateA.records = queueRecords([9]);
@@ -471,11 +668,13 @@ assert(
 	downloadedProfile.reasoningEffort === 'low' &&
 	downloadedProfile.requestsPerMinute === 120 &&
 	downloadedProfile.tokensPerMinute === 500_000 &&
+	translationB.snapshot.config.animation === 'fade' &&
+	translationB.snapshot.config.profiles.every((profile) =>
+		profile.animation === 'fade') &&
 	translationB.snapshot.config.profiles.some((profile) =>
 		profile.baseUrl === 'https://second.example.com/v1/' &&
-		profile.apiKey === 'sk-second-encrypted-test' &&
-		profile.animation === 'blur'),
-	'使用相同 WebDAV 应用密码的另一设备必须解密并应用完整 AI 翻译设置',
+		profile.apiKey === 'sk-second-encrypted-test'),
+	'使用相同 WebDAV 应用密码的另一设备必须解密并应用完整 AI 翻译设置，动画作为全局偏好保持一致',
 );
 
 const translationCachePolicy = Object.freeze({

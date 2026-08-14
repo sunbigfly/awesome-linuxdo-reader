@@ -1,5 +1,6 @@
 import {
 	discourseAuthScope,
+	discoursePostNumber,
 	discoursePostNumbers,
 	discourseTopicId,
 	type DiscourseAuthScope,
@@ -7,6 +8,10 @@ import {
 	type DiscourseTopicId,
 } from '../discourse/identifiers.js';
 import type { Cleanup } from '../kernel/lifecycle.js';
+import {
+	RequestChallengeWaitSuppressedError,
+	RequestStatusError,
+} from '../network/coordinated-request-client.js';
 
 export const READ_STATE_SUCCESS_STORAGE_KEY =
 	'linuxdo-enhanced-reader:read-success:v1';
@@ -21,6 +26,13 @@ export interface ReadStateConfirmation {
 	readonly authScope: DiscourseAuthScope;
 	readonly topicId: DiscourseTopicId;
 	readonly postNumbers: readonly DiscoursePostNumber[];
+	readonly confirmedAt: number;
+}
+
+export interface ReadStateConfirmedPost {
+	readonly authScope: DiscourseAuthScope;
+	readonly topicId: DiscourseTopicId;
+	readonly postNumber: DiscoursePostNumber;
 	readonly confirmedAt: number;
 }
 
@@ -46,6 +58,10 @@ export class ReadStateChallengeHaltedError extends Error {
 }
 
 export interface ReadStateCoordinationPort {
+	confirmedPosts?(
+		authScope: string,
+		since?: number,
+	): readonly ReadStateConfirmedPost[];
 	knownConfirmed?(
 		authScope: string,
 		topicId: string | number,
@@ -104,6 +120,7 @@ interface StoredReadSuccess {
 	readonly authScope?: string;
 	readonly topicId?: number;
 	readonly postNumbers?: readonly number[];
+	readonly confirmedAtByPost?: Readonly<Record<string, number>>;
 }
 
 function positiveMilliseconds(value: number | undefined, fallback: number, name: string): number {
@@ -168,6 +185,11 @@ function normalizeChallengeHalt(value: unknown): ReadStateChallengeHalt | null {
 	}
 }
 
+function isReadStateCloudflareFailure(error: unknown): boolean {
+	return error instanceof RequestChallengeWaitSuppressedError ||
+		(error instanceof RequestStatusError && error.cloudflareMitigated);
+}
+
 /**
  * timings 成功的持久化跨 tab 协调 owner。
  *
@@ -189,7 +211,7 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 	readonly #confirmationListeners = new Set<
 		(confirmation: ReadStateConfirmation) => void
 	>();
-	readonly #challengeHaltedTopics = new Set<string>();
+	readonly #challengeHaltedTopics = new Map<string, number>();
 	readonly #unsubscribeChannel: Cleanup;
 	#closed = false;
 
@@ -221,7 +243,10 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 		this.#unsubscribeChannel = this.#channel?.subscribe((message) => {
 			const halt = normalizeChallengeHalt(message);
 			if (halt) {
-				this.#challengeHaltedTopics.add(listenerKey(halt.authScope, halt.topicId));
+				this.#challengeHaltedTopics.set(
+					listenerKey(halt.authScope, halt.topicId),
+					halt.haltedAt,
+				);
 				return;
 			}
 			const confirmation = normalizeConfirmation(message);
@@ -245,6 +270,52 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 		return Object.freeze(
 			postNumbers.filter((postNumber) => confirmed.has(postNumber)),
 		);
+	}
+
+	confirmedPosts(
+		rawAuthScope: string,
+		rawSince = 0,
+	): readonly ReadStateConfirmedPost[] {
+		if (this.#closed) throw new Error('ReadStateCoordinator 已关闭');
+		const authScope = discourseAuthScope(rawAuthScope);
+		const since = Number(rawSince);
+		if (!Number.isFinite(since) || since < 0) {
+			throw new RangeError('confirmedPosts since 必须是非负有限数值');
+		}
+		const confirmed = new Map<string, ReadStateConfirmedPost>();
+		for (const record of this.#readRecords()) {
+			if (record.authScope !== authScope) continue;
+			let topicId: DiscourseTopicId;
+			try {
+				topicId = discourseTopicId(record.topicId);
+			} catch {
+				continue;
+			}
+			for (const [rawPostNumber, rawConfirmedAt] of Object.entries(
+				record.confirmedAtByPost ?? {},
+			)) {
+				try {
+					const postNumber = discoursePostNumber(rawPostNumber);
+					const confirmedAt = Number(rawConfirmedAt);
+					if (!Number.isFinite(confirmedAt) || confirmedAt < since) continue;
+					const key = `${topicId}:${postNumber}`;
+					const previous = confirmed.get(key);
+					if (previous && previous.confirmedAt <= confirmedAt) continue;
+					confirmed.set(key, Object.freeze({
+						authScope,
+						topicId,
+						postNumber,
+						confirmedAt,
+					}));
+				} catch {
+					// 单个坏时间戳不能破坏其余精确成功记录。
+				}
+			}
+		}
+		return Object.freeze([...confirmed.values()].sort((left, right) =>
+			left.confirmedAt - right.confirmedAt ||
+			left.topicId - right.topicId ||
+			left.postNumber - right.postNumber));
 	}
 
 	knownAttempted(
@@ -319,7 +390,7 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 			if (
 				(
 					attempted.size > 0 ||
-					this.#challengeHaltedTopics.has(listenerKey(authScope, topicId))
+					this.#challengeHaltActive(authScope, topicId)
 				) &&
 				candidates.some((postNumber) => !recent.has(postNumber))
 			) {
@@ -333,11 +404,7 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 				try {
 					submitted = discoursePostNumbers(await submit(missing));
 				} catch (error) {
-					if (
-						!!error && typeof error === 'object' &&
-						'cloudflareMitigated' in error &&
-						error.cloudflareMitigated === true
-					) {
+					if (isReadStateCloudflareFailure(error)) {
 						this.#rememberAttempt(authScope, topicId, missing);
 						this.#rememberChallengeHalt(authScope, topicId);
 						this.#forgetIntents(authScope, topicId);
@@ -557,12 +624,27 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 			topicId,
 			haltedAt: this.#now(),
 		});
-		this.#challengeHaltedTopics.add(listenerKey(authScope, topicId));
+		this.#challengeHaltedTopics.set(
+			listenerKey(authScope, topicId),
+			halt.haltedAt,
+		);
 		try {
 			this.#channel?.post(halt);
 		} catch (error) {
 			this.#onCoordinationError(error);
 		}
+	}
+
+	#challengeHaltActive(
+		authScope: DiscourseAuthScope,
+		topicId: DiscourseTopicId,
+	): boolean {
+		const key = listenerKey(authScope, topicId);
+		const haltedAt = this.#challengeHaltedTopics.get(key);
+		if (haltedAt === undefined) return false;
+		if (haltedAt > this.#now() - this.#attemptTtlMs) return true;
+		this.#challengeHaltedTopics.delete(key);
+		return false;
 	}
 
 	#remember(
@@ -580,7 +662,25 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 		try {
 			const records = this.#readRecords();
 			const merged = this.#recentlyConfirmed(authScope, topicId);
+			const confirmedAtByPost: Record<string, number> = {};
+			for (const record of records) {
+				if (
+					record.authScope !== authScope ||
+					Number(record.topicId) !== topicId
+				) continue;
+				for (const [postNumber, recordedAt] of Object.entries(
+					record.confirmedAtByPost ?? {},
+				)) {
+					const numeric = Number(recordedAt);
+					if (Number.isFinite(numeric) && numeric >= 0) {
+						confirmedAtByPost[postNumber] = numeric;
+					}
+				}
+			}
 			postNumbers.forEach((postNumber) => merged.add(postNumber));
+			postNumbers.forEach((postNumber) => {
+				confirmedAtByPost[String(postNumber)] ??= confirmedAt;
+			});
 			const mergedPostNumbers = discoursePostNumbers([...merged]);
 			const retained = records.filter((entry) =>
 				entry.authScope !== authScope || Number(entry.topicId) !== topicId);
@@ -590,6 +690,7 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 				authScope,
 				topicId,
 				postNumbers: [...mergedPostNumbers],
+				confirmedAtByPost,
 			});
 			this.#storage.setItem(
 				READ_STATE_SUCCESS_STORAGE_KEY,

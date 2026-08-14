@@ -1,5 +1,8 @@
 import { parseHTML } from 'linkedom';
-import { discourseTopicId } from '../src/discourse/identifiers.js';
+import {
+	discoursePostNumber,
+	discourseTopicId,
+} from '../src/discourse/identifiers.js';
 import {
 	ReaderHostTopicSourceCoordinator,
 } from '../src/userscript/reader-host-topic-source-coordinator.js';
@@ -31,7 +34,9 @@ const { document: parsedDocument, window: parsedWindow } = parseHTML(`
 					<a id="menu-topic" href="/t/example/43">搜索主题</a>
 				</div>
 			</div>
-			<div id="user-menu" class="menu-panel user-menu">用户菜单</div>
+			<div id="user-menu" class="menu-panel user-menu" data-tab-id="all-notifications">
+				<a id="native-notification" href="/t/example/44/7">宿主通知</a>
+			</div>
 			<div id="reader-root"><button id="reader-control">Reader 控件</button></div>
 		</body>
 	</html>
@@ -176,6 +181,53 @@ assert(
 	Number(menuCloseCalls) === 2 && menu.hidden &&
 	userMenuCloseCalls === 1 && userMenu.hidden,
 	'嵌入态切回 Reader 交互必须通过宿主 service 或原生 trigger 收起搜索与头像浮层',
+);
+
+userMenu.hidden = false;
+userMenuTrigger.setAttribute('aria-expanded', 'true');
+const nativeNotification = document.querySelector<HTMLAnchorElement>(
+	'#native-notification',
+)!;
+let nativeNotificationCallbacks = 0;
+let nativeNotificationNavigations = 0;
+nativeNotification.addEventListener('click', (event) => {
+	if ((event as MouseEvent).ctrlKey) nativeNotificationCallbacks += 1;
+	if (!event.defaultPrevented) nativeNotificationNavigations += 1;
+});
+const nativeNotificationTarget = Object.freeze({
+	request: Object.freeze({
+		topicId: discourseTopicId(44),
+		postNumber: discoursePostNumber(7),
+		source: 'notification' as const,
+	}),
+	anchor: nativeNotification,
+	sourceElement: null,
+	pointer: null,
+}) satisfies ReaderUserscriptInterceptedTarget;
+await coordinator.prepare(nativeNotificationTarget);
+assert(
+	!userMenu.hidden && nativeNotificationCallbacks === 0,
+	'宿主通知菜单必须保留到 Reader 成功进入，不能在原生已读回调前销毁 item',
+);
+await coordinator.settle(nativeNotificationTarget, true);
+assert(
+	nativeNotificationCallbacks === 1 &&
+	nativeNotificationNavigations === 0 &&
+	userMenuCloseCalls === 2 &&
+	userMenu.hidden,
+	'Reader 成功进入后必须只补发一次宿主通知回调，更新已读但不得触发原生路由',
+);
+
+userMenu.hidden = false;
+userMenuTrigger.setAttribute('aria-expanded', 'true');
+await coordinator.prepare(nativeNotificationTarget);
+await coordinator.settle(nativeNotificationTarget, false);
+assert(
+	nativeNotificationCallbacks === 1 &&
+	nativeNotificationNavigations === 0 &&
+	userMenuCloseCalls === 3 &&
+	userMenu.hidden,
+	'Reader 打开失败只能收口宿主菜单，不得伪造通知已读回调',
 );
 
 coordinator.destroy();

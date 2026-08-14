@@ -1,4 +1,5 @@
 import type { LifecycleScope } from '../kernel/lifecycle.js';
+import { bindFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
 
 export interface ReaderHeaderPopoverPositionOptions {
 	readonly document: Document;
@@ -37,11 +38,12 @@ export class ReaderHeaderPopoverPosition {
 		this.scope = options.parentScope.child();
 		const viewport = this.#document.defaultView;
 		if (viewport) this.scope.listen(viewport, 'resize', () => this.schedule());
-		this.scope.listen(
-			options.root,
+		for (const type of [
+			'ldp-reader-window-change',
 			'ldp-reader-workspace-change',
-			() => this.schedule(),
-		);
+		]) {
+			this.scope.listen(options.root, type, () => this.schedule());
+		}
 		this.scope.add(() => {
 			if (this.#frame !== null && viewport) {
 				viewport.cancelAnimationFrame(this.#frame);
@@ -121,6 +123,7 @@ export class ReaderHeaderPopoverSurface {
 	readonly #isOpen: () => boolean;
 	readonly #requestClose: () => void;
 	readonly #position: ReaderHeaderPopoverPosition;
+	#open = false;
 
 	constructor(options: ReaderHeaderPopoverSurfaceOptions) {
 		this.#document = options.document;
@@ -136,6 +139,7 @@ export class ReaderHeaderPopoverSurface {
 			popover: options.popover,
 			parentScope: this.scope,
 		});
+		this.scope.add(bindFloatingSurfaceWheel(this.#popover));
 		this.scope.listen(
 			this.#document,
 			options.outsideEvent ?? 'pointerdown',
@@ -160,6 +164,7 @@ export class ReaderHeaderPopoverSurface {
 			}
 		});
 		this.scope.add(() => {
+			this.#open = false;
 			this.#popover.hidden = true;
 			this.#toggle.setAttribute('aria-expanded', 'false');
 		});
@@ -167,9 +172,11 @@ export class ReaderHeaderPopoverSurface {
 
 	sync(open: boolean): void {
 		if (this.scope.destroyed) return;
+		const opening = open && !this.#open;
+		this.#open = open;
 		this.#popover.hidden = !open;
 		this.#toggle.setAttribute('aria-expanded', String(open));
-		if (open) this.#position.position();
+		if (opening) this.#position.position();
 	}
 
 	position(): void {

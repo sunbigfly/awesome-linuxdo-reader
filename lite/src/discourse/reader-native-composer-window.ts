@@ -1,4 +1,4 @@
-import { containFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
+import { bindFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
 import { eventElement } from '../dom/event-target.js';
 import {
 	LifecycleScope,
@@ -500,9 +500,7 @@ export class ReaderNativeComposerWindowController {
 			subtree: true,
 		});
 		scope.add(() => observer.disconnect());
-		scope.listen(composer, 'wheel', (event) => {
-			containFloatingSurfaceWheel(composer, event as WheelEvent);
-		}, { capture: true, passive: false });
+		scope.add(bindFloatingSurfaceWheel(composer, { capture: true }));
 		scope.add(() => {
 			if (this.#composer === composer) {
 				this.#deactivate();

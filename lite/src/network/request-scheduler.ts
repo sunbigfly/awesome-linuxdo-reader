@@ -31,8 +31,8 @@ const REQUEST_LANES: readonly RequestLane[] = Object.freeze([
 
 const LANE_CONCURRENCY_CAP: Readonly<Record<RequestLane, number>> = Object.freeze({
 	control: 1,
-	/* post_ids[] 当前批次与一批可丢弃的预知批次可以并行。 */
-	'topic-batch': 2,
+	/* 当前 Topic 与两批近视口预热可以并行；全局 permit 仍统一限流。 */
+	'topic-batch': 3,
 	/* replies.json 最多并行两个父楼；全局 permit 仍统一约束启动间隔与额度。 */
 	'nested-replies': 2,
 	'user-card': 2,
@@ -73,6 +73,19 @@ export class RequestTimeoutError extends Error {
 	}
 }
 
+/** start gate 只延后当前任务，scheduler 可继续放行无关队列。 */
+export class RequestStartDeferredError extends Error {
+	readonly waitMs: number;
+	readonly reason: string;
+
+	constructor(waitMs: number, reason: string) {
+		super(reason || 'request-start-deferred');
+		this.name = 'RequestStartDeferredError';
+		this.waitMs = Math.max(1, Math.ceil(Number(waitMs) || 0));
+		this.reason = String(reason || 'deferred');
+	}
+}
+
 export interface RequestSchedulerOptions {
 	readonly maxConcurrent: number;
 	readonly queueLimit: number;
@@ -87,6 +100,8 @@ export interface ScheduleRequestOptions {
 	readonly key: string;
 	readonly priority?: RequestPriority;
 	readonly lane?: RequestLane;
+	/** 仅供共享 429 闸门匹配规范化路由，不参与 single-flight identity。 */
+	readonly rateLimitRoute?: string;
 	readonly timeoutMs?: number;
 	readonly signal?: AbortSignal;
 	readonly droppable?: boolean;
@@ -127,6 +142,7 @@ export interface RequestStartGateInput {
 	readonly priority: RequestPriority;
 	/** Shared permit 是全局账本，车道只供本地 scheduler 参考。 */
 	readonly lane?: RequestLane;
+	readonly rateLimitRoute?: string;
 	readonly signal: AbortSignal;
 }
 
@@ -138,6 +154,7 @@ interface RequestTask<T> {
 	readonly key: string;
 	priority: RequestPriority;
 	readonly lane: RequestLane;
+	readonly rateLimitRoute: string;
 	readonly sequence: number;
 	readonly queuedAt: number;
 	readonly timeoutMs: number;
@@ -152,6 +169,8 @@ interface RequestTask<T> {
 	controller: AbortController | null;
 	externalAbort: (() => void) | null;
 	permitRestart: boolean;
+	notBefore: number;
+	deferredWaitReason: string;
 }
 
 function positiveInteger(value: number, name: string): number {
@@ -192,6 +211,8 @@ export class RequestScheduler {
 	#permitPending = false;
 	#permitLane: RequestLane | null = null;
 	#permitTask: RequestTask<unknown> | null = null;
+	#deferredPumpTimer: ReturnType<typeof setTimeout> | null = null;
+	#deferredPumpAt = 0;
 	#disposed = false;
 
 	constructor(options: RequestSchedulerOptions) {
@@ -248,13 +269,18 @@ export class RequestScheduler {
 			resolve = done;
 			reject = fail;
 		});
+		const queuedAt = this.#now();
 		const task: RequestTask<T> = {
 			key,
 			priority,
 			lane,
+			rateLimitRoute: String(options.rateLimitRoute ?? '').trim(),
 			sequence: this.#sequence++,
-			queuedAt: this.#now(),
-			timeoutMs: positiveInteger(options.timeoutMs ?? this.#defaultTimeoutMs, 'timeoutMs'),
+			queuedAt,
+			timeoutMs: positiveInteger(
+				options.timeoutMs ?? this.#defaultTimeoutMs,
+				'timeoutMs',
+			),
 			externalSignal: options.signal,
 			operation,
 			onStart: options.onStart,
@@ -266,17 +292,26 @@ export class RequestScheduler {
 			controller: null,
 			externalAbort: null,
 			permitRestart: false,
+			notBefore: queuedAt,
+			deferredWaitReason: '',
 		};
 		if (task.externalSignal) {
 			task.externalAbort = () => {
 				if (task.state === 'queued') {
 					this.#removeQueued(task as RequestTask<unknown>);
-					this.#finish(task as RequestTask<unknown>, abortReason(task.externalSignal!, 'signal'));
+					this.#finish(
+						task as RequestTask<unknown>,
+						abortReason(task.externalSignal!, 'signal'),
+					);
 				} else {
 					task.controller?.abort(abortReason(task.externalSignal!, 'signal'));
 				}
 			};
-			task.externalSignal.addEventListener('abort', task.externalAbort, { once: true });
+			task.externalSignal.addEventListener(
+				'abort',
+				task.externalAbort,
+				{ once: true },
+			);
 		}
 		this.#tasksByKey.set(key, task as RequestTask<unknown>);
 		this.#queue.push(task as RequestTask<unknown>);
@@ -340,6 +375,11 @@ export class RequestScheduler {
 	destroy(): void {
 		if (this.#disposed) return;
 		this.#disposed = true;
+		if (this.#deferredPumpTimer !== null) {
+			clearTimeout(this.#deferredPumpTimer);
+			this.#deferredPumpTimer = null;
+			this.#deferredPumpAt = 0;
+		}
 		for (const task of this.#queue.splice(0)) {
 			this.#finish(task, new RequestControlError('context-closed'));
 		}
@@ -363,9 +403,15 @@ export class RequestScheduler {
 		if (this.#disposed || this.#permitPending) return;
 		this.#sortQueue();
 		while (this.#activeCount < this.#maxConcurrent && this.#queue.length) {
-			const nextIndex = this.#queue.findIndex((candidate) =>
-				this.#taskCanStart(candidate));
-			if (nextIndex < 0) return;
+			const now = this.#now();
+			const nextIndex = this.#queue.findIndex(
+				(candidate) =>
+					candidate.notBefore <= now && this.#taskCanStart(candidate),
+			);
+			if (nextIndex < 0) {
+				this.#scheduleDeferredPump(now);
+				return;
+			}
 			const [task] = this.#queue.splice(nextIndex, 1);
 			if (!task) return;
 			if (task.externalSignal?.aborted) {
@@ -382,12 +428,17 @@ export class RequestScheduler {
 			this.#permitPending = true;
 			this.#permitLane = task.lane;
 			this.#permitTask = task;
-			const permitPromise = Promise.resolve().then(() => this.#startGate!.acquire({
-				key: task.key,
-				priority: task.priority,
-				lane: task.lane,
-				signal: controller.signal,
-			})).then((permit) => {
+			const permitPromise = Promise.resolve()
+				.then(() => this.#startGate!.acquire({
+					key: task.key,
+					priority: task.priority,
+					lane: task.lane,
+					...(task.rateLimitRoute
+						? { rateLimitRoute: task.rateLimitRoute }
+						: {}),
+					signal: controller.signal,
+				}))
+				.then((permit) => {
 				if (!permit || typeof permit.release !== 'function') {
 					throw new Error('start gate 返回了无效 permit');
 				}
@@ -428,6 +479,16 @@ export class RequestScheduler {
 					task.state = 'queued';
 					task.controller = null;
 					this.#queue.push(task);
+				} else if (
+					error instanceof RequestStartDeferredError &&
+					!this.#disposed &&
+					!task.externalSignal?.aborted
+				) {
+					task.state = 'queued';
+					task.controller = null;
+					task.notBefore = this.#now() + error.waitMs;
+					task.deferredWaitReason = error.reason;
+					this.#queue.push(task);
 				} else if (task.state !== 'done') {
 					this.#finish(
 						task,
@@ -440,6 +501,27 @@ export class RequestScheduler {
 			});
 			break;
 		}
+	}
+
+	#scheduleDeferredPump(now: number): void {
+		let nextAt = Number.POSITIVE_INFINITY;
+		for (const task of this.#queue) {
+			if (task.notBefore > now) nextAt = Math.min(nextAt, task.notBefore);
+		}
+		if (!Number.isFinite(nextAt)) return;
+		if (
+			this.#deferredPumpTimer !== null &&
+			this.#deferredPumpAt <= nextAt
+		) return;
+		if (this.#deferredPumpTimer !== null) {
+			clearTimeout(this.#deferredPumpTimer);
+		}
+		this.#deferredPumpAt = nextAt;
+		this.#deferredPumpTimer = setTimeout(() => {
+			this.#deferredPumpTimer = null;
+			this.#deferredPumpAt = 0;
+			this.#queuePump();
+		}, Math.max(0, nextAt - now));
 	}
 
 	#sortQueue(): void {
@@ -505,8 +587,8 @@ export class RequestScheduler {
 			LANE_CONCURRENCY_CAP[task.lane],
 		);
 		/*
-		 * 两条可丢弃 post_ids 补流并行会把同一站点推入 Cloudflare challenge；
-		 * 后台只占一槽，可见 Topic 仍按原双槽上限越过它并行。
+		 * 多条低优先级后台 post_ids 补流容易把同一站点推入 Cloudflare challenge；
+		 * 后台只占一槽，近视口预热与可见 Topic 可使用车道其余槽位。
 		 */
 		if (task.lane === 'topic-batch' && task.priority === 'background') {
 			cap = Math.min(cap, 1);
@@ -553,12 +635,16 @@ export class RequestScheduler {
 		);
 		const startedAt = this.#now();
 		try {
+			const waitReason = String(
+				permit?.waitReason || task.deferredWaitReason || '',
+			);
+			task.deferredWaitReason = '';
 			task.onStart?.(Object.freeze({
 				queuedAt: task.queuedAt,
 				permittedAt: Math.max(task.queuedAt, permittedAt),
 				startedAt: Math.max(permittedAt, startedAt),
 				recoveryProbe: permit?.recoveryProbe === true,
-				waitReason: String(permit?.waitReason ?? ''),
+				waitReason,
 			}));
 		} catch (error) {
 			this.#onInternalError(error);

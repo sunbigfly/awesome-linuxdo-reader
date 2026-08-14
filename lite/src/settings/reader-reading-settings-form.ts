@@ -37,7 +37,7 @@ export const DEFAULT_READER_READING_SETTINGS =
 		historyButtonsAlwaysVisible: true,
 		historyEdgeTriggerPercent: 15,
 		historySortMode: 'recent-viewed',
-		openTopicsAtFirstPost: false,
+		openTopicsAtFirstPost: true,
 		readerQueueAlwaysVisibleWhenEmpty: true,
 		doubleEscapeToCloseReader: false,
 		confirmNativeComposerClose: false,

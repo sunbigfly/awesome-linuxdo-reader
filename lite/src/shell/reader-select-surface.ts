@@ -8,6 +8,8 @@ const SELECTOR = [
 	'select.ldp-font-weight-select',
 ].join(',');
 
+export const READER_SELECT_DISMISS_EVENT = 'ldp-reader-select-dismiss';
+
 function eventElement(event: Event): Element | null {
 	const target = event.target as Element | null;
 	return target && typeof target.closest === 'function' ? target : null;
@@ -63,6 +65,9 @@ export class ReaderSelectSurface {
 			const select = eventElement(event)?.closest<HTMLSelectElement>(SELECTOR);
 			if (select) this.#sync(select);
 		});
+		this.scope.listen(options.root, READER_SELECT_DISMISS_EVENT, () => {
+			this.#close();
+		});
 		this.scope.listen(options.document, 'pointerdown', (event) => {
 			const select = this.#openSelect;
 			if (!select) return;
@@ -72,6 +77,12 @@ export class ReaderSelectSurface {
 		const viewport = options.document.defaultView;
 		if (viewport) {
 			this.scope.listen(viewport, 'resize', () => this.#positionOpenMenu());
+		}
+		for (const type of [
+			'ldp-reader-window-change',
+			'ldp-reader-workspace-change',
+		]) {
+			this.scope.listen(options.root, type, () => this.#positionOpenMenu());
 		}
 		this.scope.add(() => {
 			this.#close();
@@ -237,6 +248,7 @@ export class ReaderSelectSurface {
 			option.dataset.readerSelectValue = nativeOption.value;
 			option.textContent = nativeOption.label || nativeOption.textContent || '';
 			option.disabled = nativeOption.disabled;
+			option.hidden = nativeOption.hidden;
 			option.setAttribute('role', 'option');
 			option.setAttribute('aria-selected', String(nativeOption.selected));
 			return option;
@@ -297,20 +309,23 @@ export class ReaderSelectSurface {
 		const menuHeight = menuRect.height || menu.offsetHeight;
 		const margin = 12;
 		const gap = 6;
-		const settingsSurface = select.closest<HTMLElement>(
-			'.ldp-settings-popover',
+		const collisionSurface = select.closest<HTMLElement>(
+			'.ldp-unwanted-topic-filter-content,' +
+				'.ldp-settings-popover,.ldp-reader-floating-window,' +
+				'.ldp-notifications-popover,.ldp-history-popover,' +
+				'.ldp-bookmarks-popover',
 		);
-		const settingsRect = settingsSurface?.getBoundingClientRect();
+		const collisionRect = collisionSurface?.getBoundingClientRect();
 		const bounds = Object.freeze({
-			left: Math.max(margin, (settingsRect?.left ?? 0) + margin),
+			left: Math.max(margin, (collisionRect?.left ?? 0) + margin),
 			right: Math.min(
 				viewport.innerWidth - margin,
-				(settingsRect?.right ?? viewport.innerWidth) - margin,
+				(collisionRect?.right ?? viewport.innerWidth) - margin,
 			),
-			top: Math.max(margin, (settingsRect?.top ?? 0) + margin),
+			top: Math.max(margin, (collisionRect?.top ?? 0) + margin),
 			bottom: Math.min(
 				viewport.innerHeight - margin,
-				(settingsRect?.bottom ?? viewport.innerHeight) - margin,
+				(collisionRect?.bottom ?? viewport.innerHeight) - margin,
 			),
 		});
 		if (menuWidth > 0) {

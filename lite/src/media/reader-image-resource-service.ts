@@ -186,6 +186,37 @@ export class ReaderImageResourceService implements ReaderLightboxOriginalSourceP
 		return waitForConsumer(operation, options.signal);
 	}
 
+	async resolveSource(rawSource: string): Promise<string> {
+		this.#assertActive();
+		const source = this.#resources.normalize(rawSource);
+		if (source.startsWith('blob:') || source.startsWith('data:')) return source;
+		const cached = this.#sources.get(source);
+		if (cached) {
+			this.#sources.delete(source);
+			this.#sources.set(source, cached);
+			return cached;
+		}
+		const blob = this.#nonEmpty(await this.#resources.load(source, {
+			signal: this.#lifecycle.signal,
+			profile: 'resource-visible',
+		}));
+		this.#assertActive();
+		return this.#objectUrl(source, blob);
+	}
+
+	async resolveAvatarSource(rawSource: string): Promise<string> {
+		this.#assertActive();
+		const source = this.#resources.normalize(rawSource);
+		if (source.startsWith('blob:') || source.startsWith('data:')) return source;
+		this.#nonEmpty(await this.#resources.load(source, {
+			signal: this.#lifecycle.signal,
+			profile: 'resource-visible',
+			validation: 'discourse-avatar',
+		}));
+		this.#assertActive();
+		return source;
+	}
+
 	async missingOriginalCount(items: readonly ReaderLightboxItem[]): Promise<number> {
 		this.#assertActive();
 		let missing = 0;
@@ -201,25 +232,14 @@ export class ReaderImageResourceService implements ReaderLightboxOriginalSourceP
 		sources: readonly string[],
 	): Promise<ResponseCacheInvalidationReport> {
 		this.#assertActive();
-		const normalized = new Set(
+		const normalized = [...new Set(
 			sources.map((source) => this.#resources.normalize(source)),
-		);
-		const reports = await Promise.all([...normalized].map(async (source) => {
-			try {
-				return await this.#resources.invalidateWithReport(source);
-			} finally {
-				this.#deleteObjectUrl(source);
-			}
-		}));
-		const failures = Object.freeze(reports.flatMap((report) => report.failures));
-		return Object.freeze({
-			memoryEntries: reports.reduce(
-				(total, report) => total + report.memoryEntries,
-				0,
-			),
-			failures,
-			complete: failures.length === 0,
-		});
+		)];
+		try {
+			return await this.#resources.invalidateManyWithReport(normalized);
+		} finally {
+			for (const source of normalized) this.#deleteObjectUrl(source);
+		}
 	}
 
 	clearObjectUrls(): void {

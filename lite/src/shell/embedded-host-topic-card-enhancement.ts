@@ -1,14 +1,29 @@
 import type { DiscourseHostApiPort } from '../discourse/native-host-api.js';
-import {
-	BrowserDiscourseTopicNotificationLevelMutationPort,
-	type DiscourseTopicNotificationLevelMutationPort,
-} from '../discourse/native-topic-notification-action.js';
+import type {
+	ReaderUnwantedTopicFilterInput,
+	ReaderUnwantedTopicFilterMatch,
+} from '../collection/reader-unwanted-topic-filter.js';
+import type { ReaderUnwantedTopicInput } from
+	'../collection/reader-unwanted-topic-repository.js';
 import { valueRecord as record } from '../kernel/value-record.js';
-import type { EmbeddedHostEnhancementPort } from './embedded-host-root-controller.js';
+import type {
+	EmbeddedHostEnhancementPort,
+	EmbeddedHostProjectionMode,
+} from './embedded-host-root-controller.js';
 
 const CARD_SELECTOR = 'tr.topic-list-item,.topic-list-item,.latest-topic-list-item';
 const TOPIC_LINK_SELECTOR =
 	'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],a[href*="/t/"]';
+const NEW_TOPIC_BADGE_SELECTOR =
+	'.topic-post-badges,.badge-notification.new-topic';
+const OPENED_TOPIC_STORAGE_KEY =
+	'linuxdo-enhanced-reader:opened-host-topics:v1';
+const MAX_OPENED_TOPIC_IDS = 2_048;
+
+type OpenedTopicStorage = Pick<
+	Storage,
+	'getItem' | 'setItem' | 'removeItem'
+>;
 
 function modelValue(value: unknown, key: string): unknown {
 	const source = record(value);
@@ -34,16 +49,6 @@ function modelArray(value: unknown): readonly unknown[] {
 		return Array.isArray(result) ? result : Object.freeze([]);
 	} catch {
 		return Object.freeze([]);
-	}
-}
-
-function setModelValue(value: unknown, key: string, next: unknown): void {
-	const source = record(value);
-	const setter = source?.set;
-	if (typeof setter === 'function') {
-		setter.call(value, key, next);
-	} else if (source) {
-		source[key] = next;
 	}
 }
 
@@ -104,7 +109,15 @@ function nativeDndLabel(node: Element): boolean {
 }
 
 export interface EmbeddedHostTopicCardEnhancementOptions {
-	readonly notifications?: DiscourseTopicNotificationLevelMutationPort;
+	readonly openedTopicStorage?: OpenedTopicStorage;
+	readonly openedTopicStorageScope?: string;
+	readonly isTopicHidden?: (topicId: number) => boolean;
+	readonly hideTopic?: (
+		input: ReaderUnwantedTopicInput,
+	) => void | Promise<void>;
+	readonly automaticFilter?: (
+		input: ReaderUnwantedTopicFilterInput,
+	) => ReaderUnwantedTopicFilterMatch | null;
 	readonly notify?: (message: string) => void;
 	readonly onError?: (cause: unknown) => void;
 }
@@ -119,10 +132,23 @@ export class EmbeddedHostTopicCardEnhancement
 implements EmbeddedHostEnhancementPort {
 	readonly #document: Document;
 	readonly #host: DiscourseHostApiPort;
-	readonly #notifications: DiscourseTopicNotificationLevelMutationPort;
+	readonly #isTopicHidden: (topicId: number) => boolean;
+	readonly #hideTopic: (input: ReaderUnwantedTopicInput) => void | Promise<void>;
+	readonly #automaticFilter: (
+		input: ReaderUnwantedTopicFilterInput,
+	) => ReaderUnwantedTopicFilterMatch | null;
 	readonly #notify: (message: string) => void;
 	readonly #onError: (cause: unknown) => void;
+	readonly #openedTopicStorage: OpenedTopicStorage | null;
+	readonly #openedTopicStorageKey: string;
 	readonly #roots = new Set<Element>();
+	readonly #openedTopicIds = new Set<number>();
+	readonly #rootClickHandlers = new Map<Element, EventListener>();
+	readonly #pendingCards = new WeakSet<Element>();
+	readonly #nativeDndTooltipAttributes = new WeakMap<
+		HTMLElement,
+		ReadonlyMap<string, string | null>
+	>();
 
 	constructor(
 		document: Document,
@@ -131,16 +157,35 @@ implements EmbeddedHostEnhancementPort {
 	) {
 		this.#document = document;
 		this.#host = host;
-		this.#notifications = options.notifications ??
-			new BrowserDiscourseTopicNotificationLevelMutationPort(host);
+		this.#isTopicHidden = options.isTopicHidden ?? (() => false);
+		this.#hideTopic = options.hideTopic ?? (() => {
+			throw new Error('不想看仓库尚未就绪');
+		});
+		this.#automaticFilter = options.automaticFilter ?? (() => null);
 		this.#notify = options.notify ?? (() => {});
 		this.#onError = options.onError ?? (() => {});
+		this.#openedTopicStorage = options.openedTopicStorage ?? null;
+		const storageScope = normalizedLabel(
+			options.openedTopicStorageScope ?? this.#currentUsername(),
+		).toLocaleLowerCase('en-US') || 'anonymous';
+		this.#openedTopicStorageKey =
+			`${OPENED_TOPIC_STORAGE_KEY}:${encodeURIComponent(storageScope)}`;
+		this.#restoreOpenedTopicIds();
 	}
 
-	syncRoot(root: Element): void {
+	syncRoot(
+		root: Element,
+		mode: EmbeddedHostProjectionMode = 'embedded',
+	): void {
 		this.#roots.add(root);
+		if (!this.#rootClickHandlers.has(root)) {
+			const handler: EventListener = (event) => this.#onRootClick(event);
+			root.addEventListener('click', handler, true);
+			this.#rootClickHandlers.set(root, handler);
+		}
 		this.syncCards(
 			Object.freeze([...root.querySelectorAll(CARD_SELECTOR)]),
+			mode,
 		);
 	}
 
@@ -174,17 +219,36 @@ implements EmbeddedHostEnhancementPort {
 		return true;
 	}
 
-	syncCards(cards: readonly Element[]): void {
+	syncCards(
+		cards: readonly Element[],
+		mode: EmbeddedHostProjectionMode = 'embedded',
+	): void {
 		const topicModels = this.#topicModels();
 		const reactions = this.#reactionCounts(topicModels);
 		for (const card of cards) {
 			if (!card.matches(CARD_SELECTOR) || card.closest('.ldp-overlay')) continue;
-			this.#markDateCells(card);
-			this.#groupTitleTools(
-				card,
-				this.#topicInput(card, topicModels),
-			);
-			this.#syncStats(card, reactions);
+			const topic = this.#topicInput(card, topicModels);
+			const projection = this.#topicProjection(card, topic);
+			if (this.#isTopicHidden(projection.topicId)) {
+				card.remove();
+				continue;
+			}
+			const automatic = (card as HTMLElement).dataset.ldpUnwantedFilterFailed ===
+				'true'
+				? null
+				: this.#automaticFilter(projection);
+			if (automatic) {
+				void this.#hideCard(card, projection, automatic, false);
+				continue;
+			}
+			this.#markNewTopic(card, topic);
+			this.#groupTitleTools(card, topic);
+			if (mode === 'embedded') {
+				this.#markDateCells(card);
+				this.#syncStats(card, reactions);
+			} else {
+				this.#clearEmbeddedCard(card);
+			}
 		}
 	}
 
@@ -195,7 +259,34 @@ implements EmbeddedHostEnhancementPort {
 		this.#roots.clear();
 	}
 
+	markTopicOpened(topicId: number): boolean {
+		if (!Number.isSafeInteger(topicId) || topicId < 1) return false;
+		if (!this.#openedTopicIds.has(topicId)) {
+			this.#openedTopicIds.add(topicId);
+			this.#persistOpenedTopicIds();
+		}
+		let changed = false;
+		for (const card of this.#document.querySelectorAll<HTMLElement>(
+			CARD_SELECTOR,
+		)) {
+			if (Number(this.#cardTopicId(card)) !== topicId) continue;
+			const marker = card.querySelector<HTMLElement>(NEW_TOPIC_BADGE_SELECTOR);
+			if (marker && !marker.hasAttribute('data-ldp-native-new-topic-marker')) {
+				marker.setAttribute('data-ldp-native-new-topic-marker', 'true');
+				changed = true;
+			}
+			if (card.hasAttribute('data-ldp-native-new-topic')) {
+				card.removeAttribute('data-ldp-native-new-topic');
+				changed = true;
+			}
+		}
+		return changed;
+	}
+
 	#clearRoot(root: Element): void {
+		const handler = this.#rootClickHandlers.get(root);
+		if (handler) root.removeEventListener('click', handler, true);
+		this.#rootClickHandlers.delete(root);
 		for (const component of root.querySelectorAll(
 			'.ldp-topic-stats-component',
 		)) component.remove();
@@ -207,13 +298,41 @@ implements EmbeddedHostEnhancementPort {
 		)) group.replaceWith(...[...group.childNodes]);
 		for (const node of root.querySelectorAll(
 			'[data-ldp-native-dnd]',
-		)) node.removeAttribute('data-ldp-native-dnd');
+		)) {
+			this.#restoreNativeDndTooltip(node as HTMLElement);
+			node.removeAttribute('data-ldp-native-dnd');
+		}
 		for (const node of root.querySelectorAll(
 			'[data-ldp-native-topic-date]',
 		)) node.removeAttribute('data-ldp-native-topic-date');
 		for (const node of root.querySelectorAll(
 			'[data-ldp-native-old-topic]',
 		)) node.removeAttribute('data-ldp-native-old-topic');
+		for (const node of root.querySelectorAll(
+			'[data-ldp-native-topic-date-row],[data-ldp-native-dnd-ready],' +
+			'[data-ldp-native-new-topic],[data-ldp-native-new-topic-marker]',
+		)) {
+			node.removeAttribute('data-ldp-native-topic-date-row');
+			node.removeAttribute('data-ldp-native-dnd-ready');
+			node.removeAttribute('data-ldp-native-new-topic');
+			node.removeAttribute('data-ldp-native-new-topic-marker');
+		}
+		for (const node of root.querySelectorAll(
+			'[data-ldp-topic-stats]',
+		)) node.removeAttribute('data-ldp-topic-stats');
+	}
+
+	#clearEmbeddedCard(card: Element): void {
+		card.querySelector(':scope > td.posts > .ldp-topic-stats-component')
+			?.remove();
+		card.removeAttribute('data-ldp-topic-stats');
+		card.removeAttribute('data-ldp-native-topic-date-row');
+		for (const cell of card.querySelectorAll(
+			'[data-ldp-native-topic-date],[data-ldp-native-old-topic]',
+		)) {
+			cell.removeAttribute('data-ldp-native-topic-date');
+			cell.removeAttribute('data-ldp-native-old-topic');
+		}
 	}
 
 	#syncStats(
@@ -223,7 +342,13 @@ implements EmbeddedHostEnhancementPort {
 		const posts = card.querySelector(':scope > td.posts');
 		const views = card.querySelector(':scope > td.views');
 		const activity = card.querySelector(':scope > td.activity');
-		if (!posts || !views || !activity) return;
+		if (!posts || !views || !activity) {
+			card.removeAttribute('data-ldp-topic-stats');
+			card.querySelector(':scope > td.posts > .ldp-topic-stats-component')
+				?.remove();
+			return;
+		}
+		card.setAttribute('data-ldp-topic-stats', 'true');
 		let component = posts.querySelector<HTMLElement>(
 			':scope > .ldp-topic-stats-component',
 		);
@@ -306,6 +431,7 @@ implements EmbeddedHostEnhancementPort {
 		const dateCell = card.querySelector<HTMLElement>(':scope > td.views') ??
 			cells[3] ??
 			null;
+		let hasDate = false;
 		for (const cell of cells) {
 			const text = cell === dateCell
 				? String(cell.textContent ?? '').replace(/\s+/g, ' ').trim()
@@ -314,8 +440,94 @@ implements EmbeddedHostEnhancementPort {
 				/\b(?:\d{4}[/-])?\d{1,2}[/-]\d{1,2}\s+\d{1,2}:\d{2}\b/.test(text);
 			const old =
 				/\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\s+\d{1,2}:\d{2}\b/.test(text);
+			hasDate = hasDate || date;
 			cell.toggleAttribute('data-ldp-native-topic-date', date);
 			cell.toggleAttribute('data-ldp-native-old-topic', old);
+		}
+		card.toggleAttribute('data-ldp-native-topic-date-row', hasDate);
+	}
+
+	#markNewTopic(card: Element, topic: unknown): void {
+		const previous = card.querySelector<HTMLElement>(
+			'[data-ldp-native-new-topic-marker]',
+		);
+		const legacyMarker = card.querySelector<HTMLElement>(
+			'.badge-notification.new-topic',
+		);
+		const unseen = modelValue(topic, 'unseen');
+		const hostNew = unseen === true || (
+			unseen !== false && Boolean(legacyMarker ?? previous)
+		);
+		const topicId = Number(this.#cardTopicId(card));
+		if (
+			!hostNew &&
+			Number.isSafeInteger(topicId) &&
+			this.#openedTopicIds.delete(topicId)
+		) {
+			this.#persistOpenedTopicIds();
+		}
+		const marker = hostNew
+			? card.querySelector<HTMLElement>(NEW_TOPIC_BADGE_SELECTOR)
+			: null;
+		if (previous && previous !== marker) {
+			previous.removeAttribute('data-ldp-native-new-topic-marker');
+		}
+		marker?.setAttribute('data-ldp-native-new-topic-marker', 'true');
+		card.toggleAttribute(
+			'data-ldp-native-new-topic',
+			hostNew && !this.#openedTopicIds.has(topicId),
+		);
+	}
+
+	#restoreOpenedTopicIds(): void {
+		if (!this.#openedTopicStorage) return;
+		let raw: string | null;
+		try {
+			raw = this.#openedTopicStorage.getItem(this.#openedTopicStorageKey);
+		} catch (cause) {
+			this.#onError(cause);
+			return;
+		}
+		if (!raw) return;
+		try {
+			const parsed = JSON.parse(raw) as unknown;
+			if (!Array.isArray(parsed)) throw new TypeError('本机已打开 Topic 记录格式无效');
+			for (const value of parsed.slice(-MAX_OPENED_TOPIC_IDS)) {
+				const topicId = Number(value);
+				if (Number.isSafeInteger(topicId) && topicId > 0) {
+					this.#openedTopicIds.add(topicId);
+				}
+			}
+		} catch (cause) {
+			this.#onError(cause);
+			try {
+				this.#openedTopicStorage.removeItem(this.#openedTopicStorageKey);
+			} catch (removeCause) {
+				this.#onError(removeCause);
+			}
+		}
+	}
+
+	#persistOpenedTopicIds(): void {
+		if (!this.#openedTopicStorage) return;
+		while (this.#openedTopicIds.size > MAX_OPENED_TOPIC_IDS) {
+			const oldest = this.#openedTopicIds.values().next().value as
+				| number
+				| undefined;
+			if (oldest === undefined) break;
+			this.#openedTopicIds.delete(oldest);
+		}
+		try {
+			if (!this.#openedTopicIds.size) {
+				this.#openedTopicStorage.removeItem(this.#openedTopicStorageKey);
+				return;
+			}
+			this.#openedTopicStorage.setItem(
+				this.#openedTopicStorageKey,
+				JSON.stringify([...this.#openedTopicIds]),
+			);
+		} catch (cause) {
+			this.#onError(cause);
 		}
 	}
 
@@ -342,6 +554,8 @@ implements EmbeddedHostEnhancementPort {
 		}
 		if (!dnd) return;
 		dnd.dataset.ldpNativeDnd = 'true';
+		line.dataset.ldpNativeDndReady = 'true';
+		this.#prepareDndTooltip(dnd);
 		const expert = [...line.querySelectorAll<HTMLElement>('*')]
 			.find((node) => normalizedLabel(node.textContent) === '专家回应');
 		if (!expert) return;
@@ -362,49 +576,112 @@ implements EmbeddedHostEnhancementPort {
 		group.append(...children.slice(start, end + 1));
 	}
 
-	#createDndButton(line: HTMLElement, topic: unknown): HTMLButtonElement {
+	#createDndButton(line: HTMLElement, _topic: unknown): HTMLButtonElement {
 		const button = this.#document.createElement('button');
 		button.type = 'button';
 		button.dataset.ldpOwnedNativeDnd = 'true';
 		button.dataset.ldpNativeDnd = 'true';
-		button.setAttribute('aria-label', '将此话题设为免打扰');
-		button.setAttribute('aria-pressed', 'false');
-		button.title = '免打扰';
-		button.addEventListener('click', (event) => {
-			event.preventDefault();
-			event.stopPropagation();
-			void this.#muteTopic(button, topic);
-		});
+		button.setAttribute('aria-label', '免打扰：加入不想看');
+		button.dataset.ldpTooltipLabel = '免打扰：加入不想看';
 		line.append(button);
 		return button;
 	}
 
-	async #muteTopic(button: HTMLButtonElement, topic: unknown): Promise<void> {
-		if (
-			button.dataset.ldpNativeDndPending === 'true' ||
-			button.getAttribute('aria-pressed') === 'true'
-		) return;
-		button.dataset.ldpNativeDndPending = 'true';
-		button.disabled = true;
-		button.setAttribute('aria-busy', 'true');
+	#onRootClick(event: Event): void {
+		const eventTarget = event.target as Node | null;
+		const target = eventTarget?.nodeType === 1
+			? eventTarget as Element
+			: eventTarget?.parentElement ?? null;
+		const control = target?.closest<HTMLElement>('[data-ldp-native-dnd]');
+		const card = control?.closest(CARD_SELECTOR);
+		if (!control || !card) return;
+		event.preventDefault();
+		event.stopImmediatePropagation();
+		if (this.#pendingCards.has(card)) return;
+		const topic = this.#topicInput(card, this.#topicModels());
+		const projection = this.#topicProjection(card, topic);
+		void this.#hideCard(card, projection, null, true, control);
+	}
+
+	async #hideCard(
+		card: Element,
+		input: ReaderUnwantedTopicFilterInput & ReaderUnwantedTopicInput,
+		match: ReaderUnwantedTopicFilterMatch | null,
+		manual: boolean,
+		control?: HTMLElement,
+	): Promise<void> {
+		if (this.#pendingCards.has(card)) return;
+		this.#pendingCards.add(card);
+		if (control) {
+			control.dataset.ldpNativeDndPending = 'true';
+			control.setAttribute('aria-busy', 'true');
+			if (control.tagName === 'BUTTON') {
+				(control as HTMLButtonElement).disabled = true;
+			}
+		}
 		try {
-			await this.#notifications.setLevel(topic, 0);
-			setModelValue(topic, 'notification_level', 0);
-			const details = modelValue(topic, 'details');
-			if (details) setModelValue(details, 'notification_level', 0);
-			button.dataset.ldpNativeDndActive = 'true';
-			button.setAttribute('aria-pressed', 'true');
-			button.setAttribute('aria-label', '此话题已设为免打扰');
-			button.title = '已设为免打扰';
-			this.#notify('已将话题设为免打扰');
+			await this.#hideTopic(Object.freeze({
+				topicId: input.topicId,
+				title: input.title,
+				href: input.href,
+				categoryId: input.categoryId,
+				categoryName: input.categoryName,
+				categorySlug: input.categorySlug,
+				source: manual ? 'manual' : 'automatic',
+				matchedRule: match?.label ?? '',
+				matchedCategory: match?.matches.some((reason) =>
+					reason.kind === 'category') ?? false,
+			}));
+			card.remove();
+			if (manual) this.#notify('已加入不想看');
 		} catch (cause) {
 			this.#onError(cause);
-			this.#notify('设置免打扰失败，请稍后重试');
+			(card as HTMLElement).dataset.ldpUnwantedFilterFailed = 'true';
+			this.#notify(manual
+				? '加入不想看失败，请稍后重试'
+				: '自动免打扰保存失败，请稍后重试');
 		} finally {
-			delete button.dataset.ldpNativeDndPending;
-			button.disabled = false;
-			button.removeAttribute('aria-busy');
+			this.#pendingCards.delete(card);
+			if (control?.isConnected) {
+				delete control.dataset.ldpNativeDndPending;
+				control.removeAttribute('aria-busy');
+				if (control.tagName === 'BUTTON') {
+					(control as HTMLButtonElement).disabled = false;
+				}
+			}
 		}
+	}
+
+	#prepareDndTooltip(control: HTMLElement): void {
+		const attributes = [
+			'aria-label',
+			'title',
+			'data-tooltip',
+			'data-tippy-content',
+		] as const;
+		control.dataset.ldpTooltipLabel = '免打扰：加入不想看';
+		if (control.dataset.ldpOwnedNativeDnd === 'true') return;
+		if (!this.#nativeDndTooltipAttributes.has(control)) {
+			this.#nativeDndTooltipAttributes.set(control, new Map(
+				attributes.map((name) => [
+					name,
+					control.getAttribute(name),
+				]),
+			));
+		}
+		control.setAttribute('aria-label', '免打扰：加入不想看');
+		for (const name of attributes.slice(1)) control.removeAttribute(name);
+	}
+
+	#restoreNativeDndTooltip(control: HTMLElement): void {
+		delete control.dataset.ldpTooltipLabel;
+		const attributes = this.#nativeDndTooltipAttributes.get(control);
+		if (!attributes) return;
+		for (const [name, value] of attributes) {
+			if (value === null) control.removeAttribute(name);
+			else control.setAttribute(name, value);
+		}
+		this.#nativeDndTooltipAttributes.delete(control);
 	}
 
 	#currentUsername(): string {
@@ -490,6 +767,82 @@ implements EmbeddedHostEnhancementPort {
 			title: normalizedLabel(link?.textContent),
 			slug: 'topic',
 			notification_level: 1,
+		});
+	}
+
+	#topicProjection(
+		card: Element,
+		topic: unknown,
+	): ReaderUnwantedTopicFilterInput & ReaderUnwantedTopicInput {
+		const topicId = Number(this.#cardTopicId(card));
+		if (!Number.isSafeInteger(topicId) || topicId < 1) {
+			throw new Error('宿主 Topic 卡片缺少有效 topic.id');
+		}
+		const link = card.querySelector<HTMLAnchorElement>(TOPIC_LINK_SELECTOR);
+		const category = modelValue(topic, 'category');
+		const categoryIdRaw = Number(
+			modelValue(topic, 'category_id') ?? modelValue(category, 'id'),
+		);
+		const categoryName = normalizedLabel(
+			modelValue(category, 'name') ??
+			modelValue(topic, 'category_name') ??
+			card.querySelector('.category-name,.badge-category__name')?.textContent,
+		);
+		const categorySlug = normalizedLabel(
+			modelValue(category, 'slug') ?? modelValue(topic, 'category_slug'),
+		);
+		const rawLabels = modelArray(
+			modelValue(topic, 'tags') ?? modelValue(topic, 'topic_tags'),
+		);
+		const labels = new Map<string, string>();
+		const rememberLabel = (value: unknown): void => {
+			const label = normalizedLabel(
+				typeof value === 'string'
+					? value
+					: modelValue(value, 'name') ??
+						modelValue(value, 'id') ??
+						modelValue(value, 'slug'),
+			);
+			const key = label.toLocaleLowerCase('zh-CN');
+			if (key && !labels.has(key)) labels.set(key, label);
+		};
+		for (const label of rawLabels) rememberLabel(label);
+		for (const label of card.querySelectorAll<HTMLElement>(
+			'.discourse-tag,[data-tag-name],.list-tags a',
+		)) {
+			rememberLabel(label.dataset.tagName ?? label.textContent);
+		}
+		const creator = modelValue(topic, 'creator');
+		const posters = modelArray(modelValue(topic, 'posters'));
+		const opPoster = posters.find((poster) => {
+			const description = normalizedLabel(modelValue(poster, 'description'));
+			return /\b(?:original poster|op)\b|楼主|发帖人/i.test(description) ||
+				modelValue(poster, 'original_poster') === true;
+		}) ?? posters[0];
+		const domPoster = card.querySelector<HTMLElement>(
+			'.posters a[data-user-card].original-poster,' +
+			'.posters a[data-user-card]:first-child,' +
+			'.posters [data-user-card]:first-child',
+		);
+		const authorUsername = normalizedLabel(
+			modelValue(creator, 'username') ??
+			modelValue(topic, 'creator_username') ??
+			modelValue(opPoster, 'username') ??
+			domPoster?.dataset.userCard,
+		).replace(/^@+/, '');
+		return Object.freeze({
+			topicId,
+			title: normalizedLabel(
+				modelValue(topic, 'title') ?? link?.textContent,
+			) || `帖子 #${topicId}`,
+			href: link?.getAttribute('href') ?? `/t/${topicId}`,
+			categoryId: Number.isSafeInteger(categoryIdRaw) && categoryIdRaw > 0
+				? categoryIdRaw
+				: null,
+			categoryName,
+			categorySlug,
+			labels: Object.freeze([...labels.values()]),
+			authorUsername,
 		});
 	}
 

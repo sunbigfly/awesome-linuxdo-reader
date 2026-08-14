@@ -24,7 +24,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png"]
 | [外观设置](/settings/appearance) | 按钮、链接、交替背景、关系线、分隔线和预览卡片 |
 | [动画与提示](/settings/motion) | 跳转楼层提示和帖子加载动画 |
 | [阅读与导航](/settings/other) | 队列入口、历史导航、帖子打开位置和退出方式 |
-| [翻译设置](/guide/content-and-media#跨语正文翻译) | 公共翻译开关，以及 OpenAI 兼容 API URL、Key、模型、限额和 Prompt |
+| [翻译设置](/guide/content-and-media#跨语正文翻译) | 译文样式、公共翻译，以及 OpenAI 兼容 API URL、Key、模型、限额和 Prompt |
 | [快捷方式](/settings/other#快捷方式) | 为浏览导航、阅读工具、面板、帖子操作、窗口和队列绑定键盘或鼠标操作 |
 | [帖子与回复](/settings/other) | 主帖操作列、二级回复显示位置和 Boost 复制 |
 | [适用站点](/settings/other) | 添加并管理其他 HTTPS Discourse 论坛 |
@@ -70,7 +70,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png"]
 - 任一设置页产生草稿后，面板底部出现“保存全部更改”，同时显示未保存数量和涉及分类。
 - 点击一次即可提交全部草稿；若五区布局合计不是 100%，保存会停止并引导返回布局页。
 - 明、暗、系统主题切换立即生效。
-- 性能设置在下次打开阅读器时生效。
+- 性能设置统一保存后立即投到当前与后续帖子；已启动的请求自然完成，固定请求安全规则不受设置覆盖。
 - 阅读、快捷方式、交互、站点开关和数据管理操作按控件说明即时执行或显示确认。
 
 ## 设置窗口

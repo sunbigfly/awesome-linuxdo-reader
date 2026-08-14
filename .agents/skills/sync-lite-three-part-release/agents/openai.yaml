@@ -1,0 +1,4 @@
+interface:
+  display_name: "同步 Lite 三大发布块"
+  short_description: "对齐 GitHub、Greasy Fork 四文件版与当前用户手册"
+  default_prompt: "使用 $sync-lite-three-part-release 对齐已验证 Lite 变更的 GitHub、Greasy Fork 四文件版和用户手册。"

@@ -1,4 +1,4 @@
-import { LifecycleScope } from '../kernel/lifecycle.js';
+import { LifecycleScope, type Cleanup } from '../kernel/lifecycle.js';
 import type { ReaderWorkspaceModel } from './reader-workspace.js';
 import type {
 	MainOutletMutationBatch,
@@ -6,21 +6,31 @@ import type {
 } from './main-outlet-mutation-hub.js';
 
 export type EmbeddedHostRootRole = 'sidebar' | 'header' | 'shell';
+export type EmbeddedHostProjectionMode = 'embedded' | 'actions-only';
 
 export interface EmbeddedHostEnhancementPort {
-	syncRoot(root: Element): void;
+	syncRoot(root: Element, mode?: EmbeddedHostProjectionMode): void;
 	releaseRoot(root: Element): void;
 	syncActivity(card: Element): boolean;
-	syncCards(cards: readonly Element[]): void;
+	syncCards(
+		cards: readonly Element[],
+		mode?: EmbeddedHostProjectionMode,
+	): void;
 	clear(): void;
+}
+
+export interface EmbeddedHostTopicFilterChangesPort {
+	subscribe(listener: () => void, scope?: LifecycleScope): Cleanup;
 }
 
 export interface EmbeddedHostRootControllerOptions {
 	readonly model: ReaderWorkspaceModel;
+	readonly routeKind: 'list' | 'direct-topic';
 	readonly document: Document;
 	readonly overlay: HTMLElement;
 	readonly mutations: MainOutletMutationHub;
 	readonly enhancements: EmbeddedHostEnhancementPort;
+	readonly topicFilterChanges?: EmbeddedHostTopicFilterChangesPort;
 	readonly requestFrame?: (callback: FrameRequestCallback) => number;
 	readonly cancelFrame?: (id: number) => void;
 	readonly parentScope?: LifecycleScope;
@@ -60,6 +70,7 @@ function topLevelBodyChild(documentPort: Document, node: Node | null): Element |
 export class EmbeddedHostRootController {
 	readonly scope: LifecycleScope;
 	readonly #model: ReaderWorkspaceModel;
+	readonly #routeKind: EmbeddedHostRootControllerOptions['routeKind'];
 	readonly #document: Document;
 	readonly #overlay: HTMLElement;
 	readonly #mutations: MainOutletMutationHub;
@@ -72,10 +83,12 @@ export class EmbeddedHostRootController {
 	#activityCards = new Set<Element>();
 	#rootFrame = 0;
 	#cardFrame = 0;
+	#projectionMode: EmbeddedHostProjectionMode = 'actions-only';
 	#destroyed = false;
 
 	constructor(options: EmbeddedHostRootControllerOptions) {
 		this.#model = options.model;
+		this.#routeKind = options.routeKind;
 		this.#document = options.document;
 		this.#overlay = options.overlay;
 		this.#mutations = options.mutations;
@@ -85,6 +98,9 @@ export class EmbeddedHostRootController {
 		this.#cancelFrame = options.cancelFrame ?? ((id) => cancelAnimationFrame(id));
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		this.#model.changes.subscribe(() => this.#syncActivation(), this.scope);
+		options.topicFilterChanges?.subscribe(() => {
+			this.#scheduleRootSync();
+		}, this.scope);
 		this.scope.add(() => this.#deactivate());
 		this.#syncActivation();
 	}
@@ -98,14 +114,21 @@ export class EmbeddedHostRootController {
 	#syncActivation(): void {
 		if (this.#destroyed) return;
 		const embedded = this.#model.snapshot.presentation.embedded;
-		if (embedded && !this.#activeScope) {
+		const shouldActivate = this.#routeKind === 'list';
+		const projectionMode: EmbeddedHostProjectionMode = embedded
+			? 'embedded'
+			: 'actions-only';
+		if (
+			this.#activeScope &&
+			(!shouldActivate || projectionMode !== this.#projectionMode)
+		) this.#deactivate();
+		if (shouldActivate && !this.#activeScope) {
+			this.#projectionMode = projectionMode;
 			const activeScope = this.scope.child();
 			this.#activeScope = activeScope;
 			this.#mutations.subscribe((batch) => this.#onMutations(batch), activeScope);
 			this.#scheduleRootSync();
-		} else if (!embedded && this.#activeScope) {
-			this.#deactivate();
-		}
+		} else if (this.#activeScope) this.#scheduleRootSync();
 	}
 
 	#deactivate(): void {
@@ -218,11 +241,19 @@ export class EmbeddedHostRootController {
 			if (previousRole === 'shell' && nextRole !== 'shell') {
 				this.#enhancements.releaseRoot(root);
 			}
-			if (!nextRole) root.removeAttribute('data-ldp-reader-host-root');
+			if (!nextRole || this.#projectionMode !== 'embedded') {
+				root.removeAttribute('data-ldp-reader-host-root');
+			}
 		}
 		for (const [root, role] of next) {
-			root.setAttribute('data-ldp-reader-host-root', role);
-			if (role === 'shell') this.#enhancements.syncRoot(root);
+			if (this.#projectionMode === 'embedded') {
+				root.setAttribute('data-ldp-reader-host-root', role);
+			} else {
+				root.removeAttribute('data-ldp-reader-host-root');
+			}
+			if (role === 'shell') {
+				this.#enhancements.syncRoot(root, this.#projectionMode);
+			}
 		}
 		this.#roots = next;
 	}
@@ -242,6 +273,10 @@ export class EmbeddedHostRootController {
 		this.#cardFrame = 0;
 		if (!this.#activeScope) return;
 		for (const card of this.#activityCards) {
+			if (this.#projectionMode !== 'embedded') {
+				this.#changedCards.add(card);
+				continue;
+			}
 			if (
 				card.isConnected &&
 				!this.#changedCards.has(card) &&
@@ -253,6 +288,11 @@ export class EmbeddedHostRootController {
 		this.#activityCards.clear();
 		const cards = [...this.#changedCards].filter((card) => card.isConnected);
 		this.#changedCards.clear();
-		if (cards.length) this.#enhancements.syncCards(Object.freeze(cards));
+		if (cards.length) {
+			this.#enhancements.syncCards(
+				Object.freeze(cards),
+				this.#projectionMode,
+			);
+		}
 	}
 }

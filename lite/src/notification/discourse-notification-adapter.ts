@@ -9,8 +9,12 @@ import type {
 	DiscourseNativeNotificationStatePort,
 } from '../discourse/native-host-api.js';
 import type {
+	CollectionPageCacheLookup,
+	CollectionPageRequest,
 	DomainResponseCacheSettings,
+	NotificationPageCacheLookup,
 	NotificationPageRequest,
+	TopicTargetCacheLookup,
 	TopicTargetRequest,
 } from '../network/domain-request-gateway.js';
 import {
@@ -33,6 +37,7 @@ import {
 	notificationRecord,
 	readerNotificationGroup,
 	sortReaderNotifications,
+	withReaderNotificationTopicTaxonomy,
 	type ReaderNotificationGroupKey,
 	type ReaderNotificationPage,
 	type ReaderNotificationPresentedRecord,
@@ -40,6 +45,12 @@ import {
 } from './reader-notification-model.js';
 
 export interface ReaderNotificationRequestPort {
+	cachedCollectionPage?<T>(input: CollectionPageCacheLookup): Promise<T | null>;
+	cachedNotificationPage?<T>(
+		input: NotificationPageCacheLookup,
+	): Promise<T | null>;
+	cachedTopicTarget?<T>(input: TopicTargetCacheLookup): Promise<T | null>;
+	loadCollectionPage<T>(input: CollectionPageRequest<T>): Promise<T>;
 	loadNotificationPage<T>(input: NotificationPageRequest<T>): Promise<T>;
 	loadTopicTarget<T>(input: TopicTargetRequest<T>): Promise<T>;
 }
@@ -53,6 +64,15 @@ export interface ReaderNotificationNativeAjaxPort {
 
 export type ReaderNotificationNativeStatePort =
 	DiscourseNativeNotificationStatePort;
+
+export interface ReaderNotificationLoadOptions {
+	readonly refresh?: boolean;
+	readonly background?: boolean;
+	readonly history?: boolean;
+	/** 浮窗可见期的历史补全走 surface-prefetch；关闭后仍回落到 background。 */
+	readonly visibleHistory?: boolean;
+	readonly expandConsolidated?: boolean;
+}
 
 type UnknownRecord = Readonly<Record<string, unknown>>;
 
@@ -81,6 +101,35 @@ function nonNegativePage(value: unknown): number {
 		throw new RangeError('通知页码必须是非负安全整数');
 	}
 	return page;
+}
+
+function notificationPageCacheSettings(
+	group: ReaderNotificationGroupKey,
+	page: number,
+): DomainResponseCacheSettings {
+	return Object.freeze({
+		kind: 'discourse-notification-page',
+		tags: Object.freeze([
+			// 仅头页随实时事件失效；历史记录本身稳定，深页保留给水位续取。
+			page === 0 ? 'notifications' : 'notification-history',
+			`notification-group:${group}`,
+		]),
+		freshForMs: page === 0
+			? 30 * 60_000
+			: 180 * 24 * 60 * 60 * 1_000,
+		retainForMs: 180 * 24 * 60 * 60 * 1_000,
+		persist: true,
+	});
+}
+
+function notificationPageVariant(
+	group: ReturnType<typeof readerNotificationGroup>,
+): string | undefined {
+	// user_actions 的 limit 从旧 30 提升到官方上限 100；隔离旧原始页，避免
+	// 30 条缓存被新分页逻辑误判成终止页。其他来源的兼容缓存继续原样复用。
+	return group.source === 'user-actions'
+		? `user-actions-limit-${group.pageSize}-v1`
+		: undefined;
 }
 
 function username(value: unknown): string {
@@ -232,6 +281,15 @@ function topicPosts(value: unknown): readonly UnknownRecord[] {
 	return Object.freeze(candidates.map(notificationRecord));
 }
 
+function topicTaxonomyEntries(value: unknown): readonly UnknownRecord[] {
+	const payload = notificationRecord(value);
+	const topicList = notificationRecord(payload.topic_list);
+	const candidates = Array.isArray(topicList.topics)
+		? topicList.topics
+		: Array.isArray(payload.topics) ? payload.topics : [];
+	return Object.freeze(candidates.map(notificationRecord));
+}
+
 function replyMatchesBucket(
 	post: UnknownRecord,
 	parentPostNumber: number,
@@ -288,6 +346,7 @@ export class DiscourseNotificationRequestAdapter {
 	readonly #signal: AbortSignal;
 	readonly #replyExpansionCache: DomainResponseCacheSettings;
 	readonly #basePath: string;
+	readonly #categoryNameFor: (categoryId: number) => string;
 
 	constructor(options: {
 		readonly gateway: ReaderNotificationRequestPort;
@@ -297,6 +356,7 @@ export class DiscourseNotificationRequestAdapter {
 		readonly signal: AbortSignal;
 		readonly replyExpansionCache: DomainResponseCacheSettings;
 		readonly basePath?: string;
+		readonly categoryNameFor?: (categoryId: number) => string;
 	}) {
 		this.#gateway = options.gateway;
 		this.#ajax = options.ajax;
@@ -308,10 +368,123 @@ export class DiscourseNotificationRequestAdapter {
 			tags: Object.freeze([...options.replyExpansionCache.tags]),
 		});
 		this.#basePath = String(options.basePath ?? '').trim().replace(/\/+$/, '');
+		this.#categoryNameFor = options.categoryNameFor ?? (() => '');
 	}
 
 	groups(): readonly ReaderNotificationGroupKey[] {
 		return READER_NOTIFICATION_GROUP_ORDER;
+	}
+
+	async enrichTopicTaxonomy(
+		pages: readonly ReaderNotificationPage[],
+		options: ReaderNotificationLoadOptions = {},
+	): Promise<readonly ReaderNotificationPage[]> {
+		return this.#enrichTopicTaxonomy(pages, options, false);
+	}
+
+	async enrichCachedTopicTaxonomy(
+		pages: readonly ReaderNotificationPage[],
+	): Promise<readonly ReaderNotificationPage[]> {
+		return this.#enrichTopicTaxonomy(pages, {}, true);
+	}
+
+	async #enrichTopicTaxonomy(
+		pages: readonly ReaderNotificationPage[],
+		options: ReaderNotificationLoadOptions,
+		cachedOnly: boolean,
+	): Promise<readonly ReaderNotificationPage[]> {
+		const topicIds = [...new Set(pages.flatMap((page) =>
+			page.records.flatMap((record) =>
+				record.source !== 'private-messages' &&
+				record.target !== null &&
+				!record.tags.length
+					? [Number(record.target.topicId)]
+					: [])))]
+			.filter((topicId) => positiveInteger(topicId) !== null)
+			.sort((left, right) => left - right);
+		if (!topicIds.length) return pages;
+
+		const batches: number[][] = [];
+		for (let index = 0; index < topicIds.length; index += 100) {
+			batches.push(topicIds.slice(index, index + 100));
+		}
+		const payloads = await Promise.all(batches.map(async (topicIdBatch) => {
+			const query = new URLSearchParams({
+				per_page: String(topicIdBatch.length),
+			});
+			for (const topicId of topicIdBatch) {
+				query.append('topic_ids[]', String(topicId));
+			}
+			const path = `/latest.json?${query}`;
+			const cache = Object.freeze({
+				kind: 'discourse-notification-topic-taxonomy',
+				tags: Object.freeze([
+					'notification-taxonomy',
+					...topicIdBatch.map((topicId) => `topic:${topicId}`),
+				]),
+				freshForMs: this.#replyExpansionCache.freshForMs,
+				retainForMs: this.#replyExpansionCache.retainForMs,
+				persist: this.#replyExpansionCache.persist,
+			});
+			if (cachedOnly) {
+				const cachedCollectionPage = this.#gateway.cachedCollectionPage;
+				if (typeof cachedCollectionPage !== 'function') return null;
+				return cachedCollectionPage.call(this.#gateway, {
+					authScope: this.authScope,
+					collection: 'notification-topic-taxonomy',
+					page: 0,
+					variant: `v1:${topicIdBatch.join(',')}`,
+					cache,
+				});
+			}
+			return this.#gateway.loadCollectionPage<unknown>({
+				authScope: this.authScope,
+				collection: 'notification-topic-taxonomy',
+				page: 0,
+				variant: `v1:${topicIdBatch.join(',')}`,
+				profile: options.background || options.history
+					? 'background-prefetch'
+					: 'collection-visible',
+				input: path,
+				signal: this.#signal,
+				timeoutMs: 20_000,
+				cache,
+				allowStaleOnError: true,
+				transport: (request) => this.#ajax.request({
+					path,
+					method: 'GET',
+					signal: request.signal,
+					noStore: false,
+				}),
+			});
+		}));
+		const topics = new Map<number, UnknownRecord>();
+		for (const payload of payloads) {
+			if (payload === null) continue;
+			for (const topic of topicTaxonomyEntries(payload)) {
+				const topicId = positiveInteger(topic.id ?? topic.topic_id);
+				if (topicId !== null) topics.set(topicId, topic);
+			}
+		}
+		return Object.freeze(pages.map((page) => {
+			let changed = false;
+			const records = page.records.map((record) => {
+				const topic = record.target === null
+					? undefined
+					: topics.get(Number(record.target.topicId));
+				if (!topic) return record;
+				const enriched = withReaderNotificationTopicTaxonomy(
+					record,
+					topic,
+					this.#categoryNameFor,
+				);
+				if (enriched !== record) changed = true;
+				return enriched;
+			});
+			return changed
+				? Object.freeze({ ...page, records: Object.freeze(records) })
+				: page;
+		}));
 	}
 
 	async #loadConsolidatedReplyPosts(
@@ -338,14 +511,7 @@ export class DiscourseNotificationRequestAdapter {
 			signal: this.#signal,
 			cacheMode: refresh ? 'refresh' : 'default',
 			timeoutMs: 15_000,
-			cache: Object.freeze({
-				...this.#replyExpansionCache,
-				tags: Object.freeze([...new Set([
-					...this.#replyExpansionCache.tags,
-					'notifications',
-					`topic:${info.topicId}`,
-				])].sort()),
-			}),
+			cache: this.#consolidatedReplyCache(info.topicId),
 			allowStaleOnError: !refresh,
 			transport: (request) => this.#ajax.request({
 				path: candidate.descriptor.path,
@@ -358,10 +524,46 @@ export class DiscourseNotificationRequestAdapter {
 		return topicPosts(payload);
 	}
 
+	#consolidatedReplyCache(topicId: number): DomainResponseCacheSettings {
+		return Object.freeze({
+			...this.#replyExpansionCache,
+			tags: Object.freeze([...new Set([
+				...this.#replyExpansionCache.tags,
+				'notifications',
+				`topic:${topicId}`,
+			])].sort()),
+		});
+	}
+
+	async #loadCachedConsolidatedReplyPosts(
+		info: NonNullable<ReturnType<typeof consolidatedReplyInfo>>,
+	): Promise<readonly UnknownRecord[] | null> {
+		const cachedTopicTarget = this.#gateway.cachedTopicTarget;
+		if (typeof cachedTopicTarget !== 'function') return null;
+		const candidate = DiscourseNativeRequests.targetCandidates({
+			basePath: this.#basePath,
+			topicId: info.topicId,
+			postNumber: info.latestPostNumber,
+			scope: 'around',
+			refresh: false,
+		}).find((entry) => entry.endpoint === 'topic-id-query');
+		if (!candidate) return null;
+		const payload = await cachedTopicTarget.call(this.#gateway, {
+			authScope: this.authScope,
+			topicId: info.topicId,
+			operation: 'target:around:topic-id-query',
+			postNumber: info.latestPostNumber,
+			profile: 'background-prefetch',
+			cache: this.#consolidatedReplyCache(info.topicId),
+		});
+		return payload === null ? null : topicPosts(payload);
+	}
+
 	async #expandNativeNotifications(
 		entries: readonly unknown[],
 		presented: readonly ReaderNotificationPresentedRecord[],
 		refresh: boolean,
+		cachedOnly = false,
 	): Promise<readonly ExpandedNativeNotification[]> {
 		const groups = await Promise.all(entries.map(async (value, index) => {
 			const initialPresented = presented[index] ?? Object.freeze({});
@@ -371,10 +573,13 @@ export class DiscourseNotificationRequestAdapter {
 			}
 			try {
 				const seenPostNumbers = new Set<number>();
-				const replies = [...await this.#loadConsolidatedReplyPosts(
-					info,
-					refresh,
-				)]
+				const loaded = cachedOnly
+					? await this.#loadCachedConsolidatedReplyPosts(info)
+					: await this.#loadConsolidatedReplyPosts(info, refresh);
+				if (loaded === null) {
+					return Object.freeze([Object.freeze({ value })]);
+				}
+				const replies = [...loaded]
 					.filter((post) => replyMatchesBucket(
 						post,
 						info.parentPostNumber,
@@ -420,17 +625,35 @@ export class DiscourseNotificationRequestAdapter {
 		})));
 	}
 
+	async loadCached(
+		groupValue: ReaderNotificationGroupKey,
+		pageValue: number,
+		options: ReaderNotificationLoadOptions = {},
+	): Promise<ReaderNotificationPage | null> {
+		const cachedNotificationPage = this.#gateway.cachedNotificationPage;
+		if (typeof cachedNotificationPage !== 'function') return null;
+		const group = readerNotificationGroup(groupValue);
+		const page = nonNegativePage(pageValue);
+		const variant = notificationPageVariant(group);
+		const payload = await cachedNotificationPage.call(this.#gateway, {
+			authScope: this.authScope,
+			group: group.key,
+			page,
+			...(variant ? { variant } : {}),
+			cache: notificationPageCacheSettings(group.key, page),
+		});
+		if (payload === null) return null;
+		return this.#pageFromPayload(group.key, page, payload, options, true);
+	}
+
 	async load(
 		groupValue: ReaderNotificationGroupKey,
 		pageValue: number,
-		options: {
-			readonly refresh?: boolean;
-			readonly background?: boolean;
-			readonly expandConsolidated?: boolean;
-		} = {},
+		options: ReaderNotificationLoadOptions = {},
 	): Promise<ReaderNotificationPage> {
 		const group = readerNotificationGroup(groupValue);
 		const page = nonNegativePage(pageValue);
+		const variant = notificationPageVariant(group);
 		let previousCursor: string | null = null;
 		if (
 			page > 0 &&
@@ -439,7 +662,18 @@ export class DiscourseNotificationRequestAdapter {
 				group.source === 'reactions-received'
 			)
 		) {
-			const previous = await this.load(group.key, page - 1, options);
+			let previous: ReaderNotificationPage | null = null;
+			if (!options.refresh) {
+				try {
+					// 游标来源的已提交上一页就是下一页的唯一前置条件。优先直接
+					// 回放持久原始页，避免第 N 页递归到头页并因头页实时失效
+					// 重发整条游标链；缓存缺失或损坏时仍退回既有补链路径。
+					previous = await this.loadCached(group.key, page - 1, options);
+				} catch {
+					previous = null;
+				}
+			}
+			previous ??= await this.load(group.key, page - 1, options);
 			previousCursor = previous.nextCursor;
 			if (!previous.hasNext || previousCursor === null) {
 				return Object.freeze({
@@ -463,18 +697,21 @@ export class DiscourseNotificationRequestAdapter {
 			authScope: this.authScope,
 			group: group.key,
 			page,
-			...(options.background ? { profile: 'surface-prefetch' as const } : {}),
+			...(variant ? { variant } : {}),
+			...(options.history
+				? {
+					profile: options.visibleHistory
+						? 'surface-prefetch' as const
+						: 'background-prefetch' as const,
+				}
+				: options.background
+					? { profile: 'surface-prefetch' as const }
+					: {}),
 			input: descriptor.path,
 			signal: this.#signal,
 			...(options.refresh ? { cacheMode: 'refresh' as const } : {}),
 			timeoutMs: group.source === 'reactions-received' ? 30_000 : 15_000,
-			cache: {
-				kind: 'discourse-notification-page',
-				tags: ['notifications', `notification-group:${group.key}`],
-				freshForMs: 30 * 60_000,
-				retainForMs: 180 * 24 * 60 * 60 * 1_000,
-				persist: true,
-			},
+			cache: notificationPageCacheSettings(group.key, page),
 			transport: (request) => this.#ajax.request({
 				path: descriptor.path,
 				method: 'GET',
@@ -482,6 +719,17 @@ export class DiscourseNotificationRequestAdapter {
 				noStore: options.refresh === true,
 			}),
 		});
+		return this.#pageFromPayload(group.key, page, payload, options, false);
+	}
+
+	async #pageFromPayload(
+		groupValue: ReaderNotificationGroupKey,
+		page: number,
+		payload: unknown,
+		options: ReaderNotificationLoadOptions,
+		cachedOnly: boolean,
+	): Promise<ReaderNotificationPage> {
+		const group = readerNotificationGroup(groupValue);
 		const source = notificationRecord(payload);
 		const rawEntries = pickedEntries(source, group.source);
 		let records: readonly ReaderNotificationRecord[];
@@ -497,6 +745,7 @@ export class DiscourseNotificationRequestAdapter {
 					rawEntries,
 					presented,
 					options.refresh === true,
+					cachedOnly,
 				);
 			records = expanded
 				.map((entry) => normalizeNativeNotification(
@@ -510,9 +759,10 @@ export class DiscourseNotificationRequestAdapter {
 						...(entry.sourceNotificationId === undefined
 							? {}
 							: {
-								sourceNotificationId:
-									entry.sourceNotificationId,
-							}),
+									sourceNotificationId:
+										entry.sourceNotificationId,
+								}),
+						categoryNameFor: this.#categoryNameFor,
 					},
 				))
 				.filter((record) =>
@@ -520,11 +770,17 @@ export class DiscourseNotificationRequestAdapter {
 					group.typeNames.includes(record.typeName));
 		} else if (group.source === 'user-actions') {
 			records = rawEntries.map((entry) =>
-				normalizeUserActionNotification(entry, group.key));
+				normalizeUserActionNotification(
+					entry,
+					group.key,
+					this.#categoryNameFor,
+				));
 		} else if (group.source === 'boosts-received') {
-			records = rawEntries.map(normalizeBoostNotification);
+			records = rawEntries.map((entry) =>
+				normalizeBoostNotification(entry, this.#categoryNameFor));
 		} else if (group.source === 'reactions-received') {
-			records = rawEntries.map(normalizeReactionNotification);
+			records = rawEntries.map((entry) =>
+				normalizeReactionNotification(entry, this.#categoryNameFor));
 		} else {
 			records = rawEntries.map((entry) =>
 				normalizePrivateMessageNotification(
@@ -532,6 +788,7 @@ export class DiscourseNotificationRequestAdapter {
 					source,
 					group.key,
 					this.#native.username(),
+					this.#categoryNameFor,
 				));
 		}
 		const topicList = notificationRecord(source.topic_list);

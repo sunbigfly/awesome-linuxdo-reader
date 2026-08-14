@@ -6,6 +6,9 @@ import {
 	ReaderTopicActionRail,
 	type ReaderTopicActionRailPreferences,
 } from '../src/post/reader-topic-action-rail.js';
+import {
+	READER_SELECT_DISMISS_EVENT,
+} from '../src/shell/reader-select-surface.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -58,7 +61,9 @@ let nextTimer = 1;
 let now = 1_000;
 let jumpCount = 0;
 let downloadCount = 0;
-let downloadHistoryCount = 0;
+let chronicleCount = 0;
+let unwantedTopicsCount = 0;
+let userObservationCount = 0;
 let rejectJump = false;
 let rejectPreferenceUpdate = false;
 let resizeCallback: ResizeObserverCallback = () => {};
@@ -68,6 +73,10 @@ const renderedRevisions: number[] = [];
 const renderedAsRail: boolean[] = [];
 const reactionExpandedStates: boolean[] = [];
 const errors: unknown[] = [];
+let selectDismissCount = 0;
+mount.addEventListener(READER_SELECT_DISMISS_EVENT, () => {
+	selectDismissCount += 1;
+});
 
 const rail = new ReaderTopicActionRail<TestPost>({
 	document,
@@ -90,7 +99,18 @@ const rail = new ReaderTopicActionRail<TestPost>({
 			like.dataset.revision = String(post.revision);
 			const bookmark = document.createElement('button');
 			bookmark.className = 'ldp-topic-bookmark';
-			view.slots.actions.replaceChildren(like);
+			const expandedActions = document.createElement('div');
+			expandedActions.className = 'ldp-topic-footer-actions';
+			for (let index = 0; index < 5; index += 1) {
+				expandedActions.append(document.createElement('button'));
+			}
+			const contextActions = document.createElement('span');
+			contextActions.className = 'ldp-context-actions-slot';
+			for (let index = 0; index < 3; index += 1) {
+				contextActions.append(document.createElement('button'));
+			}
+			contextActions.append(expandedActions);
+			view.slots.actions.replaceChildren(like, contextActions);
 			view.slots.topicFooter.hidden = false;
 			view.slots.topicFooter.replaceChildren(bookmark);
 		},
@@ -120,8 +140,14 @@ const rail = new ReaderTopicActionRail<TestPost>({
 		downloadCurrentTopic: () => {
 			downloadCount += 1;
 		},
-		openTopicDownloadManager: () => {
-			downloadHistoryCount += 1;
+		openChronicle: () => {
+			chronicleCount += 1;
+		},
+		openUnwantedTopics: () => {
+			unwantedTopicsCount += 1;
+		},
+		openUserObservations: () => {
+			userObservationCount += 1;
 		},
 	requestFrame: (callback) => {
 		const id = nextFrame;
@@ -154,8 +180,14 @@ const rail = new ReaderTopicActionRail<TestPost>({
 		timerCallbacks.delete(id);
 	},
 		now: () => now,
-		onError: (cause) => errors.push(cause),
-	});
+	onError: (cause) => errors.push(cause),
+});
+assert(
+	!rail.host.hidden &&
+		shellRoot.classList.contains('ldp-topic-action-rail-visible') &&
+		rail.downloadButton?.hidden === true,
+	'首帖缺失时仍必须保留操作列占位，但下载入口只在第二段显示',
+);
 
 function setNumberProperty(
 	target: object,
@@ -179,6 +211,7 @@ function click(target: Element): void {
 	const event = new EventConstructor('click', {
 		bubbles: true,
 		cancelable: true,
+		composed: true,
 	});
 	target.dispatchEvent(event);
 }
@@ -304,6 +337,7 @@ function pointer(
 	const event = new EventConstructor(type, {
 		bubbles: true,
 		cancelable: true,
+		composed: true,
 	});
 	Object.defineProperties(event, {
 		button: { value: values.button ?? 0 },
@@ -318,15 +352,49 @@ setNumberProperty(mount, 'clientWidth', 500);
 setNumberProperty(mount, 'clientHeight', 600);
 setNumberProperty(rail.host, 'offsetWidth', 40);
 setNumberProperty(rail.host, 'offsetHeight', 200);
+setNumberProperty(rail.toggleButton, 'offsetLeft', 2);
+setNumberProperty(rail.toggleButton, 'offsetWidth', 36);
 setNumberProperty(rail.toggleButton, 'offsetTop', 160);
 setNumberProperty(rail.toggleButton, 'offsetHeight', 40);
 Object.defineProperty(mount, 'getBoundingClientRect', {
 	configurable: true,
-	value: () => ({ left: 20, top: 40 }),
+	value: () => ({
+		left: 20,
+		right: 520,
+		top: 40,
+		bottom: 640,
+		width: 500,
+		height: 600,
+	}),
 });
 Object.defineProperty(rail.host, 'getBoundingClientRect', {
 	configurable: true,
-	value: () => ({ left: 120, top: 200 }),
+	value: () => {
+		const styledLeft = Number.parseFloat(rail.host.style.left);
+		const left = 20 + (Number.isFinite(styledLeft) ? styledLeft : 100);
+		return ({
+		left,
+		right: left + 40,
+		top: 200,
+		bottom: 400,
+		width: 40,
+		height: 200,
+		});
+	},
+});
+Object.defineProperty(rail.toggleButton, 'getBoundingClientRect', {
+	configurable: true,
+	value: () => {
+		const hostRect = rail.host.getBoundingClientRect();
+		return ({
+		left: hostRect.left + 2,
+		right: hostRect.left + 38,
+		top: 360,
+		bottom: 400,
+		width: 36,
+		height: 40,
+		});
+	},
 });
 
 const firstPost: TestPost = Object.freeze({
@@ -350,14 +418,34 @@ assert(
 		renderedAsRail[0] === true,
 	'操作列必须复用唯一 PostView 动作投影，不复制动作 DOM',
 );
+	const downloadGroup = rail.host.querySelector<HTMLElement>(
+		':scope > .ldp-topic-action-rail-download-group',
+	);
+	const secondaryToolsGroup = downloadGroup?.querySelector<HTMLElement>(
+		':scope > .ldp-topic-action-rail-secondary-tools',
+	);
 	assert(
 		rail.topButton.querySelector('svg[data-icon="arrow-up"]') !== null &&
-		rail.toggleButton.querySelector('svg[data-icon="layers"]') !== null &&
+		rail.toggleButton.querySelector('svg[data-icon="menu-box"]') !== null &&
+			rail.toggleButton.getAttribute('aria-label')?.includes('两段展开') &&
 		rail.downloadButton?.querySelector('svg[data-icon="download"]') !== null &&
-		rail.downloadHistoryButton?.querySelector('svg[data-icon="history"]') !== null &&
-			rail.downloadButton?.hidden === false &&
-			rail.downloadHistoryButton?.hidden === true,
-		'常显模式必须显示下载图标，下载历史仅在展开后显示',
+		rail.chronicleButton?.querySelector('svg[data-icon="history"]') !== null &&
+			rail.downloadButton?.hidden === true &&
+			rail.chronicleButton?.hidden === true &&
+			rail.userObservationButton?.querySelector(
+				'svg[data-icon="activity"]',
+			) !== null &&
+			rail.userObservationButton?.hidden === true,
+		'第一段必须使用两层收纳箱图标和提示，并把下载、岁月史书与用户观察留到第二段',
+	);
+	assert(
+		secondaryToolsGroup?.children[0] === rail.downloadButton &&
+			secondaryToolsGroup.children[1] === rail.userObservationButton &&
+			secondaryToolsGroup.children[2] === rail.chronicleButton &&
+			secondaryToolsGroup.children[3] === rail.unwantedTopicsButton &&
+			secondaryToolsGroup.children.length === 4 &&
+			downloadGroup.hidden,
+		'Topic 下载、用户观察、岁月史书与不想看必须组成四项横排，第一段隐藏整个分组',
 	);
 assert(
 	rail.host.style.getPropertyValue('--ldp-topic-rail-y') === '0.95' &&
@@ -365,58 +453,33 @@ assert(
 	resizeTargets.has(mount) && resizeTargets.has(rail.host),
 	'默认位置必须以归一化锚点投影，并持续观察容器/轨道宽高变化',
 );
-const maximumRailLeft = 500 - 40;
 preferences = Object.freeze({
 	...preferences,
 	positions: Object.freeze({
 		...preferences.positions,
-		floating: Object.freeze({ x: 2 / maximumRailLeft, y: 0.95 }),
+		floating: Object.freeze({ x: 0, y: 0.95 }),
 	}),
 });
 preferenceChanges.emit(preferences);
 flushFrames();
 assert(
-	rail.host.classList.contains('is-docked-left'),
-	'操作列距左边 2px 时必须触发吸附',
+	!rail.host.classList.contains('is-docked-left') &&
+	!rail.host.classList.contains('is-actions-open-left'),
+	'透明 rail 贴左但按钮外框仍距边界 2px 时不得吸附',
 );
 preferences = Object.freeze({
 	...preferences,
 	positions: Object.freeze({
 		...preferences.positions,
-		floating: Object.freeze({ x: 3 / maximumRailLeft, y: 0.95 }),
+		floating: Object.freeze({ x: 1, y: 0.95 }),
 	}),
 });
 preferenceChanges.emit(preferences);
 flushFrames();
 assert(
-	!rail.host.classList.contains('is-docked-left'),
-	'操作列距左边 3px 时不得触发吸附',
-);
-preferences = Object.freeze({
-	...preferences,
-	positions: Object.freeze({
-		...preferences.positions,
-		floating: Object.freeze({ x: 1 - 2 / maximumRailLeft, y: 0.95 }),
-	}),
-});
-preferenceChanges.emit(preferences);
-flushFrames();
-assert(
-	rail.host.classList.contains('is-docked-right'),
-	'操作列距右边 2px 时必须触发吸附',
-);
-preferences = Object.freeze({
-	...preferences,
-	positions: Object.freeze({
-		...preferences.positions,
-		floating: Object.freeze({ x: 1 - 3 / maximumRailLeft, y: 0.95 }),
-	}),
-});
-preferenceChanges.emit(preferences);
-flushFrames();
-assert(
-	!rail.host.classList.contains('is-docked-right'),
-	'操作列距右边 3px 时不得触发吸附',
+	!rail.host.classList.contains('is-docked-right') &&
+	rail.host.classList.contains('is-actions-open-left'),
+	'透明 rail 贴右但按钮外框仍距边界 2px 时不得吸附',
 );
 preferences = Object.freeze({
 	...preferences,
@@ -434,10 +497,11 @@ flushFrames();
 shellRoot.dataset.readerWorkspaceMode = 'fullpage';
 shellRoot.dispatchEvent(new EventConstructor('ldp-reader-workspace-change'));
 flushFrames();
-assert(
-	rail.host.style.getPropertyValue('--ldp-topic-rail-y') === '0.25' &&
-		rail.host.classList.contains('is-default-right'),
-	'切到全屏必须恢复全屏自己的比例位置，不能沿用浮窗位置',
+	assert(
+		rail.host.style.getPropertyValue('--ldp-topic-rail-y') === '0.25' &&
+		rail.host.classList.contains('is-default-right') &&
+		rail.host.classList.contains('is-actions-open-left'),
+	'切到全屏必须恢复自己的右侧位置，横向操作分组同时避让右边缘',
 );
 shellRoot.dataset.readerWorkspaceMode = 'embed-left';
 shellRoot.dispatchEvent(new EventConstructor('ldp-reader-workspace-change'));
@@ -477,13 +541,23 @@ assert(
 
 	click(rail.topButton);
 	assert(jumpCount === 1, '回顶按钮必须只调用统一 timeline 跳转端口');
+	click(rail.toggleButton);
+	assert(
+		rail.host.classList.contains('is-expanded') &&
+			downloadGroup?.hidden === false,
+		'第一段点击收纳箱必须进入第二段并显示下载分组',
+	);
 	click(rail.downloadButton!);
 	assert(
 		downloadCount === 1 && rail.host.classList.contains('is-expanded') &&
-			Boolean(rail.downloadHistoryButton?.hidden) === false,
-		'常显下载图标必须先展开下载历史锚点，再把独立下载范围浮窗停靠到其旁边',
+			Boolean(rail.chronicleButton?.hidden) === false,
+		'第二段下载图标必须把独立下载范围浮窗停靠到自身旁边',
 	);
-	click(mount);
+	pointer(mount, 'pointerdown', {
+		pointerId: 20,
+		clientX: 200,
+		clientY: 200,
+	});
 	assert(
 		!rail.host.classList.contains('is-expanded'),
 		'下载范围浮窗开启后，操作列仍可由外部空白恢复常显状态',
@@ -493,66 +567,136 @@ assert(
 		rail.host.classList.contains('is-expanded') &&
 		shellRoot.classList.contains('ldp-topic-action-rail-expanded') &&
 		rail.toggleButton.getAttribute('aria-expanded') === 'true' &&
-		rail.toggleButton.querySelector('svg[data-icon="layers"]') !== null &&
-			rail.downloadHistoryButton !== null &&
-			Boolean(rail.downloadHistoryButton.hidden) === false &&
-		reactionExpandedStates.at(-1) === true,
-		'compact 操作列必须可展开完整动作并同步常显回应列表',
-	);
-click(rail.downloadHistoryButton!);
+		rail.toggleButton.querySelector('svg[data-icon="menu-box"]') !== null &&
+			rail.chronicleButton !== null &&
+			Boolean(rail.chronicleButton.hidden) === false &&
+			rail.unwantedTopicsButton !== null &&
+			Boolean(rail.unwantedTopicsButton.hidden) === false &&
+			rail.userObservationButton !== null &&
+			Boolean(rail.userObservationButton.hidden) === false &&
+			reactionExpandedStates.at(-1) === true,
+		'第一段必须可切到不重复阅读动作的第二段、显示用户观察并同步回应列表状态',
+);
+click(rail.userObservationButton!);
 assert(
-	downloadHistoryCount === 1 && rail.host.classList.contains('is-expanded'),
-	'展开后的下载历史入口必须打开独立管理浮窗且不收起操作列',
+	userObservationCount === 1 && rail.host.classList.contains('is-expanded'),
+	'展开后的用户观察入口必须打开观察浮窗且保持动作列展开',
+);
+click(rail.unwantedTopicsButton!);
+assert(
+	unwantedTopicsCount === 1 && rail.host.classList.contains('is-expanded'),
+	'岁月史书右侧的不想看入口必须打开集合浮窗且保持动作列展开',
+);
+let capturedChroniclePointerId = 0;
+Object.defineProperty(rail.chronicleButton!, 'setPointerCapture', {
+	configurable: true,
+	value: (pointerId: number) => {
+		capturedChroniclePointerId = pointerId;
+	},
+});
+pointer(rail.chronicleButton!, 'pointerdown', {
+	pointerId: 21,
+	clientX: 10,
+	clientY: 10,
+});
+click(rail.chronicleButton!);
+assert(
+	chronicleCount === 1 && capturedChroniclePointerId === 21 &&
+		rail.host.classList.contains('is-expanded'),
+	'真实鼠标序列点击岁月史书必须锁定原按钮、打开搜集浮窗且不收起操作列',
 );
 const retargetedHistoryClick = new EventConstructor('click', {
 	bubbles: true,
 	cancelable: true,
+	composed: true,
 });
 Object.defineProperty(retargetedHistoryClick, 'composedPath', {
 	configurable: true,
 	value: () => [portal, document],
 });
-retargetedHistoryClick.preventDefault();
 document.dispatchEvent(retargetedHistoryClick);
 assert(
-	downloadHistoryCount === 1 && rail.host.classList.contains('is-expanded'),
-	'已被下载历史入口处理的点击即使在外层被重定向，也必须保持展开',
+	chronicleCount === 1 && rail.host.classList.contains('is-expanded'),
+	'按下已归收纳箱所有后，抬起产生的外层重定向 click 不得误收纳展开图标',
 );
 const expandedAction = rail.host.querySelector<HTMLElement>('.ldp-like')!;
 let expandedActionClicks = 0;
 expandedAction.addEventListener('click', () => {
 	expandedActionClicks += 1;
 });
+pointer(expandedAction, 'pointerdown', {
+	pointerId: 22,
+	clientX: 10,
+	clientY: 10,
+});
 click(expandedAction);
 assert(
 	expandedActionClicks === 1 && rail.host.classList.contains('is-expanded'),
-	'ShadowRoot 内收纳箱动作必须先归 rail 所有，不能被 document 外部点击路径误收纳',
+	'ShadowRoot 内收纳箱动作必须在 pointerdown 阶段归 rail 所有',
 );
-const retargetedInternalClick = new EventConstructor('click', {
+const narrowedOwnedActionPointerDown = new EventConstructor('pointerdown', {
 	bubbles: true,
 	cancelable: true,
+	composed: true,
 });
-Object.defineProperty(retargetedInternalClick, 'composedPath', {
-	configurable: true,
-	value: () => [rail.toggleButton, rail.host, shellRoot, document],
+Object.defineProperties(narrowedOwnedActionPointerDown, {
+	button: { value: 0 },
+	pointerId: { value: 23 },
+	clientX: { value: 10 },
+	clientY: { value: 10 },
+	composedPath: {
+		configurable: true,
+		value: () => [portal, document],
+	},
 });
-document.dispatchEvent(retargetedInternalClick);
+expandedAction.dispatchEvent(narrowedOwnedActionPointerDown);
+click(expandedAction);
+assert(
+	Number(expandedActionClicks) === 2 &&
+		rail.host.classList.contains('is-expanded'),
+	'刷新后即使外层 pointerdown 路径被收窄，rail 自身仍必须先确认功能点击归属',
+);
+const retargetedInternalPointerDown = new EventConstructor('pointerdown', {
+	bubbles: true,
+	cancelable: true,
+	composed: true,
+});
+Object.defineProperties(retargetedInternalPointerDown, {
+	button: { value: 0 },
+	pointerId: { value: 24 },
+	clientX: { value: 10 },
+	clientY: { value: 10 },
+	composedPath: {
+		configurable: true,
+		value: () => [rail.toggleButton, rail.host, shellRoot, document],
+	},
+});
+document.dispatchEvent(retargetedInternalPointerDown);
 assert(
 	rail.host.classList.contains('is-expanded') &&
 	rail.toggleButton.getAttribute('aria-expanded') === 'true',
-	'ShadowRoot 内部点击被 document retarget 后仍必须由 composedPath 识别为操作列内部事件',
+	'ShadowRoot 内部按下被 document retarget 后仍必须由 composedPath 识别为操作列内部事件',
 );
 const outsideIconAction = document.createElement('button');
 outsideIconAction.className = 'ldp-outside-icon-action';
 outsideIconAction.append(document.createElement('svg'));
 mount.append(outsideIconAction);
+pointer(outsideIconAction.querySelector('svg')!, 'pointerdown', {
+	pointerId: 25,
+	clientX: 200,
+	clientY: 200,
+});
 click(outsideIconAction.querySelector('svg')!);
 assert(
 	rail.host.classList.contains('is-expanded') &&
 	rail.toggleButton.getAttribute('aria-expanded') === 'true',
 	'收纳箱展开后点击正文或其他功能图标不得触发自动收纳',
 );
-click(mount!);
+pointer(mount, 'pointerdown', {
+	pointerId: 26,
+	clientX: 200,
+	clientY: 200,
+});
 assert(
 	!rail.host.classList.contains('is-expanded') &&
 	!shellRoot.classList.contains('ldp-topic-action-rail-expanded') &&
@@ -563,20 +707,21 @@ assert(
 click(rail.toggleButton);
 click(rail.toggleButton);
 	assert(
-		rail.host.classList.contains('is-collapsed') &&
+		 rail.host.classList.contains('is-collapsed') &&
 			rail.topButton.hidden === false &&
-			rail.downloadButton?.hidden === true &&
+			Boolean(rail.downloadButton?.hidden) &&
 			rail.toggleButton.hidden === false &&
 		patches.some((patch) => patch.mode === 'collapsed') &&
 		reactionExpandedStates.at(-1) === false,
-		'展开态再次收纳必须只保留回顶和展开控制，并持久化 collapsed 模式',
+		'展开态再次收纳必须只保留回顶和展开控制，隐藏下载并持久化 collapsed 模式',
 	);
 	click(rail.toggleButton);
 	assert(
 		!rail.host.classList.contains('is-collapsed') &&
-			rail.downloadButton?.hidden === false &&
+			rail.downloadButton?.hidden === true &&
+			downloadGroup?.hidden === true &&
 		patches.some((patch) => patch.mode === 'compact'),
-		'collapsed 模式必须可恢复为带下载入口的 compact',
+		'collapsed 模式必须恢复为仅含阅读动作的第一段，下载仍留在第二段',
 	);
 
 pointer(rail.toggleButton, 'pointerdown', {
@@ -637,6 +782,32 @@ pointer(document, 'pointerup', {
 	clientX: -90,
 	clientY: 70,
 });
+const fullpageTwoPixelPatch = [...patches].reverse().find((patch) =>
+	patch.positions?.fullpage.x === 0
+);
+assert(
+	fullpageTwoPixelPatch?.positions?.fullpage.x === 0,
+	'按钮外框距左边界 2px 时不得吸附，即使透明 rail 已经贴边',
+);
+flushFrames();
+pointer(rail.toggleButton, 'pointerdown', {
+	pointerId: 11,
+	clientX: 10,
+	clientY: 20,
+});
+const fullpageCollisionHold = [...timerCallbacks.values()][0];
+timerCallbacks.clear();
+fullpageCollisionHold?.();
+pointer(document, 'pointermove', {
+	pointerId: 11,
+	clientX: -91,
+	clientY: 70,
+});
+pointer(document, 'pointerup', {
+	pointerId: 11,
+	clientX: -91,
+	clientY: 70,
+});
 const fullpagePatch = [...patches].reverse().find((patch) =>
 	patch.positions?.fullpage.x === 'left'
 );
@@ -644,7 +815,59 @@ assert(
 	fullpagePatch?.positions?.fullpage.x === 'left' &&
 		fullpagePatch.positions.floating === floatingPosition &&
 		fullpagePatch.positions.embedded.x === 0.5,
-	'全屏拖动必须只写全屏槽位，贴边时保存稳定边缘锚点',
+	'按钮外框距左边界 1px 时必须吸附，并只写全屏槽位',
+);
+flushFrames();
+pointer(rail.toggleButton, 'pointerdown', {
+	pointerId: 12,
+	clientX: 10,
+	clientY: 20,
+});
+const fullpageRightTwoPixelHold = [...timerCallbacks.values()][0];
+timerCallbacks.clear();
+fullpageRightTwoPixelHold?.();
+pointer(document, 'pointermove', {
+	pointerId: 12,
+	clientX: 370,
+	clientY: 70,
+});
+pointer(document, 'pointerup', {
+	pointerId: 12,
+	clientX: 370,
+	clientY: 70,
+});
+const fullpageRightTwoPixelPatch = [...patches].reverse().find((patch) =>
+	patch.positions?.fullpage.x === 1
+);
+assert(
+	fullpageRightTwoPixelPatch?.positions?.fullpage.x === 1,
+	'按钮外框距右边界 2px 时不得吸附，即使透明 rail 已经贴边',
+);
+flushFrames();
+pointer(rail.toggleButton, 'pointerdown', {
+	pointerId: 13,
+	clientX: 10,
+	clientY: 20,
+});
+const fullpageRightCollisionHold = [...timerCallbacks.values()][0];
+timerCallbacks.clear();
+fullpageRightCollisionHold?.();
+pointer(document, 'pointermove', {
+	pointerId: 13,
+	clientX: 371,
+	clientY: 70,
+});
+pointer(document, 'pointerup', {
+	pointerId: 13,
+	clientX: 371,
+	clientY: 70,
+});
+const fullpageRightPatch = [...patches].reverse().find((patch) =>
+	patch.positions?.fullpage.x === 'right'
+);
+assert(
+	fullpageRightPatch?.positions?.fullpage.x === 'right',
+	'按钮外框距右边界 1px 时必须吸附',
 );
 shellRoot.dataset.readerWorkspaceMode = 'floating';
 shellRoot.dispatchEvent(new EventConstructor('ldp-reader-workspace-change'));
@@ -679,12 +902,14 @@ preferences = Object.freeze({ ...preferences, fixed: false });
 preferenceChanges.emit(preferences);
 click(rail.toggleButton);
 assert(rail.host.classList.contains('is-expanded'), '刷新前必须进入临时全部展开态');
+const dismissCountBeforeRefresh = selectDismissCount;
 rail.refresh();
 assert(
 	!rail.host.classList.contains('is-expanded') &&
 	!rail.host.classList.contains('is-collapsed') &&
-	reactionExpandedStates.at(-1) === false,
-	'刷新必须把临时全部展开恢复到持久化常显态',
+	reactionExpandedStates.at(-1) === false &&
+	selectDismissCount === dismissCountBeforeRefresh + 1,
+	'刷新必须把临时全部展开恢复到持久化常显态，并关闭已展开的铃铛菜单',
 );
 rejectJump = true;
 let synchronousJumpEscaped = false;

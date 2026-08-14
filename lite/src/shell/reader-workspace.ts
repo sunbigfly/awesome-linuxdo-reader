@@ -599,7 +599,7 @@ export class ReaderWorkspacePlacementController {
  */
 export class ReaderWindowGeometryModel {
 	readonly changes = new Signal<ReaderWindowSnapshot>();
-	readonly #policy: ReaderWindowGeometryPolicy;
+	#policy: ReaderWindowGeometryPolicy;
 	#viewportWidth: number;
 	#viewportHeight: number;
 	#presentation: ReaderWorkspacePresentation;
@@ -642,6 +642,16 @@ export class ReaderWindowGeometryModel {
 		if (!this.#geometryPersisted) {
 			this.#geometry = this.#centeredGeometry();
 		}
+		this.#commit();
+		return this.#snapshot;
+	}
+
+	/** 内容 owner 可按可见组件的固有宽度更新缩放下限。 */
+	setMinimumWidth(width: number): ReaderWindowSnapshot {
+		const minWidth = finiteViewport(width, 'minWidth');
+		if (minWidth === this.#policy.minWidth) return this.#snapshot;
+		this.#policy = Object.freeze({ ...this.#policy, minWidth });
+		this.#geometry = this.#clampGeometry(this.#geometry);
 		this.#commit();
 		return this.#snapshot;
 	}
@@ -1200,6 +1210,11 @@ export class ReaderWindowPointerController {
 			preview: null,
 		};
 		this.#overlay.classList.add(this.#interactingClassName);
+		this.#overlay.dataset.readerWindowInteraction = mode;
+		dispatchCompatibilityEvent(
+			this.#overlay,
+			'ldp-reader-window-interaction-start',
+		);
 		const pointerTarget = handle as Element & {
 			setPointerCapture?(pointerId: number): void;
 		};
@@ -1300,6 +1315,11 @@ export class ReaderWindowPointerController {
 		} catch {
 			// 已失去 capture 时无需补偿。
 		}
+		dispatchCompatibilityEvent(
+			this.#overlay,
+			'ldp-reader-window-interaction-end',
+		);
+		delete this.#overlay.dataset.readerWindowInteraction;
 	}
 
 	#persist(): void {

@@ -2,7 +2,7 @@
 title: 五分钟上手
 description: 从主题列表打开阅读器，完成阅读、导航、互动和关闭工作区。
 feature_ids: ["CORE-002", "CORE-003", "CORE-006"]
-source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/userscript/main-lite-entry.ts"]
+source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/userscript/main-lite-bootstrap.ts","lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
 version: 1.3.1
 status: current
@@ -16,9 +16,9 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png"]
 
 在 LINUX DO 主题列表中点击标题。阅读器会根据当前设置以浮窗、全屏或嵌入形态打开：
 
-- 从普通主题标题进入时，默认优先使用链接携带的目标楼层。
+- 新配置默认在列表右侧嵌入阅读器；进入嵌入态时，宿主站点主题会切换到侧栏画笔入口中的 `Default`，首次切换会刷新一次页面。
+- 从普通主题标题进入时，默认从第 1 楼开始；关闭“普通帖子从第 1 楼打开”后才优先使用链接携带的目标楼层。
 - 从消息、历史或收藏进入时，保留相应目标楼层。
-- 若启用了“普通帖子从第 1 楼打开”，普通主题链接会从主楼层开始。
 
 也可以用页面顶部的阅读器入口恢复最近一次阅读的主题。
 

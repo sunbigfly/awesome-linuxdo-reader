@@ -9,6 +9,9 @@ import {
 	type ReadStateMessageChannel,
 	type ReadStateStoragePort,
 } from '../src/reading/read-state-coordination.js';
+import {
+	RequestStatusError,
+} from '../src/network/coordinated-request-client.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -103,17 +106,26 @@ assert(
 		allConfirmations[0]?.confirmedAt === 1_000,
 	'全局确认出口只能发布本次服务器成功提交的楼层，不能混入已有已读状态',
 );
+const preciseConfirmed = coordinator.confirmedPosts('account:a').map((entry) =>
+	`${entry.topicId}:${entry.postNumber}:${entry.confirmedAt}`).join(',');
+assert(
+	preciseConfirmed === '10:3:1000',
+	`精确成功账本只能回放带逐帖时间戳的新确认，不能把旧合并记录伪造成今日新增：${preciseConfirmed}`,
+);
 const stored = JSON.parse(storage.getItem(READ_STATE_SUCCESS_STORAGE_KEY) ?? '[]') as Array<{
 	fingerprint?: string;
 	authScope?: string;
 	postNumbers?: number[];
+	confirmedAtByPost?: Record<string, number>;
 }>;
 assert(
 	stored.some((entry) =>
 		entry.fingerprint === 'account%3Aa:10' &&
 		entry.authScope === 'account:a' &&
-		entry.postNumbers?.join(',') === '1,2,3'),
-	'同一 auth/topic 必须把旧批次与新成功楼层合并成一条持久记录',
+		entry.postNumbers?.join(',') === '1,2,3' &&
+		entry.confirmedAtByPost?.['3'] === 1_000 &&
+		entry.confirmedAtByPost?.['1'] === undefined),
+	'同一 auth/topic 必须合并确认集合，并只为新成功楼层保存可信逐帖时间戳',
 );
 
 const accountBSubmissions: number[][] = [];
@@ -240,6 +252,34 @@ try {
 }
 assert(failedTaskCalls === 1, '锁内 task 失败不得被当成 lock 失败重放');
 
+const untypedChallengeCoordinator = new BrowserReadStateCoordinator({
+	storage: new MemoryStorage(),
+});
+try {
+	await untypedChallengeCoordinator.submitOnce('account:a', 15, [1], async () => {
+		throw Object.assign(new Error('not a central request error'), {
+			cloudflareMitigated: true,
+		});
+	});
+	throw new Error('非中央异常不得成功');
+} catch (error) {
+	assert(
+		error instanceof Error && error.message === 'not a central request error',
+		'非中央异常必须原样传播',
+	);
+}
+let untypedChallengeRecovered = false;
+await untypedChallengeCoordinator.submitOnce('account:a', 15, [2], async (missing) => {
+	untypedChallengeRecovered = missing.join(',') === '2';
+	return missing;
+});
+assert(
+	untypedChallengeRecovered &&
+		untypedChallengeCoordinator.knownAttempted('account:a', 15, [1, 2]).length === 0,
+	'普通对象即使带同名字段也不得建立 Cloudflare 卡点',
+);
+untypedChallengeCoordinator.close();
+
 const challengeAttemptStorage = new MemoryStorage();
 let challengeAttemptNow = 2_000;
 const challengeAttemptCoordinator = new BrowserReadStateCoordinator({
@@ -250,12 +290,14 @@ const challengeAttemptCoordinator = new BrowserReadStateCoordinator({
 });
 try {
 	await challengeAttemptCoordinator.submitOnce('account:a', 14, [3, 4, 5], async () => {
-		throw Object.assign(new Error('challenge'), { cloudflareMitigated: true });
+		throw new RequestStatusError(403, { cloudflareMitigated: true });
 	});
 	throw new Error('Cloudflare 尝试不得成功');
 } catch (error) {
 	assert(
-		error instanceof Error && error.message === 'challenge',
+		error instanceof RequestStatusError &&
+			error.status === 403 &&
+			error.cloudflareMitigated,
 		'Cloudflare 失败必须原样传播给当前 controller',
 	);
 }
@@ -282,6 +324,15 @@ assert(
 	'Cloudflare 楼层尝试必须写入单独账本，不能伪装成服务器成功确认',
 );
 challengeAttemptNow += 1_001;
+let sameOwnerRecovered = false;
+await challengeAttemptCoordinator.submitOnce('account:a', 14, [3, 4, 5, 6], async (missing) => {
+	sameOwnerRecovered = missing.join(',') === '3,4,5,6';
+	return missing;
+});
+assert(
+	sameOwnerRecovered,
+	'精确去重窗口到期后，同一个协调 owner 必须恢复原 checkpoint 与新增楼层',
+);
 challengeAttemptCoordinator.close();
 const reopenedChallengeAttemptCoordinator = new BrowserReadStateCoordinator({
 	storage: challengeAttemptStorage,
@@ -289,14 +340,19 @@ const reopenedChallengeAttemptCoordinator = new BrowserReadStateCoordinator({
 	attemptTtlMs: 1_000,
 	lock: async (_name, task) => task(),
 });
-let expiredAttemptSubmitted = false;
-await reopenedChallengeAttemptCoordinator.submitOnce('account:a', 14, [4], async (missing) => {
-	expiredAttemptSubmitted = missing.length === 1;
-	return missing;
-});
+let recoveredCheckpointRepeated = false;
+const reopenedChallengeConfirmed = await reopenedChallengeAttemptCoordinator.submitOnce(
+	'account:a',
+	14,
+	[4],
+	async (missing) => {
+		recoveredCheckpointRepeated = missing.length > 0;
+		return missing;
+	},
+);
 assert(
-	expiredAttemptSubmitted,
-	'原 Topic owner 保持停止；重开后的新 owner 在精确去重窗口到期后恢复一次提交',
+	!recoveredCheckpointRepeated && reopenedChallengeConfirmed.join(',') === '4',
+	'同 owner 恢复成功后必须持久化确认，重开的 owner 不得重复提交 checkpoint',
 );
 
 const singleRecordStorage = new MemoryStorage();

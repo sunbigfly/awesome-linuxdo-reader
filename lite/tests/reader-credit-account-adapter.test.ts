@@ -2,6 +2,7 @@ import type {
 	RequestTransportResponse,
 } from '../src/network/coordinated-request-client.js';
 import type {
+	UserResourceCacheLookup,
 	UserResourceRequest,
 } from '../src/network/domain-request-gateway.js';
 import type {
@@ -50,12 +51,19 @@ const http: ExternalTranslationHttpPort = {
 	},
 };
 const requests: UserResourceRequest<unknown>[] = [];
+let cachedCreditSnapshot: unknown = null;
 const gateway: ReaderCreditAccountGateway = {
 	async loadUserResource<T>(input: UserResourceRequest<T>): Promise<T> {
 		requests.push(input as UserResourceRequest<unknown>);
 		const response = await input.transport({ signal: input.signal, attempt: 0 });
 		if (!response.ok) throw new Error(`HTTP ${response.status}`);
+		cachedCreditSnapshot = response.value;
 		return response.value;
+	},
+	async cachedUserResource<T>(
+		_input: UserResourceCacheLookup,
+	): Promise<T | null> {
+		return cachedCreditSnapshot as T | null;
 	},
 };
 let bridgeCache: unknown = null;
@@ -91,6 +99,17 @@ assert(
 		account.metrics.avatar === '已同步' &&
 		account.updatedAt === 800,
 	'LDC 响应必须投影白名单指标并记录权威账号',
+);
+const descriptorCountBeforeCache = descriptors.length;
+const cachedAccount = await adapter.cached(
+	'alice',
+	new AbortController().signal,
+);
+assert(
+	cachedAccount?.stale === true &&
+		cachedAccount.metrics.availableBalance === 12.5 &&
+		descriptors.length === descriptorCountBeforeCache,
+	'LDC 必须先从中央缓存投影旧快照，且缓存命中不得触发外部请求',
 );
 assert(
 	(bridgeCache as { readonly data?: { readonly username?: string } } | null)

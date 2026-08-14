@@ -36,9 +36,31 @@ const { document: parsedDocument, window: parsedWindow } = parseHTML(
 );
 const document = parsedDocument as unknown as Document;
 const window = parsedWindow as unknown as Window;
+let surfacePositionFrame: FrameRequestCallback | null = null;
+const surfaceRequestFrameDescriptor = Object.getOwnPropertyDescriptor(
+	window,
+	'requestAnimationFrame',
+);
+const surfaceCancelFrameDescriptor = Object.getOwnPropertyDescriptor(
+	window,
+	'cancelAnimationFrame',
+);
 Object.defineProperties(window, {
 	innerWidth: { configurable: true, value: 840 },
 	innerHeight: { configurable: true, value: 800 },
+	requestAnimationFrame: {
+		configurable: true,
+		value: (callback: FrameRequestCallback) => {
+			surfacePositionFrame = callback;
+			return 1;
+		},
+	},
+	cancelAnimationFrame: {
+		configurable: true,
+		value: () => {
+			surfacePositionFrame = null;
+		},
+	},
 });
 
 const surfaceRoot = document.createElement('div');
@@ -47,15 +69,16 @@ const surfacePopover = document.createElement('div');
 surfacePopover.hidden = true;
 surfaceRoot.append(surfaceToggle, surfacePopover);
 document.body.append(surfaceRoot);
+let surfaceToggleTop = 10;
 surfaceToggle.getBoundingClientRect = () => Object.freeze({
 	left: 800,
 	right: 840,
-	top: 10,
-	bottom: 50,
+	top: surfaceToggleTop,
+	bottom: surfaceToggleTop + 40,
 	width: 40,
 	height: 40,
 	x: 800,
-	y: 10,
+	y: surfaceToggleTop,
 	toJSON: () => ({}),
 }) as DOMRect;
 surfacePopover.getBoundingClientRect = () => Object.freeze({
@@ -100,6 +123,47 @@ assert(
 		surfacePopover.style.top === '58px',
 	'共享 collection surface 必须原子同步可见性、ARIA 与 viewport 定位',
 );
+surfaceToggleTop = 42;
+sharedSurface.sync(true);
+assert(
+	surfacePopover.style.top === '58px',
+	'已打开 collection surface 的普通状态渲染不得重复测量并改写浮窗位置',
+);
+surfaceOpen = false;
+sharedSurface.sync(false);
+surfaceOpen = true;
+sharedSurface.sync(true);
+assert(
+	String(surfacePopover.style.top) === '90px',
+	'collection surface 真正关闭后重新打开必须按当前 toggle 几何重新定位',
+);
+surfaceToggleTop = 74;
+surfaceRoot.dispatchEvent(new parsedWindow.Event('ldp-reader-window-change'));
+const windowPositionFrame = surfacePositionFrame as FrameRequestCallback | null;
+surfacePositionFrame = null;
+windowPositionFrame?.(0);
+assert(
+	String(surfacePopover.style.top) === '122px',
+	'Reader 浮窗移动后，已打开 collection surface 必须在下一帧跟随 toggle 重定位',
+);
+let surfaceWheelLeaks = 0;
+surfaceRoot.addEventListener('wheel', () => {
+	surfaceWheelLeaks += 1;
+});
+const surfaceBoundaryWheel = new parsedWindow.Event('wheel', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperties(surfaceBoundaryWheel, {
+	deltaX: { value: 0 },
+	deltaY: { value: 120 },
+	deltaMode: { value: 0 },
+});
+surfacePopover.dispatchEvent(surfaceBoundaryWheel);
+assert(
+	surfaceBoundaryWheel.defaultPrevented && surfaceWheelLeaks === 0,
+	'collection 浮层到达内部边界后不得继续滚动宿主列表',
+);
 surfacePopover.dispatchEvent(new parsedWindow.Event('pointerdown', {
 	bubbles: true,
 }));
@@ -133,6 +197,20 @@ assert(
 	'父生命周期销毁必须关闭 collection surface 并清理 ARIA',
 );
 surfaceRoot.remove();
+if (surfaceRequestFrameDescriptor) {
+	Object.defineProperty(
+		window,
+		'requestAnimationFrame',
+		surfaceRequestFrameDescriptor,
+	);
+} else Reflect.deleteProperty(window, 'requestAnimationFrame');
+if (surfaceCancelFrameDescriptor) {
+	Object.defineProperty(
+		window,
+		'cancelAnimationFrame',
+		surfaceCancelFrameDescriptor,
+	);
+} else Reflect.deleteProperty(window, 'cancelAnimationFrame');
 
 const template = createReaderShellTemplate({
 	document,
@@ -178,19 +256,40 @@ for (let topicId = 1; topicId <= 22; topicId += 1) {
 		avatarTemplate: '/avatar/{size}.png',
 		ownerUsername: `user${topicId}`,
 		postNumber: topicId,
+		...(topicId === 7
+			? {
+				topicSubtitle: '17 帖 · 700 浏览 · 9 赞',
+				categoryId: 7,
+				categoryName: '开发调优',
+				tags: ['纯水', 'Reader'],
+			}
+			: {}),
 	});
 }
-history.remember({ topicId: 1, postNumber: 1 });
+	history.remember({
+		topicId: 2,
+		postNumber: 2,
+		archiveStatus: 410,
+		archivePostNumber: null,
+	});
+	history.remember({
+		topicId: 1,
+		postNumber: 1,
+		archiveStatus: 404,
+		archivePostNumber: 1,
+	});
 
 let preferences: ReaderHistoryPanelPreferences = {
 	sortMode: 'recent-viewed',
 };
 const opened: number[] = [];
+const openedPostNumbers: number[] = [];
 const confirmations: string[] = [];
 const notifications: string[] = [];
 let view: ReaderHistoryPanelView;
 view = new ReaderHistoryPanelView({
 	document,
+	mount: template.view.surfaceHost,
 	history,
 	elements: {
 		root: template.view.root,
@@ -208,15 +307,18 @@ view = new ReaderHistoryPanelView({
 		multiDone: template.historyMultiDone,
 		search: template.historySearch,
 		searchClear: template.historySearchClear,
+		categoryFilter: template.historyCategoryFilter,
+		tagFilter: template.historyTagFilter,
 		list: template.historyList,
 		pagePrevious: template.historyPagePrevious,
 		pageInfo: template.historyPageInfo,
 		pageNext: template.historyPageNext,
 	},
 	preferences,
-	topicHref: (entry) => `/t/${entry.topicId}/${entry.postNumber}`,
+	topicHref: (entry) => `/t/${entry.topicId}`,
 	openEntry: (entry) => {
 		opened.push(entry.topicId);
+		openedPostNumbers.push(entry.postNumber);
 	},
 	changeSortMode: (sortMode) => {
 		preferences = { sortMode };
@@ -243,13 +345,87 @@ assert(
 );
 
 template.historyToggle.click();
+const historyWindow = document.querySelector<HTMLElement>(
+	'.ldp-reader-floating-window.is-history',
+);
 assert(
 	!template.historyPopover.hidden &&
+		template.historyPopover.parentElement?.classList.contains(
+			'ldp-reader-floating-window-body',
+		) === true &&
+		historyWindow?.hidden === false &&
+		historyWindow.style.width === '560px' &&
+		historyWindow.style.height === '680px' &&
+		historyWindow.style.left === '140px' &&
+		historyWindow.style.top === '60px' &&
 		template.historyToggle.getAttribute('aria-expanded') === 'true' &&
 		template.historyList.querySelectorAll('[data-history-topic-id]').length ===
 			20 &&
-		template.historyPageInfo.textContent === '1 / 2',
-	'历史按钮必须打开稳定 Shell 面板，并按 repository 最近顺序进行 20 条本地分页',
+		template.historyPageInfo.parentElement?.hidden === true &&
+		template.historyDefaultActions.closest(
+			'.ldp-reader-floating-window-actions',
+		) !== null &&
+		template.historyBulkActions.closest(
+			'.ldp-reader-floating-window-actions',
+		) !== null,
+	'历史按钮必须以 560×680 在浏览器中央打开同款独立浮窗，并隐藏点击式分页栏',
+);
+const historyFilterToggle = template.historyPopover
+	.querySelector<HTMLButtonElement>('.ldp-history-filter-toggle');
+const historyFilterPanel = template.historyPopover
+	.querySelector<HTMLElement>('.ldp-user-observation-filter-panel');
+assert(
+	historyFilterToggle !== null && historyFilterPanel?.hidden === true,
+	'历史搜索必须复用用户观察的折叠筛选入口',
+);
+historyFilterToggle.click();
+assert(
+	historyFilterPanel?.hidden === false &&
+		historyFilterToggle.getAttribute('aria-expanded') === 'true' &&
+		historyFilterPanel.querySelector(
+			'.ldp-user-observation-calendar-toggle',
+		) !== null &&
+		historyFilterPanel.querySelectorAll(
+			'.ldp-user-observation-sort-filter > option',
+		).length === 2 &&
+		historyFilterPanel.querySelector(
+			'.ldp-user-observation-sort-direction',
+		) !== null &&
+		historyFilterPanel.querySelector(
+			'.ldp-user-observation-filter-reset',
+		) !== null,
+	'历史筛选入口必须完整复用用户观察的类别、标签、日历、排序和重置控件',
+);
+const historyCalendarToggle = historyFilterPanel.querySelector<
+	HTMLButtonElement
+>('.ldp-user-observation-calendar-toggle')!;
+historyCalendarToggle.click();
+const emptyHistoryDay = historyFilterPanel.querySelector<HTMLButtonElement>(
+	'.ldp-user-observation-calendar-day[data-activity-level="0"]',
+);
+assert(
+	emptyHistoryDay?.disabled === true,
+	'浏览历史活动日历必须禁用没有记录的日期',
+);
+emptyHistoryDay?.click();
+assert(
+	view.snapshot.dateFilter === '',
+	'浏览历史活动日历不得用空日期把当前列表筛空',
+);
+historyCalendarToggle.click();
+historyFilterPanel.querySelector<HTMLButtonElement>(
+	'.ldp-user-observation-sort-direction',
+)!.click();
+assert(
+	view.snapshot.sortDirection === 'asc',
+	'历史排序方向必须重投影本地 repository 序列',
+);
+historyFilterPanel.querySelector<HTMLButtonElement>(
+	'.ldp-user-observation-filter-reset',
+)!.click();
+assert(
+	view.snapshot.sortDirection === 'desc' && view.snapshot.dateFilter === '',
+	'历史重置必须恢复默认日期与最近查看降序',
 );
 const newestHistoryItem = template.historyList.querySelector<HTMLElement>(
 	'[data-history-topic-id="1"]',
@@ -257,14 +433,30 @@ const newestHistoryItem = template.historyList.querySelector<HTMLElement>(
 assert(
 	newestHistoryItem?.querySelector<HTMLAnchorElement>(
 		'.ldp-history-link',
-	)?.getAttribute('href') === '/t/1/1',
-	'历史条目必须保留 repository 记录的目标楼层链接',
+	)?.getAttribute('href') === '/t/1' &&
+		newestHistoryItem?.dataset.historyPostNumber === undefined,
+	'历史条目必须保持 Topic 级链接，不向视图暴露内部恢复楼层',
 );
 assert(
 	newestHistoryItem?.querySelector('.ldp-notification-title')?.textContent ===
 		'Topic 1' &&
-	Boolean(newestHistoryItem.querySelector('.ldp-notification-meta')?.textContent),
-	'历史条目必须在统一 collection 网格中保留可见标题与元信息，不能只剩头像列',
+	newestHistoryItem.dataset.historyArchiveStatus === '404' &&
+	newestHistoryItem.dataset.historyArchivePostNumber === '1' &&
+	newestHistoryItem.querySelector('.ldp-notification-meta')?.textContent
+		?.includes('404 已删除 楼层'),
+	'浏览历史必须保留单楼层 404 记录并显示删除标记，不能只剩普通 Topic 元信息',
+);
+const deletedTopicHistoryItem = template.historyList.querySelector<HTMLElement>(
+	'[data-history-topic-id="2"]',
+);
+assert(
+	deletedTopicHistoryItem?.querySelector('.ldp-notification-title')
+		?.textContent === '标题已删除' &&
+		deletedTopicHistoryItem.dataset.historyArchiveStatus === '410' &&
+		deletedTopicHistoryItem.dataset.historyArchivePostNumber === undefined &&
+		deletedTopicHistoryItem.querySelector('.ldp-notification-meta')?.textContent
+			?.includes('410 已删除 Topic'),
+	'整个 Topic 确认 404/410 后必须隐去缓存原标题，单楼层删除仍保留 Topic 标题',
 );
 assert(
 	template.historyList.querySelector('img')?.getAttribute('src')?.endsWith(
@@ -272,14 +464,24 @@ assert(
 	) === true,
 	'历史条目必须复用 avatar template，不另取 Topic 数据',
 );
+const enrichedHistoryItem = template.historyList.querySelector<HTMLElement>(
+	'[data-history-topic-id="7"]',
+);
+assert(
+	enrichedHistoryItem?.querySelector('.ldp-history-subtitle')?.textContent ===
+		'17 帖 · 700 浏览 · 9 赞 · 开发调优 · #纯水 · #Reader · 刚刚',
+	'历史条目副标题必须只组合 canonical Topic 副标题、类别、标签与时间',
+);
 
-template.historyPageNext.click();
+template.historyList.dispatchEvent(new (window as unknown as {
+	Event: typeof Event;
+}).Event('scroll'));
 assert(
 	view.snapshot.page === 1 &&
 		template.historyList.querySelectorAll('[data-history-topic-id]').length ===
-			2 &&
-		template.historyPageNext.disabled,
-	'分页边界必须由过滤后的 repository 序列计算，不能维护第二份记录集合',
+			22 &&
+		template.historyPageInfo.parentElement?.hidden === true,
+	'滚动到底必须按过滤后的 repository 序列追加下一批，且不恢复点击式分页栏',
 );
 
 template.historySearch.value = 'zwzt';
@@ -296,7 +498,68 @@ assert(
 	'标题搜索必须复用注入的拼音/首字母 forms，并在查询变化时回到第一页',
 );
 
+template.historySearch.value = '开发调优';
+template.historySearch.dispatchEvent(new (window as unknown as {
+	Event: typeof Event;
+}).Event('input', { bubbles: true }));
+assert(
+	view.snapshot.totalMatches === 1 &&
+	template.historyList.querySelector<HTMLElement>(
+		'[data-history-topic-id="7"]',
+	) !== null,
+	'历史搜索必须覆盖副标题、类别与标签，而不是只匹配 Topic 标题',
+);
+
 template.historySearchClear.click();
+assert(
+	template.historyCategoryFilter.options.length === 2 &&
+		template.historyCategoryFilter.options[1]?.textContent ===
+			'开发调优 · 1' &&
+		template.historyTagFilter.options.length === 3 &&
+		template.historyTagFilter.options[1]?.textContent === '纯水 · 1' &&
+		template.historyTagFilter.options[2]?.textContent === 'Reader · 1',
+	'浏览历史必须用共享类别/标签控件投影本地 repository 的筛选项与计数',
+);
+Object.defineProperty(template.historyCategoryFilter, 'value', {
+	configurable: true,
+	writable: true,
+	value: 'category:7',
+});
+template.historyCategoryFilter.dispatchEvent(new (window as unknown as {
+	Event: typeof Event;
+}).Event('change', { bubbles: true }));
+assert(
+	view.snapshot.categoryFilter === 'category:7' &&
+		view.snapshot.totalMatches === 1 &&
+		template.historyList.querySelector<HTMLElement>(
+			'[data-history-topic-id="7"]',
+		) !== null,
+	'历史类别筛选必须使用与消息、收藏一致的 category key 并回到第一页',
+);
+template.historyCategoryFilter.value = '';
+template.historyCategoryFilter.dispatchEvent(new (window as unknown as {
+	Event: typeof Event;
+}).Event('change', { bubbles: true }));
+Object.defineProperty(template.historyTagFilter, 'value', {
+	configurable: true,
+	writable: true,
+	value: 'tag:reader',
+});
+template.historyTagFilter.dispatchEvent(new (window as unknown as {
+	Event: typeof Event;
+}).Event('change', { bubbles: true }));
+assert(
+	view.snapshot.tagFilter === 'tag:reader' &&
+		view.snapshot.totalMatches === 1 &&
+		template.historyList.querySelector<HTMLElement>(
+			'[data-history-topic-id="7"]',
+		) !== null,
+	'历史标签筛选必须忽略大小写并复用共享标签控件',
+);
+template.historyTagFilter.value = '';
+template.historyTagFilter.dispatchEvent(new (window as unknown as {
+	Event: typeof Event;
+}).Event('change', { bubbles: true }));
 template.historySortToggle.click();
 assert(
 	String(preferences.sortMode) === 'first-viewed' &&
@@ -312,7 +575,13 @@ template.historyMultiButton.click();
 assert(
 	view.snapshot.multi &&
 		template.historyDefaultActions.hidden &&
-		!template.historyBulkActions.hidden,
+		!template.historyBulkActions.hidden &&
+		template.historyList.querySelector<HTMLElement>(
+			'.ldp-history-select',
+		)?.dataset.ldpTooltipLabel === '选择这条浏览历史' &&
+		!template.historyList.querySelector<HTMLElement>(
+			'.ldp-history-select',
+		)?.hasAttribute('title'),
 	'多选模式必须切换同一面板控制组',
 );
 for (const option of template.historySelectScope.options) {
@@ -368,8 +637,8 @@ assert(
 entryLink.click();
 await Promise.resolve();
 assert(
-	opened.at(-1) === 30,
-	'普通历史链接必须只调用注入的 runtime 目标端口',
+	opened.at(-1) === 30 && openedPostNumbers.at(-1) === 8,
+	'普通历史链接必须仅把 Topic 与内部切出位置交给 runtime 恢复端口',
 );
 
 const modified = new (window as unknown as {
@@ -416,7 +685,7 @@ assert(
 view.destroy();
 history.remember({ topicId: 40, title: 'after destroy' });
 assert(
-	template.historyPopover.hidden &&
+	document.querySelector('.ldp-reader-floating-window.is-history') === null &&
 		template.historyToggle.getAttribute('aria-expanded') === 'false',
 	'面板销毁必须关闭 surface、释放 repository 和 DOM 监听',
 );

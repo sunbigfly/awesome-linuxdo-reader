@@ -205,6 +205,34 @@ assert(
 	topics.streamPostIds().join(',') === '101,102',
 	'较旧 Topic stream 不得覆盖更新的 post.id 顺序',
 );
+topics.ingest({
+	source: 'message-bus',
+	observedAt: 120,
+	expectedPostCount: 4,
+	streamPostIds: [101, 102, 199, 200],
+});
+topics.ingest({
+	source: 'topic-json',
+	observedAt: 110,
+	expectedPostCount: 2,
+	topic: { title: 'stale topic count' },
+	streamPostIds: [101, 102],
+});
+assert(
+	topics.snapshot().expectedPostCount === 4,
+	'输给较新 stream 的旧 Topic JSON 不得降低实时正文总数',
+);
+topics.ingest({
+	source: 'topic-json',
+	observedAt: 130,
+	expectedPostCount: 2,
+	topic: { title: 'authoritative topic count' },
+	streamPostIds: [101, 102],
+});
+assert(
+	topics.snapshot().expectedPostCount === 2,
+	'较新的完整 Topic JSON 必须能修复历史 created 逻辑留下的偏大 expectedPostCount',
+);
 trees.setExpectedPostCount(2);
 trees.ingest(topics.posts(), 'topic-json');
 await trees.flush();
@@ -718,9 +746,53 @@ assert(
 	'404 Topic 快照必须切换到独立永久 policy，不能继续受普通缓存期限约束',
 );
 
+const legacyPlaceholderArchiveId =
+	'account:archive|snapshot:topic-archive:93';
+const archivedSnapshot = archiveEntry!.value as StoredTopicSnapshot<TestTopic, TestPost>;
+archiveStore.entries.set(legacyPlaceholderArchiveId, Object.freeze({
+	...archiveEntry!,
+	id: legacyPlaceholderArchiveId,
+	tags: Object.freeze(['topic-local-archive', 'topic:93']),
+	value: Object.freeze({
+		...archivedSnapshot,
+		topicId: '93',
+		posts: Object.freeze([Object.freeze({
+			postNumber: 202,
+			observedAt: archiveClock,
+			source: 'loader-batch' as const,
+			value: Object.freeze({
+				id: Number.MAX_SAFE_INTEGER - 202,
+				post_number: 202,
+				reply_to_post_number: null,
+				cooked: 'legacy placeholder',
+				reader_local_archive_placeholder: true,
+			}) as TestPost,
+		})]),
+		unavailableTopic: null,
+		unavailablePosts: Object.freeze([Object.freeze({
+			postNumber: 202,
+			status: 404 as const,
+			confirmedAt: archiveClock,
+		})]),
+		tree: null,
+	}),
+}));
+const legacyPlaceholderArchive = new TopicSnapshotRepository<TestTopic, TestPost>({
+	responseRepository: archiveResponses(),
+	topicId: 93,
+	authScope: 'account:archive',
+	freshForMs: 10,
+	retainForMs: 20,
+	now: () => archiveClock,
+});
+assert(
+	await legacyPlaceholderArchive.restore() === null &&
+		!archiveStore.entries.has(legacyPlaceholderArchiveId),
+	'旧版伪造的 404 占位正文必须在快照恢复时自愈剔除，不能继续充当本地正文',
+);
+
 let invalidArchiveTreeCount = 0;
 const invalidArchiveId = 'account:archive|snapshot:topic-archive:91';
-const archivedSnapshot = archiveEntry!.value as StoredTopicSnapshot<TestTopic, TestPost>;
 archiveStore.entries.set(invalidArchiveId, Object.freeze({
 	...archiveEntry!,
 	id: invalidArchiveId,

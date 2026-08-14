@@ -5,9 +5,11 @@ import type {
 } from './reader-user-domain-session.js';
 import {
 	readerConnectTrustMetricKey,
+	type ReaderConnectTrustHistoryChange,
 	type ReaderConnectTrustHistoryDay,
 	type ReaderConnectTrustHistoryPort,
 	type ReaderConnectTrustHistorySnapshot,
+	type ReaderConnectTrustHistorySource,
 	type ReaderConnectTrustMetric,
 	type ReaderConnectTrustMetricHistory,
 } from './reader-connect-trust-adapter.js';
@@ -47,12 +49,14 @@ function metric(value: unknown): string {
 		: String(value ?? '—');
 }
 
-function staleNotice(document: Document): HTMLElement {
+function staleNotice(document: Document, refreshing: boolean): HTMLElement {
 	return node(
 		document,
 		'p',
 		'ldp-connect-error',
-		'当前显示缓存数据；联网更新失败',
+		refreshing
+			? '当前显示缓存数据；正在后台更新'
+			: '当前显示缓存数据；联网更新失败',
 	);
 }
 
@@ -149,6 +153,16 @@ function connectHistoryChangeLabel(value: number | null): string {
 	return value >= 0 ? `+${metric(value)}` : metric(value);
 }
 
+function connectHistoryChangeKind(
+	source: ReaderConnectTrustHistorySource | undefined,
+	key = '',
+): string {
+	if (source === 'server-account') return '今日服务端新增';
+	if (source === 'server-confirmed-local') return '今日服务器确认';
+	if (key === 'days-visited') return '今日本地新增';
+	return '今日窗口净变化';
+}
+
 function connectHistoryDateLabel(value: string): string {
 	const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
 	return match
@@ -203,6 +217,10 @@ export class ReaderSettingsUserView {
 		).signal;
 		this.root = node(options.document, 'div', 'ldp-user-info-content');
 		options.host.append(this.root);
+		this.#history?.changes.subscribe(
+			(change) => this.#applyHistoryChange(change),
+			this.scope,
+		);
 		this.scope.listen(this.root, 'click', (event) => {
 			const target = (event.target as Element | null)?.closest<HTMLElement>(
 					'[data-user-info-view],[data-user-info-refresh],'+
@@ -272,41 +290,109 @@ export class ReaderSettingsUserView {
 		this.scope.destroy();
 	}
 
+	focusConnect(): void {
+		if (this.scope.destroyed) return;
+		const tab = this.#connectEnabled ? 'connect' : 'profile';
+		if (
+			this.#tab === tab &&
+			!this.#historyMetricKey &&
+			!this.#historySelectedDate
+		) return;
+		this.#tab = tab;
+		this.#historyMetricKey = '';
+		this.#historySelectedDate = '';
+		this.#render(this.#session.snapshot(this.#username));
+	}
+
+	#applyHistoryChange(change: ReaderConnectTrustHistoryChange): void {
+		const snapshot = this.#historySnapshot;
+		if (
+			!snapshot ||
+			change.today !== snapshot.today ||
+			change.metric.key !== 'posts-read'
+		) return;
+		const previous = snapshot.metrics[change.metric.key];
+		if (!previous || previous.source !== 'server-confirmed-local') return;
+		const history = Object.freeze({
+			...change.metric,
+			label: previous.label,
+		});
+		this.#historySnapshot = Object.freeze({
+			...snapshot,
+			metrics: Object.freeze({
+				...snapshot.metrics,
+				[history.key]: history,
+			}),
+		});
+		if (this.#tab !== 'connect') return;
+		if (this.#historyMetricKey === history.key) {
+			this.#render(this.#session.snapshot(this.#username));
+			return;
+		}
+		const element = this.root.querySelector<HTMLElement>(
+			`[data-connect-history-metric="${history.key}"]`,
+		);
+		const badge = element?.querySelector<HTMLElement>(
+			'.ldp-connect-history-delta',
+		);
+		if (!element || !badge) return;
+		const today = history.days.find((day) => day.date === snapshot.today);
+		const delta = connectHistoryChangeLabel(today?.change ?? null);
+		badge.textContent = delta;
+		element.setAttribute(
+			'aria-label',
+			`查看${previous.label}最近 50 天记录；${
+				connectHistoryChangeKind(history.source, history.key)
+			} ${delta}`,
+		);
+	}
+
 	async #load(refresh = false): Promise<void> {
 		const historyEpoch = ++this.#historyLoadEpoch;
 		try {
-			await Promise.all([
-				this.#session.load(this.#username, { refresh }),
-				this.#connectEnabled
-					? this.#session.loadConnect(this.#username, refresh)
-					: Promise.resolve(null),
-				this.#creditEnabled
-					? this.#session.loadCredit(this.#username, refresh)
-					: Promise.resolve(null),
-			]);
-			const snapshot = this.#session.snapshot(this.#username);
-			if (
-				this.#history &&
-				this.#connectEnabled &&
-				snapshot.connect.phase === 'ready'
-			) {
-				const history = await this.#history.load(
-					this.#username,
-					snapshot.connect.metrics,
-					this.#historySignal,
-					refresh,
-				);
-				if (
-					historyEpoch === this.#historyLoadEpoch &&
-					!this.scope.destroyed
-				) {
-					this.#historySnapshot = history;
-					this.#render(this.#session.snapshot(this.#username));
-				}
-			}
+			const profileLoad = this.#session.load(this.#username, { refresh });
+			const creditLoad = this.#creditEnabled
+				? this.#session.loadCredit(this.#username, refresh)
+				: Promise.resolve(null);
+			const connectLoad = this.#connectEnabled
+				? this.#session.loadConnect(this.#username, refresh)
+				: Promise.resolve(null);
+			const historyLoad = this.#history && this.#connectEnabled
+				? connectLoad.then(async () => {
+					let snapshot = this.#session.snapshot(this.#username);
+					if (snapshot.connect.phase !== 'ready') return;
+					const cached = await this.#history!.cached(
+						this.#username,
+						snapshot.connect.metrics,
+						this.#historySignal,
+					);
+					this.#commitHistory(cached, historyEpoch);
+					if (snapshot.connect.refreshing === true) {
+						snapshot = await this.#session.loadConnect(this.#username, true);
+					}
+					if (snapshot.connect.phase !== 'ready') return;
+					const authoritative = await this.#history!.load(
+						this.#username,
+						snapshot.connect.metrics,
+						this.#historySignal,
+						true,
+					);
+					this.#commitHistory(authoritative, historyEpoch);
+				})
+				: Promise.resolve();
+			await Promise.all([profileLoad, creditLoad, connectLoad, historyLoad]);
 		} catch (cause) {
 			this.#onError(cause);
 		}
+	}
+
+	#commitHistory(
+		history: ReaderConnectTrustHistorySnapshot,
+		epoch: number,
+	): void {
+		if (epoch !== this.#historyLoadEpoch || this.scope.destroyed) return;
+		this.#historySnapshot = history;
+		this.#render(this.#session.snapshot(this.#username));
 	}
 
 	#icon(name: string): Node {
@@ -342,10 +428,16 @@ export class ReaderSettingsUserView {
 		}
 		const refresh = this.#document.createElement('button');
 		refresh.type = 'button';
+			const externalRefreshing = this.#tab === 'connect'
+				? snapshot.connect.refreshing === true
+				: this.#tab === 'credit'
+					? snapshot.credit.refreshing === true
+					: false;
 			const refreshing = snapshot.phase === 'loading' ||
 				snapshot.phase === 'refreshing' ||
 				snapshot.connect.phase === 'loading' ||
-				snapshot.credit.phase === 'loading';
+				snapshot.credit.phase === 'loading' ||
+				externalRefreshing;
 			const activeStale = this.#tab === 'profile'
 				? snapshot.stale
 				: this.#tab === 'connect'
@@ -356,7 +448,9 @@ export class ReaderSettingsUserView {
 			}${activeStale ? ' is-stale' : ''}`;
 			refresh.dataset.userInfoRefresh = '';
 			const refreshLabel = activeStale
-				? '刷新当前账号信息；当前显示缓存数据，联网更新失败'
+				? externalRefreshing
+					? '刷新当前账号信息；当前显示缓存数据，正在后台更新'
+					: '刷新当前账号信息；当前显示缓存数据，联网更新失败'
 				: '刷新当前账号信息';
 			refresh.setAttribute('aria-label', refreshLabel);
 			refresh.title = refreshLabel;
@@ -660,7 +754,12 @@ export class ReaderSettingsUserView {
 			'所有项目需要同时达标；互动项达到下限，合规项不得超过上限。';
 		head.append(heading, status);
 		card.append(head);
-		if (snapshot.connect.stale) card.append(staleNotice(this.#document));
+		if (snapshot.connect.stale) {
+			card.append(staleNotice(
+				this.#document,
+				snapshot.connect.refreshing === true,
+			));
+		}
 			if (rings.length) {
 			const ringHost = node(
 				this.#document,
@@ -756,7 +855,9 @@ export class ReaderSettingsUserView {
 			element.tabIndex = 0;
 			element.setAttribute(
 				'aria-label',
-				`查看${item.label}最近 50 天记录；今日变化 ${delta}`,
+				`查看${item.label}最近 50 天记录；${
+					connectHistoryChangeKind(history?.source, key)
+				} ${delta}`,
 			);
 			const badge = node(
 				this.#document,
@@ -773,13 +874,15 @@ export class ReaderSettingsUserView {
 			if (item.reverse && (today?.change ?? 0) > 0) {
 				badge.classList.add('is-adverse');
 			}
-			badge.title = history?.source === 'server-account'
-				? 'LinuxDo 服务端账号记录'
+			badge.dataset.ldpTooltipLabel = history?.source === 'server-account'
+				? 'LinuxDo 服务端当日新增记录'
 				: history?.source === 'server-confirmed-local'
-					? '仅统计此脚本获得服务器成功确认的已读帖子'
-				: history?.source === 'local-script'
-					? '仅当前浏览器中的此脚本本地记录，不含全平台数据'
-					: '正在加载最近 50 天记录';
+					? '仅统计已记录的 /topics/timings 服务器成功确认；未收到成功响应时为 +0'
+					: key === 'days-visited'
+						? '仅显示本脚本当日观测到的新增访问天数；滚动窗口自然回落不记负数'
+					: history?.source === 'local-script'
+						? 'Connect 滚动窗口的本地净变化；最早日期退出窗口时可为负数'
+						: '正在加载最近 50 天记录';
 			if (valueHost.classList.contains('ldp-connect-ring-value')) {
 				valueHost.prepend(badge);
 			} else {
@@ -860,7 +963,7 @@ export class ReaderSettingsUserView {
 					local ? ' is-local' : confirmedRead ? ' is-confirmed' : ' is-server'
 				}`,
 				local
-					? `仅记录安装此脚本的当前浏览器成功取数期间的变化；不包含手机、其他电脑、未安装脚本页面等 LinuxDo 全平台活动。${
+					? `仅记录安装此脚本的当前浏览器成功取数期间的 Connect 滚动窗口净变化；最早日期退出窗口时可能为负数。不会把负数解释成“当天少访问”；不包含手机、其他电脑、未安装脚本页面等 LinuxDo 全平台活动。${
 						history.startedAt ? ` 本地记录始于 ${connectHistoryDateLabel(history.startedAt)}。` : ''
 					}`
 					: confirmedRead
@@ -880,7 +983,10 @@ export class ReaderSettingsUserView {
 			);
 			for (const [label, value] of [
 				['当前值', `${metric(item.current)} / ${metric(item.target)}`],
-				['今日变化', connectHistoryChangeLabel(today?.change ?? null)],
+				[
+					connectHistoryChangeKind(history.source, history.key),
+					connectHistoryChangeLabel(today?.change ?? null),
+				],
 				['记录覆盖', `${coverage} / 50 天`],
 			] as const) {
 				const fact = node(
@@ -942,7 +1048,9 @@ export class ReaderSettingsUserView {
 				button.setAttribute('aria-selected', String(day.date === selectedDate));
 				button.setAttribute(
 					'aria-label',
-					`${connectHistoryDateLabel(day.date)}，变化 ${
+					`${connectHistoryDateLabel(day.date)}，${
+						connectHistoryChangeKind(history.source, history.key).replace(/^今日/, '')
+					} ${
 						connectHistoryChangeLabel(day.change)
 					}`,
 				);
@@ -1003,7 +1111,7 @@ export class ReaderSettingsUserView {
 			} else {
 				detail = `本地首次记录 ${metric(day.first)}，最后记录 ${
 					metric(day.current)
-				}，期间变化 ${connectHistoryChangeLabel(day.change)}；不代表全平台数据。`;
+				}，滚动窗口净变化 ${connectHistoryChangeLabel(day.change)}；最早日期退出窗口时可以为负数，不代表当天少访问，也不代表全平台数据。`;
 			}
 			selected.append(node(this.#document, 'span', '', detail));
 			return selected;

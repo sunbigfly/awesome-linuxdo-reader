@@ -8,17 +8,21 @@
   min-width: 0;
   height: auto;
   overflow: visible;
-  /* Embedded/full-page readers retain Chromium's proven native anchor path. */
+  /*
+   * Root replacement and first-time height measurements change both virtual
+   * spacers while the user is scrolling. Keep Chromium's native anchor on the
+   * real stream in embedded/full-page readers so those deltas do not consume
+   * upward wheel/key distance. The scroll adapter disables it only while its
+   * explicit stationary/programmatic anchor owns the viewport.
+   */
   overflow-anchor: auto;
   contain: layout style;
 }
 
 /*
- * A managed floating window has an independently positioned, resizable scroll
- * viewport. Its virtual spacers already preserve the physical coordinate while
- * roots are replaced, so native anchoring would apply a second correction
- * during an active wheel gesture. Settled content changes remain owned by the
- * scroll adapter's viewport anchor.
+ * A detached managed floating window owns a separately positioned viewport.
+ * Keep its established explicit-anchor path; the embedded reader is part of
+ * the host workspace and must retain the native stream anchor above.
  */
 .ldp-overlay.ldp-window-managed:not(.ldp-fullpage):not(.ldp-reader-embedded)
   .ldp-virtual-stream {
@@ -30,6 +34,73 @@
   min-height: 0;
   pointer-events: none;
   overflow-anchor: none;
+}
+
+.ldp-virtual-spacer.has-gap-placeholder {
+  width: 100%;
+}
+
+/*
+ * A sparse seek keeps its unloaded range as one virtual spacer. When wheel or
+ * scrollbar input lands inside that range, keep one low-cost post skeleton in
+ * view while the canonical page around it is hydrated. It is intentionally
+ * static: no shimmer, timer or per-floor DOM is needed for a multi-thousand
+ * floor topic.
+ */
+.ldp-virtual-gap-placeholder {
+  position: sticky;
+  top: clamp(88px, 22vh, 180px);
+  z-index: 1;
+  display: grid;
+  box-sizing: border-box;
+  width: min(calc(100% - 32px), 760px);
+  min-height: 132px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 14px;
+  margin-inline: auto;
+  padding: 18px;
+  border: 1px solid var(--ldp-divider-line-color);
+  border-radius: 14px;
+  background: var(--ldp-surface);
+  color: var(--ldp-ink-muted);
+  contain: layout paint style;
+}
+
+.ldp-virtual-gap-placeholder[hidden] {
+  display: none;
+}
+
+.ldp-virtual-gap-skeleton-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--ldp-surface-muted);
+}
+
+.ldp-virtual-gap-skeleton-body {
+  display: block;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.ldp-virtual-gap-skeleton-line {
+  display: block;
+  width: min(72%, 430px);
+  height: 10px;
+  border-radius: 999px;
+  background: var(--ldp-surface-muted);
+}
+
+.ldp-virtual-gap-skeleton-line-short {
+  width: min(46%, 260px);
+  margin-top: 12px;
+}
+
+.ldp-virtual-gap-label {
+  display: block;
+  margin-top: 20px;
+  font-size: var(--ldp-font-ui, 12px);
+  line-height: 1.4;
 }
 
 .ldp-virtual-root-list {
@@ -208,19 +279,51 @@
   contain: layout style;
 }
 
+/* 屏蔽用户只隐藏该用户楼层本体；其下 canonical 回复树仍保留。 */
+.ldp-post.ldp-post-unwanted-author {
+  min-height: 1px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.ldp-post.ldp-post-unwanted-author > :is(.ldp-post-head,.ldp-post-body) {
+  display: none !important;
+}
+
+.ldp-post.ldp-post-unwanted-author > .ldp-children:empty {
+  display: none;
+}
+
 .ldp-post-local-archive-note {
-  margin: 0 0 10px;
-  padding: 7px 10px;
-  border-left: 3px solid color-mix(in srgb, var(--ldp-warning, #d97706) 58%, transparent);
-  background: color-mix(in srgb, var(--ldp-warning, #d97706) 7%, transparent);
-  color: var(--ldp-ink-muted);
+  width: max-content;
+  max-width: calc(100% - 14px);
+  justify-self: start;
+  margin: 10px 0 0 14px;
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--danger, #c84545) 22%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--danger, #c84545) 72%, transparent);
+  border-radius: var(--ldp-radius-sm);
+  background: color-mix(in srgb, var(--danger, #c84545) 5%, transparent);
+  color: color-mix(in srgb, var(--danger, #c84545) 72%, var(--ldp-ink-muted));
   font-size: var(--ldp-font-ui);
-  line-height: 1.45;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.ldp-post-local-archive-subtext {
+  margin-inline-start: .4em;
+  color: var(--ldp-ink-muted);
+  font-size: .92em;
+  font-weight: 400;
+}
+
+.ldp-post.is-local-archive-post > .ldp-post-head .ldp-hidden-badge {
+  display: none;
 }
 
 .ldp-post.is-local-archive-post > .ldp-post-body > .ldp-content {
   padding-left: 12px;
-  border-left: 2px solid color-mix(in srgb, var(--ldp-ink-muted) 22%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--danger, #c84545) 30%, transparent);
 }
 
 .ldp-topic-runtime.is-local-archive-topic .ldp-post-actions,
@@ -451,13 +554,18 @@
   color: #a12b2b;
 }
 
-.ldp-time {
-  position: relative;
-  flex: none;
+.ldp-time,
+.ldp-time-exact {
   color: var(--ldp-ink-muted);
   font-size: var(--ldp-font-ui);
   font-weight: var(--ldp-reader-font-weight-base, 400);
+  line-height: inherit;
   white-space: nowrap;
+}
+
+.ldp-time {
+  position: relative;
+  flex: none;
 }
 
 .ldp-floor {
@@ -551,8 +659,16 @@ button.ldp-floor:hover {
   }
 }
 
-.ldp-time-relative {
+.ldp-time-relative,
+.ldp-time-exact {
   opacity: .58;
+}
+
+.ldp-time-exact {
+  display: none;
+  min-width: 0;
+  flex: 0 1 auto;
+  pointer-events: none;
 }
 
 .ldp-time[data-exact-time]::after {
@@ -565,7 +681,7 @@ button.ldp-floor:hover {
   content: attr(data-exact-time);
   font: inherit;
   line-height: inherit;
-  opacity: .62;
+  opacity: .58;
   pointer-events: none;
   transform: translateY(-50%);
   white-space: nowrap;
@@ -1170,6 +1286,16 @@ button.ldp-floor:hover {
   fill: currentColor;
 }
 
+.ldp-reaction-summary .ldp-reaction-add.liked {
+  color: var(--love, #e25822);
+  font-weight: 600;
+}
+
+.ldp-reaction-summary
+  :is(.ldp-like,.ldp-reaction-add)[data-counted="1"] > .ldp-icon {
+  fill: currentColor;
+}
+
 .ldp-like-count {
   display: inline;
   font-size: var(--ldp-font-sm);
@@ -1256,6 +1382,10 @@ button.ldp-floor:hover {
   text-decoration: none;
 }
 
+.ldp-topic-notification:has(> .ldp-select-surface) {
+  overflow: visible;
+}
+
 :is(.ldp-topic-footer-button,.ldp-topic-footer-link,.ldp-topic-notification):hover {
   background: var(--ldp-surface-muted);
   color: var(--ldp-ink);
@@ -1293,11 +1423,36 @@ button.ldp-floor:hover {
 .ldp-topic-notification-select {
   position: absolute;
   inset: 0;
+  z-index: 1;
   width: 100%;
   height: 100%;
   min-width: 0;
   cursor: pointer;
   opacity: 0;
+}
+
+.ldp-topic-notification > .ldp-select-surface {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.ldp-topic-notification > .ldp-select-surface >
+  .ldp-topic-notification-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ldp-topic-notification > .ldp-select-surface >
+  .ldp-select-indicator {
+  display: none;
 }
 
 .ldp-special-notice,
@@ -1803,6 +1958,11 @@ button.ldp-floor:hover {
   white-space: nowrap;
 }
 
+.ldp-native-boost-count.is-over-limit {
+  color: var(--danger, #c84545);
+  font-weight: 600;
+}
+
 .ldp-topic-shared-issue-label,
 .ldp-topic-bookmark-label {
   min-width: 0;
@@ -1843,9 +2003,70 @@ button.ldp-floor:hover {
 .ldp-translation-active .ldp-translation-text {
   display: block;
   margin-top: .35em;
-  padding-left: .65em;
-  border-left: 2px solid var(--ldp-border);
   color: var(--ldp-ink-muted);
+}
+
+.ldp-translation-active:not(.ldp-translation-only)[data-translation-theme="quote"] .ldp-translation-text,
+.ldp-translation-active:not(.ldp-translation-only)[data-translation-theme="highlight"] .ldp-translation-text,
+.ldp-translation-active:not(.ldp-translation-only)[data-translation-theme="paper"] .ldp-translation-text {
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.ldp-translation-active:not(.ldp-translation-only)[data-translation-theme="quote"] .ldp-translation-text {
+  padding: .45em .65em;
+  border-left: 2px solid var(--ldp-border);
+  border-radius: 0 .45em .45em 0;
+  background: color-mix(in srgb, var(--ldp-surface-muted) 78%, transparent);
+}
+
+.ldp-translation-active:not(.ldp-translation-only)[data-translation-theme="plain"] .ldp-translation-text {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.ldp-translation-active:not(.ldp-translation-only)[data-translation-theme="weakening"] .ldp-translation-text {
+  padding-left: 0;
+  border-left: 0;
+  color: var(--ldp-ink-muted);
+  opacity: .58;
+}
+
+.ldp-translation-active:not(.ldp-translation-only)[data-translation-theme="dividing-line"] .ldp-translation-text {
+  margin-top: .55em;
+  padding: .45em 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--ldp-border) 82%, transparent);
+  border-left: 0;
+}
+
+.ldp-translation-active:not(.ldp-translation-only)[data-translation-theme="underline"] .ldp-translation-text {
+  padding-left: 0;
+  border-left: 0;
+  color: var(--ldp-ink);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--ldp-accent) 58%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: .18em;
+}
+
+.ldp-translation-active:not(.ldp-translation-only)[data-translation-theme="highlight"] .ldp-translation-text {
+  margin-top: .5em;
+  padding: .5em .7em;
+  border: 0;
+  border-radius: .55em;
+  background: color-mix(in srgb, var(--ldp-accent-soft) 72%, transparent);
+  color: var(--ldp-ink);
+}
+
+.ldp-translation-active:not(.ldp-translation-only)[data-translation-theme="paper"] .ldp-translation-text {
+  margin-top: .5em;
+  padding: .65em .8em;
+  border: 1px solid color-mix(in srgb, var(--ldp-border) 78%, transparent);
+  border-radius: .6em;
+  background: color-mix(in srgb, var(--ldp-surface) 94%, var(--ldp-canvas));
+  box-shadow: 0 .18em .55em rgb(15 23 42 / .07);
+  color: var(--ldp-ink);
 }
 
 .ldp-translation-loading-indicator {

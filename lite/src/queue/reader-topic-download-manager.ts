@@ -3,6 +3,12 @@ import type {
 	ReaderTopicOfflineArtifactRecord,
 	ReaderTopicOfflineArtifactStore,
 } from '../archive/reader-topic-offline-artifact-repository.js';
+import type { TopicLocalArchiveStatus } from '../cache/topic-snapshot-repository.js';
+import {
+	READER_COLLECTION_FLOATING_WINDOW_GEOMETRY_KEY,
+	READER_COLLECTION_FLOATING_WINDOW_PLACEMENT,
+	READER_COLLECTION_FLOATING_WINDOW_POLICY,
+} from '../collection/reader-collection-floating-window.js';
 import {
 	prepareReaderTopicOfflineBlobHtml,
 } from '../archive/reader-topic-offline-document.js';
@@ -21,13 +27,13 @@ import type { BlobDownloadPort } from '../media/reader-image-download-service.js
 import type {
 	CoordinatedRequestResume,
 } from '../network/coordinated-request-client.js';
-import {
+import { ReaderFloatingWindowFrame } from '../shell/reader-floating-window-frame.js';
+import { readerEscapeOwnedBy } from '../shell/reader-escape-surface.js';
+import { ReaderSelectSurface } from '../shell/reader-select-surface.js';
+import type {
 	ReaderWindowGeometryModel,
 	ReaderWindowPointerController,
-	type ReaderWindowPreferenceInput,
-	type ReaderWindowSnapshot,
 } from '../shell/reader-workspace.js';
-import { ReaderSelectSurface } from '../shell/reader-select-surface.js';
 
 export type ReaderTopicDownloadPhase =
 	| 'queued'
@@ -57,6 +63,7 @@ export interface ReaderTopicDownloadArtifact {
 	readonly postCount: number;
 	readonly expectedPostCount: number;
 	readonly complete: boolean;
+	readonly archiveStatus?: TopicLocalArchiveStatus | null;
 }
 
 export type ReaderTopicDownloadSelectionMode = 'all' | 'op' | 'custom';
@@ -72,7 +79,7 @@ const DOWNLOAD_HISTORY_PAGE_SIZE = 8;
 const DOWNLOAD_REQUEST_AUTO_RESUME_LIMIT = 8;
 const DOWNLOAD_CHALLENGE_AUTO_RESUME_LIMIT = 1;
 export const READER_TOPIC_DOWNLOAD_WINDOW_GEOMETRY_STORAGE_KEY =
-	'linuxdo-enhanced-reader:topic-download-window:v1';
+	READER_COLLECTION_FLOATING_WINDOW_GEOMETRY_KEY;
 const ALL_POSTS_SELECTION: ReaderTopicDownloadSelection = Object.freeze({
 	mode: 'all',
 	expression: '',
@@ -328,6 +335,7 @@ export interface ReaderTopicDownloadTaskSnapshot {
 	readonly error: string;
 	readonly filename: string;
 	readonly complete: boolean;
+	readonly archiveStatus: TopicLocalArchiveStatus | null;
 	readonly createdAt: number;
 	readonly finishedAt: number;
 	/** 仅表示 Reader 曾触发浏览器下载，不表示下载目录中的文件仍存在。 */
@@ -357,11 +365,8 @@ export interface ReaderTopicDownloadManagerOptions {
 	readonly document: Document;
 	readonly mount: HTMLElement;
 	readonly floating?: boolean;
-	/** 浮窗优先停靠到当前 Reader 的下载历史按钮旁。 */
-	readonly positionAnchor?: () => HTMLElement | null;
-	/** 与阅读器偏好使用同一安全 storage；这里只持久化浮窗几何。 */
+	/** 与其他集合窗口共用同一安全 storage 和浮窗几何。 */
 	readonly geometryStorage?: Pick<Storage, 'getItem' | 'setItem'>;
-	readonly geometryStorageKey?: string;
 	readonly currentTopic: () => Readonly<{
 		readonly topicId: DiscourseTopicId;
 		readonly title: string;
@@ -410,6 +415,7 @@ interface ReaderTopicDownloadTask extends ReaderTopicDownloadTaskSnapshot {
 	error: string;
 	filename: string;
 	complete: boolean;
+	archiveStatus: TopicLocalArchiveStatus | null;
 	finishedAt: number;
 	localDownloadRequestedAt: number;
 	artifact: ReaderTopicDownloadArtifact | null;
@@ -473,45 +479,9 @@ function phaseLabel(task: ReaderTopicDownloadTask): string {
 	return task.error ? `失败 · ${task.error}` : '下载失败';
 }
 
-function emptyWindowPreferences(): ReaderWindowPreferenceInput {
-	return Object.freeze({
-		readerWindowWidth: 0,
-		readerWindowHeight: 0,
-		readerWindowX: 0,
-		readerWindowY: 0,
-		readerWindowLocked: false,
-		readerWindowPinned: false,
-	});
-}
-
-function storedWindowPreferences(
-	storage: Pick<Storage, 'getItem'> | undefined,
-	key: string,
-): ReaderWindowPreferenceInput | null {
-	try {
-		const raw = storage?.getItem(key);
-		if (!raw) return null;
-		const value = JSON.parse(raw) as Partial<ReaderWindowPreferenceInput>;
-		const width = Number(value.readerWindowWidth);
-		const height = Number(value.readerWindowHeight);
-		const left = Number(value.readerWindowX);
-		const top = Number(value.readerWindowY);
-		if (
-			!Number.isFinite(width) || width <= 0 ||
-			!Number.isFinite(height) || height <= 0 ||
-			!Number.isFinite(left) || !Number.isFinite(top)
-		) return null;
-		return Object.freeze({
-			readerWindowWidth: width,
-			readerWindowHeight: height,
-			readerWindowX: left,
-			readerWindowY: top,
-			readerWindowLocked: false,
-			readerWindowPinned: false,
-		});
-	} catch {
-		return null;
-	}
+function normalizedArchiveStatus(value: unknown): TopicLocalArchiveStatus | null {
+	const status = Number(value);
+	return status === 403 || status === 404 || status === 410 ? status : null;
 }
 
 /**
@@ -526,8 +496,7 @@ export class ReaderTopicDownloadManager {
 	readonly windowPointer: ReaderWindowPointerController | null;
 	readonly #options: ReaderTopicDownloadManagerOptions;
 	readonly #now: () => number;
-	readonly #mount: HTMLElement;
-	readonly #floatingHost: HTMLElement | null;
+	readonly #floatingWindow: ReaderFloatingWindowFrame | null;
 	readonly #details: HTMLElement;
 	readonly #summaryCount: HTMLElement;
 	readonly #downloadCurrent: HTMLButtonElement;
@@ -535,7 +504,6 @@ export class ReaderTopicDownloadManager {
 	readonly #downloadPreview: HTMLElement;
 	readonly #downloadPreviewTitle: HTMLElement;
 	readonly #downloadPreviewMeta: HTMLElement;
-	readonly #closeManagerButton: HTMLButtonElement | null;
 	readonly #selectionMode: HTMLSelectElement;
 	readonly #selectSurface: ReaderSelectSurface;
 	readonly #customSelection: HTMLInputElement;
@@ -557,11 +525,9 @@ export class ReaderTopicDownloadManager {
 	readonly #cancelFrame: (id: number) => void;
 	#tail = Promise.resolve();
 	#renderFrame = 0;
-	#positionFrame = 0;
 	#renderKey = '';
 	#managerVisible = false;
 	#managerOpen = false;
-	#geometryCustomized = false;
 	#historyPage = 0;
 	#historyBatchMode = false;
 	#visibleHistoryTopicIds: readonly DiscourseTopicId[] = Object.freeze([]);
@@ -577,22 +543,6 @@ export class ReaderTopicDownloadManager {
 		this.#now = options.now ?? Date.now;
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		const view = options.document.defaultView;
-		this.#floatingHost = options.floating
-			? node(
-				options.document,
-				'div',
-				'ldp-topic-download-floating-host',
-			)
-			: null;
-		if (this.#floatingHost) {
-			const surfaceRoot = options.mount.getRootNode();
-			if (surfaceRoot.nodeType === 11 && 'host' in surfaceRoot) {
-				(surfaceRoot as ShadowRoot).append(this.#floatingHost);
-			} else {
-				options.mount.append(this.#floatingHost);
-			}
-		}
-		this.#mount = this.#floatingHost ?? options.mount;
 		this.#requestFrame = options.requestFrame ?? ((callback) => {
 			if (typeof view?.requestAnimationFrame === 'function') {
 				return view.requestAnimationFrame(callback);
@@ -602,12 +552,37 @@ export class ReaderTopicDownloadManager {
 		});
 		this.#cancelFrame = options.cancelFrame ?? ((id) =>
 			view?.cancelAnimationFrame?.(id));
+		this.#floatingWindow = options.floating
+			? new ReaderFloatingWindowFrame({
+					document: options.document,
+					mount: options.mount,
+					title: '主题下载',
+					ariaLabel: 'Topic 下载管理',
+					icon: 'download',
+					variant: 'topic-downloads',
+					tabId: 'topic-downloads',
+					tabOrder: 40,
+					requestOpen: () => {
+						this.openManager();
+					},
+					zIndex: 2_147_483_584,
+					...(options.geometryStorage
+						? { geometryStorage: options.geometryStorage }
+						: {}),
+					geometryStorageKey:
+						READER_COLLECTION_FLOATING_WINDOW_GEOMETRY_KEY,
+					policy: READER_COLLECTION_FLOATING_WINDOW_POLICY,
+					placement: READER_COLLECTION_FLOATING_WINDOW_PLACEMENT,
+					...(options.notify ? { notify: options.notify } : {}),
+					onClose: () => this.#closeFromFrame(),
+					parentScope: this.scope,
+				})
+			: null;
 		this.#details = node(
 			options.document,
 			'section',
 			'ldp-topic-download-manager',
 		);
-		this.#details.classList.toggle('is-floating', options.floating === true);
 		this.#managerVisible = options.floating !== true;
 		if (options.floating) this.#details.hidden = true;
 		const summary = node(
@@ -615,21 +590,15 @@ export class ReaderTopicDownloadManager {
 			'header',
 			'ldp-topic-download-summary',
 		);
-		if (options.floating) summary.dataset.topicDownloadDragSurface = '1';
 		summary.append(createReaderIcon(options.document, 'download'));
 		const summaryLabel = node(options.document, 'span');
 		summaryLabel.textContent = 'Topic 下载';
-		this.#summaryCount = node(options.document, 'b');
-		summary.append(summaryLabel, this.#summaryCount);
-		this.#closeManagerButton = options.floating
-			? button(
-				options.document,
-				'ldp-topic-download-close',
-				'关闭 Topic 下载管理',
-				'x',
-			)
-			: null;
-		if (this.#closeManagerButton) summary.append(this.#closeManagerButton);
+		if (this.#floatingWindow) {
+			this.#summaryCount = this.#floatingWindow.meta;
+		} else {
+			this.#summaryCount = node(options.document, 'b');
+			summary.append(summaryLabel, this.#summaryCount);
+		}
 		const toolbar = node(
 			options.document,
 			'div',
@@ -827,33 +796,14 @@ export class ReaderTopicDownloadManager {
 			this.#list,
 			this.#historyPagination,
 		);
-		const resizeDirections = Object.freeze([
-			'n',
-			's',
-			'e',
-			'w',
-			'ne',
-			'nw',
-			'se',
-			'sw',
-		] as const);
-		const resizeHandles = options.floating
-			? resizeDirections.map((direction) => {
-				const handle = node(
-					options.document,
-					'span',
-					'ldp-topic-download-resize-handle',
-				);
-				handle.dataset.readerResize = direction;
-				handle.dataset.resize = direction;
-				handle.setAttribute('aria-hidden', 'true');
-				return handle;
-			})
-			: [];
-		this.#details.append(summary, toolbar, history, ...resizeHandles);
-		this.#mount.append(this.#details);
+		if (this.#floatingWindow) {
+			this.#details.append(toolbar, history);
+			this.#floatingWindow.body.append(this.#details);
+		} else {
+			this.#details.append(summary, toolbar, history);
+			options.mount.append(this.#details);
+		}
 		/*
-		 * 浮动管理窗位于 Reader surfaceHost 之外，不能依赖 runtime 的全局扫描。
 		 * 管理器直接持有自己的下拉 surface，确保首次打开也不会退回原生菜单。
 		 */
 		this.#selectSurface = new ReaderSelectSurface({
@@ -861,89 +811,11 @@ export class ReaderTopicDownloadManager {
 			root: this.#details,
 			parentScope: this.scope,
 		});
-		const geometryStorageKey = options.geometryStorageKey ??
-			READER_TOPIC_DOWNLOAD_WINDOW_GEOMETRY_STORAGE_KEY;
-		const restoredGeometry = options.floating
-			? storedWindowPreferences(options.geometryStorage, geometryStorageKey)
-			: null;
-		this.#geometryCustomized = restoredGeometry !== null;
-		const readViewport = (): Readonly<{ width: number; height: number }> =>
-			Object.freeze({
-				width: Math.max(
-					1,
-					Number(view?.innerWidth) ||
-						options.document.documentElement?.clientWidth ||
-						options.mount.clientWidth || 1_024,
-				),
-				height: Math.max(
-					1,
-					Number(view?.innerHeight) ||
-						options.document.documentElement?.clientHeight ||
-						options.mount.clientHeight || 768,
-				),
-			});
-		const viewport = readViewport();
-		this.windowGeometry = options.floating
-			? new ReaderWindowGeometryModel({
-					preferences: restoredGeometry ?? emptyWindowPreferences(),
-					viewportWidth: viewport.width,
-					viewportHeight: viewport.height,
-					mode: 'floating',
-					policy: {
-						margin: 8,
-						minWidth: 520,
-						minHeight: 480,
-						compactWidth: 0,
-						defaultWidth: 720,
-						defaultHeight: 680,
-						defaultViewportWidth: 0.72,
-						defaultViewportHeight: 0.8,
-					},
-				})
-			: null;
-		this.windowGeometry?.changes.subscribe(
-			(snapshot) => this.#applyWindowGeometry(snapshot),
-			this.scope,
-		);
-		this.windowPointer = this.windowGeometry
-			? new ReaderWindowPointerController({
-					model: this.windowGeometry,
-					overlay: this.#details,
-					modal: this.#details,
-					header: summary,
-					...(view ? { viewportTarget: view } : {}),
-					readViewport,
-					onPersist: (patch) => {
-						this.#geometryCustomized = true;
-						try {
-							options.geometryStorage?.setItem(
-								geometryStorageKey,
-								JSON.stringify(patch),
-							);
-						} catch {
-							options.notify?.('Topic 下载浮窗位置保存失败');
-						}
-					},
-					requestFrame: this.#requestFrame,
-					cancelFrame: this.#cancelFrame,
-					dragSurfaceSelector:
-						'.ldp-topic-download-summary[data-topic-download-drag-surface]',
-					blockedSelector:
-						'button,input,select,textarea,label,a,[role="button"],' +
-						'[contenteditable="true"]',
-					interactingClassName: 'ldp-topic-download-interacting',
-					restingTransform: 'none',
-					projectPlacement: () => {},
-					parentScope: this.scope,
-				})
-			: null;
-		if (this.windowGeometry) {
-			this.#applyWindowGeometry(this.windowGeometry.snapshot);
-		}
+		this.windowGeometry = this.#floatingWindow?.geometry ?? null;
+		this.windowPointer = this.#floatingWindow?.pointer ?? null;
 		this.scope.add(() => {
 			this.#selectSurface.destroy();
 			if (this.#renderFrame) this.#cancelFrame(this.#renderFrame);
-			if (this.#positionFrame) this.#cancelFrame(this.#positionFrame);
 			for (const task of this.#tasks.values()) {
 				task.controller?.abort(
 					new DOMException('Topic 下载管理已关闭', 'AbortError'),
@@ -954,33 +826,33 @@ export class ReaderTopicDownloadManager {
 			}
 			this.#viewObjectUrls.clear();
 			this.#details.remove();
-			this.#floatingHost?.remove();
 			this.changes.clear();
 		});
 		this.scope.listen(this.#details, 'click', (event) => this.#click(event));
 		if (options.floating) {
 			this.scope.listen(options.document, 'pointerdown', (event) => {
-				if (
-					!this.#managerVisible ||
-					this.#details.hidden ||
-					this.#removing.size > 0 ||
-					eventPathIncludes(event, this.#details)
-				) return;
-				this.closeManager();
+				if (!this.#managerVisible || this.#removing.size > 0) return;
+				if (this.#floatingWindow) {
+					this.#floatingWindow.dismissFromPointerEvent(event);
+					return;
+				}
+				if (!eventPathIncludes(event, this.#details)) this.closeManager();
 			}, true);
 			this.scope.listen(options.document, 'keydown', (event) => {
+				const keyboard = event as KeyboardEvent;
+				if (!this.#managerVisible || this.#removing.size > 0) return;
+				if (this.#floatingWindow) {
+					this.#floatingWindow.dismissFromEscapeEvent(keyboard);
+					return;
+				}
 				if (
-					(event as KeyboardEvent).key !== 'Escape' ||
-					!this.#managerVisible
+					keyboard.key !== 'Escape' ||
+					!readerEscapeOwnedBy(options.document, [this.#details])
 				) return;
-				if (this.#removing.size > 0) return;
 				event.preventDefault();
 				event.stopImmediatePropagation();
 				this.closeManager();
 			}, true);
-			if (view) {
-				this.scope.listen(view, 'resize', () => this.#queuePosition());
-			}
 		}
 		this.scope.listen(this.#selectionMode, 'change', () => {
 			this.#syncSelectionControls();
@@ -1038,7 +910,7 @@ export class ReaderTopicDownloadManager {
 	}
 
 	get element(): HTMLElement {
-		return this.#details;
+		return this.#floatingWindow?.element ?? this.#details;
 	}
 
 	snapshot(): ReaderTopicDownloadManagerSnapshot {
@@ -1171,24 +1043,33 @@ export class ReaderTopicDownloadManager {
 		this.#managerOpen = true;
 		this.#details.hidden = false;
 		this.#details.classList.add('is-open');
-		this.#queuePosition();
+		this.#floatingWindow?.open();
 		this.#emit();
 		return true;
 	}
 
 	closeManager(): boolean {
 		if (this.scope.destroyed || !this.#options.floating) return false;
+		if (this.#floatingWindow?.isOpen) {
+			this.#floatingWindow.close();
+			return true;
+		}
+		this.#closeFromFrame();
+		return true;
+	}
+
+	#closeFromFrame(): void {
+		if (!this.#managerVisible && !this.#managerOpen) return;
 		this.#managerVisible = false;
 		this.#managerOpen = false;
 		this.#details.classList.remove('is-open');
 		this.#details.hidden = true;
 		this.#emit();
-		return true;
 	}
 
 	prepareCurrentDownload(): boolean {
 		this.syncCurrent();
-		if (this.#downloadCurrent.disabled || !this.openManager()) return false;
+		if (!this.openManager()) return false;
 		this.#selectionMode.focus();
 		return true;
 	}
@@ -1236,6 +1117,7 @@ export class ReaderTopicDownloadManager {
 			error: '',
 			filename: '',
 			complete: false,
+			archiveStatus: null,
 			createdAt: this.#now(),
 			finishedAt: 0,
 			localDownloadRequestedAt: 0,
@@ -1257,6 +1139,7 @@ export class ReaderTopicDownloadManager {
 		task.error = '';
 		task.filename = '';
 		task.complete = false;
+		task.archiveStatus = null;
 		task.finishedAt = 0;
 		task.artifact = null;
 		task.requestResumeCount = 0;
@@ -1311,6 +1194,7 @@ export class ReaderTopicDownloadManager {
 					task.completed = artifact.postCount;
 					task.total = artifact.expectedPostCount;
 					task.complete = artifact.complete;
+					task.archiveStatus = normalizedArchiveStatus(artifact.archiveStatus);
 					task.phase = 'ready';
 					task.finishedAt = this.#now();
 					task.detail = '';
@@ -1431,16 +1315,9 @@ export class ReaderTopicDownloadManager {
 	#click(event: Event): void {
 		const target = eventElement(event)
 			?.closest<HTMLElement>(
-				'[data-topic-download-action],.ldp-topic-download-current,' +
-					'.ldp-topic-download-close',
+				'[data-topic-download-action],.ldp-topic-download-current',
 			) ?? null;
 		if (!target) return;
-		if (target === this.#closeManagerButton) {
-			event.preventDefault();
-			event.stopPropagation();
-			this.closeManager();
-			return;
-		}
 		if (target === this.#downloadCurrent) {
 			this.enqueueCurrent();
 			return;
@@ -1651,59 +1528,6 @@ export class ReaderTopicDownloadManager {
 		}
 	}
 
-	#queuePosition(): void {
-		if (
-			this.#positionFrame ||
-			this.scope.destroyed ||
-			!this.#options.floating ||
-			!this.#managerVisible ||
-			this.#details.hidden
-		) return;
-		let completed = false;
-		const frame = this.#requestFrame(() => {
-			completed = true;
-			this.#positionFrame = 0;
-			this.#positionFloating();
-		});
-		if (!completed) this.#positionFrame = frame;
-	}
-
-	#positionFloating(): void {
-		if (this.#geometryCustomized || !this.windowGeometry) return;
-		const anchor = this.#options.positionAnchor?.() ?? null;
-		if (!anchor?.isConnected) return;
-		const anchorRect = anchor.getBoundingClientRect();
-		const geometry = this.windowGeometry.snapshot.geometry;
-		const mountWidth = this.windowGeometry.snapshot.viewportWidth;
-		const mountHeight = this.windowGeometry.snapshot.viewportHeight;
-		const panelWidth = geometry.width;
-		const panelHeight = geometry.height;
-		const gap = 10;
-		const inset = 8;
-		const rightCandidate = anchorRect.right + gap;
-		const leftCandidate = anchorRect.left - panelWidth - gap;
-		const unclampedLeft = rightCandidate + panelWidth <= mountWidth - inset
-			? rightCandidate
-			: leftCandidate >= inset
-				? leftCandidate
-				: rightCandidate;
-		const maximumLeft = Math.max(inset, mountWidth - panelWidth - inset);
-		const left = Math.max(inset, Math.min(maximumLeft, unclampedLeft));
-		const unclampedTop = anchorRect.top - inset;
-		const maximumTop = Math.max(inset, mountHeight - panelHeight - inset);
-		const top = Math.max(inset, Math.min(maximumTop, unclampedTop));
-		this.windowGeometry.setGeometry(panelWidth, panelHeight, left, top);
-	}
-
-	#applyWindowGeometry(snapshot: ReaderWindowSnapshot): void {
-		if (!this.#options.floating || !snapshot.managed) return;
-		const geometry = snapshot.geometry;
-		this.#details.style.left = `${geometry.left}px`;
-		this.#details.style.top = `${geometry.top}px`;
-		this.#details.style.width = `${geometry.width}px`;
-		this.#details.style.height = `${geometry.height}px`;
-	}
-
 	#render(): void {
 		this.#renderFrame = 0;
 		this.syncCurrent();
@@ -1717,6 +1541,7 @@ export class ReaderTopicDownloadManager {
 				task.filename,
 				selectionLabel(task.selection),
 				phaseLabel(task),
+				task.archiveStatus === null ? '' : `${task.archiveStatus} 版本`,
 			].join(' ').toLocaleLowerCase('zh-CN').includes(query))
 			: tasks;
 		const pageCount = Math.max(
@@ -1748,15 +1573,13 @@ export class ReaderTopicDownloadManager {
 				task.detail,
 				task.error,
 				task.filename,
+				task.archiveStatus,
 				task.selection.mode,
 				task.selection.expression,
 				task.localDownloadRequestedAt,
 			]),
 		});
-		if (renderKey === this.#renderKey) {
-			this.#queuePosition();
-			return;
-		}
+		if (renderKey === this.#renderKey) return;
 		this.#renderKey = renderKey;
 		const activeCount = tasks.filter((task) =>
 			!['ready', 'error', 'cancelled'].includes(task.phase)).length;
@@ -1804,7 +1627,6 @@ export class ReaderTopicDownloadManager {
 			`第 ${this.#historyPage + 1} / ${pageCount} 页`;
 		this.#historyPagePrevious.disabled = this.#historyPage === 0;
 		this.#historyPageNext.disabled = this.#historyPage >= pageCount - 1;
-		this.#queuePosition();
 		this.#emit();
 	}
 
@@ -1826,6 +1648,7 @@ export class ReaderTopicDownloadManager {
 					error: '',
 					filename: entry.filename,
 					complete: entry.complete,
+					archiveStatus: normalizedArchiveStatus(entry.archiveStatus),
 					createdAt: entry.createdAt,
 					finishedAt: entry.finishedAt,
 					localDownloadRequestedAt:
@@ -1854,7 +1677,9 @@ export class ReaderTopicDownloadManager {
 			postCount: cached.postCount,
 			expectedPostCount: cached.expectedPostCount,
 			complete: cached.complete,
+			archiveStatus: normalizedArchiveStatus(cached.archiveStatus),
 		});
+		task.archiveStatus = normalizedArchiveStatus(cached.archiveStatus);
 	}
 
 	#backupArtifact(
@@ -1869,6 +1694,7 @@ export class ReaderTopicDownloadManager {
 			selectionMode: task.selection.mode,
 			selectionExpression: task.selection.expression,
 			...artifact,
+			archiveStatus: task.archiveStatus,
 			createdAt: task.createdAt,
 			finishedAt: task.finishedAt,
 			localDownloadRequestedAt: task.localDownloadRequestedAt,
@@ -1881,6 +1707,9 @@ export class ReaderTopicDownloadManager {
 		const row = node(document, 'article', 'ldp-topic-download-task');
 		row.classList.add(`is-${task.phase}`);
 		row.dataset.topicId = String(task.topicId);
+		if (task.archiveStatus !== null) {
+			row.dataset.archiveStatus = String(task.archiveStatus);
+		}
 		if (this.#historyBatchMode) {
 			row.classList.add('is-batch');
 			const selectionLabelNode = node(
@@ -1904,7 +1733,9 @@ export class ReaderTopicDownloadManager {
 		const title = node(document, 'strong');
 		title.textContent = task.title;
 		const state = node(document, 'small');
-		state.textContent = phaseLabel(task);
+		state.textContent = task.archiveStatus === null
+			? phaseLabel(task)
+			: `${task.archiveStatus} 版本 · ${phaseLabel(task)}`;
 		copy.append(title, state);
 		if (
 			['loading-posts', 'loading-replies', 'waiting-rate-limit', 'waiting-challenge']
@@ -1959,6 +1790,7 @@ export class ReaderTopicDownloadManager {
 			error: task.error,
 			filename: task.filename,
 			complete: task.complete,
+			archiveStatus: task.archiveStatus,
 			createdAt: task.createdAt,
 			finishedAt: task.finishedAt,
 			localDownloadRequestedAt: task.localDownloadRequestedAt,

@@ -10,6 +10,7 @@ import {
 	validateReaderWebDavConfig,
 	type ReaderWebDavAutoSyncIntervalMinutes,
 	type ReaderWebDavCategory,
+	type ReaderWebDavConfig,
 } from '../sync/reader-webdav-model.js';
 import {
 	settingsButton,
@@ -42,7 +43,7 @@ function field(
 	input.type = type;
 	input.placeholder = placeholder;
 	input.setAttribute('aria-label', labelText);
-	input.autocomplete = type === 'password' ? 'current-password' : 'off';
+	input.autocomplete = 'off';
 	root.append(label, input);
 	return Object.freeze({ root, input });
 }
@@ -68,7 +69,11 @@ export class ReaderWebDavSettingsForm {
 		HTMLInputElement | HTMLSelectElement | HTMLButtonElement
 	)[];
 	readonly #unavailableReason: () => string;
+	#loaded = false;
+	#actionPending = false;
 	#operation: AbortController | null = null;
+	#renderedConfig: ReaderWebDavConfig | null = null;
+	#passwordEdited = false;
 
 	constructor(options: ReaderWebDavSettingsFormOptions) {
 		this.#host = options.host;
@@ -100,7 +105,6 @@ export class ReaderWebDavSettingsForm {
 		this.#endpoint.inputMode = 'url';
 		const username = field(options.document, '用户名', 'text', '账号邮箱');
 		this.#username = username.input;
-		this.#username.autocomplete = 'username';
 		const password = field(options.document, '应用密码', 'password', '应用密码');
 		this.#password = password.input;
 		const remotePath = field(
@@ -120,7 +124,7 @@ export class ReaderWebDavSettingsForm {
 		const content = settingsSection(
 			options.document,
 			'选择同步内容',
-			'每类独立开关；关闭的类别不会上传、下载或删除。普通页面缓存、图片与附件不上传；离线 Topic HTML 和译文只在各自单独勾选后同步。离线 HTML 作为独立文件存入你的 WebDAV。',
+			'每类独立开关；关闭的类别不会上传、下载或删除。通知与互动历史、离线 Topic HTML 和译文只在各自单独勾选后同步。历史清单只含可搜索记录，不上传原始分页响应、请求游标或限流状态。',
 			true,
 		);
 		const categoryList = element(
@@ -210,16 +214,21 @@ export class ReaderWebDavSettingsForm {
 		]);
 		this.#syncIntervalState();
 		const unavailableReason = this.#unavailableReason();
-		if (unavailableReason) {
-			this.#renderStatus('error', unavailableReason);
-		}
+		this.#renderStatus(
+			unavailableReason ? 'error' : 'idle',
+			unavailableReason || '正在读取 WebDAV 设置…',
+		);
 		this.#host.replaceChildren(root);
 
 		this.scope.listen(this.#autoSync, 'change', () => this.#syncIntervalState());
+		this.scope.listen(this.#password, 'input', () => {
+			this.#passwordEdited = true;
+		});
 		this.scope.listen(this.#save, 'click', () => void this.#saveConfig());
 		this.scope.listen(this.#test, 'click', () => void this.#run('test'));
 		this.scope.listen(this.#sync, 'click', () => void this.#run('sync'));
 		this.#repository.changes.subscribe((snapshot) => {
+			this.#renderConfig(snapshot.config);
 			const unavailableReason = this.#unavailableReason();
 			this.#renderStatus(
 				unavailableReason ? 'error' : snapshot.status.kind,
@@ -241,11 +250,18 @@ export class ReaderWebDavSettingsForm {
 	refreshAvailability(): void {
 		if (this.scope.destroyed) return;
 		const unavailableReason = this.#unavailableReason();
+		if (unavailableReason) {
+			this.#operation?.abort(new Error(unavailableReason));
+		}
 		this.#syncIntervalState();
 		this.#renderStatus(
-			unavailableReason ? 'error' : this.#repository.snapshot.status.kind,
-			unavailableReason || this.#repository.snapshot.status.message ||
-				'填写连接信息后先测试连接，再执行合并同步。',
+			unavailableReason ? 'error' : this.#loaded
+				? this.#repository.snapshot.status.kind
+				: 'idle',
+			unavailableReason || (this.#loaded
+				? this.#repository.snapshot.status.message ||
+					'填写连接信息后先测试连接，再执行合并同步。'
+				: '正在读取 WebDAV 设置…'),
 		);
 	}
 
@@ -253,6 +269,8 @@ export class ReaderWebDavSettingsForm {
 		return ({
 			history: '主题、最近阅读楼层、已读楼层和查看时间。',
 			bookmarks: '收藏链接、标题及定位信息；不修改原站收藏。',
+			'notification-history': '逐条通知历史与搜索字段；不含私信、未读状态或原生通知 ID。独立文件，默认关闭。',
+			'activity-history': '回复、Boost 与表情回应历史；独立文件单调合并，默认关闭，不为同步额外请求 Discourse。',
 			preferences: 'Lite 外观、布局、性能与阅读交互设置；不含 WebDAV 凭据。',
 			queue: '队列主题链接、固定状态和入口楼层；不含帖子正文。',
 			'topic-context': '最近阅读位置、讨论窗口锚点和全屏窗口几何。',
@@ -268,21 +286,8 @@ export class ReaderWebDavSettingsForm {
 		try {
 			const snapshot = await this.#repository.load();
 			if (this.scope.destroyed) return;
-			const config = snapshot.config;
-			this.#endpoint.value = config.endpoint;
-			this.#username.value = config.username;
-			this.#password.value = config.password;
-			this.#remotePath.value = config.remotePath;
-			this.#autoSync.checked = config.autoSyncEnabled;
-			for (const option of this.#interval.options) {
-				option.toggleAttribute(
-					'selected',
-					option.value === String(config.autoSyncIntervalMinutes),
-				);
-			}
-			for (const category of READER_WEBDAV_CATEGORIES) {
-				this.#categories.get(category)!.checked = config.categories[category];
-			}
+			this.#renderConfig(snapshot.config);
+			this.#loaded = true;
 			this.#syncIntervalState();
 			const unavailableReason = this.#unavailableReason();
 			this.#renderStatus(
@@ -291,6 +296,7 @@ export class ReaderWebDavSettingsForm {
 					'填写连接信息后先测试连接，再执行合并同步。',
 			);
 		} catch (cause) {
+			if (this.scope.destroyed) return;
 			this.#renderStatus('error', this.#unavailableReason() || (
 				cause instanceof Error ? cause.message : 'WebDAV 设置读取失败'
 			));
@@ -298,10 +304,10 @@ export class ReaderWebDavSettingsForm {
 	}
 
 	#draft() {
-		return normalizeReaderWebDavConfig({
+		const candidate = normalizeReaderWebDavConfig({
 			endpoint: this.#endpoint.value,
 			username: this.#username.value,
-			password: this.#password.value,
+			password: '',
 			remotePath: this.#remotePath.value,
 			autoSyncEnabled: this.#autoSync.checked,
 			autoSyncIntervalMinutes: Number(
@@ -313,9 +319,58 @@ export class ReaderWebDavSettingsForm {
 				(category) => [category, this.#categories.get(category)!.checked],
 			)),
 		});
+		const rendered = this.#renderedConfig;
+		const preservesCredentialTarget = Boolean(
+			rendered &&
+			candidate.endpoint === rendered.endpoint &&
+			candidate.username === rendered.username,
+		);
+		return normalizeReaderWebDavConfig({
+			...candidate,
+			password: this.#password.value || (
+				!this.#passwordEdited && preservesCredentialTarget
+					? rendered!.password
+					: ''
+			),
+		});
+	}
+
+	#renderConfig(config: ReaderWebDavConfig): void {
+		if (this.#renderedConfig === config) return;
+		this.#endpoint.value = config.endpoint;
+		this.#username.value = config.username;
+		// 已保存密码只留在 userscript 存储；同目标留空保存时由 #draft 复用，
+		// 不把秘密回填到宿主页面 DOM 或交给站点密码管理器识别。
+		this.#password.value = '';
+		this.#password.placeholder = config.password
+			? '已保存，留空保持不变'
+			: '应用密码';
+		this.#passwordEdited = false;
+		this.#remotePath.value = config.remotePath;
+		this.#autoSync.checked = config.autoSyncEnabled;
+		for (const option of this.#interval.options) {
+			option.toggleAttribute(
+				'selected',
+				option.value === String(config.autoSyncIntervalMinutes),
+			);
+		}
+		for (const category of READER_WEBDAV_CATEGORIES) {
+			this.#categories.get(category)!.checked = config.categories[category];
+		}
+		this.#renderedConfig = config;
+		if (this.#loaded) this.#syncIntervalState();
 	}
 
 	async #saveConfig(): Promise<boolean> {
+		if (!this.#beginAction()) return false;
+		try {
+			return await this.#persistDraft(true);
+		} finally {
+			this.#finishAction();
+		}
+	}
+
+	async #persistDraft(showSavedStatus: boolean): Promise<boolean> {
 		const unavailableReason = this.#unavailableReason();
 		if (unavailableReason) {
 			this.#renderStatus('error', unavailableReason);
@@ -329,62 +384,108 @@ export class ReaderWebDavSettingsForm {
 			this.#renderStatus('error', issues[0]!);
 			return false;
 		}
-		await this.#repository.saveConfig(config);
-		this.#renderStatus('success', 'WebDAV 设置已保存。');
+		try {
+			await this.#repository.saveConfig(config);
+		} catch (cause) {
+			if (!this.scope.destroyed) this.#renderStatus(
+				'error',
+				cause instanceof Error ? cause.message : 'WebDAV 设置保存失败',
+			);
+			return false;
+		}
+		if (this.scope.destroyed) return false;
+		const savedConfig = this.#repository.snapshot.config;
+		this.#password.value = '';
+		this.#password.placeholder = savedConfig.password
+			? '已保存，留空保持不变'
+			: '应用密码';
+		this.#passwordEdited = false;
+		const unavailableReasonAfterSave = this.#unavailableReason();
+		if (unavailableReasonAfterSave) {
+			this.#renderStatus('error', unavailableReasonAfterSave);
+			return false;
+		}
+		if (showSavedStatus) {
+			this.#renderStatus('success', 'WebDAV 设置已保存。');
+		}
 		return true;
 	}
 
 	async #run(kind: 'test' | 'sync'): Promise<void> {
-		if (this.#operation || !(await this.#saveConfig())) return;
-		const issues = validateReaderWebDavConfig(this.#repository.snapshot.config, {
-			requireCredentials: true,
-		});
-		if (issues.length) {
-			this.#renderStatus('error', issues[0]!);
-			return;
-		}
+		if (!this.#beginAction()) return;
 		const operation = new AbortController();
+		let operationConfig: ReaderWebDavConfig | null = null;
 		this.#operation = operation;
-		this.#setBusy(true);
-		this.#renderStatus('syncing', kind === 'test'
-			? '正在测试 WebDAV 连接…'
-			: '正在读取远端、合并并条件写入…');
 		try {
+			if (
+				!(await this.#persistDraft(false)) ||
+				this.scope.destroyed ||
+				operation.signal.aborted
+			) return;
+			operationConfig = this.#repository.snapshot.config;
+			const issues = validateReaderWebDavConfig(
+				operationConfig,
+				{ requireCredentials: true },
+			);
+			if (issues.length) {
+				this.#renderStatus('error', issues[0]!);
+				return;
+			}
+			this.#renderStatus('syncing', kind === 'test'
+				? '正在测试 WebDAV 连接…'
+				: '正在读取远端、合并并条件写入…');
 			if (kind === 'test') {
 				await this.#coordinator.testConnection(operation.signal);
-				this.#renderStatus('success', '连接成功，WebDAV 账号和地址可用。');
+				if (this.#repository.snapshot.config === operationConfig) {
+					this.#renderStatus('success', '连接成功，WebDAV 账号和地址可用。');
+				}
 			} else {
 				await this.#coordinator.syncNow(operation.signal);
 			}
 		} catch (cause) {
-			if (!operation.signal.aborted) this.#renderStatus(
+			if (
+				!operation.signal.aborted &&
+				(operationConfig === null ||
+					this.#repository.snapshot.config === operationConfig)
+			) this.#renderStatus(
 				'error',
 				cause instanceof Error ? cause.message : 'WebDAV 操作失败',
 			);
 		} finally {
 			if (this.#operation === operation) {
 				this.#operation = null;
-				this.#setBusy(false);
 			}
+			this.#finishAction();
 		}
+	}
+
+	#beginAction(): boolean {
+		if (this.scope.destroyed || !this.#loaded || this.#actionPending) return false;
+		this.#actionPending = true;
+		this.#setBusy(true);
+		return true;
+	}
+
+	#finishAction(): void {
+		this.#actionPending = false;
+		if (!this.scope.destroyed) this.#syncIntervalState();
 	}
 
 	#setBusy(busy: boolean): void {
 		const unavailable = Boolean(this.#unavailableReason());
+		for (const control of this.#controls) {
+			control.disabled = !this.#loaded || busy || unavailable;
+		}
+		if (this.#loaded && !busy && !unavailable) {
+			this.#interval.disabled = !this.#autoSync.checked;
+		}
 		for (const button of [this.#save, this.#test, this.#sync]) {
-			button.disabled = busy || unavailable;
-			button.toggleAttribute('aria-busy', busy);
+			button.setAttribute('aria-busy', String(busy));
 		}
 	}
 
 	#syncIntervalState(): void {
-		const unavailable = Boolean(this.#unavailableReason());
-		for (const control of this.#controls) control.disabled = unavailable;
-		if (unavailable) {
-			return;
-		}
-		this.#interval.disabled = !this.#autoSync.checked;
-		this.#setBusy(Boolean(this.#operation));
+		this.#setBusy(this.#actionPending);
 	}
 
 	#renderStatus(kind: string, message: string): void {

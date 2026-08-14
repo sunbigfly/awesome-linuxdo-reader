@@ -9,7 +9,7 @@ import {
 	deepActiveElement,
 	eventElement,
 } from '../dom/event-target.js';
-import { containFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
+import { bindFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
 import { htmlElement as node } from '../dom/html-element.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import { RepeatActionGate } from '../kernel/repeat-action-gate.js';
@@ -36,10 +36,21 @@ import {
 
 export const READER_QUEUE_STORAGE_KEY =
 	'linuxdo-enhanced-reader:reader-queue:v1';
+export const READER_QUEUE_RESET_SURFACE_POSITIONS_EVENT =
+	'ldp-reader-queue-reset-surface-positions';
 const READER_QUEUE_DOCK_THRESHOLD_PX = 2;
 const READER_QUEUE_PANEL_SHOW_DELAY_MS = 180;
 const READER_QUEUE_PANEL_HIDE_GRACE_MS = 480;
 const READER_QUEUE_CLEAR_CONFIRM_MS = 3_000;
+
+export function requestReaderQueueSurfacePositionsReset(
+	document: Document,
+): void {
+	const EventConstructor = document.defaultView?.Event ?? Event;
+	document.dispatchEvent(new EventConstructor(
+		READER_QUEUE_RESET_SURFACE_POSITIONS_EVENT,
+	));
+}
 
 export interface ReaderOpenQueuePreferences {
 	readonly openTopicsAtFirstPost: boolean;
@@ -238,6 +249,21 @@ function button(
 	return result;
 }
 
+function reconcileElementChildren(
+	container: HTMLElement,
+	children: readonly HTMLElement[],
+): void {
+	const expected = new Set(children);
+	for (let index = 0; index < children.length; index += 1) {
+		const child = children[index]!;
+		const current = container.children.item(index);
+		if (current !== child) container.insertBefore(child, current);
+	}
+	for (const child of [...container.children]) {
+		if (!expected.has(child as HTMLElement)) child.remove();
+	}
+}
+
 function mutationAffectsQueueScan(
 	mutation: MutationRecord,
 	rail: HTMLElement,
@@ -270,6 +296,8 @@ function normalizedSurface(value: unknown): ReaderQueueSurfaceState {
 			? Math.min(1, Math.max(0, result))
 			: fallback;
 	};
+	const x = numeric('x', 0.02);
+	const y = numeric('y', 0.12);
 	const dock = source.dock;
 	const normalizedDock = [
 		'left',
@@ -279,11 +307,15 @@ function normalizedSurface(value: unknown): ReaderQueueSurfaceState {
 		'title',
 	].includes(String(dock))
 		? dock as ReaderQueueSurfaceState['dock']
-		: Object.hasOwn(source, 'dock') ? '' : 'title';
+		: Object.hasOwn(source, 'dock') ? '' : 'left';
 	return {
-		x: numeric('x', 0.02),
-		y: numeric('y', 0.12),
-		dock: normalizedDock,
+		x,
+		y,
+		// v2 会把当时的默认标题锚点随队列条目一起保存；只迁移这组
+		// canonical 默认值，保留用户拖动后的 title 与其他自定义位置。
+		dock: x === 0.02 && y === 0.12 && normalizedDock === 'title'
+			? 'left'
+			: normalizedDock,
 	};
 }
 
@@ -310,7 +342,7 @@ function normalizedSurfaces(
 function defaultSurface(surface: ReaderQueueSurfaceState): boolean {
 	return surface.x === 0.02 &&
 		surface.y === 0.12 &&
-		surface.dock === 'title';
+		surface.dock === 'left';
 }
 
 function normalizedEntry(value: unknown, baseUrl: string): ReaderQueueEntry | null {
@@ -403,8 +435,10 @@ export class ReaderOpenQueueSession {
 	readonly #accountStorage: ReaderAccountScopedStorageIdentity | null;
 	readonly #entries = new Map<DiscourseTopicId, ReaderQueueEntry>();
 	readonly #rail: HTMLElement;
+	readonly #toggleShell: HTMLElement;
 	readonly #toggle: HTMLButtonElement;
 	readonly #badge: HTMLElement;
+	readonly #dismiss: HTMLButtonElement;
 	readonly #bubbles: HTMLElement;
 	readonly #scrollHint: HTMLButtonElement;
 	readonly #panel: HTMLElement;
@@ -476,18 +510,35 @@ export class ReaderOpenQueueSession {
 		this.#surfaces = restored.surfaces;
 		for (const entry of restored.entries) this.#entries.set(entry.topicId, entry);
 		const document = options.document;
+		this.scope.listen(
+			document,
+			READER_QUEUE_RESET_SURFACE_POSITIONS_EVENT,
+			() => this.resetSurfacePositions(),
+		);
 		this.#rail = node(document, 'aside', 'ldp-reader-queue');
 		this.#toggle = button(
 			document,
 			'ldp-reader-queue-toggle',
 			'阅读队列',
-			'layers',
+			'book-open',
 		);
 		this.#toggle.setAttribute('aria-expanded', 'false');
 		this.#toggle.setAttribute('aria-pressed', 'false');
 		this.#toggle.setAttribute('aria-haspopup', 'listbox');
 		this.#badge = node(document, 'b');
 		this.#toggle.append(this.#badge);
+		this.#dismiss = button(
+			document,
+			'ldp-reader-queue-dismiss',
+			'关闭阅读队列',
+			'x',
+		);
+		this.#toggleShell = node(
+			document,
+			'span',
+			'ldp-reader-queue-toggle-shell',
+		);
+		this.#toggleShell.append(this.#toggle, this.#dismiss);
 		this.#bubbles = node(document, 'div', 'ldp-reader-queue-bubbles');
 		this.#bubbles.setAttribute('aria-label', '队列文章头像，可滚动查看');
 		this.#scrollHint = button(
@@ -547,7 +598,7 @@ export class ReaderOpenQueueSession {
 			this.#scheduleSurfaceMeasure();
 		}, this.scope);
 		this.#rail.append(
-			this.#toggle,
+			this.#toggleShell,
 			this.#bubbles,
 			this.#scrollHint,
 			this.#panel,
@@ -602,7 +653,7 @@ export class ReaderOpenQueueSession {
 			this.#cancelPanelClose();
 		});
 		this.scope.listen(this.#rail, 'pointerleave', () => {
-			this.#rail.classList.remove('is-dock-revealed');
+			if (!this.#panelOpen) this.#rail.classList.remove('is-dock-revealed');
 			this.#cancelPanelPreview();
 			this.#schedulePanelClose();
 		});
@@ -621,11 +672,8 @@ export class ReaderOpenQueueSession {
 		});
 		this.scope.listen(this.#bubbles, 'scroll', () =>
 			this.#syncScrollHint(), { passive: true });
-		this.scope.listen(this.#bubbles, 'wheel', (event) =>
-			containFloatingSurfaceWheel(
-				this.#bubbles,
-				event as WheelEvent,
-			), { passive: false });
+		this.scope.add(bindFloatingSurfaceWheel(this.#bubbles));
+		this.scope.add(bindFloatingSurfaceWheel(this.#panel));
 		this.scope.listen(options.root, 'pointerdown', (event) => {
 			const target = eventElement(event);
 			if (this.#panelOpen && !target?.closest('.ldp-reader-queue')) {
@@ -755,7 +803,7 @@ export class ReaderOpenQueueSession {
 		if (queueChanged) {
 			const previousBubbleScrollTop = this.#bubbles.scrollTop;
 			const activeChanged = active !== this.#activeTopicId;
-			const bubbleAvatars = this.#avatarsByTopic(this.#bubbles);
+			const bubbleShells = this.#bubbleShellsByTopic();
 			const rowAvatars = this.#avatarsByTopic(this.#list);
 			this.#renderKey = renderKey;
 			this.#syncRailPresence();
@@ -763,67 +811,12 @@ export class ReaderOpenQueueSession {
 			this.#count.textContent = `${entries.length} 篇`;
 			this.#resetClearConfirmation();
 			this.#clear.disabled = !entries.some((entry) => !entry.pinned);
-			this.#bubbles.replaceChildren(...entries.map((entry) => {
-				const shell = node(
-					this.#options.document,
-					'span',
-					'ldp-reader-queue-bubble-shell',
-				);
-				shell.classList.toggle('is-pinned', entry.pinned);
-				const bubble = button(
-					this.#options.document,
-					'ldp-reader-queue-bubble',
-					entry.title,
-					'message-square',
-				);
-				bubble.dataset.queueOpen = String(entry.topicId);
-				bubble.dataset.readerQueueTopicId = String(entry.topicId);
-				bubble.classList.toggle('is-active', entry.topicId === active);
-				bubble.setAttribute(
-					'aria-current',
-					String(entry.topicId === active),
-				);
-				bubble.classList.add(`is-${entry.loadState}`);
-				const history = this.#options.historyEntry(entry.topicId);
-				const progress = queueProgress(history);
-				bubble.classList.toggle('is-progress-complete', progress >= 100);
-				bubble.style.setProperty(
-					'--ldp-reader-queue-progress',
-					`${progress * 3.6}deg`,
-				);
-				const label = `${entry.title}，${queueStatus(
-						entry,
-						history,
-						entry.topicId === active,
-					)}`;
-				bubble.setAttribute('aria-label', label);
-				bubble.dataset.ldpTooltipLabel = label;
-				this.#avatar(
-					bubble,
-					entry,
-					history,
-					bubbleAvatars.get(entry.topicId),
-				);
-				bubble.append(node(this.#options.document, 'i'));
-				const remove = button(
-					this.#options.document,
-					'ldp-reader-queue-bubble-remove',
-					`从阅读队列移除 ${entry.title}`,
-					'x',
-				);
-				remove.dataset.queueRemove = String(entry.topicId);
-				shell.append(bubble, remove);
-				if (entry.pinned) {
-					const pin = node(
-						this.#options.document,
-						'span',
-						'ldp-reader-queue-bubble-pin',
-					);
-					pin.append(icon(this.#options.document, 'pin'));
-					shell.append(pin);
-				}
-				return shell;
-			}));
+			const bubbles = entries.map((entry) => this.#bubbleShell(
+				entry,
+				active,
+				bubbleShells.get(entry.topicId),
+			));
+			reconcileElementChildren(this.#bubbles, bubbles);
 			this.#list.replaceChildren(
 				...entries.map((entry) => this.#row(
 					entry,
@@ -870,17 +863,30 @@ export class ReaderOpenQueueSession {
 				add.dataset.readerQueueTopicId,
 			);
 			const added = topicId ? this.#entries.has(topicId) : false;
-			if (add.getAttribute('aria-pressed') === String(added)) continue;
-			add.classList.toggle('is-added', added);
-			add.setAttribute('aria-pressed', String(added));
-			add.setAttribute(
-				'aria-label',
-				added ? '移出阅读队列' : '加入阅读队列并后台预加载',
-			);
-			add.replaceChildren(icon(
-				this.#options.document,
-				added ? 'check' : 'plus',
-			));
+			const stateChanged =
+				add.getAttribute('aria-pressed') !== String(added);
+			const label = added
+				? '移出阅读队列'
+				: '加入阅读队列并后台预加载';
+			const labelChanged = add.dataset.ldpTooltipLabel !== label;
+			if (stateChanged) {
+				add.classList.toggle('is-added', added);
+				add.setAttribute('aria-pressed', String(added));
+				add.replaceChildren(icon(
+					this.#options.document,
+					added ? 'check' : 'plus',
+				));
+			}
+			add.setAttribute('aria-label', label);
+			add.dataset.ldpTooltipLabel = label;
+			if (labelChanged) {
+				const EventConstructor =
+					add.ownerDocument.defaultView?.Event ?? Event;
+				add.dispatchEvent(new EventConstructor(
+					'ldp-tooltip-refresh',
+					{ bubbles: true },
+				));
+			}
 		}
 	}
 
@@ -888,7 +894,16 @@ export class ReaderOpenQueueSession {
 		const alwaysVisible = this.#options.readPreferences()
 			.readerQueueAlwaysVisibleWhenEmpty;
 		this.#rail.hidden = !this.#entries.size && !alwaysVisible;
-		this.#badge.textContent = String(this.#entries.size);
+		this.#badge.hidden = this.#entries.size === 0;
+		this.#badge.textContent = this.#entries.size
+			? String(this.#entries.size)
+			: '';
+		this.#dismiss.setAttribute(
+			'aria-label',
+			this.#entries.size
+				? '收起阅读队列头像'
+				: '隐藏空阅读队列入口',
+		);
 	}
 
 	downloadCurrentTopic(): boolean {
@@ -905,8 +920,22 @@ export class ReaderOpenQueueSession {
 		this.#scheduleSurfaceMeasure();
 	}
 
+	resetSurfacePositions(): void {
+		for (const surface of Object.values(this.#surfaces)) {
+			surface.x = 0.02;
+			surface.y = 0.12;
+			surface.dock = 'left';
+		}
+		this.#persist();
+		this.#cancelSurfaceFrames();
+		this.#scheduleSurfaceMeasure();
+	}
+
 	toggle(): void {
 		if (this.scope.destroyed || this.#rail.hidden) return;
+		if (this.#rail.classList.contains('is-preview-collapsed')) {
+			this.#setPreviewExpanded(true);
+		}
 		if (this.#panelPinned) {
 			this.#setPanelOpen(false);
 			return;
@@ -985,6 +1014,94 @@ export class ReaderOpenQueueSession {
 		return row;
 	}
 
+	#bubbleShell(
+		entry: ReaderQueueEntry,
+		active: DiscourseTopicId | null,
+		reusable?: HTMLElement,
+	): HTMLElement {
+		const document = this.#options.document;
+		const shell = reusable ?? node(
+			document,
+			'span',
+			'ldp-reader-queue-bubble-shell',
+		);
+		shell.className = 'ldp-reader-queue-bubble-shell';
+		shell.classList.toggle('is-pinned', entry.pinned);
+		let bubble = shell.querySelector<HTMLButtonElement>(
+			':scope > .ldp-reader-queue-bubble',
+		);
+		if (!bubble) {
+			bubble = button(
+				document,
+				'ldp-reader-queue-bubble',
+				entry.title,
+				'message-square',
+			);
+		}
+		bubble.className = 'ldp-reader-queue-bubble';
+		bubble.dataset.queueOpen = String(entry.topicId);
+		bubble.dataset.readerQueueTopicId = String(entry.topicId);
+		bubble.classList.toggle('is-active', entry.topicId === active);
+		bubble.setAttribute(
+			'aria-current',
+			String(entry.topicId === active),
+		);
+		bubble.classList.add(`is-${entry.loadState}`);
+		const history = this.#options.historyEntry(entry.topicId);
+		const progress = queueProgress(history);
+		bubble.classList.toggle('is-progress-complete', progress >= 100);
+		bubble.style.setProperty(
+			'--ldp-reader-queue-progress',
+			`${progress * 3.6}deg`,
+		);
+		const label = `${entry.title}，${queueStatus(
+			entry,
+			history,
+			entry.topicId === active,
+		)}`;
+		bubble.setAttribute('aria-label', label);
+		bubble.dataset.ldpTooltipLabel = label;
+		this.#avatar(
+			bubble,
+			entry,
+			history,
+			bubble.querySelector<HTMLElement>('.ldp-reader-queue-avatar') ??
+				undefined,
+		);
+		let status = bubble.querySelector<HTMLElement>(':scope > i');
+		if (!status) status = node(document, 'i');
+		reconcileElementChildren(bubble, [
+			bubble.querySelector<HTMLElement>('.ldp-reader-queue-avatar')!,
+			status,
+		]);
+		let remove = shell.querySelector<HTMLButtonElement>(
+			':scope > .ldp-reader-queue-bubble-remove',
+		);
+		if (!remove) {
+			remove = button(
+				document,
+				'ldp-reader-queue-bubble-remove',
+				`从阅读队列移除 ${entry.title}`,
+				'x',
+			);
+		}
+		remove.setAttribute('aria-label', `从阅读队列移除 ${entry.title}`);
+		remove.dataset.queueRemove = String(entry.topicId);
+		let pin = shell.querySelector<HTMLElement>(
+			':scope > .ldp-reader-queue-bubble-pin',
+		);
+		if (entry.pinned && !pin) {
+			pin = node(document, 'span', 'ldp-reader-queue-bubble-pin');
+			pin.append(icon(document, 'pin'));
+		}
+		reconcileElementChildren(shell, [
+			bubble,
+			remove,
+			...(entry.pinned && pin ? [pin] : []),
+		]);
+		return shell;
+	}
+
 	#avatar(
 		host: HTMLElement,
 		entry: ReaderQueueEntry,
@@ -1003,7 +1120,9 @@ export class ReaderOpenQueueSession {
 			reusableAvatar &&
 			this.#avatarIdentity.get(reusableAvatar) === identity
 		) {
-			host.replaceChildren(reusableAvatar);
+			if (reusableAvatar.parentElement !== host) {
+				host.replaceChildren(reusableAvatar);
+			}
 			return;
 		}
 		const avatar = node(
@@ -1050,12 +1169,27 @@ export class ReaderOpenQueueSession {
 		return avatars;
 	}
 
+	#bubbleShellsByTopic(): Map<DiscourseTopicId, HTMLElement> {
+		const shells = new Map<DiscourseTopicId, HTMLElement>();
+		for (const shell of this.#bubbles.querySelectorAll<HTMLElement>(
+			':scope > .ldp-reader-queue-bubble-shell',
+		)) {
+			const topicId = tryDiscourseTopicId(
+				shell.querySelector<HTMLElement>('[data-queue-open]')
+					?.dataset.queueOpen,
+			);
+			if (topicId) shells.set(topicId, shell);
+		}
+		return shells;
+	}
+
 	#click(event: Event): void {
 		const target = eventElement(event);
 		const action = target?.closest<HTMLElement>(
 			'[data-queue-open],[data-queue-pin],[data-queue-remove],' +
 				'[data-queue-retry],' +
 			'.ldp-reader-queue-clear,.ldp-reader-queue-close,' +
+			'.ldp-reader-queue-dismiss,' +
 			'.ldp-reader-queue-toggle,.ldp-reader-queue-scroll-hint',
 		);
 		if (!action) return;
@@ -1094,6 +1228,18 @@ export class ReaderOpenQueueSession {
 				return;
 			}
 			this.toggle();
+			return;
+		}
+		if (action === this.#dismiss) {
+			this.#setPanelOpen(false);
+			if (this.#entries.size) {
+				this.#setPreviewExpanded(false);
+			} else {
+				void this.#options.updatePreferences({
+					readerQueueAlwaysVisibleWhenEmpty: false,
+				});
+				this.sync();
+			}
 			return;
 		}
 		if (action.classList.contains('ldp-reader-queue-close')) {
@@ -1196,7 +1342,9 @@ export class ReaderOpenQueueSession {
 		if (!topicId) return;
 		void this.#open(
 			topicId,
-			tryDiscoursePostNumber(button.dataset.postNumber),
+			button.dataset.triggerSource === 'history'
+				? null
+				: tryDiscoursePostNumber(button.dataset.postNumber),
 			button.dataset.triggerSource === 'route' ? 'link' : 'restore',
 		);
 	}
@@ -1389,10 +1537,18 @@ export class ReaderOpenQueueSession {
 		this.#cancelPanelClose();
 		if (!open) this.#panelPinned = false;
 		this.#panelOpen = open;
+		this.#rail.classList.toggle('is-dock-revealed', open);
 		this.#panel.hidden = !open;
 		this.#toggle.setAttribute('aria-expanded', String(open));
 		this.#syncToggleState();
 		if (open) this.#scheduleSurfaceMeasure();
+	}
+
+	#setPreviewExpanded(expanded: boolean): void {
+		this.#rail.classList.toggle('is-preview-collapsed', !expanded);
+		this.#syncToggleState();
+		if (expanded) this.#requestFrame(() => this.#syncScrollHint());
+		this.#scheduleSurfaceMeasure();
 	}
 
 	#cancelPanelPreview(): void {
@@ -1456,7 +1612,9 @@ export class ReaderOpenQueueSession {
 
 	#syncToggleState(): void {
 		this.#toggle.setAttribute('aria-pressed', String(this.#panelPinned));
-		const action = this.#panelPinned
+		const action = this.#rail.classList.contains('is-preview-collapsed')
+			? '展开收纳箱'
+			: this.#panelPinned
 			? '关闭收纳箱'
 			: this.#panelOpen
 				? '固定打开收纳箱'
@@ -1621,7 +1779,13 @@ export class ReaderOpenQueueSession {
 						parent.left - rail.width / 2
 					) / availableWidth,
 				));
-			} else if (action && action.width > 0 && action.height > 0) {
+			} else if (
+				this.#surface.dock !== 'left' &&
+				this.#surface.dock !== 'right' &&
+				action &&
+				action.width > 0 &&
+				action.height > 0
+			) {
 				const left = parent.left + x * availableWidth;
 				const top = parent.top + y * availableHeight;
 				const right = left + rail.width;
@@ -1740,11 +1904,16 @@ export class ReaderOpenQueueSession {
 		const anchor = this.#options.historyAnchor(topicId);
 		const current = this.#options.currentTopicId();
 		const previous = current ? this.#entries.get(current) : null;
+		const historyRestore =
+			source === 'restore' &&
+			(anchor !== null || history !== null);
 		const postNumber =
 			preferredPostNumber ??
-			anchor?.viewport.postNumber ??
-			history?.postNumber ??
-			entry?.postNumber ??
+			(historyRestore
+				? null
+				: anchor?.viewport.postNumber ??
+					history?.postNumber ??
+					entry?.postNumber) ??
 			null;
 		try {
 			const result = await this.#options.target.openTarget({
@@ -1910,6 +2079,7 @@ export class ReaderOpenQueueSession {
 				'加入阅读队列并后台预加载',
 				'plus',
 			);
+			add.dataset.ldpTooltipLabel = '加入阅读队列并后台预加载';
 			add.dataset.readerQueueTopicId = String(route.topicId);
 			add.dataset.readerQueueHref = route.href;
 			add.dataset.readerQueueTitle =
@@ -1992,7 +2162,7 @@ export class ReaderOpenQueueSession {
 		const target = routeTarget ?? (history
 			? Object.freeze({
 				topicId: history.topicId,
-				postNumber: history.postNumber,
+				postNumber: null,
 				source: 'history' as const,
 				title: history.title,
 			})

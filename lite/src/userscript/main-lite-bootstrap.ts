@@ -9,6 +9,7 @@ import {
 	discourseNativeBoostsAvailable,
 	discourseNativeIconRenderer,
 	discourseNativeSiteLogoUrl,
+	discourseNativeDefaultSiteTheme,
 	discourseNativeTheme,
 } from '../discourse/native-host-api.js';
 import type {
@@ -22,6 +23,9 @@ import { resolveReaderIcon } from '../components/reader-icon.js';
 import type {
 	ReaderLightboxCommentPostInput,
 } from '../media/reader-lightbox-comment-model.js';
+import {
+	normalizeReaderHistoryAnchorState,
+} from '../history/reader-history-model.js';
 import {
 	readerKatexStylesheet,
 } from '../media/reader-katex-controller.js';
@@ -37,6 +41,9 @@ import {
 import {
 	readerPreferencesThemeAdapter,
 } from '../appearance/reader-theme-controller.js';
+import {
+	createReaderBrowserThemeClock,
+} from '../appearance/reader-local-sun-clock.js';
 import {
 	readerPreferencesFontAdapter,
 } from '../font/reader-font-style-controller.js';
@@ -61,8 +68,9 @@ import { ReaderSurfacePortal } from '../shell/reader-surface-portal.js';
 import {
 	readerPreferencesShortcutAdapter,
 } from '../shell/reader-shortcut-controller.js';
-import type {
-	ReaderWorkspaceMode,
+import {
+	readerWorkspacePositionMode,
+	type ReaderWorkspaceMode,
 } from '../shell/reader-workspace.js';
 import {
 	EmbeddedHostTopicCardEnhancement,
@@ -77,11 +85,21 @@ import {
 	readerPreferencesTopicActionRailAdapter,
 } from '../post/reader-topic-action-rail.js';
 import {
+	readerPreferencesUnwantedTopicFilterAdapter,
+	readerUnwantedTopicFilterPreferencesEqual,
+	readerUnwantedTopicFilterMatch,
+	type ReaderUnwantedTopicFilterPreferences,
+	type ReaderUnwantedTopicFilterPreferencesPort,
+} from '../collection/reader-unwanted-topic-filter.js';
+import {
 	readerPreferencesPerformanceSettingsAdapter,
 } from '../settings/reader-performance-settings-form.js';
 import {
 	readerPreferencesReadingSettingsAdapter,
 } from '../settings/reader-reading-settings-form.js';
+import {
+	requestReaderQueueSurfacePositionsReset,
+} from '../queue/reader-open-queue-session.js';
 import {
 	showReaderSettingsResetReminder,
 } from '../settings/reader-settings-reset-reminder.js';
@@ -105,7 +123,6 @@ import {
 } from '../translation/translation-text.js';
 import {
 	ReaderTranslationConfigRepository,
-	readerTranslationActiveProfile,
 } from '../translation/reader-translation-config.js';
 import {
 	ReaderReplyTreePreferencesPreview,
@@ -119,7 +136,9 @@ import {
 	createReaderUserscriptRuntimeStage,
 } from './reader-userscript-application.js';
 import {
+	createReaderUserscriptServiceWorkerMessageRelay,
 	readerUserscriptRouteKind,
+	type ReaderUserscriptServiceWorkerMessageRelay,
 } from './reader-userscript-target-adapter.js';
 import {
 	consumeReaderNativeBypass,
@@ -142,6 +161,9 @@ import {
 } from './reader-embedded-reload-coordinator.js';
 import {
 	isReaderCloudflareChallengeWindow,
+	monitorReaderCloudflareChallengeWindow,
+	READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS,
+	READER_BACKGROUND_REQUEST_MAX_DEFER_MS,
 } from '../network/browser-shared-request-permit.js';
 import {
 	ReaderWebDavConfigRepository,
@@ -150,6 +172,7 @@ import type { ReaderWebDavClient } from '../sync/reader-webdav-client.js';
 
 const DEBUG_HANDLE_KEY = '__LDP_MAIN_LITE__';
 const LEGACY_DEBUG_HANDLE_KEY = '__LDP_MIAN_LITE__';
+const CHALLENGE_MONITOR_KEY = '__LDP_CLOUDFLARE_CHALLENGE_MONITOR__';
 // Stable 1.0.0 DOM/storage identities keep upgrades free of duplicate UI and state loss.
 const STYLE_ID = 'ldp-mian-lite-styles';
 const STYLE_RESOURCE = 'ldpReaderStyles';
@@ -263,6 +286,7 @@ function createRuntimeStage(
 	document: Document,
 	window: Window,
 	state: MutableMainLiteState,
+	serviceWorkerMessages: ReaderUserscriptServiceWorkerMessageRelay | null,
 	suppressInitialTopicOpen: boolean,
 	customSites: Readonly<{
 		readonly repository: ReaderCustomSiteRepository;
@@ -294,6 +318,29 @@ function createRuntimeStage(
 			);
 			await environment.waitForDiscourseRuntime(readiness.signal);
 			const initialPreferences = applicationContext.readPreferences();
+			let defaultSiteThemeReloadRequested = false;
+			const enforceEmbeddedDefaultSiteTheme = (
+				mode: ReaderWorkspaceMode,
+			): void => {
+				if (
+					routeKind !== 'list' ||
+					readerWorkspacePositionMode(mode) !== 'embedded' ||
+					defaultSiteThemeReloadRequested
+				) return;
+				const result = discourseNativeDefaultSiteTheme(
+					environment.discourseHost,
+				);
+				if (result !== 'updated') return;
+				defaultSiteThemeReloadRequested = true;
+				try {
+					window.location.reload();
+				} catch (cause) {
+					console.error('[main-lite:default-site-theme]', cause);
+				}
+			};
+			enforceEmbeddedDefaultSiteTheme(
+				requestedMode(initialPreferences, routeKind),
+			);
 			const replyTreePreferences =
 				new ReaderReplyTreePreferencesPreview(
 					readerPreferencesReplyTreeAdapter.read(initialPreferences),
@@ -351,6 +398,47 @@ function createRuntimeStage(
 			let persistTranslationMode: ((
 				mode: ReaderPreferences['translationMode'],
 			) => void) | null = null;
+			let hostTopicEnhancement: EmbeddedHostTopicCardEnhancement | null = null;
+			const unwantedTopicFilter: ReaderUnwantedTopicFilterPreferencesPort =
+				Object.freeze({
+					read: () => readerPreferencesUnwantedTopicFilterAdapter.read(
+						applicationContext.readPreferences(),
+					),
+					update: (preferences: ReaderUnwantedTopicFilterPreferences) => {
+						if (!applicationContext.updatePreferences) {
+							throw new Error('当前环境不能保存自动过滤设置');
+						}
+						applicationContext.updatePreferences(
+							readerPreferencesUnwantedTopicFilterAdapter.createPatch(
+								preferences,
+							),
+						);
+					},
+					subscribe: (
+						listener: (
+							preferences: ReaderUnwantedTopicFilterPreferences,
+						) => void,
+						preferenceScope?: LifecycleScope,
+					) => {
+						let previous = readerPreferencesUnwantedTopicFilterAdapter.read(
+							applicationContext.readPreferences(),
+						);
+						return applicationContext.preferenceChanges.subscribe(
+							(preferences) => {
+								const next = readerPreferencesUnwantedTopicFilterAdapter.read(
+									preferences,
+								);
+								if (readerUnwantedTopicFilterPreferencesEqual(
+									previous,
+									next,
+								)) return;
+								previous = next;
+								listener(next);
+							},
+							preferenceScope,
+						);
+					},
+				});
 			const stage = createReaderUserscriptRuntimeStage<
 				ReaderPreferences,
 				MainLiteTopic,
@@ -378,6 +466,37 @@ function createRuntimeStage(
 				const readPreferences = context.readPreferences;
 				const scrolling = () =>
 					document.scrollingElement ?? document.documentElement;
+				hostTopicEnhancement = new EmbeddedHostTopicCardEnhancement(
+					document,
+					environment.discourseHost,
+					{
+						openedTopicStorage: window.localStorage,
+						openedTopicStorageScope: currentUsername,
+						isTopicHidden: (topicId) =>
+							state.runtime?.unwantedTopics.has(topicId) === true,
+						hideTopic: (input) => {
+							const runtime = state.runtime;
+							if (!runtime) throw new Error('不想看仓库尚未就绪');
+							runtime.unwantedTopics.remember(input);
+						},
+						automaticFilter: (input) => state.runtime
+							? readerUnwantedTopicFilterMatch(
+								readerPreferencesUnwantedTopicFilterAdapter.read(
+									applicationContext.readPreferences(),
+								),
+								input,
+							)
+							: null,
+						notify: (message) =>
+							state.runtime?.feedback.show(message),
+						onError: (cause) => {
+							console.error(
+								'[main-lite:host-topic-notification]',
+								cause,
+							);
+						},
+					},
+				);
 				return {
 					document,
 					routeKind,
@@ -387,6 +506,7 @@ function createRuntimeStage(
 					),
 					embedWidth: readPreferences().listReaderEmbedWidth,
 					windowPreferences: readPreferences(),
+					topicFilterChanges: unwantedTopicFilter,
 					elements: template.workspaceElements,
 					viewportTarget: window,
 					pointerTarget: document,
@@ -401,25 +521,13 @@ function createRuntimeStage(
 							scrollHeight: scrolling().scrollHeight,
 							scrollTop: scrolling().scrollTop,
 						}),
+						readScrollTop: () => scrolling().scrollTop,
 						scrollTo: (top) => window.scrollTo({
 							top,
 							behavior: 'auto',
 						}),
 					},
-					enhancements: new EmbeddedHostTopicCardEnhancement(
-						document,
-						environment.discourseHost,
-						{
-							notify: (message) =>
-								state.runtime?.feedback.show(message),
-							onError: (cause) => {
-								console.error(
-									'[main-lite:host-topic-notification]',
-									cause,
-								);
-							},
-						},
-					),
+					enhancements: hostTopicEnhancement,
 					readAppearance: () => {
 						const preferences = readPreferences();
 						const activeTheme = theme(document, window);
@@ -444,6 +552,7 @@ function createRuntimeStage(
 								}
 								: { listReaderMode: mode },
 						);
+						enforceEmbeddedDefaultSiteTheme(mode);
 					},
 					onPersistEmbedWidth: (listReaderEmbedWidth) => {
 						context.updatePreferences?.({ listReaderEmbedWidth });
@@ -477,22 +586,27 @@ function createRuntimeStage(
 			document,
 			renderIcon,
 			translationView: bodyTranslationAllowed
-				? customSites.translation
-					? {
-						initialAnimation:
-							readerTranslationActiveProfile(
-								customSites.translation.snapshot.config,
-							).animation,
-						subscribeAnimation: (listener, animationScope) => {
-							customSites.translation!.changes.subscribe(
-								(snapshot) => listener(readerTranslationActiveProfile(
-									snapshot.config,
-								).animation),
-								animationScope,
-							);
-						},
-					}
-					: {}
+				? {
+					initialTheme: initialPreferences.translationTheme,
+					subscribeTheme: (listener, themeScope) => {
+						applicationContext.preferenceChanges.subscribe(
+							(preferences) => listener(preferences.translationTheme),
+							themeScope,
+						);
+					},
+					...(customSites.translation
+						? {
+							initialAnimation:
+								customSites.translation.snapshot.config.animation,
+							subscribeAnimation: (listener, animationScope) => {
+								customSites.translation!.changes.subscribe(
+									(snapshot) => listener(snapshot.config.animation),
+									animationScope,
+								);
+							},
+						}
+						: {}),
+				}
 				: false,
 			storage: window.localStorage,
 			sourceId: sourceId(window),
@@ -512,6 +626,10 @@ function createRuntimeStage(
 					initialPreferences.performanceRequestInterval,
 				maxConcurrent:
 					initialPreferences.performanceRequestConcurrency,
+				backgroundIdleIntervalMs:
+					READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS,
+				backgroundMaxDeferMs:
+					READER_BACKGROUND_REQUEST_MAX_DEFER_MS,
 			},
 			data: {
 				scheduler: {
@@ -572,8 +690,7 @@ function createRuntimeStage(
 						preferences: {
 							sortMode: initialPreferences.historySortMode,
 						},
-						topicHref: (entry) =>
-							`${origin}/t/${entry.topicId}/${entry.postNumber}`,
+						topicHref: (entry) => `${origin}/t/${entry.topicId}`,
 						changeSortMode: (historySortMode) => {
 							applicationContext.updatePreferences?.({
 								historySortMode,
@@ -600,6 +717,7 @@ function createRuntimeStage(
 							exactTime: services.exactTime,
 							readTopic: () => bundle.services.session.topic,
 							currentUsername: services.currentUsername,
+							recoverAvatarSource: services.recoverAvatarSource,
 							renderIcon,
 						});
 					const readState = createReaderPostReadStateFeature<MainLitePost>({
@@ -662,8 +780,9 @@ function createRuntimeStage(
 							},
 						};
 				},
-			},
-			onTopicFeatureError: (diagnostic) => {
+				},
+				unwantedTopicFilter,
+				onTopicFeatureError: (diagnostic) => {
 				console.error(
 					`[main-lite:${diagnostic.feature}]`,
 					diagnostic.cause,
@@ -716,6 +835,7 @@ function createRuntimeStage(
 		theme: {
 			preferences: readerPreferencesThemeAdapter,
 			hostTheme: discourseNativeTheme(environment.discourseHost),
+			clock: createReaderBrowserThemeClock({ window, document }),
 			system: {
 				readDark: () =>
 					Boolean(window.matchMedia?.(
@@ -733,7 +853,7 @@ function createRuntimeStage(
 					scope.add(cleanup);
 					return cleanup;
 				},
-			},
+				},
 		},
 		font: readerPreferencesFontAdapter,
 		motion: {
@@ -783,6 +903,16 @@ function createRuntimeStage(
 				? {
 					translationForm: {
 						repository: customSites.translation,
+						presentation: {
+							readTheme: () =>
+								applicationContext.readPreferences().translationTheme,
+							persistTheme: (translationTheme) => {
+								if (!applicationContext.updatePreferences) {
+									throw new Error('当前环境不能保存译文样式');
+								}
+								applicationContext.updatePreferences({ translationTheme });
+							},
+						},
 					},
 				}
 				: {}),
@@ -793,7 +923,7 @@ function createRuntimeStage(
 				topicActionRail: readerPreferencesTopicActionRailAdapter,
 				replyTree: readerPreferencesReplyTreeAdapter,
 				replyTreePreview: replyTreePreferences,
-				boostsAvailable: discourseNativeBoostsAvailable(
+				boostsAvailable: () => discourseNativeBoostsAvailable(
 					environment.discourseHost,
 				),
 			},
@@ -822,6 +952,7 @@ function createRuntimeStage(
 			: {}),
 		targets: {
 			openInitialRoute: !suppressInitialTopicOpen,
+			serviceWorkerMessages,
 			selectOpenTopicsAtFirstPost: (preferences) =>
 				preferences.openTopicsAtFirstPost,
 			onError: (error) => {
@@ -849,6 +980,7 @@ function createRuntimeStage(
 							throw new Error('偏好写端口不可用');
 						}
 						context.updatePreferences(preferences);
+						requestReaderQueueSurfacePositionsReset(document);
 					},
 					feedback: runtime.feedback,
 					isActive: () => !runtime.scope.destroyed,
@@ -857,11 +989,20 @@ function createRuntimeStage(
 					},
 				});
 			};
+			const restoreOpenedHostTopicTitle = (): void => {
+				if (runtime.shell.state !== 'running') return;
+				const topicId = runtime.shell.activeTopicId;
+				if (topicId !== null) hostTopicEnhancement?.markTopicOpened(topicId);
+			};
 			runtime.shell.changes.subscribe(
-				checkSettingsResetReminder,
+				() => {
+					checkSettingsResetReminder();
+					restoreOpenedHostTopicTitle();
+				},
 				runtime.scope,
 			);
 			checkSettingsResetReminder();
+			restoreOpenedHostTopicTitle();
 			const portal = state.portal;
 			if (!portal) throw new Error('main-lite Shadow Portal 未就绪');
 			const embeddedReload = routeKind === 'list'
@@ -903,7 +1044,9 @@ function createRuntimeStage(
 						if (!runtime.workspace.setMode(reload.mode)) return false;
 						const opened = await runtime.openTarget({
 							topicId: reload.topicId,
-							postNumber: reload.anchor.viewport.postNumber,
+							...(reload.anchor.viewport.scrollRatio === undefined
+								? { postNumber: reload.anchor.viewport.postNumber }
+								: {}),
 							source: 'restore',
 							alignment: 'nearest',
 						});
@@ -939,10 +1082,13 @@ function createRuntimeStage(
 				if (!recent) return;
 				const anchor = runtime.historyNavigation.snapshot.states[
 					String(recent.topicId)
-				] ?? null;
+				] ?? (recent.viewport === null
+					? null
+					: normalizeReaderHistoryAnchorState({
+						viewport: recent.viewport,
+					}));
 				const opened = await runtime.openTarget({
 					topicId: recent.topicId,
-					postNumber: anchor?.viewport.postNumber ?? recent.postNumber,
 					source: 'restore',
 					alignment: 'nearest',
 				});
@@ -951,7 +1097,10 @@ function createRuntimeStage(
 					(opened.topic.status === 'opened' ||
 						opened.topic.status === 'reused')
 				) {
-					await runtime.historyNavigation.restore(recent.topicId, anchor);
+					await runtime.historyNavigation.restore(recent.topicId, anchor, {
+						highlight: false,
+						restoreSemanticState: false,
+					});
 				}
 			})().catch((error) => {
 				console.error('[main-lite:embedded-default-topic]', error);
@@ -1040,6 +1189,24 @@ export function startMainLiteUserscript(
 	if (!document) throw new Error('main-lite document 不可用');
 	if (isReaderCloudflareChallengeWindow(window)) {
 		(existing as MainLiteUserscriptHandle | undefined)?.destroy?.();
+		(page[CHALLENGE_MONITOR_KEY] as (() => void) | undefined)?.();
+		const stopMonitor = monitorReaderCloudflareChallengeWindow({
+			storage: window.localStorage,
+			storageEvents: window,
+			close: () => window.close(),
+			schedule: (callback, intervalMs) =>
+				window.setInterval(callback, intervalMs),
+			cancel: (handle) => window.clearInterval(Number(handle)),
+			onError: (error) => {
+				console.warn('[main-lite] Cloudflare 验证浮窗自动关闭失败', error);
+			},
+		});
+		Object.defineProperty(page, CHALLENGE_MONITOR_KEY, {
+			configurable: true,
+			enumerable: false,
+			value: stopMonitor,
+			writable: false,
+		});
 		return null;
 	}
 	if (document.location.hostname === 'credit.linux.do') {
@@ -1075,6 +1242,13 @@ export function startMainLiteUserscript(
 	if (existing && !suppressInitialTopicOpen) {
 		return existing as MainLiteUserscriptHandle;
 	}
+	const serviceWorkerMessages =
+		createReaderUserscriptServiceWorkerMessageRelay(
+			window.navigator.serviceWorker ?? null,
+			(error) => {
+				console.error('[main-lite:service-worker-target]', error);
+			},
+		);
 	const valueStorage = environment.createValueStorage();
 	const customSiteRepository = new ReaderCustomSiteRepository({
 		storage: valueStorage,
@@ -1152,6 +1326,7 @@ export function startMainLiteUserscript(
 				document,
 				window,
 				state,
+				serviceWorkerMessages,
 				suppressInitialTopicOpen,
 				{
 					repository: customSiteRepository,
@@ -1181,12 +1356,16 @@ export function startMainLiteUserscript(
 		},
 		destroy() {
 			window.removeEventListener('keydown', onWindowKeyDown, true);
-			application.destroy();
-			if (page[DEBUG_HANDLE_KEY] === handle) {
-				delete page[DEBUG_HANDLE_KEY];
-			}
-			if (page[LEGACY_DEBUG_HANDLE_KEY] === handle) {
-				delete page[LEGACY_DEBUG_HANDLE_KEY];
+			try {
+				application.destroy();
+			} finally {
+				serviceWorkerMessages?.destroy();
+				if (page[DEBUG_HANDLE_KEY] === handle) {
+					delete page[DEBUG_HANDLE_KEY];
+				}
+				if (page[LEGACY_DEBUG_HANDLE_KEY] === handle) {
+					delete page[LEGACY_DEBUG_HANDLE_KEY];
+				}
 			}
 		},
 	});

@@ -6,6 +6,7 @@ import {
 	READER_TRANSLATION_ANIMATIONS,
 	createReaderTranslationDefaultProfile,
 	normalizeReaderTranslationBaseUrl,
+	normalizeReaderTranslationAnimation,
 	normalizeReaderTranslationConfig,
 	readerTranslationActiveProfile,
 	readerTranslationUsesAi,
@@ -14,8 +15,15 @@ import {
 	type ReaderTranslationAccessConfig,
 	type ReaderTranslationConfig,
 	type ReaderTranslationConfigRepository,
+	type ReaderTranslationAnimation,
 	type ReaderTranslationProfile,
 } from '../translation/reader-translation-config.js';
+import {
+	DEFAULT_READER_TRANSLATION_THEME,
+	READER_TRANSLATION_THEMES,
+	normalizeReaderTranslationTheme,
+	type ReaderTranslationTheme,
+} from '../translation/reader-translation-presentation.js';
 import {
 	settingsButton,
 	settingsElement as element,
@@ -43,6 +51,10 @@ export interface ReaderTranslationSettingsFormOptions {
 	readonly host: HTMLElement;
 	readonly repository: ReaderTranslationConfigRepository;
 	readonly access: Pick<TranslationRequestAdapter, 'listModels'>;
+	readonly presentation?: Readonly<{
+		readonly readTheme: () => ReaderTranslationTheme;
+		readonly persistTheme: (theme: ReaderTranslationTheme) => void;
+	}>;
 	readonly parentScope?: LifecycleScope;
 }
 
@@ -80,6 +92,9 @@ export class ReaderTranslationSettingsForm {
 	readonly #host: HTMLElement;
 	readonly #repository: ReaderTranslationConfigRepository;
 	readonly #access: Pick<TranslationRequestAdapter, 'listModels'>;
+	readonly #readTheme: () => ReaderTranslationTheme;
+	readonly #persistTheme: (theme: ReaderTranslationTheme) => void;
+	readonly #theme: HTMLSelectElement;
 	readonly #profile: HTMLSelectElement;
 	readonly #addProfile: HTMLButtonElement;
 	readonly #removeProfile: HTMLButtonElement;
@@ -110,31 +125,91 @@ export class ReaderTranslationSettingsForm {
 		this.#host = options.host;
 		this.#repository = options.repository;
 		this.#access = options.access;
+		this.#readTheme = options.presentation?.readTheme ??
+			(() => DEFAULT_READER_TRANSLATION_THEME);
+		this.#persistTheme = options.presentation?.persistTheme ?? (() => {});
 		const section = settingsSection(
 			options.document,
-			'OpenAI 兼容 API 集合',
-			'每个 URL 独立保存 Key、模型与翻译参数；Key 留空时继续使用 Google / Microsoft。',
+			'翻译设置',
+			'选择译文呈现，并配置公共翻译或 OpenAI 兼容服务。',
 			true,
 		);
+		this.#theme = element(
+			options.document,
+			'select',
+			'ldp-reader-select ldp-boost-rule-control',
+		);
+		this.#theme.setAttribute('aria-label', '译文呈现样式');
+		const themeLabels: Readonly<Record<ReaderTranslationTheme, string>> =
+			Object.freeze({
+				quote: '淡灰引用（默认）',
+				plain: '自然正文',
+				weakening: '弱化译文',
+				'dividing-line': '分隔线',
+				underline: '下划线',
+				highlight: '柔和高亮',
+				paper: '纸张卡片',
+			});
+		for (const theme of READER_TRANSLATION_THEMES) {
+			this.#theme.append(settingsOption(
+				options.document,
+				theme,
+				themeLabels[theme],
+			));
+		}
+		section.append(settingsOptionRow(
+			options.document,
+			'译文样式',
+			'选择译文的弱化、分隔或强调方式；切换后立即生效，仅影响双语模式。',
+			this.#theme,
+		));
+		this.#animation = element(
+			options.document,
+			'select',
+			'ldp-reader-select ldp-boost-rule-control',
+		);
+		this.#animation.setAttribute('aria-label', '译文出现动画');
+		const animationLabels: Readonly<Record<ReaderTranslationAnimation, string>> =
+			Object.freeze({
+				fade: '逐词浮现（推荐）',
+				blur: '逐词聚焦',
+				typewriter: '打字流式',
+				shimmer: '流光波浪',
+				spring: '弹性落字',
+				none: '关闭动画',
+			});
+		for (const animation of READER_TRANSLATION_ANIMATIONS) {
+			this.#animation.append(settingsOption(
+				options.document,
+				animation,
+				animationLabels[animation],
+			));
+		}
+		section.append(settingsOptionRow(
+			options.document,
+			'译文动画',
+			'全局控制译文的出现方式，不随翻译服务切换；系统减少动态效果时自动关闭。',
+			this.#animation,
+		));
 		this.#profile = element(
 			options.document,
 			'select',
 			'ldp-reader-select ldp-boost-rule-control',
 		);
-		this.#profile.setAttribute('aria-label', '当前翻译服务');
+		this.#profile.setAttribute('aria-label', '已保存 AI 翻译服务');
 		this.#addProfile = settingsButton(
 			options.document,
 			'ldp-config-action',
 			'新增翻译 URL',
 			'plus',
-			'新增 URL',
+			'新增服务',
 		);
 		this.#removeProfile = settingsButton(
 			options.document,
 			'ldp-config-action',
 			'删除当前翻译 URL',
 			'trash',
-			'删除',
+			'删除服务',
 		);
 		const profileControl = element(
 			options.document,
@@ -162,10 +237,10 @@ export class ReaderTranslationSettingsForm {
 			'ldp-translation-group-copy',
 		);
 		const collectionTitle = element(options.document, 'strong');
-		collectionTitle.textContent = '服务集合';
+		collectionTitle.textContent = '已保存服务';
 		const collectionDescription = element(options.document, 'small');
 		collectionDescription.textContent =
-			'AI 为可选增强；未配置时默认使用 Google / Microsoft 公共翻译';
+			'选择已有 AI 服务；新增后在下方填写 API URL';
 		collectionCopy.append(collectionTitle, collectionDescription);
 		this.#profileCount = element(
 			options.document,
@@ -175,8 +250,8 @@ export class ReaderTranslationSettingsForm {
 		collectionHeading.append(collectionCopy, this.#profileCount);
 		collectionGroup.append(collectionHeading, settingsOptionRow(
 			options.document,
-			'当前服务',
-			'选择要查看或编辑的 URL；重复 URL 会更新原服务项。',
+			'选择服务',
+			'下拉只切换已保存服务，不用于输入 URL。',
 			profileControl,
 		));
 		section.append(collectionGroup);
@@ -266,34 +341,6 @@ export class ReaderTranslationSettingsForm {
 			modelControl,
 		));
 		this.#replaceModelOptions([], '');
-		this.#animation = element(
-			options.document,
-			'select',
-			'ldp-reader-select ldp-boost-rule-control',
-		);
-		this.#animation.setAttribute('aria-label', '译文出现动画');
-		const animationLabels = Object.freeze({
-			fade: '逐词浮现（推荐）',
-			blur: '逐词聚焦',
-			typewriter: '打字流式',
-			shimmer: '流光波浪',
-			spring: '弹性落字',
-			none: '关闭动画',
-		});
-		for (const animation of READER_TRANSLATION_ANIMATIONS) {
-			this.#animation.append(settingsOption(
-				options.document,
-				animation,
-				animationLabels[animation],
-			));
-		}
-		profileFields.append(settingsOptionRow(
-			options.document,
-			'译文动画',
-			'控制每个 Section 完成翻译后的逐词或整段出现方式；系统减少动态效果时自动关闭。',
-			this.#animation,
-		));
-
 		const advanced = element(
 			options.document,
 			'details',
@@ -464,7 +511,7 @@ export class ReaderTranslationSettingsForm {
 		);
 		this.#status.role = 'status';
 		this.#status.setAttribute('aria-live', 'polite');
-		footer.append(actions, this.#status);
+		footer.append(this.#status, actions);
 		profileFields.append(footer);
 
 		const root = element(
@@ -486,6 +533,9 @@ export class ReaderTranslationSettingsForm {
 		this.scope.listen(this.#apiKey, 'input', () => this.#syncProfileSummary());
 		this.scope.listen(this.#model, 'change', () => this.#syncProfileSummary());
 		this.scope.listen(this.#profile, 'change', () => this.#selectProfile());
+		this.scope.listen(this.#theme, 'change', () => this.#applyTheme());
+		this.scope.listen(this.#animation, 'change', () =>
+			void this.#applyAnimation());
 		this.scope.listen(this.#addProfile, 'click', () => this.#startNewProfile());
 		this.scope.listen(this.#removeProfile, 'click', () =>
 			void this.#removeCurrentProfile());
@@ -509,6 +559,38 @@ export class ReaderTranslationSettingsForm {
 		};
 	}
 
+	#applyTheme(): void {
+		const theme = normalizeReaderTranslationTheme(selectedValue(this.#theme));
+		try {
+			this.#persistTheme(theme);
+			this.#renderStatus('译文样式已更新；双语正文立即使用新样式。', 'success');
+		} catch (cause) {
+			selectValue(this.#theme, this.#readTheme());
+			this.#renderStatus(cause instanceof Error
+				? cause.message
+				: '译文样式保存失败', 'error');
+		}
+	}
+
+	async #applyAnimation(): Promise<void> {
+		const current = this.#repository.snapshot.config;
+		const animation = normalizeReaderTranslationAnimation(
+			selectedValue(this.#animation),
+		);
+		try {
+			await this.#repository.saveConfig(normalizeReaderTranslationConfig({
+				...current,
+				animation,
+			}));
+			this.#renderStatus('译文动画已更新；所有服务统一使用新动画。', 'success');
+		} catch (cause) {
+			selectValue(this.#animation, current.animation);
+			this.#renderStatus(cause instanceof Error
+				? cause.message
+				: '译文动画保存失败', 'error');
+		}
+	}
+
 	#draft(): ReaderTranslationProfile {
 		const reasoningSelection = selectedValue(this.#reasoningEffort);
 		return {
@@ -521,8 +603,7 @@ export class ReaderTranslationSettingsForm {
 				: reasoningSelection,
 			requestsPerMinute: Number(this.#requestsPerMinute.value),
 			tokensPerMinute: Number(this.#tokensPerMinute.value),
-			animation: selectedValue(this.#animation) as
-				ReaderTranslationProfile['animation'],
+			animation: this.#repository.snapshot.config.animation,
 		};
 	}
 
@@ -590,8 +671,8 @@ export class ReaderTranslationSettingsForm {
 		this.#profileIdentity.textContent = normalizedUrl
 			? normalizedUrl.replace(/\/$/u, '')
 			: this.#baseUrl.value.trim() || '尚未填写 URL';
-		let state = '公共翻译';
-		let kind = 'public';
+		let state = '未启用 AI';
+		let kind = 'inactive';
 		if (this.#editingBaseUrl === null) {
 			state = '新建草稿';
 			kind = 'draft';
@@ -604,6 +685,15 @@ export class ReaderTranslationSettingsForm {
 		}
 		this.#profileState.textContent = state;
 		this.#profileState.dataset.profileState = kind;
+	}
+
+	#syncDraftActions(draft: boolean): void {
+		this.#removeProfile.setAttribute(
+			'aria-label',
+			draft ? '取消新增翻译 URL' : '删除当前翻译 URL',
+		);
+		const label = this.#removeProfile.querySelector('span');
+		if (label) label.textContent = draft ? '取消新增' : '删除服务';
 	}
 
 	#renderProfileOptions(config: ReaderTranslationConfig): void {
@@ -627,12 +717,12 @@ export class ReaderTranslationSettingsForm {
 		this.#loadReasoningEffort(profile.reasoningEffort);
 		this.#requestsPerMinute.value = String(profile.requestsPerMinute);
 		this.#tokensPerMinute.value = String(profile.tokensPerMinute);
-		selectValue(this.#animation, profile.animation);
 		this.#replaceModelOptions(
 			profile.model ? [profile.model] : [],
 			profile.model,
 		);
 		this.#catalogIdentity = profile.model ? this.#identity(profile) : null;
+		this.#syncDraftActions(false);
 		this.#syncProfileSummary();
 	}
 
@@ -648,6 +738,13 @@ export class ReaderTranslationSettingsForm {
 	}
 
 	#startNewProfile(): void {
+		if (
+			this.#editingBaseUrl === null &&
+			selectedValue(this.#profile) === '__new__'
+		) {
+			this.#baseUrl.focus();
+			return;
+		}
 		const draft = createReaderTranslationDefaultProfile();
 		this.#editingBaseUrl = null;
 		this.#profile.replaceChildren(
@@ -657,7 +754,7 @@ export class ReaderTranslationSettingsForm {
 					profile.baseUrl,
 					profile.baseUrl.replace(/\/$/u, ''),
 				)),
-			settingsOption(this.#document, '__new__', '新建 URL（未保存）'),
+			settingsOption(this.#document, '__new__', '正在新建服务（未保存）'),
 		);
 		selectValue(this.#profile, '__new__');
 		this.#baseUrl.value = '';
@@ -668,11 +765,12 @@ export class ReaderTranslationSettingsForm {
 		this.#loadReasoningEffort(draft.reasoningEffort);
 		this.#requestsPerMinute.value = String(draft.requestsPerMinute);
 		this.#tokensPerMinute.value = String(draft.tokensPerMinute);
-		selectValue(this.#animation, draft.animation);
 		this.#replaceModelOptions([], '');
 		this.#catalogIdentity = null;
+		this.#syncDraftActions(true);
 		this.#syncProfileSummary();
-		this.#renderStatus('填写新 URL 与 Key，从 /models 获取模型后保存。');
+		this.#renderStatus('请在下方 API URL 输入新地址；Key 可选。');
+		this.#baseUrl.focus();
 	}
 
 	async #removeCurrentProfile(): Promise<void> {
@@ -689,6 +787,7 @@ export class ReaderTranslationSettingsForm {
 		const next = normalizeReaderTranslationConfig({
 			profiles,
 			activeBaseUrl: profiles[0]?.baseUrl,
+			animation: current.animation,
 		});
 		try {
 			await this.#repository.saveConfig(next);
@@ -706,8 +805,10 @@ export class ReaderTranslationSettingsForm {
 
 	async #load(): Promise<void> {
 		try {
+			selectValue(this.#theme, this.#readTheme());
 			const { config } = await this.#repository.load();
 			if (this.scope.destroyed) return;
+			selectValue(this.#animation, config.animation);
 			this.#renderProfileOptions(config);
 			const active = readerTranslationActiveProfile(config);
 			this.#loadProfile(active);
@@ -744,6 +845,7 @@ export class ReaderTranslationSettingsForm {
 			const config = normalizeReaderTranslationConfig({
 				profiles,
 				activeBaseUrl: baseUrl,
+				animation: current.animation,
 			});
 			await this.#repository.saveConfig(config);
 			this.#renderProfileOptions(config);
@@ -811,7 +913,6 @@ export class ReaderTranslationSettingsForm {
 		this.#prompt.disabled = busy;
 		this.#temperature.disabled = busy;
 		this.#reasoningEffort.disabled = busy;
-		this.#animation.disabled = busy;
 		this.#customReasoningEffort.disabled = busy ||
 			this.#customReasoningEffort.hasAttribute('hidden');
 	}

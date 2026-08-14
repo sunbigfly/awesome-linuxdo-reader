@@ -1,5 +1,6 @@
 import { parseHTML } from 'linkedom';
 import {
+	ReaderBoostTargetHighlightController,
 	ReaderTopicScrollAdapter,
 } from '../src/topic/reader-topic-scroll-adapter.js';
 
@@ -37,6 +38,16 @@ const first = document.querySelector<HTMLElement>('[data-post-number="1"]')!;
 const second = document.querySelector<HTMLElement>('[data-post-number="2"]')!;
 const firstBody = first.querySelector<HTMLElement>('.ldp-post-body')!;
 const reactions = first.querySelector<HTMLElement>('.ldp-reactions')!;
+const wheelEvent = (deltaY: number): Event => {
+	const event = new parsedDocument.defaultView!.Event('wheel', {
+		bubbles: true,
+		cancelable: true,
+	});
+	Object.defineProperty(event, 'deltaY', { value: deltaY });
+	Object.defineProperty(event, 'deltaMode', { value: 0 });
+	Object.defineProperty(event, 'ctrlKey', { value: false });
+	return event;
+};
 let scrollRootRectReads = 0;
 let scrollHeightReads = 0;
 let clientHeightReads = 0;
@@ -90,6 +101,21 @@ Object.defineProperty(second, 'focus', {
 		focusCalls += 1;
 	},
 });
+const programmaticScrolls: Array<Readonly<{
+	readonly top: number;
+	readonly behavior: ScrollBehavior | undefined;
+}>> = [];
+Object.defineProperty(scrollRoot, 'scrollTo', {
+	configurable: true,
+	value: (options: ScrollToOptions): void => {
+		programmaticScrolls.push(Object.freeze({
+			top: Number(options.top),
+			behavior: options.behavior,
+		}));
+		/* 模拟 Chromium 对 scrollTop 的真实范围钳制。 */
+		scrollRoot.scrollTop = Math.min(1_600, Math.max(0, Number(options.top)));
+	},
+});
 scrollRoot.scrollTop = 200;
 const scheduled = {
 	value: null as Readonly<{
@@ -103,13 +129,11 @@ let observerDisconnects = 0;
 let frameRequests = 0;
 let frameCancels = 0;
 let clock = 100;
-const pendingFrame = {
-	value: null as FrameRequestCallback | null,
-};
+const pendingFrames = new Map<number, FrameRequestCallback>();
 function flushPendingFrame(): void {
-	const callback = pendingFrame.value;
-	pendingFrame.value = null;
-	callback?.(0);
+	const callbacks = [...pendingFrames.entries()];
+	for (const [handle] of callbacks) pendingFrames.delete(handle);
+	for (const [, callback] of callbacks) callback(0);
 }
 const observerCallback = {
 	value: null as ((entries: readonly Readonly<{
@@ -135,12 +159,12 @@ const adapter = new ReaderTopicScrollAdapter({
 	readLifetimeMs: () => 1_600,
 	requestFrame(callback) {
 		frameRequests += 1;
-		pendingFrame.value = callback;
+		pendingFrames.set(frameRequests, callback);
 		return frameRequests;
 	},
-	cancelFrame() {
+	cancelFrame(handle) {
 		frameCancels += 1;
-		pendingFrame.value = null;
+		pendingFrames.delete(handle);
 	},
 	now: () => clock,
 	createResizeObserver: (callback) => {
@@ -213,20 +237,24 @@ assert(
 );
 let scrollEvents = 0;
 let userScrollIntents = 0;
+let directUserScrollIntents = 0;
 const stopListening = adapter.listenScroll(() => {
 	scrollEvents += 1;
 });
 const stopUserScrollIntents = adapter.listenUserScrollIntent(() => {
 	userScrollIntents += 1;
 });
+const stopDirectUserScrollIntents = adapter.listenDirectUserScrollIntent(() => {
+	directUserScrollIntents += 1;
+});
 scrollRoot.scrollTop = 260;
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 scrollRoot.scrollTop = 280;
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 assert(
-	scrollEvents === 0 &&
-		frameRequests === 1 &&
-		pendingFrame.value &&
+		scrollEvents === 0 &&
+			frameRequests === 1 &&
+			Number(pendingFrames.size) === 1 &&
 		adapter.readWindowInput().scrollOffset === 280 &&
 		adapter.lastUserScrollAt() === 0,
 	'同一帧的连续 scroll 事件必须合并通知，但布局/锚定产生的 scroll 结果不得冒充用户输入',
@@ -238,13 +266,43 @@ assert(
 	adapter.lastUserScrollAt() === 0,
 	'合并帧必须提交最后一个滚动位置，不能丢失快速滚动的末端 offset',
 );
-scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('wheel'));
+scrollRoot.dispatchEvent(wheelEvent(120));
 assert(
 	adapter.lastUserScrollAt() === 100 &&
+		adapter.lastUserScrollDirection() === 1 &&
 		adapter.remainingUserIdleMs(1_500) === 1_500 &&
-		userScrollIntents === 1,
+		Number(userScrollIntents) === 1 &&
+		Number(directUserScrollIntents) === 1,
 	'用户滚动所有权必须由 wheel 意图立即取得，不能依赖下一次 scroll 结果猜测来源',
 );
+const viewportMutation = adapter.beginViewportMutation([first, second]);
+assert(
+	viewportMutation !== null &&
+		scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		adapter.readWindowInput().preservePostNumber === 2,
+	'滚动中的高度更新必须暂时关闭原生双重锚定并硬保留真实可见楼层',
+);
+scrollRoot.scrollTop = 260;
+scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
+secondRect = rect(120, 100);
+viewportMutation.restore();
+assert(
+	Number(scrollRoot.scrollTop) === 280 &&
+		adapter.readWindowInput().scrollOffset === 280 &&
+		adapter.lastUserScrollAt() === 100 &&
+		!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		adapter.readWindowInput().preservePostNumber === undefined,
+	'高度事务必须把 20px 内容位移叠加到用户同帧的 20px 上滚，而不是吞掉输入或双重补偿',
+);
+scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
+assert(
+	adapter.lastUserScrollAt() === 100 &&
+		adapter.lastUserScrollDirection() === 1 &&
+		Number(userScrollIntents) === 1,
+	'活跃滚动会话中的高度补偿事件必须消费内部身份，不能延长用户令牌或制造第二次补流意图',
+);
+flushPendingFrame();
+secondRect = rect(80, 100);
 const forwardWindow = adapter.readWindowInput();
 assert(
 	forwardWindow.overscanBeforeScreens === 1.5 &&
@@ -270,26 +328,52 @@ scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scrollend'));
 assert(
 	adapter.lastUserScrollAt() === 284 &&
 		adapter.remainingUserIdleMs(500) === 500 &&
-		scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		adapter.readWindowInput().preservePostNumber === undefined &&
+		Number(stationaryMutationObserves) === 0 &&
+		Number(pendingFrames.size) === 1,
+	'scrollend 必须只登记停稳意图，不能在尚未确认的虚拟提交前读取几何并抢占视口',
+);
+const frameCancelsBeforeVirtualCommit = frameCancels;
+adapter.notifyVirtualWindowCommit();
+assert(
+	frameCancels === frameCancelsBeforeVirtualCommit + 1 &&
+		pendingFrames.size === 1,
+	'虚拟提交信号必须撤销同帧排队的旧 fallback，从下一绘制边界重新计数',
+);
+flushPendingFrame();
+assert(
+	Number(stationaryMutationObserves) === 0 &&
+		!scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
+	'虚拟提交后的第一帧必须留给同步投影与浏览器布局，不能立即强制读取整页几何',
+);
+flushPendingFrame();
+assert(
+	scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
 		adapter.readWindowInput().preservePostNumber === 2 &&
-		stationaryMutationObserves === 1,
-	'scrollend 必须立即把当前物理楼层交给停稳锁与虚拟窗口共同保留；idle 窗口从最后一个原生滚动帧后重新计时',
+		Number(stationaryMutationObserves) === 1,
+	'连续两个稳定绘制边界后必须把当前物理楼层交给停稳锁；idle 窗口仍从 scrollend 重新计时',
+);
+assert(
+	adapter.beginViewportMutation([first, second]) === null &&
+		scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
+	'停稳锁持有视野时高度提交不得再创建第二个补偿 owner',
 );
 secondRect = rect(110, 100);
 stationaryMutationCallback.value?.();
 assert(
 	Number(scrollRoot.scrollTop) === 318 &&
-	pendingFrame.value === null &&
-	scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
+		Number(pendingFrames.size) === 0 &&
+		scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
 	'停稳后预加载 DOM 使锁定楼层移动时，必须在当前绘制周期恢复原像素位置，不能留到下一帧再拉回',
 );
 clock += 16;
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 flushPendingFrame();
-	assert(
-		adapter.lastUserScrollAt() === 284 && userScrollIntents === 1,
-		'scrollend 后由停稳锁自身写入的 scroll 不得延长或重启用户会话',
-	);
+assert(
+	adapter.lastUserScrollAt() === 284 && Number(userScrollIntents) === 1,
+	'scrollend 后由停稳锁自身写入的 scroll 不得延长或重启用户会话',
+);
 observerCallback.value?.([{
 	target: scrollRoot,
 	blockSize: 420,
@@ -311,37 +395,94 @@ clock += 16;
 secondRect = rect(140, 100);
 stationaryMutationCallback.value?.();
 const frameCancelsBeforeUnlock = frameCancels;
-scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('wheel'));
+scrollRoot.dispatchEvent(wheelEvent(120));
 assert(
 	Number(scrollRoot.scrollTop) === 378 &&
 		!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
 		adapter.readWindowInput().preservePostNumber === undefined &&
 		stationaryMutationDisconnects >= 1 &&
 		frameCancels === frameCancelsBeforeUnlock &&
-		pendingFrame.value === null,
+		Number(pendingFrames.size) === 0,
 	'停稳恢复不得遗留延迟帧；下一次真实输入必须同步解除视野锁和硬保留楼层，不能产生起步阻尼',
 );
-const frameCancelsAfterUnlock = frameCancels;
+const stationaryMutationObservesBeforeHandoff = stationaryMutationObserves;
+const settlingViewportMutation = adapter.beginViewportMutation([first, second]);
+assert(settlingViewportMutation !== null, '滚动结束竞态必须先建立高度事务');
+scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scrollend'));
+assert(
+	stationaryMutationObserves === stationaryMutationObservesBeforeHandoff &&
+		scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
+	'高度事务未提交前的 scrollend 只能登记停稳交接，不能提前创建第二个锚点',
+);
+secondRect = rect(145, 100);
+settlingViewportMutation.restore();
+assert(
+	Number(scrollRoot.scrollTop) === 383 &&
+		stationaryMutationObserves === stationaryMutationObservesBeforeHandoff &&
+		adapter.readWindowInput().preservePostNumber === undefined &&
+		!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		Number(pendingFrames.size) === 1,
+	'高度事务完成后必须保留最终像素位置，但不能在同一个虚拟提交内同步重建停稳锁',
+);
+adapter.notifyVirtualWindowCommit();
+flushPendingFrame();
+flushPendingFrame();
+assert(
+	stationaryMutationObserves === stationaryMutationObservesBeforeHandoff + 1 &&
+		adapter.readWindowInput().preservePostNumber === 2 &&
+		scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
+	'高度事务必须在提交后的稳定布局边界把最终位置无缝交给停稳锁',
+);
+scrollRoot.dispatchEvent(wheelEvent(-120));
+assert(
+	!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		adapter.readWindowInput().preservePostNumber === undefined,
+	'事务交接后的下一次真实输入必须照常释放停稳锚点',
+);
 secondRect = rect(80, 100);
 scrollRoot.scrollTop = 220;
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 flushPendingFrame();
 const backwardWindow = adapter.readWindowInput();
 assert(
-	Number(scrollEvents) === 5 &&
+	Number(scrollEvents) === 6 &&
+		adapter.lastUserScrollDirection() === -1 &&
 		backwardWindow.overscanBeforeScreens === 1.5 &&
 		backwardWindow.overscanAfterScreens === 2,
-	'滚动反向只能更新真实 offset，不能额外翻转预热边界制造换窗尖峰',
+	'滚动反向必须同步发布真实 offset，且不能额外翻转预热边界制造换窗尖峰',
 );
 stopListening();
 scrollRoot.scrollTop = 320;
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 flushPendingFrame();
-assert(Number(scrollEvents) === 5, '释放 Topic 监听后不得继续提交虚拟帧');
-adapter.writeScrollOffset(9_999);
+assert(Number(scrollEvents) === 6, '释放 Topic 监听后不得继续提交虚拟帧');
+const supersededViewportMutation = adapter.beginViewportMutation([first, second]);
+assert(supersededViewportMutation !== null, '程序化跳转竞态必须先建立高度事务');
+const rectReadsBeforeProgrammaticScroll = scrollRootRectReads;
+let programmaticScrollClassHeld = false;
+let programmaticAnchorReleased = false;
+adapter.withProgrammaticScrollTransaction(() => {
+	programmaticScrollClassHeld = scrollRoot.classList.contains(
+		'ldp-stream-programmatic-scroll',
+	);
+	programmaticAnchorReleased =
+		adapter.readWindowInput().preservePostNumber === undefined;
+	adapter.writeScrollOffset(9_999);
+});
+supersededViewportMutation.restore();
 assert(
-	Number(scrollRoot.scrollTop) === 1_600 && adapter.lastUserScrollAt() === 0,
-	'程序化 offset 必须按实时 scroll range 钳制，并与用户滚动繁忙时间分离',
+	Number(scrollRoot.scrollTop) === 1_600 &&
+		programmaticScrolls.at(-1)?.top === 1_600 &&
+		programmaticScrolls.at(-1)?.behavior === 'instant' &&
+		programmaticScrollClassHeld &&
+		programmaticAnchorReleased &&
+		scrollRootRectReads === rectReadsBeforeProgrammaticScroll + 1 &&
+		!scrollRoot.classList.contains('ldp-stream-programmatic-scroll') &&
+		adapter.lastUserScrollAt() === 0 &&
+		adapter.lastUserScrollDirection() === 0 &&
+		adapter.readWindowInput().preservePostNumber === undefined &&
+		!scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
+	'程序化 offset 必须在关闭内核锚定的 ShadowRoot 布局事务内以 instant 原子换位，并在结算后释放临时状态',
 );
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 assert(
@@ -361,6 +502,22 @@ assert(
 		scrollHeightReads === rangeReadsBeforeCompensation,
 	'虚拟尺寸补偿必须直接写 scrollTop，不能在提交帧内追加 scroll range 布局读取',
 );
+
+scrollRoot.dispatchEvent(wheelEvent(120));
+const userTokenBeforeClampedCompensation = adapter.lastUserScrollAt();
+adapter.applyScrollCompensation(5_000);
+assert(
+	Number(scrollRoot.scrollTop) === 1_600 &&
+		adapter.readWindowInput().scrollOffset === 1_600,
+	'补偿超过物理滚动范围时，scroll owner 必须立即采用内核钳制后的实际位置，不能保留虚假的请求值',
+);
+scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
+assert(
+	adapter.lastUserScrollAt() === userTokenBeforeClampedCompensation &&
+		adapter.lastUserScrollDirection() === 1,
+	'钳制后的内部 scroll 事件仍必须保持内部身份，不能在活跃会话里自激新的用户令牌',
+);
+adapter.writeScrollOffset(1_500);
 
 scrollRoot.scrollTop = 1_560;
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
@@ -473,6 +630,38 @@ assert(
 );
 scheduled.value?.callback();
 
+const boostBubble = document.createElement('span');
+boostBubble.className = 'ldp-boost-bubble';
+boostBubble.dataset.boostId = '404';
+second.append(boostBubble);
+const boostHighlightTimer = {
+	value: null as Readonly<{
+		readonly callback: () => void;
+		readonly delayMs: number;
+	}> | null,
+};
+const boostHighlight = new ReaderBoostTargetHighlightController({
+	readLifetimeMs: () => 1_600,
+	schedule: (callback, delayMs) => {
+		boostHighlightTimer.value = Object.freeze({ callback, delayMs });
+		return 1;
+	},
+	cancel() {},
+});
+boostHighlight.highlight(boostBubble);
+assert(
+	boostBubble.classList.contains('ldp-boost-target-highlight') &&
+	boostHighlightTimer.value?.delayMs === 1_600,
+	'Boost 精确定位必须使用独立 class，并复用楼层高亮生命周期而不占用楼层 owner',
+);
+boostHighlightTimer.value?.callback();
+assert(
+	!boostBubble.classList.contains('ldp-boost-target-highlight') &&
+	!boostBubble.dataset.boostTargetHighlightToken,
+	'Boost 定位反馈到期必须清理 class 与 token，允许同一气泡再次播放',
+);
+boostHighlight.destroy();
+
 adapter.writeScrollOffset(500);
 secondRect = rect(300, 28);
 adapter.alignPost(second, {
@@ -491,28 +680,130 @@ scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('wheel'));
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scrollend'));
 assert(
+	!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		pendingFrames.size >= 1,
+	'滚动结束时必须先留下一个尚未越过虚拟提交边界的停稳请求',
+);
+flushPendingFrame();
+adapter.notifyVirtualWindowCommit();
+flushPendingFrame();
+flushPendingFrame();
+assert(
 	scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
-	'销毁回归必须先留下一个活动的停稳视野锁',
+	'虚拟提交稳定后必须在当前物理位置建立停稳视野锁',
 );
 const scrollOnlyIntentsBefore = userScrollIntents;
+const directScrollIntentsBefore = directUserScrollIntents;
 scrollRoot.scrollTop = 360;
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 assert(
 	!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
-		userScrollIntents === scrollOnlyIntentsBefore + 1,
-	'原生 scrollbar 的 scroll-only 输入必须取得用户滚动所有权并同步释放停稳锁',
+		userScrollIntents === scrollOnlyIntentsBefore + 1 &&
+		directUserScrollIntents === directScrollIntentsBefore,
+	'原生 scrollbar 的 scroll-only 输入必须取得用户滚动所有权并同步释放停稳锁，但不能冒充 wheel/touch/key 直接输入',
 );
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scrollend'));
+flushPendingFrame();
+adapter.notifyVirtualWindowCommit();
+flushPendingFrame();
+flushPendingFrame();
 assert(
 	scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
 	'scroll-only 用户会话结束后必须在新位置重新建立停稳锚点',
 );
+scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('wheel'));
+scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scrollend'));
+assert(
+	!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		Number(pendingFrames.size) === 1,
+	'销毁回归必须先留下一个待处理的停稳请求',
+);
+assert(
+	adapter.readScrollRange() === 1_600,
+	'历史高度锚点必须由主滚动区的 scrollHeight - clientHeight 唯一给出',
+);
 stopUserScrollIntents();
+stopDirectUserScrollIntents();
+const frameCancelsBeforeDestroy = frameCancels;
 adapter.destroy();
 assert(
 	adapter.scope.destroyed &&
-	frameCancels === frameCancelsAfterUnlock + 1 &&
-	pendingFrame.value === null &&
+	frameCancels > frameCancelsBeforeDestroy &&
+	Number(pendingFrames.size) === 0 &&
 	!scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
-	'Topic 销毁必须取消尚未提交的滚动帧，不能让旧 Topic 回调污染新会话',
+	'Topic 销毁必须取消尚未提交的滚动帧与停稳请求，不能让旧 Topic 回调污染新会话',
 );
+
+const { document: upwardDocument } = parseHTML(
+	'<!doctype html><html><body><main id="root"><article id="inner"></article></main></body></html>',
+);
+const upwardRoot = upwardDocument.querySelector<HTMLElement>('#root')!;
+const upwardInner = upwardDocument.querySelector<HTMLElement>('#inner')!;
+Object.defineProperties(upwardRoot, {
+	clientHeight: { get: () => 400 },
+	scrollHeight: { get: () => 2_000 },
+});
+upwardRoot.scrollTop = 500;
+let upwardFrame: FrameRequestCallback | null = null;
+let upwardWindowChanges = 0;
+const upwardAdapter = new ReaderTopicScrollAdapter({
+	scrollRoot: upwardRoot,
+	createResizeObserver: () => null,
+	requestFrame(callback) {
+		upwardFrame = callback;
+		return 1;
+	},
+	cancelFrame() {
+		upwardFrame = null;
+	},
+});
+upwardAdapter.listenScroll(() => {
+	upwardWindowChanges += 1;
+});
+const isolatedWheel = (target: HTMLElement, deltaY: number): Event => {
+	const event = new upwardDocument.defaultView!.Event('wheel', {
+		bubbles: true,
+		cancelable: true,
+	});
+	Object.defineProperties(event, {
+		deltaY: { value: deltaY },
+		deltaMode: { value: 0 },
+		ctrlKey: { value: false },
+	});
+	target.dispatchEvent(event);
+	return event;
+};
+const upwardWheel = isolatedWheel(upwardRoot, -120);
+assert(
+	upwardWheel.defaultPrevented &&
+		Number(upwardRoot.scrollTop) === 380 &&
+		upwardAdapter.readWindowInput().scrollOffset === 380 &&
+		upwardAdapter.lastUserScrollDirection() === -1 &&
+		upwardWindowChanges === 1 &&
+		upwardFrame === null,
+	'主流向上 wheel 必须由唯一 scroll owner 同步消费精确 delta，不能再把同一输入交给虚拟换窗期间的浏览器默认滚动',
+);
+const secondUpwardWheel = isolatedWheel(upwardRoot, -120);
+assert(
+	secondUpwardWheel.defaultPrevented &&
+		Number(upwardRoot.scrollTop) === 260 &&
+		upwardAdapter.readWindowInput().scrollOffset === 260 &&
+		upwardWindowChanges === 2 &&
+		upwardFrame === null,
+	'连续向上 wheel 必须逐次同步发布最新窗口坐标，不能等适配器 rAF 后才让虚拟 DOM 获得排期',
+);
+upwardInner.style.overflowY = 'auto';
+Object.defineProperties(upwardInner, {
+	clientHeight: { get: () => 100 },
+	scrollHeight: { get: () => 500 },
+});
+upwardInner.scrollTop = 200;
+const nestedWheel = isolatedWheel(upwardInner, -120);
+assert(
+	!nestedWheel.defaultPrevented &&
+		Number(upwardRoot.scrollTop) === 260 &&
+		Number(upwardInner.scrollTop) === 200,
+	'代码块和内层面板仍能向上滚动时必须保留原生事件，不能被主流防跳 owner 抢走',
+);
+upwardAdapter.destroy();
+assert(upwardFrame === null, '独立向上滚动用例销毁时必须释放待提交帧');

@@ -115,15 +115,20 @@ export class ReaderSettingsHelpSurface {
 		return this.#tooltip;
 	}
 
-	sync(): void {
-		for (const row of this.#popover.querySelectorAll<HTMLElement>(
-			'.ldp-setting-row',
+	sync(root: HTMLElement = this.#popover): void {
+		for (const row of root.querySelectorAll<HTMLElement>(
+			'.ldp-setting-row:not([data-setting-help])',
 		)) {
-			if (row.dataset.settingHelp) continue;
 			const description = row.querySelector('small')?.textContent?.trim();
 			if (description) row.dataset.settingHelp = description;
 		}
-		if (this.#activeTarget && !this.#activeTarget.isConnected) this.close();
+		if (
+			this.#activeTarget &&
+			(
+				!this.#activeTarget.isConnected ||
+				!root.contains(this.#activeTarget)
+			)
+		) this.close();
 	}
 
 	show(target: HTMLElement): void {

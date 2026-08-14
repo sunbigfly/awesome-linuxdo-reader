@@ -28,6 +28,7 @@ let hostBudgetReleases = 0;
 const sharedResponses: Array<Readonly<{
 	readonly source: 'host' | 'reader';
 	readonly href?: string;
+	readonly method?: string;
 	readonly status: number;
 	readonly cloudflareMitigated?: boolean;
 	readonly blockOnCloudflareChallenge?: boolean;
@@ -80,6 +81,7 @@ assert(
 	observer.snapshot.events[0]?.serverReset === '7' &&
 	hostBudgetReleases === 1 &&
 	sharedResponses[0]?.source === 'host' &&
+	sharedResponses[0]?.method === 'GET' &&
 	sharedResponses[0]?.status === 429,
 	'ajaxComplete 必须结束同一事实并读取 Retry-After 与标准限流响应头',
 );
@@ -95,6 +97,7 @@ assert(
 	observer.snapshot.events.at(-1)?.cloudflareMitigated === true &&
 		sharedResponses[1]?.source === 'host' &&
 		sharedResponses[1]?.href === 'https://linux.do/post_actions' &&
+		sharedResponses[1]?.method === 'POST' &&
 		sharedResponses[1]?.cloudflareMitigated === true &&
 		sharedResponses[1]?.blockOnCloudflareChallenge === true &&
 		Number(hostBudgetStarts) === 2 &&

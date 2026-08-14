@@ -261,6 +261,29 @@ assert(
 );
 windowAdapter.destroy();
 
+const adaptiveMinimumWindow = new ReaderWindowGeometryModel({
+	preferences: {
+		...defaultWindowPreferences,
+		readerWindowWidth: 440,
+		readerWindowHeight: 600,
+	},
+	viewportWidth: 1_200,
+	viewportHeight: 800,
+	mode: 'floating',
+	policy: { minWidth: 440 },
+});
+adaptiveMinimumWindow.setMinimumWidth(680);
+assert(
+	adaptiveMinimumWindow.snapshot.geometry.width === 680 &&
+	adaptiveMinimumWindow.previewGeometry(320, 600, 8, 8).width === 680,
+	'内容组件提高固有宽度后，当前窗口与后续缩放都必须采用新的动态下限',
+);
+adaptiveMinimumWindow.setMinimumWidth(440);
+assert(
+	adaptiveMinimumWindow.previewGeometry(320, 600, 8, 8).width === 440,
+	'内容组件收缩后必须恢复基础下限，同时保留用户当前窗口宽度',
+);
+
 const dockWindowModel = new ReaderWindowGeometryModel({
 	preferences: defaultWindowPreferences,
 	viewportWidth: 1440,
@@ -395,6 +418,14 @@ const flushFrames = () => {
 	frames.clear();
 	for (const callback of queued) callback(0);
 };
+let interactionStarts = 0;
+let interactionEnds = 0;
+pointerOverlay.addEventListener('ldp-reader-window-interaction-start', () => {
+	interactionStarts += 1;
+});
+pointerOverlay.addEventListener('ldp-reader-window-interaction-end', () => {
+	interactionEnds += 1;
+});
 const dispatchPointer = (
 	target: Element,
 	type: string,
@@ -440,6 +471,9 @@ dispatchPointer(pointerHeader, 'pointermove', {
 flushFrames();
 assert(
 	pointerModel.snapshot.geometry === dragStart &&
+	pointerOverlay.classList.contains('ldp-window-interacting') &&
+	pointerOverlay.dataset.readerWindowInteraction === 'drag' &&
+	interactionStarts === 1 && interactionEnds === 0 &&
 	pointerModal.style.transform ===
 		`translate3d(${expectedDrag.left - dragStart.left}px,` +
 		`${expectedDrag.top - dragStart.top}px,0)` &&
@@ -460,6 +494,9 @@ dispatchPointer(pointerHeader, 'pointerup', {
 assert(
 	pointerModel.snapshot.geometry.left === expectedDrag.left &&
 	pointerModel.snapshot.geometry.top === expectedDrag.top &&
+	!pointerOverlay.classList.contains('ldp-window-interacting') &&
+	pointerOverlay.dataset.readerWindowInteraction === undefined &&
+	interactionStarts === 1 && interactionEnds === 1 &&
 	!pointerModal.style.transform &&
 	persisted.length === 1,
 	'拖动结束必须一次提交模型、清理预览并持久化一次',
@@ -501,6 +538,8 @@ flushFrames();
 assert(
 	pointerModel.snapshot.geometry.left === 440 &&
 	pointerModel.snapshot.geometry.width === 360 &&
+	pointerOverlay.dataset.readerWindowInteraction === 'w' &&
+	interactionStarts === 2 && interactionEnds === 1 &&
 	pointerModel.snapshot.geometry.left + pointerModel.snapshot.geometry.width === 800,
 	'西向缩放触及最小宽度时必须固定右边界，不能让整个浮窗漂移',
 );
@@ -509,6 +548,11 @@ dispatchPointer(resizeWest, 'pointerup', {
 	clientX: 1_000,
 	clientY: 300,
 });
+assert(
+	pointerOverlay.dataset.readerWindowInteraction === undefined &&
+	interactionStarts === 2 && interactionEnds === 2,
+	'缩放结束也必须发出一次交互结束信号并清理临时 mode',
+);
 
 lockButton.dispatchEvent(new pointerDocument.defaultView!.Event('click', {
 	bubbles: true,

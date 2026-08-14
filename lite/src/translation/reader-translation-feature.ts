@@ -11,6 +11,8 @@ import {
 } from './reader-translation-controller.js';
 import type { TranslationBatchPort } from './translation-request-adapter.js';
 import type { ReaderTranslationAnimation } from './reader-translation-config.js';
+import type { ReaderTranslationTheme } from
+	'./reader-translation-presentation.js';
 
 export interface ReaderTranslationFeatureOptions {
 	readonly document: Document;
@@ -19,8 +21,13 @@ export interface ReaderTranslationFeatureOptions {
 	readonly surfaces: () => readonly HTMLElement[];
 	readonly initialMode: ReaderTranslationMode;
 	readonly initialAnimation?: ReaderTranslationAnimation;
+	readonly initialTheme?: ReaderTranslationTheme;
 	readonly subscribeAnimation?: (
 		listener: (animation: ReaderTranslationAnimation) => void,
+		scope: LifecycleScope,
+	) => void;
+	readonly subscribeTheme?: (
+		listener: (theme: ReaderTranslationTheme) => void,
 		scope: LifecycleScope,
 	) => void;
 	readonly persistMode?: (mode: ReaderTranslationMode) => void;
@@ -60,6 +67,9 @@ export class ReaderTranslationFeature {
 				...(options.initialAnimation === undefined
 					? {}
 					: { initialAnimation: options.initialAnimation }),
+				...(options.initialTheme === undefined
+					? {}
+					: { initialTheme: options.initialTheme }),
 				...(options.persistMode === undefined
 					? {}
 					: { persistMode: options.persistMode }),
@@ -74,6 +84,10 @@ export class ReaderTranslationFeature {
 			});
 			options.subscribeAnimation?.(
 				(animation) => this.controller.setAnimation(animation),
+				this.scope,
+			);
+			options.subscribeTheme?.(
+				(theme) => this.controller.setTheme(theme),
 				this.scope,
 			);
 			this.button = createReaderTranslationButton({
@@ -130,6 +144,10 @@ export class ReaderTranslationFeature {
 	): void {
 		if (metadata === undefined) this.controller.syncPost(post);
 		else this.controller.syncPost(post, metadata);
+	}
+
+	projectKnownTranslations(root: ParentNode): number {
+		return this.controller.projectKnownTranslations(root);
 	}
 
 	applyMode(mode: ReaderTranslationMode): void {

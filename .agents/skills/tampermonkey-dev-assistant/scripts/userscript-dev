@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly manifest_path="${script_dir}/userscript-dev-rs/Cargo.toml"
+readonly build_root="${TMPDIR:-/tmp}/tampermonkey-dev-assistant-rust-target"
+
+CARGO_TARGET_DIR="$build_root" exec cargo run --quiet --locked --offline --manifest-path "$manifest_path" -- "$@"

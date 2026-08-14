@@ -17,6 +17,10 @@ import type {
 
 export interface SharedRequestPermitPort extends RequestStartGate {
 	noteRateLimit(decision: RateLimitDecision): void | Promise<void>;
+	noteRateLimitProbeResult?(input: {
+		readonly route: string;
+		readonly recovered: boolean;
+	}): void | Promise<void>;
 	noteCloudflareChallenge?(input: {
 		readonly href: string;
 		readonly force?: boolean;
@@ -62,6 +66,10 @@ export interface CoordinatedRequestOptions {
 	readonly blockOnCloudflareChallenge?: boolean;
 	readonly suppressAfterChallengeWait?: boolean;
 	readonly callSite?: string;
+	readonly profile?: string;
+	readonly namespace?: string;
+	readonly cacheMode?: string;
+	readonly identity?: Readonly<Record<string, string | number | boolean>>;
 }
 
 export interface CoordinatedRequestClientOptions {
@@ -87,6 +95,10 @@ interface LogicalRequest<T> {
 	max429Retries: number;
 	maxChallengeRetries: number;
 	currentAttemptKey: string;
+	readonly logicalId: string;
+	observationId: number | null;
+	joinedConsumers: number;
+	promoted: boolean;
 }
 
 export interface CoordinatedRequestPromotion {
@@ -243,7 +255,7 @@ export function abortableDelay(
 /**
  * 单个 reader context 的完整逻辑请求 owner。
  *
-	 * scheduler 管每次尝试，client 管跨重试单飞、单次 Retry-After 和 shared permit 通知。
+ * scheduler 管每次尝试，client 管跨重试单飞、单次 Retry-After 和 shared permit 通知。
  */
 export class CoordinatedRequestClient {
 	readonly scheduler: RequestScheduler;
@@ -257,6 +269,7 @@ export class CoordinatedRequestClient {
 	readonly #onCoordinationError: (error: unknown) => void;
 	readonly #requests = new Map<string, LogicalRequest<unknown>>();
 	#disposed = false;
+	#logicalSequence = 0;
 
 	constructor(options: CoordinatedRequestClientOptions) {
 		this.rateLimitPolicy = options.rateLimitPolicy;
@@ -294,6 +307,7 @@ export class CoordinatedRequestClient {
 		}
 		const existing = this.#requests.get(key);
 		if (existing && !existing.controller.signal.aborted) {
+			existing.joinedConsumers += 1;
 			this.#promoteLogical(existing, {
 				priority,
 				droppable: options.droppable === true,
@@ -301,6 +315,9 @@ export class CoordinatedRequestClient {
 					options.max429Retries ?? this.#defaultMax429Retries,
 				maxChallengeRetries:
 					options.maxChallengeRetries ?? this.#defaultMaxChallengeRetries,
+			});
+			this.#updateObservation(existing, {
+				joinedConsumers: existing.joinedConsumers,
 			});
 			return this.#join(existing as LogicalRequest<T>, options.signal);
 		}
@@ -316,6 +333,10 @@ export class CoordinatedRequestClient {
 			max429Retries: 0,
 			maxChallengeRetries: 0,
 			currentAttemptKey: '',
+			logicalId: `L${++this.#logicalSequence}`,
+			observationId: null,
+			joinedConsumers: 0,
+			promoted: false,
 		};
 		const promise = this.#run(logical, options, transport).finally(() => {
 			logical.settled = true;
@@ -463,6 +484,10 @@ export class CoordinatedRequestClient {
 		transport: (input: RequestTransportInput) => Promise<RequestTransportResponse<T>>,
 	): Promise<T> {
 		const method = String(options.method ?? 'GET').toUpperCase();
+		const rateLimitRoute = this.rateLimitPolicy.identity(
+			options.input,
+			method,
+		).route;
 		logical.max429Retries = nonNegativeInteger(
 			options.max429Retries ?? this.#defaultMax429Retries,
 			'max429Retries',
@@ -477,14 +502,24 @@ export class CoordinatedRequestClient {
 			logical.currentAttemptKey = `${options.key}:attempt:${attempt}`;
 			const queuedAt = this.#now();
 			let observationId = this.#beginQueuedObservation(
+				logical,
 				options,
 				method,
 				attempt,
 				logical.priority,
 				queuedAt,
 			);
+			logical.observationId = observationId;
+			this.#updateObservation(logical, {
+				joinedConsumers: logical.joinedConsumers,
+				promoted: logical.promoted,
+				max429Retries: logical.max429Retries,
+				maxChallengeRetries: logical.maxChallengeRetries,
+				droppable: logical.droppable,
+			});
 			let observationStarted = false;
 			let attemptWaitReason = '';
+			let attemptRateLimitRecoveryProbe = false;
 			let response: RequestTransportResponse<T>;
 			try {
 				response = await this.scheduler.schedule(
@@ -492,20 +527,24 @@ export class CoordinatedRequestClient {
 						key: logical.currentAttemptKey,
 						priority: logical.priority,
 						lane: options.lane ?? 'standard',
+						rateLimitRoute,
 						...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
 						signal: logical.controller.signal,
 						droppable: logical.droppable,
-						onStart: (timing) => {
-							observationStarted = true;
-							attemptWaitReason = timing.waitReason;
+							onStart: (timing) => {
+								observationStarted = true;
+								attemptWaitReason = timing.waitReason;
+								attemptRateLimitRecoveryProbe = timing.recoveryProbe;
 							observationId = this.#markObservationStarted(
 								observationId,
+								logical,
 								options,
 								method,
 								attempt,
 								logical.priority,
 								timing,
 							);
+							logical.observationId = observationId;
 						},
 					},
 					(signal) => {
@@ -520,9 +559,13 @@ export class CoordinatedRequestClient {
 				);
 			} catch (error) {
 				logical.currentAttemptKey = '';
+				if (attemptRateLimitRecoveryProbe) {
+					await this.#noteRateLimitProbeResult(rateLimitRoute, false);
+				}
 				const reason = this.#errorCode(error);
 				if (observationId === null) {
 					this.#recordControlled(
+						logical,
 						options,
 						method,
 						attempt,
@@ -532,20 +575,60 @@ export class CoordinatedRequestClient {
 				} else if (!observationStarted) {
 					this.#cancelObservation(observationId, reason);
 				} else {
-					this.#finishObservation(observationId, {
-						error: reason,
-						cloudflareMitigated:
-							!!error && typeof error === 'object' &&
-							'cloudflareMitigated' in error &&
-							error.cloudflareMitigated === true,
-					});
+						this.#finishObservation(observationId, {
+							error: reason,
+							decision: reason,
+							cloudflareMitigated:
+								!!error && typeof error === 'object' &&
+								'cloudflareMitigated' in error &&
+								error.cloudflareMitigated === true,
+						});
 				}
 				throw error;
 			}
 			logical.currentAttemptKey = '';
+			if (
+				attemptRateLimitRecoveryProbe &&
+				(
+					response.status !== 429 ||
+					response.cloudflareMitigated === true
+				)
+			) {
+				await this.#noteRateLimitProbeResult(rateLimitRoute, true);
+			}
+			const rateLimitRetryEligible =
+				response.status === 429 &&
+				response.cloudflareMitigated !== true &&
+				[
+					'critical',
+					'interactive',
+					'nested',
+					'visible',
+				].includes(logical.priority) &&
+				rateLimitRetries < logical.max429Retries;
+			const challengeResolutionEligible =
+				response.cloudflareMitigated === true &&
+				options.blockOnCloudflareChallenge !== false &&
+				Boolean(this.permitPort.resolveCloudflareChallenge) &&
+				challengeRetries < logical.maxChallengeRetries;
+			const decision = response.ok
+				? 'complete'
+				: response.cloudflareMitigated === true
+					? options.blockOnCloudflareChallenge === false
+						? 'stop-cloudflare-isolated'
+						: challengeResolutionEligible
+							? 'await-cloudflare'
+							: this.permitPort.noteCloudflareChallenge ||
+								this.permitPort.resolveCloudflareChallenge
+								? 'require-cloudflare'
+								: 'stop-cloudflare-unhandled'
+					: response.status === 429
+						? rateLimitRetryEligible ? 'retry-429' : 'stop-429'
+						: 'stop-http';
 			this.#finishObservation(observationId, {
 				status: response.status,
 				cloudflareMitigated: response.cloudflareMitigated === true,
+				decision,
 				...(response.retryAfter === undefined
 					? {}
 					: { retryAfter: String(response.retryAfter ?? '') }),
@@ -621,8 +704,14 @@ export class CoordinatedRequestClient {
 					 */
 					this.rateLimitPolicy.reset();
 					challengeRetries += 1;
+					this.#updateObservation(logical, {
+						decision: 'challenge-passed-retry',
+					});
 					continue;
 				}
+				this.#updateObservation(logical, {
+					decision: 'challenge-required',
+				});
 				/*
 				 * cf-mitigated 响应已经由共享硬闸门接管。验证未通过时必须在这里
 				 * 结束当前逻辑请求，不能再掉进普通 429 的 Retry-After 分支；否则
@@ -645,22 +734,12 @@ export class CoordinatedRequestClient {
 						? {}
 						: { globalWindow: response.rateLimitWindow }),
 				});
-				if (decision.scope === 'global') {
-					try {
-						await this.permitPort.noteRateLimit(decision);
-					} catch (error) {
-						this.#onCoordinationError(error);
-					}
+				try {
+					await this.permitPort.noteRateLimit(decision);
+				} catch (error) {
+					this.#onCoordinationError(error);
 				}
-				const retryEligible =
-					[
-						'critical',
-						'interactive',
-						'nested',
-						'visible',
-					].includes(logical.priority) &&
-					rateLimitRetries < logical.max429Retries;
-				if (!retryEligible) throw new RequestRateLimitError(decision);
+				if (!rateLimitRetryEligible) throw new RequestRateLimitError(decision);
 				rateLimitRetries += 1;
 				await this.#delay(decision.waitMs, logical.controller.signal);
 				continue;
@@ -674,10 +753,25 @@ export class CoordinatedRequestClient {
 		}
 	}
 
+	async #noteRateLimitProbeResult(
+		route: string,
+		recovered: boolean,
+	): Promise<void> {
+		try {
+			await this.permitPort.noteRateLimitProbeResult?.({ route, recovered });
+		} catch (error) {
+			this.#onCoordinationError(error);
+		}
+	}
+
 	#promoteLogical(
 		logical: LogicalRequest<unknown>,
 		promotion: CoordinatedRequestPromotion,
 	): void {
+		const previousPriority = logical.priority;
+		const previousDroppable = logical.droppable;
+		const previous429Retries = logical.max429Retries;
+		const previousChallengeRetries = logical.maxChallengeRetries;
 		logical.droppable = logical.droppable && promotion.droppable;
 		if (promotion.max429Retries !== undefined) {
 			logical.max429Retries = Math.max(
@@ -700,6 +794,21 @@ export class CoordinatedRequestClient {
 		) {
 			logical.priority = promotion.priority;
 		}
+		const promoted =
+			logical.priority !== previousPriority ||
+			logical.droppable !== previousDroppable ||
+			logical.max429Retries !== previous429Retries ||
+			logical.maxChallengeRetries !== previousChallengeRetries;
+		if (promoted) {
+			logical.promoted = true;
+			this.#updateObservation(logical, {
+				priority: logical.priority,
+				promoted: true,
+				max429Retries: logical.max429Retries,
+				maxChallengeRetries: logical.maxChallengeRetries,
+				droppable: logical.droppable,
+			});
+		}
 		if (logical.currentAttemptKey) {
 			this.scheduler.promoteQueued(
 				logical.currentAttemptKey,
@@ -710,6 +819,7 @@ export class CoordinatedRequestClient {
 	}
 
 	#beginQueuedObservation(
+		logical: LogicalRequest<unknown>,
 		options: CoordinatedRequestOptions,
 		method: string,
 		attempt: number,
@@ -729,6 +839,21 @@ export class CoordinatedRequestClient {
 				attempt: attempt + 1,
 				recoveryProbe: attempt > 0,
 				callSite: options.callSite ?? '',
+				logicalId: logical.logicalId,
+				profile: options.profile ?? '',
+				namespace: options.namespace ?? '',
+				lane: options.lane ?? 'standard',
+				cacheMode: options.cacheMode ?? '',
+				...(options.identity === undefined
+					? {}
+					: { identity: options.identity }),
+				max429Retries: logical.max429Retries,
+				maxChallengeRetries: logical.maxChallengeRetries,
+				blockOnCloudflareChallenge:
+					options.blockOnCloudflareChallenge !== false,
+				suppressAfterChallengeWait:
+					options.suppressAfterChallengeWait === true,
+				droppable: logical.droppable,
 			});
 		} catch (error) {
 			this.#onCoordinationError(error);
@@ -738,6 +863,7 @@ export class CoordinatedRequestClient {
 
 	#markObservationStarted(
 		id: number | null,
+		logical: LogicalRequest<unknown>,
 		options: CoordinatedRequestOptions,
 		method: string,
 		attempt: number,
@@ -745,9 +871,9 @@ export class CoordinatedRequestClient {
 		timing: {
 			readonly queuedAt: number;
 			readonly permittedAt: number;
-		readonly startedAt: number;
-		readonly recoveryProbe: boolean;
-		readonly waitReason: string;
+			readonly startedAt: number;
+			readonly recoveryProbe: boolean;
+			readonly waitReason: string;
 		},
 	): number | null {
 		if (!this.#observer) return null;
@@ -783,6 +909,21 @@ export class CoordinatedRequestClient {
 						? 'scheduler'
 						: ''),
 				callSite: options.callSite ?? '',
+				logicalId: logical.logicalId,
+				profile: options.profile ?? '',
+				namespace: options.namespace ?? '',
+				lane: options.lane ?? 'standard',
+				cacheMode: options.cacheMode ?? '',
+				...(options.identity === undefined
+					? {}
+					: { identity: options.identity }),
+				max429Retries: logical.max429Retries,
+				maxChallengeRetries: logical.maxChallengeRetries,
+				blockOnCloudflareChallenge:
+					options.blockOnCloudflareChallenge !== false,
+				suppressAfterChallengeWait:
+					options.suppressAfterChallengeWait === true,
+				droppable: logical.droppable,
 			});
 		} catch (error) {
 			this.#onCoordinationError(error);
@@ -812,6 +953,7 @@ export class CoordinatedRequestClient {
 			readonly serverLimit?: string;
 			readonly serverRemaining?: string;
 			readonly serverReset?: string;
+			readonly decision?: string;
 		},
 	): void {
 		if (id === null || !this.#observer) return;
@@ -823,6 +965,7 @@ export class CoordinatedRequestClient {
 	}
 
 	#recordControlled(
+		logical: LogicalRequest<unknown>,
 		options: CoordinatedRequestOptions,
 		method: string,
 		attempt: number,
@@ -844,7 +987,34 @@ export class CoordinatedRequestClient {
 				waitReason: reason,
 				callSite: options.callSite ?? '',
 				controlReason: reason,
+				logicalId: logical.logicalId,
+				profile: options.profile ?? '',
+				namespace: options.namespace ?? '',
+				lane: options.lane ?? 'standard',
+				cacheMode: options.cacheMode ?? '',
+				...(options.identity === undefined
+					? {}
+					: { identity: options.identity }),
+				max429Retries: logical.max429Retries,
+				maxChallengeRetries: logical.maxChallengeRetries,
+				blockOnCloudflareChallenge:
+					options.blockOnCloudflareChallenge !== false,
+				suppressAfterChallengeWait:
+					options.suppressAfterChallengeWait === true,
+				droppable: logical.droppable,
 			});
+		} catch (error) {
+			this.#onCoordinationError(error);
+		}
+	}
+
+	#updateObservation(
+		logical: LogicalRequest<unknown>,
+		input: Parameters<RequestObserver['update']>[1],
+	): void {
+		if (logical.observationId === null || !this.#observer) return;
+		try {
+			this.#observer.update(logical.observationId, input);
 		} catch (error) {
 			this.#onCoordinationError(error);
 		}

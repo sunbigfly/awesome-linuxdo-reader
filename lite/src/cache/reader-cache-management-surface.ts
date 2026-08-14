@@ -7,6 +7,9 @@ import type {
 	ReaderHistoryRepository,
 } from '../history/reader-history-repository.js';
 import type {
+	ReaderChronicleRepository,
+} from '../history/reader-chronicle-repository.js';
+import type {
 	ReaderAssetCacheStats,
 	ReaderBrowserAssetCacheRepository,
 } from './browser-asset-cache.js';
@@ -65,12 +68,16 @@ export interface ReaderCacheManagementSurfaceOptions<
 	readonly headerActions?: HTMLElement;
 	readonly configuration?: ReaderConfigurationManagementPort<TPreferences>;
 	readonly history: Pick<ReaderHistoryRepository, 'snapshot' | 'clear'>;
+	readonly chronicle?: Pick<ReaderChronicleRepository, 'snapshot' | 'clear'>;
 	readonly responses: Pick<ResponseRepository, 'records' | 'invalidate'> &
 		Partial<Pick<ResponseRepository, 'invalidateWithReport'>>;
 	readonly assetCaches?: Pick<
 		ReaderBrowserAssetCacheRepository,
 		'stats' | 'clear'
 	>;
+	readonly prepareClear?: (
+		categories: readonly ReaderCacheCategory[],
+	) => ReaderCacheClearPreparation | Promise<ReaderCacheClearPreparation>;
 	readonly applicationCaches?: ReaderApplicationCacheManagementPort;
 	readonly clearImageObjectUrls?: () => void;
 	readonly currentTopicAvailable: () => boolean;
@@ -103,6 +110,11 @@ export interface ReaderApplicationCacheClearResult {
 	readonly failed: readonly ReaderCacheCategory[];
 }
 
+export interface ReaderCacheClearPreparation {
+	readonly failed: readonly ReaderCacheCategory[];
+	readonly release?: () => void;
+}
+
 export interface ReaderApplicationCacheManagementPort {
 	stats(): ReaderApplicationCacheStats | Promise<ReaderApplicationCacheStats>;
 	clear(
@@ -120,8 +132,8 @@ interface CacheCategoryDefinition {
 const CATEGORIES: readonly CacheCategoryDefinition[] = Object.freeze([
 	{
 		id: 'history',
-		title: '浏览历史',
-		help: '勾选“浏览历史”后再点下方清理，会删除阅读器保存的主题、最近阅读楼层和查看时间；不会删除浏览器本身的访问历史。',
+		title: '浏览历史与岁月史书',
+		help: '勾选“浏览历史与岁月史书”后再点下方清理，会删除阅读器保存的主题、最近阅读楼层、查看时间和岁月史书 404 记录；不会删除浏览器本身的访问历史，也不会由收到 404 自动触发清理。',
 		retention: '最多 365 天',
 	},
 	{
@@ -177,10 +189,11 @@ function categoryOf(record: ResponseCacheRecord): Exclude<
 	) {
 		return 'topics';
 	}
-	if (
-		record.kind === 'users' ||
-		record.kind === 'external-user-summary' ||
-		record.tags.includes('users')
+		if (
+			record.kind === 'users' ||
+			record.kind === 'external-user-summary' ||
+			record.kind === 'user-observation-history' ||
+			record.tags.includes('users')
 	) {
 		return 'users';
 	}
@@ -255,8 +268,14 @@ function categoryStatText(
 		const topicIds = new Set(history.map((entry) =>
 			Number((entry as { readonly topicId?: unknown }).topicId),
 		).filter((topicId) => Number.isSafeInteger(topicId) && topicId > 0));
+		const chronicle = history.filter((entry) =>
+			Number((entry as { readonly status?: unknown }).status) === 404 &&
+			['topic', 'reply', 'boost'].includes(String(
+				(entry as { readonly kind?: unknown }).kind ?? '',
+			)));
 		return withApplicationCacheDetail(
-			`${topicIds.size} 个主题 · ${history.length} 条浏览记录 · ` +
+			`${topicIds.size} 个主题 · ${history.length - chronicle.length} 条浏览记录 · ` +
+				`${chronicle.length} 条 404 记录 · ` +
 				`${formatBytes(new TextEncoder().encode(JSON.stringify(history)).byteLength)} · 本机保存`,
 			application,
 		);
@@ -550,13 +569,21 @@ export class ReaderCacheManagementSurface<
 		const grouped = new Map<ReaderCacheCategory, ResponseCacheRecord[]>(
 			CATEGORIES.map(({ id }) => [id, []]),
 		);
-		const history = this.#options.history.snapshot.entries;
+		const history = Object.freeze([
+			...this.#options.history.snapshot.entries,
+			...(this.#options.chronicle?.snapshot.records ?? []),
+		]);
 		for (const record of records) {
 			grouped.get(categoryOf(record))!.push(record);
 		}
-		if (assetCaches) {
-			const target = this.#stats.get('assets');
-			if (target) target.title = assetCacheDetail(assetCaches);
+		const assetTarget = this.#stats.get('assets');
+		if (assetTarget) {
+			if (assetCaches) {
+				assetTarget.dataset.ldpTooltipLabel =
+					assetCacheDetail(assetCaches);
+			} else {
+				delete assetTarget.dataset.ldpTooltipLabel;
+			}
 		}
 		for (const { id } of CATEGORIES) {
 			const target = this.#stats.get(id);
@@ -595,6 +622,7 @@ export class ReaderCacheManagementSurface<
 		);
 		if (!selected.size) return;
 		this.#setBusy(true, '正在清理已选缓存…');
+		let releasePreparation = (): void => {};
 		try {
 			const failures = new Map<ReaderCacheCategory, string[]>();
 			const fail = (
@@ -609,7 +637,22 @@ export class ReaderCacheManagementSurface<
 				}
 				if (cause !== undefined) this.#options.onError?.(cause);
 			};
-			if (selected.has('assets') && this.#options.assetCaches) {
+			const clearing = new Set(selected);
+			if (this.#options.prepareClear) {
+				try {
+					const prepared = await this.#options.prepareClear([...selected]);
+					releasePreparation = prepared.release ?? releasePreparation;
+					for (const category of prepared.failed) {
+						if (selected.has(category)) {
+							fail([category], '同步基线未能安全解除');
+						}
+					}
+				} catch (cause) {
+					fail([...selected], '缓存清理准备失败', cause);
+				}
+			}
+			for (const category of failures.keys()) clearing.delete(category);
+			if (clearing.has('assets') && this.#options.assetCaches) {
 				try {
 					const result = await this.#options.assetCaches.clear();
 					if (result.failed.length) {
@@ -622,7 +665,7 @@ export class ReaderCacheManagementSurface<
 					fail(['assets'], '兼容图片缓存未清理', cause);
 				}
 			}
-			const responseCategories = [...selected].filter(
+			const responseCategories = [...clearing].filter(
 				(id): id is Exclude<ReaderCacheCategory, 'history'> =>
 					id !== 'history',
 			);
@@ -632,7 +675,7 @@ export class ReaderCacheManagementSurface<
 						? { all: true }
 						: {
 							ids: (await this.#options.responses.records())
-								.filter((record) => selected.has(categoryOf(record)))
+								.filter((record) => clearing.has(categoryOf(record)))
 								.map((record) => record.id),
 						};
 					if (query.all || query.ids?.length) {
@@ -653,26 +696,27 @@ export class ReaderCacheManagementSurface<
 					fail(responseCategories, '统一响应缓存未清理', cause);
 				}
 			}
-			if (this.#options.applicationCaches) {
+			if (clearing.size && this.#options.applicationCaches) {
 				try {
-					const result = await this.#options.applicationCaches.clear([...selected]);
+					const result = await this.#options.applicationCaches.clear([...clearing]);
 					for (const category of result.failed) {
-						if (selected.has(category)) {
+						if (clearing.has(category)) {
 							fail([category], '应用内存热缓存未清理');
 						}
 					}
 				} catch (cause) {
-					fail([...selected], '应用内存热缓存未清理', cause);
+					fail([...clearing], '应用内存热缓存未清理', cause);
 				}
 			}
-			if (selected.has('history')) {
+			if (clearing.has('history')) {
 				try {
 					this.#options.history.clear();
+					this.#options.chronicle?.clear();
 				} catch (cause) {
-					fail(['history'], '浏览历史未清理', cause);
+					fail(['history'], '浏览历史或岁月史书未清理', cause);
 				}
 			}
-			if (selected.has('assets')) {
+			if (clearing.has('assets')) {
 				try {
 					this.#options.clearImageObjectUrls?.();
 				} catch (cause) {
@@ -682,6 +726,8 @@ export class ReaderCacheManagementSurface<
 			for (const [id, input] of this.#selects) {
 				if (selected.has(id) && !failures.has(id)) input.checked = false;
 			}
+			releasePreparation();
+			releasePreparation = () => {};
 			const refreshed = await this.refresh();
 			if (failures.size) {
 				const labels = CATEGORIES
@@ -700,6 +746,11 @@ export class ReaderCacheManagementSurface<
 			this.#options.onError?.(cause);
 			this.#status.textContent = '清理失败，请稍后重试。';
 		} finally {
+			try {
+				releasePreparation();
+			} catch (cause) {
+				this.#options.onError?.(cause);
+			}
 			this.#setBusy(false);
 		}
 	}
@@ -844,7 +895,7 @@ export class ReaderCacheManagementSurface<
 			const confirmed = await configuration.confirm({
 				title: '恢复全部默认设置？',
 				message: '当前偏好（含性能目标）、其他适用站点、翻译和 WebDAV 设置都会恢复默认。',
-				note: '性能项恢复推荐目标，运行时仍会自适应；请求/性能记录不会被删除。翻译 API Key、WebDAV 用户名和密码会从本机设置中清除；浏览历史、阅读队列、帖子缓存和账号数据不会被删除。',
+				note: '性能项恢复推荐目标，运行时仍会自适应；请求/性能记录不会被删除。翻译 API Key、WebDAV 用户名和密码会从本机设置中清除；阅读队列图标位置会恢复默认，队列条目、浏览历史、帖子缓存和账号数据不会被删除。',
 				confirmLabel: '恢复全部默认',
 				tone: 'danger',
 				icon: 'rotate-ccw',

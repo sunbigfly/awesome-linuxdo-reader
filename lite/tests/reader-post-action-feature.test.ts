@@ -40,6 +40,7 @@ import {
 	type TopicPostActionSessionPort,
 } from '../src/post/topic-post-action-adapter.js';
 import type { TopicSessionCommit } from '../src/topic/topic-session.js';
+import { ReaderSelectSurface } from '../src/shell/reader-select-surface.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -48,6 +49,7 @@ function assert(condition: unknown, message: string): asserts condition {
 interface TestPost extends CanonicalActionPost {
 	readonly topic_id: number;
 	readonly reply_to_post_number: number | null;
+	readonly user_id?: number;
 	readonly username: string;
 	readonly cooked: string;
 	readonly can_reply: boolean;
@@ -694,6 +696,58 @@ assert(
 	regular.slots.actions.querySelector('[data-reaction-picker]'),
 	'宿主运行时就绪后必须统一重算既有 PostView 回应权限，不能要求刷新或清缓存',
 );
+const regularPrimaryReaction = regular.slots.actions.querySelector<
+	HTMLButtonElement
+>(
+	':scope > .ldp-reaction-summary > ' +
+		'.ldp-reaction-like-picker > .ldp-like',
+);
+assert(
+	regularPrimaryReaction?.dataset.counted === '1' &&
+		regularPrimaryReaction.querySelector('.ldp-like-count')?.textContent ===
+			'2' &&
+		!regularPrimaryReaction.classList.contains('liked') &&
+		regularPrimaryReaction.hasAttribute('data-tooltip') &&
+		regular.slots.actions.querySelector(
+			':scope > .ldp-actions > .ldp-like, ' +
+				':scope > .ldp-actions > .ldp-reaction-like-picker',
+		) === null,
+	'已有主爱心回应必须以未点赞常规色显示在胶囊首项、禁用悬浮提示，且不能保留胶囊外旧入口',
+);
+const ownPost: TestPost = {
+	...comment,
+	id: 4,
+	post_number: 4,
+	user_id: 99,
+	username: 'Viewer',
+	reactions: [
+		{ id: 'heart', count: 1 },
+		{ id: 'laughing', count: 1 },
+	],
+};
+const ownView = new PostView(document, {
+	postId: ownPost.id,
+	postNumber: ownPost.post_number,
+	username: ownPost.username,
+});
+document.querySelector('main')!.append(ownView.slots.root);
+feature.afterRender(ownPost, ownView);
+const ownLike = ownView.slots.actions.querySelector<HTMLButtonElement>(
+	'[data-post-like]',
+);
+const ownReaction = ownView.slots.actions.querySelector<HTMLButtonElement>(
+	'[data-reaction="laughing"]',
+);
+const ownMutationCount = mutation.calls.length;
+if (ownLike) click(ownLike);
+if (ownReaction) click(ownReaction);
+await Promise.resolve();
+assert(
+	ownLike?.disabled === true &&
+	ownReaction?.disabled === true &&
+	mutation.calls.length === ownMutationCount,
+	'自己的楼层必须让点赞与表情按钮不可点击，并在事件层保持零 reaction POST',
+);
 const railView = new PostView(document, {
 	postId: comment.id,
 	postNumber: comment.post_number,
@@ -739,6 +793,8 @@ const railReactionCounts = railReactionButtons
 assert(
 	railLike.getAttribute('aria-expanded') === 'true' &&
 		railReactionOrder === 'heart,laughing' &&
+		railReactionButtons.every((button) =>
+			button.hasAttribute('data-tooltip')) &&
 		railReactionButtons[0]?.querySelector('b')?.textContent === '2' &&
 		railReactionButtons[1]?.querySelector('b')?.textContent === '',
 	'主帖收纳箱展开后 hover 必须显示按现有回应数排序的表情列表，并保留零计数占位；' +
@@ -776,6 +832,73 @@ assert(
 		?.getAttribute('aria-expanded') === 'false',
 	'收纳箱切回常显/收纳态时必须保持表情列表关闭',
 );
+const topicRailView = new PostView(document, {
+	postId: source.id,
+	postNumber: source.post_number,
+	username: source.username,
+});
+topicRailView.slots.root.classList.add('ldp-topic-action-rail-post');
+document.querySelector('main')!.append(topicRailView.slots.root);
+feature.afterRender(source, topicRailView);
+feature.setTopicActionRailExpanded(topicRailView, true);
+const mergedRailActions = topicRailView.slots.actions.querySelector<HTMLElement>(
+	':scope > .ldp-actions > .ldp-context-actions-slot',
+);
+const topicRailActions = mergedRailActions?.querySelector<HTMLElement>(
+	':scope > .ldp-topic-footer-actions',
+);
+const topicRailBookmark = topicRailView.slots.topicFooter.querySelector(
+	':scope > .ldp-topic-bookmark',
+);
+const topicRailSharedIssue = topicRailView.slots.topicFooter.querySelector(
+	':scope > .ldp-topic-shared-issue',
+);
+assert(
+	topicRailBookmark &&
+	topicRailSharedIssue &&
+	topicRailBookmark.nextElementSibling === topicRailSharedIssue &&
+	topicRailActions?.querySelector('[data-topic-share]') &&
+	topicRailActions.querySelector('[data-topic-notification]') &&
+	mergedRailActions?.querySelectorAll(':scope > .ldp-reportbtn').length === 1 &&
+	mergedRailActions.querySelectorAll(':scope > .ldp-post-assign').length === 1 &&
+	!topicRailActions.querySelector(
+		'.ldp-topic-report,.ldp-topic-assign,.ldp-topic-reply',
+	) &&
+	topicRailView.slots.actions.querySelector(
+		':scope > .ldp-actions > .ldp-replybtn:not(.ldp-topic-reply)',
+	),
+	'全展开收纳箱必须合并楼层与主题操作、去重举报和负责人、移除重复回复，并把共享问题放到独立书签后',
+);
+const railTopicShare = topicRailActions.querySelector<HTMLButtonElement>(
+	'[data-topic-share]',
+)!;
+const railTopicNotification = topicRailActions.querySelector<HTMLSelectElement>(
+	'[data-topic-notification]',
+)!;
+assert(
+	[...mergedRailActions!.querySelectorAll<HTMLButtonElement>('button')]
+		.every((button) => !button.disabled) &&
+		!railTopicNotification.disabled,
+	'第二段底部动作组只应投影当前可用功能，不能留下不可点击图标',
+);
+click(railTopicShare);
+change(railTopicNotification, '3');
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert(
+	topicShareRequests.length === 1 &&
+		topicShareRequests[0] === source &&
+		topicNotificationRequests.length === 1 &&
+		topicNotificationRequests[0]?.post === source &&
+		topicNotificationRequests[0]?.level === 3,
+	'第二段底部动作组的主题分享与通知必须在合并到 actions slot 后仍可使用',
+);
+topicShareRequests.length = 0;
+topicNotificationRequests.length = 0;
+Object.assign(topic, {
+	notification_level: 1,
+	details: { notification_level: 1 },
+});
+topicRailView.destroy();
 const sourceView = new PostView(document, {
 	postId: source.id,
 	postNumber: source.post_number,
@@ -783,6 +906,22 @@ const sourceView = new PostView(document, {
 });
 document.querySelector('main')!.append(sourceView.slots.root);
 feature.afterRender(source, sourceView);
+const emptyPrimaryReaction = sourceView.slots.actions.querySelector<
+	HTMLButtonElement
+>(
+	':scope > .ldp-reaction-summary > ' +
+		'.ldp-reaction-like-picker > .ldp-like',
+);
+assert(
+	emptyPrimaryReaction?.dataset.counted === '0' &&
+		emptyPrimaryReaction.querySelector('.ldp-like-count')?.textContent === '' &&
+		emptyPrimaryReaction.hasAttribute('data-tooltip') &&
+		sourceView.slots.actions.querySelector(
+			':scope > .ldp-actions > .ldp-like, ' +
+				':scope > .ldp-actions > .ldp-reaction-like-picker',
+		) === null,
+	'无人回应时胶囊必须保留可直接点赞的空心爱心，且不得显示 0 或胶囊外副本',
+);
 regular.setTreePosition(source.post_number, 1);
 sourceView.slots.replyList.append(regular.slots.root);
 assert(
@@ -811,9 +950,12 @@ const sourceReactionSurface = feature.mountReactionSurface(
 );
 assert(
 	sourceReactionHost.classList.contains('ldp-has-reactions') &&
-	sourceReactionHost.querySelector('[data-reaction-picker]') &&
-	sourceReactionHost.querySelector('[data-post-reply]') === null,
-	'图片来源回应必须复用唯一 reaction renderer，同时不得复制完整 PostView 动作栏',
+		sourceReactionHost.querySelector<HTMLButtonElement>(
+			'[data-reaction-picker]',
+		)?.dataset.counted === '1' &&
+		sourceReactionHost.querySelector('.ldp-like-count')?.textContent === '2' &&
+		sourceReactionHost.querySelector('[data-post-reply]') === null,
+	'图片来源回应必须复用同一颗胶囊主爱心及计数，同时不得复制完整 PostView 动作栏',
 );
 openReactionPicker(sourceReactionHost);
 assert(
@@ -1234,6 +1376,11 @@ const shadowActionRoot = shadowActionPortal.attachShadow({ mode: 'open' });
 const shadowActionHost = document.createElement('main');
 shadowActionRoot.append(shadowActionHost);
 const shadowManagementRequests: string[] = [];
+const shadowTopicNotificationRequests: Array<Readonly<{
+	readonly post: TestPost;
+	readonly level: number;
+}>> = [];
+let shadowCurrentUsername = 'viewer';
 const shadowMessageBusHandlers = new Map<string, (message: unknown) => void>();
 const shadowHost: DiscourseHostApiPort = {
 	lookup(name) {
@@ -1267,7 +1414,7 @@ const shadowFeature = new ReaderPostActionFeature<TestTopic, TestPost>({
 		post,
 		topic,
 		currentUser: { id: 99, username: 'viewer' },
-		currentUsername: 'viewer',
+		currentUsername: shadowCurrentUsername,
 		plugins: { boosts: true, reactions: true },
 	}),
 	topicActionRail: true,
@@ -1280,6 +1427,16 @@ const shadowFeature = new ReaderPostActionFeature<TestTopic, TestPost>({
 		async assignPost() { return true; },
 		async assignTopic() { return true; },
 		async openAdmin() { return true; },
+	},
+	topicNotifications: {
+		async setLevel(post, level) {
+			shadowTopicNotificationRequests.push({ post, level });
+			Object.assign(topic, {
+				notification_level: 3,
+				details: { notification_level: 3 },
+			});
+			return { changed: true, level: 3 };
+		},
 	},
 });
 const shadowRailView = new PostView(document, {
@@ -1300,6 +1457,66 @@ assert(
 	shadowManagementRequests.join(',') === 'edit:2',
 	'ShadowRoot 收纳箱动作必须在自身 interaction root 委托，不能等到 document retarget 后丢失目标',
 );
+const shadowTopicRailView = new PostView(document, {
+	postId: source.id,
+	postNumber: source.post_number,
+	username: source.username,
+});
+shadowTopicRailView.slots.root.classList.add('ldp-topic-action-rail-post');
+shadowActionHost.append(shadowTopicRailView.slots.root);
+shadowFeature.afterRender(source, shadowTopicRailView);
+shadowFeature.setTopicActionRailExpanded(shadowTopicRailView, true);
+const shadowTopicNotification = shadowTopicRailView.slots.actions
+	.querySelector<HTMLSelectElement>('[data-topic-notification]');
+assert(
+	shadowTopicNotification && !shadowTopicNotification.disabled,
+	'ShadowRoot 收纳箱必须保留可点击的主题通知级别入口',
+);
+const shadowSelectSurface = new ReaderSelectSurface({
+	document,
+	root: shadowActionHost,
+});
+const shadowNotificationPointerDown = new (document.defaultView!.Event)(
+	'pointerdown',
+	{ bubbles: true, cancelable: true },
+);
+Object.defineProperty(shadowNotificationPointerDown, 'button', { value: 0 });
+shadowTopicNotification.dispatchEvent(shadowNotificationPointerDown);
+const shadowNotificationMenu = shadowTopicNotification.parentElement
+	?.querySelector<HTMLElement>('.ldp-select-menu');
+assert(
+	shadowTopicNotification.parentElement?.classList.contains(
+		'ldp-select-surface',
+	) &&
+		shadowTopicNotification.getAttribute('aria-expanded') === 'true' &&
+		shadowNotificationMenu && !shadowNotificationMenu.hidden &&
+		shadowNotificationMenu.querySelectorAll(
+			'[data-reader-select-value]',
+		).length === 4,
+	'ShadowRoot 收纳箱铃铛必须通过统一 select surface 弹出四档通知菜单',
+);
+change(shadowTopicNotification, '2');
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert(
+	shadowTopicNotificationRequests.length === 1 &&
+		shadowTopicNotificationRequests[0]?.post === source &&
+		shadowTopicNotificationRequests[0]?.level === 2 &&
+		shadowTopicNotification.value === '3',
+	'ShadowRoot 收纳箱铃铛的 change 必须由自身 interaction root 接管并提交通知级别：' +
+		`requests=${shadowTopicNotificationRequests.length}; ` +
+		`level=${shadowTopicNotificationRequests[0]?.level ?? 'none'}; ` +
+		`rendered=${shadowTopicNotification.value}`,
+);
+shadowCurrentUsername = '';
+shadowFeature.afterRender({ ...source, can_reply: false }, shadowTopicRailView);
+assert(
+	shadowTopicRailView.slots.actions.querySelector(
+		'[data-topic-notification]',
+	) === null,
+	'当前用户身份不可用时必须隐藏铃铛，不能留下必然失效的入口',
+);
+shadowSelectSurface.destroy();
+shadowTopicRailView.destroy();
 shadowRailView.destroy();
 shadowFeature.destroy();
 shadowActionPortal.remove();
@@ -1373,6 +1590,24 @@ const copiedBoostMenu = document.querySelector<HTMLElement>(
 const copiedBoostEditor = copiedBoostMenu.querySelector<HTMLElement>(
 	'.discourse-boosts__input',
 )!;
+let boostWheelLeaks = 0;
+document.querySelector('main')!.addEventListener('wheel', () => {
+	boostWheelLeaks += 1;
+});
+const boostBoundaryWheel = new parsedWindow.Event('wheel', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperties(boostBoundaryWheel, {
+	deltaX: { value: 0 },
+	deltaY: { value: 120 },
+	deltaMode: { value: 0 },
+});
+copiedBoostMenu.dispatchEvent(boostBoundaryWheel);
+assert(
+	boostBoundaryWheel.defaultPrevented && boostWheelLeaks === 0,
+	'Boost composer 的滚轮边界不得继续驱动宿主阅读流',
+);
 assert(
 	copiedBoostMenu.querySelector(
 		'[data-boost-emoji] svg[data-ldp-reader-icon]',
@@ -1464,6 +1699,24 @@ assert(
 		boostEmojiSurface.dataset.ldpReaderTopLayer === 'portal' &&
 		boostEmojiTopLayers.has(boostEmojiSurface),
 	'原生 emoji picker 必须进入与回复浮窗一致的 top layer，再复用 constrained CSS 夹入 Reader 边界',
+);
+let emojiWheelLeaks = 0;
+document.body.addEventListener('wheel', () => {
+	emojiWheelLeaks += 1;
+});
+const emojiBoundaryWheel = new parsedWindow.Event('wheel', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperties(emojiBoundaryWheel, {
+	deltaX: { value: 0 },
+	deltaY: { value: 120 },
+	deltaMode: { value: 0 },
+});
+boostEmojiSurface.dispatchEvent(emojiBoundaryWheel);
+assert(
+	emojiBoundaryWheel.defaultPrevented && emojiWheelLeaks === 0,
+	'提升到 top layer 的原生 emoji 浮层不得把边界滚轮泄漏给宿主',
 );
 boostEmojiPicker.dispatchEvent(new parsedWindow.Event('scroll', {
 	bubbles: true,
@@ -1610,11 +1863,17 @@ const laughing = regular.slots.actions.querySelector<HTMLButtonElement>(
 )!;
 click(laughing);
 await Promise.resolve();
+const firstReactionNativePost = (
+	mutation.calls[0]?.payload as Readonly<{
+		readonly args?: readonly unknown[];
+	}> | undefined
+)?.args?.[0] as TestPost | undefined;
 assert(
 	mutation.calls.length === 1 &&
 	mutation.calls[0]?.operation === 'reaction-toggle' &&
-	mutation.calls[0]?.variant === 'laughing',
-	'回应必须只生成一个原生 descriptor，并进入共享 PostActionController',
+	mutation.calls[0]?.variant === 'laughing' &&
+	firstReactionNativePost?.current_user_reaction == null,
+	'新增回应必须以未投影的 authoritative post 生成唯一原生 descriptor，再进入共享 PostActionController',
 );
 const heart = regular.slots.actions.querySelector<HTMLButtonElement>(
 	'[data-reaction="heart"]',
@@ -1687,12 +1946,13 @@ Object.defineProperty(boostMenu, 'offsetWidth', {
 	configurable: true,
 	value: 360,
 });
+let boostAnchorTop = 100;
 boostButton.getBoundingClientRect = () => ({
 	x: 620,
-	y: 100,
-	top: 100,
+	y: boostAnchorTop,
+	top: boostAnchorTop,
 	right: 640,
-	bottom: 120,
+	bottom: boostAnchorTop + 20,
 	left: 620,
 	width: 20,
 	height: 20,
@@ -1713,6 +1973,29 @@ assert(
 	`Boost composer 靠近视口右侧时必须按实际 360px 宽度夹入边界：${
 		boostMenu.style.left
 	}`,
+);
+const boostClip = boostButton.closest<HTMLElement>('.ldp-body');
+if (boostClip) {
+	boostClip.getBoundingClientRect = () => ({
+		x: 0,
+		y: 0,
+		top: 0,
+		right: 640,
+		bottom: 240,
+		left: 0,
+		width: 640,
+		height: 240,
+		toJSON: () => ({}),
+	});
+}
+const boostTopBeforeWindowMove = boostMenu.style.top;
+boostAnchorTop = 130;
+document.querySelector('main')!.dispatchEvent(
+	new parsedWindow.Event('ldp-reader-window-change'),
+);
+assert(
+	!boostMenu.hidden && boostMenu.style.top !== boostTopBeforeWindowMove,
+	'Reader 浮窗移动后，Boost composer 必须跟随当前楼层 anchor 重定位',
 );
 assert(
 	!boostEditor.closest('[data-post-boost]'),
@@ -1761,11 +2044,43 @@ assert(
 	boostEditor.textContent === familyEmoji.repeat(5),
 	'第六个 Unicode emoji 必须由同一受控 editor 回退，不能绕过 img emoji 计数',
 );
+const boostSubmit = boostMenu.querySelector<HTMLButtonElement>(
+	'[data-boost-submit]',
+)!;
+const overlongBoost = '超'.repeat(17);
+boostEditor.textContent = overlongBoost;
+boostEditor.dispatchEvent(new parsedWindow.Event('input', { bubbles: true }));
+const overLimitCount = boostMenu.querySelector<HTMLElement>(
+	'.ldp-native-boost-count',
+)!;
+const mutationsBeforeOverLimitSubmit = mutation.calls.length;
+const overLimitEnter = new parsedWindow.Event('keydown', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperty(overLimitEnter, 'key', { value: 'Enter' });
+boostEditor.dispatchEvent(overLimitEnter);
+click(boostSubmit);
+await Promise.resolve();
+assert(
+	boostEditor.textContent === overlongBoost &&
+		overLimitCount.textContent === '17/16' &&
+		overLimitCount.classList.contains('is-over-limit') &&
+		boostEditor.getAttribute('aria-invalid') === 'true' &&
+		boostSubmit.disabled &&
+		overLimitEnter.defaultPrevented &&
+		mutation.calls.length === mutationsBeforeOverLimitSubmit,
+	'Boost 超过 16 字时必须保留完整草稿、标红计数并禁用提交；' +
+		'即使强制触发点击或 Enter 也不能创建请求',
+);
 boostEditor.textContent = '赞同 ';
 boostEditor.dispatchEvent(new parsedWindow.Event('input', { bubbles: true }));
 assert(
 	boostEditor.textContent === '赞同 ' &&
-	boostMenu.querySelector('.ldp-native-boost-count')?.textContent === '3/16',
+		String(overLimitCount.textContent) === '3/16' &&
+		!overLimitCount.classList.contains('is-over-limit') &&
+		!boostEditor.hasAttribute('aria-invalid') &&
+		!boostSubmit.disabled,
 	'Boost 受控输入不得在输入过程中吃掉词间空格或重置普通输入光标',
 );
 boostEditor.textContent += '理由';
@@ -1828,14 +2143,39 @@ const secondBoostSettled = new Promise<void>((resolve) => {
 });
 click(boostMenu.querySelector<HTMLButtonElement>('[data-boost-submit]')!);
 await Promise.resolve();
-mutation.resolve(2, source);
+mutation.reject(2, new Error('服务端拒绝 Boost'));
 await secondBoostSettled;
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
 	Number(mutation.calls.length) === 3 &&
 	mutation.calls[2]?.operation === 'boost-create' &&
-	boostMenu.hidden,
-	'当前 Boost 成功后必须关闭自己的 composer',
+		!boostMenu.hidden &&
+		boostEditor.textContent === '确实' &&
+		boostEditor.isContentEditable &&
+		!boostSubmit.disabled &&
+		boostMenu.querySelector('.ldp-native-boost-error')?.textContent ===
+			'服务端拒绝 Boost',
+	'服务端拒绝 Boost 后必须保留当前会话草稿、错误反馈并恢复可编辑与重试状态',
+);
+boostEditor.textContent += '，修改后重试';
+boostEditor.dispatchEvent(new parsedWindow.Event('input', { bubbles: true }));
+const boostRetrySettled = new Promise<void>((resolve) => {
+	const unsubscribe = actions.events.subscribe((event) => {
+		if (event.operation !== 'boost-create' || event.phase !== 'settled') return;
+		unsubscribe();
+		resolve();
+	});
+});
+click(boostSubmit);
+await Promise.resolve();
+mutation.resolve(3, source);
+await boostRetrySettled;
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert(
+	Number(mutation.calls.length) === 4 &&
+		mutation.calls[3]?.operation === 'boost-create' &&
+		boostMenu.hidden,
+	'修改服务端拒绝后保留的 Boost 草稿必须可以重新提交，并在成功后关闭 composer',
 );
 
 const deleteButton = sourceView.slots.boost.querySelector<HTMLButtonElement>(
@@ -1871,7 +2211,7 @@ click(deleteButton);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
 	deleteConfirmations === 1 &&
-		Number(mutation.calls.length) === 3 &&
+		Number(mutation.calls.length) === 4 &&
 		!deleteButton.disabled,
 	'取消删除自己的 Boost 必须恢复按钮且零 mutation',
 );
@@ -1881,19 +2221,19 @@ click(duplicateDeleteButton);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
 	Number(deleteConfirmations) === 2 &&
-		Number(mutation.calls.length) === 4 &&
-		mutation.calls[3]?.operation === 'boost-delete' &&
+		Number(mutation.calls.length) === 5 &&
+		mutation.calls[4]?.operation === 'boost-delete' &&
 		deleteButton.disabled,
 	`删除自己的 Boost 必须先复用统一确认，再只生成一个 boost-delete descriptor/pending：${
 		deleteConfirmations
 	}/${mutation.calls.length}/${
-		mutation.calls[3]?.operation ?? 'none'
+		mutation.calls[4]?.operation ?? 'none'
 	}/${String(deleteButton.disabled)}`,
 );
 const boostDeleteNoticesBefore = notices.filter(
 	(notice) => notice === 'Boost 已删除',
 ).length;
-mutation.reject(3, new Error('boost down'));
+mutation.reject(4, new Error('boost down'));
 await deleteSettled;
 await new Promise((resolve) => setTimeout(resolve, 0));
 feature.afterRender(session.postById(1)!, sourceView);
@@ -1918,13 +2258,13 @@ click(retryDeleteButton);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
 	Number(deleteConfirmations) === 3 &&
-		Number(mutation.calls.length) === 5 &&
-		mutation.calls[4]?.operation === 'boost-delete',
+		Number(mutation.calls.length) === 6 &&
+		mutation.calls[5]?.operation === 'boost-delete',
 	`Boost 删除失败后的重试必须创建新的 single-flight mutation：${
 		deleteConfirmations
-	}/${mutation.calls.length}/${mutation.calls[4]?.operation ?? 'none'}`,
+	}/${mutation.calls.length}/${mutation.calls[5]?.operation ?? 'none'}`,
 );
-mutation.resolve(4, { boostId: 21, deleted: true });
+mutation.resolve(5, { boostId: 21, deleted: true });
 await deleteRetrySettled;
 await new Promise((resolve) => setTimeout(resolve, 0));
 feature.afterRender(session.postById(1)!, sourceView);
@@ -1961,12 +2301,12 @@ const nativeLikeSettled = new Promise<void>((resolve) => {
 click(nativeLikeButton);
 await Promise.resolve();
 assert(
-	Number(mutation.calls.length) === 6 &&
-		mutation.calls[5]?.operation === 'like-toggle' &&
+	Number(mutation.calls.length) === 7 &&
+		mutation.calls[6]?.operation === 'like-toggle' &&
 		nativeLikeButton.getAttribute('aria-busy') === 'true',
 	'无 reactions 插件时必须只生成一个原生 like descriptor，并共享 pending',
 );
-mutation.resolve(5, { acted: true, count: 1 });
+mutation.resolve(6, { acted: true, count: 1 });
 await nativeLikeSettled;
 feature.afterRender(session.postById(3)!, nativeLikeView);
 assert(
@@ -2010,17 +2350,23 @@ const primaryReactionSettled = new Promise<void>((resolve) => {
 });
 click(primaryReactionLike);
 await Promise.resolve();
+const switchReactionNativePost = (
+	mutation.calls[7]?.payload as Readonly<{
+		readonly args?: readonly unknown[];
+	}> | undefined
+)?.args?.[0] as TestPost | undefined;
 assert(
-	Number(mutation.calls.length) === 7 &&
-		mutation.calls[6]?.operation === 'reaction-toggle' &&
-		mutation.calls[6]?.variant === 'heart' &&
+	Number(mutation.calls.length) === 8 &&
+		mutation.calls[7]?.operation === 'reaction-toggle' &&
+		mutation.calls[7]?.variant === 'heart' &&
+		switchReactionNativePost?.current_user_reaction?.id === 'laughing' &&
 		primaryReactionLike.classList.contains('liked') &&
 		primaryReactionLike.querySelector('.ldp-like-count')?.textContent === '3' &&
 		lightboxPost.querySelector('[data-post-like]')
 			?.classList.contains('liked'),
-	'主爱心必须先乐观同步全部现有 PostView，再复用唯一 reaction descriptor',
+	'切换主爱心必须用原 authoritative 回应建模，再乐观同步全部现有 PostView',
 );
-mutation.resolve(6, {
+mutation.resolve(7, {
 	...authoritative,
 	reactions: [{ id: 'laughing', count: 0 }, { id: 'heart', count: 3 }],
 	current_user_reaction: { id: 'heart' },
@@ -2040,10 +2386,10 @@ assert(
 click(nativeLikeButton);
 await Promise.resolve();
 assert(
-	mutation.calls[7]?.operation === 'like-toggle',
+	mutation.calls[8]?.operation === 'like-toggle',
 	'原生点赞失败反例必须实际进入 like-toggle mutation',
 );
-mutation.reject(7, new Error('like down'));
+mutation.reject(8, new Error('like down'));
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
 	notices.at(-1) === '点赞失败：like down',
@@ -2052,11 +2398,17 @@ assert(
 
 click(primaryReactionLike);
 await Promise.resolve();
+const cancelReactionNativePost = (
+	mutation.calls[9]?.payload as Readonly<{
+		readonly args?: readonly unknown[];
+	}> | undefined
+)?.args?.[0] as TestPost | undefined;
 assert(
-	mutation.calls[8]?.operation === 'reaction-toggle',
-	'自定义回应失败反例必须实际进入 reaction-toggle mutation',
+	mutation.calls[9]?.operation === 'reaction-toggle' &&
+		cancelReactionNativePost?.current_user_reaction?.id === 'heart',
+	'取消回应必须保留请求前的当前回应，不能把 optimistic 空状态传给原生 toggle',
 );
-mutation.reject(8, new Error('reaction down'));
+mutation.reject(9, new Error('reaction down'));
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
 	notices.at(-1) === '回应失败：reaction down' &&
@@ -2080,27 +2432,62 @@ mutation.reject(railLikeCallIndex, new Error('rail like cleanup'));
 await new Promise((resolve) => setTimeout(resolve, 0));
 
 const nestedDefaultReactionCallIndex = mutation.calls.length;
+const nestedDefaultReaction = regular.slots.actions.querySelector<
+	HTMLButtonElement
+>('[data-reaction-picker]')!;
+const nestedPrimaryAnchor = nestedDefaultReaction.closest<HTMLElement>(
+	'.ldp-reaction-like-picker',
+)!;
+const nestedReactionSummary = nestedPrimaryAnchor.parentElement!;
+let nestedReactionAnchorDetached = false;
+const nestedReactionObserver = new parsedWindow.MutationObserver((records) => {
+	for (const record of records) {
+		if ([...record.removedNodes].includes(nestedPrimaryAnchor)) {
+			nestedReactionAnchorDetached = true;
+		}
+	}
+});
+nestedReactionObserver.observe(nestedReactionSummary, { childList: true });
+let nestedReactionFocusedWithoutScroll = false;
+const originalNestedReactionFocus = nestedDefaultReaction.focus;
+nestedDefaultReaction.focus = (options?: FocusOptions): void => {
+	nestedReactionFocusedWithoutScroll = options?.preventScroll === true;
+};
 let nestedReactionClickLeaks = 0;
 const downstreamNestedReactionClick = (): void => {
 	nestedReactionClickLeaks += 1;
 };
 document.addEventListener('click', downstreamNestedReactionClick);
-click(regular.slots.actions.querySelector<HTMLButtonElement>(
-	'[data-reaction-picker]',
-)!);
+const nestedReactionEvent = document.createEvent('Event');
+nestedReactionEvent.initEvent('click', true, true);
+nestedDefaultReaction.dispatchEvent(nestedReactionEvent);
 document.removeEventListener('click', downstreamNestedReactionClick);
 await Promise.resolve();
+nestedReactionObserver.disconnect();
+nestedDefaultReaction.focus = originalNestedReactionFocus;
 assert(
 	mutation.calls.length === nestedDefaultReactionCallIndex + 1 &&
 		String(mutation.calls[nestedDefaultReactionCallIndex]?.operation) ===
 			'reaction-toggle' &&
 		mutation.calls[nestedDefaultReactionCallIndex]?.variant === 'heart' &&
 		nestedReactionClickLeaks === 0 &&
+		nestedReactionEvent.defaultPrevented &&
+		!nestedReactionAnchorDetached &&
+		regular.slots.actions.querySelector('[data-reaction-picker]') ===
+			nestedDefaultReaction &&
+		nestedReactionFocusedWithoutScroll &&
 		!regular.slots.actions.querySelector('[data-post-like]')
 			?.classList.contains('liked') &&
 		regular.slots.actions.querySelector('.ldp-like-count')
 			?.textContent === '2',
-	'树状嵌套子回复的默认爱心必须在自身 Shadow Root 捕获点击、立即乐观切换且不泄漏到 document 动作链',
+	'树状嵌套子回复点赞必须保留原位按钮、无滚动聚焦并截断楼层及 document 点击链；' +
+		`calls=${mutation.calls.length - nestedDefaultReactionCallIndex};` +
+		`document=${nestedReactionClickLeaks};default=${nestedReactionEvent.defaultPrevented};` +
+		`detached=${nestedReactionAnchorDetached};` +
+		`same=${regular.slots.actions.querySelector('[data-reaction-picker]') === nestedDefaultReaction};` +
+		`focused=${nestedReactionFocusedWithoutScroll};` +
+		`liked=${regular.slots.actions.querySelector('[data-post-like]')?.classList.contains('liked')};` +
+		`count=${regular.slots.actions.querySelector('.ldp-like-count')?.textContent}`,
 );
 mutation.reject(
 	nestedDefaultReactionCallIndex,
@@ -2148,7 +2535,7 @@ assert(
 	!sourceView.slots.actions.querySelector('[data-post-like]')
 		?.classList.contains('liked') &&
 		sourceView.slots.actions.querySelector('.ldp-like-count')
-		?.textContent === '0',
+		?.textContent === '',
 	'默认爱心请求失败后必须回滚所有 optimistic 投影',
 );
 
@@ -2175,6 +2562,7 @@ closeReactionPicker(regular.slots.actions);
 
 lightbox.destroy();
 regular.destroy();
+ownView.destroy();
 sourceView.destroy();
 nativeLikeView.destroy();
 feature.destroy();

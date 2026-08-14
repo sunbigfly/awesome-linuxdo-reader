@@ -2,11 +2,11 @@
 title: 性能与请求调度
 description: 按 Discourse 正文与直属回复 API 调整批量、预知请求、DOM 窗口和共享安全边界。
 feature_ids: ["READ-001", "READ-002", "SET-012", "SET-013", "SET-014", "SET-015", "MONITOR-003"]
-source_anchors: ["lite/src/dom/reply-tree.ts","lite/src/topic/topic-session.ts","lite/src/state/reader-preferences-schema.ts","lite/src/network/request-scheduler.ts","lite/src/network/browser-shared-request-permit.ts"]
+source_anchors: ["lite/src/settings/reader-performance-settings-form.ts","lite/src/app/reader-performance-policy.ts","lite/src/topic/topic-session.ts","lite/src/topic/reader-topic-flow-controller.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/request-contract.ts"]
 since: 0.1.2
 version: 1.3.1
 status: current
-last_verified: 2026-07-23
+last_verified: 2026-08-13
 screenshots: ["/screenshots/guide-09-performance-settings-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png"]
 ---
 
@@ -16,28 +16,32 @@ screenshots: ["/screenshots/guide-09-performance-settings-v1.0.0.png", "/screens
 
 ![性能设置页中的预设、主楼层批量和 DOM 窗口](/screenshots/guide-09-performance-settings-v1.0.0.png)
 
-性能设置按当前 Discourse API 管线分成三层：
+性能设置按当前 Discourse API 管线分成四层；它提供目标上限，不覆盖请求 owner 的固定安全规则：
 
-1. **正文批量**：`posts.json + post_ids[]` 顺序消费当前批次，并可低优先级预知下一批。
+1. **正文批量**：`posts.json + post_ids[]` 按前、后或目标楼层补齐近窗缺口，并复用相同 identity 的在途请求。
 2. **树状直属回复**：`posts/{id}/replies.json` 按父楼分页，邻近父楼最多两路候选。
 3. **DOM 窗口**：同时渲染多少楼层。
-4. **共享调度**：所有候选何时启动、是否排队、何时因 429 或 Cloudflare 停流。
+4. **共享调度**：所有候选何时启动、是否排队，以及当前请求 profile 如何处理 429 或 Cloudflare。
 
 调度器不能抵消过大的预取需求；出现请求压力时，先减少需求，再降低并发。
 
 ## 预设
 
-| 参数 | 省流 | 自动（默认） | 快速预取 |
+| 参数 | 省流 | 自动（默认） | 快速预取（实验） |
 | --- | ---: | ---: | ---: |
 | 每批正文楼层 | 24 | 48 | 64 |
 | 视口外挂载缓冲 | 1 屏 | 1.5 屏 | 2 屏 |
 | 同时挂载楼层上限 | 48 | 80 | 96 |
-| API 提前加载距离 | 1.25 屏 | 2 屏 | 3 屏 |
+| API 提前加载距离 | 1.25 屏 | 2.5 屏 | 3 屏 |
 | 共享总并发上限 | 2 | 3 | 4 |
 | API 启动保护间隔 | 180 ms | 100 ms | 80 ms |
 | API 窗口预算占用 | 75% | 85% | 90% |
 
-任何手动改动都会进入“自定义”。保存后当前与后续阅读器立即采用；已经启动的请求自然完成。
+三档不是只切换名称：上表七项目标都会形成不同的运行策略，并分别进入正文批次、虚拟 DOM、近窗预知、中央 scheduler 与跨标签 permit。设备、网络或更严格的共享规则可以让最终生效值下调，但设置层不会反向放宽这些 owner。
+
+“快速预取”是实验档，不作为普通推荐；选择它或把任一自定义目标调得比“自动”更激进时，设置页会提示卡顿与 429 风险。提示不修改目标值，也不替代运行时安全规则。
+
+任何手动改动都会进入“自定义”。保存后当前与后续阅读器立即采用；已经启动的请求自然完成。不确定设备或站点余量时使用“自动（推荐）”，出现卡顿或频繁 429 时切回“自动”或“省流”。
 
 ## 正文批量取数
 
@@ -48,8 +52,9 @@ screenshots: ["/screenshots/guide-09-performance-settings-v1.0.0.png", "/screens
 - 不会增加同时挂载的 DOM 上限；
 - 只改变 `post_ids[]` 的单批数量，不会绕过共享调度。
 
-自动与快速预取会在当前批次进入 `topic-batch` 后，把 cursor 后一批作为可丢弃的后台候选。
-当前批次与预知批次最多双路；若预知失败或被队列丢弃，正常 cursor 接近时仍会重新加载。
+进入近窗时最多把两批最近缺口排入 `topic-batch`；后台候选只在全局空闲时单飞。可见缺口会提升并复用相同 identity 的在途请求，总预算允许时才可能占用第二个正文槽。
+
+预取失败、被丢弃或收到终止当前工作的 429 后，不会由设置层自动重建同一请求；后续请求必须重新来自当前实现允许的新滚动、导航或显式操作。
 
 ## DOM 窗口
 
@@ -65,7 +70,7 @@ screenshots: ["/screenshots/guide-09-performance-settings-v1.0.0.png", "/screens
 - 正文批次接近这条水位时，从后台提升为可见请求；
 - 父楼或已展开树节点进入这条水位时，调用直属回复 API；
 - 每个父楼分页仍按后端固定页大小读取；
-- 自动与快速预取最多同时准备两个父楼，可见树状请求优先于正文与后台请求；
+- 树状车道最多两路，可见树状请求优先于正文与后台请求；
 - 后续页只在翻页时请求。
 
 ## 共享请求调度
@@ -80,16 +85,18 @@ screenshots: ["/screenshots/guide-09-performance-settings-v1.0.0.png", "/screens
 
 多个阅读器实例采用更严格值。宿主页面自己的 API 请求也会纳入共享账本，阅读器主动避让。
 
+后台请求继续服从当前实现的空闲单飞、额外让路和可丢弃规则；这些固定保护不是性能设置字段。服务器响应中的额度字段只进入诊断，不会自动学习并改写上表目标。
+
 ## 429 与恢复
 
 ![请求脉络、限流窗口和异常状态](/screenshots/guide-11-request-flow-v1.0.0.png)
 
 出现 429 时：
 
-- 已知全局信号更新 10 秒/60 秒窗口；
-- 单个异常端点可以独立冷却，不必拖慢全部阅读；
-- 队列不会在恢复瞬间突发补发；
-- 恢复探测成功后逐步提高节奏；
-- 多标签页共享状态，避免各自重复试探。
+- 共享 10 秒/60 秒预防窗口继续保留已经发生的请求启动记录，不会从 `Retry-After` 动态学习或改写设置；
+- `Retry-After` 只属于命中的逻辑请求，是否等待或重试由该请求的固定 profile 决定；
+- 当前 Topic 正文、树状可见请求和后台预取遇到 429 时结束本次工作，不由设置层自动追发；
+- 符合条件的 Cloudflare 信号进入跨标签共享硬闸门；后台与明确隔离的请求只结束自身，不抢开验证窗口；
+- 验证恢复后仍重新经过优先级、并发、固定窗口和当前业务入口，不会突发补发旧队列。
 
-不要仅为了“更快”把总并发和预取同时调到最大。频繁 429 时先切回“自动”或“省流”，观察请求数据面板。
+不要仅为了“更快”把总并发和预取同时调到最大。频繁 429 时先切回“自动”或“省流”，再到“日志记录 → 请求记录”核对 profile、最终决策、窗口占用与 Cloudflare 状态。

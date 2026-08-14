@@ -33,6 +33,9 @@ const READER_SURFACE_SELECTOR = [
 	'.ldp-avatar-viewer',
 ].join(',');
 
+const HOST_TOPIC_CARD_SELECTOR =
+	':is(.topic-list-item,.latest-topic-list-item)';
+
 function domNode(value: unknown): value is Node {
 	return value !== null &&
 		typeof value === 'object' &&
@@ -83,6 +86,12 @@ export class ReaderControlTooltip {
 		if (interactionRoot !== this.#document) roots.push(this.#document);
 		for (const root of roots) this.#listen(root);
 		if (viewport) this.scope.listen(viewport, 'resize', () => this.close());
+		for (const type of [
+			'ldp-reader-window-change',
+			'ldp-reader-workspace-change',
+		]) {
+			this.scope.listen(options.surfaceHost, type, () => this.close());
+		}
 		this.scope.add(() => {
 			this.#clearCopyReset();
 			this.close();
@@ -198,9 +207,16 @@ export class ReaderControlTooltip {
 	#match(target: Element | null): TooltipMatch | null {
 		const control = target?.closest<HTMLElement>(TOOLTIP_CONTROL_SELECTOR) ?? null;
 		if (!control) return null;
+		const namedHostTopicControl =
+			control.hasAttribute('data-ldp-tooltip-label') &&
+			this.#document.documentElement.classList.contains(
+				'ldp-reader-workspace',
+			) &&
+			Boolean(control.closest(HOST_TOPIC_CARD_SELECTOR));
 		const inReaderSurface = Boolean(
 			control.closest(READER_SURFACE_SELECTOR) ||
-			control.matches('.ldp-native-reader-trigger'),
+			control.matches('.ldp-native-reader-trigger') ||
+			namedHostTopicControl,
 		);
 		if (
 			!inReaderSurface ||

@@ -3,7 +3,7 @@ import {
 	tryDiscoursePostNumber,
 	type DiscoursePostNumber,
 } from '../discourse/identifiers.js';
-import { LifecycleScope } from '../kernel/lifecycle.js';
+import { LifecycleScope, type Cleanup } from '../kernel/lifecycle.js';
 import { Signal } from '../kernel/signal.js';
 import type {
 	ReaderTopicNavigationRequest,
@@ -37,6 +37,11 @@ export interface ReaderTopicTimelineControllerOptions {
 	readonly navigation: ReaderTopicTimelineNavigationPort;
 	readonly readTotalPostCount: () => unknown;
 	readonly readNavigablePostNumbers?: () => readonly unknown[] | null;
+	/**
+	 * 只有完整投影才能把 roots() 当作一条连续可导航序列。分批缓存、远距预取或
+	 * 滚动期冻结投影必须返回 false，让时间轴暂时使用 canonical 楼层坐标。
+	 */
+	readonly readNavigablePostNumbersComplete?: () => boolean;
 	readonly initialPostNumber?: number;
 	readonly parentScope?: LifecycleScope;
 	readonly onError?: (error: unknown) => void;
@@ -104,9 +109,12 @@ export class ReaderTopicTimelineController {
 	readonly #navigation: ReaderTopicTimelineNavigationPort;
 	readonly #readTotalPostCount: () => unknown;
 	readonly #readNavigablePostNumbers: () => readonly unknown[] | null;
+	readonly #readNavigablePostNumbersComplete: () => boolean;
 	readonly #onError: (error: unknown) => void;
 	#snapshot: ReaderTopicTimelineSnapshot;
 	#jumpEpoch = 0;
+	#heldVisiblePostNumber: DiscoursePostNumber | null = null;
+	#visiblePostHoldGeneration = 0;
 
 	constructor(options: ReaderTopicTimelineControllerOptions) {
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
@@ -114,6 +122,8 @@ export class ReaderTopicTimelineController {
 		this.#readTotalPostCount = options.readTotalPostCount;
 		this.#readNavigablePostNumbers =
 			options.readNavigablePostNumbers ?? (() => null);
+		this.#readNavigablePostNumbersComplete =
+			options.readNavigablePostNumbersComplete ?? (() => true);
 		this.#onError = options.onError ?? (() => {});
 		this.#snapshot = this.#derive(
 			options.initialPostNumber ?? 1,
@@ -121,6 +131,13 @@ export class ReaderTopicTimelineController {
 		);
 		this.#navigation.changes.subscribe((result) => {
 			if (result.status === 'revealed') {
+				if (this.#heldVisiblePostNumber !== null) {
+					this.#commitCachedSources(
+						this.#heldVisiblePostNumber,
+						this.#snapshot.pendingPostNumber,
+					);
+					return;
+				}
 				/*
 				 * 目的性导航仍直达 canonical 子回复，但时间轴只表达正文主流根。
 				 * 否则滚过同一棵树时数字会在父子楼层之间来回跳。
@@ -133,6 +150,7 @@ export class ReaderTopicTimelineController {
 		}, this.scope);
 		this.scope.add(() => {
 			this.#jumpEpoch += 1;
+			this.#clearVisiblePostHold();
 			this.changes.clear();
 		});
 	}
@@ -148,6 +166,30 @@ export class ReaderTopicTimelineController {
 		);
 	}
 
+	/**
+	 * 历史恢复会在虚拟窗口补齐、测量和锚点补偿期间连续产生程序化 scroll。
+	 * 在用户真正发出滚动意图前固定历史楼层，避免这些布局事件把时间线和宿主
+	 * Topic 列表的“定位”字段改写成相邻物理窗口。返回值只释放本次 generation，
+	 * 旧恢复任务不得误解锁同楼层的新恢复。
+	 */
+	holdVisiblePost(postNumber: number): Cleanup {
+		if (this.scope.destroyed) return () => {};
+		const target = clampedPostNumber(
+			postNumber,
+			this.#snapshot.totalPostCount,
+		);
+		const generation = ++this.#visiblePostHoldGeneration;
+		this.#heldVisiblePostNumber = target;
+		this.#commitCachedSources(target, this.#snapshot.pendingPostNumber);
+		let active = true;
+		return () => {
+			if (!active) return;
+			active = false;
+			if (generation !== this.#visiblePostHoldGeneration) return;
+			this.#clearVisiblePostHold();
+		};
+	}
+
 	syncVisiblePost(
 		postNumber: number,
 		options: Readonly<{
@@ -155,6 +197,12 @@ export class ReaderTopicTimelineController {
 			readonly atEnd?: boolean;
 		}> = {},
 	): ReaderTopicTimelineSnapshot {
+		if (this.#heldVisiblePostNumber !== null) {
+			return this.#commitCachedSources(
+				this.#heldVisiblePostNumber,
+				this.#snapshot.pendingPostNumber,
+			);
+		}
 		/*
 		 * 滚动窗口每越过一个楼层都会进入这里。总楼层与可导航根只会在 Topic/
 		 * presentation commit 时变化，并由 refresh() 更新；滚动帧必须复用当前快照。
@@ -195,6 +243,18 @@ export class ReaderTopicTimelineController {
 		}
 		return clampedPostNumber(
 			Math.round(1 + normalizedRatio * (this.#snapshot.totalPostCount - 1)),
+			this.#snapshot.totalPostCount,
+		);
+	}
+
+	targetAtEnd(): DiscoursePostNumber {
+		/*
+		 * navigablePostNumbers 只描述当前已水合的正文根，并不保证已经覆盖完整
+		 * post_stream。末尾按钮必须命中 canonical 总楼层，让 navigation 按目标
+		 * 请求尾部；否则大 Topic 会把“当前缓存尾部”误当成真实末尾。
+		 */
+		return clampedPostNumber(
+			this.#snapshot.totalPostCount,
 			this.#snapshot.totalPostCount,
 		);
 	}
@@ -266,6 +326,7 @@ export class ReaderTopicTimelineController {
 		if (this.scope.destroyed) {
 			throw new Error('ReaderTopicTimelineController 已销毁');
 		}
+		this.#clearVisiblePostHold();
 		const target = discoursePostReference({ post_number: postNumber }).postNumber;
 		if (target > this.#snapshot.totalPostCount) {
 			throw new RangeError(`目标楼层超出范围：1–${this.#snapshot.totalPostCount}`);
@@ -300,10 +361,18 @@ export class ReaderTopicTimelineController {
 		pendingPostNumber: DiscoursePostNumber | null,
 	): ReaderTopicTimelineSnapshot {
 		const totalPostCount = normalizedTotal(this.#readTotalPostCount());
-		const navigablePostNumbers = normalizedNavigablePosts(
-			this.#readNavigablePostNumbers(),
-			totalPostCount,
-		);
+		/*
+		 * roots() 在大 Topic 的分批加载期可能是 [1…39, 7679…] 这样的稀疏
+		 * 局部集合。它只有在投影 owner 明确确认覆盖完整时，才有资格参与下标、
+		 * progress 与相邻楼层计算；否则必须保持 null，并且避免无意义的 O(N) 复制排序。
+		 */
+		const navigablePostNumbers =
+			this.#readNavigablePostNumbersComplete()
+				? normalizedNavigablePosts(
+					this.#readNavigablePostNumbers(),
+					totalPostCount,
+				)
+				: null;
 		return this.#deriveFromSources(
 			currentPostNumber,
 			pendingPostNumber,
@@ -363,5 +432,10 @@ export class ReaderTopicTimelineController {
 		this.#snapshot = next;
 		for (const error of this.changes.emit(next)) this.#onError(error);
 		return next;
+	}
+
+	#clearVisiblePostHold(): void {
+		this.#heldVisiblePostNumber = null;
+		this.#visiblePostHoldGeneration += 1;
 	}
 }

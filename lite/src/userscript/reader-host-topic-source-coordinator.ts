@@ -31,6 +31,58 @@ const SURFACE_SELECTOR = '.fk-d-menu,.menu-panel,.chat-drawer';
 const OWNED_SELECTOR =
 	'.ldp-overlay,.ldp-reader-portal-host,[data-ldp-owned="true"]';
 
+function nativeNotificationTarget(
+	target: ReaderUserscriptInterceptedTarget,
+): boolean {
+	if (
+		target.request.source !== 'notification' &&
+		target.request.source !== 'message'
+	) return false;
+	const menu = target.anchor.closest<HTMLElement>('.user-menu[data-tab-id]');
+	return Boolean(menu && !menu.closest(OWNED_SELECTOR));
+}
+
+/**
+ * Reader 已经接管路由后，以“新窗口点击”语义补发一次原生通知回调。
+ *
+ * Discourse 会先在通知 item 回调里同步 read/current-user/cookie，再由 base item 根据
+ * Ctrl/Meta 语义跳过 routeTo。额外的 capture preventDefault 只阻止浏览器默认开新页，
+ * 不截断宿主 item 回调。
+ */
+function acknowledgeNativeNotification(anchor: Element): boolean {
+	const view = anchor.ownerDocument.defaultView;
+	const EventConstructor = (view as unknown as Readonly<{
+		readonly MouseEvent?: typeof MouseEvent;
+	}> | null)?.MouseEvent;
+	let event: Event;
+	if (typeof EventConstructor === 'function') {
+		event = new EventConstructor('click', {
+			bubbles: true,
+			button: 0,
+			cancelable: true,
+			ctrlKey: true,
+		});
+	} else {
+		event = new (view?.Event ?? Event)('click', {
+			bubbles: true,
+			cancelable: true,
+		});
+		Object.defineProperties(event, {
+			button: { configurable: true, value: 0 },
+			ctrlKey: { configurable: true, value: true },
+		});
+	}
+	// 预先取消默认动作；Discourse notification item 仍会执行自己的 click
+	// 回调，而 base item 会因 Ctrl 语义跳过 routeTo。
+	event.preventDefault();
+	try {
+		anchor.dispatchEvent(event);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 function topicIdFromCard(card: Element): string {
 	const direct = String(
 		card.getAttribute('data-topic-id') ??
@@ -117,6 +169,8 @@ export class ReaderHostTopicSourceCoordinator {
 		HostTopicPointerAnchor
 	>();
 	readonly #restoringTargets = new Set<ReaderUserscriptInterceptedTarget>();
+	readonly #nativeNotificationTargets =
+		new Set<ReaderUserscriptInterceptedTarget>();
 	#closingOpenSurfaces: Promise<void> | null = null;
 
 	constructor(options: ReaderHostTopicSourceCoordinatorOptions) {
@@ -133,6 +187,7 @@ export class ReaderHostTopicSourceCoordinator {
 		}
 		this.scope.add(() => {
 			this.#restoringTargets.clear();
+			this.#nativeNotificationTargets.clear();
 			this.#closingOpenSurfaces = null;
 			this.#document.documentElement.classList.remove(
 				'ldp-reader-host-anchor-restoring',
@@ -151,6 +206,12 @@ export class ReaderHostTopicSourceCoordinator {
 			);
 			const blur = (target.anchor as HTMLElement).blur;
 			if (typeof blur === 'function') blur.call(target.anchor);
+		}
+		if (nativeNotificationTarget(target)) {
+			// 原生 item 回调必须等 Reader 真正打开后再补发；提前关闭菜单会销毁
+			// Glimmer click handler，导致宿主未读状态永远收不到本次点击。
+			this.#nativeNotificationTargets.add(target);
+			return;
 		}
 		await this.#closeSourceSurface(target);
 	}
@@ -174,6 +235,15 @@ export class ReaderHostTopicSourceCoordinator {
 		target: ReaderUserscriptInterceptedTarget,
 		opened: boolean,
 	): Promise<boolean> {
+		const nativeNotification = this.#nativeNotificationTargets.delete(target);
+		if (nativeNotification) {
+			if (opened && !this.scope.destroyed) {
+				acknowledgeNativeNotification(target.anchor);
+			}
+			if (opened || this.#nativeNotificationTargets.size === 0) {
+				await this.#closeSourceSurface(target);
+			}
+		}
 		const anchor = this.#anchors.get(target) ?? null;
 		this.#anchors.delete(target);
 		let restored = false;

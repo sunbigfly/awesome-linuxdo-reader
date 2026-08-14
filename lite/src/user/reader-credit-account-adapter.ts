@@ -1,5 +1,6 @@
 import type {
 	DomainResponseCacheSettings,
+	UserResourceCacheLookup,
 	UserResourceRequest,
 } from '../network/domain-request-gateway.js';
 import type {
@@ -22,6 +23,7 @@ import {
 
 export interface ReaderCreditAccountGateway {
 	loadUserResource<T>(input: UserResourceRequest<T>): Promise<T>;
+	cachedUserResource<T>(input: UserResourceCacheLookup): Promise<T | null>;
 }
 
 export interface ReaderCreditAccountAdapterOptions {
@@ -115,6 +117,13 @@ const CACHE: DomainResponseCacheSettings = Object.freeze({
 	persist: true,
 });
 
+function creditCache(accountUsername: string): DomainResponseCacheSettings {
+	return Object.freeze({
+		...CACHE,
+		tags: Object.freeze([...CACHE.tags, `user:${accountUsername}`]),
+	});
+}
+
 /**
  * LDC 只读账户摘要 adapter。
  *
@@ -137,6 +146,50 @@ export class ReaderCreditAccountAdapter {
 		if (!this.#authScope) throw new Error('LDC authScope 不能为空');
 		this.#now = options.now ?? Date.now;
 		this.#storage = options.storage;
+	}
+
+	async cached(
+		usernameValue: string,
+		signal: AbortSignal,
+	): Promise<ReaderUserExternalSnapshot | null> {
+		const expectedUsername = username(usernameValue);
+		signal.throwIfAborted();
+		const cached = await this.#gateway.cachedUserResource<
+			ReaderUserExternalSnapshot
+		>({
+			authScope: this.#authScope,
+			username: expectedUsername,
+			resource: 'credit-account',
+			profile: 'resource-visible',
+			cache: creditCache(expectedUsername),
+		});
+		signal.throwIfAborted();
+		if (
+			cached?.phase === 'ready' &&
+			cached.accountUsername === expectedUsername
+		) {
+			return staleExternalSnapshot(cached);
+		}
+		if (!this.#storage) return null;
+		try {
+			const bridge = record(await this.#storage.getValue(
+				READER_CREDIT_BRIDGE_CACHE_KEY,
+			));
+			signal.throwIfAborted();
+			const cachedAt = Number(bridge?.cachedAt);
+			if (
+				!Number.isFinite(cachedAt) ||
+				this.#now() - cachedAt >= CACHE.retainForMs
+			) return null;
+			return staleExternalSnapshot(project(
+				bridge?.data,
+				expectedUsername,
+				cachedAt,
+			));
+		} catch {
+			signal.throwIfAborted();
+			return null;
+		}
 	}
 
 	async load(
@@ -182,13 +235,7 @@ export class ReaderCreditAccountAdapter {
 			input: descriptor.url,
 			signal,
 			cacheMode: refresh ? 'refresh' : 'default',
-			cache: Object.freeze({
-				...CACHE,
-				tags: Object.freeze([
-					...CACHE.tags,
-					`user:${expectedUsername}`,
-				]),
-			}),
+			cache: creditCache(expectedUsername),
 			allowStaleOnError: true,
 			mapStaleFallback: staleExternalSnapshot,
 			transport: async (request) => {

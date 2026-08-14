@@ -69,7 +69,19 @@ export function derivePostActionCapabilities(
 	const user = input.currentUser ?? {};
 	const username = String(input.currentUsername ?? '').trim();
 	const signedIn = !!username;
-	const ownPost = signedIn && String(post.username ?? '') === username;
+	const userId = Number(user.id);
+	const postUserId = Number(post.user_id);
+	const ownPost = signedIn && (
+		(
+			Number.isSafeInteger(userId) &&
+			userId > 0 &&
+			Number.isSafeInteger(postUserId) &&
+			postUserId > 0 &&
+			userId === postUserId
+		) ||
+		String(post.username ?? '').trim().toLocaleLowerCase() ===
+			username.toLocaleLowerCase()
+	);
 	const hiddenOrDeleted = post.hidden === true || !!post.deleted_at;
 	const normalPost = Number(post.post_type ?? 1) === 1;
 	const actions = Array.isArray(post.actions_summary)
@@ -118,7 +130,7 @@ export function derivePostActionCapabilities(
 	);
 	return Object.freeze({
 		reply,
-		like: !signedIn || hiddenOrDeleted
+		like: !signedIn || ownPost || hiddenOrDeleted
 			? 'denied'
 			: reactionPlugin === 'allowed'
 				? 'allowed'
@@ -127,7 +139,9 @@ export function derivePostActionCapabilities(
 						? 'allowed'
 						: booleanDecision(likeAction.can_act)
 					: 'unknown',
-		reactions: !signedIn || hiddenOrDeleted ? 'denied' : reactionPlugin,
+		reactions: !signedIn || ownPost || hiddenOrDeleted
+			? 'denied'
+			: reactionPlugin,
 		boost,
 		share: 'allowed',
 		report,

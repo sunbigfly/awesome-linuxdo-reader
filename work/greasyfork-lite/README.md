@@ -2,22 +2,22 @@
 
 该目录把 `lite/src/` 确定性构建成 Greasy Fork 可接受的可读发布单元，解决单个
 userscript 超过 2 MB 的问题。构建不压缩、不混淆、不缩短标识符，也不下载后
-`eval`；每个可执行文件使用 2,000,000 字节项目闸门，并同时低于 Greasy Fork 的
-2 MiB 硬限制。
+`eval`；每个可执行文件使用 2 MiB 硬闸门。
 
 ## 产物
 
 | 路径 | 用途 |
 | --- | --- |
-| `libraries/main-lite-core.js` | 应用、数据、Discourse、Shell、主题、流与 userscript 运行核心 |
-| `libraries/main-lite-features.js` | 媒体、互动、设置、用户、通知、监控与其他功能模块 |
+| `libraries/main-lite-core.js` | 应用、Shell、主题、流、布局与 userscript 运行核心 |
+| `libraries/main-lite-platform.js` | 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块 |
+| `libraries/main-lite-features.js` | 媒体、互动、设置、用户、翻译与其他功能模块 |
 | `main-loader.template.user.js` | 等待填入固定 Greasy Fork Library URL 的薄主脚本模板 |
 | `build-manifest.json` | 模块数、编译器、字节数与 SHA-256 |
 | `published-libraries.json` | 已发布 Library 的真实 ID、固定 URL、同步 URL 与远端哈希 |
 | `lite/contracts/release-browser-evidence.json` | 脱敏浏览器矩阵、性能、回滚与安全渠道证据 |
 | `release.config.example.json` | 本地发布配置示例 |
 
-两个 Library 只注册模块工厂，不会自行启动；全部 `@require` 到位后，薄主 Loader
+三个 Library 只注册模块工厂，不会自行启动；全部 `@require` 到位后，薄主 Loader
 才调用统一入口。跨 Library 依赖通过稳定模块路径解析，源文件路径和源码哈希保留
 在产物中，便于 Greasy Fork 用户审查。每个 Library 都带独立的 Greasy Fork
 元数据头，但 Library 模式不会被用户直接安装；其中的 `@match` 仅满足平台首次创建
@@ -42,19 +42,20 @@ npm run main-lite:local-debug
 ```
 
 该命令先生成单文件 `work/main-lite.local.js`，再由同一个 Greasy Fork 构建器生成
-Core、Features 和 `work/main-lite.greasyfork.local.user.js`。三文件本地 Loader 使用
-`file://` 引用本仓库 Core、Features 与 CSS，并禁用自身更新；因此手动审查的两个
-Library 与待发布文件完全相同。快速调试版和三文件本地测试版不可同时启用。
+Core、Platform、Features 和 `work/main-lite.greasyfork.local.user.js`。四文件本地 Loader 使用
+`file://` 引用本仓库三个 Library 与 CSS，并禁用自身更新；因此手动审查的三个
+Library 与待发布文件完全相同。快速调试版和四文件本地测试版不可同时启用。
 
 1.0.1 的 canonical 路径统一使用 `main-lite`。构建同时保留 `mian-lite` 旧拼写的 Library、CSS 和 Loader 兼容副本，且检查时要求新旧文件逐字节一致；Webhook 全部切换到新路径并复核后，旧路径才可在后续版本评估移除。
 
 ## 两阶段发布
 
 1. 先提交并推送 `lite/`、`work/main-lite.css`、本目录 Library 与 manifest。
-2. 在 Greasy Fork 创建两个 JavaScript Library，并分别配置从以下 GitHub 地址同步：
+2. 在 Greasy Fork 创建三个 JavaScript Library，并分别配置从以下 GitHub 地址同步：
 
    ```text
    https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/main-lite-core.js
+   https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/main-lite-platform.js
    https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/main-lite-features.js
    ```
 
@@ -74,7 +75,7 @@ Library 与待发布文件完全相同。快速调试版和三文件本地测试
 
 7. 逐字节核对 Greasy Fork 远端 Library 与 manifest 哈希，再把现有脚本
    [588185](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 的同步源切到
-   `work/main-lite.js`。主脚本更新成功后，再复核安装文件的版本、两个固定 `@require`
+   `work/main-lite.js`。主脚本更新成功后，再复核安装文件的版本、三个固定 `@require`
    和 CSS `@resource`。
 
 `npm run main-lite:greasyfork:release` 只读取已核验的 `published-libraries.json`。
@@ -233,7 +234,7 @@ Greasy Fork 固定版本仅比仓库 Loader 多平台自动加入的 `@downloadU
 
 `scripts/build-main-lite-greasyfork.mjs` 中的 `libraryDefinitions` 是唯一的 Library
 清单，Loader 的 `@require`、运行时完整性检查、release config 和 manifest 都由它
-派生。某个 Library 接近 2,000,000 字节项目闸门时：
+派生。某个 Library 接近 2 MiB 硬闸门时：
 
 1. 在 `libraryDefinitions` 增加一个职责明确的新 Library；
 2. 在 `libraryForModule()` 按稳定的源码领域把模块迁入新 Library；
@@ -241,5 +242,5 @@ Greasy Fork 固定版本仅比仓库 Loader 多平台自动加入的 `@downloadU
 4. 在本地 `release.config.json` 增加该 Library 的固定版本 URL；
 5. 重新生成薄 Loader。入口模板和运行时协议不需要手工复制或改写。
 
-不要为了让产物勉强低于平台上限而压缩或混淆。项目闸门比 Greasy Fork 的硬上限
-保留额外余量；达到闸门就新增 Library，并保持每个源码模块只属于一个 Library。
+不要为了让产物勉强低于平台上限而压缩或混淆。分包时主动保留增长余量；接近闸门
+就新增 Library，并保持每个源码模块只属于一个 Library。

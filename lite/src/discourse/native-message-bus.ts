@@ -44,10 +44,10 @@ function resolveMessageBus(host: DiscourseHostApiPort): ResolvedMessageBus {
 }
 
 /**
- * Topic 实时消息的唯一浏览器端口。
+ * Discourse 站内实时消息的唯一浏览器端口。
  *
- * 只调用 Discourse 原生 `service:message-bus`；不得回退到轮询、WebSocket、EventSource、
- * fetch 或用户脚本自建频道。
+ * Topic live 与通知变更信号都只调用原生 `service:message-bus`；不得回退到自建
+ * WebSocket、EventSource、fetch 长轮询或用户脚本外部频道。
  */
 export class BrowserDiscourseMessageBusPort implements DiscourseMessageBusPort {
 	readonly nativeBinding = 'service:message-bus' as const;

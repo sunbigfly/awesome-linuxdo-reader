@@ -34,11 +34,16 @@ const topic = {
 };
 let relativeTimeCalls = 0;
 let exactTimeCalls = 0;
+const recoveredAvatars: string[] = [];
+let resolveRecoveredAvatar!: (source: string) => void;
+const recoveredAvatar = new Promise<string>((resolve) => {
+	resolveRecoveredAvatar = resolve;
+});
 const renderer = createReaderPostPresentation({
 	document,
 	presentation: {
 		avatarSource: (template, size) =>
-			template.replace('{size}', String(size)),
+			`/native${template.replace('{size}', String(size * 3))}`,
 		categoryHref: () => '',
 		tagHref: () => '',
 		userHref: (username) => `/u/${username}`,
@@ -53,6 +58,13 @@ const renderer = createReaderPostPresentation({
 	},
 	readTopic: () => topic,
 	currentUsername: 'owner',
+	recoverAvatarSource: async (source) => {
+		recoveredAvatars.push(source);
+		if (source.startsWith('/native/')) {
+			throw new Error('Discourse blank avatar sentinel');
+		}
+		return recoveredAvatar;
+	},
 	renderIcon,
 });
 const rootPost = {
@@ -69,14 +81,44 @@ const rootPost = {
 const root = new PostView(document, renderer.identity(rootPost));
 document.querySelector('main')!.append(root.slots.root);
 renderer.render(rootPost, root);
-
+const firstFrameAvatar = root.slots.header.querySelector<HTMLImageElement>(
+	'[data-reader-avatar] img.ldp-avatar',
+);
 assert(
-	root.slots.header.querySelector<HTMLImageElement>(
-		'[data-reader-avatar] .ldp-avatar',
-	)?.src.endsWith('/avatar/48.png') &&
+	firstFrameAvatar?.getAttribute('src') === '/avatar/48.png' &&
+		!root.slots.header.querySelector(
+			'[data-reader-avatar] .ldp-persistent-avatar-fallback',
+		) &&
+		root.slots.header.querySelector<HTMLElement>(
+			'[data-reader-avatar]',
+		)?.dataset.userAvatarTemplate === '/avatar/{size}.png' &&
 		root.slots.header.querySelector('.ldp-op')?.textContent === 'OP' &&
 		root.slots.header.querySelector('.ldp-me')?.textContent === 'ME',
-	'基础投影必须复用原生头像/用户链接并派生 OP/ME',
+	'基础投影首帧必须立即挂载精确尺寸头像、原图模板与 OP/ME 身份',
+);
+for (let index = 0; index < 3; index += 1) await Promise.resolve();
+assert(
+	recoveredAvatars.join(',') ===
+		'/native/avatar/144.png,/avatar/48.png' &&
+		root.slots.header.querySelector<HTMLImageElement>(
+			'[data-reader-avatar] img.ldp-avatar',
+		) === firstFrameAvatar &&
+		!root.slots.header.querySelector(
+			'[data-reader-avatar] .ldp-persistent-avatar-fallback',
+		),
+	'正文头像必须在后台拒绝宿主高 DPR 空头像，同时保持首帧精确头像可见',
+);
+resolveRecoveredAvatar('/avatar/48.png');
+for (let index = 0; index < 3; index += 1) await Promise.resolve();
+assert(
+	root.slots.header.querySelector<HTMLImageElement>(
+		'[data-reader-avatar] img.ldp-avatar',
+	) === firstFrameAvatar &&
+		firstFrameAvatar?.getAttribute('src') === '/avatar/48.png' &&
+		!root.slots.header.querySelector(
+			'[data-reader-avatar] .ldp-persistent-avatar-fallback',
+		),
+	'正文精确尺寸头像校验完成后必须保留同一首帧节点，不得闪回兜底或等待重投影',
 );
 assert(
 	root.slots.content.innerHTML === '<p>正文</p>' &&
@@ -89,19 +131,26 @@ assert(
 	root.slots.header.querySelector<HTMLElement>('.ldp-time')?.dataset.exactTime ===
 		'2026年7月30日 08:00' &&
 	root.slots.header.querySelector('.ldp-body-floor')?.textContent === '#1' &&
+	root.slots.header.querySelector('.ldp-body-floor')?.nextElementSibling
+		?.classList.contains('ldp-time-exact') === true &&
+	root.slots.header.querySelector('.ldp-time-exact')?.textContent ===
+		'2026年7月30日 08:00' &&
+	root.slots.header.querySelector('.ldp-time-exact')
+		?.getAttribute('aria-hidden') === 'true' &&
 		root.slots.header.querySelector('.ldp-post-read-state')
 			?.getAttribute('data-read-state') === 'read' &&
 		root.slots.header.querySelector(
 			'.ldp-post-read-state .ldp-icon[data-icon="check"][data-ldp-reader-icon]',
 		),
-	'相对/具体时间、楼层与已读 SVG 状态必须只投影 canonical post',
+	'具体时间必须保留正式楼层 hover 数据，并为树状嵌套准备楼层后的独立元信息项',
 );
 renderer.render(rootPost, root);
 assert(
 	relativeTimeCalls === 2 &&
 		exactTimeCalls === 1 &&
 	root.slots.header.querySelector<HTMLElement>('.ldp-time')?.dataset.exactTime ===
-		'2026年7月30日 08:00',
+		'2026年7月30日 08:00' &&
+	root.slots.header.querySelectorAll('.ldp-time-exact').length === 1,
 	'同一 PostView 重投影必须刷新相对时间，但不得重复格式化不变的具体时间',
 );
 

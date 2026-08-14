@@ -1,0 +1,394 @@
+import { parseHTML } from 'linkedom';
+import {
+	ReaderCollectionFloatingWindow,
+} from '../src/collection/reader-collection-floating-window.js';
+import {
+	ReaderFloatingWindowFrame,
+	restoreReaderFloatingWindowTabSession,
+} from '../src/shell/reader-floating-window-frame.js';
+
+function assert(condition: unknown, message: string): asserts condition {
+	if (!condition) throw new Error(message);
+}
+
+const { document: parsedDocument, window } = parseHTML(
+	'<!doctype html><html><body><main id="mount"></main>' +
+	'<button class="ldp-topic-action-rail-chronicle"></button>' +
+	'<div id="outside"></div></body></html>',
+);
+const document = parsedDocument as unknown as Document;
+const mount = document.querySelector<HTMLElement>('#mount')!;
+const storageValues = new Map<string, string>();
+const storage = {
+	getItem: (key: string) => storageValues.get(key) ?? null,
+	setItem: (key: string, value: string) => {
+		storageValues.set(key, value);
+	},
+};
+const definitions = Object.freeze([
+	['notifications', '通知私信', 'bell'],
+	['history', '浏览历史', 'history'],
+	['bookmarks', '收藏回应', 'bookmark'],
+	['topic-downloads', '主题下载', 'download'],
+	['user-observations', '用户观察', 'activity'],
+	['chronicle', '岁月史书', 'history'],
+	['unwanted-topics', '不想再看', 'eye-off'],
+] as const);
+const requested: string[] = [];
+let frames: ReaderFloatingWindowFrame[] = [];
+frames = definitions.map(([tabId, title, icon], index) =>
+	new ReaderFloatingWindowFrame({
+		document,
+		mount,
+		title,
+		ariaLabel: title,
+		icon,
+		variant: tabId,
+		tabId,
+		tabOrder: (index + 1) * 10,
+		requestOpen: () => {
+			requested.push(tabId);
+			frames[index]?.open();
+		},
+		zIndex: 2_147_483_584,
+		geometryStorage: storage,
+		geometryStorageKey: 'reader-floating-window-tabs-test',
+		policy: {
+			minWidth: 320,
+			minHeight: 360,
+			defaultWidth: 560,
+			defaultHeight: 680,
+		},
+	}),
+);
+const dismissFromPointer: EventListener = (event) => {
+	frames.find((frame) => frame.active)?.dismissFromPointerEvent(event);
+};
+const dismissFromEscape: EventListener = (event) => {
+	frames.find((frame) => frame.active)?.dismissFromEscapeEvent(
+		event as KeyboardEvent,
+	);
+};
+document.addEventListener('pointerdown', dismissFromPointer, true);
+document.addEventListener('keydown', dismissFromEscape, true);
+
+assert(
+	frames.every((frame) => frame.element.hidden && !frame.isOpen),
+	'七类共享浮窗注册后必须保持关闭，不得在 Reader 启动时抢占视图',
+);
+frames[0]!.open();
+frames[1]!.open();
+assert(
+	frames[0]!.isOpen && frames[0]!.element.hidden &&
+	frames[1]!.isOpen && frames[1]!.active && !frames[1]!.element.hidden &&
+	frames[1]!.tabList.querySelectorAll(
+		'.ldp-reader-floating-window-tab',
+	).length === 2,
+	'点击第二个入口必须保留第一个已打开标签，只切换唯一 active 浮窗',
+);
+frames[1]!.addButton.click();
+assert(
+	frames[1]!.addButton.getAttribute('aria-expanded') === 'true' &&
+	!frames[1]!.addMenu.hidden &&
+	frames[1]!.addMenu.querySelectorAll(
+		'.ldp-reader-floating-window-add-option',
+	).length === 5,
+	'加号菜单必须只列出尚未打开的剩余浮窗',
+);
+frames[1]!.addMenu.querySelector<HTMLButtonElement>(
+	'[data-floating-tab-add="topic-downloads"]',
+)!.click();
+await Promise.resolve();
+assert(
+	requested.at(-1) === 'topic-downloads' &&
+	frames[3]!.active && !frames[3]!.element.hidden &&
+	frames[0]!.isOpen && frames[1]!.isOpen,
+	'从加号菜单添加浮窗必须调用业务 open owner，并保留已有标签状态',
+);
+
+for (const frame of frames) frame.open();
+const active = frames.at(-1)!;
+const labels = [...active.tabList.querySelectorAll<HTMLElement>(
+	'.ldp-reader-floating-window-tab-title',
+)].map((label) => label.textContent);
+const openedIds = [...active.tabList.querySelectorAll<HTMLElement>(
+	'.ldp-reader-floating-window-tab',
+)].map((tab) => tab.dataset.floatingTab);
+assert(
+	openedIds.join(',') ===
+		'notifications,history,topic-downloads,bookmarks,' +
+		'user-observations,chronicle,unwanted-topics' &&
+	labels.every((label) => [...String(label)].length === 4) &&
+	active.addButton.disabled,
+	'七个标签必须使用四字标题并保持打开顺序；全部打开后加号不得生成空菜单',
+);
+active.pinButton.click();
+assert(
+	frames.every((frame) =>
+		frame.pinned && frame.pinButton.getAttribute('aria-pressed') === 'true'),
+	'任一标签切换置顶后必须同步整组状态与按钮反馈',
+);
+active.tabList.querySelector<HTMLButtonElement>(
+	'[data-floating-tab="notifications"] ' +
+	'.ldp-reader-floating-window-tab-activate',
+)!.click();
+assert(
+	frames[0]!.active && frames[0]!.pinned,
+	'切换标签后必须沿用整组置顶状态，不能回退到当前标签自己的旧值',
+);
+const pinnedOutside = new window.Event('pointerdown', {
+	bubbles: true,
+	cancelable: true,
+});
+document.querySelector('#outside')!.dispatchEvent(pinnedOutside);
+const pinnedEscape = new window.Event('keydown', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperty(pinnedEscape, 'key', { value: 'Escape' });
+document.dispatchEvent(pinnedEscape);
+assert(
+	frames.every((frame) => frame.isOpen) && pinnedEscape.defaultPrevented,
+	'整组置顶后点击浮窗外或按 Esc 均不得关闭任何工具标签',
+);
+frames[0]!.pinButton.click();
+assert(
+	frames.every((frame) => !frame.pinned),
+	'取消置顶必须同步整组状态',
+);
+Object.defineProperties(frames[0]!.tabList, {
+	scrollWidth: { configurable: true, value: 900 },
+	clientWidth: { configurable: true, value: 360 },
+	scrollLeft: { configurable: true, value: 137, writable: true },
+});
+frames[0]!.body.scrollTop = 420;
+document.querySelector('#outside')!.dispatchEvent(new window.Event(
+	'pointerdown',
+	{ bubbles: true, cancelable: true },
+));
+assert(
+	frames.every((frame) => frame.isOpen && frame.element.hidden) &&
+	frames.every((frame) => !frame.active),
+	'未置顶时点击浮窗外必须只收起整组，不能清空已打开标签',
+);
+frames[0]!.tabList.scrollLeft = 0;
+const restoreLauncher = document.querySelector<HTMLElement>(
+	'.ldp-topic-action-rail-chronicle',
+)!;
+const restoreClick = new window.Event('click', {
+	bubbles: true,
+	cancelable: true,
+});
+restoreLauncher.dispatchEvent(restoreClick);
+assert(
+	restoreClick.defaultPrevented &&
+	frames[5]!.active && frames.every((frame) => frame.isOpen) &&
+	frames[5]!.tabList.scrollLeft === 137 &&
+	frames[5]!.tabList.querySelectorAll(
+		'.ldp-reader-floating-window-tab',
+	).length === 7,
+	'点击已打开工具入口必须恢复整组并进入该入口对应标签',
+);
+frames[5]!.tabList.querySelector<HTMLButtonElement>(
+	'[data-floating-tab="notifications"] ' +
+	'.ldp-reader-floating-window-tab-activate',
+)!.click();
+const dismissingEscape = new window.Event('keydown', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperty(dismissingEscape, 'key', { value: 'Escape' });
+document.dispatchEvent(dismissingEscape);
+assert(
+	dismissingEscape.defaultPrevented &&
+	frames.every((frame) => frame.isOpen && frame.element.hidden),
+	'未置顶时按 Esc 必须只收起整组，不能清空已打开标签',
+);
+assert(
+	restoreReaderFloatingWindowTabSession(mount) &&
+	frames[0]!.active && frames[0]!.tabList.scrollLeft === 137 &&
+	frames[0]!.body.scrollTop === 420,
+	'快捷键唤回必须恢复关闭前聚焦标签、标签滚动与内容会话位置',
+);
+active.open();
+Object.defineProperties(active.tabList, {
+	scrollWidth: { configurable: true, value: 900 },
+	clientWidth: { configurable: true, value: 360 },
+	scrollLeft: { configurable: true, value: 0, writable: true },
+});
+const horizontalWheel = new window.Event('wheel', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperties(horizontalWheel, {
+	deltaX: { value: 0 },
+	deltaY: { value: 96 },
+});
+active.tabList.dispatchEvent(horizontalWheel);
+assert(
+	active.tabList.scrollLeft === 96 && horizontalWheel.defaultPrevented,
+	'七标签不得等分铺满；标签轨道必须接管纵向滚轮并横向滚动',
+);
+
+active.tabList.querySelector<HTMLButtonElement>(
+	'[data-floating-tab="notifications"] ' +
+	'.ldp-reader-floating-window-tab-activate',
+)!.click();
+assert(
+	frames[0]!.active && !frames[0]!.element.hidden && active.element.hidden,
+	'点击已有标签必须只切换 active 浮窗，不重新请求或关闭任何业务面板',
+);
+assert(
+	frames[0]!.tabList.scrollLeft === 96,
+	'切换已有标签必须继承共享横向位置，不得调用聚焦滚动造成标签轨道跳动',
+);
+frames[0]!.tabList.querySelector<HTMLButtonElement>(
+	'[data-floating-tab-close="bookmarks"]',
+)!.click();
+assert(
+	!frames[2]!.isOpen && frames[2]!.element.hidden && frames[0]!.active,
+	'每个标签右侧关闭按钮必须只关闭对应浮窗，不能影响当前标签',
+);
+assert(
+	frames[0]!.tabRow.contains(frames[0]!.pinButton) &&
+	!frames[0]!.actions.contains(frames[0]!.pinButton) &&
+	!frames[0]!.actions.contains(frames[0]!.closeButton) &&
+	frames[0]!.closeButton.closest('.ldp-reader-floating-window-tab') !== null,
+	'冻结按钮必须位于添加按钮右侧，关闭按钮只能位于标签右侧',
+);
+assert(
+	frames[0]!.tabRow.contains(frames[0]!.tabList) &&
+	frames[0]!.tabRow.contains(frames[0]!.addWrap) &&
+	frames[0]!.tabList.nextElementSibling === frames[0]!.addWrap &&
+	frames[0]!.addWrap.nextElementSibling === frames[0]!.pinButton &&
+	frames[0]!.toolbarRow.contains(frames[0]!.meta) &&
+	frames[0]!.toolbarRow.contains(frames[0]!.actions),
+	'首行必须依次排列标签、添加与冻结，第二行只保留统计和业务操作',
+);
+
+const middleButtonEvent = (type: string): Event => {
+	const event = new window.Event(type, {
+		bubbles: true,
+		cancelable: true,
+	});
+	Object.defineProperty(event, 'button', { value: 1 });
+	return event;
+};
+const historyTab = frames[0]!.tabList.querySelector<HTMLElement>(
+	'[data-floating-tab="history"]',
+)!;
+const middlePointerDown = middleButtonEvent('pointerdown');
+const middleClick = middleButtonEvent('auxclick');
+historyTab.dispatchEvent(middlePointerDown);
+historyTab.dispatchEvent(middleClick);
+assert(
+	middlePointerDown.defaultPrevented && middleClick.defaultPrevented &&
+	!frames[1]!.isOpen && frames[0]!.active,
+	'鼠标中键必须被标签捕获并关闭目标标签，不得触发自动滚动或切换当前标签',
+);
+
+const pointerEvent = (type: string, x: number, y: number): Event => {
+	const event = new window.Event(type, {
+		bubbles: true,
+		cancelable: true,
+	});
+	Object.defineProperties(event, {
+		button: { value: 0 },
+		pointerId: { value: 11 },
+		clientX: { value: x },
+		clientY: { value: y },
+	});
+	return event;
+};
+const geometryBeforeScrollbarDrag = frames[0]!.geometry.snapshot.geometry;
+const scrollbarPointerDown = pointerEvent('pointerdown', 360, 108);
+frames[0]!.tabList.dispatchEvent(scrollbarPointerDown);
+frames[0]!.element.dispatchEvent(pointerEvent('pointermove', 470, 108));
+frames[0]!.element.dispatchEvent(pointerEvent('pointerup', 470, 108));
+const geometryAfterScrollbarDrag = frames[0]!.geometry.snapshot.geometry;
+assert(
+	!scrollbarPointerDown.defaultPrevented &&
+	geometryAfterScrollbarDrag.left === geometryBeforeScrollbarDrag.left &&
+	geometryAfterScrollbarDrag.top === geometryBeforeScrollbarDrag.top &&
+	!frames[0]!.element.classList.contains(
+		'ldp-reader-floating-window-interacting',
+	),
+	'拖动标签轨道与滚动条只能横向切换标签，不得触发浮窗拖动',
+);
+
+const launcherEvent = new window.Event('pointerdown', {
+	bubbles: true,
+	cancelable: true,
+});
+let launcherPreserved = false;
+document.addEventListener('pointerdown', (event) => {
+	launcherPreserved = !frames[0]!.dismissFromPointerEvent(event);
+}, { once: true });
+document.querySelector('.ldp-topic-action-rail-chronicle')!
+	.dispatchEvent(launcherEvent);
+assert(
+	launcherPreserved,
+	'点击七类入口必须跳过点外关闭，让随后 click 添加或激活目标标签',
+);
+
+document.removeEventListener('pointerdown', dismissFromPointer, true);
+document.removeEventListener('keydown', dismissFromEscape, true);
+for (const frame of [...frames].reverse()) frame.destroy();
+assert(
+	mount.querySelector('.ldp-reader-floating-window') === null,
+	'共享标签组销毁后必须移除全部浮窗与 document 监听',
+);
+
+const stateSyncMount = document.createElement('main');
+document.body.append(stateSyncMount);
+const stateSyncDefinitions = Object.freeze([
+	['notifications', '通知私信', 'bell'],
+	['bookmarks', '收藏回应', 'bookmark'],
+	['history', '浏览历史', 'history'],
+] as const);
+const stateSyncOpen = new Map<string, boolean>();
+const stateSyncSurfaces = stateSyncDefinitions.map(([id, title, icon], index) => {
+	const toggle = document.createElement('button');
+	const content = document.createElement('section');
+	stateSyncMount.append(toggle, content);
+	return new ReaderCollectionFloatingWindow({
+		document,
+		mount: stateSyncMount,
+		toggle,
+		content,
+		title,
+		ariaLabel: title,
+		icon,
+		variant: id,
+		tabOrder: (index + 1) * 10,
+		isOpen: () => stateSyncOpen.get(id) === true,
+		requestOpen: () => {
+			stateSyncOpen.set(id, true);
+		},
+		requestClose: () => {
+			stateSyncOpen.set(id, false);
+		},
+	});
+});
+for (let index = 0; index < stateSyncSurfaces.length; index += 1) {
+	stateSyncOpen.set(stateSyncDefinitions[index]![0], true);
+	stateSyncSurfaces[index]!.sync(true);
+}
+const stateSyncHistory = stateSyncSurfaces[2]!;
+stateSyncSurfaces[0]!.sync(true);
+stateSyncSurfaces[1]!.sync(true);
+assert(
+	stateSyncHistory.frame.active &&
+	stateSyncSurfaces.slice(0, 2).every((surface) =>
+		surface.frame.isOpen && !surface.frame.active),
+	'已打开集合的重复状态渲染不得抢走用户当前选择的工具标签',
+);
+stateSyncSurfaces[1]!.sync(false);
+stateSyncOpen.set('bookmarks', true);
+stateSyncSurfaces[1]!.sync(true);
+assert(
+	stateSyncSurfaces[1]!.frame.active && !stateSyncHistory.frame.active,
+	'集合从关闭切到打开时仍必须激活其工具标签',
+);
+for (const surface of [...stateSyncSurfaces].reverse()) surface.destroy();
+stateSyncMount.remove();

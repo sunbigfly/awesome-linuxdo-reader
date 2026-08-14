@@ -222,3 +222,48 @@ assert(
 	pageChanges === 1 && nativePageCleanup === 1,
 	'page-change cleanup 必须停止后续投影并复用宿主返回的释放函数',
 );
+
+let delayedPluginApiReady = false;
+let delayedPageChange: (() => void) | null = null;
+let delayedPageCleanup = 0;
+const delayedRouteEnvironment = new BrowserUserscriptEnvironment({
+	userscriptGlobal: {
+		unsafeWindow: {
+			moduleBroker: {
+				lookup(name: string): unknown {
+					if (
+						name !== 'discourse/lib/plugin-api' ||
+						!delayedPluginApiReady
+					) return null;
+					return {
+						withPluginApi(callback: (api: unknown) => void) {
+							callback({
+								onPageChange(handler: () => void) {
+									delayedPageChange = handler;
+									return () => {
+										delayedPageCleanup += 1;
+									};
+								},
+							});
+						},
+					};
+				},
+			},
+		},
+	},
+});
+const delayedRouteChanges = createReaderUserscriptRouteChangePort(
+	delayedRouteEnvironment.discourseHost,
+);
+let delayedPageChanges = 0;
+const stopDelayedRouteChanges = delayedRouteChanges.subscribe(() => {
+	delayedPageChanges += 1;
+});
+delayedPluginApiReady = true;
+await Promise.resolve();
+invoke(delayedPageChange);
+stopDelayedRouteChanges();
+assert(
+	delayedPageChanges === 1 && delayedPageCleanup === 1,
+	'document-start 时 plugin-api 尚未就绪，延迟出现后必须恢复 page-change 订阅与释放',
+);

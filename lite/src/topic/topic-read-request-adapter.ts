@@ -18,6 +18,7 @@ import type {
 	DomainResponseCacheSettings,
 	NestedRepliesRequest,
 	TopicPostsRequest,
+	TopicTargetCacheLookup,
 	TopicTargetRequest,
 } from '../network/domain-request-gateway.js';
 import type {
@@ -34,6 +35,7 @@ export interface TopicReadRequestPort {
 		cacheMode?: 'default' | 'refresh';
 	}>): boolean;
 	loadTopicTarget<T>(input: TopicTargetRequest<T>): Promise<T>;
+	cachedTopicTarget?<T>(input: TopicTargetCacheLookup): Promise<T | null>;
 	loadNestedReplies<T>(input: NestedRepliesRequest<T>): Promise<T>;
 	promoteNestedReplies?(input: Readonly<{
 		authScope: string;
@@ -85,6 +87,7 @@ export interface TopicTargetLoadOptions extends TopicNetworkLoadOptions {
 export interface TopicPostsLoadOptions extends TopicNetworkLoadOptions {
 	readonly background?: boolean;
 	readonly priority?: 'visible' | 'nested';
+	readonly prefetchTier?: 'nearby';
 	readonly refresh?: boolean;
 }
 
@@ -94,6 +97,7 @@ export interface TopicPostByIdLoadOptions extends TopicNetworkLoadOptions {
 
 export interface TopicLoadOptions extends TopicNetworkLoadOptions {
 	readonly background?: boolean;
+	readonly prefetchTier?: 'nearby';
 	readonly refresh?: boolean;
 }
 
@@ -201,7 +205,11 @@ export class TopicReadRequestAdapter {
 			authScope: this.authScope,
 			topicId: this.topicId,
 			operation: 'topic-refresh',
-			profile: options.background ? 'background-prefetch' : 'topic-visible',
+			profile: options.background
+				? options.prefetchTier === 'nearby'
+					? 'nearby-prefetch'
+					: 'background-prefetch'
+				: 'topic-visible',
 			input: descriptor.path,
 			signal: this.#signal,
 			...(options.beforeNetwork === undefined
@@ -232,7 +240,9 @@ export class TopicReadRequestAdapter {
 			topicId: this.topicId,
 			postIds,
 			profile: options.background
-				? 'background-prefetch'
+				? options.prefetchTier === 'nearby'
+					? 'nearby-prefetch'
+					: 'background-prefetch'
 				: options.priority === 'nested' ? 'nested-visible' : 'topic-visible',
 			input: descriptor.path,
 			signal: this.#signal,
@@ -259,7 +269,9 @@ export class TopicReadRequestAdapter {
 			topicId: this.topicId,
 			postIds,
 			profile: options.background
-				? 'background-prefetch'
+				? options.prefetchTier === 'nearby'
+					? 'nearby-prefetch'
+					: 'background-prefetch'
 				: options.priority === 'nested' ? 'nested-visible' : 'topic-visible',
 			cacheMode: options.refresh ? 'refresh' : 'default',
 		}) ?? false;
@@ -394,6 +406,38 @@ export class TopicReadRequestAdapter {
 				signal: input.signal,
 				attempt: input.attempt,
 			}),
+		});
+	}
+
+	/** 只读中央响应缓存；不进入 client、Scheduler 或传输层。 */
+	cachedTargetCandidate<T>(
+		candidate: TopicTargetCandidate,
+		rawPostNumber: number,
+		options: TopicTargetLoadOptions,
+		rawTopicId: string | number = this.topicId,
+	): Promise<T | null> {
+		if (!this.#gateway.cachedTopicTarget) return Promise.resolve(null);
+		const postNumber = discoursePostNumber(rawPostNumber);
+		const topicId = discourseTopicId(rawTopicId);
+		const catalogCandidate = DiscourseNativeRequests.targetCandidates({
+			basePath: this.#basePath,
+			topicId,
+			postNumber,
+			scope: options.scope,
+			...(options.slug === undefined ? {} : { slug: options.slug }),
+			refresh: options.refresh === true,
+		}).find((entry) =>
+			entry.endpoint === candidate.endpoint && entry.url === candidate.url);
+		if (!catalogCandidate) {
+			return Promise.reject(new Error('目标楼层缓存查询不属于 Discourse 原生目录'));
+		}
+		return this.#gateway.cachedTopicTarget<T>({
+			authScope: this.authScope,
+			topicId,
+			operation: `target:${options.scope}:${candidate.endpoint}`,
+			postNumber,
+			profile: options.background ? 'background-prefetch' : 'topic-visible',
+			cache: cacheForTopic(this.#caches.posts, topicId),
 		});
 	}
 

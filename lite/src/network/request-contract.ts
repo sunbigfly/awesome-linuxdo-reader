@@ -20,6 +20,7 @@ export type RequestContractProfile =
 	| 'surface-prefetch'
 	| 'user-prefetch'
 	| 'resource-prefetch'
+	| 'nearby-prefetch'
 	| 'background-prefetch';
 
 export interface RequestProfileContract {
@@ -93,12 +94,17 @@ const PROFILES: Readonly<Record<RequestContractProfile, RequestProfileContract>>
 		priority: 'critical',
 		lifecycle: 'topic',
 		droppable: false,
+		/*
+		 * timings 可以被 Cloudflare 单独拒绝；通用 session 探针的 200
+		 * 不能证明该端点已解除。保留 checkpoint 并结束本请求，
+		 * 不建立共享验证世代，也不在其他请求过盾后追发旧批次。
+		 */
 		blockOnCloudflareChallenge: false,
 		suppressAfterChallengeWait: true,
 		defaultCacheMode: 'no-store',
 		allowedCacheModes: cacheModes('no-store'),
 		defaultTimeoutMs: 20_000,
-		max429Retries: 1,
+		max429Retries: 0,
 		maxChallengeRetries: 0,
 	}),
 	'topic-visible': Object.freeze({
@@ -108,8 +114,13 @@ const PROFILES: Readonly<Record<RequestContractProfile, RequestProfileContract>>
 		defaultCacheMode: 'default',
 		allowedCacheModes: cacheModes('default', 'refresh', 'no-store'),
 		defaultTimeoutMs: 20_000,
-		max429Retries: 1,
-		maxChallengeRetries: 1,
+		/*
+		 * Topic 正文/目标楼层把 429 与 cf-mitigated 当作本次用户意图的终态。
+		 * 验证闸门仍会阻止后续启动，但同一逻辑请求不得在过盾后自动重放；
+		 * 下一次请求只能来自新的物理滚动或显式导航。
+		 */
+		max429Retries: 0,
+		maxChallengeRetries: 0,
 	}),
 	'nested-visible': Object.freeze({
 		priority: 'nested',
@@ -118,8 +129,8 @@ const PROFILES: Readonly<Record<RequestContractProfile, RequestProfileContract>>
 		defaultCacheMode: 'default',
 		allowedCacheModes: cacheModes('default', 'refresh'),
 		defaultTimeoutMs: 12_000,
-		max429Retries: 1,
-		maxChallengeRetries: 1,
+		max429Retries: 0,
+		maxChallengeRetries: 0,
 	}),
 	'user-card-interactive': Object.freeze({
 		priority: 'interactive',
@@ -221,15 +232,37 @@ const PROFILES: Readonly<Record<RequestContractProfile, RequestProfileContract>>
 		max429Retries: 0,
 		maxChallengeRetries: 1,
 	}),
+	'nearby-prefetch': Object.freeze({
+		priority: 'prefetch',
+		lifecycle: 'topic',
+		droppable: true,
+		/*
+		 * 近视口宿主 Topic 可以先于普通后台任务，但仍必须让位于真实打开、交互与
+		 * critical 请求。它与普通预取一样不能冻结 Reader 或拉起人工验证。
+		 */
+		blockOnCloudflareChallenge: false,
+		suppressAfterChallengeWait: true,
+		defaultCacheMode: 'default',
+		allowedCacheModes: cacheModes('default', 'refresh'),
+		defaultTimeoutMs: 20_000,
+		max429Retries: 0,
+		maxChallengeRetries: 0,
+	}),
 	'background-prefetch': Object.freeze({
 		priority: 'background',
 		lifecycle: 'topic',
 		droppable: true,
+		/*
+		 * 自动预取和实时增强没有权力冻结全局 Reader 或拉起人工验证。
+		 * 它们命中 cf-mitigated 时只结束自身，且不得在其他请求过盾后追发旧工作。
+		 */
+		blockOnCloudflareChallenge: false,
+		suppressAfterChallengeWait: true,
 		defaultCacheMode: 'default',
 		allowedCacheModes: cacheModes('default', 'refresh'),
 		defaultTimeoutMs: 30_000,
 		max429Retries: 0,
-		maxChallengeRetries: 1,
+		maxChallengeRetries: 0,
 	}),
 });
 

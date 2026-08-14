@@ -258,3 +258,108 @@ assert(
 await edgeRepository.flush();
 edgeDomOwner.destroy();
 edgeStreamView.destroy();
+
+const sparseRepository = new ReplyTreeRepository(14, {
+	load: async () => null,
+	save: async () => {},
+});
+sparseRepository.ingest([
+	{ post_number: 54, reply_to_post_number: null },
+	{ post_number: 55, reply_to_post_number: null },
+	{ post_number: 7_679, reply_to_post_number: null },
+	{ post_number: 7_680, reply_to_post_number: null },
+], 'topic-json');
+const sparseLayout = new VirtualRootLayout(100);
+sparseLayout.setRoots([
+	{ postNumber: 54, subtreePostCount: 1, unloadedPostCountBefore: 53 },
+	{ postNumber: 55, subtreePostCount: 1 },
+	{ postNumber: 7_679, subtreePostCount: 1, unloadedPostCountBefore: 7_623 },
+	{ postNumber: 7_680, subtreePostCount: 1 },
+]);
+const sparseStreamView = new VirtualStreamView(document);
+document.body.append(sparseStreamView.slots.root);
+const sparseDomOwner = new ReplyTreeDomOwner(
+	sparseRepository.topology,
+	sparseStreamView.slots.rootList,
+);
+for (const postNumber of [54, 55, 7_679, 7_680]) {
+	sparseDomOwner.register(new PostView(document, {
+		postId: 3_000 + postNumber,
+		postNumber,
+		username: `sparse-${postNumber}`,
+	}), false);
+}
+const sparseVirtualDom = new VirtualStreamDomController(
+	sparseRepository,
+	sparseLayout,
+	sparseStreamView,
+	sparseDomOwner,
+);
+const sparseTailOffset = sparseLayout.offsetOf(7_679)!;
+const sparseTailCommit = sparseVirtualDom.commit({
+	scrollOffset: sparseTailOffset,
+	viewportSize: 100,
+	overscanBeforeScreens: 2,
+	overscanAfterScreens: 2,
+	preserveRootPostNumber: 54,
+});
+assert(
+	directPostNumbers(sparseStreamView.slots.rootList).join(',') === '7679,7680' &&
+		!sparseTailCommit.window.postNumbers.includes(54) &&
+		!sparseTailCommit.window.postNumbers.includes(55) &&
+		sparseStreamView.slots.beforeSpacer.style.blockSize ===
+			`${sparseTailOffset}px`,
+	'尾段原子换窗后真实 DOM 只能挂载 #7679/#7680；旧 #54 锚点不得跨未加载 spacer 与尾段共存',
+);
+const sparseGapCommit = sparseVirtualDom.commit({
+	scrollOffset: sparseTailOffset - 500,
+	viewportSize: 100,
+	overscanBeforeScreens: 0,
+	overscanAfterScreens: 0,
+});
+assert(
+	sparseGapCommit.window.unloadedGapTargetPostNumber === 7_674 &&
+		!sparseStreamView.slots.afterGapPlaceholder.hidden &&
+		sparseStreamView.slots.afterGapPlaceholder.getAttribute(
+			'data-target-post-number',
+		) === '7674' &&
+		sparseStreamView.slots.afterSpacer.classList.contains(
+			'has-gap-placeholder',
+		) &&
+		sparseStreamView.slots.beforeGapPlaceholder.hidden,
+	'视口进入稀疏 gap 时必须只在当前 spacer 内显示一个静态楼层骨架，低速请求也不能暴露整屏空白',
+);
+const sparseTailClampCommit = sparseVirtualDom.commit({
+	scrollOffset: sparseTailOffset - 300,
+	viewportSize: 500,
+	overscanBeforeScreens: 0,
+	overscanAfterScreens: 0,
+});
+assert(
+	sparseTailClampCommit.window.visiblePostNumbers.join(',') === '7679,7680' &&
+		directPostNumbers(sparseStreamView.slots.rootList).join(',') ===
+			'7679,7680' &&
+		sparseStreamView.slots.beforeGapPlaceholder.hidden &&
+		sparseStreamView.slots.afterGapPlaceholder.hidden,
+	'短尾段被浏览器钳到 gap 时必须直接挂载尾楼层并隐藏骨架，不能靠补齐前一页解除空白',
+);
+sparseVirtualDom.commit({
+	scrollOffset: sparseTailOffset,
+	viewportSize: 100,
+	overscanBeforeScreens: 0,
+	overscanAfterScreens: 0,
+});
+assert(
+	sparseStreamView.slots.beforeGapPlaceholder.hidden &&
+		sparseStreamView.slots.afterGapPlaceholder.hidden &&
+	!sparseStreamView.slots.beforeSpacer.classList.contains(
+		'has-gap-placeholder',
+	) &&
+	!sparseStreamView.slots.afterSpacer.classList.contains(
+		'has-gap-placeholder',
+	),
+	'真实楼层重新进入视口后必须立即撤掉 gap 骨架，不能遮挡正文或长期占用宽布局',
+);
+await sparseRepository.flush();
+sparseDomOwner.destroy();
+sparseStreamView.destroy();

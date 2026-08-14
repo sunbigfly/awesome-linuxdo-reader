@@ -2,6 +2,7 @@ import {
 	deepActiveElement,
 	eventElement,
 } from '../dom/event-target.js';
+import { bindFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
 import { requiredElementQuery } from '../dom/required-element.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import { readerEscapeOwnedBy } from '../shell/reader-escape-surface.js';
@@ -223,6 +224,7 @@ export class ReaderLightboxView {
 				<div class="ldp-lb-thumbs" role="listbox" aria-label="图片缩略图"></div>
 			</div>`;
 		options.mount.append(root);
+		this.scope.add(bindFloatingSurfaceWheel(root));
 		const stage = required<HTMLElement>(root, '.ldp-lb-stage');
 		const image = required<HTMLImageElement>(root, '.ldp-lb-image');
 		const comments = required<HTMLElement>(root, '.ldp-lb-comments');

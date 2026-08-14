@@ -6,7 +6,7 @@
 
 - 所有自动读取的 Discourse/外部资源由 `DomainRequestGateway` 归一为 Topic、楼层、二级回复、通知、集合、用户、翻译或公共资源请求，再进入 `CoordinatedRequestClient` 的 scheduler、single-flight、429/challenge、timeout 和 AbortSignal 链。
 - `ResponseRepository` 是远端响应唯一缓存 owner：application 内存 LRU 上限 96 项/24 MiB；IndexedDB `linuxdo-enhanced-reader:responses:v1` / `responses` 上限 600 项/96 MiB。fresh 命中不联网，stale 默认尝试联网且失败回退旧值，retain 超期才删除。持久层每 32 次成功 write/merge 主动执行一次过期、条数和字节淘汰，quota 时立即淘汰并重试。
-- Response 之上的业务热缓存不再被当成“只是 View 状态”：当前 TopicSession、通知分页（最多 32 页）、收藏/回应完整集合、用户资料/关注/外部摘要（最多 32 个用户）、图片 Object URL（最多 32 个）和 LDC 兼容 bridge 都有明确统计与清理生命周期。清理会先让晚到异步结果失效，再释放投影；不能只删 IndexedDB 后继续命中旧内存。
+- Response 之上的业务热缓存不再被当成“只是 View 状态”：当前 TopicSession、通知分页（最多 32 页）、收藏/回应完整集合、用户资料/关注/外部摘要（最多 32 个用户）、用户观察归一化历史分页、图片 Object URL（最多 32 个）和 LDC 兼容 bridge 都有明确统计与清理生命周期。清理会先让晚到异步结果失效，再释放投影；不能只删 IndexedDB 后继续命中旧内存。
 - 持久缓存失效通过 `linuxdo-enhanced-reader:cache-coordination:v1`、BroadcastChannel 和 Web Locks 跨标签同步；账号相关远端身份都含 `authScope`。翻译按内容指纹隔离，公共图片按绝对 URL/variant 隔离，二者不含账号数据。
 - mutation、权限探测和已读提交一律 `no-store`，不能用旧响应代替服务端权威结果。
 
@@ -15,15 +15,16 @@
 | 资源 | 请求与身份 | 存储 / fresh / retain | 使用者 | 在线更新、失效与长时恢复 |
 | --- | --- | --- | --- | --- |
 | Topic JSON | `TopicReadRequestAdapter.loadTopic`；`authScope + topicId + topic-refresh` | `discourse-topic-json`，30 分钟 / 7 天；同时归并 Topic 快照 | `TopicSession`、标题/时间线/权限/stream | `/topic/:id` MessageBus、composer 与动作按 `topic:id` 失效并写 canonical；完整快照 30 分钟内重复打开零请求，超期后台刷新 Topic JSON |
-| 楼层批次 | `loadPostsByIds`；`authScope + topicId + sorted postIds` | `discourse-topic-posts`，30 分钟 / 7 天；tags 含 `topic:id`、`post:id` | 虚拟滚动、引用、图片索引、回复树、Boost | MessageBus 定点 `post.id` 刷新；已加载楼层的 `boost_added` / `boost_removed` 直接归并 canonical delta，未加载楼层退回单帖权威刷新；显式 `refresh:true` 即使已有正文也重取，失败保留 canonical stale 正文 |
+| 楼层批次 | `loadPostsByIds`；`authScope + topicId + sorted postIds` | `discourse-topic-posts`，30 分钟 / 7 天；tags 含 `topic:id`、`post:id` | 虚拟滚动、引用、图片索引、回复树、Boost | MessageBus 正文事件只刷新已加载楼层（新建楼层除外）；回应回声跨 channel 全局去抖、至多 20 楼单批后台重取，失败即熔断本 Topic 本轮自动回应刷新；已加载楼层的 `boost_added` / `boost_removed` 直接归并 canonical delta，未加载楼层不补不可见请求；显式 `refresh:true` 即使已有正文也重取，失败保留 canonical stale 正文 |
 | 最新/目标楼层 | `loadPostById`、target candidate；`authScope + topicId + operation + postId/postNumber` | 与楼层缓存相同；权威定点刷新不接受旧响应冒充成功 | 跳楼、通知/收藏打开、冷启 recent-first | 超期完整快照只在 Topic JSON 后定点刷新 stream 最后一个 `post.id`，不重拉全部历史楼层 |
 | 二级回复 | `loadNestedReplies`；`authScope + topicId + parentPostNumber + parentPostId + after` | `discourse-topic-replies`，30 分钟 / 7 天 | 楼中楼、回复线、完整树补齐 | 父帖/Topic 事件定点失效；只在展开、临近预取或显式全树操作时读取，stale 失败回退 |
 | Post Voting 评论 | `loadPostVotingComments`；账号、`postId`、cursor/page | 复用楼层 policy 与 `post:id` tag | 投票评论 UI | 用户翻页或刷新时读取；动作/帖子事件按 `post:id` 失效 |
 | Topic canonical 快照与回复树 | 无额外网络；ID 为 `authScope|snapshot:topic:topicId` | `topics`，30 分钟 / 30 天，包含 Topic、stream、正文、墓碑、树和 observedAt | Topic 冷启和全部 canonical readers | HTTP、MessageBus、composer/action 共用版本仲裁并 merge；单纯恢复/重写回复树不得把远端 freshness“碰新” |
-| 通知、私信、收到的回应 | `DiscourseNotificationRequestAdapter`；`authScope + group + page`，合并回复另走 Topic target | `discourse-notification-page`，30 分钟 / 180 天；controller 内存最多 32 页 | “收藏与回应”通知面板 14 分类 | `notifications:changed` 清内存并失效 `notifications`；后台只更新 `all:0` 与 `inbox:0`，历史页在用户翻页时读取，不再启动后遍历历史 |
-| 收藏 | `/u/:username/bookmarks.json`；`authScope + bookmarks + page + username` | `discourse-bookmark-collection`，30 分钟 / 7 天 | 收藏面板，本地搜索/分页 | `bookmarks:changed` 与删除 action 失效 `bookmarks`；已打开 controller 复用内存完整集合。接口没有可靠 delta，事件后可见面板做权威集合刷新 |
-| 我给出的点赞/自定义回应 | reaction model + `user_actions`；账号、collection、page/cursor、username | 与收藏相同，30 分钟 / 7 天；两个源都允许 stale fallback | 回应面板、表情计数筛选 | `discourse-reactions:reaction-toggled` 失效 `reactions-given`；插件事件没有稳定完整 delta，保留“可见时权威合并两个完整源”的一致性策略 |
+| 通知、私信、收到的回应 | `DiscourseNotificationRequestAdapter`；`authScope + group + page`，合并回复另走 Topic target | 原始页 `discourse-notification-page` 为 30 分钟 / 180 天；另按账号、分类和 60 条物理页保存 180 天归一投影；controller 内存最多 32 页 | “收藏与回应”通知面板 14 分类 | application 空闲期先恢复归一投影并补齐缺失断点；打开与切换只消费缓存。`notifications:changed` 只失效并刷新原始头页，不删除稳定投影；focus/online 仅对超过 30 分钟的已观察头页做一次漏事件恢复。私信投影只留本机，不进入 WebDAV |
+| 收藏 | `/u/:username/bookmarks.json`；`authScope + bookmarks + page + username` | 原始 `discourse-bookmark-collection` 为 30 分钟 / 7 天；另按账号和来源以 60 条物理页保存 180 天归一投影 | 收藏面板，本地搜索/分页 | application 空闲期恢复归一投影并从缺失断点续传；打开与切换只消费缓存。`bookmarks:changed`、回应及本地 Boost/回复成功事件只刷新受影响来源；接口没有可靠 delta，不以首屏误删深历史 |
+| 我给出的点赞/自定义回应 | reaction model + `user_actions`；账号、collection、page/cursor、username | 原始响应与收藏相同；回复、Boost、回应各自进入 180 天账号归一分页投影 | 回应面板、表情计数筛选 | 切换先恢复投影；插件事件只标记来源待校验，完整来源成功后替换，断点页按 identity 合并。WebDAV 活动历史应用后也回写同一投影 |
 | 用户资料 | 原生 user summary；`authScope + username + profile` | `users`，30 分钟 / 24 小时；application 最多 32 个用户 | 用户卡、设置用户页、动作状态 | 30 分钟内 application 直接命中；超期经中央缓存校验。关注/静音/忽略/认可 action 直接归并内存并定点失效；失败保留 stale 用户卡 |
+| 用户观察公开历史 | 七类公开活动分页与 `/latest.json?topic_ids[]=` Topic 元数据批次；账号、username、stream/page/cursor 或最多 100 个 topicId | 原始页和元数据走中央响应缓存，7 天 / 180 天；归一化历史按 60 条分页永久保存在用户观察 IDB 投影，session 仅保留最近 120 条 | 用户观察八个 Tab、月活跃日历、搜索与类别/标签筛选 | 每个用户逐来源串行采集；Topic 元数据统一分批并复用中央 scheduler、429 和 challenge 恢复。批次完成后按 topicId 同步当前投影和全部旧分页；权威空 tags 标记为确实无标签，未确认记录保留待更新状态 |
 | 徽章、目录统计 | `user badges`、directory stats；账号、username、resource | 与用户资料相同且按 `user:username` 失效 | 用户卡完整徽章和统计 | 与 profile 并发/按需补齐；可选徽章失败不清空基础资料，统计失败形成 partial |
 | 关注/粉丝完整集合 | user follow list；账号、username、kind | 与用户资料相同，30 分钟 / 24 小时；内存另记录每 kind 的更新时间 | 用户卡关注面板，本地搜索/分页 | freshness 内只做本地分页；超期重校验。follow action 同时失效目标 followers 与当前用户 following；空集合与资料计数冲突时强制校验 |
 | Connect 信任摘要 | 固定带凭据 `https://connect.linux.do/`；账号、username、resource | `external-user-summary`，30 分钟 / 24 小时 | 设置用户页 Connect tab | 无可靠站点事件，打开时按 freshness 校验；账号不一致拒绝写入，失败映射 stale snapshot |
@@ -43,6 +44,7 @@
 | 阅读历史 | `linuxdo-enhanced-reader:history:scope:v2:<authScope>`；365 天；quota 从最旧项收缩 | 打开/读到楼层后累计标题、作者头像模板和已读楼层；面板与前后导航只读 repository | 首个已登录账号通过 legacy-owner 标记无损复制旧 key；之后账号隔离。旧 key 保留，scoped 空 tombstone 防止清空后复活 |
 | 阅读队列 | `linuxdo-enhanced-reader:reader-queue:v1:scope:v2:<authScope>` | 保存 pinned/排队元数据；正文、树和媒体不进入该记录，预取仍走 Topic 中央缓存 | 与历史共用 legacy claim/copy-on-read 协议，账号 A/B 独立，空队列也保留 scoped tombstone |
 | Topic 窗口几何/锚点 | `linuxdo-enhanced-reader:reply-window:v1:scope:v2:<authScope>`；最多 128 个 view | 保存 host/topic/root 的滚动锚点与窗口几何 | 首个已登录账号无损复制旧几何/锚点；其他账号从空状态开始，LRU 各自保留最近 128 项 |
+| 离线 Topic Artifact | `reader-topic-offline-artifacts:manifest:scope:v2:<authScope>` 与 `reader-topic-offline-artifact:scope:v2:<authScope>:<topicId>`；永久 | 当前账号的轻量目录与完整 HTML；显式移除才删除，普通响应缓存清理不触及 | 同站点账号隔离；首个已登录账号通过持久 legacy-owner 无损复制旧无账号目录，其他账号不可读取或重复认领；WebDAV 继续使用同一账号 scope |
 | 偏好 | `linuxdo-enhanced-reader:prefs` | `PreferencesRepository` 原子读写、normalize、跨页面同步 | 设备级而非账号级，属于用户明确设置，不按远端账号分裂 |
 | 自定义站点 | `awesome-linuxdo-reader:custom-discourse-sites:v1` | GM value storage 保存已验证 `{host,title}` | 设备级用户配置；仅显式增删改写 |
 | Connect 信任观察历史 | `linuxdo-enhanced-reader:connect-trust-history:v1:scope:v2:<authScope>`；本地观察最长 400 天，界面投影 50 天 | 保存本机观察到的 Connect 指标首末值和已确认阅读指纹；服务端 user-actions 另走 10 分钟 / 24 小时中央响应缓存 | 账号隔离、不可由服务端完整重建，属于用户本地数据；“用户资料卡”清理只删可重取的服务端响应，不删除这份观察历史 |
@@ -85,7 +87,7 @@
 
 | 设置分类 | 统计层 | 清理层 | 明确保留 |
 | --- | --- | --- | --- |
-| 浏览历史 | 账号隔离 History 条目、主题数与估算字节 | `ReaderHistoryRepository.clear()` | 阅读队列、Topic 锚点/几何、偏好、自定义站点、浏览器访问历史 |
+| 浏览历史与岁月史书 | 账号隔离 History 条目、本机仍有正文的 404 事件、主题数与估算字节 | `ReaderHistoryRepository.clear()` + `ReaderChronicleRepository.clear()`（手动清理；正文消失的史书记录读取或点击时自愈移除） | 阅读队列、Topic 正文/快照、Topic 锚点/几何、偏好、自定义站点、浏览器访问历史；收到 404 不触发正文清理 |
 | 帖子与楼层内容 | 中央 Topic/Post/Tree 记录 + 当前 TopicSession + 宿主分类/标签派生 LRU | 中央分类失效；若当前有主题，先结束旧 session 并 flush，再按 `topic:id` 精确失效并联网重建；最后清宿主身份 LRU | 历史、队列、偏好；分类清理不额外清图片，顶部“清除当前帖子缓存并刷新”才同时清该 Topic 图片 |
 | 用户资料卡 | 中央 user/external response + 用户域热缓存 + LDC bridge | 中央分类失效、用户 session epoch 清理、LDC bridge 置空 | Connect 400 天本机观察历史、原站账号资料、头像字节 |
 | 通知与消息 | 中央通知/展开记录 + controller 32 页热缓存 | 中央分类失效、取消后台 warm/live timer、load epoch 清理分页与投影 | 原站真实通知与私信 |

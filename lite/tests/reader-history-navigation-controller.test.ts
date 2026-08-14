@@ -32,8 +32,30 @@ const history = new ReaderHistoryRepository({
 	now: () => ++now,
 });
 history.load();
-history.remember({ topicId: 1, title: 'one', postNumber: 2 });
-history.remember({ topicId: 2, title: 'two', postNumber: 4 });
+history.remember({
+	topicId: 1,
+	title: 'one',
+	postNumber: 2,
+	viewport: {
+		postNumber: 2,
+		postOffset: 20,
+		scrollTop: 200,
+		scrollRange: 1_000,
+		scrollRatio: 0.2,
+	},
+});
+history.remember({
+	topicId: 2,
+	title: 'two',
+	postNumber: 4,
+	viewport: {
+		postNumber: 4,
+		postOffset: 40,
+		scrollTop: 400,
+		scrollRange: 1_000,
+		scrollRatio: 0.4,
+	},
+});
 history.remember({ topicId: 3, title: 'three', postNumber: 6 });
 
 let activeTopicId = 3;
@@ -42,7 +64,9 @@ const openedTopics: number[] = [];
 const restored: Array<Readonly<{
 	topicId: number;
 	postNumber: number;
+	scrollRatio: number | undefined;
 	highlight: boolean | undefined;
+	restoreSemanticState: boolean | undefined;
 }>> = [];
 let delayedOpen:
 	| {
@@ -60,6 +84,8 @@ const controller = new ReaderHistoryNavigationController({
 				postNumber: capturedPostNumber,
 				postOffset: 24,
 				scrollTop: 324,
+				scrollRange: 900,
+				scrollRatio: 0.36,
 			},
 		})!,
 		async openTopic(topicId) {
@@ -79,7 +105,9 @@ const controller = new ReaderHistoryNavigationController({
 			restored.push(Object.freeze({
 				topicId,
 				postNumber: anchor.viewport.postNumber,
+				scrollRatio: anchor.viewport.scrollRatio,
 				highlight: options?.highlight,
+				restoreSemanticState: options?.restoreSemanticState,
 			}));
 			capturedPostNumber = anchor.viewport.postNumber;
 		},
@@ -91,12 +119,19 @@ const activated = controller.activate(3);
 assert(
 	activated.back.join(',') === '2,1' &&
 	activated.forward.length === 0 &&
-	activated.states['1']?.viewport.postNumber === 2 &&
-	activated.states['2']?.viewport.postNumber === 4,
-	'最近浏览模式必须把当前 Topic 之外的历史确定性放入 back，并以持久楼层补齐首次会话锚点',
+	activated.states['1']?.viewport.scrollRatio === 0.2 &&
+	activated.states['2']?.viewport.scrollRatio === 0.4 &&
+	activated.states['3'] === undefined,
+	'最近浏览模式必须把当前 Topic 之外的历史确定性放入 back，并仅以持久高度比例补齐首次会话锚点',
 );
 controller.setAnchor(2, {
-	viewport: { postNumber: 4, postOffset: 12, scrollTop: 212 },
+	viewport: {
+		postNumber: 4,
+		postOffset: 12,
+		scrollTop: 212,
+		scrollRange: 800,
+		scrollRatio: 0.265,
+	},
 	replyWindow: { rootPostNumber: 4, point: { number: 4, offset: 9 } },
 	quoteHighlight: {
 		postNumber: 4,
@@ -118,10 +153,12 @@ assert(
 	activeTopicId === 2 &&
 	openedTopics.join(',') === '2' &&
 	restored[0]?.postNumber === 4 &&
+	restored[0]?.scrollRatio === 0.265 &&
+	restored[0]?.restoreSemanticState === false &&
 	controller.snapshot.back.join(',') === '1' &&
 	controller.snapshot.forward.join(',') === '3' &&
 	controller.snapshot.states['3']?.viewport.postNumber === 6,
-	'后退事务必须先捕获当前锚点，再切帖、更新双栈并恢复目标完整锚点',
+	'后退事务必须先捕获当前锚点，再切帖、更新双栈并仅恢复目标高度锚点',
 );
 
 const forwardResult = await controller.navigate('forward');
@@ -129,6 +166,8 @@ assert(
 	forwardResult.status === 'restored' &&
 	Number(activeTopicId) === 3 &&
 	restored.at(-1)?.postNumber === 6 &&
+	restored.at(-1)?.scrollRatio === 0.36 &&
+	restored.at(-1)?.restoreSemanticState === false &&
 	controller.snapshot.back.join(',') === '2,1',
 	'前进必须复用同一 states 和反向栈，不得重建第二份 Topic 状态',
 );

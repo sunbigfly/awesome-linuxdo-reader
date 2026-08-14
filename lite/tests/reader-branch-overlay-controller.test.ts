@@ -493,8 +493,26 @@ segmentedTopology.commit([
 	{ postNumber: 22, parentPostNumber: 20 },
 	{ postNumber: 23, parentPostNumber: 21 },
 ]);
+let segmentedChildrenReads = 0;
+let segmentedSubtreeCountReads = 0;
+const segmentedProjection = {
+	get revision() {
+		return segmentedTopology.revision;
+	},
+	parentOf: (postNumber: number) => segmentedTopology.parentOf(postNumber),
+	childrenOf: (postNumber: number) => {
+		segmentedChildrenReads += 1;
+		return segmentedTopology.childrenOf(postNumber);
+	},
+	subtreePostCountOf: (postNumber: number) => {
+		segmentedSubtreeCountReads += 1;
+		return segmentedTopology.subtreePostCountOf(postNumber);
+	},
+	depthOf: (postNumber: number) => segmentedTopology.depthOf(postNumber),
+	rootOf: (postNumber: number) => segmentedTopology.rootOf(postNumber),
+};
 const segmentedOwner = new ReplyTreeDomOwner(
-	segmentedTopology,
+	segmentedProjection,
 	segmentedRootList,
 );
 const segmentedViews = [20, 21, 22, 23].map((postNumber) => {
@@ -581,8 +599,10 @@ assert(
 		Boolean(nestedSegmentedTrunkToggle) &&
 		Boolean(nestedSegmentedRailToggle) &&
 		segmentedRailToggles.every(Boolean) &&
-		segmentedToggle?.parentElement === segmentedViews[0]!.slots.actions,
-	'主虚拟流的分段回复线必须零几何读取、标记 canonical 末子节点，并为父正文与各子段投影窄线点击层',
+		segmentedToggle?.parentElement === segmentedViews[0]!.slots.actions &&
+		segmentedChildrenReads === 2 &&
+		segmentedSubtreeCountReads === 2,
+	'主虚拟流的分段回复线必须零几何读取、只读当前物化父节点和缓存子树计数，并为父正文与各子段投影窄线点击层',
 );
 nestedSegmentedTrunkToggle?.click();
 assert(

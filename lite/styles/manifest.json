@@ -141,33 +141,46 @@
         "lite/src/queue/reader-open-queue-session.ts",
         "lite/src/app/reader-browser-runtime.ts",
         "lite/src/userscript/reader-floating-host-target-controller.ts",
-        "lite/src/userscript/reader-host-topic-source-coordinator.ts"
+        "lite/src/userscript/reader-host-topic-preheat-controller.ts",
+        "lite/src/userscript/reader-host-topic-source-coordinator.ts",
+        "lite/src/userscript/reader-userscript-application.ts",
+        "lite/src/userscript/reader-userscript-target-adapter.ts"
       ],
       "styles": [
         "10-workspace.css",
         "20-shell.css",
         "50-components.css",
+        "80-motion.css",
         "90-responsive.css"
       ],
       "tests": [
         "lite/tests/reader-open-queue-session.test.ts",
         "lite/tests/reader-floating-host-target-controller.test.ts",
-        "lite/tests/reader-host-topic-source-coordinator.test.ts"
+        "lite/tests/reader-host-topic-preheat-controller.test.ts",
+        "lite/tests/reader-host-topic-source-coordinator.test.ts",
+        "lite/tests/reader-userscript-target-adapter.test.ts"
       ],
       "runtimeClasses": [
         "ldp-native-reader-trigger-item",
         "ldp-native-reader-trigger",
+        "ldp-host-topic-card-performance",
+        "ldp-host-topic-reader-meta",
+        "ldp-host-user-observation-entry",
         "ldp-reader-queue-add",
         "ldp-reader-queue",
         "ldp-reader-queue-bubble",
+        "ldp-reader-queue-dismiss",
         "ldp-reader-queue-panel",
         "ldp-reader-queue-row",
+        "ldp-reader-queue-toggle-shell",
         "ldp-reader-switch-ready",
         "ldp-reader-switch-target",
         "ldp-reader-queue-retry"
       ],
       "styleSignatures": [
         ".ldp-reader-queue .ldp-reader-queue-panel.is-collision-positioned",
+        ".ldp-host-topic-card-performance",
+        ".ldp-host-topic-reader-meta",
         "translateY(-5px) scale(.94)",
         ".ldp-reader-queue-add:is(:focus-visible, .is-added)",
         "@container ldp-reader (max-width: 1200px)",
@@ -252,6 +265,13 @@
       ],
       "runtimeClasses": [
         "ldp-virtual-stream",
+        "ldp-virtual-spacer",
+        "ldp-virtual-gap-placeholder",
+        "ldp-virtual-gap-skeleton-avatar",
+        "ldp-virtual-gap-skeleton-body",
+        "ldp-virtual-gap-skeleton-line",
+        "ldp-virtual-gap-skeleton-line-short",
+        "ldp-virtual-gap-label",
         "ldp-virtual-root-list",
 		"ldp-before-zebra",
         "ldp-comments-empty",
@@ -265,6 +285,8 @@
         "ldp-post-read-state-icon"
       ],
       "styleSignatures": [
+        ".ldp-virtual-spacer.has-gap-placeholder",
+        ".ldp-virtual-gap-placeholder[hidden]",
         ".ldp-loading-tip.show",
         ".ldp-end-tip.show",
         "@keyframes ldp-spin",
@@ -341,6 +363,7 @@
         "ldp-descendant-replies-window",
         "ldp-descendant-replies-list",
         "ldp-quote-match",
+        "ldp-quote-highlight-hint",
         "ldp-hidden-reply-marker",
 		"ldp-before-hidden-reply-marker",
         "ldp-hidden-reply-toggle",
@@ -352,6 +375,7 @@
         "ldp-nested-esc-hint"
       ],
       "styleSignatures": [
+        ".ldp-quote-highlight-hint {\n  position: fixed;\n  z-index: 2147483646;\n  display: none;\n  pointer-events: auto;",
         ".ldp-descendant-replies-tree.ldp-segmented-branches .ldp-post",
         ".ldp-reply-collapsible > .ldp-nested-toggle",
         ".ldp-post.ldp-nested-collapsed:not(.ldp-nested-preview) > .ldp-nested-toggle",
@@ -364,7 +388,8 @@
         "lite/src/dom/post-view.ts",
         "lite/src/post/reader-post-action-feature.ts",
         "lite/src/post/reader-selection-quote-feature.ts",
-        "lite/src/post/reader-topic-action-rail.ts"
+        "lite/src/post/reader-topic-action-rail.ts",
+        "lite/src/topic/reader-post-author-filter-feature.ts"
       ],
       "styles": [
         "20-shell.css",
@@ -374,7 +399,8 @@
       "tests": [
         "lite/tests/reader-post-action-feature.test.ts",
         "lite/tests/reader-selection-quote-feature.test.ts",
-        "lite/tests/reader-topic-action-rail.test.ts"
+        "lite/tests/reader-topic-action-rail.test.ts",
+        "lite/tests/reader-unwanted-topic.test.ts"
       ],
       "runtimeClasses": [
         "ldp-reactions",
@@ -390,7 +416,10 @@
         "ldp-action-surface",
         "ldp-selection-toolbar",
         "ldp-topic-action-rail",
-		"ldp-topic-action-rail-expanded",
+        "ldp-topic-action-rail-expanded",
+        "ldp-topic-action-rail-unwanted-topics",
+        "ldp-topic-action-rail-user-observation",
+        "ldp-post-unwanted-author",
         "ldp-topic-footer-actions"
       ],
       "styleSignatures": [
@@ -402,7 +431,11 @@
         ".ldp-boost-bubble.ldp-boost-quick-actions-open > .ldp-boost-quick-actions",
         "> .ldp-boost-quick-actions\n  > .ldp-boost-item-action {\n  pointer-events: auto;",
         "z-index: 3;",
-        "width: calc(var(--ldp-control-height) + 4px);"
+        "width: calc(var(--ldp-control-height) + 4px);",
+        ".ldp-topic-action-rail .ldp-topic-footer-slot > .ldp-topic-shared-issue {\n  order: 40;\n}",
+        ".ldp-topic-action-rail:not(.is-expanded) > .ldp-topic-action-rail-toggle {\n  order: 54;\n}",
+        ".ldp-topic-action-rail:not(.is-expanded) .ldp-topic-footer-slot >\n  :not(.ldp-topic-shared-issue),",
+        ".ldp-topic-action-rail.is-expanded .ldp-topic-footer-slot >\n  .ldp-topic-shared-issue {\n  display: none !important;\n}"
       ]
     },
     {
@@ -428,25 +461,75 @@
     {
       "id": "collections-and-notifications",
       "owners": [
+		"lite/src/collection/reader-collection-filter-model.ts",
+		"lite/src/collection/reader-collection-floating-window.ts",
+		"lite/src/collection/reader-popover-filter-controls.ts",
+		"lite/src/collection/reader-unwanted-topic-repository.ts",
+		"lite/src/collection/reader-unwanted-topic-filter.ts",
+		"lite/src/collection/reader-unwanted-topic-filter-editor.ts",
+		"lite/src/collection/reader-unwanted-topic-view.ts",
+		"lite/src/shell/reader-floating-window-frame.ts",
         "lite/src/shell/reader-shell-template.ts",
         "lite/src/history/reader-history-panel-view.ts",
         "lite/src/bookmark/reader-bookmark-panel-view.ts",
         "lite/src/notification/reader-notification-panel-view.ts"
       ],
       "styles": [
+        "50-components.css",
         "55-collections.css"
       ],
       "tests": [
         "lite/tests/reader-history-panel-view.test.ts",
         "lite/tests/reader-bookmark-feature.test.ts",
-        "lite/tests/reader-notification-feature.test.ts"
+        "lite/tests/reader-notification-feature.test.ts",
+		"lite/tests/reader-unwanted-topic.test.ts",
+		"lite/tests/reader-floating-window-frame.test.ts"
       ],
       "runtimeClasses": [
         "ldp-notifications-popover",
         "ldp-history-popover",
         "ldp-bookmarks-popover",
-        "ldp-collection-item",
-        "ldp-popover-search"
+		"ldp-reader-floating-window",
+		"ldp-reader-floating-window-tab-row",
+		"ldp-reader-floating-window-toolbar-row",
+		"ldp-reader-floating-window-tabs",
+		"ldp-reader-floating-window-tab",
+		"ldp-reader-floating-window-tab-activate",
+		"ldp-reader-floating-window-tab-title",
+		"ldp-reader-floating-window-add-wrap",
+		"ldp-reader-floating-window-add",
+		"ldp-reader-floating-window-add-menu",
+		"ldp-reader-floating-window-add-option",
+		"ldp-reader-floating-window-extra-action",
+		"ldp-reader-floating-window-extra-actions",
+		"ldp-collection-cache-progress",
+		"ldp-collection-item",
+		"ldp-popover-search",
+		"ldp-popover-search-tools",
+		"ldp-popover-taxonomy-filters",
+		"ldp-unwanted-topic-pane",
+		"ldp-unwanted-topic-list",
+		"ldp-unwanted-topic-row",
+		"ldp-unwanted-topic-edit",
+		"ldp-unwanted-topic-restore",
+		"ldp-unwanted-topic-row-actions",
+		"ldp-unwanted-topic-category-filter",
+		"ldp-unwanted-topic-category",
+		"ldp-unwanted-topic-bulk-bar",
+		"ldp-unwanted-topic-filter-settings",
+		"ldp-unwanted-topic-filter-workbench",
+		"ldp-unwanted-topic-filter-sidebar",
+		"ldp-unwanted-topic-filter-tabs",
+		"ldp-unwanted-topic-filter-cards",
+		"ldp-unwanted-topic-filter-card",
+		"ldp-unwanted-topic-filter-results"
+      ],
+      "styleSignatures": [
+        "grid-template-areas:\n    \"tools\"\n    \"bulk\"\n    \"list\"\n    \"footer\";",
+        ".ldp-unwanted-topic-tools {\n  display: grid;\n  min-width: 0;\n  grid-area: tools;",
+        ".ldp-unwanted-topic-bulk-bar {\n  display: flex;\n  min-width: 0;\n  grid-area: bulk;",
+        ".ldp-unwanted-topic-list {\n  display: grid;\n  min-height: 0;\n  grid-area: list;",
+        ".ldp-unwanted-topic-footer {\n  display: flex;\n  min-height: 42px;\n  grid-area: footer;"
       ],
       "exclusiveRuntimeClasses": [
         "ldp-collection-item",

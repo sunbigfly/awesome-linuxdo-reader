@@ -209,14 +209,23 @@ const boost = features.boostCreate(20, nativeActions.boostCreate<TestPost>({
 	rawFingerprint: 'raw:hash',
 	currentUser: nativeModel,
 }));
+const boostTags = typeof boost.invalidateTags === 'function'
+	? boost.invalidateTags(boostedPost)
+	: boost.invalidateTags;
 await boost.commit?.(boostedPost);
-assert(Array.isArray(posts.get(20)?.boosts), 'Boost authoritative post 未提交');
+assert(
+	Array.isArray(posts.get(20)?.boosts) &&
+	(boostTags ?? []).includes('boosts-given'),
+	'Boost authoritative post 必须提交并失效发送记录',
+);
 const boostDelete = features.boostDelete(20, nativeActions.boostDelete({ boostId: 7 }));
 await boostDelete.commit?.({ boostId: 7, deleted: true });
 assert(
 	Array.isArray(posts.get(20)?.boosts) &&
 	(posts.get(20)?.boosts as readonly unknown[]).length === 0 &&
-	posts.get(20)?.can_boost === true,
+	posts.get(20)?.can_boost === true &&
+	Array.isArray(boostDelete.invalidateTags) &&
+	boostDelete.invalidateTags.includes('boosts-given'),
 	'Boost 删除结果必须归并 canonical post，而不是只改当前 DOM',
 );
 const boostReport = features.boostReport(20, nativeActions.boostReport({
@@ -347,9 +356,13 @@ const reply = features.reply(nativeActions.replyCreate<TestPost>({
 	postId: 20,
 	replyToPostNumber: 3,
 }));
+const replyTags = typeof reply.invalidateTags === 'function'
+	? reply.invalidateTags(replyPost)
+	: reply.invalidateTags;
 assert(
 	reply.presentation?.postIds[0] === 20 &&
-	reply.presentation.actionNames[0] === 'reply',
+	reply.presentation.actionNames[0] === 'reply' &&
+	(replyTags ?? []).includes('replied-topics'),
 	'reply pending 必须归属被回复楼层',
 );
 await reply.commit?.(replyPost);

@@ -66,6 +66,7 @@ interface TestPost extends DiscourseTopicPostInput {
 	readonly reply_to_post_number: number | null;
 	readonly username: string;
 	readonly cooked: string;
+	readonly hidden?: boolean;
 }
 
 interface TestTopic extends DiscourseTopicPayload<TestPost> {
@@ -86,6 +87,7 @@ class FakeTopicRequests implements TopicSessionReadPort {
 	readonly postByIdCalls: number[] = [];
 	readonly postByIdOptions: TopicPostsLoadOptions[] = [];
 	readonly targetCalls: string[] = [];
+	readonly cachedTargetCalls: string[] = [];
 	readonly batches = new Map<string, unknown>();
 	readonly batchWaits = new Map<string, Promise<void>>();
 	readonly batchErrors = new Map<string, unknown>();
@@ -94,6 +96,7 @@ class FakeTopicRequests implements TopicSessionReadPort {
 		readonly options: TopicPostsLoadOptions;
 	}>> = [];
 	readonly targets = new Map<string, unknown>();
+	readonly cachedTargets = new Map<string, unknown>();
 	readonly nested = new Map<string, unknown>();
 	readonly nestedWaits = new Map<string, Promise<void>>();
 	readonly nestedErrors = new Map<string, unknown>();
@@ -204,6 +207,16 @@ class FakeTopicRequests implements TopicSessionReadPort {
 		if (result instanceof Error) throw result;
 		return result as T;
 	}
+
+	async cachedTargetCandidate<T>(
+		candidate: TopicTargetCandidate,
+		_postNumber: number,
+		options: TopicTargetLoadOptions,
+	): Promise<T | null> {
+		const key = `${options.scope}:${candidate.url}`;
+		this.cachedTargetCalls.push(key);
+		return (this.cachedTargets.get(key) ?? null) as T | null;
+	}
 }
 
 const root = (id: number, postNumber: number, username = 'op'): TestPost => ({
@@ -280,6 +293,7 @@ const topicBeforeNetwork = (signal: AbortSignal): void => {
 };
 await session.init({ beforeNetwork: topicBeforeNetwork });
 assert(requests.topicCalls === 1, '无快照冷启必须请求一次 Topic JSON');
+const initialPostStreamRevision = session.postStreamRevision;
 const initialCachedPosts = session.cachedPosts();
 assert(
 	initialCachedPosts === session.cachedPosts() &&
@@ -291,7 +305,87 @@ assert(
 		requests.topicOptions[0]?.beforeNetwork === topicBeforeNetwork,
 	'冷启缺快照时仍必须先复用跨标签 fresh Topic 响应缓存',
 );
-assert(session.streamPostIds().join(',') === '101,102,103', 'TopicSession 必须持有 post.id stream');
+assert(
+	session.streamPostIds().join(',') === '101,102,103' &&
+		initialPostStreamRevision > 0,
+	'TopicSession 必须持有 post.id stream，并为首个 canonical stream 发布版本',
+);
+
+const preprojectionStore = new MemoryStore();
+const preprojectionResponses = new ResponseRepository({
+	store: preprojectionStore,
+	maxMemoryEntries: 8,
+	maxMemoryBytes: 50_000,
+	now: () => now,
+});
+const preprojectionSnapshots = new TopicSnapshotRepository<TestTopic, TestPost>({
+	responseRepository: preprojectionResponses,
+	topicId: 10,
+	authScope: 'account:preprojection',
+	freshForMs: 1_000,
+	retainForMs: 10_000,
+	now: () => now,
+});
+const preprojectionTrees = new ReplyTreeRepository(
+	10,
+	preprojectionSnapshots.replyTreeSnapshotStore(),
+	{ now: () => now },
+);
+const preprojectionHidden = Object.freeze({
+	...reply(
+		288,
+		2,
+		1,
+		'member',
+		'<p>此帖子已被社区举报，现已被临时隐藏。</p>',
+	),
+	hidden: true,
+});
+const preprojectionRequests = new FakeTopicRequests(Object.freeze({
+	...topic,
+	posts_count: 2,
+	post_stream: Object.freeze({
+		stream: Object.freeze([201, 288]),
+		posts: Object.freeze([
+			root(201, 1),
+			preprojectionHidden,
+		]),
+	}),
+}));
+preprojectionRequests.cachedTargets.set('single:/target/2/first', {
+	post_stream: {
+		posts: [reply(288, 2, 1, 'member', '举报前缓存的首帧正文')],
+	},
+});
+const preprojectionSession = new TopicSession({
+	topicId: 10,
+	requests: preprojectionRequests,
+	snapshots: preprojectionSnapshots,
+	replies: preprojectionTrees,
+	pageSize: 2,
+	refreshCachedInBackground: false,
+	now: () => now,
+	wait: async () => {},
+});
+const committedHiddenCooked: string[] = [];
+preprojectionSession.changes.subscribe((commit) => {
+	if (!commit.changedPostNumbers.includes(2)) return;
+	committedHiddenCooked.push(String(
+		preprojectionSession.postByNumber(2)?.cooked ?? '',
+	));
+});
+await preprojectionSession.init();
+assert(
+	preprojectionSession.postByNumber(2)?.hidden === true &&
+		preprojectionSession.postByNumber(2)?.cooked ===
+			'举报前缓存的首帧正文' &&
+		preprojectionRequests.cachedTargetCalls[0] ===
+			'single:/target/2/first' &&
+		committedHiddenCooked.join('|') === '举报前缓存的首帧正文',
+	'举报隐藏占位必须在首次 canonical 提交前合成本地正文，不能先投影空楼层再事后补救',
+);
+preprojectionSession.destroy();
+
 const readAllSnapshotPosts = snapshots.posts.bind(snapshots);
 let snapshotFullScanCount = 0;
 Object.defineProperty(snapshots, 'posts', {
@@ -316,6 +410,11 @@ assert(
 		!session.loadDone &&
 		snapshotFullScanCount === 0,
 	'预知正文必须用 cursor 后一批 post_ids 后台取数、增量刷新 canonical 索引，且不得提前推进顺序游标',
+);
+assert(
+	session.postStreamGapCount(1, 3) === 1 &&
+		session.postStreamRevision > initialPostStreamRevision,
+	'正文索引补齐必须推进 postStreamRevision，使树投影在同一 stream 顺序下重新计算精确 gap',
 );
 Object.defineProperty(snapshots, 'posts', {
 	configurable: true,
@@ -439,10 +538,399 @@ const completedLookaheadStream = await lookaheadSession.ensurePostStream({
 });
 assert(
 	completedLookaheadStream.complete &&
-		streamProgress.join(',') === '4/6/2,6/6/0',
+	streamProgress.join(',') === '4/6/2,6/6/0',
 	'全帖补流进度只能在实际覆盖度变化时发布，不能为每个已缓存批次重复全量扫描',
 );
+	let entryPreheatNow = 276;
+	const entryPreheatStore = new MemoryStore();
+	const entryPreheatResponses = new ResponseRepository({
+		store: entryPreheatStore,
+		maxMemoryEntries: 16,
+		maxMemoryBytes: 100_000,
+		now: () => entryPreheatNow,
+	});
+	const entryPreheatSnapshots = new TopicSnapshotRepository<TestTopic, TestPost>({
+		responseRepository: entryPreheatResponses,
+		topicId: 11,
+		authScope: 'account:entry-preheat',
+		freshForMs: 1_000,
+		retainForMs: 10_000,
+		now: () => entryPreheatNow,
+	});
+	const entryPreheatRequests = new FakeTopicRequests({
+		id: 11,
+		slug: 'entry-preheat',
+		posts_count: 6,
+		post_stream: {
+			stream: lookaheadPosts.map((post) => post.id),
+			posts: lookaheadPosts.slice(0, 2),
+		},
+	});
+	entryPreheatRequests.batches.set('203,204', {
+		post_stream: { posts: lookaheadPosts.slice(2, 4) },
+	});
+	entryPreheatRequests.batches.set('205,206', {
+		post_stream: { posts: lookaheadPosts.slice(4, 6) },
+	});
+	const entryPreheatSession = new TopicSession({
+		topicId: 11,
+		requests: entryPreheatRequests,
+		snapshots: entryPreheatSnapshots,
+		replies: new ReplyTreeRepository(
+			11,
+			entryPreheatSnapshots.replyTreeSnapshotStore(),
+			{ now: () => entryPreheatNow },
+		),
+		pageSize: 2,
+		refreshCachedInBackground: false,
+		now: () => entryPreheatNow,
+		wait: async () => {},
+	});
+	await entryPreheatSession.init();
+	const firstEntryPreheat = await entryPreheatSession.preheatEntry(1, {
+		background: true,
+		maxAttempts: 1,
+	});
+	const middleEntryProgress: string[] = [];
+	const middleEntryPreheat = await entryPreheatSession.preheatEntry(5, {
+		background: true,
+		prefetchTier: 'nearby',
+		maxAttempts: 1,
+		onProgress(progress) {
+			middleEntryProgress.push(
+				`${progress.warmedCount}/${progress.requestedCount}/${progress.totalCount}`,
+			);
+		},
+	});
+	assert(
+		firstEntryPreheat.cacheHit &&
+			firstEntryPreheat.warmedCount === 2 &&
+			firstEntryPreheat.requestedCount === 2 &&
+			middleEntryPreheat.warmedCount === 4 &&
+			middleEntryPreheat.requestedCount === 4 &&
+			middleEntryPreheat.totalCount === 6 &&
+			middleEntryProgress.join(',') === '2/4/6,4/4/6' &&
+			entryPreheatRequests.batchCalls.map((batch) => batch.join(','))
+				.join('|') === '203,204|205,206' &&
+			entryPreheatRequests.batchOptions.every(
+				(options) => options.prefetchTier === 'nearby',
+			),
+		'#1 必须只预热向下一标准批，中间楼层必须预热前后各一批并跳过已有缓存',
+	);
+	await entryPreheatSession.flush();
+	const restoredEntryPreheatResponses = new ResponseRepository({
+		store: entryPreheatStore,
+		maxMemoryEntries: 16,
+		maxMemoryBytes: 100_000,
+		now: () => 277,
+	});
+	const restoredEntryPreheatSnapshots = new TopicSnapshotRepository<
+		TestTopic,
+		TestPost
+	>({
+		responseRepository: restoredEntryPreheatResponses,
+		topicId: 11,
+		authScope: 'account:entry-preheat',
+		freshForMs: 1_000,
+		retainForMs: 10_000,
+		now: () => 277,
+	});
+	const restoredEntryPreheatRequests = new FakeTopicRequests(
+		entryPreheatRequests.topic,
+	);
+	const restoredEntryPreheatSession = new TopicSession({
+		topicId: 11,
+		requests: restoredEntryPreheatRequests,
+		snapshots: restoredEntryPreheatSnapshots,
+		replies: new ReplyTreeRepository(
+			11,
+			restoredEntryPreheatSnapshots.replyTreeSnapshotStore(),
+			{ now: () => 277 },
+		),
+		pageSize: 2,
+		refreshCachedInBackground: false,
+		now: () => 277,
+		wait: async () => {},
+	});
+	const restoredEntryPreheat = await restoredEntryPreheatSession
+		.restorePreheatEntry(5);
+	assert(
+		restoredEntryPreheat?.warmedCount === 4 &&
+			restoredEntryPreheat.requestedCount === 4 &&
+			restoredEntryPreheat.totalCount === 6 &&
+			restoredEntryPreheat.cacheHit &&
+			restoredEntryPreheat.complete &&
+			restoredEntryPreheatRequests.topicCalls === 0 &&
+			restoredEntryPreheatRequests.batchCalls.length === 0,
+		'刷新后的宿主列表必须从账号隔离的 Topic 正文快照恢复入口预热覆盖，不能先清零或重新请求',
+	);
+	restoredEntryPreheatSession.destroy();
+	entryPreheatNow = 278;
+	const grownEntryPosts = [
+		...lookaheadPosts,
+		{ ...root(207, 7), topic_id: 11 },
+		{ ...root(208, 8), topic_id: 11 },
+	];
+	entryPreheatRequests.topic = {
+		...entryPreheatRequests.topic,
+		posts_count: 8,
+		post_stream: {
+			stream: grownEntryPosts.map((post) => post.id),
+			posts: grownEntryPosts.slice(0, 2),
+		},
+	};
+	entryPreheatRequests.batches.set('207,208', {
+		post_stream: { posts: grownEntryPosts.slice(6, 8) },
+	});
+	const grownEntryPreheat = await entryPreheatSession.preheatEntry(7, {
+		background: true,
+		prefetchTier: 'nearby',
+		maxAttempts: 1,
+		minimumTotalCount: 8,
+	});
+	assert(
+		entryPreheatRequests.topicCalls === 2 &&
+			entryPreheatRequests.topicOptions.at(-1)?.prefetchTier === 'nearby' &&
+			entryPreheatRequests.batchCalls.at(-1)?.join(',') === '207,208' &&
+			grownEntryPreheat.posts.map((post) => post.post_number).join(',') ===
+				'5,6,7,8' &&
+			grownEntryPreheat.warmedCount === 4 &&
+			grownEntryPreheat.requestedCount === 4 &&
+			grownEntryPreheat.totalCount === 8,
+		`宿主总楼层超过旧快照时必须先刷新 canonical Topic stream，再补新增长楼层正文：` +
+			`${entryPreheatRequests.topicCalls}/` +
+			`${entryPreheatRequests.batchCalls.at(-1)?.join(',')}/` +
+			`${grownEntryPreheat.posts.map((post) => post.post_number).join(',')}/` +
+			`${grownEntryPreheat.warmedCount}/${grownEntryPreheat.requestedCount}/` +
+			`${grownEntryPreheat.totalCount}`,
+	);
+	entryPreheatSession.destroy();
 	lookaheadSession.destroy();
+
+	const sparseNavigationStore = new MemoryStore();
+	const sparseNavigationResponses = new ResponseRepository({
+		store: sparseNavigationStore,
+		maxMemoryEntries: 16,
+		maxMemoryBytes: 100_000,
+		now: () => 278,
+	});
+	const sparseNavigationSnapshots = new TopicSnapshotRepository<
+		TestTopic,
+		TestPost
+	>({
+		responseRepository: sparseNavigationResponses,
+		topicId: 14,
+		authScope: 'account:test',
+		freshForMs: 1_000,
+		retainForMs: 10_000,
+		now: () => 278,
+	});
+	const sparseNavigationPosts = Array.from({ length: 6 }, (_, index): TestPost =>
+		Object.freeze({
+			...root(501 + index, 1 + index, index ? 'member' : 'op'),
+			topic_id: 14,
+		}));
+	const sparseNavigationRequests = new FakeTopicRequests({
+		id: 14,
+		slug: 'sparse-navigation',
+		posts_count: 6,
+		post_stream: {
+			stream: sparseNavigationPosts.map((post) => post.id),
+			posts: sparseNavigationPosts.slice(0, 2),
+		},
+	});
+	sparseNavigationRequests.batches.set('505,506', {
+		post_stream: { posts: sparseNavigationPosts.slice(4) },
+	});
+	const sparseNavigationSession = new TopicSession({
+		topicId: 14,
+		requests: sparseNavigationRequests,
+		snapshots: sparseNavigationSnapshots,
+		replies: new ReplyTreeRepository(
+			14,
+			sparseNavigationSnapshots.replyTreeSnapshotStore(),
+			{ now: () => 278 },
+		),
+		pageSize: 2,
+		refreshCachedInBackground: false,
+		now: () => 278,
+		wait: async () => {},
+	});
+	await sparseNavigationSession.init();
+	const sparseBatchCallsBeforeAround = sparseNavigationRequests.batchCalls.length;
+	const sparseTargetCallsBeforeAround = sparseNavigationRequests.targetCalls.length;
+	const [firstSparseAround, joinedSparseAround] = await Promise.all([
+		sparseNavigationSession.loadAroundPost(6),
+		sparseNavigationSession.loadAroundPost(6),
+	]);
+	assert(
+		sparseNavigationSession.postStreamGapCount(2, 5) === 2 &&
+			sparseNavigationSession.postStreamGapCount(5, 6) === 0 &&
+		firstSparseAround.map((post) => post.post_number).join(',') === '5,6' &&
+			joinedSparseAround.map((post) => post.post_number).join(',') === '5,6' &&
+			sparseNavigationRequests.batchCalls.length ===
+				sparseBatchCallsBeforeAround + 1 &&
+			sparseNavigationRequests.batchCalls.at(-1)?.join(',') === '505,506' &&
+			sparseNavigationRequests.targetCalls.length ===
+				sparseTargetCallsBeforeAround,
+		'虚拟 gap 必须按 canonical post.id 顺序计数，并让并发 around 补窗只合并为一个 post_ids 批次，绝不能探测估算楼层的 target endpoint',
+	);
+	const sparseTail = await sparseNavigationSession.loadTarget(6, {
+		scope: 'around',
+		advanceCursor: false,
+	});
+	const sparseSequential = await sparseNavigationSession.next();
+	assert(
+		sparseTail.map((post) => post.post_number).join(',') === '5,6' &&
+			sparseSequential.posts.map((post) => post.post_number).join(',') === '1,2' &&
+			!sparseSequential.done,
+		'远距 around fallback 可以水合尾段，但 advanceCursor=false 必须保留原顺序游标，使下一批继续从 #1/#2 后推进而不是把中段永久跳过',
+	);
+	const deletedFloorAnchorPost = Object.freeze({
+		...root(602, 8, 'member'),
+		topic_id: 15,
+	});
+	const deletedFloorAnchorPosts = [
+		Object.freeze({ ...root(600, 1, 'op'), topic_id: 15 }),
+		Object.freeze({ ...root(601, 3, 'member'), topic_id: 15 }),
+		deletedFloorAnchorPost,
+		...Array.from({ length: 4 }, (_, index) => Object.freeze({
+			...root(603 + index, 9 + index, 'member'),
+			topic_id: 15,
+		})),
+	];
+	const deletedFloorAnchorStore = new MemoryStore();
+	const deletedFloorAnchorSnapshots = new TopicSnapshotRepository<
+		TestTopic,
+		TestPost
+	>({
+		responseRepository: new ResponseRepository({
+			store: deletedFloorAnchorStore,
+			maxMemoryEntries: 16,
+			maxMemoryBytes: 100_000,
+			now: () => 278,
+		}),
+		topicId: 15,
+		authScope: 'account:test',
+		freshForMs: 1_000,
+		retainForMs: 10_000,
+		now: () => 278,
+	});
+	const deletedFloorAnchorRequests = new FakeTopicRequests({
+		id: 15,
+		slug: 'deleted-floor-anchor',
+		posts_count: 7,
+		post_stream: {
+			stream: deletedFloorAnchorPosts.map((post) => post.id),
+			posts: [deletedFloorAnchorPosts[0]!, deletedFloorAnchorPost],
+		},
+	});
+	deletedFloorAnchorRequests.batches.set('603', {
+		post_stream: { posts: deletedFloorAnchorPosts.slice(3, 4) },
+	});
+	const deletedFloorAnchorSession = new TopicSession({
+		topicId: 15,
+		requests: deletedFloorAnchorRequests,
+		snapshots: deletedFloorAnchorSnapshots,
+		replies: new ReplyTreeRepository(
+			15,
+			deletedFloorAnchorSnapshots.replyTreeSnapshotStore(),
+			{ now: () => 278 },
+		),
+		pageSize: 2,
+		refreshCachedInBackground: false,
+		now: () => 278,
+		wait: async () => {},
+	});
+	await deletedFloorAnchorSession.init();
+	const anchoredAround = await deletedFloorAnchorSession.loadAroundPost(9);
+	assert(
+		anchoredAround.map((post) => post.post_number).join(',') === '8,9' &&
+			deletedFloorAnchorRequests.batchCalls.at(-1)?.join(',') === '603',
+		'目标楼层正文缺失时必须用最近已知楼层的真实 post_stream 索引锚定，不能把删除编号误当数组下标',
+	);
+	deletedFloorAnchorSession.destroy();
+	const sparseDeletedFloor = Object.freeze({
+		...root(507, 8, 'member'),
+		topic_id: 14,
+	});
+	sparseNavigationSession.ingestCreatedPost(
+		sparseDeletedFloor,
+		'action-response',
+		279,
+	);
+	assert(
+		sparseNavigationSession.postStreamGapCount(6, 8) === 0,
+		'post_stream 中相邻的 #6/#8 必须确认 #7 是编号空洞，不能把已删除楼层伪报成未加载正文',
+	);
+	sparseNavigationSession.destroy();
+
+	const ghostStreamStore = new MemoryStore();
+	const ghostStreamResponses = new ResponseRepository({
+		store: ghostStreamStore,
+		maxMemoryEntries: 16,
+		maxMemoryBytes: 100_000,
+		now: () => 279,
+	});
+	const ghostStreamSnapshots = new TopicSnapshotRepository<TestTopic, TestPost>({
+		responseRepository: ghostStreamResponses,
+		topicId: 15,
+		authScope: 'account:test',
+		freshForMs: 1_000,
+		retainForMs: 10_000,
+		now: () => 279,
+	});
+	const ghostStreamPosts: readonly TestPost[] = Object.freeze([
+		Object.freeze({ ...root(601, 1), topic_id: 15 }),
+		Object.freeze({ ...root(602, 2, 'member'), topic_id: 15 }),
+	]);
+	const ghostStreamRequests = new FakeTopicRequests({
+		id: 15,
+		slug: 'ghost-stream',
+		posts_count: 2,
+		post_stream: {
+			stream: [601, 602, 699],
+			posts: ghostStreamPosts,
+		},
+	});
+	const ghostStreamReplies = new ReplyTreeRepository(
+		15,
+		ghostStreamSnapshots.replyTreeSnapshotStore(),
+		{ now: () => 279 },
+	);
+	const ghostStreamSession = new TopicSession({
+		topicId: 15,
+		requests: ghostStreamRequests,
+		snapshots: ghostStreamSnapshots,
+		replies: ghostStreamReplies,
+		pageSize: 2,
+		refreshCachedInBackground: false,
+		now: () => 279,
+		wait: async () => {},
+	});
+	await ghostStreamSession.init();
+	ghostStreamSession.ingestCreatedPost(
+		Object.freeze({ ...root(603, 3, 'member'), topic_id: 15 }),
+		'message-bus',
+		280,
+	);
+	assert(
+		ghostStreamSession.streamPostIds().join(',') === '601,602,699,603' &&
+			ghostStreamSession.postStreamCoverage().expectedPostCount === 3 &&
+			ghostStreamReplies.coverage().expectedPostCount === 3,
+		'post_stream 含删除或不可读 ID 时，created 只能让 posts_count 增一，绝不能用 stream.length 污染覆盖数',
+	);
+	ghostStreamSession.ingestCreatedPost(
+		Object.freeze({ ...root(604, 3, 'member'), topic_id: 15 }),
+		'action-response',
+		281,
+	);
+	assert(
+		ghostStreamSession.streamPostIds().join(',') === '601,602,699,604' &&
+			ghostStreamSession.postStreamCoverage().expectedPostCount === 3,
+		'同一 created 楼层若由另一来源回声并校正 post.id，只能替换 stream 身份，不能重复增加正文总数',
+	);
+	ghostStreamSession.destroy();
 
 	const promotionStore = new MemoryStore();
 	const promotionResponses = new ResponseRepository({
@@ -625,6 +1113,60 @@ assert(
 	'显式 refresh 必须重取已缓存 post.id，并用权威响应更新 canonical 正文',
 );
 
+now = 260;
+session.ingestPosts([
+	Object.freeze({
+		...root(103, 3, 'member'),
+		cooked: 'message-bus-before-target-batch',
+	}),
+], 'message-bus', now);
+requests.batches.set('103', {
+	post_stream: {
+		posts: [Object.freeze({
+			...root(103, 3, 'member'),
+			cooked: 'target-batch-refreshed',
+		})],
+	},
+});
+now = 270;
+const targetedBatch = await session.loadPostsByIds([103], {
+	background: true,
+	refresh: true,
+	maxAttempts: 1,
+	ingestSource: 'target-refresh',
+});
+assert(
+	targetedBatch.posts[0]?.cooked === 'target-batch-refreshed' &&
+		session.postById(103)?.cooked === 'target-batch-refreshed',
+	'实时批量刷新必须以 target-refresh 提交，不能被已有高等级 canonical 挡回旧值',
+);
+
+now = 280;
+session.ingestPosts([
+	Object.freeze({
+		...session.postByNumber(3)!,
+		hidden: true,
+		cooked: '<p>此帖子已被社区举报，现已被临时隐藏。</p>',
+	}),
+], 'target-refresh', now);
+assert(
+	session.postByNumber(3)?.hidden === true &&
+		session.postByNumber(3)?.cooked === 'target-batch-refreshed',
+	'举报隐藏响应必须更新 hidden 状态，但不能用社区占位文案覆盖此前缓存的原始正文',
+);
+now = 281;
+session.ingestPosts([
+	Object.freeze({
+		...session.postByNumber(3)!,
+		cooked: '<p>此帖子已被社区举报，现已被临时隐藏。</p>',
+	}),
+], 'target-refresh', now);
+assert(
+	session.postByNumber(3)?.hidden === true &&
+		session.postByNumber(3)?.cooked === 'target-batch-refreshed',
+	'已经合成原正文的隐藏楼层后续刷新仍必须拒绝宿主占位，不能退回空缺楼层',
+);
+
 now = 300;
 session.ingestPosts([reply(102, 2, 3, 'member', 'live')], 'message-bus', now);
 now = 200;
@@ -682,6 +1224,21 @@ assert(
 		})
 	}`,
 );
+const targetCallsBeforeChronicleProjection = requests.targetCalls.length;
+assert(
+	session.preserveUnavailablePost(4, 404, 407) &&
+		session.postByNumber(4)?.cooked === 'reply-4' &&
+		session.localArchiveState().posts.some((entry) =>
+			entry.postNumber === 4 &&
+			entry.status === 404 &&
+			entry.confirmedAt === 407) &&
+		requests.targetCalls.length === targetCallsBeforeChronicleProjection,
+	'岁月史书必须只把已缓存正文标为 404 存档，不重发已知失效请求或伪造楼层',
+);
+assert(
+	!session.preserveUnavailablePost(404, 404, 408),
+	'本地正文缺失时不得用 404 元数据伪造楼层',
+);
 session.ingestPosts(
 	[reply(104, 4, 3, 'member', 'restored-floor')],
 	'target-refresh',
@@ -690,6 +1247,93 @@ session.ingestPosts(
 assert(
 	session.localArchiveState().posts.length === 0,
 	'更新鲜的权威楼层恢复后必须撤销本地引用标记',
+);
+requests.cachedTargets.set('around:/target/77/first', {
+	post_stream: {
+		posts: [reply(177, 77, 1, 'member', 'cached-deleted-floor')],
+	},
+});
+const targetCallsBeforeCachedRestore = requests.targetCalls.length;
+const restoredCachedFloor = await session.restoreUnavailablePostFromCache(
+	77,
+	404,
+	415,
+	'/target/77/first',
+);
+assert(
+	restoredCachedFloor &&
+		session.postByNumber(77)?.cooked === 'cached-deleted-floor' &&
+		trees.topology.parentOf(77) === 1 &&
+		session.localArchiveState().posts.some((entry) =>
+			entry.postNumber === 77 && entry.status === 404) &&
+		requests.cachedTargetCalls.slice(-2).join(',') ===
+			'single:/target/77/first,around:/target/77/first' &&
+		requests.targetCalls.length === targetCallsBeforeCachedRestore,
+	'岁月史书在 Topic 快照缺正文时必须按原请求路径读取中央响应缓存，只提交目标楼层且不联网',
+);
+session.ingestPosts(
+	[reply(177, 77, 1, 'member', 'restored-cached-floor')],
+	'target-refresh',
+	416,
+);
+assert(
+	!session.localArchiveState().posts.some((entry) => entry.postNumber === 77),
+	'更新鲜的权威回复恢复后必须撤销由响应缓存建立的 404 标记',
+);
+const targetCallsBeforeMissingArchive = requests.targetCalls.length;
+assert(
+	!(await session.restoreUnavailablePostFromCache(
+		88,
+		404,
+		420,
+		'/target/88/first',
+	)) &&
+		session.postByNumber(88) === undefined &&
+		!session.localArchiveState().posts.some((entry) => entry.postNumber === 88) &&
+		requests.targetCalls.length === targetCallsBeforeMissingArchive,
+	'中央缓存没有正文时不得生成占位楼层，也不得发起网络请求',
+);
+const moderatedPlaceholder = Object.freeze({
+	...reply(
+		188,
+		88,
+		1,
+		'member',
+		'<p>此帖子已被社区举报，现已被临时隐藏。</p>',
+	),
+	hidden: true,
+});
+now = 421;
+session.ingestPosts([moderatedPlaceholder], 'target-refresh', now);
+requests.cachedTargets.set('single:/target/88/first', {
+	post_stream: {
+		posts: [reply(188, 88, 1, 'member', '举报前缓存的原始正文')],
+	},
+});
+requests.targets.set('/target/88/first', notFound);
+now = 422;
+const restoredModeratedArchive = await session.loadTarget(88, {
+	scope: 'single',
+	forceRefresh: true,
+});
+assert(
+	restoredModeratedArchive[0]?.cooked === '举报前缓存的原始正文' &&
+		restoredModeratedArchive[0]?.hidden === true &&
+		session.localArchiveState().posts.some((entry) =>
+			entry.postNumber === 88 && entry.status === 404) &&
+		requests.cachedTargetCalls.includes('single:/target/88/first'),
+	'已存成举报占位文案的楼层后来 404 时，必须只读旧响应缓存恢复原正文并保留隐藏与本地存档标记',
+);
+now = 423;
+session.ingestPosts([
+	Object.freeze({
+		...reply(188, 88, 1, 'member', '服务器恢复后的正文'),
+		hidden: false,
+	}),
+], 'target-refresh', now);
+assert(
+	!session.localArchiveState().posts.some((entry) => entry.postNumber === 88),
+	'举报楼层恢复权威正文后必须撤销临时本地存档状态',
 );
 requests.targets.set('/target/99/first', notFound);
 requests.targets.set('/target/99/second', { post_stream: { posts: [] } });
@@ -718,7 +1362,11 @@ requests.targets.set('/post-id/105', reply(105, 5, 4, 'member', 'live-created'))
 now = 450;
 const createdPost = await session.loadPostById(105, { created: true });
 assert(createdPost?.post_number === 5, '实时 post.id 刷新必须返回权威楼层');
-assert(session.streamPostIds().join(',') === '101,102,103,105', 'created 必须原子追加 post.id stream');
+assert(
+	session.streamPostIds().join(',') === '101,102,103,105' &&
+		session.postStreamRevision > initialPostStreamRevision,
+	'created 必须原子追加 post.id stream，并使依赖精确 gap 的投影缓存失效',
+);
 assert(trees.topology.parentOf(5) === 4, 'created 单帖刷新必须同步提交回复树');
 now = 460;
 const repliedPost = reply(106, 6, 5, 'op', 'action-created');
@@ -744,6 +1392,17 @@ assert(
 	'MessageBus/action 回声不得重复追加 created stream',
 );
 now = 470;
+const preservedDeletedFloor = session.preserveDeletedPostById(105, now);
+assert(
+	!preservedDeletedFloor.topicArchived &&
+		preservedDeletedFloor.postNumber === 5 &&
+		session.postById(105)?.cooked === 'live-created' &&
+		session.localArchiveState().topic === null &&
+		session.localArchiveState().posts.some((entry) =>
+			entry.postNumber === 5 && entry.status === 404) &&
+		session.unavailablePostNumbers().some((postNumber) => postNumber === 5),
+	'单楼层删除事件必须保留缓存正文，只把对应楼层标为 404 本地存档',
+);
 const deleteCommit = session.removePostById(105, 'action-response', now);
 assert(
 	deleteCommit.removedPostNumbers?.join(',') === '5' &&
@@ -1629,6 +2288,53 @@ assert(
 		unavailableTopicSession.localArchiveState().topic?.status === 404 &&
 		unavailableTopicRequests.topicCalls === 1,
 	'不完整缓存 Topic 后来 404 时必须保留已浏览正文并完成打开，而不是落入失败页',
+);
+const preservedStarter = unavailableTopicSession.preserveDeletedPostById(701);
+const archivedFirstBatch = await unavailableTopicSession.next();
+const archivedMissingBatch = await unavailableTopicSession.next();
+const archivedStream = await unavailableTopicSession.ensurePostStream();
+await unavailableTopicSession.refresh({ background: true });
+const archivedMissingPost = await unavailableTopicSession.loadPostById(703, {
+	background: true,
+});
+const archivedTarget = await unavailableTopicSession.loadTarget(3, {
+	scope: 'around',
+	forceRefresh: true,
+});
+const archivedReplies = await unavailableTopicSession.loadDirectReplies(1, {
+	expectedCount: 4,
+	refresh: true,
+});
+assert(
+	preservedStarter.topicArchived &&
+		preservedStarter.postNumber === 1 &&
+		unavailableTopicSession.postById(701)?.post_number === 1 &&
+		archivedFirstBatch.posts.length === 2 &&
+		archivedMissingBatch.done &&
+		archivedMissingBatch.missingPostIds.join(',') === '703' &&
+		archivedStream.missingPostIds.join(',') === '703' &&
+		archivedMissingPost === null &&
+		archivedTarget.length === 0 &&
+		archivedReplies.posts[0]?.post_number === 2 &&
+		!archivedReplies.complete &&
+		archivedReplies.endpointExhausted &&
+		unavailableTopicRequests.topicCalls === 1 &&
+		unavailableTopicRequests.batchCalls.length === 0 &&
+		unavailableTopicRequests.postByIdCalls.length === 0 &&
+		unavailableTopicRequests.targetCalls.length === 0 &&
+		unavailableTopicRequests.nestedCalls.length === 0,
+	`404 存档必须保留 #1，并让刷新、缺口、目标楼层和回复链全部纯本地：${JSON.stringify({
+		first: archivedFirstBatch.posts.map((post) => post.post_number),
+		missing: archivedMissingBatch.missingPostIds,
+		streamMissing: archivedStream.missingPostIds,
+		requests: {
+			topic: unavailableTopicRequests.topicCalls,
+			batches: unavailableTopicRequests.batchCalls,
+			postById: unavailableTopicRequests.postByIdCalls,
+			targets: unavailableTopicRequests.targetCalls,
+			nested: unavailableTopicRequests.nestedCalls,
+		},
+	})}`,
 );
 await unavailableTopicSession.flush();
 unavailableTopicSession.destroy();

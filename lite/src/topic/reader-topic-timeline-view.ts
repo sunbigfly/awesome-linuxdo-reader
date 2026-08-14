@@ -242,11 +242,9 @@ export class ReaderTopicTimelineView {
 			this.#submitJump(1);
 		});
 		this.#listen(relative, 'click', () => {
-			const target = this.#controller.targetByStep(
-				this.#controller.snapshot.currentPostNumber,
-				Number.POSITIVE_INFINITY,
-			);
-			this.#submitJump(target);
+			const target = this.#controller.targetAtEnd();
+			/* 末尾是 canonical 边界命令：直接换位，不能播放跨越整帖的 lens 滚动。 */
+			this.#submitJump(target, false);
 		});
 		this.#listen(jump, 'click', () => {
 			if (jumpForm.hidden) this.#openJumpForm();
@@ -515,14 +513,15 @@ export class ReaderTopicTimelineView {
 		return validation.postNumber;
 	}
 
-	#submitJump(postNumber: number): void {
+	#submitJump(postNumber: number, animate = true): void {
 		if (
 			this.scope.destroyed ||
 			this.#controller.snapshot.pendingPostNumber !== null
 		) {
 			return;
 		}
-		this.#beginJumpAnimation(postNumber);
+		if (animate) this.#beginJumpAnimation(postNumber);
+		else this.#finishJumpAnimation(false);
 		void this.#controller.jumpTo(postNumber).then((result) => {
 			if (this.scope.destroyed) return;
 			if (

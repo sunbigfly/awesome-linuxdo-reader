@@ -2,11 +2,11 @@
 title: 界面总览
 description: 认识宿主区、标题栏、阅读队列、阅读流、时间轴、工具面板和设置中心。
 feature_ids: ["CORE-002", "CORE-006", "READ-013", "MEDIA-014", "DATA-006"]
-source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-header.ts","lite/src/translation/reader-translation-controller.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/settings/reader-webdav-settings-form.ts"]
+source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-header.ts","lite/src/translation/reader-translation-controller.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/shell/reader-floating-window-frame.ts","lite/src/settings/reader-webdav-settings-form.ts"]
 since: 0.1.2
 version: 1.3.1
 status: current
-last_verified: 2026-08-08
+last_verified: 2026-08-14
 screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png", "/screenshots/guide-05-layout-settings-v1.0.0.png"]
 ---
 
@@ -21,7 +21,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png", "/screenshots/
 | 阅读队列 | 始终可见的数量按钮、文章头像、阅读进度、预加载状态和完整列表 | 明确加入、切换、固定、重试、移除和清理 |
 | 阅读流 | 主楼层、楼中楼、媒体和主题尾部操作 | 滚动、回复、互动、展开上下文 |
 | 时间轴 | 当前楼层、日期、总楼层与跳转位置 | 拖动或点击定位、回到顶部 |
-| 工具面板 | 七类消息、历史、收藏与回应 | 分类、检索、翻页、多选和回跳 |
+| 工具面板 | 通知私信、浏览历史、收藏回应、主题下载、用户观察、岁月史书、不想再看 | 通过共享标签切换、检索、翻页、多选和回跳 |
 | 设置中心 | 三组、17 个面板 | 搜索、翻译服务、快捷方式、统一保存、个性化、性能、日志、数据管理和 WebDAV 同步 |
 
 ## 标题栏
@@ -37,6 +37,12 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png", "/screenshots/
 ## 阅读队列
 
 阅读队列按钮显示当前数量，空队列默认显示 `×` 并可关闭入口。普通打开主题不会自动入队；使用主题行加号明确加入后，浮层显示头像、实际阅读进度和后台预加载状态。桌面端可以拖动并贴边收纳；移动端使用紧凑按钮打开列表。完整说明见[阅读队列](/guide/reading-queue)。
+
+## 工具浮窗
+
+七类工具入口共用浏览器标签式浮窗。点击另一个入口会新增并切换到目标标签，不会关闭已经打开的工具；点击已有标签只切换内容。标题栏 `+` 菜单只列出尚未打开的工具，每个标签右侧的关闭按钮只关闭该工具。
+
+标签使用固定比例并受最小、最大宽度限制；标签较多时不会等分铺满标题栏，而是在独立轨道中横向滚动。数量信息、当前工具业务操作和冻结置顶按钮固定在轨道右侧，不随标签滚走；冻结后点击浮窗外仍保持显示。
 
 ## 设置中心
 

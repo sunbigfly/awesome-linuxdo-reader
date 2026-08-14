@@ -25,6 +25,8 @@ export interface ReaderHistoryOpenResult {
 
 export interface ReaderHistoryRestoreOptions {
 	readonly highlight?: boolean;
+	/** 历史浏览只恢复主视口时关闭引用高亮等语义性状态。 */
+	readonly restoreSemanticState?: boolean;
 }
 
 export interface ReaderHistoryNavigationPort {
@@ -114,8 +116,8 @@ function frozenStates(
 /**
  * Shell 级历史浏览顺序和每 Topic 锚点的唯一 owner。
  *
- * 它拥有 back/forward/states/pending/epoch，切帖只调用注入的 Shell open port，楼层恢复
- * 只调用当前 Topic 的 canonical navigation/DOM port。它不持久化 Topic 数据、不请求帖子、
+ * 它拥有 back/forward/states/pending/epoch，切帖只调用注入的 Shell open port，视口恢复
+ * 只调用当前 Topic 的 canonical DOM port。它不持久化 Topic 数据、不请求帖子、
  * 不维护分页/回复树，也不绑定按钮或边缘热区。
  */
 export class ReaderHistoryNavigationController {
@@ -352,7 +354,10 @@ export class ReaderHistoryNavigationController {
 		const targetAnchor = states[String(targetTopicId)];
 		if (!targetAnchor) return this.#result(pending, 'opened');
 		try {
-			await this.#port.restoreAnchor(targetTopicId, targetAnchor);
+			await this.#port.restoreAnchor(targetTopicId, targetAnchor, {
+				highlight: false,
+				restoreSemanticState: false,
+			});
 		} catch (cause) {
 			if (epoch !== this.#epoch || this.scope.destroyed) {
 				return this.#result(pending, 'superseded');
@@ -392,13 +397,9 @@ export class ReaderHistoryNavigationController {
 		};
 		for (const entry of this.#history.snapshot.entries) {
 			const key = String(entry.topicId);
-			if (seeded[key]) continue;
+			if (seeded[key] || entry.viewport === null) continue;
 			const anchor = normalizeReaderHistoryAnchorState({
-				viewport: {
-					postNumber: entry.postNumber,
-					postOffset: 0,
-					scrollTop: 0,
-				},
+				viewport: entry.viewport,
 			});
 			if (anchor) seeded[key] = anchor;
 		}

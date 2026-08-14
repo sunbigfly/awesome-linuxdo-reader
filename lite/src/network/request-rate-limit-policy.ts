@@ -28,6 +28,8 @@ export interface RateLimitDecision {
 	readonly fingerprint: string;
 	readonly route: string;
 	readonly window: '10s' | '60s' | '10s+60s' | 'unknown';
+	/** 服务端是否明确给出了等待时间或全局窗口，而不是仅使用本地 fallback。 */
+	readonly authoritative?: boolean;
 }
 
 export type RateLimitWindow = RateLimitDecision['window'];
@@ -57,6 +59,20 @@ function positiveInteger(value: number, name: string): number {
 		throw new RangeError(`${name} 必须是正安全整数`);
 	}
 	return value;
+}
+
+function usableRetryAfter(value: string | null | undefined, now: number): boolean {
+	const raw = String(value ?? '').trim();
+	if (!raw) return false;
+	const seconds = Number(raw);
+	if (Number.isFinite(seconds)) return seconds > 0;
+	return Date.parse(raw) > now;
+}
+
+function rateLimitWindowWaitMs(window: RateLimitWindow): number {
+	if (window === '10s') return 10_000;
+	if (window === '60s' || window === '10s+60s') return 60_000;
+	return 0;
 }
 
 export function parseRetryAfterMs(
@@ -121,8 +137,8 @@ export function endpointRequestIdentity(
 /**
  * 单次 429 的范围与 Retry-After 解释器。
  *
- * 它只为收到该响应的逻辑请求给出一次等待决策；不会建立端点熔断、全局 cooldown
- * 或跨请求惩罚。429 前的预防由统一 scheduler/shared permit 固定管线负责。
+ * 它为当前逻辑请求解释权威等待与范围；跨请求、跨标签的重复端点熔断和单探针恢复
+ * 由 shared permit 持久化，429 前的固定预防仍由 scheduler/shared permit 负责。
  */
 export class RequestRateLimitPolicy {
 	readonly #options: Required<Omit<RequestRateLimitPolicyOptions, 'baseUrl'>> & {
@@ -158,12 +174,22 @@ export class RequestRateLimitPolicy {
 			observation.method,
 			this.#options.baseUrl,
 		);
+		const hasAuthoritativeRetryAfter = usableRetryAfter(
+			observation.retryAfter,
+			at,
+		);
 		const retryAfterMs = parseRetryAfterMs(observation.retryAfter, {
 			now: at,
 			fallbackMs: this.#options.retryAfterFallbackMs,
 			minMs: this.#options.retryAfterMinMs,
 			maxMs: this.#options.retryAfterMaxMs,
 		});
+		const authoritativeWindow = observation.knownGlobalWindow
+			? observation.globalWindow ?? 'unknown'
+			: 'unknown';
+		const waitMs = hasAuthoritativeRetryAfter
+			? retryAfterMs
+			: Math.max(retryAfterMs, rateLimitWindowWaitMs(authoritativeWindow));
 		const corroboratedGlobal =
 			observation.knownGlobalWindow ||
 			this.#unknownEvidence.some(
@@ -175,11 +201,16 @@ export class RequestRateLimitPolicy {
 		this.#prune(at);
 		return this.#decision(
 			corroboratedGlobal ? 'global' : 'endpoint',
-			retryAfterMs,
-			at + retryAfterMs,
+			waitMs,
+			at + waitMs,
 			identity,
 			observation.globalWindow ?? 'unknown',
+			hasAuthoritativeRetryAfter || observation.knownGlobalWindow,
 		);
+	}
+
+	identity(input: string | URL, method = 'GET'): EndpointIdentity {
+		return endpointRequestIdentity(input, method, this.#options.baseUrl);
 	}
 
 	reset(): void {
@@ -192,8 +223,16 @@ export class RequestRateLimitPolicy {
 		retryAt: number,
 		identity: EndpointIdentity,
 		window: RateLimitDecision['window'] = 'unknown',
+		authoritative = false,
 	): RateLimitDecision {
-		return Object.freeze({ scope, waitMs, retryAt, ...identity, window });
+		return Object.freeze({
+			scope,
+			waitMs,
+			retryAt,
+			...identity,
+			window,
+			authoritative,
+		});
 	}
 
 	#prune(at: number): void {

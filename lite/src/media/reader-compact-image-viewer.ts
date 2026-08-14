@@ -4,6 +4,7 @@ import {
 	eventElement,
 	eventPathIncludes,
 } from '../dom/event-target.js';
+import { bindFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
 import { requiredElementQuery } from '../dom/required-element.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import { readerEscapeOwnedBy } from '../shell/reader-escape-surface.js';
@@ -153,6 +154,7 @@ export class ReaderCompactImageViewer {
 			</div>`;
 		this.#mount.append(root);
 		this.#root = root;
+		localScope.add(bindFloatingSurfaceWheel(root));
 		const stage = required<HTMLElement>(root, '.ldp-avatar-viewer-stage');
 		const image = required<HTMLImageElement>(root, '.ldp-avatar-viewer-image');
 		const status = required<HTMLElement>(root, '.ldp-avatar-viewer-status');
@@ -369,12 +371,38 @@ export class ReaderCompactImageViewer {
 			this.#release(true);
 		}, true);
 		const viewport = this.#document.defaultView;
+		let positionFrame: number | null = null;
+		const schedulePosition = (): void => {
+			if (localScope.destroyed || positionFrame !== null) return;
+			if (typeof viewport?.requestAnimationFrame !== 'function') {
+				this.#position(root, options);
+				return;
+			}
+			positionFrame = viewport.requestAnimationFrame(() => {
+				positionFrame = null;
+				this.#position(root, options);
+			});
+		};
+		localScope.listen(this.#document, 'scroll', (event) => {
+			if (eventPathIncludes(event, root)) return;
+			schedulePosition();
+		}, { capture: true, passive: true });
+		for (const type of [
+			'ldp-reader-window-change',
+			'ldp-reader-workspace-change',
+		]) {
+			localScope.listen(this.#mount, type, schedulePosition);
+		}
 		if (viewport) {
 			localScope.listen(viewport, 'resize', () => {
 				this.#position(root, options, true);
 			});
 		}
 		localScope.add(() => {
+			if (positionFrame !== null) {
+				viewport?.cancelAnimationFrame(positionFrame);
+				positionFrame = null;
+			}
 			if (options.outsideSafeSurface) {
 				options.outsideSafeSurface.style.removeProperty('transform');
 				options.outsideSafeSurface.style.removeProperty('width');

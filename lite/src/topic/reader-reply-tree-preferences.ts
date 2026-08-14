@@ -37,9 +37,11 @@ export interface ReaderReplyTreePreferencesPreviewPort {
 
 export interface ReaderReplyTreePresentationTopology {
 	readonly postFilterKey: string | null;
+	readonly coverageComplete: boolean;
 	postFilterMatches(postNumber: PostNumber): boolean;
 	parentOf(postNumber: PostNumber): PostNumber | null | undefined;
 	childrenOf(postNumber: PostNumber): readonly PostNumber[];
+	subtreePostCountOf(postNumber: PostNumber): number | undefined;
 	hiddenDirectChildrenOf(postNumber: PostNumber): readonly PostNumber[];
 	revealNextLevel(postNumber: PostNumber): boolean;
 	hiddenFloorRunAfter(postNumber: PostNumber): readonly PostNumber[];
@@ -60,6 +62,16 @@ export interface ReaderReplyTreePostFilter {
 
 export interface ReaderReplyTreePresentationOptions {
 	readonly canonicalCoverageComplete?: () => boolean;
+	/** canonical post_stream 变化时递增，使依赖精确 stream 间隙的根投影失效。 */
+	readonly canonicalPostStreamRevision?: () => number;
+	/**
+	 * 返回两个根楼层在 post_stream 中严格位于其间的帖子数量。投影会自行扣除
+	 * 已进入 topology 的帖子；楼层号本身允许因删除而不连续，不能拿差值代替。
+	 */
+	readonly canonicalPostStreamGapCount?: (
+		postNumber: PostNumber,
+		previousRootPostNumber: PostNumber | 0,
+	) => number | undefined;
 }
 
 export const DEFAULT_READER_REPLY_TREE_PREFERENCES =
@@ -170,8 +182,14 @@ implements ReaderReplyTreePresentationTopology {
 	#frozenCanonical: ReplyTreeTopology | null = null;
 	#frozenCanonicalSourceRevision = -1;
 	#frozenCanonicalCoverageComplete = true;
+	#frozenCanonicalPostStreamRevision = 0;
 	#preferences: ReaderReplyTreePreferences;
 	readonly #canonicalCoverageComplete: () => boolean;
+	readonly #canonicalPostStreamRevision: () => number;
+	readonly #canonicalPostStreamGapCount: ((
+		postNumber: PostNumber,
+		previousRootPostNumber: PostNumber | 0,
+	) => number | undefined) | undefined;
 	readonly #revealedFloors = new Set<PostNumber>();
 	readonly #revealedParents = new Set<PostNumber>();
 	readonly #degradedFloorRoots = new Set<PostNumber>();
@@ -180,9 +198,12 @@ implements ReaderReplyTreePresentationTopology {
 	#projectionRevision = 0;
 	#cachedCanonicalRevision = -1;
 	#cachedCanonicalCoverageComplete: boolean | null = null;
+	#cachedCanonicalPostStreamRevision = -1;
 	#cachedProjectionRevision = -1;
+	#trustedCanonicalCoverageThroughPostNumber: PostNumber | 0 = 0;
 	#cachedRoots: readonly PostNumber[] = Object.freeze([]);
 	#cachedRootBranches: readonly ReplyTreeRootBranch[] = Object.freeze([]);
+	#cachedSubtreePostCounts = new Map<PostNumber, number>();
 	#cachedHiddenFloorRunsAfter = new Map<
 		PostNumber,
 		readonly PostNumber[]
@@ -198,6 +219,10 @@ implements ReaderReplyTreePresentationTopology {
 		this.#preferences = normalizeReaderReplyTreePreferences(preferences);
 		this.#canonicalCoverageComplete =
 			options.canonicalCoverageComplete ?? (() => true);
+		this.#canonicalPostStreamRevision =
+			options.canonicalPostStreamRevision ?? (() => 0);
+		this.#canonicalPostStreamGapCount =
+			options.canonicalPostStreamGapCount;
 	}
 
 	get preferences(): ReaderReplyTreePreferences {
@@ -207,6 +232,7 @@ implements ReaderReplyTreePresentationTopology {
 	get revision(): string {
 		return `${this.#activeCanonicalRevision()}:` +
 			`${Number(this.#activeCanonicalCoverageComplete())}:` +
+			`${this.#activeCanonicalPostStreamRevision()}:` +
 			`${this.#projectionRevision}`;
 	}
 
@@ -230,6 +256,8 @@ implements ReaderReplyTreePresentationTopology {
 		this.#frozenCanonicalSourceRevision = this.canonical.revision;
 		this.#frozenCanonicalCoverageComplete =
 			this.#canonicalCoverageComplete();
+		this.#frozenCanonicalPostStreamRevision =
+			this.#canonicalPostStreamRevision();
 		return true;
 	}
 
@@ -240,15 +268,23 @@ implements ReaderReplyTreePresentationTopology {
 		const changed =
 			this.#frozenCanonicalSourceRevision !== this.canonical.revision ||
 			this.#frozenCanonicalCoverageComplete !==
-				this.#canonicalCoverageComplete();
+				this.#canonicalCoverageComplete() ||
+			this.#frozenCanonicalPostStreamRevision !==
+				this.#canonicalPostStreamRevision();
 		this.#frozenCanonical = null;
 		this.#frozenCanonicalSourceRevision = -1;
 		this.#frozenCanonicalCoverageComplete = true;
+		this.#frozenCanonicalPostStreamRevision = 0;
 		return changed;
 	}
 
 	get canonicalFrozen(): boolean {
 		return this.#frozenCanonical !== null;
+	}
+
+	/** 与当前活动投影同源；滚动冻结期间返回冻结时的覆盖状态。 */
+	get coverageComplete(): boolean {
+		return this.#activeCanonicalCoverageComplete();
 	}
 
 	update(
@@ -386,6 +422,44 @@ implements ReaderReplyTreePresentationTopology {
 		return canonical.childrenOf(postNumber);
 	}
 
+	subtreePostCountOf(postNumber: PostNumber): number | undefined {
+		this.#syncCache();
+		const cached = this.#cachedSubtreePostCounts.get(postNumber);
+		if (cached !== undefined) return cached;
+		if (this.parentOf(postNumber) === undefined) return undefined;
+		const childrenByPost = new Map<
+			PostNumber,
+			readonly PostNumber[]
+		>();
+		const order: PostNumber[] = [];
+		const pending = [postNumber];
+		const visited = new Set<PostNumber>();
+		while (pending.length) {
+			const current = pending.pop()!;
+			if (visited.has(current)) continue;
+			visited.add(current);
+			order.push(current);
+			const children = this.childrenOf(current);
+			childrenByPost.set(current, children);
+			pending.push(...children);
+		}
+		const subtreePostCounts = new Map<PostNumber, number>();
+		for (let index = order.length - 1; index >= 0; index -= 1) {
+			const current = order[index]!;
+			const subtreePostCount = 1 +
+				(childrenByPost.get(current) ?? []).reduce(
+					(count, childPostNumber) => count +
+						(subtreePostCounts.get(childPostNumber) ?? 1),
+					0,
+				);
+			subtreePostCounts.set(current, subtreePostCount);
+			if (subtreePostCount > 1) {
+				this.#cachedSubtreePostCounts.set(current, subtreePostCount);
+			}
+		}
+		return subtreePostCounts.get(postNumber) ?? 1;
+	}
+
 	hiddenDirectChildrenOf(postNumber: PostNumber): readonly PostNumber[] {
 		if (this.#postFilter) return Object.freeze([]);
 		const canonical = this.#activeCanonical();
@@ -478,26 +552,101 @@ implements ReaderReplyTreePresentationTopology {
 		const canonicalRevision = this.#activeCanonicalRevision();
 		const canonicalCoverageComplete =
 			this.#activeCanonicalCoverageComplete();
+		const canonicalPostStreamRevision =
+			this.#activeCanonicalPostStreamRevision();
 		if (
 			this.#cachedCanonicalRevision === canonicalRevision &&
 			this.#cachedCanonicalCoverageComplete ===
 				canonicalCoverageComplete &&
+			this.#cachedCanonicalPostStreamRevision ===
+				canonicalPostStreamRevision &&
 			this.#cachedProjectionRevision === this.#projectionRevision
 		) return;
-		const relations = canonical.snapshot().relations;
-		const roots = Object.freeze(relations
-			.map((relation) => relation.postNumber)
+		const postNumbers = canonical.postNumbers();
+		/*
+		 * 完整覆盖一旦证明某段 canonical 已分类，后续只因 Topic 尾部新增而短暂
+		 * incomplete 时，不能把整段历史重新解释成未知正文。否则未缓存正文的旧根
+		 * 会退回楼层号差值，瞬间制造数千个 gap，并把同一 scrollTop 映射到早期楼层。
+		 */
+		if (canonicalCoverageComplete) {
+			this.#trustedCanonicalCoverageThroughPostNumber = Math.max(
+				this.#trustedCanonicalCoverageThroughPostNumber,
+				postNumbers.at(-1) ?? 0,
+			) as PostNumber | 0;
+		}
+		const trustedCoverageThroughPostNumber =
+			this.#trustedCanonicalCoverageThroughPostNumber;
+		const roots = Object.freeze(postNumbers
 			.filter((postNumber) => this.parentOf(postNumber) === null)
 			.sort((left, right) => left - right));
+		const subtreePostCounts = new Map<PostNumber, number>();
+		let canonicalIndex = 0;
+		let previousRootCanonicalIndex = -1;
+		let previousRootPostNumber: PostNumber | 0 = 0;
 		const rootBranches = Object.freeze(roots.map((postNumber) => {
-			let subtreePostCount = 0;
+			while (
+				canonicalIndex < postNumbers.length &&
+				postNumbers[canonicalIndex]! < postNumber
+			) canonicalIndex += 1;
+			const previousKnownPostNumber = canonicalIndex > 0
+				? postNumbers[canonicalIndex - 1] ?? 0
+				: 0;
+			const canonicalPostStreamGapCount =
+				this.#canonicalPostStreamGapCount?.(
+					postNumber,
+					previousRootPostNumber,
+				);
+			const knownCanonicalPostCountBetween = Math.max(
+				0,
+				canonicalIndex - previousRootCanonicalIndex - 1,
+			);
+			const exactUnloadedPostCountBefore =
+				canonicalPostStreamGapCount === undefined
+					? undefined
+					: Number.isSafeInteger(canonicalPostStreamGapCount) &&
+							canonicalPostStreamGapCount >= 0
+						? Math.max(
+							0,
+							canonicalPostStreamGapCount -
+								knownCanonicalPostCountBetween,
+						)
+						: 0;
+			const unloadedPostCountBefore =
+				!canonicalCoverageComplete && !this.#postFilter
+					? postNumber <= trustedCoverageThroughPostNumber
+						? 0
+						: exactUnloadedPostCountBefore === undefined
+							? Math.max(
+								0,
+								postNumber - Math.max(
+									previousKnownPostNumber,
+									trustedCoverageThroughPostNumber,
+								) - 1,
+							)
+							: exactUnloadedPostCountBefore
+					: 0;
+			previousRootCanonicalIndex = canonicalIndex;
+			previousRootPostNumber = postNumber;
 			const pending = [postNumber];
+			const visited = new Set<PostNumber>();
+			let subtreePostCount = 0;
 			while (pending.length) {
 				const current = pending.pop()!;
+				if (visited.has(current)) continue;
+				visited.add(current);
 				subtreePostCount += 1;
 				pending.push(...this.childrenOf(current));
 			}
-			return Object.freeze({ postNumber, subtreePostCount });
+			if (subtreePostCount > 1) {
+				subtreePostCounts.set(postNumber, subtreePostCount);
+			}
+			return Object.freeze({
+				postNumber,
+				subtreePostCount,
+				...(unloadedPostCountBefore > 0
+					? { unloadedPostCountBefore }
+					: {}),
+			});
 		}));
 		const hiddenFloorRunsAfter = new Map<
 			PostNumber,
@@ -509,19 +658,18 @@ implements ReaderReplyTreePresentationTopology {
 				const rootPostNumber = roots[index]!;
 				const nextRootPostNumber = roots[index + 1] ?? Number.POSITIVE_INFINITY;
 				while (
-					relationIndex < relations.length &&
-					relations[relationIndex]!.postNumber <= rootPostNumber
+					relationIndex < postNumbers.length &&
+					postNumbers[relationIndex]! <= rootPostNumber
 				) {
 					relationIndex += 1;
 				}
 				const run: PostNumber[] = [];
 				let previousPostNumber = rootPostNumber;
 				while (
-					relationIndex < relations.length &&
-					relations[relationIndex]!.postNumber < nextRootPostNumber
+					relationIndex < postNumbers.length &&
+					postNumbers[relationIndex]! < nextRootPostNumber
 				) {
-					const hiddenPostNumber =
-						relations[relationIndex]!.postNumber;
+					const hiddenPostNumber = postNumbers[relationIndex]!;
 					/*
 					 * 直属回复预取可能先于主信息流补齐远端关系。覆盖未完成时只投影
 					 * 紧邻当前可见根的连续段，避免把提前到达的引用回复挂到错误根后；
@@ -529,6 +677,7 @@ implements ReaderReplyTreePresentationTopology {
 					 */
 					if (
 						!canonicalCoverageComplete &&
+						hiddenPostNumber > trustedCoverageThroughPostNumber &&
 						hiddenPostNumber !== previousPostNumber + 1
 					) break;
 					run.push(hiddenPostNumber);
@@ -545,9 +694,12 @@ implements ReaderReplyTreePresentationTopology {
 		}
 		this.#cachedRoots = roots;
 		this.#cachedRootBranches = rootBranches;
+		this.#cachedSubtreePostCounts = subtreePostCounts;
 		this.#cachedHiddenFloorRunsAfter = hiddenFloorRunsAfter;
 		this.#cachedCanonicalRevision = canonicalRevision;
 		this.#cachedCanonicalCoverageComplete = canonicalCoverageComplete;
+		this.#cachedCanonicalPostStreamRevision =
+			canonicalPostStreamRevision;
 		this.#cachedProjectionRevision = this.#projectionRevision;
 	}
 
@@ -565,6 +717,12 @@ implements ReaderReplyTreePresentationTopology {
 		return this.#frozenCanonical
 			? this.#frozenCanonicalCoverageComplete
 			: this.#canonicalCoverageComplete();
+	}
+
+	#activeCanonicalPostStreamRevision(): number {
+		return this.#frozenCanonical
+			? this.#frozenCanonicalPostStreamRevision
+			: this.#canonicalPostStreamRevision();
 	}
 
 	#showAsFloor(): boolean {

@@ -3,13 +3,15 @@ import type {
 	ReaderWorkspaceCoordinatorElements,
 } from './reader-workspace-coordinator.js';
 import {
-	READER_NOTIFICATION_GROUP_ORDER,
+	READER_NOTIFICATION_PANEL_GROUP_ORDER,
 	READER_NOTIFICATION_GROUPS,
 	type ReaderNotificationMode,
 } from '../notification/reader-notification-model.js';
 import { renderReaderIcon } from '../components/reader-icon.js';
 import { installReaderSiteLogoFallback } from '../components/reader-image-fallback.js';
 import { htmlElement as element } from '../dom/html-element.js';
+import { createReaderPopoverSearchTools } from
+	'../collection/reader-popover-filter-controls.js';
 
 export type ReaderShellIconName =
 	| 'alert-triangle'
@@ -17,12 +19,16 @@ export type ReaderShellIconName =
 	| 'arrow-up'
 	| 'bell'
 	| 'bookmark'
+	| 'check'
 	| 'check-square'
+	| 'chevron-down'
 	| 'chevron-left'
 	| 'chevron-right'
+	| 'clock'
 	| 'database'
 	| 'external-link'
 	| 'heart'
+	| 'header-settings'
 	| 'history'
 	| 'link'
 	| 'list-checks'
@@ -40,9 +46,12 @@ export type ReaderShellIconName =
 	| 'rocket'
 	| 'rotate-ccw'
 	| 'search'
+	| 'select-items'
+	| 'select-items-check'
 	| 'smile'
 	| 'square'
 	| 'trash'
+	| 'trash-2'
 	| 'user-round'
 	| 'floating-window'
 	| 'x'
@@ -75,6 +84,7 @@ export interface ReaderShellTemplate {
 	readonly onlyOpProgressValue: HTMLSpanElement;
 	readonly topicIdentityHost: HTMLDivElement;
 	readonly headerActions: HTMLDivElement;
+	readonly headerActionsToggle: HTMLButtonElement;
 	readonly layoutToggle: HTMLButtonElement;
 	readonly titleActions: HTMLDivElement;
 	readonly topicEditTrigger: HTMLButtonElement;
@@ -96,6 +106,8 @@ export interface ReaderShellTemplate {
 	readonly notificationNewMessage: HTMLAnchorElement;
 	readonly notificationSearch: HTMLInputElement;
 	readonly notificationSearchClear: HTMLButtonElement;
+	readonly notificationCategoryFilter: HTMLSelectElement;
+	readonly notificationTagFilter: HTMLSelectElement;
 	readonly notificationList: HTMLDivElement;
 	readonly notificationPagePrevious: HTMLButtonElement;
 	readonly notificationPageInfo: HTMLSpanElement;
@@ -118,6 +130,8 @@ export interface ReaderShellTemplate {
 	readonly historyMultiDone: HTMLButtonElement;
 	readonly historySearch: HTMLInputElement;
 	readonly historySearchClear: HTMLButtonElement;
+	readonly historyCategoryFilter: HTMLSelectElement;
+	readonly historyTagFilter: HTMLSelectElement;
 	readonly historyList: HTMLDivElement;
 	readonly historyPagePrevious: HTMLButtonElement;
 	readonly historyPageInfo: HTMLSpanElement;
@@ -135,6 +149,8 @@ export interface ReaderShellTemplate {
 	readonly bookmarksMultiDone: HTMLButtonElement;
 	readonly bookmarksSearch: HTMLInputElement;
 	readonly bookmarksSearchClear: HTMLButtonElement;
+	readonly bookmarkCategoryFilter: HTMLSelectElement;
+	readonly bookmarkTagFilter: HTMLSelectElement;
 	readonly bookmarkReactionFilters: HTMLDivElement;
 	readonly bookmarksList: HTMLDivElement;
 	readonly bookmarksPagePrevious: HTMLButtonElement;
@@ -184,36 +200,6 @@ function button(
 	node.setAttribute('aria-label', label);
 	node.append(icon(options, iconName));
 	return node;
-}
-
-function popoverSearch(
-	options: ReaderShellTemplateOptions,
-	name: 'notification' | 'history' | 'bookmarks',
-	placeholder: string,
-	label: string,
-	clearLabel: string,
-) {
-	const root = element(options.document, 'label', 'ldp-popover-search');
-	root.append(icon(options, 'search'));
-	const input = element(
-		options.document,
-		'input',
-		`ldp-popover-search-input ldp-${name}-search`,
-	);
-	input.type = 'search';
-	input.autocomplete = 'off';
-	input.spellcheck = false;
-	input.placeholder = placeholder;
-	input.setAttribute('aria-label', label);
-	const clear = button(
-		options,
-		`ldp-popover-search-clear ldp-${name}-search-clear`,
-		clearLabel,
-		'x',
-	);
-	clear.hidden = true;
-	root.append(input, clear);
-	return { root, input, clear };
 }
 
 function popoverPager(
@@ -273,8 +259,8 @@ function collectionBulkActions(
 		name === 'history' ? '历史全选范围' : '收藏全选范围',
 	);
 	for (const [value, label] of [
-		['page', '本页'],
-		['all', '全部页'],
+		['page', '已加载'],
+		['all', '全部记录'],
 	] as const) {
 		const option = element(options.document, 'option', '');
 		option.value = value;
@@ -284,15 +270,15 @@ function collectionBulkActions(
 	const select = button(
 		options,
 		`ldp-collection-action ldp-${name}-select-toggle`,
-		`全选本页${noun}`,
-		'square',
+		`全选已加载${noun}`,
+		name === 'bookmarks' ? 'select-items' : 'square',
 	);
 	select.setAttribute('aria-pressed', 'false');
 	const remove = button(
 		options,
 		`ldp-collection-action danger ldp-${name}-delete-selected`,
 		deleteLabel,
-		'trash',
+		name === 'bookmarks' ? 'trash-2' : 'trash',
 	);
 	remove.disabled = true;
 	const count = element(
@@ -307,7 +293,7 @@ function collectionBulkActions(
 		options,
 		`ldp-collection-action ldp-${name}-multi-done`,
 		'退出多选',
-		'x',
+		name === 'bookmarks' ? 'check' : 'x',
 	);
 	root.append(scope, select, remove, done);
 	return { root, scope, select, remove, count, done };
@@ -475,7 +461,16 @@ export function createReaderShellTemplate(
 	titleJump.setAttribute('role', 'button');
 	titleJump.tabIndex = 0;
 	titleJump.setAttribute('aria-label', '跳到 #1');
-	title.append(titleJump);
+	const topicEditTrigger = button(
+		options,
+		'ldp-topic-edit-trigger',
+		'编辑帖子标题、类别和 label',
+		'pencil',
+	);
+	topicEditTrigger.hidden = true;
+	topicEditTrigger.setAttribute('aria-haspopup', 'dialog');
+	topicEditTrigger.setAttribute('aria-expanded', 'false');
+	title.append(titleJump, topicEditTrigger);
 	const titleSubline = element(document, 'div', 'ldp-title-subline');
 	const metaRow = element(document, 'div', 'ldp-meta-row');
 	const meta = element(document, 'div', 'ldp-meta');
@@ -597,7 +592,7 @@ export function createReaderShellTemplate(
 	const notificationGroupTabs: HTMLButtonElement[] = [];
 	for (const mode of ['notifications', 'messages'] as const satisfies
 		readonly ReaderNotificationMode[]) {
-		const keys = READER_NOTIFICATION_GROUP_ORDER.filter((key) =>
+		const keys = READER_NOTIFICATION_PANEL_GROUP_ORDER.filter((key) =>
 			READER_NOTIFICATION_GROUPS[key].mode === mode);
 		const panel = element(document, 'div', 'ldp-notification-tabs');
 		panel.dataset.notificationModePanel = mode;
@@ -664,17 +659,18 @@ export function createReaderShellTemplate(
 		notificationMarkAll,
 		notificationNewMessage,
 	);
-	const {
-		root: notificationSearchWrap,
-		input: notificationSearch,
-		clear: notificationSearchClear,
-	} = popoverSearch(
-		options,
+	const notificationSearchTools = createReaderPopoverSearchTools(
+		document,
 		'notification',
 		'搜索用户、标题、内容或拼音',
 		'搜索消息',
 		'清空消息搜索',
+		options.renderIcon,
 	);
+	const notificationSearch = notificationSearchTools.search.input;
+	const notificationSearchClear = notificationSearchTools.search.clear;
+	const notificationCategoryFilter = notificationSearchTools.category;
+	const notificationTagFilter = notificationSearchTools.tag;
 	const notificationList = popoverList(
 		document,
 		'ldp-notification-list',
@@ -694,7 +690,7 @@ export function createReaderShellTemplate(
 		notificationModeTabsHost,
 		...notificationGroupPanels,
 		notificationToolbar,
-		notificationSearchWrap,
+		notificationSearchTools.root,
 		notificationList,
 		notificationPager,
 	);
@@ -757,17 +753,18 @@ export function createReaderShellTemplate(
 		historyDefaultActions,
 		historyBulkActions,
 	);
-	const {
-		root: historySearchWrap,
-		input: historySearch,
-		clear: historySearchClear,
-	} = popoverSearch(
-		options,
+	const historySearchTools = createReaderPopoverSearchTools(
+		document,
 		'history',
 		'搜索标题或拼音',
 		'搜索浏览历史',
 		'清空历史搜索',
+		options.renderIcon,
 	);
+	const historySearch = historySearchTools.search.input;
+	const historySearchClear = historySearchTools.search.clear;
+	const historyCategoryFilter = historySearchTools.category;
+	const historyTagFilter = historySearchTools.tag;
 	const historyList = popoverList(
 		document,
 		'ldp-history-list ldp-notification-list',
@@ -785,7 +782,7 @@ export function createReaderShellTemplate(
 	);
 	historyPopover.append(
 		historyTitle,
-		historySearchWrap,
+		historySearchTools.root,
 		historyList,
 		historyPager,
 	);
@@ -847,9 +844,11 @@ export function createReaderShellTemplate(
 	bookmarkTabsHost.setAttribute('aria-label', '收藏与回应类型');
 	const bookmarkTabs: HTMLButtonElement[] = [];
 	for (const [type, label] of [
-		['Reaction', '回应'],
-		['Topic', '帖子'],
-		['Post', '楼层'],
+		['Reply', '回复'],
+		['Boost', 'Boost'],
+		['Reaction', '表情回应'],
+		['Topic', '收藏帖子'],
+		['Post', '收藏楼层'],
 	] as const) {
 		const tab = button(
 			options,
@@ -859,24 +858,25 @@ export function createReaderShellTemplate(
 		);
 		tab.dataset.bookmarkType = type;
 		tab.setAttribute('role', 'tab');
-		tab.setAttribute('aria-selected', String(type === 'Reaction'));
-		tab.classList.toggle('active', type === 'Reaction');
+		tab.setAttribute('aria-selected', String(type === 'Reply'));
+		tab.classList.toggle('active', type === 'Reply');
 		tab.replaceChildren();
 		tab.textContent = label;
 		bookmarkTabs.push(tab);
 		bookmarkTabsHost.append(tab);
 	}
-	const {
-		root: bookmarksSearchWrap,
-		input: bookmarksSearch,
-		clear: bookmarksSearchClear,
-	} = popoverSearch(
-		options,
+	const bookmarksSearchTools = createReaderPopoverSearchTools(
+		document,
 		'bookmarks',
 		'搜索收藏标题、内容或拼音',
 		'搜索收藏',
 		'清空收藏搜索',
+		options.renderIcon,
 	);
+	const bookmarksSearch = bookmarksSearchTools.search.input;
+	const bookmarksSearchClear = bookmarksSearchTools.search.clear;
+	const bookmarkCategoryFilter = bookmarksSearchTools.category;
+	const bookmarkTagFilter = bookmarksSearchTools.tag;
 	const bookmarkReactionFilters = element(
 		document,
 		'div',
@@ -903,7 +903,7 @@ export function createReaderShellTemplate(
 	bookmarksPopover.append(
 		bookmarksTitle,
 		bookmarkTabsHost,
-		bookmarksSearchWrap,
+		bookmarksSearchTools.root,
 		bookmarkReactionFilters,
 		bookmarksList,
 		bookmarksPager,
@@ -925,15 +925,13 @@ export function createReaderShellTemplate(
 		bookmarksPopover,
 	);
 	const titleActions = element(document, 'div', 'ldp-title-actions');
-	const topicEditTrigger = button(
+	const headerActionsToggle = button(
 		options,
-		'ldp-topic-edit-trigger',
-		'编辑帖子标题、类别和 label',
-		'pencil',
+		'ldp-header-actions-toggle',
+		'展开其余标题栏操作',
+		'chevron-left',
 	);
-	topicEditTrigger.hidden = true;
-	topicEditTrigger.setAttribute('aria-haspopup', 'dialog');
-	topicEditTrigger.setAttribute('aria-expanded', 'false');
+	headerActionsToggle.setAttribute('aria-expanded', 'false');
 	const refreshTopic = button(
 		options,
 		'ldp-reader-refresh ldp-icon-btn',
@@ -947,12 +945,39 @@ export function createReaderShellTemplate(
 		'关闭阅读器',
 		'x',
 	);
-	titleActions.append(
-		topicEditTrigger,
-		refreshTopic,
-		openNative,
-		closeReader,
-	);
+	const setHeaderActionsExpanded = (expanded: boolean) => {
+		titleActions.classList.toggle('is-expanded', expanded);
+		header.classList.toggle('ldp-title-actions-expanded', expanded);
+		headerActionsToggle.setAttribute('aria-expanded', String(expanded));
+		const label = expanded
+			? '收起原右上角操作'
+			: '展开原右上角操作';
+		headerActionsToggle.setAttribute('aria-label', label);
+		headerActionsToggle.title = label;
+		headerActionsToggle.replaceChildren(
+			icon(options, expanded ? 'chevron-right' : 'chevron-left'),
+		);
+	};
+	titleActions.addEventListener('pointerenter', () => {
+		setHeaderActionsExpanded(true);
+	});
+	titleActions.addEventListener('pointerleave', () => {
+		setHeaderActionsExpanded(false);
+	});
+	titleActions.addEventListener('focusin', () => {
+		setHeaderActionsExpanded(true);
+	});
+	titleActions.addEventListener('focusout', (event) => {
+		const next = (event as FocusEvent).relatedTarget as Node | null;
+		if (!next || !titleActions.contains(next)) {
+			setHeaderActionsExpanded(false);
+		}
+	});
+	headerActionsToggle.addEventListener('click', () => {
+		setHeaderActionsExpanded(true);
+	});
+	setHeaderActionsExpanded(false);
+	titleActions.append(headerActionsToggle, refreshTopic, openNative, closeReader);
 	header.append(home, titleWrap, headerActions, titleActions);
 
 	const readerMain = element(document, 'div', 'ldp-reader-main');
@@ -1073,7 +1098,7 @@ export function createReaderShellTemplate(
 		'ldp-topic-timeline-relative',
 	);
 	topicTimelineRelative.type = 'button';
-	topicTimelineRelative.setAttribute('aria-label', '跳到末尾可见楼层');
+	topicTimelineRelative.setAttribute('aria-label', '跳到最新楼层');
 	const topicTimelineJump = element(
 		document,
 		'button',
@@ -1255,6 +1280,7 @@ export function createReaderShellTemplate(
 		onlyOpProgressValue,
 		topicIdentityHost,
 		headerActions,
+		headerActionsToggle,
 		layoutToggle,
 		titleActions,
 		topicEditTrigger,
@@ -1276,6 +1302,8 @@ export function createReaderShellTemplate(
 		notificationNewMessage,
 		notificationSearch,
 		notificationSearchClear,
+		notificationCategoryFilter,
+		notificationTagFilter,
 		notificationList,
 		notificationPagePrevious,
 		notificationPageInfo,
@@ -1298,6 +1326,8 @@ export function createReaderShellTemplate(
 		historyMultiDone,
 		historySearch,
 		historySearchClear,
+		historyCategoryFilter,
+		historyTagFilter,
 		historyList,
 		historyPagePrevious,
 		historyPageInfo,
@@ -1315,6 +1345,8 @@ export function createReaderShellTemplate(
 		bookmarksMultiDone,
 		bookmarksSearch,
 		bookmarksSearchClear,
+		bookmarkCategoryFilter,
+		bookmarkTagFilter,
 		bookmarkReactionFilters,
 		bookmarksList,
 		bookmarksPagePrevious,

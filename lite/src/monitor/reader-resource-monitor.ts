@@ -13,7 +13,16 @@ import type {
 	BrowserSharedRequestPermitSnapshot,
 } from '../network/browser-shared-request-permit.js';
 import { createReaderIcon } from '../components/reader-icon.js';
-import { settingsElement } from '../settings/reader-settings-dom.js';
+import {
+	settingsButton,
+	settingsElement,
+} from '../settings/reader-settings-dom.js';
+
+export interface ReaderDiagnosticLogFile {
+	readonly filename: string;
+	readonly mimeType: 'application/x-ndjson;charset=utf-8';
+	readonly text: string;
+}
 
 export interface ReaderResourceMediaSnapshot {
 	readonly catalogImages: number;
@@ -82,6 +91,9 @@ export interface ReaderResourceMonitorOptions {
 	) => Pick<MutationObserver, 'observe' | 'disconnect'>;
 	readonly sampleIntervalMs?: number;
 	readonly now?: () => number;
+	readonly saveLog?: (
+		file: ReaderDiagnosticLogFile,
+	) => void | Promise<void>;
 	readonly parentScope?: LifecycleScope;
 }
 
@@ -157,6 +169,21 @@ interface ResourceVisibilityMarker {
 	readonly state: ReaderResourceSample['visibility'] | 'stopped';
 }
 
+type ReaderDiagnosticLogKind = 'request' | 'performance';
+type ReaderDiagnosticCapturePanel = 'request' | 'performance' | 'export';
+
+interface RequestRuntimeStateEvent {
+	readonly at: number;
+	readonly lastObservedAt: number;
+	readonly observations: number;
+	readonly source: ReaderDiagnosticCapturePanel;
+	readonly lastSource: ReaderDiagnosticCapturePanel;
+	readonly scheduler: Readonly<Record<string, unknown>> | null;
+	readonly permit: Readonly<Record<string, unknown>> | null;
+}
+
+type DiagnosticCapabilityState = 'not-attempted' | 'available' | 'unavailable';
+
 interface MetricDefinition {
 	readonly id: string;
 	readonly label: string;
@@ -166,8 +193,10 @@ interface MetricDefinition {
 }
 
 const RETENTION_MS = 10 * 60_000;
+const REQUEST_RUNTIME_RETENTION_MS = 15 * 60_000;
 const EVIDENCE_WINDOW_MS = 60_000;
 const MAX_EVIDENCE_EVENTS = 1_200;
+const MAX_REQUEST_RUNTIME_STATES = 1_200;
 const REQUEST_TRACE_MS = 10_000;
 const REQUEST_SLOW_MS = 1_800;
 const REQUEST_STUCK_MS = 15_000;
@@ -334,6 +363,220 @@ function formatRequestTimestamp(raw: number): string {
 		second: '2-digit',
 	});
 	return `${clock}.${String(date.getMilliseconds()).padStart(3, '0')}`;
+}
+
+function requestDisplayPath(event: RequestObservationEvent): string {
+	return `${event.path}${event.queryShape}`;
+}
+
+const REQUEST_DECISION_LABELS: Readonly<Record<string, string>> = Object.freeze({
+	complete: '完成',
+	'retry-429': '等待 429 重试',
+	'stop-429': '429 终止',
+	'await-cloudflare': '等待过盾',
+	'require-cloudflare': '转人工验证',
+	'challenge-passed-retry': '过盾后重试',
+	'challenge-required': '验证未通过',
+	'stop-cloudflare-isolated': 'Cloudflare 隔离终止',
+	'stop-cloudflare-unhandled': 'Cloudflare 无恢复端口',
+	'stop-http': 'HTTP 终止',
+	'challenge-probe-passed': '会话探针通过',
+	'challenge-probe-rate-limited-pass': '会话已过盾但仍 429',
+	'challenge-probe-blocked': '会话探针仍被盾拦截',
+	'challenge-probe-failed': '会话探针失败',
+	'challenge-probe-cancelled': '会话探针取消',
+});
+
+function requestDecisionLabel(decision: string): string {
+	return REQUEST_DECISION_LABELS[decision] ??
+		REQUEST_WAIT_REASON_LABELS[decision] ?? decision;
+}
+
+function requestContractDiagnostic(event: RequestObservationEvent): string {
+	const contract = [event.profile, event.namespace, event.lane]
+		.filter(Boolean).join(' / ');
+	const parts = [
+		event.logicalId ? `链 ${event.logicalId}` : '',
+		contract,
+		event.cacheMode ? `缓存 ${event.cacheMode}` : '',
+		event.identity ? `身份 ${event.identity}` : '',
+		event.logicalId
+			? `尝试 ${event.attempt}/${event.max429Retries +
+				event.maxChallengeRetries + 1}`
+			: event.attempt > 1 ? `第 ${event.attempt} 次尝试` : '',
+		event.logicalId
+			? `重试上限 429 ${event.max429Retries} · 过盾 ${event.maxChallengeRetries}`
+			: '',
+		event.blockOnCloudflareChallenge === null
+			? ''
+			: event.blockOnCloudflareChallenge ? '过盾 共享闸门' : '过盾 仅结束本请求',
+		event.suppressAfterChallengeWait ? '盾后不追发' : '',
+		event.droppable === true ? '可丢弃' : '',
+		event.promoted ? '已晋升' : '',
+		event.joinedConsumers ? `单飞合并 +${event.joinedConsumers}` : '',
+		event.decision ? `决策 ${requestDecisionLabel(event.decision)}` : '',
+		event.retryAfter ? `Retry-After ${event.retryAfter} 秒` : '',
+	].filter(Boolean);
+	return parts.join(' · ');
+}
+
+const PERFORMANCE_EVENT_LABELS: Readonly<Record<string, string>> = Object.freeze({
+	request: '网络请求',
+	longtask: '长任务',
+	'long-animation-frame': '长动画帧',
+	script: '脚本归因',
+	dom: 'DOM 变更',
+	visibility: '前后台',
+	capture: '采集状态',
+	gap: '采样空档',
+});
+
+function performanceEventMetric(event: {
+	readonly kind: string;
+	readonly duration: number;
+	readonly added?: number;
+	readonly removed?: number;
+}): string {
+	if (event.kind === 'dom') {
+		return `+${event.added ?? 0} / −${event.removed ?? 0}`;
+	}
+	return event.duration > 0 ? formatDuration(event.duration) : '瞬时';
+}
+
+function diagnosticIsoTime(at: number): string {
+	return new Date(at).toISOString();
+}
+
+function diagnosticLogFilename(kind: ReaderDiagnosticLogKind, at: number): string {
+	const timestamp = diagnosticIsoTime(at)
+		.replace(/\.\d{3}Z$/, 'Z')
+		.replace(/[:]/g, '-')
+		.replace('T', '_');
+	return `linuxdo-reader-${kind}-log-${timestamp}.jsonl`;
+}
+
+function diagnosticJsonLines(records: readonly unknown[]): string {
+	return `${records.map((record) => JSON.stringify(record)).join('\n')}\n`;
+}
+
+function requestDiagnosticRecord(
+	event: RequestObservationEvent,
+	visibility: ResourceEvidenceVisibility = 'unknown',
+): Readonly<Record<string, unknown>> {
+	return Object.freeze({
+		recordType: 'request',
+		id: event.id,
+		logicalId: event.logicalId,
+		phase: event.phase,
+		visibility,
+		queuedAt: event.queuedAt,
+		queuedAtIso: diagnosticIsoTime(event.queuedAt),
+		permittedAt: event.permittedAt,
+		startedAt: event.startedAt,
+		endedAt: event.endedAt,
+		permitWaitMs: event.permitWait,
+		dispatchDurationMs: event.dispatchDuration,
+		durationMs: event.duration,
+		method: event.method,
+		path: event.path,
+		queryShape: event.queryShape,
+		transport: event.transport,
+		source: event.source,
+		type: event.type,
+		sameOrigin: event.sameOrigin,
+		priority: event.priority,
+		attempt: event.attempt,
+		recoveryProbe: event.recoveryProbe,
+		waitReason: event.waitReason,
+		callSite: event.callSite,
+		controlReason: event.controlReason,
+		profile: event.profile,
+		namespace: event.namespace,
+		lane: event.lane,
+		cacheMode: event.cacheMode,
+		identity: event.identity,
+		joinedConsumers: event.joinedConsumers,
+		promoted: event.promoted,
+		max429Retries: event.max429Retries,
+		maxChallengeRetries: event.maxChallengeRetries,
+		blockOnCloudflareChallenge: event.blockOnCloudflareChallenge,
+		suppressAfterChallengeWait: event.suppressAfterChallengeWait,
+		droppable: event.droppable,
+		decision: event.decision,
+		pending: event.pending,
+		status: event.status,
+		cloudflareMitigated: event.cloudflareMitigated,
+		sizeBytes: event.size,
+		error: event.error,
+		rateLimitCode: event.rateLimitCode,
+		retryAfter: event.retryAfter,
+		serverLimit: event.serverLimit,
+		serverRemaining: event.serverRemaining,
+		serverReset: event.serverReset,
+		resourceTimed: event.resourceTimed,
+	});
+}
+
+function schedulerDiagnosticRecord(
+	snapshot: RequestSchedulerSnapshot | null,
+): Readonly<Record<string, unknown>> | null {
+	if (!snapshot) return null;
+	return Object.freeze({
+		active: snapshot.active,
+		queued: snapshot.queued,
+		maxConcurrent: snapshot.maxConcurrent,
+		queueLimit: snapshot.queueLimit,
+		disposed: snapshot.disposed,
+		activeByLane: snapshot.activeByLane,
+		queuedByLane: snapshot.queuedByLane,
+	});
+}
+
+function permitDiagnosticRecord(
+	snapshot: BrowserSharedRequestPermitSnapshot | null,
+): Readonly<Record<string, unknown>> | null {
+	if (!snapshot) return null;
+	return Object.freeze({
+		coordinationMode: snapshot.coordinationMode,
+		shortCount: snapshot.shortCount,
+		shortBudget: snapshot.shortBudget,
+		longCount: snapshot.longCount,
+		longBudget: snapshot.longBudget,
+		minIntervalMs: snapshot.minIntervalMs,
+		maxConcurrent: snapshot.maxConcurrent,
+		instances: snapshot.instances,
+		queued: snapshot.queued,
+		active: snapshot.active,
+		nextPermitDelayMs: snapshot.nextPermitDelay,
+		blockingReason: snapshot.blockingReason,
+		challengeState: snapshot.challengeState,
+		challengeOwned: snapshot.challengeOwned,
+	});
+}
+
+function performanceScriptLabel(
+	sourceFunctionName: unknown,
+	sourceUrl: unknown,
+	baseHref: string,
+): string {
+	const functionName = String(sourceFunctionName ?? '')
+		.replace(/[\r\n\t]+/g, ' ')
+		.trim()
+		.slice(0, 80);
+	if (functionName) return functionName;
+	try {
+		const source = String(sourceUrl ?? '');
+		const url = /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(source)
+			? new URL(source)
+			: new URL(source, baseHref);
+		url.username = '';
+		url.password = '';
+		url.search = '';
+		url.hash = '';
+		return `${url.origin}${url.pathname}`.slice(0, 120);
+	} catch {
+		return '匿名脚本';
+	}
 }
 
 function percentile95(values: readonly number[]): number {
@@ -649,6 +892,7 @@ export class ReaderResourceMonitor {
 	readonly #samples: ReaderResourceSample[] = [];
 	readonly #performanceEvents: ResourceEvidenceEvent[] = [];
 	readonly #visibilityTimeline: ResourceVisibilityMarker[] = [];
+	readonly #requestRuntimeStates: RequestRuntimeStateEvent[] = [];
 	readonly #requestVisibility = new Map<
 		number,
 		ReaderResourceSample['visibility']
@@ -660,6 +904,17 @@ export class ReaderResourceMonitor {
 	#memoryMeasuring = false;
 	#lastMemoryAt = 0;
 	#baselineAt = 0;
+	#resourceObservationCapability: DiagnosticCapabilityState = 'not-attempted';
+	#longTaskCapability: DiagnosticCapabilityState = 'not-attempted';
+	#longAnimationFrameCapability: DiagnosticCapabilityState = 'not-attempted';
+	#readerMutationCapability: DiagnosticCapabilityState = 'not-attempted';
+	#hostMutationCapability: DiagnosticCapabilityState = 'not-attempted';
+	#evidenceOverflowDrops = 0;
+	#evidenceRetentionDrops = 0;
+	#sampleRetentionDrops = 0;
+	#visibilityRetentionDrops = 0;
+	#requestRuntimeRetentionDrops = 0;
+	#requestRuntimeOverflowDrops = 0;
 
 	constructor(options: ReaderResourceMonitorOptions) {
 		this.#options = options;
@@ -715,6 +970,16 @@ export class ReaderResourceMonitor {
 		performancePanel.dataset.settingsLogPanel = 'performance';
 		performancePanel.role = 'tabpanel';
 		performancePanel.hidden = true;
+		const requestExport = this.#createExportControl(
+			'request',
+			'导出请求日志',
+			'导出当前内存中的完整脱敏请求账本、调度和共享限流快照（JSONL）。',
+		);
+		const performanceExport = this.#createExportControl(
+			'performance',
+			'导出性能日志',
+			'导出十分钟快照、毫秒事件、前后台时间线、关联请求及能力/缺口声明（JSONL）。',
+		);
 		const selectPanel = (name: 'request' | 'performance'): void => {
 			this.#selectedPanel = name;
 			const requestActive = name === 'request';
@@ -895,10 +1160,7 @@ export class ReaderResourceMonitor {
 			const hidden = settingsElement(document, 'span');
 			hidden.dataset.resourceMonitorScopeHidden = '';
 			hidden.textContent = '—';
-			const basis = settingsElement(document, 'small');
-			basis.dataset.resourceMonitorScopeBasis = '';
-			basis.textContent = '—';
-			row.append(name, current, visible, hidden, basis);
+			row.append(name, current, visible, hidden);
 			scopeTable.append(row);
 			this.#scopeRows.set(scope, row);
 		}
@@ -969,7 +1231,7 @@ export class ReaderResourceMonitor {
 		const eventTitle = settingsElement(document, 'strong');
 		eventTitle.textContent = '毫秒级事件记录';
 		const eventHint = settingsElement(document, 'span');
-		eventHint.textContent = '前后台 · 范围 · 原始事实';
+		eventHint.textContent = '毫秒时间 · 类型 · 耗时/增减 · 范围 · 原始依据';
 		eventHead.append(eventTitle, eventHint);
 		this.#eventLog = settingsElement(
 			document,
@@ -990,6 +1252,7 @@ export class ReaderResourceMonitor {
 			'阅读器请求可明确归因；未标记请求记为“原站 / 未标记”；' +
 			'无法确认来源的内存与主线程事件记为“页面共享”，不以推算冒充独占数据。';
 		performancePanel.append(
+			performanceExport,
 			this.#health,
 			performancePolicyBlock,
 			evidence,
@@ -1206,7 +1469,7 @@ export class ReaderResourceMonitor {
 		logTitle.textContent = '毫秒请求记录';
 		const logHint = settingsElement(document, 'span');
 		logHint.textContent =
-			'显示车道、优先级、升级与取消；路径已脱敏，不保存查询参数、正文、Cookie、授权头或响应内容';
+			'显示逻辑链、契约、单飞、重试与过盾决策；仅保留查询键形状，不保存查询值、正文、Cookie、授权头或响应内容';
 		logHead.append(logTitle, logHint);
 		this.#requestLog = settingsElement(
 			document,
@@ -1281,6 +1544,7 @@ export class ReaderResourceMonitor {
 			limitBoundary,
 		);
 		requestPanel.append(
+			requestExport,
 			requestSummary,
 			traceBlock,
 			this.#requestBottleneck,
@@ -1301,6 +1565,371 @@ export class ReaderResourceMonitor {
 		options.host.append(this.#root);
 		this.scope.add(() => this.#root.remove());
 		this.scope.add(() => this.stop());
+	}
+
+	#createExportControl(
+		kind: ReaderDiagnosticLogKind,
+		title: string,
+		description: string,
+	): HTMLElement {
+		const document = this.#options.document;
+		const control = settingsElement(
+			document,
+			'div',
+			'ldp-log-export-control',
+		);
+		control.dataset.logExportControl = kind;
+		const copy = settingsElement(document, 'span', 'ldp-log-export-copy');
+		const heading = settingsElement(document, 'strong');
+		heading.textContent = title;
+		const detail = settingsElement(document, 'small');
+		detail.textContent = description;
+		copy.append(heading, detail);
+		const actions = settingsElement(document, 'span', 'ldp-log-export-actions');
+		const button = settingsButton(
+			document,
+			'ldp-config-action ldp-log-export-button',
+			'',
+			'download',
+			'导出 JSONL',
+		);
+		button.dataset.logExport = kind;
+		const status = settingsElement(document, 'small', 'ldp-log-export-status');
+		status.dataset.logExportStatus = kind;
+		status.role = 'status';
+		status.setAttribute('aria-live', 'polite');
+		actions.append(button, status);
+		control.append(copy, actions);
+		this.scope.listen(button, 'click', () => {
+			void this.#exportLog(kind, button, status);
+		});
+		return control;
+	}
+
+	async #exportLog(
+		kind: ReaderDiagnosticLogKind,
+		button: HTMLButtonElement,
+		status: HTMLElement,
+	): Promise<void> {
+		if (button.disabled) return;
+		button.disabled = true;
+		status.textContent = '正在整理…';
+		try {
+			const generatedAt = this.#now();
+			const requests = this.requests.snapshot.events;
+			const scheduler = schedulerDiagnosticRecord(
+				this.#options.schedulerSnapshot(),
+			);
+			let permitSnapshot: BrowserSharedRequestPermitSnapshot | null = null;
+			try {
+				permitSnapshot = await this.#options.permitSnapshot();
+			} catch {
+				// 导出仍保留本页事实，并在 runtime-state 中明确共享快照不可用。
+			}
+			const permit = permitDiagnosticRecord(permitSnapshot);
+			this.#recordRequestRuntimeState(
+				generatedAt,
+				scheduler,
+				permit,
+				'export',
+			);
+			const file = kind === 'request'
+				? this.#requestLogFile(generatedAt, requests, scheduler, permit)
+				: this.#performanceLogFile(
+					generatedAt,
+					requests,
+					scheduler,
+					permit,
+				);
+			await this.#saveDiagnosticLog(file);
+			const count = kind === 'request'
+				? requests.length
+				: this.#samples.length + this.#performanceEvents.length;
+			status.textContent = `已导出 ${count} 条${
+				kind === 'request' ? '请求' : '性能事实'
+			}`;
+		} catch (error) {
+			status.textContent = `导出失败：${
+				error instanceof Error ? error.message : '未知错误'
+			}`;
+		} finally {
+			button.disabled = false;
+		}
+	}
+
+	#requestLogFile(
+		generatedAt: number,
+		requests: readonly RequestObservationEvent[],
+		scheduler: Readonly<Record<string, unknown>> | null,
+		permit: Readonly<Record<string, unknown>> | null,
+	): ReaderDiagnosticLogFile {
+		const records: unknown[] = [
+			{
+				recordType: 'meta',
+				logType: 'request',
+				schemaVersion: 1,
+				generatedAt,
+				generatedAtIso: diagnosticIsoTime(generatedAt),
+				retention: 'current RequestObserver in-memory snapshot',
+				requestCount: requests.length,
+				requestRuntimeStateCount: this.#requestRuntimeStates.length,
+				privacy:
+					'query keys and counts only; no query values, headers, bodies, cookies, authorization, or response content',
+			},
+			{
+				recordType: 'runtime-state',
+				at: generatedAt,
+				atIso: diagnosticIsoTime(generatedAt),
+				scheduler,
+				permit,
+			},
+			...this.#requestRuntimeStates.map((event) => ({
+				recordType: 'request-runtime-state',
+				...event,
+				atIso: diagnosticIsoTime(event.at),
+				lastObservedAtIso: diagnosticIsoTime(event.lastObservedAt),
+			})),
+			...requests.map((event) => requestDiagnosticRecord(event)),
+		];
+		return Object.freeze({
+			filename: diagnosticLogFilename('request', generatedAt),
+			mimeType: 'application/x-ndjson;charset=utf-8',
+			text: diagnosticJsonLines(records),
+		});
+	}
+
+	#performanceLogFile(
+		generatedAt: number,
+		requests: readonly RequestObservationEvent[],
+		scheduler: Readonly<Record<string, unknown>> | null,
+		permit: Readonly<Record<string, unknown>> | null,
+	): ReaderDiagnosticLogFile {
+		const cutoff = generatedAt - RETENTION_MS;
+		const policy = this.#options.performancePolicySnapshot?.() ?? null;
+		const timeline: Array<{ readonly at: number; readonly record: unknown }> = [
+			...this.#samples.map((sample) => ({
+				at: sample.at,
+				record: {
+					recordType: 'sample',
+					...sample,
+					atIso: diagnosticIsoTime(sample.at),
+				},
+			})),
+			...this.#performanceEvents.map((event) => ({
+				at: event.at,
+				record: {
+					recordType: 'performance-event',
+					at: event.at,
+					atIso: diagnosticIsoTime(event.at),
+					kind: event.kind,
+					kindLabel: PERFORMANCE_EVENT_LABELS[event.kind] ?? event.kind,
+					durationMs: event.duration,
+					visibility: event.visibility,
+					scope: event.scope,
+					detail: event.detail,
+					basis: event.basis,
+					...(event.added === undefined ? {} : { added: event.added }),
+					...(event.removed === undefined ? {} : { removed: event.removed }),
+				},
+			})),
+			...this.#visibilityTimeline.map((marker) => ({
+				at: marker.at,
+				record: {
+					recordType: 'visibility-marker',
+					at: marker.at,
+					atIso: diagnosticIsoTime(marker.at),
+					state: marker.state,
+				},
+			})),
+			...this.#requestRuntimeStates.map((event) => ({
+				at: event.lastObservedAt,
+				record: {
+					recordType: 'request-runtime-state',
+					...event,
+					atIso: diagnosticIsoTime(event.at),
+					lastObservedAtIso: diagnosticIsoTime(event.lastObservedAt),
+				},
+			})),
+			...requests.filter((event) => event.queuedAt >= cutoff).map((event) => ({
+				at: event.queuedAt,
+				record: requestDiagnosticRecord(
+					event,
+					this.#requestVisibility.get(event.id) ?? 'unknown',
+				),
+			})),
+		].filter((entry) => entry.at >= cutoff && entry.at <= generatedAt)
+			.sort((left, right) => left.at - right.at);
+		const records: unknown[] = [
+			{
+				recordType: 'meta',
+				logType: 'performance',
+				schemaVersion: 1,
+				generatedAt,
+				generatedAtIso: diagnosticIsoTime(generatedAt),
+				retentionMs: RETENTION_MS,
+				sampleIntervalMs: Math.max(
+					250,
+					this.#options.sampleIntervalMs ?? 1_000,
+				),
+				sampleCount: this.#samples.length,
+				performanceEventCount: this.#performanceEvents.length,
+				associatedRequestCount: requests.filter(
+					(event) => event.queuedAt >= cutoff,
+				).length,
+				privacy:
+					'request query keys and counts only; script URLs exclude credentials, query, and fragment',
+			},
+			{
+				recordType: 'runtime-state',
+				at: generatedAt,
+				atIso: diagnosticIsoTime(generatedAt),
+				scheduler,
+				permit,
+				performancePolicy: policy,
+			},
+			this.#performanceCapabilities(generatedAt),
+			...timeline.map((entry) => entry.record),
+		];
+		return Object.freeze({
+			filename: diagnosticLogFilename('performance', generatedAt),
+			mimeType: 'application/x-ndjson;charset=utf-8',
+			text: diagnosticJsonLines(records),
+		});
+	}
+
+	#performanceCapabilities(
+		at: number,
+	): Readonly<Record<string, unknown>> {
+		const view = this.#options.document.defaultView as
+			| (Window & {
+				PerformanceObserver?: typeof PerformanceObserver;
+			})
+			| null;
+		const performance = (
+			this.#options.performance ?? view?.performance
+		) as (Performance & {
+			measureUserAgentSpecificMemory?: () => Promise<unknown>;
+			memory?: { readonly usedJSHeapSize?: number };
+		}) | null;
+		const supportedEntryTypes = Array.isArray(
+			view?.PerformanceObserver?.supportedEntryTypes,
+		)
+			? [...view.PerformanceObserver.supportedEntryTypes].sort()
+			: [];
+		const memorySource = performance?.measureUserAgentSpecificMemory
+			? 'measureUserAgentSpecificMemory'
+			: Number.isFinite(Number(performance?.memory?.usedJSHeapSize))
+				? 'performance.memory'
+				: 'unavailable';
+		return Object.freeze({
+			recordType: 'capabilities',
+			at,
+			atIso: diagnosticIsoTime(at),
+			captureActive: this.#activePanel === 'performance',
+			activePanel: this.#activePanel,
+			sampleIntervalMs: Math.max(
+				250,
+				this.#options.sampleIntervalMs ?? 1_000,
+			),
+			memoryIntervalMs: 10_000,
+			memorySource,
+			supportedEntryTypes,
+			observerInstall: {
+				resource: this.#resourceObservationCapability,
+				longtask: this.#longTaskCapability,
+				longAnimationFrame: this.#longAnimationFrameCapability,
+				readerMutation: this.#readerMutationCapability,
+				hostMutation: this.#hostMutationCapability,
+			},
+			retention: {
+				performanceMs: RETENTION_MS,
+				requestRuntimeMs: REQUEST_RUNTIME_RETENTION_MS,
+				maxPerformanceEvents: MAX_EVIDENCE_EVENTS,
+				maxRequestRuntimeStates: MAX_REQUEST_RUNTIME_STATES,
+			},
+			discarded: {
+				evidenceOverflow: this.#evidenceOverflowDrops,
+				evidenceRetention: this.#evidenceRetentionDrops,
+				sampleRetention: this.#sampleRetentionDrops,
+				visibilityRetention: this.#visibilityRetentionDrops,
+				requestRuntimeOverflow: this.#requestRuntimeOverflowDrops,
+				requestRuntimeRetention: this.#requestRuntimeRetentionDrops,
+			},
+			limitations: [
+				'performance collection runs only while the performance panel is active',
+				'browser background throttling or freezing can create unfilled gaps',
+				'memory is page-level and cannot isolate this userscript',
+				'cross-origin Resource Timing fields can be zero without Timing-Allow-Origin',
+				'CPU, GC, GPU, FPS, server logs, payloads, and unsupported browser entry types are unavailable',
+			],
+		});
+	}
+
+	#recordRequestRuntimeState(
+		at: number,
+		scheduler: Readonly<Record<string, unknown>> | null,
+		permit: Readonly<Record<string, unknown>> | null,
+		source: ReaderDiagnosticCapturePanel,
+	): void {
+		const signature = JSON.stringify({ scheduler, permit });
+		const previous = this.#requestRuntimeStates.at(-1);
+		if (
+			previous &&
+			JSON.stringify({
+				scheduler: previous.scheduler,
+				permit: previous.permit,
+			}) === signature
+		) {
+			this.#requestRuntimeStates[this.#requestRuntimeStates.length - 1] =
+				Object.freeze({
+					...previous,
+					lastObservedAt: at,
+					observations: previous.observations + 1,
+					lastSource: source,
+				});
+			return;
+		}
+		this.#requestRuntimeStates.push(Object.freeze({
+			at,
+			lastObservedAt: at,
+			observations: 1,
+			source,
+			lastSource: source,
+			scheduler,
+			permit,
+		}));
+		if (this.#requestRuntimeStates.length > MAX_REQUEST_RUNTIME_STATES) {
+			const overflow =
+				this.#requestRuntimeStates.length - MAX_REQUEST_RUNTIME_STATES;
+			this.#requestRuntimeStates.splice(0, overflow);
+			this.#requestRuntimeOverflowDrops += overflow;
+		}
+	}
+
+	async #saveDiagnosticLog(file: ReaderDiagnosticLogFile): Promise<void> {
+		if (this.#options.saveLog) {
+			await this.#options.saveLog(file);
+			return;
+		}
+		const document = this.#options.document;
+		const view = document.defaultView;
+		const urlApi = view?.URL ?? globalThis.URL;
+		if (typeof urlApi.createObjectURL !== 'function') {
+			throw new Error('当前浏览器不支持本地日志下载');
+		}
+		const BlobConstructor = view?.Blob ?? globalThis.Blob;
+		const source = urlApi.createObjectURL(new BlobConstructor([file.text], {
+			type: file.mimeType,
+		}));
+		const link = document.createElement('a');
+		link.href = source;
+		link.download = file.filename;
+		link.hidden = true;
+		(document.body ?? this.#root).append(link);
+		link.click();
+		link.remove();
+		const timer = setTimeout(() => urlApi.revokeObjectURL(source), 60_000);
+		this.scope.timer(timer);
 	}
 
 	get active(): boolean {
@@ -1340,8 +1969,11 @@ export class ReaderResourceMonitor {
 			this.#options.document.defaultView?.performance ??
 			null;
 		const installResourceObservation = (scope: LifecycleScope): void => {
-			if (!performance) return;
-			new BrowserResourceObservationAdapter({
+			if (!performance) {
+				this.#resourceObservationCapability = 'unavailable';
+				return;
+			}
+			const installed = new BrowserResourceObservationAdapter({
 				observer: this.requests,
 				performance,
 				...(this.#options.createPerformanceObserver
@@ -1351,6 +1983,9 @@ export class ReaderResourceMonitor {
 						}
 					: {}),
 			}).install(scope);
+			this.#resourceObservationCapability = installed
+				? 'available'
+				: 'unavailable';
 		};
 		const installSampler = (scope: LifecycleScope): void => {
 			void this.#sample();
@@ -1399,9 +2034,22 @@ export class ReaderResourceMonitor {
 			return;
 		}
 		installResourceObservation(active);
-		this.#observePerformance(active, 'longtask');
-		this.#observePerformance(active, 'long-animation-frame');
-		this.#observeMutations(active);
+		this.#longTaskCapability = this.#observePerformance(active, 'longtask')
+			? 'available'
+			: 'unavailable';
+		this.#longAnimationFrameCapability = this.#observePerformance(
+			active,
+			'long-animation-frame',
+		)
+			? 'available'
+			: 'unavailable';
+		const mutationCapabilities = this.#observeMutations(active);
+		this.#readerMutationCapability = mutationCapabilities.reader
+			? 'available'
+			: 'unavailable';
+		this.#hostMutationCapability = mutationCapabilities.host
+			? 'available'
+			: 'unavailable';
 		this.#healthState.textContent = '建立基线';
 		this.#healthDetail.textContent =
 			'连续取得 10 个真实快照后开始判断资源压力。';
@@ -1446,7 +2094,7 @@ export class ReaderResourceMonitor {
 	#observePerformance(
 		scope: LifecycleScope,
 		type: 'longtask' | 'long-animation-frame',
-	): void {
+	): boolean {
 		const factory = this.#options.createPerformanceObserver ??
 			((callback: PerformanceObserverCallback) => {
 				const Observer = (
@@ -1498,13 +2146,16 @@ export class ReaderResourceMonitor {
 			observer.observe({ type, buffered: true });
 		} catch {
 			observer?.disconnect();
-			return;
+			return false;
 		}
 		const installed = observer;
 		scope.add(() => installed.disconnect());
+		return true;
 	}
 
-	#observeMutations(scope: LifecycleScope): void {
+	#observeMutations(
+		scope: LifecycleScope,
+	): Readonly<{ reader: boolean; host: boolean }> {
 		const factory = this.#options.createMutationObserver ??
 			((callback: MutationCallback) => {
 				const Observer = (
@@ -1518,7 +2169,7 @@ export class ReaderResourceMonitor {
 		const install = (
 			target: Node,
 			evidenceScope: Exclude<ResourceEvidenceScope, 'shared'>,
-		): void => {
+		): boolean => {
 			let observer: Pick<MutationObserver, 'observe' | 'disconnect'> | null =
 				null;
 			try {
@@ -1558,14 +2209,16 @@ export class ReaderResourceMonitor {
 				observer.observe(target, { childList: true, subtree: true });
 			} catch {
 				observer?.disconnect();
-				return;
+				return false;
 			}
 			const installed = observer;
 			scope.add(() => installed.disconnect());
+			return true;
 		};
-		install(this.#options.readerRoot, 'reader');
+		const reader = install(this.#options.readerRoot, 'reader');
 		const hostRoot = this.#options.document.documentElement;
-		if (hostRoot) install(hostRoot, 'host');
+		const host = hostRoot ? install(hostRoot, 'host') : false;
+		return Object.freeze({ reader, host });
 	}
 
 	#readerDocumentRoot(): Element | null {
@@ -1648,9 +2301,11 @@ export class ReaderResourceMonitor {
 				Number(script.forcedStyleAndLayoutDuration) || 0,
 			);
 			group.count += 1;
-			const label = String(
-				script.sourceFunctionName || script.sourceURL || '匿名脚本',
-			).slice(0, 80);
+			const label = performanceScriptLabel(
+				script.sourceFunctionName,
+				script.sourceURL,
+				this.#options.document.baseURI,
+			);
 			if (group.labels.length < 2) group.labels.push(label);
 			groups.set(evidenceScope, group);
 		}
@@ -1719,10 +2374,12 @@ export class ReaderResourceMonitor {
 	#pushEvidence(event: ResourceEvidenceEvent): void {
 		this.#performanceEvents.push(Object.freeze(event));
 		if (this.#performanceEvents.length > MAX_EVIDENCE_EVENTS) {
+			const overflow = this.#performanceEvents.length - MAX_EVIDENCE_EVENTS;
 			this.#performanceEvents.splice(
 				0,
-				this.#performanceEvents.length - MAX_EVIDENCE_EVENTS,
+				overflow,
 			);
+			this.#evidenceOverflowDrops += overflow;
 		}
 		this.#prune(event.at);
 	}
@@ -1756,6 +2413,12 @@ export class ReaderResourceMonitor {
 			// 监控读取失败只影响本次共享预算事实，不能阻断 Reader。
 		}
 		if (this.#activeScope !== active || active.destroyed) return;
+		this.#recordRequestRuntimeState(
+			at,
+			schedulerDiagnosticRecord(scheduler),
+			permitDiagnosticRecord(permit),
+			panel,
+		);
 		const topic = this.#options.topicSnapshot();
 		const readerDom = panel === 'performance'
 			? this.#options.readerRoot.querySelectorAll('*').length + 1
@@ -2063,6 +2726,7 @@ export class ReaderResourceMonitor {
 		const cutoff = current.at - EVIDENCE_WINDOW_MS;
 		const requests = requestEvents.map((event) => ({
 			at: event.startedAt,
+			kind: 'request' as const,
 			visibility: this.#requestVisibility.get(event.id) ?? 'unknown',
 			scope: event.source === 'reader'
 				? 'reader'
@@ -2071,6 +2735,7 @@ export class ReaderResourceMonitor {
 				? Math.max(0, current.at - event.startedAt)
 				: event.duration,
 			bytes: event.size,
+			diagnostic: requestContractDiagnostic(event),
 			event,
 		} as const));
 		for (const request of requests) {
@@ -2129,11 +2794,6 @@ export class ReaderResourceMonitor {
 				? '浏览器未提供'
 				: formatBytes(current.heapBytes),
 		};
-		const basis: Record<ResourceEvidenceScope, string> = {
-			reader: 'reader 元数据 · Resource Timing · Reader DOM · LoAF 脚本（浏览器支持时）',
-			host: '未标记请求 · Resource Timing · Document DOM · 同源 LoAF 脚本（浏览器支持时）',
-			shared: 'Long Tasks · Resource Timing · Page Visibility · 未归因 LoAF（浏览器支持时）',
-		};
 		for (const evidenceScope of ['reader', 'host', 'shared'] as const) {
 			const row = this.#scopeRows.get(evidenceScope)!;
 			row.querySelector<HTMLElement>(
@@ -2145,19 +2805,21 @@ export class ReaderResourceMonitor {
 			row.querySelector<HTMLElement>(
 				'[data-resource-monitor-scope-hidden]',
 			)!.textContent = cellLabel(scopes[evidenceScope].hidden, evidenceScope);
-			row.querySelector<HTMLElement>(
-				'[data-resource-monitor-scope-basis]',
-			)!.textContent = basis[evidenceScope];
 		}
 		const events = [
 			...requests.map((request) => ({
 				at: request.at,
+				kind: request.kind,
 				visibility: request.visibility,
 				scope: request.scope,
+				duration: request.duration,
 				detail:
-					`${request.event.method} ${request.event.path} · ` +
+					`${request.event.method} ${requestDisplayPath(request.event)} · ` +
 					`${requestStatus(request.event)} · ${formatDuration(request.duration)}` +
-					`${request.bytes ? ` · ${formatBytes(request.bytes)}` : ''}`,
+					`${request.bytes ? ` · ${formatBytes(request.bytes)}` : ''}` +
+					`${request.diagnostic
+						? ` · ${request.diagnostic}`
+						: ''}`,
 				basis: request.event.resourceTimed
 					? 'PerformanceResourceTiming'
 					: request.scope === 'reader'
@@ -2189,9 +2851,12 @@ export class ReaderResourceMonitor {
 				'div',
 				'ldp-resource-monitor-event-row',
 			);
+			row.dataset.performanceEventKind = event.kind;
+			row.dataset.performanceEventScope = event.scope;
+			row.dataset.performanceEventVisibility = event.visibility;
 			const time = settingsElement(this.#options.document, 'time');
 			time.dateTime = new Date(event.at).toISOString();
-			time.textContent = new Date(event.at).toLocaleTimeString();
+			time.textContent = formatRequestTimestamp(event.at);
 			const visibility = settingsElement(
 				this.#options.document,
 				'span',
@@ -2209,19 +2874,37 @@ export class ReaderResourceMonitor {
 			scope.textContent = event.scope === 'reader'
 				? '阅读器'
 				: event.scope === 'host' ? '原站' : '页面共享';
+			const kind = settingsElement(
+				this.#options.document,
+				'span',
+				'ldp-resource-monitor-event-kind',
+			);
+			kind.textContent = PERFORMANCE_EVENT_LABELS[event.kind] ?? event.kind;
+			const metric = settingsElement(
+				this.#options.document,
+				'span',
+				'ldp-resource-monitor-event-metric',
+			);
+			metric.textContent = performanceEventMetric(event);
 			const detail = settingsElement(
 				this.#options.document,
 				'span',
 				'ldp-resource-monitor-event-detail',
 			);
-			detail.textContent = event.detail;
+			const detailText = settingsElement(
+				this.#options.document,
+				'strong',
+				'ldp-resource-monitor-event-copy',
+			);
+			detailText.textContent = event.detail;
 			const eventBasis = settingsElement(
 				this.#options.document,
-				'span',
+				'small',
 				'ldp-resource-monitor-event-basis',
 			);
 			eventBasis.textContent = event.basis;
-			row.append(time, visibility, scope, detail, eventBasis);
+			detail.append(detailText, eventBasis);
+			row.append(time, visibility, scope, kind, metric, detail);
 			return row;
 		}));
 		if (!events.length) {
@@ -2376,9 +3059,13 @@ export class ReaderResourceMonitor {
 					: '',
 			].filter(Boolean).join('，');
 			this.#requestObserved.textContent =
-				`本页最近观测：${REQUEST_TYPE_LABELS[latestLimit.type] ?? '请求'}` +
+				`本页最近观测：${REQUEST_TYPE_LABELS[latestLimit.type] ?? '请求'} ` +
+				`${latestLimit.method} ${requestDisplayPath(latestLimit)} ` +
 				`收到 ${latestLimit.cloudflareMitigated ? 'Cloudflare challenge 429' : '429'}` +
-				`${details ? `（${details}）` : ''}。`;
+				`${details ? `（${details}）` : ''}` +
+				`${latestLimit.decision
+					? `；决策 ${requestDecisionLabel(latestLimit.decision)}`
+					: ''}。`;
 		} else if (latestLimit?.serverLimit) {
 			this.#requestObserved.textContent =
 				`服务器最近返回：上限 ${latestLimit.serverLimit}` +
@@ -2404,10 +3091,12 @@ export class ReaderResourceMonitor {
 			const caller = danger.event.callSite
 				? `；发起点 ${danger.event.callSite}`
 				: '';
+			const diagnostic = requestContractDiagnostic(danger.event);
 			this.#requestBottleneckDetail.textContent =
 				`${REQUEST_TYPE_LABELS[danger.event.type] ?? danger.event.type} ` +
-				`${danger.event.method} ${danger.event.path}：` +
+				`${danger.event.method} ${requestDisplayPath(danger.event)}：` +
 				`${danger.issue.detail}${caller}` +
+				`${diagnostic ? `；${diagnostic}` : ''}` +
 				`${danger.event.retryAfter
 					? `；Retry-After ${danger.event.retryAfter} 秒`
 					: ''}。`;
@@ -2547,7 +3236,7 @@ export class ReaderResourceMonitor {
 				label: '网络',
 				level: networkIssue?.issue.level ?? 'normal',
 				detail: networkIssue
-					? `${networkIssue.issue.label}：${networkIssue.event.method} ${networkIssue.event.path}。先检查原站和网络，错误请求会保留在下方记录。`
+					? `${networkIssue.issue.label}：${networkIssue.event.method} ${requestDisplayPath(networkIssue.event)}。先检查原站和网络，错误请求会保留在下方记录。`
 					: current.activeRequests || current.queuedRequests
 						? `本页活动/排队 ${current.activeRequests}/${current.queuedRequests}，请求仍由中央调度器处理。`
 						: '最近一分钟没有普通 HTTP、网络中止或慢响应异常。',
@@ -2565,7 +3254,7 @@ export class ReaderResourceMonitor {
 					: current.challengeState === 'active'
 						? `唯一 Cloudflare 验证由${current.challengeOwned ? '本页' : '其他标签页'}处理；不要重复刷新或打开验证窗口。`
 						: rateLimited
-							? '最近一分钟出现 429；只有该逻辑请求按 Retry-After 重试，后续请求仍由同一固定预防窗口有序放行。'
+							? '最近一分钟出现 429；同端点重复或跨端点证据会进入共享冷却，恢复时只放行一个探针。'
 							: '当前未发现 429 或 Cloudflare 验证阻塞。',
 			},
 		];
@@ -2658,7 +3347,7 @@ export class ReaderResourceMonitor {
 						? 'warning'
 						: 'normal'),
 				detail: mediaIssue
-					? `${mediaIssue.issue.detail}：${mediaIssue.event.path}。浏览器资源错误可能来自 CDN、CORS、编码或源地址失效。`
+					? `${mediaIssue.issue.detail}：${requestDisplayPath(mediaIssue.event)}。浏览器资源错误可能来自 CDN、CORS、编码或源地址失效。`
 					: media.hlsSources > 0
 						? `当前挂载 ${media.hlsSources} 个 HLS 源、原生可播 ${media.nativeHlsSources} 个、活动 Hls.js 实例 ${media.activeHlsPlayers}；${
 							hlsSupported
@@ -2754,13 +3443,14 @@ export class ReaderResourceMonitor {
 					: Math.max(event.startedAt, event.endedAt);
 				const priority = requestPriorityLabel(event.priority);
 				const tooltip = [
-					`${formatRequestTimestamp(event.queuedAt)} · ${event.method} ${event.path}`,
+					`${formatRequestTimestamp(event.queuedAt)} · ${event.method} ${requestDisplayPath(event)}`,
 					`${source === 'reader' ? '阅读器' : source === 'host' ? '原站' : '资源'} / ` +
 						`${REQUEST_TYPE_LABELS[event.type] ?? event.type} / ${requestStatus(event)}`,
 					requestTimingLabel(event, at),
 					priority ? `${priority}优先级` : '',
 					event.attempt > 1 ? `第 ${event.attempt} 次尝试` : '',
 					event.callSite ? `发起点 ${event.callSite}` : '',
+					requestContractDiagnostic(event),
 				].filter(Boolean).join(' · ');
 				if (queueEnd > lifecycleStart + 0.5) {
 					const queue = settingsElement(
@@ -2781,7 +3471,7 @@ export class ReaderResourceMonitor {
 					);
 					queue.style.setProperty('--ldp-request-flow-top', `${top}px`);
 					queue.dataset.ldpTooltipLabel =
-						`${event.method} ${event.path} · ` +
+						`${event.method} ${requestDisplayPath(event)} · ` +
 						`${formatRequestTimestamp(rawLifecycleStart)} → ` +
 						`${formatRequestTimestamp(queueEnd)} · ` +
 						`${requestWaitReasonLabel(event.waitReason)}排队 ` +
@@ -2803,7 +3493,7 @@ export class ReaderResourceMonitor {
 						);
 						permit.dataset.ldpTooltipLabel =
 							`${formatRequestTimestamp(queueEnd)} · ` +
-							`${event.method} ${event.path} · 调度放行`;
+							`${event.method} ${requestDisplayPath(event)} · 调度放行`;
 						track.append(permit);
 					}
 				}
@@ -2854,7 +3544,7 @@ export class ReaderResourceMonitor {
 						`${formatRequestTimestamp(Math.min(at, Math.max(
 							windowStart,
 							rawLifecycleEnd,
-						)))} · ${issue.label} · ${event.method} ${event.path} · ` +
+						)))} · ${issue.label} · ${event.method} ${requestDisplayPath(event)} · ` +
 						issue.detail;
 					track.append(marker);
 				}
@@ -2984,8 +3674,10 @@ export class ReaderResourceMonitor {
 			row.dataset.level = issue.level;
 			row.dataset.requestFlowType = event.type;
 			const caller = event.callSite || `${event.transport} 发起`;
+			const diagnostic = requestContractDiagnostic(event);
 			row.dataset.ldpTooltipLabel =
-				`${event.method} ${event.path} · ${issue.detail} · 发起点 ${caller}`;
+				`${event.method} ${requestDisplayPath(event)} · ${issue.detail} · ` +
+				`发起点 ${caller}${diagnostic ? ` · ${diagnostic}` : ''}`;
 			const time = settingsElement(
 				this.#options.document,
 				'time',
@@ -3008,15 +3700,16 @@ export class ReaderResourceMonitor {
 				'ldp-request-flow-anomaly-detail',
 			);
 			const path = settingsElement(this.#options.document, 'strong');
-			path.textContent = `${event.method} ${event.path}`;
+			path.textContent = `${event.method} ${requestDisplayPath(event)}`;
 			const timing = settingsElement(this.#options.document, 'small');
 			timing.textContent =
 				`${event.source === 'reader'
 					? '阅读器'
 					: event.source === 'host' ? '原站' : '资源'} / ` +
 				`${REQUEST_TYPE_LABELS[event.type] ?? event.type} · ` +
-				`${requestTimingLabel(event, at)} · ` +
-				`${issue.detail} · 发起点 ${caller}`;
+					`${requestTimingLabel(event, at)} · ` +
+					`${issue.detail} · 发起点 ${caller}` +
+					(diagnostic ? ` · ${diagnostic}` : '');
 			detail.append(path, timing);
 			row.append(time, kind, detail);
 			return row;
@@ -3046,14 +3739,17 @@ export class ReaderResourceMonitor {
 			if (issue) row.dataset.level = issue.level;
 			row.dataset.requestFlowType = event.type;
 			row.dataset.requestPhase = event.phase;
+			if (event.logicalId) row.dataset.requestLogicalId = event.logicalId;
+			if (event.decision) row.dataset.requestDecision = event.decision;
 			const priority = requestPriorityLabel(event.priority);
 			const caller = event.callSite || `${event.transport} 发起`;
+			const diagnostic = requestContractDiagnostic(event);
 			row.dataset.ldpTooltipLabel = [
-				`${event.method} ${event.path}`,
+				`${event.method} ${requestDisplayPath(event)}`,
 				priority ? `${priority}优先级` : '',
-				event.attempt > 1 ? `第 ${event.attempt} 次尝试` : '',
 				requestTimingLabel(event, at),
 				`发起点 ${caller}`,
+				diagnostic,
 			].filter(Boolean).join(' · ');
 			const time = settingsElement(this.#options.document, 'time');
 			time.dateTime = new Date(event.queuedAt).toISOString();
@@ -3109,7 +3805,19 @@ export class ReaderResourceMonitor {
 				'span',
 				'ldp-request-flow-path',
 			);
-			path.textContent = `${event.path} ← ${caller}`;
+			const target = settingsElement(
+				this.#options.document,
+				'strong',
+				'ldp-request-flow-target',
+			);
+			target.textContent = `${requestDisplayPath(event)} ← ${caller}`;
+			const contract = settingsElement(
+				this.#options.document,
+				'small',
+				'ldp-request-flow-contract',
+			);
+			contract.textContent = diagnostic || `${event.transport} · 未标记契约`;
+			path.append(target, contract);
 			row.append(time, source, type, priorityName, status, timing, path);
 			return row;
 		}));
@@ -3137,17 +3845,32 @@ export class ReaderResourceMonitor {
 		const cutoff = at - RETENTION_MS;
 		while (this.#samples.length && this.#samples[0]!.at < cutoff) {
 			this.#samples.shift();
+			this.#sampleRetentionDrops += 1;
 		}
 		for (let index = this.#performanceEvents.length - 1; index >= 0; index -= 1) {
 			if (this.#performanceEvents[index]!.at < cutoff) {
 				this.#performanceEvents.splice(index, 1);
+				this.#evidenceRetentionDrops += 1;
 			}
 		}
 		for (let index = this.#visibilityTimeline.length - 1; index >= 0; index -= 1) {
 			if (
 				this.#visibilityTimeline[index]!.at < cutoff &&
 				index !== this.#visibilityTimeline.length - 1
-			) this.#visibilityTimeline.splice(index, 1);
+			) {
+				this.#visibilityTimeline.splice(index, 1);
+				this.#visibilityRetentionDrops += 1;
+			}
+		}
+		const requestRuntimeCutoff = at - REQUEST_RUNTIME_RETENTION_MS;
+		for (let index = this.#requestRuntimeStates.length - 1; index >= 0; index -= 1) {
+			if (
+				this.#requestRuntimeStates[index]!.lastObservedAt <
+					requestRuntimeCutoff
+			) {
+				this.#requestRuntimeStates.splice(index, 1);
+				this.#requestRuntimeRetentionDrops += 1;
+			}
 		}
 		const retainedRequestIds = new Set(
 			this.requests.snapshot.events.map((event) => event.id),

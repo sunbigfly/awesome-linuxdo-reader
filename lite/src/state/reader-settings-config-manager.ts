@@ -8,6 +8,7 @@ import {
 	createReaderWebDavDefaultConfig,
 	normalizeReaderWebDavConfig,
 	READER_WEBDAV_CATEGORIES,
+	validateReaderWebDavConfig,
 	type ReaderWebDavCategorySelection,
 	type ReaderWebDavConfig,
 } from '../sync/reader-webdav-model.js';
@@ -227,7 +228,7 @@ function parsePortableTranslationConfig(
 		activeBaseUrl !== source.activeBaseUrl ||
 		!profiles.some((profile) => profile.baseUrl === activeBaseUrl)
 	) throw invalidConfig();
-	return Object.freeze({
+	return normalizeReaderTranslationConfig({
 		profiles: Object.freeze(profiles),
 		activeBaseUrl,
 	});
@@ -248,7 +249,7 @@ function portableWebDavConfig(
 
 function parsePortableWebDavConfig(
 	value: unknown,
-	legacyWithoutOfflineTopics = false,
+	sourceVersion = READER_SETTINGS_CONFIG_EXPORT_VERSION,
 ): ReaderWebDavConfig | null {
 	if (value === null) return null;
 	const source = record(value);
@@ -260,10 +261,21 @@ function parsePortableWebDavConfig(
 		'autoSyncIntervalMinutes',
 	]);
 	const categories = record(source.categories);
-	const expectedCategories = legacyWithoutOfflineTopics
+	const historyCategories = new Set([
+		'notification-history',
+		'activity-history',
+	]);
+	const missesBothHistoryCategories = [...historyCategories].every(
+		(category) => !Object.hasOwn(categories, category),
+	);
+	const expectedCategories = sourceVersion ===
+		READER_SETTINGS_CONFIG_PREVIOUS_PORTABLE_VERSION
 		? READER_WEBDAV_CATEGORIES.filter((category) =>
-			category !== 'offline-topics')
-		: READER_WEBDAV_CATEGORIES;
+			category !== 'offline-topics' && !historyCategories.has(category))
+		: missesBothHistoryCategories
+			? READER_WEBDAV_CATEGORIES.filter((category) =>
+				!historyCategories.has(category))
+			: READER_WEBDAV_CATEGORIES;
 	exactKeys(categories, expectedCategories);
 	if (Object.values(categories).some((selected) => typeof selected !== 'boolean')) {
 		throw invalidConfig();
@@ -275,6 +287,9 @@ function parsePortableWebDavConfig(
 		username: '',
 		password: '',
 	});
+	if (validateReaderWebDavConfig(normalized, {
+		requireCredentials: false,
+	}).length) throw invalidConfig();
 	const portable = portableWebDavConfig(normalized);
 	if (
 		portable.endpoint !== source.endpoint ||
@@ -305,7 +320,8 @@ function parseCustomSites(value: unknown): readonly string[] {
 
 /**
  * 设置文件的 v7 安全组合 codec。v5 仍委托 canonical preferences codec 导入；
- * v6 作为缺少离线 Topic 类别的兼容格式继续接受，v7 只扩展非秘密配置。
+ * v6 作为缺少离线 Topic 与历史类别的兼容格式继续接受；较早导出的 v7
+ * 也允许同时缺少两个历史开关，缺失项会规范化为默认关闭。
  */
 export class ReaderSettingsConfigCodec<TPreferences extends object> {
 	readonly #preferences: Pick<
@@ -405,7 +421,7 @@ export class ReaderSettingsConfigCodec<TPreferences extends object> {
 			translation: parsePortableTranslationConfig(source.translation),
 			webDav: parsePortableWebDavConfig(
 				source.webDav,
-				schemaVersion === READER_SETTINGS_CONFIG_PREVIOUS_PORTABLE_VERSION,
+				schemaVersion,
 			),
 		});
 	}

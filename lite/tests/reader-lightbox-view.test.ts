@@ -136,6 +136,25 @@ assert(
 	view.slots.image.src === first.previewSrc,
 	'灯箱 view 必须一次构造旧 CSS 契约和可复用评论 slots',
 );
+let lightboxWheelLeaks = 0;
+mount.addEventListener('wheel', () => {
+	lightboxWheelLeaks += 1;
+});
+const lightboxBoundaryWheel = new window.Event('wheel', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperties(lightboxBoundaryWheel, {
+	deltaX: { value: 0 },
+	deltaY: { value: 120 },
+	deltaMode: { value: 0 },
+});
+view.slots.root.querySelector('.ldp-lb-toolbar')!
+	.dispatchEvent(lightboxBoundaryWheel);
+assert(
+	lightboxBoundaryWheel.defaultPrevented && lightboxWheelLeaks === 0,
+	'全屏灯箱非滚动区不得把滚轮泄漏给宿主页面',
+);
 const lightboxIconControls = [
 	...view.slots.root.querySelectorAll<HTMLElement>(
 		'[data-lb-action]:not(.ldp-lb-zoom-value),.ldp-lb-prev,.ldp-lb-next,.ldp-lb-description-toggle',

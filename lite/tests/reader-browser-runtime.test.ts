@@ -88,6 +88,7 @@ interface TestPost extends DiscourseTopicPostInput, CanonicalActionPost {
 	readonly reply_to_post_number: number | null;
 	readonly username: string;
 	readonly cooked: string;
+	readonly hidden?: boolean;
 	readonly read?: boolean;
 	readonly accepted_answer?: boolean;
 	readonly avatar_template?: string;
@@ -372,6 +373,25 @@ const topic14: TestTopic = Object.freeze({
 		]),
 	}),
 });
+const topic16: TestTopic = Object.freeze({
+	...topic11,
+	id: 16,
+	title: 'Cloudflare recovered target topic',
+	post_stream: Object.freeze({
+		stream: Object.freeze([161]),
+		posts: Object.freeze([
+			Object.freeze({
+				id: 161,
+				topic_id: 16,
+				post_number: 1,
+				reply_to_post_number: null,
+				username: 'challenge-root',
+				cooked: 'challenge-recovered-content',
+				read: true,
+			}),
+		]),
+	}),
+});
 const topic13Gate = deferred<TestTopic>();
 const { document: parsedDocument, window: parsedWindow } = parseHTML(
 	'<!doctype html><html><head><meta name="generator" content="Discourse"></head>' +
@@ -457,6 +477,8 @@ let topic12Attempts = 0;
 let topic14Attempts = 0;
 let topic14RefreshFailure = false;
 let topic15Attempts = 0;
+let topic16Attempts = 0;
+let topic16Challenged = true;
 let challengeVerificationRateLimited = false;
 const openRetryDelays: number[] = [];
 const nativeHost = {
@@ -529,11 +551,20 @@ const nativeHost = {
 					}
 					return Promise.resolve(topic14);
 				}
-				if (path.startsWith('/t/15.json?')) {
-					topic15Attempts += 1;
-					return Promise.reject({ status: 503 });
-				}
-				return Promise.resolve(
+					if (path.startsWith('/t/15.json?')) {
+						topic15Attempts += 1;
+						return Promise.reject({ status: 503 });
+					}
+					if (path.startsWith('/t/16.json?')) {
+						topic16Attempts += 1;
+						return topic16Challenged
+							? Promise.reject({
+								status: 429,
+								cloudflareMitigated: true,
+							})
+							: Promise.resolve(topic16);
+					}
+					return Promise.resolve(
 					path.startsWith('/t/10.json?')
 						? topic10Response
 						: path.startsWith('/t/11.json?')
@@ -568,6 +599,8 @@ let topicRootSizeCallback:
 		readonly blockSize: number;
 	}>[]) => void) | null = null;
 let topicFactoryComposer: unknown = null;
+let topicFactoryAvatarRecovery:
+	((source: string) => Promise<string>) | null = null;
 let template: ReturnType<typeof createReaderShellTemplate> | null = null;
 const stage = createReaderBrowserRuntimeStage<TestPreferences, TestTopic, TestPost>({
 	shell: {
@@ -672,6 +705,13 @@ const stage = createReaderBrowserRuntimeStage<TestPreferences, TestTopic, TestPo
 			responseOperationTimeoutMs: 5_000,
 			cacheFlightTtlMs: 30_000,
 			cacheFlightStaleMs: 45_000,
+		},
+		notifications: {
+			backgroundWarmDelayMs: 0,
+			historyStepDelayMs: 0,
+		},
+		bookmarks: {
+			backgroundWarmDelayMs: 0,
 		},
 		openRetryDelay: async (milliseconds, signal) => {
 			if (signal.aborted) throw signal.reason;
@@ -791,6 +831,7 @@ const stage = createReaderBrowserRuntimeStage<TestPreferences, TestTopic, TestPo
 		topicFactory: {
 			createDomOptions: (bundle, _context, _root, services) => {
 				topicFactoryComposer = services.composer;
+				topicFactoryAvatarRecovery = services.recoverAvatarSource;
 				return {
 					estimatedRootSize: 300,
 					identity: (post) => ({
@@ -1037,6 +1078,17 @@ assert(
 	`应用必须原子创建浏览器 Reader 运行时：${applicationDiagnostics.join(';')}`,
 );
 assert(runtime !== null, '浏览器 stage 必须暴露唯一运行时');
+await new Promise<void>((resolve) => setTimeout(resolve, 20));
+const startupSelfObservation = (
+	runtime as ReaderBrowserRuntime<TestTopic, TestPost>
+).userObservations.entry('viewer');
+assert(
+	startupSelfObservation !== null &&
+		startupSelfObservation.pages === 0 &&
+		startupSelfObservation.recordCount === 0 &&
+		startupSelfObservation.currentStream === null,
+	'application 启动可以恢复账号私有通知与收藏缓存，但不得自动采集当前账号的七类公开用户观察历史',
+);
 assert(
 	nativeAjaxObservationState() === '2/2/0',
 	'application 必须只安装一次具名宿主 Ajax 观察器',
@@ -1082,6 +1134,21 @@ assert(
 		manualChallengeNotice.hidden,
 	'普通 429 不得冒充未过盾；原生探针已确认通行时必须零开窗解闸并立即隐藏提示',
 );
+const challengeProbeEvent = challengeRuntime.data.requests.snapshot.events
+	.filter((event) => event.path === '/session/current.json')
+	.at(-1);
+assert(
+	challengeProbeEvent?.source === 'reader' &&
+		challengeProbeEvent.logicalId === 'CF-probe' &&
+		challengeProbeEvent.profile === 'challenge-probe' &&
+		challengeProbeEvent.namespace === 'cloudflare-session' &&
+		challengeProbeEvent.lane === 'control' &&
+		challengeProbeEvent.queryShape === '?_' &&
+		challengeProbeEvent.status === 429 &&
+		challengeProbeEvent.decision ===
+			'challenge-probe-rate-limited-pass',
+	'会话验证探针必须进入 Reader 请求账本，并区分已过盾但仍被普通 429 限流',
+);
 Object.defineProperty(parsedWindow, 'open', {
 	configurable: true,
 	value: originalWindowOpen,
@@ -1094,7 +1161,8 @@ assert(
 	settingsView !== null &&
 		layoutStyle !== null &&
 		document.querySelectorAll('.ldp-settings-toggle').length === 1 &&
-		document.querySelectorAll('.ldp-settings-popover').length === 1,
+		document.querySelectorAll('.ldp-settings-popover').length === 1 &&
+		document.querySelectorAll('.ldp-user-info-content').length === 0,
 	'可写设置必须由 browser stage 同时创建唯一 Settings View 和 Shell 入口',
 );
 const shellRoot = document.querySelector<HTMLElement>('.ldp-overlay')!;
@@ -1122,8 +1190,16 @@ assert(
 assert(
 	(settingsView as ReaderSettingsView<TestPreferences>).snapshot.open &&
 		(settingsView as ReaderSettingsView<TestPreferences>).snapshot
-			.activePanelId === 'performance',
-	'Browser runtime 设置入口必须直接复用同一个 Settings controller 状态',
+			.activePanelId === 'performance' &&
+		document.querySelectorAll('.ldp-user-info-content').length === 0,
+	'Browser runtime 设置入口必须复用唯一状态，且非账号面板不得预先加载用户资料',
+);
+(settingsView as ReaderSettingsView<TestPreferences>).open('user');
+assert(
+	(settingsView as ReaderSettingsView<TestPreferences>).snapshot.activePanelId ===
+			'user' &&
+		document.querySelectorAll('.ldp-user-info-content').length === 1,
+	'账号资料视图只能在用户显式打开对应设置面板时按需挂载',
 );
 (settingsView as ReaderSettingsView<TestPreferences>).close();
 assert(
@@ -1220,14 +1296,15 @@ assert(
 				activeRuntime.notificationController !== null &&
 				activeRuntime.notificationPanelView !== null &&
 				activeRuntime.bookmarkController !== null &&
-				activeRuntime.bookmarkPanelView !== null &&
-				appEventSubscriptions.has('notifications:changed') &&
-				appEventSubscriptions.has('bookmarks:changed') &&
+					activeRuntime.bookmarkPanelView !== null &&
+					appEventSubscriptions.has('notifications:changed') &&
+					appEventSubscriptions.has('user-menu:notification-click') &&
+					appEventSubscriptions.has('bookmarks:changed') &&
 				appEventSubscriptions.has(
 					'discourse-reactions:reaction-toggled',
 				) &&
-				shellRoot.querySelectorAll('.ldp-notification-tab').length === 14 &&
-				shellRoot.querySelectorAll('.ldp-bookmark-tab').length === 3 &&
+				shellRoot.querySelectorAll('.ldp-notification-tab').length === 13 &&
+				shellRoot.querySelectorAll('.ldp-bookmark-tab').length === 5 &&
 				shellRoot.querySelector('.ldp-history-sort-toggle')
 					?.getAttribute('aria-pressed') === 'true' &&
 				shellRoot.querySelector<HTMLInputElement>(
@@ -1252,6 +1329,24 @@ assert(
 	await runtimeConfirmation === false,
 	'浏览器 runtime 必须只创建一份可供历史/收藏/设置复用的确认 surface',
 );
+const delayedChronicleSend = [...nativeAjaxObservationHandlers]
+	.find(([name]) => name.startsWith('ajaxSend.'))?.[1];
+const delayedChronicleComplete = [...nativeAjaxObservationHandlers]
+	.find(([name]) => name.startsWith('ajaxComplete.'))?.[1];
+const delayedChronicleResponse = Object.freeze({
+	status: 404,
+	responseURL: 'https://linux.do/posts/by_number/10/2.json',
+});
+delayedChronicleSend?.(undefined, delayedChronicleResponse, {
+	url: '/posts/by_number/10/2.json',
+	type: 'GET',
+});
+delayedChronicleComplete?.(undefined, delayedChronicleResponse);
+assert(
+	!activeRuntime.chronicle.snapshot.records.some((record) =>
+		record.topicId === 10 && record.postNumber === 2),
+	'404 先于 Topic 正文挂载时不得生成无正文的岁月史书记录',
+);
 const opened = await activeRuntime.open(10);
 assert(
 	opened.status === 'opened',
@@ -1264,8 +1359,38 @@ assert(
 	opened.value.services.session.pageSize === 24,
 	'设置更新后的新 Topic 必须直接使用当前批次大小，不能回退构造期旧值',
 );
+assert(
+	Number(opened.value.dom.replyTreePresentation.revision.split(':')[2]) ===
+		opened.value.services.session.postStreamRevision,
+	'浏览器实际装配的回复树投影必须订阅 TopicSession post_stream 版本，不能绕过精确 gap 缓存失效链',
+);
 if (opened.status === 'opened') {
 	const activeSession = opened.value.services.session;
+	const archiveConfirmedAt = Date.now();
+	assert(
+		activeSession.preserveUnavailablePost(2, 404, archiveConfirmedAt) &&
+			activeRuntime.chronicle.snapshot.records.some((record) =>
+				record.topicId === 10 && record.postNumber === 2),
+		'正文与 404 存档稍后提交时，运行时必须重放尚未处理的请求并补记岁月史书',
+	);
+	activeRuntime.chronicle.clear();
+	assert(
+		activeSession.preserveUnavailablePost(2, 404, archiveConfirmedAt + 1) &&
+			activeRuntime.chronicle.snapshot.records.some((record) =>
+				record.topicId === 10 &&
+				record.postNumber === 2 &&
+				record.callSite === 'topic-local-archive'),
+		'请求事件已经消费后，canonical 本地 404 存档仍必须独立回填岁月史书',
+	);
+	activeSession.ingestPosts(
+		[posts[1]!],
+		'target-refresh',
+		archiveConfirmedAt + 2,
+	);
+	assert(
+		activeSession.localArchiveState().posts.length === 0,
+		'竞态回归取证后必须恢复权威楼层，避免影响后续运行时契约',
+	);
 	const openNative =
 		shellRoot.querySelector<HTMLAnchorElement>('.ldp-open');
 	assert(
@@ -1362,12 +1487,17 @@ assert(
 );
 assert(
 	activeRuntime.history.entry(10)?.title === 'Initial topic title' &&
+	activeRuntime.history.entry(10)?.topicSubtitle ===
+		'2 帖 · 40 浏览 · 5 赞 · 2 用户' &&
+	activeRuntime.history.entry(10)?.categoryId === 7 &&
+	activeRuntime.history.entry(10)?.categoryName === '测试分类' &&
+	activeRuntime.history.entry(10)?.tags.join(',') === '纯水' &&
 	activeRuntime.historyNavigation.snapshot.activeTopicId === 10 &&
 	runtimeStorage.values.has(readerAccountScopedStorageIdentity(
 		READER_HISTORY_STORAGE_KEY,
 		'account:test',
 	).key),
-	'Topic 打开必须写入账号作用域的唯一历史仓储并激活 Shell 级导航状态',
+	'Topic 打开必须把副标题、类别和标签写入账号作用域历史并激活导航状态',
 );
 assert(
 	opened.value.topicTimeline.snapshot.totalPostCount === 2 &&
@@ -1401,8 +1531,9 @@ assert(
 	notificationTarget.topic.status === 'reused' &&
 	notificationTarget.navigation?.status === 'revealed' &&
 	notificationTarget.navigation.source === 'notification' &&
+	activeRuntime.history.entry(10)?.postNumber === 1 &&
 	opened.value.topicTimeline.snapshot.currentPostNumber === 1,
-	'同 Topic 的通知/消息/初始路由必须复用 openTarget 与唯一 navigation；内容精确定位嵌套目标，时间轴只回写所属正文根楼层',
+	'Reader URL 打开必须计入 Topic 历史，但不得用 URL 目标楼层覆盖上次切出位置',
 );
 const captureViewportAnchor = opened.value.dom.captureViewportAnchor.bind(
 	opened.value.dom,
@@ -1494,6 +1625,11 @@ assert(
 assert(
 	topicFactoryComposer === activeRuntime.composer,
 	'Topic Post features 必须只接收 application 唯一原生 composer，不能自行 lookup/构造',
+);
+assert(
+	await topicFactoryAvatarRecovery?.('/avatar/runtime-user.png') ===
+		'https://linux.do/avatar/runtime-user.png',
+	'Topic 正文头像恢复必须接入运行时唯一图片资源服务并返回校验后的稳定 URL',
 );
 const imageClick = new parsedWindow.Event('click', {
 	bubbles: true,
@@ -1648,9 +1784,51 @@ assert(
 	Number(opened.value.topicTimeline.snapshot.currentPostNumber) === 1,
 	'实时新增的嵌套楼层仍须同步 canonical 总数；Composer 精确定位子楼层后，时间轴只回写所属正文根楼层',
 );
+const captureViewportAnchorBeforeQuote =
+	opened.value.dom.captureViewportAnchor.bind(opened.value.dom);
+const restoreViewportAnchorBeforeQuote =
+	opened.value.dom.restoreViewportAnchor.bind(opened.value.dom);
+const quoteSourceViewport = Object.freeze({
+	postNumber: discoursePostNumber(3),
+	postOffset: 19,
+	scrollTop: 900,
+	scrollRange: 1_200,
+	scrollRatio: 0.75,
+});
+let simulatedQuoteViewport = quoteSourceViewport;
+let capturingQuoteSource = true;
+const quoteViewportRestores: Array<Readonly<{
+	readonly postNumber: number;
+	readonly postOffset: number;
+	readonly scrollTop: number;
+	readonly scrollRatio?: number;
+}>> = [];
+Object.defineProperty(opened.value.dom, 'captureViewportAnchor', {
+	configurable: true,
+	value: () => capturingQuoteSource
+		? quoteSourceViewport
+		: simulatedQuoteViewport,
+});
+Object.defineProperty(opened.value.dom, 'restoreViewportAnchor', {
+	configurable: true,
+	value: (anchor: typeof quoteSourceViewport) => {
+		quoteViewportRestores.push(anchor);
+		simulatedQuoteViewport = anchor.scrollRatio === undefined
+			? Object.freeze({ ...anchor, scrollRange: 1_200, scrollRatio: 0.75 })
+			: Object.freeze({
+				postNumber: discoursePostNumber(1),
+				postOffset: 0,
+				scrollTop: 0,
+				scrollRange: 1_200,
+				scrollRatio: 0,
+			});
+		return true;
+	},
+});
 document.querySelector<HTMLElement>('[data-post-number="3"]')
 	?.querySelector<HTMLButtonElement>('[data-reader-context-quote="jump"]')
 	?.click();
+	capturingQuoteSource = false;
 for (let index = 0; index < 4; index += 1) await Promise.resolve();
 const capturedQuoteHighlight =
 	opened.value.topicContextFeature.captureQuoteHighlightState();
@@ -1660,6 +1838,29 @@ assert(
 	capturedQuoteHighlight?.postNumber === 1,
 	'运行时引用跳转必须从唯一 navigation 取得 canonical 元素并由 thread-context owner 精确高亮',
 );
+shellRoot.querySelector<HTMLButtonElement>(
+	'.ldp-quote-highlight-return',
+)?.click();
+for (let turn = 0; turn < 100 && quoteViewportRestores.length < 2; turn += 1) {
+	await Promise.resolve();
+}
+assert(
+	quoteViewportRestores.length === 2 &&
+	quoteViewportRestores[0]?.scrollRatio === 0.75 &&
+	quoteViewportRestores[1]?.postNumber === 3 &&
+	quoteViewportRestores[1]?.postOffset === 19 &&
+	quoteViewportRestores[1]?.scrollRatio === undefined &&
+	simulatedQuoteViewport.postNumber === 3,
+	'同 Topic 引用返回若比例恢复仍停在高亮目标，必须复用同一锚点的楼层与楼内偏移精确回退',
+);
+Object.defineProperty(opened.value.dom, 'captureViewportAnchor', {
+	configurable: true,
+	value: captureViewportAnchorBeforeQuote,
+});
+Object.defineProperty(opened.value.dom, 'restoreViewportAnchor', {
+	configurable: true,
+	value: restoreViewportAnchorBeforeQuote,
+});
 const deepCreatedPost: TestPost = Object.freeze({
 	id: 104,
 	topic_id: 10,
@@ -1693,14 +1894,43 @@ assert(
 const deepTarget = await activeRuntime.openTarget({
 	topicId: 10,
 	postNumber: 4,
+	boostId: 404,
 	source: 'notification',
+	highlight: true,
 });
+const deepPostRoots = [
+	...document.querySelectorAll<HTMLElement>('[data-post-number="4"]'),
+];
+const deepBoostBubbles = [
+	...document.querySelectorAll<HTMLElement>('[data-boost-id="404"]'),
+];
 assert(
 	deepTarget.topic.status === 'reused' &&
 	opened.value.topicContext.snapshot().discussion?.rootPostNumber === 3 &&
 	opened.value.topicContext.snapshot().discussion?.entries
-		.some((entry) => entry.postNumber === 4),
-	'消息/通知/链接命中深层楼层时必须在 canonical 导航补流后打开所属完整讨论，而不是留在隐藏正式楼层',
+		.some((entry) => entry.postNumber === 4) &&
+	deepPostRoots.some((root) =>
+		root.closest('.ldp-descendant-replies-layer') &&
+		root.classList.contains('ldp-jump-highlight')) &&
+	deepBoostBubbles.some((bubble) =>
+		bubble.closest('.ldp-descendant-replies-layer') &&
+		bubble.classList.contains('ldp-boost-target-highlight')),
+	`Boost 入口命中深层楼层时必须打开所属完整讨论，并同时保留楼层高亮与不同颜色的 Boost 精确闪烁：${JSON.stringify({
+		topic: deepTarget.topic.status,
+		navigation: deepTarget.navigation?.status,
+		discussionRoot:
+			opened.value.topicContext.snapshot().discussion?.rootPostNumber,
+		postHighlights: deepPostRoots.map((root) => ({
+			connected: root.isConnected,
+			discussion: Boolean(root.closest('.ldp-descendant-replies-layer')),
+			highlighted: root.classList.contains('ldp-jump-highlight'),
+		})),
+		boostHighlights: deepBoostBubbles.map((bubble) => ({
+			connected: bubble.isConnected,
+			discussion: Boolean(bubble.closest('.ldp-descendant-replies-layer')),
+			highlighted: bubble.classList.contains('ldp-boost-target-highlight'),
+		})),
+	})}`,
 );
 opened.value.topicContext.closeDiscussion();
 opened.value.topicOnlyOp.setEnabled(true);
@@ -1879,6 +2109,21 @@ assert(
 );
 const latestTimelinePostNumberBeforeClose =
 	activeRuntime.shell.activeValue?.topicTimeline.snapshot.currentPostNumber;
+const exitPositionPostNumber = discoursePostNumber(4);
+Object.defineProperty(
+	activeRuntime.shell.activeValue!.dom,
+	'captureViewportAnchor',
+	{
+		configurable: true,
+		value: () => ({
+			postNumber: exitPositionPostNumber,
+			postOffset: 23,
+			scrollTop: 423,
+			scrollRange: 1_200,
+			scrollRatio: 0.3525,
+		}),
+	},
+);
 const runtimeClose = activeRuntime.close();
 assert(
 	activeRuntime.shell.view.root.hidden &&
@@ -1914,14 +2159,28 @@ const storedHistoryAfterClose = JSON.parse(
 		READER_HISTORY_STORAGE_KEY,
 		'account:test',
 	).key) ?? '[]',
-) as readonly Readonly<{ topicId: number; postNumber: number }>[];
+) as readonly Readonly<{
+	topicId: number;
+	postNumber: number;
+	viewport?: Readonly<{
+		scrollTop?: number;
+		scrollRange?: number;
+		scrollRatio?: number;
+	}>;
+}>[];
+const storedExitHistory = storedHistoryAfterClose.find(
+	(entry) => entry.topicId === 10,
+);
 assert(
 	latestTimelinePostNumberBeforeClose !== undefined &&
-	activeRuntime.history.entry(10)?.postNumber ===
-		latestTimelinePostNumberBeforeClose &&
-		storedHistoryAfterClose.find((entry) => entry.topicId === 10)
-			?.postNumber === latestTimelinePostNumberBeforeClose,
-	'关闭 Topic 必须把唯一时间轴的最新楼层同步到内存与持久历史',
+	latestTimelinePostNumberBeforeClose !== exitPositionPostNumber &&
+	activeRuntime.history.entry(10)?.postNumber === exitPositionPostNumber &&
+		activeRuntime.history.entry(10)?.viewport?.scrollRatio === 0.3525 &&
+		storedExitHistory?.postNumber === exitPositionPostNumber &&
+		storedExitHistory.viewport?.scrollTop === 423 &&
+		storedExitHistory.viewport.scrollRange === 1_200 &&
+		storedExitHistory.viewport.scrollRatio === 0.3525,
+	'关闭 Topic 必须持久化最后切出的绝对坐标和高度比例，prepareClose 不得再用时间轴楼层覆盖',
 );
 assert(
 	nativeCalls.some((call) => call.path === '/topics/timings') &&
@@ -1942,8 +2201,9 @@ assert(
 		opened.value.topicLiveNavigationView.scope.destroyed &&
 		opened.value.topicActionRail?.scope.destroyed &&
 		!shellRoot.querySelector('.ldp-topic-action-rail') &&
-		appEventSubscriptions.size === 6 &&
+		appEventSubscriptions.size === 7 &&
 		appEventSubscriptions.has('notifications:changed') &&
+		appEventSubscriptions.has('user-menu:notification-click') &&
 		appEventSubscriptions.has('bookmarks:changed') &&
 		appEventSubscriptions.has(
 			'discourse-reactions:reaction-toggled',
@@ -2057,11 +2317,31 @@ activeRuntime.historyNavigation.setAnchor(10, {
 	viewport: {
 		postNumber: 2,
 		postOffset: 0,
-		scrollTop: 0,
+		scrollTop: 250,
+		scrollRange: 1_000,
+		scrollRatio: 0.25,
 	},
 	replyWindow: capturedDiscussionState,
 	quoteHighlight: capturedQuoteHighlight,
 });
+const historyScrollRoot = activeRuntime.shell.view.body;
+Object.defineProperties(historyScrollRoot, {
+	clientHeight: {
+		configurable: true,
+		get: () => 400,
+	},
+	scrollHeight: {
+		configurable: true,
+		get: () => 2_000,
+	},
+	scrollTo: {
+		configurable: true,
+		value: (options: ScrollToOptions) => {
+			historyScrollRoot.scrollTop = Number(options.top) || 0;
+		},
+	},
+});
+historyScrollRoot.scrollTop = 0;
 await activeRuntime.userCardView.open('runtime-user', runtimeUserAnchor);
 activeRuntime.userMediaViewer?.open({
 	item: Object.freeze({
@@ -2085,20 +2365,20 @@ const restoredHistory = await activeRuntime.historyNavigation.navigate('back');
 assert(
 	restoredHistory.status === 'restored' &&
 	activeRuntime.shell.activeTopicId === 10 &&
-	activeRuntime.shell.activeValue?.topicTimeline.snapshot.currentPostNumber === 2 &&
-	activeRuntime.shell.activeValue?.topicContext.snapshot().discussion
-		?.rootPostNumber === 2 &&
+	activeRuntime.shell.activeValue?.topicTimeline.snapshot.currentPostNumber === 1 &&
+	activeRuntime.shell.activeValue?.topicContext.snapshot().discussion === null &&
 	activeRuntime.shell.activeValue?.topicContextFeature
-		.captureQuoteHighlightState()?.postNumber === 1 &&
-	activeRuntime.shell.view.root.querySelector(
-		'[data-post-number="1"] mark.ldp-quote-match',
-	) &&
+		.captureQuoteHighlightState() === null &&
+	Number(historyScrollRoot.scrollTop) === 400 &&
+	!activeRuntime.shell.view.root.querySelector('.ldp-jump-highlight') &&
+	!activeRuntime.shell.view.root.querySelector('mark.ldp-quote-match') &&
 	activeRuntime.historyNavigation.snapshot.forward.some(
 		(topicId) => Number(topicId) === 11,
 	),
-	`历史后退必须复用 Shell open、Topic navigation 与根布局恢复子楼层，并维护唯一 forward 栈：${JSON.stringify({
+	`历史后退必须按新高度换算同一进度，不得导航、闪烁或恢复任何楼层语义，并维护唯一 forward 栈：${JSON.stringify({
 		status: restoredHistory.status,
 		activeTopicId: activeRuntime.shell.activeTopicId,
+		scrollTop: historyScrollRoot.scrollTop,
 		currentPostNumber:
 			activeRuntime.shell.activeValue?.topicTimeline.snapshot.currentPostNumber,
 		discussionRoot:
@@ -2119,7 +2399,18 @@ assert(
 	'历史切帖必须经 Shell switching 边界释放 UserCard、viewer、identity 与 action surface',
 );
 const restoredActive = activeRuntime.shell.activeValue!;
+await restoredActive.topicContext.openDiscussion(2);
 restoredActive.topicOnlyOp.setEnabled(true);
+Object.defineProperty(restoredActive.dom, 'captureViewportAnchor', {
+	configurable: true,
+	value: () => ({
+		postNumber: 2,
+		postOffset: 23,
+		scrollTop: 400,
+		scrollRange: 1_600,
+		scrollRatio: 0.25,
+	}),
+});
 topic10Response = rebuiltTopic;
 const callsBeforeHeaderRefresh = nativeCalls.length;
 const refreshTopicButton = shellRoot.querySelector<HTMLButtonElement>(
@@ -2153,7 +2444,7 @@ assert(
 			'Rebuilt topic title' &&
 		activeRuntime.shell.activeValue?.topicOnlyOp.snapshot.enabled &&
 		activeRuntime.shell.activeValue?.topicTimeline.snapshot
-			.currentPostNumber === 1 &&
+			.currentPostNumber === 2 &&
 		activeRuntime.shell.activeValue?.topicContext.snapshot().discussion
 			?.rootPostNumber === 2 &&
 		headerRefreshCalls.filter((call) =>
@@ -2168,7 +2459,7 @@ assert(
 		!refreshTopicButton.disabled &&
 		!refreshTopicButton.classList.contains('is-refreshing') &&
 		!refreshTopicButton.hasAttribute('aria-busy'),
-	`顶部刷新必须复用清缓存、关闭、强制重开与历史恢复事务，保留完整讨论和只看楼主状态，并把隐藏的当前楼层归一到楼主：${JSON.stringify({
+	`顶部刷新必须复用清缓存、关闭、目标楼层重开与精确锚点恢复事务，保留完整讨论、当前楼层和只看楼主状态：${JSON.stringify({
 		activeTopicId: activeRuntime.shell.activeTopicId,
 		rebuilt: activeRuntime.shell.activeValue !== restoredActive,
 		oldDestroyed: restoredActive.topicHeader.scope.destroyed,
@@ -2542,6 +2833,40 @@ assert(
 		semanticSourceRoot?.classList.contains('ldp-jump-highlight') &&
 		!physicalAnchorRoot?.classList.contains('ldp-jump-highlight'),
 	'引用从 #1 跳出后返回时，必须静默恢复 #2 的物理视野并只闪烁语义来源 #1',
+);
+const challengedTarget = await activeRuntime.open(16);
+assert(
+	challengedTarget.status === 'failed' &&
+		topic16Attempts === 1 &&
+		!manualChallengeNotice.hidden &&
+		(await activeRuntime.permit.snapshot()).challengeState === 'required',
+	`新发起的 Topic 若在 passed 吸收期仍被 cf-mitigated 拒绝，必须建立新的人工验证世代并保留失败目标：${JSON.stringify({
+		status: challengedTarget.status,
+		topic16Attempts,
+		noticeHidden: manualChallengeNotice.hidden,
+		challengeState: (await activeRuntime.permit.snapshot()).challengeState,
+	})}`,
+);
+topic16Challenged = false;
+manualChallengeLink.click();
+for (let turn = 0; turn < 2_000; turn += 1) {
+	if (activeRuntime.shell.activeTopicId === 16 && manualChallengeNotice.hidden) {
+		break;
+	}
+	await new Promise((resolve) => setTimeout(resolve, 1));
+}
+assert(
+	activeRuntime.shell.activeTopicId === 16 &&
+		topic16Attempts === 2 &&
+		manualChallengeNotice.hidden &&
+		shellRoot.querySelector('.ldp-selection-toast')?.textContent
+			?.includes('目标帖子已继续加载'),
+	`人工过盾必须只重放最新失败 Topic 一次，并以该业务响应决定恢复结果：${JSON.stringify({
+		activeTopicId: activeRuntime.shell.activeTopicId,
+		topic16Attempts,
+		noticeHidden: manualChallengeNotice.hidden,
+		feedback: shellRoot.querySelector('.ldp-selection-toast')?.textContent,
+	})}`,
 );
 await activeRuntime.close();
 application.destroy();

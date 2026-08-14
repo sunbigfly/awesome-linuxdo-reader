@@ -9,9 +9,15 @@ import {
 } from '../discourse/identifiers.js';
 import { LifecycleScope, type Cleanup } from '../kernel/lifecycle.js';
 import { Signal } from '../kernel/signal.js';
-import type {
-	ReadStateConfirmation,
-	ReadStateCoordinationPort,
+import {
+	RequestChallengeWaitSuppressedError,
+	RequestRateLimitError,
+	RequestStatusError,
+} from '../network/coordinated-request-client.js';
+import {
+	ReadStateChallengeHaltedError,
+	type ReadStateConfirmation,
+	type ReadStateCoordinationPort,
 } from './read-state-coordination.js';
 
 export type ReadVisibility = 'root' | 'nested';
@@ -73,8 +79,13 @@ export interface ReadStateControllerOptions {
 	readonly coordination?: ReadStateCoordinationPort;
 	readonly batchSize?: number;
 	readonly retryDelayMs?: number;
+	/** Cloudflare 拒绝后允许同 Topic 新楼层恢复上报前的有界冷却。 */
+	readonly challengeRecoveryDelayMs?: number;
+	/** 同一 Topic 会话最多自动恢复几次 Cloudflare checkpoint。 */
+	readonly maxChallengeRecoveries?: number;
 	readonly settleDelayMs?: number;
 	readonly maxAutomaticRetries?: number;
+	readonly now?: () => number;
 	readonly shouldRetry?: (error: unknown) => boolean;
 	readonly setTimer?: (callback: () => void, milliseconds: number) => number;
 	readonly clearTimer?: (timerId: number) => void;
@@ -108,17 +119,37 @@ function positiveInteger(value: number | undefined, fallback: number, name: stri
 	return normalized;
 }
 
-function defaultShouldRetry(error: unknown): boolean {
-	return !(error && typeof error === 'object' &&
-		'cloudflareMitigated' in error &&
-		(error as { cloudflareMitigated?: unknown }).cloudflareMitigated === true);
+type ReadStateFailureKind =
+	| 'cancelled'
+	| 'challenge'
+	| 'rate-limit'
+	| 'transient'
+	| 'terminal';
+
+function readStateFailureKind(error: unknown): ReadStateFailureKind {
+	if (
+		error instanceof ReadStateChallengeHaltedError ||
+		error instanceof RequestChallengeWaitSuppressedError
+	) return 'challenge';
+	if (error instanceof RequestRateLimitError) return 'rate-limit';
+	if (error instanceof RequestStatusError) {
+		if (error.cloudflareMitigated) return 'challenge';
+		return error.kind === 'server' || error.kind === 'timeout'
+			? 'transient'
+			: 'terminal';
+	}
+	if (
+		error instanceof Error &&
+		error.name === 'AbortError'
+	) return 'cancelled';
+	return 'transient';
 }
 
 /**
  * 一个 Topic 的服务器已读状态唯一 owner。
  *
  * 它拥有 pending/optimistic/confirmed、批次顺序和自动重试；不观察 DOM、不改 PostView、
- * 不写历史，也不自行处理 429。
+ * 不写历史；429 只消费中央 RequestRateLimitError 的 retryAt，不解析状态码或错误文案。
  */
 export class ReadStateController {
 	readonly topicId: DiscourseTopicId;
@@ -130,11 +161,14 @@ export class ReadStateController {
 	readonly #coordination: ReadStateCoordinationPort | null;
 	readonly #batchSize: number;
 	readonly #retryDelayMs: number;
+	readonly #challengeRecoveryDelayMs: number;
+	readonly #maxChallengeRecoveries: number;
 	readonly #settleDelayMs: number;
 	readonly #maxAutomaticRetries: number;
 	readonly #shouldRetry: (error: unknown) => boolean;
 	readonly #setTimer: (callback: () => void, milliseconds: number) => number;
 	readonly #clearTimer: (timerId: number) => void;
+	readonly #now: () => number;
 	readonly #onError: (error: unknown) => void;
 	readonly #confirmed = new Set<DiscoursePostNumber>();
 	readonly #candidates = new Set<DiscoursePostNumber>();
@@ -143,6 +177,8 @@ export class ReadStateController {
 	#unsubscribeCoordination: Cleanup = () => {};
 	#flushPromise: Promise<boolean> | null = null;
 	#timerId = 0;
+	#challengeRecoveryTimerId = 0;
+	#challengeRecoveryCount = 0;
 	#nextScheduleDelay = 0;
 	#sequence = 0;
 	#retryCount = 0;
@@ -163,6 +199,16 @@ export class ReadStateController {
 			5_000,
 			'retryDelayMs',
 		);
+		this.#challengeRecoveryDelayMs = positiveInteger(
+			options.challengeRecoveryDelayMs,
+			10_000,
+			'challengeRecoveryDelayMs',
+		);
+		this.#maxChallengeRecoveries = nonNegativeInteger(
+			options.maxChallengeRecoveries,
+			1,
+			'maxChallengeRecoveries',
+		);
 		this.#settleDelayMs = nonNegativeInteger(
 			options.settleDelayMs,
 			120,
@@ -173,15 +219,17 @@ export class ReadStateController {
 			1,
 			'maxAutomaticRetries',
 		);
-		this.#shouldRetry = options.shouldRetry ?? defaultShouldRetry;
+		this.#shouldRetry = options.shouldRetry ?? (() => true);
 		this.#setTimer = options.setTimer ?? ((callback, milliseconds) =>
 			setTimeout(callback, milliseconds) as unknown as number);
 		this.#clearTimer = options.clearTimer ?? clearTimeout;
+		this.#now = options.now ?? Date.now;
 		this.#onError = options.onError ?? (() => {});
 		this.scope = LifecycleScope.ownedBy(options.scope);
 		this.scope.add(() => {
 			this.#closed = true;
 			this.stop();
+			this.#clearChallengeRecovery();
 			this.changes.clear();
 			this.diagnostics.clear();
 			this.#candidates.clear();
@@ -429,32 +477,44 @@ export class ReadStateController {
 			}
 			this.#retryCount = 0;
 			this.#cloudflareHalted = false;
+			this.#challengeRecoveryCount = 0;
+			this.#clearChallengeRecovery();
 			this.#automaticRetryHalted = false;
 			return allowed.length > 0;
 		} catch (error) {
 			this.#retryCount += 1;
 			this.#onError(error);
 			this.#emitDiagnostic('submit-failed', batch, error);
-			const cloudflareMitigated = !!error && typeof error === 'object' &&
-				'cloudflareMitigated' in error &&
-				error.cloudflareMitigated === true;
-			if (cloudflareMitigated) {
+			const failureKind = readStateFailureKind(error);
+			if (failureKind === 'challenge') {
 				/*
-				 * 同 Topic 会话的 timings 一旦被 Cloudflare 拒绝，后续新楼层也不再
-				 * 自动补报。切帖/重开会创建新 owner；这里没有固定时间冷却，也不影响
-				 * Topic、用户资料或动作请求。
+				 * Cloudflare 明确拒绝意味着本批没有服务器成功确认，pending 必须作为
+				 * checkpoint 保留。冷却后最多自动恢复一次；若再次被拒绝则继续保留
+				 * checkpoint 并停下，避免无限 mutation 循环。
 				 */
 				this.#cloudflareHalted = true;
-				batch.forEach((postNumber) => this.#pending.delete(postNumber));
+				if (this.#challengeRecoveryCount < this.#maxChallengeRecoveries) {
+					this.#challengeRecoveryCount += 1;
+					this.#scheduleChallengeRecovery();
+				}
 			}
+			const retryable = (
+				failureKind === 'rate-limit' || failureKind === 'transient'
+			) && this.#shouldRetry(error);
 			if (
-				!this.#shouldRetry(error) ||
+				!retryable ||
 				this.#retryCount > this.#maxAutomaticRetries
 			) {
 				this.#automaticRetryHalted = true;
 				this.#emitDiagnostic('automatic-retry-halted', batch, error);
 			} else {
-				this.#nextScheduleDelay = this.#retryDelayMs;
+				this.#nextScheduleDelay = failureKind === 'rate-limit' &&
+					error instanceof RequestRateLimitError
+					? Math.max(
+						this.#retryDelayMs,
+						Math.ceil(error.decision.retryAt - this.#now()),
+					)
+					: this.#retryDelayMs;
 			}
 			return false;
 		}
@@ -540,6 +600,23 @@ export class ReadStateController {
 		if (!this.#timerId) return;
 		this.#clearTimer(this.#timerId);
 		this.#timerId = 0;
+	}
+
+	#scheduleChallengeRecovery(): void {
+		if (this.#challengeRecoveryTimerId || this.#closed) return;
+		this.#challengeRecoveryTimerId = this.#setTimer(() => {
+			this.#challengeRecoveryTimerId = 0;
+			if (this.#closed) return;
+			this.#cloudflareHalted = false;
+			this.#resetRetryGate();
+			this.#schedule(this.#settleDelayMs);
+		}, this.#challengeRecoveryDelayMs);
+	}
+
+	#clearChallengeRecovery(): void {
+		if (!this.#challengeRecoveryTimerId) return;
+		this.#clearTimer(this.#challengeRecoveryTimerId);
+		this.#challengeRecoveryTimerId = 0;
 	}
 
 	#resetRetryGate(): void {

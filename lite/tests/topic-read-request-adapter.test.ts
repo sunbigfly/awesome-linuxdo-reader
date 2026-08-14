@@ -2,6 +2,7 @@ import type {
 	CollectionPageRequest,
 	NestedRepliesRequest,
 	TopicPostsRequest,
+	TopicTargetCacheLookup,
 	TopicTargetRequest,
 } from '../src/network/domain-request-gateway.js';
 import {
@@ -22,6 +23,7 @@ function assert(condition: unknown, message: string): asserts condition {
 class RecordingGateway {
 	readonly posts: TopicPostsRequest<unknown>[] = [];
 	readonly targets: TopicTargetRequest<unknown>[] = [];
+	readonly cachedTargets: TopicTargetCacheLookup[] = [];
 	readonly nested: NestedRepliesRequest<unknown>[] = [];
 	readonly collections: CollectionPageRequest<unknown>[] = [];
 	readonly promotions: Array<Parameters<NonNullable<
@@ -46,6 +48,11 @@ class RecordingGateway {
 	async loadTopicTarget<T>(input: TopicTargetRequest<T>): Promise<T> {
 		this.targets.push(input as TopicTargetRequest<unknown>);
 		return input.transport({ signal: input.signal, attempt: 1 }).then((response) => response.value);
+	}
+
+	async cachedTopicTarget<T>(input: TopicTargetCacheLookup): Promise<T | null> {
+		this.cachedTargets.push(input);
+		return { post_number: input.postNumber } as unknown as T;
 	}
 
 	async loadNestedReplies<T>(input: NestedRepliesRequest<T>): Promise<T> {
@@ -119,6 +126,11 @@ assert(
 	gateway.targets.at(-1)?.cacheMode === 'refresh',
 	'明确 Topic refresh 必须绕过 fresh cache',
 );
+await adapter.loadTopic({ background: true, prefetchTier: 'nearby' });
+assert(
+	gateway.targets.at(-1)?.profile === 'nearby-prefetch',
+	'宿主近视口 Topic 初始化必须进入高优先预热契约',
+);
 
 await adapter.loadPostsByIds([30, 10, 30]);
 assert(gateway.posts[0]?.postIds.join(',') === '10,30', 'post IDs 必须排序去重');
@@ -137,6 +149,16 @@ assert(
 	gateway.posts.at(-1)?.profile === 'nested-visible' &&
 		gateway.posts.at(-1)?.beforeNetwork === beforeNetwork,
 	'视口内树状正文缺口必须提升为 nested-visible，不能与普通楼层共用 visible 优先级',
+);
+await adapter.loadPostsByIds([41], {
+	background: true,
+	prefetchTier: 'nearby',
+	beforeNetwork,
+});
+assert(
+	gateway.posts.at(-1)?.profile === 'nearby-prefetch' &&
+	gateway.posts.at(-1)?.beforeNetwork === beforeNetwork,
+	'宿主近视口正文预热必须快于普通后台请求，并继续经过统一联网闸门',
 );
 assert(
 	adapter.promotePostsByIds([40, 30, 40], { priority: 'nested' }) &&
@@ -237,6 +259,20 @@ await adapter.loadTargetCandidate(single[0]!, 8, { scope: 'single', refresh: tru
 assert(gateway.targets.at(-1)?.postNumber === 8, '目标楼层号必须进入 identity');
 assert(gateway.targets.at(-1)?.cacheMode === 'refresh', '强制目标刷新必须使用 refresh');
 assert(nativeRequests.at(-1)?.options.cache === false, '强制目标刷新必须绕过浏览器缓存');
+const nativeRequestCountBeforeCachedTarget = nativeRequests.length;
+const cachedTarget = await adapter.cachedTargetCandidate<{ readonly post_number: number }>(
+	single[0]!,
+	8,
+	{ scope: 'single', refresh: true },
+);
+assert(
+	cachedTarget?.post_number === 8 &&
+		gateway.cachedTargets.at(-1)?.operation ===
+			'target:single:post-by-number' &&
+		gateway.cachedTargets.at(-1)?.postNumber === 8 &&
+		nativeRequests.length === nativeRequestCountBeforeCachedTarget,
+	'目标楼层缓存恢复必须复用同一 identity/cache policy，且绝不进入原生传输',
+);
 
 let unknownCandidateRejected = false;
 try {

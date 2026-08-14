@@ -23,6 +23,7 @@ export type ReaderTopicNavigationSource =
 	| 'quote'
 	| 'lightbox'
 	| 'link'
+	| 'chronicle'
 	| 'restore';
 
 export interface ReaderTopicNavigationRequest {
@@ -32,6 +33,8 @@ export interface ReaderTopicNavigationRequest {
 	readonly focus?: boolean;
 	readonly highlight?: boolean;
 	readonly forceRefresh?: boolean;
+	readonly cachedOnly?: boolean;
+	readonly revealAsFloor?: boolean;
 }
 
 export type ReaderTopicNavigationStatus =
@@ -62,6 +65,8 @@ export interface ReaderTopicNavigationSession<TPost> {
 }
 
 export interface ReaderTopicNavigationDomPort {
+	/** 显式目标跳转前结束滚动期投影冻结，使隐藏/根归属读取最新 canonical。 */
+	prepareRevealPost?(postNumber: number): void;
 	revealPost(
 		postNumber: number,
 		options: ReaderTopicRevealOptions,
@@ -138,12 +143,16 @@ export class ReaderTopicNavigationController<
 		const epoch = ++this.#epoch;
 		try {
 			if (
-				request.forceRefresh === true ||
-				!this.#session.postByNumber(postNumber)
+				request.cachedOnly !== true &&
+				(
+					request.forceRefresh === true ||
+					!this.#session.postByNumber(postNumber)
+				)
 			) {
 				await this.#session.loadTarget(postNumber, {
 					scope: 'around',
-					advanceCursor: true,
+					/* 远距目的性水合不能跳过尚未读取的顺序流中段。 */
+					advanceCursor: false,
 					...(request.forceRefresh === true
 						? { forceRefresh: true }
 						: {}),
@@ -159,26 +168,33 @@ export class ReaderTopicNavigationController<
 					'unavailable',
 				));
 			}
-			const ancestorResolution = await resolveReaderReplyAncestors(
-				this.#session,
-				postNumber,
-				{
-					isActive: () => epoch === this.#epoch && !this.scope.destroyed,
-				},
-			);
+			const ancestorResolution = request.cachedOnly === true
+				? null
+				: await resolveReaderReplyAncestors(
+					this.#session,
+					postNumber,
+					{
+						isActive: () => epoch === this.#epoch && !this.scope.destroyed,
+					},
+				);
 			if (epoch !== this.#epoch || this.scope.destroyed) {
 				return this.#result(request, postNumber, 'superseded');
 			}
-			if (ancestorResolution.error !== undefined) {
+			if (ancestorResolution?.error !== undefined) {
 				this.#onError(ancestorResolution.error);
 			}
 			const revealOptions: ReaderTopicRevealOptions = {
 				source: request.source,
-				...(!ancestorResolution.complete
+				...(request.cachedOnly === true && request.revealAsFloor === true
+					? { degradedRootPostNumber: postNumber }
+					: ancestorResolution && !ancestorResolution.complete
 					? {
 						degradedRootPostNumber:
 							ancestorResolution.rootPostNumber,
 					}
+					: {}),
+				...(request.revealAsFloor === true
+					? { revealAsFloor: true }
 					: {}),
 				...(request.alignment === undefined
 					? {}
@@ -186,9 +202,11 @@ export class ReaderTopicNavigationController<
 				...(request.focus === undefined ? {} : { focus: request.focus }),
 				...(request.highlight === undefined
 					? {}
-					: { highlight: request.highlight }),
+						: { highlight: request.highlight }),
 			};
-			const reveal = this.#hidden?.isHidden(postNumber)
+			this.#dom.prepareRevealPost?.(postNumber);
+			const reveal = request.revealAsFloor !== true &&
+				this.#hidden?.isHidden(postNumber)
 				? await this.#hidden.revealPost(postNumber, revealOptions)
 				: this.#dom.revealPost(postNumber, revealOptions);
 			if (epoch !== this.#epoch || this.scope.destroyed) {

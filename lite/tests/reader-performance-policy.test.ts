@@ -1,7 +1,12 @@
 import {
 	readerBulkBackgroundRequestHasHeadroom,
+	readerQueuePrefetchRequestHasHeadroom,
 	ReaderPerformancePolicy,
 } from '../src/app/reader-performance-policy.js';
+import {
+	READER_PERFORMANCE_PRESETS,
+	createReaderPerformancePreferencesPatch,
+} from '../src/state/reader-preferences-schema.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -20,6 +25,42 @@ const policy = new ReaderPerformancePolicy({
 	shortBudgetCeiling: 50,
 	longBudgetCeiling: 200,
 });
+
+const presetSnapshots = (['low', 'balanced', 'high'] as const).map(
+	(preset) => new ReaderPerformancePolicy({
+		preferences: createReaderPerformancePreferencesPatch(
+			READER_PERFORMANCE_PRESETS[preset],
+			preset,
+		),
+		shortBudgetCeiling: 50,
+		longBudgetCeiling: 200,
+	}).value,
+);
+const [lowPreset, balancedPreset, highPreset] = presetSnapshots;
+assert(
+	lowPreset !== undefined &&
+	balancedPreset !== undefined &&
+	highPreset !== undefined &&
+	lowPreset.pageSize < balancedPreset.pageSize &&
+	balancedPreset.pageSize < highPreset.pageSize &&
+	lowPreset.streamOverscanScreens < balancedPreset.streamOverscanScreens &&
+	balancedPreset.streamOverscanScreens < highPreset.streamOverscanScreens &&
+	lowPreset.streamMaxMountedPostCount <
+		balancedPreset.streamMaxMountedPostCount &&
+	balancedPreset.streamMaxMountedPostCount <
+		highPreset.streamMaxMountedPostCount &&
+	lowPreset.nestedPrefetchScreens < balancedPreset.nestedPrefetchScreens &&
+	balancedPreset.nestedPrefetchScreens < highPreset.nestedPrefetchScreens &&
+	lowPreset.requestMaxConcurrent < balancedPreset.requestMaxConcurrent &&
+	balancedPreset.requestMaxConcurrent < highPreset.requestMaxConcurrent &&
+	lowPreset.requestMinIntervalMs > balancedPreset.requestMinIntervalMs &&
+	balancedPreset.requestMinIntervalMs > highPreset.requestMinIntervalMs &&
+	lowPreset.requestShortBudget < balancedPreset.requestShortBudget &&
+	balancedPreset.requestShortBudget < highPreset.requestShortBudget &&
+	lowPreset.requestLongBudget < balancedPreset.requestLongBudget &&
+	balancedPreset.requestLongBudget < highPreset.requestLongBudget,
+	'省流、自动与快速预取必须让七个真实运行目标逐档区分，不能只有预设名称不同',
+);
 
 assert(
 	policy.value.pageSize === 48 &&
@@ -125,6 +166,28 @@ assert(
 		longCount: 24,
 	}, true),
 	'Topic 下载的直属回复缓存未命中必须复用共享账本并限制为 8/10s、24/60s',
+);
+
+assert(
+	readerQueuePrefetchRequestHasHeadroom({
+		shortBudget: 42,
+		longBudget: 170,
+		shortCount: 3,
+		longCount: 7,
+	}) &&
+	!readerQueuePrefetchRequestHasHeadroom({
+		shortBudget: 42,
+		longBudget: 170,
+		shortCount: 4,
+		longCount: 7,
+	}) &&
+	!readerQueuePrefetchRequestHasHeadroom({
+		shortBudget: 42,
+		longBudget: 170,
+		shortCount: 3,
+		longCount: 8,
+	}),
+	'队列预加载必须复用共享账本并限制为 4/10s、8/60s，给用户与原站请求留出余量',
 );
 
 const constrained = new ReaderPerformancePolicy({

@@ -18,6 +18,12 @@ const repository = new ReplyTreeRepository(11, {
 	save: async () => {},
 });
 const layout = new VirtualRootLayout(100);
+let rootSetCount = 0;
+const setRoots = layout.setRoots.bind(layout);
+layout.setRoots = (roots) => {
+	rootSetCount += 1;
+	setRoots(roots);
+};
 const controller = new ReplyTreeVirtualLayoutController(repository, layout);
 
 repository.ingest(
@@ -40,6 +46,15 @@ assertArray(
 	}).postNumbers,
 	[3, 4],
 	'根投影必须把完整子树权重交给虚拟窗口',
+);
+const rootSetCountBeforeIdempotentIngest = rootSetCount;
+repository.ingest(
+	[{ post_number: 2, reply_to_post_number: 1 }],
+	'message-bus',
+);
+assert(
+	rootSetCount === rootSetCountBeforeIdempotentIngest,
+	'Boost 等内容更新重复携带相同父关系时，不得重建根骨架布局',
 );
 
 repository.ingest(

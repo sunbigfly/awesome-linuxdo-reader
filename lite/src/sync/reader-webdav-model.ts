@@ -7,6 +7,8 @@ export const READER_WEBDAV_DEFAULT_REMOTE_PATH =
 export const READER_WEBDAV_CATEGORIES = Object.freeze([
 	'history',
 	'bookmarks',
+	'notification-history',
+	'activity-history',
 	'preferences',
 	'queue',
 	'topic-context',
@@ -25,6 +27,8 @@ export const READER_WEBDAV_CATEGORY_LABELS = Object.freeze<Readonly<
 >>({
 	history: '浏览历史',
 	bookmarks: '收藏记录',
+	'notification-history': '通知历史缓存',
+	'activity-history': '回复、Boost 与表情回应历史',
 	preferences: '设置配置',
 	queue: '阅读队列',
 	'topic-context': '阅读位置与窗口状态',
@@ -270,7 +274,10 @@ function normalizeRemoteRecord(value: unknown): ReaderWebDavRemoteRecord | null 
 function normalizeRemoteCategory(value: unknown): ReaderWebDavRemoteCategory {
 	const source = record(value);
 	const rawRecords = record(source?.records);
-	const records: Record<string, ReaderWebDavRemoteRecord> = {};
+	const records = Object.create(null) as Record<
+		string,
+		ReaderWebDavRemoteRecord
+	>;
 	for (const [rawId, rawValue] of Object.entries(rawRecords ?? {})) {
 		const id = normalizedRecordId(rawId);
 		const item = normalizeRemoteRecord(rawValue);
@@ -302,7 +309,7 @@ export function normalizeReaderWebDavDocument(
 	) throw new Error('远端同步文件格式或版本不受支持');
 	const rawScopes = record(source.scopes);
 	if (!rawScopes) throw new Error('远端同步文件缺少 scopes');
-	const scopes: Record<string, ReaderWebDavRemoteScope> = {};
+	const scopes = Object.create(null) as Record<string, ReaderWebDavRemoteScope>;
 	for (const [rawScopeId, rawScope] of Object.entries(rawScopes)) {
 		const scopeId = normalizedRecordId(rawScopeId);
 		const scopeSource = record(rawScope);
@@ -353,9 +360,10 @@ export function reconcileReaderWebDavRecords(options: Readonly<{
 	readonly mergeValues: (local: unknown, remote: unknown) => unknown;
 }>): ReaderWebDavReconcileResult {
 	const local = localRecords(options.local);
-	const next: Record<string, ReaderWebDavRemoteRecord> = {
-		...options.remote,
-	};
+	const next = Object.assign(
+		Object.create(null) as Record<string, ReaderWebDavRemoteRecord>,
+		options.remote,
+	);
 	const ids = new Set([
 		...local.keys(),
 		...Object.keys(options.remote),
@@ -368,9 +376,13 @@ export function reconcileReaderWebDavRecords(options: Readonly<{
 	for (const id of ids) {
 		const localItem = local.get(id);
 		const remoteItem = options.remote[id];
-		const localState = localItem ? valueState(localItem.value) : MISSING_STATE;
-		const currentRemoteState = remoteState(remoteItem);
 		const baselineState = options.baseline?.[id];
+		// 本地仓储用“记录不存在”表达已删除；远端则保留 tombstone。基线已经是
+		// tombstone 时，两者属于同一逻辑状态，否则会在每轮同步重复改写墓碑。
+		const localState = localItem
+			? valueState(localItem.value)
+			: baselineState === DELETED_STATE ? DELETED_STATE : MISSING_STATE;
+		const currentRemoteState = remoteState(remoteItem);
 		let chosen: 'local' | 'remote' | 'merged';
 		let mergedValue: unknown;
 		if (baselineState === undefined) {

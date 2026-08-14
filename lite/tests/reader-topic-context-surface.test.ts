@@ -61,9 +61,17 @@ interface TestPost {
 	readonly cooked: string;
 }
 
-const quote = (
-	'<aside class="quote" data-topic="10" data-post="2">' +
+const quotedPostCooked = (
+	'<h2><strong>canonical parent</strong> full content</h2>' +
+	'<img src="/uploads/default/original/quote-full.png" alt="quote full">'
+);
+const selectedTextQuote = (
+	'<aside class="quote selected-text-quote" data-topic="10" data-post="2">' +
 	'<div class="title">引用</div><blockquote><p>canonical parent</p></blockquote></aside>'
+);
+const fullPostQuote = (
+	'<aside class="quote full-post-quote" data-topic="10" data-post="2">' +
+	`<div class="title">整楼引用</div><blockquote>${quotedPostCooked}</blockquote></aside>`
 );
 const crossTopicQuote = (
 	'<aside class="quote" data-topic="11" data-post="7">' +
@@ -88,8 +96,7 @@ const posts: TestPost[] = [
 		// 归属于当前可见分支末端，不能在祖先与末端各生成一份。
 		reply_count: 2,
 		username: 'branch',
-		cooked: '<h2><strong>canonical parent</strong> full content</h2>' +
-			'<img src="/uploads/default/original/quote-full.png" alt="quote full">',
+		cooked: quotedPostCooked,
 	},
 	{
 		id: 103,
@@ -98,7 +105,7 @@ const posts: TestPost[] = [
 		reply_to_post_number: 2,
 		reply_count: 1,
 		username: 'child',
-		cooked: `<p>child</p>${quote}`,
+		cooked: `<p>child</p>${selectedTextQuote}${fullPostQuote}`,
 	},
 	{
 		id: 104,
@@ -192,6 +199,7 @@ const navigationStatuses: string[] = [];
 const navigationRetryDelays: number[] = [];
 let navigationRevision = 0;
 let cancelNavigationDuringRetryDelay = false;
+let beforeNavigationResult: (() => void) | null = null;
 const mainViews = new Map<number, PostView>();
 const navigation = {
 	get revision() {
@@ -204,6 +212,9 @@ const navigation = {
 		navigationRevision += 1;
 		navigated.push(input.postNumber);
 		await navigationGate;
+		const beforeResult = beforeNavigationResult;
+		beforeNavigationResult = null;
+		beforeResult?.();
 		const status = navigationStatuses.shift() ?? 'revealed';
 		const element = mainViews.get(input.postNumber)?.slots.root;
 		return {
@@ -605,12 +616,16 @@ controller.closeDiscussion();
 
 const hiddenRunRoot = mainViews.get(1)!.slots.root;
 feature.syncProjection();
+const earlyHiddenRunMarker = hiddenRunRoot.nextElementSibling as HTMLElement | null;
 assert(
-	hiddenRunRoot.nextElementSibling?.getAttribute(
+	earlyHiddenRunMarker?.getAttribute(
 		'data-reader-context-hidden-replies',
-	) !== '1' &&
-		!hiddenRunRoot.classList.contains('ldp-before-hidden-reply-marker'),
-	'直属回复树尚未挂入真实节点或虚拟占位时，隐藏楼层条必须保持隐藏，不能抢在慢物化前贴到 #1 正文后',
+	) === '1' &&
+		hiddenRunRoot.classList.contains('ldp-before-hidden-reply-marker') &&
+		earlyHiddenRunMarker.querySelectorAll(
+			'[data-reader-context-hidden-post]',
+		).length === 0,
+	'canonical 一确认隐藏楼层就必须立即显示横线加三角并占稳几何，不能等待慢回复树物化；折叠态仍不得预建头像 DOM',
 );
 const childRoot = mainViews.get(3)!.slots.root;
 feature.detachRoot(childRoot);
@@ -624,6 +639,7 @@ feature.syncProjection();
 assert(
 	hiddenToggle?.getAttribute('aria-expanded') === 'false' &&
 	hiddenRunMarker?.dataset.readerContextHiddenReplies === '1' &&
+	hiddenRunMarker === earlyHiddenRunMarker &&
 	hiddenRunRoot.classList.contains('ldp-before-hidden-reply-marker') &&
 	hiddenRunRoot.nextElementSibling === hiddenRunMarker &&
 	hiddenRunMarker.previousElementSibling === hiddenRunRoot &&
@@ -633,7 +649,7 @@ assert(
 	childRoot.nextElementSibling?.getAttribute(
 		'data-reader-context-hidden-replies',
 	) !== '1',
-	'主流投影必须复用相邻可见楼层之间的独立隐藏分隔条，不能在同步时重建或插到过渡中的嵌套回复旁',
+	'回复树物化后必须复用相邻可见楼层之间已经占位的隐藏分隔条，不能重建或插到嵌套回复旁',
 );
 hiddenToggle!.click();
 const hiddenList = hiddenRunMarker.querySelector<HTMLElement>(
@@ -849,46 +865,55 @@ assert(
 	'嵌套自身楼层号必须进入唯一 navigation，不能插入额外的父楼层 DOM',
 );
 
-const quoteToggle = childRoot.querySelector<HTMLButtonElement>(
+const selectedQuote = childRoot.querySelector<HTMLElement>(
+	'.ldp-post-quote.selected-text-quote',
+)!;
+feature.attachRoot(childRoot, 3);
+const quoteToggle = selectedQuote.querySelector<HTMLButtonElement>(
 	'[data-reader-context-quote="toggle"]',
 )!;
-const collapsedQuoteBody = childRoot.querySelector<HTMLElement>(
-	'.ldp-post-quote blockquote',
-);
+const collapsedQuoteBody = selectedQuote.querySelector<HTMLElement>('blockquote');
 const collapsedQuoteHtml = collapsedQuoteBody?.innerHTML;
-const collapsedQuoteImage = collapsedQuoteBody?.querySelector('img');
+const fullQuoteBody = childRoot.querySelector<HTMLElement>(
+	'.ldp-post-quote.full-post-quote blockquote',
+);
+const quoteSourceReadsBeforeToggle = sessionPostByNumberCalls;
 assert(
-	collapsedQuoteBody?.textContent === 'canonical parent full content' &&
-		collapsedQuoteBody.querySelector(':scope > h2 > strong')?.textContent ===
-			'canonical parent' &&
-		collapsedQuoteBody.closest('.ldp-post-quote')?.getAttribute(
-			'data-ldp-quote-hydrated',
-		) === '1' &&
-		collapsedQuoteBody.closest('.ldp-post-quote')?.getAttribute(
+	collapsedQuoteBody?.textContent === 'canonical parent' &&
+		collapsedQuoteBody.querySelector('h2,img') === null &&
+		selectedQuote.getAttribute('data-ldp-quote-hydrated') === null &&
+		selectedQuote.getAttribute(
 			'data-ldp-quote-expanded',
 		) === '0' &&
-		collapsedQuoteImage?.getAttribute('src') ===
+		!selectedQuote.classList.contains('ldp-quote-expanded') &&
+		quoteToggle.getAttribute('aria-label') === '展开完整引用' &&
+		fullQuoteBody?.textContent === 'canonical parent full content' &&
+		fullQuoteBody.querySelector('img')?.getAttribute('src') ===
 			'/uploads/default/original/quote-full.png' &&
-		!collapsedQuoteBody.closest('.ldp-post-quote')?.classList.contains(
-			'ldp-quote-expanded',
-		),
-	'引用折叠态必须直接保留完整 canonical cooked 与 Markdown 语义，只由折叠状态裁切显示',
+		fullQuoteBody.closest('.ldp-post-quote')?.getAttribute(
+			'data-ldp-quote-hydrated',
+		) === null,
+	'文字选区引用必须保留原始片段，整楼引用则保留 cooked 自带的完整正文；两者都不得由来源楼层覆写',
 );
 quoteToggle.click();
 await Promise.resolve();
 await Promise.resolve();
 assert(
-	childRoot.querySelector('.ldp-post-quote blockquote')?.textContent ===
-		'canonical parent full content' &&
-	childRoot.querySelector('.ldp-post-quote blockquote')?.innerHTML ===
-		collapsedQuoteHtml &&
-	childRoot.querySelector('.ldp-post-quote blockquote img') ===
-		collapsedQuoteImage &&
+	selectedQuote.querySelector('blockquote') === collapsedQuoteBody &&
+	collapsedQuoteBody?.textContent === 'canonical parent full content' &&
+	collapsedQuoteBody.innerHTML === quotedPostCooked &&
+	collapsedQuoteBody.querySelector(':scope > h2 > strong')?.textContent ===
+		'canonical parent' &&
+	collapsedQuoteBody.querySelector('img')?.getAttribute('src') ===
+		'/uploads/default/original/quote-full.png' &&
+	selectedQuote.dataset.ldpQuoteHydrated === '1' &&
+	sessionPostByNumberCalls > quoteSourceReadsBeforeToggle &&
 	quoteToggle.getAttribute('aria-expanded') === 'true' &&
+	selectedQuote.classList.contains('ldp-quote-expanded') &&
 	quoteBodyChanges.at(-1)?.postNumber === 3 &&
 	quoteBodyChanges.at(-1)?.state === 'expanded',
-	`同 Topic 引用展开必须只经 TopicSession 读取 canonical cooked，并通知现有正文 feature 重同步：${
-		childRoot.querySelector('.ldp-post-quote blockquote')?.textContent
+	`嵌套楼层引用点击必须只由最近的已挂载 PostView 处理一次，并按需切换到被引用楼层完整正文：${
+		collapsedQuoteBody?.textContent
 	} / ${quoteToggle.getAttribute('aria-expanded')} / ${
 		JSON.stringify(quoteBodyChanges.at(-1))
 	}`,
@@ -896,25 +921,19 @@ assert(
 quoteToggle.click();
 await Promise.resolve();
 assert(
-	childRoot.querySelector('.ldp-post-quote blockquote')?.textContent ===
-		'canonical parent full content' &&
-		childRoot.querySelector('.ldp-post-quote blockquote')?.innerHTML ===
-			collapsedQuoteHtml &&
-		childRoot.querySelector('.ldp-post-quote blockquote img') ===
-			collapsedQuoteImage &&
-		childRoot.querySelector(
-			'.ldp-post-quote blockquote > h2 > strong',
-		)?.textContent === 'canonical parent' &&
-		!childRoot.querySelector('.ldp-post-quote')?.classList.contains(
-			'ldp-quote-expanded',
-		) &&
-		childRoot.querySelector('.ldp-post-quote')?.getAttribute(
+	selectedQuote.querySelector('blockquote') === collapsedQuoteBody &&
+		collapsedQuoteBody?.textContent === 'canonical parent' &&
+		collapsedQuoteBody.innerHTML === collapsedQuoteHtml &&
+		collapsedQuoteBody.querySelector('h2,img') === null &&
+		selectedQuote.dataset.ldpQuoteHydrated === undefined &&
+		!selectedQuote.classList.contains('ldp-quote-expanded') &&
+		selectedQuote.getAttribute(
 			'data-ldp-quote-expanded',
 		) === '0' &&
 	quoteBodyChanges.at(-1)?.state === 'collapsed',
-	'引用收起必须只切换裁切状态，不得替换完整 cooked DOM，并通知 feature 重同步',
+	'文字选区引用收起必须恢复原始片段，并通知正文 feature 重同步',
 );
-childRoot.querySelector<HTMLButtonElement>(
+selectedQuote.querySelector<HTMLButtonElement>(
 	'[data-reader-context-quote="jump"]',
 )?.click();
 for (let index = 0; index < 4; index += 1) await Promise.resolve();
@@ -944,7 +963,14 @@ const quoteHint = document.body.querySelector<HTMLElement>(
 assert(highlighted && quoteHint, '引用高亮必须生成可交互的就近操作浮层');
 Object.defineProperty(highlighted, 'getBoundingClientRect', {
 	configurable: true,
-	value: () => box(260, 180, 100, 20),
+	value: () => box(260, 180, 100, 60),
+});
+Object.defineProperty(highlighted, 'getClientRects', {
+	configurable: true,
+	value: () => [
+		box(260, 180, 100, 20),
+		box(260, 220, 80, 20),
+	],
 });
 Object.defineProperty(quoteHint, 'getBoundingClientRect', {
 	configurable: true,
@@ -969,13 +995,31 @@ try {
 	});
 	Object.defineProperties(quoteHover, {
 		clientX: { value: 310 },
-		clientY: { value: 180 },
+		clientY: { value: 220 },
 	});
 	highlighted.dispatchEvent(quoteHover);
 	assert(
 		quoteHint.classList.contains('ldp-quote-hint-visible') &&
+			quoteHint.style.left === '200px' &&
 			quoteHint.style.top === '140px',
-		`引用浮层必须贴近鼠标锚点，避免跨越空白区时丢失 hover：${quoteHint.style.top}`,
+		`引用浮层必须居中贴在整段多行高亮上方，不能跑到左右两侧：${quoteHint.style.left},${quoteHint.style.top}`,
+	);
+	Object.defineProperty(highlighted, 'getClientRects', {
+		configurable: true,
+		value: () => [box(260, 20, 100, 20)],
+	});
+	const quoteHoverNearTop = new window.Event('mouseenter', {
+		bubbles: false,
+		cancelable: true,
+	});
+	Object.defineProperties(quoteHoverNearTop, {
+		clientX: { value: 310 },
+		clientY: { value: 20 },
+	});
+	highlighted.dispatchEvent(quoteHoverNearTop);
+	assert(
+		quoteHint.style.left === '200px' && quoteHint.style.top === '44px',
+		`上方空间不足时引用浮层必须翻转到高亮下方，仍不得跑到左右两侧：${quoteHint.style.left},${quoteHint.style.top}`,
 	);
 	highlighted.dispatchEvent(new window.Event('mouseleave'));
 	assert(
@@ -992,6 +1036,11 @@ try {
 	globalThis.setTimeout = nativeSetTimeout;
 	globalThis.clearTimeout = nativeClearTimeout;
 }
+document.body.dispatchEvent(new window.Event('ldp-reader-window-change'));
+assert(
+	!quoteHint.classList.contains('ldp-quote-hint-visible'),
+	'Reader 浮窗移动后必须关闭旧 viewport 坐标上的引用高亮提示',
+);
 const crossTopicJump = mainViews.get(4)?.slots.root
 	.querySelector<HTMLButtonElement>('[data-reader-context-quote="jump"]');
 assert(
@@ -1045,7 +1094,8 @@ assert(
 const changedDestination = mainViews.get(2)?.slots.content;
 if (!changedDestination) throw new Error('引用目标正文缺失');
 changedDestination.textContent = 'destination changed';
-childRoot.querySelector<HTMLButtonElement>(
+beforeNavigationResult = () => feature.detachRoot(childRoot);
+selectedQuote.querySelector<HTMLButtonElement>(
 	'[data-reader-context-quote="jump"]',
 )?.click();
 for (let index = 0; index < 4; index += 1) await Promise.resolve();
@@ -1059,8 +1109,9 @@ assert(
 		'[data-reader-context-quote-return]',
 	)?.textContent === '← 返回引用处' &&
 	feature.captureQuoteHighlightState()?.source?.postNumber === 3,
-	'同 Topic 引用文字失配时必须仍保留目标楼层的返回入口与来源锚点，再闪烁楼层并明确提示',
+	'同 Topic 引用即使在跳转中回收来源楼层，文字失配时也必须保留返回入口与来源锚点，再闪烁楼层并明确提示',
 );
+feature.attachRoot(childRoot, 3);
 changedDestination.innerHTML = '<p>canonical parent full content</p>';
 assert(
 	await feature.restoreQuoteHighlightState(restorableQuoteHighlight),
@@ -1068,7 +1119,7 @@ assert(
 );
 const navigationCountBeforeRetry = navigated.length;
 navigationStatuses.push('unresolved-tree', 'unresolved-tree', 'revealed');
-childRoot.querySelector<HTMLButtonElement>(
+selectedQuote.querySelector<HTMLButtonElement>(
 	'[data-reader-context-quote="jump"]',
 )?.click();
 for (let index = 0; index < 8; index += 1) await Promise.resolve();
@@ -1080,7 +1131,7 @@ assert(
 	'同 Topic 引用的回复树暂未挂载时必须按 1 秒、2 秒有界重试，并在成功后继续精确高亮',
 );
 navigationStatuses.push('unavailable');
-childRoot.querySelector<HTMLButtonElement>(
+selectedQuote.querySelector<HTMLButtonElement>(
 	'[data-reader-context-quote="jump"]',
 )?.click();
 for (let index = 0; index < 4; index += 1) await Promise.resolve();
@@ -1091,7 +1142,7 @@ assert(
 const navigationCountBeforeCancellation = navigated.length;
 navigationStatuses.push('unresolved-tree');
 cancelNavigationDuringRetryDelay = true;
-childRoot.querySelector<HTMLButtonElement>(
+selectedQuote.querySelector<HTMLButtonElement>(
 	'[data-reader-context-quote="jump"]',
 )?.click();
 for (let index = 0; index < 4; index += 1) await Promise.resolve();
@@ -1175,6 +1226,24 @@ assert(
 	discussionLayer.querySelector('.ldp-descendant-replies-title')
 		?.textContent?.includes('（3）'),
 	'完整讨论必须投影 canonical 子树，并把目标交给 Topic 唯一高亮 owner',
+);
+let discussionWheelLeaks = 0;
+modal.addEventListener('wheel', () => {
+	discussionWheelLeaks += 1;
+});
+const discussionBoundaryWheel = new window.Event('wheel', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperties(discussionBoundaryWheel, {
+	deltaX: { value: 0 },
+	deltaY: { value: 120 },
+	deltaMode: { value: 0 },
+});
+discussionLayer.dispatchEvent(discussionBoundaryWheel);
+assert(
+	discussionBoundaryWheel.defaultPrevented && discussionWheelLeaks === 0,
+	'完整讨论浮层的滚轮边界不得继续驱动宿主阅读流',
 );
 assert(
 	!discussionLayer.querySelector('[data-reader-context-discussion]'),
@@ -1448,7 +1517,7 @@ quoteRestoreGate = new Promise<void>((_resolve, reject) => {
 document.querySelector<HTMLButtonElement>(
 	'.ldp-quote-highlight-return',
 )?.click();
-mainViews.get(3)?.slots.root.querySelector<HTMLButtonElement>(
+selectedQuote.querySelector<HTMLButtonElement>(
 	'[data-reader-context-quote="jump"]',
 )?.click();
 await Promise.resolve();

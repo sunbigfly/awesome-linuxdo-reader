@@ -4,9 +4,14 @@ import { abortableDelay } from '../network/coordinated-request-client.js';
 import type { TranslationBatchPort } from './translation-request-adapter.js';
 import type { ReaderTranslationAnimation } from './reader-translation-config.js';
 import {
+	DEFAULT_READER_TRANSLATION_THEME,
+	type ReaderTranslationTheme,
+} from './reader-translation-presentation.js';
+import {
 	renderTranslationText,
 	translationBlockNeedsTranslation,
 	translationBlocks,
+	translationProtectedTokensMatch,
 	translationSourceText,
 	translationTextsFromHtml,
 } from './translation-text.js';
@@ -27,6 +32,10 @@ export interface ReaderTranslationPreloadPost {
 	readonly action_code?: unknown;
 }
 
+export interface ReaderOfflineTranslationOptions {
+	readonly onProgress?: (completed: number, total: number) => void;
+}
+
 export interface ReaderTranslationSnapshot {
 	readonly mode: ReaderTranslationMode;
 	readonly active: boolean;
@@ -39,6 +48,7 @@ export interface ReaderTranslationControllerOptions {
 	readonly surfaces: () => readonly HTMLElement[];
 	readonly initialMode: ReaderTranslationMode;
 	readonly initialAnimation?: ReaderTranslationAnimation;
+	readonly initialTheme?: ReaderTranslationTheme;
 	readonly persistMode?: (mode: ReaderTranslationMode) => void;
 	readonly readPost?: (
 		post: HTMLElement,
@@ -63,6 +73,8 @@ interface TranslationQueueEntry {
 
 const TRANSLATION_PRELOAD_WORKERS = 5;
 const TRANSLATION_MAX_WORKERS = 6;
+const TRANSLATION_PREFETCH_BATCH_MAX_ENTRIES = 20;
+const TRANSLATION_PREFETCH_BATCH_MAX_CHARACTERS = 3_500;
 const TRANSLATION_ANIMATION_SEGMENT_LIMIT = 120;
 const SEGMENTED_TRANSLATION_ANIMATIONS = new Set<ReaderTranslationAnimation>([
 	'fade',
@@ -307,9 +319,11 @@ export class ReaderTranslationController {
 	readonly #styledSurfaces = new Set<HTMLElement>();
 	readonly #animationCleanups = new Map<HTMLElement, () => void>();
 	readonly #attachedTranslations = new WeakMap<Element, AttachedTranslation>();
+	readonly #settledTranslations = new Map<string, string>();
 	readonly #settledAnimationSections = new Set<string>();
 	#mode: ReaderTranslationMode;
 	#animation: ReaderTranslationAnimation;
+	#theme: ReaderTranslationTheme;
 	#active: boolean;
 	#draining = false;
 	#destroyed = false;
@@ -326,6 +340,7 @@ export class ReaderTranslationController {
 		this.#surfaces = options.surfaces;
 		this.#mode = normalizedMode(options.initialMode);
 		this.#animation = options.initialAnimation ?? 'fade';
+		this.#theme = options.initialTheme ?? DEFAULT_READER_TRANSLATION_THEME;
 		this.#active = this.#mode !== 'original';
 		this.#persistMode = options.persistMode;
 		this.#readPost = options.readPost ?? defaultPostMetadata;
@@ -341,6 +356,7 @@ export class ReaderTranslationController {
 			this.#queue.clear();
 			this.#inFlight.clear();
 			this.#preloadContext.clear();
+			this.#settledTranslations.clear();
 			this.#startUrgentWorker = null;
 			this.#requestController?.abort(
 				new DOMException('正文翻译已销毁', 'AbortError'),
@@ -354,6 +370,8 @@ export class ReaderTranslationController {
 					'ldp-translation-active',
 					'ldp-translation-only',
 				);
+				delete surface.dataset.translationAnimation;
+				delete surface.dataset.translationTheme;
 			}
 			this.#styledSurfaces.clear();
 			this.changes.clear();
@@ -365,10 +383,20 @@ export class ReaderTranslationController {
 		return this.#mode;
 	}
 
+	get theme(): ReaderTranslationTheme {
+		return this.#theme;
+	}
+
 	setAnimation(animation: ReaderTranslationAnimation): void {
 		if (this.#destroyed || this.#animation === animation) return;
 		for (const cleanup of [...this.#animationCleanups.values()]) cleanup();
 		this.#animation = animation;
+		this.#applyMode();
+	}
+
+	setTheme(theme: ReaderTranslationTheme): void {
+		if (this.#destroyed || this.#theme === theme) return;
+		this.#theme = theme;
 		this.#applyMode();
 	}
 
@@ -497,6 +525,116 @@ export class ReaderTranslationController {
 		void this.flush();
 	}
 
+	/**
+	 * 把当前 Topic 已取得的译文投影到离线 cooked；只消费本控制器已完成的结果，
+	 * 不排队、不读缓存也不发起下载阶段网络请求。
+	 */
+	projectKnownTranslations(root: ParentNode): number {
+		if (this.#destroyed || !this.#active) return 0;
+		return this.projectOfflineTranslations(root, this.#settledTranslations);
+	}
+
+	projectOfflineTranslations(
+		root: ParentNode,
+		translations: ReadonlyMap<string, string>,
+	): number {
+		let projected = 0;
+		for (const block of translationBlocks(root)) {
+			const source = translationSourceText(block);
+			const translation = translations.get(source);
+			if (!translation) continue;
+			this.#attachTranslation(block, source, translation);
+			projected += 1;
+		}
+		return projected;
+	}
+
+	/**
+	 * 下载阶段补齐所选正文的全部译文，再由 projectKnownTranslations 写入离线 cooked。
+	 * 请求仍走唯一 TranslationBatchPort，因此复用 provider、缓存、配额与中央调度。
+	 */
+	async prepareOfflineTranslations(
+		document: Document,
+		posts: readonly ReaderTranslationPreloadPost[],
+		signal: AbortSignal,
+		options: ReaderOfflineTranslationOptions = {},
+	): Promise<ReadonlyMap<string, string>> {
+		if (this.#destroyed || !this.#active) return new Map();
+		if (signal.aborted) throw signal.reason;
+		const sources = new Set<string>();
+		for (const post of posts) {
+			const username = String(post.username ?? '').trim().toLocaleLowerCase();
+			if (
+				Number(post.post_type ?? 1) !== 1 ||
+				String(post.action_code ?? '').trim() ||
+				username === 'system' ||
+				username === 'discobot'
+			) continue;
+			for (const text of translationTextsFromHtml(document, post.cooked)) {
+				sources.add(text);
+			}
+		}
+		await this.flush();
+		if (signal.aborted) throw signal.reason;
+		const prepared = new Map<string, string>();
+		for (const source of sources) {
+			const translation = this.#settledTranslations.get(source);
+			if (translation) prepared.set(source, translation);
+		}
+		options.onProgress?.(prepared.size, sources.size);
+		const pending = [...sources].filter((source) => !prepared.has(source));
+		for (let offset = 0; offset < pending.length;) {
+			const batch: string[] = [];
+			let characters = 0;
+			while (offset < pending.length) {
+				const source = pending[offset]!;
+				if (
+					batch.length &&
+					(batch.length >= TRANSLATION_PREFETCH_BATCH_MAX_ENTRIES ||
+						characters + source.length >
+							TRANSLATION_PREFETCH_BATCH_MAX_CHARACTERS)
+				) break;
+				batch.push(source);
+				characters += source.length;
+				offset += 1;
+			}
+			let translations: readonly string[] = [];
+			for (let retryIndex = 0; ; retryIndex += 1) {
+				try {
+					translations = await this.#translator.translate(
+						batch,
+						signal,
+						{ priority: 'prefetch' },
+					);
+					break;
+				} catch (error) {
+					const waitMs = retryDelayMs(error, retryIndex, 'prefetch');
+					if (waitMs === null || signal.aborted) throw error;
+					await this.#delay(waitMs, signal);
+					if (this.#destroyed) {
+						throw new DOMException('正文翻译已销毁', 'AbortError');
+					}
+				}
+			}
+			if (translations.length !== batch.length) {
+				throw new Error('离线 HTML 翻译返回数量不匹配');
+			}
+			batch.forEach((source, index) => {
+				const translation = String(translations[index] ?? '').trim();
+				if (
+					!translation ||
+					!translationProtectedTokensMatch(source, translation)
+				) {
+					throw new Error('离线 HTML 译文为空或改写了正文占位符');
+				}
+				this.#settledTranslations.set(source, translation);
+				prepared.set(source, translation);
+			});
+			options.onProgress?.(prepared.size, sources.size);
+		}
+		return prepared;
+	}
+
 	updatePreloadWindow(
 		document: Document,
 		topicId: string | number,
@@ -586,10 +724,13 @@ export class ReaderTranslationController {
 				'ldp-translation-active',
 				'ldp-translation-only',
 			);
+			delete surface.dataset.translationAnimation;
+			delete surface.dataset.translationTheme;
 			this.#styledSurfaces.delete(surface);
 		}
 		for (const surface of surfaces) {
 			surface.dataset.translationAnimation = this.#animation;
+			surface.dataset.translationTheme = this.#theme;
 			surface.classList.toggle('ldp-translation-active', this.#active);
 			surface.classList.toggle(
 				'ldp-translation-only',
@@ -611,6 +752,7 @@ export class ReaderTranslationController {
 		this.#queue.clear();
 		this.#inFlight.clear();
 		this.#preloadContext.clear();
+		this.#settledTranslations.clear();
 		this.#clearLoadingTranslations();
 		this.#restartAfterDrain = this.#drainPromise !== null;
 		this.#requestController?.abort(new DOMException(message, 'AbortError'));
@@ -675,8 +817,12 @@ export class ReaderTranslationController {
 			entry.priority === 'visible')
 			? 'visible'
 			: 'prefetch';
-		const maximumEntries = priority === 'visible' ? 6 : 20;
-		const maximumCharacters = priority === 'visible' ? 1_400 : 3_500;
+		const maximumEntries = priority === 'visible'
+			? 6
+			: TRANSLATION_PREFETCH_BATCH_MAX_ENTRIES;
+		const maximumCharacters = priority === 'visible'
+			? 1_400
+			: TRANSLATION_PREFETCH_BATCH_MAX_CHARACTERS;
 		for (const entry of this.#queue.values()) {
 			if (entry.priority !== priority) continue;
 			if (
@@ -747,6 +893,10 @@ export class ReaderTranslationController {
 											entry.generation !== this.#generation ||
 											controller.signal.aborted
 										) return;
+										this.#settledTranslations.set(
+											entry.text,
+											translation,
+										);
 										for (const node of entry.nodes) {
 											this.#attachTranslation(
 												node,
@@ -777,6 +927,7 @@ export class ReaderTranslationController {
 					current.forEach((entry, index) => {
 						const translation = String(translations[index] ?? '').trim();
 						if (!translation) throw new Error('翻译 adapter 返回空译文');
+						this.#settledTranslations.set(entry.text, translation);
 						const queued = this.#queue.get(entry.text);
 						if (queued) {
 							queued.nodes.forEach((node) => entry.nodes.add(node));
@@ -864,6 +1015,7 @@ export class ReaderTranslationController {
 		translation: string,
 	): void {
 		if (translationSourceText(node) !== source) return;
+		this.#settledTranslations.set(source, translation);
 		const output = this.#translationOutput(node);
 		const attached = this.#attachedTranslations.get(node);
 		if (
@@ -950,8 +1102,10 @@ export class ReaderTranslationController {
 		output.classList.add('ldp-translation-segmented');
 		const onAnimationEnd = (event: Event): void => {
 			const target = event.target;
+			const ElementConstructor = output.ownerDocument.defaultView?.Element;
 			if (
-				target instanceof Element &&
+				ElementConstructor &&
+				target instanceof ElementConstructor &&
 				target.classList.contains('ldp-translation-segment-last')
 			) cleanup();
 		};

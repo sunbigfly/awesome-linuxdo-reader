@@ -748,14 +748,18 @@ assert(
 	specialView.slots.header.querySelector(
 		'.ldp-new-user-badge[aria-label="新用户，首次发帖"]',
 	)?.textContent === '新用户' &&
+		specialView.slots.header.querySelector<HTMLElement>(
+			'.ldp-new-user-badge',
+		)?.dataset.ldpTooltipLabel === '新用户，首次发帖' &&
 	specialView.slots.header.querySelectorAll(
 		'.ldp-new-user-badge [data-icon="user-plus"]',
 	).length === 1 &&
 	specialView.slots.root.classList.contains('ldp-new-user') &&
+	specialView.slots.bodyLayer.querySelector('.ldp-special-badges') === null &&
 	specialView.slots.bodyLayer.querySelector('.ldp-special-notice') === null &&
 	specialView.slots.bodyLayer.querySelector('.ldp-system-action') === null &&
 	!specialView.slots.root.classList.contains('ldp-system-post'),
-	'新用户/回归/自定义身份必须回到楼层头部徽章，重投时同时清理旧系统事件状态',
+	'新用户/回归/自定义身份必须回到楼层头部徽章；隐藏状态只留头部徽章，重投时同时清理旧系统事件状态',
 );
 
 const projectedRootView = new PostView(document, {

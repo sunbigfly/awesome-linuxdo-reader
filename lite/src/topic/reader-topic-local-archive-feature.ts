@@ -26,6 +26,11 @@ function archiveLabel(status: number): string {
 	return status === 403 ? '已隐藏或无权访问' : `服务器返回 ${status}`;
 }
 
+function archivedPostLabel(status: number): string {
+	if (status === 403) return '隐藏前正文';
+	return `${status} 前正文`;
+}
+
 /**
  * 只投影 TopicSnapshotRepository 已确认的本地存档状态。
  *
@@ -111,7 +116,9 @@ export class ReaderTopicLocalArchiveFeature<
 	): void {
 		const unavailable = state.posts.find((entry) => entry.postNumber === postNumber) ?? null;
 		root.classList.toggle('is-local-archive-post', unavailable !== null);
-		let note = root.querySelector<HTMLElement>(':scope > .ldp-post-body > .ldp-post-local-archive-note');
+		let note = root.querySelector<HTMLElement>(
+			':scope > .ldp-post-body > .ldp-post-body-layer > .ldp-post-local-archive-note',
+		);
 		if (!unavailable) {
 			note?.remove();
 			delete root.dataset.localArchiveStatus;
@@ -125,11 +132,21 @@ export class ReaderTopicLocalArchiveFeature<
 				'ldp-post-local-archive-note',
 			);
 			note.setAttribute('role', 'note');
-			const body = root.querySelector<HTMLElement>(':scope > .ldp-post-body');
-			body?.prepend(note);
+			const bodyLayer = root.querySelector<HTMLElement>(
+				':scope > .ldp-post-body > .ldp-post-body-layer',
+			);
+			bodyLayer?.prepend(note);
 		}
 		note.textContent =
-			`本地引用存档 · ${archiveLabel(unavailable.status)} · ` +
-			`${this.#nowLabel(unavailable.confirmedAt)} 前记录。`;
+			`本地缓存 · ${archivedPostLabel(unavailable.status)} · ` +
+			`${this.#nowLabel(unavailable.confirmedAt)} 确认`;
+		if (root.querySelector(':scope > .ldp-post-head .ldp-hidden-badge')) {
+			note.append(node(
+				this.#document,
+				'span',
+				'ldp-post-local-archive-subtext',
+				'（已隐藏）',
+			));
+		}
 	}
 }

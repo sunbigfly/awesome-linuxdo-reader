@@ -7,6 +7,7 @@ import {
 import type {
 	DiscourseTopicPostInput,
 	TopicPostByIdOptions,
+	TopicPostsByIdsOptions,
 } from '../src/topic/topic-session.js';
 import { discourseTopicId } from '../src/discourse/identifiers.js';
 
@@ -126,7 +127,14 @@ assert(
 	normalized.kind === 'post' && normalized.postId === 105 && normalized.created,
 	'created MessageBus 事件归一化错误',
 );
-for (const messageType of ['acted', 'rebaked', 'recovered', 'revised'] as const) {
+const normalizedActed = normalizeTopicLiveMessage({
+	payload: { type: 'acted', post_id: 105, topic_id: 10 },
+}, 10);
+assert(
+	normalizedActed.kind === 'reaction' && normalizedActed.postId === 105,
+	'acted 必须进入可丢弃的回应批量刷新，不能冒充正文更新',
+);
+for (const messageType of ['rebaked', 'recovered', 'revised'] as const) {
 	const result = normalizeTopicLiveMessage({
 		payload: { type: messageType, post_id: 105, topic_id: 10 },
 	}, 10);
@@ -153,10 +161,9 @@ const normalizedReaction = normalizeTopicLiveMessage({
 	payload: { post_id: 105, topic_id: 10, reactions: ['heart'] },
 }, 10);
 assert(
-	normalizedReaction.kind === 'post' &&
-		normalizedReaction.postId === 105 &&
-		!normalizedReaction.created,
-	'插件 reactions channel 必须明确落到目标楼层刷新 consumer',
+	normalizedReaction.kind === 'reaction' &&
+		normalizedReaction.postId === 105,
+	'插件 reactions channel 必须明确落到可丢弃的回应批量 consumer',
 );
 assert(
 	normalizeTopicLiveMessage({ topic_id: 99, payload: { type: 'created', id: 1 } }, 10).kind ===
@@ -164,8 +171,8 @@ assert(
 	'其他 Topic 事件必须忽略',
 );
 assert(
-	normalizeTopicLiveMessage({ payload: { type: 'unknown' } }, 10).kind === 'refresh-topic',
-	'未知事件必须降级为整帖刷新',
+	normalizeTopicLiveMessage({ payload: { type: 'unknown' } }, 10).kind === 'ignore',
+	'未知事件没有权力触发整帖请求',
 );
 const normalizedCreatedPostId = normalizeTopicLiveMessage({
 	payload: { type: 'created', post_id: 105, topic_id: 10 },
@@ -176,10 +183,13 @@ assert(
 		normalizedCreatedPostId.created,
 	'created/revised 的 post_id 形态必须与 id 形态进入同一个单帖去抖键',
 );
+const normalizedStats = normalizeTopicLiveMessage({
+	type: 'stats',
+	posts_count: 8,
+}, 10);
 assert(
-	normalizeTopicLiveMessage({ type: 'stats', posts_count: 8 }, 10).kind ===
-		'topic-stats',
-	'stats companion 必须与未知消息的整帖 fallback 区分',
+	normalizedStats.kind === 'topic-stats' && normalizedStats.postsCount === 8,
+	'stats companion 必须携带可验证的 posts_count 前置条件',
 );
 const normalizedDelete = normalizeTopicLiveMessage({
 	payload: { type: 'deleted', id: 105, topic_id: 10 },
@@ -192,31 +202,51 @@ assert(
 const bus = new FakeMessageBus();
 const timers = new ManualTimers();
 const posts = new Map<number, TestPost>([[101, post(101, 1)]]);
+const streamPostIds = [101];
 const loadCalls: Array<{ postId: number; options: TopicPostByIdOptions }> = [];
+const batchLoadCalls: Array<{
+	postIds: readonly number[];
+	options: TopicPostsByIdsOptions;
+}> = [];
 let topicRefreshes = 0;
 const invalidations: string[][] = [];
+const preservedDeletions: number[] = [];
 const errors: unknown[] = [];
 const changes: Array<TopicLiveChange<{ revision: number }, TestPost>> = [];
-const controller = new TopicLiveController({
+const controller = new TopicLiveController<{ revision: number }, TestPost>({
 	topicId: 10,
 	messageBus: bus,
-		session: {
-			topicId: discourseTopicId(10),
-			postById: (postId) => posts.get(postId),
-			ingestPosts: (values) => {
-				for (const value of values) posts.set(value.id, value);
-			},
-			loadPostById: async (postId, options = {}) => {
+	session: {
+		topicId: discourseTopicId(10),
+		postById: (postId) => posts.get(postId),
+		ingestPosts: (values) => {
+			for (const value of values) posts.set(value.id, value);
+		},
+		streamPostIds: () => streamPostIds,
+		loadPostsByIds: async (postIds, options = {}) => {
+			batchLoadCalls.push({ postIds: [...postIds], options });
+			return {
+				posts: postIds.map((postId) => posts.get(postId))
+					.filter((value): value is TestPost => value !== undefined),
+				missingPostIds: [],
+			};
+		},
+		loadPostById: async (postId, options = {}) => {
 			loadCalls.push({ postId, options });
-			const value = post(postId, postId === 105 ? 5 : 2);
+			const value = post(postId, postId === 101 ? 1 : postId === 105 ? 5 : 2);
 			posts.set(postId, value);
+			if (options.created && !streamPostIds.includes(postId)) {
+				streamPostIds.push(postId);
+			}
 			return value;
 		},
-		removePostById: (postId) => {
-			const removed = posts.get(postId);
-			posts.delete(postId);
+		preserveDeletedPostById: (postId) => {
+			const preserved = posts.get(postId);
+			if (!preserved) throw new Error('missing post');
+			preservedDeletions.push(postId);
 			return {
-				removedPostNumbers: removed ? [removed.post_number] : [],
+				postNumber: preserved.post_number,
+				topicArchived: preserved.post_number === 1,
 			};
 		},
 		refresh: async () => ({ revision: ++topicRefreshes }),
@@ -226,9 +256,10 @@ const controller = new TopicLiveController({
 			invalidations.push([...tags]);
 		},
 	},
-		postDelayMs: 0,
-		topicDelayMs: 0,
-		currentUsername: 'viewer',
+	postDelayMs: 0,
+	reactionDelayMs: 0,
+	topicDelayMs: 0,
+	currentUsername: 'viewer',
 	setTimer: timers.set,
 	clearTimer: timers.clear,
 	onError: (error) => errors.push(error),
@@ -331,16 +362,43 @@ assert(
 	'完整 post delta 必须直接更新 canonical/cache/UI change，不能新增 Topic/Post 请求',
 );
 const reactionLoadsBeforeMessage = loadCalls.length;
+const reactionBatchesBeforeMessage = batchLoadCalls.length;
+bus.emit('/topic/10', {
+	payload: { type: 'acted', id: 101, topic_id: 10 },
+});
 bus.emit('/topic/10/reactions', {
 	payload: { post_id: 101, reactions: ['heart'], topic_id: 10 },
 });
+assert(timers.callbacks.size === 1, '双 channel 的同楼回应回声必须共享一个批量 timer');
 timers.runAll();
 await controller.flush();
 assert(
-	loadCalls.length === reactionLoadsBeforeMessage + 1 &&
-	loadCalls.at(-1)?.postId === 101 &&
+	loadCalls.length === reactionLoadsBeforeMessage &&
+	batchLoadCalls.length === reactionBatchesBeforeMessage + 1 &&
+	batchLoadCalls.at(-1)?.postIds.join(',') === '101' &&
+	batchLoadCalls.at(-1)?.options.background === true &&
+	batchLoadCalls.at(-1)?.options.refresh === true &&
+	batchLoadCalls.at(-1)?.options.maxAttempts === 1 &&
+	batchLoadCalls.at(-1)?.options.ingestSource === 'target-refresh' &&
 	topicRefreshes === reactionRefreshesBeforeDelta,
-	'只有 reaction 名称而没有权威计数的服务端事件必须复用既有单帖刷新，不能扩散成整帖请求',
+	'缺少权威计数的回应事件必须合并为一次可丢弃批量刷新，不能逐楼或整帖扩散',
+);
+const strictLoadsBefore = loadCalls.length;
+const strictBatchesBefore = batchLoadCalls.length;
+bus.emit('/topic/10', { payload: { type: 'revised', id: 901, topic_id: 10 } });
+bus.emit('/topic/10', { payload: { type: 'acted', id: 902, topic_id: 10 } });
+bus.emit('/topic/10', {
+	payload: {
+		type: 'boost_added',
+		id: 903,
+		boost: { id: 904, user: { id: 9, username: 'other' } },
+	},
+});
+assert(
+	Number(timers.callbacks.size) === 0 &&
+	loadCalls.length === strictLoadsBefore &&
+	batchLoadCalls.length === strictBatchesBefore,
+	'未进入 canonical 的隐藏/不可见楼层更新不得主动补请求',
 );
 const createdLoadsBefore = loadCalls.length;
 bus.emit('/topic/10', { payload: { type: 'created', id: 105, topic_id: 10 } });
@@ -351,10 +409,15 @@ assert(timers.callbacks.size === 1, '同 post.id 实时事件必须合并为一�
 timers.runAll();
 await controller.flush();
 assert(loadCalls.length === createdLoadsBefore + 1, '同 post.id 去抖后只能请求一次');
-assert(loadCalls.at(-1)?.options.created === true, '未知 created 必须通知 TopicSession 追加 stream');
 assert(
-	invalidations.some((tags) => tags.join(',') === 'topic:10,post:105'),
-	'单帖实时刷新必须精确失效 topic/post tag',
+	loadCalls.at(-1)?.options.created === true &&
+	loadCalls.at(-1)?.options.background === true,
+	'未知 created 必须用可丢弃后台请求通知 TopicSession 追加 stream',
+);
+assert(
+	invalidations.some((tags) => tags.join(',') === 'post:105') &&
+	!invalidations.some((tags) => tags.includes('topic:10')),
+	'楼层实时更新只能失效 post tag，不能借 topic tag 清空整帖批次缓存',
 );
 const postChange = changes.find((change) =>
 	change.kind === 'post' && change.postId === 105);
@@ -365,13 +428,9 @@ assert(
 bus.emit('/topic/10', { payload: { type: 'deleted', id: 105, topic_id: 10 } });
 timers.runAll();
 await controller.flush();
-assert(posts.get(105) === undefined, 'deleted 事件必须进入 TopicSession 删除入口');
-const deletedChange = changes.at(-1);
 assert(
-	deletedChange?.kind === 'deleted' &&
-	deletedChange.postId === 105 &&
-	deletedChange.postNumber === 5,
-	'deleted 事件必须输出稳定 post.id/postNumber 给 UI owner',
+	posts.get(105)?.post_number === 5 && preservedDeletions.at(-1) === 105,
+	'deleted 事件必须保留 canonical 正文，只登记岁月史书状态',
 );
 bus.emit('/topic/10', { payload: { type: 'deleted', id: 105, topic_id: 10 } });
 bus.emit('/topic/10', { payload: { type: 'recovered', id: 105, topic_id: 10 } });
@@ -396,22 +455,40 @@ await controller.flush();
 assert(loadCalls.at(-1)?.postId === 107, 'stats/created 反序 companion 必须只补目标楼层');
 assert(Number(topicRefreshes) === 0, 'stats/created 反序 companion 不得追加整帖刷新');
 
+bus.emit('/topic/10', {
+	type: 'stats',
+	posts_count: streamPostIds.length,
+	topic_id: 10,
+});
+assert(
+	Number(timers.callbacks.size) === 0,
+	'未证明 post stream 增长的 stats 不得发整帖请求',
+);
+
 bus.emit('/topic/10', { type: 'stats', posts_count: 8, topic_id: 10 });
 assert(timers.callbacks.size === 1, '孤立 stats 必须保留一次整帖兜底 timer');
 timers.runAll();
 await controller.flush();
 assert(topicRefreshes === 1, '孤立 stats 必须执行一次整帖兜底刷新');
+const topicChange = changes.at(-1);
+assert(
+	topicChange?.kind === 'topic' && topicChange.reasons.includes('stats'),
+	'已证明 stream 缺楼的 stats 刷新必须保留明确原因',
+);
 
 bus.emit('/topic/10', { payload: { type: 'mystery', topic_id: 10 } });
 bus.emit('/topic/10/reactions', { payload: { type: 'mystery', topic_id: 10 } });
-assert(timers.callbacks.size === 1, '多个未知事件必须合并为一次整帖刷新');
+assert(Number(timers.callbacks.size) === 0, '未知事件不得创建请求 timer');
 timers.runAll();
 await controller.flush();
-assert(Number(topicRefreshes) === 2, '未知事件 fallback 必须只追加一次 Topic 刷新');
-const topicChange = changes.at(-1);
+assert(Number(topicRefreshes) === 1, '未知事件不得降级成 Topic 刷新');
+
+bus.emit('/topic/10', { payload: { type: 'deleted', id: 101, topic_id: 10 } });
+timers.runAll();
+await controller.flush();
 assert(
-	topicChange?.kind === 'topic' && topicChange.reasons.includes('mystery'),
-	'整帖刷新必须输出合并原因',
+	posts.has(101) && preservedDeletions.at(-1) === 101 && !controller.active,
+	'首帖删除事件必须保留 #1 并停用该 Topic 的后续实时请求链',
 );
 
 controller.setActive(false);
@@ -421,7 +498,7 @@ assert(Number(timers.callbacks.size) === 0, '暂停后不得调度实时工作')
 assert(controller.setActive(true, { refresh: true }), '恢复必须重新订阅');
 timers.runAll();
 await controller.flush();
-assert(Number(topicRefreshes) === 3, '恢复可见状态必须补一次整帖刷新');
+assert(Number(topicRefreshes) === 2, '恢复可见状态必须补一次整帖刷新');
 
 controller.destroy();
 assert(!controller.active, '销毁必须停用实时 controller');
@@ -438,20 +515,23 @@ const failingBus = new PartialFailureBus();
 const partialTimers = new ManualTimers();
 const partialLoads: number[] = [];
 const partialErrors: unknown[] = [];
+const partialPost = post(102, 2);
 const failingController = new TopicLiveController({
 	topicId: 10,
 	messageBus: failingBus,
 	session: {
 		topicId: discourseTopicId(10),
-		postById: () => undefined,
-		loadPostById: async (postId) => {
-			partialLoads.push(postId);
-			return null;
+		postById: (postId) => postId === 102 ? partialPost : undefined,
+		loadPostsByIds: async (postIds) => {
+			partialLoads.push(...postIds);
+			return { posts: [partialPost], missingPostIds: [] };
 		},
-		removePostById: () => ({ removedPostNumbers: [] }),
+		loadPostById: async () => null,
+		preserveDeletedPostById: () => ({ postNumber: 1, topicArchived: false }),
 		refresh: async () => ({ revision: 1 }),
 	},
 	postDelayMs: 0,
+	reactionDelayMs: 0,
 	setTimer: partialTimers.set,
 	clearTimer: partialTimers.clear,
 	onError: (error) => partialErrors.push(error),
@@ -489,7 +569,7 @@ const fallbackController = new TopicLiveController({
 		loadPostById: async () => {
 			throw new Error('post refresh failed');
 		},
-		removePostById: () => ({ removedPostNumbers: [] }),
+		preserveDeletedPostById: () => ({ postNumber: 1, topicArchived: false }),
 		refresh: async () => ({ revision: ++fallbackTopicRefreshes }),
 	},
 	postDelayMs: 0,
@@ -499,15 +579,125 @@ const fallbackController = new TopicLiveController({
 	onError: (error) => fallbackErrors.push(error),
 });
 fallbackController.start();
-fallbackBus.emit('/topic/10', { payload: { type: 'revised', id: 102, topic_id: 10 } });
+fallbackBus.emit('/topic/10', { payload: { type: 'created', id: 102, topic_id: 10 } });
 fallbackTimers.runAll();
 await fallbackController.flush();
-assert(fallbackTimers.callbacks.size === 1, '单帖刷新失败必须调度整帖 fallback');
+assert(fallbackTimers.callbacks.size === 1, '新楼层刷新失败必须调度一次整帖 fallback');
 fallbackTimers.runAll();
 await fallbackController.flush();
-assert(fallbackTopicRefreshes === 1, '单帖失败只能触发一次整帖 fallback');
-assert(fallbackErrors.length === 1, '单帖失败必须留下诊断');
+assert(fallbackTopicRefreshes === 1, '新楼层失败只能触发一次整帖 fallback');
+assert(fallbackErrors.length === 1, '新楼层失败必须留下诊断');
 fallbackController.destroy();
+
+const pressureBus = new FakeMessageBus();
+const pressureTimers = new ManualTimers();
+let pressureTopicRefreshes = 0;
+const pressureController = new TopicLiveController({
+	topicId: 10,
+	messageBus: pressureBus,
+	session: {
+		topicId: discourseTopicId(10),
+		postById: () => undefined,
+		loadPostById: async () => {
+			throw Object.assign(new Error('rate limited'), {
+				status: 429,
+				cloudflareMitigated: true,
+			});
+		},
+		preserveDeletedPostById: () => ({ postNumber: 1, topicArchived: false }),
+		refresh: async () => ({ revision: ++pressureTopicRefreshes }),
+	},
+	postDelayMs: 0,
+	topicDelayMs: 0,
+	setTimer: pressureTimers.set,
+	clearTimer: pressureTimers.clear,
+});
+pressureController.start();
+pressureBus.emit('/topic/10', {
+	payload: { type: 'created', id: 103, topic_id: 10 },
+});
+pressureTimers.runAll();
+await pressureController.flush();
+assert(
+	pressureTimers.callbacks.size === 0 && pressureTopicRefreshes === 0,
+	'新楼层请求命中 429/Cloudflare 后必须终止，不能再放大为整帖 fallback',
+);
+pressureController.destroy();
+
+const reactionFailureBus = new FakeMessageBus();
+const reactionFailureTimers = new ManualTimers();
+const reactionFailurePosts = new Map<number, TestPost>();
+for (let postId = 1_201; postId <= 1_225; postId += 1) {
+	reactionFailurePosts.set(postId, post(postId, postId - 1_199));
+}
+const reactionFailureBatches: Array<{
+	postIds: readonly number[];
+	options: TopicPostsByIdsOptions;
+}> = [];
+const reactionFailureErrors: unknown[] = [];
+let reactionFailureTopicRefreshes = 0;
+const reactionFailureController = new TopicLiveController({
+	topicId: 10,
+	messageBus: reactionFailureBus,
+	session: {
+		topicId: discourseTopicId(10),
+		postById: (postId) => reactionFailurePosts.get(postId),
+		loadPostsByIds: async (postIds, options = {}) => {
+			reactionFailureBatches.push({ postIds: [...postIds], options });
+			throw Object.assign(new Error('reaction batch limited'), { status: 429 });
+		},
+		loadPostById: async () => null,
+		preserveDeletedPostById: () => ({ postNumber: 1, topicArchived: false }),
+		refresh: async () => ({ revision: ++reactionFailureTopicRefreshes }),
+	},
+	cache: {
+		invalidate: async ({ tags }) => {
+			assert(
+				tags.length <= 20 && tags.every((tag) => tag.startsWith('post:')),
+				'回应批量只能定点失效至多 20 个 post tag',
+			);
+		},
+	},
+	reactionDelayMs: 0,
+	setTimer: reactionFailureTimers.set,
+	clearTimer: reactionFailureTimers.clear,
+	onError: (error) => reactionFailureErrors.push(error),
+});
+reactionFailureController.start();
+for (const postId of reactionFailurePosts.keys()) {
+	reactionFailureBus.emit('/topic/10', {
+		payload: { type: 'acted', id: postId, topic_id: 10 },
+	});
+	reactionFailureBus.emit('/topic/10/reactions', {
+		payload: { post_id: postId, reactions: ['heart'], topic_id: 10 },
+	});
+}
+assert(
+	reactionFailureTimers.callbacks.size === 1,
+	'跨 channel 的回应突发必须全局合并成一个 timer',
+);
+reactionFailureTimers.runAll();
+await reactionFailureController.flush();
+assert(
+	reactionFailureBatches.length === 1 &&
+	reactionFailureBatches[0]?.postIds.length === 20 &&
+	reactionFailureBatches[0]?.options.background === true &&
+	reactionFailureBatches[0]?.options.refresh === true &&
+	reactionFailureBatches[0]?.options.maxAttempts === 1 &&
+	reactionFailureBatches[0]?.options.ingestSource === 'target-refresh' &&
+	reactionFailureErrors.length === 1 &&
+	reactionFailureTopicRefreshes === 0,
+	'回应突发必须有单批上限，失败后不得扩散为逐楼或整帖请求',
+);
+reactionFailureBus.emit('/topic/10', {
+	payload: { type: 'acted', id: 1_201, topic_id: 10 },
+});
+assert(
+	Number(reactionFailureTimers.callbacks.size) === 0 &&
+	reactionFailureBatches.length === 1,
+	'回应批次失败后本 Topic 本轮必须熔断后续自动回应请求',
+);
+reactionFailureController.destroy();
 
 const epochBus = new FakeMessageBus();
 const epochTimers = new ManualTimers();
@@ -518,9 +708,9 @@ const epochController = new TopicLiveController({
 	messageBus: epochBus,
 	session: {
 		topicId: discourseTopicId(10),
-		postById: () => undefined,
+		postById: (postId) => postId === 102 ? post(102, 2) : undefined,
 		loadPostById: async () => delayedPost.promise,
-		removePostById: () => ({ removedPostNumbers: [] }),
+		preserveDeletedPostById: () => ({ postNumber: 1, topicArchived: false }),
 		refresh: async () => ({ revision: 1 }),
 	},
 	postDelayMs: 0,
@@ -537,3 +727,67 @@ delayedPost.resolve(post(102, 2));
 await epochController.flush();
 assert(epochChanges.length === 0, '旧激活周期晚到结果不得进入重新激活的 UI 周期');
 epochController.destroy();
+
+const reactionEpochBus = new FakeMessageBus();
+const reactionEpochTimers = new ManualTimers();
+const reactionEpochPost = post(202, 2);
+const firstReactionBatch = deferred<{
+	readonly posts: readonly TestPost[];
+	readonly missingPostIds: readonly never[];
+}>();
+let reactionEpochBatchCalls = 0;
+const reactionEpochChanges: Array<
+	TopicLiveChange<{ revision: number }, TestPost>
+> = [];
+const reactionEpochController = new TopicLiveController<
+	{ revision: number },
+	TestPost
+>({
+	topicId: 10,
+	messageBus: reactionEpochBus,
+	session: {
+		topicId: discourseTopicId(10),
+		postById: (postId) => postId === 202 ? reactionEpochPost : undefined,
+		loadPostsByIds: async () => {
+			reactionEpochBatchCalls += 1;
+			return reactionEpochBatchCalls === 1
+				? firstReactionBatch.promise
+				: { posts: [reactionEpochPost], missingPostIds: [] };
+		},
+		loadPostById: async () => null,
+		preserveDeletedPostById: () => ({ postNumber: 2, topicArchived: false }),
+		refresh: async () => ({ revision: 1 }),
+	},
+	reactionDelayMs: 0,
+	setTimer: reactionEpochTimers.set,
+	clearTimer: reactionEpochTimers.clear,
+});
+reactionEpochController.changes.subscribe((change) =>
+	reactionEpochChanges.push(change));
+reactionEpochController.start();
+reactionEpochBus.emit('/topic/10', {
+	payload: { type: 'acted', id: 202, topic_id: 10 },
+});
+reactionEpochTimers.runAll();
+await Promise.resolve();
+reactionEpochController.setActive(false);
+reactionEpochController.start();
+reactionEpochBus.emit('/topic/10', {
+	payload: { type: 'acted', id: 202, topic_id: 10 },
+});
+firstReactionBatch.resolve({ posts: [reactionEpochPost], missingPostIds: [] });
+await reactionEpochController.flush();
+assert(
+	reactionEpochChanges.length === 0 &&
+	reactionEpochBatchCalls === 1 &&
+	reactionEpochTimers.callbacks.size === 1,
+	'旧激活周期的回应批次不得提交 UI，但新周期的回应必须重新排队',
+);
+reactionEpochTimers.runAll();
+await reactionEpochController.flush();
+assert(
+	Number(reactionEpochBatchCalls) === 2 &&
+	Number(reactionEpochChanges.length) === 1,
+	'旧回应批次结束后必须恢复当前激活周期的批量刷新',
+);
+reactionEpochController.destroy();

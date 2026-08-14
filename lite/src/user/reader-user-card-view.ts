@@ -1,11 +1,15 @@
 import { createReaderIcon } from '../components/reader-icon.js';
-import { replaceImageWithFallbackOnError } from '../components/reader-image-fallback.js';
+import {
+	installReaderImageSourceFallback,
+	replaceImageWithFallbackOnError,
+	type ReaderImageSourceRecovery,
+} from '../components/reader-image-fallback.js';
 import {
 	deepActiveElement,
 	eventElement,
 	eventPathIncludes,
 } from '../dom/event-target.js';
-import { containFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
+import { bindFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
 import { htmlElement as element } from '../dom/html-element.js';
 import { LifecycleScope, type Cleanup } from '../kernel/lifecycle.js';
 import { readerEscapeOwnedBy } from '../shell/reader-escape-surface.js';
@@ -38,11 +42,16 @@ export interface ReaderUserCardViewOptions {
 	readonly session: ReaderUserDomainSession;
 	readonly userHref: (username: string) => string;
 	readonly avatarSource?: (template: string, size: number) => string;
+	readonly recoverAvatarSource?: ReaderImageSourceRecovery;
 	readonly toggleFollow?: (
 		username: string,
 		followed: boolean,
 	) => Promise<void>;
 	readonly openMessage?: (username: string) => Promise<void>;
+	readonly observeUser?: (
+		profile: ReaderUserProfileResource,
+	) => void | Promise<void>;
+	readonly isObserved?: (username: string) => boolean;
 	readonly setNotificationLevel?: (
 		username: string,
 		level: 'normal' | 'mute' | 'ignore',
@@ -132,8 +141,11 @@ export class ReaderUserCardView {
 	readonly #session: ReaderUserDomainSession;
 	readonly #userHref: (username: string) => string;
 	readonly #avatarSource: (template: string, size: number) => string;
+	readonly #recoverAvatarSource: ReaderImageSourceRecovery | undefined;
 	readonly #toggleFollowAction: ReaderUserCardViewOptions['toggleFollow'];
 	readonly #openMessageAction: ReaderUserCardViewOptions['openMessage'];
+	readonly #observeUserAction: ReaderUserCardViewOptions['observeUser'];
+	readonly #isObserved: NonNullable<ReaderUserCardViewOptions['isObserved']>;
 	readonly #setNotificationLevelAction:
 		ReaderUserCardViewOptions['setNotificationLevel'];
 	readonly #ignoreUserAction: ReaderUserCardViewOptions['ignoreUser'];
@@ -179,8 +191,11 @@ export class ReaderUserCardView {
 		this.#session = options.session;
 		this.#userHref = options.userHref;
 		this.#avatarSource = options.avatarSource ?? (() => '');
+		this.#recoverAvatarSource = options.recoverAvatarSource;
 		this.#toggleFollowAction = options.toggleFollow;
 		this.#openMessageAction = options.openMessage;
+		this.#observeUserAction = options.observeUser;
+		this.#isObserved = options.isObserved ?? (() => false);
 		this.#setNotificationLevelAction = options.setNotificationLevel;
 		this.#ignoreUserAction = options.ignoreUser;
 		this.#endorseUserAction = options.endorseUser;
@@ -294,9 +309,7 @@ export class ReaderUserCardView {
 			this.followPanel,
 			this.followPreview,
 		]) {
-			this.scope.listen(surface, 'wheel', (event) => {
-				containFloatingSurfaceWheel(surface, event as WheelEvent);
-			}, { passive: false });
+			this.scope.add(bindFloatingSurfaceWheel(surface));
 		}
 		this.scope.listen(options.document, 'pointerdown', (event) => {
 			if (
@@ -334,12 +347,23 @@ export class ReaderUserCardView {
 			}
 			this.close(true);
 		});
-		this.scope.listen(options.document, 'scroll', () => {
+		this.scope.listen(options.document, 'scroll', (event) => {
+			if (
+				eventPathIncludes(event, this.element) ||
+				eventPathIncludes(event, this.followPanel) ||
+				eventPathIncludes(event, this.followPreview)
+			) return;
 			this.#queuePosition();
 		}, { capture: true, passive: true });
 		this.scope.listen(options.document.defaultView ?? options.document, 'resize', () => {
 			this.#queuePosition();
 		});
+		for (const type of [
+			'ldp-reader-window-change',
+			'ldp-reader-workspace-change',
+		]) {
+			this.scope.listen(options.root, type, () => this.#queuePosition());
+		}
 		this.#session.changes.subscribe((snapshot) => {
 			if (!this.#open || snapshot.username !== this.#session.activeUsername) return;
 			this.#update(snapshot);
@@ -369,7 +393,7 @@ export class ReaderUserCardView {
 		if (this.scope.destroyed) throw new Error('用户卡 View 已销毁');
 		this.#cancelOpening();
 		this.#cancelHide();
-		this.#anchor = anchor;
+		this.#setAnchor(anchor);
 		this.#closeFollow();
 		this.#actionStatuses.delete(
 			username.trim().replace(/^@/, '').toLocaleLowerCase(),
@@ -398,7 +422,7 @@ export class ReaderUserCardView {
 		if (!this.#open) return;
 		const anchor = this.#anchor;
 		this.#open = false;
-		this.#anchor = null;
+		this.#setAnchor(null);
 		this.#profile = null;
 		this.#renderedUsername = '';
 		this.#renderedRevision = -1;
@@ -422,6 +446,7 @@ export class ReaderUserCardView {
 		if (!target || this.element.contains(target)) return;
 		const username = String(target.dataset.userCard ?? '').trim();
 		if (!username) return;
+		if (target.hasAttribute('data-user-card-hover-only')) return;
 		if (this.followPanel.contains(target)) return;
 		const mediaToken = ++this.#mediaToken;
 		this.#cancelOpening();
@@ -441,6 +466,13 @@ export class ReaderUserCardView {
 		token: number,
 	): Promise<void> {
 		try {
+			const previewSource = this.#avatarPreviewSourceFromAnchor(
+				anchor,
+				username,
+			);
+			const avatarTemplate = String(
+				anchor.dataset.userAvatarTemplate ?? '',
+			).trim();
 			/* 点击头像也先同步打开骨架；资料 single-flight 完成后再进入媒体层。 */
 			const opening = this.open(username, anchor);
 			const snapshot = await this.#session.prefetch(username);
@@ -458,9 +490,31 @@ export class ReaderUserCardView {
 				!this.#open
 			) return;
 			const profile = this.#session.activeSnapshot?.profile ?? snapshot.profile;
-			const media = profile?.media ?? [];
+			if (!profile) return;
+			let media = profile.media;
 			const index = media.findIndex((entry) => entry.kind === 'avatar');
-			if (index < 0 || !profile) return;
+			if (index < 0) return;
+			if (previewSource || avatarTemplate) {
+				const canonical = media[index]!;
+				const triggerPreview = previewSource || (
+					avatarTemplate
+						? this.#avatarSource(avatarTemplate, 512)
+						: ''
+				) || canonical.src;
+				const triggerOriginal = (
+					avatarTemplate
+						? this.#avatarSource(avatarTemplate, 1000)
+						: ''
+				) || canonical.originalSrc || triggerPreview;
+				media = Object.freeze(media.map((entry, mediaIndex) =>
+					mediaIndex === index
+						? Object.freeze({
+							...canonical,
+							src: triggerPreview,
+							originalSrc: triggerOriginal,
+						})
+						: entry));
+			}
 			await this.#openMedia?.(media, index, this.element, profile, anchor);
 		} catch (cause) {
 			if (!this.scope.destroyed && token === this.#mediaToken) {
@@ -491,7 +545,7 @@ export class ReaderUserCardView {
 			this.#open &&
 			this.#session.activeUsername === username
 		) {
-			this.#anchor = target;
+			this.#setAnchor(target);
 			this.#queuePosition();
 			return;
 		}
@@ -578,6 +632,23 @@ export class ReaderUserCardView {
 	#cancelHide(): void {
 		if (this.#hideTimer !== null) this.#cancel(this.#hideTimer);
 		this.#hideTimer = null;
+	}
+
+	#setAnchor(anchor: HTMLElement | null): void {
+		this.#anchor = anchor;
+		const aboveObservation = Boolean(anchor?.closest(
+			'.ldp-reader-floating-window.is-user-observation-list',
+		));
+		for (const surface of [
+			this.element,
+			this.followPanel,
+			this.followPreview,
+		]) {
+			surface.classList.toggle(
+				'is-above-user-observation-window',
+				aboveObservation,
+			);
+		}
 	}
 
 	#scheduleFollowPreview(anchor: HTMLElement): void {
@@ -697,8 +768,9 @@ export class ReaderUserCardView {
 		const target = closestTarget<HTMLElement>(
 			event,
 			'[data-user-media-index],[data-user-card-badge-scroll],' +
-				'[data-user-follow-kind],[data-user-follow-toggle],' +
-				'[data-user-message],[data-user-notification-menu-toggle],' +
+			'[data-user-follow-kind],[data-user-follow-toggle],' +
+				'[data-user-message],[data-user-observe],' +
+				'[data-user-notification-menu-toggle],' +
 				'[data-user-notification-level],[data-user-endorse],' +
 				'[data-user-profile-retry]',
 		);
@@ -735,6 +807,7 @@ export class ReaderUserCardView {
 		const relationshipControl =
 			target.dataset.userFollowToggle !== undefined ||
 			target.dataset.userMessage !== undefined ||
+			target.dataset.userObserve !== undefined ||
 			target.dataset.userEndorse !== undefined ||
 			target.dataset.userNotificationMenuToggle !== undefined ||
 			target.dataset.userNotificationLevel !== undefined;
@@ -747,6 +820,10 @@ export class ReaderUserCardView {
 		}
 		if (target.dataset.userMessage !== undefined) {
 			void this.#openMessage(sourceUsername, sourceProfile);
+			return;
+		}
+		if (target.dataset.userObserve !== undefined) {
+			void this.#observeUser(sourceUsername, sourceProfile);
 			return;
 		}
 		if (target.dataset.userEndorse !== undefined) {
@@ -929,15 +1006,10 @@ export class ReaderUserCardView {
 			'span',
 			'ldp-user-card-skeleton-avatar ldp-user-card-skeleton-shape',
 		);
-		const anchor = target === this.followPreview
-			? this.#previewAnchor
-			: this.#anchor;
-		const directImage = anchor?.tagName === 'IMG'
-			? anchor as HTMLImageElement
-			: anchor?.querySelector<HTMLImageElement>('img');
-		const image = directImage ?? anchor?.closest('.ldp-post')
-			?.querySelector<HTMLImageElement>('.ldp-post-head img');
-		const avatarSource = String(image?.currentSrc || image?.src || '').trim();
+		const avatarSource = this.#avatarPreviewSource(
+			target,
+			snapshot.username,
+		);
 		if (avatarSource) {
 			const seed = this.#document.createElement('img');
 			seed.src = avatarSource;
@@ -1044,6 +1116,47 @@ export class ReaderUserCardView {
 		target.append(skeleton, status);
 	}
 
+	#avatarPreviewSource(target: HTMLElement, usernameValue: string): string {
+		const anchor = target === this.followPreview
+			? this.#previewAnchor
+			: this.#anchor;
+		if (!anchor) return '';
+		return this.#avatarPreviewSourceFromAnchor(anchor, usernameValue);
+	}
+
+	#avatarPreviewSourceFromAnchor(
+		anchor: HTMLElement,
+		usernameValue: string,
+	): string {
+		const username = String(usernameValue)
+			.trim()
+			.replace(/^@/, '')
+			.toLocaleLowerCase();
+		const anchorUsername = String(anchor.dataset.userCard ?? '')
+			.trim()
+			.replace(/^@/, '')
+			.toLocaleLowerCase();
+		if (username && anchorUsername && anchorUsername !== username) return '';
+		const directImage = anchor.tagName === 'IMG'
+			? anchor as HTMLImageElement
+			: anchor.querySelector<HTMLImageElement>('img');
+		let image = directImage;
+		if (!image) {
+			const avatarOwner = anchor.closest('.ldp-post-head')
+				?.querySelector<HTMLElement>(
+					'[data-user-avatar-preview][data-user-card]',
+				);
+			const ownerUsername = String(avatarOwner?.dataset.userCard ?? '')
+				.trim()
+				.replace(/^@/, '')
+				.toLocaleLowerCase();
+			if (!username || ownerUsername === username) {
+				image = avatarOwner?.querySelector<HTMLImageElement>('img') ?? null;
+			}
+		}
+		return String(image?.currentSrc || image?.src || '').trim();
+	}
+
 	#renderProfile(
 		profile: ReaderUserProfileResource,
 		target: HTMLElement,
@@ -1093,16 +1206,28 @@ export class ReaderUserCardView {
 			button.dataset.userMediaIndex = String(avatarIndex);
 			button.setAttribute('aria-label', '查看头像原图');
 		}
-		if (avatarIndex >= 0) {
+		const createAvatarFallback = () => element(
+			this.#document,
+			'span',
+			'ldp-user-card-avatar ldp-persistent-avatar-fallback',
+			[...(profile.identity.name || profile.identity.username || '?')][0] ?? '?',
+		);
+		const avatarPreviewSource = this.#avatarPreviewSource(
+			target,
+			profile.identity.username,
+		);
+		const avatarSources = [...new Set([
+			avatarPreviewSource,
+			avatarIndex >= 0 ? profile.media[avatarIndex]!.src : '',
+			profile.identity.avatarTemplate.replace(/\{size\}/g, '512'),
+			avatarIndex >= 0
+				? profile.media[avatarIndex]!.originalSrc ?? ''
+				: '',
+			profile.identity.avatarTemplate.replace(/\{size\}/g, '1000'),
+		].filter(Boolean))];
+		if (avatarSources.length) {
 			const image = this.#document.createElement('img');
 			image.className = 'ldp-user-card-avatar';
-			replaceImageWithFallbackOnError(image, () => element(
-				this.#document,
-				'span',
-				'ldp-user-card-avatar ldp-persistent-avatar-fallback',
-				[...(profile.identity.name || profile.identity.username || '?')][0] ?? '?',
-			));
-			image.src = profile.media[avatarIndex]!.src;
 			image.alt = '';
 			const wrapper = element(
 				this.#document,
@@ -1110,6 +1235,13 @@ export class ReaderUserCardView {
 				'ldp-avatar-with-flair',
 			);
 			wrapper.append(image);
+			installReaderImageSourceFallback(
+				image,
+				avatarSources,
+				createAvatarFallback,
+				this.#recoverAvatarSource,
+				avatarPreviewSource,
+			);
 			appendReaderUserFlair(this.#document, wrapper, profile.flair);
 			avatar.append(wrapper);
 		} else {
@@ -1118,12 +1250,7 @@ export class ReaderUserCardView {
 				'span',
 				'ldp-avatar-with-flair',
 			);
-			wrapper.append(element(
-				this.#document,
-				'span',
-				'ldp-user-card-avatar ldp-persistent-avatar-fallback',
-				[...(profile.identity.name || profile.identity.username || '?')][0] ?? '?',
-			));
+			wrapper.append(createAvatarFallback());
 			appendReaderUserFlair(this.#document, wrapper, profile.flair);
 			avatar.append(wrapper);
 		}
@@ -1447,6 +1574,24 @@ export class ReaderUserCardView {
 				this.#relationshipActionPending.has(username);
 			buttons.push(message);
 		}
+		if (this.#observeUserAction) {
+			let observed = false;
+			try {
+				observed = this.#isObserved(username);
+			} catch {
+				// 观察状态投影失败不能阻止入口本身显示。
+			}
+			const observe = this.#actionButton(
+				'activity',
+				observed ? '打开用户观察' : '加入用户观察',
+				observed,
+			);
+			observe.dataset.userObserve = '';
+			observe.classList.add('is-user-observation-entry');
+			observe.setAttribute('aria-pressed', String(observed));
+			observe.disabled = this.#relationshipActionPending.has(username);
+			buttons.push(observe);
+		}
 		if (this.#setNotificationLevelAction) {
 			const active = profile.relationship.ignored || profile.relationship.muted;
 			const available = profile.relationship.canMute ||
@@ -1535,7 +1680,7 @@ export class ReaderUserCardView {
 		button.className = active
 			? 'ldp-user-card-action is-active'
 			: 'ldp-user-card-action';
-		button.dataset.tooltip = label;
+		button.dataset.ldpTooltipLabel = label;
 		button.setAttribute('aria-label', label);
 		button.append(createReaderIcon(this.#document, icon));
 		return button;
@@ -1671,6 +1816,35 @@ export class ReaderUserCardView {
 			this.#setActionStatus(
 				username,
 				this.#actionError(cause, '未能打开“私信”页面，请重试'),
+				true,
+			);
+			this.#onError(cause);
+		} finally {
+			this.#relationshipActionPending.delete(username);
+			if (this.#open) this.#refreshUserSurface(username);
+		}
+	}
+
+	async #observeUser(
+		username: string,
+		profile: ReaderUserProfileResource,
+	): Promise<void> {
+		if (
+			!this.#observeUserAction ||
+			this.#relationshipActionPending.has(username)
+		) return;
+		this.#relationshipActionPending.add(username);
+		this.#closeNotificationMenu(this.element);
+		this.#closeNotificationMenu(this.followPreview);
+		this.#setActionStatus(username, '正在加入用户观察…');
+		this.#refreshUserSurface(username);
+		try {
+			await this.#observeUserAction(profile);
+			if (this.#open) this.close();
+		} catch (cause) {
+			this.#setActionStatus(
+				username,
+				this.#actionError(cause, '加入用户观察失败，请重试'),
 				true,
 			);
 			this.#onError(cause);

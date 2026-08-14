@@ -4,7 +4,7 @@
   "entryModuleId": "src/userscript/main-lite-entry.js",
   "limits": {
     "greasyForkHardLimit": 2097152,
-    "projectExecutableCeiling": 2000000
+    "projectExecutableCeiling": 2097152
   },
   "compiler": {
     "name": "esbuild",
@@ -14,8 +14,8 @@
     "vendorMinified": true,
     "sharedHelperDeclarations": 10
   },
-  "modules": 257,
-  "projectTotalExecutableBytes": 3526870,
+  "modules": 279,
+  "projectTotalExecutableBytes": 4457526,
   "libraries": [
     {
       "name": "main-lite-core",
@@ -23,10 +23,21 @@
       "compatibilityFiles": [
         "work/greasyfork-lite/libraries/mian-lite-core.js"
       ],
-      "description": "应用、数据、Discourse、Shell、主题、流与 userscript 运行核心",
-      "modules": 123,
-      "bytes": 1682561,
-      "sha256": "4a5a9a0f67214f7b696f107ee3dfd0d628fa9328c0d8470ee41eb6bbc7396154"
+      "description": "应用、Shell、主题、流、布局与 userscript 运行核心",
+      "modules": 100,
+      "bytes": 1525397,
+      "sha256": "111c99ebf2f93ae39f63d895c4222e05726be69438a62dd0e160cd7dc0d22ce9"
+    },
+    {
+      "name": "main-lite-platform",
+      "file": "work/greasyfork-lite/libraries/main-lite-platform.js",
+      "compatibilityFiles": [
+        "work/greasyfork-lite/libraries/mian-lite-platform.js"
+      ],
+      "description": "缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块",
+      "modules": 60,
+      "bytes": 1195176,
+      "sha256": "1374701d9974b5175b30e02a7a103ac323682b50a0ed29976e3f83710aaa1ccc"
     },
     {
       "name": "main-lite-features",
@@ -34,15 +45,15 @@
       "compatibilityFiles": [
         "work/greasyfork-lite/libraries/mian-lite-features.js"
       ],
-      "description": "媒体、互动、设置、用户、通知、监控与其他功能模块",
-      "modules": 134,
-      "bytes": 1841067,
-      "sha256": "e1919d8b5ec69c62cb9f875621ca0e69d6274f3f8600ac2b0f62e1aed69364e9"
+      "description": "媒体、互动、设置、用户、翻译与其他功能模块",
+      "modules": 119,
+      "bytes": 1733690,
+      "sha256": "57a071279ceb4452d50cc52119e6fe2e17808c27b2abbe76cba8e8989b5f11bb"
     }
   ],
   "loaderTemplate": {
     "file": "work/greasyfork-lite/main-loader.template.user.js",
-    "bytes": 3242,
-    "sha256": "93266db15548c3ac75680aada007314f81890ca21025fd1a07e6a097155c72bf"
+    "bytes": 3263,
+    "sha256": "ea4d0b00c317322a797499035d564cf0442554a5122866b7ed2a31be52bc2273"
   }
 }

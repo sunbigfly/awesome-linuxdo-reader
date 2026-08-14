@@ -1,6 +1,8 @@
 import type {
+	CollectionPageCacheLookup,
 	CollectionPageRequest,
 	DomainResponseCacheSettings,
+	UserResourceCacheLookup,
 	UserResourceRequest,
 } from '../network/domain-request-gateway.js';
 import type {
@@ -9,6 +11,10 @@ import type {
 import type {
 	DiscourseNativeAjaxExecution,
 } from '../network/discourse-native-read-transport.js';
+import type {
+	ReadStateConfirmedPost,
+} from '../reading/read-state-coordination.js';
+import { Signal } from '../kernel/signal.js';
 import {
 	readReaderAccountScopedString,
 	readerAccountScopedStorageIdentity,
@@ -35,6 +41,7 @@ export interface ReaderConnectTrustMetric {
 
 export interface ReaderConnectTrustGateway {
 	loadUserResource<T>(input: UserResourceRequest<T>): Promise<T>;
+	cachedUserResource<T>(input: UserResourceCacheLookup): Promise<T | null>;
 }
 
 export interface ReaderConnectTrustAdapterOptions {
@@ -190,6 +197,13 @@ const CACHE: DomainResponseCacheSettings = Object.freeze({
 	persist: true,
 });
 
+function connectCache(accountUsername: string): DomainResponseCacheSettings {
+	return Object.freeze({
+		...CACHE,
+		tags: Object.freeze([...CACHE.tags, `user:${accountUsername}`]),
+	});
+}
+
 /**
  * Connect 信任升级摘要只读 adapter。
  *
@@ -212,6 +226,30 @@ export class ReaderConnectTrustAdapter {
 		this.#now = options.now ?? Date.now;
 	}
 
+	async cached(
+		usernameValue: string,
+		signal: AbortSignal,
+	): Promise<ReaderUserExternalSnapshot | null> {
+		const expectedUsername = username(usernameValue);
+		signal.throwIfAborted();
+		const cached = await this.#gateway.cachedUserResource<
+			ReaderUserExternalSnapshot
+		>({
+			authScope: this.#authScope,
+			username: expectedUsername,
+			resource: 'connect-trust',
+			profile: 'resource-visible',
+			cache: connectCache(expectedUsername),
+		});
+		signal.throwIfAborted();
+		if (
+			!cached ||
+			cached.phase !== 'ready' ||
+			cached.accountUsername !== expectedUsername
+		) return null;
+		return staleExternalSnapshot(cached);
+	}
+
 	load(
 		usernameValue: string,
 		signal: AbortSignal,
@@ -227,13 +265,7 @@ export class ReaderConnectTrustAdapter {
 			input: descriptor.url,
 			signal,
 			cacheMode: refresh ? 'refresh' : 'default',
-			cache: Object.freeze({
-				...CACHE,
-				tags: Object.freeze([
-					...CACHE.tags,
-					`user:${expectedUsername}`,
-				]),
-			}),
+			cache: connectCache(expectedUsername),
 			allowStaleOnError: true,
 			mapStaleFallback: staleExternalSnapshot,
 			transport: async (request) => {
@@ -287,7 +319,18 @@ export interface ReaderConnectTrustHistorySnapshot {
 	readonly metrics: Readonly<Record<string, ReaderConnectTrustMetricHistory>>;
 }
 
+export interface ReaderConnectTrustHistoryChange {
+	readonly today: string;
+	readonly metric: ReaderConnectTrustMetricHistory;
+}
+
 export interface ReaderConnectTrustHistoryPort {
+	readonly changes: Pick<Signal<ReaderConnectTrustHistoryChange>, 'subscribe'>;
+	cached(
+		username: string,
+		metrics: Readonly<Record<string, unknown>>,
+		signal: AbortSignal,
+	): Promise<ReaderConnectTrustHistorySnapshot>;
 	load(
 		username: string,
 		metrics: Readonly<Record<string, unknown>>,
@@ -305,6 +348,7 @@ export interface ReaderConnectTrustReadConfirmation {
 
 export interface ReaderConnectTrustHistoryGateway {
 	loadCollectionPage<T>(input: CollectionPageRequest<T>): Promise<T>;
+	cachedCollectionPage<T>(input: CollectionPageCacheLookup): Promise<T | null>;
 }
 
 export interface ReaderConnectTrustHistoryAjaxPort {
@@ -323,6 +367,12 @@ export interface ReaderConnectTrustHistoryAdapterOptions {
 	readonly gateway: ReaderConnectTrustHistoryGateway;
 	readonly ajax: ReaderConnectTrustHistoryAjaxPort;
 	readonly storage: ReaderConnectTrustHistoryStoragePort;
+	readonly confirmations?: Readonly<{
+		confirmedPosts(
+			authScope: string,
+			since?: number,
+		): readonly ReadStateConfirmedPost[];
+	}>;
 	readonly authScope: string;
 	readonly now?: () => number;
 	readonly timeZone?: string;
@@ -363,6 +413,20 @@ const TRUST_ACTION_CACHE: DomainResponseCacheSettings = Object.freeze({
 	retainForMs: 24 * 60 * 60_000,
 	persist: true,
 });
+
+function trustActionCache(
+	accountUsername: string,
+	filter: 1 | 2 | 5,
+): DomainResponseCacheSettings {
+	return Object.freeze({
+		...TRUST_ACTION_CACHE,
+		tags: Object.freeze([
+			...TRUST_ACTION_CACHE.tags,
+			`user:${accountUsername}`,
+			`user-action:${filter}`,
+		]),
+	});
+}
 
 function objectRecord(value: unknown): UnknownRecord | null {
 	return value !== null && typeof value === 'object'
@@ -551,9 +615,13 @@ function serverFilterForMetric(key: string): 1 | 2 | 5 | null {
  */
 export class ReaderConnectTrustHistoryAdapter
 	implements ReaderConnectTrustHistoryPort {
+	readonly changes = new Signal<ReaderConnectTrustHistoryChange>();
 	readonly #gateway: ReaderConnectTrustHistoryGateway;
 	readonly #ajax: ReaderConnectTrustHistoryAjaxPort;
 	readonly #storage: ReaderConnectTrustHistoryStoragePort;
+	readonly #confirmations: ReaderConnectTrustHistoryAdapterOptions[
+		'confirmations'
+	];
 	readonly #storageIdentity: ReaderAccountScopedStorageIdentity;
 	readonly #authScope: string;
 	readonly #now: () => number;
@@ -563,6 +631,7 @@ export class ReaderConnectTrustHistoryAdapter
 		this.#gateway = options.gateway;
 		this.#ajax = options.ajax;
 		this.#storage = options.storage;
+		this.#confirmations = options.confirmations;
 		this.#authScope = String(options.authScope).trim();
 		if (!this.#authScope) throw new Error('Connect 历史 authScope 不能为空');
 		this.#storageIdentity = readerAccountScopedStorageIdentity(
@@ -574,7 +643,7 @@ export class ReaderConnectTrustHistoryAdapter
 			(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
 		const startedAt = this.#now();
 		dateKey(startedAt, this.#timeZone);
-		const stored = this.#readLocal();
+		const stored = this.#readConfirmedLocal();
 		if (stored.readTrackingStartedAt === null) {
 			stored.readTrackingStartedAt = startedAt;
 			this.#writeLocal(stored);
@@ -590,7 +659,7 @@ export class ReaderConnectTrustHistoryAdapter
 			.map(positiveInteger)
 			.filter((value): value is number => value !== null))];
 		if (!postNumbers.length) return;
-		const stored = this.#readLocal();
+		const stored = this.#readConfirmedLocal();
 		stored.readTrackingStartedAt = stored.readTrackingStartedAt === null
 			? confirmedAt
 			: Math.min(stored.readTrackingStartedAt, confirmedAt);
@@ -611,14 +680,58 @@ export class ReaderConnectTrustHistoryAdapter
 			}
 		}
 		if (changed) this.#writeLocal(stored);
+		const today = dateKey(this.#now(), this.#timeZone);
+		this.changes.emit(Object.freeze({
+			today,
+			metric: this.#confirmedReadHistory(
+				'posts-read',
+				'浏览帖子',
+				dateRange(today),
+				stored,
+			),
+		}));
 	}
 
 	syncValue(): unknown {
-		return this.#readLocal();
+		return this.#readConfirmedLocal();
 	}
 
 	replaceExternal(value: unknown): void {
 		this.#writeLocal(normalizeStoredHistory(value));
+	}
+
+	async cached(
+		usernameValue: string,
+		metrics: Readonly<Record<string, unknown>>,
+		signal: AbortSignal,
+	): Promise<ReaderConnectTrustHistorySnapshot> {
+		if (signal.aborted) throw signal.reason;
+		const accountUsername = username(usernameValue);
+		const today = dateKey(this.#now(), this.#timeZone);
+		const dates = dateRange(today);
+		const entries = metricEntries(metrics);
+		const local = this.#readConfirmedLocal();
+		const filters = [...new Set(entries
+			.map((entry) => serverFilterForMetric(
+				readerConnectTrustMetricKey(entry.label),
+			))
+			.filter((filter): filter is 1 | 2 | 5 => filter !== null))];
+		const outcomes = await Promise.all(filters.map(async (filter) =>
+			Object.freeze({
+				filter,
+				records: await this.#loadCachedActions(
+					accountUsername,
+					filter,
+					dates[0]!,
+					signal,
+				),
+			})));
+		if (signal.aborted) throw signal.reason;
+		const server = new Map<1 | 2 | 5, readonly TrustActionRecord[]>();
+		for (const outcome of outcomes) {
+			if (outcome.records) server.set(outcome.filter, outcome.records);
+		}
+		return this.#projectSnapshot(entries, dates, today, local, server);
 	}
 
 	async load(
@@ -657,6 +770,16 @@ export class ReaderConnectTrustHistoryAdapter
 				server.set(outcome.value.filter, outcome.value.records);
 			}
 		}
+		return this.#projectSnapshot(entries, dates, today, local, server);
+	}
+
+	#projectSnapshot(
+		entries: readonly ReaderConnectTrustMetric[],
+		dates: readonly string[],
+		today: string,
+		local: StoredTrustHistory,
+		server: ReadonlyMap<1 | 2 | 5, readonly TrustActionRecord[]>,
+	): ReaderConnectTrustHistorySnapshot {
 		const projected: Record<string, ReaderConnectTrustMetricHistory> = {};
 		for (const entry of entries) {
 			const key = readerConnectTrustMetricKey(entry.label);
@@ -665,7 +788,7 @@ export class ReaderConnectTrustHistoryAdapter
 					key,
 					entry.label,
 					dates,
-					local,
+					this.#readConfirmedLocal(),
 				);
 				continue;
 			}
@@ -696,6 +819,41 @@ export class ReaderConnectTrustHistoryAdapter
 		}
 	}
 
+	#readConfirmedLocal(): StoredTrustHistory {
+		const stored = this.#readLocal();
+		if (!this.#confirmations) return stored;
+		const cutoff = this.#now() - TRUST_HISTORY_RETAIN_DAYS * 24 * 60 * 60_000;
+		let changed = false;
+		try {
+			for (const confirmation of this.#confirmations.confirmedPosts(
+				this.#authScope,
+				cutoff,
+			)) {
+				if (confirmation.authScope !== this.#authScope) continue;
+				const topicId = positiveInteger(confirmation.topicId);
+				const postNumber = positiveInteger(confirmation.postNumber);
+				const confirmedAt = finiteNumber(confirmation.confirmedAt);
+				if (
+					topicId === null ||
+					postNumber === null ||
+					confirmedAt === null ||
+					confirmedAt < cutoff
+				) continue;
+				const fingerprint = `${topicId}:${postNumber}`;
+				if (stored.confirmedReads[fingerprint] !== undefined) continue;
+				stored.confirmedReads[fingerprint] = confirmedAt;
+				stored.readTrackingStartedAt = stored.readTrackingStartedAt === null
+					? confirmedAt
+					: Math.min(stored.readTrackingStartedAt, confirmedAt);
+				changed = true;
+			}
+		} catch {
+			return stored;
+		}
+		if (changed) this.#writeLocal(stored);
+		return stored;
+	}
+
 	#writeLocal(stored: StoredTrustHistory): void {
 		try {
 			this.#storage.setItem(
@@ -712,7 +870,7 @@ export class ReaderConnectTrustHistoryAdapter
 		today: string,
 		observedAt: number,
 	): StoredTrustHistory {
-		const stored = this.#readLocal();
+		const stored = this.#readConfirmedLocal();
 		const day = stored.days[today] ?? {};
 		for (const entry of entries) {
 			const key = readerConnectTrustMetricKey(entry.label);
@@ -740,6 +898,42 @@ export class ReaderConnectTrustHistoryAdapter
 		}
 		this.#writeLocal(stored);
 		return stored;
+	}
+
+	async #loadCachedActions(
+		accountUsername: string,
+		filter: 1 | 2 | 5,
+		cutoff: string,
+		signal: AbortSignal,
+	): Promise<readonly TrustActionRecord[] | null> {
+		const result: TrustActionRecord[] = [];
+		let offset = 0;
+		for (let page = 0; page < TRUST_ACTION_MAX_PAGES; page += 1) {
+			if (signal.aborted) throw signal.reason;
+			const payload = await this.#gateway.cachedCollectionPage<unknown>({
+				authScope: this.#authScope,
+				collection: 'connect-trust-actions',
+				page,
+				cursor: offset,
+				variant: `v1:${accountUsername}:${filter}`,
+				cache: trustActionCache(accountUsername, filter),
+			});
+			if (payload === null) return null;
+			const values = pageRecords(payload);
+			const records = values
+				.map((value) => actionRecord(value, this.#timeZone))
+				.filter((value): value is TrustActionRecord => value !== null);
+			for (const record of records) {
+				if (record.date >= cutoff) result.push(record);
+			}
+			const lastDate = records.at(-1)?.date ?? '';
+			if (
+				values.length < TRUST_ACTION_PAGE_SIZE ||
+				(lastDate && lastDate < cutoff)
+			) return Object.freeze(result);
+			offset += values.length;
+		}
+		return null;
 	}
 
 	async #loadActions(
@@ -771,14 +965,7 @@ export class ReaderConnectTrustHistoryAdapter
 				signal,
 				...(refresh ? { cacheMode: 'refresh' as const } : {}),
 				timeoutMs: 20_000,
-				cache: Object.freeze({
-					...TRUST_ACTION_CACHE,
-					tags: Object.freeze([
-						...TRUST_ACTION_CACHE.tags,
-						`user:${accountUsername}`,
-						`user-action:${filter}`,
-					]),
-				}),
+				cache: trustActionCache(accountUsername, filter),
 				allowStaleOnError: true,
 				transport: (request) => this.#ajax.request({
 					path,
@@ -897,7 +1084,9 @@ export class ReaderConnectTrustHistoryAdapter
 				return Object.freeze(sample
 					? {
 						date,
-						change: sample.last - sample.first,
+						change: key === 'days-visited'
+							? Math.max(0, sample.last - sample.first)
+							: sample.last - sample.first,
 						first: sample.first,
 						current: sample.last,
 						observed: true,

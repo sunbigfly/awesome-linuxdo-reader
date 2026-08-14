@@ -2,6 +2,7 @@ import {
 	deepActiveElement,
 	eventElement,
 } from '../dom/event-target.js';
+import { bindFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
 import { requiredElementQuery } from '../dom/required-element.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import { readerEscapeOwnedBy } from '../shell/reader-escape-surface.js';
@@ -98,6 +99,7 @@ export class ReaderLightboxBatchView {
 				<div class="ldp-lb-batch-actions"><span class="ldp-lb-batch-status"></span><button class="ldp-lb-batch-cancel" type="button">取消</button><button class="ldp-lb-batch-download" type="button" disabled>打包下载</button></div>
 			</section>`;
 		options.mount.append(root);
+		this.scope.add(bindFloatingSurfaceWheel(root));
 		this.slots = Object.freeze({
 			root,
 			scope: required<HTMLElement>(root, '.ldp-lb-batch-scope'),

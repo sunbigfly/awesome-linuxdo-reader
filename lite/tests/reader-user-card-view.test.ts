@@ -214,7 +214,9 @@ const gateway: ReaderUserRequestGateway = {
 const { document: parsedDocument, window: parsedWindow } = parseHTML(
 	'<!doctype html><html><body><main>' +
 	'<a href="/u/alice" data-user-card="alice">Alice</a>' +
-	'<button data-user-card="alice" data-user-avatar-preview>Avatar</button>' +
+	'<button data-user-card="alice" data-user-avatar-preview ' +
+	'data-user-avatar-template="/post-avatar/{size}.png">' +
+	'<img src="/post-avatar/48.png" alt=""></button>' +
 	'<button data-user-card="bob">Bob</button>' +
 	'</main></body></html>',
 );
@@ -252,16 +254,22 @@ const skeletonSession = new ReaderUserDomainSession({
 const skeletonRoot = document.createElement('div');
 const skeletonAnchor = document.createElement('a');
 skeletonAnchor.dataset.userCard = 'skeleton-user';
-const skeletonSeedAvatar = document.createElement('img');
-skeletonSeedAvatar.src = '/seed-avatar.png';
-skeletonAnchor.append(skeletonSeedAvatar);
 skeletonRoot.append(skeletonAnchor);
 document.body.append(skeletonRoot);
+let resolveSkeletonAvatar!: (source: string) => void;
+const skeletonRecoveredSources: string[] = [];
+const skeletonAvatar = new Promise<string>((resolve) => {
+	resolveSkeletonAvatar = resolve;
+});
 const skeletonView = new ReaderUserCardView({
 	document,
 	root: skeletonRoot,
 	session: skeletonSession,
 	userHref: (username) => `/u/${username}`,
+	recoverAvatarSource: (source) => {
+		skeletonRecoveredSources.push(source);
+		return skeletonAvatar;
+	},
 });
 const skeletonOpening = skeletonView.open('skeleton-user', skeletonAnchor);
 assert(
@@ -283,8 +291,23 @@ await skeletonOpening;
 assert(
 	!skeletonView.element.querySelector('.ldp-user-card-skeleton') &&
 		skeletonView.element.querySelector('.ldp-user-card-name')?.textContent ===
-			'Name skeleton-user',
-	'基础资料提交后必须用真实用户卡原位替换骨架',
+			'Name skeleton-user' &&
+	skeletonRecoveredSources.join(',') === '/avatar/skeleton-user.png' &&
+		skeletonView.element.querySelector(
+			'.ldp-user-card-avatar.ldp-persistent-avatar-fallback',
+		)?.textContent === 'N',
+	'基础资料提交后必须用可异步替换的头像占位进入统一校验链',
+);
+resolveSkeletonAvatar('/avatar/skeleton-user.png');
+for (let index = 0; index < 3; index += 1) await Promise.resolve();
+assert(
+	skeletonView.element.querySelector<HTMLImageElement>(
+		'img.ldp-user-card-avatar',
+	)?.getAttribute('src') === '/avatar/skeleton-user.png' &&
+		!skeletonView.element.querySelector(
+			'.ldp-user-card-avatar.ldp-persistent-avatar-fallback',
+		),
+	'用户卡头像资源完成后必须立即原位替换兜底节点',
 );
 skeletonView.destroy();
 skeletonSession.destroy();
@@ -295,10 +318,12 @@ const session = new ReaderUserDomainSession({
 	authScope: 'account:viewer',
 });
 const media: string[] = [];
+const mediaOriginals: string[] = [];
 const mediaAnchors: HTMLElement[] = [];
 const mediaReturnFocus: Array<HTMLElement | undefined> = [];
 const toggles: string[] = [];
 const messages: string[] = [];
+const observations: string[] = [];
 const notifications: string[] = [];
 const endorsements: string[] = [];
 const view = new ReaderUserCardView({
@@ -319,6 +344,10 @@ const view = new ReaderUserCardView({
 	openMessage: async (username) => {
 		messages.push(username);
 	},
+	observeUser: (userProfile) => {
+		observations.push(userProfile.identity.username);
+	},
+	isObserved: (username) => observations.includes(username),
 	setNotificationLevel: async (username, level, expiringAt) => {
 		notifications.push(`${username}:${level}:${expiringAt ? 'expiring' : 'none'}`);
 		const snapshot = session.snapshot(username).profile!;
@@ -361,6 +390,7 @@ const view = new ReaderUserCardView({
 	},
 	openMedia: (items, index, anchor, _profile, returnFocus) => {
 		media.push(items[index]!.src);
+		mediaOriginals.push(items[index]!.originalSrc ?? items[index]!.src);
 		mediaAnchors.push(anchor);
 		mediaReturnFocus.push(returnFocus);
 	},
@@ -517,22 +547,42 @@ assert(
 );
 assert(
 	[...view.element.querySelectorAll('.ldp-user-card-action')].every(
-		(button) => Boolean(button.querySelector('svg[data-ldp-reader-icon]')),
+		(button) =>
+			Boolean(button.querySelector('svg[data-ldp-reader-icon]')) &&
+			button.getAttribute('data-ldp-tooltip-label') ===
+				button.getAttribute('aria-label') &&
+			!button.hasAttribute('data-tooltip'),
 	) &&
 	[...view.element.querySelectorAll(
 		'.ldp-user-card-notification-option',
 	)].every((button) =>
 		Boolean(button.querySelector('svg[data-ldp-reader-icon]'))),
-	'用户卡主操作与消息级别菜单必须全部使用同一自足 SVG 图标链',
+	'用户卡主操作必须接入统一 tooltip，且与消息级别菜单共用自足 SVG 图标链',
+);
+assert(
+	view.element.querySelector(
+		'[data-user-observe] [data-icon="activity"]',
+	) !== null &&
+	view.element.querySelector('[data-user-observe]')?.classList.contains(
+		'is-user-observation-entry',
+	) === true &&
+	view.element.querySelector('[data-user-observe]')?.getAttribute(
+		'aria-label',
+	) === '加入用户观察',
+	'用户卡必须用与资料页一致的心电图 icon 提供“加入用户观察”入口',
 );
 assert(
 	view.element.textContent?.includes('帖子') &&
 		view.element.textContent.includes('获赞'),
 	'用户卡必须投影同一 summary 的社区统计',
 );
-view.element.querySelector<HTMLImageElement>(
-	'.ldp-user-card-avatar',
-)?.dispatchEvent(new constructors.Event('error'));
+for (let index = 0; index < 8; index += 1) {
+	const avatarImage = view.element.querySelector<HTMLImageElement>(
+		'.ldp-user-card-avatar',
+	);
+	if (!avatarImage) break;
+	avatarImage.dispatchEvent(new constructors.Event('error'));
+}
 view.element.querySelector<HTMLImageElement>(
 	'.ldp-avatar-flair-image',
 )?.dispatchEvent(new constructors.Event('error'));
@@ -548,7 +598,7 @@ assert(
 		'.ldp-avatar-flair [data-icon="shield"]',
 	) !== null &&
 	view.element.querySelector('.ldp-user-card-background') === null,
-	'用户卡头像、Flair 和背景请求失败后必须分别回退字符、语义图标或释放坏图表面',
+	'用户卡所有头像候选、Flair 和背景均失败后必须分别回退字符、语义图标或释放坏图表面',
 );
 const cardAvatarTrigger = view.element.querySelector<HTMLElement>(
 	'[data-user-media-index="0"]',
@@ -560,6 +610,22 @@ assert(
 		mediaAnchors[0] === view.element &&
 		mediaReturnFocus[0] === cardAvatarTrigger,
 	'用户卡头像必须保留卡片定位锚点，并把实际触发按钮交给统一 media port 恢复焦点',
+);
+click(view.element.querySelector('[data-user-observe]')!);
+for (let index = 0; index < 4; index += 1) await Promise.resolve();
+assert(
+	observations.join(',') === 'alice' && view.element.hidden,
+	'加入观察必须把 canonical profile 交给独立观察 owner，并关闭用户卡让出浮层',
+);
+await view.open('alice', root.querySelector('[data-user-card="alice"]') as HTMLElement);
+assert(
+	view.element.querySelector('[data-user-observe]')?.getAttribute(
+		'aria-pressed',
+	) === 'true' &&
+	view.element.querySelector('[data-user-observe]')?.getAttribute(
+		'aria-label',
+	) === '打开用户观察',
+	'已观察用户再次打开卡片时必须投影 active 状态',
 );
 click(view.element.querySelector('[data-user-message]')!);
 for (let index = 0; index < 4; index += 1) await Promise.resolve();
@@ -573,11 +639,13 @@ const postAvatarTrigger = root.querySelector<HTMLElement>(
 click(postAvatarTrigger);
 for (let index = 0; index < 4; index += 1) await Promise.resolve();
 assert(
-	media.join(',') === '/avatar/alice.png,/avatar/alice.png' &&
+	media.join(',') === '/avatar/alice.png,/post-avatar/48.png' &&
+		mediaOriginals.join(',') ===
+			'/avatar/alice.png,/post-avatar/1000.png' &&
 		!view.element.hidden && usernames.join(',') === 'alice' &&
 		mediaAnchors[1] === view.element &&
 		mediaReturnFocus[1] === postAvatarTrigger,
-	'楼层头像点击必须复用 canonical 用户资料与媒体端口，并保留用户卡定位锚点和楼层按钮焦点返回目标',
+	'楼层头像点击必须用当前预览与楼层模板取得原图，并保留 canonical 用户资料、卡片定位锚点和焦点返回目标',
 );
 await view.open('alice', root.querySelector('[data-user-card="alice"]') as HTMLElement);
 click(view.element.querySelector('[data-user-notification-menu-toggle]')!);
@@ -781,6 +849,14 @@ const reviewBob = document.createElement('button');
 reviewRoot.append(reviewAlice, reviewBob);
 document.body.append(reviewRoot);
 let userCardPositionFrames = 0;
+const userCardRequestFrameDescriptor = Object.getOwnPropertyDescriptor(
+	window,
+	'requestAnimationFrame',
+);
+const userCardCancelFrameDescriptor = Object.getOwnPropertyDescriptor(
+	window,
+	'cancelAnimationFrame',
+);
 Object.defineProperties(window, {
 	innerWidth: { configurable: true, value: 1_000 },
 	innerHeight: { configurable: true, value: 1_000 },
@@ -865,6 +941,13 @@ Object.defineProperty(reviewView.element, 'getBoundingClientRect', {
 });
 await reviewView.open('bob', reviewBob);
 const beforeScroll = reviewView.element.style.top;
+const beforeInternalScrollFrames = userCardPositionFrames;
+reviewView.element.dispatchEvent(new constructors.Event('scroll'));
+await Promise.resolve();
+assert(
+	userCardPositionFrames === beforeInternalScrollFrames,
+	'用户卡自身内容滚动不得反向触发整个浮层定位帧',
+);
 anchorTop = 100;
 document.dispatchEvent(new constructors.Event('scroll', { bubbles: true }));
 await new Promise<void>((resolve) => {
@@ -873,6 +956,16 @@ await new Promise<void>((resolve) => {
 assert(
 	reviewView.element.style.top !== beforeScroll,
 	'Reader/document scroll 必须通过唯一 View 合帧重定位用户卡',
+);
+const beforeWindowMove = reviewView.element.style.top;
+anchorTop = 200;
+reviewRoot.dispatchEvent(new constructors.Event('ldp-reader-window-change'));
+await new Promise<void>((resolve) => {
+	window.requestAnimationFrame(() => resolve());
+});
+assert(
+	reviewView.element.style.top !== beforeWindowMove,
+	'Reader 浮窗移动必须让用户卡跟随宿主头像重新定位',
 );
 reviewView.destroy();
 reviewSession.destroy();
@@ -986,6 +1079,7 @@ const hoverRoot = document.createElement('div');
 const hoverAnchor = document.createElement('a');
 hoverAnchor.href = '/u/hover-user';
 hoverAnchor.dataset.userCard = 'hover-user';
+hoverAnchor.dataset.userCardHoverOnly = '';
 Object.defineProperty(hoverAnchor, 'getBoundingClientRect', {
 	configurable: true,
 	value: () => ({
@@ -997,7 +1091,11 @@ Object.defineProperty(hoverAnchor, 'getBoundingClientRect', {
 		height: 20,
 	}),
 });
-hoverRoot.append(hoverAnchor);
+const observationWindow = document.createElement('section');
+observationWindow.className =
+	'ldp-reader-floating-window is-user-observation-list is-pinned';
+observationWindow.append(hoverAnchor);
+hoverRoot.append(observationWindow);
 document.body.append(hoverRoot);
 document.documentElement.classList.add('ldp-reader-workspace');
 const hostTopicList = document.createElement('table');
@@ -1051,6 +1149,11 @@ Object.defineProperty(hoverView.element, 'getBoundingClientRect', {
 		height: 220,
 	}),
 });
+const hoverOnlyClick = click(hoverAnchor);
+assert(
+	!hoverOnlyClick.defaultPrevented && hoverView.element.hidden,
+	'hover-only 用户卡锚点的点击必须留给原组件，不能抢走用户观察头像的打开行为',
+);
 const hoverEvent = new constructors.Event('mouseover', {
 	bubbles: true,
 	cancelable: true,
@@ -1080,7 +1183,10 @@ runDelay(500);
 for (let index = 0; index < 4; index += 1) await Promise.resolve();
 assert(
 	!hoverView.element.hidden && hoverSession.activeUsername === 'hover-user' &&
-	hoverView.element.style.top === '124px',
+	hoverView.element.style.top === '124px' &&
+	hoverView.element.classList.contains(
+		'is-above-user-observation-window',
+	),
 	`500ms 阶段必须复用已预取 snapshot，并用 4px 可抵达间距激活唯一用户卡 surface：${
 		hoverView.element.style.top
 	}`,
@@ -1236,7 +1342,10 @@ runDelay(500);
 for (let index = 0; index < 4; index += 1) await Promise.resolve();
 assert(
 	!hoverView.element.hidden &&
-		String(hoverSession.activeUsername) === 'host-user',
+		String(hoverSession.activeUsername) === 'host-user' &&
+		!hoverView.element.classList.contains(
+			'is-above-user-observation-window',
+		),
 	'宿主 Topic posters 头像必须复用 canonical session 与唯一用户卡 surface',
 );
 hoverView.destroy();
@@ -1330,3 +1439,17 @@ partialRoot.remove();
 
 view.destroy();
 session.destroy();
+if (userCardRequestFrameDescriptor) {
+	Object.defineProperty(
+		window,
+		'requestAnimationFrame',
+		userCardRequestFrameDescriptor,
+	);
+} else Reflect.deleteProperty(window, 'requestAnimationFrame');
+if (userCardCancelFrameDescriptor) {
+	Object.defineProperty(
+		window,
+		'cancelAnimationFrame',
+		userCardCancelFrameDescriptor,
+	);
+} else Reflect.deleteProperty(window, 'cancelAnimationFrame');

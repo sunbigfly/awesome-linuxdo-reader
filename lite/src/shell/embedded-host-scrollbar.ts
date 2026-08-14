@@ -19,6 +19,8 @@ export interface EmbeddedHostScrollbarSnapshot extends EmbeddedHostScrollMetrics
 
 export interface EmbeddedHostScrollPort {
 	read(): EmbeddedHostScrollMetrics;
+	/** 滚动热路径只读位置，避免每帧读取 scrollHeight 触发整页布局。 */
+	readScrollTop?(): number;
 	scrollTo(top: number): void;
 }
 
@@ -186,6 +188,7 @@ export class EmbeddedHostScrollbarController {
 	readonly #track: HTMLElement;
 	readonly #thumb: HTMLElement;
 	readonly #scroll: EmbeddedHostScrollPort;
+	readonly #readScrollTop: () => number;
 	readonly #readTrack: () => EmbeddedHostScrollbarTrackGeometry;
 	readonly #requestFrame: (callback: FrameRequestCallback) => number;
 	readonly #cancelFrame: (id: number) => void;
@@ -199,6 +202,7 @@ export class EmbeddedHostScrollbarController {
 	#active = false;
 	#geometryDirty = true;
 	#trackGeometry: EmbeddedHostScrollbarTrackGeometry = { top: 0, height: 1 };
+	#scrollMetrics: EmbeddedHostScrollMetrics | null = null;
 	#destroyed = false;
 
 	constructor(options: EmbeddedHostScrollbarControllerOptions) {
@@ -206,6 +210,8 @@ export class EmbeddedHostScrollbarController {
 		this.#track = options.track;
 		this.#thumb = options.thumb;
 		this.#scroll = options.scroll;
+		this.#readScrollTop = options.scroll.readScrollTop ??
+			(() => options.scroll.read().scrollTop);
 		this.#resizeTargets = Object.freeze([
 			...(options.resizeTargets ?? []),
 			options.track,
@@ -279,6 +285,7 @@ export class EmbeddedHostScrollbarController {
 		this.#stopPointer();
 		this.#geometryDirty = true;
 		this.#trackGeometry = { top: 0, height: 1 };
+		this.#scrollMetrics = null;
 		this.model.reset();
 		this.#clearDom();
 	}
@@ -291,7 +298,8 @@ export class EmbeddedHostScrollbarController {
 	#sync(): void {
 		this.#frame = 0;
 		if (!this.#active) return;
-		if (this.#geometryDirty) {
+		const geometryDirty = this.#geometryDirty;
+		if (geometryDirty) {
 			const geometry = this.#readTrack();
 			this.#trackGeometry = {
 				top: finite(geometry.top, 0),
@@ -299,7 +307,14 @@ export class EmbeddedHostScrollbarController {
 			};
 			this.#geometryDirty = false;
 		}
-		const snapshot = this.model.update(this.#scroll.read(), this.#trackGeometry.height);
+		const metrics = geometryDirty || this.#scrollMetrics === null
+			? this.#scroll.read()
+			: {
+				...this.#scrollMetrics,
+				scrollTop: this.#readScrollTop(),
+			};
+		this.#scrollMetrics = metrics;
+		const snapshot = this.model.update(metrics, this.#trackGeometry.height);
 		this.#apply(snapshot);
 	}
 

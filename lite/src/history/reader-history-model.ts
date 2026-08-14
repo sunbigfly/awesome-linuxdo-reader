@@ -9,6 +9,10 @@ export interface ReaderHistoryViewport {
 	readonly postNumber: DiscoursePostNumber;
 	readonly postOffset: number;
 	readonly scrollTop: number;
+	/** 离开时整个 Reader 主滚动区的最大 scrollTop。 */
+	readonly scrollRange?: number;
+	/** scrollTop / scrollRange；内容高度改变时依它恢复同一阅读进度。 */
+	readonly scrollRatio?: number;
 }
 
 export interface ReaderHistoryAnchorPoint {
@@ -70,6 +74,12 @@ function nonNegative(value: unknown): number {
 	return Math.max(0, finite(value, 0));
 }
 
+function optionalNonNegative(value: unknown): number | null {
+	if (value === null || value === undefined || value === '') return null;
+	const numeric = Number(value);
+	return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+}
+
 function optionalPostNumber(value: unknown): DiscoursePostNumber | null {
 	try {
 		return discoursePostNumber(value);
@@ -85,10 +95,25 @@ export function normalizeReaderHistoryViewport(
 		record(value) ?? Object.freeze({ postNumber: value });
 	const postNumber = optionalPostNumber(source.postNumber);
 	if (postNumber === null) return null;
+	const scrollTop = nonNegative(source.scrollTop);
+	const rawScrollRange = optionalNonNegative(source.scrollRange);
+	const rawScrollRatio = optionalNonNegative(source.scrollRatio);
+	const hasScrollGeometry = rawScrollRange !== null || rawScrollRatio !== null;
+	const scrollRange = rawScrollRange ?? 0;
+	const scrollRatio = Math.min(
+		1,
+		Math.max(
+			0,
+			rawScrollRatio !== null
+				? rawScrollRatio
+				: scrollRange > 0 ? scrollTop / scrollRange : 0,
+		),
+	);
 	return Object.freeze({
 		postNumber,
 		postOffset: finite(source.postOffset, 0),
-		scrollTop: nonNegative(source.scrollTop),
+		scrollTop,
+		...(hasScrollGeometry ? { scrollRange, scrollRatio } : {}),
 	});
 }
 

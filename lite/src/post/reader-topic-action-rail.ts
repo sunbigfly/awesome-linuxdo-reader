@@ -18,9 +18,11 @@ import {
 	readerWorkspacePositionMode,
 	type ReaderWorkspacePositionMode,
 } from '../shell/reader-workspace.js';
+import { READER_SELECT_DISMISS_EVENT } from '../shell/reader-select-surface.js';
 import { ReaderPostViewProjector } from '../topic/reader-post-view-projector.js';
 
-const TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX = 2;
+const TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX = 1;
+const TOPIC_ACTION_RAIL_ACTION_EDGE_GAP_PX = 2;
 
 export interface ReaderTopicActionRailPreferences {
 	readonly visible: boolean;
@@ -158,7 +160,9 @@ export interface ReaderTopicActionRailOptions<TPost> {
 	readonly preferences: ReaderTopicActionRailPreferencesPort;
 	readonly jumpToTop: () => void | Promise<void>;
 	readonly downloadCurrentTopic?: () => void | Promise<void>;
-	readonly openTopicDownloadManager?: () => void | Promise<void>;
+	readonly openChronicle?: () => void | Promise<void>;
+	readonly openUnwantedTopics?: () => void | Promise<void>;
+	readonly openUserObservations?: () => void | Promise<void>;
 	readonly requestFrame?: (callback: FrameRequestCallback) => number;
 	readonly cancelFrame?: (id: number) => void;
 	readonly createResizeObserver?: (
@@ -181,6 +185,8 @@ interface DragState {
 	readonly startY: number;
 	readonly left: number;
 	readonly top: number;
+	readonly toggleInsetLeft: number;
+	readonly toggleInsetRight: number;
 }
 
 function clampRatio(value: unknown, fallback: number): number {
@@ -231,7 +237,11 @@ export class ReaderTopicActionRail<TPost> {
 	readonly topButton: HTMLButtonElement;
 	readonly toggleButton: HTMLButtonElement;
 	readonly downloadButton: HTMLButtonElement | null;
-	readonly downloadHistoryButton: HTMLButtonElement | null;
+	readonly chronicleButton: HTMLButtonElement | null;
+	readonly unwantedTopicsButton: HTMLButtonElement | null;
+	readonly userObservationButton: HTMLButtonElement | null;
+	readonly #downloadGroup: HTMLElement | null;
+	readonly #secondaryToolsGroup: HTMLElement | null;
 	readonly #document: Document;
 	readonly #mount: HTMLElement;
 	readonly #shellRoot: HTMLElement;
@@ -240,7 +250,9 @@ export class ReaderTopicActionRail<TPost> {
 	readonly #preferences: ReaderTopicActionRailPreferencesPort;
 	readonly #jumpToTop: () => void | Promise<void>;
 	readonly #downloadCurrentTopic: (() => void | Promise<void>) | null;
-	readonly #openTopicDownloadManager: (() => void | Promise<void>) | null;
+	readonly #openChronicle: (() => void | Promise<void>) | null;
+	readonly #openUnwantedTopics: (() => void | Promise<void>) | null;
+	readonly #openUserObservations: (() => void | Promise<void>) | null;
 	readonly #requestFrame: (callback: FrameRequestCallback) => number;
 	readonly #cancelFrame: (id: number) => void;
 	readonly #scheduleTimer: (callback: () => void, delayMs: number) => number;
@@ -272,7 +284,9 @@ export class ReaderTopicActionRail<TPost> {
 		this.#preferences = options.preferences;
 		this.#jumpToTop = options.jumpToTop;
 		this.#downloadCurrentTopic = options.downloadCurrentTopic ?? null;
-		this.#openTopicDownloadManager = options.openTopicDownloadManager ?? null;
+		this.#openChronicle = options.openChronicle ?? null;
+		this.#openUnwantedTopics = options.openUnwantedTopics ?? null;
+		this.#openUserObservations = options.openUserObservations ?? null;
 		this.#now = options.now ?? Date.now;
 		const window = this.#document.defaultView;
 		this.#requestFrame = options.requestFrame ??
@@ -307,8 +321,8 @@ export class ReaderTopicActionRail<TPost> {
 		);
 		this.toggleButton = this.#button(
 			'ldp-topic-action-rail-toggle',
-			'展开全部主题操作',
-			'layers',
+			'展开第二段主题操作；本菜单分两段展开',
+			'menu-box',
 		);
 		this.toggleButton.setAttribute('aria-expanded', 'false');
 		this.downloadButton = this.#downloadCurrentTopic
@@ -318,22 +332,98 @@ export class ReaderTopicActionRail<TPost> {
 				'download',
 				)
 			: null;
-		this.downloadHistoryButton = this.#openTopicDownloadManager
+		this.chronicleButton = this.#openChronicle
 			? this.#button(
-				'ldp-topic-action-rail-download-history',
-				'查看 Topic 下载历史',
+				'ldp-topic-action-rail-chronicle',
+				'岁月史书',
 				'history',
 			)
 			: null;
+		this.unwantedTopicsButton = this.#openUnwantedTopics
+			? this.#button(
+				'ldp-topic-action-rail-unwanted-topics',
+				'打开不想看',
+				'eye-off',
+			)
+			: null;
+		this.userObservationButton = this.#openUserObservations
+			? this.#button(
+				'ldp-topic-action-rail-user-observation',
+				'打开用户观察',
+				'activity',
+			)
+			: null;
+		this.#secondaryToolsGroup = this.downloadButton ||
+			this.userObservationButton || this.chronicleButton ||
+			this.unwantedTopicsButton
+			? element(
+				this.#document,
+				'div',
+				'ldp-topic-action-rail-secondary-tools',
+			)
+			: null;
+		this.#secondaryToolsGroup?.setAttribute('role', 'group');
+		this.#secondaryToolsGroup?.setAttribute(
+			'aria-label',
+			'Topic 下载、用户观察、岁月史书与不想看',
+		);
+		if (this.downloadButton) {
+			this.#secondaryToolsGroup?.append(this.downloadButton);
+		}
+		if (this.userObservationButton) {
+			this.#secondaryToolsGroup?.append(this.userObservationButton);
+		}
+		if (this.chronicleButton) {
+			this.#secondaryToolsGroup?.append(this.chronicleButton);
+		}
+		if (this.unwantedTopicsButton) {
+			this.#secondaryToolsGroup?.append(this.unwantedTopicsButton);
+		}
+		this.#downloadGroup = this.#secondaryToolsGroup
+			? element(
+				this.#document,
+				'div',
+				'ldp-topic-action-rail-download-group',
+			)
+			: null;
+		this.#downloadGroup?.setAttribute('role', 'group');
+		this.#downloadGroup?.setAttribute(
+			'aria-label',
+			'第二段主题工具',
+		);
+		if (this.#secondaryToolsGroup) {
+			this.#downloadGroup?.append(this.#secondaryToolsGroup);
+		}
 		this.host.append(this.topButton);
-		if (this.downloadButton) this.host.append(this.downloadButton);
-		if (this.downloadHistoryButton) this.host.append(this.downloadHistoryButton);
+		if (this.#downloadGroup) this.host.append(this.#downloadGroup);
 		this.host.append(this.toggleButton);
 		this.#mount.append(this.host);
 
-		this.scope.listen(this.host, 'click', (event) => this.#onClick(event));
 		const interactionRoot = this.#shellRoot.getRootNode();
-		const ownedClicks = new WeakSet<Event>();
+		const ownedPointerDowns = new WeakSet<Event>();
+		this.scope.listen(this.host, 'click', (event) => this.#onClick(event));
+		this.scope.listen(this.host, 'pointerdown', (event) => {
+			/*
+			 * 点外收纳必须以按下位置为准。大刷新后的首帧可能继续重排 rail，
+			 * 若等 click 才判断，抬起事件可能已被重定向到 ShadowRoot 外层；
+			 * 岁月史书入口同时保持指针捕获，让随后 click 仍落回原功能按钮。
+			 */
+			ownedPointerDowns.add(event);
+			const pointerEvent = event as PointerEvent;
+			const chronicleButton = pointerEvent.button === 0
+				? (event.target as Element | null)?.closest<HTMLButtonElement>(
+					'.ldp-topic-action-rail-chronicle',
+				) ?? null
+				: null;
+			if (chronicleButton?.setPointerCapture) {
+				try {
+					chronicleButton.setPointerCapture(pointerEvent.pointerId);
+				} catch {
+					// 合成事件或已结束的 pointer 不支持捕获；click 委托仍可继续。
+				}
+			}
+			this.#onPointerDown(pointerEvent);
+		});
 		const collapseExpandedFromOutside = (event: Event): void => {
 			if (!this.#expanded) return;
 			if (event.defaultPrevented) return;
@@ -342,20 +432,20 @@ export class ReaderTopicActionRail<TPost> {
 			this.#applyMode('compact', false);
 		};
 		if (interactionRoot !== this.#document) {
-			this.scope.listen(interactionRoot, 'click', (event) => {
-				if (eventPathIncludes(event, this.host)) {
-					ownedClicks.add(event);
+			this.scope.listen(interactionRoot, 'pointerdown', (event) => {
+				if (
+					ownedPointerDowns.has(event) ||
+					eventPathIncludes(event, this.host)
+				) {
+					ownedPointerDowns.add(event);
 					return;
 				}
 				collapseExpandedFromOutside(event);
 			});
 		}
-		this.scope.listen(this.#document, 'click', (event) => {
-			if (ownedClicks.has(event)) return;
+		this.scope.listen(this.#document, 'pointerdown', (event) => {
+			if (ownedPointerDowns.has(event)) return;
 			collapseExpandedFromOutside(event);
-		});
-		this.scope.listen(this.host, 'pointerdown', (event) => {
-			this.#onPointerDown(event as PointerEvent);
 		});
 		this.scope.listen(this.#document, 'pointermove', (event) => {
 			this.#onPointerMove(event as PointerEvent);
@@ -404,6 +494,8 @@ export class ReaderTopicActionRail<TPost> {
 			);
 		});
 		this.#applyMode(this.#settings.mode, false);
+		this.#syncVisibility();
+		this.#queuePosition();
 	}
 
 	get view(): PostView | null {
@@ -494,16 +586,24 @@ export class ReaderTopicActionRail<TPost> {
 			}
 		if (target?.closest('.ldp-topic-action-rail-download')) {
 			event.preventDefault();
-			/* 下载管理浮窗锚定历史按钮；先展开 rail，保证锚点可见且可定位。 */
+			/* 下载浮窗先展开 rail，保证下载按钮锚点可见且可定位。 */
 			this.#applyMode('expanded', false);
 			if (this.#downloadCurrentTopic) this.#run(this.#downloadCurrentTopic);
 			return;
 		}
-		if (target?.closest('.ldp-topic-action-rail-download-history')) {
+		if (target?.closest('.ldp-topic-action-rail-chronicle')) {
 			event.preventDefault();
-			if (this.#openTopicDownloadManager) {
-				this.#run(this.#openTopicDownloadManager);
-			}
+			if (this.#openChronicle) this.#run(this.#openChronicle);
+			return;
+		}
+		if (target?.closest('.ldp-topic-action-rail-unwanted-topics')) {
+			event.preventDefault();
+			if (this.#openUnwantedTopics) this.#run(this.#openUnwantedTopics);
+			return;
+		}
+		if (target?.closest('.ldp-topic-action-rail-user-observation')) {
+			event.preventDefault();
+			if (this.#openUserObservations) this.#run(this.#openUserObservations);
 			return;
 		}
 		if (!target?.closest('.ldp-topic-action-rail-toggle')) return;
@@ -520,7 +620,15 @@ export class ReaderTopicActionRail<TPost> {
 		mode: 'collapsed' | 'compact' | 'expanded',
 		persist: boolean,
 	): void {
+		const wasExpanded = this.#expanded;
 		this.#expanded = mode === 'expanded';
+		if (wasExpanded && !this.#expanded) {
+			const EventConstructor = this.#document.defaultView?.Event ?? Event;
+			this.host.dispatchEvent(new EventConstructor(
+				READER_SELECT_DISMISS_EVENT,
+				{ bubbles: true, composed: true },
+			));
+		}
 		const storedMode = mode === 'collapsed' ? 'collapsed' : 'compact';
 		this.host.classList.toggle('is-collapsed', mode === 'collapsed');
 		this.host.classList.toggle('is-expanded', this.#expanded);
@@ -533,25 +641,30 @@ export class ReaderTopicActionRail<TPost> {
 			'aria-expanded',
 			String(this.#expanded),
 		);
-		if (this.downloadButton) {
-			this.downloadButton.hidden = mode === 'collapsed';
+		if (this.#downloadGroup) this.#downloadGroup.hidden = !this.#expanded;
+		if (this.downloadButton) this.downloadButton.hidden = !this.#expanded;
+		if (this.chronicleButton) {
+			this.chronicleButton.hidden = !this.#expanded;
 		}
-		if (this.downloadHistoryButton) {
-			this.downloadHistoryButton.hidden = !this.#expanded;
+		if (this.unwantedTopicsButton) {
+			this.unwantedTopicsButton.hidden = !this.#expanded;
+		}
+		if (this.userObservationButton) {
+			this.userObservationButton.hidden = !this.#expanded;
 		}
 		this.toggleButton.setAttribute(
 			'aria-label',
 			`${mode === 'collapsed'
-				? '显示常用主题操作'
+				? '展开第一段主题操作；再次点击可展开第二段'
 				: this.#expanded
-					? '全部收纳主题操作'
-					: '展开全部主题操作'}；${this.#settings.fixed
+					? '收纳主题操作；本菜单分两段展开'
+					: '展开第二段主题操作；本菜单分两段展开'}；${this.#settings.fixed
 				? '位置已固定'
 				: '长按拖动'}`,
 		);
 		this.toggleButton.replaceChildren(icon(
 			this.#document,
-			'layers',
+			'menu-box',
 		));
 		if (this.#view) {
 			this.#actions.setTopicActionRailExpanded?.(
@@ -570,7 +683,13 @@ export class ReaderTopicActionRail<TPost> {
 	}
 
 	#syncVisibility(): void {
-		const visible = this.#settings.visible && this.#view !== null;
+		const visible = this.#settings.visible && (
+			this.#view !== null ||
+				this.downloadButton !== null ||
+				this.chronicleButton !== null ||
+				this.unwantedTopicsButton !== null ||
+				this.userObservationButton !== null
+		);
 		this.host.hidden = !visible;
 		this.#shellRoot.classList.toggle(
 			'ldp-topic-action-rail-visible',
@@ -591,6 +710,7 @@ export class ReaderTopicActionRail<TPost> {
 		const position = this.#settings.positions[this.#positionMode()];
 		const width = Math.max(1, this.host.offsetWidth);
 		const height = Math.max(1, this.host.offsetHeight);
+		const maximumLeft = Math.max(0, this.#mount.clientWidth - width);
 		const toggleOffset =
 			this.toggleButton.offsetTop + this.toggleButton.offsetHeight / 2;
 		this.host.style.setProperty('--ldp-topic-rail-width', `${width}px`);
@@ -604,27 +724,67 @@ export class ReaderTopicActionRail<TPost> {
 			String(clampRatio(position.y, 0.95)),
 		);
 		const x = position.x;
+		let railLeft = 0;
 		this.host.classList.toggle('is-default-left', x === 'left');
 		this.host.classList.toggle('is-default-right', x === 'right');
 		if (x === 'left' || x === 'right') {
 			this.host.style.removeProperty('--ldp-topic-rail-x');
 			this.host.classList.remove('is-docked-left', 'is-docked-right');
+			const mountRect = this.#mount.getBoundingClientRect();
+			const hostRect = this.host.getBoundingClientRect();
+			const measuredLeft = hostRect.left - mountRect.left -
+				(Number(this.#mount.clientLeft) || 0);
+			railLeft = Number.isFinite(measuredLeft)
+				? Math.max(0, Math.min(maximumLeft, measuredLeft))
+				: x === 'right' ? maximumLeft : 0;
 		} else {
 			const normalized = clampRatio(x, 0);
-			const maximumLeft = Math.max(0, this.#mount.clientWidth - width);
-			const left = normalized * maximumLeft;
+			railLeft = normalized * maximumLeft;
 			this.host.style.setProperty(
 				'--ldp-topic-rail-x',
 				String(normalized),
 			);
-			const dockedLeft = left <= TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX;
+			const toggleInsets = this.#toggleHorizontalInsets();
+			const dockedLeft =
+				railLeft + toggleInsets.left <=
+					TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX;
 			this.host.classList.toggle('is-docked-left', dockedLeft);
 			this.host.classList.toggle(
 				'is-docked-right',
 				!dockedLeft &&
-					maximumLeft - left <= TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX,
+					maximumLeft - railLeft + toggleInsets.right <=
+						TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX,
 			);
 		}
+		this.#positionExpandedActions(railLeft, width, x);
+	}
+
+	#positionExpandedActions(
+		railLeft: number,
+		railWidth: number,
+		anchor: ReaderTopicActionRailPosition['x'] | null,
+	): void {
+		const hasExpandedActions = [...this.host.querySelectorAll<HTMLElement>(
+			'.ldp-context-actions-slot,.ldp-topic-action-rail-secondary-tools',
+		)].some((group) => group.childElementCount > 0);
+		if (!hasExpandedActions) {
+			this.host.classList.remove('is-actions-open-left');
+			this.host.style.removeProperty('--ldp-topic-rail-actions-max-width');
+			return;
+		}
+		const edgeInset = TOPIC_ACTION_RAIL_ACTION_EDGE_GAP_PX * 2;
+		const leftSpace = Math.max(1, railLeft + railWidth - edgeInset);
+		const rightSpace = Math.max(
+			1,
+			this.#mount.clientWidth - railLeft - edgeInset,
+		);
+		const opensLeft = anchor === 'right' ||
+			(anchor !== 'left' && leftSpace > rightSpace);
+		this.host.classList.toggle('is-actions-open-left', opensLeft);
+		this.host.style.setProperty(
+			'--ldp-topic-rail-actions-max-width',
+			`${Math.floor(opensLeft ? leftSpace : rightSpace)}px`,
+		);
 	}
 
 	#onPointerDown(event: PointerEvent): void {
@@ -646,13 +806,21 @@ export class ReaderTopicActionRail<TPost> {
 			if (this.scope.destroyed) return;
 			const hostRect = this.host.getBoundingClientRect();
 			const mountRect = this.#mount.getBoundingClientRect();
+			const toggleInsets = this.#toggleHorizontalInsets(
+				hostRect,
+				this.toggleButton.getBoundingClientRect(),
+			);
 			this.#drag = Object.freeze({
 				pointerId,
 				positionMode: this.#positionMode(),
 				startX,
 				startY,
-				left: hostRect.left - mountRect.left,
-				top: hostRect.top - mountRect.top,
+				left: hostRect.left - mountRect.left -
+					(Number(this.#mount.clientLeft) || 0),
+				top: hostRect.top - mountRect.top -
+					(Number(this.#mount.clientTop) || 0),
+				toggleInsetLeft: toggleInsets.left,
+				toggleInsetRight: toggleInsets.right,
 			});
 			this.host.classList.add('is-dragging');
 			this.host.classList.remove('is-default-left', 'is-default-right');
@@ -664,12 +832,19 @@ export class ReaderTopicActionRail<TPost> {
 	#onPointerMove(event: PointerEvent): void {
 		const drag = this.#drag;
 		if (!drag || event.pointerId !== drag.pointerId) return;
-		const maxLeft = Math.max(0, this.#mount.clientWidth - this.host.offsetWidth);
-		const maxTop = Math.max(0, this.#mount.clientHeight - this.host.offsetHeight);
-		this.host.style.left = `${Math.round(Math.max(
+		const railMaxLeft = Math.max(
 			0,
+			this.#mount.clientWidth - this.host.offsetWidth,
+		);
+		const minLeft = -drag.toggleInsetLeft;
+		const maxLeft = railMaxLeft + drag.toggleInsetRight;
+		const maxTop = Math.max(0, this.#mount.clientHeight - this.host.offsetHeight);
+		const left = Math.round(Math.max(
+			minLeft,
 			Math.min(maxLeft, drag.left + event.clientX - drag.startX),
-		))}px`;
+		));
+		this.host.style.left = `${left}px`;
+		this.#positionExpandedActions(left, this.host.offsetWidth, null);
 		this.host.style.top = `${Math.round(Math.max(
 			0,
 			Math.min(maxTop, drag.top + event.clientY - drag.startY),
@@ -681,21 +856,27 @@ export class ReaderTopicActionRail<TPost> {
 		this.#clearHold();
 		const drag = this.#drag;
 		if (!drag || event.pointerId !== drag.pointerId) return;
-		const maxLeft = Math.max(1, this.#mount.clientWidth - this.host.offsetWidth);
+		const railMaxLeft = Math.max(
+			1,
+			this.#mount.clientWidth - this.host.offsetWidth,
+		);
+		const minLeft = -drag.toggleInsetLeft;
+		const maxLeft = railMaxLeft + drag.toggleInsetRight;
 		const toggleMaxTop = Math.max(
 			1,
 			this.#mount.clientHeight - this.toggleButton.offsetHeight,
 		);
 		const left = Math.max(
-			0,
+			minLeft,
 			Math.min(maxLeft, Number.parseFloat(this.host.style.left)),
 		);
+		const toggleGaps = this.#toggleBoundaryGaps(left, railMaxLeft, drag);
 		const nextPosition = Object.freeze({
-			x: left <= TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX
+			x: toggleGaps.left <= TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX
 				? 'left' as const
-				: maxLeft - left <= TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX
+				: toggleGaps.right <= TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX
 					? 'right' as const
-					: clampRatio(left / maxLeft, 0),
+					: clampRatio(left / railMaxLeft, 0),
 			y: clampRatio(
 				(
 					Number.parseFloat(this.host.style.top) +
@@ -721,6 +902,69 @@ export class ReaderTopicActionRail<TPost> {
 			positions,
 		}));
 		this.#queuePosition();
+	}
+
+	#toggleHorizontalInsets(
+		hostRect?: DOMRect,
+		toggleRect?: DOMRect,
+	): Readonly<{ left: number; right: number }> {
+		const offsetLeft = Math.max(
+			0,
+			Number(this.toggleButton.offsetLeft) || 0,
+		);
+		const offsetWidth = Math.max(
+			0,
+			Number(this.toggleButton.offsetWidth) || 0,
+		);
+		const fallbackRight = Math.max(
+			0,
+			this.host.offsetWidth - offsetLeft - offsetWidth,
+		);
+		const measured = Boolean(
+			hostRect &&
+			toggleRect &&
+			hostRect.width > 0 &&
+			toggleRect.width > 0,
+		);
+		if (measured && hostRect && toggleRect) {
+			return Object.freeze({
+				left: Math.max(0, toggleRect.left - hostRect.left),
+				right: Math.max(0, hostRect.right - toggleRect.right),
+			});
+		}
+		return Object.freeze({
+			left: offsetLeft,
+			right: fallbackRight,
+		});
+	}
+
+	#toggleBoundaryGaps(
+		hostLeft: number,
+		railMaxLeft: number,
+		drag: DragState,
+	): Readonly<{ left: number; right: number }> {
+		const mountRect = this.#mount.getBoundingClientRect();
+		const toggleRect = this.toggleButton.getBoundingClientRect();
+		const mountLeft = mountRect.left +
+			(Number(this.#mount.clientLeft) || 0);
+		const mountRight = mountLeft + this.#mount.clientWidth;
+		if (
+			this.#mount.clientWidth > 0 &&
+			toggleRect.width > 0 &&
+			Number.isFinite(mountLeft) &&
+			Number.isFinite(mountRight) &&
+			Number.isFinite(toggleRect.left) &&
+			Number.isFinite(toggleRect.right)
+		) {
+			return Object.freeze({
+				left: Math.abs(toggleRect.left - mountLeft),
+				right: Math.abs(mountRight - toggleRect.right),
+			});
+		}
+		return Object.freeze({
+			left: hostLeft + drag.toggleInsetLeft,
+			right: railMaxLeft - hostLeft + drag.toggleInsetRight,
+		});
 	}
 
 	#positionMode(): ReaderWorkspacePositionMode {

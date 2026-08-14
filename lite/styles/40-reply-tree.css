@@ -609,9 +609,15 @@
 }
 
 .ldp-nested-preview > .ldp-post-head > .ldp-time[data-exact-time]::after {
-  position: static;
-  margin-left: 6px;
-  transform: none;
+  display: none;
+  content: none;
+}
+
+.ldp-nested-preview
+  > .ldp-post-head
+  > .ldp-time[data-exact-time]:hover
+  ~ .ldp-time-exact {
+  display: inline;
 }
 
 .ldp-nested-preview > .ldp-post-body > .ldp-content {
@@ -994,6 +1000,7 @@
   position: fixed;
   z-index: 2147483646;
   display: none;
+  pointer-events: auto;
   height: auto;
   min-height: 30px;
   padding: 3px;

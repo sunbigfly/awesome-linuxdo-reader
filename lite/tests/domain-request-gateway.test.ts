@@ -226,7 +226,8 @@ assert(
 		promotionClient.calls.length === 1 &&
 		promotionClient.calls[0]?.priority === 'visible' &&
 		promotionClient.calls[0]?.droppable === false &&
-		promotionClient.calls[0]?.max429Retries === 1,
+		promotionClient.calls[0]?.max429Retries === 0 &&
+		promotionClient.calls[0]?.maxChallengeRetries === 0,
 	'缓存读取期加入的可见消费者必须在单次 transport 前晋升后台契约，并跳过批量后台余量等待',
 );
 let releaseNestedPromotion!: () => void;
@@ -264,7 +265,8 @@ assert(
 		promotionClient.promotions[0]?.key.includes('after=20') &&
 		promotionClient.promotions[0]?.promotion.priority === 'nested' &&
 		promotionClient.promotions[0]?.promotion.droppable === false &&
-		promotionClient.promotions[0]?.promotion.max429Retries === 1,
+		promotionClient.promotions[0]?.promotion.max429Retries === 0 &&
+		promotionClient.promotions[0]?.promotion.maxChallengeRetries === 0,
 	'已进入 transport 的后台直属回复必须按完整页 identity 晋升为不可丢 nested 契约',
 );
 releaseNestedPromotion();
@@ -284,24 +286,50 @@ await gateway.loadNestedReplies({
 assert(client.calls.at(-1)?.priority === 'nested', '可见子树必须使用 nested profile');
 assert(
 	client.calls.at(-1)?.lane === 'nested-replies' &&
+		client.calls.at(-1)?.profile === 'nested-visible' &&
+		client.calls.at(-1)?.namespace === 'topic-nested' &&
+		client.calls.at(-1)?.cacheMode === 'default' &&
+		client.calls.at(-1)?.identity?.topicId === 10 &&
+		client.calls.at(-1)?.identity?.parentPostNumber === 3 &&
+		client.calls.at(-1)?.identity?.after === 20 &&
 		client.calls.at(-1)?.callSite ===
 			'nested-visible / topic-nested / nested-replies',
-	'gateway 必须把稳定 profile/namespace/车道交给唯一请求账本',
+	'gateway 必须把稳定 profile/namespace/车道/cache/identity 交给唯一请求账本',
 );
 assert(client.calls.at(-1)?.key.includes('after%3D20') === false, 'identity 不应被二次编码成不可读字段');
 assert(client.calls.at(-1)?.key.includes('after=20'), '嵌套 cursor 必须进入 key');
 
+const notificationCache = {
+	...cache,
+	kind: 'notifications',
+	tags: ['notifications'],
+};
 await gateway.loadNotificationPage({
 	authScope: 'account:test',
 	group: 'all',
 	page: 2,
 	input: '/notifications.json?page=2',
 	signal: controller.signal,
-	cache: { ...cache, kind: 'notifications', tags: ['notifications'] },
-	transport: async () => ({ ok: true, status: 200, value: [] }),
+	cache: notificationCache,
+	transport: async () => ({ ok: true, status: 200, value: [{ id: 2 }] }),
 });
 assert(client.calls.at(-1)?.priority === 'visible', '当前通知页必须是 visible');
+const callsBeforeNotificationCache = client.calls.length;
+const cachedNotifications = await gateway.cachedNotificationPage<readonly {
+	readonly id: number;
+}[]>({
+	authScope: 'account:test',
+	group: 'all',
+	page: 2,
+	cache: notificationCache,
+});
+assert(
+	cachedNotifications?.[0]?.id === 2 &&
+		client.calls.length === callsBeforeNotificationCache,
+	'通知缓存快照必须可直接读取，且不得进入 scheduler 或 transport',
+);
 
+const bookmarkCache = { ...cache, kind: 'bookmarks', tags: ['bookmarks'] };
 await gateway.loadCollectionPage({
 	authScope: 'account:test',
 	collection: 'bookmarks',
@@ -309,14 +337,63 @@ await gateway.loadCollectionPage({
 	variant: 'viewer',
 	input: '/u/viewer/bookmarks.json?page=1',
 	signal: controller.signal,
-	cache: { ...cache, kind: 'bookmarks', tags: ['bookmarks'] },
-	transport: async () => ({ ok: true, status: 200, value: [] }),
+	cache: bookmarkCache,
+	transport: async () => ({ ok: true, status: 200, value: [{ id: 1 }] }),
 });
 assert(
 	client.calls.at(-1)?.priority === 'visible' &&
 	client.calls.at(-1)?.key.includes('collection=bookmarks') &&
 	client.calls.at(-1)?.key.includes('page=1'),
 	'收藏/回应页必须通过独立 collection-visible 身份进入中央请求链',
+);
+const callsBeforeCollectionCache = client.calls.length;
+const cachedBookmarks = await gateway.cachedCollectionPage<readonly {
+	readonly id: number;
+}[]>({
+	authScope: 'account:test',
+	collection: 'bookmarks',
+	page: 1,
+	variant: 'viewer',
+	cache: bookmarkCache,
+});
+assert(
+	cachedBookmarks?.[0]?.id === 1 &&
+		client.calls.length === callsBeforeCollectionCache,
+	'集合缓存快照必须可直接读取，且不得进入 scheduler 或 transport',
+);
+
+const userSummaryCache = {
+	...cache,
+	kind: 'external-user-summary',
+	tags: ['users', 'user:alice'],
+};
+await gateway.loadUserResource({
+	authScope: 'account:test',
+	username: 'alice',
+	resource: 'connect-trust',
+	input: 'https://connect.linux.do/',
+	signal: controller.signal,
+	cache: userSummaryCache,
+	transport: async () => ({
+		ok: true,
+		status: 200,
+		value: { accountUsername: 'alice', targetLevel: 3 },
+	}),
+});
+const callsBeforeUserCache = client.calls.length;
+const cachedUserSummary = await gateway.cachedUserResource<{
+	readonly accountUsername: string;
+	readonly targetLevel: number;
+}>({
+	authScope: 'account:test',
+	username: 'alice',
+	resource: 'connect-trust',
+	cache: userSummaryCache,
+});
+assert(
+	cachedUserSummary?.targetLevel === 3 &&
+		client.calls.length === callsBeforeUserCache,
+	'用户资源缓存快照必须可直接读取，且不得进入 scheduler 或 transport',
 );
 
 await gateway.loadCollectionPage({
@@ -384,10 +461,11 @@ await gateway.submitReadState({
 });
 assert(client.calls.at(-1)?.priority === 'critical', '已读提交必须是 critical');
 assert(
+	client.calls.at(-1)?.max429Retries === 0 &&
 	client.calls.at(-1)?.maxChallengeRetries === 0 &&
 		client.calls.at(-1)?.blockOnCloudflareChallenge === false &&
 		client.calls.at(-1)?.suppressAfterChallengeWait === true,
-	'已读提交必须只结束自身、保持零自动重放，并在其他请求过盾后不追发旧批次',
+	'已读提交必须与通用 Cloudflare 验证隔离，保留 checkpoint 但不重放旧批次',
 );
 assert(client.calls.at(-1)?.key.includes('postNumbers=3%2C5'), '已读楼层必须排序后进入 key');
 
@@ -441,6 +519,35 @@ assert(
 	await gateway.cachedTranslation<string>(sectionCache) === '单段译文' &&
 	!client.calls.some((call) => call.key.includes('section-a')),
 	'section 缓存必须通过中央 ResponseRepository 直接读写，不得为命中项发起网络请求',
+);
+
+const topicTargetCache = {
+	...cache,
+	kind: 'topic-target',
+	tags: ['topic:10'],
+};
+await gateway.loadTopicTarget({
+	authScope: 'account:test',
+	topicId: 10,
+	operation: 'target',
+	postNumber: 8,
+	input: '/t/10/8.json',
+	signal: controller.signal,
+	cache: topicTargetCache,
+	transport: async () => ({ ok: true, status: 200, value: { id: 8 } }),
+});
+const callsBeforeTopicTargetCache = client.calls.length;
+const cachedTopicTarget = await gateway.cachedTopicTarget<{ readonly id: number }>({
+	authScope: 'account:test',
+	topicId: 10,
+	operation: 'target',
+	postNumber: 8,
+	cache: topicTargetCache,
+});
+assert(
+	cachedTopicTarget?.id === 8 &&
+		client.calls.length === callsBeforeTopicTargetCache,
+	'Topic 目标缓存快照必须可直接读取，且不得进入 scheduler 或 transport',
 );
 
 const aborted = new AbortController();

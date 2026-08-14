@@ -117,9 +117,14 @@ const navigation = {
 		return result;
 	},
 };
+let viewNavigablePostNumbers: readonly number[] | null = null;
+let viewNavigablePostNumbersComplete = true;
 const controller = new ReaderTopicTimelineController({
 	navigation,
 	readTotalPostCount: () => 20,
+	readNavigablePostNumbers: () => viewNavigablePostNumbers,
+	readNavigablePostNumbersComplete: () =>
+		viewNavigablePostNumbersComplete,
 	initialPostNumber: 1,
 });
 const notifications: string[] = [];
@@ -267,14 +272,31 @@ assert(
 
 template.topicTimelineTop.click();
 await Promise.resolve();
+viewNavigablePostNumbers = [1, 5, 10];
+viewNavigablePostNumbersComplete = false;
+controller.refresh();
+template.topicTimelineTrack.dispatchEvent(eventWith(window, 'pointerenter', {
+	clientY: 100,
+	pointerId: 9,
+}));
+assert(
+	template.topicTimelinePreview.textContent === '#11' &&
+	template.topicTimelineCursor
+		.querySelector('.ldp-timeline-lens-selected')?.textContent === '#11',
+	'覆盖未完成的 [#1, #5, #10] 只能是缓存样本；镜片与轨道预览必须继续显示 canonical #11，不能把数组中点 #5 冒充中间楼层',
+);
 template.topicTimelineRelative.click();
 await Promise.resolve();
 assert(
 	requests[4]?.postNumber === 1 &&
 	requests[5]?.postNumber === 20 &&
+	!template.topicTimelineTrack.classList.contains('ldp-timeline-jumping') &&
 	notifications.length === 0,
-	'日期/顶部与相对时间入口必须分别映射首楼和 controller 末楼',
+	'日期/顶部与相对时间入口必须分别映射首楼和 canonical 末楼；部分已加载根不能截断目标，末尾命令也不能播放跨帖滚动',
 );
+viewNavigablePostNumbers = null;
+viewNavigablePostNumbersComplete = true;
+controller.refresh();
 
 const requestCountBeforeSecondPointer = requests.length;
 template.topicTimelineTrack.dispatchEvent(eventWith(window, 'pointerdown', {

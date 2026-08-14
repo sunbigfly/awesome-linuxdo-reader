@@ -1,8 +1,11 @@
 import { LifecycleScope, type Cleanup } from '../kernel/lifecycle.js';
+import { eventElement } from '../dom/event-target.js';
+import type { PostNumber } from '../dom/reply-tree.js';
 import type { VirtualWindowInput } from '../stream/virtual-root-layout.js';
 import type {
 	ReaderTopicRevealOptions,
 	ReaderTopicViewportAnchor,
+	ReaderTopicViewportMutation,
 } from './reader-topic-dom-coordinator.js';
 
 export interface ReaderTopicResizeObserverPort {
@@ -37,6 +40,15 @@ export interface ReaderTopicJumpHighlightOptions {
 	readonly parentScope?: LifecycleScope;
 }
 
+export type ReaderBoostTargetHighlightOptions = Pick<
+	ReaderTopicJumpHighlightOptions,
+	| 'readLifetimeMs'
+	| 'prefersReducedMotion'
+	| 'schedule'
+	| 'cancel'
+	| 'parentScope'
+>;
+
 interface ActiveHighlight {
 	readonly target: HTMLElement;
 	readonly token: string;
@@ -46,6 +58,39 @@ interface ActiveHighlight {
 
 function finiteNonNegative(value: number, fallback = 0): number {
 	return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function wheelBlockDelta(event: WheelEvent, scrollRoot: HTMLElement): number {
+	if (event.deltaMode === 1) return event.deltaY * 40;
+	if (event.deltaMode === 2) return event.deltaY * scrollRoot.clientHeight;
+	return event.deltaY;
+}
+
+function nestedScrollTargetCanConsume(
+	event: WheelEvent,
+	scrollRoot: HTMLElement,
+	delta: number,
+): boolean {
+	const target = eventElement(event);
+	if (!target || !scrollRoot.contains(target)) return false;
+	let candidate: HTMLElement | null = target as HTMLElement;
+	while (candidate && candidate !== scrollRoot) {
+		const maxScrollTop = candidate.scrollHeight - candidate.clientHeight;
+		const view = candidate.ownerDocument.defaultView;
+		const computedOverflowY = typeof view?.getComputedStyle === 'function'
+			? view.getComputedStyle(candidate).overflowY
+			: '';
+		const overflowY = computedOverflowY || candidate.style.overflowY;
+		if (
+			maxScrollTop > 1 &&
+			/(auto|scroll|overlay)/.test(overflowY) &&
+			(delta < 0
+				? candidate.scrollTop > 0
+				: candidate.scrollTop < maxScrollTop - 1)
+		) return true;
+		candidate = candidate.parentElement;
+	}
+	return false;
 }
 
 function defaultResizeObserverFactory(
@@ -192,6 +237,75 @@ export class ReaderTopicJumpHighlightController {
 	}
 }
 
+interface ActiveBoostTargetHighlight {
+	readonly target: HTMLElement;
+	readonly token: string;
+	readonly timer: unknown;
+}
+
+/** 与楼层高亮并行存在的 Boost 精确定位反馈，不占用 Topic 唯一楼层高亮 owner。 */
+export class ReaderBoostTargetHighlightController {
+	readonly scope: LifecycleScope;
+	readonly #readLifetimeMs: () => number;
+	readonly #prefersReducedMotion: () => boolean;
+	readonly #schedule: (callback: () => void, delayMs: number) => unknown;
+	readonly #cancel: (handle: unknown) => void;
+	#active: ActiveBoostTargetHighlight | null = null;
+	#token = 0;
+
+	constructor(options: ReaderBoostTargetHighlightOptions = {}) {
+		this.scope = LifecycleScope.ownedBy(options.parentScope);
+		this.#readLifetimeMs = options.readLifetimeMs ?? (() => 2_500);
+		this.#prefersReducedMotion =
+			options.prefersReducedMotion ?? (() => false);
+		this.#schedule =
+			options.schedule ?? ((callback, delayMs) => setTimeout(callback, delayMs));
+		this.#cancel =
+			options.cancel ?? ((handle) =>
+				clearTimeout(handle as ReturnType<typeof setTimeout>));
+		this.scope.add(() => this.clear());
+	}
+
+	highlight(target: HTMLElement): void {
+		if (this.scope.destroyed || !target.isConnected) return;
+		this.clear();
+		const token = String(++this.#token);
+		target.classList.remove('ldp-boost-target-highlight');
+		void target.offsetWidth;
+		target.dataset.boostTargetHighlightToken = token;
+		target.classList.add('ldp-boost-target-highlight');
+		const lifetime = this.#prefersReducedMotion()
+			? 1_000
+			: Math.max(1, finiteNonNegative(this.#readLifetimeMs(), 2_500));
+		const timer = this.#schedule(() => {
+			if (target.dataset.boostTargetHighlightToken === token) {
+				this.#clearTarget(target);
+			}
+			if (this.#active?.token === token) this.#active = null;
+		}, lifetime);
+		this.#active = Object.freeze({ target, token, timer });
+	}
+
+	clear(): void {
+		const active = this.#active;
+		if (!active) return;
+		this.#active = null;
+		this.#cancel(active.timer);
+		if (active.target.dataset.boostTargetHighlightToken === active.token) {
+			this.#clearTarget(active.target);
+		}
+	}
+
+	destroy(): void {
+		this.scope.destroy();
+	}
+
+	#clearTarget(target: HTMLElement): void {
+		target.classList.remove('ldp-boost-target-highlight');
+		delete target.dataset.boostTargetHighlightToken;
+	}
+}
+
 export interface ReaderTopicScrollAdapterOptions
 	extends ReaderTopicJumpHighlightOptions {
 	readonly scrollRoot: HTMLElement;
@@ -207,6 +321,8 @@ export interface ReaderTopicScrollAdapterOptions
 	readonly now?: () => number;
 	readonly createMutationObserver?: ReaderTopicMutationObserverFactory;
 }
+
+export type ReaderTopicScrollDirection = -1 | 0 | 1;
 
 const SCROLLING_KEYS = new Set([
 	'ArrowDown',
@@ -224,12 +340,24 @@ const SCROLLING_KEYS = new Set([
  * 布局、锚定或程序化写入的结果，不能重新取得用户滚动所有权。
  */
 const USER_SCROLL_SESSION_GAP_MS = 500;
+/*
+ * scrollend 可能先于 scroll rAF 和虚拟 DOM commit 到达。没有显式 commit
+ * 信号时保守等待三帧；收到 commit 后仍留两帧，让随后排入的 branch paint 与
+ * 浏览器 layout 完成，再读取物理锚点，避免在同一绘制周期强制整页布局。
+ */
+const STATIONARY_LOCK_FALLBACK_FRAMES = 3;
+const STATIONARY_LOCK_AFTER_COMMIT_FRAMES = 2;
 
 interface StationaryViewportAnchor {
-	readonly postNumber: number;
+	readonly postNumber: PostNumber;
 	readonly markerRole: 'header' | 'owner';
 	readonly markerOffset: number;
 	readonly ownerOffset: number;
+}
+
+interface ViewportMutationAnchor extends StationaryViewportAnchor {
+	readonly token: number;
+	readonly scrollTop: number;
 }
 
 function isEditableScrollTarget(target: EventTarget | null): boolean {
@@ -262,6 +390,7 @@ export class ReaderTopicScrollAdapter {
 	readonly #observesViewportSize: boolean;
 	readonly #windowChangeListeners = new Set<() => void>();
 	readonly #userScrollIntentListeners = new Set<() => void>();
+	readonly #directUserScrollIntentListeners = new Set<() => void>();
 	#viewportSize = 1;
 	#viewportSizeDirty = false;
 	#scrollOffset = 0;
@@ -269,9 +398,17 @@ export class ReaderTopicScrollAdapter {
 	#scrollOffsetDirty = false;
 	#scrollFrame = 0;
 	#lastUserScrollAt = 0;
+	#lastUserScrollDirection: ReaderTopicScrollDirection = 0;
 	#userScrollSessionActive = false;
+	#lastTouchClientY: number | null = null;
 	#stationaryAnchor: StationaryViewportAnchor | null = null;
-	#stationaryScrollWriteOffset: number | null = null;
+	#stationaryLockPending = false;
+	#stationaryLockFrame = 0;
+	#stationaryLockSettleFrames = 0;
+	#viewportMutationAnchor: ViewportMutationAnchor | null = null;
+	#viewportMutationToken = 0;
+	#internalScrollWriteOffset: number | null = null;
+	#programmaticScrollTransactionDepth = 0;
 	#stationaryMutationObserver: ReaderTopicMutationObserverPort | null = null;
 	#stationaryResizeObserver: ResizeObserver | null = null;
 
@@ -309,6 +446,8 @@ export class ReaderTopicScrollAdapter {
 			});
 		}
 		this.scope.add(() => this.#releaseStationaryViewport());
+		this.scope.add(() => this.#cancelPendingStationaryViewportLock());
+		this.scope.add(() => this.#cancelViewportMutation(undefined, false));
 		const createResizeObserver =
 			options.createResizeObserver ?? defaultResizeObserverFactory;
 		const viewportObserver = createResizeObserver((entries) => {
@@ -370,8 +509,9 @@ export class ReaderTopicScrollAdapter {
 			this.#scrollRoot,
 			'scroll',
 			() => {
-				this.#claimScrollOnlyUserInput();
-				this.#markUserScrollProgress();
+				if (this.#claimScrollOnlyUserInput()) {
+					this.#markUserScrollProgress();
+				}
 				/*
 				 * scroll 事件发生时上一虚拟帧可能刚改完 DOM；在这里同步读取
 				 * scrollTop 会强制完成整棵树布局。事件只登记坐标已变化，统一到
@@ -386,12 +526,63 @@ export class ReaderTopicScrollAdapter {
 			this.#finishUserScrollSession();
 		}, { passive: true });
 		this.scope.listen(this.#scrollRoot, 'wheel', (event) => {
-			if ((event as WheelEvent).ctrlKey) return;
+			const wheel = event as WheelEvent;
+			if (wheel.ctrlKey) return;
+			const delta = wheelBlockDelta(wheel, this.#scrollRoot);
+			const direction = this.#directionOf(delta);
+			if (direction === 0) {
+				this.#markUserScrollIntent();
+				return;
+			}
+			if (
+				direction < 0 &&
+				!nestedScrollTargetCanConsume(wheel, this.#scrollRoot, delta)
+			) {
+				/*
+				 * 向上 prepend 必须先让关系投影冻结，再由唯一 scroll owner 消费
+				 * 同一份物理 delta。若继续交还 Chromium 默认滚动，虚拟 spacer 在
+				 * 默认行为前后的重算会叠加到这个输入，长 Topic 首次反向滚动可被
+				 * 放大成数千楼。内层代码块等仍优先消费自己的滚动距离。
+				 */
+				wheel.preventDefault();
+				this.#markUserScrollIntent(direction);
+				const requestedOffset = Math.max(
+					0,
+					finiteNonNegative(this.#scrollRoot.scrollTop) + delta,
+				);
+				const actualOffset = this.#writeScrollRootOffset(requestedOffset);
+				/*
+				 * 手动消费 wheel 后必须在当前输入任务里同步发布窗口坐标。若先等
+				 * scroll rAF，连续大 delta 会在虚拟 frame 获得排期前直接跨入数千楼
+				 * spacer，形成“滚动条已经移动、DOM 仍停在旧窗口”的整屏空白。
+				 * listener 只负责给唯一 VirtualStreamFrameController 排一个合并帧，
+				 * 不在 wheel 事件里读取或改写楼层 DOM。
+				 */
+				this.#scrollOffset = actualOffset;
+				this.#pendingScrollOffset = actualOffset;
+				this.#scrollOffsetDirty = false;
+				this.#notifyWindowChange();
+				return;
+			}
+			this.#markUserScrollIntent(direction);
+		}, { passive: false });
+		this.scope.listen(this.#scrollRoot, 'touchstart', (event) => {
+			this.#lastTouchClientY =
+				(event as Partial<TouchEvent>).touches?.[0]?.clientY ?? null;
 			this.#markUserScrollIntent();
 		}, { passive: true });
-		for (const type of ['touchstart', 'touchmove']) {
+		this.scope.listen(this.#scrollRoot, 'touchmove', (event) => {
+			const clientY =
+				(event as Partial<TouchEvent>).touches?.[0]?.clientY;
+			const direction = clientY === undefined || this.#lastTouchClientY === null
+				? 0
+				: this.#directionOf(this.#lastTouchClientY - clientY);
+			this.#lastTouchClientY = clientY ?? null;
+			this.#markUserScrollIntent(direction);
+		}, { passive: true });
+		for (const type of ['touchend', 'touchcancel']) {
 			this.scope.listen(this.#scrollRoot, type, () => {
-				this.#markUserScrollIntent();
+				this.#lastTouchClientY = null;
 			}, { passive: true });
 		}
 		this.scope.listen(this.#scrollRoot, 'keydown', (event) => {
@@ -404,7 +595,7 @@ export class ReaderTopicScrollAdapter {
 				!SCROLLING_KEYS.has(keyboard.key) ||
 				isEditableScrollTarget(keyboard.target)
 			) return;
-			this.#markUserScrollIntent();
+			this.#markUserScrollIntent(this.#keyboardDirection(keyboard));
 		});
 		this.scope.add(() => {
 			if (!this.#scrollFrame) return;
@@ -415,6 +606,7 @@ export class ReaderTopicScrollAdapter {
 		});
 		this.scope.add(() => this.#windowChangeListeners.clear());
 		this.scope.add(() => this.#userScrollIntentListeners.clear());
+		this.scope.add(() => this.#directUserScrollIntentListeners.clear());
 	}
 
 	readWindowInput(): VirtualWindowInput {
@@ -439,12 +631,14 @@ export class ReaderTopicScrollAdapter {
 			this.#viewportSize = viewportSize;
 			this.#viewportSizeDirty = false;
 		}
+		const preservedPostNumber = this.#stationaryAnchor?.postNumber ??
+			this.#viewportMutationAnchor?.postNumber;
 		return Object.freeze({
 			scrollOffset,
 			viewportSize,
-			...(this.#stationaryAnchor === null
+			...(preservedPostNumber === undefined
 				? {}
-				: { preservePostNumber: this.#stationaryAnchor.postNumber }),
+				: { preservePostNumber: preservedPostNumber }),
 			/*
 			 * overscan 是用户/性能策略的稳定窗口契约。滚动方向只改变 offset；
 			 * 若在反向瞬间翻转前后边界，会额外整批卸载/挂载树节点并制造尖峰。
@@ -467,6 +661,10 @@ export class ReaderTopicScrollAdapter {
 		return this.#lastUserScrollAt;
 	}
 
+	lastUserScrollDirection(): ReaderTopicScrollDirection {
+		return this.#lastUserScrollDirection;
+	}
+
 	remainingUserIdleMs(minimumIdleMs: number): number {
 		const idleMs = finiteNonNegative(Number(minimumIdleMs));
 		if (this.#lastUserScrollAt <= 0) return 0;
@@ -483,6 +681,49 @@ export class ReaderTopicScrollAdapter {
 			postOffset: visible.ownerOffset,
 			scrollTop: finiteNonNegative(this.#scrollRoot.scrollTop),
 		});
+	}
+
+	beginViewportMutation(
+		elements: readonly HTMLElement[],
+	): ReaderTopicViewportMutation | null {
+		/* 停稳锁已经持有同一物理视野，不能再创建第二个补偿 owner。 */
+		if (this.#stationaryAnchor || this.#viewportMutationAnchor) return null;
+		const visible = this.#findTopVisiblePost(elements);
+		if (!visible) return null;
+		const token = ++this.#viewportMutationToken;
+		this.#viewportMutationAnchor = Object.freeze({
+			token,
+			postNumber: visible.postNumber,
+			markerRole: visible.marker === visible.owner ? 'owner' : 'header',
+			markerOffset: visible.markerOffset,
+			ownerOffset: visible.ownerOffset,
+			scrollTop: finiteNonNegative(this.#scrollRoot.scrollTop),
+		});
+		this.#syncViewportAnchorClass();
+		return Object.freeze({
+			restore: () => this.#restoreViewportMutation(token),
+			cancel: () => this.#cancelViewportMutation(token, false),
+		});
+	}
+
+	/** 虚拟窗口及其同步投影已经提交；停稳锁可以开始等待干净的布局边界。 */
+	notifyVirtualWindowCommit(): void {
+		if (
+			!this.#stationaryLockPending ||
+			this.#userScrollSessionActive ||
+			this.#viewportMutationAnchor
+		) return;
+		this.#stationaryLockSettleFrames =
+			STATIONARY_LOCK_AFTER_COMMIT_FRAMES;
+		/*
+		 * commit 可能与旧 fallback 回调同处一个 rAF 队列。先撤销旧回调再从
+		 * 下一帧重新计数，不能让尚未执行的旧回调偷走一个稳定绘制边界。
+		 */
+		if (this.#stationaryLockFrame) {
+			this.#cancelFrame(this.#stationaryLockFrame);
+			this.#stationaryLockFrame = 0;
+		}
+		this.#scheduleStationaryViewportLock();
 	}
 
 	#measureViewportSize(): number {
@@ -504,16 +745,15 @@ export class ReaderTopicScrollAdapter {
 		 * 预加载窗口。
 		 */
 		this.#refreshPendingScrollOffset();
-		this.#scrollOffset = Math.max(0, this.#scrollOffset + delta);
-		if (this.#pendingScrollOffset !== null) {
-			this.#pendingScrollOffset = Math.max(
-				0,
-				this.#pendingScrollOffset + delta,
-			);
-		}
-		this.#writeScrollRootOffset(
-			this.#pendingScrollOffset ?? this.#scrollOffset,
+		const requestedOffset = Math.max(
+			0,
+			(this.#pendingScrollOffset ?? this.#scrollOffset) + delta,
 		);
+		const actualOffset = this.#writeScrollRootOffset(requestedOffset);
+		this.#scrollOffset = actualOffset;
+		if (this.#pendingScrollOffset !== null) {
+			this.#pendingScrollOffset = actualOffset;
+		}
 		this.#restoreStationaryViewport();
 	}
 
@@ -533,6 +773,14 @@ export class ReaderTopicScrollAdapter {
 		});
 	}
 
+	listenDirectUserScrollIntent(listener: () => void): Cleanup {
+		if (this.scope.destroyed) return () => {};
+		this.#directUserScrollIntentListeners.add(listener);
+		return this.scope.add(() => {
+			this.#directUserScrollIntentListeners.delete(listener);
+		});
+	}
+
 	writeScrollOffset(offset: number): void {
 		const normalized = finiteNonNegative(offset);
 		const maxOffset = Math.max(
@@ -543,6 +791,49 @@ export class ReaderTopicScrollAdapter {
 		this.#setScrollOffset(maxOffset > 0
 			? Math.min(normalized, maxOffset)
 			: normalized);
+	}
+
+	readScrollRange(): number {
+		return Math.max(
+			0,
+			finiteNonNegative(this.#scrollRoot.scrollHeight) -
+				finiteNonNegative(this.#scrollRoot.clientHeight),
+		);
+	}
+
+	withProgrammaticScrollTransaction(commit: () => void): void {
+		if (this.scope.destroyed) return;
+		const outermost = this.#programmaticScrollTransactionDepth === 0;
+		this.#programmaticScrollTransactionDepth += 1;
+		if (outermost) {
+			/* 目的性换位取代旧视野；预提交前就必须撤销两类保留锚点。 */
+			this.#cancelViewportMutation(undefined, false);
+			this.#releaseStationaryViewport();
+			this.#scrollRoot.classList.add('ldp-stream-programmatic-scroll');
+		}
+		try {
+			commit();
+			if (outermost) {
+				/*
+				 * 虚拟 spacer 与楼层节点已在 ShadowRoot 内同步替换。保持
+				 * overflow-anchor:none 强制结算这次布局，避免 Chromium 在下一次
+				 * pre-paint 用旧 anchor 把 instant 目标反向拉回。
+				 */
+				this.#scrollRoot.getBoundingClientRect();
+				const actualOffset = finiteNonNegative(this.#scrollRoot.scrollTop);
+				this.#scrollOffset = actualOffset;
+				this.#pendingScrollOffset = actualOffset;
+				this.#scrollOffsetDirty = false;
+			}
+		} finally {
+			this.#programmaticScrollTransactionDepth = Math.max(
+				0,
+				this.#programmaticScrollTransactionDepth - 1,
+			);
+			if (outermost) {
+				this.#scrollRoot.classList.remove('ldp-stream-programmatic-scroll');
+			}
+		}
 	}
 
 	alignPost(target: HTMLElement, options: ReaderTopicRevealOptions): void {
@@ -605,13 +896,19 @@ export class ReaderTopicScrollAdapter {
 	}
 
 	#setScrollOffset(offset: number): void {
+		this.#cancelPendingStationaryViewportLock();
+		this.#cancelViewportMutation(undefined, false);
 		this.#releaseStationaryViewport();
-		this.#scrollOffset = Math.max(0, finiteNonNegative(offset));
-		this.#pendingScrollOffset = this.#scrollOffset;
+		const requestedOffset = Math.max(0, finiteNonNegative(offset));
+		this.#scrollOffset = requestedOffset;
+		this.#pendingScrollOffset = requestedOffset;
 		this.#scrollOffsetDirty = false;
 		this.#lastUserScrollAt = 0;
+		this.#lastUserScrollDirection = 0;
 		this.#userScrollSessionActive = false;
-		this.#writeScrollRootOffset(this.#scrollOffset);
+		const actualOffset = this.#writeScrollRootOffset(requestedOffset);
+		this.#scrollOffset = actualOffset;
+		this.#pendingScrollOffset = actualOffset;
 	}
 
 	#focus(target: HTMLElement): void {
@@ -627,7 +924,7 @@ export class ReaderTopicScrollAdapter {
 	}
 
 	#findTopVisiblePost(elements: readonly HTMLElement[]): Readonly<{
-		postNumber: number;
+		postNumber: PostNumber;
 		marker: HTMLElement;
 		markerOffset: number;
 		owner: HTMLElement;
@@ -698,14 +995,24 @@ export class ReaderTopicScrollAdapter {
 		for (const listener of [...this.#windowChangeListeners]) listener();
 	}
 
-	#markUserScrollIntent(): void {
+	#markUserScrollIntent(
+		direction: ReaderTopicScrollDirection = 0,
+		direct = true,
+	): void {
+		this.#cancelPendingStationaryViewportLock();
 		this.#releaseStationaryViewport();
+		if (direction !== 0) this.#lastUserScrollDirection = direction;
 		this.#userScrollSessionActive = true;
 		this.#lastUserScrollAt = Math.max(
 			Number.EPSILON,
 			finiteNonNegative(this.#now()),
 		);
 		for (const listener of [...this.#userScrollIntentListeners]) listener();
+		if (direct) {
+			for (const listener of [...this.#directUserScrollIntentListeners]) {
+				listener();
+			}
+		}
 	}
 
 	#markUserScrollProgress(): void {
@@ -728,7 +1035,60 @@ export class ReaderTopicScrollAdapter {
 			Number.EPSILON,
 			finiteNonNegative(this.#now()),
 		);
-		this.#lockStationaryViewport();
+		this.#requestStationaryViewportLock();
+	}
+
+	#requestStationaryViewportLock(): void {
+		this.#stationaryLockPending = true;
+		this.#stationaryLockSettleFrames = STATIONARY_LOCK_FALLBACK_FRAMES;
+		if (this.#viewportMutationAnchor) return;
+		this.#scheduleStationaryViewportLock();
+	}
+
+	#scheduleStationaryViewportLock(): void {
+		if (
+			this.#stationaryLockFrame ||
+			this.scope.destroyed ||
+			!this.#stationaryLockPending ||
+			this.#userScrollSessionActive ||
+			this.#viewportMutationAnchor
+		) return;
+		let completed = false;
+		const handle = this.#requestFrame(() => {
+			completed = true;
+			this.#stationaryLockFrame = 0;
+			if (
+				this.scope.destroyed ||
+				!this.#stationaryLockPending ||
+				this.#userScrollSessionActive ||
+				this.#viewportMutationAnchor
+			) return;
+			if (this.#scrollFrame) {
+				this.#stationaryLockSettleFrames =
+					STATIONARY_LOCK_FALLBACK_FRAMES;
+				this.#scheduleStationaryViewportLock();
+				return;
+			}
+			this.#stationaryLockSettleFrames = Math.max(
+				0,
+				this.#stationaryLockSettleFrames - 1,
+			);
+			if (this.#stationaryLockSettleFrames > 0) {
+				this.#scheduleStationaryViewportLock();
+				return;
+			}
+			this.#stationaryLockPending = false;
+			this.#lockStationaryViewport();
+		});
+		if (!completed) this.#stationaryLockFrame = handle;
+	}
+
+	#cancelPendingStationaryViewportLock(): void {
+		this.#stationaryLockPending = false;
+		this.#stationaryLockSettleFrames = 0;
+		if (!this.#stationaryLockFrame) return;
+		this.#cancelFrame(this.#stationaryLockFrame);
+		this.#stationaryLockFrame = 0;
 	}
 
 	#lockStationaryViewport(): void {
@@ -747,7 +1107,7 @@ export class ReaderTopicScrollAdapter {
 			markerOffset: visible.markerOffset,
 			ownerOffset: visible.ownerOffset,
 		});
-		this.#scrollRoot.classList.add('ldp-stream-viewport-anchor');
+		this.#syncViewportAnchorClass();
 		this.#stationaryMutationObserver?.observe(this.#scrollRoot, {
 			attributes: true,
 			attributeFilter: ['class', 'hidden', 'style'],
@@ -760,10 +1120,77 @@ export class ReaderTopicScrollAdapter {
 
 	#releaseStationaryViewport(): void {
 		this.#stationaryAnchor = null;
-		this.#stationaryScrollWriteOffset = null;
 		this.#stationaryMutationObserver?.disconnect();
 		this.#stationaryResizeObserver?.disconnect();
-		this.#scrollRoot.classList.remove('ldp-stream-viewport-anchor');
+		this.#syncViewportAnchorClass();
+	}
+
+	#restoreViewportMutation(token: number): void {
+		const anchor = this.#viewportMutationAnchor;
+		if (!anchor || anchor.token !== token) return;
+		try {
+			const owner = this.#scrollRoot.querySelector<HTMLElement>(
+				`.ldp-post[data-post-number="${anchor.postNumber}"]`,
+			);
+			if (!owner || owner.hidden) return;
+			const header = anchor.markerRole === 'header'
+				? owner.querySelector<HTMLElement>(':scope > .ldp-post-head')
+				: null;
+			const marker = header ?? owner;
+			const initialMarkerOffset = header
+				? anchor.markerOffset
+				: anchor.ownerOffset;
+			const currentScrollTop = finiteNonNegative(this.#scrollRoot.scrollTop);
+			/*
+			 * 事务期间的新 scrollTop 距离属于用户，不属于布局抖动。先把这段距离
+			 * 投影到锚点期望位置，最后只补真实 DOM 高度造成的剩余位移。
+			 */
+			const expectedMarkerOffset = initialMarkerOffset -
+				(currentScrollTop - anchor.scrollTop);
+			const rootRect = this.#scrollRoot.getBoundingClientRect();
+			const visibleTop = rootRect.top + Math.min(
+				rootRect.height,
+				finiteNonNegative(this.#readTopInset()),
+			);
+			const correction = marker.getBoundingClientRect().top -
+				visibleTop - expectedMarkerOffset;
+			if (Math.abs(correction) < 0.5) return;
+			const nextOffset = Math.max(0, currentScrollTop + correction);
+			const actualOffset = this.#writeScrollRootOffset(nextOffset);
+			this.#scrollOffset = actualOffset;
+			this.#pendingScrollOffset = actualOffset;
+			this.#scrollOffsetDirty = false;
+		} finally {
+			this.#cancelViewportMutation(token, true);
+		}
+	}
+
+	#cancelViewportMutation(token?: number, settleStationary = false): void {
+		if (
+			token !== undefined &&
+			this.#viewportMutationAnchor?.token !== token
+		) return;
+		this.#viewportMutationAnchor = null;
+		if (
+			settleStationary &&
+			this.#stationaryLockPending &&
+			!this.#userScrollSessionActive
+		) {
+			/* #writeScrollRootOffset 已登记内部写入；这里只交接停稳锁。 */
+			this.#requestStationaryViewportLock();
+			this.#syncViewportAnchorClass();
+			return;
+		}
+		if (!settleStationary) this.#cancelPendingStationaryViewportLock();
+		this.#syncViewportAnchorClass();
+	}
+
+	#syncViewportAnchorClass(): void {
+		this.#scrollRoot.classList.toggle(
+			'ldp-stream-viewport-anchor',
+			this.#stationaryAnchor !== null ||
+				this.#viewportMutationAnchor !== null,
+		);
 	}
 
 	#observeStationaryContentSize(): void {
@@ -802,33 +1229,83 @@ export class ReaderTopicScrollAdapter {
 			0,
 			finiteNonNegative(this.#scrollRoot.scrollTop) + correction,
 		);
-		this.#scrollOffset = nextOffset;
-		this.#pendingScrollOffset = nextOffset;
+		const actualOffset = this.#writeScrollRootOffset(nextOffset);
+		this.#scrollOffset = actualOffset;
+		this.#pendingScrollOffset = actualOffset;
 		this.#scrollOffsetDirty = false;
-		this.#writeScrollRootOffset(nextOffset);
 	}
 
-	#writeScrollRootOffset(offset: number): void {
-		if (this.#stationaryAnchor) this.#stationaryScrollWriteOffset = offset;
-		this.#scrollRoot.scrollTop = offset;
+	#writeScrollRootOffset(offset: number): number {
+		/*
+		 * 所有 scrollTop 写入都带内部身份，而不只停稳锁写入。高度事务可能在
+		 * 活跃用户会话中修正锚点；其派生 scroll 事件绝不能延长用户令牌并再次补流。
+		 */
+		this.#internalScrollWriteOffset = offset;
+		/*
+		 * 程序化定位必须是原子换位。普通 scrollTop 写入的 auto 行为会读取当前
+		 * scroll-behavior；浏览器平滑滚动开启时，超长 Topic 会真的经过数千楼，
+		 * 同时连续触发虚拟换窗。显式 instant 把这一契约收口到唯一 scroll owner。
+		 */
+		let written = false;
+		if (typeof this.#scrollRoot.scrollTo === 'function') {
+			try {
+				this.#scrollRoot.scrollTo({ top: offset, behavior: 'instant' });
+				written = true;
+			} catch {
+				/* 旧 WebView 不接受 options 字典时退回直接赋值。 */
+			}
+		}
+		if (!written) this.#scrollRoot.scrollTop = offset;
+		/* Chromium 会按当前 scroll range 钳制写入；事件身份必须记录钳制后的值。 */
+		const actualOffset = finiteNonNegative(
+			this.#scrollRoot.scrollTop,
+		);
+		this.#internalScrollWriteOffset = actualOffset;
+		return actualOffset;
 	}
 
-	#claimScrollOnlyUserInput(): void {
-		if (!this.#stationaryAnchor || this.#userScrollSessionActive) return;
+	#claimScrollOnlyUserInput(): boolean {
 		const actualOffset = finiteNonNegative(this.#scrollRoot.scrollTop);
-		const internalOffset = this.#stationaryScrollWriteOffset;
-		this.#stationaryScrollWriteOffset = null;
+		const internalOffset = this.#internalScrollWriteOffset;
+		this.#internalScrollWriteOffset = null;
 		if (
 			internalOffset !== null &&
 			Math.abs(actualOffset - internalOffset) < 0.5
-		) return;
+		) return false;
+		if (this.#userScrollSessionActive) return true;
+		if (!this.#stationaryAnchor && !this.#stationaryLockPending) return false;
 		/*
 		 * 浮窗的原生 scrollbar 拖动只派发 scroll，不一定先派发
 		 * wheel/touch/key。停稳锁已关闭 Chromium overflow anchoring，因此此时
 		 * 任何未匹配内部写入的 scroll 都是新的外部滚动所有权；必须先解锁，
 		 * 否则 ResizeObserver 会把 thumb 拖动反向写回成来回跳动。
 		 */
-		this.#markUserScrollIntent();
+		this.#markUserScrollIntent(
+			this.#directionOf(actualOffset - this.#scrollOffset),
+			false,
+		);
+		return true;
+	}
+
+	#directionOf(delta: number): ReaderTopicScrollDirection {
+		if (!Number.isFinite(delta) || Math.abs(delta) < 0.5) return 0;
+		return delta < 0 ? -1 : 1;
+	}
+
+	#keyboardDirection(event: KeyboardEvent): ReaderTopicScrollDirection {
+		if (
+			event.key === 'ArrowUp' ||
+			event.key === 'PageUp' ||
+			event.key === 'Home' ||
+			(event.key === ' ' && event.shiftKey)
+		) return -1;
+		if (
+			event.key === 'ArrowDown' ||
+			event.key === 'PageDown' ||
+			event.key === 'End' ||
+			event.key === ' '
+		) return 1;
+		return 0;
 	}
 
 	#scheduleScrollCommit(): void {

@@ -3,8 +3,20 @@ import {
 	eventElement,
 	eventPathIncludes,
 } from '../dom/event-target.js';
+import { bindFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
-import { settingsElement as element } from './reader-settings-dom.js';
+import {
+	settingsElement as element,
+	settingsIcon,
+} from './reader-settings-dom.js';
+
+export interface ReaderSettingsEyeDropper {
+	open(options?: Readonly<{
+		readonly signal?: AbortSignal;
+	}>): Promise<Readonly<{ sRGBHex: string }>>;
+}
+
+export type ReaderSettingsEyeDropperFactory = () => ReaderSettingsEyeDropper;
 
 export interface ReaderSettingsFieldInteractionOptions {
 	readonly document: Document;
@@ -13,6 +25,7 @@ export interface ReaderSettingsFieldInteractionOptions {
 	readonly parentScope?: LifecycleScope;
 	readonly requestFrame?: (callback: FrameRequestCallback) => number;
 	readonly cancelFrame?: (handle: number) => void;
+	readonly createEyeDropper?: ReaderSettingsEyeDropperFactory | null;
 }
 
 interface ReaderSettingsColorHsv {
@@ -97,6 +110,33 @@ function rangeProgress(input: HTMLInputElement): number {
 	);
 }
 
+function normalizedHue(rawValue: number): number {
+	if (!Number.isFinite(rawValue)) return 0;
+	return ((Math.round(rawValue) % 360) + 360) % 360;
+}
+
+function normalizedPercent(rawValue: number): number {
+	if (!Number.isFinite(rawValue)) return 0;
+	return Math.min(100, Math.max(0, Math.round(rawValue)));
+}
+
+function isAbortError(error: unknown): boolean {
+	return typeof error === 'object' &&
+		error !== null &&
+		'name' in error &&
+		error.name === 'AbortError';
+}
+
+function resolveEyeDropperFactory(
+	viewport: Window | null,
+): ReaderSettingsEyeDropperFactory | null {
+	type EyeDropperConstructor = new () => ReaderSettingsEyeDropper;
+	const EyeDropper = (viewport as (Window & {
+		readonly EyeDropper?: EyeDropperConstructor;
+	}) | null)?.EyeDropper;
+	return typeof EyeDropper === 'function' ? () => new EyeDropper() : null;
+}
+
 /**
  * 设置 Shell 的动态字段唯一 owner。
  *
@@ -112,8 +152,11 @@ export class ReaderSettingsFieldInteraction {
 	readonly #pickerTitle: HTMLElement;
 	readonly #hex: HTMLInputElement;
 	readonly #presetButtons: readonly HTMLButtonElement[];
+	readonly #eyeDropper: HTMLButtonElement;
+	readonly #createEyeDropper: ReaderSettingsEyeDropperFactory | null;
 	readonly #more: HTMLButtonElement;
 	readonly #advanced: HTMLElement;
+	readonly #wheel: HTMLElement;
 	readonly #hue: HTMLInputElement;
 	readonly #saturation: HTMLInputElement;
 	readonly #brightness: HTMLInputElement;
@@ -124,7 +167,8 @@ export class ReaderSettingsFieldInteraction {
 	readonly #cancelFrame: (handle: number) => void;
 	#activeColorInput: HTMLInputElement | null = null;
 	#activeRangeRow: HTMLElement | null = null;
-	#activeColorRow: HTMLElement | null = null;
+	#activeWheelPointer: number | null = null;
+	#eyeDropperAbort: AbortController | null = null;
 	#hsv: ReaderSettingsColorHsv = Object.freeze({ h: 0, s: 0, v: 100 });
 	#commitFrame = 0;
 	#pendingCommit: Readonly<{
@@ -138,6 +182,9 @@ export class ReaderSettingsFieldInteraction {
 		this.#surfaceHost = options.surfaceHost;
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		const viewport = this.#document.defaultView;
+		this.#createEyeDropper = options.createEyeDropper === undefined
+			? resolveEyeDropperFactory(viewport)
+			: options.createEyeDropper;
 		this.#requestFrame = options.requestFrame ?? ((callback) =>
 			viewport?.requestAnimationFrame
 				? viewport.requestAnimationFrame(callback)
@@ -152,8 +199,10 @@ export class ReaderSettingsFieldInteraction {
 		this.#pickerTitle = picker.title;
 		this.#hex = picker.hex;
 		this.#presetButtons = picker.presets;
+		this.#eyeDropper = picker.eyeDropper;
 		this.#more = picker.more;
 		this.#advanced = picker.advanced;
+		this.#wheel = picker.wheel;
 		this.#hue = picker.hue;
 		this.#saturation = picker.saturation;
 		this.#brightness = picker.brightness;
@@ -161,6 +210,7 @@ export class ReaderSettingsFieldInteraction {
 		this.#saturationValue = picker.saturationValue;
 		this.#brightnessValue = picker.brightnessValue;
 		this.#surfaceHost.append(this.#picker);
+		this.scope.add(bindFloatingSurfaceWheel(this.#picker));
 
 		this.scope.listen(this.#popover, 'pointerdown', (event) => {
 			this.#onFieldPointerDown(event as PointerEvent);
@@ -179,11 +229,6 @@ export class ReaderSettingsFieldInteraction {
 			if (!color || !this.#popover.contains(color) || color.disabled) return;
 			event.preventDefault();
 			this.openColorPicker(color);
-		});
-		this.scope.listen(this.#popover, 'focusout', (event) => {
-			if (eventElement(event)?.matches('input[type="color"]')) {
-				this.#stopColorPick();
-			}
 		});
 		this.scope.listen(this.#document, 'pointerdown', (event) => {
 			if (
@@ -215,14 +260,20 @@ export class ReaderSettingsFieldInteraction {
 		return eventPathIncludes(event, this.#picker);
 	}
 
-	sync(): void {
-		for (const range of this.#popover.querySelectorAll<HTMLInputElement>(
+	sync(root: HTMLElement = this.#popover): void {
+		for (const range of root.querySelectorAll<HTMLInputElement>(
 			'input[type="range"]',
 		)) this.#syncRange(range);
-		for (const color of this.#popover.querySelectorAll<HTMLInputElement>(
+		for (const color of root.querySelectorAll<HTMLInputElement>(
 			'input[type="color"]',
 		)) color.setAttribute('aria-haspopup', 'dialog');
-		if (this.#activeColorInput && !this.#activeColorInput.isConnected) {
+		if (
+			this.#activeColorInput &&
+			(
+				!this.#activeColorInput.isConnected ||
+				!root.contains(this.#activeColorInput)
+			)
+		) {
 			this.closeColorPicker();
 		}
 	}
@@ -230,13 +281,12 @@ export class ReaderSettingsFieldInteraction {
 	close(): void {
 		this.closeColorPicker();
 		this.#stopRangeDrag();
-		this.#stopColorPick();
 	}
 
 	openColorPicker(input: HTMLInputElement): void {
 		if (input.disabled || !this.#popover.contains(input)) return;
+		this.#abortEyeDropper();
 		this.#stopRangeDrag();
-		this.#stopColorPick();
 		this.#activeColorInput = input;
 		this.#syncPicker();
 		this.#picker.hidden = false;
@@ -246,6 +296,8 @@ export class ReaderSettingsFieldInteraction {
 	}
 
 	closeColorPicker(options: Readonly<{ restoreFocus?: boolean }> = {}): void {
+		this.#abortEyeDropper();
+		this.#stopWheelPointer();
 		if (this.#picker.hidden && !this.#activeColorInput) return;
 		this.#flushCommit();
 		const previousInput = this.#activeColorInput;
@@ -261,8 +313,10 @@ export class ReaderSettingsFieldInteraction {
 		title: HTMLElement;
 		hex: HTMLInputElement;
 		presets: readonly HTMLButtonElement[];
+		eyeDropper: HTMLButtonElement;
 		more: HTMLButtonElement;
 		advanced: HTMLElement;
+		wheel: HTMLElement;
 		hue: HTMLInputElement;
 		saturation: HTMLInputElement;
 		brightness: HTMLInputElement;
@@ -275,8 +329,24 @@ export class ReaderSettingsFieldInteraction {
 		root.setAttribute('role', 'dialog');
 		root.setAttribute('aria-modal', 'false');
 		root.setAttribute('aria-label', '选择颜色');
+		const head = element(this.#document, 'div', 'ldp-color-picker-head');
 		const title = element(this.#document, 'div', 'ldp-color-picker-title');
 		title.textContent = '选择颜色';
+		const eyeDropper = element(
+			this.#document,
+			'button',
+			'ldp-color-picker-eyedropper',
+		);
+		eyeDropper.type = 'button';
+		eyeDropper.hidden = !this.#createEyeDropper;
+		eyeDropper.title = '从屏幕吸取颜色';
+		eyeDropper.setAttribute('aria-label', '从屏幕吸取颜色');
+		eyeDropper.setAttribute('aria-busy', 'false');
+		eyeDropper.append(settingsIcon(this.#document, 'droplet'));
+		const eyeDropperLabel = element(this.#document, 'span');
+		eyeDropperLabel.textContent = '吸色';
+		eyeDropper.append(eyeDropperLabel);
+		head.append(title, eyeDropper);
 		const presetHost = element(
 			this.#document,
 			'div',
@@ -308,7 +378,7 @@ export class ReaderSettingsFieldInteraction {
 		hex.setAttribute('aria-label', '十六进制颜色');
 		const more = element(this.#document, 'button', 'ldp-color-picker-more');
 		more.type = 'button';
-		more.textContent = '更多颜色';
+		more.textContent = '高级调色';
 		more.setAttribute('aria-expanded', 'false');
 		fields.append(hex, more);
 		const advanced = element(
@@ -317,6 +387,36 @@ export class ReaderSettingsFieldInteraction {
 			'ldp-color-picker-advanced',
 		);
 		advanced.hidden = true;
+		const wheelField = element(
+			this.#document,
+			'div',
+			'ldp-color-picker-wheel-field',
+		);
+		const wheelLabel = element(
+			this.#document,
+			'span',
+			'ldp-color-picker-wheel-label',
+		);
+		wheelLabel.textContent = '色相与饱和度';
+		const wheel = element(
+			this.#document,
+			'div',
+			'ldp-color-picker-wheel',
+		);
+		wheel.tabIndex = 0;
+		wheel.setAttribute('role', 'slider');
+		wheel.setAttribute('aria-label', '色相与饱和度');
+		wheel.setAttribute('aria-valuemin', '0');
+		wheel.setAttribute('aria-valuemax', '359');
+		const wheelThumb = element(
+			this.#document,
+			'span',
+			'ldp-color-picker-wheel-thumb',
+		);
+		wheelThumb.setAttribute('aria-hidden', 'true');
+		wheel.append(wheelThumb);
+		wheelField.append(wheelLabel, wheel);
+		advanced.append(wheelField);
 		const hue = this.#pickerSlider(advanced, '色相', 'hue', 359);
 		const saturation = this.#pickerSlider(
 			advanced,
@@ -330,14 +430,16 @@ export class ReaderSettingsFieldInteraction {
 			'brightness',
 			100,
 		);
-		root.append(title, presetHost, fields, advanced);
+		root.append(head, presetHost, fields, advanced);
 		return Object.freeze({
 			root,
 			title,
 			hex,
 			presets: Object.freeze(presets),
+			eyeDropper,
 			more,
 			advanced,
+			wheel,
 			hue: hue.input,
 			saturation: saturation.input,
 			brightness: brightness.input,
@@ -417,29 +519,43 @@ export class ReaderSettingsFieldInteraction {
 			this.#hex.value = this.#activeColorInput.value.toUpperCase();
 			this.#hex.setAttribute('aria-invalid', 'false');
 		});
+		this.scope.listen(this.#eyeDropper, 'click', () => {
+			void this.#pickScreenColor();
+		});
 		this.scope.listen(this.#more, 'click', () => {
 			const expanded = this.#advanced.hidden;
 			this.#advanced.hidden = !expanded;
 			this.#more.setAttribute('aria-expanded', String(expanded));
-			this.#more.textContent = expanded ? '收起调色' : '更多颜色';
+			this.#more.textContent = expanded ? '收起调色' : '高级调色';
 			if (this.#activeColorInput) this.#positionPicker(this.#activeColorInput);
 		});
 		for (const input of [this.#hue, this.#saturation, this.#brightness]) {
 			this.scope.listen(input, 'input', () => {
-				this.#hsv = Object.freeze({
+				this.#stageHsv({
 					h: Number(this.#hue.value),
 					s: Number(this.#saturation.value),
 					v: Number(this.#brightness.value),
 				});
-				const color = colorHsvToHex(this.#hsv);
-				this.#hex.value = color;
-				this.#hex.setAttribute('aria-invalid', 'false');
-				this.#syncAdvanced();
-				this.#syncPresets(color);
-				this.#scheduleCommit(color);
 			});
 			this.scope.listen(input, 'change', () => this.#flushCommit());
 		}
+		this.scope.listen(this.#wheel, 'pointerdown', (event) => {
+			this.#startWheelPointer(event as PointerEvent);
+		});
+		this.scope.listen(this.#document, 'pointermove', (event) => {
+			this.#moveWheelPointer(event as PointerEvent);
+		});
+		for (const type of ['pointerup', 'pointercancel']) {
+			this.scope.listen(this.#document, type, (event) => {
+				this.#finishWheelPointer(event as PointerEvent);
+			});
+		}
+		this.scope.listen(this.#wheel, 'lostpointercapture', (event) => {
+			this.#finishWheelPointer(event as PointerEvent, false);
+		});
+		this.scope.listen(this.#wheel, 'keydown', (event) => {
+			this.#onWheelKeyDown(event as KeyboardEvent);
+		});
 		this.scope.listen(this.#picker, 'keydown', (event) => {
 			const keyboard = event as KeyboardEvent;
 			if (keyboard.key !== 'Escape') return;
@@ -449,23 +565,157 @@ export class ReaderSettingsFieldInteraction {
 		});
 	}
 
-	#onFieldPointerDown(event: PointerEvent): void {
-		const target = eventElement(event);
-		const color = target?.closest<HTMLInputElement>('input[type="color"]');
-		if (
-			color &&
-			this.#popover.contains(color) &&
-			!color.disabled &&
-			event.button === 0
-		) {
-			this.#stopRangeDrag();
-			this.#stopColorPick();
-			this.#activeColorRow = color.closest<HTMLElement>('.ldp-setting-row');
-			this.#activeColorRow?.classList.add('ldp-color-pick-active');
-			this.#popover.classList.add('ldp-color-picking');
+	async #pickScreenColor(): Promise<void> {
+		if (!this.#createEyeDropper || !this.#activeColorInput) return;
+		this.#abortEyeDropper();
+		let picker: ReaderSettingsEyeDropper;
+		try {
+			picker = this.#createEyeDropper();
+		} catch {
+			this.#eyeDropper.title = '吸色器暂时不可用，请重试';
 			return;
 		}
-		this.#stopColorPick();
+		const operation = new AbortController();
+		this.#eyeDropperAbort = operation;
+		this.#eyeDropper.disabled = true;
+		this.#eyeDropper.setAttribute('aria-busy', 'true');
+		try {
+			const result = await picker.open({ signal: operation.signal });
+			if (
+				this.#eyeDropperAbort !== operation ||
+				operation.signal.aborted ||
+				!this.#activeColorInput
+			) return;
+			this.#eyeDropperAbort = null;
+			this.#resetEyeDropper();
+			this.#applyColor(result.sRGBHex);
+		} catch (error) {
+			if (this.#eyeDropperAbort !== operation) return;
+			this.#eyeDropperAbort = null;
+			this.#resetEyeDropper();
+			if (!isAbortError(error)) {
+				this.#eyeDropper.title = '吸色失败，请重试';
+			}
+		}
+	}
+
+	#abortEyeDropper(): void {
+		const operation = this.#eyeDropperAbort;
+		this.#eyeDropperAbort = null;
+		operation?.abort();
+		this.#resetEyeDropper();
+	}
+
+	#resetEyeDropper(): void {
+		this.#eyeDropper.disabled = false;
+		this.#eyeDropper.title = '从屏幕吸取颜色';
+		this.#eyeDropper.setAttribute('aria-busy', 'false');
+	}
+
+	#startWheelPointer(event: PointerEvent): void {
+		if (event.button !== 0) return;
+		event.preventDefault();
+		this.#activeWheelPointer = event.pointerId;
+		this.#stageWheelPoint(event);
+		try {
+			this.#wheel.setPointerCapture(event.pointerId);
+		} catch {
+			// linkedom、旧 Chromium 或已经失效的 pointer 不一定支持捕获。
+		}
+	}
+
+	#moveWheelPointer(event: PointerEvent): void {
+		if (event.pointerId !== this.#activeWheelPointer) return;
+		event.preventDefault();
+		this.#stageWheelPoint(event);
+	}
+
+	#finishWheelPointer(event: PointerEvent, applyPoint = true): void {
+		if (event.pointerId !== this.#activeWheelPointer) return;
+		if (applyPoint && event.type === 'pointerup') this.#stageWheelPoint(event);
+		this.#stopWheelPointer();
+		this.#flushCommit();
+	}
+
+	#stopWheelPointer(): void {
+		const pointerId = this.#activeWheelPointer;
+		this.#activeWheelPointer = null;
+		if (pointerId === null) return;
+		try {
+			if (this.#wheel.hasPointerCapture(pointerId)) {
+				this.#wheel.releasePointerCapture(pointerId);
+			}
+		} catch {
+			// linkedom、旧 Chromium 或已释放的 pointer 可能没有捕获能力。
+		}
+	}
+
+	#stageWheelPoint(event: PointerEvent): void {
+		const bounds = this.#wheel.getBoundingClientRect();
+		const radius = Math.min(bounds.width, bounds.height) / 2;
+		if (
+			!(radius > 0) ||
+			!Number.isFinite(event.clientX) ||
+			!Number.isFinite(event.clientY)
+		) return;
+		const deltaX = event.clientX - (bounds.left + bounds.width / 2);
+		const deltaY = event.clientY - (bounds.top + bounds.height / 2);
+		const distance = Math.hypot(deltaX, deltaY);
+		const hue = distance < 0.5
+			? this.#hsv.h
+			: normalizedHue(Math.atan2(deltaX, -deltaY) * 180 / Math.PI);
+		this.#stageHsv({
+			h: hue,
+			s: Math.min(100, distance / radius * 100),
+			v: this.#hsv.v,
+		});
+	}
+
+	#onWheelKeyDown(event: KeyboardEvent): void {
+		const step = event.shiftKey ? 10 : 1;
+		let { h, s } = this.#hsv;
+		switch (event.key) {
+			case 'ArrowLeft':
+				h -= step;
+				break;
+			case 'ArrowRight':
+				h += step;
+				break;
+			case 'ArrowDown':
+				s -= step;
+				break;
+			case 'ArrowUp':
+				s += step;
+				break;
+			case 'Home':
+				s = 0;
+				break;
+			case 'End':
+				s = 100;
+				break;
+			default:
+				return;
+		}
+		event.preventDefault();
+		this.#stageHsv({ h, s, v: this.#hsv.v });
+	}
+
+	#stageHsv(value: ReaderSettingsColorHsv): void {
+		this.#hsv = Object.freeze({
+			h: normalizedHue(value.h),
+			s: normalizedPercent(value.s),
+			v: normalizedPercent(value.v),
+		});
+		const color = colorHsvToHex(this.#hsv);
+		this.#hex.value = color;
+		this.#hex.setAttribute('aria-invalid', 'false');
+		this.#syncAdvanced();
+		this.#syncPresets(color);
+		this.#scheduleCommit(color);
+	}
+
+	#onFieldPointerDown(event: PointerEvent): void {
+		const target = eventElement(event);
 		const range = target?.closest<HTMLInputElement>('input[type="range"]');
 		if (
 			!range ||
@@ -491,12 +741,6 @@ export class ReaderSettingsFieldInteraction {
 		this.#activeRangeRow = null;
 	}
 
-	#stopColorPick(): void {
-		this.#popover.classList.remove('ldp-color-picking');
-		this.#activeColorRow?.classList.remove('ldp-color-pick-active');
-		this.#activeColorRow = null;
-	}
-
 	#syncRange(input: HTMLInputElement): void {
 		input.style.setProperty('--ldp-range-progress', `${rangeProgress(input)}%`);
 	}
@@ -516,6 +760,29 @@ export class ReaderSettingsFieldInteraction {
 
 	#syncAdvanced(): void {
 		const { h, s, v } = this.#hsv;
+		const radians = h * Math.PI / 180;
+		const wheelRadius = s / 2;
+		this.#wheel.style.setProperty(
+			'--ldp-color-wheel-x',
+			`${50 + Math.sin(radians) * wheelRadius}%`,
+		);
+		this.#wheel.style.setProperty(
+			'--ldp-color-wheel-y',
+			`${50 - Math.cos(radians) * wheelRadius}%`,
+		);
+		this.#wheel.style.setProperty(
+			'--ldp-color-wheel-shade',
+			String((100 - v) / 100),
+		);
+		this.#wheel.style.setProperty(
+			'--ldp-color-wheel-thumb',
+			colorHsvToHex({ h, s, v }),
+		);
+		this.#wheel.setAttribute('aria-valuenow', String(h));
+		this.#wheel.setAttribute(
+			'aria-valuetext',
+			`色相 ${h}°，饱和度 ${s}%`,
+		);
 		this.#hue.value = String(h);
 		this.#saturation.value = String(s);
 		this.#brightness.value = String(v);

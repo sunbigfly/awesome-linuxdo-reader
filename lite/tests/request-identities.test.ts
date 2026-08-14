@@ -85,6 +85,27 @@ const notification = notificationRequestIdentity({
 	page: 2,
 });
 assert(notification.authScope === 'account:test' && notification.page === 2, '通知身份必须包含账号与页码');
+const notificationVariant = notificationRequestIdentity({
+	authScope: 'account:test',
+	group: 'replies',
+	page: 2,
+	variant: 'user-actions-limit-100-v1',
+});
+assert(
+	notificationVariant.variant === 'user-actions-limit-100-v1' &&
+		createRequestContract('background-prefetch', {
+			namespace: 'notifications',
+			identity: notificationVariant,
+		}).key !== createRequestContract('background-prefetch', {
+			namespace: 'notifications',
+			identity: notificationRequestIdentity({
+				authScope: 'account:test',
+				group: 'replies',
+				page: 2,
+			}),
+		}).key,
+	'通知分页变体必须进入请求与持久缓存身份，防止不同 limit 复用旧页',
+);
 const collection = collectionRequestIdentity({
 	authScope: 'account:test',
 	collection: 'reactions-given',

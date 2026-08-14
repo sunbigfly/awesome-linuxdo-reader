@@ -7,6 +7,10 @@ import {
 	type ReadStateChange,
 	type ReadStateSubmitPort,
 } from '../src/reading/read-state-controller.js';
+import {
+	RequestRateLimitError,
+	RequestStatusError,
+} from '../src/network/coordinated-request-client.js';
 import type {
 	ReadStateCoordinationPort,
 } from '../src/reading/read-state-coordination.js';
@@ -169,19 +173,73 @@ assert(failureCalls === 2, '只应执行首次 + 一次自动重试');
 assert(retryController.snapshot().automaticRetryHalted, '第二次失败后必须停止自动重试');
 assert(retryController.pendingCount === 1, '停止自动重试仍必须保留 pending');
 
+const rateLimitTimers = timerHarness();
+const rateLimitController = new ReadStateController({
+	authScope: 'account:test',
+	topicId: 18,
+	submitter: {
+		async submit() {
+			throw new RequestRateLimitError(Object.freeze({
+				scope: 'endpoint',
+				waitMs: 8_000,
+				retryAt: 9_000,
+				fingerprint: 'POST:/topics/timings',
+				route: '/topics/timings',
+				window: 'unknown',
+			}));
+		},
+	},
+	now: () => 1_000,
+	setTimer: rateLimitTimers.setTimer,
+	clearTimer: rateLimitTimers.clearTimer,
+});
+rateLimitController.preload([1]);
+rateLimitController.setVisible([1], 'root');
+rateLimitController.start();
+await rateLimitController.flush({ force: true });
+assert(
+	[...rateLimitTimers.timers.values()].some((timer) => timer.delay === 8_000),
+	'中央 RequestRateLimitError 必须按 retryAt 保留 checkpoint，不能退化成统一 5 秒重试',
+);
+
+const terminalTimers = timerHarness();
+const terminalController = new ReadStateController({
+	authScope: 'account:test',
+	topicId: 19,
+	submitter: {
+		async submit() {
+			throw new RequestStatusError(401);
+		},
+	},
+	setTimer: terminalTimers.setTimer,
+	clearTimer: terminalTimers.clearTimer,
+});
+terminalController.preload([1]);
+terminalController.setVisible([1], 'root');
+terminalController.start();
+await terminalController.flush({ force: true });
+assert(
+	terminalController.snapshot().automaticRetryHalted &&
+		terminalTimers.timers.size === 0,
+	'鉴权等终止型 HTTP 异常不得被囫囵当成普通网络错误自动重试',
+);
+
+const cloudflareTimers = timerHarness();
+let cloudflareCalls = 0;
 const cloudflareController = new ReadStateController({
 	authScope: 'account:test',
 	topicId: 12,
 	submitter: {
 		async submit(postNumbers) {
-			if (postNumbers.some((postNumber) => Number(postNumber) === 2)) {
-				throw Object.assign(new Error('challenge'), { cloudflareMitigated: true });
+			cloudflareCalls += 1;
+			if (cloudflareCalls === 1) {
+				throw new RequestStatusError(403, { cloudflareMitigated: true });
 			}
 			return postNumbers;
 		},
 	},
-	setTimer: timerHarness().setTimer,
-	clearTimer: () => {},
+	setTimer: cloudflareTimers.setTimer,
+	clearTimer: cloudflareTimers.clearTimer,
 });
 cloudflareController.preload([2]);
 cloudflareController.setVisible([2], 'root');
@@ -189,19 +247,31 @@ cloudflareController.start();
 await cloudflareController.flush({ force: true });
 assert(
 	cloudflareController.snapshot().automaticRetryHalted &&
-		cloudflareController.pendingCount === 0,
-	'Cloudflare mitigation 不得由 controller 自动循环或在过盾后追发同一批楼层',
+		cloudflareController.pendingCount === 1,
+	'Cloudflare mitigation 必须保留失败批次 checkpoint，且冷却前不得自动循环',
 );
 cloudflareController.preload([3]);
 cloudflareController.setVisible([3], 'root');
 assert(
 	cloudflareController.snapshot().automaticRetryHalted,
-	'同 Topic 过盾后的新楼层不得重开自动 timings，避免快速滚动继续形成不同楼层突发',
+	'同 Topic 过盾后的新楼层在冷却期内不得立即重开 timings',
 );
 assert(
 	!await cloudflareController.flush({ force: true }) &&
 		!cloudflareController.isConfirmed(3),
-	'Cloudflare 停止必须覆盖 force flush；切帖或重开由新的 controller 自然恢复',
+	'Cloudflare 冷却必须覆盖 force flush，且不得把被拒绝响应伪装成确认',
+);
+const challengeRecovery = [...cloudflareTimers.timers.values()].find((timer) =>
+	timer.delay === 10_000);
+assert(challengeRecovery, 'Cloudflare 拒绝后必须建立一次有界恢复冷却');
+challengeRecovery.callback();
+await cloudflareController.flush({ force: true });
+assert(
+	cloudflareController.isConfirmed(3) &&
+		cloudflareController.isConfirmed(2) &&
+		cloudflareCalls === 2 &&
+		!cloudflareController.snapshot().automaticRetryHalted,
+	'冷却到期后必须合并恢复失败 checkpoint 与后续新楼层，成功后再确认清账',
 );
 
 const attemptedBatches: number[][] = [];
@@ -325,6 +395,8 @@ controller.destroy();
 visibilityFirstController.destroy();
 persistedController.destroy();
 retryController.destroy();
+rateLimitController.destroy();
+terminalController.destroy();
 cloudflareController.destroy();
 partialController.destroy();
 subscriptionController.destroy();

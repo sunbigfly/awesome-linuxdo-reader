@@ -44,6 +44,17 @@ export interface RequestObservationStart {
 	readonly callSite?: string;
 	readonly type?: RequestObservationType;
 	readonly controlReason?: string;
+	readonly logicalId?: string;
+	readonly profile?: string;
+	readonly namespace?: string;
+	readonly lane?: string;
+	readonly cacheMode?: string;
+	readonly identity?: Readonly<Record<string, string | number | boolean>>;
+	readonly max429Retries?: number;
+	readonly maxChallengeRetries?: number;
+	readonly blockOnCloudflareChallenge?: boolean;
+	readonly suppressAfterChallengeWait?: boolean;
+	readonly droppable?: boolean;
 }
 
 export interface RequestObservationFinish {
@@ -57,12 +68,24 @@ export interface RequestObservationFinish {
 	readonly serverLimit?: string;
 	readonly serverRemaining?: string;
 	readonly serverReset?: string;
+	readonly decision?: string;
+}
+
+export interface RequestObservationUpdate {
+	readonly priority?: RequestPriority | null;
+	readonly joinedConsumers?: number;
+	readonly promoted?: boolean;
+	readonly max429Retries?: number;
+	readonly maxChallengeRetries?: number;
+	readonly droppable?: boolean;
+	readonly decision?: string;
 }
 
 export interface RequestObservationEvent {
 	readonly id: number;
 	readonly href: string;
 	readonly path: string;
+	readonly queryShape: string;
 	readonly method: string;
 	readonly transport: RequestObservationTransport;
 	readonly source: RequestObservationSource;
@@ -82,6 +105,20 @@ export interface RequestObservationEvent {
 	readonly waitReason: string;
 	readonly callSite: string;
 	readonly controlReason: string;
+	readonly logicalId: string;
+	readonly profile: string;
+	readonly namespace: string;
+	readonly lane: string;
+	readonly cacheMode: string;
+	readonly identity: string;
+	readonly joinedConsumers: number;
+	readonly promoted: boolean;
+	readonly max429Retries: number;
+	readonly maxChallengeRetries: number;
+	readonly blockOnCloudflareChallenge: boolean | null;
+	readonly suppressAfterChallengeWait: boolean;
+	readonly droppable: boolean | null;
+	readonly decision: string;
 	readonly pending: boolean;
 	readonly status: number | null;
 	readonly cloudflareMitigated: boolean;
@@ -144,6 +181,71 @@ function requestObservationPath(url: URL | null, baseOrigin: string): string {
 	}
 	return `${url.origin === baseOrigin ? '' : url.host}${url.pathname || '/'}`
 		.slice(0, 180);
+}
+
+const SENSITIVE_QUERY_KEY = /(?:auth|authorization|cookie|key|password|secret|signature|token)/i;
+const DIAGNOSTIC_IDENTITY_KEYS = new Set([
+	'after',
+	'collection',
+	'group',
+	'operation',
+	'page',
+	'parentPostId',
+	'parentPostNumber',
+	'postId',
+	'postNumber',
+	'postIds',
+	'postNumbers',
+	'resource',
+	'targetType',
+	'topicId',
+]);
+
+function requestObservationQueryShape(url: URL | null): string {
+	if (!url || !['http:', 'https:'].includes(url.protocol) || !url.search) return '';
+	const counts = new Map<string, number>();
+	for (const [rawKey] of url.searchParams) {
+		const candidate = String(rawKey).trim();
+		const key = SENSITIVE_QUERY_KEY.test(candidate)
+			? 'credential'
+			: /^[A-Za-z_][A-Za-z0-9_.\[\]-]{0,39}$/.test(candidate)
+				? candidate
+				: 'param';
+		counts.set(key, (counts.get(key) ?? 0) + 1);
+	}
+	const entries = [...counts].sort(([left], [right]) => left.localeCompare(right));
+	if (!entries.length) return '';
+	const visible = entries.slice(0, 8).map(([key, count]) =>
+		count > 1 ? `${key}×${count}` : key);
+	if (entries.length > visible.length) visible.push('…');
+	return `?${visible.join('&')}`.slice(0, 180);
+}
+
+function requestObservationIdentity(
+	identity: RequestObservationStart['identity'],
+): string {
+	if (!identity) return '';
+	const details: string[] = [];
+	for (const [key, rawValue] of Object.entries(identity)
+		.sort(([left], [right]) => left.localeCompare(right))) {
+		if (!DIAGNOSTIC_IDENTITY_KEYS.has(key)) continue;
+		const value = String(rawValue).trim();
+		if (!value) continue;
+		if (key === 'postIds' || key === 'postNumbers') {
+			const count = value.split(',').filter(Boolean).length;
+			details.push(`${key}=${count}项`);
+			continue;
+		}
+		if (
+			['collection', 'group', 'operation', 'resource', 'targetType'].includes(key)
+		) {
+			const token = diagnosticCode(value);
+			if (token) details.push(`${key}=${token}`);
+			continue;
+		}
+		if (/^\d+$/.test(value)) details.push(`${key}=${value.slice(0, 16)}`);
+	}
+	return details.join(', ').slice(0, 220);
 }
 
 function diagnosticText(value: unknown, maximum = 220): string {
@@ -284,6 +386,7 @@ export class RequestObserver {
 			id: ++this.#sequence,
 			href: normalizedHref,
 			path: requestObservationPath(url, baseOrigin),
+			queryShape: requestObservationQueryShape(url),
 			method,
 			transport: input.transport,
 			source: input.source,
@@ -311,6 +414,23 @@ export class RequestObserver {
 			waitReason: diagnosticCode(input.waitReason),
 			callSite: diagnosticText(input.callSite),
 			controlReason,
+			logicalId: diagnosticCode(input.logicalId),
+			profile: diagnosticCode(input.profile),
+			namespace: diagnosticCode(input.namespace),
+			lane: diagnosticCode(input.lane),
+			cacheMode: diagnosticCode(input.cacheMode),
+			identity: requestObservationIdentity(input.identity),
+			joinedConsumers: 0,
+			promoted: false,
+			max429Retries: Math.trunc(nonNegative(input.max429Retries)),
+			maxChallengeRetries: Math.trunc(nonNegative(input.maxChallengeRetries)),
+			blockOnCloudflareChallenge:
+				typeof input.blockOnCloudflareChallenge === 'boolean'
+					? input.blockOnCloudflareChallenge
+					: null,
+			suppressAfterChallengeWait: input.suppressAfterChallengeWait === true,
+			droppable: typeof input.droppable === 'boolean' ? input.droppable : null,
+			decision: controlReason,
 			pending: !controlReason,
 			status: controlReason ? 0 : null,
 			cloudflareMitigated: false,
@@ -396,6 +516,7 @@ export class RequestObserver {
 			duration: 0,
 			waitReason: reason,
 			controlReason: reason,
+			decision: reason,
 			pending: false,
 			status: 0,
 		});
@@ -460,11 +581,45 @@ export class RequestObserver {
 			serverLimit: diagnosticText(input.serverLimit, 80),
 			serverRemaining: diagnosticText(input.serverRemaining, 80),
 			serverReset: diagnosticText(input.serverReset, 80),
+			decision: diagnosticCode(input.decision, current.decision),
 		});
 		const index = this.#events.findIndex((event) => event.id === id);
 		if (index >= 0) this.#events[index] = completed;
 		this.#active.delete(id);
 		this.#prune(endedAt);
+		this.#publish();
+		return true;
+	}
+
+	update(id: number, input: RequestObservationUpdate): boolean {
+		const current = this.#events.find((event) => event.id === id);
+		if (!current) return false;
+		const next: RequestObservationEvent = Object.freeze({
+			...current,
+			priority: input.priority === undefined
+				? current.priority
+				: input.priority,
+			joinedConsumers: input.joinedConsumers === undefined
+				? current.joinedConsumers
+				: Math.trunc(nonNegative(input.joinedConsumers)),
+			promoted: current.promoted || input.promoted === true,
+			max429Retries: input.max429Retries === undefined
+				? current.max429Retries
+				: Math.trunc(nonNegative(input.max429Retries)),
+			maxChallengeRetries: input.maxChallengeRetries === undefined
+				? current.maxChallengeRetries
+				: Math.trunc(nonNegative(input.maxChallengeRetries)),
+			droppable: input.droppable === undefined
+				? current.droppable
+				: input.droppable,
+			decision: input.decision === undefined
+				? current.decision
+				: diagnosticCode(input.decision, current.decision),
+		});
+		const index = this.#events.findIndex((event) => event.id === id);
+		if (index < 0) return false;
+		this.#events[index] = next;
+		if (current.pending) this.#active.set(id, next);
 		this.#publish();
 		return true;
 	}

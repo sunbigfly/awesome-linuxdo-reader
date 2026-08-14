@@ -1,6 +1,7 @@
 import {
 	RequestControlError,
 	RequestScheduler,
+	RequestStartDeferredError,
 	RequestTimeoutError,
 	type RequestStartGate,
 	type RequestStartPermit,
@@ -227,6 +228,28 @@ await nextTask();
 await nextTask();
 backgroundTopicHolds[2]!.resolve();
 await Promise.all(backgroundTopicRequests);
+
+const nearbyTopicHolds = Array.from({ length: 3 }, () => deferred<void>());
+const nearbyTopicStarts: number[] = [];
+const nearbyTopicRequests = nearbyTopicHolds.map(
+	(hold, index) => backgroundTopicScheduler.schedule({
+		key: `nearby-topic-${index}`,
+		lane: 'topic-batch',
+		priority: 'prefetch',
+		droppable: true,
+	}, async () => {
+		nearbyTopicStarts.push(index);
+		await hold.promise;
+	}),
+);
+await nextTask();
+assert(
+	nearbyTopicStarts.join(',') === '0,1,2' &&
+		backgroundTopicScheduler.snapshot().activeByLane['topic-batch'] === 3,
+	'近视口 Topic 预热必须能吃满三路统一请求上限',
+);
+for (const hold of nearbyTopicHolds) hold.resolve();
+await Promise.all(nearbyTopicRequests);
 backgroundTopicScheduler.destroy();
 
 const laneScheduler = new RequestScheduler({
@@ -518,6 +541,57 @@ assert(
 	'调度器必须向中央观测端口暴露一次真实排队、放行和启动时间',
 );
 gatedScheduler.destroy();
+
+let deferredGateAttempts = 0;
+const deferredStartOrder: string[] = [];
+let deferredWaitReason = '';
+const deferredGateScheduler = new RequestScheduler({
+	maxConcurrent: 1,
+	queueLimit: 2,
+	defaultTimeoutMs: 1000,
+	startGate: {
+		acquire: async (input) => {
+			if (
+				input.rateLimitRoute === 'GET:https://linux.do/t/:id.json' &&
+				deferredGateAttempts++ === 0
+			) {
+				throw new RequestStartDeferredError(25, 'rate-limit');
+			}
+			return { release() {} };
+		},
+	},
+});
+const deferredEndpointRequest = deferredGateScheduler.schedule({
+	key: 'deferred-endpoint',
+	priority: 'critical',
+	rateLimitRoute: 'GET:https://linux.do/t/:id.json',
+	onStart: (timing) => {
+		deferredWaitReason = timing.waitReason;
+	},
+}, async () => {
+	deferredStartOrder.push('endpoint');
+	return 'endpoint';
+});
+const unrelatedWhileDeferred = deferredGateScheduler.schedule({
+	key: 'unrelated-while-deferred',
+	priority: 'visible',
+	rateLimitRoute: 'GET:https://linux.do/notifications.json',
+}, async () => {
+	deferredStartOrder.push('unrelated');
+	return 'unrelated';
+});
+assert(
+	await unrelatedWhileDeferred === 'unrelated' &&
+		deferredStartOrder.join(',') === 'unrelated',
+	'端点 429 延后必须立即释放本地 permit 队首，让无关路由继续流动',
+);
+assert(
+	await deferredEndpointRequest === 'endpoint' &&
+		deferredStartOrder.join(',') === 'unrelated,endpoint' &&
+		deferredWaitReason === 'rate-limit',
+	'被延后的端点必须在冷却到期后自动恢复，并保留真实等待原因',
+);
+deferredGateScheduler.destroy();
 
 const latePermit = deferred<{ release(): void }>();
 let latePermitReleased = false;

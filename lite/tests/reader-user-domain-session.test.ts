@@ -12,6 +12,7 @@ import type {
 } from '../src/user/discourse-native-user-port.js';
 import {
 	ReaderUserDomainSession,
+	type ReaderUserExternalSnapshot,
 	type ReaderUserRequestGateway,
 } from '../src/user/reader-user-domain-session.js';
 
@@ -420,6 +421,80 @@ assert(
 		connectBob.connect.metrics.targetLevel === 3,
 	'Connect/LDC 外部 slot 必须共用同一 session owner 并保持独立投影',
 );
+
+const connectRefresh = deferred<ReaderUserExternalSnapshot>();
+const connectReplaced = deferred<void>();
+let connectCacheReads = 0;
+let connectRefreshCalls = 0;
+const swrSession = new ReaderUserDomainSession({
+	gateway,
+	native,
+	authScope: 'account:viewer',
+	connect: {
+		async cached(username) {
+			connectCacheReads += 1;
+			return Object.freeze({
+				phase: 'ready',
+				accountUsername: username,
+				metrics: Object.freeze({ targetLevel: 2 }),
+				updatedAt: 800,
+				stale: false,
+			});
+		},
+		load() {
+			connectRefreshCalls += 1;
+			return connectRefresh.promise;
+		},
+	},
+});
+swrSession.subscribe('cached-user', (snapshot) => {
+	if (
+		snapshot.connect.phase === 'ready' &&
+		snapshot.connect.stale === false &&
+		snapshot.connect.metrics.targetLevel === 3
+	) connectReplaced.resolve(undefined);
+});
+const optimisticConnect = await swrSession.loadConnect('cached-user');
+assert(
+	connectCacheReads === 1 &&
+		connectRefreshCalls === 1 &&
+		optimisticConnect.connect.phase === 'ready' &&
+		optimisticConnect.connect.stale === true &&
+		optimisticConnect.connect.refreshing === true &&
+		optimisticConnect.connect.metrics.targetLevel === 2,
+	'Connect/LDC session 必须先发布缓存快照，同时立即启动后台权威刷新',
+);
+let refreshCompletionSettled = false;
+const refreshCompletion = swrSession.loadConnect('cached-user', true).then(
+	(snapshot) => {
+		refreshCompletionSettled = true;
+		return snapshot;
+	},
+);
+await Promise.resolve();
+assert(
+	refreshCompletionSettled === false && connectRefreshCalls === 1,
+	'显式等待后台刷新时必须复用同一在途请求，不能提前返回缓存或重复联网',
+);
+connectRefresh.resolve(Object.freeze({
+	phase: 'ready',
+	accountUsername: 'cached-user',
+	metrics: Object.freeze({ targetLevel: 3 }),
+	updatedAt: 900,
+	stale: false,
+}));
+const [, completedRefresh] = await Promise.all([
+	connectReplaced.promise,
+	refreshCompletion,
+]);
+assert(
+	completedRefresh.connect.metrics.targetLevel === 3 &&
+	swrSession.snapshot('cached-user').connect.metrics.targetLevel === 3 &&
+		swrSession.snapshot('cached-user').connect.stale === false &&
+		swrSession.snapshot('cached-user').connect.refreshing === false,
+	'Connect/LDC session 必须在后台成功后自动替换缓存快照',
+);
+swrSession.destroy();
 
 const progressive = session.load('progressive');
 const progressivePending = session.snapshot('progressive');

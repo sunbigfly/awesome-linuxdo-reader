@@ -10,7 +10,10 @@ import type {
 	VirtualRootWindow,
 	VirtualWindowInput,
 } from './virtual-root-layout.js';
-import type { VirtualStreamView } from './virtual-stream-view.js';
+import type {
+	VirtualStreamGapPlaceholderState,
+	VirtualStreamView,
+} from './virtual-stream-view.js';
 
 export interface VirtualStreamDomCommit {
 	readonly window: VirtualRootWindow;
@@ -26,6 +29,10 @@ export interface VirtualStreamDomControllerOptions {
 		window: VirtualRootWindow,
 	) => ReplyTreeDomMountPlan | undefined;
 	readonly roots?: () => readonly PostNumber[];
+	readonly resolveGapPlaceholder?: (
+		window: VirtualRootWindow,
+		input: VirtualWindowInput,
+	) => VirtualStreamGapPlaceholderState | null;
 }
 
 /**
@@ -44,6 +51,10 @@ export class VirtualStreamDomController {
 		window: VirtualRootWindow,
 	) => ReplyTreeDomMountPlan | undefined;
 	readonly #roots: () => readonly PostNumber[];
+	readonly #resolveGapPlaceholder: (
+		window: VirtualRootWindow,
+		input: VirtualWindowInput,
+	) => VirtualStreamGapPlaceholderState | null;
 	#connectedRoots: ReadonlySet<PostNumber> = new Set();
 	#committed = false;
 
@@ -63,6 +74,14 @@ export class VirtualStreamDomController {
 		this.domOwner = domOwner;
 		this.#prepareRoots = options.prepareRoots ?? (() => {});
 		this.#roots = options.roots ?? (() => repository.topology.roots());
+		this.#resolveGapPlaceholder = options.resolveGapPlaceholder ?? ((window) =>
+			window.unloadedGapTargetPostNumber === undefined ||
+				window.unloadedGapSide === undefined
+				? null
+				: Object.freeze({
+					side: window.unloadedGapSide,
+					targetPostNumber: window.unloadedGapTargetPostNumber,
+				}));
 	}
 
 	commit(input: VirtualWindowInput): VirtualStreamDomCommit {
@@ -114,6 +133,9 @@ export class VirtualStreamDomController {
 		this.streamView.setSpacerSizes(
 			window.beforeSpacer + (firstRootInset?.beforeSize ?? 0),
 			window.afterSpacer + (lastRootInset?.afterSize ?? 0),
+		);
+		this.streamView.setGapPlaceholder(
+			this.#resolveGapPlaceholder(window, input),
 		);
 		return Object.freeze({
 			window,

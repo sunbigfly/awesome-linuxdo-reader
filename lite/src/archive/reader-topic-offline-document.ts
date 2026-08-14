@@ -12,6 +12,10 @@ import {
 	hasReaderIcon,
 	readerIconSvgMarkup,
 } from '../components/reader-icon.js';
+import {
+	normalizeReaderTranslationTheme,
+	type ReaderTranslationTheme,
+} from '../translation/reader-translation-presentation.js';
 
 export interface ReaderTopicOfflineQuotedPost<
 	TPost extends DiscourseTopicPostInput,
@@ -67,9 +71,13 @@ export interface ReaderTopicOfflineDocumentInput<
 	readonly siteLogoUrl?: string;
 	/** 下载时解析正文实际使用的回应表情；URL 会固化到离线 HTML。 */
 	readonly reactionEmojiUrl?: (reactionId: string) => string;
+	/** 下载时解析所有可见文本字段中的 `:shortcode:`；URL 会固化到离线 HTML。 */
+	readonly inlineEmojiUrl?: (emojiId: string) => string;
 	/** 固化下载时 Reader 已投影的阅读外观；不包含窗口位置或在线工作区几何。 */
 	readonly presentation?: Readonly<{
 		readonly theme?: 'light' | 'dark';
+		readonly translationMode?: 'original' | 'bilingual' | 'translation';
+		readonly translationTheme?: ReaderTranslationTheme;
 		readonly styleProperties?: Readonly<Record<string, string>>;
 		readonly structureColorsDisabled?: boolean;
 	}>;
@@ -343,6 +351,40 @@ function offlineReactionEmojiSources(
 	return Object.freeze(sources);
 }
 
+function offlineInlineEmojiSources(
+	values: readonly unknown[],
+	sourceUrl: string,
+	resolve: ((emojiId: string) => string) | undefined,
+): Readonly<Record<string, string>> {
+	const sources = Object.create(null) as Record<string, string>;
+	if (!resolve) return Object.freeze(sources);
+	const ids = new Set<string>();
+	const seen = new WeakSet<object>();
+	const visit = (value: unknown): void => {
+		if (typeof value === 'string') {
+			for (const match of value.matchAll(/:([a-z0-9_+\-]+):/giu)) {
+				const id = String(match[1] ?? '').trim();
+				if (id) ids.add(id);
+			}
+			return;
+		}
+		if (!value || typeof value !== 'object' || seen.has(value)) return;
+		seen.add(value);
+		if (Array.isArray(value)) value.forEach(visit);
+		else Object.values(value as Readonly<Record<string, unknown>>).forEach(visit);
+	};
+	values.forEach(visit);
+	for (const id of ids) {
+		try {
+			const source = absoluteDocumentUrl(resolve(id), sourceUrl);
+			if (source) sources[id] = source;
+		} catch {
+			// 单个短码解析失败时保留原文字段，不阻断整篇离线导出。
+		}
+	}
+	return Object.freeze(sources);
+}
+
 /** 从 cooked 引用卡片中提取需要随下载补齐的唯一目标楼层。 */
 export function readerTopicOfflineQuoteTargets<
 	TPost extends DiscourseTopicPostInput,
@@ -463,6 +505,7 @@ function readerTopicOfflineRuntime(
 		readonly header: HTMLElement;
 		readonly body: HTMLElement;
 		readonly content: HTMLElement;
+		readonly bodyLayer: HTMLElement;
 		readonly replyTree: HTMLElement;
 		readonly replyList: HTMLElement;
 		readonly replyControls: HTMLElement;
@@ -930,6 +973,64 @@ function readerTopicOfflineRuntime(
 			return String(value || '');
 		}
 	};
+	const inlineEmojiSources = data.inlineEmojiSources &&
+		typeof data.inlineEmojiSources === 'object' &&
+		!Array.isArray(data.inlineEmojiSources)
+		? data.inlineEmojiSources as Readonly<Record<string, unknown>>
+		: {};
+	const prepareOfflineInlineEmoji = (root: ParentNode): number => {
+		const walker = document.createTreeWalker(root, 4);
+		const textNodes: Text[] = [];
+		for (let current = walker.nextNode(); current; current = walker.nextNode()) {
+			if (current.nodeType !== 3 || !current.nodeValue?.includes(':')) continue;
+			const parent = current.parentElement;
+			if (
+				!parent || parent.closest(
+					'code,pre,kbd,samp,script,style,textarea,' +
+					'.ldp-offline-inline-emoji',
+				)
+			) continue;
+			textNodes.push(current as Text);
+		}
+		let rendered = 0;
+		for (const text of textNodes) {
+			const value = text.nodeValue ?? '';
+			const matches = [...value.matchAll(/:([a-z0-9_+\-]+):/giu)]
+				.map((match) => Object.freeze({
+					raw: match[0],
+					id: String(match[1] ?? ''),
+					index: match.index ?? 0,
+					source: String(inlineEmojiSources[String(match[1] ?? '')] ?? '')
+						.trim(),
+				}))
+				.filter((match) => match.source);
+			if (!matches.length) continue;
+			const fragment = document.createDocumentFragment();
+			let cursor = 0;
+			for (const match of matches) {
+				if (match.index > cursor) {
+					fragment.append(document.createTextNode(value.slice(cursor, match.index)));
+				}
+				const image = document.createElement('img');
+				image.className = 'emoji ldp-offline-inline-emoji';
+				image.src = absoluteUrl(match.source);
+				image.alt = match.raw;
+				image.loading = 'lazy';
+				image.decoding = 'async';
+				image.addEventListener('error', () => {
+					image.replaceWith(document.createTextNode(match.raw));
+				}, { once: true });
+				fragment.append(image);
+				cursor = match.index + match.raw.length;
+				rendered += 1;
+			}
+			if (cursor < value.length) {
+				fragment.append(document.createTextNode(value.slice(cursor)));
+			}
+			text.replaceWith(fragment);
+		}
+		return rendered;
+	};
 	const offlineIcon = (
 		name: 'arrow-up' | 'chevron-down' | 'chevron-left' | 'chevron-up' |
 			'layers' | 'minus' | 'plus',
@@ -979,9 +1080,8 @@ function readerTopicOfflineRuntime(
 	};
 	const archiveStatusLabel = (statusValue: unknown): string => {
 		const archiveStatus = Number(statusValue);
-		if (archiveStatus === 403) return '已隐藏或无权访问（403）';
-		if (archiveStatus === 410) return '已删除（410）';
-		return '已删除、隐藏或不可用（404）';
+		if (archiveStatus === 403) return '隐藏前正文';
+		return `${archiveStatus} 前正文`;
 	};
 	const syncOnlyOpToggle = (): void => {
 		if (!onlyOpToggle) return;
@@ -1157,6 +1257,7 @@ function readerTopicOfflineRuntime(
 		prepareImageZoom(root);
 	};
 	const expandedQuoteKeys = new Set<string>();
+	const quoteExcerptHtmlByElement = new WeakMap<HTMLElement, string>();
 	const prepareOfflineInlineOneboxes = (root: HTMLElement): void => {
 		for (const link of root.querySelectorAll<HTMLAnchorElement>(
 			'a.inline-onebox',
@@ -1235,6 +1336,9 @@ function readerTopicOfflineRuntime(
 			const title = quote.querySelector<HTMLElement>(':scope > .title');
 			const body = quote.querySelector<HTMLElement>(':scope > blockquote');
 			if (!title || !body) continue;
+			if (!quoteExcerptHtmlByElement.has(quote)) {
+				quoteExcerptHtmlByElement.set(quote, body.innerHTML);
+			}
 			quote.classList.add('ldp-post-quote');
 			title.classList.add('ldp-quote-title');
 			const targetPostNumber = Number(quote.dataset.post ?? 0);
@@ -1248,12 +1352,17 @@ function readerTopicOfflineRuntime(
 			const expanded = Boolean(targetPost && expandedQuoteKeys.has(key));
 			quote.classList.toggle('ldp-quote-expanded', expanded);
 			quote.dataset.ldpQuoteExpanded = expanded ? '1' : '0';
-			if (targetPost && quote.dataset.ldpQuoteHydrated !== '1') {
+			if (expanded && targetPost) {
 				body.innerHTML = String(targetPost.cooked || '');
 				quote.dataset.ldpQuoteHydrated = '1';
 				prepareOfflineInlineOneboxes(body);
 				prepareOfflineOneboxes(body);
-			} else if (!targetPost) {
+			} else {
+				const excerpt = quoteExcerptHtmlByElement.get(quote);
+				if (excerpt !== undefined && body.innerHTML !== excerpt) {
+					body.innerHTML = excerpt;
+				}
+				delete quote.dataset.ldpQuoteHydrated;
 				prepareOfflineQuoteImages(body);
 			}
 			let controls = title.querySelector<HTMLElement>(':scope > .quote-controls');
@@ -1306,6 +1415,7 @@ function readerTopicOfflineRuntime(
 		prepareOfflineInlineOneboxes(root);
 		prepareOfflineOneboxes(root);
 		prepareOfflineQuotes(Number(post.post_number), root);
+		prepareOfflineInlineEmoji(root);
 	};
 	const avatarFallback = (post: OfflinePost): HTMLElement => {
 		const fallback = document.createElement('span');
@@ -1912,13 +2022,15 @@ function readerTopicOfflineRuntime(
 		root.dataset.username = String(post.username || '');
 		if (post.created_at) root.dataset.createdAt = String(post.created_at);
 		root.innerHTML = '<header class="ldp-post-head"></header>' +
-			'<div class="ldp-post-body"><div class="ldp-content cooked"></div></div>' +
+			'<div class="ldp-post-body"><div class="ldp-content cooked"></div>' +
+			'<div class="ldp-post-body-layer"></div></div>' +
 			'<section class="ldp-children ldp-reply-tree">' +
 			'<div class="ldp-reply-list"></div>' +
 			'<div class="ldp-reply-controls"></div></section>';
 		const header = root.querySelector<HTMLElement>('.ldp-post-head')!;
 		const body = root.querySelector<HTMLElement>('.ldp-post-body')!;
 		const content = root.querySelector<HTMLElement>('.ldp-content')!;
+		const bodyLayer = root.querySelector<HTMLElement>('.ldp-post-body-layer')!;
 		const replyTree = root.querySelector<HTMLElement>('.ldp-reply-tree')!;
 		const replyList = root.querySelector<HTMLElement>('.ldp-reply-list')!;
 		const replyControls = root.querySelector<HTMLElement>('.ldp-reply-controls')!;
@@ -1990,6 +2102,7 @@ function readerTopicOfflineRuntime(
 			header,
 			body,
 			content,
+			bodyLayer,
 			replyTree,
 			replyList,
 			replyControls,
@@ -2064,7 +2177,8 @@ function readerTopicOfflineRuntime(
 		if (!view.hydrated) return;
 		view.header.replaceChildren();
 		view.content.replaceChildren();
-		view.body.replaceChildren(view.content);
+		view.bodyLayer.replaceChildren();
+		view.body.replaceChildren(view.content, view.bodyLayer);
 		view.root.classList.remove('is-local-archive-post');
 		view.root.classList.remove(
 			'ldp-has-boosts',
@@ -2078,6 +2192,7 @@ function readerTopicOfflineRuntime(
 		if (view.hydrated) return false;
 		const post = postByNumber.get(view.postNumber);
 		if (!post) return false;
+		const archived = unavailable.get(view.postNumber);
 		const username = String(post.username || '');
 		view.header.replaceChildren(
 			avatar(post),
@@ -2106,7 +2221,7 @@ function readerTopicOfflineRuntime(
 			time.append(label);
 			view.header.append(time);
 		}
-		if (post.hidden === true) {
+		if (post.hidden === true && !archived) {
 			view.header.append(textNode(
 				'ldp-special-badge ldp-hidden-badge warn',
 				'已隐藏',
@@ -2116,35 +2231,44 @@ function readerTopicOfflineRuntime(
 			'ldp-floor ldp-body-floor',
 			`#${view.postNumber}`,
 		));
+		if (created) {
+			const exact = textNode('ldp-time-exact', created.exact);
+			exact.setAttribute('aria-hidden', 'true');
+			view.header.append(exact);
+		}
 		view.content.innerHTML = String(post.cooked || '');
 		prepareOfflineCooked(post, view.content);
 		prepareReadOnlyPolls(post, view.content);
-		const archived = unavailable.get(view.postNumber);
+		view.bodyLayer.replaceChildren();
+		view.body.replaceChildren(view.content, view.bodyLayer);
 		if (archived) {
 			view.root.classList.add('is-local-archive-post');
 			const note = document.createElement('aside');
 			note.className = 'ldp-post-local-archive-note';
-			const reason = String(archived.reason ?? '').trim();
 			const confirmed = new Date(Number(archived.confirmedAt));
 			note.textContent = [
-				`本地引用存档 · ${archiveStatusLabel(archived.status)}`,
-				reason ? `原因：${reason}` : '',
+				`本地缓存 · ${archiveStatusLabel(archived.status)}`,
 				Number.isFinite(confirmed.getTime())
-					? `${confirmed.toLocaleString()} 前记录`
+					? `${confirmed.toLocaleString()} 确认`
 					: '',
 			].filter(Boolean).join(' · ');
-			view.body.replaceChildren(note, view.content);
-		} else {
-			view.body.replaceChildren(view.content);
+			if (post.hidden === true) {
+				note.append(textNode(
+					'ldp-post-local-archive-subtext',
+					'（已隐藏）',
+				));
+			}
+			view.bodyLayer.append(note);
 		}
 		prepareReadOnlySpecialContent(post, view);
 		prepareReadOnlySolvedAnswers(post, view);
 		prepareReadOnlyPostVoting(post, view);
 		prepareReadOnlyBoosts(post, view, ownerUsername);
-		prepareReadOnlyReactions(post, view);
+		if (!archived) prepareReadOnlyReactions(post, view);
 		for (const cooked of view.body.querySelectorAll<HTMLElement>('.cooked')) {
 			if (cooked !== view.content) prepareOfflineCooked(post, cooked);
 		}
+		prepareOfflineInlineEmoji(view.root);
 		normalizeAssets(view.body);
 		view.root.classList.remove('ldp-post-projection-pending');
 		view.root.removeAttribute('aria-busy');
@@ -2935,17 +3059,19 @@ function readerTopicOfflineRuntime(
 			const expanded = expandedQuoteKeys.has(key);
 			if (expanded) {
 				expandedQuoteKeys.delete(key);
+				const excerpt = quoteExcerptHtmlByElement.get(quote);
+				if (excerpt !== undefined) body.innerHTML = excerpt;
+				delete quote.dataset.ldpQuoteHydrated;
+				prepareOfflineQuoteImages(body);
 				quote.classList.remove('ldp-quote-expanded');
 				quote.dataset.ldpQuoteExpanded = '0';
 				quoteToggle.setAttribute('aria-expanded', 'false');
 				quoteToggle.setAttribute('aria-label', '展开完整引用');
 				quoteToggle.replaceChildren(offlineIcon('chevron-down'));
 			} else {
-				if (quote.dataset.ldpQuoteHydrated !== '1') {
-					body.innerHTML = String(targetPost.cooked || '');
-					quote.dataset.ldpQuoteHydrated = '1';
-					prepareOfflineCooked(targetPost, body);
-				}
+				body.innerHTML = String(targetPost.cooked || '');
+				quote.dataset.ldpQuoteHydrated = '1';
+				prepareOfflineCooked(targetPost, body);
 				expandedQuoteKeys.add(key);
 				quote.classList.add('ldp-quote-expanded');
 				quote.dataset.ldpQuoteExpanded = '1';
@@ -3039,6 +3165,7 @@ function readerTopicOfflineRuntime(
 	});
 	const overlay = document.querySelector<HTMLElement>('[data-offline-reader]');
 	if (overlay) overlay.dataset.ldpTheme = data.theme === 'dark' ? 'dark' : 'light';
+	prepareOfflineInlineEmoji(offlineReader);
 	render(true);
 	offlineReader.dataset.offlineHydrated = '1';
 }
@@ -3074,6 +3201,14 @@ const OFFLINE_STYLES = String.raw`
 * { box-sizing: border-box; }
 html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 body { background: #fff; font-family: system-ui, sans-serif; }
+[data-offline-reader] img.ldp-offline-inline-emoji {
+	display: inline-block;
+	width: 1.25em;
+	height: 1.25em;
+	margin: 0 .08em;
+	object-fit: contain;
+	vertical-align: -.26em;
+}
 [data-offline-reader].ldp-overlay {
 	--ldp-window-capsule-rail: 0px;
 	--ldp-offline-content-width: min(1440px, 76vw);
@@ -3644,16 +3779,6 @@ body { background: #fff; font-family: system-ui, sans-serif; }
 	min-height: 42px;
 	background: var(--ldp-surface-muted, #eef1f5);
 }
-@media (max-width: 1500px) {
-	[data-offline-reader] .ldp-header {
-		grid-template-columns: var(--ldp-home-logo-box-size) minmax(0, 1fr);
-		grid-template-rows: auto auto auto auto;
-	}
-	[data-offline-reader] .ldp-offline-tools {
-		grid-column: 2;
-		grid-row: 4;
-	}
-}
 @media (max-width: 700px) {
 	[data-offline-reader].ldp-overlay {
 		--ldp-offline-content-width: calc(100vw - 24px);
@@ -3665,12 +3790,15 @@ body { background: #fff; font-family: system-ui, sans-serif; }
 		height: calc(100vh - 16px);
 	}
 	[data-offline-reader] .ldp-header {
+		grid-template-columns: var(--ldp-home-logo-box-size) minmax(0, 1fr);
+		grid-template-rows: auto auto auto auto;
 		column-gap: 8px;
 		padding-right: var(--ldp-offline-page-gutter);
 		padding-left: var(--ldp-offline-page-gutter);
 	}
 	[data-offline-reader] .ldp-offline-tools {
 		grid-column: 1 / -1;
+		grid-row: 4;
 		grid-template-columns: minmax(0, 1fr);
 		padding: 7px;
 	}
@@ -3802,14 +3930,27 @@ export function createReaderTopicOfflineDocument<
 	});
 	const topicRecord = input.topic as Readonly<Record<string, unknown>>;
 	const theme = input.presentation?.theme === 'dark' ? 'dark' : 'light';
+	const translationMode = input.presentation?.translationMode === 'translation'
+		? 'translation'
+		: input.presentation?.translationMode === 'bilingual'
+			? 'bilingual'
+			: 'original';
+	const translationTheme = normalizeReaderTranslationTheme(
+		input.presentation?.translationTheme,
+	);
 	const readerStyle = offlineReaderStyle(input.presentation?.styleProperties);
 	const reactionEmojiSources = offlineReactionEmojiSources(
 		posts,
 		input.sourceUrl,
 		input.reactionEmojiUrl,
 	);
+	const inlineEmojiSources = offlineInlineEmojiSources(
+		[title, header, archive, posts, quotedPosts],
+		input.sourceUrl,
+		input.inlineEmojiUrl,
+	);
 	const payload = Object.freeze({
-		schemaVersion: 6,
+		schemaVersion: 8,
 		topicId,
 		title,
 		ownerUsername: String(header.ownerUsername || posts[0]?.username || ''),
@@ -3823,7 +3964,10 @@ export function createReaderTopicOfflineDocument<
 		complete: input.complete && mainPostNumbers.length >= expectedPostCount,
 		postVoting: topicRecord.is_post_voting === true,
 		theme,
+		translationMode,
+		translationTheme,
 		reactionEmojiSources,
+		inlineEmojiSources,
 		solvedAnswerPostNumbers: solvedAnswerPostNumbers(
 			topicRecord,
 			posts,
@@ -3899,6 +4043,8 @@ export function createReaderTopicOfflineDocument<
 		input.presentation?.structureColorsDisabled
 			? ' ldp-structure-colors-disabled'
 			: ''
+	}${translationMode === 'original' ? '' : ' ldp-translation-active'}${
+		translationMode === 'translation' ? ' ldp-translation-only' : ''
 	}`;
 	const html = `<!doctype html>
 <html lang="zh-CN">
@@ -3911,7 +4057,7 @@ export function createReaderTopicOfflineDocument<
 <style>${stylesheet}</style>
 </head>
 <body>
-<div class="${readerClassName}" data-offline-reader data-ldp-theme="${theme}"${
+<div class="${readerClassName}" data-offline-reader data-ldp-theme="${theme}" data-translation-theme="${translationTheme}"${
 	readerStyle ? ` style="${htmlText(readerStyle)}"` : ''
 }>
   <div class="ldp-modal">

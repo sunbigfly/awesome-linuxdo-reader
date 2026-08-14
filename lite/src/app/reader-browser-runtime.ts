@@ -12,6 +12,7 @@ import {
 	discourseNativeTopicLinks,
 	discourseNativeTopicEditCatalog,
 	discourseNativeTopicPresentation,
+	discourseNativeUnwantedTopicRuleCatalog,
 	BrowserDiscourseNativeBookmarkForm,
 	BrowserDiscourseBookmarkNativeState,
 	BrowserDiscourseNotificationNativeState,
@@ -29,6 +30,9 @@ import {
 	type ReaderCacheCategory,
 	type ReaderCurrentTopicRefreshResult,
 } from '../cache/reader-cache-management-surface.js';
+import {
+	ReaderCollectionPageRepository,
+} from '../cache/reader-collection-page-repository.js';
 import {
 	ReaderBrowserAssetCacheRepository,
 	type BrowserAssetCacheStoragePort,
@@ -75,9 +79,12 @@ import {
 	type ReaderHistoryAnchorState,
 	type ReaderHistoryQuoteHighlightState,
 	type ReaderHistoryQuoteSource,
+	type ReaderHistoryViewport,
 } from '../history/reader-history-model.js';
 import {
 	ReaderHistoryRepository,
+	type ReaderHistoryArchiveMarker,
+	type ReaderHistoryEntry,
 	type ReaderHistorySortMode,
 } from '../history/reader-history-repository.js';
 import {
@@ -90,6 +97,20 @@ import {
 	type ReaderHistoryPanelViewOptions,
 } from '../history/reader-history-panel-view.js';
 import {
+	ReaderChronicleRepository,
+	readerChronicleRequestTarget,
+	type ReaderChronicleInput,
+	type ReaderChronicleRequestTarget,
+} from '../history/reader-chronicle-repository.js';
+import { ReaderChronicleView } from '../history/reader-chronicle-view.js';
+import { ReaderUnwantedTopicRepository } from
+	'../collection/reader-unwanted-topic-repository.js';
+import { ReaderUnwantedTopicView } from
+	'../collection/reader-unwanted-topic-view.js';
+import type {
+	ReaderUnwantedTopicFilterPreferencesPort,
+} from '../collection/reader-unwanted-topic-filter.js';
+import {
 	DiscourseBookmarkRequestAdapter,
 } from '../bookmark/discourse-bookmark-adapter.js';
 import {
@@ -100,10 +121,15 @@ import {
 	type ReaderBookmarkPanelElements,
 	type ReaderBookmarkPanelViewOptions,
 } from '../bookmark/reader-bookmark-panel-view.js';
-import type {
-	ReaderBookmarkTab,
+import {
+	normalizeStoredReaderBookmark,
+	sortReaderBookmarkRecords,
+	type ReaderBookmarkRecord,
+	type ReaderBookmarkTab,
 } from '../bookmark/reader-bookmark-model.js';
 import { LifecycleScope, type Cleanup } from '../kernel/lifecycle.js';
+import { ReaderPostAuthorFilterFeature } from
+	'../topic/reader-post-author-filter-feature.js';
 import { Signal } from '../kernel/signal.js';
 import {
 	ReaderTopicLiveNavigationController,
@@ -184,7 +210,10 @@ import {
 	browserCloudflareChallengeHref,
 	type BrowserSharedRequestPermitOptions,
 } from '../network/browser-shared-request-permit.js';
-import { abortableDelay } from '../network/coordinated-request-client.js';
+import {
+	abortableDelay,
+	type RequestTransportResponse,
+} from '../network/coordinated-request-client.js';
 import {
 	BrowserDiscourseNativeAjaxPort,
 	BrowserDiscourseNativeReadTransport,
@@ -193,6 +222,11 @@ import {
 	PublicResourceRequestAdapter,
 	type PublicResourceRequestAdapterOptions,
 } from '../network/public-resource-request-adapter.js';
+import type {
+	RequestObserver,
+	RequestObservationEvent,
+	RequestObservationSnapshot,
+} from '../network/request-observer.js';
 import {
 	BrowserDiscourseNativeUserPort,
 } from '../user/discourse-native-user-port.js';
@@ -214,6 +248,25 @@ import {
 	ReaderUserCardView,
 } from '../user/reader-user-card-view.js';
 import {
+	DiscourseUserObservationAdapter,
+} from '../user/discourse-user-observation-adapter.js';
+import {
+	ReaderUserObservationSession,
+} from '../user/reader-user-observation-session.js';
+import {
+	ReaderUserObservationPageRepository,
+} from '../user/reader-user-observation-page-repository.js';
+import {
+	mergeReaderUserTopicMetadata,
+	normalizeReaderUserTopicMetadata,
+} from '../user/reader-user-observation-model.js';
+import {
+	ReaderUserObservationView,
+} from '../user/reader-user-observation-view.js';
+import {
+	readerSelfObservationProjection,
+} from '../user/reader-self-observation-projection.js';
+import {
 	ReaderSettingsUserView,
 } from '../user/reader-settings-user-view.js';
 import {
@@ -222,6 +275,10 @@ import {
 import {
 	ReaderNotificationController,
 } from '../notification/reader-notification-controller.js';
+import {
+	normalizeStoredReaderNotification,
+	sortReaderNotifications,
+} from '../notification/reader-notification-model.js';
 import {
 	ReaderNotificationPanelView,
 	type ReaderNotificationPanelElements,
@@ -235,6 +292,7 @@ import {
 } from '../post/discourse-action-transport.js';
 import {
 	PostActionController,
+	type ActionCommandEvent,
 } from '../post/post-action-controller.js';
 import {
 	DiscourseActionDescriptors,
@@ -353,6 +411,7 @@ import {
 	ReaderWebDavAutoSync,
 	ReaderWebDavCoordinator,
 } from '../sync/reader-webdav-coordinator.js';
+import type { ReaderWebDavCategory } from '../sync/reader-webdav-model.js';
 import {
 	createReaderWebDavCategoryPorts,
 } from '../sync/reader-webdav-category-ports.js';
@@ -366,6 +425,7 @@ import {
 } from '../settings/reader-reading-settings-form.js';
 import {
 	ReaderTranslationSettingsForm,
+	type ReaderTranslationSettingsFormOptions,
 } from '../settings/reader-translation-settings-form.js';
 import type {
 	ReaderTranslationConfigRepository,
@@ -392,6 +452,9 @@ import {
 } from '../settings/reader-image-settings-form.js';
 import { ReaderSelectSurface } from '../shell/reader-select-surface.js';
 import {
+	restoreReaderFloatingWindowTabSession,
+} from '../shell/reader-floating-window-frame.js';
+import {
 	ReaderImagePreferencesProjection,
 	readerImagePresentationMode,
 	normalizeReaderImagePreferences,
@@ -409,6 +472,7 @@ import {
 } from '../settings/reader-about-settings-content.js';
 import {
 	ReaderOpenQueueSession,
+	requestReaderQueueSurfacePositionsReset,
 	type ReaderOpenQueuePreferencesAdapter,
 } from '../queue/reader-open-queue-session.js';
 import {
@@ -445,6 +509,7 @@ import {
 } from '../appearance/reader-appearance-style-controller.js';
 import {
 	ReaderThemeController,
+	type ReaderThemeClockPort,
 	type ReaderHostThemePort,
 	type ReaderSystemThemePort,
 	type ReaderThemePreferencesAdapter,
@@ -488,6 +553,7 @@ import {
 	type ReaderTopicNavigationPreferences,
 } from '../topic/reader-topic-navigation-preferences.js';
 import {
+	ReaderBoostTargetHighlightController,
 	ReaderTopicScrollAdapter,
 	type ReaderTopicScrollAdapterOptions,
 } from '../topic/reader-topic-scroll-adapter.js';
@@ -570,6 +636,7 @@ import {
 import {
 	readBrowserPerformanceCapabilities,
 	readerBulkBackgroundRequestHasHeadroom,
+	readerQueuePrefetchRequestHasHeadroom,
 	ReaderPerformancePolicy,
 	type ReaderPerformancePreferences,
 	type ReaderPerformanceSnapshot,
@@ -631,6 +698,7 @@ export interface ReaderBrowserTopicFactoryServices {
 	readonly relativeTime: DiscourseNativeRelativeTimeFormatter;
 	readonly exactTime: DiscourseNativeExactTimeFormatter;
 	readonly currentUsername: string;
+	readonly recoverAvatarSource: (source: string) => Promise<string>;
 }
 
 export interface ReaderBrowserLightboxOptions<
@@ -744,8 +812,10 @@ export interface ReaderBrowserHistoryOptions {
 	readonly panelView?: Omit<
 		ReaderHistoryPanelViewOptions,
 		| 'document'
+		| 'mount'
 		| 'history'
 		| 'elements'
+		| 'storage'
 		| 'openEntry'
 		| 'parentScope'
 		| 'onError'
@@ -760,19 +830,29 @@ export interface ReaderBrowserHistoryOptions {
 export interface ReaderBrowserTargetRequest {
 	readonly topicId: number;
 	readonly postNumber?: number;
+	readonly boostId?: number;
 	readonly source: Exclude<ReaderTopicNavigationSource, 'history'>;
 	readonly alignment?: ReaderTopicRevealAlignment;
 	readonly focus?: boolean;
 	readonly highlight?: boolean;
 	readonly forceRefresh?: boolean;
+	readonly cachedOnly?: boolean;
+	readonly revealAsFloor?: boolean;
+	readonly localArchive?: Readonly<{
+		readonly status: 404;
+		readonly confirmedAt: number;
+		readonly requestPath?: string;
+	}>;
 	readonly quoteHighlight?: ReaderHistoryQuoteHighlightState;
 }
 
 export interface ReaderBrowserNotificationOptions extends Omit<
 	ReaderNotificationPanelViewOptions,
 	| 'document'
+	| 'mount'
 	| 'controller'
 	| 'elements'
+	| 'storage'
 	| 'baseUrl'
 	| 'relativeTime'
 	| 'parentScope'
@@ -782,14 +862,22 @@ export interface ReaderBrowserNotificationOptions extends Omit<
 	readonly maxCachedPages?: number;
 	readonly liveRefreshDelayMs?: number;
 	readonly backgroundWarmDelayMs?: number;
+	readonly openRevalidateMs?: number;
+	readonly nativePollIntervalMs?: number;
+	readonly syntheticPollIntervalMs?: number;
+	readonly historyStepDelayMs?: number;
+	readonly historyRetryDelayMs?: number;
+	readonly visibleHistoryConcurrency?: number;
 	readonly searchForms?: ReaderSearchFormsPort;
 }
 
 export interface ReaderBrowserBookmarkOptions extends Omit<
 	ReaderBookmarkPanelViewOptions,
 	| 'document'
+	| 'mount'
 	| 'controller'
 	| 'elements'
+	| 'storage'
 	| 'baseUrl'
 	| 'relativeTime'
 	| 'parentScope'
@@ -799,6 +887,7 @@ export interface ReaderBrowserBookmarkOptions extends Omit<
 	readonly tabOrder?: readonly ReaderBookmarkTab[];
 	readonly pageSize?: number;
 	readonly liveRefreshDelayMs?: number;
+	readonly backgroundWarmDelayMs?: number;
 	readonly changeTabOrder?: (
 		order: readonly ReaderBookmarkTab[],
 	) => void | Promise<void>;
@@ -904,8 +993,8 @@ export interface ReaderBrowserRuntimeOptions<
 	readonly bookmarks?: false | ReaderBrowserBookmarkOptions;
 	readonly boostCopy?: false | ReaderBrowserBoostCopyOptions;
 	readonly topicActionRail?: false | ReaderTopicActionRailPreferencesPort;
+	readonly unwantedTopicFilter?: false | ReaderUnwantedTopicFilterPreferencesPort;
 	readonly downloadCurrentTopic?: () => void | Promise<void>;
-	readonly openTopicDownloadManager?: () => void | Promise<void>;
 	readonly searchForms?: ReaderSearchFormsPort;
 	readonly timelineView?: false | ReaderBrowserTimelineViewOptions;
 	readonly history?: ReaderBrowserHistoryOptions;
@@ -999,6 +1088,7 @@ export interface ReaderBrowserRuntimeStageOptions<
 			readonly preferences:
 				ReaderThemePreferencesAdapter<TPreferences>;
 			readonly system: ReaderSystemThemePort;
+			readonly clock?: ReaderThemeClockPort;
 			readonly hostTheme?: ReaderHostThemePort;
 		}>;
 	readonly font?:
@@ -1043,6 +1133,9 @@ export interface ReaderBrowserRuntimeStageOptions<
 			| false
 			| Readonly<{
 				readonly repository: ReaderTranslationConfigRepository;
+				readonly presentation: NonNullable<
+					ReaderTranslationSettingsFormOptions['presentation']
+				>;
 			}>;
 		readonly interactionForm?:
 			| false
@@ -1055,7 +1148,7 @@ export interface ReaderBrowserRuntimeStageOptions<
 					ReaderReplyTreePreferencesAdapter<TPreferences>;
 				readonly replyTreePreview?:
 					ReaderReplyTreePreferencesPreviewPort;
-				readonly boostsAvailable?: boolean;
+				readonly boostsAvailable?: boolean | (() => boolean);
 			}>;
 		readonly sitesForm?:
 			| false
@@ -1269,8 +1362,8 @@ function readerNotificationPanelElements(
 	const groupTabs = [...root.querySelectorAll<HTMLButtonElement>(
 		'.ldp-notification-tab',
 	)];
-	if (modeTabs.length !== 2 || groupPanels.length !== 2 || groupTabs.length !== 14) {
-		throw new Error('消息面板必须提供 2 个模式与完整 14 个分类锚点');
+	if (modeTabs.length !== 2 || groupPanels.length !== 2 || groupTabs.length !== 13) {
+		throw new Error('消息面板必须提供 2 个模式与完整 13 个分类锚点');
 	}
 	return Object.freeze({
 		root,
@@ -1286,6 +1379,10 @@ function readerNotificationPanelElements(
 		newMessage: query<HTMLAnchorElement>('.ldp-notification-new-message'),
 		search: query<HTMLInputElement>('.ldp-notification-search'),
 		searchClear: query<HTMLButtonElement>('.ldp-notification-search-clear'),
+		categoryFilter: query<HTMLSelectElement>(
+			'.ldp-notification-category-filter',
+		),
+		tagFilter: query<HTMLSelectElement>('.ldp-notification-tag-filter'),
 		list: query<HTMLElement>('.ldp-notification-list'),
 		pagePrevious: query<HTMLButtonElement>('.ldp-notification-page-prev'),
 		pageInfo: query<HTMLElement>('.ldp-notification-page-info'),
@@ -1301,8 +1398,10 @@ function readerBookmarkPanelElements(
 	const tabs = [...root.querySelectorAll<HTMLButtonElement>(
 		'.ldp-bookmark-tab',
 	)];
-	if (tabs.length !== 3) {
-		throw new Error('收藏面板必须提供回应、帖子、楼层三个分类锚点');
+	if (tabs.length !== 5) {
+		throw new Error(
+			'收藏面板必须提供回应、Boost、回复、帖子、楼层五个分类锚点',
+		);
 	}
 	return Object.freeze({
 		root,
@@ -1323,6 +1422,10 @@ function readerBookmarkPanelElements(
 		multiDone: query<HTMLButtonElement>('.ldp-bookmarks-multi-done'),
 		search: query<HTMLInputElement>('.ldp-bookmarks-search'),
 		searchClear: query<HTMLButtonElement>('.ldp-bookmarks-search-clear'),
+		categoryFilter: query<HTMLSelectElement>(
+			'.ldp-bookmarks-category-filter',
+		),
+		tagFilter: query<HTMLSelectElement>('.ldp-bookmarks-tag-filter'),
 		reactionFilters: query<HTMLElement>('.ldp-reaction-filters'),
 		list: query<HTMLElement>('.ldp-bookmarks-list'),
 		pagePrevious: query<HTMLButtonElement>('.ldp-bookmarks-page-prev'),
@@ -1490,6 +1593,8 @@ export class ReaderBrowserRuntime<
 	readonly creditAccount: ReaderCreditAccountAdapter | null;
 	readonly userEndorsements: ReaderUserEndorsementAdapter;
 	readonly userActions: PostActionController;
+	readonly userObservations: ReaderUserObservationSession;
+	readonly userObservationView: ReaderUserObservationView;
 	readonly userCardView: ReaderUserCardView;
 	readonly translationRequests: TranslationRequestAdapter | null;
 	readonly translationFeature: ReaderTranslationFeature | null;
@@ -1517,6 +1622,10 @@ export class ReaderBrowserRuntime<
 	readonly selectSurface: ReaderSelectSurface;
 	readonly threadContextState: ReaderTopicContextStateRepository;
 	readonly history: ReaderHistoryRepository;
+	readonly chronicle: ReaderChronicleRepository;
+	readonly chronicleView: ReaderChronicleView;
+	readonly unwantedTopics: ReaderUnwantedTopicRepository;
+	readonly unwantedTopicView: ReaderUnwantedTopicView;
 	readonly historyNavigation: ReaderHistoryNavigationController;
 	readonly historyNavigationView: ReaderHistoryNavigationView | null;
 	readonly historyPanelView: ReaderHistoryPanelView | null;
@@ -1530,6 +1639,8 @@ export class ReaderBrowserRuntime<
 	readonly bookmarkActions: PostActionController | null;
 	readonly bookmarkController: ReaderBookmarkController | null;
 	readonly bookmarkPanelView: ReaderBookmarkPanelView | null;
+	readonly #collectionActionEvents = new Signal<ActionCommandEvent>();
+	readonly #chronicleRequestIds = new Set<number>();
 	readonly topicFactory: ReaderTopicFactory<
 		ReaderBrowserTopicContext<TTopic, TPost>
 	>;
@@ -1543,11 +1654,13 @@ export class ReaderBrowserRuntime<
 	) => Promise<void>;
 	readonly #loadingProgress: ReaderLoadingProgressPort | null;
 	readonly #manualChallengeController: AbortController;
+	readonly #boostTargetHighlight: ReaderBoostTargetHighlightController;
 	#manualChallengePromise: Promise<boolean> | null = null;
 	#destroyed = false;
 
 	constructor(options: ReaderBrowserRuntimeOptions<TTopic, TPost>) {
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
+		this.scope.add(() => this.#collectionActionEvents.clear());
 		this.#manualChallengeController = this.scope.abortController(
 			new DOMException('Reader runtime 已销毁', 'AbortError'),
 		);
@@ -1555,6 +1668,21 @@ export class ReaderBrowserRuntime<
 		this.workspace = options.workspace;
 		this.#openRetryDelay = options.openRetryDelay ?? abortableDelay;
 		this.#loadingProgress = options.loadingProgress ?? null;
+		this.#boostTargetHighlight = new ReaderBoostTargetHighlightController({
+			...(options.navigation?.readLifetimeMs
+				? { readLifetimeMs: options.navigation.readLifetimeMs }
+				: {}),
+			...(options.navigation?.prefersReducedMotion
+				? { prefersReducedMotion: options.navigation.prefersReducedMotion }
+				: {}),
+			...(options.navigation?.schedule
+				? { schedule: options.navigation.schedule }
+				: {}),
+			...(options.navigation?.cancel
+				? { cancel: options.navigation.cancel }
+				: {}),
+			parentScope: this.scope,
+		});
 		this.#performance = options.performance ?? Object.freeze({
 			pageSize: options.topic.pageSize,
 			streamOverscanScreens: 1.5,
@@ -1726,6 +1854,7 @@ export class ReaderBrowserRuntime<
 					? {}
 					: { origin: options.topic.origin },
 			);
+			let challengeRequestObserver: RequestObserver | null = null;
 			this.permit = new BrowserSharedRequestPermit({
 				...options.permit,
 				storage: options.storage,
@@ -1745,12 +1874,69 @@ export class ReaderBrowserRuntime<
 									options.document.location?.href ??
 									options.document.baseURI,
 								verify: async (signal: AbortSignal) => {
-									const response = await this.nativeAjax.request<unknown>({
-										path: '/session/current.json',
+									const observer = challengeRequestObserver;
+									const observationId = observer?.begin({
+										href: '/session/current.json?_=cache-bust',
 										method: 'GET',
-										signal,
-										noStore: true,
-									});
+										transport: 'xmlhttprequest',
+										source: 'reader',
+										priority: 'critical',
+										logicalId: 'CF-probe',
+										profile: 'challenge-probe',
+										namespace: 'cloudflare-session',
+										lane: 'control',
+										cacheMode: 'no-store',
+										max429Retries: 0,
+										maxChallengeRetries: 0,
+										blockOnCloudflareChallenge: false,
+										suppressAfterChallengeWait: true,
+										droppable: false,
+										callSite: 'cloudflare-challenge / session-probe',
+									}) ?? null;
+									let response: RequestTransportResponse<unknown>;
+									try {
+										response = await this.nativeAjax.request<unknown>({
+											path: '/session/current.json',
+											method: 'GET',
+											signal,
+											noStore: true,
+										});
+									} catch (error) {
+										if (observationId !== null) {
+											const decision = signal.aborted
+												? 'challenge-probe-cancelled'
+												: 'challenge-probe-failed';
+											const finished = observer?.finish(observationId, {
+												error: signal.aborted ? 'AbortError' : 'request-failed',
+												decision,
+											});
+											if (finished === false) {
+												observer?.update(observationId, { decision });
+											}
+										}
+										throw error;
+									}
+									if (observationId !== null) {
+										const decision = response.cloudflareMitigated === true
+											? 'challenge-probe-blocked'
+											: response.status === 429
+												? 'challenge-probe-rate-limited-pass'
+												: 'challenge-probe-passed';
+										const finished = observer?.finish(observationId, {
+											status: response.status,
+											cloudflareMitigated:
+												response.cloudflareMitigated === true,
+											retryAfter: String(response.retryAfter ?? ''),
+											rateLimitCode: String(response.rateLimitCode ?? ''),
+											serverLimit: String(response.serverLimit ?? ''),
+											serverRemaining: String(response.serverRemaining ?? ''),
+											serverReset: String(response.serverReset ?? ''),
+											decision,
+										});
+										if (finished === false) {
+											observer?.update(observationId, { decision });
+										}
+									}
 									/*
 									 * 普通 Discourse 429 只说明站点仍在限流，不代表 Cloudflare
 									 * challenge 仍存在。这里只验证过盾状态；原有请求管线继续
@@ -1798,11 +1984,6 @@ export class ReaderBrowserRuntime<
 				snapshot: () => this.permit.snapshot(),
 				parentScope: this.scope,
 			});
-			void this.permit.reconcileCloudflareChallenge()
-				.then(() => this.rateLimitNotice.refresh())
-				.catch(() => {
-					/* runtime 销毁会中止探针；提示继续以共享状态为准。 */
-				});
 			this.scope.listen(this.shell.view.root, 'click', (event) => {
 				const target = event.target as Element | null;
 				const anchor = typeof target?.closest === 'function'
@@ -1827,6 +2008,12 @@ export class ReaderBrowserRuntime<
 					: { broadcastChannelFactory: options.broadcastChannelFactory }),
 				parentScope: this.scope,
 			});
+			challengeRequestObserver = this.data.requests;
+			void this.permit.reconcileCloudflareChallenge()
+				.then(() => this.rateLimitNotice.refresh())
+				.catch(() => {
+					/* runtime 销毁会中止探针；提示继续以共享状态为准。 */
+				});
 			this.composerIsolation = new DiscourseComposerHostIsolation({
 				host: options.host,
 				parentScope: this.scope,
@@ -1889,6 +2076,7 @@ export class ReaderBrowserRuntime<
 						gateway: this.data.gateway,
 						ajax: this.nativeAjax,
 						storage: options.storage,
+						confirmations: this.data.readCoordination,
 						authScope: options.topic.authScope,
 					})
 					: null;
@@ -1985,6 +2173,163 @@ export class ReaderBrowserRuntime<
 				document: options.document,
 				parentScope: this.scope,
 			});
+			const userObservationPresentation =
+				discourseNativeTopicPresentation(options.host);
+			const userObservationPages = new ReaderUserObservationPageRepository(
+				this.data.responses,
+				options.topic.authScope,
+			);
+			this.userObservations = new ReaderUserObservationSession({
+				requests: new DiscourseUserObservationAdapter({
+					gateway: this.data.gateway,
+					ajax: this.nativeAjax,
+					authScope: options.topic.authScope,
+					cache: {
+						kind: 'discourse-user-observation',
+						tags: ['users', 'user-observation'],
+						freshForMs: 10 * 60_000,
+						retainForMs: options.topic.caches.posts.retainForMs,
+						persist: true,
+					},
+					categoryName: (categoryId) =>
+						userObservationPresentation.categoryName?.(categoryId) ?? '',
+				}),
+				storage: options.storage,
+				pages: userObservationPages,
+				authScope: options.topic.authScope,
+				requestResume: (cause) =>
+					this.data.client.requestResume(cause),
+				notify: (message) => this.feedback.show(message),
+				parentScope: this.scope,
+				onError: (cause) => reportTopicFeature(
+					this.shell.activeTopicId ?? 0,
+					'user',
+					cause,
+				),
+			});
+			this.userObservationView = new ReaderUserObservationView({
+					document: options.document,
+					mount: this.shell.view.surfaceHost,
+					session: this.userObservations,
+					storage: options.storage,
+					pages: userObservationPages,
+					avatarSource: (template, size) =>
+						this.userNative.avatarSource(template, size),
+					emojiSource: (id) => discourseNativeEmojiUrl(options.host, id),
+				openTarget: async (topicId, postNumber, record) => {
+					const boostId = record.kind === 'boost'
+						? Number(record.identity.match(/^boost:(\d+)$/)?.[1])
+						: 0;
+					const result = await this.openTarget({
+						topicId,
+						postNumber,
+						...(Number.isSafeInteger(boostId) && boostId > 0
+							? { boostId }
+							: {}),
+						source: 'link',
+						highlight: true,
+					});
+					return (
+						result.topic.status === 'opened' ||
+						result.topic.status === 'reused'
+					) && result.navigation?.status === 'revealed';
+				},
+				openChallenge: (username) => {
+					this.#openManualCloudflareChallenge(
+						this.#challengeHref,
+						username,
+					);
+				},
+				notify: (message) => this.feedback.show(message),
+				parentScope: this.scope,
+					onError: (cause) => reportTopicFeature(
+						this.shell.activeTopicId ?? 0,
+						'user',
+						cause,
+					),
+				});
+				this.chronicle = new ReaderChronicleRepository({
+					storage: options.storage,
+					authScope: options.topic.authScope,
+				});
+				this.chronicle.load();
+					this.chronicleView = new ReaderChronicleView({
+					document: options.document,
+					mount: this.shell.view.surfaceHost,
+					chronicle: this.chronicle,
+					storage: options.storage,
+					openTarget: async (topicId, postNumber, record) => {
+						const result = await this.openTarget({
+							topicId,
+							postNumber,
+							source: 'chronicle',
+							highlight: true,
+							...(record.kind === 'reply'
+								? {
+									cachedOnly: true,
+									revealAsFloor: true,
+									localArchive: Object.freeze({
+										status: 404 as const,
+										confirmedAt: record.lastObservedAt,
+										requestPath: record.requestPath,
+									}),
+								}
+								: {}),
+						});
+						return (
+							result.topic.status === 'opened' ||
+							result.topic.status === 'reused'
+						) && result.navigation?.status === 'revealed';
+					},
+					notify: (message) => this.feedback.show(message),
+					parentScope: this.scope,
+					onError: (cause) => reportTopicFeature(
+						this.shell.activeTopicId ?? 0,
+						'history',
+						cause,
+					),
+				});
+				this.unwantedTopics = new ReaderUnwantedTopicRepository({
+					storage: options.storage,
+					authScope: options.topic.authScope,
+				});
+				this.unwantedTopics.load();
+				this.unwantedTopicView = new ReaderUnwantedTopicView({
+					document: options.document,
+					mount: this.shell.view.surfaceHost,
+					topics: this.unwantedTopics,
+					...(options.unwantedTopicFilter
+						? {
+							filterPreferences: options.unwantedTopicFilter,
+							filterCatalog: discourseNativeUnwantedTopicRuleCatalog(
+								options.host,
+							),
+						}
+						: {}),
+					storage: options.storage,
+					openTarget: async (record) => {
+						const result = await this.openTarget({
+							topicId: record.topicId,
+							postNumber: 1,
+							source: 'link',
+							highlight: true,
+						});
+						return result.topic.status === 'opened' ||
+							result.topic.status === 'reused';
+					},
+					notify: (message) => this.feedback.show(message),
+					parentScope: this.scope,
+					onError: (cause) => reportTopicFeature(
+						this.shell.activeTopicId ?? 0,
+						'history',
+						cause,
+					),
+				});
+				/*
+				 * 启动只恢复 IndexedDB 观察索引；缺失本地索引的旧条目等待用户显式刷新。
+				 * 禁止进入 Reader/跳楼时为整份观察名单发起历史与 topic_ids 扫描。
+				 */
+				this.userObservations.resume({ allowNetwork: false });
 			this.userCardView = new ReaderUserCardView({
 				document: options.document,
 				root: this.shell.view.surfaceHost,
@@ -1998,6 +2343,8 @@ export class ReaderBrowserRuntime<
 					this.userNative.requestIdentity(username),
 				avatarSource: (template, size) =>
 					this.userNative.avatarSource(template, size),
+				recoverAvatarSource: (source: string) =>
+					this.#recoverAvatarSource(source),
 				toggleFollow: async (username, followed) => {
 					await this.userActions.dispatch(userCommands.follow(
 						username,
@@ -2009,6 +2356,10 @@ export class ReaderBrowserRuntime<
 				openMessage: async (username) => {
 					await this.composer.openPrivateMessage(username);
 				},
+				observeUser: (profile) =>
+					this.userObservationView.observe(profile),
+				isObserved: (username) =>
+					this.userObservations.isObserved(username),
 				setNotificationLevel: async (
 					username,
 					level,
@@ -2447,6 +2798,8 @@ export class ReaderBrowserRuntime<
 							tags: ['notifications'],
 							...options.topic.caches.posts,
 						},
+						categoryNameFor: (categoryId) =>
+							userObservationPresentation.categoryName?.(categoryId) ?? '',
 					});
 				const notificationMutation = new ActionRequestAdapter({
 					gateway: this.data.gateway,
@@ -2467,6 +2820,17 @@ export class ReaderBrowserRuntime<
 				this.notificationController =
 					new ReaderNotificationController({
 						requests: this.notificationRequests,
+						projection: new ReaderCollectionPageRepository({
+							responses: this.data.responses,
+							authScope: options.topic.authScope,
+							namespace: 'notifications',
+							kind: 'reader-notification-projection',
+							tags: ['notification-projection'],
+							normalizeRecord: normalizeStoredReaderNotification,
+							sortRecords: sortReaderNotifications,
+							pageSize: 60,
+							retainForMs: 180 * 24 * 60 * 60_000,
+						}),
 						native: this.notificationNative,
 						actions: this.notificationActions,
 						cache: this.data.responses,
@@ -2493,6 +2857,60 @@ export class ReaderBrowserRuntime<
 							}),
 						backgroundWarmDelayMs:
 							notificationOptions.backgroundWarmDelayMs ?? 1_800,
+						...(notificationOptions.openRevalidateMs === undefined
+							? {}
+							: {
+								openRevalidateMs:
+									notificationOptions.openRevalidateMs,
+							}),
+						...(notificationOptions.nativePollIntervalMs === undefined
+							? {}
+							: {
+								nativePollIntervalMs:
+									notificationOptions.nativePollIntervalMs,
+							}),
+						...(notificationOptions.syntheticPollIntervalMs === undefined
+							? {}
+							: {
+								syntheticPollIntervalMs:
+									notificationOptions.syntheticPollIntervalMs,
+							}),
+						...(notificationOptions.historyStepDelayMs === undefined
+							? {}
+							: {
+								historyStepDelayMs:
+									notificationOptions.historyStepDelayMs,
+							}),
+						...(notificationOptions.historyRetryDelayMs === undefined
+							? {}
+							: {
+								historyRetryDelayMs:
+									notificationOptions.historyRetryDelayMs,
+							}),
+						visibleHistoryConcurrency:
+							notificationOptions.visibleHistoryConcurrency ?? 3,
+						activity: {
+							visible: () =>
+								options.document.visibilityState !== 'hidden',
+							subscribe: (listener) => {
+								const view = options.document.defaultView;
+								const onActivity = (): void => listener();
+								options.document.addEventListener(
+									'visibilitychange',
+									onActivity,
+								);
+								view?.addEventListener('focus', onActivity);
+								view?.addEventListener('online', onActivity);
+								return () => {
+									options.document.removeEventListener(
+										'visibilitychange',
+										onActivity,
+									);
+									view?.removeEventListener('focus', onActivity);
+									view?.removeEventListener('online', onActivity);
+								};
+							},
+						},
 						...(notificationOptions.schedule === undefined
 							? {}
 							: { schedule: notificationOptions.schedule }),
@@ -2525,21 +2943,27 @@ export class ReaderBrowserRuntime<
 									: {}
 						),
 						document: options.document,
+						mount: this.shell.view.surfaceHost,
+						storage: options.storage,
 						controller: this.notificationController,
 						elements: readerNotificationPanelElements(
 							this.shell.view.root,
 						),
 						baseUrl: topicBaseUrl,
 						relativeTime: nativeRelativeTime,
+						emojiSource: notificationOptions.emojiSource ?? ((id) =>
+							discourseNativeEmojiUrl(options.host, id)),
+						archiveMarker: (topicId, postNumber) =>
+							this.#historyArchiveMarker(topicId, postNumber),
 						notify: (message) => this.feedback.show(message),
 						parentScope: this.scope,
-						onError: (cause) => reportTopicFeature(
-							this.shell.activeTopicId ?? 0,
-							'notification',
-							cause,
-						),
-					});
-			}
+							onError: (cause) => reportTopicFeature(
+								this.shell.activeTopicId ?? 0,
+								'notification',
+								cause,
+							),
+						});
+					}
 			if (options.bookmarks === false) {
 				this.bookmarkNative = null;
 				this.bookmarkRequests = null;
@@ -2562,12 +2986,19 @@ export class ReaderBrowserRuntime<
 						signal: bookmarkAbort.signal,
 						cache: {
 							kind: 'discourse-bookmark-collection',
-							tags: ['bookmarks', 'reactions-given'],
+							tags: [
+								'bookmarks',
+								'reactions-given',
+								'boosts-given',
+								'replied-topics',
+							],
 							freshForMs: 30 * 60_000,
 							retainForMs:
 								options.topic.caches.posts.retainForMs,
 							persist: true,
 						},
+						categoryNameFor: (categoryId) =>
+							userObservationPresentation.categoryName?.(categoryId) ?? '',
 					});
 				const bookmarkMutation = new ActionRequestAdapter({
 					gateway: this.data.gateway,
@@ -2587,8 +3018,21 @@ export class ReaderBrowserRuntime<
 				});
 				this.bookmarkController = new ReaderBookmarkController({
 					requests: this.bookmarkRequests,
+					projection: new ReaderCollectionPageRepository<ReaderBookmarkRecord>({
+						responses: this.data.responses,
+						authScope: options.topic.authScope,
+						namespace: 'bookmarks',
+						kind: 'reader-bookmark-projection',
+						tags: ['bookmark-projection'],
+						normalizeRecord: normalizeStoredReaderBookmark,
+						sortRecords: sortReaderBookmarkRecords,
+						pageSize: 60,
+						retainForMs: 180 * 24 * 60 * 60_000,
+					}),
 					native: this.bookmarkNative,
 					actions: this.bookmarkActions,
+					reactionEvents: this.#collectionActionEvents,
+					activityEvents: this.#collectionActionEvents,
 					cache: this.data.responses,
 					target: {
 						openTarget: async (request) => {
@@ -2605,13 +3049,15 @@ export class ReaderBrowserRuntime<
 					...(bookmarkOptions.pageSize === undefined
 						? {}
 						: { pageSize: bookmarkOptions.pageSize }),
-					...(bookmarkOptions.liveRefreshDelayMs === undefined
-						? {}
-						: {
-							liveRefreshDelayMs:
-								bookmarkOptions.liveRefreshDelayMs,
-						}),
-					...(bookmarkOptions.changeTabOrder === undefined
+						...(bookmarkOptions.liveRefreshDelayMs === undefined
+							? {}
+							: {
+								liveRefreshDelayMs:
+									bookmarkOptions.liveRefreshDelayMs,
+							}),
+						backgroundWarmDelayMs:
+							bookmarkOptions.backgroundWarmDelayMs ?? 2_400,
+						...(bookmarkOptions.changeTabOrder === undefined
 						? {}
 						: {
 							changeTabOrder:
@@ -2642,12 +3088,16 @@ export class ReaderBrowserRuntime<
 								: {}
 					),
 					document: options.document,
+					mount: this.shell.view.surfaceHost,
+					storage: options.storage,
 					controller: this.bookmarkController,
 					elements: readerBookmarkPanelElements(
 						this.shell.view.root,
 					),
 					baseUrl: topicBaseUrl,
 					relativeTime: nativeRelativeTime,
+					archiveMarker: (topicId, postNumber) =>
+						this.#historyArchiveMarker(topicId, postNumber),
 					reactionIconSource:
 						bookmarkOptions.reactionIconSource ??
 						((reaction) => discourseNativeEmojiUrl(
@@ -2669,13 +3119,72 @@ export class ReaderBrowserRuntime<
 						})),
 					notify: (message) => this.feedback.show(message),
 					parentScope: this.scope,
-					onError: (cause) => reportTopicFeature(
-						this.shell.activeTopicId ?? 0,
-						'bookmark',
-						cause,
-					),
-				});
-			}
+						onError: (cause) => reportTopicFeature(
+							this.shell.activeTopicId ?? 0,
+							'bookmark',
+							cause,
+						),
+					});
+					}
+			/* 私有集合的后台 owner 不依赖启动瞬间能否投影当前用户资料。 */
+			this.notificationController?.startBackgroundCache();
+			this.bookmarkController?.startBackgroundCache();
+			const selfObservationUsername =
+				discourseNativeCurrentUsername(options.host);
+				if (selfObservationUsername) {
+					const currentUser = options.host.lookup('service:current-user');
+					const retrySelfPrivateSources = (): void => {
+						/* 用户显式刷新只重排既有断点，不建立第二条抓取链。 */
+						this.notificationController?.startBackgroundCache();
+						this.notificationController?.retryBackgroundCache();
+						this.bookmarkController?.startBackgroundCache();
+						this.bookmarkController?.retryBackgroundCache();
+					};
+				this.userObservations.observeSelf({
+					username: selfObservationUsername,
+					name: String(readerNativeModelValue(currentUser, 'name') ?? '')
+						.trim(),
+					avatarTemplate: String(
+						readerNativeModelValue(currentUser, 'avatar_template') ?? '',
+					).trim(),
+				}, retrySelfPrivateSources);
+				const publishSelfObservation = (): void => {
+					this.userObservations.updateSelfObservation(
+						readerSelfObservationProjection({
+							...(this.notificationController
+								? {
+									notifications: {
+										snapshot:
+											this.notificationController.snapshot,
+										records:
+											this.notificationController
+												.syncHistoryRecords(),
+									},
+								}
+								: {}),
+							...(this.bookmarkController
+								? {
+									collections: {
+										snapshot: this.bookmarkController.snapshot,
+										records:
+											this.bookmarkController
+												.observationRecords(),
+									},
+								}
+								: {}),
+						}),
+					);
+				};
+				this.notificationController?.changes.subscribe(
+					publishSelfObservation,
+					this.scope,
+				);
+					this.bookmarkController?.changes.subscribe(
+						publishSelfObservation,
+						this.scope,
+					);
+					publishSelfObservation();
+				}
 			const coreTopicFactory = createReaderTopicFactory<
 				TTopic,
 				TPost,
@@ -2690,6 +3199,10 @@ export class ReaderBrowserRuntime<
 					});
 				},
 				createDomOptions: (bundle, context, root) => {
+					bundle.services.actions.events.subscribe(
+						(event) => this.#collectionActionEvents.emit(event),
+						context.scope,
+					);
 					const currentUsername =
 						discourseNativeCurrentUsername(options.host);
 					const topicImages = new ReaderTopicImageIndex<TPost>({
@@ -2794,6 +3307,8 @@ export class ReaderBrowserRuntime<
 							relativeTime: nativeRelativeTime,
 							exactTime: nativeExactTime,
 							currentUsername,
+							recoverAvatarSource: (source: string) =>
+								this.#recoverAvatarSource(source),
 							}),
 					);
 					const replyTreePresentation =
@@ -2804,6 +3319,15 @@ export class ReaderBrowserRuntime<
 							{
 								canonicalCoverageComplete: () =>
 									bundle.replies.coverage().complete,
+								canonicalPostStreamRevision: () =>
+									bundle.session.postStreamRevision ?? 0,
+								canonicalPostStreamGapCount: (
+									postNumber,
+									previousRootPostNumber,
+								) => bundle.session.postStreamGapCount?.(
+									previousRootPostNumber,
+									postNumber,
+								),
 							},
 						);
 					const topicPresentationChanges =
@@ -3165,12 +3689,10 @@ export class ReaderBrowserRuntime<
 							...(options.downloadCurrentTopic
 								? { downloadCurrentTopic: options.downloadCurrentTopic }
 								: {}),
-							...(options.openTopicDownloadManager
-								? {
-									openTopicDownloadManager:
-										options.openTopicDownloadManager,
-								}
-								: {}),
+							openChronicle: () => this.chronicleView.open(),
+							openUnwantedTopics: () => this.unwantedTopicView.open(),
+							openUserObservations: () =>
+								this.userObservationView.openList(),
 							parentScope: context.scope,
 							onError: (cause) => reportTopicFeature(
 								context.topicId,
@@ -3394,6 +3916,12 @@ export class ReaderBrowserRuntime<
 								session: bundle.services.session,
 								parentScope: context.scope,
 							});
+						const postAuthorFilter = options.unwantedTopicFilter
+							? new ReaderPostAuthorFilterFeature<TPost>({
+								preferences: options.unwantedTopicFilter,
+								parentScope: context.scope,
+							})
+							: null;
 						context.scope.add(
 						bundle.services.snapshots.setPersistenceDelayReader(
 							(minimumIdleMs) =>
@@ -3448,6 +3976,7 @@ export class ReaderBrowserRuntime<
 						}
 							const postFeatures = Object.freeze([
 								topicLocalArchive,
+								...(postAuthorFilter ? [postAuthorFilter] : []),
 								topicCookedContent,
 							topicPoll,
 							topicSpecialContent,
@@ -3588,6 +4117,23 @@ export class ReaderBrowserRuntime<
 							}
 							if (changedWindow) updateTranslationWindow();
 						}, context.scope);
+						value.services.session.archiveChanges.subscribe(() => {
+							const active = this.shell.activeValue;
+							if (active?.services.session !== value.services.session) return;
+							this.#rememberHistoryTopicMetadata(active);
+							/*
+							 * 红色本地存档标记是持久 canonical 事实，不能依赖刷新后已经
+							 * 消失的短命 RequestObservation 才进入岁月史书。
+							 */
+							this.#rememberChronicleArchives(active);
+							/*
+							 * 请求观察器会先于 TopicSession 提交缓存存档状态；在正文
+							 * 已确认可保留后重放尚未归档的 404，保留真实请求诊断。
+							 */
+							this.#collectChronicleRequests(this.data.requests.snapshot);
+						}, context.scope);
+						/* 装配时回填刷新前已持久化、但从未进入史书的本地 404。 */
+						this.#rememberChronicleArchives(value);
 						let contextSurface: ReaderTopicContextSurface<TPost> | null = null;
 						const navigation = new ReaderTopicNavigationController<TPost>({
 							session: value.services.session,
@@ -3821,6 +4367,9 @@ export class ReaderBrowserRuntime<
 						readTotalPostCount,
 						readNavigablePostNumbers: () =>
 							timelinePresentation.roots(),
+						readNavigablePostNumbersComplete: () =>
+							!timelinePresentation.canonicalFrozen &&
+							timelinePresentation.coverageComplete,
 						parentScope: context.scope,
 						onError: (cause) => reportTopicFeature(
 							context.topicId,
@@ -4201,7 +4750,7 @@ export class ReaderBrowserRuntime<
 					value,
 					prepareClose: async (reason: ReaderTopicCloseReason) => {
 						await result.prepareClose?.(reason);
-						this.#rememberHistoryTopic(value!);
+						this.#rememberHistoryTopicMetadata(value!);
 					},
 				});
 			};
@@ -4217,8 +4766,17 @@ export class ReaderBrowserRuntime<
 				...(options.history?.now === undefined
 					? {}
 					: { now: options.history.now }),
-			});
-			this.history.load();
+				});
+				this.history.load();
+				this.data.requests.changes.subscribe(
+					(snapshot) => this.#collectChronicleRequests(snapshot),
+					this.scope,
+				);
+				this.#collectChronicleRequests(this.data.requests.snapshot);
+				this.history.changes.subscribe(() => {
+				this.notificationPanelView?.syncArchiveMarkers();
+				this.bookmarkPanelView?.syncArchiveMarkers();
+			}, this.scope);
 			this.historyNavigation = new ReaderHistoryNavigationController({
 				history: this.history,
 				readSortMode:
@@ -4236,7 +4794,7 @@ export class ReaderBrowserRuntime<
 							result.status === 'opened' ||
 							result.status === 'reused'
 						) {
-							this.#rememberHistoryTopic(result.value);
+							this.#rememberHistoryTopicMetadata(result.value);
 						}
 						return this.#historyOpenResult(result);
 					},
@@ -4250,54 +4808,70 @@ export class ReaderBrowserRuntime<
 								`历史目标 Topic ${topicId} 未处于 active 状态`,
 							);
 						}
-						const result = await value.topicNavigation.navigate({
-							postNumber: anchor.viewport.postNumber,
-							source: 'history',
-							alignment: 'nearest',
-							highlight: restoreOptions?.highlight !== false,
-						});
-						if (result.status !== 'revealed') {
-							throw new Error(
-								`历史楼层 #${anchor.viewport.postNumber} 恢复失败：${result.status}`,
+						const proportional =
+							anchor.viewport.scrollRatio !== undefined;
+						const restoreSemanticState =
+							restoreOptions?.restoreSemanticState !== false;
+						if (!proportional && restoreSemanticState) {
+							const result = await value.topicNavigation.navigate({
+								postNumber: anchor.viewport.postNumber,
+								source: 'history',
+								alignment: 'nearest',
+								highlight: restoreOptions?.highlight !== false,
+							});
+							if (result.status !== 'revealed') {
+								throw new Error(
+									`旧历史楼层 #${anchor.viewport.postNumber} ` +
+									`恢复失败：${result.status}`,
 								);
 							}
-							const navigationRevision = value.topicNavigation.revision;
-							if (anchor.replyWindow) {
-								await value.topicContextSurface
-									.restoreDiscussionState(anchor.replyWindow);
-							} else {
-								value.topicContext.closeDiscussion();
-							}
-							if (!value.topicNavigation.isCurrent(navigationRevision)) return;
-							if (
-								!await value.topicContextFeature
-									.restoreQuoteHighlightState(anchor.quoteHighlight)
+						}
+						const navigationRevision = value.topicNavigation.revision;
+						if (restoreSemanticState && anchor.replyWindow) {
+							await value.topicContextSurface
+								.restoreDiscussionState(anchor.replyWindow);
+						} else {
+							value.topicContext.closeDiscussion();
+						}
+						if (!value.topicNavigation.isCurrent(navigationRevision)) return;
+						const quoteHighlight = restoreSemanticState
+							? anchor.quoteHighlight
+							: null;
+						if (
+							!await value.topicContextFeature
+								.restoreQuoteHighlightState(quoteHighlight)
 						) {
 							throw new Error(
-									`历史引用高亮 #${anchor.quoteHighlight?.postNumber ?? 0} 恢复失败`,
-								);
-							}
-							if (
-								anchor.quoteHighlight === null &&
-								!value.topicNavigation.isCurrent(navigationRevision)
-							) return;
-							/*
-							 * quote highlight 恢复自身可能执行一次 canonical navigation；
-							 * 它成功返回后已成为最新事务。用户滚动若发生在等待期间，
-							 * navigation 会先被 user-intent epoch 取消，不会走到这里。
-							 */
-							if (!value.dom.restoreViewportAnchor(anchor.viewport)) {
-							throw new Error(
-								`历史楼层 #${anchor.viewport.postNumber} 缺少 canonical 根布局`,
+								`历史引用高亮 #${quoteHighlight?.postNumber ?? 0} ` +
+								'恢复失败',
 							);
 						}
-						value.topicTimeline.syncVisiblePost(
-							anchor.viewport.postNumber,
-						);
-						this.#rememberHistoryTopic(
-							value,
-							anchor.viewport.postNumber,
-						);
+						if (
+							quoteHighlight === null &&
+							!value.topicNavigation.isCurrent(navigationRevision)
+						) return;
+						/*
+						 * 新历史以整个 Reader 主滚动区的高度比例为 owner；这里在结构恢复后
+						 * 一次写入换算坐标，不先跳楼层、不楼层高亮。无比例的旧历史不做伪恢复。
+						 */
+						if (
+							(proportional || restoreSemanticState) &&
+							!value.dom.restoreViewportAnchor(anchor.viewport)
+						) {
+							throw new Error('历史 Reader 高度锚点恢复失败');
+						}
+						if (!proportional && restoreSemanticState) {
+							value.topicTimeline.syncVisiblePost(anchor.viewport.postNumber);
+						}
+						if (proportional) {
+							this.#rememberHistoryTopic(
+								value,
+								anchor.viewport.postNumber,
+								anchor.viewport,
+							);
+						} else {
+							this.#rememberHistoryTopicMetadata(value);
+						}
 					},
 				},
 				parentScope: this.scope,
@@ -4405,6 +4979,12 @@ export class ReaderBrowserRuntime<
 				const searchClear = root.querySelector<HTMLButtonElement>(
 					'.ldp-history-search-clear',
 				);
+				const categoryFilter = root.querySelector<HTMLSelectElement>(
+					'.ldp-history-category-filter',
+				);
+				const tagFilter = root.querySelector<HTMLSelectElement>(
+					'.ldp-history-tag-filter',
+				);
 				const list = root.querySelector<HTMLElement>(
 					'.ldp-history-list',
 				);
@@ -4432,6 +5012,8 @@ export class ReaderBrowserRuntime<
 					!multiDone ||
 					!search ||
 					!searchClear ||
+					!categoryFilter ||
+					!tagFilter ||
 					!list ||
 					!pagePrevious ||
 					!pageInfo ||
@@ -4458,6 +5040,8 @@ export class ReaderBrowserRuntime<
 						historyPanelOptions.notify ??
 						((message) => this.feedback.show(message)),
 					document: options.document,
+					mount: this.shell.view.surfaceHost,
+					storage: options.storage,
 					history: this.history,
 					elements: {
 						root,
@@ -4475,17 +5059,15 @@ export class ReaderBrowserRuntime<
 						multiDone,
 						search,
 						searchClear,
+						categoryFilter,
+						tagFilter,
 						list,
 						pagePrevious,
 						pageInfo,
 						pageNext,
 					},
 					openEntry: async (entry) => {
-						await this.openTarget({
-							topicId: entry.topicId,
-							postNumber: entry.postNumber,
-							source: 'restore',
-						});
+						await this.#openHistoryEntry(entry);
 					},
 					parentScope: this.scope,
 					onError: (cause) => reportTopicFeature(
@@ -4543,7 +5125,10 @@ export class ReaderBrowserRuntime<
 				navigation: null,
 			});
 		}
+		this.#boostTargetHighlight.clear();
 		const normalizedTopicId = discourseTopicId(request.topicId);
+		const chronicleRequestFloor =
+			this.data.requests.snapshot.events.at(-1)?.id ?? 0;
 		this.#openRecoveryController?.abort(
 			new DOMException('新的打开事务已开始', 'AbortError'),
 		);
@@ -4608,9 +5193,10 @@ export class ReaderBrowserRuntime<
 				this.#lastFailedRequest = null;
 				/*
 				 * Shell 已打开即属于浏览历史；目标楼层定位和讨论树补载可能很慢，
-				 * 不得让搜索入口的历史记录等到后续导航 finally 才出现。
+				 * 不得让搜索入口的历史记录等到后续导航 finally 才出现；此处只更新
+				 * Topic 元数据，URL 目标楼层不得覆盖最后切出位置。
 				 */
-				this.#rememberHistoryTopic(result.value);
+				this.#rememberHistoryTopicMetadata(result.value);
 				if (
 					this.historyNavigation.snapshot.activeTopicId !== result.topicId
 				) {
@@ -4619,6 +5205,15 @@ export class ReaderBrowserRuntime<
 				let navigation: ReaderTopicNavigationResult | null = null;
 				try {
 					if (request.postNumber !== undefined) {
+						if (request.localArchive) {
+							await result.value.services.session
+								.restoreUnavailablePostFromCache(
+								request.postNumber,
+								request.localArchive.status,
+								request.localArchive.confirmedAt,
+								request.localArchive.requestPath,
+							);
+						}
 						for (let attempt = 0; ; attempt += 1) {
 							let navigationCause: unknown = null;
 							try {
@@ -4637,6 +5232,12 @@ export class ReaderBrowserRuntime<
 									...(request.forceRefresh === undefined
 										? {}
 										: { forceRefresh: request.forceRefresh }),
+									...(request.cachedOnly === undefined
+										? {}
+										: { cachedOnly: request.cachedOnly }),
+									...(request.revealAsFloor === undefined
+										? {}
+										: { revealAsFloor: request.revealAsFloor }),
 								});
 							} catch (cause) {
 								navigationCause = cause;
@@ -4689,6 +5290,7 @@ export class ReaderBrowserRuntime<
 							)
 							: treeParent;
 						if (
+							request.revealAsFloor !== true &&
 							canonicalParent !== null &&
 							canonicalParent !== undefined &&
 							canonicalParent > 1 &&
@@ -4715,11 +5317,14 @@ export class ReaderBrowserRuntime<
 								);
 							}
 						}
+						if (request.highlight !== false && request.boostId !== undefined) {
+							this.#highlightBoostTarget(request, navigation.element);
+						}
 					}
 					return Object.freeze({ topic: result, navigation });
 				} finally {
 					if (transactionIsCurrent()) {
-						this.#rememberHistoryTopic(result.value);
+						this.#rememberHistoryTopicMetadata(result.value);
 						if (
 							this.historyNavigation.snapshot.activeTopicId !==
 								result.topicId
@@ -4732,6 +5337,19 @@ export class ReaderBrowserRuntime<
 			if (result.status === 'failed') {
 				if (!transactionIsCurrent()) return superseded();
 				this.#lastFailedRequest = Object.freeze({ ...request });
+				if (readerShellFailureKind(result.cause) === 'cloudflare') {
+					/*
+					 * passed 的短租约只负责吸收过盾前已经在途的迟到响应；当前
+					 * Topic 是用户新发起且已经终态失败的业务请求，必须强制建立
+					 * 新 required 世代，否则 session 探针 200 会把真实 Topic 429
+					 * 吞成“已经过盾”，页面却只剩无限加载或保留旧帖。
+					 */
+					await this.permit.noteCloudflareChallenge({
+						href: this.#challengeHref,
+						force: true,
+					});
+					await this.rateLimitNotice.refresh();
+				}
 				let previousRestored =
 					previousTopicId !== null &&
 					this.shell.activeTopicId === previousTopicId;
@@ -4773,6 +5391,7 @@ export class ReaderBrowserRuntime<
 			}
 			return Object.freeze({ topic: result, navigation: null });
 		} finally {
+			this.#rememberBoostChronicleRequest(request, chronicleRequestFloor);
 			if (this.#openRecoveryController === recoveryController) {
 				this.#openRecoveryController = null;
 			}
@@ -4780,7 +5399,59 @@ export class ReaderBrowserRuntime<
 		}
 	}
 
+	#highlightBoostTarget(
+		request: ReaderBrowserTargetRequest,
+		navigationElement: HTMLElement | undefined,
+	): void {
+		const boostId = Number(request.boostId);
+		const postNumber = Number(request.postNumber);
+		if (
+			!Number.isSafeInteger(boostId) ||
+			boostId <= 0 ||
+			!Number.isSafeInteger(postNumber) ||
+			postNumber <= 0
+		) return;
+		const roots = new Set<HTMLElement>();
+		const navigationRoot = navigationElement?.matches('.ldp-post')
+			? navigationElement
+			: navigationElement?.closest<HTMLElement>('.ldp-post');
+		if (navigationRoot?.isConnected) roots.add(navigationRoot);
+		for (const root of this.shell.view.root.querySelectorAll<HTMLElement>(
+			`.ldp-post[data-post-number="${postNumber}"]`,
+		)) {
+			roots.add(root);
+		}
+		const visibleCandidates: HTMLElement[] = [];
+		let hiddenFallback: HTMLElement | null = null;
+		for (const root of roots) {
+			for (const bubble of root.querySelectorAll<HTMLElement>(
+				'.ldp-boost-bubble[data-boost-id]',
+			)) {
+				if (
+					bubble.closest<HTMLElement>('.ldp-post') !== root ||
+					Number(bubble.dataset.boostId) !== boostId
+				) continue;
+				if (bubble.closest('[hidden],[aria-hidden="true"]')) {
+					hiddenFallback ??= bubble;
+				} else {
+					visibleCandidates.push(bubble);
+				}
+			}
+		}
+		const target = visibleCandidates.find((bubble) =>
+			bubble.closest('.ldp-descendant-replies-layer')) ??
+			visibleCandidates.find((bubble) =>
+				bubble.closest<HTMLElement>('.ldp-post') === navigationRoot) ??
+			visibleCandidates[0] ?? hiddenFallback;
+		if (target) this.#boostTargetHighlight.highlight(target);
+	}
+
+	async #recoverAvatarSource(source: string): Promise<string> {
+		return this.imageResources?.resolveAvatarSource(source) ?? '';
+	}
+
 	async close(): Promise<boolean> {
+		this.#boostTargetHighlight.clear();
 		this.#openRecoveryController?.abort(
 			new DOMException('Reader 已关闭', 'AbortError'),
 		);
@@ -4807,7 +5478,10 @@ export class ReaderBrowserRuntime<
 					highlight: false,
 				});
 				const restored = this.shell.activeValue;
-				if (restored) this.#highlightQuoteSource(restored, source);
+				if (!restored || !this.#restoreExactQuoteViewport(restored, anchor)) {
+					return false;
+				}
+				this.#highlightQuoteSource(restored, source);
 				return true;
 			}
 			const navigation = await active.topicNavigation.navigate({
@@ -4835,8 +5509,29 @@ export class ReaderBrowserRuntime<
 			highlight: false,
 		});
 		const restored = this.shell.activeValue;
-		if (restored) this.#highlightQuoteSource(restored, source);
+		if (!restored || !this.#restoreExactQuoteViewport(restored, anchor)) {
+			return false;
+		}
+		this.#highlightQuoteSource(restored, source);
 		return true;
+	}
+
+	#restoreExactQuoteViewport(
+		value: ReaderBrowserTopicContext<TTopic, TPost>,
+		anchor: ReaderHistoryAnchorState,
+	): boolean {
+		const current = value.dom.captureViewportAnchor();
+		if (current?.postNumber === anchor.viewport.postNumber) return true;
+		/*
+		 * 历史浏览保留整页比例语义；引用返回还承诺回到刚才离开的楼层。
+		 * 比例因旧范围或虚拟高度变化没有落到记录楼层时，只丢弃比例几何，
+		 * 继续复用同一 viewport 的楼层与楼内偏移做精确回退。
+		 */
+		return value.dom.restoreViewportAnchor({
+			postNumber: anchor.viewport.postNumber,
+			postOffset: anchor.viewport.postOffset,
+			scrollTop: anchor.viewport.scrollTop,
+		});
 	}
 
 	#highlightQuoteSource(
@@ -4943,21 +5638,73 @@ export class ReaderBrowserRuntime<
 		this.scope.destroy();
 	}
 
-	#openManualCloudflareChallenge(href: string): void {
-		if (this.#manualChallengePromise || this.scope.destroyed) return;
-		const promise = this.permit.resolveCloudflareChallenge({
-			href,
+	#openManualCloudflareChallenge(
+		href: string,
+		observationUsername = '',
+	): void {
+		if (this.scope.destroyed) return;
+		if (this.#manualChallengePromise) {
+			/* 重复点击只唤起唯一共享浮窗；不创建第二个 challenge owner。 */
+			void this.permit.resolveCloudflareChallenge({
+				href,
 				signal: this.#manualChallengeController.signal,
 				focus: true,
-			}).then(async (passed) => {
-				if (this.scope.destroyed) return passed;
-				if (passed) {
-					await this.data.client.resetRateLimits();
-					await this.rateLimitNotice.refresh();
+			}).catch(() => {});
+			if (observationUsername) {
+				void this.#manualChallengePromise.then((passed) => {
+					if (passed && !this.scope.destroyed) {
+						this.userObservations.retry(observationUsername);
+					}
+				}).catch(() => {});
+			}
+			return;
+		}
+		const failedRequest = this.#lastFailedRequest;
+		const promise = this.permit.resolveCloudflareChallenge({
+			href,
+			signal: this.#manualChallengeController.signal,
+			focus: true,
+		}).then(async (passed) => {
+			if (this.scope.destroyed) return passed;
+			let retried = false;
+			let recovered = false;
+			if (passed) {
+				await this.data.client.resetRateLimits();
+				/*
+				 * session/current.json 只证明验证会话可通，不能替代刚才被
+				 * cf-mitigated 拒绝的 Topic 请求。人工点击本身就是一次显式
+				 * 恢复意图：只重放当时仍为最新的失败目标一次，让业务响应
+				 * 成为最终判定；若它仍被盾拒绝，中央闸门会重新保持 required，
+				 * 这里绝不循环或追发其他后台请求。
+				 */
+				if (
+					failedRequest !== null &&
+					this.#lastFailedRequest === failedRequest
+				) {
+					retried = true;
+					const result = await this.openTarget({
+						...failedRequest,
+						forceRefresh: true,
+					});
+					recovered = result.topic.status === 'opened' ||
+						result.topic.status === 'reused';
 				}
-				this.feedback.show(
+				if (observationUsername) {
+					this.userObservations.retry(observationUsername);
+				} else if (!retried || recovered) {
+					this.userObservations.resumeRecoverable('cloudflare-challenge');
+				}
+				await this.rateLimitNotice.refresh();
+			}
+			this.feedback.show(
 				passed
-					? 'Cloudflare 验证已通过，请求已回到原有有序管线'
+					? observationUsername
+						? `Cloudflare 验证已通过，@${observationUsername} 已从断点继续`
+						: retried
+						? recovered
+							? 'Cloudflare 验证已通过，目标帖子已继续加载'
+							: '验证会话已通过，但目标帖子仍被限制；未继续追发请求'
+						: 'Cloudflare 验证已通过，请求已回到原有有序管线'
 					: '验证浮窗未完成；请允许弹出窗口后重试',
 			);
 			return passed;
@@ -4988,6 +5735,14 @@ export class ReaderBrowserRuntime<
 		});
 	}
 
+	#historyArchiveMarker(
+		topicId: number,
+		postNumber: number,
+	): ReaderHistoryArchiveMarker | null {
+		const history = this.history as ReaderHistoryRepository | undefined;
+		return history?.archiveMarker(topicId, postNumber) ?? null;
+	}
+
 	#captureAndRememberHistoryAnchor(): ReaderHistoryAnchorState | null {
 		const anchor = this.#captureHistoryAnchor();
 		const value = this.shell.activeValue;
@@ -4995,6 +5750,7 @@ export class ReaderBrowserRuntime<
 			this.#rememberHistoryTopic(
 				value,
 				anchor.viewport.postNumber,
+				anchor.viewport,
 			);
 		}
 		return anchor;
@@ -5010,13 +5766,327 @@ export class ReaderBrowserRuntime<
 			replyWindow:
 				value.topicContextSurface.captureDiscussionState(),
 			quoteHighlight:
-				value.topicContextFeature.captureQuoteHighlightState(),
+					value.topicContextFeature.captureQuoteHighlightState(),
 		});
+	}
+
+	#collectChronicleRequests(snapshot: RequestObservationSnapshot): void {
+		const retained = new Set(snapshot.events.map((event) => event.id));
+		for (const id of this.#chronicleRequestIds) {
+			if (!retained.has(id)) this.#chronicleRequestIds.delete(id);
+		}
+		for (const event of snapshot.events) {
+			if (this.#chronicleRequestIds.has(event.id) || event.pending) continue;
+			if (
+				event.phase !== 'finished' ||
+				event.status !== 404 ||
+				!event.sameOrigin
+			) {
+				this.#chronicleRequestIds.add(event.id);
+				continue;
+			}
+			const target = readerChronicleRequestTarget(event.path);
+			if (!target) {
+				this.#chronicleRequestIds.add(event.id);
+				continue;
+			}
+			const input = this.#chronicleInput(target, event);
+			/* 缓存正文可能仍在同一个 404 事务的后续 Session 提交中。 */
+			if (!input) continue;
+			try {
+				this.chronicle.remember(input);
+			} catch {
+				/* 仓储已发布具名诊断；404 观察不得反向中断请求或改写缓存。 */
+			} finally {
+				this.#chronicleRequestIds.add(event.id);
+			}
+		}
+	}
+
+	#rememberChronicleArchives(
+		value: ReaderTopicRuntimeContext<
+			TTopic,
+			TPost,
+			ReaderTopicCoreServices<TTopic, TPost>
+		>,
+	): void {
+		const session = value.services.session;
+		const topicId = Number(session.topicId);
+		if (!Number.isSafeInteger(topicId) || topicId <= 0) return;
+		const topic = (session.topic ?? value.topic) as Readonly<{
+			readonly title?: unknown;
+		}> | null;
+		const topicTitle = String(topic?.title ?? '').trim() ||
+			this.history.entry(topicId)?.title || `帖子 #${topicId}`;
+		const alreadyRemembered = (
+			kind: 'topic' | 'reply',
+			postNumber: number | null,
+		): boolean => this.chronicle.snapshot.records.some((record) =>
+			record.kind === kind &&
+			Number(record.topicId) === topicId &&
+			(kind === 'topic' || Number(record.postNumber) === postNumber)
+		);
+		const remember = (
+			kind: 'topic' | 'reply',
+			postNumber: number | null,
+			confirmedAt: number,
+		): void => {
+			if (alreadyRemembered(kind, postNumber)) return;
+			const post = postNumber === null
+				? session.postByNumber(1)
+				: session.postByNumber(postNumber);
+			if (
+				kind === 'reply' &&
+				(
+					!post ||
+					(post as Readonly<{
+						readonly reader_local_archive_placeholder?: unknown;
+					}>).reader_local_archive_placeholder === true
+				)
+			) return;
+			if (kind === 'topic' && !topic && !session.cachedPosts().length) return;
+			const rawPostId = Number((post as Readonly<{
+				readonly id?: unknown;
+			}> | undefined)?.id);
+			try {
+				this.chronicle.remember({
+					kind,
+					status: 404,
+					bodyCached: true,
+					topicId,
+					topicTitle,
+					...(postNumber === null ? {} : { postNumber }),
+					...(Number.isSafeInteger(rawPostId) && rawPostId > 0
+						? { postId: rawPostId }
+						: {}),
+					requestPath: postNumber === null
+						? `/t/${topicId}.json`
+						: `/posts/by_number/${topicId}/${postNumber}.json`,
+					requestMethod: 'GET',
+					requestSource: 'reader',
+					callSite: 'topic-local-archive',
+					observedAt: confirmedAt,
+				});
+			} catch {
+				/* 仓储已发布具名诊断；史书回填不得反向改变 Topic 存档。 */
+			}
+		};
+		const archive = session.localArchiveState();
+		if (archive.topic?.status === 404) {
+			remember('topic', null, archive.topic.confirmedAt);
+		}
+		for (const entry of archive.posts) {
+			if (entry.status !== 404) continue;
+			remember('reply', Number(entry.postNumber), entry.confirmedAt);
+		}
+	}
+
+	#rememberBoostChronicleRequest(
+		request: ReaderBrowserTargetRequest,
+		requestFloor: number,
+	): void {
+		const boostId = Number(request.boostId);
+		if (!Number.isSafeInteger(boostId) || boostId <= 0) return;
+		const resolvedBoost = this.#chronicleBoostTarget(boostId);
+		for (const event of this.data.requests.snapshot.events) {
+			if (
+				event.id <= requestFloor ||
+				event.phase !== 'finished' ||
+				event.status !== 404 ||
+				!event.sameOrigin
+			) continue;
+			const target = readerChronicleRequestTarget(event.path);
+			/* Boost 自身端点已经由被动 collector 归类，避免同一信号重复计数。 */
+			if (!target || target.kind === 'boost') continue;
+			const resolvedRequest = this.#chronicleInput(target, event);
+			if (!resolvedRequest || Number(resolvedRequest.topicId) !== request.topicId) {
+				continue;
+			}
+			try {
+				this.chronicle.remember({
+					kind: 'boost',
+					status: 404,
+					bodyCached: true,
+					topicId: request.topicId,
+					topicTitle: resolvedBoost?.topicTitle ||
+						this.history.entry(request.topicId)?.title,
+					postNumber: resolvedBoost?.postNumber ?? request.postNumber,
+					postId: resolvedBoost?.postId,
+					boostId,
+					requestPath: event.path,
+					requestMethod: event.method,
+					requestSource: event.source,
+					callSite: [
+						`boost-target:${request.source}`,
+						event.callSite,
+					].filter(Boolean).join(' · '),
+					observedAt: event.endedAt || event.startedAt,
+				});
+			} catch {
+				/* 404 记录失败不得删除缓存，也不得反向改变打开事务结果。 */
+			}
+		}
+	}
+
+	#chronicleInput(
+		target: ReaderChronicleRequestTarget,
+		event: RequestObservationEvent,
+	): ReaderChronicleInput | null {
+		let targetKind = target.kind;
+		let topicId = target.topicId;
+		let postNumber = target.postNumber;
+		let postId = target.postId;
+		const boostId = target.boostId;
+		let topicTitle = '';
+		const active = this.shell.activeValue;
+		if (postId !== null && active) {
+			const post = active.services.session.postById(postId);
+			const resolved = tryDiscoursePostNumber(post?.post_number);
+			if (resolved !== null) {
+				topicId = Number(active.services.session.topicId);
+				postNumber = resolved;
+				targetKind = resolved === 1 ? 'topic' : 'reply';
+			}
+		}
+		if (targetKind === 'boost' && boostId !== null) {
+			const resolved = this.#chronicleBoostTarget(boostId);
+			if (resolved) {
+				topicId = resolved.topicId;
+				postNumber = resolved.postNumber;
+				postId = resolved.postId;
+				topicTitle = resolved.topicTitle;
+			}
+		}
+		if (topicId === null && postId !== null) {
+			const activity = this.bookmarkController?.activitySyncRecords().find(
+				(entry) => entry.postId === postId,
+			);
+			if (activity) {
+				topicId = Number(activity.topicId);
+				postNumber = Number(activity.postNumber);
+				topicTitle = activity.title;
+				targetKind = postNumber === 1 ? 'topic' : 'reply';
+			}
+		}
+		if (topicId === null) return null;
+		if (targetKind === 'reply' && postNumber === null && postId === null) {
+			return null;
+		}
+		if (targetKind === 'boost' && boostId === null) return null;
+		if (
+			!topicTitle &&
+			active &&
+			Number(active.services.session.topicId) === topicId
+		) {
+			const topic = (
+				active.services.session.topic ?? active.topic
+			) as Readonly<{ readonly title?: unknown }>;
+			topicTitle = String(topic.title ?? '').trim();
+		}
+		topicTitle ||= this.history.entry(topicId)?.title ?? `帖子 #${topicId}`;
+		const cachedPost = active &&
+			Number(active.services.session.topicId) === topicId
+			? postNumber !== null
+				? active.services.session.postByNumber(postNumber)
+				: postId !== null
+					? active.services.session.postById(postId)
+					: targetKind === 'topic'
+						? active.services.session.postByNumber(1)
+						: undefined
+			: undefined;
+		if (
+			!cachedPost ||
+			(cachedPost as Readonly<{
+				readonly reader_local_archive_placeholder?: unknown;
+			}>).reader_local_archive_placeholder === true
+		) return null;
+		return Object.freeze({
+			kind: targetKind,
+			status: 404,
+			bodyCached: true,
+			topicId,
+			topicTitle,
+			...(postNumber === null ? {} : { postNumber }),
+			...(postId === null ? {} : { postId }),
+			...(boostId === null ? {} : { boostId }),
+			requestPath: event.path,
+			requestMethod: event.method,
+			requestSource: event.source,
+			callSite: event.callSite,
+			observedAt: event.endedAt || event.startedAt,
+		});
+	}
+
+	#chronicleBoostTarget(boostId: number): Readonly<{
+		readonly topicId: number;
+		readonly postNumber: number;
+		readonly postId: number | null;
+		readonly topicTitle: string;
+	}> | null {
+		const active = this.shell.activeValue;
+		if (active) {
+			for (const post of active.services.session.cachedPosts()) {
+				const source = post as Readonly<Record<string, unknown>>;
+				const boosts = Array.isArray(source.boosts)
+					? source.boosts
+					: source.boosts ? [source.boosts] : [];
+				const found = boosts.some((value) =>
+					value !== null &&
+					typeof value === 'object' &&
+					Number((value as Readonly<{ readonly id?: unknown }>).id) === boostId);
+				if (!found) continue;
+				const topic = (
+					active.services.session.topic ?? active.topic
+				) as Readonly<{ readonly title?: unknown }>;
+				return Object.freeze({
+					topicId: Number(active.services.session.topicId),
+					postNumber: Number(post.post_number),
+					postId: Number.isSafeInteger(Number(post.id))
+						? Number(post.id)
+						: null,
+					topicTitle: String(topic.title ?? '').trim(),
+				});
+			}
+		}
+		const activity = this.bookmarkController?.activitySyncRecords().find(
+			(entry) => entry.tab === 'Boost' && entry.identity === `boost:${boostId}`,
+		);
+		if (activity) {
+			return Object.freeze({
+				topicId: Number(activity.topicId),
+				postNumber: Number(activity.postNumber),
+				postId: activity.postId === null ? null : Number(activity.postId),
+				topicTitle: activity.title,
+			});
+		}
+		const notification = this.notificationController?.syncHistoryRecords().find(
+			(entry) => entry.group === 'boosts' &&
+				entry.identity === `boosts:${boostId}`,
+		);
+		return notification?.target
+			? Object.freeze({
+				topicId: Number(notification.target.topicId),
+				postNumber: Number(notification.target.postNumber),
+				postId: null,
+				topicTitle: this.history.entry(notification.target.topicId)?.title ??
+					`帖子 #${notification.target.topicId}`,
+			})
+			: null;
+	}
+
+	#rememberHistoryTopicMetadata(
+		value: ReaderBrowserTopicContext<TTopic, TPost>,
+	): void {
+		this.#rememberHistoryTopic(
+			value,
+			this.history.entry(value.services.session.topicId)?.postNumber ?? 1,
+		);
 	}
 
 	#rememberHistoryTopic(
 		value: ReaderBrowserTopicContext<TTopic, TPost>,
 		postNumber: number = value.topicTimeline.snapshot.currentPostNumber,
+		viewport?: ReaderHistoryViewport,
 	): void {
 		const topic = (
 			value.services.session.topic ?? value.topic
@@ -5029,10 +6099,34 @@ export class ReaderBrowserRuntime<
 				}>;
 			}>;
 		}>;
+		const topicHeader = value.topicHeader.snapshot;
 		const posts = value.services.session.cachedPosts();
 		const firstPost = posts.find((post) =>
 			tryDiscoursePostNumber(post.post_number) === 1
 		);
+		const topicObservationMetadata = normalizeReaderUserTopicMetadata(
+			value.services.session.topicId,
+			topic,
+			firstPost,
+		);
+		const headerObservationMetadata = normalizeReaderUserTopicMetadata(
+			value.services.session.topicId,
+			Object.freeze({
+				title: topicHeader.title,
+				category_id: topicHeader.categoryId || null,
+				category_name: topicHeader.category?.name ?? '',
+				tags: Object.freeze(topicHeader.tags.map((tag) => tag.name)),
+			}),
+		);
+		const observationMetadata = topicObservationMetadata && headerObservationMetadata
+			? mergeReaderUserTopicMetadata(
+				topicObservationMetadata,
+				headerObservationMetadata,
+			)
+			: topicObservationMetadata ?? headerObservationMetadata;
+		if (observationMetadata) {
+			this.userObservations.rememberTopicMetadata(observationMetadata);
+		}
 		const readPostNumbers = posts
 			.filter((post) =>
 				(post as TPost & Readonly<{ read?: unknown }>).read === true
@@ -5041,10 +6135,14 @@ export class ReaderBrowserRuntime<
 		readPostNumbers.push(
 			...value.services.read.snapshot().confirmed,
 		);
+		const archive = value.services.session.localArchiveState();
+		const floorArchive = archive.posts.find(
+			(entry) => entry.postNumber === postNumber,
+		) ?? null;
 		try {
 			this.history.remember({
 				topicId: value.services.session.topicId,
-				title: topic.title,
+				title: topicHeader.title || topic.title,
 				postsCount: Math.max(
 					Number(topic.posts_count) || 0,
 					Number(topic.highest_post_number) || 0,
@@ -5057,8 +6155,21 @@ export class ReaderBrowserRuntime<
 				ownerUsername:
 					topic.details?.created_by?.username ??
 					firstPost?.username,
+				topicSubtitle: topicHeader.statsText ===
+						'主题信息暂不可用'
+					? ''
+					: topicHeader.statsText,
+				categoryId: topicHeader.categoryId || null,
+				categoryName: topicHeader.category?.name ?? '',
+				tags: topicHeader.tags.map((tag) => tag.name),
+				...(viewport === undefined ? {} : { viewport }),
 				postNumber,
 				readPostNumbers,
+				archiveStatus:
+					archive.topic?.status ?? floorArchive?.status ?? null,
+				archivePostNumber: archive.topic === null
+					? floorArchive?.postNumber ?? null
+					: null,
 			});
 		} catch {
 			// Repository 已发布 write-failed；历史持久化不得反向中断已打开 Topic。
@@ -5078,6 +6189,26 @@ export class ReaderBrowserRuntime<
 		return Object.freeze({
 			status: result.status,
 			topicId: result.topicId,
+		});
+	}
+
+	async #openHistoryEntry(entry: ReaderHistoryEntry): Promise<void> {
+		const anchor = this.historyNavigation.snapshot.states[
+			String(entry.topicId)
+		] ?? (entry.viewport === null
+			? null
+			: normalizeReaderHistoryAnchorState({ viewport: entry.viewport }));
+		const opened = await this.openTarget({
+			topicId: entry.topicId,
+			source: 'restore',
+		});
+		if (
+			anchor === null ||
+			(opened.topic.status !== 'opened' && opened.topic.status !== 'reused')
+		) return;
+		await this.historyNavigation.restore(entry.topicId, anchor, {
+			highlight: false,
+			restoreSemanticState: false,
 		});
 	}
 }
@@ -5142,6 +6273,9 @@ export function createReaderBrowserRuntimeStage<
 						readPreferences: context.readPreferences,
 						preferenceChanges: context.preferenceChanges,
 						system: themeOptions.system,
+						...(themeOptions.clock
+							? { clock: themeOptions.clock }
+							: {}),
 						parentScope: shell.scope,
 					})
 					: null;
@@ -5252,8 +6386,7 @@ export function createReaderBrowserRuntimeStage<
 		: options.shell;
 	return createReaderShellWorkspaceStage<
 		TPreferences,
-		ReaderBrowserTopicContext<TTopic, TPost>
-	>({
+		ReaderBrowserTopicContext<TTopic, TPost>>({
 		...shellOptions,
 		onReady(shell, workspace, context) {
 			const theme = themeByShell.get(shell) ?? null;
@@ -5582,9 +6715,8 @@ export function createReaderBrowserRuntimeStage<
 					parentScope: shell.scope,
 					})
 					: null;
-				let downloadCurrentTopic: (() => void) | null = null;
-				let openTopicDownloadManager: (() => void) | null = null;
-				const runtime = new ReaderBrowserRuntime<TTopic, TPost>({
+					let downloadCurrentTopic: (() => void) | null = null;
+					const runtime = new ReaderBrowserRuntime<TTopic, TPost>({
 					...options.runtime,
 				...(performancePolicy === null
 					? {}
@@ -5604,8 +6736,6 @@ export function createReaderBrowserRuntimeStage<
 					...(options.openQueue && options.runtime.resources
 						? {
 							downloadCurrentTopic: () => downloadCurrentTopic?.(),
-							openTopicDownloadManager: () =>
-								openTopicDownloadManager?.(),
 						}
 						: {}),
 						shell,
@@ -5694,6 +6824,21 @@ export function createReaderBrowserRuntimeStage<
 					const transaction = (async ():
 						Promise<ReaderCurrentTopicRefreshResult> => {
 						const anchor = runtime.historyNavigation.captureCurrent();
+						/*
+						 * 清缓存会重建整棵虚拟树；旧 scrollRatio 的分母属于旧布局，不能
+						 * 再映射到新首包。刷新事务必须以真实可见楼层及楼层内偏移为 owner，
+						 * 回复窗口与引用语义仍沿用同一历史恢复入口。
+						 */
+						const exactAnchor: ReaderHistoryAnchorState | null = anchor === null
+							? null
+							: Object.freeze({
+								...anchor,
+								viewport: Object.freeze({
+									postNumber: anchor.viewport.postNumber,
+									postOffset: anchor.viewport.postOffset,
+									scrollTop: anchor.viewport.scrollTop,
+								}),
+							});
 						const onlyOpEnabled = active.topicOnlyOp.snapshot.enabled;
 						const imageSnapshot = active.topicImages.snapshot();
 						const sources = imageSnapshot.items.flatMap((item) => [
@@ -5740,8 +6885,8 @@ export function createReaderBrowserRuntimeStage<
 						// 目标楼层，会绕过首包中已有的帖子并重复请求同一份 Topic JSON。
 						const reopened = await runtime.openTarget({
 							topicId,
-							...(anchor
-								? { postNumber: anchor.viewport.postNumber }
+							...(exactAnchor
+								? { postNumber: exactAnchor.viewport.postNumber }
 								: {}),
 							source: 'restore',
 						});
@@ -5753,8 +6898,8 @@ export function createReaderBrowserRuntimeStage<
 										.persistCurrentSnapshot();
 									return await runtime.openTarget({
 										topicId,
-										...(anchor
-											? { postNumber: anchor.viewport.postNumber }
+										...(exactAnchor
+											? { postNumber: exactAnchor.viewport.postNumber }
 											: {}),
 										source: 'restore',
 									});
@@ -5779,9 +6924,12 @@ export function createReaderBrowserRuntimeStage<
 							}
 							let recoveryMessage =
 								'刷新当前帖子失败，已恢复刷新前内容；可稍后再试。';
-							if (anchor) {
+							if (exactAnchor) {
 								try {
-									await runtime.historyNavigation.restore(topicId, anchor);
+									await runtime.historyNavigation.restore(
+										topicId,
+										exactAnchor,
+									);
 								} catch {
 									recoveryMessage =
 										'刷新当前帖子失败，已恢复刷新前内容，但之前的阅读位置未能完整还原。';
@@ -5799,8 +6947,8 @@ export function createReaderBrowserRuntimeStage<
 						if (onlyOpEnabled) {
 							reopened.topic.value.topicOnlyOp.setEnabled(true);
 						}
-						if (anchor) {
-							await runtime.historyNavigation.restore(topicId, anchor);
+						if (exactAnchor) {
+							await runtime.historyNavigation.restore(topicId, exactAnchor);
 						}
 						return Object.freeze({
 							complete: cleanupFailures.length === 0,
@@ -6121,10 +7269,10 @@ export function createReaderBrowserRuntimeStage<
 						},
 					});
 				};
-				mountSettingsUser();
 				settingsView.changes.subscribe((snapshot) => {
 					if (snapshot.open && snapshot.activePanelId === 'user') {
 						mountSettingsUser();
+						settingsUserView?.focusConnect();
 					}
 				}, runtime.scope);
 			}
@@ -6183,6 +7331,7 @@ export function createReaderBrowserRuntimeStage<
 					host: settingsView.panelHost('translation'),
 					repository: translationFormOptions.repository,
 					access: runtime.translationRequests,
+					presentation: translationFormOptions.presentation,
 					parentScope: runtime.scope,
 				});
 			}
@@ -6196,7 +7345,7 @@ export function createReaderBrowserRuntimeStage<
 				);
 			}
 			if (settingsView && interactionFormOptions) {
-				new ReaderInteractionSettingsForm<TPreferences>({
+				const interactionForm = new ReaderInteractionSettingsForm<TPreferences>({
 					document: options.runtime.document,
 					host: settingsView.panelHost('interaction'),
 					controller: settings!,
@@ -6220,6 +7369,14 @@ export function createReaderBrowserRuntimeStage<
 					preferenceChanges: context.preferenceChanges,
 					parentScope: runtime.scope,
 				});
+				settingsView.changes.subscribe((snapshot) => {
+					if (
+						snapshot.open &&
+						snapshot.activePanelId === 'interaction'
+					) {
+						interactionForm.refreshCapabilities();
+					}
+				}, runtime.scope);
 			}
 			if (settingsView && layout) {
 				new ReaderLayoutSettingsForm<TPreferences>({
@@ -6282,6 +7439,10 @@ export function createReaderBrowserRuntimeStage<
 					parentScope: runtime.scope,
 				});
 			}
+			const webDavOptions = options.settings
+				? options.settings.webDav
+				: undefined;
+			let webDavCoordinator: ReaderWebDavCoordinator | null = null;
 			const configuration =
 				options.settings && options.settings.configuration
 					? options.settings.configuration
@@ -6313,7 +7474,13 @@ export function createReaderBrowserRuntimeStage<
 									configurationManager.prepare(payload),
 								apply: (prepared) =>
 									configurationManager.apply(prepared),
-								reset: () => configurationManager.reset(),
+								reset: async () => {
+									const result = await configurationManager.reset();
+									requestReaderQueueSurfacePositionsReset(
+										options.runtime.document,
+									);
+									return result;
+								},
 								confirm: (request) =>
 									runtime.feedback.confirm(request),
 								saveTextFile: (
@@ -6337,9 +7504,49 @@ export function createReaderBrowserRuntimeStage<
 						}
 						: {}),
 					history: runtime.history,
+					chronicle: runtime.chronicle,
 					responses: runtime.data.responses,
 					...(runtime.assetCaches
 						? { assetCaches: runtime.assetCaches }
+						: {}),
+					...(webDavOptions
+						? {
+							prepareClear: async (
+								categories: readonly ReaderCacheCategory[],
+							) => {
+								const webDavCategories: ReaderWebDavCategory[] = [];
+								const protectedCategories: ReaderCacheCategory[] = [];
+								if (categories.includes('history')) {
+									webDavCategories.push('history');
+									protectedCategories.push('history');
+								}
+								if (categories.includes('responses')) {
+									webDavCategories.push('translation-cache');
+									protectedCategories.push('responses');
+								}
+								if (!webDavCategories.length) {
+									return Object.freeze({
+										failed: Object.freeze([]),
+									});
+								}
+								try {
+									if (!webDavCoordinator) {
+										throw new Error('WebDAV 同步协调器尚未就绪');
+									}
+									const release = await webDavCoordinator
+										.acquireLocalCacheClear(webDavCategories);
+									return Object.freeze({
+										failed: Object.freeze([]),
+										release,
+									});
+								} catch (cause) {
+									reportCacheError(cause);
+									return Object.freeze({
+										failed: Object.freeze(protectedCategories),
+									});
+								}
+							},
+						}
 						: {}),
 					applicationCaches: {
 						stats: async () => {
@@ -6347,7 +7554,12 @@ export function createReaderBrowserRuntimeStage<
 							const notifications = runtime.notificationController
 								?.cacheStats() ?? { pages: 0, records: 0 };
 							const bookmarks = runtime.bookmarkController
-								?.cacheStats() ?? { bookmarks: 0, reactions: 0 };
+								?.cacheStats() ?? {
+									bookmarks: 0,
+									reactions: 0,
+									boosts: 0,
+									replies: 0,
+								};
 							const creditBridge = await runtime.creditAccount?.cacheStats() ?? {
 								records: 0,
 								bytes: 0,
@@ -6388,9 +7600,12 @@ export function createReaderBrowserRuntimeStage<
 											`${notifications.records} 条消息`,
 									}),
 									responses: Object.freeze({
-										records: bookmarks.bookmarks + bookmarks.reactions,
-										detail: `内存热缓存：${bookmarks.bookmarks} 条收藏 · ` +
-											`${bookmarks.reactions} 条回应`,
+											records: bookmarks.bookmarks + bookmarks.reactions +
+												bookmarks.boosts + bookmarks.replies,
+											detail: `内存热缓存：${bookmarks.bookmarks} 条收藏 · ` +
+												`${bookmarks.reactions} 条回应 · ` +
+												`${bookmarks.boosts} 条 Boost · ` +
+												`${bookmarks.replies} 条回复`,
 									}),
 									assets: Object.freeze({
 										records: imageObjects.objectUrls,
@@ -6678,14 +7893,31 @@ export function createReaderBrowserRuntimeStage<
 					performance.now();
 				return lastScrollAt > 0 && now - lastScrollAt < 700;
 			};
-			const waitForQueuePrefetchIdle = async (
-				signal: AbortSignal,
-			): Promise<void> => {
+				const waitForQueuePrefetchIdle = async (
+					signal: AbortSignal,
+				): Promise<void> => {
 				while (!signal.aborted && queuePrefetchForegroundBusy()) {
 					await abortableDelay(180, signal);
 				}
-				if (signal.aborted) throw signal.reason;
-			};
+					if (signal.aborted) throw signal.reason;
+				};
+				const waitForQueuePrefetchRequestHeadroom = async (
+					signal: AbortSignal,
+				): Promise<void> => {
+					while (!signal.aborted) {
+						await waitForQueuePrefetchIdle(signal);
+						const snapshot = await runtime.permit.snapshot();
+						if (
+							snapshot.challengeState === 'idle' &&
+							readerQueuePrefetchRequestHasHeadroom(snapshot)
+						) return;
+						const delayMs = snapshot.nextPermitDelay > 0
+							? Math.max(500, Math.min(2_000, snapshot.nextPermitDelay))
+							: 1_000;
+						await abortableDelay(delayMs, signal);
+					}
+					throw signal.reason;
+				};
 			const waitForTopicDownloadIdle = async (
 				signal: AbortSignal,
 			): Promise<void> => {
@@ -6722,7 +7954,10 @@ export function createReaderBrowserRuntimeStage<
 				? discourseNativeTopicPresentation(options.runtime.host)
 				: null;
 			const topicOfflineArtifacts = runtime.blobDownloads
-				? new ReaderTopicOfflineArtifactRepository(runtime.data.responses)
+				? new ReaderTopicOfflineArtifactRepository(
+					runtime.data.responses,
+					options.runtime.topic.authScope,
+				)
 				: null;
 			const topicDownloadQuoteEndpointPreferences = new Map<number, string>();
 			const topicDownloadUnavailableQuoteTargets = new Set<string>();
@@ -6746,12 +7981,22 @@ export function createReaderBrowserRuntimeStage<
 						: runtime.history.ordered('recent-viewed')[0] ?? null,
 					avatarSource: (template, size) =>
 						queueTopicPresentation?.avatarSource(template, size) ?? '',
-					historyAnchor: (topicId) =>
-						runtime.historyNavigation.snapshot.states[
-							String(topicId)
-						] ?? null,
+					historyAnchor: (topicId) => {
+						const activeAnchor =
+							runtime.historyNavigation.snapshot.states[
+								String(topicId)
+							];
+						if (activeAnchor) return activeAnchor;
+						const viewport = runtime.history.entry(topicId)?.viewport ?? null;
+						return viewport === null
+							? null
+							: normalizeReaderHistoryAnchorState({ viewport });
+					},
 					restoreHistoryAnchor: async (topicId, anchor) => {
-						await runtime.historyNavigation.restore(topicId, anchor);
+						await runtime.historyNavigation.restore(topicId, anchor, {
+							highlight: false,
+							restoreSemanticState: false,
+						});
 					},
 					prefetch: async (topicId, postNumber, signal, report) => {
 						const scope = runtime.scope.child();
@@ -6774,7 +8019,7 @@ export function createReaderBrowserRuntimeStage<
 						});
 						try {
 							await abortableDelay(900, abort.signal);
-							await waitForQueuePrefetchIdle(abort.signal);
+							await waitForQueuePrefetchRequestHeadroom(abort.signal);
 							await bundle.services.session.init({ background: true });
 							const session = bundle.services.session;
 							const stream = [...session.streamPostIds()];
@@ -6833,13 +8078,14 @@ export function createReaderBrowserRuntimeStage<
 								offset += session.pageSize
 							) {
 								const batch = ids.slice(offset, offset + session.pageSize);
-								const loadedBefore = batch.reduce(
+									const loadedBefore = batch.reduce(
 									(count, postId) => count + Number(Boolean(
 										session.postById(Number(postId)),
 									)),
-									0,
-								);
-								await session.loadPostsByIds(
+										0,
+									);
+									await waitForQueuePrefetchRequestHeadroom(abort.signal);
+									await session.loadPostsByIds(
 									batch,
 									{ background: true, maxAttempts: 1 },
 								);
@@ -6864,7 +8110,8 @@ export function createReaderBrowserRuntimeStage<
 									background: true,
 									maxPages: 32,
 									maxAttempts: 2,
-									beforePage: () => waitForQueuePrefetchIdle(abort.signal),
+									beforePage: () =>
+										waitForQueuePrefetchRequestHeadroom(abort.signal),
 								},
 							);
 							report({
@@ -6880,7 +8127,7 @@ export function createReaderBrowserRuntimeStage<
 								? await runtime.mediaPrefetch.prefetch({
 									posts: mediaPosts,
 									signal: abort.signal,
-									waitUntilIdle: waitForQueuePrefetchIdle,
+									waitUntilIdle: waitForQueuePrefetchRequestHeadroom,
 									reactionSources: (post) => topic
 										? runtime.postReactions.options(topic, post)
 											.flatMap((option) => option.imageUrl
@@ -6927,11 +8174,8 @@ export function createReaderBrowserRuntimeStage<
 									downloads: runtime.blobDownloads,
 									requestResume: (error) =>
 										runtime.data.client.requestResume(error),
-									mount: shell.view.modal,
+									mount: shell.view.surfaceHost,
 									floating: true,
-									positionAnchor: () =>
-										runtime.shell.activeValue?.topicActionRail
-											?.downloadHistoryButton ?? null,
 									confirmRemoval: async (context, host) => {
 										const requestedAt = Number(
 											context.localDownloadRequestedAt,
@@ -7034,16 +8278,16 @@ export function createReaderBrowserRuntimeStage<
 							signal,
 						);
 						let backgroundNetworkRequestCount = 0;
-						const beforeDownloadNetwork = async (
+						async function beforeDownloadNetwork(
 							networkSignal: AbortSignal,
 							nestedReplies = false,
-						): Promise<void> => {
+						): Promise<void> {
 							await waitForTopicDownloadRequestHeadroom(
 								networkSignal,
 								nestedReplies,
 							);
 							backgroundNetworkRequestCount += 1;
-						};
+						}
 						const bundle = runtime.data.createTopicBundle<TTopic, TPost>({
 										topicId,
 										scope,
@@ -7368,6 +8612,36 @@ export function createReaderBrowserRuntimeStage<
 												`${missingQuoteTargetCount} 个引用正文未能补齐`,
 											);
 										}
+										const offlineTranslationController =
+											runtime.translationFeature?.controller ?? null;
+										const offlineTranslationMode =
+											offlineTranslationController?.mode ?? 'original';
+										const offlineTranslationTheme =
+											offlineTranslationController?.theme;
+										let offlineTranslations: ReadonlyMap<string, string> | null = null;
+										if (
+											offlineTranslationController &&
+											offlineTranslationMode !== 'original'
+										) {
+											offlineTranslations = await offlineTranslationController
+												.prepareOfflineTranslations(
+												options.runtime.document,
+												Object.freeze([
+													...contextPosts,
+													...[...quotedPosts.values()].map((entry) =>
+														entry.post),
+												]),
+												abort.signal,
+												{
+													onProgress: (completed, total) => report({
+														phase: 'serializing',
+														completed,
+														total,
+														detail: `正在补齐离线译文 ${completed}/${total}`,
+													}),
+												},
+											);
+										}
 										let selectedExpectedPostCount =
 											session.postStreamCoverage().expectedPostCount;
 										const selectedComplete = coverage.complete &&
@@ -7431,6 +8705,12 @@ export function createReaderBrowserRuntimeStage<
 											host.innerHTML = cooked;
 											prepareReaderCookedCallouts(options.runtime.document, host);
 											offlineKatex?.render(host);
+											if (offlineTranslations && offlineTranslationController) {
+												offlineTranslationController.projectOfflineTranslations(
+													host,
+													offlineTranslations,
+												);
+											}
 											return host.innerHTML;
 										};
 										let artifact: ReaderTopicOfflineDocument;
@@ -7460,10 +8740,18 @@ export function createReaderBrowserRuntimeStage<
 											siteLogoUrl: logo?.currentSrc || logo?.src || '',
 											reactionEmojiUrl: (reactionId) =>
 												discourseNativeEmojiUrl(options.runtime.host, reactionId),
+											inlineEmojiUrl: (emojiId) =>
+												discourseNativeEmojiUrl(options.runtime.host, emojiId),
 											presentation: Object.freeze({
 												theme: readerRoot.dataset.ldpTheme === 'dark'
 													? 'dark'
 													: 'light',
+												translationMode: offlineTranslationMode,
+												...(offlineTranslationTheme
+													? {
+														translationTheme: offlineTranslationTheme,
+													}
+													: {}),
 												styleProperties: Object.freeze(readerStyleProperties),
 												structureColorsDisabled: readerRoot.classList.contains(
 													'ldp-structure-colors-disabled',
@@ -7475,15 +8763,20 @@ export function createReaderBrowserRuntimeStage<
 										} finally {
 											offlineKatex?.destroy();
 										}
+										const downloadArtifact = Object.freeze({
+											...artifact,
+											archiveStatus: archive.topic?.status ??
+												archive.posts[0]?.status ?? null,
+										});
 										return filenameScope
 											? Object.freeze({
-												...artifact,
-												filename: artifact.filename.replace(
+												...downloadArtifact,
+												filename: downloadArtifact.filename.replace(
 													/-lite-offline\.html$/,
 													`-${filenameScope}-lite-offline.html`,
 												),
 											})
-											: artifact;
+											: downloadArtifact;
 									} finally {
 										await bundle.prepareClose?.('close');
 										scope.destroy();
@@ -7524,25 +8817,18 @@ export function createReaderBrowserRuntimeStage<
 					downloadCurrentTopic = () => {
 						openQueue.downloadCurrentTopic();
 					};
-					openTopicDownloadManager = () => {
-						openQueue.openTopicDownloadManager();
-					};
 					runtime.scope.add(() => {
 						downloadCurrentTopic = null;
-						openTopicDownloadManager = null;
 					});
 					const syncOpenQueue = (): void => openQueue.sync();
-				runtime.shell.changes.subscribe(syncOpenQueue, runtime.scope);
-				runtime.history.changes.subscribe(syncOpenQueue, runtime.scope);
-				context.preferenceChanges.subscribe(syncOpenQueue, runtime.scope);
-				workspace.workspace.changes.subscribe(
-					() => openQueue.refreshSurface(),
-					runtime.scope,
-				);
-			}
-			const webDavOptions = options.settings
-				? options.settings.webDav
-				: undefined;
+					runtime.shell.changes.subscribe(syncOpenQueue, runtime.scope);
+					runtime.history.changes.subscribe(syncOpenQueue, runtime.scope);
+					context.preferenceChanges.subscribe(syncOpenQueue, runtime.scope);
+					workspace.workspace.changes.subscribe(
+						() => openQueue.refreshSurface(),
+						runtime.scope,
+					);
+				}
 			const translationOptions = options.settings
 				? options.settings.translationForm
 				: undefined;
@@ -7554,8 +8840,9 @@ export function createReaderBrowserRuntimeStage<
 				const coordinator = new ReaderWebDavCoordinator({
 					client: webDavOptions.client,
 					repository: webDavOptions.repository,
-					categories: createReaderWebDavCategoryPorts({
-						history: runtime.history,
+						categories: createReaderWebDavCategoryPorts({
+							history: runtime.history,
+							notifications: runtime.notificationController,
 						bookmarks: runtime.bookmarkController,
 						queue: openQueue,
 						preferences: {
@@ -7582,6 +8869,10 @@ export function createReaderBrowserRuntimeStage<
 					username: () => discourseNativeCurrentUsername(
 						options.runtime.host,
 					),
+				});
+				webDavCoordinator = coordinator;
+				runtime.scope.add(() => {
+					if (webDavCoordinator === coordinator) webDavCoordinator = null;
 				});
 				const webDavSettingsForm = new ReaderWebDavSettingsForm({
 					document: options.runtime.document,
@@ -7622,6 +8913,7 @@ export function createReaderBrowserRuntimeStage<
 				...(runtime.notificationController && notificationTrigger
 					? [{
 						id: 'notifications',
+						coexistGroup: 'floating-tools',
 						trigger: notificationTrigger,
 						isOpen: () => runtime.notificationController!.snapshot.open,
 						open: () => runtime.notificationController!.open(),
@@ -7631,9 +8923,9 @@ export function createReaderBrowserRuntimeStage<
 				...(runtime.historyPanelView && historyTrigger
 					? [{
 						id: 'history',
+						coexistGroup: 'floating-tools',
 						trigger: historyTrigger,
-						isOpen: () => !shell.view.root
-							.querySelector<HTMLElement>('.ldp-history-popover')?.hidden,
+						isOpen: () => runtime.historyPanelView!.snapshot.open,
 						open: () => runtime.historyPanelView!.open(),
 						close: () => runtime.historyPanelView!.close(),
 					}]
@@ -7641,6 +8933,7 @@ export function createReaderBrowserRuntimeStage<
 				...(runtime.bookmarkController && bookmarkTrigger
 					? [{
 						id: 'bookmarks',
+						coexistGroup: 'floating-tools',
 						trigger: bookmarkTrigger,
 						isOpen: () => runtime.bookmarkController!.snapshot.open,
 						open: () => runtime.bookmarkController!.open(),
@@ -7660,6 +8953,14 @@ export function createReaderBrowserRuntimeStage<
 			if (exclusivePanels.length > 1) {
 				new ReaderExclusivePanelCoordinator({
 					entries: exclusivePanels,
+					beforeOpen: (target) => {
+						if (
+							target.id === 'settings' &&
+							runtime.unwantedTopicView.window.isOpen
+						) {
+							runtime.unwantedTopicView.close();
+						}
+					},
 					parentScope: runtime.scope,
 					onError: (cause) => {
 						runtime.feedback.show(
@@ -7694,6 +8995,9 @@ export function createReaderBrowserRuntimeStage<
 				trigger.click();
 				return true;
 			};
+			const triggerFloatingPanelShortcut = (selector: string): boolean =>
+				restoreReaderFloatingWindowTabSession(shell.view.surfaceHost) ||
+				triggerHeaderPanel(selector);
 			const shortcuts = shortcutPreferences
 				? new ReaderShortcutController<TPreferences>({
 					target: options.runtime.document,
@@ -7780,11 +9084,15 @@ export function createReaderBrowserRuntimeStage<
 							case 'settings':
 								return triggerHeaderPanel('.ldp-settings-toggle');
 							case 'notifications':
-								return triggerHeaderPanel('.ldp-notifications-toggle');
+								return triggerFloatingPanelShortcut(
+									'.ldp-notifications-toggle',
+								);
 							case 'historyPanel':
-								return triggerHeaderPanel('.ldp-history-toggle');
+								return triggerFloatingPanelShortcut('.ldp-history-toggle');
 							case 'bookmarksPanel':
-								return triggerHeaderPanel('.ldp-bookmarks-toggle');
+								return triggerFloatingPanelShortcut(
+									'.ldp-bookmarks-toggle',
+								);
 							case 'likeTopic':
 								return triggerTopicAction('button[data-post-like]');
 							case 'replyTopic':

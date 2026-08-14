@@ -2,6 +2,7 @@ import {
 	eventElement,
 	eventPathIncludes,
 } from '../dom/event-target.js';
+import { bindFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import { Signal } from '../kernel/signal.js';
 import type {
@@ -174,17 +175,6 @@ export class ReaderSettingsView<TPreferences extends object> {
 		this.#popover.setAttribute('aria-modal', 'false');
 		this.#popover.setAttribute('aria-label', '阅读器设置');
 
-		const navigation = this.#createNavigation(
-			options.brandName ?? 'AWESOME LINUX DO READER',
-			options.logoUrl,
-		);
-		const tabs = navigation.root;
-		this.#themeHost = navigation.themeHost;
-		this.#panel = element(
-			this.#document,
-			'div',
-			'ldp-settings-panel is-settings-pages',
-		);
 		const searchShell = this.#createSearch();
 		this.#searchShell = searchShell;
 		this.#searchInput = searchShell.querySelector(
@@ -196,13 +186,25 @@ export class ReaderSettingsView<TPreferences extends object> {
 		this.#searchStatus = searchShell.querySelector(
 			'.ldp-settings-search-status',
 		)!;
+		const navigation = this.#createNavigation(
+			options.brandName ?? 'AWESOME LINUX DO READER',
+			searchShell,
+			options.logoUrl,
+		);
+		const tabs = navigation.root;
+		this.#themeHost = navigation.themeHost;
+		this.#panel = element(
+			this.#document,
+			'div',
+			'ldp-settings-panel is-settings-pages',
+		);
 		this.#searchEmpty = this.#createEmptyState();
 		const draft = this.#createDraftBar();
 		this.#draftBar = draft.bar;
 		this.#draftStatus = draft.status;
 		this.#saveAll = draft.save;
 
-		this.#panel.append(searchShell, this.#searchEmpty);
+		this.#panel.append(this.#searchEmpty);
 		for (const definition of READER_SETTINGS_PANELS) {
 			const section = element(
 				this.#document,
@@ -315,6 +317,7 @@ export class ReaderSettingsView<TPreferences extends object> {
 		this.#listen(this.#popover, 'pointermove', (event) => {
 			this.#moveWindowDrag(event as PointerEvent);
 		});
+		this.scope.add(bindFloatingSurfaceWheel(this.#popover));
 		this.#listen(this.#panel, 'scroll', () => {
 			this.#fieldInteractions.closeColorPicker();
 			this.#help.close();
@@ -375,18 +378,18 @@ export class ReaderSettingsView<TPreferences extends object> {
 		return this.#themeHost;
 	}
 
-	open(panelId?: ReaderSettingsPanelId): void {
+	open(panelId: ReaderSettingsPanelId = 'user'): void {
 		if (this.scope.destroyed) throw new Error('设置 View 已销毁');
 		this.#syncPanelSearchIndex();
 		if (panelId === 'user') this.#controller.setQuery('');
-		if (panelId) this.#controller.activatePanel(panelId);
+		this.#controller.activatePanel(panelId);
 		this.#popover.hidden = false;
 		this.#toggle.setAttribute('aria-expanded', 'true');
 		this.#render(this.#controller.snapshot);
 		this.#fieldInteractions.sync();
 		this.#help.sync();
 		this.#keepWindowVisible();
-		this.#searchInput.focus({ preventScroll: true });
+		this.#tabs.get(panelId)?.focus({ preventScroll: true });
 	}
 
 	close(): void {
@@ -448,6 +451,7 @@ export class ReaderSettingsView<TPreferences extends object> {
 
 	#createNavigation(
 		brandName: string,
+		searchShell: HTMLElement,
 		logoUrl?: string,
 	): Readonly<{
 		readonly root: HTMLElement;
@@ -484,7 +488,7 @@ export class ReaderSettingsView<TPreferences extends object> {
 			row.textContent = line;
 			name.append(row);
 		}
-		brand.append(name);
+		brand.append(name, searchShell);
 
 		const navShell = element(
 			this.#document,
@@ -689,7 +693,6 @@ export class ReaderSettingsView<TPreferences extends object> {
 			section.hidden = panelId !== snapshot.activePanelId;
 		}
 		this.#panel.classList.toggle('is-settings-pages', !userMode);
-		this.#searchShell.hidden = userMode;
 		if (this.#searchInput.value !== snapshot.query) {
 			this.#searchInput.value = snapshot.query;
 		}
@@ -706,8 +709,16 @@ export class ReaderSettingsView<TPreferences extends object> {
 			: '';
 		this.#saveAll.disabled = snapshot.saving || snapshot.draftCount === 0;
 		this.#saveAll.setAttribute('aria-busy', String(snapshot.saving));
-		this.#fieldInteractions.sync();
-		this.#help.sync();
+		const activeSection = snapshot.activePanelId === null
+			? null
+			: this.#sections.get(snapshot.activePanelId) ?? null;
+		if (activeSection) {
+			this.#fieldInteractions.sync(activeSection);
+			this.#help.sync(activeSection);
+		} else {
+			this.#fieldInteractions.close();
+			this.#help.close();
+		}
 		this.changes.emit(this.snapshot);
 	}
 
@@ -746,14 +757,12 @@ export class ReaderSettingsView<TPreferences extends object> {
 	#startWindowDrag(event: PointerEvent): void {
 		const target = eventElement(event);
 		const handle = target?.closest<HTMLElement>(
-			'.ldp-settings-intro,.ldp-settings-search-shell',
+			'.ldp-settings-intro',
 		);
 		if (
 			!handle ||
 			event.button !== 0 ||
-			(handle.classList.contains('ldp-settings-intro') &&
-				this.#panel.classList.contains('is-settings-pages')) ||
-			target?.closest('.ldp-user-info-title-refresh,.ldp-settings-search')
+			target?.closest('.ldp-user-info-title-refresh')
 		) {
 			return;
 		}

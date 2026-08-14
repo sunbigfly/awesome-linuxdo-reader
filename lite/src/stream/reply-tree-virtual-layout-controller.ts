@@ -17,6 +17,7 @@ export class ReplyTreeVirtualLayoutController {
 	readonly topology: ReplyTreeRootProjection;
 	readonly layout: VirtualRootLayout;
 	readonly scope: LifecycleScope;
+	#rootBranches: readonly ReplyTreeRootBranch[] | null = null;
 
 	constructor(
 		repository: ReplyTreeRepository,
@@ -33,7 +34,10 @@ export class ReplyTreeVirtualLayoutController {
 	}
 
 	syncRoots(): void {
-		this.layout.setRoots(this.topology.rootBranches());
+		const rootBranches = this.topology.rootBranches();
+		if (rootBranches === this.#rootBranches) return;
+		this.#rootBranches = rootBranches;
+		this.layout.setRoots(rootBranches);
 	}
 
 	destroy(): void {

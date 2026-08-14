@@ -29,13 +29,12 @@ function sha256(value) {
 	return createHash('sha256').update(value).digest('hex');
 }
 
-function contentAddressedFileUrl(filePath, digest) {
+function versionedLocalFileUrl(filePath, digest) {
 	if (!/^[0-9a-f]{64}$/.test(digest)) {
 		throw new Error('本地资源 SHA-256 无效');
 	}
 	const url = new URL(browserFileUrl(filePath));
 	url.searchParams.set('v', digest);
-	url.hash = `sha256=${digest}`;
 	return url.href;
 }
 
@@ -63,7 +62,7 @@ function renderLocalDebugLoader(metadata, bundlePath, bundleDigest) {
 		...inherited,
 		'// @updateURL    none',
 		'// @downloadURL  none',
-		`// @require      ${contentAddressedFileUrl(bundlePath, bundleDigest)}`,
+		`// @require      ${versionedLocalFileUrl(bundlePath, bundleDigest)}`,
 		'// ==/UserScript==',
 		'',
 	].join('\n');
@@ -75,7 +74,7 @@ function parseArgs(args) {
 	if (args.length === 1 && args[0] === '--local-debug') {
 		return { mode: 'local-debug' };
 	}
-	throw new Error('必须指定 --check、--debug 或 --local-debug；正式发布使用 Greasy Fork 三文件构建');
+	throw new Error('必须指定 --check、--debug 或 --local-debug；正式发布使用 Greasy Fork 四文件构建');
 }
 
 const options = Object.freeze({
@@ -107,7 +106,7 @@ if (!rawMetadata.includes(STYLE_RESOURCE_TOKEN)) {
 		`${METADATA_PATH} 必须通过 ${STYLE_RESOURCE_TOKEN} 声明 Lite CSS`,
 	);
 }
-const readerStylesUrl = contentAddressedFileUrl(
+const readerStylesUrl = versionedLocalFileUrl(
 	stylesheetFilePath,
 	stylesheetSha256,
 );

@@ -2,6 +2,8 @@ import { LifecycleScope } from '../kernel/lifecycle.js';
 
 export interface ReaderExclusivePanelEntry {
 	readonly id: string;
+	/** 同组面板并存，由共享标签栏切换 active surface。 */
+	readonly coexistGroup?: string;
 	readonly trigger: HTMLElement;
 	readonly isOpen: () => boolean;
 	readonly open: () => void | Promise<void>;
@@ -10,6 +12,9 @@ export interface ReaderExclusivePanelEntry {
 
 export interface ReaderExclusivePanelCoordinatorOptions {
 	readonly entries: readonly ReaderExclusivePanelEntry[];
+	readonly beforeOpen?: (
+		target: ReaderExclusivePanelEntry,
+	) => boolean | void | Promise<boolean | void>;
 	readonly parentScope?: LifecycleScope;
 	readonly onError?: (cause: unknown) => void;
 }
@@ -18,11 +23,15 @@ export interface ReaderExclusivePanelCoordinatorOptions {
 export class ReaderExclusivePanelCoordinator {
 	readonly scope: LifecycleScope;
 	readonly #entries: readonly ReaderExclusivePanelEntry[];
+	readonly #beforeOpen: NonNullable<
+		ReaderExclusivePanelCoordinatorOptions['beforeOpen']
+	>;
 	readonly #onError: (cause: unknown) => void;
 	#epoch = 0;
 
 	constructor(options: ReaderExclusivePanelCoordinatorOptions) {
 		this.#entries = Object.freeze([...options.entries]);
+		this.#beforeOpen = options.beforeOpen ?? (() => {});
 		this.#onError = options.onError ?? (() => {});
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		const triggers = new Set<HTMLElement>();
@@ -53,18 +62,26 @@ export class ReaderExclusivePanelCoordinator {
 		const epoch = ++this.#epoch;
 		target.trigger.setAttribute('aria-busy', 'true');
 		try {
-			if (target.isOpen()) {
+			if (target.isOpen() && !target.coexistGroup) {
 				await target.close();
 				return;
 			}
 			for (const entry of this.#entries) {
 				if (entry === target || !entry.isOpen()) continue;
+				if (
+					target.coexistGroup &&
+					entry.coexistGroup === target.coexistGroup
+				) continue;
 				const closed = await entry.close();
 				if (closed === false || epoch !== this.#epoch || this.scope.destroyed) {
 					return;
 				}
 			}
 			if (epoch !== this.#epoch || this.scope.destroyed) return;
+			const ready = await this.#beforeOpen(target);
+			if (ready === false || epoch !== this.#epoch || this.scope.destroyed) {
+				return;
+			}
 			await target.open();
 		} catch (cause) {
 			if (!this.scope.destroyed && epoch === this.#epoch) this.#onError(cause);

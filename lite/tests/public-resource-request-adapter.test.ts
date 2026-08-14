@@ -26,6 +26,7 @@ function assert(condition: unknown, message: string): asserts condition {
 
 class MemoryStore implements ResponseCacheStore {
 	readonly entries = new Map<string, ResponseCacheEntry>();
+	readonly invalidations: ResponseCacheInvalidation[] = [];
 
 	async read(id: string): Promise<ResponseCacheEntry | null> {
 		return this.entries.get(id) ?? null;
@@ -36,6 +37,7 @@ class MemoryStore implements ResponseCacheStore {
 	}
 
 	async invalidate(query: ResponseCacheInvalidation): Promise<void> {
+		this.invalidations.push(query);
 		for (const [id, entry] of this.entries) {
 			if (
 				query.all ||
@@ -66,8 +68,9 @@ class InlineClient implements CoordinatedRequestPort {
 }
 
 const client = new InlineClient();
+const responseStore = new MemoryStore();
 const responses = new ResponseRepository({
-	store: new MemoryStore(),
+	store: responseStore,
 	maxMemoryEntries: 8,
 	maxMemoryBytes: 1024,
 	now: () => 100,
@@ -171,4 +174,61 @@ const rejected = await nonImageAdapter.load('data:text/html,not-an-image', {
 assert(
 	rejected instanceof Error && !nonImageBodyRead,
 	'明确非 image Content-Type 必须在读取 Blob 与进入共享缓存前被拒绝',
+);
+
+let blankAvatarBodyReads = 0;
+const blankAvatarPort = new BrowserPublicResourceHttpPort({
+	request: async () => ({
+		ok: true,
+		status: 200,
+		headers: new Headers({
+			'Content-Type': 'image/png',
+			'Last-Modified': 'Sun, 31 Dec 1989 16:00:00 GMT',
+		}),
+		async blob() {
+			blankAvatarBodyReads += 1;
+			return new Blob(['blank-avatar'], { type: 'image/png' });
+		},
+	}),
+});
+const blankAvatarAdapter = new PublicResourceRequestAdapter({
+	gateway,
+	http: blankAvatarPort,
+	baseUrl: 'https://linux.do/t/10',
+	cache: {
+		kind: 'public-resources',
+		tags: ['resource:image'],
+		freshForMs: 1000,
+		retainForMs: 10_000,
+		persist: true,
+	},
+});
+await blankAvatarAdapter.load('data:image/png,ordinary-image', { signal });
+const rejectedBlankAvatar = await blankAvatarAdapter.load(
+	'data:image/png,discourse-blank-avatar',
+	{ signal, validation: 'discourse-avatar' },
+).catch((error: unknown) => error);
+assert(
+	rejectedBlankAvatar instanceof Error && blankAvatarBodyReads === 1,
+	'Discourse 1989/1990 空头像哨兵必须只在头像校验链拒绝，并在读取 Blob 前继续候选',
+);
+
+await adapter.load('/uploads/a.png', { signal });
+await adapter.load('/uploads/b.png', { signal });
+const invalidationCount = responseStore.invalidations.length;
+const batchInvalidation = await adapter.invalidateManyWithReport([
+	'/uploads/a.png',
+	'/uploads/b.png',
+	'/uploads/a.png#duplicate',
+	'data:image/png,local',
+]);
+const batchQuery = responseStore.invalidations.at(-1);
+assert(
+	batchInvalidation.complete &&
+		batchInvalidation.memoryEntries === 2 &&
+		responseStore.invalidations.length === invalidationCount + 1 &&
+		batchQuery?.ids?.length === 2 &&
+		await adapter.cached('/uploads/a.png') === null &&
+		await adapter.cached('/uploads/b.png') === null,
+	'多图片缓存失效必须去重并合并为一次中央缓存事务，不能按图片数重复扫描持久缓存',
 );

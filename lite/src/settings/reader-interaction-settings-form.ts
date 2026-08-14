@@ -47,7 +47,7 @@ export interface ReaderInteractionSettingsFormOptions<
 	readonly replyTree:
 		ReaderReplyTreePreferencesAdapter<TPreferences>;
 	readonly replyTreePreview?: ReaderReplyTreePreferencesPreviewPort;
-	readonly boostsAvailable?: boolean;
+	readonly boostsAvailable?: boolean | (() => boolean);
 	readonly readPreferences: () => Readonly<TPreferences>;
 	readonly preferenceChanges: Pick<
 		Signal<Readonly<TPreferences>>,
@@ -66,7 +66,7 @@ const BOOST_COPY_SETTING_NAMES =
 		'counterMarker',
 		'counterStep',
 		'fixedSuffix',
-	]);
+		]);
 
 /**
  * “帖子与回复”面板的唯一领域表单。
@@ -85,6 +85,8 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 		ReaderReplyTreePreferencesAdapter<TPreferences>;
 	readonly #replyTreePreview:
 		ReaderReplyTreePreferencesPreviewPort | undefined;
+	readonly #boostsAvailable: () => boolean;
+	readonly #boostSectionHost: HTMLElement;
 	readonly #boostDraft: ReaderObjectSettingsDraft<
 		BoostCopySettings,
 		BoostCopySettingName
@@ -125,6 +127,9 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 		this.#topicActionRail = options.topicActionRail;
 		this.#replyTree = options.replyTree;
 		this.#replyTreePreview = options.replyTreePreview;
+		this.#boostsAvailable = typeof options.boostsAvailable === 'function'
+			? options.boostsAvailable
+			: () => options.boostsAvailable !== false;
 		this.#boostDraft = new ReaderObjectSettingsDraft(
 			BOOST_COPY_SETTING_NAMES,
 			this.#boostCopy.read(options.readPreferences()),
@@ -416,14 +421,17 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 			'展示当前规则实际会复制出的结果；使用递增数字时会同时展示连续两次复制，方便确认步长。';
 		previewRow.append(previewLabel, previewValue);
 		section.append(previewRow);
-		const boostSectionHost = element(
+		this.#boostSectionHost = element(
 			document,
 			'div',
 			'ldp-boost-settings-availability',
 		);
-		boostSectionHost.hidden = options.boostsAvailable === false;
-		boostSectionHost.append(section);
-		groups.append(railSection, treeSection, boostSectionHost);
+		this.#boostSectionHost.append(section);
+		groups.append(
+			railSection,
+			treeSection,
+			this.#boostSectionHost,
+		);
 
 		const footer = settingsFooter(document, '恢复默认');
 		this.#status = footer.status;
@@ -480,13 +488,26 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 			const treeChanged = this.#treeDraft.rebase(
 				this.#replyTree.read(preferences),
 			);
-			if (!boostChanged && !railChanged && !treeChanged) return;
+			if (!boostChanged && !railChanged && !treeChanged) {
+				return;
+			}
 			this.#sync();
 			if (treeChanged) this.#previewTree();
 			this.#controller.refresh();
 		}, this.scope);
 		this.scope.add(() => this.#host.replaceChildren());
+		this.refreshCapabilities();
 		this.#sync();
+	}
+
+	refreshCapabilities(): void {
+		let available = false;
+		try {
+			available = this.#boostsAvailable();
+		} catch {
+			// 可选宿主插件检测失败时先隐藏，下一次打开面板会重新读取。
+		}
+		this.#boostSectionHost.hidden = !available;
 	}
 
 	destroy(): void {

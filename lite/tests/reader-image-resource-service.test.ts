@@ -65,16 +65,19 @@ blobs.set(
 );
 const cache = new Map<string, Blob>();
 const invalidated: string[] = [];
+const invalidationBatches: string[][] = [];
 const calls: string[] = [];
+const loadValidations: Array<string | undefined> = [];
 const normalize = (source: string): string =>
 	new URL(source, 'https://linux.do/').href;
 const resources = {
 	normalize(source: string) {
 		return normalize(source);
 	},
-	async load(source: string) {
+	async load(source: string, options?: { readonly validation?: string }) {
 		const normalized = normalize(source);
 		calls.push(normalized);
+		loadValidations.push(options?.validation);
 		const blob = blobs.get(normalized);
 		if (!blob) throw new RequestStatusError(404);
 		cache.set(normalized, blob);
@@ -94,6 +97,19 @@ const resources = {
 		cache.delete(normalized);
 		return {
 			memoryEntries: 1,
+			failures: [],
+			complete: true,
+		};
+	},
+	async invalidateManyWithReport(sources: readonly string[]) {
+		const normalized = [...new Set(sources.map((source) => normalize(source)))];
+		invalidationBatches.push(normalized);
+		for (const source of normalized) {
+			invalidated.push(source);
+			cache.delete(source);
+		}
+		return {
+			memoryEntries: normalized.length,
 			failures: [],
 			complete: true,
 		};
@@ -185,11 +201,41 @@ const invalidationReport = await service.invalidateSources([
 assert(
 	invalidationReport.complete &&
 		invalidationReport.memoryEntries === 1 &&
+		invalidationBatches.length === 1 &&
+		invalidationBatches[0]?.length === 1 &&
 		invalidated.filter((source) => source === first.originalSrc).length === 2,
-	'主题图片失效必须先去重，再向当前主题重建事务返回精确缓存报告',
+	'主题图片失效必须先去重并只提交一个批次，再向当前主题重建事务返回精确缓存报告',
 );
 service.destroy();
 assert(revoked.includes('blob:test-4'), '销毁资源服务必须回收剩余 Object URL');
+
+const avatarCallStart = calls.length;
+const avatarService = new ReaderImageResourceService({
+	resources,
+	objectUrls: {
+		createObjectURL() {
+			return 'blob:avatar-source';
+		},
+		revokeObjectURL() {},
+	},
+});
+const avatarSource = await avatarService.resolveSource(first.previewSrc);
+const repeatedAvatarSource = await avatarService.resolveSource(first.previewSrc);
+assert(
+	avatarSource === 'blob:avatar-source' &&
+		repeatedAvatarSource === avatarSource &&
+		calls.length === avatarCallStart + 1,
+	'页面上下文无法直连的头像必须复用统一 Blob 请求、缓存与 Object URL',
+);
+const validatedAvatarSource = await avatarService.resolveAvatarSource(
+	first.previewSrc,
+);
+assert(
+	validatedAvatarSource === first.previewSrc &&
+		loadValidations.at(-1) === 'discourse-avatar',
+	'持久头像必须经 Discourse 空头像校验后返回稳定 URL，不占用 Object URL LRU',
+);
+avatarService.destroy();
 
 let resolveShared!: (blob: Blob) => void;
 let rejectShared!: (error: unknown) => void;

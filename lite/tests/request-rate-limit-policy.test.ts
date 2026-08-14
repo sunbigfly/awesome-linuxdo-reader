@@ -49,6 +49,7 @@ const first429 = policy.noteRateLimit({
 });
 assert(first429.scope === 'endpoint', '单个未知 429 只应归因当前端点');
 assert(first429.waitMs === 2000, '单次决策必须直接采用当前响应 Retry-After');
+assert(first429.authoritative === true, '有效 Retry-After 必须标记为权威等待');
 
 now += 1000;
 const secondRoute429 = policy.noteRateLimit({
@@ -73,12 +74,31 @@ assert(knownGlobal.waitMs === 4000, '已知全局 Retry-After 错误');
 assert(knownGlobal.window === '60s', '已知全局窗口类型必须进入共享许可决策');
 
 now += 5000;
+const knownWindowWithoutRetryAfter = policy.noteRateLimit({
+	input: 'https://linux.do/latest.json',
+	retryAfter: null,
+	knownGlobalWindow: true,
+	globalWindow: '10s',
+});
+assert(
+	knownWindowWithoutRetryAfter.scope === 'global' &&
+		knownWindowWithoutRetryAfter.waitMs === 10_000 &&
+		knownWindowWithoutRetryAfter.authoritative === true,
+	'缺少 Retry-After 时必须按服务端明确的 10 秒窗口等待，不能退回 1.5 秒心理延迟',
+);
+
+now += 5000;
 const endpointAgain = policy.noteRateLimit({
 	input: topicEndpoint,
 	retryAfter: null,
 	knownGlobalWindow: false,
 });
 assert(endpointAgain.scope === 'endpoint', '证据过期后应恢复端点级判断');
+assert(
+	policy.identity('https://linux.do/t/456/posts.json?post_ids%5B%5D=11').route ===
+		firstIdentity.route,
+	'中央 client 必须通过同一 policy 基址得到共享闸门使用的规范化路由',
+);
 policy.reset();
 now += 100;
 const afterReset = policy.noteRateLimit({

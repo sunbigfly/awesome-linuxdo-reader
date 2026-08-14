@@ -58,10 +58,13 @@ const shellIconNames = [
 	'floating-window',
 	'maximize-2',
 	'arrow-up',
+	'check',
 	'user-round',
 	'pencil',
 	'rotate-ccw',
 	'external-link',
+	'select-items',
+	'trash-2',
 	'x',
 ] as const;
 for (const name of shellIconNames) {
@@ -95,6 +98,10 @@ const shellIconControls = [
 		'.ldp-bookmarks-toggle',
 		'.ldp-bookmarks-default-actions > button',
 		'.ldp-bookmarks-bulk-actions > button',
+		'.ldp-title-actions > .ldp-reader-refresh',
+		'.ldp-title-actions > .ldp-open',
+		'.ldp-title-actions > .ldp-close',
+		'.ldp-title > .ldp-topic-edit-trigger',
 		'.ldp-title-actions > button',
 		'.ldp-title-actions > a',
 		'.ldp-rate-limit-challenge',
@@ -206,24 +213,34 @@ assert(
 		template.notificationsPopover.hidden &&
 		template.notificationModeTabs.length === 2 &&
 		template.notificationGroupPanels.length === 2 &&
-		template.notificationGroupTabs.length === 14 &&
+		template.notificationGroupTabs.length === 13 &&
 		template.notificationList.querySelector('.ldp-notification-empty') !== null &&
 		template.notificationPagePrevious.disabled &&
 		template.notificationPageNext.disabled,
-	'消息按钮、2 模式、14 分类、工具栏、列表与分页必须由稳定 Shell 提供完整命名锚点',
+	'消息按钮、2 模式、13 个可见分类、工具栏、列表与分页必须由稳定 Shell 提供完整命名锚点',
 );
 assert(
 	template.notificationSearch.className ===
 		'ldp-popover-search-input ldp-notification-search' &&
 		template.notificationSearchClear.previousElementSibling ===
 			template.notificationSearch &&
+		template.notificationSearch.parentElement?.parentElement?.classList.contains(
+			'ldp-popover-search-tools',
+		) === true &&
+		template.notificationCategoryFilter.parentElement?.classList.contains(
+			'ldp-popover-taxonomy-filters',
+		) === true &&
+		template.notificationTagFilter.previousElementSibling ===
+			template.notificationCategoryFilter &&
+		template.notificationCategoryFilter.options[0]?.textContent === '类别' &&
+		template.notificationTagFilter.options[0]?.textContent === '标签' &&
 		template.notificationPagePrevious.className ===
 			'ldp-notification-page-prev' &&
 		template.notificationPageInfo.previousElementSibling ===
 			template.notificationPagePrevious &&
 		template.notificationPageNext.previousElementSibling ===
 			template.notificationPageInfo,
-	'消息搜索与分页工厂必须保持既有 class 和节点顺序',
+	'消息搜索、类别标签过滤与分页工厂必须保持稳定 class 和节点顺序',
 );
 assert(
 	template.historyToggle.parentElement !== null &&
@@ -240,6 +257,16 @@ assert(
 		'ldp-popover-search-input ldp-history-search' &&
 		template.historySearchClear.previousElementSibling ===
 			template.historySearch &&
+		template.historySearch.parentElement?.parentElement?.classList.contains(
+			'ldp-popover-search-tools',
+		) === true &&
+		template.historyCategoryFilter.parentElement?.classList.contains(
+			'ldp-popover-taxonomy-filters',
+		) === true &&
+		template.historyTagFilter.previousElementSibling ===
+			template.historyCategoryFilter &&
+		template.historyCategoryFilter.options[0]?.textContent === '类别' &&
+		template.historyTagFilter.options[0]?.textContent === '标签' &&
 		template.historySelectScope.getAttribute('aria-label') ===
 			'历史全选范围' &&
 		template.historyBulkActions.children[0] ===
@@ -252,24 +279,41 @@ assert(
 			template.historyMultiDone &&
 		template.historyPagePrevious.className ===
 			'ldp-history-page-prev ldp-notification-page-prev',
-	'历史搜索、多选与分页工厂必须保持既有 class、ARIA 和节点顺序',
+	'历史搜索、类别标签过滤、多选与分页必须复用共享控件并保持稳定节点顺序',
 );
 assert(
 	template.bookmarksToggle.parentElement === template.headerActions &&
 		template.bookmarksPopover.parentElement === template.headerActions &&
 		template.bookmarksPopover.hidden &&
-		template.bookmarkTabs.length === 3 &&
+		template.bookmarkTabs.length === 5 &&
+		template.bookmarkTabs.map((tab) => tab.textContent).join(',') ===
+			'回复,Boost,表情回应,收藏帖子,收藏楼层' &&
+		template.bookmarkTabs[0]?.classList.contains('active') &&
+		template.bookmarkTabs[0]?.getAttribute('aria-selected') === 'true' &&
+		template.bookmarksPopover.querySelector(
+			'.ldp-bookmark-history-progress',
+		) === null &&
 		template.bookmarkReactionFilters.hidden &&
 		template.bookmarksList.querySelector('.ldp-notification-empty') !== null &&
 		template.bookmarksPagePrevious.disabled &&
 		template.bookmarksPageNext.disabled,
-	'收藏按钮、三分类、筛选、多选、列表与分页必须由稳定 Shell 提供完整命名锚点',
+	'收藏按钮、五分类、筛选、多选、列表与分页必须由稳定 Shell 提供完整命名锚点',
 );
 assert(
 	template.bookmarksSearch.className ===
 		'ldp-popover-search-input ldp-bookmarks-search' &&
 		template.bookmarksSearchClear.previousElementSibling ===
 			template.bookmarksSearch &&
+		template.bookmarksSearch.parentElement?.parentElement?.classList.contains(
+			'ldp-popover-search-tools',
+		) === true &&
+		template.bookmarkCategoryFilter.parentElement?.classList.contains(
+			'ldp-popover-taxonomy-filters',
+		) === true &&
+		template.bookmarkTagFilter.previousElementSibling ===
+			template.bookmarkCategoryFilter &&
+		template.bookmarkCategoryFilter.options[0]?.textContent === '类别' &&
+		template.bookmarkTagFilter.options[0]?.textContent === '标签' &&
 		template.bookmarksSelectScope.getAttribute('aria-label') ===
 			'收藏全选范围' &&
 		template.bookmarksBulkActions.children[0] ===
@@ -280,18 +324,35 @@ assert(
 			template.bookmarksDeleteSelected &&
 		template.bookmarksBulkActions.children[3] ===
 			template.bookmarksMultiDone &&
+		template.bookmarksSelectToggle.querySelector(
+			'[data-icon="select-items"]',
+		) !== null &&
+		template.bookmarksDeleteSelected.querySelector(
+			'[data-icon="trash-2"]',
+		) !== null &&
+		template.bookmarksMultiDone.querySelector('[data-icon="check"]') !== null &&
 		template.bookmarksPagePrevious.className ===
 			'ldp-bookmarks-page-prev ldp-notification-page-prev',
-	'收藏搜索、多选与分页工厂必须保持既有 class、ARIA 和节点顺序',
+	'收藏搜索、类别标签过滤、多选与分页工厂必须保持稳定 class、ARIA 和节点顺序',
 );
 assert(
 	template.titleActions.parentElement === template.view.modal.querySelector(
 		'.ldp-header',
 	) &&
-	template.topicEditTrigger.parentElement === template.titleActions &&
+	template.topicEditTrigger.parentElement === template.titleJump.parentElement &&
 	template.topicEditTrigger.hidden &&
 	template.topicEditTrigger.getAttribute('aria-haspopup') === 'dialog' &&
 	template.topicEditTrigger.getAttribute('aria-expanded') === 'false' &&
+	template.headerActionsToggle.parentElement === template.titleActions &&
+	template.headerActions.parentElement === template.titleActions.parentElement &&
+	template.headerActionsToggle.getAttribute('aria-expanded') === 'false' &&
+	template.headerActionsToggle.querySelector('[data-icon="chevron-left"]') !== null &&
+	!template.headerActions.hidden &&
+	!template.titleActions.classList.contains('is-expanded') &&
+	template.titleActions.firstElementChild === template.headerActionsToggle &&
+	template.headerActionsToggle.nextElementSibling === template.refreshTopic &&
+	template.refreshTopic.nextElementSibling === template.openNative &&
+	template.openNative.nextElementSibling === template.closeReader &&
 	template.refreshTopic.parentElement === template.titleActions &&
 	template.openNative.parentElement === template.titleActions &&
 	template.closeReader.parentElement === template.titleActions &&
@@ -300,7 +361,22 @@ assert(
 	template.openNative.target === '_blank' &&
 	template.openNative.rel.includes('noopener') &&
 	!template.openNative.hasAttribute('href'),
-	'编辑、刷新、原生主题与关闭入口必须复刻稳定 Header 层级，Topic 未打开时编辑、刷新和原生入口不可用',
+	'编辑入口必须跟在标题后，收纳箭头必须在右上角操作组最左侧',
+);
+const shellWindow = document.defaultView!;
+template.titleActions.dispatchEvent(new shellWindow.Event('pointerenter'));
+assert(
+	template.titleActions.classList.contains('is-expanded') &&
+		template.headerActionsToggle.getAttribute('aria-expanded') === 'true' &&
+		template.headerActionsToggle.querySelector('[data-icon="chevron-right"]') !== null,
+	'右上角收纳组必须在 pointerenter 同步展开，不得等待延时',
+);
+template.titleActions.dispatchEvent(new shellWindow.Event('pointerleave'));
+assert(
+	!template.titleActions.classList.contains('is-expanded') &&
+		template.headerActionsToggle.getAttribute('aria-expanded') === 'false' &&
+		template.headerActionsToggle.querySelector('[data-icon="chevron-left"]') !== null,
+	'右上角收纳组必须在 pointerleave 同步收起，延时必须为 0',
 );
 assert(
 	template.topicTimeline.parentElement?.classList.contains('ldp-reader-main') &&

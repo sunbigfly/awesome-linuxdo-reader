@@ -69,6 +69,7 @@ const translationProfile = Object.freeze({
 await translation.saveConfig(Object.freeze({
 	profiles: Object.freeze([translationProfile]),
 	activeBaseUrl: translationProfile.baseUrl,
+	animation: translationProfile.animation,
 }));
 await webDav.saveConfig(Object.freeze({
 	...createReaderWebDavDefaultConfig(),
@@ -110,15 +111,39 @@ assert(
 	exported.translation?.profiles[0]?.model === 'translate-model' &&
 	exported.webDav?.endpoint === 'https://dav.example.com/' &&
 	exported.webDav.categories['offline-topics'] === false &&
+	exported.webDav.categories['notification-history'] === false &&
+	exported.webDav.categories['activity-history'] === false &&
 	!exportedText.includes('translation-secret-value') &&
 	!exportedText.includes('dav-user-secret-value') &&
 	!exportedText.includes('dav-password-secret-value'),
-	'v7 导出必须组合三类独立设置、保留离线 Topic 开关且不泄露翻译或 WebDAV 凭据',
+	'v7 导出必须组合三类独立设置、保留新增 WebDAV 开关且不泄露翻译或 WebDAV 凭据',
 );
 
 const legacyV6WebDavCategories = Object.fromEntries(Object.entries(
 	exported.webDav!.categories,
-).filter(([category]) => category !== 'offline-topics'));
+).filter(([category]) => ![
+	'offline-topics',
+	'notification-history',
+	'activity-history',
+].includes(category)));
+const preHistoryV7Prepared = manager.prepare({
+	...exported,
+	webDav: {
+		...exported.webDav!,
+		categories: Object.fromEntries(Object.entries(
+			exported.webDav!.categories,
+		).filter(([category]) => ![
+			'notification-history',
+			'activity-history',
+		].includes(category))),
+	},
+});
+assert(
+	preHistoryV7Prepared.sourceVersion === 7 &&
+	preHistoryV7Prepared.webDav?.categories['notification-history'] === false &&
+	preHistoryV7Prepared.webDav?.categories['activity-history'] === false,
+	'较早导出的 v7 配置必须兼容导入，并把新增历史类别保持为默认关闭',
+);
 const legacyV6Prepared = manager.prepare({
 	...exported,
 	schemaVersion: 6,
@@ -129,8 +154,10 @@ const legacyV6Prepared = manager.prepare({
 });
 assert(
 	legacyV6Prepared.sourceVersion === 6 &&
-	legacyV6Prepared.webDav?.categories['offline-topics'] === false,
-	'旧 v6 组合配置必须兼容导入，并把新增的离线 Topic WebDAV 类别安全保持为默认关闭',
+	legacyV6Prepared.webDav?.categories['offline-topics'] === false &&
+	legacyV6Prepared.webDav?.categories['notification-history'] === false &&
+	legacyV6Prepared.webDav?.categories['activity-history'] === false,
+	'旧 v6 组合配置必须兼容导入，并把新增 WebDAV 类别安全保持为默认关闭',
 );
 
 const importedPayload = {
@@ -185,9 +212,42 @@ try {
 	secretInjectionRejected = error instanceof Error &&
 		error.message === 'invalid_config';
 }
+let webDavSecretInjectionRejected = false;
+try {
+	manager.prepare({
+		...exported,
+		webDav: {
+			...exported.webDav!,
+			username: 'must-not-import',
+			password: 'must-not-import',
+		},
+	});
+} catch (error) {
+	webDavSecretInjectionRejected = error instanceof Error &&
+		error.message === 'invalid_config';
+}
 assert(
-	secretInjectionRejected,
-	'v7 配置必须拒绝伪造的 apiKey 字段，不能静默接纳秘密扩展',
+	secretInjectionRejected && webDavSecretInjectionRejected,
+	'v7 配置必须拒绝伪造的 apiKey、WebDAV 用户名和密码字段，不能静默接纳秘密扩展',
+);
+
+let invalidWebDavTargetRejected = false;
+try {
+	manager.prepare({
+		...exported,
+		webDav: {
+			...exported.webDav!,
+			endpoint: '',
+			remotePath: '',
+		},
+	});
+} catch (error) {
+	invalidWebDavTargetRejected = error instanceof Error &&
+		error.message === 'invalid_config';
+}
+assert(
+	invalidWebDavTargetRejected,
+	'组合配置导入必须复用 WebDAV 业务校验，不能接受空地址或空远端路径',
 );
 
 const sitesBeforeRollback = customSites.snapshot;

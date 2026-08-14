@@ -11,6 +11,9 @@ import {
 	type UnknownRecord,
 	valueRecord,
 } from '../kernel/value-record.js';
+import {
+	BrowserDiscourseMessageBusPort,
+} from './native-message-bus.js';
 
 /**
  * Reader 对 Discourse 宿主容器的唯一最小读取端口。
@@ -21,6 +24,62 @@ import {
 export interface DiscourseHostApiPort {
 	lookup(name: string): unknown;
 	lookupModule(name: string): unknown;
+}
+
+const DEFERRED_SUBSCRIPTION_RETRY_DELAYS_MS = Object.freeze([
+	0,
+	50,
+	100,
+	250,
+	500,
+	1_000,
+	2_000,
+	4_000,
+	7_000,
+]);
+
+/**
+ * document-start 阶段对可选宿主事件源做一次有界延迟绑定。
+ *
+ * `attach` 返回 null 表示能力尚未就绪；返回 cleanup 表示已经完成绑定或确认无需重试。
+ * 首次同步尝试后最多重试约 15 秒，避免把宿主启动时序固化为整个 Reader 会话的缺失。
+ */
+export function discourseDeferredSubscription(
+	attach: () => Cleanup | null,
+): Cleanup {
+	let active = true;
+	let attachedCleanup: Cleanup | null = null;
+	let retryIndex = 0;
+	let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+	const tryAttach = (): void => {
+		if (!active || attachedCleanup) return;
+		const cleanup = attach();
+		if (cleanup) {
+			attachedCleanup = cleanup;
+			return;
+		}
+		if (retryIndex >= DEFERRED_SUBSCRIPTION_RETRY_DELAYS_MS.length) return;
+		const delay = DEFERRED_SUBSCRIPTION_RETRY_DELAYS_MS[retryIndex++];
+		if (delay === 0) {
+			queueMicrotask(tryAttach);
+			return;
+		}
+		retryTimer = setTimeout(() => {
+			retryTimer = null;
+			tryAttach();
+		}, delay);
+	};
+
+	tryAttach();
+	return () => {
+		if (!active) return;
+		active = false;
+		if (retryTimer !== null) clearTimeout(retryTimer);
+		retryTimer = null;
+		attachedCleanup?.();
+		attachedCleanup = null;
+	};
 }
 
 /**
@@ -37,27 +96,29 @@ export function discourseNativeAppEventSubscription(
 ): Cleanup {
 	const eventName = String(eventNameValue).trim();
 	if (!eventName) return () => {};
-	const appEvents = objectRecord(host.lookup('service:app-events'));
-	const on = appEvents?.on;
-	const off = appEvents?.off;
-	if (typeof on !== 'function' || typeof off !== 'function') return () => {};
-	const owner = Object.freeze({});
-	try {
-		on.call(appEvents, eventName, owner, listener);
-	} catch (cause) {
-		onError?.(cause);
-		return () => {};
-	}
-	let active = true;
-	return () => {
-		if (!active) return;
-		active = false;
+	return discourseDeferredSubscription(() => {
+		const appEvents = objectRecord(host.lookup('service:app-events'));
+		const on = appEvents?.on;
+		const off = appEvents?.off;
+		if (typeof on !== 'function' || typeof off !== 'function') return null;
+		const owner = Object.freeze({});
 		try {
-			off.call(appEvents, eventName, owner, listener);
+			on.call(appEvents, eventName, owner, listener);
 		} catch (cause) {
 			onError?.(cause);
+			return () => {};
 		}
-	};
+		let active = true;
+		return () => {
+			if (!active) return;
+			active = false;
+			try {
+				off.call(appEvents, eventName, owner, listener);
+			} catch (cause) {
+				onError?.(cause);
+			}
+		};
+	});
 }
 
 export interface DiscourseNativePostRuntimeBindings {
@@ -194,49 +255,117 @@ export function discourseNativeTheme(
 			listener: (mode: ReaderThemeMode) => void,
 			scope: LifecycleScope,
 		): Cleanup {
-			const service = objectRecord(
-				host.lookup('service:interface-color'),
-			);
-			const appEvents = objectRecord(service?.appEvents);
-			const on = appEvents?.on;
-			const off = appEvents?.off;
-			if (typeof on !== 'function' || typeof off !== 'function') {
-				return () => {};
-			}
-			const context = Object.freeze({});
-			const onChanged = () => {
-				const mode = discourseNativeThemeMode(service);
-				if (mode) listener(mode);
-			};
-			try {
-				on.call(
-					appEvents,
-					'interface-color:changed',
-					context,
-					onChanged,
+			const cleanup = discourseDeferredSubscription(() => {
+				const service = objectRecord(
+					host.lookup('service:interface-color'),
 				);
-			} catch {
-				return () => {};
-			}
-			let active = true;
-			const cleanup = () => {
-				if (!active) return;
-				active = false;
+				const appEvents = objectRecord(service?.appEvents);
+				const on = appEvents?.on;
+				const off = appEvents?.off;
+				if (typeof on !== 'function' || typeof off !== 'function') {
+					return null;
+				}
+				const context = Object.freeze({});
+				const onChanged = () => {
+					const mode = discourseNativeThemeMode(service);
+					if (mode) listener(mode);
+				};
 				try {
-					off.call(
+					on.call(
 						appEvents,
 						'interface-color:changed',
 						context,
 						onChanged,
 					);
 				} catch {
-					// Discourse 已卸载时仍允许 Reader scope 完整释放。
+					return () => {};
 				}
-			};
+				let active = true;
+				return () => {
+					if (!active) return;
+					active = false;
+					try {
+						off.call(
+							appEvents,
+							'interface-color:changed',
+							context,
+							onChanged,
+						);
+					} catch {
+						// Discourse 已卸载时仍允许 Reader scope 完整释放。
+					}
+				};
+			});
 			scope.add(cleanup);
 			return cleanup;
 		},
 	});
+}
+
+export type DiscourseNativeDefaultSiteThemeResult =
+	| 'already-default'
+	| 'updated'
+	| 'unavailable'
+	| 'failed';
+
+/**
+ * 嵌入 Reader 对 Discourse 站点默认主题的唯一宿主写桥。
+ *
+ * 这里的“站点主题”是侧栏画笔入口显示的 Default，不是明暗配色。桥只从 site 的
+ * user_themes 找 default 标记，并复用 Discourse 官方 theme-selector 模块写入带
+ * theme_key_seq 的本地主题 Cookie；整页刷新仍由 userscript application 决定。
+ */
+export function discourseNativeDefaultSiteTheme(
+	host: DiscourseHostApiPort,
+): DiscourseNativeDefaultSiteThemeResult {
+	const site = host.lookup('service:site');
+	const themeValues = nativeModelValue(site, 'user_themes') ??
+		nativeModelValue(site, 'userThemes');
+	const themes = Array.isArray(themeValues) ? themeValues : [];
+	const defaultTheme = themes.find((value) =>
+		nativeModelValue(value, 'default') === true
+	);
+	const defaultThemeId = Number(
+		nativeModelValue(defaultTheme, 'theme_id') ??
+			nativeModelValue(defaultTheme, 'themeId'),
+	);
+	if (!Number.isSafeInteger(defaultThemeId) || defaultThemeId === 0) {
+		return 'unavailable';
+	}
+
+	const module = objectRecord(
+		host.lookupModule('discourse/lib/theme-selector'),
+	);
+	const defaultExport = objectRecord(module?.default);
+	const owner = typeof module?.setLocalTheme === 'function'
+		? module
+		: defaultExport;
+	const currentThemeId = owner?.currentThemeId;
+	const setLocalTheme = owner?.setLocalTheme;
+	if (
+		typeof currentThemeId !== 'function' ||
+		typeof setLocalTheme !== 'function'
+	) {
+		return 'unavailable';
+	}
+
+	try {
+		if (Number(currentThemeId.call(owner)) === defaultThemeId) {
+			return 'already-default';
+		}
+		const currentUser = discourseNativeCurrentUser(host);
+		const themeSequence = Number(
+			nativeModelValue(currentUser, 'theme_key_seq') ??
+				nativeModelValue(currentUser, 'themeKeySeq'),
+		);
+		if (!Number.isSafeInteger(themeSequence) || themeSequence < 0) {
+			return 'unavailable';
+		}
+		setLocalTheme.call(owner, [defaultThemeId], themeSequence);
+		return 'updated';
+	} catch {
+		return 'failed';
+	}
 }
 
 export type DiscourseNativeRelativeTimeFormatter = (
@@ -276,6 +405,20 @@ export interface DiscourseNativeTopicEditCatalogPort {
 		readonly categoryId: number;
 		readonly selected: readonly DiscourseNativeTopicEditTag[];
 	}>): Promise<readonly DiscourseNativeTopicEditTag[]>;
+}
+
+export interface DiscourseNativeUnwantedTopicRuleUser {
+	readonly id: number | null;
+	readonly username: string;
+	readonly name: string;
+	readonly avatarTemplate: string;
+}
+
+export interface DiscourseNativeUnwantedTopicRuleCatalogPort
+	extends DiscourseNativeTopicEditCatalogPort {
+	searchUsers(query: string): Promise<
+		readonly DiscourseNativeUnwantedTopicRuleUser[]
+	>;
 }
 
 /**
@@ -364,7 +507,7 @@ export function discourseNativeTopicEditCatalog(
 					const incoming = Array.isArray(payload?.results)
 						? payload.results
 						: [];
-				const sort = tagUtilsOwner.sortSearchResults;
+					const sort = tagUtilsOwner.sortSearchResults;
 					return typeof sort === 'function'
 						? sort.call(tagUtilsOwner, incoming) as readonly unknown[]
 						: incoming;
@@ -385,6 +528,69 @@ export function discourseNativeTopicEditCatalog(
 				}));
 			}
 			return Object.freeze([...byName.values()]);
+		},
+	});
+}
+
+/**
+ * “不想看”规则编辑器复用 Topic 编辑分类/标签能力，并只经宿主 user-search 查询用户。
+ * 候选结果保留稳定 ID 与唯一 username，重名 display name 必须由调用方显式二次选择。
+ */
+export function discourseNativeUnwantedTopicRuleCatalog(
+	host: DiscourseHostApiPort,
+): DiscourseNativeUnwantedTopicRuleCatalogPort {
+	const topicCatalog = discourseNativeTopicEditCatalog(host);
+	return Object.freeze({
+		categories: () => topicCatalog.categories(),
+		searchTags: (request: Readonly<{
+			readonly query: string;
+			readonly categoryId: number;
+			readonly selected: readonly DiscourseNativeTopicEditTag[];
+		}>) => topicCatalog.searchTags(request),
+		async searchUsers(
+			queryValue: string,
+		): Promise<readonly DiscourseNativeUnwantedTopicRuleUser[]> {
+			const loaded = host.lookupModule('discourse/lib/user-search');
+			const module = valueRecord(loaded);
+			const search = typeof loaded === 'function'
+				? loaded
+				: module?.default;
+			if (typeof search !== 'function') {
+				throw new Error('Discourse 用户搜索服务尚未就绪');
+			}
+			const query = String(queryValue ?? '').replace(/^@+/, '').trim();
+			if (!query) return Object.freeze([]);
+			const result = await search.call(module, Object.freeze({
+				term: query,
+				includeGroups: false,
+				includeStagedUsers: false,
+				limit: 20,
+			}));
+			const users = valueRecord(result)?.users;
+			const values = Array.isArray(users) ? users : [];
+			const byUsername = new Map<
+				string,
+				DiscourseNativeUnwantedTopicRuleUser
+			>();
+			for (const value of values) {
+				const username = String(
+					nativeModelValue(value, 'username') ?? '',
+				).trim();
+				if (!username) continue;
+				const key = username.toLocaleLowerCase('zh-CN');
+				if (byUsername.has(key)) continue;
+				const id = Number(nativeModelValue(value, 'id'));
+				byUsername.set(key, Object.freeze({
+					id: Number.isSafeInteger(id) && id > 0 ? id : null,
+					username,
+					name: String(nativeModelValue(value, 'name') ?? '').trim(),
+					avatarTemplate: String(
+						nativeModelValue(value, 'avatar_template') ??
+							nativeModelValue(value, 'avatarTemplate') ?? '',
+					).trim(),
+				}));
+			}
+			return Object.freeze([...byUsername.values()]);
 		},
 	});
 }
@@ -770,15 +976,6 @@ export function discourseNativeJqueryModule(
 export function discourseNativeFlagCatalog(
 	host: DiscourseHostApiPort,
 ): DiscourseNativeFlagCatalogPort {
-	const site = host.lookup('service:site');
-	const postActionTypeModule = objectRecord(
-		host.lookupModule('discourse/models/post-action-type'),
-	);
-	const postActionTypeDefault = objectRecord(postActionTypeModule?.default);
-	const maxMessageLength = Number(
-		postActionTypeModule?.MAX_MESSAGE_LENGTH ??
-		postActionTypeDefault?.MAX_MESSAGE_LENGTH,
-	);
 	const list = (value: unknown): readonly unknown[] => {
 		if (Array.isArray(value)) return value;
 		const iterator = value !== null &&
@@ -794,6 +991,7 @@ export function discourseNativeFlagCatalog(
 	};
 	return Object.freeze({
 		flagTypes(): readonly DiscourseNativeFlagType[] {
+			const site = host.lookup('service:site');
 			return Object.freeze(list(nativeModelValue(site, 'flagTypes'))
 				.map((value) => {
 					const id = Number(nativeModelValue(value, 'id'));
@@ -830,6 +1028,16 @@ export function discourseNativeFlagCatalog(
 				));
 		},
 		messageMaxLength(): number {
+			const postActionTypeModule = objectRecord(
+				host.lookupModule('discourse/models/post-action-type'),
+			);
+			const postActionTypeDefault = objectRecord(
+				postActionTypeModule?.default,
+			);
+			const maxMessageLength = Number(
+				postActionTypeModule?.MAX_MESSAGE_LENGTH ??
+				postActionTypeDefault?.MAX_MESSAGE_LENGTH,
+			);
 			return Number.isSafeInteger(maxMessageLength) &&
 				maxMessageLength > 0
 				? maxMessageLength
@@ -1143,18 +1351,20 @@ export function discourseNativeExactTimeFormatter(
 export function discourseNativeTopicPresentation(
 	host: DiscourseHostApiPort,
 ): DiscourseNativeTopicPresentationPort {
-	const urlModule = objectRecord(host.lookupModule('discourse/lib/url'));
-	const urlDefault = objectRecord(urlModule?.default);
-	const urlOwner = typeof urlModule?.getCategoryAndTagUrl === 'function'
-		? urlModule
-		: urlDefault;
-	const avatarModule = objectRecord(
-		host.lookupModule('discourse/lib/avatar-utils'),
-	);
-	const avatarDefault = objectRecord(avatarModule?.default);
-	const avatarOwner = typeof avatarModule?.avatarUrl === 'function'
-		? avatarModule
-		: avatarDefault;
+	const urlOwner = (): UnknownRecord | null => {
+		const module = objectRecord(host.lookupModule('discourse/lib/url'));
+		return typeof module?.getCategoryAndTagUrl === 'function'
+			? module
+			: objectRecord(module?.default);
+	};
+	const avatarOwner = (): UnknownRecord | null => {
+		const module = objectRecord(
+			host.lookupModule('discourse/lib/avatar-utils'),
+		);
+		return typeof module?.avatarUrl === 'function'
+			? module
+			: objectRecord(module?.default);
+	};
 	const categoryModel = (categoryId: number): unknown => {
 		const categories = nativeModelValue(
 			host.lookup('service:site'),
@@ -1169,13 +1379,14 @@ export function discourseNativeTopicPresentation(
 		categoryId: number,
 		tag?: string,
 	): string => {
-		const method = urlOwner?.getCategoryAndTagUrl;
+		const owner = urlOwner();
+		const method = owner?.getCategoryAndTagUrl;
 		const category = categoryId > 0 ? categoryModel(categoryId) : null;
 		if (categoryId > 0 && !category) return '';
 		if (typeof method === 'function') {
 			try {
 				const resolved = String(method.call(
-					urlOwner,
+					owner,
 					category,
 					true,
 					tag,
@@ -1197,13 +1408,14 @@ export function discourseNativeTopicPresentation(
 		avatarSource(template: string, size: number): string {
 			const normalized = String(template ?? '').trim();
 			if (!normalized) return '';
-			const method = avatarOwner?.avatarUrl;
+			const owner = avatarOwner();
+			const method = owner?.avatarUrl;
 			if (typeof method !== 'function') {
 				return normalized.replace(/\{size\}/g, String(size));
 			}
 			try {
 				const resolved = String(
-					method.call(avatarOwner, normalized, size) ?? '',
+					method.call(owner, normalized, size) ?? '',
 				).trim();
 				return (resolved || normalized)
 					.replace(/\{size\}/g, String(size));
@@ -1241,10 +1453,11 @@ export function discourseNativeTopicPresentation(
 		userHref(username: string): string {
 			const normalized = String(username ?? '').trim();
 			if (!normalized) return '';
-			const userPath = urlOwner?.userPath;
+			const owner = urlOwner();
+			const userPath = owner?.userPath;
 			if (typeof userPath === 'function') {
 				try {
-					return String(userPath.call(urlOwner, normalized) ?? '');
+					return String(userPath.call(owner, normalized) ?? '');
 				} catch {
 					return '';
 				}
@@ -1326,6 +1539,12 @@ export interface DiscourseNativeNotificationPresentation {
 	readonly postNumber?: unknown;
 }
 
+export interface DiscourseNativeNotificationClick {
+	readonly notificationId: number;
+	readonly href: string;
+	readonly wasRead: boolean | null;
+}
+
 export interface DiscourseNativeNotificationStatePort {
 	username(): string;
 	unreadCount(): number;
@@ -1338,6 +1557,9 @@ export interface DiscourseNativeNotificationStatePort {
 		notifications: readonly unknown[],
 	): Promise<readonly DiscourseNativeNotificationPresentation[]>;
 	subscribeChanged(listener: () => void): Cleanup;
+	subscribeClicked?(
+		listener: (click: DiscourseNativeNotificationClick) => void,
+	): Cleanup;
 }
 
 export interface DiscourseNativeBookmarkStatePort {
@@ -1462,10 +1684,10 @@ function fallbackNotificationPresentation(
 }
 
 /**
- * current-user、通知 presentation 与 app-events 的宿主唯一窄桥。
+ * current-user、通知 presentation、原生变更信号与宿主点击的唯一窄桥。
  *
- * 通知业务只能消费本端口，不能自行 lookup service/module；本类不发请求、不持有分页、
- * 不渲染 DOM。
+ * 通知业务只能消费本端口，不能自行 lookup service/module；MessageBus payload 只投影为
+ * 失效信号，本类不发请求、不持有分页、不渲染 DOM。
  */
 export class BrowserDiscourseNotificationNativeState
 implements DiscourseNativeNotificationStatePort {
@@ -1656,23 +1878,79 @@ implements DiscourseNativeNotificationStatePort {
 		);
 		const on = appEvents?.on;
 		const off = appEvents?.off;
-		if (typeof on !== 'function' || typeof off !== 'function') return () => {};
+		const cleanups: Cleanup[] = [];
 		const context = Object.freeze({});
-		try {
-			on.call(appEvents, 'notifications:changed', context, listener);
-		} catch {
-			return () => {};
+		if (typeof on === 'function' && typeof off === 'function') {
+			try {
+				on.call(appEvents, 'notifications:changed', context, listener);
+				cleanups.push(() => {
+					try {
+						off.call(appEvents, 'notifications:changed', context, listener);
+					} catch {
+						// 宿主已卸载时不应破坏 Reader application scope 释放。
+					}
+				});
+			} catch {
+				// app-events 缺失时仍尝试原生 MessageBus 通道。
+			}
+		}
+		const userId = Number(nativeModelValue(
+			discourseNativeCurrentUser(this.#host),
+			'id',
+		));
+		if (Number.isSafeInteger(userId) && userId > 0) {
+			const messageBus = new BrowserDiscourseMessageBusPort(this.#host);
+			let active = true;
+			const onMessage = (): void => {
+				void Promise.resolve().then(() => {
+					if (active) listener();
+				});
+			};
+			const channel = `/notification/${userId}`;
+			try {
+				messageBus.subscribe(channel, onMessage);
+				cleanups.push(() => {
+					active = false;
+					try {
+						messageBus.unsubscribe(channel, onMessage);
+					} catch {
+						// MessageBus 可先于 Reader application scope 销毁。
+					}
+				});
+			} catch {
+				active = false;
+				// 原生 MessageBus 不可用时保留 app-event 与可见期回查。
+			}
 		}
 		let active = true;
 		return () => {
 			if (!active) return;
 			active = false;
-			try {
-				off.call(appEvents, 'notifications:changed', context, listener);
-			} catch {
-				// 宿主已卸载时不应破坏 Reader application scope 释放。
-			}
+			for (const cleanup of cleanups.splice(0).reverse()) cleanup();
 		};
+	}
+
+	subscribeClicked(
+		listener: (click: DiscourseNativeNotificationClick) => void,
+	): Cleanup {
+		return discourseNativeAppEventSubscription(
+			this.#host,
+			'user-menu:notification-click',
+			(payload) => {
+				const source = objectRecord(payload);
+				const notification = source?.notification;
+				const notificationId = Number(nativeModelValue(notification, 'id'));
+				if (!Number.isSafeInteger(notificationId) || notificationId <= 0) return;
+				const read = nativeModelValue(notification, 'read');
+				listener(Object.freeze({
+					notificationId,
+					href: String(source?.href ?? '').trim(),
+					wasRead: typeof read === 'boolean'
+						? read
+						: null,
+				}));
+			},
+		);
 	}
 }
 
@@ -1727,47 +2005,49 @@ implements DiscourseNativeBookmarkStatePort {
 	subscribeChanged(
 		listener: (source: 'bookmarks' | 'reactions') => void,
 	): Cleanup {
-		const appEvents = objectRecord(
-			this.#host.lookup('service:app-events'),
-		);
-		const on = appEvents?.on;
-		const off = appEvents?.off;
-		if (typeof on !== 'function' || typeof off !== 'function') return () => {};
-		const context = Object.freeze({});
-		const subscriptions = Object.freeze([
-			['bookmarks:changed', 'bookmarks'],
-			['discourse-reactions:reaction-toggled', 'reactions'],
-		] as const);
-		const attached: Array<Readonly<{
-			name: string;
-			handler: () => void;
-		}>> = [];
-		for (const [name, source] of subscriptions) {
-			const handler = () => listener(source);
-			try {
-				on.call(appEvents, name, context, handler);
-				attached.push(Object.freeze({ name, handler }));
-			} catch {
-				// 单个可选插件事件缺失不能阻止收藏事件订阅。
-			}
-		}
-		let active = true;
-		return () => {
-			if (!active) return;
-			active = false;
-			for (const entry of attached) {
+		return discourseDeferredSubscription(() => {
+			const appEvents = objectRecord(
+				this.#host.lookup('service:app-events'),
+			);
+			const on = appEvents?.on;
+			const off = appEvents?.off;
+			if (typeof on !== 'function' || typeof off !== 'function') return null;
+			const context = Object.freeze({});
+			const subscriptions = Object.freeze([
+				['bookmarks:changed', 'bookmarks'],
+				['discourse-reactions:reaction-toggled', 'reactions'],
+			] as const);
+			const attached: Array<Readonly<{
+				name: string;
+				handler: () => void;
+			}>> = [];
+			for (const [name, source] of subscriptions) {
+				const handler = () => listener(source);
 				try {
-					off.call(
-						appEvents,
-						entry.name,
-						context,
-						entry.handler,
-					);
+					on.call(appEvents, name, context, handler);
+					attached.push(Object.freeze({ name, handler }));
 				} catch {
-					// 宿主卸载时 application scope 仍须完整释放。
+					// 单个可选插件事件缺失不能阻止收藏事件订阅。
 				}
 			}
-		};
+			let active = true;
+			return () => {
+				if (!active) return;
+				active = false;
+				for (const entry of attached) {
+					try {
+						off.call(
+							appEvents,
+							entry.name,
+							context,
+							entry.handler,
+						);
+					} catch {
+						// 宿主卸载时 application scope 仍须完整释放。
+					}
+				}
+			};
+		});
 	}
 }
 

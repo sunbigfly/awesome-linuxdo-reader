@@ -186,7 +186,6 @@ function specialBadges(post: UnknownRecord): readonly Readonly<{
 	if (postType === 4) add('私信回复');
 	if (postType === 2) add('管理操作', 'warn');
 	if (post.wiki === true) add('Wiki');
-	if (post.hidden === true) add('已隐藏', 'warn');
 	if (post.deleted_at) add('已删除', 'danger');
 	if (post.locked === true) add('已锁定', 'warn');
 	return Object.freeze(badges);
@@ -1134,7 +1133,7 @@ export class ReaderTopicSpecialContentFeature<
 			'span',
 			'ldp-new-user-badge',
 		);
-		badge.title = identity.title;
+		badge.dataset.ldpTooltipLabel = identity.title;
 		badge.setAttribute('role', 'img');
 		badge.setAttribute('aria-label', identity.title);
 		badge.append(
@@ -1156,7 +1155,7 @@ export class ReaderTopicSpecialContentFeature<
 		for (const badge of badges) {
 			const node = this.#document.createElement('span');
 			node.className = `ldp-special-badge ${badge.tone}`.trim();
-			if (badge.title) node.title = badge.title;
+			if (badge.title) node.dataset.ldpTooltipLabel = badge.title;
 			if (badge.icon) node.append(this.#icon(badge.icon));
 			const label = htmlElement(this.#document, 'span', '', badge.label);
 			node.append(label);

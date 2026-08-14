@@ -7,6 +7,7 @@ import {
 	parseReaderTopicDownloadPostSelection,
 	readerTopicDownloadCoverage,
 	readerTopicDownloadLocalArchivePlan,
+	READER_TOPIC_DOWNLOAD_WINDOW_GEOMETRY_STORAGE_KEY,
 	ReaderTopicDownloadManager,
 	selectReaderTopicDownloadPosts,
 	type ReaderTopicDownloadArtifact,
@@ -14,6 +15,9 @@ import {
 	type ReaderTopicDownloadRemovalContext,
 	type ReaderTopicDownloadSelection,
 } from '../src/queue/reader-topic-download-manager.js';
+import {
+	READER_COLLECTION_FLOATING_WINDOW_GEOMETRY_KEY,
+} from '../src/collection/reader-collection-floating-window.js';
 import {
 	RequestCloudflareChallengeError,
 	RequestRateLimitError,
@@ -159,6 +163,7 @@ const artifact = (topicId: number): ReaderTopicDownloadArtifact => Object.freeze
 	postCount: 3,
 	expectedPostCount: 3,
 	complete: true,
+	archiveStatus: topicId === 41 ? 404 : null,
 });
 
 const { document: parsedDocument, window: parsedWindowSource } = parseHTML(
@@ -177,7 +182,6 @@ Object.defineProperty(parsedWindow, 'innerHeight', {
 	value: 800,
 });
 const mount = document.querySelector<HTMLElement>('#mount')!;
-const positionAnchor = document.querySelector<HTMLElement>('#download-history')!;
 const firstGate = deferred();
 const staleCancelGate = deferred();
 const retryGate = deferred();
@@ -236,7 +240,6 @@ const manager = new ReaderTopicDownloadManager({
 	document,
 	mount,
 	floating: true,
-	positionAnchor: () => positionAnchor,
 	geometryStorage,
 	currentTopic: () => Object.freeze({
 		topicId: discourseTopicId(41),
@@ -388,18 +391,12 @@ const manager = new ReaderTopicDownloadManager({
 const details = mount.querySelector<HTMLElement>(
 	'.ldp-topic-download-manager',
 )!;
+const floatingWindow = manager.element;
 Object.defineProperty(mount, 'getBoundingClientRect', {
 	configurable: true,
 	value: () => ({
 		left: 100, top: 50, right: 900, bottom: 650,
 		width: 800, height: 600,
-	}),
-});
-Object.defineProperty(positionAnchor, 'getBoundingClientRect', {
-	configurable: true,
-	value: () => ({
-		left: 140, top: 200, right: 180, bottom: 240,
-		width: 40, height: 40,
 	}),
 });
 Object.defineProperty(details, 'getBoundingClientRect', {
@@ -410,7 +407,8 @@ Object.defineProperty(details, 'getBoundingClientRect', {
 	}),
 });
 assert(
-	details.hidden && !details.classList.contains('is-open'),
+	details.hidden && floatingWindow.hidden &&
+		!details.classList.contains('is-open'),
 	'Topic 下载管理默认必须隐藏，只由收纳箱中的历史入口打开',
 );
 assert(
@@ -422,24 +420,52 @@ assert(
 	'创建任务前必须显示当前 Topic 与下载范围，且不得预建重复进度组件',
 );
 assert(
-	details.querySelector('.ldp-topic-download-summary')?.tagName === 'HEADER' &&
+	floatingWindow.querySelector('.ldp-reader-floating-window-title')
+		?.textContent === '主题下载' &&
+	floatingWindow.querySelector('.ldp-reader-floating-window-pin') !== null &&
+	details.querySelector('.ldp-topic-download-summary') === null &&
 		details.querySelector('.ldp-topic-download-toolbar')?.children.length === 1 &&
 		details.querySelector('.ldp-topic-download-selection > label')
 			?.firstElementChild?.textContent === '下载范围' &&
 		details.querySelector('.ldp-topic-download-current')?.parentElement
 			?.classList.contains('ldp-topic-download-selection') === true,
-	'下载标题栏不得保留折叠功能，下载范围必须作为下拉上方 label，开始下载并入同一卡片',
+	'下载必须复用共享浮窗标题栏，下载范围作为下拉上方 label，开始下载并入同一卡片',
 );
 assert(
-	manager.openManager() && !details.hidden &&
+	READER_TOPIC_DOWNLOAD_WINDOW_GEOMETRY_STORAGE_KEY ===
+		READER_COLLECTION_FLOATING_WINDOW_GEOMETRY_KEY &&
+	manager.openManager() && !details.hidden && !floatingWindow.hidden &&
 		details.classList.contains('is-open') &&
-		details.style.left === '190px' && details.style.top === '152px' &&
-		details.style.width === '720px' && details.style.height === '640px' &&
-		details.parentElement?.classList.contains(
-			'ldp-topic-download-floating-host',
+		floatingWindow.style.left === '320px' &&
+		floatingWindow.style.top === '60px' &&
+		floatingWindow.style.width === '560px' &&
+		floatingWindow.style.height === '680px' &&
+		floatingWindow.parentElement?.classList.contains(
+			'ldp-reader-floating-host',
 		) === true &&
-		details.querySelectorAll('.ldp-topic-download-resize-handle').length === 8,
-	'查看下载历史必须在顶层窗口打开、停靠到入口旁，并复用八向缩放骨架',
+		floatingWindow.querySelectorAll(
+			'.ldp-reader-floating-window-resize',
+		).length === 8,
+	'下载历史必须复用用户观察的共享尺寸、居中位置、host 与八向缩放骨架',
+);
+let floatingWheelLeaks = 0;
+mount.addEventListener('wheel', () => {
+	floatingWheelLeaks += 1;
+});
+const floatingBoundaryWheel = new parsedWindow.Event('wheel', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperties(floatingBoundaryWheel, {
+	deltaX: { value: 0 },
+	deltaY: { value: 120 },
+	deltaMode: { value: 0 },
+});
+floatingWindow.querySelector('.ldp-reader-floating-window-head')!
+	.dispatchEvent(floatingBoundaryWheel);
+assert(
+	floatingBoundaryWheel.defaultPrevented && floatingWheelLeaks === 0,
+	'下载管理浮窗的非滚动区不得继续驱动宿主阅读流',
 );
 const pointerEvent = (type: string, x: number, y: number): Event => {
 	const event = new parsedWindow.Event(type, {
@@ -454,28 +480,43 @@ const pointerEvent = (type: string, x: number, y: number): Event => {
 	});
 	return event;
 };
-const downloadSummary = details.querySelector<HTMLElement>(
-	'.ldp-topic-download-summary',
+const downloadSummary = floatingWindow.querySelector<HTMLElement>(
+	'.ldp-reader-floating-window-head',
 )!;
 downloadSummary.dispatchEvent(pointerEvent('pointerdown', 300, 220));
-details.dispatchEvent(pointerEvent('pointermove', 350, 170));
-details.dispatchEvent(pointerEvent('pointerup', 350, 170));
+floatingWindow.dispatchEvent(pointerEvent('pointermove', 350, 170));
+floatingWindow.dispatchEvent(pointerEvent('pointerup', 350, 170));
 assert(
-	manager.windowGeometry?.snapshot.geometry.left === 240 &&
-		manager.windowGeometry.snapshot.geometry.top === 102 &&
-		[...geometryValues.values()].some((value) =>
-			value.includes('"readerWindowX":240') &&
-			value.includes('"readerWindowY":102')),
-	'拖动下载历史窗口必须更新顶层几何并立即持久化',
+	manager.windowGeometry?.snapshot.geometry.left === 370 &&
+		manager.windowGeometry.snapshot.geometry.top === 10 &&
+		geometryValues.get(READER_COLLECTION_FLOATING_WINDOW_GEOMETRY_KEY)
+			?.includes('"readerWindowX":370') === true &&
+		geometryValues.get(READER_COLLECTION_FLOATING_WINDOW_GEOMETRY_KEY)
+			?.includes('"readerWindowY":10') === true,
+	'拖动下载历史窗口必须把几何立即写入四集合共用存储键',
 );
 details.dispatchEvent(new parsedWindow.Event('pointerdown', { bubbles: true }));
 assert(!details.hidden, '操作下载浮窗内部控件不得触发点外关闭');
+floatingWindow.querySelector<HTMLButtonElement>(
+	'.ldp-reader-floating-window-pin',
+)!.click();
 document.querySelector<HTMLElement>('#outside')!.dispatchEvent(
 	new parsedWindow.Event('pointerdown', { bubbles: true }),
 );
 assert(
-	details.hidden && !details.classList.contains('is-open'),
-	'点击下载浮窗外空白必须关闭浮窗',
+	!details.hidden && manager.windowGeometry?.snapshot.pinned === true,
+	'共享浮窗锁定置顶后，点击窗口外必须保持下载管理可见',
+);
+floatingWindow.querySelector<HTMLButtonElement>(
+	'.ldp-reader-floating-window-pin',
+)!.click();
+document.querySelector<HTMLElement>('#outside')!.dispatchEvent(
+	new parsedWindow.Event('pointerdown', { bubbles: true }),
+);
+assert(
+	!details.hidden && floatingWindow.hidden &&
+		details.classList.contains('is-open'),
+	'点击下载浮窗外空白必须只收起整组，并保留下载标签会话',
 );
 manager.openManager();
 let underlyingEscapeCount = 0;
@@ -489,9 +530,10 @@ const escape = new parsedWindow.Event('keydown', {
 Object.defineProperty(escape, 'key', { value: 'Escape' });
 document.dispatchEvent(escape);
 assert(
-	details.hidden && !details.classList.contains('is-open') &&
+	!details.hidden && floatingWindow.hidden &&
+		details.classList.contains('is-open') &&
 		underlyingEscapeCount === 0,
-	'Esc 必须优先关闭下载管理浮窗，并阻止底层 Reader 同时响应',
+	'Esc 必须优先收起下载管理整组、保留标签会话并阻止底层 Reader 响应',
 );
 manager.openManager();
 mount.querySelector<HTMLButtonElement>('.ldp-topic-download-current')!.click();
@@ -516,9 +558,12 @@ assert(
 		notices.some((notice) => notice === '已加入后台下载：当前 Topic'),
 	'点击下载后必须隐藏预提交摘要，并由历史任务行持续显示阶段、百分比和确定进度',
 );
-mount.querySelector<HTMLButtonElement>('.ldp-topic-download-close')!.click();
+mount.querySelector<HTMLButtonElement>(
+	'.ldp-reader-floating-window-close',
+)!.click();
 assert(
-	details.hidden && !details.classList.contains('is-open') &&
+	details.hidden && floatingWindow.hidden &&
+		!details.classList.contains('is-open') &&
 		manager.snapshot().tasks[0]?.phase === 'loading-posts',
 	'关闭下载管理浮窗必须真正隐藏窗口，但不得取消正在进行的后台任务',
 );
@@ -528,9 +573,17 @@ await tick();
 await tick();
 assert(
 	manager.snapshot().tasks[0]?.phase === 'ready' &&
+		manager.snapshot().tasks[0]?.archiveStatus === 404 &&
 		workerSelections[0]?.mode === 'all' &&
 		saved.length === 0 &&
 		backups.get(41)?.html.includes('<title>Topic 41</title>') === true &&
+		backups.get(41)?.archiveStatus === 404 &&
+		mount.querySelector<HTMLElement>(
+			'.ldp-topic-download-task[data-topic-id="41"]',
+		)?.dataset.archiveStatus === '404' &&
+		mount.querySelector(
+			'.ldp-topic-download-task[data-topic-id="41"] small',
+		)?.textContent?.includes('404 版本') === true &&
 		mount.querySelector('[data-topic-download-action="view"]') !== null &&
 		mount.querySelector('[data-topic-download-action="save"]')
 			?.getAttribute('aria-label') === '下载 HTML 到本地',
@@ -550,6 +603,15 @@ assert(
 		mount.querySelector('.ldp-topic-download-current')?.textContent
 			?.includes('已在下载历史') === true,
 	'同一 Topic 的同一下载范围完成后必须隐藏预提交摘要并阻止重复下载',
+);
+manager.closeManager();
+assert(
+	manager.prepareCurrentDownload() &&
+		!details.hidden && details.classList.contains('is-open') &&
+		mount.querySelector<HTMLButtonElement>(
+			'.ldp-topic-download-current',
+		)?.disabled === true,
+	'快捷下载入口必须打开下载管理器，即使当前范围已在历史；重复下载仍由开始按钮阻止',
 );
 mount.querySelector<HTMLButtonElement>(
 	'[data-topic-download-action="view"][data-topic-id="41"]',
@@ -871,7 +933,8 @@ assert(
 );
 manager.destroy();
 assert(
-	mount.querySelector('.ldp-topic-download-manager') === null,
+	mount.querySelector('.ldp-topic-download-manager') === null &&
+		mount.querySelector('.ldp-reader-floating-window') === null,
 	'下载管理销毁必须释放浮窗和未完成任务',
 );
 
@@ -899,11 +962,11 @@ const restoredManager = new ReaderTopicDownloadManager({
 await tick();
 restoredManager.openManager();
 assert(
-	restoredManager.element.style.left === '240px' &&
-		restoredManager.element.style.top === '102px' &&
-		restoredManager.element.style.width === '720px' &&
-		restoredManager.element.style.height === '640px',
-	'重新打开 Reader 后必须恢复下载历史浮窗上次的大小和位置',
+	restoredManager.element.style.left === '370px' &&
+		restoredManager.element.style.top === '10px' &&
+		restoredManager.element.style.width === '560px' &&
+		restoredManager.element.style.height === '680px',
+	'重新打开 Reader 后必须从四集合共享几何恢复下载历史浮窗',
 );
 mount.querySelector<HTMLButtonElement>(
 	'[data-topic-download-action="view"][data-topic-id="41"]',
@@ -912,9 +975,9 @@ await tick();
 assert(
 	restoredManager.snapshot().tasks.some((task) =>
 		task.topicId === 41 && task.phase === 'ready' &&
-			task.selection.mode === 'op') &&
+			task.selection.mode === 'op' && task.archiveStatus === 404) &&
 		restoredViewed.includes('当前 Topic'),
-	'重新打开 Reader 后必须从持久备份恢复下载范围与历史，原下载文件移动后仍可查看',
+	'重新打开 Reader 后必须从持久备份恢复下载范围、404 版本与历史，原下载文件移动后仍可查看',
 );
 restoredManager.destroy();
 

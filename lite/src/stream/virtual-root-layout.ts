@@ -21,6 +21,7 @@ export interface VirtualWindowInput {
 export interface VirtualRootBranch {
 	readonly postNumber: PostNumber;
 	readonly subtreePostCount: number;
+	readonly unloadedPostCountBefore?: number;
 }
 
 export interface VirtualRootWindow {
@@ -32,6 +33,24 @@ export interface VirtualRootWindow {
 	readonly atEnd: boolean;
 	readonly beforeSpacer: number;
 	readonly afterSpacer: number;
+	/** 当前连续已加载段之前存在未水合区间；该段不能冒充顺序流 frontier。 */
+	readonly hasUnloadedGapBefore?: boolean;
+	/** 当前连续已加载段之后仍有未水合区间。 */
+	readonly hasUnloadedGapAfter?: boolean;
+	readonly segmentStartPostNumber?: PostNumber;
+	readonly segmentEndPostNumber?: PostNumber;
+	/** 前方 gap 的已知上边界，供 before 定向补流。 */
+	readonly unloadedGapBeforeAnchorPostNumber?: PostNumber;
+	/** 后方 gap 的已知下边界，供 after 定向补流。 */
+	readonly unloadedGapAfterAnchorPostNumber?: PostNumber;
+	/** 真实视口距当前连续段两端的距离，用于在进入空洞前定向补流。 */
+	readonly distanceToSegmentStart?: number;
+	readonly distanceToSegmentEnd?: number;
+	/** 当前挂载窗到同一连续已加载段末端的剩余高度，不跨未水合区间。 */
+	readonly afterSegmentSpacer?: number;
+	/** 视口中心落入未水合区间时，对应的近似 canonical 楼层。 */
+	readonly unloadedGapTargetPostNumber?: PostNumber;
+	readonly unloadedGapSide?: 'before' | 'after';
 	readonly totalSize: number;
 }
 
@@ -70,6 +89,13 @@ function positiveSafeInteger(value: number, name: string): number {
 	return value;
 }
 
+function nonNegativeSafeInteger(value: number, name: string): number {
+	if (!Number.isSafeInteger(value) || value < 0) {
+		throw new RangeError(`${name} 必须是非负安全整数`);
+	}
+	return value;
+}
+
 /**
  * 只拥有根楼层的块布局模型，不读取 DOM，也不保存回复关系。
  */
@@ -79,6 +105,9 @@ export class VirtualRootLayout {
 	readonly #measuredSizes = new Map<PostNumber, number>();
 	#postNumbers: PostNumber[] = [];
 	#subtreePostCounts: number[] = [];
+	#unloadedPostCountsBefore: number[] = [];
+	#segmentStartByIndex: number[] = [];
+	#segmentEndByIndex: number[] = [];
 	#indexByPost = new Map<PostNumber, number>();
 	#prefix: number[] = [0];
 	#subtreeCountPrefix: number[] = [0];
@@ -98,6 +127,7 @@ export class VirtualRootLayout {
 		);
 		const unique = new Set<PostNumber>();
 		const subtreePostCountByPost = new Map<PostNumber, number>();
+		const unloadedPostCountBeforeByPost = new Map<PostNumber, number>();
 		for (const root of roots) {
 			const postNumber = typeof root === 'number' ? root : root.postNumber;
 			assertPostNumber(postNumber);
@@ -109,11 +139,48 @@ export class VirtualRootLayout {
 					? 1
 					: positiveSafeInteger(root.subtreePostCount, 'subtreePostCount'),
 			);
+			const unloadedPostCountBefore = typeof root === 'number'
+				? 0
+				: nonNegativeSafeInteger(
+					root.unloadedPostCountBefore ?? 0,
+					'unloadedPostCountBefore',
+				);
+			if (unloadedPostCountBefore >= postNumber) {
+				throw new RangeError(
+					'unloadedPostCountBefore 必须小于当前根楼层号',
+				);
+			}
+			unloadedPostCountBeforeByPost.set(
+				postNumber,
+				unloadedPostCountBefore,
+			);
 		}
 		this.#postNumbers = [...unique].sort((left, right) => left - right);
 		this.#subtreePostCounts = this.#postNumbers.map(
 			(postNumber) => subtreePostCountByPost.get(postNumber) ?? 1,
 		);
+		this.#unloadedPostCountsBefore = this.#postNumbers.map(
+			(postNumber) => unloadedPostCountBeforeByPost.get(postNumber) ?? 0,
+		);
+		this.#segmentStartByIndex = new Array(this.#postNumbers.length);
+		let segmentStart = 0;
+		for (let index = 0; index < this.#postNumbers.length; index += 1) {
+			if ((this.#unloadedPostCountsBefore[index] ?? 0) > 0) {
+				segmentStart = index;
+			}
+			this.#segmentStartByIndex[index] = segmentStart;
+		}
+		this.#segmentEndByIndex = new Array(this.#postNumbers.length);
+		let segmentEnd = this.#postNumbers.length;
+		for (let index = this.#postNumbers.length - 1; index >= 0; index -= 1) {
+			if (
+				index + 1 < this.#postNumbers.length &&
+				(this.#unloadedPostCountsBefore[index + 1] ?? 0) > 0
+			) {
+				segmentEnd = index + 1;
+			}
+			this.#segmentEndByIndex[index] = segmentEnd;
+		}
 		for (const postNumber of this.#measuredSizes.keys()) {
 			const subtreePostCountChanged =
 				this.#estimateSubtreeSize &&
@@ -223,6 +290,11 @@ export class VirtualRootLayout {
 				atEnd: true,
 				beforeSpacer: 0,
 				afterSpacer: 0,
+				hasUnloadedGapBefore: false,
+				hasUnloadedGapAfter: false,
+				distanceToSegmentStart: 0,
+				distanceToSegmentEnd: 0,
+				afterSegmentSpacer: 0,
 				totalSize: 0,
 			});
 		}
@@ -245,19 +317,48 @@ export class VirtualRootLayout {
 			materializationStart + materializationStep +
 				viewportSize * (1 + afterScreens),
 		);
-		const overscanStartIndex = this.#firstBlockEndingAfter(rangeStart);
+		let visibleStartIndex = this.#firstBlockEndingAfter(
+			Math.min(scrollOffset, Math.max(0, totalSize - 1)),
+		);
+		/*
+		 * 稀疏尾段短于视口时，浏览器会把目标 scrollTop 钳到尾段之前的
+		 * unloaded gap。prefix[index + 1] 包含“下一根之前的 gap”，普通二分
+		 * 因而仍把视口归给前一段，目标根无法挂载，形成“先骨架、等补页”的死锁。
+		 * 只有下一段真实根已经与视口相交时才越过 gap；深处 gap 仍保持纯 spacer。
+		 */
+		const visibleRootEnd =
+			(this.#prefix[visibleStartIndex] ?? 0) +
+			this.#sizeAt(visibleStartIndex);
+		const nextVisibleIndex = visibleStartIndex + 1;
+		if (
+			visibleRootEnd <= scrollOffset &&
+			nextVisibleIndex < this.#postNumbers.length &&
+			(this.#prefix[nextVisibleIndex] ?? 0) <
+				Math.min(totalSize, scrollOffset + viewportSize)
+		) {
+			visibleStartIndex = nextVisibleIndex;
+		}
+		const segmentStartIndex =
+			this.#segmentStartByIndex[visibleStartIndex] ?? 0;
+		const segmentEndIndex =
+			this.#segmentEndByIndex[visibleStartIndex] ?? this.#postNumbers.length;
+		const unloadedGap = this.#unloadedGapAt(
+			scrollOffset + viewportSize / 2,
+		);
+		const overscanStartIndex = Math.max(
+			segmentStartIndex,
+			this.#firstBlockEndingAfter(rangeStart),
+		);
 		const overscanEndIndex = Math.min(
+			segmentEndIndex,
 			this.#postNumbers.length,
 			Math.max(
 				overscanStartIndex + 1,
 				this.#firstBlockStartingAtOrAfter(rangeEnd),
 			),
 		);
-		const visibleStartIndex = this.#firstBlockEndingAfter(
-			Math.min(scrollOffset, Math.max(0, totalSize - 1)),
-		);
 		const visibleEndIndex = Math.min(
-			this.#postNumbers.length,
+			segmentEndIndex,
 			Math.max(
 				visibleStartIndex + 1,
 				this.#firstBlockStartingAtOrAfter(
@@ -282,7 +383,11 @@ export class VirtualRootLayout {
 		const preserveRootIndex = input.preserveRootPostNumber === undefined
 			? undefined
 			: this.#indexByPost.get(input.preserveRootPostNumber);
-		if (preserveRootIndex !== undefined) {
+		if (
+			preserveRootIndex !== undefined &&
+			preserveRootIndex >= segmentStartIndex &&
+			preserveRootIndex < segmentEndIndex
+		) {
 			/*
 			 * 停稳锚点是物理视野的唯一参照。根尺寸/前缀在 idle 提交后即使跨过
 			 * 物化边界，也必须软超预算保留当前锚点根；否则树窗口会先销毁参照，
@@ -292,17 +397,75 @@ export class VirtualRootLayout {
 			endIndex = Math.max(endIndex, preserveRootIndex + 1);
 		}
 		const boundedEnd = Math.min(this.#postNumbers.length, endIndex);
+		const visiblePostNumbers: PostNumber[] = [];
+		for (let index = visibleStartIndex; index < visibleEndIndex; index += 1) {
+			const rootStart = this.#prefix[index] ?? 0;
+			const rootEnd = rootStart + this.#sizeAt(index);
+			if (rootEnd > scrollOffset && rootStart < scrollOffset + viewportSize) {
+				visiblePostNumbers.push(this.#postNumbers[index]!);
+			}
+		}
+		const mountedEnd = boundedEnd > startIndex
+			? (this.#prefix[boundedEnd - 1] ?? 0) + this.#sizeAt(boundedEnd - 1)
+			: this.#prefix[startIndex] ?? 0;
+		const segmentContentEnd = segmentEndIndex > segmentStartIndex
+			? (this.#prefix[segmentEndIndex - 1] ?? 0) +
+				this.#sizeAt(segmentEndIndex - 1)
+			: mountedEnd;
+		const segmentContentStart = this.#prefix[segmentStartIndex] ?? 0;
+		const hasUnloadedGapBefore =
+			(this.#unloadedPostCountsBefore[segmentStartIndex] ?? 0) > 0;
+		const hasUnloadedGapAfter =
+			segmentEndIndex < this.#postNumbers.length &&
+			(this.#unloadedPostCountsBefore[segmentEndIndex] ?? 0) > 0;
+		const segmentStartPostNumber = this.#postNumbers[segmentStartIndex]!;
+		const segmentEndPostNumber = this.#postNumbers[segmentEndIndex - 1]!;
+		const unloadedGapAfterAnchorPostNumber = hasUnloadedGapAfter
+			? discoursePostNumber(
+				this.#postNumbers[segmentEndIndex]! -
+					(this.#unloadedPostCountsBefore[segmentEndIndex] ?? 0) - 1,
+			)
+			: undefined;
 		return Object.freeze({
 			startIndex,
 			endIndex: boundedEnd,
 			postNumbers: Object.freeze(this.#postNumbers.slice(startIndex, boundedEnd)),
-			visiblePostNumbers: Object.freeze(
-				this.#postNumbers.slice(visibleStartIndex, visibleEndIndex),
-			),
+			visiblePostNumbers: Object.freeze(visiblePostNumbers),
 			atStart: scrollOffset <= 10,
 			atEnd: scrollOffset + viewportSize >= Math.max(0, totalSize - 16),
 			beforeSpacer: this.#prefix[startIndex] ?? 0,
-			afterSpacer: Math.max(0, totalSize - (this.#prefix[boundedEnd] ?? totalSize)),
+			afterSpacer: Math.max(0, totalSize - mountedEnd),
+			hasUnloadedGapBefore,
+			hasUnloadedGapAfter,
+			segmentStartPostNumber,
+			segmentEndPostNumber,
+			...(hasUnloadedGapBefore
+				? { unloadedGapBeforeAnchorPostNumber: segmentStartPostNumber }
+				: {}),
+			...(unloadedGapAfterAnchorPostNumber === undefined
+				? {}
+				: { unloadedGapAfterAnchorPostNumber }),
+			distanceToSegmentStart: Math.max(
+				0,
+				scrollOffset - segmentContentStart,
+			),
+			distanceToSegmentEnd: Math.max(
+				0,
+				segmentContentEnd - (scrollOffset + viewportSize),
+			),
+			afterSegmentSpacer: Math.max(0, segmentContentEnd - mountedEnd),
+			...(unloadedGap === undefined || (
+				visiblePostNumbers.length > 0 &&
+				unloadedGap.nextIndex <= visibleStartIndex
+			)
+				? {}
+				: {
+					unloadedGapTargetPostNumber: unloadedGap.targetPostNumber,
+					unloadedGapSide:
+						unloadedGap.nextIndex <= visibleStartIndex
+							? ('before' as const)
+							: ('after' as const),
+				}),
 			totalSize,
 		});
 	}
@@ -380,9 +543,16 @@ export class VirtualRootLayout {
 
 	#ensurePrefix(): void {
 		const start = Math.min(this.#dirtyFrom, this.#postNumbers.length);
-		if (start === 0) this.#prefix[0] = 0;
+		if (start === 0) {
+			this.#prefix[0] = this.#estimatedSize *
+				(this.#unloadedPostCountsBefore[0] ?? 0);
+		}
 		for (let index = start; index < this.#postNumbers.length; index += 1) {
-			this.#prefix[index + 1] = (this.#prefix[index] ?? 0) + this.#sizeAt(index);
+			this.#prefix[index + 1] =
+				(this.#prefix[index] ?? 0) +
+				this.#sizeAt(index) +
+				this.#estimatedSize *
+					(this.#unloadedPostCountsBefore[index + 1] ?? 0);
 		}
 		this.#prefix.length = this.#postNumbers.length + 1;
 		this.#dirtyFrom = this.#postNumbers.length;
@@ -408,5 +578,33 @@ export class VirtualRootLayout {
 			else high = middle;
 		}
 		return low;
+	}
+
+	#unloadedGapAt(offset: number): Readonly<{
+		readonly nextIndex: number;
+		readonly targetPostNumber: PostNumber;
+	}> | undefined {
+		if (!Number.isFinite(offset) || offset < 0 || !this.#postNumbers.length) {
+			return undefined;
+		}
+		const nextIndex = this.#firstBlockStartingAtOrAfter(offset);
+		if (nextIndex >= this.#postNumbers.length) return undefined;
+		const unloadedPostCount =
+			this.#unloadedPostCountsBefore[nextIndex] ?? 0;
+		if (unloadedPostCount <= 0) return undefined;
+		const gapEnd = this.#prefix[nextIndex] ?? 0;
+		const gapStart = gapEnd - this.#estimatedSize * unloadedPostCount;
+		if (offset < gapStart || offset >= gapEnd) return undefined;
+		const nextPostNumber = this.#postNumbers[nextIndex]!;
+		const missingOffset = Math.min(
+			unloadedPostCount - 1,
+			Math.max(0, Math.floor((offset - gapStart) / this.#estimatedSize)),
+		);
+		return Object.freeze({
+			nextIndex,
+			targetPostNumber: discoursePostNumber(
+				nextPostNumber - unloadedPostCount + missingOffset,
+			),
+		});
 	}
 }

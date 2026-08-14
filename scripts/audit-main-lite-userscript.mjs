@@ -12,10 +12,11 @@ const LOCAL_BUNDLE_PATH = 'work/main-lite.local.js';
 const LEGACY_LOCAL_BUNDLE_PATH = 'work/mian-lite.local.js';
 const LOCAL_STYLESHEET_PATH = 'work/main-lite.css';
 const LEGACY_LOCAL_STYLESHEET_PATH = 'work/mian-lite.css';
-const LOCAL_THREE_PART_LOADER_PATH =
+const LOCAL_FOUR_PART_LOADER_PATH =
 	'work/main-lite.greasyfork.local.user.js';
-const LOCAL_THREE_PART_LIBRARY_PATHS = [
+const LOCAL_FOUR_PART_LIBRARY_PATHS = [
 	'work/greasyfork-lite/libraries/main-lite-core.js',
+	'work/greasyfork-lite/libraries/main-lite-platform.js',
 	'work/greasyfork-lite/libraries/main-lite-features.js',
 ];
 const STYLE_RESOURCE_TOKEN = '__LDP_READER_STYLES_URL__';
@@ -46,10 +47,9 @@ function sha256(value) {
 	return createHash('sha256').update(value).digest('hex');
 }
 
-function contentAddressedFileUrl(filePath, digest) {
+function versionedLocalFileUrl(filePath, digest) {
 	const url = new URL(browserFileUrl(filePath));
 	url.searchParams.set('v', digest);
-	url.hash = `sha256=${digest}`;
 	return url.href;
 }
 
@@ -189,11 +189,11 @@ assertValues(loader, 'version', [
 ], LOADER_PATH);
 assertValues(loader, 'description', [LOCAL_DESCRIPTION], LOADER_PATH);
 
-const localStylesheetUrl = contentAddressedFileUrl(
+const localStylesheetUrl = versionedLocalFileUrl(
 	path.join(projectRoot, LOCAL_STYLESHEET_PATH),
 	localStylesheetSha256,
 );
-const localBundleUrl = contentAddressedFileUrl(
+const localBundleUrl = versionedLocalFileUrl(
 	path.join(projectRoot, LOCAL_BUNDLE_PATH),
 	localBundleSha256,
 );
@@ -230,54 +230,54 @@ if (localArtifact) {
 		`ldpKatexStyles ${KATEX_STYLESHEET}`,
 	], LOCAL_BUNDLE_PATH);
 
-	const [threePartLoaderSource, ...threePartLibrarySources] =
+	const [fourPartLoaderSource, ...fourPartLibrarySources] =
 		await Promise.all([
 			readFile(
-				path.join(projectRoot, LOCAL_THREE_PART_LOADER_PATH),
+				path.join(projectRoot, LOCAL_FOUR_PART_LOADER_PATH),
 				'utf8',
 			),
-			...LOCAL_THREE_PART_LIBRARY_PATHS.map((libraryPath) =>
+			...LOCAL_FOUR_PART_LIBRARY_PATHS.map((libraryPath) =>
 				readFile(path.join(projectRoot, libraryPath), 'utf8')),
 		]);
-	const threePartLoader = metadataEntries(
-		threePartLoaderSource,
-		LOCAL_THREE_PART_LOADER_PATH,
+	const fourPartLoader = metadataEntries(
+		fourPartLoaderSource,
+		LOCAL_FOUR_PART_LOADER_PATH,
 	);
-	const threePartVersion = values(threePartLoader, 'version')[0] ?? '';
-	const versionlessThreePartLoader = threePartLoaderSource.replace(
-		threePartVersion,
-		'__LDP_LOCAL_THREE_PART_VERSION__',
+	const fourPartVersion = values(fourPartLoader, 'version')[0] ?? '';
+	const versionlessFourPartLoader = fourPartLoaderSource.replace(
+		fourPartVersion,
+		'__LDP_LOCAL_FOUR_PART_VERSION__',
 	);
-	assertValues(threePartLoader, 'version', [
-		`${packageVersion}-local-three-part.${sha256(versionlessThreePartLoader).slice(0, 12)}`,
-	], LOCAL_THREE_PART_LOADER_PATH);
-	assertValues(threePartLoader, 'resource', [
+	assertValues(fourPartLoader, 'version', [
+		`${packageVersion}-local-four-part.${sha256(versionlessFourPartLoader).slice(0, 12)}`,
+	], LOCAL_FOUR_PART_LOADER_PATH);
+	assertValues(fourPartLoader, 'resource', [
 		`ldpReaderStyles ${localStylesheetUrl}`,
 		`ldpKatexStyles ${KATEX_STYLESHEET}`,
-	], LOCAL_THREE_PART_LOADER_PATH, {
+	], LOCAL_FOUR_PART_LOADER_PATH, {
 		windowsFileUrlCaseInsensitive: true,
 	});
-	assertValues(threePartLoader, 'require', [
+	assertValues(fourPartLoader, 'require', [
 		...values(metadata, 'require'),
-		...LOCAL_THREE_PART_LIBRARY_PATHS.map((libraryPath, index) =>
-			contentAddressedFileUrl(
+		...LOCAL_FOUR_PART_LIBRARY_PATHS.map((libraryPath, index) =>
+			versionedLocalFileUrl(
 				path.join(projectRoot, libraryPath),
-				sha256(threePartLibrarySources[index] ?? ''),
+				sha256(fourPartLibrarySources[index] ?? ''),
 			)),
-	], LOCAL_THREE_PART_LOADER_PATH, {
+	], LOCAL_FOUR_PART_LOADER_PATH, {
 		windowsFileUrlCaseInsensitive: true,
 	});
 	assertValues(
-		threePartLoader,
+		fourPartLoader,
 		'updateURL',
 		['none'],
-		LOCAL_THREE_PART_LOADER_PATH,
+		LOCAL_FOUR_PART_LOADER_PATH,
 	);
 	assertValues(
-		threePartLoader,
+		fourPartLoader,
 		'downloadURL',
 		['none'],
-		LOCAL_THREE_PART_LOADER_PATH,
+		LOCAL_FOUR_PART_LOADER_PATH,
 	);
 }
 
@@ -300,13 +300,13 @@ if (extraLoaderKeys.length) {
 }
 
 process.stdout.write(`${JSON.stringify({
-	schemaVersion: 3,
+	schemaVersion: 4,
 	baseline: METADATA_PATH,
 	metadata: METADATA_PATH,
 	packageVersion,
 	loader: LOADER_PATH,
 	localBundle: localArtifact ? LOCAL_BUNDLE_PATH : null,
-	localThreePartLoader: localArtifact ? LOCAL_THREE_PART_LOADER_PATH : null,
+	localFourPartLoader: localArtifact ? LOCAL_FOUR_PART_LOADER_PATH : null,
 	localBundleSha256,
 	localStylesheetSha256,
 	matches: values(metadata, 'match').length,

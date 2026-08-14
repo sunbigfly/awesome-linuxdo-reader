@@ -54,13 +54,19 @@ assert(
 		host.querySelectorAll('[data-performance-key]').length === 7 &&
 		host.querySelector('[data-performance-preset="balanced"]')
 			?.classList.contains('active') &&
+		host.querySelector('[data-performance-preset="high"]')?.textContent ===
+			'快速预取（实验）' &&
+		host.querySelector('[data-performance-preset="high"]')
+			?.getAttribute('data-performance-risk') === 'experimental' &&
+		host.querySelector('[data-performance-preset="high"]')
+			?.getAttribute('data-setting-help')?.includes('可能增加卡顿或 429') &&
 		[...host.querySelectorAll<HTMLElement>('.ldp-performance-preset')]
 			.every((button) => Boolean(button.dataset.settingHelp)) &&
 		[...host.querySelectorAll<HTMLElement>('.ldp-performance-fields .ldp-setting-row')]
 			.every((row) => Boolean(row.dataset.settingHelp)) &&
 		host.querySelector('[data-performance-key="pageSize"]')
 			?.closest<HTMLElement>('.ldp-setting-row')?.dataset.settingHelp ===
-			'Discourse posts.json 的单批 post_ids 目标上限。进入近窗时最多排入两批最近缺口，后台始终单槽启动；眼前缺口会提升并复用同一请求。缓存、游标与全站限流许可保持共享；当前生效批次见性能记录。' &&
+			'posts.json 单批 post_ids 目标上限。近窗最多两批；后台单飞，可见缺口复用在途请求。共享许可不变，生效批次见性能记录。' &&
 		host.querySelector('[data-performance-key="streamMaxItems"]')
 			?.closest<HTMLElement>('.ldp-setting-row')
 			?.querySelector('.ldp-performance-copy strong')?.textContent ===
@@ -70,22 +76,30 @@ assert(
 			'在当前屏幕前后额外保留多少屏楼层元素；树内与一级楼层共用同一窗口，并受“同时保留楼层目标上限”约束。' &&
 		host.querySelector('[data-performance-key="nestedPrefetchViewports"]')
 			?.closest<HTMLElement>('.ldp-setting-row')?.dataset.settingHelp ===
-			'同一目标距离用于正文 post_ids 批次提升和父楼 replies.json 候选。后台正文单槽启动，树状车道最多两路；增加距离只提前网络取数，不扩大正文 DOM 窗口，运行时可按网络状态下调，当前生效距离见性能记录。' &&
+			'同一距离提升正文并触发 replies.json 候选；后台单飞，树状最多两路，只提前取数。' &&
 		host.querySelector('[data-settings-category="performance-request"]')
 			?.querySelector('.ldp-settings-category-head small')?.textContent ===
-			'这里设置阅读器请求的目标天花板；实际并发和启动间隔还受设备、网络、跨标签许可、原站活动与 429 限制，并在请求记录显示。' &&
+			'这里只设置目标上限；后台仍须空闲单飞，并让位于前台、活动请求和共享窗口。' &&
+		host.querySelector('[data-performance-key="requestMinInterval"]')
+			?.closest<HTMLElement>('.ldp-setting-row')?.dataset.settingHelp
+			?.includes('不改写全局设置') &&
+		host.querySelector('[data-performance-key="requestRateTarget"]')
+			?.closest<HTMLElement>('.ldp-setting-row')?.dataset.settingHelp
+			?.includes('不自动改写设置') &&
 		host.querySelector('[data-performance-preset="low"]')
-			?.getAttribute('data-setting-help')?.includes('后台正文仍为单槽') &&
+			?.getAttribute('data-setting-help')?.includes('后台单飞') &&
 		host.querySelector('.ldp-performance-status')?.textContent
 			?.includes('正文每批不超过 48 楼') &&
 		host.querySelector('.ldp-performance-status')?.textContent
-			?.includes('后台正文单槽') &&
+			?.includes('后台请求空闲单飞') &&
 		host.querySelector('.ldp-performance-status')?.textContent
 			?.includes('树状最多 2 路') &&
 		host.querySelector('.ldp-performance-status')?.textContent
-			?.includes('生效批次与 DOM 上限见性能记录') &&
+			?.includes('生效批次与 DOM 见性能记录') &&
 		host.querySelector('.ldp-performance-status')?.textContent
-			?.includes('实际并发、间隔和排队见请求记录') &&
+			?.includes('请求实际值见请求记录') &&
+		!host.querySelector('.ldp-performance-status')?.classList
+			.contains('is-risk') &&
 		controller.snapshot.draftCount === 0,
 	'性能 form 必须复用旧设计语言呈现 4 个预设、4 组 7 字段，并从规范化偏好初始化',
 );
@@ -98,7 +112,13 @@ pageSize.dispatchEvent(new parsedWindow.Event('input', { bubbles: true }));
 assert(
 	Number(controller.snapshot.draftCount) === 1 &&
 		host.querySelector('[data-performance-preset="custom"]')
-			?.classList.contains('active'),
+			?.classList.contains('active') &&
+		host.querySelector('[data-performance-preset="custom"]')
+			?.getAttribute('data-performance-risk') === 'experimental' &&
+		host.querySelector('.ldp-performance-status')?.classList
+			.contains('is-risk') &&
+		host.querySelector('.ldp-performance-status')?.textContent
+			?.includes('可能增加卡顿或 429'),
 	'手工修改必须只进入 performance draft，并从公共模型推导为自定义预设',
 );
 const customSave = controller.saveAll();
@@ -118,7 +138,9 @@ host.querySelector<HTMLButtonElement>(
 assert(
 	controller.snapshot.draftCount > 0 &&
 		host.querySelector('[data-performance-preset="low"]')
-			?.getAttribute('aria-pressed') === 'true',
+			?.getAttribute('aria-pressed') === 'true' &&
+		!host.querySelector('.ldp-performance-status')?.classList
+			.contains('is-risk'),
 	'预设按钮必须批量更新同一份草稿，不能逐字段写 preference',
 );
 const lowSave = controller.saveAll();
@@ -149,6 +171,18 @@ assert(
 		controller.snapshot.draftCount === 0,
 	'放弃必须从 controller 提供的同一当前偏好快照恢复全部性能字段',
 );
+pageSize.value = '32';
+pageSize.dispatchEvent(new parsedWindow.Event('input', { bubbles: true }));
+assert(
+	host.querySelector('[data-performance-preset="custom"]')
+		?.classList.contains('active') &&
+	!host.querySelector('[data-performance-preset="custom"]')
+		?.hasAttribute('data-performance-risk') &&
+	!host.querySelector('.ldp-performance-status')?.classList
+		.contains('is-risk'),
+	'不高于自动档的保守自定义不能被误标为卡顿或 429 风险',
+);
+controller.discardAll();
 preferences = Object.freeze({
 	...preferences,
 	performancePreset: 'high',
@@ -165,6 +199,10 @@ assert(
 	String(pageSize.value) === '64' &&
 		host.querySelector('[data-performance-preset="high"]')
 			?.classList.contains('active') &&
+		host.querySelector('.ldp-performance-status')?.classList
+			.contains('is-risk') &&
+		host.querySelector('.ldp-performance-status')?.textContent
+			?.includes('不确定时请使用自动（推荐）') &&
 		controller.snapshot.draftCount === 0,
 	'无本地草稿时外部 preference change 必须原地更新同一 form，不重建 DOM',
 );

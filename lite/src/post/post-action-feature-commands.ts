@@ -206,6 +206,7 @@ export class PostActionFeatureCommands<TPost extends CanonicalActionPost> {
 				reduceResult: (result) => ({ ...result }),
 				invalidateTags: (result) => [
 					`post:${postId}`,
+					'boosts-given',
 					...(result.topic_id === undefined
 						? []
 						: [`topic:${String(discourseTopicId(result.topic_id))}`]),
@@ -236,7 +237,7 @@ export class PostActionFeatureCommands<TPost extends CanonicalActionPost> {
 						: [],
 					can_boost: true,
 				} as TPost),
-				invalidateTags: [`post:${postId}`],
+				invalidateTags: [`post:${postId}`, 'boosts-given'],
 			}),
 			presentation: postActionPresentation(postId, 'boost'),
 		};
@@ -509,6 +510,7 @@ export class PostActionFeatureCommands<TPost extends CanonicalActionPost> {
 				selectCreatedPost: (result) => result,
 				invalidateTags: (result) => [
 					`post:${discoursePostId(result.id)}`,
+					'replied-topics',
 					...(result.topic_id === undefined
 						? []
 						: [`topic:${String(discourseTopicId(result.topic_id))}`]),

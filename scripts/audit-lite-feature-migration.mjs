@@ -28,7 +28,7 @@ const artifactChecks = new Set([
 	'main-lite:check',
 	'userscript:inspect',
 ]);
-const expectedCatalogSize = 104;
+const expectedCatalogSize = 105;
 const expectedProofScope = 'static-evidence-integrity-only';
 const requiredBrowserScenarios = [
 	'coldReload',

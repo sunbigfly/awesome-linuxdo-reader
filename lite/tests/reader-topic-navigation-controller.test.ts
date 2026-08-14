@@ -28,14 +28,17 @@ const loads: Array<Readonly<{
 	postNumber: number;
 	scope: string | undefined;
 	forceRefresh: boolean | undefined;
+	advanceCursor: boolean | undefined;
 }>> = [];
 const reveals: Array<Readonly<{
 	postNumber: number;
 	source: string;
 	alignment: string | undefined;
 	degradedRootPostNumber: number | undefined;
+	revealAsFloor: boolean | undefined;
 }>> = [];
 const hiddenReveals: number[] = [];
+const preparedReveals: number[] = [];
 const hiddenPostNumbers = new Set<number>([6]);
 const delayed = {
 	resolve: undefined as (() => void) | undefined,
@@ -56,6 +59,7 @@ const navigation = new ReaderTopicNavigationController<TestPost>({
 				postNumber,
 				scope: options?.scope,
 				forceRefresh: options?.forceRefresh,
+				advanceCursor: options?.advanceCursor,
 			});
 			if (postNumber === 8 || postNumber === 10) {
 				await new Promise<void>((resolve) => {
@@ -77,12 +81,16 @@ const navigation = new ReaderTopicNavigationController<TestPost>({
 		},
 	},
 	dom: {
+		prepareRevealPost(postNumber) {
+			preparedReveals.push(postNumber);
+		},
 		revealPost(postNumber, options) {
 			reveals.push({
 				postNumber,
 				source: options.source,
 				alignment: options.alignment,
 				degradedRootPostNumber: options.degradedRootPostNumber,
+				revealAsFloor: options.revealAsFloor,
 			});
 			if (postNumber === 7) return null;
 			return Object.freeze({
@@ -141,8 +149,9 @@ assert(
 	loaded.status === 'revealed' &&
 	loaded.mounted &&
 	loads.at(-1)?.postNumber === 5 &&
-	loads.at(-1)?.scope === 'around',
-	'缺失目标必须先经 TopicSession around 补流，再揭示 canonical 树节点',
+	loads.at(-1)?.scope === 'around' &&
+	loads.at(-1)?.advanceCursor === false,
+	'缺失目标必须先经 TopicSession around 补流，再揭示 canonical 树节点；目的性远跳不得吞掉尚未水合的顺序流中段',
 );
 
 const hidden = await navigation.navigate({
@@ -153,9 +162,31 @@ const hidden = await navigation.navigate({
 assert(
 	hidden.status === 'revealed' &&
 		hidden.element?.dataset.postNumber === '6' &&
+		preparedReveals.includes(6) &&
 		hiddenReveals.join(',') === '6' &&
 		!reveals.some((entry) => entry.postNumber === 6),
-	'主投影隐藏的目标必须只在完整讨论端口揭示，不能再交给正文 DOM 提升成正式楼层',
+	'主投影隐藏的目标必须先结束旧滚动投影，再只在完整讨论端口揭示，不能交给正文 DOM 提升成正式楼层',
+);
+
+posts.set(12, post(12));
+hiddenPostNumbers.add(12);
+const loadsBeforeChronicle = loads.length;
+const hiddenRevealsBeforeChronicle = hiddenReveals.length;
+const chronicleFloor = await navigation.navigate({
+	postNumber: 12,
+	source: 'chronicle',
+	cachedOnly: true,
+	revealAsFloor: true,
+	highlight: true,
+});
+assert(
+	chronicleFloor.status === 'revealed' &&
+		loads.length === loadsBeforeChronicle &&
+		hiddenReveals.length === hiddenRevealsBeforeChronicle &&
+		reveals.at(-1)?.postNumber === 12 &&
+		reveals.at(-1)?.revealAsFloor === true &&
+		reveals.at(-1)?.degradedRootPostNumber === 12,
+	'岁月史书必须不重发已知 404，并绕过隐藏讨论窗口，即使父链未缓存也要把真实回复降级投影成可定位楼层 DOM',
 );
 
 const unavailable = await navigation.navigate({

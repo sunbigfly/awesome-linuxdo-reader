@@ -8,6 +8,17 @@ function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
 }
 
+function deferred<T>(): Readonly<{
+	promise: Promise<T>;
+	resolve: (value: T) => void;
+}> {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((next) => {
+		resolve = next;
+	});
+	return Object.freeze({ promise, resolve });
+}
+
 const { document: parsedDocument, window } = parseHTML(
 	'<!doctype html><html><body>' +
 		'<main id="surface"><section id="settings">' +
@@ -53,10 +64,18 @@ color.getBoundingClientRect = () => ({
 } as DOMRect);
 let scheduledFrame: FrameRequestCallback | null = null;
 let cancelledFrames = 0;
+const sampledColor = deferred<Readonly<{ sRGBHex: string }>>();
+let eyeDropperSignal: AbortSignal | null = null;
 const interactions = new ReaderSettingsFieldInteraction({
 	document,
 	popover,
 	surfaceHost: surface,
+	createEyeDropper: () => ({
+		open: (options) => {
+			eyeDropperSignal = options?.signal ?? null;
+			return sampledColor.promise;
+		},
+	}),
 	requestFrame: (callback) => {
 		scheduledFrame = callback;
 		return 7;
@@ -85,14 +104,18 @@ assert(
 );
 
 function pointer(
-	target: Element,
+	target: EventTarget,
 	type: string,
 	pointerId = 1,
+	clientX = 0,
+	clientY = 0,
 ): Event {
 	const event = new window.Event(type, { bubbles: true, cancelable: true });
 	Object.defineProperties(event, {
 		button: { value: 0 },
 		pointerId: { value: pointerId },
+		clientX: { value: clientX },
+		clientY: { value: clientY },
 	});
 	target.dispatchEvent(event);
 	return event;
@@ -127,11 +150,11 @@ color.addEventListener('input', () => {
 });
 pointer(color, 'pointerdown', 2);
 assert(
-	popover.classList.contains('ldp-color-picking') &&
-	document.querySelector('#color-row')?.classList.contains(
+	!popover.classList.contains('ldp-color-picking') &&
+	!document.querySelector('#color-row')?.classList.contains(
 		'ldp-color-pick-active',
 	),
-	'颜色 pointerdown 必须复用主线 picking 专注态',
+	'颜色 pointerdown 不得触发整窗专注态或大面积样式重算',
 );
 const colorClick = new window.Event('click', {
 	bubbles: true,
@@ -148,17 +171,60 @@ assert(
 	!popover.classList.contains('ldp-color-picking'),
 	'颜色 click 必须阻止浏览器原生面板，并按 surface 边界打开主线自定义弹层',
 );
+const eyeDropper = interactions.picker.querySelector<HTMLButtonElement>(
+	'.ldp-color-picker-eyedropper',
+)!;
+assert(
+	!eyeDropper.hidden && eyeDropper.getAttribute('aria-busy') === 'false',
+	'浏览器提供 EyeDropper 能力时，统一调色器必须显示可访问的屏幕吸色入口',
+);
+eyeDropper.click();
+assert(
+	eyeDropper.disabled &&
+	eyeDropper.getAttribute('aria-busy') === 'true' &&
+	Boolean(eyeDropperSignal) &&
+	colorInputs === 0,
+	'屏幕吸色必须直接在用户点击中启动，并在等待系统选择时保持单一进行态',
+);
+sampledColor.resolve({ sRGBHex: '#ABCDEF' });
+await Promise.resolve();
+assert(
+	color.value.toUpperCase() === '#ABCDEF' &&
+	Number(colorInputs) === 1 &&
+	!interactions.picker.hidden &&
+	!eyeDropper.disabled &&
+	eyeDropper.getAttribute('aria-busy') === 'false',
+	'屏幕吸色结果必须复用原颜色 input 草稿事件、同步面板并保持调色器打开',
+);
 interactions.picker.querySelector<HTMLButtonElement>(
 	'[data-color="#2563EB"]',
 )!.click();
 assert(
 	color.value.toUpperCase() === '#2563EB' &&
-	colorInputs === 1 &&
+	Number(colorInputs) === 2 &&
 	interactions.picker.hidden,
 	'预设颜色必须通过原 input 事件进入领域草稿，并在一次提交后关闭弹层',
 );
 
 interactions.openColorPicker(color);
+let pickerWheelLeaks = 0;
+surface.addEventListener('wheel', () => {
+	pickerWheelLeaks += 1;
+});
+const pickerBoundaryWheel = new window.Event('wheel', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperties(pickerBoundaryWheel, {
+	deltaX: { value: 0 },
+	deltaY: { value: 120 },
+	deltaMode: { value: 0 },
+});
+interactions.picker.dispatchEvent(pickerBoundaryWheel);
+assert(
+	pickerBoundaryWheel.defaultPrevented && pickerWheelLeaks === 0,
+	'独立调色浮层的滚轮边界不得继续驱动设置窗或宿主阅读流',
+);
 interactions.picker.querySelector<HTMLButtonElement>(
 	'.ldp-color-picker-more',
 )!.click();
@@ -195,20 +261,76 @@ const brightness = interactions.picker.querySelector<HTMLInputElement>(
 hue.value = '120';
 saturation.value = '100';
 brightness.value = '100';
+scheduledFrame = null;
 hue.dispatchEvent(new window.Event('input', { bubbles: true }));
 assert(
-	colorInputs === 1 && scheduledFrame,
+	Number(colorInputs) === 2 && scheduledFrame,
 	'高级调色连续输入必须合并到一帧，不能每个 pointer sample 都提交草稿',
 );
 const commitFrame = scheduledFrame as FrameRequestCallback;
 commitFrame(16);
 assert(
 	color.value.toUpperCase() === '#00FF00' &&
-	Number(colorInputs) === 2 &&
+	Number(colorInputs) === 3 &&
 	cancelledFrames === 1 &&
 	interactions.picker.querySelector('.ldp-color-picker-hue-value')
 		?.textContent === '120°',
 	'高级调色必须按帧提交最终 HSV 颜色并同步可读数值',
+);
+
+const wheel = interactions.picker.querySelector<HTMLElement>(
+	'.ldp-color-picker-wheel',
+)!;
+wheel.getBoundingClientRect = () => ({
+	x: 0,
+	y: 0,
+	left: 0,
+	top: 0,
+	right: 120,
+	bottom: 120,
+	width: 120,
+	height: 120,
+	toJSON() { return {}; },
+} as DOMRect);
+scheduledFrame = null;
+pointer(wheel, 'pointerdown', 3, 120, 60);
+pointer(document, 'pointermove', 3, 60, 120);
+assert(
+	Number(colorInputs) === 3 && scheduledFrame,
+	'二维色盘的连续 pointer sample 必须与滑杆共用单帧草稿提交',
+);
+pointer(document, 'pointerup', 3, 60, 120);
+assert(
+	color.value.toUpperCase() === '#00FFFF' &&
+	Number(colorInputs) === 4 &&
+	Number(cancelledFrames) === 2 &&
+	wheel.getAttribute('aria-valuetext') === '色相 180°，饱和度 100%' &&
+	wheel.style.getPropertyValue('--ldp-color-wheel-thumb') === '#00FFFF',
+	'二维色盘必须把坐标映射为 HSV、在手势结束时提交，并同步可访问数值和游标颜色',
+);
+
+scheduledFrame = null;
+const wheelKey = new window.Event('keydown', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperties(wheelKey, {
+	key: { value: 'ArrowRight' },
+	shiftKey: { value: true },
+});
+wheel.dispatchEvent(wheelKey);
+assert(
+	wheelKey.defaultPrevented &&
+	wheel.getAttribute('aria-valuenow') === '190' &&
+	Number(colorInputs) === 4 &&
+	scheduledFrame,
+	'色盘必须支持键盘微调，Shift 方向键按 10 度步进并沿用按帧提交',
+);
+const wheelKeyFrame = scheduledFrame as FrameRequestCallback;
+wheelKeyFrame(32);
+assert(
+	color.value.toUpperCase() === '#00D5FF' && Number(colorInputs) === 5,
+	'色盘键盘操作必须写回同一颜色草稿，而不是维护第二份颜色状态',
 );
 
 assert(

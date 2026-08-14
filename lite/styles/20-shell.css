@@ -142,6 +142,95 @@
   text-decoration: underline;
 }
 
+/* Discourse 原生用户页：昵称旁的用户观察入口。 */
+.user-main :is(.user-profile-names,.primary-textual):has(
+  .ldp-host-user-observation-entry
+),
+.user-main :is(
+  .user-profile-names__primary,
+  .full-name,
+  .username,
+  h1
+):has(> .ldp-host-user-observation-entry) {
+  overflow: visible;
+}
+
+.user-main .ldp-host-user-observation-entry {
+  --ldp-host-observation-accent: var(--tertiary, #47855f);
+  box-sizing: border-box;
+  display: inline-flex;
+  width: auto;
+  height: 1.08em;
+  min-width: 30px;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  gap: .16em;
+  margin: 0 0 0 .32em;
+  padding: 0 .34em;
+  appearance: none;
+  position: relative;
+  z-index: 2;
+  overflow: visible;
+  border: 1px solid color-mix(
+    in srgb,
+    var(--ldp-host-observation-accent) 48%,
+    transparent
+  );
+  border-radius: 999px;
+  background: color-mix(
+    in srgb,
+    var(--ldp-host-observation-accent) 12%,
+    var(--secondary, #fff)
+  );
+  box-shadow: 0 0 0 1px color-mix(
+    in srgb,
+    var(--ldp-host-observation-accent) 8%,
+    transparent
+  );
+  color: var(--ldp-host-observation-accent);
+  font: inherit;
+  line-height: 1;
+  vertical-align: middle;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.user-main .ldp-host-user-observation-entry > .ldp-icon {
+  width: .58em;
+  height: .58em;
+  stroke-width: 2.25;
+}
+
+.user-main .ldp-host-user-observation-entry-label {
+  font-size: .3em;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.user-main .ldp-host-user-observation-entry:is(:hover,:focus-visible) {
+  border-color: var(--ldp-host-observation-accent);
+  background: color-mix(
+    in srgb,
+    var(--ldp-host-observation-accent) 20%,
+    var(--secondary, #fff)
+  );
+  transform: scale(1.05);
+}
+
+.user-main .ldp-host-user-observation-entry:focus-visible {
+  outline: 2px solid var(--ldp-host-observation-accent);
+  outline-offset: 3px;
+}
+
+.user-main .ldp-host-user-observation-entry:disabled {
+  opacity: .62;
+  cursor: wait;
+}
+
 .ldp-only-op-toggle {
   display: inline-flex;
   width: 20px;
@@ -384,7 +473,8 @@
   top: calc(7px + var(--ldp-window-capsule-rail, 0px));
 }
 
-.ldp-title-actions > :is(button,a) {
+.ldp-title-actions > :is(button,a),
+.ldp-title > .ldp-topic-edit-trigger {
   display: inline-flex;
   width: calc(28px * var(--ldp-reader-display-scale, 1));
   height: calc(28px * var(--ldp-reader-display-scale, 1));
@@ -404,7 +494,7 @@
     transform var(--ldp-motion-fast) ease-out;
 }
 
-.ldp-head-btns > button {
+.ldp-head-btns > :is(button,a) {
   display: inline-flex;
   width: calc(var(--ldp-head-button-size) * var(--ldp-reader-display-scale, 1));
   height: calc(var(--ldp-head-button-size) * var(--ldp-reader-display-scale, 1));
@@ -425,9 +515,7 @@
     transform var(--ldp-motion-fast) ease-out;
 }
 
-.ldp-layout-toggle > span {
-  display: none;
-}
+.ldp-head-btns > .ldp-layout-toggle { display: none !important; }
 
 .ldp-open {
   flex: none;
@@ -438,58 +526,100 @@
   color: var(--ldp-accent);
 }
 
-.ldp-head-btns > button:hover {
+.ldp-head-btns > :is(button,a):hover {
   border-color: color-mix(in srgb, var(--ldp-ink-muted) 52%, transparent);
   background: color-mix(in srgb, var(--ldp-surface-muted) 82%, var(--ldp-canvas));
   color: var(--ldp-ink);
 }
 
-.ldp-head-btns > button:focus-visible {
+.ldp-head-btns > :is(button,a):focus-visible {
   outline: 2px solid color-mix(in srgb, var(--ldp-accent) 52%, transparent);
   outline-offset: 2px;
 }
 
-.ldp-head-btns > button[aria-expanded="true"] {
+.ldp-head-btns > :is(button,a)[aria-expanded="true"] {
   border-color: color-mix(in srgb, var(--ldp-accent) 36%, transparent);
   background: color-mix(in srgb, var(--ldp-accent-soft) 38%, var(--ldp-canvas));
   color: var(--ldp-accent);
 }
 
 .ldp-title-actions > :is(button,a):active,
-.ldp-head-btns > button:active {
+.ldp-head-btns > :is(button,a):active {
   transform: scale(.94);
 }
 
-.ldp-title-actions .ldp-icon {
+.ldp-title-actions:not(.is-expanded) > :is(
+  .ldp-reader-refresh,
+  .ldp-open,
+  .ldp-close
+) {
+  display: none;
+}
+
+.ldp-title-actions > [hidden] {
+  display: none;
+}
+
+.ldp-title-actions .ldp-icon,
+.ldp-title > .ldp-topic-edit-trigger .ldp-icon {
   width: 14px;
   height: 14px;
 }
 
-.ldp-title-actions .ldp-topic-edit-trigger {
+.ldp-title > .ldp-topic-edit-trigger {
   display: inline-flex;
+  position: relative;
+  width: .8em;
+  height: .8em;
+  align-items: center;
+  justify-content: center;
+  margin-left: .16em;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ldp-ink-muted);
+  font: inherit;
+  line-height: 0;
+  vertical-align: -.08em;
+  transform: none;
+}
+
+.ldp-title > .ldp-topic-edit-trigger::before {
+  position: absolute;
+  content: "";
+  inset: -.2em;
+}
+
+.ldp-title > .ldp-topic-edit-trigger .ldp-icon {
+  width: 100%;
+  height: 100%;
+}
+
+.ldp-title > .ldp-topic-edit-trigger:is(
+  :hover,
+  :focus-visible,
+  :active,
+  [aria-expanded="true"]
+) {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ldp-accent);
+  transform: none;
+}
+
+.ldp-title > .ldp-topic-edit-trigger[hidden] {
+  display: none;
 }
 
 .ldp-head-btns .ldp-icon {
   width: 14px;
   height: 14px;
   stroke-width: 1.8;
-}
-
-.ldp-title-actions .ldp-close {
-  position: relative;
-}
-
-.ldp-title-actions .ldp-close::before {
-  position: absolute;
-  top: 7px;
-  bottom: 7px;
-  left: calc(var(--ldp-header-action-gap) / -2);
-  width: 1px;
-  background: var(--ldp-border);
-  content: "";
-  opacity: .72;
-  pointer-events: none;
-  transform: translateX(-50%);
 }
 
 .ldp-reader-refresh:disabled {
@@ -564,10 +694,14 @@
   }
 
   .ldp-title::before {
-    width: calc(112px * var(--ldp-reader-display-scale, 1) + 32px);
+    width: calc(28px * var(--ldp-reader-display-scale, 1) + 8px);
     height: calc(28px * var(--ldp-reader-display-scale, 1));
     float: right;
     content: "";
+  }
+
+  .ldp-header.ldp-title-actions-expanded .ldp-title::before {
+    width: calc(112px * var(--ldp-reader-display-scale, 1) + 24px);
   }
 
   .ldp-header.ldp-title-single-line .ldp-title::before {
@@ -622,18 +756,29 @@
   white-space: nowrap;
 }
 
+.ldp-notifications-toggle {
+  position: relative;
+}
+
 .ldp-notification-unread-badge {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  min-width: 7px;
-  height: 7px;
-  padding: 0;
-  border: 1px solid var(--ldp-canvas);
+  top: -5px;
+  right: -5px;
+  display: inline-flex;
+  min-width: 17px;
+  height: 17px;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 4px;
+  border: 2px solid var(--ldp-canvas);
   border-radius: 999px;
   background: var(--danger, #c84545);
   color: #fff;
-  font-size: 0;
+  font-size: var(--ldp-font-micro, 9px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  line-height: 1;
 }
 
 .ldp-body {
@@ -650,14 +795,20 @@
   align-content: start;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scroll-behavior: auto;
   overflow-anchor: auto;
   margin: 0;
   padding: 0;
 }
 
-.ldp-body:is(.ldp-stream-viewport-anchor,.ldp-quote-positioning) {
-  /* 停稳视野锁或引用定位接管期间只允许一个物理锚定 owner。 */
+.ldp-body:is(.ldp-stream-programmatic-scroll,.ldp-quote-positioning) {
+  /* 程序化换位或引用定位接管期间只允许一个物理锚定 owner。 */
   overflow-anchor: none;
+}
+
+.ldp-body.ldp-stream-viewport-anchor {
+	/* 显式楼层锚点已由唯一 scroll owner 持有，不能再叠加 Chromium 补偿。 */
+	overflow-anchor: none;
 }
 
 .ldp-body > * {
@@ -1500,6 +1651,12 @@
   left: -4px;
 }
 
+.ldp-reader-queue.is-docked-right:not(.is-dock-revealed):not(:focus-within)
+  .ldp-reader-queue-dismiss {
+  right: auto;
+  left: -4px;
+}
+
 .ldp-reader-queue.is-preview-reversed {
   flex-direction: column-reverse;
 }
@@ -1521,6 +1678,14 @@
 .ldp-reader-queue.is-preview-collapsed,
 .ldp-reader-queue:is(.is-docked-left, .is-docked-right):not(.is-dock-revealed):not(:focus-within) {
   gap: 0;
+}
+
+.ldp-reader-queue-toggle-shell {
+  position: relative;
+  display: flex;
+  width: var(--ldp-reader-queue-toggle-size);
+  height: var(--ldp-reader-queue-toggle-size);
+  flex: none;
 }
 
 .ldp-reader-queue-toggle {
@@ -1573,6 +1738,55 @@
   font-size: var(--ldp-font-micro);
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  transition: opacity var(--ldp-motion-fast) ease-out;
+}
+
+.ldp-reader-queue-toggle > b[hidden] {
+  display: none;
+}
+
+.ldp-reader-queue-dismiss {
+  position: absolute;
+  top: -5px;
+  right: -4px;
+  z-index: 2;
+  display: inline-flex;
+  width: var(--ldp-reader-queue-badge-size);
+  height: var(--ldp-reader-queue-badge-size);
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 3px;
+  border: 2px solid var(--ldp-canvas);
+  border-radius: 50%;
+  background: var(--danger, #c94747);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(.82);
+  transition:
+    opacity var(--ldp-motion-fast) ease-out,
+    transform var(--ldp-motion-fast) ease-out;
+}
+
+.ldp-reader-queue-toggle-shell:hover .ldp-reader-queue-toggle > b,
+.ldp-reader-queue-toggle-shell:focus-within .ldp-reader-queue-toggle > b {
+  opacity: 0;
+}
+
+.ldp-reader-queue-toggle-shell:hover .ldp-reader-queue-dismiss,
+.ldp-reader-queue-toggle-shell:focus-within .ldp-reader-queue-dismiss,
+.ldp-reader-queue-dismiss:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+.ldp-reader-queue-dismiss .ldp-icon {
+  width: 8px;
+  height: 8px;
+  stroke-width: 2.5;
 }
 
 .ldp-reader-queue-bubbles {
@@ -2045,36 +2259,23 @@
 	display: none !important;
 }
 
-.ldp-topic-download-floating-host {
-	position: fixed;
-	inset: 0;
-	z-index: 2147483580;
-	display: block;
-	pointer-events: none;
+.ldp-reader-floating-window.is-topic-downloads {
+  container-name: ldp-user-observation-window;
+  container-type: inline-size;
 }
 
-.ldp-topic-download-manager.is-floating {
-	position: fixed;
-	top: 76px;
-	left: 76px;
-	z-index: 1;
-	display: block;
-	width: min(720px, calc(100vw - 16px));
-	min-width: min(520px, calc(100vw - 16px));
-	max-height: none;
-	box-sizing: border-box;
-	border: 1px solid var(--ldp-divider-line-color, #ddd);
-	border-radius: 14px;
-	background: var(--secondary, #fff);
-	box-shadow: 0 20px 56px rgb(0 0 0 / 24%);
-	pointer-events: auto;
+.ldp-reader-floating-window.is-topic-downloads
+  .ldp-reader-floating-window-body {
+  min-height: 0;
 }
 
-.ldp-topic-download-manager.is-floating.is-open {
+.ldp-reader-floating-window.is-topic-downloads .ldp-topic-download-manager {
   display: grid;
-  height: min(680px, 80vh, calc(100vh - 16px));
-  min-height: min(480px, calc(100vh - 16px));
-  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100%;
+  max-height: none;
+  grid-template-rows: auto minmax(0, 1fr);
+  border-top: 0;
+  background: transparent;
 }
 
 .ldp-topic-download-manager > .ldp-reader-confirm-layer {
@@ -2111,10 +2312,6 @@
 	touch-action: none;
 }
 
-.ldp-topic-download-manager.is-floating .ldp-topic-download-summary {
-	cursor: move;
-}
-
 .ldp-topic-download-summary > .ldp-icon {
   width: 15px;
   height: 15px;
@@ -2126,57 +2323,6 @@
   color: var(--ldp-ink-muted);
   font-size: var(--ldp-font-sm);
   font-weight: 550;
-}
-
-.ldp-topic-download-close {
-  position: relative;
-  z-index: 1;
-  order: 2;
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  place-items: center;
-  margin: -2px -3px -2px auto;
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--ldp-ink-muted);
-  cursor: pointer;
-}
-
-.ldp-topic-download-close:is(:hover, :focus-visible) {
-  background: var(--ldp-surface-muted);
-  color: var(--ldp-ink);
-}
-
-.ldp-topic-download-close > .ldp-icon {
-  width: 15px;
-  height: 15px;
-}
-
-.ldp-topic-download-resize-handle {
-	position: absolute;
-	z-index: 5;
-	display: block;
-	background: transparent;
-	pointer-events: auto;
-	touch-action: none;
-}
-
-.ldp-topic-download-resize-handle[data-resize="n"] { top: -6px; right: 16px; left: 16px; height: 12px; cursor: n-resize; }
-.ldp-topic-download-resize-handle[data-resize="s"] { right: 16px; bottom: -6px; left: 16px; height: 12px; cursor: s-resize; }
-.ldp-topic-download-resize-handle[data-resize="e"] { top: 16px; right: -6px; bottom: 16px; width: 12px; cursor: e-resize; }
-.ldp-topic-download-resize-handle[data-resize="w"] { top: 16px; bottom: 16px; left: -6px; width: 12px; cursor: w-resize; }
-.ldp-topic-download-resize-handle[data-resize="ne"] { top: -7px; right: -7px; width: 20px; height: 20px; cursor: ne-resize; }
-.ldp-topic-download-resize-handle[data-resize="nw"] { top: -7px; left: -7px; width: 20px; height: 20px; cursor: nw-resize; }
-.ldp-topic-download-resize-handle[data-resize="sw"] { bottom: -7px; left: -7px; width: 20px; height: 20px; cursor: sw-resize; }
-.ldp-topic-download-resize-handle[data-resize="se"] { right: -7px; bottom: -7px; width: 20px; height: 20px; cursor: se-resize; }
-
-.ldp-topic-download-interacting {
-	cursor: grabbing;
-	user-select: none;
 }
 
 .ldp-topic-download-toolbar {
@@ -2232,7 +2378,7 @@
 	width: 100%;
 }
 
-.ldp-topic-download-manager.is-floating:has(
+.ldp-reader-floating-window.is-topic-downloads:has(
   .ldp-topic-download-selection-mode[aria-expanded="true"]
 ) {
   overflow: visible;
@@ -2710,15 +2856,6 @@
 }
 
 @media (max-width: 640px) {
-  .ldp-topic-download-manager.is-floating {
-    width: calc(100% - 16px);
-  }
-
-  .ldp-topic-download-manager.is-floating.is-open {
-    height: min(680px, calc(100% - 16px), 84vh);
-    min-height: min(480px, calc(100% - 16px));
-  }
-
   .ldp-topic-download-toolbar {
     padding-inline: 8px;
   }
@@ -2821,26 +2958,68 @@
 
 .ldp-topic-action-rail > .ldp-topic-action-rail-post > .ldp-post-body,
 .ldp-topic-action-rail > .ldp-topic-action-rail-post > .ldp-post-body > .ldp-topic-footer-slot,
-.ldp-topic-action-rail :is(.ldp-reactions,.ldp-actions,.ldp-topic-footer-actions) {
+.ldp-topic-action-rail :is(.ldp-reactions,.ldp-actions) {
   display: contents;
 }
 
-/* rail 的视觉次序独立于 PostView DOM：下载固定在 Boost 下方、书签上方。 */
+/* 第一段只保留阅读动作；第二段按收藏、下载、观察、史书、不想看和其余入口排列。 */
 .ldp-topic-action-rail-top { order: 0; }
-.ldp-topic-action-rail .ldp-actions > * { order: 60; }
+.ldp-topic-action-rail .ldp-actions > * { order: 70; }
 .ldp-topic-action-rail .ldp-actions > :is(
   .ldp-like,
   .ldp-reaction-like-picker
 ) { order: 10; }
 .ldp-topic-action-rail .ldp-actions > .ldp-replybtn { order: 20; }
 .ldp-topic-action-rail .ldp-actions > .ldp-boostbtn { order: 30; }
-.ldp-topic-action-rail-download { order: 40; }
-.ldp-topic-action-rail-download-history { order: 41; }
-.ldp-topic-action-rail .ldp-topic-footer-actions > * { order: 70; }
-.ldp-topic-action-rail .ldp-topic-footer-actions > .ldp-topic-bookmark {
+.ldp-topic-action-rail-download-group {
+  display: contents;
+}
+.ldp-topic-action-rail-download-group[hidden] { display: none !important; }
+.ldp-topic-action-rail-secondary-tools {
+  --ldp-topic-action-group-height: 22px;
+  display: flex;
+  box-sizing: border-box;
+  width: min(
+    138px,
+    var(--ldp-topic-rail-actions-max-width, calc(100vw - 8px))
+  );
+  min-width: 0;
+  height: auto;
+  min-height: var(--ldp-topic-action-group-height);
+  align-items: center;
+  justify-content: space-between;
+  flex-flow: row nowrap;
+  gap: 1px;
+  margin: calc(
+    (var(--ldp-control-height) - var(--ldp-topic-action-group-height)) / 2
+  ) 0;
+  padding: 1px 2px;
+  overflow: visible;
+  border: 0;
+  border-radius: var(--ldp-radius-sm);
+  background: var(--ldp-surface-muted);
+  transition: none;
+  order: 51;
+}
+
+.ldp-topic-action-rail.is-expanded .ldp-topic-action-rail-secondary-tools
+  :is(button:not(.ldp-select-option),.ldp-topic-notification) {
+  width: 26px;
+  height: 20px;
+  min-width: 26px;
+}
+.ldp-topic-action-rail .ldp-topic-footer-slot > * { order: 59; }
+.ldp-topic-action-rail .ldp-topic-footer-slot > .ldp-topic-bookmark {
   order: 50;
 }
+.ldp-topic-action-rail .ldp-topic-footer-slot > .ldp-topic-shared-issue {
+  order: 40;
+}
 .ldp-topic-action-rail-toggle { order: 100; }
+
+.ldp-topic-action-rail:not(.is-expanded) > .ldp-topic-action-rail-toggle {
+  order: 54;
+}
 
 .ldp-topic-action-rail .ldp-reaction-summary,
 .ldp-topic-action-rail .ldp-topic-footer-separator {
@@ -2849,14 +3028,74 @@
 
 .ldp-topic-action-rail:not(.is-expanded) .ldp-actions >
   :not(.ldp-like):not(.ldp-reaction-like-picker):not(.ldp-replybtn):not(.ldp-boostbtn),
-.ldp-topic-action-rail:not(.is-expanded) .ldp-topic-footer-actions >
-  :not(.ldp-topic-bookmark) {
+.ldp-topic-action-rail:not(.is-expanded) .ldp-topic-footer-slot >
+  :not(.ldp-topic-shared-issue),
+.ldp-topic-action-rail.is-expanded .ldp-topic-footer-slot >
+  .ldp-topic-shared-issue {
+  display: none !important;
+}
+
+.ldp-topic-action-rail.is-expanded > .ldp-topic-action-rail-top,
+.ldp-topic-action-rail.is-expanded .ldp-actions > :is(
+  .ldp-like,
+  .ldp-reaction-like-picker,
+  .ldp-replybtn,
+  .ldp-boostbtn
+) {
   display: none !important;
 }
 
 .ldp-topic-action-rail.is-expanded .ldp-context-actions-slot {
-  width: calc(var(--ldp-context-action-count, 0) * 22px - 2px);
+  --ldp-topic-action-group-height: 22px;
+  display: flex;
+  box-sizing: border-box;
+  width: min(
+    138px,
+    var(--ldp-topic-rail-actions-max-width, calc(100vw - 8px))
+  ) !important;
+  max-width: var(--ldp-topic-rail-actions-max-width, calc(100vw - 8px));
+  min-width: 0;
+  height: auto;
+  min-height: var(--ldp-topic-action-group-height);
+  align-items: center;
+  justify-content: flex-start;
+  flex-flow: row wrap;
+  gap: 1px;
+  margin: calc(
+    (var(--ldp-control-height) - var(--ldp-topic-action-group-height)) / 2
+  ) 0;
+  padding: 1px 2px;
   overflow: visible;
+  border: 0;
+  border-radius: var(--ldp-radius-sm);
+  background: var(--ldp-surface-muted);
+  transition: none;
+}
+
+.ldp-topic-action-rail.is-expanded .ldp-context-actions-slot
+  :is(button:not(.ldp-select-option),.ldp-topic-notification) {
+  width: 26px;
+  height: 20px;
+  min-width: 26px;
+}
+
+.ldp-topic-action-rail.is-expanded .ldp-context-actions-slot >
+  .ldp-topic-footer-actions {
+  display: contents;
+}
+
+.ldp-topic-action-rail.is-expanded.is-actions-open-left
+  .ldp-context-actions-slot {
+  justify-content: flex-end;
+}
+
+.ldp-topic-action-rail.is-expanded.is-actions-open-left
+  :is(.ldp-context-actions-slot,.ldp-topic-action-rail-secondary-tools) {
+  transform: translateX(calc(var(--ldp-control-height) - 100%));
+}
+
+.ldp-topic-action-rail.is-expanded .ldp-context-actions-slot:empty {
+  display: none;
 }
 
 .ldp-topic-action-rail.is-expanded .ldp-actions .ldp-context-action {
@@ -2885,14 +3124,14 @@
 }
 
 .ldp-topic-action-rail:is(.is-docked-left,.is-docked-right):not(.is-dragging):not(:hover):not(:focus-within) >
-	:not(.ldp-topic-action-rail-top):not(.ldp-topic-action-rail-download):not(.ldp-topic-action-rail-toggle) {
+	:not(.ldp-topic-action-rail-top):not(.ldp-topic-action-rail-download-group):not(.ldp-topic-action-rail-toggle) {
 	visibility: hidden;
 }
 
 .ldp-topic-action-rail:is(.is-docked-left,.is-docked-right) >
 	:is(
 		.ldp-topic-action-rail-top,
-		.ldp-topic-action-rail-download,
+		.ldp-topic-action-rail-download-group,
 		.ldp-topic-action-rail-toggle
 	) {
 	pointer-events: auto;
@@ -2907,7 +3146,8 @@
     minmax(0, var(--ldp-layout-right, 5%));
 }
 
-.ldp-topic-action-rail :is(button,.ldp-topic-notification) {
+.ldp-topic-action-rail
+  :is(button:not(.ldp-select-option),.ldp-topic-notification) {
   display: inline-flex;
   width: var(--ldp-control-height);
   height: var(--ldp-control-height);
@@ -2922,29 +3162,31 @@
   cursor: pointer;
 }
 
-.ldp-topic-action-rail :is(button,.ldp-topic-notification):hover {
+.ldp-topic-action-rail
+  :is(button:not(.ldp-select-option),.ldp-topic-notification):hover {
   background: var(--ldp-surface-muted);
   color: var(--ldp-accent);
 }
 
-.ldp-topic-action-rail > :is(
+.ldp-topic-action-rail :is(
 	.ldp-topic-action-rail-download,
-	.ldp-topic-action-rail-download-history
+	.ldp-topic-action-rail-chronicle,
+	.ldp-topic-action-rail-unwanted-topics,
+	.ldp-topic-action-rail-user-observation
 ) {
 	color: var(--ldp-accent);
 }
 
-.ldp-topic-action-rail > :is(
+.ldp-topic-action-rail :is(
 	.ldp-topic-action-rail-download,
-	.ldp-topic-action-rail-download-history
+	.ldp-topic-action-rail-chronicle,
+	.ldp-topic-action-rail-unwanted-topics,
+	.ldp-topic-action-rail-user-observation
 )[hidden] {
 	display: none !important;
 }
 
-.ldp-topic-action-rail.is-expanded > :is(
-	.ldp-topic-action-rail-download-history,
-	.ldp-topic-action-rail-toggle
-) {
+.ldp-topic-action-rail.is-expanded > .ldp-topic-action-rail-toggle {
 	background: var(--ldp-accent-soft);
 	color: var(--ldp-accent);
 }
@@ -2954,8 +3196,14 @@
   height: 18px;
 }
 
-.ldp-topic-action-rail :is(button,.ldp-topic-notification) >
-  span:not(.ldp-like-count) {
+.ldp-topic-action-rail
+  :is(
+    button:not(.ldp-select-option):not(.ldp-reaction-chip),
+    .ldp-topic-notification
+  ) >
+  span:not(.ldp-like-count):not(.ldp-select-surface):not(
+    .ldp-topic-shared-issue-count
+  ) {
   display: none;
 }
 
@@ -2973,7 +3221,7 @@
   opacity: .72;
 }
 
-.ldp-topic-action-rail.is-expanded
+.ldp-topic-action-rail:not(.is-expanded)
   .ldp-topic-footer-button.ldp-topic-shared-issue {
   width: var(--ldp-control-height);
   height: calc(var(--ldp-control-height) + 8px);
@@ -2983,12 +3231,12 @@
   padding: 3px 0;
 }
 
-.ldp-topic-action-rail.is-expanded
+.ldp-topic-action-rail:not(.is-expanded)
   .ldp-topic-shared-issue > .ldp-topic-shared-issue-label {
   display: none;
 }
 
-.ldp-topic-action-rail.is-expanded
+.ldp-topic-action-rail:not(.is-expanded)
   .ldp-topic-shared-issue > .ldp-topic-shared-issue-count {
   display: block;
   margin: 0;
@@ -3005,14 +3253,22 @@
 .ldp-topic-action-rail .ldp-reaction-like-picker {
   position: relative;
   display: inline-flex;
+  height: var(--ldp-control-height);
   align-items: center;
 }
 
+.ldp-topic-action-rail .ldp-reaction-like-picker >
+  .ldp-like[aria-expanded="true"] {
+  background: var(--ldp-surface-muted);
+  border-radius: var(--ldp-radius-sm) 0 0 var(--ldp-radius-sm);
+}
+
 .ldp-topic-action-rail .ldp-reaction-picker {
-  bottom: 0;
-  left: 100%;
-  height: calc(var(--ldp-control-height) + 8px);
-  min-height: calc(var(--ldp-control-height) + 8px);
+  top: 0;
+  bottom: auto;
+  left: calc(100% - 1px);
+  height: 100%;
+  min-height: 100%;
   align-items: center;
   flex-flow: row nowrap;
   gap: 2px;
@@ -3024,7 +3280,7 @@
 .ldp-topic-action-rail .ldp-reaction-picker .ldp-reaction-chip {
   width: auto;
   min-width: 18px;
-  height: calc(var(--ldp-control-height) + 8px);
+  height: 100%;
   flex-direction: column;
   gap: 1px;
   padding: 3px;
@@ -3038,6 +3294,10 @@
   font-weight: inherit;
   line-height: 1;
   opacity: .72;
+}
+
+.ldp-topic-action-rail .ldp-reaction-picker .ldp-reaction-chip > b:empty {
+  display: none;
 }
 
 .ldp-topic-action-rail .ldp-reaction-picker .ldp-reaction-chip > span {

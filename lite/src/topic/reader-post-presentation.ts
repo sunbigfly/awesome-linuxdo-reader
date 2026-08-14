@@ -3,7 +3,10 @@ import type {
 	DiscourseNativeRelativeTimeFormatter,
 	DiscourseNativeTopicPresentationPort,
 } from '../discourse/native-host-api.js';
-import { replaceImageWithFallbackOnError } from '../components/reader-image-fallback.js';
+import {
+	installReaderImageSourceFallback,
+	type ReaderImageSourceRecovery,
+} from '../components/reader-image-fallback.js';
 import { renderReaderIcon } from '../components/reader-icon.js';
 import type {
 	PostView,
@@ -40,6 +43,7 @@ export interface ReaderPostPresentationOptions {
 	readonly exactTime: DiscourseNativeExactTimeFormatter;
 	readonly readTopic: () => unknown;
 	readonly currentUsername?: string;
+	readonly recoverAvatarSource?: ReaderImageSourceRecovery;
 	readonly renderIcon?: (name: string, document: Document) => Node | null;
 }
 
@@ -107,32 +111,31 @@ function appendAvatar(
 	username: string,
 	displayName: string,
 ): void {
-	const source = options.presentation.avatarSource(
-		text(post.avatar_template),
-		48,
-	);
+	const avatarTemplate = text(post.avatar_template);
+	const source = options.presentation.avatarSource(avatarTemplate, 48);
+	const exactSource = avatarTemplate.replace(/\{size\}/g, '48');
 	const trigger = options.document.createElement('button');
 	trigger.type = 'button';
 	trigger.className = 'ldp-user-link ldp-avatar-link';
 	trigger.dataset.readerAvatar = '';
 	trigger.dataset.userAvatarPreview = '';
+	if (avatarTemplate) trigger.dataset.userAvatarTemplate = avatarTemplate;
 	trigger.dataset.userCard = username;
 	trigger.setAttribute('aria-label', `查看 ${displayName} 的头像原图`);
 	if (source) {
 		const avatar = options.document.createElement('img');
 		avatar.className = 'ldp-avatar';
-		replaceImageWithFallbackOnError(avatar, () => {
+		avatar.alt = '';
+		avatar.loading = 'lazy';
+		avatar.decoding = 'async';
+		trigger.append(avatar);
+		installReaderImageSourceFallback(avatar, [source, exactSource], () => {
 			const fallback = options.document.createElement('span');
 			fallback.className = 'ldp-avatar ldp-persistent-avatar-fallback';
 			fallback.textContent = [...(displayName || username || '?')][0] ?? '?';
 			fallback.setAttribute('aria-hidden', 'true');
 			return fallback;
-		});
-		avatar.src = source;
-		avatar.alt = '';
-		avatar.loading = 'lazy';
-		avatar.decoding = 'async';
-		trigger.append(avatar);
+		}, options.recoverAvatarSource, exactSource);
 	} else {
 		const fallback = options.document.createElement('span');
 		fallback.className = 'ldp-avatar ldp-persistent-avatar-fallback';
@@ -439,6 +442,7 @@ export function createReaderPostPresentation<
 			const createdAt =
 				text(post.created_at) || text(view.identity.createdAt);
 			const relative = options.relativeTime(createdAt);
+			let exactLabel: HTMLElement | null = null;
 			if (relative) {
 				const time = options.document.createElement('span');
 				time.className = 'ldp-time';
@@ -452,7 +456,13 @@ export function createReaderPostPresentation<
 						value: exact,
 					}));
 				}
-				if (exact) time.dataset.exactTime = exact;
+				if (exact) {
+					time.dataset.exactTime = exact;
+					exactLabel = options.document.createElement('span');
+					exactLabel.className = 'ldp-time-exact';
+					exactLabel.textContent = exact;
+					exactLabel.setAttribute('aria-hidden', 'true');
+				}
 				const label = options.document.createElement('span');
 				label.className = 'ldp-time-relative';
 				label.textContent = `· ${relative}`;
@@ -473,6 +483,7 @@ export function createReaderPostPresentation<
 				postNumber,
 				replyToPostNumber,
 			);
+			if (exactLabel) header.append(exactLabel);
 			appendReadState(
 				options.document,
 				header,

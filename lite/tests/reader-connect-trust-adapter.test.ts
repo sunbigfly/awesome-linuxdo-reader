@@ -6,7 +6,9 @@ import type {
 	DiscourseNativeAjaxExecution,
 } from '../src/network/discourse-native-read-transport.js';
 import type {
+	CollectionPageCacheLookup,
 	CollectionPageRequest,
+	UserResourceCacheLookup,
 	UserResourceRequest,
 } from '../src/network/domain-request-gateway.js';
 import type {
@@ -15,9 +17,15 @@ import type {
 	ExternalTranslationHttpResponse,
 } from '../src/translation/translation-request-adapter.js';
 import {
+	discourseAuthScope,
+	discoursePostNumber,
+	discourseTopicId,
+} from '../src/discourse/identifiers.js';
+import {
 	ReaderConnectTrustAdapter,
 	ReaderConnectTrustHistoryAdapter,
 	type ReaderConnectTrustGateway,
+	type ReaderConnectTrustHistoryChange,
 	type ReaderConnectTrustHistoryAjaxPort,
 	type ReaderConnectTrustHistoryGateway,
 	type ReaderConnectTrustMetric,
@@ -67,12 +75,19 @@ const http: ExternalTranslationHttpPort = {
 	},
 };
 const requests: UserResourceRequest<unknown>[] = [];
+let cachedConnectSnapshot: unknown = null;
 const gateway: ReaderConnectTrustGateway = {
 	async loadUserResource<T>(input: UserResourceRequest<T>): Promise<T> {
 		requests.push(input as UserResourceRequest<unknown>);
 		const response = await input.transport({ signal: input.signal, attempt: 0 });
 		if (!response.ok) throw new Error(`HTTP ${response.status}`);
+		cachedConnectSnapshot = response.value;
 		return response.value;
+	},
+	async cachedUserResource<T>(
+		_input: UserResourceCacheLookup,
+	): Promise<T | null> {
+		return cachedConnectSnapshot as T | null;
 	},
 };
 const { document: parsedDocument } = parseHTML(
@@ -109,6 +124,17 @@ assert(
 		quotas[0]?.reverse === true &&
 		snapshot.updatedAt === 900,
 	'Connect HTML 必须投影账号、周期、总状态和四类冻结指标',
+);
+const descriptorCountBeforeCache = descriptors.length;
+const cachedSnapshot = await adapter.cached(
+	'alice',
+	new AbortController().signal,
+);
+assert(
+	cachedSnapshot?.stale === true &&
+		cachedSnapshot.metrics.targetLevel === 3 &&
+		descriptors.length === descriptorCountBeforeCache,
+	'Connect 必须先从中央缓存投影旧快照，且缓存命中不得触发外部请求',
 );
 assert(
 	requests[0]?.resource === 'connect-trust' &&
@@ -151,6 +177,12 @@ try {
 
 let historyNow = Date.parse('2026-08-06T12:00:00.000Z');
 const historyRequests: CollectionPageRequest<unknown>[] = [];
+const cachedHistoryPages = new Map<string, unknown>();
+const historyCacheKey = (input: Readonly<{
+	readonly page: number;
+	readonly cursor?: string | number;
+	readonly variant?: string;
+}>): string => `${input.page}:${String(input.cursor ?? '')}:${String(input.variant ?? '')}`;
 const actionPayloads = new Map<number, readonly Readonly<Record<string, unknown>>[]>([
 	[1, Object.freeze([
 		Object.freeze({ created_at: '2026-08-06T10:00:00.000Z', topic_id: 1, acting_user_id: 1 }),
@@ -192,7 +224,13 @@ const historyGateway: ReaderConnectTrustHistoryGateway = {
 		historyRequests.push(input as CollectionPageRequest<unknown>);
 		const response = await input.transport({ signal: input.signal, attempt: 0 });
 		if (!response.ok) throw new Error(`HTTP ${response.status}`);
+		cachedHistoryPages.set(historyCacheKey(input), response.value);
 		return response.value;
+	},
+	async cachedCollectionPage<T>(
+		input: CollectionPageCacheLookup,
+	): Promise<T | null> {
+		return (cachedHistoryPages.get(historyCacheKey(input)) ?? null) as T | null;
 	},
 };
 const historyStorageValues = new Map<string, string>();
@@ -207,6 +245,8 @@ const historyAdapter = new ReaderConnectTrustHistoryAdapter({
 	timeZone: 'UTC',
 	now: () => historyNow,
 });
+const historyChanges: ReaderConnectTrustHistoryChange[] = [];
+historyAdapter.changes.subscribe((change) => historyChanges.push(change));
 historyAdapter.recordReadConfirmation({
 	authScope: 'account:other',
 	topicId: 20,
@@ -225,6 +265,12 @@ historyAdapter.recordReadConfirmation({
 	postNumbers: [2],
 	confirmedAt: historyNow + 1_000,
 });
+assert(
+	historyChanges.length === 2 &&
+		historyChanges.at(-1)?.metric.days.at(-1)?.change === 2 &&
+		historyRequests.length === 0,
+	'已读成功确认必须立即推送去重后的本地历史，且不得触发 Connect 历史网络请求',
+);
 const historyMetrics = (daysVisited: number, postsRead: number, flagged: number) =>
 	Object.freeze({
 		rings: Object.freeze([Object.freeze({
@@ -251,11 +297,23 @@ await historyAdapter.load(
 historyNow += 60_000;
 const historySnapshot = await historyAdapter.load(
 	'alice',
-	historyMetrics(99, 56_340, 1),
+	historyMetrics(97, 56_340, 1),
 	new AbortController().signal,
 	true,
 );
+const requestCountBeforeCachedHistory = historyRequests.length;
+const cachedHistorySnapshot = await historyAdapter.cached(
+	'alice',
+	historyMetrics(99, 56_340, 1),
+	new AbortController().signal,
+);
 const todayHistory = (key: string) => historySnapshot.metrics[key]?.days.at(-1);
+assert(
+	cachedHistorySnapshot.metrics['likes-received']?.source === 'server-account' &&
+	cachedHistorySnapshot.metrics['likes-received']?.days.at(-1)?.change === 3 &&
+	historyRequests.length === requestCountBeforeCachedHistory,
+	'Connect 50 天记录必须先复用完整中央分页缓存，且缓存投影不得发出网络请求',
+);
 assert(
 	historySnapshot.dayCount === 50 &&
 		historySnapshot.metrics['likes-given']?.source === 'server-account' &&
@@ -268,10 +326,10 @@ assert(
 );
 assert(
 	historySnapshot.metrics['days-visited']?.source === 'local-script' &&
-		todayHistory('days-visited')?.change === 1 &&
-		todayHistory('flagged-posts')?.change === 1 &&
-		historySnapshot.metrics['days-visited']?.days.filter((day) => day.observed).length === 1,
-	'没有成功事件出口的指标只能记录当前脚本当日首末快照，不得补造安装前日期',
+	todayHistory('days-visited')?.change === 0 &&
+	todayHistory('flagged-posts')?.change === 1 &&
+	historySnapshot.metrics['days-visited']?.days.filter((day) => day.observed).length === 1,
+	'访问天数的滚动窗口回落不得显示负数；其余本地指标仍只记录脚本当日首末快照',
 );
 assert(
 	historySnapshot.metrics['posts-read']?.source === 'server-confirmed-local' &&
@@ -291,4 +349,45 @@ assert(
 	[...historyStorageValues.keys()].some((key) =>
 		key.includes('connect-trust-history:v1:scope:v2:account%3Aalice')),
 	'服务端历史分页必须进入中央 collection gateway，本地快照必须按账号隔离持久化',
+);
+
+const reconciledHistoryStorage = new Map<string, string>();
+const reconciledHistoryAdapter = new ReaderConnectTrustHistoryAdapter({
+	gateway: historyGateway,
+	ajax: historyAjax,
+	storage: {
+		getItem: (key) => reconciledHistoryStorage.get(key) ?? null,
+		setItem: (key, value) => reconciledHistoryStorage.set(key, value),
+	},
+	confirmations: {
+		confirmedPosts: () => Object.freeze([
+			Object.freeze({
+				authScope: discourseAuthScope('account:alice'),
+				topicId: discourseTopicId(30),
+				postNumber: discoursePostNumber(1),
+				confirmedAt: historyNow,
+			}),
+			Object.freeze({
+				authScope: discourseAuthScope('account:alice'),
+				topicId: discourseTopicId(30),
+				postNumber: discoursePostNumber(2),
+				confirmedAt: historyNow,
+			}),
+		]),
+	},
+	authScope: 'account:alice',
+	timeZone: 'UTC',
+	now: () => historyNow,
+});
+const reconciledHistory = await reconciledHistoryAdapter.cached(
+	'alice',
+	historyMetrics(99, 56_340, 1),
+	new AbortController().signal,
+);
+assert(
+	reconciledHistory.metrics['posts-read']?.days.at(-1)?.change === 2 &&
+	Object.keys((reconciledHistoryAdapter.syncValue() as {
+		readonly confirmedReads: Readonly<Record<string, number>>;
+	}).confirmedReads).join(',') === '30:1,30:2',
+	'浏览帖子历史必须从中央 timings 精确成功账本补回遗漏确认，避免只依赖易错过的实时回调',
 );

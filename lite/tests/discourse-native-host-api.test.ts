@@ -3,8 +3,10 @@ import {
 	BrowserDiscourseBookmarkNativeState,
 	BrowserDiscourseNotificationNativeState,
 	BrowserDiscourseHostApiPort,
+	discourseNativeAppEventSubscription,
 	discourseNativeBoostsAvailable,
 	discourseNativeCurrentUserBindingAvailable,
+	discourseNativeDefaultSiteTheme,
 	discourseNativeEmojiUrl,
 	discourseNativeEmojiMenu,
 	discourseNativeExactTimeFormatter,
@@ -18,6 +20,7 @@ import {
 	discourseNativeTopicLinks,
 	discourseNativeTopicPresentation,
 	discourseNativeTheme,
+	discourseNativeUnwantedTopicRuleCatalog,
 	type DiscourseHostApiPort,
 } from '../src/discourse/native-host-api.js';
 import { LifecycleScope } from '../src/kernel/lifecycle.js';
@@ -181,6 +184,70 @@ assert(
 );
 nativeThemeScope.destroy();
 assert(nativeThemeHandler === null, '宿主主题订阅必须跟随 lifecycle 成对释放');
+
+let lateNativeThemeReady = false;
+const lateNativeTheme = discourseNativeTheme({
+	lookup: (name) =>
+		name === 'service:interface-color' && lateNativeThemeReady
+			? nativeThemeService
+			: null,
+	lookupModule: () => null,
+});
+const lateNativeThemeScope = new LifecycleScope();
+const lateNativeThemes: string[] = [];
+lateNativeTheme.subscribe(
+	(mode) => lateNativeThemes.push(mode),
+	lateNativeThemeScope,
+);
+lateNativeThemeReady = true;
+await Promise.resolve();
+nativeThemeMode = 'dark';
+emitNativeThemeChange();
+assert(
+	lateNativeThemes.join(',') === 'dark',
+	'document-start 时主题 service 尚未就绪，延迟出现后必须恢复原生事件订阅',
+);
+lateNativeThemeScope.destroy();
+assert(nativeThemeHandler === null, '延迟建立的主题订阅也必须随 scope 成对释放');
+
+let activeSiteThemeId = 8;
+let defaultSiteThemeWrite = '';
+const defaultSiteThemeHost: DiscourseHostApiPort = {
+	lookup(name) {
+		if (name === 'service:site') {
+			return {
+				user_themes: [
+					{ theme_id: 8, name: 'Custom', default: false },
+					{ theme_id: -1, name: 'Default', default: true },
+				],
+			};
+		}
+		if (name === 'service:current-user') return { theme_key_seq: 7 };
+		return null;
+	},
+	lookupModule(name) {
+		return name === 'discourse/lib/theme-selector'
+			? {
+				currentThemeId: () => activeSiteThemeId,
+				setLocalTheme(ids: readonly number[], sequence: number) {
+					defaultSiteThemeWrite = `${ids.join(',')}|${sequence}`;
+					activeSiteThemeId = ids[0]!;
+				},
+			}
+			: null;
+	},
+};
+assert(
+	discourseNativeDefaultSiteTheme(defaultSiteThemeHost) === 'updated' &&
+		defaultSiteThemeWrite === '-1|7' &&
+		discourseNativeDefaultSiteTheme(defaultSiteThemeHost) ===
+			'already-default' &&
+	discourseNativeDefaultSiteTheme({
+		lookup: () => null,
+		lookupModule: () => null,
+	}) === 'unavailable',
+	'嵌入态必须只经 Discourse theme-selector 把站点主题切到 default，并避免重复写入',
+);
 
 const jqueryModule = Object.freeze({ default: () => null });
 const jqueryHost = new BrowserDiscourseHostApiPort({
@@ -440,6 +507,7 @@ assert(
 );
 
 let topicPresentationSiteReady = true;
+let topicPresentationModulesReady = false;
 const topicPresentation = discourseNativeTopicPresentation({
 	lookup(name) {
 		return name === 'service:site' && topicPresentationSiteReady
@@ -447,6 +515,7 @@ const topicPresentation = discourseNativeTopicPresentation({
 			: null;
 	},
 	lookupModule(name) {
+		if (!topicPresentationModulesReady) return null;
 		if (name === 'discourse/lib/url') {
 			return {
 				getCategoryAndTagUrl(
@@ -454,15 +523,17 @@ const topicPresentation = discourseNativeTopicPresentation({
 					_includeParent: boolean,
 					tag?: string,
 				) {
-					return tag ? `/tag/${tag}` : `/c/${category?.id ?? 0}`;
+					return tag
+						? `/native-tag/${tag}`
+						: `/native-category/${category?.id ?? 0}`;
 				},
-				userPath: (username: string) => `/u/${username}`,
+				userPath: (username: string) => `/native-user/${username}`,
 			};
 		}
 		if (name === 'discourse/lib/avatar-utils') {
 			return {
 				avatarUrl: (template: string, size: number) =>
-					template.replace('{size}', String(size)),
+					`/native${template.replace('{size}', String(size))}`,
 			};
 		}
 		return null;
@@ -473,18 +544,24 @@ assert(
 	topicPresentation.categoryName?.(7) === '',
 	'document-start 时 site 尚未就绪必须安全降级',
 );
+assert(
+	topicPresentation.avatarSource('/avatar/{size}.png', 32) ===
+		'/avatar/32.png',
+	'document-start 时 avatar helper 尚未就绪必须保留模板降级',
+);
 topicPresentationSiteReady = true;
+topicPresentationModulesReady = true;
 assert(
 	topicPresentation.categoryName?.(7) === '搞七捻三' &&
 	topicPresentation.categoryName?.(8) === '' &&
 	topicPresentation.categoryIcon?.(7) === 'code' &&
 	topicPresentation.categoryIcon?.(8) === '' &&
-	topicPresentation.categoryHref(7) === '/c/7' &&
-	topicPresentation.tagHref('纯水') === '/tag/纯水' &&
-	topicPresentation.userHref('owner') === '/u/owner' &&
+	topicPresentation.categoryHref(7) === '/native-category/7' &&
+	topicPresentation.tagHref('纯水') === '/native-tag/纯水' &&
+	topicPresentation.userHref('owner') === '/native-user/owner' &&
 	topicPresentation.avatarSource('/avatar/{size}.png', 32) ===
-		'/avatar/32.png',
-	'主题 Header/特殊正文必须共用 Discourse 原生 URL 与 avatar helper',
+		'/native/avatar/32.png',
+	'document-start 创建的展示端口必须在宿主 URL 与 avatar helper 就绪后自动恢复',
 );
 assert(
 	discourseNativeSiteLogoUrl({
@@ -771,6 +848,42 @@ assert(
 	'举报类型与说明上限必须只经 service:site 和原生 post-action-type 模块投影',
 );
 
+let lateFlagCatalogReady = false;
+const lateFlagCatalog = discourseNativeFlagCatalog({
+	lookup(name) {
+		if (name !== 'service:site' || !lateFlagCatalogReady) return null;
+		return {
+			flagTypes: [{
+				id: 8,
+				name_key: 'spam',
+				name: '垃圾内容',
+				enabled: true,
+				applies_to: ['DiscourseBoosts::Boost'],
+			}],
+		};
+	},
+	lookupModule(name) {
+		return name === 'discourse/models/post-action-type' &&
+			lateFlagCatalogReady
+			? { default: { MAX_MESSAGE_LENGTH: 900 } }
+			: null;
+	},
+});
+assert(
+	lateFlagCatalog.flagTypes().length === 0 &&
+		lateFlagCatalog.messageMaxLength() === 500,
+	'举报宿主尚未就绪时必须保持空目录与安全说明上限',
+);
+lateFlagCatalogReady = true;
+const lateBoostFlag = lateFlagCatalog.flagTypes()[0];
+assert(
+	lateBoostFlag?.id === 8 &&
+		lateBoostFlag.nameKey === 'spam' &&
+		lateBoostFlag.appliesTo.includes('DiscourseBoosts::Boost') &&
+		lateFlagCatalog.messageMaxLength() === 900,
+	'举报目录必须在宿主延迟就绪后按次恢复，不能永久缓存启动期空值',
+);
+
 const emojiShowInputs: Readonly<Record<string, unknown>>[] = [];
 let emojiClosed = '';
 const emojiMenu = discourseNativeEmojiMenu({
@@ -867,6 +980,7 @@ assert(
 );
 
 const currentUserValues: Record<string, unknown> = {
+	id: 42,
 	username: 'viewer',
 	unread_notifications: 2,
 	unread_high_priority_notifications: 1,
@@ -883,27 +997,57 @@ const currentUser = {
 		Object.assign(currentUserValues, values);
 	},
 };
-const notificationHandlers = new Set<() => void>();
+const notificationHandlers = new Map<
+	string,
+	Set<(payload?: unknown) => void>
+>();
 const appEvents = {
-	on(eventName: string, context: unknown, handler: () => void): void {
+	on(
+		eventName: string,
+		context: unknown,
+		handler: (payload?: unknown) => void,
+	): void {
 		assert(
-			eventName === 'notifications:changed' && context !== null,
-			'通知宿主桥只能订阅原生 notifications:changed',
+			(
+				eventName === 'notifications:changed' ||
+				eventName === 'user-menu:notification-click'
+			) && context !== null,
+			'通知宿主桥只能订阅原生通知变化与点击事件',
 		);
-		notificationHandlers.add(handler);
+		const handlers = notificationHandlers.get(eventName) ?? new Set();
+		handlers.add(handler);
+		notificationHandlers.set(eventName, handlers);
 	},
-	off(eventName: string, context: unknown, handler: () => void): void {
+	off(
+		eventName: string,
+		context: unknown,
+		handler: (payload?: unknown) => void,
+	): void {
 		assert(
-			eventName === 'notifications:changed' && context !== null,
+			notificationHandlers.has(eventName) && context !== null,
 			'通知宿主桥必须按同一 context 退订',
 		);
-		notificationHandlers.delete(handler);
+		notificationHandlers.get(eventName)?.delete(handler);
 	},
 };
+const notificationMessageBusHandlers = new Map<
+	string,
+	(message: unknown) => void
+>();
 const notificationHost: DiscourseHostApiPort = {
 	lookup(name) {
 		if (name === 'service:current-user') return currentUser;
 		if (name === 'service:app-events') return appEvents;
+		if (name === 'service:message-bus') return {
+			subscribe(channel: string, handler: (message: unknown) => void) {
+				notificationMessageBusHandlers.set(channel, handler);
+			},
+			unsubscribe(channel: string, handler: (message: unknown) => void) {
+				if (notificationMessageBusHandlers.get(channel) === handler) {
+					notificationMessageBusHandlers.delete(channel);
+				}
+			},
+		};
 		if (name === 'service:site-settings') return {};
 		if (name === 'service:site') return {
 			notificationLookup: { 1: 'replied' },
@@ -968,11 +1112,35 @@ let notificationChanges = 0;
 const unsubscribeNotification = notificationNative.subscribeChanged(() => {
 	notificationChanges += 1;
 });
-for (const handler of notificationHandlers) handler();
+for (const handler of notificationHandlers.get('notifications:changed') ?? []) {
+	handler();
+}
+notificationMessageBusHandlers.get('/notification/42')?.({ recent: [] });
+await Promise.resolve();
 unsubscribeNotification();
 assert(
-	notificationChanges === 1 && notificationHandlers.size === 0,
-	'notification application scope 必须精确退订原生 app-events',
+	notificationChanges === 2 &&
+		(notificationHandlers.get('notifications:changed')?.size ?? 0) === 0 &&
+		notificationMessageBusHandlers.size === 0,
+	'notification application scope 必须同时退订原生 app-event 与用户 MessageBus',
+);
+let clickedNotificationId = 0;
+const unsubscribeNotificationClick = notificationNative.subscribeClicked((click) => {
+	clickedNotificationId = click.wasRead === false ? click.notificationId : 0;
+});
+for (
+	const handler of notificationHandlers.get('user-menu:notification-click') ?? []
+) {
+	handler({
+		notification: { id: 9, read: false },
+		href: '/t/test/42/3',
+	});
+}
+unsubscribeNotificationClick();
+assert(
+	clickedNotificationId === 9 &&
+		(notificationHandlers.get('user-menu:notification-click')?.size ?? 0) === 0,
+	'宿主通知点击必须携带稳定 notification ID 并精确退订',
 );
 notificationNative.markAllRead();
 assert(
@@ -983,10 +1151,11 @@ assert(
 
 const bookmarkEvents = new Map<string, Set<() => void>>();
 let reactionFinds = 0;
+let bookmarkAppEventsReady = false;
 const bookmarkHost: DiscourseHostApiPort = {
 	lookup(name) {
 		if (name === 'service:current-user') return currentUser;
-		if (name === 'service:app-events') return {
+		if (name === 'service:app-events' && bookmarkAppEventsReady) return {
 			on(eventName: string, _context: unknown, handler: () => void) {
 				const handlers = bookmarkEvents.get(eventName) ?? new Set();
 				handlers.add(handler);
@@ -1039,6 +1208,8 @@ const unsubscribeBookmark = bookmarkNative.subscribeChanged((source) => {
 	bookmarkChanges += 1;
 	bookmarkChangeSources.push(source);
 });
+bookmarkAppEventsReady = true;
+await Promise.resolve();
 for (const eventName of [
 	'bookmarks:changed',
 	'discourse-reactions:reaction-toggled',
@@ -1053,4 +1224,102 @@ assert(
 	bookmarkChangeSources.join(',') === 'bookmarks,reactions' &&
 	[...bookmarkEvents.values()].every((handlers) => handlers.size === 0),
 	'收藏宿主桥必须统一解析 current-user、原生回应 model 和两个 app-events 生命周期',
+);
+
+const delayedAppEvents = new Map<string, Set<(payload?: unknown) => void>>();
+let delayedAppEventsReady = false;
+const unsubscribeDelayedAppEvent = discourseNativeAppEventSubscription({
+	lookup(name) {
+		if (name !== 'service:app-events' || !delayedAppEventsReady) return null;
+		return {
+			on(eventName: string, _owner: unknown, handler: (payload?: unknown) => void) {
+				const handlers = delayedAppEvents.get(eventName) ?? new Set();
+				handlers.add(handler);
+				delayedAppEvents.set(eventName, handlers);
+			},
+			off(eventName: string, _owner: unknown, handler: (payload?: unknown) => void) {
+				delayedAppEvents.get(eventName)?.delete(handler);
+			},
+		};
+	},
+	lookupModule() {
+		return null;
+	},
+}, 'reader:test-changed', () => {
+	bookmarkChanges += 1;
+});
+delayedAppEventsReady = true;
+await Promise.resolve();
+for (const handler of delayedAppEvents.get('reader:test-changed') ?? []) handler();
+unsubscribeDelayedAppEvent();
+assert(
+	Number(bookmarkChanges) === 3 &&
+		(delayedAppEvents.get('reader:test-changed')?.size ?? 0) === 0,
+	'通用 app-event 桥必须在 service 延迟就绪后恢复订阅并保持精确退订',
+);
+
+let unwantedTagQuery = '';
+let unwantedUserQuery = '';
+const unwantedCatalog = discourseNativeUnwantedTopicRuleCatalog({
+	lookup(name) {
+		if (name === 'service:site') {
+			return { categories: [{
+				id: 7,
+				name: '国产替代',
+				slug: 'domestic',
+				color: '88AA99',
+			}] };
+		}
+		if (name === 'service:site-settings') {
+			return { max_tag_search_results: 20 };
+		}
+		if (name === 'service:tag-utils') {
+			return {
+				searchTags(
+					_path: string,
+					options: Readonly<{ q: string }>,
+					transform: (value: unknown) => readonly unknown[],
+				) {
+					unwantedTagQuery = options.q;
+					return Promise.resolve(transform({
+						results: [{ id: 11, name: '人工智能' }],
+					}));
+				},
+				sortSearchResults(values: readonly unknown[]) {
+					return values;
+				},
+			};
+		}
+		return null;
+	},
+	lookupModule(name) {
+		return name === 'discourse/lib/user-search'
+			? {
+				default: (options: Readonly<{ term: string }>) => {
+					unwantedUserQuery = options.term;
+					return Promise.resolve({ users: [
+						{ id: 21, username: 'alice', name: '同名用户' },
+						{ id: 22, username: 'bob', name: '同名用户' },
+						{ id: 21, username: 'alice', name: '重复项' },
+					] });
+				},
+			}
+			: null;
+	},
+});
+const unwantedTags = await unwantedCatalog.searchTags({
+	query: '人工',
+	categoryId: 0,
+	selected: Object.freeze([]),
+});
+const unwantedUsers = await unwantedCatalog.searchUsers('@同名');
+assert(
+	unwantedCatalog.categories()[0]?.id === 7 &&
+	unwantedTags[0]?.name === '人工智能' &&
+	unwantedTagQuery === '人工' &&
+	unwantedUserQuery === '同名' &&
+	unwantedUsers.length === 2 &&
+	unwantedUsers.map((user) => `${user.name}:${user.username}:${user.id}`)
+		.join('|') === '同名用户:alice:21|同名用户:bob:22',
+	'自动过滤编辑器必须复用宿主类别、Label 与用户查询，并按唯一 username 保留重名候选',
 );

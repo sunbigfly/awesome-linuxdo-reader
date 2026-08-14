@@ -134,6 +134,25 @@ assert(
 	mount.querySelector('.ldp-avatar-viewer.is-image'),
 	'批量 surface 必须从 scope 模型投影范围、隐藏内部归档名，并自动打开与 main.js 等价的紧凑首图预览',
 );
+let batchWheelLeaks = 0;
+mount.addEventListener('wheel', () => {
+	batchWheelLeaks += 1;
+});
+const batchBoundaryWheel = new window.Event('wheel', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperties(batchBoundaryWheel, {
+	deltaX: { value: 0 },
+	deltaY: { value: 120 },
+	deltaMode: { value: 0 },
+});
+view.slots.root.querySelector('.ldp-lb-batch-head')!
+	.dispatchEvent(batchBoundaryWheel);
+assert(
+	batchBoundaryWheel.defaultPrevented && batchWheelLeaks === 0,
+	'批量下载浮层的非滚动区不得把滚轮泄漏给宿主页面',
+);
 view.slots.scope.querySelector<HTMLElement>('[data-lb-batch-scope="all"]')!
 	.dispatchEvent(new window.Event('click', { bubbles: true }));
 await tick();

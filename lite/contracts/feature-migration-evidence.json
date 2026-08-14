@@ -1530,17 +1530,19 @@
       "owners": [
         "lite/src/appearance/reader-appearance-style-controller.ts",
         "lite/src/settings/reader-appearance-settings-form.ts",
+        "lite/src/settings/reader-settings-field-interaction.ts",
         "lite/src/shell/embedded-host-appearance.ts",
         "lite/src/state/reader-preferences-schema.ts",
         "lite/src/app/reader-browser-runtime.ts"
       ],
       "tests": [
         "lite/tests/reader-appearance-settings-form.test.ts",
+        "lite/tests/reader-settings-field-interaction.test.ts",
         "lite/tests/embedded-host-appearance.test.ts",
         "lite/tests/reader-preferences-schema.test.ts",
         "lite/tests/reader-browser-runtime.test.ts"
       ],
-      "note": "强调/链接/斑马纹/回复线/引用线/分隔线/楼层预览共用 schema、对象草稿和唯一 CSS owner；结构色关闭只透明化结构颜色，不改树或 DOM，embedded host 消费同一 resolved profile。设置页已恢复主线四主组、四命名子组、说明与结构线 Header switch。BranchOverlay 消费同一回复线颜色/宽度/圆角，并把细可见线与最小 8px 透明命中热区分开；真实 SVG 命中和像素零偏移仍待 lite 浏览器验收。"
+      "note": "强调/链接/斑马纹/回复线/引用线/分隔线/楼层预览共用 schema、对象草稿和唯一 CSS owner；结构色关闭只透明化结构颜色，不改树或 DOM，embedded host 消费同一 resolved profile。所有颜色字段复用统一调色器与 input 草稿事件，预设、HEX、HSV 滑杆、二维色相/饱和度圆盘及能力检测后的屏幕吸色不会产生第二份状态。设置页已恢复主线四主组、四命名子组、说明与结构线 Header switch。BranchOverlay 消费同一回复线颜色/宽度/圆角，并把细可见线与最小 8px 透明命中热区分开；真实系统吸色器、SVG 命中和三形态像素仍待 lite 浏览器验收。"
     },
   "SET-010": {
     "implementationStatus": "static-complete",
@@ -1948,6 +1950,9 @@
         "lite/src/sync/reader-webdav-client.ts",
         "lite/src/sync/reader-webdav-config-repository.ts",
         "lite/src/sync/reader-webdav-coordinator.ts",
+        "lite/src/sync/reader-webdav-category-ports.ts",
+        "lite/src/sync/reader-webdav-history-cache-port.ts",
+        "lite/src/sync/reader-webdav-offline-topic-port.ts",
         "lite/src/settings/reader-webdav-settings-form.ts",
         "lite/src/app/reader-browser-runtime.ts",
         "lite/src/userscript/main-lite-bootstrap.ts"
@@ -1955,9 +1960,29 @@
       "tests": [
         "lite/tests/reader-webdav-model.test.ts",
         "lite/tests/reader-webdav-sync.test.ts",
+        "lite/tests/reader-webdav-history-cache-sync.test.ts",
+        "lite/tests/reader-webdav-offline-topic-sync.test.ts",
         "lite/tests/reader-webdav-settings-form.test.ts"
       ],
-      "note": "WebDAV 以 schema 2 的单一远端 JSON 文档按站点与账号作用域保存七类可选记录，客户端限制 HTTPS、2 MiB 文件、ETag 条件写入和逐级 MKCOL。Coordinator 用上次成功基线执行三方合并，以 tombstone 传播删除，冲突时重新读取并有限重试；只有条件写入成功才应用本地结果和更新基线。设置页默认关闭定时同步，支持 15 分钟至 6 小时串行调度，凭据仅保存于脚本专属存储且不进入远端文件、URL 或设置同步。双设备、并发冲突、删除传播、凭据边界与定时节奏已有静态测试，坚果云真实账号及跨浏览器显示仍待发布浏览器验收。"
+      "note": "WebDAV 提供十二类独立开关。普通记录继续写入 schema 2 的主 sync.json，并按服务地址、WebDAV 账号、远端文件、站点与 Discourse 账号隔离基线；通知和互动历史以账号指纹隔离的独立清单单调合并，不上传私信、已读状态、原生通知 ID、分页响应、游标或限流状态，也不为同步额外请求 Discourse；离线 Topic 使用清单加独立 HTML 对象。所有链路读取最新 ETag、冲突后有限重试，只有远端条件写入成功且本地快照未变化才应用结果。设置导入兼容旧类别并默认关闭新增大对象开关，凭据不进入导出或远端明文配置。类别、双设备恢复、冲突保留、离线对象完整性与设置边界已有静态测试；真实 WebDAV 服务及跨浏览器显示仍待发布浏览器验收。"
+    },
+    "DATA-007": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/queue/reader-topic-download-manager.ts",
+        "lite/src/archive/reader-topic-offline-document.ts",
+        "lite/src/archive/reader-topic-offline-artifact-repository.ts",
+        "lite/src/sync/reader-webdav-offline-topic-port.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-topic-download-manager.test.ts",
+        "lite/tests/reader-topic-offline-document.test.ts",
+        "lite/tests/reader-topic-offline-artifact-repository.test.ts",
+        "lite/tests/reader-webdav-offline-topic-sync.test.ts"
+      ],
+      "note": "离线 Topic 下载由队列管理器按全部、楼主或自选范围补齐 canonical 帖子与讨论上下文，再生成包含搜索、跳转、主题样式和独立运行时的单文件 HTML。完成产物以永久 ResponseRepository 记录保存下载元数据和正文，缓存管理可查看、恢复或明确删除；只有用户单独启用 WebDAV 类别时，才以账号隔离清单和逐 Topic HTML 对象同步，并以 bytes 与 SHA-256 校验恢复内容，图片和附件仍保留原 URL。范围投影、生成、备份恢复、删除和双设备同步已有静态测试；真实大 Topic 下载、浏览器文件保存与离线页面视觉仍待浏览器验收。"
     },
     "MONITOR-001": {
       "implementationStatus": "static-complete",

@@ -31,6 +31,8 @@ const expectedKeys = [
 	'lightboxDescriptionHeight',
 	'lightboxCommentsWidthPercent',
 	'themeMode',
+	'autoDarkModeEnabled',
+	'autoDarkModeStartTime',
 	'fontRenderingEnabled',
 	'fontRenderingOnHost',
 	'hostFontFamily',
@@ -72,6 +74,7 @@ const expectedKeys = [
 	'historyEdgeTriggerPercent',
 	'loadingAnimation',
 	'translationMode',
+	'translationTheme',
 	'openTopicsAtFirstPost',
 	'doubleEscapeToCloseReader',
 	'confirmNativeComposerClose',
@@ -80,6 +83,12 @@ const expectedKeys = [
 	'topicActionRailFixed',
 	'topicActionRailMode',
 	'topicActionRailPositions',
+	'unwantedTopicFilterEnabled',
+	'unwantedTopicFilterCategories',
+	'unwantedTopicFilterLabels',
+	'unwantedTopicFilterTopicAuthors',
+	'unwantedTopicFilterTopicFields',
+	'unwantedTopicFilterPostAuthors',
 	'expandNestedRepliesByDefault',
 	'expandLeafNestedReplies',
 	'aggregateDescendantReplies',
@@ -99,10 +108,12 @@ const expectedKeys = [
 
 assert(
 	JSON.stringify(Object.keys(defaults)) === JSON.stringify(expectedKeys),
-	'默认偏好必须保持旧 72 字段顺序并追加 4 个图片形态字段',
+	'默认偏好必须保持既有字段顺序并追加自动暗色设置',
 );
 assert(
 	defaults.listReaderEmbedWidth === 648 &&
+	defaults.listReaderMode === 'embed-right' &&
+	defaults.openTopicsAtFirstPost &&
 	defaults.performancePreset === 'balanced' &&
 	defaults.performancePageSize === 48 &&
 	defaults.performanceStreamOverscan === 1.5 &&
@@ -114,17 +125,34 @@ assert(
 	defaults.inlineReplyTreeMaxDepth === 3 &&
 	defaults.jumpHighlightCount === 1 &&
 	!defaults.confirmNativeComposerClose &&
+	!defaults.unwantedTopicFilterEnabled &&
+	defaults.unwantedTopicFilterCategories.length === 0 &&
+	normalizeReaderPreferences({}, environment).listReaderMode === 'embed-right' &&
+	normalizeReaderPreferences({}, environment).openTopicsAtFirstPost &&
 	!normalizeReaderPreferences({}, environment).confirmNativeComposerClose &&
 	normalizeReaderPreferences(
-		{ confirmNativeComposerClose: true },
+		{
+			confirmNativeComposerClose: true,
+			openTopicsAtFirstPost: false,
+		},
 		environment,
-	).confirmNativeComposerClose,
-	'视口、请求目标、回复树深度、闪烁或原生回复关闭默认值偏移',
+	).confirmNativeComposerClose &&
+	!normalizeReaderPreferences(
+		{ openTopicsAtFirstPost: false },
+		environment,
+	).openTopicsAtFirstPost,
+	'视口、嵌入、帖子起点、请求目标、回复树深度、闪烁或原生回复关闭默认值偏移',
 );
 assert(
 	normalizeReaderPreferences({ ...defaults, imageProfile: {} }, environment)
-		.imageProfile.preset === '50',
-	'图片 profile 缺少 preset 时必须回落旧版 50% 默认值',
+		.imageProfile.preset === '100' &&
+		defaults.imageProfile.custom === 100,
+	'图片 profile 缺少 preset 时必须回落 100% 默认值',
+);
+assert(
+	!defaults.autoDarkModeEnabled &&
+		defaults.autoDarkModeStartTime === 'sunset',
+	'自动暗色默认关闭，启用后的默认开启时间必须跟随当地日落',
 );
 const independentImages = normalizeReaderPreferences({
 	...defaults,
@@ -155,6 +183,8 @@ const normalized = normalizeReaderPreferences({
 	imageProfile: { preset: 'bad', custom: 999 },
 	lightboxDescriptionHeight: 999,
 	lightboxCommentsWidthPercent: 99,
+	autoDarkModeEnabled: 'yes',
+	autoDarkModeStartTime: '26:00',
 	hostFontFamily: 'bad',
 	hostFontCustomFamily: '  A\";{}  B  ',
 	hostFontWeight: 999,
@@ -203,6 +233,7 @@ const normalized = normalizeReaderPreferences({
 	historyEdgeTriggerPercent: 99,
 	loadingAnimation: 'bad',
 	translationMode: 'bad',
+	translationTheme: 'marker',
 	readerShortcutBindings: {
 		historyBack: ['Ctrl+KeyA', 'Ctrl+KeyA', 'Bad+KeyB'],
 		historyForward: ['Ctrl+KeyA', 'Mouse2', 'Mouse4'],
@@ -232,6 +263,16 @@ assert(
 	normalized.lightboxDescriptionHeight === 360 &&
 	normalized.lightboxCommentsWidthPercent === 50,
 	'大图描述高度必须受视口约束，评论宽度必须限幅',
+);
+assert(
+	!normalized.autoDarkModeEnabled &&
+		normalized.autoDarkModeStartTime === 'sunset' &&
+		normalizeReaderPreferences({
+			...defaults,
+			autoDarkModeEnabled: true,
+			autoDarkModeStartTime: '20:35',
+		}, environment).autoDarkModeStartTime === '20:35',
+	'自动暗色必须只接受显式开关和有效的 24 小时时间',
 );
 assert(
 	normalized.hostFontFamily === 'system' &&
@@ -279,17 +320,22 @@ assert(
 	normalized.readerWindowX === 0 &&
 	normalized.readerWindowY === 34 &&
 	normalized.readerWindowLocked &&
-	normalized.listReaderMode === 'floating' &&
+	normalized.listReaderMode === 'embed-right' &&
 	normalized.listReaderEmbedWidth === 360 &&
 	normalized.composerWindowWidth === 34,
 	'窗口和列表几何归一化偏移',
 );
 assert(
 	JSON.stringify(normalized.bookmarkTabOrder) ===
-		JSON.stringify(['Post', 'Reaction', 'Topic']) &&
+		JSON.stringify(['Post', 'Reply', 'Boost', 'Reaction', 'Topic']) &&
 	normalized.historyEdgeTriggerPercent === 15 &&
 	normalized.loadingAnimation === 'quoteecho' &&
-	normalized.translationMode === 'original',
+	normalized.translationMode === 'original' &&
+	normalized.translationTheme === 'quote' &&
+	normalizeReaderPreferences({
+		...defaults,
+		translationTheme: 'highlight',
+	}, environment).translationTheme === 'highlight',
 	'历史、收藏、加载动画或翻译枚举归一化偏移',
 );
 assert(
@@ -438,11 +484,46 @@ const exported = codec.export({
 	unknown: true,
 });
 assert(
-	exported.settingsCount === 76 &&
-	Object.keys(exported.settings).length === 76 &&
+	exported.settingsCount === 85 &&
+	Object.keys(exported.settings).length === 85 &&
 	exported.settings.performancePageSize === 64 &&
 	!Object.hasOwn(exported.settings, 'unknown'),
-	'真实配置 codec 必须复用同一 76 字段 schema',
+	'真实配置 codec 必须复用同一 85 字段 schema',
+);
+const beforeUnwantedFilterSettings = Object.fromEntries(
+	Object.entries(defaults).filter(([key]) => !key.startsWith(
+		'unwantedTopicFilter',
+	)),
+);
+const importedBeforeUnwantedFilter = codec.import({
+	format: READER_CONFIG_EXPORT_FORMAT,
+	schemaVersion: READER_CONFIG_EXPORT_VERSION,
+	scriptVersion: 'before-unwanted-filter',
+	exportedAt: '2026-08-13T00:00:00.000Z',
+	settingsCount: Object.keys(beforeUnwantedFilterSettings).length,
+	settings: beforeUnwantedFilterSettings,
+});
+assert(
+	!importedBeforeUnwantedFilter.unwantedTopicFilterEnabled &&
+	importedBeforeUnwantedFilter.unwantedTopicFilterPostAuthors.length === 0,
+	'新增免打扰预设字段必须兼容导入上一版完整配置',
+);
+const previousSettings = Object.fromEntries(
+	Object.entries(defaults).filter(([key]) =>
+		!['autoDarkModeEnabled', 'autoDarkModeStartTime'].includes(key)),
+);
+const importedPrevious = codec.import({
+	format: READER_CONFIG_EXPORT_FORMAT,
+	schemaVersion: READER_CONFIG_EXPORT_VERSION,
+	scriptVersion: 'previous',
+	exportedAt: '2026-08-10T00:00:00.000Z',
+	settingsCount: Object.keys(previousSettings).length,
+	settings: previousSettings,
+});
+assert(
+	!importedPrevious.autoDarkModeEnabled &&
+		importedPrevious.autoDarkModeStartTime === 'sunset',
+	'新增自动暗色字段必须兼容导入上一版完整配置',
 );
 const legacySettings = Object.fromEntries(
 	Object.entries(defaults).filter(([key]) =>

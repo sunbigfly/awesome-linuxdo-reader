@@ -64,6 +64,7 @@ let now = 1;
 let prefetchNow = 1_000;
 let directReplyPrefetchScreens = 0;
 let lastUserScrollAt = 0;
+let postStreamRevision = 0;
 let nextPrefetchHandle = 1;
 const scheduledPrefetches = new Map<number, Readonly<{
 	readonly callback: () => void;
@@ -79,8 +80,10 @@ function flushPrefetches(at: number): void {
 }
 const directReplyCalls: number[] = [];
 let simulateScrollDuringDirectReply = false;
+let failDirectReplyPrefetch = false;
 let simulateScrollDuringBatch = false;
 let batchCommitCount = 0;
+const rangeHydrationCalls: string[] = [];
 const replies = new ReplyTreeRepository(10, {
 	async load() {
 		return null;
@@ -89,7 +92,12 @@ const replies = new ReplyTreeRepository(10, {
 }, { now: () => now++ });
 const session = {
 	changes,
+	get postStreamRevision() {
+		return postStreamRevision;
+	},
 	async init() {
+		postStreamRevision += 1;
+		replies.setExpectedPostCount(posts.size);
 		replies.ingest([...posts.values()], 'topic-json');
 		changes.emit(Object.freeze({
 			source: 'topic-json' as const,
@@ -122,6 +130,18 @@ const session = {
 			missingPostIds: Object.freeze([]),
 		});
 	},
+	async loadBeforePost(postNumber: number) {
+		rangeHydrationCalls.push(`before:${postNumber}`);
+		return Object.freeze([posts.get(1)!]);
+	},
+	async loadAfterPost(postNumber: number) {
+		rangeHydrationCalls.push(`after:${postNumber}`);
+		return Object.freeze([posts.get(5)!]);
+	},
+	async loadAroundPost(postNumber: number) {
+		rangeHydrationCalls.push(`around:${postNumber}`);
+		return Object.freeze([posts.get(5)!]);
+	},
 	async loadDirectReplies(
 		postNumber: number,
 		options?: Readonly<{
@@ -129,6 +149,9 @@ const session = {
 		}>,
 	) {
 		directReplyCalls.push(postNumber);
+		if (failDirectReplyPrefetch) {
+			throw Object.assign(new Error('too many requests'), { status: 429 });
+		}
 		if (simulateScrollDuringDirectReply) {
 			lastUserScrollAt = prefetchNow;
 			await options?.beforeCommit?.();
@@ -169,13 +192,27 @@ const nodeFeatureEvents: string[] = [];
 let projectionSyncs = 0;
 const revealEvents: string[] = [];
 let scrollOffset = 0;
+let scrollRange = 1_000;
 let physicalVisiblePostNumber: number | null = null;
 const scrollListener = {
+	value: null as (() => void) | null,
+};
+const userScrollIntentListener = {
 	value: null as (() => void) | null,
 };
 let scheduledFrames = 0;
 const visibleRoots: number[] = [];
 const renderCounts = new Map<number, number>();
+let viewportMutationBegins = 0;
+let viewportMutationRestores = 0;
+let viewportMutationCancels = 0;
+let viewportMutationActive = false;
+let virtualWindowCommitNotifications = 0;
+let stagedPhysicalMaxScrollOffset: number | null = null;
+let programmaticScrollTransactions = 0;
+let programmaticScrollActive = false;
+const virtualCommitProgrammaticStates: boolean[] = [];
+let presentationObservedDuringViewportMutation = false;
 let treePreferences = normalizeReaderReplyTreePreferences({
 	expandNestedRepliesByDefault: true,
 	expandLeafNestedReplies: false,
@@ -207,6 +244,14 @@ const coordinator = new ReaderTopicDomCoordinator({
 				if (scrollListener.value === listener) scrollListener.value = null;
 			};
 		},
+		listenUserScrollIntent(listener) {
+			userScrollIntentListener.value = listener;
+			return () => {
+				if (userScrollIntentListener.value === listener) {
+					userScrollIntentListener.value = null;
+				}
+			};
+		},
 		readVisibleViewportAnchor() {
 			return physicalVisiblePostNumber === null
 				? null
@@ -216,8 +261,50 @@ const coordinator = new ReaderTopicDomCoordinator({
 					scrollTop: scrollOffset,
 				};
 		},
+		readScrollRange: () => scrollRange,
+		beginViewportMutation(elements) {
+			assert(
+				elements.some((element) => element.isConnected),
+				'视口高度事务必须只接收当前虚拟窗口内仍连接的楼层',
+			);
+			viewportMutationBegins += 1;
+			viewportMutationActive = true;
+			let settled = false;
+			return Object.freeze({
+				restore() {
+					if (settled) return;
+					settled = true;
+					viewportMutationActive = false;
+					viewportMutationRestores += 1;
+				},
+				cancel() {
+					if (settled) return;
+					settled = true;
+					viewportMutationActive = false;
+					viewportMutationCancels += 1;
+				},
+			});
+		},
+		notifyVirtualWindowCommit() {
+			virtualWindowCommitNotifications += 1;
+			virtualCommitProgrammaticStates.push(programmaticScrollActive);
+			if (stagedPhysicalMaxScrollOffset !== null) {
+				stagedPhysicalMaxScrollOffset = 900;
+			}
+		},
+		withProgrammaticScrollTransaction(commit) {
+			programmaticScrollTransactions += 1;
+			programmaticScrollActive = true;
+			try {
+				commit();
+			} finally {
+				programmaticScrollActive = false;
+			}
+		},
 		writeScrollOffset(offset) {
-			scrollOffset = offset;
+			scrollOffset = stagedPhysicalMaxScrollOffset === null
+				? offset
+				: Math.min(offset, stagedPhysicalMaxScrollOffset);
 			lastUserScrollAt = 0;
 		},
 		alignPost(element, options) {
@@ -307,6 +394,11 @@ const coordinator = new ReaderTopicDomCoordinator({
 coordinator.visibleRootChanges.subscribe((change) => {
 	visibleRoots.push(change.postNumber);
 });
+presentationChanges.subscribe(() => {
+	if (viewportMutationActive) {
+		presentationObservedDuringViewportMutation = true;
+	}
+});
 
 await coordinator.initialize();
 const originalLayoutWindow = coordinator.layout.window.bind(coordinator.layout);
@@ -331,6 +423,51 @@ assert(
 		layoutWindowCalls === 2,
 	'同一半屏候选窗内每帧只能计算一次主虚拟窗口，不能为直属回复预取重复规划同一窗口',
 );
+physicalVisiblePostNumber = 5;
+coordinator.notifyScroll();
+coordinator.flushNow();
+assert(
+	visibleRoots.at(-1) === 5,
+	'虚拟窗口与已提交物理视野暂时不一致时，楼层时间轴必须服从 scroll owner 的物理锚点',
+);
+physicalVisiblePostNumber = 1;
+const viewportMutationBeginsBeforeGapIndexCommit = viewportMutationBegins;
+const viewportMutationRestoresBeforeGapIndexCommit = viewportMutationRestores;
+postStreamRevision += 1;
+changes.emit(Object.freeze({
+	source: 'loader-batch' as const,
+	observedAt: now++,
+	acceptedPosts: 1,
+	ignoredPosts: 0,
+	changedPostNumbers: Object.freeze([5]),
+	topicChanged: false,
+	streamChanged: false,
+}));
+coordinator.flushNow();
+assert(
+	viewportMutationBegins === viewportMutationBeginsBeforeGapIndexCommit + 1 &&
+		viewportMutationRestores === viewportMutationRestoresBeforeGapIndexCommit + 1,
+	'离屏正文补齐 post stream 索引并缩短前置 gap 时，也必须以同一个物理楼层事务提交几何',
+);
+physicalVisiblePostNumber = null;
+await coordinator.hydrateUnloadedRange({
+	direction: 'before',
+	postNumber: discoursePostNumber(5),
+});
+await coordinator.hydrateUnloadedRange({
+	direction: 'after',
+	postNumber: discoursePostNumber(2),
+});
+await coordinator.hydrateUnloadedRange({
+	direction: 'around',
+	postNumber: discoursePostNumber(4),
+});
+coordinator.flushNow();
+assert(
+	rangeHydrationCalls.join(',') ===
+		'before:5,after:2,around:4',
+	'稀疏 gap 必须复用 TopicSession 的 before/after/canonical-around 端口，不得猜测目标楼层 API',
+);
 const root = topicHost.querySelector<HTMLElement>('[data-post-number="1"]')!;
 const child = topicHost.querySelector<HTMLElement>('[data-post-number="2"]')!;
 assert(root.parentElement?.classList.contains('ldp-virtual-root-list'), '根楼层必须进入虚拟根列表');
@@ -342,12 +479,23 @@ physicalVisiblePostNumber = 2;
 scrollOffset = 150;
 const nestedPhysicalAnchor = coordinator.captureViewportAnchor();
 scrollOffset = 0;
+stagedPhysicalMaxScrollOffset = 20;
+const commitsBeforeHistoryRestore = virtualWindowCommitNotifications;
+const transactionsBeforeHistoryRestore = programmaticScrollTransactions;
 assert(
 	nestedPhysicalAnchor?.postNumber === 2 &&
+		nestedPhysicalAnchor.scrollRange === 1_000 &&
+		nestedPhysicalAnchor.scrollRatio === 0.15 &&
 		coordinator.restoreViewportAnchor(nestedPhysicalAnchor) &&
-		scrollOffset === 150,
-	'真实 DOM 只负责选择可见楼层；嵌套楼层的历史偏移必须统一换算为虚拟树坐标并可无损往返',
+		scrollOffset === 150 &&
+		virtualWindowCommitNotifications === commitsBeforeHistoryRestore + 2 &&
+		programmaticScrollTransactions === transactionsBeforeHistoryRestore + 1 &&
+		virtualCommitProgrammaticStates
+			.slice(commitsBeforeHistoryRestore)
+			.every(Boolean),
+	'真实 DOM 只负责捕获当前位置；历史恢复必须先扩展物理范围，再把高度比例换算结果一次写回主滚动坐标',
 );
+stagedPhysicalMaxScrollOffset = null;
 physicalVisiblePostNumber = null;
 scrollOffset = 0;
 coordinator.flushNow();
@@ -388,6 +536,28 @@ assert(
 	Number(scheduledPrefetches.size) === 1,
 	'预取距离热恢复后必须从同一 canonical 坐标重新纳入候选，无需重建 Topic 或 DOM',
 );
+const countedLayoutWindow = coordinator.layout.window.bind(coordinator.layout);
+coordinator.layout.window = (input) => Object.freeze({
+	...countedLayoutWindow(input),
+	unloadedGapTargetPostNumber: discoursePostNumber(999),
+	unloadedGapSide: 'before' as const,
+});
+lastUserScrollAt = prefetchNow;
+userScrollIntentListener.value?.();
+replies.setExpectedPostCount(posts.size + 1);
+const rangeHydrationCallsBeforeFrozenTarget = rangeHydrationCalls.length;
+await coordinator.hydrateUnloadedRange({
+	direction: 'around',
+	postNumber: discoursePostNumber(4),
+});
+assert(
+	rangeHydrationCalls.length === rangeHydrationCallsBeforeFrozenTarget + 1 &&
+		rangeHydrationCalls.at(-1) === 'around:4',
+	'解冻后即使新窗口映射到另一个 gap，本次用户滚动选中的 around 楼层也不得被悄悄改写',
+);
+coordinator.layout.window = countedLayoutWindow;
+replies.setExpectedPostCount(posts.size);
+coordinator.refreshRootProjection();
 assert(
 	featureEvents.includes('before:1') &&
 	featureEvents.includes('after:2') &&
@@ -418,12 +588,21 @@ assert(
 );
 lastUserScrollAt = prefetchNow;
 simulateScrollDuringDirectReply = true;
+stagedPhysicalMaxScrollOffset = 300;
+const commitsBeforeOffscreenReveal = virtualWindowCommitNotifications;
+const transactionsBeforeOffscreenReveal = programmaticScrollTransactions;
 const revealedOffscreen = coordinator.revealPost(5, {
 	source: 'timeline',
 	alignment: 'center',
 	highlight: true,
 });
+stagedPhysicalMaxScrollOffset = null;
 const offscreenRoot = coordinator.domOwner.view(5)!.slots.root;
+assert(
+	virtualWindowCommitNotifications === commitsBeforeOffscreenReveal + 2 &&
+		programmaticScrollTransactions === transactionsBeforeOffscreenReveal + 1,
+	'窗口外 reveal 必须在同一同步事务内完成物理范围提交、程序化换位和目标窗口提交',
+);
 assert(
 	featureEvents.includes('before:5') && featureEvents.includes('after:5'),
 	'Topic 元数据变更后的暖视图必须延迟到实际回屏时刷新，不能永久冻结旧权限或动作状态',
@@ -432,20 +611,30 @@ assert(
 	directReplyCalls.length === 0,
 	'直属回复请求必须通过唯一预取调度器发车，不能绕开任务取消与候选校验',
 );
+const viewportMutationBeginsBeforeDirectReply = viewportMutationBegins;
+const viewportMutationRestoresBeforeDirectReply = viewportMutationRestores;
 flushPrefetches(1_179);
 await Promise.resolve();
 await Promise.resolve();
 assert(
 	directReplyCalls.join(',') === '5' &&
-		replies.topology.parentOf(6) === 5,
-	'当前视口树请求返回后必须立即提交关系与正文，不能因仍在滚动而延迟水合',
+		replies.topology.parentOf(6) === 5 &&
+		viewportMutationBegins === viewportMutationBeginsBeforeDirectReply + 1 &&
+		viewportMutationActive,
+	'当前视口树请求返回后必须立即提交关系与正文；新增子楼层自身尚无 DOM 时，也要通过已连接祖先持有视口事务',
+);
+coordinator.flushNow();
+assert(
+	viewportMutationRestores === viewportMutationRestoresBeforeDirectReply + 1 &&
+		!viewportMutationActive,
+	'新增直属回复完成虚拟帧后必须恢复其祖先持有的唯一视口事务',
 );
 assert(
 	revealedOffscreen?.mounted === true &&
 	revealedOffscreen.rootPostNumber === 5 &&
 	scrollOffset === 600 &&
 	offscreenRoot.isConnected,
-	'统一 reveal 必须用 root layout 偏移直接挂载窗口外目标',
+	'统一 reveal 必须先提交扩大的物理 spacer，再用 root layout 偏移一次直达窗口外目标',
 );
 assert(
 	directReplyCalls.join(',') === '5' &&
@@ -487,9 +676,27 @@ const capturedViewport = coordinator.captureViewportAnchor();
 assert(
 	capturedViewport?.postNumber === 5 &&
 	capturedViewport.postOffset === 38 &&
-	capturedViewport.scrollTop === 638,
-	'历史锚点必须直接由 canonical 根布局与当前 scroll port 计算，不能扫描/复制 DOM',
+	capturedViewport.scrollTop === 638 &&
+	capturedViewport.scrollRange === 1_000 &&
+	capturedViewport.scrollRatio === 0.638,
+	'历史锚点必须直接由主滚动区计算绝对位置与高度比例，不能扫描/复制 DOM',
 );
+const revealsBeforeProportionalRestore = revealEvents.length;
+scrollRange = 2_000;
+scrollOffset = 0;
+assert(
+	coordinator.restoreViewportAnchor({
+		postNumber: discoursePostNumber(999),
+		postOffset: 0,
+		scrollTop: 250,
+		scrollRange: 1_000,
+		scrollRatio: 0.25,
+	}) &&
+		scrollOffset === 500 &&
+		revealEvents.length === revealsBeforeProportionalRestore,
+	'新历史必须按当前内容高度换算同一进度；即使备用楼层不存在也不得 reveal 或闪烁楼层',
+);
+scrollRange = 1_000;
 lastUserScrollAt = prefetchNow;
 scrollOffset = 0;
 coordinator.flushNow();
@@ -502,8 +709,8 @@ const offscreenRenderCount = renderCounts.get(5);
 assert(
 	coordinator.domOwner.view(5) === undefined &&
 		!offscreenRoot.isConnected &&
-		coordinator.preparedPostViewCount === 3,
-	'离屏楼层必须退出布局 owner，但可在现有 DOM 预算内保留最近暖视图供立即回屏',
+		coordinator.preparedPostViewCount === 4,
+	'离屏楼层必须退出布局 owner，但可在现有 DOM 预算内连同已提交的直属回复保留最近暖视图供立即回屏',
 );
 const revealedChild = coordinator.revealPost(2, {
 	source: 'history',
@@ -530,6 +737,7 @@ assert(
 scrollOffset = 0;
 coordinator.flushNow();
 const cachedRenderCount = renderCounts.get(5) ?? 0;
+const viewportMutationBeginsBeforeOffscreenUpdate = viewportMutationBegins;
 posts.set(5, Object.freeze({
 	...posts.get(5)!,
 	cooked: 'offscreen-root-updated',
@@ -547,8 +755,58 @@ assert(
 	!offscreenRoot.isConnected &&
 		offscreenRoot.querySelector('.ldp-content')?.textContent ===
 			'offscreen-root-updated' &&
-		renderCounts.get(5) === cachedRenderCount + 1,
+		renderCounts.get(5) === cachedRenderCount + 1 &&
+		viewportMutationBegins === viewportMutationBeginsBeforeOffscreenUpdate,
 	'实时更新必须原地刷新暖视图；缓存只能复用 DOM，不能冻结 canonical 正文或动作状态',
+);
+const viewportMutationBeginsBeforeMountedUpdates = viewportMutationBegins;
+const viewportMutationRestoresBeforeMountedUpdates = viewportMutationRestores;
+const virtualCommitNotificationsBeforeMountedUpdates =
+	virtualWindowCommitNotifications;
+const rootRenderCountBeforeMountedUpdates = renderCounts.get(1) ?? 0;
+posts.set(1, Object.freeze({
+	...posts.get(1)!,
+	cooked: 'root-boost-height-1',
+}));
+changes.emit(Object.freeze({
+	source: 'message-bus' as const,
+	observedAt: now++,
+	acceptedPosts: 1,
+	ignoredPosts: 0,
+	changedPostNumbers: Object.freeze([1]),
+	topicChanged: false,
+	streamChanged: false,
+}));
+posts.set(1, Object.freeze({
+	...posts.get(1)!,
+	cooked: 'root-boost-height-2',
+}));
+changes.emit(Object.freeze({
+	source: 'message-bus' as const,
+	observedAt: now++,
+	acceptedPosts: 1,
+	ignoredPosts: 0,
+	changedPostNumbers: Object.freeze([1]),
+	topicChanged: false,
+	streamChanged: false,
+}));
+assert(
+	viewportMutationBegins === viewportMutationBeginsBeforeMountedUpdates + 1 &&
+		viewportMutationRestores === viewportMutationRestoresBeforeMountedUpdates &&
+		viewportMutationActive &&
+		presentationObservedDuringViewportMutation &&
+		renderCounts.get(1) === rootRenderCountBeforeMountedUpdates + 2,
+	'同帧多个已挂载 Boost/正文高度更新必须共享一个锚点事务，并覆盖 presentation feature 提交',
+);
+coordinator.flushNow();
+assert(
+	viewportMutationRestores === viewportMutationRestoresBeforeMountedUpdates + 1 &&
+		virtualWindowCommitNotifications ===
+			virtualCommitNotificationsBeforeMountedUpdates + 1 &&
+		!viewportMutationActive &&
+		topicHost.querySelector('[data-post-number="1"] .ldp-content')
+			?.textContent === 'root-boost-height-2',
+	'虚拟帧完成后必须只恢复一次视口、通知 scroll owner 越过提交边界，并呈现合并批次的最终 canonical 内容',
 );
 
 const grandchild: TestPost = {
@@ -559,6 +817,7 @@ const grandchild: TestPost = {
 	cooked: 'grandchild',
 };
 lastUserScrollAt = prefetchNow;
+userScrollIntentListener.value?.();
 scrollListener.value?.();
 const presentedBeforeLiveCommit = presentedCommits.length;
 posts.set(3, grandchild);
@@ -575,10 +834,68 @@ changes.emit(Object.freeze({
 coordinator.flushNow();
 assert(
 	replies.topology.rootOf(3) === 1 &&
-	coordinator.replyTreePresentation.rootOf(3) === 1 &&
+		coordinator.replyTreePresentation.rootOf(3) === undefined &&
+		coordinator.replyTreePresentation.canonicalFrozen &&
 		presentedCommits.length === presentedBeforeLiveCommit + 1 &&
-		presentedCommits.at(-1)?.changedPostNumbers.includes(3) === true,
-	'滚动中的实时楼层必须立即进入 canonical、可见关系投影与 presentation 提交',
+		presentedCommits.at(-1)?.changedPostNumbers.includes(3) === true &&
+		!topicHost.querySelector('[data-post-number="3"]'),
+	'滚动中的实时楼层必须立即进入 canonical 与 presentation 提交，但物理树投影要保持手势开始时的稳定快照',
+);
+const rangeHydrationCallsBeforeKnownNestedTarget = rangeHydrationCalls.length;
+const knownNestedHydration = await coordinator.hydrateUnloadedRange({
+	direction: 'around',
+	postNumber: discoursePostNumber(3),
+});
+assert(
+	knownNestedHydration === 0 &&
+		rangeHydrationCalls.length === rangeHydrationCallsBeforeKnownNestedTarget &&
+		!coordinator.replyTreePresentation.canonicalFrozen &&
+		coordinator.replyTreePresentation.rootOf(3) === 1,
+	`gap 目标若已被上一批确认成嵌套楼层，必须立即采用最新树投影并本地显现，不能再次请求同一 around 页或等待用户继续滚动：${JSON.stringify({
+		knownNestedHydration,
+		rangeHydrationCallsBeforeKnownNestedTarget,
+		rangeHydrationCalls: rangeHydrationCalls.length,
+		canonicalFrozen: coordinator.replyTreePresentation.canonicalFrozen,
+		root: coordinator.replyTreePresentation.rootOf(3),
+	})}`,
+);
+const rangeHydrationCallsBeforeStableKnownTarget = rangeHydrationCalls.length;
+const stableKnownHydration = await coordinator.hydrateUnloadedRange({
+	direction: 'around',
+	postNumber: discoursePostNumber(3),
+});
+assert(
+	stableKnownHydration === 0 &&
+		rangeHydrationCalls.length === rangeHydrationCallsBeforeStableKnownTarget,
+	`canonical 已知楼层即使不处于冻结投影也必须本地撤掉假 gap，不能重复请求：${JSON.stringify({
+		stableKnownHydration,
+		rangeHydrationCallsBeforeStableKnownTarget,
+		rangeHydrationCalls: rangeHydrationCalls.length,
+	})}`,
+);
+lastUserScrollAt = prefetchNow;
+userScrollIntentListener.value?.();
+assert(
+	coordinator.replyTreePresentation.canonicalFrozen,
+	'下一次真实滚动仍必须重新建立独立的短生命周期投影快照',
+);
+const viewportMutationBeginsBeforeThaw = viewportMutationBegins;
+const thawDueAt = prefetchNow + 180;
+flushPrefetches(thawDueAt - 1);
+await Promise.resolve();
+assert(
+	coordinator.replyTreePresentation.canonicalFrozen,
+	'配置的滚动 idle 窗口结束前不得提前解冻回复树投影',
+);
+flushPrefetches(thawDueAt);
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	!coordinator.replyTreePresentation.canonicalFrozen &&
+		coordinator.replyTreePresentation.rootOf(3) === 1 &&
+		viewportMutationBegins === viewportMutationBeginsBeforeThaw &&
+		!viewportMutationActive,
+	'无新关系的后续滚动停稳后必须只结束冻结，不能制造第二次视口几何事务',
 );
 coordinator.revealPost(3, {
 	source: 'message-bus',
@@ -716,6 +1033,41 @@ assert(
 	directReplyCalls.join(',') === '5',
 	'同一 reply_count 已完整预取后，后续虚拟帧只能复用完成状态，不能重复调用 TopicSession',
 );
+scrollOffset = 600;
+coordinator.flushNow();
+failDirectReplyPrefetch = true;
+posts.set(5, Object.freeze({
+	...posts.get(5)!,
+	reply_count: 2,
+}));
+changes.emit(Object.freeze({
+	source: 'message-bus' as const,
+	observedAt: now++,
+	acceptedPosts: 1,
+	ignoredPosts: 0,
+	changedPostNumbers: Object.freeze([5]),
+	topicChanged: false,
+	streamChanged: false,
+}));
+flushPrefetches(prefetchNow + 180);
+await Promise.resolve();
+await Promise.resolve();
+coordinator.flushNow();
+directReplyPrefetchScreens = 0;
+coordinator.flushNow();
+directReplyPrefetchScreens = 2;
+coordinator.flushNow();
+flushPrefetches(prefetchNow + 180);
+await Promise.resolve();
+await Promise.resolve();
+flushPrefetches(prefetchNow + 180);
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	directReplyCalls.join(',') === '5,5',
+	'同一 reply_count 的树请求失败或 429 后必须成为本观察周期终态；窗口刷新和滚出再回屏都不得重发同一 API：' +
+		directReplyCalls.join(','),
+);
 coordinator.revealPost(5, {
 	source: 'resource-removal-test',
 	alignment: 'nearest',
@@ -749,8 +1101,29 @@ assert(
 	`删除已暖存楼层必须立即销毁唯一 PostView，并同步减少资源诊断计数：before=${preparedBeforeCachedRemoval}, after=${coordinator.preparedPostViewCount}, destroyed=${removalView.scope.destroyed}, owner=${Boolean(coordinator.domOwner.view(5))}`,
 );
 
+const viewportMutationCancelsBeforeDestroy = viewportMutationCancels;
+posts.set(1, Object.freeze({
+	...posts.get(1)!,
+	cooked: 'root-update-before-destroy',
+}));
+changes.emit(Object.freeze({
+	source: 'message-bus' as const,
+	observedAt: now++,
+	acceptedPosts: 1,
+	ignoredPosts: 0,
+	changedPostNumbers: Object.freeze([1]),
+	topicChanged: false,
+	streamChanged: false,
+}));
+assert(viewportMutationActive, '销毁回归必须先留下一个待提交的高度事务');
 coordinator.destroy();
-assert(!topicHost.firstElementChild && observed.size === 0, '销毁必须释放虚拟流与根观察器');
+assert(
+	!topicHost.firstElementChild &&
+		observed.size === 0 &&
+		!viewportMutationActive &&
+		viewportMutationCancels === viewportMutationCancelsBeforeDestroy + 1,
+	'销毁必须释放虚拟流、根观察器和尚未提交的视口高度事务',
+);
 
 /* 快速滚动只创建稳定高度骨架，完整 PostView 投影必须移出滚动帧并分批水合。 */
 const { document: hydrationParsedDocument } = parseHTML(
@@ -936,13 +1309,28 @@ const pendingChild = hydrationCoordinator.domOwner.view(2)?.slots.root;
 const hiddenAncestor = hydrationCoordinator.domOwner.view(1)?.slots.root;
 if (!hiddenAncestor) throw new Error('祖先骨架未挂载');
 assert(
-	pendingChild?.classList.contains('ldp-post-projection-pending') === false &&
+	pendingChild?.classList.contains('ldp-post-projection-pending') === true &&
+		!hydrationRenderCounts.has(2) &&
+		pendingChild.hasAttribute('aria-busy') &&
+		!hydrationNodeEvents.includes('attach:2') &&
+		projectionTasks.size === 1,
+	'快速滚动进入新窗口时只能创建稳定高度骨架，不能同步投影正文、动作、媒体和已读观察',
+);
+const nextProjectionTask = [...projectionTasks.entries()]
+	.sort((left, right) => left[1].dueAt - right[1].dueAt)[0];
+if (!nextProjectionTask) throw new Error('停滚后的正文水合任务未排入队列');
+projectionTasks.delete(nextProjectionTask[0]);
+hydrationNow = nextProjectionTask[1].dueAt;
+nextProjectionTask[1].callback();
+hydrationCoordinator.flushNow();
+assert(
+	pendingChild.classList.contains('ldp-post-projection-pending') === false &&
 		hydrationRenderCounts.get(2) === 1 &&
 		pendingChild.querySelector('.ldp-content')?.textContent === 'child' &&
 		!pendingChild.hasAttribute('aria-busy') &&
 		hydrationNodeEvents.includes('attach:2') &&
-		projectionTasks.size === 0,
-	'快速滚动进入新窗口时必须同步创建完整正文并激活动作、媒体和已读观察',
+		Number(projectionTasks.size) === 0,
+	'停滚达到 idle 门槛后必须单批物化正文并恢复节点 feature',
 );
 assert(
 	hiddenAncestor.classList.contains('ldp-virtual-ancestor-shell'),
@@ -960,6 +1348,19 @@ assert(
 		hiddenAncestor.querySelector('.ldp-content')?.textContent === 'root' &&
 		hydrationNodeEvents.at(-1) === 'attach:1',
 	'引用跳回树根 #1 时必须先把已连接的祖先骨架实体化，再交给精确高亮定位',
+);
+hydrationPosts.delete(2);
+hydrationLastUserScrollAt = ++hydrationNow;
+hydrationScrollOffset = 600;
+hydrationScrollListener.value?.();
+hydrationCoordinator.flushNow();
+assert(
+	hydrationCoordinator.visibleDataGapPostNumber() === 2 &&
+		!hydrationCoordinator.streamView.slots.beforeGapPlaceholder.hidden &&
+		hydrationCoordinator.streamView.slots.beforeGapPlaceholder.getAttribute(
+			'data-target-post-number',
+		) === '2',
+	'可见子楼层正文已到但祖先正文缺失时，必须补最上层缺口并在同一物理 spacer 显示骨架，不能停放子树后留下无状态空白',
 );
 hydrationCoordinator.destroy();
 assert(
@@ -1315,3 +1716,92 @@ assert(
 );
 stableNearbyCoordinator.destroy();
 await Promise.resolve();
+
+const staleCompleteChanges = new Signal<TopicSessionCommit>();
+const staleCompleteReplies = new ReplyTreeRepository(18, {
+	async load() {
+		return null;
+	},
+	async save() {},
+});
+staleCompleteReplies.setExpectedPostCount(2);
+staleCompleteReplies.ingest([
+	{ post_number: 1, reply_to_post_number: null },
+	{ post_number: 20, reply_to_post_number: null },
+], 'cache-snapshot');
+const staleCompleteHost = document.createElement('main');
+document.body.append(staleCompleteHost);
+const staleCompleteCoordinator = new ReaderTopicDomCoordinator({
+	document,
+	topicHost: staleCompleteHost,
+	session: {
+		changes: staleCompleteChanges,
+		async init() {
+			return Object.freeze({ id: 18 });
+		},
+		cachedPosts: () => Object.freeze([]),
+		postByNumber: () => undefined,
+		postStreamCoverage: () => Object.freeze({
+			complete: false,
+			expectedPostCount: 7_300,
+			streamPostCount: 7_302,
+			missingPostCount: 7_300,
+		}),
+		async next() {
+			return Object.freeze({
+				posts: Object.freeze([]),
+				done: true,
+				retry: false,
+				fatal: false,
+				missingPostIds: Object.freeze([]),
+			});
+		},
+	},
+	replies: staleCompleteReplies,
+	estimatedRootSize: 100,
+	scroll: {
+		readWindowInput: () => ({
+			scrollOffset: 0,
+			viewportSize: 100,
+			overscanBeforeScreens: 0,
+			overscanAfterScreens: 0,
+		}),
+		applyScrollCompensation() {},
+		listenScroll: () => () => {},
+		writeScrollOffset() {},
+		alignPost() {},
+	},
+	identity: (post) => ({
+		postId: post.id,
+		postNumber: post.post_number,
+		username: post.username,
+	}),
+	render() {},
+	observerFactory: () => ({
+		observe() {},
+		unobserve() {},
+		disconnect() {},
+	}),
+	frameScheduler: {
+		request: () => 1,
+		cancel() {},
+	},
+});
+await staleCompleteCoordinator.initialize();
+assert(
+	!staleCompleteCoordinator.replyTreePresentation.coverageComplete &&
+		staleCompleteCoordinator.replyTreePresentation.rootBranches()
+			.find((branch) => branch.postNumber === 20)
+			?.unloadedPostCountBefore === 18,
+	'旧回复树快照即使相对旧计数 complete，也不能越过当前 Topic 权威计数建立可信历史前缀',
+);
+staleCompleteReplies.setExpectedPostCount(7_300);
+assert(
+	!staleCompleteCoordinator.replyTreePresentation.coverageComplete &&
+		staleCompleteCoordinator.replyTreePresentation.rootBranches()
+			.find((branch) => branch.postNumber === 20)
+			?.unloadedPostCountBefore === 18,
+	'只追平计数但尚未补齐关系时仍必须保留历史 gap，不能把 expectedPostCount 当作覆盖证明',
+);
+staleCompleteCoordinator.destroy();
+await staleCompleteReplies.flush();

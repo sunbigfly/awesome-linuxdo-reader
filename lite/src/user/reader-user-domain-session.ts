@@ -52,6 +52,7 @@ export interface ReaderUserExternalSnapshot {
 	readonly metrics: Readonly<Record<string, unknown>>;
 	readonly updatedAt: number | null;
 	readonly stale: boolean;
+	readonly refreshing?: boolean;
 }
 
 export function staleExternalSnapshot(
@@ -80,6 +81,10 @@ export interface ReaderUserRequestGateway {
 }
 
 export interface ReaderUserExternalPort {
+	readonly cached?: (
+		username: string,
+		signal: AbortSignal,
+	) => Promise<ReaderUserExternalSnapshot | null>;
 	load(
 		username: string,
 		signal: AbortSignal,
@@ -180,6 +185,7 @@ const EMPTY_EXTERNAL: ReaderUserExternalSnapshot = Object.freeze({
 	metrics: Object.freeze({}),
 	updatedAt: null,
 	stale: false,
+	refreshing: false,
 });
 
 function normalizedUsername(value: string): string {
@@ -303,7 +309,7 @@ export class ReaderUserDomainSession {
 	readonly #subscriptions = new Map<string, number>();
 	readonly #loads = new Map<string, Promise<ReaderUserDomainSnapshot>>();
 	readonly #followLoads = new Map<string, FollowLoadOperation>();
-	readonly #externalLoads = new Map<string, Promise<ReaderUserExternalSnapshot>>();
+	readonly #externalLoads = new Map<string, Promise<ReaderUserDomainSnapshot>>();
 	readonly #controller = new AbortController();
 	#cacheEpoch = 0;
 	#activeUsername = '';
@@ -749,38 +755,88 @@ export class ReaderUserDomainSession {
 			this.#emit(username, entry);
 			return this.#snapshot(username, entry);
 		}
+		const key = `${slot}:${username}`;
+		const active = this.#externalLoads.get(key);
+		if (active) {
+			return !refresh && entry[slot].phase === 'ready'
+				? this.#snapshot(username, entry)
+				: active;
+		}
+		let cached = entry[slot].phase === 'ready'
+			? staleExternalSnapshot(entry[slot])
+			: null;
+		if (!refresh && port.cached) {
+			try {
+				cached = await port.cached(username, this.#controller.signal) ?? cached;
+			} catch (cause) {
+				if (this.#controller.signal.aborted) throw cause;
+				this.#onError(cause);
+			}
+		}
+		if (cacheEpoch !== this.#cacheEpoch) return this.snapshot(username);
+		if (cached) {
+			entry[slot] = Object.freeze({
+				...staleExternalSnapshot(cached),
+				accountUsername: username,
+				refreshing: true,
+			});
+			entry.revision += 1;
+			this.#emit(username, entry);
+			const operation = this.#startExternalRefresh(
+				slot,
+				port,
+				username,
+				entry,
+				cacheEpoch,
+				key,
+			);
+			return refresh ? operation : this.#snapshot(username, entry);
+		}
 		entry[slot] = Object.freeze({
 			...entry[slot],
 			phase: 'loading',
 			accountUsername: username,
+			refreshing: true,
 		});
 		entry.revision += 1;
 		this.#emit(username, entry);
-		const key = `${slot}:${username}`;
-		let operation = this.#externalLoads.get(key);
-		if (!operation) {
-			operation = port.load(
+		return this.#startExternalRefresh(slot, port, username, entry, cacheEpoch, key);
+	}
+
+	#startExternalRefresh(
+		slot: 'connect' | 'credit',
+		port: ReaderUserExternalPort,
+		username: string,
+		entry: UserEntry,
+		cacheEpoch: number,
+		key: string,
+	): Promise<ReaderUserDomainSnapshot> {
+		const existing = this.#externalLoads.get(key);
+		if (existing) return existing;
+		const operation = (async (): Promise<ReaderUserDomainSnapshot> => {
+		try {
+			const snapshot = await port.load(
 				username,
 				this.#controller.signal,
-				refresh,
-			).finally(() => {
-				if (this.#externalLoads.get(key) === operation) {
-					this.#externalLoads.delete(key);
-					this.#trimEntries();
-				}
-			});
-			this.#externalLoads.set(key, operation);
-		}
-		try {
-			const snapshot = await operation;
-			if (cacheEpoch !== this.#cacheEpoch) return this.snapshot(username);
-			entry[slot] = snapshot;
-		} catch (cause) {
+				true,
+			);
 			if (cacheEpoch !== this.#cacheEpoch) return this.snapshot(username);
 			entry[slot] = Object.freeze({
-				...entry[slot],
-				phase: 'error',
+				...snapshot,
+				refreshing: false,
 			});
+		} catch (cause) {
+			if (cacheEpoch !== this.#cacheEpoch) return this.snapshot(username);
+			entry[slot] = entry[slot].phase === 'ready'
+				? Object.freeze({
+					...staleExternalSnapshot(entry[slot]),
+					refreshing: false,
+				})
+				: Object.freeze({
+					...entry[slot],
+					phase: 'error',
+					refreshing: false,
+				});
 			this.#onError(cause);
 		}
 		if (!this.scope.destroyed) {
@@ -788,6 +844,14 @@ export class ReaderUserDomainSession {
 			this.#emit(username, entry);
 		}
 		return this.#snapshot(username, entry);
+		})().finally(() => {
+			if (this.#externalLoads.get(key) === operation) {
+				this.#externalLoads.delete(key);
+				this.#trimEntries();
+			}
+		});
+		this.#externalLoads.set(key, operation);
+		return operation;
 	}
 
 	destroy(): void {

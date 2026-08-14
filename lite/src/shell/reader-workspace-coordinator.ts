@@ -13,6 +13,7 @@ import {
 import {
 	EmbeddedHostRootController,
 	type EmbeddedHostEnhancementPort,
+	type EmbeddedHostTopicFilterChangesPort,
 } from './embedded-host-root-controller.js';
 import {
 	EmbeddedHostScrollbarController,
@@ -76,6 +77,7 @@ export interface ReaderWorkspaceCoordinatorOptions {
 	readonly hostScroll: EmbeddedHostScrollPort;
 	readonly readHostScrollbarTrack?: () => EmbeddedHostScrollbarTrackGeometry;
 	readonly enhancements: EmbeddedHostEnhancementPort;
+	readonly topicFilterChanges?: EmbeddedHostTopicFilterChangesPort;
 	readonly readAppearance: () => EmbeddedHostResolvedAppearance;
 	readonly appearanceChanges?: Signal<EmbeddedHostResolvedAppearance>;
 	readonly measureHostRowHeight?: () => number;
@@ -581,10 +583,14 @@ export class ReaderWorkspaceCoordinator {
 		this.scope.add(() => this.mutations.destroy());
 		new EmbeddedHostRootController({
 			model: this.workspace,
+			routeKind: options.routeKind,
 			document: options.document,
 			overlay: options.elements.overlay,
 			mutations: this.mutations,
 			enhancements: options.enhancements,
+			...(options.topicFilterChanges
+				? { topicFilterChanges: options.topicFilterChanges }
+				: {}),
 			requestFrame,
 			cancelFrame,
 			parentScope: this.scope,
@@ -614,7 +620,8 @@ export class ReaderWorkspaceCoordinator {
 			button: options.elements.hostTopButton,
 			pointerTarget: options.pointerTarget,
 			scrollTarget: options.scrollTarget,
-			readScrollTop: () => options.hostScroll.read().scrollTop,
+			readScrollTop: () => options.hostScroll.readScrollTop?.() ??
+				options.hostScroll.read().scrollTop,
 			readViewportHeight: () => options.readViewport().height,
 			scrollToTop: () => options.hostScroll.scrollTo(0),
 			requestFrame,

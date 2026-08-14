@@ -62,13 +62,29 @@ const lifecycleObserver = new RequestObserver({
 	now: () => lifecycleNow,
 });
 const queuedId = lifecycleObserver.begin({
-	href: '/posts/9/replies.json',
+	href: '/posts/9/replies.json?topic_ids[]=9&topic_ids[]=10&token=private',
 	transport: 'scheduler',
 	source: 'reader',
 	phase: 'queued',
 	queuedAt: 4_900,
 	priority: 'nested',
 	callSite: 'nested-visible / post-9',
+	logicalId: 'L7',
+	profile: 'nested-visible',
+	namespace: 'topic-nested',
+	lane: 'nested-replies',
+	cacheMode: 'default',
+	identity: {
+		authScope: 'account:secret',
+		topicId: 20,
+		parentPostNumber: 9,
+		after: 20,
+	},
+	max429Retries: 0,
+	maxChallengeRetries: 0,
+	blockOnCloudflareChallenge: true,
+	suppressAfterChallengeWait: false,
+	droppable: true,
 });
 assert(
 	lifecycleObserver.snapshot.queued === 1 &&
@@ -77,6 +93,31 @@ assert(
 		lifecycleObserver.snapshot.events[0]?.phase === 'queued',
 	'入队事实必须立即可见，但不能冒充已运行请求',
 );
+assert(
+	lifecycleObserver.update(queuedId, {
+		priority: 'interactive',
+		joinedConsumers: 1,
+		promoted: true,
+		droppable: false,
+		decision: 'retry-429',
+	}) &&
+		lifecycleObserver.snapshot.events[0]?.queryShape ===
+			'?credential&topic_ids[]×2' &&
+		lifecycleObserver.snapshot.events[0]?.logicalId === 'L7' &&
+		lifecycleObserver.snapshot.events[0]?.profile === 'nested-visible' &&
+		lifecycleObserver.snapshot.events[0]?.namespace === 'topic-nested' &&
+		lifecycleObserver.snapshot.events[0]?.lane === 'nested-replies' &&
+		lifecycleObserver.snapshot.events[0]?.cacheMode === 'default' &&
+		lifecycleObserver.snapshot.events[0]?.identity ===
+			'after=20, parentPostNumber=9, topicId=20' &&
+		lifecycleObserver.snapshot.events[0]?.joinedConsumers === 1 &&
+		lifecycleObserver.snapshot.events[0]?.promoted === true &&
+		lifecycleObserver.snapshot.events[0]?.droppable === false &&
+		lifecycleObserver.snapshot.events[0]?.decision === 'retry-429' &&
+		!JSON.stringify(lifecycleObserver.snapshot.events[0]).includes('secret') &&
+		!JSON.stringify(lifecycleObserver.snapshot.events[0]).includes('private'),
+	'请求账本必须保留脱敏查询形状、typed contract、逻辑链、单飞合并和晋升决策',
+);
 lifecycleNow = 5_020;
 assert(
 	lifecycleObserver.markStarted({
@@ -84,7 +125,7 @@ assert(
 		queuedAt: 4_900,
 		permittedAt: 5_000,
 		startedAt: 5_010,
-		priority: 'nested',
+		priority: 'interactive',
 		waitReason: 'scheduler',
 	}),
 	'已排队事实必须能够原地推进为运行中',
@@ -115,10 +156,13 @@ const challengedId = lifecycleObserver.begin({
 lifecycleObserver.finish(challengedId, {
 	status: 429,
 	cloudflareMitigated: true,
+	decision: 'require-cloudflare',
 });
 assert(
 	lifecycleObserver.snapshot.events.at(-1)?.status === 429 &&
-		lifecycleObserver.snapshot.events.at(-1)?.cloudflareMitigated === true,
+		lifecycleObserver.snapshot.events.at(-1)?.cloudflareMitigated === true &&
+		lifecycleObserver.snapshot.events.at(-1)?.decision ===
+			'require-cloudflare',
 	'429 请求账本必须保留 Cloudflare challenge 归因',
 );
 const cancelledId = lifecycleObserver.begin({
@@ -187,12 +231,19 @@ const privacyObserver = new RequestObserver({
 	now: () => 3_000,
 });
 const privateUrlId = privacyObserver.begin({
-	href: 'https://user:password@example.com/path/to.json?access_token=secret#private',
+	href: 'https://user:password@example.com/path/to.json?topic_ids[]=1&topic_ids[]=2&access_token=secret#private',
 	method: 'GET',
 	transport: 'fetch',
 	source: 'reader',
 	waitReason: 'priority?token=secret',
 	callSite: 'fetcher https://example.com/source.js?token=secret#private',
+	identity: {
+		authScope: 'account:secret',
+		username: 'private',
+		group: 'all',
+		page: 2,
+		postIds: '1,2,3',
+	},
 });
 privacyObserver.finish(privateUrlId, {
 	status: 500,
@@ -205,6 +256,8 @@ const privateUrlEvent = privacyObserver.snapshot.events[0]!;
 assert(
 	privateUrlEvent.href === 'https://example.com/path/to.json' &&
 		privateUrlEvent.path === 'example.com/path/to.json' &&
+		privateUrlEvent.queryShape === '?credential&topic_ids[]×2' &&
+		privateUrlEvent.identity === 'group=all, page=2, postIds=3项' &&
 		privateUrlEvent.callSite === 'fetcher https://example.com/source.js' &&
 		privateUrlEvent.waitReason === '' &&
 		privateUrlEvent.error === 'request-failed' &&

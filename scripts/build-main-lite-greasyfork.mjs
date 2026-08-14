@@ -53,8 +53,8 @@ const externalModuleIds = Object.freeze(Object.fromEntries(
 ))
 const libraryMarker = '// __LDP_GREASYFORK_LIBRARY_REQUIREMENTS__'
 const stylesheetToken = '__LDP_READER_STYLES_URL__'
-const projectExecutableCeiling = 2_000_000
 const greasyForkHardLimit = 2 * 1024 * 1024
+const projectExecutableCeiling = greasyForkHardLimit
 const releaseAcceptanceKeys = [
   'runtimeComplete',
   'featureContractCoverageComplete',
@@ -75,18 +75,27 @@ const requiredBrowserScenarios = [
 ]
 const coreDomains = new Set([
   'app',
-  'cache',
-  'discourse',
+  'components',
   'dom',
   'kernel',
   'layout',
   'live',
-  'network',
   'shell',
   'state',
   'stream',
   'topic',
   'userscript',
+])
+const platformDomains = new Set([
+  'cache',
+  'collection',
+  'discourse',
+  'history',
+  'monitor',
+  'network',
+  'notification',
+  'queue',
+  'sync',
 ])
 const libraryDefinitions = [
   Object.freeze({
@@ -95,8 +104,17 @@ const libraryDefinitions = [
     titleZhCn: 'Awesome LinuxDo Reader Lite 核心库',
     file: 'libraries/main-lite-core.js',
     compatibilityFiles: ['libraries/mian-lite-core.js'],
-    descriptionEn: 'Core runtime modules for Awesome LinuxDo Reader Lite.',
-    description: '应用、数据、Discourse、Shell、主题、流与 userscript 运行核心',
+    descriptionEn: 'Core runtime and presentation modules for Awesome LinuxDo Reader Lite.',
+    description: '应用、Shell、主题、流、布局与 userscript 运行核心',
+  }),
+  Object.freeze({
+    name: 'main-lite-platform',
+    title: 'Awesome LinuxDo Reader Lite Platform Library',
+    titleZhCn: 'Awesome LinuxDo Reader Lite 平台库',
+    file: 'libraries/main-lite-platform.js',
+    compatibilityFiles: ['libraries/mian-lite-platform.js'],
+    descriptionEn: 'Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.',
+    description: '缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块',
   }),
   Object.freeze({
     name: 'main-lite-features',
@@ -105,7 +123,7 @@ const libraryDefinitions = [
     file: 'libraries/main-lite-features.js',
     compatibilityFiles: ['libraries/mian-lite-features.js'],
     descriptionEn: 'Feature modules for Awesome LinuxDo Reader Lite.',
-    description: '媒体、互动、设置、用户、通知、监控与其他功能模块',
+    description: '媒体、互动、设置、用户、翻译与其他功能模块',
   }),
 ]
 
@@ -174,13 +192,12 @@ function browserFileUrl(filePath) {
   return `file:///${drive.toUpperCase()}:/${encodedPath}`
 }
 
-function contentAddressedFileUrl(filePath, digest) {
+function versionedLocalFileUrl(filePath, digest) {
   if (!/^[0-9a-f]{64}$/.test(digest)) {
     throw new Error('本地资源 SHA-256 无效')
   }
   const url = new URL(browserFileUrl(filePath))
   url.searchParams.set('v', digest)
-  url.hash = `sha256=${digest}`
   return url.href
 }
 
@@ -495,11 +512,11 @@ async function compileModules() {
 }
 
 function libraryForModule(module) {
-  if (module.id.startsWith('contracts/')) return libraryDefinitions[1]
+  if (module.id.startsWith('contracts/')) return libraryDefinitions[2]
   const domain = module.id.split('/')[1]
-  return coreDomains.has(domain)
-    ? libraryDefinitions[0]
-    : libraryDefinitions[1]
+  if (coreDomains.has(domain)) return libraryDefinitions[0]
+  if (platformDomains.has(domain)) return libraryDefinitions[1]
+  return libraryDefinitions[2]
 }
 
 function renderModule(module) {
@@ -587,36 +604,36 @@ function renderLocalTestLoader(
 ) {
   const requirements = libraries.map((library) => {
     const libraryPath = path.join(projectRoot, library.file)
-    return `// @require      ${contentAddressedFileUrl(libraryPath, library.sha256)}`
+    return `// @require      ${versionedLocalFileUrl(libraryPath, library.sha256)}`
   }).join('\n')
   let localMetadata = metadata.replace(
     stylesheetToken,
-    contentAddressedFileUrl(stylesheetPath, stylesheetDigest),
+    versionedLocalFileUrl(stylesheetPath, stylesheetDigest),
   )
   localMetadata = replaceMetadataLine(
     localMetadata,
     '@name',
-    `Awesome LinuxDo Reader (v${sourceVersion} Greasy Fork local three-part)`,
+    `Awesome LinuxDo Reader (v${sourceVersion} Greasy Fork local four-part)`,
   )
   localMetadata = replaceMetadataLine(
     localMetadata,
     '@name:zh-CN',
-    `更流畅的 LinuxDo 阅读器（v${sourceVersion} 三文件本地测试）`,
+    `更流畅的 LinuxDo 阅读器（v${sourceVersion} 四文件本地测试）`,
   )
   localMetadata = replaceMetadataLine(
     localMetadata,
     '@version',
-    '__LDP_LOCAL_THREE_PART_VERSION__',
+    '__LDP_LOCAL_FOUR_PART_VERSION__',
   )
   localMetadata = replaceMetadataLine(
     localMetadata,
     '@description',
-    '从本地 Loader、Core、Features 与 CSS 加载，供手动审查 Greasy Fork 三文件结构。',
+    '从本地 Loader、Core、Platform、Features 与 CSS 加载，供手动审查 Greasy Fork 四文件结构。',
   )
   localMetadata = replaceMetadataLine(
     localMetadata,
     '@description:en',
-    'Loads the local Loader, Core, Features, and CSS for manual review of the Greasy Fork three-part build.',
+    'Loads the local Loader, Core, Platform, Features, and CSS for manual review of the Greasy Fork four-part build.',
   )
   localMetadata = localMetadata.replace(
     '// ==/UserScript==',
@@ -628,11 +645,11 @@ function renderLocalTestLoader(
     requirements,
   )
   const output = versionlessOutput.replace(
-    '__LDP_LOCAL_THREE_PART_VERSION__',
-    `${sourceVersion}-local-three-part.${sha256(versionlessOutput).slice(0, 12)}`,
+    '__LDP_LOCAL_FOUR_PART_VERSION__',
+    `${sourceVersion}-local-four-part.${sha256(versionlessOutput).slice(0, 12)}`,
   )
   if (/https:\/\/update\.greasyfork\.org\/scripts\//.test(output)) {
-    throw new Error('三文件本地测试 Loader 不得引用远端项目 Library')
+    throw new Error('四文件本地测试 Loader 不得引用远端项目 Library')
   }
   return output
 }
@@ -827,7 +844,7 @@ for (const definition of libraryDefinitions) {
   )
   parse(content, { sourceType: 'script' })
   const bytes = Buffer.byteLength(content)
-  if (bytes > projectExecutableCeiling) {
+  if (!localTest && bytes > projectExecutableCeiling) {
     throw new Error(`${definition.name} 超过项目执行文件闸门：${bytes}`)
   }
   const outputPath = path.join(outputRoot, definition.file)

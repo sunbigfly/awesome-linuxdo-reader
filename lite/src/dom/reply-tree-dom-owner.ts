@@ -5,6 +5,7 @@ export interface ReplyTreeDomTopology {
 	readonly revision?: string | number;
 	parentOf(postNumber: PostNumber): PostNumber | null | undefined;
 	childrenOf?(postNumber: PostNumber): readonly PostNumber[];
+	subtreePostCountOf?(postNumber: PostNumber): number | undefined;
 	depthOf(postNumber: PostNumber): number | undefined;
 	rootOf(postNumber: PostNumber): PostNumber | undefined;
 }

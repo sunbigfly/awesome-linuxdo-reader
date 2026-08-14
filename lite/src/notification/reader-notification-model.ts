@@ -16,6 +16,7 @@ export type ReaderNotificationGroupKey =
 	| 'links'
 	| 'boosts'
 	| 'reactions'
+	| 'reactionLikes'
 	| 'inbox'
 	| 'sent'
 	| 'newMessages'
@@ -75,7 +76,7 @@ export const READER_NOTIFICATION_GROUPS: Readonly<
 		source: 'user-actions',
 		label: '回复',
 		icon: 'reply',
-		pageSize: 30,
+		pageSize: 100,
 		typeNames: ['replied', 'quoted'],
 		actionTypes: [6, 9],
 	}),
@@ -85,7 +86,7 @@ export const READER_NOTIFICATION_GROUPS: Readonly<
 		source: 'user-actions',
 		label: '赞',
 		icon: 'heart',
-		pageSize: 30,
+		pageSize: 100,
 		typeNames: ['liked', 'liked_consolidated'],
 		actionTypes: [2],
 	}),
@@ -95,7 +96,7 @@ export const READER_NOTIFICATION_GROUPS: Readonly<
 		source: 'user-actions',
 		label: '@提及',
 		icon: 'at',
-		pageSize: 30,
+		pageSize: 100,
 		typeNames: ['mentioned', 'group_mentioned'],
 		actionTypes: [7],
 	}),
@@ -105,7 +106,7 @@ export const READER_NOTIFICATION_GROUPS: Readonly<
 		source: 'user-actions',
 		label: '编辑',
 		icon: 'pencil',
-		pageSize: 30,
+		pageSize: 100,
 		typeNames: ['edited'],
 		actionTypes: [11],
 	}),
@@ -115,7 +116,7 @@ export const READER_NOTIFICATION_GROUPS: Readonly<
 		source: 'user-actions',
 		label: '链接',
 		icon: 'link',
-		pageSize: 30,
+		pageSize: 100,
 		typeNames: ['linked', 'linked_consolidated'],
 		actionTypes: [17],
 	}),
@@ -123,7 +124,7 @@ export const READER_NOTIFICATION_GROUPS: Readonly<
 		key: 'boosts',
 		mode: 'notifications',
 		source: 'boosts-received',
-		label: 'Boosts',
+		label: 'Boost',
 		icon: 'rocket',
 		pageSize: 20,
 		typeNames: ['boost'],
@@ -136,6 +137,16 @@ export const READER_NOTIFICATION_GROUPS: Readonly<
 		icon: 'smile',
 		pageSize: 20,
 		typeNames: ['reaction'],
+	}),
+	reactionLikes: group({
+		key: 'reactionLikes',
+		mode: 'notifications',
+		source: 'user-actions',
+		label: '回应与赞',
+		icon: 'smile',
+		pageSize: 30,
+		typeNames: ['reaction', 'liked', 'liked_consolidated'],
+		actionTypes: [2],
 	}),
 	inbox: group({
 		key: 'inbox',
@@ -197,18 +208,53 @@ export const READER_NOTIFICATION_GROUP_ORDER: readonly ReaderNotificationGroupKe
 	Object.freeze([
 		'all',
 		'replies',
-		'likes',
+		'boosts',
 		'mentions',
+		'likes',
+		'reactions',
 		'edits',
 		'links',
-		'boosts',
-		'reactions',
 		'inbox',
 		'sent',
 		'newMessages',
 		'unreadMessages',
 		'archive',
 		'botMessages',
+	]);
+
+/** 通知浮窗只展示合并后的用户分类；底层来源仍由 GROUP_ORDER 独立维护。 */
+export const READER_NOTIFICATION_PANEL_GROUP_ORDER:
+	readonly ReaderNotificationGroupKey[] = Object.freeze([
+		'all',
+		'replies',
+		'boosts',
+		'reactionLikes',
+		'mentions',
+		'edits',
+		'links',
+		'inbox',
+		'sent',
+		'newMessages',
+		'unreadMessages',
+		'archive',
+		'botMessages',
+	]);
+
+/**
+ * “全部”通知的展示事实源。
+ *
+ * `/notifications.json` 会把多条回复、点赞等折叠成一个父通知，只适合提供未读计数、
+ * 通知 ID 与已读 mutation 身份；面板中的“全部”必须合并下面这些逐条活动集合。
+ */
+export const READER_NOTIFICATION_AGGREGATE_GROUP_ORDER: readonly ReaderNotificationGroupKey[] =
+	Object.freeze([
+		'replies',
+		'likes',
+		'mentions',
+		'edits',
+		'links',
+		'boosts',
+		'reactions',
 	]);
 
 export function readerNotificationGroup(
@@ -249,8 +295,10 @@ export interface ReaderNotificationRecord {
 	readonly highPriority: boolean;
 	readonly typeName: string;
 	readonly typeLabel: string;
+	readonly aggregateCount: number | null;
 	readonly icon: string;
 	readonly actor: string;
+	readonly avatarFallback: string;
 	readonly avatarTemplate: string;
 	readonly summary: string;
 	readonly excerpt: string;
@@ -259,6 +307,9 @@ export interface ReaderNotificationRecord {
 	readonly read: boolean | null;
 	readonly href: string;
 	readonly target: ReaderNotificationTarget | null;
+	readonly categoryId: number | null;
+	readonly categoryName: string;
+	readonly tags: readonly string[];
 	readonly searchText: string;
 }
 
@@ -320,6 +371,79 @@ export function notificationSearchText(values: readonly unknown[]): string {
 function positiveId(value: unknown): number | null {
 	const numeric = Number(value);
 	return Number.isSafeInteger(numeric) && numeric > 0 ? numeric : null;
+}
+
+function tagNames(...values: readonly unknown[]): readonly string[] {
+	const names = new Map<string, string>();
+	const visit = (value: unknown): void => {
+		if (Array.isArray(value)) {
+			for (const item of value) visit(item);
+			return;
+		}
+		const source = notificationRecord(value);
+		const name = notificationText(
+			typeof value === 'string'
+				? value
+				: source.name ?? source.tag_name ?? source.slug,
+		);
+		if (!name) return;
+		const key = name.toLocaleLowerCase('zh-CN');
+		if (!names.has(key)) names.set(key, name);
+	};
+	for (const value of values) visit(value);
+	return Object.freeze([...names.values()]);
+}
+
+function notificationTaxonomy(
+	categoryNameFor: ((categoryId: number) => string) | undefined,
+	...values: readonly unknown[]
+): Readonly<{
+	readonly categoryId: number | null;
+	readonly categoryName: string;
+	readonly tags: readonly string[];
+}> {
+	let categoryId: number | null = null;
+	let categoryName = '';
+	const tags: unknown[] = [];
+	for (const value of values) {
+		const source = notificationRecord(value);
+		const category = notificationRecord(source.category);
+		categoryId ??= positiveId(source.category_id ?? category.id);
+		categoryName ||= notificationText(
+			source.category_name ??
+			source.categoryName ??
+			category.name ??
+			source.category_slug ??
+			category.slug,
+		);
+		tags.push(source.tags, source.topic_tags);
+	}
+	if (!categoryName && categoryId !== null && categoryNameFor) {
+		categoryName = notificationText(categoryNameFor(categoryId));
+	}
+	return Object.freeze({
+		categoryId,
+		categoryName,
+		tags: tagNames(tags),
+	});
+}
+
+export function readerNotificationCategoryFilterKey(
+	record: Pick<ReaderNotificationRecord, 'categoryId' | 'categoryName'>,
+): string {
+	if (record.categoryId !== null) return `category:${record.categoryId}`;
+	const name = record.categoryName.trim().toLocaleLowerCase('zh-CN');
+	return name ? `category-name:${name}` : '';
+}
+
+export function readerNotificationTagFilterKey(value: string): string {
+	const tag = value.trim().toLocaleLowerCase('zh-CN');
+	return tag ? `tag:${tag}` : '';
+}
+
+function aggregateCount(value: unknown): number | null {
+	const numeric = Number(value);
+	return Number.isSafeInteger(numeric) && numeric > 1 ? numeric : null;
 }
 
 function createdAt(value: unknown): string {
@@ -390,8 +514,127 @@ function recordResult(
 			input.typeLabel,
 			input.target?.topicId,
 			input.target?.postNumber,
+			input.categoryName,
+			...input.tags,
 		]),
 	});
+}
+
+/** 归一化持久集合投影；损坏或跨 schema 的记录按 miss 处理。 */
+export function normalizeStoredReaderNotification(
+	value: unknown,
+): ReaderNotificationRecord | null {
+	const source = notificationRecord(value);
+	const identity = String(source.identity ?? '').trim();
+	const group = String(source.group ?? '') as ReaderNotificationGroupKey;
+	const notificationSource = String(
+		source.source ?? '',
+	) as ReaderNotificationSource;
+	if (
+		!identity ||
+		!Object.hasOwn(READER_NOTIFICATION_GROUPS, group) ||
+		![
+			'notifications',
+			'user-actions',
+			'boosts-received',
+			'reactions-received',
+			'private-messages',
+		].includes(notificationSource)
+	) return null;
+	const targetValue = notificationRecord(source.target);
+	const topicId = tryDiscourseTopicId(targetValue.topicId);
+	const postNumber = tryDiscoursePostNumber(targetValue.postNumber);
+	const target = topicId && postNumber
+		? Object.freeze({ topicId, postNumber })
+		: null;
+	const tags = Object.freeze((Array.isArray(source.tags) ? source.tags : [])
+		.map(notificationText).filter(Boolean));
+	const read = source.read === true ? true : source.read === false ? false : null;
+	return recordResult({
+		identity,
+		group,
+		source: notificationSource,
+		sourceNotificationId: positiveId(source.sourceNotificationId),
+		notificationTypeId: positiveId(source.notificationTypeId),
+		highPriority: source.highPriority === true,
+		typeName: notificationText(source.typeName),
+		typeLabel: notificationText(source.typeLabel),
+		aggregateCount: aggregateCount(source.aggregateCount),
+		icon: notificationText(source.icon) || 'bell',
+		actor: notificationUsername(source.actor),
+		avatarFallback: notificationText(source.avatarFallback),
+		avatarTemplate: String(source.avatarTemplate ?? '').trim(),
+		summary: notificationText(source.summary),
+		excerpt: notificationText(source.excerpt),
+		stateLabel: notificationText(source.stateLabel),
+		createdAt: createdAt(source.createdAt),
+		read,
+		href: String(source.href ?? '').trim(),
+		target,
+		categoryId: positiveId(source.categoryId),
+		categoryName: notificationText(source.categoryName),
+		tags,
+	});
+}
+
+export function withReaderNotificationTopicTaxonomy(
+	record: ReaderNotificationRecord,
+	value: unknown,
+	categoryNameFor?: (categoryId: number) => string,
+): ReaderNotificationRecord {
+	const topic = notificationRecord(value);
+	const taxonomy = notificationTaxonomy(categoryNameFor, topic);
+	const categoryId = record.categoryId ?? taxonomy.categoryId;
+	const categoryName = record.categoryName || (
+		categoryId !== null && categoryId === taxonomy.categoryId
+			? taxonomy.categoryName
+			: ''
+	);
+	const hasTopicTags = Object.hasOwn(topic, 'tags') ||
+		Object.hasOwn(topic, 'topic_tags');
+	const tags = record.tags.length || !hasTopicTags
+		? record.tags
+		: taxonomy.tags;
+	if (
+		categoryId === record.categoryId &&
+		categoryName === record.categoryName &&
+		tags.length === record.tags.length &&
+		tags.every((tag, index) => tag === record.tags[index])
+	) return record;
+	return recordResult({
+		...record,
+		categoryId,
+		categoryName,
+		tags,
+	});
+}
+
+function notificationActivityVerb(
+	group: ReaderNotificationGroupKey,
+	typeName: string,
+): string {
+	if (typeName === 'quoted') return '引用了你';
+	return ({
+		replies: '回复了你',
+		likes: '赞了你的帖子',
+		mentions: '@提及了你',
+		edits: '编辑了帖子',
+		links: '链接了你的帖子',
+		boosts: 'Boost 了你的帖子',
+		reactions: '回应了你的帖子',
+	} as Partial<Record<ReaderNotificationGroupKey, string>>)[group] ?? '';
+}
+
+function notificationActivitySummary(input: {
+	readonly actor: string;
+	readonly group: ReaderNotificationGroupKey;
+	readonly typeName: string;
+	readonly title: string;
+}): string {
+	const verb = notificationActivityVerb(input.group, input.typeName);
+	if (!verb) return '';
+	return `${input.actor ? `@${input.actor} · ` : ''}${verb}` +
+		`${input.title ? ` · ${input.title}` : ''}`;
 }
 
 export function normalizeNativeNotification(
@@ -401,13 +644,14 @@ export function normalizeNativeNotification(
 	options: {
 		readonly identity?: string;
 		readonly sourceNotificationId?: unknown;
+		readonly categoryNameFor?: (categoryId: number) => string;
 	} = {},
 ): ReaderNotificationRecord {
 	const source = notificationRecord(value);
 	const data = notificationData(source);
 	const typeName = String(presented.typeName ?? source.type_name ?? '').trim();
 	const group = nativeNotificationGroup(typeName, groupValue);
-	const actor = notificationUsername(
+	const presentedActor = notificationUsername(
 		presented.actor ??
 		data.display_username ??
 		data.original_username ??
@@ -415,6 +659,26 @@ export function normalizeNativeNotification(
 		data.username ??
 		source.username,
 	);
+	const count = typeName === 'replied'
+		? aggregateCount(data.consolidated_count)
+		: null;
+	const aggregateActor = count === null
+		? ''
+		: notificationUsername(
+			data.original_username ??
+			data.acting_user_name ??
+			data.username ??
+			data.display_username ??
+			presented.actor,
+		);
+	const namedAggregateActor = aggregateActor &&
+		aggregateActor !== String(count) &&
+		!/^[0-9]+$/.test(aggregateActor)
+		? aggregateActor
+		: '';
+	const actor = count === null
+		? presentedActor
+		: namedAggregateActor;
 	const target = targetFrom(
 		presented.topicId ?? source.topic_id ?? data.topic_id,
 		presented.postNumber ?? source.post_number ?? data.post_number,
@@ -427,12 +691,27 @@ export function normalizeNativeNotification(
 	const id = positiveId(options.sourceNotificationId ?? source.id);
 	const timestamp = createdAt(source.created_at);
 	const href = String(presented.href ?? '').trim();
-	const summary = notificationText(
+	const title = notificationText(data.topic_title);
+	const canonicalSummary = count === null
+		? notificationActivitySummary({
+			actor: presentedActor,
+			group: group.key,
+			typeName,
+			title,
+		})
+		: `${namedAggregateActor ? `@${namedAggregateActor} 等 · ` : ''}` +
+			`${count} 条回复${title ? ` · ${title}` : ''}`;
+	const summary = canonicalSummary || notificationText(
 		presented.summary ??
 		data.topic_title ??
 		presented.typeLabel ??
 		typeName ??
 		'通知',
+	);
+	const taxonomy = notificationTaxonomy(
+		options.categoryNameFor,
+		data,
+		source,
 	);
 	return recordResult({
 		identity: options.identity ?? (
@@ -447,15 +726,21 @@ export function normalizeNativeNotification(
 		highPriority: source.high_priority === true,
 		typeName,
 		typeLabel: notificationText(presented.typeLabel ?? (typeName || '通知')),
+		aggregateCount: count,
 		icon: TYPE_ICONS[typeName] ?? group.icon,
 		actor,
-		avatarTemplate: String(
-			source.acting_user_avatar_template ??
-			source.avatar_template ??
-			data.acting_user_avatar_template ??
-			data.avatar_template ??
-			'',
-		).trim(),
+		avatarFallback: count === null
+			? actor.slice(0, 1).toLocaleUpperCase() || '?'
+			: String(count),
+		avatarTemplate: count === null
+			? String(
+				source.acting_user_avatar_template ??
+				source.avatar_template ??
+				data.acting_user_avatar_template ??
+				data.avatar_template ??
+				'',
+			).trim()
+			: '',
 		summary,
 		excerpt: '',
 		stateLabel: source.read === true ? '已读' : source.read === false ? '未读' : '',
@@ -463,6 +748,7 @@ export function normalizeNativeNotification(
 		read: typeof source.read === 'boolean' ? source.read : null,
 		href,
 		target,
+		...taxonomy,
 	});
 }
 
@@ -479,6 +765,10 @@ function syntheticRecord(input: {
 	readonly stateLabel?: unknown;
 	readonly read?: boolean | null;
 	readonly typeName?: string;
+	readonly icon?: string;
+	readonly categoryId?: unknown;
+	readonly categoryName?: unknown;
+	readonly tags?: readonly unknown[];
 }): ReaderNotificationRecord {
 	const group = readerNotificationGroup(input.group);
 	const actor = notificationUsername(input.actor);
@@ -496,8 +786,10 @@ function syntheticRecord(input: {
 		highPriority: false,
 		typeName: input.typeName ?? group.typeNames[0] ?? group.key,
 		typeLabel: group.label,
-		icon: group.icon,
+		aggregateCount: null,
+		icon: input.icon ?? group.icon,
 		actor,
+		avatarFallback: actor.slice(0, 1).toLocaleUpperCase() || '?',
 		avatarTemplate: String(input.avatarTemplate ?? '').trim(),
 		summary,
 		excerpt,
@@ -506,27 +798,31 @@ function syntheticRecord(input: {
 		read: input.read ?? null,
 		href: '',
 		target,
+		categoryId: positiveId(input.categoryId),
+		categoryName: notificationText(input.categoryName),
+		tags: tagNames(input.tags),
 	});
 }
 
 export function normalizeUserActionNotification(
 	value: unknown,
 	groupKey: ReaderNotificationGroupKey,
+	categoryNameFor?: (categoryId: number) => string,
 ): ReaderNotificationRecord {
 	const action = notificationRecord(value);
+	const taxonomy = notificationTaxonomy(categoryNameFor, action);
 	const actionType = Number(action.action_type) || 0;
 	const actor = notificationUsername(action.acting_username ?? action.username);
 	const title = notificationText(action.title);
-	const verb = actionType === 9
-		? '引用了你'
-		: ({
-			replies: '回复了你',
-			likes: '赞了你的帖子',
-			mentions: '@提及了你',
-			edits: '编辑了帖子',
-			links: '链接了你的帖子',
-		} as Partial<Record<ReaderNotificationGroupKey, string>>)[groupKey] ??
-		readerNotificationGroup(groupKey).label;
+	const typeName = actionType === 9
+		? 'quoted'
+		: readerNotificationGroup(groupKey).typeNames[0] ?? groupKey;
+	const summary = notificationActivitySummary({
+		actor,
+		group: groupKey,
+		typeName,
+		title,
+	});
 	return syntheticRecord({
 		group: groupKey,
 		identity: [
@@ -540,28 +836,31 @@ export function normalizeUserActionNotification(
 		createdAt: action.created_at,
 		topicId: action.topic_id,
 		postNumber: action.post_number,
-		summary: `${actor ? `@${actor} · ` : ''}${verb}${title ? ` · ${title}` : ''}`,
+		summary: summary || readerNotificationGroup(groupKey).label,
 		excerpt: action.excerpt,
-		...(actionType === 9
-			? { typeName: 'quoted' }
-			: readerNotificationGroup(groupKey).typeNames[0] === undefined
-				? {}
-				: {
-					typeName:
-						readerNotificationGroup(groupKey).typeNames[0]!,
-				}),
+		typeName,
+		...taxonomy,
 	});
 }
 
 export function normalizeReactionNotification(
 	value: unknown,
+	categoryNameFor?: (categoryId: number) => string,
 ): ReaderNotificationRecord {
 	const reaction = notificationRecord(value);
 	const post = notificationRecord(reaction.post);
+	const topic = notificationRecord(post.topic);
 	const user = notificationRecord(reaction.user);
+	const taxonomy = notificationTaxonomy(
+		categoryNameFor,
+		reaction,
+		post,
+		topic,
+	);
 	const reactionValue = notificationRecord(reaction.reaction).reaction_value ??
 		reaction.reaction_value ??
 		(typeof reaction.reaction === 'string' ? reaction.reaction : '');
+	const reactionId = String(reactionValue ?? '').trim().replace(/^:+|:+$/g, '');
 	const actor = notificationUsername(user.username);
 	const title = notificationText(
 		notificationRecord(post.topic).title ?? post.topic_title,
@@ -576,19 +875,29 @@ export function normalizeReactionNotification(
 		topicId: post.topic_id ?? target?.topicId,
 		postNumber: post.post_number ?? target?.postNumber,
 		summary: `${actor ? `@${actor} · ` : ''}` +
-			`${reactionValue ? `用 ${reactionValue} ` : ''}回应了你的帖子` +
+			'回应了你的帖子' +
 			`${title ? ` · ${title}` : ''}`,
 		excerpt: post.excerpt,
 		typeName: 'reaction',
+		icon: reactionId ? `emoji:${reactionId}` : 'smile',
+		...taxonomy,
 	});
 }
 
 export function normalizeBoostNotification(
 	value: unknown,
+	categoryNameFor?: (categoryId: number) => string,
 ): ReaderNotificationRecord {
 	const boost = notificationRecord(value);
 	const post = notificationRecord(boost.post);
+	const topic = notificationRecord(post.topic);
 	const user = notificationRecord(boost.user);
+	const taxonomy = notificationTaxonomy(
+		categoryNameFor,
+		boost,
+		post,
+		topic,
+	);
 	const actor = notificationUsername(user.username);
 	const title = notificationText(post.topic_title);
 	const target = targetFromHref(post.url);
@@ -604,6 +913,7 @@ export function normalizeBoostNotification(
 			`${title ? ` · ${title}` : ''}`,
 		excerpt: boost.cooked ?? post.excerpt,
 		typeName: 'boost',
+		...taxonomy,
 	});
 }
 
@@ -612,8 +922,10 @@ export function normalizePrivateMessageNotification(
 	payloadValue: unknown,
 	groupKey: ReaderNotificationGroupKey,
 	currentUsernameValue: string,
+	categoryNameFor?: (categoryId: number) => string,
 ): ReaderNotificationRecord {
 	const topic = notificationRecord(value);
+	const taxonomy = notificationTaxonomy(categoryNameFor, topic);
 	const payload = notificationRecord(payloadValue);
 	const users = new Map<number, UnknownRecord>(
 		(Array.isArray(payload.users) ? payload.users : []).map((userValue) => {
@@ -670,6 +982,7 @@ export function normalizePrivateMessageNotification(
 		read: !unread,
 		stateLabel,
 		typeName: 'private_message',
+		...taxonomy,
 	});
 }
 

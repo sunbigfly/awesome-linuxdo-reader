@@ -265,6 +265,15 @@ export class ReaderSelectionQuoteFeature<
 				this.#hideImageToolbar();
 			});
 		}
+		for (const type of [
+			'ldp-reader-window-change',
+			'ldp-reader-workspace-change',
+		]) {
+			this.scope.listen(this.#root, type, () => {
+				this.#hide();
+				this.#hideImageToolbar();
+			});
+		}
 		this.scope.listen(toolbar, 'pointerdown', (event) => {
 			event.preventDefault();
 		});

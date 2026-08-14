@@ -120,6 +120,13 @@ assert(
 const preset = host.querySelector<HTMLSelectElement>(
 	'.ldp-image-scale-preset',
 )!;
+assert(
+	String(preferences.imageProfile.preset) === '100' &&
+		host.querySelector<HTMLButtonElement>(
+			'.ldp-settings-form-reset',
+		)?.disabled === true,
+	'图片设置与偏好事实源必须统一以 100% 为默认大小',
+);
 for (const option of [...preset.options]) {
 	option.selected = option.value === 'custom';
 }

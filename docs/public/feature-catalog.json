@@ -57,12 +57,12 @@
     "feature_id": "CORE-004",
     "title": "多种阅读形态",
     "category": "开始使用",
-    "description": "支持浮窗、全屏、左侧嵌入、右侧嵌入和移动端布局。",
-    "source_anchor": "lite/src/shell/reader-workspace.ts",
+    "description": "支持浮窗、全屏、左侧嵌入、右侧嵌入和移动端布局；新配置默认右侧嵌入，嵌入态固定使用宿主 Default 站点主题。",
+    "source_anchor": "lite/src/userscript/main-lite-bootstrap.ts",
     "since": "0.1.2",
     "version": "1.3.1",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-08-13",
     "screenshots": [
       "assets/screenshots/guide-05-layout-settings-v1.0.0.png",
       "assets/screenshots/guide-01-reader-overview-v1.3.0.png"
@@ -508,7 +508,7 @@
     "since": "0.1.2",
     "version": "1.3.1",
     "status": "current",
-    "last_verified": "2026-08-03",
+    "last_verified": "2026-08-13",
     "screenshots": [
       "assets/screenshots/guide-02-settings-overview-v1.3.0.png",
       "assets/screenshots/guide-25-user-card-v1.0.0.png"
@@ -614,7 +614,7 @@
     "feature_id": "MEDIA-014",
     "title": "非中文正文翻译",
     "category": "内容与媒体",
-    "description": "在非中文内置社区和语言未知的通用 Discourse 站点切换原文、双语和全译文；可使用公共翻译或多个 OpenAI 兼容服务，并以有界 Section 缓存复用译文。",
+    "description": "在非中文内置社区和语言未知的通用 Discourse 站点切换原文、双语和全译文，并从无装饰、弱化、分隔、强调、引用和卡片等译文样式中选择；可使用公共翻译或多个 OpenAI 兼容服务，并以有界 Section 缓存复用译文。",
     "source_anchor": "lite/src/translation/reader-translation-controller.ts",
     "since": "0.1.11",
     "version": "1.3.1",
@@ -975,6 +975,22 @@
     ]
   },
   {
+    "feature_id": "COLLECT-007",
+    "title": "不想看与预设自动过滤",
+    "category": "消息与收藏",
+    "description": "把列表页免打扰接入账号隔离的不想看集合，支持单行条目的并排标注与多标签编辑、行内恢复、类别显示筛选，以及按当前搜索和筛选结果批量恢复；同一浮窗内以可检索只读卡片管理类别、Label、OP、字符或楼层用户规则，新增实体经宿主查询校验，字符支持正则，多项命中会完整归档原因。",
+    "source_anchor": "lite/src/collection/reader-unwanted-topic-repository.ts",
+    "since": "1.3.1",
+    "version": "1.3.1",
+    "status": "current",
+    "last_verified": "2026-08-14",
+    "screenshots": [],
+    "docs": [
+      "guide/messages-and-collections.md",
+      "settings/other.md"
+    ]
+  },
+  {
     "feature_id": "USER-001",
     "title": "阅读器用户卡",
     "category": "用户资料",
@@ -1229,12 +1245,12 @@
     "feature_id": "SET-009",
     "title": "外观颜色与结构线",
     "category": "个性化设置",
-    "description": "设置强调色、链接、斑马纹、回复线、引用线、分隔线和楼层预览，并提供 0.1.8 明亮主题默认配色。",
+    "description": "设置强调色、链接、斑马纹、回复线、引用线、分隔线和楼层预览；颜色字段共用预设、HEX、HSV 滑杆、二维色盘及浏览器屏幕吸色入口。",
     "source_anchor": "lite/src/appearance/reader-appearance-style-controller.ts",
     "since": "0.1.2",
     "version": "1.3.1",
     "status": "current",
-    "last_verified": "2026-07-25",
+    "last_verified": "2026-08-11",
     "screenshots": [
       "assets/screenshots/guide-07-appearance-settings-v1.0.0.png"
     ],
@@ -1283,12 +1299,12 @@
     "feature_id": "SET-012",
     "title": "API 预取预设与正文批量",
     "category": "性能设置",
-    "description": "选择省流、自动、快速预取或自定义，并设置 post_ids 正文单批数量。",
-    "source_anchor": "lite/src/state/reader-preferences-schema.ts",
+    "description": "选择省流、自动、实验性快速预取或自定义，并设置 post_ids 正文单批目标；高于自动档的目标会提示卡顿与 429 风险，且不能覆盖近窗复用、后台空闲单飞或请求安全契约。",
+    "source_anchor": "lite/src/settings/reader-performance-settings-form.ts",
     "since": "0.1.2",
     "version": "1.3.1",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-08-13",
     "screenshots": [
       "assets/screenshots/guide-09-performance-settings-v1.0.0.png"
     ],
@@ -1301,12 +1317,12 @@
     "feature_id": "SET-013",
     "title": "主楼层 DOM 窗口",
     "category": "性能设置",
-    "description": "设置视口外挂载缓冲和同时挂载楼层上限。",
-    "source_anchor": "lite/src/dom/reply-tree.ts",
+    "description": "设置视口外挂载缓冲和同时挂载楼层目标上限；必要祖先结构与滚动占位继续由虚拟窗口 owner 裁决。",
+    "source_anchor": "lite/src/topic/reader-topic-navigation-preferences.ts",
     "since": "0.1.2",
     "version": "1.3.1",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-08-13",
     "screenshots": [
       "assets/screenshots/guide-09-performance-settings-v1.0.0.png"
     ],
@@ -1319,12 +1335,12 @@
     "feature_id": "SET-014",
     "title": "正文与树状 API 预知距离",
     "category": "性能设置",
-    "description": "设置正文批次提升和父楼直属回复请求距离视口多少屏开始。",
-    "source_anchor": "lite/src/state/reader-preferences-schema.ts",
+    "description": "设置正文近窗缺口提升和父楼直属回复候选距离视口多少屏开始，不扩大 DOM 窗口。",
+    "source_anchor": "lite/src/topic/reader-topic-flow-controller.ts",
     "since": "0.1.2",
     "version": "1.3.1",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-08-13",
     "screenshots": [
       "assets/screenshots/guide-09-performance-settings-v1.0.0.png"
     ],
@@ -1337,12 +1353,12 @@
     "feature_id": "SET-015",
     "title": "共享 API 安全边界",
     "category": "性能设置",
-    "description": "设置正文、树状、宿主和跨标签共用的总并发、启动间隔和窗口预算。",
-    "source_anchor": "lite/src/network/request-scheduler.ts",
+    "description": "设置共享总并发、基础启动间隔和固定预防窗口目标；后台让路、请求 profile、宿主计账与 Cloudflare 硬闸门保持更高优先级。",
+    "source_anchor": "lite/src/network/browser-shared-request-permit.ts",
     "since": "0.1.2",
     "version": "1.3.1",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-08-13",
     "screenshots": [
       "assets/screenshots/guide-11-request-flow-v1.0.0.png",
       "assets/screenshots/guide-09-performance-settings-v1.0.0.png"
@@ -1375,12 +1391,12 @@
     "feature_id": "SET-017",
     "title": "帖子从 #1 打开",
     "category": "其他设置",
-    "description": "普通帖子链接可固定从第一楼开始，消息、历史和收藏仍按目标楼层。",
+    "description": "普通帖子链接默认从第一楼开始，消息、历史和收藏仍按目标楼层；该默认可在阅读与导航设置中关闭。",
     "source_anchor": "lite/src/state/reader-preferences-schema.ts",
     "since": "0.1.2",
     "version": "1.3.1",
     "status": "current",
-    "last_verified": "2026-08-07",
+    "last_verified": "2026-08-13",
     "screenshots": [
       "assets/screenshots/guide-26-reading-navigation-v1.0.0.png"
     ],
@@ -1559,7 +1575,7 @@
     "feature_id": "DATA-006",
     "title": "WebDAV 跨设备合并同步",
     "category": "数据管理",
-    "description": "通过标准 WebDAV 三方合并十类可选数据；离线 Topic 使用轻量清单与独立 HTML 对象，避免占用主同步文件。",
+    "description": "通过标准 WebDAV 同步十二类可选数据；通知与互动历史使用单调合并的独立清单，离线 Topic 使用轻量清单与独立 HTML，均不占用主同步文件。",
     "source_anchor": "lite/src/sync/reader-webdav-coordinator.ts",
     "since": "1.1.0",
     "version": "1.3.1",
@@ -1604,12 +1620,12 @@
     "feature_id": "MONITOR-001",
     "title": "实时资源监控",
     "category": "监控与限流",
-    "description": "观察内存估计、长任务、DOM、楼层、媒体、请求、网络与十分钟趋势。",
+    "description": "按毫秒事件和十分钟快照观察内存、长任务、DOM、楼层、媒体与网络，并可导出 JSONL。",
     "source_anchor": "lite/src/monitor/reader-resource-monitor.ts",
     "since": "0.1.2",
     "version": "1.3.1",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-08-13",
     "screenshots": [
       "assets/screenshots/guide-10-resource-monitor-v1.0.0.png"
     ],
@@ -1622,12 +1638,12 @@
     "feature_id": "MONITOR-002",
     "title": "请求数据面板",
     "category": "监控与限流",
-    "description": "展示请求速率、传输量、P95、排队、异常和按类型记录。",
+    "description": "展示请求速率、P95、排队、异常、逻辑链、typed contract、重试决策，并可导出完整脱敏 JSONL。",
     "source_anchor": "lite/src/app/reader-data-runtime.ts",
     "since": "0.1.2",
     "version": "1.3.1",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-08-13",
     "screenshots": [
       "assets/screenshots/guide-11-request-flow-v1.0.0.png"
     ],
@@ -1679,12 +1695,12 @@
     "feature_id": "MONITOR-005",
     "title": "请求记录脱敏",
     "category": "监控与限流",
-    "description": "请求面板不保留查询参数、正文、Cookie、授权头或响应内容。",
+    "description": "请求面板只保留查询键形状和有限安全 identity，不保留查询值、正文、Cookie、授权头或响应内容。",
     "source_anchor": "lite/src/network/request-observer.ts",
     "since": "0.1.2",
     "version": "1.3.1",
     "status": "current",
-    "last_verified": "2026-07-23",
+    "last_verified": "2026-08-13",
     "screenshots": [
       "assets/screenshots/guide-11-request-flow-v1.0.0.png"
     ],

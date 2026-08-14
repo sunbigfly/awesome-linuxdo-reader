@@ -129,6 +129,7 @@ export class DiscourseNativeAjaxObservationAdapter {
 			readonly sharedResponse: Readonly<{
 				readonly source: 'host' | 'reader';
 				readonly href: string;
+				readonly method: string;
 				readonly recoveryProbe: boolean;
 				readonly blockOnCloudflareChallenge: boolean;
 			}> | null;
@@ -191,6 +192,7 @@ export class DiscourseNativeAjaxObservationAdapter {
 					? Object.freeze({
 						source: event.source === 'reader' ? 'reader' : 'host',
 						href: event.href,
+						method: event.method,
 						recoveryProbe: event.recoveryProbe,
 						blockOnCloudflareChallenge: event.type !== 'read',
 					})

@@ -61,7 +61,9 @@ assert(
 	presentation.rootOf(5) === 1 &&
 		presentation.depthOf(5) === 4 &&
 		JSON.stringify(presentation.childrenOf(4)) === '[5]' &&
-		presentation.rootBranches()[0]?.subtreePostCount === 5,
+		presentation.rootBranches()[0]?.subtreePostCount === 5 &&
+		presentation.subtreePostCountOf(1) === 5 &&
+		presentation.subtreePostCountOf(3) === 3,
 	'五层模式必须直接由 canonical 关系投影完整链，不能等待整体刷新或另算嵌套快照',
 );
 
@@ -231,7 +233,10 @@ const partialRunPresentation = new ReaderReplyTreePresentation(
 );
 assert(
 	JSON.stringify(partialRunPresentation.hiddenFloorRunAfter(1)) === '[2]' &&
-		partialRunPresentation.hiddenFloorRunAfter(20).length === 0,
+		partialRunPresentation.hiddenFloorRunAfter(20).length === 0 &&
+		partialRunPresentation.rootBranches()
+			.find((branch) => branch.postNumber === 20)
+			?.unloadedPostCountBefore === 17,
 	'覆盖未完成时，隐藏楼层只能从可见根连续分段，提前到达的 #23/#28 不得挂到错误根后',
 );
 partialRunCanonical.commit([
@@ -249,6 +254,57 @@ assert(
 		JSON.stringify(partialRunPresentation.hiddenFloorRunAfter(27)) === '[28]' &&
 		partialRunPresentation.hiddenFloorRunAfter(20).length === 0,
 	'缺失流楼层补齐后，#28 必须只归到正式相邻根 #27，不能继续残留在旧 owner',
+);
+
+const liveTailCanonical = new ReplyTreeTopology();
+liveTailCanonical.commit([
+	{ postNumber: 1, parentPostNumber: null },
+	{ postNumber: 2, parentPostNumber: 1 },
+	{ postNumber: 20, parentPostNumber: null },
+]);
+let liveTailCoverageComplete = true;
+let liveTailStreamRevision = 1;
+const liveTailPresentation = new ReaderReplyTreePresentation(
+	liveTailCanonical,
+	{ hideNestedReplyFloors: true },
+	{
+		canonicalCoverageComplete: () => liveTailCoverageComplete,
+		canonicalPostStreamRevision: () => liveTailStreamRevision,
+		canonicalPostStreamGapCount: () => undefined,
+	},
+);
+assert(
+	liveTailPresentation.rootBranches()
+		.find((branch) => branch.postNumber === 20)
+		?.unloadedPostCountBefore === undefined &&
+		JSON.stringify(liveTailPresentation.hiddenFloorRunAfter(1)) === '[2]',
+	'完整 canonical 必须先确认历史区间和隐藏楼层归属',
+);
+liveTailCoverageComplete = false;
+liveTailStreamRevision += 1;
+assert(
+	liveTailPresentation.rootBranches()
+		.find((branch) => branch.postNumber === 20)
+		?.unloadedPostCountBefore === undefined &&
+		JSON.stringify(liveTailPresentation.hiddenFloorRunAfter(1)) === '[2]',
+	'尾部新帖尚未入树时，已完整历史段不得因正文未驻留而退化成全局 gap 或丢失隐藏标志',
+);
+liveTailCanonical.commit([{ postNumber: 22, parentPostNumber: null }]);
+liveTailStreamRevision += 1;
+assert(
+	liveTailPresentation.rootBranches()
+		.find((branch) => branch.postNumber === 22)
+		?.unloadedPostCountBefore === 1,
+	'可信历史前缀之后若仍存在未分类新楼层，只能为新增尾段保留局部 gap',
+);
+liveTailCoverageComplete = true;
+liveTailCanonical.commit([{ postNumber: 21, parentPostNumber: null }]);
+liveTailStreamRevision += 1;
+assert(
+	liveTailPresentation.rootBranches().every(
+		(branch) => branch.unloadedPostCountBefore === undefined,
+	),
+	'新尾段完成分类后必须收口局部 gap，并把可信覆盖推进到最新楼层',
 );
 
 const deletedGapCanonical = new ReplyTreeTopology();
@@ -272,6 +328,66 @@ assert(
 	JSON.stringify(deletedGapPresentation.hiddenFloorRunAfter(1)) === '[3]',
 	'完整覆盖确认编号缺口后必须恢复合法隐藏段，不能破坏删除楼层主题',
 );
+const sparseDeletedFloorCanonical = new ReplyTreeTopology();
+sparseDeletedFloorCanonical.commit([
+	{ postNumber: 7_718, parentPostNumber: null },
+	{ postNumber: 7_720, parentPostNumber: null },
+]);
+let sparseDeletedFloorStreamRevision = 0;
+let sparseDeletedFloorGapCount = 1;
+const sparseDeletedFloorPresentation = new ReaderReplyTreePresentation(
+	sparseDeletedFloorCanonical,
+	{ hideNestedReplyFloors: true },
+	{
+		canonicalCoverageComplete: () => false,
+		canonicalPostStreamRevision: () => sparseDeletedFloorStreamRevision,
+		canonicalPostStreamGapCount: (
+			postNumber,
+			previousRootPostNumber,
+		) => postNumber === 7_720 && previousRootPostNumber === 7_718
+			? sparseDeletedFloorGapCount
+			: undefined,
+	},
+);
+assert(
+	sparseDeletedFloorPresentation.rootBranches()
+		.find((branch) => branch.postNumber === 7_720)
+		?.unloadedPostCountBefore === 1,
+	'post_stream 尚未确认时必须保留 #7718/#7720 之间的待加载 gap',
+);
+sparseDeletedFloorGapCount = 0;
+sparseDeletedFloorStreamRevision += 1;
+assert(
+	sparseDeletedFloorPresentation.rootBranches()
+		.find((branch) => branch.postNumber === 7_720)
+		?.unloadedPostCountBefore === undefined,
+	'canonical stream 更新后必须失效旧根缓存；已确认相邻的 #7718/#7720 不能因已删除 #7719 生成永久 gap',
+);
+const sparseSegmentCanonical = new ReplyTreeTopology();
+sparseSegmentCanonical.commit([
+	{ postNumber: 804, parentPostNumber: null },
+	{ postNumber: 7_063, parentPostNumber: 1 },
+	{ postNumber: 7_064, parentPostNumber: null },
+]);
+const sparseSegmentPresentation = new ReaderReplyTreePresentation(
+	sparseSegmentCanonical,
+	{ hideNestedReplyFloors: true },
+	{
+		canonicalCoverageComplete: () => false,
+		canonicalPostStreamGapCount: (
+			postNumber,
+			previousRootPostNumber,
+		) => postNumber === 7_064 && previousRootPostNumber === 804
+			? 5_890
+			: 0,
+	},
+);
+assert(
+	sparseSegmentPresentation.rootBranches()
+		.find((branch) => branch.postNumber === 7_064)
+		?.unloadedPostCountBefore === 5_889,
+	'跨段 gap 必须以相邻可见根计算并只扣除已加载的嵌套回复，不能因 #7063 已进入 topology 就把 #804/#7064 直接拼接',
+);
 canonical.commit([{ postNumber: 5, parentPostNumber: 1 }]);
 assert(
 	presentation.parentOf(5) === 1 &&
@@ -290,30 +406,39 @@ liveCanonical.commit([
 	{ postNumber: 1, parentPostNumber: null },
 	{ postNumber: 2, parentPostNumber: null },
 ]);
-const livePresentation = new ReaderReplyTreePresentation(liveCanonical, {
-	expandNestedRepliesByDefault: true,
-	aggregateDescendantReplies: true,
-	inlineReplyTreeMaxDepth: 5,
-	hideNestedReplyFloors: true,
-});
+let liveCoverageComplete = false;
+const livePresentation = new ReaderReplyTreePresentation(
+	liveCanonical,
+	{
+		expandNestedRepliesByDefault: true,
+		aggregateDescendantReplies: true,
+		inlineReplyTreeMaxDepth: 5,
+		hideNestedReplyFloors: true,
+	},
+	{ canonicalCoverageComplete: () => liveCoverageComplete },
+);
 const cachedLiveRoots = livePresentation.roots();
 assert(
+	!livePresentation.coverageComplete &&
 	livePresentation.freezeCanonical() &&
 		!livePresentation.freezeCanonical() &&
 		livePresentation.canonicalFrozen &&
 		livePresentation.roots() === cachedLiveRoots,
 	'一次滚轮手势只能建立一份短生命周期关系投影，不能逐帧复制树',
 );
+liveCoverageComplete = true;
 liveCanonical.commit([{ postNumber: 2, parentPostNumber: 1 }]);
 assert(
 	JSON.stringify(livePresentation.roots()) === '[1,2]' &&
 		livePresentation.parentOf(2) === null &&
+		!livePresentation.coverageComplete &&
 		liveCanonical.parentOf(2) === 1,
-	'MessageBus 必须即时更新 canonical，但滚动中的虚拟窗口仍读取手势开始时的稳定投影',
+	'MessageBus 必须即时更新 canonical，但滚动中的虚拟窗口与时间轴覆盖状态仍读取手势开始时的同一份稳定投影',
 );
 assert(
 	livePresentation.thawCanonical() &&
 		!livePresentation.canonicalFrozen &&
+		livePresentation.coverageComplete &&
 		JSON.stringify(livePresentation.roots()) === '[1]' &&
 		livePresentation.parentOf(2) === 1,
 	'停滚后必须一次切到最新 canonical 关系，不能遗失实时父子更新',

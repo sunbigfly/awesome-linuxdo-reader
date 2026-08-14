@@ -31,6 +31,11 @@ class FakePermitPort implements SharedRequestPermitPort {
 	released = 0;
 	readonly rateLimits: number[] = [];
 	readonly rateLimitWindows: string[] = [];
+	readonly acquiredRateLimitRoutes: string[] = [];
+	readonly rateLimitProbeResults: Array<Readonly<{
+		route: string;
+		recovered: boolean;
+	}>> = [];
 	challengePasses = false;
 	challengeNotes = 0;
 	readonly challengeNoteForces: boolean[] = [];
@@ -40,12 +45,13 @@ class FakePermitPort implements SharedRequestPermitPort {
 	nextRecoveryProbe = false;
 	nextWaitReason = '';
 
-	async acquire(): Promise<{
+	async acquire(input: { readonly rateLimitRoute?: string }): Promise<{
 		readonly recoveryProbe?: boolean;
 		readonly waitReason?: string;
 		release(): void;
 	}> {
 		this.acquired += 1;
+		this.acquiredRateLimitRoutes.push(String(input.rateLimitRoute ?? ''));
 		let released = false;
 		const recoveryProbe = this.nextRecoveryProbe;
 		const waitReason = this.nextWaitReason;
@@ -65,6 +71,13 @@ class FakePermitPort implements SharedRequestPermitPort {
 	noteRateLimit(decision: { waitMs: number; window: string }): void {
 		this.rateLimits.push(decision.waitMs);
 		this.rateLimitWindows.push(decision.window);
+	}
+
+	noteRateLimitProbeResult(input: {
+		readonly route: string;
+		readonly recovered: boolean;
+	}): void {
+		this.rateLimitProbeResults.push(Object.freeze({ ...input }));
 	}
 
 	noteCloudflareChallenge(input: { readonly force?: boolean }): void {
@@ -134,9 +147,18 @@ let attempts = 0;
 const retried = await client.request(
 	{
 		key: 'global-retry',
-		input: 'https://linux.do/t/123.json',
+		input: 'https://linux.do/t/123.json?topic_ids[]=1&topic_ids[]=2&token=private',
 		priority: 'visible',
 		callSite: 'topic-visible / reader-topic-target',
+		profile: 'topic-visible',
+		namespace: 'topic-target',
+		lane: 'topic-batch',
+		cacheMode: 'default',
+		identity: {
+			authScope: 'account:secret',
+			operation: 'target',
+			topicId: 123,
+		},
 	},
 	async ({ attempt }) => {
 		attempts += 1;
@@ -170,13 +192,31 @@ assert(
 	requestObserver.snapshot.events.length === 2 &&
 		requestObserver.snapshot.events[0]?.source === 'reader' &&
 		requestObserver.snapshot.events[0]?.status === 429 &&
+		requestObserver.snapshot.events[0]?.decision === 'retry-429' &&
 		requestObserver.snapshot.events[1]?.status === 200 &&
-	requestObserver.snapshot.events[1]?.attempt === 2 &&
-	!requestObserver.snapshot.events[1]?.recoveryProbe &&
-	requestObserver.snapshot.events[1]?.callSite ===
-		'topic-visible / reader-topic-target' &&
-		!requestObserver.snapshot.events[0]?.href.includes('?'),
-	'中央 client 必须把每次排队/重试和稳定发起点写入同一脱敏 Reader 请求账本',
+		requestObserver.snapshot.events[1]?.decision === 'complete' &&
+		requestObserver.snapshot.events[1]?.attempt === 2 &&
+		!requestObserver.snapshot.events[1]?.recoveryProbe &&
+		requestObserver.snapshot.events[1]?.callSite ===
+			'topic-visible / reader-topic-target' &&
+		requestObserver.snapshot.events[0]?.logicalId !== '' &&
+		requestObserver.snapshot.events[0]?.logicalId ===
+			requestObserver.snapshot.events[1]?.logicalId &&
+		requestObserver.snapshot.events[0]?.profile === 'topic-visible' &&
+		requestObserver.snapshot.events[0]?.namespace === 'topic-target' &&
+		requestObserver.snapshot.events[0]?.lane === 'topic-batch' &&
+		requestObserver.snapshot.events[0]?.cacheMode === 'default' &&
+		requestObserver.snapshot.events[0]?.identity ===
+			'operation=target, topicId=123' &&
+		requestObserver.snapshot.events[0]?.queryShape ===
+			'?credential&topic_ids[]×2' &&
+		requestObserver.snapshot.events[0]?.max429Retries === 1 &&
+		requestObserver.snapshot.events[0]?.maxChallengeRetries === 1 &&
+		requestObserver.snapshot.events[0]?.blockOnCloudflareChallenge === true &&
+		!requestObserver.snapshot.events[0]?.href.includes('?') &&
+		!JSON.stringify(requestObserver.snapshot.events).includes('secret') &&
+		!JSON.stringify(requestObserver.snapshot.events).includes('private'),
+	'中央 client 必须把每次排队/重试、typed contract、逻辑链和决策写入同一脱敏 Reader 请求账本',
 );
 
 permitPort.nextRecoveryProbe = true;
@@ -191,7 +231,10 @@ await client.request(
 );
 assert(
 	requestObserver.snapshot.events.at(-1)?.recoveryProbe === true &&
-		requestObserver.snapshot.events.at(-1)?.waitReason === '10s',
+		requestObserver.snapshot.events.at(-1)?.waitReason === '10s' &&
+		permitPort.rateLimitProbeResults.at(-1)?.recovered === true &&
+		permitPort.rateLimitProbeResults.at(-1)?.route ===
+			'GET:https://linux.do/t/:id.json',
 	'共享许可的恢复探针和真实阻塞原因必须穿过 scheduler 写入请求账本，不能用重试次数冒充',
 );
 
@@ -230,10 +273,10 @@ try {
 		{
 			key: 'read:cloudflare',
 			input: '/topics/timings',
-				method: 'POST',
-				priority: 'critical',
-				maxChallengeRetries: 0,
-				blockOnCloudflareChallenge: false,
+			method: 'POST',
+			priority: 'critical',
+			maxChallengeRetries: 0,
+			blockOnCloudflareChallenge: false,
 		},
 		async () => ({
 			ok: false,
@@ -253,7 +296,7 @@ assert(
 			permitPort.challengeResolutions === 0 &&
 			permitPort.challengeNotes === 0 &&
 			requestObserver.snapshot.events.at(-1)?.cloudflareMitigated === true,
-		'非关键 timings 403 必须只结束自身且保留诊断，不得建立共享验证闸门或打开验证窗',
+		'显式隔离的非关键写入必须只结束自身且保留诊断，不得建立共享验证闸门',
 );
 
 const challengePermit = new FakePermitPort();
@@ -413,6 +456,15 @@ assert(first === second, '跨重试逻辑请求必须维持同一单飞 Promise'
 singleFlightResponse.resolve({ ok: true, status: 200, value: 'single' });
 assert((await second) === 'single', '逻辑单飞结果错误');
 assert(singleFlightExecutions === 1, '逻辑单飞 transport 只能执行一次');
+const singleFlightEvent = requestObserver.snapshot.events
+	.filter((event) => event.path === '/t/456.json')
+	.at(-1);
+assert(
+	singleFlightEvent?.joinedConsumers === 1 &&
+		singleFlightEvent.promoted === true &&
+		singleFlightEvent.priority === 'critical',
+	'单飞复用必须在同一逻辑链记录消费者合并和优先级晋升',
+);
 const consumerFlightResponse = deferred<RequestTransportResponse<string>>();
 const firstConsumerAbort = new AbortController();
 const secondConsumerAbort = new AbortController();
@@ -572,8 +624,11 @@ assert(
 		},
 	) === 'next' &&
 		Number(endpointTransportCalls) === 2 &&
-		endpointPermit.rateLimits.length === 0,
-	'单次端点 429 只能结束当前逻辑请求；下一请求仍须立即进入同一预防管线，不得残留熔断或 cooldown',
+		endpointPermit.rateLimits.join(',') === '1500' &&
+		endpointPermit.acquiredRateLimitRoutes.every((route) =>
+			route === 'GET:https://linux.do/t/:id/posts.json?post_ids%5B%5D'),
+	`单次端点 429 必须通知共享留证但不直接熔断，后续请求仍携带规范化路由进入同一预防管线：` +
+		`${endpointPermit.rateLimits.join(',')} / ${endpointPermit.acquiredRateLimitRoutes.join(',')}`,
 );
 endpointClient.destroy();
 

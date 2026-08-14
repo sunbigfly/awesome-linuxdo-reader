@@ -10,6 +10,9 @@ import type {
 	ReaderHistoryEntry,
 } from '../src/history/reader-history-repository.js';
 import type {
+	ReaderChronicleRecord,
+} from '../src/history/reader-chronicle-repository.js';
+import type {
 	ResponseCacheInvalidation,
 	ResponseCacheRecord,
 } from '../src/cache/response-repository.js';
@@ -86,10 +89,36 @@ let historyEntries: readonly ReaderHistoryEntry[] = [{
 	postsCount: 1,
 	avatarTemplate: '',
 	ownerUsername: 'owner',
+	topicSubtitle: '1 帖',
+	categoryId: null,
+	categoryName: '',
+	tags: Object.freeze([]),
+	viewport: null,
 	postNumber: discoursePostNumber(1),
 	readPostNumbers: [discoursePostNumber(1)],
+	archiveStatus: null,
+	archivePostNumber: null,
 	firstViewedAt: 1,
 	viewedAt: 2,
+}];
+let chronicleEntries: readonly ReaderChronicleRecord[] = [{
+	identity: 'topic:42:topic:test',
+	kind: 'topic',
+	status: 404,
+	topicId: discourseTopicId(42),
+	topicTitle: '主题',
+	postNumber: null,
+	postId: null,
+	boostId: null,
+	requestPath: '/t/42.json',
+	requestMethod: 'GET',
+	requestSource: 'reader',
+	callSite: 'test',
+	firstObservedAt: 1,
+	lastObservedAt: 2,
+	occurrences: 1,
+	bodyCached: true,
+	searchText: '主题 topic 42 404',
 }];
 let currentClears = 0;
 let currentRefreshPartial = false;
@@ -97,6 +126,7 @@ let currentRefreshRestored = false;
 let imageObjectUrlClears = 0;
 let browserAssetClears = 0;
 const notices: string[] = [];
+const clearOrder: string[] = [];
 const surface = new ReaderCacheManagementSurface({
 	document,
 	host,
@@ -156,6 +186,7 @@ const surface = new ReaderCacheManagementSurface({
 			};
 		},
 		clear() {
+			clearOrder.push('history');
 			historyEntries = [];
 			return {
 				entries: historyEntries,
@@ -164,9 +195,28 @@ const surface = new ReaderCacheManagementSurface({
 			};
 		},
 	},
+	chronicle: {
+		get snapshot() {
+			return {
+				records: chronicleEntries,
+				revision: 1,
+				source: 'initial' as const,
+			};
+		},
+		clear() {
+			clearOrder.push('chronicle');
+			chronicleEntries = [];
+			return {
+				records: chronicleEntries,
+				revision: 2,
+				source: 'clear' as const,
+			};
+		},
+	},
 	responses: {
 		records: async () => records,
 		invalidate: async (query) => {
+			clearOrder.push('responses');
 			invalidations.push(query);
 			for (let index = records.length - 1; index >= 0; index -= 1) {
 				if (query.all || query.ids?.includes(records[index]!.id)) {
@@ -192,6 +242,7 @@ const surface = new ReaderCacheManagementSurface({
 			errors: [],
 		}),
 		clear: async () => {
+			clearOrder.push('assets');
 			browserAssetClears += 1;
 			return { deleted: ['avatar' as const], missing: [], failed: [] };
 		},
@@ -218,11 +269,20 @@ const surface = new ReaderCacheManagementSurface({
 			},
 		}),
 		clear: async (categories) => {
+			clearOrder.push('application');
 			applicationCacheClears.push([...categories]);
 			return { failed: [] };
 		},
 	},
+	prepareClear: (categories) => {
+		clearOrder.push(`prepare:${categories.join(',')}`);
+		return {
+			failed: [],
+			release: () => clearOrder.push('release'),
+		};
+	},
 	clearImageObjectUrls: () => {
+		clearOrder.push('objects');
 		imageObjectUrlClears += 1;
 	},
 	currentTopicAvailable: () => true,
@@ -266,9 +326,15 @@ assert(
 			?.textContent?.includes('头像 3 个（75 B）') &&
 		host.querySelector<HTMLElement>('[data-cache-size="assets"]')
 			?.textContent?.includes('接口图片 1 个（50 B）') &&
+		host.querySelector<HTMLElement>('[data-cache-size="assets"]')
+			?.dataset.ldpTooltipLabel?.includes('头像：3 条 · 75 B') === true &&
+		!host.querySelector<HTMLElement>('[data-cache-size="assets"]')
+			?.hasAttribute('title') &&
 		host.querySelector<HTMLElement>(
 			'.ldp-cache-row:has([value="history"])',
-		)?.dataset.settingHelp?.startsWith('勾选“浏览历史”') &&
+		)?.dataset.settingHelp?.startsWith('勾选“浏览历史与岁月史书”') &&
+		host.querySelector<HTMLElement>('[data-cache-size="history"]')
+			?.textContent?.includes('1 条 404 记录') &&
 		host.querySelector<HTMLElement>(
 			'.ldp-cache-row:has([value="topics"])',
 		)?.dataset.settingHelp?.includes('避免旧快照在清理后写回') &&
@@ -386,7 +452,7 @@ assert(
 		confirmations[1]?.message ===
 			'当前偏好（含性能目标）、其他适用站点、翻译和 WebDAV 设置都会恢复默认。' &&
 		confirmations[1]?.note ===
-			'性能项恢复推荐目标，运行时仍会自适应；请求/性能记录不会被删除。翻译 API Key、WebDAV 用户名和密码会从本机设置中清除；浏览历史、阅读队列、帖子缓存和账号数据不会被删除。' &&
+			'性能项恢复推荐目标，运行时仍会自适应；请求/性能记录不会被删除。翻译 API Key、WebDAV 用户名和密码会从本机设置中清除；阅读队列图标位置会恢复默认，队列条目、浏览历史、帖子缓存和账号数据不会被删除。' &&
 		confirmations[1]?.confirmLabel === '恢复全部默认' &&
 		host.querySelector<HTMLElement>('.ldp-config-status')?.textContent ===
 			'全部设置已恢复默认；性能项将继续按运行环境自适应。',
@@ -404,12 +470,15 @@ host.querySelector<HTMLButtonElement>('.ldp-cache-clear')!.click();
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
 	historyEntries.length === 0 &&
+		chronicleEntries.length === 0 &&
 		invalidations[0]?.ids?.join(',') === 'topic,image' &&
 		applicationCacheClears[0]?.join(',') === 'history,topics,assets' &&
 		browserAssetClears === 1 &&
 		imageObjectUrlClears === 1 &&
+		clearOrder.join('|') ===
+			'prepare:history,topics,assets|assets|responses|application|history|chronicle|objects|release' &&
 		notices.includes('已清理所选本地缓存'),
-	'选择性清理必须把 History、ResponseRepository 与图片 Object URL 组成一次数据面操作',
+	'选择性清理必须先取得跨层清理事务，再依次处理各 owner 并在统计刷新前释放',
 );
 
 actions.querySelector<HTMLButtonElement>('.ldp-reader-refresh')!.click();
@@ -647,3 +716,65 @@ assert(
 	'选择性清理无法读取持久目录时必须保留勾选并报告失败，不能把未知状态当空缓存成功',
 );
 clearFailedSurface.destroy();
+
+const { document: preparedDocumentSource, window: preparedWindow } = parseHTML(
+	'<!doctype html><html><body><main id="prepared-host"></main></body></html>',
+);
+const preparedDocument = preparedDocumentSource as unknown as Document;
+const preparedHost = preparedDocument.querySelector<HTMLElement>('#prepared-host')!;
+let preparedHistoryClears = 0;
+let preparedTopicInvalidations = 0;
+let preparationReleases = 0;
+const preparedSurface = new ReaderCacheManagementSurface({
+	document: preparedDocument,
+	host: preparedHost,
+	history: {
+		get snapshot() {
+			return { entries: [], revision: 1, source: 'initial' as const };
+		},
+		clear() {
+			preparedHistoryClears += 1;
+			return { entries: [], revision: 2, source: 'clear' as const };
+		},
+	},
+	responses: {
+		records: async () => [{
+			id: 'prepared-topic',
+			kind: 'topics',
+			tags: ['topic:9'],
+			storedAt: 1,
+			expiresAt: 2,
+			bytes: 10,
+		}],
+		invalidate: async () => {
+			preparedTopicInvalidations += 1;
+		},
+	},
+	prepareClear: () => ({
+		failed: ['history'],
+		release: () => {
+			preparationReleases += 1;
+		},
+	}),
+	currentTopicAvailable: () => false,
+	clearCurrentTopic: async () => {},
+});
+await new Promise((resolve) => setTimeout(resolve, 0));
+for (const id of ['history', 'topics']) {
+	const input = preparedHost.querySelector<HTMLInputElement>(`[value="${id}"]`)!;
+	input.checked = true;
+	input.dispatchEvent(new preparedWindow.Event('change', { bubbles: true }));
+}
+preparedHost.querySelector<HTMLButtonElement>('.ldp-cache-clear')!.click();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert(
+	preparedHistoryClears === 0 &&
+		preparedTopicInvalidations === 1 &&
+		preparationReleases === 1 &&
+		preparedHost.querySelector<HTMLInputElement>('[value="history"]')!.checked &&
+		!preparedHost.querySelector<HTMLInputElement>('[value="topics"]')!.checked &&
+		preparedHost.querySelector<HTMLElement>('.ldp-cache-note')?.textContent ===
+			'部分缓存已清理；未完成：浏览历史与岁月史书。已保留勾选，可重试。',
+	'跨层准备失败必须只阻止受保护类别，继续清理独立类别并始终释放事务 barrier',
+);
+preparedSurface.destroy();

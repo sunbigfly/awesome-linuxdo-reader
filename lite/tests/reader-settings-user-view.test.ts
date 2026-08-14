@@ -1,4 +1,5 @@
 import { parseHTML } from 'linkedom';
+import { Signal } from '../src/kernel/signal.js';
 import type {
 	UserResourceRequest,
 } from '../src/network/domain-request-gateway.js';
@@ -10,6 +11,7 @@ import {
 	ReaderSettingsUserView,
 } from '../src/user/reader-settings-user-view.js';
 import type {
+	ReaderConnectTrustHistoryChange,
 	ReaderConnectTrustHistoryPort,
 } from '../src/user/reader-connect-trust-adapter.js';
 import {
@@ -212,31 +214,44 @@ const serverDays = (today: number) => Object.freeze(historyDates.map((date, inde
 		current: null,
 		observed: true,
 	})));
+const historyChanges = new Signal<ReaderConnectTrustHistoryChange>();
+const historySnapshot = (postsRead: number, likesReceived: number) => Object.freeze({
+	today: '2026-08-06',
+	dayCount: 50 as const,
+	metrics: Object.freeze({
+		'days-visited': Object.freeze({
+			key: 'days-visited', label: '访问天数', source: 'local-script' as const,
+			startedAt: '2026-08-06', days: localDays(2, 18, 20),
+		}),
+		'posts-read': Object.freeze({
+			key: 'posts-read', label: '浏览帖子', source: 'server-confirmed-local' as const,
+			startedAt: '2026-08-06', days: serverDays(postsRead),
+		}),
+		'likes-received': Object.freeze({
+			key: 'likes-received', label: '获赞', source: 'server-account' as const,
+			startedAt: historyDates[0]!, days: serverDays(likesReceived),
+		}),
+		'flagged-posts': Object.freeze({
+			key: 'flagged-posts', label: '被举报帖子', source: 'local-script' as const,
+			startedAt: '2026-08-06', days: localDays(0, 1, 1),
+		}),
+	}),
+});
+let historyCacheLoads = 0;
+let releaseHistoryRefresh!: () => void;
+const historyRefreshGate = new Promise<void>((resolve) => {
+	releaseHistoryRefresh = resolve;
+});
 const history: ReaderConnectTrustHistoryPort = {
+	changes: historyChanges,
+	async cached() {
+		historyCacheLoads += 1;
+		return historySnapshot(6, 2);
+	},
 	async load() {
 		historyLoads += 1;
-		return Object.freeze({
-			today: '2026-08-06',
-			dayCount: 50 as const,
-			metrics: Object.freeze({
-				'days-visited': Object.freeze({
-					key: 'days-visited', label: '访问天数', source: 'local-script' as const,
-					startedAt: '2026-08-06', days: localDays(2, 18, 20),
-				}),
-				'posts-read': Object.freeze({
-					key: 'posts-read', label: '浏览帖子', source: 'server-confirmed-local' as const,
-					startedAt: '2026-08-06', days: serverDays(10),
-				}),
-				'likes-received': Object.freeze({
-					key: 'likes-received', label: '获赞', source: 'server-account' as const,
-					startedAt: historyDates[0]!, days: serverDays(3),
-				}),
-				'flagged-posts': Object.freeze({
-					key: 'flagged-posts', label: '被举报帖子', source: 'local-script' as const,
-					startedAt: '2026-08-06', days: localDays(0, 1, 1),
-				}),
-			}),
-		});
+		await historyRefreshGate;
+		return historySnapshot(10, 3);
 	},
 };
 const { document: parsedDocument, window: parsedWindow } = parseHTML(
@@ -360,12 +375,12 @@ creditMode = 'error';
 await session.loadCredit('alice', true);
 assert(
 	Number(creditLoads) === 3 &&
-		view.root.textContent?.includes('复用 credit.linux.do 登录会话') &&
-		view.root.textContent.includes('暂时无法读取 LDC 数据') &&
-		view.root.querySelector<HTMLAnchorElement>('.ldp-user-info-site')?.href ===
-			'https://credit.linux.do/home' &&
-		view.root.querySelector('.ldp-connect-error .ldp-icon') === null,
-	'LDC 无成功数据时必须对齐主线登录会话说明、失败文案与无额外图标的同步入口',
+		view.root.textContent?.includes('无限制') &&
+		!view.root.textContent.includes('暂时无法读取 LDC 数据') &&
+		view.root.querySelector('[data-user-info-refresh]')?.getAttribute(
+			'aria-label',
+		) === '刷新当前账号信息；当前显示缓存数据，联网更新失败',
+	'LDC 后台刷新失败时必须保留最后可用缓存，并只在刷新入口标记陈旧状态',
 );
 view.destroy();
 const connectHost = document.createElement('section');
@@ -387,6 +402,15 @@ assert(
 			'[data-user-info-view="connect"].active',
 		) !== null &&
 		connectView.root.textContent?.includes('信任级别 3 的要求') &&
+		historyCacheLoads === 1 &&
+		historyLoads === 1,
+	'用户信息设置必须默认聚焦 Connect，同时并行完成历史缓存投影并启动后台刷新',
+);
+assert(
+	connectView.root.querySelector(
+		'[data-user-info-view="connect"].active',
+	) !== null &&
+		connectView.root.textContent?.includes('信任级别 3 的要求') &&
 		connectView.root.textContent.includes('当前显示缓存数据；联网更新失败') &&
 		connectView.root.textContent.includes('访问天数') &&
 		connectView.root.textContent.includes('1,200 / 2,000') &&
@@ -403,24 +427,65 @@ assert(
 			connectView.root.querySelector(
 				'.ldp-connect-quota.is-danger',
 			) !== null,
-		'Connect tab 必须默认投影同一 session 的等级、环形、下限危险、超额成就与合规记录状态',
-	);
+		'Connect tab 必须投影同一 session 的等级、环形、下限危险、超额成就与合规记录状态',
+);
 assert(
-	historyLoads === 1 &&
+	historyCacheLoads === 1 &&
+		historyLoads === 1 &&
 		connectView.root.querySelectorAll('.ldp-connect-history-delta').length === 4 &&
 		connectView.root.querySelector(
 			'[data-connect-history-metric="likes-received"] .ldp-connect-history-delta.is-server',
-		)?.textContent === '+3' &&
+		)?.textContent === '+2' &&
 		connectView.root.querySelector(
 			'[data-connect-history-metric="days-visited"] .ldp-connect-history-delta.is-local',
 		)?.textContent === '+2',
-	'Connect 每项数值必须投影今日变化角标，并区分服务端与本地脚本来源',
+	'Connect 50 天记录必须先展示缓存角标，并在后台请求未完成时保持可操作',
 );
 assert(
 	connectView.root.querySelector(
 		'[data-connect-history-metric="posts-read"] .ldp-connect-history-delta.is-confirmed',
-	)?.textContent === '+10',
-	'浏览帖子角标必须使用服务器已读确认来源，不能伪装成 Connect 本地快照差值',
+	)?.textContent === '+6',
+	'浏览帖子缓存角标必须保持服务器已读确认来源，不能伪装成 Connect 本地快照差值',
+);
+assert(
+	connectView.root.querySelector<HTMLElement>(
+		'[data-connect-history-metric="posts-read"] .ldp-connect-history-delta',
+	)?.dataset.ldpTooltipLabel?.includes('未收到成功响应时为 +0') === true &&
+	connectView.root.querySelector<HTMLElement>(
+		'[data-connect-history-metric="days-visited"] .ldp-connect-history-delta',
+	)?.dataset.ldpTooltipLabel?.includes('滚动窗口自然回落不记负数') === true &&
+	connectView.root.querySelector(
+		'[data-connect-history-metric="days-visited"]',
+	)?.getAttribute('aria-label')?.includes('今日本地新增') === true,
+	'浏览帖子零值与访问天数必须用各自真实来源解释，访问天数不得显示窗口回落负数',
+);
+releaseHistoryRefresh();
+for (let index = 0; index < 8; index += 1) await Promise.resolve();
+assert(
+	connectView.root.querySelector(
+		'[data-connect-history-metric="likes-received"] .ldp-connect-history-delta.is-server',
+	)?.textContent === '+3' &&
+		connectView.root.querySelector(
+			'[data-connect-history-metric="posts-read"] .ldp-connect-history-delta.is-confirmed',
+		)?.textContent === '+10',
+	'Connect 50 天记录的后台权威响应必须自动替换先前缓存投影',
+);
+historyChanges.emit(Object.freeze({
+	today: '2026-08-06',
+	metric: Object.freeze({
+		key: 'posts-read',
+		label: '浏览帖子',
+		source: 'server-confirmed-local',
+		startedAt: '2026-08-06',
+		days: serverDays(12),
+	}),
+}));
+assert(
+	historyLoads === 1 &&
+		connectView.root.querySelector(
+			'[data-connect-history-metric="posts-read"] .ldp-connect-history-delta.is-confirmed',
+		)?.textContent === '+12',
+	'已读成功确认必须无网络地实时刷新 Connect 浏览帖子今日角标',
 );
 const receivedValue = connectView.root.querySelector(
 	'[data-connect-history-metric="likes-received"] .ldp-connect-bar-copy > strong',
@@ -470,8 +535,21 @@ connectView.root.querySelector<HTMLElement>(
 	'[data-user-info-view="profile"]',
 )!.dispatchEvent(new EventConstructor('click', { bubbles: true }));
 assert(
-	connectLoads === 1 && connectView.root.textContent?.includes('Alice'),
+	connectLoads === 1 &&
+		connectView.root.textContent?.includes('Alice') &&
+		connectView.root.querySelector(
+			'[data-user-info-view="profile"].active',
+		) !== null,
 	'Connect/Profile 切 tab 不得重复外部请求',
+);
+connectView.focusConnect();
+assert(
+	connectLoads === 1 &&
+		connectView.root.querySelector(
+			'[data-user-info-view="connect"].active',
+		) !== null &&
+		connectView.root.textContent?.includes('信任级别 3 的要求'),
+	'每次重新进入用户信息必须回到 Connect 概览，且不得重复外部请求',
 );
 connectView.destroy();
 session.destroy();

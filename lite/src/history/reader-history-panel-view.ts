@@ -2,8 +2,18 @@ import type {
 	DiscourseTopicId,
 } from '../discourse/identifiers.js';
 import { discourseAvatarTemplateUrl } from '../discourse/native-host-api.js';
-import { ReaderHeaderPopoverSurface } from
-	'../collection/reader-header-popover-position.js';
+import {
+	ReaderCollectionFloatingWindow,
+	ReaderCollectionScrollWindow,
+} from '../collection/reader-collection-floating-window.js';
+import {
+	ReaderPopoverFilterDisclosure,
+	syncReaderFilterOptions,
+} from '../collection/reader-popover-filter-controls.js';
+import {
+	readerCollectionDateKey,
+	type ReaderCollectionSortDirection,
+} from '../collection/reader-collection-filter-model.js';
 import { replaceImageWithFallbackOnError } from '../components/reader-image-fallback.js';
 import { createReaderIcon } from '../components/reader-icon.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
@@ -13,6 +23,11 @@ import {
 	type ReaderSearchFormsPort,
 } from '../search/reader-search.js';
 import {
+	readerHistoryArchiveDisplayTitle,
+	readerHistoryArchiveMarkerLabel,
+	readerHistoryCategoryFilterKey,
+	readerHistoryFilterOptions,
+	readerHistoryTagFilterKey,
 	type ReaderHistoryEntry,
 	type ReaderHistoryRepository,
 	type ReaderHistorySortMode,
@@ -40,6 +55,8 @@ export interface ReaderHistoryPanelElements {
 	readonly multiDone: HTMLButtonElement;
 	readonly search: HTMLInputElement;
 	readonly searchClear: HTMLButtonElement;
+	readonly categoryFilter: HTMLSelectElement;
+	readonly tagFilter: HTMLSelectElement;
 	readonly list: HTMLElement;
 	readonly pagePrevious: HTMLButtonElement;
 	readonly pageInfo: HTMLElement;
@@ -59,6 +76,10 @@ export interface ReaderHistoryPanelSnapshot {
 	readonly open: boolean;
 	readonly page: number;
 	readonly query: string;
+	readonly categoryFilter: string;
+	readonly tagFilter: string;
+	readonly dateFilter: string;
+	readonly sortDirection: ReaderCollectionSortDirection;
 	readonly multi: boolean;
 	readonly selectionScope: ReaderHistorySelectionScope;
 	readonly selectedTopicIds: ReadonlySet<DiscourseTopicId>;
@@ -70,8 +91,10 @@ export interface ReaderHistoryPanelSnapshot {
 
 export interface ReaderHistoryPanelViewOptions {
 	readonly document: Document;
+	readonly mount: HTMLElement;
 	readonly history: ReaderHistoryRepository;
 	readonly elements: ReaderHistoryPanelElements;
+	readonly storage?: Pick<Storage, 'getItem' | 'setItem'>;
 	readonly preferences: ReaderHistoryPanelPreferences;
 	readonly pageSize?: number;
 	readonly topicHref: (entry: ReaderHistoryEntry) => string;
@@ -135,10 +158,16 @@ export class ReaderHistoryPanelView {
 	>;
 	readonly #now: () => number;
 	readonly #onError: (cause: unknown) => void;
-	readonly #surface: ReaderHeaderPopoverSurface;
+	readonly #surface: ReaderCollectionFloatingWindow;
+	readonly #filterDisclosure: ReaderPopoverFilterDisclosure;
+	readonly #scrollWindow: ReaderCollectionScrollWindow<ReaderHistoryEntry>;
 	#preferences: ReaderHistoryPanelPreferences;
 	#page = 0;
 	#query = '';
+	#categoryFilter = '';
+	#tagFilter = '';
+	#dateFilter = '';
+	#sortDirection: ReaderCollectionSortDirection = 'desc';
 	#multi = false;
 	#selectionScope: ReaderHistorySelectionScope = 'page';
 	#selection = new Set<DiscourseTopicId>();
@@ -178,21 +207,92 @@ export class ReaderHistoryPanelView {
 		this.#onError = options.onError ?? (() => {});
 		this.#preferences = this.#normalizePreferences(options.preferences);
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
-		this.#surface = new ReaderHeaderPopoverSurface({
+		this.#surface = new ReaderCollectionFloatingWindow({
 			document: this.#document,
-			root: this.#elements.root,
+			mount: options.mount,
 			toggle: this.#elements.toggle,
-			popover: this.#elements.popover,
+			content: this.#elements.popover,
+			title: '浏览历史',
+			ariaLabel: '浏览历史',
+			icon: 'history',
+			variant: 'history',
+			tabOrder: 20,
+			...(options.storage
+				? { geometryStorage: options.storage }
+				: {}),
 			parentScope: this.scope,
-			isOpen: () => !this.#elements.popover.hidden,
+			isOpen: () => this.#surface?.isOpen ?? false,
+			requestOpen: () => this.open(),
 			requestClose: () => this.close(),
+			notify: this.#notify,
+		});
+		this.#surface.attachHeaderActions({
+			root: this.#elements.defaultActions,
+			buttons: [
+				this.#elements.sortToggle,
+				this.#elements.multiButton,
+				this.#elements.clearButton,
+			],
+			label: '浏览历史操作',
+		});
+		this.#surface.attachHeaderActions({
+			root: this.#elements.bulkActions,
+			buttons: [
+				this.#elements.selectToggle,
+				this.#elements.deleteSelected,
+				this.#elements.multiDone,
+			],
+			label: '浏览历史多选操作',
+		});
+		const collectionTitle = this.#elements.popover.querySelector<HTMLElement>(
+			'.ldp-collection-title',
+		);
+		if (collectionTitle) collectionTitle.hidden = true;
+		this.#filterDisclosure = new ReaderPopoverFilterDisclosure({
+			search: this.#elements.search,
+			onDateChange: (value) => {
+				this.#dateFilter = value;
+				this.#resetFilteredPage();
+			},
+			onSortChange: (value) => {
+				const mode: ReaderHistorySortMode = value === 'first-viewed'
+					? 'first-viewed'
+					: 'recent-viewed';
+				if (mode === this.#preferences.sortMode) return;
+				this.#run(async () => {
+					await this.#changeSortMode(mode);
+					if (!this.scope.destroyed) {
+						this.applyPreferences({ sortMode: mode });
+					}
+				});
+			},
+			onDirectionChange: (value) => {
+				this.#sortDirection = value;
+				this.#resetFilteredPage();
+			},
+			onReset: () => this.#resetFilters(),
+			parentScope: this.scope,
+		});
+		const pager = this.#elements.pageInfo.parentElement;
+		if (!pager) throw new Error('历史面板缺少滚动分页锚点');
+		this.#scrollWindow = new ReaderCollectionScrollWindow({
+			list: this.#elements.list,
+			pager,
+			identity: (entry: ReaderHistoryEntry) => String(entry.topicId),
+			loadMore: () => {
+				if (this.#page >= this.#totalPages - 1) return;
+				this.#page += 1;
+				this.#render();
+			},
+			onError: this.#onError,
+			parentScope: this.scope,
 		});
 		this.#bind();
 		this.#history.changes.subscribe(() => {
 			this.#pruneSelection();
 			if (
 				this.#preferences.sortMode === 'recent-viewed' &&
-				!this.#elements.popover.hidden
+				this.#surface.isOpen
 			) {
 				this.#page = 0;
 			}
@@ -207,9 +307,13 @@ export class ReaderHistoryPanelView {
 
 	get snapshot(): ReaderHistoryPanelSnapshot {
 		return Object.freeze({
-			open: !this.#elements.popover.hidden,
+			open: this.#surface.isOpen,
 			page: this.#page,
 			query: this.#query,
+			categoryFilter: this.#categoryFilter,
+			tagFilter: this.#tagFilter,
+			dateFilter: this.#dateFilter,
+			sortDirection: this.#sortDirection,
 			multi: this.#multi,
 			selectionScope: this.#selectionScope,
 			selectedTopicIds: new Set(this.#selection),
@@ -237,7 +341,7 @@ export class ReaderHistoryPanelView {
 	}
 
 	close(): void {
-		if (this.scope.destroyed || this.#elements.popover.hidden) return;
+		if (this.scope.destroyed || !this.#surface.isOpen) return;
 		this.#surface.sync(false);
 		this.#multi = false;
 		this.#selection.clear();
@@ -246,7 +350,7 @@ export class ReaderHistoryPanelView {
 
 	toggle(): void {
 		if (this.scope.destroyed) return;
-		if (this.#elements.popover.hidden) this.open();
+		if (!this.#surface.isOpen) this.open();
 		else this.close();
 	}
 
@@ -268,7 +372,7 @@ export class ReaderHistoryPanelView {
 		this.#listen(this.#elements.toggle, 'click', (event) => {
 			event.preventDefault();
 			event.stopPropagation();
-			if (this.#elements.popover.hidden) this.open();
+			if (!this.#surface.isOpen) this.open();
 			else this.close();
 		});
 		this.#listen(this.#elements.sortToggle, 'click', () => {
@@ -323,14 +427,16 @@ export class ReaderHistoryPanelView {
 			this.#render();
 			this.#elements.search.focus({ preventScroll: true });
 		});
-		this.#listen(this.#elements.pagePrevious, 'click', () => {
-			if (this.#page <= 0) return;
-			this.#page -= 1;
+		this.#listen(this.#elements.categoryFilter, 'change', () => {
+			this.#categoryFilter = this.#elements.categoryFilter.value;
+			this.#page = 0;
+			this.#selection.clear();
 			this.#render();
 		});
-		this.#listen(this.#elements.pageNext, 'click', () => {
-			if (this.#page >= this.#totalPages - 1) return;
-			this.#page += 1;
+		this.#listen(this.#elements.tagFilter, 'change', () => {
+			this.#tagFilter = this.#elements.tagFilter.value;
+			this.#page = 0;
+			this.#selection.clear();
 			this.#render();
 		});
 		this.#listen(this.#elements.deleteSelected, 'click', () => {
@@ -367,6 +473,10 @@ export class ReaderHistoryPanelView {
 				this.#history.clear();
 				this.#elements.search.value = '';
 				this.#query = '';
+				this.#categoryFilter = '';
+				this.#tagFilter = '';
+				this.#dateFilter = '';
+				this.#sortDirection = 'desc';
 				this.#page = 0;
 				this.#selection.clear();
 				this.#notify('浏览历史已清空');
@@ -424,10 +534,7 @@ export class ReaderHistoryPanelView {
 		this.#totalMatches = entries.length;
 		this.#totalPages = Math.max(1, Math.ceil(entries.length / this.#pageSize));
 		this.#page = Math.max(0, Math.min(this.#page, this.#totalPages - 1));
-		const pageEntries = entries.slice(
-			this.#page * this.#pageSize,
-			(this.#page + 1) * this.#pageSize,
-		);
+		const pageEntries = entries.slice(0, (this.#page + 1) * this.#pageSize);
 		this.#visibleTopicIds = Object.freeze(
 			pageEntries.map((entry) => entry.topicId),
 		);
@@ -435,7 +542,9 @@ export class ReaderHistoryPanelView {
 		if (!pageEntries.length) {
 			const empty = this.#document.createElement('div');
 			empty.className = 'ldp-notification-empty';
-			empty.textContent = this.#query
+			empty.textContent = this.#query || this.#categoryFilter ||
+				this.#tagFilter || this.#dateFilter ||
+				this.#sortDirection !== 'desc'
 				? '没有匹配的浏览历史'
 				: '暂无浏览历史';
 			this.#elements.list.append(empty);
@@ -445,11 +554,39 @@ export class ReaderHistoryPanelView {
 			}
 		}
 		this.#syncControls(entries);
+		this.#filterDisclosure.sync({
+			active: Boolean(
+				this.#categoryFilter || this.#tagFilter || this.#dateFilter ||
+				this.#preferences.sortMode !== 'recent-viewed' ||
+				this.#sortDirection !== 'desc',
+			),
+			date: this.#dateFilter,
+			sort: this.#preferences.sortMode,
+			direction: this.#sortDirection,
+			dayCounts: this.#dayCounts(),
+		});
+		this.#surface.frame.meta.textContent = this.#totalMatches > 0
+			? `${this.#totalMatches} 条`
+			: '本地历史';
+		this.#scrollWindow.sync({
+			loading: false,
+			hasMore: this.#page < this.#totalPages - 1,
+		});
 		this.#revision += 1;
-		if (!this.#elements.popover.hidden) this.#surface.position();
 	}
 
 	#renderEntry(entry: ReaderHistoryEntry): HTMLElement {
+		const archiveMarker = entry.archiveStatus === null
+			? null
+			: Object.freeze({
+				status: entry.archiveStatus,
+				postNumber: entry.archivePostNumber,
+				topicTitle: entry.title,
+			});
+		const displayTitle = readerHistoryArchiveDisplayTitle(
+			entry.title,
+			archiveMarker,
+		);
 		const item = this.#document.createElement('div');
 		item.className = [
 			'ldp-history-item',
@@ -458,39 +595,51 @@ export class ReaderHistoryPanelView {
 			this.#selection.has(entry.topicId) ? 'selected' : '',
 		].filter(Boolean).join(' ');
 		item.dataset.historyTopicId = String(entry.topicId);
-		item.dataset.historyPostNumber = String(entry.postNumber);
 		item.dataset.historyActor = entry.ownerUsername;
+		if (entry.archiveStatus !== null) {
+			item.dataset.historyArchiveStatus = String(entry.archiveStatus);
+			if (entry.archivePostNumber !== null) {
+				item.dataset.historyArchivePostNumber = String(entry.archivePostNumber);
+			}
+		}
 		if (this.#multi) {
 			const select = this.#document.createElement('label');
 			select.className = 'ldp-history-select ldp-collection-select';
-			select.title = '选择这条浏览历史';
+			select.dataset.ldpTooltipLabel = '选择这条浏览历史';
 			const checkbox = this.#document.createElement('input');
 			checkbox.className =
 				'ldp-history-select-input ldp-collection-select-input';
 			checkbox.type = 'checkbox';
 			checkbox.checked = this.#selection.has(entry.topicId);
-			checkbox.setAttribute('aria-label', `选择《${entry.title}》`);
+			checkbox.setAttribute('aria-label', `选择《${displayTitle}》`);
 			select.append(checkbox);
 			item.append(select);
 		}
 		const link = this.#document.createElement('a');
 		link.className = 'ldp-notification-item ldp-history-link';
-		link.dataset.ldpPreserveTargetPost = '1';
 		link.href = this.#topicHref(entry);
 		link.append(this.#renderAvatar(entry));
 		const copy = this.#document.createElement('span');
 		copy.className = 'ldp-notification-copy';
 		const title = this.#document.createElement('span');
 		title.className = 'ldp-notification-title';
-		title.textContent = entry.title;
+		title.textContent = displayTitle;
 		const meta = this.#document.createElement('span');
-		meta.className = 'ldp-notification-meta';
+		meta.className = 'ldp-notification-meta ldp-history-subtitle';
 		const sortTime = this.#preferences.sortMode === 'first-viewed'
 			? entry.firstViewedAt
 			: entry.viewedAt;
-		meta.textContent =
-			`${entry.postsCount} 帖 · #${entry.postNumber} · ` +
-			this.#relativeTime(sortTime);
+		const category = entry.categoryName ||
+			(entry.categoryId === null ? '' : `类别 #${entry.categoryId}`);
+		meta.textContent = [
+			archiveMarker === null
+				? ''
+				: readerHistoryArchiveMarkerLabel(archiveMarker),
+			entry.topicSubtitle || `${entry.postsCount} 帖`,
+			category,
+			...entry.tags.map((tag) => tag.startsWith('#') ? tag : `#${tag}`),
+			this.#relativeTime(sortTime),
+		].filter(Boolean).join(' · ');
 		copy.append(title, meta);
 		link.append(copy);
 		item.append(link);
@@ -564,6 +713,10 @@ export class ReaderHistoryPanelView {
 		this.#elements.sortToggle.title = sortLabel;
 		this.#elements.defaultActions.hidden = this.#multi;
 		this.#elements.bulkActions.hidden = !this.#multi;
+		const collectionTitle = this.#elements.bulkActions.closest<HTMLElement>(
+			'.ldp-collection-title',
+		);
+		if (collectionTitle) collectionTitle.hidden = !this.#multi;
 		this.#elements.multiButton.disabled = allEntries.length === 0;
 		this.#elements.clearButton.disabled = allEntries.length === 0;
 		for (const option of this.#elements.selectScope.options) {
@@ -580,31 +733,94 @@ export class ReaderHistoryPanelView {
 		this.#elements.selectToggle.setAttribute(
 			'aria-label',
 			`${allSelected ? '全不选' : '全选'}` +
-			`${this.#selectionScope === 'all' ? '全部页面' : '本页'}浏览历史`,
+			`${this.#selectionScope === 'all' ? '全部记录' : '已加载'}浏览历史`,
 		);
 		this.#elements.deleteSelected.disabled = this.#selection.size === 0;
 		this.#elements.deleteSelectedLabel.textContent =
 			String(this.#selection.size);
 		this.#elements.deleteSelectedLabel.hidden = this.#selection.size === 0;
 		this.#elements.searchClear.hidden = this.#query.length === 0;
-		this.#elements.pagePrevious.disabled = this.#page <= 0;
-		this.#elements.pageNext.disabled = this.#page >= this.#totalPages - 1;
-		this.#elements.pageInfo.textContent = entries.length
-			? `${this.#page + 1} / ${this.#totalPages}`
-			: '暂无记录';
+		syncReaderFilterOptions(
+			this.#elements.categoryFilter,
+			'类别',
+			'暂无类别',
+			readerHistoryFilterOptions(allEntries, 'category'),
+			this.#categoryFilter,
+		);
+		syncReaderFilterOptions(
+			this.#elements.tagFilter,
+			'标签',
+			'暂无标签',
+			readerHistoryFilterOptions(allEntries, 'tag'),
+			this.#tagFilter,
+		);
 	}
 
 	#matchingEntries(): readonly ReaderHistoryEntry[] {
-		const ordered = this.#history.ordered(this.#preferences.sortMode);
-		if (!this.#query) return ordered;
+		const source = this.#history.ordered(this.#preferences.sortMode);
+		const ordered = this.#sortDirection === 'asc'
+			? [...source].reverse()
+			: source;
 		return ordered.filter((entry) => {
-			return readerSearchMatches(
+			const timestamp = this.#preferences.sortMode === 'first-viewed'
+				? entry.firstViewedAt
+				: entry.viewedAt;
+			return (!this.#categoryFilter ||
+				readerHistoryCategoryFilterKey(entry) === this.#categoryFilter) &&
+			(!this.#tagFilter || entry.tags.some((tag) =>
+				readerHistoryTagFilterKey(tag) === this.#tagFilter)) &&
+			(!this.#dateFilter ||
+				readerCollectionDateKey(timestamp) === this.#dateFilter) &&
+			[
 				entry.title,
+				entry.topicSubtitle,
+				entry.categoryName,
+				...entry.tags,
+			].some((value) => readerSearchMatches(
+				value,
 				this.#query,
 				this.#searchForms,
 				this.#onError,
-			);
+			));
 		});
+	}
+
+	#dayCounts(): ReadonlyMap<string, number> {
+		const counts = new Map<string, number>();
+		for (const entry of this.#history.snapshot.entries) {
+			const timestamp = this.#preferences.sortMode === 'first-viewed'
+				? entry.firstViewedAt
+				: entry.viewedAt;
+			const day = readerCollectionDateKey(timestamp);
+			if (day) counts.set(day, (counts.get(day) ?? 0) + 1);
+		}
+		return new Map([...counts].sort(([left], [right]) =>
+			left.localeCompare(right)));
+	}
+
+	#resetFilteredPage(): void {
+		this.#page = 0;
+		this.#selection.clear();
+		this.#render();
+	}
+
+	#resetFilters(): void {
+		this.#elements.search.value = '';
+		this.#query = '';
+		this.#categoryFilter = '';
+		this.#tagFilter = '';
+		this.#dateFilter = '';
+		this.#sortDirection = 'desc';
+		const restoreSort = this.#preferences.sortMode !== 'recent-viewed';
+		if (restoreSort) {
+			this.#run(async () => {
+				await this.#changeSortMode('recent-viewed');
+				if (!this.scope.destroyed) {
+					this.applyPreferences({ sortMode: 'recent-viewed' });
+				}
+			});
+		}
+		this.#resetFilteredPage();
 	}
 
 	#selectionScopeIds(

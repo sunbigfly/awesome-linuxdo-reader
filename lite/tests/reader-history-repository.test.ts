@@ -46,6 +46,17 @@ storage.values.set(READER_HISTORY_STORAGE_KEY, JSON.stringify([
 		topicId: 10,
 		title: 'Topic 10',
 		postsCount: 2,
+		topicSubtitle: '2 帖 · 12 浏览',
+		categoryId: 7,
+		categoryName: '搞七捻三',
+		tags: ['纯水', { name: '纯水' }, { slug: 'OpenAI' }],
+		viewport: {
+			postNumber: 2,
+			postOffset: 18,
+			scrollTop: 400,
+			scrollRange: 1_000,
+			scrollRatio: 0.4,
+		},
 		postNumber: 2,
 		readPostNumbers: [2, 1, 2, 0, 'bad'],
 		viewedAt: now - 100,
@@ -75,8 +86,14 @@ assert(
 	loaded.entries.length === 1 &&
 	loaded.entries[0]?.topicId === 10 &&
 	loaded.entries[0].readPostNumbers.join(',') === '1,2' &&
+	loaded.entries[0].topicSubtitle === '2 帖 · 12 浏览' &&
+	loaded.entries[0].categoryId === 7 &&
+	loaded.entries[0].categoryName === '搞七捻三' &&
+	loaded.entries[0].tags.join(',') === '纯水,OpenAI' &&
+	loaded.entries[0].viewport?.scrollTop === 400 &&
+	loaded.entries[0].viewport.scrollRatio === 0.4 &&
 	loaded.entries[0].firstViewedAt === now - 100,
-	'历史读取必须逐项归一化、去重、补首访时间并淘汰过期/损坏项',
+	'历史读取必须逐项归一化、去重、保留 Topic 元数据与比例高度锚点',
 );
 assert(
 	diagnostics.includes('entries-normalized') &&
@@ -92,15 +109,51 @@ const remembered = repository.remember({
 	readPostNumbers: new Set([3, 5]),
 	avatarTemplate: '/avatar/{size}.png',
 	ownerUsername: 'owner',
+	topicSubtitle: '8 帖 · 80 浏览 · 6 赞',
+	categoryId: 8,
+	categoryName: '开发调优',
+	tags: ['Reader', 'OpenAI', 'reader'],
+	viewport: {
+		postNumber: 5,
+		postOffset: 26,
+		scrollTop: 750,
+		scrollRange: 1_200,
+		scrollRatio: 0.625,
+	},
+	archiveStatus: 404,
 });
 assert(
 	remembered.entries[0]?.title === 'Updated Topic' &&
 	remembered.entries[0].postNumber === 5 &&
 	remembered.entries[0].postsCount === 8 &&
 	remembered.entries[0].readPostNumbers.join(',') === '1,2,3,5' &&
+	remembered.entries[0].topicSubtitle === '8 帖 · 80 浏览 · 6 赞' &&
+	remembered.entries[0].categoryId === 8 &&
+	remembered.entries[0].categoryName === '开发调优' &&
+	remembered.entries[0].tags.join(',') === 'Reader,OpenAI' &&
+	remembered.entries[0].viewport?.scrollRange === 1_200 &&
+	remembered.entries[0].viewport.scrollRatio === 0.625 &&
+	remembered.entries[0].archiveStatus === 404 &&
+	remembered.entries[0].archivePostNumber === null &&
+	repository.archiveMarker(10, 1)?.status === 404 &&
 	remembered.entries[0].firstViewedAt === now - 100 &&
 	remembered.entries[0].viewedAt === now,
-	'remember 必须累计已读楼层、保留首次时间并更新最近位置/元数据',
+	'remember 必须累计已读楼层、保留首次时间并更新最近位置、404 版本和元数据',
+);
+repository.remember({
+	topicId: 10,
+	postNumber: 5,
+	archiveStatus: 404,
+	archivePostNumber: 5,
+});
+assert(
+	repository.archiveMarker(10, 5)?.postNumber === 5 &&
+		repository.archiveMarker(10, 4) === null &&
+		repository.entry(10)?.topicSubtitle === '8 帖 · 80 浏览 · 6 赞' &&
+		repository.entry(10)?.categoryName === '开发调优' &&
+		repository.entry(10)?.tags.join(',') === 'Reader,OpenAI' &&
+		repository.entry(10)?.viewport?.scrollRatio === 0.625,
+	'只更新楼层状态时必须保留 Topic 元数据与 Reader 高度锚点',
 );
 repository.remember({ topicId: 12, title: 'Topic 12', postNumber: 1 });
 assert(

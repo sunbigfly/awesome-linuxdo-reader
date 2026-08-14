@@ -183,7 +183,7 @@ function mountOfflineRuntime(
 }
 
 const dangerousCooked =
-	'<p>正文 &amp; 特殊类型</p></script><script id="escaped-script">bad()</script>' +
+	'<p>正文 &amp; 特殊类型 :penguin:</p></script><script id="escaped-script">bad()</script>' +
 	'<img src="/optimized.png" data-orig-src="/original.png">' +
 	'<img class="emoji emoji-custom" src="images/emoji/twitter/sparkling_heart.png">' +
 	'<aside class="quote" data-topic="10" data-post="2">' +
@@ -196,7 +196,8 @@ const dangerousCooked =
 	'<blockquote><p>跨 Topic 引用摘录</p>' +
 	'<a href="/uploads/default/original/external-quote-excerpt.png">[image]</a>' +
 	'</blockquote></aside>' +
-	'<pre><code>const answer = 42;</code></pre><table><tr><td>cell</td></tr></table>';
+	'<pre><code>const answer = ":penguin:";</code></pre>' +
+	'<table><tr><td>cell</td></tr></table>';
 const posts: readonly TestPost[] = Object.freeze([
 	Object.freeze({
 		id: 101,
@@ -231,10 +232,14 @@ const posts: readonly TestPost[] = Object.freeze([
 		name: 'Member',
 		avatar_template: '/user_avatar/linux.do/member/{size}/1.png',
 		created_at: '2026-08-09T00:01:00.000Z',
+		hidden: true,
 		cooked: '<h2><strong>第二楼正文</strong>完整内容</h2>' +
 			'<img src="/uploads/default/original/second-full.png" alt="第二楼完整图">' +
 			'<div class="poll" data-poll-name="poll"></div>',
 		deleted_reason: '楼层由作者删除',
+		reactions: Object.freeze([
+			Object.freeze({ id: 'heart', count: 1 }),
+		]),
 		polls: Object.freeze([Object.freeze({
 			name: 'poll',
 			title: '离线投票',
@@ -296,7 +301,7 @@ const topic: TestTopic = {
 };
 const result = createReaderTopicOfflineDocument({
 	topicId: 10,
-	title: '离线 / Topic: 测试',
+	title: '离线 / Topic: 测试 :penguin:',
 	sourceUrl: 'https://linux.do/t/offline-topic/10',
 	topic,
 	posts,
@@ -335,8 +340,12 @@ const result = createReaderTopicOfflineDocument({
 	siteLogoUrl: '/images/logo.png',
 	reactionEmojiUrl: (reactionId) =>
 		`/images/emoji/twitter/${encodeURIComponent(reactionId)}.png`,
+	inlineEmojiUrl: (emojiId) =>
+		`/images/emoji/twitter/${encodeURIComponent(emojiId)}.png`,
 	presentation: Object.freeze({
 		theme: 'dark',
+		translationMode: 'bilingual',
+		translationTheme: 'highlight',
 		styleProperties: Object.freeze({
 			'--ldp-post-font-size': '17px',
 			'--ldp-reply-line-width': '2px',
@@ -349,7 +358,7 @@ const result = createReaderTopicOfflineDocument({
 });
 
 assert(
-	result.filename === '离线 _ Topic_ 测试-10-lite-offline.html' &&
+	result.filename === '离线 _ Topic_ 测试 _penguin_-10-lite-offline.html' &&
 		result.postCount === 3 &&
 		result.expectedPostCount === 4 &&
 		!result.complete,
@@ -399,6 +408,11 @@ const offlineDocumentContract = Object.freeze({
 		result.html.includes('jumpToOfflinePost'),
 	hasUnifiedOfflineToolStrip:
 		result.html.includes('minmax(420px, 560px)') &&
+		/\.ldp-offline-tools\s*\{[^}]*grid-column:\s*3;[^}]*grid-row:\s*1 \/ 4;/s
+			.test(result.html) &&
+		!result.html.includes('@media (max-width: 1500px)') &&
+		/@media \(max-width:\s*700px\)\s*\{[\s\S]*?\.ldp-header\s*\{[^}]*grid-template-columns:\s*var\(--ldp-home-logo-box-size\) minmax\(0, 1fr\);[^}]*grid-template-rows:\s*auto auto auto auto;[\s\S]*?\.ldp-offline-tools\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*grid-row:\s*4;/s
+			.test(result.html) &&
 		/\.ldp-offline-tools\s*\{[^}]*border:\s*1px[^}]*border-radius:\s*8px/s
 			.test(result.html) &&
 		/\.ldp-offline-search,\s*\n[^\n]*\.ldp-offline-jump-field\s*\{[^}]*border:\s*0;/s
@@ -459,6 +473,9 @@ const payload = JSON.parse(dataNode.textContent ?? '{}') as {
 	readonly schemaVersion?: number;
 	readonly ownerUsername?: string;
 	readonly reactionEmojiSources?: Readonly<Record<string, string>>;
+	readonly inlineEmojiSources?: Readonly<Record<string, string>>;
+	readonly translationMode?: string;
+	readonly translationTheme?: string;
 	readonly solvedAnswerPostNumbers?: readonly number[];
 	readonly quotedPosts?: readonly {
 		readonly topicId?: number;
@@ -476,10 +493,16 @@ const payload = JSON.parse(dataNode.textContent ?? '{}') as {
 	};
 };
 assert(
-	payload.schemaVersion === 6 &&
+	payload.schemaVersion === 8 &&
 		payload.ownerUsername === 'op' &&
 		payload.reactionEmojiSources?.distorted_face ===
 			'https://linux.do/images/emoji/twitter/distorted_face.png' &&
+		payload.inlineEmojiSources?.penguin ===
+			'https://linux.do/images/emoji/twitter/penguin.png' &&
+	payload.translationMode === 'bilingual' &&
+	payload.translationTheme === 'highlight' &&
+	parsedDocument.querySelector<HTMLElement>('[data-offline-reader]')
+		?.dataset.translationTheme === 'highlight' &&
 		parsedDocument.querySelector<HTMLBaseElement>('base')?.getAttribute('href') ===
 			'https://linux.do/' &&
 		payload.solvedAnswerPostNumbers?.join(',') === '3' &&
@@ -512,6 +535,10 @@ assert(
 			?.dataset.ldpTheme === 'dark' &&
 		parsedDocument.querySelector<HTMLElement>('[data-offline-reader]')
 			?.classList.contains('ldp-structure-colors-disabled') === true &&
+		parsedDocument.querySelector<HTMLElement>('[data-offline-reader]')
+			?.classList.contains('ldp-translation-active') === true &&
+		parsedDocument.querySelector<HTMLElement>('[data-offline-reader]')
+			?.classList.contains('ldp-translation-only') === false &&
 		parsedDocument.querySelector<HTMLElement>('[data-offline-reader]')
 			?.style.getPropertyValue('--ldp-post-font-size') === '17px' &&
 		parsedDocument.querySelector<HTMLElement>('[data-offline-reader]')
@@ -726,44 +753,53 @@ const offlineCollapsedHtml = offlineQuote.querySelector(
 assert(
 	offlineQuote.querySelector(':scope > .ldp-quote-title') !== null &&
 		offlineQuote.dataset.ldpQuoteExpanded === '0' &&
-		offlineQuote.dataset.ldpQuoteHydrated === '1' &&
+		offlineQuote.dataset.ldpQuoteHydrated === undefined &&
 		!offlineQuote.classList.contains('ldp-quote-expanded') &&
 		offlineQuoteToggle.getAttribute('aria-expanded') === 'false' &&
+		offlineQuoteToggle.getAttribute('aria-label') === '展开完整引用' &&
 		offlineQuoteToggle.querySelector('[data-icon="chevron-down"]') !== null &&
 		offlineQuoteJump.querySelector('[data-icon="arrow-up"]') !== null &&
 		offlineQuoteJump.getAttribute('href') ===
 			'https://linux.do/t/offline-topic/10/2' &&
 		offlineQuoteJump.target === '_blank' &&
 		offlineQuoteImage.getAttribute('src') ===
-			'https://linux.do/uploads/default/original/second-full.png' &&
-		offlineQuoteImage.alt === '第二楼完整图' &&
-		offlineQuote.querySelector(
-			':scope > blockquote > h2 > strong',
-		)?.textContent === '第二楼正文',
-	'离线正文必须在折叠态直接渲染目标楼层完整 cooked、Markdown 结构与正文图片，并保留真实跳转',
+			'https://linux.do/uploads/default/original/quote.png' &&
+		offlineQuoteImage.alt === '引用图片' &&
+		offlineQuote.querySelector(':scope > blockquote')?.textContent
+			?.includes('第二楼引用摘录') === true &&
+		!offlineQuote.querySelector(':scope > blockquote')?.textContent
+			?.includes('第二楼正文完整内容') &&
+		offlineQuote.querySelector(':scope > blockquote > h2') === null,
+	'离线文字引用必须保留下载正文中的原始片段与片段图片，不能由目标楼层全文覆写，并保留真实跳转',
 );
 offlineQuoteToggle.click();
 assert(
 	offlineQuote.classList.contains('ldp-quote-expanded') &&
-		offlineQuote.querySelector(':scope > blockquote')?.innerHTML ===
+		offlineQuote.dataset.ldpQuoteHydrated === '1' &&
+		offlineQuote.querySelector(':scope > blockquote')?.innerHTML !==
 			offlineCollapsedHtml &&
 		offlineQuote.querySelector(':scope > blockquote')?.textContent
 			?.includes('第二楼正文完整内容') === true &&
+		offlineQuote.querySelector(':scope > blockquote > h2 > strong')
+			?.textContent === '第二楼正文' &&
+		offlineQuote.querySelector<HTMLImageElement>(':scope > blockquote img')
+			?.src === 'https://linux.do/uploads/default/original/second-full.png' &&
 		offlineQuoteToggle.querySelector('[data-icon="chevron-up"]') !== null,
-	'引用展开必须只解除高度裁切，不得重新替换离线完整 cooked DOM',
+	'离线文字引用展开必须切换到归档内被引用楼层的完整正文与图片',
 );
 offlineQuoteToggle.click();
 assert(
 	!offlineQuote.classList.contains('ldp-quote-expanded') &&
+		offlineQuote.dataset.ldpQuoteHydrated === undefined &&
 		offlineQuote.querySelector(':scope > blockquote')?.innerHTML ===
 			offlineCollapsedHtml &&
 		offlineQuote.querySelector(':scope > blockquote')?.textContent
-			?.includes('第二楼正文完整内容') === true &&
+			?.includes('第二楼引用摘录') === true &&
 		offlineQuote.querySelector<HTMLImageElement>(
 			':scope > blockquote img',
 		)?.getAttribute('src') ===
-			'https://linux.do/uploads/default/original/second-full.png',
-	'引用收起必须只恢复高度裁切，完整 cooked 与正文图片保持同一份 DOM',
+			'https://linux.do/uploads/default/original/quote.png',
+	'离线文字引用收起必须恢复原始片段正文与片段图片',
 );
 const externalQuote = [...root.querySelectorAll<HTMLElement>('.ldp-post-quote')]
 	.find((quote) => quote.dataset.topic === '20')!;
@@ -778,37 +814,39 @@ const externalCollapsedHtml = externalQuote.querySelector(
 )?.innerHTML;
 assert(
 	externalQuote.dataset.ldpQuoteExpanded === '0' &&
-		externalQuote.dataset.ldpQuoteHydrated === '1' &&
+		externalQuote.dataset.ldpQuoteHydrated === undefined &&
 		externalQuoteToggle.getAttribute('aria-expanded') === 'false' &&
 		externalQuoteToggle.querySelector('[data-icon="chevron-down"]') !== null &&
 		externalQuoteJump.href === 'https://linux.do/t/external-topic/20/7' &&
-		externalQuote.querySelector(
-			':scope > blockquote > h3 > em',
-		)?.textContent === '跨 Topic 完整引用正文' &&
+		externalQuote.querySelector(':scope > blockquote')?.textContent
+			?.includes('跨 Topic 引用摘录') === true &&
+		externalQuote.querySelector(':scope > blockquote > h3') === null &&
 		externalQuote.querySelector<HTMLImageElement>(':scope > blockquote img')
-			?.src === 'https://linux.do/uploads/default/original/external-quote-full.png',
-	'跨 Topic 引用必须默认折叠完整 cooked，并保留 Markdown、正文图片与跳转目标',
+			?.src === 'https://linux.do/uploads/default/original/external-quote-excerpt.png',
+	'跨 Topic 文字引用也必须保留原始片段、片段图片与跳转目标，不能渲染外部楼层全文',
 );
 externalQuoteToggle.click();
 assert(
 	externalQuote.classList.contains('ldp-quote-expanded') &&
-		externalQuote.querySelector(':scope > blockquote')?.innerHTML ===
+		externalQuote.dataset.ldpQuoteHydrated === '1' &&
+		externalQuote.querySelector(':scope > blockquote')?.innerHTML !==
 			externalCollapsedHtml &&
 		externalQuote.querySelector(':scope > blockquote')?.textContent
 			?.includes('跨 Topic 完整引用正文') === true &&
 		externalQuote.querySelector<HTMLImageElement>(':scope > blockquote img')
 			?.src === 'https://linux.do/uploads/default/original/external-quote-full.png' &&
 		externalQuoteToggle.querySelector('[data-icon="chevron-up"]') !== null,
-	'跨 Topic 引用展开必须使用下载时嵌入的完整 cooked 与引用原图',
+	'跨 Topic 文字引用展开必须切换到归档内附带的目标楼层完整正文',
 );
 externalQuoteToggle.click();
 assert(
 	!externalQuote.classList.contains('ldp-quote-expanded') &&
+		externalQuote.dataset.ldpQuoteHydrated === undefined &&
 		externalQuote.querySelector(':scope > blockquote')?.innerHTML ===
 			externalCollapsedHtml &&
 		externalQuote.querySelector(':scope > blockquote')?.textContent
-			?.includes('跨 Topic 完整引用正文') === true,
-	'跨 Topic 引用收起必须只恢复高度裁切，不能切回扁平摘录',
+			?.includes('跨 Topic 引用摘录') === true,
+	'跨 Topic 文字引用收起必须恢复原始片段，不能残留目标楼层全文',
 );
 const rootBranchToggle = root.querySelector<HTMLButtonElement>(
 	'[data-offline-branch-toggle="1"][data-offline-branch-scope="main"]',
@@ -1207,6 +1245,15 @@ const imageFrame = currentRoot.querySelector<HTMLElement>(
 	'.ldp-offline-image-frame',
 )!;
 const readOnlyProjectionContract = Object.freeze({
+	titleEmoji: mounted.document.querySelector<HTMLImageElement>(
+		'#ldp-offline-title img.ldp-offline-inline-emoji',
+	)?.src === 'https://linux.do/images/emoji/twitter/penguin.png',
+	contentEmoji: currentRoot.querySelector<HTMLImageElement>(
+		'.ldp-content img.ldp-offline-inline-emoji',
+	)?.src === 'https://linux.do/images/emoji/twitter/penguin.png',
+	codeShortcodePreserved: currentRoot.querySelector('code')?.textContent
+		?.includes(':penguin:') === true &&
+		currentRoot.querySelector('code img.ldp-offline-inline-emoji') === null,
 	avatar: currentRoot.querySelector('.ldp-avatar-link .ldp-avatar') !== null,
 	avatarProfile: currentRoot.querySelector<HTMLAnchorElement>(
 		'.ldp-avatar-link',
@@ -1218,6 +1265,9 @@ const readOnlyProjectionContract = Object.freeze({
 	op: currentRoot.querySelector('.ldp-op')?.textContent === 'OP',
 	time: currentRoot.querySelector('.ldp-time[data-exact-time]') !== null,
 	floor: currentRoot.querySelector('.ldp-floor')?.textContent === '#1',
+	exactTimeAfterFloor: currentRoot.querySelector(
+		'.ldp-floor + .ldp-time-exact[aria-hidden="true"]',
+	) !== null,
 	boost: currentRoot.querySelector('.ldp-offline-boost-bubble')?.textContent
 		?.includes('这条 Boost 也属于正文快照') === true,
 	boostAvatar: currentRoot.querySelector<HTMLImageElement>('.ldp-boost-avatar')
@@ -1244,7 +1294,17 @@ const readOnlyProjectionContract = Object.freeze({
 	readOnlyReactions:
 		currentRoot.querySelector('.ldp-offline-reaction-chip button') === null,
 	archive: currentChild.querySelector('.ldp-post-local-archive-note')?.textContent
-		?.includes('楼层由作者删除') === true,
+		?.startsWith('本地缓存 · 410 前正文 · ') === true &&
+		currentChild.querySelector('.ldp-post-local-archive-note')?.textContent
+			?.endsWith('确认（已隐藏）') === true &&
+		currentChild.querySelector(
+			'.ldp-post-local-archive-note > .ldp-post-local-archive-subtext',
+		)?.textContent === '（已隐藏）' &&
+		currentChild.querySelector('.ldp-post-head .ldp-hidden-badge') === null &&
+		currentChild.querySelector(
+			'.ldp-content + .ldp-post-body-layer > .ldp-post-local-archive-note',
+		) !== null &&
+		currentChild.querySelector('.ldp-offline-reactions') === null,
 	poll: currentChild.querySelector('.ldp-reader-poll .ldp-poll-result') !== null,
 	pollMeta: currentChild.querySelector('.ldp-poll-meta')?.textContent
 		?.includes('3 位投票人') === true,

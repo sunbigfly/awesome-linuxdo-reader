@@ -11,6 +11,8 @@ import { Signal } from '../kernel/signal.js';
 import type {
 	DiscourseTopicPostInput,
 	TopicPostByIdOptions,
+	TopicPostsByIdsOptions,
+	TopicPostsResult,
 } from '../topic/topic-session.js';
 import type { TopicLoadOptions } from '../topic/topic-read-request-adapter.js';
 
@@ -27,13 +29,18 @@ export interface TopicLiveSessionPort<TTopic, TPost extends DiscourseTopicPostIn
 		source: 'message-bus',
 		observedAt?: number,
 	): unknown;
+	streamPostIds?(): readonly number[];
+	loadPostsByIds?(
+		postIds: readonly number[],
+		options?: TopicPostsByIdsOptions,
+	): Promise<TopicPostsResult<TPost>>;
 	loadPostById(postId: number, options?: TopicPostByIdOptions): Promise<TPost | null>;
-	removePostById(
+	preserveDeletedPostById(
 		postId: number,
-		source?: 'message-bus',
 		observedAt?: number,
 	): {
-		readonly removedPostNumbers?: readonly number[];
+		readonly postNumber: number;
+		readonly topicArchived: boolean;
 	};
 	refresh(options?: TopicLoadOptions): Promise<TTopic>;
 }
@@ -51,6 +58,8 @@ export interface TopicLiveControllerOptions<
 	readonly session: TopicLiveSessionPort<TTopic, TPost>;
 	readonly cache?: TopicLiveCachePort;
 	readonly postDelayMs?: number;
+	readonly reactionDelayMs?: number;
+	readonly reactionBatchSize?: number;
 	readonly topicDelayMs?: number;
 	readonly currentUsername?: string;
 	readonly setTimer?: (callback: () => void, milliseconds: number) => number;
@@ -85,6 +94,10 @@ export type TopicLiveMessage =
 		created: boolean;
 	}>
 	| Readonly<{
+		kind: 'reaction';
+		postId: DiscoursePostId;
+	}>
+	| Readonly<{
 		kind: 'post-delete';
 		postId: DiscoursePostId;
 	}>
@@ -99,10 +112,9 @@ export type TopicLiveMessage =
 		boostId: number;
 	}>
 	| Readonly<{
-		kind: 'refresh-topic';
-		reason: string;
+		kind: 'topic-stats';
+		postsCount: number | null;
 	}>
-	| Readonly<{ kind: 'topic-stats' }>
 	| Readonly<{ kind: 'ignore' }>;
 
 interface PendingPostRefresh {
@@ -112,8 +124,7 @@ interface PendingPostRefresh {
 	created: boolean;
 }
 
-const TARGETED_MESSAGE_TYPES = new Set([
-	'acted',
+const POST_REFRESH_MESSAGE_TYPES = new Set([
 	'created',
 	'rebaked',
 	'recovered',
@@ -151,6 +162,17 @@ function positiveInteger(value: unknown): number | null {
 	return Number.isSafeInteger(numeric) && numeric > 0 ? numeric : null;
 }
 
+function requestPressureFailure(error: unknown): boolean {
+	const record = objectRecord(error);
+	const status = Number(record?.status ?? 0);
+	const code = String(record?.code ?? '').trim();
+	const name = String(record?.name ?? '').trim();
+	return status === 429 ||
+		record?.cloudflareMitigated === true ||
+		name === 'AbortError' ||
+		['cancelled', 'queue-limit'].includes(code);
+}
+
 function username(value: unknown): string {
 	return String(value ?? '').trim().replace(/^@+/, '').toLocaleLowerCase();
 }
@@ -181,14 +203,12 @@ export function normalizeTopicLiveMessage(
 	if (messageTopicId !== null && messageTopicId !== topicId) {
 		return Object.freeze({ kind: 'ignore' });
 	}
-	const reactionPostId = Array.isArray(payload.reactions)
-		? tryDiscoursePostId(payload.post_id)
+	const messageType = String(payload.type ?? '').trim();
+	const reactionPostId = Array.isArray(payload.reactions) || messageType === 'acted'
+		? tryDiscoursePostId(payload.post_id ?? payload.id)
 		: null;
-	const messageType = reactionPostId === null
-		? String(payload.type ?? '').trim()
-		: 'acted';
 	const typedPostId = (
-		TARGETED_MESSAGE_TYPES.has(messageType) ||
+		POST_REFRESH_MESSAGE_TYPES.has(messageType) ||
 		DELETION_MESSAGE_TYPES.has(messageType)
 	)
 		? tryDiscoursePostId(payload.post_id)
@@ -197,6 +217,9 @@ export function normalizeTopicLiveMessage(
 		typedPostId ??
 		tryDiscoursePostId(payload.id);
 	if (messageType === 'read') return Object.freeze({ kind: 'ignore' });
+	if (reactionPostId !== null) {
+		return Object.freeze({ kind: 'reaction', postId: reactionPostId });
+	}
 	if (postId !== null && messageType === BOOST_ADDED_MESSAGE_TYPE) {
 		const boost = objectRecord(payload.boost);
 		if (boost && positiveInteger(boost.id) !== null) {
@@ -215,7 +238,7 @@ export function normalizeTopicLiveMessage(
 			postId,
 		});
 	}
-	if (postId !== null && TARGETED_MESSAGE_TYPES.has(messageType)) {
+	if (postId !== null && POST_REFRESH_MESSAGE_TYPES.has(messageType)) {
 		return Object.freeze({
 			kind: 'post',
 			postId,
@@ -223,12 +246,12 @@ export function normalizeTopicLiveMessage(
 		});
 	}
 	if (messageType === TOPIC_STATS_MESSAGE_TYPE) {
-		return Object.freeze({ kind: 'topic-stats' });
+		return Object.freeze({
+			kind: 'topic-stats',
+			postsCount: positiveInteger(payload.posts_count),
+		});
 	}
-	return Object.freeze({
-		kind: 'refresh-topic',
-		reason: messageType || 'unknown-message',
-	});
+	return Object.freeze({ kind: 'ignore' });
 }
 
 /**
@@ -249,6 +272,8 @@ export class TopicLiveController<
 	readonly #cache: TopicLiveCachePort | null;
 	readonly #currentUsername: string;
 	readonly #postDelayMs: number;
+	readonly #reactionDelayMs: number;
+	readonly #reactionBatchSize: number;
 	readonly #topicDelayMs: number;
 	readonly #setTimer: (callback: () => void, milliseconds: number) => number;
 	readonly #clearTimer: (timerId: number) => void;
@@ -258,8 +283,12 @@ export class TopicLiveController<
 		readonly handler: (message: unknown) => void;
 	}> = [];
 	readonly #pendingPosts = new Map<DiscoursePostId, PendingPostRefresh>();
+	readonly #pendingReactionPostIds = new Set<DiscoursePostId>();
 	readonly #fullRefreshReasons = new Set<string>();
 	readonly #tasks = new Set<Promise<void>>();
+	#reactionRefreshTimer = 0;
+	#reactionRefreshRunning = false;
+	#reactionRefreshSuppressed = false;
 	#fullRefreshTimer = 0;
 	#fullRefreshRunning = false;
 	#activationEpoch = 0;
@@ -276,6 +305,16 @@ export class TopicLiveController<
 		this.#cache = options.cache ?? null;
 		this.#currentUsername = username(options.currentUsername);
 		this.#postDelayMs = delay(options.postDelayMs, 120, 'postDelayMs');
+		this.#reactionDelayMs = delay(
+			options.reactionDelayMs,
+			1_500,
+			'reactionDelayMs',
+		);
+		const reactionBatchSize = positiveInteger(options.reactionBatchSize ?? 20);
+		if (reactionBatchSize === null) {
+			throw new RangeError('reactionBatchSize 必须是正安全整数');
+		}
+		this.#reactionBatchSize = reactionBatchSize;
 		this.#topicDelayMs = delay(options.topicDelayMs, 350, 'topicDelayMs');
 		this.#setTimer = options.setTimer ?? ((callback, milliseconds) =>
 			setTimeout(callback, milliseconds) as unknown as number);
@@ -389,10 +428,7 @@ export class TopicLiveController<
 				created: false,
 				wasKnown: true,
 			}));
-			this.#track(this.#invalidate([
-				`topic:${this.topicId}`,
-				`post:${postId}`,
-			]));
+			this.#track(this.#invalidate([`post:${postId}`]));
 			return true;
 		} catch (error) {
 			this.#onError(error);
@@ -417,31 +453,35 @@ export class TopicLiveController<
 			normalized = normalizeTopicLiveMessage(message, this.topicId);
 		} catch (error) {
 			this.#onError(error);
-			this.scheduleTopicRefresh('invalid-message');
 			return;
 		}
 		if (normalized.kind === 'ignore') return;
-		if (normalized.kind === 'refresh-topic') {
-			this.scheduleTopicRefresh(normalized.reason);
+		if (normalized.kind === 'reaction') {
+			this.#queueReactionRefresh(normalized.postId);
 			return;
 		}
 		if (normalized.kind === 'topic-stats') {
-			if (this.#pendingPosts.size === 0) this.scheduleTopicRefresh('stats');
+			if (
+				this.#pendingPosts.size === 0 &&
+				this.#statsRequireTopicRefresh(normalized.postsCount)
+			) {
+				this.scheduleTopicRefresh('stats');
+			}
 			return;
 		}
-		this.#cancelStatsRefresh();
-		if (
-			(normalized.kind === 'boost-added' || normalized.kind === 'boost-removed') &&
-			this.#commitBoostDelta(normalized)
-		) return;
-		const postChange = normalized.kind === 'boost-added' ||
-			normalized.kind === 'boost-removed'
-			? Object.freeze({
-				kind: 'post' as const,
-				postId: normalized.postId,
-				created: false,
-			})
-			: normalized;
+		if (normalized.kind === 'boost-added' || normalized.kind === 'boost-removed') {
+			/*
+			 * Boost 消息本身就是权威 delta。目标楼层尚未进入 canonical 时无需
+			 * 为不可见内容补请求；它日后加载时会直接取得最新状态。
+			 */
+			this.#commitBoostDelta(normalized);
+			return;
+		}
+		const postChange = normalized;
+		const known = this.#session.postById(postChange.postId) !== undefined;
+		if (postChange.kind === 'post-delete' && !known) return;
+		if (postChange.kind === 'post' && !postChange.created && !known) return;
+		if (postChange.kind === 'post' && postChange.created) this.#cancelStatsRefresh();
 		const current = this.#pendingPosts.get(postChange.postId);
 		if (current) {
 			if (postChange.kind === 'post-delete') {
@@ -534,10 +574,7 @@ export class TopicLiveController<
 				created: false,
 				wasKnown: true,
 			}));
-			this.#track(this.#invalidate([
-				`topic:${this.topicId}`,
-				`post:${message.postId}`,
-			]));
+			this.#track(this.#invalidate([`post:${message.postId}`]));
 			return true;
 		} catch (error) {
 			this.#onError(error);
@@ -550,24 +587,13 @@ export class TopicLiveController<
 		epoch: number,
 	): Promise<void> {
 		if (!this.#acceptsWork(epoch)) return;
-		await this.#invalidate([`topic:${this.topicId}`, `post:${postId}`]);
 		if (!this.#session.postById(postId)) return;
 		try {
-			const commit = this.#session.removePostById(postId, 'message-bus');
+			const preserved = this.#session.preserveDeletedPostById(postId);
 			if (!this.#acceptsWork(epoch)) return;
-			const postNumber = Number(commit.removedPostNumbers?.[0] ?? 0);
-			if (Number.isSafeInteger(postNumber) && postNumber > 0) {
-				this.#emit(Object.freeze({
-					kind: 'deleted',
-					postId,
-					postNumber,
-				}));
-			}
+			if (preserved.topicArchived) this.#deactivate();
 		} catch (error) {
 			this.#onError(error);
-			if (this.#acceptsWork(epoch)) {
-				this.scheduleTopicRefresh('post-delete-failed');
-			}
 		}
 	}
 
@@ -577,15 +603,18 @@ export class TopicLiveController<
 		epoch: number,
 	): Promise<void> {
 		if (!this.#acceptsWork(epoch)) return;
-		await this.#invalidate([`topic:${this.topicId}`, `post:${postId}`]);
 		const wasKnown = this.#session.postById(postId) !== undefined;
+		const createdPostMissing = created && !wasKnown;
+		if (!createdPostMissing && !wasKnown) return;
+		await this.#invalidate([`post:${postId}`]);
 		try {
 			const post = await this.#session.loadPostById(postId, {
-				created: created && !wasKnown,
+				background: true,
+				created: createdPostMissing,
 			});
 			if (!post || !this.#acceptsWork(epoch)) {
-				if (!post && this.#acceptsWork(epoch)) {
-					this.scheduleTopicRefresh('post-missing');
+				if (!post && createdPostMissing && this.#acceptsWork(epoch)) {
+					this.scheduleTopicRefresh('created-post-missing');
 				}
 				return;
 			}
@@ -593,14 +622,108 @@ export class TopicLiveController<
 				kind: 'post',
 				postId: discoursePostId(postId),
 				post,
-				created: created && !wasKnown,
+				created: createdPostMissing,
 				wasKnown,
 			}));
 		} catch (error) {
 			this.#onError(error);
-			if (this.#acceptsWork(epoch)) {
-				this.scheduleTopicRefresh('post-refresh-failed');
+			if (
+				createdPostMissing &&
+				this.#acceptsWork(epoch) &&
+				!requestPressureFailure(error)
+			) {
+				this.scheduleTopicRefresh('created-post-refresh-failed');
 			}
+		}
+	}
+
+	#queueReactionRefresh(postId: DiscoursePostId): void {
+		if (
+			this.#reactionRefreshSuppressed ||
+			!this.#session.loadPostsByIds ||
+			!this.#session.postById(postId)
+		) return;
+		/* 同一楼层横跨标准/reactions 两个 channel 的回声只保留最后一个。 */
+		this.#pendingReactionPostIds.delete(postId);
+		this.#pendingReactionPostIds.add(postId);
+		if (this.#reactionRefreshRunning) return;
+		if (this.#reactionRefreshTimer) {
+			this.#clearTimer(this.#reactionRefreshTimer);
+		}
+		const epoch = this.#activationEpoch;
+		this.#reactionRefreshTimer = this.#setTimer(() => {
+			this.#reactionRefreshTimer = 0;
+			this.#track(this.#refreshReactions(epoch));
+		}, this.#reactionDelayMs);
+	}
+
+	async #refreshReactions(epoch: number): Promise<void> {
+		const loadPostsByIds = this.#session.loadPostsByIds;
+		if (
+			!this.#acceptsWork(epoch) ||
+			this.#reactionRefreshRunning ||
+			this.#reactionRefreshSuppressed ||
+			!loadPostsByIds
+		) return;
+		const pending = [...this.#pendingReactionPostIds];
+		this.#pendingReactionPostIds.clear();
+		const postIds = pending
+			.slice(-this.#reactionBatchSize)
+			.filter((postId) => this.#session.postById(postId) !== undefined);
+		if (!postIds.length) return;
+		this.#reactionRefreshRunning = true;
+		try {
+			await this.#invalidate(postIds.map((postId) => `post:${postId}`));
+			const result = await loadPostsByIds.call(this.#session, postIds, {
+				background: true,
+				refresh: true,
+				maxAttempts: 1,
+				ingestSource: 'target-refresh',
+			});
+			if (!this.#acceptsWork(epoch)) return;
+			const requested = new Set(postIds);
+			for (const post of result.posts) {
+				const postId = tryDiscoursePostId(post.id);
+				if (postId === null || !requested.has(postId)) continue;
+				this.#emit(Object.freeze({
+					kind: 'post',
+					postId,
+					post,
+					created: false,
+					wasKnown: true,
+				}));
+			}
+		} catch (error) {
+			/*
+			 * 回应计数是可丢弃增强。任一批次失败后停用本 Topic 本轮自动回应刷新，
+			 * 防止 429/过盾/队列压力被 MessageBus 持续放大；正文与用户操作不受影响。
+			 */
+			if (this.#acceptsWork(epoch)) {
+				this.#reactionRefreshSuppressed = true;
+				this.#pendingReactionPostIds.clear();
+				this.#onError(error);
+			}
+		} finally {
+			this.#reactionRefreshRunning = false;
+			if (
+				this.#active &&
+				!this.#closed &&
+				!this.#reactionRefreshSuppressed &&
+				this.#pendingReactionPostIds.size
+			) {
+				const postId = [...this.#pendingReactionPostIds].at(-1);
+				if (postId !== undefined) this.#queueReactionRefresh(postId);
+			}
+		}
+	}
+
+	#statsRequireTopicRefresh(postsCount: number | null): boolean {
+		if (postsCount === null || !this.#session.streamPostIds) return false;
+		try {
+			return postsCount > this.#session.streamPostIds().length;
+		} catch (error) {
+			this.#onError(error);
+			return false;
 		}
 	}
 
@@ -610,7 +733,6 @@ export class TopicLiveController<
 		const reasons = Object.freeze([...this.#fullRefreshReasons].sort());
 		this.#fullRefreshReasons.clear();
 		try {
-			await this.#invalidate([`topic:${this.topicId}`]);
 			const topic = await this.#session.refresh({ background: true });
 			if (this.#acceptsWork(epoch)) {
 				this.#emit(Object.freeze({ kind: 'topic', topic, reasons }));
@@ -659,6 +781,11 @@ export class TopicLiveController<
 		if (this.#fullRefreshTimer) this.#clearTimer(this.#fullRefreshTimer);
 		this.#fullRefreshTimer = 0;
 		this.#fullRefreshReasons.clear();
+		if (this.#reactionRefreshTimer) {
+			this.#clearTimer(this.#reactionRefreshTimer);
+		}
+		this.#reactionRefreshTimer = 0;
+		this.#pendingReactionPostIds.clear();
 		for (const pending of this.#pendingPosts.values()) {
 			this.#clearTimer(pending.timerId);
 		}

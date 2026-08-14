@@ -162,17 +162,38 @@ function normalizeStreamPostIds(
 	return discoursePostIdStream(values ?? []);
 }
 
+function moderationHiddenPlaceholder(value: unknown): boolean {
+	const cooked = String(value ?? '')
+		.replace(/<[^>]*>/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+	return /社区举报.*临时隐藏/.test(cooked) ||
+		/flagged by the community.*temporarily hidden/i.test(cooked);
+}
+
 function mergePostEntity<TPost extends ReplyTreePostInput>(
 	current: TPost | undefined,
 	incoming: TPost,
 ): TPost {
 	if (!current || current === incoming) return incoming;
+	const currentRecord = current as Readonly<Record<string, unknown>>;
+	const incomingRecord = incoming as Readonly<Record<string, unknown>>;
+	/*
+	 * Discourse 会把被社区举报隐藏的楼层正文替换为临时占位文案。该响应仍
+	 * 更新 hidden 等服务器状态，但不能覆盖本机此前已经取得的真实 cooked；
+	 * 否则后续 404 只会永久存下“此帖子已被举报”的占位内容。
+	 */
+	const preserveVisibleCooked =
+		incomingRecord.hidden === true &&
+		moderationHiddenPlaceholder(incomingRecord.cooked) &&
+		typeof currentRecord.cooked === 'string' &&
+		currentRecord.cooked.trim().length > 0 &&
+		!moderationHiddenPlaceholder(currentRecord.cooked);
 	const merged: Record<string, unknown> = {
-		...(current as Readonly<Record<string, unknown>>),
+		...currentRecord,
 	};
-	for (const [key, value] of Object.entries(
-		incoming as Readonly<Record<string, unknown>>,
-	)) {
+	for (const [key, value] of Object.entries(incomingRecord)) {
+		if (key === 'cooked' && preserveVisibleCooked) continue;
 		if (value !== undefined) merged[key] = value;
 	}
 	return Object.freeze(merged) as TPost;
@@ -365,6 +386,8 @@ export class TopicSnapshotRepository<
 		const observedAt = finiteTimestamp(input.observedAt ?? this.#now(), 'observedAt');
 		let topicChanged = false;
 		let streamChanged = false;
+		let streamVersionAccepted = false;
+		let expectedPostCountChanged = false;
 		let ignoredPosts = 0;
 		let acceptedPosts = 0;
 		const changedPostNumbers: number[] = [];
@@ -395,6 +418,7 @@ export class TopicSnapshotRepository<
 				{ observedAt, source: input.source },
 			)
 		) {
+			streamVersionAccepted = true;
 			const blockedPostIds = new Set(
 				[...this.#removedPosts.values()]
 					.filter((removed) =>
@@ -417,23 +441,39 @@ export class TopicSnapshotRepository<
 			}
 			this.#streamObservedAt = observedAt;
 		}
-			if (input.expectedPostCount !== undefined) {
-				const blockedRemovalCount = [...this.#removedPosts.values()]
-					.filter((removed) =>
-						!shouldReplaceDiscourseRemoval(removed, {
-							observedAt,
-							source: input.source,
-						}))
-					.length;
-				this.#expectedPostCount = Math.max(
-					this.#expectedPostCount,
-					Math.max(
-						0,
-						nonNegativeInteger(input.expectedPostCount, 'expectedPostCount') -
-							blockedRemovalCount,
-					),
-				);
+		if (input.expectedPostCount !== undefined) {
+			const blockedRemovalCount = [...this.#removedPosts.values()]
+				.filter((removed) =>
+					!shouldReplaceDiscourseRemoval(removed, {
+						observedAt,
+						source: input.source,
+					}))
+				.length;
+			const incomingExpectedPostCount = Math.max(
+				0,
+				nonNegativeInteger(input.expectedPostCount, 'expectedPostCount') -
+					blockedRemovalCount,
+			);
+			/*
+			 * 新鲜且同时赢得 stream 版本仲裁的完整 Topic JSON 是正文总数权威，
+			 * 可以修正旧 created 逻辑留下的偏大计数。较旧 Topic 响应若已输给
+			 * MessageBus/action 的 stream，则只能保留当前值，不能回退新正文。
+			 */
+			const nextExpectedPostCount =
+				input.source === 'topic-json' &&
+				input.topic !== undefined &&
+				topicChanged &&
+				streamVersionAccepted
+					? incomingExpectedPostCount
+					: Math.max(
+						this.#expectedPostCount,
+						incomingExpectedPostCount,
+					);
+			if (nextExpectedPostCount !== this.#expectedPostCount) {
+				this.#expectedPostCount = nextExpectedPostCount;
+				expectedPostCountChanged = true;
 			}
+		}
 		for (const post of input.posts ?? []) {
 			const postNumber = tryDiscoursePostNumber(post.post_number);
 			if (postNumber === null) {
@@ -476,7 +516,8 @@ export class TopicSnapshotRepository<
 			acceptedPosts += 1;
 			changedPostNumbers.push(postNumber);
 		}
-		const changed = topicChanged || streamChanged || changedPostNumbers.length > 0;
+		const changed = topicChanged || streamChanged ||
+			expectedPostCountChanged || changedPostNumbers.length > 0;
 		if (changed) {
 			this.#updatedAt = Math.max(this.#updatedAt, observedAt);
 			this.#queuePersistence();
@@ -922,6 +963,14 @@ export class TopicSnapshotRepository<
 			[...removedPosts.values()].map((entry) => entry.postId),
 		);
 		for (const rawEntry of value.posts) {
+			if ((rawEntry?.value as Readonly<{
+				readonly reader_local_archive_placeholder?: unknown;
+			}> | null)?.reader_local_archive_placeholder === true) {
+				this.#onInvalidSnapshot(new Error(
+					`Topic ${this.topicId} 的旧版 404 占位楼层已丢弃`,
+				));
+				continue;
+			}
 			const postNumber = tryDiscoursePostNumber(rawEntry?.postNumber);
 			const source = normalizeDiscourseIngestSource(rawEntry?.source);
 			const valuePostNumber = tryDiscoursePostNumber(rawEntry?.value?.post_number);

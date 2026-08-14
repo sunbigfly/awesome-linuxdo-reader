@@ -7,6 +7,14 @@ import {
 	DEFAULT_BOOST_COPY_SETTINGS,
 	normalizeBoostCopySettings,
 } from './reader-boost-copy-settings.js';
+import {
+	DEFAULT_READER_TRANSLATION_THEME,
+	normalizeReaderTranslationTheme,
+	type ReaderTranslationTheme,
+} from '../translation/reader-translation-presentation.js';
+import {
+	normalizeReaderUnwantedTopicFilterPreferences,
+} from '../collection/reader-unwanted-topic-filter.js';
 
 export const READER_PREFERENCES_STORAGE_KEY = 'linuxdo-enhanced-reader:prefs';
 export const READER_CONFIG_EXPORT_FORMAT = 'awesome-linuxdo-reader-settings';
@@ -122,6 +130,8 @@ export interface ReaderPreferences {
 	readonly lightboxDescriptionHeight: number;
 	readonly lightboxCommentsWidthPercent: number;
 	readonly themeMode: 'light' | 'dark' | 'system';
+	readonly autoDarkModeEnabled: boolean;
+	readonly autoDarkModeStartTime: 'sunset' | string;
 	readonly fontRenderingEnabled: boolean;
 	readonly fontRenderingOnHost: boolean;
 	readonly hostFontFamily: ReaderFontFamily;
@@ -163,6 +173,7 @@ export interface ReaderPreferences {
 	readonly historyEdgeTriggerPercent: number;
 	readonly loadingAnimation: ReaderLoadingAnimation;
 	readonly translationMode: 'original' | 'bilingual' | 'translation';
+	readonly translationTheme: ReaderTranslationTheme;
 	readonly openTopicsAtFirstPost: boolean;
 	readonly doubleEscapeToCloseReader: boolean;
 	readonly confirmNativeComposerClose: boolean;
@@ -171,6 +182,12 @@ export interface ReaderPreferences {
 	readonly topicActionRailFixed: boolean;
 	readonly topicActionRailMode: 'collapsed' | 'compact';
 	readonly topicActionRailPositions: ReaderTopicActionRailPositions;
+	readonly unwantedTopicFilterEnabled: boolean;
+	readonly unwantedTopicFilterCategories: readonly string[];
+	readonly unwantedTopicFilterLabels: readonly string[];
+	readonly unwantedTopicFilterTopicAuthors: readonly string[];
+	readonly unwantedTopicFilterTopicFields: readonly string[];
+	readonly unwantedTopicFilterPostAuthors: readonly string[];
 	readonly expandNestedRepliesByDefault: boolean;
 	readonly expandLeafNestedReplies: boolean;
 	readonly aggregateDescendantReplies: boolean;
@@ -199,7 +216,7 @@ export interface ReaderTopicActionRailPositions {
 	readonly embedded: ReaderTopicActionRailPosition;
 }
 
-type BookmarkTabType = 'Reaction' | 'Topic' | 'Post';
+type BookmarkTabType = 'Reaction' | 'Boost' | 'Reply' | 'Topic' | 'Post';
 export type ReaderLoadingAnimation =
 	| 'random'
 	| 'portal'
@@ -265,6 +282,8 @@ const FONT_FAMILIES = new Set<ReaderFontFamily>([
 ]);
 const FONT_WEIGHTS = new Set<ReaderFontWeight>([300, 400, 500, 600]);
 const BOOKMARK_TAB_TYPES = Object.freeze<readonly BookmarkTabType[]>([
+	'Reply',
+	'Boost',
 	'Reaction',
 	'Topic',
 	'Post',
@@ -357,8 +376,8 @@ export const READER_HOST_FONT_SCALE_DEFAULTS = Object.freeze({
 	labelCard: 100,
 });
 export const IMAGE_PROFILE_DEFAULT = Object.freeze<ReaderImageProfile>({
-	preset: '50',
-	custom: 50,
+	preset: '100',
+	custom: 100,
 });
 const APPEARANCE_PROFILE_DEFAULT = Object.freeze<ReaderAppearanceProfile>({
 	accentColor: '#47855f',
@@ -1298,6 +1317,8 @@ export function createReaderPreferencesDefaults(
 		lightboxDescriptionHeight: LIGHTBOX_DESCRIPTION_HEIGHT_DEFAULT,
 		lightboxCommentsWidthPercent: LIGHTBOX_COMMENTS_WIDTH_DEFAULT,
 		themeMode: 'system',
+		autoDarkModeEnabled: false,
+		autoDarkModeStartTime: 'sunset',
 		fontRenderingEnabled: true,
 		fontRenderingOnHost: true,
 		hostFontFamily: 'system',
@@ -1320,7 +1341,7 @@ export function createReaderPreferencesDefaults(
 		readerWindowY: 0,
 		readerWindowLocked: false,
 		readerWindowPinned: false,
-		listReaderMode: 'floating',
+		listReaderMode: 'embed-right',
 		listReaderEmbedWidth: Math.round(viewport.viewportWidth * 0.45),
 		composerWindowWidth: 0,
 		composerWindowHeight: 0,
@@ -1333,7 +1354,8 @@ export function createReaderPreferencesDefaults(
 		historyEdgeTriggerPercent: HISTORY_EDGE_TRIGGER_DEFAULT,
 		loadingAnimation: 'quoteecho',
 		translationMode: 'original',
-		openTopicsAtFirstPost: false,
+		translationTheme: DEFAULT_READER_TRANSLATION_THEME,
+		openTopicsAtFirstPost: true,
 		doubleEscapeToCloseReader: false,
 		confirmNativeComposerClose: false,
 		readerShortcutBindings:
@@ -1346,6 +1368,12 @@ export function createReaderPreferencesDefaults(
 			fullpage: Object.freeze({ x: 'left', y: 0.95 }),
 			embedded: Object.freeze({ x: 'left', y: 0.95 }),
 		}),
+		unwantedTopicFilterEnabled: false,
+		unwantedTopicFilterCategories: Object.freeze([]),
+		unwantedTopicFilterLabels: Object.freeze([]),
+		unwantedTopicFilterTopicAuthors: Object.freeze([]),
+		unwantedTopicFilterTopicFields: Object.freeze([]),
+		unwantedTopicFilterPostAuthors: Object.freeze([]),
 		expandNestedRepliesByDefault: true,
 		expandLeafNestedReplies: false,
 		aggregateDescendantReplies: true,
@@ -1440,16 +1468,32 @@ export function normalizeReaderPreferences(
 		'embed-right',
 	].includes(String(source.listReaderMode))
 		? source.listReaderMode as ReaderPreferences['listReaderMode']
-		: 'floating';
+		: defaults.listReaderMode;
 	const themeMode = ['light', 'dark', 'system'].includes(String(source.themeMode))
 		? source.themeMode as ReaderPreferences['themeMode']
 		: 'system';
+	const autoDarkModeStartTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(
+		String(source.autoDarkModeStartTime),
+	)
+		? String(source.autoDarkModeStartTime)
+		: 'sunset';
 	const translationMode = ['bilingual', 'translation'].includes(
 		String(source.translationMode),
 	)
 		? source.translationMode as ReaderPreferences['translationMode']
 		: 'original';
+	const translationTheme = normalizeReaderTranslationTheme(
+		source.translationTheme,
+	);
 	const jumpColor = String(source.jumpHighlightColor || '').trim().toLowerCase();
+	const unwantedTopicFilter = normalizeReaderUnwantedTopicFilterPreferences({
+		enabled: source.unwantedTopicFilterEnabled === true,
+		categories: source.unwantedTopicFilterCategories as readonly string[],
+		labels: source.unwantedTopicFilterLabels as readonly string[],
+		topicAuthors: source.unwantedTopicFilterTopicAuthors as readonly string[],
+		topicFields: source.unwantedTopicFilterTopicFields as readonly string[],
+		postAuthors: source.unwantedTopicFilterPostAuthors as readonly string[],
+	});
 	return Object.freeze({
 		topicReaderMode,
 		imageProfile,
@@ -1480,6 +1524,8 @@ export function normalizeReaderPreferences(
 			),
 		),
 		themeMode,
+		autoDarkModeEnabled: source.autoDarkModeEnabled === true,
+		autoDarkModeStartTime,
 		fontRenderingEnabled: source.fontRenderingEnabled !== false,
 		fontRenderingOnHost: source.fontRenderingOnHost === true,
 		hostFontFamily: normalizeFontFamily(source.hostFontFamily, 'system'),
@@ -1539,7 +1585,8 @@ export function normalizeReaderPreferences(
 			: HISTORY_EDGE_TRIGGER_DEFAULT,
 		loadingAnimation,
 		translationMode,
-		openTopicsAtFirstPost: source.openTopicsAtFirstPost === true,
+		translationTheme,
+		openTopicsAtFirstPost: source.openTopicsAtFirstPost !== false,
 		doubleEscapeToCloseReader: source.doubleEscapeToCloseReader === true,
 		confirmNativeComposerClose: source.confirmNativeComposerClose === true,
 		readerShortcutBindings:
@@ -1555,6 +1602,12 @@ export function normalizeReaderPreferences(
 				: null,
 			value.topicActionRailPosition,
 		),
+		unwantedTopicFilterEnabled: unwantedTopicFilter.enabled,
+		unwantedTopicFilterCategories: unwantedTopicFilter.categories,
+		unwantedTopicFilterLabels: unwantedTopicFilter.labels,
+		unwantedTopicFilterTopicAuthors: unwantedTopicFilter.topicAuthors,
+		unwantedTopicFilterTopicFields: unwantedTopicFilter.topicFields,
+		unwantedTopicFilterPostAuthors: unwantedTopicFilter.postAuthors,
 		expandNestedRepliesByDefault,
 		expandLeafNestedReplies,
 		aggregateDescendantReplies,
@@ -1591,6 +1644,14 @@ export function createReaderPreferencesConfigCodec(
 		value: Readonly<Record<string, unknown>>,
 	): Readonly<ReaderPreferences> =>
 		normalizeReaderPreferences(value, options.environment);
+	const unwantedTopicFilterDefaults = Object.freeze({
+		unwantedTopicFilterEnabled: false,
+		unwantedTopicFilterCategories: Object.freeze([]),
+		unwantedTopicFilterLabels: Object.freeze([]),
+		unwantedTopicFilterTopicAuthors: Object.freeze([]),
+		unwantedTopicFilterTopicFields: Object.freeze([]),
+		unwantedTopicFilterPostAuthors: Object.freeze([]),
+	});
 	return new PreferencesConfigCodec({
 		format: READER_CONFIG_EXPORT_FORMAT,
 		schemaVersion: READER_CONFIG_EXPORT_VERSION,
@@ -1599,18 +1660,37 @@ export function createReaderPreferencesConfigCodec(
 		normalize,
 		legacyImportRules: [
 			{
+				missingDefaults: unwantedTopicFilterDefaults,
+			},
+			{
 				missingDefaults: {
+					...unwantedTopicFilterDefaults,
+					autoDarkModeEnabled: false,
+					autoDarkModeStartTime: 'sunset',
+				},
+			},
+			{
+				missingDefaults: {
+					...unwantedTopicFilterDefaults,
+					autoDarkModeEnabled: false,
+					autoDarkModeStartTime: 'sunset',
 					fullpageLayoutProfile: READER_FULLPAGE_LAYOUT_DEFAULT,
 				},
 			},
 			{
 				missingDefaults: {
+					...unwantedTopicFilterDefaults,
+					autoDarkModeEnabled: false,
+					autoDarkModeStartTime: 'sunset',
 					fullpageLayoutProfile: READER_FULLPAGE_LAYOUT_DEFAULT,
 					confirmNativeComposerClose: true,
 				},
 			},
 			{
 				missingDefaults: {
+					...unwantedTopicFilterDefaults,
+					autoDarkModeEnabled: false,
+					autoDarkModeStartTime: 'sunset',
 					readerShortcutBindings: defaults.readerShortcutBindings,
 					topicActionRailMode: 'compact',
 					inlineReplyTreeMaxDepth: 1,

@@ -16,6 +16,7 @@ const ESCAPE_SURFACE_SELECTOR = [
 	'.ldp-user-card-fallback.open',
 	'.ldp-user-card-follow-panel:not([hidden])',
 	'.ldp-user-card-follow-preview:not([hidden])',
+	'.ldp-reader-floating-window:not([hidden])',
 	'.ldp-reaction-picker:not([hidden])',
 	'.ldp-selection-toolbar:not([hidden])',
 ].join(',');
@@ -32,6 +33,9 @@ function visible(document: Document, element: HTMLElement): boolean {
 function declaredSurfaceZIndex(element: HTMLElement): number | null {
 	for (const [selector, zIndex] of [
 		['.ldp-reader-action-layer', 2147483612],
+		['.ldp-user-card-follow-preview.is-above-user-observation-window', 2147483619],
+		['.ldp-user-card-follow-panel.is-above-user-observation-window', 2147483618],
+		['.ldp-user-card-fallback.is-above-user-observation-window', 2147483617],
 		['.ldp-user-card-follow-preview', 2147483611],
 		['.ldp-user-card-follow-panel', 2147483610],
 		['.ldp-color-picker-popover', 2147483610],
@@ -41,6 +45,7 @@ function declaredSurfaceZIndex(element: HTMLElement): number | null {
 		['.ldp-avatar-viewer', 2147483609],
 		['.ldp-native-boost-menu', 2147483608],
 		['.ldp-user-card-fallback', 2147483608],
+		['.ldp-reader-floating-window.is-user-observation-list', 2147483584],
 		['.ldp-settings-popover', 2147483606],
 		['.ldp-notifications-popover', 2147483606],
 		['.ldp-history-popover', 2147483606],

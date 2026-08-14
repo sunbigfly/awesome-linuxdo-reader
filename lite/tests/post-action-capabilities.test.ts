@@ -59,11 +59,17 @@ assert(
 	'同一 canonical 派生器必须服务根、嵌套和回屏 PostView',
 );
 const ownPost = derivePostActionCapabilities({
-	post: hydratedPost,
+	post: { ...hydratedPost, user_id: 99, username: 'Author' },
+	currentUser: { id: 99 },
 	currentUsername: 'author',
 	plugins: { boosts: true, reactions: true },
 });
-assert(ownPost.boost === 'denied', '作者自己的楼层不得显示 Boost');
+assert(
+	ownPost.boost === 'denied' &&
+	ownPost.like === 'denied' &&
+	ownPost.reactions === 'denied',
+	'作者自己的楼层必须同时禁用 Boost、点赞和表情回应',
+);
 
 const privileged = derivePostActionCapabilities({
 	post: {

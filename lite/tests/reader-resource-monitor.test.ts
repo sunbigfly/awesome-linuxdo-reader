@@ -1,6 +1,7 @@
 import { parseHTML } from 'linkedom';
 import {
 	ReaderResourceMonitor,
+	type ReaderDiagnosticLogFile,
 } from '../src/monitor/reader-resource-monitor.js';
 import { RequestObserver } from '../src/network/request-observer.js';
 
@@ -53,6 +54,7 @@ let hlsLibrarySupported = true;
 let nativeManagedMediaSource = false;
 const memory = { usedJSHeapSize: 4_096 };
 const memoryResolvers: Array<(value: { readonly bytes?: number }) => void> = [];
+const savedLogs: ReaderDiagnosticLogFile[] = [];
 const performance = {
 	timeOrigin: 1_000,
 	memory,
@@ -216,6 +218,9 @@ const monitor = new ReaderResourceMonitor({
 	},
 	sampleIntervalMs: 60_000,
 	now: () => now,
+	saveLog: (file) => {
+		savedLogs.push(file);
+	},
 });
 assert(
 	host.querySelectorAll('.ldp-resource-monitor').length === 1 &&
@@ -224,7 +229,9 @@ assert(
 	host.querySelector('.ldp-resource-monitor > .ldp-settings-log-content') !==
 		null &&
 	host.querySelector('.ldp-resource-monitor > .ldp-settings-category-head') ===
-		null,
+		null &&
+	host.querySelector('[data-log-export="performance"]')?.textContent
+		?.includes('导出 JSONL'),
 	'日志页必须只有页面级标题，切换标签置于独立内容卡之外，不能再生成第二个日志标题',
 );
 
@@ -261,7 +268,7 @@ assert(
 		host.querySelector('[data-resource-monitor-row="floors"] small')
 			?.textContent?.includes('不等于持久缓存总量') &&
 		host.querySelector('.ldp-request-flow-log-block .ldp-request-flow-block-head')
-			?.textContent?.includes('优先级、升级与取消') &&
+			?.textContent?.includes('逻辑链、契约、单飞、重试与过盾决策') &&
 		host.querySelector(
 			'[data-settings-log-panel="request"] .ldp-request-flow-limit',
 		)
@@ -347,6 +354,7 @@ assert(
 			document.documentElement.querySelectorAll('*').length &&
 		host.querySelectorAll('.ldp-resource-monitor-trend-row').length === 3 &&
 		host.querySelectorAll('.ldp-resource-monitor-scope-row').length === 3 &&
+		host.querySelector('[data-resource-monitor-scope-basis]') === null &&
 		host.querySelector('[data-resource-monitor-policy]')
 			?.textContent?.includes('正文批次 36 楼') &&
 		host.querySelector('[data-resource-monitor-policy]')
@@ -403,6 +411,16 @@ for (const record of observers.filter((entry) =>
 				name: record.type,
 				startTime: now - performance.timeOrigin,
 				duration: record.type === 'longtask' ? 600 : 40,
+				...(record.type === 'long-animation-frame'
+					? {
+						scripts: [{
+							duration: 12,
+							forcedStyleAndLayoutDuration: 3,
+							sourceURL:
+								'https://linux.do/assets/app.js?token=private#fragment',
+						}],
+					}
+					: {}),
 				toJSON: () => ({}),
 			},
 		],
@@ -441,8 +459,71 @@ assert(
 		host.querySelector(
 			'[data-resource-monitor-chart="retainedFloors"] polyline',
 		)?.getAttribute('points')?.includes('240.0') === true &&
-		host.querySelector('.ldp-resource-monitor-event-basis') !== null,
+		host.querySelector('.ldp-resource-monitor-event-basis') !== null &&
+		host.querySelector(
+			'.ldp-resource-monitor-event-row[data-performance-event-kind="longtask"]',
+		)?.textContent?.includes('600 ms') &&
+		host.querySelector('.ldp-resource-monitor-event-row time')?.textContent
+			?.includes('.') &&
+		host.querySelector(
+			'.ldp-resource-monitor-event-row[data-performance-event-kind="script"]',
+		)?.textContent?.includes('https://linux.do/assets/app.js') &&
+		!host.querySelector('.ldp-resource-monitor-event-log')?.textContent
+			?.includes('private'),
 	'监控必须聚合真实卡顿与浏览器内存，并保留事件发生时而非采样时的前后台归因',
+);
+
+host.querySelector<HTMLButtonElement>('[data-log-export="performance"]')
+	?.click();
+await new Promise<void>((resolve) => setTimeout(resolve, 0));
+const performanceLog = savedLogs.find((file) =>
+	file.filename.includes('-performance-log-'));
+const performanceRecords = performanceLog?.text.trim().split('\n').map(
+	(line) => JSON.parse(line) as Record<string, unknown>,
+) ?? [];
+const performanceMeta = performanceRecords.find((record) =>
+	record.recordType === 'meta');
+const performanceSample = performanceRecords.find((record) =>
+	record.recordType === 'sample');
+const capabilities = performanceRecords.find((record) =>
+	record.recordType === 'capabilities');
+assert(
+	performanceLog?.mimeType === 'application/x-ndjson;charset=utf-8' &&
+		performanceLog.filename.endsWith('.jsonl') &&
+		performanceMeta?.logType === 'performance' &&
+		performanceMeta.sampleIntervalMs === 60_000 &&
+		performanceRecords.some((record) =>
+			record.recordType === 'runtime-state') &&
+		capabilities?.captureActive === true &&
+		capabilities.memorySource === 'measureUserAgentSpecificMemory' &&
+		(capabilities.observerInstall as Record<string, unknown>)?.resource ===
+			'available' &&
+		(capabilities.observerInstall as Record<string, unknown>)?.longtask ===
+			'available' &&
+		(capabilities.observerInstall as Record<string, unknown>)
+			?.longAnimationFrame === 'available' &&
+		(capabilities.observerInstall as Record<string, unknown>)
+			?.readerMutation === 'available' &&
+		Array.isArray(capabilities.limitations) &&
+		(capabilities.limitations as unknown[]).length >= 5 &&
+		(capabilities.discarded as Record<string, unknown>)
+			?.evidenceOverflow === 0 &&
+		performanceRecords.some((record) =>
+			record.recordType === 'performance-event' &&
+			record.kind === 'longtask' && record.durationMs === 600) &&
+		performanceRecords.some((record) =>
+			record.recordType === 'performance-event' &&
+			record.kind === 'dom' && record.added === 1) &&
+		performanceRecords.some((record) =>
+			record.recordType === 'request' &&
+			record.path === '/posts/9/replies.json' &&
+			record.queryShape === '?credential') &&
+		performanceSample?.requestActiveByLane !== undefined &&
+		performanceSample.mediaDiagnostics !== undefined &&
+		!performanceLog.text.includes('private') &&
+		host.querySelector('[data-log-export-status="performance"]')?.textContent
+			?.includes('已导出'),
+	'性能日志导出必须保留十分钟样本、毫秒事件、DOM 增减、关联脱敏请求和运行态策略',
 );
 
 Object.defineProperty(document, 'visibilityState', {

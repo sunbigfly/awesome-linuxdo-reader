@@ -31,6 +31,8 @@ export interface ReaderWebDavCategoryPort {
 	readonly initialStrategy: ReaderWebDavInitialStrategy;
 	capture(): readonly ReaderWebDavLocalRecord[] |
 		Promise<readonly ReaderWebDavLocalRecord[]>;
+	/** 有内部主键的类别必须证明清单键与载荷属于同一个业务实体。 */
+	validateRecord?(id: string, value: unknown): boolean;
 	mergeValues(local: unknown, remote: unknown): unknown;
 	apply(records: readonly ReaderWebDavLocalRecord[]): unknown | Promise<unknown>;
 	decodeRemoteRecords?(
@@ -113,6 +115,20 @@ function localFingerprint(records: readonly ReaderWebDavLocalRecord[]): string {
 		.sort((left, right) => left.id.localeCompare(right.id)));
 }
 
+function baselineStorageScopeId(
+	config: ReaderWebDavConfig,
+	runtimeScopeId: string,
+): string {
+	// 同一 Discourse 账号可以切换 WebDAV 服务、账号或远端文件。基线只属于
+	// 精确的远端目标；复用旧目标基线会把新空文件误判成远端删除。
+	return `target:${readerWebDavFingerprint({
+		endpoint: config.endpoint,
+		username: config.username,
+		remotePath: config.remotePath,
+		runtimeScopeId,
+	})}`;
+}
+
 function withScope(
 	document: ReaderWebDavDocument,
 	scopeId: string,
@@ -150,6 +166,8 @@ export class ReaderWebDavCoordinator {
 		signal: AbortSignal,
 	) => Promise<void>;
 	#active: Promise<ReaderWebDavSyncResult> | null = null;
+	#activeConfig: ReaderWebDavConfig | null = null;
+	#localCacheMutationBarrier: Promise<void> | null = null;
 
 	constructor(options: ReaderWebDavCoordinatorOptions) {
 		this.#client = options.client;
@@ -173,10 +191,64 @@ export class ReaderWebDavCoordinator {
 		await this.#client.test(snapshot.config, signal);
 	}
 
+	/**
+	 * 在本机缓存清理期间暂停同步，并先解除对应类别的本地三方合并基线。
+	 * 已经开始的同步会先完整结束；清理者释放 barrier 后，后续同步才可读取新本地状态。
+	 */
+	async acquireLocalCacheClear(
+		categories: readonly ReaderWebDavCategory[],
+	): Promise<() => void> {
+		while (this.#localCacheMutationBarrier) {
+			await this.#localCacheMutationBarrier;
+		}
+		let resolveBarrier = (): void => {};
+		const barrier = new Promise<void>((resolve) => {
+			resolveBarrier = resolve;
+		});
+		this.#localCacheMutationBarrier = barrier;
+		let released = false;
+		const release = (): void => {
+			if (released) return;
+			released = true;
+			if (this.#localCacheMutationBarrier === barrier) {
+				this.#localCacheMutationBarrier = null;
+			}
+			resolveBarrier();
+		};
+		try {
+			if (this.#active) await this.#active;
+			await this.#repository.forgetBaselineCategories(categories);
+			return release;
+		} catch (cause) {
+			release();
+			throw cause;
+		}
+	}
+
 	syncNow(signal = new AbortController().signal): Promise<ReaderWebDavSyncResult> {
-		if (this.#active) return this.#active;
+		if (this.#localCacheMutationBarrier) {
+			return this.#localCacheMutationBarrier.then(() => {
+				if (signal.aborted) throw signal.reason;
+				return this.syncNow(signal);
+			});
+		}
+		if (this.#active) {
+			if (this.#activeConfig === this.#repository.snapshot.config) {
+				return this.#active;
+			}
+			// 设置导入、重置或表单保存可能在定时同步期间切换目标。该调用必须
+			// 等旧事务收尾后按最新配置再跑一轮，不能把旧目标结果冒充新目标成功。
+			return this.#active.catch(() => undefined).then(() => {
+				if (signal.aborted) throw signal.reason;
+				return this.syncNow(signal);
+			});
+		}
+		this.#activeConfig = this.#repository.snapshot.config;
 		const active = this.#synchronize(signal).finally(() => {
-			if (this.#active === active) this.#active = null;
+			if (this.#active === active) {
+				this.#active = null;
+				this.#activeConfig = null;
+			}
 		});
 		this.#active = active;
 		return active;
@@ -184,6 +256,7 @@ export class ReaderWebDavCoordinator {
 
 	async #synchronize(signal: AbortSignal): Promise<ReaderWebDavSyncResult> {
 		const startedAt = this.#now();
+		let synchronizedConfig: ReaderWebDavConfig | null = null;
 		await this.#repository.saveStatus(Object.freeze({
 			kind: 'syncing',
 			message: '正在读取并合并 WebDAV 数据…',
@@ -191,6 +264,7 @@ export class ReaderWebDavCoordinator {
 		}));
 		try {
 			const snapshot = await this.#repository.load();
+			synchronizedConfig = snapshot.config;
 			const issues = validateReaderWebDavConfig(snapshot.config, {
 				requireCredentials: true,
 			});
@@ -198,6 +272,10 @@ export class ReaderWebDavCoordinator {
 			const scopeId = readerWebDavRuntimeScopeId(
 				this.#hostname(),
 				this.#username(),
+			);
+			const baselineScopeId = baselineStorageScopeId(
+				snapshot.config,
+				scopeId,
 			);
 			const selected = READER_WEBDAV_CATEGORIES
 				.filter((category) => snapshot.config.categories[category])
@@ -215,13 +293,26 @@ export class ReaderWebDavCoordinator {
 				});
 			let outcome: ReaderWebDavSyncResult | null = null;
 			let nextBaseline: ReaderWebDavBaseline =
-				snapshot.baselines[scopeId] ?? Object.freeze({});
+				snapshot.baselines[baselineScopeId] ?? Object.freeze({});
 			let applyRecords: readonly Readonly<{
 				readonly port: ReaderWebDavCategoryPort;
 				readonly records: readonly ReaderWebDavLocalRecord[];
 				readonly captured: readonly ReaderWebDavLocalRecord[];
 			}>[] = [];
-			for (let attempt = 0; attempt < 3; attempt += 1) {
+			if (!regularSelected.length) {
+				// 独立清单类别从 remotePath 只派生目录，不依赖主 sync.json。
+				// 跳过无关 GET/解析，避免损坏或超限的主文件阻断独立数据恢复。
+				outcome = Object.freeze({
+					uploaded: 0,
+					imported: 0,
+					deleted: 0,
+					conflicts: 0,
+					categories: selected.length,
+					remoteCreated: false,
+					at: this.#now(),
+				});
+			}
+			for (let attempt = 0; regularSelected.length && attempt < 3; attempt += 1) {
 				if (signal.aborted) throw signal.reason;
 				const remoteFile = await this.#client.read(snapshot.config, signal);
 				const document = remoteFile
@@ -253,6 +344,15 @@ export class ReaderWebDavCoordinator {
 				let changed = remoteFile === null && regularSelected.length > 0;
 				for (const port of regularSelected) {
 					const local = await port.capture();
+					if (port.validateRecord) {
+						for (const item of local) {
+							if (!port.validateRecord(item.id, item.value)) {
+								throw new Error(
+									`本机 WebDAV ${port.category} 记录 ${item.id} 身份不一致`,
+								);
+							}
+						}
+					}
 					const remoteRecords =
 						remoteScope.categories[port.category]?.records ?? {};
 					const decodedRemoteRecords = port.decodeRemoteRecords
@@ -260,7 +360,16 @@ export class ReaderWebDavCoordinator {
 							remoteRecords,
 							transformContext,
 						)
-						: remoteRecords;
+							: remoteRecords;
+					if (port.validateRecord) {
+						for (const [id, item] of Object.entries(decodedRemoteRecords)) {
+							if (!item.deleted && !port.validateRecord(id, item.value)) {
+								throw new Error(
+									`远端 WebDAV ${port.category} 记录 ${id} 身份不一致`,
+								);
+							}
+						}
+					}
 					const reconciled = reconcileReaderWebDavRecords({
 						local,
 						remote: decodedRemoteRecords,
@@ -364,8 +473,15 @@ export class ReaderWebDavCoordinator {
 				}
 			}
 			if (!outcome) throw new Error('WebDAV 文件持续冲突，请稍后重试');
-			for (const item of applyRecords) await item.port.apply(item.records);
-			await this.#repository.saveBaseline(scopeId, nextBaseline);
+			for (const item of applyRecords) {
+				if (
+					localFingerprint(item.records) !==
+					localFingerprint(item.captured)
+				) await item.port.apply(item.records);
+			}
+			if (regularSelected.length) {
+				await this.#repository.saveBaseline(baselineScopeId, nextBaseline);
+			}
 			let aggregate = outcome;
 			for (const port of standaloneSelected) {
 				const standalone = await port.synchronizeStandalone!({
@@ -384,7 +500,7 @@ export class ReaderWebDavCoordinator {
 					...nextBaseline,
 					[port.category]: standalone.baseline,
 				});
-				await this.#repository.saveBaseline(scopeId, nextBaseline);
+				await this.#repository.saveBaseline(baselineScopeId, nextBaseline);
 				aggregate = Object.freeze({
 					...aggregate,
 					uploaded: aggregate.uploaded + standalone.uploaded,
@@ -398,18 +514,25 @@ export class ReaderWebDavCoordinator {
 			}
 			const message = `同步完成：上传 ${aggregate.uploaded}，下载 ${aggregate.imported}` +
 				`，删除 ${aggregate.deleted}，冲突 ${aggregate.conflicts}`;
-			await this.#repository.saveStatus(Object.freeze({
-				kind: 'success',
-				message,
-				at: aggregate.at,
-			}));
+			if (this.#repository.snapshot.config === synchronizedConfig) {
+				await this.#repository.saveStatus(Object.freeze({
+					kind: 'success',
+					message,
+					at: aggregate.at,
+				}));
+			}
 			return aggregate;
 		} catch (cause) {
-			await this.#repository.saveStatus(Object.freeze({
-				kind: 'error',
-				message: errorMessage(cause),
-				at: this.#now(),
-			}));
+			if (
+				synchronizedConfig === null ||
+				this.#repository.snapshot.config === synchronizedConfig
+			) {
+				await this.#repository.saveStatus(Object.freeze({
+					kind: 'error',
+					message: errorMessage(cause),
+					at: this.#now(),
+				}));
+			}
 			throw cause;
 		}
 	}
@@ -450,7 +573,11 @@ export class ReaderWebDavAutoSync {
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		this.#repository.changes.subscribe(() => this.#refresh(), this.scope);
 		this.scope.add(() => this.#clear());
-		void this.#repository.load().then(() => this.#refresh());
+		void this.#repository.load()
+			.then(() => this.#refresh())
+			.catch(() => {
+				// 设置表单负责呈现持久化读取错误；自动调度只需避免未处理拒绝。
+			});
 	}
 
 	#refresh(): void {

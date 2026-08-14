@@ -24,10 +24,15 @@ const { document: parsedDocument, window } = parseHTML(
 	'<button class="ldp-reader-history-nav" aria-label="后退" title="后退"></button>' +
 	'<button class="ldp-settings-tab" aria-label="设置分组"></button>' +
 	'<button class="ldp-topic-timeline-track" aria-label="时间轴"></button>' +
+	'<input class="ldp-theme-time" data-ldp-tooltip-label="当地日落时间">' +
 	'<button class="ldp-avatar-flair" data-ldp-tooltip-label="贡献者"></button>' +
-	'</section></body></html>',
+	'</section><article class="topic-list-item">' +
+	'<button class="ldp-reader-queue-add" aria-label="加入阅读队列" ' +
+	'data-ldp-tooltip-label="加入阅读队列" title="原生提示"></button>' +
+	'</article></body></html>',
 );
 const document = parsedDocument as unknown as Document;
+document.documentElement.classList.add('ldp-reader-workspace');
 Object.defineProperties(window, {
 	innerWidth: { configurable: true, value: 800 },
 	innerHeight: { configurable: true, value: 600 },
@@ -35,9 +40,19 @@ Object.defineProperties(window, {
 const overlay = document.querySelector<HTMLElement>('.ldp-overlay')!;
 const history = document.querySelector<HTMLElement>('.ldp-reader-history-nav')!;
 const settingsTab = document.querySelector<HTMLElement>('.ldp-settings-tab')!;
+const themeTime = document.querySelector<HTMLElement>('.ldp-theme-time')!;
 const badge = document.querySelector<HTMLElement>('.ldp-avatar-flair')!;
+const hostQueueAdd = document.querySelector<HTMLElement>(
+	'.ldp-reader-queue-add',
+)!;
 Object.defineProperty(history, 'getBoundingClientRect', {
 	value: () => rect(100, 120, 40, 40),
+});
+Object.defineProperty(themeTime, 'getBoundingClientRect', {
+	value: () => rect(200, 300, 100, 30),
+});
+Object.defineProperty(hostQueueAdd, 'getBoundingClientRect', {
+	value: () => rect(250, 420, 40, 40),
 });
 const scheduled = {
 	callback: null as (() => void) | null,
@@ -84,6 +99,26 @@ settingsTab.dispatchEvent(excludedHover);
 assert(
 	tooltip.element.textContent === '后退',
 	'设置页签和时间轴轨道必须继续使用自身可见文案，不能叠加通用 tooltip',
+);
+themeTime.dispatchEvent(hover);
+assert(
+	String(tooltip.element.textContent) === '当地日落时间' &&
+		tooltip.element.classList.contains('ldp-transient-surface') &&
+		String(tooltip.element.style.left) === '310px' &&
+		String(tooltip.element.style.top) === '170px',
+	'显式命名的输入控件必须复用项目 tooltip 样式并优先显示在控件上方',
+);
+overlay.dispatchEvent(new window.Event('ldp-reader-window-change'));
+assert(
+	tooltip.element.hidden,
+	'Reader 浮窗移动后必须关闭旧 viewport 坐标上的通用 tooltip',
+);
+hostQueueAdd.dispatchEvent(hover);
+assert(
+	!tooltip.element.hidden &&
+		String(tooltip.element.textContent) === '加入阅读队列' &&
+		!hostQueueAdd.hasAttribute('title'),
+	'宿主 Topic card 内由 Reader 显式命名的图标必须复用统一 tooltip owner，并移除浏览器原生提示',
 );
 
 badge.click();

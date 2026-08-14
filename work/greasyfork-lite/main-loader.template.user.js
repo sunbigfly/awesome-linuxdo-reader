@@ -59,5 +59,5 @@
 		runtime.sourceVersion !== "1.3.1") {
 		throw new Error('[main-lite] Greasy Fork Library 缺失或版本不匹配');
 	}
-	runtime.start("src/userscript/main-lite-entry.js", ["main-lite-core","main-lite-features"]);
+	runtime.start("src/userscript/main-lite-entry.js", ["main-lite-core","main-lite-platform","main-lite-features"]);
 })();

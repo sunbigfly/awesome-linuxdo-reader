@@ -17,8 +17,9 @@ import {
 	eventElement,
 	eventPathIncludes,
 } from '../dom/event-target.js';
+import { bindFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
 import type { PostView } from '../dom/post-view.js';
-import { LifecycleScope } from '../kernel/lifecycle.js';
+import { LifecycleScope, type Cleanup } from '../kernel/lifecycle.js';
 import {
 	readerEscapeOwnedBy,
 	readerSurfaceQueryAll,
@@ -214,6 +215,8 @@ interface BoostEditorStats {
 
 const BOOST_EMOJI_MENU_IDENTIFIER = 'ldp-native-boost-emoji-picker';
 const BOOST_SURFACE_OWNED_EVENTS = new WeakSet<Event>();
+const BOOST_MAX_VISIBLE_LENGTH = 16;
+const BOOST_MAX_EMOJI = 5;
 const BOOST_QUICK_ACTION_OPEN_DELAY_MS = 180;
 const BOOST_QUICK_ACTION_SWITCH_DELAY_MS = 250;
 const BOOST_QUICK_ACTION_CLOSE_DELAY_MS = 500;
@@ -570,6 +573,7 @@ export class ReaderPostActionFeature<
 	#boostGeneration = 0;
 	#boostPositionFrame: number | null = null;
 	#boostEmojiTopLayer: HTMLElement | null = null;
+	#boostEmojiWheelCleanup: Cleanup | null = null;
 	#hostRuntimeReadyTimer: number | null = null;
 	#hostRuntimeReadyAttempt = 0;
 	#hostRuntimeRetryNeeded = false;
@@ -689,7 +693,15 @@ export class ReaderPostActionFeature<
 				this.#closeBoostQuickActions();
 			}
 		});
+		const interactionChanges = new WeakSet<Event>();
+		if (interactionRoot !== this.#document) {
+			this.scope.listen(interactionRoot, 'change', (event) => {
+				interactionChanges.add(event);
+				this.#onChange(event);
+			});
+		}
 		this.scope.listen(this.#document, 'change', (event) => {
+			if (interactionChanges.has(event)) return;
 			this.#onChange(event);
 		});
 		this.scope.listen(this.#document, 'keydown', (event) => {
@@ -730,6 +742,16 @@ export class ReaderPostActionFeature<
 			this.scope.listen(defaultView, 'resize', () => {
 				this.#scheduleBoostPosition();
 			}, { passive: true });
+		}
+		for (const type of [
+			'ldp-reader-window-change',
+			'ldp-reader-workspace-change',
+		]) {
+			this.scope.listen(
+				this.#surfaceHost,
+				type,
+				() => this.#scheduleBoostPosition(),
+			);
 		}
 		this.scope.add(this.#models.subscribeClientSettings(() => {
 			this.#resetHostRuntimeReadyRetry();
@@ -925,7 +947,8 @@ export class ReaderPostActionFeature<
 		const primaryReaction = this.#primaryReaction(post);
 		const manifest = binding.snapshot.entries.find((entry) =>
 			entry.name === 'reactions');
-		const reactions = postReactions(post).filter((reaction) =>
+		const allReactions = postReactions(post);
+		const reactions = allReactions.filter((reaction) =>
 			reaction.id !== primaryReaction);
 		const options = this.#reactions.options(this.#topic(), binding.post);
 		if (
@@ -967,10 +990,15 @@ export class ReaderPostActionFeature<
 				false,
 			);
 		const needsInlinePicker = canReact && !postLikePicker;
+		const embedsPostLikePicker = canReact && postLikePicker;
 		let summary = slot.querySelector<HTMLElement>(
 			':scope > .ldp-reaction-summary',
 		);
-		if (!reactions.length && !needsInlinePicker) {
+		if (
+			!reactions.length &&
+			!needsInlinePicker &&
+			!embedsPostLikePicker
+		) {
 			summary?.remove();
 			if (!postLikePicker) binding.open = false;
 			binding.root.classList.toggle(
@@ -1000,17 +1028,40 @@ export class ReaderPostActionFeature<
 			fragment.append(button);
 		}
 		if (needsInlinePicker) {
+			const triggerReaction = primaryReaction || 'heart';
+			const primaryCount = allReactions.find((reaction) =>
+				reaction.id === triggerReaction)?.count ?? 0;
+			const primaryOption = optionById.get(triggerReaction) ?? Object.freeze({
+				id: triggerReaction,
+				label: `:${triggerReaction}:`,
+				selectable: false,
+			});
 			const anchor = this.#document.createElement('span');
 			anchor.className = 'ldp-reaction-picker-anchor';
 			const trigger = this.#document.createElement('button');
 			trigger.type = 'button';
 			trigger.className = 'ldp-reaction-add ldp-btn';
 			trigger.dataset.reactionPicker = '';
-			trigger.dataset.reaction = 'heart';
-			trigger.setAttribute('aria-label', '添加回应');
+			trigger.dataset.reaction = triggerReaction;
+			trigger.dataset.acted = current === triggerReaction ? '1' : '0';
+			trigger.dataset.counted = primaryCount > 0 ? '1' : '0';
+			trigger.dataset.tooltip = '';
+			trigger.classList.toggle('liked', current === triggerReaction);
+			trigger.setAttribute(
+				'aria-label',
+				current === triggerReaction ? '取消点赞' : '点赞',
+			);
 			trigger.setAttribute('aria-expanded', String(binding.open));
 			trigger.disabled = pending;
-			trigger.append(this.#iconNode('heart'));
+			trigger.append(
+				triggerReaction === 'heart'
+					? this.#iconNode('heart')
+					: this.#reactionGraphic(primaryOption),
+			);
+			const count = this.#document.createElement('span');
+			count.className = 'ldp-like-count';
+			count.textContent = primaryCount > 0 ? String(primaryCount) : '';
+			trigger.append(count);
 			const picker = this.#document.createElement('div');
 			picker.className = 'ldp-reaction-picker';
 			picker.hidden = !binding.open;
@@ -1025,7 +1076,24 @@ export class ReaderPostActionFeature<
 		} else if (!postLikePicker) {
 			binding.open = false;
 		}
-		summary.replaceChildren(fragment);
+		const postLikeAnchor = embedsPostLikePicker
+			? slot.querySelector<HTMLElement>(
+				':scope > .ldp-actions > .ldp-reaction-like-picker, ' +
+					':scope > .ldp-reaction-summary > ' +
+					'.ldp-reaction-like-picker',
+			)
+			: null;
+		if (postLikeAnchor) {
+			for (const child of [...summary.children]) {
+				if (child !== postLikeAnchor) child.remove();
+			}
+			if (postLikeAnchor.parentElement !== summary) {
+				summary.prepend(postLikeAnchor);
+			}
+			summary.append(fragment);
+		} else {
+			summary.replaceChildren(fragment);
+		}
 		summary.classList.toggle(
 			'ldp-reaction-summary-add-only',
 			reactions.length === 0 && needsInlinePicker,
@@ -1047,7 +1115,12 @@ export class ReaderPostActionFeature<
 	): boolean {
 		const slot = binding.slot;
 		const actions = slot.querySelector<HTMLElement>(':scope > .ldp-actions');
-		const like = actions?.querySelector<HTMLButtonElement>(':scope .ldp-like');
+		const like = slot.querySelector<HTMLButtonElement>(
+			':scope > .ldp-actions > .ldp-like, ' +
+				':scope > .ldp-actions > .ldp-reaction-like-picker > .ldp-like, ' +
+				':scope > .ldp-reaction-summary > ' +
+				'.ldp-reaction-like-picker > .ldp-like',
+		);
 		if (!actions || !like) return false;
 
 		if (dedicatedRail) {
@@ -1060,6 +1133,7 @@ export class ReaderPostActionFeature<
 				actions.prepend(like);
 			}
 			delete like.dataset.reactionPicker;
+			delete like.dataset.tooltip;
 			like.removeAttribute('aria-expanded');
 			like.querySelector('.ldp-topic-action-rail-reaction-badge')?.remove();
 			binding.open = false;
@@ -1080,6 +1154,7 @@ export class ReaderPostActionFeature<
 			anchor.append(like);
 		}
 		like.dataset.reactionPicker = '';
+		like.dataset.tooltip = '';
 		like.setAttribute('aria-expanded', String(binding.open));
 
 		const counts = new Map(
@@ -1438,9 +1513,11 @@ export class ReaderPostActionFeature<
 			actions.className = 'ldp-actions';
 			slot.append(actions);
 		}
-		let likeButton = actions.querySelector<HTMLButtonElement>(
-			':scope > .ldp-like, ' +
-				':scope > .ldp-reaction-like-picker > .ldp-like',
+		let likeButton = slot.querySelector<HTMLButtonElement>(
+			':scope > .ldp-actions > .ldp-like, ' +
+				':scope > .ldp-actions > .ldp-reaction-like-picker > .ldp-like, ' +
+				':scope > .ldp-reaction-summary > ' +
+				'.ldp-reaction-like-picker > .ldp-like',
 		);
 		if (!showLike) {
 			const anchor = likeButton?.closest('.ldp-reaction-like-picker');
@@ -1470,10 +1547,16 @@ export class ReaderPostActionFeature<
 				'aria-label',
 				likeValue.acted ? '取消点赞' : '点赞',
 			);
+			likeButton.dataset.counted =
+				likeValue.reaction && likeValue.count > 0 ? '1' : '0';
 			const count = likeButton.querySelector<HTMLElement>(
 				'.ldp-like-count',
 			);
-			if (count) count.textContent = String(likeValue.count);
+			if (count) {
+				count.textContent = likeValue.reaction && likeValue.count === 0
+					? ''
+					: String(likeValue.count);
+			}
 			likeButton.disabled = like?.decision !== 'allowed' || pending;
 			if (pending) likeButton.setAttribute('aria-busy', 'true');
 			else likeButton.removeAttribute('aria-busy');
@@ -1793,28 +1876,52 @@ export class ReaderPostActionFeature<
 			firstPost &&
 			!!this.#management &&
 			assign?.decision === 'allowed';
+		const showTopicReport = showReport && !topicActionRail;
+		const showTopicAssign = showAssign && !topicActionRail;
+		const showTopicReply = showReply && !topicActionRail;
+		const mergedContextActions = topicActionRail
+			? binding.view.slots.actions.querySelector<HTMLElement>(
+				':scope > .ldp-actions > .ldp-context-actions-slot',
+			)
+			: null;
+		const actionsHost = mergedContextActions ?? slot;
 		if (
-			!showReport &&
+			!showTopicReport &&
 			!showShare &&
 			!showBookmark &&
 			!showNotification &&
 			!showSharedIssue &&
-			!showAssign &&
-			!showReply
+			!showTopicAssign &&
+			!showTopicReply
 		) {
+			actionsHost.querySelector(
+				':scope > .ldp-topic-footer-actions',
+			)?.remove();
 			slot.replaceChildren();
 			slot.hidden = true;
 			return;
 		}
-		let actions = slot.querySelector<HTMLElement>(
+		if (mergedContextActions) {
+			mergedContextActions.setAttribute('role', 'group');
+			mergedContextActions.setAttribute(
+				'aria-label',
+				'楼层与主题操作',
+			);
+			slot.querySelector(
+				':scope > .ldp-topic-footer-actions',
+			)?.remove();
+		}
+		let actions = actionsHost.querySelector<HTMLElement>(
 			':scope > .ldp-topic-footer-actions',
 		);
 		if (!actions) {
 			actions = this.#document.createElement('div');
 			actions.className = 'ldp-topic-footer-actions';
 			actions.setAttribute('aria-label', '主题操作');
-			slot.append(actions);
+			actionsHost.append(actions);
 		}
+		const bookmarkHost = topicActionRail ? slot : actions;
+		const sharedIssueHost = topicActionRail ? slot : actions;
 		const topic = record(this.#topic()) ?? {};
 		const topicBookmarked = this.#bookmarked(topic);
 		const notificationLevel = readerTopicNotificationLevel(topic);
@@ -1841,7 +1948,7 @@ export class ReaderPostActionFeature<
 		const sharedIssuePending = binding.snapshot.pendingSurfaces.some(
 			(surface) => surface.name === 'feature:shared-issue',
 		);
-		let sharedIssueButton = actions.querySelector<HTMLButtonElement>(
+		let sharedIssueButton = sharedIssueHost.querySelector<HTMLButtonElement>(
 			':scope > .ldp-topic-shared-issue',
 		);
 		let sharedIssueSeparator = actions.querySelector<HTMLElement>(
@@ -1850,24 +1957,31 @@ export class ReaderPostActionFeature<
 		if (!showSharedIssue) {
 			sharedIssueButton?.remove();
 			sharedIssueSeparator?.remove();
-		} else if (!sharedIssueButton) {
-			sharedIssueButton = this.#actionButton(
-				'hand',
-				'俺也一样',
-				'ldp-topic-footer-button ldp-topic-shared-issue',
-			);
-			sharedIssueButton.dataset.topicSharedIssue = '';
-			const label = this.#document.createElement('span');
-			label.className = 'ldp-topic-shared-issue-label';
-			label.textContent = '俺也一样';
-			const value = this.#document.createElement('span');
-			value.className = 'ldp-topic-shared-issue-count';
-			sharedIssueButton.append(label, value);
-			sharedIssueSeparator = this.#document.createElement('span');
-			sharedIssueSeparator.className = 'ldp-topic-footer-separator';
-			sharedIssueSeparator.setAttribute('aria-hidden', 'true');
-			actions.prepend(sharedIssueSeparator);
-			actions.prepend(sharedIssueButton);
+		} else {
+			if (!sharedIssueButton) {
+				sharedIssueButton = this.#actionButton(
+					'hand',
+					'俺也一样',
+					'ldp-topic-footer-button ldp-topic-shared-issue',
+				);
+				sharedIssueButton.dataset.topicSharedIssue = '';
+				const label = this.#document.createElement('span');
+				label.className = 'ldp-topic-shared-issue-label';
+				label.textContent = '俺也一样';
+				const value = this.#document.createElement('span');
+				value.className = 'ldp-topic-shared-issue-count';
+				sharedIssueButton.append(label, value);
+				sharedIssueHost.prepend(sharedIssueButton);
+			}
+			if (topicActionRail) {
+				sharedIssueSeparator?.remove();
+				sharedIssueSeparator = null;
+			} else if (!sharedIssueSeparator) {
+				sharedIssueSeparator = this.#document.createElement('span');
+				sharedIssueSeparator.className = 'ldp-topic-footer-separator';
+				sharedIssueSeparator.setAttribute('aria-hidden', 'true');
+				sharedIssueButton.after(sharedIssueSeparator);
+			}
 		}
 		if (sharedIssueButton && sharedIssue) {
 			const label = `俺也一样（${sharedIssue.count}）`;
@@ -1904,7 +2018,7 @@ export class ReaderPostActionFeature<
 			shareButton.append(label);
 			actions.append(shareButton);
 		}
-		let bookmarkButton = actions.querySelector<HTMLButtonElement>(
+		let bookmarkButton = bookmarkHost.querySelector<HTMLButtonElement>(
 			':scope > .ldp-topic-bookmark',
 		);
 		if (!showBookmark) bookmarkButton?.remove();
@@ -1918,7 +2032,7 @@ export class ReaderPostActionFeature<
 			const label = this.#document.createElement('span');
 			label.className = 'ldp-topic-bookmark-label';
 			bookmarkButton.append(label);
-			actions.append(bookmarkButton);
+			bookmarkHost.append(bookmarkButton);
 		}
 		if (bookmarkButton) {
 			bookmarkButton.classList.toggle('on', topicBookmarked);
@@ -1943,10 +2057,13 @@ export class ReaderPostActionFeature<
 				bookmarkButton.removeAttribute('aria-busy');
 			}
 		}
+		if (topicActionRail && bookmarkButton && sharedIssueButton) {
+			bookmarkButton.after(sharedIssueButton);
+		}
 		let reportButton = actions.querySelector<HTMLButtonElement>(
 			':scope > .ldp-topic-report',
 		);
-		if (!showReport) reportButton?.remove();
+		if (!showTopicReport) reportButton?.remove();
 		else if (!reportButton) {
 			reportButton = this.#actionButton(
 				'flag',
@@ -1970,7 +2087,7 @@ export class ReaderPostActionFeature<
 		let assignButton = actions.querySelector<HTMLButtonElement>(
 			':scope > .ldp-topic-assign',
 		);
-		if (!showAssign) assignButton?.remove();
+		if (!showTopicAssign) assignButton?.remove();
 		else if (!assignButton) {
 			assignButton = this.#actionButton(
 				'user-plus',
@@ -1991,7 +2108,10 @@ export class ReaderPostActionFeature<
 		let notification = actions.querySelector<HTMLElement>(
 			':scope > .ldp-topic-notification',
 		);
-		if (!showNotification) notification?.remove();
+		const notificationUsername = showNotification
+			? this.#currentUserIdentity(binding.post).username
+			: '';
+		if (!notificationUsername) notification?.remove();
 		else if (!notification) {
 			notification = this.#document.createElement('span');
 			notification.className = 'ldp-topic-notification';
@@ -2029,7 +2149,7 @@ export class ReaderPostActionFeature<
 				notification.removeAttribute('aria-busy');
 			}
 			const select = notification.querySelector<HTMLSelectElement>(
-				':scope > .ldp-topic-notification-select',
+				'.ldp-topic-notification-select',
 			);
 			if (select) {
 				try {
@@ -2043,15 +2163,13 @@ export class ReaderPostActionFeature<
 						option.value === String(displayedNotificationLevel),
 					);
 				}
-				select.disabled =
-					notificationPending ||
-					!this.#currentUserIdentity(binding.post).username;
+				select.disabled = notificationPending;
 			}
 		}
 		let replyButton = actions.querySelector<HTMLButtonElement>(
 			':scope > .ldp-topic-reply',
 		);
-		if (!showReply) replyButton?.remove();
+		if (!showTopicReply) replyButton?.remove();
 		else if (!replyButton) {
 			replyButton = this.#actionButton(
 				'reply',
@@ -2069,6 +2187,7 @@ export class ReaderPostActionFeature<
 			if (reply?.pending) replyButton.setAttribute('aria-busy', 'true');
 			else replyButton.removeAttribute('aria-busy');
 		}
+		if (mergedContextActions) mergedContextActions.append(actions);
 		slot.hidden = false;
 	}
 
@@ -2167,10 +2286,11 @@ export class ReaderPostActionFeature<
 		editor.contentEditable = 'true';
 		editor.setAttribute('role', 'textbox');
 		editor.setAttribute('aria-label', 'Boost 内容');
-		editor.dataset.placeholder = '写一句，最多 16 字';
+		editor.dataset.placeholder =
+			`写一句，最多 ${BOOST_MAX_VISIBLE_LENGTH} 字`;
 		const count = this.#document.createElement('span');
 		count.className = 'ldp-native-boost-count';
-		count.textContent = '0/16';
+		count.textContent = `0/${BOOST_MAX_VISIBLE_LENGTH}`;
 		const emoji = this.#document.createElement('button');
 		emoji.type = 'button';
 		emoji.className =
@@ -2199,6 +2319,7 @@ export class ReaderPostActionFeature<
 		container.append(editor, count, emoji, submit, cancel);
 		menu.append(container, error);
 		this.#surfaceHost.append(menu);
+		this.scope.add(bindFloatingSurfaceWheel(menu));
 
 		this.scope.listen(menu, 'input', () => {
 			this.#syncBoostEditor(menu, editor, true);
@@ -2252,7 +2373,7 @@ export class ReaderPostActionFeature<
 
 	#boundedBoostRaw(value: unknown): string {
 		return [...String(value ?? '').replace(/\s+/g, ' ')]
-			.slice(0, 16)
+			.slice(0, BOOST_MAX_VISIBLE_LENGTH)
 			.join('');
 	}
 
@@ -2304,11 +2425,10 @@ export class ReaderPostActionFeature<
 		enforceLimit: boolean,
 	): BoostEditorStats {
 		let stats = this.#readBoostEditor(editor);
-		const invalid = stats.length > 16 || stats.emojiCount > 5;
 		if (
 			enforceLimit &&
 			!this.#boostComposing &&
-			invalid
+			stats.emojiCount > BOOST_MAX_EMOJI
 		) {
 			editor.innerHTML = this.#boostPreviousEditorHtml;
 			this.#placeBoostCursorAtEnd(editor);
@@ -2326,21 +2446,31 @@ export class ReaderPostActionFeature<
 		const submit = menu.querySelector<HTMLButtonElement>(
 			'[data-boost-submit]',
 		);
-		if (count) count.textContent = `${stats.length}/16`;
+		const overLength = stats.length > BOOST_MAX_VISIBLE_LENGTH;
+		const overEmojiLimit = stats.emojiCount > BOOST_MAX_EMOJI;
+		if (count) {
+			count.textContent = `${stats.length}/${BOOST_MAX_VISIBLE_LENGTH}`;
+			count.classList.toggle('is-over-limit', overLength);
+		}
+		if (overLength) editor.setAttribute('aria-invalid', 'true');
+		else editor.removeAttribute('aria-invalid');
 		if (emoji) {
 			emoji.disabled =
 				this.#boostSubmitting ||
 				this.#boostComposing ||
-				stats.length + (stats.length ? 2 : 1) > 16 ||
-				stats.emojiCount >= 5;
+				stats.length + (stats.length ? 2 : 1) >
+					BOOST_MAX_VISIBLE_LENGTH ||
+				stats.emojiCount >= BOOST_MAX_EMOJI;
 		}
 		if (submit) {
 			submit.disabled =
 				this.#boostSubmitting ||
 				this.#boostComposing ||
-				!stats.raw.trim();
+				!stats.raw.trim() ||
+				overLength ||
+				overEmojiLimit;
 		}
-		if (enforceLimit && !invalid) {
+		if (enforceLimit && !overLength && !overEmojiLimit) {
 			const error = menu.querySelector<HTMLElement>(
 				'.ldp-native-boost-error',
 			);
@@ -2363,8 +2493,9 @@ export class ReaderPostActionFeature<
 		const stats = this.#readBoostEditor(editor);
 		if (
 			!code ||
-			stats.length + (stats.length ? 2 : 1) > 16 ||
-			stats.emojiCount >= 5
+			stats.length + (stats.length ? 2 : 1) >
+				BOOST_MAX_VISIBLE_LENGTH ||
+			stats.emojiCount >= BOOST_MAX_EMOJI
 		) {
 			return;
 		}
@@ -2506,6 +2637,7 @@ export class ReaderPostActionFeature<
 			content.setAttribute('popover', 'manual');
 			content.dataset.ldpReaderTopLayer = 'portal';
 			this.#boostEmojiTopLayer = content;
+			this.#boostEmojiWheelCleanup = bindFloatingSurfaceWheel(content);
 		}
 		try {
 			if (!this.#topLayer.isOpen(content)) this.#topLayer.show(content);
@@ -2520,6 +2652,8 @@ export class ReaderPostActionFeature<
 		const content = this.#boostEmojiTopLayer;
 		if (!content) return;
 		this.#boostEmojiTopLayer = null;
+		this.#boostEmojiWheelCleanup?.();
+		this.#boostEmojiWheelCleanup = null;
 		try {
 			if (this.#topLayer.isOpen(content)) this.#topLayer.hide(content);
 		} catch (cause) {
@@ -2569,7 +2703,7 @@ export class ReaderPostActionFeature<
 		submit.disabled = true;
 		emoji.disabled = false;
 		cancel.disabled = false;
-		count.textContent = '0/16';
+		count.textContent = `0/${BOOST_MAX_VISIBLE_LENGTH}`;
 		error.textContent = '';
 		this.#boostBinding = binding;
 		this.#boostAnchor = anchor;
@@ -2734,9 +2868,21 @@ export class ReaderPostActionFeature<
 			this.#boostGeneration === generation &&
 			this.#boostMenu === menu &&
 			this.#boostBinding === binding;
-		const raw = this.#readBoostEditor(editor).raw.trim();
+		const stats = this.#readBoostEditor(editor);
+		const raw = stats.raw.trim();
 		if (!raw) {
 			error.textContent = '请输入 Boost 内容';
+			editor.focus();
+			return;
+		}
+		if (
+			stats.length > BOOST_MAX_VISIBLE_LENGTH ||
+			stats.emojiCount > BOOST_MAX_EMOJI
+		) {
+			error.textContent = stats.length > BOOST_MAX_VISIBLE_LENGTH
+				? `Boost 最多 ${BOOST_MAX_VISIBLE_LENGTH} 字`
+				: `Boost 最多 ${BOOST_MAX_EMOJI} 个表情`;
+			this.#syncBoostEditor(menu, editor, false);
 			editor.focus();
 			return;
 		}
@@ -2783,7 +2929,10 @@ export class ReaderPostActionFeature<
 				editor.contentEditable = 'true';
 				cancel.disabled = false;
 				if (succeeded) this.#closeBoost();
-				else this.#syncBoostEditor(menu, editor, true);
+				else {
+					this.#syncBoostEditor(menu, editor, false);
+					this.#placeBoostCursorAtEnd(editor);
+				}
 			}
 		}
 	}
@@ -2980,6 +3129,7 @@ export class ReaderPostActionFeature<
 		button.type = 'button';
 		button.className = 'ldp-reaction-chip';
 		button.dataset.reaction = option.id;
+		button.dataset.tooltip = '';
 		button.setAttribute('aria-label', option.label);
 		button.append(this.#reactionGraphic(option));
 		if (count !== null) {
@@ -3017,7 +3167,10 @@ export class ReaderPostActionFeature<
 		if (
 			!binding ||
 			binding.kind !== 'post' ||
-			!binding.view.slots.topicFooter.contains(select)
+			!(
+				binding.view.slots.topicFooter.contains(select) ||
+				binding.view.slots.actions.contains(select)
+			)
 		) {
 			return;
 		}
@@ -3046,11 +3199,16 @@ export class ReaderPostActionFeature<
 			!trigger.disabled
 		) {
 			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation();
 			this.#clearReactionHoverTimers(binding.slot);
+			const reaction =
+				reactionId(trigger.dataset.reaction) || 'heart';
 			this.#dispatchReaction(
 				binding,
-				reactionId(trigger.dataset.reaction) || 'heart',
+				reaction,
 			);
+			this.#focusReactionControl(binding, reaction, trigger);
 			return true;
 		}
 
@@ -3065,9 +3223,33 @@ export class ReaderPostActionFeature<
 		const id = reactionId(button.dataset.reaction);
 		if (!id) return false;
 		event.preventDefault();
+		event.stopPropagation();
+		event.stopImmediatePropagation();
 		this.#clearReactionHoverTimers(binding.slot);
 		this.#dispatchReaction(binding, id);
+		this.#focusReactionControl(binding, id, button);
 		return true;
+	}
+
+	#focusReactionControl(
+		binding: BoundReactionSurface<TPost>,
+		reaction: string,
+		preferred: HTMLButtonElement,
+	): void {
+		const preferredInCapsule =
+			preferred.isConnected &&
+			binding.slot.contains(preferred) &&
+			!preferred.closest('.ldp-reaction-picker');
+		const matching = [...binding.slot.querySelectorAll<HTMLButtonElement>(
+			'button[data-reaction]',
+		)].find((candidate) =>
+			!candidate.closest('.ldp-reaction-picker') &&
+			reactionId(candidate.dataset.reaction) === reaction);
+		const fallback = binding.slot.querySelector<HTMLButtonElement>(
+			'button[data-reaction-picker],button[data-post-like]',
+		);
+		(preferredInCapsule ? preferred : matching ?? fallback)
+			?.focus({ preventScroll: true });
 	}
 
 	#onClick(event: Event): void {
@@ -3214,7 +3396,10 @@ export class ReaderPostActionFeature<
 		if (
 			binding &&
 			topicShare &&
-			binding.view.slots.topicFooter.contains(topicShare) &&
+			(
+				binding.view.slots.topicFooter.contains(topicShare) ||
+				binding.view.slots.actions.contains(topicShare)
+			) &&
 			!topicShare.disabled
 		) {
 			event.preventDefault();
@@ -3724,8 +3909,10 @@ export class ReaderPostActionFeature<
 		const postId = Number(binding.post.id);
 		if (this.#actionPending(postId, 'reactions')) return;
 		binding.open = false;
-		const snapshots = this.#projectReaction(postId, reaction);
+		let snapshots = new Map<BoundReactionSurface<TPost>, TPost>();
 		try {
+			// 原生 toggle 依据 current_user_reaction 区分新增、切换和取消，必须先用
+			// authoritative post 建模，再投影 optimistic 状态。
 			const native = this.#models.createContext(this.#topic(), binding.post);
 			const mutation = this.#descriptors.postReaction<TPost>({
 				postId,
@@ -3734,6 +3921,7 @@ export class ReaderPostActionFeature<
 				appEvents: native.appEvents,
 				eventOwner: binding.root,
 			});
+			snapshots = this.#projectReaction(postId, reaction);
 			void this.#actions.dispatch(
 				this.#commands.reaction(postId, mutation),
 			).catch((cause: unknown) => {
@@ -3829,6 +4017,7 @@ export class ReaderPostActionFeature<
 		if (expanded && !binding.contextHydrated) {
 			binding.contextHydrated = true;
 			this.#renderActions(binding);
+			this.#renderTopicFooter(binding);
 		}
 		this.#clearReactionHoverTimers(binding.slot);
 		this.#syncReactionPickerVisibility(binding);

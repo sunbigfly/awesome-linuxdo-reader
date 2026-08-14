@@ -947,6 +947,10 @@ export class ReaderBranchOverlayController {
 	}
 
 	#subtreePostCount(parentPostNumber: PostNumber): number {
+		const cached = this.#domOwner.topology.subtreePostCountOf?.(
+			parentPostNumber,
+		);
+		if (cached !== undefined) return Math.max(1, cached);
 		const visited = new Set<PostNumber>();
 		const pending = [parentPostNumber];
 		while (pending.length) {

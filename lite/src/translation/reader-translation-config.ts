@@ -44,6 +44,7 @@ export interface ReaderTranslationProfile {
 	readonly requestsPerMinute: number;
 	/** 0 表示不限制；按输入与预期译文长度估算。 */
 	readonly tokensPerMinute: number;
+	/** @deprecated 只用于旧数据与可移植配置兼容；运行态以顶层 animation 为准。 */
 	readonly animation: ReaderTranslationAnimation;
 }
 
@@ -51,6 +52,8 @@ export interface ReaderTranslationConfig {
 	/** URL 是服务项身份；数组不设业务数量上限。 */
 	readonly profiles: readonly ReaderTranslationProfile[];
 	readonly activeBaseUrl: string;
+	/** 译文动画是全局呈现偏好，不随 URL Profile 切换。 */
+	readonly animation: ReaderTranslationAnimation;
 }
 
 export interface ReaderTranslationAccessConfig {
@@ -118,6 +121,7 @@ export function createReaderTranslationDefaultConfig(): ReaderTranslationConfig 
 	return Object.freeze({
 		profiles: Object.freeze([profile]),
 		activeBaseUrl: profile.baseUrl,
+		animation: DEFAULT_READER_TRANSLATION_ANIMATION,
 	});
 }
 
@@ -205,19 +209,31 @@ export function normalizeReaderTranslationConfig(
 			: candidate);
 		if (profile) byUrl.set(profile.baseUrl, profile);
 	}
-	const profiles = Object.freeze(byUrl.size
+	const normalizedProfiles = byUrl.size
 		? [...byUrl.values()]
-		: [...defaults.profiles]);
+		: [...defaults.profiles];
 	const requestedActive = normalizeReaderTranslationBaseUrl(
 		source?.activeBaseUrl ?? source?.baseUrl,
 	);
-	const activeBaseUrl = profiles.some((profile) =>
+	const activeBaseUrl = normalizedProfiles.some((profile) =>
 		profile.baseUrl === requestedActive)
 		? requestedActive
-		: profiles[0]!.baseUrl;
+		: normalizedProfiles[0]!.baseUrl;
+	const legacyActiveAnimation = normalizedProfiles.find((profile) =>
+		profile.baseUrl === activeBaseUrl)?.animation;
+	const animation = normalizeReaderTranslationAnimation(
+		Object.hasOwn(source ?? {}, 'animation')
+			? source?.animation
+			: legacyActiveAnimation,
+	);
+	const profiles = Object.freeze(normalizedProfiles.map((profile) =>
+		profile.animation === animation
+			? profile
+			: Object.freeze({ ...profile, animation })));
 	return Object.freeze({
 		profiles,
 		activeBaseUrl,
+		animation,
 	});
 }
 
@@ -250,10 +266,16 @@ export function validateReaderTranslationConfig(
 		profile.baseUrl === value.activeBaseUrl)) {
 		issues.push('当前翻译 URL 不在服务集合中');
 	}
+	if (normalizeReaderTranslationAnimation(value.animation) !== value.animation) {
+		issues.push('译文动画配置无效');
+	}
 	const seen = new Set<string>();
 	for (const profile of value.profiles) {
 		if (seen.has(profile.baseUrl)) issues.push('翻译 URL 不能重复');
 		seen.add(profile.baseUrl);
+		if (profile.animation !== value.animation) {
+			issues.push('译文动画必须作为全局偏好保持一致');
+		}
 		issues.push(...validateReaderTranslationProfile(profile));
 	}
 	return Object.freeze(issues);

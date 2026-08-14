@@ -21,6 +21,8 @@ export interface ReplyTreeChangeSet {
 export interface ReplyTreeRootBranch {
 	readonly postNumber: PostNumber;
 	readonly subtreePostCount: number;
+	/** 覆盖未完成时，当前根之前尚未进入 canonical topology 的楼层数。 */
+	readonly unloadedPostCountBefore?: number;
 }
 
 function assertPostNumber(value: number, field: string): void {
@@ -35,6 +37,8 @@ function sorted(values: Iterable<PostNumber>): PostNumber[] {
 	return [...values].sort((left, right) => left - right);
 }
 
+const EMPTY_POST_NUMBERS: readonly PostNumber[] = Object.freeze([]);
+
 /**
  * 楼层拓扑的唯一数据所有者。
  *
@@ -46,6 +50,16 @@ export class ReplyTreeTopology {
 	#parentByPost = new Map<PostNumber, PostNumber | null>();
 	#childrenByParent = new Map<PostNumber, Set<PostNumber>>();
 	#subtreePostCountByPost = new Map<PostNumber, number>();
+	#rootPostNumbers = new Set<PostNumber>();
+	#sortedChildrenByParent = new Map<
+		PostNumber,
+		readonly PostNumber[]
+	>();
+	#depthByPost = new Map<PostNumber, number | undefined>();
+	#rootByPost = new Map<PostNumber, PostNumber | undefined>();
+	#postNumbersCache: readonly PostNumber[] | null = null;
+	#rootsCache: readonly PostNumber[] | null = null;
+	#rootBranchesCache: readonly ReplyTreeRootBranch[] | null = null;
 	#snapshotCache: ReplyTreeSnapshot | null = null;
 
 	get revision(): number {
@@ -59,26 +73,36 @@ export class ReplyTreeTopology {
 
 	childrenOf(parentPostNumber: PostNumber): readonly PostNumber[] {
 		assertPostNumber(parentPostNumber, 'parentPostNumber');
-		return sorted(this.#childrenByParent.get(parentPostNumber) ?? []);
+		const cached = this.#sortedChildrenByParent.get(parentPostNumber);
+		if (cached) return cached;
+		const children = this.#childrenByParent.get(parentPostNumber);
+		if (!children?.size) return EMPTY_POST_NUMBERS;
+		const result = Object.freeze(sorted(children));
+		this.#sortedChildrenByParent.set(parentPostNumber, result);
+		return result;
+	}
+
+	postNumbers(): readonly PostNumber[] {
+		if (this.#postNumbersCache) return this.#postNumbersCache;
+		this.#postNumbersCache = Object.freeze(sorted(this.#parentByPost.keys()));
+		return this.#postNumbersCache;
 	}
 
 	roots(): readonly PostNumber[] {
-		return Object.freeze(
-			sorted(
-				[...this.#parentByPost]
-					.filter(([, parentPostNumber]) => parentPostNumber === null)
-					.map(([postNumber]) => postNumber),
-			),
-		);
+		if (this.#rootsCache) return this.#rootsCache;
+		this.#rootsCache = Object.freeze(sorted(this.#rootPostNumbers));
+		return this.#rootsCache;
 	}
 
 	rootBranches(): readonly ReplyTreeRootBranch[] {
-		return Object.freeze(
+		if (this.#rootBranchesCache) return this.#rootBranchesCache;
+		this.#rootBranchesCache = Object.freeze(
 			this.roots().map((postNumber) => Object.freeze({
 				postNumber,
 				subtreePostCount: this.#subtreePostCountByPost.get(postNumber) ?? 1,
 			})),
 		);
+		return this.#rootBranchesCache;
 	}
 
 	clone(): ReplyTreeTopology {
@@ -94,6 +118,14 @@ export class ReplyTreeTopology {
 		clone.#subtreePostCountByPost = new Map(
 			this.#subtreePostCountByPost,
 		);
+		clone.#rootPostNumbers = new Set(this.#rootPostNumbers);
+		clone.#sortedChildrenByParent = new Map(this.#sortedChildrenByParent);
+		clone.#depthByPost = new Map(this.#depthByPost);
+		clone.#rootByPost = new Map(this.#rootByPost);
+		clone.#postNumbersCache = this.#postNumbersCache;
+		clone.#rootsCache = this.#rootsCache;
+		clone.#rootBranchesCache = this.#rootBranchesCache;
+		clone.#snapshotCache = this.#snapshotCache;
 		return clone;
 	}
 
@@ -110,27 +142,15 @@ export class ReplyTreeTopology {
 	depthOf(postNumber: PostNumber): number | undefined {
 		assertPostNumber(postNumber, 'postNumber');
 		if (!this.#parentByPost.has(postNumber)) return undefined;
-		let depth = 0;
-		let current = this.#parentByPost.get(postNumber);
-		while (current !== null) {
-			if (current === undefined || !this.#parentByPost.has(current)) return undefined;
-			depth += 1;
-			current = this.#parentByPost.get(current);
-		}
-		return depth;
+		this.#resolveAncestry(postNumber);
+		return this.#depthByPost.get(postNumber);
 	}
 
 	rootOf(postNumber: PostNumber): PostNumber | undefined {
 		assertPostNumber(postNumber, 'postNumber');
 		if (!this.#parentByPost.has(postNumber)) return undefined;
-		let current = postNumber;
-		let parent = this.#parentByPost.get(current);
-		while (parent !== null) {
-			if (parent === undefined || !this.#parentByPost.has(parent)) return undefined;
-			current = parent;
-			parent = this.#parentByPost.get(current);
-		}
-		return current;
+		this.#resolveAncestry(postNumber);
+		return this.#rootByPost.get(postNumber);
 	}
 
 	commit(relations: readonly ReplyRelation[]): ReplyTreeChangeSet {
@@ -142,7 +162,7 @@ export class ReplyTreeTopology {
 			});
 		}
 
-		const nextParents = new Map(this.#parentByPost);
+		const updates = new Map<PostNumber, PostNumber | null>();
 		const touched = new Set<PostNumber>();
 		for (const relation of relations) {
 			assertPostNumber(relation.postNumber, 'postNumber');
@@ -152,17 +172,17 @@ export class ReplyTreeTopology {
 					throw new Error(`楼层 #${relation.postNumber} 不能回复自身`);
 				}
 			}
-			nextParents.set(relation.postNumber, relation.parentPostNumber);
+			updates.set(relation.postNumber, relation.parentPostNumber);
 			touched.add(relation.postNumber);
 		}
 
-		this.#assertAcyclic(nextParents, touched);
+		this.#assertAcyclicWithUpdates(updates, touched);
 
 		const changed = new Set<PostNumber>();
 		const detached = new Set<PostNumber>();
 		for (const postNumber of touched) {
 			const previousParent = this.#parentByPost.get(postNumber);
-			const nextParent = nextParents.get(postNumber);
+			const nextParent = updates.get(postNumber);
 			if (previousParent === nextParent && this.#parentByPost.has(postNumber)) continue;
 			changed.add(postNumber);
 			if (previousParent !== undefined && previousParent !== null) detached.add(postNumber);
@@ -176,13 +196,76 @@ export class ReplyTreeTopology {
 			});
 		}
 
-		this.#parentByPost = nextParents;
-		this.#childrenByParent = this.#buildChildren(nextParents);
-		this.#subtreePostCountByPost = this.#buildSubtreePostCounts(
-			nextParents,
-			this.#childrenByParent,
-		);
+		let membershipChanged = false;
+		let rootsChanged = false;
+		const addedPostCount = [...changed].filter(
+			(postNumber) => !this.#parentByPost.has(postNumber),
+		).length;
+		const projectedSize = this.#parentByPost.size + addedPostCount;
+		const rebuildAll = changed.size > 64 &&
+			changed.size * 4 >= projectedSize;
+		if (rebuildAll) {
+			const nextParents = this.#parentByPost.size === 0
+				? updates
+				: new Map(this.#parentByPost);
+			if (this.#parentByPost.size === 0) {
+				membershipChanged = true;
+			} else {
+				for (const postNumber of changed) {
+					if (!nextParents.has(postNumber)) membershipChanged = true;
+					nextParents.set(postNumber, updates.get(postNumber)!);
+				}
+			}
+			this.#parentByPost = nextParents;
+			this.#childrenByParent = this.#buildChildren(nextParents);
+			this.#subtreePostCountByPost = this.#buildSubtreePostCounts(
+				nextParents,
+				this.#childrenByParent,
+			);
+			this.#rootPostNumbers = new Set();
+			for (const [postNumber, parentPostNumber] of nextParents) {
+				if (parentPostNumber === null) {
+					this.#rootPostNumbers.add(postNumber);
+				}
+			}
+			this.#sortedChildrenByParent.clear();
+			rootsChanged = true;
+		} else {
+			const affectedCounts = new Set<PostNumber>();
+			for (const postNumber of changed) {
+				this.#addKnownAncestorChain(postNumber, affectedCounts);
+			}
+			for (const postNumber of changed) {
+				const hadPost = this.#parentByPost.has(postNumber);
+				const previousParent = this.#parentByPost.get(postNumber);
+				const nextParent = updates.get(postNumber)!;
+				if (!hadPost) membershipChanged = true;
+				if (hadPost && previousParent === null) {
+					this.#rootPostNumbers.delete(postNumber);
+					rootsChanged = true;
+				}
+				if (previousParent !== undefined && previousParent !== null) {
+					this.#detachChild(previousParent, postNumber);
+				}
+				this.#parentByPost.set(postNumber, nextParent);
+				if (nextParent === null) {
+					this.#rootPostNumbers.add(postNumber);
+					rootsChanged = true;
+				} else {
+					this.#attachChild(nextParent, postNumber);
+				}
+			}
+			for (const postNumber of changed) {
+				this.#addKnownAncestorChain(postNumber, affectedCounts);
+			}
+			this.#recomputeSubtreePostCounts(affectedCounts);
+		}
 		this.#revision += 1;
+		this.#depthByPost = new Map();
+		this.#rootByPost = new Map();
+		if (membershipChanged) this.#postNumbersCache = null;
+		if (rootsChanged) this.#rootsCache = null;
+		this.#rootBranchesCache = null;
 		this.#snapshotCache = null;
 		return Object.freeze({
 			revision: this.#revision,
@@ -208,19 +291,33 @@ export class ReplyTreeTopology {
 		}
 		const previousParent = this.#parentByPost.get(postNumber) ?? null;
 		const directChildren = this.childrenOf(postNumber);
-		const nextParents = new Map(this.#parentByPost);
-		nextParents.delete(postNumber);
-		for (const childPostNumber of directChildren) {
-			nextParents.set(childPostNumber, previousParent);
+		const affectedCounts = new Set<PostNumber>();
+		this.#addKnownAncestorChain(postNumber, affectedCounts);
+		if (previousParent === null) {
+			this.#rootPostNumbers.delete(postNumber);
+		} else {
+			this.#detachChild(previousParent, postNumber);
 		}
-		this.#assertAcyclic(nextParents, new Set(directChildren));
-		this.#parentByPost = nextParents;
-		this.#childrenByParent = this.#buildChildren(nextParents);
-		this.#subtreePostCountByPost = this.#buildSubtreePostCounts(
-			nextParents,
-			this.#childrenByParent,
-		);
+		this.#parentByPost.delete(postNumber);
+		this.#childrenByParent.delete(postNumber);
+		this.#sortedChildrenByParent.delete(postNumber);
+		this.#subtreePostCountByPost.delete(postNumber);
+		for (const childPostNumber of directChildren) {
+			this.#parentByPost.set(childPostNumber, previousParent);
+			if (previousParent === null) {
+				this.#rootPostNumbers.add(childPostNumber);
+			} else {
+				this.#attachChild(previousParent, childPostNumber);
+			}
+			this.#addKnownAncestorChain(childPostNumber, affectedCounts);
+		}
+		this.#recomputeSubtreePostCounts(affectedCounts);
 		this.#revision += 1;
+		this.#depthByPost = new Map();
+		this.#rootByPost = new Map();
+		this.#postNumbersCache = null;
+		this.#rootsCache = null;
+		this.#rootBranchesCache = null;
 		this.#snapshotCache = null;
 		return Object.freeze({
 			revision: this.#revision,
@@ -264,7 +361,18 @@ export class ReplyTreeTopology {
 			nextParents,
 			this.#childrenByParent,
 		);
+		this.#rootPostNumbers = new Set(
+			[...nextParents]
+				.filter(([, parentPostNumber]) => parentPostNumber === null)
+				.map(([postNumber]) => postNumber),
+		);
 		this.#revision = Math.max(this.#revision + 1, snapshot.revision);
+		this.#sortedChildrenByParent.clear();
+		this.#depthByPost = new Map();
+		this.#rootByPost = new Map();
+		this.#postNumbersCache = null;
+		this.#rootsCache = null;
+		this.#rootBranchesCache = null;
 		this.#snapshotCache = null;
 		return Object.freeze({
 			revision: this.#revision,
@@ -275,7 +383,7 @@ export class ReplyTreeTopology {
 
 	snapshot(): ReplyTreeSnapshot {
 		if (this.#snapshotCache) return this.#snapshotCache;
-		const relations = sorted(this.#parentByPost.keys()).map((postNumber) =>
+		const relations = this.postNumbers().map((postNumber) =>
 			Object.freeze({
 				postNumber,
 				parentPostNumber: this.#parentByPost.get(postNumber) ?? null,
@@ -286,6 +394,128 @@ export class ReplyTreeTopology {
 			relations: Object.freeze(relations),
 		});
 		return this.#snapshotCache;
+	}
+
+	#resolveAncestry(postNumber: PostNumber): void {
+		if (this.#depthByPost.has(postNumber)) return;
+		const path: PostNumber[] = [];
+		let current = postNumber;
+		let depth: number | undefined;
+		let rootPostNumber: PostNumber | undefined;
+		while (true) {
+			if (this.#depthByPost.has(current)) {
+				depth = this.#depthByPost.get(current);
+				rootPostNumber = this.#rootByPost.get(current);
+				break;
+			}
+			if (!this.#parentByPost.has(current)) {
+				depth = undefined;
+				rootPostNumber = undefined;
+				break;
+			}
+			const parentPostNumber = this.#parentByPost.get(current);
+			if (parentPostNumber === null) {
+				depth = 0;
+				rootPostNumber = current;
+				this.#depthByPost.set(current, depth);
+				this.#rootByPost.set(current, rootPostNumber);
+				break;
+			}
+			path.push(current);
+			current = parentPostNumber!;
+		}
+		while (path.length) {
+			const descendantPostNumber = path.pop()!;
+			if (depth !== undefined) depth += 1;
+			this.#depthByPost.set(descendantPostNumber, depth);
+			this.#rootByPost.set(descendantPostNumber, rootPostNumber);
+		}
+	}
+
+	#attachChild(parentPostNumber: PostNumber, postNumber: PostNumber): void {
+		const children = this.#childrenByParent.get(parentPostNumber) ??
+			new Set<PostNumber>();
+		children.add(postNumber);
+		this.#childrenByParent.set(parentPostNumber, children);
+		this.#sortedChildrenByParent.delete(parentPostNumber);
+	}
+
+	#detachChild(parentPostNumber: PostNumber, postNumber: PostNumber): void {
+		const children = this.#childrenByParent.get(parentPostNumber);
+		if (!children) return;
+		children.delete(postNumber);
+		if (!children.size) this.#childrenByParent.delete(parentPostNumber);
+		this.#sortedChildrenByParent.delete(parentPostNumber);
+	}
+
+	#addKnownAncestorChain(
+		postNumber: PostNumber,
+		target: Set<PostNumber>,
+	): void {
+		const seen = new Set<PostNumber>();
+		let current: PostNumber | null | undefined = postNumber;
+		while (
+			current !== null &&
+			current !== undefined &&
+			this.#parentByPost.has(current) &&
+			!seen.has(current)
+		) {
+			seen.add(current);
+			target.add(current);
+			current = this.#parentByPost.get(current);
+		}
+	}
+
+	#knownDepth(
+		postNumber: PostNumber,
+		depthByPost: Map<PostNumber, number>,
+	): number {
+		const cached = depthByPost.get(postNumber);
+		if (cached !== undefined) return cached;
+		const path: PostNumber[] = [];
+		let current = postNumber;
+		let depth = -1;
+		while (true) {
+			const currentDepth = depthByPost.get(current);
+			if (currentDepth !== undefined) {
+				depth = currentDepth;
+				break;
+			}
+			if (!this.#parentByPost.has(current)) break;
+			path.push(current);
+			const parentPostNumber = this.#parentByPost.get(current);
+			if (
+				parentPostNumber === null ||
+				parentPostNumber === undefined ||
+				!this.#parentByPost.has(parentPostNumber)
+			) break;
+			current = parentPostNumber;
+		}
+		while (path.length) {
+			depth += 1;
+			depthByPost.set(path.pop()!, depth);
+		}
+		return depthByPost.get(postNumber) ?? 0;
+	}
+
+	#recomputeSubtreePostCounts(affected: ReadonlySet<PostNumber>): void {
+		const depthByPost = new Map<PostNumber, number>();
+		const postNumbers = [...affected]
+			.filter((postNumber) => this.#parentByPost.has(postNumber))
+			.sort((left, right) =>
+				this.#knownDepth(right, depthByPost) -
+					this.#knownDepth(left, depthByPost) ||
+				right - left,
+			);
+		for (const postNumber of postNumbers) {
+			let subtreePostCount = 1;
+			for (const childPostNumber of
+				this.#childrenByParent.get(postNumber) ?? []) {
+				subtreePostCount +=
+					this.#subtreePostCountByPost.get(childPostNumber) ?? 1;
+			}
+			this.#subtreePostCountByPost.set(postNumber, subtreePostCount);
+		}
 	}
 
 	#buildChildren(
@@ -335,16 +565,44 @@ export class ReplyTreeTopology {
 		parents: ReadonlyMap<PostNumber, PostNumber | null>,
 		starts: ReadonlySet<PostNumber>,
 	): void {
+		this.#assertAcyclicFrom(
+			(postNumber) => parents.get(postNumber),
+			starts,
+		);
+	}
+
+	#assertAcyclicWithUpdates(
+		updates: ReadonlyMap<PostNumber, PostNumber | null>,
+		starts: ReadonlySet<PostNumber>,
+	): void {
+		this.#assertAcyclicFrom(
+			(postNumber) => updates.has(postNumber)
+				? updates.get(postNumber)
+				: this.#parentByPost.get(postNumber),
+			starts,
+		);
+	}
+
+	#assertAcyclicFrom(
+		parentOf: (postNumber: PostNumber) => PostNumber | null | undefined,
+		starts: ReadonlySet<PostNumber>,
+	): void {
+		const complete = new Set<PostNumber>();
 		for (const start of starts) {
+			if (complete.has(start)) continue;
 			const path = new Set<PostNumber>();
+			const traversed: PostNumber[] = [];
 			let current: PostNumber | null | undefined = start;
 			while (current !== null && current !== undefined) {
+				if (complete.has(current)) break;
 				if (path.has(current)) {
 					throw new Error(`楼层关系存在环，经过 #${current}`);
 				}
 				path.add(current);
-				current = parents.get(current);
+				traversed.push(current);
+				current = parentOf(current);
 			}
+			for (const postNumber of traversed) complete.add(postNumber);
 		}
 	}
 }

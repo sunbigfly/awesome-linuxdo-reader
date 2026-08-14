@@ -182,6 +182,7 @@ const sourceArtifact = Object.freeze({
 	postCount: 7,
 	expectedPostCount: 7,
 	complete: true,
+	archiveStatus: 404,
 	createdAt: 10_000,
 	finishedAt: 20_000,
 	localDownloadRequestedAt: 21_000,
@@ -209,14 +210,16 @@ assert(
 	upload.uploaded === 1 &&
 	upload.remoteCreated &&
 	!mainEntry &&
+	!server.requests.some((request) => request.url.endsWith('/sync.json')) &&
 	Boolean(manifestEntry) &&
 	Boolean(htmlEntry) &&
 	htmlEntry![1].text === largeHtml &&
 	htmlEntry![1].contentType === 'text/html; charset=utf-8' &&
 	manifestEntry![1].text.length < 20_000 &&
 	!manifestEntry![1].text.includes('完整离线正文') &&
-	manifestEntry![1].text.includes('webdav-offline-topic-314.html'),
-	'离线 Topic 必须使用轻量清单加独立完整 HTML；仅选该类别时不得创建空 sync.json 或触发 2 MiB 主文件上限',
+	manifestEntry![1].text.includes('webdav-offline-topic-314.html') &&
+	manifestEntry![1].text.includes('"archiveStatus":404'),
+	'离线 Topic 必须使用轻量清单加独立完整 HTML；仅选该类别时不得读取或创建 sync.json，也不能受主文件格式或 2 MiB 上限阻断',
 );
 assert(
 	!server.requests.some((request) =>
@@ -236,8 +239,9 @@ assert(
 	restored.selectionMode === 'custom' &&
 	restored.selectionExpression === '1,3,8-12' &&
 	restored.filename === sourceArtifact.filename &&
+	restored.archiveStatus === 404 &&
 	restored.localDownloadRequestedAt === 21_000,
-	'另一设备必须把清单元数据与独立 HTML 水合回同一个本地离线 Artifact 结构体',
+	'另一设备必须把清单元数据、存档状态与独立 HTML 水合回同一个本地离线 Artifact 结构体',
 );
 
 const localOnlyChange = Object.freeze({
@@ -280,4 +284,34 @@ assert(
 	JSON.parse(server.files.get(manifestEntry![0])!.text)
 		.records['314'].deleted === true,
 	'删除离线 Topic 必须通过清单墓碑传播，并在另一设备清理同一 Artifact 记录',
+);
+
+const activeManifest = JSON.parse(manifestEntry![1].text) as {
+	records: Record<string, unknown>;
+};
+const currentManifest = server.files.get(manifestEntry![0])!;
+server.files.set(manifestEntry![0], Object.freeze({
+	...currentManifest,
+	version: currentManifest.version + 1,
+	text: JSON.stringify({
+		...activeManifest,
+		records: { '315': activeManifest.records['314'] },
+	}),
+}));
+const mismatchedStore = new MemoryArtifactStore();
+const mismatchedCoordinator = coordinator(
+	client,
+	await repository('offline-device-corrupt-manifest'),
+	mismatchedStore,
+);
+let identityFailure = '';
+try {
+	await mismatchedCoordinator.syncNow();
+} catch (cause) {
+	identityFailure = cause instanceof Error ? cause.message : '';
+}
+assert(
+	identityFailure.includes('清单记录身份不一致') &&
+	mismatchedStore.records.size === 0,
+	'离线清单键与内部 Topic 身份不一致时必须拒绝整轮应用，不能把正文写入错误 Topic',
 );

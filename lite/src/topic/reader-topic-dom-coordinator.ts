@@ -65,6 +65,9 @@ const DIRECT_REPLY_PREFETCH_MAX_PAGES = 5;
  */
 const MATERIALIZATION_STEP_SCREENS = 0.5;
 const HIDDEN_REPLY_MARKER_BLOCK_SIZE = 18;
+const PROJECTION_HYDRATION_MIN_IDLE_MS = 120;
+const PROJECTION_HYDRATION_BATCH_DELAY_MS = 16;
+const PROJECTION_HYDRATION_BATCH_SIZE = 1;
 
 function isAbortFailure(error: unknown): boolean {
 	return (error instanceof DOMException && error.name === 'AbortError') ||
@@ -77,7 +80,28 @@ export interface ReaderTopicSessionDomPort<TTopic, TPost extends DiscourseTopicP
 	init(): Promise<TTopic>;
 	cachedPosts(): readonly TPost[];
 	postByNumber(postNumber: number): TPost | undefined;
+	readonly postStreamRevision?: number;
+	postStreamGapCount?(
+		previousPostNumber: number,
+		postNumber: number,
+	): number | undefined;
+	postStreamCoverage?(): Readonly<{
+		readonly expectedPostCount: number;
+		readonly streamPostCount: number;
+	}>;
 	next(options?: TopicBatchOptions): Promise<TopicBatchResult<TPost>>;
+	loadBeforePost?(
+		postNumber: number,
+		options?: ReaderTopicRangeHydrationOptions,
+	): Promise<readonly TPost[]>;
+	loadAfterPost?(
+		postNumber: number,
+		options?: ReaderTopicRangeHydrationOptions,
+	): Promise<readonly TPost[]>;
+	loadAroundPost?(
+		postNumber: number,
+		options?: ReaderTopicRangeHydrationOptions,
+	): Promise<readonly TPost[]>;
 	prefetchAhead?(
 		batchCount: number,
 		options?: TopicAheadPrefetchOptions,
@@ -88,6 +112,16 @@ export interface ReaderTopicSessionDomPort<TTopic, TPost extends DiscourseTopicP
 	): Promise<TopicDirectRepliesResult<TPost>>;
 }
 
+export interface ReaderTopicRangeHydrationRequest {
+	readonly direction: 'before' | 'after' | 'around';
+	readonly postNumber: PostNumber;
+}
+
+export type ReaderTopicRangeHydrationOptions = Readonly<Pick<
+	TopicBatchOptions,
+	'background' | 'priority' | 'beforeNetwork' | 'maxAttempts'
+>>;
+
 export type ReaderTopicRevealAlignment = 'start' | 'center' | 'nearest';
 
 export interface ReaderTopicRevealOptions {
@@ -96,6 +130,7 @@ export interface ReaderTopicRevealOptions {
 	readonly viewportOffset?: number;
 	readonly focus?: boolean;
 	readonly highlight?: boolean;
+	readonly revealAsFloor?: boolean;
 	readonly degradedRootPostNumber?: PostNumber;
 }
 
@@ -110,6 +145,19 @@ export interface ReaderTopicViewportAnchor {
 	readonly postNumber: PostNumber;
 	readonly postOffset: number;
 	readonly scrollTop: number;
+	readonly scrollRange?: number;
+	readonly scrollRatio?: number;
+}
+
+/**
+ * 一次会改变已挂载内容高度的 DOM 提交所持有的短生命周期视口锚点。
+ *
+ * capture/restore 的物理几何只属于 scroll owner；协调器仅负责把多个同步 Session
+ * 提交合并到下一次虚拟帧，并保证销毁或异常路径能够释放事务。
+ */
+export interface ReaderTopicViewportMutation {
+	restore(): void;
+	cancel(): void;
 }
 
 export interface ReaderTopicVisibleRootChange {
@@ -121,15 +169,23 @@ export interface ReaderTopicVisibleRootChange {
 export interface ReaderTopicScrollPort {
 	readWindowInput(): VirtualWindowInput;
 	lastUserScrollAt?(): number;
+	lastUserScrollDirection?(): -1 | 0 | 1;
 	applyScrollCompensation(delta: number): void;
 	listenScroll(listener: () => void): Cleanup;
 	listenUserScrollIntent?(listener: () => void): Cleanup;
+	listenDirectUserScrollIntent?(listener: () => void): Cleanup;
 	writeScrollOffset(offset: number): void;
+	readScrollRange?(): number;
 	alignPost(element: HTMLElement, options: ReaderTopicRevealOptions): void;
 	highlightPost?(element: HTMLElement): void;
 	readVisibleViewportAnchor?(
 		elements: readonly HTMLElement[],
 	): ReaderTopicViewportAnchor | null;
+	beginViewportMutation?(
+		elements: readonly HTMLElement[],
+	): ReaderTopicViewportMutation | null;
+	withProgrammaticScrollTransaction?(commit: () => void): void;
+	notifyVirtualWindowCommit?(): void;
 }
 
 export interface ReaderTopicDirectReplyPrefetchScheduler {
@@ -206,6 +262,7 @@ export class ReaderTopicDomCoordinator<
 	readonly #onError: (error: unknown) => void;
 	readonly #branchFrames: FrameSchedulerPort;
 	readonly #directReplyPrefetchScheduler: ReaderTopicDirectReplyPrefetchScheduler;
+	readonly #projectionHydrationScheduler: ReaderTopicProjectionHydrationScheduler;
 	readonly #readDirectReplyPrefetchScreens: () => number;
 	readonly #readDirectReplyPrefetchIdleMs: () => number;
 	readonly #readDirectReplyPrefetchConcurrency: () => number;
@@ -235,6 +292,8 @@ export class ReaderTopicDomCoordinator<
 		replyTree?: number;
 	}>();
 	readonly #pendingOwnSizePostNumbers = new Set<PostNumber>();
+	readonly #activeBranchPostNumbers = new Set<PostNumber>();
+	readonly #projectionHydrationFailedPostNumbers = new Set<PostNumber>();
 	#rootVirtualInsets: ReadonlyMap<PostNumber, Readonly<{
 		readonly beforeSize: number;
 		readonly afterSize: number;
@@ -242,6 +301,7 @@ export class ReaderTopicDomCoordinator<
 	#mountedPostNumbers: ReadonlySet<PostNumber> = new Set();
 	#activeContentPostNumbers: ReadonlySet<PostNumber> = new Set();
 	#nextContentPostNumbers: ReadonlySet<PostNumber> = new Set();
+	#desiredContentPostNumbers: ReadonlySet<PostNumber> = new Set();
 	#directReplyPrefetchCandidatePostNumbers: ReadonlySet<PostNumber> = new Set();
 	#directReplyPrefetchOrderedCandidates: readonly PostNumber[] = Object.freeze([]);
 	#directReplyVisiblePostNumbers: ReadonlySet<PostNumber> = new Set();
@@ -249,19 +309,25 @@ export class ReaderTopicDomCoordinator<
 	#directReplyPrefetchCandidateKey = '';
 	#branchPaintHandle: number | null = null;
 	#branchPaintGeneration = 0;
+	#canonicalFreezeEpoch = 0;
 	#pendingBranchCollapseAnchor: Readonly<{
 		postNumber: PostNumber;
 		viewportOffset: number;
 	}> | null = null;
 	#directReplyPrefetchHandle: unknown = null;
+	#projectionHydrationHandle: unknown = null;
+	#projectionHydrationPostNumbers: readonly PostNumber[] = Object.freeze([]);
 	#retainedViewLimit = 0;
 	#lastVisibleRootChangeKey = '';
+	#lastPostStreamRevision: number;
+	#pendingViewportMutation: ReaderTopicViewportMutation | null = null;
 	#destroyed = false;
 
 	constructor(options: ReaderTopicDomCoordinatorOptions<TTopic, TPost>) {
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		this.#session = options.session;
 		this.#scroll = options.scroll;
+		this.#lastPostStreamRevision = options.session.postStreamRevision ?? 0;
 		this.#onError = options.onError ?? (() => {});
 		this.presentationChanges =
 			options.presentationChanges ?? new Signal<TopicSessionCommit>();
@@ -281,6 +347,14 @@ export class ReaderTopicDomCoordinator<
 		});
 		this.#directReplyPrefetchScheduler =
 			options.directReplyPrefetchScheduler ?? Object.freeze({
+				schedule: (callback: () => void, delayMs: number) =>
+					setTimeout(callback, delayMs),
+				cancel: (handle: unknown) =>
+					clearTimeout(handle as ReturnType<typeof setTimeout>),
+			});
+		this.#projectionHydrationScheduler =
+			options.projectionHydrationScheduler ??
+			Object.freeze({
 				schedule: (callback: () => void, delayMs: number) =>
 					setTimeout(callback, delayMs),
 				cancel: (handle: unknown) =>
@@ -317,8 +391,29 @@ export class ReaderTopicDomCoordinator<
 				options.replies.topology,
 				options.replyTreePreferences?.read(),
 				{
-					canonicalCoverageComplete: () =>
-						options.replies.coverage().complete,
+					canonicalCoverageComplete: () => {
+						const replyCoverage = options.replies.coverage();
+						if (!replyCoverage.complete) return false;
+						const topicExpectedPostCount =
+							options.session.postStreamCoverage?.().expectedPostCount;
+						/*
+						 * Topic 快照与其内嵌回复树会并发恢复。旧树可能带着较小的
+						 * expectedPostCount，短暂满足自己的 complete；只有它也覆盖
+						 * 当前 Topic 权威计数时，才允许把历史 gap 标记为可信前缀。
+						 * 否则一次尾段补窗就会把数千个未驻留楼层瞬间折叠掉。
+						 */
+						return topicExpectedPostCount === undefined ||
+							replyCoverage.expectedPostCount >= topicExpectedPostCount;
+					},
+					canonicalPostStreamRevision: () =>
+						options.session.postStreamRevision ?? 0,
+					canonicalPostStreamGapCount: (
+						postNumber,
+						previousRootPostNumber,
+					) => options.session.postStreamGapCount?.(
+						previousRootPostNumber,
+						postNumber,
+					),
 				},
 			);
 		this.domOwner = new ReplyTreeDomOwner(
@@ -352,6 +447,27 @@ export class ReaderTopicDomCoordinator<
 				prepareRoots: (_postNumbers, input, window) =>
 					this.#prepareRootViews(input, window),
 				roots: () => this.replyTreePresentation.roots(),
+				resolveGapPlaceholder: (window, input) => {
+					if (
+						window.unloadedGapTargetPostNumber !== undefined &&
+						window.unloadedGapSide !== undefined
+					) {
+						return Object.freeze({
+							side: window.unloadedGapSide,
+							targetPostNumber: window.unloadedGapTargetPostNumber,
+						});
+					}
+					const targetPostNumber = this.visibleDataGapPostNumber();
+					if (targetPostNumber === undefined) return null;
+					const targetOffset = this.#treeViewport.offsetOf(targetPostNumber);
+					return Object.freeze({
+						side: targetOffset !== undefined &&
+							targetOffset > input.scrollOffset + input.viewportSize / 2
+							? ('after' as const)
+							: ('before' as const),
+						targetPostNumber,
+					});
+				},
 			},
 		);
 		this.frame = new VirtualStreamFrameController(this.domController, {
@@ -398,7 +514,15 @@ export class ReaderTopicDomCoordinator<
 				this.#syncDirectReplyPrefetchCandidates();
 				this.#releaseParkedViews(commit.tree.parked);
 				if (projectionChanged) this.#scheduleBranchPaint();
+				/*
+				 * 楼层正文映射提交会重算巨大 gap；虚拟窗口仍可能保留提交前的
+				 * 首项。时间轴必须优先读取 scroll owner 已确认的物理锚点，不能
+				 * 在视野没有移动时把楼层号跳到另一段。
+				 */
 				const visiblePostNumber =
+					this.#scroll.readVisibleViewportAnchor?.(
+						this.#visiblePostElements(),
+					)?.postNumber ??
 					this.#treeViewport.visiblePostNumbers[0] ??
 					commit.window.visiblePostNumbers[0];
 				const visibleRootPostNumber = visiblePostNumber === undefined
@@ -419,6 +543,8 @@ export class ReaderTopicDomCoordinator<
 						}
 					}
 				}
+				this.#restorePendingViewportMutation();
+				this.#scroll.notifyVirtualWindowCommit?.();
 			},
 			...(options.observerFactory
 				? { observerFactory: options.observerFactory }
@@ -527,7 +653,12 @@ export class ReaderTopicDomCoordinator<
 		this.scope.add(options.scroll.listenScroll(() => {
 			this.frame.notifyScroll();
 		}));
+		this.scope.add(options.scroll.listenUserScrollIntent?.(() => {
+			this.#freezeCanonicalUntilScrollIdle();
+		}) ?? (() => {}));
 		this.scope.add(() => {
+			this.#cancelProjectionHydration();
+			this.#projectionHydrationFailedPostNumbers.clear();
 			if (this.#directReplyPrefetchHandle !== null) {
 				this.#directReplyPrefetchScheduler.cancel(
 					this.#directReplyPrefetchHandle,
@@ -555,12 +686,14 @@ export class ReaderTopicDomCoordinator<
 				const root = this.domOwner.view(postNumber)?.slots.root;
 				if (root) this.#deactivateNodeContent(root, postNumber);
 			}
-			for (const postNumber of this.#rootObservers.keys()) {
+			for (const postNumber of this.#activeBranchPostNumbers) {
 				const root = this.domOwner.view(postNumber)?.slots.root;
 				if (root) this.#deactivateBranch(root, postNumber);
 			}
+			this.#activeBranchPostNumbers.clear();
 			this.#activeContentPostNumbers = new Set();
 			this.#nextContentPostNumbers = new Set();
+			this.#desiredContentPostNumbers = new Set();
 			if (this.#branchPaintHandle !== null) {
 				this.#branchFrames.cancel(this.#branchPaintHandle);
 			}
@@ -570,6 +703,7 @@ export class ReaderTopicDomCoordinator<
 			);
 			this.visibleRootChanges.clear();
 			this.windowChanges.clear();
+			this.#cancelPendingViewportMutation();
 			if (this.#ownsPresentationChanges) this.presentationChanges.clear();
 			for (const cleanup of this.#rootObservers.values()) cleanup();
 			this.#rootObservers.clear();
@@ -602,6 +736,73 @@ export class ReaderTopicDomCoordinator<
 		this.#assertActive();
 		this.frame.notifyScroll();
 		return result;
+	}
+
+	async hydrateUnloadedRange(
+		request: ReaderTopicRangeHydrationRequest,
+		options: ReaderTopicRangeHydrationOptions = {},
+	): Promise<number> {
+		this.#assertActive();
+		let postNumber: PostNumber = discoursePostNumber(request.postNumber);
+		/*
+		 * 滚动手势开始时会冻结树投影。上一批可能已经把 gap 中的楼层确认成
+		 * 别人的嵌套树；先采用最新关系并重新读取当前窗口，旧计划若已消失就
+		 * 直接收口。around 的楼层是本次用户滚动令牌已经选定的目标；投影变化
+		 * 只能证明它已不再缺失，不能悄悄换成新 scrollTop 下的另一个楼层。
+		 */
+		if (this.replyTreePresentation.canonicalFrozen) {
+			this.#adoptLatestCanonicalProjection();
+			const window = this.frame.lastCommit?.window;
+			if (request.direction === 'around') {
+				const stillVisibleDataGap =
+					this.visibleDataGapPostNumber() === postNumber;
+				if (
+					!stillVisibleDataGap &&
+					window?.unloadedGapTargetPostNumber === undefined
+				) return 0;
+			} else if (request.direction === 'before') {
+				if (window?.hasUnloadedGapBefore !== true) return 0;
+				postNumber = window.unloadedGapBeforeAnchorPostNumber ??
+					window.segmentStartPostNumber ?? postNumber;
+			} else {
+				if (window?.hasUnloadedGapAfter !== true) return 0;
+				postNumber = window.unloadedGapAfterAnchorPostNumber ??
+					window.segmentEndPostNumber ?? postNumber;
+			}
+		}
+		/*
+		 * around 的楼层号可能来自虚拟 gap 估算，也可能是 canonical 已知但正文
+		 * 尚未缓存的可见楼层。只有正文已经存在时它才是旧投影；仅有拓扑关系仍
+		 * 必须定向补正文，否则会留下空壳并诱发全局 cursor 扫描。
+		 */
+		if (
+			request.direction === 'around' &&
+			this.#session.postByNumber(postNumber) !== undefined
+		) {
+			this.refreshRootProjection();
+			return 0;
+		}
+		let posts: readonly TPost[];
+		if (request.direction === 'before') {
+			posts = this.#session.loadBeforePost
+				? await this.#session.loadBeforePost(postNumber, options)
+				: Object.freeze([]);
+		} else if (request.direction === 'after') {
+			posts = this.#session.loadAfterPost
+				? await this.#session.loadAfterPost(postNumber, options)
+				: Object.freeze([]);
+		} else {
+			posts = this.#session.loadAroundPost
+				? await this.#session.loadAroundPost(postNumber, options)
+				: Object.freeze([]);
+		}
+		this.#assertActive();
+		/*
+		 * 定向水合的返回值就是本次滚动要解决的树分类。这里不能继续等下一次
+		 * scroll idle，否则已加载的嵌套楼层仍会以 gap 骨架存在，逼用户反复滚动。
+		 */
+		if (!this.#adoptLatestCanonicalProjection()) this.frame.notifyScroll();
+		return posts.length;
 	}
 
 	async prefetchAhead(batchCount: number): Promise<void> {
@@ -688,9 +889,28 @@ export class ReaderTopicDomCoordinator<
 
 	hasVisibleDataGap(): boolean {
 		this.#assertActive();
-		return this.#treeViewport.visiblePostNumbers.some(
-			(postNumber) => !this.#session.postByNumber(postNumber),
-		);
+		return this.visibleDataGapPostNumber() !== undefined;
+	}
+
+	visibleDataGapPostNumber(): PostNumber | undefined {
+		this.#assertActive();
+		for (const visiblePostNumber of this.#treeViewport.visiblePostNumbers) {
+			let postNumber: PostNumber | null | undefined = visiblePostNumber;
+			let rootmostMissingPostNumber: PostNumber | undefined;
+			const visited = new Set<PostNumber>();
+			while (postNumber !== null && postNumber !== undefined) {
+				if (visited.has(postNumber)) break;
+				visited.add(postNumber);
+				if (!this.#session.postByNumber(postNumber)) {
+					rootmostMissingPostNumber = postNumber;
+				}
+				postNumber = this.replyTreePresentation.parentOf(postNumber);
+			}
+			if (rootmostMissingPostNumber !== undefined) {
+				return rootmostMissingPostNumber;
+			}
+		}
+		return undefined;
 	}
 
 	lastUserScrollAt(): number {
@@ -698,9 +918,20 @@ export class ReaderTopicDomCoordinator<
 		return this.#scrollLifecycle.lastUserScrollAt();
 	}
 
+	lastUserScrollDirection(): -1 | 0 | 1 {
+		this.#assertActive();
+		const direction = this.#scroll.lastUserScrollDirection?.() ?? 0;
+		return direction === -1 || direction === 1 ? direction : 0;
+	}
+
 	listenUserScrollIntent(listener: () => void): Cleanup {
 		this.#assertActive();
 		return this.#scroll.listenUserScrollIntent?.(listener) ?? (() => {});
+	}
+
+	listenDirectUserScrollIntent(listener: () => void): Cleanup {
+		this.#assertActive();
+		return this.#scroll.listenDirectUserScrollIntent?.(listener) ?? (() => {});
 	}
 
 	captureViewportAnchor(): ReaderTopicViewportAnchor | null {
@@ -709,6 +940,10 @@ export class ReaderTopicDomCoordinator<
 			this.#visiblePostElements(),
 		);
 		const input = this.#scroll.readWindowInput();
+		const scrollRange = this.#scrollRange(input);
+		const scrollRatio = scrollRange > 0
+			? Math.min(1, Math.max(0, input.scrollOffset / scrollRange))
+			: 0;
 		if (physicalAnchor) {
 			const postNumber = discoursePostReference({
 				post_number: physicalAnchor.postNumber,
@@ -723,6 +958,8 @@ export class ReaderTopicDomCoordinator<
 					postNumber,
 					postOffset: input.scrollOffset - postLayoutOffset,
 					scrollTop: input.scrollOffset,
+					scrollRange,
+					scrollRatio,
 				});
 			}
 		}
@@ -738,7 +975,23 @@ export class ReaderTopicDomCoordinator<
 			postNumber: visibleRootPostNumber,
 			postOffset: input.scrollOffset - rootOffset,
 			scrollTop: input.scrollOffset,
+			scrollRange,
+			scrollRatio,
 		});
+	}
+
+	#scrollRange(input: VirtualWindowInput): number {
+		const physicalRange = Number(this.#scroll.readScrollRange?.());
+		if (Number.isFinite(physicalRange) && physicalRange > 0) {
+			return physicalRange;
+		}
+		const virtualRange = Math.max(
+			0,
+			this.layout.window(input).totalSize - input.viewportSize,
+		);
+		return virtualRange > 0
+			? virtualRange
+			: Math.max(0, Number.isFinite(physicalRange) ? physicalRange : 0);
 	}
 
 	#connectedPostElements(): readonly HTMLElement[] {
@@ -762,20 +1015,26 @@ export class ReaderTopicDomCoordinator<
 
 	restoreViewportAnchor(anchor: ReaderTopicViewportAnchor): boolean {
 		this.#assertActive();
+		const scrollRatio = Number(anchor.scrollRatio);
+		if (Number.isFinite(scrollRatio) && scrollRatio >= 0) {
+			return this.#writeVirtualOffset(() => {
+				const input = this.#scroll.readWindowInput();
+				return this.#scrollRange(input) * Math.min(1, scrollRatio);
+			});
+		}
 		const postNumber = discoursePostReference({
 			post_number: anchor.postNumber,
 		}).postNumber;
 		const rootPostNumber = this.domOwner.topology.rootOf(postNumber);
 		if (rootPostNumber === undefined) return false;
-		const postLayoutOffset = this.#treeViewport.offsetOf(postNumber) ??
-			this.layout.offsetOf(rootPostNumber);
-		if (postLayoutOffset === undefined) return false;
 		const postOffset = Number(anchor.postOffset);
-		this.#scroll.writeScrollOffset(
-			postLayoutOffset + (Number.isFinite(postOffset) ? postOffset : 0),
-		);
-		this.frame.flushNow();
-		return true;
+		return this.#writeVirtualOffset(() => {
+			const postLayoutOffset = this.#treeViewport.offsetOf(postNumber) ??
+				this.layout.offsetOf(rootPostNumber);
+			return postLayoutOffset === undefined
+				? undefined
+				: postLayoutOffset + (Number.isFinite(postOffset) ? postOffset : 0);
+		});
 	}
 
 	/** 只闪烁已挂载楼层，不改变当前视口几何。 */
@@ -805,6 +1064,13 @@ export class ReaderTopicDomCoordinator<
 			this.replyTreePresentation.rootOf(postNumber) === undefined;
 	}
 
+	/** 目的性导航取代当前滚动手势，并用最新回复关系判定目标属于正文还是隐藏子树。 */
+	prepareRevealPost(rawPostNumber: number): void {
+		this.#assertActive();
+		discoursePostReference({ post_number: rawPostNumber });
+		this.#adoptLatestCanonicalProjection();
+	}
+
 	revealPost(
 		rawPostNumber: number,
 		options: ReaderTopicRevealOptions,
@@ -813,6 +1079,13 @@ export class ReaderTopicDomCoordinator<
 		const postNumber = discoursePostReference({
 			post_number: rawPostNumber,
 		}).postNumber;
+		if (
+			options.revealAsFloor === true &&
+			this.replyTreePresentation.revealAsFloor(postNumber)
+		) {
+			this.#rootProjection.syncRoots();
+			this.#syncProjectionFeatures();
+		}
 		let rootPostNumber = this.domOwner.topology.rootOf(postNumber);
 		if (
 			rootPostNumber === undefined &&
@@ -840,12 +1113,16 @@ export class ReaderTopicDomCoordinator<
 			!currentRoot.classList.contains('ldp-virtual-ancestor-shell') &&
 			!currentRoot.classList.contains('ldp-post-projection-pending');
 		if (!wasMaterialized) {
-			const offset = this.#treeViewport.offsetOf(postNumber) ??
-				this.layout.offsetOf(rootPostNumber);
-			if (offset === undefined) return null;
-			this.#scroll.writeScrollOffset(offset);
-			this.frame.flushNow();
+			if (!this.#writeVirtualOffset(() =>
+				this.#treeViewport.offsetOf(postNumber) ??
+					this.layout.offsetOf(rootPostNumber)
+			)) return null;
 		}
+		const pendingRoot = this.domOwner.view(postNumber)?.slots.root;
+		if (
+			pendingRoot?.classList.contains('ldp-post-projection-pending') &&
+			!this.#materializeProjection(postNumber, false)
+		) return null;
 		const element = this.domOwner.view(postNumber)?.slots.root;
 		if (
 			!element?.isConnected ||
@@ -861,6 +1138,30 @@ export class ReaderTopicDomCoordinator<
 		});
 	}
 
+	#writeVirtualOffset(readOffset: () => number | undefined): boolean {
+		/*
+		 * 远距目标或历史锚点可能刚进入虚拟布局，而浏览器里的 spacer 仍是
+		 * 上一帧旧高度。预提交、offset 重算、写入和目标窗提交必须全部处于
+		 * 同一个程序化事务；否则预提交仍会消费旧停稳锚点，把首段与尾段根
+		 * 软保留在同一窗口，ShadowRoot 最终只能把 #55 与 #7679 紧挨排版。
+		 */
+		let written = false;
+		const commit = (): void => {
+			this.frame.flushNow();
+			const offset = readOffset();
+			if (offset === undefined) return;
+			this.#scroll.writeScrollOffset(offset);
+			this.frame.flushNow();
+			written = true;
+		};
+		if (this.#scroll.withProgrammaticScrollTransaction) {
+			this.#scroll.withProgrammaticScrollTransaction(commit);
+		} else {
+			commit();
+		}
+		return written;
+	}
+
 	destroy(): void {
 		if (this.#destroyed) return;
 		this.#destroyed = true;
@@ -868,9 +1169,127 @@ export class ReaderTopicDomCoordinator<
 	}
 
 	#queueSessionCommit(commit: TopicSessionCommit): void {
-		this.#rootProjection.syncRoots();
-		this.#applySessionCommit(commit);
-		this.#emitPresentationCommit(commit);
+		const postStreamRevision = this.#session.postStreamRevision ?? 0;
+		const postStreamGeometryChanged =
+			postStreamRevision !== this.#lastPostStreamRevision;
+		this.#lastPostStreamRevision = postStreamRevision;
+		this.#beginViewportMutation(commit, postStreamGeometryChanged);
+		try {
+			this.#rootProjection.syncRoots();
+			this.#applySessionCommit(commit);
+			this.#emitPresentationCommit(commit);
+		} catch (error) {
+			this.#cancelPendingViewportMutation();
+			throw error;
+		}
+	}
+
+	#beginViewportMutation(
+		commit: TopicSessionCommit,
+		postStreamGeometryChanged = false,
+	): void {
+		if (!this.#commitMayChangeConnectedGeometry(
+			commit,
+			postStreamGeometryChanged,
+		)) return;
+		this.#beginConnectedViewportMutation();
+	}
+
+	#commitMayChangeConnectedGeometry(
+		commit: TopicSessionCommit,
+		postStreamGeometryChanged: boolean,
+	): boolean {
+		/*
+		 * 离屏正文进入 floor -> post.id 索引后，已连接楼层之前的 gap 会缩短。
+		 * 即使 changedPostNumbers 全部离屏，这仍是当前视口的几何提交。
+		 */
+		if (
+			postStreamGeometryChanged &&
+			this.#connectedPostElements().length > 0
+		) return true;
+		if (commit.topicChanged || commit.streamChanged) {
+			return this.#connectedPostElements().length > 0;
+		}
+		for (const postNumber of [
+			...commit.changedPostNumbers,
+			...(commit.removedPostNumbers ?? []),
+		]) {
+			const root = this.domOwner.view(postNumber)?.slots.root;
+			if (
+				root?.isConnected &&
+				this.streamView.slots.root.contains(root)
+			) return true;
+			const rootPostNumber = this.replyTreePresentation.rootOf(postNumber);
+			if (rootPostNumber === undefined || rootPostNumber === postNumber) {
+				continue;
+			}
+			const connectedRoot =
+				this.domOwner.view(rootPostNumber)?.slots.root;
+			if (
+				connectedRoot?.isConnected &&
+				this.streamView.slots.root.contains(connectedRoot)
+			) return true;
+		}
+		return false;
+	}
+
+	#beginConnectedViewportMutation(): ReaderTopicViewportMutation | null {
+		if (
+			this.#pendingViewportMutation ||
+			!this.#scroll.beginViewportMutation
+		) return null;
+		const elements = this.#connectedPostElements();
+		if (!elements.length) return null;
+		const mutation = this.#scroll.beginViewportMutation(elements);
+		this.#pendingViewportMutation = mutation;
+		return mutation;
+	}
+
+	#freezeCanonicalUntilScrollIdle(): void {
+		if (!this.replyTreePresentation.freezeCanonical()) return;
+		const epoch = ++this.#canonicalFreezeEpoch;
+		void this.#scrollLifecycle.waitForIdle().then(() => {
+			if (this.#destroyed || epoch !== this.#canonicalFreezeEpoch) return;
+			try {
+				this.#adoptLatestCanonicalProjection();
+			} catch (error) {
+				this.#onError(error);
+			}
+		}).catch(this.#onError);
+	}
+
+	#adoptLatestCanonicalProjection(): boolean {
+		if (!this.replyTreePresentation.canonicalFrozen) return false;
+		this.#canonicalFreezeEpoch += 1;
+		const changed = this.replyTreePresentation.thawCanonical();
+		if (!changed) return true;
+		const mutation = this.#beginConnectedViewportMutation();
+		try {
+			this.refreshRootProjection();
+			if (mutation && this.#pendingViewportMutation === mutation) {
+				this.#restorePendingViewportMutation();
+			}
+		} catch (error) {
+			if (mutation && this.#pendingViewportMutation === mutation) {
+				this.#cancelPendingViewportMutation();
+			}
+			throw error;
+		}
+		return true;
+	}
+
+	#restorePendingViewportMutation(): void {
+		const mutation = this.#pendingViewportMutation;
+		if (!mutation) return;
+		this.#pendingViewportMutation = null;
+		mutation.restore();
+	}
+
+	#cancelPendingViewportMutation(): void {
+		const mutation = this.#pendingViewportMutation;
+		if (!mutation) return;
+		this.#pendingViewportMutation = null;
+		mutation.cancel();
 	}
 
 	#emitPresentationCommit(commit: TopicSessionCommit): void {
@@ -882,6 +1301,7 @@ export class ReaderTopicDomCoordinator<
 	#applySessionCommit(commit: TopicSessionCommit, notify = true): void {
 		this.#directReplyPrefetchCandidateKey = '';
 		for (const postNumber of commit.removedPostNumbers ?? []) {
+			this.#projectionHydrationFailedPostNumbers.delete(postNumber);
 			this.#directReplyPrefetchedExpectedCounts.delete(postNumber);
 			this.#directReplyPrefetchAttemptedExpectedCounts.delete(postNumber);
 			const root = this.domOwner.view(postNumber)?.slots.root;
@@ -904,6 +1324,9 @@ export class ReaderTopicDomCoordinator<
 			this.#topicDirtyRetainedPostNumbers.delete(postNumber);
 		}
 		const refreshPostNumbers = new Set(commit.changedPostNumbers);
+		for (const postNumber of refreshPostNumbers) {
+			this.#projectionHydrationFailedPostNumbers.delete(postNumber);
+		}
 		if (commit.topicChanged) {
 			for (const postNumber of this.#mountedPostNumbers) {
 				refreshPostNumbers.add(postNumber);
@@ -937,6 +1360,9 @@ export class ReaderTopicDomCoordinator<
 				this.domOwner.view(postNumber) ??
 				this.#retainedViews.get(postNumber);
 			if (!existing) continue;
+			if (existing.slots.root.classList.contains(
+				'ldp-post-projection-pending',
+			)) continue;
 			try {
 				this.postProjector.render(post, existing as PostView);
 				this.#topicDirtyRetainedPostNumbers.delete(postNumber);
@@ -970,7 +1396,15 @@ export class ReaderTopicDomCoordinator<
 		}
 		this.#rootVirtualInsets = plan.rootVirtualInsets ?? new Map();
 		this.#mountedPostNumbers = plan.mountedPostNumbers;
-		this.#nextContentPostNumbers = plan.contentPostNumbers;
+		this.#desiredContentPostNumbers = new Set(plan.contentPostNumbers);
+		const visiblePostNumbers = new Set(
+			this.#treeViewport.visiblePostNumbers,
+		);
+		let eagerProjectionBudget = this.#scrollLifecycle.isIdle(
+			PROJECTION_HYDRATION_MIN_IDLE_MS,
+		)
+			? plan.contentPostNumbers.size
+			: 0;
 		for (const postNumber of plan.mountedPostNumbers) {
 			if (this.domOwner.view(postNumber)) continue;
 			const retained = this.#retainedViews.get(postNumber);
@@ -978,6 +1412,9 @@ export class ReaderTopicDomCoordinator<
 				this.#retainedViews.delete(postNumber);
 				this.domOwner.register(retained, false);
 				if (
+					!retained.slots.root.classList.contains(
+						'ldp-post-projection-pending',
+					) &&
 					this.#topicDirtyRetainedPostNumbers.delete(postNumber)
 				) {
 					const post = this.#session.postByNumber(postNumber);
@@ -994,17 +1431,196 @@ export class ReaderTopicDomCoordinator<
 			const post = this.#session.postByNumber(postNumber);
 			if (!post) continue;
 			try {
-				const created = this.postProjector.create(
-					post,
-					this.scope,
-					postNumber,
+				const renderImmediately =
+					eagerProjectionBudget > 0 &&
+					plan.contentPostNumbers.has(postNumber);
+				const created = renderImmediately
+					? this.postProjector.create(
+						post,
+						this.scope,
+						postNumber,
+					)
+					: this.postProjector.createShell(
+						post,
+						this.scope,
+						postNumber,
+					);
+				if (renderImmediately) eagerProjectionBudget -= 1;
+				else this.#markProjectionPending(
+					created,
+					plan.ownSizes.get(postNumber),
 				);
 				this.domOwner.register(created, false);
 			} catch (error) {
 				this.#onError(error);
 			}
 		}
+		this.#nextContentPostNumbers = new Set(
+			[...plan.contentPostNumbers].filter((postNumber) => {
+				const root = this.domOwner.view(postNumber)?.slots.root;
+				return !!root && !root.classList.contains(
+					'ldp-post-projection-pending',
+				);
+			}),
+		);
+		this.#setProjectionHydrationCandidates(
+			[
+				...visiblePostNumbers,
+				...plan.contentPostNumbers,
+			],
+		);
 		return plan;
+	}
+
+	#markProjectionPending(view: PostView, ownSize?: number): void {
+		const root = view.slots.root;
+		root.classList.add('ldp-post-projection-pending');
+		root.setAttribute('aria-busy', 'true');
+		if (ownSize !== undefined) {
+			root.style.setProperty(
+				'--ldp-virtual-own-size',
+				`${Math.max(0, ownSize)}px`,
+			);
+		}
+	}
+
+	#setProjectionHydrationCandidates(
+		postNumbers: readonly PostNumber[],
+	): void {
+		const unique = new Set<PostNumber>();
+		for (const postNumber of postNumbers) {
+			if (
+				unique.has(postNumber) ||
+				!this.#mountedPostNumbers.has(postNumber) ||
+				this.#projectionHydrationFailedPostNumbers.has(postNumber)
+			) continue;
+			const root = this.domOwner.view(postNumber)?.slots.root;
+			if (!root?.classList.contains('ldp-post-projection-pending')) continue;
+			unique.add(postNumber);
+		}
+		this.#projectionHydrationPostNumbers = Object.freeze([...unique]);
+		if (!this.#projectionHydrationPostNumbers.length) {
+			if (this.#projectionHydrationHandle !== null) {
+				this.#projectionHydrationScheduler.cancel(
+					this.#projectionHydrationHandle,
+				);
+			}
+			this.#projectionHydrationHandle = null;
+			return;
+		}
+		this.#scheduleProjectionHydration();
+	}
+
+	#scheduleProjectionHydration(delayMs?: number): void {
+		if (
+			this.scope.destroyed ||
+			this.#projectionHydrationHandle !== null ||
+			!this.#projectionHydrationPostNumbers.length
+		) return;
+		const delay = delayMs ?? Math.max(
+			PROJECTION_HYDRATION_BATCH_DELAY_MS,
+			this.#scrollLifecycle.remainingIdleMs(
+				PROJECTION_HYDRATION_MIN_IDLE_MS,
+			),
+		);
+		this.#projectionHydrationHandle =
+			this.#projectionHydrationScheduler.schedule(() => {
+				this.#projectionHydrationHandle = null;
+				if (this.scope.destroyed) return;
+				const remainingIdleMs = this.#scrollLifecycle.remainingIdleMs(
+					PROJECTION_HYDRATION_MIN_IDLE_MS,
+				);
+				if (remainingIdleMs > 0) {
+					this.#scheduleProjectionHydration(remainingIdleMs);
+					return;
+				}
+				this.#hydrateProjectionBatch();
+			}, Math.max(0, delay));
+	}
+
+	#hydrateProjectionBatch(): void {
+		const remaining: PostNumber[] = [];
+		let hydrated = 0;
+		for (const postNumber of this.#projectionHydrationPostNumbers) {
+			if (
+				hydrated < PROJECTION_HYDRATION_BATCH_SIZE &&
+				this.#materializeProjection(postNumber)
+			) {
+				hydrated += 1;
+				continue;
+			}
+			const root = this.domOwner.view(postNumber)?.slots.root;
+			if (
+				this.#mountedPostNumbers.has(postNumber) &&
+				!this.#projectionHydrationFailedPostNumbers.has(postNumber) &&
+				root?.classList.contains('ldp-post-projection-pending')
+			) remaining.push(postNumber);
+		}
+		this.#projectionHydrationPostNumbers = Object.freeze(remaining);
+		if (remaining.length) {
+			this.#scheduleProjectionHydration(
+				PROJECTION_HYDRATION_BATCH_DELAY_MS,
+			);
+		}
+	}
+
+	#materializeProjection(postNumber: PostNumber, notify = true): boolean {
+		if (
+			!this.#mountedPostNumbers.has(postNumber) ||
+			this.#projectionHydrationFailedPostNumbers.has(postNumber)
+		) return false;
+		const post = this.#session.postByNumber(postNumber);
+		const view = this.domOwner.view(postNumber) as PostView | undefined;
+		const root = view?.slots.root;
+		if (
+			!post ||
+			!view ||
+			!root?.classList.contains('ldp-post-projection-pending')
+		) return false;
+		const mutation = notify && root.isConnected
+			? this.#beginConnectedViewportMutation()
+			: null;
+		try {
+			this.postProjector.render(post, view);
+		} catch (error) {
+			this.#projectionHydrationFailedPostNumbers.add(postNumber);
+			if (mutation && this.#pendingViewportMutation === mutation) {
+				this.#cancelPendingViewportMutation();
+			}
+			this.#onError(error);
+			return false;
+		}
+		this.#topicDirtyRetainedPostNumbers.delete(postNumber);
+		root.classList.remove('ldp-post-projection-pending');
+		root.removeAttribute('aria-busy');
+		if (root.isConnected && this.#rootObservers.has(postNumber)) {
+			this.#activateBranch(root, postNumber);
+		}
+		if (
+			root.isConnected &&
+			this.#desiredContentPostNumbers.has(postNumber) &&
+			!this.#activeContentPostNumbers.has(postNumber)
+		) {
+			this.#activeContentPostNumbers = new Set([
+				...this.#activeContentPostNumbers,
+				postNumber,
+			]);
+			this.#activateNodeContent(root, postNumber);
+		}
+		this.#syncProjectionFeatures();
+		if (notify) this.frame.notifyScroll();
+		this.#scheduleBranchPaint();
+		return true;
+	}
+
+	#cancelProjectionHydration(): void {
+		if (this.#projectionHydrationHandle !== null) {
+			this.#projectionHydrationScheduler.cancel(
+				this.#projectionHydrationHandle,
+			);
+		}
+		this.#projectionHydrationHandle = null;
+		this.#projectionHydrationPostNumbers = Object.freeze([]);
 	}
 
 	#measureOwnPostSize(postNumber: PostNumber): boolean {
@@ -1051,6 +1667,7 @@ export class ReaderTopicDomCoordinator<
 			const view = this.#retainedViews.get(postNumber);
 			this.#retainedViews.delete(postNumber);
 			this.#topicDirtyRetainedPostNumbers.delete(postNumber);
+			this.#projectionHydrationFailedPostNumbers.delete(postNumber);
 			view?.destroy();
 		}
 	}
@@ -1197,16 +1814,9 @@ export class ReaderTopicDomCoordinator<
 						(candidateOffsets.get(right) ?? 0) ||
 					left - right),
 			);
-			const previousCandidates =
-				this.#directReplyPrefetchCandidatePostNumbers;
 			this.#directReplyPrefetchCandidatePostNumbers = new Set(
 				this.#directReplyPrefetchOrderedCandidates,
 			);
-			for (const postNumber of previousCandidates) {
-				if (!this.#directReplyPrefetchCandidatePostNumbers.has(postNumber)) {
-					this.#directReplyPrefetchAttemptedExpectedCounts.delete(postNumber);
-				}
-			}
 		}
 		const visiblePostNumbers = new Set(
 			this.#treeViewport.visiblePostNumbers.filter(
@@ -1407,7 +2017,22 @@ export class ReaderTopicDomCoordinator<
 			}
 			this.frame.notifyScroll();
 		}).catch((error) => {
-			if (!isAbortFailure(error)) this.#onError(error);
+			if (
+				!isAbortFailure(error) &&
+				!this.scope.destroyed &&
+				this.#directReplyPrefetches.get(postNumber) === request
+			) {
+				/*
+				 * 同一 reply_count 的失败是本次观察周期的终态。候选窗、ResizeObserver
+				 * 或虚拟提交只能重排 DOM，不能把 429/404 再包装成新的业务请求；后续
+				 * canonical reply_count 增长时才会自然获得一次新尝试。
+				 */
+				this.#directReplyPrefetchAttemptedExpectedCounts.set(
+					postNumber,
+					expectedCount,
+				);
+				this.#onError(error);
+			}
 		}).finally(() => {
 			if (this.#directReplyPrefetches.get(postNumber) === request) {
 				this.#directReplyPrefetches.delete(postNumber);
@@ -1481,10 +2106,16 @@ export class ReaderTopicDomCoordinator<
 	}
 
 	#activateBranch(root: HTMLElement, postNumber: PostNumber): void {
+		if (
+			this.#activeBranchPostNumbers.has(postNumber) ||
+			root.classList.contains('ldp-post-projection-pending')
+		) return;
+		this.#activeBranchPostNumbers.add(postNumber);
 		this.postProjector.attach(root, postNumber, 'branch');
 	}
 
 	#deactivateBranch(root: HTMLElement, postNumber: PostNumber): void {
+		if (!this.#activeBranchPostNumbers.delete(postNumber)) return;
 		this.postProjector.detach(root, postNumber, 'branch');
 	}
 

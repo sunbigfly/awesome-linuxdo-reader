@@ -54,7 +54,7 @@ function normalizedBaselines(
 	value: unknown,
 ): Readonly<Record<string, ReaderWebDavBaseline>> {
 	const scopes = record(value);
-	const result: Record<string, ReaderWebDavBaseline> = {};
+	const result = Object.create(null) as Record<string, ReaderWebDavBaseline>;
 	for (const [scopeId, rawBaseline] of Object.entries(scopes ?? {})) {
 		if (!scopeId || scopeId.length > 240) continue;
 		const source = record(rawBaseline);
@@ -87,6 +87,37 @@ function normalizedStatus(value: unknown): ReaderWebDavSyncStatus {
 		kind: kind === 'syncing' ? 'idle' : kind,
 		message: String(source?.message ?? ''),
 		at: Math.max(0, Number(source?.at) || 0),
+	});
+}
+
+function sameConfig(
+	left: ReaderWebDavConfig,
+	right: ReaderWebDavConfig,
+): boolean {
+	return left.endpoint === right.endpoint &&
+		left.username === right.username &&
+		left.password === right.password &&
+		left.remotePath === right.remotePath &&
+		left.autoSyncEnabled === right.autoSyncEnabled &&
+		left.autoSyncIntervalMinutes === right.autoSyncIntervalMinutes &&
+		READER_WEBDAV_CATEGORIES.every((category) =>
+			left.categories[category] === right.categories[category]);
+}
+
+function sameBaseline(
+	left: ReaderWebDavBaseline | undefined,
+	right: ReaderWebDavBaseline,
+): boolean {
+	if (!left) return false;
+	return READER_WEBDAV_CATEGORIES.every((category) => {
+		const leftRecords = left[category];
+		const rightRecords = right[category];
+		if (leftRecords === rightRecords) return true;
+		if (!leftRecords || !rightRecords) return false;
+		const leftIds = Object.keys(leftRecords);
+		const rightIds = Object.keys(rightRecords);
+		return leftIds.length === rightIds.length &&
+			leftIds.every((id) => leftRecords[id] === rightRecords[id]);
 	});
 }
 
@@ -126,7 +157,7 @@ export class ReaderWebDavConfigRepository {
 		if (this.#loadPromise) return this.#loadPromise;
 		this.#loadPromise = (async () => {
 			const source = record(await this.#storage.getValue(this.#storageKey));
-			this.#snapshot = Object.freeze({
+			const snapshot = Object.freeze({
 				loaded: true,
 				config: normalizeReaderWebDavConfig(source?.config),
 				writerId: String(source?.writerId ?? '').trim() ||
@@ -134,9 +165,7 @@ export class ReaderWebDavConfigRepository {
 				baselines: normalizedBaselines(source?.baselines),
 				status: normalizedStatus(source?.status),
 			});
-			await this.#persist();
-			this.changes.emit(this.#snapshot);
-			return this.#snapshot;
+			return this.#commit(() => snapshot);
 		})();
 		try {
 			return await this.#loadPromise;
@@ -147,13 +176,18 @@ export class ReaderWebDavConfigRepository {
 
 	async saveConfig(value: ReaderWebDavConfig): Promise<ReaderWebDavConfigSnapshot> {
 		await this.load();
-		this.#snapshot = Object.freeze({
-			...this.#snapshot,
-			config: normalizeReaderWebDavConfig(value),
-		});
-		await this.#persist();
-		this.changes.emit(this.#snapshot);
-		return this.#snapshot;
+		const config = normalizeReaderWebDavConfig(value);
+		return this.#commit((snapshot) => sameConfig(snapshot.config, config)
+			? snapshot
+			: Object.freeze({
+				...snapshot,
+				config,
+				status: Object.freeze({
+					kind: 'idle',
+					message: 'WebDAV 设置已更新，尚未使用当前配置同步。',
+					at: 0,
+				}),
+			}));
 	}
 
 	async saveBaseline(
@@ -161,44 +195,95 @@ export class ReaderWebDavConfigRepository {
 		baseline: ReaderWebDavBaseline,
 	): Promise<ReaderWebDavConfigSnapshot> {
 		await this.load();
-		this.#snapshot = Object.freeze({
-			...this.#snapshot,
-			baselines: Object.freeze({
-				...this.#snapshot.baselines,
-				[scopeId]: baseline,
-			}),
+		return this.#commit((snapshot) =>
+			sameBaseline(snapshot.baselines[scopeId], baseline)
+				? snapshot
+				: Object.freeze({
+					...snapshot,
+					baselines: Object.freeze({
+						...snapshot.baselines,
+						[scopeId]: baseline,
+					}),
+				}));
+	}
+
+	/**
+	 * 本机缓存清理只解除对应类别的三方合并基线，不触碰远端记录。
+	 *
+	 * 同一份本机数据可能先后连接多个 WebDAV 目标，因此必须从所有目标 scope
+	 * 移除类别基线；下一次同步会按首次合并策略恢复仍存在的远端内容，而不会把
+	 * 本机缓存缺失误判成用户主动删除。
+	 */
+	async forgetBaselineCategories(
+		categories: readonly ReaderWebDavCategory[],
+	): Promise<ReaderWebDavConfigSnapshot> {
+		await this.load();
+		const forgotten = new Set(categories);
+		if (!forgotten.size) return this.#snapshot;
+		return this.#commit((snapshot) => {
+			let changed = false;
+			const baselines: Record<string, ReaderWebDavBaseline> = {};
+			for (const [scopeId, baseline] of Object.entries(snapshot.baselines)) {
+				let scopeChanged = false;
+				const next: Partial<Record<
+					ReaderWebDavCategory,
+					Readonly<Record<string, string>>
+				>> = {};
+				for (const category of READER_WEBDAV_CATEGORIES) {
+					const records = baseline[category];
+					if (records === undefined) continue;
+					if (forgotten.has(category)) {
+						changed = true;
+						scopeChanged = true;
+						continue;
+					}
+					next[category] = records;
+				}
+				baselines[scopeId] = scopeChanged
+					? Object.freeze(next)
+					: baseline;
+			}
+			if (!changed) return snapshot;
+			return Object.freeze({
+				...snapshot,
+				baselines: Object.freeze(baselines),
+			});
 		});
-		await this.#persist();
-		this.changes.emit(this.#snapshot);
-		return this.#snapshot;
 	}
 
 	async saveStatus(
 		status: ReaderWebDavSyncStatus,
 	): Promise<ReaderWebDavConfigSnapshot> {
 		await this.load();
-		this.#snapshot = Object.freeze({
-			...this.#snapshot,
+		return this.#commit((snapshot) => Object.freeze({
+			...snapshot,
 			status: Object.freeze({ ...status }),
-		});
-		await this.#persist();
-		this.changes.emit(this.#snapshot);
-		return this.#snapshot;
+		}));
 	}
 
-	#persist(): Promise<void> {
-		const snapshot = this.#snapshot;
-		const write = this.#writeTail.then(() => this.#storage.setValue(
-			this.#storageKey,
-			{
+	#commit(
+		update: (
+			snapshot: ReaderWebDavConfigSnapshot,
+		) => ReaderWebDavConfigSnapshot,
+	): Promise<ReaderWebDavConfigSnapshot> {
+		const transaction = this.#writeTail.then(async () => {
+			const snapshot = update(this.#snapshot);
+			if (snapshot === this.#snapshot) return snapshot;
+			await this.#storage.setValue(this.#storageKey, {
 				version: 2,
 				config: snapshot.config,
 				writerId: snapshot.writerId,
 				baselines: snapshot.baselines,
 				status: snapshot.status,
-			},
-		));
-		this.#writeTail = write.catch(() => {});
-		return write;
+			});
+			this.#snapshot = snapshot;
+			this.changes.emit(snapshot);
+			return snapshot;
+		});
+		this.#writeTail = transaction.then(
+			() => undefined,
+			() => undefined,
+		);
+		return transaction;
 	}
 }

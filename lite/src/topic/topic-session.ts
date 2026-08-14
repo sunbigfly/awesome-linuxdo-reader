@@ -16,6 +16,7 @@ import {
 import type {
 	TopicSnapshotRepository,
 	TopicLocalArchiveState,
+	TopicLocalArchiveStatus,
 } from '../cache/topic-snapshot-repository.js';
 import type {
 	ReplyTreePostInput,
@@ -81,6 +82,11 @@ export interface TopicSessionReadPort {
 		postNumber: number,
 		options: TopicTargetLoadOptions,
 	): readonly TopicTargetCandidate[];
+	cachedTargetCandidate?<T>(
+		candidate: TopicTargetCandidate,
+		postNumber: number,
+		options: TopicTargetLoadOptions,
+	): Promise<T | null>;
 	loadTargetCandidate<T>(
 		candidate: TopicTargetCandidate,
 		postNumber: number,
@@ -124,6 +130,11 @@ export interface TopicSessionCommit {
 	readonly streamChanged: boolean;
 }
 
+export interface TopicPreservedDeletion {
+	readonly postNumber: DiscoursePostNumber;
+	readonly topicArchived: boolean;
+}
+
 export interface TopicBatchOptions {
 	readonly background?: boolean;
 	readonly priority?: 'visible' | 'nested';
@@ -150,10 +161,33 @@ export interface TopicPostsResult<TPost> {
 	readonly missingPostIds: readonly DiscoursePostId[];
 }
 
-export interface TopicAheadPrefetchOptions extends TopicPostsLoadOptions {
+export interface TopicPostsByIdsOptions extends TopicPostsLoadOptions {
 	readonly maxAttempts?: number;
 	readonly beforeCommit?: () => void | Promise<void>;
+	/**
+	 * 普通窗口/预取固定为 loader-batch；只有已由上层验证并合并的定点实时刷新
+	 * 可以升级为 target-refresh，避免刷新响应被旧 canonical 来源等级挡回。
+	 */
+	readonly ingestSource?: 'loader-batch' | 'target-refresh';
 }
+
+export type TopicAheadPrefetchOptions = TopicPostsByIdsOptions;
+
+export interface TopicEntryPreheatProgress {
+	readonly warmedCount: number;
+	readonly requestedCount: number;
+	readonly totalCount: number;
+	readonly cacheHit: boolean;
+	readonly complete: boolean;
+}
+
+export interface TopicEntryPreheatOptions extends TopicAheadPrefetchOptions {
+	readonly onProgress?: (progress: TopicEntryPreheatProgress) => void;
+	readonly minimumTotalCount?: number;
+}
+
+export interface TopicEntryPreheatResult<TPost>
+extends TopicPostsResult<TPost>, TopicEntryPreheatProgress {}
 
 export interface TopicPostStreamResult<TPost> extends TopicPostsResult<TPost> {
 	readonly complete: boolean;
@@ -342,6 +376,17 @@ function errorStatus(error: unknown): number {
 	return Number((error as { status?: unknown } | null)?.status ?? 0);
 }
 
+function comparableRequestPath(value: unknown): string {
+	const source = String(value ?? '').trim();
+	if (!source) return '';
+	try {
+		const url = new URL(source, 'https://reader.invalid');
+		return `${url.pathname}${url.search}`;
+	} catch {
+		return source;
+	}
+}
+
 function isAuthFailure(error: unknown): boolean {
 	return [401, 403].includes(errorStatus(error));
 }
@@ -449,6 +494,42 @@ export function discoursePostsFromPayload<TPost extends DiscourseTopicPostInput>
 		: Object.freeze([payload as TPost]);
 }
 
+function postRecord(
+	value: DiscourseTopicPostInput | null | undefined,
+): Readonly<Record<string, unknown>> | null {
+	return value && typeof value === 'object'
+		? value as Readonly<Record<string, unknown>>
+		: null;
+}
+
+function moderationHiddenPlaceholder(
+	value: DiscourseTopicPostInput | null | undefined,
+): boolean {
+	const source = postRecord(value);
+	if (source?.hidden !== true) return false;
+	const cooked = String(source.cooked ?? '')
+		.replace(/<[^>]*>/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+	return /社区举报.*临时隐藏/.test(cooked) ||
+		/flagged by the community.*temporarily hidden/i.test(cooked);
+}
+
+function cachedOriginalCooked(
+	value: DiscourseTopicPostInput | null | undefined,
+): string | null {
+	const source = postRecord(value);
+	if (
+		!source ||
+		source.reader_local_archive_placeholder === true ||
+		moderationHiddenPlaceholder(value)
+	) {
+		return null;
+	}
+	const cooked = typeof source.cooked === 'string' ? source.cooked : '';
+	return cooked.trim() ? cooked : null;
+}
+
 /**
  * Topic 的唯一数据会话 owner。
  *
@@ -478,6 +559,7 @@ export class TopicSession<
 	>;
 	readonly #postById = new Map<DiscoursePostId, TPost>();
 	readonly #postByNumber = new Map<DiscoursePostNumber, TPost>();
+	readonly #streamIndexByPostId = new Map<DiscoursePostId, number>();
 	#cachedPostsSnapshot: readonly TPost[] | null = null;
 	readonly #pendingByPostId = new Map<DiscoursePostId, Promise<void>>();
 	readonly #pendingDirectReplies = new Map<
@@ -486,6 +568,7 @@ export class TopicSession<
 	>();
 	readonly #unavailablePostNumbers = new Set<DiscoursePostNumber>();
 	#streamPostIds: readonly DiscoursePostId[] = Object.freeze([]);
+	#postStreamRevision = 0;
 	#topic: TTopic | null = null;
 	#cursor = 0;
 	#sequentialLoadStarted = false;
@@ -494,6 +577,9 @@ export class TopicSession<
 	#refreshPromise: Promise<TTopic> | null = null;
 	#postStreamPromise: Promise<TopicPostStreamResult<TPost>> | null = null;
 	#postStreamExecution: TopicPostStreamExecution | null = null;
+	#authoritativeTopicExpectedPostCount = 0;
+	readonly #createdPostNumbersSinceAuthoritativeTopic =
+		new Set<DiscoursePostNumber>();
 	#closed = false;
 	#archiveStateKey = '';
 
@@ -549,6 +635,44 @@ export class TopicSession<
 
 	streamPostIds(): readonly DiscoursePostId[] {
 		return this.#streamPostIds;
+	}
+
+	get postStreamRevision(): number {
+		return this.#postStreamRevision;
+	}
+
+	/**
+	 * 两个已加载楼层之间实际存在的 canonical stream 项数。
+	 *
+	 * post_number 会因删除而留洞；只有 post_stream 的相对位置能够区分“已删除编号”
+	 * 与“正文尚未水合”。索引随 stream 快照一次重建，根投影逐楼读取保持 O(1)。
+	 */
+	postStreamGapCount(
+		rawPreviousPostNumber: number,
+		rawPostNumber: number,
+	): number | undefined {
+		const postNumber = discoursePostNumber(rawPostNumber);
+		const post = this.#postByNumber.get(postNumber);
+		if (!post) return undefined;
+		const postId = discoursePostReference(post).postId;
+		if (postId === null) return undefined;
+		const postIndex = this.#streamIndexByPostId.get(postId);
+		if (postIndex === undefined) return undefined;
+		let previousIndex = -1;
+		if (rawPreviousPostNumber > 0) {
+			const previousPost = this.#postByNumber.get(
+				discoursePostNumber(rawPreviousPostNumber),
+			);
+			if (!previousPost) return undefined;
+			const previousPostId = discoursePostReference(previousPost).postId;
+			if (previousPostId === null) return undefined;
+			const resolvedPreviousIndex =
+				this.#streamIndexByPostId.get(previousPostId);
+			if (resolvedPreviousIndex === undefined) return undefined;
+			previousIndex = resolvedPreviousIndex;
+		}
+		if (postIndex <= previousIndex) return undefined;
+		return postIndex - previousIndex - 1;
 	}
 
 	postStreamCoverage(): TopicPostStreamCoverage {
@@ -619,6 +743,10 @@ export class TopicSession<
 
 	refresh(options: TopicLoadOptions = {}): Promise<TTopic> {
 		this.#assertActive();
+		if (this.#isLocalArchiveTopic()) {
+			const cached = this.#topic ?? this.#snapshots.topic();
+			if (cached) return Promise.resolve(cached);
+		}
 		return this.#loadTopic(options, true);
 	}
 
@@ -629,9 +757,13 @@ export class TopicSession<
 			...options,
 			refresh,
 		})
-			.then((topic) => {
+			.then(async (topic) => {
 				this.#assertActive();
-				this.#commitTopic(topic, 'topic-json', observedAt);
+				const posts = await this.#prepareModerationHiddenPosts(
+					discoursePostsFromPayload<TPost>(topic),
+				);
+				this.#assertActive();
+				this.#commitTopic(topic, 'topic-json', observedAt, posts);
 				return topic;
 			})
 			.catch((error) => {
@@ -665,11 +797,24 @@ export class TopicSession<
 		}
 		const ids = this.#streamPostIds.slice(position, position + this.#pageSize);
 		const missingBefore = ids.filter((postId) => !this.#postById.has(postId));
-		options.onSource?.(missingBefore.length ? 'network' : 'cache', Object.freeze({
+		const localArchive = this.#isLocalArchiveTopic();
+		options.onSource?.(localArchive || !missingBefore.length ? 'cache' : 'network', Object.freeze({
 			cachedCount: ids.length - missingBefore.length,
 			missingCount: missingBefore.length,
 			totalCount: ids.length,
 		}));
+		if (localArchive) {
+			const posts = ids.map((postId) => this.#postById.get(postId))
+				.filter((post): post is TPost => post !== undefined);
+			this.#cursor += ids.length;
+			return this.#batchResult(
+				posts,
+				this.#cursor >= this.#streamPostIds.length,
+				missingBefore,
+				false,
+				false,
+			);
+		}
 		let loadError: unknown;
 		if (missingBefore.length) {
 			try {
@@ -713,13 +858,20 @@ export class TopicSession<
 
 	async loadPostsByIds(
 		rawPostIds: readonly number[],
-		options: TopicPostsLoadOptions & {
-			readonly maxAttempts?: number;
-			readonly beforeCommit?: () => void | Promise<void>;
-		} = {},
+		options: TopicPostsByIdsOptions = {},
 	): Promise<TopicPostsResult<TPost>> {
 		this.#assertActive();
 		const postIds = discoursePostIdStream(rawPostIds);
+		if (this.#isLocalArchiveTopic()) {
+			const missingPostIds = postIds.filter((postId) => !this.#postById.has(postId));
+			return Object.freeze({
+				posts: Object.freeze(
+					postIds.map((postId) => this.#postById.get(postId))
+						.filter((post): post is TPost => post !== undefined),
+				),
+				missingPostIds: freezeNumbers(missingPostIds),
+			});
+		}
 		const maxAttempts = positiveInteger(options.maxAttempts ?? 2, 'maxAttempts');
 		let lastError: unknown;
 		for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -800,6 +952,22 @@ export class TopicSession<
 		options: TopicPostStreamOptions = {},
 	): Promise<TopicPostStreamResult<TPost>> {
 		this.#assertActive();
+		if (this.#isLocalArchiveTopic()) {
+			const missingPostIds = this.#streamPostIds.filter(
+				(postId) => !this.#postById.has(postId),
+			);
+			options.onProgress?.(Object.freeze({
+				loadedCount: this.#streamPostIds.length - missingPostIds.length,
+				totalCount: this.#streamPostIds.length,
+				missingCount: missingPostIds.length,
+			}));
+			return Promise.resolve(Object.freeze({
+				posts: this.cachedPosts(),
+				missingPostIds: freezeNumbers(missingPostIds),
+				complete: this.postStreamCoverage().complete,
+				failedBatchCount: 0,
+			}));
+		}
 		if (this.#postStreamPromise) {
 			this.#upgradePostStreamExecution(options);
 			return this.#postStreamPromise;
@@ -950,6 +1118,7 @@ export class TopicSession<
 	): Promise<TPost | null> {
 		this.#assertActive();
 		const postId = discoursePostId(rawPostId);
+		if (this.#isLocalArchiveTopic()) return this.#postById.get(postId) ?? null;
 		const observedAt = this.#now();
 		const payload = await this.#requests.loadPostById<unknown>(postId, options);
 		const matchingPost = discoursePostsFromPayload<TPost>(payload).find((post) => {
@@ -1232,16 +1401,29 @@ export class TopicSession<
 		this.#assertActive();
 		const reference = discoursePostReference(post);
 		if (reference.postId === null) throw new Error('created 楼层缺少 post.id');
+		const knownPostAtNumber = this.#postByNumber.get(reference.postNumber);
+		const knownPostIdAtNumber = knownPostAtNumber === undefined
+			? null
+			: discoursePostReference(knownPostAtNumber).postId;
+		const isNewCreatedFloor = knownPostAtNumber === undefined;
 		const nextStream = this.#streamWithCreatedPost(
 			reference.postId,
 			reference.postNumber,
 		);
+		/*
+		 * post_stream 可能保留已删除或当前用户不可读的 post.id，长度不等于
+		 * Topic.posts_count。created 只相对最近一次权威 Topic 计数记录新的可读
+		 * 楼层；MessageBus/action 回声即使换了 post.id，也不能重复抬高总数。
+		 */
+		if (isNewCreatedFloor) {
+			this.#createdPostNumbersSinceAuthoritativeTopic.add(
+				reference.postNumber,
+			);
+		}
 		const expectedPostCount = nextStream === undefined
 			? undefined
-			: Math.max(
-				nextStream.length,
-				this.#snapshots.snapshot().expectedPostCount,
-			);
+			: this.#authoritativeTopicExpectedPostCount +
+				this.#createdPostNumbersSinceAuthoritativeTopic.size;
 		const repairedChildren = [...this.#postByNumber.values()].filter((candidate) => {
 			try {
 				return discoursePostReference(candidate).replyToPostNumber === reference.postNumber;
@@ -1251,7 +1433,13 @@ export class TopicSession<
 		});
 		return this.#commit({
 			posts: [post, ...repairedChildren],
-			...(nextStream === undefined ? {} : { streamPostIds: nextStream }),
+			...(nextStream === undefined
+				? {}
+				: {
+					streamPostIds: knownPostIdAtNumber === null
+						? nextStream
+						: nextStream.filter((postId) => postId !== knownPostIdAtNumber),
+				}),
 			...(expectedPostCount === undefined ? {} : { expectedPostCount }),
 		}, source, observedAt);
 	}
@@ -1300,6 +1488,190 @@ export class TopicSession<
 		return result;
 	}
 
+	preserveDeletedPostById(
+		rawPostId: number,
+		observedAt = this.#now(),
+	): TopicPreservedDeletion {
+		this.#assertActive();
+		const postId = discoursePostId(rawPostId);
+		const post = this.#postById.get(postId);
+		if (!post) throw new Error(`canonical post.id ${postId} 尚未加载`);
+		const postNumber = discoursePostReference(post).postNumber;
+		const topicArchived = postNumber === 1 &&
+			this.#snapshots.markTopicUnavailable(404, observedAt);
+		const postArchived = postNumber !== 1 &&
+			this.#snapshots.markPostUnavailable(postNumber, 404, observedAt);
+		if (postArchived) this.#unavailablePostNumbers.add(postNumber);
+		if (topicArchived || postArchived) this.#syncLocalArchiveState();
+		return Object.freeze({ postNumber, topicArchived });
+	}
+
+	/**
+	 * 已确认失效的楼层只在 canonical 快照已有正文时转为只读存档。
+	 *
+	 * 岁月史书等入口传入的是已观测到的服务器状态；本方法不发请求、
+	 * 不伪造正文，也不在缓存缺失时创建占位楼层。
+	 */
+	preserveUnavailablePost(
+		rawPostNumber: number,
+		status: TopicLocalArchiveStatus,
+		confirmedAt = this.#now(),
+	): boolean {
+		this.#assertActive();
+		const postNumber = discoursePostReference({
+			post_number: rawPostNumber,
+		}).postNumber;
+		if (!this.#postByNumber.has(postNumber)) return false;
+		const archived = postNumber === 1
+			? this.#snapshots.markTopicUnavailable(status, confirmedAt)
+			: this.#snapshots.markPostUnavailable(
+				postNumber,
+				status,
+				confirmedAt,
+			);
+		if (postNumber !== 1) this.#unavailablePostNumbers.add(postNumber);
+		if (archived) this.#syncLocalArchiveState();
+		return true;
+	}
+
+	/**
+	 * 当 Topic 快照尚无正文或只剩举报占位文案时，从中央响应缓存找回曾经成功
+	 * 返回的目标楼层。只提交精确目标，不联网、不把整份旧 Topic payload 覆盖
+	 * 当前 canonical 状态。
+	 */
+	async restoreUnavailablePostFromCache(
+		rawPostNumber: number,
+		status: TopicLocalArchiveStatus,
+		confirmedAt = this.#now(),
+		preferredRequestPath?: string,
+	): Promise<boolean> {
+		this.#assertActive();
+		const postNumber = discoursePostReference({
+			post_number: rawPostNumber,
+		}).postNumber;
+		const current = this.#postByNumber.get(postNumber);
+		if (
+			current &&
+			!moderationHiddenPlaceholder(current) &&
+			this.preserveUnavailablePost(postNumber, status, confirmedAt)
+		) {
+			return true;
+		}
+		const target = await this.#cachedOriginalPost(
+			postNumber,
+			preferredRequestPath,
+		);
+		const originalCooked = cachedOriginalCooked(target);
+		if (target && originalCooked) {
+			const currentPost = this.#postByNumber.get(postNumber);
+			const restored = currentPost && moderationHiddenPlaceholder(currentPost)
+				? Object.freeze({
+					...currentPost,
+					cooked: originalCooked,
+				}) as TPost
+				: target;
+			/*
+			 * 这是曾经成功返回的同目标响应，只恢复正文；紧接着重新提交
+			 * localArchive 标记，绝不把它呈现成服务器当前权威内容。
+			 */
+			this.ingestPosts(
+				[restored],
+				currentPost ? 'target-refresh' : 'loader-batch',
+				confirmedAt,
+			);
+			if (this.preserveUnavailablePost(postNumber, status, confirmedAt)) {
+				return true;
+			}
+		}
+		return this.preserveUnavailablePost(postNumber, status, confirmedAt);
+	}
+
+	async #cachedOriginalPost(
+		postNumber: DiscoursePostNumber,
+		preferredRequestPath?: string,
+	): Promise<TPost | null> {
+		const readCached = this.#requests.cachedTargetCandidate;
+		if (!readCached) return null;
+		const slug = String(this.#topic?.slug ?? 'topic');
+		const plans = (['single', 'around'] as const).flatMap((scope) => {
+			const options: TopicTargetLoadOptions = Object.freeze({
+				scope,
+				slug,
+				refresh: true,
+			});
+			return this.#requests.targetCandidates(postNumber, options).map(
+				(candidate) => Object.freeze({ candidate, options }),
+			);
+		});
+		const preferred = comparableRequestPath(preferredRequestPath);
+		const matching = preferred
+			? plans.filter(({ candidate }) =>
+				comparableRequestPath(candidate.url) === preferred)
+			: [];
+		for (const { candidate, options } of matching.length ? matching : plans) {
+			let payload: unknown;
+			try {
+				payload = await readCached.call(
+					this.#requests,
+					candidate,
+					postNumber,
+					options,
+				);
+			} catch (error) {
+				this.#onError(error);
+				continue;
+			}
+			if (payload === null) continue;
+			const target = discoursePostsFromPayload<TPost>(payload).find((post) => {
+				try {
+					return discoursePostReference(post).postNumber === postNumber;
+				} catch {
+					return false;
+				}
+			});
+			if (cachedOriginalCooked(target)) return target ?? null;
+		}
+		return null;
+	}
+
+	async #prepareModerationHiddenPosts(
+		posts: readonly TPost[],
+	): Promise<readonly TPost[]> {
+		let changed = false;
+		const prepared: TPost[] = [];
+		for (const post of posts) {
+			if (!moderationHiddenPlaceholder(post)) {
+				prepared.push(post);
+				continue;
+			}
+			let postNumber: DiscoursePostNumber;
+			try {
+				postNumber = discoursePostReference(post).postNumber;
+			} catch (error) {
+				this.#onError(error);
+				prepared.push(post);
+				continue;
+			}
+			const currentCooked = cachedOriginalCooked(
+				this.#postByNumber.get(postNumber),
+			);
+			const cached = currentCooked
+				? null
+				: await this.#cachedOriginalPost(postNumber);
+			const originalCooked = currentCooked ?? cachedOriginalCooked(cached);
+			if (!originalCooked) {
+				prepared.push(post);
+				continue;
+			}
+			changed = true;
+			prepared.push(Object.freeze({
+				...post,
+				cooked: originalCooked,
+			}) as TPost);
+		}
+		return changed ? Object.freeze(prepared) : posts;
+	}
+
 	async loadTarget(
 		rawPostNumber: number,
 		options: TopicTargetOptions = {},
@@ -1309,6 +1681,14 @@ export class TopicSession<
 		const scope = options.scope ?? 'single';
 		const shouldAdvance = options.advanceCursor ?? (scope === 'around');
 		const cachedBeforeRequest = this.#postByNumber.get(postNumber);
+		if (this.#isLocalArchiveTopic()) {
+			if (cachedBeforeRequest && shouldAdvance) {
+				this.#advanceCursorPast([cachedBeforeRequest], postNumber);
+			}
+			return cachedBeforeRequest
+				? Object.freeze([cachedBeforeRequest])
+				: Object.freeze([]);
+		}
 		if (!options.forceRefresh && this.#unavailablePostNumbers.has(postNumber)) {
 			return cachedBeforeRequest
 				? Object.freeze([cachedBeforeRequest])
@@ -1331,6 +1711,7 @@ export class TopicSession<
 		};
 		let fallback: readonly TPost[] = Object.freeze([]);
 		let definitiveStatus: 403 | 404 | 410 | null = null;
+		let definitiveRequestPath: string | undefined;
 		for (const candidate of this.#requests.targetCandidates(postNumber, targetOptions)) {
 			const observedAt = this.#now();
 			try {
@@ -1370,58 +1751,60 @@ export class TopicSession<
 				if (scope === 'around' && committedPosts.length && !fallback.length) {
 					fallback = committedPosts;
 				}
-			} catch (error) {
-				const status = errorStatus(error);
-				if (discourseNativeTargetFailureIsDefinitive({
-					endpoint: candidate.endpoint,
-					scope,
-					status,
-				})) {
-					definitiveStatus = status as 404 | 410;
-					break;
-				}
-				if (
-					scope === 'single' &&
-					candidate.endpoint === 'post-by-number' &&
-					status === 403 &&
-					cachedBeforeRequest !== undefined
-				) {
-					definitiveStatus = 403;
-					continue;
-				}
+				} catch (error) {
+					const status = errorStatus(error);
+					if (discourseNativeTargetFailureIsDefinitive({
+						endpoint: candidate.endpoint,
+						scope,
+						status,
+					})) {
+						definitiveStatus = status as 404 | 410;
+						definitiveRequestPath = candidate.url;
+						break;
+					}
+					if (
+						scope === 'single' &&
+						candidate.endpoint === 'post-by-number' &&
+						status === 403 &&
+						cachedBeforeRequest !== undefined
+					) {
+						definitiveStatus = 403;
+						definitiveRequestPath = candidate.url;
+						continue;
+					}
 				if (isAuthFailure(error) || isThrottleFailure(error)) throw error;
 			}
 		}
 		if (scope === 'around' && this.#streamPostIds.length) {
-			const center = this.#streamIndexForPostNumber(postNumber);
-			const start = Math.max(
-				0,
-				Math.min(
-					Math.max(0, this.#streamPostIds.length - this.#pageSize),
-					center - Math.floor(this.#pageSize / 2),
-				),
-			);
-			const result = await this.loadPostsByIds(
-				this.#streamPostIds.slice(start, start + this.#pageSize),
-			);
-			if (result.posts.length) {
-				this.#advanceCursorPast(result.posts, postNumber);
-				return result.posts;
+			const posts = await this.loadAroundPost(postNumber, {
+				maxAttempts: 1,
+				refresh: options.forceRefresh === true,
+				...(options.beforeNetwork === undefined
+					? {}
+					: { beforeNetwork: options.beforeNetwork }),
+			});
+			if (posts.length) {
+				if (shouldAdvance) {
+					this.#advanceCursorPast(posts, postNumber);
+				}
+				return posts;
 			}
 		}
 		if (scope === 'single' && definitiveStatus !== null) {
 			this.#unavailablePostNumbers.add(postNumber);
 			if (cachedBeforeRequest) {
-				this.#snapshots.markPostUnavailable(
+				const confirmedAt = this.#now();
+				await this.restoreUnavailablePostFromCache(
 					postNumber,
 					definitiveStatus,
-					this.#now(),
+					confirmedAt,
+					definitiveRequestPath,
 				);
-				this.#syncLocalArchiveState();
+				const archivedPost = this.#postByNumber.get(postNumber) ?? cachedBeforeRequest;
 				if (shouldAdvance) {
-					this.#advanceCursorPast([cachedBeforeRequest], postNumber);
+					this.#advanceCursorPast([archivedPost], postNumber);
 				}
-				return Object.freeze([cachedBeforeRequest]);
+				return Object.freeze([archivedPost]);
 			}
 		}
 		if (fallback.length && shouldAdvance) this.#advanceCursorPast(fallback, postNumber);
@@ -1430,16 +1813,192 @@ export class TopicSession<
 
 	loadBeforePost(
 		postNumber: number,
-		options: TopicPostsLoadOptions = {},
+		options: TopicAheadPrefetchOptions = {},
 	): Promise<readonly TPost[]> {
-		return this.#loadRelative(postNumber, 'before', options);
+		return this.#loadRelative(postNumber, 'before', {
+			...options,
+			maxAttempts: options.maxAttempts ?? 1,
+		});
 	}
 
 	loadAfterPost(
 		postNumber: number,
-		options: TopicPostsLoadOptions = {},
+		options: TopicAheadPrefetchOptions = {},
 	): Promise<readonly TPost[]> {
-		return this.#loadRelative(postNumber, 'after', options);
+		return this.#loadRelative(postNumber, 'after', {
+			...options,
+			maxAttempts: options.maxAttempts ?? 1,
+		});
+	}
+
+	/**
+	 * 只使用 Topic 已知的 canonical post_stream，在目标楼层附近读取一批正文。
+	 *
+	 * 虚拟 gap 的楼层号来自估算，不是可直接访问的 Discourse route。这里不得走
+	 * targetCandidates，否则删除楼层或稀疏编号会把一次补窗放大成 topic/by-number
+	 * 候选循环；批次仍完整复用 loadPostsByIds 的缓存、single-flight 与 429 终态。
+	 */
+	async loadAroundPost(
+		rawPostNumber: number,
+		options: TopicAheadPrefetchOptions = {},
+	): Promise<readonly TPost[]> {
+		this.#assertActive();
+		if (!this.#streamPostIds.length) return Object.freeze([]);
+		const postNumber = discoursePostReference({
+			post_number: rawPostNumber,
+		}).postNumber;
+		const center = this.#streamIndexForPostNumber(postNumber);
+		const start = Math.max(
+			0,
+			Math.min(
+				Math.max(0, this.#streamPostIds.length - this.#pageSize),
+				center - Math.floor(this.#pageSize / 2),
+			),
+		);
+		const result = await this.loadPostsByIds(
+			this.#streamPostIds.slice(start, start + this.#pageSize),
+			{
+				...options,
+				maxAttempts: options.maxAttempts ?? 1,
+			},
+		);
+		return result.posts;
+	}
+
+	/**
+	 * 宿主 Topic 列表入口的标准正文预热窗口。
+	 *
+	 * #1 只取向下一个 pageSize；中间楼层取前后各一个 pageSize，目标楼层归入
+	 * 向下窗口。所有批次仍走 loadPostsByIds 的缓存、single-flight 与中央后台调度；
+	 * 完整缓存命中时不创建网络请求。
+	 */
+	async restorePreheatEntry(
+		rawPostNumber: number,
+	): Promise<TopicEntryPreheatProgress | null> {
+		this.#assertActive();
+		if (!this.#topic && !this.#streamPostIds.length && !this.#snapshots.posts().length) {
+			const restored = await this.#snapshots.restore();
+			this.#assertActive();
+			if (!restored) return null;
+			this.#restoreIndexes();
+		}
+		if (!this.#streamPostIds.length) return null;
+		const { ids, totalCount } = this.#entryPreheatWindow(rawPostNumber);
+		const warmedCount = ids.reduce(
+			(count, postId) => count + Number(this.#postById.has(postId)),
+			0,
+		);
+		return Object.freeze({
+			warmedCount,
+			requestedCount: ids.length,
+			totalCount,
+			cacheHit: warmedCount >= ids.length,
+			complete: warmedCount >= ids.length,
+		});
+	}
+
+	async preheatEntry(
+		rawPostNumber: number,
+		options: TopicEntryPreheatOptions = {},
+	): Promise<TopicEntryPreheatResult<TPost>> {
+		this.#assertActive();
+		const { onProgress, minimumTotalCount: rawMinimumTotalCount, ...loadOptions } =
+			options;
+		const minimumTotalCount = nonNegativeInteger(rawMinimumTotalCount);
+		if (
+			minimumTotalCount > Math.max(
+				this.#streamPostIds.length,
+				this.#snapshots.snapshot().expectedPostCount,
+			)
+		) {
+			await this.refresh({
+				...(loadOptions.background === undefined
+					? {}
+					: { background: loadOptions.background }),
+				...(loadOptions.prefetchTier === undefined
+					? {}
+					: { prefetchTier: loadOptions.prefetchTier }),
+				...(loadOptions.beforeNetwork === undefined
+					? {}
+					: { beforeNetwork: loadOptions.beforeNetwork }),
+			});
+		}
+		const { ids, totalCount } = this.#entryPreheatWindow(rawPostNumber);
+		if (!this.#streamPostIds.length) {
+			const empty = Object.freeze({
+				posts: Object.freeze([]),
+				missingPostIds: Object.freeze([]),
+				warmedCount: 0,
+				requestedCount: 0,
+				totalCount,
+				cacheHit: true,
+				complete: true,
+			} satisfies TopicEntryPreheatResult<TPost>);
+			onProgress?.(empty);
+			return empty;
+		}
+		const cacheHit = ids.every((postId) => this.#postById.has(postId));
+		const progress = (): TopicEntryPreheatProgress => {
+			const warmedCount = ids.reduce(
+				(count, postId) => count + Number(this.#postById.has(postId)),
+				0,
+			);
+			return Object.freeze({
+				warmedCount,
+				requestedCount: ids.length,
+				totalCount,
+				cacheHit,
+				complete: warmedCount >= ids.length,
+			});
+		};
+		for (let offset = 0; offset < ids.length; offset += this.#pageSize) {
+			const batch = ids.slice(offset, offset + this.#pageSize);
+			if (batch.some((postId) => !this.#postById.has(postId))) {
+				await this.loadPostsByIds(batch, loadOptions);
+			}
+			onProgress?.(progress());
+		}
+		const finalProgress = progress();
+		if (!ids.length) onProgress?.(finalProgress);
+		return Object.freeze({
+			posts: Object.freeze(ids
+				.map((postId) => this.#postById.get(postId))
+				.filter((post): post is TPost => post !== undefined)),
+			missingPostIds: freezeNumbers(ids.filter(
+				(postId) => !this.#postById.has(postId),
+			)),
+			...finalProgress,
+		});
+	}
+
+	#entryPreheatWindow(rawPostNumber: number): Readonly<{
+		readonly ids: readonly DiscoursePostId[];
+		readonly totalCount: number;
+	}> {
+		const postNumber = discoursePostReference({
+			post_number: rawPostNumber,
+		}).postNumber;
+		const totalCount = Math.max(
+			this.#streamPostIds.length,
+			this.#snapshots.snapshot().expectedPostCount,
+		);
+		if (!this.#streamPostIds.length) {
+			return Object.freeze({ ids: Object.freeze([]), totalCount });
+		}
+		const targetIndex = this.#streamIndexForPostNumber(postNumber);
+		const start = targetIndex <= 0
+			? 0
+			: Math.max(0, targetIndex - this.#pageSize);
+		const end = Math.min(
+			this.#streamPostIds.length,
+			targetIndex <= 0
+				? this.#pageSize
+				: targetIndex + this.#pageSize,
+		);
+		return Object.freeze({
+			ids: this.#streamPostIds.slice(start, end),
+			totalCount,
+		});
 	}
 
 	loadLastPost(options: TopicPostsLoadOptions = {}): Promise<readonly TPost[]> {
@@ -1478,10 +2037,6 @@ export class TopicSession<
 		options: TopicDirectRepliesOptions,
 		profile: PendingDirectReplies<TPost>['profile'],
 	): Promise<TopicDirectRepliesResult<TPost>> {
-		const request = this.#requests.loadNestedReplies;
-		if (typeof request !== 'function') {
-			throw new Error('TopicSession 请求端口未提供 Discourse 直属回复能力');
-		}
 		const parentPost = this.#postByNumber.get(parentPostNumber);
 		if (!parentPost) throw new Error(`父楼层 #${parentPostNumber} 尚未加载`);
 		const parentPostId = discoursePostReference(parentPost).postId;
@@ -1502,17 +2057,22 @@ export class TopicSession<
 			knownRelationCount,
 			posts.length,
 		);
-		if (!options.refresh && expectedCount <= posts.length) {
+		const localArchive = this.#isLocalArchiveTopic();
+		if (localArchive || (!options.refresh && expectedCount <= posts.length)) {
 			return Object.freeze({
 				parentPostNumber,
 				posts,
 				scopedPosts: posts,
 				expectedCount,
-				complete: true,
-				endpointExhausted: false,
+				complete: expectedCount <= posts.length,
+				endpointExhausted: localArchive,
 				pageCount: 0,
 				nextAfter: 0,
 			});
+		}
+		const request = this.#requests.loadNestedReplies;
+		if (typeof request !== 'function') {
+			throw new Error('TopicSession 请求端口未提供 Discourse 直属回复能力');
 		}
 		const maxPages = Math.max(
 			1,
@@ -1665,7 +2225,11 @@ export class TopicSession<
 			this.#replies.restore(),
 		]);
 		this.#restoreIndexes();
+		await this.#prepareRestoredModerationHiddenPosts();
 		const snapshot = this.#snapshots.snapshot();
+		this.#authoritativeTopicExpectedPostCount =
+			snapshot.expectedPostCount;
+		this.#createdPostNumbersSinceAuthoritativeTopic.clear();
 		this.#replies.setExpectedPostCount(snapshot.expectedPostCount);
 		const cachedPosts = this.#snapshots.posts();
 		if (this.#replies.coverage().knownPostCount < cachedPosts.length) {
@@ -1722,10 +2286,41 @@ export class TopicSession<
 		return this.#topic!;
 	}
 
+	async #prepareRestoredModerationHiddenPosts(): Promise<void> {
+		const currentPosts = this.cachedPosts();
+		const prepared = await this.#prepareModerationHiddenPosts(currentPosts);
+		if (prepared === currentPosts) return;
+		const snapshot = this.#snapshots.snapshot();
+		const archived = this.#snapshots.localArchiveState();
+		for (let index = 0; index < prepared.length; index += 1) {
+			const post = prepared[index]!;
+			if (post === currentPosts[index]) continue;
+			const postNumber = discoursePostReference(post).postNumber;
+			const stored = snapshot.posts.find((entry) =>
+				entry.postNumber === postNumber);
+			this.ingestPosts(
+				[post],
+				stored?.source ?? 'loader-batch',
+				stored?.observedAt ?? snapshot.updatedAt,
+			);
+			const marker = archived.posts.find((entry) =>
+				entry.postNumber === postNumber);
+			if (!marker) continue;
+			this.#snapshots.markPostUnavailable(
+				postNumber,
+				marker.status,
+				marker.confirmedAt,
+			);
+			this.#unavailablePostNumbers.add(postNumber);
+		}
+		this.#syncLocalArchiveState();
+	}
+
 	#commitTopic(
 		topic: TTopic,
 		source: DiscourseIngestSource,
 		observedAt: number,
+		preparedPosts?: readonly TPost[],
 	): TopicSessionCommit {
 		const payloadTopicId = topic.id === undefined ? this.topicId : discourseTopicId(topic.id);
 		if (payloadTopicId !== this.topicId) {
@@ -1734,7 +2329,7 @@ export class TopicSession<
 		const streamPostIds = this.#mergeStreamPostIds(
 			discoursePostIdStream(topic.post_stream?.stream ?? []),
 		);
-		const posts = discoursePostsFromPayload<TPost>(topic);
+		const posts = preparedPosts ?? discoursePostsFromPayload<TPost>(topic);
 		const expectedPostCount = nonNegativeInteger(topic.posts_count);
 		return this.#commit(
 			{ topic, posts, streamPostIds, expectedPostCount },
@@ -1797,9 +2392,6 @@ export class TopicSession<
 		normalized.push(...byId.values());
 		const posts = normalized.map((entry) => entry.post);
 		const treeResult = this.#replies.ingest(posts, source, { observedAt });
-		if (input.expectedPostCount !== undefined) {
-			this.#replies.setExpectedPostCount(input.expectedPostCount);
-		}
 		const snapshotResult = this.#snapshots.ingest({
 			source,
 			observedAt,
@@ -1810,6 +2402,20 @@ export class TopicSession<
 				: { expectedPostCount: input.expectedPostCount }),
 			posts,
 		});
+		if (input.expectedPostCount !== undefined) {
+			/*
+			 * 快照仓先完成 Topic/stream 版本仲裁，再把胜出的计数交给回复树。
+			 * 这样请求途中到达的 MessageBus created 不会被旧 Topic 响应降级。
+			 */
+			this.#replies.setExpectedPostCount(
+				this.#snapshots.snapshot().expectedPostCount,
+			);
+		}
+		if (input.topic !== undefined) {
+			this.#authoritativeTopicExpectedPostCount =
+				this.#snapshots.snapshot().expectedPostCount;
+			this.#createdPostNumbersSinceAuthoritativeTopic.clear();
+		}
 		this.#applySnapshotChanges(snapshotResult.changedPostNumbers);
 		this.#syncLocalArchiveState();
 		const result = Object.freeze({
@@ -1833,10 +2439,11 @@ export class TopicSession<
 	 */
 	#applySnapshotChanges(changedPostNumbers: readonly number[]): void {
 		this.#topic = this.#snapshots.topic();
-		this.#streamPostIds = this.#snapshots.streamPostIds();
+		this.#syncStreamPostIds();
 		if (!changedPostNumbers.length) return;
 		const entries: NormalizedPost<TPost>[] = [];
 		const changedIds = new Set<DiscoursePostId>();
+		let postStreamIndexChanged = false;
 		for (const rawPostNumber of changedPostNumbers) {
 			const postNumber = discoursePostNumber(rawPostNumber);
 			const post = this.#snapshots.post(postNumber);
@@ -1870,6 +2477,11 @@ export class TopicSession<
 					this.#restoreIndexes();
 					return;
 				}
+				if (Boolean(previousAtNumber) !== Boolean(previousAtId)) {
+					this.#restoreIndexes();
+					return;
+				}
+				if (!previousAtNumber) postStreamIndexChanged = true;
 				changedIds.add(reference.postId);
 				entries.push(Object.freeze({
 					post,
@@ -1896,12 +2508,19 @@ export class TopicSession<
 				this.#unavailablePostNumbers.delete(entry.postNumber);
 			}
 		}
+		/*
+		 * 精确 gap 不只依赖 post.id stream 顺序，也依赖楼层正文到 post.id 的
+		 * canonical 映射。回复树会先发布关系提交；若正文索引随后补齐却沿用旧
+		 * revision，树投影会永久复用按楼层号猜出的巨大 gap。把这次索引提交纳入
+		 * 同一个版本，Session change 的最终投影即可在浏览器绘制前失效旧高度。
+		 */
+		if (postStreamIndexChanged) this.#postStreamRevision += 1;
 	}
 
 	#restoreIndexes(): void {
 		this.#cachedPostsSnapshot = null;
 		this.#topic = this.#snapshots.topic();
-		this.#streamPostIds = this.#snapshots.streamPostIds();
+		this.#syncStreamPostIds();
 		this.#postById.clear();
 		this.#postByNumber.clear();
 		const normalizedById = new Map<DiscoursePostId, NormalizedPost<TPost>>();
@@ -1958,6 +2577,19 @@ export class TopicSession<
 		for (const postNumber of archivedPostNumbers) {
 			this.#unavailablePostNumbers.add(postNumber);
 		}
+		/* 完整重建同样替换了 gap 查询依赖的楼层索引。 */
+		this.#postStreamRevision += 1;
+	}
+
+	#syncStreamPostIds(): void {
+		const next = this.#snapshots.streamPostIds();
+		if (next === this.#streamPostIds) return;
+		this.#streamPostIds = next;
+		this.#postStreamRevision += 1;
+		this.#streamIndexByPostId.clear();
+		for (let index = 0; index < next.length; index += 1) {
+			this.#streamIndexByPostId.set(next[index]!, index);
+		}
 	}
 
 	#syncLocalArchiveState(): void {
@@ -1974,6 +2606,10 @@ export class TopicSession<
 		if (key === this.#archiveStateKey) return;
 		this.#archiveStateKey = key;
 		for (const error of this.archiveChanges.emit(snapshot)) this.#onError(error);
+	}
+
+	#isLocalArchiveTopic(): boolean {
+		return this.#snapshots.localArchiveState().topic !== null;
 	}
 
 	#mergeStreamPostIds(
@@ -2026,10 +2662,17 @@ export class TopicSession<
 
 	async #ensurePostIds(
 		missing: readonly DiscoursePostId[],
-		options: TopicPostsLoadOptions & {
-			readonly beforeCommit?: () => void | Promise<void>;
-		},
+		options: TopicPostsByIdsOptions,
 	): Promise<void> {
+		if (options.ingestSource === 'target-refresh') {
+			/*
+			 * 权威刷新不能只加入一个已经在途的低等级 loader 批次，否则网络虽成功，
+			 * canonical 仍可能因来源仲裁保持旧值。中央 gateway 仍会按请求 identity
+			 * single-flight；本层则确保同一响应以 target-refresh 语义提交。
+			 */
+			await this.#fetchPostBatch(missing, options, 0);
+			return;
+		}
 		if (options.background !== true) this.#promotePendingPostBatches(options);
 		const unclaimed = missing.filter((postId) => !this.#pendingByPostId.has(postId));
 		if (unclaimed.length) {
@@ -2063,9 +2706,7 @@ export class TopicSession<
 
 	async #fetchPostBatch(
 		postIds: readonly DiscoursePostId[],
-		options: TopicPostsLoadOptions & {
-			readonly beforeCommit?: () => void | Promise<void>;
-		},
+		options: TopicPostsByIdsOptions,
 		splitDepth: number,
 	): Promise<void> {
 		const observedAt = this.#now();
@@ -2080,6 +2721,9 @@ export class TopicSession<
 				...(options.priority === undefined
 					? {}
 					: { priority: options.priority }),
+				...(options.prefetchTier === undefined
+					? {}
+					: { prefetchTier: options.prefetchTier }),
 				...(options.beforeNetwork === undefined
 					? {}
 					: { beforeNetwork: options.beforeNetwork }),
@@ -2087,7 +2731,11 @@ export class TopicSession<
 			const posts = discoursePostsFromPayload<TPost>(payload);
 			await options.beforeCommit?.();
 			this.#assertActive();
-			this.ingestPosts(posts, 'loader-batch', observedAt);
+			this.ingestPosts(
+				posts,
+				options.ingestSource ?? 'loader-batch',
+				observedAt,
+			);
 		} catch (error) {
 			if (shouldSplit(error) && postIds.length > 1 && splitDepth < 1) {
 				const middle = Math.ceil(postIds.length / 2);
@@ -2107,7 +2755,7 @@ export class TopicSession<
 	async #loadRelative(
 		rawPostNumber: number,
 		direction: 'before' | 'after' | 'last',
-		options: TopicPostsLoadOptions,
+		options: TopicAheadPrefetchOptions,
 	): Promise<readonly TPost[]> {
 		this.#assertActive();
 		if (!this.#streamPostIds.length) return Object.freeze([]);
@@ -2137,11 +2785,41 @@ export class TopicSession<
 		if (post) {
 			const reference = discoursePostReference(post);
 			if (reference.postId !== null) {
-				const exact = this.#streamPostIds.indexOf(reference.postId);
-				if (exact >= 0) return exact;
+				const exact = this.#streamIndexByPostId.get(reference.postId);
+				if (exact !== undefined) return exact;
 			}
 		}
-		return Math.min(this.#streamPostIds.length - 1, Math.max(0, postNumber - 1));
+		/*
+		 * post_number 不是 post_stream 索引：删除/隐藏楼层会让两者逐渐偏离。
+		 * 稀疏目标没有正文时，从已缓存的最近 canonical 楼层及其真实 post.id
+		 * 索引推算；只有完全没有锚点的冷启动才退回编号近似。
+		 */
+		let bestIndex = -1;
+		let bestDistance = Number.POSITIVE_INFINITY;
+		for (const [knownPostNumber, knownPost] of this.#postByNumber) {
+			let knownIndex: number | undefined;
+			try {
+				const knownPostId = discoursePostReference(knownPost).postId;
+				if (knownPostId !== null) {
+					knownIndex = this.#streamIndexByPostId.get(knownPostId);
+				}
+			} catch {
+				continue;
+			}
+			if (knownIndex === undefined) continue;
+			const distance = Math.abs(knownPostNumber - postNumber);
+			if (
+				distance < bestDistance ||
+				(distance === bestDistance && knownPostNumber <= postNumber)
+			) {
+				bestDistance = distance;
+				bestIndex = knownIndex + (postNumber - knownPostNumber);
+			}
+		}
+		return Math.min(
+			this.#streamPostIds.length - 1,
+			Math.max(0, bestIndex >= 0 ? bestIndex : postNumber - 1),
+		);
 	}
 
 	#advanceCursorPast(posts: readonly TPost[], targetPostNumber?: number): void {

@@ -24,6 +24,19 @@
 !/.github/workflows/
 !/.github/workflows/*.yml
 
+!/AGENTS.md
+
+!/.agents/
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/develop-lite-reader/
+!/.agents/skills/develop-lite-reader/**
+!/.agents/skills/sync-lite-three-part-release/
+!/.agents/skills/sync-lite-three-part-release/**
+!/.agents/skills/tampermonkey-dev-assistant/
+!/.agents/skills/tampermonkey-dev-assistant/**
+
 !/assets/
 /assets/*
 !/assets/logo.png

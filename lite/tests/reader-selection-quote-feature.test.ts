@@ -245,6 +245,17 @@ assert(
 		feature.toolbar.querySelectorAll('button').length === 2,
 	'同一正文内的有效 Selection 必须只创建一份定位到 viewport 的引用 toolbar',
 );
+root.dispatchEvent(new (document.defaultView as unknown as {
+	Event: typeof Event;
+}).Event('ldp-reader-window-change'));
+assert(
+	feature.toolbar.hidden,
+	'Reader 浮窗移动后必须关闭旧 viewport 坐标上的划词工具条',
+);
+contentRoot.dispatchEvent(new (document.defaultView as unknown as {
+	Event: typeof Event;
+}).Event('mouseup', { bubbles: true }));
+flushFrame();
 let escapeLeaks = 0;
 const downstreamEscape = (): void => {
 	escapeLeaks += 1;

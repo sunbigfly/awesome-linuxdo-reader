@@ -47,6 +47,104 @@ assert(
 	'窗口到达内容末端时必须发布边界，供时间轴显示 canonical 总楼层',
 );
 
+const sparse = new VirtualRootLayout(100, true);
+sparse.setRoots([
+	...Array.from({ length: 55 }, (_, index) => ({
+		postNumber: index + 1,
+		subtreePostCount: 1,
+	})),
+	{ postNumber: 7_679, subtreePostCount: 1, unloadedPostCountBefore: 7_623 },
+	{ postNumber: 7_680, subtreePostCount: 1 },
+]);
+const sparseTailOffset = sparse.offsetOf(7_679)!;
+const sparseTail = sparse.window({
+	scrollOffset: sparseTailOffset,
+	viewportSize: 100,
+	overscanBeforeScreens: 2,
+	overscanAfterScreens: 2,
+	maxMountedPostCount: 8,
+	preserveRootPostNumber: 54,
+});
+assert(
+	sparseTailOffset === 767_800 &&
+		sparseTail.beforeSpacer === sparseTailOffset &&
+		sparseTail.hasUnloadedGapBefore === true &&
+		sparseTail.unloadedGapBeforeAnchorPostNumber === 7_679 &&
+		sparseTail.segmentStartPostNumber === 7_679 &&
+		sparseTail.segmentEndPostNumber === 7_680 &&
+		sparseTail.distanceToSegmentStart === 0 &&
+		sparseTail.afterSegmentSpacer === 0 &&
+		sparseTail.visiblePostNumbers.join(',') === '7679' &&
+		!sparseTail.postNumbers.includes(54) &&
+		!sparseTail.postNumbers.includes(55),
+	'远距尾段前的未加载楼层必须成为纯 spacer；旧 #54 停稳锚点与 overscan 都不得跨段把 #54/#55 和 #7679 拼进同一 DOM 窗口',
+);
+const sparseGap = sparse.window({
+	scrollOffset: sparseTailOffset - 500,
+	viewportSize: 100,
+	overscanBeforeScreens: 0,
+	overscanAfterScreens: 0,
+});
+assert(
+	sparseGap.visiblePostNumbers.length === 0 &&
+		!sparseGap.postNumbers.includes(7_679) &&
+		sparseGap.unloadedGapTargetPostNumber === 7_674 &&
+		sparseGap.unloadedGapSide === 'after',
+	'视口落在尚未水合的楼层区间时必须保持纯占位，不能把区间两端任一楼层伪报成当前可见楼层',
+);
+const sparseTailClamp = sparse.window({
+	scrollOffset: sparseTailOffset - 300,
+	viewportSize: 500,
+	overscanBeforeScreens: 0,
+	overscanAfterScreens: 0,
+});
+assert(
+	sparseTailClamp.postNumbers.join(',') === '7679,7680' &&
+		sparseTailClamp.visiblePostNumbers.join(',') === '7679,7680' &&
+		sparseTailClamp.unloadedGapTargetPostNumber === undefined,
+	'浏览器把短尾段 scrollTop 钳到 gap 时，只要尾段已与视口相交就必须原子挂载真实楼层，不能先显示 gap 骨架等待补页',
+);
+const sparseHeadGap = sparse.window({
+	scrollOffset: sparse.offsetOf(55)!,
+	viewportSize: 500,
+	overscanBeforeScreens: 0,
+	overscanAfterScreens: 0,
+});
+assert(
+	sparseHeadGap.visiblePostNumbers.join(',') === '55' &&
+		sparseHeadGap.unloadedGapTargetPostNumber !== undefined &&
+		sparseHeadGap.unloadedGapSide === 'after',
+	'已加载段末楼仅占视口顶部时，下面的未加载区间仍必须发布占位与定向补流，不能把剩余视口暴露为空白',
+);
+const sparseHeadEnd = sparse.window({
+	scrollOffset: sparse.offsetOf(55)!,
+	viewportSize: 100,
+	overscanBeforeScreens: 0,
+	overscanAfterScreens: 0,
+});
+assert(
+	sparseHeadEnd.hasUnloadedGapBefore === false &&
+		sparseHeadEnd.hasUnloadedGapAfter === true &&
+		sparseHeadEnd.unloadedGapAfterAnchorPostNumber === 55 &&
+		sparseHeadEnd.distanceToSegmentEnd === 0 &&
+		sparseHeadEnd.afterSegmentSpacer === 0 &&
+		sparseHeadEnd.afterSpacer > 700_000,
+	'首个连续段到达自身末端时必须独立发布段内边界，不能被后方巨大 gap 掩盖而停止顺序补流',
+);
+sparse.setRoots([
+	...Array.from({ length: 55 }, (_, index) => ({
+		postNumber: index + 1,
+		subtreePostCount: 1,
+	})),
+	{ postNumber: 56, subtreePostCount: 1 },
+	{ postNumber: 7_679, subtreePostCount: 1, unloadedPostCountBefore: 7_622 },
+	{ postNumber: 7_680, subtreePostCount: 1 },
+]);
+assert(
+	sparse.offsetOf(7_679) === sparseTailOffset,
+	'中间段每水合一个估算楼层时必须等量缩短 gap，保持尾段虚拟坐标稳定而不逐批抖动',
+);
+
 const steppedLayout = new VirtualRootLayout(100);
 steppedLayout.setRoots(Array.from({ length: 20 }, (_, index) => index + 1));
 const steppedFirst = steppedLayout.window({

@@ -21,6 +21,7 @@ const publicResourceDescriptors = new WeakSet<object>();
 
 export interface PublicResourceHttpDescriptor {
 	readonly url: string;
+	readonly validation?: 'discourse-avatar';
 	readonly [publicResourceDescriptorBrand]: true;
 }
 
@@ -62,6 +63,7 @@ export interface PublicResourceLoadOptions {
 	readonly signal: AbortSignal;
 	readonly cacheMode?: ResponseCacheMode;
 	readonly profile?: 'resource-visible' | 'resource-prefetch';
+	readonly validation?: 'discourse-avatar';
 }
 
 function normalizedSource(rawSource: string, baseUrl: string | URL): string {
@@ -75,9 +77,13 @@ function normalizedSource(rawSource: string, baseUrl: string | URL): string {
 	return url.href;
 }
 
-function descriptor(source: string): PublicResourceHttpDescriptor {
+function descriptor(
+	source: string,
+	validation?: PublicResourceLoadOptions['validation'],
+): PublicResourceHttpDescriptor {
 	const value = Object.freeze({
 		url: source,
+		...(validation === undefined ? {} : { validation }),
 		[publicResourceDescriptorBrand]: true as const,
 	});
 	publicResourceDescriptors.add(value);
@@ -121,9 +127,16 @@ export class BrowserPublicResourceHttpPort implements PublicResourceHttpPort {
 		const contentType = String(response.headers.get('Content-Type') ?? '')
 			.trim()
 			.toLowerCase();
+		const lastModified = Date.parse(String(
+			response.headers.get('Last-Modified') ?? '',
+		));
+		const discourseBlankAvatar =
+			input.validation === 'discourse-avatar' &&
+			Number.isFinite(lastModified) &&
+			new Date(lastModified).getUTCFullYear() <= 1990;
 		const accepted = response.ok && (
 			contentType === '' || contentType.startsWith('image/')
-		);
+		) && !discourseBlankAvatar;
 		const value = accepted ? await response.blob() : new Blob();
 		const rateLimitCode =
 			response.headers.get('Discourse-Rate-Limit-Error-Code') ??
@@ -166,7 +179,10 @@ export class PublicResourceRequestAdapter {
 
 	async load(rawSource: string, options: PublicResourceLoadOptions): Promise<Blob> {
 		const source = normalizedSource(rawSource, this.#baseUrl);
-		const requestDescriptor = descriptor(source);
+		const requestDescriptor = descriptor(source, options.validation);
+		const variant = options.validation === 'discourse-avatar'
+			? 'avatar-blob'
+			: 'blob';
 		if (source.startsWith('blob:') || source.startsWith('data:')) {
 			const response = await this.#http.execute(requestDescriptor, {
 				signal: options.signal,
@@ -177,7 +193,7 @@ export class PublicResourceRequestAdapter {
 		}
 		return this.#gateway.loadResource({
 			resourceId: source,
-			variant: 'blob',
+			variant,
 			input: source,
 			signal: options.signal,
 			cache: this.#cache,
@@ -216,19 +232,30 @@ export class PublicResourceRequestAdapter {
 	invalidateWithReport(
 		rawSource: string,
 	): Promise<ResponseCacheInvalidationReport> {
-		const source = normalizedSource(rawSource, this.#baseUrl);
-		if (source.startsWith('blob:') || source.startsWith('data:')) {
+		return this.invalidateManyWithReport([rawSource]);
+	}
+
+	invalidateManyWithReport(
+		rawSources: readonly string[],
+	): Promise<ResponseCacheInvalidationReport> {
+		const sources = [...new Set(rawSources.map((rawSource) =>
+			normalizedSource(rawSource, this.#baseUrl),
+		))].filter((source) =>
+			!source.startsWith('blob:') && !source.startsWith('data:'),
+		);
+		if (!sources.length) {
 			return Promise.resolve(Object.freeze({
 				memoryEntries: 0,
 				failures: Object.freeze([]),
 				complete: true,
 			}));
 		}
-		return this.#gateway.invalidateResourceWithReport({
-			resourceId: source,
-			variant: 'blob',
-			cache: this.#cache,
-		});
+		return this.#gateway.invalidateResourcesWithReport(
+			sources.map((source) => ({
+				resourceId: source,
+				variant: 'blob',
+			})),
+		);
 	}
 
 	normalize(rawSource: string): string {

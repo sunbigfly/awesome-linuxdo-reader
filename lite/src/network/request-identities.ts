@@ -81,12 +81,17 @@ export function notificationRequestIdentity(input: {
 	readonly authScope: string;
 	readonly group: string;
 	readonly page: number;
+	readonly variant?: string;
 }): RequestIdentity {
-	return Object.freeze({
+	const identity: Record<string, RequestIdentityValue> = {
 		authScope: discourseAuthScope(input.authScope),
 		group: token(input.group, 'group'),
 		page: nonNegative(input.page, 'page'),
-	});
+	};
+	if (input.variant !== undefined) {
+		identity.variant = token(input.variant, 'variant');
+	}
+	return Object.freeze(identity);
 }
 
 export function collectionRequestIdentity(input: {

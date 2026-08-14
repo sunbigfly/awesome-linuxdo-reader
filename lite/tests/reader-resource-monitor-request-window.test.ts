@@ -1,6 +1,7 @@
 import { parseHTML } from 'linkedom';
 import {
 	ReaderResourceMonitor,
+	type ReaderDiagnosticLogFile,
 } from '../src/monitor/reader-resource-monitor.js';
 import { RequestObserver } from '../src/network/request-observer.js';
 
@@ -23,6 +24,7 @@ const host = document.querySelector<HTMLElement>('#host')!;
 const readerRoot = document.querySelector<HTMLElement>('#reader')!;
 let now = 100_050;
 let localQueued = 0;
+const savedLogs: ReaderDiagnosticLogFile[] = [];
 const requests = new RequestObserver({
 	baseHref: 'https://linux.do/latest',
 	retentionMs: 5 * 60_000,
@@ -171,9 +173,20 @@ const monitor = new ReaderResourceMonitor({
 	performance: null,
 	sampleIntervalMs: 60_000,
 	now: () => now,
+	saveLog: (file) => {
+		savedLogs.push(file);
+	},
 });
 monitor.start();
 await monitor.sampleNow();
+
+assert(
+	host.querySelector('[data-log-export="request"]')?.textContent
+		?.includes('导出 JSONL') &&
+	host.querySelector('[data-log-export-control="request"]')?.textContent
+		?.includes('完整脱敏请求账本'),
+	'请求记录设置页必须提供独立 JSONL 导出入口并说明脱敏范围',
+);
 
 assert(
 	host.querySelector<HTMLElement>(
@@ -304,13 +317,27 @@ assert(
 
 const userCardQueuedAt = now;
 const userCardRequest = requests.begin({
-	href: '/u/alice/card.json',
+	href: '/u/alice/card.json?topic_ids[]=1&topic_ids[]=2&token=private',
 	transport: 'scheduler',
 	source: 'reader',
 	phase: 'queued',
 	queuedAt: userCardQueuedAt,
 	priority: 'interactive',
 	callSite: 'user-card-hover / floor-owner',
+	logicalId: 'L-user',
+	profile: 'user-card',
+	namespace: 'user-hover',
+	lane: 'interactive',
+	cacheMode: 'default',
+	identity: {
+		authScope: 'account:secret',
+		username: 'alice',
+		resource: 'card',
+	},
+	max429Retries: 1,
+	maxChallengeRetries: 1,
+	blockOnCloudflareChallenge: false,
+	droppable: false,
 });
 await new Promise<void>((resolve) => setTimeout(resolve, 0));
 assert(
@@ -322,8 +349,28 @@ assert(
 	)?.textContent?.includes('排队中') &&
 	host.querySelector<HTMLElement>(
 		'.ldp-request-flow-log-row[data-request-phase="queued"]',
-	)?.textContent?.includes('/u/alice/card.json ← user-card-hover / floor-owner'),
-	'用户卡插队请求必须不等周期采样就同步显示优先级、排队状态和发起点',
+	)?.textContent?.includes(
+		'/u/alice/card.json?credential&topic_ids[]×2 ← user-card-hover / floor-owner',
+	) &&
+	host.querySelector<HTMLElement>(
+		'.ldp-request-flow-log-row[data-request-phase="queued"]',
+	)?.textContent?.includes('链 L-user') &&
+	host.querySelector<HTMLElement>(
+		'.ldp-request-flow-log-row[data-request-phase="queued"]',
+	)?.textContent?.includes('user-card / user-hover / interactive') &&
+	host.querySelector<HTMLElement>(
+		'.ldp-request-flow-log-row[data-request-phase="queued"]',
+	)?.textContent?.includes('重试上限 429 1 · 过盾 1') &&
+	host.querySelector<HTMLElement>(
+		'.ldp-request-flow-log-row[data-request-phase="queued"]',
+	)?.textContent?.includes('身份 resource=card') &&
+	!host.querySelector<HTMLElement>(
+		'.ldp-request-flow-log-row[data-request-phase="queued"]',
+	)?.textContent?.includes('private') &&
+	!host.querySelector<HTMLElement>(
+		'.ldp-request-flow-log-row[data-request-phase="queued"]',
+	)?.textContent?.includes('secret'),
+	'用户卡插队请求必须同步显示脱敏目标、逻辑链、typed contract、重试上限、排队状态和发起点',
 );
 now += 20;
 requests.markStarted({
@@ -342,13 +389,55 @@ assert(
 	'同一条用户卡请求获准后必须原地同步推进为进行中',
 );
 now += 30;
-requests.finish(userCardRequest, { status: 200 });
+requests.finish(userCardRequest, { status: 200, decision: 'complete' });
 await new Promise<void>((resolve) => setTimeout(resolve, 0));
 assert(
 	host.querySelector<HTMLElement>(
 		'.ldp-request-flow-log-row[data-request-phase="finished"]',
-	)?.textContent?.includes('200'),
-	'同一条用户卡请求完成后必须同步显示最终 HTTP 状态',
+	)?.textContent?.includes('200') &&
+	host.querySelector<HTMLElement>(
+		'.ldp-request-flow-log-row[data-request-phase="finished"]',
+	)?.textContent?.includes('决策 完成'),
+	'同一条用户卡请求完成后必须同步显示最终 HTTP 状态和终止决策',
+);
+
+now += 10;
+localQueued = 3;
+await monitor.sampleNow();
+now += 10;
+localQueued = 0;
+await monitor.sampleNow();
+
+host.querySelector<HTMLButtonElement>('[data-log-export="request"]')?.click();
+await new Promise<void>((resolve) => setTimeout(resolve, 0));
+const requestLog = savedLogs.find((file) =>
+	file.filename.includes('-request-log-'));
+const requestRecords = requestLog?.text.trim().split('\n').map((line) =>
+	JSON.parse(line) as Record<string, unknown>) ?? [];
+const exportedUserCard = requestRecords.find((record) =>
+	record.recordType === 'request' && record.logicalId === 'L-user');
+const runtimeStates = requestRecords.filter((record) =>
+	record.recordType === 'request-runtime-state');
+assert(
+	requestLog?.mimeType === 'application/x-ndjson;charset=utf-8' &&
+		requestLog.filename.endsWith('.jsonl') &&
+		requestRecords[0]?.recordType === 'meta' &&
+		requestRecords.some((record) => record.recordType === 'runtime-state') &&
+		runtimeStates.length >= 3 &&
+		runtimeStates.some((record) =>
+			(record.scheduler as Record<string, unknown> | null)?.queued === 3) &&
+		runtimeStates.every((record) =>
+			Number(record.lastObservedAt) >= Number(record.at) &&
+			Number(record.observations) >= 1) &&
+		exportedUserCard?.path === '/u/alice/card.json' &&
+		exportedUserCard.queryShape === '?credential&topic_ids[]×2' &&
+		exportedUserCard.decision === 'complete' &&
+		exportedUserCard.identity === 'resource=card' &&
+		!requestLog.text.includes('private') &&
+		!requestLog.text.includes('secret') &&
+		host.querySelector('[data-log-export-status="request"]')?.textContent
+			?.includes('已导出'),
+	'请求日志导出必须包含完整因果字段、运行态变化时间线和查询键形状，且不得泄露查询值或身份凭据',
 );
 
 monitor.destroy();

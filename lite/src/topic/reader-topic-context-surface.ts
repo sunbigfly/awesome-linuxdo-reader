@@ -7,6 +7,7 @@ import {
 	deepActiveElement,
 	eventElement,
 } from '../dom/event-target.js';
+import { bindFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
 import { htmlElement as element } from '../dom/html-element.js';
 import type {
 	PostView,
@@ -234,6 +235,31 @@ function quoteExcerptText(document: Document, html: string): string {
 	return String(container.textContent ?? '').trim();
 }
 
+interface QuoteHintRect {
+	readonly left: number;
+	readonly top: number;
+	readonly right: number;
+	readonly bottom: number;
+	readonly width: number;
+	readonly height: number;
+}
+
+function usableQuoteHintRect(rect: QuoteHintRect): boolean {
+	return [rect.left, rect.top, rect.right, rect.bottom, rect.width, rect.height]
+		.every(Number.isFinite) && rect.width > 0 && rect.height > 0;
+}
+
+function quoteHintElementRects(element: HTMLElement): readonly QuoteHintRect[] {
+	const clientRects = typeof element.getClientRects === 'function'
+		? Array.from(element.getClientRects()).filter(usableQuoteHintRect)
+		: [];
+	if (clientRects.length) return clientRects;
+	const bounds = element.getBoundingClientRect();
+	return usableQuoteHintRect(bounds)
+		? Object.freeze([bounds])
+		: Object.freeze([]);
+}
+
 function markQuoteTextMatch(
 	document: Document,
 	root: HTMLElement,
@@ -396,6 +422,16 @@ export class ReaderTopicContextFeature<
 			options.document.documentElement;
 		this.#notify = options.notify ?? (() => {});
 		this.#onError = options.onError ?? (() => {});
+		for (const type of [
+			'ldp-reader-window-change',
+			'ldp-reader-workspace-change',
+		]) {
+			this.scope.listen(this.#quoteHintHost, type, () => {
+				this.#quoteHighlightHint?.classList.remove(
+					'ldp-quote-hint-visible',
+				);
+			});
+		}
 		(options.presentationChanges ?? this.#replies.changes).subscribe(() => {
 			for (const roots of this.#rootsByPostNumber.values()) {
 				for (const root of roots) this.#syncMountedTree(root);
@@ -561,18 +597,36 @@ export class ReaderTopicContextFeature<
 
 	applyRevealedQuoteHighlight(
 		state: ReaderHistoryQuoteHighlightState,
-		postRoot: HTMLElement,
+		postRoot: HTMLElement | null = null,
 	): boolean {
-		if (postRoot.dataset.postNumber !== String(state.postNumber)) return false;
+		const targetRoot = this.#resolveQuoteTargetRoot(state.postNumber, postRoot);
+		if (!targetRoot) {
+			this.#clearQuoteHighlight();
+			this.#quoteHighlight = state;
+			return false;
+		}
 		const matched = this.#applyQuoteHighlight(
-			postRoot,
+			targetRoot,
 			state.text,
 			state.active,
 			state.source,
 			true,
 		);
-		if (!matched) this.#revealQuoteTarget?.(postRoot, 'floor');
+		if (!matched) this.#revealQuoteTarget?.(targetRoot, 'floor');
 		return matched;
+	}
+
+	#resolveQuoteTargetRoot(
+		postNumber: DiscoursePostNumber,
+		preferred: HTMLElement | null,
+	): HTMLElement | null {
+		const expected = String(postNumber);
+		if (preferred?.dataset.postNumber === expected && preferred.isConnected) {
+			return preferred;
+		}
+		return [...(this.#rootsByPostNumber.get(postNumber) ?? [])]
+			.find((root) => root.isConnected && root.dataset.postNumber === expected) ??
+			null;
 	}
 
 	async restoreQuoteHighlightState(
@@ -640,6 +694,7 @@ export class ReaderTopicContextFeature<
 			const expanded = this.#expandedQuoteKeys.has(key);
 			quote.classList.toggle('ldp-quote-expanded', expanded);
 			quote.dataset.ldpQuoteExpanded = expanded ? '1' : '0';
+			if (!expanded) this.#restoreQuoteExcerpt(quote, body);
 			const toggle = button(
 				this.#document,
 				'ldp-quote-toggle',
@@ -664,6 +719,7 @@ export class ReaderTopicContextFeature<
 			jump.dataset.targetTopicId = String(targetTopicId);
 			jump.append(this.#icon('arrow-up'));
 			controls.append(jump);
+			if (!expanded) continue;
 			const fullPost = this.#controller.quotedPost(
 				targetTopicId,
 				targetPostNumber,
@@ -672,7 +728,7 @@ export class ReaderTopicContextFeature<
 				this.#applyQuotePost(quote, body, fullPost);
 				continue;
 			}
-			void this.#hydrateQuoteBody(
+			void this.#hydrateExpandedQuoteBody(
 				view,
 				quote,
 				body,
@@ -683,6 +739,14 @@ export class ReaderTopicContextFeature<
 				if (!this.scope.destroyed) this.#onError(error);
 			});
 		}
+	}
+
+	#restoreQuoteExcerpt(quote: HTMLElement, body: HTMLElement): boolean {
+		const excerpt = this.#quoteJumpExcerptByElement.get(quote);
+		delete quote.dataset.ldpQuoteHydrated;
+		if (excerpt === undefined || body.innerHTML === excerpt) return false;
+		body.innerHTML = excerpt;
+		return true;
 	}
 
 	#applyQuotePost(
@@ -697,7 +761,7 @@ export class ReaderTopicContextFeature<
 		return true;
 	}
 
-	async #hydrateQuoteBody(
+	async #hydrateExpandedQuoteBody(
 		view: PostView,
 		quote: HTMLElement,
 		body: HTMLElement,
@@ -711,6 +775,7 @@ export class ReaderTopicContextFeature<
 		);
 		if (
 			!fullPost ||
+			!this.#expandedQuoteKeys.has(key) ||
 			this.scope.destroyed ||
 			this.#viewByRoot.get(view.slots.root) !== view ||
 			!view.slots.content.contains(quote) ||
@@ -719,10 +784,7 @@ export class ReaderTopicContextFeature<
 			return;
 		}
 		if (!this.#applyQuotePost(quote, body, fullPost)) return;
-		this.#notifyQuoteBodyChanged(
-			view.slots.root,
-			this.#expandedQuoteKeys.has(key) ? 'expanded' : 'collapsed',
-		);
+		this.#notifyQuoteBodyChanged(view.slots.root, 'expanded');
 	}
 
 	async #loadQuotePost(
@@ -1110,14 +1172,7 @@ export class ReaderTopicContextFeature<
 		const hiddenPostNumbers =
 			this.#presentation?.hiddenFloorRunAfter(postNumber) ??
 			Object.freeze([]);
-		if (
-			hiddenPostNumbers.length === 0 ||
-			!this.#hiddenReplyTreeProjectionReady(
-				root,
-				postNumber,
-				hiddenPostNumbers,
-			)
-		) {
+		if (hiddenPostNumbers.length === 0) {
 			this.#removeHiddenReplyMarker(root);
 			return;
 		}
@@ -1177,29 +1232,6 @@ export class ReaderTopicContextFeature<
 		 * 同级；挂进上一楼层会让其边框、背景和横向滚动条错误包住分隔条。
 		 */
 		root.after(marker);
-	}
-
-	#hiddenReplyTreeProjectionReady(
-		root: HTMLElement,
-		postNumber: DiscoursePostNumber,
-		hiddenPostNumbers: readonly PostNumber[],
-	): boolean {
-		const presentation = this.#presentation;
-		if (!presentation) return true;
-		const belongsToRoot = hiddenPostNumbers.some(
-			(hiddenPostNumber) =>
-				presentation.rootOf(hiddenPostNumber) === postNumber,
-		);
-		if (!belongsToRoot || presentation.childrenOf(postNumber).length === 0) {
-			return true;
-		}
-		const replyList = root.querySelector<HTMLElement>(
-			':scope > .ldp-children > .ldp-reply-list',
-		);
-		if (!replyList) return false;
-		return Array.from(replyList.children).some((child) =>
-			child.classList.contains('ldp-post') ||
-			child.classList.contains('ldp-tree-virtual-spacer'));
 	}
 
 	#appendHiddenReplyBatch(
@@ -1409,6 +1441,7 @@ export class ReaderTopicContextFeature<
 		);
 		if (!quoteAction || !root.contains(quoteAction)) return;
 		event.preventDefault();
+		event.stopPropagation();
 		const targetPostNumber = discoursePostNumber(
 			quoteAction.dataset.targetPostNumber,
 		);
@@ -1466,8 +1499,8 @@ export class ReaderTopicContextFeature<
 				source: 'quote',
 				alignment: 'nearest',
 				highlight: false,
-			}, root, jumpEpoch);
-			if (!result || !this.#isActiveRoot(root)) return;
+			}, jumpEpoch);
+			if (!result || !this.#isQuoteJumpCurrent(jumpEpoch)) return;
 			if (result.status !== 'revealed') {
 				if (result.status === 'unavailable') {
 					this.#notify(
@@ -1484,10 +1517,10 @@ export class ReaderTopicContextFeature<
 				}
 				return;
 			}
-			if (
-				result.element &&
-				!this.applyRevealedQuoteHighlight(quoteHighlight, result.element)
-			) {
+			if (!this.applyRevealedQuoteHighlight(
+				quoteHighlight,
+				result.element ?? null,
+			)) {
 				this.#notify(
 					`目的地内容已修改；已定位到楼层 #${targetPostNumber}`,
 				);
@@ -1497,11 +1530,13 @@ export class ReaderTopicContextFeature<
 		const quote = quoteAction.closest<HTMLElement>('.ldp-post-quote');
 		const body = quote?.querySelector<HTMLElement>(':scope > blockquote');
 		if (!quote || !body) return;
+		if (quoteAction.getAttribute('aria-busy') === 'true') return;
 		const key = String(quoteAction.dataset.quoteKey ?? '');
 		const expanded = this.#expandedQuoteKeys.has(key);
 		const anchorRoot = postRoot ?? root;
 		if (expanded) {
 			this.#expandedQuoteKeys.delete(key);
+			this.#restoreQuoteExcerpt(quote, body);
 			quote.dataset.ldpQuoteExpanded = '0';
 			quote.classList.remove('ldp-quote-expanded');
 			quoteAction.setAttribute('aria-expanded', 'false');
@@ -1528,7 +1563,10 @@ export class ReaderTopicContextFeature<
 				if (!fullPost) {
 					quoteAction.setAttribute(
 						'aria-label',
-						'完整引用不可用；可使用原生引用链接',
+						'完整引用不可用；可跳到被引用楼层',
+					);
+					this.#notify(
+						`被引用楼层 #${targetPostNumber} 的完整正文暂不可用`,
 					);
 					return;
 				}
@@ -1555,7 +1593,6 @@ export class ReaderTopicContextFeature<
 	async #navigateQuoteWithRetry(
 		navigation: ReaderTopicContextNavigationPort,
 		request: ReaderTopicContextNavigationRequest,
-		root: HTMLElement,
 		jumpEpoch: number,
 	): Promise<ReaderTopicContextNavigationResult | null> {
 		for (let attempt = 0; ; attempt += 1) {
@@ -1563,20 +1600,14 @@ export class ReaderTopicContextFeature<
 			try {
 				result = await navigation.navigate(request);
 			} catch (error) {
-				if (
-					this.#isActiveRoot(root) &&
-					jumpEpoch === this.#quoteJumpEpoch
-				) {
+				if (this.#isQuoteJumpCurrent(jumpEpoch)) {
 					this.#notify(
 						`目的地楼层 #${request.postNumber} 定位失败；请稍后重试`,
 					);
 				}
 				throw error;
 			}
-			if (
-				!this.#isActiveRoot(root) ||
-				jumpEpoch !== this.#quoteJumpEpoch
-			) {
+			if (!this.#isQuoteJumpCurrent(jumpEpoch)) {
 				return null;
 			}
 			if (result.status !== 'unresolved-tree' || attempt >= 2) {
@@ -1587,10 +1618,7 @@ export class ReaderTopicContextFeature<
 			);
 			const navigationRevision = navigation.revision;
 			await this.#navigationRetryDelay((attempt + 1) * 1_000);
-			if (
-				!this.#isActiveRoot(root) ||
-				jumpEpoch !== this.#quoteJumpEpoch
-			) {
+			if (!this.#isQuoteJumpCurrent(jumpEpoch)) {
 				return null;
 			}
 			if (
@@ -1604,6 +1632,10 @@ export class ReaderTopicContextFeature<
 				});
 			}
 		}
+	}
+
+	#isQuoteJumpCurrent(jumpEpoch: number): boolean {
+		return !this.scope.destroyed && jumpEpoch === this.#quoteJumpEpoch;
 	}
 
 	#notifyQuoteBodyChanged(
@@ -1707,34 +1739,64 @@ export class ReaderTopicContextFeature<
 			if (!lastMark || this.#quoteHighlightHint !== hint) return;
 			cancelHintHide();
 			hint.classList.add('ldp-quote-hint-visible');
-			const markRect = lastMark.getBoundingClientRect();
+			const markRects = this.#quoteHighlightMarks.flatMap(
+				quoteHintElementRects,
+			);
+			const markRect = markRects.length
+				? Object.freeze({
+					left: Math.min(...markRects.map((rect) => rect.left)),
+					top: Math.min(...markRects.map((rect) => rect.top)),
+					right: Math.max(...markRects.map((rect) => rect.right)),
+					bottom: Math.max(...markRects.map((rect) => rect.bottom)),
+					width: 0,
+					height: 0,
+				})
+				: lastMark.getBoundingClientRect();
 			const rootRect = this.#scrollRoot.getBoundingClientRect();
 			const hintRect = hint.getBoundingClientRect();
 			const view = this.#document.defaultView;
-			const viewportWidth = view?.innerWidth ??
+			const measuredViewportWidth = view?.innerWidth ??
 				this.#document.documentElement.clientWidth;
+			const measuredViewportHeight = view?.innerHeight ??
+				this.#document.documentElement.clientHeight;
+			const viewportWidth = Number.isFinite(measuredViewportWidth) &&
+				measuredViewportWidth > 0
+				? measuredViewportWidth
+				: Math.max(rootRect.right, hintRect.width + 16);
+			const viewportHeight = Number.isFinite(measuredViewportHeight) &&
+				measuredViewportHeight > 0
+				? measuredViewportHeight
+				: Math.max(rootRect.bottom, hintRect.height + 16);
 			const anchorX = event && Number.isFinite(event.clientX)
 				? event.clientX
-				: markRect.left + markRect.width / 2;
-			const anchorY = event && Number.isFinite(event.clientY)
-				? event.clientY
-				: markRect.top;
+				: (markRect.left + markRect.right) / 2;
 			const edge = 8;
 			const gap = QUOTE_HINT_POINTER_GAP_PX;
-			const left = Math.max(
-				edge,
-				Math.min(
-					anchorX - hintRect.width / 2,
-					viewportWidth - hintRect.width - edge,
-				),
+			const minLeft = edge;
+			const maxLeft = Math.max(edge, viewportWidth - hintRect.width - edge);
+			const minTop = Math.max(edge, rootRect.top + edge);
+			const maxTop = Math.max(
+				minTop,
+				Math.min(viewportHeight - edge, rootRect.bottom - edge) -
+					hintRect.height,
 			);
-			const showBelow =
-				anchorY - hintRect.height - gap < rootRect.top + edge;
-			const top = showBelow
-				? anchorY + gap
-				: anchorY - hintRect.height - gap;
-			hint.style.left = `${Math.round(left)}px`;
-			hint.style.top = `${Math.round(Math.max(edge, top))}px`;
+			const clampLeft = (value: number): number =>
+				Math.max(minLeft, Math.min(value, maxLeft));
+			const clampTop = (value: number): number =>
+				Math.max(minTop, Math.min(value, maxTop));
+			const above = markRect.top - hintRect.height - gap;
+			const below = markRect.bottom + gap;
+			const fitsAbove = above >= minTop;
+			const fitsBelow = below <= maxTop;
+			const aboveSpace = markRect.top - minTop;
+			const belowSpace = maxTop + hintRect.height - markRect.bottom;
+			const top = fitsAbove || (!fitsBelow && aboveSpace >= belowSpace)
+				? above
+				: below;
+			hint.style.left = `${Math.round(clampLeft(
+				anchorX - hintRect.width / 2,
+			))}px`;
+			hint.style.top = `${Math.round(clampTop(top))}px`;
 		};
 		const scheduleHintHide = (): void => {
 			cancelHintHide();
@@ -2129,6 +2191,7 @@ export class ReaderTopicContextSurface<
 		);
 		this.#discussionLayer.append(this.#discussionPanel);
 		options.discussionHost.append(this.#discussionLayer);
+		this.scope.add(bindFloatingSurfaceWheel(this.#discussionLayer));
 		this.#discussionTopology.update(null);
 		this.discussionDomOwner = new ReplyTreeDomOwner(
 			this.#discussionTopology,

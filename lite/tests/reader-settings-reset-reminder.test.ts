@@ -76,7 +76,9 @@ const options = {
 assert(
 	await showReaderSettingsResetReminder(options) === 'kept' &&
 	confirmations.length === 1 &&
-	confirmations[0]?.message.includes('完整应用新版体验') === true &&
+	confirmations[0]?.message?.includes('完整应用新版体验') === true &&
+	confirmations[0]?.note?.includes('阅读队列图标位置') === true &&
+	confirmations[0]?.note?.includes('队列条目') === true &&
 	confirmations[0]?.confirmLabel === '恢复默认值' &&
 	confirmations[0]?.cancelLabel === '保留当前设置' &&
 	storage.getItem(READER_SETTINGS_RESET_REMINDER_STORAGE_KEY) ===

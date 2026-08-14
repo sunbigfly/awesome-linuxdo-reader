@@ -12,6 +12,88 @@ export function replaceImageWithFallbackOnError(
 	}, { once: true });
 }
 
+export type ReaderImageSourceRecovery = (
+	source: string,
+) => string | Promise<string>;
+
+/**
+ * 装配统一资源层时先保留可替换的语义占位，恢复完成后原位提交真实图片；没有资源层时
+ * 才按浏览器直连候选逐级降级。资源层负责请求、single-flight、缓存与来源校验，本
+ * helper 只拥有单个 img 的候选推进和 DOM 替换。
+ */
+export function installReaderImageSourceFallback(
+	image: HTMLImageElement,
+	sources: readonly string[],
+	createFallback: () => Element,
+	recoverSource?: ReaderImageSourceRecovery,
+	visibleSource?: string,
+): void {
+	const candidates = [...new Set(
+		sources.map((source) => String(source).trim()).filter(Boolean),
+	)];
+	let directIndex = 0;
+	let recoveryIndex = 0;
+	let fallback: Element | null = null;
+	let recovering = false;
+
+	const showFallback = (): Element | null => {
+		if (fallback?.parentNode) return fallback;
+		const next = createFallback();
+		if (image.parentNode) image.replaceWith(next);
+		fallback = next;
+		return next.parentNode ? next : null;
+	};
+	const recoverNext = async (): Promise<void> => {
+		if (recovering) return;
+		recovering = true;
+		while (recoverSource && recoveryIndex < candidates.length) {
+			const candidate = candidates[recoveryIndex]!;
+			recoveryIndex += 1;
+			try {
+				const recovered = String(await recoverSource(candidate)).trim();
+				if (!fallback?.parentNode && !image.parentNode) return;
+				if (!recovered) continue;
+				if (fallback?.parentNode) {
+					fallback.replaceWith(image);
+					fallback = null;
+				}
+				recovering = false;
+				image.src = recovered;
+				return;
+			} catch {
+				// 当前候选不可恢复时继续使用下一候选，最终保留语义占位。
+			}
+		}
+		recovering = false;
+		if (fallback?.parentNode) image.removeEventListener('error', advance);
+	};
+	function advance(): void {
+		if (recoverSource) {
+			if (!showFallback()) return;
+			void recoverNext();
+			return;
+		}
+		const direct = candidates[directIndex];
+		directIndex += 1;
+		if (direct) {
+			image.src = direct;
+			return;
+		}
+		image.removeEventListener('error', advance);
+		showFallback();
+	}
+
+	image.addEventListener('error', advance);
+	if (recoverSource) {
+		const visible = String(visibleSource ?? '').trim();
+		if (visible) image.src = visible;
+		else if (!showFallback()) return;
+		void recoverNext();
+	} else {
+		advance();
+	}
+}
+
 const READER_SITE_LOGO_PLACEHOLDER = `data:image/svg+xml,${encodeURIComponent(
 	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#e9eef3"/><path d="M18 33a14 14 0 1 1 28 0v13H18V33Z" fill="#748392"/><circle cx="27" cy="31" r="3" fill="#fff"/><circle cx="37" cy="31" r="3" fill="#fff"/></svg>',
 )}`;

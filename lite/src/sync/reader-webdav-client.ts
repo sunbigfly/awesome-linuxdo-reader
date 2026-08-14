@@ -232,9 +232,8 @@ export class ReaderWebDavClient {
 	}
 
 	/**
-	 * 读取主同步文件之外的独立对象。离线 Topic HTML 使用内容寻址文件，
-	 * 不受主 sync.json 的 2 MiB 安全上限约束；完整性由上层清单的
-	 * byteLength 与 SHA-256 再校验。
+	 * 读取主同步文件之外的独立对象。离线 Topic HTML 与历史清单不受主
+	 * sync.json 的 2 MiB 安全上限约束；需要内容完整性校验的对象由上层负责。
 	 */
 	async readObject(
 		config: ReaderWebDavConfig,
@@ -254,12 +253,12 @@ export class ReaderWebDavClient {
 		);
 		if (response.status === 404 || response.status === 409) return null;
 		if (response.status < 200 || response.status >= 300) {
-			throw statusError(response.status, '读取离线对象');
+			throw statusError(response.status, '读取独立对象');
 		}
 		const etag = headerValue(response.responseHeaders, 'ETag');
 		if (!etag) throw new ReaderWebDavError(
 			'unexpected',
-			'WebDAV 离线对象读取成功但服务器未返回 ETag',
+			'WebDAV 独立对象读取成功但服务器未返回 ETag',
 		);
 		return Object.freeze({
 			text: String(response.responseText ?? ''),
@@ -289,7 +288,7 @@ export class ReaderWebDavClient {
 			text,
 		);
 		if (![200, 201, 204].includes(response.status)) {
-			throw statusError(response.status, '写入离线对象');
+			throw statusError(response.status, '写入独立对象');
 		}
 		return headerValue(response.responseHeaders, 'ETag');
 	}
@@ -302,7 +301,7 @@ export class ReaderWebDavClient {
 		const normalized = normalizeReaderWebDavRemotePath(remotePath);
 		if (!normalized) throw new ReaderWebDavError(
 			'unexpected',
-			'WebDAV 离线对象路径无效',
+			'WebDAV 独立对象路径无效',
 		);
 		const segments = normalized.split('/').slice(0, -1);
 		let relative = '';

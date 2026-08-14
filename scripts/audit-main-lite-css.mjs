@@ -518,6 +518,14 @@ const forbidden = [
 	['main.css reference', /main\.css/i],
 	['remote import', /@import\b/i],
 	['global wildcard reset', /(^|})\s*\*\s*{/m],
+	[
+		'embedded virtual-stream native anchoring override',
+		/(?:^|})\s*[^{}]*\.ldp-overlay\.ldp-reader-embedded\s+\.ldp-virtual-stream[^{}]*\{[^{}]*overflow-anchor:\s*none\s*;/s,
+	],
+	[
+		'stationary viewport native anchoring override',
+		/\.ldp-body[^{}]*\.ldp-stream-viewport-anchor[^{}]*\{[^{}]*overflow-anchor:\s*none\s*;/s,
+	],
 ].filter(([, pattern]) => pattern.test(stylesheet)).map(([name]) => name);
 const requiredLayoutContracts = [
 	[
@@ -545,11 +553,15 @@ const requiredLayoutContracts = [
 		/\.ldp-virtual-stream\s*\{[^}]*height:\s*auto\s*;[^}]*overflow:\s*visible\s*;/s,
 	],
 	[
-		'native virtual-stream anchor owner',
+		'native virtual-stream anchor owner across reader shapes',
 		/\.ldp-virtual-stream\s*\{[^}]*overflow-anchor:\s*auto\s*;/s,
 	],
 	[
-		'floating virtual stream excluded from duplicate native anchoring',
+		'programmatic body explicit anchor owner',
+		/\.ldp-body:is\(\.ldp-stream-programmatic-scroll,\.ldp-quote-positioning\)\s*\{[^}]*overflow-anchor:\s*none\s*;/s,
+	],
+	[
+		'detached managed floating stream explicit anchor owner',
 		/\.ldp-overlay\.ldp-window-managed:not\(\.ldp-fullpage\):not\(\.ldp-reader-embedded\)[^{]*\.ldp-virtual-stream\s*\{[^}]*overflow-anchor:\s*none\s*;/s,
 	],
 	[

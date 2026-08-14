@@ -3,12 +3,16 @@ import type {
 	SharedRequestPermitPort,
 } from './coordinated-request-client.js';
 import {
+	endpointRequestIdentity,
+	parseRetryAfterMs,
+	rateLimitWindowFromCode,
 	type RateLimitDecision,
 } from './request-rate-limit-policy.js';
-import type {
-	RequestPriority,
-	RequestStartGateInput,
-	RequestStartPermit,
+import {
+	RequestStartDeferredError,
+	type RequestPriority,
+	type RequestStartGateInput,
+	type RequestStartPermit,
 } from './request-scheduler.js';
 
 export const READER_REQUEST_PERMIT_STORAGE_KEY =
@@ -19,6 +23,13 @@ export const READER_REQUEST_PERMIT_CHANNEL =
 	'linuxdo-enhanced-reader:request-permit-channel:v1';
 export const READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME =
 	'ldp-cloudflare-challenge';
+export const READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS = 2_500;
+export const READER_BACKGROUND_REQUEST_MAX_DEFER_MS = 15_000;
+const READER_CLOUDFLARE_CHALLENGE_MAX_PROBE_INTERVAL_MS = 10_000;
+const READER_RATE_LIMIT_EVIDENCE_WINDOW_MS = 4_000;
+const READER_RATE_LIMIT_MAX_BACKOFF_MS = 60_000;
+const READER_RATE_LIMIT_PROBE_FAILURE_WAIT_MS = 1_000;
+const READER_RATE_LIMIT_PROBE_RECHECK_MS = 500;
 
 /**
  * 验证窗口只能承载原站 Cloudflare 页面，不能再次启动 Reader 并递归创建验证窗口。
@@ -29,10 +40,100 @@ export function isReaderCloudflareChallengeWindow(
 	return window.name === READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME;
 }
 
+export interface ReaderCloudflareChallengeWindowMonitorOptions {
+	readonly storage: Pick<Storage, 'getItem'>;
+	readonly close: () => void;
+	readonly storageEvents?: EventTarget | null;
+	readonly schedule?: (callback: () => void, intervalMs: number) => unknown;
+	readonly cancel?: (handle: unknown) => void;
+	readonly intervalMs?: number;
+	readonly now?: () => number;
+	readonly onError?: (error: unknown) => void;
+}
+
+type ReaderCloudflareChallengeLeaseState =
+	| 'active'
+	| 'released'
+	| 'unknown';
+
+function readerCloudflareChallengeLeaseState(
+	storage: Pick<Storage, 'getItem'>,
+	now: number,
+): ReaderCloudflareChallengeLeaseState {
+	try {
+		const stored = storage.getItem(READER_REQUEST_PERMIT_STORAGE_KEY);
+		if (!stored) return 'released';
+		const parsed: unknown = JSON.parse(stored);
+		if (!parsed || typeof parsed !== 'object') return 'unknown';
+		const challenge = (parsed as Readonly<Record<string, unknown>>).challenge;
+		if (challenge === null || challenge === undefined) return 'released';
+		if (typeof challenge !== 'object') return 'unknown';
+		const source = challenge as Readonly<Record<string, unknown>>;
+		const state = String(source.state ?? '');
+		const expiresAt = Number(source.expiresAt);
+		if (!Number.isFinite(expiresAt)) return 'unknown';
+		if (expiresAt <= now || state === 'passed') return 'released';
+		return state === 'active' || state === 'required'
+			? 'active'
+			: 'unknown';
+	} catch {
+		return 'unknown';
+	}
+}
+
+/**
+ * Reader 命名创建的 challenge 页不启动完整 Reader，只监听共享硬闸门。
+ * owner 页面重载或切换后，只要横幅对应的 active/required 状态消失，浮窗就自行关闭。
+ */
+export function monitorReaderCloudflareChallengeWindow(
+	options: ReaderCloudflareChallengeWindowMonitorOptions,
+): () => void {
+	const schedule = options.schedule ??
+		((callback, intervalMs) => setInterval(callback, intervalMs));
+	const cancel = options.cancel ??
+		((handle) => clearInterval(handle as ReturnType<typeof setInterval>));
+	const intervalMs = Math.max(250, Number(options.intervalMs ?? 1_000));
+	const now = options.now ?? Date.now;
+	const onError = options.onError ?? (() => {});
+	let timer: unknown = null;
+	let stopped = false;
+	const stop = (): void => {
+		if (stopped) return;
+		stopped = true;
+		if (timer !== null) cancel(timer);
+		timer = null;
+		options.storageEvents?.removeEventListener('storage', onStorage);
+	};
+	const check = (): void => {
+		if (
+			stopped ||
+			readerCloudflareChallengeLeaseState(options.storage, now()) !==
+				'released'
+		) return;
+		try {
+			options.close();
+			stop();
+		} catch (error) {
+			onError(error);
+		}
+	};
+	const onStorage = (event: Event): void => {
+		const key = (event as StorageEvent).key;
+		if (key === undefined || key === null || key === READER_REQUEST_PERMIT_STORAGE_KEY) {
+			check();
+		}
+	};
+	options.storageEvents?.addEventListener('storage', onStorage);
+	check();
+	if (!stopped) timer = schedule(check, intervalMs);
+	return stop;
+}
+
 interface StoredIntent {
 	readonly id: string;
 	readonly ownerId: string;
 	readonly priority: RequestPriority;
+	readonly rateLimitRoute: string;
 	readonly queuedAt: number;
 	readonly expiresAt: number;
 }
@@ -54,8 +155,48 @@ interface StoredChallengeLease {
 	readonly required: boolean;
 	readonly automaticAttempted: boolean;
 	readonly recoveryProbeAttempted?: boolean;
+	readonly probeToken?: string;
+	readonly probeNotBefore?: number;
+	readonly probeBackoffMs?: number;
 	readonly updatedAt: number;
 	readonly expiresAt: number;
+}
+
+interface StoredRateLimitLease {
+	readonly scope: 'endpoint' | 'global';
+	readonly route: string;
+	readonly hits: number;
+	readonly authoritative: boolean;
+	readonly lastObservedAt: number;
+	readonly retryAt: number;
+	readonly expiresAt: number;
+	readonly probeOwnerId?: string;
+	readonly probeExpiresAt?: number;
+}
+
+type StoredChallengeProbeState = Readonly<Partial<Pick<
+	StoredChallengeLease,
+	'probeToken' | 'probeNotBefore' | 'probeBackoffMs'
+>>>;
+
+function storedChallengeProbeState(
+	source: Partial<StoredChallengeLease> | null | undefined,
+): StoredChallengeProbeState {
+	if (!source) return Object.freeze({});
+	const token = typeof source.probeToken === 'string'
+		? source.probeToken.trim()
+		: '';
+	const notBefore = Number(source.probeNotBefore);
+	const backoffMs = Number(source.probeBackoffMs);
+	return Object.freeze({
+		...(token ? { probeToken: token } : {}),
+		...(Number.isFinite(notBefore) && notBefore > 0
+			? { probeNotBefore: notBefore }
+			: {}),
+		...(Number.isSafeInteger(backoffMs) && backoffMs > 0
+			? { probeBackoffMs: backoffMs }
+			: {}),
+	});
 }
 
 interface MutablePermitState {
@@ -65,6 +206,7 @@ interface MutablePermitState {
 	intents: StoredIntent[];
 	active: StoredPermit[];
 	policies: StoredPolicy[];
+	rateLimits: StoredRateLimitLease[];
 	challenge: StoredChallengeLease | null;
 }
 
@@ -115,6 +257,17 @@ export interface BrowserSharedRequestPermitOptions {
 	readonly longBudget: number;
 	readonly minIntervalMs: number;
 	readonly maxConcurrent: number;
+	/** 后台历史只在全局空闲窗口单飞启动；缓存命中不会进入该窗口。 */
+	readonly backgroundIdleIntervalMs?: number;
+	/** 连续前台流量下最多让路多久；到期仍不越过排队前台或活动请求。 */
+	readonly backgroundMaxDeferMs?: number;
+	/** 同一路由重复 429 的共享证据窗口。 */
+	readonly rateLimitEvidenceWindowMs?: number;
+	/** 重复 429 的共享指数退避上限。 */
+	readonly rateLimitMaxBackoffMs?: number;
+	/** 共享等待只增加正向抖动，避免多个标签同刻恢复。 */
+	readonly rateLimitJitterRatio?: number;
+	readonly random?: () => number;
 	readonly intentTtlMs?: number;
 	readonly permitTtlMs?: number;
 	readonly policyTtlMs?: number;
@@ -144,8 +297,9 @@ export interface BrowserSharedRequestPermitSnapshot {
 		| 'concurrency'
 		| 'interval'
 		| '10s'
-		| '60s'
-		| 'challenge'
+			| '60s'
+			| 'rate-limit'
+			| 'challenge'
 		| '';
 }
 
@@ -162,7 +316,15 @@ interface PermitDecision {
 	readonly waitMs: number;
 	readonly reason: BrowserSharedRequestPermitSnapshot['blockingReason'];
 	readonly recoveryProbe?: boolean;
+	readonly defer?: boolean;
 }
+
+const CLEAR_RATE_LIMIT_GATE = Object.freeze({
+	waitMs: 0,
+	recoveryProbe: false,
+	global: false,
+	probeWaiting: false,
+});
 
 export interface BrowserSharedHostRequestLease {
 	release(input?: BrowserSharedObservedResponse): void;
@@ -171,6 +333,7 @@ export interface BrowserSharedHostRequestLease {
 export interface BrowserSharedObservedResponse {
 	readonly source: 'host' | 'reader';
 	readonly href?: string;
+	readonly method?: string;
 	readonly status: number;
 	readonly cloudflareMitigated?: boolean;
 	readonly blockOnCloudflareChallenge?: boolean;
@@ -214,10 +377,37 @@ function nonNegativeInteger(value: number, name: string): number {
 	return normalized;
 }
 
+function unitInterval(value: number | undefined, fallback: number, name: string): number {
+	const normalized = Number(value ?? fallback);
+	if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1) {
+		throw new RangeError(`${name} 必须位于 0 到 1`);
+	}
+	return normalized;
+}
+
+function authoritativeRetryAfter(value: unknown, now: number): boolean {
+	const raw = String(value ?? '').trim();
+	if (!raw) return false;
+	const seconds = Number(raw);
+	return Number.isFinite(seconds) ? seconds > 0 : Date.parse(raw) > now;
+}
+
+function observedRateLimitWindowWaitMs(
+	window: RateLimitDecision['window'],
+): number {
+	if (window === '10s') return 10_000;
+	if (window === '60s' || window === '10s+60s') return 60_000;
+	return 0;
+}
+
 function normalizedSourceId(value: string): string {
 	const normalized = String(value).trim();
 	if (!normalized) throw new Error('request permit sourceId 不能为空');
 	return normalized;
+}
+
+function activeRateLimitLease(lease: StoredRateLimitLease): boolean {
+	return lease.scope === 'global' || lease.authoritative || lease.hits >= 2;
 }
 
 function emptyState(): MutablePermitState {
@@ -228,6 +418,7 @@ function emptyState(): MutablePermitState {
 		intents: [],
 		active: [],
 		policies: [],
+		rateLimits: [],
 		challenge: null,
 	};
 }
@@ -253,10 +444,18 @@ function normalizeState(
 			typeof intent === 'object' &&
 			typeof intent.id === 'string' &&
 			typeof intent.ownerId === 'string' &&
-			intent.priority in PRIORITY_WEIGHT &&
-			Number.isFinite(intent.queuedAt) &&
-			Number(intent.expiresAt) > now)
-			.slice(-256)
+				intent.priority in PRIORITY_WEIGHT &&
+				(
+					intent.rateLimitRoute === undefined ||
+					typeof intent.rateLimitRoute === 'string'
+				) &&
+				Number.isFinite(intent.queuedAt) &&
+				Number(intent.expiresAt) > now)
+				.map((intent) => Object.freeze({
+					...intent,
+					rateLimitRoute: String(intent.rateLimitRoute ?? '').trim(),
+				}))
+				.slice(-256)
 		: [];
 	const active = Array.isArray(source.active)
 		? source.active.filter((permit): permit is StoredPermit =>
@@ -290,6 +489,35 @@ function normalizeState(
 				expiresAt: Number(policy.expiresAt),
 			}))
 			.slice(-64)
+			: [];
+	const rateLimits = Array.isArray(source.rateLimits)
+		? source.rateLimits.filter((lease): lease is StoredRateLimitLease =>
+			!!lease &&
+			typeof lease === 'object' &&
+			['endpoint', 'global'].includes(String(lease.scope)) &&
+			typeof lease.route === 'string' &&
+			lease.route.trim() !== '' &&
+			Number.isSafeInteger(Number(lease.hits)) &&
+			Number(lease.hits) > 0 &&
+			Number.isFinite(Number(lease.lastObservedAt)) &&
+			Number.isFinite(Number(lease.retryAt)) &&
+			Number(lease.expiresAt) > now)
+			.map((lease) => Object.freeze({
+				scope: lease.scope === 'global' ? 'global' as const : 'endpoint' as const,
+				route: String(lease.route),
+				hits: Number(lease.hits),
+				authoritative: lease.authoritative === true,
+				lastObservedAt: Number(lease.lastObservedAt),
+				retryAt: Number(lease.retryAt),
+				expiresAt: Number(lease.expiresAt),
+				...(typeof lease.probeOwnerId === 'string' && lease.probeOwnerId
+					? { probeOwnerId: lease.probeOwnerId }
+					: {}),
+				...(Number(lease.probeExpiresAt) > now
+					? { probeExpiresAt: Number(lease.probeExpiresAt) }
+					: {}),
+			}))
+			.slice(-128)
 		: [];
 	const challengeSource = source.challenge &&
 		typeof source.challenge === 'object'
@@ -319,6 +547,7 @@ function normalizeState(
 					challengeSource.ownerId === '',
 				recoveryProbeAttempted:
 					challengeSource.recoveryProbeAttempted === true,
+				...storedChallengeProbeState(challengeSource),
 				updatedAt: Math.max(
 					0,
 					Number(challengeSource.updatedAt) || 0,
@@ -333,7 +562,8 @@ function normalizeState(
 		intents,
 		active,
 		policies,
-		/* 旧 v1 的 cooldown/学习字段不会被复制，下一次写入即完成迁移。 */
+		rateLimits,
+		/* 旧 v1 的 cooldown/学习字段不会被复制；只保留新式有界 429 lease。 */
 		challenge,
 	};
 }
@@ -464,6 +694,12 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 	#longBudget: number;
 	#minIntervalMs: number;
 	#maxConcurrent: number;
+	readonly #backgroundIdleIntervalMs: number;
+	readonly #backgroundMaxDeferMs: number;
+	readonly #rateLimitEvidenceWindowMs: number;
+	readonly #rateLimitMaxBackoffMs: number;
+	readonly #rateLimitJitterRatio: number;
+	readonly #random: () => number;
 	readonly #intentTtlMs: number;
 	readonly #permitTtlMs: number;
 	readonly #policyTtlMs: number;
@@ -493,6 +729,8 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 	#challengeFocusRequested = false;
 	#challengeWindow: BrowserCloudflareChallengeWindow | null = null;
 	#challengeReconcilePromise: Promise<boolean> | null = null;
+	#challengeProbePromise: Promise<boolean> | null = null;
+	#challengeProbeController: AbortController | null = null;
 
 	constructor(options: BrowserSharedRequestPermitOptions) {
 		this.#storage = options.storage;
@@ -508,6 +746,32 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		this.#longBudget = positiveInteger(options.longBudget, 160, 'longBudget');
 		this.#minIntervalMs = nonNegativeInteger(options.minIntervalMs, 'minIntervalMs');
 		this.#maxConcurrent = positiveInteger(options.maxConcurrent, 3, 'maxConcurrent');
+		this.#backgroundIdleIntervalMs = nonNegativeInteger(
+			options.backgroundIdleIntervalMs ??
+				READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS,
+			'backgroundIdleIntervalMs',
+		);
+		this.#backgroundMaxDeferMs = nonNegativeInteger(
+			options.backgroundMaxDeferMs ??
+				READER_BACKGROUND_REQUEST_MAX_DEFER_MS,
+			'backgroundMaxDeferMs',
+		);
+		this.#rateLimitEvidenceWindowMs = positiveInteger(
+			options.rateLimitEvidenceWindowMs,
+			READER_RATE_LIMIT_EVIDENCE_WINDOW_MS,
+			'rateLimitEvidenceWindowMs',
+		);
+		this.#rateLimitMaxBackoffMs = positiveInteger(
+			options.rateLimitMaxBackoffMs,
+			READER_RATE_LIMIT_MAX_BACKOFF_MS,
+			'rateLimitMaxBackoffMs',
+		);
+		this.#rateLimitJitterRatio = unitInterval(
+			options.rateLimitJitterRatio,
+			0.2,
+			'rateLimitJitterRatio',
+		);
+		this.#random = options.random ?? Math.random;
 		this.#intentTtlMs = positiveInteger(options.intentTtlMs, 15_000, 'intentTtlMs');
 		this.#permitTtlMs = positiveInteger(options.permitTtlMs, 35_000, 'permitTtlMs');
 		this.#policyTtlMs = positiveInteger(options.policyTtlMs, 30_000, 'policyTtlMs');
@@ -584,6 +848,10 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 				new DOMException('request permit 已销毁', 'AbortError'),
 			);
 			this.#challengeController = null;
+			this.#challengeProbeController?.abort(
+				new DOMException('request permit 已销毁', 'AbortError'),
+			);
+			this.#challengeProbeController = null;
 			try {
 				this.#challengeWindow?.close?.();
 			} catch {
@@ -605,8 +873,15 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		try {
 			while (!this.#closed) {
 				if (input.signal.aborted) throw this.#abortReason(input.signal);
-				const decision = await this.#transact((state, now) =>
-					this.#tryGrant(state, now, intentId, queuedAt, input.priority));
+					const decision = await this.#transact((state, now) =>
+						this.#tryGrant(
+							state,
+							now,
+							intentId,
+							queuedAt,
+							input.priority,
+							String(input.rateLimitRoute ?? '').trim(),
+						));
 				if (decision.granted && decision.permitId) {
 					granted = true;
 					return this.#permit(
@@ -616,6 +891,12 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 					);
 				}
 				waitReason = decision.reason || waitReason;
+				if (decision.defer) {
+					throw new RequestStartDeferredError(
+						decision.waitMs,
+						decision.reason,
+					);
+				}
 				await this.#wait(decision.waitMs, input.signal);
 			}
 			throw new Error('BrowserSharedRequestPermit 已销毁');
@@ -630,25 +911,166 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 
 	async noteRateLimit(decision: RateLimitDecision): Promise<void> {
 		this.#assertOpen();
-		/*
-		 * Retry-After 只属于收到该 429 的逻辑请求。共享管线不再把它持久化成
-		 * cooldown 或学习预算；Cloudflare 则由 required/active 状态立即硬阻塞新启动。
-		 */
-		void decision;
+		const route = String(decision.route).trim();
+		if (!route) return;
+		await this.#transact((state, now) => {
+			const scope = decision.scope === 'global' ? 'global' as const : 'endpoint' as const;
+			const leaseRoute = scope === 'global' ? '*' : route;
+			const index = state.rateLimits.findIndex(
+				(lease) => lease.scope === scope && lease.route === leaseRoute,
+			);
+			const previous = index >= 0 ? state.rateLimits[index] : undefined;
+			const repeated = Boolean(
+				previous &&
+				previous.lastObservedAt >= now - this.#rateLimitEvidenceWindowMs,
+			);
+			const hits = repeated ? previous!.hits + 1 : 1;
+			const authoritative =
+				scope === 'global' ||
+				decision.authoritative === true ||
+				(previous?.authoritative === true && repeated);
+			const exponent = Math.max(0, Math.min(6, hits - 1));
+			const boundedWaitMs = Math.min(
+				this.#rateLimitMaxBackoffMs,
+				Math.max(1, decision.waitMs) * (2 ** exponent),
+			);
+			const random = Math.max(0, Math.min(1, Number(this.#random()) || 0));
+			const jitterMs = Math.floor(
+				boundedWaitMs * this.#rateLimitJitterRatio * random,
+			);
+			const retryAt = Math.max(
+				decision.retryAt,
+				now + boundedWaitMs + jitterMs,
+			);
+			const next = Object.freeze<StoredRateLimitLease>({
+				scope,
+				route: leaseRoute,
+				hits,
+				authoritative,
+				lastObservedAt: now,
+				retryAt,
+				expiresAt: Math.max(
+					now + this.#rateLimitEvidenceWindowMs,
+					retryAt + this.#permitTtlMs,
+				),
+			});
+			if (index >= 0) state.rateLimits[index] = next;
+			else state.rateLimits.push(next);
+			if (scope === 'endpoint') {
+				const corroborating = state.rateLimits.find((lease) =>
+					lease.scope === 'endpoint' &&
+					lease.route !== leaseRoute &&
+					lease.lastObservedAt >= now - this.#rateLimitEvidenceWindowMs);
+				if (corroborating) {
+					const globalIndex = state.rateLimits.findIndex(
+						(lease) => lease.scope === 'global',
+					);
+					const globalPrevious = globalIndex >= 0
+						? state.rateLimits[globalIndex]
+						: undefined;
+					const globalRetryAt = Math.max(
+						retryAt,
+						corroborating.retryAt,
+						globalPrevious?.retryAt ?? 0,
+					);
+					const globalLease = Object.freeze<StoredRateLimitLease>({
+						scope: 'global',
+						route: '*',
+						hits: (globalPrevious?.hits ?? 0) + 1,
+						authoritative:
+							authoritative || corroborating.authoritative,
+						lastObservedAt: now,
+						retryAt: globalRetryAt,
+						expiresAt: Math.max(
+							now + this.#rateLimitEvidenceWindowMs,
+							globalRetryAt + this.#permitTtlMs,
+						),
+					});
+					if (globalIndex >= 0) state.rateLimits[globalIndex] = globalLease;
+					else state.rateLimits.push(globalLease);
+				}
+			}
+			if (state.rateLimits.length > 128) {
+				state.rateLimits.splice(0, state.rateLimits.length - 128);
+			}
+		});
+	}
+
+	async noteRateLimitProbeResult(input: {
+		readonly route: string;
+		readonly recovered: boolean;
+	}): Promise<void> {
+		this.#assertOpen();
+		const route = String(input.route).trim();
+		if (!route) return;
+		await this.#transact((state, now) => {
+			if (input.recovered) {
+				state.rateLimits = state.rateLimits.filter(
+					(lease) => lease.scope !== 'global' && lease.route !== route,
+				);
+				return;
+			}
+			state.rateLimits = state.rateLimits.map((lease) => {
+				if (
+					lease.probeOwnerId !== this.#sourceId ||
+					(lease.scope !== 'global' && lease.route !== route)
+				) return lease;
+				const retryAt = Math.max(
+					lease.retryAt,
+					now + READER_RATE_LIMIT_PROBE_FAILURE_WAIT_MS,
+				);
+				return Object.freeze({
+					scope: lease.scope,
+					route: lease.route,
+					hits: lease.hits,
+					authoritative: lease.authoritative,
+					lastObservedAt: lease.lastObservedAt,
+					retryAt,
+					expiresAt: Math.max(lease.expiresAt, retryAt + this.#permitTtlMs),
+				});
+			});
+		});
 	}
 
 	noteObservedResponse(input: BrowserSharedObservedResponse): void {
-		/*
-		 * 宿主 Ajax 不经过 CoordinatedRequestClient；只有权威 cf-mitigated
-		 * challenge 信号可以把它接入同一硬闸门。普通 4xx/429 仍只留证。
-		 */
+		if (input.source !== 'host' || !input.href) return;
+		if (input.status === 429) {
+			const now = this.#now();
+			const window = rateLimitWindowFromCode(input.rateLimitCode);
+			const hasAuthoritativeRetryAfter = authoritativeRetryAfter(
+				input.retryAfter,
+				now,
+			);
+			const waitMs = Math.max(
+				parseRetryAfterMs(input.retryAfter, {
+					now,
+					fallbackMs: 1_500,
+					minMs: 1_000,
+					maxMs: this.#rateLimitMaxBackoffMs,
+				}),
+				observedRateLimitWindowWaitMs(window),
+			);
+			const identity = endpointRequestIdentity(
+				input.href,
+				input.method,
+				this.#challengeOrigin || undefined,
+			);
+			void this.noteRateLimit(Object.freeze({
+				scope: window === 'unknown' ? 'endpoint' : 'global',
+				waitMs,
+				retryAt: now + waitMs,
+				...identity,
+				window,
+				authoritative:
+					hasAuthoritativeRetryAfter || window !== 'unknown',
+			})).catch(this.#onError);
+		}
 		if (
-			input.source !== 'host' ||
-			input.cloudflareMitigated !== true ||
-			input.blockOnCloudflareChallenge === false ||
-			!input.href
-		) return;
-		void this.noteCloudflareChallenge({ href: input.href }).catch(this.#onError);
+			input.cloudflareMitigated === true &&
+			input.blockOnCloudflareChallenge !== false
+		) {
+			void this.noteCloudflareChallenge({ href: input.href }).catch(this.#onError);
+		}
 	}
 
 	async noteCloudflareChallenge(input: {
@@ -682,6 +1104,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 					state.challenge?.automaticAttempted === true,
 				recoveryProbeAttempted:
 					state.challenge?.recoveryProbeAttempted === true,
+				...storedChallengeProbeState(state.challenge),
 				updatedAt: now,
 				expiresAt: now + this.#challengeMaxWaitMs,
 			});
@@ -691,7 +1114,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 	/**
 	 * 页面重载可能销毁原验证 owner，却留下已完成验证的命名窗口与 required 状态。
 	 * 每个 challenge 世代只允许一个新 context 做一次原生 session 探针；成功即解闸，
-	 * 失败仍保留人工按钮。它不打开窗口、不重放业务请求，也不形成请求 cooldown。
+	 * 失败仍保留人工按钮。它不打开窗口、不重放业务请求，并与人工入口共享探针退避。
 	 */
 	reconcileCloudflareChallenge(): Promise<boolean> {
 		this.#assertOpen();
@@ -801,10 +1224,12 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		});
 	}
 
-	/** 兼容旧恢复入口；固定预防窗口必须原样保留，避免过盾后形成追赶突发。 */
-	resetRateLimits(): Promise<void> {
+	/** 清除 429 反馈 lease；固定预防窗口必须原样保留，避免恢复后形成追赶突发。 */
+	async resetRateLimits(): Promise<void> {
 		this.#assertOpen();
-		return Promise.resolve();
+		await this.#transact((state) => {
+			state.rateLimits = [];
+		});
 	}
 
 	async snapshot(): Promise<BrowserSharedRequestPermitSnapshot> {
@@ -812,6 +1237,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		const state = this.#read(now);
 		const policy = this.#effectivePolicy(state);
 		const blocking = this.#blockingState(state, now, policy);
+		const rateLimitBlocking = this.#rateLimitGate(state, now, '', false);
 		const instances = new Set([
 			this.#sourceId,
 			...state.policies.map((entry) => entry.ownerId),
@@ -838,9 +1264,11 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 				state.challenge?.state === 'active' &&
 				!state.challenge.required &&
 				state.challenge.ownerId === this.#sourceId,
-			nextPermitDelay: blocking.waitMs,
+			nextPermitDelay: Math.max(blocking.waitMs, rateLimitBlocking.waitMs),
 			blockingReason:
-				blocking.reason || (state.intents.length ? 'priority' : ''),
+				(rateLimitBlocking.waitMs > blocking.waitMs
+					? 'rate-limit'
+					: blocking.reason) || (state.intents.length ? 'priority' : ''),
 		});
 	}
 
@@ -908,6 +1336,9 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 					state: 'active',
 					required: false,
 					automaticAttempted: true,
+					recoveryProbeAttempted:
+						state.challenge?.recoveryProbeAttempted === true,
+					...storedChallengeProbeState(state.challenge),
 					updatedAt: now,
 					expiresAt: now + this.#challengeLeaseTtlMs,
 				});
@@ -960,7 +1391,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		if (signal.aborted) throw this.#abortReason(signal);
 		let verified = false;
 		try {
-			verified = await this.#verifyChallenge!(signal);
+			verified = await this.#challengePassesProbe(signal);
 		} catch (error) {
 			if (signal.aborted) throw error;
 			this.#onError(error);
@@ -996,11 +1427,13 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			await this.#releaseChallengeLease();
 			return false;
 		}
-		let popupLoaded = false;
 		let verifyDelayMs = this.#challengeVerifyIntervalMs;
+		const maxVerifyDelayMs = Math.max(
+			verifyDelayMs,
+			READER_CLOUDFLARE_CHALLENGE_MAX_PROBE_INTERVAL_MS,
+		);
 		let nextVerifyAt = this.#now() + verifyDelayMs;
 		const onPopupLoad: EventListener = () => {
-			popupLoaded = true;
 			this.#wake();
 		};
 		popup.addEventListener?.('load', onPopupLoad);
@@ -1022,7 +1455,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 				}
 				const inspectedPassed = this.#inspectChallenge(popup) === 'passed';
 				const probeDue = Boolean(this.#verifyChallenge) &&
-					(inspectedPassed || popupLoaded || this.#now() >= nextVerifyAt);
+					(inspectedPassed || this.#now() >= nextVerifyAt);
 				if (inspectedPassed && !this.#verifyChallenge) {
 					await this.#completeChallengeLease();
 					try {
@@ -1034,9 +1467,8 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 					return true;
 				}
 				if (probeDue) {
-					popupLoaded = false;
 					const verified = await this.#challengePassesProbe(signal);
-					verifyDelayMs = Math.min(10_000, verifyDelayMs * 2);
+					verifyDelayMs = Math.min(maxVerifyDelayMs, verifyDelayMs * 2);
 					nextVerifyAt = this.#now() + verifyDelayMs;
 					if (verified) {
 						await this.#completeChallengeLease();
@@ -1097,15 +1529,132 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		}
 	}
 
-	async #challengePassesProbe(signal: AbortSignal): Promise<boolean> {
-		if (!this.#verifyChallenge) return false;
+	#challengePassesProbe(signal: AbortSignal): Promise<boolean> {
+		if (!this.#verifyChallenge) return Promise.resolve(false);
+		if (signal.aborted) {
+			return Promise.reject(this.#abortReason(signal));
+		}
+		/*
+		 * 页面重载 reconcile 与新到达的 challenge 响应可能同时要求 session
+		 * 探针。验证请求不属于任一业务调用方；同一 context 只保留一个飞行请求，
+		 * 跨 context 再由共享租约限定冷却。各调用方仅等待共享结果，单方中止不得
+		 * 取消其他过盾等待者。
+		 */
+		if (!this.#challengeProbePromise) {
+			const controller = new AbortController();
+			this.#challengeProbeController = controller;
+			const promise = this.#runChallengeProbe(controller.signal)
+				.catch((error: unknown) => {
+					if (controller.signal.aborted) {
+						throw controller.signal.reason ?? error;
+					}
+					this.#onError(error);
+					return false;
+				})
+				.finally(() => {
+					if (this.#challengeProbePromise === promise) {
+						this.#challengeProbePromise = null;
+						this.#challengeProbeController = null;
+					}
+				});
+			this.#challengeProbePromise = promise;
+		}
+		const shared = this.#challengeProbePromise;
+		if (!shared) return Promise.resolve(false);
+		let abort = (): void => {};
+		const cancelled = new Promise<never>((_resolve, reject) => {
+			abort = () => reject(this.#abortReason(signal));
+			signal.addEventListener('abort', abort, { once: true });
+		});
+		return Promise.race([shared, cancelled]).finally(() => {
+			signal.removeEventListener('abort', abort);
+		});
+	}
+
+	async #runChallengeProbe(signal: AbortSignal): Promise<boolean> {
+		const verify = this.#verifyChallenge;
+		if (!verify) return false;
+		if (signal.aborted) throw this.#abortReason(signal);
+		const probeToken = `${this.#sourceId}:challenge-probe:${this.#createId()}`;
+		const maxBackoffMs = Math.max(
+			this.#challengeVerifyIntervalMs,
+			READER_CLOUDFLARE_CHALLENGE_MAX_PROBE_INTERVAL_MS,
+		);
+		const reservation = await this.#transact((state, now) => {
+			const challenge = state.challenge;
+			if (challenge?.state === 'passed') {
+				return Object.freeze({ status: 'passed' as const, backoffMs: 0 });
+			}
+			if (
+				challenge?.state !== 'active' ||
+				challenge.ownerId !== this.#sourceId ||
+				Number(challenge.probeNotBefore ?? 0) > now
+			) {
+				return Object.freeze({ status: 'deferred' as const, backoffMs: 0 });
+			}
+			const storedBackoffMs = Number(challenge.probeBackoffMs);
+			const backoffMs = Number.isSafeInteger(storedBackoffMs) &&
+				storedBackoffMs > 0
+				? Math.max(
+					this.#challengeVerifyIntervalMs,
+					Math.min(maxBackoffMs, storedBackoffMs),
+				)
+				: this.#challengeVerifyIntervalMs;
+			state.challenge = Object.freeze({
+				...challenge,
+				probeToken,
+				probeNotBefore: now + backoffMs,
+				probeBackoffMs: backoffMs,
+				updatedAt: now,
+				expiresAt: Math.max(
+					challenge.expiresAt,
+					now + this.#challengeLeaseTtlMs,
+				),
+			});
+			return Object.freeze({ status: 'reserved' as const, backoffMs });
+		});
+		if (reservation.status === 'passed') return true;
+		if (reservation.status !== 'reserved') return false;
+		if (signal.aborted) throw this.#abortReason(signal);
+
+		let verified = false;
 		try {
-			return await this.#verifyChallenge(signal);
+			verified = await verify(signal);
 		} catch (error) {
 			if (signal.aborted) throw error;
 			this.#onError(error);
-			return false;
 		}
+		const settlement = await this.#transact((state, now) => {
+			const challenge = state.challenge;
+			if (challenge?.state === 'passed') return 'passed' as const;
+			if (
+				!challenge ||
+				challenge.ownerId !== this.#sourceId ||
+				challenge.probeToken !== probeToken
+			) return 'stale' as const;
+			const backoffMs = verified
+				? this.#challengeVerifyIntervalMs
+				: Math.min(
+					maxBackoffMs,
+					Math.max(
+						this.#challengeVerifyIntervalMs,
+						reservation.backoffMs * 2,
+					),
+				);
+			state.challenge = Object.freeze({
+				...challenge,
+				probeNotBefore: now + backoffMs,
+				probeBackoffMs: backoffMs,
+				updatedAt: now,
+				expiresAt: Math.max(
+					challenge.expiresAt,
+					now + this.#challengeLeaseTtlMs,
+				),
+			});
+			return 'updated' as const;
+		});
+		return settlement === 'passed' ||
+			(verified && settlement === 'updated');
 	}
 
 	#focusChallengeWindow(): void {
@@ -1152,6 +1701,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 					automaticAttempted: true,
 					recoveryProbeAttempted:
 						state.challenge.recoveryProbeAttempted === true,
+					...storedChallengeProbeState(state.challenge),
 					updatedAt: now,
 					expiresAt: now + this.#challengeMaxWaitMs,
 				});
@@ -1165,6 +1715,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		intentId: string,
 		queuedAt: number,
 		priority: RequestPriority,
+		rateLimitRoute: string,
 	): PermitDecision {
 		this.#rememberPolicy(state, now);
 		const policy = this.#effectivePolicy(state);
@@ -1172,13 +1723,18 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		if (existing) {
 			state.intents = state.intents.map((intent) =>
 				intent.id === intentId
-					? Object.freeze({ ...intent, expiresAt: now + this.#intentTtlMs })
+					? Object.freeze({
+						...intent,
+						rateLimitRoute,
+						expiresAt: now + this.#intentTtlMs,
+					})
 					: intent);
 		} else {
 			state.intents.push(Object.freeze({
 				id: intentId,
 				ownerId: this.#sourceId,
 				priority,
+				rateLimitRoute,
 				queuedAt,
 				expiresAt: now + this.#intentTtlMs,
 			}));
@@ -1187,23 +1743,79 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			PRIORITY_WEIGHT[left.priority] - PRIORITY_WEIGHT[right.priority] ||
 			left.queuedAt - right.queuedAt ||
 			left.id.localeCompare(right.id));
-		if (state.intents[0]?.id !== intentId) {
+		const firstEligibleIntent = state.intents.find((intent) =>
+			this.#rateLimitGate(
+				state,
+				now,
+				intent.rateLimitRoute,
+				false,
+			).waitMs === 0);
+		if (firstEligibleIntent && firstEligibleIntent.id !== intentId) {
 			return Object.freeze({
 				granted: false,
 				waitMs: 80,
 				reason: 'priority',
 			});
 		}
-		const blocking = this.#blockingState(state, now, policy);
-		const { waitMs } = blocking;
-		if (waitMs > 0) {
+		if (!firstEligibleIntent) {
+			const rateLimitBlocking = this.#rateLimitGate(
+				state,
+				now,
+				rateLimitRoute,
+				false,
+			);
 			return Object.freeze({
 				granted: false,
-				waitMs,
-				reason: blocking.reason,
+				waitMs: Math.max(
+					25,
+					rateLimitBlocking.probeWaiting && !rateLimitBlocking.global
+						? Math.min(
+							rateLimitBlocking.waitMs,
+							READER_RATE_LIMIT_PROBE_RECHECK_MS,
+						)
+						: rateLimitBlocking.waitMs,
+				),
+				reason: 'rate-limit',
+				defer: !rateLimitBlocking.global,
 			});
 		}
-		state.intents.shift();
+		const blocking = this.#blockingState(
+			state,
+			now,
+			policy,
+			priority,
+			queuedAt,
+		);
+		const rateLimitBlocking = this.#rateLimitGate(
+			state,
+			now,
+			rateLimitRoute,
+			false,
+		);
+		const waitMs = Math.max(blocking.waitMs, rateLimitBlocking.waitMs);
+		if (waitMs > 0) {
+			const rateLimitDominates =
+				rateLimitBlocking.waitMs > blocking.waitMs;
+			return Object.freeze({
+				granted: false,
+				waitMs: rateLimitDominates &&
+						rateLimitBlocking.probeWaiting &&
+						!rateLimitBlocking.global
+					? Math.min(waitMs, READER_RATE_LIMIT_PROBE_RECHECK_MS)
+					: waitMs,
+				reason: rateLimitDominates
+					? 'rate-limit'
+					: blocking.reason,
+				defer: rateLimitDominates && !rateLimitBlocking.global,
+			});
+		}
+		const rateLimitRecoveryProbe = this.#rateLimitGate(
+			state,
+			now,
+			rateLimitRoute,
+			true,
+		).recoveryProbe;
+		state.intents = state.intents.filter((intent) => intent.id !== intentId);
 		state.events.push(now);
 		const permitId = `${this.#sourceId}:permit:${this.#createId()}`;
 		state.active.push(Object.freeze({
@@ -1216,7 +1828,64 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			permitId,
 			waitMs: 0,
 			reason: '',
-			recoveryProbe: false,
+			recoveryProbe: rateLimitRecoveryProbe,
+		});
+	}
+
+	#rateLimitGate(
+		state: MutablePermitState,
+		now: number,
+		route: string,
+		claim: boolean,
+	): Readonly<{
+		waitMs: number;
+		recoveryProbe: boolean;
+		global: boolean;
+		probeWaiting: boolean;
+	}> {
+		/* 正常无 429 热路径不分配候选数组，也不创建任何计时器或监听器。 */
+		if (!state.rateLimits.length) return CLEAR_RATE_LIMIT_GATE;
+		const matching = state.rateLimits.filter((lease) =>
+			activeRateLimitLease(lease) &&
+			(lease.scope === 'global' || (!!route && lease.route === route)));
+		if (!matching.length) {
+			return CLEAR_RATE_LIMIT_GATE;
+		}
+		const global = matching.some((lease) => lease.scope === 'global');
+		let waitMs = 0;
+		let probeWaiting = false;
+		for (const lease of matching) {
+			if (lease.retryAt > now) {
+				waitMs = Math.max(waitMs, lease.retryAt - now);
+				continue;
+			}
+			if (lease.probeOwnerId && Number(lease.probeExpiresAt) > now) {
+				probeWaiting = true;
+				waitMs = Math.max(waitMs, Number(lease.probeExpiresAt) - now);
+			}
+		}
+		if (waitMs > 0 || !claim) {
+			return Object.freeze({
+				waitMs,
+				recoveryProbe: waitMs === 0,
+				global,
+				probeWaiting,
+			});
+		}
+		state.rateLimits = state.rateLimits.map((lease) => {
+			if (!matching.includes(lease)) return lease;
+			return Object.freeze({
+				...lease,
+				probeOwnerId: this.#sourceId,
+				probeExpiresAt: now + this.#permitTtlMs,
+				expiresAt: Math.max(lease.expiresAt, now + this.#permitTtlMs),
+			});
+		});
+		return Object.freeze({
+			waitMs: 0,
+			recoveryProbe: true,
+			global,
+			probeWaiting: false,
 		});
 	}
 
@@ -1280,6 +1949,8 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		state: MutablePermitState,
 		now: number,
 		policy: BrowserSharedRequestPermitRuntimePolicy,
+		priority: RequestPriority = 'visible',
+		queuedAt = now,
 	): Readonly<{
 		waitMs: number;
 		reason: BrowserSharedRequestPermitSnapshot['blockingReason'];
@@ -1293,6 +1964,12 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			});
 		}
 		const activeDelay = state.active.length >= policy.maxConcurrent
+			? Math.max(
+				25,
+				Math.min(...state.active.map((permit) => permit.expiresAt - now)),
+			)
+			: 0;
+		const backgroundActiveDelay = priority === 'background' && state.active.length
 			? Math.max(
 				25,
 				Math.min(...state.active.map((permit) => permit.expiresAt - now)),
@@ -1314,12 +1991,28 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			now,
 		);
 		const latest = state.events.at(-1) ?? 0;
-		const intervalDelay = Math.max(
+		const backgroundDeferRemainingMs = priority === 'background'
+			? Math.max(0, queuedAt + this.#backgroundMaxDeferMs - now)
+			: 0;
+		const enforceBackgroundIdle = priority === 'background' &&
+			backgroundDeferRemainingMs > 0;
+		const requestIntervalMs = enforceBackgroundIdle
+			? Math.max(policy.minIntervalMs, this.#backgroundIdleIntervalMs)
+			: policy.minIntervalMs;
+		let intervalDelay = Math.max(
 			0,
-			latest + policy.minIntervalMs - now,
+			latest + requestIntervalMs - now,
 		);
+		if (enforceBackgroundIdle) {
+			// 到达最大让路时间后只解除额外 idle；固定窗口、活动 lease 与
+			// 排队优先级仍继续裁决，不能借此形成后台追赶突发。
+			intervalDelay = Math.min(
+				intervalDelay,
+				backgroundDeferRemainingMs,
+			);
+		}
 		const candidates = [
-			['concurrency', activeDelay],
+			['concurrency', Math.max(activeDelay, backgroundActiveDelay)],
 			['interval', intervalDelay],
 			['10s', shortWindowDelay],
 			['60s', longWindowDelay],
@@ -1492,6 +2185,24 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 				state.policies = state.policies.filter(
 					(policy) => policy.ownerId !== this.#sourceId,
 				);
+				state.rateLimits = state.rateLimits.map((lease) => {
+					if (lease.probeOwnerId !== this.#sourceId) return lease;
+					return Object.freeze({
+						scope: lease.scope,
+						route: lease.route,
+						hits: lease.hits,
+						authoritative: lease.authoritative,
+						lastObservedAt: lease.lastObservedAt,
+						retryAt: Math.max(
+							lease.retryAt,
+							now + READER_RATE_LIMIT_PROBE_FAILURE_WAIT_MS,
+						),
+						expiresAt: Math.max(
+							lease.expiresAt,
+							now + this.#permitTtlMs,
+						),
+					});
+				});
 				if (
 					state.challenge?.state === 'active' &&
 					state.challenge.ownerId === this.#sourceId
@@ -1503,6 +2214,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 						automaticAttempted: true,
 						recoveryProbeAttempted:
 							state.challenge.recoveryProbeAttempted === true,
+						...storedChallengeProbeState(state.challenge),
 						updatedAt: now,
 						expiresAt: now + this.#challengeMaxWaitMs,
 					});

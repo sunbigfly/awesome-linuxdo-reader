@@ -101,7 +101,7 @@ assert(
 			option.hasAttribute('selected'),
 		)?.getAttribute('value') ===
 			'recent-viewed' &&
-		!openFirst.checked &&
+		openFirst.checked &&
 		queueEmpty.checked &&
 		!doubleEscape.checked &&
 		!confirmComposer.checked &&
@@ -149,7 +149,7 @@ const firstViewed = sortOptions.find(
 )!;
 firstViewed.selected = true;
 sort.dispatchEvent(new parsedWindow.Event('change', { bubbles: true }));
-openFirst.checked = true;
+openFirst.checked = false;
 openFirst.dispatchEvent(
 	new parsedWindow.Event('change', { bubbles: true }),
 );
@@ -179,7 +179,7 @@ assert(
 		!preferences.historyButtonsAlwaysVisible &&
 		preferences.historyEdgeTriggerPercent === 7 &&
 		preferences.historySortMode === 'first-viewed' &&
-		preferences.openTopicsAtFirstPost &&
+		!preferences.openTopicsAtFirstPost &&
 		!preferences.readerQueueAlwaysVisibleWhenEmpty &&
 		preferences.doubleEscapeToCloseReader &&
 		preferences.confirmNativeComposerClose &&
@@ -191,7 +191,7 @@ preferences = Object.freeze({
 	...preferences,
 	historyEdgeTriggerPercent: 3,
 	historySortMode: 'recent-viewed',
-	openTopicsAtFirstPost: false,
+	openTopicsAtFirstPost: true,
 });
 preferenceChanges.emit(preferences);
 assert(
@@ -200,7 +200,7 @@ assert(
 			option.hasAttribute('selected'),
 		)?.getAttribute('value') ===
 			'recent-viewed' &&
-		!openFirst.checked &&
+		openFirst.checked &&
 		controller.snapshot.draftCount === 0,
 	'没有本地草稿时外部偏好变更必须原地更新同一表单',
 );
@@ -245,7 +245,7 @@ assert(
 		preferences.historyButtonsAlwaysVisible &&
 		preferences.historyEdgeTriggerPercent === 15 &&
 	preferences.historySortMode === 'recent-viewed' &&
-		!preferences.openTopicsAtFirstPost &&
+		preferences.openTopicsAtFirstPost &&
 		preferences.readerQueueAlwaysVisibleWhenEmpty &&
 		!preferences.doubleEscapeToCloseReader &&
 		!preferences.confirmNativeComposerClose,

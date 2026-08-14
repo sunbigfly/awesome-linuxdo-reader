@@ -111,6 +111,25 @@ assert(
 	sourceCalls.join(',') === 'user:avatar:false:false',
 	'头像必须使用锚定紧凑 surface、先投影轻量预览和 Flair，并经共享资源端口加载 1000px 原图',
 );
+let compactWheelLeaks = 0;
+mount.addEventListener('wheel', () => {
+	compactWheelLeaks += 1;
+});
+const compactBoundaryWheel = new window.Event('wheel', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperties(compactBoundaryWheel, {
+	deltaX: { value: 0 },
+	deltaY: { value: 120 },
+	deltaMode: { value: 0 },
+});
+avatarRoot.querySelector('.ldp-avatar-viewer-toolbar')!
+	.dispatchEvent(compactBoundaryWheel);
+assert(
+	compactBoundaryWheel.defaultPrevented && compactWheelLeaks === 0,
+	'紧凑图片浮窗工具栏不得把滚轮泄漏给宿主列表',
+);
 avatarImage.dispatchEvent(new window.Event('load'));
 resolveOriginal(Object.freeze({
 	source: 'blob:https://linux.do/avatar-original',
@@ -214,6 +233,18 @@ assert(
 	'Escape 必须只关闭最内层紧凑查看器并释放批量组件的锚定尺寸',
 );
 
+let compactAnchorTop = 180;
+anchor.getBoundingClientRect = () => ({
+	x: 100,
+	y: compactAnchorTop,
+	left: 100,
+	top: compactAnchorTop,
+	right: 132,
+	bottom: compactAnchorTop + 32,
+	width: 32,
+	height: 32,
+	toJSON: () => ({}),
+});
 const backgroundRoot = viewer.open({
 	item: Object.freeze({
 		...imageItem,
@@ -227,5 +258,12 @@ assert(
 	backgroundRoot.classList.contains('is-background') &&
 	!backgroundRoot.classList.contains('is-image'),
 	'用户背景必须使用宽幅紧凑 surface，不能继承全屏 Lightbox 或批量图片工具',
+);
+const compactTopBeforeWindowMove = backgroundRoot.style.top;
+compactAnchorTop = 260;
+mount.dispatchEvent(new window.Event('ldp-reader-window-change'));
+assert(
+	backgroundRoot.style.top !== compactTopBeforeWindowMove,
+	'Reader 浮窗移动后，锚定的紧凑图片浮窗必须跟随头像重定位',
 );
 viewer.destroy();

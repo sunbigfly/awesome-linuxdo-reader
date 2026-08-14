@@ -104,6 +104,7 @@ const controller = new ReaderSettingsController<ReaderPreferences>({
 	initialPanelId: 'interaction',
 });
 const host = document.querySelector<HTMLElement>('#settings')!;
+let boostsAvailable = false;
 const form = new ReaderInteractionSettingsForm({
 	document,
 	host,
@@ -111,7 +112,7 @@ const form = new ReaderInteractionSettingsForm({
 	boostCopy: readerPreferencesBoostCopyAdapter,
 	topicActionRail: readerPreferencesTopicActionRailAdapter,
 	replyTree: readerPreferencesReplyTreeAdapter,
-	boostsAvailable: false,
+	boostsAvailable: () => boostsAvailable,
 	replyTreePreview: {
 		update(value) {
 			treePreviews.push(value.inlineReplyTreeMaxDepth ?? 1);
@@ -155,6 +156,14 @@ assert(
 		)?.closest<HTMLElement>('.ldp-setting-row')?.hidden === true &&
 		Number(controller.snapshot.draftCount) === 0,
 	'帖子与回复面板必须复用单一 form，并对齐主脚本分组、树选项与兼容字段可见性',
+);
+boostsAvailable = true;
+form.refreshCapabilities();
+assert(
+	host.querySelector<HTMLElement>(
+		'.ldp-boost-settings-availability',
+	)?.hidden === false,
+	'设置面板打开时必须重读 Boost 插件能力，不能固化 document-start 的缺失状态',
 );
 const treeDepth = host.querySelector<HTMLSelectElement>(
 	'.ldp-inline-reply-tree-depth',

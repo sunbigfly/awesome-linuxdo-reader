@@ -73,6 +73,23 @@
   stroke-width: 2;
 }
 
+.ldp-collection-tab-count {
+  flex: none;
+  color: var(--primary-medium, #777);
+  font-size: .9em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.ldp-bookmark-tab .ldp-collection-tab-count {
+  margin-inline-start: 4px;
+}
+
+.ldp-notification-tab.active .ldp-collection-tab-count,
+.ldp-bookmark-tab.active .ldp-collection-tab-count {
+  color: currentColor;
+}
+
 .ldp-notification-mode-tab:hover,
 .ldp-notification-tab:hover {
   color: var(--primary, #222);
@@ -100,6 +117,10 @@
   padding: 5px 10px 0;
   color: var(--primary-medium, #777);
   font-size: var(--ldp-font-sm, 11px);
+}
+
+.ldp-notification-toolbar.is-empty {
+  display: none;
 }
 
 .ldp-notification-unread-status {
@@ -151,6 +172,71 @@
   border: 1px solid var(--primary-low, #ddd);
   border-radius: 6px;
   background: var(--secondary, #fff);
+}
+
+.ldp-popover-search-tools {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 148px;
+  align-items: stretch;
+  gap: 8px;
+  margin: 8px 10px 6px;
+}
+
+.ldp-popover-search-tools > .ldp-popover-search {
+  min-width: 0;
+  margin: 0;
+}
+
+.ldp-popover-taxonomy-filters {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.ldp-popover-taxonomy-filters
+  > :is(.ldp-reader-select, .ldp-select-surface) {
+  width: 100%;
+  min-width: 0;
+}
+
+.ldp-popover-taxonomy-filter {
+  height: 36px;
+  padding: 4px 7px;
+  overflow: hidden;
+  font-size: var(--ldp-font-xs, 10px);
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ldp-popover-taxonomy-filters
+  > .ldp-select-surface:has(> .ldp-popover-taxonomy-filter:disabled) {
+  opacity: .55;
+}
+
+.ldp-popover-taxonomy-filters .ldp-select-option {
+  min-width: 0;
+  min-height: 30px;
+  padding: 2px 7px;
+  font-size: var(--ldp-font-sm, 11px);
+  overflow-wrap: anywhere;
+}
+
+.ldp-popover-taxonomy-filters .ldp-select-menu {
+  width: max(100%, 168px);
+  max-width: min(168px, calc(100vw - 24px));
+}
+
+@media (max-width: 480px) {
+  .ldp-popover-search-tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ldp-popover-taxonomy-filters {
+    width: min(148px, 100%);
+    justify-self: end;
+  }
 }
 
 .ldp-popover-search:focus-within {
@@ -277,6 +363,67 @@
 .ldp-collection-action:disabled {
   cursor: default;
   opacity: .42;
+}
+
+.ldp-bookmarks-bulk-actions > .ldp-collection-action {
+  appearance: none;
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--ldp-radius-sm, 7px);
+  background: transparent;
+  box-shadow: none;
+  transition:
+    background-color var(--ldp-motion-fast, 140ms) ease,
+    color var(--ldp-motion-fast, 140ms) ease,
+    transform var(--ldp-motion-fast, 140ms) ease;
+}
+
+.ldp-bookmarks-bulk-actions > .ldp-collection-action > .ldp-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.8;
+}
+
+.ldp-bookmarks-bulk-actions >
+  .ldp-bookmarks-select-toggle > .ldp-icon {
+  stroke-width: 1.45;
+}
+
+.ldp-bookmarks-bulk-actions > .ldp-collection-action:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--tertiary, #47855f) 11%, transparent);
+  color: var(--tertiary, #47855f);
+  transform: translateY(-1px);
+}
+
+.ldp-bookmarks-bulk-actions > .ldp-collection-action:active:not(:disabled) {
+  transform: scale(.94);
+}
+
+.ldp-bookmarks-bulk-actions > .ldp-collection-action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tertiary, #47855f) 48%, transparent);
+  outline-offset: 1px;
+}
+
+.ldp-bookmarks-bulk-actions >
+  .ldp-bookmarks-select-toggle[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--tertiary, #47855f) 12%, transparent);
+  color: var(--tertiary, #47855f);
+}
+
+.ldp-bookmarks-bulk-actions >
+  .ldp-collection-action.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger, #c94747) 11%, transparent);
+  color: var(--danger, #c94747);
+}
+
+.ldp-bookmarks-bulk-actions > .ldp-collection-action:disabled {
+  background: transparent;
+  opacity: .32;
 }
 
 .ldp-collection-count {
@@ -436,11 +583,12 @@
   );
 }
 
-.ldp-reaction-record .ldp-notification-item {
+.ldp-activity-record .ldp-notification-item {
   padding-right: 12px;
 }
 
-.ldp-reaction-record-icon {
+.ldp-reaction-record-icon,
+.ldp-activity-record-icon {
   display: inline-flex;
   width: 16px;
   height: 16px;
@@ -450,6 +598,11 @@
   font-size: 14px;
   line-height: 1;
   vertical-align: -3px;
+}
+
+.ldp-activity-record-icon .ldp-icon {
+  width: 15px;
+  height: 15px;
 }
 
 .ldp-collection-select {
@@ -701,6 +854,17 @@
   stroke-width: 2;
 }
 
+.ldp-notification-type-icon > img.emoji {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.ldp-notification-type-icon > [data-notification-emoji-text] {
+  font-size: 17px;
+  line-height: 1;
+}
+
 .ldp-notification-title-text {
   min-width: 0;
 }
@@ -721,6 +885,10 @@
   line-height: 1.3;
 }
 
+.ldp-history-subtitle {
+  overflow-wrap: anywhere;
+}
+
 .ldp-notification-read-state {
   display: inline-flex;
   min-width: 28px;
@@ -739,10 +907,10 @@
 .ldp-notification-item.unread .ldp-notification-read-state {
   background: color-mix(
     in srgb,
-    var(--tertiary-low, #dbeeff) 72%,
+    var(--danger-low, #f7dddd) 72%,
     var(--secondary, #fff)
   );
-  color: var(--tertiary, #47855f);
+  color: var(--danger, #c84545);
 }
 
 .ldp-notification-empty,
@@ -788,6 +956,10 @@
     var(--ldp-divider-line-color, #e5e5e5);
 }
 
+.ldp-notification-pager[hidden] {
+  display: none;
+}
+
 .ldp-notification-page-prev,
 .ldp-notification-page-next {
   display: inline-flex;
@@ -821,4 +993,213 @@
   font-size: var(--ldp-font-sm, 11px);
   font-variant-numeric: tabular-nums;
   text-align: center;
+}
+
+/* 通知、收藏与历史完全复用用户观察的独立窗口几何与工具布局。 */
+.ldp-reader-floating-window:is(
+  .is-notifications,
+  .is-bookmarks,
+  .is-history
+) > .ldp-reader-floating-window-body
+  > :is(
+    .ldp-notifications-popover,
+    .ldp-bookmarks-popover,
+    .ldp-history-popover
+  ) {
+  position: static;
+  z-index: auto;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ldp-reader-floating-window:is(
+  .is-notifications,
+  .is-bookmarks,
+  .is-history
+) .ldp-popover-search-tools {
+  grid-template-columns: minmax(220px, 1fr) 36px;
+  margin: 0 14px 10px;
+}
+
+.ldp-reader-floating-window:is(
+  .is-notifications,
+  .is-bookmarks,
+  .is-history
+) .ldp-popover-taxonomy-filters {
+  width: 100%;
+  grid-column: 1 / -1;
+  justify-self: stretch;
+}
+
+.ldp-reader-floating-window.is-notifications .ldp-notification-search-tools,
+.ldp-reader-floating-window.is-bookmarks .ldp-bookmarks-search-tools,
+.ldp-reader-floating-window.is-history .ldp-history-search-tools {
+  margin-top: 12px;
+}
+
+.ldp-reader-floating-window:is(.is-bookmarks, .is-history)
+  .ldp-collection-title {
+  display: none;
+}
+
+.ldp-reader-floating-window-extra-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.ldp-reader-floating-window-actions
+  .ldp-reader-floating-window-extra-actions[hidden] {
+  display: none;
+}
+
+.ldp-reader-floating-window-actions
+  .ldp-reader-floating-window-extra-actions > .ldp-collection-scope {
+  width: 68px;
+  min-width: 68px;
+  min-height: 24px;
+  height: 24px;
+  padding: 0 5px;
+  border-color: var(--ldp-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ldp-ink);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.ldp-reader-floating-window-actions
+  .ldp-reader-floating-window-extra-actions
+  > .ldp-collection-scope > option {
+  font-size: 10px;
+}
+
+.ldp-reader-floating-window-actions
+  .ldp-reader-floating-window-extra-actions
+  > .ldp-select-surface:has(> .ldp-collection-scope) {
+  width: 68px;
+  min-width: 68px;
+  max-width: 68px;
+  height: 24px;
+  margin-right: 6px;
+}
+
+.ldp-reader-floating-window-actions
+  .ldp-reader-floating-window-extra-actions
+  > .ldp-select-surface:has(> .ldp-collection-scope)
+  > .ldp-collection-scope {
+  min-height: 24px;
+  height: 24px;
+  padding: 0 16px 0 5px;
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.ldp-reader-floating-window-actions
+  .ldp-reader-floating-window-extra-actions
+  > .ldp-select-surface:has(> .ldp-collection-scope)
+  > .ldp-select-indicator {
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-width: 1.25px;
+}
+
+.ldp-reader-floating-window-actions
+  .ldp-reader-floating-window-extra-actions
+  > .ldp-select-surface:has(> .ldp-collection-scope)
+  > .ldp-select-menu {
+  width: 68px;
+  min-width: 68px;
+  max-width: 68px;
+  padding: 3px;
+}
+
+.ldp-reader-floating-window-actions
+  .ldp-reader-floating-window-extra-actions
+  > .ldp-select-surface:has(> .ldp-collection-scope)
+  .ldp-select-option {
+  min-height: 24px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  font-size: 10px;
+}
+
+.ldp-reader-floating-window.is-bookmarks .ldp-bookmark-select-input {
+  width: 13px;
+  height: 13px;
+}
+
+.ldp-reader-floating-window-actions
+  .ldp-reader-floating-window-extra-action {
+  position: relative;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  outline: 0;
+  background: transparent;
+  color: var(--ldp-ink-muted);
+  cursor: pointer;
+}
+
+.ldp-reader-floating-window-actions
+  .ldp-reader-floating-window-extra-action:hover:not(:disabled) {
+  background: var(--ldp-surface-muted);
+  color: var(--ldp-ink);
+}
+
+.ldp-reader-floating-window-actions
+  .ldp-reader-floating-window-extra-action:focus-visible {
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--ldp-accent) 24%, transparent);
+  color: var(--ldp-accent);
+}
+
+.ldp-reader-floating-window-actions
+  .ldp-reader-floating-window-extra-action > .ldp-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.ldp-reader-floating-window-actions
+  .ldp-reader-floating-window-extra-action > span {
+  display: none;
+}
+
+.ldp-reader-floating-window.is-notifications
+  :is(.ldp-notification-mode-tab, .ldp-notification-tab) {
+  padding-block: 9px;
+}
+
+.ldp-reader-floating-window:is(.is-notifications, .is-bookmarks)
+  .ldp-collection-cache-progress:first-child,
+.ldp-reader-floating-window.is-notifications
+  .ldp-collection-cache-progress {
+  margin-block: 10px;
+  padding-block: 0;
+}
+
+@container ldp-user-observation-window (max-width: 620px) {
+  .ldp-reader-floating-window:is(
+    .is-notifications,
+    .is-bookmarks,
+    .is-history
+  ) .ldp-popover-search-tools {
+    grid-template-columns: minmax(0, 1fr) 36px;
+    margin-inline: 10px;
+  }
+
 }

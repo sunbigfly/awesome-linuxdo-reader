@@ -73,7 +73,11 @@ export interface TopicPostsRequest<T> extends DomainRequestExecution<T> {
 	readonly authScope: string;
 	readonly topicId: string | number;
 	readonly postIds: readonly number[];
-	readonly profile?: 'topic-visible' | 'nested-visible' | 'background-prefetch';
+	readonly profile?:
+		| 'topic-visible'
+		| 'nested-visible'
+		| 'nearby-prefetch'
+		| 'background-prefetch';
 }
 
 export interface TopicTargetRequest<T> extends DomainRequestExecution<T> {
@@ -83,7 +87,18 @@ export interface TopicTargetRequest<T> extends DomainRequestExecution<T> {
 	readonly postId?: number;
 	readonly postNumber?: number;
 	readonly cursor?: number;
-	readonly profile?: 'topic-visible' | 'background-prefetch';
+	readonly profile?: 'topic-visible' | 'nearby-prefetch' | 'background-prefetch';
+}
+
+export interface TopicTargetCacheLookup {
+	readonly authScope: string;
+	readonly topicId: string | number;
+	readonly operation: string;
+	readonly postId?: number;
+	readonly postNumber?: number;
+	readonly cursor?: number;
+	readonly profile?: TopicTargetRequest<unknown>['profile'];
+	readonly cache: DomainResponseCacheSettings;
 }
 
 export interface NestedRepliesRequest<T> extends DomainRequestExecution<T> {
@@ -99,7 +114,20 @@ export interface NotificationPageRequest<T> extends DomainRequestExecution<T> {
 	readonly authScope: string;
 	readonly group: string;
 	readonly page: number;
-	readonly profile?: 'notification-visible' | 'surface-prefetch';
+	readonly variant?: string;
+	readonly profile?:
+		| 'notification-visible'
+		| 'surface-prefetch'
+		| 'background-prefetch';
+}
+
+export interface NotificationPageCacheLookup {
+	readonly authScope: string;
+	readonly group: string;
+	readonly page: number;
+	readonly variant?: string;
+	readonly profile?: NotificationPageRequest<unknown>['profile'];
+	readonly cache: DomainResponseCacheSettings;
 }
 
 export interface CollectionPageRequest<T> extends DomainRequestExecution<T> {
@@ -109,6 +137,16 @@ export interface CollectionPageRequest<T> extends DomainRequestExecution<T> {
 	readonly cursor?: string | number;
 	readonly variant?: string;
 	readonly profile?: 'collection-visible' | 'background-prefetch';
+}
+
+export interface CollectionPageCacheLookup {
+	readonly authScope: string;
+	readonly collection: string;
+	readonly page: number;
+	readonly cursor?: string | number;
+	readonly variant?: string;
+	readonly profile?: CollectionPageRequest<unknown>['profile'];
+	readonly cache: DomainResponseCacheSettings;
 }
 
 export interface ActionRequest<T> extends DomainRequestExecution<T> {
@@ -169,6 +207,15 @@ export interface UserResourceRequest<T> extends DomainRequestExecution<T> {
 		| 'user-card-interactive'
 		| 'resource-visible'
 		| 'user-prefetch';
+}
+
+export interface UserResourceCacheLookup {
+	readonly authScope: string;
+	readonly username: string;
+	readonly resource: string;
+	readonly page?: number;
+	readonly profile?: UserResourceRequest<unknown>['profile'];
+	readonly cache: DomainResponseCacheSettings;
 }
 
 export interface ResourceCacheLookup {
@@ -248,6 +295,17 @@ export class DomainRequestGateway {
 		});
 	}
 
+	async cachedTopicTarget<T>(input: TopicTargetCacheLookup): Promise<T | null> {
+		const contract = createRequestContract(input.profile ?? 'topic-visible', {
+			namespace: 'topic-target',
+			identity: topicRequestIdentity(input),
+		});
+		const cached = await this.#responses.read<T>(
+			cachePolicy(contract, input.cache),
+		);
+		return cached.state === 'miss' ? null : cached.value as T;
+	}
+
 	loadNestedReplies<T>(input: NestedRepliesRequest<T>): Promise<T> {
 		return this.#execute({
 			...input,
@@ -310,6 +368,22 @@ export class DomainRequestGateway {
 		});
 	}
 
+	async cachedNotificationPage<T>(
+		input: NotificationPageCacheLookup,
+	): Promise<T | null> {
+		const contract = createRequestContract(
+			input.profile ?? 'notification-visible',
+			{
+				namespace: 'notifications',
+				identity: notificationRequestIdentity(input),
+			},
+		);
+		const cached = await this.#responses.read<T>(
+			cachePolicy(contract, input.cache),
+		);
+		return cached.state === 'miss' ? null : cached.value as T;
+	}
+
 	loadCollectionPage<T>(input: CollectionPageRequest<T>): Promise<T> {
 		return this.#execute({
 			...input,
@@ -318,6 +392,22 @@ export class DomainRequestGateway {
 			namespace: 'reader-collection',
 			identity: collectionRequestIdentity(input),
 		});
+	}
+
+	async cachedCollectionPage<T>(
+		input: CollectionPageCacheLookup,
+	): Promise<T | null> {
+		const contract = createRequestContract(
+			input.profile ?? 'collection-visible',
+			{
+				namespace: 'reader-collection',
+				identity: collectionRequestIdentity(input),
+			},
+		);
+		const cached = await this.#responses.read<T>(
+			cachePolicy(contract, input.cache),
+		);
+		return cached.state === 'miss' ? null : cached.value as T;
 	}
 
 	mutate<T>(input: ActionRequest<T>): Promise<T> {
@@ -385,6 +475,17 @@ export class DomainRequestGateway {
 		});
 	}
 
+	async cachedUserResource<T>(input: UserResourceCacheLookup): Promise<T | null> {
+		const contract = createRequestContract(input.profile ?? 'resource-visible', {
+			namespace: 'reader-user',
+			identity: userRequestIdentity(input),
+		});
+		const cached = await this.#responses.read<T>(
+			cachePolicy(contract, input.cache),
+		);
+		return cached.state === 'miss' ? null : cached.value as T;
+	}
+
 	async cachedResource<T>(input: ResourceCacheLookup): Promise<T | null> {
 		const contract = this.#resourceContract(input);
 		const cached = await this.#responses.read<T>(
@@ -420,8 +521,24 @@ export class DomainRequestGateway {
 	invalidateResourceWithReport(
 		input: ResourceCacheLookup,
 	): Promise<ResponseCacheInvalidationReport> {
+		return this.invalidateResourcesWithReport([input]);
+	}
+
+	invalidateResourcesWithReport(
+		inputs: readonly Pick<ResourceCacheLookup, 'resourceId' | 'variant'>[],
+	): Promise<ResponseCacheInvalidationReport> {
+		const ids = Object.freeze([...new Set(inputs.map((input) =>
+			this.#resourceContract(input).cacheKey,
+		))]);
+		if (!ids.length) {
+			return Promise.resolve(Object.freeze({
+				memoryEntries: 0,
+				failures: Object.freeze([]),
+				complete: true,
+			}));
+		}
 		return this.#responses.invalidateWithReport({
-			ids: [this.#resourceContract(input).cacheKey],
+			ids,
 		});
 	}
 
@@ -476,6 +593,10 @@ export class DomainRequestGateway {
 					effective.suppressAfterChallengeWait === true,
 				callSite:
 					`${effective.profile} / ${input.namespace} / ${input.lane}`,
+				profile: effective.profile,
+				namespace: input.namespace,
+				cacheMode: effective.cacheMode,
+				identity: input.identity,
 				...(input.method === undefined ? {} : { method: input.method }),
 			};
 			return this.#client.request(

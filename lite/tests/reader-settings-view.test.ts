@@ -84,10 +84,18 @@ assert(
 );
 assert(
 	view.snapshot.activePanelId === 'user' &&
-		surfaceHost.querySelector<HTMLElement>('.ldp-settings-search-shell')!.hidden &&
+		!surfaceHost.querySelector<HTMLElement>('.ldp-settings-search-shell')!.hidden &&
+		surfaceHost.querySelector('.ldp-settings-search-shell')?.parentElement
+			?.classList.contains('ldp-settings-brand') &&
+		surfaceHost.querySelector('.ldp-settings-search-shell')?.parentElement
+			?.parentElement?.classList.contains('ldp-settings-tabs') &&
+		surfaceHost.querySelector('.ldp-settings-search-shell')?.previousElementSibling
+			?.classList.contains('ldp-settings-brand-name') &&
+		!surfaceHost.querySelector('.ldp-settings-panel')
+			?.contains(surfaceHost.querySelector('.ldp-settings-search-shell')) &&
 		!surfaceHost.querySelector('.ldp-settings-panel')
 			?.classList.contains('is-settings-pages'),
-	'设置默认页必须对齐主线用户信息模式，并隐藏仅属于设置页的搜索条',
+	'设置默认页必须对齐主线用户信息模式，并让收起搜索固定在品牌区内且不参与头部高度',
 );
 assert(
 	view.panelHost('performance').dataset.settingsContent === 'performance',
@@ -101,14 +109,112 @@ assert(
 	'主题领域必须只挂到设置侧栏底部的稳定锚点',
 );
 
+const search = surfaceHost.querySelector<HTMLInputElement>(
+	'.ldp-settings-search-input',
+)!;
+const performanceTab = surfaceHost.querySelector<HTMLButtonElement>(
+	'[data-settings-panel="performance"].ldp-settings-tab',
+)!;
+const originalSearchFocus = search.focus;
+const originalPerformanceTabFocus = performanceTab.focus;
+let settingsOpenFocusTarget = '';
+search.focus = () => {
+	settingsOpenFocusTarget = 'search';
+};
+performanceTab.focus = () => {
+	settingsOpenFocusTarget = 'panel';
+};
 view.open('performance');
+search.focus = originalSearchFocus;
+performanceTab.focus = originalPerformanceTabFocus;
 assert(
 	view.snapshot.open &&
 		String(view.snapshot.activePanelId) === 'performance' &&
 		actions.querySelector('.ldp-settings-toggle')
 			?.getAttribute('aria-expanded') === 'true' &&
-		viewChanges.at(-1) === true,
-	'打开设置必须同步入口 ARIA、controller 激活面板和唯一 View 状态信号',
+		viewChanges.at(-1) === true &&
+		settingsOpenFocusTarget === 'panel',
+	'打开设置必须同步入口 ARIA、controller 激活面板和唯一 View 状态信号，并让搜索默认保持收起',
+);
+const settingsPopover = surfaceHost.querySelector<HTMLElement>(
+	'.ldp-settings-popover',
+)!;
+const performanceIntro = surfaceHost.querySelector<HTMLElement>(
+	'[data-settings-panel="performance"] .ldp-settings-intro',
+)!;
+surfaceHost.getBoundingClientRect = () => ({
+	x: 0,
+	y: 0,
+	left: 0,
+	top: 0,
+	right: 1200,
+	bottom: 900,
+	width: 1200,
+	height: 900,
+	toJSON: () => ({}),
+});
+settingsPopover.getBoundingClientRect = () => ({
+	x: 100,
+	y: 80,
+	left: 100,
+	top: 80,
+	right: 900,
+	bottom: 680,
+	width: 800,
+	height: 600,
+	toJSON: () => ({}),
+});
+const settingsPointer = (
+	type: string,
+	clientX: number,
+	clientY: number,
+): Event => {
+	const event = new parsedWindow.Event(type, {
+		bubbles: true,
+		cancelable: true,
+	});
+	Object.defineProperties(event, {
+		button: { value: 0 },
+		pointerId: { value: 7 },
+		clientX: { value: clientX },
+		clientY: { value: clientY },
+	});
+	return event;
+};
+performanceIntro.dispatchEvent(settingsPointer('pointerdown', 320, 110));
+assert(
+	settingsPopover.classList.contains('ldp-settings-window-dragging'),
+	'普通设置页标题栏必须与用户信息标题栏共用浮窗拖动入口',
+);
+settingsPopover.dispatchEvent(settingsPointer('pointermove', 344, 126));
+settingsPopover.dispatchEvent(settingsPointer('pointerup', 344, 126));
+assert(
+	!settingsPopover.classList.contains('ldp-settings-window-dragging') &&
+		settingsPopover.style.left === '124px' &&
+		settingsPopover.style.top === '96px' &&
+		settingsPopover.style.transform === 'none',
+	'普通设置页拖动结束后必须提交新位置并完整释放拖动态',
+);
+let escapedWheelCount = 0;
+const countEscapedWheel = (): void => {
+	escapedWheelCount += 1;
+};
+surfaceHost.addEventListener('wheel', countEscapedWheel);
+const settingsBoundaryWheel = new parsedWindow.Event('wheel', {
+	bubbles: true,
+	cancelable: true,
+}) as unknown as WheelEvent;
+Object.defineProperties(settingsBoundaryWheel, {
+	deltaX: { value: 0 },
+	deltaY: { value: 120 },
+	deltaMode: { value: 0 },
+});
+surfaceHost.querySelector<HTMLElement>('.ldp-settings-nav')!
+	.dispatchEvent(settingsBoundaryWheel);
+surfaceHost.removeEventListener('wheel', countEscapedWheel);
+assert(
+	settingsBoundaryWheel.defaultPrevented && escapedWheelCount === 0,
+	'设置导航抵达内部滚动边界后必须阻止滚轮继续冒泡到宿主页面',
 );
 const escapeSettings = new parsedWindow.Event('keydown', {
 	bubbles: true,
@@ -121,10 +227,15 @@ assert(
 	!view.snapshot.open,
 	'设置必须从 document capture 阶段接收 Esc 并关闭当前前置 surface',
 );
+view.open();
+assert(
+	view.snapshot.open &&
+		view.snapshot.activePanelId === 'user' &&
+		view.snapshot.query === '',
+	'每次无指定入口重新打开设置都必须聚焦用户信息，并清除设置页搜索状态',
+);
+view.close();
 view.open('performance');
-const search = surfaceHost.querySelector<HTMLInputElement>(
-	'.ldp-settings-search-input',
-)!;
 search.value = 'indexeddb';
 search.dispatchEvent(new parsedWindow.Event('input', { bubbles: true }));
 assert(
@@ -139,7 +250,7 @@ search.value = '按两次 esc';
 search.dispatchEvent(new parsedWindow.Event('input', { bubbles: true }));
 assert(
 	String(view.snapshot.activePanelId) === 'reading' &&
-		view.snapshot.query === '按两次 esc' &&
+		String(view.snapshot.query) === '按两次 esc' &&
 		surfaceHost.querySelector('.ldp-settings-search-status')?.textContent ===
 			'找到 1 个设置分区',
 	'搜索索引必须包含领域 form 实际渲染文字，不能只依赖静态面板关键词',
@@ -147,6 +258,47 @@ assert(
 surfaceHost.querySelector<HTMLButtonElement>(
 	'.ldp-settings-search-clear',
 )!.click();
+
+const performanceRange = document.createElement('input');
+performanceRange.type = 'range';
+performanceRange.min = '0';
+performanceRange.max = '100';
+performanceRange.value = '25';
+const performanceHelp = document.createElement('div');
+performanceHelp.className = 'ldp-setting-row';
+const performanceHelpCopy = document.createElement('small');
+performanceHelpCopy.textContent = '性能帮助';
+performanceHelp.append(performanceHelpCopy);
+view.panelHost('performance').append(performanceRange, performanceHelp);
+const fontRange = document.createElement('input');
+fontRange.type = 'range';
+fontRange.min = '0';
+fontRange.max = '100';
+fontRange.value = '75';
+const fontHelp = document.createElement('div');
+fontHelp.className = 'ldp-setting-row';
+const fontHelpCopy = document.createElement('small');
+fontHelpCopy.textContent = '字体帮助';
+fontHelp.append(fontHelpCopy);
+view.panelHost('font').append(fontRange, fontHelp);
+surfaceHost.querySelector<HTMLButtonElement>(
+	'#ldp-settings-tab-performance',
+)!.click();
+assert(
+	performanceRange.style.getPropertyValue('--ldp-range-progress') === '25%' &&
+		performanceHelp.dataset.settingHelp === '性能帮助' &&
+		fontRange.style.getPropertyValue('--ldp-range-progress') === '' &&
+		fontHelp.dataset.settingHelp === undefined,
+	'面板切换只能同步当前可见表单，不能遍历隐藏设置页',
+);
+surfaceHost.querySelector<HTMLButtonElement>(
+	'#ldp-settings-tab-font',
+)!.click();
+assert(
+	fontRange.style.getPropertyValue('--ldp-range-progress') === '75%' &&
+		fontHelp.dataset.settingHelp === '字体帮助',
+	'隐藏表单首次进入时必须补齐动态字段和帮助语义',
+);
 
 controller.registerDraft({
 	panelId: 'performance',

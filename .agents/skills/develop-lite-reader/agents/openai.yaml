@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lite 阅读器开发助手"
+  short_description: "开发 Lite 阅读器并生成单文件与四文件本地手动审查版本"
+  default_prompt: "使用 $develop-lite-reader 修改 Lite 阅读器并生成单文件和四文件本地审查产物。"
