@@ -5,7 +5,11 @@ import { runInThisContext } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const runtimeKey = '__AWESOME_LINUXDO_READER_LITE_MODULE_RUNTIME__';
-const expectedLibraries = ['main-lite-core', 'main-lite-features'];
+const expectedLibraries = [
+	'main-lite-core',
+	'main-lite-platform',
+	'main-lite-features',
+];
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, '..');
 const testsDirectory = path.join(projectRoot, 'lite/tests');
@@ -13,6 +17,7 @@ const sourceDirectory = path.join(projectRoot, 'lite/src');
 const runPath = path.join(testsDirectory, 'run.ts');
 const libraryPaths = [
 	path.join(projectRoot, 'work/greasyfork-lite/libraries/main-lite-core.js'),
+	path.join(projectRoot, 'work/greasyfork-lite/libraries/main-lite-platform.js'),
 	path.join(projectRoot, 'work/greasyfork-lite/libraries/main-lite-features.js'),
 ];
 
@@ -79,7 +84,7 @@ async function loadSplitRuntime() {
 	}
 	const runtime = globalThis[runtimeKey];
 	if (!runtime || typeof runtime.start !== 'function') {
-		throw new Error('三文件产物没有注册 Lite 模块 runtime');
+		throw new Error('四文件产物没有注册 Lite 模块 runtime');
 	}
 	return runtime;
 }
@@ -121,10 +126,10 @@ async function run() {
 		write: false,
 	});
 	if (result.warnings.length) {
-		throw new Error(`main-lite 三文件测试构建返回 ${result.warnings.length} 条警告`);
+		throw new Error(`main-lite 四文件测试构建返回 ${result.warnings.length} 条警告`);
 	}
 	const outputFile = result.outputFiles?.[0];
-	if (!outputFile) throw new Error('main-lite 三文件测试构建无输出');
+	if (!outputFile) throw new Error('main-lite 四文件测试构建无输出');
 	const moduleUrl = `data:text/javascript;base64,${Buffer.from(outputFile.text).toString('base64')}`;
 	await import(moduleUrl);
 	process.stdout.write(`main-lite split contract tests: passed (${testFiles.length} files)\n`);
