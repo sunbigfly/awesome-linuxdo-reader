@@ -6,7 +6,7 @@ source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/r
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
+last_verified: 2026-08-16
 screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png"]
 ---
 
@@ -73,6 +73,19 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png"]
 - 明、暗、系统主题切换立即生效；自动暗色可按当地日落或固定时间进入暗色，并在日出恢复先前模式。
 - 性能设置统一保存后立即投到当前与后续帖子；已启动的请求自然完成，固定请求安全规则不受设置覆盖。
 - 阅读、快捷方式、交互、站点开关和数据管理操作按控件说明即时执行或显示确认。
+
+## 配置、快捷方式、缓存与同步如何联动
+
+| 操作 | 影响范围 | 保存方式 | 与其他数据的关系 |
+| --- | --- | --- | --- |
+| 图片、字体、布局、浮窗、外观与动效 | 当前阅读器界面偏好 | 预览后统一保存 | 可进入设置导出和“设置配置”WebDAV 类别 |
+| 快捷方式与阅读交互 | 当前脚本偏好 | 修改后立即保存 | 快捷绑定会随设置配置导出、导入或恢复默认 |
+| 导入设置 | 偏好、适用站点、翻译与 WebDAV 非敏感配置 | 确认后事务写入 | 失败时回滚；不会导入秘密凭据、历史、队列或缓存 |
+| [恢复全部默认](/settings/data-management#reset-settings) | 设置与本机秘密凭据 | 确认后立即重置 | 不删除阅读队列条目、历史、离线下载或缓存 |
+| 清理缓存 | 选中的本机派生数据 | 二次确认后执行 | 不改设置、原站数据或 WebDAV 远端；已同步记录可能再次合并回来 |
+| WebDAV 同步 | 用户主动选择的 12 类跨设备记录 | 面板单独保存和执行 | 设置类别不含 WebDAV 用户名、密码或翻译 API Key |
+
+建议先在[数据管理](/settings/data-management)导出配置，再进行大范围导入、恢复默认或缓存排障。需要跨设备时，再单独阅读 [WebDAV 同步](/settings/webdav-sync) 的类别、凭据和删除边界。
 
 ## 设置窗口
 

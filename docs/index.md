@@ -1,19 +1,19 @@
 ---
 layout: home
 title: Awesome LinuxDo Reader 用户手册
-description: LINUX DO 全面适配、兼容中英文及其他语言 Discourse 站点并支持正文翻译的 Awesome LinuxDo Reader 用户手册。
+description: 从安装、连续阅读和原站互动，到设置、缓存、WebDAV 与故障恢复的 Awesome LinuxDo Reader 用户手册。
 feature_ids: ["CORE-001", "CORE-002", "CORE-004", "CORE-007", "READ-001", "ACTION-001", "DATA-001", "DATA-006", "DATA-007"]
 source_anchors: ["lite/userscript.meta.txt","lite/src/queue/reader-open-queue-session.ts","lite/src/shell/reader-workspace.ts","lite/src/app/reader-application.ts","lite/src/dom/reply-tree.ts","lite/src/app/reader-browser-runtime.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/queue/reader-topic-download-manager.ts"]
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
+last_verified: 2026-08-16
 screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png"]
 
 hero:
   name: Awesome LinuxDo Reader
   text: 正式用户手册
-  tagline: LINUX DO 全面适配，中文、英文及其他语言的标准 Discourse 站点通用。
+  tagline: 把 Discourse 从帖子列表，变成完整的阅读工作区。
   image:
     src: /logo.png
     alt: Awesome LinuxDo Reader 标志
@@ -48,7 +48,7 @@ features:
   - icon: >-
       <!-- @license Lucide Icons v1.26.0 - ISC --><svg class="lucide lucide-sliders-horizontal" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/></svg>
     title: 精细个性化
-    details: 图片、字体、五区布局、浮窗、明暗主题、结构颜色与跳转动效。
+    details: 18 个设置面板覆盖图片、字体、布局、浮窗、主题、快捷方式、性能与数据管理。
   - icon: >-
       <!-- @license Lucide Icons v1.26.0 - ISC --><svg class="lucide lucide-cloud-upload" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 13v8"/><path d="m16 17-4-4-4 4"/><path d="M5.6 16.7A5 5 0 0 1 6 7a7 7 0 0 1 13.7 1.7A4.5 4.5 0 0 1 18.5 17H18"/></svg>
     title: WebDAV 跨设备同步
@@ -59,19 +59,17 @@ features:
     details: 后台补齐全部、楼主或自选楼层，生成可搜索、可跳转并可选同步到 WebDAV 的独立 HTML。
   - icon: >-
       <!-- @license Lucide Icons v1.26.0 - ISC --><svg class="lucide lucide-shield-check" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
-    title: 有界资源治理
-    details: DOM 窗口、分层缓存、共享请求调度、429 退避、资源和请求监控。
+    title: 安全配置与资源治理
+    details: 设置导入导出与恢复默认、六类缓存、共享请求调度、429 退避和脱敏诊断都有明确边界。
 ---
 
-## 手册覆盖范围
+## 从阅读到管理，一套完整工作流
 
-这套手册对应 userscript `1.5.0` 源码，以 `lite/src/` 与 `lite/styles/` 为事实源。LINUX DO 是完整功能基线，消息、历史、收藏、互动、长帖、楼层关系与性能治理均保持全面适配；脚本也通过运行态识别、站点适配层和插件能力检测兼容中文、英文及其他语言的标准 Discourse 站点。
+这套手册对应 userscript `1.5.0`，覆盖从打开主题、理解讨论、完成原站互动，到整理内容、迁移配置、清理缓存和跨设备同步的完整链路。LINUX DO 是完整功能基线；其他标准 Discourse 社区会按运行态、语言和插件能力自动适配。
 
-1.5.0 把通知、历史、收藏、下载、用户观察、岁月史书和不想看收敛到共享多标签工具浮窗，并补齐当地日落自动暗色、用户持续观察、不想看自动过滤、后台集合续传与四文件一致性门禁。WebDAV 仍由用户主动配置并按类别启用；普通缓存不上传，只有单独开启对应历史或离线 Topic 类别后，相关记录和完整 HTML 才会同步。
+阅读器不会替代原站：账号、权限、帖子、消息、收藏和互动结果始终由当前社区负责。阅读器补充的是连续阅读工作区、讨论上下文、内容工具、个性设置与本地数据管理；WebDAV 默认关闭，只有用户配置凭据并选择类别后才会访问远端。
 
-Greasy Fork 公开安装版已更新为 1.5.0：主 Loader 固定加载 Core、Platform、Features 三个同版本 Library，CSS 固定到不可变 Git 提交。已经打开的旧页面不会热替换运行中代码，更新脚本后需要完整刷新。
-
-脚本内置 20 个其他知名 Discourse 社区，并会在任意 HTTPS 域名上以本地运行态和 DOM 证据自动识别标准 Discourse；深度定制站点可验证添加为兼容兜底。站点适配本身不限制内容语言；除内置中文站点 LINUX DO 外，其他 Discourse 社区另提供原文、双语和简体中文译文三种阅读状态。功能目录记录了每项能力的源码锚点、版本、验证日期、截图和对应文档。
+完整功能目录记录 110 项用户可见能力的适用范围、源码锚点、验证日期、截图和对应说明。安装版的更新方式与技术结构集中放在[安装与更新](/getting-started/installation)，避免让日常使用说明被发布细节打断。
 
 ::: tip 推荐路径
 第一次使用按“安装与更新 → 五分钟上手 → 界面总览”阅读。遇到加载、图片或限流问题，直接进入“故障排查”。
@@ -81,10 +79,24 @@ Greasy Fork 公开安装版已更新为 1.5.0：主 Loader 固定加载 Core、P
 
 <p class="image-caption">阅读器可以保留宿主主题列表，同时在独立工作区中阅读完整主题。</p>
 
-## 先了解五个边界
+## 按任务找到答案
+
+| 你要完成的事 | 推荐入口 |
+| --- | --- |
+| 安装、更新或确认当前版本 | [安装与更新](/getting-started/installation) |
+| 第一次打开主题并完成阅读 | [五分钟上手](/getting-started/quick-start) |
+| 理解楼中楼、引用和完整讨论 | [二级回复、完整讨论与上下文](/guide/thread-context) |
+| 调整界面、快捷方式和性能 | [设置中心总览](/settings/overview) |
+| 备份、导入或恢复全部默认 | [数据管理](/settings/data-management) |
+| 清理当前主题或六类本地缓存 | [数据、配置与缓存](/manage/data-and-cache) |
+| 配置和核对跨设备数据 | [WebDAV 同步](/settings/webdav-sync) |
+| 处理加载、图片、429 或配置异常 | [故障排查](/manage/troubleshooting) |
+
+## 先了解六个边界
 
 1. 阅读器不接管账号体系，登录、权限、内容和互动结果都以当前 Discourse 原站为准。
 2. 缓存清理只影响当前浏览器里的阅读器数据，不会删除原站帖子、消息、收藏或回应。
 3. LINUX DO 保持完整覆盖；其他站点缺少 Boost、Reactions、Post Voting 等插件时，对应入口会自动隐藏。
 4. 正文翻译只在用户主动开启后发送待翻译文本；未配置 Key 时使用第三方 Google / Microsoft 接口，配置后使用用户选择的 OpenAI 兼容服务。
 5. 请求监控能说明当前页面观察到的活动，但浏览器不会提供单个 userscript 的绝对 CPU 或独占内存。
+6. 导入设置、恢复默认、清理缓存和 WebDAV 同步是四种不同操作；执行前先确认目标是配置、本地缓存还是跨设备记录。

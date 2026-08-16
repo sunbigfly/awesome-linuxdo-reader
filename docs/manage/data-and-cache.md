@@ -6,7 +6,7 @@ source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
+last_verified: 2026-08-16
 screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png"]
 ---
 
@@ -21,6 +21,17 @@ screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png"]
 | 原站账号数据 | 帖子、消息、收藏、回应、已读状态 | LINUX DO | 只有对应业务操作才能改变 |
 
 缓存清理不会撤销原站收藏或回应，也不会删除帖子和真实消息。
+
+## 先选择正确动作
+
+| 目标 | 应使用的入口 | 不会发生什么 |
+| --- | --- | --- |
+| 备份或迁移界面、阅读与快捷方式配置 | [数据管理 → 导出设置](/settings/data-management#导出设置) | 不导出历史、正文、Cookie 或秘密凭据 |
+| 应用另一份配置 | [数据管理 → 导入设置](/settings/data-management#导入设置) | 无效文件、取消或写入失败不会留下半套配置 |
+| 回到初始设置 | [数据管理 → 恢复全部默认](/settings/data-management#reset-settings) | 不删除队列条目、历史、离线 Topic 或缓存 |
+| 修复单个主题的本地数据 | 标题栏“清除当前帖子缓存并刷新” | 不需要清空所有缓存 |
+| 回收某类派生数据 | 数据管理中的六类缓存清理 | 不改原站账号状态，也不直接删除 WebDAV 远端记录 |
+| 在设备间交换所选数据 | [WebDAV 同步](/settings/webdav-sync) | 默认不运行；关闭的类别不会上传、下载或删除 |
 
 ## WebDAV 跨设备记录
 
@@ -98,6 +109,15 @@ screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png"]
 2. 若只影响一个主题，优先清理当前主题缓存。
 3. 若用户卡或消息显示旧值，只清理相应类型。
 4. 只有配置本身异常时才恢复全部默认。
+
+## 一次完整的配置与同步闭环
+
+1. 先导出当前设置，保留可回退的本机配置文件。
+2. 修改设置或快捷方式，按该面板的即时保存或统一保存规则提交。
+3. 需要跨设备时，在来源设备核对 WebDAV 地址、账号、远端文件和类别，并完成一次“立即同步”。
+4. 在目标设备导入配置；秘密凭据不会随文件迁移，需要在本机重新填写或复用同地址已有凭据。
+5. 在目标设备执行“测试连接”和“立即同步”，确认所选记录已经合并。
+6. 若问题只涉及缓存，按最小类别清理；若配置整体异常，再使用[恢复全部默认](/settings/data-management#reset-settings)。
 5. 清理后重新打开相关主题或面板并复现。
 
 勾选类别并点击“清理已选缓存”后，必须先在二次确认中核对类别清单。确认框会明确说明：这里只删除本机缓存，不删除站点账号或 WebDAV 远端数据；已同步记录可能在后续同步时重新合并回来。

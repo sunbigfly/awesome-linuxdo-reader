@@ -1495,12 +1495,12 @@
     "feature_id": "SET-020",
     "title": "设置分组、搜索与统一保存",
     "category": "个性化设置",
-    "description": "按三组浏览 15 个设置面板，按名称和说明搜索，在独立面板管理键盘与鼠标快捷方式，并在底部一次保存全部实时预览草稿。",
+    "description": "按三组浏览 18 个设置面板，按名称和说明搜索，在独立面板管理键盘与鼠标快捷方式，并在底部一次保存全部实时预览草稿。",
     "source_anchor": "lite/src/settings/reader-settings-controller.ts",
     "since": "0.1.14",
     "version": "1.5.0",
     "status": "current",
-    "last_verified": "2026-08-15",
+    "last_verified": "2026-08-16",
     "screenshots": [
       "assets/screenshots/guide-02-settings-overview-v1.3.0.png",
       "assets/screenshots/guide-27-shortcuts-v1.0.0.png"

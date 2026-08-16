@@ -6,7 +6,7 @@ source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/app/rea
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
+last_verified: 2026-08-16
 screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/guide-18-thread-context-v1.0.0.png", "/screenshots/guide-26-reading-navigation-v1.0.0.png", "/screenshots/guide-27-shortcuts-v1.0.0.png", "/screenshots/guide-28-applicable-sites-v1.0.0.png"]
 ---
 
@@ -67,6 +67,8 @@ screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/g
 - 在输入框、编辑器或需要键盘操作的控件中，阅读器不会抢占普通输入。
 
 快捷方式修改会立即写入当前脚本配置，不进入底部的统一草稿队列。动作暂时不可用时只显示提示，不会改走另一项社区操作。
+
+快捷绑定属于阅读器偏好，会进入 v9 设置导出，并随配置导入或[恢复全部默认](/settings/data-management#reset-settings)一起处理；它不需要 WebDAV 独立类别。若启用 WebDAV 的“设置配置”，快捷绑定会作为该类别的一部分合并，但 WebDAV 凭据仍不会随设置同步。
 
 ## 主帖操作列
 

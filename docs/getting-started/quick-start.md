@@ -1,12 +1,12 @@
 ---
 title: 五分钟上手
-description: 从主题列表打开阅读器，完成阅读、导航、互动和关闭工作区。
+description: 从主题列表打开阅读器，完成阅读、导航、互动、资料整理和初始设置。
 feature_ids: ["CORE-002", "CORE-003", "CORE-006"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/userscript/main-lite-bootstrap.ts","lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
+last_verified: 2026-08-16
 screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png"]
 ---
 
@@ -45,18 +45,28 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png"]
 
 主题末尾还提供分享、主题书签、主题通知级别和回复主题。
 
-## 4. 打开侧边工具
+## 4. 打开共享工具
 
 阅读器标题栏提供：
 
-- **消息**：按全部、回复、点赞、Boost、关注、私信和其他七类查看通知；
-- **历史**：最近阅读主题、位置和时间；
-- **收藏与回应**：回应、主题书签和楼层书签；
-- **设置**：图片、字体、布局、性能、监控、数据管理等。
+- **通知与私信**：按全部、回复、点赞、Boost、关注、私信和其他类别查看通知；
+- **浏览历史**：恢复最近主题、阅读位置和时间；
+- **收藏与回应**：集中查看回应、主题书签和楼层书签；
+- **Topic 下载**：把全部、楼主或自选楼层生成独立离线 HTML；
+- **用户观察、岁月史书和不想看**：持续整理公开活动、失效内容和免打扰记录。
 
 ## 5. 切换形态或关闭
 
 使用标题栏的布局按钮切换当前工作区形态。关闭按钮只关闭阅读器，不会关闭 LINUX DO 页面；阅读位置会写入本地历史，稍后可以恢复。
+
+## 6. 按需完成初始设置
+
+进入“设置”后，优先确认以下项目：
+
+1. 在[设置中心总览](/settings/overview)选择界面形态、主题和阅读习惯；界面草稿需要点击“保存全部更改”，快捷方式等即时设置会直接保存。
+2. 在[快捷方式](/settings/other#快捷方式)保留常用动作；浏览器保留键、无修饰字母和冲突组合不会保存。
+3. 在[数据管理](/settings/data-management)导出一份配置备份。导入或恢复全部默认不会删除历史、队列和缓存，秘密凭据也不会进入导出文件。
+4. 只有确实需要跨设备数据时才配置 [WebDAV 同步](/settings/webdav-sync)；它默认关闭，并按 12 类数据分别启用。
 
 ::: tip
 第一次使用建议保留“均衡”性能预设。只有在明确出现等待或资源压力时，再按[性能与请求调度](/settings/performance)调整。
