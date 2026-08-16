@@ -7,7 +7,7 @@ since: 0.1.2
 version: 1.5.0
 status: current
 last_verified: 2026-08-16
-screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png"]
+screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png"]
 ---
 
 # 设置中心总览
@@ -35,9 +35,9 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png"]
 | [WebDAV 同步](/settings/webdav-sync) | 跨设备合并所选记录，并可单独同步离线 Topic HTML |
 | [关于](/settings/about) | 功能摘要、版本和项目入口 |
 
-![设置中心完整导航、当前账号和 Connect 信任进度](/screenshots/guide-02-settings-overview-v1.3.0.png)
+![设置中心完整导航、当前账号和 Connect 信任进度](/screenshots/guide-02-settings-overview-v1.5.0.png)
 
-<p class="image-caption">截图沿用 v1.3.0 的稳定布局；当前版本扩展为 18 个面板，并补齐独立 AI 服务、当地日落自动暗色、共享工具窗口与完整同步边界。</p>
+<p class="image-caption">从阅读器标题栏进入设置中心，可搜索并切换三组、18 个面板；统一保存负责当前设置，WebDAV、缓存清理和恢复默认仍是各自独立的确认流程。</p>
 
 ## 分组与搜索
 

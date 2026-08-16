@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="760" viewBox="0 0 1440 760" role="img" aria-labelledby="title desc">
+  <title id="title">WebDAV 十二类数据跨设备合并同步流程</title>
+  <desc id="desc">设备 A 和设备 B 读取同一 WebDAV 目标，以本机、远端和上次成功基线执行三方合并，再以 ETag 条件写入。十二类数据分别开关，通知与互动历史、离线 Topic 使用独立对象。</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fbf8"/>
+      <stop offset="1" stop-color="#edf5ef"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4f8b68"/>
+    </marker>
+  </defs>
+  <rect width="1440" height="760" rx="32" fill="url(#background)"/>
+  <text x="720" y="66" text-anchor="middle" font-family="system-ui, sans-serif" font-size="34" font-weight="700" fill="#193d2b">WebDAV 十二类数据合并同步</text>
+  <text x="720" y="105" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20" fill="#547162">读取远端 → 三方合并 → ETag 条件写入；冲突时重新读取并重试</text>
+
+  <g>
+    <rect x="90" y="158" width="330" height="250" rx="24" fill="#ffffff" stroke="#c8ded0" stroke-width="2"/>
+    <rect x="1020" y="158" width="330" height="250" rx="24" fill="#ffffff" stroke="#c8ded0" stroke-width="2"/>
+    <rect x="525" y="138" width="390" height="290" rx="26" fill="#315f47"/>
+  </g>
+
+  <text x="255" y="210" text-anchor="middle" font-family="system-ui, sans-serif" font-size="27" font-weight="700" fill="#244d37">设备 A</text>
+  <text x="255" y="250" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#607a6b">当前浏览器的本地记录</text>
+  <text x="255" y="304" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#315f47">保留未同步的本机新增与删除</text>
+  <text x="255" y="342" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#315f47">只应用远端写入成功后的合并结果</text>
+  <text x="255" y="380" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#315f47">缓存清理不生成远端删除标记</text>
+
+  <text x="1185" y="210" text-anchor="middle" font-family="system-ui, sans-serif" font-size="27" font-weight="700" fill="#244d37">设备 B</text>
+  <text x="1185" y="250" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#607a6b">另一个浏览器的本地记录</text>
+  <text x="1185" y="304" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#315f47">首次同步默认与远端合并</text>
+  <text x="1185" y="342" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#315f47">只有墓碑表示协议删除</text>
+  <text x="1185" y="380" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#315f47">目标地址、账号、路径和站点账号隔离</text>
+
+  <text x="720" y="192" text-anchor="middle" font-family="system-ui, sans-serif" font-size="28" font-weight="700" fill="#ffffff">WebDAV 远端对象</text>
+  <text x="720" y="232" text-anchor="middle" font-family="ui-monospace, monospace" font-size="18" fill="#d9ebdf">ALR-Lite/v2/sync.json + 独立清单 / HTML</text>
+  <line x1="586" y1="260" x2="854" y2="260" stroke="#8fc3a4" stroke-width="2"/>
+  <text x="720" y="299" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" fill="#ffffff">普通类别进入主同步文件并使用三方合并</text>
+  <text x="720" y="333" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" fill="#ffffff">通知与互动历史使用单调合并的独立清单</text>
+  <text x="720" y="367" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" fill="#ffffff">离线 Topic 使用轻量清单与独立明文 HTML</text>
+  <text x="720" y="401" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" fill="#ffffff">凭据只保存在本机，不写入远端对象</text>
+
+  <path d="M 430 244 C 470 214, 490 214, 515 234" fill="none" stroke="#4f8b68" stroke-width="4" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <path d="M 925 234 C 950 214, 970 214, 1010 244" fill="none" stroke="#4f8b68" stroke-width="4" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+
+  <rect x="90" y="474" width="1260" height="230" rx="24" fill="#ffffff" stroke="#d5e5da" stroke-width="2"/>
+  <text x="125" y="514" font-family="system-ui, sans-serif" font-size="20" font-weight="700" fill="#244d37">十二类独立开关</text>
+  <g font-family="system-ui, sans-serif" font-size="17" fill="#315f47">
+    <text x="125" y="555">浏览历史</text>
+    <text x="435" y="555">收藏记录</text>
+    <text x="745" y="555">设置配置</text>
+    <text x="1055" y="555">阅读队列</text>
+    <text x="125" y="596">通知历史缓存</text>
+    <text x="435" y="596">回复 / Boost / 回应历史</text>
+    <text x="745" y="596">阅读位置与窗口状态</text>
+    <text x="1055" y="596">自定义适用站点</text>
+    <text x="125" y="637">Connect 观察历史</text>
+    <text x="435" y="637">AI 服务集合（Key 加密）</text>
+    <text x="745" y="637">已翻译 Section 缓存</text>
+    <text x="1055" y="637">离线 Topic 下载</text>
+  </g>
+  <text x="125" y="678" font-family="system-ui, sans-serif" font-size="17" fill="#6a7f72">默认只开启浏览历史、收藏记录和阅读队列；定时同步默认关闭。普通正文、图片、附件、Cookie、请求游标、限流状态和页面缓存不会上传。</text>
+</svg>

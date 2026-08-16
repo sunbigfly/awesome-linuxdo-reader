@@ -7,7 +7,7 @@ since: 0.1.2
 version: 1.5.0
 status: current
 last_verified: 2026-08-16
-screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/guide-18-thread-context-v1.0.0.png", "/screenshots/guide-26-reading-navigation-v1.0.0.png", "/screenshots/guide-27-shortcuts-v1.0.0.png", "/screenshots/guide-28-applicable-sites-v1.0.0.png"]
+screenshots: ["/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/guide-18-thread-context-v1.5.0.png", "/screenshots/guide-26-reading-navigation-v1.5.0.png", "/screenshots/guide-27-shortcuts-v1.5.0.png", "/screenshots/guide-28-applicable-sites-v1.5.0.png"]
 ---
 
 # 阅读、快捷方式、帖子与适用站点
@@ -19,7 +19,9 @@ screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/g
 - **帖子与回复**：主帖操作列、二级回复显示位置和 Boost 复制；
 - **适用站点**：其他 HTTPS Discourse 论坛。
 
-![阅读与导航面板中的队列入口、历史、打开位置和退出设置](/screenshots/guide-26-reading-navigation-v1.0.0.png)
+![阅读与导航面板中的队列入口、历史、打开位置和退出设置](/screenshots/guide-26-reading-navigation-v1.5.0.png)
+
+<p class="image-caption">在“阅读与导航”选择队列入口、历史切换、主题打开位置和退出方式；这些选项共同决定从列表进入、连续阅读和离开后的状态恢复。</p>
 
 ## 阅读队列入口
 
@@ -56,7 +58,9 @@ screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/g
 
 ## 快捷方式
 
-![快捷方式面板中的键盘、滚轮和鼠标侧键绑定](/screenshots/guide-27-shortcuts-v1.0.0.png)
+![快捷方式面板中的键盘、滚轮和鼠标侧键绑定](/screenshots/guide-27-shortcuts-v1.5.0.png)
+
+<p class="image-caption">在“快捷方式”给 21 个动作配置键盘、滚轮或鼠标侧键，每个动作最多三组；冲突与浏览器保留键会在保存前拦截。</p>
 
 21 个快捷动作分为浏览导航、阅读工具、界面面板、帖子操作、窗口与队列五组。点击某个动作右侧的“添加”后，按下键盘组合键、滚轮、鼠标中键、后退键或前进键即可保存；右键始终留给浏览器上下文菜单，不作为快捷方式。“清空”“默认”和“全部恢复默认”分别管理单项或全部绑定。
 
@@ -72,7 +76,9 @@ screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/g
 
 ## 主帖操作列
 
-![帖子与回复面板中的主帖操作列和二级回复设置](/screenshots/guide-12-other-features-v1.0.0.png)
+![帖子与回复面板中的主帖操作列和二级回复设置](/screenshots/guide-12-other-features-v1.5.0.png)
+
+<p class="image-caption">“帖子与回复”控制主帖操作列、完整讨论和 Boost 复制等行为；缺少对应站点插件时相关入口自动隐藏。</p>
 
 “始终显示主帖操作列”默认开启；“锁定操作列位置”默认关闭。未锁定时长按操作列收纳按钮约 420 ms 后拖动，位置会保存；“恢复默认”将其放回正文左侧。
 
@@ -88,7 +94,9 @@ screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/g
 
 ## 二级回复显示位置
 
-![父楼层下展开的二级回复、关系线和正式楼层](/screenshots/guide-18-thread-context-v1.0.0.png)
+![父楼层下展开的二级回复、关系线和正式楼层](/screenshots/guide-18-thread-context-v1.5.0.png)
+
+<p class="image-caption">启用完整讨论后，直属回复在父楼层下形成关系树，同时保留它们在主信息流的正式楼层，跳转与历史位置不会失真。</p>
 
 | 设置 | 结果 |
 | --- | --- |
@@ -115,7 +123,9 @@ screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/g
 
 ## 其他适用站点
 
-![适用站点面板中的 HTTPS Discourse 论坛验证入口](/screenshots/guide-28-applicable-sites-v1.0.0.png)
+![适用站点面板中的 HTTPS Discourse 论坛验证入口](/screenshots/guide-28-applicable-sites-v1.5.0.png)
+
+<p class="image-caption">在“适用站点”输入 HTTPS 论坛地址并验证 Discourse 证据，成功后才加入自定义站点；验证不会绕过目标站登录或权限。</p>
 
 标准 HTTPS Discourse 论坛会自动识别，通常无需添加。只有深度定制站点自动识别失败时，才输入域名或完整网址并点击“验证并添加”；阅读器会匿名访问该站点的 `/site/basic-info.json`，检测到 Discourse 公开站点信息后保存为兼容兜底。已内置站点不需要重复添加，保存的域名可以在同一区域移除。
 

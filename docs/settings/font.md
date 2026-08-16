@@ -6,15 +6,17 @@ source_anchors: ["lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-04-font-settings-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-04-font-settings-v1.5.0.png"]
 ---
 
 # 字体设置
 
 路径：**阅读器标题栏 → 设置 → 字体设置**。
 
-![字体设置页中的渲染、宿主文字和分作用域字体控件](/screenshots/guide-04-font-settings-v1.0.0.png)
+![字体设置页中的渲染、宿主文字和分作用域字体控件](/screenshots/guide-04-font-settings-v1.5.0.png)
+
+<p class="image-caption">在“设置 → 字体设置”分别调整宿主列表、阅读器界面、正文与回复框；作用域独立保存，便于只放大阅读内容而不挤压列表。</p>
 
 ## 字体显示优化
 

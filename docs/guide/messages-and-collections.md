@@ -6,8 +6,8 @@ source_anchors: ["lite/src/app/reader-browser-runtime.ts","lite/src/discourse/na
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-15-notifications-replies-v1.0.0.png", "/screenshots/guide-16-history-v1.0.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-15-notifications-replies-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.5.0.png"]
 ---
 
 # 消息、历史与收藏
@@ -31,7 +31,7 @@ screenshots: ["/screenshots/guide-15-notifications-replies-v1.0.0.png", "/screen
 
 私信模式提供最新、已发送、新、未读、归档和机器人聊天六类主题列表。每条私信显示参与者、标题、摘要、最后活动时间和“新 / 未读 / 已读”状态；未读主题优先定位到最后已读楼层之后，否则进入最新楼层。
 
-![消息中心回复分类中的真实通知和目标回跳](/screenshots/guide-15-notifications-replies-v1.0.0.png)
+![消息中心回复分类中的真实通知和目标回跳](/screenshots/guide-15-notifications-replies-v1.5.0.png)
 
 <p class="image-caption">从标题栏打开消息中心，先选择消息类别，再点击具体通知；阅读器会进入对应主题并定位到目标楼层。</p>
 
@@ -61,7 +61,7 @@ screenshots: ["/screenshots/guide-15-notifications-replies-v1.0.0.png", "/screen
 
 历史是阅读器保存在当前浏览器中的主题访问记录，包括标题、主题 ID、最近视口、首次查看和最后查看时间。0.1.15 的位置状态还可包含完整讨论分支、分支内锚点和引用高亮。
 
-![浏览历史列表、检索和目标阅读位置](/screenshots/guide-16-history-v1.0.0.png)
+![浏览历史列表、检索和目标阅读位置](/screenshots/guide-16-history-v1.5.0.png)
 
 <p class="image-caption">打开历史面板后可检索、排序和多选；点击一条历史记录会恢复该主题最近保存的阅读位置。</p>
 
@@ -78,7 +78,7 @@ screenshots: ["/screenshots/guide-15-notifications-replies-v1.0.0.png", "/screen
 
 ## 收藏与回应
 
-![回应、主题书签和楼层书签统一入口](/screenshots/guide-17-bookmarks-reactions-v1.0.0.png)
+![回应、主题书签和楼层书签统一入口](/screenshots/guide-17-bookmarks-reactions-v1.5.0.png)
 
 <p class="image-caption">在收藏与回应中心切换“回应、帖子、楼层”标签；先确认对象类型，再执行跳转或移除。</p>
 

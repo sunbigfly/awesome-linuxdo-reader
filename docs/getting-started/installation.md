@@ -6,8 +6,8 @@ source_anchors: ["lite/userscript.meta.txt","lite/src/app/reader-application.ts"
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png"]
 ---
 
 # 安装与更新
@@ -24,7 +24,7 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
 - **CSS**：固定到 Git `2a1f6695162217d4a86cf0e3958d8a361594f90b`；610,039 字节，SHA-256 `db6d4a47f0fb07f002907a6c9788f730f233b902d548238da0023a46182a026a`。
 :::
 
-![安装并启用脚本后，LINUX DO 列表页与增强阅读工作区同时可用](/screenshots/guide-01-reader-overview-v1.3.0.png)
+![安装并启用脚本后，LINUX DO 列表页与增强阅读工作区同时可用](/screenshots/guide-01-reader-overview-v1.5.0.png)
 
 <p class="image-caption">安装成功并刷新页面后，主题列表仍保留在宿主区域，主题可直接进入右侧增强阅读工作区。</p>
 

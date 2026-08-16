@@ -6,15 +6,17 @@ source_anchors: ["lite/userscript.meta.txt","lite/src/components/reader-image-fa
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-14-about-v1.3.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ---
 
 # 关于
 
 路径：**阅读器标题栏 → 设置 → 关于**。
 
-![关于页中的产品定位、能力摘要、版本和致谢](/screenshots/guide-14-about-v1.3.0.png)
+![关于页中的产品定位、能力摘要、版本和致谢](/screenshots/guide-14-about-v1.5.0.png)
+
+<p class="image-caption">在“设置 → 关于”核对实际运行版本、项目入口、许可证与第三方组件；版本判断以当前脚本元数据为准。</p>
 
 ## 页面内容
 

@@ -6,8 +6,8 @@ source_anchors: ["lite/src/queue/reader-open-queue-session.ts"]
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-21-reading-queue-v1.0.0.png", "/screenshots/guide-24-reading-queue-entry-v1.0.0.png", "/screenshots/guide-13-data-management-v1.3.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-16-history-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-21-reading-queue-v1.5.0.png", "/screenshots/guide-24-reading-queue-entry-v1.5.0.png", "/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png"]
 ---
 
 # 阅读队列
@@ -16,7 +16,7 @@ screenshots: ["/screenshots/guide-21-reading-queue-v1.0.0.png", "/screenshots/gu
 
 阅读队列不是收藏夹，也不是离线下载工具。移出队列不会删除帖子、撤销收藏或清除已经写入本地缓存的正文和图片。
 
-![阅读工作区中的五篇文章队列、实际阅读进度和分层预加载状态](/screenshots/guide-21-reading-queue-v1.0.0.png)
+![阅读工作区中的五篇文章队列、实际阅读进度和分层预加载状态](/screenshots/guide-21-reading-queue-v1.5.0.png)
 
 <p class="image-caption">完整列表同时显示当前文章、固定操作、实际阅读进度，以及正文、楼中楼和图片的后台准备情况。</p>
 
@@ -32,7 +32,7 @@ screenshots: ["/screenshots/guide-21-reading-queue-v1.0.0.png", "/screenshots/gu
 
 直接点击主题标题只会打开阅读器，不会自动加入队列。需要跨主题准备、预加载或稍后切换时，再点击加号明确加入；这样普通阅读不会悄悄改变队列。
 
-![主题列表中的加号入口、已加入状态和阅读器队列](/screenshots/guide-24-reading-queue-entry-v1.0.0.png)
+![主题列表中的加号入口、已加入状态和阅读器队列](/screenshots/guide-24-reading-queue-entry-v1.5.0.png)
 
 <p class="image-caption">在主题标题旁点击圆形加号即可加入；已加入的主题显示勾选。右侧队列仍可继续阅读当前主题，不会因为添加操作被切换。</p>
 
@@ -140,7 +140,7 @@ screenshots: ["/screenshots/guide-21-reading-queue-v1.0.0.png", "/screenshots/gu
 
 正文、楼中楼和图片由各自的缓存系统管理。清空队列与清理缓存是两个独立操作。
 
-![数据管理中的缓存统计、清理和本地数据入口](/screenshots/guide-13-data-management-v1.3.0.png)
+![数据管理中的缓存统计、清理和本地数据入口](/screenshots/guide-13-data-management-v1.5.0.png)
 
 <p class="image-caption">需要释放空间时进入“设置 → 数据管理”；这里清理的是正文和资源缓存，不等同于从阅读队列移除文章。</p>
 
@@ -161,7 +161,7 @@ screenshots: ["/screenshots/guide-21-reading-queue-v1.0.0.png", "/screenshots/gu
 4. 如果再次失败，检查“设置 → 日志记录 → 请求记录”中的错误、`429` 或冷却状态。
 5. 原生主题也打不开时，优先排查登录、权限、网络、帖子状态或 Cloudflare 验证。
 
-![请求数据面板中的请求速率、异常、排队和冷却状态](/screenshots/guide-11-request-flow-v1.0.0.png)
+![请求数据面板中的请求速率、异常、排队和冷却状态](/screenshots/guide-11-request-flow-v1.5.0.png)
 
 <p class="image-caption">重新预加载仍失败时打开“设置 → 日志记录 → 请求记录”，先查看失败请求、排队和冷却状态，再决定等待、重试或进入原生页面检查。</p>
 
@@ -176,6 +176,6 @@ screenshots: ["/screenshots/guide-21-reading-queue-v1.0.0.png", "/screenshots/gu
 | 主题收藏 | 长期保存关注主题 | 是，跟随 LINUX DO 账号 | 是 |
 | 本地缓存 | 减少重复下载正文和资源 | 取决于缓存保留期 | 否 |
 
-![浏览历史面板中的主题记录、检索和恢复位置](/screenshots/guide-16-history-v1.0.0.png)
+![浏览历史面板中的主题记录、检索和恢复位置](/screenshots/guide-16-history-v1.5.0.png)
 
 <p class="image-caption">历史面板用于找回已经读过的主题；阅读队列用于准备接下来要读的主题。两者入口和删除语义不同。</p>

@@ -6,8 +6,8 @@ source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/discour
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-25-user-card-v1.0.0.png", "/screenshots/guide-02-settings-overview-v1.3.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-25-user-card-v1.5.0.png", "/screenshots/guide-02-settings-overview-v1.5.0.png"]
 ---
 
 # 用户资料与关系
@@ -28,7 +28,7 @@ screenshots: ["/screenshots/guide-25-user-card-v1.0.0.png", "/screenshots/guide-
 
 用户头像旁的原站 Flair 徽章会先尝试把当前页面 SVG 符号安全内联，避免依赖外部图标运行时；图标无法解析或未通过净化时回退到内置盾牌图标，徽章名称和颜色仍会保留。
 
-![阅读器用户卡中的资料、统计、关系操作和头像预览](/screenshots/guide-25-user-card-v1.0.0.png)
+![阅读器用户卡中的资料、统计、关系操作和头像预览](/screenshots/guide-25-user-card-v1.5.0.png)
 
 <p class="image-caption">点击楼层作者的用户名打开用户卡；统计卡片用于进入帖子、获赞和主题，底部按钮依次提供私信、通知和账号关系操作。</p>
 
@@ -79,7 +79,7 @@ screenshots: ["/screenshots/guide-25-user-card-v1.0.0.png", "/screenshots/guide-
 
 “设置 → 用户信息”集中展示当前登录账号、社区统计以及 Connect 信任级别升级进度，并允许手动刷新。
 
-![设置中心的当前账号信息、社区统计和 Connect 进度](/screenshots/guide-02-settings-overview-v1.3.0.png)
+![设置中心的当前账号信息、社区统计和 Connect 进度](/screenshots/guide-02-settings-overview-v1.5.0.png)
 
 <p class="image-caption">查看自己的账号时打开“设置 → 用户信息”，切换 Connect 与基本信息标签，并用右上角刷新按钮重新取得资料。</p>
 

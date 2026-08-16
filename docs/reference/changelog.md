@@ -7,12 +7,12 @@ since: 0.1.2
 version: 1.5.0
 status: current
 last_verified: 2026-08-16
-screenshots: ["/screenshots/guide-14-about-v1.3.0.png"]
+screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ---
 
 # 更新记录
 
-![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.3.0.png)
+![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
 

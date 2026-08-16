@@ -6,8 +6,8 @@ source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/shell/r
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-05-layout-settings-v1.0.0.png", "/screenshots/guide-06-window-settings-v1.0.0.png", "/screenshots/guide-07-appearance-settings-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-05-layout-settings-v1.5.0.png", "/screenshots/guide-06-window-settings-v1.5.0.png", "/screenshots/guide-07-appearance-settings-v1.5.0.png"]
 ---
 
 # 布局、浮窗与外观
@@ -35,7 +35,9 @@ screenshots: ["/screenshots/guide-05-layout-settings-v1.0.0.png", "/screenshots/
 | 普通（嵌入/浮窗） | 0% | 88% | 0% | 8% | 4% |
 | 全屏 | 15% | 70% | 5% | 8% | 2% |
 
-![五区布局的比例、共享和应用状态](/screenshots/guide-05-layout-settings-v1.0.0.png)
+![五区布局的比例、共享和应用状态](/screenshots/guide-05-layout-settings-v1.5.0.png)
+
+<p class="image-caption">在“设置 → 布局设置”按阅读形态配置宿主、正文、间距和时间轴五区；保存后同类窗口共享比例，当前主题内容不受影响。</p>
 
 ## 浮窗
 
@@ -58,7 +60,9 @@ screenshots: ["/screenshots/guide-05-layout-settings-v1.0.0.png", "/screenshots/
 
 ## 外观项目
 
-![外观设置中的浅色/暗色颜色与结构参数](/screenshots/guide-07-appearance-settings-v1.0.0.png)
+![外观设置中的浅色/暗色颜色与结构参数](/screenshots/guide-07-appearance-settings-v1.5.0.png)
+
+<p class="image-caption">切换到“外观设置”配置明暗主题、当地日落切换、强调色、斑马纹和结构线；视觉配置与布局比例分别保存。</p>
 
 按浮窗、全屏、移动分别设置：
 

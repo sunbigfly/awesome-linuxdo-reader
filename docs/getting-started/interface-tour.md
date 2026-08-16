@@ -6,8 +6,8 @@ source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/r
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png", "/screenshots/guide-05-layout-settings-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/guide-05-layout-settings-v1.5.0.png"]
 ---
 
 # 界面总览
@@ -46,7 +46,9 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png", "/screenshots/
 
 ## 设置中心
 
-![设置中心中的布局设置和三种形态配置](/screenshots/guide-05-layout-settings-v1.0.0.png)
+![设置中心中的布局设置和三种形态配置](/screenshots/guide-05-layout-settings-v1.5.0.png)
+
+<p class="image-caption">从阅读器标题栏打开设置，选择“布局设置”分别维护普通、全屏和移动形态；保存后只改变阅读工作区比例，不修改原站内容。</p>
 
 设置中心包含用户信息、图片、字体、布局、浮窗、外观、动画与提示、阅读与导航、翻译设置、AI 服务、快捷方式、帖子与回复、适用站点、性能、日志记录、数据管理、WebDAV 同步和关于 18 个面板。桌面端按三组排列，设置页顶部可搜索，存在草稿时底部可统一保存；明、暗、系统按钮只切换阅读器主题。翻译参数、AI 服务与 WebDAV 连接各自在对应面板保存，不进入“保存全部更改”的界面草稿。
 

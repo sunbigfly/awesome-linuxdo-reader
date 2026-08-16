@@ -6,8 +6,8 @@ source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/app/rea
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-10-resource-monitor-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-10-resource-monitor-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png"]
 ---
 
 # 资源与请求监控
@@ -29,7 +29,9 @@ screenshots: ["/screenshots/guide-10-resource-monitor-v1.0.0.png", "/screenshots
 | 当前网络请求 | 进行中与排队 |
 | 最近 60 秒网络 | 请求数与已知传输量 |
 
-![资源监控中的基线、阅读器 DOM 和前后台事件](/screenshots/guide-10-resource-monitor-v1.0.0.png)
+![资源监控中的基线、阅读器 DOM 和前后台事件](/screenshots/guide-10-resource-monitor-v1.5.0.png)
+
+<p class="image-caption">在“设置 → 日志记录 → 性能记录”观察阅读器 DOM、长任务和前后台基线，用于判断趋势；数值不是 userscript 独占 CPU 或内存。</p>
 
 面板还提供：
 
@@ -42,7 +44,9 @@ screenshots: ["/screenshots/guide-10-resource-monitor-v1.0.0.png", "/screenshots
 
 ## 请求记录
 
-![请求速率、脉络、类型、异常和限流边界](/screenshots/guide-11-request-flow-v1.0.0.png)
+![请求速率、脉络、类型、异常和限流边界](/screenshots/guide-11-request-flow-v1.5.0.png)
+
+<p class="image-caption">切换到“请求记录”查看请求类型、排队、异常与 429 冷却；先依据状态确认是站点限流、Cloudflare 还是本地队列，再决定等待或重试。</p>
 
 摘要包含当前页：
 

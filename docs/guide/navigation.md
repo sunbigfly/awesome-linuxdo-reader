@@ -6,8 +6,8 @@ source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/r
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png", "/screenshots/guide-16-history-v1.0.0.png", "/screenshots/guide-21-reading-queue-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png", "/screenshots/guide-21-reading-queue-v1.5.0.png"]
 ---
 
 # 楼层、时间轴与历史
@@ -26,7 +26,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png", "/screenshots/
 
 大量楼层快速跳转需要经过“获取数据 → 挂载目标 → 定位”的顺序。不要在第一次等待时连续重复点击，否则会产生互相覆盖的目标。
 
-![阅读工作区右侧时间轴、当前楼层和回顶入口](/screenshots/guide-01-reader-overview-v1.3.0.png)
+![阅读工作区右侧时间轴、当前楼层和回顶入口](/screenshots/guide-01-reader-overview-v1.5.0.png)
 
 <p class="image-caption">时间轴位于阅读工作区右侧：拖动滑块选择楼层，观察当前楼层与日期，底部按钮返回主题顶部。</p>
 
@@ -49,7 +49,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png", "/screenshots/
 
 0.1.15 的阅读锚点不再只有楼层号，还会记录当前虚拟流视口及偏移、完整讨论窗口的根楼层与分支位置，以及仍有效的引用高亮。切换到另一个主题前会先捕获当前状态，返回时再按“分支上下文 → 目标楼层 → 精确偏移”的顺序恢复。
 
-![浏览历史中的顺序、检索、目标位置和前后翻页](/screenshots/guide-16-history-v1.0.0.png)
+![浏览历史中的顺序、检索、目标位置和前后翻页](/screenshots/guide-16-history-v1.5.0.png)
 
 <p class="image-caption">历史面板显示保存的主题和最近位置；阅读器边缘的前后按钮沿同一条历史链切换，不按主题列表顺序切换。</p>
 
@@ -89,7 +89,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png", "/screenshots/
 
 当地址栏在同一主题内从一个楼层路由变到另一个楼层路由时，已经打开的阅读器会直接跳到新楼层，不会重新创建整个阅读工作区。重复的 Discourse 页面变化信号会按当前路由去重；原站搜索菜单中只有真实主题或楼层结果会被接管，搜索建议及其他菜单链接保持原生行为。
 
-![阅读队列中的当前主题、预加载状态和阅读进度](/screenshots/guide-21-reading-queue-v1.0.0.png)
+![阅读队列中的当前主题、预加载状态和阅读进度](/screenshots/guide-21-reading-queue-v1.5.0.png)
 
 <p class="image-caption">需要连续阅读多篇文章时打开队列面板；点击队列项切换主题，并通过进度与预加载状态判断是否已经准备完成。</p>
 

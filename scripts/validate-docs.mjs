@@ -172,7 +172,7 @@ if (packageLockVersion !== version || packageLockRootVersion !== version) {
 
 for (const [file, expected, label] of [
   [path.join(root, 'README.md'), `当前项目版本为 \`${version}\``, 'README.md 当前版本'],
-  [path.join(root, 'README.md'), `${version} 重点`, 'README.md 当前版本摘要'],
+  [path.join(root, 'README.md'), '## 核心能力', 'README.md 产品能力章节'],
   [path.join(docsRoot, 'INTRODUCTION.md'), `当前版本：\`${version}\``, 'INTRODUCTION.md 当前版本'],
   [path.join(docsRoot, 'INTRODUCTION.md'), `当前版本：${version}`, 'INTRODUCTION.md 品牌版本'],
   [path.join(docsRoot, 'index.md'), `对应 userscript \`${version}\``, 'docs/index.md 当前版本'],

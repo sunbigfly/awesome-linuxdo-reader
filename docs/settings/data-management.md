@@ -7,14 +7,16 @@ since: 0.1.2
 version: 1.5.0
 status: current
 last_verified: 2026-08-16
-screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png", "/screenshots/guide-30-settings-update-reminder-v1.3.0.png"]
+screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-30-settings-update-reminder-v1.5.0.png"]
 ---
 
 # 数据管理
 
 路径：**阅读器标题栏 → 设置 → 数据管理**。
 
-![数据管理页中的设置导出导入、恢复默认和缓存分类](/screenshots/guide-13-data-management-v1.3.0.png)
+![数据管理页中的设置导出导入、恢复默认和缓存分类](/screenshots/guide-13-data-management-v1.5.0.png)
+
+<p class="image-caption">从“设置 → 数据管理”导出或导入设置 v9，并按类别检查缓存；导出排除翻译 Key 与 WebDAV 凭据，导入失败会回滚已应用字段。</p>
 
 ## 设置配置
 
@@ -54,7 +56,9 @@ v9 导出文件包含当前版本规范化的 85 项图片、字体、布局、�
 
 v1.5.0 会再次为已有设置的用户递增“大版本设置更新”提示锚点；即使已经消费过 v1.3.1 的提示锁，升级后仍会收到一次新版默认值建议。选择“保留当前设置”不会改动任何值；选择“恢复默认值”会重置设置和阅读队列图标位置，但不删除队列条目、历史、下载记录、帖子缓存或账号数据。新用户首次安装仍保持静默，同一锚点不会重复提示。
 
-![一次性设置更新提示；界面与文案在 v1.3.1 保持不变](/screenshots/guide-30-settings-update-reminder-v1.3.0.png)
+![当前设置契约的一次性更新提示与重置入口](/screenshots/guide-30-settings-update-reminder-v1.5.0.png)
+
+<p class="image-caption">设置契约升级时会显示一次性提示；选择重置只恢复阅读器设置和队列图标，不删除队列条目、历史、缓存、账号数据或原站内容。</p>
 
 ## 本地缓存
 

@@ -6,15 +6,15 @@ source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-23-documentation-maintenance-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-23-documentation-maintenance-v1.5.0.png"]
 ---
 
 # 文档维护规范
 
 用户手册是功能交付的一部分。只要 `lite/src/`、`lite/styles/` 或 userscript 元数据中的用户可见入口、行为、设置、数据边界或故障恢复发生变化，就必须更新对应文档。
 
-![线上文档维护规范中的功能字段和完成标准](/screenshots/guide-23-documentation-maintenance-v1.0.0.png)
+![线上文档维护规范中的功能字段和完成标准](/screenshots/guide-23-documentation-maintenance-v1.5.0.png)
 
 <p class="image-caption">维护规范本身也是公开手册页面，字段、截图与验证规则都接受同一套自动检查。</p>
 

@@ -7,7 +7,7 @@ since: 0.1.2
 version: 1.5.0
 status: current
 last_verified: 2026-08-16
-screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png"]
+screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png"]
 ---
 
 # 数据、配置与缓存
@@ -79,7 +79,9 @@ screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png"]
 
 ## 六类缓存
 
-![数据管理中的缓存分类、保留期和选择性清理](/screenshots/guide-13-data-management-v1.3.0.png)
+![数据管理中的缓存分类、保留期和选择性清理](/screenshots/guide-13-data-management-v1.5.0.png)
+
+<p class="image-caption">从“设置 → 数据管理”先核对六类缓存的数量与保留期，再选择目标类别清理；设置、历史、队列和原站收藏不属于缓存，不会被连带删除。</p>
 
 | 类型 | 包含 | 不包含 |
 | --- | --- | --- |

@@ -6,13 +6,13 @@ source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/dom/rep
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png", "/screenshots/guide-03-image-settings-v1.0.0.png", "/screenshots/guide-04-font-settings-v1.0.0.png", "/screenshots/guide-05-layout-settings-v1.0.0.png", "/screenshots/guide-07-appearance-settings-v1.0.0.png", "/screenshots/guide-09-performance-settings-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-13-data-management-v1.3.0.png", "/screenshots/guide-27-shortcuts-v1.0.0.png", "/screenshots/guide-28-applicable-sites-v1.0.0.png", "/screenshots/guide-32-webdav-sync-v1.3.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png", "/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/guide-04-font-settings-v1.5.0.png", "/screenshots/guide-05-layout-settings-v1.5.0.png", "/screenshots/guide-07-appearance-settings-v1.5.0.png", "/screenshots/guide-09-performance-settings-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-27-shortcuts-v1.5.0.png", "/screenshots/guide-28-applicable-sites-v1.5.0.png", "/screenshots/guide-32-webdav-sync-v1.5.0.png"]
 ---
 
 # 完整设置参考
 
-![设置中心中的分类导航、当前用户信息和配置入口](/screenshots/guide-02-settings-overview-v1.3.0.png)
+![设置中心中的分类导航、当前用户信息和配置入口](/screenshots/guide-02-settings-overview-v1.5.0.png)
 
 <p class="image-caption">截图展示设置中心的基础配置入口；当前版本按三组、18 个面板组织，并支持搜索、自动暗色、翻译设置、AI 服务、快捷方式、WebDAV 同步和统一保存。</p>
 
@@ -148,7 +148,9 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png", "/screenshot
 
 ## 快捷方式
 
-![快捷方式面板中的分组、默认绑定和单项管理操作](/screenshots/guide-27-shortcuts-v1.0.0.png)
+![快捷方式面板中的分组、默认绑定和单项管理操作](/screenshots/guide-27-shortcuts-v1.5.0.png)
+
+<p class="image-caption">快捷方式按业务动作分组，支持恢复单项默认、清空和新增绑定；每项最多三组，保存前统一检查冲突与浏览器保留键。</p>
 
 - 五组动作：浏览导航、阅读工具、界面面板、帖子操作、窗口与队列；
 - 每项最多 3 个键盘、滚轮、鼠标中键或侧键绑定，共 21 个动作；右键不参与录制；
@@ -158,7 +160,9 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png", "/screenshot
 
 ## 适用站点
 
-![适用站点面板中的自定义 HTTPS Discourse 验证入口](/screenshots/guide-28-applicable-sites-v1.0.0.png)
+![适用站点面板中的自定义 HTTPS Discourse 验证入口](/screenshots/guide-28-applicable-sites-v1.5.0.png)
+
+<p class="image-caption">自定义站点必须使用 HTTPS 并通过 Discourse 能力验证；添加只扩展脚本适用范围，不授予额外账号、跨域或站点权限。</p>
 
 标准 HTTPS Discourse 会自动识别。只有深度定制站点识别失败时才需输入域名或 HTTPS 网址；阅读器只匿名检测公开站点信息，确认是 Discourse 后保存为兼容兜底。已内置站点不需要重复添加，验证失败或超时不会写入配置。
 

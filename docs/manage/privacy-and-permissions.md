@@ -6,13 +6,13 @@ source_anchors: ["lite/src/translation/reader-translation-controller.ts","lite/s
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-14-about-v1.3.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ---
 
 # 隐私、权限与边界
 
-![关于面板中的版本、第三方组件、许可证和项目边界信息](/screenshots/guide-14-about-v1.3.0.png)
+![关于面板中的版本、第三方组件、许可证和项目边界信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">关于面板集中展示当前版本、第三方参考项目和许可证；账号数据与互动结果仍以 LINUX DO 原站为准。</p>
 

@@ -6,8 +6,8 @@ source_anchors: ["lite/src/media/reader-image-scale.ts","lite/src/network/public
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-03-image-settings-v1.0.0.png", "/screenshots/guide-04-font-settings-v1.0.0.png", "/screenshots/guide-19-image-lightbox-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/guide-04-font-settings-v1.5.0.png", "/screenshots/guide-19-image-lightbox-v1.5.0.png"]
 ---
 
 # 图片与字体
@@ -35,7 +35,9 @@ screenshots: ["/screenshots/guide-03-image-settings-v1.0.0.png", "/screenshots/g
 
 描述高度最小 56 px，默认 120 px。评论面板宽度默认 25%，允许 18%–50%。
 
-![灯箱中的原图、描述、关联评论和下载控件](/screenshots/guide-19-image-lightbox-v1.0.0.png)
+![灯箱中的原图、描述、关联评论和下载控件](/screenshots/guide-19-image-lightbox-v1.5.0.png)
+
+<p class="image-caption">图片设置决定灯箱默认加载策略，字体设置决定说明与评论的可读性；点击正文图片即可核对两类配置的联动结果。</p>
 
 ## 内置字体渲染
 

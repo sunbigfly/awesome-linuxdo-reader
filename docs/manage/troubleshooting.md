@@ -6,8 +6,8 @@ source_anchors: ["lite/src/components/reader-icon.ts","lite/src/app/reader-brows
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-19-image-lightbox-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-13-data-management-v1.3.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-19-image-lightbox-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-13-data-management-v1.5.0.png"]
 ---
 
 # 故障排查
@@ -67,7 +67,9 @@ screenshots: ["/screenshots/guide-19-image-lightbox-v1.0.0.png", "/screenshots/g
 
 ## 图片和媒体
 
-![灯箱保留预览、原图和关联评论入口](/screenshots/guide-19-image-lightbox-v1.0.0.png)
+![灯箱保留预览、原图和关联评论入口](/screenshots/guide-19-image-lightbox-v1.5.0.png)
+
+<p class="image-caption">点击正文图片打开灯箱；若原图或评论未加载，先在工具栏重试并核对当前站点权限，关闭灯箱不会改变正文或下载记录。</p>
 
 - 预览能看、原图失败：原图地址可能过期、受权限限制或被跨域阻止。
 - 来源楼层 404：已有 CDN 图片仍可能可用，不应无限重试来源。
@@ -85,7 +87,9 @@ screenshots: ["/screenshots/guide-19-image-lightbox-v1.0.0.png", "/screenshots/g
 
 ## 429 和 Cloudflare
 
-![请求数据面板中的异常、排队和恢复状态](/screenshots/guide-11-request-flow-v1.0.0.png)
+![请求数据面板中的异常、排队和恢复状态](/screenshots/guide-11-request-flow-v1.5.0.png)
+
+<p class="image-caption">从“设置 → 日志记录 → 请求记录”确认失败类型和冷却状态；429 或 Cloudflare 恢复期间保持页面可见并等待调度器解除暂停。</p>
 
 1. 不要连续刷新或重复点击加载。
 2. 切回“均衡”或“省资源”。
@@ -97,7 +101,9 @@ screenshots: ["/screenshots/guide-19-image-lightbox-v1.0.0.png", "/screenshots/g
 
 ## 配置恢复
 
-![配置导出、导入、恢复默认和缓存清理](/screenshots/guide-13-data-management-v1.3.0.png)
+![配置导出、导入、恢复默认和缓存清理](/screenshots/guide-13-data-management-v1.5.0.png)
+
+<p class="image-caption">配置异常时先导出当前非秘密设置，再导入已知有效文件或恢复默认；缓存清理是独立操作，WebDAV 凭据、历史和原站数据不会随设置重置。</p>
 
 顺序：
 

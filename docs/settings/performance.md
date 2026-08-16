@@ -6,15 +6,17 @@ source_anchors: ["lite/src/settings/reader-performance-settings-form.ts","lite/s
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-09-performance-settings-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-09-performance-settings-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png"]
 ---
 
 # 性能与请求调度
 
 路径：**阅读器标题栏 → 设置 → 性能设置**。
 
-![性能设置页中的预设、主楼层批量和 DOM 窗口](/screenshots/guide-09-performance-settings-v1.0.0.png)
+![性能设置页中的预设、主楼层批量和 DOM 窗口](/screenshots/guide-09-performance-settings-v1.5.0.png)
+
+<p class="image-caption">在“设置 → 性能设置”先选预设，再按长帖规模调整批量、预知和 DOM 窗口；更大数值会提高即时占用，不代表更快。</p>
 
 性能设置按当前 Discourse API 管线分成四层；它提供目标上限，不覆盖请求 owner 的固定安全规则：
 
@@ -89,7 +91,9 @@ screenshots: ["/screenshots/guide-09-performance-settings-v1.0.0.png", "/screens
 
 ## 429 与恢复
 
-![请求脉络、限流窗口和异常状态](/screenshots/guide-11-request-flow-v1.0.0.png)
+![请求脉络、限流窗口和异常状态](/screenshots/guide-11-request-flow-v1.5.0.png)
+
+<p class="image-caption">调整性能后到“日志记录 → 请求记录”核对排队、异常和限流窗口，确认调度结果后再继续修改，避免把站点 429 当成本地渲染问题。</p>
 
 出现 429 时：
 

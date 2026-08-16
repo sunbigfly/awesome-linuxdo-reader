@@ -6,8 +6,8 @@ source_anchors: ["lite/src/dom/reply-tree-repository.ts","lite/src/topic/reader-
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-18-thread-context-v1.0.0.png", "/screenshots/guide-20-community-actions-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-18-thread-context-v1.5.0.png", "/screenshots/guide-20-community-actions-v1.5.0.png"]
 ---
 
 # 二级回复、完整讨论与上下文
@@ -23,7 +23,7 @@ LINUX DO 的回复既有正式楼层号，也可能属于某个父楼层的直�
 3. 在当前位置展示预览，避免立即打断阅读。
 4. 选择楼层号可跳到正式位置，返回时仍可找回原上下文。
 
-![父楼层、直属回复、关系线和正式楼层同时保留](/screenshots/guide-18-thread-context-v1.0.0.png)
+![父楼层、直属回复、关系线和正式楼层同时保留](/screenshots/guide-18-thread-context-v1.5.0.png)
 
 <p class="image-caption">父楼层下方的缩进区域表示直属讨论；点击引用或父回复提示查看来源，点击楼层号跳到它在主信息流中的正式位置。</p>
 
@@ -57,7 +57,7 @@ LINUX DO 的回复既有正式楼层号，也可能属于某个父楼层的直�
 
 回复或编辑楼中楼内容成功后，阅读器会刷新权威楼层数据，并把焦点放回对应的父楼层讨论树。这样可以立即核对更新结果，而不需要先回到原生主题再寻找楼层。
 
-![展开后的楼中楼、关系线、回应和回复入口](/screenshots/guide-20-community-actions-v1.0.0.png)
+![展开后的楼中楼、关系线、回应和回复入口](/screenshots/guide-20-community-actions-v1.5.0.png)
 
 <p class="image-caption">截图展示二级回复中的原生互动入口；完整讨论窗口、精确位置恢复和隐藏回复标记以当前脚本实际界面为准。</p>
 

@@ -6,15 +6,17 @@ source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/appeara
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-07-appearance-settings-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-07-appearance-settings-v1.5.0.png"]
 ---
 
 # 外观设置
 
 路径：**阅读器标题栏 → 设置 → 外观设置**。
 
-![外观设置页中的三种形态、主题颜色与结构参数](/screenshots/guide-07-appearance-settings-v1.0.0.png)
+![外观设置页中的三种形态、主题颜色与结构参数](/screenshots/guide-07-appearance-settings-v1.5.0.png)
+
+<p class="image-caption">进入“设置 → 外观设置”选择浅色、暗色或当地日落自动切换，并调整强调色与结构线；保存后只影响阅读器视觉，不改动原站主题。</p>
 
 ## 主题模式
 

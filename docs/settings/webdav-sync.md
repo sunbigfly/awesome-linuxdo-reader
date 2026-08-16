@@ -7,18 +7,20 @@ since: 1.1.0
 version: 1.5.0
 status: current
 last_verified: 2026-08-16
-screenshots: ["/screenshots/guide-29-webdav-sync-v1.1.0.svg", "/screenshots/guide-32-webdav-sync-v1.3.0.png"]
+screenshots: ["/screenshots/guide-29-webdav-sync-v1.5.0.svg", "/screenshots/guide-32-webdav-sync-v1.5.0.png"]
 ---
 
 # WebDAV 同步
 
 路径：**阅读器标题栏 → 设置 → WebDAV 同步**。
 
-![设备 A、WebDAV 远端文件与设备 B 之间的合并同步流程](/screenshots/guide-29-webdav-sync-v1.1.0.svg)
+![设备 A、WebDAV 远端文件与设备 B 之间的合并同步流程](/screenshots/guide-29-webdav-sync-v1.5.0.svg)
+
+<p class="image-caption">设备先读取本地、远端和上次基线，再按类别三方合并并使用 ETag 写回；普通记录、翻译缓存和离线 Topic 保持各自对象边界。</p>
 
 WebDAV 用一个小型 JSON 文件在多个浏览器之间交换普通本地记录。通知历史、互动历史和离线 Topic 使用独立对象，不挤占也不读取主 `sync.json`：两类历史各保存一份按站点账号隔离的可搜索记录清单；离线 Topic 使用轻量清单和每个 Topic 独立的 HTML。普通记录按成功同步基线执行三方合并；历史清单按记录单调累积，不把尚未回填到本机的旧消息误判为删除。所有写入都使用 ETag 条件请求，远端在同步期间变化时会重新读取并重试，不会把 412 冲突当成成功；主文件、账号 scope、类别或记录无墓碑却消失时按远端回滚处理，以本机副本安全重建。
 
-![WebDAV 同步内容中的离线 Topic 独立开关](/screenshots/guide-32-webdav-sync-v1.3.0.png)
+![WebDAV 同步内容中的离线 Topic 独立开关](/screenshots/guide-32-webdav-sync-v1.5.0.png)
 
 <p class="image-caption">凭据区未进入截图；离线 Topic 默认关闭，开启后才同步完整明文 HTML。</p>
 

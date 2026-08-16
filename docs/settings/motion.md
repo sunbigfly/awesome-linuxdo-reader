@@ -6,15 +6,17 @@ source_anchors: ["lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-08-motion-settings-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-08-motion-settings-v1.5.0.png"]
 ---
 
 # 动画与提示
 
 路径：**阅读器标题栏 → 设置 → 动画与提示**。
 
-![闪烁动效页中的颜色、轮廓、速率、次数和等待动画](/screenshots/guide-08-motion-settings-v1.0.0.png)
+![闪烁动效页中的颜色、轮廓、速率、次数和等待动画](/screenshots/guide-08-motion-settings-v1.5.0.png)
+
+<p class="image-caption">进入“设置 → 闪烁动效”配置跳转提示颜色、轮廓、速率和次数；提示结束后目标楼层与阅读位置保持不变。</p>
 
 ## 目标楼层提示
 

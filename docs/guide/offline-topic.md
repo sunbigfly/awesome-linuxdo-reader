@@ -6,15 +6,15 @@ source_anchors: ["lite/src/queue/reader-topic-download-manager.ts","lite/src/arc
 since: 1.3.0
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-31-topic-download-v1.3.0.png", "/screenshots/guide-32-webdav-sync-v1.3.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-31-topic-download-v1.5.0.png", "/screenshots/guide-32-webdav-sync-v1.5.0.png"]
 ---
 
 # 离线 Topic 下载
 
 阅读器可以在后台补齐当前 Topic，把正文、楼层关系和阅读工具封装成一个可独立打开的 HTML 文件。入口位于主题操作列的“下载”与“下载历史”。
 
-![Topic 下载窗口中的范围选择、后台任务和历史管理](/screenshots/guide-31-topic-download-v1.3.0.png)
+![Topic 下载窗口中的范围选择、后台任务和历史管理](/screenshots/guide-31-topic-download-v1.5.0.png)
 
 <p class="image-caption">先选择全部、楼主或自定义楼层，再开始后台下载；下方历史区用于搜索与批量管理。</p>
 
@@ -55,7 +55,7 @@ HTML 自带阅读界面，不需要重新安装脚本。图片、视频和附件
 
 “设置 → WebDAV 同步 → 离线 Topic 下载”默认关闭。开启后，下载历史写入轻量清单，每个 Topic 的完整 HTML 作为独立明文对象保存，不占用 2 MiB 主同步文件。同步仍使用 ETag 与三方合并；对象缺失或 SHA-256 不一致时会报错并保留本机副本。
 
-![WebDAV 同步内容中的离线 Topic 独立开关](/screenshots/guide-32-webdav-sync-v1.3.0.png)
+![WebDAV 同步内容中的离线 Topic 独立开关](/screenshots/guide-32-webdav-sync-v1.5.0.png)
 
 <p class="image-caption">离线 Topic 与普通记录、翻译配置和译文缓存分别控制；不开启就不会上传 HTML。</p>
 

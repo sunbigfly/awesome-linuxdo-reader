@@ -6,15 +6,17 @@ source_anchors: ["lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-05-layout-settings-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-05-layout-settings-v1.5.0.png"]
 ---
 
 # 布局设置
 
 路径：**阅读器标题栏 → 设置 → 布局设置**。
 
-![布局设置页中的当前形态与五区比例](/screenshots/guide-05-layout-settings-v1.0.0.png)
+![布局设置页中的当前形态与五区比例](/screenshots/guide-05-layout-settings-v1.5.0.png)
+
+<p class="image-caption">选择普通、全屏或移动形态后调整五区比例并保存；拖动当前窗口只改变临时几何，布局设置用于后续同形态窗口。</p>
 
 ## 五个区域
 

@@ -6,15 +6,17 @@ source_anchors: ["lite/src/monitor/reader-resource-monitor.ts"]
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-10-resource-monitor-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-10-resource-monitor-v1.5.0.png"]
 ---
 
 # 性能记录明细
 
 路径：**阅读器标题栏 → 设置 → 日志记录 → 性能记录**。
 
-![资源监控页中的基线、前后台实测和资源指标](/screenshots/guide-10-resource-monitor-v1.0.0.png)
+![资源监控页中的基线、前后台实测和资源指标](/screenshots/guide-10-resource-monitor-v1.5.0.png)
+
+<p class="image-caption">从“日志记录 → 性能记录”采集当前页快照并比较前后台趋势；浏览器指标用于定位变化，不等同于脚本独占资源账单。</p>
 
 此页是只读诊断面板。它不会自动上传观测结果，也不会代替 Chrome DevTools 性能分析。
 

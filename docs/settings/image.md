@@ -6,15 +6,17 @@ source_anchors: ["lite/src/media/reader-image-scale.ts","lite/src/network/public
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-03-image-settings-v1.0.0.png", "/screenshots/guide-19-image-lightbox-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/guide-19-image-lightbox-v1.5.0.png"]
 ---
 
 # 图片设置
 
 路径：**阅读器标题栏 → 设置 → 图片设置**。
 
-![图片设置页中的灯箱行为与帖子图片显示配置](/screenshots/guide-03-image-settings-v1.0.0.png)
+![图片设置页中的灯箱行为与帖子图片显示配置](/screenshots/guide-03-image-settings-v1.5.0.png)
+
+<p class="image-caption">进入“设置 → 图片设置”分别控制三种阅读形态的正文比例、原图策略和图片评论；设置只决定展示与加载方式，不改写帖子图片。</p>
 
 ## 大图查看器
 
@@ -53,7 +55,9 @@ screenshots: ["/screenshots/guide-03-image-settings-v1.0.0.png", "/screenshots/g
 
 ## 在灯箱中核对
 
-![图片灯箱的缩放、原图、下载、描述和评论区域](/screenshots/guide-19-image-lightbox-v1.0.0.png)
+![图片灯箱的缩放、原图、下载、描述和评论区域](/screenshots/guide-19-image-lightbox-v1.5.0.png)
+
+<p class="image-caption">点击正文图片进入灯箱后可缩放、切换原图、下载并查看关联评论；返回楼层会保持当前阅读位置。</p>
 
 打开任意帖子图片后，检查：
 

@@ -24,8 +24,8 @@
 <p align="center"><sub>Lite 1.5.0 · TypeScript · MIT License · Tampermonkey</sub></p>
 
 <p align="center">
-  <a href="assets/screenshots/guide-01-reader-overview-v1.3.0.png">
-    <img src="assets/screenshots/guide-01-reader-overview-v1.3.0.png" alt="LINUX DO 主题列表与增强阅读工作区" width="960">
+  <a href="assets/screenshots/guide-01-reader-overview-v1.5.0.png">
+    <img src="assets/screenshots/guide-01-reader-overview-v1.5.0.png" alt="LINUX DO 主题列表与增强阅读工作区" width="960">
   </a>
 </p>
 
@@ -35,7 +35,7 @@ Awesome LinuxDo Reader 不是独立论坛，也不替代原站。它在保留当
 
 LINUX DO 是完整功能基线。对于其他标准 Discourse 社区，阅读器会根据站点运行态和插件能力自动适配；站点没有 Boost、Reactions 或 Topic Voting 时，相应入口会自然隐藏。
 
-## 1.5.0 重点能力
+## 核心能力
 
 <table>
   <tr>
@@ -77,22 +77,22 @@ LINUX DO 是完整功能基线。对于其他标准 Discourse 社区，阅读器
 <table>
   <tr>
     <td width="33%" align="center" valign="top">
-      <a href="assets/screenshots/guide-18-thread-context-v1.0.0.png">
-        <img src="assets/screenshots/guide-18-thread-context-v1.0.0.png" alt="楼层关系与讨论上下文" width="100%">
+      <a href="assets/screenshots/guide-18-thread-context-v1.5.0.png">
+        <img src="assets/screenshots/guide-18-thread-context-v1.5.0.png" alt="楼层关系与讨论上下文" width="100%">
       </a>
       <br><strong>理解讨论关系</strong><br>
       <sub>父回复、引用回跳与楼层上下文</sub>
     </td>
     <td width="33%" align="center" valign="top">
-      <a href="assets/screenshots/guide-31-topic-download-v1.3.0.png">
-        <img src="assets/screenshots/guide-31-topic-download-v1.3.0.png" alt="离线 Topic 下载与管理" width="100%">
+      <a href="assets/screenshots/guide-31-topic-download-v1.5.0.png">
+        <img src="assets/screenshots/guide-31-topic-download-v1.5.0.png" alt="离线 Topic 下载与管理" width="100%">
       </a>
       <br><strong>保留重要内容</strong><br>
       <sub>按范围生成可搜索的离线 Topic</sub>
     </td>
     <td width="33%" align="center" valign="top">
-      <a href="assets/screenshots/guide-32-webdav-sync-v1.3.0.png">
-        <img src="assets/screenshots/guide-32-webdav-sync-v1.3.0.png" alt="WebDAV 分类同步设置" width="100%">
+      <a href="assets/screenshots/guide-32-webdav-sync-v1.5.0.png">
+        <img src="assets/screenshots/guide-32-webdav-sync-v1.5.0.png" alt="WebDAV 分类同步设置" width="100%">
       </a>
       <br><strong>同步由你决定</strong><br>
       <sub>按数据类别独立启用 WebDAV</sub>

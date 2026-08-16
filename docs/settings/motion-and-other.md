@@ -6,15 +6,17 @@ source_anchors: ["lite/src/history/reader-history-navigation-controller.ts","lit
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-08-motion-settings-v1.0.0.png", "/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/guide-18-thread-context-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-08-motion-settings-v1.5.0.png", "/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/guide-18-thread-context-v1.5.0.png"]
 ---
 
 # 动画、阅读与互动
 
 逐控件说明见[动画与提示](/settings/motion)和[阅读、帖子与适用站点](/settings/other)。
 
-![闪烁提示和等待区域动画设置](/screenshots/guide-08-motion-settings-v1.0.0.png)
+![闪烁提示和等待区域动画设置](/screenshots/guide-08-motion-settings-v1.5.0.png)
+
+<p class="image-caption">在“设置 → 闪烁动效”调整目标楼层提示与等待动画；减少动态效果时可关闭或降低强度，不影响跳转本身。</p>
 
 ## 目标楼层闪烁
 
@@ -52,7 +54,9 @@ screenshots: ["/screenshots/guide-08-motion-settings-v1.0.0.png", "/screenshots/
 
 ## 回复展示
 
-![父楼层下的二级回复和正式楼层展示](/screenshots/guide-18-thread-context-v1.0.0.png)
+![父楼层下的二级回复和正式楼层展示](/screenshots/guide-18-thread-context-v1.5.0.png)
+
+<p class="image-caption">“帖子与回复”中的完整讨论设置决定父楼层下如何展开分支；楼层仍保留正式位置，引用与跳转继续按原站编号工作。</p>
 
 - 在父回复下展开二级回复：展示直接回复。
 - 启用深层回复阅读：允许继续阅读更深分支。

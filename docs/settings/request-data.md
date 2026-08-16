@@ -6,8 +6,8 @@ source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/app/rea
 since: 0.1.2
 version: 1.5.0
 status: current
-last_verified: 2026-08-15
-screenshots: ["/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-10-resource-monitor-v1.0.0.png"]
+last_verified: 2026-08-16
+screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-10-resource-monitor-v1.5.0.png"]
 ---
 
 # 日志记录
@@ -16,7 +16,9 @@ screenshots: ["/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/gui
 
 0.1.14 把原“请求数据”和“资源监控”合并到同一面板，通过顶部标签切换。两个标签都只保留当前页面内存中的诊断记录，不会自动上传。
 
-![请求数据页中的速率、脉络、异常和 HTTP 状态](/screenshots/guide-11-request-flow-v1.0.0.png)
+![请求数据页中的速率、脉络、异常和 HTTP 状态](/screenshots/guide-11-request-flow-v1.5.0.png)
+
+<p class="image-caption">“请求记录”按类型汇总请求速率、脉络、排队、异常和 HTTP 状态；诊断导出会脱敏，不包含 Cookie 或 Authorization。</p>
 
 ## 请求记录
 
@@ -126,7 +128,9 @@ screenshots: ["/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/gui
 
 ## 性能记录
 
-![性能记录中的页面元素、楼层、网络和前后台趋势](/screenshots/guide-10-resource-monitor-v1.0.0.png)
+![性能记录中的页面元素、楼层、网络和前后台趋势](/screenshots/guide-10-resource-monitor-v1.5.0.png)
+
+<p class="image-caption">“性能记录”用于比较页面元素、楼层、长任务、媒体与网络趋势；切换前后台后再取快照，可区分可见性变化与内容增长。</p>
 
 性能标签每秒形成快照，记录页面内存估算、主线程卡顿、阅读器页面元素、楼层列表元素、二级回复缓存、媒体元素和网络趋势，并区分阅读器、原站/未标记和页面共享范围。
 
