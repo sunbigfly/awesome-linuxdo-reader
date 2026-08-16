@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.5.0
+version: 1.5.1
 status: current
 last_verified: 2026-08-16
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
@@ -15,6 +15,29 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.5.1 — WebDAV 联动与主题卡片修复
+
+核验日期：2026-08-16。
+
+### 修复与联动
+
+- WebDAV 设置偏好改为按同一远端快照联合校验联动字段，合法的独立浮窗图片比例不再被本机“共享三种形态”状态误判为身份不一致；字符串冒充数字、未知字段和损坏组合仍会在写入前拒绝。
+- WebDAV 十二类开关明确为每台设备独立授权，不会被其他设备从远端反向开启；需要交换同一类别的设备必须分别开启、保存并同步，设置导出仍可复制不含凭据的类别选择。
+- 嵌入列表中的免打扰入口退出 Reader 与宿主悬停提示链，只保留可访问名称，避免出现重复白色提示卡片；离开嵌入态后完整恢复宿主原属性。
+- 宿主主题卡片固定占满列表可用宽度，并为右侧统计与头像列保留稳定比例，避免不同主题行随内容长度出现横向收缩或错位。
+
+### 工程与文档
+
+- 开发、发布与旧版维护规则补齐并行任务的 owner 边界，并把单文件与四文件 runtime 契约、源码模块哈希、manifest 和兼容副本统一纳入 parity 门禁。
+- README、Greasy Fork 产品介绍、用户手册与 110 项功能目录同步到 `1.5.1`；沿用 1.5.0 截图时保留原始文件名，不伪造未重新截取的版本标记。
+
+### 发布状态
+
+- `1.5.1` 已发布到 Greasy Fork：主 Loader 固定版本为 `1904337`，加载 Core `1904332`、Platform `1904334` 与 Features `1904333`。
+- 固定 Loader 原始文件为 4,052 字节，SHA-256 `d0e7779a622dcf35274534fea5d52407e570ead3f11a98aa0e95631f72e4e2ec`；移除平台加入的 `@downloadURL none` 后为 4,031 字节，SHA-256 `ada5e1d68dd694bfd07469aab407307ba1c4ee4f59322146c80ff04448f5f0f6`，与仓库 Loader 逐字节一致。
+- Core 为 1,552,280 字节，SHA-256 `94de6f182860d14bc7f0ec99ec85b18a5439ee8bd22813a73479f812d2d7ca21`；Platform 为 1,236,505 字节，SHA-256 `c711741eda054d237d02184bdad29c5c87c34c798627c99dc7021f29448ec329`；Features 为 1,954,095 字节，SHA-256 `940111bfafb2164d02d683ff93cefef60bd58c0c5550ecadac38e221f6477a5c`。
+- CSS 固定到 Git `c815193e4b094b1109998dabbf4fcb5c0bb8fd0d`：610,772 字节，SHA-256 `d26719a138478e12108b93c9df82918ac860c5cbe8387e7a4ad804a7cde97f1e`。
 
 ## 1.5.0 — 共享工具工作区与四文件构建
 

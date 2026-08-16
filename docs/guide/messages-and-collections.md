@@ -4,7 +4,7 @@ description: 使用消息、历史、收藏、用户观察、岁月史书和不�
 feature_ids: ["ACTION-004", "ACTION-007", "COLLECT-001", "COLLECT-002", "COLLECT-003", "COLLECT-004", "COLLECT-005", "COLLECT-006", "COLLECT-007", "COLLECT-009", "USER-007"]
 source_anchors: ["lite/src/app/reader-browser-runtime.ts","lite/src/discourse/native-host-api.ts","lite/src/notification/reader-notification-model.ts","lite/src/notification/reader-notification-controller.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-repository.ts","lite/src/history/reader-chronicle-repository.ts","lite/src/bookmark/reader-bookmark-model.ts","lite/src/bookmark/reader-bookmark-controller.ts","lite/src/collection/reader-unwanted-topic-repository.ts","lite/src/user/reader-user-observation-session.ts"]
 since: 0.1.2
-version: 1.5.0
+version: 1.5.1
 status: current
 last_verified: 2026-08-16
 screenshots: ["/screenshots/guide-15-notifications-replies-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.5.0.png"]
@@ -102,7 +102,7 @@ screenshots: ["/screenshots/guide-15-notifications-replies-v1.5.0.png", "/screen
 
 ## 不想看
 
-列表页的免打扰图标现在用于本地“不想看”集合，不再修改原站通知级别。点击后主题会立即从当前列表消失；嵌入和非嵌入列表都提供同一入口。展开主帖操作列后，可在“岁月史书”右侧打开“不想看”浮窗。
+列表页的免打扰图标现在用于本地“不想看”集合，不再修改原站通知级别。点击后主题会立即从当前列表消失；嵌入和非嵌入列表都提供同一入口。图标只保留屏幕阅读器可识别的名称，不再叠加宿主或 Reader 的悬停提示卡片。展开主帖操作列后，可在“岁月史书”右侧打开“不想看”浮窗。
 
 每个条目默认只显示一行 Topic 标题，右侧依次提供“恢复显示”和编辑；点击编辑后，左侧免打扰图标与编辑图标会收起，自定义标注和多标签输入并排显示，确认后可随时再次编辑。标签输入支持浏览器下拉搜索；浮窗会显示每个标签包含的 Topic 数，并按数量从高到低排列。命中自定义类别的历史会显示类别，并可按类别筛选。
 

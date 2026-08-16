@@ -4,7 +4,7 @@ description: 查看当前账号资料、社区统计、Connect 信任进度和 L
 feature_ids: ["USER-005", "USER-006"]
 source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/translation/translation-request-adapter.ts"]
 since: 0.1.2
-version: 1.5.0
+version: 1.5.1
 status: current
 last_verified: 2026-08-16
 screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png"]

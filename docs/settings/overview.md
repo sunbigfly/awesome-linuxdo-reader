@@ -4,7 +4,7 @@ description: 理解 18 个设置面板、分组导航、安全配置管理、Web
 feature_ids: ["USER-005", "SET-001", "SET-020", "SET-022", "DATA-001", "DATA-006", "DATA-007"]
 source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/reader-preferences-schema.ts","lite/src/appearance/reader-theme-controller.ts","lite/src/appearance/reader-local-sun-clock.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-ai-service-settings-form.ts","lite/src/settings/reader-translation-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/settings/reader-webdav-settings-form.ts","lite/src/state/reader-settings-config-manager.ts"]
 since: 0.1.2
-version: 1.5.0
+version: 1.5.1
 status: current
 last_verified: 2026-08-16
 screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png"]
@@ -12,7 +12,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png"]
 
 # 设置中心总览
 
-点击阅读器标题栏的“设置”进入设置中心。当前 v1.5.0 按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 18 个面板：
+点击阅读器标题栏的“设置”进入设置中心。当前 v1.5.1 按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 18 个面板：
 
 | 面板 | 作用 |
 | --- | --- |

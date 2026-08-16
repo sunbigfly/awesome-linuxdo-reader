@@ -2,9 +2,9 @@
 title: WebDAV 同步
 description: 使用坚果云等标准 WebDAV 在设备之间合并同步历史、收藏、设置、阅读队列和其他有价值的本地记录。
 feature_ids: ["DATA-006", "DATA-007"]
-source_anchors: ["lite/src/settings/reader-webdav-settings-form.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-history-cache-port.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts"]
+source_anchors: ["lite/src/settings/reader-webdav-settings-form.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-category-ports.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-history-cache-port.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts"]
 since: 1.1.0
-version: 1.5.0
+version: 1.5.1
 status: current
 last_verified: 2026-08-16
 screenshots: ["/screenshots/guide-29-webdav-sync-v1.5.0.svg", "/screenshots/guide-32-webdav-sync-v1.5.0.png"]
@@ -72,11 +72,15 @@ WebDAV 用一个小型 JSON 文件在多个浏览器之间交换普通本地记�
 
 普通帖子正文、图片、附件、原始分页响应、请求游标、短期限流状态和普通页面缓存不会进入 WebDAV；历史同步只读取已经存在的可搜索记录，不会为了 WebDAV 额外请求 Discourse。旧历史一般不变，因此清单按 identity 单调合并，同一记录只在内容较新时更新，不传播“本机暂时没缓存到”造成的删除。只有主动开启“离线 Topic 下载”时，完整 HTML 才会作为独立明文文件上传。默认只启用浏览历史、收藏记录和阅读队列；两类历史缓存、离线 Topic、翻译服务集合与译文缓存都必须分别主动开启。
 
+十二类同步开关是当前设备的独立授权策略，不写入远端，也不会被另一台设备反向开启。要让两台设备交换“设置配置”，必须在两端都开启该类别、保存设置，再分别执行同步；若需要一次复制地址、远端路径、类别开关和定时策略，可使用设置导出/导入，用户名和密码仍需在每台设备本机确认。
+
 ## 1.3.0 之后的字段兼容
 
 当前同步结构不仅保留 1.3.0 已有条目，也会合并后续仍有用户意义的字段：浏览历史中的分类、标签、精确楼层/滚动锚点和岁月史书状态；收藏与互动历史中的分类、标签和定位信息；AI 服务中的模型列表、模型能力目录、业务参数和动画；离线 Topic 清单中的归档状态。较新设备同步到较旧记录时，空占位不会抹掉另一端已经保存的有效分类、标签或阅读位置。
 
 1.3.0 生成的离线 Topic v1 清单没有归档状态，1.5.0 会只把该缺失字段升级为“无存档状态”，完整 HTML 仍可导入；字段存在但类型错误时则拒绝，不能把损坏内容当成旧版迁移。主同步文件、十二类 payload、离线清单和加密 API Key 信封都使用精确字段与类型校验；加密盐、IV、迭代次数或密文结构被篡改时会在解密和本机应用前停止。
+
+设置偏好按同一份远端快照联合校验，而不是把每个字段脱离兄弟字段单独判断。图片配置中的“共享三种形态”与浮窗/全屏/移动比例、性能预设与细项、回复树联动开关等组合会一起归一化；合法组合可以跨设备导入，字符串冒充数字、未知字段或内部不一致的组合仍会在写入和本机应用前拒绝。
 
 ## 与导入、重置和缓存清理的联动
 
@@ -110,6 +114,7 @@ WebDAV 用一个小型 JSON 文件在多个浏览器之间交换普通本地记�
 - `401` 或 `403`：检查账号邮箱和第三方应用密码，不要改用登录密码。
 - `404`：连接测试只验证 WebDAV 根地址和账号；首次同步或已同步主文件后来消失时，会抛弃该目标的旧主文件基线并用本机安全重建目录和文件，不会把 404 当成逐条删除。若创建仍失败，检查远端路径是否包含目录与文件名。
 - `412`：远端在本轮同步期间被其他设备更新，阅读器会重新读取并重试；持续出现时稍后再同步。
+- `远端 WebDAV preferences 记录 … 身份不一致`：先确认两端均使用当前版本再重试。当前版本会把同一远端快照中的联动偏好一起校验；仍报错表示对应字段类型或组合确实损坏，阅读器会保留本机设置且不会写回远端。
 - 新设备没有记录：确认两端连接到同一个地址、账号和远端文件，并且对应类别在两端都已开启。
 - 清空后记录消失：区分“只清了本地缓存”与“成功同步过删除”。前者可从远端恢复；后者会传播删除标记。
 - 翻译 API Key 解密失败：确认当前 WebDAV 应用密码与加密该配置时一致；阅读器不会把无法解密的 Key 当成空值覆盖远端。

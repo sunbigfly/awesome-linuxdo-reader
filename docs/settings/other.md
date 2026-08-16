@@ -4,7 +4,7 @@ description: 配置队列入口、历史、退出、键盘与鼠标快捷方式�
 feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "COLLECT-007", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/app/reader-application.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-context-controller.ts","lite/src/post/boost-copy-rule.ts","lite/src/post/reader-topic-action-rail.ts","lite/src/collection/reader-unwanted-topic-filter.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts"]
 since: 0.1.2
-version: 1.5.0
+version: 1.5.1
 status: current
 last_verified: 2026-08-16
 screenshots: ["/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/guide-18-thread-context-v1.5.0.png", "/screenshots/guide-26-reading-navigation-v1.5.0.png", "/screenshots/guide-27-shortcuts-v1.5.0.png", "/screenshots/guide-28-applicable-sites-v1.5.0.png"]
@@ -84,7 +84,7 @@ screenshots: ["/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/g
 
 操作列包含回顶、点赞、回复、Boost 和收藏，展开后补充分享、通知等主题操作。站点缺少某项插件或账号没有权限时，对应入口不会出现。
 
-展开操作列后，“不想看”位于“岁月史书”右侧。列表页点击免打扰会把对应 Topic 收进此浮窗并立即从列表移除；它不会修改原站通知级别。
+展开操作列后，“不想看”位于“岁月史书”右侧。列表页点击免打扰会把对应 Topic 收进此浮窗并立即从列表移除；它不会修改原站通知级别，入口也不会叠加宿主或 Reader 的悬停提示卡片。
 
 ## 免打扰与自动过滤
 
