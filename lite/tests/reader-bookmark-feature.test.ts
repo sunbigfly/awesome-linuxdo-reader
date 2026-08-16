@@ -352,7 +352,7 @@ const historicalAdapter = new DiscourseBookmarkRequestAdapter({
 		async loadCollectionPage<T>(input: CollectionPageRequest<T>): Promise<T> {
 			historicalRequests.push(input as CollectionPageRequest<unknown>);
 			const actions = input.page === 0
-				? Array.from({ length: 60 }, (_, index) => ({
+				? Array.from({ length: 100 }, (_, index) => ({
 					id: 1_000 + index,
 					action_type: 5,
 					post_id: 2_000 + index,
@@ -389,8 +389,8 @@ const historicalRecords = await historicalAdapter.loadRepliedTopics({
 	},
 });
 assert(
-	historicalRecords.length === 60 &&
-	historicalProgress.join(',') === '1:60:false,2:60:true' &&
+	historicalRecords.length === 100 &&
+	historicalProgress.join(',') === '1:100:false,2:100:true' &&
 	historicalRequests.length === 2 &&
 	historicalRequests.every((request) =>
 		request.profile === 'background-prefetch') &&
@@ -413,8 +413,8 @@ const visibleHistoryRecords = await historicalAdapter.loadRepliedTopics({
 	},
 });
 assert(
-	visibleHistoryRecords.length === 60 &&
-	visibleHistoryProgress.join(',') === '1:60:false' &&
+	visibleHistoryRecords.length === 100 &&
+	visibleHistoryProgress.join(',') === '1:100:false' &&
 	historicalRequests.length === visibleHistoryRequestStart + 1 &&
 	historicalRequests.at(-1)?.profile === 'collection-visible',
 	'可见分类加载必须只取首屏并立即返回，完整历史继续留给后台低优先级分页',
@@ -933,6 +933,122 @@ assert(
 	'后台历史必须轮转五条流并从保存的页游标继续，不得每轮从第一页重扫',
 );
 pacedController.destroy();
+
+const parallelBookmarkSchedules = new Map<
+	number,
+	Readonly<{ callback: () => void; delayMs: number }>
+>();
+const parallelBookmarkCalls: Array<Readonly<{
+	stream: ReaderBookmarkHistoryStream;
+	background: boolean;
+}>> = [];
+const parallelBookmarkResolvers: Array<() => void> = [];
+let parallelBookmarkScheduleId = 0;
+let parallelBookmarkActive = 0;
+let parallelBookmarkPeak = 0;
+let holdParallelBookmarks = true;
+const parallelBookmarkController = new ReaderBookmarkController({
+	requests: {
+		async loadBookmarks(options: ReaderBookmarkLoadOptions = {}) {
+			options.onProgress?.(Object.freeze({
+				pages: 1,
+				records: Object.freeze([]),
+				complete: false,
+			}));
+			return Object.freeze([]);
+		},
+		async loadHistoryPage(
+			stream: ReaderBookmarkHistoryStream,
+			position: ReaderBookmarkHistoryPosition,
+			options: ReaderBookmarkLoadOptions,
+		) {
+			parallelBookmarkCalls.push(Object.freeze({
+				stream,
+				background: options.background === true,
+			}));
+			parallelBookmarkActive += 1;
+			parallelBookmarkPeak = Math.max(
+				parallelBookmarkPeak,
+				parallelBookmarkActive,
+			);
+			if (holdParallelBookmarks) {
+				await new Promise<void>((resolve) => {
+					parallelBookmarkResolvers.push(resolve);
+				});
+			}
+			parallelBookmarkActive -= 1;
+			return Object.freeze({
+				stream,
+				page: position.page,
+				records: Object.freeze([]),
+				complete: true,
+				next: Object.freeze({
+					page: position.page + 1,
+					cursor: position.cursor,
+				}),
+			});
+		},
+	} as unknown as DiscourseBookmarkRequestAdapter,
+	native,
+	actions,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+	backgroundWarmDelayMs: 0,
+	visibleHistoryConcurrency: 3,
+	schedule(callback, delayMs) {
+		const id = ++parallelBookmarkScheduleId;
+		parallelBookmarkSchedules.set(id, Object.freeze({ callback, delayMs }));
+		return id;
+	},
+	cancel(handle) {
+		parallelBookmarkSchedules.delete(Number(handle));
+	},
+});
+await parallelBookmarkController.open();
+parallelBookmarkController.startBackgroundCache();
+await flushMicrotasks();
+const parallelBookmarkTask = parallelBookmarkSchedules.entries().next().value as
+	| [number, Readonly<{ callback: () => void; delayMs: number }>]
+	| undefined;
+assert(parallelBookmarkTask !== undefined, '可见收藏历史必须排入快取任务');
+parallelBookmarkSchedules.delete(parallelBookmarkTask[0]);
+parallelBookmarkTask[1].callback();
+await flushMicrotasks();
+assert(
+	parallelBookmarkPeak === 3 &&
+		parallelBookmarkCalls.length === 3 &&
+		parallelBookmarkCalls.every((call) => !call.background),
+	'收藏浮窗打开时必须以 collection-visible 持续占用三个不同历史来源槽',
+);
+parallelBookmarkResolvers.shift()?.();
+await flushMicrotasks();
+assert(
+	parallelBookmarkCalls.length === 4 &&
+		parallelBookmarkPeak === 3 &&
+		parallelBookmarkSchedules.size === 0,
+	'收藏历史必须在单个槽释放后立即补位，不能等待整批来源完成',
+);
+parallelBookmarkController.close();
+holdParallelBookmarks = false;
+for (const resolve of parallelBookmarkResolvers.splice(0)) resolve();
+await flushMicrotasks();
+const parallelBookmarkBackgroundTask =
+	parallelBookmarkSchedules.entries().next().value as
+		| [number, Readonly<{ callback: () => void; delayMs: number }>]
+		| undefined;
+assert(
+	parallelBookmarkBackgroundTask !== undefined,
+	'收藏浮窗关闭后必须保留 application 后台续传任务',
+);
+parallelBookmarkSchedules.delete(parallelBookmarkBackgroundTask[0]);
+parallelBookmarkBackgroundTask[1].callback();
+await flushMicrotasks();
+assert(
+	parallelBookmarkCalls.length === 5 &&
+		parallelBookmarkCalls.at(-1)?.background === true,
+	'收藏浮窗关闭后必须降回单来源 background-prefetch 请求',
+);
+parallelBookmarkController.destroy();
 
 const retrySchedules = new Map<
 	number,
@@ -1878,6 +1994,20 @@ controller.applySyncedActivityRecords(Object.freeze([
 ]));
 const mergedReplyAfterWebDav = controller.activitySyncRecords().find((entry) =>
 	entry.identity === localReplyBeforeWebDav.identity);
+const localBookmarkBeforeWebDav = controller.observationRecords().find((entry) =>
+	entry.tab === 'Topic' || entry.tab === 'Post')!;
+controller.applySyncedBookmarkRecords(Object.freeze([
+	Object.freeze({
+		...localBookmarkBeforeWebDav,
+		identity: 'webdav-bookmark:remote-topic',
+		topicId: discourseTopicId(8_888),
+		postId: discoursePostId(88_801),
+		postNumber: discoursePostNumber(1),
+		title: 'WebDAV 跨设备收藏',
+		excerpt: '远端收藏缓存必须可清理',
+		searchText: 'webdav跨设备收藏 远端收藏缓存必须可清理',
+	}),
+]));
 await controller.selectTab('Reply');
 controller.setQuery('webdav跨设备活动历史');
 assert(
@@ -1903,7 +2033,7 @@ assert(
 		Number(bookmarkCacheAfterClear.boosts) === 0 &&
 		Number(bookmarkCacheAfterClear.replies) === 0 &&
 		Number(controller.snapshot.records.length) === 0,
-	'数据管理清理收藏与回应缓存必须同步清空 controller 完整集合投影',
+	'数据管理清理收藏与回应缓存必须同步清空原生集合、WebDAV 收藏和活动历史投影',
 );
 view.destroy();
 controller.destroy();

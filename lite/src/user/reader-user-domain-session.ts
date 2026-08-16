@@ -1,4 +1,7 @@
-import type { ResponseCacheMode } from '../cache/response-repository.js';
+import type {
+	ResponseCacheInvalidation,
+	ResponseCacheMode,
+} from '../cache/response-repository.js';
 import { LifecycleScope, type Cleanup } from '../kernel/lifecycle.js';
 import { Signal } from '../kernel/signal.js';
 import type {
@@ -418,6 +421,68 @@ export class ReaderUserDomainSession {
 			this.#trimEntries();
 		};
 		return scope ? scope.add(cleanup) : cleanup;
+	}
+
+	applyExternalCacheInvalidation(query: ResponseCacheInvalidation): void {
+		if (this.scope.destroyed) return;
+		const usernames = new Set<string>();
+		const tags = query.tags ?? Object.freeze([]);
+		const invalidateAllProfiles = query.all === true ||
+			query.kinds?.includes(PROFILE_CACHE.kind) === true ||
+			tags.includes('users');
+		if (invalidateAllProfiles) {
+			for (const username of this.#entries.keys()) usernames.add(username);
+		} else {
+			for (const tag of tags) {
+				const match = /^user:([^:]+)$/.exec(tag);
+				if (!match?.[1]) continue;
+				try {
+					usernames.add(normalizedUsername(match[1]));
+				} catch {
+					continue;
+				}
+			}
+			for (const id of query.ids ?? []) {
+				if (!id.startsWith('reader-user?')) continue;
+				try {
+					const identity = new URLSearchParams(id.slice('reader-user?'.length));
+					if (identity.get('authScope') !== this.#authScope) continue;
+					const value = identity.get('username');
+					if (value) usernames.add(normalizedUsername(value));
+				} catch {
+					continue;
+				}
+			}
+		}
+		const invalidateAllFollowLists = tags.includes('user-follow-lists');
+		for (const username of invalidateAllFollowLists && !usernames.size
+			? this.#entries.keys()
+			: usernames) {
+			const entry = this.#entries.get(username);
+			if (!entry) continue;
+			entry.epoch += 1;
+			this.#loads.delete(username);
+			for (const kind of ['following', 'followers'] as const) {
+				entry.followLoadEpochs[kind] =
+					(entry.followLoadEpochs[kind] ?? 0) + 1;
+				this.#followLoads.delete(`${username}:${kind}`);
+			}
+			entry.followSources = {};
+			entry.followUpdatedAt = {};
+			entry.followCountVersions = {};
+			entry.followPhase = 'idle';
+			entry.followErrorStatus = null;
+			entry.updatedAt = null;
+			entry.stale = entry.profile !== null;
+			entry.revision += 1;
+			this.#emit(username, entry);
+			if (
+				username === this.#activeUsername ||
+				(this.#subscriptions.get(username) ?? 0) > 0
+			) {
+				void this.load(username, { interactive: true }).catch(this.#onError);
+			}
+		}
 	}
 
 	async activate(

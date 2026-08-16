@@ -925,14 +925,19 @@ button.ldp-floor:hover {
 
 .ldp-content table {
   display: block;
+  width: 100%;
   max-width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
 }
 
 .ldp-content :where(th,td) {
+  min-width: 9rem;
   padding: .45em .65em;
   border: 1px solid var(--ldp-border);
+  vertical-align: top;
 }
 
 .ldp-content th {

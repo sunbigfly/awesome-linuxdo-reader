@@ -26,6 +26,11 @@ class MemoryStorage implements Pick<Storage, 'getItem' | 'setItem'> {
 const preferencesStorageKey = 'reader-preferences';
 const defaults = Object.freeze({ theme: 'system', depth: 3 });
 
+assert(
+	READER_SETTINGS_RESET_REMINDER_CAMPAIGN === 'settings-contract-2026-08-r3',
+	'1.5.0 设置契约必须递增恢复提醒锚点，重新覆盖已消费 r2 的已有用户',
+);
+
 const freshStorage = new MemoryStorage();
 let freshConfirmations = 0;
 const freshResult = await showReaderSettingsResetReminder({
@@ -53,6 +58,10 @@ assert(
 
 const storage = new MemoryStorage();
 storage.setItem(preferencesStorageKey, JSON.stringify({ depth: 8 }));
+storage.setItem(
+	READER_SETTINGS_RESET_REMINDER_STORAGE_KEY,
+	'settings-contract-2026-08-r2',
+);
 const confirmations: ReaderConfirmRequest[] = [];
 const updates: Readonly<typeof defaults>[] = [];
 const notices: string[] = [];
@@ -84,7 +93,7 @@ assert(
 	storage.getItem(READER_SETTINGS_RESET_REMINDER_STORAGE_KEY) ===
 		READER_SETTINGS_RESET_REMINDER_CAMPAIGN &&
 	updates.length === 0,
-	'老用户在 1.3.1 campaign 首次启动必须只收到一次可保留当前设置的体验提示',
+	'已消费 r2 的老用户升级到 r3 后必须只再收到一次可保留当前设置的体验提示',
 );
 assert(
 	await showReaderSettingsResetReminder(options) === 'skipped' &&

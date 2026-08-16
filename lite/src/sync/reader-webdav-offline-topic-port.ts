@@ -7,6 +7,7 @@ import {
 	ReaderWebDavError,
 } from './reader-webdav-client.js';
 import {
+	normalizeReaderWebDavRemoteRecord,
 	normalizeReaderWebDavRemotePath,
 	reconcileReaderWebDavRecords,
 	readerWebDavFingerprint,
@@ -151,19 +152,6 @@ function byteLength(value: string): number {
 	return new TextEncoder().encode(value).byteLength;
 }
 
-function normalizeRemoteRecord(value: unknown): ReaderWebDavRemoteRecord | null {
-	const source = record(value);
-	if (!source) return null;
-	const deleted = source.deleted === true;
-	if (!deleted && !Object.hasOwn(source, 'value')) return null;
-	return Object.freeze({
-		changedAt: timestamp(source.changedAt),
-		writerId: String(source.writerId ?? ''),
-		deleted,
-		...(deleted ? {} : { value: source.value }),
-	});
-}
-
 function normalizeManifest(value: unknown): ReaderWebDavOfflineTopicManifest {
 	const source = record(value);
 	if (
@@ -172,17 +160,24 @@ function normalizeManifest(value: unknown): ReaderWebDavOfflineTopicManifest {
 	) throw new Error('WebDAV 离线 Topic 清单格式或版本不受支持');
 	const rawRecords = record(source.records);
 	if (!rawRecords) throw new Error('WebDAV 离线 Topic 清单缺少 records');
+	if (
+		typeof source.updatedAt !== 'number' ||
+		!Number.isFinite(source.updatedAt) ||
+		source.updatedAt < 0 ||
+		typeof source.writerId !== 'string'
+	) throw new Error('WebDAV 离线 Topic 清单字段类型无效');
 	const records: Record<string, ReaderWebDavRemoteRecord> = {};
 	for (const [id, rawValue] of Object.entries(rawRecords)) {
-		if (!topicId(id)) continue;
-		const normalized = normalizeRemoteRecord(rawValue);
-		if (normalized) records[id] = normalized;
+		if (!topicId(id) || String(topicId(id)) !== id) {
+			throw new Error('WebDAV 离线 Topic 清单记录 ID 无效');
+		}
+		records[id] = normalizeReaderWebDavRemoteRecord(rawValue);
 	}
 	return Object.freeze({
 		format: OFFLINE_TOPIC_MANIFEST_FORMAT,
 		schemaVersion: OFFLINE_TOPIC_MANIFEST_VERSION,
-		updatedAt: timestamp(source.updatedAt),
-		writerId: String(source.writerId ?? ''),
+		updatedAt: source.updatedAt,
+		writerId: source.writerId,
 		records: Object.freeze(records),
 	});
 }
@@ -211,11 +206,23 @@ function remoteValue(
 			digest,
 		)
 	) return null;
-	return Object.freeze({
+	const normalized = Object.freeze({
 		...valueMetadata,
 		version: 1,
 		object: Object.freeze({ path, sha256: digest, bytes }),
 	});
+	/*
+	 * 1.3.0 的 v1 清单早于 archiveStatus；缺失只表示当时没有存档状态，
+	 * 不能把整份离线正文判损坏。字段一旦存在仍参与 canonical 比对，因此
+	 * 数值字符串、未知状态和额外字段不会被静默归一化后覆盖远端。
+	 */
+	const { archiveStatus: _archiveStatus, ...legacyNormalized } = normalized;
+	const canonical = Object.hasOwn(source, 'archiveStatus')
+		? normalized
+		: Object.freeze(legacyNormalized);
+	return readerWebDavFingerprint(source) === readerWebDavFingerprint(canonical)
+		? normalized
+		: null;
 }
 
 async function captureArtifacts(

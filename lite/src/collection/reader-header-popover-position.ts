@@ -7,6 +7,7 @@ export interface ReaderHeaderPopoverPositionOptions {
 	readonly toggle: HTMLElement;
 	readonly popover: HTMLElement;
 	readonly parentScope: LifecycleScope;
+	readonly preferredPlacement?: 'top' | 'bottom';
 }
 
 export interface ReaderHeaderPopoverSurfaceOptions extends
@@ -29,12 +30,14 @@ export class ReaderHeaderPopoverPosition {
 	readonly #document: Document;
 	readonly #toggle: HTMLElement;
 	readonly #popover: HTMLElement;
+	readonly #preferredPlacement: 'top' | 'bottom';
 	#frame: number | null = null;
 
 	constructor(options: ReaderHeaderPopoverPositionOptions) {
 		this.#document = options.document;
 		this.#toggle = options.toggle;
 		this.#popover = options.popover;
+		this.#preferredPlacement = options.preferredPlacement ?? 'bottom';
 		this.scope = options.parentScope.child();
 		const viewport = this.#document.defaultView;
 		if (viewport) this.scope.listen(viewport, 'resize', () => this.schedule());
@@ -51,6 +54,7 @@ export class ReaderHeaderPopoverPosition {
 			this.#frame = null;
 			this.#popover.style.removeProperty('left');
 			this.#popover.style.removeProperty('top');
+			delete this.#popover.dataset.placement;
 		});
 	}
 
@@ -75,19 +79,22 @@ export class ReaderHeaderPopoverPosition {
 		);
 		const below = buttonRect.bottom + gap;
 		const above = buttonRect.top - popoverRect.height - gap;
+		const spaceBelow = viewport.innerHeight - margin - below;
+		const spaceAbove = buttonRect.top - gap - margin;
+		const belowFits = popoverRect.height <= spaceBelow;
+		const aboveFits = popoverRect.height <= spaceAbove;
+		const placeAbove = this.#preferredPlacement === 'top'
+			? aboveFits || (!belowFits && spaceAbove >= spaceBelow)
+			: !belowFits && (aboveFits || spaceAbove > spaceBelow);
 		const nextLeft = `${Math.round(left)}px`;
-		const nextTop = `${Math.round(
-			below + popoverRect.height <= viewport.innerHeight - margin ||
-				above < margin
-				? below
-				: above,
-		)}px`;
+		const nextTop = `${Math.round(placeAbove ? Math.max(margin, above) : below)}px`;
 		if (this.#popover.style.left !== nextLeft) {
 			this.#popover.style.left = nextLeft;
 		}
 		if (this.#popover.style.top !== nextTop) {
 			this.#popover.style.top = nextTop;
 		}
+		this.#popover.dataset.placement = placeAbove ? 'top' : 'bottom';
 	}
 
 	schedule(): void {
@@ -138,6 +145,9 @@ export class ReaderHeaderPopoverSurface {
 			toggle: options.toggle,
 			popover: options.popover,
 			parentScope: this.scope,
+			...(options.preferredPlacement === undefined
+				? {}
+				: { preferredPlacement: options.preferredPlacement }),
 		});
 		this.scope.add(bindFloatingSurfaceWheel(this.#popover));
 		this.scope.listen(

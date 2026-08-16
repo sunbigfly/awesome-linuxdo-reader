@@ -145,8 +145,8 @@ const CATEGORIES: readonly CacheCategoryDefinition[] = Object.freeze([
 	{
 		id: 'users',
 		title: '用户资料卡',
-		help: '勾选“用户资料卡”后清理，会删除用户名、简介、徽章、用户组、关注列表和账户摘要等可重新获取的资料快照；不会删除 Connect 近 400 天的本机信任观察历史，头像仍归“头像、表情与原图”单独管理。',
-		retention: '临时 5 分钟 · 持久 1 天',
+		help: '勾选“用户资料卡”后清理，会删除用户名、简介、徽章、用户组、关注列表、账户摘要，以及用户观察已缓存的公开历史和采集断点；观察名单仍保留。不会删除 Connect 近 400 天的本机信任观察历史，头像仍归“头像、表情与原图”单独管理。',
+		retention: '资料 1 天 · 观察历史直到主动清理',
 	},
 	{
 		id: 'notifications',
@@ -171,7 +171,13 @@ const CATEGORIES: readonly CacheCategoryDefinition[] = Object.freeze([
 function categoryOf(record: ResponseCacheRecord): Exclude<
 	ReaderCacheCategory,
 	'history'
-> {
+> | null {
+	if (
+		record.kind.startsWith('topic-offline-artifact') ||
+		record.tags.some((tag) => tag.startsWith('topic-offline-artifact'))
+	) {
+		return null;
+	}
 	if (record.kind === 'images' || record.tags.includes('images')) {
 		return 'assets';
 	}
@@ -189,14 +195,24 @@ function categoryOf(record: ResponseCacheRecord): Exclude<
 	) {
 		return 'topics';
 	}
-		if (
-			record.kind === 'users' ||
+	if (
+		record.kind === 'users' ||
 			record.kind === 'external-user-summary' ||
 			record.kind === 'user-observation-history' ||
 			record.tags.includes('users')
 	) {
 		return 'users';
 	}
+	if (
+		record.kind.includes('bookmark') ||
+		record.tags.includes('bookmarks') ||
+		record.tags.some((tag) => tag.startsWith('bookmark-'))
+	) {
+		return 'responses';
+	}
+	// 未登记的永久记录可能是用户显式保留的下载或未来业务数据；缓存面板只能
+	// 删除已经映射到六类契约的记录，不能把未知永久数据当成“其他响应”。
+	if (record.permanent === true) return null;
 	return 'responses';
 }
 
@@ -546,35 +562,55 @@ export class ReaderCacheManagementSurface<
 
 	async refresh(): Promise<boolean> {
 		const token = ++this.#refreshToken;
-		let records: readonly ResponseCacheRecord[];
-		let assetCaches: ReaderAssetCacheStats | null;
-		let applicationCaches: ReaderApplicationCacheStats | null;
-		try {
-			[records, assetCaches, applicationCaches] = await Promise.all([
+		const [recordsResult, assetCachesResult, applicationCachesResult] =
+			await Promise.allSettled([
 				this.#options.responses.records(),
-				this.#options.assetCaches?.stats() ?? null,
-				this.#options.applicationCaches?.stats() ?? null,
+				Promise.resolve(this.#options.assetCaches?.stats() ?? null),
+				Promise.resolve(this.#options.applicationCaches?.stats() ?? null),
 			]);
-		} catch (cause) {
-			if (token !== this.#refreshToken || this.scope.destroyed) return false;
-			this.#options.onError?.(cause);
-			for (const target of this.#stats.values()) {
-				if (!target.textContent) target.textContent = '统计失败';
-			}
-			this.#status.textContent =
-				'本地缓存统计读取失败；现有选择不受影响，可稍后重试。';
-			return false;
-		}
 		if (token !== this.#refreshToken || this.scope.destroyed) return false;
+		const incomplete = new Set<ReaderCacheCategory>();
+		const responseCategories = CATEGORIES.filter(
+			({ id }) => id !== 'history',
+		).map(({ id }) => id);
+		const records = recordsResult.status === 'fulfilled'
+			? recordsResult.value
+			: Object.freeze([] as ResponseCacheRecord[]);
+		if (recordsResult.status === 'rejected') {
+			this.#options.onError?.(recordsResult.reason);
+			for (const category of responseCategories) incomplete.add(category);
+		}
+		const assetCaches = assetCachesResult.status === 'fulfilled'
+			? assetCachesResult.value
+			: null;
+		if (assetCachesResult.status === 'rejected') {
+			this.#options.onError?.(assetCachesResult.reason);
+			incomplete.add('assets');
+		}
+		if (assetCaches?.errors.length) incomplete.add('assets');
+		const applicationCaches = applicationCachesResult.status === 'fulfilled'
+			? applicationCachesResult.value
+			: null;
+		if (applicationCachesResult.status === 'rejected') {
+			this.#options.onError?.(applicationCachesResult.reason);
+			for (const category of responseCategories) incomplete.add(category);
+		}
 		const grouped = new Map<ReaderCacheCategory, ResponseCacheRecord[]>(
 			CATEGORIES.map(({ id }) => [id, []]),
 		);
-		const history = Object.freeze([
-			...this.#options.history.snapshot.entries,
-			...(this.#options.chronicle?.snapshot.records ?? []),
-		]);
+		let history: readonly unknown[] = Object.freeze([]);
+		try {
+			history = Object.freeze([
+				...this.#options.history.snapshot.entries,
+				...(this.#options.chronicle?.snapshot.records ?? []),
+			]);
+		} catch (cause) {
+			this.#options.onError?.(cause);
+			incomplete.add('history');
+		}
 		for (const record of records) {
-			grouped.get(categoryOf(record))!.push(record);
+			const category = categoryOf(record);
+			if (category) grouped.get(category)!.push(record);
 		}
 		const assetTarget = this.#stats.get('assets');
 		if (assetTarget) {
@@ -588,24 +624,37 @@ export class ReaderCacheManagementSurface<
 		for (const { id } of CATEGORIES) {
 			const target = this.#stats.get(id);
 			if (target) {
-				target.textContent = categoryStatText(
+				const detail = categoryStatText(
 					id,
 					grouped.get(id) ?? [],
-						history,
-						assetCaches,
-						applicationCaches?.categories[id],
-					);
+					history,
+					assetCaches,
+					applicationCaches?.categories[id],
+				);
+				target.textContent = incomplete.has(id)
+					? `${detail} · 统计不完整`
+					: detail;
 			}
 		}
-		const total = history.length + records.length +
+		const managedResponseRecords = [...grouped.values()].reduce(
+			(total, categoryRecords) => total + categoryRecords.length,
+			0,
+		);
+		const total = history.length + managedResponseRecords +
 			(assetCaches?.count ?? 0) +
 			Object.values(applicationCaches?.categories ?? {}).reduce(
 				(sum, category) => sum + Math.max(0, Number(category?.records) || 0),
 				0,
 			);
-		this.#status.textContent = assetCaches?.errors.length
-			? `共 ${total} 条本地记录；部分浏览器图片缓存统计失败`
-			: `共 ${total} 条本地记录`;
+		if (incomplete.size) {
+			const labels = CATEGORIES
+				.filter(({ id }) => incomplete.has(id))
+				.map(({ title }) => title);
+			this.#status.textContent =
+				`共 ${total} 条已知本地记录；统计不完整：${labels.join('、')}`;
+			return false;
+		}
+		this.#status.textContent = `共 ${total} 条本地记录`;
 		return true;
 	}
 
@@ -621,9 +670,29 @@ export class ReaderCacheManagementSurface<
 				.map(([id]) => id),
 		);
 		if (!selected.size) return;
-		this.#setBusy(true, '正在清理已选缓存…');
+		this.#setBusy(true, '等待确认清理已选缓存…');
 		let releasePreparation = (): void => {};
 		try {
+			if (this.#options.configuration) {
+				const labels = CATEGORIES
+					.filter(({ id }) => selected.has(id))
+					.map(({ title }) => title);
+				const confirmed = await this.#options.configuration.confirm({
+					title: '清理所选本地缓存？',
+					message: `将清理：${labels.join('、')}。`,
+					note: '只删除本机缓存，不删除站点账号或 WebDAV 远端数据；' +
+						'已同步记录可能在后续同步时重新合并回来。' +
+						'需要的数据将按需联网获取。',
+					confirmLabel: '清理已选缓存',
+					tone: 'danger',
+					icon: 'trash',
+				});
+				if (!confirmed) {
+					this.#status.textContent = '已取消缓存清理。';
+					return;
+				}
+			}
+			this.#status.textContent = '正在清理已选缓存…';
 			const failures = new Map<ReaderCacheCategory, string[]>();
 			const fail = (
 				categories: readonly ReaderCacheCategory[],
@@ -671,19 +740,18 @@ export class ReaderCacheManagementSurface<
 			);
 			if (responseCategories.length) {
 				try {
-					const query = responseCategories.length === CATEGORIES.length - 1
-						? { all: true }
-						: {
-							ids: (await this.#options.responses.records())
-								.filter((record) => clearing.has(categoryOf(record)))
-								.map((record) => record.id),
-						};
-					if (query.all || query.ids?.length) {
+					const ids = (await this.#options.responses.records())
+						.filter((record) => {
+							const category = categoryOf(record);
+							return category !== null && clearing.has(category);
+						})
+						.map((record) => record.id);
+					if (ids.length) {
 						let report: ResponseCacheInvalidationReport | null = null;
 						if (this.#options.responses.invalidateWithReport) {
-							report = await this.#options.responses.invalidateWithReport(query);
+							report = await this.#options.responses.invalidateWithReport({ ids });
 						} else {
-							await this.#options.responses.invalidate(query);
+							await this.#options.responses.invalidate({ ids });
 						}
 						if (report && !report.complete) {
 							for (const failure of report.failures) {

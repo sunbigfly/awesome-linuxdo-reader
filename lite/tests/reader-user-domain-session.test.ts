@@ -1141,6 +1141,34 @@ assert(
 );
 lateSession.destroy();
 
+const externalRefreshRequestIndex = nativeRequests.length;
+session.applyExternalCacheInvalidation({
+	ids: [
+		'reader-user?authScope=account%3Aviewer&resource=profile&username=bob',
+	],
+});
+await Promise.resolve();
+assert(
+	nativeRequests[externalRefreshRequestIndex]?.username === 'bob',
+	'其他标签提交用户资料后，当前可见用户卡必须退出 30 分钟热缓存并重新读取中央缓存链',
+);
+nativeRequests[externalRefreshRequestIndex]!.pending.resolve({
+	ok: true,
+	status: 200,
+	value: Object.freeze({
+		...profile('bob'),
+		relationship: Object.freeze({
+			...profile('bob').relationship,
+			muted: true,
+		}),
+	}),
+});
+for (let index = 0; index < 8; index += 1) await Promise.resolve();
+assert(
+	session.snapshot('bob').profile?.relationship.muted === true,
+	'跨标签用户资料失效后的新 canonical profile 必须回写当前用户投影',
+);
+
 const userCacheBeforeClear = session.cacheStats();
 assert(
 	userCacheBeforeClear.profiles > 0,

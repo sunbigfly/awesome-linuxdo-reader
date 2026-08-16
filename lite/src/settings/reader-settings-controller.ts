@@ -14,6 +14,7 @@ export type ReaderSettingsPanelId =
 	| 'flash'
 	| 'reading'
 	| 'translation'
+	| 'ai-service'
 	| 'shortcuts'
 	| 'interaction'
 	| 'user'
@@ -92,8 +93,15 @@ const panels = [
 		id: 'translation',
 		groupId: 'reading-interaction',
 		title: '翻译设置',
-		description: '选择译文样式，并配置公共翻译或 AI 服务。',
-		keywords: ['翻译', '样式', '双语', '高亮', 'ai', 'openai', 'api', 'key', '模型', '思考', 'prompt', '预加载'],
+		description: '设置译文样式、动画与当前服务的翻译参数。',
+		keywords: ['翻译', '样式', '双语', '高亮', '动画', '温度', '思考', 'prompt', 'rpm', 'tpm', '预加载'],
+	},
+	{
+		id: 'ai-service',
+		groupId: 'reading-interaction',
+		title: 'AI 服务',
+		description: '管理供翻译、帖子总结等功能共用的 OpenAI 兼容服务。',
+		keywords: ['ai', 'openai', 'api', 'url', 'key', '模型', '服务', '帖子总结'],
 	},
 	{
 		id: 'shortcuts',
@@ -186,6 +194,7 @@ export const READER_SETTINGS_GROUPS = Object.freeze([
 		panelIds: Object.freeze([
 			'reading',
 			'translation',
+			'ai-service',
 			'shortcuts',
 			'interaction',
 		] as const),

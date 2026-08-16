@@ -191,14 +191,14 @@ html.ldp-reader-open [data-ldp-reader-top-layer][popover]::backdrop {
   pointer-events: none !important;
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) {
   color: var(--ldp-interface-font-color, var(--primary, #222));
   font-family: var(--ldp-interface-font-family, inherit);
   font-size: var(--ldp-font-base, 13px);
   font-weight: var(--ldp-interface-font-weight, 400);
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .fk-d-menu__inner-content {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .fk-d-menu__inner-content {
   box-sizing: border-box !important;
   border: 1px solid var(--primary-low, #d7d7d7) !important;
   border-radius: 8px !important;
@@ -208,7 +208,24 @@ html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .fk-d-menu__
   overscroll-behavior: contain;
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu {
+html.ldp-reader-open .fk-d-menu[data-identifier="admin-post-menu"] .fk-d-menu__inner-content {
+  width: min(240px, calc(100vw - 16px)) !important;
+  max-width: calc(100vw - 16px) !important;
+  max-height: min(480px, calc(100dvh - 16px)) !important;
+  overflow: auto !important;
+}
+
+html.ldp-reader-open .fk-d-menu[data-identifier="admin-post-menu"][data-ldp-reader-admin-menu="positioned"] {
+  position: fixed !important;
+  top: var(--ldp-reader-admin-menu-top, 0) !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: var(--ldp-reader-admin-menu-left, 0) !important;
+  margin: 0 !important;
+  transform: none !important;
+}
+
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu {
   min-width: 200px;
   gap: 2px !important;
   box-sizing: border-box;
@@ -217,8 +234,13 @@ html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-me
   list-style: none;
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu__item > :is(.btn, a),
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu__item .btn {
+html.ldp-reader-open .fk-d-menu[data-identifier="admin-post-menu"] .dropdown-menu {
+  width: 100%;
+  min-width: 0;
+}
+
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu__item > :is(.btn, a),
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu__item .btn {
   display: flex;
   box-sizing: border-box;
   width: 100%;
@@ -240,68 +262,68 @@ html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-me
   cursor: pointer;
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu__item > :is(.btn, a):is(:hover, :focus-visible),
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu__item .btn:is(:hover, :focus-visible) {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu__item > :is(.btn, a):is(:hover, :focus-visible),
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu__item .btn:is(:hover, :focus-visible) {
   background: var(--primary-very-low, #f2f2f2) !important;
   color: var(--primary, #222) !important;
   outline: none !important;
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu__item > :is(.btn, a):is(.active, [aria-current="true"], [aria-checked="true"]),
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu__item .btn:is(.active, [aria-current="true"], [aria-checked="true"]) {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu__item > :is(.btn, a):is(.active, [aria-current="true"], [aria-checked="true"]),
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu__item .btn:is(.active, [aria-current="true"], [aria-checked="true"]) {
   background: color-mix(in srgb, var(--tertiary-low, #dceee2) 68%, var(--secondary, #fff)) !important;
   color: var(--tertiary, #47855f) !important;
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu__item > :is(.btn, a):is(:disabled, [aria-disabled="true"]),
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu__item .btn:is(:disabled, [aria-disabled="true"]) {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu__item > :is(.btn, a):is(:disabled, [aria-disabled="true"]),
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu__item .btn:is(:disabled, [aria-disabled="true"]) {
   background: transparent !important;
   color: var(--primary-medium, #777) !important;
   opacity: .48;
   cursor: default;
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu__item .d-icon {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu__item .d-icon {
   width: 18px;
   height: 18px;
   flex: none;
   color: var(--primary-medium, #777);
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu__item > :is(.btn, a):is(:hover, :focus-visible, .active, [aria-current="true"], [aria-checked="true"]) .d-icon,
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu__item .btn:is(:hover, :focus-visible, .active, [aria-current="true"], [aria-checked="true"]) .d-icon {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu__item > :is(.btn, a):is(:hover, :focus-visible, .active, [aria-current="true"], [aria-checked="true"]) .d-icon,
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu__item .btn:is(:hover, :focus-visible, .active, [aria-current="true"], [aria-checked="true"]) .d-icon {
   color: inherit;
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu__divider {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu__divider {
   margin: 3px 4px !important;
   border-color: var(--ldp-divider-line-color, var(--primary-low, #ddd)) !important;
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] .dropdown-menu__subheader {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) .dropdown-menu__subheader {
   padding: 7px 8px 3px !important;
   color: var(--primary-medium, #777);
   font-size: var(--ldp-font-xs, 10px);
   font-weight: 700;
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] :is(.fk-d-menu__inner-content, .fk-d-menu__inner-content *) {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) :is(.fk-d-menu__inner-content, .fk-d-menu__inner-content *) {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--tertiary, #47855f) 42%, var(--secondary, #fff)) transparent;
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] :is(.fk-d-menu__inner-content, .fk-d-menu__inner-content *)::-webkit-scrollbar {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) :is(.fk-d-menu__inner-content, .fk-d-menu__inner-content *)::-webkit-scrollbar {
   width: 9px;
   height: 9px;
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] :is(.fk-d-menu__inner-content, .fk-d-menu__inner-content *)::-webkit-scrollbar-button {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) :is(.fk-d-menu__inner-content, .fk-d-menu__inner-content *)::-webkit-scrollbar-button {
   display: none;
   width: 0;
   height: 0;
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] :is(.fk-d-menu__inner-content, .fk-d-menu__inner-content *)::-webkit-scrollbar-track {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) :is(.fk-d-menu__inner-content, .fk-d-menu__inner-content *)::-webkit-scrollbar-track {
   border-radius: 999px;
   background: linear-gradient(
     90deg,
@@ -311,7 +333,7 @@ html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] :is(.fk-d-me
   );
 }
 
-html.ldp-reader-open .fk-d-menu[data-ldp-reader-top-layer="portal"] :is(.fk-d-menu__inner-content, .fk-d-menu__inner-content *)::-webkit-scrollbar-thumb {
+html.ldp-reader-open .fk-d-menu:is([data-ldp-reader-top-layer="portal"], [data-identifier="admin-post-menu"]) :is(.fk-d-menu__inner-content, .fk-d-menu__inner-content *)::-webkit-scrollbar-thumb {
   border-radius: 5px;
   background: color-mix(in srgb, var(--tertiary, #47855f) 42%, var(--secondary, #fff));
 }

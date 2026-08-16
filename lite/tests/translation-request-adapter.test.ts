@@ -93,8 +93,62 @@ class FakeHttp implements ExternalTranslationHttpPort {
 				status: 200,
 				value: { body: JSON.stringify({ data: [
 					{ id: 'gpt-4o-mini' },
-					{ id: 'translation-model' },
+					{
+						id: 'translation-model',
+						name: 'Translation Pro',
+						created: 1_800_000_000,
+						context_length: 200_000,
+						architecture: {
+							input_modalities: ['text', 'image'],
+							output_modalities: ['text'],
+						},
+						supported_parameters: ['reasoning'],
+						pricing: { prompt: '0.000001', completion: '0.000002' },
+						benchmarks: {
+							artificial_analysis: { intelligence_index: 71.4 },
+						},
+					},
 				] }) },
+			};
+		}
+		if (descriptor.provider === 'model-metadata-models-dev') {
+			return {
+				ok: true,
+				status: 200,
+				value: { body: JSON.stringify({
+					'openai/gpt-4o-mini': {
+						id: 'openai/gpt-4o-mini',
+						name: 'GPT-4o mini',
+						family: 'gpt-4o',
+						release_date: '2024-07-18',
+						knowledge: '2023-10',
+						attachment: true,
+						reasoning: false,
+						tool_call: true,
+						structured_output: true,
+						temperature: true,
+						modalities: { input: ['text', 'image'], output: ['text'] },
+						limit: { context: 128_000, output: 16_384 },
+					},
+				}) },
+			};
+		}
+		if (descriptor.provider === 'model-metadata-openrouter') {
+			return {
+				ok: true,
+				status: 200,
+				value: { body: JSON.stringify({ data: [{
+					id: 'openai/gpt-4o-mini',
+					canonical_slug: 'openai/gpt-4o-mini-20240718',
+					context_length: 128_000,
+					architecture: {
+						input_modalities: ['text', 'image'],
+						output_modalities: ['text'],
+					},
+					supported_parameters: ['temperature', 'tools', 'structured_outputs'],
+					pricing: { prompt: '0.00000015', completion: '0.0000006' },
+					top_provider: { max_completion_tokens: 16_384 },
+				}] }) },
 			};
 		}
 		if (descriptor.provider === 'ai') {
@@ -111,18 +165,23 @@ class FakeHttp implements ExternalTranslationHttpPort {
 			const request = JSON.parse(String(descriptor.body)) as {
 				readonly messages?: readonly Readonly<{
 					readonly role?: string;
-					readonly content?: string;
+					readonly content?: unknown;
 				}>[];
 			};
 			const user = request.messages?.filter((message) =>
 				message.role === 'user').at(-1);
-			const payload = JSON.parse(String(user?.content ?? '{}')) as {
-				readonly texts?: readonly unknown[];
-			};
-			const content = JSON.stringify(Array.from(
-				{ length: payload.texts?.length ?? 0 },
-				() => 'AI 译文 ⟦0⟧',
-			));
+			const customCompletion = Array.isArray(user?.content);
+			const payload = customCompletion
+				? Object.freeze({ texts: Object.freeze([]) })
+				: JSON.parse(String(user?.content ?? '{}')) as {
+					readonly texts?: readonly unknown[];
+				};
+			const content = customCompletion
+				? '自定义短总结'
+				: JSON.stringify(Array.from(
+					{ length: payload.texts?.length ?? 0 },
+					() => 'AI 译文 ⟦0⟧',
+				));
 			return {
 				ok: true,
 				status: 200,
@@ -364,6 +423,7 @@ const aiAdapter = new TranslationRequestAdapter({
 	readConfig: () => normalizeReaderTranslationConfig({
 		baseUrl: 'https://api.example.com/v1/',
 		apiKey: 'secret-test-key',
+		models: ['summary-model', 'translation-model'],
 		model: 'translation-model',
 		prompt: '使用社区常用术语。',
 		temperature: 0.2,
@@ -395,6 +455,67 @@ assert(
 	aiTasks.calls.at(-1)?.quota?.tokensPerMinute === 500_000 &&
 	!aiTasks.calls.at(-1)?.key.includes('secret-test-key'),
 	'AI 请求必须关闭思考、只把 Key 放在授权头，预加载进入可丢弃 prefetch 车道且日志 identity 不泄露 Key',
+);
+const completion = await aiAdapter.complete({
+	model: {
+		baseUrl: 'https://api.example.com/v1/',
+		model: 'summary-model',
+	},
+	systemPrompt: '只输出短总结。',
+	userPrompt: '{"discussionTree":[]}',
+	images: [{
+		key: 'topic:42:image:1',
+		url: 'data:image/png;base64,cG5n',
+		detail: 'low',
+	}],
+	operationKey: 'topic-summary:all',
+}, signal);
+const completionCall = aiHttp.calls.filter((call) => call.provider === 'ai').at(-1);
+const completionHttpCalls = aiHttp.calls.filter((call) => call.provider === 'ai').length;
+const cachedCompletion = await aiAdapter.complete({
+	model: {
+		baseUrl: 'https://api.example.com/v1/',
+		model: 'summary-model',
+	},
+	systemPrompt: '只输出短总结。',
+	userPrompt: '{"discussionTree":[]}',
+	images: [{
+		key: 'topic:42:image:1',
+		url: 'data:image/png;base64,cG5n',
+		detail: 'low',
+	}],
+	operationKey: 'topic-summary:all',
+}, signal);
+const refreshedCompletion = await aiAdapter.complete({
+	model: {
+		baseUrl: 'https://api.example.com/v1/',
+		model: 'summary-model',
+	},
+	systemPrompt: '只输出短总结。',
+	userPrompt: '{"discussionTree":[]}',
+	images: [{
+		key: 'topic:42:image:1',
+		url: 'data:image/png;base64,cG5n',
+		detail: 'low',
+	}],
+	operationKey: 'topic-summary:all',
+	bypassCache: true,
+}, signal);
+assert(
+	completion.text === '自定义短总结' &&
+	completion.model === 'summary-model' &&
+	completion.cacheHit === false &&
+	cachedCompletion.cacheHit === true &&
+	aiHttp.calls.filter((call) => call.provider === 'ai').length ===
+		completionHttpCalls + 1 &&
+	refreshedCompletion.cacheHit === false &&
+	String(completionCall?.body).includes('"type":"image_url"') &&
+	String(completionCall?.body).includes('data:image/png;base64,cG5n') &&
+	String(completionCall?.body).includes('"max_completion_tokens":1200') &&
+	aiTasks.calls.at(-1)?.priority === 'interactive' &&
+	aiTasks.calls.at(-1)?.key.startsWith('ai-completion:') &&
+	!String(aiTasks.calls.at(-1)?.key).includes('secret-test-key'),
+	'通用 AI 完成入口必须复用活动翻译 Profile、任务限流和多模态消息，且不泄露 Key',
 );
 aiReasoningEffort = '';
 await aiAdapter.translate(['Another text ⟦0⟧'], signal);
@@ -474,8 +595,63 @@ const modelCatalog = await aiAdapter.listModels({
 }, signal);
 assert(
 	modelCatalog.models.join(',') === 'gpt-4o-mini,translation-model' &&
+	modelCatalog.enrichedModels === 1 &&
+	modelCatalog.metadataSources?.join(',') === 'models.dev,openrouter' &&
+	modelCatalog.catalog[0]?.canonicalId === 'gpt-4o-mini' &&
+	modelCatalog.catalog[0]?.contextLength === 0 &&
+	modelCatalog.catalog[0]?.metadataSources.join(',') === 'provider' &&
+	modelCatalog.publicCatalog?.[0]?.canonicalId ===
+		'openai/gpt-4o-mini-20240718' &&
+	modelCatalog.publicCatalog?.[0]?.family === 'gpt-4o' &&
+	modelCatalog.publicCatalog?.[0]?.contextLength === 128_000 &&
+	modelCatalog.publicCatalog?.[0]?.maxCompletionTokens === 16_384 &&
+	modelCatalog.publicCatalog?.[0]?.toolCall === true &&
+	modelCatalog.publicCatalog?.[0]?.promptPrice === '0.00000015' &&
+	modelCatalog.publicCatalog?.[0]?.metadataSources.join(',') ===
+		'models.dev,openrouter' &&
+	modelCatalog.catalog[1]?.name === 'Translation Pro' &&
+	modelCatalog.catalog[1]?.contextLength === 200_000 &&
+	modelCatalog.catalog[1]?.outputModalities.join(',') === 'text' &&
+	modelCatalog.catalog[1]?.intelligenceScore === 71.4 &&
 	aiHttp.calls.some((call) =>
 		call.provider === 'ai-models' && call.url.endsWith('/v1/models')) &&
 	aiTasks.calls.at(-1)?.priority === 'interactive',
-	'模型目录必须只读 /models，去重排序后返回服务端实际模型 ID',
+	'模型目录必须分开返回供应商事实与精确匹配的公共资料，避免持久化混写',
+);
+const publicCatalog = await aiAdapter.listPublicModels(signal);
+assert(
+	publicCatalog.models.join(',') === 'openai/gpt-4o-mini' &&
+	publicCatalog.catalog[0]?.toolCall === true &&
+	publicCatalog.catalog[0]?.promptPrice === '0.00000015' &&
+	aiHttp.calls.filter((call) =>
+		call.provider === 'model-metadata-models-dev').length === 1 &&
+	aiHttp.calls.filter((call) =>
+		call.provider === 'model-metadata-openrouter').length === 1,
+	'默认模型能力查询必须复用内存公共目录，不重复请求公共 API',
+);
+await aiAdapter.listPublicModels(signal, true);
+assert(
+	aiHttp.calls.filter((call) =>
+		call.provider === 'model-metadata-models-dev').length === 2 &&
+	aiHttp.calls.filter((call) =>
+		call.provider === 'model-metadata-openrouter').length === 2,
+	'强制刷新公共模型能力必须绕过运行时内存目录并重新请求两个固定来源',
+);
+const openRouterCatalogRequest = providerRequests.aiModels({
+	baseUrl: 'https://openrouter.ai/api/v1/',
+	apiKey: 'openrouter-test-key',
+});
+assert(
+	openRouterCatalogRequest.url ===
+		'https://openrouter.ai/api/v1/models?output_modalities=all',
+	'OpenRouter 模型目录必须请求全部输出模态，供通用分组使用',
+);
+assert(
+	providerRequests.modelsDevMetadata().url ===
+		'https://models.dev/models.json' &&
+	providerRequests.openRouterMetadata().url ===
+		'https://openrouter.ai/api/v1/models?output_modalities=all' &&
+	!providerRequests.modelsDevMetadata().headers?.Authorization &&
+	!providerRequests.openRouterMetadata().headers?.Authorization,
+	'公共模型元数据 descriptor 必须固定到匿名只读目录，不能携带用户 API Key',
 );

@@ -2,6 +2,7 @@ import { parseHTML } from 'linkedom';
 import {
 	ReaderSelectSurface,
 	READER_SELECT_DISMISS_EVENT,
+	READER_SELECT_RESELECT_EVENT,
 } from '../src/shell/reader-select-surface.js';
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -72,7 +73,9 @@ Object.defineProperty(menu, 'getBoundingClientRect', {
 	}),
 });
 let changes = 0;
+let reselections = 0;
 select.addEventListener('change', () => changes += 1);
+select.addEventListener(READER_SELECT_RESELECT_EVENT, () => reselections += 1);
 
 assert(
 	select.parentElement?.classList.contains('ldp-select-surface') &&
@@ -108,6 +111,12 @@ assert(
 	select.value === '3' && changes === 1 && menu.hidden &&
 		select.getAttribute('aria-expanded') === 'false',
 	'统一下拉选项必须回写原生 select、只派发一次 change 并关闭菜单',
+);
+select.dispatchEvent(pointerDown);
+menu.querySelector<HTMLButtonElement>('[data-reader-select-value="3"]')!.click();
+assert(
+	select.value === '3' && changes === 1 && reselections === 1 && menu.hidden,
+	'再次选择当前项必须派发独立 reselect 事件，且不得伪造原生 change',
 );
 
 const reopenedPointerDown = new constructors.Event('pointerdown', {
@@ -189,6 +198,49 @@ assert(
 	menu.hidden && select.getAttribute('aria-expanded') === 'false',
 	'Reader 操作区收纳时必须通过统一事件关闭已展开的下拉菜单',
 );
+
+const settingsPanel = document.createElement('section');
+settingsPanel.className = 'ldp-settings-panel';
+const settingsSection = document.createElement('section');
+settingsSection.className = 'ldp-settings-section';
+const settingsIntro = document.createElement('header');
+settingsIntro.className = 'ldp-settings-intro';
+const profileGroup = document.createElement('section');
+profileGroup.className = 'ldp-translation-profile-group';
+root.append(settingsPanel);
+settingsPanel.append(settingsSection);
+settingsSection.append(settingsIntro, profileGroup);
+profileGroup.append(select.parentElement!);
+Object.defineProperty(settingsPanel, 'getBoundingClientRect', {
+	configurable: true,
+	value: () => ({
+		left: 0,
+		right: 320,
+		top: 20,
+		bottom: 340,
+		width: 320,
+		height: 320,
+	}),
+});
+Object.defineProperty(settingsIntro, 'getBoundingClientRect', {
+	configurable: true,
+	value: () => ({
+		left: 0,
+		right: 320,
+		top: 20,
+		bottom: 100,
+		width: 320,
+		height: 80,
+	}),
+});
+selectTop = 280;
+select.dispatchEvent(notificationPointerDown);
+assert(
+	select.parentElement?.classList.contains('is-menu-above') &&
+		menu.style.maxHeight === '162px',
+	'设置下拉向上展开时必须以滚动面板和冻结标题下沿为碰撞边界',
+);
+root.dispatchEvent(new constructors.Event(READER_SELECT_DISMISS_EVENT));
 
 const filterContent = document.createElement('section');
 filterContent.className = 'ldp-unwanted-topic-filter-content';

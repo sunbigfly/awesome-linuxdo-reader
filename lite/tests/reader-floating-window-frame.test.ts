@@ -1,6 +1,7 @@
 import { parseHTML } from 'linkedom';
 import {
 	ReaderCollectionFloatingWindow,
+	ReaderCollectionNodeCache,
 } from '../src/collection/reader-collection-floating-window.js';
 import {
 	ReaderFloatingWindowFrame,
@@ -18,6 +19,29 @@ const { document: parsedDocument, window } = parseHTML(
 );
 const document = parsedDocument as unknown as Document;
 const mount = document.querySelector<HTMLElement>('#mount')!;
+const nodeCache = new ReaderCollectionNodeCache<
+	Readonly<{ id: number }>,
+	HTMLElement
+>();
+const stableRecord = Object.freeze({ id: 1 });
+const firstNode = nodeCache.node('record:1', stableRecord, 'default', () =>
+	document.createElement('article'));
+const reusedNode = nodeCache.node('record:1', stableRecord, 'default', () =>
+	document.createElement('article'));
+assert(firstNode === reusedNode, '相同集合记录与视图变体必须复用原 DOM 节点');
+const changedNode = nodeCache.node(
+	'record:1',
+	Object.freeze({ id: 1 }),
+	'default',
+	() => document.createElement('article'),
+);
+assert(changedNode !== firstNode, '记录对象变化后必须重建节点以反映新内容');
+nodeCache.prune([]);
+assert(
+	nodeCache.node('record:1', stableRecord, 'default', () =>
+		document.createElement('article')) !== changedNode,
+	'集合记录离开可见窗口后必须释放节点缓存',
+);
 const storageValues = new Map<string, string>();
 const storage = {
 	getItem: (key: string) => storageValues.get(key) ?? null,
@@ -205,10 +229,10 @@ assert(
 	'未置顶时按 Esc 必须只收起整组，不能清空已打开标签',
 );
 assert(
-	restoreReaderFloatingWindowTabSession(mount) &&
-	frames[0]!.active && frames[0]!.tabList.scrollLeft === 137 &&
+	restoreReaderFloatingWindowTabSession(mount, 'history') &&
+	frames[1]!.active && frames[1]!.tabList.scrollLeft === 137 &&
 	frames[0]!.body.scrollTop === 420,
-	'快捷键唤回必须恢复关闭前聚焦标签、标签滚动与内容会话位置',
+	'快捷键唤回必须恢复动作指定标签、标签滚动且保留各标签内容会话位置',
 );
 active.open();
 Object.defineProperties(active.tabList, {
@@ -300,8 +324,39 @@ const pointerEvent = (type: string, x: number, y: number): Event => {
 	});
 	return event;
 };
+Object.defineProperties(frames[0]!.tabList, {
+	clientHeight: { configurable: true, value: 28 },
+	offsetHeight: { configurable: true, value: 34 },
+});
+Object.defineProperty(frames[0]!.tabList, 'getBoundingClientRect', {
+	configurable: true,
+	value: () => ({
+		left: 40,
+		top: 80,
+		right: 400,
+		bottom: 114,
+		width: 360,
+		height: 34,
+		x: 40,
+		y: 80,
+		toJSON: () => ({}),
+	}),
+});
+const geometryBeforeHeaderDrag = frames[0]!.geometry.snapshot.geometry;
+const headerBlankPointerDown = pointerEvent('pointerdown', 360, 96);
+frames[0]!.tabList.dispatchEvent(headerBlankPointerDown);
+frames[0]!.element.dispatchEvent(pointerEvent('pointermove', 470, 126));
+frames[0]!.element.dispatchEvent(pointerEvent('pointerup', 470, 126));
+const geometryAfterHeaderDrag = frames[0]!.geometry.snapshot.geometry;
+assert(
+	headerBlankPointerDown.defaultPrevented &&
+	geometryAfterHeaderDrag.left === geometryBeforeHeaderDrag.left + 110 &&
+	geometryAfterHeaderDrag.top === geometryBeforeHeaderDrag.top + 30,
+	'标签轨道空白和顶部非交互区域必须支持左键拖动七类共享浮窗',
+);
+
 const geometryBeforeScrollbarDrag = frames[0]!.geometry.snapshot.geometry;
-const scrollbarPointerDown = pointerEvent('pointerdown', 360, 108);
+const scrollbarPointerDown = pointerEvent('pointerdown', 360, 112);
 frames[0]!.tabList.dispatchEvent(scrollbarPointerDown);
 frames[0]!.element.dispatchEvent(pointerEvent('pointermove', 470, 108));
 frames[0]!.element.dispatchEvent(pointerEvent('pointerup', 470, 108));
@@ -313,7 +368,7 @@ assert(
 	!frames[0]!.element.classList.contains(
 		'ldp-reader-floating-window-interacting',
 	),
-	'拖动标签轨道与滚动条只能横向切换标签，不得触发浮窗拖动',
+	'拖动标签轨道滚动条只能横向切换标签，不得触发浮窗拖动',
 );
 
 const launcherEvent = new window.Event('pointerdown', {
@@ -330,6 +385,24 @@ assert(
 	launcherPreserved,
 	'点击七类入口必须跳过点外关闭，让随后 click 添加或激活目标标签',
 );
+
+frames[0]!.geometry.setGeometry(640, 560, 88, 72);
+const sharedGeometry = frames[0]!.geometry.snapshot.geometry;
+const sequentialClosingFrames = frames.filter((frame) => frame.isOpen);
+for (let index = 0; index < sequentialClosingFrames.length - 1; index += 1) {
+	const closing = sequentialClosingFrames[index]!;
+	const next = sequentialClosingFrames[index + 1]!;
+	closing.closeButton.click();
+	const geometry = next.geometry.snapshot.geometry;
+	assert(
+		next.active && !next.element.hidden &&
+		geometry.width === sharedGeometry.width &&
+		geometry.height === sharedGeometry.height &&
+		geometry.left === sharedGeometry.left &&
+		geometry.top === sharedGeometry.top,
+		'依次关闭激活标签时，接替标签必须保持共享大小和位置',
+	);
+}
 
 document.removeEventListener('pointerdown', dismissFromPointer, true);
 document.removeEventListener('keydown', dismissFromEscape, true);

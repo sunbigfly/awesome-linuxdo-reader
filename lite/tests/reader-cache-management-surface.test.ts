@@ -40,7 +40,25 @@ const records: ResponseCacheRecord[] = [
 	{ id: 'message', kind: 'discourse-notification-page', tags: ['notifications'], storedAt: 1, expiresAt: 2, bytes: 30 },
 	{ id: 'message-replies', kind: 'discourse-topic-posts', tags: ['notifications'], storedAt: 1, expiresAt: 2, bytes: 35 },
 	{ id: 'api', kind: 'translations', tags: ['translation:zh-CN'], storedAt: 1, expiresAt: 2, bytes: 40 },
+	{
+		id: 'bookmark-projection',
+		kind: 'reader-bookmark-projection',
+		tags: ['bookmark-projection'],
+		storedAt: 1,
+		expiresAt: Number.MAX_SAFE_INTEGER,
+		bytes: 45,
+		permanent: true,
+	},
 	{ id: 'image', kind: 'images', tags: ['images'], storedAt: 1, expiresAt: 2, bytes: 50 },
+	{
+		id: 'offline-topic',
+		kind: 'topic-offline-artifact',
+		tags: ['topic-offline-artifact'],
+		storedAt: 1,
+		expiresAt: Number.MAX_SAFE_INTEGER,
+		bytes: 500,
+		permanent: true,
+	},
 ];
 const invalidations: ResponseCacheInvalidation[] = [];
 const applicationCacheClears: string[][] = [];
@@ -81,6 +99,7 @@ const confirmations: Array<Readonly<{
 	readonly message: string;
 	readonly note: string;
 	readonly confirmLabel: string;
+	readonly tone?: 'danger' | 'primary';
 }>> = [];
 let confirmationGate: Promise<boolean> | null = null;
 let historyEntries: readonly ReaderHistoryEntry[] = [{
@@ -340,7 +359,13 @@ assert(
 		)?.dataset.settingHelp?.includes('避免旧快照在清理后写回') &&
 		host.querySelector<HTMLElement>(
 			'.ldp-cache-row:has([value="users"])',
+		)?.dataset.settingHelp?.includes('观察名单仍保留') &&
+		host.querySelector<HTMLElement>(
+			'.ldp-cache-row:has([value="users"])',
 		)?.dataset.settingHelp?.includes('不会删除 Connect 近 400 天') &&
+		host.querySelector<HTMLElement>(
+			'[data-cache-retention="users"]',
+		)?.textContent === '资料 1 天 · 观察历史直到主动清理' &&
 		host.querySelector<HTMLElement>(
 			'[data-cache-retention="topics"]',
 		)?.textContent === '接口 7 天 · 快照 30 天' &&
@@ -474,11 +499,18 @@ assert(
 		invalidations[0]?.ids?.join(',') === 'topic,image' &&
 		applicationCacheClears[0]?.join(',') === 'history,topics,assets' &&
 		browserAssetClears === 1 &&
-		imageObjectUrlClears === 1 &&
-		clearOrder.join('|') ===
+	imageObjectUrlClears === 1 &&
+	clearOrder.join('|') ===
 			'prepare:history,topics,assets|assets|responses|application|history|chronicle|objects|release' &&
-		notices.includes('已清理所选本地缓存'),
-	'选择性清理必须先取得跨层清理事务，再依次处理各 owner 并在统计刷新前释放',
+	confirmations[2]?.title === '清理所选本地缓存？' &&
+	confirmations[2]?.message ===
+		'将清理：浏览历史与岁月史书、帖子与楼层内容、头像、表情与原图。' &&
+	confirmations[2]?.note ===
+		'只删除本机缓存，不删除站点账号或 WebDAV 远端数据；已同步记录可能在后续同步时重新合并回来。需要的数据将按需联网获取。' &&
+	confirmations[2]?.confirmLabel === '清理已选缓存' &&
+	confirmations[2]?.tone === 'danger' &&
+	notices.includes('已清理所选本地缓存'),
+	'选择性清理必须先确认，再取得跨层清理事务并依次处理各 owner，在统计刷新前释放',
 );
 
 actions.querySelector<HTMLButtonElement>('.ldp-reader-refresh')!.click();
@@ -536,6 +568,14 @@ assert(
 	!host.querySelector<HTMLButtonElement>('.ldp-config-export')!.disabled &&
 		!host.querySelector<HTMLButtonElement>('.ldp-cache-clear')!.disabled,
 	'取消配置确认后必须恢复现有选择与可操作状态',
+);
+host.querySelector<HTMLButtonElement>('.ldp-cache-clear')!.click();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert(
+	invalidations.at(-1)?.all !== true &&
+		invalidations.at(-1)?.ids?.join(',') === 'api,bookmark-projection' &&
+		records.some((record) => record.id === 'offline-topic'),
+	'清理收藏、回应与其他数据必须删除已识别的永久收藏投影，同时保留永久离线 Topic 且不能使用全库清空',
 );
 surface.destroy();
 assert(
@@ -645,6 +685,30 @@ const failedSurface = new ReaderCacheManagementSurface({
 		},
 		invalidate: async () => {},
 	},
+	assetCaches: {
+		stats: async () => ({
+			count: 1,
+			bytes: 12,
+			groups: [{
+				id: 'avatar' as const,
+				label: '头像',
+				cacheName: 'linuxdo-enhanced-reader:avatars:v1',
+				count: 1,
+				bytes: 12,
+				state: 'available' as const,
+			}],
+			errors: [],
+		}),
+		clear: async () => ({ deleted: [], missing: [], failed: [] }),
+	},
+	applicationCaches: {
+		stats: () => ({
+			categories: {
+				users: { records: 2, detail: '仍可读取 2 条用户热缓存' },
+			},
+		}),
+		clear: () => ({ failed: [] }),
+	},
 	currentTopicAvailable: () => false,
 	clearCurrentTopic: async () => {},
 	onError: (cause) => refreshErrors.push(cause),
@@ -653,10 +717,16 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
 	refreshErrors.length === 1 &&
 		failedHost.querySelector<HTMLElement>('.ldp-cache-note')?.textContent ===
-			'本地缓存统计读取失败；现有选择不受影响，可稍后重试。' &&
-		[...failedHost.querySelectorAll<HTMLElement>('[data-cache-size]')]
-			.every((target) => target.textContent === '统计失败'),
-	'初始缓存目录读取失败必须被 surface 消化并显示可重试状态，不能形成未处理 rejection',
+			'共 3 条已知本地记录；统计不完整：帖子与楼层内容、用户资料卡、通知与消息、收藏、回应与其他数据、头像、表情与原图' &&
+		failedHost.querySelector<HTMLElement>('[data-cache-size="history"]')
+			?.textContent?.includes('0 条浏览记录') === true &&
+		failedHost.querySelector<HTMLElement>('[data-cache-size="users"]')
+			?.textContent?.includes('仍可读取 2 条用户热缓存 · 统计不完整') === true &&
+		failedHost.querySelector<HTMLElement>('[data-cache-size="assets"]')
+			?.textContent?.includes('头像 1 个（12 B）') === true &&
+		failedHost.querySelector<HTMLElement>('[data-cache-size="assets"]')
+			?.textContent?.endsWith('统计不完整') === true,
+	'中央响应目录读取失败时必须保留历史、兼容图片与应用热缓存统计，只把受影响类别标记为不完整',
 );
 failedSurface.destroy();
 

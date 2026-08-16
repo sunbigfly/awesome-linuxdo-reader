@@ -7,6 +7,8 @@ import type {
 
 export interface ReaderLightboxBatchSnapshot {
 	readonly open: boolean;
+	readonly purpose: 'download' | 'selection';
+	readonly maximumSelected: number | null;
 	readonly scope: 'loaded' | 'all';
 	readonly items: readonly ReaderLightboxItem[];
 	readonly selectedKeys: ReadonlySet<string>;
@@ -42,6 +44,10 @@ export interface ReaderLightboxBatchCatalogPort {
 export interface ReaderLightboxBatchControllerOptions {
 	readonly sequence: ReaderLightboxController;
 	readonly archiveName: string;
+	readonly purpose?: 'download' | 'selection';
+	readonly maximumSelected?: number;
+	readonly initialScope?: ReaderLightboxBatchSnapshot['scope'];
+	readonly allComplete?: boolean;
 	readonly imageCatalog?: ReaderLightboxBatchCatalogPort;
 	readonly parentScope?: LifecycleScope;
 	readonly onError?: (error: unknown) => void;
@@ -63,6 +69,9 @@ export class ReaderLightboxBatchController {
 	readonly #sequence: ReaderLightboxController;
 	readonly #onError: (error: unknown) => void;
 	readonly #imageCatalog: ReaderLightboxBatchCatalogPort | null;
+	readonly #purpose: ReaderLightboxBatchSnapshot['purpose'];
+	readonly #maximumSelected: number | null;
+	readonly #initialScope: ReaderLightboxBatchSnapshot['scope'];
 	readonly #selected = new Set<string>();
 	readonly #loadedKeys = new Set<string>();
 	#open = false;
@@ -80,6 +89,13 @@ export class ReaderLightboxBatchController {
 	constructor(options: ReaderLightboxBatchControllerOptions) {
 		this.#sequence = options.sequence;
 		this.#imageCatalog = options.imageCatalog ?? null;
+		this.#purpose = options.purpose ?? 'download';
+		const maximumSelected = Number(options.maximumSelected ?? 0);
+		this.#maximumSelected = Number.isSafeInteger(maximumSelected) && maximumSelected > 0
+			? maximumSelected
+			: null;
+		this.#initialScope = options.initialScope ?? 'loaded';
+		this.#allComplete = options.allComplete === true;
 		this.#archiveName = archiveName(options.archiveName);
 		this.#onError = options.onError ?? (() => {});
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
@@ -107,6 +123,8 @@ export class ReaderLightboxBatchController {
 		const selectedItems = items.filter((item) => this.#selected.has(item.key));
 		return Object.freeze({
 			open: this.#open,
+			purpose: this.#purpose,
+			maximumSelected: this.#maximumSelected,
 			scope: this.#scope,
 			items,
 			selectedKeys: new Set(this.#selected),
@@ -128,7 +146,7 @@ export class ReaderLightboxBatchController {
 		this.#assertActive();
 		if (this.#open) return;
 		this.#open = true;
-		this.#scope = 'loaded';
+		this.#scope = this.#initialScope;
 		this.#loadedKeys.clear();
 		for (const item of this.#sequence.snapshot().items) {
 			this.#loadedKeys.add(item.key);
@@ -143,7 +161,7 @@ export class ReaderLightboxBatchController {
 		if (scope === 'loaded') {
 			this.#scope = 'loaded';
 			this.#selected.clear();
-			this.#status = '请选择要打包的图片';
+			this.#status = this.#idleStatus();
 			this.#emit();
 			return Promise.resolve(true);
 		}
@@ -154,7 +172,7 @@ export class ReaderLightboxBatchController {
 		}
 		this.#scope = 'all';
 		this.#selected.clear();
-		if (this.#allComplete && this.#imageCatalog.changes) {
+		if (this.#allComplete) {
 			this.#status = `已扫描全部帖子，共找到 ${this.#scopeItems().length} 张图片`;
 			this.#emit();
 			return Promise.resolve(true);
@@ -216,7 +234,15 @@ export class ReaderLightboxBatchController {
 			throw new Error(`批量图片 ${normalized || '(empty)'} 不在当前序列`);
 		}
 		if (this.#selected.has(normalized)) this.#selected.delete(normalized);
-		else this.#selected.add(normalized);
+		else if (
+			this.#maximumSelected !== null &&
+			this.#selected.size >= this.#maximumSelected
+		) {
+			this.#status = `最多选择 ${this.#maximumSelected} 张图片`;
+			this.#emit();
+			return;
+		} else this.#selected.add(normalized);
+		this.#status = this.#idleStatus();
 		this.#emit();
 	}
 
@@ -227,8 +253,12 @@ export class ReaderLightboxBatchController {
 			items.every((item) => this.#selected.has(item.key));
 		this.#selected.clear();
 		if (!allSelected) {
-			for (const item of items) this.#selected.add(item.key);
+			const selected = this.#maximumSelected === null
+				? items
+				: items.slice(0, this.#maximumSelected);
+			for (const item of selected) this.#selected.add(item.key);
 		}
+		this.#status = this.#idleStatus();
 		this.#emit();
 	}
 
@@ -308,7 +338,16 @@ export class ReaderLightboxBatchController {
 		this.#completed = 0;
 		this.#total = 0;
 		this.#phase = 'idle';
-		this.#status = '请选择要打包的图片';
+		this.#status = this.#idleStatus();
+	}
+
+	#idleStatus(): string {
+		if (this.#purpose === 'selection') {
+			return this.#maximumSelected === null
+				? '请选择要交给 AI 参考的图片'
+				: `请选择图片，最多 ${this.#maximumSelected} 张`;
+		}
+		return '请选择要打包的图片';
 	}
 
 	#emit(): void {

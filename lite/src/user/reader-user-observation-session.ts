@@ -1,4 +1,11 @@
 import type {
+	ResponseCacheFlightPort,
+	ResponseCacheInvalidation,
+} from '../cache/response-repository.js';
+import {
+	runReaderCollectionHydrationLease,
+} from '../collection/reader-collection-hydration.js';
+import type {
 	CoordinatedRequestResume,
 } from '../network/coordinated-request-client.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
@@ -127,6 +134,12 @@ export interface ReaderUserObservationSnapshot {
 	readonly revision: number;
 }
 
+export interface ReaderUserObservationCacheStats {
+	readonly users: number;
+	readonly memoryRecords: number;
+	readonly storedRecords: number;
+}
+
 export interface ReaderUserObservationStoragePort {
 	getItem(key: string): string | null;
 	setItem(key: string, value: string): void;
@@ -157,6 +170,11 @@ export interface ReaderUserObservationSessionOptions {
 		'topicMetadataCandidates' | 'mergeTopicMetadata'
 	>;
 	readonly authScope: string;
+	readonly historyCoordination?: Pick<
+		ResponseCacheFlightPort,
+		'acquireFlight' | 'renewFlight' | 'releaseFlight' | 'waitForFlight'
+	>;
+	readonly historyCoordinationKey?: string;
 	readonly requestResume?: (
 		cause: unknown,
 	) => CoordinatedRequestResume | null;
@@ -407,7 +425,13 @@ export class ReaderUserObservationSession {
 	readonly #notify: (message: string) => void;
 	readonly #onError: (cause: unknown) => void;
 	readonly #now: () => number;
+	readonly #historyCoordination: ReaderUserObservationSessionOptions[
+		'historyCoordination'
+	];
+	readonly #historyCoordinationKey: string;
+	readonly #manifestPrefix: string;
 	readonly #entries = new Map<string, ObservationEntry>();
+	readonly #externalRestores = new Map<string, Promise<void>>();
 	readonly #topicMetadata = new Map<number, ReaderUserTopicMetadata>();
 	#pageMetadataWrite = Promise.resolve();
 	readonly #jobs: ObservationJob[] = [];
@@ -418,6 +442,7 @@ export class ReaderUserObservationSession {
 	#activeUsername = '';
 	#topicMetadataRevision = 0;
 	#revision = 0;
+	#cacheEpoch = 0;
 
 	constructor(options: ReaderUserObservationSessionOptions) {
 		this.#requests = options.requests;
@@ -431,6 +456,13 @@ export class ReaderUserObservationSession {
 		this.#notify = options.notify ?? (() => {});
 		this.#onError = options.onError ?? (() => {});
 		this.#now = options.now ?? Date.now;
+		this.#historyCoordination = options.historyCoordination;
+		this.#historyCoordinationKey = String(
+			options.historyCoordinationKey ??
+				`reader-user-observation-history:v1:${options.authScope}`,
+		).trim();
+		this.#manifestPrefix = `reader-user-observation:manifest:v1:${
+			encodeURIComponent(String(options.authScope).trim())}:`;
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		this.#restore();
 		this.scope.add(() => {
@@ -440,12 +472,92 @@ export class ReaderUserObservationSession {
 				);
 			}
 			this.#jobs.length = 0;
+			this.#externalRestores.clear();
 			this.changes.clear();
 		});
 	}
 
+	applyExternalCacheInvalidation(query: ResponseCacheInvalidation): void {
+		if (this.scope.destroyed) return;
+		const usernames = new Set<string>();
+		const all = query.all === true ||
+			query.kinds?.includes('user-observation-history') === true ||
+			query.tags?.includes('user-observation-history') === true;
+		if (all) {
+			for (const username of this.#entries.keys()) usernames.add(username);
+		} else {
+			for (const id of query.ids ?? []) {
+				if (!id.startsWith(this.#manifestPrefix)) continue;
+				try {
+					usernames.add(normalizedUsername(decodeURIComponent(
+						id.slice(this.#manifestPrefix.length),
+					)));
+				} catch {
+					continue;
+				}
+			}
+		}
+		for (const username of usernames) {
+			const entry = this.#entries.get(username);
+			if (!entry || isActivePhase(entry.phase) || this.#externalRestores.has(username)) {
+				continue;
+			}
+			const restore = this.#resumeEntry(entry, false).finally(() => {
+				if (this.#externalRestores.get(username) === restore) {
+					this.#externalRestores.delete(username);
+				}
+			});
+			this.#externalRestores.set(username, restore);
+			void restore.catch(this.#onError);
+		}
+	}
+
 	get snapshot(): ReaderUserObservationSnapshot {
 		return this.#snapshot();
+	}
+
+	cacheStats(): ReaderUserObservationCacheStats {
+		let memoryRecords = 0;
+		let storedRecords = 0;
+		for (const entry of this.#entries.values()) {
+			memoryRecords += entry.records.length;
+			storedRecords += entry.storedRecordCount;
+		}
+		return Object.freeze({
+			users: this.#entries.size,
+			memoryRecords,
+			storedRecords,
+		});
+	}
+
+	/** 保留观察名单，只清除公开历史、断点与进行中的缓存回填。 */
+	clearCache(): void {
+		if (this.scope.destroyed) return;
+		this.#cacheEpoch += 1;
+		this.#jobs.length = 0;
+		this.#externalRestores.clear();
+		for (const entry of this.#entries.values()) {
+			entry.epoch += 1;
+			entry.controller?.abort(
+				new DOMException('用户观察缓存已清理', 'AbortError'),
+			);
+			entry.controller = null;
+			entry.phase = 'idle';
+			entry.completedAt = 0;
+			entry.pages = 0;
+			entry.currentStream = null;
+			entry.completedStreams = 0;
+			entry.lastRecordCount = 0;
+			entry.storedRecordCount = 0;
+			entry.streamCheckpoints = {};
+			entry.knownIdentities = new Set<string>();
+			entry.records = Object.freeze([]);
+			entry.detail = '本地公开历史缓存已清理';
+			entry.error = '';
+			entry.recoveryKind = null;
+		}
+		this.#persist();
+		this.#emit();
 	}
 
 	isObserved(usernameValue: string): boolean {
@@ -577,11 +689,13 @@ export class ReaderUserObservationSession {
 	}
 
 	async #resumeEntry(entry: ObservationEntry, allowNetwork: boolean): Promise<void> {
+		const cacheEpoch = this.#cacheEpoch;
 		try {
 			const storedIndex = await this.#pages?.identityIndex(entry.username);
 			const identityIndex = storedIndex?.complete
 				? await this.#pages?.persistentIdentityIndex(entry.username)
 				: storedIndex;
+			if (this.#cacheEpoch !== cacheEpoch) return;
 			if (
 				storedIndex?.complete && !identityIndex &&
 				this.#entries.get(entry.username) === entry
@@ -821,6 +935,25 @@ export class ReaderUserObservationSession {
 	}
 
 	async #run(job: ObservationJob): Promise<void> {
+		const entry = this.#entries.get(job.username);
+		if (!entry) return;
+		const leaseResult = await runReaderCollectionHydrationLease({
+			coordination: this.#historyCoordination ?? null,
+			token: `${this.#historyCoordinationKey}:${encodeURIComponent(job.username)}`,
+			onError: this.#onError,
+			beforeRun: () => this.#resumeEntry(entry, false),
+			run: () => this.#runOwned(job),
+		});
+		if (
+			leaseResult !== 'producer' &&
+			!this.scope.destroyed &&
+			this.#entries.get(job.username) === entry
+		) {
+			await this.#resumeEntry(entry, false);
+		}
+	}
+
+	async #runOwned(job: ObservationJob): Promise<void> {
 		const entry = this.#entries.get(job.username);
 		if (!entry) return;
 		const epoch = ++entry.epoch;

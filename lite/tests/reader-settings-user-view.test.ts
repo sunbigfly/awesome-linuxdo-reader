@@ -518,11 +518,104 @@ assert(
 			?.textContent === '服务端已读确认',
 	'浏览帖子详情必须明确 200 成功、帖子去重与非全平台边界',
 );
-connectView.root.querySelector<HTMLElement>('[data-connect-history-back]')!
-	.dispatchEvent(new EventConstructor('click', { bubbles: true }));
-connectView.root.querySelector<HTMLElement>(
-	'[data-connect-history-metric="days-visited"]',
-)!.dispatchEvent(new EventConstructor('click', { bubbles: true }));
+const historyContext = connectView.root.querySelector(
+	'.ldp-connect-history-context',
+);
+const historySource = connectView.root.querySelector(
+	'.ldp-connect-history-source',
+);
+assert(
+	historyContext?.textContent === '@alice · 最近 50 天' &&
+		historyContext.parentElement?.classList.contains(
+			'ldp-connect-history-head',
+		) === true &&
+		historyContext.nextElementSibling === historySource &&
+		connectView.root.querySelector(
+			'.ldp-connect-history-heading > small',
+		) === null,
+	'账号与 50 天提示必须移到来源胶囊左侧，不能继续占据下拉第二行',
+);
+const historyCard = connectView.root.querySelector('.ldp-connect-history-card');
+const historyHead = historyCard?.querySelector('.ldp-connect-history-head');
+const historyHeading = historyCard?.querySelector('.ldp-connect-history-heading');
+const historyCalendar = historyCard?.querySelector('.ldp-connect-history-calendar');
+const historySelected = historyCard?.querySelector('.ldp-connect-history-selected');
+const historyNotice = historyCard?.querySelector('.ldp-connect-history-notice');
+const historySummary = historyCard?.querySelector('.ldp-connect-history-summary');
+const historyInfo = historyCard?.querySelector<HTMLElement>(
+	'[data-connect-history-info]',
+);
+const historyHelp = historyInfo?.closest('.ldp-connect-history-help');
+assert(
+	historyHead?.nextElementSibling === historySummary &&
+		historySummary?.nextElementSibling === historyCalendar &&
+		historyCalendar?.nextElementSibling === historySelected &&
+		historySelected?.nextElementSibling === null,
+	'Connect 二级页必须先展示指标汇总，再展示日历和日期详情',
+);
+assert(
+	historyHeading?.nextElementSibling === historyHelp &&
+		historyNotice?.parentElement === historyHelp &&
+		historyNotice.getAttribute('role') === 'tooltip' &&
+		historyInfo?.getAttribute('aria-expanded') === 'false',
+	'数据来源说明必须收进下拉右侧的信息按钮，不再占用日历下方空间',
+);
+historyInfo!.dispatchEvent(new EventConstructor('click', { bubbles: true }));
+assert(
+	historyInfo?.getAttribute('aria-expanded') === 'true' &&
+		historyHelp?.classList.contains('is-open') === true,
+	'点击信息按钮必须固定展开数据来源说明',
+);
+historyInfo!.dispatchEvent(new EventConstructor('click', { bubbles: true }));
+assert(
+	historyInfo?.getAttribute('aria-expanded') === 'false' &&
+		historyHelp?.classList.contains('is-open') === false,
+	'再次点击信息按钮必须收起数据来源说明',
+);
+const historyMetricSelect = connectView.root.querySelector<HTMLSelectElement>(
+	'[data-connect-history-select]',
+)!;
+assert(
+	historyMetricSelect.value === 'posts-read' &&
+		[...historyMetricSelect.options].map((option) => option.textContent).join('|') ===
+			'访问天数|浏览帖子|获赞|被举报帖子',
+	'Connect 二级日历标题必须提供当前全部指标的下拉切换入口',
+);
+for (const option of [...historyMetricSelect.options]) {
+	option.selected = false;
+	option.removeAttribute('selected');
+}
+const likesReceivedOption = [...historyMetricSelect.options].find((option) =>
+	option.value === 'likes-received');
+likesReceivedOption!.selected = true;
+likesReceivedOption!.setAttribute('selected', '');
+historyMetricSelect.dispatchEvent(new EventConstructor('change', { bubbles: true }));
+const switchedHistorySelect = connectView.root.querySelector<HTMLSelectElement>(
+	'[data-connect-history-select]',
+);
+assert(
+	switchedHistorySelect?.value === 'likes-received' &&
+		connectView.root.querySelector('.ldp-connect-history-source.is-server')
+			?.textContent === '服务端记录' &&
+		connectView.root.querySelector('.ldp-connect-history-day.is-today > strong')
+			?.textContent === '+3' &&
+		connectView.root.querySelector('.ldp-connect-history-calendar')
+			?.getAttribute('aria-label') === '获赞最近 50 天记录' &&
+		historyLoads === 1,
+	'二级日历下拉切换必须直接重绘所选指标分布且不新增网络请求',
+);
+const localHistorySelect = connectView.root.querySelector<HTMLSelectElement>(
+	'[data-connect-history-select]',
+)!;
+for (const option of [...localHistorySelect.options]) {
+	option.selected = false;
+	option.removeAttribute('selected');
+}
+const daysVisitedOption = [...localHistorySelect.options].find((option) =>
+	option.value === 'days-visited');
+daysVisitedOption!.selected = true;
+daysVisitedOption!.setAttribute('selected', '');
+localHistorySelect.dispatchEvent(new EventConstructor('change', { bubbles: true }));
 assert(
 	connectView.root.textContent?.includes('不包含手机、其他电脑、未安装脚本页面') &&
 		connectView.root.textContent.includes('不代表全平台数据') &&

@@ -21,6 +21,7 @@ import {
 	type ReaderTranslationConfig,
 	type ReaderTranslationConfigRepository,
 	type ReaderTranslationProfile,
+	type ReaderAiModelCatalogEntry,
 } from '../translation/reader-translation-config.js';
 import type {
 	PreferencesConfigCodec,
@@ -31,8 +32,8 @@ import {
 	READER_CONFIG_EXPORT_VERSION,
 } from './reader-preferences-schema.js';
 
-export const READER_SETTINGS_CONFIG_EXPORT_VERSION = 7;
-const READER_SETTINGS_CONFIG_PREVIOUS_PORTABLE_VERSION = 6;
+export const READER_SETTINGS_CONFIG_EXPORT_VERSION = 9;
+const READER_SETTINGS_CONFIG_LEGACY_PORTABLE_VERSIONS = Object.freeze([6, 7, 8]);
 export const READER_SETTINGS_CONFIG_OMITTED_SECRETS = Object.freeze([
 	'translation.apiKey',
 	'webDav.username',
@@ -41,6 +42,8 @@ export const READER_SETTINGS_CONFIG_OMITTED_SECRETS = Object.freeze([
 
 export interface ReaderPortableTranslationProfile {
 	readonly baseUrl: string;
+	readonly models: readonly string[];
+	readonly modelCatalog: readonly ReaderAiModelCatalogEntry[];
 	readonly model: string;
 	readonly prompt: string;
 	readonly temperature: number;
@@ -164,6 +167,8 @@ function portableTranslationProfile(
 ): ReaderPortableTranslationProfile {
 	return Object.freeze({
 		baseUrl: profile.baseUrl,
+		models: profile.models,
+		modelCatalog: profile.modelCatalog,
 		model: profile.model,
 		prompt: profile.prompt,
 		temperature: profile.temperature,
@@ -188,6 +193,7 @@ function portableTranslationConfig(
 
 function parsePortableTranslationConfig(
 	value: unknown,
+	sourceVersion = READER_SETTINGS_CONFIG_EXPORT_VERSION,
 ): ReaderTranslationConfig | null {
 	if (value === null) return null;
 	const source = record(value);
@@ -197,8 +203,12 @@ function parsePortableTranslationConfig(
 	}
 	const profiles = source.profiles.map((value) => {
 		const profile = record(value);
+		const hasModels = sourceVersion >= 8;
+		const hasModelCatalog = sourceVersion >= 9;
 		exactKeys(profile, [
 			'baseUrl',
+			...(hasModels ? ['models'] : []),
+			...(hasModelCatalog ? ['modelCatalog'] : []),
 			'model',
 			'prompt',
 			'temperature',
@@ -214,8 +224,16 @@ function parsePortableTranslationConfig(
 		const parsed = normalized.profiles[0];
 		if (!parsed) throw invalidConfig();
 		const portable = portableTranslationProfile(parsed);
-		if (Object.entries(portable).some(([key, normalizedValue]) =>
-			profile[key] !== normalizedValue)) {
+		if (
+			Object.entries(profile).some(([key, sourceValue]) =>
+				key !== 'models' && key !== 'modelCatalog' &&
+				sourceValue !== portable[key as keyof ReaderPortableTranslationProfile]) ||
+			(hasModels &&
+				JSON.stringify(profile.models) !== JSON.stringify(portable.models)) ||
+			(hasModelCatalog &&
+				JSON.stringify(profile.modelCatalog) !==
+					JSON.stringify(portable.modelCatalog))
+		) {
 			throw invalidConfig();
 		}
 		return parsed;
@@ -268,11 +286,11 @@ function parsePortableWebDavConfig(
 	const missesBothHistoryCategories = [...historyCategories].every(
 		(category) => !Object.hasOwn(categories, category),
 	);
-	const expectedCategories = sourceVersion ===
-		READER_SETTINGS_CONFIG_PREVIOUS_PORTABLE_VERSION
+	const expectedCategories = sourceVersion === 6
 		? READER_WEBDAV_CATEGORIES.filter((category) =>
 			category !== 'offline-topics' && !historyCategories.has(category))
-		: missesBothHistoryCategories
+		: sourceVersion < READER_SETTINGS_CONFIG_EXPORT_VERSION &&
+				missesBothHistoryCategories
 			? READER_WEBDAV_CATEGORIES.filter((category) =>
 				!historyCategories.has(category))
 			: READER_WEBDAV_CATEGORIES;
@@ -319,9 +337,9 @@ function parseCustomSites(value: unknown): readonly string[] {
 }
 
 /**
- * 设置文件的 v7 安全组合 codec。v5 仍委托 canonical preferences codec 导入；
- * v6 作为缺少离线 Topic 与历史类别的兼容格式继续接受；较早导出的 v7
- * 也允许同时缺少两个历史开关，缺失项会规范化为默认关闭。
+ * 设置文件的 v9 安全组合 codec。v5 仍委托 canonical preferences codec 导入；
+ * v6/v7/v8 仅按各自真实旧结构补齐后来新增的模型目录、离线 Topic 和历史类别，
+ * 当前 v9 则要求完整字段，避免损坏文件被静默当成旧文件修复。
  */
 export class ReaderSettingsConfigCodec<TPreferences extends object> {
 	readonly #preferences: Pick<
@@ -365,12 +383,16 @@ export class ReaderSettingsConfigCodec<TPreferences extends object> {
 
 	#import(payload: unknown): ReaderPreparedSettingsConfig<TPreferences> {
 		const source = record(payload);
-		const schemaVersion = Number(source.schemaVersion);
+		const schemaVersion = source.schemaVersion;
+		if (
+			typeof schemaVersion !== 'number' ||
+			!Number.isSafeInteger(schemaVersion)
+		) throw invalidConfig();
 		if (schemaVersion === READER_CONFIG_EXPORT_VERSION) {
 			const preferences = this.#preferences.import(payload);
 			return Object.freeze({
 				sourceVersion: schemaVersion,
-				settingsCount: Number(source.settingsCount),
+				settingsCount: source.settingsCount as number,
 				preferences,
 				includesPortableSections: false,
 				customSites: null,
@@ -380,7 +402,7 @@ export class ReaderSettingsConfigCodec<TPreferences extends object> {
 		}
 		if (
 			schemaVersion !== READER_SETTINGS_CONFIG_EXPORT_VERSION &&
-			schemaVersion !== READER_SETTINGS_CONFIG_PREVIOUS_PORTABLE_VERSION
+			!READER_SETTINGS_CONFIG_LEGACY_PORTABLE_VERSIONS.includes(schemaVersion)
 		) {
 			throw invalidConfig();
 		}
@@ -414,11 +436,14 @@ export class ReaderSettingsConfigCodec<TPreferences extends object> {
 		});
 		return Object.freeze({
 			sourceVersion: schemaVersion,
-			settingsCount: Number(source.settingsCount),
+			settingsCount: source.settingsCount as number,
 			preferences,
 			includesPortableSections: true,
 			customSites: parseCustomSites(source.customSites),
-			translation: parsePortableTranslationConfig(source.translation),
+			translation: parsePortableTranslationConfig(
+				source.translation,
+				schemaVersion,
+			),
 			webDav: parsePortableWebDavConfig(
 				source.webDav,
 				schemaVersion,

@@ -9,6 +9,7 @@ import {
 	READER_SHORTCUT_DEFAULTS,
 	normalizeReaderShortcutBinding,
 	normalizeReaderShortcutBindings,
+	readerShortcutBindingPolicyIssue,
 	type ReaderPreferences,
 	type ReaderShortcutAction,
 	type ReaderShortcutBindings,
@@ -244,42 +245,6 @@ export interface ReaderShortcutControllerOptions<
 	readonly parentScope?: LifecycleScope;
 }
 
-const reserved = new Set([
-	'Ctrl+KeyD',
-	'Ctrl+KeyF',
-	'Ctrl+KeyH',
-	'Ctrl+KeyJ',
-	'Ctrl+KeyL',
-	'Ctrl+KeyN',
-	'Ctrl+KeyO',
-	'Ctrl+KeyP',
-	'Ctrl+KeyR',
-	'Ctrl+KeyS',
-	'Ctrl+KeyT',
-	'Ctrl+KeyW',
-	'Ctrl+Tab',
-	'Ctrl+Shift+KeyN',
-	'Ctrl+Shift+KeyT',
-	'Ctrl+Shift+Tab',
-	'Alt+ArrowLeft',
-	'Alt+ArrowRight',
-	'Alt+F4',
-	'Alt+Home',
-	'Meta+Comma',
-	'Meta+KeyF',
-	'Meta+KeyL',
-	'Meta+KeyN',
-	'Meta+KeyP',
-	'Meta+KeyQ',
-	'Meta+KeyR',
-	'Meta+KeyS',
-	'Meta+KeyT',
-	'Meta+KeyW',
-	'Shift+Meta+KeyT',
-	'F11',
-	'F12',
-]);
-
 export function readerShortcutBindingLabel(binding: string): string {
 	const labels: Readonly<Record<string, string>> = Object.freeze({
 		Ctrl: 'Ctrl',
@@ -320,9 +285,11 @@ export function readerShortcutBindingLabel(binding: string): string {
 			? part.slice(3)
 			: /^Digit\d$/.test(part)
 				? part.slice(5)
+				: /^Numpad\d$/.test(part)
+					? `数字键盘 ${part.slice(6)}`
 				: /^Mouse\d+$/.test(part)
-					? `鼠标键 ${Number(part.slice(5)) + 1}`
-					: part),
+						? `鼠标键 ${Number(part.slice(5)) + 1}`
+						: part),
 	).join(' + ');
 }
 
@@ -378,15 +345,11 @@ export function readerShortcutBindingIssue(
 	if (owner) {
 		return `${readerShortcutBindingLabel(normalized)} 已绑定“${definitions[owner].label}”，请先移除或改用其他组合。`;
 	}
-	if (reserved.has(normalized)) {
+	const policyIssue = readerShortcutBindingPolicyIssue(normalized);
+	if (policyIssue === 'reserved') {
 		return `${readerShortcutBindingLabel(normalized)} 通常由浏览器占用，无法保证生效，请换一个组合。`;
 	}
-	const parts = normalized.split('+');
-	const code = parts.at(-1) ?? '';
-	if (
-		parts.length === 1 &&
-		/^(?:Key[A-Z]|Digit\d)$/.test(code)
-	) {
+	if (policyIssue === 'bare-alphanumeric') {
 		return '单个字母或数字容易与论坛快捷键冲突，请至少加入 Ctrl、Alt、Shift 或 Meta。';
 	}
 	return '';
@@ -540,6 +503,15 @@ export class ReaderShortcutController<TPreferences extends object> {
 		if (this.#recording) {
 			this.#consume(event, mouse);
 			const action = this.#recording;
+			if (this.#bindings[action].includes(binding)) {
+				this.captures.emit(Object.freeze({
+					action,
+					binding,
+					accepted: false,
+					message: `${readerShortcutBindingLabel(binding)} 已在该动作中。`,
+				}));
+				return;
+			}
 			const issue = readerShortcutBindingIssue(
 				this.#bindings,
 				binding,

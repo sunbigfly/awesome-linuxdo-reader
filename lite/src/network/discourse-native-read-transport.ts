@@ -60,8 +60,10 @@ interface NativeAjaxRequest<T> extends PromiseLike<T> {
 interface NativeAjaxOptions {
 	readonly type: 'GET' | 'POST' | 'PUT' | 'DELETE';
 	readonly headers?: Readonly<Record<string, string>>;
-	readonly data?: Readonly<Record<string, unknown>>;
+	readonly data?: Readonly<Record<string, unknown>> | FormData;
 	readonly cache?: false;
+	readonly processData?: false;
+	readonly contentType?: false;
 }
 
 interface ResolvedNativeAjax {
@@ -253,7 +255,8 @@ export interface DiscourseNativeAjaxExecution {
 	readonly method: NativeAjaxOptions['type'];
 	readonly signal: AbortSignal;
 	readonly headers?: Readonly<Record<string, string>>;
-	readonly data?: Readonly<Record<string, unknown>>;
+	readonly data?: Readonly<Record<string, unknown>> | FormData;
+	readonly multipart?: boolean;
 	readonly noStore?: boolean;
 }
 
@@ -274,7 +277,12 @@ async function executeNativeAjax<T>(
 		...(input.headers && Object.keys(input.headers).length
 			? { headers: { ...input.headers } }
 			: {}),
-		...(input.data === undefined ? {} : { data: { ...input.data } }),
+		...(input.data === undefined
+			? {}
+			: { data: input.multipart ? input.data : { ...input.data } }),
+		...(input.multipart
+			? { processData: false as const, contentType: false as const }
+			: {}),
 		...(input.noStore ? { cache: false as const } : {}),
 	};
 	let pending: NativeAjaxRequest<T>;
@@ -398,6 +406,7 @@ implements DiscourseNativeMutationTransport {
 			signal: input.signal,
 			headers: input.descriptor.headers,
 			data: input.descriptor.data,
+			multipart: input.descriptor.multipart === true,
 			noStore: true,
 		});
 	}

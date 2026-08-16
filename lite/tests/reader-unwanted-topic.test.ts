@@ -502,6 +502,18 @@ assert(
 const regex = document.querySelector<HTMLInputElement>(
 	'.ldp-unwanted-topic-filter-regex input',
 )!;
+const helpRow = document.querySelector<HTMLElement>(
+	'.ldp-unwanted-topic-filter-help-row',
+)!;
+assert(
+	helpRow.firstElementChild?.classList.contains(
+		'ldp-unwanted-topic-filter-lookup-status',
+	) === true &&
+	helpRow.lastElementChild?.classList.contains(
+		'ldp-unwanted-topic-filter-regex',
+	) === true,
+	'字符提示与正则选框必须由同一辅助信息行左对齐承载',
+);
 regex.checked = true;
 regex.dispatchEvent(new parsedWindow.Event('change', { bubbles: true }));
 addRule.value = '退款|退费';

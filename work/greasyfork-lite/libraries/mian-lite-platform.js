@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.3.1
+// @version      1.5.0
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.3.1 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.5.0 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.3.1",
+			sourceVersion: "1.5.0",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.3.1") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.0") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -1050,8 +1050,8 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	  {
 	    id: "users",
 	    title: "用户资料卡",
-	    help: "勾选“用户资料卡”后清理，会删除用户名、简介、徽章、用户组、关注列表和账户摘要等可重新获取的资料快照；不会删除 Connect 近 400 天的本机信任观察历史，头像仍归“头像、表情与原图”单独管理。",
-	    retention: "临时 5 分钟 · 持久 1 天"
+	    help: "勾选“用户资料卡”后清理，会删除用户名、简介、徽章、用户组、关注列表、账户摘要，以及用户观察已缓存的公开历史和采集断点；观察名单仍保留。不会删除 Connect 近 400 天的本机信任观察历史，头像仍归“头像、表情与原图”单独管理。",
+	    retention: "资料 1 天 · 观察历史直到主动清理"
 	  },
 	  {
 	    id: "notifications",
@@ -1073,7 +1073,7 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	  }
 	]);
 	function categoryOf(record) {
-	  return record.kind === "images" || record.tags.includes("images") ? "assets" : record.kind.includes("notification") || record.tags.includes("notifications") ? "notifications" : record.kind === "topics" || record.kind.startsWith("discourse-topic") || record.tags.some((tag) => tag.startsWith("topic:") || tag.startsWith("post:")) ? "topics" : record.kind === "users" || record.kind === "external-user-summary" || record.kind === "user-observation-history" || record.tags.includes("users") ? "users" : "responses";
+	  return record.kind.startsWith("topic-offline-artifact") || record.tags.some((tag) => tag.startsWith("topic-offline-artifact")) ? null : record.kind === "images" || record.tags.includes("images") ? "assets" : record.kind.includes("notification") || record.tags.includes("notifications") ? "notifications" : record.kind === "topics" || record.kind.startsWith("discourse-topic") || record.tags.some((tag) => tag.startsWith("topic:") || tag.startsWith("post:")) ? "topics" : record.kind === "users" || record.kind === "external-user-summary" || record.kind === "user-observation-history" || record.tags.includes("users") ? "users" : record.kind.includes("bookmark") || record.tags.includes("bookmarks") || record.tags.some((tag) => tag.startsWith("bookmark-")) ? "responses" : record.permanent === !0 ? null : "responses";
 	}
 	function formatBytes(rawBytes) {
 	  const bytes = Math.max(0, Number(rawBytes) || 0);
@@ -1302,47 +1302,69 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	    this.#refreshCurrent && (this.#refreshCurrent.disabled = this.#busy || !this.#options.currentTopicAvailable());
 	  }
 	  async refresh() {
-	    const token = ++this.#refreshToken;
-	    let records, assetCaches, applicationCaches;
-	    try {
-	      [records, assetCaches, applicationCaches] = await Promise.all([
-	        this.#options.responses.records(),
-	        this.#options.assetCaches?.stats() ?? null,
-	        this.#options.applicationCaches?.stats() ?? null
-	      ]);
-	    } catch (cause) {
-	      if (token !== this.#refreshToken || this.scope.destroyed) return !1;
-	      this.#options.onError?.(cause);
-	      for (const target of this.#stats.values())
-	        target.textContent || (target.textContent = "统计失败");
-	      return this.#status.textContent = "本地缓存统计读取失败；现有选择不受影响，可稍后重试。", !1;
-	    }
+	    const token = ++this.#refreshToken, [recordsResult, assetCachesResult, applicationCachesResult] = await Promise.allSettled([
+	      this.#options.responses.records(),
+	      Promise.resolve(this.#options.assetCaches?.stats() ?? null),
+	      Promise.resolve(this.#options.applicationCaches?.stats() ?? null)
+	    ]);
 	    if (token !== this.#refreshToken || this.scope.destroyed) return !1;
+	    const incomplete = /* @__PURE__ */ new Set(), responseCategories = CATEGORIES.filter(
+	      ({ id }) => id !== "history"
+	    ).map(({ id }) => id), records = recordsResult.status === "fulfilled" ? recordsResult.value : Object.freeze([]);
+	    if (recordsResult.status === "rejected") {
+	      this.#options.onError?.(recordsResult.reason);
+	      for (const category of responseCategories) incomplete.add(category);
+	    }
+	    const assetCaches = assetCachesResult.status === "fulfilled" ? assetCachesResult.value : null;
+	    assetCachesResult.status === "rejected" && (this.#options.onError?.(assetCachesResult.reason), incomplete.add("assets")), assetCaches?.errors.length && incomplete.add("assets");
+	    const applicationCaches = applicationCachesResult.status === "fulfilled" ? applicationCachesResult.value : null;
+	    if (applicationCachesResult.status === "rejected") {
+	      this.#options.onError?.(applicationCachesResult.reason);
+	      for (const category of responseCategories) incomplete.add(category);
+	    }
 	    const grouped = new Map(
 	      CATEGORIES.map(({ id }) => [id, []])
-	    ), history = Object.freeze([
-	      ...this.#options.history.snapshot.entries,
-	      ...this.#options.chronicle?.snapshot.records ?? []
-	    ]);
-	    for (const record of records)
-	      grouped.get(categoryOf(record)).push(record);
+	    );
+	    let history = Object.freeze([]);
+	    try {
+	      history = Object.freeze([
+	        ...this.#options.history.snapshot.entries,
+	        ...this.#options.chronicle?.snapshot.records ?? []
+	      ]);
+	    } catch (cause) {
+	      this.#options.onError?.(cause), incomplete.add("history");
+	    }
+	    for (const record of records) {
+	      const category = categoryOf(record);
+	      category && grouped.get(category).push(record);
+	    }
 	    const assetTarget = this.#stats.get("assets");
 	    assetTarget && (assetCaches ? assetTarget.dataset.ldpTooltipLabel = assetCacheDetail(assetCaches) : delete assetTarget.dataset.ldpTooltipLabel);
 	    for (const { id } of CATEGORIES) {
 	      const target = this.#stats.get(id);
-	      target && (target.textContent = categoryStatText(
-	        id,
-	        grouped.get(id) ?? [],
-	        history,
-	        assetCaches,
-	        applicationCaches?.categories[id]
-	      ));
+	      if (target) {
+	        const detail = categoryStatText(
+	          id,
+	          grouped.get(id) ?? [],
+	          history,
+	          assetCaches,
+	          applicationCaches?.categories[id]
+	        );
+	        target.textContent = incomplete.has(id) ? `${detail} · 统计不完整` : detail;
+	      }
 	    }
-	    const total = history.length + records.length + (assetCaches?.count ?? 0) + Object.values(applicationCaches?.categories ?? {}).reduce(
+	    const managedResponseRecords = [...grouped.values()].reduce(
+	      (total2, categoryRecords) => total2 + categoryRecords.length,
+	      0
+	    ), total = history.length + managedResponseRecords + (assetCaches?.count ?? 0) + Object.values(applicationCaches?.categories ?? {}).reduce(
 	      (sum, category) => sum + Math.max(0, Number(category?.records) || 0),
 	      0
 	    );
-	    return this.#status.textContent = assetCaches?.errors.length ? `共 ${total} 条本地记录；部分浏览器图片缓存统计失败` : `共 ${total} 条本地记录`, !0;
+	    if (incomplete.size) {
+	      const labels = CATEGORIES.filter(({ id }) => incomplete.has(id)).map(({ title }) => title);
+	      return this.#status.textContent = `共 ${total} 条已知本地记录；统计不完整：${labels.join("、")}`, !1;
+	    }
+	    return this.#status.textContent = `共 ${total} 条本地记录`, !0;
 	  }
 	  destroy() {
 	    this.scope.destroy();
@@ -1353,10 +1375,25 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	      [...this.#selects].filter(([, input]) => input.checked).map(([id]) => id)
 	    );
 	    if (!selected.size) return;
-	    this.#setBusy(!0, "正在清理已选缓存…");
+	    this.#setBusy(!0, "等待确认清理已选缓存…");
 	    let releasePreparation = () => {
 	    };
 	    try {
+	      if (this.#options.configuration) {
+	        const labels = CATEGORIES.filter(({ id }) => selected.has(id)).map(({ title }) => title);
+	        if (!await this.#options.configuration.confirm({
+	          title: "清理所选本地缓存？",
+	          message: `将清理：${labels.join("、")}。`,
+	          note: "只删除本机缓存，不删除站点账号或 WebDAV 远端数据；已同步记录可能在后续同步时重新合并回来。需要的数据将按需联网获取。",
+	          confirmLabel: "清理已选缓存",
+	          tone: "danger",
+	          icon: "trash"
+	        })) {
+	          this.#status.textContent = "已取消缓存清理。";
+	          return;
+	        }
+	      }
+	      this.#status.textContent = "正在清理已选缓存…";
 	      const failures = /* @__PURE__ */ new Map(), fail = (categories, message, cause) => {
 	        for (const category of categories) {
 	          const messages = failures.get(category) ?? [];
@@ -1389,12 +1426,13 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	      );
 	      if (responseCategories.length)
 	        try {
-	          const query = responseCategories.length === CATEGORIES.length - 1 ? { all: !0 } : {
-	            ids: (await this.#options.responses.records()).filter((record) => clearing.has(categoryOf(record))).map((record) => record.id)
-	          };
-	          if (query.all || query.ids?.length) {
+	          const ids = (await this.#options.responses.records()).filter((record) => {
+	            const category = categoryOf(record);
+	            return category !== null && clearing.has(category);
+	          }).map((record) => record.id);
+	          if (ids.length) {
 	            let report = null;
-	            if (this.#options.responses.invalidateWithReport ? report = await this.#options.responses.invalidateWithReport(query) : await this.#options.responses.invalidate(query), report && !report.complete) {
+	            if (this.#options.responses.invalidateWithReport ? report = await this.#options.responses.invalidateWithReport({ ids }) : await this.#options.responses.invalidate({ ids }), report && !report.complete) {
 	              for (const failure of report.failures)
 	                this.#options.onError?.(failure.cause);
 	              fail(responseCategories, "统一响应缓存未完整失效");
@@ -1567,7 +1605,7 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	    this.#configStatus && (this.#configStatus.textContent = message);
 	  }
 	}
-}, "252cc169b39898212d67a6e3a5df0ad2de0ace5c79037f03ae0de246123d7a52");
+}, "495aff91d326a0cfaa60ffdc9717b3443671fdf4a8c740b1dabcb75ba0c43caa");
 
 /* Source: lite/src/cache/reader-collection-page-repository.ts */
 runtime.register("src/cache/reader-collection-page-repository.js", function(module, exports, require) {
@@ -1604,7 +1642,9 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	  #pageSize;
 	  #retainForMs;
 	  #permanent;
+	  #coordination;
 	  #writes = /* @__PURE__ */ new Map();
+	  #generationNonce = Math.random().toString(36).slice(2);
 	  #generation = 0;
 	  constructor(options) {
 	    if (this.#responses = options.responses, this.#scope = requiredToken(options.authScope, "集合投影 authScope"), this.#namespace = requiredToken(options.namespace, "集合投影 namespace"), this.#kind = String(options.kind).trim(), !this.#kind) throw new Error("集合投影 kind 不能为空");
@@ -1614,18 +1654,25 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	      options.retainForMs ?? 15552e6
 	    ), !Number.isFinite(this.#retainForMs) || this.#retainForMs <= 0)
 	      throw new RangeError("集合投影 retainForMs 必须是正有限数值");
-	    this.#permanent = options.permanent === !0;
+	    this.#permanent = options.permanent === !0, this.#coordination = options.coordination;
 	  }
-	  async read(partitionValue) {
-	    const partition = requiredToken(partitionValue, "集合投影 partition"), cached = await this.#responses.read(
-	      this.#policy(partition, "manifest")
+	  async read(partitionValue, options = {}) {
+	    const partition = requiredToken(partitionValue, "集合投影 partition"), manifestPolicy = this.#policy(partition, "manifest");
+	    options.fresh && this.#responses.forgetMemory({ ids: [manifestPolicy.id] });
+	    const cached = await this.#responses.read(
+	      manifestPolicy
 	    ), manifest = this.#manifest(cached.value, partition);
 	    if (!manifest) return null;
 	    const records = [], identities = /* @__PURE__ */ new Set();
 	    for (let start = 0; start < manifest.pages; start += 6) {
 	      const pages = await Promise.all(Array.from(
 	        { length: Math.min(6, manifest.pages - start) },
-	        (_, offset) => this.#readPage(manifest, partition, start + offset)
+	        (_, offset) => this.#readPage(
+	          manifest,
+	          partition,
+	          start + offset,
+	          options.fresh === !0
+	        )
 	      ));
 	      for (const page of pages) {
 	        if (!page) return null;
@@ -1642,21 +1689,27 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	      complete: manifest.complete,
 	      updatedAt: manifest.updatedAt,
 	      ...manifest.sourceNextPage === void 0 ? {} : { sourceNextPage: manifest.sourceNextPage },
-	      ...manifest.sourcePageSize === void 0 ? {} : { sourcePageSize: manifest.sourcePageSize }
+	      ...manifest.sourcePageSize === void 0 ? {} : { sourcePageSize: manifest.sourcePageSize },
+	      ...manifest.sourceOffset === void 0 ? {} : { sourceOffset: manifest.sourceOffset }
 	    });
 	  }
 	  write(partitionValue, records, options = {}) {
 	    const partition = requiredToken(partitionValue, "集合投影 partition"), queued = (this.#writes.get(partition) ?? Promise.resolve()).catch(() => {
-	    }).then(() => this.#commit(partition, records, options));
+	    }).then(() => this.#withWriteLease(
+	      partition,
+	      () => this.#commit(partition, records, options)
+	    ));
 	    return this.#writes.set(partition, queued), queued.finally(() => {
 	      this.#writes.get(partition) === queued && this.#writes.delete(partition);
 	    }).catch(() => {
 	    }), queued;
 	  }
 	  async #commit(partition, incoming, options) {
+	    const manifestPolicy = this.#policy(partition, "manifest");
+	    this.#responses.forgetMemory({ ids: [manifestPolicy.id] });
 	    const previousRead = await this.#responses.read(
-	      this.#policy(partition, "manifest")
-	    ), previousManifest = this.#manifest(previousRead.value, partition), previous = options.mergeStored === !1 ? null : await this.read(decodeURIComponent(partition)), merged = /* @__PURE__ */ new Map();
+	      manifestPolicy
+	    ), previousManifest = this.#manifest(previousRead.value, partition), previous = options.mergeStored === !1 ? null : await this.read(decodeURIComponent(partition), { fresh: !0 }), merged = /* @__PURE__ */ new Map();
 	    for (const record of previous?.records ?? [])
 	      merged.set(record.identity, record);
 	    for (const value of incoming) {
@@ -1671,13 +1724,22 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	    const records = Object.freeze([...this.#sortRecords([...merged.values()])]), updatedAt = Math.max(
 	      0,
 	      Math.floor(Number(options.updatedAt ?? Date.now()) || 0)
-	    ), requestedSourceNextPage = options.sourceNextPage === void 0 ? previousManifest?.sourceNextPage : safeInteger(options.sourceNextPage);
-	    if (requestedSourceNextPage === null)
+	    ), replaceCheckpoint = options.checkpointMode === "replace", requestedSourceNextPageValue = options.sourceNextPage === void 0 ? previousManifest?.sourceNextPage : safeInteger(options.sourceNextPage);
+	    if (requestedSourceNextPageValue === null)
 	      throw new RangeError("集合投影 sourceNextPage 必须是非负安全整数");
-	    const requestedSourcePageSize = options.sourcePageSize === void 0 ? previousManifest?.sourcePageSize : positiveSafeInteger(options.sourcePageSize);
+	    const requestedSourceNextPage = replaceCheckpoint ? requestedSourceNextPageValue : previousManifest?.sourceNextPage === void 0 && requestedSourceNextPageValue === void 0 ? void 0 : Math.max(
+	      previousManifest?.sourceNextPage ?? 0,
+	      requestedSourceNextPageValue ?? 0
+	    ), requestedSourcePageSize = options.sourcePageSize === void 0 ? previousManifest?.sourcePageSize : positiveSafeInteger(options.sourcePageSize);
 	    if (requestedSourcePageSize === null)
 	      throw new RangeError("集合投影 sourcePageSize 必须是正安全整数");
-	    const generation = `${updatedAt.toString(36)}-${(++this.#generation).toString(36)}`, pages = Math.ceil(records.length / this.#pageSize);
+	    const requestedSourceOffsetValue = options.sourceOffset === void 0 ? previousManifest?.sourceOffset : safeInteger(options.sourceOffset);
+	    if (requestedSourceOffsetValue === null)
+	      throw new RangeError("集合投影 sourceOffset 必须是非负安全整数");
+	    const previousSourceNextPage = previousManifest?.sourceNextPage, previousSourceOffset = previousManifest?.sourceOffset;
+	    let requestedSourceOffset;
+	    replaceCheckpoint ? requestedSourceOffset = requestedSourceOffsetValue : options.sourceOffset === void 0 ? requestedSourceOffset = previousSourceOffset : previousSourceOffset === void 0 ? requestedSourceOffset = requestedSourceOffsetValue : requestedSourceNextPageValue !== void 0 && previousSourceNextPage !== void 0 && requestedSourceNextPageValue !== previousSourceNextPage ? requestedSourceOffset = requestedSourceNextPageValue > previousSourceNextPage ? requestedSourceOffsetValue : previousSourceOffset : requestedSourceOffset = options.sourceOffsetOrder === "descending" ? Math.min(previousSourceOffset, requestedSourceOffsetValue ?? 0) : Math.max(previousSourceOffset, requestedSourceOffsetValue ?? 0);
+	    const generation = `${updatedAt.toString(36)}-${this.#generationNonce}-${(++this.#generation).toString(36)}`, pages = Math.ceil(records.length / this.#pageSize);
 	    for (let start = 0; start < pages; start += 6)
 	      await Promise.all(Array.from(
 	        { length: Math.min(6, pages - start) },
@@ -1693,7 +1755,8 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	                page * this.#pageSize,
 	                (page + 1) * this.#pageSize
 	              ))
-	            })
+	            }),
+	            { publish: !1 }
 	          );
 	        }
 	      )), start + 6 < pages && await yieldMainThread();
@@ -1710,12 +1773,13 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	          Math.floor(Number(options.totalHint) || 0)
 	        ),
 	        pages,
-	        complete: options.complete === !0,
+	        complete: options.checkpointMode === "advance" && previousManifest?.complete === !0 || options.complete === !0,
 	        updatedAt,
 	        ...requestedSourceNextPage === void 0 ? {} : { sourceNextPage: requestedSourceNextPage },
-	        ...requestedSourcePageSize === void 0 ? {} : { sourcePageSize: requestedSourcePageSize }
+	        ...requestedSourcePageSize === void 0 ? {} : { sourcePageSize: requestedSourcePageSize },
+	        ...requestedSourceOffset === void 0 ? {} : { sourceOffset: requestedSourceOffset }
 	      })
-	    ), previousManifest && previousManifest.generation !== generation && previousManifest.pages > 0 && await this.#responses.invalidate({
+	    ), previousManifest && previousManifest.generation !== generation && previousManifest.pages > 0 && await this.#responses.prune({
 	      ids: Object.freeze(Array.from(
 	        { length: previousManifest.pages },
 	        (_, page) => this.#policy(
@@ -1729,8 +1793,8 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	  }
 	  #manifest(value, partition) {
 	    if (!value || typeof value != "object" || Array.isArray(value)) return null;
-	    const source = value, total = safeInteger(source.total), totalHint = safeInteger(source.totalHint), pages = safeInteger(source.pages), updatedAt = safeInteger(source.updatedAt), sourceNextPage = source.sourceNextPage === void 0 ? void 0 : safeInteger(source.sourceNextPage), sourcePageSize = source.sourcePageSize === void 0 ? void 0 : positiveSafeInteger(source.sourcePageSize);
-	    return source.schemaVersion !== 1 || source.partition !== partition || typeof source.generation != "string" || !source.generation || source.pageSize !== this.#pageSize || total === null || totalHint === null || pages === null || updatedAt === null || sourceNextPage === null || sourcePageSize === null || typeof source.complete != "boolean" || pages !== Math.ceil(total / this.#pageSize) ? null : Object.freeze({
+	    const source = value, total = safeInteger(source.total), totalHint = safeInteger(source.totalHint), pages = safeInteger(source.pages), updatedAt = safeInteger(source.updatedAt), sourceNextPage = source.sourceNextPage === void 0 ? void 0 : safeInteger(source.sourceNextPage), sourcePageSize = source.sourcePageSize === void 0 ? void 0 : positiveSafeInteger(source.sourcePageSize), sourceOffset = source.sourceOffset === void 0 ? void 0 : safeInteger(source.sourceOffset);
+	    return source.schemaVersion !== 1 || source.partition !== partition || typeof source.generation != "string" || !source.generation || source.pageSize !== this.#pageSize || total === null || totalHint === null || pages === null || updatedAt === null || sourceNextPage === null || sourcePageSize === null || sourceOffset === null || typeof source.complete != "boolean" || pages !== Math.ceil(total / this.#pageSize) ? null : Object.freeze({
 	      schemaVersion: 1,
 	      partition,
 	      generation: source.generation,
@@ -1741,12 +1805,45 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	      complete: source.complete,
 	      updatedAt,
 	      ...sourceNextPage === void 0 ? {} : { sourceNextPage },
-	      ...sourcePageSize === void 0 ? {} : { sourcePageSize }
+	      ...sourcePageSize === void 0 ? {} : { sourcePageSize },
+	      ...sourceOffset === void 0 ? {} : { sourceOffset }
 	    });
 	  }
-	  async #readPage(manifest, partition, page) {
+	  async #withWriteLease(partition, operation) {
+	    const coordination = this.#coordination;
+	    if (!coordination) {
+	      await operation();
+	      return;
+	    }
+	    const token = `reader-collection-projection-write:v1:${this.#policy(partition, "manifest").id}`;
+	    for (; ; ) {
+	      const lease = await coordination.acquireFlight(token);
+	      if (!lease.producer) {
+	        await coordination.waitForFlight(token);
+	        continue;
+	      }
+	      const heartbeat = lease.coordinated ? setInterval(() => {
+	        coordination.renewFlight(lease).catch(() => {
+	        });
+	      }, 1e4) : null;
+	      try {
+	        await operation();
+	        return;
+	      } finally {
+	        heartbeat !== null && clearInterval(heartbeat), await coordination.releaseFlight(lease);
+	      }
+	    }
+	  }
+	  async #readPage(manifest, partition, page, fresh = !1) {
+	    const policy = this.#policy(
+	      partition,
+	      "page",
+	      page,
+	      manifest.generation
+	    );
+	    fresh && this.#responses.forgetMemory({ ids: [policy.id] });
 	    const value = (await this.#responses.read(
-	      this.#policy(partition, "page", page, manifest.generation)
+	      policy
 	    )).value;
 	    if (!value || value.schemaVersion !== 1 || value.generation !== manifest.generation || value.page !== page || !Array.isArray(value.records)) return null;
 	    const records = [];
@@ -1779,7 +1876,7 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	    });
 	  }
 	}
-}, "29381a3222b31a37352f2af0da901d5d05a59e37ea5050c923da5f88669a3fcd");
+}, "2c54916ac80b81ab088a90cd4e2a7c65fb2e83b6fe617fd31092c7c64abe1452");
 
 /* Source: lite/src/cache/response-repository.ts */
 runtime.register("src/cache/response-repository.js", function(module, exports, require) {
@@ -1996,7 +2093,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      signal.addEventListener("abort", onAbort, { once: !0 }), inflight.promise.then(finish, fail);
 	    });
 	  }
-	  async write(rawPolicy, value) {
+	  async write(rawPolicy, value, options = {}) {
 	    const policy = normalizePolicy(rawPolicy), storedAt = Math.max(
 	      this.#now(),
 	      (this.#memory.get(policy.id)?.storedAt ?? -1) + 1
@@ -2012,14 +2109,24 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      ...policy.permanent === !0 ? { permanent: !0 } : {}
 	    });
 	    if (this.#remember(entry), !policy.persist) return;
-	    const write = (this.#writes.get(policy.id) ?? Promise.resolve()).catch(() => {
-	    }).then(() => this.#store.write(entry)).catch((error) => {
+	    const previous = this.#writes.get(policy.id) ?? Promise.resolve();
+	    let persisted = !1;
+	    const write = previous.catch(() => {
+	    }).then(async () => {
+	      await this.#store.write(entry), persisted = !0;
+	    }).catch((error) => {
 	      this.#onPersistenceError(error);
 	    });
-	    this.#writes.set(policy.id, write), await write, this.#writes.get(policy.id) === write && this.#writes.delete(policy.id);
+	    if (this.#writes.set(policy.id, write), await write, persisted && options.publish !== !1)
+	      try {
+	        await this.#mutationPort?.publish({ ids: [policy.id] });
+	      } catch (error) {
+	        this.#onPersistenceError(error);
+	      }
+	    this.#writes.get(policy.id) === write && this.#writes.delete(policy.id);
 	  }
 	  /** WebDAV 等受控迁移入口：仅在远端版本更新时保留原 storedAt 写回。 */
-	  async restore(rawPolicy, value, storedAtValue) {
+	  async restore(rawPolicy, value, storedAtValue, options = {}) {
 	    const policy = normalizePolicy(rawPolicy), storedAt = Math.max(0, Math.floor(storedAtValue));
 	    if (!Number.isSafeInteger(storedAt) || policy.permanent !== !0 && storedAt + policy.retainForMs <= this.#now() || ((await this.read(policy)).storedAt ?? -1) >= storedAt) return;
 	    const entry = Object.freeze({
@@ -2034,11 +2141,21 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      ...policy.permanent === !0 ? { permanent: !0 } : {}
 	    });
 	    if (this.#remember(entry), !policy.persist) return;
-	    const write = (this.#writes.get(policy.id) ?? Promise.resolve()).catch(() => {
-	    }).then(() => this.#store.write(entry)).catch((error) => {
+	    const previous = this.#writes.get(policy.id) ?? Promise.resolve();
+	    let persisted = !1;
+	    const write = previous.catch(() => {
+	    }).then(async () => {
+	      await this.#store.write(entry), persisted = !0;
+	    }).catch((error) => {
 	      this.#onPersistenceError(error);
 	    });
-	    this.#writes.set(policy.id, write), await write, this.#writes.get(policy.id) === write && this.#writes.delete(policy.id);
+	    if (this.#writes.set(policy.id, write), await write, persisted && options.publish !== !1)
+	      try {
+	        await this.#mutationPort?.publish({ ids: [policy.id] });
+	      } catch (error) {
+	        this.#onPersistenceError(error);
+	      }
+	    this.#writes.get(policy.id) === write && this.#writes.delete(policy.id);
 	  }
 	  async merge(rawPolicy, incoming, mergeValues) {
 	    const policy = normalizePolicy(rawPolicy), memory = this.#memory.get(policy.id), localValue = !this.#store.merge && memory && this.#validEntry(memory, policy) ? mergeValues(memory.value, incoming) : incoming;
@@ -2102,6 +2219,28 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	  async invalidate(query, publish = !0) {
 	    const report = await this.#invalidateWithReport(query, publish);
 	    if (!report.complete) throw new ResponseCacheInvalidationError(report);
+	  }
+	  /**
+	   * 删除只由当前 owner 判定为不可达的内部 generation。不广播、不提升全局 epoch、
+	   * 不撤销其他 cache flight；不得用于用户可见缓存清理或领域失效。
+	   */
+	  async prune(query) {
+	    for (const [id, entry] of this.#memory)
+	      matchesInvalidation(entry, query) && this.#memory.delete(id);
+	    this.#writes.size && await Promise.all(this.#writes.values());
+	    const result = await this.#store.invalidate(query);
+	    if (result && !result.ok)
+	      throw result.error ?? new Error("响应缓存内部 generation 修剪失败");
+	  }
+	  /**
+	   * 只忘记当前标签页的内存副本，让 owner 重新读取共享持久缓存。
+	   * 不删除 IndexedDB、不广播，也不提升全局 epoch。
+	   */
+	  forgetMemory(query) {
+	    let removed = 0;
+	    for (const [id, entry] of this.#memory)
+	      matchesInvalidation(entry, query) && (this.#memory.delete(id), removed += 1);
+	    return removed;
 	  }
 	  async invalidateWithReport(query, publish = !0) {
 	    return this.#invalidateWithReport(query, publish);
@@ -2294,7 +2433,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    super("等待共享缓存请求超时"), this.name = "TimeoutError";
 	  }
 	}
-}, "49141a0a146319e0a72079c4327b9d751bd5ed0cda3c5f9393adaaa4a5ddfa13");
+}, "4071456c5d0195d1a502791abf8f9b0f4ee8e2fa3bcdc9edaaa347bb394eedc2");
 
 /* Source: lite/src/cache/topic-snapshot-repository.ts */
 runtime.register("src/cache/topic-snapshot-repository.js", function(module, exports, require) {
@@ -2968,6 +3107,7 @@ runtime.register("src/collection/reader-collection-floating-window.js", function
 	  READER_COLLECTION_FLOATING_WINDOW_PLACEMENT: () => READER_COLLECTION_FLOATING_WINDOW_PLACEMENT,
 	  READER_COLLECTION_FLOATING_WINDOW_POLICY: () => READER_COLLECTION_FLOATING_WINDOW_POLICY,
 	  ReaderCollectionFloatingWindow: () => ReaderCollectionFloatingWindow,
+	  ReaderCollectionNodeCache: () => ReaderCollectionNodeCache,
 	  ReaderCollectionProgressView: () => ReaderCollectionProgressView,
 	  ReaderCollectionScrollWindow: () => ReaderCollectionScrollWindow
 	});
@@ -2979,6 +3119,24 @@ runtime.register("src/collection/reader-collection-floating-window.js", function
 	  defaultWidth: 560,
 	  defaultHeight: 680
 	}), READER_COLLECTION_FLOATING_WINDOW_PLACEMENT = "center", READER_COLLECTION_FLOATING_WINDOW_GEOMETRY_KEY = "linuxdo-enhanced-reader:collection-window:v1";
+	class ReaderCollectionNodeCache {
+	  #entries = /* @__PURE__ */ new Map();
+	  node(keyValue, record, variantValue, create) {
+	    const key = String(keyValue), variant = String(variantValue), cached = this.#entries.get(key);
+	    if (cached?.record === record && cached.variant === variant)
+	      return cached.node;
+	    const node2 = create();
+	    return this.#entries.set(key, Object.freeze({ record, variant, node: node2 })), node2;
+	  }
+	  prune(keys) {
+	    const retained = new Set(keys);
+	    for (const key of this.#entries.keys())
+	      retained.has(key) || this.#entries.delete(key);
+	  }
+	  clear() {
+	    this.#entries.clear();
+	  }
+	}
 	class ReaderCollectionScrollWindow {
 	  scope;
 	  #list;
@@ -3204,7 +3362,79 @@ runtime.register("src/collection/reader-collection-floating-window.js", function
 	    this.scope.destroy();
 	  }
 	}
-}, "27432ce919bc667cd0e889b885b8d9a058ef183767325814421e7a700f3db37a");
+}, "2d28396e95b4a7c0c9dca6205a0446b7d172f0fb6ef10cb582d94e4e030c5957");
+
+/* Source: lite/src/collection/reader-collection-hydration.ts */
+runtime.register("src/collection/reader-collection-hydration.js", function(module, exports, require) {
+	var reader_collection_hydration_exports = {};
+	__export(reader_collection_hydration_exports, {
+	  readerCollectionResumePosition: () => readerCollectionResumePosition,
+	  runReaderCollectionHydrationLease: () => runReaderCollectionHydrationLease,
+	  runReaderCollectionWorkers: () => runReaderCollectionWorkers
+	});
+	module.exports = __toCommonJS(reader_collection_hydration_exports);
+	function positiveSafeInteger(value, fallback) {
+	  const normalized = Math.floor(Number(value));
+	  return Number.isSafeInteger(normalized) && normalized > 0 ? normalized : fallback;
+	}
+	function nonNegativeSafeInteger(value) {
+	  const normalized = Math.floor(Number(value));
+	  return Number.isSafeInteger(normalized) && normalized >= 0 ? normalized : null;
+	}
+	function readerCollectionResumePosition(checkpoint, targetPageSizeValue, legacyPageSizeValue = targetPageSizeValue) {
+	  const targetPageSize = positiveSafeInteger(targetPageSizeValue, 1), legacyPageSize = positiveSafeInteger(
+	    checkpoint.sourcePageSize,
+	    positiveSafeInteger(legacyPageSizeValue, targetPageSize)
+	  ), storedOffset = nonNegativeSafeInteger(checkpoint.sourceOffset), storedPage = nonNegativeSafeInteger(checkpoint.sourceNextPage) ?? 0, offset = storedOffset ?? storedPage * legacyPageSize;
+	  return Object.freeze({
+	    page: Math.floor(offset / targetPageSize),
+	    offset
+	  });
+	}
+	async function runReaderCollectionWorkers(options) {
+	  const concurrency = positiveSafeInteger(options.concurrency, 1), maxTasks = options.maxTasks === void 0 ? Number.MAX_SAFE_INTEGER : Math.max(0, Math.floor(Number(options.maxTasks) || 0));
+	  let started = 0, completed = 0;
+	  const worker = async () => {
+	    for (; started < maxTasks && (options.shouldContinue?.() ?? !0); ) {
+	      const key = options.claim();
+	      if (key === null) return;
+	      started += 1;
+	      try {
+	        await options.run(key), completed += 1;
+	      } finally {
+	        options.release?.(key);
+	      }
+	    }
+	  };
+	  return await Promise.all(Array.from(
+	    { length: Math.min(concurrency, Math.max(1, maxTasks)) },
+	    () => worker()
+	  )), Object.freeze({ started, completed });
+	}
+	async function runReaderCollectionHydrationLease(options) {
+	  const coordination = options.coordination, token = String(options.token).trim();
+	  if (!coordination || !token)
+	    return await options.beforeRun?.(), options.signal?.throwIfAborted(), await options.run(), "producer";
+	  options.signal?.throwIfAborted();
+	  const lease = await coordination.acquireFlight(token);
+	  if (options.signal?.throwIfAborted(), !lease.producer)
+	    return await coordination.waitForFlight(
+	      token,
+	      options.signal
+	    ) ? "consumer" : "consumer-timeout";
+	  const heartbeatMs = positiveSafeInteger(options.heartbeatMs, 1e4), heartbeat = lease.coordinated ? setInterval(() => {
+	    coordination.renewFlight(lease).catch(
+	      options.onError ?? (() => {
+	      })
+	    );
+	  }, heartbeatMs) : null;
+	  try {
+	    return await options.beforeRun?.(), options.signal?.throwIfAborted(), await options.run(), "producer";
+	  } finally {
+	    heartbeat !== null && clearInterval(heartbeat), await coordination.releaseFlight(lease);
+	  }
+	}
+}, "166c8ac2e1883e299191ca0bc5e86c31f6bbbe06974a722778507882459f29ca");
 
 /* Source: lite/src/collection/reader-header-popover-position.ts */
 runtime.register("src/collection/reader-header-popover-position.js", function(module, exports, require) {
@@ -3220,9 +3450,10 @@ runtime.register("src/collection/reader-header-popover-position.js", function(mo
 	  #document;
 	  #toggle;
 	  #popover;
+	  #preferredPlacement;
 	  #frame = null;
 	  constructor(options) {
-	    this.#document = options.document, this.#toggle = options.toggle, this.#popover = options.popover, this.scope = options.parentScope.child();
+	    this.#document = options.document, this.#toggle = options.toggle, this.#popover = options.popover, this.#preferredPlacement = options.preferredPlacement ?? "bottom", this.scope = options.parentScope.child();
 	    const viewport = this.#document.defaultView;
 	    viewport && this.scope.listen(viewport, "resize", () => this.schedule());
 	    for (const type of [
@@ -3231,7 +3462,7 @@ runtime.register("src/collection/reader-header-popover-position.js", function(mo
 	    ])
 	      this.scope.listen(options.root, type, () => this.schedule());
 	    this.scope.add(() => {
-	      this.#frame !== null && viewport && viewport.cancelAnimationFrame(this.#frame), this.#frame = null, this.#popover.style.removeProperty("left"), this.#popover.style.removeProperty("top");
+	      this.#frame !== null && viewport && viewport.cancelAnimationFrame(this.#frame), this.#frame = null, this.#popover.style.removeProperty("left"), this.#popover.style.removeProperty("top"), delete this.#popover.dataset.placement;
 	    });
 	  }
 	  position() {
@@ -3243,10 +3474,8 @@ runtime.register("src/collection/reader-header-popover-position.js", function(mo
 	        viewport.innerWidth - popoverRect.width - margin,
 	        buttonRect.right - popoverRect.width
 	      )
-	    ), below = buttonRect.bottom + gap, above = buttonRect.top - popoverRect.height - gap, nextLeft = `${Math.round(left)}px`, nextTop = `${Math.round(
-	      below + popoverRect.height <= viewport.innerHeight - margin || above < margin ? below : above
-	    )}px`;
-	    this.#popover.style.left !== nextLeft && (this.#popover.style.left = nextLeft), this.#popover.style.top !== nextTop && (this.#popover.style.top = nextTop);
+	    ), below = buttonRect.bottom + gap, above = buttonRect.top - popoverRect.height - gap, spaceBelow = viewport.innerHeight - margin - below, spaceAbove = buttonRect.top - gap - margin, belowFits = popoverRect.height <= spaceBelow, aboveFits = popoverRect.height <= spaceAbove, placeAbove = this.#preferredPlacement === "top" ? aboveFits || !belowFits && spaceAbove >= spaceBelow : !belowFits && (aboveFits || spaceAbove > spaceBelow), nextLeft = `${Math.round(left)}px`, nextTop = `${Math.round(placeAbove ? Math.max(margin, above) : below)}px`;
+	    this.#popover.style.left !== nextLeft && (this.#popover.style.left = nextLeft), this.#popover.style.top !== nextTop && (this.#popover.style.top = nextTop), this.#popover.dataset.placement = placeAbove ? "top" : "bottom";
 	  }
 	  schedule() {
 	    const viewport = this.#document.defaultView;
@@ -3273,7 +3502,8 @@ runtime.register("src/collection/reader-header-popover-position.js", function(mo
 	      root: options.root,
 	      toggle: options.toggle,
 	      popover: options.popover,
-	      parentScope: this.scope
+	      parentScope: this.scope,
+	      ...options.preferredPlacement === void 0 ? {} : { preferredPlacement: options.preferredPlacement }
 	    }), this.scope.add((0, import_floating_surface_wheel.bindFloatingSurfaceWheel)(this.#popover)), this.scope.listen(
 	      this.#document,
 	      options.outsideEvent ?? "pointerdown",
@@ -3300,7 +3530,7 @@ runtime.register("src/collection/reader-header-popover-position.js", function(mo
 	    this.scope.destroy();
 	  }
 	}
-}, "17130579f0f25113b0310afec99338b15e5e640f46caa176089d7cfe372e7bb1");
+}, "b013b73a3e23c577b69c4e0505a798ad10bb1227c0fedf9e81a8aef8e00cc847");
 
 /* Source: lite/src/collection/reader-popover-filter-controls.ts */
 runtime.register("src/collection/reader-popover-filter-controls.js", function(module, exports, require) {
@@ -3847,7 +4077,7 @@ runtime.register("src/collection/reader-unwanted-topic-filter-editor.js", functi
 	      "span",
 	      "",
 	      "正则表达式"
-	    )), this.#topicOptions.append(this.#topicField, regexLabel);
+	    )), this.#topicOptions.append(this.#topicField);
 	    const inputLabel = (0, import_html_element.htmlElement)(
 	      options.document,
 	      "label",
@@ -3860,11 +4090,17 @@ runtime.register("src/collection/reader-unwanted-topic-filter-editor.js", functi
 	      options.document,
 	      "p",
 	      "ldp-unwanted-topic-filter-lookup-status"
-	    ), this.#lookupStatus.setAttribute("role", "status"), this.#lookupStatus.setAttribute("aria-live", "polite"), this.#results = (0, import_html_element.htmlElement)(
+	    ), this.#lookupStatus.setAttribute("role", "status"), this.#lookupStatus.setAttribute("aria-live", "polite");
+	    const helpRow = (0, import_html_element.htmlElement)(
+	      options.document,
+	      "div",
+	      "ldp-unwanted-topic-filter-help-row"
+	    );
+	    helpRow.append(this.#lookupStatus, regexLabel), this.#results = (0, import_html_element.htmlElement)(
 	      options.document,
 	      "div",
 	      "ldp-unwanted-topic-filter-results"
-	    ), this.#results.setAttribute("role", "listbox"), add.append(addControls, this.#lookupStatus, this.#results), content.append(activeHead, this.#cards, add), workbench.append(sidebar, content);
+	    ), this.#results.setAttribute("role", "listbox"), add.append(addControls, helpRow, this.#results), content.append(activeHead, this.#cards, add), workbench.append(sidebar, content);
 	    const footer = (0, import_html_element.htmlElement)(
 	      options.document,
 	      "footer",
@@ -4156,7 +4392,7 @@ runtime.register("src/collection/reader-unwanted-topic-filter-editor.js", functi
 	    this.#addButton.disabled = !valid, this.#lookupStatus.textContent = input ? valid ? "规则格式有效，可添加到当前草稿。" : "正则表达式无效，请检查斜杠、标志或括号。" : "输入字符后添加；正则使用 /表达式/标志 形式。";
 	  }
 	}
-}, "70d4847c9ae053c42760eadfb2b4670fdd4633d12986865b327060ca2c362365");
+}, "38c90fd418505130e60e7f5f86432282f0ce6312d5095e87ee37be0812ca2997");
 
 /* Source: lite/src/collection/reader-unwanted-topic-filter.ts */
 runtime.register("src/collection/reader-unwanted-topic-filter.js", function(module, exports, require) {
@@ -6361,6 +6597,7 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	  discourseNativeFollowRoute: () => discourseNativeFollowRoute,
 	  discourseNativeHostRouteRefresh: () => discourseNativeHostRouteRefresh,
 	  discourseNativeIconRenderer: () => discourseNativeIconRenderer,
+	  discourseNativeInitialCurrentUsername: () => discourseNativeInitialCurrentUsername,
 	  discourseNativeJqueryModule: () => discourseNativeJqueryModule,
 	  discourseNativeMenuCloser: () => discourseNativeMenuCloser,
 	  discourseNativePostAdminMenu: () => discourseNativePostAdminMenu,
@@ -6782,7 +7019,8 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	}
 	function discourseNativeCurrentUser(host) {
 	  const serviceUser = host.lookup("service:current-user");
-	  if (serviceUser) return serviceUser;
+	  if (String(nativeModelValue(serviceUser, "username") ?? "").trim())
+	    return serviceUser;
 	  const userModule = (0, import_value_record.valueRecord)(host.lookupModule("discourse/models/user"));
 	  for (const owner of [(0, import_value_record.valueRecord)(userModule?.default), userModule]) {
 	    const current = owner?.current;
@@ -6793,7 +7031,7 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	      } catch {
 	      }
 	  }
-	  return null;
+	  return serviceUser ?? null;
 	}
 	function discourseNativeCurrentUserBindingAvailable(host) {
 	  const currentUser = host.lookup("service:current-user");
@@ -6808,6 +7046,25 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	      "username"
 	    ) ?? ""
 	  ).trim();
+	}
+	function discourseNativeInitialCurrentUsername(host) {
+	  const current = discourseNativeCurrentUsername(host);
+	  if (current) return current;
+	  const module2 = (0, import_value_record.valueRecord)(
+	    host.lookupModule("discourse/lib/preload-store")
+	  );
+	  for (const owner of [(0, import_value_record.valueRecord)(module2?.default), module2]) {
+	    const get = owner?.get;
+	    if (typeof get == "function")
+	      try {
+	        const preloaded = get.call(owner, "currentUser"), username = String(
+	          nativeModelValue(preloaded, "username") ?? ""
+	        ).trim();
+	        if (username) return username;
+	      } catch {
+	      }
+	  }
+	  return "";
 	}
 	function discourseNativeSiteLogoUrl(host, baseUrl, fallbackCandidates = []) {
 	  const settings = (0, import_value_record.objectRecord)(host.lookup("service:site-settings")), candidates = [
@@ -6944,7 +7201,7 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	    }
 	  });
 	}
-	function discourseNativePostAdminMenu(host) {
+	function discourseNativePostAdminMenu(host, options = {}) {
 	  return Object.freeze({
 	    async show(anchor, post, scheduleRerender) {
 	      const menu = (0, import_value_record.objectRecord)(host.lookup("service:menu")), component = (0, import_value_record.objectRecord)(
@@ -6958,6 +7215,16 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	        component,
 	        modalForMobile: !0,
 	        autofocus: !0,
+	        ...options.computePosition ? {
+	          strategy: "fixed",
+	          fallbackPlacements: Object.freeze([
+	            "right-start",
+	            "left-start",
+	            "right-end",
+	            "left-end"
+	          ]),
+	          computePosition: (content) => options.computePosition?.(anchor, content)
+	        } : {},
 	        data: Object.freeze({
 	          post,
 	          changeNotice: topicAction("changeNotice"),
@@ -7572,7 +7839,7 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	    return this.#container = urlContainer ?? fallbackContainer, this.#container;
 	  }
 	}
-}, "3d1708585681408c6a29500e00fa41a2536188018206c1e44cc3c84fc84ee571");
+}, "b1692ff3151f3c4ea4ff4e7d17999c87a45e84aa11d07134e5583dc2633f6abc");
 
 /* Source: lite/src/discourse/native-message-bus.ts */
 runtime.register("src/discourse/native-message-bus.js", function(module, exports, require) {
@@ -8201,9 +8468,32 @@ runtime.register("src/discourse/native-request-descriptors.js", function(module,
 	      [nativeMutationDescriptorBrand]: !0
 	    });
 	    return nativeMutationDescriptors.add(descriptor), descriptor;
+	  },
+	  topicSummary(input) {
+	    const topicId = (0, import_identifiers.discourseTopicId)(input.topicId), descriptor = Object.freeze({
+	      operation: "topic-summary",
+	      path: `${discourseBasePath(input.basePath)}/discourse-ai/summarization/t/${topicId}`,
+	      method: "POST",
+	      headers: Object.freeze({ Accept: "application/json" }),
+	      data: Object.freeze({}),
+	      [nativeMutationDescriptorBrand]: !0
+	    });
+	    return nativeMutationDescriptors.add(descriptor), descriptor;
+	  },
+	  topicSummaryImageUpload(input) {
+	    const descriptor = Object.freeze({
+	      operation: "topic-summary-image-upload",
+	      path: `${discourseBasePath(input.basePath)}/uploads.json`,
+	      method: "POST",
+	      headers: Object.freeze({ Accept: "application/json" }),
+	      data: input.formData,
+	      multipart: !0,
+	      [nativeMutationDescriptorBrand]: !0
+	    });
+	    return nativeMutationDescriptors.add(descriptor), descriptor;
 	  }
 	});
-}, "921bba71979f25d4c7bcf7b1dfbaa8354e25d7c589db3d7addfadca0a3ec858d");
+}, "e02199ee304a9a30932ed0e49eb4cc80be4143f88d9fc516734cd45b70331918");
 
 /* Source: lite/src/discourse/native-topic-notification-action.ts */
 runtime.register("src/discourse/native-topic-notification-action.js", function(module, exports, require) {
@@ -8883,6 +9173,79 @@ runtime.register("src/discourse/reader-native-composer-window.js", function(modu
 	  }
 	}
 }, "7d6bc57aadd215f81aea59593a589569369ea0826545f18133f7b4fc44597805");
+
+/* Source: lite/src/discourse/reader-native-post-admin-menu.ts */
+runtime.register("src/discourse/reader-native-post-admin-menu.js", function(module, exports, require) {
+	var reader_native_post_admin_menu_exports = {};
+	__export(reader_native_post_admin_menu_exports, {
+	  positionReaderNativePostAdminMenu: () => positionReaderNativePostAdminMenu
+	});
+	module.exports = __toCommonJS(reader_native_post_admin_menu_exports);
+	var import_reader_native_composer_window = require("./reader-native-composer-window.js");
+	const ADMIN_MENU_SELECTOR = '.fk-d-menu[data-identifier="admin-post-menu"]', ADMIN_MENU_GAP_PX = 8, ADMIN_MENU_BOUNDARY_PADDING_PX = 8, ADMIN_MENU_FALLBACK_WIDTH_PX = 240, ADMIN_MENU_FALLBACK_HEIGHT_PX = 48;
+	function positive(value, fallback) {
+	  return Number.isFinite(value) && value > 0 ? value : fallback;
+	}
+	function clamp(value, minimum, maximum) {
+	  return Math.max(minimum, Math.min(maximum, value));
+	}
+	function positionReaderNativePostAdminMenu(options) {
+	  const { document, reader, anchor, content } = options, surface = content.closest(ADMIN_MENU_SELECTOR);
+	  if (!surface || !surface.isConnected || !reader.isConnected || !anchor.isConnected) return !1;
+	  surface.dataset.ldpReaderAdminMenu = "positioned";
+	  const topLayer = options.topLayer ?? (0, import_reader_native_composer_window.readerNativeTopLayerPort)();
+	  if (!surface.hasAttribute("popover")) {
+	    surface.setAttribute("popover", "manual"), surface.dataset.ldpReaderTopLayer = "portal";
+	    try {
+	      topLayer.show(surface);
+	    } catch {
+	    }
+	    topLayer.isOpen(surface) || (surface.removeAttribute("popover"), delete surface.dataset.ldpReaderTopLayer);
+	  }
+	  const viewport = document.documentElement, readerRect = reader.getBoundingClientRect(), anchorRect = anchor.getBoundingClientRect(), surfaceRect = surface.getBoundingClientRect(), viewportWidth = positive(
+	    viewport.clientWidth,
+	    positive(document.defaultView?.innerWidth ?? 0, readerRect.right)
+	  ), viewportHeight = positive(
+	    viewport.clientHeight,
+	    positive(document.defaultView?.innerHeight ?? 0, readerRect.bottom)
+	  ), readerLeft = readerRect.width > 0 ? readerRect.left : 0, readerRight = readerRect.width > 0 ? readerRect.right : viewportWidth, readerTop = readerRect.height > 0 ? readerRect.top : 0, readerBottom = readerRect.height > 0 ? readerRect.bottom : viewportHeight, leftBound = Math.max(
+	    ADMIN_MENU_BOUNDARY_PADDING_PX,
+	    readerLeft + ADMIN_MENU_BOUNDARY_PADDING_PX
+	  ), rightBound = Math.max(
+	    leftBound,
+	    Math.min(
+	      viewportWidth - ADMIN_MENU_BOUNDARY_PADDING_PX,
+	      readerRight - ADMIN_MENU_BOUNDARY_PADDING_PX
+	    )
+	  ), topBound = Math.max(
+	    ADMIN_MENU_BOUNDARY_PADDING_PX,
+	    readerTop + ADMIN_MENU_BOUNDARY_PADDING_PX
+	  ), bottomBound = Math.max(
+	    topBound,
+	    Math.min(
+	      viewportHeight - ADMIN_MENU_BOUNDARY_PADDING_PX,
+	      readerBottom - ADMIN_MENU_BOUNDARY_PADDING_PX
+	    )
+	  ), width = Math.min(
+	    positive(surfaceRect.width, ADMIN_MENU_FALLBACK_WIDTH_PX),
+	    Math.max(1, rightBound - leftBound)
+	  ), height = Math.min(
+	    positive(surfaceRect.height, ADMIN_MENU_FALLBACK_HEIGHT_PX),
+	    Math.max(1, bottomBound - topBound)
+	  ), rightCandidate = anchorRect.right + ADMIN_MENU_GAP_PX, leftCandidate = anchorRect.left - ADMIN_MENU_GAP_PX - width, left = rightCandidate + width <= rightBound ? rightCandidate : leftCandidate >= leftBound ? leftCandidate : clamp(anchorRect.left, leftBound, Math.max(leftBound, rightBound - width)), top = clamp(
+	    anchorRect.top,
+	    topBound,
+	    Math.max(topBound, bottomBound - height)
+	  );
+	  return surface.style.setProperty(
+	    "--ldp-reader-admin-menu-left",
+	    `${Math.round(left)}px`
+	  ), surface.style.setProperty(
+	    "--ldp-reader-admin-menu-top",
+	    `${Math.round(top)}px`
+	  ), !0;
+	}
+}, "0be025740cd022ddac5632878106f27ed3be3d12861f238973a0ac991a6058cd");
 
 /* Source: lite/src/history/reader-chronicle-repository.ts */
 runtime.register("src/history/reader-chronicle-repository.js", function(module, exports, require) {
@@ -15330,7 +15693,8 @@ runtime.register("src/network/discourse-native-read-transport.js", function(modu
 	  const path = nativePath(input.path, origin), options = {
 	    type: input.method,
 	    ...input.headers && Object.keys(input.headers).length ? { headers: { ...input.headers } } : {},
-	    ...input.data === void 0 ? {} : { data: { ...input.data } },
+	    ...input.data === void 0 ? {} : { data: input.multipart ? input.data : { ...input.data } },
+	    ...input.multipart ? { processData: !1, contentType: !1 } : {},
 	    ...input.noStore ? { cache: !1 } : {}
 	  };
 	  let pending;
@@ -15404,11 +15768,12 @@ runtime.register("src/network/discourse-native-read-transport.js", function(modu
 	      signal: input.signal,
 	      headers: input.descriptor.headers,
 	      data: input.descriptor.data,
+	      multipart: input.descriptor.multipart === !0,
 	      noStore: !0
 	    });
 	  }
 	}
-}, "a7a4d027801b7432b77f7a2d3f4f92ad75d122130f406d8ebd37d141d829b3d5");
+}, "f7a36c4992ee35870fd61e99a2b31a5eef89e31eecf72338f77e8a4f07d70e59");
 
 /* Source: lite/src/network/domain-request-gateway.ts */
 runtime.register("src/network/domain-request-gateway.js", function(module, exports, require) {
@@ -17576,11 +17941,26 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  readerNotificationRequestCanAutoRetry: () => readerNotificationRequestCanAutoRetry
 	});
 	module.exports = __toCommonJS(reader_notification_controller_exports);
-	var import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_reader_collection_filter_model = require("../collection/reader-collection-filter-model.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_notification_action_feature_commands = require("../post/notification-action-feature-commands.js"), import_reader_search = require("../search/reader-search.js"), import_reader_notification_model = require("./reader-notification-model.js");
-	const DEFAULT_MAX_CACHED_PAGES = 32, DEFAULT_LIVE_REFRESH_DELAY_MS = 240, DEFAULT_RETRY_DELAY_MS = 600, DEFAULT_OPEN_REVALIDATE_MS = 30 * 6e4, DEFAULT_NATIVE_POLL_INTERVAL_MS = 30 * 6e4, DEFAULT_SYNTHETIC_POLL_INTERVAL_MS = 30 * 6e4, DEFAULT_HISTORY_STEP_DELAY_MS = 250, DEFAULT_HISTORY_RETRY_DELAY_MS = 15e3, READER_NOTIFICATION_REACTION_LIKE_GROUPS = Object.freeze([
+	var import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_reader_collection_filter_model = require("../collection/reader-collection-filter-model.js"), import_reader_collection_hydration = require("../collection/reader-collection-hydration.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_notification_action_feature_commands = require("../post/notification-action-feature-commands.js"), import_reader_search = require("../search/reader-search.js"), import_reader_notification_model = require("./reader-notification-model.js");
+	const DEFAULT_MAX_CACHED_PAGES = 32, DEFAULT_LIVE_REFRESH_DELAY_MS = 240, DEFAULT_RETRY_DELAY_MS = 600, DEFAULT_OPEN_REVALIDATE_MS = 30 * 6e4, DEFAULT_NATIVE_POLL_INTERVAL_MS = 30 * 6e4, DEFAULT_SYNTHETIC_POLL_INTERVAL_MS = 30 * 6e4, DEFAULT_HISTORY_STEP_DELAY_MS = 250, DEFAULT_HISTORY_RETRY_DELAY_MS = 15e3, LEGACY_USER_ACTION_PAGE_SIZE = 30, HISTORY_PROJECTION_BATCH_PAGES = 4, VISIBLE_HISTORY_LEASE_ROUNDS = 2, READER_NOTIFICATION_REACTION_LIKE_GROUPS = Object.freeze([
 	  "likes",
 	  "reactions"
 	]);
+	function notificationProjectionCheckpointNeedsRepair(group, snapshot) {
+	  const descriptor = (0, import_reader_notification_model.readerNotificationGroup)(group);
+	  if (!snapshot.complete || descriptor.source !== "user-actions" || snapshot.sourceOffset === void 0) return !1;
+	  const sourcePageSize = Math.max(
+	    1,
+	    Math.floor(Number(snapshot.sourcePageSize ?? descriptor.pageSize) || 0)
+	  ), sourceNextPage = Math.max(
+	    0,
+	    Math.floor(Number(snapshot.sourceNextPage) || 0)
+	  ), sourceOffset = Math.max(
+	    0,
+	    Math.floor(Number(snapshot.sourceOffset) || 0)
+	  ), minimumCompleteRecords = Math.max(0, sourceOffset - sourcePageSize);
+	  return sourceNextPage > 1 && snapshot.records.length < minimumCompleteRecords;
+	}
 	function readerNotificationRequestCanAutoRetry(cause) {
 	  const source = cause !== null && typeof cause == "object" ? cause : Object.freeze({}), status = Number(source.status ?? 0);
 	  if (status === 429) return !1;
@@ -17635,6 +18015,8 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  #historyStepDelayMs;
 	  #historyRetryDelayMs;
 	  #visibleHistoryConcurrency;
+	  #historyCoordination;
+	  #historyCoordinationKey;
 	  #retryDelayMs;
 	  #delay;
 	  #schedule;
@@ -17643,6 +18025,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  #activity;
 	  #searchForms;
 	  #onError;
+	  #historyAbort;
 	  #pages = /* @__PURE__ */ new Map();
 	  #taxonomyFlights = /* @__PURE__ */ new Map();
 	  #historyRecords = /* @__PURE__ */ new Map();
@@ -17685,6 +18068,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  #error = null;
 	  #unreadCount = 0;
 	  #revision = 0;
+	  #snapshotCache = null;
 	  #loadEpoch = 0;
 	  #navigationEpoch = 0;
 	  #selectionFlight = null;
@@ -17706,6 +18090,8 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  #backgroundCacheActive = !1;
 	  #backgroundRestore = null;
 	  #projectionPersistAfterRestore = /* @__PURE__ */ new Set();
+	  #projectionCheckpointReplacements = /* @__PURE__ */ new Set();
+	  #historyInFlightGroups = /* @__PURE__ */ new Set();
 	  #nativeRefreshPending = !1;
 	  #nativeChangePending = !1;
 	  #nativeChangeEpoch = 0;
@@ -17732,7 +18118,9 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      options.historyRetryDelayMs ?? DEFAULT_HISTORY_RETRY_DELAY_MS
 	    ), this.#visibleHistoryConcurrency = Number(
 	      options.visibleHistoryConcurrency ?? 1
-	    );
+	    ), this.#historyCoordination = options.historyCoordination, this.#historyCoordinationKey = String(
+	      options.historyCoordinationKey ?? ""
+	    ).trim();
 	    for (const [label, value] of [
 	      ["通知打开回查间隔", this.#openRevalidateMs],
 	      ["原生通知轮询间隔", this.#nativePollIntervalMs],
@@ -17757,24 +18145,28 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	        markRead: (notificationId) => this.#commitRead(notificationId),
 	        refresh: () => this.refresh()
 	      }
-	    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.scope.add(this.#native.subscribeChanged(() => {
+	    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#historyAbort = this.scope.abortController(
+	      new Error("通知历史采集已关闭")
+	    ), this.scope.add(this.#native.subscribeChanged(() => {
 	      this.#onNativeChanged();
 	    })), this.#native.subscribeClicked && this.scope.add(this.#native.subscribeClicked((click) => {
 	      this.#onNativeClicked(click);
 	    })), this.#activity && this.scope.add(this.#activity.subscribe(() => {
 	      this.#onActivityChanged();
 	    })), this.scope.add(() => {
-	      this.#loadEpoch += 1, this.#navigationEpoch += 1, this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#poll !== null && this.#cancel(this.#poll), this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#poll = null, this.#historySchedule = null, this.#historyEpoch += 1, this.#backgroundWarm = null, this.#backgroundWarmEpoch += 1, this.#backgroundCacheActive = !1, this.#backgroundRestore = null, this.#projectionPersistAfterRestore.clear(), this.#taxonomyFlights.clear(), this.#pages.clear(), this.#historyRecords.clear(), this.#lastAuthoritativeAt.clear(), this.#readRecordKeys.clear(), this.changes.clear();
+	      this.#loadEpoch += 1, this.#navigationEpoch += 1, this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#poll !== null && this.#cancel(this.#poll), this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#poll = null, this.#historySchedule = null, this.#historyEpoch += 1, this.#historyInFlightGroups.clear(), this.#backgroundWarm = null, this.#backgroundWarmEpoch += 1, this.#backgroundCacheActive = !1, this.#backgroundRestore = null, this.#projectionPersistAfterRestore.clear(), this.#taxonomyFlights.clear(), this.#pages.clear(), this.#historyRecords.clear(), this.#lastAuthoritativeAt.clear(), this.#readRecordKeys.clear(), this.changes.clear();
 	    });
 	  }
 	  get snapshot() {
+	    if (this.#snapshotCache?.revision === this.#revision)
+	      return this.#snapshotCache;
 	    const totalPages = this.#hasLocalFilters() ? Math.max(1, Math.ceil(this.#matchingRecords().length / (0, import_reader_notification_model.readerNotificationGroup)(this.#group).pageSize)) : Math.max(
 	      1,
 	      Math.ceil(
 	        this.#total / (0, import_reader_notification_model.readerNotificationGroup)(this.#group).pageSize
 	      )
 	    );
-	    return Object.freeze({
+	    return this.#snapshotCache = Object.freeze({
 	      open: this.#open,
 	      mode: this.#mode,
 	      group: this.#group,
@@ -17801,7 +18193,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      error: this.#error,
 	      history: this.#historySnapshot(),
 	      revision: this.#revision
-	    });
+	    }), this.#snapshotCache;
 	  }
 	  cacheStats() {
 	    const indexedRecords = [...this.#historyRecords.values()].reduce(
@@ -17862,67 +18254,70 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      this.#historyError = null, this.#historyRetryAt = null, this.#historyLoading || (this.#historyStatus = "idle", this.#historyCurrentGroup = null), this.#emit(), this.#scheduleHistoryHydration(0);
 	    }
 	  }
-	  async #restoreBackgroundProjections() {
+	  async #restoreBackgroundProjections(fresh = !1) {
 	    if (!this.#projection || this.scope.destroyed) return;
 	    const restored = await Promise.all(
 	      import_reader_notification_model.READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.map(async (group) => {
 	        try {
 	          return Object.freeze({
 	            group,
-	            snapshot: await this.#projection.read(group)
+	            snapshot: await this.#projection.read(
+	              group,
+	              fresh ? { fresh: !0 } : void 0
+	            )
 	          });
 	        } catch (cause) {
 	          return this.#onError(cause), Object.freeze({ group, snapshot: null });
 	        }
 	      })
 	    );
-	    if (!this.scope.destroyed) {
-	      for (const { group, snapshot } of restored) {
-	        if (!snapshot) continue;
-	        const state = this.#historyGroups.get(group);
-	        state.retryAt = null, state.error = null, this.#rememberProjectionRecords(group, snapshot.records);
-	        const records = /* @__PURE__ */ new Map();
-	        for (const record of snapshot.records)
-	          records.set(record.identity, record);
-	        for (const record of this.#historyRecords.get(group)?.values() ?? [])
-	          records.set(record.identity, record);
-	        this.#historyRecords.set(group, records), state.estimatedPages = Math.max(
-	          state.estimatedPages,
-	          Math.max(
-	            1,
-	            Math.ceil(
-	              Math.max(snapshot.totalHint, records.size) / (0, import_reader_notification_model.readerNotificationGroup)(group).pageSize
-	            )
+	    if (this.scope.destroyed) return;
+	    const checkpointRepairs = [];
+	    for (const { group, snapshot } of restored) {
+	      if (!snapshot) continue;
+	      const state = this.#historyGroups.get(group), repairCheckpoint = notificationProjectionCheckpointNeedsRepair(group, snapshot);
+	      state.retryAt = null, state.error = null, this.#rememberProjectionRecords(group, snapshot.records);
+	      const records = /* @__PURE__ */ new Map();
+	      for (const record of snapshot.records)
+	        records.set(record.identity, record);
+	      for (const record of this.#historyRecords.get(group)?.values() ?? [])
+	        records.set(record.identity, record);
+	      this.#historyRecords.set(group, records), state.estimatedPages = Math.max(
+	        state.estimatedPages,
+	        repairCheckpoint ? Math.max(1, Math.floor(Number(snapshot.sourceNextPage) || 0)) : 1,
+	        Math.max(
+	          1,
+	          Math.ceil(
+	            Math.max(snapshot.totalHint, records.size) / (0, import_reader_notification_model.readerNotificationGroup)(group).pageSize
 	          )
+	        )
+	      );
+	      const expectedSourcePageSize = (0, import_reader_notification_model.readerNotificationGroup)(group).pageSize, resumed = (0, import_reader_collection_hydration.readerCollectionResumePosition)(
+	        snapshot,
+	        expectedSourcePageSize,
+	        (0, import_reader_notification_model.readerNotificationGroup)(group).source === "user-actions" ? LEGACY_USER_ACTION_PAGE_SIZE : expectedSourcePageSize
+	      ), sourceNextPage = snapshot.complete ? Math.max(0, Math.floor(Number(snapshot.sourceNextPage ?? 0))) : resumed.page;
+	      state.nextPage = repairCheckpoint ? 0 : sourceNextPage, state.pages.clear();
+	      for (let page = 0; page < state.nextPage; page += 1)
+	        state.pages.add(page);
+	      if (state.terminalPage = null, state.complete = !1, (!snapshot.complete || repairCheckpoint) && state.nextPage > 0 && (state.estimatedPages = Math.max(
+	        state.estimatedPages,
+	        state.nextPage + 1
+	      )), snapshot.complete && !repairCheckpoint) {
+	        const completedPages = Math.max(
+	          1,
+	          sourceNextPage > 0 ? sourceNextPage : state.estimatedPages
 	        );
-	        const expectedSourcePageSize = (0, import_reader_notification_model.readerNotificationGroup)(group).pageSize, sourcePageSizeCompatible = snapshot.sourcePageSize === expectedSourcePageSize, sourceNextPage = Math.max(
-	          0,
-	          Math.floor(Number(
-	            snapshot.complete || sourcePageSizeCompatible ? snapshot.sourceNextPage ?? 0 : 0
-	          ))
-	        );
-	        state.nextPage = sourceNextPage, state.pages.clear();
-	        for (let page = 0; page < sourceNextPage; page += 1)
+	        state.complete = !0, state.estimatedPages = completedPages, state.nextPage = completedPages, state.terminalPage = completedPages - 1, state.pages.clear();
+	        for (let page = 0; page < completedPages; page += 1)
 	          state.pages.add(page);
-	        if (!snapshot.complete && sourceNextPage > 0 && (state.estimatedPages = Math.max(
-	          state.estimatedPages,
-	          sourceNextPage + 1
-	        )), snapshot.complete) {
-	          const completedPages = Math.max(
-	            1,
-	            sourceNextPage > 0 ? sourceNextPage : state.estimatedPages
-	          );
-	          state.complete = !0, state.estimatedPages = completedPages, state.nextPage = completedPages, state.terminalPage = completedPages - 1, state.pages.clear();
-	          for (let page = 0; page < completedPages; page += 1)
-	            state.pages.add(page);
-	        }
-	        for (const entry of this.#pages.values())
-	          entry.page.group === group && this.#indexHistoryPage(entry.page);
-	      }
-	      this.#refreshAggregateHistoryPages(), this.#historyStatus = [...this.#historyGroups.values()].every(
-	        (state) => state.complete
-	      ) ? "complete" : "idle", this.#historyCurrentGroup = null, this.#historyError = null, this.#historyRetryAt = null, this.#raiseUnreadCountForCachedRecords(), this.#open && this.#pages.has(pageKey(this.#group, this.#page)) ? this.#renderFromCache() : this.#emit();
+	      } else repairCheckpoint && (this.#projectionCheckpointReplacements.add(group), checkpointRepairs.push(group));
+	      for (const entry of this.#pages.values())
+	        entry.page.group === group && this.#indexHistoryPage(entry.page);
 	    }
+	    this.#refreshAggregateHistoryPages(), this.#historyStatus = [...this.#historyGroups.values()].every(
+	      (state) => state.complete
+	    ) ? "complete" : "idle", this.#historyCurrentGroup = null, this.#historyError = null, this.#historyRetryAt = null, checkpointRepairs.length && await Promise.all(checkpointRepairs.map((group) => this.#persistProjection(group))), this.#raiseUnreadCountForCachedRecords(), this.#open && this.#pages.has(pageKey(this.#group, this.#page)) ? this.#renderFromCache() : this.#emit();
 	  }
 	  /** WebDAV 只同步逐条历史投影；原生通知 ID 与已读状态仍由 Discourse 裁决。 */
 	  syncHistoryRecords() {
@@ -17977,7 +18372,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    });
 	  }
 	  #resetHistoryHydration() {
-	    this.#historyEpoch += 1, this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#historySchedule = null, this.#historyLoading = !1, this.#historyCursor = 0, this.#historyStatus = "idle", this.#historyCurrentGroup = null, this.#historyError = null, this.#historyRetryAt = null, this.#historyRecords.clear();
+	    this.#historyEpoch += 1, this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#historySchedule = null, this.#historyLoading = !1, this.#historyInFlightGroups.clear(), this.#historyCursor = 0, this.#historyStatus = "idle", this.#historyCurrentGroup = null, this.#historyError = null, this.#historyRetryAt = null, this.#historyRecords.clear();
 	    for (const state of this.#historyGroups.values())
 	      state.pages.clear(), state.nextPage = 0, state.terminalPage = null, state.estimatedPages = 1, state.complete = !1, state.retryAt = null, state.error = null;
 	  }
@@ -18529,11 +18924,10 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    })), this.#indexHistoryPage(inherited), inherited.group !== "all" && this.#refreshAggregateHistoryPages(), this.#trimCachedPages(), persist && (this.#persistProjection(page.group), import_reader_notification_model.READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.includes(page.group) && this.#persistProjection("all"));
 	  }
 	  #persistProjection(group) {
-	    if (!this.#projection || group === "reactionLikes") return;
-	    if (this.#backgroundRestore !== null) {
-	      this.#projectionPersistAfterRestore.add(group);
-	      return;
-	    }
+	    if (!this.#projection || group === "reactionLikes")
+	      return Promise.resolve();
+	    if (this.#backgroundRestore !== null)
+	      return this.#projectionPersistAfterRestore.add(group), Promise.resolve();
 	    const prefix = `${group}:`, byIdentity = /* @__PURE__ */ new Map();
 	    for (const record of this.#projectionRecords.get(group)?.values() ?? [])
 	      byIdentity.set(record.identity, record);
@@ -18558,14 +18952,20 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    const totalHint = cachedPages.reduce(
 	      (total, page) => Math.max(total, page.total),
 	      committedRecords.length
-	    );
-	    this.#projection.write(group, committedRecords, {
+	    ), replaceCheckpoint = this.#projectionCheckpointReplacements.has(group);
+	    return this.#projection.write(group, committedRecords, {
 	      mergeStored: !exactReplacement,
 	      totalHint,
 	      complete,
 	      updatedAt: this.#now(),
+	      checkpointMode: replaceCheckpoint ? "replace" : "advance",
 	      ...state ? { sourceNextPage: state.nextPage } : {},
-	      ...state ? { sourcePageSize: (0, import_reader_notification_model.readerNotificationGroup)(group).pageSize } : {}
+	      ...state ? { sourcePageSize: (0, import_reader_notification_model.readerNotificationGroup)(group).pageSize } : {},
+	      ...state ? {
+	        sourceOffset: state.nextPage * (0, import_reader_notification_model.readerNotificationGroup)(group).pageSize
+	      } : {}
+	    }).then(() => {
+	      replaceCheckpoint && this.#projectionCheckpointReplacements.delete(group);
 	    }).catch(this.#onError);
 	  }
 	  #rememberProjectionRecords(group, records) {
@@ -19002,9 +19402,6 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  #historyContinuationDelay() {
 	    return this.#open && this.#visibleHistoryConcurrency > 1 ? 0 : this.#historyStepDelayMs;
 	  }
-	  #historyBatchSize() {
-	    return this.#open ? this.#visibleHistoryConcurrency : 1;
-	  }
 	  #historyHasReadyGroup(now = this.#now()) {
 	    return [...this.#historyGroups.values()].some((state) => !state.complete && (state.retryAt === null || state.retryAt <= now));
 	  }
@@ -19024,26 +19421,36 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    let lastIndex = -1;
 	    for (let offset = 0; offset < import_reader_notification_model.READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.length; offset += 1) {
 	      const index = (this.#historyCursor + offset) % import_reader_notification_model.READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.length, group = import_reader_notification_model.READER_NOTIFICATION_AGGREGATE_GROUP_ORDER[index], state = this.#historyGroups.get(group);
-	      if (!(state.complete || state.retryAt !== null && state.retryAt > this.#now()) && (state.retryAt = null, state.error = null, groups.push(group), lastIndex = index, groups.length >= limit))
+	      if (!(this.#historyInFlightGroups.has(group) || state.complete || state.retryAt !== null && state.retryAt > this.#now()) && (state.retryAt = null, state.error = null, groups.push(group), lastIndex = index, groups.length >= limit))
 	        break;
 	    }
 	    return lastIndex >= 0 && (this.#historyCursor = (lastIndex + 1) % import_reader_notification_model.READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.length), Object.freeze(groups);
 	  }
 	  async #hydrateHistoryGroup(group, epoch, visibleHistory) {
-	    const state = this.#historyGroups.get(group), page = state.nextPage;
+	    const state = this.#historyGroups.get(group), descriptor = (0, import_reader_notification_model.readerNotificationGroup)(group), pages = [state.nextPage];
+	    if (visibleHistory && descriptor.source === "user-actions") {
+	      const upperBound = Math.max(state.nextPage + 1, state.estimatedPages);
+	      for (let page = state.nextPage + 1; page < upperBound && pages.length < this.#visibleHistoryConcurrency; page += 1)
+	        state.pages.has(page) || pages.push(page);
+	    }
 	    try {
-	      let loaded = null;
-	      try {
-	        loaded = await this.#loadCachedRequestedPage(group, page);
-	      } catch (cause) {
-	        this.#onError(cause);
-	      }
+	      const loadedPages = await Promise.all(pages.map(async (page) => {
+	        let loaded = null;
+	        try {
+	          loaded = await this.#loadCachedRequestedPage(group, page);
+	        } catch (cause) {
+	          this.#onError(cause);
+	        }
+	        const cacheHit = loaded !== null;
+	        return loaded ??= await this.#loadRequestedPage(group, page, {
+	          history: !0,
+	          ...visibleHistory ? { visibleHistory: !0 } : {}
+	        }), Object.freeze({ page, loaded, cacheHit });
+	      }));
 	      if (this.scope.destroyed || epoch !== this.#historyEpoch) return null;
-	      const cacheHit = loaded !== null;
-	      return loaded || (loaded = await this.#loadRequestedPage(group, page, {
-	        history: !0,
-	        ...visibleHistory ? { visibleHistory: !0 } : {}
-	      })), this.scope.destroyed || epoch !== this.#historyEpoch ? null : (this.#cachePage(loaded), cacheHit || this.#queueTopicTaxonomyEnrichment([loaded], { history: !0 }), cacheHit);
+	      for (const result of loadedPages.sort((left, right) => left.page - right.page))
+	        state.terminalPage !== null && result.page > state.terminalPage || (this.#cachePage(result.loaded, this.#now(), !1), result.cacheHit || this.#queueTopicTaxonomyEnrichment([result.loaded], { history: !0 }));
+	      return (state.complete || state.nextPage % HISTORY_PROJECTION_BATCH_PAGES === 0) && await this.#persistProjection(group), loadedPages.every((result) => result.cacheHit);
 	    } catch (cause) {
 	      if (this.scope.destroyed || epoch !== this.#historyEpoch) return null;
 	      this.#onError(cause);
@@ -19068,8 +19475,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      this.#historyStatus = "paused", this.#historyCurrentGroup = null, this.#historyRetryAt = null, this.#emit(), this.#scheduleHistoryHydration(this.#historyStepDelayMs);
 	      return;
 	    }
-	    const groups = this.#nextHistoryGroups(this.#historyBatchSize());
-	    if (!groups.length) {
+	    if (!this.#historyHasReadyGroup()) {
 	      const complete2 = [...this.#historyGroups.values()].every(
 	        (state) => state.complete
 	      ), recovery2 = this.#historyRecoveryState();
@@ -19078,15 +19484,46 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      );
 	      return;
 	    }
-	    const epoch = this.#historyEpoch, visibleHistory = this.#open && this.#visibleHistoryConcurrency > 1;
-	    this.#historyLoading = !0, this.#historyStatus = "loading", this.#historyCurrentGroup = groups.length === 1 ? groups[0] : null;
+	    const epoch = this.#historyEpoch, visibleHistory = this.#open && this.#visibleHistoryConcurrency > 1, openAtStart = this.#open, concurrency = visibleHistory ? this.#visibleHistoryConcurrency : 1;
+	    this.#historyLoading = !0, this.#historyStatus = "loading", this.#historyCurrentGroup = null;
 	    const pendingRecovery = this.#historyRecoveryState();
 	    this.#historyError = pendingRecovery.error, this.#historyRetryAt = pendingRecovery.retryAt, this.#emit();
-	    let results = Object.freeze([]);
+	    const results = [], dirtyGroups = /* @__PURE__ */ new Set();
 	    try {
-	      results = await Promise.all(groups.map((group) => this.#hydrateHistoryGroup(group, epoch, visibleHistory)));
+	      await (0, import_reader_collection_hydration.runReaderCollectionHydrationLease)({
+	        coordination: this.#historyCoordination ?? null,
+	        token: this.#historyCoordinationKey,
+	        signal: this.#historyAbort.signal,
+	        onError: this.#onError,
+	        beforeRun: () => this.#restoreBackgroundProjections(!0),
+	        run: async () => {
+	          await (0, import_reader_collection_hydration.runReaderCollectionWorkers)({
+	            concurrency,
+	            maxTasks: visibleHistory ? concurrency * VISIBLE_HISTORY_LEASE_ROUNDS : 1,
+	            shouldContinue: () => !this.scope.destroyed && epoch === this.#historyEpoch && this.#open === openAtStart && !this.#loading && !this.#refreshing && !this.#retrying && !this.#markingAll && this.#selectionFlight === null && (!this.#activity || this.#activityVisible()),
+	            claim: () => {
+	              const group = this.#nextHistoryGroups(1)[0] ?? null;
+	              return group !== null && this.#historyInFlightGroups.add(group), group;
+	            },
+	            release: (group) => {
+	              this.#historyInFlightGroups.delete(group);
+	            },
+	            run: async (group) => {
+	              concurrency === 1 && (this.#historyCurrentGroup = group, this.#emit()), results.push(await this.#hydrateHistoryGroup(
+	                group,
+	                epoch,
+	                visibleHistory
+	              ));
+	              const state = this.#historyGroups.get(group);
+	              state.complete || state.nextPage % HISTORY_PROJECTION_BATCH_PAGES === 0 ? dirtyGroups.delete(group) : dirtyGroups.add(group), !(this.scope.destroyed || epoch !== this.#historyEpoch) && (this.#hasLocalFilters() && this.#open ? this.#renderFromCache() : this.#emit());
+	            }
+	          }), dirtyGroups.size && (await Promise.all([...dirtyGroups].map((group) => this.#persistProjection(group))), dirtyGroups.clear());
+	        }
+	      }) !== "producer" && !this.scope.destroyed && epoch === this.#historyEpoch && await this.#restoreBackgroundProjections(!0);
+	    } catch (cause) {
+	      !this.scope.destroyed && epoch === this.#historyEpoch && (this.#onError(cause), this.#historyError = cause, this.#historyRetryAt = this.#now() + this.#historyRetryDelayMs);
 	    } finally {
-	      this.#historyLoading = !1;
+	      this.#historyLoading = !1, this.#historyInFlightGroups.clear();
 	    }
 	    if (this.scope.destroyed || epoch !== this.#historyEpoch) return;
 	    const complete = [...this.#historyGroups.values()].every((candidate) => candidate.complete), recovery = this.#historyRecoveryState(), ready = this.#historyHasReadyGroup();
@@ -19197,10 +19634,10 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    }, refreshSelectedImmediately ? 0 : this.#liveRefreshDelayMs);
 	  }
 	  #emit() {
-	    this.#revision += 1, this.changes.emit(this.snapshot).forEach(this.#onError);
+	    this.#revision += 1, this.#snapshotCache = null, this.changes.emit(this.snapshot).forEach(this.#onError);
 	  }
 	}
-}, "917488354848a91e67fdc27bf1fc7a22cc529cfc10d2b8a6d1177a5f69b7b55f");
+}, "2124fe061c7e2813bc36cd47da57c2ac27c3ecb0deffd719a0c7ad8678e5de02");
 
 /* Source: lite/src/notification/reader-notification-model.ts */
 runtime.register("src/notification/reader-notification-model.js", function(module, exports, require) {
@@ -19864,6 +20301,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	  #filterDisclosure;
 	  #markAllHeaderActions;
 	  #scrollWindow;
+	  #recordNodes = new import_reader_collection_floating_window.ReaderCollectionNodeCache();
 	  #relativeTimer = null;
 	  #historyCacheCompleted = !1;
 	  constructor(options) {
@@ -19921,7 +20359,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    }), this.#bind(), this.#controller.changes.subscribe((snapshot) => {
 	      this.#render(snapshot);
 	    }, this.scope), this.scope.add(() => {
-	      this.#stopRelativeTimer(), this.#elements.list.replaceChildren();
+	      this.#stopRelativeTimer(), this.#recordNodes.clear(), this.#elements.list.replaceChildren();
 	    }), this.#render(this.#controller.snapshot);
 	  }
 	  destroy() {
@@ -20132,21 +20570,25 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	  #renderRecords(snapshot, records) {
 	    const list = this.#elements.list, scrollTop = list.scrollTop;
 	    if (snapshot.retrying && !records.length) {
+	      this.#recordNodes.clear();
 	      const message = this.#document.createElement("div");
 	      message.className = "ldp-notification-empty", message.textContent = "消息加载暂时中断，正在自动重试…", list.replaceChildren(message);
 	      return;
 	    }
 	    if (snapshot.loading && !records.length) {
+	      this.#recordNodes.clear();
 	      const message = this.#document.createElement("div");
 	      message.className = "ldp-notification-empty", message.textContent = "正在加载消息…", list.replaceChildren(message);
 	      return;
 	    }
 	    if (snapshot.error && !snapshot.stale && !records.length) {
+	      this.#recordNodes.clear();
 	      const message = this.#document.createElement("div");
 	      message.className = "ldp-notification-empty", message.textContent = "消息加载失败，请重试", list.replaceChildren(message);
 	      return;
 	    }
 	    if (!records.length) {
+	      this.#recordNodes.clear();
 	      const message = this.#document.createElement("div");
 	      message.className = "ldp-notification-empty", message.textContent = snapshot.query || snapshot.categoryFilter || snapshot.tagFilter || snapshot.dateFilter || snapshot.sortDirection !== "desc" ? "本地缓存中没有匹配消息" : "暂无消息", list.replaceChildren(message);
 	      return;
@@ -20156,23 +20598,34 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	      const label = dateGroup(record.createdAt, now), records2 = grouped.get(label) ?? [];
 	      records2.push(record), grouped.set(label, records2);
 	    }
-	    const fragment = this.#document.createDocumentFragment();
+	    const fragment = this.#document.createDocumentFragment(), renderedKeys = [];
 	    for (const [label, records2] of grouped) {
 	      const section = this.#document.createElement("section");
 	      section.className = "ldp-notification-date-group";
 	      const heading = this.#document.createElement("div");
 	      heading.className = "ldp-notification-date-label", heading.textContent = label, section.append(heading);
-	      for (const record of records2) section.append(this.#recordNode(record));
+	      for (const record of records2) {
+	        const marker = record.target ? this.#archiveMarker(
+	          record.target.topicId,
+	          record.target.postNumber
+	        ) : null, variant = marker ? `${marker.status}:${marker.topicTitle ?? ""}:${marker.postNumber ?? ""}` : "";
+	        renderedKeys.push(record.identity), section.append(this.#recordNodes.node(
+	          record.identity,
+	          record,
+	          variant,
+	          () => this.#recordNode(record, marker)
+	        ));
+	      }
 	      fragment.append(section);
 	    }
-	    list.replaceChildren(fragment), list.scrollTop = scrollTop;
+	    this.#recordNodes.prune(renderedKeys), list.replaceChildren(fragment), list.scrollTop = scrollTop;
 	  }
-	  #recordNode(record) {
+	  #recordNode(record, markerValue) {
 	    const item = this.#document.createElement("a");
 	    item.className = "ldp-notification-item ldp-notification-message-item";
 	    const unread = record.read === !1, readStateLabel = unread ? "未读" : "已读";
 	    item.classList.toggle("unread", unread), item.classList.toggle("read", !unread), item.dataset.notificationReadState = unread ? "unread" : "read", item.href = recordHref(record, this.#baseUrl), item.dataset.notificationSource = record.sourceNotificationId === null ? record.source : "notifications", item.dataset.notificationId = String(record.sourceNotificationId ?? 0), item.dataset.notificationKey = record.identity, item.dataset.readerTargetSource = record.source === "private-messages" ? "message" : "notification", item.dataset.readerTargetInterception = "off", item.dataset.ldpPreserveTargetPost = "1", record.target && (item.dataset.notificationTopicId = String(record.target.topicId), item.dataset.notificationPostNumber = String(record.target.postNumber));
-	    const archiveMarker = record.target ? this.#archiveMarker(record.target.topicId, record.target.postNumber) : null, archiveLabel = archiveMarker ? (0, import_reader_history_repository.readerHistoryArchiveMarkerLabel)(archiveMarker) : "";
+	    const archiveMarker = markerValue !== void 0 ? markerValue : record.target ? this.#archiveMarker(record.target.topicId, record.target.postNumber) : null, archiveLabel = archiveMarker ? (0, import_reader_history_repository.readerHistoryArchiveMarkerLabel)(archiveMarker) : "";
 	    archiveMarker && (item.dataset.localArchiveStatus = String(archiveMarker.status), item.dataset.localArchiveScope = archiveMarker.postNumber === null ? "topic" : "post");
 	    const avatarUrl = this.#avatarSource(record.avatarTemplate, 48);
 	    let avatar;
@@ -20253,7 +20706,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    this.#relativeTimer !== null && (this.#cancel(this.#relativeTimer), this.#relativeTimer = null);
 	  }
 	}
-}, "8de1ca80ff83d9e9d46d54e092d6f5a0a4df7c521d38465b12a8e2e6c8ef8ef2");
+}, "81b939d637c8e644b8e0c9803d798d3e1fc8525d732c18180fbfc4bb83e8dfc3");
 
 /* Source: lite/src/queue/reader-open-queue-session.ts */
 runtime.register("src/queue/reader-open-queue-session.js", function(module, exports, require) {
@@ -22433,18 +22886,75 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	  createReaderWebDavTranslationCacheCategoryPort: () => createReaderWebDavTranslationCacheCategoryPort,
 	  createReaderWebDavTranslationCategoryPort: () => createReaderWebDavTranslationCategoryPort,
 	  mergeReaderWebDavConnectHistoryValues: () => mergeReaderWebDavConnectHistoryValues,
-	  mergeReaderWebDavHistoryValues: () => mergeReaderWebDavHistoryValues
+	  mergeReaderWebDavHistoryValues: () => mergeReaderWebDavHistoryValues,
+	  readerWebDavActivityHistoryRecordMatchesSchema: () => readerWebDavActivityHistoryRecordMatchesSchema,
+	  readerWebDavBookmarkRecordMatchesSchema: () => readerWebDavBookmarkRecordMatchesSchema,
+	  readerWebDavConnectHistoryRecordMatchesSchema: () => readerWebDavConnectHistoryRecordMatchesSchema,
+	  readerWebDavCustomSiteRecordMatchesSchema: () => readerWebDavCustomSiteRecordMatchesSchema,
+	  readerWebDavHistoryRecordMatchesSchema: () => readerWebDavHistoryRecordMatchesSchema,
+	  readerWebDavNotificationHistoryRecordMatchesSchema: () => readerWebDavNotificationHistoryRecordMatchesSchema,
+	  readerWebDavPreferenceRecordMatchesSchema: () => readerWebDavPreferenceRecordMatchesSchema,
+	  readerWebDavQueueRecordMatchesSchema: () => readerWebDavQueueRecordMatchesSchema,
+	  readerWebDavTopicContextRecordMatchesSchema: () => readerWebDavTopicContextRecordMatchesSchema,
+	  readerWebDavTranslationCacheRecordMatchesSchema: () => readerWebDavTranslationCacheRecordMatchesSchema,
+	  readerWebDavTranslationRemoteValueMatchesSchema: () => readerWebDavTranslationRemoteValueMatchesSchema
 	});
 	module.exports = __toCommonJS(reader_webdav_category_ports_exports);
-	var import_identifiers = require("../discourse/identifiers.js"), import_reader_bookmark_model = require("../bookmark/reader-bookmark-model.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_notification_model = require("../notification/reader-notification-model.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_webdav_model = require("./reader-webdav-model.js"), import_reader_webdav_secret_codec = require("./reader-webdav-secret-codec.js"), import_reader_webdav_offline_topic_port = require("./reader-webdav-offline-topic-port.js"), import_reader_webdav_history_cache_port = require("./reader-webdav-history-cache-port.js");
+	var import_identifiers = require("../discourse/identifiers.js"), import_reader_bookmark_model = require("../bookmark/reader-bookmark-model.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_custom_site_repository = require("../site/reader-custom-site-repository.js"), import_reader_notification_model = require("../notification/reader-notification-model.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_webdav_model = require("./reader-webdav-model.js"), import_reader_webdav_secret_codec = require("./reader-webdav-secret-codec.js"), import_reader_webdav_offline_topic_port = require("./reader-webdav-offline-topic-port.js"), import_reader_webdav_history_cache_port = require("./reader-webdav-history-cache-port.js");
 	function record(value) {
 	  return value !== null && typeof value == "object" && !Array.isArray(value) ? value : null;
 	}
 	function localRecord(id, value) {
 	  return Object.freeze({ id, value });
 	}
+	function readerWebDavPreferenceRecordMatchesSchema(preferences, id, value, normalize) {
+	  if (!Object.hasOwn(preferences, id)) return !1;
+	  try {
+	    const normalized = normalize({
+	      ...preferences,
+	      [id]: value
+	    });
+	    return Object.hasOwn(normalized, id) && (0, import_reader_webdav_model.readerWebDavFingerprint)(normalized[id]) === (0, import_reader_webdav_model.readerWebDavFingerprint)(value);
+	  } catch {
+	    return !1;
+	  }
+	}
+	function readerWebDavTopicContextRecordMatchesSchema(id, value) {
+	  const source = record(value);
+	  return source ? id === "geometry" ? exactKeys(source, ["left", "top", "width", "height"]) && finiteNumber(source.left) && finiteNumber(source.top) && finiteNumber(source.width) && Number(source.width) > 0 && finiteNumber(source.height) && Number(source.height) > 0 : id.startsWith("view:") && id.length > 5 && exactKeys(source, [
+	    "at",
+	    "number",
+	    "scrollTop",
+	    "scrollLeft",
+	    "offset"
+	  ]) && finiteNonNegativeNumber(source.at) && positiveSafeInteger(source.number) && finiteNonNegativeNumber(source.scrollTop) && finiteNonNegativeNumber(source.scrollLeft) && finiteNumber(source.offset) : !1;
+	}
+	function readerWebDavCustomSiteRecordMatchesSchema(id, value) {
+	  if (typeof value != "string" || value !== id) return !1;
+	  const normalized = (0, import_reader_custom_site_repository.normalizeReaderCustomSiteHost)(value);
+	  return !!(normalized && normalized === value && !(0, import_reader_custom_site_repository.readerBuiltinDiscourseHost)(value));
+	}
 	function categoryPort(value) {
 	  return Object.freeze(value);
+	}
+	function exactKeys(value, keys) {
+	  const expected = new Set(keys);
+	  return Object.keys(value).length === expected.size && Object.keys(value).every((key) => expected.has(key));
+	}
+	function finiteNumber(value) {
+	  return typeof value == "number" && Number.isFinite(value);
+	}
+	function finiteNonNegativeNumber(value) {
+	  return finiteNumber(value) && value >= 0;
+	}
+	function positiveSafeInteger(value) {
+	  return typeof value == "number" && Number.isSafeInteger(value) && value > 0;
+	}
+	function canonicalRecordFieldsMatch(value, normalized, required, optional = []) {
+	  const source = record(value), canonical = record(normalized);
+	  if (!source || !canonical) return !1;
+	  const allowed = /* @__PURE__ */ new Set([...required, ...optional]);
+	  return required.some((key) => !Object.hasOwn(source, key)) || Object.keys(source).some((key) => !allowed.has(key)) ? !1 : Object.entries(source).every(([key, item]) => Object.hasOwn(canonical, key) && (0, import_reader_webdav_model.readerWebDavFingerprint)(item) === (0, import_reader_webdav_model.readerWebDavFingerprint)(canonical[key]));
 	}
 	function number(value, fallback = 0) {
 	  const numeric = Number(value);
@@ -22456,19 +22966,43 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	function historyValue(value) {
 	  return (0, import_reader_history_repository.normalizeReaderHistoryEntry)(value);
 	}
+	function readerWebDavHistoryRecordMatchesSchema(id, value) {
+	  const normalized = historyValue(value);
+	  return normalized !== null && String(normalized.topicId) === id && canonicalRecordFieldsMatch(value, normalized, [
+	    "topicId",
+	    "title",
+	    "postsCount",
+	    "avatarTemplate",
+	    "ownerUsername",
+	    "postNumber",
+	    "readPostNumbers",
+	    "firstViewedAt",
+	    "viewedAt"
+	  ], [
+	    "topicSubtitle",
+	    "categoryId",
+	    "categoryName",
+	    "tags",
+	    "viewport",
+	    "archiveStatus",
+	    "archivePostNumber"
+	  ]);
+	}
 	function mergeReaderWebDavHistoryValues(local, remote) {
 	  const left = historyValue(local), right = historyValue(remote);
 	  if (!left) return right;
 	  if (!right) return left;
-	  const recent = left.viewedAt >= right.viewedAt ? left : right, older = recent === left ? right : left, recentSource = record(recent === left ? local : remote), recentOwns = (key) => recentSource !== null && Object.hasOwn(recentSource, key), archived = recent.archiveStatus !== null ? recent : older;
+	  const recent = left.viewedAt >= right.viewedAt ? left : right, older = recent === left ? right : left, archived = recent.archiveStatus !== null ? recent : older;
 	  return Object.freeze({
 	    ...recent,
 	    postsCount: Math.max(left.postsCount, right.postsCount),
-	    topicSubtitle: recentOwns("topicSubtitle") ? recent.topicSubtitle : older.topicSubtitle,
-	    categoryId: recentOwns("categoryId") ? recent.categoryId : older.categoryId,
-	    categoryName: recentOwns("categoryName") ? recent.categoryName : older.categoryName,
-	    tags: recentOwns("tags") ? recent.tags : older.tags,
-	    viewport: recentOwns("viewport") ? recent.viewport : older.viewport,
+	    // 历史字段是观察快照；升级归一化会为旧记录补空值，空占位不能
+	    // 抹掉另一设备已经观察到的分类、标签或精确阅读锚点。
+	    topicSubtitle: recent.topicSubtitle || older.topicSubtitle,
+	    categoryId: recent.categoryId ?? older.categoryId,
+	    categoryName: recent.categoryName || older.categoryName,
+	    tags: recent.tags.length ? recent.tags : older.tags,
+	    viewport: recent.viewport ?? older.viewport,
 	    readPostNumbers: Object.freeze([.../* @__PURE__ */ new Set([
 	      ...left.readPostNumbers,
 	      ...right.readPostNumbers
@@ -22492,6 +23026,20 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    addedAt: Math.max(1, number(source.addedAt, 1)),
 	    pinned: source.pinned === !0
 	  });
+	}
+	function readerWebDavQueueRecordMatchesSchema(id, value) {
+	  const normalized = queueValue(value);
+	  return normalized !== null && String(normalized.topicId) === id && canonicalRecordFieldsMatch(value, normalized, [
+	    "topicId",
+	    "title",
+	    "href",
+	    "avatarTemplate",
+	    "avatarSource",
+	    "ownerUsername",
+	    "postNumber",
+	    "addedAt",
+	    "pinned"
+	  ]);
 	}
 	function mergeQueue(local, remote) {
 	  const left = queueValue(local), right = queueValue(remote);
@@ -22566,6 +23114,23 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    tags: value.tags
 	  });
 	}
+	function readerWebDavBookmarkRecordMatchesSchema(id, value) {
+	  const normalized = bookmarkValue(value), remote = normalized ? bookmarkRemoteValue(normalized) : null;
+	  return normalized !== null && normalized.identity === id && canonicalRecordFieldsMatch(value, remote, [
+	    "identity",
+	    "tab",
+	    "bookmarkId",
+	    "topicId",
+	    "postId",
+	    "postNumber",
+	    "title",
+	    "authorUsername",
+	    "avatarTemplate",
+	    "createdAt",
+	    "name",
+	    "highestPostNumber"
+	  ], ["categoryId", "categoryName", "tags"]);
+	}
 	function mergeBookmark(local, remote) {
 	  const left = bookmarkValue(local), right = bookmarkValue(remote);
 	  if (!left) return remote;
@@ -22631,6 +23196,29 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    categoryName: value.categoryName,
 	    tags: value.tags
 	  });
+	}
+	function readerWebDavActivityHistoryRecordMatchesSchema(id, value) {
+	  const normalized = activityHistoryValue(value);
+	  return normalized !== null && normalized.identity === id && canonicalRecordFieldsMatch(
+	    value,
+	    activityHistoryRemoteValue(normalized),
+	    [
+	      "identity",
+	      "tab",
+	      "topicId",
+	      "postId",
+	      "postNumber",
+	      "title",
+	      "authorUsername",
+	      "avatarTemplate",
+	      "createdAt",
+	      "reaction",
+	      "excerpt",
+	      "categoryId",
+	      "categoryName",
+	      "tags"
+	    ]
+	  );
 	}
 	function mergeActivityHistory(local, remote) {
 	  const left = activityHistoryValue(local), right = activityHistoryValue(remote);
@@ -22714,6 +23302,33 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    tags: value.tags
 	  });
 	}
+	function readerWebDavNotificationHistoryRecordMatchesSchema(id, value) {
+	  const normalized = notificationHistoryValue(value);
+	  return normalized !== null && normalized.identity === id && canonicalRecordFieldsMatch(
+	    value,
+	    notificationHistoryRemoteValue(normalized),
+	    [
+	      "identity",
+	      "group",
+	      "highPriority",
+	      "typeName",
+	      "typeLabel",
+	      "aggregateCount",
+	      "icon",
+	      "actor",
+	      "avatarFallback",
+	      "avatarTemplate",
+	      "summary",
+	      "excerpt",
+	      "createdAt",
+	      "href",
+	      "target",
+	      "categoryId",
+	      "categoryName",
+	      "tags"
+	    ]
+	  );
+	}
 	function mergeNotificationHistory(local, remote) {
 	  const left = notificationHistoryValue(local), right = notificationHistoryValue(remote);
 	  if (!left) return remote;
@@ -22789,13 +23404,36 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    const candidates = [leftReads[fingerprint], rightReads[fingerprint]].map(Number).filter(Number.isFinite);
 	    candidates.length && (confirmedReads[fingerprint] = Math.min(...candidates));
 	  }
-	  const starts = [left.readTrackingStartedAt, right.readTrackingStartedAt].map(Number).filter(Number.isFinite);
+	  const starts = [left.readTrackingStartedAt, right.readTrackingStartedAt].filter(finiteNonNegativeNumber);
 	  return Object.freeze({
 	    version: 1,
 	    days: Object.freeze(days),
 	    readTrackingStartedAt: starts.length ? Math.min(...starts) : null,
 	    confirmedReads: Object.freeze(confirmedReads)
 	  });
+	}
+	function readerWebDavConnectHistoryRecordMatchesSchema(id, value) {
+	  const source = record(value), days = record(source?.days), confirmedReads = record(source?.confirmedReads);
+	  if (id !== "current" || !source || source.version !== 1 || !days || !confirmedReads || !exactKeys(source, [
+	    "version",
+	    "days",
+	    "readTrackingStartedAt",
+	    "confirmedReads"
+	  ]) || !(source.readTrackingStartedAt === null || finiteNonNegativeNumber(source.readTrackingStartedAt))) return !1;
+	  for (const [day, rawMetrics] of Object.entries(days)) {
+	    const metrics = record(rawMetrics);
+	    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !metrics) return !1;
+	    for (const [key, rawSample] of Object.entries(metrics)) {
+	      const sample = record(rawSample);
+	      if (!key || !sample || !exactKeys(sample, [
+	        "first",
+	        "last",
+	        "firstObservedAt",
+	        "lastObservedAt"
+	      ]) || !finiteNumber(sample.first) || !finiteNumber(sample.last) || !finiteNonNegativeNumber(sample.firstObservedAt) || !finiteNonNegativeNumber(sample.lastObservedAt) || sample.firstObservedAt > sample.lastObservedAt) return !1;
+	    }
+	  }
+	  return Object.entries(confirmedReads).every(([fingerprint, confirmedAt]) => /^\d+:\d+$/.test(fingerprint) && finiteNonNegativeNumber(confirmedAt));
 	}
 	const TRANSLATION_SECTION_CACHE_ID_PREFIX = "reader-translation-section?", TRANSLATION_CACHE_RECORD_ID = "sections", TRANSLATION_CACHE_MAX_SECTIONS = 240, TRANSLATION_CACHE_MAX_PLAINTEXT_BYTES = 720 * 1024;
 	function translationCacheEntry(value) {
@@ -22828,6 +23466,42 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    ]
 	  });
 	}
+	function readerWebDavTranslationCacheRecordMatchesSchema(id, value) {
+	  const source = record(value);
+	  return id === TRANSLATION_CACHE_RECORD_ID && source?.version === 1 && Array.isArray(source.sections) && (0, import_reader_webdav_model.readerWebDavFingerprint)(source) === (0, import_reader_webdav_model.readerWebDavFingerprint)(translationCachePayload(source));
+	}
+	function translationRemoteProfileMatchesSchema(value, version) {
+	  const source = record(value);
+	  if (!source) return !1;
+	  const keys = [
+	    "baseUrl",
+	    "model",
+	    "prompt",
+	    "temperature",
+	    "reasoningEffort",
+	    "requestsPerMinute",
+	    "tokensPerMinute",
+	    "animation",
+	    ...version >= 4 ? ["models"] : [],
+	    ...version >= 5 ? ["modelCatalog"] : []
+	  ];
+	  return !(!exactKeys(source, keys) || typeof source.baseUrl != "string" || (0, import_reader_translation_config.normalizeReaderTranslationBaseUrl)(source.baseUrl) !== source.baseUrl || typeof source.model != "string" || source.model.trim() !== source.model || source.model.length > 160 || typeof source.prompt != "string" || source.prompt.trim() !== source.prompt || !source.prompt || source.prompt.length > 4e3 || !finiteNumber(source.temperature) || source.temperature < 0 || source.temperature > 1 || typeof source.reasoningEffort != "string" || source.reasoningEffort.trim() !== source.reasoningEffort || source.reasoningEffort.length > 64 || /[\u0000-\u001f\u007f]/.test(source.reasoningEffort) || !Number.isSafeInteger(source.requestsPerMinute) || Number(source.requestsPerMinute) < 0 || Number(source.requestsPerMinute) > 1e4 || !Number.isSafeInteger(source.tokensPerMinute) || Number(source.tokensPerMinute) < 0 || Number(source.tokensPerMinute) > 1e8 || typeof source.animation != "string" || (0, import_reader_translation_config.normalizeReaderTranslationAnimation)(source.animation) !== source.animation || version >= 4 && (!Array.isArray(source.models) || source.models.some((item) => typeof item != "string" || !item || item.trim() !== item)) || version >= 5 && (!Array.isArray(source.modelCatalog) || source.modelCatalog.some((item) => {
+	    const normalized = (0, import_reader_translation_config.normalizeReaderAiModelCatalogEntry)(item);
+	    return !normalized || (0, import_reader_webdav_model.readerWebDavFingerprint)(normalized) !== (0, import_reader_webdav_model.readerWebDavFingerprint)(item);
+	  })));
+	}
+	function readerWebDavTranslationRemoteValueMatchesSchema(value) {
+	  const source = record(value);
+	  if (!source || ![3, 4, 5].includes(source.version)) return !1;
+	  const version = source.version, keys = [
+	    "version",
+	    "activeBaseUrl",
+	    "profiles",
+	    "encryptedApiKeys",
+	    ...version >= 5 || Object.hasOwn(source, "animation") ? ["animation"] : []
+	  ];
+	  return exactKeys(source, keys) && typeof source.activeBaseUrl == "string" && (0, import_reader_translation_config.normalizeReaderTranslationBaseUrl)(source.activeBaseUrl) === source.activeBaseUrl && Array.isArray(source.profiles) && source.profiles.length > 0 && source.profiles.every((profile) => translationRemoteProfileMatchesSchema(profile, version)) && (source.encryptedApiKeys === "" || (0, import_reader_webdav_secret_codec.readerWebDavEncryptedSecretMatchesSchema)(source.encryptedApiKeys)) && (!Object.hasOwn(source, "animation") || typeof source.animation == "string" && (0, import_reader_translation_config.normalizeReaderTranslationAnimation)(source.animation) === source.animation);
+	}
 	function encryptedTranslationKeyAssociatedData(context, recordId, baseUrls) {
 	  return `awesome-linuxdo-reader-lite-webdav|translation-key|${context.scopeId}|${recordId}|${JSON.stringify(baseUrls)}|v2`;
 	}
@@ -22837,6 +23511,8 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	      if (item.deleted) return [id, item];
 	      const config = (0, import_reader_translation_config.normalizeReaderTranslationConfig)(item.value), baseUrls = config.profiles.map((profile) => profile.baseUrl), apiKeys = config.profiles.map((profile) => profile.apiKey), profiles = config.profiles.map((profile) => Object.freeze({
 	        baseUrl: profile.baseUrl,
+	        models: profile.models,
+	        modelCatalog: profile.modelCatalog,
 	        model: profile.model,
 	        prompt: profile.prompt,
 	        temperature: profile.temperature,
@@ -22845,7 +23521,7 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	        tokensPerMinute: profile.tokensPerMinute,
 	        animation: profile.animation
 	      })), value = Object.freeze({
-	        version: 3,
+	        version: 5,
 	        activeBaseUrl: config.activeBaseUrl,
 	        animation: config.animation,
 	        profiles: Object.freeze(profiles),
@@ -22865,30 +23541,32 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    async ([id, item]) => {
 	      if (item.deleted) return [id, item];
 	      const source = record(item.value);
-	      if (!source || !Array.isArray(source.profiles))
+	      if (!source || !readerWebDavTranslationRemoteValueMatchesSchema(source))
 	        throw new Error("WebDAV 翻译服务集合格式无效");
-	      const baseUrls = source.profiles.map((rawProfile) => text(record(rawProfile)?.baseUrl)), decryptedKeys = source.encryptedApiKeys ? await (0, import_reader_webdav_secret_codec.decryptReaderWebDavSecret)(
+	      const version = source.version, rawProfiles = source.profiles, baseUrls = rawProfiles.map((rawProfile) => String(record(rawProfile).baseUrl)), decryptedKeys = source.encryptedApiKeys ? await (0, import_reader_webdav_secret_codec.decryptReaderWebDavSecret)(
 	        source.encryptedApiKeys,
 	        context.secret,
 	        encryptedTranslationKeyAssociatedData(context, id, baseUrls)
 	      ) : [];
-	      if (!Array.isArray(decryptedKeys))
+	      if (!Array.isArray(decryptedKeys) || source.encryptedApiKeys !== "" && decryptedKeys.length !== rawProfiles.length)
 	        throw new Error("WebDAV 翻译 API Key 集合格式无效");
 	      const profiles = [];
-	      for (const [index, rawProfile] of source.profiles.entries()) {
+	      for (const [index, rawProfile] of rawProfiles.entries()) {
 	        const profile = record(rawProfile), baseUrl = baseUrls[index];
 	        if (!profile || !baseUrl)
 	          throw new Error("WebDAV 翻译服务项格式无效");
 	        profiles.push({
 	          baseUrl,
 	          apiKey: String(decryptedKeys[index] ?? ""),
-	          model: text(profile.model),
-	          prompt: String(profile.prompt ?? ""),
-	          temperature: number(profile.temperature, 0.1),
-	          reasoningEffort: text(profile.reasoningEffort),
-	          requestsPerMinute: number(profile.requestsPerMinute, 0),
-	          tokensPerMinute: number(profile.tokensPerMinute, 0),
-	          animation: text(profile.animation)
+	          models: version >= 4 ? profile.models : [],
+	          modelCatalog: version >= 5 ? profile.modelCatalog : [],
+	          model: profile.model,
+	          prompt: profile.prompt,
+	          temperature: profile.temperature,
+	          reasoningEffort: profile.reasoningEffort,
+	          requestsPerMinute: profile.requestsPerMinute,
+	          tokensPerMinute: profile.tokensPerMinute,
+	          animation: profile.animation
 	        });
 	      }
 	      const value = (0, import_reader_translation_config.normalizeReaderTranslationConfig)({
@@ -22896,6 +23574,23 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	        activeBaseUrl: source.activeBaseUrl,
 	        ...Object.hasOwn(source, "animation") ? { animation: source.animation } : {}
 	      });
+	      if (value.profiles.length !== rawProfiles.length || value.activeBaseUrl !== source.activeBaseUrl || Object.hasOwn(source, "animation") && value.animation !== source.animation || rawProfiles.some((rawProfile, index) => {
+	        const profile = record(rawProfile), normalized = value.profiles[index];
+	        if (!normalized) return !0;
+	        const canonical = Object.freeze({
+	          baseUrl: normalized.baseUrl,
+	          ...version >= 4 ? { models: normalized.models } : {},
+	          ...version >= 5 ? { modelCatalog: normalized.modelCatalog } : {},
+	          model: normalized.model,
+	          prompt: normalized.prompt,
+	          temperature: normalized.temperature,
+	          reasoningEffort: normalized.reasoningEffort,
+	          requestsPerMinute: normalized.requestsPerMinute,
+	          tokensPerMinute: normalized.tokensPerMinute,
+	          animation: normalized.animation
+	        });
+	        return (0, import_reader_webdav_model.readerWebDavFingerprint)(profile) !== (0, import_reader_webdav_model.readerWebDavFingerprint)(canonical);
+	      })) throw new Error("WebDAV 翻译服务集合字段类型无效");
 	      return [id, Object.freeze({ ...item, value })];
 	    }
 	  ));
@@ -22922,7 +23617,7 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	  return categoryPort({
 	    category: "translation-cache",
 	    initialStrategy: "merge",
-	    validateRecord: (id) => id === TRANSLATION_CACHE_RECORD_ID,
+	    validateRecord: readerWebDavTranslationCacheRecordMatchesSchema,
 	    capture: async () => {
 	      const entries = await options.responses.entries({
 	        kinds: [options.cache.kind],
@@ -22956,7 +23651,7 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	function createReaderWebDavNotificationHistoryCategoryPort(notifications) {
 	  return (0, import_reader_webdav_history_cache_port.createReaderWebDavHistoryCacheCategoryPort)({
 	    category: "notification-history",
-	    recordIdentity: (value) => notificationHistoryValue(value)?.identity ?? "",
+	    validateRecord: readerWebDavNotificationHistoryRecordMatchesSchema,
 	    capture: () => notifications.syncHistoryRecords().filter((entry) => import_reader_notification_model.READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.includes(entry.group)).map((entry) => localRecord(entry.identity, notificationHistoryRemoteValue(entry))),
 	    mergeValues: mergeNotificationHistory,
 	    apply: (records) => notifications.applySyncedHistoryRecords(
@@ -22967,7 +23662,7 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	function createReaderWebDavActivityHistoryCategoryPort(activity) {
 	  return (0, import_reader_webdav_history_cache_port.createReaderWebDavHistoryCacheCategoryPort)({
 	    category: "activity-history",
-	    recordIdentity: (value) => activityHistoryValue(value)?.identity ?? "",
+	    validateRecord: readerWebDavActivityHistoryRecordMatchesSchema,
 	    capture: () => activity.activitySyncRecords().filter((entry) => ACTIVITY_TABS.includes(entry.tab)).map((entry) => localRecord(entry.identity, activityHistoryRemoteValue(entry))),
 	    mergeValues: mergeActivityHistory,
 	    apply: (records) => activity.applySyncedActivityRecords(
@@ -22980,7 +23675,7 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    categoryPort({
 	      category: "history",
 	      initialStrategy: "merge",
-	      validateRecord: (id, value) => String(historyValue(value)?.topicId ?? "") === id,
+	      validateRecord: readerWebDavHistoryRecordMatchesSchema,
 	      /* 岁月史书依赖本机正文，不能同步到没有对应正文的另一设备。 */
 	      capture: () => options.history.snapshot.entries.map((entry) => localRecord(String(entry.topicId), entry)),
 	      mergeValues: mergeReaderWebDavHistoryValues,
@@ -22991,6 +23686,7 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    categoryPort({
 	      category: "preferences",
 	      initialStrategy: "remote",
+	      validateRecord: options.preferences.validate,
 	      capture: () => Object.entries(options.preferences.read()).map(
 	        ([id, value]) => localRecord(id, value)
 	      ),
@@ -23002,6 +23698,7 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    categoryPort({
 	      category: "topic-context",
 	      initialStrategy: "merge",
+	      validateRecord: readerWebDavTopicContextRecordMatchesSchema,
 	      capture: () => {
 	        const snapshot = options.topicContext.snapshot;
 	        return Object.freeze([
@@ -23018,7 +23715,7 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    categoryPort({
 	      category: "custom-sites",
 	      initialStrategy: "merge",
-	      validateRecord: (id, value) => typeof value == "string" && value === id,
+	      validateRecord: readerWebDavCustomSiteRecordMatchesSchema,
 	      capture: async () => (await options.customSites.load()).map((host) => localRecord(host, host)),
 	      mergeValues: (local) => local,
 	      apply: (records) => options.customSites.replaceExternal(
@@ -23029,14 +23726,14 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	  return options.queue && ports.push(categoryPort({
 	    category: "queue",
 	    initialStrategy: "merge",
-	    validateRecord: (id, value) => String(queueValue(value)?.topicId ?? "") === id,
+	    validateRecord: readerWebDavQueueRecordMatchesSchema,
 	    capture: () => options.queue.syncEntries().map((entry) => localRecord(String(entry.topicId), entry)),
 	    mergeValues: mergeQueue,
 	    apply: (records) => options.queue.replaceExternal(records.map((entry) => queueValue(entry.value)).filter((entry) => entry !== null))
 	  })), options.bookmarks && (ports.push(categoryPort({
 	    category: "bookmarks",
 	    initialStrategy: "merge",
-	    validateRecord: (id, value) => bookmarkValue(value)?.identity === id,
+	    validateRecord: readerWebDavBookmarkRecordMatchesSchema,
 	    capture: async () => (await options.bookmarks.syncBookmarkRecords()).map((entry) => localRecord(entry.identity, bookmarkRemoteValue(entry))),
 	    mergeValues: mergeBookmark,
 	    apply: (records) => options.bookmarks.applySyncedBookmarkRecords(
@@ -23047,7 +23744,7 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	  )), options.connectHistory && ports.push(categoryPort({
 	    category: "connect-history",
 	    initialStrategy: "merge",
-	    validateRecord: (id) => id === "current",
+	    validateRecord: readerWebDavConnectHistoryRecordMatchesSchema,
 	    capture: () => [localRecord(
 	      "current",
 	      options.connectHistory.syncValue()
@@ -23062,7 +23759,7 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    options.offlineTopics
 	  )), Object.freeze(ports);
 	}
-}, "93906e28900f11d17908672f67903ada066646f2113f5f6697f212821cd81642");
+}, "92ce675af3ccdc2a4a5d273527b173e7f14d0c11070e92a22c40d27665037f65");
 
 /* Source: lite/src/sync/reader-webdav-client.ts */
 runtime.register("src/sync/reader-webdav-client.js", function(module, exports, require) {
@@ -23615,7 +24312,20 @@ runtime.register("src/sync/reader-webdav-coordinator.js", function(module, expor
 	      ), baselineScopeId = baselineStorageScopeId(
 	        snapshot.config,
 	        scopeId
-	      ), selected = import_reader_webdav_model.READER_WEBDAV_CATEGORIES.filter((category) => snapshot.config.categories[category]).map((category) => this.#categories.get(category)).filter((port) => !!port);
+	      ), requested = import_reader_webdav_model.READER_WEBDAV_CATEGORIES.filter(
+	        (category) => snapshot.config.categories[category]
+	      ), unavailable = requested.filter(
+	        (category) => !this.#categories.has(category)
+	      );
+	      if (unavailable.length)
+	        throw new Error(
+	          `所选同步内容当前不可用：${unavailable.map(
+	            (category) => import_reader_webdav_model.READER_WEBDAV_CATEGORY_LABELS[category]
+	          ).join("、")}`
+	        );
+	      const selected = requested.map(
+	        (category) => this.#categories.get(category)
+	      );
 	      if (!selected.length) throw new Error("所选同步内容当前不可用");
 	      const regularSelected = selected.filter((port) => !port.synchronizeStandalone), standaloneSelected = selected.filter((port) => !!port.synchronizeStandalone), transformContext = Object.freeze({
 	        secret: snapshot.config.password,
@@ -23633,9 +24343,9 @@ runtime.register("src/sync/reader-webdav-coordinator.js", function(module, expor
 	      }));
 	      for (let attempt = 0; regularSelected.length && attempt < 3; attempt += 1) {
 	        if (signal.aborted) throw signal.reason;
-	        const remoteFile = await this.#client.read(snapshot.config, signal), document = remoteFile ? (0, import_reader_webdav_model.normalizeReaderWebDavDocument)(JSON.parse(remoteFile.text)) : (0, import_reader_webdav_model.createReaderWebDavDocument)(snapshot.writerId, this.#now()), remoteScope = document.scopes[scopeId] ?? Object.freeze({
+	        const remoteFile = await this.#client.read(snapshot.config, signal), document = remoteFile ? (0, import_reader_webdav_model.normalizeReaderWebDavDocument)(JSON.parse(remoteFile.text)) : (0, import_reader_webdav_model.createReaderWebDavDocument)(snapshot.writerId, this.#now()), storedRemoteScope = document.scopes[scopeId], remoteScope = storedRemoteScope ?? Object.freeze({
 	          categories: Object.freeze({})
-	        }), categories = { ...remoteScope.categories }, baseline = { ...nextBaseline }, pendingApply = [];
+	        }), categories = { ...remoteScope.categories }, attemptBaseline = storedRemoteScope ? nextBaseline : Object.freeze({}), baseline = { ...attemptBaseline }, pendingApply = [];
 	        let uploaded = 0, imported = 0, deleted = 0, conflicts = 0, changed = remoteFile === null && regularSelected.length > 0;
 	        for (const port of regularSelected) {
 	          const local = await port.capture();
@@ -23646,7 +24356,7 @@ runtime.register("src/sync/reader-webdav-coordinator.js", function(module, expor
 	                  `本机 WebDAV ${port.category} 记录 ${item.id} 身份不一致`
 	                );
 	          }
-	          const remoteRecords = remoteScope.categories[port.category]?.records ?? {}, decodedRemoteRecords = port.decodeRemoteRecords ? await port.decodeRemoteRecords(
+	          const remoteCategory = remoteScope.categories[port.category], remoteRecords = remoteCategory?.records ?? {}, decodedRemoteRecords = port.decodeRemoteRecords ? await port.decodeRemoteRecords(
 	            remoteRecords,
 	            transformContext
 	          ) : remoteRecords;
@@ -23660,7 +24370,7 @@ runtime.register("src/sync/reader-webdav-coordinator.js", function(module, expor
 	          const reconciled = (0, import_reader_webdav_model.reconcileReaderWebDavRecords)({
 	            local,
 	            remote: decodedRemoteRecords,
-	            ...nextBaseline[port.category] === void 0 ? {} : { baseline: nextBaseline[port.category] },
+	            ...remoteCategory === void 0 || attemptBaseline[port.category] === void 0 ? {} : { baseline: attemptBaseline[port.category] },
 	            writerId: snapshot.writerId,
 	            now: this.#now(),
 	            initialStrategy: port.initialStrategy,
@@ -23818,7 +24528,7 @@ runtime.register("src/sync/reader-webdav-coordinator.js", function(module, expor
 	    this.#handle !== null && (this.#cancel(this.#handle), this.#handle = null);
 	  }
 	}
-}, "11960c9dc097177a5d13c0654733a44d087ea4432c1ec1cb9f08baf25e9bc868");
+}, "5a2cee10900b5297ea062f65ba73f5e5a23ad0ce3ad81fe9b3318aeb62879557");
 
 /* Source: lite/src/sync/reader-webdav-history-cache-port.ts */
 runtime.register("src/sync/reader-webdav-history-cache-port.js", function(module, exports, require) {
@@ -23832,24 +24542,9 @@ runtime.register("src/sync/reader-webdav-history-cache-port.js", function(module
 	function record(value) {
 	  return value !== null && typeof value == "object" && !Array.isArray(value) ? value : null;
 	}
-	function timestamp(value) {
-	  const numeric = Number(value);
-	  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0;
-	}
 	function normalizedRecordId(value) {
 	  const source = String(value ?? "").trim();
 	  return !source || source.length > 240 || /[\u0000-\u001f]/.test(source) ? "" : source;
-	}
-	function remoteRecord(value) {
-	  const source = record(value);
-	  if (!source) return null;
-	  const deleted = source.deleted === !0;
-	  return !deleted && !Object.hasOwn(source, "value") ? null : Object.freeze({
-	    changedAt: timestamp(source.changedAt),
-	    writerId: String(source.writerId ?? ""),
-	    deleted,
-	    ...deleted ? {} : { value: source.value }
-	  });
 	}
 	function manifestPath(remotePath, scopeId, category) {
 	  const normalized = (0, import_reader_webdav_model.normalizeReaderWebDavRemotePath)(remotePath);
@@ -23862,17 +24557,20 @@ runtime.register("src/sync/reader-webdav-history-cache-port.js", function(module
 	  if (source?.format !== HISTORY_CACHE_MANIFEST_FORMAT || source.schemaVersion !== HISTORY_CACHE_MANIFEST_VERSION || source.category !== category) throw new Error(`WebDAV ${category} 清单格式或版本不受支持`);
 	  const rawRecords = record(source.records);
 	  if (!rawRecords) throw new Error(`WebDAV ${category} 清单缺少 records`);
+	  if (typeof source.updatedAt != "number" || !Number.isFinite(source.updatedAt) || source.updatedAt < 0 || typeof source.writerId != "string") throw new Error(`WebDAV ${category} 清单字段类型无效`);
 	  const records = /* @__PURE__ */ Object.create(null);
 	  for (const [rawId, rawValue] of Object.entries(rawRecords)) {
-	    const id = normalizedRecordId(rawId), item = remoteRecord(rawValue);
-	    id && item && (records[id] = item);
+	    const id = normalizedRecordId(rawId);
+	    if (!id || id !== rawId)
+	      throw new Error(`WebDAV ${category} 记录 ID 无效`);
+	    records[id] = (0, import_reader_webdav_model.normalizeReaderWebDavRemoteRecord)(rawValue);
 	  }
 	  return Object.freeze({
 	    format: HISTORY_CACHE_MANIFEST_FORMAT,
 	    schemaVersion: HISTORY_CACHE_MANIFEST_VERSION,
 	    category,
-	    updatedAt: timestamp(source.updatedAt),
-	    writerId: String(source.writerId ?? ""),
+	    updatedAt: source.updatedAt,
+	    writerId: source.writerId,
 	    records: Object.freeze(records)
 	  });
 	}
@@ -23900,8 +24598,13 @@ runtime.register("src/sync/reader-webdav-history-cache-port.js", function(module
 	      records: Object.freeze({})
 	    });
 	    for (const [id, item] of Object.entries(remote.records))
-	      if (!item.deleted && options.recordIdentity(item.value) !== id)
-	        throw new Error(`WebDAV ${options.category} 记录 ${id} 身份不一致`);
+	      if (!item.deleted && !options.validateRecord(id, item.value))
+	        throw new Error(
+	          `WebDAV ${options.category} 记录 ${id} 身份不一致或格式无效`
+	        );
+	    for (const item of local)
+	      if (!options.validateRecord(item.id, item.value))
+	        throw new Error(`本机 WebDAV ${options.category} 记录 ${item.id} 格式无效`);
 	    const reconciled = (0, import_reader_webdav_model.reconcileReaderWebDavRecords)({
 	      local,
 	      remote: remote.records,
@@ -23975,7 +24678,7 @@ runtime.register("src/sync/reader-webdav-history-cache-port.js", function(module
 	    synchronizeStandalone: (context) => synchronizeHistoryCache(options, context)
 	  });
 	}
-}, "02fdf5cd2766901be70793dd9829deb1c7625974358b7f7549ccf527b564bc7b");
+}, "b626c922282b3df80ec672c0dcfb2f4ce4de6c36a0e5cad31fb6bc11a4e4b274");
 
 /* Source: lite/src/sync/reader-webdav-model.ts */
 runtime.register("src/sync/reader-webdav-model.js", function(module, exports, require) {
@@ -23992,6 +24695,7 @@ runtime.register("src/sync/reader-webdav-model.js", function(module, exports, re
 	  normalizeReaderWebDavConfig: () => normalizeReaderWebDavConfig,
 	  normalizeReaderWebDavDocument: () => normalizeReaderWebDavDocument,
 	  normalizeReaderWebDavRemotePath: () => normalizeReaderWebDavRemotePath,
+	  normalizeReaderWebDavRemoteRecord: () => normalizeReaderWebDavRemoteRecord,
 	  readerWebDavFingerprint: () => readerWebDavFingerprint,
 	  readerWebDavRuntimeScopeId: () => readerWebDavRuntimeScopeId,
 	  reconcileReaderWebDavRecords: () => reconcileReaderWebDavRecords,
@@ -24021,16 +24725,17 @@ runtime.register("src/sync/reader-webdav-model.js", function(module, exports, re
 	  "topic-context": "阅读位置与窗口状态",
 	  "custom-sites": "自定义适用站点",
 	  "connect-history": "Connect 本机观察历史",
-	  translation: "AI 翻译服务集合（Key 加密）",
+	  translation: "AI 服务集合（Key 加密）",
 	  "translation-cache": "已翻译 Section 缓存",
 	  "offline-topics": "离线 Topic 下载（HTML 正文）"
 	}), AUTO_SYNC_INTERVALS = /* @__PURE__ */ new Set([15, 30, 60, 180, 360]), MISSING_STATE = "missing", DELETED_STATE = "deleted";
 	function record(value) {
 	  return value !== null && typeof value == "object" && !Array.isArray(value) ? value : null;
 	}
-	function timestamp(value) {
-	  const numeric = Number(value);
-	  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0;
+	function timestamp(value, label) {
+	  if (typeof value != "number" || !Number.isFinite(value) || value < 0)
+	    throw new Error(`${label} 必须是非负有限数值`);
+	  return value;
 	}
 	function canonical(value) {
 	  return value === null || typeof value != "object" ? JSON.stringify(value) ?? "null" : Array.isArray(value) ? `[${value.map(canonical).join(",")}]` : `{${Object.entries(value).filter(([, item]) => item !== void 0).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(",")}}`;
@@ -24101,22 +24806,33 @@ runtime.register("src/sync/reader-webdav-model.js", function(module, exports, re
 	  const issues = [];
 	  return normalizedEndpoint(value.endpoint) || issues.push("WebDAV 地址必须是 HTTPS"), normalizeReaderWebDavRemotePath(value.remotePath) || issues.push("远端路径必须包含目录和文件名"), options.requireCredentials !== !1 && (value.username.trim() || issues.push("请填写 WebDAV 用户名"), value.password || issues.push("请填写 WebDAV 应用密码")), READER_WEBDAV_CATEGORIES.some((category) => value.categories[category]) || issues.push("至少选择一种同步内容"), Object.freeze(issues);
 	}
-	function normalizeRemoteRecord(value) {
+	function normalizeReaderWebDavRemoteRecord(value) {
 	  const source = record(value);
-	  if (!source) return null;
-	  const deleted = source.deleted === !0;
-	  return !deleted && !Object.hasOwn(source, "value") ? null : Object.freeze({
-	    changedAt: timestamp(source.changedAt),
-	    writerId: String(source.writerId ?? ""),
+	  if (!source) throw new Error("WebDAV 远端记录必须是对象");
+	  if (typeof source.deleted != "boolean")
+	    throw new Error("WebDAV 远端记录 deleted 必须是布尔值");
+	  if (typeof source.writerId != "string")
+	    throw new Error("WebDAV 远端记录 writerId 必须是字符串");
+	  const deleted = source.deleted;
+	  if (!deleted && !Object.hasOwn(source, "value"))
+	    throw new Error("WebDAV 活跃远端记录缺少 value");
+	  return Object.freeze({
+	    changedAt: timestamp(source.changedAt, "WebDAV 远端记录 changedAt"),
+	    writerId: source.writerId,
 	    deleted,
 	    ...deleted ? {} : { value: source.value }
 	  });
 	}
 	function normalizeRemoteCategory(value) {
-	  const source = record(value), rawRecords = record(source?.records), records = /* @__PURE__ */ Object.create(null);
-	  for (const [rawId, rawValue] of Object.entries(rawRecords ?? {})) {
-	    const id = normalizedRecordId(rawId), item = normalizeRemoteRecord(rawValue);
-	    id && item && (records[id] = item);
+	  const source = record(value);
+	  if (!source) throw new Error("WebDAV 远端分类必须是对象");
+	  const rawRecords = record(source?.records);
+	  if (!rawRecords) throw new Error("WebDAV 远端分类缺少 records");
+	  const records = /* @__PURE__ */ Object.create(null);
+	  for (const [rawId, rawValue] of Object.entries(rawRecords)) {
+	    const id = normalizedRecordId(rawId);
+	    if (!id || id !== rawId) throw new Error("WebDAV 远端记录 ID 无效");
+	    records[id] = normalizeReaderWebDavRemoteRecord(rawValue);
 	  }
 	  return Object.freeze({ records: Object.freeze(records) });
 	}
@@ -24137,21 +24853,28 @@ runtime.register("src/sync/reader-webdav-model.js", function(module, exports, re
 	  const scopes = /* @__PURE__ */ Object.create(null);
 	  for (const [rawScopeId, rawScope] of Object.entries(rawScopes)) {
 	    const scopeId = normalizedRecordId(rawScopeId), scopeSource = record(rawScope), rawCategories = record(scopeSource?.categories);
-	    if (!scopeId || !rawCategories) continue;
-	    const categories = {};
-	    for (const category of READER_WEBDAV_CATEGORIES)
-	      Object.hasOwn(rawCategories, category) && (categories[category] = normalizeRemoteCategory(
-	        rawCategories[category]
-	      ));
+	    if (!scopeId || scopeId !== rawScopeId || !rawCategories)
+	      throw new Error("WebDAV 远端 scope 格式无效");
+	    const categories = /* @__PURE__ */ Object.create(null);
+	    for (const [rawCategory, rawCategoryValue] of Object.entries(
+	      rawCategories
+	    )) {
+	      const category = normalizedRecordId(rawCategory);
+	      if (!category || category !== rawCategory)
+	        throw new Error("WebDAV 远端分类 ID 无效");
+	      categories[category] = normalizeRemoteCategory(rawCategoryValue);
+	    }
 	    scopes[scopeId] = Object.freeze({
 	      categories: Object.freeze(categories)
 	    });
 	  }
+	  if (typeof source.writerId != "string")
+	    throw new Error("WebDAV 远端 writerId 必须是字符串");
 	  return Object.freeze({
 	    format: READER_WEBDAV_FORMAT,
 	    schemaVersion: 2,
-	    updatedAt: timestamp(source.updatedAt),
-	    writerId: String(source.writerId ?? ""),
+	    updatedAt: timestamp(source.updatedAt, "WebDAV 远端 updatedAt"),
+	    writerId: source.writerId,
 	    scopes: Object.freeze(scopes)
 	  });
 	}
@@ -24176,7 +24899,7 @@ runtime.register("src/sync/reader-webdav-model.js", function(module, exports, re
 	  for (const id of ids) {
 	    const localItem = local.get(id), remoteItem = options.remote[id], baselineState = options.baseline?.[id], localState = localItem ? valueState(localItem.value) : baselineState === DELETED_STATE ? DELETED_STATE : MISSING_STATE, currentRemoteState = remoteState(remoteItem);
 	    let chosen, mergedValue;
-	    if (baselineState === void 0 ? remoteItem ? !localItem || remoteItem.deleted || options.initialStrategy === "remote" ? chosen = "remote" : (chosen = "merged", mergedValue = options.mergeValues(localItem.value, remoteItem.value)) : chosen = "local" : localState !== baselineState ? currentRemoteState !== baselineState ? localState === currentRemoteState ? chosen = "remote" : localItem && remoteItem && !remoteItem.deleted ? (chosen = "merged", mergedValue = options.mergeValues(localItem.value, remoteItem.value), conflicts += 1) : (chosen = "remote", conflicts += 1) : chosen = "local" : chosen = "remote", chosen === "remote") {
+	    if (baselineState === void 0 ? remoteItem ? !localItem || remoteItem.deleted || options.initialStrategy === "remote" ? chosen = "remote" : (chosen = "merged", mergedValue = options.mergeValues(localItem.value, remoteItem.value)) : chosen = "local" : !remoteItem && localItem ? (chosen = "local", conflicts += 1) : localState !== baselineState ? currentRemoteState !== baselineState ? localState === currentRemoteState ? chosen = "remote" : localItem && remoteItem && !remoteItem.deleted ? (chosen = "merged", mergedValue = options.mergeValues(localItem.value, remoteItem.value), conflicts += 1) : (chosen = "remote", conflicts += 1) : chosen = "local" : chosen = "remote", chosen === "remote") {
 	      currentRemoteState !== localState && (imported += 1), !remoteItem && baselineState !== void 0 && (next[id] = Object.freeze({
 	        changedAt: options.now,
 	        writerId: options.writerId,
@@ -24220,7 +24943,7 @@ runtime.register("src/sync/reader-webdav-model.js", function(module, exports, re
 	  if (!user) throw new Error("当前登录账号尚未就绪，请稍后重试");
 	  return `site:${host}|account:${user}`;
 	}
-}, "6882fb1acd9488bd257849e42d857396e25ca23186759e1326184244b5a2a2c6");
+}, "a812872096a68697e30587bb0fe712b783e666a73f0bafa267eca4ad8326d461");
 
 /* Source: lite/src/sync/reader-webdav-offline-topic-port.ts */
 runtime.register("src/sync/reader-webdav-offline-topic-port.js", function(module, exports, require) {
@@ -24301,48 +25024,40 @@ runtime.register("src/sync/reader-webdav-offline-topic-port.js", function(module
 	function byteLength(value) {
 	  return new TextEncoder().encode(value).byteLength;
 	}
-	function normalizeRemoteRecord(value) {
-	  const source = record(value);
-	  if (!source) return null;
-	  const deleted = source.deleted === !0;
-	  return !deleted && !Object.hasOwn(source, "value") ? null : Object.freeze({
-	    changedAt: timestamp(source.changedAt),
-	    writerId: String(source.writerId ?? ""),
-	    deleted,
-	    ...deleted ? {} : { value: source.value }
-	  });
-	}
 	function normalizeManifest(value) {
 	  const source = record(value);
 	  if (source?.format !== OFFLINE_TOPIC_MANIFEST_FORMAT || source.schemaVersion !== OFFLINE_TOPIC_MANIFEST_VERSION) throw new Error("WebDAV 离线 Topic 清单格式或版本不受支持");
 	  const rawRecords = record(source.records);
 	  if (!rawRecords) throw new Error("WebDAV 离线 Topic 清单缺少 records");
+	  if (typeof source.updatedAt != "number" || !Number.isFinite(source.updatedAt) || source.updatedAt < 0 || typeof source.writerId != "string") throw new Error("WebDAV 离线 Topic 清单字段类型无效");
 	  const records = {};
 	  for (const [id, rawValue] of Object.entries(rawRecords)) {
-	    if (!topicId(id)) continue;
-	    const normalized = normalizeRemoteRecord(rawValue);
-	    normalized && (records[id] = normalized);
+	    if (!topicId(id) || String(topicId(id)) !== id)
+	      throw new Error("WebDAV 离线 Topic 清单记录 ID 无效");
+	    records[id] = (0, import_reader_webdav_model.normalizeReaderWebDavRemoteRecord)(rawValue);
 	  }
 	  return Object.freeze({
 	    format: OFFLINE_TOPIC_MANIFEST_FORMAT,
 	    schemaVersion: OFFLINE_TOPIC_MANIFEST_VERSION,
-	    updatedAt: timestamp(source.updatedAt),
-	    writerId: String(source.writerId ?? ""),
+	    updatedAt: source.updatedAt,
+	    writerId: source.writerId,
 	    records: Object.freeze(records)
 	  });
 	}
 	function remoteValue(value, context) {
 	  const source = record(value), valueMetadata = metadata(source), object = record(source?.object), digest = String(object?.sha256 ?? ""), bytes = Number(object?.bytes), path = (0, import_reader_webdav_model.normalizeReaderWebDavRemotePath)(object?.path);
-	  return source?.version !== 1 || !valueMetadata || !/^[a-f0-9]{64}$/.test(digest) || !Number.isSafeInteger(bytes) || bytes < 1 || !path || path !== objectPath(
+	  if (source?.version !== 1 || !valueMetadata || !/^[a-f0-9]{64}$/.test(digest) || !Number.isSafeInteger(bytes) || bytes < 1 || !path || path !== objectPath(
 	    context.config.remotePath,
 	    context.scopeId,
 	    valueMetadata.topicId,
 	    digest
-	  ) ? null : Object.freeze({
+	  )) return null;
+	  const normalized = Object.freeze({
 	    ...valueMetadata,
 	    version: 1,
 	    object: Object.freeze({ path, sha256: digest, bytes })
-	  });
+	  }), { archiveStatus: _archiveStatus, ...legacyNormalized } = normalized, canonical = Object.hasOwn(source, "archiveStatus") ? normalized : Object.freeze(legacyNormalized);
+	  return (0, import_reader_webdav_model.readerWebDavFingerprint)(source) === (0, import_reader_webdav_model.readerWebDavFingerprint)(canonical) ? normalized : null;
 	}
 	async function captureArtifacts(store) {
 	  const result = [];
@@ -24549,14 +25264,15 @@ runtime.register("src/sync/reader-webdav-offline-topic-port.js", function(module
 	    synchronizeStandalone: (context) => synchronizeStandalone(store, context)
 	  });
 	}
-}, "d1670a3fde9cf4f06b0d6324568b4aa4a73c25104006b81e12183411a5306ce1");
+}, "3780054a84e84f3719406b93c4357e2faa560b5c17e1a0dd3d113feb34543a34");
 
 /* Source: lite/src/sync/reader-webdav-secret-codec.ts */
 runtime.register("src/sync/reader-webdav-secret-codec.js", function(module, exports, require) {
 	var reader_webdav_secret_codec_exports = {};
 	__export(reader_webdav_secret_codec_exports, {
 	  decryptReaderWebDavSecret: () => decryptReaderWebDavSecret,
-	  encryptReaderWebDavSecret: () => encryptReaderWebDavSecret
+	  encryptReaderWebDavSecret: () => encryptReaderWebDavSecret,
+	  readerWebDavEncryptedSecretMatchesSchema: () => readerWebDavEncryptedSecretMatchesSchema
 	});
 	module.exports = __toCommonJS(reader_webdav_secret_codec_exports);
 	const READER_WEBDAV_SECRET_FORMAT = "awesome-linuxdo-reader-lite-aes-gcm";
@@ -24575,8 +25291,10 @@ runtime.register("src/sync/reader-webdav-secret-codec.js", function(module, expo
 	  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
 	}
 	function fromBase64Url(value, maximum) {
-	  const source = String(value ?? "");
-	  if (!source || source.length > Math.ceil(maximum * 4 / 3) + 4)
+	  if (typeof value != "string")
+	    throw new Error("WebDAV 加密载荷类型无效");
+	  const source = value;
+	  if (!source || !/^[A-Za-z0-9_-]+$/u.test(source) || source.length > Math.ceil(maximum * 4 / 3) + 4)
 	    throw new Error("WebDAV 加密载荷长度无效");
 	  const base64 = source.replaceAll("-", "+").replaceAll("_", "/"), padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "="), binary = atob(padded);
 	  if (binary.length > maximum) throw new Error("WebDAV 加密载荷超过安全上限");
@@ -24584,6 +25302,28 @@ runtime.register("src/sync/reader-webdav-secret-codec.js", function(module, expo
 	  for (let index = 0; index < binary.length; index += 1)
 	    bytes[index] = binary.charCodeAt(index);
 	  return bytes;
+	}
+	function readerWebDavEncryptedSecretMatchesSchema(value) {
+	  const source = record(value);
+	  if (!source || Object.keys(source).length !== 8 || ![
+	    "format",
+	    "version",
+	    "kdf",
+	    "iterations",
+	    "salt",
+	    "cipher",
+	    "iv",
+	    "ciphertext"
+	  ].every((key) => Object.hasOwn(source, key)) || source.format !== READER_WEBDAV_SECRET_FORMAT || source.version !== 1 || source.kdf !== "PBKDF2-SHA-256" || source.cipher !== "AES-256-GCM" || typeof source.iterations != "number" || !Number.isSafeInteger(source.iterations) || source.iterations < 1e5 || source.iterations > 1e6) return !1;
+	  try {
+	    const salt = fromBase64Url(source.salt, 16), iv = fromBase64Url(source.iv, 12), ciphertext = fromBase64Url(
+	      source.ciphertext,
+	      1048576
+	    );
+	    return salt.length === 16 && iv.length === 12 && ciphertext.length >= 16 && base64Url(salt) === source.salt && base64Url(iv) === source.iv && base64Url(ciphertext) === source.ciphertext;
+	  } catch {
+	    return !1;
+	  }
 	}
 	async function encryptionKey(secret, salt, iterations, usage) {
 	  if (!secret) throw new Error("WebDAV 应用密码为空，无法加密翻译设置");
@@ -24632,12 +25372,9 @@ runtime.register("src/sync/reader-webdav-secret-codec.js", function(module, expo
 	}
 	async function decryptReaderWebDavSecret(value, secret, associatedData) {
 	  try {
-	    const source = record(value);
-	    if (source?.format !== READER_WEBDAV_SECRET_FORMAT || source.version !== 1 || source.kdf !== "PBKDF2-SHA-256" || source.cipher !== "AES-256-GCM") throw new Error("unsupported envelope");
-	    const iterations = Number(source.iterations);
-	    if (iterations < 1e5 || iterations > 1e6)
-	      throw new Error("invalid iterations");
-	    const salt = fromBase64Url(source.salt, 16), iv = fromBase64Url(source.iv, 12);
+	    if (!readerWebDavEncryptedSecretMatchesSchema(value))
+	      throw new Error("unsupported envelope");
+	    const source = value, iterations = source.iterations, salt = fromBase64Url(source.salt, 16), iv = fromBase64Url(source.iv, 12);
 	    if (salt.length !== 16 || iv.length !== 12)
 	      throw new Error("invalid nonce");
 	    const ciphertext = fromBase64Url(
@@ -24659,7 +25396,7 @@ runtime.register("src/sync/reader-webdav-secret-codec.js", function(module, expo
 	    );
 	  }
 	}
-}, "3e50e23a4927ef9a804b79b46266974527179f913c473eaa1d6f821d6f371f49");
+}, "e6fb2aa401af8addb0db5eca34d0e7fa22c3b8a25d4df2f1592660cd818a670a");
 
 	runtime.markLibrary("main-lite-platform");
 })();

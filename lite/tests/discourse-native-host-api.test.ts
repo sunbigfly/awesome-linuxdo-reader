@@ -12,6 +12,7 @@ import {
 	discourseNativeExactTimeFormatter,
 	discourseNativeFlagCatalog,
 	discourseNativeHostRouteRefresh,
+	discourseNativeInitialCurrentUsername,
 	discourseNativeCurrentUsername,
 	discourseNativeIconRenderer,
 	discourseNativePostAdminMenu,
@@ -23,6 +24,9 @@ import {
 	discourseNativeUnwantedTopicRuleCatalog,
 	type DiscourseHostApiPort,
 } from '../src/discourse/native-host-api.js';
+import {
+	positionReaderNativePostAdminMenu,
+} from '../src/discourse/reader-native-post-admin-menu.js';
 import { LifecycleScope } from '../src/kernel/lifecycle.js';
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -383,6 +387,57 @@ assert(
 	new BrowserDiscourseBookmarkNativeState(modelCurrentUserHost).username() ===
 		'SwitchedModelViewer',
 	'收藏与回应桥必须复用同一 current-user/User.current 兼容入口，不能把已登录用户误判为匿名',
+);
+
+const placeholderCurrentUserHost: DiscourseHostApiPort = {
+	lookup: (name) => name === 'service:current-user'
+		? Object.freeze({ username: '' })
+		: null,
+	lookupModule: (name) => name === 'discourse/models/user'
+		? {
+			default: {
+				current: () => Object.freeze({ username: 'ModelFallbackViewer' }),
+			},
+		}
+		: null,
+};
+assert(
+	discourseNativeCurrentUsername(placeholderCurrentUserHost) ===
+		'ModelFallbackViewer',
+	'current-user service 已注册但身份仍为空时必须继续读取 User.current，避免设置面板把已登录会话误判为匿名',
+);
+
+let preloadedCurrentUser: unknown = Object.freeze({
+	username: 'PreloadedViewer',
+});
+const preloadedCurrentUserHost: DiscourseHostApiPort = {
+	lookup: () => null,
+	lookupModule(name) {
+		if (name === 'discourse/lib/preload-store') {
+			return {
+				default: {
+					get(key: string): unknown {
+						return key === 'currentUser' ? preloadedCurrentUser : null;
+					},
+				},
+			};
+		}
+		if (name === 'discourse/models/user') {
+			return { default: { current: () => null } };
+		}
+		return null;
+	},
+};
+assert(
+	discourseNativeCurrentUsername(preloadedCurrentUserHost) === '' &&
+		discourseNativeInitialCurrentUsername(preloadedCurrentUserHost) ===
+			'PreloadedViewer',
+	'刷新启动必须用 preload-store 的 currentUser 建立账号分区，不能因 service/model 短暂为空写入 anonymous cache',
+);
+preloadedCurrentUser = null;
+assert(
+	discourseNativeInitialCurrentUsername(preloadedCurrentUserHost) === '',
+	'匿名页没有预加载 currentUser 时必须继续使用匿名分区',
 );
 
 let classCurrentUser: unknown = null;
@@ -929,38 +984,52 @@ assert(
 
 const adminMenuInputs: Readonly<Record<string, unknown>>[] = [];
 const adminActions: string[] = [];
-const adminMenu = discourseNativePostAdminMenu({
-	lookup(name) {
-		if (name === 'service:menu') {
-			return {
-				show(_anchor: HTMLElement, input: Readonly<Record<string, unknown>>) {
-					adminMenuInputs.push(input);
-				},
-			};
-		}
-		if (name === 'controller:topic') {
-			return {
-				send(action: string, post: object) {
-					assert(
-						post === nativeAdminPost,
-						'原生管理回调必须保持同一个 Post model',
-					);
-					adminActions.push(action);
-				},
-			};
-		}
-		return null;
+let positionedAdminAnchor: HTMLElement | null = null;
+let positionedAdminContent: HTMLElement | null = null;
+const adminMenu = discourseNativePostAdminMenu(
+	{
+		lookup(name) {
+			if (name === 'service:menu') {
+				return {
+					show(
+						_anchor: HTMLElement,
+						input: Readonly<Record<string, unknown>>,
+					) {
+						adminMenuInputs.push(input);
+					},
+				};
+			}
+			if (name === 'controller:topic') {
+				return {
+					send(action: string, post: object) {
+						assert(
+							post === nativeAdminPost,
+							'原生管理回调必须保持同一个 Post model',
+						);
+						adminActions.push(action);
+					},
+				};
+			}
+			return null;
+		},
+		lookupModule(name) {
+			return name === 'discourse/components/admin-post-menu'
+				? { default: Object.freeze({ name: 'AdminPostMenu' }) }
+				: null;
+		},
 	},
-	lookupModule(name) {
-		return name === 'discourse/components/admin-post-menu'
-			? { default: Object.freeze({ name: 'AdminPostMenu' }) }
-			: null;
+	{
+		computePosition(anchor, content) {
+			positionedAdminAnchor = anchor;
+			positionedAdminContent = content;
+		},
 	},
-});
+);
 const nativeAdminPost = Object.freeze({ id: 20 });
 let adminRerenders = 0;
+const nativeAdminAnchor = {} as HTMLElement;
 await adminMenu.show(
-	{} as HTMLElement,
+	nativeAdminAnchor,
 	nativeAdminPost,
 	() => {
 		adminRerenders += 1;
@@ -968,15 +1037,145 @@ await adminMenu.show(
 );
 const adminInput = adminMenuInputs[0];
 const adminData = adminInput?.data as Readonly<Record<string, unknown>>;
+const adminContent = {} as HTMLElement;
+const adminComputePosition = adminInput?.computePosition;
+assert(
+	typeof adminComputePosition === 'function',
+	'原生楼层管理菜单必须暴露 Reader 固定定位回调',
+);
+(adminComputePosition as (content: HTMLElement) => void)(adminContent);
 (adminData.toggleWiki as () => void)();
 (adminData.changePostOwner as () => void)();
 (adminData.scheduleRerender as () => void)();
 assert(
 	adminInput?.identifier === 'admin-post-menu' &&
 	adminInput?.component &&
+		adminInput.strategy === 'fixed' &&
+		(adminInput.fallbackPlacements as readonly string[]).join(',') ===
+			'right-start,left-start,right-end,left-end' &&
+		positionedAdminAnchor === nativeAdminAnchor &&
+		positionedAdminContent === adminContent &&
 	adminActions.join(',') === 'toggleWiki,changePostOwner' &&
 	adminRerenders === 1,
-	'楼层管理必须完整委托原生 admin-post-menu/controller 并只回调 canonical 刷新',
+	'楼层管理必须完整委托原生菜单/controller，并允许 Reader 注入固定定位后只回调 canonical 刷新',
+);
+
+const adminPositionDom = parseHTML(
+	'<!doctype html><html><body></body></html>',
+);
+const adminPositionDocument = adminPositionDom.document as unknown as Document;
+Object.defineProperties(adminPositionDocument.documentElement, {
+	clientWidth: { configurable: true, value: 1200 },
+	clientHeight: { configurable: true, value: 800 },
+});
+const adminReader = adminPositionDocument.createElement('main');
+const adminPositionAnchor = adminPositionDocument.createElement('button');
+const adminSurface = adminPositionDocument.createElement('div');
+adminSurface.className = 'fk-d-menu';
+adminSurface.dataset.identifier = 'admin-post-menu';
+const adminPositionContent = adminPositionDocument.createElement('ul');
+adminPositionContent.className = 'dropdown-menu';
+adminSurface.append(adminPositionContent);
+adminPositionDocument.body.append(
+	adminReader,
+	adminPositionAnchor,
+	adminSurface,
+);
+Object.defineProperty(adminReader, 'getBoundingClientRect', {
+	configurable: true,
+	value: () => ({
+		x: 600,
+		y: 0,
+		left: 600,
+		top: 0,
+		right: 1200,
+		bottom: 800,
+		width: 600,
+		height: 800,
+		toJSON() {},
+	}),
+});
+let adminAnchorRect = {
+	x: 620,
+	y: 700,
+	left: 620,
+	top: 700,
+	right: 650,
+	bottom: 730,
+	width: 30,
+	height: 30,
+	toJSON() {},
+};
+Object.defineProperty(adminPositionAnchor, 'getBoundingClientRect', {
+	configurable: true,
+	value: () => adminAnchorRect,
+});
+Object.defineProperty(adminSurface, 'getBoundingClientRect', {
+	configurable: true,
+	value: () => ({
+		x: 0,
+		y: 0,
+		left: 0,
+		top: 0,
+		right: 240,
+		bottom: 80,
+		width: 240,
+		height: 80,
+		toJSON() {},
+	}),
+});
+const adminTopLayers = new Set<HTMLElement>();
+const adminTopLayer = {
+	isOpen: (element: HTMLElement) => adminTopLayers.has(element),
+	show: (element: HTMLElement) => {
+		adminTopLayers.add(element);
+	},
+	hide: (element: HTMLElement) => {
+		adminTopLayers.delete(element);
+	},
+};
+assert(
+	positionReaderNativePostAdminMenu({
+		document: adminPositionDocument,
+		reader: adminReader,
+		anchor: adminPositionAnchor,
+		content: adminPositionContent,
+		topLayer: adminTopLayer,
+	}) &&
+		adminSurface.dataset.ldpReaderAdminMenu === 'positioned' &&
+		adminSurface.dataset.ldpReaderTopLayer === 'portal' &&
+		adminSurface.getAttribute('popover') === 'manual' &&
+		adminTopLayers.has(adminSurface) &&
+		adminSurface.style.getPropertyValue('--ldp-reader-admin-menu-left') ===
+			'658px' &&
+		adminSurface.style.getPropertyValue('--ldp-reader-admin-menu-top') ===
+			'700px',
+	'原生楼层管理菜单必须提升到 Reader top layer，并优先停靠在锚点右侧',
+);
+adminAnchorRect = {
+	x: 1160,
+	y: 770,
+	left: 1160,
+	top: 770,
+	right: 1190,
+	bottom: 800,
+	width: 30,
+	height: 30,
+	toJSON() {},
+};
+positionReaderNativePostAdminMenu({
+	document: adminPositionDocument,
+	reader: adminReader,
+	anchor: adminPositionAnchor,
+	content: adminPositionContent,
+	topLayer: adminTopLayer,
+});
+assert(
+	adminSurface.style.getPropertyValue('--ldp-reader-admin-menu-left') ===
+		'912px' &&
+		adminSurface.style.getPropertyValue('--ldp-reader-admin-menu-top') ===
+			'712px',
+	'Reader 右侧或底部空间不足时，原生楼层管理菜单必须翻到锚点左侧并夹入 Reader 边界',
 );
 
 const currentUserValues: Record<string, unknown> = {

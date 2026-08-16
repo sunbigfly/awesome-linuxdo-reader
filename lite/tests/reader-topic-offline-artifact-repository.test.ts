@@ -83,6 +83,71 @@ assert(
 	'下载 HTML 必须按 Topic 作为永久缓存独立存储，重新创建 Reader 后仍可恢复 404 版本标记',
 );
 
+let archiveWriterResponses!: ResponseRepository;
+let archiveReaderResponses!: ResponseRepository;
+archiveWriterResponses = new ResponseRepository({
+	store,
+	maxMemoryEntries: 8,
+	maxMemoryBytes: 4_096,
+	now: () => 2_000,
+	mutationPort: {
+		publish: (query) => archiveReaderResponses.applyExternalInvalidation(query),
+	},
+});
+archiveReaderResponses = new ResponseRepository({
+	store,
+	maxMemoryEntries: 8,
+	maxMemoryBytes: 4_096,
+	now: () => 2_000,
+	mutationPort: {
+		publish: (query) => archiveWriterResponses.applyExternalInvalidation(query),
+	},
+});
+const archiveWriter = new ReaderTopicOfflineArtifactRepository(
+	archiveWriterResponses,
+	'account:alice',
+);
+const archiveReader = new ReaderTopicOfflineArtifactRepository(
+	archiveReaderResponses,
+	'account:alice',
+);
+await archiveWriter.write(Object.freeze({
+	topicId: 43,
+	title: '跨标签离线 Topic',
+	html: '<!doctype html><main>版本一</main>',
+	filename: 'topic-43.html',
+	postCount: 1,
+	expectedPostCount: 1,
+	complete: true,
+	createdAt: 1_700,
+	finishedAt: 1_800,
+}));
+assert(
+	(await archiveReader.read(43))?.html.includes('版本一') === true,
+	'另一个标签必须能恢复刚提交的离线正文',
+);
+await archiveWriter.write(Object.freeze({
+	topicId: 43,
+	title: '跨标签离线 Topic',
+	html: '<!doctype html><main>版本二</main>',
+	filename: 'topic-43.html',
+	postCount: 2,
+	expectedPostCount: 2,
+	complete: true,
+	createdAt: 1_700,
+	finishedAt: 1_900,
+}));
+assert(
+	(await archiveReader.read(43))?.html.includes('版本二') === true,
+	'离线正文覆盖后必须清除其他标签的旧 memory LRU',
+);
+await archiveReader.list();
+await archiveWriter.remove(43);
+assert(
+	!(await archiveReader.list()).some((entry) => entry.topicId === 43),
+	'离线目录删除后其他标签不得继续显示旧 manifest',
+);
+
 await responses().invalidate({ tags: ['topic:42'] });
 const survivedTopicRefresh = new ReaderTopicOfflineArtifactRepository(
 	responses(),

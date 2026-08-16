@@ -82,6 +82,17 @@ assert(
 );
 
 colorPicker.hidden = true;
+const modelMetadata = document.createElement('article');
+modelMetadata.className = 'ldp-ai-service-model-metadata';
+shadowRoot.append(modelMetadata);
+assert(
+	readerFrontmostEscapeSurface(document) === modelMetadata &&
+		readerEscapeOwnedBy(document, modelMetadata) &&
+		!readerEscapeOwnedBy(document, settings),
+	'模型详情作为设置面板 sibling 打开时必须先取得 Esc，关闭详情不得连带关闭设置面板',
+);
+
+modelMetadata.hidden = true;
 reactionPicker.hidden = true;
 settings.hidden = true;
 discussion.hidden = true;

@@ -4,6 +4,7 @@ import {
 } from '../src/app/reader-application.js';
 import {
 	createReaderBrowserRuntimeStage,
+	readerWebDavCacheClearPlan,
 	type ReaderBrowserRuntime,
 } from '../src/app/reader-browser-runtime.js';
 import {
@@ -51,12 +52,29 @@ import type {
 	DiscourseTopicPostInput,
 } from '../src/topic/topic-session.js';
 import type {
+	ReaderTopicViewportAnchor,
+} from '../src/topic/reader-topic-dom-coordinator.js';
+import type {
 	ReaderTopicNavigationResult,
 } from '../src/topic/reader-topic-navigation-controller.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
 }
+
+const cacheClearPlan = readerWebDavCacheClearPlan([
+	'history',
+	'notifications',
+	'responses',
+	'topics',
+]);
+assert(
+	cacheClearPlan.webDavCategories.join(',') ===
+		'history,notification-history,bookmarks,translation-cache,activity-history' &&
+	cacheClearPlan.protectedCategories.join(',') ===
+		'history,notifications,responses',
+	'本地收藏、回应与翻译缓存清理必须同时解除 bookmarks、activity-history 与 translation-cache 基线，不能把缓存缺失传播成远端删除',
+);
 
 function deferred<T>(): Readonly<{
 	readonly promise: Promise<T>;
@@ -1627,7 +1645,10 @@ assert(
 	'Topic Post features 必须只接收 application 唯一原生 composer，不能自行 lookup/构造',
 );
 assert(
-	await topicFactoryAvatarRecovery?.('/avatar/runtime-user.png') ===
+	await (topicFactoryAvatarRecovery as
+		((source: string) => Promise<string>) | null)?.(
+			'/avatar/runtime-user.png',
+		) ===
 		'https://linux.do/avatar/runtime-user.png',
 	'Topic 正文头像恢复必须接入运行时唯一图片资源服务并返回校验后的稳定 URL',
 );
@@ -1788,14 +1809,15 @@ const captureViewportAnchorBeforeQuote =
 	opened.value.dom.captureViewportAnchor.bind(opened.value.dom);
 const restoreViewportAnchorBeforeQuote =
 	opened.value.dom.restoreViewportAnchor.bind(opened.value.dom);
-const quoteSourceViewport = Object.freeze({
+const quoteSourceViewport: Readonly<ReaderTopicViewportAnchor> = Object.freeze({
 	postNumber: discoursePostNumber(3),
 	postOffset: 19,
 	scrollTop: 900,
 	scrollRange: 1_200,
 	scrollRatio: 0.75,
 });
-let simulatedQuoteViewport = quoteSourceViewport;
+let simulatedQuoteViewport: Readonly<ReaderTopicViewportAnchor> =
+	quoteSourceViewport;
 let capturingQuoteSource = true;
 const quoteViewportRestores: Array<Readonly<{
 	readonly postNumber: number;
@@ -1811,7 +1833,7 @@ Object.defineProperty(opened.value.dom, 'captureViewportAnchor', {
 });
 Object.defineProperty(opened.value.dom, 'restoreViewportAnchor', {
 	configurable: true,
-	value: (anchor: typeof quoteSourceViewport) => {
+	value: (anchor: ReaderTopicViewportAnchor) => {
 		quoteViewportRestores.push(anchor);
 		simulatedQuoteViewport = anchor.scrollRatio === undefined
 			? Object.freeze({ ...anchor, scrollRange: 1_200, scrollRatio: 0.75 })
@@ -2685,6 +2707,34 @@ assert(
 const activeBeforeCategoryClear = activeRuntime.shell.activeValue!;
 const topic13CallsBeforeCategoryClear = nativeCalls.filter((call) =>
 	call.path.startsWith('/t/13.json?track_visit=true')).length;
+const cacheHistoryCountBeforeRefresh = activeRuntime.history.snapshot.entries.length;
+(settingsView as ReaderSettingsView<TestPreferences>).open('cache');
+for (let turn = 0; turn < 2_000; turn += 1) {
+	const text = document.querySelector<HTMLElement>('.ldp-cache-row')
+		?.textContent ?? '';
+	if (text.includes(`${cacheHistoryCountBeforeRefresh} 个主题`)) break;
+	await new Promise((resolve) => setTimeout(resolve, 1));
+}
+(settingsView as ReaderSettingsView<TestPreferences>).close();
+activeRuntime.history.remember({
+	topicId: 987_654_321,
+	title: '缓存面板重新进入刷新回归记录',
+	postNumber: 1,
+});
+(settingsView as ReaderSettingsView<TestPreferences>).open('cache');
+for (let turn = 0; turn < 2_000; turn += 1) {
+	const text = document.querySelector<HTMLElement>('.ldp-cache-row')
+		?.textContent ?? '';
+	if (text.includes(`${cacheHistoryCountBeforeRefresh + 1} 个主题`)) break;
+	await new Promise((resolve) => setTimeout(resolve, 1));
+}
+assert(
+	(document.querySelector<HTMLElement>('.ldp-cache-row')?.textContent ?? '')
+		.includes(`${cacheHistoryCountBeforeRefresh + 1} 个主题`),
+	'重新进入数据管理面板时必须刷新实时缓存统计，不能保留首次挂载快照',
+);
+(settingsView as ReaderSettingsView<TestPreferences>).close();
+activeRuntime.history.forget(987_654_321);
 (settingsView as ReaderSettingsView<TestPreferences>).open('cache');
 for (const category of ['topics', 'users', 'notifications', 'responses', 'assets']) {
 	const input = document.querySelector<HTMLInputElement>(
@@ -2857,7 +2907,7 @@ for (let turn = 0; turn < 2_000; turn += 1) {
 }
 assert(
 	activeRuntime.shell.activeTopicId === 16 &&
-		topic16Attempts === 2 &&
+		Number(topic16Attempts) === 2 &&
 		manualChallengeNotice.hidden &&
 		shellRoot.querySelector('.ldp-selection-toast')?.textContent
 			?.includes('目标帖子已继续加载'),

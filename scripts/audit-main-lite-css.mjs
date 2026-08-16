@@ -597,6 +597,14 @@ const requiredLayoutContracts = [
 		/:is\(\.ldp-content,\.ldp-solved-excerpt\)\s+img:not\(\.emoji\)\s*\{[^}]*zoom:\s*var\(--ldp-image-zoom,\s*1\)\s*;/s,
 	],
 	[
+		'cooked table local horizontal scroll',
+		/\.ldp-content\s+table\s*\{[^}]*width:\s*100%\s*;[^}]*max-width:\s*100%\s*;[^}]*overflow-x:\s*auto\s*;[^}]*overscroll-behavior-inline:\s*contain\s*;/s,
+	],
+	[
+		'cooked table readable column floor',
+		/\.ldp-content\s+:where\(th,td\)\s*\{[^}]*min-width:\s*9rem\s*;/s,
+	],
+	[
 		'lightbox comments width inheritance',
 		/\.ldp-lightbox\s*\{(?:(?!--ldp-lb-comments-width-preferred:\s*25%).)*--ldp-lb-comments-width:\s*clamp\(min\(240px,\s*50%\),\s*var\(--ldp-lb-comments-width-preferred,\s*25%\),\s*50%\)\s*;/s,
 	],

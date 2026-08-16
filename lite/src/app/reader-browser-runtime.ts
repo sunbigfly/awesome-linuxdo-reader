@@ -59,6 +59,9 @@ import {
 	visibleDiscourseNativeFloatingSurface,
 } from '../discourse/reader-native-composer-window.js';
 import {
+	positionReaderNativePostAdminMenu,
+} from '../discourse/reader-native-post-admin-menu.js';
+import {
 	DiscourseNativePostModelFactory,
 } from '../discourse/native-post-model-factory.js';
 import {
@@ -160,6 +163,9 @@ import {
 	type ObjectUrlPort,
 } from '../media/reader-image-resource-service.js';
 import {
+	ReaderLightboxImagePicker,
+} from '../media/reader-lightbox-image-picker.js';
+import {
 	ReaderMediaPrefetchService,
 } from '../media/reader-media-prefetch-service.js';
 import {
@@ -216,6 +222,7 @@ import {
 } from '../network/coordinated-request-client.js';
 import {
 	BrowserDiscourseNativeAjaxPort,
+	BrowserDiscourseNativeMutationTransport,
 	BrowserDiscourseNativeReadTransport,
 } from '../network/discourse-native-read-transport.js';
 import {
@@ -332,6 +339,18 @@ import {
 	type ReaderTopicActionRailPreferencesPort,
 } from '../post/reader-topic-action-rail.js';
 import {
+	ReaderTopicSummaryImageUploadAdapter,
+	ReaderTopicSummaryRequestAdapter,
+} from '../post/reader-topic-summary-request-adapter.js';
+import {
+	ReaderTopicSummarySurface,
+	type ReaderTopicSummaryFontCatalogPort,
+	type ReaderTopicSummaryImagePreview,
+} from '../post/reader-topic-summary-surface.js';
+import {
+	ReaderTopicCustomSummaryRequestAdapter,
+} from '../post/reader-topic-custom-summary.js';
+import {
 	ReaderPostManagementActionCoordinator,
 } from '../post/reader-post-management-action-coordinator.js';
 import {
@@ -414,6 +433,7 @@ import {
 import type { ReaderWebDavCategory } from '../sync/reader-webdav-model.js';
 import {
 	createReaderWebDavCategoryPorts,
+	readerWebDavPreferenceRecordMatchesSchema,
 } from '../sync/reader-webdav-category-ports.js';
 import {
 	ReaderPerformanceSettingsForm,
@@ -427,6 +447,9 @@ import {
 	ReaderTranslationSettingsForm,
 	type ReaderTranslationSettingsFormOptions,
 } from '../settings/reader-translation-settings-form.js';
+import {
+	ReaderAiServiceSettingsForm,
+} from '../settings/reader-ai-service-settings-form.js';
 import type {
 	ReaderTranslationConfigRepository,
 } from '../translation/reader-translation-config.js';
@@ -647,6 +670,36 @@ const hostTopicUserCardSelector =
 	'html.ldp-reader-workspace ' +
 	':is(.topic-list-item,.latest-topic-list-item) ' +
 	':is(.posters,.topic-poster) [data-user-card]';
+
+export function readerWebDavCacheClearPlan(
+	categories: readonly ReaderCacheCategory[],
+): Readonly<{
+	readonly webDavCategories: readonly ReaderWebDavCategory[];
+	readonly protectedCategories: readonly ReaderCacheCategory[];
+}> {
+	const webDavCategories: ReaderWebDavCategory[] = [];
+	const protectedCategories: ReaderCacheCategory[] = [];
+	if (categories.includes('history')) {
+		webDavCategories.push('history');
+		protectedCategories.push('history');
+	}
+	if (categories.includes('notifications')) {
+		webDavCategories.push('notification-history');
+		protectedCategories.push('notifications');
+	}
+	if (categories.includes('responses')) {
+		webDavCategories.push(
+			'bookmarks',
+			'translation-cache',
+			'activity-history',
+		);
+		protectedCategories.push('responses');
+	}
+	return Object.freeze({
+		webDavCategories: Object.freeze(webDavCategories),
+		protectedCategories: Object.freeze(protectedCategories),
+	});
+}
 
 export type ReaderBrowserTopicContext<
 	TTopic extends DiscourseComposerTopicInput<TPost>,
@@ -888,6 +941,7 @@ export interface ReaderBrowserBookmarkOptions extends Omit<
 	readonly pageSize?: number;
 	readonly liveRefreshDelayMs?: number;
 	readonly backgroundWarmDelayMs?: number;
+	readonly visibleHistoryConcurrency?: number;
 	readonly changeTabOrder?: (
 		order: readonly ReaderBookmarkTab[],
 	) => void | Promise<void>;
@@ -993,6 +1047,7 @@ export interface ReaderBrowserRuntimeOptions<
 	readonly bookmarks?: false | ReaderBrowserBookmarkOptions;
 	readonly boostCopy?: false | ReaderBrowserBoostCopyOptions;
 	readonly topicActionRail?: false | ReaderTopicActionRailPreferencesPort;
+	readonly topicSummaryFonts?: ReaderTopicSummaryFontCatalogPort;
 	readonly unwantedTopicFilter?: false | ReaderUnwantedTopicFilterPreferencesPort;
 	readonly downloadCurrentTopic?: () => void | Promise<void>;
 	readonly searchForms?: ReaderSearchFormsPort;
@@ -1162,6 +1217,10 @@ export interface ReaderBrowserRuntimeStageOptions<
 				readonly client: ReaderWebDavClient;
 				readonly repository: ReaderWebDavConfigRepository;
 				readonly customSites: ReaderCustomSiteRepository;
+				readonly preferencesCodec: Pick<
+					PreferencesConfigCodec<TPreferences>,
+					'export'
+				>;
 			}>;
 		readonly aboutContent?:
 			| false
@@ -1567,6 +1626,40 @@ function documentTopicId(document: Document): number | null {
 	return Number.isSafeInteger(topicId) && topicId > 0 ? topicId : null;
 }
 
+function createReaderLocalFontQuery(
+	document: Document,
+): (() => Promise<readonly string[]>) | undefined {
+	const browserWindow = document.defaultView as
+		| (Window & {
+			queryLocalFonts?: () => Promise<
+				readonly Readonly<{ readonly family?: string }>[]
+			>;
+		})
+		| null;
+	if (!browserWindow?.queryLocalFonts) return undefined;
+	let resolved: readonly string[] | null = null;
+	let pending: Promise<readonly string[]> | null = null;
+	return async () => {
+		if (resolved) return resolved;
+		if (pending) return pending;
+		pending = browserWindow.queryLocalFonts!()
+			.then((entries) => Object.freeze([...new Set(
+				entries
+					.map((entry) => String(entry.family ?? '').trim())
+					.filter(Boolean),
+			)].sort((left, right) => left.localeCompare(right))))
+			.then((names) => {
+				resolved = names;
+				return names;
+			});
+		try {
+			return await pending;
+		} finally {
+			pending = null;
+		}
+	};
+}
+
 /**
  * 浏览器 Reader 的唯一运行时组合根。
  *
@@ -1725,6 +1818,8 @@ export class ReaderBrowserRuntime<
 			}
 		};
 		try {
+			const nativeUserCatalog =
+				discourseNativeUnwantedTopicRuleCatalog(options.host);
 			this.selectSurface = new ReaderSelectSurface({
 				document: options.document,
 				root: this.shell.view.surfaceHost,
@@ -1801,6 +1896,7 @@ export class ReaderBrowserRuntime<
 			this.assignmentForm = new ReaderAssignmentFormSurface({
 				document: options.document,
 				root: this.shell.view.surfaceHost,
+				users: nativeUserCatalog,
 				coordinator: this.actionSurfaces,
 				...(options.renderIcon
 					? { renderIcon: options.renderIcon }
@@ -2178,6 +2274,7 @@ export class ReaderBrowserRuntime<
 			const userObservationPages = new ReaderUserObservationPageRepository(
 				this.data.responses,
 				options.topic.authScope,
+				this.data.cacheCoordination,
 			);
 			this.userObservations = new ReaderUserObservationSession({
 				requests: new DiscourseUserObservationAdapter({
@@ -2197,6 +2294,9 @@ export class ReaderBrowserRuntime<
 				storage: options.storage,
 				pages: userObservationPages,
 				authScope: options.topic.authScope,
+				historyCoordination: this.data.cacheCoordination,
+				historyCoordinationKey:
+					`reader-user-observation-history:v1:${options.topic.authScope}`,
 				requestResume: (cause) =>
 					this.data.client.requestResume(cause),
 				notify: (message) => this.feedback.show(message),
@@ -2207,6 +2307,10 @@ export class ReaderBrowserRuntime<
 					cause,
 				),
 			});
+			this.scope.add(this.data.cacheCoordination.subscribeInvalidation((query) => {
+				this.users.applyExternalCacheInvalidation(query);
+				this.userObservations.applyExternalCacheInvalidation(query);
+			}));
 			this.userObservationView = new ReaderUserObservationView({
 					document: options.document,
 					mount: this.shell.view.surfaceHost,
@@ -2301,9 +2405,7 @@ export class ReaderBrowserRuntime<
 					...(options.unwantedTopicFilter
 						? {
 							filterPreferences: options.unwantedTopicFilter,
-							filterCatalog: discourseNativeUnwantedTopicRuleCatalog(
-								options.host,
-							),
+							filterCatalog: nativeUserCatalog,
 						}
 						: {}),
 					storage: options.storage,
@@ -2691,12 +2793,34 @@ export class ReaderBrowserRuntime<
 				new BrowserDiscoursePresencePort(options.host);
 			const nativeTopicLinks =
 				discourseNativeTopicLinks(options.host, topicBaseUrl);
+			const topicSummaryTransport = (() => {
+				try {
+					const hostname = new URL(
+						topicBaseUrl,
+						options.document.baseURI,
+					).hostname.toLocaleLowerCase();
+					return hostname === 'linux.do'
+						? new BrowserDiscourseNativeMutationTransport(this.nativeAjax)
+						: null;
+				} catch {
+					return null;
+				}
+			})();
 			const nativeFlagCatalog =
 				discourseNativeFlagCatalog(options.host);
 			const nativeEmojiMenu =
 				discourseNativeEmojiMenu(options.host);
 			const nativeAdminMenu =
-				discourseNativePostAdminMenu(options.host);
+				discourseNativePostAdminMenu(options.host, {
+					computePosition: (anchor, content) => {
+						positionReaderNativePostAdminMenu({
+							document: options.document,
+							reader: this.shell.view.modal,
+							anchor,
+							content,
+						});
+					},
+				});
 			const nativePostModels =
 				new DiscourseNativePostModelFactory(options.host);
 			const nativeBookmarkForm =
@@ -2770,7 +2894,16 @@ export class ReaderBrowserRuntime<
 				LifecycleScope,
 				ReaderTopicLiveNavigationView<TTopic, TPost>
 			>();
-			if (options.notifications === false) {
+			const topicSummaryPreviews = new WeakMap<
+				LifecycleScope,
+				{ open: ((input: ReaderTopicSummaryImagePreview) => void) | null }
+			>();
+			const authenticatedCollectionScope =
+				options.topic.authScope.startsWith('account:');
+			if (
+				options.notifications === false ||
+				!authenticatedCollectionScope
+			) {
 				this.notificationNative = null;
 				this.notificationRequests = null;
 				this.notificationActions = null;
@@ -2830,6 +2963,8 @@ export class ReaderBrowserRuntime<
 							sortRecords: sortReaderNotifications,
 							pageSize: 60,
 							retainForMs: 180 * 24 * 60 * 60_000,
+							permanent: true,
+							coordination: this.data.cacheCoordination,
 						}),
 						native: this.notificationNative,
 						actions: this.notificationActions,
@@ -2889,6 +3024,9 @@ export class ReaderBrowserRuntime<
 							}),
 						visibleHistoryConcurrency:
 							notificationOptions.visibleHistoryConcurrency ?? 3,
+						historyCoordination: this.data.cacheCoordination,
+						historyCoordinationKey:
+							`reader-notification-history:v1:${options.topic.authScope}`,
 						activity: {
 							visible: () =>
 								options.document.visibilityState !== 'hidden',
@@ -2964,7 +3102,10 @@ export class ReaderBrowserRuntime<
 							),
 						});
 					}
-			if (options.bookmarks === false) {
+			if (
+				options.bookmarks === false ||
+				!authenticatedCollectionScope
+			) {
 				this.bookmarkNative = null;
 				this.bookmarkRequests = null;
 				this.bookmarkActions = null;
@@ -3028,6 +3169,8 @@ export class ReaderBrowserRuntime<
 						sortRecords: sortReaderBookmarkRecords,
 						pageSize: 60,
 						retainForMs: 180 * 24 * 60 * 60_000,
+						permanent: true,
+						coordination: this.data.cacheCoordination,
 					}),
 					native: this.bookmarkNative,
 					actions: this.bookmarkActions,
@@ -3057,6 +3200,11 @@ export class ReaderBrowserRuntime<
 							}),
 						backgroundWarmDelayMs:
 							bookmarkOptions.backgroundWarmDelayMs ?? 2_400,
+						visibleHistoryConcurrency:
+							bookmarkOptions.visibleHistoryConcurrency ?? 3,
+						historyCoordination: this.data.cacheCoordination,
+						historyCoordinationKey:
+							`reader-bookmark-history:v1:${options.topic.authScope}`,
 						...(bookmarkOptions.changeTabOrder === undefined
 						? {}
 						: {
@@ -3661,7 +3809,137 @@ export class ReaderBrowserRuntime<
 								cause,
 							),
 						});
-					const topicActionRail = options.topicActionRail
+					let topicActionRail: ReaderTopicActionRail<TPost> | null = null;
+					const topicSummaryImagePicker = this.imageResources
+						? new ReaderLightboxImagePicker({
+							document: options.document,
+							mount: this.shell.view.surfaceHost,
+							catalog: topicImages,
+							originalSources: this.imageResources,
+							maximumSelected: 6,
+							notify: (message) => this.feedback.show(message),
+							parentScope: context.scope,
+							onError: (cause) => reportTopicFeature(
+								context.topicId,
+								'image-index',
+								cause,
+							),
+						})
+						: null;
+					const topicSummaryPreview = options.lightbox && options.resources
+						? { open: null } as {
+							open: ((input: ReaderTopicSummaryImagePreview) => void) | null;
+						}
+						: null;
+					if (topicSummaryPreview) {
+						topicSummaryPreviews.set(context.scope, topicSummaryPreview);
+						context.scope.add(() => topicSummaryPreviews.delete(context.scope));
+					}
+					const topicSummarySurface =
+						topicSummaryTransport && options.topicActionRail
+							? new ReaderTopicSummarySurface({
+								document: options.document,
+								mount: this.shell.view.surfaceHost,
+								request: new ReaderTopicSummaryRequestAdapter({
+									gateway: this.data.gateway,
+									transport: topicSummaryTransport,
+									authScope: options.topic.authScope,
+									topicId: context.topicId,
+									signal: context.signal,
+									...(options.topic.basePath === undefined
+										? {}
+										: { basePath: options.topic.basePath }),
+								}),
+								...(this.translationRequests
+									? {
+										aiModels: this.translationRequests,
+									customRequest:
+											new ReaderTopicCustomSummaryRequestAdapter({
+												document: options.document,
+												baseUrl: topicBaseUrl,
+												session: bundle.services.session,
+												topology: bundle.services.replies.topology,
+												completion: this.translationRequests,
+												signal: context.signal,
+											}),
+									}
+									: {}),
+								...(topicSummaryImagePicker && this.imageResources
+									? {
+										imagePicker: topicSummaryImagePicker,
+										imageResources: this.imageResources,
+									}
+									: {}),
+								uploader: new ReaderTopicSummaryImageUploadAdapter({
+									gateway: this.data.gateway,
+									transport: topicSummaryTransport,
+									authScope: options.topic.authScope,
+									topicId: context.topicId,
+									signal: context.signal,
+									createFormData: () => {
+										const Constructor = options.document.defaultView
+											?.FormData ?? FormData;
+										return new Constructor();
+									},
+									...(options.topic.basePath === undefined
+										? {}
+										: { basePath: options.topic.basePath }),
+								}),
+								topicTitle: () => {
+									const topic = bundle.services.session.topic as
+										| Readonly<{ readonly title?: unknown }>
+										| null;
+									return String(
+										topic?.title ?? options.document.title ?? '',
+									);
+								},
+								topicUrl: () =>
+									nativeTopicLinks.topicHref(context.topicId),
+								openReply: async (raw) => {
+									const topic = bundle.services.session.topic;
+									const firstPost = bundle.services.session.postByNumber(1);
+									if (!topic || !firstPost) {
+										throw new Error('当前主题 #1 楼尚未就绪');
+									}
+									await this.composer.openReply({
+										topic,
+										post: firstPost,
+										initialRaw: raw,
+									});
+								},
+								...(options.share
+									? { clipboard: options.share }
+									: {}),
+								...(this.blobDownloads
+									? { downloads: this.blobDownloads }
+									: {}),
+								settingsStorage: options.storage,
+								positionMode: () =>
+									this.shell.view.root.dataset.readerWorkspaceMode ??
+									'floating',
+								...(options.topicSummaryFonts
+									? { fonts: options.topicSummaryFonts }
+									: {}),
+								...(topicSummaryPreview
+									? {
+										previewImage: (input: ReaderTopicSummaryImagePreview) => {
+											if (!topicSummaryPreview.open) {
+												throw new Error('主题灯箱尚未完成装配');
+											}
+											topicSummaryPreview.open(input);
+										},
+									}
+									: {}),
+								notify: (message) => this.feedback.show(message),
+								parentScope: context.scope,
+								onError: (cause) => reportTopicFeature(
+									context.topicId,
+									'post-action',
+									cause,
+								),
+							})
+							: null;
+					topicActionRail = options.topicActionRail
 						? new ReaderTopicActionRail<TPost>({
 							document: options.document,
 							mount: this.shell.view.modal,
@@ -3686,6 +3964,9 @@ export class ReaderBrowserRuntime<
 									);
 								}
 							},
+							...(topicSummarySurface
+								? { openTopicSummary: () => topicSummarySurface.open() }
+								: {}),
 							...(options.downloadCurrentTopic
 								? { downloadCurrentTopic: options.downloadCurrentTopic }
 								: {}),
@@ -4654,6 +4935,42 @@ export class ReaderBrowserRuntime<
 						},
 					})
 					: null;
+				const topicSummaryPreview = topicSummaryPreviews.get(context.scope);
+				const topicSummaryPreviewObjectUrls = options.resources?.objectUrls;
+				if (topicLightbox && topicSummaryPreview && topicSummaryPreviewObjectUrls) {
+					topicSummaryPreview.open = ({ blob, alt, returnFocus }) => {
+						const source = topicSummaryPreviewObjectUrls.createObjectURL(blob);
+						try {
+							const session = topicLightbox.open({
+								items: [Object.freeze({
+									key: `topic-summary-share:${context.topicId}:${Date.now()}`,
+									topicId: context.topicId,
+									sourcePostNumber: 1,
+									imageOrder: 0,
+									previewSrc: source,
+									originalSrc: source,
+									alt,
+								})],
+								initialIndex: 0,
+								returnFocus,
+								commentsExpanded: false,
+								descriptionExpanded: false,
+								commentsEnabled: false,
+								includeTopicImages: false,
+								batchEnabled: false,
+							});
+							session.view.scope.add(() => {
+								topicSummaryPreviewObjectUrls.revokeObjectURL(source);
+							});
+						} catch (cause) {
+							topicSummaryPreviewObjectUrls.revokeObjectURL(source);
+							throw cause;
+						}
+					};
+					context.scope.add(() => {
+						topicSummaryPreview.open = null;
+					});
+				}
 					const openTopicImage = options.openTopicImage;
 				const topicImageInteraction = topicLightbox || openTopicImage
 					? new ReaderTopicImageInteraction({
@@ -6392,6 +6709,9 @@ export function createReaderBrowserRuntimeStage<
 			const theme = themeByShell.get(shell) ?? null;
 			const appearance = appearanceByShell.get(shell) ?? null;
 			const font = fontByShell.get(shell) ?? null;
+			const queryLocalFonts = createReaderLocalFontQuery(
+				options.runtime.document,
+			);
 			const rawNavigation = options.runtime.navigation;
 			if (boostCopyPreferences && options.runtime.boostCopy) {
 				throw new Error(
@@ -6733,6 +7053,14 @@ export function createReaderBrowserRuntimeStage<
 					...(topicActionRail === undefined
 						? {}
 						: { topicActionRail }),
+					topicSummaryFonts: Object.freeze({
+						readCurrentFamily: () =>
+							options.runtime.document.defaultView
+								?.getComputedStyle(shell.view.root)
+								.getPropertyValue('--ldp-post-font-family')
+								.trim() || 'system-ui,sans-serif',
+						...(queryLocalFonts ? { queryLocalFonts } : {}),
+					}),
 					...(options.openQueue && options.runtime.resources
 						? {
 							downloadCurrentTopic: () => downloadCurrentTopic?.(),
@@ -7322,7 +7650,7 @@ export function createReaderBrowserRuntimeStage<
 			if (translationFormOptions && (!settingsView || !runtime.translationRequests)) {
 				runtime.destroy();
 				throw new Error(
-					'翻译设置 form 需要启用 Settings View 与 TranslationRequestAdapter',
+					'翻译与 AI 服务设置 form 需要启用 Settings View 与 TranslationRequestAdapter',
 				);
 			}
 			if (settingsView && translationFormOptions && runtime.translationRequests) {
@@ -7330,8 +7658,15 @@ export function createReaderBrowserRuntimeStage<
 					document: options.runtime.document,
 					host: settingsView.panelHost('translation'),
 					repository: translationFormOptions.repository,
-					access: runtime.translationRequests,
 					presentation: translationFormOptions.presentation,
+					parentScope: runtime.scope,
+				});
+				new ReaderAiServiceSettingsForm({
+					document: options.runtime.document,
+					host: settingsView.panelHost('ai-service'),
+					surfaceHost: shell.view.surfaceHost,
+					repository: translationFormOptions.repository,
+					access: runtime.translationRequests,
 					parentScope: runtime.scope,
 				});
 			}
@@ -7397,29 +7732,12 @@ export function createReaderBrowserRuntimeStage<
 				});
 			}
 			if (settingsView && font) {
-				const localFontWindow =
-					options.runtime.document.defaultView as
-						| (Window & {
-							queryLocalFonts?: () => Promise<
-								readonly Readonly<{
-									readonly family?: string;
-								}>[]
-							>;
-						})
-						| null;
 				new ReaderFontSettingsForm<TPreferences>({
 					document: options.runtime.document,
 					host: settingsView.panelHost('font'),
 					controller: settings!,
 					font,
-					...(localFontWindow?.queryLocalFonts
-						? {
-							queryLocalFonts: async () =>
-								(await localFontWindow.queryLocalFonts!())
-									.map((entry) => entry.family ?? '')
-									.filter(Boolean),
-						}
-						: {}),
+					...(queryLocalFonts ? { queryLocalFonts } : {}),
 					parentScope: runtime.scope,
 				});
 			}
@@ -7514,16 +7832,10 @@ export function createReaderBrowserRuntimeStage<
 							prepareClear: async (
 								categories: readonly ReaderCacheCategory[],
 							) => {
-								const webDavCategories: ReaderWebDavCategory[] = [];
-								const protectedCategories: ReaderCacheCategory[] = [];
-								if (categories.includes('history')) {
-									webDavCategories.push('history');
-									protectedCategories.push('history');
-								}
-								if (categories.includes('responses')) {
-									webDavCategories.push('translation-cache');
-									protectedCategories.push('responses');
-								}
+								const {
+									webDavCategories,
+									protectedCategories,
+								} = readerWebDavCacheClearPlan(categories);
 								if (!webDavCategories.length) {
 									return Object.freeze({
 										failed: Object.freeze([]),
@@ -7551,6 +7863,7 @@ export function createReaderBrowserRuntimeStage<
 					applicationCaches: {
 						stats: async () => {
 							const users = runtime.users.cacheStats();
+							const userObservations = runtime.userObservations.cacheStats();
 							const notifications = runtime.notificationController
 								?.cacheStats() ?? { pages: 0, records: 0 };
 							const bookmarks = runtime.bookmarkController
@@ -7586,13 +7899,17 @@ export function createReaderBrowserRuntimeStage<
 												`宿主身份派生：${hostIdentity.categoryEntries} 个分类键 · ` +
 												`${hostIdentity.tagEntries} 个标签`,
 									}),
-									users: Object.freeze({
-										records: users.profiles + users.followLists +
-											users.externalSnapshots + creditBridge.records,
-										detail: `内存热缓存：${users.profiles} 个资料 · ` +
-											`${users.followLists} 份关注列表 · ` +
-											`${users.externalSnapshots} 份账户摘要；` +
-											`LDC bridge ${creditBridge.records} 条（${creditBridge.bytes} B）`,
+								users: Object.freeze({
+									records: users.profiles + users.followLists +
+										users.externalSnapshots + creditBridge.records +
+										userObservations.storedRecords,
+									detail: `内存热缓存：${users.profiles} 个资料 · ` +
+										`${users.followLists} 份关注列表 · ` +
+										`${users.externalSnapshots} 份账户摘要；` +
+										`用户观察：${userObservations.users} 人 · ` +
+										`${userObservations.memoryRecords} 条内存 / ` +
+										`${userObservations.storedRecords} 条持久投影；` +
+										`LDC bridge ${creditBridge.records} 条（${creditBridge.bytes} B）`,
 									}),
 									notifications: Object.freeze({
 										records: notifications.records,
@@ -7621,6 +7938,7 @@ export function createReaderBrowserRuntimeStage<
 							if (selected.has('users')) {
 								try {
 									runtime.users.clearCache();
+									runtime.userObservations.clearCache();
 									await runtime.creditAccount?.clearCache();
 								} catch (cause) {
 									failed.push('users');
@@ -7678,6 +7996,12 @@ export function createReaderBrowserRuntimeStage<
 					() => cacheSurface.sync(),
 					runtime.scope,
 				);
+				let cachePanelVisible = false;
+				settingsView?.changes.subscribe((snapshot) => {
+					const visible = snapshot.open && snapshot.activePanelId === 'cache';
+					if (visible && !cachePanelVisible) void cacheSurface.refresh();
+					cachePanelVisible = visible;
+				}, runtime.scope);
 			}
 			const resourceMonitor = settingsView
 				? new ReaderResourceMonitor({
@@ -8847,6 +9171,16 @@ export function createReaderBrowserRuntimeStage<
 						queue: openQueue,
 						preferences: {
 							read: context.readPreferences,
+							validate: (id, value) => {
+								const preferences = context.readPreferences();
+								return readerWebDavPreferenceRecordMatchesSchema(
+									preferences,
+									id,
+									value,
+									(candidate) => webDavOptions.preferencesCodec
+										.export(candidate).settings,
+								);
+							},
 							update: (patch) => {
 								context.updatePreferences!(patch);
 							},
@@ -8991,12 +9325,24 @@ export function createReaderBrowserRuntimeStage<
 			};
 			const triggerHeaderPanel = (selector: string): boolean => {
 				const trigger = shell.view.root.querySelector<HTMLElement>(selector);
-				if (!trigger) return false;
+				if (
+					!trigger ||
+					trigger.hidden ||
+					trigger.getAttribute('aria-disabled') === 'true' ||
+					('disabled' in trigger &&
+						(trigger as HTMLButtonElement).disabled)
+				) return false;
 				trigger.click();
 				return true;
 			};
-			const triggerFloatingPanelShortcut = (selector: string): boolean =>
-				restoreReaderFloatingWindowTabSession(shell.view.surfaceHost) ||
+			const triggerFloatingPanelShortcut = (
+				selector: string,
+				tabId: string,
+			): boolean =>
+				restoreReaderFloatingWindowTabSession(
+					shell.view.surfaceHost,
+					tabId,
+				) ||
 				triggerHeaderPanel(selector);
 			const shortcuts = shortcutPreferences
 				? new ReaderShortcutController<TPreferences>({
@@ -9086,12 +9432,17 @@ export function createReaderBrowserRuntimeStage<
 							case 'notifications':
 								return triggerFloatingPanelShortcut(
 									'.ldp-notifications-toggle',
+									'notifications',
 								);
 							case 'historyPanel':
-								return triggerFloatingPanelShortcut('.ldp-history-toggle');
+								return triggerFloatingPanelShortcut(
+									'.ldp-history-toggle',
+									'history',
+								);
 							case 'bookmarksPanel':
 								return triggerFloatingPanelShortcut(
 									'.ldp-bookmarks-toggle',
+									'bookmarks',
 								);
 							case 'likeTopic':
 								return triggerTopicAction('button[data-post-like]');

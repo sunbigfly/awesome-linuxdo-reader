@@ -15,6 +15,7 @@ import {
 } from '../src/sync/reader-webdav-model.js';
 import {
 	createReaderTranslationDefaultProfile,
+	normalizeReaderAiModelCatalogEntry,
 	ReaderTranslationConfigRepository,
 } from '../src/translation/reader-translation-config.js';
 
@@ -63,6 +64,16 @@ const translationProfile = Object.freeze({
 	...createReaderTranslationDefaultProfile(),
 	baseUrl: 'https://translate.example.com/v1/',
 	apiKey: 'translation-secret-value',
+	models: Object.freeze(['translate-model']),
+	modelCatalog: Object.freeze([normalizeReaderAiModelCatalogEntry({
+		id: 'translate-model',
+		name: 'Translate Pro',
+		context_length: 200_000,
+		architecture: { output_modalities: ['text'] },
+		benchmarks: {
+			artificial_analysis: { intelligence_index: 70 },
+		},
+	})!]),
 	model: 'translate-model',
 	prompt: '翻译成简体中文',
 });
@@ -108,6 +119,9 @@ assert(
 	exported.schemaVersion === READER_SETTINGS_CONFIG_EXPORT_VERSION &&
 	exported.settingsCount === 2 &&
 	exported.customSites[0] === 'forum.example.com' &&
+	exported.translation?.profiles[0]?.models.includes('translate-model') &&
+	exported.translation?.profiles[0]?.modelCatalog[0]?.contextLength === 200_000 &&
+	exported.translation?.profiles[0]?.modelCatalog[0]?.intelligenceScore === 70 &&
 	exported.translation?.profiles[0]?.model === 'translate-model' &&
 	exported.webDav?.endpoint === 'https://dav.example.com/' &&
 	exported.webDav.categories['offline-topics'] === false &&
@@ -116,7 +130,61 @@ assert(
 	!exportedText.includes('translation-secret-value') &&
 	!exportedText.includes('dav-user-secret-value') &&
 	!exportedText.includes('dav-password-secret-value'),
-	'v7 导出必须组合三类独立设置、保留新增 WebDAV 开关且不泄露翻译或 WebDAV 凭据',
+	'v9 导出必须组合模型元数据目录与三类独立设置、保留新增 WebDAV 开关且不泄露翻译或 WebDAV 凭据',
+);
+
+for (const invalidMetadata of [
+	{ ...exported, schemaVersion: '9' },
+	{ ...exported, settingsCount: '2' },
+	{ ...exported, scriptVersion: 9 },
+	{ ...exported, exportedAt: 9 },
+]) {
+	let rejected = false;
+	try {
+		manager.prepare(invalidMetadata);
+	} catch (error) {
+		rejected = error instanceof Error && error.message === 'invalid_config';
+	}
+	assert(rejected, 'v9 组合配置的版本、计数与时间元数据必须保持精确字段类型');
+}
+
+const legacyV8Prepared = manager.prepare({
+	...exported,
+	schemaVersion: 8,
+	translation: {
+		...exported.translation!,
+		profiles: exported.translation!.profiles.map((profile) => {
+			const { modelCatalog: _modelCatalog, ...legacyProfile } = profile;
+			return legacyProfile;
+		}),
+	},
+});
+assert(
+	legacyV8Prepared.sourceVersion === 8 &&
+	legacyV8Prepared.translation?.profiles[0]?.modelCatalog[0]?.id ===
+		'translate-model',
+	'较早导出的 v8 配置必须兼容导入，并为旧模型 ID 补齐最小元数据',
+);
+
+let incompleteV9Rejected = false;
+try {
+	manager.prepare({
+		...exported,
+		translation: {
+			...exported.translation!,
+			profiles: exported.translation!.profiles.map((profile) => {
+				const { modelCatalog: _modelCatalog, ...incompleteProfile } = profile;
+				return incompleteProfile;
+			}),
+		},
+	});
+} catch (error) {
+	incompleteV9Rejected = error instanceof Error &&
+		error.message === 'invalid_config';
+}
+assert(
+	incompleteV9Rejected,
+	'当前 v9 配置缺少模型目录时必须拒绝，不能套用 v8 迁移规则静默补值',
 );
 
 const legacyV6WebDavCategories = Object.fromEntries(Object.entries(
@@ -128,6 +196,18 @@ const legacyV6WebDavCategories = Object.fromEntries(Object.entries(
 ].includes(category)));
 const preHistoryV7Prepared = manager.prepare({
 	...exported,
+	schemaVersion: 7,
+	translation: {
+		...exported.translation!,
+		profiles: exported.translation!.profiles.map((profile) => {
+			const {
+				models: _models,
+				modelCatalog: _modelCatalog,
+				...legacyProfile
+			} = profile;
+			return legacyProfile;
+		}),
+	},
 	webDav: {
 		...exported.webDav!,
 		categories: Object.fromEntries(Object.entries(
@@ -147,6 +227,17 @@ assert(
 const legacyV6Prepared = manager.prepare({
 	...exported,
 	schemaVersion: 6,
+	translation: {
+		...exported.translation!,
+		profiles: exported.translation!.profiles.map((profile) => {
+			const {
+				models: _models,
+				modelCatalog: _modelCatalog,
+				...legacyProfile
+			} = profile;
+			return legacyProfile;
+		}),
+	},
 	webDav: {
 		...exported.webDav!,
 		categories: legacyV6WebDavCategories,
@@ -158,6 +249,29 @@ assert(
 	legacyV6Prepared.webDav?.categories['notification-history'] === false &&
 	legacyV6Prepared.webDav?.categories['activity-history'] === false,
 	'旧 v6 组合配置必须兼容导入，并把新增 WebDAV 类别安全保持为默认关闭',
+);
+
+let incompleteV9WebDavRejected = false;
+try {
+	manager.prepare({
+		...exported,
+		webDav: {
+			...exported.webDav!,
+			categories: Object.fromEntries(Object.entries(
+				exported.webDav!.categories,
+			).filter(([category]) => ![
+				'notification-history',
+				'activity-history',
+			].includes(category))),
+		},
+	});
+} catch (error) {
+	incompleteV9WebDavRejected = error instanceof Error &&
+		error.message === 'invalid_config';
+}
+assert(
+	incompleteV9WebDavRejected,
+	'当前 v9 配置缺少历史同步开关时必须拒绝，不能套用 v7/v8 迁移规则静默补值',
 );
 
 const importedPayload = {
@@ -193,7 +307,7 @@ assert(
 	!webDav.snapshot.config.autoSyncEnabled &&
 	applied.preservedTranslationApiKeys === 1 &&
 	applied.webDavAutoSyncDisabled,
-	'v7 导入必须应用安全字段、复用同 URL 翻译 Key，并为新 WebDAV 地址清凭据关定时同步',
+	'v9 导入必须应用安全字段、复用同 URL 翻译 Key，并为新 WebDAV 地址清凭据关定时同步',
 );
 
 let secretInjectionRejected = false;
@@ -228,7 +342,7 @@ try {
 }
 assert(
 	secretInjectionRejected && webDavSecretInjectionRejected,
-	'v7 配置必须拒绝伪造的 apiKey、WebDAV 用户名和密码字段，不能静默接纳秘密扩展',
+	'v9 配置必须拒绝伪造的 apiKey、WebDAV 用户名和密码字段，不能静默接纳秘密扩展',
 );
 
 let invalidWebDavTargetRejected = false;
@@ -280,6 +394,40 @@ assert(
 		JSON.stringify(translationBeforeRollback) &&
 	JSON.stringify(webDav.snapshot.config) === JSON.stringify(webDavBeforeRollback),
 	'组合导入最后一步失败时必须逆序恢复三个已写仓储',
+);
+
+let translationWritesFail = false;
+const guardedTranslationStorage = new Map<string, unknown>();
+const guardedTranslation = new ReaderTranslationConfigRepository({
+	storage: {
+		getValue: (key) => guardedTranslationStorage.get(key),
+		setValue: (key, value) => {
+			if (translationWritesFail) {
+				throw new Error('translation-write-failed');
+			}
+			guardedTranslationStorage.set(key, value);
+		},
+	},
+});
+await guardedTranslation.load();
+const guardedTranslationBefore = guardedTranslation.snapshot;
+translationWritesFail = true;
+let translationWriteRejected = false;
+try {
+	await guardedTranslation.saveConfig(Object.freeze({
+		...guardedTranslationBefore.config,
+		profiles: Object.freeze(guardedTranslationBefore.config.profiles.map(
+			(profile) => Object.freeze({ ...profile, prompt: '不得泄漏到内存' }),
+		)),
+	}));
+} catch (error) {
+	translationWriteRejected = error instanceof Error &&
+		error.message === 'translation-write-failed';
+}
+assert(
+	translationWriteRejected &&
+	guardedTranslation.snapshot === guardedTranslationBefore,
+	'翻译配置持久化失败时必须保留原运行态快照，不能留下仅内存生效的半提交',
 );
 
 const legacy = preferencesCodec.export({ theme: 'dark', density: 1 });

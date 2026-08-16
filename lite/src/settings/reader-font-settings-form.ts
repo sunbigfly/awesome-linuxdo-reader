@@ -1,4 +1,5 @@
 import {
+	READER_FONT_FAMILY_LABELS,
 	READER_FONT_SETTINGS_DEFAULT,
 	normalizeReaderFontSettings,
 	type ReaderFontRenderingMode,
@@ -46,14 +47,6 @@ export interface ReaderFontSettingsFormOptions<TPreferences extends object> {
 	readonly parentScope?: LifecycleScope;
 }
 
-const FAMILY_LABELS = Object.freeze<Record<ReaderFontFamily, string>>({
-	site: '跟随原站',
-	system: '系统默认字体',
-	cjkSans: '中文无衬线',
-	serif: '衬线',
-	monospace: '等宽',
-	custom: '自定义本机字体',
-});
 const LOCAL_FONT_VALUE_PREFIX = 'local-font:';
 
 function localFontValue(name: string): string {
@@ -464,7 +457,12 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 		select.dataset.readerSelectSearchable = 'true';
 		select.setAttribute('aria-label', `${config.label}字体`);
 		for (const family of READER_FONT_FAMILIES) {
-			appendOption(document, select, family, FAMILY_LABELS[family]);
+			appendOption(
+				document,
+				select,
+				family,
+				READER_FONT_FAMILY_LABELS[family],
+			);
 		}
 		this.#selects.set(config.family, select);
 		this.scope.listen(select, 'change', () => {

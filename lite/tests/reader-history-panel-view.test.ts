@@ -7,7 +7,10 @@ import {
 	ReaderHistoryRepository,
 	type ReaderHistoryStoragePort,
 } from '../src/history/reader-history-repository.js';
-import { ReaderHeaderPopoverSurface } from
+import {
+	ReaderHeaderPopoverPosition,
+	ReaderHeaderPopoverSurface,
+} from
 	'../src/collection/reader-header-popover-position.js';
 import { LifecycleScope } from '../src/kernel/lifecycle.js';
 import {
@@ -189,6 +192,53 @@ document.dispatchEvent(surfaceEscape);
 assert(
 	Number(surfaceCloseRequests) === 2 && surfaceFocusRequests === 1,
 	'Escape 必须经唯一 surface 关闭并把焦点恢复到 toggle',
+);
+const preferredTopToggle = document.createElement('button');
+const preferredTopPopover = document.createElement('div');
+surfaceRoot.append(preferredTopToggle, preferredTopPopover);
+let preferredTop = 620;
+preferredTopToggle.getBoundingClientRect = () => Object.freeze({
+	left: 200,
+	right: 500,
+	top: preferredTop,
+	bottom: preferredTop + 40,
+	width: 300,
+	height: 40,
+	x: 200,
+	y: preferredTop,
+	toJSON: () => ({}),
+}) as DOMRect;
+preferredTopPopover.getBoundingClientRect = () => Object.freeze({
+	left: 0,
+	right: 460,
+	top: 0,
+	bottom: 240,
+	width: 460,
+	height: 240,
+	x: 0,
+	y: 0,
+	toJSON: () => ({}),
+}) as DOMRect;
+const preferredTopPosition = new ReaderHeaderPopoverPosition({
+	document,
+	root: surfaceRoot,
+	toggle: preferredTopToggle,
+	popover: preferredTopPopover,
+	parentScope: surfaceScope,
+	preferredPlacement: 'top',
+});
+preferredTopPosition.position();
+assert(
+	preferredTopPopover.dataset.placement === 'top' &&
+	preferredTopPopover.style.top === '372px',
+	'模型能力类锚定浮层必须优先置于控件上方',
+);
+preferredTop = 20;
+preferredTopPosition.position();
+assert(
+	preferredTopPopover.dataset.placement === 'bottom' &&
+	preferredTopPopover.style.top === '68px',
+	'上方发生 viewport 碰撞时，锚定浮层必须自动翻到控件下方',
 );
 surfaceScope.destroy();
 assert(

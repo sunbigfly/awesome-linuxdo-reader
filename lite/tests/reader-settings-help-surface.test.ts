@@ -11,6 +11,8 @@ const { document: parsedDocument, window } = parseHTML(
 	'<!doctype html><html><body><main id="surface"><section id="settings">' +
 		'<label class="ldp-setting-row" id="automatic"><span><strong>提前加载</strong>' +
 		'<small>控制视野前后额外准备的楼层范围。</small></span><input type="range"></label>' +
+		'<label class="ldp-setting-row" id="choice"><span><strong>排序方式</strong>' +
+		'<small>选择内容的排列顺序。</small></span><select><option>默认</option></select></label>' +
 		'<button class="ldp-setting-row" id="explicit" data-setting-help="明确帮助文本">操作</button>' +
 		'</section></main></body></html>',
 );
@@ -18,6 +20,7 @@ const document = parsedDocument as unknown as Document;
 const surface = document.querySelector<HTMLElement>('#surface')!;
 const popover = document.querySelector<HTMLElement>('#settings')!;
 const automatic = document.querySelector<HTMLElement>('#automatic')!;
+const choice = document.querySelector<HTMLElement>('#choice')!;
 const explicit = document.querySelector<HTMLElement>('#explicit')!;
 surface.getBoundingClientRect = () => ({
 	x: 0,
@@ -80,6 +83,7 @@ help.tooltip.getBoundingClientRect = () => ({
 
 assert(
 	automatic.dataset.settingHelp === '控制视野前后额外准备的楼层范围。' &&
+	choice.dataset.settingHelp === '选择内容的排列顺序。' &&
 	explicit.dataset.settingHelp === '明确帮助文本' &&
 	help.tooltip.hidden,
 	'帮助 owner 必须复用领域行已有说明，同时保留显式主线帮助文案',
@@ -92,6 +96,14 @@ function point(target: Element, type: string, relatedTarget: Element | null): vo
 }
 
 point(automatic.querySelector('input')!, 'pointerover', null);
+point(choice.querySelector('select')!, 'pointerover', null);
+assert(
+	help.tooltip.hidden &&
+	!automatic.hasAttribute('aria-describedby') &&
+	!choice.hasAttribute('aria-describedby'),
+	'Hover 输入框或下拉框不得触发行标题副标题的帮助浮层',
+);
+point(automatic.querySelector('strong')!, 'pointerover', null);
 assert(
 	!help.tooltip.hidden &&
 	help.tooltip.classList.contains('is-visible') &&
@@ -99,7 +111,25 @@ assert(
 	automatic.getAttribute('aria-describedby') === help.tooltip.id &&
 	help.tooltip.style.left === '120px' &&
 	help.tooltip.style.top === '98px',
-	'Hover 必须找到整行帮助目标、建立 ARIA 并按主线优先上方/不足时下翻定位',
+	'Hover 行标题必须找到整行帮助目标、建立 ARIA 并按主线优先上方/不足时下翻定位',
+);
+point(
+	automatic.querySelector('input')!,
+	'pointerover',
+	automatic.querySelector('strong'),
+);
+assert(
+	help.tooltip.hidden && !automatic.hasAttribute('aria-describedby'),
+	'从标题移入输入框时必须立即关闭帮助浮层',
+);
+point(
+	automatic.querySelector('strong')!,
+	'pointerover',
+	automatic.querySelector('input'),
+);
+assert(
+	!help.tooltip.hidden && automatic.hasAttribute('aria-describedby'),
+	'从输入框移回标题时必须重新显示帮助浮层',
 );
 automatic.querySelector('input')!.dispatchEvent(
 	new window.Event('pointerdown', { bubbles: true }),

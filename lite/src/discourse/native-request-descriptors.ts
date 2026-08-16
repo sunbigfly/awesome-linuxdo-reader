@@ -53,11 +53,15 @@ export interface DiscourseNativeReadDescriptor {
 }
 
 export interface DiscourseNativeMutationDescriptor {
-	readonly operation: 'topic-timings';
+	readonly operation:
+		| 'topic-timings'
+		| 'topic-summary'
+		| 'topic-summary-image-upload';
 	readonly path: string;
 	readonly method: 'POST';
 	readonly headers: Readonly<Record<string, string>>;
-	readonly data: Readonly<Record<string, unknown>>;
+	readonly data: Readonly<Record<string, unknown>> | FormData;
+	readonly multipart?: true;
 	readonly [nativeMutationDescriptorBrand]: true;
 }
 
@@ -152,6 +156,16 @@ export interface DiscourseNativeTopicTimingsInput {
 	readonly topicId: string | number;
 	readonly postNumbers: readonly number[];
 	readonly readTimeMs: number;
+}
+
+export interface DiscourseNativeTopicSummaryInput {
+	readonly basePath?: string;
+	readonly topicId: string | number;
+}
+
+export interface DiscourseNativeTopicSummaryImageUploadInput {
+	readonly basePath?: string;
+	readonly formData: FormData;
 }
 
 export function discourseBasePath(value: string | undefined): string {
@@ -446,6 +460,40 @@ export const DiscourseNativeRequests = Object.freeze({
 				'X-SILENCE-LOGGER': 'true',
 			}),
 			data,
+			[nativeMutationDescriptorBrand]: true as const,
+		});
+		nativeMutationDescriptors.add(descriptor);
+		return descriptor;
+	},
+
+	topicSummary(
+		input: DiscourseNativeTopicSummaryInput,
+	): DiscourseNativeMutationDescriptor {
+		const topicId: DiscourseTopicId = discourseTopicId(input.topicId);
+		const descriptor: DiscourseNativeMutationDescriptor = Object.freeze({
+			operation: 'topic-summary' as const,
+			path:
+				`${discourseBasePath(input.basePath)}` +
+				`/discourse-ai/summarization/t/${topicId}`,
+			method: 'POST' as const,
+			headers: Object.freeze({ Accept: 'application/json' }),
+			data: Object.freeze({}),
+			[nativeMutationDescriptorBrand]: true as const,
+		});
+		nativeMutationDescriptors.add(descriptor);
+		return descriptor;
+	},
+
+	topicSummaryImageUpload(
+		input: DiscourseNativeTopicSummaryImageUploadInput,
+	): DiscourseNativeMutationDescriptor {
+		const descriptor: DiscourseNativeMutationDescriptor = Object.freeze({
+			operation: 'topic-summary-image-upload' as const,
+			path: `${discourseBasePath(input.basePath)}/uploads.json`,
+			method: 'POST' as const,
+			headers: Object.freeze({ Accept: 'application/json' }),
+			data: input.formData,
+			multipart: true as const,
 			[nativeMutationDescriptorBrand]: true as const,
 		});
 		nativeMutationDescriptors.add(descriptor);

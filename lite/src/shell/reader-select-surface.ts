@@ -9,6 +9,7 @@ const SELECTOR = [
 ].join(',');
 
 export const READER_SELECT_DISMISS_EVENT = 'ldp-reader-select-dismiss';
+export const READER_SELECT_RESELECT_EVENT = 'ldp-reader-select-reselect';
 
 function eventElement(event: Event): Element | null {
 	const target = event.target as Element | null;
@@ -176,6 +177,12 @@ export class ReaderSelectSurface {
 				const EventConstructor = this.#document.defaultView?.Event ?? Event;
 				select.dispatchEvent(new EventConstructor('input', { bubbles: true }));
 				select.dispatchEvent(new EventConstructor('change', { bubbles: true }));
+			} else {
+				const EventConstructor = this.#document.defaultView?.Event ?? Event;
+				select.dispatchEvent(new EventConstructor(
+					READER_SELECT_RESELECT_EVENT,
+					{ bubbles: true },
+				));
 			}
 			return;
 		}
@@ -257,11 +264,13 @@ export class ReaderSelectSurface {
 			const search = this.#document.createElement('input');
 			search.type = 'search';
 			search.className = 'ldp-select-search';
-			search.placeholder = '搜索字体';
-			search.setAttribute('aria-label', '搜索字体');
+			const searchLabel = select.dataset.readerSelectSearchLabel ?? '搜索字体';
+			search.placeholder = searchLabel;
+			search.setAttribute('aria-label', searchLabel);
 			const empty = this.#document.createElement('span');
 			empty.className = 'ldp-select-empty';
-			empty.textContent = '没有匹配的字体';
+			empty.textContent = select.dataset.readerSelectEmptyLabel ??
+				'没有匹配的字体';
 			empty.hidden = true;
 			search.addEventListener('input', () => {
 				const query = search.value.trim().toLocaleLowerCase();
@@ -309,20 +318,31 @@ export class ReaderSelectSurface {
 		const menuHeight = menuRect.height || menu.offsetHeight;
 		const margin = 12;
 		const gap = 6;
-		const collisionSurface = select.closest<HTMLElement>(
+		const settingsPanel = select.closest<HTMLElement>('.ldp-settings-panel');
+		const collisionSurface = settingsPanel ?? select.closest<HTMLElement>(
 			'.ldp-unwanted-topic-filter-content,' +
 				'.ldp-settings-popover,.ldp-reader-floating-window,' +
 				'.ldp-notifications-popover,.ldp-history-popover,' +
-				'.ldp-bookmarks-popover',
+				'.ldp-bookmarks-popover,.ldp-topic-summary-surface',
 		);
 		const collisionRect = collisionSurface?.getBoundingClientRect();
+		const settingsSection = settingsPanel
+			? select.closest<HTMLElement>('.ldp-settings-section')
+			: null;
+		const frozenIntroRect = settingsSection
+			?.querySelector<HTMLElement>('.ldp-settings-intro')
+			?.getBoundingClientRect();
 		const bounds = Object.freeze({
 			left: Math.max(margin, (collisionRect?.left ?? 0) + margin),
 			right: Math.min(
 				viewport.innerWidth - margin,
 				(collisionRect?.right ?? viewport.innerWidth) - margin,
 			),
-			top: Math.max(margin, (collisionRect?.top ?? 0) + margin),
+			top: Math.max(
+				margin,
+				(collisionRect?.top ?? 0) + margin,
+				frozenIntroRect ? frozenIntroRect.bottom + margin : 0,
+			),
 			bottom: Math.min(
 				viewport.innerHeight - margin,
 				(collisionRect?.bottom ?? viewport.innerHeight) - margin,

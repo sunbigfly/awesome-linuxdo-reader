@@ -69,6 +69,48 @@ export interface ReaderCollectionScrollPage<T> {
 	readonly hasMore: boolean;
 }
 
+interface ReaderCollectionNodeCacheEntry<T, TNode extends Node> {
+	readonly record: T;
+	readonly variant: string;
+	readonly node: TNode;
+}
+
+/**
+ * 通知、收藏与用户活动列表共用的轻量 DOM recycler。记录对象及视图变体未变化时复用
+ * 原节点，避免历史进度每推进一页就重建头像、图标和全部事件子树。
+ */
+export class ReaderCollectionNodeCache<T, TNode extends Node> {
+	readonly #entries = new Map<string, ReaderCollectionNodeCacheEntry<T, TNode>>();
+
+	node(
+		keyValue: string,
+		record: T,
+		variantValue: string,
+		create: () => TNode,
+	): TNode {
+		const key = String(keyValue);
+		const variant = String(variantValue);
+		const cached = this.#entries.get(key);
+		if (cached?.record === record && cached.variant === variant) {
+			return cached.node;
+		}
+		const node = create();
+		this.#entries.set(key, Object.freeze({ record, variant, node }));
+		return node;
+	}
+
+	prune(keys: Iterable<string>): void {
+		const retained = new Set(keys);
+		for (const key of this.#entries.keys()) {
+			if (!retained.has(key)) this.#entries.delete(key);
+		}
+	}
+
+	clear(): void {
+		this.#entries.clear();
+	}
+}
+
 /**
  * 集合浮窗与用户观察共用的滚动分页 owner。
  *

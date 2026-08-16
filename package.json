@@ -1,6 +1,6 @@
 {
   "name": "awesome-linuxdo-reader",
-  "version": "1.3.1",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -27,8 +27,9 @@
     "main-lite:greasyfork:local-test": "node scripts/build-main-lite-greasyfork.mjs --local-test && npm run main-lite:greasyfork:test",
     "main-lite:greasyfork:release": "node scripts/build-main-lite-greasyfork.mjs --config work/greasyfork-lite/published-libraries.json && npm run main-lite:greasyfork:test",
     "main-lite:greasyfork:test": "node scripts/test-main-lite-greasyfork.mjs",
-    "main-lite:local-debug": "npm run main-lite:css:build && node scripts/build-main-lite.mjs --local-debug && npm run main-lite:greasyfork:local-test && npm run audit:lite-userscript:local",
-    "main-lite:lint": "eslint eslint.config.mjs docs/.vitepress/config.mts scripts/audit-lite-native-requests.mjs scripts/audit-main-lite-userscript.mjs scripts/audit-main-requests.mjs scripts/audit-main-runtime.mjs scripts/audit-main-lite-css.mjs scripts/build-main-lite-css.mjs scripts/build-main-lite-greasyfork.mjs scripts/build-main-lite.mjs scripts/test-main-lite-greasyfork.mjs scripts/test-main-lite.mjs scripts/validate-docs.mjs \"lite/{src,tests}/**/*.ts\"",
+    "main-lite:local-debug": "npm run main-lite:css:build && node scripts/build-main-lite.mjs --local-debug && node scripts/build-main-lite-greasyfork.mjs --local-test && npm run main-lite:parity && npm run audit:lite-userscript:local",
+    "main-lite:lint": "eslint eslint.config.mjs docs/.vitepress/config.mts scripts/audit-lite-native-requests.mjs scripts/audit-main-lite-userscript.mjs scripts/audit-main-requests.mjs scripts/audit-main-runtime.mjs scripts/audit-main-lite-css.mjs scripts/build-main-lite-css.mjs scripts/build-main-lite-greasyfork.mjs scripts/build-main-lite.mjs scripts/test-main-lite-greasyfork.mjs scripts/test-main-lite.mjs scripts/validate-docs.mjs scripts/verify-main-lite-local-parity.mjs \"lite/{src,tests}/**/*.ts\"",
+    "main-lite:parity": "npm run main-lite:test && npm run main-lite:greasyfork:test && node scripts/verify-main-lite-local-parity.mjs",
     "main-lite:test": "node scripts/test-main-lite.mjs",
     "main-lite:typecheck": "tsc --project tsconfig.main-lite.json && tsc --project tsconfig.main-lite-tests.json",
     "main-lite:verify": "npm run main-lite:lint && npm run main-lite:check",
@@ -44,6 +45,7 @@
     "mian-lite:greasyfork:test": "npm run main-lite:greasyfork:test",
     "mian-lite:local-debug": "npm run main-lite:local-debug",
     "mian-lite:lint": "npm run main-lite:lint",
+    "mian-lite:parity": "npm run main-lite:parity",
     "mian-lite:test": "npm run main-lite:test",
     "mian-lite:typecheck": "npm run main-lite:typecheck",
     "mian-lite:verify": "npm run main-lite:verify",

@@ -29,9 +29,22 @@ for (const element of [origin]) {
 }
 const focusCallbacks: Array<() => void> = [];
 const scheduleCallbacks: Array<() => void> = [];
+const userQueries: string[] = [];
 const surface = new ReaderAssignmentFormSurface({
 	document,
 	root,
+	users: {
+		async searchUsers(query) {
+			userQueries.push(query);
+			if (query === 'ne') return Object.freeze([
+				Object.freeze({ id: 42, username: 'neo', name: 'Neo' }),
+				Object.freeze({ id: 43, username: 'neon', name: 'Neon' }),
+			]);
+			return query === 'missing-user'
+				? Object.freeze([])
+				: Object.freeze([Object.freeze({ id: 42, username: query })]);
+		},
+	},
 	focusSoon: (callback) => focusCallbacks.push(callback),
 	schedule: (callback) => {
 		scheduleCallbacks.push(callback);
@@ -71,11 +84,71 @@ Object.defineProperty(username, 'focus', {
 });
 assert(
 	username.value === 'old-owner' &&
+	username.disabled === false &&
+	root.querySelector('.ldp-reader-assignment-dialog') !== null &&
+	root.querySelector<HTMLButtonElement>('.ldp-reader-action-submit')?.disabled &&
 	root.querySelectorAll('.ldp-reader-action-layer').length === 1 &&
 	root.querySelector('[data-icon="x"]'),
 	'指定表单必须复用当前负责人且始终只有一个 Shell layer',
 );
-username.value = '@alice';
+scheduleCallbacks.shift()?.();
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	userQueries.at(-1) === 'old-owner' &&
+		root.querySelector('.ldp-reader-action-status')?.textContent ===
+			'已找到 @old-owner。' &&
+		!root.querySelector<HTMLButtonElement>('.ldp-reader-action-submit')?.disabled,
+	'当前负责人也必须先经宿主用户目录精确确认，不能因预填值绕过校验',
+);
+username.value = 'missing-user';
+username.dispatchEvent(new (document.defaultView!.Event)('input', {
+	bubbles: true,
+}));
+scheduleCallbacks.shift()?.();
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	username.getAttribute('aria-invalid') === 'true' &&
+		root.querySelector<HTMLButtonElement>('.ldp-reader-action-submit')?.disabled &&
+		root.querySelector('.ldp-reader-action-status')?.textContent ===
+			'没有找到“missing-user”对应的社区用户。',
+	'不存在的用户必须给出内联错误并禁用确认指定',
+);
+username.value = 'ne';
+username.dispatchEvent(new (document.defaultView!.Event)('input', {
+	bubbles: true,
+}));
+scheduleCallbacks.shift()?.();
+await Promise.resolve();
+await Promise.resolve();
+const candidateList = root.querySelector<HTMLElement>(
+	'.ldp-reader-assignment-user-candidates',
+)!;
+const candidateButtons = [
+	...candidateList.querySelectorAll<HTMLButtonElement>('button'),
+];
+assert(
+	username.getAttribute('aria-expanded') === 'true' &&
+		!candidateList.hidden &&
+		candidateButtons.length === 2 &&
+		candidateButtons[0]?.textContent?.includes('Neo@neo · #42') &&
+		candidateButtons[1]?.textContent?.includes('Neon@neon · #43') &&
+		root.querySelector<HTMLButtonElement>('.ldp-reader-action-submit')?.disabled &&
+		root.querySelector('.ldp-reader-action-status')?.textContent ===
+			'找到 2 个候选，请选择具体用户。',
+	'部分用户名必须下拉展示宿主候选，并在选择前保持提交禁用',
+);
+candidateButtons[1]?.click();
+assert(
+	username.value === 'neon' &&
+		username.getAttribute('aria-expanded') === 'false' &&
+		candidateList.hidden &&
+		!root.querySelector<HTMLButtonElement>('.ldp-reader-action-submit')?.disabled &&
+		root.querySelector('.ldp-reader-action-status')?.textContent ===
+			'已选择 @neon。',
+	'点击候选必须回填规范用户名、收起下拉并解锁确认指定',
+);
 note.value = '任务备注';
 form.dispatchEvent(new (document.defaultView!.Event)('submit', {
 	bubbles: true,
@@ -84,19 +157,19 @@ form.dispatchEvent(new (document.defaultView!.Event)('submit', {
 await Promise.resolve();
 assert(
 	submissions.length === 1 &&
-	submissions[0]?.username === 'alice' &&
+	submissions[0]?.username === 'neon' &&
 	submissions[0]?.note === '任务备注' &&
 	username.disabled &&
 	root.querySelector<HTMLButtonElement>('.ldp-reader-action-submit')
 		?.textContent === '指定中…',
 	'指定表单必须统一去除 @、规范备注并在提交期间锁定全部控件',
 );
-submissionResolvers.shift()?.('已指定给 @alice');
+submissionResolvers.shift()?.('已指定给 @neon');
 await Promise.resolve();
 await Promise.resolve();
 assert(
 	root.querySelector('.ldp-reader-action-status')?.textContent ===
-		'已指定给 @alice' &&
+		'已指定给 @neon' &&
 	scheduleCallbacks.length === 1,
 	'成功结果必须在同一表单显示并经唯一 timer 收口',
 );
@@ -146,6 +219,12 @@ const retryUsername =
 	root.querySelector<HTMLInputElement>('input[name="username"]')!;
 const retryForm = root.querySelector<HTMLFormElement>('form')!;
 retryUsername.value = 'retry-owner';
+retryUsername.dispatchEvent(new (document.defaultView!.Event)('input', {
+	bubbles: true,
+}));
+scheduleCallbacks.shift()?.();
+await Promise.resolve();
+await Promise.resolve();
 let synchronousFailureEscaped = false;
 try {
 	retryForm.dispatchEvent(new (document.defaultView!.Event)('submit', {

@@ -230,6 +230,37 @@ assert(
 	'WebDAV 离线 HTML 链路不得把连接凭据写入 URL、清单或对象',
 );
 
+const currentManifestBeforeLegacyRead = server.files.get(manifestEntry![0])!;
+const legacyManifestPayload = JSON.parse(currentManifestBeforeLegacyRead.text) as {
+	records: Record<string, {
+		value?: Record<string, unknown>;
+	}>;
+};
+delete legacyManifestPayload.records['314']?.value?.archiveStatus;
+server.files.set(manifestEntry![0], Object.freeze({
+	...currentManifestBeforeLegacyRead,
+	version: currentManifestBeforeLegacyRead.version + 1,
+	text: JSON.stringify(legacyManifestPayload),
+}));
+const legacyTargetStore = new MemoryArtifactStore();
+const legacyDownload = await coordinator(
+	client,
+	await repository('offline-device-legacy-reader'),
+	legacyTargetStore,
+).syncNow();
+const legacyRestored = await legacyTargetStore.read(314);
+assert(
+	legacyDownload.imported === 1 &&
+	legacyRestored?.title === sourceArtifact.title &&
+	legacyRestored.archiveStatus === null &&
+	legacyRestored.html === largeHtml,
+	'1.5.0 必须继续读取 1.3.0 未包含 archiveStatus 的 v1 离线清单，并只把缺失状态升级为 null',
+);
+server.files.set(manifestEntry![0], Object.freeze({
+	...currentManifestBeforeLegacyRead,
+	version: currentManifestBeforeLegacyRead.version + 2,
+}));
+
 const download = await targetCoordinator.syncNow();
 const restored = await targetStore.read(314);
 assert(
@@ -242,6 +273,16 @@ assert(
 	restored.archiveStatus === 404 &&
 	restored.localDownloadRequestedAt === 21_000,
 	'另一设备必须把清单元数据、存档状态与独立 HTML 水合回同一个本地离线 Artifact 结构体',
+);
+
+server.files.delete(manifestEntry![0]);
+const rebuildMissingManifest = await targetCoordinator.syncNow();
+assert(
+	rebuildMissingManifest.uploaded === 1 &&
+	rebuildMissingManifest.deleted === 0 &&
+	(await targetStore.read(314))?.html === largeHtml &&
+	server.files.has(manifestEntry![0]),
+	'离线 Topic 清单被删除或回滚后必须用本机完整 HTML 重建，不能把无墓碑的记录缺席解释成本机删除',
 );
 
 const localOnlyChange = Object.freeze({

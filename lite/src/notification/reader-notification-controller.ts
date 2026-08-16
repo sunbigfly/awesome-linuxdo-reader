@@ -4,10 +4,17 @@ import type {
 	ReaderCollectionProjectionPort,
 	ReaderCollectionProjectionSnapshot,
 } from '../cache/reader-collection-page-repository.js';
+import type { ResponseCacheFlightPort } from
+	'../cache/response-repository.js';
 import {
 	readerCollectionDateKey,
 	type ReaderCollectionSortDirection,
 } from '../collection/reader-collection-filter-model.js';
+import {
+	readerCollectionResumePosition,
+	runReaderCollectionHydrationLease,
+	runReaderCollectionWorkers,
+} from '../collection/reader-collection-hydration.js';
 import type {
 	ActionCacheInvalidationPort,
 	PostActionController,
@@ -131,6 +138,11 @@ export interface ReaderNotificationControllerOptions {
 	readonly historyRetryDelayMs?: number;
 	/** 浮窗打开时允许同时补全的不同活动来源数。 */
 	readonly visibleHistoryConcurrency?: number;
+	readonly historyCoordination?: Pick<
+		ResponseCacheFlightPort,
+		'acquireFlight' | 'renewFlight' | 'releaseFlight' | 'waitForFlight'
+	>;
+	readonly historyCoordinationKey?: string;
 	readonly retryDelayMs?: number;
 	readonly delay?: (delayMs: number) => Promise<void>;
 	readonly schedule?: (callback: () => void, delayMs: number) => unknown;
@@ -172,10 +184,40 @@ const DEFAULT_SYNTHETIC_POLL_INTERVAL_MS = 30 * 60_000;
 // 缓存命中不进入请求许可管线；浮窗可见期有界并行，关闭后回落到 background。
 const DEFAULT_HISTORY_STEP_DELAY_MS = 250;
 const DEFAULT_HISTORY_RETRY_DELAY_MS = 15_000;
+const LEGACY_USER_ACTION_PAGE_SIZE = 30;
+const HISTORY_PROJECTION_BATCH_PAGES = 4;
+const VISIBLE_HISTORY_LEASE_ROUNDS = 2;
 const READER_NOTIFICATION_REACTION_LIKE_GROUPS = Object.freeze([
 	'likes',
 	'reactions',
 ] as const satisfies readonly ReaderNotificationGroupKey[]);
+
+function notificationProjectionCheckpointNeedsRepair(
+	group: ReaderNotificationGroupKey,
+	snapshot: ReaderCollectionProjectionSnapshot<ReaderNotificationRecord>,
+): boolean {
+	const descriptor = readerNotificationGroup(group);
+	if (
+		!snapshot.complete ||
+		descriptor.source !== 'user-actions' ||
+		snapshot.sourceOffset === undefined
+	) return false;
+	const sourcePageSize = Math.max(
+		1,
+		Math.floor(Number(snapshot.sourcePageSize ?? descriptor.pageSize) || 0),
+	);
+	const sourceNextPage = Math.max(
+		0,
+		Math.floor(Number(snapshot.sourceNextPage) || 0),
+	);
+	const sourceOffset = Math.max(
+		0,
+		Math.floor(Number(snapshot.sourceOffset) || 0),
+	);
+	/* complete 的最后一页可以不足 pageSize；此前的页必须都是满页。 */
+	const minimumCompleteRecords = Math.max(0, sourceOffset - sourcePageSize);
+	return sourceNextPage > 1 && snapshot.records.length < minimumCompleteRecords;
+}
 
 export function readerNotificationRequestCanAutoRetry(cause: unknown): boolean {
 	const source: Readonly<Record<string, unknown>> =
@@ -274,6 +316,8 @@ export class ReaderNotificationController {
 	readonly #historyStepDelayMs: number;
 	readonly #historyRetryDelayMs: number;
 	readonly #visibleHistoryConcurrency: number;
+	readonly #historyCoordination: ReaderNotificationControllerOptions['historyCoordination'];
+	readonly #historyCoordinationKey: string;
 	readonly #retryDelayMs: number;
 	readonly #delay: (delayMs: number) => Promise<void>;
 	readonly #schedule: (callback: () => void, delayMs: number) => unknown;
@@ -282,6 +326,7 @@ export class ReaderNotificationController {
 	readonly #activity: ReaderNotificationActivityPort | null;
 	readonly #searchForms: ReaderSearchFormsPort;
 	readonly #onError: (cause: unknown) => void;
+	readonly #historyAbort: AbortController;
 	readonly #pages = new Map<string, CachedNotificationPage>();
 	readonly #taxonomyFlights = new Map<string, Promise<void>>();
 	readonly #historyRecords = new Map<
@@ -333,6 +378,7 @@ export class ReaderNotificationController {
 	#error: unknown | null = null;
 	#unreadCount = 0;
 	#revision = 0;
+	#snapshotCache: ReaderNotificationControllerSnapshot | null = null;
 	#loadEpoch = 0;
 	#navigationEpoch = 0;
 	#selectionFlight: Promise<void> | null = null;
@@ -356,6 +402,10 @@ export class ReaderNotificationController {
 	readonly #projectionPersistAfterRestore = new Set<
 		ReaderNotificationGroupKey
 	>();
+	readonly #projectionCheckpointReplacements = new Set<
+		ReaderNotificationGroupKey
+	>();
+	readonly #historyInFlightGroups = new Set<ReaderNotificationGroupKey>();
 	#nativeRefreshPending = false;
 	#nativeChangePending = false;
 	#nativeChangeEpoch = 0;
@@ -415,6 +465,10 @@ export class ReaderNotificationController {
 		this.#visibleHistoryConcurrency = Number(
 			options.visibleHistoryConcurrency ?? 1,
 		);
+		this.#historyCoordination = options.historyCoordination;
+		this.#historyCoordinationKey = String(
+			options.historyCoordinationKey ?? '',
+		).trim();
 		for (const [label, value] of [
 			['通知打开回查间隔', this.#openRevalidateMs],
 			['原生通知轮询间隔', this.#nativePollIntervalMs],
@@ -462,6 +516,9 @@ export class ReaderNotificationController {
 			},
 		});
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
+		this.#historyAbort = this.scope.abortController(
+			new Error('通知历史采集已关闭'),
+		);
 		this.scope.add(this.#native.subscribeChanged(() => {
 			void this.#onNativeChanged();
 		}));
@@ -486,6 +543,7 @@ export class ReaderNotificationController {
 			this.#poll = null;
 			this.#historySchedule = null;
 			this.#historyEpoch += 1;
+			this.#historyInFlightGroups.clear();
 			this.#backgroundWarm = null;
 			this.#backgroundWarmEpoch += 1;
 			this.#backgroundCacheActive = false;
@@ -501,6 +559,9 @@ export class ReaderNotificationController {
 	}
 
 	get snapshot(): ReaderNotificationControllerSnapshot {
+		if (this.#snapshotCache?.revision === this.#revision) {
+			return this.#snapshotCache;
+		}
 		const filtering = this.#hasLocalFilters();
 		const totalPages = filtering
 			? Math.max(1, Math.ceil(this.#matchingRecords().length /
@@ -511,7 +572,7 @@ export class ReaderNotificationController {
 					this.#total / readerNotificationGroup(this.#group).pageSize,
 				),
 			);
-		return Object.freeze({
+		this.#snapshotCache = Object.freeze({
 			open: this.#open,
 			mode: this.#mode,
 			group: this.#group,
@@ -539,6 +600,7 @@ export class ReaderNotificationController {
 			history: this.#historySnapshot(),
 			revision: this.#revision,
 		});
+		return this.#snapshotCache;
 	}
 
 	cacheStats(): ReaderNotificationCacheStats {
@@ -633,14 +695,17 @@ export class ReaderNotificationController {
 		this.#scheduleHistoryHydration(0);
 	}
 
-	async #restoreBackgroundProjections(): Promise<void> {
+	async #restoreBackgroundProjections(fresh = false): Promise<void> {
 		if (!this.#projection || this.scope.destroyed) return;
 		const restored = await Promise.all(
 			READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.map(async (group) => {
 				try {
 					return Object.freeze({
 						group,
-						snapshot: await this.#projection!.read(group),
+						snapshot: await this.#projection!.read(
+							group,
+							fresh ? { fresh: true } : undefined,
+						),
 					});
 				} catch (cause) {
 					this.#onError(cause);
@@ -649,9 +714,12 @@ export class ReaderNotificationController {
 			}),
 		);
 		if (this.scope.destroyed) return;
+		const checkpointRepairs: ReaderNotificationGroupKey[] = [];
 		for (const { group, snapshot } of restored) {
 			if (!snapshot) continue;
 			const state = this.#historyGroups.get(group)!;
+			const repairCheckpoint =
+				notificationProjectionCheckpointNeedsRepair(group, snapshot);
 			state.retryAt = null;
 			state.error = null;
 			this.#rememberProjectionRecords(group, snapshot.records);
@@ -665,6 +733,9 @@ export class ReaderNotificationController {
 			this.#historyRecords.set(group, records);
 			state.estimatedPages = Math.max(
 				state.estimatedPages,
+				repairCheckpoint
+					? Math.max(1, Math.floor(Number(snapshot.sourceNextPage) || 0))
+					: 1,
 				Math.max(
 					1,
 					Math.ceil(
@@ -674,28 +745,30 @@ export class ReaderNotificationController {
 				),
 			);
 			const expectedSourcePageSize = readerNotificationGroup(group).pageSize;
-			const sourcePageSizeCompatible = snapshot.sourcePageSize ===
-				expectedSourcePageSize;
-			const sourceNextPage = Math.max(
-				0,
-				Math.floor(Number(
-					snapshot.complete || sourcePageSizeCompatible
-						? snapshot.sourceNextPage ?? 0
-						: 0,
-				)),
+			const resumed = readerCollectionResumePosition(
+				snapshot,
+				expectedSourcePageSize,
+				readerNotificationGroup(group).source === 'user-actions'
+					? LEGACY_USER_ACTION_PAGE_SIZE
+					: expectedSourcePageSize,
 			);
-			state.nextPage = sourceNextPage;
+			const sourceNextPage = snapshot.complete
+				? Math.max(0, Math.floor(Number(snapshot.sourceNextPage ?? 0)))
+				: resumed.page;
+			state.nextPage = repairCheckpoint ? 0 : sourceNextPage;
 			state.pages.clear();
-			for (let page = 0; page < sourceNextPage; page += 1) {
+			for (let page = 0; page < state.nextPage; page += 1) {
 				state.pages.add(page);
 			}
-			if (!snapshot.complete && sourceNextPage > 0) {
+			state.terminalPage = null;
+			state.complete = false;
+			if ((!snapshot.complete || repairCheckpoint) && state.nextPage > 0) {
 				state.estimatedPages = Math.max(
 					state.estimatedPages,
-					sourceNextPage + 1,
+					state.nextPage + 1,
 				);
 			}
-			if (snapshot.complete) {
+			if (snapshot.complete && !repairCheckpoint) {
 				// sourceNextPage 包含为确认到底而读取的空终止页，不能再从
 				// 去重后的记录数反推，否则重启后会丢失真实终止水位。
 				const completedPages = Math.max(
@@ -710,6 +783,9 @@ export class ReaderNotificationController {
 				for (let page = 0; page < completedPages; page += 1) {
 					state.pages.add(page);
 				}
+			} else if (repairCheckpoint) {
+				this.#projectionCheckpointReplacements.add(group);
+				checkpointRepairs.push(group);
 			}
 			// 启动恢复期间可能已有头页刷新完成；重新索引这些页，避免
 			// 持久断点覆盖刚取得的权威页状态。
@@ -724,6 +800,10 @@ export class ReaderNotificationController {
 		this.#historyCurrentGroup = null;
 		this.#historyError = null;
 		this.#historyRetryAt = null;
+		if (checkpointRepairs.length) {
+			await Promise.all(checkpointRepairs.map((group) =>
+				this.#persistProjection(group)));
+		}
 		this.#raiseUnreadCountForCachedRecords();
 		if (this.#open && this.#pages.has(pageKey(this.#group, this.#page))) {
 			this.#renderFromCache();
@@ -810,6 +890,7 @@ export class ReaderNotificationController {
 		if (this.#historySchedule !== null) this.#cancel(this.#historySchedule);
 		this.#historySchedule = null;
 		this.#historyLoading = false;
+		this.#historyInFlightGroups.clear();
 		this.#historyCursor = 0;
 		this.#historyStatus = 'idle';
 		this.#historyCurrentGroup = null;
@@ -1850,11 +1931,13 @@ export class ReaderNotificationController {
 		}
 	}
 
-	#persistProjection(group: ReaderNotificationGroupKey): void {
-		if (!this.#projection || group === 'reactionLikes') return;
+	#persistProjection(group: ReaderNotificationGroupKey): Promise<void> {
+		if (!this.#projection || group === 'reactionLikes') {
+			return Promise.resolve();
+		}
 		if (this.#backgroundRestore !== null) {
 			this.#projectionPersistAfterRestore.add(group);
-			return;
+			return Promise.resolve();
 		}
 		const prefix = `${group}:`;
 		const byIdentity = new Map<string, ReaderNotificationRecord>();
@@ -1899,15 +1982,28 @@ export class ReaderNotificationController {
 			(total, page) => Math.max(total, page.total),
 			committedRecords.length,
 		);
-		void this.#projection.write(group, committedRecords, {
+		const replaceCheckpoint =
+			this.#projectionCheckpointReplacements.has(group);
+		return this.#projection.write(group, committedRecords, {
 			mergeStored: !exactReplacement,
 			totalHint,
 			complete,
 			updatedAt: this.#now(),
+			checkpointMode: replaceCheckpoint ? 'replace' : 'advance',
 			...(state ? { sourceNextPage: state.nextPage } : {}),
 			...(state
 				? { sourcePageSize: readerNotificationGroup(group).pageSize }
 				: {}),
+			...(state
+				? {
+						sourceOffset: state.nextPage *
+							readerNotificationGroup(group).pageSize,
+					}
+				: {}),
+		}).then(() => {
+			if (replaceCheckpoint) {
+				this.#projectionCheckpointReplacements.delete(group);
+			}
 		}).catch(this.#onError);
 	}
 
@@ -2738,10 +2834,6 @@ export class ReaderNotificationController {
 			: this.#historyStepDelayMs;
 	}
 
-	#historyBatchSize(): number {
-		return this.#open ? this.#visibleHistoryConcurrency : 1;
-	}
-
 	#historyHasReadyGroup(now = this.#now()): boolean {
 		return [...this.#historyGroups.values()].some((state) =>
 			!state.complete && (state.retryAt === null || state.retryAt <= now));
@@ -2793,6 +2885,7 @@ export class ReaderNotificationController {
 			const group = READER_NOTIFICATION_AGGREGATE_GROUP_ORDER[index]!;
 			const state = this.#historyGroups.get(group)!;
 			if (
+				this.#historyInFlightGroups.has(group) ||
 				state.complete ||
 				(state.retryAt !== null && state.retryAt > this.#now())
 			) continue;
@@ -2815,30 +2908,51 @@ export class ReaderNotificationController {
 		visibleHistory: boolean,
 	): Promise<boolean | null> {
 		const state = this.#historyGroups.get(group)!;
-		const page = state.nextPage;
-		try {
-			let loaded: ReaderNotificationPage | null = null;
-			try {
-				loaded = await this.#loadCachedRequestedPage(group, page);
-			} catch (cause) {
-				// 旧原始页损坏只退化到中央联网路径，不能中断断点续传。
-				this.#onError(cause);
+		const descriptor = readerNotificationGroup(group);
+		const pages = [state.nextPage];
+		if (visibleHistory && descriptor.source === 'user-actions') {
+			const upperBound = Math.max(state.nextPage + 1, state.estimatedPages);
+			for (
+				let page = state.nextPage + 1;
+				page < upperBound && pages.length < this.#visibleHistoryConcurrency;
+				page += 1
+			) {
+				if (!state.pages.has(page)) pages.push(page);
 			}
-			if (this.scope.destroyed || epoch !== this.#historyEpoch) return null;
-			const cacheHit = loaded !== null;
-			if (!loaded) {
-				loaded = await this.#loadRequestedPage(group, page, {
+		}
+		try {
+			const loadedPages = await Promise.all(pages.map(async (page) => {
+				let loaded: ReaderNotificationPage | null = null;
+				try {
+					loaded = await this.#loadCachedRequestedPage(group, page);
+				} catch (cause) {
+					// 旧原始页损坏只退化到中央联网路径，不能中断断点续传。
+					this.#onError(cause);
+				}
+				const cacheHit = loaded !== null;
+				loaded ??= await this.#loadRequestedPage(group, page, {
 					history: true,
 					...(visibleHistory ? { visibleHistory: true } : {}),
 				});
-			}
+				return Object.freeze({ page, loaded, cacheHit });
+			}));
 			if (this.scope.destroyed || epoch !== this.#historyEpoch) return null;
-			this.#cachePage(loaded);
-			if (!cacheHit) {
-				// 标签补全继续留在 background，避免与可见期正文快取抢并发槽。
-				this.#queueTopicTaxonomyEnrichment([loaded], { history: true });
+			for (const result of loadedPages.sort((left, right) =>
+				left.page - right.page)) {
+				if (
+					state.terminalPage !== null &&
+					result.page > state.terminalPage
+				) continue;
+				this.#cachePage(result.loaded, this.#now(), false);
+				if (!result.cacheHit) {
+					this.#queueTopicTaxonomyEnrichment([result.loaded], { history: true });
+				}
 			}
-			return cacheHit;
+			if (
+				state.complete ||
+				state.nextPage % HISTORY_PROJECTION_BATCH_PAGES === 0
+			) await this.#persistProjection(group);
+			return loadedPages.every((result) => result.cacheHit);
 		} catch (cause) {
 			if (this.scope.destroyed || epoch !== this.#historyEpoch) return null;
 			this.#onError(cause);
@@ -2887,8 +3001,7 @@ export class ReaderNotificationController {
 			this.#scheduleHistoryHydration(this.#historyStepDelayMs);
 			return;
 		}
-		const groups = this.#nextHistoryGroups(this.#historyBatchSize());
-		if (!groups.length) {
+		if (!this.#historyHasReadyGroup()) {
 			const complete = [...this.#historyGroups.values()].every(
 				(state) => state.complete,
 			);
@@ -2909,19 +3022,91 @@ export class ReaderNotificationController {
 		}
 		const epoch = this.#historyEpoch;
 		const visibleHistory = this.#open && this.#visibleHistoryConcurrency > 1;
+		const openAtStart = this.#open;
+		const concurrency = visibleHistory ? this.#visibleHistoryConcurrency : 1;
 		this.#historyLoading = true;
 		this.#historyStatus = 'loading';
-		this.#historyCurrentGroup = groups.length === 1 ? groups[0]! : null;
+		this.#historyCurrentGroup = null;
 		const pendingRecovery = this.#historyRecoveryState();
 		this.#historyError = pendingRecovery.error;
 		this.#historyRetryAt = pendingRecovery.retryAt;
 		this.#emit();
-		let results: readonly (boolean | null)[] = Object.freeze([]);
+		const results: (boolean | null)[] = [];
+		const dirtyGroups = new Set<ReaderNotificationGroupKey>();
 		try {
-			results = await Promise.all(groups.map((group) =>
-				this.#hydrateHistoryGroup(group, epoch, visibleHistory)));
+			const leaseResult = await runReaderCollectionHydrationLease({
+				coordination: this.#historyCoordination ?? null,
+					token: this.#historyCoordinationKey,
+					signal: this.#historyAbort.signal,
+					onError: this.#onError,
+					beforeRun: () => this.#restoreBackgroundProjections(true),
+					run: async () => {
+					await runReaderCollectionWorkers({
+						concurrency,
+						maxTasks: visibleHistory
+							? concurrency * VISIBLE_HISTORY_LEASE_ROUNDS
+							: 1,
+						shouldContinue: () =>
+							!this.scope.destroyed &&
+							epoch === this.#historyEpoch &&
+							this.#open === openAtStart &&
+							!this.#loading &&
+							!this.#refreshing &&
+							!this.#retrying &&
+							!this.#markingAll &&
+							this.#selectionFlight === null &&
+							(!this.#activity || this.#activityVisible()),
+						claim: () => {
+							const group = this.#nextHistoryGroups(1)[0] ?? null;
+							if (group !== null) this.#historyInFlightGroups.add(group);
+							return group;
+						},
+						release: (group) => {
+							this.#historyInFlightGroups.delete(group);
+						},
+						run: async (group) => {
+							if (concurrency === 1) {
+								this.#historyCurrentGroup = group;
+								this.#emit();
+							}
+							results.push(await this.#hydrateHistoryGroup(
+								group,
+								epoch,
+								visibleHistory,
+							));
+							const state = this.#historyGroups.get(group)!;
+							if (
+								state.complete ||
+								state.nextPage % HISTORY_PROJECTION_BATCH_PAGES === 0
+							) dirtyGroups.delete(group);
+							else dirtyGroups.add(group);
+							if (this.scope.destroyed || epoch !== this.#historyEpoch) return;
+							if (this.#hasLocalFilters() && this.#open) {
+								this.#renderFromCache();
+							} else this.#emit();
+						},
+					});
+					if (dirtyGroups.size) {
+						await Promise.all([...dirtyGroups].map((group) =>
+							this.#persistProjection(group)));
+						dirtyGroups.clear();
+					}
+				},
+			});
+			if (
+				leaseResult !== 'producer' &&
+				!this.scope.destroyed &&
+				epoch === this.#historyEpoch
+			) await this.#restoreBackgroundProjections(true);
+		} catch (cause) {
+			if (!this.scope.destroyed && epoch === this.#historyEpoch) {
+				this.#onError(cause);
+				this.#historyError = cause;
+				this.#historyRetryAt = this.#now() + this.#historyRetryDelayMs;
+			}
 		} finally {
 			this.#historyLoading = false;
+			this.#historyInFlightGroups.clear();
 		}
 		if (this.scope.destroyed || epoch !== this.#historyEpoch) return;
 		const complete = [...this.#historyGroups.values()]
@@ -3100,6 +3285,7 @@ export class ReaderNotificationController {
 
 	#emit(): void {
 		this.#revision += 1;
+		this.#snapshotCache = null;
 		this.changes.emit(this.snapshot).forEach(this.#onError);
 	}
 }

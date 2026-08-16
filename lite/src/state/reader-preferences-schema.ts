@@ -540,6 +540,79 @@ export const READER_SHORTCUT_ACTIONS = Object.freeze(
 	Object.keys(READER_SHORTCUT_DEFAULTS) as ReaderShortcutAction[],
 );
 const SHORTCUT_MODIFIERS = Object.freeze(['Ctrl', 'Alt', 'Shift', 'Meta']);
+const READER_SHORTCUT_RESERVED_BINDINGS = new Set([
+	'Ctrl+KeyD',
+	'Ctrl+KeyF',
+	'Ctrl+KeyH',
+	'Ctrl+KeyJ',
+	'Ctrl+KeyL',
+	'Ctrl+KeyN',
+	'Ctrl+KeyO',
+	'Ctrl+KeyP',
+	'Ctrl+KeyR',
+	'Ctrl+KeyS',
+	'Ctrl+KeyT',
+	'Ctrl+KeyW',
+	'Ctrl+Tab',
+	'Ctrl+Shift+KeyN',
+	'Ctrl+Shift+KeyB',
+	'Ctrl+Shift+KeyD',
+	'Ctrl+Shift+KeyI',
+	'Ctrl+Shift+KeyJ',
+	'Ctrl+Shift+KeyO',
+	'Ctrl+Shift+KeyP',
+	'Ctrl+Shift+KeyT',
+	'Ctrl+Shift+KeyW',
+	'Ctrl+Shift+Delete',
+	'Ctrl+Shift+Tab',
+	'Ctrl+KeyU',
+	'Alt+ArrowLeft',
+	'Alt+ArrowRight',
+	'Alt+F4',
+	'Alt+Home',
+	'Meta+Comma',
+	'Meta+KeyF',
+	'Meta+KeyL',
+	'Meta+KeyN',
+	'Meta+KeyP',
+	'Meta+KeyQ',
+	'Meta+KeyR',
+	'Meta+KeyS',
+	'Meta+KeyT',
+	'Meta+KeyW',
+	'Meta+BracketLeft',
+	'Meta+BracketRight',
+	'Alt+Meta+KeyC',
+	'Alt+Meta+KeyI',
+	'Alt+Meta+KeyJ',
+	'Alt+Meta+ArrowLeft',
+	'Alt+Meta+ArrowRight',
+	'Shift+Meta+BracketLeft',
+	'Shift+Meta+BracketRight',
+	'Shift+Meta+KeyN',
+	'Shift+Meta+KeyT',
+	'Shift+Meta+KeyW',
+	'F11',
+	'F12',
+]);
+
+const READER_SHORTCUT_KEYBOARD_CODE = new RegExp([
+	'^(?:Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|',
+	'Arrow(?:Down|Left|Right|Up)|',
+	'(?:Backquote|Backslash|BracketLeft|BracketRight|Comma|Equal|Minus|',
+	'Period|Quote|Semicolon|Slash)|',
+	'(?:Backspace|CapsLock|ContextMenu|Delete|End|Enter|Escape|Help|Home|',
+	'Insert|PageDown|PageUp|Pause|PrintScreen|ScrollLock|Space|Tab)|',
+	'Intl(?:Backslash|Ro|Yen)|Lang[1-5]|(?:Convert|KanaMode|NonConvert)|',
+	'Numpad(?:[0-9]|Add|Backspace|Clear|ClearEntry|Comma|Decimal|Divide|',
+	'Enter|Equal|Hash|MemoryAdd|MemoryClear|MemoryRecall|MemoryStore|',
+	'MemorySubtract|Multiply|ParenLeft|ParenRight|Star|Subtract)|',
+	'Browser(?:Back|Favorites|Forward|Home|Refresh|Search|Stop)|',
+	'Media(?:PlayPause|Select|Stop|TrackNext|TrackPrevious)|',
+	'AudioVolume(?:Down|Mute|Up)|Launch(?:App1|App2|Mail)|',
+	'(?:Abort|Again|Copy|Cut|Eject|Find|Fn|FnLock|Hyper|Open|Paste|Power|',
+	'Props|Select|Sleep|Super|Turbo|Undo|WakeUp))$',
+].join(''));
 
 const JUMP_HIGHLIGHT_DEFAULTS = Object.freeze({
 	color: '#0888cc',
@@ -1203,7 +1276,9 @@ export function normalizeReaderShortcutBinding(value: unknown): string {
 		.filter(Boolean);
 	const code = parts.pop() || '';
 	if (
-		!/^(?:[A-Za-z][A-Za-z0-9]*|Mouse(?:1|3|4|[5-9]))$/.test(code)
+		!READER_SHORTCUT_KEYBOARD_CODE.test(code) &&
+		!/^Mouse(?:1|3|4|[5-9])$/.test(code) &&
+		code !== 'Wheel'
 		|| /^(?:Control|Alt|Shift|Meta)(?:Left|Right)?$/.test(code)
 	) {
 		return '';
@@ -1211,6 +1286,20 @@ export function normalizeReaderShortcutBinding(value: unknown): string {
 	const modifiers = SHORTCUT_MODIFIERS.filter((modifier) => parts.includes(modifier));
 	if (parts.some((part) => !SHORTCUT_MODIFIERS.includes(part))) return '';
 	return [...modifiers, code].join('+');
+}
+
+export function readerShortcutBindingPolicyIssue(
+	value: unknown,
+): 'invalid' | 'reserved' | 'bare-alphanumeric' | null {
+	const binding = normalizeReaderShortcutBinding(value);
+	if (!binding) return 'invalid';
+	if (READER_SHORTCUT_RESERVED_BINDINGS.has(binding)) return 'reserved';
+	const parts = binding.split('+');
+	const code = parts.at(-1) ?? '';
+	return parts.length === 1 &&
+		/^(?:Key[A-Z]|Digit\d|Numpad\d)$/.test(code)
+		? 'bare-alphanumeric'
+		: null;
 }
 
 export function normalizeReaderShortcutBindings(
@@ -1224,7 +1313,8 @@ export function normalizeReaderShortcutBindings(
 			? source[action]
 			: READER_SHORTCUT_DEFAULTS[action];
 		const bindings = [...new Set(
-			selected.map(normalizeReaderShortcutBinding).filter(Boolean),
+			selected.map(normalizeReaderShortcutBinding).filter((binding) =>
+				binding && readerShortcutBindingPolicyIssue(binding) === null),
 		)].filter((binding) => {
 			if (used.has(binding)) return false;
 			used.add(binding);

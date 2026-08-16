@@ -5,8 +5,8 @@ import type {
 	ReaderBrowserRuntime,
 } from '../app/reader-browser-runtime.js';
 import {
-	discourseNativeCurrentUsername,
 	discourseNativeBoostsAvailable,
+	discourseNativeInitialCurrentUsername,
 	discourseNativeIconRenderer,
 	discourseNativeSiteLogoUrl,
 	discourseNativeDefaultSiteTheme,
@@ -362,7 +362,7 @@ function createRuntimeStage(
 			const preferencesDefaults = createReaderPreferencesDefaults(
 				preferencesEnvironment,
 			);
-			const currentUsername = discourseNativeCurrentUsername(
+			const currentUsername = discourseNativeInitialCurrentUsername(
 				environment.discourseHost,
 			);
 			const renderNativeIcon = discourseNativeIconRenderer(
@@ -885,6 +885,7 @@ function createRuntimeStage(
 					webDav: {
 						...customSites.webDav,
 						customSites: customSites.repository,
+						preferencesCodec,
 					},
 				}
 				: {}),

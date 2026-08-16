@@ -843,6 +843,11 @@ export class ReaderUserObservationView {
 	#startWindowInteraction(): void {
 		const mode = this.listWindow.element.dataset.readerWindowInteraction ?? '';
 		if (!/[ew]/.test(mode)) return;
+		if (this.#renderFrame !== null) {
+			this.#document.defaultView?.cancelAnimationFrame(this.#renderFrame);
+			this.#renderFrame = null;
+			this.#sessionRenderPending = true;
+		}
 		const width = this.#detailPane.getBoundingClientRect().width;
 		if (Number.isFinite(width) && width > 0) {
 			this.#detailPane.style.width = `${Math.round(width)}px`;
@@ -1356,6 +1361,16 @@ export class ReaderUserObservationView {
 				this.#storedHydrationKey = '';
 				this.#storedHydrationPendingKey = '';
 			}
+			return;
+		}
+		if (this.listWindow.element.classList.contains(
+			'ldp-reader-floating-window-interacting',
+		)) {
+			if (this.#storedHydrationPendingKey === hydrationKey) {
+				this.#storedHydrationKey = '';
+				this.#storedHydrationPendingKey = '';
+			}
+			this.#sessionRenderPending = true;
 			return;
 		}
 		if (this.#storedHydrationPendingKey === hydrationKey) {

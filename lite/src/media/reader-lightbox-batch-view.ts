@@ -26,7 +26,16 @@ export interface ReaderLightboxBatchViewOptions {
 	readonly document: Document;
 	readonly mount: HTMLElement;
 	readonly controller: ReaderLightboxBatchController;
-	readonly downloads: ReaderImageDownloadService;
+	readonly downloads?: ReaderImageDownloadService;
+	readonly mode?: 'download' | 'selection';
+	readonly title?: string;
+	readonly confirmLabel?: string;
+	readonly openPreviewOnOpen?: boolean;
+	readonly backdrop?: 'blur' | 'plain';
+	readonly onConfirm?: (
+		items: readonly ReaderLightboxItem[],
+	) => void | Promise<void>;
+	readonly onClose?: () => void;
 	readonly originalSources?: ReaderLightboxOriginalSourcePort;
 	readonly confirmOriginal?: (
 		missing: number,
@@ -50,6 +59,14 @@ export interface ReaderLightboxBatchViewSlots {
 	readonly download: HTMLButtonElement;
 }
 
+interface ReaderLightboxBatchCard {
+	readonly root: HTMLElement;
+	readonly input: HTMLInputElement;
+	readonly preview: HTMLButtonElement;
+	readonly image: HTMLImageElement;
+	readonly copy: HTMLElement;
+}
+
 const required = requiredElementQuery('批量下载模板');
 
 /**
@@ -59,7 +76,11 @@ export class ReaderLightboxBatchView {
 	readonly scope: LifecycleScope;
 	readonly slots: ReaderLightboxBatchViewSlots;
 	readonly #controller: ReaderLightboxBatchController;
-	readonly #downloads: ReaderImageDownloadService;
+	readonly #downloads: ReaderImageDownloadService | null;
+	readonly #mode: 'download' | 'selection';
+	readonly #openPreviewOnOpen: boolean;
+	readonly #onConfirm: NonNullable<ReaderLightboxBatchViewOptions['onConfirm']>;
+	readonly #onClose: NonNullable<ReaderLightboxBatchViewOptions['onClose']>;
 	readonly #confirmOriginal: NonNullable<
 		ReaderLightboxBatchViewOptions['confirmOriginal']
 	>;
@@ -68,23 +89,39 @@ export class ReaderLightboxBatchView {
 	readonly #document: Document;
 	readonly #dialog: HTMLElement;
 	readonly #close: HTMLButtonElement;
-	#itemsSignature = '';
+	readonly #cards = new Map<string, ReaderLightboxBatchCard>();
 	#downloadAbort: AbortController | null = null;
 	#returnFocus: HTMLElement | null = null;
+	#wasOpen = false;
 
 	constructor(options: ReaderLightboxBatchViewOptions) {
 		this.#document = options.document;
 		this.#controller = options.controller;
-		this.#downloads = options.downloads;
+		this.#downloads = options.downloads ?? null;
+		this.#mode = options.mode ?? 'download';
+		if (this.#mode === 'download' && !this.#downloads) {
+			throw new Error('批量下载视图缺少图片下载服务');
+		}
+		this.#openPreviewOnOpen = options.openPreviewOnOpen ??
+			this.#mode === 'download';
+		this.#onConfirm = options.onConfirm ?? (() => {});
+		this.#onClose = options.onClose ?? (() => {});
 		this.#confirmOriginal = options.confirmOriginal ?? (() => false);
 		this.#onError = options.onError ?? (() => {});
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		const root = options.document.createElement('div');
 		root.className = 'ldp-lb-batch-overlay';
+		root.classList.toggle('is-plain-backdrop', options.backdrop === 'plain');
 		root.hidden = true;
+		const title = String(options.title ?? (
+			this.#mode === 'selection' ? '选择总结图片' : '批量下载'
+		)).trim();
+		const confirmLabel = String(options.confirmLabel ?? (
+			this.#mode === 'selection' ? '使用所选图片' : '打包下载'
+		)).trim();
 		root.innerHTML = `
-			<section class="ldp-lb-batch-dialog" role="dialog" aria-modal="true" aria-label="批量下载图片">
-				<div class="ldp-lb-batch-head"><strong>批量下载</strong><button class="ldp-lb-btn ldp-lb-batch-close" type="button" aria-label="关闭批量下载"></button></div>
+			<section class="ldp-lb-batch-dialog" role="dialog" aria-modal="true" aria-label="${title}">
+				<div class="ldp-lb-batch-head"><strong>${title}</strong><button class="ldp-lb-btn ldp-lb-batch-close" type="button" aria-label="关闭${title}"></button></div>
 				<label class="ldp-lb-batch-name" hidden><span>名称</span><input type="text" maxlength="120" aria-label="ZIP 文件名称"></label>
 				<div class="ldp-lb-batch-tools">
 					<div class="ldp-lb-batch-scope" role="tablist" aria-label="批量下载范围"></div>
@@ -96,7 +133,7 @@ export class ReaderLightboxBatchView {
 					<div class="ldp-lb-batch-progress-copy"><span>准备下载…</span><span>0%</span></div>
 					<div class="ldp-lb-batch-progress-track" role="progressbar" aria-label="批量下载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="ldp-lb-batch-progress-fill"></span></div>
 				</div>
-				<div class="ldp-lb-batch-actions"><span class="ldp-lb-batch-status"></span><button class="ldp-lb-batch-cancel" type="button">取消</button><button class="ldp-lb-batch-download" type="button" disabled>打包下载</button></div>
+				<div class="ldp-lb-batch-actions"><span class="ldp-lb-batch-status"></span><button class="ldp-lb-batch-cancel" type="button">取消</button><button class="ldp-lb-batch-download" type="button" disabled>${confirmLabel}</button></div>
 			</section>`;
 		options.mount.append(root);
 		this.scope.add(bindFloatingSurfaceWheel(root));
@@ -177,8 +214,10 @@ export class ReaderLightboxBatchView {
 		}
 		this.#controller.open();
 		const first = this.#controller.snapshot().items[0];
-		const anchor = first ? this.#cardForKey(first.key) : null;
-		if (first && anchor) this.#openPreview(first.key, anchor);
+		const anchor = first ? this.#previewForKey(first.key) : null;
+		if (this.#openPreviewOnOpen && first && anchor) {
+			this.#openPreview(first.key, anchor);
+		}
 		else this.#close.focus({ preventScroll: true });
 	}
 
@@ -187,6 +226,8 @@ export class ReaderLightboxBatchView {
 	}
 
 	#render(snapshot: ReaderLightboxBatchSnapshot): void {
+		const wasOpen = this.#wasOpen;
+		this.#wasOpen = snapshot.open;
 		this.slots.root.hidden = !snapshot.open;
 		if (!snapshot.open) {
 			this.#preview.close();
@@ -196,6 +237,7 @@ export class ReaderLightboxBatchView {
 				returnFocus?.isConnected &&
 				typeof returnFocus.focus === 'function'
 			) returnFocus.focus({ preventScroll: true });
+			if (wasOpen) this.#onClose();
 			return;
 		}
 		this.slots.root.setAttribute(
@@ -203,50 +245,7 @@ export class ReaderLightboxBatchView {
 			String(snapshot.busy || snapshot.loadingAll),
 		);
 		this.#renderScopeControls(snapshot);
-		const signature = snapshot.items.map((item) => item.key).join('\u0000');
-		if (signature !== this.#itemsSignature) {
-			this.#itemsSignature = signature;
-			const fragment = this.slots.root.ownerDocument.createDocumentFragment();
-				snapshot.items.forEach((item, index) => {
-					const label = this.slots.root.ownerDocument.createElement('label');
-					label.className = 'ldp-lb-batch-item';
-					label.tabIndex = -1;
-				label.dataset.lbBatchKey = item.key;
-				const input = this.slots.root.ownerDocument.createElement('input');
-				input.type = 'checkbox';
-				input.setAttribute(
-					'aria-label',
-					`选择 #${item.sourcePostNumber} 图片 ${index + 1}`,
-				);
-				const image = this.slots.root.ownerDocument.createElement('img');
-				image.src = item.previewSrc;
-				image.alt = '';
-				image.loading = 'lazy';
-				image.decoding = 'async';
-				image.dataset.ldpBatchThumbState = 'loading';
-				image.addEventListener('load', () => {
-					image.dataset.ldpBatchThumbState = 'loaded';
-				}, { once: true });
-				image.addEventListener('error', () => {
-					image.dataset.ldpBatchThumbState = 'failed';
-				}, { once: true });
-				const copy = this.slots.root.ownerDocument.createElement('span');
-				copy.textContent = `#${item.sourcePostNumber} · 图片 ${index + 1}`;
-				label.append(input, image, copy);
-				fragment.append(label);
-			});
-			this.slots.grid.replaceChildren(fragment);
-		}
-		this.slots.grid.querySelectorAll<HTMLElement>('.ldp-lb-batch-item')
-			.forEach((item) => {
-				const selected = snapshot.selectedKeys.has(item.dataset.lbBatchKey ?? '');
-				item.classList.toggle('selected', selected);
-				const input = item.querySelector<HTMLInputElement>('input');
-				if (input) {
-					input.checked = selected;
-					input.disabled = snapshot.busy || snapshot.loadingAll;
-				}
-			});
+		this.#reconcileCards(snapshot);
 		this.slots.archiveName.value = snapshot.archiveName;
 		this.slots.archiveName.disabled = snapshot.busy || snapshot.loadingAll;
 		this.slots.selectAll.disabled = snapshot.busy || snapshot.loadingAll;
@@ -264,7 +263,9 @@ export class ReaderLightboxBatchView {
 			snapshot.busy ||
 			snapshot.loadingAll ||
 			!snapshot.selectedItems.length;
-		this.slots.cancel.textContent = snapshot.busy ? '取消下载' : '取消';
+		this.slots.cancel.textContent = snapshot.busy && this.#mode === 'download'
+			? '取消下载'
+			: '取消';
 		this.slots.status.textContent = snapshot.status;
 		const progressVisible = snapshot.phase !== 'idle';
 		this.slots.progress.hidden = !progressVisible;
@@ -284,7 +285,11 @@ export class ReaderLightboxBatchView {
 	#renderScopeControls(snapshot: ReaderLightboxBatchSnapshot): void {
 		const options = [
 			{ scope: 'loaded', label: '当前加载的图片', enabled: true },
-			{ scope: 'all', label: '全部帖子图片', enabled: snapshot.canLoadAll },
+			{
+				scope: 'all',
+				label: this.#mode === 'selection' ? '全帖可选图片' : '全部帖子图片',
+				enabled: snapshot.canLoadAll,
+			},
 		] as const;
 		const signature = options
 			.map((option) => `${option.scope}:${option.enabled}`)
@@ -313,6 +318,71 @@ export class ReaderLightboxBatchView {
 				snapshot.busy ||
 				snapshot.loadingAll && !selected;
 		});
+	}
+
+	#reconcileCards(snapshot: ReaderLightboxBatchSnapshot): void {
+		const expected = new Set(snapshot.items.map((item) => item.key));
+		for (const [key, card] of this.#cards) {
+			if (expected.has(key)) continue;
+			card.root.remove();
+			this.#cards.delete(key);
+		}
+		const ordered = snapshot.items.map((item, index) => {
+			const card = this.#cards.get(item.key) ?? this.#createCard(item.key);
+			this.#cards.set(item.key, card);
+			card.input.setAttribute(
+				'aria-label',
+				`选择 #${item.sourcePostNumber} 图片 ${index + 1}`,
+			);
+			card.preview.setAttribute(
+				'aria-label',
+				`预览 #${item.sourcePostNumber} 图片 ${index + 1}`,
+			);
+			if (card.image.dataset.ldpBatchThumbSrc !== item.previewSrc) {
+				card.image.dataset.ldpBatchThumbSrc = item.previewSrc;
+				card.image.dataset.ldpBatchThumbState = 'loading';
+				card.image.src = item.previewSrc;
+			}
+			card.copy.textContent = `#${item.sourcePostNumber} · 图片 ${index + 1}`;
+			const selected = snapshot.selectedKeys.has(item.key);
+			card.root.classList.toggle('selected', selected);
+			card.input.checked = selected;
+			card.input.disabled = snapshot.busy || snapshot.loadingAll;
+			card.preview.disabled = snapshot.busy;
+			return card.root;
+		});
+		const current = [...this.slots.grid.children];
+		if (
+			current.length !== ordered.length ||
+			ordered.some((card, index) => current[index] !== card)
+		) this.slots.grid.replaceChildren(...ordered);
+	}
+
+	#createCard(key: string): ReaderLightboxBatchCard {
+		const document = this.slots.root.ownerDocument;
+		const root = document.createElement('article');
+		root.className = 'ldp-lb-batch-item';
+		root.tabIndex = -1;
+		root.dataset.lbBatchKey = key;
+		const input = document.createElement('input');
+		input.type = 'checkbox';
+		const preview = document.createElement('button');
+		preview.type = 'button';
+		preview.className = 'ldp-lb-batch-preview';
+		const image = document.createElement('img');
+		image.alt = '';
+		image.loading = 'lazy';
+		image.decoding = 'async';
+		image.onload = () => {
+			image.dataset.ldpBatchThumbState = 'loaded';
+		};
+		image.onerror = () => {
+			image.dataset.ldpBatchThumbState = 'failed';
+		};
+		preview.append(image);
+		const copy = document.createElement('span');
+		root.append(input, preview, copy);
+		return Object.freeze({ root, input, preview, image, copy });
 	}
 
 	#onSelection(event: Event): void {
@@ -348,11 +418,11 @@ export class ReaderLightboxBatchView {
 
 	#onClick(event: Event): void {
 		const target = eventElement(event);
-		const previewImage = target?.closest<HTMLImageElement>(
-			'.ldp-lb-batch-item img',
+		const previewButton = target?.closest<HTMLButtonElement>(
+			'.ldp-lb-batch-preview',
 		);
-		if (previewImage) {
-			const card = previewImage.closest<HTMLElement>('.ldp-lb-batch-item');
+		if (previewButton) {
+			const card = previewButton.closest<HTMLElement>('.ldp-lb-batch-item');
 			const key = card?.dataset.lbBatchKey;
 			if (!key) return;
 			event.preventDefault();
@@ -377,13 +447,14 @@ export class ReaderLightboxBatchView {
 				this.#controller.close();
 			}
 		} else if (target?.closest('.ldp-lb-batch-download')) {
-			void this.#download();
+			if (this.#mode === 'selection') void this.#confirmSelection();
+			else void this.#download();
 		}
 	}
 
 	#openPreview(key: string, anchor: HTMLElement): void {
 		const snapshot = this.#controller.snapshot();
-		if (!snapshot.open || snapshot.busy || snapshot.loadingAll) return;
+		if (!snapshot.open || snapshot.busy) return;
 		const index = snapshot.items.findIndex((item) => item.key === key);
 		const item = snapshot.items[index];
 		if (!item) return;
@@ -392,14 +463,14 @@ export class ReaderLightboxBatchView {
 		) ?? undefined;
 		const openAt = (nextIndex: number) => {
 			const nextItem = this.#controller.snapshot().items[nextIndex];
-			const nextAnchor = nextItem ? this.#cardForKey(nextItem.key) : null;
+			const nextAnchor = nextItem ? this.#previewForKey(nextItem.key) : null;
 			if (nextItem && nextAnchor) this.#openPreview(nextItem.key, nextAnchor);
 		};
-			this.#preview.open({
+		this.#preview.open({
 				item,
 				kind: 'image',
 				anchor,
-				returnFocus: () => this.#cardForKey(item.key),
+				returnFocus: () => this.#previewForKey(item.key),
 			...(dialog ? { outsideSafeSurface: dialog } : {}),
 			selection: {
 				selected: snapshot.selectedKeys.has(item.key),
@@ -417,7 +488,9 @@ export class ReaderLightboxBatchView {
 				disabled: index === snapshot.items.length - 1,
 				run: () => openAt(index + 1),
 			},
-			onDownload: () => this.#downloadItem(item, index),
+			...(this.#downloads
+				? { onDownload: () => this.#downloadItem(item, index) }
+				: {}),
 		});
 	}
 
@@ -425,6 +498,7 @@ export class ReaderLightboxBatchView {
 		item: ReaderLightboxItem,
 		index: number,
 	): Promise<void> {
+		if (!this.#downloads) return;
 		const missing = await this.#downloads.missingOriginalCount([item]);
 		const original = missing > 0
 			? await this.#confirmOriginal(missing, 1)
@@ -432,14 +506,12 @@ export class ReaderLightboxBatchView {
 		await this.#downloads.download(item, index, { original });
 	}
 
-	#cardForKey(key: string): HTMLElement | null {
-		return [...this.slots.grid.querySelectorAll<HTMLElement>(
-			'.ldp-lb-batch-item',
-		)].find((item) => item.dataset.lbBatchKey === key) ?? null;
+	#previewForKey(key: string): HTMLButtonElement | null {
+		return this.#cards.get(key)?.preview ?? null;
 	}
 
 	async #download(): Promise<void> {
-		if (this.#downloadAbort) return;
+		if (this.#downloadAbort || !this.#downloads) return;
 		let snapshot: ReaderLightboxBatchSnapshot;
 		try {
 			snapshot = this.#controller.begin();
@@ -483,6 +555,19 @@ export class ReaderLightboxBatchView {
 			else this.#controller.fail(error);
 		} finally {
 			if (this.#downloadAbort === controller) this.#downloadAbort = null;
+		}
+	}
+
+	async #confirmSelection(): Promise<void> {
+		const snapshot = this.#controller.snapshot();
+		if (!snapshot.selectedItems.length) return;
+		this.slots.download.disabled = true;
+		try {
+			await this.#onConfirm(snapshot.selectedItems);
+			this.#controller.close();
+		} catch (error) {
+			this.#onError(error);
+			if (!this.scope.destroyed) this.#render(this.#controller.snapshot());
 		}
 	}
 

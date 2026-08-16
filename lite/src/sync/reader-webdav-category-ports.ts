@@ -18,8 +18,11 @@ import type {
 	ReaderOpenQueueSession,
 	ReaderQueueSyncEntry,
 } from '../queue/reader-open-queue-session.js';
-import type { ReaderCustomSiteRepository } from
-	'../site/reader-custom-site-repository.js';
+import {
+	normalizeReaderCustomSiteHost,
+	readerBuiltinDiscourseHost,
+	type ReaderCustomSiteRepository,
+} from '../site/reader-custom-site-repository.js';
 import type { ReaderTopicContextStateRepository } from
 	'../topic/reader-topic-context-state.js';
 import type { ReaderConnectTrustHistoryAdapter } from
@@ -41,6 +44,9 @@ import type { DomainResponseCacheSettings } from
 	'../network/domain-request-gateway.js';
 import {
 	createReaderTranslationDefaultConfig,
+	normalizeReaderAiModelCatalogEntry,
+	normalizeReaderTranslationAnimation,
+	normalizeReaderTranslationBaseUrl,
 	normalizeReaderTranslationConfig,
 	type ReaderTranslationConfig,
 	type ReaderTranslationConfigRepository,
@@ -57,6 +63,7 @@ import {
 import {
 	decryptReaderWebDavSecret,
 	encryptReaderWebDavSecret,
+	readerWebDavEncryptedSecretMatchesSchema,
 } from './reader-webdav-secret-codec.js';
 import { createReaderWebDavOfflineTopicCategoryPort } from
 	'./reader-webdav-offline-topic-port.js';
@@ -75,8 +82,110 @@ function localRecord(id: string, value: unknown): ReaderWebDavLocalRecord {
 	return Object.freeze({ id, value });
 }
 
+export function readerWebDavPreferenceRecordMatchesSchema(
+	preferences: Readonly<object>,
+	id: string,
+	value: unknown,
+	normalize: (
+		value: Readonly<Record<string, unknown>>,
+	) => Readonly<object>,
+): boolean {
+	if (!Object.hasOwn(preferences, id)) return false;
+	try {
+		const normalized = normalize({
+			...(preferences as Readonly<Record<string, unknown>>),
+			[id]: value,
+		}) as Readonly<Record<string, unknown>>;
+		return Object.hasOwn(normalized, id) &&
+			readerWebDavFingerprint(normalized[id]) ===
+				readerWebDavFingerprint(value);
+	} catch {
+		return false;
+	}
+}
+
+export function readerWebDavTopicContextRecordMatchesSchema(
+	id: string,
+	value: unknown,
+): boolean {
+	const source = record(value);
+	if (!source) return false;
+	if (id === 'geometry') {
+		return exactKeys(source, ['left', 'top', 'width', 'height']) &&
+			finiteNumber(source.left) &&
+			finiteNumber(source.top) &&
+			finiteNumber(source.width) && Number(source.width) > 0 &&
+			finiteNumber(source.height) && Number(source.height) > 0;
+	}
+	return id.startsWith('view:') && id.length > 5 &&
+		exactKeys(source, [
+			'at',
+			'number',
+			'scrollTop',
+			'scrollLeft',
+			'offset',
+		]) &&
+		finiteNonNegativeNumber(source.at) &&
+		positiveSafeInteger(source.number) &&
+		finiteNonNegativeNumber(source.scrollTop) &&
+		finiteNonNegativeNumber(source.scrollLeft) &&
+		finiteNumber(source.offset);
+}
+
+export function readerWebDavCustomSiteRecordMatchesSchema(
+	id: string,
+	value: unknown,
+): boolean {
+	if (typeof value !== 'string' || value !== id) return false;
+	const normalized = normalizeReaderCustomSiteHost(value);
+	return Boolean(
+		normalized && normalized === value && !readerBuiltinDiscourseHost(value),
+	);
+}
+
 function categoryPort(value: ReaderWebDavCategoryPort): ReaderWebDavCategoryPort {
 	return Object.freeze(value);
+}
+
+function exactKeys(
+	value: UnknownRecord,
+	keys: readonly string[],
+): boolean {
+	const expected = new Set(keys);
+	return Object.keys(value).length === expected.size &&
+		Object.keys(value).every((key) => expected.has(key));
+}
+
+function finiteNumber(value: unknown): value is number {
+	return typeof value === 'number' && Number.isFinite(value);
+}
+
+function finiteNonNegativeNumber(value: unknown): value is number {
+	return finiteNumber(value) && value >= 0;
+}
+
+function positiveSafeInteger(value: unknown): value is number {
+	return typeof value === 'number' &&
+		Number.isSafeInteger(value) && value > 0;
+}
+
+function canonicalRecordFieldsMatch(
+	value: unknown,
+	normalized: unknown,
+	required: readonly string[],
+	optional: readonly string[] = [],
+): boolean {
+	const source = record(value);
+	const canonical = record(normalized);
+	if (!source || !canonical) return false;
+	const allowed = new Set([...required, ...optional]);
+	if (
+		required.some((key) => !Object.hasOwn(source, key)) ||
+		Object.keys(source).some((key) => !allowed.has(key))
+	) return false;
+	return Object.entries(source).every(([key, item]) =>
+		Object.hasOwn(canonical, key) &&
+		readerWebDavFingerprint(item) === readerWebDavFingerprint(canonical[key]));
 }
 
 function number(value: unknown, fallback = 0): number {
@@ -92,6 +201,33 @@ function historyValue(value: unknown): ReaderHistoryEntry | null {
 	return normalizeReaderHistoryEntry(value);
 }
 
+export function readerWebDavHistoryRecordMatchesSchema(
+	id: string,
+	value: unknown,
+): boolean {
+	const normalized = historyValue(value);
+	return normalized !== null && String(normalized.topicId) === id &&
+		canonicalRecordFieldsMatch(value, normalized, [
+			'topicId',
+			'title',
+			'postsCount',
+			'avatarTemplate',
+			'ownerUsername',
+			'postNumber',
+			'readPostNumbers',
+			'firstViewedAt',
+			'viewedAt',
+		], [
+			'topicSubtitle',
+			'categoryId',
+			'categoryName',
+			'tags',
+			'viewport',
+			'archiveStatus',
+			'archivePostNumber',
+		]);
+}
+
 export function mergeReaderWebDavHistoryValues(
 	local: unknown,
 	remote: unknown,
@@ -102,26 +238,19 @@ export function mergeReaderWebDavHistoryValues(
 	if (!right) return left;
 	const recent = left.viewedAt >= right.viewedAt ? left : right;
 	const older = recent === left ? right : left;
-	const recentSource = record(recent === left ? local : remote);
-	const recentOwns = (key: string): boolean =>
-		recentSource !== null && Object.hasOwn(recentSource, key);
 	const archived = recent.archiveStatus !== null
 		? recent
 		: older;
 	return Object.freeze({
 		...recent,
 		postsCount: Math.max(left.postsCount, right.postsCount),
-		topicSubtitle: recentOwns('topicSubtitle')
-			? recent.topicSubtitle
-			: older.topicSubtitle,
-		categoryId: recentOwns('categoryId')
-			? recent.categoryId
-			: older.categoryId,
-		categoryName: recentOwns('categoryName')
-			? recent.categoryName
-			: older.categoryName,
-		tags: recentOwns('tags') ? recent.tags : older.tags,
-		viewport: recentOwns('viewport') ? recent.viewport : older.viewport,
+		// 历史字段是观察快照；升级归一化会为旧记录补空值，空占位不能
+		// 抹掉另一设备已经观察到的分类、标签或精确阅读锚点。
+		topicSubtitle: recent.topicSubtitle || older.topicSubtitle,
+		categoryId: recent.categoryId ?? older.categoryId,
+		categoryName: recent.categoryName || older.categoryName,
+		tags: recent.tags.length ? recent.tags : older.tags,
+		viewport: recent.viewport ?? older.viewport,
 		readPostNumbers: Object.freeze([...new Set([
 			...left.readPostNumbers,
 			...right.readPostNumbers,
@@ -148,6 +277,25 @@ function queueValue(value: unknown): ReaderQueueSyncEntry | null {
 		addedAt: Math.max(1, number(source.addedAt, 1)),
 		pinned: source.pinned === true,
 	});
+}
+
+export function readerWebDavQueueRecordMatchesSchema(
+	id: string,
+	value: unknown,
+): boolean {
+	const normalized = queueValue(value);
+	return normalized !== null && String(normalized.topicId) === id &&
+		canonicalRecordFieldsMatch(value, normalized, [
+			'topicId',
+			'title',
+			'href',
+			'avatarTemplate',
+			'avatarSource',
+			'ownerUsername',
+			'postNumber',
+			'addedAt',
+			'pinned',
+		]);
 }
 
 function mergeQueue(local: unknown, remote: unknown): unknown {
@@ -260,6 +408,29 @@ function bookmarkRemoteValue(value: ReaderBookmarkRecord): unknown {
 	});
 }
 
+export function readerWebDavBookmarkRecordMatchesSchema(
+	id: string,
+	value: unknown,
+): boolean {
+	const normalized = bookmarkValue(value);
+	const remote = normalized ? bookmarkRemoteValue(normalized) : null;
+	return normalized !== null && normalized.identity === id &&
+		canonicalRecordFieldsMatch(value, remote, [
+			'identity',
+			'tab',
+			'bookmarkId',
+			'topicId',
+			'postId',
+			'postNumber',
+			'title',
+			'authorUsername',
+			'avatarTemplate',
+			'createdAt',
+			'name',
+			'highestPostNumber',
+		], ['categoryId', 'categoryName', 'tags']);
+}
+
 function mergeBookmark(local: unknown, remote: unknown): unknown {
 	const left = bookmarkValue(local);
 	const right = bookmarkValue(remote);
@@ -357,6 +528,34 @@ function activityHistoryRemoteValue(value: ReaderBookmarkRecord): unknown {
 		categoryName: value.categoryName,
 		tags: value.tags,
 	});
+}
+
+export function readerWebDavActivityHistoryRecordMatchesSchema(
+	id: string,
+	value: unknown,
+): boolean {
+	const normalized = activityHistoryValue(value);
+	return normalized !== null && normalized.identity === id &&
+		canonicalRecordFieldsMatch(
+			value,
+			activityHistoryRemoteValue(normalized),
+			[
+				'identity',
+				'tab',
+				'topicId',
+				'postId',
+				'postNumber',
+				'title',
+				'authorUsername',
+				'avatarTemplate',
+				'createdAt',
+				'reaction',
+				'excerpt',
+				'categoryId',
+				'categoryName',
+				'tags',
+			],
+		);
 }
 
 function mergeActivityHistory(local: unknown, remote: unknown): unknown {
@@ -492,6 +691,38 @@ function notificationHistoryRemoteValue(
 	});
 }
 
+export function readerWebDavNotificationHistoryRecordMatchesSchema(
+	id: string,
+	value: unknown,
+): boolean {
+	const normalized = notificationHistoryValue(value);
+	return normalized !== null && normalized.identity === id &&
+		canonicalRecordFieldsMatch(
+			value,
+			notificationHistoryRemoteValue(normalized),
+			[
+				'identity',
+				'group',
+				'highPriority',
+				'typeName',
+				'typeLabel',
+				'aggregateCount',
+				'icon',
+				'actor',
+				'avatarFallback',
+				'avatarTemplate',
+				'summary',
+				'excerpt',
+				'createdAt',
+				'href',
+				'target',
+				'categoryId',
+				'categoryName',
+				'tags',
+			],
+		);
+}
+
 function mergeNotificationHistory(local: unknown, remote: unknown): unknown {
 	const left = notificationHistoryValue(local);
 	const right = notificationHistoryValue(remote);
@@ -617,13 +848,61 @@ export function mergeReaderWebDavConnectHistoryValues(
 		if (candidates.length) confirmedReads[fingerprint] = Math.min(...candidates);
 	}
 	const starts = [left.readTrackingStartedAt, right.readTrackingStartedAt]
-		.map(Number).filter(Number.isFinite);
+		.filter(finiteNonNegativeNumber);
 	return Object.freeze({
 		version: 1,
 		days: Object.freeze(days),
 		readTrackingStartedAt: starts.length ? Math.min(...starts) : null,
 		confirmedReads: Object.freeze(confirmedReads),
 	});
+}
+
+export function readerWebDavConnectHistoryRecordMatchesSchema(
+	id: string,
+	value: unknown,
+): boolean {
+	const source = record(value);
+	const days = record(source?.days);
+	const confirmedReads = record(source?.confirmedReads);
+	if (
+		id !== 'current' ||
+		!source ||
+		source.version !== 1 ||
+		!days ||
+		!confirmedReads ||
+		!exactKeys(source, [
+			'version',
+			'days',
+			'readTrackingStartedAt',
+			'confirmedReads',
+		]) ||
+		!(source.readTrackingStartedAt === null ||
+			finiteNonNegativeNumber(source.readTrackingStartedAt))
+	) return false;
+	for (const [day, rawMetrics] of Object.entries(days)) {
+		const metrics = record(rawMetrics);
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !metrics) return false;
+		for (const [key, rawSample] of Object.entries(metrics)) {
+			const sample = record(rawSample);
+			if (
+				!key ||
+				!sample ||
+				!exactKeys(sample, [
+					'first',
+					'last',
+					'firstObservedAt',
+					'lastObservedAt',
+				]) ||
+				!finiteNumber(sample.first) ||
+				!finiteNumber(sample.last) ||
+				!finiteNonNegativeNumber(sample.firstObservedAt) ||
+				!finiteNonNegativeNumber(sample.lastObservedAt) ||
+				sample.firstObservedAt > sample.lastObservedAt
+			) return false;
+		}
+	}
+	return Object.entries(confirmedReads).every(([fingerprint, confirmedAt]) =>
+		/^\d+:\d+$/.test(fingerprint) && finiteNonNegativeNumber(confirmedAt));
 }
 
 const TRANSLATION_SECTION_CACHE_ID_PREFIX = 'reader-translation-section?';
@@ -694,6 +973,109 @@ function mergeTranslationCache(local: unknown, remote: unknown): unknown {
 	});
 }
 
+export function readerWebDavTranslationCacheRecordMatchesSchema(
+	id: string,
+	value: unknown,
+): boolean {
+	const source = record(value);
+	return id === TRANSLATION_CACHE_RECORD_ID &&
+		source?.version === 1 &&
+		Array.isArray(source.sections) &&
+		readerWebDavFingerprint(source) ===
+			readerWebDavFingerprint(translationCachePayload(source));
+}
+
+function translationRemoteProfileMatchesSchema(
+	value: unknown,
+	version: 3 | 4 | 5,
+): boolean {
+	const source = record(value);
+	if (!source) return false;
+	const keys = [
+		'baseUrl',
+		'model',
+		'prompt',
+		'temperature',
+		'reasoningEffort',
+		'requestsPerMinute',
+		'tokensPerMinute',
+		'animation',
+		...(version >= 4 ? ['models'] : []),
+		...(version >= 5 ? ['modelCatalog'] : []),
+	];
+	if (
+		!exactKeys(source, keys) ||
+		typeof source.baseUrl !== 'string' ||
+		normalizeReaderTranslationBaseUrl(source.baseUrl) !== source.baseUrl ||
+		typeof source.model !== 'string' ||
+		source.model.trim() !== source.model ||
+		source.model.length > 160 ||
+		typeof source.prompt !== 'string' ||
+		source.prompt.trim() !== source.prompt ||
+		!source.prompt ||
+		source.prompt.length > 4_000 ||
+		!finiteNumber(source.temperature) ||
+		source.temperature < 0 || source.temperature > 1 ||
+		typeof source.reasoningEffort !== 'string' ||
+		source.reasoningEffort.trim() !== source.reasoningEffort ||
+		source.reasoningEffort.length > 64 ||
+		/[\u0000-\u001f\u007f]/.test(source.reasoningEffort) ||
+		!Number.isSafeInteger(source.requestsPerMinute) ||
+		Number(source.requestsPerMinute) < 0 ||
+		Number(source.requestsPerMinute) > 10_000 ||
+		!Number.isSafeInteger(source.tokensPerMinute) ||
+		Number(source.tokensPerMinute) < 0 ||
+		Number(source.tokensPerMinute) > 100_000_000 ||
+		typeof source.animation !== 'string' ||
+		normalizeReaderTranslationAnimation(source.animation) !== source.animation
+	) return false;
+	if (version >= 4 && (
+		!Array.isArray(source.models) ||
+		source.models.some((item) =>
+			typeof item !== 'string' || !item || item.trim() !== item)
+	)) return false;
+	if (version >= 5 && (
+		!Array.isArray(source.modelCatalog) ||
+		source.modelCatalog.some((item) => {
+			const normalized = normalizeReaderAiModelCatalogEntry(item);
+			return !normalized || readerWebDavFingerprint(normalized) !==
+				readerWebDavFingerprint(item);
+		})
+	)) return false;
+	return true;
+}
+
+export function readerWebDavTranslationRemoteValueMatchesSchema(
+	value: unknown,
+): boolean {
+	const source = record(value);
+	if (!source || ![3, 4, 5].includes(source.version as number)) return false;
+	const version = source.version as 3 | 4 | 5;
+	const keys = [
+		'version',
+		'activeBaseUrl',
+		'profiles',
+		'encryptedApiKeys',
+		...(version >= 5 || Object.hasOwn(source, 'animation')
+			? ['animation']
+			: []),
+	];
+	return exactKeys(source, keys) &&
+		typeof source.activeBaseUrl === 'string' &&
+		normalizeReaderTranslationBaseUrl(source.activeBaseUrl) ===
+			source.activeBaseUrl &&
+		Array.isArray(source.profiles) &&
+		source.profiles.length > 0 &&
+		source.profiles.every((profile) =>
+			translationRemoteProfileMatchesSchema(profile, version)) &&
+		(source.encryptedApiKeys === '' ||
+			readerWebDavEncryptedSecretMatchesSchema(source.encryptedApiKeys)) &&
+		(!Object.hasOwn(source, 'animation') || (
+			typeof source.animation === 'string' &&
+			normalizeReaderTranslationAnimation(source.animation) === source.animation
+		));
+}
+
 function encryptedTranslationKeyAssociatedData(
 	context: ReaderWebDavCategoryTransformContext,
 	recordId: string,
@@ -715,6 +1097,8 @@ async function encodeTranslationConfigRecords(
 			const apiKeys = config.profiles.map((profile) => profile.apiKey);
 			const profiles = config.profiles.map((profile) => Object.freeze({
 				baseUrl: profile.baseUrl,
+				models: profile.models,
+				modelCatalog: profile.modelCatalog,
 				model: profile.model,
 				prompt: profile.prompt,
 				temperature: profile.temperature,
@@ -724,7 +1108,7 @@ async function encodeTranslationConfigRecords(
 				animation: profile.animation,
 			}));
 			const value = Object.freeze({
-				version: 3,
+				version: 5,
 				activeBaseUrl: config.activeBaseUrl,
 				animation: config.animation,
 				profiles: Object.freeze(profiles),
@@ -750,11 +1134,13 @@ async function decodeTranslationConfigRecords(
 		async ([id, item]) => {
 			if (item.deleted) return [id, item] as const;
 			const source = record(item.value);
-			if (!source || !Array.isArray(source.profiles)) {
+			if (!source || !readerWebDavTranslationRemoteValueMatchesSchema(source)) {
 				throw new Error('WebDAV 翻译服务集合格式无效');
 			}
-			const baseUrls = source.profiles.map((rawProfile) =>
-				text(record(rawProfile)?.baseUrl));
+			const version = source.version as 3 | 4 | 5;
+			const rawProfiles = source.profiles as readonly unknown[];
+			const baseUrls = rawProfiles.map((rawProfile) =>
+				String(record(rawProfile)!.baseUrl));
 			const decryptedKeys = source.encryptedApiKeys
 				? await decryptReaderWebDavSecret(
 					source.encryptedApiKeys,
@@ -762,11 +1148,15 @@ async function decodeTranslationConfigRecords(
 					encryptedTranslationKeyAssociatedData(context, id, baseUrls),
 				)
 				: [];
-			if (!Array.isArray(decryptedKeys)) {
+			if (
+				!Array.isArray(decryptedKeys) ||
+				(source.encryptedApiKeys !== '' &&
+					decryptedKeys.length !== rawProfiles.length)
+			) {
 				throw new Error('WebDAV 翻译 API Key 集合格式无效');
 			}
 			const profiles: unknown[] = [];
-			for (const [index, rawProfile] of source.profiles.entries()) {
+			for (const [index, rawProfile] of rawProfiles.entries()) {
 				const profile = record(rawProfile);
 				const baseUrl = baseUrls[index]!;
 				if (!profile || !baseUrl) {
@@ -775,13 +1165,15 @@ async function decodeTranslationConfigRecords(
 				profiles.push({
 					baseUrl,
 					apiKey: String(decryptedKeys[index] ?? ''),
-					model: text(profile.model),
-					prompt: String(profile.prompt ?? ''),
-					temperature: number(profile.temperature, 0.1),
-					reasoningEffort: text(profile.reasoningEffort),
-					requestsPerMinute: number(profile.requestsPerMinute, 0),
-					tokensPerMinute: number(profile.tokensPerMinute, 0),
-					animation: text(profile.animation),
+					models: version >= 4 ? profile.models : [],
+					modelCatalog: version >= 5 ? profile.modelCatalog : [],
+					model: profile.model,
+					prompt: profile.prompt,
+					temperature: profile.temperature,
+					reasoningEffort: profile.reasoningEffort,
+					requestsPerMinute: profile.requestsPerMinute,
+					tokensPerMinute: profile.tokensPerMinute,
+					animation: profile.animation,
 				});
 			}
 			const value: ReaderTranslationConfig = normalizeReaderTranslationConfig({
@@ -791,6 +1183,33 @@ async function decodeTranslationConfigRecords(
 					? { animation: source.animation }
 					: {}),
 			});
+			if (
+				value.profiles.length !== rawProfiles.length ||
+				value.activeBaseUrl !== source.activeBaseUrl ||
+				(Object.hasOwn(source, 'animation') &&
+					value.animation !== source.animation) ||
+				rawProfiles.some((rawProfile, index) => {
+					const profile = record(rawProfile)!;
+					const normalized = value.profiles[index];
+					if (!normalized) return true;
+					const canonical = Object.freeze({
+						baseUrl: normalized.baseUrl,
+						...(version >= 4 ? { models: normalized.models } : {}),
+						...(version >= 5
+							? { modelCatalog: normalized.modelCatalog }
+							: {}),
+						model: normalized.model,
+						prompt: normalized.prompt,
+						temperature: normalized.temperature,
+						reasoningEffort: normalized.reasoningEffort,
+						requestsPerMinute: normalized.requestsPerMinute,
+						tokensPerMinute: normalized.tokensPerMinute,
+						animation: normalized.animation,
+					});
+					return readerWebDavFingerprint(profile) !==
+						readerWebDavFingerprint(canonical);
+				})
+			) throw new Error('WebDAV 翻译服务集合字段类型无效');
 			return [id, Object.freeze({ ...item, value })] as const;
 		},
 	));
@@ -831,7 +1250,7 @@ export function createReaderWebDavTranslationCacheCategoryPort(
 	return categoryPort({
 		category: 'translation-cache',
 		initialStrategy: 'merge',
-		validateRecord: (id) => id === TRANSLATION_CACHE_RECORD_ID,
+		validateRecord: readerWebDavTranslationCacheRecordMatchesSchema,
 		capture: async () => {
 			const entries = await options.responses.entries({
 				kinds: [options.cache.kind],
@@ -882,7 +1301,7 @@ export function createReaderWebDavNotificationHistoryCategoryPort(
 ): ReaderWebDavCategoryPort {
 	return createReaderWebDavHistoryCacheCategoryPort({
 		category: 'notification-history',
-		recordIdentity: (value) => notificationHistoryValue(value)?.identity ?? '',
+		validateRecord: readerWebDavNotificationHistoryRecordMatchesSchema,
 		capture: () => notifications.syncHistoryRecords()
 			.filter((entry) =>
 				READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.includes(entry.group))
@@ -902,7 +1321,7 @@ export function createReaderWebDavActivityHistoryCategoryPort(
 ): ReaderWebDavCategoryPort {
 	return createReaderWebDavHistoryCacheCategoryPort({
 		category: 'activity-history',
-		recordIdentity: (value) => activityHistoryValue(value)?.identity ?? '',
+		validateRecord: readerWebDavActivityHistoryRecordMatchesSchema,
 		capture: () => activity.activitySyncRecords()
 			.filter((entry) => ACTIVITY_TABS.includes(entry.tab as
 				typeof ACTIVITY_TABS[number]))
@@ -924,6 +1343,7 @@ export interface ReaderWebDavCategoryPortsOptions<TPreferences extends object> {
 	readonly queue: ReaderOpenQueueSession | null;
 	readonly preferences: Readonly<{
 		read(): Readonly<TPreferences>;
+		validate(id: string, value: unknown): boolean;
 		update(patch: Partial<TPreferences>): void | Promise<unknown>;
 	}>;
 	readonly topicContext: ReaderTopicContextStateRepository;
@@ -943,8 +1363,7 @@ export function createReaderWebDavCategoryPorts<TPreferences extends object>(
 		categoryPort({
 			category: 'history',
 			initialStrategy: 'merge',
-			validateRecord: (id, value) =>
-				String(historyValue(value)?.topicId ?? '') === id,
+			validateRecord: readerWebDavHistoryRecordMatchesSchema,
 			/* 岁月史书依赖本机正文，不能同步到没有对应正文的另一设备。 */
 			capture: () => options.history.snapshot.entries.map((entry) =>
 				localRecord(String(entry.topicId), entry)),
@@ -959,6 +1378,7 @@ export function createReaderWebDavCategoryPorts<TPreferences extends object>(
 		categoryPort({
 			category: 'preferences',
 			initialStrategy: 'remote',
+			validateRecord: options.preferences.validate,
 			capture: () => Object.entries(options.preferences.read()).map(
 				([id, value]) => localRecord(id, value),
 			),
@@ -970,6 +1390,7 @@ export function createReaderWebDavCategoryPorts<TPreferences extends object>(
 		categoryPort({
 			category: 'topic-context',
 			initialStrategy: 'merge',
+			validateRecord: readerWebDavTopicContextRecordMatchesSchema,
 			capture: () => {
 				const snapshot = options.topicContext.snapshot;
 				return Object.freeze([
@@ -992,8 +1413,7 @@ export function createReaderWebDavCategoryPorts<TPreferences extends object>(
 		categoryPort({
 			category: 'custom-sites',
 			initialStrategy: 'merge',
-			validateRecord: (id, value) =>
-				typeof value === 'string' && value === id,
+			validateRecord: readerWebDavCustomSiteRecordMatchesSchema,
 			capture: async () => (await options.customSites.load()).map((host) =>
 				localRecord(host, host)),
 			mergeValues: (local) => local,
@@ -1003,11 +1423,10 @@ export function createReaderWebDavCategoryPorts<TPreferences extends object>(
 		}),
 	];
 	if (options.queue) {
-			ports.push(categoryPort({
+		ports.push(categoryPort({
 				category: 'queue',
 				initialStrategy: 'merge',
-				validateRecord: (id, value) =>
-					String(queueValue(value)?.topicId ?? '') === id,
+				validateRecord: readerWebDavQueueRecordMatchesSchema,
 			capture: () => options.queue!.syncEntries().map((entry) =>
 				localRecord(String(entry.topicId), entry)),
 			mergeValues: mergeQueue,
@@ -1017,11 +1436,10 @@ export function createReaderWebDavCategoryPorts<TPreferences extends object>(
 		}));
 	}
 	if (options.bookmarks) {
-			ports.push(categoryPort({
+		ports.push(categoryPort({
 				category: 'bookmarks',
 				initialStrategy: 'merge',
-				validateRecord: (id, value) =>
-					bookmarkValue(value)?.identity === id,
+				validateRecord: readerWebDavBookmarkRecordMatchesSchema,
 			capture: async () => (await options.bookmarks!.syncBookmarkRecords())
 				.map((entry) => localRecord(entry.identity, bookmarkRemoteValue(entry))),
 			mergeValues: mergeBookmark,
@@ -1038,10 +1456,10 @@ export function createReaderWebDavCategoryPorts<TPreferences extends object>(
 		));
 	}
 	if (options.connectHistory) {
-			ports.push(categoryPort({
+		ports.push(categoryPort({
 				category: 'connect-history',
 				initialStrategy: 'merge',
-				validateRecord: (id) => id === 'current',
+				validateRecord: readerWebDavConnectHistoryRecordMatchesSchema,
 			capture: () => [localRecord('current',
 				options.connectHistory!.syncValue())],
 			mergeValues: mergeReaderWebDavConnectHistoryValues,

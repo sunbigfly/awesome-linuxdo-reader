@@ -113,6 +113,44 @@ class DroppedObservationManifestStore extends ObservationMemoryStore {
 	}
 }
 
+class ObservationWriteCoordination {
+	readonly #active = new Set<string>();
+	readonly #waiters = new Map<string, Set<() => void>>();
+
+	acquireFlight(token: string) {
+		const producer = !this.#active.has(token);
+		if (producer) this.#active.add(token);
+		return Promise.resolve(Object.freeze({
+			producer,
+			token,
+			flightId: token,
+			epoch: 0,
+			expiresAt: Number.MAX_SAFE_INTEGER,
+			coordinated: true,
+		}));
+	}
+
+	renewFlight(): Promise<boolean> {
+		return Promise.resolve(true);
+	}
+
+	releaseFlight(lease: Readonly<{ readonly token: string }>): Promise<void> {
+		this.#active.delete(lease.token);
+		for (const resolve of this.#waiters.get(lease.token) ?? []) resolve();
+		this.#waiters.delete(lease.token);
+		return Promise.resolve();
+	}
+
+	waitForFlight(token: string): Promise<boolean> {
+		if (!this.#active.has(token)) return Promise.resolve(true);
+		return new Promise((resolve) => {
+			const waiters = this.#waiters.get(token) ?? new Set<() => void>();
+			waiters.add(() => resolve(true));
+			this.#waiters.set(token, waiters);
+		});
+	}
+}
+
 const adapterRequests: CollectionPageRequest<unknown>[] = [];
 const adapterCacheLookups: CollectionPageCacheLookup[] = [];
 const adapterAjax: ReaderUserObservationNativeAjax = {
@@ -615,6 +653,169 @@ const observationPages = new ReaderUserObservationPageRepository(
 	}),
 	'account:viewer',
 );
+const sharedObservationStore = new ObservationMemoryStore();
+const observationCoordination = new ObservationWriteCoordination();
+let firstObservationResponses!: ResponseRepository;
+let secondObservationResponses!: ResponseRepository;
+firstObservationResponses = new ResponseRepository({
+	store: sharedObservationStore,
+	maxMemoryEntries: 32,
+	maxMemoryBytes: 2_000_000,
+	mutationPort: {
+		publish: (query) => secondObservationResponses.applyExternalInvalidation(query),
+	},
+});
+secondObservationResponses = new ResponseRepository({
+	store: sharedObservationStore,
+	maxMemoryEntries: 32,
+	maxMemoryBytes: 2_000_000,
+	mutationPort: {
+		publish: (query) => firstObservationResponses.applyExternalInvalidation(query),
+	},
+});
+const firstObservationPages = new ReaderUserObservationPageRepository(
+	firstObservationResponses,
+	'account:viewer',
+	observationCoordination,
+);
+const secondObservationPages = new ReaderUserObservationPageRepository(
+	secondObservationResponses,
+	'account:viewer',
+	observationCoordination,
+);
+const crossTabRecords = Object.freeze(Array.from({ length: 4 }, (_, index) =>
+	normalizeReaderUserActivity(activity(index, 'cross-tab'), 'cross-tab')!));
+await firstObservationPages.write(
+	'cross-tab',
+	crossTabRecords.slice(0, 1),
+	1_000,
+	false,
+);
+assert(
+	(await secondObservationPages.summary('cross-tab'))?.total === 1,
+	'用户观察新标签必须恢复共享持久 manifest',
+);
+await firstObservationPages.write(
+	'cross-tab',
+	crossTabRecords.slice(0, 2),
+	2_000,
+	false,
+);
+assert(
+	(await secondObservationPages.summary('cross-tab'))?.total === 2,
+	'用户观察 manifest 提交后必须清除其他标签的旧内存总数',
+);
+await Promise.all([
+	firstObservationPages.write('cross-tab', crossTabRecords.slice(2, 3), 3_000),
+	secondObservationPages.write('cross-tab', crossTabRecords.slice(3, 4), 3_000),
+]);
+const crossTabCommitted = new ReaderUserObservationPageRepository(
+	new ResponseRepository({
+		store: sharedObservationStore,
+		maxMemoryEntries: 32,
+		maxMemoryBytes: 2_000_000,
+	}),
+	'account:viewer',
+);
+assert(
+	(await crossTabCommitted.summary('cross-tab'))?.total === 4,
+	'用户观察并发 writer 必须串行接棒并从最新持久世代合并，不能末写覆盖',
+);
+let releaseObservationLease!: () => void;
+const observationLeaseGate = new Promise<void>((resolve) => {
+	releaseObservationLease = resolve;
+});
+let observationLeaseBlocked = false;
+let observationLeaseNetworkPages = 0;
+const leaseRequests: ReaderUserObservationRequestPort = {
+	async loadPage(request) {
+		observationLeaseNetworkPages += 1;
+		if (!observationLeaseBlocked) {
+			observationLeaseBlocked = true;
+			await observationLeaseGate;
+		}
+		const stream = request.stream ?? 'activity';
+		const streamIndex = READER_USER_OBSERVATION_STREAMS.indexOf(stream);
+		return Object.freeze({
+			stream,
+			page: request.page,
+			offset: request.offset,
+			records: Object.freeze([
+				normalizeReaderUserActivity(
+					activity(100 + streamIndex, request.username),
+					request.username,
+				)!,
+			]),
+			complete: true,
+			nextOffset: request.offset + 1,
+			identity: Object.freeze({
+				username: request.username,
+				name: '',
+				avatarTemplate: '',
+			}),
+		});
+	},
+};
+const leaseStorage = () => {
+	const values = new Map<string, string>();
+	return {
+		getItem: (key: string) => values.get(key) ?? null,
+		setItem: (key: string, value: string) => values.set(key, value),
+	};
+};
+const firstLeaseSession = new ReaderUserObservationSession({
+	requests: leaseRequests,
+	storage: leaseStorage(),
+	pages: firstObservationPages,
+	authScope: 'account:viewer',
+	historyCoordination: observationCoordination,
+	historyCoordinationKey: 'reader-user-observation-history:test',
+});
+const secondLeaseSession = new ReaderUserObservationSession({
+	requests: leaseRequests,
+	storage: leaseStorage(),
+	pages: secondObservationPages,
+	authScope: 'account:viewer',
+	historyCoordination: observationCoordination,
+	historyCoordinationKey: 'reader-user-observation-history:test',
+});
+const leaseIdentity = Object.freeze({
+	username: 'lease-user',
+	name: '',
+	avatarTemplate: '',
+});
+firstLeaseSession.observe(leaseIdentity);
+for (let index = 0; index < 8 && !observationLeaseBlocked; index += 1) {
+	await Promise.resolve();
+}
+secondLeaseSession.observe(leaseIdentity);
+releaseObservationLease();
+for (let index = 0; index < 80; index += 1) {
+	if (
+		firstLeaseSession.entry('lease-user')?.phase === 'ready' &&
+		secondLeaseSession.entry('lease-user')?.phase === 'ready'
+	) break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+assert(
+	observationLeaseNetworkPages === READER_USER_OBSERVATION_STREAMS.length &&
+		firstLeaseSession.entry('lease-user')?.phase === 'ready' &&
+		secondLeaseSession.entry('lease-user')?.phase === 'ready',
+	'同账号同用户的两标签观察采集必须共享整段 lease，consumer 只恢复持久投影',
+);
+const observationCacheStats = firstLeaseSession.cacheStats();
+firstLeaseSession.clearCache();
+assert(
+	observationCacheStats.users === 1 &&
+	observationCacheStats.storedRecords > 0 &&
+	firstLeaseSession.entry('lease-user')?.recordCount === 0 &&
+	firstLeaseSession.entry('lease-user')?.storedRecordCount === 0 &&
+	firstLeaseSession.entry('lease-user')?.phase === 'idle' &&
+	firstLeaseSession.snapshot.entries.length === 1,
+	'用户资料缓存清理必须保留观察名单，同时清除用户观察的内存历史、持久断点计数并阻止晚到回填',
+);
+firstLeaseSession.destroy();
+secondLeaseSession.destroy();
 const session = new ReaderUserObservationSession({
 	requests: sessionRequests,
 	storage: {
@@ -2206,8 +2407,10 @@ const dispatchWindowPointer = (
 };
 dispatchWindowPointer('pointerdown', 600);
 session.refresh('alice');
-await Promise.resolve();
-await Promise.resolve();
+for (let turn = 0; turn < 80; turn += 1) {
+	if (session.entry('alice')?.phase === 'waiting-challenge') break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
 const waitingChallenge = session.entry('alice');
 const challengeRequestCount = requestOrder.length;
 session.refresh('alice');
@@ -2220,9 +2423,9 @@ assert(
 	detailPane.style.width === '600px' &&
 	view.listWindow.body.querySelector('.ldp-user-observation-activity') ===
 		activityBeforeInteraction &&
-	view.listWindow.body.querySelector(
-		'.ldp-user-observation-progress:not([hidden])',
-	) === null,
+		view.listWindow.body.querySelector(
+			'.ldp-user-observation-progress:not([hidden])',
+		) === null,
 	'后台快照变化必须在横向缩放期间冻结长时间线宽度并暂缓 DOM 重建',
 );
 dispatchWindowPointer('pointerup', 600);
@@ -2803,6 +3006,7 @@ for (let index = 0; index < 20; index += 1) {
 assert(
 	partialSummary?.complete === false &&
 		partialIdentityIndex?.complete === false &&
+		partialOtherWindow !== null &&
 		partialOtherWindow.total === 1 &&
 		partialOtherWindow.records[0]?.kind === 'quote' &&
 		partialSession.entry(partialUsername)?.phase === 'idle' &&
@@ -2824,7 +3028,7 @@ partialView.listWindow.body.querySelector<HTMLButtonElement>(
 )!.click();
 for (let index = 0; index < 30; index += 1) {
 	if (
-		partialNetworkRequests.length === 1 &&
+		Number(partialNetworkRequests.length) === 1 &&
 		partialView.listWindow.body.querySelector(
 			'[data-user-observation-tab="all"]',
 		)?.textContent === '全部 120' &&

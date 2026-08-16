@@ -236,7 +236,7 @@ const normalized = normalizeReaderPreferences({
 	translationTheme: 'marker',
 	readerShortcutBindings: {
 		historyBack: ['Ctrl+KeyA', 'Ctrl+KeyA', 'Bad+KeyB'],
-		historyForward: ['Ctrl+KeyA', 'Mouse2', 'Mouse4'],
+		historyForward: ['Ctrl+KeyA', 'Mouse2', 'Mouse4', 'Banana42'],
 		closeReader: ['Escape', 'Escape', 'Alt+Escape', 'Shift+Escape'],
 	},
 	topicActionRailMode: 'expanded',
@@ -342,9 +342,9 @@ assert(
 	JSON.stringify(normalized.readerShortcutBindings.historyBack) ===
 		JSON.stringify(['Ctrl+KeyA']) &&
 	JSON.stringify(normalized.readerShortcutBindings.historyForward) ===
-		JSON.stringify(['Mouse2', 'Mouse4']) &&
+		JSON.stringify(['Mouse4']) &&
 	normalized.readerShortcutBindings.closeReader.length === 3,
-	'快捷键必须按旧版通用 code 规则、动作顺序全局去重并限制每项三条',
+	'快捷键必须只接受真实键盘/鼠标 code，拒绝右键和伪造 code，并按动作顺序全局去重且限制每项三条',
 );
 assert(
 	normalized.topicActionRailMode === 'compact' &&

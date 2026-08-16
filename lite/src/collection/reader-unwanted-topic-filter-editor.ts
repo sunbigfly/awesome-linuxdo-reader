@@ -293,7 +293,7 @@ export class ReaderUnwantedTopicFilterEditor {
 			'',
 			'正则表达式',
 		));
-		this.#topicOptions.append(this.#topicField, regexLabel);
+		this.#topicOptions.append(this.#topicField);
 		const inputLabel = node(
 			options.document,
 			'label',
@@ -320,13 +320,19 @@ export class ReaderUnwantedTopicFilterEditor {
 		);
 		this.#lookupStatus.setAttribute('role', 'status');
 		this.#lookupStatus.setAttribute('aria-live', 'polite');
+		const helpRow = node(
+			options.document,
+			'div',
+			'ldp-unwanted-topic-filter-help-row',
+		);
+		helpRow.append(this.#lookupStatus, regexLabel);
 		this.#results = node(
 			options.document,
 			'div',
 			'ldp-unwanted-topic-filter-results',
 		);
 		this.#results.setAttribute('role', 'listbox');
-		add.append(addControls, this.#lookupStatus, this.#results);
+		add.append(addControls, helpRow, this.#results);
 		content.append(activeHead, this.#cards, add);
 		workbench.append(sidebar, content);
 

@@ -45,6 +45,17 @@ export const READER_FONT_SETTINGS_DEFAULT = Object.freeze<ReaderFontSettings>({
 	fontProfile: READER_FONT_DEFAULT,
 });
 
+export const READER_FONT_FAMILY_LABELS = Object.freeze<
+	Record<ReaderFontFamily, string>
+>({
+	site: '跟随原站',
+	system: '系统默认字体',
+	cjkSans: '中文无衬线',
+	serif: '衬线',
+	monospace: '等宽',
+	custom: '自定义本机字体',
+});
+
 export interface ReaderFontPreferencesAdapter<TPreferences extends object> {
 	readSettings(preferences: Readonly<TPreferences>): ReaderFontSettings;
 	createPatch(settings: ReaderFontSettings): Partial<TPreferences>;
@@ -252,6 +263,19 @@ function normalizedCustomFamily(value: unknown): string {
 		.replace(/[\u0000-\u001f\u007f"'`,;{}<>\\]/g, '')
 		.replace(/\s+/g, ' ')
 		.trim()].slice(0, 64).join('');
+}
+
+export function readerFontFamilyCss(
+	family: ReaderFontFamily,
+	customFamily = '',
+	siteFamily = 'inherit',
+): string {
+	if (family === 'site') return siteFamily || 'inherit';
+	if (family !== 'custom') return FONT_STACKS[family];
+	const normalized = normalizedCustomFamily(customFamily);
+	return normalized
+		? `${JSON.stringify(normalized)},${FONT_STACKS.system}`
+		: FONT_STACKS.system;
 }
 
 function normalizedColor(value: unknown): string {
@@ -532,12 +556,11 @@ export class ReaderFontStyleController<TPreferences extends object> {
 		family: ReaderFontFamily,
 		customFamily: string,
 	): string {
-		if (family === 'site') return this.#readSiteFontFamily() || 'inherit';
-		if (family !== 'custom') return FONT_STACKS[family];
-		const normalized = normalizedCustomFamily(customFamily);
-		return normalized
-			? `${JSON.stringify(normalized)},${FONT_STACKS.system}`
-			: FONT_STACKS.system;
+		return readerFontFamilyCss(
+			family,
+			customFamily,
+			this.#readSiteFontFamily(),
+		);
 	}
 
 	#applyProfile(

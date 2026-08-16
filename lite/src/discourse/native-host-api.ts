@@ -837,6 +837,13 @@ export interface DiscourseNativePostAdminMenuPort {
 	): Promise<void>;
 }
 
+export interface DiscourseNativePostAdminMenuOptions {
+	readonly computePosition?: (
+		anchor: HTMLElement,
+		content: HTMLElement,
+	) => void;
+}
+
 export type DiscourseBookmarkSubjectType = 'Post' | 'Topic';
 
 export interface DiscourseNativeBookmarkFormPort {
@@ -851,7 +858,9 @@ type BookmarkFormDataConstructor = new (bookmark: object) => object;
 /** PostView、设置与收藏共用的 Discourse 原生 current-user 入口。 */
 function discourseNativeCurrentUser(host: DiscourseHostApiPort): unknown {
 	const serviceUser = host.lookup('service:current-user');
-	if (serviceUser) return serviceUser;
+	if (String(nativeModelValue(serviceUser, 'username') ?? '').trim()) {
+		return serviceUser;
+	}
 	const userModule = valueRecord(host.lookupModule('discourse/models/user'));
 	for (const owner of [valueRecord(userModule?.default), userModule]) {
 		const current = owner?.current;
@@ -863,7 +872,7 @@ function discourseNativeCurrentUser(host: DiscourseHostApiPort): unknown {
 			// 新版 Discourse 只提供 current-user service；继续保持匿名投影。
 		}
 	}
-	return null;
+	return serviceUser ?? null;
 }
 
 export function discourseNativeCurrentUserBindingAvailable(
@@ -892,6 +901,37 @@ export function discourseNativeCurrentUsername(
 			'username',
 		) ?? '',
 	).trim();
+}
+
+/**
+ * userscript 组合根建立账号隔离 authScope 时使用的一次性身份读取。
+ *
+ * Discourse 刷新启动期间 `service:current-user` 与 `User.current()` 可能短暂为空，而
+ * preload-store 已经持有本次文档对应的 currentUser。这里只把预加载值作为启动回退；
+ * 运行期会话状态仍必须使用 discourseNativeCurrentUsername，避免登出后复用旧身份。
+ */
+export function discourseNativeInitialCurrentUsername(
+	host: DiscourseHostApiPort,
+): string {
+	const current = discourseNativeCurrentUsername(host);
+	if (current) return current;
+	const module = valueRecord(
+		host.lookupModule('discourse/lib/preload-store'),
+	);
+	for (const owner of [valueRecord(module?.default), module]) {
+		const get = owner?.get;
+		if (typeof get !== 'function') continue;
+		try {
+			const preloaded = get.call(owner, 'currentUser');
+			const username = String(
+				nativeModelValue(preloaded, 'username') ?? '',
+			).trim();
+			if (username) return username;
+		} catch {
+			// 旧版或匿名页没有预加载 currentUser；保持匿名启动。
+		}
+	}
+	return '';
 }
 
 /**
@@ -1125,6 +1165,7 @@ export function discourseNativeEmojiMenu(
  */
 export function discourseNativePostAdminMenu(
 	host: DiscourseHostApiPort,
+	options: DiscourseNativePostAdminMenuOptions = {},
 ): DiscourseNativePostAdminMenuPort {
 	return Object.freeze({
 		async show(
@@ -1154,6 +1195,19 @@ export function discourseNativePostAdminMenu(
 				component,
 				modalForMobile: true,
 				autofocus: true,
+				...(options.computePosition
+					? {
+						strategy: 'fixed',
+						fallbackPlacements: Object.freeze([
+							'right-start',
+							'left-start',
+							'right-end',
+							'left-end',
+						]),
+						computePosition: (content: HTMLElement) =>
+							options.computePosition?.(anchor, content),
+					}
+					: {}),
 				data: Object.freeze({
 					post,
 					changeNotice: topicAction('changeNotice'),

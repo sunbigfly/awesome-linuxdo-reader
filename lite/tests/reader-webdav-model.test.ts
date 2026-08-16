@@ -8,6 +8,16 @@ import {
 import {
 	mergeReaderWebDavConnectHistoryValues,
 	mergeReaderWebDavHistoryValues,
+	readerWebDavActivityHistoryRecordMatchesSchema,
+	readerWebDavBookmarkRecordMatchesSchema,
+	readerWebDavConnectHistoryRecordMatchesSchema,
+	readerWebDavCustomSiteRecordMatchesSchema,
+	readerWebDavHistoryRecordMatchesSchema,
+	readerWebDavNotificationHistoryRecordMatchesSchema,
+	readerWebDavPreferenceRecordMatchesSchema,
+	readerWebDavQueueRecordMatchesSchema,
+	readerWebDavTopicContextRecordMatchesSchema,
+	readerWebDavTranslationRemoteValueMatchesSchema,
 } from '../src/sync/reader-webdav-category-ports.js';
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -109,6 +119,23 @@ assert(
 	'本机已删除且远端已有墓碑时必须保持稳定，不能每轮重写墓碑并重复计入上传或删除',
 );
 
+const missingRemoteRecordPreservesLocal = reconcileReaderWebDavRecords({
+	local: queue([1]),
+	remote: {},
+	baseline: Object.freeze({ '1': deviceAUpload.baseline['1']! }),
+	writerId: 'device-a',
+	now: 55_000,
+	initialStrategy: 'merge',
+	mergeValues: mergeQueue,
+});
+assert(
+	missingRemoteRecordPreservesLocal.active[0]?.id === '1' &&
+	missingRemoteRecordPreservesLocal.uploaded === 1 &&
+	missingRemoteRecordPreservesLocal.deleted === 0 &&
+	missingRemoteRecordPreservesLocal.conflicts === 1,
+	'远端记录无墓碑却从已有基线中消失时必须按回滚或损坏处理并重传本机，不能反向删除本机数据',
+);
+
 const baseline: ReaderWebDavBaseline['queue'] = Object.freeze({
 	'8': deviceAUpload.baseline['1']!,
 });
@@ -185,10 +212,19 @@ assert(
 const mergedLegacyHistory = mergeReaderWebDavHistoryValues(
 	Object.freeze({
 		topicId: 42,
-		title: '较新的旧客户端记录',
+		title: '较新的升级后旧记录',
 		postsCount: 3,
+		avatarTemplate: '',
+		ownerUsername: '',
+		topicSubtitle: '',
+		categoryId: null,
+		categoryName: '',
+		tags: [],
+		viewport: null,
 		postNumber: 3,
 		readPostNumbers: [1, 3],
+		archiveStatus: null,
+		archivePostNumber: null,
 		firstViewedAt: 100,
 		viewedAt: 300,
 	}),
@@ -233,7 +269,7 @@ assert(
 	mergedLegacyHistory.categoryName === '开发调优' &&
 	mergedLegacyHistory.tags.join(',') === 'Reader,OpenAI' &&
 	mergedLegacyHistory.viewport?.scrollRatio === 0.4,
-	'WebDAV 合并较新旧客户端记录时必须保留较早完整记录的元数据与高度锚点',
+	'WebDAV 合并升级后补空字段的较新记录时，必须保留另一设备已有的有意义元数据与高度锚点',
 );
 
 const mergedConnectHistory = mergeReaderWebDavConnectHistoryValues(
@@ -326,4 +362,302 @@ assert(
 	Object.getPrototypeOf(prototypeReconcile.records) === null &&
 	prototypeReconcile.active[0]?.id === '__proto__',
 	'WebDAV 远端 scope 与记录 ID 必须写入无原型字典，保留合法字符串键且不能污染对象原型',
+);
+
+const futureCategoryDocument = normalizeReaderWebDavDocument({
+	format: 'awesome-linuxdo-reader-lite-webdav',
+	schemaVersion: 2,
+	updatedAt: 1,
+	writerId: 'future-device',
+	scopes: {
+		'site:linux.do|account:reader': {
+			categories: {
+				'future-category': {
+					records: {
+						future: {
+							changedAt: 1,
+							writerId: 'future-device',
+							deleted: false,
+							value: { payload: 'must-survive' },
+						},
+					},
+				},
+			},
+		},
+	},
+});
+assert(
+	futureCategoryDocument.scopes['site:linux.do|account:reader']
+		?.categories['future-category']?.records.future?.value !== undefined &&
+	readerWebDavPreferenceRecordMatchesSchema(
+		{ themeMode: 'dark' },
+		'themeMode',
+		'dark',
+		(value) => ({
+			themeMode: value.themeMode === 'dark' ? 'dark' : 'system',
+		}),
+	) &&
+	!readerWebDavPreferenceRecordMatchesSchema(
+		{ themeMode: 'dark' },
+		'futurePreference',
+		'dark',
+		(value) => value,
+	) &&
+	readerWebDavTopicContextRecordMatchesSchema(
+		'view:linux.do:42:1:0',
+		{
+			at: 100,
+			number: 1,
+			scrollTop: 10,
+			scrollLeft: 0,
+			offset: 12,
+		},
+	) &&
+	!readerWebDavTopicContextRecordMatchesSchema('future-context', {}) &&
+	readerWebDavCustomSiteRecordMatchesSchema(
+		'forum.example.com',
+		'forum.example.com',
+	) &&
+	!readerWebDavCustomSiteRecordMatchesSchema('linux.do', 'linux.do'),
+	'当前客户端必须透传同 schema 的未知未来类别，并拒绝把未知未来偏好当成本机删除传播',
+);
+
+assert(
+	!readerWebDavPreferenceRecordMatchesSchema(
+		{ historyButtonsAlwaysVisible: true },
+		'historyButtonsAlwaysVisible',
+		'true',
+		(value) => ({
+			historyButtonsAlwaysVisible:
+				value.historyButtonsAlwaysVisible === true,
+		}),
+	) &&
+	!readerWebDavTopicContextRecordMatchesSchema('geometry', {
+		left: 10,
+		top: 20,
+		width: '900',
+		height: 700,
+	}) &&
+	!readerWebDavTopicContextRecordMatchesSchema('view:linux.do:42:1:0', {
+		at: 100,
+		number: 1,
+		scrollTop: '10',
+		scrollLeft: 0,
+		offset: 12,
+	}) &&
+	readerWebDavConnectHistoryRecordMatchesSchema('current', {
+		version: 1,
+		days: {
+			'2026-08-16': {
+				'days-visited': {
+					first: 10,
+					last: 11,
+					firstObservedAt: 1_000,
+					lastObservedAt: 2_000,
+				},
+			},
+		},
+		readTrackingStartedAt: null,
+		confirmedReads: { '42:1': 2_000 },
+	}) &&
+	!readerWebDavConnectHistoryRecordMatchesSchema('current', {
+		version: 1,
+		days: {
+			'2026-08-16': {
+				'days-visited': {
+					first: '10',
+					last: 11,
+					firstObservedAt: 1_000,
+					lastObservedAt: 2_000,
+				},
+			},
+		},
+		readTrackingStartedAt: null,
+		confirmedReads: {},
+	}),
+	'偏好、主题上下文与 Connect 历史必须按当前 schema 拒绝可被静默强制转换的错误字段类型',
+);
+
+const currentHistoryRecord = Object.freeze({
+	topicId: 42,
+	title: '当前历史记录',
+	postsCount: 3,
+	avatarTemplate: '/u/owner/{size}.png',
+	ownerUsername: 'owner',
+	topicSubtitle: '3 帖 · 30 浏览',
+	categoryId: 7,
+	categoryName: '开发调优',
+	tags: Object.freeze(['Reader']),
+	viewport: Object.freeze({
+		postNumber: 3,
+		postOffset: 12,
+		scrollTop: 480,
+		scrollRange: 1_200,
+		scrollRatio: 0.4,
+	}),
+	postNumber: 3,
+	readPostNumbers: Object.freeze([1, 3]),
+	archiveStatus: 404,
+	archivePostNumber: null,
+	firstViewedAt: 100,
+	viewedAt: 200,
+});
+const currentQueueRecord = Object.freeze({
+	topicId: 42,
+	title: '当前队列记录',
+	href: '/t/current/42',
+	avatarTemplate: '/u/owner/{size}.png',
+	avatarSource: 'https://linux.do/u/owner/48/1.png',
+	ownerUsername: 'owner',
+	postNumber: 3,
+	addedAt: 100,
+	pinned: true,
+});
+const currentBookmarkRecord = Object.freeze({
+	identity: 'bookmark:42:3',
+	tab: 'Post',
+	bookmarkId: 9,
+	topicId: 42,
+	postId: 4_203,
+	postNumber: 3,
+	title: '当前收藏记录',
+	authorUsername: 'owner',
+	avatarTemplate: '/u/owner/{size}.png',
+	createdAt: '2026-08-16T00:00:00.000Z',
+	name: '稍后阅读',
+	highestPostNumber: 8,
+	categoryId: 7,
+	categoryName: '开发调优',
+	tags: Object.freeze(['Reader']),
+});
+const currentActivityRecord = Object.freeze({
+	identity: 'activity:reply:42:3',
+	tab: 'Reply',
+	topicId: 42,
+	postId: 4_203,
+	postNumber: 3,
+	title: '当前活动记录',
+	authorUsername: 'owner',
+	avatarTemplate: '/u/owner/{size}.png',
+	createdAt: '2026-08-16T00:00:00.000Z',
+	reaction: '',
+	excerpt: '回复正文',
+	categoryId: 7,
+	categoryName: '开发调优',
+	tags: Object.freeze(['Reader']),
+});
+const currentNotificationRecord = Object.freeze({
+	identity: 'notification:42:3',
+	group: 'replies',
+	highPriority: true,
+	typeName: 'replied',
+	typeLabel: '回复',
+	aggregateCount: null,
+	icon: 'reply',
+	actor: 'owner',
+	avatarFallback: 'O',
+	avatarTemplate: '/u/owner/{size}.png',
+	summary: '回复了当前主题',
+	excerpt: '通知正文',
+	createdAt: '2026-08-16T00:00:00.000Z',
+	href: '/t/current/42/3',
+	target: Object.freeze({ topicId: 42, postNumber: 3 }),
+	categoryId: 7,
+	categoryName: '开发调优',
+	tags: Object.freeze(['Reader']),
+});
+const currentTranslationRecord = Object.freeze({
+	version: 5,
+	activeBaseUrl: 'https://api.example.com/v1/',
+	animation: 'fade',
+	profiles: Object.freeze([Object.freeze({
+		baseUrl: 'https://api.example.com/v1/',
+		model: 'translation-model',
+		prompt: '翻译成简体中文。',
+		temperature: 0.1,
+		reasoningEffort: 'low',
+		requestsPerMinute: 60,
+		tokensPerMinute: 120_000,
+		animation: 'fade',
+		models: Object.freeze([]),
+		modelCatalog: Object.freeze([]),
+	})]),
+	encryptedApiKeys: '',
+});
+assert(
+	readerWebDavHistoryRecordMatchesSchema('42', currentHistoryRecord) &&
+	!readerWebDavHistoryRecordMatchesSchema('42', {
+		...currentHistoryRecord,
+		archiveStatus: '404',
+	}) &&
+	readerWebDavQueueRecordMatchesSchema('42', currentQueueRecord) &&
+	!readerWebDavQueueRecordMatchesSchema('42', {
+		...currentQueueRecord,
+		addedAt: '100',
+	}) &&
+	readerWebDavBookmarkRecordMatchesSchema(
+		currentBookmarkRecord.identity,
+		currentBookmarkRecord,
+	) &&
+	!readerWebDavBookmarkRecordMatchesSchema(
+		currentBookmarkRecord.identity,
+		{ ...currentBookmarkRecord, categoryId: '7' },
+	) &&
+	readerWebDavActivityHistoryRecordMatchesSchema(
+		currentActivityRecord.identity,
+		currentActivityRecord,
+	) &&
+	!readerWebDavActivityHistoryRecordMatchesSchema(
+		currentActivityRecord.identity,
+		{ ...currentActivityRecord, tags: 'Reader' },
+	) &&
+	readerWebDavNotificationHistoryRecordMatchesSchema(
+		currentNotificationRecord.identity,
+		currentNotificationRecord,
+	) &&
+	!readerWebDavNotificationHistoryRecordMatchesSchema(
+		currentNotificationRecord.identity,
+		{ ...currentNotificationRecord, highPriority: 1 },
+	) &&
+	readerWebDavTranslationRemoteValueMatchesSchema(currentTranslationRecord) &&
+	!readerWebDavTranslationRemoteValueMatchesSchema({
+		...currentTranslationRecord,
+		profiles: [{
+			...currentTranslationRecord.profiles[0],
+			temperature: '0.1',
+		}],
+	}),
+	'历史、队列、收藏、通知、活动和 AI 服务字段必须接受当前完整结构，并逐字段拒绝可被静默强制转换的错误类型',
+);
+
+let malformedEnvelopeRejected = false;
+try {
+	normalizeReaderWebDavDocument({
+		format: 'awesome-linuxdo-reader-lite-webdav',
+		schemaVersion: 2,
+		updatedAt: 1,
+		writerId: 'remote-device',
+		scopes: {
+			'site:linux.do|account:reader': {
+				categories: {
+					queue: {
+						records: {
+							'42': {
+								changedAt: '1',
+								writerId: 'remote-device',
+								deleted: false,
+								value: { topicId: 42 },
+							},
+						},
+					},
+				},
+			},
+		},
+	});
+} catch {
+	malformedEnvelopeRejected = true;
+}
+assert(
+	malformedEnvelopeRejected,
+	'主 WebDAV 文档的时间戳、writerId 与 deleted 必须严格校验类型，不能静默归一化后覆盖远端',
 );

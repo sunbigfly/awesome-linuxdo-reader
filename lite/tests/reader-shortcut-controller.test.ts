@@ -57,6 +57,22 @@ const preferenceChanges = new Signal<Readonly<ShortcutPreferences>>();
 let preferences: Readonly<ShortcutPreferences> = Object.freeze({
 	bindings: normalizeReaderShortcutBindings(undefined),
 });
+const sanitizedBindings = normalizeReaderShortcutBindings({
+	...preferences.bindings,
+	translate: [
+		'Ctrl+KeyW',
+		'Ctrl+Shift+KeyW',
+		'KeyA',
+		'Numpad1',
+		'Mouse2',
+		'Banana42',
+		'Ctrl+KeyK',
+	],
+});
+assert(
+	sanitizedBindings.translate.join(',') === 'Ctrl+KeyK',
+	'导入或外部存储里的浏览器保留键和裸字母必须由 canonical schema 清除，不能绕过录制门禁进入运行态',
+);
 const executed: ReaderShortcutAction[] = [];
 let closeReaderBlocked = true;
 let allActionsBlocked = false;
@@ -164,6 +180,21 @@ assert(
 	'录制成功必须立即写入唯一偏好端口、退出录制并消费原始事件',
 );
 
+settingsHost.querySelector<HTMLButtonElement>(
+	'[data-shortcut-record="translate"]',
+)!.click();
+surface.dispatchEvent(eventWith(window, 'keydown', {
+	code: 'KeyK',
+	ctrlKey: true,
+}));
+assert(
+	controller.snapshot.recording === 'translate' &&
+	preferences.bindings.translate.filter((binding) =>
+		binding === 'Ctrl+KeyK').length === 1,
+	'同一动作重复录制已有组合必须保持录制并拒绝假成功，不能写入重复值',
+);
+controller.cancelRecording();
+
 let captureMessage = '';
 controller.captures.subscribe((capture) => {
 	captureMessage = capture.message;
@@ -200,10 +231,10 @@ assert(
 surface.dispatchEvent(eventWith(window, 'keydown', {
 	code: 'KeyO',
 	ctrlKey: true,
-	shiftKey: true,
+	altKey: true,
 }));
 assert(
-	preferences.bindings.onlyAuthor.includes('Ctrl+Shift+KeyO'),
+	preferences.bindings.onlyAuthor.includes('Ctrl+Alt+KeyO'),
 	'未被浏览器保留的有效替代组合必须在拒绝后仍能完成同一录制事务',
 );
 
@@ -279,7 +310,7 @@ assert(
 assert(
 	readerShortcutBindingIssue(
 		preferences.bindings,
-		'Ctrl+Shift+KeyO',
+		'Ctrl+Alt+KeyO',
 		'translate',
 	).includes('只看楼主') &&
 		readerShortcutBindingLabel('Shift+Wheel') === 'Shift + 滚轮',

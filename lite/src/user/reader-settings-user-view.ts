@@ -225,14 +225,17 @@ export class ReaderSettingsUserView {
 			const target = (event.target as Element | null)?.closest<HTMLElement>(
 					'[data-user-info-view],[data-user-info-refresh],'+
 					'[data-connect-history-metric],[data-connect-history-back],'+
-					'[data-connect-history-date]',
+					'[data-connect-history-date],[data-connect-history-info]',
 				);
 				if (!target) return;
+				if (target.dataset.connectHistoryInfo !== undefined) {
+					const expanded = target.getAttribute('aria-expanded') !== 'true';
+					this.#setHistoryInfoOpen(target, expanded);
+					return;
+				}
 				const historyMetric = target.dataset.connectHistoryMetric;
 				if (historyMetric !== undefined) {
-					this.#historyMetricKey = historyMetric;
-					this.#historySelectedDate = this.#historySnapshot?.today ?? '';
-					this.#render(this.#session.snapshot(this.#username));
+					this.#selectHistoryMetric(historyMetric, false);
 					return;
 				}
 				if (target.dataset.connectHistoryBack !== undefined) {
@@ -259,8 +262,36 @@ export class ReaderSettingsUserView {
 			}
 				if (target.dataset.userInfoRefresh !== undefined) void this.#load(true);
 			});
+			this.scope.listen(this.#document, 'pointerdown', (event) => {
+				const help = (event.target as Element | null)?.closest<HTMLElement>(
+					'.ldp-connect-history-help',
+				);
+				if (help && this.root.contains(help)) return;
+				const toggle = this.root.querySelector<HTMLElement>(
+					'[data-connect-history-info][aria-expanded="true"]',
+				);
+				if (toggle) this.#setHistoryInfoOpen(toggle, false);
+			});
+			this.scope.listen(this.root, 'change', (event) => {
+				const select = (event.target as Element | null)?.closest<HTMLSelectElement>(
+					'[data-connect-history-select]',
+				);
+				if (!select || !this.root.contains(select)) return;
+				this.#selectHistoryMetric(select.value, true);
+			});
 			this.scope.listen(this.root, 'keydown', (event) => {
 				const keyboard = event as KeyboardEvent;
+				if (keyboard.key === 'Escape') {
+					const toggle = this.root.querySelector<HTMLElement>(
+						'[data-connect-history-info][aria-expanded="true"]',
+					);
+					if (toggle) {
+						keyboard.preventDefault();
+						this.#setHistoryInfoOpen(toggle, false);
+						toggle.focus();
+					}
+					return;
+				}
 				if (keyboard.key !== 'Enter' && keyboard.key !== ' ') return;
 				const target = (event.target as Element | null)?.closest<HTMLElement>(
 					'[data-connect-history-metric]',
@@ -301,6 +332,28 @@ export class ReaderSettingsUserView {
 		this.#tab = tab;
 		this.#historyMetricKey = '';
 		this.#historySelectedDate = '';
+		this.#render(this.#session.snapshot(this.#username));
+	}
+
+	#setHistoryInfoOpen(toggle: HTMLElement, open: boolean): void {
+		toggle.setAttribute('aria-expanded', String(open));
+		toggle.closest('.ldp-connect-history-help')?.classList.toggle('is-open', open);
+	}
+
+	#selectHistoryMetric(metricKey: string, preserveDate: boolean): void {
+		const key = String(metricKey).trim();
+		if (!key || (key === this.#historyMetricKey && preserveDate)) return;
+		const historySnapshot = this.#historySnapshot;
+		const history = historySnapshot?.metrics[key];
+		if (
+			!preserveDate ||
+			!this.#historySelectedDate ||
+			(history && !history.days.some((day) =>
+				day.date === this.#historySelectedDate))
+		) {
+			this.#historySelectedDate = historySnapshot?.today ?? '';
+		}
+		this.#historyMetricKey = key;
 		this.#render(this.#session.snapshot(this.#username));
 	}
 
@@ -723,10 +776,13 @@ export class ReaderSettingsUserView {
 				...connectMetricList(snapshot, 'quotas'),
 				...connectMetricList(snapshot, 'vetoes'),
 			];
+			const historyMetrics = [...rings, ...bars, ...compliance];
 			if (this.#historyMetricKey) {
-				const selected = [...rings, ...bars, ...compliance].find((item) =>
+				const selected = historyMetrics.find((item) =>
 					readerConnectTrustMetricKey(item.label) === this.#historyMetricKey);
-				if (selected) return this.#connectHistory(snapshot, selected);
+				if (selected) {
+					return this.#connectHistory(snapshot, selected, historyMetrics);
+				}
 			}
 			const head = node(this.#document, 'div', 'ldp-connect-head');
 		const heading = node(this.#document, 'div', 'ldp-connect-heading');
@@ -893,6 +949,7 @@ export class ReaderSettingsUserView {
 		#connectHistory(
 			snapshot: ReaderUserDomainSnapshot,
 			item: ReaderConnectTrustMetric,
+			items: readonly ReaderConnectTrustMetric[],
 		): HTMLElement {
 			const view = node(this.#document, 'section', 'ldp-user-info-view');
 			view.dataset.userInfoPanel = 'connect';
@@ -915,15 +972,34 @@ export class ReaderSettingsUserView {
 				this.#icon('chevron-left'),
 				node(this.#document, 'span', '', '返回'),
 			);
-			const heading = node(this.#document, 'div', 'ldp-connect-heading');
-			heading.append(
-				node(this.#document, 'strong', '', item.label),
-				node(
-					this.#document,
-					'small',
-					'',
-					`@${snapshot.connect.accountUsername} · 最近 50 天`,
-				),
+			const heading = node(
+				this.#document,
+				'div',
+				'ldp-connect-heading ldp-connect-history-heading',
+			);
+			const metricSelect = this.#document.createElement('select');
+			metricSelect.className =
+				'ldp-reader-select ldp-connect-history-metric-select';
+			metricSelect.dataset.connectHistorySelect = '';
+			metricSelect.setAttribute('aria-label', '选择 Connect 日历指标');
+			const selectedKey = readerConnectTrustMetricKey(item.label);
+			const includedKeys = new Set<string>();
+			for (const candidate of items) {
+				const key = readerConnectTrustMetricKey(candidate.label);
+				if (!key || includedKeys.has(key)) continue;
+				includedKeys.add(key);
+				const option = this.#document.createElement('option');
+				option.value = key;
+				option.textContent = candidate.label;
+				option.selected = key === selectedKey;
+				metricSelect.append(option);
+			}
+			heading.append(metricSelect);
+			const context = node(
+				this.#document,
+				'span',
+				'ldp-connect-history-context',
+				`@${snapshot.connect.accountUsername} · 最近 50 天`,
 			);
 			const history = this.#connectMetricHistory(item);
 			const source = node(
@@ -942,7 +1018,7 @@ export class ReaderSettingsUserView {
 						? '服务端已读确认'
 						: '本地脚本记录',
 			);
-			head.append(back, heading, source);
+			head.append(back, heading, context, source);
 			card.append(head);
 			if (!history || !this.#historySnapshot) {
 				card.append(node(
@@ -959,7 +1035,7 @@ export class ReaderSettingsUserView {
 			const notice = node(
 				this.#document,
 				'p',
-				`ldp-connect-history-notice${
+				`ldp-connect-history-notice ldp-connect-history-help-tooltip${
 					local ? ' is-local' : confirmedRead ? ' is-confirmed' : ' is-server'
 				}`,
 				local
@@ -972,7 +1048,21 @@ export class ReaderSettingsUserView {
 						}`
 						: '来自 LinuxDo 服务端账号活动记录；可覆盖不同设备，但仅限该接口实际提供的公开活动。',
 			);
-			card.append(notice);
+			notice.setAttribute('role', 'tooltip');
+			const help = node(
+				this.#document,
+				'div',
+				'ldp-connect-history-help',
+			);
+			const info = this.#document.createElement('button');
+			info.type = 'button';
+			info.className = 'ldp-connect-history-info';
+			info.dataset.connectHistoryInfo = '';
+			info.setAttribute('aria-label', '查看此日历的数据来源说明');
+			info.setAttribute('aria-expanded', 'false');
+			info.append(this.#icon('info'));
+			help.append(info, notice);
+			head.insertBefore(help, context);
 			const today = history.days.find((day) =>
 				day.date === this.#historySnapshot?.today) ?? null;
 			const coverage = history.days.filter((day) => day.observed).length;
@@ -1000,7 +1090,6 @@ export class ReaderSettingsUserView {
 				);
 				summary.append(fact);
 			}
-			card.append(summary);
 			const calendar = node(
 				this.#document,
 				'div',
@@ -1076,7 +1165,7 @@ export class ReaderSettingsUserView {
 				);
 				calendar.append(button);
 			}
-			card.append(calendar);
+			card.append(summary, calendar);
 			const selected = history.days.find((day) => day.date === selectedDate) ??
 				history.days.at(-1) ?? null;
 			if (selected) card.append(this.#connectHistorySelected(selected, history));

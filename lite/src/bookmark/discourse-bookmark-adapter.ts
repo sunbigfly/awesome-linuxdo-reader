@@ -84,9 +84,9 @@ export interface ReaderBookmarkHistoryPage {
 type UnknownRecord = Readonly<Record<string, unknown>>;
 
 const GIVEN_REACTIONS_PAGE_SIZE = 20;
-const GIVEN_LIKES_PAGE_SIZE = 60;
+const GIVEN_LIKES_PAGE_SIZE = 100;
 const GIVEN_BOOSTS_PAGE_SIZE = 20;
-const GIVEN_REPLIES_PAGE_SIZE = 60;
+const GIVEN_REPLIES_PAGE_SIZE = 100;
 const MAX_COLLECTION_PAGES = 500;
 const HISTORICAL_PAGE_FRESH_MS = 7 * 24 * 60 * 60_000;
 const HISTORICAL_PAGE_RETAIN_MS = 180 * 24 * 60 * 60_000;
@@ -508,8 +508,8 @@ export class DiscourseBookmarkRequestAdapter {
 				collection: stream === 'replies' ? 'replied-topics' : 'likes-given',
 				cursor,
 				variant: stream === 'replies'
-					? `v1:${username.toLocaleLowerCase()}`
-					: `v2:${username.toLocaleLowerCase()}`,
+					? `v2-limit100:${username.toLocaleLowerCase()}`
+					: `v3-limit100:${username.toLocaleLowerCase()}`,
 				input: path,
 				timeoutMs: 20_000,
 				cache: cloneCache(this.#cache, [

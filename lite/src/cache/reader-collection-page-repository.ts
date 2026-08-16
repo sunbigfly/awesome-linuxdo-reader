@@ -1,4 +1,5 @@
 import type {
+	ResponseCacheFlightPort,
 	ResponseCachePolicy,
 	ResponseRepository,
 } from './response-repository.js';
@@ -16,6 +17,8 @@ export interface ReaderCollectionProjectionSnapshot<TRecord> {
 	readonly sourceNextPage?: number;
 	/** 产生 sourceNextPage 时使用的远端分页大小。 */
 	readonly sourcePageSize?: number;
+	/** 与远端页大小无关的已提交绝对 offset。 */
+	readonly sourceOffset?: number;
 }
 
 export interface ReaderCollectionProjectionWriteOptions {
@@ -27,10 +30,24 @@ export interface ReaderCollectionProjectionWriteOptions {
 	readonly sourceNextPage?: number;
 	/** 远端分页大小；用于在接口 limit 变化时拒绝复用旧水位。 */
 	readonly sourcePageSize?: number;
+	/** 与远端页大小无关的已提交绝对 offset。 */
+	readonly sourceOffset?: number;
+	/** 同一页竞争写入时，offset 是递增位置还是递减 before cursor。 */
+	readonly sourceOffsetOrder?: 'ascending' | 'descending';
+	/** advance 防止跨标签页旧写回退水位；replace 用于显式刷新新世代。 */
+	readonly checkpointMode?: 'advance' | 'replace';
+}
+
+export interface ReaderCollectionProjectionReadOptions {
+	/** 丢弃当前标签的旧内存 manifest/page，重新读取跨标签已提交的持久投影。 */
+	readonly fresh?: boolean;
 }
 
 export interface ReaderCollectionProjectionPort<TRecord> {
-	read(partition: string): Promise<ReaderCollectionProjectionSnapshot<TRecord> | null>;
+	read(
+		partition: string,
+		options?: ReaderCollectionProjectionReadOptions,
+	): Promise<ReaderCollectionProjectionSnapshot<TRecord> | null>;
 	write(
 		partition: string,
 		records: readonly TRecord[],
@@ -52,6 +69,10 @@ export interface ReaderCollectionPageRepositoryOptions<
 	readonly pageSize?: number;
 	readonly retainForMs?: number;
 	readonly permanent?: boolean;
+	readonly coordination?: Pick<
+		ResponseCacheFlightPort,
+		'acquireFlight' | 'renewFlight' | 'releaseFlight' | 'waitForFlight'
+	>;
 }
 
 interface StoredManifest {
@@ -66,6 +87,7 @@ interface StoredManifest {
 	readonly updatedAt: number;
 	readonly sourceNextPage?: number;
 	readonly sourcePageSize?: number;
+	readonly sourceOffset?: number;
 }
 
 interface StoredPage<TRecord> {
@@ -122,7 +144,9 @@ export class ReaderCollectionPageRepository<
 	readonly #pageSize: number;
 	readonly #retainForMs: number;
 	readonly #permanent: boolean;
+	readonly #coordination: ReaderCollectionPageRepositoryOptions<TRecord>['coordination'];
 	readonly #writes = new Map<string, Promise<void>>();
+	readonly #generationNonce = Math.random().toString(36).slice(2);
 	#generation = 0;
 
 	constructor(options: ReaderCollectionPageRepositoryOptions<TRecord>) {
@@ -147,14 +171,20 @@ export class ReaderCollectionPageRepository<
 			throw new RangeError('集合投影 retainForMs 必须是正有限数值');
 		}
 		this.#permanent = options.permanent === true;
+		this.#coordination = options.coordination;
 	}
 
 	async read(
 		partitionValue: string,
+		options: ReaderCollectionProjectionReadOptions = {},
 	): Promise<ReaderCollectionProjectionSnapshot<TRecord> | null> {
 		const partition = requiredToken(partitionValue, '集合投影 partition');
+		const manifestPolicy = this.#policy(partition, 'manifest');
+		if (options.fresh) {
+			this.#responses.forgetMemory({ ids: [manifestPolicy.id] });
+		}
 		const cached = await this.#responses.read<StoredManifest>(
-			this.#policy(partition, 'manifest'),
+			manifestPolicy,
 		);
 		const manifest = this.#manifest(cached.value, partition);
 		if (!manifest) return null;
@@ -163,7 +193,12 @@ export class ReaderCollectionPageRepository<
 		for (let start = 0; start < manifest.pages; start += IO_BATCH_SIZE) {
 			const pages = await Promise.all(Array.from(
 				{ length: Math.min(IO_BATCH_SIZE, manifest.pages - start) },
-				(_, offset) => this.#readPage(manifest, partition, start + offset),
+				(_, offset) => this.#readPage(
+					manifest,
+					partition,
+					start + offset,
+					options.fresh === true,
+				),
 			));
 			for (const page of pages) {
 				if (!page) return null;
@@ -187,6 +222,9 @@ export class ReaderCollectionPageRepository<
 			...(manifest.sourcePageSize === undefined
 				? {}
 				: { sourcePageSize: manifest.sourcePageSize }),
+			...(manifest.sourceOffset === undefined
+				? {}
+				: { sourceOffset: manifest.sourceOffset }),
 		});
 	}
 
@@ -198,7 +236,10 @@ export class ReaderCollectionPageRepository<
 		const partition = requiredToken(partitionValue, '集合投影 partition');
 		const previous = this.#writes.get(partition) ?? Promise.resolve();
 		const queued = previous.catch(() => {}).then(() =>
-			this.#commit(partition, records, options));
+			this.#withWriteLease(
+				partition,
+				() => this.#commit(partition, records, options),
+			));
 		this.#writes.set(partition, queued);
 		void queued.finally(() => {
 			if (this.#writes.get(partition) === queued) {
@@ -213,13 +254,15 @@ export class ReaderCollectionPageRepository<
 		incoming: readonly TRecord[],
 		options: ReaderCollectionProjectionWriteOptions,
 	): Promise<void> {
+		const manifestPolicy = this.#policy(partition, 'manifest');
+		this.#responses.forgetMemory({ ids: [manifestPolicy.id] });
 		const previousRead = await this.#responses.read<StoredManifest>(
-			this.#policy(partition, 'manifest'),
+			manifestPolicy,
 		);
 		const previousManifest = this.#manifest(previousRead.value, partition);
 		const previous = options.mergeStored === false
 			? null
-			: await this.read(decodeURIComponent(partition));
+			: await this.read(decodeURIComponent(partition), { fresh: true });
 		const merged = new Map<string, TRecord>();
 		for (const record of previous?.records ?? []) {
 			merged.set(record.identity, record);
@@ -238,19 +281,59 @@ export class ReaderCollectionPageRepository<
 			0,
 			Math.floor(Number(options.updatedAt ?? Date.now()) || 0),
 		);
-		const requestedSourceNextPage = options.sourceNextPage === undefined
+		const replaceCheckpoint = options.checkpointMode === 'replace';
+		const requestedSourceNextPageValue = options.sourceNextPage === undefined
 			? previousManifest?.sourceNextPage
 			: safeInteger(options.sourceNextPage);
-		if (requestedSourceNextPage === null) {
+		if (requestedSourceNextPageValue === null) {
 			throw new RangeError('集合投影 sourceNextPage 必须是非负安全整数');
 		}
+		const requestedSourceNextPage = replaceCheckpoint
+			? requestedSourceNextPageValue
+			: previousManifest?.sourceNextPage === undefined &&
+					requestedSourceNextPageValue === undefined
+				? undefined
+				: Math.max(
+					previousManifest?.sourceNextPage ?? 0,
+					requestedSourceNextPageValue ?? 0,
+				);
 		const requestedSourcePageSize = options.sourcePageSize === undefined
 			? previousManifest?.sourcePageSize
 			: positiveSafeInteger(options.sourcePageSize);
 		if (requestedSourcePageSize === null) {
 			throw new RangeError('集合投影 sourcePageSize 必须是正安全整数');
 		}
-		const generation = `${updatedAt.toString(36)}-${(++this.#generation).toString(36)}`;
+		const requestedSourceOffsetValue = options.sourceOffset === undefined
+			? previousManifest?.sourceOffset
+			: safeInteger(options.sourceOffset);
+		if (requestedSourceOffsetValue === null) {
+			throw new RangeError('集合投影 sourceOffset 必须是非负安全整数');
+		}
+		const previousSourceNextPage = previousManifest?.sourceNextPage;
+		const previousSourceOffset = previousManifest?.sourceOffset;
+		let requestedSourceOffset: number | undefined;
+		if (replaceCheckpoint) {
+			requestedSourceOffset = requestedSourceOffsetValue;
+		} else if (options.sourceOffset === undefined) {
+			requestedSourceOffset = previousSourceOffset;
+		} else if (previousSourceOffset === undefined) {
+			requestedSourceOffset = requestedSourceOffsetValue;
+		} else if (
+			requestedSourceNextPageValue !== undefined &&
+			previousSourceNextPage !== undefined &&
+			requestedSourceNextPageValue !== previousSourceNextPage
+		) {
+			requestedSourceOffset = requestedSourceNextPageValue >
+				previousSourceNextPage
+				? requestedSourceOffsetValue
+				: previousSourceOffset;
+		} else {
+			requestedSourceOffset = options.sourceOffsetOrder === 'descending'
+				? Math.min(previousSourceOffset, requestedSourceOffsetValue ?? 0)
+				: Math.max(previousSourceOffset, requestedSourceOffsetValue ?? 0);
+		}
+		const generation = `${updatedAt.toString(36)}-${this.#generationNonce}-` +
+			`${(++this.#generation).toString(36)}`;
 		const pages = Math.ceil(records.length / this.#pageSize);
 		for (let start = 0; start < pages; start += IO_BATCH_SIZE) {
 			await Promise.all(Array.from(
@@ -268,6 +351,7 @@ export class ReaderCollectionPageRepository<
 								(page + 1) * this.#pageSize,
 							)),
 						}),
+						{ publish: false },
 					);
 				},
 			));
@@ -286,7 +370,9 @@ export class ReaderCollectionPageRepository<
 					Math.floor(Number(options.totalHint) || 0),
 				),
 				pages,
-				complete: options.complete === true,
+				complete: options.checkpointMode === 'advance'
+					? previousManifest?.complete === true || options.complete === true
+					: options.complete === true,
 				updatedAt,
 				...(requestedSourceNextPage === undefined
 					? {}
@@ -294,6 +380,9 @@ export class ReaderCollectionPageRepository<
 				...(requestedSourcePageSize === undefined
 					? {}
 					: { sourcePageSize: requestedSourcePageSize }),
+				...(requestedSourceOffset === undefined
+					? {}
+					: { sourceOffset: requestedSourceOffset }),
 			}),
 		);
 		if (
@@ -301,7 +390,7 @@ export class ReaderCollectionPageRepository<
 			previousManifest.generation !== generation &&
 			previousManifest.pages > 0
 		) {
-			await this.#responses.invalidate({
+			await this.#responses.prune({
 				ids: Object.freeze(Array.from(
 					{ length: previousManifest.pages },
 					(_, page) => this.#policy(
@@ -328,6 +417,9 @@ export class ReaderCollectionPageRepository<
 		const sourcePageSize = source.sourcePageSize === undefined
 			? undefined
 			: positiveSafeInteger(source.sourcePageSize);
+		const sourceOffset = source.sourceOffset === undefined
+			? undefined
+			: safeInteger(source.sourceOffset);
 		if (
 			source.schemaVersion !== 1 ||
 			source.partition !== partition ||
@@ -336,6 +428,7 @@ export class ReaderCollectionPageRepository<
 			total === null || totalHint === null || pages === null ||
 			updatedAt === null || sourceNextPage === null ||
 			sourcePageSize === null ||
+			sourceOffset === null ||
 			typeof source.complete !== 'boolean' ||
 			pages !== Math.ceil(total / this.#pageSize)
 		) return null;
@@ -351,16 +444,57 @@ export class ReaderCollectionPageRepository<
 			updatedAt,
 			...(sourceNextPage === undefined ? {} : { sourceNextPage }),
 			...(sourcePageSize === undefined ? {} : { sourcePageSize }),
+			...(sourceOffset === undefined ? {} : { sourceOffset }),
 		});
+	}
+
+	async #withWriteLease(
+		partition: string,
+		operation: () => Promise<void>,
+	): Promise<void> {
+		const coordination = this.#coordination;
+		if (!coordination) {
+			await operation();
+			return;
+		}
+		const token = `reader-collection-projection-write:v1:${
+			this.#policy(partition, 'manifest').id}`;
+		while (true) {
+			const lease = await coordination.acquireFlight(token);
+			if (!lease.producer) {
+				await coordination.waitForFlight(token);
+				continue;
+			}
+			const heartbeat = lease.coordinated
+				? setInterval(() => {
+					void coordination.renewFlight(lease).catch(() => {});
+				}, 10_000)
+				: null;
+			try {
+				await operation();
+				return;
+			} finally {
+				if (heartbeat !== null) clearInterval(heartbeat);
+				await coordination.releaseFlight(lease);
+			}
+		}
 	}
 
 	async #readPage(
 		manifest: StoredManifest,
 		partition: string,
 		page: number,
+		fresh = false,
 	): Promise<StoredPage<TRecord> | null> {
+		const policy = this.#policy(
+			partition,
+			'page',
+			page,
+			manifest.generation,
+		);
+		if (fresh) this.#responses.forgetMemory({ ids: [policy.id] });
 		const cached = await this.#responses.read<StoredPage<unknown>>(
-			this.#policy(partition, 'page', page, manifest.generation),
+			policy,
 		);
 		const value = cached.value;
 		if (

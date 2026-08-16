@@ -23,6 +23,7 @@ const assignment = new ReaderAssignmentFormSurface({
 	document,
 	root,
 	coordinator,
+	users: { searchUsers: async () => Object.freeze([]) },
 	focusSoon: (callback) => callback(),
 });
 

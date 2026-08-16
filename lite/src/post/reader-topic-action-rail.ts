@@ -23,6 +23,10 @@ import { ReaderPostViewProjector } from '../topic/reader-post-view-projector.js'
 
 const TOPIC_ACTION_RAIL_DOCK_THRESHOLD_PX = 1;
 const TOPIC_ACTION_RAIL_ACTION_EDGE_GAP_PX = 2;
+const TOPIC_ACTION_RAIL_ACTION_GROUP_MIN_WIDTH_PX = 138;
+const TOPIC_ACTION_RAIL_ACTION_BUTTON_WIDTH_PX = 26;
+const TOPIC_ACTION_RAIL_ACTION_BUTTON_GAP_PX = 1;
+const TOPIC_ACTION_RAIL_ACTION_GROUP_INLINE_PADDING_PX = 2;
 
 export interface ReaderTopicActionRailPreferences {
 	readonly visible: boolean;
@@ -159,6 +163,7 @@ export interface ReaderTopicActionRailOptions<TPost> {
 	readonly actions: ReaderTopicActionRailPostFeature<TPost>;
 	readonly preferences: ReaderTopicActionRailPreferencesPort;
 	readonly jumpToTop: () => void | Promise<void>;
+	readonly openTopicSummary?: () => void | Promise<void>;
 	readonly downloadCurrentTopic?: () => void | Promise<void>;
 	readonly openChronicle?: () => void | Promise<void>;
 	readonly openUnwantedTopics?: () => void | Promise<void>;
@@ -235,6 +240,7 @@ export class ReaderTopicActionRail<TPost> {
 	readonly scope: LifecycleScope;
 	readonly host: HTMLElement;
 	readonly topButton: HTMLButtonElement;
+	readonly summaryButton: HTMLButtonElement | null;
 	readonly toggleButton: HTMLButtonElement;
 	readonly downloadButton: HTMLButtonElement | null;
 	readonly chronicleButton: HTMLButtonElement | null;
@@ -249,6 +255,7 @@ export class ReaderTopicActionRail<TPost> {
 	readonly #actions: ReaderTopicActionRailPostFeature<TPost>;
 	readonly #preferences: ReaderTopicActionRailPreferencesPort;
 	readonly #jumpToTop: () => void | Promise<void>;
+	readonly #openTopicSummary: (() => void | Promise<void>) | null;
 	readonly #downloadCurrentTopic: (() => void | Promise<void>) | null;
 	readonly #openChronicle: (() => void | Promise<void>) | null;
 	readonly #openUnwantedTopics: (() => void | Promise<void>) | null;
@@ -283,6 +290,7 @@ export class ReaderTopicActionRail<TPost> {
 		this.#actions = options.actions;
 		this.#preferences = options.preferences;
 		this.#jumpToTop = options.jumpToTop;
+		this.#openTopicSummary = options.openTopicSummary ?? null;
 		this.#downloadCurrentTopic = options.downloadCurrentTopic ?? null;
 		this.#openChronicle = options.openChronicle ?? null;
 		this.#openUnwantedTopics = options.openUnwantedTopics ?? null;
@@ -319,6 +327,13 @@ export class ReaderTopicActionRail<TPost> {
 			'回到顶部',
 			'arrow-up',
 		);
+		this.summaryButton = this.#openTopicSummary
+			? this.#button(
+				'ldp-topic-action-rail-summary',
+				'AI 总结（LinuxDo 官方 / 自定义）',
+				'sparkles',
+			)
+			: null;
 		this.toggleButton = this.#button(
 			'ldp-topic-action-rail-toggle',
 			'展开第二段主题操作；本菜单分两段展开',
@@ -396,6 +411,7 @@ export class ReaderTopicActionRail<TPost> {
 		}
 		this.host.append(this.topButton);
 		if (this.#downloadGroup) this.host.append(this.#downloadGroup);
+		if (this.summaryButton) this.host.append(this.summaryButton);
 		this.host.append(this.toggleButton);
 		this.#mount.append(this.host);
 
@@ -578,12 +594,17 @@ export class ReaderTopicActionRail<TPost> {
 			event.stopPropagation();
 			return;
 		}
-			const target = event.target as Element | null;
-			if (target?.closest('.ldp-topic-action-rail-top')) {
-				event.preventDefault();
-				this.#run(this.#jumpToTop);
-				return;
-			}
+		const target = event.target as Element | null;
+		if (target?.closest('.ldp-topic-action-rail-top')) {
+			event.preventDefault();
+			this.#run(this.#jumpToTop);
+			return;
+		}
+		if (target?.closest('.ldp-topic-action-rail-summary')) {
+			event.preventDefault();
+			if (this.#openTopicSummary) this.#run(this.#openTopicSummary);
+			return;
+		}
 		if (target?.closest('.ldp-topic-action-rail-download')) {
 			event.preventDefault();
 			/* 下载浮窗先展开 rail，保证下载按钮锚点可见且可定位。 */
@@ -642,6 +663,7 @@ export class ReaderTopicActionRail<TPost> {
 			String(this.#expanded),
 		);
 		if (this.#downloadGroup) this.#downloadGroup.hidden = !this.#expanded;
+		if (this.summaryButton) this.summaryButton.hidden = mode !== 'compact';
 		if (this.downloadButton) this.downloadButton.hidden = !this.#expanded;
 		if (this.chronicleButton) {
 			this.chronicleButton.hidden = !this.#expanded;
@@ -685,6 +707,7 @@ export class ReaderTopicActionRail<TPost> {
 	#syncVisibility(): void {
 		const visible = this.#settings.visible && (
 			this.#view !== null ||
+				this.summaryButton !== null ||
 				this.downloadButton !== null ||
 				this.chronicleButton !== null ||
 				this.unwantedTopicsButton !== null ||
@@ -764,14 +787,33 @@ export class ReaderTopicActionRail<TPost> {
 		railWidth: number,
 		anchor: ReaderTopicActionRailPosition['x'] | null,
 	): void {
-		const hasExpandedActions = [...this.host.querySelectorAll<HTMLElement>(
+		const groups = [...this.host.querySelectorAll<HTMLElement>(
 			'.ldp-context-actions-slot,.ldp-topic-action-rail-secondary-tools',
-		)].some((group) => group.childElementCount > 0);
-		if (!hasExpandedActions) {
+		)].filter((group) => group.childElementCount > 0);
+		if (!groups.length) {
 			this.host.classList.remove('is-actions-open-left');
+			this.host.style.removeProperty('--ldp-topic-rail-actions-width');
 			this.host.style.removeProperty('--ldp-topic-rail-actions-max-width');
 			return;
 		}
+		const desiredWidth = Math.max(
+			TOPIC_ACTION_RAIL_ACTION_GROUP_MIN_WIDTH_PX,
+			...groups.map((group) => {
+				const controls = [...group.querySelectorAll<HTMLElement>(
+					':scope > :is(button,.ldp-topic-notification),' +
+					':scope > .ldp-topic-footer-actions > ' +
+					':is(button,.ldp-topic-notification)',
+				)].filter((control) =>
+					!control.hidden && control.getAttribute('aria-hidden') !== 'true'
+				).length;
+				return controls > 0
+					? controls * TOPIC_ACTION_RAIL_ACTION_BUTTON_WIDTH_PX +
+						Math.max(0, controls - 1) *
+							TOPIC_ACTION_RAIL_ACTION_BUTTON_GAP_PX +
+						TOPIC_ACTION_RAIL_ACTION_GROUP_INLINE_PADDING_PX * 2
+					: 0;
+			}),
+		);
 		const edgeInset = TOPIC_ACTION_RAIL_ACTION_EDGE_GAP_PX * 2;
 		const leftSpace = Math.max(1, railLeft + railWidth - edgeInset);
 		const rightSpace = Math.max(
@@ -781,6 +823,10 @@ export class ReaderTopicActionRail<TPost> {
 		const opensLeft = anchor === 'right' ||
 			(anchor !== 'left' && leftSpace > rightSpace);
 		this.host.classList.toggle('is-actions-open-left', opensLeft);
+		this.host.style.setProperty(
+			'--ldp-topic-rail-actions-width',
+			`${desiredWidth}px`,
+		);
 		this.host.style.setProperty(
 			'--ldp-topic-rail-actions-max-width',
 			`${Math.floor(opensLeft ? leftSpace : rightSpace)}px`,

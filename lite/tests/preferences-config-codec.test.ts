@@ -131,6 +131,26 @@ for (const invalid of [
 		settingsCount: 7,
 	},
 	legacyPayload(['layoutProfile']),
+	{
+		...legacyPayload([]),
+		schemaVersion: '5',
+	},
+	{
+		...legacyPayload([]),
+		settingsCount: '6',
+	},
+	{
+		...legacyPayload([]),
+		scriptVersion: 5,
+	},
+	{
+		...legacyPayload([]),
+		exportedAt: 5,
+	},
+	{
+		...legacyPayload([]),
+		unexpected: true,
+	},
 	null,
 ]) {
 	let rejected = false;
@@ -139,5 +159,8 @@ for (const invalid of [
 	} catch (error) {
 		rejected = error instanceof Error && error.message.includes('invalid_config');
 	}
-	assert(rejected, '计数错误、未知字段或非兼容缺失字段必须拒绝');
+	assert(
+		rejected,
+		'元数据类型错误、计数错误、未知字段或非兼容缺失字段必须拒绝',
+	);
 }

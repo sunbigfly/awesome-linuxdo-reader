@@ -60,11 +60,17 @@ export class ReaderSettingsHelpSurface {
 
 		this.scope.listen(this.#popover, 'pointerover', (event) => {
 			const pointer = event as PointerEvent;
+			const pointerTarget = eventElement(event);
+			if (pointerTarget?.closest('input, select, textarea, .ldp-select-surface')) {
+				this.close();
+				return;
+			}
 			const target = this.#helpTarget(event);
 			if (
 				!target ||
 				target === this.#interactionTarget ||
-				(domNode(pointer.relatedTarget) &&
+				(target === this.#activeTarget &&
+					domNode(pointer.relatedTarget) &&
 					target.contains(pointer.relatedTarget))
 			) return;
 			this.#interactionTarget = null;

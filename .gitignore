@@ -75,6 +75,7 @@
 !/scripts/test-main-lite.mjs
 !/scripts/test-main-lite-greasyfork.mjs
 !/scripts/test-mian-lite.mjs
+!/scripts/verify-main-lite-local-parity.mjs
 
 !/lite/
 !/lite/**

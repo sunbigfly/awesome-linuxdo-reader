@@ -1085,14 +1085,18 @@ assert(
 		parallelHistoryLoads.every((entry) => entry.visible),
 	'浮窗打开时必须并行快取三个不同活动来源，并将其提升到 surface-prefetch',
 );
+parallelHistoryResolvers.shift()?.();
+await flushMicrotasks();
+assert(
+	parallelHistoryLoads.length === 4 &&
+	parallelHistoryPeak === 3 &&
+	parallelHistoryCallbacks.size === 0,
+	'可见历史必须在单个槽位释放后立即补入下一来源，不能等待整批完成或重新排时器',
+);
+parallelHistoryController.close();
 holdParallelHistory = false;
 for (const resolve of parallelHistoryResolvers.splice(0)) resolve();
 await flushMicrotasks();
-assert(
-	[...parallelHistoryCallbacks.values()][0]?.delayMs === 0,
-	'可见并行批次完成后必须立即续取下一批，不能再插入后台步进等待',
-);
-parallelHistoryController.close();
 const closedParallelHistoryTask = parallelHistoryCallbacks.entries().next().value as
 	| [number, Readonly<{ callback: () => void; delayMs: number }>]
 	| undefined;
@@ -1101,7 +1105,7 @@ parallelHistoryCallbacks.delete(closedParallelHistoryTask[0]);
 closedParallelHistoryTask[1].callback();
 await flushMicrotasks();
 assert(
-	parallelHistoryLoads.length === 4 &&
+	parallelHistoryLoads.length === 5 &&
 		parallelHistoryLoads.at(-1)?.visible === false,
 	'浮窗关闭后必须降回单来源 background 请求，不能保持可见并发优先级',
 );
@@ -1493,6 +1497,142 @@ assert(
 	'只有持久缓存之后的真实缺页才可进入后台网络，并在提交后推进新水位',
 );
 resumedHistoryController.destroy();
+
+const corruptCheckpointCallbacks = new Map<
+	number,
+	Readonly<{ callback: () => void; delayMs: number }>
+>();
+const corruptCheckpointWrites: Array<Readonly<{
+	complete: boolean;
+	sourceNextPage: number | undefined;
+	sourceOffset: number | undefined;
+	checkpointMode: string | undefined;
+}>> = [];
+const corruptCheckpointLoads: number[] = [];
+const corruptCheckpointResolvers: Array<() => void> = [];
+let corruptCheckpointScheduleId = 0;
+let corruptCheckpointActive = 0;
+let corruptCheckpointPeak = 0;
+let corruptRepliesProjection = Object.freeze({
+	records: Object.freeze([resumedHistoryRecord]),
+	totalHint: 200,
+	complete: true,
+	updatedAt: 2_100,
+	sourceNextPage: 6,
+	sourcePageSize: 100,
+	sourceOffset: 600,
+});
+const corruptCheckpointController = new ReaderNotificationController({
+	requests: {
+		async loadCached(): Promise<null> {
+			return null;
+		},
+		async load(
+			group: ReaderNotificationGroupKey,
+			page: number,
+			options?: Parameters<DiscourseNotificationRequestAdapter['load']>[2],
+		) {
+			if (!options?.history) {
+				return Object.freeze({
+					group,
+					page,
+					records: Object.freeze([]),
+					total: 0,
+					hasNext: false,
+					nextCursor: null,
+				});
+			}
+			corruptCheckpointLoads.push(page);
+			corruptCheckpointActive += 1;
+			corruptCheckpointPeak = Math.max(
+				corruptCheckpointPeak,
+				corruptCheckpointActive,
+			);
+			await new Promise<void>((resolve) => {
+				corruptCheckpointResolvers.push(resolve);
+			});
+			corruptCheckpointActive -= 1;
+			return Object.freeze({
+				group,
+				page,
+				records: Object.freeze([]),
+				total: 600,
+				hasNext: page < 5,
+				nextCursor: null,
+			});
+		},
+	} as unknown as DiscourseNotificationRequestAdapter,
+	projection: {
+		async read(group) {
+			return group === 'replies'
+				? corruptRepliesProjection
+				: Object.freeze({
+					records: Object.freeze([]),
+					totalHint: 0,
+					complete: true,
+					updatedAt: 2_100,
+					sourceNextPage: 1,
+				});
+		},
+		async write(group, records, options) {
+			if (group !== 'replies') return;
+			corruptCheckpointWrites.push(Object.freeze({
+				complete: options?.complete === true,
+				sourceNextPage: options?.sourceNextPage,
+				sourceOffset: options?.sourceOffset,
+				checkpointMode: options?.checkpointMode,
+			}));
+			corruptRepliesProjection = Object.freeze({
+				records: Object.freeze([...records]),
+				totalHint: Math.max(records.length, options?.totalHint ?? 0),
+				complete: options?.complete === true,
+				updatedAt: options?.updatedAt ?? 2_100,
+				sourceNextPage: options?.sourceNextPage ?? 0,
+				sourcePageSize: options?.sourcePageSize ?? 100,
+				sourceOffset: options?.sourceOffset ?? 0,
+			});
+		},
+	},
+	native,
+	actions: {} as PostActionController,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+	backgroundWarmDelayMs: 0,
+	historyStepDelayMs: 0,
+	visibleHistoryConcurrency: 3,
+	schedule(callback, delayMs) {
+		const id = ++corruptCheckpointScheduleId;
+		corruptCheckpointCallbacks.set(id, Object.freeze({ callback, delayMs }));
+		return id;
+	},
+	cancel(handle) {
+		corruptCheckpointCallbacks.delete(Number(handle));
+	},
+});
+corruptCheckpointController.startBackgroundCache();
+await flushMicrotasks();
+assert(
+	corruptCheckpointWrites[0]?.checkpointMode === 'replace' &&
+	corruptCheckpointWrites[0]?.complete === false &&
+	corruptCheckpointWrites[0]?.sourceNextPage === 0 &&
+	corruptCheckpointWrites[0]?.sourceOffset === 0 &&
+	corruptCheckpointController.snapshot.history.status !== 'complete',
+	'声明 offset 600 却只有 100 条的残缺完成投影必须保留记录并重置断点，不能继续显示历史已到底',
+);
+await corruptCheckpointController.open();
+const corruptCheckpointTask = [...corruptCheckpointCallbacks][0];
+assert(corruptCheckpointTask !== undefined, '修复后的残缺通知必须立即排入续传');
+corruptCheckpointCallbacks.delete(corruptCheckpointTask[0]);
+corruptCheckpointTask[1].callback();
+await flushMicrotasks();
+assert(
+	corruptCheckpointLoads.join(',') === '0,1,2' &&
+	corruptCheckpointPeak === 3,
+	'浮窗可见时，已知残缺水位的 user_actions 缺页必须在中央并发预算内并行补取',
+);
+for (const resolve of corruptCheckpointResolvers.splice(0)) resolve();
+await flushMicrotasks();
+corruptCheckpointController.destroy();
 
 let releaseStartupProjectionRestore!: () => void;
 const startupProjectionRestore = new Promise<void>((resolve) => {

@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.3.1
+// @version      1.5.0
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.3.1 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.5.0 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.3.1",
+			sourceVersion: "1.5.0",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.3.1") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.0") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -371,11 +371,23 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	var reader_browser_runtime_exports = {};
 	__export(reader_browser_runtime_exports, {
 	  ReaderBrowserRuntime: () => ReaderBrowserRuntime,
-	  createReaderBrowserRuntimeStage: () => createReaderBrowserRuntimeStage
+	  createReaderBrowserRuntimeStage: () => createReaderBrowserRuntimeStage,
+	  readerWebDavCacheClearPlan: () => readerWebDavCacheClearPlan
 	});
 	module.exports = __toCommonJS(reader_browser_runtime_exports);
-	var import_native_host_api = require("../discourse/native-host-api.js"), import_native_request_descriptors = require("../discourse/native-request-descriptors.js"), import_reader_cache_management_surface = require("../cache/reader-cache-management-surface.js"), import_reader_collection_page_repository = require("../cache/reader-collection-page-repository.js"), import_browser_asset_cache = require("../cache/browser-asset-cache.js"), import_discourse_application_cache_invalidation = require("../cache/discourse-application-cache-invalidation.js"), import_reader_settings_config_manager = require("../state/reader-settings-config-manager.js"), import_native_composer = require("../discourse/native-composer.js"), import_reader_control_tooltip = require("../components/reader-control-tooltip.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_native_post_model_factory = require("../discourse/native-post-model-factory.js"), import_native_presence = require("../discourse/native-presence.js"), import_identifiers = require("../discourse/identifiers.js"), import_reader_history_navigation_controller = require("../history/reader-history-navigation-controller.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_history_navigation_view = require("../history/reader-history-navigation-view.js"), import_reader_history_panel_view = require("../history/reader-history-panel-view.js"), import_reader_chronicle_repository = require("../history/reader-chronicle-repository.js"), import_reader_chronicle_view = require("../history/reader-chronicle-view.js"), import_reader_unwanted_topic_repository = require("../collection/reader-unwanted-topic-repository.js"), import_reader_unwanted_topic_view = require("../collection/reader-unwanted-topic-view.js"), import_discourse_bookmark_adapter = require("../bookmark/discourse-bookmark-adapter.js"), import_reader_bookmark_controller = require("../bookmark/reader-bookmark-controller.js"), import_reader_bookmark_panel_view = require("../bookmark/reader-bookmark-panel-view.js"), import_reader_bookmark_model = require("../bookmark/reader-bookmark-model.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_post_author_filter_feature = require("../topic/reader-post-author-filter-feature.js"), import_signal = require("../kernel/signal.js"), import_reader_topic_live_navigation_controller = require("../live/reader-topic-live-navigation-controller.js"), import_reader_resource_monitor = require("../monitor/reader-resource-monitor.js"), import_browser_request_observation = require("../network/browser-request-observation.js"), import_reader_topic_live_navigation_view = require("../live/reader-topic-live-navigation-view.js"), import_reader_rate_limit_notice = require("../shell/reader-rate-limit-notice.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_reader_image_download_service = require("../media/reader-image-download-service.js"), import_reader_image_resource_service = require("../media/reader-image-resource-service.js"), import_reader_media_prefetch_service = require("../media/reader-media-prefetch-service.js"), import_reader_topic_image_index = require("../media/reader-topic-image-index.js"), import_reader_topic_image_interaction = require("../media/reader-topic-image-interaction.js"), import_reader_lightbox_feature = require("../media/reader-lightbox-feature.js"), import_reader_compact_image_viewer = require("../media/reader-compact-image-viewer.js"), import_reader_topic_media_feature = require("../media/reader-topic-media-feature.js"), import_reader_media_controller = require("../media/reader-media-controller.js"), import_reader_cooked_content_feature = require("../media/reader-cooked-content-feature.js"), import_reader_poll_feature = require("../media/reader-poll-feature.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js"), import_discourse_native_read_transport = require("../network/discourse-native-read-transport.js"), import_public_resource_request_adapter = require("../network/public-resource-request-adapter.js"), import_discourse_native_user_port = require("../user/discourse-native-user-port.js"), import_reader_user_domain_session = require("../user/reader-user-domain-session.js"), import_reader_credit_account_adapter = require("../user/reader-credit-account-adapter.js"), import_reader_connect_trust_adapter = require("../user/reader-connect-trust-adapter.js"), import_reader_user_endorsement_adapter = require("../user/reader-user-endorsement-adapter.js"), import_reader_user_card_view = require("../user/reader-user-card-view.js"), import_discourse_user_observation_adapter = require("../user/discourse-user-observation-adapter.js"), import_reader_user_observation_session = require("../user/reader-user-observation-session.js"), import_reader_user_observation_page_repository = require("../user/reader-user-observation-page-repository.js"), import_reader_user_observation_model = require("../user/reader-user-observation-model.js"), import_reader_user_observation_view = require("../user/reader-user-observation-view.js"), import_reader_self_observation_projection = require("../user/reader-self-observation-projection.js"), import_reader_settings_user_view = require("../user/reader-settings-user-view.js"), import_discourse_notification_adapter = require("../notification/discourse-notification-adapter.js"), import_reader_notification_controller = require("../notification/reader-notification-controller.js"), import_reader_notification_model = require("../notification/reader-notification-model.js"), import_reader_notification_panel_view = require("../notification/reader-notification-panel-view.js"), import_action_request_adapter = require("../post/action-request-adapter.js"), import_discourse_action_transport = require("../post/discourse-action-transport.js"), import_post_action_controller = require("../post/post-action-controller.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_post_action_feature_commands = require("../post/post-action-feature-commands.js"), import_user_action_feature_commands = require("../post/user-action-feature-commands.js"), import_reader_post_action_feature = require("../post/reader-post-action-feature.js"), import_reader_bookmark_action_coordinator = require("../post/reader-bookmark-action-coordinator.js"), import_reader_share_action_coordinator = require("../post/reader-share-action-coordinator.js"), import_reader_topic_notification_coordinator = require("../post/reader-topic-notification-coordinator.js"), import_reader_topic_shared_issue_coordinator = require("../post/reader-topic-shared-issue-coordinator.js"), import_topic_action_feature_commands = require("../post/topic-action-feature-commands.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_post_management_action_coordinator = require("../post/reader-post-management-action-coordinator.js"), import_reader_selection_quote_feature = require("../post/reader-selection-quote-feature.js"), import_reader_workspace_coordinator = require("../shell/reader-workspace-coordinator.js"), import_reader_feedback_surface = require("../shell/reader-feedback-surface.js"), import_reader_action_surface_coordinator = require("../shell/reader-action-surface-coordinator.js"), import_reader_exclusive_panel_coordinator = require("../shell/reader-exclusive-panel-coordinator.js"), import_reader_shell_recovery_view = require("../shell/reader-shell-recovery-view.js"), import_reader_report_form_surface = require("../shell/reader-report-form-surface.js"), import_reader_assignment_form_surface = require("../shell/reader-assignment-form-surface.js"), import_reader_choice_form_surface = require("../shell/reader-choice-form-surface.js"), import_reader_topic_edit_form_surface = require("../shell/reader-topic-edit-form-surface.js"), import_reader_settings_controller = require("../settings/reader-settings-controller.js"), import_reader_settings_view = require("../settings/reader-settings-view.js"), import_reader_theme_settings_control = require("../settings/reader-theme-settings-control.js"), import_reader_window_settings_form = require("../settings/reader-window-settings-form.js"), import_reader_shortcut_settings_form = require("../settings/reader-shortcut-settings-form.js"), import_reader_custom_site_settings_form = require("../settings/reader-custom-site-settings-form.js"), import_reader_webdav_settings_form = require("../settings/reader-webdav-settings-form.js"), import_browser_discourse_site_probe = require("../site/browser-discourse-site-probe.js"), import_reader_webdav_coordinator = require("../sync/reader-webdav-coordinator.js"), import_reader_webdav_category_ports = require("../sync/reader-webdav-category-ports.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_translation_settings_form = require("../settings/reader-translation-settings-form.js"), import_reader_appearance_settings_form = require("../settings/reader-appearance-settings-form.js"), import_reader_font_settings_form = require("../settings/reader-font-settings-form.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_reader_layout_settings_form = require("../settings/reader-layout-settings-form.js"), import_reader_interaction_settings_form = require("../settings/reader-interaction-settings-form.js"), import_reader_image_settings_form = require("../settings/reader-image-settings-form.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_reader_about_settings_content = require("../settings/reader-about-settings-content.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_topic_download_manager = require("../queue/reader-topic-download-manager.js"), import_reader_topic_offline_document = require("../archive/reader-topic-offline-document.js"), import_reader_topic_offline_artifact_repository = require("../archive/reader-topic-offline-artifact-repository.js"), import_reader_cooked_content_feature2 = require("../media/reader-cooked-content-feature.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_loading_animation_view = require("../motion/reader-loading-animation-view.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_topic_factory = require("../topic/reader-topic-factory.js"), import_reader_topic_navigation_controller = require("../topic/reader-topic-navigation-controller.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_topic_flow_controller = require("../topic/reader-topic-flow-controller.js"), import_reader_topic_navigation_preferences = require("../topic/reader-topic-navigation-preferences.js"), import_reader_topic_scroll_adapter = require("../topic/reader-topic-scroll-adapter.js"), import_reader_topic_local_archive_feature = require("../topic/reader-topic-local-archive-feature.js"), import_reader_topic_timeline_controller = require("../topic/reader-topic-timeline-controller.js"), import_reader_topic_timeline_view = require("../topic/reader-topic-timeline-view.js"), import_reader_topic_header = require("../topic/reader-topic-header.js"), import_reader_topic_edit_controller = require("../topic/reader-topic-edit-controller.js"), import_reader_topic_comments_header = require("../topic/reader-topic-comments-header.js"), import_reader_topic_only_op_controller = require("../topic/reader-topic-only-op-controller.js"), import_reader_topic_special_content_feature = require("../topic/reader-topic-special-content-feature.js"), import_reader_topic_context_controller = require("../topic/reader-topic-context-controller.js"), import_reader_topic_context_surface = require("../topic/reader-topic-context-surface.js"), import_reader_topic_context_state = require("../topic/reader-topic-context-state.js"), import_topic_session = require("../topic/topic-session.js"), import_reader_translation_feature = require("../translation/reader-translation-feature.js"), import_translation_request_adapter = require("../translation/translation-request-adapter.js"), import_reader_data_runtime = require("./reader-data-runtime.js"), import_reader_performance_policy = require("./reader-performance-policy.js");
+	var import_native_host_api = require("../discourse/native-host-api.js"), import_native_request_descriptors = require("../discourse/native-request-descriptors.js"), import_reader_cache_management_surface = require("../cache/reader-cache-management-surface.js"), import_reader_collection_page_repository = require("../cache/reader-collection-page-repository.js"), import_browser_asset_cache = require("../cache/browser-asset-cache.js"), import_discourse_application_cache_invalidation = require("../cache/discourse-application-cache-invalidation.js"), import_reader_settings_config_manager = require("../state/reader-settings-config-manager.js"), import_native_composer = require("../discourse/native-composer.js"), import_reader_control_tooltip = require("../components/reader-control-tooltip.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_reader_native_post_admin_menu = require("../discourse/reader-native-post-admin-menu.js"), import_native_post_model_factory = require("../discourse/native-post-model-factory.js"), import_native_presence = require("../discourse/native-presence.js"), import_identifiers = require("../discourse/identifiers.js"), import_reader_history_navigation_controller = require("../history/reader-history-navigation-controller.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_history_navigation_view = require("../history/reader-history-navigation-view.js"), import_reader_history_panel_view = require("../history/reader-history-panel-view.js"), import_reader_chronicle_repository = require("../history/reader-chronicle-repository.js"), import_reader_chronicle_view = require("../history/reader-chronicle-view.js"), import_reader_unwanted_topic_repository = require("../collection/reader-unwanted-topic-repository.js"), import_reader_unwanted_topic_view = require("../collection/reader-unwanted-topic-view.js"), import_discourse_bookmark_adapter = require("../bookmark/discourse-bookmark-adapter.js"), import_reader_bookmark_controller = require("../bookmark/reader-bookmark-controller.js"), import_reader_bookmark_panel_view = require("../bookmark/reader-bookmark-panel-view.js"), import_reader_bookmark_model = require("../bookmark/reader-bookmark-model.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_post_author_filter_feature = require("../topic/reader-post-author-filter-feature.js"), import_signal = require("../kernel/signal.js"), import_reader_topic_live_navigation_controller = require("../live/reader-topic-live-navigation-controller.js"), import_reader_resource_monitor = require("../monitor/reader-resource-monitor.js"), import_browser_request_observation = require("../network/browser-request-observation.js"), import_reader_topic_live_navigation_view = require("../live/reader-topic-live-navigation-view.js"), import_reader_rate_limit_notice = require("../shell/reader-rate-limit-notice.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_reader_image_download_service = require("../media/reader-image-download-service.js"), import_reader_image_resource_service = require("../media/reader-image-resource-service.js"), import_reader_lightbox_image_picker = require("../media/reader-lightbox-image-picker.js"), import_reader_media_prefetch_service = require("../media/reader-media-prefetch-service.js"), import_reader_topic_image_index = require("../media/reader-topic-image-index.js"), import_reader_topic_image_interaction = require("../media/reader-topic-image-interaction.js"), import_reader_lightbox_feature = require("../media/reader-lightbox-feature.js"), import_reader_compact_image_viewer = require("../media/reader-compact-image-viewer.js"), import_reader_topic_media_feature = require("../media/reader-topic-media-feature.js"), import_reader_media_controller = require("../media/reader-media-controller.js"), import_reader_cooked_content_feature = require("../media/reader-cooked-content-feature.js"), import_reader_poll_feature = require("../media/reader-poll-feature.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js"), import_discourse_native_read_transport = require("../network/discourse-native-read-transport.js"), import_public_resource_request_adapter = require("../network/public-resource-request-adapter.js"), import_discourse_native_user_port = require("../user/discourse-native-user-port.js"), import_reader_user_domain_session = require("../user/reader-user-domain-session.js"), import_reader_credit_account_adapter = require("../user/reader-credit-account-adapter.js"), import_reader_connect_trust_adapter = require("../user/reader-connect-trust-adapter.js"), import_reader_user_endorsement_adapter = require("../user/reader-user-endorsement-adapter.js"), import_reader_user_card_view = require("../user/reader-user-card-view.js"), import_discourse_user_observation_adapter = require("../user/discourse-user-observation-adapter.js"), import_reader_user_observation_session = require("../user/reader-user-observation-session.js"), import_reader_user_observation_page_repository = require("../user/reader-user-observation-page-repository.js"), import_reader_user_observation_model = require("../user/reader-user-observation-model.js"), import_reader_user_observation_view = require("../user/reader-user-observation-view.js"), import_reader_self_observation_projection = require("../user/reader-self-observation-projection.js"), import_reader_settings_user_view = require("../user/reader-settings-user-view.js"), import_discourse_notification_adapter = require("../notification/discourse-notification-adapter.js"), import_reader_notification_controller = require("../notification/reader-notification-controller.js"), import_reader_notification_model = require("../notification/reader-notification-model.js"), import_reader_notification_panel_view = require("../notification/reader-notification-panel-view.js"), import_action_request_adapter = require("../post/action-request-adapter.js"), import_discourse_action_transport = require("../post/discourse-action-transport.js"), import_post_action_controller = require("../post/post-action-controller.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_post_action_feature_commands = require("../post/post-action-feature-commands.js"), import_user_action_feature_commands = require("../post/user-action-feature-commands.js"), import_reader_post_action_feature = require("../post/reader-post-action-feature.js"), import_reader_bookmark_action_coordinator = require("../post/reader-bookmark-action-coordinator.js"), import_reader_share_action_coordinator = require("../post/reader-share-action-coordinator.js"), import_reader_topic_notification_coordinator = require("../post/reader-topic-notification-coordinator.js"), import_reader_topic_shared_issue_coordinator = require("../post/reader-topic-shared-issue-coordinator.js"), import_topic_action_feature_commands = require("../post/topic-action-feature-commands.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_topic_summary_request_adapter = require("../post/reader-topic-summary-request-adapter.js"), import_reader_topic_summary_surface = require("../post/reader-topic-summary-surface.js"), import_reader_topic_custom_summary = require("../post/reader-topic-custom-summary.js"), import_reader_post_management_action_coordinator = require("../post/reader-post-management-action-coordinator.js"), import_reader_selection_quote_feature = require("../post/reader-selection-quote-feature.js"), import_reader_workspace_coordinator = require("../shell/reader-workspace-coordinator.js"), import_reader_feedback_surface = require("../shell/reader-feedback-surface.js"), import_reader_action_surface_coordinator = require("../shell/reader-action-surface-coordinator.js"), import_reader_exclusive_panel_coordinator = require("../shell/reader-exclusive-panel-coordinator.js"), import_reader_shell_recovery_view = require("../shell/reader-shell-recovery-view.js"), import_reader_report_form_surface = require("../shell/reader-report-form-surface.js"), import_reader_assignment_form_surface = require("../shell/reader-assignment-form-surface.js"), import_reader_choice_form_surface = require("../shell/reader-choice-form-surface.js"), import_reader_topic_edit_form_surface = require("../shell/reader-topic-edit-form-surface.js"), import_reader_settings_controller = require("../settings/reader-settings-controller.js"), import_reader_settings_view = require("../settings/reader-settings-view.js"), import_reader_theme_settings_control = require("../settings/reader-theme-settings-control.js"), import_reader_window_settings_form = require("../settings/reader-window-settings-form.js"), import_reader_shortcut_settings_form = require("../settings/reader-shortcut-settings-form.js"), import_reader_custom_site_settings_form = require("../settings/reader-custom-site-settings-form.js"), import_reader_webdav_settings_form = require("../settings/reader-webdav-settings-form.js"), import_browser_discourse_site_probe = require("../site/browser-discourse-site-probe.js"), import_reader_webdav_coordinator = require("../sync/reader-webdav-coordinator.js"), import_reader_webdav_category_ports = require("../sync/reader-webdav-category-ports.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_translation_settings_form = require("../settings/reader-translation-settings-form.js"), import_reader_ai_service_settings_form = require("../settings/reader-ai-service-settings-form.js"), import_reader_appearance_settings_form = require("../settings/reader-appearance-settings-form.js"), import_reader_font_settings_form = require("../settings/reader-font-settings-form.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_reader_layout_settings_form = require("../settings/reader-layout-settings-form.js"), import_reader_interaction_settings_form = require("../settings/reader-interaction-settings-form.js"), import_reader_image_settings_form = require("../settings/reader-image-settings-form.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_reader_about_settings_content = require("../settings/reader-about-settings-content.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_topic_download_manager = require("../queue/reader-topic-download-manager.js"), import_reader_topic_offline_document = require("../archive/reader-topic-offline-document.js"), import_reader_topic_offline_artifact_repository = require("../archive/reader-topic-offline-artifact-repository.js"), import_reader_cooked_content_feature2 = require("../media/reader-cooked-content-feature.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_loading_animation_view = require("../motion/reader-loading-animation-view.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_topic_factory = require("../topic/reader-topic-factory.js"), import_reader_topic_navigation_controller = require("../topic/reader-topic-navigation-controller.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_topic_flow_controller = require("../topic/reader-topic-flow-controller.js"), import_reader_topic_navigation_preferences = require("../topic/reader-topic-navigation-preferences.js"), import_reader_topic_scroll_adapter = require("../topic/reader-topic-scroll-adapter.js"), import_reader_topic_local_archive_feature = require("../topic/reader-topic-local-archive-feature.js"), import_reader_topic_timeline_controller = require("../topic/reader-topic-timeline-controller.js"), import_reader_topic_timeline_view = require("../topic/reader-topic-timeline-view.js"), import_reader_topic_header = require("../topic/reader-topic-header.js"), import_reader_topic_edit_controller = require("../topic/reader-topic-edit-controller.js"), import_reader_topic_comments_header = require("../topic/reader-topic-comments-header.js"), import_reader_topic_only_op_controller = require("../topic/reader-topic-only-op-controller.js"), import_reader_topic_special_content_feature = require("../topic/reader-topic-special-content-feature.js"), import_reader_topic_context_controller = require("../topic/reader-topic-context-controller.js"), import_reader_topic_context_surface = require("../topic/reader-topic-context-surface.js"), import_reader_topic_context_state = require("../topic/reader-topic-context-state.js"), import_topic_session = require("../topic/topic-session.js"), import_reader_translation_feature = require("../translation/reader-translation-feature.js"), import_translation_request_adapter = require("../translation/translation-request-adapter.js"), import_reader_data_runtime = require("./reader-data-runtime.js"), import_reader_performance_policy = require("./reader-performance-policy.js");
 	const readerSurfaceOnlyCloseEvents = /* @__PURE__ */ new WeakSet(), hostTopicUserCardSelector = "html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item) :is(.posters,.topic-poster) [data-user-card]";
+	function readerWebDavCacheClearPlan(categories) {
+	  const webDavCategories = [], protectedCategories = [];
+	  return categories.includes("history") && (webDavCategories.push("history"), protectedCategories.push("history")), categories.includes("notifications") && (webDavCategories.push("notification-history"), protectedCategories.push("notifications")), categories.includes("responses") && (webDavCategories.push(
+	    "bookmarks",
+	    "translation-cache",
+	    "activity-history"
+	  ), protectedCategories.push("responses")), Object.freeze({
+	    webDavCategories: Object.freeze(webDavCategories),
+	    protectedCategories: Object.freeze(protectedCategories)
+	  });
+	}
 	function readerReportOptions(document, flagTypes, availableNames, appliesTo) {
 	  return Object.freeze(flagTypes.filter(
 	    (flag) => flag.enabled && availableNames.has(flag.nameKey) && (!flag.appliesTo.length || flag.appliesTo.includes(appliesTo))
@@ -642,6 +654,23 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	  const tail = segments.slice(topicIndex + 1), topicOffset = /^\d+$/.test(tail[0] ?? "") ? 0 : 1, topicId = Number(tail[topicOffset]);
 	  return Number.isSafeInteger(topicId) && topicId > 0 ? topicId : null;
 	}
+	function createReaderLocalFontQuery(document) {
+	  const browserWindow = document.defaultView;
+	  if (!browserWindow?.queryLocalFonts) return;
+	  let resolved = null, pending = null;
+	  return async () => {
+	    if (resolved) return resolved;
+	    if (pending) return pending;
+	    pending = browserWindow.queryLocalFonts().then((entries) => Object.freeze([...new Set(
+	      entries.map((entry) => String(entry.family ?? "").trim()).filter(Boolean)
+	    )].sort((left, right) => left.localeCompare(right)))).then((names) => (resolved = names, names));
+	    try {
+	      return await pending;
+	    } finally {
+	      pending = null;
+	    }
+	  };
+	}
 	class ReaderBrowserRuntime {
 	  scope;
 	  shell;
@@ -753,6 +782,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	      }
 	    };
 	    try {
+	      const nativeUserCatalog = (0, import_native_host_api.discourseNativeUnwantedTopicRuleCatalog)(options.host);
 	      this.selectSurface = new import_reader_select_surface.ReaderSelectSurface({
 	        document: options.document,
 	        root: this.shell.view.surfaceHost,
@@ -805,6 +835,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	      }), this.assignmentForm = new import_reader_assignment_form_surface.ReaderAssignmentFormSurface({
 	        document: options.document,
 	        root: this.shell.view.surfaceHost,
+	        users: nativeUserCatalog,
 	        coordinator: this.actionSurfaces,
 	        ...options.renderIcon ? { renderIcon: options.renderIcon } : {},
 	        parentScope: this.scope
@@ -1075,7 +1106,8 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	      });
 	      const userObservationPresentation = (0, import_native_host_api.discourseNativeTopicPresentation)(options.host), userObservationPages = new import_reader_user_observation_page_repository.ReaderUserObservationPageRepository(
 	        this.data.responses,
-	        options.topic.authScope
+	        options.topic.authScope,
+	        this.data.cacheCoordination
 	      );
 	      if (this.userObservations = new import_reader_user_observation_session.ReaderUserObservationSession({
 	        requests: new import_discourse_user_observation_adapter.DiscourseUserObservationAdapter({
@@ -1094,6 +1126,8 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        storage: options.storage,
 	        pages: userObservationPages,
 	        authScope: options.topic.authScope,
+	        historyCoordination: this.data.cacheCoordination,
+	        historyCoordinationKey: `reader-user-observation-history:v1:${options.topic.authScope}`,
 	        requestResume: (cause) => this.data.client.requestResume(cause),
 	        notify: (message) => this.feedback.show(message),
 	        parentScope: this.scope,
@@ -1102,7 +1136,9 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	          "user",
 	          cause
 	        )
-	      }), this.userObservationView = new import_reader_user_observation_view.ReaderUserObservationView({
+	      }), this.scope.add(this.data.cacheCoordination.subscribeInvalidation((query) => {
+	        this.users.applyExternalCacheInvalidation(query), this.userObservations.applyExternalCacheInvalidation(query);
+	      })), this.userObservationView = new import_reader_user_observation_view.ReaderUserObservationView({
 	        document: options.document,
 	        mount: this.shell.view.surfaceHost,
 	        session: this.userObservations,
@@ -1175,9 +1211,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        topics: this.unwantedTopics,
 	        ...options.unwantedTopicFilter ? {
 	          filterPreferences: options.unwantedTopicFilter,
-	          filterCatalog: (0, import_native_host_api.discourseNativeUnwantedTopicRuleCatalog)(
-	            options.host
-	          )
+	          filterCatalog: nativeUserCatalog
 	        } : {},
 	        storage: options.storage,
 	        openTarget: async (record) => {
@@ -1450,12 +1484,30 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        onReady: topicReady,
 	        createDomOptions,
 	        ...topicFactoryOptions
-	      } = options.topicFactory, topicBaseUrl = options.topic.origin ?? options.data.rateLimit.baseUrl ?? options.document.baseURI, nativeRelativeTime = (0, import_native_host_api.discourseNativeRelativeTimeFormatter)(options.host), nativeExactTime = (0, import_native_host_api.discourseNativeExactTimeFormatter)(options.host), nativeTopicPresentation = (0, import_native_host_api.discourseNativeTopicPresentation)(options.host), nativeTopicEditCatalog = (0, import_native_host_api.discourseNativeTopicEditCatalog)(options.host), nativePresence = new import_native_presence.BrowserDiscoursePresencePort(options.host), nativeTopicLinks = (0, import_native_host_api.discourseNativeTopicLinks)(options.host, topicBaseUrl), nativeFlagCatalog = (0, import_native_host_api.discourseNativeFlagCatalog)(options.host), nativeEmojiMenu = (0, import_native_host_api.discourseNativeEmojiMenu)(options.host), nativeAdminMenu = (0, import_native_host_api.discourseNativePostAdminMenu)(options.host), nativePostModels = new import_native_post_model_factory.DiscourseNativePostModelFactory(options.host), nativeBookmarkForm = new import_native_host_api.BrowserDiscourseNativeBookmarkForm(options.host);
+	      } = options.topicFactory, topicBaseUrl = options.topic.origin ?? options.data.rateLimit.baseUrl ?? options.document.baseURI, nativeRelativeTime = (0, import_native_host_api.discourseNativeRelativeTimeFormatter)(options.host), nativeExactTime = (0, import_native_host_api.discourseNativeExactTimeFormatter)(options.host), nativeTopicPresentation = (0, import_native_host_api.discourseNativeTopicPresentation)(options.host), nativeTopicEditCatalog = (0, import_native_host_api.discourseNativeTopicEditCatalog)(options.host), nativePresence = new import_native_presence.BrowserDiscoursePresencePort(options.host), nativeTopicLinks = (0, import_native_host_api.discourseNativeTopicLinks)(options.host, topicBaseUrl), topicSummaryTransport = (() => {
+	        try {
+	          return new URL(
+	            topicBaseUrl,
+	            options.document.baseURI
+	          ).hostname.toLocaleLowerCase() === "linux.do" ? new import_discourse_native_read_transport.BrowserDiscourseNativeMutationTransport(this.nativeAjax) : null;
+	        } catch {
+	          return null;
+	        }
+	      })(), nativeFlagCatalog = (0, import_native_host_api.discourseNativeFlagCatalog)(options.host), nativeEmojiMenu = (0, import_native_host_api.discourseNativeEmojiMenu)(options.host), nativeAdminMenu = (0, import_native_host_api.discourseNativePostAdminMenu)(options.host, {
+	        computePosition: (anchor, content) => {
+	          (0, import_reader_native_post_admin_menu.positionReaderNativePostAdminMenu)({
+	            document: options.document,
+	            reader: this.shell.view.modal,
+	            anchor,
+	            content
+	          });
+	        }
+	      }), nativePostModels = new import_native_post_model_factory.DiscourseNativePostModelFactory(options.host), nativeBookmarkForm = new import_native_host_api.BrowserDiscourseNativeBookmarkForm(options.host);
 	      this.postReactions = new import_reader_post_action_feature.DiscoursePostReactionCatalog(
 	        nativePostModels
 	      );
-	      const postReactions = this.postReactions, topicFeatures = /* @__PURE__ */ new WeakMap(), topicDoms = /* @__PURE__ */ new WeakMap(), topicContextSurfaces = /* @__PURE__ */ new WeakMap(), topicHeaders = /* @__PURE__ */ new WeakMap(), topicHeaderViews = /* @__PURE__ */ new WeakMap(), topicOnlyOpControllers = /* @__PURE__ */ new WeakMap(), topicNavigations = /* @__PURE__ */ new WeakMap(), topicFlows = /* @__PURE__ */ new WeakMap(), topicTimelines = /* @__PURE__ */ new WeakMap(), topicTimelineViews = /* @__PURE__ */ new WeakMap(), topicLiveNavigations = /* @__PURE__ */ new WeakMap(), topicLiveNavigationViews = /* @__PURE__ */ new WeakMap();
-	      if (options.notifications === !1)
+	      const postReactions = this.postReactions, topicFeatures = /* @__PURE__ */ new WeakMap(), topicDoms = /* @__PURE__ */ new WeakMap(), topicContextSurfaces = /* @__PURE__ */ new WeakMap(), topicHeaders = /* @__PURE__ */ new WeakMap(), topicHeaderViews = /* @__PURE__ */ new WeakMap(), topicOnlyOpControllers = /* @__PURE__ */ new WeakMap(), topicNavigations = /* @__PURE__ */ new WeakMap(), topicFlows = /* @__PURE__ */ new WeakMap(), topicTimelines = /* @__PURE__ */ new WeakMap(), topicTimelineViews = /* @__PURE__ */ new WeakMap(), topicLiveNavigations = /* @__PURE__ */ new WeakMap(), topicLiveNavigationViews = /* @__PURE__ */ new WeakMap(), topicSummaryPreviews = /* @__PURE__ */ new WeakMap(), authenticatedCollectionScope = options.topic.authScope.startsWith("account:");
+	      if (options.notifications === !1 || !authenticatedCollectionScope)
 	        this.notificationNative = null, this.notificationRequests = null, this.notificationActions = null, this.notificationController = null, this.notificationPanelView = null;
 	      else {
 	        const notificationOptions = options.notifications ?? {}, notificationAbort = this.scope.abortController(
@@ -1501,7 +1553,9 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            normalizeRecord: import_reader_notification_model.normalizeStoredReaderNotification,
 	            sortRecords: import_reader_notification_model.sortReaderNotifications,
 	            pageSize: 60,
-	            retainForMs: 4320 * 60 * 6e4
+	            retainForMs: 4320 * 60 * 6e4,
+	            permanent: !0,
+	            coordination: this.data.cacheCoordination
 	          }),
 	          native: this.notificationNative,
 	          actions: this.notificationActions,
@@ -1535,6 +1589,8 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            historyRetryDelayMs: notificationOptions.historyRetryDelayMs
 	          },
 	          visibleHistoryConcurrency: notificationOptions.visibleHistoryConcurrency ?? 3,
+	          historyCoordination: this.data.cacheCoordination,
+	          historyCoordinationKey: `reader-notification-history:v1:${options.topic.authScope}`,
 	          activity: {
 	            visible: () => options.document.visibilityState !== "hidden",
 	            subscribe: (listener) => {
@@ -1584,7 +1640,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	          )
 	        });
 	      }
-	      if (options.bookmarks === !1)
+	      if (options.bookmarks === !1 || !authenticatedCollectionScope)
 	        this.bookmarkNative = null, this.bookmarkRequests = null, this.bookmarkActions = null, this.bookmarkController = null, this.bookmarkPanelView = null;
 	      else {
 	        const bookmarkOptions = options.bookmarks ?? {}, bookmarkAbort = this.scope.abortController(
@@ -1636,7 +1692,9 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            normalizeRecord: import_reader_bookmark_model.normalizeStoredReaderBookmark,
 	            sortRecords: import_reader_bookmark_model.sortReaderBookmarkRecords,
 	            pageSize: 60,
-	            retainForMs: 4320 * 60 * 6e4
+	            retainForMs: 4320 * 60 * 6e4,
+	            permanent: !0,
+	            coordination: this.data.cacheCoordination
 	          }),
 	          native: this.bookmarkNative,
 	          actions: this.bookmarkActions,
@@ -1655,6 +1713,9 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            liveRefreshDelayMs: bookmarkOptions.liveRefreshDelayMs
 	          },
 	          backgroundWarmDelayMs: bookmarkOptions.backgroundWarmDelayMs ?? 2400,
+	          visibleHistoryConcurrency: bookmarkOptions.visibleHistoryConcurrency ?? 3,
+	          historyCoordination: this.data.cacheCoordination,
+	          historyCoordinationKey: `reader-bookmark-history:v1:${options.topic.authScope}`,
 	          ...bookmarkOptions.changeTabOrder === void 0 ? {} : {
 	            changeTabOrder: bookmarkOptions.changeTabOrder
 	          },
@@ -2085,7 +2146,99 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	              "post-action",
 	              cause
 	            )
-	          }), topicActionRail = options.topicActionRail ? new import_reader_topic_action_rail.ReaderTopicActionRail({
+	          });
+	          let topicActionRail = null;
+	          const topicSummaryImagePicker = this.imageResources ? new import_reader_lightbox_image_picker.ReaderLightboxImagePicker({
+	            document: options.document,
+	            mount: this.shell.view.surfaceHost,
+	            catalog: topicImages,
+	            originalSources: this.imageResources,
+	            maximumSelected: 6,
+	            notify: (message) => this.feedback.show(message),
+	            parentScope: context.scope,
+	            onError: (cause) => reportTopicFeature(
+	              context.topicId,
+	              "image-index",
+	              cause
+	            )
+	          }) : null, topicSummaryPreview = options.lightbox && options.resources ? { open: null } : null;
+	          topicSummaryPreview && (topicSummaryPreviews.set(context.scope, topicSummaryPreview), context.scope.add(() => topicSummaryPreviews.delete(context.scope)));
+	          const topicSummarySurface = topicSummaryTransport && options.topicActionRail ? new import_reader_topic_summary_surface.ReaderTopicSummarySurface({
+	            document: options.document,
+	            mount: this.shell.view.surfaceHost,
+	            request: new import_reader_topic_summary_request_adapter.ReaderTopicSummaryRequestAdapter({
+	              gateway: this.data.gateway,
+	              transport: topicSummaryTransport,
+	              authScope: options.topic.authScope,
+	              topicId: context.topicId,
+	              signal: context.signal,
+	              ...options.topic.basePath === void 0 ? {} : { basePath: options.topic.basePath }
+	            }),
+	            ...this.translationRequests ? {
+	              aiModels: this.translationRequests,
+	              customRequest: new import_reader_topic_custom_summary.ReaderTopicCustomSummaryRequestAdapter({
+	                document: options.document,
+	                baseUrl: topicBaseUrl,
+	                session: bundle.services.session,
+	                topology: bundle.services.replies.topology,
+	                completion: this.translationRequests,
+	                signal: context.signal
+	              })
+	            } : {},
+	            ...topicSummaryImagePicker && this.imageResources ? {
+	              imagePicker: topicSummaryImagePicker,
+	              imageResources: this.imageResources
+	            } : {},
+	            uploader: new import_reader_topic_summary_request_adapter.ReaderTopicSummaryImageUploadAdapter({
+	              gateway: this.data.gateway,
+	              transport: topicSummaryTransport,
+	              authScope: options.topic.authScope,
+	              topicId: context.topicId,
+	              signal: context.signal,
+	              createFormData: () => {
+	                const Constructor = options.document.defaultView?.FormData ?? FormData;
+	                return new Constructor();
+	              },
+	              ...options.topic.basePath === void 0 ? {} : { basePath: options.topic.basePath }
+	            }),
+	            topicTitle: () => {
+	              const topic = bundle.services.session.topic;
+	              return String(
+	                topic?.title ?? options.document.title ?? ""
+	              );
+	            },
+	            topicUrl: () => nativeTopicLinks.topicHref(context.topicId),
+	            openReply: async (raw) => {
+	              const topic = bundle.services.session.topic, firstPost = bundle.services.session.postByNumber(1);
+	              if (!topic || !firstPost)
+	                throw new Error("当前主题 #1 楼尚未就绪");
+	              await this.composer.openReply({
+	                topic,
+	                post: firstPost,
+	                initialRaw: raw
+	              });
+	            },
+	            ...options.share ? { clipboard: options.share } : {},
+	            ...this.blobDownloads ? { downloads: this.blobDownloads } : {},
+	            settingsStorage: options.storage,
+	            positionMode: () => this.shell.view.root.dataset.readerWorkspaceMode ?? "floating",
+	            ...options.topicSummaryFonts ? { fonts: options.topicSummaryFonts } : {},
+	            ...topicSummaryPreview ? {
+	              previewImage: (input) => {
+	                if (!topicSummaryPreview.open)
+	                  throw new Error("主题灯箱尚未完成装配");
+	                topicSummaryPreview.open(input);
+	              }
+	            } : {},
+	            notify: (message) => this.feedback.show(message),
+	            parentScope: context.scope,
+	            onError: (cause) => reportTopicFeature(
+	              context.topicId,
+	              "post-action",
+	              cause
+	            )
+	          }) : null;
+	          topicActionRail = options.topicActionRail ? new import_reader_topic_action_rail.ReaderTopicActionRail({
 	            document: options.document,
 	            mount: this.shell.view.modal,
 	            shellRoot: this.shell.view.root,
@@ -2107,6 +2260,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	                  `主帖操作列回顶失败：${result.status}`
 	                );
 	            },
+	            ...topicSummarySurface ? { openTopicSummary: () => topicSummarySurface.open() } : {},
 	            ...options.downloadCurrentTopic ? { downloadCurrentTopic: options.downloadCurrentTopic } : {},
 	            openChronicle: () => this.chronicleView.open(),
 	            openUnwantedTopics: () => this.unwantedTopicView.open(),
@@ -2117,8 +2271,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	              "post-action",
 	              cause
 	            )
-	          }) : null;
-	          topicActionRail && (0, import_reader_topic_action_rail.bindReaderTopicActionRailStarter)({
+	          }) : null, topicActionRail && (0, import_reader_topic_action_rail.bindReaderTopicActionRailStarter)({
 	            readStarter: () => bundle.services.session.postByNumber(1),
 	            loadStarter: () => bundle.services.session.loadTarget(1, {
 	              scope: "single",
@@ -2831,7 +2984,37 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	              cause
 	            );
 	          }
-	        }) : null, openTopicImage = options.openTopicImage, topicImageInteraction = topicLightbox || openTopicImage ? new import_reader_topic_image_interaction.ReaderTopicImageInteraction({
+	        }) : null, topicSummaryPreview = topicSummaryPreviews.get(context.scope), topicSummaryPreviewObjectUrls = options.resources?.objectUrls;
+	        topicLightbox && topicSummaryPreview && topicSummaryPreviewObjectUrls && (topicSummaryPreview.open = ({ blob, alt, returnFocus }) => {
+	          const source = topicSummaryPreviewObjectUrls.createObjectURL(blob);
+	          try {
+	            topicLightbox.open({
+	              items: [Object.freeze({
+	                key: `topic-summary-share:${context.topicId}:${Date.now()}`,
+	                topicId: context.topicId,
+	                sourcePostNumber: 1,
+	                imageOrder: 0,
+	                previewSrc: source,
+	                originalSrc: source,
+	                alt
+	              })],
+	              initialIndex: 0,
+	              returnFocus,
+	              commentsExpanded: !1,
+	              descriptionExpanded: !1,
+	              commentsEnabled: !1,
+	              includeTopicImages: !1,
+	              batchEnabled: !1
+	            }).view.scope.add(() => {
+	              topicSummaryPreviewObjectUrls.revokeObjectURL(source);
+	            });
+	          } catch (cause) {
+	            throw topicSummaryPreviewObjectUrls.revokeObjectURL(source), cause;
+	          }
+	        }, context.scope.add(() => {
+	          topicSummaryPreview.open = null;
+	        }));
+	        const openTopicImage = options.openTopicImage, topicImageInteraction = topicLightbox || openTopicImage ? new import_reader_topic_image_interaction.ReaderTopicImageInteraction({
 	          topicHost: result.value.root,
 	          additionalHosts: [
 	            topicContextSurface.discussionContentHost
@@ -3833,7 +4016,9 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	  return (0, import_reader_workspace_coordinator.createReaderShellWorkspaceStage)({
 	    ...shellOptions,
 	    onReady(shell, workspace, context) {
-	      const theme = themeByShell.get(shell) ?? null, appearance = appearanceByShell.get(shell) ?? null, font = fontByShell.get(shell) ?? null, rawNavigation = options.runtime.navigation;
+	      const theme = themeByShell.get(shell) ?? null, appearance = appearanceByShell.get(shell) ?? null, font = fontByShell.get(shell) ?? null, queryLocalFonts = createReaderLocalFontQuery(
+	        options.runtime.document
+	      ), rawNavigation = options.runtime.navigation;
 	      if (boostCopyPreferences && options.runtime.boostCopy)
 	        throw new Error(
 	          "Boost 复制偏好投影与自定义 runtime 读取器只能配置一个"
@@ -4049,6 +4234,10 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        ...lightbox === void 0 ? {} : { lightbox },
 	        ...boostCopy === void 0 ? {} : { boostCopy },
 	        ...topicActionRail === void 0 ? {} : { topicActionRail },
+	        topicSummaryFonts: Object.freeze({
+	          readCurrentFamily: () => options.runtime.document.defaultView?.getComputedStyle(shell.view.root).getPropertyValue("--ldp-post-font-family").trim() || "system-ui,sans-serif",
+	          ...queryLocalFonts ? { queryLocalFonts } : {}
+	        }),
 	        ...options.openQueue && options.runtime.resources ? {
 	          downloadCurrentTopic: () => downloadCurrentTopic?.()
 	        } : {},
@@ -4420,16 +4609,22 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	      const translationFormOptions = options.settings ? options.settings.translationForm : void 0;
 	      if (translationFormOptions && (!settingsView || !runtime.translationRequests))
 	        throw runtime.destroy(), new Error(
-	          "翻译设置 form 需要启用 Settings View 与 TranslationRequestAdapter"
+	          "翻译与 AI 服务设置 form 需要启用 Settings View 与 TranslationRequestAdapter"
 	        );
-	      settingsView && translationFormOptions && runtime.translationRequests && new import_reader_translation_settings_form.ReaderTranslationSettingsForm({
+	      settingsView && translationFormOptions && runtime.translationRequests && (new import_reader_translation_settings_form.ReaderTranslationSettingsForm({
 	        document: options.runtime.document,
 	        host: settingsView.panelHost("translation"),
 	        repository: translationFormOptions.repository,
-	        access: runtime.translationRequests,
 	        presentation: translationFormOptions.presentation,
 	        parentScope: runtime.scope
-	      });
+	      }), new import_reader_ai_service_settings_form.ReaderAiServiceSettingsForm({
+	        document: options.runtime.document,
+	        host: settingsView.panelHost("ai-service"),
+	        surfaceHost: shell.view.surfaceHost,
+	        repository: translationFormOptions.repository,
+	        access: runtime.translationRequests,
+	        parentScope: runtime.scope
+	      }));
 	      const interactionFormOptions = options.settings ? options.settings.interactionForm : void 0;
 	      if (interactionFormOptions && !settingsView)
 	        throw runtime.destroy(), new Error(
@@ -4457,7 +4652,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	          snapshot.open && snapshot.activePanelId === "interaction" && interactionForm.refreshCapabilities();
 	        }, runtime.scope);
 	      }
-	      if (settingsView && layout && new import_reader_layout_settings_form.ReaderLayoutSettingsForm({
+	      settingsView && layout && new import_reader_layout_settings_form.ReaderLayoutSettingsForm({
 	        document: options.runtime.document,
 	        host: settingsView.panelHost("layout"),
 	        controller: settings,
@@ -4469,20 +4664,14 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        controller: settings,
 	        appearance,
 	        parentScope: runtime.scope
-	      }), settingsView && font) {
-	        const localFontWindow = options.runtime.document.defaultView;
-	        new import_reader_font_settings_form.ReaderFontSettingsForm({
-	          document: options.runtime.document,
-	          host: settingsView.panelHost("font"),
-	          controller: settings,
-	          font,
-	          ...localFontWindow?.queryLocalFonts ? {
-	            queryLocalFonts: async () => (await localFontWindow.queryLocalFonts()).map((entry) => entry.family ?? "").filter(Boolean)
-	          } : {},
-	          parentScope: runtime.scope
-	        });
-	      }
-	      settingsView && motionPreferences && navigationPreferences && new import_reader_motion_settings_form.ReaderMotionSettingsForm({
+	      }), settingsView && font && new import_reader_font_settings_form.ReaderFontSettingsForm({
+	        document: options.runtime.document,
+	        host: settingsView.panelHost("font"),
+	        controller: settings,
+	        font,
+	        ...queryLocalFonts ? { queryLocalFonts } : {},
+	        parentScope: runtime.scope
+	      }), settingsView && motionPreferences && navigationPreferences && new import_reader_motion_settings_form.ReaderMotionSettingsForm({
 	        document: options.runtime.document,
 	        host: settingsView.panelHost("flash"),
 	        controller: settings,
@@ -4542,8 +4731,11 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        ...runtime.assetCaches ? { assetCaches: runtime.assetCaches } : {},
 	        ...webDavOptions ? {
 	          prepareClear: async (categories) => {
-	            const webDavCategories = [], protectedCategories = [];
-	            if (categories.includes("history") && (webDavCategories.push("history"), protectedCategories.push("history")), categories.includes("responses") && (webDavCategories.push("translation-cache"), protectedCategories.push("responses")), !webDavCategories.length)
+	            const {
+	              webDavCategories,
+	              protectedCategories
+	            } = readerWebDavCacheClearPlan(categories);
+	            if (!webDavCategories.length)
 	              return Object.freeze({
 	                failed: Object.freeze([])
 	              });
@@ -4564,7 +4756,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        } : {},
 	        applicationCaches: {
 	          stats: async () => {
-	            const users = runtime.users.cacheStats(), notifications = runtime.notificationController?.cacheStats() ?? { pages: 0, records: 0 }, bookmarks2 = runtime.bookmarkController?.cacheStats() ?? {
+	            const users = runtime.users.cacheStats(), userObservations = runtime.userObservations.cacheStats(), notifications = runtime.notificationController?.cacheStats() ?? { pages: 0, records: 0 }, bookmarks2 = runtime.bookmarkController?.cacheStats() ?? {
 	              bookmarks: 0,
 	              reactions: 0,
 	              boosts: 0,
@@ -4587,8 +4779,8 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	                  detail: runtime.shell.activeTopicId === null ? `当前会话：未打开主题；宿主身份派生：${hostIdentity.categoryEntries} 个分类键 · ${hostIdentity.tagEntries} 个标签` : `当前会话：主题 ${runtime.shell.activeTopicId}（清理时联网重建）；宿主身份派生：${hostIdentity.categoryEntries} 个分类键 · ${hostIdentity.tagEntries} 个标签`
 	                }),
 	                users: Object.freeze({
-	                  records: users.profiles + users.followLists + users.externalSnapshots + creditBridge.records,
-	                  detail: `内存热缓存：${users.profiles} 个资料 · ${users.followLists} 份关注列表 · ${users.externalSnapshots} 份账户摘要；LDC bridge ${creditBridge.records} 条（${creditBridge.bytes} B）`
+	                  records: users.profiles + users.followLists + users.externalSnapshots + creditBridge.records + userObservations.storedRecords,
+	                  detail: `内存热缓存：${users.profiles} 个资料 · ${users.followLists} 份关注列表 · ${users.externalSnapshots} 份账户摘要；用户观察：${userObservations.users} 人 · ${userObservations.memoryRecords} 条内存 / ${userObservations.storedRecords} 条持久投影；LDC bridge ${creditBridge.records} 条（${creditBridge.bytes} B）`
 	                }),
 	                notifications: Object.freeze({
 	                  records: notifications.records,
@@ -4609,7 +4801,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            const selected = new Set(categories), failed = [];
 	            if (selected.has("users"))
 	              try {
-	                runtime.users.clearCache(), await runtime.creditAccount?.clearCache();
+	                runtime.users.clearCache(), runtime.userObservations.clearCache(), await runtime.creditAccount?.clearCache();
 	              } catch (cause) {
 	                failed.push("users"), reportCacheError(cause);
 	              }
@@ -4647,10 +4839,17 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        onError: reportCacheError,
 	        parentScope: runtime.scope
 	      }) : null;
-	      cacheSurface && runtime.shell.changes.subscribe(
-	        () => cacheSurface.sync(),
-	        runtime.scope
-	      );
+	      if (cacheSurface) {
+	        runtime.shell.changes.subscribe(
+	          () => cacheSurface.sync(),
+	          runtime.scope
+	        );
+	        let cachePanelVisible = !1;
+	        settingsView?.changes.subscribe((snapshot) => {
+	          const visible = snapshot.open && snapshot.activePanelId === "cache";
+	          visible && !cachePanelVisible && cacheSurface.refresh(), cachePanelVisible = visible;
+	        }, runtime.scope);
+	      }
 	      const resourceMonitor = settingsView ? new import_reader_resource_monitor.ReaderResourceMonitor({
 	        document: options.runtime.document,
 	        host: settingsView.panelHost("logs"),
@@ -5386,6 +5585,15 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            queue: openQueue,
 	            preferences: {
 	              read: context.readPreferences,
+	              validate: (id, value) => {
+	                const preferences = context.readPreferences();
+	                return (0, import_reader_webdav_category_ports.readerWebDavPreferenceRecordMatchesSchema)(
+	                  preferences,
+	                  id,
+	                  value,
+	                  (candidate) => webDavOptions.preferencesCodec.export(candidate).settings
+	                );
+	              },
 	              update: (patch) => {
 	                context.updatePreferences(patch);
 	              }
@@ -5481,8 +5689,11 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        return !button || button.disabled || button.hidden ? !1 : (button.click(), !0);
 	      }, triggerHeaderPanel = (selector) => {
 	        const trigger = shell.view.root.querySelector(selector);
-	        return trigger ? (trigger.click(), !0) : !1;
-	      }, triggerFloatingPanelShortcut = (selector) => (0, import_reader_floating_window_frame.restoreReaderFloatingWindowTabSession)(shell.view.surfaceHost) || triggerHeaderPanel(selector), shortcuts = shortcutPreferences ? new import_reader_shortcut_controller.ReaderShortcutController({
+	        return !trigger || trigger.hidden || trigger.getAttribute("aria-disabled") === "true" || "disabled" in trigger && trigger.disabled ? !1 : (trigger.click(), !0);
+	      }, triggerFloatingPanelShortcut = (selector, tabId) => (0, import_reader_floating_window_frame.restoreReaderFloatingWindowTabSession)(
+	        shell.view.surfaceHost,
+	        tabId
+	      ) || triggerHeaderPanel(selector), shortcuts = shortcutPreferences ? new import_reader_shortcut_controller.ReaderShortcutController({
 	        target: options.runtime.document,
 	        preferences: shortcutPreferences,
 	        readPreferences: context.readPreferences,
@@ -5536,13 +5747,18 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	              return triggerHeaderPanel(".ldp-settings-toggle");
 	            case "notifications":
 	              return triggerFloatingPanelShortcut(
-	                ".ldp-notifications-toggle"
+	                ".ldp-notifications-toggle",
+	                "notifications"
 	              );
 	            case "historyPanel":
-	              return triggerFloatingPanelShortcut(".ldp-history-toggle");
+	              return triggerFloatingPanelShortcut(
+	                ".ldp-history-toggle",
+	                "history"
+	              );
 	            case "bookmarksPanel":
 	              return triggerFloatingPanelShortcut(
-	                ".ldp-bookmarks-toggle"
+	                ".ldp-bookmarks-toggle",
+	                "bookmarks"
 	              );
 	            case "likeTopic":
 	              return triggerTopicAction("button[data-post-like]");
@@ -5625,7 +5841,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    }
 	  });
 	}
-}, "2c9f9bd17812731a0b8e52eeb66840948ff116a33b4f70bc1cfbd0ac39b1a968");
+}, "7bd3194b979d0549d1788c64d3d54ae207e976b6d64bd40fe6fabd2b0b49198e");
 
 /* Source: lite/src/app/reader-data-runtime.ts */
 runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -6258,6 +6474,7 @@ runtime.register("src/components/reader-icon.js", function(module, exports, requ
 	  settings: "M9.7 4.1a2.34 2.34 0 0 1 4.6 0 2.34 2.34 0 0 0 3.3 1.9 2.34 2.34 0 0 1 2.4 4.1 2.34 2.34 0 0 0 0 3.8 2.34 2.34 0 0 1-2.4 4.1 2.34 2.34 0 0 0-3.3 1.9 2.34 2.34 0 0 1-4.6 0A2.34 2.34 0 0 0 6.4 18 2.34 2.34 0 0 1 4 13.9a2.34 2.34 0 0 0 0-3.8A2.34 2.34 0 0 1 6.4 6a2.34 2.34 0 0 0 3.3-1.9ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z",
 	  search: "M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-2.3 5.7L21 21",
 	  shield: "M12 2 21 5v6c0 5.7-3.7 9.4-9 11-5.3-1.6-9-5.3-9-11V5l9-3Zm0 3L6 7v4c0 3.9 2.2 6.5 6 8 3.8-1.5 6-4.1 6-8V7l-6-2Z",
+	  sparkles: "M12 3l1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2L12 3ZM19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14ZM5 14l.8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8L5 14Z",
 	  square: "M3 3h18v18H3z",
 	  "user-plus": "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm10-3v6m3-3h-6",
 	  upload: "M12 15V3m-5 5 5-5 5 5M5 21h14",
@@ -6349,7 +6566,7 @@ runtime.register("src/components/reader-icon.js", function(module, exports, requ
 	  }
 	  return resolveReaderIcon(document, name, rendered);
 	}
-}, "780d5eb031a941596efffc8935e78d4baae88de7d012ecdfa6859d696acda1b9");
+}, "44c88f76d9ed017c46ff4443d6d9668e460663d76eef84e2f284ca9d736d825b");
 
 /* Source: lite/src/components/reader-image-fallback.ts */
 runtime.register("src/components/reader-image-fallback.js", function(module, exports, require) {
@@ -10448,11 +10665,16 @@ runtime.register("src/shell/reader-assignment-form-surface.js", function(module,
 	class ReaderAssignmentFormSurface {
 	  scope;
 	  #host;
+	  #users;
+	  #scheduleLookup;
+	  #cancelLookup;
 	  constructor(options) {
 	    this.#host = new import_reader_action_form_support.ReaderActionFormSurfaceHost({
 	      ...options,
 	      label: "ReaderAssignmentFormSurface"
-	    }), this.scope = this.#host.scope;
+	    }), this.scope = this.#host.scope, this.#users = options.users, this.#scheduleLookup = options.schedule ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs)), this.#cancelLookup = options.cancel ?? ((handle) => globalThis.clearTimeout(
+	      handle
+	    ));
 	  }
 	  open(request) {
 	    if (request.signal?.aborted) return Promise.resolve(!1);
@@ -10465,35 +10687,139 @@ runtime.register("src/shell/reader-assignment-form-surface.js", function(module,
 	      cancelDataAttribute: "data-assignment-cancel",
 	      submitLabel: "确认指定",
 	      renderIcon: this.#host.renderIcon
-	    }), { form, status, submit } = frame, usernameField = document.createElement("label");
+	    });
+	    frame.dialog.classList.add("ldp-reader-assignment-dialog");
+	    const { form, status, submit } = frame, usernameField = document.createElement("label");
 	    usernameField.className = "ldp-reader-action-field";
+	    const usernameLookup = document.createElement("div");
+	    usernameLookup.className = "ldp-reader-assignment-user-lookup";
 	    const usernameLabel = document.createElement("span");
 	    usernameLabel.textContent = "用户名";
 	    const username = document.createElement("input");
-	    username.name = "username", username.type = "text", username.maxLength = 100, username.autocomplete = "off", username.placeholder = "不含 @", username.required = !0, username.value = String(request.initialUsername ?? "").replace(/^@+/, ""), usernameField.append(usernameLabel, username);
+	    username.name = "username", username.type = "text", username.maxLength = 100, username.autocomplete = "off", username.placeholder = "不含 @", username.required = !0, username.value = String(request.initialUsername ?? "").replace(/^@+/, ""), username.setAttribute("aria-describedby", `${titleId}-status`), username.setAttribute("aria-autocomplete", "list"), username.setAttribute("aria-controls", `${titleId}-candidates`), username.setAttribute("aria-expanded", "false"), status.id = `${titleId}-status`, usernameField.append(usernameLabel, username);
+	    const candidates = document.createElement("div");
+	    candidates.id = `${titleId}-candidates`, candidates.className = "ldp-reader-assignment-user-candidates", candidates.setAttribute("role", "listbox"), candidates.setAttribute("aria-label", "匹配的社区用户"), candidates.hidden = !0, usernameLookup.append(usernameField, candidates);
 	    const noteField = document.createElement("label");
 	    noteField.className = "ldp-reader-action-field";
 	    const noteLabel = document.createElement("span");
 	    noteLabel.textContent = "备注（选填）";
 	    const note = document.createElement("textarea");
-	    note.name = "note", note.maxLength = 1e3, note.placeholder = "说明这次指定的原因或任务", noteField.append(noteLabel, note), status.before(usernameField, noteField);
-	    const session = this.#host.start({
+	    note.name = "note", note.maxLength = 1e3, note.placeholder = "说明这次指定的原因或任务", noteField.append(noteLabel, note), status.before(usernameLookup, noteField);
+	    let lookupTimer = null, lookupSequence = 0, verifiedInput = "", verifiedUsername = "", candidateUsers = Object.freeze([]);
+	    const cancelLookup = () => {
+	      lookupSequence += 1, lookupTimer !== null && this.#cancelLookup(lookupTimer), lookupTimer = null;
+	    }, session = this.#host.start({
 	      frame,
 	      previousFocus,
 	      closeSelector: "[data-assignment-close]",
 	      cancelSelector: "[data-assignment-cancel]",
-	      signal: request.signal
-	    });
-	    return form.addEventListener("submit", (event) => {
-	      if (event.preventDefault(), session.busy) return;
-	      const normalizedUsername = username.value.trim().replace(/^@+/, ""), normalizedNote = note.value.trim();
-	      if (session.resetStatus(), !normalizedUsername) {
-	        status.textContent = "请输入要指定的用户名", username.focus();
+	      signal: request.signal,
+	      onSettled: cancelLookup
+	    }), normalizeUsername = (value) => value.trim().replace(/^@+/, ""), usernameKey = (value) => normalizeUsername(value).toLocaleLowerCase("zh-CN"), showLookupStatus = (message, tone) => {
+	      status.textContent = message, status.classList.toggle("success", tone === "success"), status.classList.toggle("is-neutral", tone === "neutral");
+	    }, hideCandidates = () => {
+	      candidates.hidden = !0, username.setAttribute("aria-expanded", "false");
+	    }, clearCandidates = () => {
+	      candidateUsers = Object.freeze([]), candidates.replaceChildren(), hideCandidates();
+	    }, selectUser = (user) => {
+	      const selectedUsername = normalizeUsername(user.username);
+	      selectedUsername && (cancelLookup(), username.value = selectedUsername, verifiedInput = usernameKey(selectedUsername), verifiedUsername = selectedUsername, username.setAttribute("aria-invalid", "false"), submit.disabled = !1, clearCandidates(), showLookupStatus(`已选择 @${selectedUsername}。`, "success"), username.focus({ preventScroll: !0 }));
+	    }, renderCandidates = (users) => {
+	      candidateUsers = Object.freeze(users.filter((user) => normalizeUsername(user.username)).slice(0, 20)), candidates.replaceChildren(...candidateUsers.map((user, index) => {
+	        const button = document.createElement("button");
+	        button.type = "button", button.dataset.assignmentUserCandidate = String(index), button.setAttribute("role", "option"), button.setAttribute("aria-selected", String(
+	          usernameKey(user.username) === usernameKey(verifiedUsername)
+	        ));
+	        const name = document.createElement("strong");
+	        name.textContent = String(user.name ?? "").trim() || `@${user.username}`;
+	        const detail = document.createElement("small");
+	        return detail.textContent = `@${user.username}${user.id ? ` · #${user.id}` : ""}`, button.append(name, detail), button;
+	      })), candidates.hidden = candidateUsers.length === 0, username.setAttribute(
+	        "aria-expanded",
+	        String(candidateUsers.length > 0)
+	      );
+	    }, scheduleLookup = (revealCandidates = !0) => {
+	      if (cancelLookup(), !session.active) return;
+	      verifiedInput = "", verifiedUsername = "", submit.disabled = !0, username.removeAttribute("aria-invalid"), clearCandidates();
+	      const query = normalizeUsername(username.value);
+	      if (!query) {
+	        showLookupStatus(
+	          "输入后会检索社区用户，只有真实用户名可以指定。",
+	          "neutral"
+	        );
 	        return;
 	      }
-	      session.submit({
+	      const sequence = lookupSequence;
+	      showLookupStatus("正在检索用户…", "neutral"), lookupTimer = this.#scheduleLookup(() => {
+	        lookupTimer = null, this.#users.searchUsers(query).then((users) => {
+	          if (!session.active || sequence !== lookupSequence) return;
+	          const key = usernameKey(query), numericId = /^\d+$/.test(query) ? Number(query) : null, visibleUsers = users.filter((user) => normalizeUsername(user.username)), matched = visibleUsers.find((user) => usernameKey(user.username) === key || Number.isSafeInteger(numericId) && numericId > 0 && user.id === numericId);
+	          if (revealCandidates && renderCandidates(visibleUsers), matched) {
+	            verifiedInput = key, verifiedUsername = normalizeUsername(matched.username), username.setAttribute("aria-invalid", "false"), submit.disabled = !1, showLookupStatus(
+	              `已找到 @${verifiedUsername}。`,
+	              "success"
+	            );
+	            return;
+	          }
+	          if (!visibleUsers.length) {
+	            username.setAttribute("aria-invalid", "true"), showLookupStatus(
+	              `没有找到“${query}”对应的社区用户。`,
+	              "error"
+	            );
+	            return;
+	          }
+	          showLookupStatus(
+	            `找到 ${visibleUsers.length} 个候选，请选择具体用户。`,
+	            "neutral"
+	          );
+	        }).catch(() => {
+	          !session.active || sequence !== lookupSequence || (clearCandidates(), username.setAttribute("aria-invalid", "true"), showLookupStatus("用户检索失败，请稍后重试。", "error"));
+	        });
+	      }, 240);
+	    };
+	    return username.addEventListener("input", () => scheduleLookup()), username.addEventListener("keydown", (event) => {
+	      if (event.key === "Escape" && !candidates.hidden) {
+	        event.preventDefault(), hideCandidates();
+	        return;
+	      }
+	      if (event.key !== "ArrowDown" || candidates.hidden) return;
+	      const first = candidates.querySelector("button");
+	      first && (event.preventDefault(), first.focus({ preventScroll: !0 }));
+	    }), candidates.addEventListener("click", (event) => {
+	      const button = event.target?.closest(
+	        "button[data-assignment-user-candidate]"
+	      );
+	      if (!button) return;
+	      const user = candidateUsers[Number(button.dataset.assignmentUserCandidate)];
+	      user && selectUser(user);
+	    }), candidates.addEventListener("keydown", (event) => {
+	      const buttons = [...candidates.querySelectorAll("button")], current = event.target?.closest(
+	        "button[data-assignment-user-candidate]"
+	      ), index = current ? buttons.indexOf(current) : -1;
+	      if (event.key === "Escape") {
+	        event.preventDefault(), hideCandidates(), username.focus({ preventScroll: !0 });
+	        return;
+	      }
+	      if (!buttons.length || !["ArrowDown", "ArrowUp"].includes(event.key)) return;
+	      event.preventDefault();
+	      const offset = event.key === "ArrowDown" ? 1 : -1;
+	      buttons[(index + offset + buttons.length) % buttons.length]?.focus({ preventScroll: !0 });
+	    }), form.addEventListener("focusin", (event) => {
+	      usernameLookup.contains(event.target) || hideCandidates();
+	    }), form.addEventListener("submit", (event) => {
+	      if (event.preventDefault(), session.busy) return;
+	      const normalizedUsername = normalizeUsername(username.value), normalizedNote = note.value.trim();
+	      if (!normalizedUsername) {
+	        scheduleLookup(), username.focus();
+	        return;
+	      }
+	      if (!verifiedUsername || verifiedInput !== usernameKey(normalizedUsername)) {
+	        scheduleLookup(), username.focus();
+	        return;
+	      }
+	      status.classList.remove("is-neutral"), session.resetStatus(), session.submit({
 	        execute: () => request.submit(Object.freeze({
-	          username: normalizedUsername,
+	          username: verifiedUsername,
 	          note: normalizedNote
 	        })),
 	        setBusy: (busy) => (0, import_reader_action_form_support.setReaderActionFormBusy)(
@@ -10506,13 +10832,13 @@ runtime.register("src/shell/reader-assignment-form-surface.js", function(module,
 	        successMessage: (message) => message || "指定已更新",
 	        failureMessage: (cause) => cause instanceof Error ? cause.message : "指定失败，请重试"
 	      });
-	    }), session.mount(() => username.focus({ preventScroll: !0 })), session.result;
+	    }), session.mount(() => username.focus({ preventScroll: !0 })), scheduleLookup(!1), session.result;
 	  }
 	  destroy() {
 	    this.#host.destroy();
 	  }
 	}
-}, "d3cfc6ae2bfd3be19338f0fa6631051f17f122abad4b9b95e5a299b5d35f9d5e");
+}, "bafbf9aad17fff35ba421f5cd5887e74f855572affd55569a16854e4972f8dff");
 
 /* Source: lite/src/shell/reader-choice-form-surface.ts */
 runtime.register("src/shell/reader-choice-form-surface.js", function(module, exports, require) {
@@ -10714,6 +11040,7 @@ runtime.register("src/shell/reader-escape-surface.js", function(module, exports,
 	module.exports = __toCommonJS(reader_escape_surface_exports);
 	const ESCAPE_SURFACE_SELECTOR = [
 	  ".ldp-reader-action-layer:not([hidden])",
+	  ".ldp-ai-service-model-metadata:not([hidden])",
 	  ".ldp-avatar-viewer",
 	  ".ldp-native-boost-menu:not([hidden])",
 	  '[data-identifier="ldp-native-boost-emoji-picker"]',
@@ -10744,6 +11071,7 @@ runtime.register("src/shell/reader-escape-surface.js", function(module, exports,
 	function declaredSurfaceZIndex(element) {
 	  for (const [selector, zIndex] of [
 	    [".ldp-reader-action-layer", 2147483612],
+	    [".ldp-ai-service-model-metadata", 2147483612],
 	    [".ldp-user-card-follow-preview.is-above-user-observation-window", 2147483619],
 	    [".ldp-user-card-follow-panel.is-above-user-observation-window", 2147483618],
 	    [".ldp-user-card-fallback.is-above-user-observation-window", 2147483617],
@@ -10822,7 +11150,7 @@ runtime.register("src/shell/reader-escape-surface.js", function(module, exports,
 	  const frontmost = readerFrontmostEscapeSurface(document);
 	  return frontmost ? (Array.isArray(owners) ? owners : [owners]).some((owner) => owner === frontmost) : !0;
 	}
-}, "3fdbc7a9fd5da4c3f6e80d5e90f072d3e27dbbc97640d672c6f468077695c731");
+}, "2c7a02acf9e893a104eef25e40506f26cad42004754ff606c5be4c7e3e345dfc");
 
 /* Source: lite/src/shell/reader-exclusive-panel-coordinator.ts */
 runtime.register("src/shell/reader-exclusive-panel-coordinator.js", function(module, exports, require) {
@@ -11062,13 +11390,26 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    selector: ".ldp-topic-action-rail-unwanted-topics",
 	    id: "unwanted-topics"
 	  })
-	]), READER_FLOATING_WINDOW_LAUNCHER_SELECTOR = READER_FLOATING_WINDOW_LAUNCHERS.map(({ selector }) => selector).join(","), floatingWindowTabGroups = /* @__PURE__ */ new WeakMap();
+	]), READER_FLOATING_WINDOW_LAUNCHER_SELECTOR = READER_FLOATING_WINDOW_LAUNCHERS.map(({ selector }) => selector).join(","), READER_FLOATING_WINDOW_SCROLLBAR_GUARD_PX = 6, floatingWindowTabGroups = /* @__PURE__ */ new WeakMap();
 	function eventPathMatches(event, selector) {
 	  const composed = typeof event.composedPath == "function" ? event.composedPath() : [event.target];
 	  return (composed.length ? composed : [event.target]).some((target) => {
 	    const matches = target?.matches;
 	    return typeof matches == "function" && matches.call(target, selector);
 	  });
+	}
+	function pointerHitsHorizontalScrollbar(event, element) {
+	  if (element.scrollWidth <= element.clientWidth + 1) return !1;
+	  const bounds = element.getBoundingClientRect();
+	  if (bounds.width <= 0 || bounds.height <= 0) return !1;
+	  const measuredHeight = Math.max(
+	    0,
+	    Number(element.offsetHeight) - Number(element.clientHeight)
+	  ), guardHeight = Math.max(
+	    READER_FLOATING_WINDOW_SCROLLBAR_GUARD_PX,
+	    measuredHeight
+	  );
+	  return event.clientX >= bounds.left && event.clientX <= bounds.right && event.clientY >= bounds.bottom - guardHeight && event.clientY <= bounds.bottom;
 	}
 	class ReaderFloatingWindowTabGroup {
 	  #document;
@@ -11079,6 +11420,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	  #onPointerDown;
 	  #onClick;
 	  #active = null;
+	  #sharedGeometry = null;
 	  #pinned = !1;
 	  #tabScrollLeft = 0;
 	  #visible = !1;
@@ -11094,11 +11436,11 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    const existing = this.#frames.get(frame.tabId);
 	    if (existing && existing !== frame)
 	      throw new Error(`浮窗标签 id 重复：${frame.tabId}`);
-	    this.#captureTabScroll(), this.#frames.size ? frame.syncSharedPinned(this.#pinned) : this.#pinned = frame.pinned, this.#frames.set(frame.tabId, frame), this.#sync();
+	    this.#captureTabScroll(), this.#captureSharedGeometry(), this.#frames.size ? frame.syncSharedPinned(this.#pinned) : this.#pinned = frame.pinned, this.#frames.set(frame.tabId, frame), this.#sync();
 	  }
 	  unregister(frame) {
 	    if (this.#frames.get(frame.tabId) !== frame) return;
-	    this.#captureTabScroll(), this.#frames.delete(frame.tabId);
+	    this.#captureTabScroll(), this.#captureSharedGeometry(), this.#frames.delete(frame.tabId);
 	    const index = this.#opened.indexOf(frame);
 	    index >= 0 && this.#opened.splice(index, 1), this.#active === frame && (this.#active = this.#opened[Math.min(index, this.#opened.length - 1)] ?? this.#opened.at(-1) ?? null), this.#opened.length || (this.#visible = !1), this.#sync(), !this.#frames.size && (this.#document.removeEventListener(
 	      "pointerdown",
@@ -11108,13 +11450,13 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	  }
 	  open(frame) {
 	    if (!this.#frames.has(frame.tabId)) return;
-	    this.#captureTabScroll();
+	    this.#captureTabScroll(), this.#visible ? this.#captureSharedGeometry() : this.#sharedGeometry = frame.geometry.snapshot.geometry;
 	    const revealActive = !this.#opened.includes(frame);
 	    revealActive && this.#opened.push(frame), this.#active = frame, this.#visible = !0, this.#sync(revealActive);
 	  }
 	  close(frame) {
 	    const index = this.#opened.indexOf(frame);
-	    index < 0 || (this.#captureTabScroll(), this.#opened.splice(index, 1), this.#active === frame && (this.#active = this.#opened[Math.min(index, this.#opened.length - 1)] ?? this.#opened.at(-1) ?? null), this.#opened.length || (this.#visible = !1), this.#sync());
+	    index < 0 || (this.#captureTabScroll(), this.#captureSharedGeometry(), this.#opened.splice(index, 1), this.#active === frame && (this.#active = this.#opened[Math.min(index, this.#opened.length - 1)] ?? this.#opened.at(-1) ?? null), this.#opened.length || (this.#visible = !1), this.#sync());
 	  }
 	  activate(frame) {
 	    !frame.isOpen || !this.#opened.includes(frame) || frame.open();
@@ -11139,16 +11481,25 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    }
 	  }
 	  refresh() {
-	    this.#captureTabScroll(), this.#sync();
+	    this.#captureTabScroll(), this.#captureSharedGeometry(), this.#sync();
 	  }
-	  restore() {
-	    return this.#visible || !this.#opened.length ? !1 : ((!this.#active || !this.#opened.includes(this.#active)) && (this.#active = this.#opened.at(-1) ?? null), this.#visible = !!this.#active, this.#sync(), this.#visible);
+	  restore(tabId) {
+	    if (this.#visible || !this.#opened.length) return !1;
+	    if (this.#captureSharedGeometry(), tabId) {
+	      const requested = this.#frames.get(tabId);
+	      if (!requested || !this.#opened.includes(requested)) return !1;
+	      this.#active = requested;
+	    } else (!this.#active || !this.#opened.includes(this.#active)) && (this.#active = this.#opened.at(-1) ?? null);
+	    return this.#visible = !!this.#active, this.#sync(), this.#visible;
 	  }
 	  #closeMenus() {
 	    for (const frame of this.#frames.values()) frame.closeAddMenu();
 	  }
 	  #dismiss() {
-	    this.#captureTabScroll(), this.#visible = !1, this.#sync();
+	    this.#captureTabScroll(), this.#captureSharedGeometry(), this.#visible = !1, this.#sync();
+	  }
+	  #captureSharedGeometry() {
+	    this.#active && (this.#sharedGeometry = this.#active.geometry.snapshot.geometry);
 	  }
 	  #captureTabScroll() {
 	    if (!this.#active?.active) return;
@@ -11156,6 +11507,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    Number.isFinite(scrollLeft) && (this.#tabScrollLeft = Math.max(0, scrollLeft));
 	  }
 	  #sync(revealActive = !1) {
+	    !this.#sharedGeometry && this.#active && (this.#sharedGeometry = this.#active.geometry.snapshot.geometry), this.#active && this.#sharedGeometry && this.#active.applySharedGeometry(this.#sharedGeometry);
 	    const remaining = [...this.#frames.values()].filter((frame) => !this.#opened.includes(frame)).sort((left, right) => left.tabOrder - right.tabOrder);
 	    for (const frame of this.#frames.values())
 	      frame.syncTabVisibility(this.#visible && frame === this.#active);
@@ -11173,8 +11525,8 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	  const created = new ReaderFloatingWindowTabGroup(document, mount);
 	  return floatingWindowTabGroups.set(mount, created), created;
 	}
-	function restoreReaderFloatingWindowTabSession(mount) {
-	  return floatingWindowTabGroups.get(mount)?.restore() ?? !1;
+	function restoreReaderFloatingWindowTabSession(mount, tabId) {
+	  return floatingWindowTabGroups.get(mount)?.restore(tabId) ?? !1;
 	}
 	function storedPreferences(storage, key) {
 	  try {
@@ -11249,24 +11601,28 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	  #geometryStorage;
 	  #geometryStorageKey;
 	  #requestOpen;
+	  #tabAction;
 	  #notify;
 	  #tabGroup;
+	  #launcherSelector;
 	  #tabLabel;
 	  #iconName;
 	  #open = !1;
 	  #active = !1;
 	  constructor(options) {
 	    this.#onClose = options.onClose ?? (() => {
-	    }), this.#baseZIndex = options.zIndex, this.#geometryStorage = options.geometryStorage, this.#geometryStorageKey = options.geometryStorageKey, this.#requestOpen = options.requestOpen, this.#notify = options.notify ?? (() => {
+	    }), this.#baseZIndex = options.zIndex, this.#geometryStorage = options.geometryStorage, this.#geometryStorageKey = options.geometryStorageKey, this.#requestOpen = options.requestOpen, this.#tabAction = options.tabAction ?? null, this.#tabAction?.classList.add("ldp-reader-floating-window-tab-action");
+	    const standalone = options.sessionMode === "standalone";
+	    this.#launcherSelector = standalone ? options.launcherSelector ?? null : null, this.#notify = options.notify ?? (() => {
 	    }), this.tabId = options.tabId, this.tabOrder = options.tabOrder, this.#tabLabel = options.title, this.#iconName = options.icon, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.host = (0, import_html_element.htmlElement)(
 	      options.document,
 	      "div",
 	      `ldp-reader-floating-host is-${options.variant}`
-	    ), this.host.style.zIndex = String(options.zIndex), options.mount.append(this.host), this.element = (0, import_html_element.htmlElement)(
+	    ), this.host.style.zIndex = String(options.zIndex), this.host.classList.toggle("is-standalone", standalone), options.mount.append(this.host), this.element = (0, import_html_element.htmlElement)(
 	      options.document,
 	      "section",
 	      `ldp-reader-floating-window is-${options.variant}`
-	    ), this.element.hidden = !0, this.element.setAttribute("role", "dialog"), this.element.setAttribute("aria-label", options.ariaLabel), this.header = (0, import_html_element.htmlElement)(
+	    ), this.element.hidden = !0, this.element.classList.toggle("is-standalone", standalone), this.element.setAttribute("role", "dialog"), this.element.setAttribute("aria-label", options.ariaLabel), this.header = (0, import_html_element.htmlElement)(
 	      options.document,
 	      "header",
 	      "ldp-reader-floating-window-head"
@@ -11275,7 +11631,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	      "strong",
 	      "ldp-reader-floating-window-title",
 	      options.title
-	    ), this.title.hidden = !0, this.tabList = (0, import_html_element.htmlElement)(
+	    ), this.title.hidden = !standalone, this.tabList = (0, import_html_element.htmlElement)(
 	      options.document,
 	      "nav",
 	      "ldp-reader-floating-window-tabs"
@@ -11303,7 +11659,13 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	      options.document,
 	      "div",
 	      "ldp-reader-floating-window-toolbar-row"
-	    ), this.toolbarRow.append(this.meta, this.actions), this.header.append(
+	    ), this.toolbarRow.append(this.meta, this.actions), standalone ? this.header.append(
+	      this.title,
+	      this.meta,
+	      this.pinButton,
+	      ...this.#tabAction ? [this.#tabAction] : [],
+	      this.closeButton
+	    ) : this.header.append(
 	      this.title,
 	      this.tabRow,
 	      this.toolbarRow
@@ -11380,7 +11742,13 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	      requestFrame,
 	      cancelFrame,
 	      dragSurfaceSelector: ".ldp-reader-floating-window-head[data-reader-floating-drag-surface]",
-	      blockedSelector: '.ldp-reader-floating-window-tab-row,button,input,select,textarea,label,a,[role="button"],[contenteditable="true"]',
+	      blockedSelector: 'button,input,select,textarea,label,a,[role="button"],[contenteditable="true"]',
+	      isDragBlocked: (event, target) => {
+	        const tabs = target.closest(
+	          ".ldp-reader-floating-window-tabs"
+	        );
+	        return tabs === this.tabList && pointerHitsHorizontalScrollbar(event, tabs);
+	      },
 	      interactingClassName: "ldp-reader-floating-window-interacting",
 	      restingTransform: "none",
 	      projectPlacement: () => {
@@ -11398,10 +11766,10 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    }, { passive: !1 }), view && this.scope.listen(view, "resize", () => {
 	      const next = viewport(options.document, options.mount);
 	      this.geometry.resizeViewport(next.width, next.height);
-	    }), this.#tabGroup = tabGroup(options.document, options.mount), this.#tabGroup.register(this), this.scope.listen(this.pinButton, "click", () => {
-	      this.#tabGroup.syncPinnedFrom(this);
+	    }), this.#tabGroup = standalone ? null : tabGroup(options.document, options.mount), this.#tabGroup?.register(this), this.#tabGroup && this.scope.listen(this.pinButton, "click", () => {
+	      this.#tabGroup?.syncPinnedFrom(this);
 	    }), this.scope.add(() => {
-	      this.#tabGroup.unregister(this), this.host.remove();
+	      this.#tabGroup?.unregister(this), this.host.remove();
 	    });
 	  }
 	  get isOpen() {
@@ -11414,16 +11782,24 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    return this.#active;
 	  }
 	  setIcon(name) {
-	    this.#iconName = name, this.#tabGroup.refresh();
+	    this.#iconName = name, this.#tabGroup?.refresh();
 	  }
 	  setTitle(value) {
-	    this.title.textContent = value, this.#tabGroup.refresh();
+	    this.title.textContent = value, this.#tabGroup?.refresh();
 	  }
 	  setMinimumWidth(width) {
 	    this.geometry.setMinimumWidth(width);
 	  }
+	  applySharedGeometry(geometry) {
+	    this.geometry.setGeometry(
+	      geometry.width,
+	      geometry.height,
+	      geometry.left,
+	      geometry.top
+	    );
+	  }
 	  open() {
-	    this.scope.destroyed || (this.#syncSharedGeometry(), this.#open = !0, this.element.classList.add("is-open"), this.#tabGroup.open(this));
+	    this.scope.destroyed || (this.#syncSharedGeometry(), this.#open = !0, this.element.classList.add("is-open"), this.#tabGroup ? this.#tabGroup.open(this) : this.syncTabVisibility(!0));
 	  }
 	  #syncSharedGeometry() {
 	    const restored = storedPreferences(
@@ -11435,16 +11811,16 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	      restored.readerWindowHeight,
 	      restored.readerWindowX,
 	      restored.readerWindowY
-	    ), this.syncSharedPinned(this.#tabGroup.pinned);
+	    ), this.#tabGroup && this.syncSharedPinned(this.#tabGroup.pinned);
 	  }
 	  close() {
-	    !this.#open || this.scope.destroyed || (this.#open = !1, this.element.classList.remove("is-open"), this.#tabGroup.close(this), this.#onClose());
+	    !this.#open || this.scope.destroyed || (this.#open = !1, this.element.classList.remove("is-open"), this.#tabGroup ? this.#tabGroup.close(this) : this.syncTabVisibility(!1), this.#onClose());
 	  }
 	  dismissFromPointerEvent(event) {
-	    return !this.#open || !this.#active || this.pinned || this.contains(event.target) || eventPathMatches(event, ".ldp-reader-floating-window") || this.#tabGroup.isLauncherEvent(event) ? !1 : this.#tabGroup.dismissFromPointerEvent(this, event);
+	    return !this.#open || !this.#active || this.pinned || this.contains(event.target) || eventPathMatches(event, ".ldp-reader-floating-window") || this.#launcherSelector && eventPathMatches(event, this.#launcherSelector) || this.#tabGroup?.isLauncherEvent(event) ? !1 : this.#tabGroup ? this.#tabGroup.dismissFromPointerEvent(this, event) : (this.close(), !0);
 	  }
 	  dismissFromEscapeEvent(event) {
-	    return !this.#open || !this.#active ? !1 : this.#tabGroup.dismissFromEscapeEvent(this, event);
+	    return !this.#open || !this.#active ? !1 : this.#tabGroup ? this.#tabGroup.dismissFromEscapeEvent(this, event) : event.key !== "Escape" || !(0, import_reader_escape_surface.readerEscapeOwnedBy)(this.#document(), [this.element]) ? !1 : (event.preventDefault(), event.stopImmediatePropagation(), this.pinned || this.close(), !0);
 	  }
 	  syncSharedPinned(pinned) {
 	    this.pinned !== pinned && this.geometry.setPinned(pinned);
@@ -11453,7 +11829,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    this.#active = active && this.#open, this.element.hidden = !this.#active, this.element.classList.toggle("is-active-tab", this.#active), this.#active || this.closeAddMenu();
 	  }
 	  renderTabChrome(opened, remaining, scrollLeft, revealActive) {
-	    this.#active && (this.tabList.replaceChildren(...opened.map((frame) => {
+	    !this.#active || !this.#tabGroup || (this.tabList.replaceChildren(...opened.map((frame) => {
 	      const item = (0, import_html_element.htmlElement)(
 	        this.#document(),
 	        "div",
@@ -11473,7 +11849,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	          frame.#tabLabel
 	        )
 	      ), activate.addEventListener("click", () => {
-	        this.#tabGroup.activate(frame);
+	        this.#tabGroup?.activate(frame);
 	      });
 	      const close = frame === this ? this.closeButton : this.#document().createElement("button");
 	      return frame !== this && (close.type = "button", close.className = "ldp-reader-floating-window-close", close.append((0, import_reader_icon.createReaderIcon)(this.#document(), "x")), close.addEventListener("click", () => frame.close())), close.dataset.floatingTabClose = frame.tabId, close.setAttribute(
@@ -11483,7 +11859,11 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	        event.button === 1 && (event.preventDefault(), event.stopPropagation());
 	      }), item.addEventListener("auxclick", (event) => {
 	        event.button === 1 && (event.preventDefault(), event.stopPropagation(), frame.close());
-	      }), item.append(activate, close), item;
+	      }), item.append(
+	        activate,
+	        ...frame === this && frame.#tabAction ? [frame.#tabAction] : [],
+	        close
+	      ), item;
 	    })), this.tabList.scrollLeft = Math.max(0, scrollLeft), revealActive && this.#revealActiveTab(), this.addButton.disabled = remaining.length === 0, this.addButton.setAttribute(
 	      "aria-label",
 	      remaining.length ? `添加工具浮窗，剩余 ${remaining.length} 个` : "所有工具浮窗均已打开"
@@ -11535,7 +11915,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    return this.element.ownerDocument;
 	  }
 	}
-}, "5252955acf17c61ee79631300f7ad93ce61dac9e061c69542bc4f1cdbc5c107f");
+}, "8fc4ee5517b90edffc06aa4d0976cdc95f163ef634756c47bd3833e077db482d");
 
 /* Source: lite/src/shell/reader-rate-limit-notice.ts */
 runtime.register("src/shell/reader-rate-limit-notice.js", function(module, exports, require) {
@@ -11705,6 +12085,7 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	var reader_select_surface_exports = {};
 	__export(reader_select_surface_exports, {
 	  READER_SELECT_DISMISS_EVENT: () => READER_SELECT_DISMISS_EVENT,
+	  READER_SELECT_RESELECT_EVENT: () => READER_SELECT_RESELECT_EVENT,
 	  ReaderSelectSurface: () => ReaderSelectSurface
 	});
 	module.exports = __toCommonJS(reader_select_surface_exports);
@@ -11714,7 +12095,7 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	  "select.ldp-cache-select",
 	  "select.ldp-collection-scope",
 	  "select.ldp-font-weight-select"
-	].join(","), READER_SELECT_DISMISS_EVENT = "ldp-reader-select-dismiss";
+	].join(","), READER_SELECT_DISMISS_EVENT = "ldp-reader-select-dismiss", READER_SELECT_RESELECT_EVENT = "ldp-reader-select-reselect";
 	function eventElement(event) {
 	  const target = event.target;
 	  return target && typeof target.closest == "function" ? target : null;
@@ -11811,6 +12192,12 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	      if (this.#sync(select2), this.#close(), select2.focus({ preventScroll: !0 }), changed) {
 	        const EventConstructor = this.#document.defaultView?.Event ?? Event;
 	        select2.dispatchEvent(new EventConstructor("input", { bubbles: !0 })), select2.dispatchEvent(new EventConstructor("change", { bubbles: !0 }));
+	      } else {
+	        const EventConstructor = this.#document.defaultView?.Event ?? Event;
+	        select2.dispatchEvent(new EventConstructor(
+	          READER_SELECT_RESELECT_EVENT,
+	          { bubbles: !0 }
+	        ));
 	      }
 	      return;
 	    }
@@ -11863,9 +12250,11 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	      return option.type = "button", option.className = "ldp-select-option ldp-picker-option", option.dataset.readerSelectValue = nativeOption.value, option.textContent = nativeOption.label || nativeOption.textContent || "", option.disabled = nativeOption.disabled, option.hidden = nativeOption.hidden, option.setAttribute("role", "option"), option.setAttribute("aria-selected", String(nativeOption.selected)), option;
 	    })), select.dataset.readerSelectSearchable === "true") {
 	      const search2 = this.#document.createElement("input");
-	      search2.type = "search", search2.className = "ldp-select-search", search2.placeholder = "搜索字体", search2.setAttribute("aria-label", "搜索字体");
+	      search2.type = "search", search2.className = "ldp-select-search";
+	      const searchLabel = select.dataset.readerSelectSearchLabel ?? "搜索字体";
+	      search2.placeholder = searchLabel, search2.setAttribute("aria-label", searchLabel);
 	      const empty = this.#document.createElement("span");
-	      empty.className = "ldp-select-empty", empty.textContent = "没有匹配的字体", empty.hidden = !0, search2.addEventListener("input", () => {
+	      empty.className = "ldp-select-empty", empty.textContent = select.dataset.readerSelectEmptyLabel ?? "没有匹配的字体", empty.hidden = !0, search2.addEventListener("input", () => {
 	        const query = search2.value.trim().toLocaleLowerCase();
 	        let visible = 0;
 	        for (const option of options.querySelectorAll(
@@ -11886,15 +12275,19 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	    const select = this.#openSelect, wrapper = select ? this.#states.get(select) : null, menu = wrapper?.querySelector(".ldp-select-menu"), viewport = this.#document.defaultView;
 	    if (!select || !wrapper || !menu || menu.hidden || !viewport) return;
 	    menu.style.removeProperty("left"), menu.style.removeProperty("max-height"), menu.style.removeProperty("max-width"), wrapper.classList.remove("is-menu-above");
-	    const selectRect = select.getBoundingClientRect(), menuRect = menu.getBoundingClientRect(), menuWidth = menuRect.width || menu.offsetWidth, menuHeight = menuRect.height || menu.offsetHeight, margin = 12, gap = 6, collisionRect = select.closest(
-	      ".ldp-unwanted-topic-filter-content,.ldp-settings-popover,.ldp-reader-floating-window,.ldp-notifications-popover,.ldp-history-popover,.ldp-bookmarks-popover"
-	    )?.getBoundingClientRect(), bounds = Object.freeze({
+	    const selectRect = select.getBoundingClientRect(), menuRect = menu.getBoundingClientRect(), menuWidth = menuRect.width || menu.offsetWidth, menuHeight = menuRect.height || menu.offsetHeight, margin = 12, gap = 6, settingsPanel = select.closest(".ldp-settings-panel"), collisionRect = (settingsPanel ?? select.closest(
+	      ".ldp-unwanted-topic-filter-content,.ldp-settings-popover,.ldp-reader-floating-window,.ldp-notifications-popover,.ldp-history-popover,.ldp-bookmarks-popover,.ldp-topic-summary-surface"
+	    ))?.getBoundingClientRect(), frozenIntroRect = (settingsPanel ? select.closest(".ldp-settings-section") : null)?.querySelector(".ldp-settings-intro")?.getBoundingClientRect(), bounds = Object.freeze({
 	      left: Math.max(margin, (collisionRect?.left ?? 0) + margin),
 	      right: Math.min(
 	        viewport.innerWidth - margin,
 	        (collisionRect?.right ?? viewport.innerWidth) - margin
 	      ),
-	      top: Math.max(margin, (collisionRect?.top ?? 0) + margin),
+	      top: Math.max(
+	        margin,
+	        (collisionRect?.top ?? 0) + margin,
+	        frozenIntroRect ? frozenIntroRect.bottom + margin : 0
+	      ),
 	      bottom: Math.min(
 	        viewport.innerHeight - margin,
 	        (collisionRect?.bottom ?? viewport.innerHeight) - margin
@@ -11946,7 +12339,7 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	    menu && (menu.hidden = !0, menu.style.removeProperty("left"), menu.style.removeProperty("max-height"), menu.style.removeProperty("max-width")), restoreFocus && select.focus({ preventScroll: !0 });
 	  }
 	}
-}, "6aa5efda844f1aa819aefade978916afdd6d2c6fa2e038e646d4752e4513b9c6");
+}, "a316312b868e84deede49135f4c40fc6af6b415272cf9ab806c313e391ee3067");
 
 /* Source: lite/src/shell/reader-shell-recovery-view.ts */
 runtime.register("src/shell/reader-shell-recovery-view.js", function(module, exports, require) {
@@ -13361,41 +13754,7 @@ runtime.register("src/shell/reader-shortcut-controller.js", function(module, exp
 	      })))
 	    })
 	  )
-	), reserved = /* @__PURE__ */ new Set([
-	  "Ctrl+KeyD",
-	  "Ctrl+KeyF",
-	  "Ctrl+KeyH",
-	  "Ctrl+KeyJ",
-	  "Ctrl+KeyL",
-	  "Ctrl+KeyN",
-	  "Ctrl+KeyO",
-	  "Ctrl+KeyP",
-	  "Ctrl+KeyR",
-	  "Ctrl+KeyS",
-	  "Ctrl+KeyT",
-	  "Ctrl+KeyW",
-	  "Ctrl+Tab",
-	  "Ctrl+Shift+KeyN",
-	  "Ctrl+Shift+KeyT",
-	  "Ctrl+Shift+Tab",
-	  "Alt+ArrowLeft",
-	  "Alt+ArrowRight",
-	  "Alt+F4",
-	  "Alt+Home",
-	  "Meta+Comma",
-	  "Meta+KeyF",
-	  "Meta+KeyL",
-	  "Meta+KeyN",
-	  "Meta+KeyP",
-	  "Meta+KeyQ",
-	  "Meta+KeyR",
-	  "Meta+KeyS",
-	  "Meta+KeyT",
-	  "Meta+KeyW",
-	  "Shift+Meta+KeyT",
-	  "F11",
-	  "F12"
-	]);
+	);
 	function readerShortcutBindingLabel(binding) {
 	  const labels = Object.freeze({
 	    Ctrl: "Ctrl",
@@ -13431,7 +13790,7 @@ runtime.register("src/shell/reader-shortcut-controller.js", function(module, exp
 	    Wheel: "滚轮"
 	  });
 	  return binding.split("+").map(
-	    (part) => labels[part] ?? (/^Key[A-Z]$/.test(part) ? part.slice(3) : /^Digit\d$/.test(part) ? part.slice(5) : /^Mouse\d+$/.test(part) ? `鼠标键 ${Number(part.slice(5)) + 1}` : part)
+	    (part) => labels[part] ?? (/^Key[A-Z]$/.test(part) ? part.slice(3) : /^Digit\d$/.test(part) ? part.slice(5) : /^Numpad\d$/.test(part) ? `数字键盘 ${part.slice(6)}` : /^Mouse\d+$/.test(part) ? `鼠标键 ${Number(part.slice(5)) + 1}` : part)
 	  ).join(" + ");
 	}
 	function readerShortcutBindingFromEvent(event) {
@@ -13454,10 +13813,8 @@ runtime.register("src/shell/reader-shortcut-controller.js", function(module, exp
 	  );
 	  if (owner)
 	    return `${readerShortcutBindingLabel(normalized)} 已绑定“${definitions[owner].label}”，请先移除或改用其他组合。`;
-	  if (reserved.has(normalized))
-	    return `${readerShortcutBindingLabel(normalized)} 通常由浏览器占用，无法保证生效，请换一个组合。`;
-	  const parts = normalized.split("+"), code = parts.at(-1) ?? "";
-	  return parts.length === 1 && /^(?:Key[A-Z]|Digit\d)$/.test(code) ? "单个字母或数字容易与论坛快捷键冲突，请至少加入 Ctrl、Alt、Shift 或 Meta。" : "";
+	  const policyIssue = (0, import_reader_preferences_schema.readerShortcutBindingPolicyIssue)(normalized);
+	  return policyIssue === "reserved" ? `${readerShortcutBindingLabel(normalized)} 通常由浏览器占用，无法保证生效，请换一个组合。` : policyIssue === "bare-alphanumeric" ? "单个字母或数字容易与论坛快捷键冲突，请至少加入 Ctrl、Alt、Shift 或 Meta。" : "";
 	}
 	function editableTarget(event) {
 	  const target = (0, import_event_target.eventElement)(event);
@@ -13548,7 +13905,17 @@ runtime.register("src/shell/reader-shortcut-controller.js", function(module, exp
 	    if (!binding) return;
 	    if (this.#recording) {
 	      this.#consume(event, mouse);
-	      const action2 = this.#recording, issue = readerShortcutBindingIssue(
+	      const action2 = this.#recording;
+	      if (this.#bindings[action2].includes(binding)) {
+	        this.captures.emit(Object.freeze({
+	          action: action2,
+	          binding,
+	          accepted: !1,
+	          message: `${readerShortcutBindingLabel(binding)} 已在该动作中。`
+	        }));
+	        return;
+	      }
+	      const issue = readerShortcutBindingIssue(
 	        this.#bindings,
 	        binding,
 	        action2
@@ -13628,7 +13995,7 @@ runtime.register("src/shell/reader-shortcut-controller.js", function(module, exp
 	    this.scope.destroyed || this.changes.emit(this.snapshot);
 	  }
 	}
-}, "d1011e417cc7ef5f2c25a5891952a9160942452deac0ca4e31f5453b92853545");
+}, "56c75eeed42c96ccea449ca0f6c743739d6da190d504b4d0429202d9e20ef593");
 
 /* Source: lite/src/shell/reader-surface-portal.ts */
 runtime.register("src/shell/reader-surface-portal.js", function(module, exports, require) {
@@ -14972,6 +15339,7 @@ runtime.register("src/shell/reader-workspace.js", function(module, exports, requ
 	  #cancelFrame;
 	  #dragSurfaceSelector;
 	  #blockedSelector;
+	  #isDragBlocked;
 	  #interactingClassName;
 	  #restingTransform;
 	  #projectPlacement;
@@ -14979,7 +15347,7 @@ runtime.register("src/shell/reader-workspace.js", function(module, exports, requ
 	  #frame = 0;
 	  #destroyed = !1;
 	  constructor(options) {
-	    this.#model = options.model, this.#overlay = options.overlay, this.#modal = options.modal, this.#header = options.header, this.#onPersist = options.onPersist, this.#requestFrame = options.requestFrame ?? ((callback) => requestAnimationFrame(callback)), this.#cancelFrame = options.cancelFrame ?? ((id) => cancelAnimationFrame(id)), this.#dragSurfaceSelector = options.dragSurfaceSelector ?? ".ldp-header[data-ldp-reader-drag-surface]", this.#blockedSelector = options.blockedSelector ?? WINDOW_DRAG_BLOCKED_SELECTOR, this.#interactingClassName = options.interactingClassName ?? "ldp-window-interacting", this.#restingTransform = options.restingTransform, this.#projectPlacement = options.projectPlacement ?? projectReaderWindowPlacement, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.scope.listen(this.#overlay, "pointerdown", (event) => this.#onPointerDown(
+	    this.#model = options.model, this.#overlay = options.overlay, this.#modal = options.modal, this.#header = options.header, this.#onPersist = options.onPersist, this.#requestFrame = options.requestFrame ?? ((callback) => requestAnimationFrame(callback)), this.#cancelFrame = options.cancelFrame ?? ((id) => cancelAnimationFrame(id)), this.#dragSurfaceSelector = options.dragSurfaceSelector ?? ".ldp-header[data-ldp-reader-drag-surface]", this.#blockedSelector = options.blockedSelector ?? WINDOW_DRAG_BLOCKED_SELECTOR, this.#isDragBlocked = options.isDragBlocked, this.#interactingClassName = options.interactingClassName ?? "ldp-window-interacting", this.#restingTransform = options.restingTransform, this.#projectPlacement = options.projectPlacement ?? projectReaderWindowPlacement, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.scope.listen(this.#overlay, "pointerdown", (event) => this.#onPointerDown(
 	      event
 	    )), this.scope.listen(this.#overlay, "pointermove", (event) => this.#onPointerMove(
 	      event
@@ -15015,7 +15383,7 @@ runtime.register("src/shell/reader-workspace.js", function(module, exports, requ
 	      const dragSurface = target.closest(
 	        this.#dragSurfaceSelector
 	      );
-	      dragSurface === this.#header && !target.closest(this.#blockedSelector) && (mode = "drag", handle = dragSurface);
+	      dragSurface === this.#header && !target.closest(this.#blockedSelector) && !this.#isDragBlocked?.(event, target) && (mode = "drag", handle = dragSurface);
 	    }
 	    if (!mode || !handle) return;
 	    event.preventDefault(), event.stopPropagation();
@@ -15105,7 +15473,7 @@ runtime.register("src/shell/reader-workspace.js", function(module, exports, requ
 	    this.#onPersist?.(this.#model.preferencePatch());
 	  }
 	}
-}, "9018555afb4dead1fd55e7844f5ee6e03643bfb1c9293440b1a3a37c770ea050");
+}, "48837eddefba6208c03437dfceea81ab115842737f6592b31ac086792edb76c1");
 
 /* Source: lite/src/state/preferences-config-codec.ts */
 runtime.register("src/state/preferences-config-codec.js", function(module, exports, require) {
@@ -15123,6 +15491,10 @@ runtime.register("src/state/preferences-config-codec.js", function(module, expor
 	  if (!value || typeof value != "object" || Array.isArray(value))
 	    throw new Error(`${name} 必须是对象`);
 	  return value;
+	}
+	function exactKeys(value, expected) {
+	  const actual = Object.keys(value).sort(), canonical = [...expected].sort();
+	  return actual.length === canonical.length && actual.every((key, index) => key === canonical[index]);
 	}
 	class PreferencesConfigCodec {
 	  #format;
@@ -15173,10 +15545,17 @@ runtime.register("src/state/preferences-config-codec.js", function(module, expor
 	  }
 	  #import(payload) {
 	    const record = plainRecord(payload, "config payload");
-	    if (record.format !== this.#format || Number(record.schemaVersion) !== this.#schemaVersion)
+	    if (!exactKeys(record, [
+	      "format",
+	      "schemaVersion",
+	      "scriptVersion",
+	      "exportedAt",
+	      "settingsCount",
+	      "settings"
+	    ]) || record.format !== this.#format || record.schemaVersion !== this.#schemaVersion || typeof record.scriptVersion != "string" || !record.scriptVersion.trim() || typeof record.exportedAt != "string" || !record.exportedAt.trim())
 	      throw new Error("invalid_config");
 	    const settingsRecord = plainRecord(record.settings, "config settings"), originalKeys = Object.keys(settingsRecord);
-	    if (Number(record.settingsCount) !== originalKeys.length || originalKeys.some((key) => !this.#settingKeySet.has(key)))
+	    if (record.settingsCount !== originalKeys.length || originalKeys.some((key) => !this.#settingKeySet.has(key)))
 	      throw new Error("invalid_config");
 	    const migrated = { ...settingsRecord };
 	    for (const rule of this.#legacyRules) {
@@ -15196,7 +15575,7 @@ runtime.register("src/state/preferences-config-codec.js", function(module, expor
 	    });
 	  }
 	}
-}, "bab6d3c95c652c4b4ebcf85c43f2da0cdd299b92f3025e2aa5f36e2eed638d40");
+}, "11cea2ff96a9bf9261c17b5eba9846e468cb5fd87580df681664e704f1b7191b");
 
 /* Source: lite/src/state/preferences-repository.ts */
 runtime.register("src/state/preferences-repository.js", function(module, exports, require) {
@@ -15451,6 +15830,7 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	  readerLayoutProfileTotal: () => readerLayoutProfileTotal,
 	  readerLayoutRegionMaximum: () => readerLayoutRegionMaximum,
 	  readerPerformancePresetForConfig: () => readerPerformancePresetForConfig,
+	  readerShortcutBindingPolicyIssue: () => readerShortcutBindingPolicyIssue,
 	  rebalanceReaderLayoutProfile: () => rebalanceReaderLayoutProfile,
 	  resolveReaderAppearanceColor: () => resolveReaderAppearanceColor
 	});
@@ -15663,7 +16043,77 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	  closeReader: Object.freeze(["Escape"])
 	}), READER_SHORTCUT_ACTIONS = Object.freeze(
 	  Object.keys(READER_SHORTCUT_DEFAULTS)
-	), SHORTCUT_MODIFIERS = Object.freeze(["Ctrl", "Alt", "Shift", "Meta"]), JUMP_HIGHLIGHT_DEFAULTS = Object.freeze({
+	), SHORTCUT_MODIFIERS = Object.freeze(["Ctrl", "Alt", "Shift", "Meta"]), READER_SHORTCUT_RESERVED_BINDINGS = /* @__PURE__ */ new Set([
+	  "Ctrl+KeyD",
+	  "Ctrl+KeyF",
+	  "Ctrl+KeyH",
+	  "Ctrl+KeyJ",
+	  "Ctrl+KeyL",
+	  "Ctrl+KeyN",
+	  "Ctrl+KeyO",
+	  "Ctrl+KeyP",
+	  "Ctrl+KeyR",
+	  "Ctrl+KeyS",
+	  "Ctrl+KeyT",
+	  "Ctrl+KeyW",
+	  "Ctrl+Tab",
+	  "Ctrl+Shift+KeyN",
+	  "Ctrl+Shift+KeyB",
+	  "Ctrl+Shift+KeyD",
+	  "Ctrl+Shift+KeyI",
+	  "Ctrl+Shift+KeyJ",
+	  "Ctrl+Shift+KeyO",
+	  "Ctrl+Shift+KeyP",
+	  "Ctrl+Shift+KeyT",
+	  "Ctrl+Shift+KeyW",
+	  "Ctrl+Shift+Delete",
+	  "Ctrl+Shift+Tab",
+	  "Ctrl+KeyU",
+	  "Alt+ArrowLeft",
+	  "Alt+ArrowRight",
+	  "Alt+F4",
+	  "Alt+Home",
+	  "Meta+Comma",
+	  "Meta+KeyF",
+	  "Meta+KeyL",
+	  "Meta+KeyN",
+	  "Meta+KeyP",
+	  "Meta+KeyQ",
+	  "Meta+KeyR",
+	  "Meta+KeyS",
+	  "Meta+KeyT",
+	  "Meta+KeyW",
+	  "Meta+BracketLeft",
+	  "Meta+BracketRight",
+	  "Alt+Meta+KeyC",
+	  "Alt+Meta+KeyI",
+	  "Alt+Meta+KeyJ",
+	  "Alt+Meta+ArrowLeft",
+	  "Alt+Meta+ArrowRight",
+	  "Shift+Meta+BracketLeft",
+	  "Shift+Meta+BracketRight",
+	  "Shift+Meta+KeyN",
+	  "Shift+Meta+KeyT",
+	  "Shift+Meta+KeyW",
+	  "F11",
+	  "F12"
+	]), READER_SHORTCUT_KEYBOARD_CODE = new RegExp([
+	  "^(?:Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|",
+	  "Arrow(?:Down|Left|Right|Up)|",
+	  "(?:Backquote|Backslash|BracketLeft|BracketRight|Comma|Equal|Minus|",
+	  "Period|Quote|Semicolon|Slash)|",
+	  "(?:Backspace|CapsLock|ContextMenu|Delete|End|Enter|Escape|Help|Home|",
+	  "Insert|PageDown|PageUp|Pause|PrintScreen|ScrollLock|Space|Tab)|",
+	  "Intl(?:Backslash|Ro|Yen)|Lang[1-5]|(?:Convert|KanaMode|NonConvert)|",
+	  "Numpad(?:[0-9]|Add|Backspace|Clear|ClearEntry|Comma|Decimal|Divide|",
+	  "Enter|Equal|Hash|MemoryAdd|MemoryClear|MemoryRecall|MemoryStore|",
+	  "MemorySubtract|Multiply|ParenLeft|ParenRight|Star|Subtract)|",
+	  "Browser(?:Back|Favorites|Forward|Home|Refresh|Search|Stop)|",
+	  "Media(?:PlayPause|Select|Stop|TrackNext|TrackPrevious)|",
+	  "AudioVolume(?:Down|Mute|Up)|Launch(?:App1|App2|Mail)|",
+	  "(?:Abort|Again|Copy|Cut|Eject|Find|Fn|FnLock|Hyper|Open|Paste|Power|",
+	  "Props|Select|Sleep|Super|Turbo|Undo|WakeUp))$"
+	].join("")), JUMP_HIGHLIGHT_DEFAULTS = Object.freeze({
 	  color: "#0888cc",
 	  radius: 10,
 	  borderWidth: 1,
@@ -16044,16 +16494,23 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	}
 	function normalizeReaderShortcutBinding(value) {
 	  const parts = String(value || "").split("+").map((part) => part.trim()).filter(Boolean), code = parts.pop() || "";
-	  if (!/^(?:[A-Za-z][A-Za-z0-9]*|Mouse(?:1|3|4|[5-9]))$/.test(code) || /^(?:Control|Alt|Shift|Meta)(?:Left|Right)?$/.test(code))
+	  if (!READER_SHORTCUT_KEYBOARD_CODE.test(code) && !/^Mouse(?:1|3|4|[5-9])$/.test(code) && code !== "Wheel" || /^(?:Control|Alt|Shift|Meta)(?:Left|Right)?$/.test(code))
 	    return "";
 	  const modifiers = SHORTCUT_MODIFIERS.filter((modifier) => parts.includes(modifier));
 	  return parts.some((part) => !SHORTCUT_MODIFIERS.includes(part)) ? "" : [...modifiers, code].join("+");
+	}
+	function readerShortcutBindingPolicyIssue(value) {
+	  const binding = normalizeReaderShortcutBinding(value);
+	  if (!binding) return "invalid";
+	  if (READER_SHORTCUT_RESERVED_BINDINGS.has(binding)) return "reserved";
+	  const parts = binding.split("+"), code = parts.at(-1) ?? "";
+	  return parts.length === 1 && /^(?:Key[A-Z]|Digit\d|Numpad\d)$/.test(code) ? "bare-alphanumeric" : null;
 	}
 	function normalizeReaderShortcutBindings(value) {
 	  const source = plainRecord(value), used = /* @__PURE__ */ new Set(), result = {};
 	  for (const action of READER_SHORTCUT_ACTIONS) {
 	    const selected = Object.hasOwn(source, action) && Array.isArray(source[action]) ? source[action] : READER_SHORTCUT_DEFAULTS[action], bindings = [...new Set(
-	      selected.map(normalizeReaderShortcutBinding).filter(Boolean)
+	      selected.map(normalizeReaderShortcutBinding).filter((binding) => binding && readerShortcutBindingPolicyIssue(binding) === null)
 	    )].filter((binding) => used.has(binding) ? !1 : (used.add(binding), !0)).slice(0, 3);
 	    result[action] = Object.freeze(bindings);
 	  }
@@ -16408,7 +16865,7 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	    prepareStored: prepareStoredReaderPreferences
 	  });
 	}
-}, "528c04985a0fc3b1a5aaaf2b29196c7f524e363724e72e2b597d5a1b5ce367e6");
+}, "912c4eddb46b49e2508257294d02732ccf3c2b68e66442d6e7143837ea08df20");
 
 /* Source: lite/src/state/reader-settings-config-manager.ts */
 runtime.register("src/state/reader-settings-config-manager.js", function(module, exports, require) {
@@ -16421,7 +16878,7 @@ runtime.register("src/state/reader-settings-config-manager.js", function(module,
 	});
 	module.exports = __toCommonJS(reader_settings_config_manager_exports);
 	var import_reader_custom_site_repository = require("../site/reader-custom-site-repository.js"), import_reader_webdav_model = require("../sync/reader-webdav-model.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_preferences_schema = require("./reader-preferences-schema.js");
-	const READER_SETTINGS_CONFIG_EXPORT_VERSION = 7, READER_SETTINGS_CONFIG_PREVIOUS_PORTABLE_VERSION = 6, READER_SETTINGS_CONFIG_OMITTED_SECRETS = Object.freeze([
+	const READER_SETTINGS_CONFIG_EXPORT_VERSION = 9, READER_SETTINGS_CONFIG_LEGACY_PORTABLE_VERSIONS = Object.freeze([6, 7, 8]), READER_SETTINGS_CONFIG_OMITTED_SECRETS = Object.freeze([
 	  "translation.apiKey",
 	  "webDav.username",
 	  "webDav.password"
@@ -16441,6 +16898,8 @@ runtime.register("src/state/reader-settings-config-manager.js", function(module,
 	function portableTranslationProfile(profile) {
 	  return Object.freeze({
 	    baseUrl: profile.baseUrl,
+	    models: profile.models,
+	    modelCatalog: profile.modelCatalog,
 	    model: profile.model,
 	    prompt: profile.prompt,
 	    temperature: profile.temperature,
@@ -16459,15 +16918,17 @@ runtime.register("src/state/reader-settings-config-manager.js", function(module,
 	    activeBaseUrl: normalized.activeBaseUrl
 	  });
 	}
-	function parsePortableTranslationConfig(value) {
+	function parsePortableTranslationConfig(value, sourceVersion = READER_SETTINGS_CONFIG_EXPORT_VERSION) {
 	  if (value === null) return null;
 	  const source = record(value);
 	  if (exactKeys(source, ["profiles", "activeBaseUrl"]), !Array.isArray(source.profiles) || !source.profiles.length)
 	    throw invalidConfig();
 	  const profiles = source.profiles.map((value2) => {
-	    const profile = record(value2);
+	    const profile = record(value2), hasModels = sourceVersion >= 8, hasModelCatalog = sourceVersion >= 9;
 	    exactKeys(profile, [
 	      "baseUrl",
+	      ...hasModels ? ["models"] : [],
+	      ...hasModelCatalog ? ["modelCatalog"] : [],
 	      "model",
 	      "prompt",
 	      "temperature",
@@ -16482,7 +16943,7 @@ runtime.register("src/state/reader-settings-config-manager.js", function(module,
 	    }).profiles[0];
 	    if (!parsed) throw invalidConfig();
 	    const portable = portableTranslationProfile(parsed);
-	    if (Object.entries(portable).some(([key, normalizedValue]) => profile[key] !== normalizedValue))
+	    if (Object.entries(profile).some(([key, sourceValue]) => key !== "models" && key !== "modelCatalog" && sourceValue !== portable[key]) || hasModels && JSON.stringify(profile.models) !== JSON.stringify(portable.models) || hasModelCatalog && JSON.stringify(profile.modelCatalog) !== JSON.stringify(portable.modelCatalog))
 	      throw invalidConfig();
 	    return parsed;
 	  });
@@ -16520,7 +16981,7 @@ runtime.register("src/state/reader-settings-config-manager.js", function(module,
 	    "activity-history"
 	  ]), missesBothHistoryCategories = [...historyCategories].every(
 	    (category) => !Object.hasOwn(categories, category)
-	  ), expectedCategories = sourceVersion === READER_SETTINGS_CONFIG_PREVIOUS_PORTABLE_VERSION ? import_reader_webdav_model.READER_WEBDAV_CATEGORIES.filter((category) => category !== "offline-topics" && !historyCategories.has(category)) : missesBothHistoryCategories ? import_reader_webdav_model.READER_WEBDAV_CATEGORIES.filter((category) => !historyCategories.has(category)) : import_reader_webdav_model.READER_WEBDAV_CATEGORIES;
+	  ), expectedCategories = sourceVersion === 6 ? import_reader_webdav_model.READER_WEBDAV_CATEGORIES.filter((category) => category !== "offline-topics" && !historyCategories.has(category)) : sourceVersion < READER_SETTINGS_CONFIG_EXPORT_VERSION && missesBothHistoryCategories ? import_reader_webdav_model.READER_WEBDAV_CATEGORIES.filter((category) => !historyCategories.has(category)) : import_reader_webdav_model.READER_WEBDAV_CATEGORIES;
 	  if (exactKeys(categories, expectedCategories), Object.values(categories).some((selected) => typeof selected != "boolean"))
 	    throw invalidConfig();
 	  const normalizedCategories = (0, import_reader_webdav_model.createReaderWebDavCategorySelection)(categories), normalized = (0, import_reader_webdav_model.normalizeReaderWebDavConfig)({
@@ -16571,12 +17032,13 @@ runtime.register("src/state/reader-settings-config-manager.js", function(module,
 	    }
 	  }
 	  #import(payload) {
-	    const source = record(payload), schemaVersion = Number(source.schemaVersion);
+	    const source = record(payload), schemaVersion = source.schemaVersion;
+	    if (typeof schemaVersion != "number" || !Number.isSafeInteger(schemaVersion)) throw invalidConfig();
 	    if (schemaVersion === import_reader_preferences_schema.READER_CONFIG_EXPORT_VERSION) {
 	      const preferences2 = this.#preferences.import(payload);
 	      return Object.freeze({
 	        sourceVersion: schemaVersion,
-	        settingsCount: Number(source.settingsCount),
+	        settingsCount: source.settingsCount,
 	        preferences: preferences2,
 	        includesPortableSections: !1,
 	        customSites: null,
@@ -16584,7 +17046,7 @@ runtime.register("src/state/reader-settings-config-manager.js", function(module,
 	        webDav: null
 	      });
 	    }
-	    if (schemaVersion !== READER_SETTINGS_CONFIG_EXPORT_VERSION && schemaVersion !== READER_SETTINGS_CONFIG_PREVIOUS_PORTABLE_VERSION || (exactKeys(source, [
+	    if (schemaVersion !== READER_SETTINGS_CONFIG_EXPORT_VERSION && !READER_SETTINGS_CONFIG_LEGACY_PORTABLE_VERSIONS.includes(schemaVersion) || (exactKeys(source, [
 	      "format",
 	      "schemaVersion",
 	      "scriptVersion",
@@ -16606,11 +17068,14 @@ runtime.register("src/state/reader-settings-config-manager.js", function(module,
 	    });
 	    return Object.freeze({
 	      sourceVersion: schemaVersion,
-	      settingsCount: Number(source.settingsCount),
+	      settingsCount: source.settingsCount,
 	      preferences,
 	      includesPortableSections: !0,
 	      customSites: parseCustomSites(source.customSites),
-	      translation: parsePortableTranslationConfig(source.translation),
+	      translation: parsePortableTranslationConfig(
+	        source.translation,
+	        schemaVersion
+	      ),
 	      webDav: parsePortableWebDavConfig(
 	        source.webDav,
 	        schemaVersion
@@ -16731,7 +17196,7 @@ runtime.register("src/state/reader-settings-config-manager.js", function(module,
 	    }
 	  }
 	}
-}, "04a7d2ec34311abaf6c1b1cf52f4db8c9d4e4e6ca842f066bbb12c18bcd21536");
+}, "de1850d0832f75d8e437786b0c0f3eea5e4989cf60012e3d610c43333e715ccb");
 
 /* Source: lite/src/stream/reply-tree-viewport-layout.ts */
 runtime.register("src/stream/reply-tree-viewport-layout.js", function(module, exports, require) {
@@ -28033,7 +28498,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	        scriptVersion
 	      }), preferencesDefaults = (0, import_reader_preferences_schema.createReaderPreferencesDefaults)(
 	        preferencesEnvironment
-	      ), currentUsername = (0, import_native_host_api.discourseNativeCurrentUsername)(
+	      ), currentUsername = (0, import_native_host_api.discourseNativeInitialCurrentUsername)(
 	        environment.discourseHost
 	      ), renderNativeIcon = (0, import_native_host_api.discourseNativeIconRenderer)(
 	        environment.discourseHost
@@ -28463,7 +28928,8 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	          ...customSites.webDav ? {
 	            webDav: {
 	              ...customSites.webDav,
-	              customSites: customSites.repository
+	              customSites: customSites.repository,
+	              preferencesCodec
 	            }
 	          } : {},
 	          aboutContent: {
@@ -28830,7 +29296,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	  }), handle;
 	}
 	const startMianLiteUserscript = startMainLiteUserscript;
-}, "e97d2f1e4aa708227d474b2a223cec8986c15fd57ad32ca440aec35d4b9ca2d7");
+}, "5fc996e88d95c38e19c87ced5961d31fd0576585956abe0474c3d3928129bbfd");
 
 /* Source: lite/src/userscript/main-lite-entry.ts */
 runtime.register("src/userscript/main-lite-entry.js", function(module, exports, require) {

@@ -145,3 +145,30 @@ assert(await backgroundLoad && deferredSequence.snapshot().items.length === 2,
 	'共享补流晚到后仍须归并唯一图片序列，关闭 overlay 不得丢 canonical 结果');
 backgroundBatch.destroy();
 deferredSequence.destroy();
+
+const selectionSequence = new ReaderLightboxController({
+	items: [first, second, third],
+});
+const selectionBatch = new ReaderLightboxBatchController({
+	sequence: selectionSequence,
+	archiveName: 'AI images',
+	purpose: 'selection',
+	maximumSelected: 2,
+});
+selectionBatch.open();
+selectionBatch.toggleAll();
+assert(
+	selectionBatch.snapshot().purpose === 'selection' &&
+	selectionBatch.snapshot().maximumSelected === 2 &&
+	selectionBatch.snapshot().selectedItems.length === 2 &&
+	selectionBatch.snapshot().status.includes('最多 2 张'),
+	'通用图片选择模式必须复用批量 controller，并在状态 owner 内限制 AI 图片数量',
+);
+selectionBatch.toggle(third.key);
+assert(
+	selectionBatch.snapshot().selectedItems.length === 2 &&
+	selectionBatch.snapshot().status === '最多选择 2 张图片',
+	'超过图片上限时不得改变已选集合',
+);
+selectionBatch.destroy();
+selectionSequence.destroy();

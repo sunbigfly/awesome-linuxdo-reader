@@ -5,6 +5,7 @@ import type {
 	ReaderWebDavStandaloneCategorySyncResult,
 } from './reader-webdav-coordinator.js';
 import {
+	normalizeReaderWebDavRemoteRecord,
 	normalizeReaderWebDavRemotePath,
 	reconcileReaderWebDavRecords,
 	readerWebDavFingerprint,
@@ -36,7 +37,7 @@ export interface ReaderWebDavHistoryCacheCategoryPortOptions {
 	readonly category: ReaderWebDavHistoryCacheCategory;
 	capture(): readonly ReaderWebDavLocalRecord[] |
 		Promise<readonly ReaderWebDavLocalRecord[]>;
-	recordIdentity(value: unknown): string;
+	validateRecord(id: string, value: unknown): boolean;
 	mergeValues(local: unknown, remote: unknown): unknown;
 	apply(records: readonly ReaderWebDavLocalRecord[]): unknown | Promise<unknown>;
 }
@@ -49,28 +50,10 @@ function record(value: unknown): UnknownRecord | null {
 		: null;
 }
 
-function timestamp(value: unknown): number {
-	const numeric = Number(value);
-	return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0;
-}
-
 function normalizedRecordId(value: unknown): string {
 	const source = String(value ?? '').trim();
 	if (!source || source.length > 240 || /[\u0000-\u001f]/.test(source)) return '';
 	return source;
-}
-
-function remoteRecord(value: unknown): ReaderWebDavRemoteRecord | null {
-	const source = record(value);
-	if (!source) return null;
-	const deleted = source.deleted === true;
-	if (!deleted && !Object.hasOwn(source, 'value')) return null;
-	return Object.freeze({
-		changedAt: timestamp(source.changedAt),
-		writerId: String(source.writerId ?? ''),
-		deleted,
-		...(deleted ? {} : { value: source.value }),
-	});
 }
 
 function manifestPath(
@@ -97,21 +80,29 @@ function normalizeManifest(
 	) throw new Error(`WebDAV ${category} 清单格式或版本不受支持`);
 	const rawRecords = record(source.records);
 	if (!rawRecords) throw new Error(`WebDAV ${category} 清单缺少 records`);
+	if (
+		typeof source.updatedAt !== 'number' ||
+		!Number.isFinite(source.updatedAt) ||
+		source.updatedAt < 0 ||
+		typeof source.writerId !== 'string'
+	) throw new Error(`WebDAV ${category} 清单字段类型无效`);
 	const records = Object.create(null) as Record<
 		string,
 		ReaderWebDavRemoteRecord
 	>;
 	for (const [rawId, rawValue] of Object.entries(rawRecords)) {
 		const id = normalizedRecordId(rawId);
-		const item = remoteRecord(rawValue);
-		if (id && item) records[id] = item;
+		if (!id || id !== rawId) {
+			throw new Error(`WebDAV ${category} 记录 ID 无效`);
+		}
+		records[id] = normalizeReaderWebDavRemoteRecord(rawValue);
 	}
 	return Object.freeze({
 		format: HISTORY_CACHE_MANIFEST_FORMAT,
 		schemaVersion: HISTORY_CACHE_MANIFEST_VERSION,
 		category,
-		updatedAt: timestamp(source.updatedAt),
-		writerId: String(source.writerId ?? ''),
+		updatedAt: source.updatedAt,
+		writerId: source.writerId,
 		records: Object.freeze(records),
 	});
 }
@@ -142,7 +133,7 @@ async function synchronizeHistoryCache(
 			path,
 			context.signal,
 		);
-		const remote = remoteFile
+			const remote = remoteFile
 			? normalizeManifest(JSON.parse(remoteFile.text), options.category)
 			: Object.freeze({
 				format: HISTORY_CACHE_MANIFEST_FORMAT,
@@ -152,11 +143,18 @@ async function synchronizeHistoryCache(
 				writerId: '',
 				records: Object.freeze({}),
 				}) satisfies ReaderWebDavHistoryCacheManifest;
-		for (const [id, item] of Object.entries(remote.records)) {
-			if (!item.deleted && options.recordIdentity(item.value) !== id) {
-				throw new Error(`WebDAV ${options.category} 记录 ${id} 身份不一致`);
+			for (const [id, item] of Object.entries(remote.records)) {
+				if (!item.deleted && !options.validateRecord(id, item.value)) {
+					throw new Error(
+						`WebDAV ${options.category} 记录 ${id} 身份不一致或格式无效`,
+					);
+				}
 			}
-		}
+			for (const item of local) {
+				if (!options.validateRecord(item.id, item.value)) {
+					throw new Error(`本机 WebDAV ${options.category} 记录 ${item.id} 格式无效`);
+				}
+			}
 		// 历史缓存是单调累积的本地投影。每轮都按“首次合并”处理，避免尚未回填到
 		// 本机的远端记录被误判为用户删除并写成墓碑。
 		const reconciled = reconcileReaderWebDavRecords({

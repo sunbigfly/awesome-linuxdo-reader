@@ -1,6 +1,7 @@
 import { discourseAvatarTemplateUrl } from '../discourse/native-host-api.js';
 import {
 	ReaderCollectionFloatingWindow,
+	ReaderCollectionNodeCache,
 	ReaderCollectionProgressView,
 	ReaderCollectionScrollWindow,
 } from '../collection/reader-collection-floating-window.js';
@@ -148,6 +149,10 @@ export class ReaderNotificationPanelView {
 	readonly #filterDisclosure: ReaderPopoverFilterDisclosure;
 	readonly #markAllHeaderActions: HTMLElement;
 	readonly #scrollWindow: ReaderCollectionScrollWindow<ReaderNotificationRecord>;
+	readonly #recordNodes = new ReaderCollectionNodeCache<
+		ReaderNotificationRecord,
+		HTMLAnchorElement
+	>();
 	#relativeTimer: unknown = null;
 	#historyCacheCompleted = false;
 
@@ -234,6 +239,7 @@ export class ReaderNotificationPanelView {
 		}, this.scope);
 		this.scope.add(() => {
 			this.#stopRelativeTimer();
+			this.#recordNodes.clear();
 			this.#elements.list.replaceChildren();
 		});
 		this.#render(this.#controller.snapshot);
@@ -573,6 +579,7 @@ export class ReaderNotificationPanelView {
 		const list = this.#elements.list;
 		const scrollTop = list.scrollTop;
 		if (snapshot.retrying && !records.length) {
+			this.#recordNodes.clear();
 			const message = this.#document.createElement('div');
 			message.className = 'ldp-notification-empty';
 			message.textContent = '消息加载暂时中断，正在自动重试…';
@@ -580,6 +587,7 @@ export class ReaderNotificationPanelView {
 			return;
 		}
 		if (snapshot.loading && !records.length) {
+			this.#recordNodes.clear();
 			const message = this.#document.createElement('div');
 			message.className = 'ldp-notification-empty';
 			message.textContent = '正在加载消息…';
@@ -587,6 +595,7 @@ export class ReaderNotificationPanelView {
 			return;
 		}
 		if (snapshot.error && !snapshot.stale && !records.length) {
+			this.#recordNodes.clear();
 			const message = this.#document.createElement('div');
 			message.className = 'ldp-notification-empty';
 			message.textContent = '消息加载失败，请重试';
@@ -594,6 +603,7 @@ export class ReaderNotificationPanelView {
 			return;
 		}
 		if (!records.length) {
+			this.#recordNodes.clear();
 			const message = this.#document.createElement('div');
 			message.className = 'ldp-notification-empty';
 			message.textContent = snapshot.query ||
@@ -613,6 +623,7 @@ export class ReaderNotificationPanelView {
 			grouped.set(label, records);
 		}
 		const fragment = this.#document.createDocumentFragment();
+		const renderedKeys: string[] = [];
 		for (const [label, records] of grouped) {
 			const section = this.#document.createElement('section');
 			section.className = 'ldp-notification-date-group';
@@ -620,14 +631,36 @@ export class ReaderNotificationPanelView {
 			heading.className = 'ldp-notification-date-label';
 			heading.textContent = label;
 			section.append(heading);
-			for (const record of records) section.append(this.#recordNode(record));
+			for (const record of records) {
+				const marker = record.target
+					? this.#archiveMarker(
+						record.target.topicId,
+						record.target.postNumber,
+					)
+					: null;
+				const variant = marker
+					? `${marker.status}:${marker.topicTitle ?? ''}:` +
+						`${marker.postNumber ?? ''}`
+					: '';
+				renderedKeys.push(record.identity);
+				section.append(this.#recordNodes.node(
+					record.identity,
+					record,
+					variant,
+					() => this.#recordNode(record, marker),
+				));
+			}
 			fragment.append(section);
 		}
+		this.#recordNodes.prune(renderedKeys);
 		list.replaceChildren(fragment);
 		list.scrollTop = scrollTop;
 	}
 
-	#recordNode(record: ReaderNotificationRecord): HTMLAnchorElement {
+	#recordNode(
+		record: ReaderNotificationRecord,
+		markerValue?: ReaderHistoryArchiveMarker | null,
+	): HTMLAnchorElement {
 		const item = this.#document.createElement('a');
 		item.className = 'ldp-notification-item ldp-notification-message-item';
 		const unread = record.read === false;
@@ -649,7 +682,9 @@ export class ReaderNotificationPanelView {
 			item.dataset.notificationTopicId = String(record.target.topicId);
 			item.dataset.notificationPostNumber = String(record.target.postNumber);
 		}
-		const archiveMarker = record.target
+		const archiveMarker = markerValue !== undefined
+			? markerValue
+			: record.target
 			? this.#archiveMarker(record.target.topicId, record.target.postNumber)
 			: null;
 		const archiveLabel = archiveMarker

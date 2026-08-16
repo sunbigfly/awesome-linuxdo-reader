@@ -52,7 +52,11 @@ const document = parsedDocument as unknown as Document;
 const window = parsedWindow as unknown as Window;
 let relativeTick: (() => void) | null = null;
 let relativeTimerCleared = false;
+const originalSetInterval = globalThis.setInterval;
+const originalClearInterval = globalThis.clearInterval;
 Object.defineProperty(window, 'setInterval', {
+	configurable: true,
+	writable: true,
 	value: (callback: () => void, delayMs: number): number => {
 		assert(delayMs === 30_000, '时间轴相对时间必须沿用 30 秒刷新周期');
 		relativeTick = callback;
@@ -60,6 +64,8 @@ Object.defineProperty(window, 'setInterval', {
 	},
 });
 Object.defineProperty(window, 'clearInterval', {
+	configurable: true,
+	writable: true,
 	value: (timerId: number): void => {
 		if (timerId === 17) relativeTimerCleared = true;
 	},
@@ -364,3 +370,15 @@ assert(
 		relativeTimerCleared,
 	'Topic 生命周期结束必须隐藏稳定 Shell 时间轴并回收 lens/pending/动画/listener/timer',
 );
+Object.defineProperties(window, {
+	setInterval: {
+		configurable: true,
+		writable: true,
+		value: originalSetInterval,
+	},
+	clearInterval: {
+		configurable: true,
+		writable: true,
+		value: originalClearInterval,
+	},
+});

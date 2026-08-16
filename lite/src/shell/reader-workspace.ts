@@ -148,6 +148,10 @@ export interface ReaderWindowPointerControllerOptions {
 	readonly cancelFrame?: (id: number) => void;
 	readonly dragSurfaceSelector?: string;
 	readonly blockedSelector?: string;
+	readonly isDragBlocked?: (
+		event: PointerEvent,
+		target: Element,
+	) => boolean;
 	readonly interactingClassName?: string;
 	readonly restingTransform?: string;
 	readonly projectPlacement?: (
@@ -1080,6 +1084,9 @@ export class ReaderWindowPointerController {
 	readonly #cancelFrame: (id: number) => void;
 	readonly #dragSurfaceSelector: string;
 	readonly #blockedSelector: string;
+	readonly #isDragBlocked:
+		| ((event: PointerEvent, target: Element) => boolean)
+		| undefined;
 	readonly #interactingClassName: string;
 	readonly #restingTransform: string | undefined;
 	readonly #projectPlacement: (
@@ -1103,6 +1110,7 @@ export class ReaderWindowPointerController {
 			'.ldp-header[data-ldp-reader-drag-surface]';
 		this.#blockedSelector = options.blockedSelector ??
 			WINDOW_DRAG_BLOCKED_SELECTOR;
+		this.#isDragBlocked = options.isDragBlocked;
 		this.#interactingClassName = options.interactingClassName ??
 			'ldp-window-interacting';
 		this.#restingTransform = options.restingTransform;
@@ -1188,7 +1196,8 @@ export class ReaderWindowPointerController {
 			);
 			if (
 				dragSurface === this.#header &&
-				!target.closest(this.#blockedSelector)
+				!target.closest(this.#blockedSelector) &&
+				!this.#isDragBlocked?.(event, target)
 			) {
 				mode = 'drag';
 				handle = dragSurface;

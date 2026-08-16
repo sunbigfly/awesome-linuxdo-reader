@@ -9,6 +9,7 @@ import {
 } from './reader-webdav-config-repository.js';
 import {
 	READER_WEBDAV_CATEGORIES,
+	READER_WEBDAV_CATEGORY_LABELS,
 	createReaderWebDavDocument,
 	normalizeReaderWebDavDocument,
 	reconcileReaderWebDavRecords,
@@ -277,10 +278,22 @@ export class ReaderWebDavCoordinator {
 				snapshot.config,
 				scopeId,
 			);
-			const selected = READER_WEBDAV_CATEGORIES
-				.filter((category) => snapshot.config.categories[category])
-				.map((category) => this.#categories.get(category))
-				.filter((port): port is ReaderWebDavCategoryPort => Boolean(port));
+			const requested = READER_WEBDAV_CATEGORIES.filter(
+				(category) => snapshot.config.categories[category],
+			);
+			const unavailable = requested.filter(
+				(category) => !this.#categories.has(category),
+			);
+			if (unavailable.length) {
+				throw new Error(
+					`所选同步内容当前不可用：${unavailable.map(
+						(category) => READER_WEBDAV_CATEGORY_LABELS[category],
+					).join('、')}`,
+				);
+			}
+			const selected = requested.map(
+				(category) => this.#categories.get(category)!,
+			);
 			if (!selected.length) throw new Error('所选同步内容当前不可用');
 			const regularSelected = selected.filter((port) =>
 				!port.synchronizeStandalone);
@@ -318,18 +331,22 @@ export class ReaderWebDavCoordinator {
 				const document = remoteFile
 					? normalizeReaderWebDavDocument(JSON.parse(remoteFile.text))
 					: createReaderWebDavDocument(snapshot.writerId, this.#now());
+				const storedRemoteScope = document.scopes[scopeId];
 				const remoteScope: ReaderWebDavRemoteScope =
-					document.scopes[scopeId] ?? Object.freeze({
-					categories: Object.freeze({}),
-				});
+					storedRemoteScope ?? Object.freeze({
+						categories: Object.freeze({}),
+					});
 				const categories: Partial<Record<
 					ReaderWebDavCategory,
 					ReaderWebDavRemoteCategory
 				>> = { ...remoteScope.categories };
+				const attemptBaseline: ReaderWebDavBaseline = storedRemoteScope
+					? nextBaseline
+					: Object.freeze({});
 				const baseline: Partial<Record<
 					ReaderWebDavCategory,
 					Readonly<Record<string, string>>
-				>> = { ...nextBaseline };
+				>> = { ...attemptBaseline };
 				const pendingApply: Array<Readonly<{
 					port: ReaderWebDavCategoryPort;
 					records: readonly ReaderWebDavLocalRecord[];
@@ -353,8 +370,8 @@ export class ReaderWebDavCoordinator {
 							}
 						}
 					}
-					const remoteRecords =
-						remoteScope.categories[port.category]?.records ?? {};
+					const remoteCategory = remoteScope.categories[port.category];
+					const remoteRecords = remoteCategory?.records ?? {};
 					const decodedRemoteRecords = port.decodeRemoteRecords
 						? await port.decodeRemoteRecords(
 							remoteRecords,
@@ -373,9 +390,10 @@ export class ReaderWebDavCoordinator {
 					const reconciled = reconcileReaderWebDavRecords({
 						local,
 						remote: decodedRemoteRecords,
-						...(nextBaseline[port.category] === undefined
+						...(remoteCategory === undefined ||
+							attemptBaseline[port.category] === undefined
 							? {}
-							: { baseline: nextBaseline[port.category] }),
+							: { baseline: attemptBaseline[port.category] }),
 						writerId: snapshot.writerId,
 						now: this.#now(),
 						initialStrategy: port.initialStrategy,

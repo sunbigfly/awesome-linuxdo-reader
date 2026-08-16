@@ -256,16 +256,54 @@ const pending = repository.getOrLoad(
 	{ cacheMode: 'refresh' },
 );
 await Promise.resolve();
+const mutationsBeforeInvalidation = mutations.length;
 await repository.invalidate({ tags: ['topic:10'] });
 invalidatedLoad.resolve({ version: 3 });
 assert((await pending).version === 3, '失效期间原调用方仍应收到在飞结果');
 assert((await repository.read(cachePolicy)).state === 'miss', '失效前启动的 loader 不得复活缓存');
-assert(mutations.length === 1, '本地失效必须广播一次');
+assert(
+	mutations.length === mutationsBeforeInvalidation + 1,
+	'本地失效必须广播一次',
+);
 
 await repository.write(cachePolicy, { version: 4 });
+const mutationsAfterWrite = mutations.length;
 repository.applyExternalInvalidation({ kinds: ['topics'] });
 assert((await repository.read(cachePolicy)).state === 'fresh', '外部失效后允许从仍存在的持久层恢复');
-assert(mutations.length === 1, '外部失效不能再次广播形成循环');
+assert(
+	mutations.length === mutationsAfterWrite,
+	'外部失效不能再次广播形成循环',
+);
+
+const peerStore = new MemoryStore();
+let firstPeer!: ResponseRepository;
+let secondPeer!: ResponseRepository;
+firstPeer = new ResponseRepository({
+	store: peerStore,
+	maxMemoryEntries: 4,
+	maxMemoryBytes: 1_000,
+	mutationPort: {
+		publish: (query) => secondPeer.applyExternalInvalidation(query),
+	},
+});
+secondPeer = new ResponseRepository({
+	store: peerStore,
+	maxMemoryEntries: 4,
+	maxMemoryBytes: 1_000,
+	mutationPort: {
+		publish: (query) => firstPeer.applyExternalInvalidation(query),
+	},
+});
+await firstPeer.write(cachePolicy, { version: 1 });
+assert(
+	(await secondPeer.read<{ version: number }>(cachePolicy)).value?.version === 1,
+	'跨标签首读必须复用持久缓存',
+);
+await firstPeer.write(cachePolicy, { version: 2 });
+assert(
+	(await secondPeer.read<{ version: number }>(cachePolicy)).value?.version === 2,
+	'持久写入提交后必须广播并清除其他标签的旧 memory LRU',
+);
 
 const invalidationCause = new Error('indexeddb clear failed');
 const broadcastCause = new Error('broadcast failed');

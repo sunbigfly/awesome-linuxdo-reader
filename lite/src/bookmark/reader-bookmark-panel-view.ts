@@ -9,6 +9,7 @@ import {
 } from '../history/reader-history-repository.js';
 import {
 	ReaderCollectionFloatingWindow,
+	ReaderCollectionNodeCache,
 	ReaderCollectionProgressView,
 	ReaderCollectionScrollWindow,
 } from '../collection/reader-collection-floating-window.js';
@@ -153,9 +154,14 @@ export class ReaderBookmarkPanelView {
 	readonly #progress: ReaderCollectionProgressView;
 	readonly #filterDisclosure: ReaderPopoverFilterDisclosure;
 	readonly #scrollWindow: ReaderCollectionScrollWindow<ReaderBookmarkRecord>;
+	readonly #recordNodes = new ReaderCollectionNodeCache<
+		ReaderBookmarkRecord,
+		HTMLElement
+	>();
 	#tabDrag: TabDrag | null = null;
 	#suppressTabClick = false;
 	#historyCacheCompleted = false;
+	#reactionFilterSignature = '';
 
 	constructor(options: ReaderBookmarkPanelViewOptions) {
 		this.#document = options.document;
@@ -257,6 +263,7 @@ export class ReaderBookmarkPanelView {
 				tab.classList.remove('ldp-bookmark-tab-dragging');
 			}
 			this.#tabDrag = null;
+			this.#recordNodes.clear();
 			this.#elements.list.replaceChildren();
 		});
 		this.#render(this.#controller.snapshot);
@@ -690,10 +697,18 @@ export class ReaderBookmarkPanelView {
 
 	#renderReactionFilters(snapshot: ReaderBookmarkControllerSnapshot): void {
 		const host = this.#elements.reactionFilters;
-		host.replaceChildren();
-		host.hidden =
+		const hidden =
 			snapshot.tab !== 'Reaction' || snapshot.reactionFilters.size === 0;
-		if (host.hidden) return;
+		const signature = JSON.stringify([
+			hidden,
+			snapshot.reactionFilter,
+			[...snapshot.reactionFilters],
+		]);
+		if (signature === this.#reactionFilterSignature) return;
+		this.#reactionFilterSignature = signature;
+		host.replaceChildren();
+		host.hidden = hidden;
+		if (hidden) return;
 		const filters = [['', [...snapshot.reactionFilters.values()].reduce(
 			(total, count) => total + count,
 			0,
@@ -730,12 +745,14 @@ export class ReaderBookmarkPanelView {
 		const scrollTop = host.scrollTop;
 		host.replaceChildren();
 		if (snapshot.loading && !records.length) {
+			this.#recordNodes.clear();
 			host.append(this.#message(
 				`正在加载${recordKind(snapshot.tab)}…`,
 			));
 			return;
 		}
 		if (snapshot.error && !snapshot.stale && !records.length) {
+			this.#recordNodes.clear();
 			const message = this.#message(
 				`${recordKind(snapshot.tab)}加载失败`,
 				true,
@@ -756,6 +773,7 @@ export class ReaderBookmarkPanelView {
 			host.append(this.#message('刷新失败，正在显示上次已加载内容', true));
 		}
 		if (!records.length) {
+			this.#recordNodes.clear();
 			const emptyCopy = snapshot.tab === 'Reaction'
 				? '暂无回应记录；在楼层下方点回应后会出现在这里。'
 				: snapshot.tab === 'Boost'
@@ -774,15 +792,36 @@ export class ReaderBookmarkPanelView {
 			));
 			return;
 		}
+		const renderedKeys: string[] = [];
 		for (const record of records) {
-			host.append(this.#record(record, snapshot));
+			const marker = this.#archiveMarker(
+				record.topicId,
+				record.postNumber,
+			);
+			const selected = record.bookmarkId !== null &&
+				snapshot.selectedBookmarkIds.has(record.bookmarkId);
+			const relativeLabel = record.createdAt
+				? this.#relativeTime(record.createdAt)
+				: '';
+			const variant = `${snapshot.multi}:${selected}:${relativeLabel}:` + (marker
+				? `${marker.status}:${marker.topicTitle ?? ''}:${marker.postNumber ?? ''}`
+				: '');
+			renderedKeys.push(record.identity);
+			host.append(this.#recordNodes.node(
+				record.identity,
+				record,
+				variant,
+				() => this.#record(record, snapshot, marker),
+			));
 		}
+		this.#recordNodes.prune(renderedKeys);
 		host.scrollTop = scrollTop;
 	}
 
 	#record(
 		record: ReaderBookmarkRecord,
 		snapshot: ReaderBookmarkControllerSnapshot,
+		markerValue?: ReaderHistoryArchiveMarker | null,
 	): HTMLElement {
 		const item = this.#document.createElement('div');
 		item.className = activityTab(record.tab)
@@ -790,10 +829,9 @@ export class ReaderBookmarkPanelView {
 				'ldp-collection-item'
 			: 'ldp-bookmark-item ldp-collection-item';
 		item.dataset.bookmarkKey = record.identity;
-		const archiveMarker = this.#archiveMarker(
-			record.topicId,
-			record.postNumber,
-		);
+		const archiveMarker = markerValue === undefined
+			? this.#archiveMarker(record.topicId, record.postNumber)
+			: markerValue;
 		const archivePrefix = archiveMarker
 			? `${readerHistoryArchiveMarkerLabel(archiveMarker)} · `
 			: '';

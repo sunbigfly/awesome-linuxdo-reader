@@ -10,11 +10,19 @@ import type {
 } from '../network/domain-request-gateway.js';
 import { rateLimitWindowFromCode } from '../network/request-rate-limit-policy.js';
 import {
+	findReaderAiModelCatalogExactMatch,
+	mergeReaderAiModelCatalogEntries,
+	normalizeReaderAiModelCatalogEntry,
 	normalizeReaderTranslationBaseUrl,
+	readerAiModelGroups,
+	readerAiProfileForSelection,
 	readerTranslationActiveProfile,
 	validateReaderTranslationAccessConfig,
 	validateReaderTranslationConfig,
 	type ReaderTranslationAccessConfig,
+	type ReaderAiModelCatalogEntry,
+	type ReaderAiModelGroup,
+	type ReaderAiModelSelection,
 	type ReaderTranslationConfig,
 	type ReaderTranslationProfile,
 } from './reader-translation-config.js';
@@ -36,6 +44,8 @@ export interface ExternalTranslationHttpDescriptor {
 		| 'microsoft-auth'
 		| 'microsoft'
 		| 'ai-models'
+		| 'model-metadata-models-dev'
+		| 'model-metadata-openrouter'
 		| 'ai'
 		| 'credit-user'
 		| 'connect-trust';
@@ -119,6 +129,43 @@ export interface TranslationBatchOptions {
 
 export interface TranslationModelCatalog {
 	readonly models: readonly string[];
+	readonly catalog: readonly ReaderAiModelCatalogEntry[];
+	readonly publicCatalog?: readonly ReaderAiModelCatalogEntry[];
+	readonly enrichedModels?: number;
+	readonly metadataSources?: readonly string[];
+}
+
+export interface TranslationAiCompletionImage {
+	readonly key: string;
+	readonly url: string;
+	readonly detail?: 'auto' | 'high' | 'low';
+}
+
+export interface TranslationAiCompletionInput {
+	readonly model: ReaderAiModelSelection;
+	readonly systemPrompt: string;
+	readonly userPrompt: string;
+	readonly images?: readonly TranslationAiCompletionImage[];
+	readonly maxOutputTokens?: number;
+	readonly operationKey?: string;
+	readonly bypassCache?: boolean;
+}
+
+export interface TranslationAiCompletionResult {
+	readonly text: string;
+	readonly model: string;
+	readonly cacheHit?: boolean;
+}
+
+export interface TranslationAiCompletionPort {
+	complete(
+		input: TranslationAiCompletionInput,
+		signal: AbortSignal,
+	): Promise<TranslationAiCompletionResult>;
+}
+
+export interface TranslationAiModelCatalogPort {
+	availableModels(): Promise<readonly ReaderAiModelGroup[]>;
 }
 
 function responseHeader(headers: string | undefined, name: string): string | null {
@@ -172,10 +219,16 @@ function descriptorHeader(
 
 function aiEndpointAllowed(url: URL, suffix: 'models' | 'chat/completions'): boolean {
 	const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+	const searchAllowed = suffix === 'models'
+		? !url.search || (
+			url.searchParams.size === 1 &&
+			url.searchParams.get('output_modalities') === 'all'
+		)
+		: !url.search;
 	return (url.protocol === 'https:' || (url.protocol === 'http:' && loopback)) &&
 		!url.username &&
 		!url.password &&
-		!url.search &&
+		searchAllowed &&
 		!url.hash &&
 		url.pathname.endsWith(`/${suffix}`);
 }
@@ -222,6 +275,23 @@ function assertExternalDescriptor(
 			descriptor.method === 'GET' &&
 			aiEndpointAllowed(url, 'models') &&
 			descriptorHeader(descriptor.headers, 'Authorization').startsWith('Bearer ')
+		) ||
+		(
+			registered &&
+			descriptor.provider === 'model-metadata-models-dev' &&
+			descriptor.method === 'GET' &&
+			url.href === 'https://models.dev/models.json' &&
+			descriptorHeader(descriptor.headers, 'Accept') === 'application/json' &&
+			!descriptorHeader(descriptor.headers, 'Authorization')
+		) ||
+		(
+			registered &&
+			descriptor.provider === 'model-metadata-openrouter' &&
+			descriptor.method === 'GET' &&
+			url.href ===
+				'https://openrouter.ai/api/v1/models?output_modalities=all' &&
+			descriptorHeader(descriptor.headers, 'Accept') === 'application/json' &&
+			!descriptorHeader(descriptor.headers, 'Authorization')
 		) ||
 		(
 			registered &&
@@ -328,7 +398,9 @@ export class BrowserUserscriptExternalHttpPort implements ExternalTranslationHtt
 					...(descriptor.credentials === true
 						? { anonymous: false, withCredentials: true }
 						: descriptor.provider === 'ai' ||
-							descriptor.provider === 'ai-models'
+							descriptor.provider === 'ai-models' ||
+							descriptor.provider === 'model-metadata-models-dev' ||
+							descriptor.provider === 'model-metadata-openrouter'
 							? { anonymous: true, withCredentials: false }
 						: {}),
 					onload: (response) => {
@@ -525,6 +597,10 @@ export class TranslationProviderRequests {
 		const issues = validateReaderTranslationAccessConfig(config);
 		if (issues.length) throw new Error(issues[0]);
 		const url = new URL('models', normalizeReaderTranslationBaseUrl(config.baseUrl));
+		if (
+			url.hostname === 'openrouter.ai' ||
+			url.hostname.endsWith('.openrouter.ai')
+		) url.searchParams.set('output_modalities', 'all');
 		const descriptor: ExternalTranslationHttpDescriptor = Object.freeze({
 			provider: 'ai-models',
 			method: 'GET',
@@ -533,6 +609,30 @@ export class TranslationProviderRequests {
 				Accept: 'application/json',
 				Authorization: `Bearer ${config.apiKey.trim()}`,
 			}),
+			[translationDescriptorBrand]: true as const,
+		});
+		translationDescriptors.add(descriptor);
+		return descriptor;
+	}
+
+	modelsDevMetadata(): ExternalTranslationHttpDescriptor {
+		const descriptor: ExternalTranslationHttpDescriptor = Object.freeze({
+			provider: 'model-metadata-models-dev',
+			method: 'GET',
+			url: 'https://models.dev/models.json',
+			headers: Object.freeze({ Accept: 'application/json' }),
+			[translationDescriptorBrand]: true as const,
+		});
+		translationDescriptors.add(descriptor);
+		return descriptor;
+	}
+
+	openRouterMetadata(): ExternalTranslationHttpDescriptor {
+		const descriptor: ExternalTranslationHttpDescriptor = Object.freeze({
+			provider: 'model-metadata-openrouter',
+			method: 'GET',
+			url: 'https://openrouter.ai/api/v1/models?output_modalities=all',
+			headers: Object.freeze({ Accept: 'application/json' }),
 			[translationDescriptorBrand]: true as const,
 		});
 		translationDescriptors.add(descriptor);
@@ -616,6 +716,103 @@ function parseAi(body: string, sources: readonly string[]): readonly string[] {
 	);
 }
 
+type PublicModelCatalog = ReadonlyMap<string, ReaderAiModelCatalogEntry>;
+
+function modelCatalogRecord(
+	value: unknown,
+): Readonly<Record<string, unknown>> | null {
+	return value !== null && typeof value === 'object' && !Array.isArray(value)
+		? value as Readonly<Record<string, unknown>>
+		: null;
+}
+
+function parseModelsDevCatalog(body: string): PublicModelCatalog {
+	const payload = modelCatalogRecord(JSON.parse(body) as unknown);
+	const rawModels = modelCatalogRecord(payload?.models) ?? payload;
+	const catalog = new Map<string, ReaderAiModelCatalogEntry>();
+	for (const [canonicalId, rawValue] of Object.entries(rawModels ?? {})) {
+		const value = modelCatalogRecord(rawValue);
+		if (!value) continue;
+		const entry = normalizeReaderAiModelCatalogEntry({
+			...value,
+			id: canonicalId,
+			canonicalId,
+			metadataSources: ['models.dev'],
+		});
+		if (entry) catalog.set(entry.id.toLocaleLowerCase(), entry);
+		if (catalog.size >= 5_000) break;
+	}
+	return catalog;
+}
+
+function parseOpenRouterCatalog(body: string): PublicModelCatalog {
+	const payload = modelCatalogRecord(JSON.parse(body) as unknown);
+	const catalog = new Map<string, ReaderAiModelCatalogEntry>();
+	for (const rawValue of Array.isArray(payload?.data) ? payload.data : []) {
+		const value = modelCatalogRecord(rawValue);
+		if (!value) continue;
+		const entry = normalizeReaderAiModelCatalogEntry({
+			...value,
+			metadataSources: ['openrouter'],
+			pricingSource: 'openrouter',
+		});
+		if (entry) catalog.set(entry.id.toLocaleLowerCase(), entry);
+		if (catalog.size >= 5_000) break;
+	}
+	return catalog;
+}
+
+function enrichModelCatalog(
+	providerCatalog: readonly ReaderAiModelCatalogEntry[],
+	publicCatalogs: readonly PublicModelCatalog[],
+): Readonly<{
+	readonly catalog: readonly ReaderAiModelCatalogEntry[];
+	readonly enrichedModels: number;
+}> {
+	let enrichedModels = 0;
+	const catalog = providerCatalog.map((providerEntry) => {
+		let publicEntry: ReaderAiModelCatalogEntry | null = null;
+		for (const publicCatalog of publicCatalogs) {
+			const match = findReaderAiModelCatalogExactMatch(
+				publicEntry ?? providerEntry,
+				publicCatalog.values(),
+			);
+			if (!match) continue;
+			publicEntry = publicEntry
+				? mergeReaderAiModelCatalogEntries(publicEntry, match)
+				: match;
+		}
+		if (!publicEntry) return providerEntry;
+		enrichedModels += 1;
+		return mergeReaderAiModelCatalogEntries(
+			providerEntry,
+			publicEntry,
+			true,
+		);
+	});
+	return Object.freeze({
+		catalog: Object.freeze(catalog),
+		enrichedModels,
+	});
+}
+
+function combinedPublicModelCatalog(
+	publicCatalogs: readonly PublicModelCatalog[],
+): readonly ReaderAiModelCatalogEntry[] {
+	const byId = new Map<string, ReaderAiModelCatalogEntry>();
+	for (const catalog of publicCatalogs) {
+		for (const entry of catalog.values()) {
+			const key = entry.id.toLocaleLowerCase();
+			const existing = byId.get(key);
+			byId.set(key, existing
+				? mergeReaderAiModelCatalogEntries(existing, entry)
+				: entry);
+		}
+	}
+	return Object.freeze([...byId.values()]
+		.sort((left, right) => left.id.localeCompare(right.id)));
+}
+
 export class TranslationRequestAdapter implements TranslationBatchPort {
 	readonly #gateway: DomainRequestGateway;
 	readonly #http: ExternalTranslationHttpPort;
@@ -629,6 +826,8 @@ export class TranslationRequestAdapter implements TranslationBatchPort {
 	readonly #requests = new TranslationProviderRequests();
 	readonly #tasks: TranslationTaskPort;
 	readonly #ownedTasks: TranslationTaskManager | null;
+	#publicCatalogs: readonly PublicModelCatalog[] | null = null;
+	#publicMetadataSources: readonly string[] = Object.freeze([]);
 
 	constructor(options: TranslationRequestAdapterOptions) {
 		this.#gateway = options.gateway;
@@ -646,6 +845,150 @@ export class TranslationRequestAdapter implements TranslationBatchPort {
 		this.#ownedTasks?.destroy();
 	}
 
+	/**
+	 * 使用业务显式选择的 OpenAI-compatible 供应商与模型，并复用统一任务限流。
+	 *
+	 * 该入口不读取翻译 prompt、不写译文缓存；业务必须显式提供受约束的 system/user
+	 * prompt。这样总结等能力可以共享同一套 API 配置，但不会污染翻译语义。
+	 */
+	async complete(
+		input: TranslationAiCompletionInput,
+		signal: AbortSignal,
+	): Promise<TranslationAiCompletionResult> {
+		const config = this.#readConfig ? await this.#readConfig() : null;
+		if (signal.aborted) throw signal.reason;
+		if (!config) throw new Error('自定义 AI 尚未配置，请先在 AI 服务中添加 API');
+		const issues = validateReaderTranslationConfig(config);
+		if (issues.length) throw new Error(issues[0]);
+		const source = readerAiProfileForSelection(config, input.model);
+		if (!source) {
+			throw new Error('所选供应商或模型已不可用，请重新选择业务模型');
+		}
+		const active = Object.freeze({ ...source, model: input.model.model });
+		const systemPrompt = String(input.systemPrompt ?? '').trim();
+		const userPrompt = String(input.userPrompt ?? '').trim();
+		if (!systemPrompt || !userPrompt) throw new Error('自定义 AI 提示词不能为空');
+		const images = Object.freeze((input.images ?? []).map((image) =>
+			Object.freeze({
+				key: String(image.key ?? '').trim(),
+				url: String(image.url ?? '').trim(),
+				detail: image.detail ?? 'low',
+			})).filter((image) => image.key && image.url));
+		const fingerprint = await this.#fingerprint([
+			'ai-completion-v1',
+			active.baseUrl,
+			active.model,
+			String(active.temperature),
+			active.reasoningEffort,
+			String(input.operationKey ?? ''),
+			systemPrompt,
+			userPrompt,
+			...images.map((image) => image.key),
+		]);
+		if (signal.aborted) throw signal.reason;
+		const cached = input.bypassCache === true
+			? ''
+			: String(await this.#gateway.cachedTranslation<string>({
+				provider: 'ai-completion-v1',
+				textFingerprint: fingerprint,
+				sourceLanguage: 'none',
+				targetLanguage: 'summary',
+				cache: this.#translationCache,
+			}) ?? '').trim();
+		if (signal.aborted) throw signal.reason;
+		if (cached) return Object.freeze({
+			text: cached,
+			model: active.model,
+			cacheHit: true,
+		});
+		const responses:
+			RequestTransportResponse<ExternalTranslationHttpResponse>[] = [];
+		const fetchAi = async (url: URL, init: RequestInit): Promise<Response> => {
+			const descriptor = this.#requests.ai(active, url, init);
+			const response = await this.#tasks.request({
+				key: `ai-completion:${fingerprint}:${responses.length}`,
+				serviceKey: `${active.baseUrl}\u0000${active.model}`,
+				priority: 'interactive',
+				signal,
+				quota: {
+					requestsPerMinute: active.requestsPerMinute,
+					tokensPerMinute: active.tokensPerMinute,
+				},
+				estimatedTokens: estimatedTranslationTokens(
+					[userPrompt],
+					systemPrompt,
+					images.map((image) => image.key),
+				),
+			}, (requestSignal) => this.#http.execute(descriptor, {
+				signal: requestSignal,
+				attempt: 0,
+			}));
+			responses.push(response);
+			return new Response(response.value.body, {
+				status: response.status >= 200 && response.status <= 599
+					? response.status
+					: 520,
+				headers: { 'Content-Type': 'application/json' },
+			});
+		};
+		try {
+			const result = await generateText({
+				apiKey: active.apiKey,
+				baseURL: active.baseUrl,
+				model: active.model,
+				fetch: fetchAi,
+				abortSignal: signal,
+				temperature: active.temperature,
+				max_completion_tokens: Math.max(
+					256,
+					Math.min(2_400, Math.trunc(input.maxOutputTokens ?? 1_200)),
+				),
+				...(active.reasoningEffort
+					? { reasoning_effort: active.reasoningEffort }
+					: {}),
+				messages: [
+					{ role: 'system', content: systemPrompt },
+					{
+						role: 'user',
+						content: images.length
+							? [
+								{ type: 'text', text: userPrompt },
+								...images.map((image) => ({
+									type: 'image_url' as const,
+									image_url: {
+										url: image.url,
+										detail: image.detail,
+									},
+								})),
+							]
+							: userPrompt,
+					},
+				],
+			});
+			const latest = responses.at(-1);
+			if (!latest) throw new Error('AI SDK 未发出自定义总结请求');
+			const text = String(result.text ?? '').trim();
+			if (!text) throw new Error('自定义 AI 没有返回可显示的内容');
+			await this.#gateway.cacheTranslation({
+				provider: 'ai-completion-v1',
+				textFingerprint: fingerprint,
+				sourceLanguage: 'none',
+				targetLanguage: 'summary',
+				cache: this.#translationCache,
+			}, text);
+			return Object.freeze({ text, model: active.model, cacheHit: false });
+		} catch (cause) {
+			const latest = responses.at(-1);
+			if (latest && !latest.ok) throw translationRequestError(latest);
+			throw cause;
+		}
+	}
+
+	async availableModels(): Promise<readonly ReaderAiModelGroup[]> {
+		const config = this.#readConfig ? await this.#readConfig() : null;
+		return config ? readerAiModelGroups(config) : Object.freeze([]);
+	}
+
 	async translate(
 		rawTexts: readonly string[],
 		signal: AbortSignal,
@@ -658,7 +1001,12 @@ export class TranslationRequestAdapter implements TranslationBatchPort {
 			? 'prefetch'
 			: 'visible';
 		const active = config ? readerTranslationActiveProfile(config) : null;
-		if (config && active?.apiKey.trim()) {
+		if (
+			config &&
+			active?.apiKey.trim() &&
+			active.model.trim() &&
+			active.models.includes(active.model.trim())
+		) {
 			const issues = validateReaderTranslationConfig(config);
 			if (issues.length) throw new Error(issues[0]);
 			const identity = Object.freeze([
@@ -832,15 +1180,100 @@ export class TranslationRequestAdapter implements TranslationBatchPort {
 		const data = payload && typeof payload === 'object'
 			? (payload as { readonly data?: unknown }).data
 			: null;
-		const models = [...new Set(Array.isArray(data)
-			? data.map((item) => item && typeof item === 'object'
-				? String((item as { readonly id?: unknown }).id ?? '').trim()
-				: '').filter(Boolean)
-			: [])]
-			.slice(0, 1_000)
-			.sort((left, right) => left.localeCompare(right));
-		if (!models.length) throw new Error('/models 未返回可用模型');
-		return Object.freeze({ models: Object.freeze(models) });
+		const catalogById = new Map<string, ReaderAiModelCatalogEntry>();
+		for (const item of Array.isArray(data) ? data : []) {
+			const entry = normalizeReaderAiModelCatalogEntry(item);
+			if (entry) catalogById.set(entry.id, entry);
+			if (catalogById.size >= 1_000) break;
+		}
+		const providerCatalog = Object.freeze([...catalogById.values()]
+			.sort((left, right) => left.id.localeCompare(right.id)));
+		if (!providerCatalog.length) throw new Error('/models 未返回可用模型');
+		const openRouter = new URL(config.baseUrl).hostname === 'openrouter.ai';
+		const publicCatalogs = await this.#loadPublicCatalogs(
+			signal,
+			openRouter ? response.value.body : undefined,
+		);
+		const enriched = enrichModelCatalog(providerCatalog, publicCatalogs);
+		const publicCatalog = combinedPublicModelCatalog(publicCatalogs);
+		const models = Object.freeze(providerCatalog.map((entry) => entry.id));
+		return Object.freeze({
+			models,
+			catalog: providerCatalog,
+			publicCatalog,
+			enrichedModels: enriched.enrichedModels,
+			metadataSources: this.#publicMetadataSources,
+		});
+	}
+
+	async listPublicModels(
+		signal: AbortSignal,
+		forceRefresh = false,
+	): Promise<TranslationModelCatalog> {
+		const publicCatalogs = await this.#loadPublicCatalogs(
+			signal,
+			undefined,
+			forceRefresh,
+		);
+		const catalog = combinedPublicModelCatalog(publicCatalogs);
+		if (!catalog.length) throw new Error('公共模型目录暂时不可用');
+		return Object.freeze({
+			models: Object.freeze(catalog.map((entry) => entry.id)),
+			catalog,
+			enrichedModels: catalog.filter((entry) =>
+				entry.metadataSources.length > 1).length,
+			metadataSources: this.#publicMetadataSources,
+		});
+	}
+
+	async #loadPublicCatalogs(
+		signal: AbortSignal,
+		openRouterBody?: string,
+		forceRefresh = false,
+	): Promise<readonly PublicModelCatalog[]> {
+		if (this.#publicCatalogs && !forceRefresh) return this.#publicCatalogs;
+		const metadataLoads: Array<Readonly<{
+			name: string;
+			load: Promise<PublicModelCatalog>;
+		}>> = [{
+			name: 'models.dev',
+			load: this.#executeNetwork(this.#requests.modelsDevMetadata(), {
+				key: 'ai-model-metadata:models.dev:v1',
+				serviceKey: 'public:models.dev',
+				priority: 'interactive',
+				signal,
+			}).then((result) => parseModelsDevCatalog(result.value.body)),
+		}, {
+			name: 'openrouter',
+			load: openRouterBody === undefined
+				? this.#executeNetwork(this.#requests.openRouterMetadata(), {
+					key: 'ai-model-metadata:openrouter:v1',
+					serviceKey: 'public:openrouter',
+					priority: 'interactive',
+					signal,
+				}).then((result) => parseOpenRouterCatalog(result.value.body))
+				: Promise.resolve(parseOpenRouterCatalog(openRouterBody)),
+		}];
+		const metadataResults = await Promise.allSettled(
+			metadataLoads.map((source) => source.load),
+		);
+		if (signal.aborted) throw signal.reason;
+		if (
+			forceRefresh &&
+			metadataResults.some((result) => result.status === 'rejected')
+		) throw new Error('公共模型元数据刷新不完整，已保留现有缓存');
+		const publicCatalogs: PublicModelCatalog[] = [];
+		const metadataSources: string[] = [];
+		metadataResults.forEach((result, index) => {
+			if (result.status !== 'fulfilled') return;
+			publicCatalogs.push(result.value);
+			metadataSources.push(metadataLoads[index]!.name);
+		});
+		if (publicCatalogs.length) {
+			this.#publicCatalogs = Object.freeze(publicCatalogs);
+			this.#publicMetadataSources = Object.freeze(metadataSources);
+		}
+		return Object.freeze(publicCatalogs);
 	}
 
 	async #executeNetwork(

@@ -36,6 +36,16 @@ function plainRecord(value: unknown, name: string): Readonly<Record<string, unkn
 	return value as Readonly<Record<string, unknown>>;
 }
 
+function exactKeys(
+	value: Readonly<Record<string, unknown>>,
+	expected: readonly string[],
+): boolean {
+	const actual = Object.keys(value).sort();
+	const canonical = [...expected].sort();
+	return actual.length === canonical.length &&
+		actual.every((key, index) => key === canonical[index]);
+}
+
 /**
  * 偏好导入/导出格式的唯一 codec。字段业务归一化仍由 PreferencesRepository 共用的
  * normalize 注入，不在 codec 内复制布局、字体或性能规则。
@@ -108,15 +118,27 @@ export class PreferencesConfigCodec<TPreferences extends object> {
 	#import(payload: unknown): Readonly<TPreferences> {
 		const record = plainRecord(payload, 'config payload');
 		if (
+			!exactKeys(record, [
+				'format',
+				'schemaVersion',
+				'scriptVersion',
+				'exportedAt',
+				'settingsCount',
+				'settings',
+			]) ||
 			record.format !== this.#format ||
-			Number(record.schemaVersion) !== this.#schemaVersion
+			record.schemaVersion !== this.#schemaVersion ||
+			typeof record.scriptVersion !== 'string' ||
+			!record.scriptVersion.trim() ||
+			typeof record.exportedAt !== 'string' ||
+			!record.exportedAt.trim()
 		) {
 			throw new Error('invalid_config');
 		}
 		const settingsRecord = plainRecord(record.settings, 'config settings');
 		const originalKeys = Object.keys(settingsRecord);
 		if (
-			Number(record.settingsCount) !== originalKeys.length ||
+			record.settingsCount !== originalKeys.length ||
 			originalKeys.some((key) => !this.#settingKeySet.has(key))
 		) {
 			throw new Error('invalid_config');

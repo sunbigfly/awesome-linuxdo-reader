@@ -1,4 +1,5 @@
 import type {
+	ResponseCacheFlightPort,
 	ResponseCacheInvalidation,
 	ResponseCachePolicy,
 	ResponseRepository,
@@ -259,15 +260,29 @@ function yieldMainThread(): Promise<void> {
 export class ReaderUserObservationPageRepository {
 	readonly #responses: ResponseRepository;
 	readonly #authScope: string;
+	readonly #coordination: Pick<
+		ResponseCacheFlightPort,
+		'acquireFlight' | 'renewFlight' | 'releaseFlight' | 'waitForFlight'
+	> | undefined;
+	readonly #writes = new Map<string, Promise<unknown>>();
+	readonly #generationNonce = Math.random().toString(36).slice(2);
 	#generation = 0;
 
-	constructor(responses: ResponseRepository, authScope: string) {
+	constructor(
+		responses: ResponseRepository,
+		authScope: string,
+		coordination?: Pick<
+			ResponseCacheFlightPort,
+			'acquireFlight' | 'renewFlight' | 'releaseFlight' | 'waitForFlight'
+		>,
+	) {
 		this.#responses = responses;
 		this.#authScope = String(authScope).trim();
 		if (!this.#authScope) throw new Error('用户观察 authScope 不能为空');
+		this.#coordination = coordination;
 	}
 
-	async write(
+	write(
 		usernameValue: string,
 		records: readonly ReaderUserActivityRecord[],
 		updatedAt = Date.now(),
@@ -276,8 +291,28 @@ export class ReaderUserObservationPageRepository {
 		complete = true,
 	): Promise<void> {
 		const owner = username(usernameValue);
+		return this.#enqueueMutation(owner, () => this.#commitWrite(
+			owner,
+			records,
+			updatedAt,
+			mergeStored,
+			topicMetadata,
+			complete,
+		));
+	}
+
+	async #commitWrite(
+		owner: string,
+		records: readonly ReaderUserActivityRecord[],
+		updatedAt: number,
+		mergeStored: boolean,
+		topicMetadata: readonly ReaderUserTopicMetadata[],
+		complete: boolean,
+	): Promise<void> {
+		const manifestPolicy = policy(this.#authScope, owner, 'manifest');
+		this.#responses.forgetMemory({ ids: [manifestPolicy.id] });
 		const previousRead = await this.#responses.read<ReaderUserObservationStoredManifest>(
-			policy(this.#authScope, owner, 'manifest'),
+			manifestPolicy,
 		);
 		const previous = manifestValue(previousRead.value);
 		let committedRecords = records;
@@ -290,6 +325,7 @@ export class ReaderUserObservationPageRepository {
 						owner,
 						previous,
 						start + indexValue,
+						true,
 					),
 				));
 				for (const storedPage of storedPages) {
@@ -328,6 +364,7 @@ export class ReaderUserObservationPageRepository {
 		}
 		committedRecords = sortReaderUserActivities(committedRecords);
 		const generation = `${Math.max(0, Math.floor(updatedAt)).toString(36)}-` +
+			`${this.#generationNonce}-` +
 			`${(++this.#generation).toString(36)}`;
 		const pages = Math.ceil(committedRecords.length / PAGE_SIZE);
 		const counts: Partial<Record<ReaderUserActivityKind, number>> = {};
@@ -360,13 +397,14 @@ export class ReaderUserObservationPageRepository {
 								(page + 1) * PAGE_SIZE,
 							)),
 						}),
+						{ publish: false },
 					);
 				},
 			));
 			if (start + IO_BATCH_SIZE < pages) await yieldMainThread();
 		}
 		await this.#responses.write<ReaderUserObservationStoredManifest>(
-			policy(this.#authScope, owner, 'manifest'),
+			manifestPolicy,
 			Object.freeze({
 				schemaVersion: 2,
 				username: owner,
@@ -383,7 +421,7 @@ export class ReaderUserObservationPageRepository {
 			}),
 		);
 		if (previous && previous.generation !== generation && previous.pages > 0) {
-			await this.#responses.invalidate(Object.freeze({
+			await this.#responses.prune(Object.freeze({
 				ids: Object.freeze(Array.from({ length: previous.pages }, (_, page) =>
 					policy(
 						this.#authScope,
@@ -432,10 +470,19 @@ export class ReaderUserObservationPageRepository {
 	 * 只接受 IndexedDB 中可逐页回读的完整世代；当前标签页 memory LRU 命中不能
 	 * 代替落盘成功。采集 session 只有通过这里才能提交 ready。
 	 */
-	async persistentIdentityIndex(
+	persistentIdentityIndex(
 		usernameValue: string,
 	): Promise<ReaderUserObservationStoredIdentityIndex | null> {
 		const owner = username(usernameValue);
+		return this.#enqueueMutation(
+			owner,
+			() => this.#persistentIdentityIndex(owner),
+		);
+	}
+
+	async #persistentIdentityIndex(
+		owner: string,
+	): Promise<ReaderUserObservationStoredIdentityIndex | null> {
 		const manifestRead = await this.#responses
 			.readPersistent<ReaderUserObservationStoredManifest>(
 				policy(this.#authScope, owner, 'manifest'),
@@ -575,15 +622,27 @@ export class ReaderUserObservationPageRepository {
 	 * 只改写命中 topicId 的物理页与 manifest 索引；打开一个 Topic 不得重写该用户的
 	 * 整份公开历史。记录 identity、顺序和分页代际保持不变。
 	 */
-	async mergeTopicMetadata(
+	mergeTopicMetadata(
 		usernameValue: string,
 		metadata: ReaderUserTopicMetadata,
 	): Promise<boolean> {
 		const owner = username(usernameValue);
+		return this.#enqueueMutation(
+			owner,
+			() => this.#mergeTopicMetadata(owner, metadata),
+		);
+	}
+
+	async #mergeTopicMetadata(
+		owner: string,
+		metadata: ReaderUserTopicMetadata,
+	): Promise<boolean> {
+		const manifestPolicy = policy(this.#authScope, owner, 'manifest');
+		this.#responses.forgetMemory({ ids: [manifestPolicy.id] });
 		const topicId = Number(metadata.topicId);
 		if (!Number.isSafeInteger(topicId) || topicId < 1) return false;
 		const manifestRead = await this.#responses.read<ReaderUserObservationStoredManifest>(
-			policy(this.#authScope, owner, 'manifest'),
+			manifestPolicy,
 		);
 		const manifest = manifestValue(manifestRead.value);
 		if (!manifest) return false;
@@ -600,7 +659,12 @@ export class ReaderUserObservationPageRepository {
 		for (let start = 0; start < pageNumbers.length; start += IO_BATCH_SIZE) {
 			await Promise.all(pageNumbers.slice(start, start + IO_BATCH_SIZE).map(
 				async (page) => {
-					const storedPage = await this.#readPhysicalPage(owner, manifest, page);
+					const storedPage = await this.#readPhysicalPage(
+						owner,
+						manifest,
+						page,
+						true,
+					);
 					if (!storedPage) return;
 					let pageChanged = false;
 					const records = storedPage.records.map((record, slot) => {
@@ -639,7 +703,7 @@ export class ReaderUserObservationPageRepository {
 		}
 		if (!changed) return false;
 		await this.#responses.write<ReaderUserObservationStoredManifest>(
-			policy(this.#authScope, owner, 'manifest'),
+			manifestPolicy,
 			Object.freeze({
 				...manifest,
 				index: Object.freeze(nextIndex),
@@ -832,13 +896,54 @@ export class ReaderUserObservationPageRepository {
 		});
 	}
 
-	async remove(usernameValue: string): Promise<void> {
+	#enqueueMutation<T>(owner: string, operation: () => Promise<T>): Promise<T> {
+		const previous = this.#writes.get(owner) ?? Promise.resolve();
+		const queued = previous.catch(() => {}).then(() =>
+			this.#withWriteLease(owner, operation));
+		this.#writes.set(owner, queued);
+		void queued.finally(() => {
+			if (this.#writes.get(owner) === queued) this.#writes.delete(owner);
+		}).catch(() => {});
+		return queued;
+	}
+
+	async #withWriteLease<T>(
+		owner: string,
+		operation: () => Promise<T>,
+	): Promise<T> {
+		const coordination = this.#coordination;
+		if (!coordination) return operation();
+		const token = `reader-user-observation-write:v1:${
+			policy(this.#authScope, owner, 'manifest').id}`;
+		while (true) {
+			const lease = await coordination.acquireFlight(token);
+			if (!lease.producer) {
+				await coordination.waitForFlight(token);
+				continue;
+			}
+			const heartbeat = lease.coordinated
+				? setInterval(() => {
+					void coordination.renewFlight(lease).catch(() => {});
+				}, 10_000)
+				: null;
+			try {
+				return await operation();
+			} finally {
+				if (heartbeat !== null) clearInterval(heartbeat);
+				await coordination.releaseFlight(lease);
+			}
+		}
+	}
+
+	remove(usernameValue: string): Promise<void> {
 		const owner = username(usernameValue);
-		await this.#responses.invalidate(Object.freeze({
-			tags: Object.freeze([
-				`user-observation-history:user:${userToken(owner)}`,
-			]),
-		}));
+		return this.#enqueueMutation(owner, () => this.#responses.invalidate(
+			Object.freeze({
+				tags: Object.freeze([
+					`user-observation-history:user:${userToken(owner)}`,
+				]),
+			}),
+		));
 	}
 
 	static cleanupQuery(authScope: string): ResponseCacheInvalidation {

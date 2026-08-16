@@ -22,6 +22,9 @@ export interface ReaderFloatingWindowFrameOptions {
 	readonly tabOrder: number;
 	readonly requestOpen: () => void | Promise<void>;
 	readonly zIndex: number;
+	readonly tabAction?: HTMLElement;
+	readonly sessionMode?: 'shared' | 'standalone';
+	readonly launcherSelector?: string;
 	readonly geometryStorage?: Pick<Storage, 'getItem' | 'setItem'>;
 	readonly geometryStorageKey: string;
 	readonly policy: Partial<ReaderWindowGeometryPolicy> & Readonly<{
@@ -57,6 +60,7 @@ const READER_FLOATING_WINDOW_LAUNCHERS = Object.freeze([
 ]);
 const READER_FLOATING_WINDOW_LAUNCHER_SELECTOR =
 	READER_FLOATING_WINDOW_LAUNCHERS.map(({ selector }) => selector).join(',');
+const READER_FLOATING_WINDOW_SCROLLBAR_GUARD_PX = 6;
 
 const floatingWindowTabGroups = new WeakMap<
 	HTMLElement,
@@ -75,7 +79,27 @@ function eventPathMatches(event: Event, selector: string): boolean {
 	});
 }
 
-/** 同一 Reader 内七类工具浮窗的浏览器标签式会话 owner。 */
+function pointerHitsHorizontalScrollbar(
+	event: PointerEvent,
+	element: HTMLElement,
+): boolean {
+	if (element.scrollWidth <= element.clientWidth + 1) return false;
+	const bounds = element.getBoundingClientRect();
+	if (bounds.width <= 0 || bounds.height <= 0) return false;
+	const measuredHeight = Math.max(
+		0,
+		Number(element.offsetHeight) - Number(element.clientHeight),
+	);
+	const guardHeight = Math.max(
+		READER_FLOATING_WINDOW_SCROLLBAR_GUARD_PX,
+		measuredHeight,
+	);
+	return event.clientX >= bounds.left && event.clientX <= bounds.right &&
+		event.clientY >= bounds.bottom - guardHeight &&
+		event.clientY <= bounds.bottom;
+}
+
+/** 同一 Reader 内工具浮窗的浏览器标签式会话 owner。 */
 class ReaderFloatingWindowTabGroup {
 	readonly #document: Document;
 	readonly #mount: HTMLElement;
@@ -85,6 +109,7 @@ class ReaderFloatingWindowTabGroup {
 	readonly #onPointerDown: EventListener;
 	readonly #onClick: EventListener;
 	#active: ReaderFloatingWindowFrame | null = null;
+	#sharedGeometry: ReaderWindowSnapshot['geometry'] | null = null;
 	#pinned = false;
 	#tabScrollLeft = 0;
 	#visible = false;
@@ -117,6 +142,7 @@ class ReaderFloatingWindowTabGroup {
 			throw new Error(`浮窗标签 id 重复：${frame.tabId}`);
 		}
 		this.#captureTabScroll();
+		this.#captureSharedGeometry();
 		if (!this.#frames.size) this.#pinned = frame.pinned;
 		else frame.syncSharedPinned(this.#pinned);
 		this.#frames.set(frame.tabId, frame);
@@ -126,6 +152,7 @@ class ReaderFloatingWindowTabGroup {
 	unregister(frame: ReaderFloatingWindowFrame): void {
 		if (this.#frames.get(frame.tabId) !== frame) return;
 		this.#captureTabScroll();
+		this.#captureSharedGeometry();
 		this.#frames.delete(frame.tabId);
 		const index = this.#opened.indexOf(frame);
 		if (index >= 0) this.#opened.splice(index, 1);
@@ -150,6 +177,8 @@ class ReaderFloatingWindowTabGroup {
 	open(frame: ReaderFloatingWindowFrame): void {
 		if (!this.#frames.has(frame.tabId)) return;
 		this.#captureTabScroll();
+		if (this.#visible) this.#captureSharedGeometry();
+		else this.#sharedGeometry = frame.geometry.snapshot.geometry;
 		const revealActive = !this.#opened.includes(frame);
 		if (revealActive) this.#opened.push(frame);
 		this.#active = frame;
@@ -161,6 +190,7 @@ class ReaderFloatingWindowTabGroup {
 		const index = this.#opened.indexOf(frame);
 		if (index < 0) return;
 		this.#captureTabScroll();
+		this.#captureSharedGeometry();
 		this.#opened.splice(index, 1);
 		if (this.#active === frame) {
 			this.#active = this.#opened[Math.min(index, this.#opened.length - 1)] ??
@@ -220,12 +250,18 @@ class ReaderFloatingWindowTabGroup {
 
 	refresh(): void {
 		this.#captureTabScroll();
+		this.#captureSharedGeometry();
 		this.#sync();
 	}
 
-	restore(): boolean {
+	restore(tabId?: string): boolean {
 		if (this.#visible || !this.#opened.length) return false;
-		if (!this.#active || !this.#opened.includes(this.#active)) {
+		this.#captureSharedGeometry();
+		if (tabId) {
+			const requested = this.#frames.get(tabId);
+			if (!requested || !this.#opened.includes(requested)) return false;
+			this.#active = requested;
+		} else if (!this.#active || !this.#opened.includes(this.#active)) {
 			this.#active = this.#opened.at(-1) ?? null;
 		}
 		this.#visible = Boolean(this.#active);
@@ -239,8 +275,14 @@ class ReaderFloatingWindowTabGroup {
 
 	#dismiss(): void {
 		this.#captureTabScroll();
+		this.#captureSharedGeometry();
 		this.#visible = false;
 		this.#sync();
+	}
+
+	#captureSharedGeometry(): void {
+		if (!this.#active) return;
+		this.#sharedGeometry = this.#active.geometry.snapshot.geometry;
 	}
 
 	#captureTabScroll(): void {
@@ -252,6 +294,12 @@ class ReaderFloatingWindowTabGroup {
 	}
 
 	#sync(revealActive = false): void {
+		if (!this.#sharedGeometry && this.#active) {
+			this.#sharedGeometry = this.#active.geometry.snapshot.geometry;
+		}
+		if (this.#active && this.#sharedGeometry) {
+			this.#active.applySharedGeometry(this.#sharedGeometry);
+		}
 		const remaining = [...this.#frames.values()]
 			.filter((frame) => !this.#opened.includes(frame))
 			.sort((left, right) => left.tabOrder - right.tabOrder);
@@ -279,11 +327,12 @@ function tabGroup(
 	return created;
 }
 
-/** 快捷键唤回时恢复整组关闭前的聚焦标签和会话位置。 */
+/** 快捷键唤回时恢复指定或整组关闭前的聚焦标签和会话位置。 */
 export function restoreReaderFloatingWindowTabSession(
 	mount: HTMLElement,
+	tabId?: string,
 ): boolean {
-	return floatingWindowTabGroups.get(mount)?.restore() ?? false;
+	return floatingWindowTabGroups.get(mount)?.restore(tabId) ?? false;
 }
 
 function storedPreferences(
@@ -400,8 +449,10 @@ export class ReaderFloatingWindowFrame {
 		| undefined;
 	readonly #geometryStorageKey: string;
 	readonly #requestOpen: () => void | Promise<void>;
+	readonly #tabAction: HTMLElement | null;
 	readonly #notify: (message: string) => void;
-	readonly #tabGroup: ReaderFloatingWindowTabGroup;
+	readonly #tabGroup: ReaderFloatingWindowTabGroup | null;
+	readonly #launcherSelector: string | null;
 	readonly #tabLabel: string;
 	#iconName: string;
 	#open = false;
@@ -413,6 +464,12 @@ export class ReaderFloatingWindowFrame {
 		this.#geometryStorage = options.geometryStorage;
 		this.#geometryStorageKey = options.geometryStorageKey;
 		this.#requestOpen = options.requestOpen;
+		this.#tabAction = options.tabAction ?? null;
+		this.#tabAction?.classList.add('ldp-reader-floating-window-tab-action');
+		const standalone = options.sessionMode === 'standalone';
+		this.#launcherSelector = standalone
+			? options.launcherSelector ?? null
+			: null;
 		this.#notify = options.notify ?? (() => {});
 		this.tabId = options.tabId;
 		this.tabOrder = options.tabOrder;
@@ -425,6 +482,7 @@ export class ReaderFloatingWindowFrame {
 			`ldp-reader-floating-host is-${options.variant}`,
 		);
 		this.host.style.zIndex = String(options.zIndex);
+		this.host.classList.toggle('is-standalone', standalone);
 		/* surfaceHost 是完整 Reader overlay；挂在其内即可继承当前主题与字体。 */
 		options.mount.append(this.host);
 		this.element = node(
@@ -433,6 +491,7 @@ export class ReaderFloatingWindowFrame {
 			`ldp-reader-floating-window is-${options.variant}`,
 		);
 		this.element.hidden = true;
+		this.element.classList.toggle('is-standalone', standalone);
 		this.element.setAttribute('role', 'dialog');
 		this.element.setAttribute('aria-label', options.ariaLabel);
 		this.header = node(
@@ -447,7 +506,7 @@ export class ReaderFloatingWindowFrame {
 			'ldp-reader-floating-window-title',
 			options.title,
 		);
-		this.title.hidden = true;
+		this.title.hidden = !standalone;
 		this.tabList = node(
 			options.document,
 			'nav',
@@ -509,11 +568,21 @@ export class ReaderFloatingWindowFrame {
 			'ldp-reader-floating-window-toolbar-row',
 		);
 		this.toolbarRow.append(this.meta, this.actions);
-		this.header.append(
-			this.title,
-			this.tabRow,
-			this.toolbarRow,
-		);
+		if (standalone) {
+			this.header.append(
+				this.title,
+				this.meta,
+				this.pinButton,
+				...(this.#tabAction ? [this.#tabAction] : []),
+				this.closeButton,
+			);
+		} else {
+			this.header.append(
+				this.title,
+				this.tabRow,
+				this.toolbarRow,
+			);
+		}
 		this.body = node(
 			options.document,
 			'div',
@@ -598,9 +667,15 @@ export class ReaderFloatingWindowFrame {
 			dragSurfaceSelector:
 				'.ldp-reader-floating-window-head[data-reader-floating-drag-surface]',
 			blockedSelector:
-				'.ldp-reader-floating-window-tab-row,' +
 				'button,input,select,textarea,label,a,[role="button"],' +
 				'[contenteditable="true"]',
+			isDragBlocked: (event, target) => {
+				const tabs = target.closest<HTMLElement>(
+					'.ldp-reader-floating-window-tabs',
+				);
+				return tabs === this.tabList &&
+					pointerHitsHorizontalScrollbar(event, tabs);
+			},
 			interactingClassName: 'ldp-reader-floating-window-interacting',
 			restingTransform: 'none',
 			projectPlacement: () => {},
@@ -633,13 +708,17 @@ export class ReaderFloatingWindowFrame {
 				this.geometry.resizeViewport(next.width, next.height);
 			});
 		}
-		this.#tabGroup = tabGroup(options.document, options.mount);
-		this.#tabGroup.register(this);
-		this.scope.listen(this.pinButton, 'click', () => {
-			this.#tabGroup.syncPinnedFrom(this);
-		});
+		this.#tabGroup = standalone
+			? null
+			: tabGroup(options.document, options.mount);
+		this.#tabGroup?.register(this);
+		if (this.#tabGroup) {
+			this.scope.listen(this.pinButton, 'click', () => {
+				this.#tabGroup?.syncPinnedFrom(this);
+			});
+		}
 		this.scope.add(() => {
-			this.#tabGroup.unregister(this);
+			this.#tabGroup?.unregister(this);
 			this.host.remove();
 		});
 	}
@@ -658,16 +737,25 @@ export class ReaderFloatingWindowFrame {
 
 	setIcon(name: string): void {
 		this.#iconName = name;
-		this.#tabGroup.refresh();
+		this.#tabGroup?.refresh();
 	}
 
 	setTitle(value: string): void {
 		this.title.textContent = value;
-		this.#tabGroup.refresh();
+		this.#tabGroup?.refresh();
 	}
 
 	setMinimumWidth(width: number): void {
 		this.geometry.setMinimumWidth(width);
+	}
+
+	applySharedGeometry(geometry: ReaderWindowSnapshot['geometry']): void {
+		this.geometry.setGeometry(
+			geometry.width,
+			geometry.height,
+			geometry.left,
+			geometry.top,
+		);
 	}
 
 	open(): void {
@@ -675,7 +763,8 @@ export class ReaderFloatingWindowFrame {
 		this.#syncSharedGeometry();
 		this.#open = true;
 		this.element.classList.add('is-open');
-		this.#tabGroup.open(this);
+		if (this.#tabGroup) this.#tabGroup.open(this);
+		else this.syncTabVisibility(true);
 	}
 
 	#syncSharedGeometry(): void {
@@ -691,14 +780,15 @@ export class ReaderFloatingWindowFrame {
 				restored.readerWindowY,
 			);
 		}
-		this.syncSharedPinned(this.#tabGroup.pinned);
+		if (this.#tabGroup) this.syncSharedPinned(this.#tabGroup.pinned);
 	}
 
 	close(): void {
 		if (!this.#open || this.scope.destroyed) return;
 		this.#open = false;
 		this.element.classList.remove('is-open');
-		this.#tabGroup.close(this);
+		if (this.#tabGroup) this.#tabGroup.close(this);
+		else this.syncTabVisibility(false);
 		this.#onClose();
 	}
 
@@ -709,14 +799,30 @@ export class ReaderFloatingWindowFrame {
 			this.pinned ||
 			this.contains(event.target) ||
 			eventPathMatches(event, '.ldp-reader-floating-window') ||
-			this.#tabGroup.isLauncherEvent(event)
+			(this.#launcherSelector &&
+				eventPathMatches(event, this.#launcherSelector)) ||
+			this.#tabGroup?.isLauncherEvent(event)
 		) return false;
-		return this.#tabGroup.dismissFromPointerEvent(this, event);
+		if (this.#tabGroup) {
+			return this.#tabGroup.dismissFromPointerEvent(this, event);
+		}
+		this.close();
+		return true;
 	}
 
 	dismissFromEscapeEvent(event: KeyboardEvent): boolean {
 		if (!this.#open || !this.#active) return false;
-		return this.#tabGroup.dismissFromEscapeEvent(this, event);
+		if (this.#tabGroup) {
+			return this.#tabGroup.dismissFromEscapeEvent(this, event);
+		}
+		if (
+			event.key !== 'Escape' ||
+			!readerEscapeOwnedBy(this.#document(), [this.element])
+		) return false;
+		event.preventDefault();
+		event.stopImmediatePropagation();
+		if (!this.pinned) this.close();
+		return true;
 	}
 
 	syncSharedPinned(pinned: boolean): void {
@@ -737,7 +843,7 @@ export class ReaderFloatingWindowFrame {
 		scrollLeft: number,
 		revealActive: boolean,
 	): void {
-		if (!this.#active) return;
+		if (!this.#active || !this.#tabGroup) return;
 		this.tabList.replaceChildren(...opened.map((frame) => {
 			const item = node(
 				this.#document(),
@@ -765,7 +871,7 @@ export class ReaderFloatingWindowFrame {
 				),
 			);
 			activate.addEventListener('click', () => {
-				this.#tabGroup.activate(frame);
+				this.#tabGroup?.activate(frame);
 			});
 			const close = frame === this
 				? this.closeButton
@@ -793,7 +899,13 @@ export class ReaderFloatingWindowFrame {
 				event.stopPropagation();
 				frame.close();
 			});
-			item.append(activate, close);
+			item.append(
+				activate,
+				...(frame === this && frame.#tabAction
+					? [frame.#tabAction]
+					: []),
+				close,
+			);
 			return item;
 		}));
 		this.tabList.scrollLeft = Math.max(0, scrollLeft);

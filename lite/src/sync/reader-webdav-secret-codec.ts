@@ -46,8 +46,15 @@ function fromBase64Url(
 	value: unknown,
 	maximum: number,
 ): Uint8Array<ArrayBuffer> {
-	const source = String(value ?? '');
-	if (!source || source.length > Math.ceil(maximum * 4 / 3) + 4) {
+	if (typeof value !== 'string') {
+		throw new Error('WebDAV 加密载荷类型无效');
+	}
+	const source = value;
+	if (
+		!source ||
+		!/^[A-Za-z0-9_-]+$/u.test(source) ||
+		source.length > Math.ceil(maximum * 4 / 3) + 4
+	) {
 		throw new Error('WebDAV 加密载荷长度无效');
 	}
 	const base64 = source.replaceAll('-', '+').replaceAll('_', '/');
@@ -59,6 +66,42 @@ function fromBase64Url(
 		bytes[index] = binary.charCodeAt(index);
 	}
 	return bytes;
+}
+
+export function readerWebDavEncryptedSecretMatchesSchema(
+	value: unknown,
+): value is ReaderWebDavEncryptedSecret {
+	const source = record(value);
+	if (
+		!source ||
+		Object.keys(source).length !== 8 ||
+		!['format', 'version', 'kdf', 'iterations', 'salt', 'cipher', 'iv',
+			'ciphertext'].every((key) => Object.hasOwn(source, key)) ||
+		source.format !== READER_WEBDAV_SECRET_FORMAT ||
+		source.version !== READER_WEBDAV_SECRET_VERSION ||
+		source.kdf !== 'PBKDF2-SHA-256' ||
+		source.cipher !== 'AES-256-GCM' ||
+		typeof source.iterations !== 'number' ||
+		!Number.isSafeInteger(source.iterations) ||
+		source.iterations < 100_000 ||
+		source.iterations > 1_000_000
+	) return false;
+	try {
+		const salt = fromBase64Url(source.salt, SALT_BYTES);
+		const iv = fromBase64Url(source.iv, IV_BYTES);
+		const ciphertext = fromBase64Url(
+			source.ciphertext,
+			MAX_CIPHERTEXT_BYTES,
+		);
+		return salt.length === SALT_BYTES &&
+			iv.length === IV_BYTES &&
+			ciphertext.length >= 16 &&
+			base64Url(salt) === source.salt &&
+			base64Url(iv) === source.iv &&
+			base64Url(ciphertext) === source.ciphertext;
+	} catch {
+		return false;
+	}
 }
 
 async function encryptionKey(
@@ -129,17 +172,11 @@ export async function decryptReaderWebDavSecret(
 	associatedData: string,
 ): Promise<unknown> {
 	try {
-		const source = record(value);
-		if (
-			source?.format !== READER_WEBDAV_SECRET_FORMAT ||
-			source.version !== READER_WEBDAV_SECRET_VERSION ||
-			source.kdf !== 'PBKDF2-SHA-256' ||
-			source.cipher !== 'AES-256-GCM'
-		) throw new Error('unsupported envelope');
-		const iterations = Number(source.iterations);
-		if (iterations < 100_000 || iterations > 1_000_000) {
-			throw new Error('invalid iterations');
+		if (!readerWebDavEncryptedSecretMatchesSchema(value)) {
+			throw new Error('unsupported envelope');
 		}
+		const source = value;
+		const iterations = source.iterations;
 		const salt = fromBase64Url(source.salt, SALT_BYTES);
 		const iv = fromBase64Url(source.iv, IV_BYTES);
 		if (salt.length !== SALT_BYTES || iv.length !== IV_BYTES) {

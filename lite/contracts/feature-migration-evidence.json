@@ -629,6 +629,54 @@
       ],
       "note": "Topic/Post 收藏的单条、本页和全部结果选择由 controller 的 canonical bookmark ID 集合统一拥有；Reaction 明确禁用多选。单条删除复用 bookmark-api#delete，并与主线一致直接提交而不增加确认；批量删除复用 Discourse Bookmark.bulkOperation 并冻结确认发起时的 IDs。两者均经 BookmarkActionFeatureCommands/PostActionController 做结果校验、中央 bookmarks tag 失效和失败 reconcile，View 只投影 request busy/disabled 及主线成功/详细失败反馈。真实确认焦点、跨页大集合删除、按钮动画和宿主列表即时回声仍待浏览器验收。"
     },
+    "COLLECT-007": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/collection/reader-unwanted-topic-filter.ts",
+        "lite/src/collection/reader-unwanted-topic-filter-editor.ts",
+        "lite/src/collection/reader-unwanted-topic-repository.ts",
+        "lite/src/collection/reader-unwanted-topic-view.ts",
+        "lite/src/shell/embedded-host-topic-card-enhancement.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-unwanted-topic.test.ts",
+        "lite/tests/embedded-host-topic-card-enhancement.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "不想看集合按站点账号隔离，手动恢复、标注、多标签、类别筛选和当前结果批量恢复由唯一 repository/View 持有；类别、Label、OP、字符和楼层用户自动规则经宿主候选校验，正则与多命中原因保留。保存后只重扫当前列表和已挂载楼层，不为历史 Topic 增加网络请求；真实列表动画、输入法和共享浮窗像素仍待浏览器验收。"
+    },
+    "COLLECT-008": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/shell/reader-floating-window-frame.ts",
+        "lite/src/collection/reader-collection-floating-window.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-floating-window-frame.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "通知、历史、收藏、下载、用户观察、岁月史书和不想看复用唯一标签式浮窗 frame 与 surfaceHost；新增、切换、单独关闭、冻结、标签轨道滚动和业务工具栏由同一状态投影，下载不再创建独立几何 owner。真实七标签拥挤、拖缩、冻结和三形态像素仍待浏览器验收。"
+    },
+    "COLLECT-009": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/history/reader-chronicle-repository.ts",
+        "lite/src/history/reader-chronicle-view.ts",
+        "lite/src/cache/reader-cache-management-surface.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-chronicle.test.ts",
+        "lite/tests/reader-cache-management-surface.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "岁月史书只接受服务器确认 404 且本机仍有正文的 Topic、楼层或 Boost，按账号、目标和请求位置去重，保留首次/最近时间及出现次数，并执行一年/1000 条上限。View 提供分类、搜索、展开和本地恢复；正文消失时移除记录，数据管理可与浏览历史一起清理，不进入 WebDAV。真实 404 页面恢复和共享浮窗像素仍待浏览器验收。"
+    },
     "MEDIA-001": {
       "implementationStatus": "static-complete",
       "browserStatus": "pending",
@@ -1367,6 +1415,23 @@
       ],
       "note": "LDC 只读摘要只允许精确 GET https://credit.linux.do/api/v1/oauth/user-info，并经共享 userscript HTTP capability、中央 gateway/scheduler/429/ResponseRepository 与 30 分钟持久成功缓存；返回账号必须与当前 Discourse username 一致后才写缓存。credit.linux.do 独立同源桥不启动 Reader，成功继续写旧版 GM key、失败保留旧值。设置页独立 credit slot 按主线分离账号副标题与 Lv pill，今日额度保留剩余/每日上限及负数“无限制”分支，积分与收支、支付与账户各六项分组，缺省余额/每日限额保持 0/未设置；四个入口与失败登录说明均有明确语义。真实跨域凭据、同源桥、缓存升级/回滚和三形态像素尚未浏览器签署。"
     },
+    "USER-007": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/user/reader-user-observation-model.ts",
+        "lite/src/user/reader-user-observation-page-repository.ts",
+        "lite/src/user/reader-user-observation-session.ts",
+        "lite/src/user/reader-user-observation-view.ts",
+        "lite/src/user/reader-self-observation-projection.ts",
+        "lite/src/app/reader-browser-runtime.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-user-observation.test.ts",
+        "lite/tests/reader-browser-runtime.test.ts"
+      ],
+      "note": "用户观察名单、公开活动归一化、分页断点、后台队列、Topic 元数据补充和 429/Cloudflare 恢复由唯一 session/repository/View 持有；普通用户只在显式加入或刷新时采集。当前账号固定为自己并额外投影通知、私信和收藏，不把私有记录写入公开观察缓存。真实长历史采集、跨页排序和共享浮窗像素仍待浏览器验收。"
+    },
     "SET-001": {
       "implementationStatus": "static-complete",
       "browserStatus": "pending",
@@ -1841,6 +1906,22 @@
         "lite/tests/reader-browser-runtime.test.ts"
       ],
       "note": "空队列入口、Reader 单/双 Esc 退出和原生 composer 关闭确认已进入 ReaderReadingSettingsForm 的同一全局草稿事务；四组顺序及三项退出/队列文案已对齐主线。ReaderOpenQueueSession 只拥有 Reader 退出；DiscourseComposerCoordinator 通过原生 composer model 判断打开态并独占关闭/舍弃按钮与 Esc guard。两者复用 RepeatActionGate 算法但保持独立实例和生命周期，每次交互热读应用偏好。序列化、重基、保存/放弃、原生模型和键盘路径均有契约测试，真实原生 composer DOM/焦点仍待浏览器验收。"
+    },
+    "SET-022": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/appearance/reader-local-sun-clock.ts",
+        "lite/src/appearance/reader-theme-controller.ts",
+        "lite/src/settings/reader-theme-settings-control.ts",
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/userscript/main-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-theme-controller.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts"
+      ],
+      "note": "自动暗色可按本机计算的当地日落或固定时间进入暗色，并在次日日出恢复启用前的主题；自动切换复用手动主题与宿主原生主题链路。位置只用于本机 NOAA 近似计算，不发送网络；授权失败、非法坐标和极区结果使用明确回退。真实定位授权、跨日边界和宿主主题像素仍待浏览器验收。"
     },
     "DATA-001": {
       "implementationStatus": "static-complete",

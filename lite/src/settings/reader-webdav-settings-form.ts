@@ -276,7 +276,7 @@ export class ReaderWebDavSettingsForm {
 			'topic-context': '最近阅读位置、讨论窗口锚点和全屏窗口几何。',
 			'custom-sites': '用户添加的其他 HTTPS Discourse 站点。',
 			'connect-history': '本机观察的 Connect 指标历史与服务器确认已读指纹。',
-			translation: '可包含任意数量的 URL、模型、思考等级与 Prompt；只加密每个 URL 对应的 API Key。',
+			translation: '可包含任意数量的共用 AI 服务及其翻译参数；只加密每个 URL 对应的 API Key。',
 			'translation-cache': '最近使用的已翻译正文 Section；普通同步并合并写回中央缓存，不包含原文。',
 			'offline-topics': '下载历史与完整离线 HTML；默认关闭。每个 Topic 以独立明文 HTML 文件存入你的 WebDAV，不占用 2 MiB 主同步文件；图片与附件仍保留原 URL。',
 		})[category];

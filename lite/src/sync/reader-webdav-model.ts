@@ -34,7 +34,7 @@ export const READER_WEBDAV_CATEGORY_LABELS = Object.freeze<Readonly<
 	'topic-context': '阅读位置与窗口状态',
 	'custom-sites': '自定义适用站点',
 	'connect-history': 'Connect 本机观察历史',
-	translation: 'AI 翻译服务集合（Key 加密）',
+	translation: 'AI 服务集合（Key 加密）',
 	'translation-cache': '已翻译 Section 缓存',
 	'offline-topics': '离线 Topic 下载（HTML 正文）',
 });
@@ -72,10 +72,10 @@ export interface ReaderWebDavRemoteCategory {
 }
 
 export interface ReaderWebDavRemoteScope {
-	readonly categories: Readonly<Partial<Record<
-		ReaderWebDavCategory,
-		ReaderWebDavRemoteCategory
-	>>>;
+	readonly categories: Readonly<
+		Partial<Record<ReaderWebDavCategory, ReaderWebDavRemoteCategory>> &
+		Record<string, ReaderWebDavRemoteCategory | undefined>
+	>;
 }
 
 export interface ReaderWebDavDocument {
@@ -119,9 +119,11 @@ function record(value: unknown): Readonly<Record<string, unknown>> | null {
 		: null;
 }
 
-function timestamp(value: unknown): number {
-	const numeric = Number(value);
-	return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0;
+function timestamp(value: unknown, label: string): number {
+	if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+		throw new Error(`${label} 必须是非负有限数值`);
+	}
+	return value;
 }
 
 function canonical(value: unknown): string {
@@ -258,14 +260,24 @@ export function validateReaderWebDavConfig(
 	return Object.freeze(issues);
 }
 
-function normalizeRemoteRecord(value: unknown): ReaderWebDavRemoteRecord | null {
+export function normalizeReaderWebDavRemoteRecord(
+	value: unknown,
+): ReaderWebDavRemoteRecord {
 	const source = record(value);
-	if (!source) return null;
-	const deleted = source.deleted === true;
-	if (!deleted && !Object.hasOwn(source, 'value')) return null;
+	if (!source) throw new Error('WebDAV 远端记录必须是对象');
+	if (typeof source.deleted !== 'boolean') {
+		throw new Error('WebDAV 远端记录 deleted 必须是布尔值');
+	}
+	if (typeof source.writerId !== 'string') {
+		throw new Error('WebDAV 远端记录 writerId 必须是字符串');
+	}
+	const deleted = source.deleted;
+	if (!deleted && !Object.hasOwn(source, 'value')) {
+		throw new Error('WebDAV 活跃远端记录缺少 value');
+	}
 	return Object.freeze({
-		changedAt: timestamp(source.changedAt),
-		writerId: String(source.writerId ?? ''),
+		changedAt: timestamp(source.changedAt, 'WebDAV 远端记录 changedAt'),
+		writerId: source.writerId,
 		deleted,
 		...(deleted ? {} : { value: source.value }),
 	});
@@ -273,15 +285,17 @@ function normalizeRemoteRecord(value: unknown): ReaderWebDavRemoteRecord | null 
 
 function normalizeRemoteCategory(value: unknown): ReaderWebDavRemoteCategory {
 	const source = record(value);
+	if (!source) throw new Error('WebDAV 远端分类必须是对象');
 	const rawRecords = record(source?.records);
+	if (!rawRecords) throw new Error('WebDAV 远端分类缺少 records');
 	const records = Object.create(null) as Record<
 		string,
 		ReaderWebDavRemoteRecord
 	>;
-	for (const [rawId, rawValue] of Object.entries(rawRecords ?? {})) {
+	for (const [rawId, rawValue] of Object.entries(rawRecords)) {
 		const id = normalizedRecordId(rawId);
-		const item = normalizeRemoteRecord(rawValue);
-		if (id && item) records[id] = item;
+		if (!id || id !== rawId) throw new Error('WebDAV 远端记录 ID 无效');
+		records[id] = normalizeReaderWebDavRemoteRecord(rawValue);
 	}
 	return Object.freeze({ records: Object.freeze(records) });
 }
@@ -314,27 +328,34 @@ export function normalizeReaderWebDavDocument(
 		const scopeId = normalizedRecordId(rawScopeId);
 		const scopeSource = record(rawScope);
 		const rawCategories = record(scopeSource?.categories);
-		if (!scopeId || !rawCategories) continue;
-		const categories: Partial<Record<
-			ReaderWebDavCategory,
+		if (!scopeId || scopeId !== rawScopeId || !rawCategories) {
+			throw new Error('WebDAV 远端 scope 格式无效');
+		}
+		const categories = Object.create(null) as Record<
+			string,
 			ReaderWebDavRemoteCategory
-		>> = {};
-		for (const category of READER_WEBDAV_CATEGORIES) {
-			if (Object.hasOwn(rawCategories, category)) {
-				categories[category] = normalizeRemoteCategory(
-					rawCategories[category],
-				);
+		>;
+		for (const [rawCategory, rawCategoryValue] of Object.entries(
+			rawCategories,
+		)) {
+			const category = normalizedRecordId(rawCategory);
+			if (!category || category !== rawCategory) {
+				throw new Error('WebDAV 远端分类 ID 无效');
 			}
+			categories[category] = normalizeRemoteCategory(rawCategoryValue);
 		}
 		scopes[scopeId] = Object.freeze({
 			categories: Object.freeze(categories),
 		});
 	}
+	if (typeof source.writerId !== 'string') {
+		throw new Error('WebDAV 远端 writerId 必须是字符串');
+	}
 	return Object.freeze({
 		format: READER_WEBDAV_FORMAT,
 		schemaVersion: READER_WEBDAV_SCHEMA_VERSION,
-		updatedAt: timestamp(source.updatedAt),
-		writerId: String(source.writerId ?? ''),
+		updatedAt: timestamp(source.updatedAt, 'WebDAV 远端 updatedAt'),
+		writerId: source.writerId,
 		scopes: Object.freeze(scopes),
 	});
 }
@@ -396,7 +417,12 @@ export function reconcileReaderWebDavRecords(options: Readonly<{
 		} else {
 			const localChanged = localState !== baselineState;
 			const remoteChanged = currentRemoteState !== baselineState;
-			if (!localChanged) chosen = 'remote';
+			// 协议内删除必须由 tombstone 表达；已建立基线的远端记录直接消失，
+			// 只能视为文件回滚、手工裁剪或损坏，不能反向删除仍存在的本机数据。
+			if (!remoteItem && localItem) {
+				chosen = 'local';
+				conflicts += 1;
+			} else if (!localChanged) chosen = 'remote';
 			else if (!remoteChanged) chosen = 'local';
 			else if (localState === currentRemoteState) chosen = 'remote';
 			else if (localItem && remoteItem && !remoteItem.deleted) {

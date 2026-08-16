@@ -86,6 +86,11 @@ export interface ResponseCacheMutationPort {
 	publish(query: ResponseCacheInvalidation): void | Promise<void>;
 }
 
+export interface ResponseCacheWriteOptions {
+	/** 内部 generation 页面由最终 manifest 统一公布，避免逐页广播。 */
+	readonly publish?: boolean;
+}
+
 export interface ResponseCacheFlightLease {
 	readonly producer: boolean;
 	readonly token: string;
@@ -475,7 +480,11 @@ export class ResponseRepository {
 		});
 	}
 
-	async write<T>(rawPolicy: ResponseCachePolicy, value: T): Promise<void> {
+	async write<T>(
+		rawPolicy: ResponseCachePolicy,
+		value: T,
+		options: ResponseCacheWriteOptions = {},
+	): Promise<void> {
 		const policy = normalizePolicy(rawPolicy);
 		const storedAt = Math.max(
 			this.#now(),
@@ -497,14 +506,25 @@ export class ResponseRepository {
 		this.#remember(entry);
 		if (!policy.persist) return;
 		const previous = this.#writes.get(policy.id) ?? Promise.resolve();
+		let persisted = false;
 		const write = previous
 			.catch(() => {})
-			.then(() => this.#store.write(entry))
+			.then(async () => {
+				await this.#store.write(entry);
+				persisted = true;
+			})
 			.catch((error) => {
 				this.#onPersistenceError(error);
 			});
 		this.#writes.set(policy.id, write);
 		await write;
+		if (persisted && options.publish !== false) {
+			try {
+				await this.#mutationPort?.publish({ ids: [policy.id] });
+			} catch (error) {
+				this.#onPersistenceError(error);
+			}
+		}
 		if (this.#writes.get(policy.id) === write) this.#writes.delete(policy.id);
 	}
 
@@ -513,6 +533,7 @@ export class ResponseRepository {
 		rawPolicy: ResponseCachePolicy,
 		value: T,
 		storedAtValue: number,
+		options: ResponseCacheWriteOptions = {},
 	): Promise<void> {
 		const policy = normalizePolicy(rawPolicy);
 		const storedAt = Math.max(0, Math.floor(storedAtValue));
@@ -543,14 +564,25 @@ export class ResponseRepository {
 		this.#remember(entry);
 		if (!policy.persist) return;
 		const previous = this.#writes.get(policy.id) ?? Promise.resolve();
+		let persisted = false;
 		const write = previous
 			.catch(() => {})
-			.then(() => this.#store.write(entry))
+			.then(async () => {
+				await this.#store.write(entry);
+				persisted = true;
+			})
 			.catch((error) => {
 				this.#onPersistenceError(error);
 			});
 		this.#writes.set(policy.id, write);
 		await write;
+		if (persisted && options.publish !== false) {
+			try {
+				await this.#mutationPort?.publish({ ids: [policy.id] });
+			} catch (error) {
+				this.#onPersistenceError(error);
+			}
+		}
 		if (this.#writes.get(policy.id) === write) this.#writes.delete(policy.id);
 	}
 
@@ -647,6 +679,35 @@ export class ResponseRepository {
 	async invalidate(query: ResponseCacheInvalidation, publish = true): Promise<void> {
 		const report = await this.#invalidateWithReport(query, publish);
 		if (!report.complete) throw new ResponseCacheInvalidationError(report);
+	}
+
+	/**
+	 * 删除只由当前 owner 判定为不可达的内部 generation。不广播、不提升全局 epoch、
+	 * 不撤销其他 cache flight；不得用于用户可见缓存清理或领域失效。
+	 */
+	async prune(query: ResponseCacheInvalidation): Promise<void> {
+		for (const [id, entry] of this.#memory) {
+			if (matchesInvalidation(entry, query)) this.#memory.delete(id);
+		}
+		if (this.#writes.size) await Promise.all(this.#writes.values());
+		const result = await this.#store.invalidate(query);
+		if (result && !result.ok) {
+			throw result.error ?? new Error('响应缓存内部 generation 修剪失败');
+		}
+	}
+
+	/**
+	 * 只忘记当前标签页的内存副本，让 owner 重新读取共享持久缓存。
+	 * 不删除 IndexedDB、不广播，也不提升全局 epoch。
+	 */
+	forgetMemory(query: ResponseCacheInvalidation): number {
+		let removed = 0;
+		for (const [id, entry] of this.#memory) {
+			if (!matchesInvalidation(entry, query)) continue;
+			this.#memory.delete(id);
+			removed += 1;
+		}
+		return removed;
 	}
 
 	async invalidateWithReport(

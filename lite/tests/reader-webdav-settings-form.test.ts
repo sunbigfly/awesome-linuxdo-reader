@@ -142,7 +142,7 @@ assert(
 	host.textContent?.includes('不为同步额外请求 Discourse') &&
 	host.textContent?.includes('每个 Topic 以独立明文 HTML 文件存入你的 WebDAV') &&
 	host.textContent?.includes('图片与附件仍保留原 URL') &&
-	host.textContent?.includes('AI 翻译服务集合（Key 加密）') &&
+	host.textContent?.includes('AI 服务集合（Key 加密）') &&
 	host.textContent?.includes('只加密每个 URL 对应的 API Key') &&
 	host.textContent?.includes('离线 Topic 下载（HTML 正文）') &&
 	host.textContent?.includes('立即同步'),

@@ -1,21 +1,16 @@
 import { LifecycleScope } from '../kernel/lifecycle.js';
-import type { TranslationRequestAdapter } from
-	'../translation/translation-request-adapter.js';
 import {
 	READER_AI_REASONING_EFFORT_PRESETS,
 	READER_TRANSLATION_ANIMATIONS,
-	createReaderTranslationDefaultProfile,
-	normalizeReaderTranslationBaseUrl,
+	compareReaderAiModels,
 	normalizeReaderTranslationAnimation,
 	normalizeReaderTranslationConfig,
+	readerAiModelDisplayLabel,
 	readerTranslationActiveProfile,
-	readerTranslationUsesAi,
-	validateReaderTranslationAccessConfig,
 	validateReaderTranslationProfile,
-	type ReaderTranslationAccessConfig,
+	type ReaderTranslationAnimation,
 	type ReaderTranslationConfig,
 	type ReaderTranslationConfigRepository,
-	type ReaderTranslationAnimation,
 	type ReaderTranslationProfile,
 } from '../translation/reader-translation-config.js';
 import {
@@ -34,6 +29,13 @@ import {
 } from './reader-settings-dom.js';
 
 const CUSTOM_REASONING_EFFORT = '__custom__';
+const PUBLIC_TRANSLATION_MODEL = '__public__';
+const SEGMENTED_TRANSLATION_ANIMATIONS = new Set<ReaderTranslationAnimation>([
+	'fade',
+	'blur',
+	'shimmer',
+	'spring',
+]);
 
 const reasoningEffortLabels = Object.freeze(new Map<string, string>([
 	['', '自动（不发送参数）'],
@@ -50,7 +52,6 @@ export interface ReaderTranslationSettingsFormOptions {
 	readonly document: Document;
 	readonly host: HTMLElement;
 	readonly repository: ReaderTranslationConfigRepository;
-	readonly access: Pick<TranslationRequestAdapter, 'listModels'>;
 	readonly presentation?: Readonly<{
 		readonly readTheme: () => ReaderTranslationTheme;
 		readonly persistTheme: (theme: ReaderTranslationTheme) => void;
@@ -61,7 +62,7 @@ export interface ReaderTranslationSettingsFormOptions {
 function field(
 	document: Document,
 	label: string,
-	type: 'text' | 'password' | 'number',
+	type: 'text' | 'number',
 	placeholder: string,
 ): HTMLInputElement {
 	const input = element(document, 'input', 'ldp-boost-rule-control');
@@ -74,8 +75,7 @@ function field(
 
 function selectValue(select: HTMLSelectElement, value: string): void {
 	for (const option of [...select.options]) {
-		const selected = option.value === value;
-		option.toggleAttribute('selected', selected);
+		option.toggleAttribute('selected', option.value === value);
 	}
 }
 
@@ -85,25 +85,103 @@ function selectedValue(select: HTMLSelectElement): string {
 			option.hasAttribute('selected')).at(-1)?.value ?? '';
 }
 
-/** 连接信息、服务端模型目录与折叠高级参数的唯一翻译设置 DOM owner。 */
+function modelSelectionValue(baseUrl: string, model: string): string {
+	return JSON.stringify([baseUrl, model]);
+}
+
+function parseModelSelection(value: string): Readonly<{
+	readonly baseUrl: string;
+	readonly model: string;
+}> | null {
+	if (value === PUBLIC_TRANSLATION_MODEL) return null;
+	try {
+		const parsed = JSON.parse(value) as unknown;
+		return Array.isArray(parsed) && parsed.length === 2 &&
+			typeof parsed[0] === 'string' && typeof parsed[1] === 'string'
+			? Object.freeze({ baseUrl: parsed[0], model: parsed[1] })
+			: null;
+	} catch {
+		return null;
+	}
+}
+
+interface TranslationSettingsPreview {
+	readonly root: HTMLElement;
+	readonly output: HTMLElement;
+}
+
+function renderAnimationPreviewText(
+	document: Document,
+	output: HTMLElement,
+): void {
+	output.replaceChildren(...[
+		'知识',
+		'会在',
+		'分享中',
+		'不断生长。',
+	].map((text, index) => {
+		const segment = element(document, 'span', 'ldp-translation-segment');
+		segment.textContent = text;
+		segment.style.setProperty(
+			'--ldp-translation-segment-delay',
+			`${index * 120}ms`,
+		);
+		return segment;
+	}));
+}
+
+function translationSettingsPreview(
+	document: Document,
+	kind: 'theme' | 'animation',
+): TranslationSettingsPreview {
+	const root = element(
+		document,
+		'div',
+		'ldp-translation-settings-preview ldp-translation-active',
+	);
+	root.dataset.previewKind = kind;
+	root.setAttribute('aria-label', kind === 'theme'
+		? '译文样式效果预览'
+		: '译文动画效果预览');
+	const label = element(document, 'small', 'ldp-translation-preview-label');
+	label.textContent = kind === 'theme' ? '样式预览' : '动画预览';
+	const content = element(document, 'span', 'ldp-translation-preview-content');
+	const original = element(document, 'span', 'ldp-translation-original');
+	original.textContent = 'Knowledge grows when ideas are shared.';
+	const output = element(document, 'span', 'ldp-translation-text');
+	if (kind === 'animation') renderAnimationPreviewText(document, output);
+	else output.textContent = '知识会在分享中不断生长。';
+	content.append(original, output);
+	root.append(label, content);
+	return Object.freeze({ root, output });
+}
+
+function previewControl(
+	document: Document,
+	select: HTMLSelectElement,
+	preview: HTMLElement,
+): HTMLElement {
+	const control = element(document, 'span', 'ldp-translation-preview-control');
+	control.append(select, preview);
+	return control;
+}
+
+/** 译文呈现与当前 AI 服务翻译参数的唯一设置 DOM owner。 */
 export class ReaderTranslationSettingsForm {
 	readonly scope: LifecycleScope;
 	readonly #document: Document;
 	readonly #host: HTMLElement;
 	readonly #repository: ReaderTranslationConfigRepository;
-	readonly #access: Pick<TranslationRequestAdapter, 'listModels'>;
 	readonly #readTheme: () => ReaderTranslationTheme;
 	readonly #persistTheme: (theme: ReaderTranslationTheme) => void;
 	readonly #theme: HTMLSelectElement;
-	readonly #profile: HTMLSelectElement;
-	readonly #addProfile: HTMLButtonElement;
-	readonly #removeProfile: HTMLButtonElement;
-	readonly #profileCount: HTMLElement;
-	readonly #profileIdentity: HTMLElement;
-	readonly #profileState: HTMLElement;
-	readonly #baseUrl: HTMLInputElement;
-	readonly #apiKey: HTMLInputElement;
+	readonly #themePreview: HTMLElement;
+	readonly #animation: HTMLSelectElement;
+	readonly #animationPreview: HTMLElement;
+	readonly #animationPreviewOutput: HTMLElement;
 	readonly #model: HTMLSelectElement;
+	readonly #serviceIdentity: HTMLElement;
+	readonly #serviceState: HTMLElement;
 	readonly #prompt: HTMLTextAreaElement;
 	readonly #temperature: HTMLInputElement;
 	readonly #temperatureValue: HTMLOutputElement;
@@ -111,29 +189,24 @@ export class ReaderTranslationSettingsForm {
 	readonly #customReasoningEffort: HTMLInputElement;
 	readonly #requestsPerMinute: HTMLInputElement;
 	readonly #tokensPerMinute: HTMLInputElement;
-	readonly #animation: HTMLSelectElement;
 	readonly #save: HTMLButtonElement;
-	readonly #loadModels: HTMLButtonElement;
 	readonly #status: HTMLElement;
-	#catalogIdentity: string | null = null;
-	#editingBaseUrl: string | null = null;
-	#operation: AbortController | null = null;
 
 	constructor(options: ReaderTranslationSettingsFormOptions) {
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		this.#document = options.document;
 		this.#host = options.host;
 		this.#repository = options.repository;
-		this.#access = options.access;
 		this.#readTheme = options.presentation?.readTheme ??
 			(() => DEFAULT_READER_TRANSLATION_THEME);
 		this.#persistTheme = options.presentation?.persistTheme ?? (() => {});
 		const section = settingsSection(
 			options.document,
 			'翻译设置',
-			'选择译文呈现，并配置公共翻译或 OpenAI 兼容服务。',
+			'设置译文呈现，以及当前 AI 服务用于正文翻译的参数。',
 			true,
 		);
+
 		this.#theme = element(
 			options.document,
 			'select',
@@ -157,12 +230,15 @@ export class ReaderTranslationSettingsForm {
 				themeLabels[theme],
 			));
 		}
+		const themePreview = translationSettingsPreview(options.document, 'theme');
+		this.#themePreview = themePreview.root;
 		section.append(settingsOptionRow(
 			options.document,
 			'译文样式',
 			'选择译文的弱化、分隔或强调方式；切换后立即生效，仅影响双语模式。',
-			this.#theme,
+			previewControl(options.document, this.#theme, this.#themePreview),
 		));
+
 		this.#animation = element(
 			options.document,
 			'select',
@@ -185,76 +261,36 @@ export class ReaderTranslationSettingsForm {
 				animationLabels[animation],
 			));
 		}
+		const animationPreview = translationSettingsPreview(
+			options.document,
+			'animation',
+		);
+		this.#animationPreview = animationPreview.root;
+		this.#animationPreviewOutput = animationPreview.output;
 		section.append(settingsOptionRow(
 			options.document,
 			'译文动画',
-			'全局控制译文的出现方式，不随翻译服务切换；系统减少动态效果时自动关闭。',
-			this.#animation,
+			'全局控制译文的出现方式；系统减少动态效果时自动关闭。',
+			previewControl(
+				options.document,
+				this.#animation,
+				this.#animationPreview,
+			),
 		));
-		this.#profile = element(
+
+		this.#model = element(
 			options.document,
 			'select',
 			'ldp-reader-select ldp-boost-rule-control',
 		);
-		this.#profile.setAttribute('aria-label', '已保存 AI 翻译服务');
-		this.#addProfile = settingsButton(
+		this.#model.dataset.readerSelectSearchable = 'true';
+		this.#model.setAttribute('aria-label', '正文翻译模型');
+		const modelRow = settingsOptionRow(
 			options.document,
-			'ldp-config-action',
-			'新增翻译 URL',
-			'plus',
-			'新增服务',
+			'翻译模型',
+			'公共翻译无需 API；自定义模型按供应商 URL 分组，来自“AI 服务”已缓存目录。',
+			this.#model,
 		);
-		this.#removeProfile = settingsButton(
-			options.document,
-			'ldp-config-action',
-			'删除当前翻译 URL',
-			'trash',
-			'删除服务',
-		);
-		const profileControl = element(
-			options.document,
-			'span',
-			'ldp-translation-profile-control',
-		);
-		profileControl.append(
-			this.#profile,
-			this.#addProfile,
-			this.#removeProfile,
-		);
-		const collectionGroup = element(
-			options.document,
-			'div',
-			'ldp-translation-collection-group',
-		);
-		const collectionHeading = element(
-			options.document,
-			'div',
-			'ldp-translation-group-heading',
-		);
-		const collectionCopy = element(
-			options.document,
-			'span',
-			'ldp-translation-group-copy',
-		);
-		const collectionTitle = element(options.document, 'strong');
-		collectionTitle.textContent = '已保存服务';
-		const collectionDescription = element(options.document, 'small');
-		collectionDescription.textContent =
-			'选择已有 AI 服务；新增后在下方填写 API URL';
-		collectionCopy.append(collectionTitle, collectionDescription);
-		this.#profileCount = element(
-			options.document,
-			'span',
-			'ldp-translation-profile-count',
-		);
-		collectionHeading.append(collectionCopy, this.#profileCount);
-		collectionGroup.append(collectionHeading, settingsOptionRow(
-			options.document,
-			'选择服务',
-			'下拉只切换已保存服务，不用于输入 URL。',
-			profileControl,
-		));
-		section.append(collectionGroup);
 
 		const profileGroup = element(
 			options.document,
@@ -272,75 +308,16 @@ export class ReaderTranslationSettingsForm {
 			'ldp-translation-group-copy',
 		);
 		const profileTitle = element(options.document, 'strong');
-		profileTitle.textContent = '服务配置';
-		this.#profileIdentity = element(options.document, 'small');
-		profileHeadingCopy.append(profileTitle, this.#profileIdentity);
-		this.#profileState = element(
+		profileTitle.textContent = '当前服务的翻译参数';
+		this.#serviceIdentity = element(options.document, 'small');
+		profileHeadingCopy.append(profileTitle, this.#serviceIdentity);
+		this.#serviceState = element(
 			options.document,
 			'span',
 			'ldp-translation-profile-state',
 		);
-		profileHeading.append(profileHeadingCopy, this.#profileState);
-		const profileFields = element(
-			options.document,
-			'div',
-			'ldp-translation-profile-fields',
-		);
-		profileGroup.append(profileHeading, profileFields);
-		section.append(profileGroup);
-		this.#baseUrl = field(
-			options.document,
-			'API URL',
-			'text',
-			'https://api.openai.com/v1/',
-		);
-		this.#baseUrl.inputMode = 'url';
-		profileFields.append(settingsOptionRow(
-			options.document,
-			'API URL',
-			'填写 OpenAI 兼容服务的 /v1 根地址；末尾斜杠会自动补齐。',
-			this.#baseUrl,
-		));
-		this.#apiKey = field(
-			options.document,
-			'API Key',
-			'password',
-			'sk-…',
-		);
-		this.#apiKey.autocomplete = 'new-password';
-		profileFields.append(settingsOptionRow(
-			options.document,
-			'API Key',
-			'与当前 URL 一一对应；留空仍使用 Google / Microsoft 公共翻译，WebDAV 同步时仅此字段加密。',
-			this.#apiKey,
-		));
+		profileHeading.append(profileHeadingCopy, this.#serviceState);
 
-		this.#model = element(
-			options.document,
-			'select',
-			'ldp-reader-select ldp-boost-rule-control',
-		);
-		this.#model.setAttribute('aria-label', '模型');
-		this.#loadModels = settingsButton(
-			options.document,
-			'ldp-config-action ldp-translation-model-fetch',
-			'从 /models 获取可用模型',
-			'list',
-			'获取模型',
-		);
-		const modelControl = element(
-			options.document,
-			'span',
-			'ldp-translation-model-control',
-		);
-		modelControl.append(this.#model, this.#loadModels);
-		profileFields.append(settingsOptionRow(
-			options.document,
-			'模型',
-			'由当前 URL 的 /models 返回，不提供预设或手动输入。',
-			modelControl,
-		));
-		this.#replaceModelOptions([], '');
 		const advanced = element(
 			options.document,
 			'details',
@@ -371,10 +348,8 @@ export class ReaderTranslationSettingsForm {
 			'div',
 			'ldp-translation-advanced-body',
 		);
-		this.#temperature = element(
-			options.document,
-			'input',
-		);
+
+		this.#temperature = element(options.document, 'input');
 		this.#temperature.type = 'range';
 		this.#temperature.min = '0';
 		this.#temperature.max = '1';
@@ -397,6 +372,7 @@ export class ReaderTranslationSettingsForm {
 			'默认 0.1；翻译强调稳定与占位符完整，通常建议不超过 0.2。',
 			temperatureControl,
 		));
+
 		this.#reasoningEffort = element(
 			options.document,
 			'select',
@@ -437,6 +413,7 @@ export class ReaderTranslationSettingsForm {
 			'默认关闭；预设采用 OpenAI reasoning_effort 值，具体支持范围由所选模型决定。选择自定义时可填写兼容服务接受的值。',
 			reasoningControl,
 		));
+
 		this.#requestsPerMinute = field(
 			options.document,
 			'每分钟请求数（RPM）',
@@ -453,6 +430,7 @@ export class ReaderTranslationSettingsForm {
 			'当前 URL 与模型每分钟最多启动的 AI 请求数；0 表示不限制。预加载会为可见正文保留额度。',
 			this.#requestsPerMinute,
 		));
+
 		this.#tokensPerMinute = field(
 			options.document,
 			'每分钟令牌数（TPM）',
@@ -469,6 +447,7 @@ export class ReaderTranslationSettingsForm {
 			'当前 URL 与模型每分钟允许的估算输入及译文令牌数；0 表示不限制。',
 			this.#tokensPerMinute,
 		));
+
 		this.#prompt = element(
 			options.document,
 			'textarea',
@@ -483,8 +462,6 @@ export class ReaderTranslationSettingsForm {
 			'控制术语、语气与译法；JSON 数组和占位符规则由阅读器固定维护。',
 			this.#prompt,
 		));
-		advanced.append(advancedSummary, advancedBody);
-		profileFields.append(advanced);
 
 		this.#save = settingsButton(
 			options.document,
@@ -512,7 +489,10 @@ export class ReaderTranslationSettingsForm {
 		this.#status.role = 'status';
 		this.#status.setAttribute('aria-live', 'polite');
 		footer.append(this.#status, actions);
-		profileFields.append(footer);
+		advancedBody.append(footer);
+		advanced.append(advancedSummary, advancedBody);
+		profileGroup.append(profileHeading, modelRow, advanced);
+		section.append(profileGroup);
 
 		const root = element(
 			options.document,
@@ -527,24 +507,18 @@ export class ReaderTranslationSettingsForm {
 		this.scope.listen(this.#reasoningEffort, 'change', () => {
 			this.#syncReasoningEffort();
 		});
-		this.scope.listen(this.#baseUrl, 'change', () => this.#invalidateModels());
-		this.scope.listen(this.#apiKey, 'change', () => this.#invalidateModels());
-		this.scope.listen(this.#baseUrl, 'input', () => this.#syncProfileSummary());
-		this.scope.listen(this.#apiKey, 'input', () => this.#syncProfileSummary());
-		this.scope.listen(this.#model, 'change', () => this.#syncProfileSummary());
-		this.scope.listen(this.#profile, 'change', () => this.#selectProfile());
 		this.scope.listen(this.#theme, 'change', () => this.#applyTheme());
 		this.scope.listen(this.#animation, 'change', () =>
 			void this.#applyAnimation());
-		this.scope.listen(this.#addProfile, 'click', () => this.#startNewProfile());
-		this.scope.listen(this.#removeProfile, 'click', () =>
-			void this.#removeCurrentProfile());
-		this.scope.listen(this.#save, 'click', () => void this.#saveConfig());
-		this.scope.listen(this.#loadModels, 'click', () => void this.#fetchModels());
-		this.scope.add(() => {
-			this.#operation?.abort(new Error('翻译设置已关闭'));
-			this.#host.replaceChildren();
+		this.scope.listen(this.#model, 'change', () => {
+			this.#loadSelectedProfile(this.#repository.snapshot.config);
+			this.#renderStatus('已切换翻译模型草稿，保存后生效。');
 		});
+		this.scope.listen(this.#save, 'click', () => void this.#saveConfig());
+		this.#repository.changes.subscribe((snapshot) => {
+			if (snapshot.loaded) this.#loadConfig(snapshot.config);
+		}, this.scope);
+		this.scope.add(() => this.#host.replaceChildren());
 		void this.#load();
 	}
 
@@ -552,20 +526,16 @@ export class ReaderTranslationSettingsForm {
 		this.scope.destroy();
 	}
 
-	#accessDraft(): ReaderTranslationAccessConfig {
-		return {
-			baseUrl: this.#baseUrl.value.trim(),
-			apiKey: this.#apiKey.value.trim(),
-		};
-	}
-
 	#applyTheme(): void {
 		const theme = normalizeReaderTranslationTheme(selectedValue(this.#theme));
+		this.#syncThemePreview(theme);
 		try {
 			this.#persistTheme(theme);
 			this.#renderStatus('译文样式已更新；双语正文立即使用新样式。', 'success');
 		} catch (cause) {
-			selectValue(this.#theme, this.#readTheme());
+			const current = this.#readTheme();
+			selectValue(this.#theme, current);
+			this.#syncThemePreview(current);
 			this.#renderStatus(cause instanceof Error
 				? cause.message
 				: '译文样式保存失败', 'error');
@@ -577,25 +547,62 @@ export class ReaderTranslationSettingsForm {
 		const animation = normalizeReaderTranslationAnimation(
 			selectedValue(this.#animation),
 		);
+		this.#syncAnimationPreview(animation, true);
 		try {
 			await this.#repository.saveConfig(normalizeReaderTranslationConfig({
 				...current,
 				animation,
 			}));
-			this.#renderStatus('译文动画已更新；所有服务统一使用新动画。', 'success');
+			this.#renderStatus('译文动画已更新；所有翻译统一使用新动画。', 'success');
 		} catch (cause) {
 			selectValue(this.#animation, current.animation);
+			this.#syncAnimationPreview(current.animation, true);
 			this.#renderStatus(cause instanceof Error
 				? cause.message
 				: '译文动画保存失败', 'error');
 		}
 	}
 
-	#draft(): ReaderTranslationProfile {
+	#syncThemePreview(theme: ReaderTranslationTheme): void {
+		this.#themePreview.dataset.translationTheme = theme;
+	}
+
+	#syncAnimationPreview(
+		animation: ReaderTranslationAnimation,
+		forceReplay = false,
+	): void {
+		if (
+			!forceReplay &&
+			this.#animationPreview.dataset.translationAnimation === animation
+		) return;
+		this.#animationPreview.dataset.translationTheme = 'plain';
+		delete this.#animationPreview.dataset.translationAnimation;
+		this.#animationPreviewOutput.classList.remove(
+			'ldp-translation-enter',
+			'ldp-translation-segmented',
+		);
+		renderAnimationPreviewText(
+			this.#document,
+			this.#animationPreviewOutput,
+		);
+		void this.#animationPreview.offsetWidth;
+		this.#animationPreview.dataset.translationAnimation = animation;
+		this.#animationPreviewOutput.classList.toggle(
+			'ldp-translation-segmented',
+			SEGMENTED_TRANSLATION_ANIMATIONS.has(animation),
+		);
+		if (animation === 'none') return;
+		this.#animationPreviewOutput.classList.add('ldp-translation-enter');
+	}
+
+	#draft(
+		active: ReaderTranslationProfile,
+		model: string,
+	): ReaderTranslationProfile {
 		const reasoningSelection = selectedValue(this.#reasoningEffort);
 		return {
-			...this.#accessDraft(),
-			model: selectedValue(this.#model).trim(),
+			...active,
+			model,
 			prompt: this.#prompt.value.trim(),
 			temperature: Number(this.#temperature.value),
 			reasoningEffort: reasoningSelection === CUSTOM_REASONING_EFFORT
@@ -605,37 +612,6 @@ export class ReaderTranslationSettingsForm {
 			tokensPerMinute: Number(this.#tokensPerMinute.value),
 			animation: this.#repository.snapshot.config.animation,
 		};
-	}
-
-	#identity(config: ReaderTranslationAccessConfig = this.#accessDraft()): string {
-		return `${normalizeReaderTranslationBaseUrl(config.baseUrl)}\u0000${config.apiKey}`;
-	}
-
-	#replaceModelOptions(
-		models: readonly string[],
-		preferred: string,
-	): void {
-		const uniqueModels = [...new Set(models.map((model) => model.trim()).filter(Boolean))];
-		const placeholder = settingsOption(
-			this.#document,
-			'',
-			uniqueModels.length ? '请选择模型' : '请先获取模型',
-		);
-		placeholder.disabled = true;
-		this.#model.replaceChildren(
-			placeholder,
-			...uniqueModels.map((model) => settingsOption(this.#document, model, model)),
-		);
-		selectValue(this.#model, uniqueModels.includes(preferred) ? preferred : '');
-		this.#model.disabled = uniqueModels.length === 0;
-	}
-
-	#invalidateModels(): void {
-		if (this.#catalogIdentity === this.#identity()) return;
-		this.#catalogIdentity = null;
-		this.#replaceModelOptions([], '');
-		this.#syncProfileSummary();
-		this.#renderStatus('连接信息已变化，请重新获取模型。');
 	}
 
 	#syncTemperature(): void {
@@ -666,155 +642,76 @@ export class ReaderTranslationSettingsForm {
 		this.#customReasoningEffort.disabled = !custom;
 	}
 
-	#syncProfileSummary(): void {
-		const normalizedUrl = normalizeReaderTranslationBaseUrl(this.#baseUrl.value);
-		this.#profileIdentity.textContent = normalizedUrl
-			? normalizedUrl.replace(/\/$/u, '')
-			: this.#baseUrl.value.trim() || '尚未填写 URL';
-		let state = '未启用 AI';
-		let kind = 'inactive';
-		if (this.#editingBaseUrl === null) {
-			state = '新建草稿';
-			kind = 'draft';
-		} else if (this.#apiKey.value.trim() && selectedValue(this.#model)) {
-			state = 'AI 已配置';
-			kind = 'ready';
-		} else if (this.#apiKey.value.trim()) {
-			state = '待选模型';
-			kind = 'pending';
-		}
-		this.#profileState.textContent = state;
-		this.#profileState.dataset.profileState = kind;
-	}
-
-	#syncDraftActions(draft: boolean): void {
-		this.#removeProfile.setAttribute(
-			'aria-label',
-			draft ? '取消新增翻译 URL' : '删除当前翻译 URL',
+	#renderModelOptions(config: ReaderTranslationConfig): void {
+		const publicOption = settingsOption(
+			this.#document,
+			PUBLIC_TRANSLATION_MODEL,
+			'Google / Microsoft 公共翻译',
 		);
-		const label = this.#removeProfile.querySelector('span');
-		if (label) label.textContent = draft ? '取消新增' : '删除服务';
-	}
-
-	#renderProfileOptions(config: ReaderTranslationConfig): void {
-		this.#profile.replaceChildren(...config.profiles.map((profile) =>
-			settingsOption(
-				this.#document,
-				profile.baseUrl,
-				profile.baseUrl.replace(/\/$/u, ''),
-			)));
-		selectValue(this.#profile, config.activeBaseUrl);
-		this.#profileCount.textContent = `${config.profiles.length} 个已保存服务`;
-	}
-
-	#loadProfile(profile: ReaderTranslationProfile): void {
-		this.#editingBaseUrl = normalizeReaderTranslationBaseUrl(profile.baseUrl) || null;
-		this.#baseUrl.value = profile.baseUrl;
-		this.#apiKey.value = profile.apiKey;
-		this.#prompt.value = profile.prompt;
-		this.#temperature.value = String(profile.temperature);
-		this.#syncTemperature();
-		this.#loadReasoningEffort(profile.reasoningEffort);
-		this.#requestsPerMinute.value = String(profile.requestsPerMinute);
-		this.#tokensPerMinute.value = String(profile.tokensPerMinute);
-		this.#replaceModelOptions(
-			profile.model ? [profile.model] : [],
-			profile.model,
-		);
-		this.#catalogIdentity = profile.model ? this.#identity(profile) : null;
-		this.#syncDraftActions(false);
-		this.#syncProfileSummary();
-	}
-
-	#selectProfile(): void {
-		const url = selectedValue(this.#profile);
-		const profile = this.#repository.snapshot.config.profiles.find((entry) =>
-			entry.baseUrl === url);
-		if (!profile) return;
-		this.#loadProfile(profile);
-		this.#renderStatus(profile.apiKey && profile.model
-			? `当前服务：${profile.model}`
-			: '当前 URL 尚未启用 AI；Key 留空时使用公共翻译。');
-	}
-
-	#startNewProfile(): void {
-		if (
-			this.#editingBaseUrl === null &&
-			selectedValue(this.#profile) === '__new__'
-		) {
-			this.#baseUrl.focus();
-			return;
-		}
-		const draft = createReaderTranslationDefaultProfile();
-		this.#editingBaseUrl = null;
-		this.#profile.replaceChildren(
-			...this.#repository.snapshot.config.profiles.map((profile) =>
-				settingsOption(
+		const groups = config.profiles
+			.filter((profile) => profile.apiKey.trim() && profile.models.length)
+			.map((profile) => {
+				const group = this.#document.createElement('optgroup');
+				group.label = profile.baseUrl.replace(/\/$/u, '');
+				group.append(...[...profile.modelCatalog]
+					.sort(compareReaderAiModels)
+					.map((entry) => settingsOption(
 					this.#document,
-					profile.baseUrl,
-					profile.baseUrl.replace(/\/$/u, ''),
-				)),
-			settingsOption(this.#document, '__new__', '正在新建服务（未保存）'),
-		);
-		selectValue(this.#profile, '__new__');
-		this.#baseUrl.value = '';
-		this.#apiKey.value = '';
-		this.#prompt.value = draft.prompt;
-		this.#temperature.value = String(draft.temperature);
-		this.#syncTemperature();
-		this.#loadReasoningEffort(draft.reasoningEffort);
-		this.#requestsPerMinute.value = String(draft.requestsPerMinute);
-		this.#tokensPerMinute.value = String(draft.tokensPerMinute);
-		this.#replaceModelOptions([], '');
-		this.#catalogIdentity = null;
-		this.#syncDraftActions(true);
-		this.#syncProfileSummary();
-		this.#renderStatus('请在下方 API URL 输入新地址；Key 可选。');
-		this.#baseUrl.focus();
+					modelSelectionValue(profile.baseUrl, entry.id),
+					readerAiModelDisplayLabel(entry),
+				)));
+				return group;
+			});
+		this.#model.replaceChildren(publicOption, ...groups);
+		const active = readerTranslationActiveProfile(config);
+		const selected = active.apiKey.trim() && active.models.includes(active.model)
+			? modelSelectionValue(active.baseUrl, active.model)
+			: PUBLIC_TRANSLATION_MODEL;
+		selectValue(this.#model, selected);
 	}
 
-	async #removeCurrentProfile(): Promise<void> {
-		if (!this.#editingBaseUrl) {
-			const current = this.#repository.snapshot.config;
-			this.#renderProfileOptions(current);
-			this.#loadProfile(readerTranslationActiveProfile(current));
-			this.#renderStatus('已放弃未保存的新 URL。');
-			return;
-		}
-		const current = this.#repository.snapshot.config;
-		const profiles = current.profiles.filter((profile) =>
-			profile.baseUrl !== this.#editingBaseUrl);
-		const next = normalizeReaderTranslationConfig({
-			profiles,
-			activeBaseUrl: profiles[0]?.baseUrl,
-			animation: current.animation,
-		});
-		try {
-			await this.#repository.saveConfig(next);
-			this.#renderProfileOptions(next);
-			this.#loadProfile(readerTranslationActiveProfile(next));
-			this.#renderStatus(profiles.length
-				? '已删除当前 URL，并切换到下一项。'
-				: '已删除最后一项；保留空白 OpenAI 默认入口供后续配置。', 'success');
-		} catch (cause) {
-			this.#renderStatus(cause instanceof Error
-				? cause.message
-				: '删除翻译 URL 失败', 'error');
-		}
+	#selectedProfile(config: ReaderTranslationConfig): ReaderTranslationProfile {
+		const selection = parseModelSelection(selectedValue(this.#model));
+		return selection
+			? config.profiles.find((profile) =>
+				profile.baseUrl === selection.baseUrl &&
+				profile.models.includes(selection.model)) ??
+				readerTranslationActiveProfile(config)
+			: readerTranslationActiveProfile(config);
+	}
+
+	#loadSelectedProfile(config: ReaderTranslationConfig): void {
+		const selection = parseModelSelection(selectedValue(this.#model));
+		const active = this.#selectedProfile(config);
+		this.#serviceIdentity.textContent = selection
+			? `${active.baseUrl.replace(/\/$/u, '')} · ${selection.model}`
+			: 'Google / Microsoft 公共翻译';
+		this.#serviceState.textContent = selection ? 'AI 翻译' : '公共翻译';
+		this.#serviceState.dataset.profileState = selection ? 'ready' : 'inactive';
+		this.#prompt.value = active.prompt;
+		this.#temperature.value = String(active.temperature);
+		this.#syncTemperature();
+		this.#loadReasoningEffort(active.reasoningEffort);
+		this.#requestsPerMinute.value = String(active.requestsPerMinute);
+		this.#tokensPerMinute.value = String(active.tokensPerMinute);
+	}
+
+	#loadConfig(config: ReaderTranslationConfig): void {
+		selectValue(this.#animation, config.animation);
+		this.#syncAnimationPreview(config.animation);
+		this.#renderModelOptions(config);
+		this.#loadSelectedProfile(config);
 	}
 
 	async #load(): Promise<void> {
 		try {
-			selectValue(this.#theme, this.#readTheme());
+			const theme = this.#readTheme();
+			selectValue(this.#theme, theme);
+			this.#syncThemePreview(theme);
 			const { config } = await this.#repository.load();
 			if (this.scope.destroyed) return;
-			selectValue(this.#animation, config.animation);
-			this.#renderProfileOptions(config);
-			const active = readerTranslationActiveProfile(config);
-			this.#loadProfile(active);
-			this.#renderStatus(readerTranslationUsesAi(config)
-				? `AI 翻译已启用：${active.model}`
-				: '当前使用 Google / Microsoft；填写 Key 后获取并选择模型。');
+			this.#loadConfig(config);
+			this.#renderStatus('供应商目录在“AI 服务”管理；正文翻译模型在此单独选择。');
 		} catch (cause) {
 			this.#renderStatus(cause instanceof Error
 				? cause.message
@@ -830,30 +727,26 @@ export class ReaderTranslationSettingsForm {
 			this.#renderStatus('请填写自定义思考等级。', 'error');
 			return false;
 		}
-		const profile = this.#draft();
+		const current = this.#repository.snapshot.config;
+		const selection = parseModelSelection(selectedValue(this.#model));
+		const active = this.#selectedProfile(current);
+		const profile = this.#draft(active, selection?.model ?? '');
 		const issues = validateReaderTranslationProfile(profile);
 		if (issues.length) {
 			this.#renderStatus(issues[0]!, 'error');
 			return false;
 		}
 		try {
-			const current = this.#repository.snapshot.config;
-			const baseUrl = normalizeReaderTranslationBaseUrl(profile.baseUrl);
-			const profiles = current.profiles.filter((entry) =>
-				entry.baseUrl !== this.#editingBaseUrl && entry.baseUrl !== baseUrl);
-			profiles.push(Object.freeze({ ...profile, baseUrl }));
 			const config = normalizeReaderTranslationConfig({
-				profiles,
-				activeBaseUrl: baseUrl,
-				animation: current.animation,
+				...current,
+				activeBaseUrl: selection?.baseUrl ?? current.activeBaseUrl,
+				profiles: current.profiles.map((entry) =>
+					entry.baseUrl === active.baseUrl ? profile : entry),
 			});
 			await this.#repository.saveConfig(config);
-			this.#renderProfileOptions(config);
-			const active = readerTranslationActiveProfile(config);
-			this.#loadProfile(active);
-			this.#renderStatus(readerTranslationUsesAi(config)
-				? `已保存；后续翻译与预加载使用 ${active.model}。`
-				: '已保存；API Key 为空，后续使用公共翻译。', 'success');
+			this.#renderStatus(selection
+				? `已保存正文翻译模型：${selection.model}`
+				: '已切换为 Google / Microsoft 公共翻译。', 'success');
 			return true;
 		} catch (cause) {
 			this.#renderStatus(cause instanceof Error
@@ -861,60 +754,6 @@ export class ReaderTranslationSettingsForm {
 				: '翻译设置保存失败', 'error');
 			return false;
 		}
-	}
-
-	async #fetchModels(): Promise<void> {
-		if (this.#operation) return;
-		const access = this.#accessDraft();
-		const issues = validateReaderTranslationAccessConfig(access);
-		if (issues.length) {
-			this.#renderStatus(issues[0]!, 'error');
-			return;
-		}
-		const operation = new AbortController();
-		this.#operation = operation;
-		this.#setBusy(true);
-		this.#renderStatus('正在从 /models 获取可用模型…');
-		try {
-			const result = await this.#access.listModels(access, operation.signal);
-			const saved = readerTranslationActiveProfile(
-				this.#repository.snapshot.config,
-			);
-			const preferred = this.#identity(saved) === this.#identity(access)
-				? saved.model
-				: '';
-			this.#replaceModelOptions(result.models, preferred);
-			this.#catalogIdentity = this.#identity(access);
-			this.#renderStatus(
-				`已获取 ${result.models.length} 个模型，请选择后保存。`,
-				'success',
-			);
-		} catch (cause) {
-			if (!operation.signal.aborted) {
-				this.#renderStatus(cause instanceof Error
-					? cause.message
-					: '模型列表获取失败', 'error');
-			}
-		} finally {
-			if (this.#operation === operation) this.#operation = null;
-			this.#setBusy(false);
-		}
-	}
-
-	#setBusy(busy: boolean): void {
-		this.#save.disabled = busy;
-		this.#loadModels.disabled = busy;
-		this.#profile.disabled = busy;
-		this.#addProfile.disabled = busy;
-		this.#removeProfile.disabled = busy;
-		this.#baseUrl.disabled = busy;
-		this.#apiKey.disabled = busy;
-		this.#model.disabled = busy || this.#model.options.length <= 1;
-		this.#prompt.disabled = busy;
-		this.#temperature.disabled = busy;
-		this.#reasoningEffort.disabled = busy;
-		this.#customReasoningEffort.disabled = busy ||
-			this.#customReasoningEffort.hasAttribute('hidden');
 	}
 
 	#renderStatus(

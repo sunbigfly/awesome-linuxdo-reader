@@ -74,6 +74,7 @@ const panelIcons = Object.freeze<Record<ReaderSettingsPanelId, string>>({
 	flash: 'lightbulb',
 	reading: 'history',
 	translation: 'languages',
+	'ai-service': 'sparkles',
 	shortcuts: 'settings',
 	interaction: 'git-branch',
 	user: 'user-round',
@@ -118,7 +119,6 @@ export class ReaderSettingsView<TPreferences extends object> {
 	readonly #toggle: HTMLButtonElement;
 	readonly #popover: HTMLElement;
 	readonly #panel: HTMLElement;
-	readonly #searchShell: HTMLElement;
 	readonly #searchInput: HTMLInputElement;
 	readonly #searchClear: HTMLButtonElement;
 	readonly #searchStatus: HTMLElement;
@@ -176,7 +176,6 @@ export class ReaderSettingsView<TPreferences extends object> {
 		this.#popover.setAttribute('aria-label', '阅读器设置');
 
 		const searchShell = this.#createSearch();
-		this.#searchShell = searchShell;
 		this.#searchInput = searchShell.querySelector(
 			'.ldp-settings-search-input',
 		)!;

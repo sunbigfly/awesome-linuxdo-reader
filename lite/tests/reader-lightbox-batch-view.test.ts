@@ -185,7 +185,9 @@ view.slots.cancel.dispatchEvent(new window.Event('click', { bubbles: true }));
 assert(view.slots.root.hidden, '空闲取消必须关闭 overlay 并清空选择');
 view.open();
 const focusBeforeEscape = restoredFocus;
-const firstCard = view.slots.grid.querySelector<HTMLElement>('.ldp-lb-batch-item')!;
+	const firstCard = view.slots.grid.querySelector<HTMLButtonElement>(
+		'.ldp-lb-batch-preview',
+	)!;
 let cardFocus = 0;
 Object.defineProperty(firstCard, 'focus', {
 	value: () => {
@@ -262,3 +264,78 @@ assert(
 	'Lightbox 整体销毁后批量异步结果不得再写已销毁 controller',
 );
 sequence.destroy();
+
+const selectionSequence = new ReaderLightboxController({ items: [item, secondItem] });
+const selectionController = new ReaderLightboxBatchController({
+	sequence: selectionSequence,
+	archiveName: 'AI images',
+	purpose: 'selection',
+	maximumSelected: 2,
+});
+const confirmedSelections: Array<readonly ReaderLightboxItem[]> = [];
+let selectionClosed = 0;
+const selectionView = new ReaderLightboxBatchView({
+	document,
+	mount,
+	controller: selectionController,
+	mode: 'selection',
+	title: '选择 AI 总结参考图片',
+	confirmLabel: '使用所选图片',
+	openPreviewOnOpen: false,
+	onConfirm: (items) => {
+		confirmedSelections.push(items);
+	},
+	onClose: () => {
+		selectionClosed += 1;
+	},
+});
+selectionView.open();
+assert(
+	!mount.querySelector('.ldp-avatar-viewer') &&
+	selectionView.slots.download.textContent === '使用所选图片',
+	'图片选择模式必须复用同一批量视图，但不强制首图预览或下载服务',
+);
+const stableSelectionImage = selectionView.slots.grid.querySelector(
+	'.ldp-lb-batch-preview > img',
+);
+selectionView.slots.grid.querySelector<HTMLButtonElement>(
+	'.ldp-lb-batch-preview',
+)?.click();
+assert(
+	mount.querySelector('.ldp-avatar-viewer.is-image') &&
+	!selectionView.slots.root.hidden,
+	'图片选择器必须把缩略图点击明确路由到紧凑预览，不能误当成勾选',
+);
+const selectionPreviewEscape = new window.Event('keydown', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperty(selectionPreviewEscape, 'key', { value: 'Escape' });
+document.dispatchEvent(selectionPreviewEscape);
+assert(
+	!mount.querySelector('.ldp-avatar-viewer') &&
+	!selectionView.slots.root.hidden &&
+	selectionClosed === 0,
+	'预览打开时 Escape 必须只关闭预览，图片选择浮层继续保留',
+);
+selectionView.slots.selectAll.dispatchEvent(new window.Event('click', {
+	bubbles: true,
+}));
+assert(
+	selectionView.slots.grid.querySelector('.ldp-lb-batch-preview > img') ===
+		stableSelectionImage,
+	'选择状态更新必须复用稳定缩略图节点，不能重建图片造成闪烁',
+);
+selectionView.slots.download.dispatchEvent(new window.Event('click', {
+	bubbles: true,
+}));
+await tick();
+assert(
+	confirmedSelections[0]?.length === 2 &&
+	selectionClosed === 1 &&
+	selectionView.slots.root.hidden,
+	'选择确认必须返回媒体引用并关闭 overlay，不得复制图片请求或下载逻辑',
+);
+selectionView.destroy();
+selectionController.destroy();
+selectionSequence.destroy();

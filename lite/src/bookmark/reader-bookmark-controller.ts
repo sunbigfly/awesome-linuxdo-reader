@@ -4,6 +4,12 @@ import type {
 	ReaderCollectionProjectionPort,
 	ReaderCollectionProjectionSnapshot,
 } from '../cache/reader-collection-page-repository.js';
+import type { ResponseCacheFlightPort } from
+	'../cache/response-repository.js';
+import {
+	runReaderCollectionHydrationLease,
+	runReaderCollectionWorkers,
+} from '../collection/reader-collection-hydration.js';
 import type {
 	ActionCacheInvalidationPort,
 	ActionCommandEvent,
@@ -128,6 +134,12 @@ export interface ReaderBookmarkControllerOptions {
 	readonly historyBatchPages?: number;
 	readonly historyBatchDelayMs?: number;
 	readonly historyRetryDelayMs?: number;
+	readonly visibleHistoryConcurrency?: number;
+	readonly historyCoordination?: Pick<
+		ResponseCacheFlightPort,
+		'acquireFlight' | 'renewFlight' | 'releaseFlight' | 'waitForFlight'
+	>;
+	readonly historyCoordinationKey?: string;
 	readonly changeTabOrder?: (
 		order: readonly ReaderBookmarkTab[],
 	) => void | Promise<void>;
@@ -151,6 +163,8 @@ const DEFAULT_BACKGROUND_RETRY_DELAY_MS = 60_000;
 const DEFAULT_HISTORY_STEP_DELAY_MS = 4_000;
 const DEFAULT_HISTORY_BATCH_PAGES = 8;
 const DEFAULT_HISTORY_BATCH_DELAY_MS = 60_000;
+const HISTORY_PROJECTION_BATCH_PAGES = 4;
+const VISIBLE_HISTORY_LEASE_ROUNDS = 2;
 const CLOUDFLARE_HISTORY_RETRY_DELAY_MS = 5 * 60_000;
 const BACKGROUND_SOURCE_ORDER: readonly ReaderBookmarkSource[] = Object.freeze([
 	'bookmarks',
@@ -214,6 +228,10 @@ function historyStreamsForSource(
 	return source === 'reactions'
 		? Object.freeze(['reaction-plugin', 'likes'])
 		: Object.freeze([source]);
+}
+
+function historyProjectionPartition(stream: ReaderBookmarkHistoryStream): string {
+	return `history:${stream}`;
 }
 
 function historyRetryDelayMs(cause: unknown, fallbackMs: number): number {
@@ -334,6 +352,7 @@ export class ReaderBookmarkController {
 	#scopeBookmarkIds: readonly number[] = Object.freeze([]);
 	#reactionFilterCounts: ReadonlyMap<string, number> = new Map();
 	#revision = 0;
+	#snapshotCache: ReaderBookmarkControllerSnapshot | null = null;
 	#loadEpoch = 0;
 	#loadAbort: AbortController | null = null;
 	#liveRefresh: unknown = null;
@@ -347,6 +366,10 @@ export class ReaderBookmarkController {
 	#backgroundRestoreEpoch = 0;
 	#backgroundStreamCursor = 0;
 	#backgroundNetworkPages = 0;
+	readonly #visibleHistoryConcurrency: number;
+	readonly #historyCoordination: ReaderBookmarkControllerOptions['historyCoordination'];
+	readonly #historyCoordinationKey: string;
+	readonly #backgroundInFlightStreams = new Set<ReaderBookmarkHistoryStream>();
 	#backgroundStatus: ReaderBookmarkHistoryProgress['status'] = 'idle';
 	#backgroundSource: ReaderBookmarkSource | null = null;
 	#backgroundError: unknown | null = null;
@@ -405,6 +428,13 @@ export class ReaderBookmarkController {
 		this.#historyRetryDelayMs = Number(
 			options.historyRetryDelayMs ?? DEFAULT_BACKGROUND_RETRY_DELAY_MS,
 		);
+		this.#visibleHistoryConcurrency = Number(
+			options.visibleHistoryConcurrency ?? 1,
+		);
+		this.#historyCoordination = options.historyCoordination;
+		this.#historyCoordinationKey = String(
+			options.historyCoordinationKey ?? '',
+		).trim();
 		for (const [name, value] of [
 			['historyStepDelayMs', this.#historyStepDelayMs],
 			['historyBatchDelayMs', this.#historyBatchDelayMs],
@@ -419,6 +449,13 @@ export class ReaderBookmarkController {
 			this.#historyBatchPages < 1
 		) {
 			throw new RangeError('historyBatchPages 必须是正安全整数');
+		}
+		if (
+			!Number.isSafeInteger(this.#visibleHistoryConcurrency) ||
+			this.#visibleHistoryConcurrency < 1 ||
+			this.#visibleHistoryConcurrency > BACKGROUND_STREAM_ORDER.length
+		) {
+			throw new RangeError('收藏可见历史并发数必须位于 1 到 5');
 		}
 		this.#tabOrder = normalizeReaderBookmarkTabOrder(
 			options.tabOrder ?? READER_BOOKMARK_TAB_ORDER,
@@ -478,8 +515,11 @@ export class ReaderBookmarkController {
 	}
 
 	get snapshot(): ReaderBookmarkControllerSnapshot {
+		if (this.#snapshotCache?.revision === this.#revision) {
+			return this.#snapshotCache;
+		}
 		const totalPages = Math.max(1, Math.ceil(this.#total / this.#pageSize));
-		return Object.freeze({
+		this.#snapshotCache = Object.freeze({
 			open: this.#open,
 			tab: this.#tab,
 			tabOrder: this.#tabOrder,
@@ -511,6 +551,7 @@ export class ReaderBookmarkController {
 			scopeBookmarkIds: this.#scopeBookmarkIds,
 			revision: this.#revision,
 		});
+		return this.#snapshotCache;
 	}
 
 	async open(): Promise<void> {
@@ -529,6 +570,7 @@ export class ReaderBookmarkController {
 		else {
 			this.#render();
 		}
+		this.#scheduleBackgroundWarm(0);
 	}
 
 	close(): void {
@@ -833,29 +875,83 @@ export class ReaderBookmarkController {
 		this.#scheduleBackgroundWarm(0);
 	}
 
-	async #restoreBackgroundProjections(epoch: number): Promise<void> {
+	async #restoreBackgroundProjections(
+		epoch: number,
+		fresh = false,
+	): Promise<void> {
 		if (!this.#projection || this.scope.destroyed) return;
 		const sources = BACKGROUND_SOURCE_ORDER;
-		const restored = await Promise.all(sources.map(async (source) => {
+		const restoredSources = await Promise.all(sources.map(async (source) => {
 			try {
 				return Object.freeze({
 					source,
-					snapshot: await this.#projection!.read(source),
+					snapshot: await this.#projection!.read(
+						source,
+						fresh ? { fresh: true } : undefined,
+					),
 				});
 			} catch (cause) {
 				this.#onError(cause);
 				return Object.freeze({ source, snapshot: null });
 			}
 		}));
+		const restoredStreams = await Promise.all(
+			BACKGROUND_STREAM_ORDER.map(async (stream) => {
+				try {
+					return Object.freeze({
+						stream,
+						snapshot: await this.#projection!.read(
+							historyProjectionPartition(stream),
+							fresh ? { fresh: true } : undefined,
+						),
+					});
+				} catch (cause) {
+					this.#onError(cause);
+					return Object.freeze({ stream, snapshot: null });
+				}
+			}),
+		);
 		if (
 			this.scope.destroyed || epoch !== this.#backgroundRestoreEpoch
 		) return;
-		for (const { source, snapshot } of restored) {
+		for (const { source, snapshot } of restoredSources) {
 			if (!snapshot) continue;
 			this.#applySourceProgress(source, {
 				pages: snapshot.records.length > 0 || snapshot.complete ? 1 : 0,
 				records: this.#mergeSourceRecords(source, snapshot.records),
 				complete: snapshot.complete,
+			}, false);
+		}
+		const restoredStreamNames = new Set<ReaderBookmarkHistoryStream>();
+		for (const { stream, snapshot } of restoredStreams) {
+			if (!snapshot) continue;
+			restoredStreamNames.add(stream);
+			this.#historyStreams.set(stream, Object.freeze({
+				next: Object.freeze({
+					page: snapshot.sourceNextPage ?? 0,
+					cursor: snapshot.sourceOffset ?? 0,
+				}),
+				pages: snapshot.sourceNextPage ?? 0,
+				complete: snapshot.complete,
+				refreshHead: false,
+			}));
+			this.#historyStreamRecords.set(stream, snapshot.records);
+		}
+		for (const source of sources) {
+			const streams = historyStreamsForSource(source);
+			if (!streams.every((stream) => restoredStreamNames.has(stream))) continue;
+			const records = source === 'reactions'
+				? mergeGivenReactionRecords(
+					this.#historyStreamRecords.get('likes') ?? [],
+					this.#historyStreamRecords.get('reaction-plugin') ?? [],
+				)
+				: this.#historyStreamRecords.get(streams[0]!) ?? Object.freeze([]);
+			this.#applySourceProgress(source, {
+				pages: streams.reduce((total, stream) =>
+					total + (this.#historyStreams.get(stream)?.pages ?? 0), 0),
+				records,
+				complete: streams.every((stream) =>
+					this.#historyStreams.get(stream)?.complete === true),
 			}, false);
 		}
 		this.#backgroundStatus = this.#historyProgress().completedTabs === 5
@@ -886,7 +982,7 @@ export class ReaderBookmarkController {
 		this.#syncedBookmarkRecords = sortReaderBookmarkRecords(records.filter(
 			(entry) => entry.tab === 'Topic' || entry.tab === 'Post',
 		));
-		this.#persistSource('bookmarks');
+		void this.#persistSource('bookmarks');
 		this.#render();
 	}
 
@@ -912,9 +1008,9 @@ export class ReaderBookmarkController {
 				entry.tab === 'Reply',
 		));
 		this.#reactionFilterCounts = this.#reactionFilters();
-		this.#persistSource('reactions');
-		this.#persistSource('boosts');
-		this.#persistSource('replies');
+		void this.#persistSource('reactions');
+		void this.#persistSource('boosts');
+		void this.#persistSource('replies');
 		this.#render();
 	}
 
@@ -942,6 +1038,7 @@ export class ReaderBookmarkController {
 			this.#historyStreamRecords.set(stream, Object.freeze([]));
 		}
 		this.#bookmarkRecords = Object.freeze([]);
+		this.#syncedBookmarkRecords = Object.freeze([]);
 		this.#syncedActivityRecords = Object.freeze([]);
 		this.#reactionRecords = Object.freeze([]);
 		this.#boostRecords = Object.freeze([]);
@@ -1026,7 +1123,11 @@ export class ReaderBookmarkController {
 			this.#render();
 		} finally {
 			if (this.#loadAbort === loadAbort) this.#loadAbort = null;
-			this.#scheduleBackgroundWarm(this.#historyStepDelayMs);
+			this.#scheduleBackgroundWarm(
+				this.#open && this.#visibleHistoryConcurrency > 1
+					? 0
+					: this.#historyStepDelayMs,
+			);
 		}
 	}
 
@@ -1173,11 +1274,14 @@ export class ReaderBookmarkController {
 			complete: progress.complete,
 			checkedAt: Date.now(),
 		}));
-		if (persist) this.#persistSource(source);
+		if (persist) void this.#persistSource(source);
 	}
 
-	#persistSource(source: ReaderBookmarkSource): void {
-		if (!this.#projection) return;
+	#persistSource(
+		source: ReaderBookmarkSource,
+		checkpointMode: 'advance' | 'replace' = 'advance',
+	): Promise<void> {
+		if (!this.#projection) return Promise.resolve();
 		const records = source === 'bookmarks'
 			? this.#mergedBookmarkRecords()
 			: this.#mergedActivityRecords(
@@ -1186,12 +1290,39 @@ export class ReaderBookmarkController {
 					: source === 'boosts' ? 'Boost' : 'Reply',
 			);
 		const complete = this.#sourceProgress.get(source)?.complete === true;
-		void this.#projection.write(source, records, {
+		return this.#projection.write(source, records, {
 			mergeStored: !complete,
 			totalHint: records.length,
 			complete,
 			updatedAt: Date.now(),
+			checkpointMode,
 		}).catch(this.#onError);
+	}
+
+	#persistHistoryStream(
+		stream: ReaderBookmarkHistoryStream,
+		checkpointMode: 'advance' | 'replace' = 'advance',
+	): Promise<void> {
+		if (!this.#projection) return Promise.resolve();
+		const state = this.#historyStreams.get(stream) ??
+			emptyHistoryStreamState();
+		const records = this.#historyStreamRecords.get(stream) ?? Object.freeze([]);
+		return this.#projection.write(
+			historyProjectionPartition(stream),
+			records,
+			{
+				mergeStored: true,
+				totalHint: records.length,
+				complete: state.complete,
+				updatedAt: Date.now(),
+				sourceNextPage: state.next.page,
+				sourceOffset: state.next.cursor,
+				...(stream === 'boosts' || stream === 'reaction-plugin'
+					? { sourceOffsetOrder: 'descending' as const }
+					: {}),
+				checkpointMode,
+			},
+		).catch(this.#onError);
 	}
 
 	#mergeSourceRecords(
@@ -1221,7 +1352,9 @@ export class ReaderBookmarkController {
 		for (const stream of historyStreamsForSource(source)) {
 			this.#historyStreams.set(stream, emptyHistoryStreamState(true));
 			this.#historyStreamRecords.set(stream, Object.freeze([]));
+			void this.#persistHistoryStream(stream, 'replace');
 		}
+		void this.#persistSource(source, 'replace');
 		if (this.#backgroundStatus === 'complete') {
 			this.#backgroundStatus = 'idle';
 		}
@@ -1241,6 +1374,7 @@ export class ReaderBookmarkController {
 			const stream = BACKGROUND_STREAM_ORDER[index]!;
 			const source = sourceForHistoryStream(stream);
 			if (
+				this.#backgroundInFlightStreams.has(stream) ||
 				this.#sourceProgress.get(source)?.complete ||
 				this.#historyStreams.get(stream)?.complete
 			) continue;
@@ -1251,7 +1385,7 @@ export class ReaderBookmarkController {
 		return null;
 	}
 
-	#applyHistoryPage(page: ReaderBookmarkHistoryPage): void {
+	async #applyHistoryPage(page: ReaderBookmarkHistoryPage): Promise<boolean> {
 		const previous = this.#historyStreams.get(page.stream) ??
 			emptyHistoryStreamState();
 		this.#historyStreams.set(page.stream, Object.freeze({
@@ -1286,7 +1420,17 @@ export class ReaderBookmarkController {
 			records: sourceRecords,
 			complete: streams.every((stream) =>
 				this.#historyStreams.get(stream)?.complete === true),
-		});
+		}, false);
+		const state = this.#historyStreams.get(page.stream)!;
+		const persisted = state.complete ||
+			state.pages % HISTORY_PROJECTION_BATCH_PAGES === 0;
+		if (persisted) {
+			await Promise.all([
+				this.#persistHistoryStream(page.stream),
+				this.#persistSource(source),
+			]);
+		}
+		return persisted;
 	}
 
 	#suspendBackgroundWarm(): void {
@@ -1330,8 +1474,11 @@ export class ReaderBookmarkController {
 			this.#backgroundWarming
 		) return;
 		if (!this.#native.username().trim()) return;
-		const stream = this.#nextBackgroundStream();
-		if (!stream) {
+		if (!BACKGROUND_STREAM_ORDER.some((stream) => {
+			const source = sourceForHistoryStream(stream);
+			return !this.#sourceProgress.get(source)?.complete &&
+				!this.#historyStreams.get(stream)?.complete;
+		})) {
 			this.#backgroundStatus = 'complete';
 			this.#backgroundSource = null;
 			this.#backgroundError = null;
@@ -1339,47 +1486,121 @@ export class ReaderBookmarkController {
 			this.#emit();
 			return;
 		}
+		const visibleHistory = this.#open && this.#visibleHistoryConcurrency > 1;
+		const openAtStart = this.#open;
+		const concurrency = visibleHistory ? this.#visibleHistoryConcurrency : 1;
 		this.#backgroundWarming = true;
 		this.#backgroundWarmPending = false;
 		this.#backgroundStatus = 'running';
-		this.#backgroundSource = sourceForHistoryStream(stream);
+		this.#backgroundSource = null;
 		this.#backgroundError = null;
 		this.#backgroundRetryAt = null;
 		const abort = new AbortController();
 		this.#backgroundWarmAbort = abort;
 		const epoch = ++this.#backgroundWarmEpoch;
 		let retryCause: unknown | null = null;
+		let retryStream: ReaderBookmarkHistoryStream | null = null;
 		let networkRequests = 0;
+		const dirtyStreams = new Set<ReaderBookmarkHistoryStream>();
 		this.#emit();
 		try {
-			const state = this.#historyStreams.get(stream) ??
-				emptyHistoryStreamState();
-			const beforeNetwork = (): void => {
-				networkRequests += 1;
-			};
-			const page = await this.#requests.loadHistoryPage(stream, state.next, {
-				background: true,
+			const leaseResult = await runReaderCollectionHydrationLease({
+				coordination: this.#historyCoordination ?? null,
+				token: this.#historyCoordinationKey,
 				signal: abort.signal,
-				...(state.refreshHead && state.next.page === 0
-					? { refresh: true }
-					: {}),
-				beforeNetwork,
-			});
-			const records = await this.#enrichTopicTaxonomy(page.records, {
-				background: true,
-				signal: abort.signal,
-				beforeNetwork,
+				onError: this.#onError,
+				beforeRun: () => this.#restoreBackgroundProjections(
+					this.#backgroundRestoreEpoch,
+					true,
+				),
+				run: async () => {
+					await runReaderCollectionWorkers({
+						concurrency,
+						maxTasks: visibleHistory
+							? concurrency * VISIBLE_HISTORY_LEASE_ROUNDS
+							: 1,
+						shouldContinue: () =>
+							retryCause === null &&
+							!this.scope.destroyed &&
+							!abort.signal.aborted &&
+							epoch === this.#backgroundWarmEpoch &&
+							this.#open === openAtStart,
+						claim: () => {
+							const stream = this.#nextBackgroundStream();
+							if (stream) this.#backgroundInFlightStreams.add(stream);
+							return stream;
+						},
+						release: (stream) => {
+							this.#backgroundInFlightStreams.delete(stream);
+						},
+						run: async (stream) => {
+							if (concurrency === 1) {
+								this.#backgroundSource = sourceForHistoryStream(stream);
+								this.#emit();
+							}
+							const state = this.#historyStreams.get(stream) ??
+								emptyHistoryStreamState();
+							const beforeNetwork = (): void => {
+								networkRequests += 1;
+							};
+							try {
+								const page = await this.#requests.loadHistoryPage(
+									stream,
+									state.next,
+									{
+										background: !visibleHistory,
+										signal: abort.signal,
+										...(state.refreshHead && state.next.page === 0
+											? { refresh: true }
+											: {}),
+										beforeNetwork,
+									},
+								);
+								const records = await this.#enrichTopicTaxonomy(page.records, {
+									background: !visibleHistory,
+									signal: abort.signal,
+									beforeNetwork,
+								});
+								if (
+									this.scope.destroyed || abort.signal.aborted ||
+									epoch !== this.#backgroundWarmEpoch
+								) return;
+								const persisted = await this.#applyHistoryPage(
+									records === page.records
+									? page
+									: Object.freeze({ ...page, records }),
+								);
+								if (persisted) dirtyStreams.delete(stream);
+								else dirtyStreams.add(stream);
+								this.#render();
+							} catch (cause) {
+								if (abort.signal.aborted) return;
+								retryCause ??= cause;
+								retryStream ??= stream;
+							}
+						},
+					});
+					if (dirtyStreams.size) {
+						await Promise.all([
+							...[...dirtyStreams].map((stream) =>
+								this.#persistHistoryStream(stream)),
+							...[...new Set([...dirtyStreams].map(
+								sourceForHistoryStream,
+							))].map((source) => this.#persistSource(source)),
+						]);
+						dirtyStreams.clear();
+					}
+				},
 			});
 			if (
-				this.scope.destroyed ||
-				abort.signal.aborted ||
-				epoch !== this.#backgroundWarmEpoch
-			) return;
-			this.#applyHistoryPage(records === page.records
-				? page
-				: Object.freeze({ ...page, records }));
+				leaseResult !== 'producer' &&
+				!this.scope.destroyed &&
+				epoch === this.#backgroundWarmEpoch
+			) await this.#restoreBackgroundProjections(
+				this.#backgroundRestoreEpoch,
+				true,
+			);
 			this.#backgroundNetworkPages += networkRequests;
-			this.#render();
 		} catch (cause) {
 			if (
 				abort.signal.aborted ||
@@ -1391,18 +1612,23 @@ export class ReaderBookmarkController {
 				this.#backgroundWarmAbort = null;
 			}
 			this.#backgroundWarming = false;
+			this.#backgroundInFlightStreams.clear();
 			if (this.scope.destroyed) return;
 			if (epoch !== this.#backgroundWarmEpoch) {
 				const pending = this.#backgroundWarmPending;
 				this.#backgroundWarmPending = false;
 				if (pending) {
-					this.#scheduleBackgroundWarm(this.#historyStepDelayMs);
+					this.#scheduleBackgroundWarm(
+						this.#open && this.#visibleHistoryConcurrency > 1
+							? 0
+							: this.#historyStepDelayMs,
+					);
 				}
 				return;
 			}
 			this.#backgroundSource = retryCause === null
 				? null
-				: sourceForHistoryStream(stream);
+				: retryStream === null ? null : sourceForHistoryStream(retryStream);
 			const complete = this.#historyProgress().completedTabs === 5;
 			this.#backgroundWarmPending = false;
 			this.#backgroundStatus = complete
@@ -1426,17 +1652,26 @@ export class ReaderBookmarkController {
 				this.#scheduleBackgroundWarm(0);
 				return;
 			}
+			if (openAtStart) {
+				this.#scheduleBackgroundWarm(0);
+				return;
+			}
 			if (this.#backgroundNetworkPages >= this.#historyBatchPages) {
 				this.#backgroundNetworkPages = 0;
 				this.#scheduleBackgroundWarm(this.#historyBatchDelayMs);
 				return;
 			}
-			this.#scheduleBackgroundWarm(this.#historyStepDelayMs);
+			this.#scheduleBackgroundWarm(
+				this.#open && this.#visibleHistoryConcurrency > 1
+					? 0
+					: this.#historyStepDelayMs,
+			);
 		}
 	}
 
 	#cancelBackgroundWarm(): void {
 		this.#backgroundWarmEpoch += 1;
+		this.#backgroundInFlightStreams.clear();
 		this.#backgroundWarmAbort?.abort(
 			new Error('收藏后台预热已取消'),
 		);
@@ -1630,7 +1865,7 @@ export class ReaderBookmarkController {
 		);
 		for (const id of removed) this.#selection.delete(id);
 		this.#bookmarksLoaded = true;
-		this.#persistSource('bookmarks');
+		void this.#persistSource('bookmarks');
 		this.#render();
 	}
 
@@ -1711,6 +1946,7 @@ export class ReaderBookmarkController {
 
 	#emit(): void {
 		this.#revision += 1;
+		this.#snapshotCache = null;
 		this.changes.emit(this.snapshot);
 	}
 }

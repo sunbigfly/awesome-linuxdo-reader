@@ -886,6 +886,26 @@
   box-shadow: 0 18px 54px rgba(0, 0, 0, .42);
 }
 
+.ldp-lb-batch-overlay.is-summary-image-picker {
+  z-index: 2147483587;
+  pointer-events: auto;
+}
+
+.ldp-lb-batch-overlay.is-plain-backdrop {
+  position: fixed;
+  background: rgba(7, 9, 12, .18);
+  backdrop-filter: none;
+}
+
+.ldp-lb-batch-overlay.is-summary-picker-positioned
+  > .ldp-lb-batch-dialog {
+  position: fixed;
+  top: var(--ldp-summary-picker-top);
+  left: var(--ldp-summary-picker-left);
+  width: var(--ldp-summary-picker-width);
+  max-height: var(--ldp-summary-picker-height);
+}
+
 .ldp-lb-batch-head,
 .ldp-lb-batch-tools,
 .ldp-lb-batch-actions {
@@ -912,7 +932,6 @@
   border: 1px solid rgba(255, 255, 255, .12);
   border-radius: 8px;
   background: rgba(255, 255, 255, .035);
-  cursor: pointer;
 }
 
 .ldp-github-onebox-logo {
@@ -1736,6 +1755,7 @@
   position: absolute;
   top: 9px;
   left: 9px;
+  z-index: 2;
   width: 17px;
   height: 17px;
   margin: 0;
@@ -1743,7 +1763,28 @@
   cursor: pointer;
 }
 
-.ldp-lb-batch-item > img {
+.ldp-lb-batch-preview {
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: zoom-in;
+}
+
+.ldp-lb-batch-preview:focus-visible {
+  outline: 2px solid #8cc7ff;
+  outline-offset: 2px;
+}
+
+.ldp-lb-batch-preview:disabled {
+  cursor: default;
+}
+
+.ldp-lb-batch-preview > img {
   display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
@@ -1754,22 +1795,20 @@
     rgba(255, 255, 255, .11) 18%,
     rgba(255, 255, 255, .045) 33%
   );
-  background-size: 220% 100%;
   object-fit: cover;
-  animation: ldp-lb-batch-thumbnail-loading 1.25s linear infinite;
 }
 
-.ldp-lb-batch-item > img[data-ldp-batch-thumb-state="loaded"] {
+.ldp-lb-batch-preview > img[data-ldp-batch-thumb-state="loaded"] {
   background: repeating-conic-gradient(#d8dbe0 0 25%, #f3f4f6 0 50%) 50% / 14px 14px;
-  animation: none;
 }
 
-.ldp-lb-batch-item > img[data-ldp-batch-thumb-state="failed"] {
+.ldp-lb-batch-preview > img[data-ldp-batch-thumb-state="failed"] {
   opacity: .28;
-  animation: none;
 }
 
-.ldp-lb-batch-item:has(> img[data-ldp-batch-thumb-state="failed"])::after {
+.ldp-lb-batch-item:has(
+  > .ldp-lb-batch-preview > img[data-ldp-batch-thumb-state="failed"]
+)::after {
   position: absolute;
   top: 50%;
   right: 8px;
@@ -1780,12 +1819,6 @@
   text-align: center;
   transform: translateY(-12px);
   pointer-events: none;
-}
-
-@keyframes ldp-lb-batch-thumbnail-loading {
-  to {
-    background-position-x: -220%;
-  }
 }
 
 .ldp-lb-batch-item > span {

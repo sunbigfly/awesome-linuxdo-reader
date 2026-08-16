@@ -148,6 +148,7 @@ for (const name of [
 	'shield',
 	'shield-halved',
 	'smile',
+	'sparkles',
 	'square',
 	'sun',
 	'tag',

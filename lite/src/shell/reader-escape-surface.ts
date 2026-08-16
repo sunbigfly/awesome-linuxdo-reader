@@ -1,5 +1,6 @@
 const ESCAPE_SURFACE_SELECTOR = [
 	'.ldp-reader-action-layer:not([hidden])',
+	'.ldp-ai-service-model-metadata:not([hidden])',
 	'.ldp-avatar-viewer',
 	'.ldp-native-boost-menu:not([hidden])',
 	'[data-identifier="ldp-native-boost-emoji-picker"]',
@@ -33,6 +34,7 @@ function visible(document: Document, element: HTMLElement): boolean {
 function declaredSurfaceZIndex(element: HTMLElement): number | null {
 	for (const [selector, zIndex] of [
 		['.ldp-reader-action-layer', 2147483612],
+		['.ldp-ai-service-model-metadata', 2147483612],
 		['.ldp-user-card-follow-preview.is-above-user-observation-window', 2147483619],
 		['.ldp-user-card-follow-panel.is-above-user-observation-window', 2147483618],
 		['.ldp-user-card-fallback.is-above-user-observation-window', 2147483617],
