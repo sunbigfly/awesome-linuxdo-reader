@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.0
+// @version      1.5.1
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.0 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.5.1 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.0",
+			sourceVersion: "1.5.1",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.0") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.1") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -5585,13 +5585,14 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            queue: openQueue,
 	            preferences: {
 	              read: context.readPreferences,
-	              validate: (id, value) => {
+	              validate: (id, value, records) => {
 	                const preferences = context.readPreferences();
 	                return (0, import_reader_webdav_category_ports.readerWebDavPreferenceRecordMatchesSchema)(
 	                  preferences,
 	                  id,
 	                  value,
-	                  (candidate) => webDavOptions.preferencesCodec.export(candidate).settings
+	                  (candidate) => webDavOptions.preferencesCodec.export(candidate).settings,
+	                  records
 	                );
 	              },
 	              update: (patch) => {
@@ -5841,7 +5842,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    }
 	  });
 	}
-}, "7bd3194b979d0549d1788c64d3d54ae207e976b6d64bd40fe6fabd2b0b49198e");
+}, "dd3101cef603ba71745b16a38678f31504ba6c3cef66d04a01c14171e28914f7");
 
 /* Source: lite/src/app/reader-data-runtime.ts */
 runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -6309,7 +6310,7 @@ runtime.register("src/components/reader-control-tooltip.js", function(module, ex
 	  }
 	  #match(target) {
 	    const control = target?.closest(TOOLTIP_CONTROL_SELECTOR) ?? null;
-	    if (!control) return null;
+	    if (!control || control.hasAttribute("data-ldp-native-dnd")) return null;
 	    const namedHostTopicControl = control.hasAttribute("data-ldp-tooltip-label") && this.#document.documentElement.classList.contains(
 	      "ldp-reader-workspace"
 	    ) && !!control.closest(HOST_TOPIC_CARD_SELECTOR);
@@ -6413,7 +6414,7 @@ runtime.register("src/components/reader-control-tooltip.js", function(module, ex
 	    this.#copyResetTimer && (this.#cancelSchedule(this.#copyResetTimer), this.#copyResetTimer = 0);
 	  }
 	}
-}, "5fcf1e81671bb4baf98b6f4f366670b5412b293e52620838af570c8c05e7bced");
+}, "8c6538bb3b9ca78569693905b692efac4491c47d8b3a091d5629adde434613bb");
 
 /* Source: lite/src/components/reader-icon.ts */
 runtime.register("src/components/reader-icon.js", function(module, exports, require) {
@@ -10127,7 +10128,7 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	  }
 	  #createDndButton(line, _topic) {
 	    const button = this.#document.createElement("button");
-	    return button.type = "button", button.dataset.ldpOwnedNativeDnd = "true", button.dataset.ldpNativeDnd = "true", button.setAttribute("aria-label", "免打扰：加入不想看"), button.dataset.ldpTooltipLabel = "免打扰：加入不想看", line.append(button), button;
+	    return button.type = "button", button.dataset.ldpOwnedNativeDnd = "true", button.dataset.ldpNativeDnd = "true", button.setAttribute("aria-label", "免打扰：加入不想看"), line.append(button), button;
 	  }
 	  #onRootClick(event) {
 	    const eventTarget = event.target, control = (eventTarget?.nodeType === 1 ? eventTarget : eventTarget?.parentElement ?? null)?.closest("[data-ldp-native-dnd]"), card = control?.closest(CARD_SELECTOR);
@@ -10162,17 +10163,16 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	      "aria-label",
 	      "title",
 	      "data-tooltip",
-	      "data-tippy-content"
+	      "data-tippy-content",
+	      "data-ldp-tooltip-label"
 	    ];
-	    if (control.dataset.ldpTooltipLabel = "免打扰：加入不想看", control.dataset.ldpOwnedNativeDnd !== "true") {
-	      this.#nativeDndTooltipAttributes.has(control) || this.#nativeDndTooltipAttributes.set(control, new Map(
-	        attributes.map((name) => [
-	          name,
-	          control.getAttribute(name)
-	        ])
-	      )), control.setAttribute("aria-label", "免打扰：加入不想看");
-	      for (const name of attributes.slice(1)) control.removeAttribute(name);
-	    }
+	    control.dataset.ldpOwnedNativeDnd !== "true" && !this.#nativeDndTooltipAttributes.has(control) && this.#nativeDndTooltipAttributes.set(control, new Map(
+	      attributes.map((name) => [
+	        name,
+	        control.getAttribute(name)
+	      ])
+	    )), control.setAttribute("aria-label", "免打扰：加入不想看");
+	    for (const name of attributes.slice(1)) control.removeAttribute(name);
 	  }
 	  #restoreNativeDndTooltip(control) {
 	    delete control.dataset.ldpTooltipLabel;
@@ -10292,7 +10292,7 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	    return (link?.getAttribute("href") ?? "").match(/\/t\/(?:[^/]+\/)?(\d+)(?:\/|$)/)?.[1] ?? "";
 	  }
 	}
-}, "cc0ae4a72eb56578975cd1d8eacd800dec934b678dd0b0e0def84a38ba17e54e");
+}, "f8481d0a58620cbb850b9697399af84e685ac5fcb8f31b7d7e2948f3113e4be7");
 
 /* Source: lite/src/shell/main-outlet-mutation-hub.ts */
 runtime.register("src/shell/main-outlet-mutation-hub.js", function(module, exports, require) {

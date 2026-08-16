@@ -29,6 +29,7 @@ const { document: parsedDocument, window } = parseHTML(
 	'</section><article class="topic-list-item">' +
 	'<button class="ldp-reader-queue-add" aria-label="加入阅读队列" ' +
 	'data-ldp-tooltip-label="加入阅读队列" title="原生提示"></button>' +
+	'<button data-ldp-native-dnd aria-label="免打扰：加入不想看"></button>' +
 	'</article></body></html>',
 );
 const document = parsedDocument as unknown as Document;
@@ -45,6 +46,7 @@ const badge = document.querySelector<HTMLElement>('.ldp-avatar-flair')!;
 const hostQueueAdd = document.querySelector<HTMLElement>(
 	'.ldp-reader-queue-add',
 )!;
+const hostDnd = document.querySelector<HTMLElement>('[data-ldp-native-dnd]')!;
 Object.defineProperty(history, 'getBoundingClientRect', {
 	value: () => rect(100, 120, 40, 40),
 });
@@ -119,6 +121,12 @@ assert(
 		String(tooltip.element.textContent) === '加入阅读队列' &&
 		!hostQueueAdd.hasAttribute('title'),
 	'宿主 Topic card 内由 Reader 显式命名的图标必须复用统一 tooltip owner，并移除浏览器原生提示',
+);
+tooltip.close();
+hostDnd.dispatchEvent(hover);
+assert(
+	tooltip.element.hidden && !tooltip.element.textContent,
+	'宿主免打扰动作必须退出 Reader tooltip owner，避免重新出现白色提示卡片',
 );
 
 badge.click();

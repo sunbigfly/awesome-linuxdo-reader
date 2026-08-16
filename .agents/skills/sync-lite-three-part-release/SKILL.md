@@ -18,12 +18,14 @@ description: "在当前 awesome-linuxdo-reader 仓库完成一次已验证 Lite 
 4. 把 CSS 视为 `work/main-lite.css` 固定哈希 `@resource`，不是第五个 Greasy Fork 可执行单元。
 5. 把 `lite/src/`、`lite/styles/` 和 `lite/userscript.meta.txt` 视为事实源；不要直接手改 `work/main-lite.js`、`work/main-lite.css` 或 `work/greasyfork-lite/libraries/*.js`。
 6. 记录并保留任务开始前的 dirty 路径；只暂存本次批次的路径白名单。默认排除用户的 `work/main.js`、`work/main.css`、`work/main-lite.local.js`、`work/main-lite.greasyfork.local.user.js`、日志和其他既有改动。
-7. 永不提交 `work/greasyfork-lite/release.config.json`、凭据、Cookie、Token、本机路径或被忽略的验收副本。
-8. 只有用户确认发布批次后才执行 push、Greasy Fork 设置修改和立即同步；只要求准备时停在本地验证结果。
-9. 1.0.1 迁移期必须保留 `mian-lite:*` 命令和同名生成物兼容别名；canonical 与旧拼写的 Loader、CSS、Core、Platform、Features 必须由同一次构建生成且逐字节一致。所有新文档、GitHub Raw URL 与 Greasy Fork 同步源使用 `main-lite`。
-10. 把“提交/同步”视为功能验证已经完成。本 Skill 不重复 ESLint、源码单文件测试、浏览器矩阵、性能门禁或主观界面验收；实际 Core、Platform、Features 分包产物的契约门必须有当前快照的成功收据，但同一快照不得重复执行。
-11. 开发阶段必须已经运行 `npm run main-lite:local-debug`，生成单文件和四文件本地审查版；该命令已包含实际分包产物契约测试。本 Skill 记录并复用其当前快照收据，不重新生成开发调试产物，只在取得不可变发布坐标后生成并复核最终 Loader。
-12. Greasy Fork 主脚本公开介绍页不是 GitHub README，GitHub Webhook 只同步代码，不会自动更新该正文。介绍页更新是独立外部写入，必须列入审批包；发布完成前必须从公开页面回读目标版本与最终坐标，不能用代码更新时间代替。
+7. 项目有并行任务时，检查和生成只按本次发布批次的 exact path 白名单、影响产物和待发布字节归因。白名单外的 dirty、失败和生成物变化不分析、不修复、不回滚、不重跑、不等待；只有它进入本批白名单、改变本批待发布字节或使发布证据无法独立成立时，才作为本任务边界冲突停止。
+8. 永不提交 `work/greasyfork-lite/release.config.json`、凭据、Cookie、Token、本机路径或被忽略的验收副本。
+9. 只有用户确认发布批次后才执行 push、Greasy Fork 设置修改和立即同步；只要求准备时停在本地验证结果。
+10. 1.0.1 迁移期必须保留 `mian-lite:*` 命令和同名生成物兼容别名；canonical 与旧拼写的 Loader、CSS、Core、Platform、Features 必须由同一次构建生成且逐字节一致。所有新文档、GitHub Raw URL 与 Greasy Fork 同步源使用 `main-lite`。
+11. 把“提交/同步”视为功能验证已经完成。本 Skill 不重复 ESLint、源码/分包契约、浏览器矩阵、性能门禁或主观界面验收；单文件与实际 Core、Platform、Features 的 parity gate 必须有当前快照的成功收据，但同一快照不得重复执行。
+12. 开发阶段必须已经运行 `npm run main-lite:local-debug`，生成单文件和四文件本地审查版；该命令已包含源码与分包 runtime 契约、元数据/CSS/源码模块/manifest/兼容副本 parity gate。本 Skill 记录并复用其当前快照收据，不重新生成开发调试产物，只在取得不可变发布坐标后生成并复核最终 Loader。
+13. Greasy Fork 主脚本公开介绍页不是 GitHub README，GitHub Webhook 只同步代码，不会自动更新该正文。介绍页更新是独立外部写入，必须列入审批包；发布完成前必须从公开页面回读目标版本与最终坐标，不能用代码更新时间代替。
+14. 用户明确延期 Greasy Fork 时，把它视为部分发布，而不是“本轮不打开 Greasy Fork”。先用 GitHub API 脱敏核对活动的 `greasyfork.org` push Webhook；审批包必须明确采用以下一种边界：暂不推送受 Hook 管理的 Loader/Library，或经用户批准暂挂相关 Hook 并保持关闭直到后续 Greasy Fork 发布。不得先 push 再赌 Webhook 不触发，也不得把 GitHub/Pages/CSS 已同步写成“三块已对齐”。
 
 ## 先判定影响面
 
@@ -55,7 +57,7 @@ description: "在当前 awesome-linuxdo-reader 仓库完成一次已验证 Lite 
 - Library/CSS 与 Loader 都变化时，A → 远端固定坐标 → B 是安全下限，不能并成一次 push；C 只记录最终线上证据，不夹带可执行文件。
 - 不在 B 写“发布中”“待 Webhook”之类临时 README、安装说明或手册文案；B 只提交发布配置和最终 Loader，取得主 Loader ID 后在 C 一次写成最终状态。
 - 本地发布检查尽量合并到一个 shell 调用；远端 API、Raw 和固定文件读取按阶段各批量查询一次。不展示完整生成文件 diff。
-- 为分包契约门记录“快照收据”：目标版本、Core SHA-256、Platform SHA-256、Features SHA-256、CSS SHA-256、构建器与契约测试脚本的 Git blob ID，以及成功命令。当前发布会话内这些值完全相同就复用收据；任一值变化、收据缺失或上次执行中断时才运行一次 `npm run main-lite:greasyfork:check`。不要为了“更保险”在发布前后重复执行。
+- 为 parity gate 记录“快照收据”：目标版本、Core SHA-256、Platform SHA-256、Features SHA-256、CSS SHA-256、单文件 SHA-256、构建器、源码/分包契约脚本与 `verify-main-lite-local-parity.mjs` 的 Git blob ID，以及成功的 `npm run main-lite:local-debug` 命令。当前发布会话内这些值完全相同就复用收据；任一值变化、收据缺失或上次执行中断时才重新生成并验证一次，不要为了“更保险”在发布前后重复执行。
 - 最终坐标构建正常路径只运行一次写入构建，再做 `cmp`、元数据和 SHA-256 常量时间核对；只有构建器或事实源在收据后变化、写入被中断、产物哈希变化或核对失败时，才补一次 `--check` 或分包契约测试。
 - 已配置的 Greasy Fork Webhook 默认视为可靠触发器，不例行打开管理页、查询 GitHub delivery 或深挖源码页面。记录 push UTC 时间后，用 WebSearch/官方公开 API 查看目标版本的 `created_at` 或分发端 `Last-Modified` 已更新即可确认触发；只有更新时间在轮询窗口内未变化时才排查 Webhook。
 - 公开版本轮询前 30 秒使用 2 秒间隔，之后使用 5 秒间隔，总计最多 60 秒，发现目标版本立即停止；Pages 只等待最终 C 对应的一次工作流。
@@ -107,7 +109,7 @@ A push → Library version IDs/bytes/SHA-256 → published config/CSS immutable 
 
 跳过空批次；没有不可变坐标依赖时合并 A、B。纯文档变更只提交并同步文档，不构建或重发 Greasy Fork。批次 C 不得夹带可执行产物变化，也不得因此主动重发 Greasy Fork。
 
-出现意外 dirty 重叠、疑似秘密、一致性失败、非 fast-forward 拒绝或远端字节不一致时停止。瞬时网络失败则记录 `branch`、`HEAD`、dirty 基线、已完成检查和唯一待执行命令。恢复时先确认这些状态未变并查询实时远端 SHA：远端已经等于目标 `HEAD` 就直接收口，否则只重试失败的外部动作与远端核验，不重复提交或发布。工作树没有本批新变更而分支仅为 ahead 时，审核 ahead commit 后直接续推，不创建空提交。
+本批 exact path 出现意外 dirty 重叠、疑似秘密、一致性失败、非 fast-forward 拒绝或远端字节不一致时停止；边界外变化按固定边界排除。瞬时网络失败则记录 `branch`、`HEAD`、dirty 基线、已完成检查和唯一待执行命令。恢复时先确认本批状态未变并查询实时远端 SHA：远端已经等于目标 `HEAD` 就直接收口，否则只重试失败的外部动作与远端核验，不重复提交或发布。工作树没有本批新变更而分支仅为 ahead 时，审核 ahead commit 后直接续推，不创建空提交。
 
 ## 1. 锁定待同步快照
 
@@ -121,7 +123,7 @@ git diff --name-status
 git diff --stat
 ```
 
-记录任务前 dirty 路径和待同步 commit。此阶段不修改事实源、不重建产物、不补功能验证；发现待提交内容仍在变化时停止，返回开发/验证阶段。
+记录任务前 dirty 路径和待同步 commit。此阶段不修改事实源、不重建产物、不补功能验证；只有本批白名单或待发布字节仍在变化时才停止并返回开发/验证阶段，边界外并行变化不等待。
 
 ## 2. 只检查发布一致性
 
@@ -133,12 +135,13 @@ git diff --stat
 - CSS：`readerStylesUrl` 指向已包含目标 CSS 的不可变 Git commit，声明哈希与 `work/main-lite.css` 一致；
 - 兼容别名：现存 canonical `main-lite` 与 `mian-lite` 生成物逐字节一致；
 - 本地审查：`work/main-lite.local.js` 与 `work/main-lite.greasyfork.local.user.js` 存在，四文件 Loader 只用 `file://` 引用本地 Core、Platform、Features 和 CSS；
+- 本地 parity：同一快照的源码与分包 runtime 契约均通过，元数据、CSS、全部 Lite 源码模块哈希、manifest 和兼容副本均通过 `verify-main-lite-local-parity.mjs`；不要求架构不同的 JS 容器整文件字节相等；
 - 手册：版本、安装链接、固定发布坐标和“已发布/准备中”状态不冲突。
 
-此时只检查事实源对应的 Library、模板、manifest 与兼容别名，不提前校验尚未取得的新 CSS/Library 远端坐标。先从开发阶段 `main-lite:local-debug` 的成功输出记录快照收据；若当前会话没有收据，或当前哈希/blob ID 与收据不同，仅运行一次：
+此时只检查事实源对应的 Library、模板、manifest 与兼容别名，不提前校验尚未取得的新 CSS/Library 远端坐标。先从开发阶段 `main-lite:local-debug` 的成功输出记录快照收据；若当前会话没有收据，或当前哈希/blob ID 与收据不同，仅运行一次完整本地构建：
 
 ```bash
-npm run main-lite:greasyfork:check
+npm run main-lite:local-debug
 ```
 
 随后无论是否复用收据，都只做低成本字节与哈希核对：
@@ -157,7 +160,7 @@ sha256sum work/main-lite.js \
   work/main-lite.css
 ```
 
-`main-lite:greasyfork:check` 已包含 `main-lite:greasyfork:test`。该测试直接从待发布 Core、Platform、Features 的模块 runtime 运行完整 Lite 契约；失败时停止发布，不能以源码测试、哈希一致或人工检查替代。快照相同只复用已通过的收据，不再次运行这两个命令。
+`main-lite:local-debug` 内置 `main-lite:parity`，源码与实际 Core、Platform、Features runtime 分别运行完整 Lite 契约，并执行结构 parity gate。本批白名单或待发布字节相关的失败时停止发布，不能以其中一侧测试、总哈希一致或人工检查替代；只命中已证明的边界外并行失败时按固定边界排除。快照相同只复用已通过的收据，不再次运行这些命令。
 
 用 `git diff -- work/greasyfork-lite/libraries/ work/greasyfork-lite/build-manifest.json` 判断哪一个 Library 变化。若三库都没变化，不创建新的 Library 版本。
 
@@ -230,7 +233,7 @@ node scripts/build-main-lite-greasyfork.mjs \
 构建后立即重新计算 Core、Platform、Features、CSS SHA-256 并与快照收据比较：
 
 - 三个 Library 哈希均未变化：分包字节仍是已通过契约门的同一快照，不再运行 `main-lite:greasyfork:test`；
-- 任一 Library 哈希变化：收据失效，停止发布并对新产物只运行一次 `npm run main-lite:greasyfork:check`；
+- 任一 Library 哈希变化：收据失效，停止发布并对新快照只运行一次 `npm run main-lite:local-debug`；
 - 构建器或事实源在收据后变化、写入过程被中断、兼容副本不一致或 Loader 核对失败：只补一次同参数 `--check`，不要固定执行 build + check 双编译；
 - `--consistency-only` 只跳过历史浏览器、性能和功能验收，不能创建“无需分包契约门”的例外。
 

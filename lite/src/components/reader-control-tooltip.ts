@@ -206,7 +206,7 @@ export class ReaderControlTooltip {
 
 	#match(target: Element | null): TooltipMatch | null {
 		const control = target?.closest<HTMLElement>(TOOLTIP_CONTROL_SELECTOR) ?? null;
-		if (!control) return null;
+		if (!control || control.hasAttribute('data-ldp-native-dnd')) return null;
 		const namedHostTopicControl =
 			control.hasAttribute('data-ldp-tooltip-label') &&
 			this.#document.documentElement.classList.contains(

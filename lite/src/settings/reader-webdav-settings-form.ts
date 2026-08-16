@@ -124,7 +124,7 @@ export class ReaderWebDavSettingsForm {
 		const content = settingsSection(
 			options.document,
 			'选择同步内容',
-			'每类独立开关；关闭的类别不会上传、下载或删除。通知与互动历史、离线 Topic HTML 和译文只在各自单独勾选后同步。历史清单只含可搜索记录，不上传原始分页响应、请求游标或限流状态。',
+			'每类开关都是当前设备的独立授权，不会随 WebDAV 同步；需要参与同一类别的设备必须分别开启并保存。关闭的类别不会上传、下载或删除。通知与互动历史、离线 Topic HTML 和译文只在各自单独勾选后同步。历史清单只含可搜索记录，不上传原始分页响应、请求游标或限流状态。',
 			true,
 		);
 		const categoryList = element(

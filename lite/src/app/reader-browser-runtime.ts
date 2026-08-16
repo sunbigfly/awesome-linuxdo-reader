@@ -9171,7 +9171,7 @@ export function createReaderBrowserRuntimeStage<
 						queue: openQueue,
 						preferences: {
 							read: context.readPreferences,
-							validate: (id, value) => {
+							validate: (id, value, records) => {
 								const preferences = context.readPreferences();
 								return readerWebDavPreferenceRecordMatchesSchema(
 									preferences,
@@ -9179,6 +9179,7 @@ export function createReaderBrowserRuntimeStage<
 									value,
 									(candidate) => webDavOptions.preferencesCodec
 										.export(candidate).settings,
+									records,
 								);
 							},
 							update: (patch) => {

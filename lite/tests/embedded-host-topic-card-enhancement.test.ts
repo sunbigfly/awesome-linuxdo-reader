@@ -18,7 +18,9 @@ const { document: parsedDocument } = parseHTML(
 	'<a class="raw-topic-link" href="/t/demo/42">主题</a>' +
 	'<span class="topic-post-badges"><a class="badge-notification">●</a></span>' +
 	'<span>专家回应</span><button aria-label="将此话题设为免打扰" ' +
-	'title="宿主免打扰" data-tooltip="宿主提示"><svg></svg></button></div>' +
+	'title="宿主免打扰" data-tooltip="宿主提示" ' +
+	'data-ldp-tooltip-label="宿主显式提示"><svg></svg>' +
+	'<span class="host-dnd-label">免打扰</span></button></div>' +
 	'<div class="link-bottom-line"><a class="discourse-tag">人工智能</a></div></td>' +
 	'<td class="posters"><a data-user-card="author42" class="original-poster"></a></td>' +
 	'<td class="posts"><span>7</span></td><td class="views">2026/07/31 09:30</td>' +
@@ -155,11 +157,12 @@ assert(
 	component.querySelector('.ldp-topic-stat--response .ldp-topic-stat-value')
 		?.textContent === '72' &&
 	dnd.closest('.ldp-native-topic-title-tools') &&
-	dnd.dataset.ldpTooltipLabel === '免打扰：加入不想看' &&
+	dnd.querySelector('.host-dnd-label')?.textContent === '免打扰' &&
 	dnd.getAttribute('aria-label') === '免打扰：加入不想看' &&
 	!dnd.hasAttribute('title') &&
-	!dnd.hasAttribute('data-tooltip'),
-	'嵌入态必须保留统计投影，并把宿主免打扰语义改为加入不想看',
+	!dnd.hasAttribute('data-tooltip') &&
+	!dnd.hasAttribute('data-ldp-tooltip-label'),
+	'嵌入态必须保留统计投影，并让宿主免打扰退出全部悬停提示入口',
 );
 assert(
 	card.hasAttribute('data-ldp-topic-stats') &&
@@ -169,8 +172,9 @@ assert(
 );
 assert(
 	fallbackDnd.previousElementSibling?.classList.contains('ldp-reader-queue-add') &&
-	fallbackDnd.dataset.ldpOwnedNativeDnd === 'true',
-	'宿主缺少免打扰动作时必须在收纳箱入口后补出自有入口',
+	fallbackDnd.dataset.ldpOwnedNativeDnd === 'true' &&
+	!fallbackDnd.hasAttribute('data-ldp-tooltip-label'),
+	'宿主缺少免打扰动作时必须在收纳箱入口后补出无 tooltip 的自有入口',
 );
 assert(
 	enhancement.markTopicOpened(42) &&
@@ -271,8 +275,9 @@ assert(
 	!newTopicMarker?.hasAttribute('data-ldp-native-new-topic-marker') &&
 	dnd?.getAttribute('title') === '宿主免打扰' &&
 	dnd.getAttribute('data-tooltip') === '宿主提示' &&
+	dnd.getAttribute('data-ldp-tooltip-label') === '宿主显式提示' &&
 	dnd.getAttribute('aria-label') === '将此话题设为免打扰' &&
-	!dnd.hasAttribute('data-ldp-tooltip-label'),
+	!dnd.hasAttribute('data-ldp-native-dnd'),
 	'换根必须撤销嵌入投影并恢复宿主 tooltip',
 );
 

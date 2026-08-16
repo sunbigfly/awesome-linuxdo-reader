@@ -195,6 +195,7 @@ function queuePort(state: {
 
 async function repository(
 	writerId: string,
+	categories = createReaderWebDavCategorySelection({ queue: true }),
 ): Promise<ReaderWebDavConfigRepository> {
 	const result = new ReaderWebDavConfigRepository({
 		storage: new MemoryValueStorage(),
@@ -206,7 +207,7 @@ async function repository(
 		username: 'webdav-account@example.test',
 		password: 'webdav-application-password',
 		remotePath: 'ALR-Lite/v2/sync.json',
-		categories: createReaderWebDavCategorySelection({ queue: true }),
+		categories,
 		autoSyncEnabled: false,
 		autoSyncIntervalMinutes: 60,
 	}));
@@ -425,6 +426,112 @@ assert(
 	identityState.applies === 0 &&
 	!identityServer.requests.some((request) => request.method === 'PUT'),
 	'主同步记录键与载荷业务身份不一致时必须在写入和本地应用前拒绝整轮事务',
+);
+
+const preferenceServer = new MemoryWebDavServer();
+preferenceServer.text = JSON.stringify({
+	format: 'awesome-linuxdo-reader-lite-webdav',
+	schemaVersion: 2,
+	updatedAt: 1,
+	writerId: 'remote-preference-device',
+	scopes: {
+		'site:linux.do|account:reader-account': {
+			categories: {
+				preferences: {
+					records: {
+						imageProfile: {
+							changedAt: 1,
+							writerId: 'remote-preference-device',
+							deleted: false,
+							value: { preset: '100', custom: 100 },
+						},
+						imageProfilesShared: {
+							changedAt: 1,
+							writerId: 'remote-preference-device',
+							deleted: false,
+							value: false,
+						},
+						floatingImageProfile: {
+							changedAt: 1,
+							writerId: 'remote-preference-device',
+							deleted: false,
+							value: { preset: '125', custom: 125 },
+						},
+					},
+				},
+			},
+		},
+	},
+});
+preferenceServer.version = 1;
+const preferenceState = {
+	records: Object.freeze([
+		Object.freeze({
+			id: 'imageProfile',
+			value: Object.freeze({ preset: '100', custom: 100 }),
+		}),
+		Object.freeze({ id: 'imageProfilesShared', value: true }),
+		Object.freeze({
+			id: 'floatingImageProfile',
+			value: Object.freeze({ preset: '100', custom: 100 }),
+		}),
+	]) as readonly ReaderWebDavLocalRecord[],
+	applies: 0,
+};
+const imageProfileValid = (value: unknown): boolean => {
+	const source = value as Readonly<{
+		preset?: unknown;
+		custom?: unknown;
+	}> | null;
+	return (source?.preset === '100' || source?.preset === '125') &&
+		typeof source.custom === 'number';
+};
+const preferencePort: ReaderWebDavCategoryPort = Object.freeze({
+	category: 'preferences',
+	initialStrategy: 'remote',
+	validateRecord: (
+		id: string,
+		value: unknown,
+		records: readonly ReaderWebDavLocalRecord[],
+	) => {
+		const snapshot = Object.fromEntries(records.map((
+			entry: ReaderWebDavLocalRecord,
+		) => [
+			entry.id,
+			entry.value,
+		])) as Readonly<Record<string, unknown>>;
+		if (id === 'imageProfilesShared') return typeof value === 'boolean';
+		if (id === 'imageProfile') return imageProfileValid(value);
+		if (id !== 'floatingImageProfile' || !imageProfileValid(value)) return false;
+		return snapshot.imageProfilesShared === false ||
+			JSON.stringify(value) === JSON.stringify(snapshot.imageProfile);
+	},
+	capture: () => preferenceState.records,
+	mergeValues: (local: unknown) => local,
+	apply: (records: readonly ReaderWebDavLocalRecord[]) => {
+		preferenceState.records = Object.freeze([...records]);
+		preferenceState.applies += 1;
+	},
+});
+const preferenceCoordinator = new ReaderWebDavCoordinator({
+	client: new ReaderWebDavClient({ request: preferenceServer.request }),
+	repository: await repository(
+		'preference-device',
+		createReaderWebDavCategorySelection({ preferences: true }),
+	),
+	categories: [preferencePort],
+	hostname: () => 'linux.do',
+	username: () => 'reader-account',
+});
+await preferenceCoordinator.syncNow();
+assert(
+	preferenceState.applies === 1 &&
+	preferenceState.records.find((entry) =>
+		entry.id === 'imageProfilesShared')?.value === false &&
+	(preferenceState.records.find((entry) =>
+		entry.id === 'floatingImageProfile')?.value as { preset?: unknown })
+		?.preset === '125',
+	'远端偏好必须用同一快照的兄弟字段联合校验，不能把合法的独立浮窗图片配置误报为身份不一致',
 );
 
 stateA.records = queueRecords([1, 2, 3, 4], ' updated');
@@ -885,7 +992,11 @@ const cachePortA = createReaderWebDavTranslationCacheCategoryPort({
 	cache: translationCachePolicy,
 });
 assert(
-	cachePortA.validateRecord?.('sections', { version: 2, sections: [] }) === false,
+	cachePortA.validateRecord?.(
+		'sections',
+		{ version: 2, sections: [] },
+		[],
+	) === false,
 	'译文缓存必须拒绝未来载荷版本，不能按 v1 归一化后覆盖远端新字段',
 );
 assert(

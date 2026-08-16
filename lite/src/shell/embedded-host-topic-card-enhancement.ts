@@ -582,7 +582,6 @@ implements EmbeddedHostEnhancementPort {
 		button.dataset.ldpOwnedNativeDnd = 'true';
 		button.dataset.ldpNativeDnd = 'true';
 		button.setAttribute('aria-label', '免打扰：加入不想看');
-		button.dataset.ldpTooltipLabel = '免打扰：加入不想看';
 		line.append(button);
 		return button;
 	}
@@ -658,10 +657,12 @@ implements EmbeddedHostEnhancementPort {
 			'title',
 			'data-tooltip',
 			'data-tippy-content',
+			'data-ldp-tooltip-label',
 		] as const;
-		control.dataset.ldpTooltipLabel = '免打扰：加入不想看';
-		if (control.dataset.ldpOwnedNativeDnd === 'true') return;
-		if (!this.#nativeDndTooltipAttributes.has(control)) {
+		if (
+			control.dataset.ldpOwnedNativeDnd !== 'true' &&
+			!this.#nativeDndTooltipAttributes.has(control)
+		) {
 			this.#nativeDndTooltipAttributes.set(control, new Map(
 				attributes.map((name) => [
 					name,

@@ -1,6 +1,6 @@
 /* Awesome LinuxDo Reader Lite stylesheet.
  * Generated only from lite/styles/*.css; do not edit generated outputs.
- * source-sha256: 0ea8d6950a66547400d502edcd9e6ccff203d4a83f9784b93c361941df553a38
+ * source-sha256: 33a2211d87e70d7387386c20734e4e1936021f39ab1285cdca16b5c64ba32357
  */
 
 /* source: 00-foundation.css */
@@ -1113,13 +1113,32 @@ html .link-top-line [data-ldp-native-dnd] {
   display: inline-flex !important;
   width: 20px !important;
   min-width: 20px !important;
+  max-width: 20px !important;
   height: 20px !important;
   flex: 0 0 20px;
   box-sizing: border-box;
   margin: 0 0 0 4px !important;
   padding: 0 !important;
+  overflow: hidden !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  color: transparent !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  white-space: nowrap !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
   vertical-align: middle;
   transform: none;
+}
+
+html .link-top-line [data-ldp-native-dnd] > * {
+  display: none !important;
+}
+
+html .link-top-line [data-ldp-native-dnd]::after {
+  display: none !important;
+  content: none !important;
 }
 
 html .link-top-line [data-ldp-owned-native-dnd] {
@@ -1660,11 +1679,16 @@ html.ldp-reader-workspace .ldp-topic-stats-component {
 
 html.ldp-reader-workspace .topic-list-item[data-ldp-topic-stats="true"] {
   display: grid !important;
+  width: 100% !important;
+  inline-size: 100% !important;
   min-height: 0 !important;
-  grid-template-columns: minmax(0, 1fr) minmax(12rem, max-content);
+  justify-self: stretch !important;
+  justify-content: stretch !important;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 32%) !important;
   grid-template-rows: max-content max-content;
   align-content: start;
   align-items: start;
+  column-gap: 16px;
   row-gap: 0;
   padding-block: 4px !important;
 }
@@ -1756,6 +1780,8 @@ html.ldp-reader-workspace .topic-list-item[data-ldp-topic-stats="true"] > td.mai
 }
 
 html.ldp-reader-workspace .topic-list-item[data-ldp-topic-stats="true"] > td.posters {
+  width: max-content !important;
+  max-width: 100% !important;
   align-self: center !important;
   justify-self: end !important;
   grid-column: 2 !important;

@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.0
+// @version      1.5.1
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.0 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.5.1 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.0",
+			sourceVersion: "1.5.1",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.0") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.1") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -22907,11 +22907,12 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	function localRecord(id, value) {
 	  return Object.freeze({ id, value });
 	}
-	function readerWebDavPreferenceRecordMatchesSchema(preferences, id, value, normalize) {
+	function readerWebDavPreferenceRecordMatchesSchema(preferences, id, value, normalize, records = []) {
 	  if (!Object.hasOwn(preferences, id)) return !1;
 	  try {
 	    const normalized = normalize({
 	      ...preferences,
+	      ...Object.fromEntries(records.map((entry) => [entry.id, entry.value])),
 	      [id]: value
 	    });
 	    return Object.hasOwn(normalized, id) && (0, import_reader_webdav_model.readerWebDavFingerprint)(normalized[id]) === (0, import_reader_webdav_model.readerWebDavFingerprint)(value);
@@ -23686,7 +23687,7 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    categoryPort({
 	      category: "preferences",
 	      initialStrategy: "remote",
-	      validateRecord: options.preferences.validate,
+	      validateRecord: (id, value, records) => options.preferences.validate(id, value, records),
 	      capture: () => Object.entries(options.preferences.read()).map(
 	        ([id, value]) => localRecord(id, value)
 	      ),
@@ -23759,7 +23760,7 @@ runtime.register("src/sync/reader-webdav-category-ports.js", function(module, ex
 	    options.offlineTopics
 	  )), Object.freeze(ports);
 	}
-}, "92ce675af3ccdc2a4a5d273527b173e7f14d0c11070e92a22c40d27665037f65");
+}, "6feff4948f5e5b1ec90d525ea5d3461735fce9f7393cecdb8c60881b33a2f23d");
 
 /* Source: lite/src/sync/reader-webdav-client.ts */
 runtime.register("src/sync/reader-webdav-client.js", function(module, exports, require) {
@@ -24351,7 +24352,7 @@ runtime.register("src/sync/reader-webdav-coordinator.js", function(module, expor
 	          const local = await port.capture();
 	          if (port.validateRecord) {
 	            for (const item of local)
-	              if (!port.validateRecord(item.id, item.value))
+	              if (!port.validateRecord(item.id, item.value, local))
 	                throw new Error(
 	                  `本机 WebDAV ${port.category} 记录 ${item.id} 身份不一致`
 	                );
@@ -24359,12 +24360,21 @@ runtime.register("src/sync/reader-webdav-coordinator.js", function(module, expor
 	          const remoteCategory = remoteScope.categories[port.category], remoteRecords = remoteCategory?.records ?? {}, decodedRemoteRecords = port.decodeRemoteRecords ? await port.decodeRemoteRecords(
 	            remoteRecords,
 	            transformContext
-	          ) : remoteRecords;
+	          ) : remoteRecords, activeRemoteRecords = Object.freeze(
+	            Object.entries(decodedRemoteRecords).filter(([, item]) => !item.deleted).map(([id, item]) => Object.freeze({
+	              id,
+	              value: item.value
+	            }))
+	          );
 	          if (port.validateRecord) {
-	            for (const [id, item] of Object.entries(decodedRemoteRecords))
-	              if (!item.deleted && !port.validateRecord(id, item.value))
+	            for (const item of activeRemoteRecords)
+	              if (!port.validateRecord(
+	                item.id,
+	                item.value,
+	                activeRemoteRecords
+	              ))
 	                throw new Error(
-	                  `远端 WebDAV ${port.category} 记录 ${id} 身份不一致`
+	                  `远端 WebDAV ${port.category} 记录 ${item.id} 身份不一致`
 	                );
 	          }
 	          const reconciled = (0, import_reader_webdav_model.reconcileReaderWebDavRecords)({
@@ -24528,7 +24538,7 @@ runtime.register("src/sync/reader-webdav-coordinator.js", function(module, expor
 	    this.#handle !== null && (this.#cancel(this.#handle), this.#handle = null);
 	  }
 	}
-}, "5a2cee10900b5297ea062f65ba73f5e5a23ad0ce3ad81fe9b3318aeb62879557");
+}, "804a922d868dbe22d7f7fe07f6e06d164aab77a5a6ef730e78a14da0831b1d8c");
 
 /* Source: lite/src/sync/reader-webdav-history-cache-port.ts */
 runtime.register("src/sync/reader-webdav-history-cache-port.js", function(module, exports, require) {

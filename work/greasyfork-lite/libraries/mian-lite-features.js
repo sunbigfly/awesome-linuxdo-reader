@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.0
+// @version      1.5.1
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户、翻译与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.0 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.5.1 - main-lite-features
  * 媒体、互动、设置、用户、翻译与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.0",
+			sourceVersion: "1.5.1",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.0") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.1") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -27065,7 +27065,7 @@ runtime.register("src/settings/reader-webdav-settings-form.js", function(module,
 	    const content = (0, import_reader_settings_dom.settingsSection)(
 	      options.document,
 	      "选择同步内容",
-	      "每类独立开关；关闭的类别不会上传、下载或删除。通知与互动历史、离线 Topic HTML 和译文只在各自单独勾选后同步。历史清单只含可搜索记录，不上传原始分页响应、请求游标或限流状态。",
+	      "每类开关都是当前设备的独立授权，不会随 WebDAV 同步；需要参与同一类别的设备必须分别开启并保存。关闭的类别不会上传、下载或删除。通知与互动历史、离线 Topic HTML 和译文只在各自单独勾选后同步。历史清单只含可搜索记录，不上传原始分页响应、请求游标或限流状态。",
 	      !0
 	    ), categoryList = (0, import_reader_settings_dom.settingsElement)(
 	      options.document,
@@ -27306,7 +27306,7 @@ runtime.register("src/settings/reader-webdav-settings-form.js", function(module,
 	    this.#status.dataset.statusKind = kind, this.#status.textContent = message;
 	  }
 	}
-}, "2e20ed96bf874b4c3b319d52c70352cf1a31b9d8eb43a04c1824d10e2fc0e199");
+}, "fa407f9e884b844c98c6b77d246b389b4dd6edad385aa1c59e7e225fd23b391b");
 
 /* Source: lite/src/settings/reader-window-settings-form.ts */
 runtime.register("src/settings/reader-window-settings-form.js", function(module, exports, require) {

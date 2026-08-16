@@ -89,11 +89,13 @@ export function readerWebDavPreferenceRecordMatchesSchema(
 	normalize: (
 		value: Readonly<Record<string, unknown>>,
 	) => Readonly<object>,
+	records: readonly ReaderWebDavLocalRecord[] = [],
 ): boolean {
 	if (!Object.hasOwn(preferences, id)) return false;
 	try {
 		const normalized = normalize({
 			...(preferences as Readonly<Record<string, unknown>>),
+			...Object.fromEntries(records.map((entry) => [entry.id, entry.value])),
 			[id]: value,
 		}) as Readonly<Record<string, unknown>>;
 		return Object.hasOwn(normalized, id) &&
@@ -1343,7 +1345,11 @@ export interface ReaderWebDavCategoryPortsOptions<TPreferences extends object> {
 	readonly queue: ReaderOpenQueueSession | null;
 	readonly preferences: Readonly<{
 		read(): Readonly<TPreferences>;
-		validate(id: string, value: unknown): boolean;
+		validate(
+			id: string,
+			value: unknown,
+			records: readonly ReaderWebDavLocalRecord[],
+		): boolean;
 		update(patch: Partial<TPreferences>): void | Promise<unknown>;
 	}>;
 	readonly topicContext: ReaderTopicContextStateRepository;
@@ -1378,7 +1384,8 @@ export function createReaderWebDavCategoryPorts<TPreferences extends object>(
 		categoryPort({
 			category: 'preferences',
 			initialStrategy: 'remote',
-			validateRecord: options.preferences.validate,
+			validateRecord: (id, value, records) =>
+				options.preferences.validate(id, value, records),
 			capture: () => Object.entries(options.preferences.read()).map(
 				([id, value]) => localRecord(id, value),
 			),

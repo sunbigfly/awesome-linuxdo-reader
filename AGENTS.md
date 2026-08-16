@@ -6,6 +6,11 @@
 - Lite 已验证变更需要提交、推送或同步 GitHub、Greasy Fork 四文件版和用户手册时，使用 `$sync-lite-three-part-release`（保留该 Skill 名称作兼容入口）。
 - 只有明确维护旧版 `work/main.js` 单文件脚本时，才使用 `$tampermonkey-dev-assistant`；不要把旧版流程用于 Lite。
 
+## 并行任务边界
+
+- 项目允许存在并行任务。检查、测试或生成前，先按当前请求固定本任务的 owner、源码、测试、生成物和交付路径；只归因和处理这个边界内的结果。
+- 边界外的 dirty、失败和生成物变化不分析、不修复、不回滚、不重跑、不等待，也不作为本任务阻塞。只有它与本任务 exact path 重叠、使本任务结果无法独立归因或验证，或会把未授权内容带入本次交付时，才作为边界冲突停止。
+
 ## Lite 事实源与生成物
 
 - 业务事实源：`lite/src/`。
@@ -33,7 +38,8 @@
    - `work/greasyfork-lite/libraries/main-lite-core.js`；
    - `work/greasyfork-lite/libraries/main-lite-platform.js`；
    - `work/greasyfork-lite/libraries/main-lite-features.js`。
-6. 构建失败、产物缺失或四文件本地 Loader 引用远端项目 Library 时，任务保持未完成。
+6. 本任务边界内的构建失败、相关产物缺失或四文件本地 Loader 引用远端项目 Library 时，任务保持未完成；汇总命令只命中已证明的边界外并行失败时，不据此判定本任务失败。
+7. 需要证明单文件本地调试版与四文件版一致时，以 `npm run main-lite:local-debug` 内置的 parity gate 为准：同一源码快照分别通过源码与分包 runtime 契约，并核对元数据、CSS、模块源码哈希、manifest 与兼容副本；两种架构的整文件字节不要求相等。
 
 ## 手动审查与证据边界
 
@@ -50,6 +56,7 @@
 - 未经当前请求明确授权，不 commit、push、修改 Greasy Fork 或执行其他外部写入。
 - 发布时使用 `work/main-lite.js` 薄 Loader、Core、Platform、Features 四文件结构；CSS 作为固定 Git 提交和 SHA-256 的 `@resource`，不是第五个 Greasy Fork 可执行文件。
 - 远端 Library 或 CSS 坐标变化时，先取得不可变坐标，再由同一个 `scripts/build-main-lite-greasyfork.mjs` 生成并复核最终 Loader。
+- 用户明确延期 Greasy Fork 时，先核对 GitHub 是否存在活动的 `greasyfork.org` push Webhook；不得让 GitHub push 在未说明的情况下自动生成 Greasy Fork 版本，也不得把 GitHub/Pages 已同步表述为三块已对齐。
 
 ## 详细流程
 

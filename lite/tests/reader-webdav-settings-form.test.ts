@@ -135,6 +135,8 @@ assert(
 	notificationHistorySwitch?.checked === false &&
 	activityHistorySwitch?.checked === false &&
 	interval.disabled &&
+	host.textContent?.includes('每类开关都是当前设备的独立授权，不会随 WebDAV 同步') &&
+	host.textContent?.includes('需要参与同一类别的设备必须分别开启并保存') &&
 	host.textContent?.includes('通知与互动历史、离线 Topic HTML 和译文只在各自单独勾选后同步') &&
 	host.textContent?.includes('不上传原始分页响应、请求游标或限流状态') &&
 	host.textContent?.includes('不含私信、未读状态或原生通知 ID') &&

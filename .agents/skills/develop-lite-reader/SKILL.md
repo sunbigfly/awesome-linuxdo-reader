@@ -12,9 +12,10 @@ description: "在当前 awesome-linuxdo-reader 仓库开发、修改、修复或
 1. 把 `lite/src/`、`lite/styles/` 和 `lite/userscript.meta.txt` 作为事实源；只把 `work/main.js`、`work/main.css` 当作只读对照。
 2. 不直接编辑 `work/main-lite*.js`、`work/mian-lite*.js`、`work/main-lite.css`、`work/mian-lite.css` 或 `work/greasyfork-lite/libraries/*.js`。
 3. 记录并保留任务前 dirty 路径，只改当前需求的 owner、测试和必要构建配置。
-4. 不自动改版本、提交、push、发布或修改 Greasy Fork 设置。
-5. 浏览器、DevTools、真实页面和截图仅在当前请求明确授权时使用；本地构建不等于浏览器验收。
-6. 当前项目开发和审查以本地版为准；`work/main-lite.local.js` 即使超过 2 MiB 也不拆分、不判失败，不把单文件大小作为设计约束或完成条件。`main-lite:local-debug` 仍按下文生成两套本地产物；只有用户明确切换到 `$sync-lite-three-part-release` 执行线上发布时，才按发布流程核实平台体积限制。
+4. 项目有并行任务时，检查、测试和生成只按当前任务的 owner、输入、相关测试和预期产物归因。边界外的 dirty、失败和生成物变化不分析、不修复、不回滚、不重跑、不等待，也不作为本任务阻塞；只有 exact path 重叠、结果无法独立验证或未授权内容会进入本次交付时才停止。
+5. 不自动改版本、提交、push、发布或修改 Greasy Fork 设置。
+6. 浏览器、DevTools、真实页面和截图仅在当前请求明确授权时使用；本地构建不等于浏览器验收。
+7. 当前项目开发和审查以本地版为准；`work/main-lite.local.js` 即使超过 2 MiB 也不拆分、不判失败，不把单文件大小作为设计约束或完成条件。`main-lite:local-debug` 仍按下文生成两套本地产物；只有用户明确切换到 `$sync-lite-three-part-release` 执行线上发布时，才按发布流程核实平台体积限制。
 
 ## 请求、渲染与性能规则
 
@@ -45,7 +46,7 @@ description: "在当前 awesome-linuxdo-reader 仓库开发、修改、修复或
 
 ### 2. 实现与验证
 
-使用 `apply_patch` 做窄修改。修改 JS/TS/React 时只对本次文件运行一次 ESLint；运行最小相关测试。修复本次引入的问题后最多各重跑一次，不清理历史问题。源码单文件测试通过不代表 Greasy Fork 四文件产物语义一致，构建器变更必须由分包产物重新执行同一套契约测试。
+使用 `apply_patch` 做窄修改。修改 JS/TS/React 时只对本次文件运行一次 ESLint；运行最小相关测试。修复本次引入的问题后最多各重跑一次，不清理历史问题。源码单文件测试通过不代表 Greasy Fork 四文件产物语义一致；最终本地构建必须让本任务相关的源码测试与实际分包 runtime 测试各通过一次，并执行结构 parity gate。
 
 ### 3. 每次变更生成两套本地产物
 
@@ -64,11 +65,17 @@ npm run main-lite:local-debug
 - 四文件 Platform：`work/greasyfork-lite/libraries/main-lite-platform.js`；
 - 四文件 Features：`work/greasyfork-lite/libraries/main-lite-features.js`。
 
-该命令还必须通过 `npm run main-lite:greasyfork:test`：从实际生成的 Core、Platform、Features 注册模块中运行完整 Lite 契约测试，不能改为只测 `lite/src/`，也不能用 bytes、SHA-256 或构建成功替代。
+该命令还必须通过内置的 `npm run main-lite:parity`：
+
+- `npm run main-lite:test` 从事实源运行完整 Lite 契约；
+- `npm run main-lite:greasyfork:test` 从实际生成的 Core、Platform、Features runtime 运行同一套契约；
+- `scripts/verify-main-lite-local-parity.mjs` 核对两版的站点、权限、外部依赖、本地 CSS 指纹，逐项核对四文件中的全部 Lite 源码模块 SHA-256、manifest bytes/SHA-256 及 `main-lite`/`mian-lite` 兼容副本。
+
+单文件 bundle 与分包 Library 的容器结构本就不同，不比较没有语义的整文件字节相等；上述契约与结构证据任一失败都不能写“功能无差异”。不能只测 `lite/src/`，也不能用构建成功或 Library 总哈希替代。
 
 四文件 Loader 必须用 `file://` 引用上述本地 Core、Platform、Features 和 CSS，带“本地四文件测试”名称，并禁用自身更新；三个 Library 必须与 Greasy Fork 待发布产物是同一文件。构建输出必须给出四个 JS 文件和 CSS 的 bytes、SHA-256。
 
-构建失败、分包契约测试失败，或任一产物缺失、过期、引用远端项目 Library 时，保持任务未完成。不要用手工复制或临时 Loader 绕过构建器。
+本任务边界内的构建、契约/parity gate 失败，或相关产物缺失、过期、引用远端项目 Library 时，保持任务未完成。汇总命令只命中已证明的边界外并行失败时，按固定边界排除，不修复或重跑；但本任务改动仍须进入相关生成物并通过可独立归因的检查。不要用手工复制或临时 Loader 绕过构建器。
 
 ### 4. 交付手动审查
 

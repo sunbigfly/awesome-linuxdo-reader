@@ -32,8 +32,16 @@ export interface ReaderWebDavCategoryPort {
 	readonly initialStrategy: ReaderWebDavInitialStrategy;
 	capture(): readonly ReaderWebDavLocalRecord[] |
 		Promise<readonly ReaderWebDavLocalRecord[]>;
-	/** 有内部主键的类别必须证明清单键与载荷属于同一个业务实体。 */
-	validateRecord?(id: string, value: unknown): boolean;
+	/**
+	 * 有内部主键的类别必须证明清单键与载荷属于同一个业务实体。
+	 * records 是同一类别、同一快照中的全部活动记录，供存在兄弟字段依赖的
+	 * 组合配置按完整上下文校验；普通实体类别可以忽略第三个参数。
+	 */
+	validateRecord?(
+		id: string,
+		value: unknown,
+		records: readonly ReaderWebDavLocalRecord[],
+	): boolean;
 	mergeValues(local: unknown, remote: unknown): unknown;
 	apply(records: readonly ReaderWebDavLocalRecord[]): unknown | Promise<unknown>;
 	decodeRemoteRecords?(
@@ -363,7 +371,7 @@ export class ReaderWebDavCoordinator {
 					const local = await port.capture();
 					if (port.validateRecord) {
 						for (const item of local) {
-							if (!port.validateRecord(item.id, item.value)) {
+							if (!port.validateRecord(item.id, item.value, local)) {
 								throw new Error(
 									`本机 WebDAV ${port.category} 记录 ${item.id} 身份不一致`,
 								);
@@ -378,11 +386,23 @@ export class ReaderWebDavCoordinator {
 							transformContext,
 						)
 							: remoteRecords;
+					const activeRemoteRecords = Object.freeze(
+						Object.entries(decodedRemoteRecords)
+							.filter(([, item]) => !item.deleted)
+							.map(([id, item]) => Object.freeze({
+								id,
+								value: item.value,
+							})),
+					);
 					if (port.validateRecord) {
-						for (const [id, item] of Object.entries(decodedRemoteRecords)) {
-							if (!item.deleted && !port.validateRecord(id, item.value)) {
+						for (const item of activeRemoteRecords) {
+							if (!port.validateRecord(
+								item.id,
+								item.value,
+								activeRemoteRecords,
+							)) {
 								throw new Error(
-									`远端 WebDAV ${port.category} 记录 ${id} 身份不一致`,
+									`远端 WebDAV ${port.category} 记录 ${item.id} 身份不一致`,
 								);
 							}
 						}

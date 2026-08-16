@@ -386,6 +386,43 @@ const futureCategoryDocument = normalizeReaderWebDavDocument({
 		},
 	},
 });
+const currentImagePreferences = Object.freeze({
+	imageProfile: Object.freeze({ preset: '100', custom: 100 }),
+	imageProfilesShared: true,
+	floatingImageProfile: Object.freeze({ preset: '100', custom: 100 }),
+});
+const remoteImagePreferenceRecords = Object.freeze([
+	Object.freeze({
+		id: 'imageProfile',
+		value: Object.freeze({ preset: '100', custom: 100 }),
+	}),
+	Object.freeze({ id: 'imageProfilesShared', value: false }),
+	Object.freeze({
+		id: 'floatingImageProfile',
+		value: Object.freeze({ preset: '125', custom: 125 }),
+	}),
+]);
+const normalizeImagePreferences = (
+	value: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> => {
+	const profile = (candidate: unknown): Readonly<Record<string, unknown>> => {
+		const source = candidate as Readonly<Record<string, unknown>>;
+		const custom = Number(source?.custom);
+		return Object.freeze({
+			preset: source?.preset === '125' ? '125' : '100',
+			custom: Number.isFinite(custom) ? custom : 100,
+		});
+	};
+	const imageProfile = profile(value.imageProfile);
+	const imageProfilesShared = value.imageProfilesShared !== false;
+	return Object.freeze({
+		imageProfile,
+		imageProfilesShared,
+		floatingImageProfile: imageProfilesShared
+			? imageProfile
+			: profile(value.floatingImageProfile),
+	});
+};
 assert(
 	futureCategoryDocument.scopes['site:linux.do|account:reader']
 		?.categories['future-category']?.records.future?.value !== undefined &&
@@ -396,6 +433,32 @@ assert(
 		(value) => ({
 			themeMode: value.themeMode === 'dark' ? 'dark' : 'system',
 		}),
+	) &&
+	!readerWebDavPreferenceRecordMatchesSchema(
+		currentImagePreferences,
+		'floatingImageProfile',
+		remoteImagePreferenceRecords[2]!.value,
+		normalizeImagePreferences,
+	) &&
+	readerWebDavPreferenceRecordMatchesSchema(
+		currentImagePreferences,
+		'floatingImageProfile',
+		remoteImagePreferenceRecords[2]!.value,
+		normalizeImagePreferences,
+		remoteImagePreferenceRecords,
+	) &&
+	!readerWebDavPreferenceRecordMatchesSchema(
+		currentImagePreferences,
+		'floatingImageProfile',
+		{ preset: '125', custom: '125' },
+		normalizeImagePreferences,
+		Object.freeze([
+			...remoteImagePreferenceRecords.slice(0, 2),
+			Object.freeze({
+				id: 'floatingImageProfile',
+				value: Object.freeze({ preset: '125', custom: '125' }),
+			}),
+		]),
 	) &&
 	!readerWebDavPreferenceRecordMatchesSchema(
 		{ themeMode: 'dark' },
@@ -419,7 +482,7 @@ assert(
 		'forum.example.com',
 	) &&
 	!readerWebDavCustomSiteRecordMatchesSchema('linux.do', 'linux.do'),
-	'当前客户端必须透传同 schema 的未知未来类别，并拒绝把未知未来偏好当成本机删除传播',
+	'当前客户端必须透传同 schema 的未知未来类别，按同一快照联合校验依赖字段，并拒绝未知或错误类型偏好',
 );
 
 assert(
