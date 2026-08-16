@@ -4,9 +4,9 @@ description: 导出导入设置，理解本地与 WebDAV 数据范围，查看�
 feature_ids: ["COLLECT-004", "DATA-001", "DATA-002", "DATA-003", "DATA-004", "DATA-006", "DATA-007", "TROUBLE-004"]
 source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-08-11
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png"]
 ---
 
@@ -24,7 +24,7 @@ screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png"]
 
 ## WebDAV 跨设备记录
 
-1.1.0 起，设置中的 [WebDAV 同步](/settings/webdav-sync) 可在多个浏览器之间合并浏览历史、收藏记录、设置配置、阅读队列、阅读位置与窗口状态、自定义适用站点和 Connect 本机观察历史；1.2.0 起另可独立同步 AI 翻译服务集合与已翻译 Section 缓存。1.3.0 再增加默认关闭的“离线 Topic 下载”：本地按当前站点账号保存由元数据和完整 HTML 组成的专用 Artifact，远端按同一账号 scope 保存轻量清单与独立 HTML 对象。下载、离线查看和删除范围见[离线 Topic 下载](/guide/offline-topic)。
+1.1.0 起，设置中的 [WebDAV 同步](/settings/webdav-sync) 可在多个浏览器之间合并浏览历史、收藏记录、设置配置、阅读队列、阅读位置与窗口状态、自定义适用站点和 Connect 本机观察历史；1.2.0 起另可独立同步 AI 服务集合与已翻译 Section 缓存。1.3.0 再增加默认关闭的“离线 Topic 下载”：本地按当前站点账号保存由元数据和完整 HTML 组成的专用 Artifact，远端按同一账号 scope 保存轻量清单与独立 HTML 对象。下载、离线查看和删除范围见[离线 Topic 下载](/guide/offline-topic)。
 
 这条链路与缓存清理分开：普通正文、图片、附件、短期限流状态和页面缓存不会上传；离线 Topic 只有单独勾选后才上传完整明文 HTML，图片和附件仍保留原 URL；译文缓存只在单独勾选后同步且不含原文，翻译 API Key 只以 WebDAV 应用密码加密后的载荷出现。同步不是整份覆盖；每轮先读取远端，以本机上次成功同步基线执行三方合并，并通过 ETag 条件写入。只有远端写入成功后才应用本机合并结果。
 
@@ -41,7 +41,8 @@ screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png"]
 - 性能、主题与其他开关；
 - 规范化后的共享/独立形态配置。
 - 其他适用站点；
-- 翻译服务的 URL、模型、Prompt、速率和动画等非敏感规则；
+- AI 服务的 URL、缓存模型目录，以及翻译业务选择、Prompt、速率和动画等非敏感规则；
+- 公共模型能力目录另存为 7 天本机派生缓存，不属于 AI 服务集合，也不参与 WebDAV 合并；缓存过期不会阻止先查看旧数据，后台完整刷新或用户强制刷新成功后才原子替换。供应商 `/models` 目录只保存实际可用项，详情展示按精确 ID 临时叠加公共资料，因此公共缓存更新不需要重新保存供应商服务。
 - WebDAV 地址、远端路径、同步类别、间隔和开关等非敏感选项。
 
 不包含：
@@ -55,7 +56,7 @@ screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png"]
 
 ## 导入和恢复默认
 
-- v7 文件包含安全组合设置，同时继续接受旧 v6 组合文件和 v5 偏好文件；
+- v9 文件包含 85 项偏好、AI 服务模型目录与安全组合设置，同时继续接受 v8/v7/v6 组合文件和 v5 偏好文件；旧结构迁移只对对应旧版本生效，缺字段的 v9 文件会拒绝；
 - 导入会规范化数值和缺失字段；
 - 无效文件不会部分写入；任一仓储写入失败时会逆序恢复已写设置；
 - 导入和恢复全部默认都先经统一确认弹层；
@@ -99,4 +100,8 @@ screenshots: ["/screenshots/guide-13-data-management-v1.3.0.png"]
 4. 只有配置本身异常时才恢复全部默认。
 5. 清理后重新打开相关主题或面板并复现。
 
+勾选类别并点击“清理已选缓存”后，必须先在二次确认中核对类别清单。确认框会明确说明：这里只删除本机缓存，不删除站点账号或 WebDAV 远端数据；已同步记录可能在后续同步时重新合并回来。
+
 不要把“清空全部历史”用于一般加载故障。未启用 WebDAV 时，历史只有本地副本；启用后也应先确认最近一次同步成功，再执行会传播删除标记的业务删除。
+
+数据管理中的缓存清理不是 WebDAV 业务删除。历史、通知、收藏/回应涉及同步投影时，阅读器会先等待同步并取得清理屏障；无法安全解除本机基线的类别不会删除且保留勾选。清理成功后远端记录仍可在下一轮恢复，只有建立成功基线后的业务记录删除才通过 tombstone 跨设备传播。

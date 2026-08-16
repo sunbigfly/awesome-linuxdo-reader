@@ -1,203 +1,94 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Awesome LinuxDo Reader" width="320">
+  <img src="assets/logo.png" alt="Awesome LinuxDo Reader" width="300">
 </p>
 
 <h1 align="center">Awesome LinuxDo Reader</h1>
 
-<p align="center">为 LINUX DO 深度定制并保持完整功能覆盖，同时通过站点识别与能力检测兼容中文、英文及其他语言的标准 Discourse 社区，在列表页内完成阅读、翻译、回复与原站互动。</p>
+<p align="center">在主题列表里完成长帖阅读、上下文追踪与原站互动。</p>
 
 <p align="center">
-  <a href="https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js">安装脚本</a> ·
-  <a href="https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader">GreasyFork</a> ·
+  <a href="https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader">安装脚本</a> ·
+  <a href="https://sunbigfly.github.io/awesome-linuxdo-reader/">用户手册</a> ·
   <a href="lite/src/userscript/main-lite-entry.ts">Lite 源码</a> ·
-  <a href="https://sunbigfly.github.io/awesome-linuxdo-reader/">在线用户手册</a> ·
-  <a href="docs/INTRODUCTION.md">项目介绍</a> ·
-  <a href="CONTRIBUTING.md">参与开发</a> ·
-  <a href="LICENSE">MIT License</a>
+  <a href="CONTRIBUTING.md">参与开发</a>
 </p>
 
 <p align="center">
   <a href="assets/screenshots/guide-01-reader-overview-v1.3.0.png">
-    <img src="assets/screenshots/guide-01-reader-overview-v1.3.0.png" alt="在 LINUX DO 列表页右侧打开完整增强阅读工作区" width="960">
+    <img src="assets/screenshots/guide-01-reader-overview-v1.3.0.png" alt="LINUX DO 列表页右侧的增强阅读工作区" width="960">
   </a>
 </p>
 
-<p align="center"><sub>在列表页内完成阅读、追踪上下文与社区互动</sub></p>
+Awesome LinuxDo Reader 是面向 Discourse 长内容的 userscript。它对 LINUX DO 保持完整适配，也能自动识别标准 HTTPS Discourse 社区；站点缺少 Boost、Reactions、Topic Voting 等插件时，相应入口会自然隐藏。
 
-## 功能
+## 重要特性
 
-- LINUX DO 全面适配，消息、历史、收藏、回应、Boost、长帖与楼层关系等能力保持完整覆盖。
-- 中文、英文及其他语言的标准 Discourse 站点均可使用；插件、主题和权限差异由站点适配层与能力检测自动降级。
-- 列表页直接打开完整帖子，支持浮窗、全屏与移动端布局。
-- 保留楼层关系、楼中楼、跳转、浏览历史与真实已读进度。
-- 集成回复、点赞、回应、收藏、通知、搜索与用户资料等社区能力。
-- 为非中文内置社区提供原文、双语与全译文切换，并集成原图灯箱、媒体播放和公式渲染。
-- 后台下载全部、楼主或自选楼层，生成可搜索、可跳转的独立离线 HTML；下载历史可选同步到 WebDAV。
-- 设置导出、导入与恢复默认覆盖组合配置，并始终排除翻译 API Key、WebDAV 用户名和密码。
-- 内置 21 个社区；其他标准 HTTPS Discourse 论坛自动识别，深度定制站点可验证添加为兜底，非 Discourse 网站不会启动。
-- 内置请求调度、429 退避、DOM 窗口化与本地资源监控。
+- **连续阅读**：浮窗、全屏、左右嵌入与移动布局；长帖虚拟化加载，时间轴、历史前后切换、多主题队列和真实已读进度保持连续。
+- **完整上下文**：楼中楼、无限树状完整讨论、父回复与引用回跳、只看楼主、已解决答案、系统事件和目标楼层高亮。
+- **原站互动**：回复、划词引用、点赞、表情回应、Boost、收藏、通知级别、分享、举报、编辑、删除与站点插件操作都沿用原站权限和状态。
+- **共享工具工作区**：通知与私信、浏览历史、收藏与回应、Topic 下载、用户观察、岁月史书和不想看共用可冻结的多标签浮窗。
+- **用户观察与内容留存**：渐进整理用户公开活动；“自己”额外汇总私有消息与收藏投影；服务器已 404、但本机仍有正文的内容可进入岁月史书继续阅读。
+- **富内容与跨语阅读**：原图灯箱、图片评论、批量下载、音视频、HLS、KaTeX、投票、代码工具，以及原文、双语、全译文和自定义 OpenAI 兼容翻译服务。
+- **离线 Topic**：后台补齐全部、楼主或自选楼层，生成可搜索、可跳转并保留讨论关系的独立 HTML。
+- **精细个性化**：字体、图片比例、五区布局、颜色、关系线、动效和快捷方式；暗色可按当地日落或固定时间自动启用，并在日出恢复原主题。
+- **安全同步与诊断**：WebDAV 按类别合并历史、收藏、队列、设置和离线内容；配置导出排除秘密字段；请求、429、Cloudflare、DOM 与性能状态可脱敏查看和导出。
 
-## 核心体验
+完整的 110 项用户可见能力与对应手册见[功能覆盖目录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/feature-catalog)。
 
-<table>
-  <tr>
-    <th width="33%">离线 Topic</th>
-    <th width="33%">安全配置管理</th>
-    <th width="33%">WebDAV 分类同步</th>
-  </tr>
-  <tr>
-    <td><a href="assets/screenshots/guide-31-topic-download-v1.3.0.png"><img src="assets/screenshots/guide-31-topic-download-v1.3.0.png" alt="选择下载范围并管理 Topic 离线 HTML"></a></td>
-    <td><a href="assets/screenshots/guide-13-data-management-v1.3.0.png"><img src="assets/screenshots/guide-13-data-management-v1.3.0.png" alt="安全导出、导入和恢复组合设置"></a></td>
-    <td><a href="assets/screenshots/guide-32-webdav-sync-v1.3.0.png"><img src="assets/screenshots/guide-32-webdav-sync-v1.3.0.png" alt="按类别选择 WebDAV 同步内容"></a></td>
-  </tr>
-  <tr>
-    <td>后台补齐、离线查看与下载历史。</td>
-    <td>秘密字段永不进入配置导出。</td>
-    <td>普通记录三方合并，离线 HTML 独立存放。</td>
-  </tr>
-</table>
+## 版本与安装
 
-## 更多截图
+当前项目版本为 `1.5.0`。
 
-以下图片由 Chrome DevTools 在真实 LINUX DO 页面重新采集，保留当时的公开界面、账号和状态信息，未额外打码。点击分组展开，点击图片查看原图。
+### 1.5.0 重点
 
-<details>
-<summary><strong>阅读流转</strong> — 工作区与楼中楼上下文</summary>
+把阅读工具收敛为共享多标签工作区，补齐用户观察、岁月史书、不想看自动过滤、当地日落自动暗色、后台集合续传和四文件构建一致性门禁，并全面更新用户手册。1.3.0 之后的数据链路也统一完成收口：WebDAV 12 类同步、设置 v9 导入导出与失败回滚、21 个快捷动作、六类缓存清理屏障及危险清理二次确认共用同一组安全边界。
 
-<table>
-  <tr>
-    <th width="50%">阅读器工作区</th>
-    <th width="50%">楼中楼上下文</th>
-  </tr>
-  <tr>
-    <td><a href="assets/screenshots/guide-01-reader-overview-v1.3.0.png"><img src="assets/screenshots/guide-01-reader-overview-v1.3.0.png" alt="列表页右侧嵌入阅读器工作区"></a></td>
-    <td><a href="assets/screenshots/guide-18-thread-context-v1.0.0.png"><img src="assets/screenshots/guide-18-thread-context-v1.0.0.png" alt="父楼层下展开楼中楼并保留关系线"></a></td>
-  </tr>
-</table>
-</details>
+`1.5.0` 已同步到 GitHub、Greasy Fork 四文件链和用户手册。普通用户仍只需安装主脚本；Loader 会固定加载同一发布快照的 Core、Platform、Features，并从不可变 Git 提交读取 CSS。
 
-<details>
-<summary><strong>社区互动</strong> — 浏览历史、收藏与回应</summary>
+| 发布单元 | Greasy Fork 固定版本 | 字节与 SHA-256 |
+| --- | --- | --- |
+| Loader | `588185 / 1904252` | 原始 4,052 字节，`60a80af4e514c5131b572a1e8afb44dcf80cce7a82fe967ceb2293d96ef383e3`；移除平台元数据后 4,031 字节，`f396fbf42eca4cd0f761557cb330577034225e3967bee33f6877467f40821d5f` |
+| Core | `590254 / 1904245` | 1,552,321 字节，`a645aa16ac2592f591e2fcb0aceb9057b9e43adb9f8f21bb00e5a401eb8d804a` |
+| Platform | `591595 / 1904248` | 1,236,060 字节，`b8755569a5591fc106e2faac433e136bbbbfd3d548dc4b9369a953747f60a178` |
+| Features | `590255 / 1904246` | 1,953,979 字节，`9316bcefe26cb24f78e6fb87dadc523e71f37c4642324c4ba9475d10a6993053` |
 
-<table>
-  <tr>
-    <th width="50%">浏览历史</th>
-    <th width="50%">收藏与回应</th>
-  </tr>
-  <tr>
-    <td><a href="assets/screenshots/guide-16-history-v1.0.0.png"><img src="assets/screenshots/guide-16-history-v1.0.0.png" alt="查看浏览历史和目标阅读位置"></a></td>
-    <td><a href="assets/screenshots/guide-17-bookmarks-reactions-v1.0.0.png"><img src="assets/screenshots/guide-17-bookmarks-reactions-v1.0.0.png" alt="查看收藏、书签与社区回应"></a></td>
-  </tr>
-</table>
-</details>
+CSS 固定到 Git `2a1f6695162217d4a86cf0e3958d8a361594f90b`：610,039 字节，SHA-256 `db6d4a47f0fb07f002907a6c9788f730f233b902d548238da0023a46182a026a`。
 
-<details>
-<summary><strong>个性化</strong> — 用户信息、外观与布局</summary>
+1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容 userscript 管理器。
+2. 打开 [Greasy Fork 脚本页](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 并安装。
+3. 刷新 LINUX DO 或其他标准 Discourse 社区，点击主题标题开始阅读。
 
-<table>
-  <tr>
-    <th width="33%">用户信息</th>
-    <th width="33%">外观设置</th>
-    <th width="33%">布局设置</th>
-  </tr>
-  <tr>
-    <td><a href="assets/screenshots/guide-02-settings-overview-v1.3.0.png"><img src="assets/screenshots/guide-02-settings-overview-v1.3.0.png" alt="查看当前账号信息、社区统计和 Connect 进度"></a></td>
-    <td><a href="assets/screenshots/guide-07-appearance-settings-v1.0.0.png"><img src="assets/screenshots/guide-07-appearance-settings-v1.0.0.png" alt="配置主题、颜色、背景和回复关系样式"></a></td>
-    <td><a href="assets/screenshots/guide-05-layout-settings-v1.0.0.png"><img src="assets/screenshots/guide-05-layout-settings-v1.0.0.png" alt="配置浮窗、全屏和移动模式布局"></a></td>
-  </tr>
-</table>
-</details>
+站点范围、权限差异和翻译边界见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
 
-<details>
-<summary><strong>后台优化</strong> — 缓存与 DOM 渲染管理</summary>
+## 工程结构
 
-<table>
-  <tr>
-    <th width="50%">缓存管理</th>
-    <th width="50%">DOM 渲染管理</th>
-  </tr>
-  <tr>
-    <td><a href="assets/screenshots/guide-13-data-management-v1.3.0.png"><img src="assets/screenshots/guide-13-data-management-v1.3.0.png" alt="按资源类型查看和管理本地缓存"></a></td>
-    <td><a href="assets/screenshots/guide-09-performance-settings-v1.0.0.png"><img src="assets/screenshots/guide-09-performance-settings-v1.0.0.png" alt="配置 DOM 挂载窗口、缓冲区与渲染上限"></a></td>
-  </tr>
-</table>
-</details>
+Lite 的事实源只有：
 
-## 安装
+- `lite/src/`：TypeScript 业务源码；
+- `lite/styles/`：阅读器样式；
+- `lite/userscript.meta.txt`：userscript 元数据。
 
-> **发布状态：** Lite `1.3.1` 已发布：Loader `588185 / 1899428`、Core `590254 / 1899419`、Features `590255 / 1899422`；CSS 继续固定到 Git `5ca40cf`，完整校验值见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
+Greasy Fork 使用薄 Loader + Core + Platform + Features 四个可执行文件；CSS 由固定 Git 提交和 SHA-256 的 `@resource` 加载，不是第五个执行文件。生成物可读、不混淆，每个执行文件都有 2 MiB 发布闸门。
 
-1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
-2. 在 [GreasyFork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 点击“安装此脚本”。
-3. 打开或刷新以下任一站点：
-   - [LINUX DO](https://linux.do/)
-   - [Brave Community](https://community.brave.com/)
-   - [Roblox Developer Forum](https://devforum.roblox.com/)
-   - [OpenAI Developer Community](https://community.openai.com/)
-   - [Home Assistant Community](https://community.home-assistant.io/)
-   - [Cfx.re Forum](https://forum.cfx.re/)
-   - [Spiceworks Community](https://community.spiceworks.com/)
-   - [Arduino Forum](https://forum.arduino.cc/)
-   - [Unity Discussions](https://discussions.unity.com/)
-   - [Cloudflare Community](https://community.cloudflare.com/)
-   - [Epic Developer Community](https://forums.unrealengine.com/)
-   - [Obsidian Forum](https://forum.obsidian.md/)
-   - [Cursor Community](https://forum.cursor.com/)
-   - [Godot Forum](https://forum.godotengine.org/)
-   - [n8n Community](https://community.n8n.io/)
-   - [MikroTik Forum](https://forum.mikrotik.com/)
-   - [Discourse Meta](https://meta.discourse.org/)
-   - [Python Discussions](https://discuss.python.org/)
-   - [Swift Forums](https://forums.swift.org/)
-   - [Julia Discourse](https://discourse.julialang.org/)
-   - [Rust Users Forum](https://users.rust-lang.org/)
-4. 其他标准 HTTPS Discourse 论坛会自动识别；只有深度定制站点识别失败时，才需在“设置 → 适用站点 → 其他适用站点”中验证添加为兼容兜底。
-5. 点击主题标题开始使用。
+本地开发同时生成两种审查入口：
 
-当前项目版本为 `1.3.1`。脚本对 LINUX DO 保持全面适配，同时自动识别中文、英文及其他语言的标准 HTTPS Discourse 社区；深度定制站点仍可验证添加为兼容兜底。除内置中文站点 LINUX DO 外，其他 Discourse 社区还支持原文、双语和简体中文译文切换；完整范围、翻译边界和能力降级规则见[兼容性说明](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/compatibility)。
-
-1.3.1 重点是为已有设置的用户重新投放一次“建议恢复默认值”提示，确保新版设置与默认值能够完整生效；同时修复 Boost 输入框调用宿主表情选择器时被阅读器层遮挡的问题。新用户保持静默，选择保留当前设置也不会改动任何值。1.3.0 的离线 Topic、安全配置、WebDAV 分类同步和阅读体验改进保持不变，完整列表见[更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog)。
-
-## 开发
-
-v1.0.0 起，`lite/src/` 是唯一业务源码，`lite/styles/` 是样式事实源；v1.0.1 起 canonical 生成物统一为 `work/main-lite.css`、`work/greasyfork-lite/libraries/main-lite-*.js` 与 `work/main-lite.js`。这些文件均由确定性构建生成，禁止直接编辑。Greasy Fork 只接收可读、未压缩的薄 Loader 和两个 Library；正式 Loader 通过固定版本 URL 与 SHA-256 引用 Library。旧 `mian-lite` 路径在迁移期保留逐字节一致的兼容副本，切换前的旧版 working copy 保存在 `archive/legacy-main-2026-08-07/`，原 `work/main.js` 与 `work/main.css` 仅作旧版兼容参考。
-
-### 三条保留产物
-
-| 版本 | 保留内容 | 是否进入 GitHub | 用途 |
-| --- | --- | --- | --- |
-| GitHub 原版 | `lite/src/`、`lite/styles/`、测试、构建脚本、文档与可审查生成物 | 是 | 唯一源码事实源和完整开发历史 |
-| 本地测试版 | `work/main-lite.local.js`、`work/local-debug.user.js` 与验收脚本 | 否，受 `.gitignore` 保护 | Tampermonkey 真实页面调试；旧 `mian-lite.local.js` 保留兼容 |
-| Greasy Fork 上传版 | `work/main-lite.js` 薄 Loader、两个 `main-lite-*` Library 和 `work/main-lite.css` | 是 | 通过发布门禁后由主脚本加载固定版本 Library；迁移期同时生成旧路径副本 |
-
-三条产物不会互相覆盖：本地测试版只从当前工作区加载；Greasy Fork Library 从
-GitHub Raw `main` 通过 Webhook 同步；用户只安装主脚本，不需要单独安装 Library。
-正式 Loader 必须在静态检查、真实浏览器、性能和回滚门禁都完成后生成和发布。
-
-```text
-.
-├── .github/          GitHub 协作模板
-├── assets/           品牌与文档资源
-├── docs/             项目介绍和资料索引
-├── dist/             仓库直装的压缩 userscript 与来源清单
-├── lite/             v1.3.1 TypeScript 业务源码、样式、契约与测试
-├── scripts/          跨平台开发工具入口
-├── tools/            Rust 开发辅助工具源码
-├── work/greasyfork-lite/  Lite Greasy Fork Library 发布产物
-├── archive/legacy-main-2026-08-07/  旧版 main.js/main.css 只读归档
-├── CONTRIBUTING.md   开发与验证规范
-├── LICENSE           MIT 许可证
-└── README.md         项目入口
+```bash
+npm run main-lite:local-debug
 ```
 
-本地开发与验证流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+- `work/main-lite.local.js`：单文件快速调试版；
+- `work/main-lite.greasyfork.local.user.js`：本地四文件 Loader。
+
+该命令会让事实源与实际分包 runtime 分别跑完同一套契约，并核对元数据、CSS、全部源码模块哈希、manifest 和兼容副本。两种本地版本不可同时启用。
+
+开发、测试与提交规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 用户手册
 
-直接打开 [在线用户手册](https://sunbigfly.github.io/awesome-linuxdo-reader/) 即可浏览，无需安装本项目、下载文档或运行本地服务。手册覆盖安装、阅读导航、社区互动、图片与媒体、全部设置、缓存、请求治理、隐私和故障排查。
+[在线用户手册](https://sunbigfly.github.io/awesome-linuxdo-reader/)覆盖安装、阅读导航、社区互动、消息与收藏、用户观察、媒体、翻译、全部设置、WebDAV、数据边界、诊断和故障排查。机器可读目录位于 [`docs/public/feature-catalog.json`](docs/public/feature-catalog.json)。
 
-功能覆盖目录位于 [`docs/public/feature-catalog.json`](docs/public/feature-catalog.json)。每项用户可见能力都有稳定 `feature_id`、源码锚点、版本、验证日期、截图和对应文档；修改用户功能时必须同步更新。
+GitHub README 与 Greasy Fork 公开介绍共用的版本、能力和数据边界文案集中维护在 [`docs/INTRODUCTION.md`](docs/INTRODUCTION.md)；发布时两处从同一最终坐标更新，避免源码说明与脚本页长期分叉。
 
 ## 许可
 
-本项目基于 [MIT License](LICENSE) 开源。
+[MIT License](LICENSE)

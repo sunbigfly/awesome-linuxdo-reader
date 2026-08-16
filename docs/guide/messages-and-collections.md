@@ -1,12 +1,12 @@
 ---
 title: 消息、历史与收藏
-description: 使用消息分类、检索、分页、历史管理以及收藏与回应中心。
-feature_ids: ["ACTION-004", "ACTION-007", "COLLECT-001", "COLLECT-002", "COLLECT-003", "COLLECT-004", "COLLECT-005", "COLLECT-006", "COLLECT-007"]
-source_anchors: ["lite/src/app/reader-browser-runtime.ts","lite/src/discourse/native-host-api.ts","lite/src/notification/reader-notification-model.ts","lite/src/notification/reader-notification-controller.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-repository.ts","lite/src/bookmark/reader-bookmark-model.ts","lite/src/bookmark/reader-bookmark-controller.ts","lite/src/collection/reader-unwanted-topic-repository.ts"]
+description: 使用消息、历史、收藏、用户观察、岁月史书和不想看等共享工具。
+feature_ids: ["ACTION-004", "ACTION-007", "COLLECT-001", "COLLECT-002", "COLLECT-003", "COLLECT-004", "COLLECT-005", "COLLECT-006", "COLLECT-007", "COLLECT-009", "USER-007"]
+source_anchors: ["lite/src/app/reader-browser-runtime.ts","lite/src/discourse/native-host-api.ts","lite/src/notification/reader-notification-model.ts","lite/src/notification/reader-notification-controller.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-repository.ts","lite/src/history/reader-chronicle-repository.ts","lite/src/bookmark/reader-bookmark-model.ts","lite/src/bookmark/reader-bookmark-controller.ts","lite/src/collection/reader-unwanted-topic-repository.ts","lite/src/user/reader-user-observation-session.ts"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-08-14
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-15-notifications-replies-v1.0.0.png", "/screenshots/guide-16-history-v1.0.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.0.0.png"]
 ---
 
@@ -47,6 +47,12 @@ screenshots: ["/screenshots/guide-15-notifications-replies-v1.0.0.png", "/screen
 
 阅读器还监听原站的通知和收藏变更事件。application 启动后会先从当前账号的本地归一分页投影恢复消息、私信、收藏、回复、Boost 与回应，并在空闲期从缺失断点继续；打开浮窗或重复切回已缓存分类只读取这份投影，不会因为打开动作重新联网。原生事件只使受影响的短期接口首屏失效并合并刷新，不会删除稳定投影；远端最终状态仍以 Discourse 返回结果为准。浏览器重新联网或从长时间休眠恢复时，已观察头页超过 30 分钟才执行一次漏事件校验。
 
+## 用户观察
+
+从用户卡选择“加入用户观察”，可把对方加入当前账号隔离的观察名单。打开“用户观察”后先选择用户，再按主题、回复、点赞、Boost、回应、已解决、投票等真实来源筛选；列表支持关键词、类别、标签和时间排序，点击记录会在现有阅读器中打开目标 Topic 或楼层。
+
+观察名单与已提交分页断点保存在本机，公开活动正文进入有界分页缓存。首次加入或手动刷新时才会启动采集；页面刷新不会自动重放每个普通用户的完整公开历史。采集使用后台串行队列，某个来源遇到 429、Cloudflare 或网络错误时会保存断点、显示重试入口，其余用户和来源仍可继续。
+
 当前登录账号会自动成为“用户观察”中的固定“自己”条目，并复用同一个浮窗、后台串行队列、分页断点、进度段和重试入口。页面启动或刷新不会自动重放普通用户观察的公开历史；账号私有的通知与收藏集合则会先恢复本地投影，再由 application 级低优先级任务补齐缺失断点。公开主题、回复、Boost、回应等仍按普通用户观察采集；只有“自己”的详情额外提供“通知”“私信”“收藏与回应”分类，其中通知逐条标注“已读/未读”。这些账号私有记录直接读取消息与收藏控制器已归一化的本地缓存，不会写入公开用户观察分页仓库，也不会出现在其他被观察用户中。原消息与收藏面板继续负责全部已读、删除收藏等原站动作。
 
 私有集合补齐任务与浮窗开关无关，会从持久化的来源分页水位渐进执行；打开面板只回放已有投影，不会另起任务或提高网络优先级。续传会先直接消费仍在本地的原始分页，只有水位后的真实缺页才进入后台网络。部分原站接口不提供固定总页数，因此未完成时只显示“已缓存页数”和固定的来源完成数，不用不断增长的估算页数充当分母；只有七个来源都返回“无下一页”时，`7/7 来源`才表示历史真正到底。列表正文一旦可用就结束前台加载；类别、标签等补充信息在后台请求并合并回同一缓存，不阻塞翻页。“我的持续观察”会统一显示公开来源、通知与私信、收藏与回应的完成进度；单个来源遇到 429、Cloudflare 或网络失败时会保留已提交分页断点、独立退避并自动续传，其余可用来源继续推进，所有恢复仍服从中央请求许可。
@@ -85,6 +91,14 @@ screenshots: ["/screenshots/guide-15-notifications-replies-v1.0.0.png", "/screen
 | 楼层 | 楼层书签 | 检索、跳到精确楼层、移除 |
 
 标签可以拖动排序，首项成为默认入口。列表每页 20 条；点赞来源可能按更大批次获取，再归一化到面板分页。
+
+通知和收藏标签会在名称后显示各自的权威总数。搜索、筛选和当前页切换只改变列表内容，不会改写该总数或额外发起统计请求。
+
+## 岁月史书
+
+“岁月史书”保存原站已经返回 `404`、但本机缓存仍能提供正文的 Topic、楼层或 Boost 入口。它不会主动扫描全站，也不会把普通网络失败、权限错误或尚未确认的请求写入历史。
+
+记录按当前站点账号隔离，按目标和请求位置去重，并保留首次、最近观察时间与出现次数。面板可按 Topic、回复或 Boost 分类检索和展开；点击记录会优先从本地正文恢复阅读。若对应本地正文已经清理，打开时会移除失效记录。岁月史书最多保留 1,000 条、最长一年，不进入 WebDAV；在“数据管理”清理“浏览历史与岁月史书”时会与普通阅读历史一起删除。
 
 ## 不想看
 

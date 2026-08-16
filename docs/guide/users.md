@@ -1,12 +1,12 @@
 ---
 title: 用户资料与关系
-description: 查看用户卡、资料、徽章、统计、关注列表和账号关系操作。
-feature_ids: ["MEDIA-007", "USER-001", "USER-002", "USER-003", "USER-004", "USER-005"]
-source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/discourse/native-request-descriptors.ts","lite/src/discourse/native-host-api.ts"]
+description: 查看用户卡、资料、徽章、统计、关注关系并持续观察用户活动。
+feature_ids: ["MEDIA-007", "USER-001", "USER-002", "USER-003", "USER-004", "USER-005", "USER-007"]
+source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/discourse/native-request-descriptors.ts","lite/src/discourse/native-host-api.ts","lite/src/user/reader-user-observation-session.ts"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-08-09
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-25-user-card-v1.0.0.png", "/screenshots/guide-02-settings-overview-v1.3.0.png"]
 ---
 
@@ -61,6 +61,19 @@ screenshots: ["/screenshots/guide-25-user-card-v1.0.0.png", "/screenshots/guide-
 - 其他站点开放的动作。
 
 这些操作会写入 LINUX DO 账号状态。阅读器会显示进行中和结果信息，但网络中断时仍应回到原站确认。
+
+## 用户持续观察
+
+用户卡底部提供“加入用户观察”或“打开用户观察”。加入后，阅读器按账号保存观察身份，并在共享工具浮窗中整理该用户的公开活动：
+
+- 主题、回复、点赞与获赞；
+- Boost、表情回应、提及、引用和编辑；
+- 已解决答案、投票及站点实际提供的其他活动；
+- Topic 分类、标签、回复数和浏览数等后台补充信息。
+
+每个用户有独立的来源进度、分页断点和失败重试。普通用户的完整历史只在首次加入或手动刷新时采集，刷新页面不会自动重放；打开已缓存记录也不会另起一轮网络请求。当前登录账号固定显示为“自己”，并额外投影本机已有的通知、私信和收藏/回应记录，但私有记录不会进入其他用户的公开观察缓存。
+
+观察列表是本地研究工具，不等于原站关注、通知级别或用户关系。移出观察名单不会取消原站关注，也不会删除对方内容；清理用户观察缓存后需要重新采集历史。
 
 ## 设置中的当前账号
 

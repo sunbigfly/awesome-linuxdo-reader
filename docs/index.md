@@ -5,9 +5,9 @@ description: LINUX DO 全面适配、兼容中英文及其他语言 Discourse �
 feature_ids: ["CORE-001", "CORE-002", "CORE-004", "CORE-007", "READ-001", "ACTION-001", "DATA-001", "DATA-006", "DATA-007"]
 source_anchors: ["lite/userscript.meta.txt","lite/src/queue/reader-open-queue-session.ts","lite/src/shell/reader-workspace.ts","lite/src/app/reader-application.ts","lite/src/dom/reply-tree.ts","lite/src/app/reader-browser-runtime.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/queue/reader-topic-download-manager.ts"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-08-11
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-01-reader-overview-v1.3.0.png"]
 
 hero:
@@ -65,7 +65,11 @@ features:
 
 ## 手册覆盖范围
 
-这套手册对应 userscript `1.3.1`，以 `lite/src/` 与 `lite/styles/` 为事实源。LINUX DO 是完整功能基线，消息、历史、收藏、互动、长帖、楼层关系与性能治理均保持全面适配；脚本也通过运行态识别、站点适配层和插件能力检测兼容中文、英文及其他语言的标准 Discourse 站点。WebDAV 同步由用户主动配置并按类别启用；普通缓存不上传，只有单独开启“离线 Topic 下载”后，完整 HTML 才会作为独立明文对象同步。
+这套手册对应 userscript `1.5.0` 源码，以 `lite/src/` 与 `lite/styles/` 为事实源。LINUX DO 是完整功能基线，消息、历史、收藏、互动、长帖、楼层关系与性能治理均保持全面适配；脚本也通过运行态识别、站点适配层和插件能力检测兼容中文、英文及其他语言的标准 Discourse 站点。
+
+1.5.0 把通知、历史、收藏、下载、用户观察、岁月史书和不想看收敛到共享多标签工具浮窗，并补齐当地日落自动暗色、用户持续观察、不想看自动过滤、后台集合续传与四文件一致性门禁。WebDAV 仍由用户主动配置并按类别启用；普通缓存不上传，只有单独开启对应历史或离线 Topic 类别后，相关记录和完整 HTML 才会同步。
+
+Greasy Fork 公开安装版已更新为 1.5.0：主 Loader 固定加载 Core、Platform、Features 三个同版本 Library，CSS 固定到不可变 Git 提交。已经打开的旧页面不会热替换运行中代码，更新脚本后需要完整刷新。
 
 脚本内置 20 个其他知名 Discourse 社区，并会在任意 HTTPS 域名上以本地运行态和 DOM 证据自动识别标准 Discourse；深度定制站点可验证添加为兼容兜底。站点适配本身不限制内容语言；除内置中文站点 LINUX DO 外，其他 Discourse 社区另提供原文、双语和简体中文译文三种阅读状态。功能目录记录了每项能力的源码锚点、版本、验证日期、截图和对应文档。
 

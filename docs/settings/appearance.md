@@ -1,12 +1,12 @@
 ---
 title: 外观设置
-description: 配置主题模式、强调色、斑马纹、结构线、引用线、分隔线和楼层预览。
-feature_ids: ["SET-001", "SET-009"]
-source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/appearance/reader-appearance-style-controller.ts"]
+description: 配置主题模式、当地日落自动暗色、强调色、斑马纹和内容结构线。
+feature_ids: ["SET-001", "SET-009", "SET-022"]
+source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/appearance/reader-theme-controller.ts","lite/src/appearance/reader-local-sun-clock.ts","lite/src/appearance/reader-appearance-style-controller.ts"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-07-27
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-07-appearance-settings-v1.0.0.png"]
 ---
 
@@ -25,6 +25,17 @@ screenshots: ["/screenshots/guide-07-appearance-settings-v1.0.0.png"]
 - **系统**：跟随宿主页面和系统当前主题。
 
 主题模式立即生效。外观字段仍按明、暗主题分别保存适应色，避免同一颜色在另一主题中失去对比度。
+
+## 自动暗色
+
+开启“自动暗色”后，可以选择：
+
+- **日落**：按浏览器提供的位置和当前时区，在本机计算当天日落；
+- **固定时间**：使用自己设置的小时与分钟开始暗色。
+
+到达开始时间后，阅读器复用“暗”按钮的同一主题链路，并同步宿主站点主题；次日日出时恢复启用自动暗色前的明亮或系统模式。手动点击明、暗、系统会保留你的主题选择，关闭自动暗色会立即恢复原模式。
+
+日出日落使用本地公式计算，坐标不会发送到网络。浏览器未授权位置、坐标无效或极区无法得到有效时间时，界面会明确使用安全的日出/日落回退时间；点击“日落”可随时从固定时间恢复为当地日落。
 
 ## 配置范围
 

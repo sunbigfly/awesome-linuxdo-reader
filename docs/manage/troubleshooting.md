@@ -4,9 +4,9 @@ description: 按安装、打开、跳楼、图片、429、配置和缓存分类�
 feature_ids: ["CORE-005", "MEDIA-013", "DATA-003", "MONITOR-003", "MONITOR-004", "TROUBLE-001", "TROUBLE-002", "TROUBLE-003", "TROUBLE-004", "TROUBLE-005", "TROUBLE-006"]
 source_anchors: ["lite/src/components/reader-icon.ts","lite/src/app/reader-browser-runtime.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/network/browser-shared-request-permit.ts","lite/userscript.meta.txt","lite/src/topic/topic-session.ts","lite/src/media/reader-topic-image-index.ts","lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-08-11
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-19-image-lightbox-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-13-data-management-v1.3.0.png"]
 ---
 
@@ -31,7 +31,7 @@ screenshots: ["/screenshots/guide-19-image-lightbox-v1.0.0.png", "/screenshots/g
 2. 确认脚本和站点访问权限已启用。
 3. 安装/更新后完整刷新。
 4. 停用重复的正式版、本地版或同类接管脚本。
-5. 从脚本管理器确认版本为 `1.3.1`。
+5. 从脚本管理器确认版本为 `1.5.0`；若仍显示 `1.3.1`，让脚本管理器检查更新并完整刷新页面。
 
 ## 主题或楼层无法加载
 

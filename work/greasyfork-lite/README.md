@@ -1,5 +1,9 @@
 # Lite Greasy Fork 发布工程
 
+> `1.5.0` 已完成 GitHub、Greasy Fork 四文件链、公开介绍和用户手册同步；本节记录当前不可变坐标与逐字节核验结果。
+
+Greasy Fork 主脚本公开介绍的同步源是仓库根部 [`GREASYFORK.md`](../../GREASYFORK.md)，共享长介绍维护在 [`docs/INTRODUCTION.md`](../../docs/INTRODUCTION.md)。本文件只维护四文件构建、固定坐标和发布证据。
+
 该目录把 `lite/src/` 确定性构建成 Greasy Fork 可接受的可读发布单元，解决单个
 userscript 超过 2 MB 的问题。构建不压缩、不混淆、不缩短标识符，也不下载后
 `eval`；每个可执行文件使用 2 MiB 硬闸门。
@@ -81,6 +85,17 @@ Library 与待发布文件完全相同。快速调试版和四文件本地测试
 `npm run main-lite:greasyfork:release` 只读取已核验的 `published-libraries.json`。
 `release.config.json` 不进入 Git；其中没有凭据，但只作为首次发布草稿，不能用占位符
 冒充已发布状态。
+
+### v1.5.0 已发布坐标
+
+| 发布单元 | Greasy Fork | 固定版本 | 核验结果 |
+| --- | --- | --- | --- |
+| 主 Loader | [588185](https://greasyfork.org/scripts/588185) | `1904252` | 固定文件 4,052 字节，SHA-256 `60a80af4e514c5131b572a1e8afb44dcf80cce7a82fe967ceb2293d96ef383e3`；移除平台加入的 `@downloadURL none` 后为 4,031 字节，SHA-256 `f396fbf42eca4cd0f761557cb330577034225e3967bee33f6877467f40821d5f` |
+| Core | [590254](https://greasyfork.org/scripts/590254) | `1904245` | 1,552,321 字节，SHA-256 `a645aa16ac2592f591e2fcb0aceb9057b9e43adb9f8f21bb00e5a401eb8d804a` |
+| Platform | [591595](https://greasyfork.org/scripts/591595) | `1904248` | 1,236,060 字节，SHA-256 `b8755569a5591fc106e2faac433e136bbbbfd3d548dc4b9369a953747f60a178` |
+| Features | [590255](https://greasyfork.org/scripts/590255) | `1904246` | 1,953,979 字节，SHA-256 `9316bcefe26cb24f78e6fb87dadc523e71f37c4642324c4ba9475d10a6993053` |
+
+四个发布单元已在 `update.greasyfork.org` 固定版本 URL 核验；versionless 安装文件与元数据均为 v1.5.0。CSS 固定到 Git `2a1f6695162217d4a86cf0e3958d8a361594f90b`，610,039 字节，SHA-256 `db6d4a47f0fb07f002907a6c9788f730f233b902d548238da0023a46182a026a`。
 
 ### v1.3.1 已发布坐标
 

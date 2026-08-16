@@ -4,9 +4,9 @@ description: 阅读资源趋势、请求脉络、429 状态和 Cloudflare 恢复
 feature_ids: ["MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
 source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/request-observer.ts"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-08-13
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-10-resource-monitor-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png"]
 ---
 

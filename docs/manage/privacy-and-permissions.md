@@ -4,9 +4,9 @@ description: 理解 userscript 权限、WebDAV 凭据与同步边界、LDC 只�
 feature_ids: ["MEDIA-014", "USER-006", "DATA-004", "DATA-005", "DATA-006", "DATA-007", "MONITOR-005", "TROUBLE-005"]
 source_anchors: ["lite/src/translation/reader-translation-controller.ts","lite/src/translation/translation-request-adapter.ts","lite/src/cache/response-repository.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/userscript/browser-userscript-environment.ts","lite/src/network/request-observer.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-config-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-08-11
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-14-about-v1.3.0.png"]
 ---
 
@@ -18,7 +18,7 @@ screenshots: ["/screenshots/guide-14-about-v1.3.0.png"]
 
 ## userscript 元数据
 
-当前 `1.3.1`：
+当前 `1.5.0`：
 
 | 字段 | 值 | 用途 |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ screenshots: ["/screenshots/guide-14-about-v1.3.0.png"]
 
 WebDAV 默认关闭，只有用户填写 HTTPS 地址、账号、应用密码并选择类别后才会访问远端。WebDAV 账号和应用密码只保存在 userscript 专属存储，不进入远端 JSON、设置导出、同步的“设置配置”类别或请求 URL。
 
-远端主同步文件只保存所选普通类别的结构化记录、更新时间、写入设备标识和删除标记。Cookie、Authorization、WebDAV 密码、页面缓存与短期限流状态永不上传。离线 Topic、AI 翻译服务集合和已翻译 Section 缓存默认关闭：离线 Topic 只在单独启用时上传轻量清单和每个 Topic 的完整明文 HTML，图片与附件仍保留原 URL；翻译服务只写入 URL、模型、参数及使用 WebDAV 应用密码加密的 API Key；译文缓存不包含原文。收藏同步只交换阅读器的链接和定位信息，不直接修改原站收藏状态。
+远端主同步文件只保存所选普通类别的结构化记录、更新时间、写入设备标识和删除标记。Cookie、Authorization、WebDAV 密码、页面缓存与短期限流状态永不上传。离线 Topic、AI 服务集合和已翻译 Section 缓存默认关闭：离线 Topic 只在单独启用时上传轻量清单和每个 Topic 的完整明文 HTML，图片与附件仍保留原 URL；AI 服务只写入 URL、缓存模型目录、翻译业务选择、参数及使用 WebDAV 应用密码加密的 API Key；译文缓存不包含原文。收藏同步只交换阅读器的链接和定位信息，不直接修改原站收藏状态。
 
 远端文件受 WebDAV 服务商账号安全和存储政策约束。应使用独立的第三方应用密码；停用同步时可以关闭定时同步并清空本机凭据，但删除远端文件会影响其他设备，需在服务商侧单独确认。
 
@@ -72,7 +72,8 @@ LDC 面板通过显式声明的 `@connect credit.linux.do` 只读取当前登录
 
 - 只有用户主动切换到双语或全译文后，普通正文文本才会发送给 Google / Microsoft 公共接口或用户选择的 OpenAI 兼容服务；Cookie、原站授权头和表单内容不会附带。
 - 译文进入最多 240 条的中央 Section 缓存，不进入设置导出；只有用户单独启用 WebDAV 的“已翻译 Section 缓存”类别后才跨设备同步，且不携带原文。
-- 翻译 API Key 保存在脚本专属配置；启用 WebDAV 的“AI 翻译服务集合”时，Key 使用当前 WebDAV 应用密码经 PBKDF2 派生密钥后加密，其他配置明文同步。更换应用密码后，旧设备需使用加密时的密码才能解密。
+- AI 服务 API Key 保存在脚本专属配置；启用 WebDAV 的“AI 服务集合”时，Key 使用当前 WebDAV 应用密码经 PBKDF2 派生密钥后加密，其他配置明文同步。更换应用密码后，旧设备需使用加密时的密码才能解密。
+- 主动获取供应商模型或打开“公共模型能力查询”且本地缓存缺失/过期时，脚本会匿名读取固定的 `models.dev/models.json` 与 OpenRouter 公共模型目录；请求不携带供应商 API Key，也不发送当前模型 ID。公共目录缓存在本机脚本存储中，不写入 WebDAV。
 - 自动识别未知站点只检查当前页面的 Discourse 原生模块和 DOM 标志，不发送网络请求；只有用户主动添加兼容兜底站点时，才向输入的 HTTPS 域名匿名请求公开的 `/site/basic-info.json`，且不附带当前论坛 Cookie。
 - 第三方翻译服务和目标论坛仍受各自隐私政策、可用性与地区网络限制约束。
 

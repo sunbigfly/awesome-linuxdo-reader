@@ -4,9 +4,9 @@ description: 查看阅读器定位、能力摘要、当前版本、在线用户�
 feature_ids: ["REF-002", "REF-003"]
 source_anchors: ["lite/userscript.meta.txt","lite/src/components/reader-image-fallback.ts"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-08-11
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-14-about-v1.3.0.png"]
 ---
 

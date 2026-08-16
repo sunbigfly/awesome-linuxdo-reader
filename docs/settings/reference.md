@@ -4,9 +4,9 @@ description: 汇总全部设置项、范围、默认值、生效时机和数据�
 feature_ids: ["SET-012", "SET-013", "SET-014", "SET-015", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021", "DATA-006", "DATA-007"]
 source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree.ts","lite/src/network/request-scheduler.ts","lite/src/dom/reply-tree-repository.ts","lite/src/post/boost-copy-rule.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-08-11
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png", "/screenshots/guide-03-image-settings-v1.0.0.png", "/screenshots/guide-04-font-settings-v1.0.0.png", "/screenshots/guide-05-layout-settings-v1.0.0.png", "/screenshots/guide-07-appearance-settings-v1.0.0.png", "/screenshots/guide-09-performance-settings-v1.0.0.png", "/screenshots/guide-11-request-flow-v1.0.0.png", "/screenshots/guide-13-data-management-v1.3.0.png", "/screenshots/guide-27-shortcuts-v1.0.0.png", "/screenshots/guide-28-applicable-sites-v1.0.0.png", "/screenshots/guide-32-webdav-sync-v1.3.0.png"]
 ---
 
@@ -14,7 +14,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png", "/screenshot
 
 ![设置中心中的分类导航、当前用户信息和配置入口](/screenshots/guide-02-settings-overview-v1.3.0.png)
 
-<p class="image-caption">截图展示设置中心的基础配置入口；当前版本按三组、17 个面板组织，并支持搜索、翻译设置、快捷方式、WebDAV 同步和统一保存。</p>
+<p class="image-caption">截图展示设置中心的基础配置入口；当前版本按三组、18 个面板组织，并支持搜索、自动暗色、翻译设置、AI 服务、快捷方式、WebDAV 同步和统一保存。</p>
 
 ## 用户信息
 
@@ -55,6 +55,8 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png", "/screenshot
 
 强调色、链接色、帖子/列表斑马纹、圆角、结构颜色、回复线、引用线、分隔线、楼层预览均按明/暗主题和阅读形态保存。线宽允许 0.5–4 px；楼层预览高度 180–720 px。
 
+主题可固定为明亮、暗色或跟随系统，也可启用自动暗色。自动模式支持当地日落与固定时间两种计划：当地日落优先使用浏览器位置与本地日期计算日出、日落，在日出恢复启用自动模式前的主题；定位、时区或太阳时刻不可用时保持当前主题并提示原因，不会凭空切换。
+
 颜色字段共用同一调色器：可从预设或 HEX 输入，也可展开色相/饱和度圆盘与 HSV 滑杆精调；浏览器提供屏幕吸色能力时，标题栏会额外显示“吸色”入口。所有入口都写回同一份设置草稿。
 
 明亮主题中，帖子斑马纹和宿主列表斑马纹默认均为 `#f7f7f7`，回复关系线默认为 `#6dab85`，楼层预览默认为 `#dba7a7`。已有自定义配置不会被版本更新强制覆盖。
@@ -83,17 +85,28 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png", "/screenshot
 
 - 译文样式覆盖自然正文、弱化译文、分隔线、下划线、柔和高亮、带浅灰底的引用和纸张卡片；这是全局阅读偏好，切换后立即生效，仅影响双语模式。
 - 译文动画也是全局阅读偏好，不随 AI 服务 URL 切换；系统启用减少动态效果时自动关闭。
-- API Key 留空时使用 Google / Microsoft 公共翻译；填写 Key 后使用当前 OpenAI 兼容 API URL 与从 `/models` 读取的模型。
-- 每个 URL 独立保存 Key、模型、温度、思考等级、RPM、TPM 和 Prompt；URL 必须使用 HTTPS，本机 `localhost`/`127.0.0.1` 可使用 HTTP。
+- 正文翻译模型在本面板选择；自定义模型按供应商 URL 分组，公共翻译仍可直接选择 Google / Microsoft。
+- 温度、思考等级、RPM、TPM 和翻译 Prompt 仍在本面板维护，并应用到正文翻译所选供应商。
 - AI 请求失败不会静默改用公共翻译；应检查 URL、Key、模型和服务限额，或清空 Key 后保存以恢复公共翻译。
 
 完整边界见 [跨语正文翻译](/guide/content-and-media#跨语正文翻译)。
+
+## AI 服务
+
+- “已保存服务”、API URL、API Key 与可用模型目录从翻译设置中独立出来，供正文翻译、帖子自定义总结等功能共用。
+- 每个 URL 独立保存 Key 与 `/models` 返回的缓存目录及可用元数据；URL 必须使用 HTTPS，本机 `localhost`/`127.0.0.1` 可使用 HTTP。
+- 本面板不指定业务模型。正文翻译在“翻译设置”选择，帖子自定义总结在总结窗口选择；多个 API 供应商始终按 URL 分组，模型 ID 相同也不会混用。
+- “获取模型”只把当前服务 `/models` 返回的实际可用项存入对应供应商目录；Models.dev 与 OpenRouter 公共资料使用独立缓存，查看详情时才按精确 ID 动态叠加。供应商已返回的限制和价格始终优先，公共目录不会用模糊名称强行匹配私有别名，也不会改写供应商模型集合。
+- 可用模型目录按模态、智能基准、上下文长度和发布时间分组排序；选中后会在控件上方打开可碰撞翻转的 HTML 能力卡，展示规范 ID、系列、输入输出上限、知识截止、能力开关、思考等级、请求参数、价格来源、独立指数与详细基准。缺失字段直接省略，不再堆叠“未返回”占位；目录查看不会改写任何业务模型选择。
+- “获取模型”右侧的查询图标无需 API URL 或 Key，可独立搜索公共模型能力目录。公共目录本地缓存 7 天，设置打开时会先读取缓存；过期后继续展示旧数据并在后台完整刷新两个固定来源。查询区的刷新按钮可绕过有效期强制更新，只有两个来源都成功时才替换旧缓存。它只用于能力参考，不代表任一已保存供应商实际开放该模型，也不参与 WebDAV 同步。
+- OpenRouter 供应商目录会请求全部输出模态；连接信息变化时需重新获取当前供应商模型，已经失效的业务选择会要求重新选择。
+- Key 留空时正文翻译继续使用 Google / Microsoft 公共翻译；帖子总结等只支持自定义 AI 的能力保持不可用。
 
 ## WebDAV 同步
 
 - 服务地址必须是 HTTPS；坚果云默认地址为 `https://dav.jianguoyun.com/dav/`，使用账号邮箱和第三方应用密码。
 - 默认远端文件为 `ALR-Lite/v2/sync.json`。
-- 浏览历史、收藏记录、通知历史缓存、回复/Boost/表情回应历史、设置配置、阅读队列、阅读位置与窗口状态、自定义适用站点、Connect 本机观察历史、AI 翻译服务集合、已翻译 Section 缓存和离线 Topic 下载共十二类独立开关。
+- 浏览历史、收藏记录、通知历史缓存、回复/Boost/表情回应历史、设置配置、阅读队列、阅读位置与窗口状态、自定义适用站点、Connect 本机观察历史、AI 服务集合、已翻译 Section 缓存和离线 Topic 下载共十二类独立开关。
 - 定时同步默认关闭，可选 15 分钟、30 分钟、1 小时、3 小时和 6 小时。
 - 手动同步使用三方合并或历史单调合并，并通过 ETag 条件写入。两类历史只读取已有可搜索记录，不会上传原始分页响应、游标或限流状态，也不会为同步额外请求 Discourse；离线 Topic HTML 使用独立对象；翻译 API Key 仅在启用对应类别时加密写入。
 
@@ -138,8 +151,8 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png", "/screenshot
 ![快捷方式面板中的分组、默认绑定和单项管理操作](/screenshots/guide-27-shortcuts-v1.0.0.png)
 
 - 五组动作：浏览导航、阅读工具、界面面板、帖子操作、窗口与队列；
-- 每项最多 3 个键盘、滚轮或鼠标按键绑定；
-- 同一组合、浏览器保留键、无修饰键的单字母或数字不会保存；
+- 每项最多 3 个键盘、滚轮、鼠标中键或侧键绑定，共 21 个动作；右键不参与录制；
+- 同一组合、浏览器保留键、无修饰键的单字母、主键盘数字或数字小键盘按键不会保存；
 - 单项支持添加、移除、清空和恢复默认，也可一次恢复全部默认；
 - 修改立即保存，不进入统一草稿队列。
 

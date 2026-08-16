@@ -4,9 +4,9 @@ description: 规定功能目录、页面元数据、截图、版本同步和本�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-08-07
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-23-documentation-maintenance-v1.0.0.png"]
 ---
 

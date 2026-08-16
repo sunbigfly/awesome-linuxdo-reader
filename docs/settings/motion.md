@@ -4,9 +4,9 @@ description: 配置目标楼层提示和主题加载动画，并兼顾减少动�
 feature_ids: ["SET-010", "SET-011"]
 source_anchors: ["lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-07-30
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-08-motion-settings-v1.0.0.png"]
 ---
 

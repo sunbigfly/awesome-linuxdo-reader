@@ -4,9 +4,9 @@ description: 配置队列入口、历史、退出、键盘与鼠标快捷方式�
 feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "COLLECT-007", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/app/reader-application.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-context-controller.ts","lite/src/post/boost-copy-rule.ts","lite/src/post/reader-topic-action-rail.ts","lite/src/collection/reader-unwanted-topic-filter.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-08-14
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/guide-18-thread-context-v1.0.0.png", "/screenshots/guide-26-reading-navigation-v1.0.0.png", "/screenshots/guide-27-shortcuts-v1.0.0.png", "/screenshots/guide-28-applicable-sites-v1.0.0.png"]
 ---
 
@@ -58,12 +58,12 @@ screenshots: ["/screenshots/guide-12-other-features-v1.0.0.png", "/screenshots/g
 
 ![快捷方式面板中的键盘、滚轮和鼠标侧键绑定](/screenshots/guide-27-shortcuts-v1.0.0.png)
 
-快捷方式分为浏览导航、阅读工具、界面面板、帖子操作、窗口与队列五组。点击某个动作右侧的“添加”后，按下键盘组合键、滚轮、鼠标中键、后退键或前进键即可保存；“清空”“默认”和“全部恢复默认”分别管理单项或全部绑定。
+21 个快捷动作分为浏览导航、阅读工具、界面面板、帖子操作、窗口与队列五组。点击某个动作右侧的“添加”后，按下键盘组合键、滚轮、鼠标中键、后退键或前进键即可保存；右键始终留给浏览器上下文菜单，不作为快捷方式。“清空”“默认”和“全部恢复默认”分别管理单项或全部绑定。
 
 - 每个动作最多保留 3 个快捷方式；
 - 同一组合不能同时属于两个动作；
-- 浏览器常用保留键不会保存；
-- 单个字母或数字必须至少搭配 `Ctrl`、`Alt`、`Shift` 或 `Meta`，避免与论坛快捷键冲突；
+- 浏览器常用保留键不会保存，包括刷新、查找、地址栏、开发者工具、新建/关闭标签页和隐私窗口等组合；
+- 单个字母、主键盘数字或数字小键盘按键必须至少搭配 `Ctrl`、`Alt`、`Shift` 或 `Meta`，避免与论坛快捷键冲突；
 - 在输入框、编辑器或需要键盘操作的控件中，阅读器不会抢占普通输入。
 
 快捷方式修改会立即写入当前脚本配置，不进入底部的统一草稿队列。动作暂时不可用时只显示提示，不会改走另一项社区操作。

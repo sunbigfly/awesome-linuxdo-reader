@@ -1,18 +1,18 @@
 ---
 title: 设置中心总览
-description: 理解 17 个设置面板、分组导航、安全配置管理、WebDAV 同步、三种形态配置与统一保存方式。
-feature_ids: ["USER-005", "SET-001", "SET-020", "DATA-001", "DATA-006", "DATA-007"]
-source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/reader-preferences-schema.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/settings/reader-webdav-settings-form.ts","lite/src/state/reader-settings-config-manager.ts"]
+description: 理解 18 个设置面板、分组导航、安全配置管理、WebDAV 同步、三种形态配置与统一保存方式。
+feature_ids: ["USER-005", "SET-001", "SET-020", "SET-022", "DATA-001", "DATA-006", "DATA-007"]
+source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/reader-preferences-schema.ts","lite/src/appearance/reader-theme-controller.ts","lite/src/appearance/reader-local-sun-clock.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-ai-service-settings-form.ts","lite/src/settings/reader-translation-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/settings/reader-webdav-settings-form.ts","lite/src/state/reader-settings-config-manager.ts"]
 since: 0.1.2
-version: 1.3.1
+version: 1.5.0
 status: current
-last_verified: 2026-08-11
+last_verified: 2026-08-15
 screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png"]
 ---
 
 # 设置中心总览
 
-点击阅读器标题栏的“设置”进入设置中心。当前 v1.3.0 按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 17 个面板：
+点击阅读器标题栏的“设置”进入设置中心。当前 v1.5.0 按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 18 个面板：
 
 | 面板 | 作用 |
 | --- | --- |
@@ -21,10 +21,11 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png"]
 | [字体设置](/settings/font) | 字体显示优化、原站列表尺寸和界面/正文/回复字体 |
 | [布局设置](/settings/layout) | 左右留白、正文区域、时间轴和两者间距 |
 | [浮窗设置](/settings/window) | 浮窗宽高、位置、保持显示和锁定 |
-| [外观设置](/settings/appearance) | 按钮、链接、交替背景、关系线、分隔线和预览卡片 |
+| [外观设置](/settings/appearance) | 明暗主题、当地日落自动暗色、颜色、关系线、分隔线和预览卡片 |
 | [动画与提示](/settings/motion) | 跳转楼层提示和帖子加载动画 |
 | [阅读与导航](/settings/other) | 队列入口、历史导航、帖子打开位置和退出方式 |
-| [翻译设置](/guide/content-and-media#跨语正文翻译) | 译文样式、公共翻译，以及 OpenAI 兼容 API URL、Key、模型、限额和 Prompt |
+| [翻译设置](/guide/content-and-media#跨语正文翻译) | 译文样式、动画、按供应商分组的翻译模型，以及温度、限额和翻译 Prompt |
+| [AI 服务](/settings/reference#ai-服务) | 供翻译、帖子总结等功能共用的 OpenAI 兼容 API URL、Key 与缓存模型目录 |
 | [快捷方式](/settings/other#快捷方式) | 为浏览导航、阅读工具、面板、帖子操作、窗口和队列绑定键盘或鼠标操作 |
 | [帖子与回复](/settings/other) | 主帖操作列、二级回复显示位置和 Boost 复制 |
 | [适用站点](/settings/other) | 添加并管理其他 HTTPS Discourse 论坛 |
@@ -36,7 +37,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png"]
 
 ![设置中心完整导航、当前账号和 Connect 信任进度](/screenshots/guide-02-settings-overview-v1.3.0.png)
 
-<p class="image-caption">v1.3.0 设置中心保留 17 个面板，并补齐安全配置管理、离线 Topic 与 WebDAV 同步边界。</p>
+<p class="image-caption">截图沿用 v1.3.0 的稳定布局；当前版本扩展为 18 个面板，并补齐独立 AI 服务、当地日落自动暗色、共享工具窗口与完整同步边界。</p>
 
 ## 分组与搜索
 
@@ -69,7 +70,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.3.0.png"]
 - 图片、字体、布局、浮窗、外观和跳转提示中的草稿会实时预览。
 - 任一设置页产生草稿后，面板底部出现“保存全部更改”，同时显示未保存数量和涉及分类。
 - 点击一次即可提交全部草稿；若五区布局合计不是 100%，保存会停止并引导返回布局页。
-- 明、暗、系统主题切换立即生效。
+- 明、暗、系统主题切换立即生效；自动暗色可按当地日落或固定时间进入暗色，并在日出恢复先前模式。
 - 性能设置统一保存后立即投到当前与后续帖子；已启动的请求自然完成，固定请求安全规则不受设置覆盖。
 - 阅读、快捷方式、交互、站点开关和数据管理操作按控件说明即时执行或显示确认。
 
