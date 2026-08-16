@@ -88,6 +88,10 @@ export interface ReaderUserExternalPort {
 		username: string,
 		signal: AbortSignal,
 	) => Promise<ReaderUserExternalSnapshot | null>;
+	readonly externalCached?: (
+		username: string,
+		signal: AbortSignal,
+	) => Promise<ReaderUserExternalSnapshot | null>;
 	load(
 		username: string,
 		signal: AbortSignal,
@@ -798,6 +802,29 @@ export class ReaderUserDomainSession {
 			usernameValue,
 			refresh,
 		);
+	}
+
+	async reloadExternalCredit(): Promise<void> {
+		const port = this.#credit;
+		if (this.scope.destroyed || !port?.externalCached) return;
+		for (const [username, entry] of this.#entries) {
+			if (entry.credit.phase === 'idle') continue;
+			try {
+				const cached = await port.externalCached(
+					username,
+					this.#controller.signal,
+				);
+				if (!cached || this.scope.destroyed) continue;
+				entry.credit = Object.freeze({
+					...cached,
+					refreshing: false,
+				});
+				entry.revision += 1;
+				this.#emit(username, entry);
+			} catch (cause) {
+				if (!this.#controller.signal.aborted) this.#onError(cause);
+			}
+		}
 	}
 
 	async #loadExternal(

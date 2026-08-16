@@ -1086,12 +1086,10 @@
 
 .ldp-lb-source-text {
   box-sizing: border-box;
-  height: var(--ldp-lb-description-height, 120px);
-  min-height: 56px;
-  max-height: 40vh;
+  height: auto;
+  max-height: min(var(--ldp-lb-description-height, 120px), 40vh);
   overflow: auto;
   padding: 10px 14px 11px;
-  resize: vertical;
   color: var(--primary-medium, #666);
   font-size: var(--ldp-font-ui);
   overflow-wrap: anywhere;

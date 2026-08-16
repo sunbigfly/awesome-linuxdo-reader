@@ -221,6 +221,9 @@ export class ReaderSettingsUserView {
 			(change) => this.#applyHistoryChange(change),
 			this.scope,
 		);
+		this.#history?.externalChanges?.subscribe(() => {
+			void this.#reloadExternalHistory();
+		}, this.scope);
 		this.scope.listen(this.root, 'click', (event) => {
 			const target = (event.target as Element | null)?.closest<HTMLElement>(
 					'[data-user-info-view],[data-user-info-refresh],'+
@@ -398,6 +401,22 @@ export class ReaderSettingsUserView {
 				connectHistoryChangeKind(history.source, history.key)
 			} ${delta}`,
 		);
+	}
+
+	async #reloadExternalHistory(): Promise<void> {
+		if (!this.#history || !this.#connectEnabled || this.scope.destroyed) return;
+		const snapshot = this.#session.snapshot(this.#username);
+		if (snapshot.connect.phase !== 'ready') return;
+		const epoch = ++this.#historyLoadEpoch;
+		try {
+			this.#commitHistory(await this.#history.cached(
+				this.#username,
+				snapshot.connect.metrics,
+				this.#historySignal,
+			), epoch);
+		} catch (cause) {
+			this.#onError(cause);
+		}
 	}
 
 	async #load(refresh = false): Promise<void> {

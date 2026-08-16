@@ -1,6 +1,3 @@
-import {
-	createPreferencesStorageSyncStage,
-} from '../app/reader-application-stages.js';
 import type {
 	ReaderBrowserRuntime,
 } from '../app/reader-browser-runtime.js';
@@ -114,6 +111,10 @@ import {
 	type ReaderPreferences,
 } from '../state/reader-preferences-schema.js';
 import {
+	ReaderInformationFlowCoordinator,
+	type ReaderInformationFlowDomain,
+} from '../state/reader-information-flow-coordinator.js';
+import {
 	createReaderPostPresentation,
 	createReaderPostReadStateFeature,
 	type ReaderPostPresentationPost,
@@ -130,6 +131,7 @@ import {
 } from '../topic/reader-reply-tree-preferences.js';
 import {
 	BrowserUserscriptEnvironment,
+	type BrowserUserscriptValueStoragePort,
 } from './browser-userscript-environment.js';
 import {
 	createReaderUserscriptApplication,
@@ -201,6 +203,7 @@ export interface MainLiteUserscriptHandle {
 interface MutableMainLiteState {
 	runtime: ReaderBrowserRuntime<MainLiteTopic, MainLitePost> | null;
 	portal: ReaderSurfacePortal | null;
+	informationFlow: ReaderInformationFlowCoordinator | null;
 	readonly diagnostics: ReaderApplicationDiagnostic[];
 }
 
@@ -267,6 +270,57 @@ function createStyleStage(
 				portal.destroy();
 				if (state.portal === portal) state.portal = null;
 				style.remove();
+			};
+		},
+	});
+}
+
+function createInformationFlowStage(
+	window: Window,
+	storage: BrowserUserscriptValueStoragePort | null,
+	preferences: Readonly<{ reloadExternal(): unknown }>,
+	state: MutableMainLiteState,
+	bindings: readonly Readonly<{
+		readonly domain: ReaderInformationFlowDomain;
+		readonly keys: readonly string[];
+		readonly refresh: () => void | Promise<unknown>;
+	}>[],
+): ReaderApplicationStage<ReaderPreferences> {
+	return Object.freeze({
+		name: 'information-flow',
+		required: true,
+		setup(scope: LifecycleScope) {
+			const informationFlow = new ReaderInformationFlowCoordinator({
+				storageEvents: window,
+				parentScope: scope,
+				onDiagnostic: ({ domain, source, cause }) => {
+					console.error(
+						`[main-lite:information-flow:${domain}:${source}]`,
+						cause,
+					);
+				},
+			});
+			state.informationFlow = informationFlow;
+			informationFlow.register({
+				domain: 'preferences',
+				storageKeys: [READER_PREFERENCES_STORAGE_KEY],
+				refresh: () => preferences.reloadExternal(),
+			});
+			for (const binding of bindings) {
+				if (!storage?.subscribe) continue;
+				informationFlow.register({
+					domain: binding.domain,
+					subscriptions: binding.keys.map((key) => ({
+						source: 'userscript-value',
+						subscribe: (notify) => storage.subscribe!(key, notify),
+					})),
+					refresh: binding.refresh,
+				});
+			}
+			return () => {
+				if (state.informationFlow === informationFlow) {
+					state.informationFlow = null;
+				}
 			};
 		},
 	});
@@ -399,6 +453,7 @@ function createRuntimeStage(
 				mode: ReaderPreferences['translationMode'],
 			) => void) | null = null;
 			let hostTopicEnhancement: EmbeddedHostTopicCardEnhancement | null = null;
+			let hostOpenedTopicsRegistered = false;
 			const unwantedTopicFilter: ReaderUnwantedTopicFilterPreferencesPort =
 				Object.freeze({
 					read: () => readerPreferencesUnwantedTopicFilterAdapter.read(
@@ -439,12 +494,17 @@ function createRuntimeStage(
 						);
 					},
 				});
+			const informationFlow = state.informationFlow;
+			if (!informationFlow) {
+				throw new Error('main-lite 统一信息流协调器尚未就绪');
+			}
 			const stage = createReaderUserscriptRuntimeStage<
 				ReaderPreferences,
 				MainLiteTopic,
 				MainLitePost
 			>({
 		environment,
+		informationFlow,
 		shell: {
 			compatibilityKey: () => `${origin}:mian-lite:v1`,
 			createView: () => {
@@ -473,7 +533,7 @@ function createRuntimeStage(
 						openedTopicStorage: window.localStorage,
 						openedTopicStorageScope: currentUsername,
 						isTopicHidden: (topicId) =>
-							state.runtime?.unwantedTopics.has(topicId) === true,
+							state.runtime?.unwantedTopics.isManuallyHidden(topicId) === true,
 						hideTopic: (input) => {
 							const runtime = state.runtime;
 							if (!runtime) throw new Error('不想看仓库尚未就绪');
@@ -497,6 +557,17 @@ function createRuntimeStage(
 						},
 					},
 				);
+				if (!hostOpenedTopicsRegistered) {
+					hostOpenedTopicsRegistered = true;
+					scope.add(informationFlow.register({
+						domain: 'host-opened-topics',
+						storageKeys: [
+							hostTopicEnhancement.openedTopicStorageKey,
+						],
+						refresh: () => hostTopicEnhancement
+							?.reloadExternalOpenedTopics(),
+					}));
+				}
 				return {
 					document,
 					routeKind,
@@ -1289,6 +1360,7 @@ export function startMainLiteUserscript(
 	const state: MutableMainLiteState = {
 		runtime: null,
 		portal: null,
+		informationFlow: null,
 		diagnostics: [],
 	};
 	const onWindowKeyDown = (event: KeyboardEvent): void => {
@@ -1313,14 +1385,30 @@ export function startMainLiteUserscript(
 			}
 		},
 		stages: [
-			createPreferencesStorageSyncStage({
-				key: READER_PREFERENCES_STORAGE_KEY,
-				window,
-				repository: preferences,
-				onError: (cause) => {
-					console.error('[main-lite:preferences-sync]', cause);
+			createInformationFlowStage(window, valueStorage, preferences, state, [
+				{
+					domain: 'custom-sites',
+					keys: [customSiteRepository.storageKey],
+					refresh: () => customSiteRepository.reloadExternal(),
 				},
-			}),
+				...(translation
+					? [{
+						domain: 'translation-config' as const,
+						keys: [
+							translation.storageKey,
+							translation.metadataStorageKey,
+						],
+						refresh: () => translation.reloadExternalState(),
+					}]
+					: []),
+				...(webDav
+					? [{
+						domain: 'webdav-config' as const,
+						keys: [webDav.repository.storageKey],
+						refresh: () => webDav.repository.reloadExternal(),
+					}]
+					: []),
+			]),
 			createStyleStage(environment, document, state),
 			createRuntimeStage(
 				environment,

@@ -144,6 +144,10 @@ export class ReaderCustomSiteRepository {
 		return this.#sites;
 	}
 
+	get storageKey(): string {
+		return this.#storageKey;
+	}
+
 	async load(): Promise<readonly string[]> {
 		if (this.#loaded) return this.#sites;
 		if (this.#loadPromise) return this.#loadPromise;
@@ -161,6 +165,17 @@ export class ReaderCustomSiteRepository {
 		} finally {
 			this.#loadPromise = null;
 		}
+	}
+
+	async reloadExternal(): Promise<readonly string[]> {
+		if (!this.#storage) return this.#sites;
+		await this.#writeTail;
+		this.#sites = normalizedSites(
+			await this.#storage.getValue(this.#storageKey),
+		);
+		this.#loaded = true;
+		this.changes.emit(this.#sites);
+		return this.#sites;
 	}
 
 	async allows(value: unknown): Promise<boolean> {

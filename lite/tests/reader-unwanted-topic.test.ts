@@ -79,10 +79,13 @@ repository.remember({
 });
 assert(
 	repository.has(1) &&
+	repository.isManuallyHidden(1) &&
+	repository.has(4) &&
+	!repository.isManuallyHidden(4) &&
 	repository.ordered()[0]?.topicId === 4 &&
 	repository.snapshot.records.find((entry) => entry.topicId === 1)?.note ===
 		'以后再看',
-	'不想看仓库必须按更新时间排序并持久保存可选标注',
+	'不想看仓库必须区分手动永久隐藏与旧自动历史，并持久保存可选标注',
 );
 const reloaded = new ReaderUnwantedTopicRepository({
 	storage,
@@ -392,11 +395,15 @@ assert(
 	document.querySelector<HTMLElement>(
 		'.ldp-reader-floating-window-title',
 )?.textContent === '免打扰与自动过滤' &&
+	document.querySelector('.ldp-unwanted-topic-filter-master')?.parentElement
+		?.matches('.ldp-unwanted-topic-filter-footer') === true &&
+	document.querySelector('.ldp-unwanted-topic-filter-master')?.nextElementSibling
+		?.matches('.ldp-unwanted-topic-filter-actions') === true &&
 	[...document.querySelectorAll<HTMLElement>(
 		'[data-unwanted-rule-tab]',
 	)].map((tab) => tab.textContent).join('|') ===
 		'主题类别|主题标签|OP 用户|字符匹配|楼层用户',
-	'设置齿轮必须在同一个不想看浮窗切入自动过滤规则页，并显示返回入口',
+	'设置页必须复用不想看浮窗、显示返回入口，并把总开关放在底栏操作按钮前',
 );
 const filterEnabled = document.querySelector<HTMLInputElement>(
 	'.ldp-unwanted-filter-enabled',

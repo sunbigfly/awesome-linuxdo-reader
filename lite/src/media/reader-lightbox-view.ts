@@ -13,7 +13,6 @@ import {
 } from './reader-image-transform-controller.js';
 import {
 	ReaderLightboxGeometryController,
-	type ReaderLightboxGeometryControllerOptions,
 	type ReaderLightboxGeometryPreferencePatch,
 	type ReaderLightboxGeometryPreferences,
 } from './reader-lightbox-geometry-controller.js';
@@ -73,12 +72,6 @@ export interface ReaderLightboxViewOptions {
 	readonly onDescriptionExpandedChange?: (
 		expanded: boolean,
 	) => void | Promise<void>;
-	readonly createResizeObserver?:
-		ReaderLightboxGeometryControllerOptions['createResizeObserver'];
-	readonly geometrySchedule?:
-		ReaderLightboxGeometryControllerOptions['schedule'];
-	readonly geometryCancelSchedule?:
-		ReaderLightboxGeometryControllerOptions['cancelSchedule'];
 	readonly parentScope?: LifecycleScope;
 	readonly onBoundary?: (
 		direction: -1 | 1,
@@ -346,8 +339,6 @@ export class ReaderLightboxView {
 			root,
 			main: required(root, '.ldp-lb-main'),
 			resizer: commentsResizer,
-			source,
-			sourceText: this.slots.sourceText,
 			preferences: options.geometryPreferences ?? Object.freeze({
 				lightboxDescriptionHeight:
 					LIGHTBOX_DESCRIPTION_HEIGHT_DEFAULT,
@@ -360,15 +351,6 @@ export class ReaderLightboxView {
 			renderTransform: () => this.transform.render(),
 			...(options.frameScheduler
 				? { frameScheduler: options.frameScheduler }
-				: {}),
-			...(options.createResizeObserver
-				? { createResizeObserver: options.createResizeObserver }
-				: {}),
-			...(options.geometrySchedule
-				? { schedule: options.geometrySchedule }
-				: {}),
-			...(options.geometryCancelSchedule
-				? { cancelSchedule: options.geometryCancelSchedule }
 				: {}),
 			parentScope: this.scope,
 			onError: this.#onError,

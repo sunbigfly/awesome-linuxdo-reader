@@ -39,9 +39,12 @@ const MAX_SHARE_IMAGE_WIDTH = 2_160;
 const DEFAULT_SHARE_BODY_FONT_SIZE = 31;
 const MIN_SHARE_BODY_FONT_SIZE = 22;
 const MAX_SHARE_BODY_FONT_SIZE = 48;
-const SUMMARY_SHARE_SETTINGS_KEY = 'ldp:topic-summary-share-settings:v1';
-const SUMMARY_RESULTS_CACHE_KEY = 'ldp:topic-summary-results:v1';
-const SUMMARY_WINDOW_GEOMETRY_KEY = 'ldp:topic-summary-window-geometry:v1';
+export const READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY =
+	'ldp:topic-summary-share-settings:v1';
+export const READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY =
+	'ldp:topic-summary-results:v1';
+export const READER_TOPIC_SUMMARY_WINDOW_GEOMETRY_STORAGE_KEY_PREFIX =
+	'ldp:topic-summary-window-geometry:v1';
 const LOCAL_FONT_PREFIX = 'local:';
 
 export type ReaderTopicSummaryShareStyle =
@@ -375,7 +378,7 @@ function readShareSettings(
 	if (!storage) return DEFAULT_SHARE_SETTINGS;
 	try {
 		const parsed = JSON.parse(
-			storage.getItem(SUMMARY_SHARE_SETTINGS_KEY) ?? 'null',
+			storage.getItem(READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY) ?? 'null',
 		) as Partial<PersistedShareSettings> | null;
 		if (!parsed || ![1, 2, 3, 4, 5].includes(Number(parsed.schemaVersion))) {
 			return DEFAULT_SHARE_SETTINGS;
@@ -504,7 +507,7 @@ function readSummaryResults(
 	if (!storage) return Object.freeze([]);
 	try {
 		const parsed = JSON.parse(
-			storage.getItem(SUMMARY_RESULTS_CACHE_KEY) ?? 'null',
+			storage.getItem(READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY) ?? 'null',
 		) as Readonly<{ readonly schemaVersion?: unknown; readonly entries?: unknown }>;
 		const schemaVersion = Number(parsed?.schemaVersion);
 		if (![1, 2].includes(schemaVersion) || !Array.isArray(parsed.entries)) {
@@ -1782,7 +1785,8 @@ export class ReaderTopicSummarySurface {
 			requestOpen: () => this.open(),
 			zIndex: 2_147_483_586,
 			...(geometryStorage ? { geometryStorage } : {}),
-			geometryStorageKey: SUMMARY_WINDOW_GEOMETRY_KEY,
+			geometryStorageKey:
+				READER_TOPIC_SUMMARY_WINDOW_GEOMETRY_STORAGE_KEY_PREFIX,
 			policy: Object.freeze({
 				minWidth: 360,
 				minHeight: 420,
@@ -2042,6 +2046,36 @@ export class ReaderTopicSummarySurface {
 		void this.#loadAiModels();
 	}
 
+	reloadExternalState(): void {
+		if (!this.#storage || this.scope.destroyed) return;
+		this.#historyEntries = readSummaryResults(this.#storage);
+		this.#summaries.clear();
+		this.#settings = readShareSettings(this.#storage);
+		selectValue(this.styleSelect, this.#settings.style);
+		selectValue(this.chineseFontSelect, this.#settings.chineseFont);
+		selectValue(this.latinFontSelect, this.#settings.latinFont);
+		selectValue(this.widthModeSelect, this.#settings.widthMode);
+		this.customWidthInput.value = String(this.#settings.customWidth);
+		selectValue(this.fontSizeModeSelect, this.#settings.fontSizeMode);
+		this.customFontSizeInput.value = String(this.#settings.customFontSize);
+		selectValue(this.summaryLengthSelect, this.#settings.summaryLength);
+		selectValue(this.summaryPurposeSelect, this.#settings.summaryPurpose);
+		this.customPromptInput.value = this.#settings.customPrompt;
+		const selectedModel = aiModelValue(
+			this.#settings.customModelBaseUrl,
+			this.#settings.customModel,
+		);
+		if ([...this.customModelSelect.options].some((option) =>
+			option.value === selectedModel)) {
+			selectValue(this.customModelSelect, selectedModel);
+		}
+		this.#updateShareControlVisibility();
+		this.#applyTheme();
+		this.#restoreSelectionSummary();
+		this.frame.reloadStoredGeometry();
+		this.#render();
+	}
+
 	close(): void {
 		this.#imagePicker?.close?.();
 		this.#historyOpen = false;
@@ -2150,7 +2184,7 @@ export class ReaderTopicSummarySurface {
 	#persistSettings(): void {
 		try {
 			this.#storage?.setItem(
-				SUMMARY_SHARE_SETTINGS_KEY,
+				READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY,
 				JSON.stringify(this.#settings),
 			);
 		} catch (cause) {
@@ -2367,16 +2401,24 @@ export class ReaderTopicSummarySurface {
 			context,
 			summary,
 		});
-		this.#historyEntries = Object.freeze([
+		const stored = readSummaryResults(this.#storage);
+		const byId = new Map([
+			...stored,
 			...this.#historyEntries,
+		].map((entry) => [entry.id, entry]));
+		this.#historyEntries = Object.freeze([
+			...byId.values(),
 			record,
 		].slice(-80));
 		if (!this.#storage) return;
 		try {
-			this.#storage.setItem(SUMMARY_RESULTS_CACHE_KEY, JSON.stringify({
-				schemaVersion: 2,
-				entries: this.#historyEntries,
-			}));
+			this.#storage.setItem(
+				READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY,
+				JSON.stringify({
+					schemaVersion: 2,
+					entries: this.#historyEntries,
+				}),
+			);
 		} catch (cause) {
 			this.#onError(cause);
 		}

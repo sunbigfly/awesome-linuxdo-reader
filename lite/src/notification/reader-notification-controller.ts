@@ -660,7 +660,8 @@ export class ReaderNotificationController {
 		if (
 			this.scope.destroyed ||
 			this.#backgroundCacheActive ||
-			this.#backgroundWarmDelayMs === null
+			this.#backgroundWarmDelayMs === null ||
+			(this.#activity !== null && !this.#activityVisible())
 		) return;
 		this.#backgroundCacheActive = true;
 		const restore = this.#restoreBackgroundProjections();
@@ -695,6 +696,17 @@ export class ReaderNotificationController {
 		this.#scheduleHistoryHydration(0);
 	}
 
+	reloadExternalProjection(): Promise<void> {
+		if (!this.#projection || this.scope.destroyed) return Promise.resolve();
+		const previous = this.#backgroundRestore ?? Promise.resolve();
+		const restore = previous.catch(() => {}).then(() =>
+			this.#restoreBackgroundProjections(true));
+		this.#backgroundRestore = restore;
+		return restore.finally(() => {
+			if (this.#backgroundRestore === restore) this.#backgroundRestore = null;
+		});
+	}
+
 	async #restoreBackgroundProjections(fresh = false): Promise<void> {
 		if (!this.#projection || this.scope.destroyed) return;
 		const restored = await Promise.all(
@@ -722,13 +734,15 @@ export class ReaderNotificationController {
 				notificationProjectionCheckpointNeedsRepair(group, snapshot);
 			state.retryAt = null;
 			state.error = null;
-			this.#rememberProjectionRecords(group, snapshot.records);
+			this.#rememberProjectionRecords(group, snapshot.records, fresh);
 			const records = new Map<string, ReaderNotificationRecord>();
 			for (const record of snapshot.records) {
 				records.set(record.identity, record);
 			}
-			for (const record of this.#historyRecords.get(group)?.values() ?? []) {
-				records.set(record.identity, record);
+			if (!fresh) {
+				for (const record of this.#historyRecords.get(group)?.values() ?? []) {
+					records.set(record.identity, record);
+				}
 			}
 			this.#historyRecords.set(group, records);
 			state.estimatedPages = Math.max(
@@ -2010,13 +2024,16 @@ export class ReaderNotificationController {
 	#rememberProjectionRecords(
 		group: ReaderNotificationGroupKey,
 		records: readonly ReaderNotificationRecord[],
+		replace = false,
 	): void {
 		const remember = (
 			partition: ReaderNotificationGroupKey,
 			values: readonly ReaderNotificationRecord[],
 		): void => {
-			const indexed = this.#projectionRecords.get(partition) ??
-				new Map<string, ReaderNotificationRecord>();
+			const indexed = replace
+				? new Map<string, ReaderNotificationRecord>()
+				: this.#projectionRecords.get(partition) ??
+					new Map<string, ReaderNotificationRecord>();
 			for (const record of values) indexed.set(record.identity, record);
 			this.#projectionRecords.set(partition, indexed);
 		};
@@ -2794,8 +2811,18 @@ export class ReaderNotificationController {
 
 	#onActivityChanged(): void {
 		if (this.scope.destroyed) return;
+		const visible = this.#activityVisible();
+		const backgroundWasActive = this.#backgroundCacheActive;
+		if (!visible) {
+			if (this.#backgroundWarm !== null) this.#cancel(this.#backgroundWarm);
+			this.#backgroundWarm = null;
+			this.#backgroundWarmPending = false;
+			this.#backgroundWarmEpoch += 1;
+		} else if (!this.#backgroundCacheActive) {
+			this.startBackgroundCache();
+		}
 		if (this.#backgroundCacheActive) {
-			if (this.#activity && !this.#activityVisible()) {
+			if (this.#activity && !visible) {
 				if (this.#historySchedule !== null) this.#cancel(this.#historySchedule);
 				this.#historySchedule = null;
 				if (this.#historyStatus !== 'complete') {
@@ -2803,11 +2830,12 @@ export class ReaderNotificationController {
 					this.#historyCurrentGroup = null;
 					this.#emit();
 				}
-			} else {
+			} else if (backgroundWasActive) {
 				this.#scheduleHistoryHydration(0);
+				this.#scheduleBackgroundWarm(0);
 			}
 		}
-		if (!this.#activityVisible()) {
+		if (!visible) {
 			this.#cancelPoll();
 			return;
 		}
@@ -2864,7 +2892,8 @@ export class ReaderNotificationController {
 			this.#historyLoading ||
 			this.#historySchedule !== null ||
 			this.#historyStatus === 'complete' ||
-			!this.#native.username().trim()
+			!this.#native.username().trim() ||
+			(this.#activity !== null && !this.#activityVisible())
 		) return;
 		this.#historySchedule = this.#schedule(() => {
 			this.#historySchedule = null;
@@ -3135,7 +3164,8 @@ export class ReaderNotificationController {
 		if (
 			this.#backgroundWarmDelayMs === null ||
 			!this.#backgroundCacheActive ||
-			this.scope.destroyed
+			this.scope.destroyed ||
+			(this.#activity !== null && !this.#activityVisible())
 		) return;
 		if (this.#backgroundWarming) {
 			this.#backgroundWarmPending = true;
@@ -3152,7 +3182,8 @@ export class ReaderNotificationController {
 		if (
 			!this.#backgroundCacheActive ||
 			this.scope.destroyed ||
-			this.#backgroundWarming
+			this.#backgroundWarming ||
+			(this.#activity !== null && !this.#activityVisible())
 		) return;
 		const rateLimitBackoffMs = this.#pollNotBefore - this.#now();
 		if (rateLimitBackoffMs > 0) {
@@ -3163,7 +3194,9 @@ export class ReaderNotificationController {
 		this.#backgroundWarmPending = false;
 		const epoch = ++this.#backgroundWarmEpoch;
 		const valid = () =>
-			!this.scope.destroyed && epoch === this.#backgroundWarmEpoch;
+			!this.scope.destroyed &&
+			epoch === this.#backgroundWarmEpoch &&
+			(this.#activity === null || this.#activityVisible());
 		try {
 			const signedIn = Boolean(this.#native.username().trim());
 			let needsNativeExpansion = false;

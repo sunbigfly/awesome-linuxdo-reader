@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.1
+// @version      1.5.2
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.1 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.5.2 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.1",
+			sourceVersion: "1.5.2",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.1") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.2") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -4020,7 +4020,7 @@ runtime.register("src/collection/reader-unwanted-topic-filter-editor.js", functi
 	      const button = options.document.createElement("button");
 	      button.type = "button", button.dataset.unwantedRuleTab = tab.name, button.textContent = tab.title, button.setAttribute("aria-pressed", String(tab.name === this.#active)), this.#tabs.set(tab.name, button), tabList.append(button);
 	    }
-	    sidebar.append(master, tabList);
+	    sidebar.append(tabList);
 	    const content = (0, import_html_element.htmlElement)(
 	      options.document,
 	      "section",
@@ -4116,7 +4116,7 @@ runtime.register("src/collection/reader-unwanted-topic-filter-editor.js", functi
 	      "div",
 	      "ldp-unwanted-topic-filter-actions"
 	    );
-	    this.#reset = this.#textButton("恢复默认", "rotate-ccw"), this.#save = this.#textButton("保存设置", "check"), this.#save.classList.add("ldp-unwanted-topic-filter-save"), actions.append(this.#reset, this.#save), footer.append(this.#status, actions), this.element.append(workbench, footer), this.#listen(), this.#preferences.subscribe((preferences) => {
+	    this.#reset = this.#textButton("恢复默认", "rotate-ccw"), this.#save = this.#textButton("保存设置", "check"), this.#save.classList.add("ldp-unwanted-topic-filter-save"), actions.append(this.#reset, this.#save), footer.append(this.#status, master, actions), this.element.append(workbench, footer), this.#listen(), this.#preferences.subscribe((preferences) => {
 	      this.#changeCount() || this.#accept(preferences);
 	    }, this.scope), this.scope.add(() => this.#clearLookup()), this.#accept(this.#preferences.read());
 	  }
@@ -4392,7 +4392,7 @@ runtime.register("src/collection/reader-unwanted-topic-filter-editor.js", functi
 	    this.#addButton.disabled = !valid, this.#lookupStatus.textContent = input ? valid ? "规则格式有效，可添加到当前草稿。" : "正则表达式无效，请检查斜杠、标志或括号。" : "输入字符后添加；正则使用 /表达式/标志 形式。";
 	  }
 	}
-}, "38c90fd418505130e60e7f5f86432282f0ce6312d5095e87ee37be0812ca2997");
+}, "32bbea274af3aa2858ec1a89afc696054e8cb25ca80a22acde9bcf515f4ee4e9");
 
 /* Source: lite/src/collection/reader-unwanted-topic-filter.ts */
 runtime.register("src/collection/reader-unwanted-topic-filter.js", function(module, exports, require) {
@@ -4708,12 +4708,21 @@ runtime.register("src/collection/reader-unwanted-topic-repository.js", function(
 	  get snapshot() {
 	    return this.#snapshot;
 	  }
+	  get storageKey() {
+	    return this.#key;
+	  }
 	  load() {
+	    return this.#readAndCommit("initial");
+	  }
+	  reloadExternal() {
+	    return this.#readAndCommit("external-reload");
+	  }
+	  #readAndCommit(source) {
 	    try {
 	      const stored = this.#accountStorage ? (0, import_reader_account_scoped_storage.readReaderAccountScopedString)(this.#storage, this.#accountStorage) : this.#storage.getItem(this.#key), raw = stored === null ? [] : JSON.parse(stored);
 	      if (!Array.isArray(raw)) throw new TypeError("不想看存储值必须是数组");
 	      const records = this.#normalizeMany(raw);
-	      return JSON.stringify(records) !== JSON.stringify(raw) && this.#persist(records), this.#commit(records, "initial");
+	      return JSON.stringify(records) !== JSON.stringify(raw) && this.#persist(records), this.#commit(records, source);
 	    } catch {
 	      return this.#commit([], "fallback");
 	    }
@@ -4722,10 +4731,15 @@ runtime.register("src/collection/reader-unwanted-topic-repository.js", function(
 	    const topicId = (0, import_identifiers.tryDiscourseTopicId)(topicIdValue);
 	    return topicId !== null && this.#snapshot.records.some((entry) => entry.topicId === topicId);
 	  }
+	  isManuallyHidden(topicIdValue) {
+	    const topicId = (0, import_identifiers.tryDiscourseTopicId)(topicIdValue);
+	    return topicId !== null && this.#snapshot.records.some((entry) => entry.topicId === topicId && entry.source === "manual");
+	  }
 	  ordered() {
 	    return this.#ordered(this.#snapshot.records);
 	  }
 	  remember(input) {
+	    this.#mergeStoredBeforeMutation();
 	    const topicId = (0, import_identifiers.discourseTopicId)(input.topicId), previous = this.#snapshot.records.find((entry) => entry.topicId === topicId), now = this.#now(), incoming = normalizeReaderUnwantedTopicRecord({
 	      topicId,
 	      title: input.title,
@@ -4747,6 +4761,7 @@ runtime.register("src/collection/reader-unwanted-topic-repository.js", function(
 	    ], "remember");
 	  }
 	  update(topicIdValue, patch) {
+	    this.#mergeStoredBeforeMutation();
 	    const topicId = (0, import_identifiers.discourseTopicId)(topicIdValue), previous = this.#snapshot.records.find((entry) => entry.topicId === topicId);
 	    if (!previous) return this.#snapshot;
 	    const next = normalizeReaderUnwantedTopicRecord({
@@ -4764,6 +4779,7 @@ runtime.register("src/collection/reader-unwanted-topic-repository.js", function(
 	    return this.removeMany([topicIdValue]);
 	  }
 	  removeMany(topicIdValues) {
+	    this.#mergeStoredBeforeMutation();
 	    const topicIds = /* @__PURE__ */ new Set();
 	    for (const value of topicIdValues)
 	      try {
@@ -4775,7 +4791,7 @@ runtime.register("src/collection/reader-unwanted-topic-repository.js", function(
 	    return next.length === this.#snapshot.records.length ? this.#snapshot : this.#persistAndCommit(next, "remove");
 	  }
 	  clear() {
-	    return this.#persistAndCommit([], "clear");
+	    return this.#mergeStoredBeforeMutation(), this.#persistAndCommit([], "clear");
 	  }
 	  replaceExternal(values) {
 	    return this.#persistAndCommit(this.#normalizeMany(values), "external-sync");
@@ -4789,6 +4805,15 @@ runtime.register("src/collection/reader-unwanted-topic-repository.js", function(
 	      merged && records.set(merged.topicId, merged);
 	    }
 	    return this.#ordered([...records.values()]);
+	  }
+	  #mergeStoredBeforeMutation() {
+	    let stored;
+	    try {
+	      stored = this.#accountStorage ? (0, import_reader_account_scoped_storage.readReaderAccountScopedString)(this.#storage, this.#accountStorage) : this.#storage.getItem(this.#key);
+	    } catch {
+	      return;
+	    }
+	    (stored ?? "[]") !== JSON.stringify(this.#snapshot.records) && this.#readAndCommit("external-reload");
 	  }
 	  #ordered(values) {
 	    return Object.freeze([...values].sort((left, right) => right.hiddenAt - left.hiddenAt || right.topicId - left.topicId).slice(0, this.#maxRecords));
@@ -4812,7 +4837,7 @@ runtime.register("src/collection/reader-unwanted-topic-repository.js", function(
 	    }), this.changes.emit(this.#snapshot), this.#snapshot;
 	  }
 	}
-}, "afe2cfde79bf6711082830d3e02018b5744358933978e146f2e413f4f39ca5f4");
+}, "4052c2d17b20114900ba83d03eddd38803c002a64c71c446c2b7bc4cfcddf00a");
 
 /* Source: lite/src/collection/reader-unwanted-topic-view.ts */
 runtime.register("src/collection/reader-unwanted-topic-view.js", function(module, exports, require) {
@@ -5779,11 +5804,16 @@ ${inserted}`), after && !/^\s/.test(after) && (inserted += `
 	        cleanupErrors.push(error);
 	      }
 	    }
-	    if (cleanupErrors.length)
-	      throw new AggregateError(
+	    if (cleanupErrors.length) {
+	      const cleanupError = new AggregateError(
 	        cleanupErrors,
 	        "Discourse composer 舍弃后清理失败"
 	      );
+	      try {
+	        this.#onError(cleanupError);
+	      } catch {
+	      }
+	    }
 	  }
 	  installSubmitGuard(options) {
 	    if (this.#assertActive(), !this.#isolation)
@@ -6573,7 +6603,7 @@ ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer,
 	      throw new Error("DiscourseComposerTopicSyncController 已销毁");
 	  }
 	}
-}, "76776dc0758a7cd10d2e27ec465a8a7fb10760d27b6e27435e7e9771629576bf");
+}, "41f7e0c2861c4a517ecb56480e90811536d897e16b376788be46012bd6349ea5");
 
 /* Source: lite/src/discourse/native-host-api.ts */
 runtime.register("src/discourse/native-host-api.js", function(module, exports, require) {
@@ -9490,6 +9520,9 @@ runtime.register("src/history/reader-chronicle-repository.js", function(module, 
 	  get snapshot() {
 	    return this.#snapshot;
 	  }
+	  get storageKey() {
+	    return this.#key;
+	  }
 	  load() {
 	    return this.#readAndCommit("initial");
 	  }
@@ -9500,6 +9533,7 @@ runtime.register("src/history/reader-chronicle-repository.js", function(module, 
 	    return this.#ordered(this.#snapshot.records);
 	  }
 	  remember(input) {
+	    this.#mergeStoredBeforeMutation();
 	    const incoming = inputRecord(input, this.#now()), previous = this.#snapshot.records.find((entry) => entry.identity === incoming.identity), next = previous ? normalizeRecord({
 	      ...previous,
 	      ...incoming,
@@ -9521,6 +9555,7 @@ runtime.register("src/history/reader-chronicle-repository.js", function(module, 
 	    ], "remember");
 	  }
 	  remove(identity) {
+	    this.#mergeStoredBeforeMutation();
 	    const normalized = text(identity, 512);
 	    return !normalized || !this.#snapshot.records.some((entry) => entry.identity === normalized) ? this.#snapshot : this.#persistAndCommit(
 	      this.#snapshot.records.filter((entry) => entry.identity !== normalized),
@@ -9528,7 +9563,7 @@ runtime.register("src/history/reader-chronicle-repository.js", function(module, 
 	    );
 	  }
 	  clear() {
-	    return this.#persistAndCommit([], "clear");
+	    return this.#mergeStoredBeforeMutation(), this.#persistAndCommit([], "clear");
 	  }
 	  replaceExternal(values) {
 	    return this.#persistAndCommit(
@@ -9572,6 +9607,16 @@ runtime.register("src/history/reader-chronicle-repository.js", function(module, 
 	    }
 	    return this.#ordered([...records.values()]);
 	  }
+	  #mergeStoredBeforeMutation() {
+	    let stored;
+	    try {
+	      stored = this.#accountStorage ? (0, import_reader_account_scoped_storage.readReaderAccountScopedString)(this.#storage, this.#accountStorage) : this.#storage.getItem(this.#key);
+	    } catch (cause) {
+	      this.#diagnose("read-failed", cause);
+	      return;
+	    }
+	    (stored ?? "[]") !== JSON.stringify(this.#snapshot.records) && this.#readAndCommit("external-reload");
+	  }
 	  #ordered(values) {
 	    return Object.freeze([...values].sort((left, right) => right.lastObservedAt - left.lastObservedAt || right.topicId - left.topicId || left.identity.localeCompare(right.identity)).slice(0, this.#maxRecords));
 	  }
@@ -9608,7 +9653,7 @@ runtime.register("src/history/reader-chronicle-repository.js", function(module, 
 	    this.diagnostics.emit(Object.freeze({ code, cause }));
 	  }
 	}
-}, "6e64c31a57b0d94764bfee2ed6d8d54785c5333de93ef13f0adf448ad82a080c");
+}, "7cbdfc6ebf4c6461ac643a5f801cb2b116587de05ea017717407860a40ecdf7c");
 
 /* Source: lite/src/history/reader-chronicle-view.ts */
 runtime.register("src/history/reader-chronicle-view.js", function(module, exports, require) {
@@ -11030,6 +11075,9 @@ runtime.register("src/history/reader-history-repository.js", function(module, ex
 	  get snapshot() {
 	    return this.#snapshot;
 	  }
+	  get storageKey() {
+	    return this.#key;
+	  }
 	  load() {
 	    return this.#readAndCommit("initial");
 	  }
@@ -11064,6 +11112,7 @@ runtime.register("src/history/reader-history-repository.js", function(module, ex
 	    });
 	  }
 	  remember(input) {
+	    this.#mergeStoredBeforeMutation();
 	    const topicId = (0, import_identifiers.discourseTopicId)(input.topicId), previous = this.entry(topicId), now = this.#now(), inputReads = normalizedReadPostNumbers(input.readPostNumbers);
 	    let postNumber;
 	    try {
@@ -11120,6 +11169,7 @@ runtime.register("src/history/reader-history-repository.js", function(module, ex
 	    return this.forgetMany([topicIdValue]);
 	  }
 	  forgetMany(topicIdValues) {
+	    this.#mergeStoredBeforeMutation();
 	    const topicIds = /* @__PURE__ */ new Set();
 	    for (const value of topicIdValues)
 	      try {
@@ -11133,7 +11183,7 @@ runtime.register("src/history/reader-history-repository.js", function(module, ex
 	    return next.length === this.#snapshot.entries.length ? this.#snapshot : this.#persistAndCommit(Object.freeze(next), "forget");
 	  }
 	  clear() {
-	    return this.#persistAndCommit(Object.freeze([]), "clear");
+	    return this.#mergeStoredBeforeMutation(), this.#persistAndCommit(Object.freeze([]), "clear");
 	  }
 	  replaceExternal(values) {
 	    const cutoff = this.#now() - this.#maxAgeMs, entries = [], seen = /* @__PURE__ */ new Set();
@@ -11178,6 +11228,16 @@ runtime.register("src/history/reader-history-repository.js", function(module, ex
 	    }
 	    return this.#commit(frozen, source);
 	  }
+	  #mergeStoredBeforeMutation() {
+	    let stored;
+	    try {
+	      stored = this.#accountStorage ? (0, import_reader_account_scoped_storage.readReaderAccountScopedString)(this.#storage, this.#accountStorage) : this.#storage.getItem(this.#key);
+	    } catch (cause) {
+	      this.#diagnose("read-failed", cause);
+	      return;
+	    }
+	    (stored ?? "[]") !== JSON.stringify(this.#snapshot.entries) && this.#readAndCommit("external-reload");
+	  }
 	  #persistAndCommit(entries, source) {
 	    const persisted = this.#persist(entries);
 	    return this.#commit(persisted, source);
@@ -11212,7 +11272,7 @@ runtime.register("src/history/reader-history-repository.js", function(module, ex
 	    this.diagnostics.emit(Object.freeze({ code, cause }));
 	  }
 	}
-}, "44b3cfc451643873f36cc0fa21780cf6059c51579db7e169e8ae3d1cf8dd4f89");
+}, "ae73da022ef835f9162058dd24d22f3bea8357614a327b9aab9033034bc763d0");
 
 /* Source: lite/src/monitor/reader-resource-monitor.ts */
 runtime.register("src/monitor/reader-resource-monitor.js", function(module, exports, require) {
@@ -13902,7 +13962,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	    ownerId: challengeSource.ownerId,
 	    state: String(challengeSource.state) === "passed" ? "passed" : "active",
 	    required: String(challengeSource.state) === "required" || String(challengeSource.state) === "active" && (challengeSource.required === !0 || challengeSource.ownerId === ""),
-	    automaticAttempted: challengeSource.automaticAttempted === !0 || challengeSource.ownerId === "",
+	    automaticAttempted: typeof challengeSource.automaticAttempted == "boolean" ? challengeSource.automaticAttempted : challengeSource.ownerId === "",
 	    recoveryProbeAttempted: challengeSource.recoveryProbeAttempted === !0,
 	    ...storedChallengeProbeState(challengeSource),
 	    updatedAt: Math.max(
@@ -14247,16 +14307,19 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	  }
 	  async noteCloudflareChallenge(input) {
 	    this.#assertOpen(), !(!this.#challenge || !challengeHrefMatchesOrigin(input.href, this.#challengeOrigin)) && await this.#transact((state, now) => {
-	      state.challenge?.state === "passed" && input.force !== !0 || state.challenge?.state === "active" && !state.challenge.required || (state.challenge = Object.freeze({
+	      if (state.challenge?.state === "passed" && input.force !== !0 || state.challenge?.state === "active" && !state.challenge.required)
+	        return;
+	      const newGeneration = state.challenge?.state === "passed" && input.force === !0;
+	      state.challenge = Object.freeze({
 	        ownerId: "",
 	        state: "active",
 	        required: !0,
-	        automaticAttempted: state.challenge?.automaticAttempted === !0,
-	        recoveryProbeAttempted: state.challenge?.recoveryProbeAttempted === !0,
-	        ...storedChallengeProbeState(state.challenge),
+	        automaticAttempted: !newGeneration && state.challenge?.automaticAttempted === !0,
+	        recoveryProbeAttempted: !newGeneration && state.challenge?.recoveryProbeAttempted === !0,
+	        ...newGeneration ? {} : storedChallengeProbeState(state.challenge),
 	        updatedAt: now,
 	        expiresAt: now + this.#challengeMaxWaitMs
-	      }));
+	      });
 	    });
 	  }
 	  /**
@@ -14458,7 +14521,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	    );
 	    let nextVerifyAt = this.#now() + verifyDelayMs;
 	    const onPopupLoad = () => {
-	      this.#wake();
+	      nextVerifyAt = this.#now(), this.#expediteChallengeProbeAfterLoad();
 	    };
 	    popup.addEventListener?.("load", onPopupLoad), this.#focusChallengeWindow();
 	    try {
@@ -14542,6 +14605,26 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	    return Promise.race([shared, cancelled]).finally(() => {
 	      signal.removeEventListener("abort", abort);
 	    });
+	  }
+	  async #expediteChallengeProbeAfterLoad() {
+	    try {
+	      await this.#challengeProbePromise;
+	    } catch {
+	    }
+	    try {
+	      await this.#transact((state, now) => {
+	        state.challenge?.state !== "active" || state.challenge.ownerId !== this.#sourceId || (state.challenge = Object.freeze({
+	          ...state.challenge,
+	          probeNotBefore: now,
+	          probeBackoffMs: this.#challengeVerifyIntervalMs,
+	          updatedAt: now
+	        }));
+	      });
+	    } catch (error) {
+	      this.#onError(error);
+	    } finally {
+	      this.#wake();
+	    }
 	  }
 	  async #runChallengeProbe(signal) {
 	    const verify = this.#verifyChallenge;
@@ -14999,7 +15082,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	    (key === null || key === READER_REQUEST_PERMIT_STORAGE_KEY) && this.#wake();
 	  };
 	}
-}, "ec11d5d230ce31d16871304ad8b1ed0a61bb1f38204fc3523b32426c427db3c9");
+}, "adba9b8251b6c7fa63800935d91f471ed0b617fe5dffcb47286acfe406e0a859");
 
 /* Source: lite/src/network/coordinated-request-client.ts */
 runtime.register("src/network/coordinated-request-client.js", function(module, exports, require) {
@@ -18232,7 +18315,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  }
 	  /** application 启动时恢复持久投影；随后与浮窗开关无关地渐进续传。 */
 	  startBackgroundCache() {
-	    if (this.scope.destroyed || this.#backgroundCacheActive || this.#backgroundWarmDelayMs === null) return;
+	    if (this.scope.destroyed || this.#backgroundCacheActive || this.#backgroundWarmDelayMs === null || this.#activity !== null && !this.#activityVisible()) return;
 	    this.#backgroundCacheActive = !0;
 	    const restore = this.#restoreBackgroundProjections();
 	    this.#backgroundRestore = restore, restore.catch(this.#onError).finally(() => {
@@ -18253,6 +18336,14 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	        state.retryAt = null, state.error = null;
 	      this.#historyError = null, this.#historyRetryAt = null, this.#historyLoading || (this.#historyStatus = "idle", this.#historyCurrentGroup = null), this.#emit(), this.#scheduleHistoryHydration(0);
 	    }
+	  }
+	  reloadExternalProjection() {
+	    if (!this.#projection || this.scope.destroyed) return Promise.resolve();
+	    const restore = (this.#backgroundRestore ?? Promise.resolve()).catch(() => {
+	    }).then(() => this.#restoreBackgroundProjections(!0));
+	    return this.#backgroundRestore = restore, restore.finally(() => {
+	      this.#backgroundRestore === restore && (this.#backgroundRestore = null);
+	    });
 	  }
 	  async #restoreBackgroundProjections(fresh = !1) {
 	    if (!this.#projection || this.scope.destroyed) return;
@@ -18276,12 +18367,13 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    for (const { group, snapshot } of restored) {
 	      if (!snapshot) continue;
 	      const state = this.#historyGroups.get(group), repairCheckpoint = notificationProjectionCheckpointNeedsRepair(group, snapshot);
-	      state.retryAt = null, state.error = null, this.#rememberProjectionRecords(group, snapshot.records);
+	      state.retryAt = null, state.error = null, this.#rememberProjectionRecords(group, snapshot.records, fresh);
 	      const records = /* @__PURE__ */ new Map();
 	      for (const record of snapshot.records)
 	        records.set(record.identity, record);
-	      for (const record of this.#historyRecords.get(group)?.values() ?? [])
-	        records.set(record.identity, record);
+	      if (!fresh)
+	        for (const record of this.#historyRecords.get(group)?.values() ?? [])
+	          records.set(record.identity, record);
 	      this.#historyRecords.set(group, records), state.estimatedPages = Math.max(
 	        state.estimatedPages,
 	        repairCheckpoint ? Math.max(1, Math.floor(Number(snapshot.sourceNextPage) || 0)) : 1,
@@ -18968,9 +19060,9 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      replaceCheckpoint && this.#projectionCheckpointReplacements.delete(group);
 	    }).catch(this.#onError);
 	  }
-	  #rememberProjectionRecords(group, records) {
+	  #rememberProjectionRecords(group, records, replace = !1) {
 	    const remember = (partition, values) => {
-	      const indexed = this.#projectionRecords.get(partition) ?? /* @__PURE__ */ new Map();
+	      const indexed = replace ? /* @__PURE__ */ new Map() : this.#projectionRecords.get(partition) ?? /* @__PURE__ */ new Map();
 	      for (const record of values) indexed.set(record.identity, record);
 	      this.#projectionRecords.set(partition, indexed);
 	    };
@@ -19391,7 +19483,8 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  }
 	  #onActivityChanged() {
 	    if (this.scope.destroyed) return;
-	    if (this.#backgroundCacheActive && (this.#activity && !this.#activityVisible() ? (this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#historySchedule = null, this.#historyStatus !== "complete" && (this.#historyStatus = "paused", this.#historyCurrentGroup = null, this.#emit())) : this.#scheduleHistoryHydration(0)), !this.#activityVisible()) {
+	    const visible = this.#activityVisible(), backgroundWasActive = this.#backgroundCacheActive;
+	    if (visible ? this.#backgroundCacheActive || this.startBackgroundCache() : (this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#backgroundWarm = null, this.#backgroundWarmPending = !1, this.#backgroundWarmEpoch += 1), this.#backgroundCacheActive && (this.#activity && !visible ? (this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#historySchedule = null, this.#historyStatus !== "complete" && (this.#historyStatus = "paused", this.#historyCurrentGroup = null, this.#emit())) : backgroundWasActive && (this.#scheduleHistoryHydration(0), this.#scheduleBackgroundWarm(0))), !visible) {
 	      this.#cancelPoll();
 	      return;
 	    }
@@ -19412,7 +19505,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    return Object.freeze({ error, retryAt });
 	  }
 	  #scheduleHistoryHydration(delayMs = this.#historyContinuationDelay()) {
-	    this.#backgroundWarmDelayMs === null || !this.#backgroundCacheActive || this.scope.destroyed || this.#historyLoading || this.#historySchedule !== null || this.#historyStatus === "complete" || !this.#native.username().trim() || (this.#historySchedule = this.#schedule(() => {
+	    this.#backgroundWarmDelayMs === null || !this.#backgroundCacheActive || this.scope.destroyed || this.#historyLoading || this.#historySchedule !== null || this.#historyStatus === "complete" || !this.#native.username().trim() || this.#activity !== null && !this.#activityVisible() || (this.#historySchedule = this.#schedule(() => {
 	      this.#historySchedule = null, this.#runHistoryHydrationStep();
 	    }, Math.max(0, delayMs)));
 	  }
@@ -19532,7 +19625,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    !ready && recovery.retryAt !== null && (nextDelay = Math.max(0, recovery.retryAt - this.#now())), this.#scheduleHistoryHydration(nextDelay);
 	  }
 	  #scheduleBackgroundWarm(delayMs = this.#backgroundWarmDelayMs ?? 0) {
-	    if (!(this.#backgroundWarmDelayMs === null || !this.#backgroundCacheActive || this.scope.destroyed)) {
+	    if (!(this.#backgroundWarmDelayMs === null || !this.#backgroundCacheActive || this.scope.destroyed || this.#activity !== null && !this.#activityVisible())) {
 	      if (this.#backgroundWarming) {
 	        this.#backgroundWarmPending = !0;
 	        return;
@@ -19543,14 +19636,14 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    }
 	  }
 	  async #warmBackgroundCollections() {
-	    if (!this.#backgroundCacheActive || this.scope.destroyed || this.#backgroundWarming) return;
+	    if (!this.#backgroundCacheActive || this.scope.destroyed || this.#backgroundWarming || this.#activity !== null && !this.#activityVisible()) return;
 	    const rateLimitBackoffMs = this.#pollNotBefore - this.#now();
 	    if (rateLimitBackoffMs > 0) {
 	      this.#scheduleBackgroundWarm(rateLimitBackoffMs);
 	      return;
 	    }
 	    this.#backgroundWarming = !0, this.#backgroundWarmPending = !1;
-	    const epoch = ++this.#backgroundWarmEpoch, valid = () => !this.scope.destroyed && epoch === this.#backgroundWarmEpoch;
+	    const epoch = ++this.#backgroundWarmEpoch, valid = () => !this.scope.destroyed && epoch === this.#backgroundWarmEpoch && (this.#activity === null || this.#activityVisible());
 	    try {
 	      const signedIn = !!this.#native.username().trim();
 	      let needsNativeExpansion = !1;
@@ -19637,7 +19730,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    this.#revision += 1, this.#snapshotCache = null, this.changes.emit(this.snapshot).forEach(this.#onError);
 	  }
 	}
-}, "2124fe061c7e2813bc36cd47da57c2ac27c3ecb0deffd719a0c7ad8678e5de02");
+}, "5074f813cfa85bdfa8b92ab2c1b7cda77a42ae44914ec9a37487de8b179d65b2");
 
 /* Source: lite/src/notification/reader-notification-model.ts */
 runtime.register("src/notification/reader-notification-model.js", function(module, exports, require) {
@@ -21006,6 +21099,9 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	  get size() {
 	    return this.#entries.size;
 	  }
+	  get storageKey() {
+	    return this.#storageKey;
+	  }
 	  get #surface() {
 	    return this.#surfaces[(0, import_reader_workspace.readerWorkspacePositionMode)(
 	      this.#workspaceRoot.dataset.readerWorkspaceMode
@@ -21031,6 +21127,22 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	    this.#entries.clear();
 	    for (const entry of entries) this.#entries.set(entry.topicId, entry);
 	    this.#persist(), this.sync();
+	  }
+	  reloadExternal() {
+	    if (this.scope.destroyed) return;
+	    const restored = this.#restore();
+	    for (const [topicId, controller] of this.#prefetchControllers)
+	      restored.entries.some((entry) => entry.topicId === topicId) || controller.abort(
+	        new DOMException("队列已由其他标签更新", "AbortError")
+	      );
+	    this.#entries.clear();
+	    for (const entry of restored.entries) this.#entries.set(entry.topicId, entry);
+	    for (const mode of Object.keys(this.#surfaces))
+	      Object.assign(this.#surfaces[mode], restored.surfaces[mode]);
+	    this.#cancelSurfaceFrames(), this.sync(), this.#scheduleSurfaceMeasure();
+	  }
+	  reloadExternalDownloads() {
+	    return this.#downloadManager?.reloadExternal() ?? Promise.resolve();
 	  }
 	  sync() {
 	    this.#syncNativeReaderTrigger();
@@ -21138,6 +21250,7 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	    this.#scheduleSurfaceMeasure();
 	  }
 	  resetSurfacePositions() {
+	    this.#reloadStoredEntriesForMutation();
 	    for (const surface of Object.values(this.#surfaces))
 	      surface.x = 0.02, surface.y = 0.12, surface.dock = "left";
 	    this.#persist(), this.#cancelSurfaceFrames(), this.#scheduleSurfaceMeasure();
@@ -21343,7 +21456,7 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	      this.#setPanelOpen(!1);
 	      return;
 	    }
-	    if (action === this.#clear) {
+	    if ((action === this.#clear || action.dataset.queuePin !== void 0 || action.dataset.queueRemove !== void 0) && this.#reloadStoredEntriesForMutation(), action === this.#clear) {
 	      const removable = [...this.#entries.values()].filter((entry) => !entry.pinned);
 	      if (!removable.length) {
 	        this.#resetClearConfirmation();
@@ -21386,7 +21499,7 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	      event.preventDefault(), event.stopPropagation();
 	      const topicId2 = (0, import_identifiers.tryDiscourseTopicId)(add.dataset.readerQueueTopicId);
 	      if (!topicId2) return;
-	      if (this.#entries.has(topicId2)) this.#remove(topicId2);
+	      if (this.#reloadStoredEntriesForMutation(), this.#entries.has(topicId2)) this.#remove(topicId2);
 	      else {
 	        const href = String(add.dataset.readerQueueHref ?? `/t/${topicId2}`);
 	        this.#entries.set(topicId2, {
@@ -21483,7 +21596,7 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	    }
 	  }
 	  #drag(event) {
-	    if (event.button !== 0) return;
+	    if (this.#reloadStoredEntriesForMutation(), event.button !== 0) return;
 	    this.#cancelPanelPreview(), this.#closePinnedPanelOnClick = this.#panelPinned, this.#setPanelOpen(!1), this.#cancelSurfaceFrames();
 	    const geometry = this.#measureSurface(), { rail: start, parent } = geometry, offsetX = event.clientX - start.left, offsetY = event.clientY - start.top, originX = event.clientX, originY = event.clientY;
 	    let moved = !1;
@@ -21721,7 +21834,7 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	      if (result.topic.status === "failed")
 	        throw result.topic.cause ?? new Error(`Reader 目标 Topic ${topicId} 打开失败`);
 	      if (result.topic.status !== "opened" && result.topic.status !== "reused") return;
-	      source === "restore" && anchor && await this.#options.restoreHistoryAnchor(topicId, anchor), previous && previous.topicId !== topicId && !previous.pinned && (this.#entries.delete(previous.topicId), this.#persist()), this.sync();
+	      source === "restore" && anchor && await this.#options.restoreHistoryAnchor(topicId, anchor), previous && previous.topicId !== topicId && !previous.pinned && (this.#reloadStoredEntriesForMutation(), this.#entries.delete(previous.topicId), this.#persist()), this.sync();
 	    } catch (error) {
 	      this.#options.notify?.(`主题 #${topicId} 打开失败：${String(error)}`);
 	    }
@@ -21881,6 +21994,12 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	      return { entries: [], surfaces: normalizedSurfaces(null, null) };
 	    }
 	  }
+	  #reloadStoredEntriesForMutation() {
+	    if (this.scope.destroyed) return;
+	    const restored = this.#restore();
+	    this.#entries.clear();
+	    for (const entry of restored.entries) this.#entries.set(entry.topicId, entry);
+	  }
 	  #persist() {
 	    try {
 	      const entries = [...this.#entries.values()];
@@ -21903,7 +22022,7 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	    }
 	  }
 	}
-}, "f0cd5aa4df0f361d63e55068fca2561444efcd767cef88ec4cac12029b433470");
+}, "afd82564a21c347c6f3c72f83d364486a2b444017c4209c0ca6ce08336863f1c");
 
 /* Source: lite/src/queue/reader-topic-download-manager.ts */
 runtime.register("src/queue/reader-topic-download-manager.js", function(module, exports, require) {
@@ -22107,6 +22226,7 @@ runtime.register("src/queue/reader-topic-download-manager.js", function(module, 
 	  #visibleHistoryTopicIds = Object.freeze([]);
 	  #selectedHistoryTopics = /* @__PURE__ */ new Set();
 	  #removing = /* @__PURE__ */ new Set();
+	  #externalRestore = null;
 	  #viewObjectUrls = /* @__PURE__ */ new Set();
 	  constructor(options) {
 	    this.#options = options, this.#now = options.now ?? Date.now, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
@@ -22339,9 +22459,9 @@ runtime.register("src/queue/reader-topic-download-manager.js", function(module, 
 	  }
 	  syncCurrent() {
 	    const current = this.#options.currentTopic(), task = current ? this.#tasks.get(current.topicId) : null, selection = this.#selectionForDuplicateCheck(), active = !!(task && !["ready", "error", "cancelled"].includes(task.phase)), duplicateReady = !!(task?.phase === "ready" && selection && sameSelection(task.selection, selection));
-	    this.#downloadCurrent.disabled = current === null || active || duplicateReady, this.#downloadCurrent.classList.toggle("is-active", active), this.#downloadCurrentLabel.textContent = duplicateReady ? "已在下载历史" : active ? task?.phase === "waiting-rate-limit" ? "等待断点续传" : task?.phase === "waiting-challenge" ? "等待过盾续传" : task?.phase === "queued" ? "已加入下载队列" : "正在后台下载" : "开始后台下载", this.#downloadCurrent.setAttribute(
+	    this.#downloadCurrent.disabled = current === null || active, this.#downloadCurrent.classList.toggle("is-active", active), this.#downloadCurrentLabel.textContent = duplicateReady ? "重新生成离线 HTML" : active ? task?.phase === "waiting-rate-limit" ? "等待断点续传" : task?.phase === "waiting-challenge" ? "等待过盾续传" : task?.phase === "queued" ? "已加入下载队列" : "正在后台下载" : "开始后台下载", this.#downloadCurrent.setAttribute(
 	      "aria-label",
-	      duplicateReady && current ? `${current.title} 的${selectionLabel(selection)}已在下载历史` : active && current ? `${current.title} 正在后台下载` : "开始后台下载当前 Topic"
+	      duplicateReady && current ? `重新生成 ${current.title} 的${selectionLabel(selection)}离线 HTML` : active && current ? `${current.title} 正在后台下载` : "开始后台下载当前 Topic"
 	    ), this.#downloadCurrent.dataset.topicId = current ? String(current.topicId) : "", this.#downloadCurrent.dataset.topicTitle = current?.title ?? "", this.#downloadPreview.hidden = current === null || active || duplicateReady, this.#downloadPreviewTitle.textContent = current?.title ?? "", this.#downloadPreviewMeta.textContent = current ? `Topic #${current.topicId} · ${this.#selectionPreviewLabel()}` : "";
 	  }
 	  #selectionForDuplicateCheck() {
@@ -22406,17 +22526,30 @@ runtime.register("src/queue/reader-topic-download-manager.js", function(module, 
 	  prepareCurrentDownload() {
 	    return this.syncCurrent(), this.openManager() ? (this.#selectionMode.focus(), !0) : !1;
 	  }
-	  enqueueCurrent() {
+	  reloadExternal() {
+	    if (this.scope.destroyed) return Promise.resolve();
+	    if (this.#externalRestore) return this.#externalRestore;
+	    const restore = this.#restoreArtifacts(!0).finally(() => {
+	      this.#externalRestore === restore && (this.#externalRestore = null);
+	    });
+	    return this.#externalRestore = restore, restore;
+	  }
+	  enqueueCurrent(regenerateDuplicateReady = !1) {
 	    const current = this.#options.currentTopic();
 	    if (!current) return null;
 	    const selection = this.#readSelection();
-	    return selection ? this.enqueue(current.topicId, current.title, selection) : null;
+	    return selection ? this.enqueue(
+	      current.topicId,
+	      current.title,
+	      selection,
+	      regenerateDuplicateReady
+	    ) : null;
 	  }
-	  enqueue(rawTopicId, rawTitle, selection = ALL_POSTS_SELECTION) {
+	  enqueue(rawTopicId, rawTitle, selection = ALL_POSTS_SELECTION, regenerateDuplicateReady = !1) {
 	    const topicId = (0, import_identifiers.discourseTopicId)(rawTopicId), title = String(rawTitle || `Topic #${topicId}`).replace(/\s+/g, " ").trim(), selected = normalizedSelection(selection);
 	    this.openManager();
 	    const existing = this.#tasks.get(topicId);
-	    if (existing && (!["ready", "error", "cancelled"].includes(existing.phase) || existing.phase === "ready" && sameSelection(existing.selection, selected)))
+	    if (existing && (!["ready", "error", "cancelled"].includes(existing.phase) || !regenerateDuplicateReady && existing.phase === "ready" && sameSelection(existing.selection, selected)))
 	      return this.#scheduleRender(), this.#taskSnapshot(existing);
 	    const resumeFromCheckpoint = !!(existing?.resumeAvailable && sameSelection(existing.selection, selected)), task = existing ?? {
 	      topicId,
@@ -22526,7 +22659,7 @@ runtime.register("src/queue/reader-topic-download-manager.js", function(module, 
 	    ) ?? null;
 	    if (!target) return;
 	    if (target === this.#downloadCurrent) {
-	      this.enqueueCurrent();
+	      this.enqueueCurrent(!0);
 	      return;
 	    }
 	    const topicId = (0, import_identifiers.discourseTopicId)(Number(target.dataset.topicId)), task = this.#tasks.get(topicId);
@@ -22740,13 +22873,19 @@ runtime.register("src/queue/reader-topic-download-manager.js", function(module, 
 	    }
 	    this.#historyPagination.hidden = filteredTasks.length <= DOWNLOAD_HISTORY_PAGE_SIZE, this.#historyPageLabel.textContent = `第 ${this.#historyPage + 1} / ${pageCount} 页`, this.#historyPagePrevious.disabled = this.#historyPage === 0, this.#historyPageNext.disabled = this.#historyPage >= pageCount - 1, this.#emit();
 	  }
-	  async #restoreArtifacts() {
+	  async #restoreArtifacts(reconcile = !1) {
 	    const store = this.#options.artifacts;
 	    if (!(!store || this.scope.destroyed))
 	      try {
-	        for (const entry of await store.list()) {
+	        const entries = await store.list(), storedTopicIds = new Set(entries.map((entry) => (0, import_identifiers.discourseTopicId)(entry.topicId)));
+	        if (reconcile)
+	          for (const [topicId, task] of this.#tasks)
+	            storedTopicIds.has(topicId) || task.phase !== "ready" || (this.#tasks.delete(topicId), this.#selectedHistoryTopics.delete(topicId));
+	        for (const entry of entries) {
 	          const topicId = (0, import_identifiers.discourseTopicId)(entry.topicId);
-	          this.scope.destroyed || this.#tasks.has(topicId) || this.#tasks.set(topicId, {
+	          if (this.scope.destroyed) continue;
+	          const current = this.#tasks.get(topicId);
+	          current && current.phase !== "ready" && current.phase !== "error" && current.phase !== "cancelled" || this.#tasks.set(topicId, {
 	            topicId,
 	            title: entry.title,
 	            selection: restoredSelection(entry),
@@ -22874,7 +23013,7 @@ runtime.register("src/queue/reader-topic-download-manager.js", function(module, 
 	      this.#options.notify?.(`Topic 下载管理更新失败：${String(error)}`);
 	  }
 	}
-}, "2e854cba554d599f8f6f997217c4ad9eda48e3f40e032a7d101350befd32cd43");
+}, "62b74758e846074d345e19770e0162308c50698704cc6b1c8dc965f7247f90c3");
 
 /* Source: lite/src/sync/reader-webdav-category-ports.ts */
 runtime.register("src/sync/reader-webdav-category-ports.js", function(module, exports, require) {
@@ -24090,6 +24229,9 @@ runtime.register("src/sync/reader-webdav-config-repository.js", function(module,
 	  get snapshot() {
 	    return this.#snapshot;
 	  }
+	  get storageKey() {
+	    return this.#storageKey;
+	  }
 	  async load() {
 	    if (this.#snapshot.loaded) return this.#snapshot;
 	    if (this.#loadPromise) return this.#loadPromise;
@@ -24108,6 +24250,24 @@ runtime.register("src/sync/reader-webdav-config-repository.js", function(module,
 	    } finally {
 	      this.#loadPromise = null;
 	    }
+	  }
+	  reloadExternal() {
+	    const transaction = this.#writeTail.then(async () => {
+	      const source = record(await this.#storage.getValue(this.#storageKey)), snapshot = Object.freeze({
+	        loaded: !0,
+	        config: (0, import_reader_webdav_model.normalizeReaderWebDavConfig)(source?.config),
+	        writerId: String(source?.writerId ?? "").trim() || this.#createWriterId(),
+	        baselines: normalizedBaselines(source?.baselines),
+	        status: normalizedStatus(source?.status)
+	      });
+	      return this.#snapshot = snapshot, this.changes.emit(snapshot), snapshot;
+	    });
+	    return this.#writeTail = transaction.then(
+	      () => {
+	      },
+	      () => {
+	      }
+	    ), transaction;
 	  }
 	  async saveConfig(value) {
 	    await this.load();
@@ -24190,7 +24350,7 @@ runtime.register("src/sync/reader-webdav-config-repository.js", function(module,
 	    ), transaction;
 	  }
 	}
-}, "5016a6be04237471132a73e0f397062461d5fff0617f25244fa3ebc6d66113e6");
+}, "839ea66a04fb71f7166bdeafe0fc480acff86e5ba7aea7bf196244b6280c79c1");
 
 /* Source: lite/src/sync/reader-webdav-coordinator.ts */
 runtime.register("src/sync/reader-webdav-coordinator.js", function(module, exports, require) {

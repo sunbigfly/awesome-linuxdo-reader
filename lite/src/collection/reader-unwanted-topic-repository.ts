@@ -49,6 +49,7 @@ export interface ReaderUnwantedTopicSnapshot {
 	readonly source:
 		| 'fallback'
 		| 'initial'
+		| 'external-reload'
 		| 'remember'
 		| 'update'
 		| 'remove'
@@ -264,7 +265,21 @@ export class ReaderUnwantedTopicRepository {
 		return this.#snapshot;
 	}
 
+	get storageKey(): string {
+		return this.#key;
+	}
+
 	load(): ReaderUnwantedTopicSnapshot {
+		return this.#readAndCommit('initial');
+	}
+
+	reloadExternal(): ReaderUnwantedTopicSnapshot {
+		return this.#readAndCommit('external-reload');
+	}
+
+	#readAndCommit(
+		source: 'initial' | 'external-reload',
+	): ReaderUnwantedTopicSnapshot {
 		try {
 			const stored = this.#accountStorage
 				? readReaderAccountScopedString(this.#storage, this.#accountStorage)
@@ -273,7 +288,7 @@ export class ReaderUnwantedTopicRepository {
 			if (!Array.isArray(raw)) throw new TypeError('不想看存储值必须是数组');
 			const records = this.#normalizeMany(raw);
 			if (JSON.stringify(records) !== JSON.stringify(raw)) this.#persist(records);
-			return this.#commit(records, 'initial');
+			return this.#commit(records, source);
 		} catch {
 			return this.#commit([], 'fallback');
 		}
@@ -285,11 +300,18 @@ export class ReaderUnwantedTopicRepository {
 			entry.topicId === topicId);
 	}
 
+	isManuallyHidden(topicIdValue: unknown): boolean {
+		const topicId = tryDiscourseTopicId(topicIdValue);
+		return topicId !== null && this.#snapshot.records.some((entry) =>
+			entry.topicId === topicId && entry.source === 'manual');
+	}
+
 	ordered(): readonly ReaderUnwantedTopicRecord[] {
 		return this.#ordered(this.#snapshot.records);
 	}
 
 	remember(input: ReaderUnwantedTopicInput): ReaderUnwantedTopicSnapshot {
+		this.#mergeStoredBeforeMutation();
 		const topicId = discourseTopicId(input.topicId);
 		const previous = this.#snapshot.records.find((entry) =>
 			entry.topicId === topicId);
@@ -327,6 +349,7 @@ export class ReaderUnwantedTopicRepository {
 		topicIdValue: unknown,
 		patch: Readonly<{ readonly note?: unknown; readonly labels?: unknown }>,
 	): ReaderUnwantedTopicSnapshot {
+		this.#mergeStoredBeforeMutation();
 		const topicId = discourseTopicId(topicIdValue);
 		const previous = this.#snapshot.records.find((entry) =>
 			entry.topicId === topicId);
@@ -349,6 +372,7 @@ export class ReaderUnwantedTopicRepository {
 	}
 
 	removeMany(topicIdValues: readonly unknown[]): ReaderUnwantedTopicSnapshot {
+		this.#mergeStoredBeforeMutation();
 		const topicIds = new Set<DiscourseTopicId>();
 		for (const value of topicIdValues) {
 			try {
@@ -365,6 +389,7 @@ export class ReaderUnwantedTopicRepository {
 	}
 
 	clear(): ReaderUnwantedTopicSnapshot {
+		this.#mergeStoredBeforeMutation();
 		return this.#persistAndCommit([], 'clear');
 	}
 
@@ -384,6 +409,19 @@ export class ReaderUnwantedTopicRepository {
 			if (merged) records.set(merged.topicId, merged);
 		}
 		return this.#ordered([...records.values()]);
+	}
+
+	#mergeStoredBeforeMutation(): void {
+		let stored: string | null;
+		try {
+			stored = this.#accountStorage
+				? readReaderAccountScopedString(this.#storage, this.#accountStorage)
+				: this.#storage.getItem(this.#key);
+		} catch {
+			return;
+		}
+		if ((stored ?? '[]') === JSON.stringify(this.#snapshot.records)) return;
+		this.#readAndCommit('external-reload');
 	}
 
 	#ordered(values: readonly ReaderUnwantedTopicRecord[]): readonly ReaderUnwantedTopicRecord[] {

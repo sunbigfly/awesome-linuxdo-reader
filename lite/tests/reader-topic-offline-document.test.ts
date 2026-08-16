@@ -32,6 +32,10 @@ interface TestPost {
 	readonly post_voting_vote_count?: number;
 	readonly post_voting_comments?: readonly unknown[];
 	readonly accepted_answer?: boolean;
+	readonly link_counts?: readonly Readonly<{
+		readonly url: string;
+		readonly clicks: number;
+	}>[];
 }
 
 interface TestTopic {
@@ -184,6 +188,14 @@ function mountOfflineRuntime(
 
 const dangerousCooked =
 	'<p>正文 &amp; 特殊类型 :penguin:</p></script><script id="escaped-script">bad()</script>' +
+		'<p><span class="hashtag-cooked"><a href="/tag/game"><span class="hashtag-icon-placeholder"></span>game</a></span></p>' +
+		'<p><a class="mention" href="/u/alice">@alice</a></p>' +
+	'<p><a class="inline-onebox" href="/docs"><svg></svg>文档链接</a></p>' +
+	'<aside class="onebox allowlistedgeneric" data-onebox-src="https://grasp-rat-game.h-e.top">' +
+	'<header class="source"><img class="site-icon" src="/favicon.png">' +
+	'<a href="https://grasp-rat-game.h-e.top">grasp-rat-game.h-e.top</a></header>' +
+	'<article class="onebox-body"><img class="thumbnail" src="/preview.png">' +
+	'<h3><a href="https://grasp-rat-game.h-e.top">团团鼠历险记</a></h3></article></aside>' +
 	'<img src="/optimized.png" data-orig-src="/original.png">' +
 	'<img class="emoji emoji-custom" src="images/emoji/twitter/sparkling_heart.png">' +
 	'<aside class="quote" data-topic="10" data-post="2">' +
@@ -222,6 +234,10 @@ const posts: readonly TestPost[] = Object.freeze([
 			Object.freeze({ id: 'heart', count: 3 }),
 			Object.freeze({ id: 'clap', count: 2 }),
 			Object.freeze({ id: 'distorted_face', count: 14 }),
+		]),
+		link_counts: Object.freeze([
+			Object.freeze({ url: '/docs', clicks: 1_234 }),
+			Object.freeze({ url: 'https://grasp-rat-game.h-e.top', clicks: 5_628 }),
 		]),
 	}),
 	Object.freeze({
@@ -493,7 +509,7 @@ const payload = JSON.parse(dataNode.textContent ?? '{}') as {
 	};
 };
 assert(
-	payload.schemaVersion === 8 &&
+	payload.schemaVersion === 9 &&
 		payload.ownerUsername === 'op' &&
 		payload.reactionEmojiSources?.distorted_face ===
 			'https://linux.do/images/emoji/twitter/distorted_face.png' &&
@@ -672,6 +688,29 @@ assert(
 	`小主题首屏必须同步挂载完整可见树：${[
 		...mounted.document.querySelectorAll<HTMLElement>('#ldp-offline-posts .ldp-post'),
 	].map((post) => post.dataset.postNumber).join(',')}`,
+);
+const offlineInlineOnebox = root.querySelector<HTMLAnchorElement>(
+	'a.inline-onebox',
+)!;
+const offlineOnebox = root.querySelector<HTMLElement>('aside.onebox')!;
+assert(
+	offlineInlineOnebox.querySelector('.ldp-inline-onebox-label')
+		?.textContent === '文档链接' &&
+		offlineInlineOnebox.querySelector('.ldp-link-click-count')
+			?.textContent === '1,234' &&
+		offlineOnebox.querySelector('.onebox-body h3 .ldp-link-click-count')
+			?.textContent === '5,628' &&
+		!offlineOnebox.querySelector('header.source .ldp-link-click-count'),
+	'离线正文必须与在线 Reader 一致地整理 Onebox 标签并把点击数投影到唯一正文链接',
+);
+assert(
+	offlineOnebox.querySelector(':scope > header.source > img.site-icon') !== null &&
+		offlineOnebox.querySelector(':scope > article.onebox-body > img.thumbnail') !== null &&
+			!offlineOnebox.querySelector('.ldp-offline-image-frame') &&
+			root.querySelector('.hashtag-cooked .ldp-hashtag-icon[data-icon="tag"]') &&
+			root.querySelector<HTMLElement>('.mention.ldp-user-link')
+				?.dataset.userCard === 'alice',
+		'离线图片缩放不得接管 Onebox 自有图像，Hashtag 与 mention 也必须复用在线正文语义',
 );
 assert(
 	root.parentElement?.id === 'ldp-offline-posts' &&

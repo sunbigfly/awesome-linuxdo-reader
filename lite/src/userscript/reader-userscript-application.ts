@@ -43,6 +43,9 @@ import type {
 	BrowserAssetCacheStoragePort,
 } from '../cache/browser-asset-cache.js';
 import type {
+	ReaderInformationFlowCoordinator,
+} from '../state/reader-information-flow-coordinator.js';
+import type {
 	BrowserUserscriptEnvironment,
 } from './browser-userscript-environment.js';
 import {
@@ -121,6 +124,7 @@ export interface ReaderUserscriptRuntimeStageOptions<
 		& CanonicalActionPost,
 > {
 	readonly environment: BrowserUserscriptEnvironment;
+	readonly informationFlow?: ReaderInformationFlowCoordinator;
 	readonly shell: ReaderBrowserRuntimeStageOptions<
 		TPreferences,
 		TTopic,
@@ -431,6 +435,9 @@ export function createReaderUserscriptRuntimeStage<
 		: options.targets ?? Object.freeze({});
 	return createReaderBrowserRuntimeStage({
 		shell: options.shell,
+		...(options.informationFlow
+			? { informationFlow: options.informationFlow }
+			: {}),
 		runtime: {
 			...options.runtime,
 			searchForms:
@@ -622,6 +629,7 @@ export function createReaderUserscriptRuntimeStage<
 					hostPreheat = new ReaderHostTopicPreheatController({
 						document: options.runtime.document,
 						mutations: runtime.workspace.mutations,
+						activity: runtime.activity,
 						maxConcurrentPreheats: 3,
 						historyEntry: (topicId) => runtime.history.entry(topicId),
 						readConfirmedCount: (topicId) =>

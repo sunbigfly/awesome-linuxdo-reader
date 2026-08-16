@@ -117,6 +117,11 @@ export interface ReaderBookmarkOpenTargetPort {
 	}): Promise<boolean>;
 }
 
+export interface ReaderBookmarkActivityPort {
+	visible(): boolean;
+	subscribe(listener: () => void): () => void;
+}
+
 export interface ReaderBookmarkControllerOptions {
 	readonly requests: DiscourseBookmarkRequestAdapter;
 	readonly projection?: ReaderCollectionProjectionPort<ReaderBookmarkRecord>;
@@ -140,6 +145,7 @@ export interface ReaderBookmarkControllerOptions {
 		'acquireFlight' | 'renewFlight' | 'releaseFlight' | 'waitForFlight'
 	>;
 	readonly historyCoordinationKey?: string;
+	readonly activity?: ReaderBookmarkActivityPort;
 	readonly changeTabOrder?: (
 		order: readonly ReaderBookmarkTab[],
 	) => void | Promise<void>;
@@ -314,6 +320,7 @@ export class ReaderBookmarkController {
 	readonly #cancel: (handle: unknown) => void;
 	readonly #searchForms: ReaderSearchFormsPort;
 	readonly #onError: (cause: unknown) => void;
+	readonly #activity: ReaderBookmarkActivityPort | null;
 	readonly #taxonomyFlights = new Map<string, Promise<void>>();
 	#open = false;
 	#tabOrder: readonly ReaderBookmarkTab[];
@@ -469,6 +476,7 @@ export class ReaderBookmarkController {
 		this.#searchForms = options.searchForms ??
 			((value) => Object.freeze([normalizeReaderSearchText(value)]));
 		this.#onError = options.onError ?? (() => {});
+		this.#activity = options.activity ?? null;
 		this.#commands = new BookmarkActionFeatureCommands({
 			state: {
 				removeBookmarks: (ids) => this.#removeBookmarks(ids),
@@ -499,6 +507,11 @@ export class ReaderBookmarkController {
 				this.#markSourceChanged('replies');
 			}
 		}, this.scope);
+		if (this.#activity) {
+			this.scope.add(this.#activity.subscribe(() => {
+				this.#onActivityChanged();
+			}));
+		}
 		this.scope.add(() => {
 			this.#loadEpoch += 1;
 			this.#cancelLoad();
@@ -843,7 +856,8 @@ export class ReaderBookmarkController {
 		if (
 			this.scope.destroyed ||
 			this.#backgroundCacheActive ||
-			this.#backgroundWarmDelayMs === null
+			this.#backgroundWarmDelayMs === null ||
+			!this.#activityVisible()
 		) return;
 		this.#backgroundCacheActive = true;
 		const epoch = ++this.#backgroundRestoreEpoch;
@@ -873,6 +887,18 @@ export class ReaderBookmarkController {
 		this.#backgroundSource = null;
 		this.#emit();
 		this.#scheduleBackgroundWarm(0);
+	}
+
+	reloadExternalProjection(): Promise<void> {
+		if (!this.#projection || this.scope.destroyed) return Promise.resolve();
+		const previous = this.#backgroundRestore ?? Promise.resolve();
+		const epoch = ++this.#backgroundRestoreEpoch;
+		const restore = previous.catch(() => {}).then(() =>
+			this.#restoreBackgroundProjections(epoch, true));
+		this.#backgroundRestore = restore;
+		return restore.finally(() => {
+			if (this.#backgroundRestore === restore) this.#backgroundRestore = null;
+		});
 	}
 
 	async #restoreBackgroundProjections(
@@ -918,7 +944,9 @@ export class ReaderBookmarkController {
 			if (!snapshot) continue;
 			this.#applySourceProgress(source, {
 				pages: snapshot.records.length > 0 || snapshot.complete ? 1 : 0,
-				records: this.#mergeSourceRecords(source, snapshot.records),
+				records: fresh
+					? sortReaderBookmarkRecords(snapshot.records)
+					: this.#mergeSourceRecords(source, snapshot.records),
 				complete: snapshot.complete,
 			}, false);
 		}
@@ -1447,6 +1475,32 @@ export class ReaderBookmarkController {
 		this.#backgroundRetryAt = null;
 	}
 
+	#activityVisible(): boolean {
+		if (!this.#activity) return true;
+		try {
+			return this.#activity.visible();
+		} catch (cause) {
+			this.#onError(cause);
+			return false;
+		}
+	}
+
+	#onActivityChanged(): void {
+		if (this.scope.destroyed) return;
+		if (!this.#activityVisible()) {
+			if (this.#backgroundCacheActive) {
+				this.#suspendBackgroundWarm();
+				this.#emit();
+			}
+			return;
+		}
+		if (!this.#backgroundCacheActive) {
+			this.startBackgroundCache();
+			return;
+		}
+		this.#scheduleBackgroundWarm(0);
+	}
+
 	#scheduleBackgroundWarm(
 		delayMs = this.#backgroundWarmDelayMs ?? 0,
 	): void {
@@ -1454,6 +1508,7 @@ export class ReaderBookmarkController {
 			this.#backgroundWarmDelayMs === null ||
 			!this.#backgroundCacheActive ||
 			this.scope.destroyed ||
+			!this.#activityVisible() ||
 			this.#historyProgress().completedTabs === 5
 		) return;
 		if (this.#backgroundWarming) {
@@ -1471,7 +1526,8 @@ export class ReaderBookmarkController {
 		if (
 			!this.#backgroundCacheActive ||
 			this.scope.destroyed ||
-			this.#backgroundWarming
+			this.#backgroundWarming ||
+			!this.#activityVisible()
 		) return;
 		if (!this.#native.username().trim()) return;
 		if (!BACKGROUND_STREAM_ORDER.some((stream) => {
@@ -1524,7 +1580,8 @@ export class ReaderBookmarkController {
 							!this.scope.destroyed &&
 							!abort.signal.aborted &&
 							epoch === this.#backgroundWarmEpoch &&
-							this.#open === openAtStart,
+							this.#open === openAtStart &&
+							this.#activityVisible(),
 						claim: () => {
 							const stream = this.#nextBackgroundStream();
 							if (stream) this.#backgroundInFlightStreams.add(stream);

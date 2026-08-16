@@ -99,6 +99,21 @@ class MemoryStorage implements Pick<Storage, 'getItem' | 'setItem'> {
 	}
 }
 
+class RuntimeLockQueue {
+	readonly queues = new Map<string, Promise<unknown>>();
+
+	request<T>(
+		name: string,
+		_options: LockOptions,
+		callback: () => T | PromiseLike<T>,
+	): Promise<T> {
+		const previous = this.queues.get(name) ?? Promise.resolve();
+		const result = previous.catch(() => {}).then(callback);
+		this.queues.set(name, result.then(() => undefined, () => undefined));
+		return result;
+	}
+}
+
 interface TestPost extends DiscourseTopicPostInput, CanonicalActionPost {
 	readonly id: number;
 	readonly topic_id: number;
@@ -498,6 +513,7 @@ let topic15Attempts = 0;
 let topic16Attempts = 0;
 let topic16Challenged = true;
 let challengeVerificationRateLimited = false;
+let challengeVerificationBlocked = false;
 const openRetryDelays: number[] = [];
 const nativeHost = {
 	lookup(name: string): unknown {
@@ -546,6 +562,12 @@ const nativeHost = {
 		return {
 				ajax(path: string, options: Readonly<Record<string, unknown>>) {
 					nativeCalls.push({ path, options });
+					if (path === '/session/current.json' && challengeVerificationBlocked) {
+						return Promise.reject({
+							status: 429,
+							cloudflareMitigated: true,
+						});
+					}
 					if (path === '/session/current.json' && challengeVerificationRateLimited) {
 						return Promise.reject({ status: 429 });
 					}
@@ -692,7 +714,7 @@ const stage = createReaderBrowserRuntimeStage<TestPreferences, TestTopic, TestPo
 		document,
 		storage: runtimeStorage,
 		sourceId: 'reader-browser-runtime:test',
-		locks: null,
+		locks: new RuntimeLockQueue() as unknown as Pick<LockManager, 'request'>,
 		indexedDb: null,
 		storageEvents: null,
 		broadcastChannelFactory: null,
@@ -1057,6 +1079,7 @@ const originalWindowOpen = parsedWindow.open;
 let manualChallengeOpened = 0;
 let manualChallengeClosed = 0;
 let manualChallengeOpenedHref = '';
+let manualChallengeLoadListener: EventListener | null = null;
 const { document: challengeDocument } = parseHTML(
 	'<!doctype html><html><head><title>LINUX DO</title></head>' +
 	'<body><main id="main-outlet"></main></body></html>',
@@ -1067,13 +1090,14 @@ Object.defineProperty(challengeDocument, 'contentType', {
 	configurable: true,
 	get: () => challengeContentType,
 });
-Object.defineProperty(parsedWindow, 'open', {
-	configurable: true,
-	value: (url: string) => {
+const openChallengeWindow = (url: string): Window => {
 		manualChallengeOpened += 1;
 		manualChallengeOpenedHref = url;
+		let closed = false;
 		return {
-			closed: false,
+			get closed() {
+				return closed;
+			},
 			document: challengeDocument,
 			location: {
 				get href() {
@@ -1084,12 +1108,25 @@ Object.defineProperty(parsedWindow, 'open', {
 					challengeContentType = 'application/json';
 				},
 			},
+			addEventListener(type: string, listener: EventListener) {
+				if (type === 'load') manualChallengeLoadListener = listener;
+			},
+			removeEventListener(type: string, listener: EventListener) {
+				if (type === 'load' && manualChallengeLoadListener === listener) {
+					manualChallengeLoadListener = null;
+				}
+			},
 			focus() {},
 			close() {
+				if (closed) return;
+				closed = true;
 				manualChallengeClosed += 1;
 			},
 		} as unknown as Window;
-	},
+	};
+Object.defineProperty(parsedWindow, 'open', {
+	configurable: true,
+	value: openChallengeWindow,
 });
 assert(
 	await application.start() === 'running',
@@ -1167,10 +1204,6 @@ assert(
 			'challenge-probe-rate-limited-pass',
 	'会话验证探针必须进入 Reader 请求账本，并区分已过盾但仍被普通 429 限流',
 );
-Object.defineProperty(parsedWindow, 'open', {
-	configurable: true,
-	value: originalWindowOpen,
-});
 assert(
 	settingsController !== null,
 	'可写偏好 repository 必须在 browser stage 创建唯一 Settings controller',
@@ -2884,21 +2917,53 @@ assert(
 		!physicalAnchorRoot?.classList.contains('ldp-jump-highlight'),
 	'引用从 #1 跳出后返回时，必须静默恢复 #2 的物理视野并只闪烁语义来源 #1',
 );
+const automaticChallengeOpensBefore = manualChallengeOpened;
+const automaticChallengeClosesBefore = manualChallengeClosed;
+let automaticChallengeResolveCalls = 0;
+const resolveAutomaticChallenge = activeRuntime.permit
+	.resolveCloudflareChallenge.bind(activeRuntime.permit);
+Object.defineProperty(activeRuntime.permit, 'resolveCloudflareChallenge', {
+	configurable: true,
+	value: (input: Parameters<typeof resolveAutomaticChallenge>[0]) => {
+		automaticChallengeResolveCalls += 1;
+		return resolveAutomaticChallenge(input);
+	},
+});
+Object.defineProperty(parsedWindow, 'open', {
+	configurable: true,
+	value: openChallengeWindow,
+});
+challengeVerificationBlocked = true;
 const challengedTarget = await activeRuntime.open(16);
+for (let turn = 0; turn < 2_000; turn += 1) {
+	if (
+		automaticChallengeResolveCalls === 1 &&
+		manualChallengeOpened === automaticChallengeOpensBefore + 1 &&
+		(await activeRuntime.permit.snapshot()).challengeState === 'active'
+	) break;
+	await new Promise((resolve) => setTimeout(resolve, 1));
+}
 assert(
 	challengedTarget.status === 'failed' &&
 		topic16Attempts === 1 &&
 		!manualChallengeNotice.hidden &&
-		(await activeRuntime.permit.snapshot()).challengeState === 'required',
-	`新发起的 Topic 若在 passed 吸收期仍被 cf-mitigated 拒绝，必须建立新的人工验证世代并保留失败目标：${JSON.stringify({
+		automaticChallengeResolveCalls === 1 &&
+		manualChallengeOpened === automaticChallengeOpensBefore + 1 &&
+		(await activeRuntime.permit.snapshot()).challengeState === 'active',
+	`新发起的 Topic 被 cf-mitigated 拒绝时必须先探针再自动打开唯一过盾页，并保留最新失败目标：${JSON.stringify({
 		status: challengedTarget.status,
 		topic16Attempts,
+		automaticChallengeResolveCalls,
+		challengeOpens: manualChallengeOpened - automaticChallengeOpensBefore,
 		noticeHidden: manualChallengeNotice.hidden,
 		challengeState: (await activeRuntime.permit.snapshot()).challengeState,
 	})}`,
 );
 topic16Challenged = false;
-manualChallengeLink.click();
+challengeVerificationBlocked = false;
+(manualChallengeLoadListener as EventListener | null)?.(
+	new parsedWindow.Event('load'),
+);
 for (let turn = 0; turn < 2_000; turn += 1) {
 	if (activeRuntime.shell.activeTopicId === 16 && manualChallengeNotice.hidden) {
 		break;
@@ -2908,16 +2973,24 @@ for (let turn = 0; turn < 2_000; turn += 1) {
 assert(
 	activeRuntime.shell.activeTopicId === 16 &&
 		Number(topic16Attempts) === 2 &&
+		manualChallengeOpened === automaticChallengeOpensBefore + 1 &&
+		manualChallengeClosed === automaticChallengeClosesBefore + 1 &&
 		manualChallengeNotice.hidden &&
 		shellRoot.querySelector('.ldp-selection-toast')?.textContent
 			?.includes('目标帖子已继续加载'),
-	`人工过盾必须只重放最新失败 Topic 一次，并以该业务响应决定恢复结果：${JSON.stringify({
+	`自动打开的唯一过盾页必须在用户通过后立即关闭、只重放最新失败 Topic 一次并撤销横幅：${JSON.stringify({
 		activeTopicId: activeRuntime.shell.activeTopicId,
 		topic16Attempts,
+		challengeOpens: manualChallengeOpened - automaticChallengeOpensBefore,
+		challengeCloses: manualChallengeClosed - automaticChallengeClosesBefore,
 		noticeHidden: manualChallengeNotice.hidden,
 		feedback: shellRoot.querySelector('.ldp-selection-toast')?.textContent,
 	})}`,
 );
+Object.defineProperty(parsedWindow, 'open', {
+	configurable: true,
+	value: originalWindowOpen,
+});
 await activeRuntime.close();
 application.destroy();
 let settingsAfterDestroyRejected = false;

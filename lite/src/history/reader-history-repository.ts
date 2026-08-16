@@ -364,6 +364,10 @@ export class ReaderHistoryRepository {
 		return this.#snapshot;
 	}
 
+	get storageKey(): string {
+		return this.#key;
+	}
+
 	load(): ReaderHistorySnapshot {
 		return this.#readAndCommit('initial');
 	}
@@ -413,6 +417,7 @@ export class ReaderHistoryRepository {
 	}
 
 	remember(input: ReaderHistoryTopicInput): ReaderHistorySnapshot {
+		this.#mergeStoredBeforeMutation();
 		const topicId = discourseTopicId(input.topicId);
 		const previous = this.entry(topicId);
 		const now = this.#now();
@@ -493,6 +498,7 @@ export class ReaderHistoryRepository {
 	}
 
 	forgetMany(topicIdValues: readonly unknown[]): ReaderHistorySnapshot {
+		this.#mergeStoredBeforeMutation();
 		const topicIds = new Set<DiscourseTopicId>();
 		for (const value of topicIdValues) {
 			try {
@@ -510,6 +516,7 @@ export class ReaderHistoryRepository {
 	}
 
 	clear(): ReaderHistorySnapshot {
+		this.#mergeStoredBeforeMutation();
 		return this.#persistAndCommit(Object.freeze([]), 'clear');
 	}
 
@@ -581,6 +588,20 @@ export class ReaderHistoryRepository {
 			}
 		}
 		return this.#commit(frozen, source);
+	}
+
+	#mergeStoredBeforeMutation(): void {
+		let stored: string | null;
+		try {
+			stored = this.#accountStorage
+				? readReaderAccountScopedString(this.#storage, this.#accountStorage)
+				: this.#storage.getItem(this.#key);
+		} catch (cause) {
+			this.#diagnose('read-failed', cause);
+			return;
+		}
+		if ((stored ?? '[]') === JSON.stringify(this.#snapshot.entries)) return;
+		this.#readAndCommit('external-reload');
 	}
 
 	#persistAndCommit(

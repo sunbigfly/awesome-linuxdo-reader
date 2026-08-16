@@ -152,6 +152,10 @@ export class ReaderWebDavConfigRepository {
 		return this.#snapshot;
 	}
 
+	get storageKey(): string {
+		return this.#storageKey;
+	}
+
 	async load(): Promise<ReaderWebDavConfigSnapshot> {
 		if (this.#snapshot.loaded) return this.#snapshot;
 		if (this.#loadPromise) return this.#loadPromise;
@@ -172,6 +176,28 @@ export class ReaderWebDavConfigRepository {
 		} finally {
 			this.#loadPromise = null;
 		}
+	}
+
+	reloadExternal(): Promise<ReaderWebDavConfigSnapshot> {
+		const transaction = this.#writeTail.then(async () => {
+			const source = record(await this.#storage.getValue(this.#storageKey));
+			const snapshot = Object.freeze({
+				loaded: true,
+				config: normalizeReaderWebDavConfig(source?.config),
+				writerId: String(source?.writerId ?? '').trim() ||
+					this.#createWriterId(),
+				baselines: normalizedBaselines(source?.baselines),
+				status: normalizedStatus(source?.status),
+			});
+			this.#snapshot = snapshot;
+			this.changes.emit(snapshot);
+			return snapshot;
+		});
+		this.#writeTail = transaction.then(
+			() => undefined,
+			() => undefined,
+		);
+		return transaction;
 	}
 
 	async saveConfig(value: ReaderWebDavConfig): Promise<ReaderWebDavConfigSnapshot> {

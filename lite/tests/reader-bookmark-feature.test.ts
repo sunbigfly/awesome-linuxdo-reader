@@ -711,6 +711,61 @@ warmController.close();
 assert(warmCallbacks.size === 0, '后台补齐完成后关闭收藏面板不得重新排入任务');
 warmController.destroy();
 
+let hiddenBookmarkActivityVisible = false;
+const hiddenBookmarkActivityListeners = new Set<() => void>();
+const hiddenBookmarkSchedules = new Map<number, () => void>();
+let hiddenBookmarkScheduleId = 0;
+const hiddenBookmarkRequestStart = gateway.requests.length;
+const hiddenBookmarkController = new ReaderBookmarkController({
+	requests,
+	native,
+	actions,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+	backgroundWarmDelayMs: 0,
+	activity: {
+		visible: () => hiddenBookmarkActivityVisible,
+		subscribe(listener) {
+			hiddenBookmarkActivityListeners.add(listener);
+			return () => hiddenBookmarkActivityListeners.delete(listener);
+		},
+	},
+	schedule(callback) {
+		const id = ++hiddenBookmarkScheduleId;
+		hiddenBookmarkSchedules.set(id, callback);
+		return id;
+	},
+	cancel(handle) {
+		hiddenBookmarkSchedules.delete(Number(handle));
+	},
+});
+hiddenBookmarkController.startBackgroundCache();
+await flushMicrotasks();
+assert(
+	hiddenBookmarkSchedules.size === 0 &&
+		gateway.requests.length === hiddenBookmarkRequestStart,
+	'隐藏标签不得恢复或启动收藏后台续传',
+);
+hiddenBookmarkActivityVisible = true;
+for (const listener of [...hiddenBookmarkActivityListeners]) listener();
+await flushMicrotasks();
+assert(
+	Number(hiddenBookmarkSchedules.size) === 1,
+	'标签恢复可见后必须从共享收藏断点排入唯一后台任务',
+);
+hiddenBookmarkActivityVisible = false;
+for (const listener of [...hiddenBookmarkActivityListeners]) listener();
+assert(
+	hiddenBookmarkSchedules.size === 0 &&
+	hiddenBookmarkController.snapshot.historyProgress.status === 'idle',
+	'收藏后台任务在标签隐藏时必须撤销，不能留下定时器或继续占用请求许可',
+);
+hiddenBookmarkController.destroy();
+assert(
+	hiddenBookmarkActivityListeners.size === 0,
+	'收藏页面活跃监听必须随 application owner 释放',
+);
+
 let releaseBookmarkTaxonomy: (() => void) | null = null;
 let bookmarkOpenSettled = false;
 const deferredTaxonomyController = new ReaderBookmarkController({

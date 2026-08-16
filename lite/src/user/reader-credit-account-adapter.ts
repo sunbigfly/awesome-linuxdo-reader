@@ -20,6 +20,7 @@ import {
 	objectRecord as record,
 	type UnknownRecord,
 } from '../kernel/value-record.js';
+import type { Cleanup } from '../kernel/lifecycle.js';
 
 export interface ReaderCreditAccountGateway {
 	loadUserResource<T>(input: UserResourceRequest<T>): Promise<T>;
@@ -34,6 +35,10 @@ export interface ReaderCreditAccountAdapterOptions {
 	readonly storage?: Readonly<{
 		getValue(key: string): unknown | Promise<unknown>;
 		setValue(key: string, value: unknown): void | Promise<void>;
+		subscribe?(
+			key: string,
+			listener: (value: unknown, previous: unknown) => void,
+		): Cleanup;
 	}>;
 }
 
@@ -146,6 +151,39 @@ export class ReaderCreditAccountAdapter {
 		if (!this.#authScope) throw new Error('LDC authScope 不能为空');
 		this.#now = options.now ?? Date.now;
 		this.#storage = options.storage;
+	}
+
+	get storageKey(): string {
+		return READER_CREDIT_BRIDGE_CACHE_KEY;
+	}
+
+	subscribeExternal(listener: () => void): Cleanup {
+		return this.#storage?.subscribe?.(
+			READER_CREDIT_BRIDGE_CACHE_KEY,
+			listener,
+		) ?? (() => {});
+	}
+
+	async externalCached(
+		usernameValue: string,
+		signal: AbortSignal,
+	): Promise<ReaderUserExternalSnapshot | null> {
+		if (!this.#storage) return null;
+		const expectedUsername = username(usernameValue);
+		const bridge = record(await this.#storage.getValue(
+			READER_CREDIT_BRIDGE_CACHE_KEY,
+		));
+		signal.throwIfAborted();
+		const cachedAt = Number(bridge?.cachedAt);
+		if (
+			!Number.isFinite(cachedAt) ||
+			this.#now() - cachedAt >= CACHE.retainForMs
+		) return null;
+		return staleExternalSnapshot(project(
+			bridge?.data,
+			expectedUsername,
+			cachedAt,
+		));
 	}
 
 	async cached(

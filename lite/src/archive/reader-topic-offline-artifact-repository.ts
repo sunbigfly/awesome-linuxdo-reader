@@ -265,6 +265,10 @@ export class ReaderTopicOfflineArtifactRepository
 		this.#manifestPolicy = manifestPolicy(this.#authScope);
 	}
 
+	get manifestCacheId(): string {
+		return this.#manifestPolicy.id;
+	}
+
 	async list(): Promise<readonly ReaderTopicOfflineArtifactMetadata[]> {
 		await this.#ensureLegacyMigration();
 		const cached = await this.#responses.read<ReaderTopicOfflineArtifactManifest>(

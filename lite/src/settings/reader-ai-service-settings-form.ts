@@ -492,6 +492,19 @@ export class ReaderAiServiceSettingsForm {
 			void this.#removeCurrentProfile());
 		this.scope.listen(this.#save, 'click', () => void this.#saveConfig());
 		this.scope.listen(this.#loadModels, 'click', () => void this.#fetchModels());
+		this.#repository.changes.subscribe(({ config }) => {
+			if (this.scope.destroyed) return;
+			this.#renderProfileOptions(config);
+			this.#loadProfile(readerTranslationActiveProfile(config));
+		}, this.scope);
+		this.#repository.metadataChanges.subscribe((cache) => {
+			if (!cache || this.scope.destroyed) return;
+			this.#publicCacheLoaded = true;
+			this.#publicCatalogFetchedAt = cache.fetchedAt;
+			this.#replacePublicModelCatalog(cache.catalog);
+			this.#publicExplorerStatus.textContent =
+				`已同步其他标签的模型目录 · ${cache.catalog.length} 个`;
+		}, this.scope);
 		this.scope.add(() => {
 			this.#operation?.abort(new Error('AI 服务设置已关闭'));
 			this.#publicOperation?.abort(new Error('AI 服务设置已关闭'));

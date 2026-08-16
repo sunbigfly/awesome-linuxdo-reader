@@ -67,7 +67,7 @@ export class ReaderRateLimitNotice {
 			if (this.scope.destroyed || epoch !== this.#epoch) return;
 			if (snapshot.challengeState === 'required') {
 				this.#elements.detail.textContent =
-					'关键 Reader 请求遇到 Cloudflare 验证，已暂停后续请求；点击右侧按钮只打开一个人工验证浮窗。';
+					'关键 Reader 请求遇到 Cloudflare 验证，已暂停后续请求；Reader 会先自动探测，确有需要时只打开一个过盾页。若浏览器拦截，请点击右侧按钮。';
 				this.#show();
 				return;
 			}

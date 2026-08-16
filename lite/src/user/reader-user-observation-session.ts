@@ -516,6 +516,67 @@ export class ReaderUserObservationSession {
 		return this.#snapshot();
 	}
 
+	get storageKey(): string {
+		return this.#storageIdentity.key;
+	}
+
+	reloadExternal(): void {
+		if (this.scope.destroyed) return;
+		const persisted = this.#readPersistedIdentities();
+		if (persisted === null) return;
+		const incoming = new Map(persisted.map((entry) => [entry.username, entry]));
+		for (const [username, entry] of this.#entries) {
+			if (incoming.has(username) || username === this.#selfUsername) continue;
+			entry.epoch += 1;
+			entry.controller?.abort(
+				new DOMException('观察名单已由其他标签更新', 'AbortError'),
+			);
+			this.#entries.delete(username);
+			this.#jobs.splice(0, this.#jobs.length, ...this.#jobs.filter(
+				(job) => job.username !== username,
+			));
+			if (this.#activeUsername === username) this.#activeUsername = '';
+		}
+		for (const identity of persisted) {
+			const existing = this.#entries.get(identity.username);
+			if (!existing) {
+				this.#entries.set(identity.username, {
+					...identity,
+					streamCheckpoints: { ...identity.streamCheckpoints },
+					knownIdentities: new Set<string>(),
+					phase: 'idle',
+					currentStream: null,
+					completedStreams: 0,
+					storedRecordCount: 0,
+					records: Object.freeze([]),
+					detail: identity.completedAt
+						? '等待从中央缓存恢复'
+						: '等待后台采集',
+					error: '',
+					recoveryKind: null,
+					epoch: 0,
+					controller: null,
+				});
+				continue;
+			}
+			existing.name = identity.name || existing.name;
+			existing.avatarTemplate = identity.avatarTemplate ||
+				existing.avatarTemplate;
+			if (isActivePhase(existing.phase)) continue;
+			existing.addedAt = identity.addedAt;
+			existing.completedAt = identity.completedAt;
+			existing.pages = identity.pages;
+			existing.lastRecordCount = Math.max(
+				existing.records.length,
+				identity.lastRecordCount,
+			);
+			existing.streamCheckpoints = { ...identity.streamCheckpoints };
+		}
+		this.#trim();
+		this.#emit();
+		this.resume({ allowNetwork: false });
+	}
+
 	cacheStats(): ReaderUserObservationCacheStats {
 		let memoryRecords = 0;
 		let storedRecords = 0;
@@ -748,6 +809,7 @@ export class ReaderUserObservationSession {
 		options: Readonly<{ readonly allowNetwork?: boolean }> = {},
 	): Readonly<{ added: boolean; entry: ReaderUserObservationEntrySnapshot }> {
 		if (this.scope.destroyed) throw new Error('用户观察 session 已关闭');
+		this.reloadExternal();
 		const identity = identityFromProfile(profile);
 		let entry = this.#entries.get(identity.username);
 		const added = !entry;
@@ -849,6 +911,7 @@ export class ReaderUserObservationSession {
 	}
 
 	remove(usernameValue: string): boolean {
+		this.reloadExternal();
 		const username = normalizedUsername(usernameValue);
 		if (username === this.#selfUsername) return false;
 		const entry = this.#entries.get(username);
@@ -1548,21 +1611,37 @@ export class ReaderUserObservationSession {
 		return changed;
 	}
 
-	#restore(): void {
+	#readPersistedIdentities(): readonly NonNullable<
+		ReturnType<typeof persistedIdentity>
+	>[] | null {
 		try {
 			const raw = readReaderAccountScopedString(
 				this.#storage,
 				this.#storageIdentity,
 			);
-			if (!raw) return;
+			if (!raw) return Object.freeze([]);
 			const parsed = JSON.parse(raw) as Readonly<Record<string, unknown>>;
 			if (Number(parsed.schemaVersion) !== 1 || !Array.isArray(parsed.users)) {
-				return;
+				return null;
 			}
-			for (const value of parsed.users.slice(0, MAX_OBSERVED_USERS)) {
-				const identity = persistedIdentity(value);
-				if (!identity || this.#entries.has(identity.username)) continue;
-				this.#entries.set(identity.username, {
+			return Object.freeze(parsed.users
+				.slice(0, MAX_OBSERVED_USERS)
+				.map(persistedIdentity)
+				.filter((identity): identity is NonNullable<
+					ReturnType<typeof persistedIdentity>
+				> => identity !== null));
+		} catch (cause) {
+			this.#onError(cause);
+			return null;
+		}
+	}
+
+	#restore(): void {
+		const identities = this.#readPersistedIdentities();
+		if (!identities) return;
+		for (const identity of identities) {
+			if (this.#entries.has(identity.username)) continue;
+			this.#entries.set(identity.username, {
 					...identity,
 					streamCheckpoints: { ...identity.streamCheckpoints },
 					knownIdentities: new Set<string>(),
@@ -1580,9 +1659,6 @@ export class ReaderUserObservationSession {
 					epoch: 0,
 					controller: null,
 				});
-			}
-		} catch (cause) {
-			this.#onError(cause);
 		}
 	}
 

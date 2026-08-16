@@ -16,6 +16,7 @@ const TOPIC_LINK_SELECTOR =
 	'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],a[href*="/t/"]';
 const NEW_TOPIC_BADGE_SELECTOR =
 	'.topic-post-badges,.badge-notification.new-topic';
+const AUTOMATIC_FILTER_ATTRIBUTE = 'data-ldp-unwanted-auto-filter';
 const OPENED_TOPIC_STORAGE_KEY =
 	'linuxdo-enhanced-reader:opened-host-topics:v1';
 const MAX_OPENED_TOPIC_IDS = 2_048;
@@ -233,12 +234,9 @@ implements EmbeddedHostEnhancementPort {
 				card.remove();
 				continue;
 			}
-			const automatic = (card as HTMLElement).dataset.ldpUnwantedFilterFailed ===
-				'true'
-				? null
-				: this.#automaticFilter(projection);
+			const automatic = this.#automaticFilter(projection);
+			card.toggleAttribute(AUTOMATIC_FILTER_ATTRIBUTE, Boolean(automatic));
 			if (automatic) {
-				void this.#hideCard(card, projection, automatic, false);
 				continue;
 			}
 			this.#markNewTopic(card, topic);
@@ -259,8 +257,24 @@ implements EmbeddedHostEnhancementPort {
 		this.#roots.clear();
 	}
 
+	get openedTopicStorageKey(): string {
+		return this.#openedTopicStorageKey;
+	}
+
+	reloadExternalOpenedTopics(): void {
+		this.#openedTopicIds.clear();
+		this.#restoreOpenedTopicIds();
+		const topicModels = this.#topicModels();
+		for (const card of this.#document.querySelectorAll<HTMLElement>(
+			CARD_SELECTOR,
+		)) {
+			this.#markNewTopic(card, this.#topicInput(card, topicModels));
+		}
+	}
+
 	markTopicOpened(topicId: number): boolean {
 		if (!Number.isSafeInteger(topicId) || topicId < 1) return false;
+		this.#restoreOpenedTopicIds();
 		if (!this.#openedTopicIds.has(topicId)) {
 			this.#openedTopicIds.add(topicId);
 			this.#persistOpenedTopicIds();
@@ -320,6 +334,9 @@ implements EmbeddedHostEnhancementPort {
 		for (const node of root.querySelectorAll(
 			'[data-ldp-topic-stats]',
 		)) node.removeAttribute('data-ldp-topic-stats');
+		for (const node of root.querySelectorAll(
+			`[${AUTOMATIC_FILTER_ATTRIBUTE}]`,
+		)) node.removeAttribute(AUTOMATIC_FILTER_ATTRIBUTE);
 	}
 
 	#clearEmbeddedCard(card: Element): void {
@@ -599,14 +616,12 @@ implements EmbeddedHostEnhancementPort {
 		if (this.#pendingCards.has(card)) return;
 		const topic = this.#topicInput(card, this.#topicModels());
 		const projection = this.#topicProjection(card, topic);
-		void this.#hideCard(card, projection, null, true, control);
+		void this.#hideCard(card, projection, control);
 	}
 
 	async #hideCard(
 		card: Element,
 		input: ReaderUnwantedTopicFilterInput & ReaderUnwantedTopicInput,
-		match: ReaderUnwantedTopicFilterMatch | null,
-		manual: boolean,
 		control?: HTMLElement,
 	): Promise<void> {
 		if (this.#pendingCards.has(card)) return;
@@ -626,19 +641,15 @@ implements EmbeddedHostEnhancementPort {
 				categoryId: input.categoryId,
 				categoryName: input.categoryName,
 				categorySlug: input.categorySlug,
-				source: manual ? 'manual' : 'automatic',
-				matchedRule: match?.label ?? '',
-				matchedCategory: match?.matches.some((reason) =>
-					reason.kind === 'category') ?? false,
+				source: 'manual',
+				matchedRule: '',
+				matchedCategory: false,
 			}));
 			card.remove();
-			if (manual) this.#notify('已加入不想看');
+			this.#notify('已加入不想看');
 		} catch (cause) {
 			this.#onError(cause);
-			(card as HTMLElement).dataset.ldpUnwantedFilterFailed = 'true';
-			this.#notify(manual
-				? '加入不想看失败，请稍后重试'
-				: '自动免打扰保存失败，请稍后重试');
+			this.#notify('加入不想看失败，请稍后重试');
 		} finally {
 			this.#pendingCards.delete(card);
 			if (control?.isConnected) {

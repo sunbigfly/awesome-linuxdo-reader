@@ -4539,10 +4539,10 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 .ldp-unwanted-topic-filter-master {
-  display: grid;
-  gap: 10px;
-  padding: 2px 6px 14px;
-  border-bottom: 1px solid var(--ldp-divider-line-color);
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
 }
 
 .ldp-unwanted-topic-filter-master > span {
@@ -4567,7 +4567,7 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 .ldp-unwanted-topic-filter-master .ldp-setting-switch {
-  justify-self: start;
+  flex: none;
 }
 
 .ldp-unwanted-topic-filter-tabs {
@@ -4986,11 +4986,14 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   border-top: 1px solid var(--ldp-divider-line-color);
 }
 
+.ldp-unwanted-topic-filter-footer > .ldp-unwanted-topic-filter-status {
+  margin-right: auto;
+}
+
 .ldp-unwanted-topic-filter-footer > .ldp-unwanted-topic-filter-actions {
   display: flex;
   flex: none;
   justify-content: flex-end;
-  margin-left: auto;
   gap: 8px;
 }
 
@@ -5163,15 +5166,19 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   }
 
   .ldp-unwanted-topic-filter-master {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 0 2px 8px;
+    margin-right: auto;
   }
 
   .ldp-unwanted-topic-filter-master small {
     display: none;
+  }
+
+  .ldp-unwanted-topic-filter-footer {
+    flex-wrap: wrap;
+  }
+
+  .ldp-unwanted-topic-filter-footer > .ldp-unwanted-topic-filter-status {
+    flex: 1 1 100%;
   }
 
   .ldp-unwanted-topic-filter-tabs {

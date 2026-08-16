@@ -85,6 +85,13 @@ assert(
 		JSON.stringify(['another.example']),
 	'移除站点必须通过同一序列化写队列更新内存和 GM 存储',
 );
+stored.set(READER_CUSTOM_SITES_STORAGE_KEY, ['remote.example']);
+await repository.reloadExternal();
+assert(
+	repository.storageKey === READER_CUSTOM_SITES_STORAGE_KEY &&
+		repository.snapshot.join(',') === 'remote.example',
+	'其他标签的 GM 配置事件必须无写回地重读共享站点列表并触发当前设置投影',
+);
 
 let requestOptions: BrowserDiscourseSiteProbeRequestOptions | null = null;
 const probe = new BrowserDiscourseSiteProbe({

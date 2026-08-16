@@ -936,6 +936,10 @@ html.ldp-reader-workspace [data-ldp-native-new-topic-marker] {
   display: none !important;
 }
 
+html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item)[data-ldp-unwanted-auto-filter] {
+  display: none !important;
+}
+
 html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item)[data-ldp-native-new-topic]
   .link-top-line > :is(a,.title,.raw-topic-link) {
   color: color-mix(

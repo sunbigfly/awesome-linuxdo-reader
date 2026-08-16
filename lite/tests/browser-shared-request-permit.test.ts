@@ -1327,6 +1327,74 @@ assert(
 challengeFirst.destroy();
 challengeSecond.destroy();
 
+const nextGenerationNow = Date.now();
+const nextGenerationStorage = new MemoryStorage();
+nextGenerationStorage.setItem(READER_REQUEST_PERMIT_STORAGE_KEY, JSON.stringify({
+	schemaVersion: 1,
+	updatedAt: nextGenerationNow,
+	events: [],
+	intents: [],
+	active: [],
+	policies: [],
+	rateLimits: [],
+	challenge: {
+		ownerId: 'previous-owner',
+		state: 'passed',
+		required: false,
+		automaticAttempted: true,
+		updatedAt: nextGenerationNow,
+		expiresAt: nextGenerationNow + 10_000,
+	},
+}));
+let nextGenerationPassed = false;
+let nextGenerationOpened = 0;
+let nextGenerationClosed = false;
+const nextGenerationPermit = new BrowserSharedRequestPermit({
+	...permitOptions(
+		nextGenerationStorage,
+		new LockQueue(),
+		'next-generation-challenge',
+	),
+	challenge: {
+		origin: 'https://linux.do',
+		open: () => {
+			nextGenerationOpened += 1;
+			return {
+				get closed() {
+					return nextGenerationClosed;
+				},
+				close() {
+					nextGenerationClosed = true;
+				},
+			};
+		},
+		inspect: () => nextGenerationPassed ? 'passed' : 'pending',
+		verify: async () => nextGenerationPassed,
+		pollIntervalMs: 5,
+		verifyIntervalMs: 25,
+	},
+});
+await nextGenerationPermit.noteCloudflareChallenge({
+	href: 'https://linux.do/t/new-generation.json',
+	force: true,
+});
+const nextGenerationChallenge = nextGenerationPermit.resolveCloudflareChallenge({
+	href: 'https://linux.do/t/new-generation.json',
+	signal: new AbortController().signal,
+});
+await delay(40);
+assert(
+	nextGenerationOpened === 1 &&
+		(await nextGenerationPermit.snapshot()).challengeState === 'active',
+	'真实业务响应在 passed 吸收期再次被盾时，必须作为新世代再自动尝试一次且仍保持单窗',
+);
+nextGenerationPassed = true;
+assert(
+	await nextGenerationChallenge,
+	'新世代自动过盾必须在唯一窗口确认后正常解闸',
+);
+nextGenerationPermit.destroy();
+
 let verificationClosed = false;
 let verificationOpened = 0;
 const verificationPopup = {
@@ -1380,6 +1448,8 @@ verificationPermit.destroy();
 let opaquePopupClosed = false;
 let opaquePopupOpened = 0;
 let opaqueVerificationCalls = 0;
+let opaqueVerificationPassed = false;
+let opaquePopupLoadListener: EventListener | null = null;
 const opaquePopupPermit = new BrowserSharedRequestPermit({
 	...permitOptions(new MemoryStorage(), new LockQueue(), 'challenge-opaque-popup'),
 	challenge: {
@@ -1390,6 +1460,14 @@ const opaquePopupPermit = new BrowserSharedRequestPermit({
 				get closed() {
 					return opaquePopupClosed;
 				},
+				addEventListener(type: string, listener: EventListener) {
+					if (type === 'load') opaquePopupLoadListener = listener;
+				},
+				removeEventListener(type: string, listener: EventListener) {
+					if (type === 'load' && opaquePopupLoadListener === listener) {
+						opaquePopupLoadListener = null;
+					}
+				},
 				close() {
 					opaquePopupClosed = true;
 				},
@@ -1398,26 +1476,36 @@ const opaquePopupPermit = new BrowserSharedRequestPermit({
 		inspect: () => 'pending',
 		verify: async () => {
 			opaqueVerificationCalls += 1;
-			return opaqueVerificationCalls >= 2;
+			return opaqueVerificationPassed;
 		},
 		pollIntervalMs: 5,
-		verifyIntervalMs: 25,
+		verifyIntervalMs: 5_000,
 		leaseTtlMs: 10_000,
 		maxWaitMs: 15_000,
 	},
 });
-const opaquePopupChallenge = await opaquePopupPermit.resolveCloudflareChallenge({
+const opaquePopupChallengePending = opaquePopupPermit.resolveCloudflareChallenge({
 	href: 'https://linux.do/t/opaque-popup.json',
 	signal: new AbortController().signal,
 	focus: true,
 });
+for (let turn = 0; turn < 200; turn += 1) {
+	if (opaquePopupOpened === 1 && opaquePopupLoadListener) break;
+	await delay(1);
+}
+opaqueVerificationPassed = true;
+(opaquePopupLoadListener as EventListener | null)?.({} as Event);
+const opaquePopupChallenge = await Promise.race([
+	opaquePopupChallengePending,
+	delay(250).then(() => false),
+]);
 assert(
 	opaquePopupChallenge &&
 		opaquePopupOpened === 1 &&
 		opaqueVerificationCalls === 2 &&
 		opaquePopupClosed &&
 		(await opaquePopupPermit.snapshot()).challengeState === 'passed',
-	`验证窗口已回到正常页面但 WindowProxy 不可读时，独立同源探针必须确认通行、关闭窗口并解闸：${JSON.stringify({
+	`验证窗口 load 必须取消探针退避；即使 WindowProxy 不可读，也要立即确认通行、关闭窗口并解闸：${JSON.stringify({
 		opaquePopupChallenge,
 		opaquePopupOpened,
 		opaqueVerificationCalls,

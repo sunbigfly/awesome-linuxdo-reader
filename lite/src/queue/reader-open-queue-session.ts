@@ -720,6 +720,10 @@ export class ReaderOpenQueueSession {
 		return this.#entries.size;
 	}
 
+	get storageKey(): string {
+		return this.#storageKey;
+	}
+
 	get #surface(): ReaderQueueSurfaceState {
 		return this.#surfaces[readerWorkspacePositionMode(
 			this.#workspaceRoot.dataset.readerWorkspaceMode,
@@ -756,6 +760,30 @@ export class ReaderOpenQueueSession {
 		for (const entry of entries) this.#entries.set(entry.topicId, entry);
 		this.#persist();
 		this.sync();
+	}
+
+	reloadExternal(): void {
+		if (this.scope.destroyed) return;
+		const restored = this.#restore();
+		for (const [topicId, controller] of this.#prefetchControllers) {
+			if (!restored.entries.some((entry) => entry.topicId === topicId)) {
+				controller.abort(
+					new DOMException('队列已由其他标签更新', 'AbortError'),
+				);
+			}
+		}
+		this.#entries.clear();
+		for (const entry of restored.entries) this.#entries.set(entry.topicId, entry);
+		for (const mode of Object.keys(this.#surfaces) as ReaderWorkspacePositionMode[]) {
+			Object.assign(this.#surfaces[mode], restored.surfaces[mode]);
+		}
+		this.#cancelSurfaceFrames();
+		this.sync();
+		this.#scheduleSurfaceMeasure();
+	}
+
+	reloadExternalDownloads(): Promise<void> {
+		return this.#downloadManager?.reloadExternal() ?? Promise.resolve();
 	}
 
 	sync(): void {
@@ -921,6 +949,7 @@ export class ReaderOpenQueueSession {
 	}
 
 	resetSurfacePositions(): void {
+		this.#reloadStoredEntriesForMutation();
 		for (const surface of Object.values(this.#surfaces)) {
 			surface.x = 0.02;
 			surface.y = 0.12;
@@ -1246,6 +1275,11 @@ export class ReaderOpenQueueSession {
 			this.#setPanelOpen(false);
 			return;
 		}
+		if (
+			action === this.#clear ||
+			action.dataset.queuePin !== undefined ||
+			action.dataset.queueRemove !== undefined
+		) this.#reloadStoredEntriesForMutation();
 		if (action === this.#clear) {
 			const removable = [...this.#entries.values()]
 				.filter((entry) => !entry.pinned);
@@ -1300,6 +1334,7 @@ export class ReaderOpenQueueSession {
 			event.stopPropagation();
 			const topicId = tryDiscourseTopicId(add.dataset.readerQueueTopicId);
 			if (!topicId) return;
+			this.#reloadStoredEntriesForMutation();
 			if (this.#entries.has(topicId)) this.#remove(topicId);
 			else {
 				const href = String(add.dataset.readerQueueHref ?? `/t/${topicId}`);
@@ -1425,6 +1460,7 @@ export class ReaderOpenQueueSession {
 	}
 
 	#drag(event: PointerEvent): void {
+		this.#reloadStoredEntriesForMutation();
 		if (event.button !== 0) return;
 		this.#cancelPanelPreview();
 		// hover 预览可能已经展开；拖动入口不能因此被面板状态锁死。
@@ -1933,6 +1969,7 @@ export class ReaderOpenQueueSession {
 				await this.#options.restoreHistoryAnchor(topicId, anchor);
 			}
 			if (previous && previous.topicId !== topicId && !previous.pinned) {
+				this.#reloadStoredEntriesForMutation();
 				this.#entries.delete(previous.topicId);
 				this.#persist();
 			}
@@ -2239,6 +2276,13 @@ export class ReaderOpenQueueSession {
 		} catch {
 			return { entries: [], surfaces: normalizedSurfaces(null, null) };
 		}
+	}
+
+	#reloadStoredEntriesForMutation(): void {
+		if (this.scope.destroyed) return;
+		const restored = this.#restore();
+		this.#entries.clear();
+		for (const entry of restored.entries) this.#entries.set(entry.topicId, entry);
 	}
 
 	#persist(): void {

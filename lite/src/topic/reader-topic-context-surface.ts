@@ -2383,6 +2383,16 @@ export class ReaderTopicContextSurface<
 			this.#syncWorkspaceMode(fullPage);
 			this.#applyDiscussionGeometry(this.discussionGeometry.snapshot);
 		}, this.scope);
+		this.#state.changes.subscribe((state) => {
+			if (!state.fullPageGeometry) return;
+			const stored = state.fullPageGeometry;
+			this.discussionGeometry.setGeometry(
+				stored.width,
+				stored.height,
+				stored.left,
+				stored.top,
+			);
+		}, this.scope);
 		this.scope.add(() => {
 			this.#persistActiveDiscussionPoint();
 			if (this.#treeWidthFrame) {

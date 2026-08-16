@@ -74,6 +74,7 @@ const topics = [
 const hidden: ReaderUnwantedTopicInput[] = [];
 const notices: string[] = [];
 const actionErrors: unknown[] = [];
+let automaticFilterEnabled = true;
 const openedTopicValues = new Map<string, string>();
 const openedTopicStorage = {
 	getItem: (key: string) => openedTopicValues.get(key) ?? null,
@@ -105,7 +106,8 @@ const enhancementOptions: EmbeddedHostTopicCardEnhancementOptions = {
 	hideTopic: (input) => {
 		hidden.push(input);
 	},
-	automaticFilter: (input) => input.categoryName === '国产替代'
+	automaticFilter: (input) =>
+		automaticFilterEnabled && input.categoryName === '国产替代'
 		? {
 			kind: 'category',
 			rule: '国产替代',
@@ -134,6 +136,9 @@ const enhancement = new EmbeddedHostTopicCardEnhancement(
 );
 const root = document.querySelector('.topic-list')!;
 const card = document.querySelector<HTMLElement>('[data-topic-id="42"]')!;
+const automaticCard = document.querySelector<HTMLElement>(
+	'[data-topic-id="45"]',
+)!;
 enhancement.syncRoot(root, 'embedded');
 await Promise.resolve();
 const component = card.querySelector<HTMLElement>(
@@ -183,6 +188,18 @@ assert(
 	[...openedTopicValues.values()].some((value) => value === '[42]'),
 	'Reader 成功打开 Topic 后必须立即恢复宿主标题颜色、继续隐藏图标并持久记录',
 );
+openedTopicValues.set(enhancement.openedTopicStorageKey, '[]');
+enhancement.reloadExternalOpenedTopics();
+assert(
+	card.hasAttribute('data-ldp-native-new-topic'),
+	'其他标签清空已打开记录后，宿主新话题标记必须局部重投影',
+);
+openedTopicValues.set(enhancement.openedTopicStorageKey, '[42]');
+enhancement.reloadExternalOpenedTopics();
+assert(
+	!card.hasAttribute('data-ldp-native-new-topic'),
+	'其他标签打开 Topic 后，当前标签必须自动具备清除新话题标记的数据回调',
+);
 enhancement.syncCards(Object.freeze([card]), 'embedded');
 assert(
 	!card.hasAttribute('data-ldp-native-new-topic'),
@@ -199,17 +216,24 @@ assert(
 	'页面刷新并重建增强器后，本机已打开 Topic 仍不能重新显示新话题标题色',
 );
 assert(
-	!document.querySelector('[data-topic-id="45"]') &&
+	automaticCard.isConnected &&
+	automaticCard.hasAttribute('data-ldp-unwanted-auto-filter') &&
 	!document.querySelector('[data-topic-id="46"]') &&
-	hidden.some((input) =>
-		input.topicId === 45 &&
-		input.source === 'automatic' &&
-		input.matchedRule === '类别：国产替代；OP：@blockedop' &&
-		input.categoryId === 9 &&
-		input.categoryName === '国产替代' &&
-		input.categorySlug === 'domestic' &&
-		input.matchedCategory === true),
-	'预设规则命中必须持久化全部原因及命中类别并立即移除，已在不想看的主题也不能闪回',
+	hidden.every((input) => input.topicId !== 45),
+	'自动规则必须只投影隐藏、不得写入不想看持久层，手动记录仍应直接移除',
+);
+automaticFilterEnabled = false;
+enhancement.syncCards(Object.freeze([automaticCard]), 'embedded');
+assert(
+	automaticCard.isConnected &&
+	!automaticCard.hasAttribute('data-ldp-unwanted-auto-filter'),
+	'关闭自动过滤后，当前列表中已挂载的 Topic 必须立即恢复',
+);
+automaticFilterEnabled = true;
+enhancement.syncCards(Object.freeze([automaticCard]), 'embedded');
+assert(
+	automaticCard.hasAttribute('data-ldp-unwanted-auto-filter'),
+	'重新启用自动过滤后必须恢复动态隐藏投影',
 );
 
 let fallbackCardClicks = 0;
@@ -272,13 +296,14 @@ assert(
 	!card.hasAttribute('data-ldp-topic-stats') &&
 	!card.hasAttribute('data-ldp-native-topic-date-row') &&
 	!card.hasAttribute('data-ldp-native-new-topic') &&
+	!automaticCard.hasAttribute('data-ldp-unwanted-auto-filter') &&
 	!newTopicMarker?.hasAttribute('data-ldp-native-new-topic-marker') &&
 	dnd?.getAttribute('title') === '宿主免打扰' &&
 	dnd.getAttribute('data-tooltip') === '宿主提示' &&
 	dnd.getAttribute('data-ldp-tooltip-label') === '宿主显式提示' &&
 	dnd.getAttribute('aria-label') === '将此话题设为免打扰' &&
 	!dnd.hasAttribute('data-ldp-native-dnd'),
-	'换根必须撤销嵌入投影并恢复宿主 tooltip',
+	'换根必须撤销自动过滤与嵌入投影，并恢复宿主 tooltip',
 );
 
 const actionOnlyCard = document.createElement('tr');

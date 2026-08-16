@@ -61,6 +61,25 @@ assert(
 	Object.keys(repository.snapshot.views).length === 1,
 	'旧 v1 几何和讨论锚点必须归一化恢复，坏记录只能局部丢弃',
 );
+let externalContextChanges = 0;
+repository.changes.subscribe(() => {
+	externalContextChanges += 1;
+});
+storage.value = {
+	fullPageGeometry: {
+		left: 35,
+		top: 45,
+		width: 910,
+		height: 690,
+	},
+	views: storage.value.views,
+};
+await repository.reloadExternal();
+assert(
+	repository.snapshot.fullPageGeometry?.left === 35 &&
+		externalContextChanges === 1,
+	'完整讨论状态收到其他标签 GM 变更后必须只重读本地值并发布局部回调',
+);
 repository.rememberPoint('linux.do', 10, 2, {
 	number: discoursePostNumber(4),
 	scrollTop: 80,
@@ -90,7 +109,7 @@ assert(
 	Object.keys(repository.snapshot.views).length === 2 &&
 	repository.point('linux.do', 10, 2) === null &&
 	repository.point('linux.do', 10, 7)?.scrollLeft === 2 &&
-	repository.snapshot.fullPageGeometry?.left === 50 &&
+	Number(repository.snapshot.fullPageGeometry?.left) === 50 &&
 	writes.length === 4,
 	'仓储必须按更新时间淘汰旧 view、覆盖同 key、串行写入并独立保留几何',
 );

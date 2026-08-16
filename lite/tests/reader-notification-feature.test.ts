@@ -786,6 +786,72 @@ warmController.close();
 assert(warmCallbacks.size === 0, '后台补齐完成后关闭消息面板不得重新排入任务');
 warmController.destroy();
 
+let hiddenNotificationActivityVisible = false;
+const hiddenNotificationActivityListeners = new Set<() => void>();
+const hiddenNotificationSchedules = new Map<number, () => void>();
+let hiddenNotificationScheduleId = 0;
+const hiddenNotificationLoads: string[] = [];
+const hiddenNotificationController = new ReaderNotificationController({
+	requests: {
+		async load(group: ReaderNotificationGroupKey, page: number) {
+			hiddenNotificationLoads.push(`${group}:${page}`);
+			return Object.freeze({
+				group,
+				page,
+				records: Object.freeze([]),
+				total: 0,
+				hasNext: false,
+				nextCursor: null,
+			});
+		},
+	} as unknown as DiscourseNotificationRequestAdapter,
+	native,
+	actions: {} as PostActionController,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+	backgroundWarmDelayMs: 0,
+	activity: {
+		visible: () => hiddenNotificationActivityVisible,
+		subscribe(listener) {
+			hiddenNotificationActivityListeners.add(listener);
+			return () => hiddenNotificationActivityListeners.delete(listener);
+		},
+	},
+	schedule(callback) {
+		const id = ++hiddenNotificationScheduleId;
+		hiddenNotificationSchedules.set(id, callback);
+		return id;
+	},
+	cancel(handle) {
+		hiddenNotificationSchedules.delete(Number(handle));
+	},
+});
+hiddenNotificationController.startBackgroundCache();
+await flushMicrotasks();
+assert(
+	hiddenNotificationSchedules.size === 0 && hiddenNotificationLoads.length === 0,
+	'隐藏标签不得恢复或启动通知后台续传',
+);
+hiddenNotificationActivityVisible = true;
+for (const listener of [...hiddenNotificationActivityListeners]) listener();
+await flushMicrotasks();
+assert(
+	Number(hiddenNotificationSchedules.size) === 1,
+	'标签恢复可见后必须从共享通知断点排入唯一后台任务',
+);
+hiddenNotificationActivityVisible = false;
+for (const listener of [...hiddenNotificationActivityListeners]) listener();
+assert(
+	hiddenNotificationSchedules.size === 0 &&
+	hiddenNotificationController.snapshot.history.status === 'paused',
+	'通知后台任务在标签隐藏时必须撤销，不能留下定时器或继续占用请求许可',
+);
+hiddenNotificationController.destroy();
+assert(
+	hiddenNotificationActivityListeners.size === 0,
+	'通知页面活跃监听必须随 application owner 释放',
+);
+
 let releaseNotificationTaxonomy: (() => void) | null = null;
 let notificationOpenSettled = false;
 const deferredTaxonomyController = new ReaderNotificationController({

@@ -1,6 +1,6 @@
 /* Awesome LinuxDo Reader Lite stylesheet.
  * Generated only from lite/styles/*.css; do not edit generated outputs.
- * source-sha256: 33a2211d87e70d7387386c20734e4e1936021f39ab1285cdca16b5c64ba32357
+ * source-sha256: f1f4e026390062664b98d49ead93e0b70467380c1d590d3796ff0a4dad1c1261
  */
 
 /* source: 00-foundation.css */
@@ -1289,6 +1289,10 @@ html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item)
 }
 
 html.ldp-reader-workspace [data-ldp-native-new-topic-marker] {
+  display: none !important;
+}
+
+html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item)[data-ldp-unwanted-auto-filter] {
   display: none !important;
 }
 
@@ -14583,10 +14587,10 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 .ldp-unwanted-topic-filter-master {
-  display: grid;
-  gap: 10px;
-  padding: 2px 6px 14px;
-  border-bottom: 1px solid var(--ldp-divider-line-color);
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
 }
 
 .ldp-unwanted-topic-filter-master > span {
@@ -14611,7 +14615,7 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 .ldp-unwanted-topic-filter-master .ldp-setting-switch {
-  justify-self: start;
+  flex: none;
 }
 
 .ldp-unwanted-topic-filter-tabs {
@@ -15030,11 +15034,14 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   border-top: 1px solid var(--ldp-divider-line-color);
 }
 
+.ldp-unwanted-topic-filter-footer > .ldp-unwanted-topic-filter-status {
+  margin-right: auto;
+}
+
 .ldp-unwanted-topic-filter-footer > .ldp-unwanted-topic-filter-actions {
   display: flex;
   flex: none;
   justify-content: flex-end;
-  margin-left: auto;
   gap: 8px;
 }
 
@@ -15207,15 +15214,19 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   }
 
   .ldp-unwanted-topic-filter-master {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 0 2px 8px;
+    margin-right: auto;
   }
 
   .ldp-unwanted-topic-filter-master small {
     display: none;
+  }
+
+  .ldp-unwanted-topic-filter-footer {
+    flex-wrap: wrap;
+  }
+
+  .ldp-unwanted-topic-filter-footer > .ldp-unwanted-topic-filter-status {
+    flex: 1 1 100%;
   }
 
   .ldp-unwanted-topic-filter-tabs {
@@ -17539,12 +17550,10 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 
 .ldp-lb-source-text {
   box-sizing: border-box;
-  height: var(--ldp-lb-description-height, 120px);
-  min-height: 56px;
-  max-height: 40vh;
+  height: auto;
+  max-height: min(var(--ldp-lb-description-height, 120px), 40vh);
   overflow: auto;
   padding: 10px 14px 11px;
-  resize: vertical;
   color: var(--primary-medium, #666);
   font-size: var(--ldp-font-ui);
   overflow-wrap: anywhere;

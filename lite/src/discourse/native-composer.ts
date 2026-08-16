@@ -479,10 +479,15 @@ export class DiscourseComposerCoordinator {
 			}
 		}
 		if (cleanupErrors.length) {
-			throw new AggregateError(
+			const cleanupError = new AggregateError(
 				cleanupErrors,
 				'Discourse composer 舍弃后清理失败',
 			);
+			try {
+				this.#onError(cleanupError);
+			} catch {
+				// 草稿已删除；诊断 consumer 失败不能反向误报为舍弃失败。
+			}
 		}
 	}
 

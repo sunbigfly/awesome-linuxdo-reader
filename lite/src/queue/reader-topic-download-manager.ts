@@ -533,6 +533,7 @@ export class ReaderTopicDownloadManager {
 	#visibleHistoryTopicIds: readonly DiscourseTopicId[] = Object.freeze([]);
 	readonly #selectedHistoryTopics = new Set<DiscourseTopicId>();
 	readonly #removing = new Set<DiscourseTopicId>();
+	#externalRestore: Promise<void> | null = null;
 	readonly #viewObjectUrls = new Set<Readonly<{
 		readonly urlApi: Pick<typeof URL, 'revokeObjectURL'>;
 		readonly value: string;
@@ -933,10 +934,10 @@ export class ReaderTopicDownloadManager {
 			task?.phase === 'ready' && selection &&
 				sameSelection(task.selection, selection),
 		);
-		this.#downloadCurrent.disabled = current === null || active || duplicateReady;
+		this.#downloadCurrent.disabled = current === null || active;
 		this.#downloadCurrent.classList.toggle('is-active', active);
 		this.#downloadCurrentLabel.textContent = duplicateReady
-			? '已在下载历史'
+			? '重新生成离线 HTML'
 			: active
 			? task?.phase === 'waiting-rate-limit'
 				? '等待断点续传'
@@ -949,7 +950,7 @@ export class ReaderTopicDownloadManager {
 		this.#downloadCurrent.setAttribute(
 			'aria-label',
 			duplicateReady && current
-				? `${current.title} 的${selectionLabel(selection!)}已在下载历史`
+				? `重新生成 ${current.title} 的${selectionLabel(selection!)}离线 HTML`
 				: active && current
 				? `${current.title} 正在后台下载`
 				: '开始后台下载当前 Topic',
@@ -1074,18 +1075,36 @@ export class ReaderTopicDownloadManager {
 		return true;
 	}
 
-	enqueueCurrent(): ReaderTopicDownloadTaskSnapshot | null {
+	reloadExternal(): Promise<void> {
+		if (this.scope.destroyed) return Promise.resolve();
+		if (this.#externalRestore) return this.#externalRestore;
+		const restore = this.#restoreArtifacts(true).finally(() => {
+			if (this.#externalRestore === restore) this.#externalRestore = null;
+		});
+		this.#externalRestore = restore;
+		return restore;
+	}
+
+	enqueueCurrent(
+		regenerateDuplicateReady = false,
+	): ReaderTopicDownloadTaskSnapshot | null {
 		const current = this.#options.currentTopic();
 		if (!current) return null;
 		const selection = this.#readSelection();
 		if (!selection) return null;
-		return this.enqueue(current.topicId, current.title, selection);
+		return this.enqueue(
+			current.topicId,
+			current.title,
+			selection,
+			regenerateDuplicateReady,
+		);
 	}
 
 	enqueue(
 		rawTopicId: number,
 		rawTitle: string,
 		selection: ReaderTopicDownloadSelection = ALL_POSTS_SELECTION,
+		regenerateDuplicateReady = false,
 	): ReaderTopicDownloadTaskSnapshot {
 		const topicId = discourseTopicId(rawTopicId);
 		const title = String(rawTitle || `Topic #${topicId}`).replace(/\s+/g, ' ').trim();
@@ -1095,7 +1114,7 @@ export class ReaderTopicDownloadManager {
 		if (
 			existing && (
 				!['ready', 'error', 'cancelled'].includes(existing.phase) ||
-				(existing.phase === 'ready' &&
+				(!regenerateDuplicateReady && existing.phase === 'ready' &&
 					sameSelection(existing.selection, selected))
 			)
 		) {
@@ -1319,7 +1338,7 @@ export class ReaderTopicDownloadManager {
 			) ?? null;
 		if (!target) return;
 		if (target === this.#downloadCurrent) {
-			this.enqueueCurrent();
+			this.enqueueCurrent(true);
 			return;
 		}
 		const topicId = discourseTopicId(Number(target.dataset.topicId));
@@ -1630,13 +1649,30 @@ export class ReaderTopicDownloadManager {
 		this.#emit();
 	}
 
-	async #restoreArtifacts(): Promise<void> {
+	async #restoreArtifacts(reconcile = false): Promise<void> {
 		const store = this.#options.artifacts;
 		if (!store || this.scope.destroyed) return;
 		try {
-			for (const entry of await store.list()) {
+			const entries = await store.list();
+			const storedTopicIds = new Set(entries.map((entry) =>
+				discourseTopicId(entry.topicId)));
+			if (reconcile) {
+				for (const [topicId, task] of this.#tasks) {
+					if (storedTopicIds.has(topicId) || task.phase !== 'ready') continue;
+					this.#tasks.delete(topicId);
+					this.#selectedHistoryTopics.delete(topicId);
+				}
+			}
+			for (const entry of entries) {
 				const topicId = discourseTopicId(entry.topicId);
-				if (this.scope.destroyed || this.#tasks.has(topicId)) continue;
+				if (this.scope.destroyed) continue;
+				const current = this.#tasks.get(topicId);
+				if (
+					current &&
+					current.phase !== 'ready' &&
+					current.phase !== 'error' &&
+					current.phase !== 'cancelled'
+				) continue;
 				this.#tasks.set(topicId, {
 					topicId,
 					title: entry.title,
@@ -1654,10 +1690,10 @@ export class ReaderTopicDownloadManager {
 					localDownloadRequestedAt:
 						Math.max(0, Number(entry.localDownloadRequestedAt) || 0),
 					artifact: null,
-						controller: null,
-						requestResumeCount: 0,
-						challengeResumeCount: 0,
-						resumeAvailable: false,
+					controller: null,
+					requestResumeCount: 0,
+					challengeResumeCount: 0,
+					resumeAvailable: false,
 				});
 			}
 			this.#trimTasks();

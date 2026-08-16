@@ -608,6 +608,10 @@ const requiredLayoutContracts = [
 		'lightbox comments width inheritance',
 		/\.ldp-lightbox\s*\{(?:(?!--ldp-lb-comments-width-preferred:\s*25%).)*--ldp-lb-comments-width:\s*clamp\(min\(240px,\s*50%\),\s*var\(--ldp-lb-comments-width-preferred,\s*25%\),\s*50%\)\s*;/s,
 	],
+	[
+		'lightbox description content-sized scroll cap',
+		/\.ldp-lb-source-text\s*\{[^}]*height:\s*auto\s*;[^}]*max-height:\s*min\(var\(--ldp-lb-description-height,\s*120px\),\s*40vh\)\s*;[^}]*overflow:\s*auto\s*;/s,
+	],
 ];
 const missingLayoutContracts = requiredLayoutContracts
 	.filter(([, pattern]) => !pattern.test(stylesheet))

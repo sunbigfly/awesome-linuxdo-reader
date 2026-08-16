@@ -543,8 +543,9 @@ function normalizeState(
 						)
 					),
 				automaticAttempted:
-					challengeSource.automaticAttempted === true ||
-					challengeSource.ownerId === '',
+					typeof challengeSource.automaticAttempted === 'boolean'
+						? challengeSource.automaticAttempted
+						: challengeSource.ownerId === '',
 				recoveryProbeAttempted:
 					challengeSource.recoveryProbeAttempted === true,
 				...storedChallengeProbeState(challengeSource),
@@ -1096,15 +1097,19 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			) {
 				return;
 			}
+			const newGeneration =
+				state.challenge?.state === 'passed' && input.force === true;
 			state.challenge = Object.freeze({
 				ownerId: '',
 				state: 'active',
 				required: true,
 				automaticAttempted:
+					!newGeneration &&
 					state.challenge?.automaticAttempted === true,
 				recoveryProbeAttempted:
+					!newGeneration &&
 					state.challenge?.recoveryProbeAttempted === true,
-				...storedChallengeProbeState(state.challenge),
+				...(newGeneration ? {} : storedChallengeProbeState(state.challenge)),
 				updatedAt: now,
 				expiresAt: now + this.#challengeMaxWaitMs,
 			});
@@ -1434,7 +1439,12 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		);
 		let nextVerifyAt = this.#now() + verifyDelayMs;
 		const onPopupLoad: EventListener = () => {
-			this.#wake();
+			/*
+			 * 用户完成 Turnstile 后通常会触发同窗导航/load。此时不能继续等待
+			 * 最长 10 秒的指数退避；立刻允许共享 session 探针确认并收窗。
+			 */
+			nextVerifyAt = this.#now();
+			void this.#expediteChallengeProbeAfterLoad();
 		};
 		popup.addEventListener?.('load', onPopupLoad);
 		this.#focusChallengeWindow();
@@ -1569,6 +1579,36 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		return Promise.race([shared, cancelled]).finally(() => {
 			signal.removeEventListener('abort', abort);
 		});
+	}
+
+	async #expediteChallengeProbeAfterLoad(): Promise<void> {
+		/*
+		 * load 可能恰好撞上上一轮 session 探针；先等它结算，再在共享租约里
+		 * 清掉 probeNotBefore，避免旧探针的失败结算重新写回长退避。
+		 */
+		try {
+			await this.#challengeProbePromise;
+		} catch {
+			// 探针失败仍应允许导航完成后的即时复核。
+		}
+		try {
+			await this.#transact((state, now) => {
+				if (
+					state.challenge?.state !== 'active' ||
+					state.challenge.ownerId !== this.#sourceId
+				) return;
+				state.challenge = Object.freeze({
+					...state.challenge,
+					probeNotBefore: now,
+					probeBackoffMs: this.#challengeVerifyIntervalMs,
+					updatedAt: now,
+				});
+			});
+		} catch (error) {
+			this.#onError(error);
+		} finally {
+			this.#wake();
+		}
 	}
 
 	async #runChallengeProbe(signal: AbortSignal): Promise<boolean> {

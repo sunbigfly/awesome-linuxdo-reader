@@ -12,6 +12,8 @@ import {
 	type ReaderTopicSummary,
 } from '../src/post/reader-topic-summary-request-adapter.js';
 import {
+	READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY,
+	READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY,
 	renderReaderTopicSummaryShareImage,
 	ReaderTopicSummarySurface,
 	type ReaderTopicSummaryShareImageOptions,
@@ -627,6 +629,53 @@ assert(
 	)?.hidden,
 	'点击时间线记录必须退出历史列表并恢复当次可分享结果',
 );
+stored.set(READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY, JSON.stringify({
+	schemaVersion: 2,
+	entries: [
+		...(officialHistory.entries ?? []),
+		{
+			...(officialHistory.entries?.at(-1) ?? {}),
+			id: 'remote-tab-summary',
+			generatedAt: '2026-08-16T02:00:00.000Z',
+		},
+	],
+}));
+stored.set(READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY, JSON.stringify({
+	schemaVersion: 5,
+	style: 'sunset',
+	chineseFont: 'system',
+	latinFont: 'system',
+	widthMode: 'social',
+	customWidth: 1_080,
+	fontSizeMode: 'recommended',
+	customFontSize: 31,
+	customPrompt: '',
+	customModelBaseUrl: 'https://api.example.com/v1',
+	customModel: 'summary-test-model',
+	summaryLength: 'standard',
+	summaryPurpose: 'general',
+}));
+stored.set(
+	'ldp:topic-summary-window-geometry:v1:fullpage',
+	JSON.stringify({
+		readerWindowWidth: 650,
+		readerWindowHeight: 690,
+		readerWindowX: 30,
+		readerWindowY: 42,
+		readerWindowLocked: false,
+		readerWindowPinned: false,
+	}),
+);
+surface.reloadExternalState();
+click(surface.historyButton);
+assert(
+	surface.root.querySelectorAll('.ldp-topic-summary-history-item').length === 3 &&
+	surface.styleSelect.value === 'sunset' &&
+	surface.widthModeSelect.value === 'social' &&
+	Number(surface.frame.geometry.snapshot.geometry.left) === 30,
+	'其他标签的总结历史、分享设置与当前形态浮窗位置必须由同一局部回调同步',
+);
+click(surface.historyButton);
 
 click(surface.settingsButton);
 await flush();
@@ -838,7 +887,9 @@ assert(
 	!surface.root.hidden && surface.frame.isOpen,
 	'图片选择会话活动时，关闭按钮的 pointerdown 与 Escape 都不能越级关闭总结浮窗',
 );
-resolveDeferredImagePicker?.(null);
+(resolveDeferredImagePicker as (
+	((items: readonly ReaderLightboxItem[] | null) => void) | null
+))?.(null);
 await flush();
 pickerCloseProbe.remove();
 deferImagePicker = false;
@@ -865,7 +916,7 @@ assert(
 	customRequests[0]?.length === 'detailed' &&
 	customRequests[0]?.customPrompt === '优先说明楼主最终结论' &&
 	customRequests[0]?.images?.length === 1 &&
-	surface.frame.meta.textContent === '自定义 API' &&
+	String(surface.frame.meta.textContent) === '自定义 API' &&
 	!surface.previewCanvas.hidden,
 	`自定义总结必须把范围、Prompt 与所选图片交给共享 API，并投影可视化制备阶段：${JSON.stringify({
 		customRequests,
@@ -905,7 +956,7 @@ change(surface.floorRangeInput);
 click(surface.generateButton);
 await flush();
 assert(
-	customRequests.length === 3 &&
+	Number(customRequests.length) === 3 &&
 	customRequests[2]?.scope === 'range' &&
 	customRequests[2]?.floorRange === '#2-#4, #8',
 	'自定义范围必须接受区间与散点楼层，并作为独立参数传给嵌套总结请求',
@@ -919,8 +970,8 @@ const allHistory = JSON.parse(
 	}>[];
 }>;
 assert(
-	allHistory.entries?.length === 5 &&
-	surface.root.querySelectorAll('.ldp-topic-summary-history-item').length === 5 &&
+	allHistory.entries?.length === 6 &&
+	surface.root.querySelectorAll('.ldp-topic-summary-history-item').length === 6 &&
 	allHistory.entries.filter((entry) =>
 		entry.context?.purpose === 'decision' &&
 		entry.context?.length === 'detailed' &&

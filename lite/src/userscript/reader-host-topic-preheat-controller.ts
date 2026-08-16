@@ -86,6 +86,11 @@ export interface ReaderHostTopicPreheatProgress {
 	readonly complete: boolean;
 }
 
+export interface ReaderHostTopicPreheatActivityPort {
+	visible(): boolean;
+	subscribe(listener: () => void): () => void;
+}
+
 export interface ReaderHostTopicPreheatControllerOptions {
 	readonly document: Document;
 	readonly mutations: MainOutletMutationHub;
@@ -114,6 +119,7 @@ export interface ReaderHostTopicPreheatControllerOptions {
 	readonly cancelFrame?: (id: number) => void;
 	readonly maxQueuedTopics?: number;
 	readonly maxConcurrentPreheats?: number;
+	readonly activity?: ReaderHostTopicPreheatActivityPort;
 	readonly shouldPauseAfterError?: (error: unknown) => boolean;
 	readonly canResume?: () => boolean | Promise<boolean>;
 	readonly onError?: (error: unknown) => void;
@@ -246,6 +252,11 @@ export class ReaderHostTopicPreheatController {
 			{ root: null, rootMargin: '125% 0px', threshold: 0.01 },
 		) ?? null;
 		options.mutations.subscribe((batch) => this.#onMutations(batch), this.scope);
+		if (options.activity) {
+			this.scope.add(options.activity.subscribe(() => {
+				this.#onActivityChanged();
+			}));
+		}
 		this.scope.add(() => this.#clear());
 	}
 
@@ -509,6 +520,10 @@ export class ReaderHostTopicPreheatController {
 				: viewportCenter;
 			this.#nearTopics.set(topic.topicId, Math.abs(cardCenter - viewportCenter));
 		}
+		if (!this.#activityVisible()) {
+			this.#pauseForInactivity();
+			return;
+		}
 		this.#dropStaleQueuedTopics();
 		if (this.#nearTopics.size) {
 			for (const [topicId, controller] of this.#activeControllers) {
@@ -526,7 +541,7 @@ export class ReaderHostTopicPreheatController {
 	}
 
 	#fillQueue(): void {
-		if (this.#paused) return;
+		if (this.#paused || !this.#activityVisible()) return;
 		this.#dropStaleQueuedTopics();
 		for (const [topicId] of [...this.#nearTopics.entries()]
 			.sort((left, right) => left[1] - right[1])) {
@@ -553,6 +568,7 @@ export class ReaderHostTopicPreheatController {
 
 	#enqueue(topic: TopicState): void {
 		if (
+			!this.#activityVisible() ||
 			this.#liveReading.has(topic.topicId) ||
 			topic.status === 'queued' ||
 			topic.status === 'loading' ||
@@ -569,7 +585,12 @@ export class ReaderHostTopicPreheatController {
 	}
 
 	#pump(): void {
-		if (this.#destroyed || this.scope.destroyed || this.#paused) return;
+		if (
+			this.#destroyed ||
+			this.scope.destroyed ||
+			this.#paused ||
+			!this.#activityVisible()
+		) return;
 		for (let index = this.#queue.length - 1; index >= 0; index -= 1) {
 			const topicId = this.#queue[index]!;
 			const topic = this.#topics.get(topicId);
@@ -636,7 +657,12 @@ export class ReaderHostTopicPreheatController {
 				this.#networkActiveTopics.delete(topicId);
 				if (this.#activeControllers.get(topicId) === controller) {
 					this.#activeControllers.delete(topicId);
-					if (!this.#paused) {
+					if (controller.signal.aborted && topic.status === 'loading') {
+						topic.status = 'idle';
+						topic.attempts = Math.max(0, topic.attempts - 1);
+						this.#renderTopic(topic);
+					}
+					if (!this.#paused && this.#activityVisible()) {
 						this.#fillQueue();
 						this.#pump();
 					}
@@ -685,7 +711,7 @@ export class ReaderHostTopicPreheatController {
 			if (topic.restoreController !== controller) return;
 			topic.restoreController = null;
 			topic.restorePending = false;
-			if (!this.#paused) {
+			if (!this.#paused && this.#activityVisible()) {
 				this.#fillQueue();
 				this.#pump();
 			}
@@ -741,6 +767,43 @@ export class ReaderHostTopicPreheatController {
 		}
 	}
 
+	#activityVisible(): boolean {
+		try {
+			return this.#options.activity?.visible() ?? true;
+		} catch (error) {
+			this.#report(error);
+			return false;
+		}
+	}
+
+	#pauseForInactivity(): void {
+		for (const topicId of this.#queue.splice(0)) {
+			const queued = this.#topics.get(topicId);
+			if (queued?.status !== 'queued') continue;
+			queued.status = 'idle';
+			this.#renderTopic(queued);
+		}
+		for (const controller of this.#activeControllers.values()) {
+			controller.abort(
+				new DOMException('页面进入后台，暂停宿主 Topic 预热', 'AbortError'),
+			);
+		}
+	}
+
+	#onActivityChanged(): void {
+		if (this.#destroyed || this.scope.destroyed) return;
+		if (!this.#activityVisible()) {
+			this.#pauseForInactivity();
+			return;
+		}
+		if (this.#paused) {
+			void this.#tryResume();
+			return;
+		}
+		this.#fillQueue();
+		this.#pump();
+	}
+
 	#stopPreheatForLiveTopic(topic: TopicState): void {
 		this.#removeFromQueue(topic.topicId);
 		topic.restoreController?.abort(
@@ -758,7 +821,12 @@ export class ReaderHostTopicPreheatController {
 		if (this.#resumePromise) return this.#resumePromise;
 		const promise = Promise.resolve(this.#options.canResume?.() ?? true)
 			.then((ready) => {
-				if (!ready || this.#destroyed || this.scope.destroyed) return;
+				if (
+					!ready ||
+					this.#destroyed ||
+					this.scope.destroyed ||
+					!this.#activityVisible()
+				) return;
 				this.#paused = false;
 				this.#fillQueue();
 				this.#pump();

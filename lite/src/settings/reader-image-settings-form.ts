@@ -262,8 +262,9 @@ export class ReaderImageSettingsForm<TPreferences extends object> {
 		this.#descriptionHeight.step = '1';
 		lightbox.append(settingsOptionRow(
 			document,
-			'图片描述高度',
-			`范围 ${LIGHTBOX_DESCRIPTION_HEIGHT_MIN}–${this.#descriptionMaximum}px。`,
+			'图片描述最大高度',
+			`内容较少时自适应，超过上限后内部滚动；范围 ` +
+				`${LIGHTBOX_DESCRIPTION_HEIGHT_MIN}–${this.#descriptionMaximum}px。`,
 			this.#descriptionHeight,
 		));
 		const commentsWidthControl = element(
@@ -405,7 +406,7 @@ export class ReaderImageSettingsForm<TPreferences extends object> {
 			value.lightboxDescriptionHeight > this.#descriptionMaximum
 		) {
 			issues.push(
-				`图片描述高度必须是 ${LIGHTBOX_DESCRIPTION_HEIGHT_MIN}–${this.#descriptionMaximum}px`,
+				`图片描述最大高度必须是 ${LIGHTBOX_DESCRIPTION_HEIGHT_MIN}–${this.#descriptionMaximum}px`,
 			);
 		}
 		if (

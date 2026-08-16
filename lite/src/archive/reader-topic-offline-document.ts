@@ -1033,7 +1033,7 @@ function readerTopicOfflineRuntime(
 	};
 	const offlineIcon = (
 		name: 'arrow-up' | 'chevron-down' | 'chevron-left' | 'chevron-up' |
-			'layers' | 'minus' | 'plus',
+			'layers' | 'minus' | 'plus' | 'tag',
 	): SVGSVGElement => {
 		const namespace = 'http://www.w3.org/2000/svg';
 		const icon = document.createElementNS(namespace, 'svg');
@@ -1058,11 +1058,23 @@ function readerTopicOfflineRuntime(
 			]),
 			minus: Object.freeze(['M5 12h14']),
 			plus: Object.freeze(['M12 5v14', 'M5 12h14']),
+			tag: Object.freeze([
+				'M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z',
+			]),
 		};
 		for (const definition of paths[name]) {
 			const path = document.createElementNS(namespace, 'path');
 			path.setAttribute('d', definition);
 			icon.append(path);
+		}
+		if (name === 'tag') {
+			const hole = document.createElementNS(namespace, 'circle');
+			hole.setAttribute('cx', '7.5');
+			hole.setAttribute('cy', '7.5');
+			hole.setAttribute('r', '.5');
+			hole.setAttribute('fill', 'currentColor');
+			hole.setAttribute('stroke', 'none');
+			icon.append(hole);
 		}
 		return icon;
 	};
@@ -1146,6 +1158,7 @@ function readerTopicOfflineRuntime(
 		for (const image of root.querySelectorAll<HTMLImageElement>('img')) {
 			if (
 				image.closest('.ldp-offline-image-frame') ||
+				image.closest('aside.onebox') ||
 				image.matches(
 					'.emoji,.emoji-custom,.avatar,.ldp-avatar,' +
 					'.ldp-boost-avatar,.ldp-pv-comment-avatar,.ldp-solved-avatar',
@@ -1258,6 +1271,49 @@ function readerTopicOfflineRuntime(
 	};
 	const expandedQuoteKeys = new Set<string>();
 	const quoteExcerptHtmlByElement = new WeakMap<HTMLElement, string>();
+	const prepareOfflineHashtags = (root: HTMLElement): void => {
+		for (const hashtag of root.querySelectorAll<HTMLElement>('.hashtag-cooked')) {
+			const host = hashtag.matches('a')
+				? hashtag
+				: hashtag.querySelector<HTMLElement>('a') ?? hashtag;
+			if (host.querySelector('img.emoji')) continue;
+			const existing = host.querySelector<SVGElement>('svg');
+			if (existing?.querySelector(
+				'path,circle,rect,ellipse,line,polyline,polygon',
+			)) continue;
+			const icon = offlineIcon('tag');
+			icon.classList.add('ldp-hashtag-icon');
+			const placeholder = host.querySelector('.hashtag-icon-placeholder');
+			if (placeholder) placeholder.replaceWith(icon);
+			else if (existing) existing.replaceWith(icon);
+			else host.prepend(icon);
+		}
+	};
+	const prepareOfflineUserMentions = (root: HTMLElement): void => {
+		const base = new URL(String(data.baseUrl || data.sourceUrl || location.href));
+		for (const link of root.querySelectorAll<HTMLAnchorElement>('a.mention')) {
+			let username = String(link.dataset.username ?? '')
+				.trim()
+				.replace(/^@+/, '');
+			if (!username) {
+				try {
+					const url = new URL(link.getAttribute('href') ?? '', base);
+					const match = url.origin === base.origin
+						? url.pathname.match(/^\/u\/([^/]+)\/?$/i)
+						: null;
+					username = match?.[1] ? decodeURIComponent(match[1]) : '';
+				} catch {
+					username = '';
+				}
+			}
+			if (!username) username = String(link.textContent ?? '')
+				.trim()
+				.replace(/^@+/, '');
+			if (!username) continue;
+			link.classList.add('ldp-user-link');
+			link.dataset.userCard = username;
+		}
+	};
 	const prepareOfflineInlineOneboxes = (root: HTMLElement): void => {
 		for (const link of root.querySelectorAll<HTMLAnchorElement>(
 			'a.inline-onebox',
@@ -1303,6 +1359,44 @@ function readerTopicOfflineRuntime(
 			}
 			body.replaceChildren(title, ...(description ? [description] : []));
 			onebox.dataset.ldpGithubOneboxNormalized = '1';
+		}
+	};
+	const decorateOfflineClickCounts = (
+		root: HTMLElement,
+		post: OfflinePost,
+	): void => {
+		if (!Array.isArray(post.link_counts)) return;
+		const counts = new Map<string, number>();
+		for (const value of post.link_counts) {
+			if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+			const item = value as Readonly<Record<string, unknown>>;
+			const clicks = Math.max(0, Math.trunc(Number(item.clicks) || 0));
+			const url = item.reflection ? '' : absoluteUrl(item.url);
+			if (!url || clicks === 0) continue;
+			counts.set(url, Math.max(clicks, counts.get(url) ?? 0));
+		}
+		for (const link of root.querySelectorAll<HTMLAnchorElement>('a[href]')) {
+			if (link.querySelector(':scope > .ldp-link-click-count')) continue;
+			const onebox = link.closest('aside.onebox');
+			if (onebox && link.closest('header.source')) {
+				const titleLink = onebox.querySelector<HTMLAnchorElement>(
+					'.onebox-body h3 a[href]',
+				);
+				if (
+					titleLink && absoluteUrl(titleLink.getAttribute('href')) ===
+						absoluteUrl(link.getAttribute('href'))
+				) continue;
+			}
+			const clicks = counts.get(absoluteUrl(link.getAttribute('href')));
+			if (!clicks || !(link.textContent ?? '').trim()) continue;
+			const count = document.createElement('span');
+			const label = `${clicks.toLocaleString('zh-CN')} 次点击`;
+			count.className = 'ldp-link-click-count';
+			count.setAttribute('role', 'note');
+			count.setAttribute('aria-label', label);
+			count.dataset.ldpTooltipLabel = label;
+			count.textContent = clicks.toLocaleString('zh-CN');
+			link.append(count);
 		}
 	};
 	const quoteKey = (
@@ -1411,11 +1505,15 @@ function readerTopicOfflineRuntime(
 	const prepareOfflineCooked = (
 		post: OfflinePost,
 		root: HTMLElement,
+		withClickCounts = true,
 	): void => {
+		prepareOfflineHashtags(root);
+		prepareOfflineUserMentions(root);
 		prepareOfflineInlineOneboxes(root);
 		prepareOfflineOneboxes(root);
 		prepareOfflineQuotes(Number(post.post_number), root);
 		prepareOfflineInlineEmoji(root);
+		if (withClickCounts) decorateOfflineClickCounts(root, post);
 	};
 	const avatarFallback = (post: OfflinePost): HTMLElement => {
 		const fallback = document.createElement('span');
@@ -2266,7 +2364,7 @@ function readerTopicOfflineRuntime(
 		prepareReadOnlyBoosts(post, view, ownerUsername);
 		if (!archived) prepareReadOnlyReactions(post, view);
 		for (const cooked of view.body.querySelectorAll<HTMLElement>('.cooked')) {
-			if (cooked !== view.content) prepareOfflineCooked(post, cooked);
+			if (cooked !== view.content) prepareOfflineCooked(post, cooked, false);
 		}
 		prepareOfflineInlineEmoji(view.root);
 		normalizeAssets(view.body);
@@ -3950,7 +4048,7 @@ export function createReaderTopicOfflineDocument<
 		input.inlineEmojiUrl,
 	);
 	const payload = Object.freeze({
-		schemaVersion: 8,
+		schemaVersion: 9,
 		topicId,
 		title,
 		ownerUsername: String(header.ownerUsername || posts[0]?.username || ''),

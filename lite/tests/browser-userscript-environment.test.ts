@@ -16,6 +16,13 @@ function assert(condition: unknown, message: string): asserts condition {
 const messageBus = Object.freeze({ subscribe() {}, unsubscribe() {} });
 let gmCalls = 0;
 const gmValues = new Map<string, unknown>();
+const gmValueListeners = new Map<number, (
+	name: string,
+	previous: unknown,
+	value: unknown,
+	remote: boolean,
+) => void>();
+let gmValueListenerId = 0;
 const sharedTargets: unknown[] = [];
 const copiedTexts: string[] = [];
 const katexCalls: string[] = [];
@@ -150,6 +157,22 @@ const userscriptGlobal = {
 	GM_setValue(key: string, value: unknown) {
 		gmValues.set(key, value);
 	},
+	GM_addValueChangeListener(
+		_key: string,
+		listener: (
+			name: string,
+			previous: unknown,
+			value: unknown,
+			remote: boolean,
+		) => void,
+	) {
+		gmValueListenerId += 1;
+		gmValueListeners.set(gmValueListenerId, listener);
+		return gmValueListenerId;
+	},
+	GM_removeValueChangeListener(listenerId: number) {
+		gmValueListeners.delete(listenerId);
+	},
 	GM_getResourceText(name: string) {
 		return name === 'ldpReaderStyles' ? '.ldp-overlay{display:block;}' : '';
 	},
@@ -275,6 +298,24 @@ assert(
 	JSON.stringify(await valueStorage?.getValue('reader-state')) ===
 		JSON.stringify({ value: 1 }),
 	'用户脚本值存储必须集中复用 GM_getValue/GM_setValue，并保留对象协议',
+);
+const remoteValues: unknown[] = [];
+const unsubscribeValue = valueStorage?.subscribe?.(
+	'reader-state',
+	(value) => remoteValues.push(value),
+);
+const valueListener = [...gmValueListeners.values()][0];
+valueListener?.('reader-state', { value: 1 }, { value: 2 }, false);
+valueListener?.('reader-state', { value: 2 }, { value: 3 }, true);
+assert(
+	JSON.stringify(remoteValues) === JSON.stringify([{ value: 3 }]),
+	'GM value change port 必须只转发其他标签的远端更新，避免本标签写入事件回环',
+);
+unsubscribeValue?.();
+await Promise.resolve();
+assert(
+	gmValueListeners.size === 0,
+	'GM value change 订阅必须提供可等待异步 listener id 的销毁回调',
 );
 const searchForms = environment.createPinyinSearchForms();
 assert(

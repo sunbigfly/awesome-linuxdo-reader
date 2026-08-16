@@ -50,7 +50,7 @@
 | Connect 信任观察历史 | `linuxdo-enhanced-reader:connect-trust-history:v1:scope:v2:<authScope>`；本地观察最长 400 天，界面投影 50 天 | 保存本机观察到的 Connect 指标首末值和已确认阅读指纹；服务端 user-actions 另走 10 分钟 / 24 小时中央响应缓存 | 账号隔离、不可由服务端完整重建，属于用户本地数据；“用户资料卡”清理只删可重取的服务端响应，不删除这份观察历史 |
 | LDC 兼容 bridge | `awesome-linuxdo-reader:ldc-user-bridge:v1`；30 分钟 | LDC 页面同源桥与 Reader 中央请求的短期兼容交接，只保存白名单数据和 `cachedAt` | 可重新获取；过期加载主动置空，设置“用户资料卡”清理也会置空，并以 epoch 阻止晚到请求复写 |
 | 已读成功协调 | `linuxdo-enhanced-reader:read-success:v1`；默认 60 秒/16 条 | 防止跨标签重复提交 timings，包含 `authScope + topicId + postNumbers` | 短期淘汰、账号隔离；服务端提交仍 no-store |
-| cache/request 协调 | cache coordination、request permit 的固定 storage/channel/lock key | 只保存租约、限流和失效元数据，不保存响应正文 | 有 TTL、条数上限和 sourceId；用于跨标签 single-flight |
+| cache/request 协调 | cache coordination、request permit 的固定 storage/channel/lock key | 只保存租约、限流和失效元数据，不保存响应正文 | 有 TTL、条数上限和 sourceId；用于跨标签 single-flight。通知、收藏历史和宿主 Topic 近视口预热共用 application 级页面活跃信号；隐藏标签不启动或续跑后台联网，恢复后从共享 IndexedDB 与断点接管 |
 | embedded reload handoff | `ldp:mian-lite:embedded-reload:v1`，短 TTL，读取即删 | iframe/嵌入模式重载时传递一次性目标 | 临时导航状态，不是资源缓存 |
 | 兼容 CacheStorage 目录 | 三个固定 avatar/emoji/original cache name | 设置页仅统计或由用户清理；Lite 不再向这些 bucket 写 Blob | 只读兼容目录，不能视为 Lite 的第二份图片 cache |
 

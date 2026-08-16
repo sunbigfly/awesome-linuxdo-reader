@@ -326,6 +326,7 @@ export interface ReaderConnectTrustHistoryChange {
 
 export interface ReaderConnectTrustHistoryPort {
 	readonly changes: Pick<Signal<ReaderConnectTrustHistoryChange>, 'subscribe'>;
+	readonly externalChanges?: Pick<Signal<void>, 'subscribe'>;
 	cached(
 		username: string,
 		metrics: Readonly<Record<string, unknown>>,
@@ -616,6 +617,7 @@ function serverFilterForMetric(key: string): 1 | 2 | 5 | null {
 export class ReaderConnectTrustHistoryAdapter
 	implements ReaderConnectTrustHistoryPort {
 	readonly changes = new Signal<ReaderConnectTrustHistoryChange>();
+	readonly externalChanges = new Signal<void>();
 	readonly #gateway: ReaderConnectTrustHistoryGateway;
 	readonly #ajax: ReaderConnectTrustHistoryAjaxPort;
 	readonly #storage: ReaderConnectTrustHistoryStoragePort;
@@ -648,6 +650,14 @@ export class ReaderConnectTrustHistoryAdapter
 			stored.readTrackingStartedAt = startedAt;
 			this.#writeLocal(stored);
 		}
+	}
+
+	get storageKey(): string {
+		return this.#storageIdentity.key;
+	}
+
+	reloadExternal(): void {
+		this.externalChanges.emit(undefined);
 	}
 
 	recordReadConfirmation(input: ReaderConnectTrustReadConfirmation): void {

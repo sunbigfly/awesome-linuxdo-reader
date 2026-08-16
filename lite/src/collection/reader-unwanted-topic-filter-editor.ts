@@ -213,7 +213,7 @@ export class ReaderUnwantedTopicFilterEditor {
 			this.#tabs.set(tab.name, button);
 			tabList.append(button);
 		}
-		sidebar.append(master, tabList);
+		sidebar.append(tabList);
 
 		const content = node(
 			options.document,
@@ -357,7 +357,7 @@ export class ReaderUnwantedTopicFilterEditor {
 		this.#save = this.#textButton('保存设置', 'check');
 		this.#save.classList.add('ldp-unwanted-topic-filter-save');
 		actions.append(this.#reset, this.#save);
-		footer.append(this.#status, actions);
+		footer.append(this.#status, master, actions);
 		this.element.append(workbench, footer);
 
 		this.#listen();

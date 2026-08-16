@@ -954,6 +954,7 @@ export function normalizeReaderAiModelMetadataCache(
 /** 共用 AI 服务与高级翻译参数的兼容存储 owner；storage key 保持不变。 */
 export class ReaderTranslationConfigRepository {
 	readonly changes = new Signal<ReaderTranslationConfigSnapshot>();
+	readonly metadataChanges = new Signal<ReaderAiModelMetadataCache | null>();
 	readonly #storage: ReaderTranslationConfigStoragePort;
 	readonly #storageKey: string;
 	readonly #metadataCacheStorageKey: string;
@@ -975,6 +976,14 @@ export class ReaderTranslationConfigRepository {
 		return this.#snapshot;
 	}
 
+	get storageKey(): string {
+		return this.#storageKey;
+	}
+
+	get metadataStorageKey(): string {
+		return this.#metadataCacheStorageKey;
+	}
+
 	async load(): Promise<ReaderTranslationConfigSnapshot> {
 		if (this.#snapshot.loaded) return this.#snapshot;
 		if (this.#loadPromise) return this.#loadPromise;
@@ -992,6 +1001,24 @@ export class ReaderTranslationConfigRepository {
 		} finally {
 			this.#loadPromise = null;
 		}
+	}
+
+	async reloadExternal(): Promise<ReaderTranslationConfigSnapshot> {
+		await this.#writeTail;
+		const source = record(await this.#storage.getValue(this.#storageKey));
+		this.#snapshot = Object.freeze({
+			loaded: true,
+			config: normalizeReaderTranslationConfig(source?.config ?? source),
+		});
+		this.changes.emit(this.#snapshot);
+		return this.#snapshot;
+	}
+
+	async reloadExternalState(): Promise<void> {
+		await Promise.all([
+			this.reloadExternal(),
+			this.reloadExternalMetadata(),
+		]);
 	}
 
 	async saveConfig(
@@ -1021,6 +1048,13 @@ export class ReaderTranslationConfigRepository {
 		);
 	}
 
+	async reloadExternalMetadata(): Promise<ReaderAiModelMetadataCache | null> {
+		await this.#writeTail;
+		const cache = await this.loadModelMetadataCache();
+		this.metadataChanges.emit(cache);
+		return cache;
+	}
+
 	async saveModelMetadataCache(
 		value: ReaderAiModelMetadataCache,
 	): Promise<ReaderAiModelMetadataCache> {
@@ -1032,6 +1066,7 @@ export class ReaderTranslationConfigRepository {
 		));
 		this.#writeTail = write.catch(() => {});
 		await write;
+		this.metadataChanges.emit(normalized);
 		return normalized;
 	}
 }

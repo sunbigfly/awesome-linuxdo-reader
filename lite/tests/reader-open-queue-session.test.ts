@@ -1168,6 +1168,29 @@ assert(
 	queuePanelBoundaryWheel.defaultPrevented && queuePanelWheelLeaks === 0,
 	'悬停打开的队列面板不得继续沿用宿主列表滚轮目标',
 );
+storage.setItem(queue.storageKey, JSON.stringify({
+	version: 2,
+	entries: [{
+		topicId: 99,
+		title: '其他标签加入的 Topic',
+		href: '/t/remote/99/4',
+		postNumber: 4,
+		addedAt: 9_999,
+		pinned: true,
+	}],
+	surfaces: {
+		floating: { x: 0.25, y: 0.3, dock: '' },
+		fullpage: { x: 0.02, y: 0.12, dock: 'left' },
+		embedded: { x: 0.02, y: 0.12, dock: 'left' },
+	},
+}));
+queue.reloadExternal();
+assert(
+	queue.syncEntries().length === 1 &&
+		queue.syncEntries()[0]?.topicId === 99 &&
+		queue.syncEntries()[0]?.postNumber === 4,
+	'其他标签更新阅读队列后，当前标签必须重读条目并局部重绘，不能依赖页面刷新',
+);
 queue.destroy();
 assert(
 	!root.querySelector('.ldp-reader-queue') &&

@@ -31,8 +31,6 @@ const main = document.querySelector<HTMLElement>('.ldp-lb-main')!;
 const resizer = document.querySelector<HTMLButtonElement>(
 	'.ldp-lb-comments-resizer',
 )!;
-const source = document.querySelector<HTMLDetailsElement>('details')!;
-const sourceText = document.querySelector<HTMLElement>('.ldp-lb-source-text')!;
 Object.defineProperty(document.defaultView, 'innerHeight', {
 	value: 1_000,
 	configurable: true,
@@ -48,28 +46,12 @@ main.getBoundingClientRect = () => ({
 	height: 700,
 	toJSON() { return {}; },
 } as DOMRect);
-sourceText.getBoundingClientRect = () => ({
-	x: 0,
-	y: 0,
-	left: 0,
-	top: 0,
-	right: 300,
-	bottom: 200,
-	width: 300,
-	height: 200,
-	toJSON() { return {}; },
-} as DOMRect);
-let resizeCallback: ResizeObserverCallback | null = null;
-let observerDisconnects = 0;
-let scheduled: (() => void) | null = null;
 let transformRenders = 0;
 const patches: Array<Readonly<Record<string, unknown>>> = [];
 const controller = new ReaderLightboxGeometryController({
 	root,
 	main,
 	resizer,
-	source,
-	sourceText,
 	preferences: {
 		lightboxDescriptionHeight: 120,
 		lightboxCommentsWidthPercent: 25,
@@ -81,22 +63,6 @@ const controller = new ReaderLightboxGeometryController({
 		transformRenders += 1;
 	},
 	frameScheduler: new ImmediateFrames(),
-	createResizeObserver: (callback) => {
-		resizeCallback = callback;
-		return {
-			observe() {},
-			disconnect() {
-				observerDisconnects += 1;
-			},
-		};
-	},
-	schedule: (callback) => {
-		scheduled = callback;
-		return callback;
-	},
-	cancelSchedule: () => {
-		scheduled = null;
-	},
 });
 
 assert(
@@ -151,26 +117,14 @@ assert(
 	'separator 键盘操作必须沿用同一宽度 owner 和持久化端口',
 );
 
-if (!resizeCallback) throw new Error('说明区必须建立 ResizeObserver');
-source.open = true;
-(resizeCallback as ResizeObserverCallback)([], {} as ResizeObserver);
-assert(scheduled, '说明区可见时 ResizeObserver 必须进入 160ms 合并保存');
-(scheduled as () => void)();
 assert(
-	controller.descriptionHeight === 200 &&
-	root.style.getPropertyValue('--ldp-lb-description-height') === '200px' &&
-	patches.some((patch) => patch.lightboxDescriptionHeight === 200),
-	'说明区 resize 必须规范化实际高度并写回同一偏好端口',
+	controller.descriptionHeight === 120 &&
+	!patches.some((patch) => patch.lightboxDescriptionHeight !== undefined),
+	'说明高度只作为内容自适应的上限，不得因内容变化反向改写偏好',
 );
-
-source.open = false;
-scheduled = null;
-(resizeCallback as ResizeObserverCallback)([], {} as ResizeObserver);
-assert(!scheduled, '说明区关闭时不得继续安排几何持久化');
 
 controller.destroy();
 assert(
-	observerDisconnects === 1 &&
 	!root.classList.contains('is-resizing-comments'),
-	'销毁必须反向释放 observer、frame、timer 和拖动 class',
+	'销毁必须反向释放 frame 和拖动 class',
 );

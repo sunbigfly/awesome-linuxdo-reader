@@ -19,28 +19,16 @@ export type ReaderLightboxGeometryPreferencePatch = Partial<
 	ReaderLightboxGeometryPreferences
 >;
 
-export interface ReaderLightboxGeometryResizeObserverPort {
-	observe(target: Element): void;
-	disconnect(): void;
-}
-
 export interface ReaderLightboxGeometryControllerOptions {
 	readonly root: HTMLElement;
 	readonly main: HTMLElement;
 	readonly resizer: HTMLButtonElement;
-	readonly source: HTMLDetailsElement;
-	readonly sourceText: HTMLElement;
 	readonly preferences: ReaderLightboxGeometryPreferences;
 	readonly persist?: (
 		patch: ReaderLightboxGeometryPreferencePatch,
 	) => void | Promise<void>;
 	readonly renderTransform: () => void;
 	readonly frameScheduler?: ReaderImageTransformFrameScheduler;
-	readonly createResizeObserver?: (
-		callback: ResizeObserverCallback,
-	) => ReaderLightboxGeometryResizeObserverPort;
-	readonly schedule?: (callback: () => void, delayMs: number) => unknown;
-	readonly cancelSchedule?: (handle: unknown) => void;
 	readonly parentScope?: LifecycleScope;
 	readonly onError?: (error: unknown) => void;
 }
@@ -108,42 +96,32 @@ function browserFrameScheduler(
 /**
  * Lightbox 评论列与说明区唯一几何 owner。
  *
- * 它只合并 pointer/keyboard/ResizeObserver 到 CSS 变量并经注入端口保存偏好；不读取
- * Discourse、不拥有评论数据，也不建立第二份配置存储。
+ * 它把评论列 pointer/keyboard 操作投影到 CSS 变量并经注入端口保存；
+ * 说明高度作为内容自适应的上限。它不读取 Discourse、不拥有评论数据，也不建立
+ * 第二份配置存储。
  */
 export class ReaderLightboxGeometryController {
 	readonly scope: LifecycleScope;
 	readonly #root: HTMLElement;
 	readonly #main: HTMLElement;
 	readonly #resizer: HTMLButtonElement;
-	readonly #source: HTMLDetailsElement;
-	readonly #sourceText: HTMLElement;
 	readonly #persistPreferences: ReaderLightboxGeometryControllerOptions['persist'];
 	readonly #renderTransform: () => void;
 	readonly #frames: ReaderImageTransformFrameScheduler;
-	readonly #schedule: (callback: () => void, delayMs: number) => unknown;
-	readonly #cancelSchedule: (handle: unknown) => void;
 	readonly #onError: (error: unknown) => void;
 	#commentsWidthPercent: number;
 	#descriptionHeight: number;
 	#commentsResize: CommentsResizeState | null = null;
 	#commentsResizeFrame = 0;
 	#transformFrame = 0;
-	#descriptionSaveTimer: unknown | null = null;
 
 	constructor(options: ReaderLightboxGeometryControllerOptions) {
 		this.#root = options.root;
 		this.#main = options.main;
 		this.#resizer = options.resizer;
-		this.#source = options.source;
-		this.#sourceText = options.sourceText;
 		this.#persistPreferences = options.persist;
 		this.#renderTransform = options.renderTransform;
 		this.#frames = options.frameScheduler ?? browserFrameScheduler(options.root);
-		this.#schedule = options.schedule ?? ((callback, delayMs) =>
-			globalThis.setTimeout(callback, delayMs));
-		this.#cancelSchedule = options.cancelSchedule ?? ((handle) =>
-			globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>));
 		this.#onError = options.onError ?? (() => {});
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		const viewportHeight = options.root.ownerDocument.defaultView?.innerHeight;
@@ -169,27 +147,13 @@ export class ReaderLightboxGeometryController {
 			this.#onPointerEnd(event as PointerEvent));
 		this.scope.listen(this.#resizer, 'keydown', (event) =>
 			this.#onKeyDown(event as KeyboardEvent));
-		const createResizeObserver = options.createResizeObserver ??
-			(typeof options.root.ownerDocument.defaultView?.ResizeObserver === 'function'
-				? (callback: ResizeObserverCallback) =>
-					new options.root.ownerDocument.defaultView!.ResizeObserver(callback)
-				: null);
-		if (createResizeObserver) {
-			const observer = createResizeObserver(() => this.#onDescriptionResize());
-			observer.observe(this.#sourceText);
-			this.scope.add(() => observer.disconnect());
-		}
 		this.scope.add(() => {
 			if (this.#commentsResizeFrame) {
 				this.#frames.cancel(this.#commentsResizeFrame);
 			}
 			if (this.#transformFrame) this.#frames.cancel(this.#transformFrame);
-			if (this.#descriptionSaveTimer !== null) {
-				this.#cancelSchedule(this.#descriptionSaveTimer);
-			}
 			this.#commentsResizeFrame = 0;
 			this.#transformFrame = 0;
-			this.#descriptionSaveTimer = null;
 			this.#commentsResize = null;
 			this.#root.classList.remove('is-resizing-comments');
 		});
@@ -328,27 +292,6 @@ export class ReaderLightboxGeometryController {
 			this.#commentsWidthPercent + (event.key === 'ArrowLeft' ? 2 : -2),
 			true,
 		);
-	}
-
-	#onDescriptionResize(): void {
-		if (!this.#source.open || this.#source.hidden || this.scope.destroyed) return;
-		if (this.#descriptionSaveTimer !== null) {
-			this.#cancelSchedule(this.#descriptionSaveTimer);
-		}
-		this.#descriptionSaveTimer = this.#schedule(() => {
-			this.#descriptionSaveTimer = null;
-			const next = normalizeReaderLightboxDescriptionHeight(
-				this.#sourceText.getBoundingClientRect().height,
-				this.#root.ownerDocument.defaultView?.innerHeight,
-			);
-			if (next === this.#descriptionHeight) return;
-			this.#descriptionHeight = next;
-			this.#root.style.setProperty(
-				'--ldp-lb-description-height',
-				`${next}px`,
-			);
-			this.#persist({ lightboxDescriptionHeight: next });
-		}, 160);
 	}
 
 	#persist(patch: ReaderLightboxGeometryPreferencePatch): void {

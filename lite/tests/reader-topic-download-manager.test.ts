@@ -591,18 +591,29 @@ assert(
 );
 manager.syncCurrent();
 const completedAttemptCount = attempts.get(41);
-const duplicateReady = manager.enqueueCurrent();
+const regenerateButton = mount.querySelector<HTMLButtonElement>(
+	'.ldp-topic-download-current',
+)!;
+assert(
+	regenerateButton.disabled === false &&
+		regenerateButton.textContent?.includes('重新生成离线 HTML') === true &&
+		regenerateButton.getAttribute('aria-label')
+			?.includes('重新生成 当前 Topic') === true,
+	'同范围历史不得把旧自包含 HTML 冒充当前版本，必须提供明确的重新生成入口',
+);
+regenerateButton.click();
+await tick();
 await tick();
 assert(
-	duplicateReady?.phase === 'ready' &&
-		attempts.get(41) === completedAttemptCount &&
+	manager.snapshot().tasks[0]?.phase === 'ready' &&
+		attempts.get(41) === Number(completedAttemptCount) + 1 &&
 		mount.querySelector('.ldp-topic-download-preview:not([hidden])') === null &&
 		mount.querySelector<HTMLButtonElement>(
 			'.ldp-topic-download-current',
-		)?.disabled === true &&
+		)?.disabled === false &&
 		mount.querySelector('.ldp-topic-download-current')?.textContent
-			?.includes('已在下载历史') === true,
-	'同一 Topic 的同一下载范围完成后必须隐藏预提交摘要并阻止重复下载',
+			?.includes('重新生成离线 HTML') === true,
+	'重新生成必须复用相同下载范围并以当前运行时覆盖旧历史，完成后仍保留再次刷新入口',
 );
 manager.closeManager();
 assert(
@@ -610,8 +621,8 @@ assert(
 		!details.hidden && details.classList.contains('is-open') &&
 		mount.querySelector<HTMLButtonElement>(
 			'.ldp-topic-download-current',
-		)?.disabled === true,
-	'快捷下载入口必须打开下载管理器，即使当前范围已在历史；重复下载仍由开始按钮阻止',
+		)?.disabled === false,
+	'快捷下载入口必须打开下载管理器，并允许已在历史的同范围离线 HTML 重新生成',
 );
 mount.querySelector<HTMLButtonElement>(
 	'[data-topic-download-action="view"][data-topic-id="41"]',
@@ -978,6 +989,25 @@ assert(
 			task.selection.mode === 'op' && task.archiveStatus === 404) &&
 		restoredViewed.includes('当前 Topic'),
 	'重新打开 Reader 后必须从持久备份恢复下载范围、404 版本与历史，原下载文件移动后仍可查看',
+);
+const externalArtifact = Object.freeze({
+	...backups.get(41)!,
+	topicId: discourseTopicId(77),
+	title: '其他标签下载的 Topic',
+	filename: 'topic-77.html',
+});
+backups.set(77, externalArtifact);
+await restoredManager.reloadExternal();
+assert(
+	restoredManager.snapshot().tasks.some((task) =>
+		task.topicId === 77 && task.title === '其他标签下载的 Topic'),
+	'其他标签新增 HTML 备份后必须局部刷新下载历史，且不得重新请求 Topic',
+);
+backups.delete(77);
+await restoredManager.reloadExternal();
+assert(
+	!restoredManager.snapshot().tasks.some((task) => task.topicId === 77),
+	'其他标签删除 HTML 备份后必须从当前下载历史投影移除对应记录',
 );
 restoredManager.destroy();
 

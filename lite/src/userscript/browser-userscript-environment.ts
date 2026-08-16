@@ -65,6 +65,10 @@ export type BrowserUserscriptSearchFormsPort = ReaderSearchFormsPort;
 export interface BrowserUserscriptValueStoragePort {
 	getValue(key: string): unknown | Promise<unknown>;
 	setValue(key: string, value: unknown): void | Promise<void>;
+	subscribe?(
+		key: string,
+		listener: (value: unknown, previous: unknown) => void,
+	): () => void;
 }
 
 export interface BrowserCreditBridgeHttpPort {
@@ -253,10 +257,46 @@ export class BrowserUserscriptEnvironment {
 	}
 
 	createValueStorage(): BrowserUserscriptValueStoragePort | null {
+		const subscription = (
+			owner: UnknownRecord,
+			add: (...args: unknown[]) => unknown,
+			remove: (...args: unknown[]) => unknown,
+		) => (
+			key: string,
+			listener: (value: unknown, previous: unknown) => void,
+		): (() => void) => {
+			let active = true;
+			let id: Promise<unknown>;
+			try {
+				id = Promise.resolve(add.call(
+					owner,
+					String(key),
+					(
+						_name: unknown,
+						previous: unknown,
+						value: unknown,
+						remote: unknown,
+					) => {
+						if (active && remote === true) listener(value, previous);
+					},
+				));
+			} catch {
+				return () => {};
+			}
+			return () => {
+				if (!active) return;
+				active = false;
+				void id.then((listenerId) =>
+					remove.call(owner, listenerId)).catch(() => {});
+			};
+		};
 		const modern = objectRecord(this.#userscriptGlobal.GM);
 		const modernGet = modern?.getValue;
 		const modernSet = modern?.setValue;
+		const modernAdd = modern?.addValueChangeListener;
+		const modernRemove = modern?.removeValueChangeListener;
 		if (
+			modern &&
 			typeof modernGet === 'function' &&
 			typeof modernSet === 'function'
 		) {
@@ -264,10 +304,22 @@ export class BrowserUserscriptEnvironment {
 				getValue: (key: string) => modernGet.call(modern, key, null),
 				setValue: (key: string, value: unknown) =>
 					modernSet.call(modern, key, value) as void | Promise<void>,
+				...(typeof modernAdd === 'function' &&
+					typeof modernRemove === 'function'
+					? {
+						subscribe: subscription(
+							modern,
+							modernAdd as (...args: unknown[]) => unknown,
+							modernRemove as (...args: unknown[]) => unknown,
+						),
+					}
+					: {}),
 			});
 		}
 		const legacyGet = this.#userscriptGlobal.GM_getValue;
 		const legacySet = this.#userscriptGlobal.GM_setValue;
+		const legacyAdd = this.#userscriptGlobal.GM_addValueChangeListener;
+		const legacyRemove = this.#userscriptGlobal.GM_removeValueChangeListener;
 		if (
 			typeof legacyGet !== 'function' ||
 			typeof legacySet !== 'function'
@@ -281,6 +333,16 @@ export class BrowserUserscriptEnvironment {
 				legacySet.call(this.#userscriptGlobal, key, value) as
 					| void
 					| Promise<void>,
+			...(typeof legacyAdd === 'function' &&
+				typeof legacyRemove === 'function'
+				? {
+					subscribe: subscription(
+						this.#userscriptGlobal,
+						legacyAdd as (...args: unknown[]) => unknown,
+						legacyRemove as (...args: unknown[]) => unknown,
+					),
+				}
+				: {}),
 		});
 	}
 

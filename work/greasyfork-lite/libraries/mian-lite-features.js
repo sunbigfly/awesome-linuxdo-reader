@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.1
+// @version      1.5.2
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户、翻译与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.1 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.5.2 - main-lite-features
  * 媒体、互动、设置、用户、翻译与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.1",
+			sourceVersion: "1.5.2",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.1") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.2") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -831,6 +831,9 @@ runtime.register("src/archive/reader-topic-offline-artifact-repository.js", func
 	  constructor(responses, authScope) {
 	    this.#responses = responses, this.#authScope = (0, import_identifiers.discourseAuthScope)(authScope), this.#manifestPolicy = manifestPolicy(this.#authScope);
 	  }
+	  get manifestCacheId() {
+	    return this.#manifestPolicy.id;
+	  }
 	  async list() {
 	    await this.#ensureLegacyMigration();
 	    const cached = await this.#responses.read(
@@ -942,7 +945,7 @@ runtime.register("src/archive/reader-topic-offline-artifact-repository.js", func
 	      throw new Error("Reader 永久 HTML 正文未能写入持久存储");
 	  }
 	}
-}, "ab94f62ec0adb03ffc091e76903b259be1aae2cd4b2b9b64e97f6c23eb38f2a9");
+}, "8c13db21ccb0a365b03c497d3aeddef8031722d441079d54f339f1b131ce3e1c");
 
 /* Source: lite/src/archive/reader-topic-offline-document.ts */
 runtime.register("src/archive/reader-topic-offline-document.js", function(module, exports, require) {
@@ -1466,11 +1469,18 @@ runtime.register("src/archive/reader-topic-offline-document.js", function(module
 	        "m3 17 9 5 9-5"
 	      ]),
 	      minus: Object.freeze(["M5 12h14"]),
-	      plus: Object.freeze(["M12 5v14", "M5 12h14"])
+	      plus: Object.freeze(["M12 5v14", "M5 12h14"]),
+	      tag: Object.freeze([
+	        "M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"
+	      ])
 	    };
 	    for (const definition of paths[name]) {
 	      const path = document.createElementNS(namespace, "path");
 	      path.setAttribute("d", definition), icon.append(path);
+	    }
+	    if (name === "tag") {
+	      const hole = document.createElementNS(namespace, "circle");
+	      hole.setAttribute("cx", "7.5"), hole.setAttribute("cy", "7.5"), hole.setAttribute("r", ".5"), hole.setAttribute("fill", "currentColor"), hole.setAttribute("stroke", "none"), icon.append(hole);
 	    }
 	    return icon;
 	  }, offlineIconButton = (className, label, iconName) => {
@@ -1498,7 +1508,7 @@ runtime.register("src/archive/reader-topic-offline-document.js", function(module
 	  }, prepareImageZoom = (root) => {
 	    const scales = [50, 100, 150, 200], minimumScale = 50, maximumScale = 200;
 	    for (const image of root.querySelectorAll("img")) {
-	      if (image.closest(".ldp-offline-image-frame") || image.matches(
+	      if (image.closest(".ldp-offline-image-frame") || image.closest("aside.onebox") || image.matches(
 	        ".emoji,.emoji-custom,.avatar,.ldp-avatar,.ldp-boost-avatar,.ldp-pv-comment-avatar,.ldp-solved-avatar"
 	      ) || image.closest(".onebox-avatar,.user-card-avatar")) continue;
 	      const picture = image.closest("picture"), linkedMedia = (picture ?? image).closest("a[href]"), media = linkedMedia && linkedMedia.querySelectorAll("img").length === 1 && !(linkedMedia.textContent ?? "").trim() ? linkedMedia : picture ?? image;
@@ -1553,7 +1563,33 @@ runtime.register("src/archive/reader-topic-offline-document.js", function(module
 	    for (const anchor of root.querySelectorAll("a[href]"))
 	      anchor.href = absoluteUrl(anchor.getAttribute("href")), anchor.target = "_blank", anchor.rel = "noopener noreferrer";
 	    prepareImageZoom(root);
-	  }, expandedQuoteKeys = /* @__PURE__ */ new Set(), quoteExcerptHtmlByElement = /* @__PURE__ */ new WeakMap(), prepareOfflineInlineOneboxes = (root) => {
+	  }, expandedQuoteKeys = /* @__PURE__ */ new Set(), quoteExcerptHtmlByElement = /* @__PURE__ */ new WeakMap(), prepareOfflineHashtags = (root) => {
+	    for (const hashtag of root.querySelectorAll(".hashtag-cooked")) {
+	      const host = hashtag.matches("a") ? hashtag : hashtag.querySelector("a") ?? hashtag;
+	      if (host.querySelector("img.emoji")) continue;
+	      const existing = host.querySelector("svg");
+	      if (existing?.querySelector(
+	        "path,circle,rect,ellipse,line,polyline,polygon"
+	      )) continue;
+	      const icon = offlineIcon("tag");
+	      icon.classList.add("ldp-hashtag-icon");
+	      const placeholder = host.querySelector(".hashtag-icon-placeholder");
+	      placeholder ? placeholder.replaceWith(icon) : existing ? existing.replaceWith(icon) : host.prepend(icon);
+	    }
+	  }, prepareOfflineUserMentions = (root) => {
+	    const base = new URL2(String(data.baseUrl || data.sourceUrl || location.href));
+	    for (const link of root.querySelectorAll("a.mention")) {
+	      let username = String(link.dataset.username ?? "").trim().replace(/^@+/, "");
+	      if (!username)
+	        try {
+	          const url = new URL2(link.getAttribute("href") ?? "", base), match = url.origin === base.origin ? url.pathname.match(/^\/u\/([^/]+)\/?$/i) : null;
+	          username = match?.[1] ? decodeURIComponent(match[1]) : "";
+	        } catch {
+	          username = "";
+	        }
+	      username || (username = String(link.textContent ?? "").trim().replace(/^@+/, "")), username && (link.classList.add("ldp-user-link"), link.dataset.userCard = username);
+	    }
+	  }, prepareOfflineInlineOneboxes = (root) => {
 	    for (const link of root.querySelectorAll(
 	      "a.inline-onebox"
 	    )) {
@@ -1579,6 +1615,28 @@ runtime.register("src/archive/reader-topic-offline-document.js", function(module
 	        thumbnail.className = "site-icon ldp-github-onebox-logo", thumbnail.removeAttribute("width"), thumbnail.removeAttribute("height"), thumbnail.alt = "", header.prepend(thumbnail);
 	      }
 	      body.replaceChildren(title, ...description ? [description] : []), onebox.dataset.ldpGithubOneboxNormalized = "1";
+	    }
+	  }, decorateOfflineClickCounts = (root, post) => {
+	    if (!Array.isArray(post.link_counts)) return;
+	    const counts = /* @__PURE__ */ new Map();
+	    for (const value of post.link_counts) {
+	      if (!value || typeof value != "object" || Array.isArray(value)) continue;
+	      const item = value, clicks = Math.max(0, Math.trunc(Number(item.clicks) || 0)), url = item.reflection ? "" : absoluteUrl(item.url);
+	      !url || clicks === 0 || counts.set(url, Math.max(clicks, counts.get(url) ?? 0));
+	    }
+	    for (const link of root.querySelectorAll("a[href]")) {
+	      if (link.querySelector(":scope > .ldp-link-click-count")) continue;
+	      const onebox = link.closest("aside.onebox");
+	      if (onebox && link.closest("header.source")) {
+	        const titleLink = onebox.querySelector(
+	          ".onebox-body h3 a[href]"
+	        );
+	        if (titleLink && absoluteUrl(titleLink.getAttribute("href")) === absoluteUrl(link.getAttribute("href"))) continue;
+	      }
+	      const clicks = counts.get(absoluteUrl(link.getAttribute("href")));
+	      if (!clicks || !(link.textContent ?? "").trim()) continue;
+	      const count = document.createElement("span"), label = `${clicks.toLocaleString("zh-CN")} 次点击`;
+	      count.className = "ldp-link-click-count", count.setAttribute("role", "note"), count.setAttribute("aria-label", label), count.dataset.ldpTooltipLabel = label, count.textContent = clicks.toLocaleString("zh-CN"), link.append(count);
 	    }
 	  }, quoteKey = (sourcePostNumber, targetTopicId, targetPostNumber) => `${sourcePostNumber}:${targetTopicId}:${targetPostNumber}`, prepareOfflineQuoteImages = (root) => {
 	    for (const link of root.querySelectorAll("a[href]")) {
@@ -1617,8 +1675,8 @@ runtime.register("src/archive/reader-topic-offline-document.js", function(module
 	        jump.className = "ldp-quote-jump", jump.href = absoluteUrl(targetHref), jump.target = "_blank", jump.rel = "noopener noreferrer", jump.setAttribute("aria-label", `跳到被引用楼层 #${targetPostNumber}`), jump.dataset.offlineQuoteJump = String(targetPostNumber), jump.dataset.targetTopicId = String(targetTopicId), jump.append(offlineIcon("arrow-up")), controls.append(jump);
 	      }
 	    }
-	  }, prepareOfflineCooked = (post, root) => {
-	    prepareOfflineInlineOneboxes(root), prepareOfflineOneboxes(root), prepareOfflineQuotes(Number(post.post_number), root), prepareOfflineInlineEmoji(root);
+	  }, prepareOfflineCooked = (post, root, withClickCounts = !0) => {
+	    prepareOfflineHashtags(root), prepareOfflineUserMentions(root), prepareOfflineInlineOneboxes(root), prepareOfflineOneboxes(root), prepareOfflineQuotes(Number(post.post_number), root), prepareOfflineInlineEmoji(root), withClickCounts && decorateOfflineClickCounts(root, post);
 	  }, avatarFallback = (post) => {
 	    const fallback = document.createElement("span");
 	    return fallback.className = "ldp-avatar ldp-persistent-avatar-fallback", fallback.textContent = String(post.name || post.username || "?").charAt(0), fallback.setAttribute("aria-hidden", "true"), fallback;
@@ -2020,7 +2078,7 @@ runtime.register("src/archive/reader-topic-offline-document.js", function(module
 	    }
 	    prepareReadOnlySpecialContent(post, view), prepareReadOnlySolvedAnswers(post, view), prepareReadOnlyPostVoting(post, view), prepareReadOnlyBoosts(post, view, ownerUsername), archived || prepareReadOnlyReactions(post, view);
 	    for (const cooked of view.body.querySelectorAll(".cooked"))
-	      cooked !== view.content && prepareOfflineCooked(post, cooked);
+	      cooked !== view.content && prepareOfflineCooked(post, cooked, !1);
 	    return prepareOfflineInlineEmoji(view.root), normalizeAssets(view.body), view.root.classList.remove("ldp-post-projection-pending"), view.root.removeAttribute("aria-busy"), view.root.dataset.ldpContentHydrated = "1", view.hydrated = !0, !0;
 	  }, hydrateView = (view) => currentContentPostNumbers.has(view.postNumber) && projectView(view), virtualSpacer = (blockSize) => {
 	    const spacer = document.createElement("div");
@@ -3185,7 +3243,7 @@ body { background: #fff; font-family: system-ui, sans-serif; }
 	    input.sourceUrl,
 	    input.inlineEmojiUrl
 	  ), payload = Object.freeze({
-	    schemaVersion: 8,
+	    schemaVersion: 9,
 	    topicId,
 	    title,
 	    ownerUsername: String(header.ownerUsername || posts[0]?.username || ""),
@@ -3297,7 +3355,7 @@ ${OFFLINE_RUNTIME_SCRIPT_OPEN}(${readerTopicOfflineRuntime.toString()})();<\/scr
 	    complete: payload.complete
 	  });
 	}
-}, "a9efcb12f78d2d449ce6a6a657da224fdf4d20e30a2d2f6d42da259c776eaac6");
+}, "16e02dad37e2361881f38bdeb5ff6b3b8d10bc2cc3c77df66581ab76db1ee7c5");
 
 /* Source: lite/src/bookmark/discourse-bookmark-adapter.ts */
 runtime.register("src/bookmark/discourse-bookmark-adapter.js", function(module, exports, require) {
@@ -3766,6 +3824,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  #cancel;
 	  #searchForms;
 	  #onError;
+	  #activity;
 	  #taxonomyFlights = /* @__PURE__ */ new Map();
 	  #open = !1;
 	  #tabOrder;
@@ -3860,7 +3919,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	      options.tabOrder ?? import_reader_bookmark_model.READER_BOOKMARK_TAB_ORDER
 	    ), this.#tab = this.#tabOrder[0], this.#changeTabOrder = options.changeTabOrder ?? (() => {
 	    }), this.#schedule = options.schedule ?? ((callback, delayMs) => setTimeout(callback, delayMs)), this.#cancel = options.cancel ?? ((handle) => clearTimeout(handle)), this.#searchForms = options.searchForms ?? ((value) => Object.freeze([(0, import_reader_search.normalizeReaderSearchText)(value)])), this.#onError = options.onError ?? (() => {
-	    }), this.#commands = new import_bookmark_action_feature_commands.BookmarkActionFeatureCommands({
+	    }), this.#activity = options.activity ?? null, this.#commands = new import_bookmark_action_feature_commands.BookmarkActionFeatureCommands({
 	      state: {
 	        removeBookmarks: (ids) => this.#removeBookmarks(ids),
 	        refresh: () => this.refresh()
@@ -3871,7 +3930,9 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	      event.operation === "reaction-toggle" && event.phase === "succeeded" && this.#markSourceChanged("reactions");
 	    }, this.scope), options.activityEvents?.subscribe((event) => {
 	      event.phase === "succeeded" && ((event.operation === "boost-create" || event.operation === "boost-delete") && this.#markSourceChanged("boosts"), event.operation === "reply-create" && this.#markSourceChanged("replies"));
-	    }, this.scope), this.scope.add(() => {
+	    }, this.scope), this.#activity && this.scope.add(this.#activity.subscribe(() => {
+	      this.#onActivityChanged();
+	    })), this.scope.add(() => {
 	      this.#loadEpoch += 1, this.#cancelLoad(), this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#backgroundWarm = null, this.#cancelBackgroundWarm(), this.#taxonomyFlights.clear(), this.#selection.clear(), this.changes.clear();
 	    }), this.#render();
 	  }
@@ -4041,7 +4102,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  }
 	  /** application 启动时恢复持久投影；随后与浮窗开关无关地渐进续传。 */
 	  startBackgroundCache() {
-	    if (this.scope.destroyed || this.#backgroundCacheActive || this.#backgroundWarmDelayMs === null) return;
+	    if (this.scope.destroyed || this.#backgroundCacheActive || this.#backgroundWarmDelayMs === null || !this.#activityVisible()) return;
 	    this.#backgroundCacheActive = !0;
 	    const epoch = ++this.#backgroundRestoreEpoch, restore = this.#restoreBackgroundProjections(epoch);
 	    this.#backgroundRestore = restore, restore.catch(this.#onError).finally(() => {
@@ -4051,6 +4112,14 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  /** 保留已提交分页断点，只提前重排后台续传；中央限流仍拥有最终许可。 */
 	  retryBackgroundCache() {
 	    this.scope.destroyed || this.#historyProgress().completedTabs === 5 || (this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#backgroundWarm = null, this.#backgroundError = null, this.#backgroundRetryAt = null, this.#backgroundStatus = this.#backgroundWarming ? "running" : "idle", this.#backgroundSource = null, this.#emit(), this.#scheduleBackgroundWarm(0));
+	  }
+	  reloadExternalProjection() {
+	    if (!this.#projection || this.scope.destroyed) return Promise.resolve();
+	    const previous = this.#backgroundRestore ?? Promise.resolve(), epoch = ++this.#backgroundRestoreEpoch, restore = previous.catch(() => {
+	    }).then(() => this.#restoreBackgroundProjections(epoch, !0));
+	    return this.#backgroundRestore = restore, restore.finally(() => {
+	      this.#backgroundRestore === restore && (this.#backgroundRestore = null);
+	    });
 	  }
 	  async #restoreBackgroundProjections(epoch, fresh = !1) {
 	    if (!this.#projection || this.scope.destroyed) return;
@@ -4085,7 +4154,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    for (const { source, snapshot } of restoredSources)
 	      snapshot && this.#applySourceProgress(source, {
 	        pages: snapshot.records.length > 0 || snapshot.complete ? 1 : 0,
-	        records: this.#mergeSourceRecords(source, snapshot.records),
+	        records: fresh ? (0, import_reader_bookmark_model.sortReaderBookmarkRecords)(snapshot.records) : this.#mergeSourceRecords(source, snapshot.records),
 	        complete: snapshot.complete
 	      }, !1);
 	    const restoredStreamNames = /* @__PURE__ */ new Set();
@@ -4361,8 +4430,29 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  #suspendBackgroundWarm() {
 	    this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#backgroundWarm = null, this.#backgroundWarmPending = !1, this.#backgroundNetworkPages = 0, this.#backgroundWarming && this.#cancelBackgroundWarm(), this.#backgroundSource = null, this.#backgroundStatus = this.#historyProgress().completedTabs === 5 ? "complete" : "idle", this.#backgroundError = null, this.#backgroundRetryAt = null;
 	  }
+	  #activityVisible() {
+	    if (!this.#activity) return !0;
+	    try {
+	      return this.#activity.visible();
+	    } catch (cause) {
+	      return this.#onError(cause), !1;
+	    }
+	  }
+	  #onActivityChanged() {
+	    if (!this.scope.destroyed) {
+	      if (!this.#activityVisible()) {
+	        this.#backgroundCacheActive && (this.#suspendBackgroundWarm(), this.#emit());
+	        return;
+	      }
+	      if (!this.#backgroundCacheActive) {
+	        this.startBackgroundCache();
+	        return;
+	      }
+	      this.#scheduleBackgroundWarm(0);
+	    }
+	  }
 	  #scheduleBackgroundWarm(delayMs = this.#backgroundWarmDelayMs ?? 0) {
-	    if (!(this.#backgroundWarmDelayMs === null || !this.#backgroundCacheActive || this.scope.destroyed || this.#historyProgress().completedTabs === 5)) {
+	    if (!(this.#backgroundWarmDelayMs === null || !this.#backgroundCacheActive || this.scope.destroyed || !this.#activityVisible() || this.#historyProgress().completedTabs === 5)) {
 	      if (this.#backgroundWarming) {
 	        this.#backgroundWarmPending = !0;
 	        return;
@@ -4373,7 +4463,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    }
 	  }
 	  async #warmBackgroundCollections() {
-	    if (!this.#backgroundCacheActive || this.scope.destroyed || this.#backgroundWarming || !this.#native.username().trim()) return;
+	    if (!this.#backgroundCacheActive || this.scope.destroyed || this.#backgroundWarming || !this.#activityVisible() || !this.#native.username().trim()) return;
 	    if (!BACKGROUND_STREAM_ORDER.some((stream) => {
 	      const source = sourceForHistoryStream(stream);
 	      return !this.#sourceProgress.get(source)?.complete && !this.#historyStreams.get(stream)?.complete;
@@ -4403,7 +4493,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	          await (0, import_reader_collection_hydration.runReaderCollectionWorkers)({
 	            concurrency,
 	            maxTasks: visibleHistory ? concurrency * VISIBLE_HISTORY_LEASE_ROUNDS : 1,
-	            shouldContinue: () => retryCause === null && !this.scope.destroyed && !abort.signal.aborted && epoch === this.#backgroundWarmEpoch && this.#open === openAtStart,
+	            shouldContinue: () => retryCause === null && !this.scope.destroyed && !abort.signal.aborted && epoch === this.#backgroundWarmEpoch && this.#open === openAtStart && this.#activityVisible(),
 	            claim: () => {
 	              const stream = this.#nextBackgroundStream();
 	              return stream && this.#backgroundInFlightStreams.add(stream), stream;
@@ -4653,7 +4743,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    this.#revision += 1, this.#snapshotCache = null, this.changes.emit(this.snapshot);
 	  }
 	}
-}, "92d24abb068c04fc6c6cf38b2013dd32f5fb58abf5a83a4b3a4ac9282352e4a7");
+}, "b2cae4178d9bb56e608c1f1d3d0e4c1f76b9dd209d331921b191ad391633572b");
 
 /* Source: lite/src/bookmark/reader-bookmark-model.ts */
 runtime.register("src/bookmark/reader-bookmark-model.js", function(module, exports, require) {
@@ -9367,22 +9457,17 @@ runtime.register("src/media/reader-lightbox-geometry-controller.js", function(mo
 	  #root;
 	  #main;
 	  #resizer;
-	  #source;
-	  #sourceText;
 	  #persistPreferences;
 	  #renderTransform;
 	  #frames;
-	  #schedule;
-	  #cancelSchedule;
 	  #onError;
 	  #commentsWidthPercent;
 	  #descriptionHeight;
 	  #commentsResize = null;
 	  #commentsResizeFrame = 0;
 	  #transformFrame = 0;
-	  #descriptionSaveTimer = null;
 	  constructor(options) {
-	    this.#root = options.root, this.#main = options.main, this.#resizer = options.resizer, this.#source = options.source, this.#sourceText = options.sourceText, this.#persistPreferences = options.persist, this.#renderTransform = options.renderTransform, this.#frames = options.frameScheduler ?? browserFrameScheduler(options.root), this.#schedule = options.schedule ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs)), this.#cancelSchedule = options.cancelSchedule ?? ((handle) => globalThis.clearTimeout(handle)), this.#onError = options.onError ?? (() => {
+	    this.#root = options.root, this.#main = options.main, this.#resizer = options.resizer, this.#persistPreferences = options.persist, this.#renderTransform = options.renderTransform, this.#frames = options.frameScheduler ?? browserFrameScheduler(options.root), this.#onError = options.onError ?? (() => {
 	    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
 	    const viewportHeight = options.root.ownerDocument.defaultView?.innerHeight;
 	    this.#commentsWidthPercent = normalizeReaderLightboxCommentsWidth(
@@ -9393,14 +9478,8 @@ runtime.register("src/media/reader-lightbox-geometry-controller.js", function(mo
 	    ), this.#root.style.setProperty(
 	      "--ldp-lb-description-height",
 	      `${this.#descriptionHeight}px`
-	    ), this.#applyCommentsWidth(this.#commentsWidthPercent, !1), this.scope.listen(this.#resizer, "pointerdown", (event) => this.#onPointerDown(event)), this.scope.listen(this.#resizer, "pointermove", (event) => this.#onPointerMove(event)), this.scope.listen(this.#resizer, "pointerup", (event) => this.#onPointerEnd(event)), this.scope.listen(this.#resizer, "pointercancel", (event) => this.#onPointerEnd(event)), this.scope.listen(this.#resizer, "keydown", (event) => this.#onKeyDown(event));
-	    const createResizeObserver = options.createResizeObserver ?? (typeof options.root.ownerDocument.defaultView?.ResizeObserver == "function" ? (callback) => new options.root.ownerDocument.defaultView.ResizeObserver(callback) : null);
-	    if (createResizeObserver) {
-	      const observer = createResizeObserver(() => this.#onDescriptionResize());
-	      observer.observe(this.#sourceText), this.scope.add(() => observer.disconnect());
-	    }
-	    this.scope.add(() => {
-	      this.#commentsResizeFrame && this.#frames.cancel(this.#commentsResizeFrame), this.#transformFrame && this.#frames.cancel(this.#transformFrame), this.#descriptionSaveTimer !== null && this.#cancelSchedule(this.#descriptionSaveTimer), this.#commentsResizeFrame = 0, this.#transformFrame = 0, this.#descriptionSaveTimer = null, this.#commentsResize = null, this.#root.classList.remove("is-resizing-comments");
+	    ), this.#applyCommentsWidth(this.#commentsWidthPercent, !1), this.scope.listen(this.#resizer, "pointerdown", (event) => this.#onPointerDown(event)), this.scope.listen(this.#resizer, "pointermove", (event) => this.#onPointerMove(event)), this.scope.listen(this.#resizer, "pointerup", (event) => this.#onPointerEnd(event)), this.scope.listen(this.#resizer, "pointercancel", (event) => this.#onPointerEnd(event)), this.scope.listen(this.#resizer, "keydown", (event) => this.#onKeyDown(event)), this.scope.add(() => {
+	      this.#commentsResizeFrame && this.#frames.cancel(this.#commentsResizeFrame), this.#transformFrame && this.#frames.cancel(this.#transformFrame), this.#commentsResizeFrame = 0, this.#transformFrame = 0, this.#commentsResize = null, this.#root.classList.remove("is-resizing-comments");
 	    });
 	  }
 	  get commentsWidthPercent() {
@@ -9487,19 +9566,6 @@ runtime.register("src/media/reader-lightbox-geometry-controller.js", function(mo
 	      !0
 	    ));
 	  }
-	  #onDescriptionResize() {
-	    !this.#source.open || this.#source.hidden || this.scope.destroyed || (this.#descriptionSaveTimer !== null && this.#cancelSchedule(this.#descriptionSaveTimer), this.#descriptionSaveTimer = this.#schedule(() => {
-	      this.#descriptionSaveTimer = null;
-	      const next = normalizeReaderLightboxDescriptionHeight(
-	        this.#sourceText.getBoundingClientRect().height,
-	        this.#root.ownerDocument.defaultView?.innerHeight
-	      );
-	      next !== this.#descriptionHeight && (this.#descriptionHeight = next, this.#root.style.setProperty(
-	        "--ldp-lb-description-height",
-	        `${next}px`
-	      ), this.#persist({ lightboxDescriptionHeight: next }));
-	    }, 160));
-	  }
 	  #persist(patch) {
 	    if (this.#persistPreferences)
 	      try {
@@ -9509,7 +9575,7 @@ runtime.register("src/media/reader-lightbox-geometry-controller.js", function(mo
 	      }
 	  }
 	}
-}, "f03b14b3cc9c7cf884087b62f02376edd9923f914da3123bac28b1ed6bfc22b0");
+}, "ce4f320c08f7eb0d2fc751162c7dfa595fdce760a6c7d1f8e35336b6b2fa2c90");
 
 /* Source: lite/src/media/reader-lightbox-image-picker.ts */
 runtime.register("src/media/reader-lightbox-image-picker.js", function(module, exports, require) {
@@ -9886,8 +9952,6 @@ runtime.register("src/media/reader-lightbox-view.js", function(module, exports, 
 	      root,
 	      main: required(root, ".ldp-lb-main"),
 	      resizer: commentsResizer,
-	      source,
-	      sourceText: this.slots.sourceText,
 	      preferences: options.geometryPreferences ?? Object.freeze({
 	        lightboxDescriptionHeight: import_reader_preferences_schema.LIGHTBOX_DESCRIPTION_HEIGHT_DEFAULT,
 	        lightboxCommentsWidthPercent: import_reader_preferences_schema.LIGHTBOX_COMMENTS_WIDTH_DEFAULT
@@ -9895,9 +9959,6 @@ runtime.register("src/media/reader-lightbox-view.js", function(module, exports, 
 	      ...options.persistGeometryPreferences ? { persist: options.persistGeometryPreferences } : {},
 	      renderTransform: () => this.transform.render(),
 	      ...options.frameScheduler ? { frameScheduler: options.frameScheduler } : {},
-	      ...options.createResizeObserver ? { createResizeObserver: options.createResizeObserver } : {},
-	      ...options.geometrySchedule ? { schedule: options.geometrySchedule } : {},
-	      ...options.geometryCancelSchedule ? { cancelSchedule: options.geometryCancelSchedule } : {},
 	      parentScope: this.scope,
 	      onError: this.#onError
 	    }), this.#controller.changes.subscribe((snapshot) => this.#render(snapshot), this.scope), this.scope.listen(root, "click", (event) => this.#onClick(event)), this.scope.listen(stage, "wheel", (event) => this.#onWheel(event), {
@@ -10125,7 +10186,7 @@ runtime.register("src/media/reader-lightbox-view.js", function(module, exports, 
 	      } else event.key === "ArrowLeft" ? (event.preventDefault(), this.#move(-1)) : event.key === "ArrowRight" ? (event.preventDefault(), this.#move(1)) : this.transform.handleShortcut(event);
 	  }
 	}
-}, "8021e3dd03f33aae452a217cf05224d827d803376a4fcbe25fce85ccdf5dd693");
+}, "f317a013b43f1ff88665197d0d76ce165c704ff8693b03a258990041c00815e8");
 
 /* Source: lite/src/media/reader-media-controller.ts */
 runtime.register("src/media/reader-media-controller.js", function(module, exports, require) {
@@ -17183,13 +17244,16 @@ runtime.register("src/post/reader-topic-summary-request-adapter.js", function(mo
 runtime.register("src/post/reader-topic-summary-surface.js", function(module, exports, require) {
 	var reader_topic_summary_surface_exports = {};
 	__export(reader_topic_summary_surface_exports, {
+	  READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY: () => READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY,
+	  READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY: () => READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY,
+	  READER_TOPIC_SUMMARY_WINDOW_GEOMETRY_STORAGE_KEY_PREFIX: () => READER_TOPIC_SUMMARY_WINDOW_GEOMETRY_STORAGE_KEY_PREFIX,
 	  ReaderTopicSummarySurface: () => ReaderTopicSummarySurface,
 	  createReaderTopicSummaryShareImage: () => createReaderTopicSummaryShareImage,
 	  renderReaderTopicSummaryShareImage: () => renderReaderTopicSummaryShareImage
 	});
 	module.exports = __toCommonJS(reader_topic_summary_surface_exports);
 	var import_reader_icon = require("../components/reader-icon.js"), import_html_element = require("../dom/html-element.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_topic_custom_summary = require("./reader-topic-custom-summary.js");
-	const DEFAULT_SHARE_IMAGE_WIDTH = 1080, SOCIAL_SHARE_IMAGE_WIDTH = 1200, MIN_SHARE_IMAGE_WIDTH = 720, MAX_SHARE_IMAGE_WIDTH = 2160, DEFAULT_SHARE_BODY_FONT_SIZE = 31, MIN_SHARE_BODY_FONT_SIZE = 22, MAX_SHARE_BODY_FONT_SIZE = 48, SUMMARY_SHARE_SETTINGS_KEY = "ldp:topic-summary-share-settings:v1", SUMMARY_RESULTS_CACHE_KEY = "ldp:topic-summary-results:v1", SUMMARY_WINDOW_GEOMETRY_KEY = "ldp:topic-summary-window-geometry:v1", LOCAL_FONT_PREFIX = "local:";
+	const DEFAULT_SHARE_IMAGE_WIDTH = 1080, SOCIAL_SHARE_IMAGE_WIDTH = 1200, MIN_SHARE_IMAGE_WIDTH = 720, MAX_SHARE_IMAGE_WIDTH = 2160, DEFAULT_SHARE_BODY_FONT_SIZE = 31, MIN_SHARE_BODY_FONT_SIZE = 22, MAX_SHARE_BODY_FONT_SIZE = 48, READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY = "ldp:topic-summary-share-settings:v1", READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY = "ldp:topic-summary-results:v1", READER_TOPIC_SUMMARY_WINDOW_GEOMETRY_STORAGE_KEY_PREFIX = "ldp:topic-summary-window-geometry:v1", LOCAL_FONT_PREFIX = "local:";
 	function positionStorage(storage, readMode) {
 	  if (!storage) return;
 	  const key = (value) => {
@@ -17409,7 +17473,7 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	  if (!storage) return DEFAULT_SHARE_SETTINGS;
 	  try {
 	    const parsed = JSON.parse(
-	      storage.getItem(SUMMARY_SHARE_SETTINGS_KEY) ?? "null"
+	      storage.getItem(READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY) ?? "null"
 	    );
 	    return !parsed || ![1, 2, 3, 4, 5].includes(Number(parsed.schemaVersion)) ? DEFAULT_SHARE_SETTINGS : Object.freeze({
 	      schemaVersion: 5,
@@ -17482,7 +17546,7 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	  if (!storage) return Object.freeze([]);
 	  try {
 	    const parsed = JSON.parse(
-	      storage.getItem(SUMMARY_RESULTS_CACHE_KEY) ?? "null"
+	      storage.getItem(READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY) ?? "null"
 	    ), schemaVersion = Number(parsed?.schemaVersion);
 	    return ![1, 2].includes(schemaVersion) || !Array.isArray(parsed.entries) ? Object.freeze([]) : Object.freeze(parsed.entries.flatMap((entry, index) => {
 	      if (!entry || typeof entry != "object") return [];
@@ -18295,7 +18359,7 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	      requestOpen: () => this.open(),
 	      zIndex: 2147483586,
 	      ...geometryStorage ? { geometryStorage } : {},
-	      geometryStorageKey: SUMMARY_WINDOW_GEOMETRY_KEY,
+	      geometryStorageKey: READER_TOPIC_SUMMARY_WINDOW_GEOMETRY_STORAGE_KEY_PREFIX,
 	      policy: Object.freeze({
 	        minWidth: 360,
 	        minHeight: 420,
@@ -18444,6 +18508,15 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	  open() {
 	    this.scope.destroyed || (this.#historyOpen = !1, this.#viewingHistoryId = null, this.#restoreSelectionSummary(), this.root.hidden = !1, this.frame.open(), this.#render(), this.#loadAiModels());
 	  }
+	  reloadExternalState() {
+	    if (!this.#storage || this.scope.destroyed) return;
+	    this.#historyEntries = readSummaryResults(this.#storage), this.#summaries.clear(), this.#settings = readShareSettings(this.#storage), selectValue(this.styleSelect, this.#settings.style), selectValue(this.chineseFontSelect, this.#settings.chineseFont), selectValue(this.latinFontSelect, this.#settings.latinFont), selectValue(this.widthModeSelect, this.#settings.widthMode), this.customWidthInput.value = String(this.#settings.customWidth), selectValue(this.fontSizeModeSelect, this.#settings.fontSizeMode), this.customFontSizeInput.value = String(this.#settings.customFontSize), selectValue(this.summaryLengthSelect, this.#settings.summaryLength), selectValue(this.summaryPurposeSelect, this.#settings.summaryPurpose), this.customPromptInput.value = this.#settings.customPrompt;
+	    const selectedModel = aiModelValue(
+	      this.#settings.customModelBaseUrl,
+	      this.#settings.customModel
+	    );
+	    [...this.customModelSelect.options].some((option) => option.value === selectedModel) && selectValue(this.customModelSelect, selectedModel), this.#updateShareControlVisibility(), this.#applyTheme(), this.#restoreSelectionSummary(), this.frame.reloadStoredGeometry(), this.#render();
+	  }
 	  close() {
 	    this.#imagePicker?.close?.(), this.#historyOpen = !1, this.root.hidden = !0, this.frame.close();
 	  }
@@ -18510,7 +18583,7 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	  #persistSettings() {
 	    try {
 	      this.#storage?.setItem(
-	        SUMMARY_SHARE_SETTINGS_KEY,
+	        READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY,
 	        JSON.stringify(this.#settings)
 	      );
 	    } catch (cause) {
@@ -18657,16 +18730,22 @@ ${selectionKey}`;
 	      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
 	      context,
 	      summary
-	    });
+	    }), stored = readSummaryResults(this.#storage), byId = new Map([
+	      ...stored,
+	      ...this.#historyEntries
+	    ].map((entry) => [entry.id, entry]));
 	    if (this.#historyEntries = Object.freeze([
-	      ...this.#historyEntries,
+	      ...byId.values(),
 	      record
 	    ].slice(-80)), !!this.#storage)
 	      try {
-	        this.#storage.setItem(SUMMARY_RESULTS_CACHE_KEY, JSON.stringify({
-	          schemaVersion: 2,
-	          entries: this.#historyEntries
-	        }));
+	        this.#storage.setItem(
+	          READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY,
+	          JSON.stringify({
+	            schemaVersion: 2,
+	            entries: this.#historyEntries
+	          })
+	        );
 	      } catch (cause) {
 	        this.#onError(cause);
 	      }
@@ -19013,7 +19092,7 @@ ${selectionKey}`;
 	    return this.#uploadedImage = Object.freeze({ key, value }), value;
 	  }
 	}
-}, "44e997458e477b470a076b102fc9b83e60efaa38da2c1f7e1f14d7f17a2e9e6e");
+}, "9ee05fff1dc8a56adcf6c79f81b4af7120bd29aa1d887bd5ac29ef818dded8ed");
 
 /* Source: lite/src/post/topic-action-feature-commands.ts */
 runtime.register("src/post/topic-action-feature-commands.js", function(module, exports, require) {
@@ -20794,7 +20873,11 @@ runtime.register("src/settings/reader-ai-service-settings-form.js", function(mod
 	    const settingsPanel = this.#host.closest(".ldp-settings-panel");
 	    settingsPanel && this.scope.listen(settingsPanel, "scroll", () => {
 	      this.#metadataAnchor === this.#publicModels ? this.#publicModelMetadataPosition.schedule() : this.#modelMetadataPosition.schedule();
-	    }), this.scope.listen(this.#addProfile, "click", () => this.#startNewProfile()), this.scope.listen(this.#removeProfile, "click", () => void this.#removeCurrentProfile()), this.scope.listen(this.#save, "click", () => void this.#saveConfig()), this.scope.listen(this.#loadModels, "click", () => void this.#fetchModels()), this.scope.add(() => {
+	    }), this.scope.listen(this.#addProfile, "click", () => this.#startNewProfile()), this.scope.listen(this.#removeProfile, "click", () => void this.#removeCurrentProfile()), this.scope.listen(this.#save, "click", () => void this.#saveConfig()), this.scope.listen(this.#loadModels, "click", () => void this.#fetchModels()), this.#repository.changes.subscribe(({ config }) => {
+	      this.scope.destroyed || (this.#renderProfileOptions(config), this.#loadProfile((0, import_reader_translation_config.readerTranslationActiveProfile)(config)));
+	    }, this.scope), this.#repository.metadataChanges.subscribe((cache) => {
+	      !cache || this.scope.destroyed || (this.#publicCacheLoaded = !0, this.#publicCatalogFetchedAt = cache.fetchedAt, this.#replacePublicModelCatalog(cache.catalog), this.#publicExplorerStatus.textContent = `已同步其他标签的模型目录 · ${cache.catalog.length} 个`);
+	    }, this.scope), this.scope.add(() => {
 	      this.#operation?.abort(new Error("AI 服务设置已关闭")), this.#publicOperation?.abort(new Error("AI 服务设置已关闭")), this.#modelMetadata.remove(), this.#host.replaceChildren();
 	    }), this.#load();
 	  }
@@ -21202,7 +21285,7 @@ runtime.register("src/settings/reader-ai-service-settings-form.js", function(mod
 	    this.#status.textContent = message, kind === "idle" ? this.#status.removeAttribute("data-status-kind") : this.#status.dataset.statusKind = kind;
 	  }
 	}
-}, "aaaa316a254f5c4dc71fa45c358b41d8ea105c04f1839731e22e6157fb521688");
+}, "d417d5388dbf0a4281b8fc28940a2b200305e918abe630dd55e2fcedcdfc844c");
 
 /* Source: lite/src/settings/reader-appearance-settings-form.ts */
 runtime.register("src/settings/reader-appearance-settings-form.js", function(module, exports, require) {
@@ -22388,8 +22471,8 @@ runtime.register("src/settings/reader-image-settings-form.js", function(module, 
 	      "ldp-lightbox-description-height"
 	    ), this.#descriptionHeight.type = "number", this.#descriptionHeight.min = String(import_reader_preferences_schema.LIGHTBOX_DESCRIPTION_HEIGHT_MIN), this.#descriptionHeight.max = String(this.#descriptionMaximum), this.#descriptionHeight.step = "1", lightbox.append((0, import_reader_settings_dom.settingsOptionRow)(
 	      document,
-	      "图片描述高度",
-	      `范围 ${import_reader_preferences_schema.LIGHTBOX_DESCRIPTION_HEIGHT_MIN}–${this.#descriptionMaximum}px。`,
+	      "图片描述最大高度",
+	      `内容较少时自适应，超过上限后内部滚动；范围 ${import_reader_preferences_schema.LIGHTBOX_DESCRIPTION_HEIGHT_MIN}–${this.#descriptionMaximum}px。`,
 	      this.#descriptionHeight
 	    ));
 	    const commentsWidthControl = (0, import_reader_settings_dom.settingsElement)(
@@ -22482,7 +22565,7 @@ runtime.register("src/settings/reader-image-settings-form.js", function(module, 
 	  #validate() {
 	    const value = this.#draft.read(), issues = [];
 	    return (!Number.isFinite(value.lightboxDescriptionHeight) || value.lightboxDescriptionHeight < import_reader_preferences_schema.LIGHTBOX_DESCRIPTION_HEIGHT_MIN || value.lightboxDescriptionHeight > this.#descriptionMaximum) && issues.push(
-	      `图片描述高度必须是 ${import_reader_preferences_schema.LIGHTBOX_DESCRIPTION_HEIGHT_MIN}–${this.#descriptionMaximum}px`
+	      `图片描述最大高度必须是 ${import_reader_preferences_schema.LIGHTBOX_DESCRIPTION_HEIGHT_MIN}–${this.#descriptionMaximum}px`
 	    ), (!Number.isFinite(value.lightboxCommentsWidthPercent) || value.lightboxCommentsWidthPercent < import_reader_preferences_schema.LIGHTBOX_COMMENTS_WIDTH_MIN || value.lightboxCommentsWidthPercent > import_reader_preferences_schema.LIGHTBOX_COMMENTS_WIDTH_MAX) && issues.push(
 	      `图片评论宽度必须是 ${import_reader_preferences_schema.LIGHTBOX_COMMENTS_WIDTH_MIN}%–${import_reader_preferences_schema.LIGHTBOX_COMMENTS_WIDTH_MAX}%`
 	    ), Object.freeze(issues);
@@ -22524,7 +22607,7 @@ runtime.register("src/settings/reader-image-settings-form.js", function(module, 
 	    );
 	  }
 	}
-}, "8ee2db55d1127be0a03c677bd212f65b1d22947fc398d9907d7f564a8e94db8b");
+}, "280cdcce0199ab5c1cb5b1a1bdad33a7b2ad2ecbbb9acf6a41bc53355e102c85");
 
 /* Source: lite/src/settings/reader-interaction-settings-form.ts */
 runtime.register("src/settings/reader-interaction-settings-form.js", function(module, exports, require) {
@@ -27733,6 +27816,9 @@ runtime.register("src/site/reader-custom-site-repository.js", function(module, e
 	  get snapshot() {
 	    return this.#sites;
 	  }
+	  get storageKey() {
+	    return this.#storageKey;
+	  }
 	  async load() {
 	    if (this.#loaded) return this.#sites;
 	    if (this.#loadPromise) return this.#loadPromise;
@@ -27745,6 +27831,11 @@ runtime.register("src/site/reader-custom-site-repository.js", function(module, e
 	    } finally {
 	      this.#loadPromise = null;
 	    }
+	  }
+	  async reloadExternal() {
+	    return this.#storage ? (await this.#writeTail, this.#sites = normalizedSites(
+	      await this.#storage.getValue(this.#storageKey)
+	    ), this.#loaded = !0, this.changes.emit(this.#sites), this.#sites) : this.#sites;
 	  }
 	  async allows(value) {
 	    const host = normalizeReaderCustomSiteHost(value);
@@ -27776,7 +27867,7 @@ runtime.register("src/site/reader-custom-site-repository.js", function(module, e
 	    }), await write, this.#sites;
 	  }
 	}
-}, "4c3246e4e780d084686a316761f64b65993d1ce4733b14f0a525cdbe08a7ab6c");
+}, "b500efe4ba032fff21c9b5434fb2f691cd6a379b21c1384b9712d3c2e570394e");
 
 /* Source: lite/src/translation/reader-translation-button.ts */
 runtime.register("src/translation/reader-translation-button.js", function(module, exports, require) {
@@ -28329,6 +28420,7 @@ runtime.register("src/translation/reader-translation-config.js", function(module
 	}
 	class ReaderTranslationConfigRepository {
 	  changes = new import_signal.Signal();
+	  metadataChanges = new import_signal.Signal();
 	  #storage;
 	  #storageKey;
 	  #metadataCacheStorageKey;
@@ -28343,6 +28435,12 @@ runtime.register("src/translation/reader-translation-config.js", function(module
 	  }
 	  get snapshot() {
 	    return this.#snapshot;
+	  }
+	  get storageKey() {
+	    return this.#storageKey;
+	  }
+	  get metadataStorageKey() {
+	    return this.#metadataCacheStorageKey;
 	  }
 	  async load() {
 	    if (this.#snapshot.loaded) return this.#snapshot;
@@ -28359,6 +28457,20 @@ runtime.register("src/translation/reader-translation-config.js", function(module
 	    } finally {
 	      this.#loadPromise = null;
 	    }
+	  }
+	  async reloadExternal() {
+	    await this.#writeTail;
+	    const source = record(await this.#storage.getValue(this.#storageKey));
+	    return this.#snapshot = Object.freeze({
+	      loaded: !0,
+	      config: normalizeReaderTranslationConfig(source?.config ?? source)
+	    }), this.changes.emit(this.#snapshot), this.#snapshot;
+	  }
+	  async reloadExternalState() {
+	    await Promise.all([
+	      this.reloadExternal(),
+	      this.reloadExternalMetadata()
+	    ]);
 	  }
 	  async saveConfig(value) {
 	    await this.load();
@@ -28379,6 +28491,11 @@ runtime.register("src/translation/reader-translation-config.js", function(module
 	      await this.#storage.getValue(this.#metadataCacheStorageKey)
 	    );
 	  }
+	  async reloadExternalMetadata() {
+	    await this.#writeTail;
+	    const cache = await this.loadModelMetadataCache();
+	    return this.metadataChanges.emit(cache), cache;
+	  }
 	  async saveModelMetadataCache(value) {
 	    const normalized = normalizeReaderAiModelMetadataCache(value);
 	    if (!normalized) throw new Error("公共模型元数据缓存为空或无效");
@@ -28387,10 +28504,10 @@ runtime.register("src/translation/reader-translation-config.js", function(module
 	      { version: 1, ...normalized }
 	    ));
 	    return this.#writeTail = write.catch(() => {
-	    }), await write, normalized;
+	    }), await write, this.metadataChanges.emit(normalized), normalized;
 	  }
 	}
-}, "429d3f83239187235d343fa73f2814d985f7d0c8f57b8529021a9769f325a76e");
+}, "6a35b53c2d5d31334dfa4d868fb965b770161bad8519d7d01f432977551e973a");
 
 /* Source: lite/src/translation/reader-translation-controller.ts */
 runtime.register("src/translation/reader-translation-controller.js", function(module, exports, require) {
@@ -31324,6 +31441,7 @@ runtime.register("src/user/reader-connect-trust-adapter.js", function(module, ex
 	}
 	class ReaderConnectTrustHistoryAdapter {
 	  changes = new import_signal.Signal();
+	  externalChanges = new import_signal.Signal();
 	  #gateway;
 	  #ajax;
 	  #storage;
@@ -31342,6 +31460,12 @@ runtime.register("src/user/reader-connect-trust-adapter.js", function(module, ex
 	    dateKey(startedAt, this.#timeZone);
 	    const stored = this.#readConfirmedLocal();
 	    stored.readTrackingStartedAt === null && (stored.readTrackingStartedAt = startedAt, this.#writeLocal(stored));
+	  }
+	  get storageKey() {
+	    return this.#storageIdentity.key;
+	  }
+	  reloadExternal() {
+	    this.externalChanges.emit(void 0);
 	  }
 	  recordReadConfirmation(input) {
 	    if (String(input.authScope).trim() !== this.#authScope) return;
@@ -31647,7 +31771,7 @@ runtime.register("src/user/reader-connect-trust-adapter.js", function(module, ex
 	    });
 	  }
 	}
-}, "9d822c1b1309d3fd5295c98a212612defd80eb9aed85efa1309f7696153e666e");
+}, "ba2dbb208d84b15f380cdd9ab0ce037ae090419fb87f54e80ca352f2032f9d50");
 
 /* Source: lite/src/user/reader-credit-account-adapter.ts */
 runtime.register("src/user/reader-credit-account-adapter.js", function(module, exports, require) {
@@ -31723,6 +31847,29 @@ runtime.register("src/user/reader-credit-account-adapter.js", function(module, e
 	  constructor(options) {
 	    if (this.#gateway = options.gateway, this.#http = options.http, this.#authScope = String(options.authScope).trim(), !this.#authScope) throw new Error("LDC authScope 不能为空");
 	    this.#now = options.now ?? Date.now, this.#storage = options.storage;
+	  }
+	  get storageKey() {
+	    return import_reader_credit_account_bridge.READER_CREDIT_BRIDGE_CACHE_KEY;
+	  }
+	  subscribeExternal(listener) {
+	    return this.#storage?.subscribe?.(
+	      import_reader_credit_account_bridge.READER_CREDIT_BRIDGE_CACHE_KEY,
+	      listener
+	    ) ?? (() => {
+	    });
+	  }
+	  async externalCached(usernameValue, signal) {
+	    if (!this.#storage) return null;
+	    const expectedUsername = username(usernameValue), bridge = (0, import_value_record.objectRecord)(await this.#storage.getValue(
+	      import_reader_credit_account_bridge.READER_CREDIT_BRIDGE_CACHE_KEY
+	    ));
+	    signal.throwIfAborted();
+	    const cachedAt = Number(bridge?.cachedAt);
+	    return !Number.isFinite(cachedAt) || this.#now() - cachedAt >= CACHE.retainForMs ? null : (0, import_reader_user_domain_session.staleExternalSnapshot)(project(
+	      bridge?.data,
+	      expectedUsername,
+	      cachedAt
+	    ));
 	  }
 	  async cached(usernameValue, signal) {
 	    const expectedUsername = username(usernameValue);
@@ -31833,7 +31980,7 @@ runtime.register("src/user/reader-credit-account-adapter.js", function(module, e
 	    this.#storageEpoch += 1, await this.#storage?.setValue(import_reader_credit_account_bridge.READER_CREDIT_BRIDGE_CACHE_KEY, null);
 	  }
 	}
-}, "22b530817e4c70031002bd0e8f54899b713bfc1b69eafd8cbc317c0376fb710a");
+}, "f54ea581cfb0decb8cb9136250800375c45593c06fb2db321d0ee4e240d05aea");
 
 /* Source: lite/src/user/reader-credit-account-bridge.ts */
 runtime.register("src/user/reader-credit-account-bridge.js", function(module, exports, require) {
@@ -32103,7 +32250,9 @@ runtime.register("src/user/reader-settings-user-view.js", function(module, expor
 	    ).signal, this.root = (0, import_html_element.htmlElement)(options.document, "div", "ldp-user-info-content"), options.host.append(this.root), this.#history?.changes.subscribe(
 	      (change) => this.#applyHistoryChange(change),
 	      this.scope
-	    ), this.scope.listen(this.root, "click", (event) => {
+	    ), this.#history?.externalChanges?.subscribe(() => {
+	      this.#reloadExternalHistory();
+	    }, this.scope), this.scope.listen(this.root, "click", (event) => {
 	      const target = event.target?.closest(
 	        "[data-user-info-view],[data-user-info-refresh],[data-connect-history-metric],[data-connect-history-back],[data-connect-history-date],[data-connect-history-info]"
 	      );
@@ -32218,6 +32367,21 @@ runtime.register("src/user/reader-settings-user-view.js", function(module, expor
 	      "aria-label",
 	      `查看${previous.label}最近 50 天记录；${connectHistoryChangeKind(history.source, history.key)} ${delta}`
 	    );
+	  }
+	  async #reloadExternalHistory() {
+	    if (!this.#history || !this.#connectEnabled || this.scope.destroyed) return;
+	    const snapshot = this.#session.snapshot(this.#username);
+	    if (snapshot.connect.phase !== "ready") return;
+	    const epoch = ++this.#historyLoadEpoch;
+	    try {
+	      this.#commitHistory(await this.#history.cached(
+	        this.#username,
+	        snapshot.connect.metrics,
+	        this.#historySignal
+	      ), epoch);
+	    } catch (cause) {
+	      this.#onError(cause);
+	    }
 	  }
 	  async #load(refresh = !1) {
 	    const historyEpoch = ++this.#historyLoadEpoch;
@@ -32917,7 +33081,7 @@ runtime.register("src/user/reader-settings-user-view.js", function(module, expor
 	    return card.append(stats, details, actions), view.append(card), view;
 	  }
 	}
-}, "ad290152aae2f6776dc3d58a85227f3636eb7b82bb3590c58426729133509885");
+}, "9698d2acd4a9df3cb3f2b4bb71df5c2f063e53ec300e78d42d4be798ee737e4e");
 
 /* Source: lite/src/user/reader-user-badge-icon.ts */
 runtime.register("src/user/reader-user-badge-icon.js", function(module, exports, require) {
@@ -34830,6 +34994,26 @@ runtime.register("src/user/reader-user-domain-session.js", function(module, expo
 	      refresh
 	    );
 	  }
+	  async reloadExternalCredit() {
+	    const port = this.#credit;
+	    if (!(this.scope.destroyed || !port?.externalCached)) {
+	      for (const [username, entry] of this.#entries)
+	        if (entry.credit.phase !== "idle")
+	          try {
+	            const cached = await port.externalCached(
+	              username,
+	              this.#controller.signal
+	            );
+	            if (!cached || this.scope.destroyed) continue;
+	            entry.credit = Object.freeze({
+	              ...cached,
+	              refreshing: !1
+	            }), entry.revision += 1, this.#emit(username, entry);
+	          } catch (cause) {
+	            this.#controller.signal.aborted || this.#onError(cause);
+	          }
+	    }
+	  }
 	  async #loadExternal(slot, port, usernameValue, refresh) {
 	    if (this.scope.destroyed) throw new Error("用户域 session 已销毁");
 	    const username = normalizedUsername(usernameValue), entry = this.#entry(username), cacheEpoch = this.#cacheEpoch;
@@ -35187,7 +35371,7 @@ runtime.register("src/user/reader-user-domain-session.js", function(module, expo
 	      for (const error of this.changes.emit(snapshot)) this.#onError(error);
 	  }
 	}
-}, "13112206a0aef38d4f00d5cf50e3eb40b4ca7f44efeb67d6c8430b5dd26cd952");
+}, "abb8e383f44c497d87d60c2daf857b579ac718c4e1662d5d05d31a15a58bc22f");
 
 /* Source: lite/src/user/reader-user-endorsement-adapter.ts */
 runtime.register("src/user/reader-user-endorsement-adapter.js", function(module, exports, require) {
@@ -36423,6 +36607,47 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	  get snapshot() {
 	    return this.#snapshot();
 	  }
+	  get storageKey() {
+	    return this.#storageIdentity.key;
+	  }
+	  reloadExternal() {
+	    if (this.scope.destroyed) return;
+	    const persisted = this.#readPersistedIdentities();
+	    if (persisted === null) return;
+	    const incoming = new Map(persisted.map((entry) => [entry.username, entry]));
+	    for (const [username, entry] of this.#entries)
+	      incoming.has(username) || username === this.#selfUsername || (entry.epoch += 1, entry.controller?.abort(
+	        new DOMException("观察名单已由其他标签更新", "AbortError")
+	      ), this.#entries.delete(username), this.#jobs.splice(0, this.#jobs.length, ...this.#jobs.filter(
+	        (job) => job.username !== username
+	      )), this.#activeUsername === username && (this.#activeUsername = ""));
+	    for (const identity of persisted) {
+	      const existing = this.#entries.get(identity.username);
+	      if (!existing) {
+	        this.#entries.set(identity.username, {
+	          ...identity,
+	          streamCheckpoints: { ...identity.streamCheckpoints },
+	          knownIdentities: /* @__PURE__ */ new Set(),
+	          phase: "idle",
+	          currentStream: null,
+	          completedStreams: 0,
+	          storedRecordCount: 0,
+	          records: Object.freeze([]),
+	          detail: identity.completedAt ? "等待从中央缓存恢复" : "等待后台采集",
+	          error: "",
+	          recoveryKind: null,
+	          epoch: 0,
+	          controller: null
+	        });
+	        continue;
+	      }
+	      existing.name = identity.name || existing.name, existing.avatarTemplate = identity.avatarTemplate || existing.avatarTemplate, !isActivePhase(existing.phase) && (existing.addedAt = identity.addedAt, existing.completedAt = identity.completedAt, existing.pages = identity.pages, existing.lastRecordCount = Math.max(
+	        existing.records.length,
+	        identity.lastRecordCount
+	      ), existing.streamCheckpoints = { ...identity.streamCheckpoints });
+	    }
+	    this.#trim(), this.#emit(), this.resume({ allowNetwork: !1 });
+	  }
 	  cacheStats() {
 	    let memoryRecords = 0, storedRecords = 0;
 	    for (const entry of this.#entries.values())
@@ -36553,6 +36778,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	  }
 	  observe(profile, options = {}) {
 	    if (this.scope.destroyed) throw new Error("用户观察 session 已关闭");
+	    this.reloadExternal();
 	    const identity = identityFromProfile(profile);
 	    let entry = this.#entries.get(identity.username);
 	    const added = !entry;
@@ -36602,6 +36828,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	    return usernames.length;
 	  }
 	  remove(usernameValue) {
+	    this.reloadExternal();
 	    const username = normalizedUsername(usernameValue);
 	    if (username === this.#selfUsername) return !1;
 	    const entry = this.#entries.get(username);
@@ -36952,19 +37179,24 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	    }
 	    return changed;
 	  }
-	  #restore() {
+	  #readPersistedIdentities() {
 	    try {
 	      const raw = (0, import_reader_account_scoped_storage.readReaderAccountScopedString)(
 	        this.#storage,
 	        this.#storageIdentity
 	      );
-	      if (!raw) return;
+	      if (!raw) return Object.freeze([]);
 	      const parsed = JSON.parse(raw);
-	      if (Number(parsed.schemaVersion) !== 1 || !Array.isArray(parsed.users))
-	        return;
-	      for (const value of parsed.users.slice(0, MAX_OBSERVED_USERS)) {
-	        const identity = persistedIdentity(value);
-	        !identity || this.#entries.has(identity.username) || this.#entries.set(identity.username, {
+	      return Number(parsed.schemaVersion) !== 1 || !Array.isArray(parsed.users) ? null : Object.freeze(parsed.users.slice(0, MAX_OBSERVED_USERS).map(persistedIdentity).filter((identity) => identity !== null));
+	    } catch (cause) {
+	      return this.#onError(cause), null;
+	    }
+	  }
+	  #restore() {
+	    const identities = this.#readPersistedIdentities();
+	    if (identities)
+	      for (const identity of identities)
+	        this.#entries.has(identity.username) || this.#entries.set(identity.username, {
 	          ...identity,
 	          streamCheckpoints: { ...identity.streamCheckpoints },
 	          knownIdentities: /* @__PURE__ */ new Set(),
@@ -36980,10 +37212,6 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	          epoch: 0,
 	          controller: null
 	        });
-	      }
-	    } catch (cause) {
-	      this.#onError(cause);
-	    }
 	  }
 	  #trim() {
 	    const removable = [...this.#entries.values()].sort((left, right) => right.addedAt - left.addedAt).filter((entry) => entry.username !== this.#selfUsername), keepOthers = Math.max(0, MAX_OBSERVED_USERS - (this.#selfUsername && this.#entries.has(this.#selfUsername) ? 1 : 0));
@@ -37070,7 +37298,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	      this.#onError(cause);
 	  }
 	}
-}, "ea9d92a932e4aaea37d4e57c880f6a4455ac683d624115a1b7da21beab0cf5b9");
+}, "0629c14ab5d829fc91919617b319e9cced652a959ee246537e8b3d55e52c693d");
 
 /* Source: lite/src/user/reader-user-observation-view.ts */
 runtime.register("src/user/reader-user-observation-view.js", function(module, exports, require) {

@@ -456,6 +456,10 @@ export class ReaderChronicleRepository {
 		return this.#snapshot;
 	}
 
+	get storageKey(): string {
+		return this.#key;
+	}
+
 	load(): ReaderChronicleSnapshot {
 		return this.#readAndCommit('initial');
 	}
@@ -469,6 +473,7 @@ export class ReaderChronicleRepository {
 	}
 
 	remember(input: ReaderChronicleInput): ReaderChronicleSnapshot {
+		this.#mergeStoredBeforeMutation();
 		const incoming = inputRecord(input, this.#now());
 		const previous = this.#snapshot.records.find((entry) =>
 			entry.identity === incoming.identity);
@@ -497,6 +502,7 @@ export class ReaderChronicleRepository {
 	}
 
 	remove(identity: string): ReaderChronicleSnapshot {
+		this.#mergeStoredBeforeMutation();
 		const normalized = text(identity, 512);
 		if (!normalized || !this.#snapshot.records.some((entry) =>
 			entry.identity === normalized)) return this.#snapshot;
@@ -507,6 +513,7 @@ export class ReaderChronicleRepository {
 	}
 
 	clear(): ReaderChronicleSnapshot {
+		this.#mergeStoredBeforeMutation();
 		return this.#persistAndCommit([], 'clear');
 	}
 
@@ -565,6 +572,20 @@ export class ReaderChronicleRepository {
 			if (merged) records.set(merged.identity, merged);
 		}
 		return this.#ordered([...records.values()]);
+	}
+
+	#mergeStoredBeforeMutation(): void {
+		let stored: string | null;
+		try {
+			stored = this.#accountStorage
+				? readReaderAccountScopedString(this.#storage, this.#accountStorage)
+				: this.#storage.getItem(this.#key);
+		} catch (cause) {
+			this.#diagnose('read-failed', cause);
+			return;
+		}
+		if ((stored ?? '[]') === JSON.stringify(this.#snapshot.records)) return;
+		this.#readAndCommit('external-reload');
 	}
 
 	#ordered(values: readonly ReaderChronicleRecord[]): readonly ReaderChronicleRecord[] {

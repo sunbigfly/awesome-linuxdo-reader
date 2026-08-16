@@ -89,6 +89,7 @@ import './reader-reply-ancestor-resolver.test.js';
 import './preferences-config-codec.test.js';
 import './reader-settings-config-manager.test.js';
 import './preferences-repository.test.js';
+import './reader-information-flow-coordinator.test.js';
 import './reader-history-repository.test.js';
 import './reader-chronicle.test.js';
 import './reader-unwanted-topic.test.js';

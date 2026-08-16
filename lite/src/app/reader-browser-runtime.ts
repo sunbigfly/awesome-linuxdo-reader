@@ -344,6 +344,9 @@ import {
 } from '../post/reader-topic-summary-request-adapter.js';
 import {
 	ReaderTopicSummarySurface,
+	READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY,
+	READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY,
+	READER_TOPIC_SUMMARY_WINDOW_GEOMETRY_STORAGE_KEY_PREFIX,
 	type ReaderTopicSummaryFontCatalogPort,
 	type ReaderTopicSummaryImagePreview,
 } from '../post/reader-topic-summary-surface.js';
@@ -475,8 +478,12 @@ import {
 } from '../settings/reader-image-settings-form.js';
 import { ReaderSelectSurface } from '../shell/reader-select-surface.js';
 import {
+	reloadReaderFloatingWindowTabGeometry,
 	restoreReaderFloatingWindowTabSession,
 } from '../shell/reader-floating-window-frame.js';
+import {
+	READER_COLLECTION_FLOATING_WINDOW_GEOMETRY_KEY,
+} from '../collection/reader-collection-floating-window.js';
 import {
 	ReaderImagePreferencesProjection,
 	readerImagePresentationMode,
@@ -625,6 +632,9 @@ import {
 	readerTopicContextWebStorage,
 	type ReaderTopicContextStateStoragePort,
 } from '../topic/reader-topic-context-state.js';
+import {
+	ReaderInformationFlowCoordinator,
+} from '../state/reader-information-flow-coordinator.js';
 import type {
 	ReaderTopicPostFeature,
 } from '../topic/reader-topic-dom-coordinator.js';
@@ -1000,6 +1010,37 @@ export interface ReaderBrowserTopicFeatureDiagnostic {
 	readonly cause: unknown;
 }
 
+export interface ReaderBrowserActivityPort {
+	visible(): boolean;
+	subscribe(listener: () => void): Cleanup;
+}
+
+function createReaderBrowserActivity(
+	document: Document,
+	scope: LifecycleScope,
+): ReaderBrowserActivityPort {
+	const listeners = new Set<() => void>();
+	const publish = (): void => {
+		for (const listener of [...listeners]) listener();
+	};
+	scope.listen(document, 'visibilitychange', publish);
+	const view = document.defaultView;
+	if (view) {
+		scope.listen(view, 'focus', publish);
+		scope.listen(view, 'online', publish);
+		scope.listen(view, 'pageshow', publish);
+		scope.listen(view, 'pagehide', publish);
+	}
+	scope.add(() => listeners.clear());
+	return Object.freeze({
+		visible: () => document.visibilityState !== 'hidden',
+		subscribe(listener: () => void): Cleanup {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		},
+	});
+}
+
 export interface ReaderBrowserRuntimeOptions<
 	TTopic extends DiscourseComposerTopicInput<TPost>,
 	TPost extends ReaderLightboxCommentPostInput
@@ -1110,6 +1151,7 @@ export interface ReaderBrowserRuntimeStageOptions<
 		& DiscourseComposerPostInput
 		& CanonicalActionPost,
 > {
+	readonly informationFlow?: ReaderInformationFlowCoordinator;
 	readonly shell: Omit<
 		ReaderShellWorkspaceStageOptions<
 			TPreferences,
@@ -1679,6 +1721,7 @@ export class ReaderBrowserRuntime<
 	readonly workspace: ReaderWorkspaceCoordinator;
 	readonly permit: BrowserSharedRequestPermit;
 	readonly data: ReaderDataRuntime;
+	readonly activity: ReaderBrowserActivityPort;
 	readonly nativeAjax: BrowserDiscourseNativeAjaxPort;
 	readonly userNative: BrowserDiscourseNativeUserPort;
 	readonly users: ReaderUserDomainSession;
@@ -1734,6 +1777,7 @@ export class ReaderBrowserRuntime<
 	readonly bookmarkPanelView: ReaderBookmarkPanelView | null;
 	readonly #collectionActionEvents = new Signal<ActionCommandEvent>();
 	readonly #chronicleRequestIds = new Set<number>();
+	readonly #topicSummarySurfaces = new Set<ReaderTopicSummarySurface>();
 	readonly topicFactory: ReaderTopicFactory<
 		ReaderBrowserTopicContext<TTopic, TPost>
 	>;
@@ -1754,6 +1798,7 @@ export class ReaderBrowserRuntime<
 	constructor(options: ReaderBrowserRuntimeOptions<TTopic, TPost>) {
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		this.scope.add(() => this.#collectionActionEvents.clear());
+		this.activity = createReaderBrowserActivity(options.document, this.scope);
 		this.#manualChallengeController = this.scope.abortController(
 			new DOMException('Reader runtime 已销毁', 'AbortError'),
 		);
@@ -3027,28 +3072,7 @@ export class ReaderBrowserRuntime<
 						historyCoordination: this.data.cacheCoordination,
 						historyCoordinationKey:
 							`reader-notification-history:v1:${options.topic.authScope}`,
-						activity: {
-							visible: () =>
-								options.document.visibilityState !== 'hidden',
-							subscribe: (listener) => {
-								const view = options.document.defaultView;
-								const onActivity = (): void => listener();
-								options.document.addEventListener(
-									'visibilitychange',
-									onActivity,
-								);
-								view?.addEventListener('focus', onActivity);
-								view?.addEventListener('online', onActivity);
-								return () => {
-									options.document.removeEventListener(
-										'visibilitychange',
-										onActivity,
-									);
-									view?.removeEventListener('focus', onActivity);
-									view?.removeEventListener('online', onActivity);
-								};
-							},
-						},
+						activity: this.activity,
 						...(notificationOptions.schedule === undefined
 							? {}
 							: { schedule: notificationOptions.schedule }),
@@ -3205,6 +3229,7 @@ export class ReaderBrowserRuntime<
 						historyCoordination: this.data.cacheCoordination,
 						historyCoordinationKey:
 							`reader-bookmark-history:v1:${options.topic.authScope}`,
+						activity: this.activity,
 						...(bookmarkOptions.changeTabOrder === undefined
 						? {}
 						: {
@@ -3939,6 +3964,12 @@ export class ReaderBrowserRuntime<
 								),
 							})
 							: null;
+					if (topicSummarySurface) {
+						this.#topicSummarySurfaces.add(topicSummarySurface);
+						context.scope.add(() => {
+							this.#topicSummarySurfaces.delete(topicSummarySurface);
+						});
+					}
 					topicActionRail = options.topicActionRail
 						? new ReaderTopicActionRail<TPost>({
 							document: options.document,
@@ -5411,6 +5442,12 @@ export class ReaderBrowserRuntime<
 		return this.#performance;
 	}
 
+	reloadExternalTopicSummaryState(): void {
+		for (const surface of this.#topicSummarySurfaces) {
+			surface.reloadExternalState();
+		}
+	}
+
 	applyPerformance(snapshot: ReaderPerformanceSnapshot): void {
 		if (this.#destroyed || this.scope.destroyed) return;
 		this.#performance = snapshot;
@@ -5666,6 +5703,16 @@ export class ReaderBrowserRuntime<
 						force: true,
 					});
 					await this.rateLimitNotice.refresh();
+					/*
+					 * Topic 正文不在 request client 内自动重放，但横幅出现后仍应启动
+					 * 唯一过盾恢复器：先探针，确实仍被盾拦截才开窗。恢复器只会
+					 * 重放这里保存的最新失败目标一次，不改变其他请求的调度契约。
+					 */
+					this.#openManualCloudflareChallenge(
+						this.#challengeHref,
+						'',
+						false,
+					);
 				}
 				let previousRestored =
 					previousTopicId !== null &&
@@ -5958,15 +6005,18 @@ export class ReaderBrowserRuntime<
 	#openManualCloudflareChallenge(
 		href: string,
 		observationUsername = '',
+		focus = true,
 	): void {
 		if (this.scope.destroyed) return;
 		if (this.#manualChallengePromise) {
-			/* 重复点击只唤起唯一共享浮窗；不创建第二个 challenge owner。 */
-			void this.permit.resolveCloudflareChallenge({
-				href,
-				signal: this.#manualChallengeController.signal,
-				focus: true,
-			}).catch(() => {});
+			if (focus) {
+				/* 人工点击只唤起唯一共享浮窗；自动恢复重入不创建第二个 owner。 */
+				void this.permit.resolveCloudflareChallenge({
+					href,
+					signal: this.#manualChallengeController.signal,
+					focus: true,
+				}).catch(() => {});
+			}
 			if (observationUsername) {
 				void this.#manualChallengePromise.then((passed) => {
 					if (passed && !this.scope.destroyed) {
@@ -5980,7 +6030,7 @@ export class ReaderBrowserRuntime<
 		const promise = this.permit.resolveCloudflareChallenge({
 			href,
 			signal: this.#manualChallengeController.signal,
-			focus: true,
+			focus,
 		}).then(async (passed) => {
 			if (this.scope.destroyed) return passed;
 			let retried = false;
@@ -5988,9 +6038,15 @@ export class ReaderBrowserRuntime<
 			if (passed) {
 				await this.data.client.resetRateLimits();
 				/*
+				 * permit 已由原生 session 探针确认不再受 cf-mitigated；先立即
+				 * 撤销横幅，再重放最新失败目标。若目标仍被盾拒绝，openTarget
+				 * 会建立新的 required 世代并重新显示真实状态。
+				 */
+				await this.rateLimitNotice.refresh();
+				/*
 				 * session/current.json 只证明验证会话可通，不能替代刚才被
-				 * cf-mitigated 拒绝的 Topic 请求。人工点击本身就是一次显式
-				 * 恢复意图：只重放当时仍为最新的失败目标一次，让业务响应
+				 * cf-mitigated 拒绝的 Topic 请求。当前过盾恢复只重放当时仍为
+				 * 最新的失败目标一次，让业务响应
 				 * 成为最终判定；若它仍被盾拒绝，中央闸门会重新保持 required，
 				 * 这里绝不循环或追发其他后台请求。
 				 */
@@ -6011,7 +6067,6 @@ export class ReaderBrowserRuntime<
 				} else if (!retried || recovered) {
 					this.userObservations.resumeRecoverable('cloudflare-challenge');
 				}
-				await this.rateLimitNotice.refresh();
 			}
 			this.feedback.show(
 				passed
@@ -9153,6 +9208,130 @@ export function createReaderBrowserRuntimeStage<
 						runtime.scope,
 					);
 				}
+			const informationFlow = options.informationFlow ??
+				new ReaderInformationFlowCoordinator({
+					storageEvents: options.runtime.storageEvents ?? null,
+					parentScope: runtime.scope,
+					onDiagnostic: ({ domain, source, cause }) => {
+						console.error(
+							`[main-lite:information-flow:${domain}:${source}]`,
+							cause,
+						);
+					},
+				});
+			runtime.scope.add(informationFlow.connectCache(
+				runtime.data.cacheCoordination,
+			));
+			const registerInformationFlow = (
+				registration: Parameters<typeof informationFlow.register>[0],
+			): void => {
+				runtime.scope.add(informationFlow.register(registration));
+			};
+			registerInformationFlow({
+				domain: 'reading-history',
+				storageKeys: [runtime.history.storageKey],
+				refresh: () => runtime.history.reloadExternal(),
+			});
+			registerInformationFlow({
+				domain: 'chronicle',
+				storageKeys: [runtime.chronicle.storageKey],
+				refresh: () => runtime.chronicle.reloadExternal(),
+			});
+			registerInformationFlow({
+				domain: 'unwanted-topics',
+				storageKeys: [runtime.unwantedTopics.storageKey],
+				refresh: () => runtime.unwantedTopics.reloadExternal(),
+			});
+			registerInformationFlow({
+				domain: 'user-observations',
+				storageKeys: [runtime.userObservations.storageKey],
+				refresh: () => runtime.userObservations.reloadExternal(),
+			});
+			registerInformationFlow({
+				domain: 'topic-context',
+				storageKeys: [runtime.threadContextState.storageKey],
+				subscriptions: [{
+					source: 'userscript-value',
+					subscribe: (notify) => runtime.threadContextState
+						.subscribeExternal(notify),
+				}],
+				refresh: () => runtime.threadContextState.reloadExternal(),
+			});
+			registerInformationFlow({
+				domain: 'topic-summary-state',
+				storageKeys: [
+					READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY,
+					READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY,
+				],
+				storageKeyPrefixes: [
+					`${READER_TOPIC_SUMMARY_WINDOW_GEOMETRY_STORAGE_KEY_PREFIX}:`,
+				],
+				refresh: () => runtime.reloadExternalTopicSummaryState(),
+			});
+			registerInformationFlow({
+				domain: 'surface-layout',
+				storageKeys: [READER_COLLECTION_FLOATING_WINDOW_GEOMETRY_KEY],
+				refresh: () => reloadReaderFloatingWindowTabGeometry(
+					runtime.shell.view.surfaceHost,
+				),
+			});
+			if (runtime.connectHistory) {
+				registerInformationFlow({
+					domain: 'connect-trust-history',
+					storageKeys: [runtime.connectHistory.storageKey],
+					refresh: () => runtime.connectHistory?.reloadExternal(),
+				});
+			}
+			if (runtime.creditAccount) {
+				registerInformationFlow({
+					domain: 'credit-account',
+					subscriptions: [{
+						source: 'userscript-value',
+						subscribe: (notify) => runtime.creditAccount!
+							.subscribeExternal(notify),
+					}],
+					refresh: () => runtime.users.reloadExternalCredit(),
+				});
+			}
+			const projectionScope = encodeURIComponent(
+				String(options.runtime.topic.authScope).trim(),
+			);
+			if (runtime.notificationController) {
+				registerInformationFlow({
+					domain: 'notifications',
+					cacheIdPrefixes: [
+						'reader-collection-projection:notifications:manifest:v1:' +
+						`${projectionScope}:`,
+					],
+					refresh: () => runtime.notificationController
+						?.reloadExternalProjection(),
+				});
+			}
+			if (runtime.bookmarkController) {
+				registerInformationFlow({
+					domain: 'bookmarks',
+					cacheIdPrefixes: [
+						'reader-collection-projection:bookmarks:manifest:v1:' +
+						`${projectionScope}:`,
+					],
+					refresh: () => runtime.bookmarkController
+						?.reloadExternalProjection(),
+				});
+			}
+			if (openQueue) {
+				registerInformationFlow({
+					domain: 'reader-queue',
+					storageKeys: [openQueue.storageKey],
+					refresh: () => openQueue.reloadExternal(),
+				});
+				if (topicOfflineArtifacts) {
+					registerInformationFlow({
+						domain: 'download-history',
+						cacheIds: [topicOfflineArtifacts.manifestCacheId],
+						refresh: () => openQueue.reloadExternalDownloads(),
+					});
+				}
+			}
 			const translationOptions = options.settings
 				? options.settings.translationForm
 				: undefined;

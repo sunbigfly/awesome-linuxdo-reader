@@ -8,6 +8,8 @@ import type {
 	ReaderHistoryAnchorPoint,
 } from '../history/reader-history-model.js';
 import type { ReaderWindowGeometry } from '../shell/reader-workspace.js';
+import type { Cleanup } from '../kernel/lifecycle.js';
+import { Signal } from '../kernel/signal.js';
 import {
 	readReaderAccountScopedValue,
 	readerAccountScopedStorageIdentity,
@@ -20,6 +22,10 @@ export const READER_TOPIC_CONTEXT_STATE_KEY =
 export interface ReaderTopicContextStateStoragePort {
 	getValue(key: string): unknown | Promise<unknown>;
 	setValue(key: string, value: unknown): void | Promise<void>;
+	subscribe?(
+		key: string,
+		listener: (value: unknown, previous: unknown) => void,
+	): Cleanup;
 }
 
 export interface ReaderTopicContextStoredState {
@@ -132,6 +138,7 @@ function normalizedState(
  * 只持久化几何与每个讨论根的视口锚点；帖子、父子关系、分页和请求不得进入该记录。
  */
 export class ReaderTopicContextStateRepository {
+	readonly changes = new Signal<ReaderTopicContextStoredState>();
 	readonly #storage: ReaderTopicContextStateStoragePort;
 	readonly #key: string;
 	readonly #accountStorage: ReaderAccountScopedStorageIdentity | null;
@@ -165,6 +172,14 @@ export class ReaderTopicContextStateRepository {
 		return this.#state;
 	}
 
+	get storageKey(): string {
+		return this.#key;
+	}
+
+	subscribeExternal(listener: () => void): Cleanup {
+		return this.#storage.subscribe?.(this.#key, listener) ?? (() => {});
+	}
+
 	load(): Promise<ReaderTopicContextStoredState> {
 		if (this.#loadPromise) return this.#loadPromise;
 		this.#loadPromise = (async () => {
@@ -191,12 +206,32 @@ export class ReaderTopicContextStateRepository {
 					},
 				}, this.#maxViews);
 				if (hasLocalState) this.#persist();
+				this.changes.emit(this.#state);
 			} catch (error) {
 				this.#onError(error);
 			}
 			return this.#state;
 		})();
 		return this.#loadPromise;
+	}
+
+	async reloadExternal(): Promise<ReaderTopicContextStoredState> {
+		await this.#write;
+		try {
+			this.#state = normalizedState(
+				this.#accountStorage
+					? await readReaderAccountScopedValue(
+						this.#storage,
+						this.#accountStorage,
+					)
+					: await this.#storage.getValue(this.#key),
+				this.#maxViews,
+			);
+			this.changes.emit(this.#state);
+		} catch (error) {
+			this.#onError(error);
+		}
+		return this.#state;
 	}
 
 	point(
@@ -259,6 +294,7 @@ export class ReaderTopicContextStateRepository {
 	replaceExternal(value: unknown): ReaderTopicContextStoredState {
 		this.#state = normalizedState(value, this.#maxViews);
 		this.#persist();
+		this.changes.emit(this.#state);
 		return this.#state;
 	}
 

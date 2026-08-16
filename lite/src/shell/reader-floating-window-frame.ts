@@ -254,6 +254,16 @@ class ReaderFloatingWindowTabGroup {
 		this.#sync();
 	}
 
+	reloadStoredGeometry(): void {
+		const target = this.#active ?? this.#frames.values().next().value as
+			| ReaderFloatingWindowFrame
+			| undefined;
+		if (!target) return;
+		target.reloadStoredGeometry();
+		this.#sharedGeometry = target.geometry.snapshot.geometry;
+		this.#sync();
+	}
+
 	restore(tabId?: string): boolean {
 		if (this.#visible || !this.#opened.length) return false;
 		this.#captureSharedGeometry();
@@ -333,6 +343,12 @@ export function restoreReaderFloatingWindowTabSession(
 	tabId?: string,
 ): boolean {
 	return floatingWindowTabGroups.get(mount)?.restore(tabId) ?? false;
+}
+
+export function reloadReaderFloatingWindowTabGeometry(
+	mount: HTMLElement,
+): void {
+	floatingWindowTabGroups.get(mount)?.reloadStoredGeometry();
 }
 
 function storedPreferences(
@@ -756,6 +772,10 @@ export class ReaderFloatingWindowFrame {
 			geometry.left,
 			geometry.top,
 		);
+	}
+
+	reloadStoredGeometry(): void {
+		this.#syncSharedGeometry();
 	}
 
 	open(): void {

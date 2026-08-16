@@ -110,6 +110,10 @@ assert(
 			'.ldp-lightbox-comments-expanded-default',
 			'.ldp-lightbox-description-expanded-default',
 		].every((selector) => host.querySelector(selector)) &&
+		host.querySelector('.ldp-lightbox-description-height')
+			?.closest('.ldp-setting-row')?.textContent?.includes(
+				'内容较少时自适应',
+			) === true &&
 		host.querySelector('.ldp-image-scale-preset')
 			?.closest('.ldp-setting-row')?.textContent?.includes(
 				'关闭后只修改当前形态',

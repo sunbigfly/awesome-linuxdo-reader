@@ -694,4 +694,98 @@ assert(
 	'只有宿主楼层总数增长时，部分预热才允许按新的最低楼层重新入队',
 );
 partial.destroy();
+
+let activityVisible = false;
+const activityListeners = new Set<() => void>();
+let activityPreheatCalls = 0;
+let activityPreheatSignal: AbortSignal | null = null;
+const currentActivityPreheatSignal = (): AbortSignal | null =>
+	activityPreheatSignal;
+const activityAware = new ReaderHostTopicPreheatController({
+	document,
+	mutations,
+	historyEntry: () => null,
+	readOpenTopicsAtFirstPost: () => true,
+	activity: {
+		visible: () => activityVisible,
+		subscribe(listener) {
+			activityListeners.add(listener);
+			return () => activityListeners.delete(listener);
+		},
+	},
+	preheat(_topicId, _postNumber, signal) {
+		activityPreheatCalls += 1;
+		activityPreheatSignal = signal;
+		if (activityPreheatCalls === 1) {
+			return new Promise((_, reject) => {
+				signal.addEventListener('abort', () => reject(signal.reason), {
+					once: true,
+				});
+			});
+		}
+		return Promise.resolve(Object.freeze({
+			warmedCount: 121,
+			requestedCount: 121,
+			totalCount: 121,
+			cacheHit: false,
+			complete: true,
+		}));
+	},
+	createIntersectionObserver(callback) {
+		intersectionCallback = callback;
+		return {
+			observe(target) {
+				observed.add(target);
+			},
+			unobserve(target) {
+				observed.delete(target);
+			},
+			disconnect() {
+				intersectionDisconnects += 1;
+				observed.clear();
+			},
+		};
+	},
+	requestFrame(callback) {
+		const id = nextFrame++;
+		frames.set(id, callback);
+		return id;
+	},
+	cancelFrame(id) {
+		frames.delete(id);
+	},
+});
+flushFrames();
+intersectionCallback([{
+	target: restoredCard,
+	isIntersecting: true,
+}] as unknown as IntersectionObserverEntry[], {} as IntersectionObserver);
+assert(
+	activityPreheatCalls === 0,
+	'隐藏标签的宿主近视口 Topic 不得进入正文预热请求链',
+);
+activityVisible = true;
+for (const listener of [...activityListeners]) listener();
+await flushMicrotasks();
+assert(
+	Number(activityPreheatCalls) === 1 &&
+	currentActivityPreheatSignal()?.aborted === false,
+	'标签恢复可见后必须接管近视口 Topic 预热',
+);
+activityVisible = false;
+for (const listener of [...activityListeners]) listener();
+await flushMicrotasks();
+assert(
+	currentActivityPreheatSignal()?.aborted === true,
+	'标签隐藏时必须中止已在途的宿主 Topic 预热',
+);
+activityVisible = true;
+for (const listener of [...activityListeners]) listener();
+await flushMicrotasks();
+assert(
+	activityPreheatCalls === 2,
+	'标签再次可见时必须从 canonical 缓存状态重新接管预热，不能永久停在 loading',
+);
+activityAware.destroy();
+assert(activityListeners.size === 0, '宿主预热活跃监听必须随 owner 释放');
 mutations.destroy();

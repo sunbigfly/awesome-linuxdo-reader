@@ -816,6 +816,45 @@ assert(
 );
 firstLeaseSession.destroy();
 secondLeaseSession.destroy();
+const sharedListValues = new Map<string, string>();
+const sharedListStorage = {
+	getItem: (key: string) => sharedListValues.get(key) ?? null,
+	setItem: (key: string, value: string) => sharedListValues.set(key, value),
+};
+const noNetworkObservationRequests: ReaderUserObservationRequestPort = {
+	loadPage() {
+		throw new Error('观察名单跨标签重载不得发起网络请求');
+	},
+};
+const firstListSession = new ReaderUserObservationSession({
+	requests: noNetworkObservationRequests,
+	storage: sharedListStorage,
+	authScope: 'account:viewer',
+});
+const secondListSession = new ReaderUserObservationSession({
+	requests: noNetworkObservationRequests,
+	storage: sharedListStorage,
+	authScope: 'account:viewer',
+});
+firstListSession.observe({
+	username: 'remote-user',
+	name: '远端用户',
+	avatarTemplate: '/remote/{size}.png',
+}, { allowNetwork: false });
+secondListSession.reloadExternal();
+assert(
+	secondListSession.storageKey === firstListSession.storageKey &&
+		secondListSession.entry('remote-user')?.name === '远端用户',
+	'一个标签新增观察用户后，其他标签必须只重读共享名单并立即更新投影',
+);
+firstListSession.remove('remote-user');
+secondListSession.reloadExternal();
+assert(
+	secondListSession.entry('remote-user') === null,
+	'一个标签移除观察用户后，其他标签不得保留只能靠刷新消失的旧名单项',
+);
+firstListSession.destroy();
+secondListSession.destroy();
 const session = new ReaderUserObservationSession({
 	requests: sessionRequests,
 	storage: {

@@ -508,6 +508,57 @@ assert(
 	Number(clearStateCalls) === 3,
 	'单击舍弃必须执行 destroyDraft、clearState 和 close',
 );
+const successfulDestroyDraft = service.destroyDraft;
+const cleanupDiagnosticBaseline = errors.length;
+const cleanupNoticeBaseline = closeNotices.length;
+await resetDiscardModel();
+service.model!.clearState = () => {
+	clearStateCalls += 1;
+	throw new Error('测试：草稿删除后的 model 清理失败');
+};
+const closeCallsBeforeCleanupFailure = discardCloseCalls;
+assert(
+	dispatchClick('.discard-button').defaultPrevented,
+	'草稿删除后的清理异常仍必须消费原生舍弃事件',
+);
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	discardCloseCalls === closeCallsBeforeCleanupFailure + 1 &&
+		closeNotices.length === cleanupNoticeBaseline &&
+		errors.length === cleanupDiagnosticBaseline + 1 &&
+		errors.at(-1) instanceof AggregateError,
+	'草稿已删除时必须继续关窗并仅记录清理诊断，不能误报舍弃失败',
+);
+errors.splice(cleanupDiagnosticBaseline);
+const draftFailure = new Error('测试：草稿删除请求失败');
+await resetDiscardModel();
+service.destroyDraft = async () => {
+	discardDraftCalls += 1;
+	throw draftFailure;
+};
+const clearCallsBeforeDraftFailure = clearStateCalls;
+const closeCallsBeforeDraftFailure = discardCloseCalls;
+const draftFailureDiagnosticBaseline = errors.length;
+const draftFailureNoticeBaseline = closeNotices.length;
+assert(
+	dispatchClick('.discard-button').defaultPrevented,
+	'真实草稿删除失败仍必须消费原生舍弃事件',
+);
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	clearStateCalls === clearCallsBeforeDraftFailure &&
+		discardCloseCalls === closeCallsBeforeDraftFailure &&
+		closeNotices.length === draftFailureNoticeBaseline + 1 &&
+		closeNotices.at(-1) === '舍弃回复失败，请重试' &&
+		errors.length === draftFailureDiagnosticBaseline + 1 &&
+		errors.at(-1) === draftFailure,
+	'草稿删除失败必须保留 Composer 会话并显示一次可重试提示',
+);
+service.destroyDraft = successfulDestroyDraft;
+errors.splice(draftFailureDiagnosticBaseline);
+closeNotices.splice(cleanupNoticeBaseline);
 closeGuardEnabled = true;
 assert(
 	dispatchClick('.toggle-save-and-close').defaultPrevented,
