@@ -4,7 +4,7 @@ description: 配置队列入口、历史、退出、键盘与鼠标快捷方式�
 feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "COLLECT-007", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/app/reader-application.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-context-controller.ts","lite/src/post/boost-copy-rule.ts","lite/src/post/reader-topic-action-rail.ts","lite/src/collection/reader-unwanted-topic-filter.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts"]
 since: 0.1.2
-version: 1.5.1
+version: 1.5.2
 status: current
 last_verified: 2026-08-16
 screenshots: ["/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/guide-18-thread-context-v1.5.0.png", "/screenshots/guide-26-reading-navigation-v1.5.0.png", "/screenshots/guide-27-shortcuts-v1.5.0.png", "/screenshots/guide-28-applicable-sites-v1.5.0.png"]
@@ -90,7 +90,7 @@ screenshots: ["/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/g
 
 打开“不想看”浮窗后，点击标题栏齿轮进入“免打扰与自动过滤”；设置仍在同一个浮窗内，点击返回回到 Topic 列表。左侧切换规则类别，右侧卡片区只读展示当前规则，区域固定高度并独立滚动；可搜索、高亮并定位卡片，悬停后删除。手动免打扰始终可用。
 
-新增类别、Label、OP 或楼层用户时会自动查询宿主，只有选择合法候选后才能加入；同名用户需根据唯一用户名和 ID 二次选择。字符匹配可指定 `title`、`category`、`label`、`user` 或 `topic`，支持普通包含与正则表达式。保存后会立即重扫当前 Topic 列表和已挂载楼层，不需要刷新页面。主题命中后会进入“不想看”历史；同时命中多项时会记录全部原因，类别命中可在历史中显示并筛选。历史列表还支持基于当前搜索、标签和类别筛选结果进行批量恢复。楼层用户命中只隐藏该用户的楼层本体并保留回复树。
+新增类别、Label、OP 或楼层用户时会自动查询宿主，只有选择合法候选后才能加入；同名用户需根据唯一用户名和 ID 二次选择。字符匹配可指定 `title`、`category`、`label`、`user` 或 `topic`，支持普通包含与正则表达式。保存后会立即重扫当前 Topic 列表和已挂载楼层，不需要刷新页面。主题规则只动态隐藏当前命中项，不写入“不想看”持久记录；关闭总开关或删除规则后立即恢复。只有手动免打扰会持久收纳 Topic；旧版本留下的自动历史仍保留供查看，但不再覆盖当前规则状态。楼层用户命中只隐藏该用户的楼层本体并保留回复树。
 
 ## 二级回复显示位置
 

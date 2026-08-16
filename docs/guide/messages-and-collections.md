@@ -4,7 +4,7 @@ description: 使用消息、历史、收藏、用户观察、岁月史书和不�
 feature_ids: ["ACTION-004", "ACTION-007", "COLLECT-001", "COLLECT-002", "COLLECT-003", "COLLECT-004", "COLLECT-005", "COLLECT-006", "COLLECT-007", "COLLECT-009", "USER-007"]
 source_anchors: ["lite/src/app/reader-browser-runtime.ts","lite/src/discourse/native-host-api.ts","lite/src/notification/reader-notification-model.ts","lite/src/notification/reader-notification-controller.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-repository.ts","lite/src/history/reader-chronicle-repository.ts","lite/src/bookmark/reader-bookmark-model.ts","lite/src/bookmark/reader-bookmark-controller.ts","lite/src/collection/reader-unwanted-topic-repository.ts","lite/src/user/reader-user-observation-session.ts"]
 since: 0.1.2
-version: 1.5.1
+version: 1.5.2
 status: current
 last_verified: 2026-08-16
 screenshots: ["/screenshots/guide-15-notifications-replies-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.5.0.png"]
@@ -110,7 +110,7 @@ screenshots: ["/screenshots/guide-15-notifications-replies-v1.5.0.png", "/screen
 
 点击“不想看”浮窗标题栏的设置图标，可在同一个浮窗内进入“免打扰与自动过滤”，并通过返回按钮回到 Topic 列表。左侧切换类别、Label、OP 用户、字符匹配和楼层用户；右侧用只读自适应卡片展示规则，卡片区固定高度并独立滚动，可搜索、高亮并定位已有规则，悬停卡片可删除。
 
-新增类别、Label 和用户规则时会自动查询宿主目录，必须从真实候选中选择；同名用户会同时显示唯一用户名与 ID，需再次选择具体账号。字符匹配可选择 `title`、`category`、`label`、`user` 或 `topic` 字段，并支持普通包含和正则表达式。保存自动过滤设置后会立即重扫当前列表与已挂载楼层，不需要刷新页面；无关设置变化不会触发这次重扫。命中任一主题规则就会自动加入“不想看”历史；同一 Topic 同时命中多条规则时会完整记录全部命中原因，类别命中还会保存稳定类别 ID、名称与 slug，供历史展示和筛选。楼层用户规则只隐藏指定用户的楼层本体，保留其下回复树。所有自动规则统一受总开关控制，手动免打扰入口始终可用。
+新增类别、Label 和用户规则时会自动查询宿主目录，必须从真实候选中选择；同名用户会同时显示唯一用户名与 ID，需再次选择具体账号。字符匹配可选择 `title`、`category`、`label`、`user` 或 `topic` 字段，并支持普通包含和正则表达式。保存自动过滤设置后会立即重扫当前列表与已挂载楼层，不需要刷新页面；无关设置变化不会触发这次重扫。主题规则只在当前列表动态隐藏命中项，不写入“不想看”持久记录；关闭总开关或删除规则后，已挂载 Topic 会立即恢复。只有手动免打扰会持久收纳 Topic；旧版本留下的自动历史仍保留供查看，但不再覆盖当前规则状态。楼层用户规则只隐藏指定用户的楼层本体，保留其下回复树。所有自动规则统一受总开关控制，手动免打扰入口始终可用。
 
 不想看列表按当前账号隔离保存在本地，打开浮窗只读取这份投影，不会为每个 Topic 另发网络请求。
 
