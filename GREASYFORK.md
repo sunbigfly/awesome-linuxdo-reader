@@ -4,49 +4,66 @@
 
 # Awesome LinuxDo Reader
 
-LINUX DO 全面适配、标准 Discourse 社区通用的增强阅读器：在列表页直接阅读完整主题，保留楼层关系与原站互动，并提供跨语翻译、原图灯箱、离线 Topic、WebDAV 同步和精细布局。
+**把 Discourse 从帖子列表，变成完整的阅读工作区。**
 
-[安装脚本](https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js) · [在线用户手册](https://sunbigfly.github.io/awesome-linuxdo-reader/) · [GitHub 项目](https://github.com/sunbigfly/awesome-linuxdo-reader) · [问题反馈](https://github.com/sunbigfly/awesome-linuxdo-reader/issues)
+在一个连续界面中完成长帖阅读、上下文追踪、跨语翻译、原站互动与资料整理。为 LINUX DO 深度定制，也适用于标准 HTTPS Discourse 社区。
 
-![在 LINUX DO 列表页右侧打开完整增强阅读工作区](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-01-reader-overview-v1.3.0.png)
+[安装脚本](https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js) · [在线用户手册](https://sunbigfly.github.io/awesome-linuxdo-reader/) · [110 项功能目录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/feature-catalog) · [GitHub 项目](https://github.com/sunbigfly/awesome-linuxdo-reader) · [问题反馈](https://github.com/sunbigfly/awesome-linuxdo-reader/issues)
 
-## 1.5.0 重点
+![LINUX DO 主题列表与增强阅读工作区](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-01-reader-overview-v1.5.0.png)
 
-- **共享工具工作区**：通知与私信、历史、收藏与回应、Topic 下载、用户观察、岁月史书和不想看统一进入可冻结的多标签浮窗。
-- **连续阅读与上下文**：浮窗、全屏、左右嵌入与移动布局，支持楼中楼、无限讨论树、时间轴、真实已读进度和历史导航。
-- **内容与翻译**：原图灯箱、图片评论、批量下载、音视频、HLS、KaTeX，以及公共接口或自定义 OpenAI 兼容模型的跨语翻译。
-- **离线 Topic**：后台下载全部、楼主或自选楼层，生成可搜索、可跳转并保留讨论关系的独立 HTML。
-- **安全同步**：WebDAV 12 类记录按开关三方合并；翻译配置、缓存与离线 Topic 只有用户主动选择后才同步。
-- **安全配置**：设置 v9 导出、导入与恢复默认支持失败回滚；翻译 API Key、WebDAV 用户名和密码始终排除。
-- **快捷方式与缓存**：21 个快捷动作共用保留键门禁；六类缓存危险清理逐项列出类别并二次确认。
-- **多站点兼容**：LINUX DO 保持完整覆盖；其他标准 HTTPS Discourse 自动识别，缺少的插件能力自动隐藏。
+## 为长内容重新设计 Discourse 阅读体验
 
-| 离线 Topic | 安全配置管理 | WebDAV 分类同步 |
+Awesome LinuxDo Reader 不是独立论坛，也不替代原站。它在保留当前账号、权限、内容来源和列表状态的前提下，为主题列表增加完整阅读工作区，让阅读、定位、回复和整理资料不再依赖频繁跳页。
+
+LINUX DO 是完整功能基线。其他标准 Discourse 社区会根据站点运行态和插件能力自动适配；站点没有 Boost、Reactions 或 Topic Voting 时，相应入口自然隐藏。
+
+## 核心能力
+
+- **连续阅读工作区**：在浮窗、全屏、左右嵌入或移动布局中直接阅读完整主题；长帖按需渲染，多主题队列、历史切换和真实已读进度保持连续。
+- **完整讨论上下文**：还原楼中楼、父回复、引用来源和完整讨论树，支持只看楼主、已解决答案、时间轴、目标楼层高亮与跨 Topic 回跳。
+- **原站级互动**：回复、划词引用、点赞、表情回应、Boost、收藏、通知、分享、编辑和举报继续使用原站 API、登录态与权限判断。
+- **共享工具工作区**：通知与私信、历史、收藏与回应、Topic 下载、用户观察、岁月史书和不想看集中到可冻结的多标签浮窗。
+- **富内容与跨语阅读**：覆盖原图灯箱、图片评论、批量下载、音视频、HLS、KaTeX、投票与代码工具，支持原文、双语、全译文和自定义 OpenAI 兼容翻译服务。
+- **可控的数据与性能**：提供离线 Topic、WebDAV 12 类同步、设置 v9 导入导出、六类缓存治理、21 个快捷动作、请求诊断、429 退避和长帖虚拟化。
+
+| 理解讨论关系 | 保留重要内容 | 同步由你决定 |
 | --- | --- | --- |
-| ![选择范围并管理离线 HTML](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-31-topic-download-v1.3.0.png) | ![导出、导入和恢复组合设置](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-13-data-management-v1.3.0.png) | ![选择 WebDAV 同步内容](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-32-webdav-sync-v1.3.0.png) |
+| ![父回复、楼中楼与正式楼层](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-18-thread-context-v1.5.0.png) | ![离线 Topic 下载与管理](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-31-topic-download-v1.5.0.png) | ![WebDAV 分类同步设置](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-32-webdav-sync-v1.5.0.png) |
+
+## 从打开主题到完成阅读
+
+1. **留在主题列表**：点击标题后在当前页面打开主题，不打断列表筛选和浏览位置。
+2. **沿上下文阅读**：通过时间轴、楼层关系、只看楼主、历史导航和多主题队列持续推进。
+3. **直接完成互动**：回复、点赞、收藏和其他社区动作提交到当前原站。
+4. **按需整理内容**：把重要主题加入收藏、阅读队列、离线 Topic 或自己选择的 WebDAV 同步类别。
+
+## 适合这些场景
+
+- 每天在 LINUX DO 或其他 Discourse 社区跟进大量主题。
+- 阅读数百楼的长帖，需要随时确认引用、父回复和讨论分支。
+- 在中文与非中文社区之间切换，希望保留原文并快速获得双语内容。
+- 集中处理通知、私信、收藏、用户动态和历史内容。
+- 离线保存重要主题，或在多设备间延续自己选择的阅读数据。
 
 ## 安装
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
-2. 在本页点击“安装此脚本”。普通用户只需安装主脚本，不要单独安装 Core、Platform 或 Features Library。
+2. 在本页点击“安装此脚本”。普通用户只需安装主脚本，不需要单独安装 Core、Platform 或 Features Library。
 3. 打开或刷新 LINUX DO、内置社区或其他标准 HTTPS Discourse，点击主题标题开始使用。
 
-> **当前版本：** Lite `1.5.0` 已发布。主 Loader `588185 / 1904252`、Core `590254 / 1904245`、Platform `591595 / 1904248`、Features `590255 / 1904246` 均已逐字节核验；CSS 固定到 Git `2a1f6695162217d4a86cf0e3958d8a361594f90b` 并带 SHA-256。
-
-| 发布单元 | 字节与 SHA-256 |
-| --- | --- |
-| Loader | 原始 4,052 字节，`60a80af4e514c5131b572a1e8afb44dcf80cce7a82fe967ceb2293d96ef383e3`；移除平台元数据后 4,031 字节，`f396fbf42eca4cd0f761557cb330577034225e3967bee33f6877467f40821d5f` |
-| Core | 1,552,321 字节，`a645aa16ac2592f591e2fcb0aceb9057b9e43adb9f8f21bb00e5a401eb8d804a` |
-| Platform | 1,236,060 字节，`b8755569a5591fc106e2faac433e136bbbbfd3d548dc4b9369a953747f60a178` |
-| Features | 1,953,979 字节，`9316bcefe26cb24f78e6fb87dadc523e71f37c4642324c4ba9475d10a6993053` |
+> 当前正式版为 Lite `1.5.0`。更新后刷新已打开的 Discourse 页面，并在“设置 → 关于”或脚本管理器中核对实际运行版本。
 
 ## 数据与权限边界
 
-- 阅读器不接管账号体系；帖子、权限、消息、收藏和互动结果以原站为准。
-- WebDAV 默认关闭，只有用户主动配置并选择类别后才访问远端。
+- **原站优先**：账号、权限、帖子、消息、收藏和互动结果始终以当前 Discourse 原站为准。
+- **本地优先**：设置、阅读状态和缓存默认保存在当前浏览器；WebDAV 默认关闭。
+- **主动同步**：只有配置 WebDAV 并选择具体类别后，阅读器才访问对应远端。
+- **秘密隔离**：设置导出不会包含翻译 API Key、WebDAV 用户名或密码；导入失败会回滚已应用内容。
+- **安全清理**：缓存清理、设置重置、设置导入和 WebDAV 同步是四种独立操作，不会删除原站内容。
+- **透明诊断**：请求、429、Cloudflare、缓存和资源状态可以脱敏查看，不导出 Cookie 或 Authorization。
 - 离线 HTML 可能包含帖子正文和公开用户名；只应保存或同步到你控制的位置。
-- 正文翻译只在用户主动开启后发送待翻译文本；具体范围见[隐私、权限与边界](https://sunbigfly.github.io/awesome-linuxdo-reader/manage/privacy-and-permissions)。
 
-完整功能、设置、兼容性与故障排查请查看[在线用户手册](https://sunbigfly.github.io/awesome-linuxdo-reader/)。
+完整的 110 项用户可见能力、设置、兼容性与故障排查请查看[在线用户手册](https://sunbigfly.github.io/awesome-linuxdo-reader/)。
 
 许可证：[MIT License](https://github.com/sunbigfly/awesome-linuxdo-reader/blob/main/LICENSE)
