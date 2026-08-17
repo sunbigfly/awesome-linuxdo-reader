@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.5.3
+version: 1.5.4
 status: current
 last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
@@ -15,6 +15,24 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.5.4 — 恢复默认保留免打扰设置
+
+核验日期：2026-08-17。
+
+### 设置与数据边界
+
+- 数据管理中的“恢复全部默认”和大版本设置更新提示改为保留“不想再看”的手动收纳记录，以及自动过滤总开关、主题类别、Label、OP 用户、字符规则和楼层用户。
+- 普通显示、阅读、交互与性能偏好仍恢复推荐默认；其他适用站点、翻译和 WebDAV 配置继续按确认弹层重置，本机翻译 API Key、WebDAV 用户名与密码仍会清除。
+- 阅读队列条目、浏览历史、岁月史书、离线下载、业务缓存和原站账号数据继续由各自持久 owner 管理，不会被设置重置连带删除。
+- 确认弹层、完成反馈、一次性升级提示与用户手册统一说明保留和重置边界；“不想再看”面板自身的恢复按钮仍只负责该面板自动过滤草稿。
+
+### 发布状态
+
+- `1.5.4` 已发布到 Greasy Fork：主 Loader 固定版本为 `1905015`，加载 Core `1905010`、Platform `1905012` 与 Features `1905011`。
+- 固定 Loader 原始文件为 4,141 字节，SHA-256 `6624fe32bd06a79ef8ec1f58fc93910ade3fc844c6891496e3dafec43b5e9474`；移除平台加入的 `@downloadURL none` 后为 4,120 字节，SHA-256 `66c9b81ed37c4d8f4135ec7522c89e813b82cb15b708ed3327706de98422422e`，与仓库 Loader 逐字节一致。
+- Core 为 1,577,128 字节，SHA-256 `3fa3487b444baf95ab951e2a98296d0822a1fd49f4ab4b932ab28473c86429db`；Platform 为 1,257,549 字节，SHA-256 `fe3451175591ba4e283a347064538c6bba95e0b8bceb9d513c259cb3be25706a`；Features 为 1,974,596 字节，SHA-256 `f7ec6a944e15e1f065ff26c1f7f36420514eaf5dc5b5455d18af5265a29f2d29`。
+- CSS 没有变化，继续固定到 Git `25fb1508884e8e524e381c1a7942e9729f41d52d`：611,633 字节，SHA-256 `1bce472ab2eecf03f62579975724661d11c8e1839b13cb837c92ae2edbe2f40d`；源码与分包 runtime 各通过 223 文件契约，287 个模块通过 parity 门禁。
 
 ## 1.5.3 — 集合增量更新与失效恢复
 

@@ -4,7 +4,7 @@ description: 从主题列表打开阅读器，完成阅读、导航、互动、�
 feature_ids: ["CORE-002", "CORE-003", "CORE-006"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/userscript/main-lite-bootstrap.ts","lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
-version: 1.5.3
+version: 1.5.4
 status: current
 last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png"]

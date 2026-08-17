@@ -4,7 +4,7 @@ description: 理解 18 个设置面板、分组导航、安全配置管理、Web
 feature_ids: ["USER-005", "SET-001", "SET-020", "SET-022", "DATA-001", "DATA-006", "DATA-007"]
 source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/state/reader-preferences-schema.ts","lite/src/appearance/reader-theme-controller.ts","lite/src/appearance/reader-local-sun-clock.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-ai-service-settings-form.ts","lite/src/settings/reader-translation-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/settings/reader-webdav-settings-form.ts","lite/src/state/reader-settings-config-manager.ts"]
 since: 0.1.2
-version: 1.5.3
+version: 1.5.4
 status: current
 last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png"]
@@ -12,7 +12,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png"]
 
 # 设置中心总览
 
-点击阅读器标题栏的“设置”进入设置中心。当前 v1.5.3 按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 18 个面板：
+点击阅读器标题栏的“设置”进入设置中心。当前 v1.5.4 按“显示与布局”“阅读与交互”“系统与数据”分组，共包含 18 个面板：
 
 | 面板 | 作用 |
 | --- | --- |
@@ -81,7 +81,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png"]
 | 图片、字体、布局、浮窗、外观与动效 | 当前阅读器界面偏好 | 预览后统一保存 | 可进入设置导出和“设置配置”WebDAV 类别 |
 | 快捷方式与阅读交互 | 当前脚本偏好 | 修改后立即保存 | 快捷绑定会随设置配置导出、导入或恢复默认 |
 | 导入设置 | 偏好、适用站点、翻译与 WebDAV 非敏感配置 | 确认后事务写入 | 失败时回滚；不会导入秘密凭据、历史、队列或缓存 |
-| [恢复全部默认](/settings/data-management#reset-settings) | 设置与本机秘密凭据 | 确认后立即重置 | 不删除阅读队列条目、历史、离线下载或缓存 |
+| [恢复全部默认](/settings/data-management#reset-settings) | 普通设置与本机秘密凭据 | 确认后立即重置 | 保留“不想再看”内容、阅读队列条目、历史、离线下载和缓存 |
 | 清理缓存 | 选中的本机派生数据 | 二次确认后执行 | 不改设置、原站数据或 WebDAV 远端；已同步记录可能再次合并回来 |
 | WebDAV 同步 | 用户主动选择的 12 类跨设备记录 | 面板单独保存和执行 | 设置类别不含 WebDAV 用户名、密码或翻译 API Key |
 

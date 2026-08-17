@@ -4,7 +4,7 @@ description: 导出导入设置，理解本地与 WebDAV 数据范围，查看�
 feature_ids: ["COLLECT-004", "DATA-001", "DATA-002", "DATA-003", "DATA-004", "DATA-006", "DATA-007", "TROUBLE-004"]
 source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.5.3
+version: 1.5.4
 status: current
 last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png"]
@@ -74,7 +74,7 @@ screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png"]
 - 同 URL 的翻译 API Key 可继续复用本机值；WebDAV 地址变化或本机没有同地址凭据时会清空连接凭据并关闭定时同步；
 - 成功后立即投影，无需依赖整页刷新。
 
-“恢复全部默认”会覆盖偏好、其他适用站点、翻译和 WebDAV 设置，清除本机翻译 API Key 与 WebDAV 用户名、密码，并把阅读队列图标恢复到默认位置。它不会删除阅读队列条目、浏览历史、缓存或改动原站账号。
+“恢复全部默认”会覆盖普通偏好、其他适用站点、翻译和 WebDAV 设置，清除本机翻译 API Key 与 WebDAV 用户名、密码，并把阅读队列图标恢复到默认位置。它会保留“不想再看”的手动记录与自动过滤设置，也不会删除阅读队列条目、浏览历史、离线下载、缓存或改动原站账号。
 只恢复图片、字体、布局、外观或动效等一个范围时，使用对应设置面板自己的恢复按钮。
 
 ## 六类缓存
