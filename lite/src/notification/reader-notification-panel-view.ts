@@ -148,12 +148,15 @@ export class ReaderNotificationPanelView {
 	readonly #progress: ReaderCollectionProgressView;
 	readonly #filterDisclosure: ReaderPopoverFilterDisclosure;
 	readonly #markAllHeaderActions: HTMLElement;
+	readonly #refreshHeaderAction: HTMLButtonElement;
 	readonly #scrollWindow: ReaderCollectionScrollWindow<ReaderNotificationRecord>;
 	readonly #recordNodes = new ReaderCollectionNodeCache<
 		ReaderNotificationRecord,
 		HTMLAnchorElement
 	>();
 	#relativeTimer: unknown = null;
+	#refreshVisualReset: unknown = null;
+	#refreshVisualState: 'idle' | 'running' | 'success' | 'error' = 'idle';
 	#historyCacheCompleted = false;
 
 	constructor(options: ReaderNotificationPanelViewOptions) {
@@ -195,10 +198,25 @@ export class ReaderNotificationPanelView {
 			notify: this.#notify,
 		});
 		this.#markAllHeaderActions = this.#document.createElement('div');
-		this.#markAllHeaderActions.append(this.#elements.markAll);
+		this.#refreshHeaderAction = this.#document.createElement('button');
+		this.#refreshHeaderAction.type = 'button';
+		this.#refreshHeaderAction.className = 'ldp-notification-refresh';
+		this.#refreshHeaderAction.title = '更新通知';
+		this.#refreshHeaderAction.setAttribute('aria-label', '更新通知');
+		this.#refreshHeaderAction.replaceChildren(
+			renderReaderIcon(
+				this.#document,
+				'rotate-ccw',
+				this.#renderIcon,
+			),
+		);
+		this.#markAllHeaderActions.append(
+			this.#refreshHeaderAction,
+			this.#elements.markAll,
+		);
 		this.#surface.attachHeaderActions({
 			root: this.#markAllHeaderActions,
-			buttons: [this.#elements.markAll],
+			buttons: [this.#refreshHeaderAction, this.#elements.markAll],
 			label: '通知操作',
 		});
 		this.#progress = new ReaderCollectionProgressView({
@@ -239,6 +257,10 @@ export class ReaderNotificationPanelView {
 		}, this.scope);
 		this.scope.add(() => {
 			this.#stopRelativeTimer();
+			if (this.#refreshVisualReset !== null) {
+				this.#cancel(this.#refreshVisualReset);
+				this.#refreshVisualReset = null;
+			}
 			this.#recordNodes.clear();
 			this.#elements.list.replaceChildren();
 		});
@@ -306,6 +328,25 @@ export class ReaderNotificationPanelView {
 			}).catch((cause) => {
 				this.#onError(cause);
 				this.#notify(`标记已读失败：${errorMessage(cause)}`);
+			});
+		});
+		this.scope.listen(this.#refreshHeaderAction, 'click', () => {
+			if (this.#refreshVisualState === 'running') return;
+			this.#setRefreshVisualState('running');
+			void this.#controller.refresh().then(() => {
+				if (this.scope.destroyed) return;
+				if (this.#controller.snapshot.error) {
+					this.#setRefreshVisualState('error', 3_000);
+					this.#notify('通知更新失败，请稍后重试');
+					return;
+				}
+				this.#setRefreshVisualState('success', 1_800);
+				this.#notify('通知已更新');
+			}).catch((cause) => {
+				if (this.scope.destroyed) return;
+				this.#setRefreshVisualState('error', 3_000);
+				this.#onError(cause);
+				this.#notify(`通知更新失败：${errorMessage(cause)}`);
 			});
 		});
 		this.scope.listen(this.#elements.list, 'click', (eventValue) => {
@@ -389,7 +430,7 @@ export class ReaderNotificationPanelView {
 		);
 		markAll.hidden =
 			readerNotificationGroup(snapshot.group).source !== 'notifications';
-		this.#markAllHeaderActions.hidden = markAll.hidden;
+		this.#syncRefreshHeaderAction(snapshot);
 		unreadStatus.hidden = markAll.hidden || snapshot.unreadCount <= 0;
 		newMessage.hidden = snapshot.mode !== 'messages';
 		this.#elements.toolbar.hidden =
@@ -481,6 +522,72 @@ export class ReaderNotificationPanelView {
 		tab.setAttribute('aria-label', `${label}，${count} 条`);
 	}
 
+	#setRefreshVisualState(
+		state: 'idle' | 'running' | 'success' | 'error',
+		resetAfterMs = 0,
+	): void {
+		if (this.#refreshVisualReset !== null) {
+			this.#cancel(this.#refreshVisualReset);
+			this.#refreshVisualReset = null;
+		}
+		this.#refreshVisualState = state;
+		this.#syncRefreshHeaderAction(this.#controller.snapshot);
+		this.#syncWindowStatus(this.#controller.snapshot);
+		if (!(resetAfterMs > 0)) return;
+		this.#refreshVisualReset = this.#schedule(() => {
+			this.#refreshVisualReset = null;
+			if (this.scope.destroyed) return;
+			this.#refreshVisualState = 'idle';
+			this.#syncRefreshHeaderAction(this.#controller.snapshot);
+			this.#syncWindowStatus(this.#controller.snapshot);
+		}, resetAfterMs);
+	}
+
+	#syncRefreshHeaderAction(
+		snapshot: ReaderNotificationControllerSnapshot,
+	): void {
+		const busy = snapshot.loading || snapshot.refreshing ||
+			this.#refreshVisualState === 'running';
+		const backgroundReaction = snapshot.backgroundRefreshingGroups.includes(
+			'reactions',
+		);
+		const backgroundReactionFailed =
+			snapshot.backgroundRefreshFailedGroups.includes('reactions');
+		const state = busy
+			? 'running'
+			: backgroundReactionFailed ? 'error' : this.#refreshVisualState;
+		const label = state === 'running'
+			? '正在更新通知'
+			: backgroundReaction
+				? '主要通知已更新，回应后台更新中'
+			: state === 'success'
+				? '通知更新完成'
+				: state === 'error'
+					? backgroundReactionFailed
+						? '回应后台更新失败，点击重试'
+						: '通知更新失败，点击重试'
+					: '更新通知';
+		const icon = state === 'running'
+			? 'loader'
+			: backgroundReaction
+				? 'rotate-ccw'
+			: state === 'success'
+				? 'check-square'
+				: state === 'error' ? 'x' : 'rotate-ccw';
+		this.#refreshHeaderAction.disabled = busy;
+		this.#refreshHeaderAction.dataset.ldpRequestBusy = busy ? '1' : '0';
+		this.#refreshHeaderAction.dataset.refreshState = state;
+		this.#refreshHeaderAction.classList.toggle('is-refreshing', busy);
+		this.#refreshHeaderAction.setAttribute('aria-busy', String(busy));
+		this.#refreshHeaderAction.setAttribute('aria-label', label);
+		this.#refreshHeaderAction.title = label;
+		this.#refreshHeaderAction.replaceChildren(renderReaderIcon(
+			this.#document,
+			icon,
+			this.#renderIcon,
+		));
+	}
+
 	#syncWindowStatus(snapshot: ReaderNotificationControllerSnapshot): void {
 		const history = snapshot.history;
 		const complete = history.status === 'complete';
@@ -491,11 +598,25 @@ export class ReaderNotificationPanelView {
 		const cacheStatus = history.cachedRecords > 0
 			? `已缓存 ${history.cachedRecords} 条`
 			: '';
+		const refreshStatus = snapshot.refreshing ||
+			this.#refreshVisualState === 'running'
+			? '正在更新通知'
+			: this.#refreshVisualState === 'success'
+				? '刚刚更新'
+				: this.#refreshVisualState === 'error' ? '更新失败' : '';
+		const backgroundRefreshStatus =
+			snapshot.backgroundRefreshingGroups.includes('reactions')
+				? '后台更新回应'
+				: snapshot.backgroundRefreshFailedGroups.includes('reactions')
+					? '回应后台更新失败'
+					: '';
 		this.#surface.frame.meta.textContent = [
 			snapshot.unreadCount > 0 ? `未读 ${snapshot.unreadCount}` : '',
 			totalStatus,
 			cacheStatus,
 			complete ? '历史已到底' : '',
+			refreshStatus,
+			backgroundRefreshStatus,
 		].filter(Boolean).join(' · ');
 		if (
 			history.status === 'idle' && history.completedGroups === 0 &&

@@ -429,8 +429,13 @@ bus.emit('/topic/10', { payload: { type: 'deleted', id: 105, topic_id: 10 } });
 timers.runAll();
 await controller.flush();
 assert(
-	posts.get(105)?.post_number === 5 && preservedDeletions.at(-1) === 105,
-	'deleted 事件必须保留 canonical 正文，只登记岁月史书状态',
+	posts.get(105)?.post_number === 5 &&
+		preservedDeletions.at(-1) === 105 &&
+		changes.some((change) =>
+			change.kind === 'deleted' &&
+			change.postId === 105 &&
+			change.postNumber === 5),
+	'deleted 事件必须保留 canonical 正文，并把精确楼层删除信号发布给岁月史书 consumer',
 );
 bus.emit('/topic/10', { payload: { type: 'deleted', id: 105, topic_id: 10 } });
 bus.emit('/topic/10', { payload: { type: 'recovered', id: 105, topic_id: 10 } });

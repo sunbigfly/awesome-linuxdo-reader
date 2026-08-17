@@ -1175,6 +1175,21 @@
 }
 
 .ldp-reader-floating-window-actions
+	:is(.ldp-notification-refresh, .ldp-bookmark-refresh).is-refreshing
+	> .ldp-icon {
+	animation: ldp-notification-refresh-spin .8s linear infinite;
+	transform-box: fill-box;
+	transform-origin: center;
+	will-change: transform;
+}
+
+@keyframes ldp-notification-refresh-spin {
+	to {
+		transform: rotate(1turn);
+	}
+}
+
+.ldp-reader-floating-window-actions
   .ldp-reader-floating-window-extra-action > span {
   display: none;
 }

@@ -52,10 +52,7 @@ export interface ReaderUserObservationViewOptions {
 	readonly parentScope?: LifecycleScope;
 }
 
-type SelfObservationTab = 'notifications' | 'messages' | 'collections';
-export type ReaderUserObservationViewTab =
-	| ReaderUserObservationStoredTab
-	| SelfObservationTab;
+export type ReaderUserObservationViewTab = ReaderUserObservationStoredTab;
 type ObservationTab = ReaderUserObservationViewTab;
 type ObservationSort = 'time' | 'replies' | 'views';
 type ObservationSortDirection = 'desc' | 'asc';
@@ -68,29 +65,12 @@ const PRIMARY_OBSERVATION_TABS = Object.freeze([
 	['reply', '回复'],
 	['boost', 'Boost'],
 	['reaction-like', '回应与赞'],
-	['mention', '@提及'],
-	['edit', '编辑'],
 	['linked', '链接'],
 	['other-actions', '其他'],
 ] as const satisfies readonly (readonly [ObservationTab, string])[]);
-const SELF_OBSERVATION_TABS = Object.freeze([
-	['notifications', '通知'],
-	['messages', '私信'],
-	['collections', '收藏与回应'],
-] as const satisfies readonly (readonly [SelfObservationTab, string])[]);
 const OBSERVATION_TABS = new Set<ObservationTab>(
-	[...PRIMARY_OBSERVATION_TABS, ...SELF_OBSERVATION_TABS].map(([tab]) => tab),
+	PRIMARY_OBSERVATION_TABS.map(([tab]) => tab),
 );
-
-function isSelfObservationTab(tab: ObservationTab): tab is SelfObservationTab {
-	return ['notifications', 'messages', 'collections'].includes(tab);
-}
-
-function observationTabs(entry: ReaderUserObservationEntrySnapshot) {
-	return entry.isSelf
-		? Object.freeze([...PRIMARY_OBSERVATION_TABS, ...SELF_OBSERVATION_TABS])
-		: PRIMARY_OBSERVATION_TABS;
-}
 
 function localDateKey(timestamp: number): string {
 	if (!Number.isFinite(timestamp)) return '';
@@ -173,6 +153,9 @@ function detailMeta(entry: ReaderUserObservationEntrySnapshot): string {
 		return `等待验证 · ${progressStep(entry)}/${entry.totalStreams}`;
 	}
 	if (entry.phase === 'queued' || entry.phase === 'loading') {
+		if (entry.detail.startsWith('缓存恢复')) {
+			return `缓存恢复 · ${progressStep(entry)}/${entry.totalStreams}`;
+		}
 		return `采集中 · ${progressStep(entry)}/${entry.totalStreams}`;
 	}
 	return phaseLabel(entry);
@@ -197,7 +180,7 @@ function actionIcon(record: ReaderUserActivityRecord): string {
 	return 'history';
 }
 
-/** 用户观察名单、公开历史与当前账号私有投影单浮窗切换的唯一 DOM owner。 */
+/** 用户观察名单与七类公开历史单浮窗切换的唯一 DOM owner。 */
 export class ReaderUserObservationView {
 	readonly scope: LifecycleScope;
 	readonly listWindow: ReaderFloatingWindowFrame;
@@ -264,7 +247,6 @@ export class ReaderUserObservationView {
 	#storedTotal = 0;
 	#storedPage = 0;
 	#indexedRecords: readonly ReaderUserActivityRecord[] | null = null;
-	#indexedPrivateRecords: readonly ReaderUserActivityRecord[] | null = null;
 	#profileSignature = '';
 	#storedHydrationKey = '';
 	#storedSummary: Readonly<{
@@ -341,8 +323,9 @@ export class ReaderUserObservationView {
 			options.document,
 			'p',
 			'ldp-user-observation-intro',
-			'当前账号会作为“自己”持续观察；通知、私信与收藏只在自己的详情可见。' +
-			'首次完整采集；以后只增量读取最新页，碰到已保存记录即停止。' +
+			'当前账号与其他用户使用相同的公开观察字段。首次完整采集；' +
+				'以后只增量读取最新页，碰到已保存记录即停止。' +
+				'连续 60 秒没有新进展会暂停，并提供断点重试。' +
 				'主题元数据在采集末尾统一补齐；详情月历按当前 Tab 统计并可点日筛选。' +
 				'普通 429 遵循中央 Retry-After；Cloudflare 验证进入共享暂停门。',
 		);
@@ -718,7 +701,7 @@ export class ReaderUserObservationView {
 		const entry = this.#session.snapshot.entries.find((candidate) =>
 			candidate.isSelf);
 		if (!entry) return false;
-		const allowed = observationTabs(entry).some(([candidate]) =>
+		const allowed = PRIMARY_OBSERVATION_TABS.some(([candidate]) =>
 			candidate === tab);
 		this.#openDetail(entry.username, allowed ? tab : 'all');
 		return true;
@@ -900,7 +883,7 @@ export class ReaderUserObservationView {
 		open.setAttribute(
 			'aria-label',
 			entry.isSelf
-				? '浏览我的持续观察与账号私有记录'
+				? '浏览我的公开活动观察'
 				: `浏览 @${entry.username} 的公开历史`,
 		);
 		open.append(this.#avatar(entry, 40));
@@ -942,14 +925,19 @@ export class ReaderUserObservationView {
 		);
 		const refresh = this.#document.createElement('button');
 		refresh.type = 'button';
-		if (entry.phase === 'error' || entry.phase === 'idle') {
+		const restartActive = isActivePhase(entry);
+		if (entry.phase === 'error' || entry.phase === 'idle' || restartActive) {
 			refresh.dataset.userObservationRetry = entry.username;
-			refresh.setAttribute('aria-label', `从断点继续 @${entry.username} 的公开历史`);
+			refresh.setAttribute(
+				'aria-label',
+				restartActive
+					? `中止当前采集并从断点继续 @${entry.username} 的公开历史`
+					: `从断点继续 @${entry.username} 的公开历史`,
+			);
 		} else {
 			refresh.dataset.userObservationRefresh = entry.username;
 			refresh.setAttribute('aria-label', `更新 @${entry.username} 的最近活动`);
 		}
-		refresh.disabled = isActivePhase(entry) && entry.phase !== 'waiting-rate-limit';
 		refresh.append(createReaderIcon(this.#document, 'rotate-ccw'));
 		const challenge = this.#challengeButton(entry, true);
 		const remove = this.#document.createElement('button');
@@ -970,7 +958,6 @@ export class ReaderUserObservationView {
 		return [
 			entry.completedAt,
 			entry.recordCount,
-			entry.privateRecordCount,
 			entry.completedStreams,
 			entry.pages,
 		].join(':');
@@ -987,7 +974,7 @@ export class ReaderUserObservationView {
 		const count = (kind: ReaderUserActivityKind): number =>
 			summary?.counts[kind] ?? localCounts.get(kind) ?? 0;
 		const publicTotal = summary?.total ?? entry.recordCount;
-		const total = publicTotal + entry.privateRecordCount;
+		const total = publicTotal;
 		const topics = count('topic');
 		const replies = count('reply');
 		const boosts = count('boost');
@@ -1007,7 +994,6 @@ export class ReaderUserObservationView {
 		const parts = [
 			state,
 			`${total} 条`,
-			...(entry.isSelf ? [`私有 ${entry.privateRecordCount}`] : []),
 			`主题 ${topics}`,
 			`回复 ${replies}`,
 		];
@@ -1107,6 +1093,14 @@ export class ReaderUserObservationView {
 		}
 	}
 
+	#retryObservation(username: string): void {
+		const entry = this.#session.entry(username);
+		this.#session.retry(username);
+		this.#notify(entry && isActivePhase(entry)
+			? `已中止 @${username} 当前采集，正在从已保存断点续传`
+			: `已安排 @${username} 从已保存断点继续采集`);
+	}
+
 	#onListClick(event: MouseEvent): void {
 		const target = closestTarget<HTMLElement>(event,
 			'[data-user-observation-open],[data-user-observation-refresh],' +
@@ -1125,7 +1119,7 @@ export class ReaderUserObservationView {
 		}
 		const retry = target.dataset.userObservationRetry;
 		if (retry) {
-			this.#session.retry(retry);
+			this.#retryObservation(retry);
 			return;
 		}
 		const challenge = target.dataset.userObservationChallenge;
@@ -1150,14 +1144,10 @@ export class ReaderUserObservationView {
 			return;
 		}
 		const previousSessionEntry = this.#sessionEntry;
-		const privateRecordsChanged = !previousSessionEntry ||
-			previousSessionEntry.privateRecords !== entry.privateRecords;
 		const recordsChanged = !previousSessionEntry ||
-			previousSessionEntry.records !== entry.records ||
-			privateRecordsChanged;
-		const privateTab = isSelfObservationTab(this.#activeTab);
+			previousSessionEntry.records !== entry.records;
 		const storedAvailable = Boolean(
-			!privateTab && this.#pages && entry.storedRecordCount > 0,
+			this.#pages && entry.storedRecordCount > 0,
 		);
 		const storedProjection = storedAvailable && this.#storedTotal > 0 &&
 			previousSessionEntry?.username === entry.username
@@ -1186,12 +1176,11 @@ export class ReaderUserObservationView {
 		this.listWindow.meta.textContent = detailMeta(entry);
 		this.#renderDetailProfile(entry);
 		this.#renderDetailProgress(entry);
-		const tabs = observationTabs(entry);
-		if (!tabs.some(([tab]) => tab === this.#activeTab)) {
+		if (!PRIMARY_OBSERVATION_TABS.some(([tab]) => tab === this.#activeTab)) {
 			this.#activeTab = 'all';
 		}
 		if (
-			(recordsChanged && (!storedProjection || privateRecordsChanged)) ||
+			(recordsChanged && !storedProjection) ||
 			metadataProjected ||
 			!this.#detailTabs.childElementCount
 		) {
@@ -1202,7 +1191,7 @@ export class ReaderUserObservationView {
 			this.#syncDetailMinimumWidth();
 			this.#renderDetailTimeline(this.#sessionEntry);
 		}
-		if (!privateTab) void this.#hydrateStoredDetail(entry);
+		void this.#hydrateStoredDetail(entry);
 	}
 
 	#renderDetailProfile(entry: ReaderUserObservationEntrySnapshot): void {
@@ -1214,8 +1203,8 @@ export class ReaderUserObservationView {
 			entry.name,
 			entry.avatarTemplate,
 			publicCount,
-			entry.privateRecordCount,
 			entry.pages,
+			entry.phase,
 			entry.recoveryKind,
 		].join('\n');
 		if (signature === this.#profileSignature) return;
@@ -1228,11 +1217,9 @@ export class ReaderUserObservationView {
 					this.#document,
 					'small',
 					'',
-					entry.isSelf
-						? `${publicCount} 条公开活动 · ` +
-							`${entry.privateRecordCount} 条账号私有记录 · ` +
-							`已请求 ${entry.pages} 页`
-						: `${publicCount} 条公开活动 · 已请求 ${entry.pages} 页`,
+					entry.phase === 'ready'
+						? `${publicCount} 条公开活动 · 已请求 ${entry.pages} 页`
+						: `已保存 ${publicCount} 条公开活动 · 已请求 ${entry.pages} 页`,
 				),
 		);
 		const challenge = this.#challengeButton(entry, false);
@@ -1252,9 +1239,7 @@ export class ReaderUserObservationView {
 				? this.#storedSummary.summary
 				: undefined
 		);
-		const entry = this.#session.entry(this.#detailUsername);
-		const tabs = entry ? observationTabs(entry) : PRIMARY_OBSERVATION_TABS;
-		this.#detailTabs.replaceChildren(...tabs.map(
+		this.#detailTabs.replaceChildren(...PRIMARY_OBSERVATION_TABS.map(
 			([tab, label]) => {
 				const button = this.#document.createElement('button');
 				button.type = 'button';
@@ -1262,12 +1247,9 @@ export class ReaderUserObservationView {
 				button.className = tab === this.#activeTab ? 'is-active' : '';
 				button.setAttribute('role', 'tab');
 				button.setAttribute('aria-selected', String(tab === this.#activeTab));
-				const privateTab = isSelfObservationTab(tab);
-				const count = privateTab
-					? this.#recordsByTab.get(tab)?.length ?? 0
-					: storedSummary
+				const count = storedSummary
 					? tab === 'all'
-						? storedSummary.total + (entry?.privateRecordCount ?? 0)
+						? storedSummary.total
 						: tab === 'reaction-like'
 							? storedSummary.reactionLikeCount
 							: tab === 'other-actions'
@@ -1291,10 +1273,7 @@ export class ReaderUserObservationView {
 	async #hydrateStoredDetail(
 		entry: ReaderUserObservationEntrySnapshot,
 	): Promise<void> {
-		if (
-			!this.#pages || entry.storedRecordCount <= 0 ||
-			isSelfObservationTab(this.#activeTab)
-		) return;
+		if (!this.#pages || entry.storedRecordCount <= 0) return;
 		const hydrationKey = [
 			entry.username,
 			entry.completedAt,
@@ -1829,17 +1808,10 @@ export class ReaderUserObservationView {
 	}
 
 	#indexRecords(entry: ReaderUserObservationEntrySnapshot): void {
-		if (
-			this.#indexedRecords === entry.records &&
-			this.#indexedPrivateRecords === entry.privateRecords
-		) return;
+		if (this.#indexedRecords === entry.records) return;
 		this.#indexedRecords = entry.records;
-		this.#indexedPrivateRecords = entry.privateRecords;
 		this.#recordsByTab.clear();
-		this.#recordsByTab.set('all', sortReaderUserActivities([
-			...entry.records,
-			...entry.privateRecords,
-		]));
+		this.#recordsByTab.set('all', sortReaderUserActivities(entry.records));
 		this.#recordsByTab.set('reaction-like', Object.freeze(
 			entry.records.filter((record) =>
 				record.kind === 'reaction' || record.kind === 'like'),
@@ -1863,22 +1835,11 @@ export class ReaderUserObservationView {
 		for (const [kind, records] of buckets) {
 			this.#recordsByTab.set(kind, Object.freeze(records));
 		}
-		this.#recordsByTab.set('notifications', Object.freeze(
-			entry.privateRecords.filter((record) =>
-				record.selfStream === 'notifications'),
-		));
-		this.#recordsByTab.set('messages', Object.freeze(
-			entry.privateRecords.filter((record) => record.selfStream === 'messages'),
-		));
-		this.#recordsByTab.set('collections', Object.freeze(
-			entry.privateRecords.filter((record) =>
-				record.selfStream === 'collections'),
-		));
 	}
 
 	#renderDetailProgress(entry: ReaderUserObservationEntrySnapshot): void {
 		const incomplete = entry.completedStreams < entry.totalStreams;
-		const visible = incomplete || entry.phase === 'error';
+		const visible = incomplete || entry.phase === 'error' || isActivePhase(entry);
 		this.#detailProgress.hidden = !visible;
 		if (!visible) {
 			this.#detailProgress.replaceChildren();
@@ -1902,25 +1863,34 @@ export class ReaderUserObservationView {
 			? '限流等待 · 自动续传'
 			: entry.phase === 'waiting-challenge'
 				? '验证后自动续传'
+				: entry.phase === 'error'
+					? entry.error || '采集失败，可从断点重试'
 				: entry.phase === 'queued'
-					? '等待空闲'
-					: `${progressStep(entry)} / ${entry.totalStreams}`;
+					? entry.detail || '等待空闲'
+					: entry.detail || `${progressStep(entry)} / ${entry.totalStreams}`;
+		const progressStatusNode = node(
+			this.#document,
+			'span',
+			'',
+			progressStatus,
+		);
+		progressStatusNode.title = progressStatus;
 		copy.append(
 			node(this.#document, 'strong', '', streamLabel),
-			node(this.#document, 'span', '', progressStatus),
+			progressStatusNode,
 		);
-		if (
-			entry.phase === 'error' ||
-			(entry.isSelf && entry.streams.some((stream) =>
-				stream.status === 'waiting'))
-		) {
+		if (entry.phase === 'error') {
 			const retry = this.#document.createElement('button');
 			retry.type = 'button';
 			retry.className = 'ldp-user-observation-progress-retry';
 			retry.dataset.userObservationRetry = entry.username;
+			retry.setAttribute(
+				'aria-label',
+				`从断点重试 @${entry.username} 的公开历史`,
+			);
 			retry.append(
 				createReaderIcon(this.#document, 'rotate-ccw'),
-				this.#document.createTextNode('重试'),
+				this.#document.createTextNode('断点重试'),
 			);
 			copy.append(retry);
 		}
@@ -1975,7 +1945,6 @@ export class ReaderUserObservationView {
 		this.#detailList.scrollTop = scrollTop;
 		if (!records.length) {
 			const loadingStoredPage = Boolean(
-				!isSelfObservationTab(this.#activeTab) &&
 				this.#pages && entry.storedRecordCount > 0,
 			);
 			this.#detailList.append(node(
@@ -1984,10 +1953,6 @@ export class ReaderUserObservationView {
 				'ldp-user-observation-empty',
 				loadingStoredPage
 					? '正在从本地分页缓存读取这一页…'
-					: isSelfObservationTab(this.#activeTab)
-						? entry.phase === 'ready'
-							? '这个账号私有分类暂时没有记录。'
-							: '后台还在补齐账号私有缓存，记录会自动出现在这里。'
 					: entry.phase === 'ready'
 					? '这个分类暂时没有公开活动。'
 					: '后台还在采集，新的记录会自动出现在这里。',
@@ -2309,7 +2274,7 @@ export class ReaderUserObservationView {
 		}
 		const retry = target.dataset.userObservationRetry;
 		if (retry) {
-			this.#session.retry(retry);
+			this.#retryObservation(retry);
 			return;
 		}
 		if (target.dataset.userObservationActivity === undefined) return;
@@ -2345,17 +2310,6 @@ export class ReaderUserObservationView {
 	async #showMore(): Promise<void> {
 		const entry = this.#session.entry(this.#detailUsername);
 		if (!entry) return;
-		if (isSelfObservationTab(this.#activeTab)) {
-			this.#indexRecords(entry);
-			const total = this.#filteredRecords().length;
-			if (this.#visibleLimit >= total) return;
-			this.#visibleLimit = Math.min(
-				total,
-				this.#visibleLimit + DETAIL_BATCH_SIZE,
-			);
-			this.#renderDetailTimeline(entry);
-			return;
-		}
 		if (this.#storedHydrationPendingKey) {
 			this.#storedAppendRequested = true;
 			return;

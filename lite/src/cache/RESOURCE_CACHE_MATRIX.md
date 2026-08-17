@@ -87,7 +87,7 @@
 
 | 设置分类 | 统计层 | 清理层 | 明确保留 |
 | --- | --- | --- | --- |
-| 浏览历史与岁月史书 | 账号隔离 History 条目、本机仍有正文的 404 事件、主题数与估算字节 | `ReaderHistoryRepository.clear()` + `ReaderChronicleRepository.clear()`（手动清理；正文消失的史书记录读取或点击时自愈移除） | 阅读队列、Topic 正文/快照、Topic 锚点/几何、偏好、自定义站点、浏览器访问历史；收到 404 不触发正文清理 |
+| 浏览历史与岁月史书 | 账号隔离 History 条目、本机仍有可定位内容的删除及 403/404/410 事件、主题数与估算字节 | `ReaderHistoryRepository.clear()` + `ReaderChronicleRepository.clear()`（手动清理；正文消失的史书记录读取或点击时自愈移除） | 阅读队列、Topic 正文/快照、Topic 锚点/几何、偏好、自定义站点、浏览器访问历史；收到失效信号不触发正文清理 |
 | 帖子与楼层内容 | 中央 Topic/Post/Tree 记录 + 当前 TopicSession + 宿主分类/标签派生 LRU | 中央分类失效；若当前有主题，先结束旧 session 并 flush，再按 `topic:id` 精确失效并联网重建；最后清宿主身份 LRU | 历史、队列、偏好；分类清理不额外清图片，顶部“清除当前帖子缓存并刷新”才同时清该 Topic 图片 |
 | 用户资料卡 | 中央 user/external response + 用户域热缓存 + LDC bridge | 中央分类失效、用户 session epoch 清理、LDC bridge 置空 | Connect 400 天本机观察历史、原站账号资料、头像字节 |
 | 通知与消息 | 中央通知/展开记录 + controller 32 页热缓存 | 中央分类失效、取消后台 warm/live timer、load epoch 清理分页与投影 | 原站真实通知与私信 |

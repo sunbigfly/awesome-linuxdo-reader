@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.2
+// @version      1.5.3
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.2 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.5.3 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.2",
+			sourceVersion: "1.5.3",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.2") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.3") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -1033,12 +1033,12 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	  ReaderCacheManagementSurface: () => ReaderCacheManagementSurface
 	});
 	module.exports = __toCommonJS(reader_cache_management_surface_exports);
-	var import_lifecycle = require("../kernel/lifecycle.js"), import_reader_settings_dom = require("../settings/reader-settings-dom.js");
+	var import_reader_chronicle_repository = require("../history/reader-chronicle-repository.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_settings_dom = require("../settings/reader-settings-dom.js");
 	const CATEGORIES = Object.freeze([
 	  {
 	    id: "history",
 	    title: "浏览历史与岁月史书",
-	    help: "勾选“浏览历史与岁月史书”后再点下方清理，会删除阅读器保存的主题、最近阅读楼层、查看时间和岁月史书 404 记录；不会删除浏览器本身的访问历史，也不会由收到 404 自动触发清理。",
+	    help: "勾选“浏览历史与岁月史书”后再点下方清理，会删除阅读器保存的主题、最近阅读楼层、查看时间和岁月史书删除/不可用记录；不会删除浏览器本身的访问历史，也不会因收到失效信号自动触发清理。",
 	    retention: "最多 365 天"
 	  },
 	  {
@@ -1115,11 +1115,9 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	  if (id === "history") {
 	    const topicIds = new Set(history.map(
 	      (entry) => Number(entry.topicId)
-	    ).filter((topicId) => Number.isSafeInteger(topicId) && topicId > 0)), chronicle = history.filter((entry) => Number(entry.status) === 404 && ["topic", "reply", "boost"].includes(String(
-	      entry.kind ?? ""
-	    )));
+	    ).filter((topicId) => Number.isSafeInteger(topicId) && topicId > 0)), chronicle = history.filter((entry) => (0, import_reader_chronicle_repository.readerChronicleRecord)(entry) !== null);
 	    return withApplicationCacheDetail(
-	      `${topicIds.size} 个主题 · ${history.length - chronicle.length} 条浏览记录 · ${chronicle.length} 条 404 记录 · ${formatBytes(new TextEncoder().encode(JSON.stringify(history)).byteLength)} · 本机保存`,
+	      `${topicIds.size} 个主题 · ${history.length - chronicle.length} 条浏览记录 · ${chronicle.length} 条失效记录 · ${formatBytes(new TextEncoder().encode(JSON.stringify(history)).byteLength)} · 本机保存`,
 	      application
 	    );
 	  }
@@ -1605,7 +1603,7 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	    this.#configStatus && (this.#configStatus.textContent = message);
 	  }
 	}
-}, "495aff91d326a0cfaa60ffdc9717b3443671fdf4a8c740b1dabcb75ba0c43caa");
+}, "fc0208c758d0750baf0d59dc8789a3ab00be6743f87fdafbaa8c6ade2b3a090f");
 
 /* Source: lite/src/cache/reader-collection-page-repository.ts */
 runtime.register("src/cache/reader-collection-page-repository.js", function(module, exports, require) {
@@ -2470,7 +2468,7 @@ runtime.register("src/cache/topic-snapshot-repository.js", function(module, expo
 	}
 	function mergePostEntity(current, incoming) {
 	  if (!current || current === incoming) return incoming;
-	  const currentRecord = current, incomingRecord = incoming, preserveVisibleCooked = incomingRecord.hidden === !0 && moderationHiddenPlaceholder(incomingRecord.cooked) && typeof currentRecord.cooked == "string" && currentRecord.cooked.trim().length > 0 && !moderationHiddenPlaceholder(currentRecord.cooked), merged = {
+	  const currentRecord = current, incomingRecord = incoming, preserveVisibleCooked = (incomingRecord.deleted_at !== null && incomingRecord.deleted_at !== void 0 || incomingRecord.deletedAt !== null && incomingRecord.deletedAt !== void 0 || incomingRecord.hidden === !0 && moderationHiddenPlaceholder(incomingRecord.cooked)) && typeof currentRecord.cooked == "string" && currentRecord.cooked.trim().length > 0 && !moderationHiddenPlaceholder(currentRecord.cooked), merged = {
 	    ...currentRecord
 	  };
 	  for (const [key, value] of Object.entries(incomingRecord))
@@ -3078,7 +3076,7 @@ runtime.register("src/cache/topic-snapshot-repository.js", function(module, expo
 	    });
 	  }
 	}
-}, "47e7c0f0e76eeb5c7b5fce66c0227e242262b7875ec453b9aed5d144881dbc78");
+}, "4191d5f0aa579070c51658fd34a3cf1a3282be259d952a99d24efbb012f1fae4");
 
 /* Source: lite/src/collection/reader-collection-filter-model.ts */
 runtime.register("src/collection/reader-collection-filter-model.js", function(module, exports, require) {
@@ -7769,19 +7767,29 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	      if (typeof on != "function" || typeof off != "function") return null;
 	      const context = Object.freeze({}), subscriptions = Object.freeze([
 	        ["bookmarks:changed", "bookmarks"],
-	        ["discourse-reactions:reaction-toggled", "reactions"]
-	      ]), attached = [];
+	        ["discourse-reactions:reaction-toggled", "reactions"],
+	        ["composer:created-post", "replies"],
+	        ["post:created", "replies"]
+	      ]), attached = [], pending = /* @__PURE__ */ new Set();
+	      let publishScheduled = !1, active = !0;
+	      const publish = () => {
+	        if (publishScheduled = !1, !active) return;
+	        const sources = [...pending];
+	        pending.clear();
+	        for (const source of sources) listener(source);
+	      };
 	      for (const [name, source] of subscriptions) {
-	        const handler = () => listener(source);
+	        const handler = () => {
+	          pending.add(source), !publishScheduled && (publishScheduled = !0, Promise.resolve().then(publish));
+	        };
 	        try {
 	          on.call(appEvents, name, context, handler), attached.push(Object.freeze({ name, handler }));
 	        } catch {
 	        }
 	      }
-	      let active = !0;
 	      return () => {
 	        if (active) {
-	          active = !1;
+	          active = !1, pending.clear();
 	          for (const entry of attached)
 	            try {
 	              off.call(
@@ -7869,7 +7877,7 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	    return this.#container = urlContainer ?? fallbackContainer, this.#container;
 	  }
 	}
-}, "b1692ff3151f3c4ea4ff4e7d17999c87a45e84aa11d07134e5583dc2633f6abc");
+}, "9e02e336d833c851376e18b8c206a166c5484195014ff6b40ceb0a94948aa488");
 
 /* Source: lite/src/discourse/native-message-bus.ts */
 runtime.register("src/discourse/native-message-bus.js", function(module, exports, require) {
@@ -9286,8 +9294,10 @@ runtime.register("src/history/reader-chronicle-repository.js", function(module, 
 	  READER_CHRONICLE_STORAGE_KEY: () => READER_CHRONICLE_STORAGE_KEY,
 	  ReaderChronicleRepository: () => ReaderChronicleRepository,
 	  mergeReaderChronicleValues: () => mergeReaderChronicleValues,
+	  readerChronicleHttpStatus: () => readerChronicleHttpStatus,
 	  readerChronicleRecord: () => readerChronicleRecord,
-	  readerChronicleRequestTarget: () => readerChronicleRequestTarget
+	  readerChronicleRequestTarget: () => readerChronicleRequestTarget,
+	  readerChronicleStatus: () => readerChronicleStatus
 	});
 	module.exports = __toCommonJS(reader_chronicle_repository_exports);
 	var import_identifiers = require("../discourse/identifiers.js"), import_signal = require("../kernel/signal.js"), import_reader_account_scoped_storage = require("../state/reader-account-scoped-storage.js");
@@ -9313,6 +9323,15 @@ runtime.register("src/history/reader-chronicle-repository.js", function(module, 
 	function kind(value) {
 	  return value === "topic" || value === "reply" || value === "boost" ? value : null;
 	}
+	function readerChronicleStatus(value) {
+	  if (value === "deleted") return "deleted";
+	  const numeric = Number(value);
+	  return numeric === 403 || numeric === 404 || numeric === 410 ? numeric : null;
+	}
+	function readerChronicleHttpStatus(value) {
+	  const status = readerChronicleStatus(value);
+	  return status === 403 || status === 404 || status === 410 ? status : null;
+	}
 	function hash(value) {
 	  let result = 2166136261;
 	  for (let index = 0; index < value.length; index += 1)
@@ -9334,7 +9353,7 @@ runtime.register("src/history/reader-chronicle-repository.js", function(module, 
 	    input.postNumber === null ? "" : `楼层 ${input.postNumber}`,
 	    input.postId === null ? "" : `post ${input.postId}`,
 	    input.boostId === null ? "" : `boost ${input.boostId}`,
-	    "404",
+	    input.status === "deleted" ? "已删除 deleted" : String(input.status),
 	    input.requestMethod,
 	    input.requestPath,
 	    input.requestSource,
@@ -9349,8 +9368,8 @@ runtime.register("src/history/reader-chronicle-repository.js", function(module, 
 	  return right && right !== fallback ? right : left || right || fallback;
 	}
 	function normalizeRecord(value) {
-	  const source = record(value), targetKind = kind(source?.kind), topicId = (0, import_identifiers.tryDiscourseTopicId)(source?.topicId);
-	  if (!source || !targetKind || topicId === null || Number(source.status) !== 404 || source.bodyCached !== !0)
+	  const source = record(value), targetKind = kind(source?.kind), topicId = (0, import_identifiers.tryDiscourseTopicId)(source?.topicId), status = readerChronicleStatus(source?.status);
+	  if (!source || !targetKind || topicId === null || status === null || source.bodyCached !== !0)
 	    return null;
 	  const postNumber = (0, import_identifiers.tryDiscoursePostNumber)(source.postNumber), postId = (0, import_identifiers.tryDiscoursePostId)(source.postId), boostId = positiveInteger(source.boostId);
 	  if (targetKind === "reply" && postNumber === null && postId === null || targetKind === "boost" && boostId === null) return null;
@@ -9359,7 +9378,7 @@ runtime.register("src/history/reader-chronicle-repository.js", function(module, 
 	  const base = Object.freeze({
 	    identity: "",
 	    kind: targetKind,
-	    status: 404,
+	    status,
 	    bodyCached: !0,
 	    topicId,
 	    topicTitle: normalizedTitle(source.topicTitle, topicId),
@@ -9385,19 +9404,19 @@ runtime.register("src/history/reader-chronicle-repository.js", function(module, 
 	function inputRecord(input, now) {
 	  const topicId = (0, import_identifiers.discourseTopicId)(input.topicId), targetKind = kind(input.kind);
 	  if (!targetKind) throw new Error("岁月史书记录类型无效");
-	  if (input.status !== void 0 && Number(input.status) !== 404)
-	    throw new Error("岁月史书只接受 HTTP 404 信号");
+	  const status = readerChronicleStatus(input.status ?? 404);
+	  if (status === null) throw new Error("岁月史书只接受删除或 403/404/410 信号");
 	  if (input.bodyCached !== !0)
-	    throw new Error("岁月史书只接受本机仍有正文的 404");
+	    throw new Error("岁月史书只接受本机仍有可定位内容的失效记录");
 	  const postNumber = (0, import_identifiers.tryDiscoursePostNumber)(input.postNumber), postId = (0, import_identifiers.tryDiscoursePostId)(input.postId), boostId = positiveInteger(input.boostId);
 	  if (targetKind === "reply" && postNumber === null && postId === null)
-	    throw new Error("回复 404 必须包含楼层或 post.id");
+	    throw new Error("回复失效记录必须包含楼层或 post.id");
 	  if (targetKind === "boost" && boostId === null)
-	    throw new Error("Boost 404 必须包含 boost.id");
+	    throw new Error("Boost 失效记录必须包含 boost.id");
 	  const observedAt = timestamp(input.observedAt) || now, requestPath = text(input.requestPath) || `/t/${topicId}`, requestMethod = method(input.requestMethod), base = Object.freeze({
 	    identity: "",
 	    kind: targetKind,
-	    status: 404,
+	    status,
 	    bodyCached: !0,
 	    topicId,
 	    topicTitle: normalizedTitle(input.topicTitle, topicId),
@@ -9653,7 +9672,7 @@ runtime.register("src/history/reader-chronicle-repository.js", function(module, 
 	    this.diagnostics.emit(Object.freeze({ code, cause }));
 	  }
 	}
-}, "7cbdfc6ebf4c6461ac643a5f801cb2b116587de05ea017717407860a40ecdf7c");
+}, "287aeafba012502a3483ab02d2fa9cb842c8a1fa6ed58eafe5e0769a70d634ba");
 
 /* Source: lite/src/history/reader-chronicle-view.ts */
 runtime.register("src/history/reader-chronicle-view.js", function(module, exports, require) {
@@ -9678,7 +9697,8 @@ runtime.register("src/history/reader-chronicle-view.js", function(module, export
 	  return elapsed < 6e4 ? "刚刚" : elapsed < 36e5 ? `${Math.floor(elapsed / 6e4)} 分钟前` : elapsed < 864e5 ? `${Math.floor(elapsed / 36e5)} 小时前` : elapsed < 30 * 864e5 ? `${Math.floor(elapsed / 864e5)} 天前` : new Date(timestamp).toLocaleDateString("zh-CN");
 	}
 	function kindLabel(record) {
-	  return record.kind === "topic" ? "主题 404" : record.kind === "reply" ? `回复 #${record.postNumber ?? "?"} · 404` : `Boost #${record.boostId ?? "?"} · 404`;
+	  const status = record.status === "deleted" ? "已删除" : String(record.status);
+	  return record.kind === "topic" ? `主题 · ${status}` : record.kind === "reply" ? `回复 #${record.postNumber ?? "?"} · ${status}` : `Boost #${record.boostId ?? "?"} · ${status}`;
 	}
 	function kindIcon(kind) {
 	  return kind === "topic" ? "message-square" : kind === "reply" ? "reply" : "rocket";
@@ -9717,7 +9737,7 @@ runtime.register("src/history/reader-chronicle-view.js", function(module, export
 	      document: options.document,
 	      mount: options.mount,
 	      title: "岁月史书",
-	      ariaLabel: "岁月史书 404 搜集栏",
+	      ariaLabel: "岁月史书失效记录搜集栏",
 	      icon: "history",
 	      variant: "chronicle",
 	      tabId: "chronicle",
@@ -9738,7 +9758,7 @@ runtime.register("src/history/reader-chronicle-view.js", function(module, export
 	      "label",
 	      "ldp-chronicle-search"
 	    );
-	    searchLabel.append((0, import_reader_icon.createReaderIcon)(options.document, "search")), this.#search = options.document.createElement("input"), this.#search.type = "search", this.#search.placeholder = "搜索主题、定位、404 信息", this.#search.setAttribute("aria-label", "搜索岁月史书"), this.#searchResult = (0, import_html_element.htmlElement)(
+	    searchLabel.append((0, import_reader_icon.createReaderIcon)(options.document, "search")), this.#search = options.document.createElement("input"), this.#search.type = "search", this.#search.placeholder = "搜索主题、定位、删除或状态", this.#search.setAttribute("aria-label", "搜索岁月史书"), this.#searchResult = (0, import_html_element.htmlElement)(
 	      options.document,
 	      "span",
 	      "ldp-chronicle-search-result"
@@ -9788,7 +9808,7 @@ runtime.register("src/history/reader-chronicle-view.js", function(module, export
 	      this.#document,
 	      "p",
 	      "ldp-chronicle-empty",
-	      searching ? "没有匹配的 404 记录。" : "还没有收到可定位的 Topic、回复或 Boost 404 信号。"
+	      searching ? "没有匹配的失效记录。" : "还没有收到可定位的 Topic、回复或 Boost 删除/不可用信号。"
 	    )), this.#renderFooter(records.length);
 	  }
 	  #topicGroup(records) {
@@ -9879,7 +9899,7 @@ runtime.register("src/history/reader-chronicle-view.js", function(module, export
 	      this.#document,
 	      "span",
 	      "",
-	      "岁月史书只保留本机仍有正文的 404 记录。"
+	      "岁月史书只保留本机仍有可定位内容的删除或 403/404/410 记录。"
 	    )), this.#visibleLimit >= total) return;
 	    const more = this.#document.createElement("button");
 	    more.type = "button", more.dataset.chronicleMore = "", more.textContent = `继续显示（${Math.min(this.#visibleLimit, total)} / ${total}）`, this.#footer.append(more);
@@ -9926,7 +9946,7 @@ runtime.register("src/history/reader-chronicle-view.js", function(module, export
 	    )).then((opened) => {
 	      opened || (this.#chronicle.remove(record.identity), this.#notify("本地正文已不存在，已从岁月史书移除"));
 	    }).catch((cause) => {
-	      this.#onError(cause), this.#notify("该 404 定位暂时无法打开");
+	      this.#onError(cause), this.#notify("该失效记录暂时无法打开");
 	    });
 	  }
 	  #showMore() {
@@ -9934,7 +9954,7 @@ runtime.register("src/history/reader-chronicle-view.js", function(module, export
 	    this.#visibleLimit >= total || (this.#visibleLimit = Math.min(total, this.#visibleLimit + CHRONICLE_BATCH_SIZE), this.#render());
 	  }
 	}
-}, "cb2d428b803546cd0bee2639c86d6b0aeb60b7d0f8c2a400423a07e307ad9933");
+}, "58cdf35a9d5b64f5650eac7ee404580eaee1501b70eb5abb1ebe4e5c517ad692");
 
 /* Source: lite/src/history/reader-history-model.ts */
 runtime.register("src/history/reader-history-model.js", function(module, exports, require) {
@@ -15953,7 +15973,7 @@ runtime.register("src/network/domain-request-gateway.js", function(module, expor
 	    return this.#execute({
 	      ...input,
 	      profile: input.profile ?? "notification-visible",
-	      lane: "standard",
+	      lane: input.parallelHead ? "topic-batch" : "standard",
 	      namespace: "notifications",
 	      identity: (0, import_request_identities.notificationRequestIdentity)(input)
 	    });
@@ -16203,7 +16223,7 @@ runtime.register("src/network/domain-request-gateway.js", function(module, expor
 	    execution.consumers = Math.max(0, execution.consumers - 1), execution.consumers === 0 && this.#executions.get(key) === execution && this.#executions.delete(key);
 	  }
 	}
-}, "bb5459015c86190f3bcc63a743091ec5cbd9b83e2d765c0ba2d93434fd630b3d");
+}, "ef7d95ec50f5eb0f2179c0448de3331733c936854c1a419b64445060d675f868");
 
 /* Source: lite/src/network/public-resource-request-adapter.ts */
 runtime.register("src/network/public-resource-request-adapter.js", function(module, exports, require) {
@@ -17947,6 +17967,7 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	      authScope: this.authScope,
 	      group: group.key,
 	      page,
+	      ...options.refresh ? { parallelHead: !0 } : {},
 	      ...variant ? { variant } : {},
 	      ...options.history ? {
 	        profile: options.visibleHistory ? "surface-prefetch" : "background-prefetch"
@@ -18014,7 +18035,7 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	    });
 	  }
 	}
-}, "02761084dedf0c1bb146318bc9e6e5fd21639625031bd1bc377f25e48221e048");
+}, "f94bfca1eaf8ba5f57676099478ed72fcd51c6fc724fb57452ca7e5556ee20c7");
 
 /* Source: lite/src/notification/reader-notification-controller.ts */
 runtime.register("src/notification/reader-notification-controller.js", function(module, exports, require) {
@@ -18025,7 +18046,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	});
 	module.exports = __toCommonJS(reader_notification_controller_exports);
 	var import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_reader_collection_filter_model = require("../collection/reader-collection-filter-model.js"), import_reader_collection_hydration = require("../collection/reader-collection-hydration.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_notification_action_feature_commands = require("../post/notification-action-feature-commands.js"), import_reader_search = require("../search/reader-search.js"), import_reader_notification_model = require("./reader-notification-model.js");
-	const DEFAULT_MAX_CACHED_PAGES = 32, DEFAULT_LIVE_REFRESH_DELAY_MS = 240, DEFAULT_RETRY_DELAY_MS = 600, DEFAULT_OPEN_REVALIDATE_MS = 30 * 6e4, DEFAULT_NATIVE_POLL_INTERVAL_MS = 30 * 6e4, DEFAULT_SYNTHETIC_POLL_INTERVAL_MS = 30 * 6e4, DEFAULT_HISTORY_STEP_DELAY_MS = 250, DEFAULT_HISTORY_RETRY_DELAY_MS = 15e3, LEGACY_USER_ACTION_PAGE_SIZE = 30, HISTORY_PROJECTION_BATCH_PAGES = 4, VISIBLE_HISTORY_LEASE_ROUNDS = 2, READER_NOTIFICATION_REACTION_LIKE_GROUPS = Object.freeze([
+	const DEFAULT_MAX_CACHED_PAGES = 32, DEFAULT_LIVE_REFRESH_DELAY_MS = 240, DEFAULT_RETRY_DELAY_MS = 600, DEFAULT_OPEN_REVALIDATE_MS = 30 * 6e4, DEFAULT_NATIVE_POLL_INTERVAL_MS = 30 * 6e4, DEFAULT_SYNTHETIC_POLL_INTERVAL_MS = 30 * 6e4, DEFAULT_HISTORY_STEP_DELAY_MS = 250, DEFAULT_HISTORY_RETRY_DELAY_MS = 15e3, DEFAULT_HEAD_CATCH_UP_MAX_PAGES = 20, LEGACY_USER_ACTION_PAGE_SIZE = 30, HISTORY_PROJECTION_BATCH_PAGES = 4, VISIBLE_HISTORY_LEASE_ROUNDS = 2, READER_NOTIFICATION_REACTION_LIKE_GROUPS = Object.freeze([
 	  "likes",
 	  "reactions"
 	]);
@@ -18175,6 +18196,10 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  #projectionPersistAfterRestore = /* @__PURE__ */ new Set();
 	  #projectionCheckpointReplacements = /* @__PURE__ */ new Set();
 	  #historyInFlightGroups = /* @__PURE__ */ new Set();
+	  #backgroundHeadRefreshes = /* @__PURE__ */ new Map();
+	  #backgroundRefreshingGroups = /* @__PURE__ */ new Set();
+	  #backgroundRefreshFailedGroups = /* @__PURE__ */ new Set();
+	  #backgroundHeadRefreshEpoch = 0;
 	  #nativeRefreshPending = !1;
 	  #nativeChangePending = !1;
 	  #nativeChangeEpoch = 0;
@@ -18237,7 +18262,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    })), this.#activity && this.scope.add(this.#activity.subscribe(() => {
 	      this.#onActivityChanged();
 	    })), this.scope.add(() => {
-	      this.#loadEpoch += 1, this.#navigationEpoch += 1, this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#poll !== null && this.#cancel(this.#poll), this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#poll = null, this.#historySchedule = null, this.#historyEpoch += 1, this.#historyInFlightGroups.clear(), this.#backgroundWarm = null, this.#backgroundWarmEpoch += 1, this.#backgroundCacheActive = !1, this.#backgroundRestore = null, this.#projectionPersistAfterRestore.clear(), this.#taxonomyFlights.clear(), this.#pages.clear(), this.#historyRecords.clear(), this.#lastAuthoritativeAt.clear(), this.#readRecordKeys.clear(), this.changes.clear();
+	      this.#loadEpoch += 1, this.#navigationEpoch += 1, this.#backgroundHeadRefreshEpoch += 1, this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#poll !== null && this.#cancel(this.#poll), this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#poll = null, this.#historySchedule = null, this.#historyEpoch += 1, this.#historyInFlightGroups.clear(), this.#backgroundHeadRefreshes.clear(), this.#backgroundRefreshingGroups.clear(), this.#backgroundRefreshFailedGroups.clear(), this.#backgroundWarm = null, this.#backgroundWarmEpoch += 1, this.#backgroundCacheActive = !1, this.#backgroundRestore = null, this.#projectionPersistAfterRestore.clear(), this.#taxonomyFlights.clear(), this.#pages.clear(), this.#historyRecords.clear(), this.#lastAuthoritativeAt.clear(), this.#readRecordKeys.clear(), this.changes.clear();
 	    });
 	  }
 	  get snapshot() {
@@ -18272,6 +18297,12 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      retrying: this.#retrying,
 	      markingAll: this.#markingAll,
 	      stale: this.#stale,
+	      backgroundRefreshingGroups: Object.freeze(
+	        [...this.#backgroundRefreshingGroups]
+	      ),
+	      backgroundRefreshFailedGroups: Object.freeze(
+	        [...this.#backgroundRefreshFailedGroups]
+	      ),
 	      unreadCount: this.#unreadCount,
 	      error: this.#error,
 	      history: this.#historySnapshot(),
@@ -18367,13 +18398,12 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    for (const { group, snapshot } of restored) {
 	      if (!snapshot) continue;
 	      const state = this.#historyGroups.get(group), repairCheckpoint = notificationProjectionCheckpointNeedsRepair(group, snapshot);
-	      state.retryAt = null, state.error = null, this.#rememberProjectionRecords(group, snapshot.records, fresh);
-	      const records = /* @__PURE__ */ new Map();
+	      state.retryAt = null, state.error = null, this.#rememberProjectionRecords(group, snapshot.records);
+	      const records = new Map(
+	        this.#historyRecords.get(group) ?? []
+	      );
 	      for (const record of snapshot.records)
 	        records.set(record.identity, record);
-	      if (!fresh)
-	        for (const record of this.#historyRecords.get(group)?.values() ?? [])
-	          records.set(record.identity, record);
 	      this.#historyRecords.set(group, records), state.estimatedPages = Math.max(
 	        state.estimatedPages,
 	        repairCheckpoint ? Math.max(1, Math.floor(Number(snapshot.sourceNextPage) || 0)) : 1,
@@ -18405,7 +18435,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	          state.pages.add(page);
 	      } else repairCheckpoint && (this.#projectionCheckpointReplacements.add(group), checkpointRepairs.push(group));
 	      for (const entry of this.#pages.values())
-	        entry.page.group === group && this.#indexHistoryPage(entry.page);
+	        entry.page.group === group && entry.advancesHistory !== !1 && this.#indexHistoryPage(entry.page);
 	    }
 	    this.#refreshAggregateHistoryPages(), this.#historyStatus = [...this.#historyGroups.values()].every(
 	      (state) => state.complete
@@ -18469,13 +18499,18 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      state.pages.clear(), state.nextPage = 0, state.terminalPage = null, state.estimatedPages = 1, state.complete = !1, state.retryAt = null, state.error = null;
 	  }
 	  clearCache() {
-	    this.scope.destroyed || (this.#loadEpoch += 1, this.#navigationEpoch += 1, this.#backgroundWarmEpoch += 1, this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#poll !== null && this.#cancel(this.#poll), this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#poll = null, this.#historySchedule = null, this.#backgroundWarm = null, this.#backgroundWarmPending = !1, this.#nativeRefreshPending = !1, this.#nativeChangePending = !1, this.#pollNotBefore = 0, this.#pages.clear(), this.#resetHistoryHydration(), this.#projectionRecords.clear(), this.#lastAuthoritativeAt.clear(), this.#readRecordKeys.clear(), this.#records = Object.freeze([]), this.#categoryFilter = "", this.#tagFilter = "", this.#dateFilter = "", this.#sortDirection = "desc", this.#total = 0, this.#hasNext = !1, this.#loading = !1, this.#refreshing = !1, this.#retrying = !1, this.#stale = !1, this.#error = null, this.#emit(), this.#schedulePoll(), this.#scheduleBackgroundWarm(), this.#scheduleHistoryHydration(this.#historyContinuationDelay()));
+	    this.scope.destroyed || (this.#loadEpoch += 1, this.#navigationEpoch += 1, this.#backgroundWarmEpoch += 1, this.#backgroundHeadRefreshEpoch += 1, this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#poll !== null && this.#cancel(this.#poll), this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#poll = null, this.#historySchedule = null, this.#backgroundWarm = null, this.#backgroundWarmPending = !1, this.#nativeRefreshPending = !1, this.#nativeChangePending = !1, this.#backgroundHeadRefreshes.clear(), this.#backgroundRefreshingGroups.clear(), this.#backgroundRefreshFailedGroups.clear(), this.#pollNotBefore = 0, this.#pages.clear(), this.#resetHistoryHydration(), this.#projectionRecords.clear(), this.#lastAuthoritativeAt.clear(), this.#readRecordKeys.clear(), this.#records = Object.freeze([]), this.#categoryFilter = "", this.#tagFilter = "", this.#dateFilter = "", this.#sortDirection = "desc", this.#total = 0, this.#hasNext = !1, this.#loading = !1, this.#refreshing = !1, this.#retrying = !1, this.#stale = !1, this.#error = null, this.#emit(), this.#schedulePoll(), this.#scheduleBackgroundWarm(), this.#scheduleHistoryHydration(this.#historyContinuationDelay()));
 	  }
 	  async open() {
 	    if (this.scope.destroyed) throw new Error("通知控制器已销毁");
 	    this.#open || (this.#open = !0, this.#emit());
 	    const key = pageKey(this.#group, this.#page), cached = this.#pages.has(key);
-	    cached && this.#renderFromCache(), cached ? this.#nativeChangePending && await this.#runSelectedRequest(() => this.#refreshAfterNativeChange()) : (this.#loading = !0, this.#emit(), this.#projection && await this.#restoreSelectedProjection(this.#navigationEpoch), await this.#runSelectedRequest(() => this.#showSelectedPage()));
+	    let loadedMissingPage = !1;
+	    if (cached && this.#renderFromCache(), cached || (this.#loading = !0, this.#emit(), this.#projection && await this.#restoreSelectedProjection(this.#navigationEpoch), loadedMissingPage = !this.#pages.has(key), await this.#runSelectedRequest(() => this.#showSelectedPage())), !loadedMissingPage) {
+	      await this.refresh();
+	      return;
+	    }
+	    this.#schedulePoll();
 	  }
 	  close() {
 	    this.#open && (this.#open = !1, this.#loadEpoch += 1, this.#navigationEpoch += 1, this.#cancelPoll(), this.#backgroundCacheActive || (this.#backgroundWarmEpoch += 1, this.#backgroundWarmPending = !1, this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#backgroundWarm = null, this.#historyEpoch += 1, this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#historySchedule = null, this.#historyStatus !== "complete" && (this.#historyStatus = "paused", this.#historyCurrentGroup = null)), this.#emit());
@@ -18540,7 +18575,14 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    await this.#runNavigation(epoch);
 	  }
 	  async refresh() {
-	    this.scope.destroyed || (await this.#runSelectedRequest(() => this.#refreshAfterNativeChange()), this.#schedulePoll());
+	    if (!this.scope.destroyed) {
+	      this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#liveRefresh = null, this.#nativeChangeEpoch += 1, this.#nativeChangePending = !0, this.#unreadCount = this.#native.unreadCount();
+	      try {
+	        await this.#runSelectedRequest(() => this.#refreshAfterNativeChange(!0));
+	      } finally {
+	        this.#schedulePoll();
+	      }
+	    }
 	  }
 	  async markAllAsRead() {
 	    if (!(this.#unreadCount <= 0 || this.scope.destroyed || this.#markingAll)) {
@@ -18687,6 +18729,11 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      this.#renderFromCache();
 	      return;
 	    }
+	    if (this.#group === "all" && this.#page > 0) {
+	      const page = this.#indexedAggregatePage(this.#page);
+	      this.#cachePage(page, this.#now(), !1, !1), this.#applyPage(page), this.#emit();
+	      return;
+	    }
 	    const restored = await this.#restoreSelectedPageFromPersistentCache();
 	    if (!(restored === null || restored)) {
 	      if (this.#pages.has(key)) {
@@ -18728,9 +18775,75 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	          nextCursor: null
 	        });
 	      }
+	      if (page === 0 && options.refresh) {
+	        const pages = await this.#loadHeadPagesUntilKnown(group, options);
+	        for (const loaded of pages.slice(1))
+	          this.#cachePage(loaded, this.#now(), !0, !1);
+	        return pages.length > 1 && this.#queueTopicTaxonomyEnrichment(pages.slice(1), options), pages[0];
+	      }
 	      return this.#requests.load(group, page, options);
 	    }
 	    return this.#loadAggregatePage(page, options);
+	  }
+	  #knownIdentitiesForGroup(group) {
+	    const identities = /* @__PURE__ */ new Set();
+	    for (const record of this.#projectionRecords.get(group)?.values() ?? [])
+	      identities.add(record.identity);
+	    for (const record of this.#historyRecords.get(group)?.values() ?? [])
+	      identities.add(record.identity);
+	    const prefix = `${group}:`;
+	    for (const [key, entry] of this.#pages)
+	      if (key.startsWith(prefix))
+	        for (const record of entry.page.records) identities.add(record.identity);
+	    return identities;
+	  }
+	  async #loadHeadPagesUntilKnown(group, options) {
+	    const knownIdentities = this.#knownIdentitiesForGroup(group), pages = [];
+	    for (let page = 0; ; page += 1) {
+	      const loaded = await this.#requests.load(group, page, options);
+	      pages.push(loaded);
+	      const reachedKnownIdentity = loaded.records.some((record) => knownIdentities.has(record.identity));
+	      if (!loaded.hasNext || loaded.records.length === 0 || knownIdentities.size === 0 || reachedKnownIdentity || page + 1 >= DEFAULT_HEAD_CATCH_UP_MAX_PAGES) break;
+	    }
+	    return Object.freeze(pages);
+	  }
+	  #hasGroupHeadFallback(group) {
+	    if (this.#pages.has(pageKey(group, 0)) || (this.#historyRecords.get(group)?.size ?? 0) > 0 || (this.#projectionRecords.get(group)?.size ?? 0) > 0) return !0;
+	    const state = this.#historyGroups.get(group);
+	    return !!(state && (state.pages.size > 0 || state.nextPage > 0 || state.terminalPage !== null || state.complete));
+	  }
+	  #queueBackgroundHeadRefresh(group, options) {
+	    if (this.scope.destroyed || this.#backgroundHeadRefreshes.has(group)) return;
+	    const epoch = this.#backgroundHeadRefreshEpoch;
+	    this.#backgroundRefreshFailedGroups.delete(group), this.#backgroundRefreshingGroups.add(group), this.#emit();
+	    let flight;
+	    flight = (async () => {
+	      try {
+	        const pages = await this.#loadHeadPagesUntilKnown(group, {
+	          ...options,
+	          refresh: !0,
+	          background: !0
+	        });
+	        if (this.scope.destroyed || epoch !== this.#backgroundHeadRefreshEpoch) return;
+	        for (const loaded of pages)
+	          this.#cachePage(loaded, this.#now(), !0, !1);
+	        this.#queueTopicTaxonomyEnrichment(pages, {
+	          ...options,
+	          background: !0
+	        }), this.#lastAuthoritativeAt.set(pageKey(group, 0), this.#now()), this.#raiseUnreadCountForCachedRecords(), this.#backgroundRefreshFailedGroups.delete(group), this.#open ? this.#renderFromCache() : this.#emit();
+	      } catch (cause) {
+	        if (this.scope.destroyed || epoch !== this.#backgroundHeadRefreshEpoch) return;
+	        this.#backgroundRefreshFailedGroups.add(group);
+	        const pollBackoffMs = readerNotificationPollBackoffMs(cause);
+	        pollBackoffMs > 0 && (this.#pollNotBefore = Math.max(
+	          this.#pollNotBefore,
+	          this.#now() + pollBackoffMs
+	        )), this.#onError(cause);
+	      } finally {
+	        if (this.#backgroundHeadRefreshes.get(group) !== flight) return;
+	        this.#backgroundHeadRefreshes.delete(group), this.#backgroundRefreshingGroups.delete(group), !this.scope.destroyed && epoch === this.#backgroundHeadRefreshEpoch && (this.#open ? this.#renderFromCache() : this.#emit());
+	      }
+	    })(), this.#backgroundHeadRefreshes.set(group, flight);
 	  }
 	  async #loadCachedRequestedPage(group, page) {
 	    const requests = this.#requests;
@@ -18802,6 +18915,19 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  async #loadReactionLikePage(page, options = {}) {
 	    const aggregate = (0, import_reader_notification_model.readerNotificationGroup)("reactionLikes"), end = (page + 1) * aggregate.pageSize, results = await Promise.all(
 	      READER_NOTIFICATION_REACTION_LIKE_GROUPS.map(async (groupKey) => {
+	        if (options.refresh)
+	          try {
+	            const pages2 = await this.#loadHeadPagesUntilKnown(
+	              groupKey,
+	              options
+	            );
+	            return Object.freeze({ pages: pages2, error: null });
+	          } catch (cause) {
+	            return Object.freeze({
+	              pages: Object.freeze([]),
+	              error: cause
+	            });
+	          }
 	        const group = (0, import_reader_notification_model.readerNotificationGroup)(groupKey), state = this.#historyGroups.get(groupKey), pages = [];
 	        let error = null;
 	        const requiredPages = Math.max(1, Math.ceil(end / group.pageSize));
@@ -18823,7 +18949,8 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      })
 	    ), loadedPages = results.flatMap((result) => result.pages), failures = results.map((result) => result.error).filter((cause) => cause !== null);
 	    if (!loadedPages.length && failures.length) throw failures[0];
-	    for (const loaded of loadedPages) this.#cachePage(loaded);
+	    for (const loaded of loadedPages)
+	      this.#cachePage(loaded, this.#now(), !0, !options.refresh);
 	    this.#queueTopicTaxonomyEnrichment(loadedPages, options);
 	    for (const cause of failures) this.#onError(cause);
 	    return this.#indexedReactionLikePage(page);
@@ -18832,6 +18959,25 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    if (page > 0) return this.#indexedAggregatePage(page);
 	    const end = (0, import_reader_notification_model.readerNotificationGroup)("all").pageSize, results = await Promise.all(
 	      import_reader_notification_model.READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.map(async (groupKey) => {
+	        if (options.refresh) {
+	          if (groupKey === "reactions" && this.#hasGroupHeadFallback(groupKey))
+	            return this.#queueBackgroundHeadRefresh(groupKey, options), Object.freeze({
+	              pages: Object.freeze([]),
+	              error: null
+	            });
+	          try {
+	            const pages2 = await this.#loadHeadPagesUntilKnown(
+	              groupKey,
+	              options
+	            );
+	            return Object.freeze({ pages: pages2, error: null });
+	          } catch (cause) {
+	            return Object.freeze({
+	              pages: Object.freeze([]),
+	              error: cause
+	            });
+	          }
+	        }
 	        const group = (0, import_reader_notification_model.readerNotificationGroup)(groupKey), pages = [];
 	        let error = null;
 	        const requiredPages = Math.max(1, Math.ceil(end / group.pageSize));
@@ -18858,7 +19004,8 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    if (!loadedPages.length && failures.length) throw failures[0];
 	    for (const cause of failures) this.#onError(cause);
 	    if (!options.valid || options.valid()) {
-	      for (const loaded of loadedPages) this.#cachePage(loaded);
+	      for (const loaded of loadedPages)
+	        this.#cachePage(loaded, this.#now(), !0, !options.refresh);
 	      this.#queueTopicTaxonomyEnrichment(loadedPages, options);
 	    }
 	    const indexed = this.#indexedAggregatePage(page);
@@ -18980,7 +19127,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	        }
 	      if (!page) throw new Error("通知自动重试未返回结果");
 	      if (this.scope.destroyed || epoch !== this.#loadEpoch) return;
-	      this.#cachePage(page), page.group !== "all" && page.group !== "reactionLikes" && this.#queueTopicTaxonomyEnrichment([page]), page.group === "all" && this.#inheritAllSyntheticPages(), authoritative && this.#lastAuthoritativeAt.set(key, this.#now()), this.#raiseUnreadCountForCachedRecords(), this.#applyPage(this.#pages.get(key)?.page ?? page), this.#loading = !1, this.#refreshing = !1, this.#retrying = !1, this.#stale = !1, this.#error = null, this.#emit(), this.#scheduleHistoryHydration(this.#historyContinuationDelay());
+	      this.#cachePage(page, this.#now(), !0, !refresh), page.group !== "all" && page.group !== "reactionLikes" && this.#queueTopicTaxonomyEnrichment([page]), page.group === "all" && this.#inheritAllSyntheticPages(), authoritative && this.#lastAuthoritativeAt.set(key, this.#now()), this.#raiseUnreadCountForCachedRecords(), this.#applyPage(this.#pages.get(key)?.page ?? page), this.#loading = !1, this.#refreshing = !1, this.#retrying = !1, this.#stale = !1, this.#error = null, this.#emit(), this.#scheduleHistoryHydration(this.#historyContinuationDelay());
 	    } catch (cause) {
 	      if (this.scope.destroyed || epoch !== this.#loadEpoch) return;
 	      this.#loading = !1, this.#refreshing = !1, this.#retrying = !1, this.#error = cause, this.#stale = !!cached;
@@ -19008,12 +19155,21 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    ), page.hasNext || (state.terminalPage = page.page); state.pages.has(state.nextPage); ) state.nextPage += 1;
 	    state.complete = state.terminalPage !== null && state.nextPage > state.terminalPage, state.complete && state.terminalPage !== null && (state.estimatedPages = Math.max(1, state.terminalPage + 1));
 	  }
-	  #cachePage(page, loadedAt = this.#now(), persist = !0) {
-	    const key = pageKey(page.group, page.page), nativeRecords = this.#inheritNativeState(page.records), records = this.#inheritReadRecordState(nativeRecords), inherited = records === page.records ? page : Object.freeze({ ...page, records });
-	    this.#pages.delete(key), this.#pages.set(key, Object.freeze({
+	  #cachePage(page, loadedAt = this.#now(), persist = !0, advanceHistory = !0) {
+	    const key = pageKey(page.group, page.page), nativeRecords = this.#inheritNativeState(page.records), records = this.#inheritReadRecordState(nativeRecords), inherited = records === page.records ? page : Object.freeze({ ...page, records }), historyState = this.#historyGroups.get(inherited.group), hasHistoryCheckpoint = historyState !== void 0 && (historyState.pages.size > 0 || historyState.nextPage > 0 || historyState.terminalPage !== null || historyState.complete || (this.#historyRecords.get(inherited.group)?.size ?? 0) > 0), advancesHistory = advanceHistory || !hasHistoryCheckpoint;
+	    if (this.#pages.delete(key), this.#pages.set(key, Object.freeze({
 	      page: inherited,
-	      loadedAt
-	    })), this.#indexHistoryPage(inherited), inherited.group !== "all" && this.#refreshAggregateHistoryPages(), this.#trimCachedPages(), persist && (this.#persistProjection(page.group), import_reader_notification_model.READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.includes(page.group) && this.#persistProjection("all"));
+	      loadedAt,
+	      advancesHistory
+	    })), advancesHistory)
+	      this.#indexHistoryPage(inherited);
+	    else {
+	      const historyRecords = this.#historyRecords.get(inherited.group) ?? /* @__PURE__ */ new Map();
+	      for (const record of inherited.records)
+	        historyRecords.set(record.identity, record);
+	      this.#historyRecords.set(inherited.group, historyRecords);
+	    }
+	    inherited.group !== "all" && this.#refreshAggregateHistoryPages(), this.#trimCachedPages(), persist && (this.#persistProjection(page.group), import_reader_notification_model.READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.includes(page.group) && this.#persistProjection("all"));
 	  }
 	  #persistProjection(group) {
 	    if (!this.#projection || group === "reactionLikes")
@@ -19029,9 +19185,11 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      if (key.startsWith(prefix))
 	        for (const record of entry.page.records)
 	          byIdentity.set(record.identity, record);
-	    const state = this.#historyGroups.get(group), cachedPages = [...this.#pages.entries()].filter(([key]) => key.startsWith(prefix)).map(([, entry]) => entry.page), complete = state?.complete === !0 || cachedPages.length > 0 && cachedPages.some((page) => !page.hasNext) && cachedPages.every((_, index, pages) => pages.some((candidate) => candidate.page === index)), exactReplacement = complete && (0, import_reader_notification_model.readerNotificationGroup)(group).source === "private-messages";
+	    const state = this.#historyGroups.get(group), cachedPages = [...this.#pages.entries()].filter(([key]) => key.startsWith(prefix)).map(([, entry]) => entry.page), complete = state ? state.complete : cachedPages.length > 0 && cachedPages.some((page) => !page.hasNext) && cachedPages.every((_, index, pages) => pages.some((candidate) => candidate.page === index)), exactReplacement = complete && (0, import_reader_notification_model.readerNotificationGroup)(group).source === "private-messages";
 	    if (exactReplacement) {
 	      byIdentity.clear();
+	      for (const record of this.#historyRecords.get(group)?.values() ?? [])
+	        byIdentity.set(record.identity, record);
 	      for (const page of cachedPages)
 	        for (const record of page.records)
 	          byIdentity.set(record.identity, record);
@@ -19060,9 +19218,9 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      replaceCheckpoint && this.#projectionCheckpointReplacements.delete(group);
 	    }).catch(this.#onError);
 	  }
-	  #rememberProjectionRecords(group, records, replace = !1) {
+	  #rememberProjectionRecords(group, records) {
 	    const remember = (partition, values) => {
-	      const indexed = replace ? /* @__PURE__ */ new Map() : this.#projectionRecords.get(partition) ?? /* @__PURE__ */ new Map();
+	      const indexed = this.#projectionRecords.get(partition) ?? /* @__PURE__ */ new Map();
 	      for (const record of values) indexed.set(record.identity, record);
 	      this.#projectionRecords.set(partition, indexed);
 	    };
@@ -19359,14 +19517,18 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    for (const key of [...this.#lastAuthoritativeAt.keys()])
 	      (key.startsWith("native:") || key.startsWith("all:") || key.endsWith(":0")) && this.#lastAuthoritativeAt.delete(key);
 	  }
-	  async #refreshAfterNativeChange() {
+	  async #refreshAfterNativeChange(force = !1) {
 	    if (this.scope.destroyed) return;
-	    if (this.#hasLocalFilters()) {
+	    if (this.#hasLocalFilters() && !force) {
 	      this.#nativeRefreshPending = !0, this.#renderFromCache();
 	      return;
 	    }
 	    const changeEpoch = this.#nativeChangeEpoch, selectedGroup = this.#group, selectedPage = this.#page, source = (0, import_reader_notification_model.readerNotificationGroup)(selectedGroup).source;
 	    try {
+	      if (selectedPage > 0) {
+	        await this.#refreshAllHeadAfterNativeChange();
+	        return;
+	      }
 	      if (selectedGroup === "all" || source === "user-actions" || source === "boosts-received" || source === "reactions-received") {
 	        const selectedRefresh = this.#load(!0), nativeKey = nativePageKey(0), nativeRefresh = this.#nativeChangePending || this.#shouldRevalidate(nativeKey) ? this.#refreshNativeAssociation(
 	          changeEpoch,
@@ -19397,12 +19559,14 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      ), !valid())) return;
 	      const inboxKey = pageKey("inbox", 0);
 	      if (this.#native.username().trim() && !this.#pages.has(inboxKey)) {
-	        const inbox = await this.#requests.load("inbox", 0, {
+	        const inboxPages = await this.#loadHeadPagesUntilKnown("inbox", {
 	          refresh: !0,
 	          background: !0
 	        });
 	        if (!valid()) return;
-	        this.#cachePage(inbox), this.#lastAuthoritativeAt.set(inboxKey, this.#now());
+	        for (const inbox of inboxPages)
+	          this.#cachePage(inbox, this.#now(), !0, !1);
+	        this.#lastAuthoritativeAt.set(inboxKey, this.#now());
 	      }
 	      const selectedSource = (0, import_reader_notification_model.readerNotificationGroup)(selectedGroup).source;
 	      this.#open && !selectedFiltering && selectedGroup === this.#group && selectedPage === this.#page && selectedSource === "private-messages" && selectedGroup !== "inbox" ? await this.#load(!0) : this.#open && !selectedFiltering && selectedGroup === "inbox" && selectedGroup === this.#group && selectedPage === this.#page && this.#renderFromCache();
@@ -19427,6 +19591,22 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      if (this.scope.destroyed || changeEpoch !== this.#nativeChangeEpoch) return;
 	      const needsExpansion = this.#nativeAssociationNeedsExpansion(nativePage);
 	      if (this.#cacheNativeAssociationPage(nativePage), this.#lastAuthoritativeAt.set(nativePageKey(0), this.#now()), this.#inheritAllSyntheticPages(), this.#raiseUnreadCountForCachedRecords(), selectedGroup === this.#group && selectedPage === this.#page && this.#pages.has(pageKey(selectedGroup, selectedPage)) && this.#renderFromCache(), !needsExpansion) return;
+	      this.#refreshExpandedNativeAssociation(
+	        changeEpoch,
+	        selectedGroup,
+	        selectedPage
+	      );
+	    } catch (cause) {
+	      if (this.scope.destroyed || changeEpoch !== this.#nativeChangeEpoch) return;
+	      const pollBackoffMs = readerNotificationPollBackoffMs(cause);
+	      pollBackoffMs > 0 && (this.#pollNotBefore = Math.max(
+	        this.#pollNotBefore,
+	        this.#now() + pollBackoffMs
+	      )), this.#onError(cause);
+	    }
+	  }
+	  async #refreshExpandedNativeAssociation(changeEpoch, selectedGroup, selectedPage) {
+	    try {
 	      const expandedPage = await this.#requests.load("all", 0, {
 	        background: !0,
 	        expandConsolidated: !0
@@ -19459,23 +19639,25 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  }
 	  #schedulePoll() {
 	    if (this.#cancelPoll(), !this.#open || !this.#activityVisible() || this.scope.destroyed) return;
-	    const delayMs = this.#pollNotBefore - this.#now();
+	    const backoffMs = this.#pollNotBefore - this.#now(), delayMs = backoffMs > 0 ? backoffMs : this.#pollIntervalMs();
 	    delayMs > 0 && (this.#poll = this.#schedule(() => {
 	      if (this.#poll = null, !(!this.#open || !this.#activityVisible() || this.scope.destroyed)) {
 	        if (this.#loading || this.#refreshing || this.#selectionFlight !== null) {
 	          this.#schedulePoll();
 	          return;
 	        }
-	        this.#unreadCount = this.#native.unreadCount(), this.#runSelectedRequest(() => this.#refreshAfterNativeChange()).finally(() => {
-	          this.#schedulePoll();
-	        });
+	        this.refresh().catch(this.#onError);
 	      }
 	    }, delayMs));
+	  }
+	  #pollIntervalMs() {
+	    const source = (0, import_reader_notification_model.readerNotificationGroup)(this.#group).source;
+	    return this.#group === "all" || source === "user-actions" || source === "boosts-received" || source === "reactions-received" ? this.#syntheticPollIntervalMs : this.#nativePollIntervalMs;
 	  }
 	  #activityRecoveryDue(key) {
 	    const observedAt = this.#lastAuthoritativeAt.get(key) ?? this.#pages.get(key)?.loadedAt;
 	    if (observedAt === void 0) return !1;
-	    const source = (0, import_reader_notification_model.readerNotificationGroup)(this.#group).source, recoveryMs = this.#group === "all" || source === "user-actions" || source === "boosts-received" || source === "reactions-received" ? this.#syntheticPollIntervalMs : this.#nativePollIntervalMs;
+	    const recoveryMs = this.#pollIntervalMs();
 	    return this.#now() - observedAt >= Math.max(
 	      this.#openRevalidateMs,
 	      recoveryMs
@@ -19730,7 +19912,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    this.#revision += 1, this.#snapshotCache = null, this.changes.emit(this.snapshot).forEach(this.#onError);
 	  }
 	}
-}, "5074f813cfa85bdfa8b92ab2c1b7cda77a42ae44914ec9a37487de8b179d65b2");
+}, "80e091bc5112151f86ad329a230ee19724d9d929eedbe63a001a60896be804d6");
 
 /* Source: lite/src/notification/reader-notification-model.ts */
 runtime.register("src/notification/reader-notification-model.js", function(module, exports, require) {
@@ -20393,9 +20575,12 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	  #progress;
 	  #filterDisclosure;
 	  #markAllHeaderActions;
+	  #refreshHeaderAction;
 	  #scrollWindow;
 	  #recordNodes = new import_reader_collection_floating_window.ReaderCollectionNodeCache();
 	  #relativeTimer = null;
+	  #refreshVisualReset = null;
+	  #refreshVisualState = "idle";
 	  #historyCacheCompleted = !1;
 	  constructor(options) {
 	    this.#document = options.document, this.#controller = options.controller, this.#elements = options.elements, this.#baseUrl = new URL(options.baseUrl).href, this.#relativeTime = options.relativeTime, this.#renderIcon = options.renderIcon ?? null, this.#avatarSource = options.avatarSource ?? ((template, size) => (0, import_native_host_api.discourseAvatarTemplateUrl)(template, size, this.#baseUrl)), this.#emojiSource = options.emojiSource ?? (() => ""), this.#archiveMarker = options.archiveMarker ?? (() => null), this.#schedule = options.schedule ?? ((callback, delayMs) => setTimeout(callback, delayMs)), this.#cancel = options.cancel ?? ((handle) => clearTimeout(handle)), this.#notify = options.notify ?? (() => {
@@ -20416,9 +20601,18 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	      requestOpen: () => this.#controller.open(),
 	      requestClose: () => this.#controller.close(),
 	      notify: this.#notify
-	    }), this.#markAllHeaderActions = this.#document.createElement("div"), this.#markAllHeaderActions.append(this.#elements.markAll), this.#surface.attachHeaderActions({
+	    }), this.#markAllHeaderActions = this.#document.createElement("div"), this.#refreshHeaderAction = this.#document.createElement("button"), this.#refreshHeaderAction.type = "button", this.#refreshHeaderAction.className = "ldp-notification-refresh", this.#refreshHeaderAction.title = "更新通知", this.#refreshHeaderAction.setAttribute("aria-label", "更新通知"), this.#refreshHeaderAction.replaceChildren(
+	      (0, import_reader_icon.renderReaderIcon)(
+	        this.#document,
+	        "rotate-ccw",
+	        this.#renderIcon
+	      )
+	    ), this.#markAllHeaderActions.append(
+	      this.#refreshHeaderAction,
+	      this.#elements.markAll
+	    ), this.#surface.attachHeaderActions({
 	      root: this.#markAllHeaderActions,
-	      buttons: [this.#elements.markAll],
+	      buttons: [this.#refreshHeaderAction, this.#elements.markAll],
 	      label: "通知操作"
 	    }), this.#progress = new import_reader_collection_floating_window.ReaderCollectionProgressView({
 	      document: this.#document,
@@ -20452,7 +20646,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    }), this.#bind(), this.#controller.changes.subscribe((snapshot) => {
 	      this.#render(snapshot);
 	    }, this.scope), this.scope.add(() => {
-	      this.#stopRelativeTimer(), this.#recordNodes.clear(), this.#elements.list.replaceChildren();
+	      this.#stopRelativeTimer(), this.#refreshVisualReset !== null && (this.#cancel(this.#refreshVisualReset), this.#refreshVisualReset = null), this.#recordNodes.clear(), this.#elements.list.replaceChildren();
 	    }), this.#render(this.#controller.snapshot);
 	  }
 	  destroy() {
@@ -20500,6 +20694,18 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	      }).catch((cause) => {
 	        this.#onError(cause), this.#notify(`标记已读失败：${errorMessage(cause)}`);
 	      });
+	    }), this.scope.listen(this.#refreshHeaderAction, "click", () => {
+	      this.#refreshVisualState !== "running" && (this.#setRefreshVisualState("running"), this.#controller.refresh().then(() => {
+	        if (!this.scope.destroyed) {
+	          if (this.#controller.snapshot.error) {
+	            this.#setRefreshVisualState("error", 3e3), this.#notify("通知更新失败，请稍后重试");
+	            return;
+	          }
+	          this.#setRefreshVisualState("success", 1800), this.#notify("通知已更新");
+	        }
+	      }).catch((cause) => {
+	        this.scope.destroyed || (this.#setRefreshVisualState("error", 3e3), this.#onError(cause), this.#notify(`通知更新失败：${errorMessage(cause)}`));
+	      }));
 	    }), this.scope.listen(this.#elements.list, "click", (eventValue) => {
 	      const event = eventValue, target = event.target, item = target?.closest ? target.closest(".ldp-notification-item") : null;
 	      if (!item || !this.#elements.list.contains(item)) return;
@@ -20547,7 +20753,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	        this.#renderIcon
 	      ),
 	      markAllLabel
-	    ), markAll.hidden = (0, import_reader_notification_model.readerNotificationGroup)(snapshot.group).source !== "notifications", this.#markAllHeaderActions.hidden = markAll.hidden, unreadStatus.hidden = markAll.hidden || snapshot.unreadCount <= 0, newMessage.hidden = snapshot.mode !== "messages", this.#elements.toolbar.hidden = unreadStatus.hidden && newMessage.hidden;
+	    ), markAll.hidden = (0, import_reader_notification_model.readerNotificationGroup)(snapshot.group).source !== "notifications", this.#syncRefreshHeaderAction(snapshot), unreadStatus.hidden = markAll.hidden || snapshot.unreadCount <= 0, newMessage.hidden = snapshot.mode !== "messages", this.#elements.toolbar.hidden = unreadStatus.hidden && newMessage.hidden;
 	    for (const tab of this.#elements.modeTabs) {
 	      const active = tab.dataset.notificationMode === snapshot.mode;
 	      tab.classList.toggle("active", active), tab.setAttribute("aria-selected", String(active));
@@ -20604,13 +20810,30 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    );
 	    counter || (counter = this.#document.createElement("span"), counter.className = "ldp-collection-tab-count", counter.setAttribute("aria-hidden", "true"), tab.append(counter)), counter.textContent = String(count), tab.setAttribute("aria-label", `${label}，${count} 条`);
 	  }
+	  #setRefreshVisualState(state, resetAfterMs = 0) {
+	    this.#refreshVisualReset !== null && (this.#cancel(this.#refreshVisualReset), this.#refreshVisualReset = null), this.#refreshVisualState = state, this.#syncRefreshHeaderAction(this.#controller.snapshot), this.#syncWindowStatus(this.#controller.snapshot), resetAfterMs > 0 && (this.#refreshVisualReset = this.#schedule(() => {
+	      this.#refreshVisualReset = null, !this.scope.destroyed && (this.#refreshVisualState = "idle", this.#syncRefreshHeaderAction(this.#controller.snapshot), this.#syncWindowStatus(this.#controller.snapshot));
+	    }, resetAfterMs));
+	  }
+	  #syncRefreshHeaderAction(snapshot) {
+	    const busy = snapshot.loading || snapshot.refreshing || this.#refreshVisualState === "running", backgroundReaction = snapshot.backgroundRefreshingGroups.includes(
+	      "reactions"
+	    ), backgroundReactionFailed = snapshot.backgroundRefreshFailedGroups.includes("reactions"), state = busy ? "running" : backgroundReactionFailed ? "error" : this.#refreshVisualState, label = state === "running" ? "正在更新通知" : backgroundReaction ? "主要通知已更新，回应后台更新中" : state === "success" ? "通知更新完成" : state === "error" ? backgroundReactionFailed ? "回应后台更新失败，点击重试" : "通知更新失败，点击重试" : "更新通知", icon = state === "running" ? "loader" : backgroundReaction ? "rotate-ccw" : state === "success" ? "check-square" : state === "error" ? "x" : "rotate-ccw";
+	    this.#refreshHeaderAction.disabled = busy, this.#refreshHeaderAction.dataset.ldpRequestBusy = busy ? "1" : "0", this.#refreshHeaderAction.dataset.refreshState = state, this.#refreshHeaderAction.classList.toggle("is-refreshing", busy), this.#refreshHeaderAction.setAttribute("aria-busy", String(busy)), this.#refreshHeaderAction.setAttribute("aria-label", label), this.#refreshHeaderAction.title = label, this.#refreshHeaderAction.replaceChildren((0, import_reader_icon.renderReaderIcon)(
+	      this.#document,
+	      icon,
+	      this.#renderIcon
+	    ));
+	  }
 	  #syncWindowStatus(snapshot) {
-	    const history = snapshot.history, complete = history.status === "complete", totalStatus = snapshot.total > 0 && snapshot.total !== history.cachedRecords ? `${snapshot.total} 条` : "", cacheStatus = history.cachedRecords > 0 ? `已缓存 ${history.cachedRecords} 条` : "";
+	    const history = snapshot.history, complete = history.status === "complete", totalStatus = snapshot.total > 0 && snapshot.total !== history.cachedRecords ? `${snapshot.total} 条` : "", cacheStatus = history.cachedRecords > 0 ? `已缓存 ${history.cachedRecords} 条` : "", refreshStatus = snapshot.refreshing || this.#refreshVisualState === "running" ? "正在更新通知" : this.#refreshVisualState === "success" ? "刚刚更新" : this.#refreshVisualState === "error" ? "更新失败" : "", backgroundRefreshStatus = snapshot.backgroundRefreshingGroups.includes("reactions") ? "后台更新回应" : snapshot.backgroundRefreshFailedGroups.includes("reactions") ? "回应后台更新失败" : "";
 	    if (this.#surface.frame.meta.textContent = [
 	      snapshot.unreadCount > 0 ? `未读 ${snapshot.unreadCount}` : "",
 	      totalStatus,
 	      cacheStatus,
-	      complete ? "历史已到底" : ""
+	      complete ? "历史已到底" : "",
+	      refreshStatus,
+	      backgroundRefreshStatus
 	    ].filter(Boolean).join(" · "), history.status === "idle" && history.completedGroups === 0 && history.cachedRecords === 0 && (this.#historyCacheCompleted = !1), complete && (this.#historyCacheCompleted = !0), this.#historyCacheCompleted) {
 	      this.#progress.render({
 	        visible: !1,
@@ -20799,7 +21022,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    this.#relativeTimer !== null && (this.#cancel(this.#relativeTimer), this.#relativeTimer = null);
 	  }
 	}
-}, "81b939d637c8e644b8e0c9803d798d3e1fc8525d732c18180fbfc4bb83e8dfc3");
+}, "2dcf8859630bde83ef7de1991252b8a16930e2eb88b1ae65282d7a74bd02fdeb");
 
 /* Source: lite/src/queue/reader-open-queue-session.ts */
 runtime.register("src/queue/reader-open-queue-session.js", function(module, exports, require) {

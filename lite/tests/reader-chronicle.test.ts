@@ -5,7 +5,9 @@ import {
 import {
 	READER_CHRONICLE_STORAGE_KEY,
 	ReaderChronicleRepository,
+	readerChronicleHttpStatus,
 	readerChronicleRequestTarget,
+	readerChronicleStatus,
 	type ReaderChronicleStoragePort,
 } from '../src/history/reader-chronicle-repository.js';
 import { ReaderChronicleView } from '../src/history/reader-chronicle-view.js';
@@ -34,13 +36,22 @@ class MemoryStorage implements ReaderChronicleStoragePort {
 }
 
 assert(
+	readerChronicleStatus('deleted') === 'deleted' &&
+	readerChronicleHttpStatus(403) === 403 &&
+	readerChronicleHttpStatus('404') === 404 &&
+	readerChronicleHttpStatus(410) === 410 &&
+	readerChronicleHttpStatus(500) === null,
+	'岁月史书必须区分软删除与 403/404/410，并拒绝普通失败状态',
+);
+
+assert(
 	readerChronicleRequestTarget('/t/42.json')?.kind === 'topic' &&
 	readerChronicleRequestTarget('/t/topic-slug/42/7.json')?.postNumber === 7 &&
 	readerChronicleRequestTarget('/posts/by_number/42/9.json')?.kind === 'reply' &&
 	readerChronicleRequestTarget('/posts/701.json')?.postId === 701 &&
 	readerChronicleRequestTarget('/discourse-boosts/boosts/88.json')?.boostId === 88 &&
 	readerChronicleRequestTarget('/avatar/404.png') === null,
-	'岁月史书必须只从 Topic、楼层和 Boost 请求路径提取可定位的 404 目标',
+	'岁月史书必须只从 Topic、楼层和 Boost 请求路径提取可定位的失效目标',
 );
 
 let now = 2_100_000_000_000;
@@ -83,7 +94,7 @@ try {
 }
 assert(
 	rejectedMetadataOnly && chronicle.snapshot.records.length === 0,
-	'没有本地正文确认的新 404 信号不得写入岁月史书',
+	'没有本地内容确认的新失效信号不得写入岁月史书',
 );
 chronicle.remember({
 	kind: 'topic',
@@ -99,7 +110,7 @@ chronicle.remember({
 now += 100;
 chronicle.remember({
 	kind: 'topic',
-	status: 404,
+	status: 410,
 	bodyCached: true,
 	topicId: 10,
 	topicTitle: 'Alpha 主题',
@@ -111,7 +122,7 @@ chronicle.remember({
 now += 100;
 chronicle.remember({
 	kind: 'reply',
-	status: 404,
+	status: 'deleted',
 	bodyCached: true,
 	topicId: 10,
 	topicTitle: 'Alpha 主题',
@@ -125,7 +136,7 @@ chronicle.remember({
 now += 100;
 chronicle.remember({
 	kind: 'boost',
-	status: 404,
+	status: 403,
 	bodyCached: true,
 	topicId: 20,
 	topicTitle: 'Beta 主题',
@@ -144,9 +155,14 @@ const repeated = rememberedRecords.find((record) =>
 assert(
 	rememberedRecords.length === 3 &&
 	repeated?.occurrences === 2 &&
+	repeated.status === 410 &&
+	rememberedRecords.some((record) =>
+		record.kind === 'reply' && record.status === 'deleted') &&
+	rememberedRecords.some((record) =>
+		record.kind === 'boost' && record.status === 403) &&
 	repeated.firstObservedAt < repeated.lastObservedAt &&
 	storage.values.get('topic-cache-sentinel') === 'cached topic body',
-	'相同目标与请求定位必须累计次数；收到 404 不得删除或改写 Topic 本地缓存',
+	'相同目标与请求定位必须累计次数并保留最新状态；失效信号不得删除或改写 Topic 本地缓存',
 );
 
 assert(
@@ -198,7 +214,7 @@ assert(
 	view.window.element.querySelectorAll('[data-chronicle-tab]').length === 4 &&
 	view.window.element.querySelectorAll('.ldp-chronicle-topic').length === 2 &&
 	view.window.element.textContent?.includes(
-		'岁月史书只保留本机仍有正文的 404 记录。',
+		'岁月史书只保留本机仍有可定位内容的删除或 403/404/410 记录。',
 	) &&
 	view.window.element.style.width === '540px' &&
 	view.window.element.style.height === '660px' &&
@@ -272,7 +288,7 @@ assert(
 		opened[0]?.[0] === 10 &&
 		opened[0]?.[1] === 9 &&
 		opened[0]?.[2].startsWith('reply:10:'),
-	'404 记录必须把完整记录交给统一 Reader 端口，供缓存正文标记和模拟楼层投影',
+	'失效记录必须把完整记录交给统一 Reader 端口，供缓存正文标记和模拟楼层投影',
 );
 openable = false;
 view.window.element.querySelector<HTMLButtonElement>(

@@ -64,9 +64,7 @@ export type ReaderSelfObservationStream =
 	| 'account-notifications'
 	| 'account-collections';
 
-export type ReaderUserObservationProgressStream =
-	| ReaderUserObservationStream
-	| ReaderSelfObservationStream;
+export type ReaderUserObservationProgressStream = ReaderUserObservationStream;
 
 export type ReaderSelfObservationStreamStatus =
 	| 'idle'
@@ -119,9 +117,6 @@ export interface ReaderUserObservationEntrySnapshot
 	/** 已提交到分页仓库、可按 Tab 和筛选窗口读取的记录数。 */
 	readonly storedRecordCount: number;
 	readonly records: readonly ReaderUserActivityRecord[];
-	/** 账号私有记录只驻留当前登录账号的运行期投影，不写入公开观察分页仓库。 */
-	readonly privateRecords: readonly ReaderUserActivityRecord[];
-	readonly privateRecordCount: number;
 	readonly detail: string;
 	readonly error: string;
 	readonly recoveryKind: ReaderUserObservationRecoveryKind | null;
@@ -181,13 +176,10 @@ export interface ReaderUserObservationSessionOptions {
 	readonly notify?: (message: string) => void;
 	readonly onError?: (cause: unknown) => void;
 	readonly now?: () => number;
+	/** 单个采集断点连续无进展多久后暂停；仅供运行时策略与契约测试注入。 */
+	readonly stallTimeoutMs?: number;
 	readonly parentScope?: LifecycleScope;
 }
-
-const EMPTY_SELF_OBSERVATION = Object.freeze({
-	records: Object.freeze([]),
-	streams: Object.freeze([]),
-}) satisfies ReaderSelfObservationSnapshot;
 
 interface ObservationEntry {
 	username: string;
@@ -226,6 +218,8 @@ interface ObservationStreamCheckpoint {
 	readonly page: number;
 	readonly offset: number;
 	readonly complete: boolean;
+	/** 非 Topic 分页已由当前规则确认终点，旧版短页断点没有此标记。 */
+	readonly terminalVerified?: boolean;
 }
 
 const MAX_OBSERVED_USERS = 32;
@@ -235,6 +229,13 @@ const RECORD_PROJECTION_BATCH_PAGES = 12;
 const CACHE_REPLAY_BATCH_PAGES = 12;
 const SESSION_RECORD_WINDOW = 120;
 const TOPIC_METADATA_BATCH_SIZE = 100;
+const DEFAULT_STALL_TIMEOUT_MS = 60_000;
+
+function requiresVerifiedTerminal(
+	stream: ReaderUserObservationStream,
+): boolean {
+	return !['topics', 'assigned', 'votes'].includes(stream);
+}
 
 function normalizedUsername(value: unknown): string {
 	const username = String(value ?? '')
@@ -286,10 +287,14 @@ function persistedIdentity(value: unknown): Readonly<{
 			const checkpoint = value as Readonly<Record<string, unknown>>;
 			const page = nonNegativeInteger(checkpoint.page);
 			const offset = nonNegativeInteger(checkpoint.offset);
+			const terminalVerified = checkpoint.terminalVerified === true;
 			streamCheckpoints[stream] = Object.freeze({
 				page,
 				offset,
-				complete: checkpoint.complete === true,
+				complete: checkpoint.complete === true && (
+					!requiresVerifiedTerminal(stream) || terminalVerified
+				),
+				...(terminalVerified ? { terminalVerified: true } : {}),
 			});
 		}
 	}
@@ -425,6 +430,7 @@ export class ReaderUserObservationSession {
 	readonly #notify: (message: string) => void;
 	readonly #onError: (cause: unknown) => void;
 	readonly #now: () => number;
+	readonly #stallTimeoutMs: number;
 	readonly #historyCoordination: ReaderUserObservationSessionOptions[
 		'historyCoordination'
 	];
@@ -436,8 +442,6 @@ export class ReaderUserObservationSession {
 	#pageMetadataWrite = Promise.resolve();
 	readonly #jobs: ObservationJob[] = [];
 	#selfUsername = '';
-	#selfObservation: ReaderSelfObservationSnapshot = EMPTY_SELF_OBSERVATION;
-	#retrySelfObservation: (() => void) | null = null;
 	#draining = false;
 	#activeUsername = '';
 	#topicMetadataRevision = 0;
@@ -456,6 +460,10 @@ export class ReaderUserObservationSession {
 		this.#notify = options.notify ?? (() => {});
 		this.#onError = options.onError ?? (() => {});
 		this.#now = options.now ?? Date.now;
+		this.#stallTimeoutMs = Number.isFinite(options.stallTimeoutMs) &&
+			Number(options.stallTimeoutMs) > 0
+			? Math.floor(Number(options.stallTimeoutMs))
+			: DEFAULT_STALL_TIMEOUT_MS;
 		this.#historyCoordination = options.historyCoordination;
 		this.#historyCoordinationKey = String(
 			options.historyCoordinationKey ??
@@ -636,33 +644,17 @@ export class ReaderUserObservationSession {
 	}
 
 	/**
-	 * 当前账号复用普通观察名单与采集队列；私有来源只绑定到这一条 identity。
-	 * application 启动只注册 identity 并恢复本地投影，公开历史必须等待用户显式刷新，
-	 * 避免每个标签页刷新时同时重放七类历史和 Topic 元数据请求。
+	 * 当前账号复用与其他用户完全相同的七类公开观察；这里只注册 identity，公开历史
+	 * 必须等待用户显式打开或刷新，避免页面启动时重放历史和 Topic 元数据请求。
 	 */
 	observeSelf(
 		profile: ReaderObservedUserIdentity,
-		retryPrivate?: () => void,
 	): ReaderUserObservationEntrySnapshot {
 		const identity = identityFromProfile(profile);
 		this.#selfUsername = identity.username;
-		this.#retrySelfObservation = retryPrivate ?? null;
 		this.observe(identity, { allowNetwork: false });
 		this.#emit();
 		return this.entry(identity.username)!;
-	}
-
-	updateSelfObservation(snapshot: ReaderSelfObservationSnapshot): void {
-		if (!this.#selfUsername || this.scope.destroyed) return;
-		this.#selfObservation = Object.freeze({
-			records: sortReaderUserActivities(snapshot.records.filter((record) =>
-				Boolean(record.selfStream))),
-			streams: Object.freeze(snapshot.streams.map((stream) => Object.freeze({
-				...stream,
-				progress: Math.max(0, Math.min(1, Number(stream.progress) || 0)),
-			}))),
-		});
-		this.#emit();
 	}
 
 	projectTopicMetadata(
@@ -775,19 +767,24 @@ export class ReaderUserObservationSession {
 				return;
 			}
 			if (identityIndex && this.#entries.get(entry.username) === entry) {
+				const sourceIncomplete = Object.values(entry.streamCheckpoints)
+					.some((checkpoint) => checkpoint.complete !== true);
+				const complete = identityIndex.complete && !sourceIncomplete;
 				entry.knownIdentities = new Set(identityIndex.identities);
 				entry.lastRecordCount = Math.max(
 					entry.lastRecordCount,
 					identityIndex.total,
 				);
 				entry.storedRecordCount = identityIndex.total;
-				entry.phase = identityIndex.complete ? 'ready' : 'idle';
-				entry.detail = identityIndex.complete
+				entry.phase = complete ? 'ready' : 'idle';
+				entry.detail = complete
 					? `已索引 ${identityIndex.total} 条本地分页缓存`
-					: `已恢复 ${identityIndex.total} 条断点索引`;
+					: sourceIncomplete
+						? `已恢复 ${identityIndex.total} 条记录；旧版终点待续传确认`
+						: `已恢复 ${identityIndex.total} 条断点索引`;
 				entry.error = '';
 				this.#emit();
-				if (!identityIndex.complete && allowNetwork) {
+				if (!complete && allowNetwork) {
 					this.#enqueue(entry.username, false, false, false, true);
 				}
 				return;
@@ -854,7 +851,6 @@ export class ReaderUserObservationSession {
 		const username = normalizedUsername(usernameValue);
 		const entry = this.#entries.get(username);
 		if (!entry || this.scope.destroyed) return;
-		if (username === this.#selfUsername) this.#retrySelfObservation?.();
 		if ([
 			'queued',
 			'loading',
@@ -875,21 +871,21 @@ export class ReaderUserObservationSession {
 		this.#enqueue(username, true, true);
 	}
 
-	/** 失败后只从已提交的来源分页断点续采；不会切换成刷新或重放旧网络页。 */
+	/** 中止活动请求或恢复失败任务，并只从已提交的来源分页断点续采。 */
 	retry(usernameValue: string): void {
 		const username = normalizedUsername(usernameValue);
 		const entry = this.#entries.get(username);
 		if (!entry || this.scope.destroyed) return;
-		if (username === this.#selfUsername) this.#retrySelfObservation?.();
-		if (
-			isActivePhase(entry.phase) ||
-			(entry.phase !== 'error' && entry.phase !== 'idle')
-		) return;
+		const restartActive = isActivePhase(entry.phase);
+		if (!restartActive && entry.phase !== 'error' && entry.phase !== 'idle') return;
 		entry.epoch += 1;
-		entry.controller?.abort(new DOMException('续传用户历史', 'AbortError'));
+		entry.controller?.abort(new DOMException(
+			restartActive ? '用户手动中止并续传用户历史' : '续传用户历史',
+			'AbortError',
+		));
 		entry.controller = null;
 		entry.detail = entry.pages > 0
-			? `准备从第 ${entry.pages + 1} 个缓存断点续传`
+			? `已保存 ${entry.pages} 页断点，准备续传`
 			: '准备从缓存断点恢复';
 		entry.error = '';
 		entry.recoveryKind = null;
@@ -961,9 +957,11 @@ export class ReaderUserObservationSession {
 			!entry.controller.signal.aborted
 		) return;
 		entry.phase = 'queued';
-		entry.detail = refresh && entry.records.length
-			? '等待后台增量更新'
-			: '等待后台串行采集';
+		entry.detail = continueFromCheckpoint
+			? '断点重试已接收 · 等待当前请求释放后继续'
+			: refresh && entry.records.length
+				? '等待后台增量更新'
+				: '等待后台串行采集';
 		entry.error = '';
 		this.#jobs.push(Object.freeze({
 			username,
@@ -985,10 +983,29 @@ export class ReaderUserObservationSession {
 				if (!this.#entries.has(job.username)) continue;
 				this.#activeUsername = job.username;
 				this.#emit();
-				await this.#run(job);
-				if (this.#activeUsername === job.username) {
-					this.#activeUsername = '';
-					this.#emit();
+				try {
+					await this.#run(job);
+				} catch (cause) {
+					const replacementQueued = this.#jobs.some(
+						(queued) => queued.username === job.username,
+					);
+					const entry = this.#entries.get(job.username);
+					if (entry && !replacementQueued && isActivePhase(entry.phase)) {
+						entry.phase = 'error';
+						entry.error = errorMessage(cause);
+						entry.detail = '采集队列交接失败，可从断点重试';
+						entry.controller = null;
+						this.#persist();
+						this.#emit();
+					}
+					if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
+						this.#onError(cause);
+					}
+				} finally {
+					if (this.#activeUsername === job.username) {
+						this.#activeUsername = '';
+						this.#emit();
+					}
 				}
 			}
 		} finally {
@@ -1137,6 +1154,53 @@ export class ReaderUserObservationSession {
 				this.#onError(cause);
 			}
 		};
+		let stallTimer: ReturnType<typeof setTimeout> | null = null;
+		let rejectStall!: (reason: unknown) => void;
+		const stalled = new Promise<never>((_resolve, reject) => {
+			rejectStall = reject;
+		});
+		const disarmStallWatch = (): void => {
+			if (stallTimer === null) return;
+			clearTimeout(stallTimer);
+			stallTimer = null;
+		};
+		const armStallWatch = (): void => {
+			disarmStallWatch();
+			if (controller.signal.aborted) return;
+			stallTimer = setTimeout(() => {
+				stallTimer = null;
+				if (
+					this.scope.destroyed ||
+					this.#entries.get(job.username) !== entry ||
+					entry.epoch !== epoch ||
+					controller.signal.aborted ||
+					!['queued', 'loading'].includes(entry.phase)
+				) return;
+				const reason = new DOMException(
+					'用户观察采集长时间无进展',
+					'AbortError',
+				);
+				const seconds = Math.max(1, Math.ceil(this.#stallTimeoutMs / 1_000));
+				const progressDetail = entry.detail.trim();
+				entry.phase = 'error';
+				entry.error = `连续 ${seconds} 秒没有新进展，已暂停采集；` +
+					'可从当前断点重试';
+				entry.detail = progressDetail
+					? `${progressDetail} · 已暂停`
+					: '采集长时间无进展，已暂停';
+				entry.recoveryKind = null;
+				entry.controller = null;
+				this.#persist();
+				this.#emit();
+				this.#notify(`@${job.username} 采集长时间无进展，` +
+					'已暂停，可从断点重试');
+				controller.abort(reason);
+				rejectStall(reason);
+				void persistNormalizedCheckpoint();
+			}, this.#stallTimeoutMs);
+		};
+		const awaitWithStall = <T>(operation: Promise<T>): Promise<T> =>
+			Promise.race([operation, stalled]);
 		const enrichTopicMetadata = async (): Promise<void> => {
 			const loadTopicMetadata = this.#requests.loadTopicMetadata;
 			if (!loadTopicMetadata) return;
@@ -1148,10 +1212,12 @@ export class ReaderUserObservationSession {
 				) candidates.add(record.topicId);
 			}
 			try {
-				for (const topicId of await this.#pages?.topicMetadataCandidates(
-					entry.username,
-				) ?? []) candidates.add(topicId);
+				for (const topicId of await awaitWithStall(Promise.resolve(
+					this.#pages?.topicMetadataCandidates(entry.username) ??
+						Object.freeze([]),
+				))) candidates.add(topicId);
 			} catch (cause) {
+				controller.signal.throwIfAborted();
 				this.#onError(cause);
 			}
 			const topicIds = [...candidates]
@@ -1177,12 +1243,15 @@ export class ReaderUserObservationSession {
 				while (true) {
 					controller.signal.throwIfAborted();
 					try {
-						metadata = await loadTopicMetadata.call(this.#requests, {
-							topicIds: topicIdBatch,
-							signal: controller.signal,
-							background: true,
-							refresh: job.refresh,
-						});
+						metadata = await awaitWithStall(loadTopicMetadata.call(
+							this.#requests,
+							{
+								topicIds: topicIdBatch,
+								signal: controller.signal,
+								background: true,
+								refresh: job.refresh,
+							},
+						));
 						break;
 					} catch (cause) {
 						controller.signal.throwIfAborted();
@@ -1210,6 +1279,7 @@ export class ReaderUserObservationSession {
 							: `主题元数据等待验证 · 第 ${batchIndex + 1} 批 · ` +
 								'通过后自动续传';
 						this.#emit();
+						disarmStallWatch();
 						await Promise.all([
 							resume.wait(controller.signal),
 							persistNormalizedCheckpoint(),
@@ -1219,6 +1289,7 @@ export class ReaderUserObservationSession {
 						entry.detail = `主题元数据更新中 · ${batchIndex}/` +
 							`${batches.length} 批`;
 						this.#emit();
+						armStallWatch();
 					}
 				}
 				for (const value of metadata) {
@@ -1231,6 +1302,7 @@ export class ReaderUserObservationSession {
 				entry.detail = `主题元数据更新中 · ${batchIndex + 1}/` +
 					`${batches.length} 批 · 已补齐 ${resolved}/${topicIds.length} 个主题`;
 				this.#emit();
+				armStallWatch();
 			}
 		};
 		const finish = async (restoredFromCache = false): Promise<void> => {
@@ -1298,9 +1370,12 @@ export class ReaderUserObservationSession {
 				);
 			}
 		};
+		armStallWatch();
 		try {
 			if (startingStreamIndex >= READER_USER_OBSERVATION_STREAMS.length) {
 				await enrichTopicMetadata();
+				controller.signal.throwIfAborted();
+				disarmStallWatch();
 				await finish(true);
 				return;
 			}
@@ -1322,7 +1397,8 @@ export class ReaderUserObservationSession {
 				let page = checkpoint?.page ?? 0;
 				let offset = checkpoint?.offset ?? 0;
 				const seenOffsets = new Set<number>([offset]);
-				let streamComplete = false;
+				let streamComplete = checkpoint?.complete === true;
+				let terminalVerified = checkpoint?.terminalVerified === true;
 				entry.phase = 'loading';
 				entry.currentStream = stream;
 				entry.completedStreams = streamIndex;
@@ -1348,15 +1424,18 @@ export class ReaderUserObservationSession {
 						const pageCount = job.continueFromCheckpoint
 							? Math.min(CACHE_REPLAY_BATCH_PAGES, checkpointPage - cachePage)
 							: CACHE_REPLAY_BATCH_PAGES;
-						const batch = await this.#requests.loadCachedPages?.({
-							username: job.username,
-							stream,
-							startPage: cachePage,
-							pageCount,
-							signal: controller.signal,
-							background: true,
-						}) ?? Object.freeze([
-							await this.#requests.loadCachedPage({
+						const cachedBatch = this.#requests.loadCachedPages
+							? await awaitWithStall(this.#requests.loadCachedPages({
+								username: job.username,
+								stream,
+								startPage: cachePage,
+								pageCount,
+								signal: controller.signal,
+								background: true,
+							}))
+							: null;
+						const batch = cachedBatch ?? Object.freeze([
+							await awaitWithStall(this.#requests.loadCachedPage({
 								username: job.username,
 								stream,
 								page: cachePage,
@@ -1364,7 +1443,7 @@ export class ReaderUserObservationSession {
 								signal: controller.signal,
 								background: true,
 								refresh: false,
-							}),
+							})),
 						]);
 						if (!batch.length) break;
 						for (const cached of batch) {
@@ -1373,6 +1452,7 @@ export class ReaderUserObservationSession {
 								break;
 							}
 							if (mergePageIdentity(entry, cached.identity)) this.#persist();
+							const cachedComplete = cached.complete;
 							this.#mergeRecords(records, cached.records, identitiesByTopic);
 							cachePage += 1;
 							totalPages += 1;
@@ -1383,22 +1463,30 @@ export class ReaderUserObservationSession {
 							}
 							entry.pages = Math.max(previousPages, totalPages);
 							if (!job.continueFromCheckpoint) {
+								terminalVerified = requiresVerifiedTerminal(stream) &&
+									cachedComplete;
 								entry.streamCheckpoints[stream] = Object.freeze({
 									page,
 									offset,
-									complete: cached.complete,
+									complete: cachedComplete,
+									...(terminalVerified ? { terminalVerified: true } : {}),
 								});
 							}
 							projectRecords();
+							const replayProgress = job.continueFromCheckpoint
+								? `断点回放 ${cachePage}/${checkpointPage} 页`
+								: `已回放 ${cachePage} 页`;
 							entry.detail = `缓存恢复 · ${streamLabel} · ` +
 								`${streamIndex + 1}/${READER_USER_OBSERVATION_STREAMS.length} · ` +
-								`${records.size} 条 · ${entry.pages} 页`;
+								`${replayProgress} · ${records.size} 条`;
 							if (
-								cached.complete ||
+								cachedComplete ||
 								totalPages % RECORD_PROJECTION_BATCH_PAGES === 0
 							) checkpointChanged();
-							if (cached.complete) {
+							armStallWatch();
+							if (cachedComplete) {
 								streamComplete = true;
+								terminalVerified = requiresVerifiedTerminal(stream);
 								page = cachePage;
 								offset = cacheOffset;
 								cacheStopped = true;
@@ -1437,7 +1525,7 @@ export class ReaderUserObservationSession {
 					controller.signal.throwIfAborted();
 					let loaded: ReaderUserObservationPage;
 					try {
-						loaded = await this.#requests.loadPage({
+						loaded = await awaitWithStall(this.#requests.loadPage({
 							username: job.username,
 							stream,
 							page,
@@ -1445,7 +1533,7 @@ export class ReaderUserObservationSession {
 							signal: controller.signal,
 							background: true,
 							refresh: job.refresh,
-						});
+						}));
 						networkPages += 1;
 					} catch (cause) {
 						controller.signal.throwIfAborted();
@@ -1467,6 +1555,7 @@ export class ReaderUserObservationSession {
 								entry.detail = `${streamLabel} 当前不可用，继续下一类`;
 								this.#emit();
 								streamComplete = true;
+								terminalVerified = requiresVerifiedTerminal(stream);
 								break;
 							}
 							throw cause;
@@ -1486,6 +1575,7 @@ export class ReaderUserObservationSession {
 								`${Math.max(0, Math.ceil(resume.waitMs / 1_000))} 秒后自动续传`
 							: `${streamLabel} 等待验证 · 第 ${page + 1} 页 · 通过后自动续传`;
 						this.#emit();
+						disarmStallWatch();
 						await Promise.all([
 							resume.wait(controller.signal),
 							persistNormalizedCheckpoint(),
@@ -1494,6 +1584,7 @@ export class ReaderUserObservationSession {
 						entry.phase = 'loading';
 						entry.detail = `恢复中 · ${streamLabel} 第 ${page + 1} 页`;
 						this.#emit();
+						armStallWatch();
 						continue;
 					}
 					if (
@@ -1504,8 +1595,9 @@ export class ReaderUserObservationSession {
 					const reachedKnownRecord = incremental && loaded.records.some(
 						(activity) => knownStreamIdentities.has(activity.identity),
 					);
+					const verifiedPageEnd = loaded.complete;
 					if (
-						!loaded.complete && !reachedKnownRecord &&
+						!verifiedPageEnd && !reachedKnownRecord &&
 						(!Number.isSafeInteger(loaded.nextOffset) ||
 							loaded.nextOffset < 0 || seenOffsets.has(loaded.nextOffset))
 					) {
@@ -1517,31 +1609,43 @@ export class ReaderUserObservationSession {
 					offset = loaded.nextOffset;
 					seenOffsets.add(offset);
 					entry.pages = incremental || job.continueFromCheckpoint
-						? Math.max(previousPages, totalPages)
+						? previousPages + networkPages
 						: totalPages;
-					streamComplete = loaded.complete || reachedKnownRecord;
+					terminalVerified = terminalVerified || (
+						requiresVerifiedTerminal(stream) &&
+						(verifiedPageEnd || reachedKnownRecord)
+					);
+					streamComplete = verifiedPageEnd || reachedKnownRecord;
 					entry.streamCheckpoints[stream] = Object.freeze({
 						page,
 						offset,
 						complete: streamComplete,
+						...(terminalVerified ? { terminalVerified: true } : {}),
 					});
 					entry.detail = `${incremental ? '增量更新' : '后台采集中'} · ` +
 						`${streamLabel} · ${streamIndex + 1}/` +
 						`${READER_USER_OBSERVATION_STREAMS.length} · ` +
 						`${records.size} 条 · ${entry.pages} 页`;
 					checkpointChanged(streamComplete);
+					armStallWatch();
 				}
 				entry.completedStreams = streamIndex + 1;
 				entry.streamCheckpoints[stream] = Object.freeze({
+					...entry.streamCheckpoints[stream],
 					page,
 					offset,
 					complete: true,
+					...(terminalVerified ? { terminalVerified: true } : {}),
 				});
 				this.#persist();
+				armStallWatch();
 			}
 			await enrichTopicMetadata();
+			controller.signal.throwIfAborted();
+			disarmStallWatch();
 			await finish(job.restoreCache && networkPages === 0 && totalPages > 0);
 		} catch (cause) {
+			disarmStallWatch();
 			if (
 				controller.signal.aborted ||
 				this.scope.destroyed ||
@@ -1561,6 +1665,8 @@ export class ReaderUserObservationSession {
 			await persistNormalizedCheckpoint();
 			this.#notify(`@${job.username} 历史采集失败：${entry.error}`);
 			this.#onError(cause);
+		} finally {
+			disarmStallWatch();
 		}
 	}
 
@@ -1704,9 +1810,6 @@ export class ReaderUserObservationSession {
 
 	#entrySnapshot(entry: ObservationEntry): ReaderUserObservationEntrySnapshot {
 		const isSelf = entry.username === this.#selfUsername;
-		const privateObservation = isSelf
-			? this.#selfObservation
-			: EMPTY_SELF_OBSERVATION;
 		const publicStreams: readonly ReaderUserObservationProgressStreamSnapshot[] =
 			Object.freeze(READER_USER_OBSERVATION_STREAMS.map((stream) => {
 				const complete = entry.streamCheckpoints[stream]?.complete === true ||
@@ -1714,6 +1817,8 @@ export class ReaderUserObservationSession {
 				const current = entry.currentStream === stream;
 				const status: ReaderSelfObservationStreamStatus = complete
 					? 'complete'
+					: current && entry.phase === 'error'
+						? 'error'
 					: current && [
 						'waiting-rate-limit',
 						'waiting-challenge',
@@ -1725,36 +1830,16 @@ export class ReaderUserObservationSession {
 					label: readerUserObservationStreamLabel(stream),
 					status,
 					progress: complete ? 1 : current ? 0.5 : 0,
-					detail: current ? entry.detail : '',
+					detail: current ? entry.error || entry.detail : '',
 				});
 			}));
-		const privateStreams: readonly ReaderUserObservationProgressStreamSnapshot[] =
-			Object.freeze(privateObservation.streams.map((stream) => Object.freeze({
-				stream: stream.stream,
-				label: stream.label,
-				status: stream.status,
-				progress: stream.progress,
-				detail: stream.detail,
-			})));
-		const streams = Object.freeze([...publicStreams, ...privateStreams]);
-		const privateCurrent = privateObservation.streams.find((stream) =>
-			stream.status !== 'complete');
-		const privateError = privateObservation.streams.find((stream) =>
-			stream.status === 'error' && stream.error)?.error ?? '';
-		let phase = entry.phase;
-		if (!isActivePhase(phase) && phase !== 'error' && privateCurrent) {
-			phase = privateCurrent.status === 'error'
-				? 'error'
-				: privateCurrent.status === 'waiting'
-					? 'waiting-rate-limit'
-					: privateCurrent.status === 'idle' ? 'queued' : 'loading';
-		}
+		const streams = publicStreams;
 		return Object.freeze({
 			username: entry.username,
 			name: entry.name,
 			avatarTemplate: entry.avatarTemplate,
 			isSelf,
-			phase,
+			phase: entry.phase,
 			addedAt: entry.addedAt,
 			completedAt: entry.completedAt,
 			pages: entry.pages,
@@ -1766,12 +1851,8 @@ export class ReaderUserObservationSession {
 			recordCount: Math.max(entry.lastRecordCount, entry.records.length),
 			storedRecordCount: entry.storedRecordCount,
 			records: entry.records,
-			privateRecords: privateObservation.records,
-			privateRecordCount: privateObservation.records.length,
-			detail: !isActivePhase(entry.phase) && privateCurrent?.detail
-				? privateCurrent.detail
-				: entry.detail,
-			error: entry.error || privateError,
+			detail: entry.detail,
+			error: entry.error,
 			recoveryKind: entry.recoveryKind,
 		});
 	}

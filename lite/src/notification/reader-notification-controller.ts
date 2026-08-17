@@ -93,6 +93,8 @@ export interface ReaderNotificationControllerSnapshot {
 	readonly retrying: boolean;
 	readonly markingAll: boolean;
 	readonly stale: boolean;
+	readonly backgroundRefreshingGroups: readonly ReaderNotificationGroupKey[];
+	readonly backgroundRefreshFailedGroups: readonly ReaderNotificationGroupKey[];
 	readonly unreadCount: number;
 	readonly error: unknown | null;
 	readonly history: ReaderNotificationHistorySnapshot;
@@ -157,6 +159,7 @@ export interface ReaderNotificationControllerOptions {
 interface CachedNotificationPage {
 	readonly page: ReaderNotificationPage;
 	readonly loadedAt: number;
+	readonly advancesHistory?: boolean;
 }
 
 interface NotificationHistoryGroupState {
@@ -177,13 +180,14 @@ export interface ReaderNotificationCacheStats {
 const DEFAULT_MAX_CACHED_PAGES = 32;
 const DEFAULT_LIVE_REFRESH_DELAY_MS = 240;
 const DEFAULT_RETRY_DELAY_MS = 600;
-// 打开浮窗只回放缓存；该时限仅用于 focus/online 等恢复信号下的漏事件兜底。
+// 打开浮窗或 focus/online 恢复时，只对到期头页做漏事件兜底。
 const DEFAULT_OPEN_REVALIDATE_MS = 30 * 60_000;
 const DEFAULT_NATIVE_POLL_INTERVAL_MS = 30 * 60_000;
 const DEFAULT_SYNTHETIC_POLL_INTERVAL_MS = 30 * 60_000;
 // 缓存命中不进入请求许可管线；浮窗可见期有界并行，关闭后回落到 background。
 const DEFAULT_HISTORY_STEP_DELAY_MS = 250;
 const DEFAULT_HISTORY_RETRY_DELAY_MS = 15_000;
+const DEFAULT_HEAD_CATCH_UP_MAX_PAGES = 20;
 const LEGACY_USER_ACTION_PAGE_SIZE = 30;
 const HISTORY_PROJECTION_BATCH_PAGES = 4;
 const VISIBLE_HISTORY_LEASE_ROUNDS = 2;
@@ -406,6 +410,13 @@ export class ReaderNotificationController {
 		ReaderNotificationGroupKey
 	>();
 	readonly #historyInFlightGroups = new Set<ReaderNotificationGroupKey>();
+	readonly #backgroundHeadRefreshes = new Map<
+		ReaderNotificationGroupKey,
+		Promise<void>
+	>();
+	readonly #backgroundRefreshingGroups = new Set<ReaderNotificationGroupKey>();
+	readonly #backgroundRefreshFailedGroups = new Set<ReaderNotificationGroupKey>();
+	#backgroundHeadRefreshEpoch = 0;
 	#nativeRefreshPending = false;
 	#nativeChangePending = false;
 	#nativeChangeEpoch = 0;
@@ -535,6 +546,7 @@ export class ReaderNotificationController {
 		this.scope.add(() => {
 			this.#loadEpoch += 1;
 			this.#navigationEpoch += 1;
+			this.#backgroundHeadRefreshEpoch += 1;
 			if (this.#liveRefresh !== null) this.#cancel(this.#liveRefresh);
 			if (this.#poll !== null) this.#cancel(this.#poll);
 			if (this.#historySchedule !== null) this.#cancel(this.#historySchedule);
@@ -544,6 +556,9 @@ export class ReaderNotificationController {
 			this.#historySchedule = null;
 			this.#historyEpoch += 1;
 			this.#historyInFlightGroups.clear();
+			this.#backgroundHeadRefreshes.clear();
+			this.#backgroundRefreshingGroups.clear();
+			this.#backgroundRefreshFailedGroups.clear();
 			this.#backgroundWarm = null;
 			this.#backgroundWarmEpoch += 1;
 			this.#backgroundCacheActive = false;
@@ -595,6 +610,12 @@ export class ReaderNotificationController {
 			retrying: this.#retrying,
 			markingAll: this.#markingAll,
 			stale: this.#stale,
+			backgroundRefreshingGroups: Object.freeze(
+				[...this.#backgroundRefreshingGroups],
+			),
+			backgroundRefreshFailedGroups: Object.freeze(
+				[...this.#backgroundRefreshFailedGroups],
+			),
 			unreadCount: this.#unreadCount,
 			error: this.#error,
 			history: this.#historySnapshot(),
@@ -734,16 +755,16 @@ export class ReaderNotificationController {
 				notificationProjectionCheckpointNeedsRepair(group, snapshot);
 			state.retryAt = null;
 			state.error = null;
-			this.#rememberProjectionRecords(group, snapshot.records, fresh);
-			const records = new Map<string, ReaderNotificationRecord>();
+			this.#rememberProjectionRecords(group, snapshot.records);
+			const records = new Map<string, ReaderNotificationRecord>(
+				this.#historyRecords.get(group) ?? [],
+			);
 			for (const record of snapshot.records) {
 				records.set(record.identity, record);
 			}
-			if (!fresh) {
-				for (const record of this.#historyRecords.get(group)?.values() ?? []) {
-					records.set(record.identity, record);
-				}
-			}
+			// fresh 只表示绕过仓库热缓存读取最新世代，不代表删除本机已经
+			// 归档的逐条活动；部分快照必须按 identity 合并，不能让刷新中
+			// 的缓存数和分类计数先缩水、再等待历史续传补回。
 			this.#historyRecords.set(group, records);
 			state.estimatedPages = Math.max(
 				state.estimatedPages,
@@ -804,7 +825,10 @@ export class ReaderNotificationController {
 			// 启动恢复期间可能已有头页刷新完成；重新索引这些页，避免
 			// 持久断点覆盖刚取得的权威页状态。
 			for (const entry of this.#pages.values()) {
-				if (entry.page.group === group) this.#indexHistoryPage(entry.page);
+				if (
+					entry.page.group === group &&
+					entry.advancesHistory !== false
+				) this.#indexHistoryPage(entry.page);
 			}
 		}
 		this.#refreshAggregateHistoryPages();
@@ -927,6 +951,7 @@ export class ReaderNotificationController {
 		this.#loadEpoch += 1;
 		this.#navigationEpoch += 1;
 		this.#backgroundWarmEpoch += 1;
+		this.#backgroundHeadRefreshEpoch += 1;
 		if (this.#liveRefresh !== null) this.#cancel(this.#liveRefresh);
 		if (this.#poll !== null) this.#cancel(this.#poll);
 		if (this.#historySchedule !== null) this.#cancel(this.#historySchedule);
@@ -938,6 +963,9 @@ export class ReaderNotificationController {
 		this.#backgroundWarmPending = false;
 		this.#nativeRefreshPending = false;
 		this.#nativeChangePending = false;
+		this.#backgroundHeadRefreshes.clear();
+		this.#backgroundRefreshingGroups.clear();
+		this.#backgroundRefreshFailedGroups.clear();
 		this.#pollNotBefore = 0;
 		this.#pages.clear();
 		this.#resetHistoryHydration();
@@ -970,6 +998,7 @@ export class ReaderNotificationController {
 		}
 		const key = pageKey(this.#group, this.#page);
 		const cached = this.#pages.has(key);
+		let loadedMissingPage = false;
 		if (cached) this.#renderFromCache();
 		if (!cached) {
 			this.#loading = true;
@@ -977,10 +1006,14 @@ export class ReaderNotificationController {
 			if (this.#projection) {
 				await this.#restoreSelectedProjection(this.#navigationEpoch);
 			}
+			loadedMissingPage = !this.#pages.has(key);
 			await this.#runSelectedRequest(() => this.#showSelectedPage());
-		} else if (this.#nativeChangePending) {
-			await this.#runSelectedRequest(() => this.#refreshAfterNativeChange());
 		}
+		if (!loadedMissingPage) {
+			await this.refresh();
+			return;
+		}
+		this.#schedulePoll();
 	}
 
 	close(): void {
@@ -1115,8 +1148,19 @@ export class ReaderNotificationController {
 
 	async refresh(): Promise<void> {
 		if (this.scope.destroyed) return;
-		await this.#runSelectedRequest(() => this.#refreshAfterNativeChange());
-		this.#schedulePoll();
+		// 主动刷新已经覆盖尚未执行的宿主事件头页校验，
+		// 取消它避免当前一轮完成后再串行重复一轮。
+		if (this.#liveRefresh !== null) this.#cancel(this.#liveRefresh);
+		this.#liveRefresh = null;
+		this.#nativeChangeEpoch += 1;
+		this.#nativeChangePending = true;
+		this.#unreadCount = this.#native.unreadCount();
+		try {
+			await this.#runSelectedRequest(() =>
+				this.#refreshAfterNativeChange(true));
+		} finally {
+			this.#schedulePoll();
+		}
 	}
 
 	async markAllAsRead(): Promise<void> {
@@ -1362,6 +1406,13 @@ export class ReaderNotificationController {
 			this.#renderFromCache();
 			return;
 		}
+		if (this.#group === 'all' && this.#page > 0) {
+			const page = this.#indexedAggregatePage(this.#page);
+			this.#cachePage(page, this.#now(), false, false);
+			this.#applyPage(page);
+			this.#emit();
+			return;
+		}
 		const restored = await this.#restoreSelectedPageFromPersistentCache();
 		if (restored === null || restored) return;
 		if (this.#pages.has(key)) {
@@ -1436,9 +1487,135 @@ export class ReaderNotificationController {
 					nextCursor: null,
 				});
 			}
+			if (page === 0 && options.refresh) {
+				const pages = await this.#loadHeadPagesUntilKnown(group, options);
+				for (const loaded of pages.slice(1)) {
+					this.#cachePage(loaded, this.#now(), true, false);
+				}
+				if (pages.length > 1) {
+					this.#queueTopicTaxonomyEnrichment(pages.slice(1), options);
+				}
+				return pages[0]!;
+			}
 			return this.#requests.load(group, page, options);
 		}
 		return this.#loadAggregatePage(page, options);
+	}
+
+	#knownIdentitiesForGroup(
+		group: ReaderNotificationGroupKey,
+	): ReadonlySet<string> {
+		const identities = new Set<string>();
+		for (const record of this.#projectionRecords.get(group)?.values() ?? []) {
+			identities.add(record.identity);
+		}
+		for (const record of this.#historyRecords.get(group)?.values() ?? []) {
+			identities.add(record.identity);
+		}
+		const prefix = `${group}:`;
+		for (const [key, entry] of this.#pages) {
+			if (!key.startsWith(prefix)) continue;
+			for (const record of entry.page.records) identities.add(record.identity);
+		}
+		return identities;
+	}
+
+	async #loadHeadPagesUntilKnown(
+		group: ReaderNotificationGroupKey,
+		options: ReaderNotificationLoadOptions,
+	): Promise<readonly ReaderNotificationPage[]> {
+		const knownIdentities = this.#knownIdentitiesForGroup(group);
+		const pages: ReaderNotificationPage[] = [];
+		for (let page = 0; ; page += 1) {
+			const loaded = await this.#requests.load(group, page, options);
+			pages.push(loaded);
+			const reachedKnownIdentity = loaded.records.some((record) =>
+				knownIdentities.has(record.identity));
+			if (
+				!loaded.hasNext ||
+				loaded.records.length === 0 ||
+				knownIdentities.size === 0 ||
+				reachedKnownIdentity ||
+				page + 1 >= DEFAULT_HEAD_CATCH_UP_MAX_PAGES
+			) break;
+		}
+		return Object.freeze(pages);
+	}
+
+	#hasGroupHeadFallback(group: ReaderNotificationGroupKey): boolean {
+		if (this.#pages.has(pageKey(group, 0))) return true;
+		if ((this.#historyRecords.get(group)?.size ?? 0) > 0) return true;
+		if ((this.#projectionRecords.get(group)?.size ?? 0) > 0) return true;
+		const state = this.#historyGroups.get(group);
+		return Boolean(state && (
+			state.pages.size > 0 ||
+			state.nextPage > 0 ||
+			state.terminalPage !== null ||
+			state.complete
+		));
+	}
+
+	#queueBackgroundHeadRefresh(
+		group: ReaderNotificationGroupKey,
+		options: ReaderNotificationLoadOptions,
+	): void {
+		if (this.scope.destroyed || this.#backgroundHeadRefreshes.has(group)) return;
+		const epoch = this.#backgroundHeadRefreshEpoch;
+		this.#backgroundRefreshFailedGroups.delete(group);
+		this.#backgroundRefreshingGroups.add(group);
+		this.#emit();
+		let flight!: Promise<void>;
+		flight = (async () => {
+			try {
+				const pages = await this.#loadHeadPagesUntilKnown(group, {
+					...options,
+					refresh: true,
+					background: true,
+				});
+				if (
+					this.scope.destroyed ||
+					epoch !== this.#backgroundHeadRefreshEpoch
+				) return;
+				for (const loaded of pages) {
+					this.#cachePage(loaded, this.#now(), true, false);
+				}
+				this.#queueTopicTaxonomyEnrichment(pages, {
+					...options,
+					background: true,
+				});
+				this.#lastAuthoritativeAt.set(pageKey(group, 0), this.#now());
+				this.#raiseUnreadCountForCachedRecords();
+				this.#backgroundRefreshFailedGroups.delete(group);
+				if (this.#open) this.#renderFromCache();
+				else this.#emit();
+			} catch (cause) {
+				if (
+					this.scope.destroyed ||
+					epoch !== this.#backgroundHeadRefreshEpoch
+				) return;
+				this.#backgroundRefreshFailedGroups.add(group);
+				const pollBackoffMs = readerNotificationPollBackoffMs(cause);
+				if (pollBackoffMs > 0) {
+					this.#pollNotBefore = Math.max(
+						this.#pollNotBefore,
+						this.#now() + pollBackoffMs,
+					);
+				}
+				this.#onError(cause);
+			} finally {
+				if (this.#backgroundHeadRefreshes.get(group) !== flight) return;
+				this.#backgroundHeadRefreshes.delete(group);
+				this.#backgroundRefreshingGroups.delete(group);
+				if (
+					!this.scope.destroyed &&
+					epoch === this.#backgroundHeadRefreshEpoch
+				) {
+					if (this.#open) this.#renderFromCache();
+					else this.#emit();
+				}
+			}
+		})();
+		this.#backgroundHeadRefreshes.set(group, flight);
 	}
 
 	async #loadCachedRequestedPage(
@@ -1559,6 +1736,20 @@ export class ReaderNotificationController {
 		const end = (page + 1) * aggregate.pageSize;
 		const results = await Promise.all(
 			READER_NOTIFICATION_REACTION_LIKE_GROUPS.map(async (groupKey) => {
+				if (options.refresh) {
+					try {
+						const pages = await this.#loadHeadPagesUntilKnown(
+							groupKey,
+							options,
+						);
+						return Object.freeze({ pages, error: null });
+					} catch (cause) {
+						return Object.freeze({
+							pages: Object.freeze([]),
+							error: cause,
+						});
+					}
+				}
 				const group = readerNotificationGroup(groupKey);
 				const state = this.#historyGroups.get(groupKey);
 				const pages: ReaderNotificationPage[] = [];
@@ -1597,7 +1788,9 @@ export class ReaderNotificationController {
 			.map((result) => result.error)
 			.filter((cause): cause is NonNullable<typeof cause> => cause !== null);
 		if (!loadedPages.length && failures.length) throw failures[0];
-		for (const loaded of loadedPages) this.#cachePage(loaded);
+		for (const loaded of loadedPages) {
+			this.#cachePage(loaded, this.#now(), true, !options.refresh);
+		}
 		this.#queueTopicTaxonomyEnrichment(loadedPages, options);
 		for (const cause of failures) this.#onError(cause);
 		return this.#indexedReactionLikePage(page);
@@ -1620,6 +1813,30 @@ export class ReaderNotificationController {
 		const end = aggregate.pageSize;
 		const results = await Promise.all(
 			READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.map(async (groupKey) => {
+				if (options.refresh) {
+					if (
+						groupKey === 'reactions' &&
+						this.#hasGroupHeadFallback(groupKey)
+					) {
+						this.#queueBackgroundHeadRefresh(groupKey, options);
+						return Object.freeze({
+							pages: Object.freeze([]),
+							error: null,
+						});
+					}
+					try {
+						const pages = await this.#loadHeadPagesUntilKnown(
+							groupKey,
+							options,
+						);
+						return Object.freeze({ pages, error: null });
+					} catch (cause) {
+						return Object.freeze({
+							pages: Object.freeze([]),
+							error: cause,
+						});
+					}
+				}
 				const group = readerNotificationGroup(groupKey);
 				const pages: ReaderNotificationPage[] = [];
 				let error: unknown | null = null;
@@ -1655,7 +1872,9 @@ export class ReaderNotificationController {
 		if (!loadedPages.length && failures.length) throw failures[0];
 		for (const cause of failures) this.#onError(cause);
 		if (!options.valid || options.valid()) {
-			for (const loaded of loadedPages) this.#cachePage(loaded);
+			for (const loaded of loadedPages) {
+				this.#cachePage(loaded, this.#now(), true, !options.refresh);
+			}
 			this.#queueTopicTaxonomyEnrichment(loadedPages, options);
 		}
 		const indexed = this.#indexedAggregatePage(page);
@@ -1853,7 +2072,7 @@ export class ReaderNotificationController {
 			}
 			if (!page) throw new Error('通知自动重试未返回结果');
 			if (this.scope.destroyed || epoch !== this.#loadEpoch) return;
-			this.#cachePage(page);
+			this.#cachePage(page, this.#now(), true, !refresh);
 			if (page.group !== 'all' && page.group !== 'reactionLikes') {
 				this.#queueTopicTaxonomyEnrichment([page]);
 			}
@@ -1922,6 +2141,7 @@ export class ReaderNotificationController {
 		page: ReaderNotificationPage,
 		loadedAt = this.#now(),
 		persist = true,
+		advanceHistory = true,
 	): void {
 		const key = pageKey(page.group, page.page);
 		const nativeRecords = this.#inheritNativeState(page.records);
@@ -1929,12 +2149,31 @@ export class ReaderNotificationController {
 		const inherited = records === page.records
 			? page
 			: Object.freeze({ ...page, records });
+		const historyState = this.#historyGroups.get(inherited.group);
+		const hasHistoryCheckpoint = historyState !== undefined && (
+			historyState.pages.size > 0 ||
+			historyState.nextPage > 0 ||
+			historyState.terminalPage !== null ||
+			historyState.complete ||
+			(this.#historyRecords.get(inherited.group)?.size ?? 0) > 0
+		);
+		const advancesHistory = advanceHistory || !hasHistoryCheckpoint;
 		this.#pages.delete(key);
 		this.#pages.set(key, Object.freeze({
 			page: inherited,
 			loadedAt,
+			advancesHistory,
 		}));
-		this.#indexHistoryPage(inherited);
+		if (advancesHistory) {
+			this.#indexHistoryPage(inherited);
+		} else {
+			const historyRecords = this.#historyRecords.get(inherited.group) ??
+				new Map<string, ReaderNotificationRecord>();
+			for (const record of inherited.records) {
+				historyRecords.set(record.identity, record);
+			}
+			this.#historyRecords.set(inherited.group, historyRecords);
+		}
 		if (inherited.group !== 'all') this.#refreshAggregateHistoryPages();
 		this.#trimCachedPages();
 		if (persist) {
@@ -1971,16 +2210,19 @@ export class ReaderNotificationController {
 		const cachedPages = [...this.#pages.entries()]
 			.filter(([key]) => key.startsWith(prefix))
 			.map(([, entry]) => entry.page);
-		const complete = state?.complete === true || (
-			cachedPages.length > 0 &&
-			cachedPages.some((page) => !page.hasNext) &&
-			cachedPages.every((_, index, pages) =>
-				pages.some((candidate) => candidate.page === index))
-		);
+		const complete = state
+			? state.complete
+			: cachedPages.length > 0 &&
+				cachedPages.some((page) => !page.hasNext) &&
+				cachedPages.every((_, index, pages) =>
+					pages.some((candidate) => candidate.page === index));
 		const exactReplacement = complete &&
 			readerNotificationGroup(group).source === 'private-messages';
 		if (exactReplacement) {
 			byIdentity.clear();
+			for (const record of this.#historyRecords.get(group)?.values() ?? []) {
+				byIdentity.set(record.identity, record);
+			}
 			for (const page of cachedPages) {
 				for (const record of page.records) {
 					byIdentity.set(record.identity, record);
@@ -2024,16 +2266,13 @@ export class ReaderNotificationController {
 	#rememberProjectionRecords(
 		group: ReaderNotificationGroupKey,
 		records: readonly ReaderNotificationRecord[],
-		replace = false,
 	): void {
 		const remember = (
 			partition: ReaderNotificationGroupKey,
 			values: readonly ReaderNotificationRecord[],
 		): void => {
-			const indexed = replace
-				? new Map<string, ReaderNotificationRecord>()
-				: this.#projectionRecords.get(partition) ??
-					new Map<string, ReaderNotificationRecord>();
+			const indexed = this.#projectionRecords.get(partition) ??
+				new Map<string, ReaderNotificationRecord>();
 			for (const record of values) indexed.set(record.identity, record);
 			this.#projectionRecords.set(partition, indexed);
 		};
@@ -2549,9 +2788,9 @@ export class ReaderNotificationController {
 		}
 	}
 
-	async #refreshAfterNativeChange(): Promise<void> {
+	async #refreshAfterNativeChange(force = false): Promise<void> {
 		if (this.scope.destroyed) return;
-		if (this.#hasLocalFilters()) {
+		if (this.#hasLocalFilters() && !force) {
 			this.#nativeRefreshPending = true;
 			this.#renderFromCache();
 			return;
@@ -2561,6 +2800,10 @@ export class ReaderNotificationController {
 		const selectedPage = this.#page;
 		const source = readerNotificationGroup(selectedGroup).source;
 		try {
+			if (selectedPage > 0) {
+				await this.#refreshAllHeadAfterNativeChange();
+				return;
+			}
 			if (
 				selectedGroup === 'all' ||
 				source === 'user-actions' ||
@@ -2635,12 +2878,14 @@ export class ReaderNotificationController {
 				this.#native.username().trim() &&
 				!this.#pages.has(inboxKey)
 			) {
-				const inbox = await this.#requests.load('inbox', 0, {
+				const inboxPages = await this.#loadHeadPagesUntilKnown('inbox', {
 					refresh: true,
 					background: true,
 				});
 				if (!valid()) return;
-				this.#cachePage(inbox);
+				for (const inbox of inboxPages) {
+					this.#cachePage(inbox, this.#now(), true, false);
+				}
 				this.#lastAuthoritativeAt.set(inboxKey, this.#now());
 			}
 			const selectedSource = readerNotificationGroup(selectedGroup).source;
@@ -2711,6 +2956,33 @@ export class ReaderNotificationController {
 				this.#renderFromCache();
 			}
 			if (!needsExpansion) return;
+			void this.#refreshExpandedNativeAssociation(
+				changeEpoch,
+				selectedGroup,
+				selectedPage,
+			);
+		} catch (cause) {
+			if (
+				this.scope.destroyed ||
+				changeEpoch !== this.#nativeChangeEpoch
+			) return;
+			const pollBackoffMs = readerNotificationPollBackoffMs(cause);
+			if (pollBackoffMs > 0) {
+				this.#pollNotBefore = Math.max(
+					this.#pollNotBefore,
+					this.#now() + pollBackoffMs,
+				);
+			}
+			this.#onError(cause);
+		}
+	}
+
+	async #refreshExpandedNativeAssociation(
+		changeEpoch: number,
+		selectedGroup: ReaderNotificationGroupKey,
+		selectedPage: number,
+	): Promise<void> {
+		try {
 			const expandedPage = await this.#requests.load('all', 0, {
 				background: true,
 				expandConsolidated: true,
@@ -2771,7 +3043,8 @@ export class ReaderNotificationController {
 	#schedulePoll(): void {
 		this.#cancelPoll();
 		if (!this.#open || !this.#activityVisible() || this.scope.destroyed) return;
-		const delayMs = this.#pollNotBefore - this.#now();
+		const backoffMs = this.#pollNotBefore - this.#now();
+		const delayMs = backoffMs > 0 ? backoffMs : this.#pollIntervalMs();
 		if (!(delayMs > 0)) return;
 		this.#poll = this.#schedule(() => {
 			this.#poll = null;
@@ -2784,25 +3057,25 @@ export class ReaderNotificationController {
 				this.#schedulePoll();
 				return;
 			}
-			this.#unreadCount = this.#native.unreadCount();
-			void this.#runSelectedRequest(() =>
-				this.#refreshAfterNativeChange()).finally(() => {
-				this.#schedulePoll();
-			});
+			void this.refresh().catch(this.#onError);
 		}, delayMs);
+	}
+
+	#pollIntervalMs(): number {
+		const source = readerNotificationGroup(this.#group).source;
+		return this.#group === 'all' ||
+			source === 'user-actions' ||
+			source === 'boosts-received' ||
+			source === 'reactions-received'
+			? this.#syntheticPollIntervalMs
+			: this.#nativePollIntervalMs;
 	}
 
 	#activityRecoveryDue(key: string): boolean {
 		const observedAt = this.#lastAuthoritativeAt.get(key) ??
 			this.#pages.get(key)?.loadedAt;
 		if (observedAt === undefined) return false;
-		const source = readerNotificationGroup(this.#group).source;
-		const recoveryMs = this.#group === 'all' ||
-			source === 'user-actions' ||
-			source === 'boosts-received' ||
-			source === 'reactions-received'
-			? this.#syntheticPollIntervalMs
-			: this.#nativePollIntervalMs;
+		const recoveryMs = this.#pollIntervalMs();
 		return this.#now() - observedAt >= Math.max(
 			this.#openRevalidateMs,
 			recoveryMs,

@@ -70,6 +70,7 @@ interface TestPost {
 	readonly reply_to_post_number: number | null;
 	readonly cooked: string;
 	readonly created_at?: string;
+	readonly deleted_at?: string | null;
 	readonly can_boost?: boolean;
 	readonly actions_summary?: readonly Readonly<Record<string, unknown>>[];
 }
@@ -196,6 +197,32 @@ assert(
 	topics.post(2)?.actions_summary?.length === 1,
 	'实时稀疏楼层更新必须保留已加载的时间、权限和动作字段',
 );
+topics.ingest({
+	source: 'message-bus',
+	observedAt: 115,
+	posts: [{
+		post_number: 2,
+		reply_to_post_number: 1,
+		cooked: '<p>该帖子已被作者删除</p>',
+		deleted_at: '2026-08-17T00:00:00.000Z',
+	}],
+});
+assert(
+	topics.post(2)?.cooked === 'child-live' &&
+	topics.post(2)?.deleted_at === '2026-08-17T00:00:00.000Z',
+	'删除墓碑必须更新 deleted_at，但不得覆盖已缓存正文',
+);
+topics.ingest({
+	source: 'message-bus',
+	observedAt: 119,
+	posts: [{
+		post_number: 2,
+		reply_to_post_number: 1,
+		cooked: 'child-live',
+		deleted_at: null,
+	}],
+});
+assert(topics.post(2)?.deleted_at === null, '恢复楼层必须清除删除状态');
 topics.ingest({
 	source: 'topic-json',
 	observedAt: 90,

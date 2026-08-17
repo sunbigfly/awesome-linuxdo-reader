@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.2
+// @version      1.5.3
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户、翻译与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.2 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.5.3 - main-lite-features
  * 媒体、互动、设置、用户、翻译与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.2",
+			sourceVersion: "1.5.3",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.2") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.3") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -3715,7 +3715,7 @@ runtime.register("src/bookmark/discourse-bookmark-adapter.js", function(module, 
 	    });
 	    for (let page = 0; page < pageLimit; page += 1) {
 	      if (signal.aborted) throw signal.reason;
-	      const loaded = await this.loadHistoryPage(stream, position, options);
+	      const loaded = await this.loadHistoryPage(stream, position, options), reachedKnownIdentity = loaded.records.some((entry) => options.stopWhenIdentityKnown?.(entry.identity) === !0);
 	      for (const entry of loaded.records)
 	        records.set(entry.identity, entry);
 	      const snapshot = reportProgress(
@@ -3724,7 +3724,7 @@ runtime.register("src/bookmark/discourse-bookmark-adapter.js", function(module, 
 	        loaded.complete,
 	        onProgress
 	      );
-	      if (loaded.complete) return snapshot;
+	      if (loaded.complete || reachedKnownIdentity) return snapshot;
 	      position = loaded.next;
 	    }
 	    if (pageLimit < MAX_COLLECTION_PAGES)
@@ -3732,7 +3732,7 @@ runtime.register("src/bookmark/discourse-bookmark-adapter.js", function(module, 
 	    throw collectionLimitError(stream);
 	  }
 	}
-}, "d3f59b0be1201ca853689a7a71eb7e09963192d9f2c060784342ac60ac27f66d");
+}, "cdb895049b9bce28a7942694cdeb1f11c8d9a47fbac3ed853097a78f188bb6ff");
 
 /* Source: lite/src/bookmark/reader-bookmark-controller.ts */
 runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, exports, require) {
@@ -3742,7 +3742,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	});
 	module.exports = __toCommonJS(reader_bookmark_controller_exports);
 	var import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_reader_collection_hydration = require("../collection/reader-collection-hydration.js"), import_bookmark_action_feature_commands = require("../post/bookmark-action-feature-commands.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_reader_search = require("../search/reader-search.js"), import_reader_bookmark_model = require("./reader-bookmark-model.js"), import_reader_collection_filter_model = require("../collection/reader-collection-filter-model.js");
-	const DEFAULT_PAGE_SIZE = 20, DEFAULT_LIVE_REFRESH_DELAY_MS = 240, DEFAULT_BACKGROUND_RETRY_DELAY_MS = 6e4, DEFAULT_HISTORY_STEP_DELAY_MS = 4e3, DEFAULT_HISTORY_BATCH_PAGES = 8, DEFAULT_HISTORY_BATCH_DELAY_MS = 6e4, HISTORY_PROJECTION_BATCH_PAGES = 4, VISIBLE_HISTORY_LEASE_ROUNDS = 2, CLOUDFLARE_HISTORY_RETRY_DELAY_MS = 5 * 6e4, BACKGROUND_SOURCE_ORDER = Object.freeze([
+	const DEFAULT_PAGE_SIZE = 20, DEFAULT_LIVE_REFRESH_DELAY_MS = 240, DEFAULT_OPEN_REVALIDATE_MS = 30 * 6e4, DEFAULT_POLL_INTERVAL_MS = 30 * 6e4, DEFAULT_BACKGROUND_RETRY_DELAY_MS = 6e4, DEFAULT_HISTORY_STEP_DELAY_MS = 4e3, DEFAULT_HISTORY_BATCH_PAGES = 8, DEFAULT_HISTORY_BATCH_DELAY_MS = 6e4, HISTORY_PROJECTION_BATCH_PAGES = 4, VISIBLE_HISTORY_LEASE_ROUNDS = 2, CLOUDFLARE_HISTORY_RETRY_DELAY_MS = 5 * 6e4, BACKGROUND_SOURCE_ORDER = Object.freeze([
 	  "bookmarks",
 	  "replies",
 	  "boosts",
@@ -3815,6 +3815,8 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  #pageSize;
 	  #liveRefreshDelayMs;
 	  #backgroundWarmDelayMs;
+	  #openRevalidateMs;
+	  #pollIntervalMs;
 	  #historyStepDelayMs;
 	  #historyBatchPages;
 	  #historyBatchDelayMs;
@@ -3822,6 +3824,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  #changeTabOrder;
 	  #schedule;
 	  #cancel;
+	  #now;
 	  #searchForms;
 	  #onError;
 	  #activity;
@@ -3863,6 +3866,9 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  #loadEpoch = 0;
 	  #loadAbort = null;
 	  #liveRefresh = null;
+	  #poll = null;
+	  #headRefreshFlight = null;
+	  #headRefreshPending = /* @__PURE__ */ new Set();
 	  #backgroundWarm = null;
 	  #backgroundWarmAbort = null;
 	  #backgroundWarming = !1;
@@ -3884,6 +3890,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  #sourceProgress = new Map(BACKGROUND_SOURCE_ORDER.map((source) => [source, emptySourceProgress()]));
 	  #historyStreams = new Map(BACKGROUND_STREAM_ORDER.map((stream) => [stream, emptyHistoryStreamState()]));
 	  #historyStreamRecords = new Map(BACKGROUND_STREAM_ORDER.map((stream) => [stream, Object.freeze([])]));
+	  #lastAuthoritativeAt = /* @__PURE__ */ new Map();
 	  constructor(options) {
 	    if (this.#requests = options.requests, this.#projection = options.projection ?? null, this.#native = options.native, this.#actions = options.actions, this.#cache = options.cache, this.#target = options.target, this.#pageSize = pageSize(options.pageSize), this.#liveRefreshDelayMs = Number(
 	      options.liveRefreshDelayMs ?? DEFAULT_LIVE_REFRESH_DELAY_MS
@@ -3891,6 +3898,14 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	      throw new RangeError("收藏实时刷新延迟必须是非负有限数值");
 	    if (this.#backgroundWarmDelayMs = options.backgroundWarmDelayMs === void 0 ? null : Number(options.backgroundWarmDelayMs), this.#backgroundWarmDelayMs !== null && (!Number.isFinite(this.#backgroundWarmDelayMs) || this.#backgroundWarmDelayMs < 0))
 	      throw new RangeError("收藏后台预热延迟必须是非负有限数值");
+	    if (this.#openRevalidateMs = Number(
+	      options.openRevalidateMs ?? DEFAULT_OPEN_REVALIDATE_MS
+	    ), !Number.isFinite(this.#openRevalidateMs) || this.#openRevalidateMs < 0)
+	      throw new RangeError("收藏打开回查间隔必须是非负有限数值");
+	    if (this.#pollIntervalMs = Number(
+	      options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
+	    ), !Number.isFinite(this.#pollIntervalMs) || this.#pollIntervalMs <= 0)
+	      throw new RangeError("收藏兜底轮询间隔必须是正有限数值");
 	    this.#historyStepDelayMs = Number(
 	      options.historyStepDelayMs ?? DEFAULT_HISTORY_STEP_DELAY_MS
 	    ), this.#historyBatchPages = Number(
@@ -3918,7 +3933,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    this.#tabOrder = (0, import_reader_bookmark_model.normalizeReaderBookmarkTabOrder)(
 	      options.tabOrder ?? import_reader_bookmark_model.READER_BOOKMARK_TAB_ORDER
 	    ), this.#tab = this.#tabOrder[0], this.#changeTabOrder = options.changeTabOrder ?? (() => {
-	    }), this.#schedule = options.schedule ?? ((callback, delayMs) => setTimeout(callback, delayMs)), this.#cancel = options.cancel ?? ((handle) => clearTimeout(handle)), this.#searchForms = options.searchForms ?? ((value) => Object.freeze([(0, import_reader_search.normalizeReaderSearchText)(value)])), this.#onError = options.onError ?? (() => {
+	    }), this.#schedule = options.schedule ?? ((callback, delayMs) => setTimeout(callback, delayMs)), this.#cancel = options.cancel ?? ((handle) => clearTimeout(handle)), this.#now = options.now ?? Date.now, this.#searchForms = options.searchForms ?? ((value) => Object.freeze([(0, import_reader_search.normalizeReaderSearchText)(value)])), this.#onError = options.onError ?? (() => {
 	    }), this.#activity = options.activity ?? null, this.#commands = new import_bookmark_action_feature_commands.BookmarkActionFeatureCommands({
 	      state: {
 	        removeBookmarks: (ids) => this.#removeBookmarks(ids),
@@ -3933,7 +3948,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    }, this.scope), this.#activity && this.scope.add(this.#activity.subscribe(() => {
 	      this.#onActivityChanged();
 	    })), this.scope.add(() => {
-	      this.#loadEpoch += 1, this.#cancelLoad(), this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#backgroundWarm = null, this.#cancelBackgroundWarm(), this.#taxonomyFlights.clear(), this.#selection.clear(), this.changes.clear();
+	      this.#loadEpoch += 1, this.#cancelLoad(), this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#poll !== null && this.#cancel(this.#poll), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#poll = null, this.#headRefreshPending.clear(), this.#headRefreshFlight = null, this.#backgroundWarm = null, this.#cancelBackgroundWarm(), this.#taxonomyFlights.clear(), this.#selection.clear(), this.changes.clear();
 	    }), this.#render();
 	  }
 	  get snapshot() {
@@ -3975,10 +3990,12 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  }
 	  async open() {
 	    if (this.scope.destroyed) throw new Error("收藏控制器已销毁");
-	    this.#open || (this.#open = !0, this.#activeReady() || (this.#loading = !0), this.#emit()), this.#activeReady() ? this.#render() : (!(this.#projection && await this.#restoreSource(sourceForTab(this.#tab))) || !this.#activeLoaded()) && await this.#load(!1), this.#scheduleBackgroundWarm(0);
+	    const source = sourceForTab(this.#tab);
+	    let loadedMissingSource = !1;
+	    this.#open || (this.#open = !0, this.#activeReady() || (this.#loading = !0), this.#emit()), this.#activeReady() ? this.#render() : (!(this.#projection && await this.#restoreSource(source)) || !this.#activeLoaded()) && (loadedMissingSource = !0, await this.#load(!1)), loadedMissingSource || await this.#refreshSourceHead(source), this.#scheduleBackgroundWarm(0), this.#schedulePoll();
 	  }
 	  close() {
-	    this.#open && (this.#open = !1, this.#multi = !1, this.#selection.clear(), this.#loadEpoch += 1, this.#cancelLoad(), this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#liveRefresh = null, this.#backgroundCacheActive || this.#suspendBackgroundWarm(), this.#emit());
+	    this.#open && (this.#open = !1, this.#multi = !1, this.#selection.clear(), this.#loadEpoch += 1, this.#cancelLoad(), this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#liveRefresh = null, this.#cancelPoll(), this.#backgroundCacheActive || this.#suspendBackgroundWarm(), this.#emit());
 	  }
 	  async toggle() {
 	    this.#open ? this.close() : await this.open();
@@ -3986,7 +4003,11 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  async selectTab(tab) {
 	    if (!import_reader_bookmark_model.READER_BOOKMARK_TAB_ORDER.includes(tab))
 	      throw new Error("未知收藏分类");
-	    this.#tab !== tab && (this.#tab = tab, this.#page = 0, this.#query = "", this.#categoryFilter = "", this.#tagFilter = "", this.#dateFilter = "", this.#sortDirection = "desc", this.#reactionFilter = "", this.#multi = !1, this.#selection.clear()), this.#activeReady() ? this.#render() : (this.#loading = !0, this.#refreshing = !1, this.#error = null, this.#render(), (!(this.#projection && await this.#restoreSource(sourceForTab(this.#tab))) || !this.#activeLoaded()) && await this.#load(!1));
+	    this.#tab !== tab && (this.#tab = tab, this.#page = 0, this.#query = "", this.#categoryFilter = "", this.#tagFilter = "", this.#dateFilter = "", this.#sortDirection = "desc", this.#reactionFilter = "", this.#multi = !1, this.#selection.clear());
+	    let loadedMissingSource = !1;
+	    this.#activeReady() ? this.#render() : (this.#loading = !0, this.#refreshing = !1, this.#error = null, this.#render(), (!(this.#projection && await this.#restoreSource(sourceForTab(this.#tab))) || !this.#activeLoaded()) && (loadedMissingSource = !0, await this.#load(!1)));
+	    const source = sourceForTab(this.#tab);
+	    !loadedMissingSource && this.#shouldRevalidateSource(source) && await this.#refreshSourceHead(source);
 	  }
 	  async reorderTab(tab, before) {
 	    if (tab === before) return;
@@ -4089,7 +4110,12 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    });
 	  }
 	  async refresh() {
-	    this.scope.destroyed || await this.#load(!0);
+	    if (!this.scope.destroyed)
+	      try {
+	        await this.#refreshSourceHead(sourceForTab(this.#tab));
+	      } finally {
+	        this.#schedulePoll();
+	      }
 	  }
 	  cacheStats() {
 	    const activities = this.#mergedActivityRecords();
@@ -4152,11 +4178,11 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    );
 	    if (this.scope.destroyed || epoch !== this.#backgroundRestoreEpoch) return;
 	    for (const { source, snapshot } of restoredSources)
-	      snapshot && this.#applySourceProgress(source, {
+	      snapshot && (this.#applySourceProgress(source, {
 	        pages: snapshot.records.length > 0 || snapshot.complete ? 1 : 0,
 	        records: fresh ? (0, import_reader_bookmark_model.sortReaderBookmarkRecords)(snapshot.records) : this.#mergeSourceRecords(source, snapshot.records),
 	        complete: snapshot.complete
-	      }, !1);
+	      }, !1), this.#lastAuthoritativeAt.set(source, snapshot.updatedAt));
 	    const restoredStreamNames = /* @__PURE__ */ new Set();
 	    for (const { stream, snapshot } of restoredStreams)
 	      snapshot && (restoredStreamNames.add(stream), this.#historyStreams.set(stream, Object.freeze({
@@ -4177,7 +4203,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	      ) : this.#historyStreamRecords.get(streams[0]) ?? Object.freeze([]);
 	      this.#applySourceProgress(source, {
 	        pages: streams.reduce((total, stream) => total + (this.#historyStreams.get(stream)?.pages ?? 0), 0),
-	        records,
+	        records: this.#mergeSourceRecords(source, records),
 	        complete: streams.every((stream) => this.#historyStreams.get(stream)?.complete === !0)
 	      }, !1);
 	    }
@@ -4218,7 +4244,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  }
 	  clearCache() {
 	    if (!this.scope.destroyed) {
-	      this.#backgroundRestoreEpoch += 1, this.#cancelLoad(), this.#loadEpoch += 1, this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#backgroundWarm = null, this.#cancelBackgroundWarm(), this.#backgroundStatus = "idle", this.#backgroundSource = null, this.#backgroundError = null, this.#backgroundRetryAt = null, this.#backgroundStreamCursor = 0, this.#backgroundNetworkPages = 0;
+	      this.#backgroundRestoreEpoch += 1, this.#cancelLoad(), this.#loadEpoch += 1, this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#backgroundWarm = null, this.#cancelBackgroundWarm(), this.#backgroundStatus = "idle", this.#backgroundSource = null, this.#backgroundError = null, this.#backgroundRetryAt = null, this.#backgroundStreamCursor = 0, this.#backgroundNetworkPages = 0, this.#lastAuthoritativeAt.clear(), this.#headRefreshPending.clear();
 	      for (const source of BACKGROUND_SOURCE_ORDER)
 	        this.#sourceProgress.set(source, emptySourceProgress());
 	      for (const stream of BACKGROUND_STREAM_ORDER)
@@ -4231,17 +4257,19 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  }
 	  async #load(refresh) {
 	    if (this.scope.destroyed) return;
+	    if (refresh) {
+	      await this.#refreshSourceHead(sourceForTab(this.#tab));
+	      return;
+	    }
 	    this.#suspendBackgroundWarm(), this.#cancelLoad();
 	    const loadAbort = new AbortController();
 	    this.#loadAbort = loadAbort;
 	    const epoch = ++this.#loadEpoch, hadData = this.#activeLoaded() || this.#sourceRecords().length > 0;
 	    this.#loading = !hadData, this.#refreshing = hadData, this.#stale = !1, this.#error = null, this.#emit();
 	    const source = sourceForTab(this.#tab);
-	    refresh && this.#markProgressIncomplete(source);
 	    let reportedPages = null, reportedComplete = null;
 	    try {
 	      const loaded = await this.#loadSource(source, {
-	        ...refresh ? { refresh: !0 } : {},
 	        signal: loadAbort.signal,
 	        pageLimit: 1,
 	        onProgress: (progress) => {
@@ -4256,7 +4284,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	        ),
 	        records: loaded,
 	        complete: reportedComplete ?? !0
-	      }), this.#loading = !1, this.#refreshing = !1, this.#stale = !1, this.#error = null, this.#render(), this.#queueTopicTaxonomyEnrichment(source, loaded);
+	      }), this.#loading = !1, this.#refreshing = !1, this.#stale = !1, this.#error = null, this.#lastAuthoritativeAt.set(source, this.#now()), this.#render(), this.#queueTopicTaxonomyEnrichment(source, loaded);
 	    } catch (cause) {
 	      if (this.scope.destroyed || epoch !== this.#loadEpoch) return;
 	      this.#loading = !1, this.#refreshing = !1, this.#stale = hadData || this.#sourceRecords().length > 0, this.#error = cause, this.#onError(cause), this.#render();
@@ -4278,10 +4306,72 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	      pages: stored.records.length > 0 || stored.complete ? 1 : 0,
 	      records: stored.records,
 	      complete: stored.complete
-	    }, !1), this.#loading = !1, this.#refreshing = !1, this.#stale = !1, this.#error = null, this.#render(), !0);
+	    }, !1), this.#lastAuthoritativeAt.set(source, stored.updatedAt), this.#loading = !1, this.#refreshing = !1, this.#stale = !1, this.#error = null, this.#render(), !0);
 	  }
 	  #loadSource(source, options) {
 	    return source === "reactions" ? this.#requests.loadGivenReactions(options) : source === "boosts" ? this.#requests.loadGivenBoosts(options) : source === "replies" ? this.#requests.loadRepliedTopics(options) : this.#requests.loadBookmarks(options);
+	  }
+	  #shouldRevalidateSource(source) {
+	    const observedAt = this.#lastAuthoritativeAt.get(source);
+	    return observedAt === void 0 || this.#now() - observedAt >= this.#openRevalidateMs;
+	  }
+	  async #refreshSourceHead(source) {
+	    for (; this.#headRefreshFlight !== null; ) {
+	      const active = this.#headRefreshFlight;
+	      try {
+	        await active;
+	      } catch {
+	      }
+	      if (this.scope.destroyed) return;
+	    }
+	    const flight = this.#performSourceHeadRefresh(source);
+	    this.#headRefreshFlight = flight;
+	    try {
+	      await flight;
+	    } finally {
+	      this.#headRefreshFlight === flight && (this.#headRefreshFlight = null);
+	    }
+	  }
+	  async #performSourceHeadRefresh(source) {
+	    if (this.scope.destroyed) return;
+	    this.#suspendBackgroundWarm();
+	    const selected = this.#open && sourceForTab(this.#tab) === source, refreshAbort = new AbortController(), epoch = selected ? this.#loadEpoch + 1 : null;
+	    selected && (this.#cancelLoad(), this.#loadAbort = refreshAbort, epoch !== null && (this.#loadEpoch = epoch));
+	    const valid = () => !this.scope.destroyed && !refreshAbort.signal.aborted && (epoch === null || epoch === this.#loadEpoch), knownIdentities = new Set(
+	      this.#sourceRecordsFor(source).map((record) => record.identity)
+	    ), previous = this.#sourceProgress.get(source) ?? emptySourceProgress();
+	    let reportedPages = 0, reportedComplete = !1;
+	    selected && (this.#loading = knownIdentities.size === 0, this.#refreshing = knownIdentities.size > 0, this.#stale = !1, this.#error = null, this.#emit());
+	    try {
+	      const loaded = await this.#loadSource(source, {
+	        refresh: !0,
+	        signal: refreshAbort.signal,
+	        ...selected ? {} : { background: !0 },
+	        ...knownIdentities.size > 0 ? {
+	          stopWhenIdentityKnown: (identity) => knownIdentities.has(identity)
+	        } : { pageLimit: 1 },
+	        onProgress: (progress) => {
+	          valid() && (reportedPages = progress.pages, reportedComplete = progress.complete, this.#applySourceProgress(source, {
+	            pages: Math.max(previous.pages, progress.pages),
+	            records: progress.records,
+	            complete: previous.complete || progress.complete
+	          }), selected && (this.#loading = !1, this.#refreshing = !0), this.#render());
+	        }
+	      });
+	      if (!valid()) return;
+	      this.#applySourceProgress(source, {
+	        pages: Math.max(previous.pages, reportedPages || 1),
+	        records: loaded,
+	        complete: previous.complete || reportedComplete
+	      }), this.#lastAuthoritativeAt.set(source, this.#now()), this.#queueTopicTaxonomyEnrichment(source, loaded), selected && (this.#loading = !1, this.#refreshing = !1, this.#stale = !1, this.#error = null), this.#render();
+	    } catch (cause) {
+	      if (!valid()) return;
+	      selected && (this.#loading = !1, this.#refreshing = !1, this.#stale = knownIdentities.size > 0, this.#error = cause, this.#render()), this.#onError(cause);
+	    } finally {
+	      this.#loadAbort === refreshAbort && (this.#loadAbort = null), this.#scheduleBackgroundWarm(
+	        this.#open && this.#visibleHistoryConcurrency > 1 ? 0 : this.#historyStepDelayMs
+	      );
+	    }
 	  }
 	  async #enrichTopicTaxonomy(records, options = {}) {
 	    const requests = this.#requests;
@@ -4331,7 +4421,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	      pages: progress.complete ? progress.pages : Math.max(previous.pages, progress.pages),
 	      records: records.length,
 	      complete: progress.complete,
-	      checkedAt: Date.now()
+	      checkedAt: this.#now()
 	    })), persist && this.#persistSource(source);
 	  }
 	  #persistSource(source, checkpointMode = "advance") {
@@ -4343,7 +4433,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	      mergeStored: !complete,
 	      totalHint: records.length,
 	      complete,
-	      updatedAt: Date.now(),
+	      updatedAt: this.#now(),
 	      checkpointMode
 	    }).catch(this.#onError);
 	  }
@@ -4357,7 +4447,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	        mergeStored: !0,
 	        totalHint: records.length,
 	        complete: state.complete,
-	        updatedAt: Date.now(),
+	        updatedAt: this.#now(),
 	        sourceNextPage: state.next.page,
 	        sourceOffset: state.next.cursor,
 	        ...stream === "boosts" || stream === "reaction-plugin" ? { sourceOffsetOrder: "descending" } : {},
@@ -4370,17 +4460,6 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    for (const record of current) records.set(record.identity, record);
 	    for (const record of incoming) records.set(record.identity, record);
 	    return (0, import_reader_bookmark_model.sortReaderBookmarkRecords)([...records.values()]);
-	  }
-	  #markProgressIncomplete(source) {
-	    const progress = this.#sourceProgress.get(source) ?? emptySourceProgress();
-	    this.#sourceProgress.set(source, Object.freeze({
-	      ...progress,
-	      pages: 0,
-	      complete: !1
-	    }));
-	    for (const stream of historyStreamsForSource(source))
-	      this.#historyStreams.set(stream, emptyHistoryStreamState(!0)), this.#historyStreamRecords.set(stream, Object.freeze([])), this.#persistHistoryStream(stream, "replace");
-	    this.#persistSource(source, "replace"), this.#backgroundStatus === "complete" && (this.#backgroundStatus = "idle"), this.#backgroundError = null, this.#backgroundRetryAt = null;
 	  }
 	  #cancelLoad() {
 	    this.#loadAbort?.abort(new Error("收藏加载已取消")), this.#loadAbort = null;
@@ -4420,7 +4499,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	      ),
 	      records: sourceRecords,
 	      complete: streams.every((stream) => this.#historyStreams.get(stream)?.complete === !0)
-	    }, !1);
+	    }, !1), this.#lastAuthoritativeAt.set(source, this.#now());
 	    const state = this.#historyStreams.get(page.stream), persisted = state.complete || state.pages % HISTORY_PROJECTION_BATCH_PAGES === 0;
 	    return persisted && await Promise.all([
 	      this.#persistHistoryStream(page.stream),
@@ -4441,15 +4520,25 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  #onActivityChanged() {
 	    if (!this.scope.destroyed) {
 	      if (!this.#activityVisible()) {
-	        this.#backgroundCacheActive && (this.#suspendBackgroundWarm(), this.#emit());
+	        this.#cancelPoll(), this.#backgroundCacheActive && (this.#suspendBackgroundWarm(), this.#emit());
 	        return;
 	      }
-	      if (!this.#backgroundCacheActive) {
-	        this.startBackgroundCache();
-	        return;
-	      }
-	      this.#scheduleBackgroundWarm(0);
+	      this.#backgroundCacheActive ? this.#scheduleBackgroundWarm(0) : this.startBackgroundCache(), this.#schedulePoll();
 	    }
+	  }
+	  #cancelPoll() {
+	    this.#poll !== null && (this.#cancel(this.#poll), this.#poll = null);
+	  }
+	  #schedulePoll() {
+	    this.#cancelPoll(), !(!this.#open || this.#activity === null || !this.#activityVisible() || this.scope.destroyed) && (this.#poll = this.#schedule(() => {
+	      if (this.#poll = null, !(!this.#open || !this.#activityVisible() || this.scope.destroyed)) {
+	        if (this.#loading || this.#refreshing || this.#headRefreshFlight !== null) {
+	          this.#schedulePoll();
+	          return;
+	        }
+	        this.refresh().catch(this.#onError);
+	      }
+	    }, this.#pollIntervalMs));
 	  }
 	  #scheduleBackgroundWarm(delayMs = this.#backgroundWarmDelayMs ?? 0) {
 	    if (!(this.#backgroundWarmDelayMs === null || !this.#backgroundCacheActive || this.scope.destroyed || !this.#activityVisible() || this.#historyProgress().completedTabs === 5)) {
@@ -4613,6 +4702,11 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	      (entry) => entry.tab === this.#tab
 	    );
 	  }
+	  #sourceRecordsFor(source) {
+	    return source === "bookmarks" ? this.#mergedBookmarkRecords() : this.#mergedActivityRecords(
+	      source === "reactions" ? "Reaction" : source === "boosts" ? "Boost" : "Reply"
+	    );
+	  }
 	  #mergedActivityRecords(tab = null) {
 	    const records = /* @__PURE__ */ new Map();
 	    for (const entry of this.#syncedActivityRecords)
@@ -4706,10 +4800,10 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  }
 	  async #onNativeChanged(source) {
 	    if (this.scope.destroyed) return;
-	    const tag = source === "bookmarks" ? "bookmarks" : "reactions-given";
+	    const tags = source === "bookmarks" ? ["bookmarks"] : source === "replies" ? ["replied-topics", "user-action:5"] : source === "boosts" ? ["boosts-given"] : ["reactions-given", "likes-given"];
 	    try {
 	      await this.#cache.invalidate({
-	        tags: [tag]
+	        tags
 	      });
 	    } catch (cause) {
 	      this.#onError(cause);
@@ -4717,9 +4811,19 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    this.#markSourceChanged(source);
 	  }
 	  #markSourceChanged(source) {
-	    this.scope.destroyed || (this.#backgroundRestoreEpoch += 1, this.#suspendBackgroundWarm(), this.#markProgressIncomplete(source), source === "bookmarks" && (this.#bookmarksLoaded = !1, this.#syncedBookmarkRecords = Object.freeze([])), source === "reactions" && (this.#reactionsLoaded = !1), source === "boosts" && (this.#boostsLoaded = !1), source === "replies" && (this.#repliesLoaded = !1), this.#scheduleBackgroundWarm(), !(!this.#open || sourceForTab(this.#tab) !== source) && (this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#liveRefresh = this.#schedule(() => {
-	      this.#liveRefresh = null, this.#load(!0);
-	    }, this.#liveRefreshDelayMs)));
+	    if (this.scope.destroyed || (this.#suspendBackgroundWarm(), this.#headRefreshPending.add(source), this.#liveRefresh !== null)) return;
+	    const immediate = this.#open && sourceForTab(this.#tab) === source && this.#activityVisible();
+	    this.#liveRefresh = this.#schedule(() => {
+	      this.#liveRefresh = null, this.#flushHeadRefreshes();
+	    }, immediate ? 0 : this.#liveRefreshDelayMs);
+	  }
+	  async #flushHeadRefreshes() {
+	    if (this.scope.destroyed) return;
+	    const sources = [...this.#headRefreshPending];
+	    this.#headRefreshPending.clear();
+	    for (const source of sources)
+	      if (await this.#refreshSourceHead(source), this.scope.destroyed) return;
+	    this.#headRefreshPending.size > 0 && this.#markSourceChanged([...this.#headRefreshPending][0]);
 	  }
 	  #render() {
 	    const matches = this.#matchingRecords();
@@ -4743,7 +4847,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    this.#revision += 1, this.#snapshotCache = null, this.changes.emit(this.snapshot);
 	  }
 	}
-}, "b2cae4178d9bb56e608c1f1d3d0e4c1f76b9dd209d331921b191ad391633572b");
+}, "731279bef07716fa979c41cf34173ea570437400be4b26e3e0b927a8e2417236");
 
 /* Source: lite/src/bookmark/reader-bookmark-model.ts */
 runtime.register("src/bookmark/reader-bookmark-model.js", function(module, exports, require) {
@@ -5123,6 +5227,7 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	  #surface;
 	  #progress;
 	  #filterDisclosure;
+	  #refreshHeaderAction;
 	  #scrollWindow;
 	  #recordNodes = new import_reader_collection_floating_window.ReaderCollectionNodeCache();
 	  #tabDrag = null;
@@ -5151,10 +5256,14 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	      requestOpen: () => this.#controller.open(),
 	      requestClose: () => this.#controller.close(),
 	      notify: this.#notify
-	    }), this.#surface.attachHeaderActions({
+	    }), this.#refreshHeaderAction = this.#document.createElement("button"), this.#refreshHeaderAction.type = "button", this.#refreshHeaderAction.className = "ldp-bookmark-refresh", this.#refreshHeaderAction.title = "更新收藏与回应", this.#refreshHeaderAction.setAttribute("aria-label", "更新收藏与回应"), this.#refreshHeaderAction.replaceChildren((0, import_reader_icon.renderReaderIcon)(
+	      this.#document,
+	      "rotate-ccw",
+	      this.#renderIcon
+	    )), this.#elements.defaultActions.prepend(this.#refreshHeaderAction), this.#surface.attachHeaderActions({
 	      root: this.#elements.defaultActions,
-	      buttons: [this.#elements.multiButton],
-	      label: "收藏批量操作"
+	      buttons: [this.#refreshHeaderAction, this.#elements.multiButton],
+	      label: "收藏更新与批量操作"
 	    }), this.#surface.attachHeaderActions({
 	      root: this.#elements.bulkActions,
 	      buttons: [
@@ -5285,6 +5394,14 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	      target && this.#controller.setReactionFilter(
 	        target.dataset.reactionFilter ?? ""
 	      );
+	    }), this.scope.listen(this.#refreshHeaderAction, "click", () => {
+	      this.#refreshHeaderAction.dataset.ldpRequestBusy !== "1" && this.#controller.refresh().then(() => {
+	        const error = this.#controller.snapshot.error;
+	        if (error !== null) throw error;
+	        this.#notify("收藏与回应已更新");
+	      }).catch((cause) => {
+	        this.#onError(cause), this.#notify(`收藏与回应更新失败：${errorMessage(cause)}`);
+	      });
 	    }), this.scope.listen(this.#elements.multiButton, "click", () => this.#controller.enterMulti()), this.scope.listen(this.#elements.multiDone, "click", () => this.#controller.exitMulti()), this.scope.listen(this.#elements.selectScope, "change", () => this.#controller.setSelectionScope(
 	      this.#elements.selectScope.value
 	    )), this.scope.listen(this.#elements.selectToggle, "click", () => {
@@ -5357,7 +5474,7 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	  }
 	  #render(snapshot) {
 	    const elements = this.#elements;
-	    this.#surface.sync(snapshot.open), this.#syncWindowStatus(snapshot);
+	    this.#surface.sync(snapshot.open), this.#syncRefreshHeaderAction(snapshot), this.#syncWindowStatus(snapshot);
 	    const records = this.#scrollWindow.project({
 	      streamKey: JSON.stringify([
 	        snapshot.tab,
@@ -5436,7 +5553,8 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	    const history = snapshot.historyProgress;
 	    this.#surface.frame.meta.textContent = [
 	      snapshot.total > 0 ? `${snapshot.total} 条` : "",
-	      history.records > 0 ? `缓存 ${history.records}` : ""
+	      history.records > 0 ? `缓存 ${history.records}` : "",
+	      snapshot.refreshing ? "正在更新收藏与回应" : ""
 	    ].filter(Boolean).join(" · ");
 	    const complete = history.status === "complete";
 	    if (history.status === "idle" && history.completedTabs === 0 && history.records === 0 && (this.#historyCacheCompleted = !1), complete && (this.#historyCacheCompleted = !0), this.#historyCacheCompleted) {
@@ -5487,6 +5605,14 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	      valueText: `${history.completedTabs}/${history.totalTabs} 来源`,
 	      retryable: failed
 	    });
+	  }
+	  #syncRefreshHeaderAction(snapshot) {
+	    const busy = snapshot.loading || snapshot.refreshing, failed = !busy && snapshot.stale && snapshot.error !== null, label = busy ? "正在更新收藏与回应" : failed ? "收藏与回应更新失败，点击重试" : "更新收藏与回应";
+	    this.#refreshHeaderAction.disabled = busy, this.#refreshHeaderAction.dataset.ldpRequestBusy = busy ? "1" : "0", this.#refreshHeaderAction.dataset.refreshState = busy ? "running" : failed ? "error" : "idle", this.#refreshHeaderAction.classList.toggle("is-refreshing", busy), this.#refreshHeaderAction.setAttribute("aria-busy", String(busy)), this.#refreshHeaderAction.setAttribute("aria-label", label), this.#refreshHeaderAction.title = label, this.#refreshHeaderAction.replaceChildren((0, import_reader_icon.renderReaderIcon)(
+	      this.#document,
+	      busy ? "loader" : failed ? "x" : "rotate-ccw",
+	      this.#renderIcon
+	    ));
 	  }
 	  #renderReactionFilters(snapshot) {
 	    const host = this.#elements.reactionFilters, hidden = snapshot.tab !== "Reaction" || snapshot.reactionFilters.size === 0, signature = JSON.stringify([
@@ -5678,7 +5804,7 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	    button.dataset.ldpRequestBusy = busy ? "1" : "0", button.setAttribute("aria-busy", String(busy)), button.disabled = busy;
 	  }
 	}
-}, "355f78c9251f9b1a2c9775c440e53ad4cd811d55ba96406f283ce29a82f07f66");
+}, "6bc4fe514ac4dac15576cc147d26235b6ea0554e54a8ab8385f78796ac75661e");
 
 /* Source: lite/src/font/reader-font-style-controller.ts */
 runtime.register("src/font/reader-font-style-controller.js", function(module, exports, require) {
@@ -25509,7 +25635,7 @@ runtime.register("src/settings/reader-settings-reset-reminder.js", function(modu
 	  showReaderSettingsResetReminder: () => showReaderSettingsResetReminder
 	});
 	module.exports = __toCommonJS(reader_settings_reset_reminder_exports);
-	const READER_SETTINGS_RESET_REMINDER_STORAGE_KEY = "linuxdo-enhanced-reader:settings-reset-reminder", READER_SETTINGS_RESET_REMINDER_CAMPAIGN = "settings-contract-2026-08-r3";
+	const READER_SETTINGS_RESET_REMINDER_STORAGE_KEY = "linuxdo-enhanced-reader:settings-reset-reminder", READER_SETTINGS_RESET_REMINDER_CAMPAIGN = "settings-contract-2026-08-r4";
 	function nonEmpty(value, name) {
 	  const normalized = String(value).trim();
 	  if (!normalized) throw new Error(`${name} 不能为空`);
@@ -25561,7 +25687,7 @@ runtime.register("src/settings/reader-settings-reset-reminder.js", function(modu
 	    return "failed";
 	  }
 	}
-}, "c4ea7a060fb3e0720e2efdb7716f41949405c3ab1812c0cc64ff1aa48f93f783");
+}, "ac4428088d31faf1e95d7befd2380cd38a5bdce3a882bd3b47b1f65b146f4753");
 
 /* Source: lite/src/settings/reader-settings-view.ts */
 runtime.register("src/settings/reader-settings-view.js", function(module, exports, require) {
@@ -30817,9 +30943,9 @@ runtime.register("src/user/discourse-user-observation-adapter.js", function(modu
 	function readerUserObservationStreamLabel(stream) {
 	  return stream === "activity" ? "主题、回复与赞" : stream === "topics" ? "主题分类与标签" : stream === "assigned" ? "已指定" : stream === "boosts" ? "Boosts" : stream === "reactions" ? "回应" : stream === "solved" ? "已解决" : "投票";
 	}
-	const USER_ACTIVITY_PAGE_SIZE = 60, ASSIGNED_TOPIC_PAGE_SIZE = 30, BOOST_PAGE_SIZE = 20, REACTION_PAGE_SIZE = 20, SOLVED_PAGE_SIZE = 20, VOTED_TOPIC_PAGE_SIZE = 30, HISTORICAL_PAGE_FRESH_MS = 10080 * 6e4, HISTORICAL_PAGE_RETAIN_MS = 4320 * 60 * 6e4;
+	const USER_ACTIVITY_PAGE_SIZE = 60, PUBLIC_USER_ACTION_FILTER = "1,4,5,15,16,17", ASSIGNED_TOPIC_PAGE_SIZE = 30, BOOST_PAGE_SIZE = 20, REACTION_PAGE_SIZE = 20, SOLVED_PAGE_SIZE = 20, VOTED_TOPIC_PAGE_SIZE = 30, HISTORICAL_PAGE_FRESH_MS = 10080 * 6e4, HISTORICAL_PAGE_RETAIN_MS = 4320 * 60 * 6e4;
 	function fixedPageOffset(stream, page) {
-	  return stream === "activity" ? page * USER_ACTIVITY_PAGE_SIZE : stream === "solved" ? page * SOLVED_PAGE_SIZE : stream === "topics" || stream === "assigned" || stream === "votes" ? page : null;
+	  return stream === "topics" || stream === "assigned" || stream === "votes" ? page : null;
 	}
 	function normalizedUsername(value) {
 	  const username = String(value ?? "").trim().replace(/^@/, "").toLocaleLowerCase();
@@ -30912,7 +31038,7 @@ runtime.register("src/user/discourse-user-observation-adapter.js", function(modu
 	      categoryNameFor
 	    ) : stream === "boosts" ? (0, import_reader_user_observation_model.normalizeReaderUserBoost)(value, username, categoryNameFor) : stream === "reactions" ? (0, import_reader_user_observation_model.normalizeReaderUserReaction)(value, username, categoryNameFor) : (0, import_reader_user_observation_model.normalizeReaderUserSolvedPost)(value, categoryNameFor);
 	    return activity ? [activity] : [];
-	  }), beforeCursor = stream === "boosts" || stream === "reactions" ? nextBeforeCursor(values, offset) : 0, pageSize = stream === "activity" ? USER_ACTIVITY_PAGE_SIZE : stream === "assigned" ? ASSIGNED_TOPIC_PAGE_SIZE : stream === "boosts" ? BOOST_PAGE_SIZE : stream === "reactions" ? REACTION_PAGE_SIZE : stream === "solved" ? SOLVED_PAGE_SIZE : VOTED_TOPIC_PAGE_SIZE, complete = stream === "topics" || stream === "assigned" || stream === "votes" ? !String(topicPage(payload).more_topics_url ?? "").trim() : stream === "boosts" || stream === "reactions" ? values.length < pageSize || beforeCursor === 0 : values.length < pageSize, identity = stream === "activity" ? activityPageIdentity(payload, username) : null;
+	  }), beforeCursor = stream === "boosts" || stream === "reactions" ? nextBeforeCursor(values, offset) : 0, pageSize = stream === "activity" ? USER_ACTIVITY_PAGE_SIZE : stream === "assigned" ? ASSIGNED_TOPIC_PAGE_SIZE : stream === "boosts" ? BOOST_PAGE_SIZE : stream === "reactions" ? REACTION_PAGE_SIZE : stream === "solved" ? SOLVED_PAGE_SIZE : VOTED_TOPIC_PAGE_SIZE, complete = stream === "topics" || stream === "assigned" || stream === "votes" ? !String(topicPage(payload).more_topics_url ?? "").trim() : stream === "boosts" || stream === "reactions" ? values.length < pageSize || beforeCursor === 0 : values.length === 0, identity = stream === "activity" ? activityPageIdentity(payload, username) : null;
 	  return Object.freeze({
 	    stream,
 	    page,
@@ -30930,7 +31056,8 @@ runtime.register("src/user/discourse-user-observation-adapter.js", function(modu
 	      path: "/user_actions.json?" + new URLSearchParams({
 	        username,
 	        offset: String(offset),
-	        limit: String(USER_ACTIVITY_PAGE_SIZE)
+	        limit: String(USER_ACTIVITY_PAGE_SIZE),
+	        filter: PUBLIC_USER_ACTION_FILTER
 	      }),
 	      collection: "user-observation-activity",
 	      variant: `v1:${username}`,
@@ -30955,7 +31082,8 @@ runtime.register("src/user/discourse-user-observation-adapter.js", function(modu
 	    return offset > 0 && query.set("before_boost_id", String(offset)), Object.freeze({
 	      path: `/discourse-boosts/users/${encodedUsername}/boosts-given.json` + (query.size ? `?${query}` : ""),
 	      collection: "user-observation-boosts",
-	      variant: `v1:${username}`,
+	      // v1 可能持久化过错误空页；升级 key 后强制重新核验 Boost 首屏。
+	      variant: `v2:${username}`,
 	      timeoutMs: 2e4
 	    });
 	  }
@@ -31137,7 +31265,7 @@ runtime.register("src/user/discourse-user-observation-adapter.js", function(modu
 	    }));
 	  }
 	}
-}, "697bd0c2b93490fa7a1a9b3a93c38470b54248ae2e6f4a36894e82d7e92e0c71");
+}, "279cb05f20edeacee6306771f6c854cc0c500963fe2f1c91ab28aa1938f4787c");
 
 /* Source: lite/src/user/reader-connect-trust-adapter.ts */
 runtime.register("src/user/reader-connect-trust-adapter.js", function(module, exports, require) {
@@ -36433,10 +36561,10 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	});
 	module.exports = __toCommonJS(reader_user_observation_session_exports);
 	var import_reader_collection_hydration = require("../collection/reader-collection-hydration.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_reader_account_scoped_storage = require("../state/reader-account-scoped-storage.js"), import_reader_user_observation_model = require("./reader-user-observation-model.js"), import_discourse_user_observation_adapter = require("./discourse-user-observation-adapter.js");
-	const READER_USER_OBSERVATION_STORAGE_KEY = "linuxdo-enhanced-reader:user-observation:v1", EMPTY_SELF_OBSERVATION = Object.freeze({
-	  records: Object.freeze([]),
-	  streams: Object.freeze([])
-	}), MAX_OBSERVED_USERS = 32, RATE_LIMIT_RESUME_LIMIT = 8, CHALLENGE_RESUME_LIMIT = 3, RECORD_PROJECTION_BATCH_PAGES = 12, CACHE_REPLAY_BATCH_PAGES = 12, SESSION_RECORD_WINDOW = 120, TOPIC_METADATA_BATCH_SIZE = 100;
+	const READER_USER_OBSERVATION_STORAGE_KEY = "linuxdo-enhanced-reader:user-observation:v1", MAX_OBSERVED_USERS = 32, RATE_LIMIT_RESUME_LIMIT = 8, CHALLENGE_RESUME_LIMIT = 3, RECORD_PROJECTION_BATCH_PAGES = 12, CACHE_REPLAY_BATCH_PAGES = 12, SESSION_RECORD_WINDOW = 120, TOPIC_METADATA_BATCH_SIZE = 100, DEFAULT_STALL_TIMEOUT_MS = 6e4;
+	function requiresVerifiedTerminal(stream) {
+	  return !["topics", "assigned", "votes"].includes(stream);
+	}
 	function normalizedUsername(value) {
 	  const username = String(value ?? "").trim().replace(/^@/, "").toLocaleLowerCase();
 	  if (!username) throw new Error("观察用户 username 不能为空");
@@ -36463,11 +36591,12 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	    for (const stream of import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS) {
 	      const value2 = checkpoints[stream];
 	      if (!value2 || typeof value2 != "object" || Array.isArray(value2)) continue;
-	      const checkpoint = value2, page = nonNegativeInteger(checkpoint.page), offset = nonNegativeInteger(checkpoint.offset);
+	      const checkpoint = value2, page = nonNegativeInteger(checkpoint.page), offset = nonNegativeInteger(checkpoint.offset), terminalVerified = checkpoint.terminalVerified === !0;
 	      streamCheckpoints[stream] = Object.freeze({
 	        page,
 	        offset,
-	        complete: checkpoint.complete === !0
+	        complete: checkpoint.complete === !0 && (!requiresVerifiedTerminal(stream) || terminalVerified),
+	        ...terminalVerified ? { terminalVerified: !0 } : {}
 	      });
 	    }
 	  }
@@ -36547,6 +36676,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	  #notify;
 	  #onError;
 	  #now;
+	  #stallTimeoutMs;
 	  #historyCoordination;
 	  #historyCoordinationKey;
 	  #manifestPrefix;
@@ -36556,8 +36686,6 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	  #pageMetadataWrite = Promise.resolve();
 	  #jobs = [];
 	  #selfUsername = "";
-	  #selfObservation = EMPTY_SELF_OBSERVATION;
-	  #retrySelfObservation = null;
 	  #draining = !1;
 	  #activeUsername = "";
 	  #topicMetadataRevision = 0;
@@ -36569,7 +36697,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	      options.authScope
 	    ), this.#requestResume = options.requestResume ?? (() => null), this.#notify = options.notify ?? (() => {
 	    }), this.#onError = options.onError ?? (() => {
-	    }), this.#now = options.now ?? Date.now, this.#historyCoordination = options.historyCoordination, this.#historyCoordinationKey = String(
+	    }), this.#now = options.now ?? Date.now, this.#stallTimeoutMs = Number.isFinite(options.stallTimeoutMs) && Number(options.stallTimeoutMs) > 0 ? Math.floor(Number(options.stallTimeoutMs)) : DEFAULT_STALL_TIMEOUT_MS, this.#historyCoordination = options.historyCoordination, this.#historyCoordinationKey = String(
 	      options.historyCoordinationKey ?? `reader-user-observation-history:v1:${options.authScope}`
 	    ).trim(), this.#manifestPrefix = `reader-user-observation:manifest:v1:${encodeURIComponent(String(options.authScope).trim())}:`, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#restore(), this.scope.add(() => {
 	      for (const entry of this.#entries.values())
@@ -36681,22 +36809,12 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	    return entry ? this.#entrySnapshot(entry) : null;
 	  }
 	  /**
-	   * 当前账号复用普通观察名单与采集队列；私有来源只绑定到这一条 identity。
-	   * application 启动只注册 identity 并恢复本地投影，公开历史必须等待用户显式刷新，
-	   * 避免每个标签页刷新时同时重放七类历史和 Topic 元数据请求。
+	   * 当前账号复用与其他用户完全相同的七类公开观察；这里只注册 identity，公开历史
+	   * 必须等待用户显式打开或刷新，避免页面启动时重放历史和 Topic 元数据请求。
 	   */
-	  observeSelf(profile, retryPrivate) {
+	  observeSelf(profile) {
 	    const identity = identityFromProfile(profile);
-	    return this.#selfUsername = identity.username, this.#retrySelfObservation = retryPrivate ?? null, this.observe(identity, { allowNetwork: !1 }), this.#emit(), this.entry(identity.username);
-	  }
-	  updateSelfObservation(snapshot) {
-	    !this.#selfUsername || this.scope.destroyed || (this.#selfObservation = Object.freeze({
-	      records: (0, import_reader_user_observation_model.sortReaderUserActivities)(snapshot.records.filter((record) => !!record.selfStream)),
-	      streams: Object.freeze(snapshot.streams.map((stream) => Object.freeze({
-	        ...stream,
-	        progress: Math.max(0, Math.min(1, Number(stream.progress) || 0))
-	      })))
-	    }), this.#emit());
+	    return this.#selfUsername = identity.username, this.observe(identity, { allowNetwork: !1 }), this.#emit(), this.entry(identity.username);
 	  }
 	  projectTopicMetadata(records) {
 	    let changed = !1;
@@ -36765,10 +36883,11 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	        return;
 	      }
 	      if (identityIndex && this.#entries.get(entry.username) === entry) {
+	        const sourceIncomplete = Object.values(entry.streamCheckpoints).some((checkpoint) => checkpoint.complete !== !0), complete = identityIndex.complete && !sourceIncomplete;
 	        entry.knownIdentities = new Set(identityIndex.identities), entry.lastRecordCount = Math.max(
 	          entry.lastRecordCount,
 	          identityIndex.total
-	        ), entry.storedRecordCount = identityIndex.total, entry.phase = identityIndex.complete ? "ready" : "idle", entry.detail = identityIndex.complete ? `已索引 ${identityIndex.total} 条本地分页缓存` : `已恢复 ${identityIndex.total} 条断点索引`, entry.error = "", this.#emit(), !identityIndex.complete && allowNetwork && this.#enqueue(entry.username, !1, !1, !1, !0);
+	        ), entry.storedRecordCount = identityIndex.total, entry.phase = complete ? "ready" : "idle", entry.detail = complete ? `已索引 ${identityIndex.total} 条本地分页缓存` : sourceIncomplete ? `已恢复 ${identityIndex.total} 条记录；旧版终点待续传确认` : `已恢复 ${identityIndex.total} 条断点索引`, entry.error = "", this.#emit(), !complete && allowNetwork && this.#enqueue(entry.username, !1, !1, !1, !0);
 	        return;
 	      }
 	    } catch (cause) {
@@ -36804,21 +36923,26 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	  }
 	  refresh(usernameValue) {
 	    const username = normalizedUsername(usernameValue), entry = this.#entries.get(username);
-	    !entry || this.scope.destroyed || (username === this.#selfUsername && this.#retrySelfObservation?.(), ![
+	    !entry || this.scope.destroyed || [
 	      "queued",
 	      "loading",
 	      "waiting-rate-limit",
 	      "waiting-challenge"
-	    ].includes(entry.phase) && (entry.epoch += 1, entry.controller?.abort(new DOMException("增量更新用户历史", "AbortError")), entry.controller = null, entry.detail = entry.records.length ? "准备增量更新最近活动" : "准备采集公开活动", entry.error = "", entry.recoveryKind = null, this.#jobs.splice(0, this.#jobs.length, ...this.#jobs.filter(
+	    ].includes(entry.phase) || (entry.epoch += 1, entry.controller?.abort(new DOMException("增量更新用户历史", "AbortError")), entry.controller = null, entry.detail = entry.records.length ? "准备增量更新最近活动" : "准备采集公开活动", entry.error = "", entry.recoveryKind = null, this.#jobs.splice(0, this.#jobs.length, ...this.#jobs.filter(
 	      (job) => job.username !== username
-	    )), this.#enqueue(username, !0, !0)));
+	    )), this.#enqueue(username, !0, !0));
 	  }
-	  /** 失败后只从已提交的来源分页断点续采；不会切换成刷新或重放旧网络页。 */
+	  /** 中止活动请求或恢复失败任务，并只从已提交的来源分页断点续采。 */
 	  retry(usernameValue) {
 	    const username = normalizedUsername(usernameValue), entry = this.#entries.get(username);
-	    !entry || this.scope.destroyed || (username === this.#selfUsername && this.#retrySelfObservation?.(), !(isActivePhase(entry.phase) || entry.phase !== "error" && entry.phase !== "idle") && (entry.epoch += 1, entry.controller?.abort(new DOMException("续传用户历史", "AbortError")), entry.controller = null, entry.detail = entry.pages > 0 ? `准备从第 ${entry.pages + 1} 个缓存断点续传` : "准备从缓存断点恢复", entry.error = "", entry.recoveryKind = null, this.#jobs.splice(0, this.#jobs.length, ...this.#jobs.filter(
+	    if (!entry || this.scope.destroyed) return;
+	    const restartActive = isActivePhase(entry.phase);
+	    !restartActive && entry.phase !== "error" && entry.phase !== "idle" || (entry.epoch += 1, entry.controller?.abort(new DOMException(
+	      restartActive ? "用户手动中止并续传用户历史" : "续传用户历史",
+	      "AbortError"
+	    )), entry.controller = null, entry.detail = entry.pages > 0 ? `已保存 ${entry.pages} 页断点，准备续传` : "准备从缓存断点恢复", entry.error = "", entry.recoveryKind = null, this.#jobs.splice(0, this.#jobs.length, ...this.#jobs.filter(
 	      (job) => job.username !== username
-	    )), this.#enqueue(username, !1, !0, !0, !0)));
+	    )), this.#enqueue(username, !1, !0, !0, !0));
 	  }
 	  /** 共享请求闸门恢复后，只重排对应失败类型，并沿已提交来源断点续传。 */
 	  resumeRecoverable(kind) {
@@ -36854,7 +36978,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	      });
 	      return;
 	    }
-	    this.#activeUsername === username && entry.controller !== null && !entry.controller.signal.aborted || (entry.phase = "queued", entry.detail = refresh && entry.records.length ? "等待后台增量更新" : "等待后台串行采集", entry.error = "", this.#jobs.push(Object.freeze({
+	    this.#activeUsername === username && entry.controller !== null && !entry.controller.signal.aborted || (entry.phase = "queued", entry.detail = continueFromCheckpoint ? "断点重试已接收 · 等待当前请求释放后继续" : refresh && entry.records.length ? "等待后台增量更新" : "等待后台串行采集", entry.error = "", this.#jobs.push(Object.freeze({
 	      username,
 	      refresh,
 	      notify,
@@ -36868,7 +36992,19 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	      try {
 	        for (; !this.scope.destroyed && this.#jobs.length; ) {
 	          const job = this.#jobs.shift();
-	          this.#entries.has(job.username) && (this.#activeUsername = job.username, this.#emit(), await this.#run(job), this.#activeUsername === job.username && (this.#activeUsername = "", this.#emit()));
+	          if (this.#entries.has(job.username)) {
+	            this.#activeUsername = job.username, this.#emit();
+	            try {
+	              await this.#run(job);
+	            } catch (cause) {
+	              const replacementQueued = this.#jobs.some(
+	                (queued) => queued.username === job.username
+	              ), entry = this.#entries.get(job.username);
+	              entry && !replacementQueued && isActivePhase(entry.phase) && (entry.phase = "error", entry.error = errorMessage(cause), entry.detail = "采集队列交接失败，可从断点重试", entry.controller = null, this.#persist(), this.#emit()), cause instanceof DOMException && cause.name === "AbortError" || this.#onError(cause);
+	            } finally {
+	              this.#activeUsername === job.username && (this.#activeUsername = "", this.#emit());
+	            }
+	          }
 	        }
 	      } finally {
 	        this.#activeUsername = "", this.#draining = !1;
@@ -36943,18 +37079,33 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	      } catch (cause) {
 	        this.#onError(cause);
 	      }
-	    }, enrichTopicMetadata = async () => {
+	    };
+	    let stallTimer = null, rejectStall;
+	    const stalled = new Promise((_resolve, reject) => {
+	      rejectStall = reject;
+	    }), disarmStallWatch = () => {
+	      stallTimer !== null && (clearTimeout(stallTimer), stallTimer = null);
+	    }, armStallWatch = () => {
+	      disarmStallWatch(), !controller.signal.aborted && (stallTimer = setTimeout(() => {
+	        if (stallTimer = null, this.scope.destroyed || this.#entries.get(job.username) !== entry || entry.epoch !== epoch || controller.signal.aborted || !["queued", "loading"].includes(entry.phase)) return;
+	        const reason = new DOMException(
+	          "用户观察采集长时间无进展",
+	          "AbortError"
+	        ), seconds = Math.max(1, Math.ceil(this.#stallTimeoutMs / 1e3)), progressDetail = entry.detail.trim();
+	        entry.phase = "error", entry.error = `连续 ${seconds} 秒没有新进展，已暂停采集；可从当前断点重试`, entry.detail = progressDetail ? `${progressDetail} · 已暂停` : "采集长时间无进展，已暂停", entry.recoveryKind = null, entry.controller = null, this.#persist(), this.#emit(), this.#notify(`@${job.username} 采集长时间无进展，已暂停，可从断点重试`), controller.abort(reason), rejectStall(reason), persistNormalizedCheckpoint();
+	      }, this.#stallTimeoutMs));
+	    }, awaitWithStall = (operation) => Promise.race([operation, stalled]), enrichTopicMetadata = async () => {
 	      const loadTopicMetadata = this.#requests.loadTopicMetadata;
 	      if (!loadTopicMetadata) return;
 	      const candidates = /* @__PURE__ */ new Set();
 	      for (const record of records.values())
 	        record.topicId !== null && record.topicMetadataComplete !== !0 && candidates.add(record.topicId);
 	      try {
-	        for (const topicId of await this.#pages?.topicMetadataCandidates(
-	          entry.username
-	        ) ?? []) candidates.add(topicId);
+	        for (const topicId of await awaitWithStall(Promise.resolve(
+	          this.#pages?.topicMetadataCandidates(entry.username) ?? Object.freeze([])
+	        ))) candidates.add(topicId);
 	      } catch (cause) {
-	        this.#onError(cause);
+	        controller.signal.throwIfAborted(), this.#onError(cause);
 	      }
 	      const topicIds = [...candidates].filter((topicId) => this.#topicMetadata.get(topicId)?.complete !== !0).sort((left, right) => left - right);
 	      if (!topicIds.length) return;
@@ -36972,12 +37123,15 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	        for (; ; ) {
 	          controller.signal.throwIfAborted();
 	          try {
-	            metadata = await loadTopicMetadata.call(this.#requests, {
-	              topicIds: topicIdBatch,
-	              signal: controller.signal,
-	              background: !0,
-	              refresh: job.refresh
-	            });
+	            metadata = await awaitWithStall(loadTopicMetadata.call(
+	              this.#requests,
+	              {
+	                topicIds: topicIdBatch,
+	                signal: controller.signal,
+	                background: !0,
+	                refresh: job.refresh
+	              }
+	            ));
 	            break;
 	          } catch (cause) {
 	            if (controller.signal.throwIfAborted(), schedulerYielded(cause)) {
@@ -36988,15 +37142,15 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	            if (!resume) throw cause;
 	            const limit = resume.kind === "rate-limit" ? RATE_LIMIT_RESUME_LIMIT : CHALLENGE_RESUME_LIMIT;
 	            if ((resume.kind === "rate-limit" ? ++rateLimitResumes : ++challengeResumes) > limit) throw cause;
-	            entry.phase = resume.kind === "rate-limit" ? "waiting-rate-limit" : "waiting-challenge", entry.detail = resume.kind === "rate-limit" ? `主题元数据限流等待 · 第 ${batchIndex + 1} 批 · ${Math.max(0, Math.ceil(resume.waitMs / 1e3))} 秒后自动续传` : `主题元数据等待验证 · 第 ${batchIndex + 1} 批 · 通过后自动续传`, this.#emit(), await Promise.all([
+	            entry.phase = resume.kind === "rate-limit" ? "waiting-rate-limit" : "waiting-challenge", entry.detail = resume.kind === "rate-limit" ? `主题元数据限流等待 · 第 ${batchIndex + 1} 批 · ${Math.max(0, Math.ceil(resume.waitMs / 1e3))} 秒后自动续传` : `主题元数据等待验证 · 第 ${batchIndex + 1} 批 · 通过后自动续传`, this.#emit(), disarmStallWatch(), await Promise.all([
 	              resume.wait(controller.signal),
 	              persistNormalizedCheckpoint()
-	            ]), controller.signal.throwIfAborted(), entry.phase = "loading", entry.detail = `主题元数据更新中 · ${batchIndex}/${batches.length} 批`, this.#emit();
+	            ]), controller.signal.throwIfAborted(), entry.phase = "loading", entry.detail = `主题元数据更新中 · ${batchIndex}/${batches.length} 批`, this.#emit(), armStallWatch();
 	          }
 	        }
 	        for (const value of metadata)
 	          this.#mergeTopicMetadata(records, identitiesByTopic, value) && (resolved += 1);
-	        projectRecords(!0), entry.phase = "loading", entry.detail = `主题元数据更新中 · ${batchIndex + 1}/${batches.length} 批 · 已补齐 ${resolved}/${topicIds.length} 个主题`, this.#emit();
+	        projectRecords(!0), entry.phase = "loading", entry.detail = `主题元数据更新中 · ${batchIndex + 1}/${batches.length} 批 · 已补齐 ${resolved}/${topicIds.length} 个主题`, this.#emit(), armStallWatch();
 	      }
 	    }, finish = async (restoredFromCache = !1) => {
 	      const completedRecords = (0, import_reader_user_observation_model.sortReaderUserActivities)([...records.values()]);
@@ -37035,30 +37189,31 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	        incremental ? `@${job.username} 最近活动更新完成，新增 ${added} 条` : `@${job.username} 历史采集完成，共 ${entry.lastRecordCount} 条`
 	      );
 	    };
+	    armStallWatch();
 	    try {
 	      if (startingStreamIndex >= import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS.length) {
-	        await enrichTopicMetadata(), await finish(!0);
+	        await enrichTopicMetadata(), controller.signal.throwIfAborted(), disarmStallWatch(), await finish(!0);
 	        return;
 	      }
 	      for (let streamIndex = startingStreamIndex; streamIndex < import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS.length; streamIndex += 1) {
 	        const stream = import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS[streamIndex], streamLabel = (0, import_discourse_user_observation_adapter.readerUserObservationStreamLabel)(stream), knownStreamIdentities = knownIdentities.size ? knownIdentities : new Set(entry.records.filter((record) => recordBelongsToStream(record, stream)).map((record) => record.identity)), checkpoint = job.continueFromCheckpoint ? entry.streamCheckpoints[stream] : void 0;
 	        let page = checkpoint?.page ?? 0, offset = checkpoint?.offset ?? 0;
 	        const seenOffsets = /* @__PURE__ */ new Set([offset]);
-	        let streamComplete = !1;
+	        let streamComplete = checkpoint?.complete === !0, terminalVerified = checkpoint?.terminalVerified === !0;
 	        if (entry.phase = "loading", entry.currentStream = stream, entry.completedStreams = streamIndex, entry.detail = `${incremental ? "增量更新" : "后台采集中"} · ${streamLabel} · ${streamIndex + 1}/${import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS.length}`, this.#emit(), job.restoreCache && (!job.continueFromCheckpoint || replayCheckpointCache) && this.#requests.loadCachedPage) {
 	          const checkpointPage = page;
 	          let cachePage = job.continueFromCheckpoint ? 0 : page, cacheOffset = job.continueFromCheckpoint ? 0 : offset, cacheStopped = !1;
 	          for (; !cacheStopped && (!job.continueFromCheckpoint || cachePage < checkpointPage); ) {
 	            controller.signal.throwIfAborted();
-	            const pageCount = job.continueFromCheckpoint ? Math.min(CACHE_REPLAY_BATCH_PAGES, checkpointPage - cachePage) : CACHE_REPLAY_BATCH_PAGES, batch = await this.#requests.loadCachedPages?.({
+	            const pageCount = job.continueFromCheckpoint ? Math.min(CACHE_REPLAY_BATCH_PAGES, checkpointPage - cachePage) : CACHE_REPLAY_BATCH_PAGES, batch = (this.#requests.loadCachedPages ? await awaitWithStall(this.#requests.loadCachedPages({
 	              username: job.username,
 	              stream,
 	              startPage: cachePage,
 	              pageCount,
 	              signal: controller.signal,
 	              background: !0
-	            }) ?? Object.freeze([
-	              await this.#requests.loadCachedPage({
+	            })) : null) ?? Object.freeze([
+	              await awaitWithStall(this.#requests.loadCachedPage({
 	                username: job.username,
 	                stream,
 	                page: cachePage,
@@ -37066,7 +37221,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	                signal: controller.signal,
 	                background: !0,
 	                refresh: !1
-	              })
+	              }))
 	            ]);
 	            if (!batch.length) break;
 	            for (const cached of batch) {
@@ -37074,12 +37229,17 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	                cacheStopped = !0;
 	                break;
 	              }
-	              if (mergePageIdentity(entry, cached.identity) && this.#persist(), this.#mergeRecords(records, cached.records, identitiesByTopic), cachePage += 1, totalPages += 1, cacheOffset = cached.nextOffset, job.continueFromCheckpoint || (page = cachePage, offset = cacheOffset), entry.pages = Math.max(previousPages, totalPages), job.continueFromCheckpoint || (entry.streamCheckpoints[stream] = Object.freeze({
+	              mergePageIdentity(entry, cached.identity) && this.#persist();
+	              const cachedComplete = cached.complete;
+	              this.#mergeRecords(records, cached.records, identitiesByTopic), cachePage += 1, totalPages += 1, cacheOffset = cached.nextOffset, job.continueFromCheckpoint || (page = cachePage, offset = cacheOffset), entry.pages = Math.max(previousPages, totalPages), job.continueFromCheckpoint || (terminalVerified = requiresVerifiedTerminal(stream) && cachedComplete, entry.streamCheckpoints[stream] = Object.freeze({
 	                page,
 	                offset,
-	                complete: cached.complete
-	              })), projectRecords(), entry.detail = `缓存恢复 · ${streamLabel} · ${streamIndex + 1}/${import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS.length} · ${records.size} 条 · ${entry.pages} 页`, (cached.complete || totalPages % RECORD_PROJECTION_BATCH_PAGES === 0) && checkpointChanged(), cached.complete) {
-	                streamComplete = !0, page = cachePage, offset = cacheOffset, cacheStopped = !0;
+	                complete: cachedComplete,
+	                ...terminalVerified ? { terminalVerified: !0 } : {}
+	              })), projectRecords();
+	              const replayProgress = job.continueFromCheckpoint ? `断点回放 ${cachePage}/${checkpointPage} 页` : `已回放 ${cachePage} 页`;
+	              if (entry.detail = `缓存恢复 · ${streamLabel} · ${streamIndex + 1}/${import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS.length} · ${replayProgress} · ${records.size} 条`, (cachedComplete || totalPages % RECORD_PROJECTION_BATCH_PAGES === 0) && checkpointChanged(), armStallWatch(), cachedComplete) {
+	                streamComplete = !0, terminalVerified = requiresVerifiedTerminal(stream), page = cachePage, offset = cacheOffset, cacheStopped = !0;
 	                break;
 	              }
 	            }
@@ -37094,7 +37254,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	          controller.signal.throwIfAborted();
 	          let loaded;
 	          try {
-	            loaded = await this.#requests.loadPage({
+	            loaded = await awaitWithStall(this.#requests.loadPage({
 	              username: job.username,
 	              stream,
 	              page,
@@ -37102,7 +37262,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	              signal: controller.signal,
 	              background: !0,
 	              refresh: job.refresh
-	            }), networkPages += 1;
+	            })), networkPages += 1;
 	          } catch (cause) {
 	            if (controller.signal.throwIfAborted(), schedulerYielded(cause)) {
 	              entry.phase = "queued", entry.detail = `${streamLabel} 已为前台请求让路 · 第 ${page + 1} 页等待自动续传`, this.#emit();
@@ -37111,42 +37271,47 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	            const resume = this.#requestResume(cause);
 	            if (!resume) {
 	              if (stream !== "activity" && !cloudflareMitigated(cause) && [403, 404].includes(statusOf(cause) ?? 0)) {
-	                entry.phase = "loading", entry.detail = `${streamLabel} 当前不可用，继续下一类`, this.#emit(), streamComplete = !0;
+	                entry.phase = "loading", entry.detail = `${streamLabel} 当前不可用，继续下一类`, this.#emit(), streamComplete = !0, terminalVerified = requiresVerifiedTerminal(stream);
 	                break;
 	              }
 	              throw cause;
 	            }
 	            const limit = resume.kind === "rate-limit" ? RATE_LIMIT_RESUME_LIMIT : CHALLENGE_RESUME_LIMIT;
 	            if ((resume.kind === "rate-limit" ? ++rateLimitResumes : ++challengeResumes) > limit) throw cause;
-	            entry.phase = resume.kind === "rate-limit" ? "waiting-rate-limit" : "waiting-challenge", entry.detail = resume.kind === "rate-limit" ? `${streamLabel} 限流等待 · 第 ${page + 1} 页 · ${Math.max(0, Math.ceil(resume.waitMs / 1e3))} 秒后自动续传` : `${streamLabel} 等待验证 · 第 ${page + 1} 页 · 通过后自动续传`, this.#emit(), await Promise.all([
+	            entry.phase = resume.kind === "rate-limit" ? "waiting-rate-limit" : "waiting-challenge", entry.detail = resume.kind === "rate-limit" ? `${streamLabel} 限流等待 · 第 ${page + 1} 页 · ${Math.max(0, Math.ceil(resume.waitMs / 1e3))} 秒后自动续传` : `${streamLabel} 等待验证 · 第 ${page + 1} 页 · 通过后自动续传`, this.#emit(), disarmStallWatch(), await Promise.all([
 	              resume.wait(controller.signal),
 	              persistNormalizedCheckpoint()
-	            ]), controller.signal.throwIfAborted(), entry.phase = "loading", entry.detail = `恢复中 · ${streamLabel} 第 ${page + 1} 页`, this.#emit();
+	            ]), controller.signal.throwIfAborted(), entry.phase = "loading", entry.detail = `恢复中 · ${streamLabel} 第 ${page + 1} 页`, this.#emit(), armStallWatch();
 	            continue;
 	          }
 	          if (this.#entries.get(job.username) !== entry || entry.epoch !== epoch) return;
 	          mergePageIdentity(entry, loaded.identity) && this.#persist();
 	          const reachedKnownRecord = incremental && loaded.records.some(
 	            (activity) => knownStreamIdentities.has(activity.identity)
-	          );
-	          if (!loaded.complete && !reachedKnownRecord && (!Number.isSafeInteger(loaded.nextOffset) || loaded.nextOffset < 0 || seenOffsets.has(loaded.nextOffset)))
+	          ), verifiedPageEnd = loaded.complete;
+	          if (!verifiedPageEnd && !reachedKnownRecord && (!Number.isSafeInteger(loaded.nextOffset) || loaded.nextOffset < 0 || seenOffsets.has(loaded.nextOffset)))
 	            throw new Error(`${streamLabel} 分页游标未前进，已停止重复请求`);
-	          this.#mergeRecords(records, loaded.records, identitiesByTopic), page += 1, totalPages += 1, offset = loaded.nextOffset, seenOffsets.add(offset), entry.pages = incremental || job.continueFromCheckpoint ? Math.max(previousPages, totalPages) : totalPages, streamComplete = loaded.complete || reachedKnownRecord, entry.streamCheckpoints[stream] = Object.freeze({
+	          this.#mergeRecords(records, loaded.records, identitiesByTopic), page += 1, totalPages += 1, offset = loaded.nextOffset, seenOffsets.add(offset), entry.pages = incremental || job.continueFromCheckpoint ? previousPages + networkPages : totalPages, terminalVerified = terminalVerified || requiresVerifiedTerminal(stream) && (verifiedPageEnd || reachedKnownRecord), streamComplete = verifiedPageEnd || reachedKnownRecord, entry.streamCheckpoints[stream] = Object.freeze({
 	            page,
 	            offset,
-	            complete: streamComplete
-	          }), entry.detail = `${incremental ? "增量更新" : "后台采集中"} · ${streamLabel} · ${streamIndex + 1}/${import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS.length} · ${records.size} 条 · ${entry.pages} 页`, checkpointChanged(streamComplete);
+	            complete: streamComplete,
+	            ...terminalVerified ? { terminalVerified: !0 } : {}
+	          }), entry.detail = `${incremental ? "增量更新" : "后台采集中"} · ${streamLabel} · ${streamIndex + 1}/${import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS.length} · ${records.size} 条 · ${entry.pages} 页`, checkpointChanged(streamComplete), armStallWatch();
 	        }
 	        entry.completedStreams = streamIndex + 1, entry.streamCheckpoints[stream] = Object.freeze({
+	          ...entry.streamCheckpoints[stream],
 	          page,
 	          offset,
-	          complete: !0
-	        }), this.#persist();
+	          complete: !0,
+	          ...terminalVerified ? { terminalVerified: !0 } : {}
+	        }), this.#persist(), armStallWatch();
 	      }
-	      await enrichTopicMetadata(), await finish(job.restoreCache && networkPages === 0 && totalPages > 0);
+	      await enrichTopicMetadata(), controller.signal.throwIfAborted(), disarmStallWatch(), await finish(job.restoreCache && networkPages === 0 && totalPages > 0);
 	    } catch (cause) {
-	      if (controller.signal.aborted || this.scope.destroyed || this.#entries.get(job.username) !== entry || entry.epoch !== epoch) return;
+	      if (disarmStallWatch(), controller.signal.aborted || this.scope.destroyed || this.#entries.get(job.username) !== entry || entry.epoch !== epoch) return;
 	      projectRecords(!0), entry.phase = "error", entry.error = errorMessage(cause), entry.recoveryKind = recoveryKind(cause), entry.detail = entry.records.length ? `已保留 ${entry.records.length} 条断点数据` : "", entry.controller = null, this.#persist(), this.#emit(), await persistNormalizedCheckpoint(), this.#notify(`@${job.username} 历史采集失败：${entry.error}`), this.#onError(cause);
+	    } finally {
+	      disarmStallWatch();
 	    }
 	  }
 	  #mergeRecords(records, incoming, identitiesByTopic) {
@@ -37241,8 +37406,8 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	    }
 	  }
 	  #entrySnapshot(entry) {
-	    const isSelf = entry.username === this.#selfUsername, privateObservation = isSelf ? this.#selfObservation : EMPTY_SELF_OBSERVATION, publicStreams = Object.freeze(import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS.map((stream) => {
-	      const complete = entry.streamCheckpoints[stream]?.complete === !0 || entry.phase === "ready", current = entry.currentStream === stream, status = complete ? "complete" : current && [
+	    const isSelf = entry.username === this.#selfUsername, streams = Object.freeze(import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS.map((stream) => {
+	      const complete = entry.streamCheckpoints[stream]?.complete === !0 || entry.phase === "ready", current = entry.currentStream === stream, status = complete ? "complete" : current && entry.phase === "error" ? "error" : current && [
 	        "waiting-rate-limit",
 	        "waiting-challenge"
 	      ].includes(entry.phase) ? "waiting" : current ? "loading" : "idle";
@@ -37251,22 +37416,15 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	        label: (0, import_discourse_user_observation_adapter.readerUserObservationStreamLabel)(stream),
 	        status,
 	        progress: complete ? 1 : current ? 0.5 : 0,
-	        detail: current ? entry.detail : ""
+	        detail: current ? entry.error || entry.detail : ""
 	      });
-	    })), privateStreams = Object.freeze(privateObservation.streams.map((stream) => Object.freeze({
-	      stream: stream.stream,
-	      label: stream.label,
-	      status: stream.status,
-	      progress: stream.progress,
-	      detail: stream.detail
-	    }))), streams = Object.freeze([...publicStreams, ...privateStreams]), privateCurrent = privateObservation.streams.find((stream) => stream.status !== "complete"), privateError = privateObservation.streams.find((stream) => stream.status === "error" && stream.error)?.error ?? "";
-	    let phase = entry.phase;
-	    return !isActivePhase(phase) && phase !== "error" && privateCurrent && (phase = privateCurrent.status === "error" ? "error" : privateCurrent.status === "waiting" ? "waiting-rate-limit" : privateCurrent.status === "idle" ? "queued" : "loading"), Object.freeze({
+	    }));
+	    return Object.freeze({
 	      username: entry.username,
 	      name: entry.name,
 	      avatarTemplate: entry.avatarTemplate,
 	      isSelf,
-	      phase,
+	      phase: entry.phase,
 	      addedAt: entry.addedAt,
 	      completedAt: entry.completedAt,
 	      pages: entry.pages,
@@ -37277,10 +37435,8 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	      recordCount: Math.max(entry.lastRecordCount, entry.records.length),
 	      storedRecordCount: entry.storedRecordCount,
 	      records: entry.records,
-	      privateRecords: privateObservation.records,
-	      privateRecordCount: privateObservation.records.length,
-	      detail: !isActivePhase(entry.phase) && privateCurrent?.detail ? privateCurrent.detail : entry.detail,
-	      error: entry.error || privateError,
+	      detail: entry.detail,
+	      error: entry.error,
 	      recoveryKind: entry.recoveryKind
 	    });
 	  }
@@ -37298,7 +37454,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	      this.#onError(cause);
 	  }
 	}
-}, "0629c14ab5d829fc91919617b319e9cced652a959ee246537e8b3d55e52c693d");
+}, "dc423428c6b0ef4630209706407eef84946f4e0319e4f2b3d8264758bda05be2");
 
 /* Source: lite/src/user/reader-user-observation-view.ts */
 runtime.register("src/user/reader-user-observation-view.js", function(module, exports, require) {
@@ -37314,23 +37470,11 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	  ["reply", "回复"],
 	  ["boost", "Boost"],
 	  ["reaction-like", "回应与赞"],
-	  ["mention", "@提及"],
-	  ["edit", "编辑"],
 	  ["linked", "链接"],
 	  ["other-actions", "其他"]
-	]), SELF_OBSERVATION_TABS = Object.freeze([
-	  ["notifications", "通知"],
-	  ["messages", "私信"],
-	  ["collections", "收藏与回应"]
 	]), OBSERVATION_TABS = new Set(
-	  [...PRIMARY_OBSERVATION_TABS, ...SELF_OBSERVATION_TABS].map(([tab]) => tab)
+	  PRIMARY_OBSERVATION_TABS.map(([tab]) => tab)
 	);
-	function isSelfObservationTab(tab) {
-	  return ["notifications", "messages", "collections"].includes(tab);
-	}
-	function observationTabs(entry) {
-	  return entry.isSelf ? Object.freeze([...PRIMARY_OBSERVATION_TABS, ...SELF_OBSERVATION_TABS]) : PRIMARY_OBSERVATION_TABS;
-	}
 	function localDateKey(timestamp) {
 	  if (!Number.isFinite(timestamp)) return "";
 	  const date = new Date(timestamp);
@@ -37370,7 +37514,7 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	  );
 	}
 	function detailMeta(entry) {
-	  return entry.phase === "waiting-rate-limit" ? `限流等待 · ${progressStep(entry)}/${entry.totalStreams}` : entry.phase === "waiting-challenge" ? `等待验证 · ${progressStep(entry)}/${entry.totalStreams}` : entry.phase === "queued" || entry.phase === "loading" ? `采集中 · ${progressStep(entry)}/${entry.totalStreams}` : phaseLabel(entry);
+	  return entry.phase === "waiting-rate-limit" ? `限流等待 · ${progressStep(entry)}/${entry.totalStreams}` : entry.phase === "waiting-challenge" ? `等待验证 · ${progressStep(entry)}/${entry.totalStreams}` : entry.phase === "queued" || entry.phase === "loading" ? entry.detail.startsWith("缓存恢复") ? `缓存恢复 · ${progressStep(entry)}/${entry.totalStreams}` : `采集中 · ${progressStep(entry)}/${entry.totalStreams}` : phaseLabel(entry);
 	}
 	function actionIcon(record) {
 	  return record.selfStream === "notifications" ? "bell" : record.selfStream === "messages" ? "mail" : record.selfStream === "collections" ? "bookmark" : record.kind === "topic" ? "message-square" : record.kind === "reply" ? "reply" : record.kind === "like" || record.kind === "liked" ? "heart" : record.kind === "assigned" ? "user-plus" : record.kind === "boost" ? "rocket" : record.kind === "reaction" ? "smile" : record.kind === "solved" || record.kind === "vote" ? "check-square" : record.kind === "response" ? "reply" : record.kind === "mention" ? "at" : record.kind === "quote" ? "message-square" : record.kind === "edit" ? "pencil" : record.kind === "linked" ? "link" : "history";
@@ -37431,7 +37575,6 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	  #storedTotal = 0;
 	  #storedPage = 0;
 	  #indexedRecords = null;
-	  #indexedPrivateRecords = null;
 	  #profileSignature = "";
 	  #storedHydrationKey = "";
 	  #storedSummary = null;
@@ -37475,7 +37618,7 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	      options.document,
 	      "p",
 	      "ldp-user-observation-intro",
-	      "当前账号会作为“自己”持续观察；通知、私信与收藏只在自己的详情可见。首次完整采集；以后只增量读取最新页，碰到已保存记录即停止。主题元数据在采集末尾统一补齐；详情月历按当前 Tab 统计并可点日筛选。普通 429 遵循中央 Retry-After；Cloudflare 验证进入共享暂停门。"
+	      "当前账号与其他用户使用相同的公开观察字段。首次完整采集；以后只增量读取最新页，碰到已保存记录即停止。连续 60 秒没有新进展会暂停，并提供断点重试。主题元数据在采集末尾统一补齐；详情月历按当前 Tab 统计并可点日筛选。普通 429 遵循中央 Retry-After；Cloudflare 验证进入共享暂停门。"
 	    ), listSearchLabel = (0, import_html_element.htmlElement)(
 	      options.document,
 	      "label",
@@ -37682,7 +37825,7 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	  openSelf(tab = "all") {
 	    const entry = this.#session.snapshot.entries.find((candidate) => candidate.isSelf);
 	    if (!entry) return !1;
-	    const allowed = observationTabs(entry).some(([candidate]) => candidate === tab);
+	    const allowed = PRIMARY_OBSERVATION_TABS.some(([candidate]) => candidate === tab);
 	    return this.#openDetail(entry.username, allowed ? tab : "all"), !0;
 	  }
 	  close() {
@@ -37762,7 +37905,7 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    const open = this.#document.createElement("button");
 	    open.type = "button", open.className = "ldp-user-observation-user-open", open.dataset.userObservationOpen = entry.username, open.setAttribute(
 	      "aria-label",
-	      entry.isSelf ? "浏览我的持续观察与账号私有记录" : `浏览 @${entry.username} 的公开历史`
+	      entry.isSelf ? "浏览我的公开活动观察" : `浏览 @${entry.username} 的公开历史`
 	    ), open.append(this.#avatar(entry, 40));
 	    const copy = (0, import_html_element.htmlElement)(
 	      this.#document,
@@ -37796,7 +37939,12 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	      "div",
 	      "ldp-user-observation-user-actions"
 	    ), refresh = this.#document.createElement("button");
-	    refresh.type = "button", entry.phase === "error" || entry.phase === "idle" ? (refresh.dataset.userObservationRetry = entry.username, refresh.setAttribute("aria-label", `从断点继续 @${entry.username} 的公开历史`)) : (refresh.dataset.userObservationRefresh = entry.username, refresh.setAttribute("aria-label", `更新 @${entry.username} 的最近活动`)), refresh.disabled = isActivePhase(entry) && entry.phase !== "waiting-rate-limit", refresh.append((0, import_reader_icon.createReaderIcon)(this.#document, "rotate-ccw"));
+	    refresh.type = "button";
+	    const restartActive = isActivePhase(entry);
+	    entry.phase === "error" || entry.phase === "idle" || restartActive ? (refresh.dataset.userObservationRetry = entry.username, refresh.setAttribute(
+	      "aria-label",
+	      restartActive ? `中止当前采集并从断点继续 @${entry.username} 的公开历史` : `从断点继续 @${entry.username} 的公开历史`
+	    )) : (refresh.dataset.userObservationRefresh = entry.username, refresh.setAttribute("aria-label", `更新 @${entry.username} 的最近活动`)), refresh.append((0, import_reader_icon.createReaderIcon)(this.#document, "rotate-ccw"));
 	    const challenge = this.#challengeButton(entry, !0), remove = this.#document.createElement("button");
 	    return remove.type = "button", remove.dataset.userObservationRemove = entry.username, remove.setAttribute("aria-label", `移出 @${entry.username}`), remove.append((0, import_reader_icon.createReaderIcon)(this.#document, "trash")), actions.append(
 	      refresh,
@@ -37808,7 +37956,6 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    return [
 	      entry.completedAt,
 	      entry.recordCount,
-	      entry.privateRecordCount,
 	      entry.completedStreams,
 	      entry.pages
 	    ].join(":");
@@ -37817,13 +37964,12 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    const key = this.#listSummaryKey(entry), stored = this.#listSummaries.get(entry.username), summary = stored?.key === key ? stored.summary : null, localCounts = /* @__PURE__ */ new Map();
 	    for (const record of entry.records)
 	      localCounts.set(record.kind, (localCounts.get(record.kind) ?? 0) + 1);
-	    const count = (kind) => summary?.counts[kind] ?? localCounts.get(kind) ?? 0, publicTotal = summary?.total ?? entry.recordCount, total = publicTotal + entry.privateRecordCount, topics = count("topic"), replies = count("reply"), boosts = count("boost"), reactionLikes = summary?.reactionLikeCount ?? count("reaction") + count("like"), other = Math.max(
+	    const count = (kind) => summary?.counts[kind] ?? localCounts.get(kind) ?? 0, publicTotal = summary?.total ?? entry.recordCount, total = publicTotal, topics = count("topic"), replies = count("reply"), boosts = count("boost"), reactionLikes = summary?.reactionLikeCount ?? count("reaction") + count("like"), other = Math.max(
 	      0,
 	      publicTotal - topics - replies - boosts - reactionLikes
 	    ), parts = [
 	      entry.phase === "ready" ? entry.detail.startsWith("最近活动已更新") ? "最近已更新" : entry.detail.startsWith("已从本地缓存恢复") ? "缓存已恢复" : "采集完成" : phaseLabel(entry),
 	      `${total} 条`,
-	      ...entry.isSelf ? [`私有 ${entry.privateRecordCount}`] : [],
 	      `主题 ${topics}`,
 	      `回复 ${replies}`
 	    ];
@@ -37870,6 +38016,10 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	      this.#onError(cause), this.#notify("Cloudflare 验证浮窗未能打开，请稍后重试");
 	    }
 	  }
+	  #retryObservation(username) {
+	    const entry = this.#session.entry(username);
+	    this.#session.retry(username), this.#notify(entry && isActivePhase(entry) ? `已中止 @${username} 当前采集，正在从已保存断点续传` : `已安排 @${username} 从已保存断点继续采集`);
+	  }
 	  #onListClick(event) {
 	    const target = closestTarget(
 	      event,
@@ -37888,7 +38038,7 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    }
 	    const retry = target.dataset.userObservationRetry;
 	    if (retry) {
-	      this.#session.retry(retry);
+	      this.#retryObservation(retry);
 	      return;
 	    }
 	    const challenge = target.dataset.userObservationChallenge;
@@ -37905,7 +38055,7 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	      this.#showList();
 	      return;
 	    }
-	    const previousSessionEntry = this.#sessionEntry, privateRecordsChanged = !previousSessionEntry || previousSessionEntry.privateRecords !== entry.privateRecords, recordsChanged = !previousSessionEntry || previousSessionEntry.records !== entry.records || privateRecordsChanged, privateTab = isSelfObservationTab(this.#activeTab), storedAvailable = !!(!privateTab && this.#pages && entry.storedRecordCount > 0), storedProjection = storedAvailable && this.#storedTotal > 0 && previousSessionEntry?.username === entry.username ? Object.freeze({
+	    const previousSessionEntry = this.#sessionEntry, recordsChanged = !previousSessionEntry || previousSessionEntry.records !== entry.records, storedAvailable = !!(this.#pages && entry.storedRecordCount > 0), storedProjection = storedAvailable && this.#storedTotal > 0 && previousSessionEntry?.username === entry.username ? Object.freeze({
 	      ...entry,
 	      records: previousSessionEntry.records,
 	      recordCount: Math.max(
@@ -37915,7 +38065,7 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    }) : null, sessionProjection = storedProjection ?? (storedAvailable && !entry.records.length ? Object.freeze({ ...entry, records: Object.freeze([]) }) : entry), projectedRecords = this.#session.projectTopicMetadata(
 	      sessionProjection.records
 	    ), metadataProjected = projectedRecords !== sessionProjection.records;
-	    this.#sessionEntry = metadataProjected ? Object.freeze({ ...sessionProjection, records: projectedRecords }) : sessionProjection, this.listWindow.setTitle(entry.isSelf ? "我的持续观察" : `${entry.name || entry.username} 的公开历史`), this.listWindow.meta.textContent = detailMeta(entry), this.#renderDetailProfile(entry), this.#renderDetailProgress(entry), observationTabs(entry).some(([tab]) => tab === this.#activeTab) || (this.#activeTab = "all"), (recordsChanged && (!storedProjection || privateRecordsChanged) || metadataProjected || !this.#detailTabs.childElementCount) && (this.#indexRecords(this.#sessionEntry), this.#renderDetailTabs(), this.#renderDetailFilters(), this.#syncDetailFilterState(), this.#syncDetailMinimumWidth(), this.#renderDetailTimeline(this.#sessionEntry)), privateTab || this.#hydrateStoredDetail(entry);
+	    this.#sessionEntry = metadataProjected ? Object.freeze({ ...sessionProjection, records: projectedRecords }) : sessionProjection, this.listWindow.setTitle(entry.isSelf ? "我的持续观察" : `${entry.name || entry.username} 的公开历史`), this.listWindow.meta.textContent = detailMeta(entry), this.#renderDetailProfile(entry), this.#renderDetailProgress(entry), PRIMARY_OBSERVATION_TABS.some(([tab]) => tab === this.#activeTab) || (this.#activeTab = "all"), (recordsChanged && !storedProjection || metadataProjected || !this.#detailTabs.childElementCount) && (this.#indexRecords(this.#sessionEntry), this.#renderDetailTabs(), this.#renderDetailFilters(), this.#syncDetailFilterState(), this.#syncDetailMinimumWidth(), this.#renderDetailTimeline(this.#sessionEntry)), this.#hydrateStoredDetail(entry);
 	  }
 	  #renderDetailProfile(entry) {
 	    const publicCount = entry.storedRecordCount > 0 ? entry.storedRecordCount : entry.recordCount, signature = [
@@ -37923,8 +38073,8 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	      entry.name,
 	      entry.avatarTemplate,
 	      publicCount,
-	      entry.privateRecordCount,
 	      entry.pages,
+	      entry.phase,
 	      entry.recoveryKind
 	    ].join(`
 `);
@@ -37938,7 +38088,7 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	        this.#document,
 	        "small",
 	        "",
-	        entry.isSelf ? `${publicCount} 条公开活动 · ${entry.privateRecordCount} 条账号私有记录 · 已请求 ${entry.pages} 页` : `${publicCount} 条公开活动 · 已请求 ${entry.pages} 页`
+	        entry.phase === "ready" ? `${publicCount} 条公开活动 · 已请求 ${entry.pages} 页` : `已保存 ${publicCount} 条公开活动 · 已请求 ${entry.pages} 页`
 	      )
 	    );
 	    const challenge = this.#challengeButton(entry, !1);
@@ -37949,12 +38099,12 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	      username: this.#detailUsername,
 	      summary
 	    }));
-	    const storedSummary = summary ?? (this.#storedSummary?.username === this.#detailUsername ? this.#storedSummary.summary : void 0), entry = this.#session.entry(this.#detailUsername), tabs = entry ? observationTabs(entry) : PRIMARY_OBSERVATION_TABS;
-	    this.#detailTabs.replaceChildren(...tabs.map(
+	    const storedSummary = summary ?? (this.#storedSummary?.username === this.#detailUsername ? this.#storedSummary.summary : void 0);
+	    this.#detailTabs.replaceChildren(...PRIMARY_OBSERVATION_TABS.map(
 	      ([tab, label]) => {
 	        const button = this.#document.createElement("button");
 	        button.type = "button", button.dataset.userObservationTab = tab, button.className = tab === this.#activeTab ? "is-active" : "", button.setAttribute("role", "tab"), button.setAttribute("aria-selected", String(tab === this.#activeTab));
-	        const count = isSelfObservationTab(tab) ? this.#recordsByTab.get(tab)?.length ?? 0 : storedSummary ? tab === "all" ? storedSummary.total + (entry?.privateRecordCount ?? 0) : tab === "reaction-like" ? storedSummary.reactionLikeCount : tab === "other-actions" ? Object.entries(storedSummary.counts).reduce(
+	        const count = storedSummary ? tab === "all" ? storedSummary.total : tab === "reaction-like" ? storedSummary.reactionLikeCount : tab === "other-actions" ? Object.entries(storedSummary.counts).reduce(
 	          (total, [kind, value]) => total + ((0, import_reader_user_observation_page_repository.readerUserObservationStoredTabIncludesKind)(
 	            kind,
 	            tab
@@ -37966,7 +38116,7 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    ));
 	  }
 	  async #hydrateStoredDetail(entry) {
-	    if (!this.#pages || entry.storedRecordCount <= 0 || isSelfObservationTab(this.#activeTab)) return;
+	    if (!this.#pages || entry.storedRecordCount <= 0) return;
 	    const hydrationKey = [
 	      entry.username,
 	      entry.completedAt,
@@ -38296,11 +38446,8 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    this.listWindow.setMinimumWidth(OBSERVATION_LIST_MIN_WIDTH);
 	  }
 	  #indexRecords(entry) {
-	    if (this.#indexedRecords === entry.records && this.#indexedPrivateRecords === entry.privateRecords) return;
-	    this.#indexedRecords = entry.records, this.#indexedPrivateRecords = entry.privateRecords, this.#recordsByTab.clear(), this.#recordsByTab.set("all", (0, import_reader_user_observation_model.sortReaderUserActivities)([
-	      ...entry.records,
-	      ...entry.privateRecords
-	    ])), this.#recordsByTab.set("reaction-like", Object.freeze(
+	    if (this.#indexedRecords === entry.records) return;
+	    this.#indexedRecords = entry.records, this.#recordsByTab.clear(), this.#recordsByTab.set("all", (0, import_reader_user_observation_model.sortReaderUserActivities)(entry.records)), this.#recordsByTab.set("reaction-like", Object.freeze(
 	      entry.records.filter((record) => record.kind === "reaction" || record.kind === "like")
 	    )), this.#recordsByTab.set("other-actions", Object.freeze(
 	      entry.records.filter((record) => (0, import_reader_user_observation_page_repository.readerUserObservationStoredTabIncludesKind)(
@@ -38315,16 +38462,9 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    }
 	    for (const [kind, records] of buckets)
 	      this.#recordsByTab.set(kind, Object.freeze(records));
-	    this.#recordsByTab.set("notifications", Object.freeze(
-	      entry.privateRecords.filter((record) => record.selfStream === "notifications")
-	    )), this.#recordsByTab.set("messages", Object.freeze(
-	      entry.privateRecords.filter((record) => record.selfStream === "messages")
-	    )), this.#recordsByTab.set("collections", Object.freeze(
-	      entry.privateRecords.filter((record) => record.selfStream === "collections")
-	    ));
 	  }
 	  #renderDetailProgress(entry) {
-	    const visible = entry.completedStreams < entry.totalStreams || entry.phase === "error";
+	    const visible = entry.completedStreams < entry.totalStreams || entry.phase === "error" || isActivePhase(entry);
 	    if (this.#detailProgress.hidden = !visible, !visible) {
 	      this.#detailProgress.replaceChildren();
 	      return;
@@ -38334,15 +38474,23 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	      this.#document,
 	      "div",
 	      "ldp-user-observation-progress-copy"
-	    ), currentStream = entry.streams.find((stream) => ["loading", "waiting", "error"].includes(stream.status)) ?? entry.streams.find((stream) => stream.status !== "complete"), streamLabel = currentStream ? currentStream.label : entry.detail.includes("主题元数据") ? "主题元数据更新中" : "等待开始", progressStatus = entry.phase === "waiting-rate-limit" ? "限流等待 · 自动续传" : entry.phase === "waiting-challenge" ? "验证后自动续传" : entry.phase === "queued" ? "等待空闲" : `${progressStep(entry)} / ${entry.totalStreams}`;
-	    if (copy.append(
+	    ), currentStream = entry.streams.find((stream) => ["loading", "waiting", "error"].includes(stream.status)) ?? entry.streams.find((stream) => stream.status !== "complete"), streamLabel = currentStream ? currentStream.label : entry.detail.includes("主题元数据") ? "主题元数据更新中" : "等待开始", progressStatus = entry.phase === "waiting-rate-limit" ? "限流等待 · 自动续传" : entry.phase === "waiting-challenge" ? "验证后自动续传" : entry.phase === "error" ? entry.error || "采集失败，可从断点重试" : entry.phase === "queued" ? entry.detail || "等待空闲" : entry.detail || `${progressStep(entry)} / ${entry.totalStreams}`, progressStatusNode = (0, import_html_element.htmlElement)(
+	      this.#document,
+	      "span",
+	      "",
+	      progressStatus
+	    );
+	    if (progressStatusNode.title = progressStatus, copy.append(
 	      (0, import_html_element.htmlElement)(this.#document, "strong", "", streamLabel),
-	      (0, import_html_element.htmlElement)(this.#document, "span", "", progressStatus)
-	    ), entry.phase === "error" || entry.isSelf && entry.streams.some((stream) => stream.status === "waiting")) {
+	      progressStatusNode
+	    ), entry.phase === "error") {
 	      const retry = this.#document.createElement("button");
-	      retry.type = "button", retry.className = "ldp-user-observation-progress-retry", retry.dataset.userObservationRetry = entry.username, retry.append(
+	      retry.type = "button", retry.className = "ldp-user-observation-progress-retry", retry.dataset.userObservationRetry = entry.username, retry.setAttribute(
+	        "aria-label",
+	        `从断点重试 @${entry.username} 的公开历史`
+	      ), retry.append(
 	        (0, import_reader_icon.createReaderIcon)(this.#document, "rotate-ccw"),
-	        this.#document.createTextNode("重试")
+	        this.#document.createTextNode("断点重试")
 	      ), copy.append(retry);
 	    }
 	    const segments = (0, import_html_element.htmlElement)(
@@ -38366,12 +38514,12 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    this.#detailSearchResult.hidden = !searching, this.#detailSearchResult.textContent = searching ? `${totalValue ?? records.length} 条` : "";
 	    const scrollTop = this.#detailList.scrollTop;
 	    if (this.#detailList.replaceChildren(...records.slice(0, this.#visibleLimit).map((record) => this.#activityRow(record))), this.#detailList.scrollTop = scrollTop, !records.length) {
-	      const loadingStoredPage = !!(!isSelfObservationTab(this.#activeTab) && this.#pages && entry.storedRecordCount > 0);
+	      const loadingStoredPage = !!(this.#pages && entry.storedRecordCount > 0);
 	      this.#detailList.append((0, import_html_element.htmlElement)(
 	        this.#document,
 	        "p",
 	        "ldp-user-observation-empty",
-	        loadingStoredPage ? "正在从本地分页缓存读取这一页…" : isSelfObservationTab(this.#activeTab) ? entry.phase === "ready" ? "这个账号私有分类暂时没有记录。" : "后台还在补齐账号私有缓存，记录会自动出现在这里。" : entry.phase === "ready" ? "这个分类暂时没有公开活动。" : "后台还在采集，新的记录会自动出现在这里。"
+	        loadingStoredPage ? "正在从本地分页缓存读取这一页…" : entry.phase === "ready" ? "这个分类暂时没有公开活动。" : "后台还在采集，新的记录会自动出现在这里。"
 	      ));
 	    }
 	  }
@@ -38567,7 +38715,7 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    }
 	    const retry = target.dataset.userObservationRetry;
 	    if (retry) {
-	      this.#session.retry(retry);
+	      this.#retryObservation(retry);
 	      return;
 	    }
 	    if (target.dataset.userObservationActivity === void 0) return;
@@ -38589,16 +38737,6 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	  async #showMore() {
 	    const entry = this.#session.entry(this.#detailUsername);
 	    if (!entry) return;
-	    if (isSelfObservationTab(this.#activeTab)) {
-	      this.#indexRecords(entry);
-	      const total2 = this.#filteredRecords().length;
-	      if (this.#visibleLimit >= total2) return;
-	      this.#visibleLimit = Math.min(
-	        total2,
-	        this.#visibleLimit + DETAIL_BATCH_SIZE
-	      ), this.#renderDetailTimeline(entry);
-	      return;
-	    }
 	    if (this.#storedHydrationPendingKey) {
 	      this.#storedAppendRequested = !0;
 	      return;
@@ -38654,7 +38792,7 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    }), this.#indexRecords(this.#sessionEntry), this.#renderDetailTimeline(this.#sessionEntry, window.total);
 	  }
 	}
-}, "48e179c92c5dc982ab815c6b15fc51138645acf3e64a81169b20d292d1750d41");
+}, "3959499ceabcdf348c9c05b91d25a041c0133024176285518c189a3cf6d6cfe7");
 
 /* Source: lite/src/user/reader-user-profile-presentation.ts */
 runtime.register("src/user/reader-user-profile-presentation.js", function(module, exports, require) {

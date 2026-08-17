@@ -697,6 +697,7 @@ export class DiscourseNotificationRequestAdapter {
 			authScope: this.authScope,
 			group: group.key,
 			page,
+			...(options.refresh ? { parallelHead: true } : {}),
 			...(variant ? { variant } : {}),
 			...(options.history
 				? {

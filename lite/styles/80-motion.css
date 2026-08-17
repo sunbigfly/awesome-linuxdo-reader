@@ -493,6 +493,15 @@
     transition-duration: .001ms !important;
   }
 
+	/* Busy indicators remain animated because motion is their live-state signal. */
+	.ldp-overlay
+		:is(.ldp-notification-refresh, .ldp-bookmark-refresh).is-refreshing
+		> .ldp-icon {
+		animation-duration: .8s !important;
+		animation-iteration-count: infinite !important;
+		animation-play-state: running !important;
+	}
+
 	:is(.ldp-loadmask,.ldp-loading-settings-preview) .ldp-loading-visual-inner {
 		animation: ldp-loader-reduced-breathe 2.5s ease-in-out infinite !important;
 		animation-duration: 2.5s !important;

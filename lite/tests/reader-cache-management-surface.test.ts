@@ -123,7 +123,7 @@ let historyEntries: readonly ReaderHistoryEntry[] = [{
 let chronicleEntries: readonly ReaderChronicleRecord[] = [{
 	identity: 'topic:42:topic:test',
 	kind: 'topic',
-	status: 404,
+	status: 410,
 	topicId: discourseTopicId(42),
 	topicTitle: '主题',
 	postNumber: null,
@@ -137,7 +137,7 @@ let chronicleEntries: readonly ReaderChronicleRecord[] = [{
 	lastObservedAt: 2,
 	occurrences: 1,
 	bodyCached: true,
-	searchText: '主题 topic 42 404',
+	searchText: '主题 topic 42 410',
 }];
 let currentClears = 0;
 let currentRefreshPartial = false;
@@ -353,7 +353,7 @@ assert(
 			'.ldp-cache-row:has([value="history"])',
 		)?.dataset.settingHelp?.startsWith('勾选“浏览历史与岁月史书”') &&
 		host.querySelector<HTMLElement>('[data-cache-size="history"]')
-			?.textContent?.includes('1 条 404 记录') &&
+			?.textContent?.includes('1 条失效记录') &&
 		host.querySelector<HTMLElement>(
 			'.ldp-cache-row:has([value="topics"])',
 		)?.dataset.settingHelp?.includes('避免旧快照在清理后写回') &&

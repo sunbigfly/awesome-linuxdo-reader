@@ -232,6 +232,11 @@ class ReaderFloatingWindowTabGroup {
 		return true;
 	}
 
+	dismissActiveFromEarlyEscapeEvent(event: KeyboardEvent): boolean {
+		if (!this.#visible || !this.#active?.active) return false;
+		return this.dismissFromEscapeEvent(this.#active, event);
+	}
+
 	isLauncherEvent(event: Event): boolean {
 		return eventPathMatches(event, READER_FLOATING_WINDOW_LAUNCHER_SELECTOR);
 	}
@@ -343,6 +348,15 @@ export function restoreReaderFloatingWindowTabSession(
 	tabId?: string,
 ): boolean {
 	return floatingWindowTabGroups.get(mount)?.restore(tabId) ?? false;
+}
+
+/** 在宿主可能截断 Document 事件前，由 userscript 的 Window capture 入口收起整组。 */
+export function dismissReaderFloatingWindowTabSessionFromEscape(
+	mount: HTMLElement,
+	event: KeyboardEvent,
+): boolean {
+	return floatingWindowTabGroups.get(mount)
+		?.dismissActiveFromEarlyEscapeEvent(event) ?? false;
 }
 
 export function reloadReaderFloatingWindowTabGeometry(

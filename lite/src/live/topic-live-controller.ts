@@ -591,6 +591,11 @@ export class TopicLiveController<
 		try {
 			const preserved = this.#session.preserveDeletedPostById(postId);
 			if (!this.#acceptsWork(epoch)) return;
+			this.#emit(Object.freeze({
+				kind: 'deleted',
+				postId,
+				postNumber: preserved.postNumber,
+			}));
 			if (preserved.topicArchived) this.#deactivate();
 		} catch (error) {
 			this.#onError(error);

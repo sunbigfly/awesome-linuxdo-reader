@@ -1141,8 +1141,9 @@ assert(
 	startupSelfObservation !== null &&
 		startupSelfObservation.pages === 0 &&
 		startupSelfObservation.recordCount === 0 &&
-		startupSelfObservation.currentStream === null,
-	'application 启动可以恢复账号私有通知与收藏缓存，但不得自动采集当前账号的七类公开用户观察历史',
+		startupSelfObservation.currentStream === null &&
+		startupSelfObservation.totalStreams === 7,
+	'application 启动只注册当前账号的七类公开观察字段且不得自动联网采集；通知、私信与收藏继续由原功能独立拥有',
 );
 assert(
 	nativeAjaxObservationState() === '2/2/0',
@@ -1385,7 +1386,7 @@ const delayedChronicleSend = [...nativeAjaxObservationHandlers]
 const delayedChronicleComplete = [...nativeAjaxObservationHandlers]
 	.find(([name]) => name.startsWith('ajaxComplete.'))?.[1];
 const delayedChronicleResponse = Object.freeze({
-	status: 404,
+	status: 410,
 	responseURL: 'https://linux.do/posts/by_number/10/2.json',
 });
 delayedChronicleSend?.(undefined, delayedChronicleResponse, {
@@ -1396,7 +1397,7 @@ delayedChronicleComplete?.(undefined, delayedChronicleResponse);
 assert(
 	!activeRuntime.chronicle.snapshot.records.some((record) =>
 		record.topicId === 10 && record.postNumber === 2),
-	'404 先于 Topic 正文挂载时不得生成无正文的岁月史书记录',
+	'410 先于 Topic 正文挂载时不得生成无内容的岁月史书记录',
 );
 const opened = await activeRuntime.open(10);
 assert(
@@ -1411,6 +1412,13 @@ assert(
 	'设置更新后的新 Topic 必须直接使用当前批次大小，不能回退构造期旧值',
 );
 assert(
+	activeRuntime.chronicle.snapshot.records.some((record) =>
+		record.topicId === 10 &&
+		record.postNumber === 2 &&
+		record.status === 410),
+	'非活动 Topic 期间先到的 410 必须在正文挂载后从请求观察保留窗口重放入史',
+);
+assert(
 	Number(opened.value.dom.replyTreePresentation.revision.split(':')[2]) ===
 		opened.value.services.session.postStreamRevision,
 	'浏览器实际装配的回复树投影必须订阅 TopicSession post_stream 版本，不能绕过精确 gap 缓存失效链',
@@ -1419,19 +1427,22 @@ if (opened.status === 'opened') {
 	const activeSession = opened.value.services.session;
 	const archiveConfirmedAt = Date.now();
 	assert(
-		activeSession.preserveUnavailablePost(2, 404, archiveConfirmedAt) &&
-			activeRuntime.chronicle.snapshot.records.some((record) =>
-				record.topicId === 10 && record.postNumber === 2),
-		'正文与 404 存档稍后提交时，运行时必须重放尚未处理的请求并补记岁月史书',
-	);
-	activeRuntime.chronicle.clear();
-	assert(
-		activeSession.preserveUnavailablePost(2, 404, archiveConfirmedAt + 1) &&
+		activeSession.preserveUnavailablePost(2, 410, archiveConfirmedAt) &&
 			activeRuntime.chronicle.snapshot.records.some((record) =>
 				record.topicId === 10 &&
 				record.postNumber === 2 &&
+				record.status === 410),
+		'正文与 410 存档稍后提交时，运行时必须重放尚未处理的请求并补记真实状态',
+	);
+	activeRuntime.chronicle.clear();
+	assert(
+		activeSession.preserveUnavailablePost(2, 403, archiveConfirmedAt + 1) &&
+			activeRuntime.chronicle.snapshot.records.some((record) =>
+				record.topicId === 10 &&
+				record.postNumber === 2 &&
+				record.status === 403 &&
 				record.callSite === 'topic-local-archive'),
-		'请求事件已经消费后，canonical 本地 404 存档仍必须独立回填岁月史书',
+		'请求事件已经消费后，canonical 本地 403 存档仍必须独立回填岁月史书',
 	);
 	activeSession.ingestPosts(
 		[posts[1]!],
@@ -1441,6 +1452,32 @@ if (opened.status === 'opened') {
 	assert(
 		activeSession.localArchiveState().posts.length === 0,
 		'竞态回归取证后必须恢复权威楼层，避免影响后续运行时契约',
+	);
+	activeRuntime.chronicle.clear();
+	activeSession.ingestPosts(
+		[Object.freeze({
+			...posts[0]!,
+			deleted_at: new Date(archiveConfirmedAt + 3).toISOString(),
+			cooked: '<p>（话题已被作者删除）</p>',
+		}) as TestPost],
+		'message-bus',
+		archiveConfirmedAt + 3,
+	);
+	assert(
+		activeRuntime.chronicle.snapshot.records.some((record) =>
+			record.topicId === 10 &&
+			record.kind === 'topic' &&
+			record.status === 'deleted' &&
+			record.callSite === 'post-model:deleted_at'),
+		'HTTP 200 内的首帖 deleted_at 删除墓碑必须以 Topic 软删除真实信号进入岁月史书',
+	);
+	activeSession.ingestPosts(
+		[Object.freeze({
+			...posts[0]!,
+			deleted_at: null,
+		}) as TestPost],
+		'target-refresh',
+		archiveConfirmedAt + 4,
 	);
 	const openNative =
 		shellRoot.querySelector<HTMLAnchorElement>('.ldp-open');

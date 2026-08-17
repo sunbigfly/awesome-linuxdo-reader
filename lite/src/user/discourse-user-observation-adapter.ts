@@ -109,6 +109,8 @@ export interface ReaderUserObservationTopicMetadataRequest {
 type UnknownRecord = Readonly<Record<string, unknown>>;
 
 const USER_ACTIVITY_PAGE_SIZE = 60;
+/** 与观察其他用户相同的公开 UserAction 范围，避免观察自己时混入私有动作。 */
+const PUBLIC_USER_ACTION_FILTER = '1,4,5,15,16,17';
 const ASSIGNED_TOPIC_PAGE_SIZE = 30;
 const BOOST_PAGE_SIZE = 20;
 const REACTION_PAGE_SIZE = 20;
@@ -121,8 +123,6 @@ function fixedPageOffset(
 	stream: ReaderUserObservationStream,
 	page: number,
 ): number | null {
-	if (stream === 'activity') return page * USER_ACTIVITY_PAGE_SIZE;
-	if (stream === 'solved') return page * SOLVED_PAGE_SIZE;
 	if (stream === 'topics' || stream === 'assigned' || stream === 'votes') {
 		return page;
 	}
@@ -306,7 +306,11 @@ function observationPage(
 		? !String(topicPage(payload).more_topics_url ?? '').trim()
 		: stream === 'boosts' || stream === 'reactions'
 			? values.length < pageSize || beforeCursor === 0
-			: values.length < pageSize;
+			/*
+			 * user_actions/solved 在可见性过滤或站点插件介入后可能返回短页，
+			 * 后续 offset 仍有数据；只有空页才能证明 offset 流真正到底。
+			 */
+			: values.length === 0;
 	const identity = stream === 'activity'
 		? activityPageIdentity(payload, username)
 		: null;
@@ -345,6 +349,7 @@ function pageDescriptor(
 				username,
 				offset: String(offset),
 				limit: String(USER_ACTIVITY_PAGE_SIZE),
+				filter: PUBLIC_USER_ACTION_FILTER,
 			}),
 			collection: 'user-observation-activity',
 			variant: `v1:${username}`,
@@ -377,7 +382,8 @@ function pageDescriptor(
 			path: `/discourse-boosts/users/${encodedUsername}/boosts-given.json` +
 				(query.size ? `?${query}` : ''),
 			collection: 'user-observation-boosts',
-			variant: `v1:${username}`,
+			// v1 可能持久化过错误空页；升级 key 后强制重新核验 Boost 首屏。
+			variant: `v2:${username}`,
 			timeoutMs: 20_000,
 		});
 	}

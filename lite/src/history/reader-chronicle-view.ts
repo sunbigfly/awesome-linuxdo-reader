@@ -63,9 +63,12 @@ function defaultRelativeTime(timestamp: number): string {
 }
 
 function kindLabel(record: ReaderChronicleRecord): string {
-	if (record.kind === 'topic') return '主题 404';
-	if (record.kind === 'reply') return `回复 #${record.postNumber ?? '?'} · 404`;
-	return `Boost #${record.boostId ?? '?'} · 404`;
+	const status = record.status === 'deleted' ? '已删除' : String(record.status);
+	if (record.kind === 'topic') return `主题 · ${status}`;
+	if (record.kind === 'reply') {
+		return `回复 #${record.postNumber ?? '?'} · ${status}`;
+	}
+	return `Boost #${record.boostId ?? '?'} · ${status}`;
 }
 
 function kindIcon(kind: ReaderChronicleKind): string {
@@ -95,7 +98,7 @@ function topicDetailLabel(records: readonly ReaderChronicleRecord[]): string {
 		: `${records.length} 条 Topic 记录`;
 }
 
-/** 按 Topic 沉淀真实 404 信号的唯一浮窗 DOM owner。 */
+/** 按 Topic 沉淀真实删除与不可用信号的唯一浮窗 DOM owner。 */
 export class ReaderChronicleView {
 	readonly scope: LifecycleScope;
 	readonly window: ReaderFloatingWindowFrame;
@@ -126,7 +129,7 @@ export class ReaderChronicleView {
 			document: options.document,
 			mount: options.mount,
 			title: '岁月史书',
-			ariaLabel: '岁月史书 404 搜集栏',
+			ariaLabel: '岁月史书失效记录搜集栏',
 			icon: 'history',
 			variant: 'chronicle',
 			tabId: 'chronicle',
@@ -151,7 +154,7 @@ export class ReaderChronicleView {
 		searchLabel.append(createReaderIcon(options.document, 'search'));
 		this.#search = options.document.createElement('input');
 		this.#search.type = 'search';
-		this.#search.placeholder = '搜索主题、定位、404 信息';
+		this.#search.placeholder = '搜索主题、定位、删除或状态';
 		this.#search.setAttribute('aria-label', '搜索岁月史书');
 		this.#searchResult = node(
 			options.document,
@@ -248,8 +251,8 @@ export class ReaderChronicleView {
 				'p',
 				'ldp-chronicle-empty',
 				searching
-					? '没有匹配的 404 记录。'
-					: '还没有收到可定位的 Topic、回复或 Boost 404 信号。',
+					? '没有匹配的失效记录。'
+					: '还没有收到可定位的 Topic、回复或 Boost 删除/不可用信号。',
 			));
 		}
 		this.#renderFooter(records.length);
@@ -391,7 +394,7 @@ export class ReaderChronicleView {
 			this.#document,
 			'span',
 			'',
-			'岁月史书只保留本机仍有正文的 404 记录。',
+			'岁月史书只保留本机仍有可定位内容的删除或 403/404/410 记录。',
 		));
 		if (this.#visibleLimit >= total) return;
 		const more = this.#document.createElement('button');
@@ -463,7 +466,7 @@ export class ReaderChronicleView {
 			}
 		}).catch((cause) => {
 			this.#onError(cause);
-			this.#notify('该 404 定位暂时无法打开');
+			this.#notify('该失效记录暂时无法打开');
 		});
 	}
 

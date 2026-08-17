@@ -135,6 +135,8 @@ export interface ReaderBookmarkControllerOptions {
 	readonly pageSize?: number;
 	readonly liveRefreshDelayMs?: number;
 	readonly backgroundWarmDelayMs?: number;
+	readonly openRevalidateMs?: number;
+	readonly pollIntervalMs?: number;
 	readonly historyStepDelayMs?: number;
 	readonly historyBatchPages?: number;
 	readonly historyBatchDelayMs?: number;
@@ -151,6 +153,7 @@ export interface ReaderBookmarkControllerOptions {
 	) => void | Promise<void>;
 	readonly schedule?: (callback: () => void, delayMs: number) => unknown;
 	readonly cancel?: (handle: unknown) => void;
+	readonly now?: () => number;
 	readonly searchForms?: ReaderSearchFormsPort;
 	readonly parentScope?: LifecycleScope;
 	readonly onError?: (cause: unknown) => void;
@@ -165,6 +168,8 @@ export interface ReaderBookmarkCacheStats {
 
 const DEFAULT_PAGE_SIZE = 20;
 const DEFAULT_LIVE_REFRESH_DELAY_MS = 240;
+const DEFAULT_OPEN_REVALIDATE_MS = 30 * 60_000;
+const DEFAULT_POLL_INTERVAL_MS = 30 * 60_000;
 const DEFAULT_BACKGROUND_RETRY_DELAY_MS = 60_000;
 const DEFAULT_HISTORY_STEP_DELAY_MS = 4_000;
 const DEFAULT_HISTORY_BATCH_PAGES = 8;
@@ -309,6 +314,8 @@ export class ReaderBookmarkController {
 	readonly #pageSize: number;
 	readonly #liveRefreshDelayMs: number;
 	readonly #backgroundWarmDelayMs: number | null;
+	readonly #openRevalidateMs: number;
+	readonly #pollIntervalMs: number;
 	readonly #historyStepDelayMs: number;
 	readonly #historyBatchPages: number;
 	readonly #historyBatchDelayMs: number;
@@ -318,6 +325,7 @@ export class ReaderBookmarkController {
 	) => void | Promise<void>;
 	readonly #schedule: (callback: () => void, delayMs: number) => unknown;
 	readonly #cancel: (handle: unknown) => void;
+	readonly #now: () => number;
 	readonly #searchForms: ReaderSearchFormsPort;
 	readonly #onError: (cause: unknown) => void;
 	readonly #activity: ReaderBookmarkActivityPort | null;
@@ -363,6 +371,9 @@ export class ReaderBookmarkController {
 	#loadEpoch = 0;
 	#loadAbort: AbortController | null = null;
 	#liveRefresh: unknown = null;
+	#poll: unknown = null;
+	#headRefreshFlight: Promise<void> | null = null;
+	readonly #headRefreshPending = new Set<ReaderBookmarkSource>();
 	#backgroundWarm: unknown = null;
 	#backgroundWarmAbort: AbortController | null = null;
 	#backgroundWarming = false;
@@ -393,6 +404,7 @@ export class ReaderBookmarkController {
 		ReaderBookmarkHistoryStream,
 		readonly ReaderBookmarkRecord[]
 	>(BACKGROUND_STREAM_ORDER.map((stream) => [stream, Object.freeze([])]));
+	readonly #lastAuthoritativeAt = new Map<ReaderBookmarkSource, number>();
 
 	constructor(options: ReaderBookmarkControllerOptions) {
 		this.#requests = options.requests;
@@ -422,6 +434,21 @@ export class ReaderBookmarkController {
 			)
 		) {
 			throw new RangeError('收藏后台预热延迟必须是非负有限数值');
+		}
+		this.#openRevalidateMs = Number(
+			options.openRevalidateMs ?? DEFAULT_OPEN_REVALIDATE_MS,
+		);
+		if (
+			!Number.isFinite(this.#openRevalidateMs) ||
+			this.#openRevalidateMs < 0
+		) {
+			throw new RangeError('收藏打开回查间隔必须是非负有限数值');
+		}
+		this.#pollIntervalMs = Number(
+			options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+		);
+		if (!Number.isFinite(this.#pollIntervalMs) || this.#pollIntervalMs <= 0) {
+			throw new RangeError('收藏兜底轮询间隔必须是正有限数值');
 		}
 		this.#historyStepDelayMs = Number(
 			options.historyStepDelayMs ?? DEFAULT_HISTORY_STEP_DELAY_MS,
@@ -473,6 +500,7 @@ export class ReaderBookmarkController {
 			((callback, delayMs) => setTimeout(callback, delayMs));
 		this.#cancel = options.cancel ??
 			((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
+		this.#now = options.now ?? Date.now;
 		this.#searchForms = options.searchForms ??
 			((value) => Object.freeze([normalizeReaderSearchText(value)]));
 		this.#onError = options.onError ?? (() => {});
@@ -516,8 +544,12 @@ export class ReaderBookmarkController {
 			this.#loadEpoch += 1;
 			this.#cancelLoad();
 			if (this.#liveRefresh !== null) this.#cancel(this.#liveRefresh);
+			if (this.#poll !== null) this.#cancel(this.#poll);
 			if (this.#backgroundWarm !== null) this.#cancel(this.#backgroundWarm);
 			this.#liveRefresh = null;
+			this.#poll = null;
+			this.#headRefreshPending.clear();
+			this.#headRefreshFlight = null;
 			this.#backgroundWarm = null;
 			this.#cancelBackgroundWarm();
 			this.#taxonomyFlights.clear();
@@ -569,6 +601,8 @@ export class ReaderBookmarkController {
 
 	async open(): Promise<void> {
 		if (this.scope.destroyed) throw new Error('收藏控制器已销毁');
+		const source = sourceForTab(this.#tab);
+		let loadedMissingSource = false;
 		if (!this.#open) {
 			this.#open = true;
 			if (!this.#activeReady()) this.#loading = true;
@@ -576,14 +610,21 @@ export class ReaderBookmarkController {
 		}
 		if (!this.#activeReady()) {
 			const restored = this.#projection
-				? await this.#restoreSource(sourceForTab(this.#tab))
+				? await this.#restoreSource(source)
 				: false;
-			if (!restored || !this.#activeLoaded()) await this.#load(false);
+			if (!restored || !this.#activeLoaded()) {
+				loadedMissingSource = true;
+				await this.#load(false);
+			}
 		}
 		else {
 			this.#render();
 		}
+		if (!loadedMissingSource) {
+			await this.#refreshSourceHead(source);
+		}
 		this.#scheduleBackgroundWarm(0);
+		this.#schedulePoll();
 	}
 
 	close(): void {
@@ -595,6 +636,7 @@ export class ReaderBookmarkController {
 		this.#cancelLoad();
 		if (this.#liveRefresh !== null) this.#cancel(this.#liveRefresh);
 		this.#liveRefresh = null;
+		this.#cancelPoll();
 		if (!this.#backgroundCacheActive) this.#suspendBackgroundWarm();
 		this.#emit();
 	}
@@ -620,6 +662,7 @@ export class ReaderBookmarkController {
 			this.#multi = false;
 			this.#selection.clear();
 		}
+		let loadedMissingSource = false;
 		if (!this.#activeReady()) {
 			this.#loading = true;
 			this.#refreshing = false;
@@ -628,10 +671,17 @@ export class ReaderBookmarkController {
 			const restored = this.#projection
 				? await this.#restoreSource(sourceForTab(this.#tab))
 				: false;
-			if (!restored || !this.#activeLoaded()) await this.#load(false);
+			if (!restored || !this.#activeLoaded()) {
+				loadedMissingSource = true;
+				await this.#load(false);
+			}
 		}
 		else {
 			this.#render();
+		}
+		const source = sourceForTab(this.#tab);
+		if (!loadedMissingSource && this.#shouldRevalidateSource(source)) {
+			await this.#refreshSourceHead(source);
 		}
 	}
 
@@ -838,7 +888,11 @@ export class ReaderBookmarkController {
 
 	async refresh(): Promise<void> {
 		if (this.scope.destroyed) return;
-		await this.#load(true);
+		try {
+			await this.#refreshSourceHead(sourceForTab(this.#tab));
+		} finally {
+			this.#schedulePoll();
+		}
 	}
 
 	cacheStats(): ReaderBookmarkCacheStats {
@@ -949,6 +1003,7 @@ export class ReaderBookmarkController {
 					: this.#mergeSourceRecords(source, snapshot.records),
 				complete: snapshot.complete,
 			}, false);
+			this.#lastAuthoritativeAt.set(source, snapshot.updatedAt);
 		}
 		const restoredStreamNames = new Set<ReaderBookmarkHistoryStream>();
 		for (const { stream, snapshot } of restoredStreams) {
@@ -977,7 +1032,7 @@ export class ReaderBookmarkController {
 			this.#applySourceProgress(source, {
 				pages: streams.reduce((total, stream) =>
 					total + (this.#historyStreams.get(stream)?.pages ?? 0), 0),
-				records,
+				records: this.#mergeSourceRecords(source, records),
 				complete: streams.every((stream) =>
 					this.#historyStreams.get(stream)?.complete === true),
 			}, false);
@@ -1058,6 +1113,8 @@ export class ReaderBookmarkController {
 		this.#backgroundRetryAt = null;
 		this.#backgroundStreamCursor = 0;
 		this.#backgroundNetworkPages = 0;
+		this.#lastAuthoritativeAt.clear();
+		this.#headRefreshPending.clear();
 		for (const source of BACKGROUND_SOURCE_ORDER) {
 			this.#sourceProgress.set(source, emptySourceProgress());
 		}
@@ -1093,6 +1150,10 @@ export class ReaderBookmarkController {
 
 	async #load(refresh: boolean): Promise<void> {
 		if (this.scope.destroyed) return;
+		if (refresh) {
+			await this.#refreshSourceHead(sourceForTab(this.#tab));
+			return;
+		}
 		this.#suspendBackgroundWarm();
 		this.#cancelLoad();
 		const loadAbort = new AbortController();
@@ -1106,12 +1167,10 @@ export class ReaderBookmarkController {
 		this.#error = null;
 		this.#emit();
 		const source = sourceForTab(this.#tab);
-		if (refresh) this.#markProgressIncomplete(source);
 		let reportedPages: number | null = null;
 		let reportedComplete: boolean | null = null;
 		try {
 			const loaded = await this.#loadSource(source, {
-				...(refresh ? { refresh: true } : {}),
 				signal: loadAbort.signal,
 				pageLimit: 1,
 				onProgress: (progress) => {
@@ -1139,6 +1198,7 @@ export class ReaderBookmarkController {
 			this.#refreshing = false;
 			this.#stale = false;
 			this.#error = null;
+			this.#lastAuthoritativeAt.set(source, this.#now());
 			this.#render();
 			this.#queueTopicTaxonomyEnrichment(source, loaded);
 		} catch (cause) {
@@ -1176,6 +1236,7 @@ export class ReaderBookmarkController {
 			records: stored.records,
 			complete: stored.complete,
 		}, false);
+		this.#lastAuthoritativeAt.set(source, stored.updatedAt);
 		this.#loading = false;
 		this.#refreshing = false;
 		this.#stale = false;
@@ -1198,6 +1259,121 @@ export class ReaderBookmarkController {
 			return this.#requests.loadRepliedTopics(options);
 		}
 		return this.#requests.loadBookmarks(options);
+	}
+
+	#shouldRevalidateSource(source: ReaderBookmarkSource): boolean {
+		const observedAt = this.#lastAuthoritativeAt.get(source);
+		return observedAt === undefined ||
+			this.#now() - observedAt >= this.#openRevalidateMs;
+	}
+
+	async #refreshSourceHead(source: ReaderBookmarkSource): Promise<void> {
+		while (this.#headRefreshFlight !== null) {
+			const active = this.#headRefreshFlight;
+			try {
+				await active;
+			} catch {
+				// 活跃刷新负责自己的错误状态；后续来源仍可继续对账。
+			}
+			if (this.scope.destroyed) return;
+		}
+		const flight = this.#performSourceHeadRefresh(source);
+		this.#headRefreshFlight = flight;
+		try {
+			await flight;
+		} finally {
+			if (this.#headRefreshFlight === flight) this.#headRefreshFlight = null;
+		}
+	}
+
+	async #performSourceHeadRefresh(source: ReaderBookmarkSource): Promise<void> {
+		if (this.scope.destroyed) return;
+		this.#suspendBackgroundWarm();
+		const selected = this.#open && sourceForTab(this.#tab) === source;
+		const refreshAbort = new AbortController();
+		const epoch = selected ? this.#loadEpoch + 1 : null;
+		if (selected) {
+			this.#cancelLoad();
+			this.#loadAbort = refreshAbort;
+			if (epoch !== null) this.#loadEpoch = epoch;
+		}
+		const valid = () =>
+			!this.scope.destroyed &&
+			!refreshAbort.signal.aborted &&
+			(epoch === null || epoch === this.#loadEpoch);
+		const knownIdentities = new Set(
+			this.#sourceRecordsFor(source).map((record) => record.identity),
+		);
+		const previous = this.#sourceProgress.get(source) ?? emptySourceProgress();
+		let reportedPages = 0;
+		let reportedComplete = false;
+		if (selected) {
+			this.#loading = knownIdentities.size === 0;
+			this.#refreshing = knownIdentities.size > 0;
+			this.#stale = false;
+			this.#error = null;
+			this.#emit();
+		}
+		try {
+			const loaded = await this.#loadSource(source, {
+				refresh: true,
+				signal: refreshAbort.signal,
+				...(selected ? {} : { background: true }),
+				...(knownIdentities.size > 0
+					? {
+							stopWhenIdentityKnown: (identity: string) =>
+								knownIdentities.has(identity),
+						}
+					: { pageLimit: 1 }),
+				onProgress: (progress) => {
+					if (!valid()) return;
+					reportedPages = progress.pages;
+					reportedComplete = progress.complete;
+					this.#applySourceProgress(source, {
+						pages: Math.max(previous.pages, progress.pages),
+						records: progress.records,
+						complete: previous.complete || progress.complete,
+					});
+					if (selected) {
+						this.#loading = false;
+						this.#refreshing = true;
+					}
+					this.#render();
+				},
+			});
+			if (!valid()) return;
+			this.#applySourceProgress(source, {
+				pages: Math.max(previous.pages, reportedPages || 1),
+				records: loaded,
+				complete: previous.complete || reportedComplete,
+			});
+			this.#lastAuthoritativeAt.set(source, this.#now());
+			this.#queueTopicTaxonomyEnrichment(source, loaded);
+			if (selected) {
+				this.#loading = false;
+				this.#refreshing = false;
+				this.#stale = false;
+				this.#error = null;
+			}
+			this.#render();
+		} catch (cause) {
+			if (!valid()) return;
+			if (selected) {
+				this.#loading = false;
+				this.#refreshing = false;
+				this.#stale = knownIdentities.size > 0;
+				this.#error = cause;
+				this.#render();
+			}
+			this.#onError(cause);
+		} finally {
+			if (this.#loadAbort === refreshAbort) this.#loadAbort = null;
+			this.#scheduleBackgroundWarm(
+				this.#open && this.#visibleHistoryConcurrency > 1
+					? 0
+					: this.#historyStepDelayMs,
+			);
+		}
 	}
 
 	async #enrichTopicTaxonomy(
@@ -1300,7 +1476,7 @@ export class ReaderBookmarkController {
 				: Math.max(previous.pages, progress.pages),
 			records: records.length,
 			complete: progress.complete,
-			checkedAt: Date.now(),
+			checkedAt: this.#now(),
 		}));
 		if (persist) void this.#persistSource(source);
 	}
@@ -1322,7 +1498,7 @@ export class ReaderBookmarkController {
 			mergeStored: !complete,
 			totalHint: records.length,
 			complete,
-			updatedAt: Date.now(),
+			updatedAt: this.#now(),
 			checkpointMode,
 		}).catch(this.#onError);
 	}
@@ -1342,7 +1518,7 @@ export class ReaderBookmarkController {
 				mergeStored: true,
 				totalHint: records.length,
 				complete: state.complete,
-				updatedAt: Date.now(),
+				updatedAt: this.#now(),
 				sourceNextPage: state.next.page,
 				sourceOffset: state.next.cursor,
 				...(stream === 'boosts' || stream === 'reaction-plugin'
@@ -1368,26 +1544,6 @@ export class ReaderBookmarkController {
 		for (const record of current) records.set(record.identity, record);
 		for (const record of incoming) records.set(record.identity, record);
 		return sortReaderBookmarkRecords([...records.values()]);
-	}
-
-	#markProgressIncomplete(source: ReaderBookmarkSource): void {
-		const progress = this.#sourceProgress.get(source) ?? emptySourceProgress();
-		this.#sourceProgress.set(source, Object.freeze({
-			...progress,
-			pages: 0,
-			complete: false,
-		}));
-		for (const stream of historyStreamsForSource(source)) {
-			this.#historyStreams.set(stream, emptyHistoryStreamState(true));
-			this.#historyStreamRecords.set(stream, Object.freeze([]));
-			void this.#persistHistoryStream(stream, 'replace');
-		}
-		void this.#persistSource(source, 'replace');
-		if (this.#backgroundStatus === 'complete') {
-			this.#backgroundStatus = 'idle';
-		}
-		this.#backgroundError = null;
-		this.#backgroundRetryAt = null;
 	}
 
 	#cancelLoad(): void {
@@ -1449,6 +1605,7 @@ export class ReaderBookmarkController {
 			complete: streams.every((stream) =>
 				this.#historyStreams.get(stream)?.complete === true),
 		}, false);
+		this.#lastAuthoritativeAt.set(source, this.#now());
 		const state = this.#historyStreams.get(page.stream)!;
 		const persisted = state.complete ||
 			state.pages % HISTORY_PROJECTION_BATCH_PAGES === 0;
@@ -1488,6 +1645,7 @@ export class ReaderBookmarkController {
 	#onActivityChanged(): void {
 		if (this.scope.destroyed) return;
 		if (!this.#activityVisible()) {
+			this.#cancelPoll();
 			if (this.#backgroundCacheActive) {
 				this.#suspendBackgroundWarm();
 				this.#emit();
@@ -1496,9 +1654,43 @@ export class ReaderBookmarkController {
 		}
 		if (!this.#backgroundCacheActive) {
 			this.startBackgroundCache();
-			return;
+		} else {
+			this.#scheduleBackgroundWarm(0);
 		}
-		this.#scheduleBackgroundWarm(0);
+		this.#schedulePoll();
+	}
+
+	#cancelPoll(): void {
+		if (this.#poll === null) return;
+		this.#cancel(this.#poll);
+		this.#poll = null;
+	}
+
+	#schedulePoll(): void {
+		this.#cancelPoll();
+		if (
+			!this.#open ||
+			this.#activity === null ||
+			!this.#activityVisible() ||
+			this.scope.destroyed
+		) return;
+		this.#poll = this.#schedule(() => {
+			this.#poll = null;
+			if (
+				!this.#open ||
+				!this.#activityVisible() ||
+				this.scope.destroyed
+			) return;
+			if (
+				this.#loading ||
+				this.#refreshing ||
+				this.#headRefreshFlight !== null
+			) {
+				this.#schedulePoll();
+				return;
+			}
+			void this.refresh().catch(this.#onError);
+		}, this.#pollIntervalMs);
 	}
 
 	#scheduleBackgroundWarm(
@@ -1786,6 +1978,17 @@ export class ReaderBookmarkController {
 		);
 	}
 
+	#sourceRecordsFor(
+		source: ReaderBookmarkSource,
+	): readonly ReaderBookmarkRecord[] {
+		if (source === 'bookmarks') return this.#mergedBookmarkRecords();
+		return this.#mergedActivityRecords(
+			source === 'reactions'
+				? 'Reaction'
+				: source === 'boosts' ? 'Boost' : 'Reply',
+		);
+	}
+
 	#mergedActivityRecords(
 		tab: Extract<ReaderBookmarkTab, 'Reaction' | 'Boost' | 'Reply'> | null = null,
 	): readonly ReaderBookmarkRecord[] {
@@ -1927,13 +2130,19 @@ export class ReaderBookmarkController {
 	}
 
 	async #onNativeChanged(
-		source: 'bookmarks' | 'reactions',
+		source: ReaderBookmarkSource,
 	): Promise<void> {
 		if (this.scope.destroyed) return;
-		const tag = source === 'bookmarks' ? 'bookmarks' : 'reactions-given';
+		const tags = source === 'bookmarks'
+			? ['bookmarks']
+			: source === 'replies'
+				? ['replied-topics', 'user-action:5']
+				: source === 'boosts'
+					? ['boosts-given']
+					: ['reactions-given', 'likes-given'];
 		try {
 			await this.#cache.invalidate({
-				tags: [tag],
+				tags,
 			});
 		} catch (cause) {
 			this.#onError(cause);
@@ -1943,28 +2152,28 @@ export class ReaderBookmarkController {
 
 	#markSourceChanged(source: ReaderBookmarkSource): void {
 		if (this.scope.destroyed) return;
-		this.#backgroundRestoreEpoch += 1;
 		this.#suspendBackgroundWarm();
-		this.#markProgressIncomplete(source);
-		if (source === 'bookmarks') {
-			this.#bookmarksLoaded = false;
-			this.#syncedBookmarkRecords = Object.freeze([]);
-		}
-		if (source === 'reactions') this.#reactionsLoaded = false;
-		if (source === 'boosts') this.#boostsLoaded = false;
-		if (source === 'replies') this.#repliesLoaded = false;
-		this.#scheduleBackgroundWarm();
-		if (
-			!this.#open ||
-			sourceForTab(this.#tab) !== source
-		) {
-			return;
-		}
-		if (this.#liveRefresh !== null) this.#cancel(this.#liveRefresh);
+		this.#headRefreshPending.add(source);
+		if (this.#liveRefresh !== null) return;
+		const immediate = this.#open && sourceForTab(this.#tab) === source &&
+			this.#activityVisible();
 		this.#liveRefresh = this.#schedule(() => {
 			this.#liveRefresh = null;
-			void this.#load(true);
-		}, this.#liveRefreshDelayMs);
+			void this.#flushHeadRefreshes();
+		}, immediate ? 0 : this.#liveRefreshDelayMs);
+	}
+
+	async #flushHeadRefreshes(): Promise<void> {
+		if (this.scope.destroyed) return;
+		const sources = [...this.#headRefreshPending];
+		this.#headRefreshPending.clear();
+		for (const source of sources) {
+			await this.#refreshSourceHead(source);
+			if (this.scope.destroyed) return;
+		}
+		if (this.#headRefreshPending.size > 0) {
+			this.#markSourceChanged([...this.#headRefreshPending][0]!);
+		}
 	}
 
 	#render(): void {

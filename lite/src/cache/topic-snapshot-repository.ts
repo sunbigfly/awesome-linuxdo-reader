@@ -179,13 +179,18 @@ function mergePostEntity<TPost extends ReplyTreePostInput>(
 	const currentRecord = current as Readonly<Record<string, unknown>>;
 	const incomingRecord = incoming as Readonly<Record<string, unknown>>;
 	/*
-	 * Discourse 会把被社区举报隐藏的楼层正文替换为临时占位文案。该响应仍
-	 * 更新 hidden 等服务器状态，但不能覆盖本机此前已经取得的真实 cooked；
-	 * 否则后续 404 只会永久存下“此帖子已被举报”的占位内容。
+	 * Discourse 会把被社区举报隐藏或已删除楼层的正文替换为占位文案。该
+	 * 响应仍更新 hidden / deleted_at 等服务器状态，但不能覆盖本机此前
+	 * 已经取得的真实 cooked；否则岁月史书只能存下删除墓碑。
 	 */
+	const explicitlyDeleted =
+		incomingRecord.deleted_at !== null && incomingRecord.deleted_at !== undefined ||
+		incomingRecord.deletedAt !== null && incomingRecord.deletedAt !== undefined;
 	const preserveVisibleCooked =
-		incomingRecord.hidden === true &&
-		moderationHiddenPlaceholder(incomingRecord.cooked) &&
+		(explicitlyDeleted || (
+			incomingRecord.hidden === true &&
+			moderationHiddenPlaceholder(incomingRecord.cooked)
+		)) &&
 		typeof currentRecord.cooked === 'string' &&
 		currentRecord.cooked.trim().length > 0 &&
 		!moderationHiddenPlaceholder(currentRecord.cooked);

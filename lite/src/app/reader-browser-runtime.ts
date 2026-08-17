@@ -101,9 +101,11 @@ import {
 } from '../history/reader-history-panel-view.js';
 import {
 	ReaderChronicleRepository,
+	readerChronicleHttpStatus,
 	readerChronicleRequestTarget,
 	type ReaderChronicleInput,
 	type ReaderChronicleRequestTarget,
+	type ReaderChronicleStatus,
 } from '../history/reader-chronicle-repository.js';
 import { ReaderChronicleView } from '../history/reader-chronicle-view.js';
 import { ReaderUnwantedTopicRepository } from
@@ -270,9 +272,6 @@ import {
 import {
 	ReaderUserObservationView,
 } from '../user/reader-user-observation-view.js';
-import {
-	readerSelfObservationProjection,
-} from '../user/reader-self-observation-projection.js';
 import {
 	ReaderSettingsUserView,
 } from '../user/reader-settings-user-view.js';
@@ -902,7 +901,7 @@ export interface ReaderBrowserTargetRequest {
 	readonly cachedOnly?: boolean;
 	readonly revealAsFloor?: boolean;
 	readonly localArchive?: Readonly<{
-		readonly status: 404;
+		readonly status: 403 | 404 | 410;
 		readonly confirmedAt: number;
 		readonly requestPath?: string;
 	}>;
@@ -2418,7 +2417,9 @@ export class ReaderBrowserRuntime<
 									cachedOnly: true,
 									revealAsFloor: true,
 									localArchive: Object.freeze({
-										status: 404 as const,
+										status: record.status === 'deleted'
+											? 410 as const
+											: record.status,
 										confirmedAt: record.lastObservedAt,
 										requestPath: record.requestPath,
 									}),
@@ -3299,20 +3300,13 @@ export class ReaderBrowserRuntime<
 						),
 					});
 					}
-			/* 私有集合的后台 owner 不依赖启动瞬间能否投影当前用户资料。 */
+			/* 私有集合继续由各自浮窗拥有，不接入用户观察字段或进度。 */
 			this.notificationController?.startBackgroundCache();
 			this.bookmarkController?.startBackgroundCache();
 			const selfObservationUsername =
 				discourseNativeCurrentUsername(options.host);
-				if (selfObservationUsername) {
-					const currentUser = options.host.lookup('service:current-user');
-					const retrySelfPrivateSources = (): void => {
-						/* 用户显式刷新只重排既有断点，不建立第二条抓取链。 */
-						this.notificationController?.startBackgroundCache();
-						this.notificationController?.retryBackgroundCache();
-						this.bookmarkController?.startBackgroundCache();
-						this.bookmarkController?.retryBackgroundCache();
-					};
+			if (selfObservationUsername) {
+				const currentUser = options.host.lookup('service:current-user');
 				this.userObservations.observeSelf({
 					username: selfObservationUsername,
 					name: String(readerNativeModelValue(currentUser, 'name') ?? '')
@@ -3320,44 +3314,8 @@ export class ReaderBrowserRuntime<
 					avatarTemplate: String(
 						readerNativeModelValue(currentUser, 'avatar_template') ?? '',
 					).trim(),
-				}, retrySelfPrivateSources);
-				const publishSelfObservation = (): void => {
-					this.userObservations.updateSelfObservation(
-						readerSelfObservationProjection({
-							...(this.notificationController
-								? {
-									notifications: {
-										snapshot:
-											this.notificationController.snapshot,
-										records:
-											this.notificationController
-												.syncHistoryRecords(),
-									},
-								}
-								: {}),
-							...(this.bookmarkController
-								? {
-									collections: {
-										snapshot: this.bookmarkController.snapshot,
-										records:
-											this.bookmarkController
-												.observationRecords(),
-									},
-								}
-								: {}),
-						}),
-					);
-				};
-				this.notificationController?.changes.subscribe(
-					publishSelfObservation,
-					this.scope,
-				);
-					this.bookmarkController?.changes.subscribe(
-						publishSelfObservation,
-						this.scope,
-					);
-					publishSelfObservation();
-				}
+				});
+			}
 			const coreTopicFactory = createReaderTopicFactory<
 				TTopic,
 				TPost,
@@ -4413,6 +4371,11 @@ export class ReaderBrowserRuntime<
 							this.translationFeature?.syncMountedPosts();
 						}, context.scope);
 						value.services.session.changes.subscribe((commit) => {
+							this.#rememberChronicleDeletedPosts(
+								value,
+								commit.changedPostNumbers,
+								commit.observedAt,
+							);
 							let changedWindow = false;
 							for (const postNumber of commit.changedPostNumbers) {
 								const post = value.services.session.postByNumber(postNumber);
@@ -4429,6 +4392,16 @@ export class ReaderBrowserRuntime<
 							}
 							if (changedWindow) updateTranslationWindow();
 						}, context.scope);
+						value.services.live.changes.subscribe((change) => {
+							if (change.kind !== 'deleted') return;
+							this.#rememberChronicleDeletedPost(
+								value,
+								change.postNumber,
+								Date.now(),
+								'message-bus:deleted',
+								false,
+							);
+						}, context.scope);
 						value.services.session.archiveChanges.subscribe(() => {
 							const active = this.shell.activeValue;
 							if (active?.services.session !== value.services.session) return;
@@ -4440,12 +4413,17 @@ export class ReaderBrowserRuntime<
 							this.#rememberChronicleArchives(active);
 							/*
 							 * 请求观察器会先于 TopicSession 提交缓存存档状态；在正文
-							 * 已确认可保留后重放尚未归档的 404，保留真实请求诊断。
+							 * 已确认可保留后重放尚未归档的失效请求，保留真实请求诊断。
 							 */
 							this.#collectChronicleRequests(this.data.requests.snapshot);
 						}, context.scope);
-						/* 装配时回填刷新前已持久化、但从未进入史书的本地 404。 */
+						/* 装配时回填刷新前已持久化、但从未进入史书的本地失效状态。 */
 						this.#rememberChronicleArchives(value);
+						this.#rememberChronicleDeletedPosts(value);
+						this.#collectChronicleRequests(
+							this.data.requests.snapshot,
+							value,
+						);
 						let contextSurface: ReaderTopicContextSurface<TPost> | null = null;
 						const navigation = new ReaderTopicNavigationController<TPost>({
 							session: value.services.session,
@@ -6142,16 +6120,25 @@ export class ReaderBrowserRuntime<
 		});
 	}
 
-	#collectChronicleRequests(snapshot: RequestObservationSnapshot): void {
+	#collectChronicleRequests(
+		snapshot: RequestObservationSnapshot,
+		context?: ReaderTopicRuntimeContext<
+			TTopic,
+			TPost,
+			ReaderTopicCoreServices<TTopic, TPost>
+		>,
+	): void {
 		const retained = new Set(snapshot.events.map((event) => event.id));
 		for (const id of this.#chronicleRequestIds) {
 			if (!retained.has(id)) this.#chronicleRequestIds.delete(id);
 		}
 		for (const event of snapshot.events) {
 			if (this.#chronicleRequestIds.has(event.id) || event.pending) continue;
+			const status = readerChronicleHttpStatus(event.status);
 			if (
 				event.phase !== 'finished' ||
-				event.status !== 404 ||
+				status === null ||
+				event.cloudflareMitigated ||
 				!event.sameOrigin
 			) {
 				this.#chronicleRequestIds.add(event.id);
@@ -6162,13 +6149,13 @@ export class ReaderBrowserRuntime<
 				this.#chronicleRequestIds.add(event.id);
 				continue;
 			}
-			const input = this.#chronicleInput(target, event);
-			/* 缓存正文可能仍在同一个 404 事务的后续 Session 提交中。 */
+			const input = this.#chronicleInput(target, event, context);
+			/* 缓存正文可能仍在同一个失效事务的后续 Session 提交中。 */
 			if (!input) continue;
 			try {
 				this.chronicle.remember(input);
 			} catch {
-				/* 仓储已发布具名诊断；404 观察不得反向中断请求或改写缓存。 */
+				/* 仓储已发布具名诊断；失效观察不得反向中断请求或改写缓存。 */
 			} finally {
 				this.#chronicleRequestIds.add(event.id);
 			}
@@ -6193,17 +6180,20 @@ export class ReaderBrowserRuntime<
 		const alreadyRemembered = (
 			kind: 'topic' | 'reply',
 			postNumber: number | null,
+			status: ReaderChronicleStatus,
 		): boolean => this.chronicle.snapshot.records.some((record) =>
 			record.kind === kind &&
 			Number(record.topicId) === topicId &&
-			(kind === 'topic' || Number(record.postNumber) === postNumber)
+			(kind === 'topic' || Number(record.postNumber) === postNumber) &&
+			record.status === status
 		);
 		const remember = (
 			kind: 'topic' | 'reply',
 			postNumber: number | null,
+			status: 403 | 404 | 410,
 			confirmedAt: number,
 		): void => {
-			if (alreadyRemembered(kind, postNumber)) return;
+			if (alreadyRemembered(kind, postNumber, status)) return;
 			const post = postNumber === null
 				? session.postByNumber(1)
 				: session.postByNumber(postNumber);
@@ -6223,7 +6213,7 @@ export class ReaderBrowserRuntime<
 			try {
 				this.chronicle.remember({
 					kind,
-					status: 404,
+					status,
 					bodyCached: true,
 					topicId,
 					topicTitle,
@@ -6244,12 +6234,99 @@ export class ReaderBrowserRuntime<
 			}
 		};
 		const archive = session.localArchiveState();
-		if (archive.topic?.status === 404) {
-			remember('topic', null, archive.topic.confirmedAt);
+		if (archive.topic) {
+			remember(
+				'topic',
+				null,
+				archive.topic.status,
+				archive.topic.confirmedAt,
+			);
 		}
 		for (const entry of archive.posts) {
-			if (entry.status !== 404) continue;
-			remember('reply', Number(entry.postNumber), entry.confirmedAt);
+			remember(
+				'reply',
+				Number(entry.postNumber),
+				entry.status,
+				entry.confirmedAt,
+			);
+		}
+	}
+
+	#rememberChronicleDeletedPosts(
+		value: ReaderTopicRuntimeContext<
+			TTopic,
+			TPost,
+			ReaderTopicCoreServices<TTopic, TPost>
+		>,
+		postNumbers: readonly number[] = value.services.session.cachedPosts().map((post) =>
+			Number(post.post_number)),
+		observedAt = Date.now(),
+	): void {
+		for (const postNumber of postNumbers) {
+			this.#rememberChronicleDeletedPost(
+				value,
+				Number(postNumber),
+				observedAt,
+				'post-model:deleted_at',
+				true,
+			);
+		}
+	}
+
+	#rememberChronicleDeletedPost(
+		value: ReaderTopicRuntimeContext<
+			TTopic,
+			TPost,
+			ReaderTopicCoreServices<TTopic, TPost>
+		>,
+		postNumber: number,
+		observedAt: number,
+		callSite: string,
+		requireDeletedModel: boolean,
+	): void {
+		if (!Number.isSafeInteger(postNumber) || postNumber < 1) return;
+		const post = value.services.session.postByNumber(postNumber);
+		if (!post) return;
+		const source = post as TPost & Readonly<{
+			readonly deleted_at?: unknown;
+			readonly deletedAt?: unknown;
+		}>;
+		const deletedAt = source.deleted_at ?? source.deletedAt;
+		if (requireDeletedModel && !deletedAt) return;
+		const topicId = Number(value.services.session.topicId);
+		const kind = postNumber === 1 ? 'topic' : 'reply';
+		if (this.chronicle.snapshot.records.some((record) =>
+			record.kind === kind &&
+			Number(record.topicId) === topicId &&
+			(kind === 'topic' || Number(record.postNumber) === postNumber) &&
+			record.status === 'deleted'
+		)) return;
+		const topic = (
+			value.services.session.topic ?? value.topic
+		) as Readonly<{ readonly title?: unknown }>;
+		const parsedDeletedAt = Date.parse(String(deletedAt ?? ''));
+		try {
+			this.chronicle.remember({
+				kind,
+				status: 'deleted',
+				bodyCached: true,
+				topicId,
+				topicTitle: String(topic.title ?? '').trim() ||
+					this.history.entry(topicId)?.title,
+				...(kind === 'reply' ? { postNumber } : {}),
+				postId: Number(post.id),
+				requestPath: kind === 'topic'
+					? `/t/${topicId}.json`
+					: `/posts/by_number/${topicId}/${postNumber}.json`,
+				requestMethod: 'GET',
+				requestSource: 'host',
+				callSite,
+				observedAt: Number.isFinite(parsedDeletedAt)
+					? parsedDeletedAt
+					: observedAt,
+			});
+		} catch {
+			/* 删除模型记录失败不得反向改变 Topic canonical 或实时事件。 */
 		}
 	}
 
@@ -6261,10 +6338,12 @@ export class ReaderBrowserRuntime<
 		if (!Number.isSafeInteger(boostId) || boostId <= 0) return;
 		const resolvedBoost = this.#chronicleBoostTarget(boostId);
 		for (const event of this.data.requests.snapshot.events) {
+			const status = readerChronicleHttpStatus(event.status);
 			if (
 				event.id <= requestFloor ||
 				event.phase !== 'finished' ||
-				event.status !== 404 ||
+				status === null ||
+				event.cloudflareMitigated ||
 				!event.sameOrigin
 			) continue;
 			const target = readerChronicleRequestTarget(event.path);
@@ -6277,7 +6356,7 @@ export class ReaderBrowserRuntime<
 			try {
 				this.chronicle.remember({
 					kind: 'boost',
-					status: 404,
+					status,
 					bodyCached: true,
 					topicId: request.topicId,
 					topicTitle: resolvedBoost?.topicTitle ||
@@ -6295,7 +6374,7 @@ export class ReaderBrowserRuntime<
 					observedAt: event.endedAt || event.startedAt,
 				});
 			} catch {
-				/* 404 记录失败不得删除缓存，也不得反向改变打开事务结果。 */
+				/* 失效记录失败不得删除缓存，也不得反向改变打开事务结果。 */
 			}
 		}
 	}
@@ -6303,14 +6382,21 @@ export class ReaderBrowserRuntime<
 	#chronicleInput(
 		target: ReaderChronicleRequestTarget,
 		event: RequestObservationEvent,
+		context?: ReaderTopicRuntimeContext<
+			TTopic,
+			TPost,
+			ReaderTopicCoreServices<TTopic, TPost>
+		>,
 	): ReaderChronicleInput | null {
+		const status = readerChronicleHttpStatus(event.status);
+		if (status === null || event.cloudflareMitigated) return null;
 		let targetKind = target.kind;
 		let topicId = target.topicId;
 		let postNumber = target.postNumber;
 		let postId = target.postId;
 		const boostId = target.boostId;
 		let topicTitle = '';
-		const active = this.shell.activeValue;
+		const active = context ?? this.shell.activeValue;
 		if (postId !== null && active) {
 			const post = active.services.session.postById(postId);
 			const resolved = tryDiscoursePostNumber(post?.post_number);
@@ -6374,7 +6460,7 @@ export class ReaderBrowserRuntime<
 		) return null;
 		return Object.freeze({
 			kind: targetKind,
-			status: 404,
+			status,
 			bodyCached: true,
 			topicId,
 			topicTitle,

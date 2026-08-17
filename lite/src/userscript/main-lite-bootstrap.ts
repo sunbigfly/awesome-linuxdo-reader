@@ -61,6 +61,9 @@ import {
 	createReaderShellTemplate,
 	type ReaderShellTemplate,
 } from '../shell/reader-shell-template.js';
+import {
+	dismissReaderFloatingWindowTabSessionFromEscape,
+} from '../shell/reader-floating-window-frame.js';
 import { ReaderSurfacePortal } from '../shell/reader-surface-portal.js';
 import {
 	readerPreferencesShortcutAdapter,
@@ -1364,7 +1367,13 @@ export function startMainLiteUserscript(
 		diagnostics: [],
 	};
 	const onWindowKeyDown = (event: KeyboardEvent): void => {
-		state.runtime?.shell.activeValue?.topicContextSurface
+		const runtime = state.runtime;
+		if (!runtime) return;
+		if (dismissReaderFloatingWindowTabSessionFromEscape(
+			runtime.shell.view.surfaceHost,
+			event,
+		)) return;
+		runtime.shell.activeValue?.topicContextSurface
 			.handleEscape(event);
 	};
 	window.addEventListener('keydown', onWindowKeyDown, true);

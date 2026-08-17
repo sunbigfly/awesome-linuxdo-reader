@@ -314,6 +314,23 @@ await gateway.loadNotificationPage({
 	transport: async () => ({ ok: true, status: 200, value: [{ id: 2 }] }),
 });
 assert(client.calls.at(-1)?.priority === 'visible', '当前通知页必须是 visible');
+assert(client.calls.at(-1)?.lane === 'standard', '普通通知分页必须保持单请求车道');
+await gateway.loadNotificationPage({
+	authScope: 'account:test',
+	group: 'all',
+	page: 0,
+	parallelHead: true,
+	input: '/notifications.json?page=0',
+	signal: controller.signal,
+	cacheMode: 'refresh',
+	cache: notificationCache,
+	transport: async () => ({ ok: true, status: 200, value: [{ id: 3 }] }),
+});
+assert(
+	client.calls.at(-1)?.priority === 'visible' &&
+		client.calls.at(-1)?.lane === 'topic-batch',
+	'通知头部校验必须进入受中央总并发约束的批次车道',
+);
 const callsBeforeNotificationCache = client.calls.length;
 const cachedNotifications = await gateway.cachedNotificationPage<readonly {
 	readonly id: number;

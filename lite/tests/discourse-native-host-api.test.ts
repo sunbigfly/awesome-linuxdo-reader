@@ -1412,17 +1412,20 @@ await Promise.resolve();
 for (const eventName of [
 	'bookmarks:changed',
 	'discourse-reactions:reaction-toggled',
+	'composer:created-post',
+	'post:created',
 ]) {
 	for (const handler of bookmarkEvents.get(eventName) ?? []) handler();
 }
+await Promise.resolve();
 unsubscribeBookmark();
 assert(
 	bookmarkNative.username() === 'viewer' &&
 	reactionFinds === 2 &&
-	bookmarkChanges === 2 &&
-	bookmarkChangeSources.join(',') === 'bookmarks,reactions' &&
+	bookmarkChanges === 3 &&
+	bookmarkChangeSources.join(',') === 'bookmarks,reactions,replies' &&
 	[...bookmarkEvents.values()].every((handlers) => handlers.size === 0),
-	'收藏宿主桥必须统一解析 current-user、原生回应 model 和两个 app-events 生命周期',
+	'收藏宿主桥必须统一解析 current-user、收藏/回应与宿主发帖事件，并合并同 tick 回复回声',
 );
 
 const delayedAppEvents = new Map<string, Set<(payload?: unknown) => void>>();
@@ -1452,7 +1455,7 @@ await Promise.resolve();
 for (const handler of delayedAppEvents.get('reader:test-changed') ?? []) handler();
 unsubscribeDelayedAppEvent();
 assert(
-	Number(bookmarkChanges) === 3 &&
+	Number(bookmarkChanges) === 4 &&
 		(delayedAppEvents.get('reader:test-changed')?.size ?? 0) === 0,
 	'通用 app-event 桥必须在 service 延迟就绪后恢复订阅并保持精确退订',
 );

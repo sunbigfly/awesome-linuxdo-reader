@@ -1,6 +1,6 @@
 /* Awesome LinuxDo Reader Lite stylesheet.
  * Generated only from lite/styles/*.css; do not edit generated outputs.
- * source-sha256: f1f4e026390062664b98d49ead93e0b70467380c1d590d3796ff0a4dad1c1261
+ * source-sha256: d3e3bfb0a3921ca8424a69dcd5c8f147accfe10844a134328ae90c5753ee4679
  */
 
 /* source: 00-foundation.css */
@@ -16432,6 +16432,21 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 .ldp-reader-floating-window-actions
+	:is(.ldp-notification-refresh, .ldp-bookmark-refresh).is-refreshing
+	> .ldp-icon {
+	animation: ldp-notification-refresh-spin .8s linear infinite;
+	transform-box: fill-box;
+	transform-origin: center;
+	will-change: transform;
+}
+
+@keyframes ldp-notification-refresh-spin {
+	to {
+		transform: rotate(1turn);
+	}
+}
+
+.ldp-reader-floating-window-actions
   .ldp-reader-floating-window-extra-action > span {
   display: none;
 }
@@ -24755,6 +24770,15 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
     animation-iteration-count: 1 !important;
     transition-duration: .001ms !important;
   }
+
+	/* Busy indicators remain animated because motion is their live-state signal. */
+	.ldp-overlay
+		:is(.ldp-notification-refresh, .ldp-bookmark-refresh).is-refreshing
+		> .ldp-icon {
+		animation-duration: .8s !important;
+		animation-iteration-count: infinite !important;
+		animation-play-state: running !important;
+	}
 
 	:is(.ldp-loadmask,.ldp-loading-settings-preview) .ldp-loading-visual-inner {
 		animation: ldp-loader-reduced-breathe 2.5s ease-in-out infinite !important;

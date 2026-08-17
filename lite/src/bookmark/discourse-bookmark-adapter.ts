@@ -57,6 +57,7 @@ export interface ReaderBookmarkLoadOptions {
 	readonly signal?: AbortSignal;
 	readonly background?: boolean;
 	readonly pageLimit?: number;
+	readonly stopWhenIdentityKnown?: (identity: string) => boolean;
 	readonly beforeNetwork?: (signal: AbortSignal) => void | Promise<void>;
 	readonly onProgress?: (progress: ReaderBookmarkLoadProgress) => void;
 }
@@ -631,6 +632,8 @@ export class DiscourseBookmarkRequestAdapter {
 		for (let page = 0; page < pageLimit; page += 1) {
 			if (signal.aborted) throw signal.reason;
 			const loaded = await this.loadHistoryPage(stream, position, options);
+			const reachedKnownIdentity = loaded.records.some((entry) =>
+				options.stopWhenIdentityKnown?.(entry.identity) === true);
 			for (const entry of loaded.records) {
 				records.set(entry.identity, entry);
 			}
@@ -640,7 +643,7 @@ export class DiscourseBookmarkRequestAdapter {
 				loaded.complete,
 				onProgress,
 			);
-			if (loaded.complete) return snapshot;
+			if (loaded.complete || reachedKnownIdentity) return snapshot;
 			position = loaded.next;
 		}
 		if (pageLimit < MAX_COLLECTION_PAGES) {

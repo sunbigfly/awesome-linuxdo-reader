@@ -1,5 +1,8 @@
 import { parseHTML } from 'linkedom';
 import type { Cleanup } from '../src/kernel/lifecycle.js';
+import type {
+	DiscourseNativeBookmarkChangeSource,
+} from '../src/discourse/native-host-api.js';
 import { Signal } from '../src/kernel/signal.js';
 import {
 	discoursePostId,
@@ -68,7 +71,7 @@ function pointerEvent(
 
 class FakeBookmarkNative implements ReaderBookmarkNativeStatePort {
 	readonly listeners = new Set<
-		(source: 'bookmarks' | 'reactions') => void
+		(source: DiscourseNativeBookmarkChangeSource) => void
 	>();
 	reactionCalls = 0;
 
@@ -98,13 +101,13 @@ class FakeBookmarkNative implements ReaderBookmarkNativeStatePort {
 	}
 
 	subscribeChanged(
-		listener: (source: 'bookmarks' | 'reactions') => void,
+		listener: (source: DiscourseNativeBookmarkChangeSource) => void,
 	): Cleanup {
 		this.listeners.add(listener);
 		return () => this.listeners.delete(listener);
 	}
 
-	emitChanged(source: 'bookmarks' | 'reactions'): void {
+	emitChanged(source: DiscourseNativeBookmarkChangeSource): void {
 		for (const listener of [...this.listeners]) listener(source);
 	}
 }
@@ -241,11 +244,13 @@ class FakeBookmarkAjax implements ReaderBookmarkNativeAjaxPort {
 class FakeCollectionGateway {
 	readonly requests: CollectionPageRequest<unknown>[] = [];
 	lastFailureResponse: RequestTransportResponse<unknown> | null = null;
+	barrier: Promise<void> | null = null;
 
 	async loadCollectionPage<T>(
 		input: CollectionPageRequest<T>,
 	): Promise<T> {
 		this.requests.push(input as CollectionPageRequest<unknown>);
+		if (this.barrier) await this.barrier;
 		await input.beforeNetwork?.(input.signal);
 		const response = await input.transport({
 			signal: input.signal,
@@ -398,6 +403,55 @@ assert(
 	historicalRequests[1]?.cache?.freshForMs === 7 * 24 * 60 * 60_000 &&
 	historicalRequests[1]?.cache?.retainForMs === 180 * 24 * 60 * 60_000,
 	'后台历史必须逐页增量报告，统一走最低优先级，并让稳定旧页使用长效缓存',
+);
+
+const incrementalRequests: CollectionPageRequest<unknown>[] = [];
+const incrementalAdapter = new DiscourseBookmarkRequestAdapter({
+	gateway: {
+		async loadCollectionPage<T>(input: CollectionPageRequest<T>): Promise<T> {
+			incrementalRequests.push(input as CollectionPageRequest<unknown>);
+			const offset = Number(input.cursor ?? 0);
+			const actions = offset >= 200
+				? []
+				: Array.from({ length: 100 }, (_, index) => {
+					const id = offset === 100 && index === 0
+						? 1_500
+						: 2_000 + offset + index;
+					return {
+						id,
+						action_type: 5,
+						post_id: 3_000 + offset + index,
+						topic_id: 4_000 + offset + index,
+						post_number: index + 1,
+						title: `增量回复 ${offset + index + 1}`,
+						username: 'viewer',
+						created_at: '2026-08-17T00:00:00.000Z',
+					};
+				});
+			return { user_actions: actions } as T;
+		},
+	},
+	ajax,
+	native,
+	authScope: 'account:test',
+	signal: new AbortController().signal,
+	cache: {
+		kind: 'discourse-bookmark-collection',
+		tags: ['bookmarks'],
+		freshForMs: 60_000,
+		retainForMs: 86_400_000,
+		persist: true,
+	},
+});
+const incrementalRecords = await incrementalAdapter.loadRepliedTopics({
+	refresh: true,
+	stopWhenIdentityKnown: (identity) => identity === 'reply:1500',
+});
+assert(
+	incrementalRequests.length === 2 &&
+	incrementalRequests.every((request) => request.cacheMode === 'refresh') &&
+	incrementalRecords.some((record) => record.identity === 'reply:1500'),
+	'头部增量必须从首页强制回源，整页无重复才继续，并在首个已知 identity 所在页停止',
 );
 
 const visibleHistoryRequestStart = historicalRequests.length;
@@ -554,9 +608,9 @@ const projectedBookmark: ReaderBookmarkRecord = Object.freeze({
 });
 const normalizedBookmarkProjectionController = new ReaderBookmarkController({
 	requests: {
-		async loadBookmarks(): Promise<never> {
+		async loadBookmarks() {
 			normalizedBookmarkProjectionLoads += 1;
-			throw new Error('归一收藏投影命中后不应进入网络');
+			return Object.freeze([projectedBookmark]);
 		},
 	} as unknown as DiscourseBookmarkRequestAdapter,
 	projection: {
@@ -599,13 +653,69 @@ normalizedBookmarkProjectionController.startBackgroundCache();
 await flushMicrotasks();
 assert(
 	normalizedBookmarkProjectionController.snapshot.records[0]?.identity ===
-		projectedBookmark.identity && normalizedBookmarkProjectionLoads === 0 &&
+		projectedBookmark.identity && normalizedBookmarkProjectionLoads === 2 &&
 		normalizedBookmarkOpenSchedules === 0 &&
 		normalizedBookmarkProjectionController.snapshot.historyProgress.status ===
 			'complete',
-	'收藏、回复、Boost 与回应必须先恢复账号归一投影；重复打开不能启动历史续传或等待网络',
+	'收藏、回复、Boost 与回应必须先恢复账号归一投影，并在每次打开浮窗时立即增量回查头页',
 );
 normalizedBookmarkProjectionController.destroy();
+
+let bookmarkPollVisible = true;
+let bookmarkPollLoads = 0;
+const bookmarkPollSchedules = new Map<number, Readonly<{
+	callback: () => void;
+	delayMs: number;
+}>>();
+let bookmarkPollScheduleId = 0;
+const bookmarkPollController = new ReaderBookmarkController({
+	requests: {
+		async loadRepliedTopics() {
+			bookmarkPollLoads += 1;
+			return replyRecords;
+		},
+	} as unknown as DiscourseBookmarkRequestAdapter,
+	native,
+	actions: {} as PostActionController,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+	tabOrder: ['Reply'],
+	pollIntervalMs: 10_000,
+	activity: {
+		visible: () => bookmarkPollVisible,
+		subscribe: () => () => {},
+	},
+	schedule(callback, delayMs) {
+		const id = ++bookmarkPollScheduleId;
+		bookmarkPollSchedules.set(id, Object.freeze({ callback, delayMs }));
+		return id;
+	},
+	cancel(handle) {
+		bookmarkPollSchedules.delete(Number(handle));
+	},
+});
+await bookmarkPollController.open();
+assert(
+	bookmarkPollLoads === 1 &&
+	bookmarkPollSchedules.size === 1 &&
+	[...bookmarkPollSchedules.values()][0]?.delayMs === 10_000,
+	'收藏回应浮窗首次打开必须立即读取当前头页，并安排唯一低频兜底轮询',
+);
+const bookmarkPollEntry = bookmarkPollSchedules.entries().next().value as
+	| [number, Readonly<{ callback: () => void; delayMs: number }>]
+	| undefined;
+if (!bookmarkPollEntry) throw new Error('收藏回应兜底轮询尚未排入');
+bookmarkPollSchedules.delete(bookmarkPollEntry[0]);
+bookmarkPollEntry[1].callback();
+await flushMicrotasks();
+assert(
+	bookmarkPollLoads === 2 && bookmarkPollSchedules.size === 1,
+	'收藏回应兜底轮询到期后必须增量刷新，并续排下一次唯一轮询',
+);
+bookmarkPollVisible = false;
+bookmarkPollController.close();
+assert(bookmarkPollSchedules.size === 0, '关闭收藏回应浮窗必须撤销兜底轮询');
+bookmarkPollController.destroy();
 
 const mutations: ActionMutationDescriptor<unknown>[] = [];
 const invalidations: string[][] = [];
@@ -698,14 +808,14 @@ assert(
 	warmController.snapshot.historyProgress.status === 'complete' &&
 	warmController.snapshot.historyProgress.completedTabs === 5 &&
 	warmController.snapshot.historyProgress.records === 6 &&
-	warmPrimaryRequests.length === 5 &&
-	warmTaxonomyRequests.length === 5 &&
+	warmPrimaryRequests.length === 6 &&
+	warmTaxonomyRequests.length === 6 &&
 	warmRequests.filter((request) =>
-		request.profile === 'collection-visible').length === 0 &&
+		request.profile === 'collection-visible').length === 1 &&
 	warmRequests.filter((request) =>
-		request.profile === 'background-prefetch').length === 10 &&
-	gateway.requests.length === warmRequestsBeforeOpen,
-	'application 后台必须用中央 background 优先级补齐收藏历史；打开面板只能回放缓存',
+		request.profile === 'background-prefetch').length === 11 &&
+	gateway.requests.length === warmRequestsBeforeOpen + 2,
+	'application 后台必须用中央 background 优先级补齐收藏历史；打开面板则立即用可见优先级校验当前头页',
 );
 warmController.close();
 assert(warmCallbacks.size === 0, '后台补齐完成后关闭收藏面板不得重新排入任务');
@@ -1266,9 +1376,9 @@ assert(
 );
 await priorityController.open();
 assert(
-	priorityVisibleCalls === 1 &&
+	priorityVisibleCalls === 2 &&
 	priorityController.snapshot.records.length === replyRecords.length,
-	'分类已有首屏缓存时必须零等待复用，不能因历史尚未完成而重复前台请求',
+	'分类已有首屏缓存时必须立即展示，每次打开仍必须只校验当前头页',
 );
 priorityController.destroy();
 await flushMicrotasks();
@@ -1453,7 +1563,7 @@ native.emitChanged('reactions');
 await flushMicrotasks();
 assert(
 	invalidations.some((tags) =>
-		tags.length === 1 && tags.includes('reactions-given')) &&
+		tags.includes('reactions-given') && tags.includes('likes-given')) &&
 	scheduled.size === 1,
 	'宿主收藏/回应事件必须统一失效中央缓存并合并为一次可见刷新',
 );
@@ -1510,6 +1620,28 @@ reactionEvents.emit({
 assert(
 	scheduled.size === 1,
 	'回复成功后必须合并排入当前回复 tab 刷新',
+);
+controller.close();
+await controller.open();
+await controller.selectTab('Reply');
+const hostReplyRequestsBefore = gateway.requests.filter((request) =>
+	request.collection === 'replied-topics').length;
+native.emitChanged('replies');
+await flushMicrotasks();
+assert(
+	invalidations.some((tags) =>
+		tags.includes('replied-topics') && tags.includes('user-action:5')) &&
+	scheduled.size === 1,
+	'宿主 composer/post 回复事件必须失效回复头页并合并同 tick 回声',
+);
+for (const callback of [...scheduled.values()]) callback();
+scheduled.clear();
+await flushMicrotasks();
+assert(
+	gateway.requests.filter((request) =>
+		request.collection === 'replied-topics').length ===
+		hostReplyRequestsBefore + 1,
+	'宿主回复事件命中首页已知 identity 后必须只请求一页，不得重扫完整回复历史',
 );
 controller.close();
 await controller.open();
@@ -1764,6 +1896,9 @@ assert(
 	);
 	bookmarkCalendarToggle.click();
 	assert(
+		document.querySelector<HTMLButtonElement>(
+			'.ldp-reader-floating-window.is-bookmarks .ldp-bookmark-refresh',
+		) !== null &&
 		template.bookmarksMultiButton.closest(
 			'.ldp-reader-floating-window-actions',
 		) !== null &&
@@ -1774,6 +1909,39 @@ assert(
 			'.ldp-collection-title',
 		)?.hidden === true,
 		'收藏默认与批量操作必须进入浮窗标题栏，内容区不保留空白操作行',
+	);
+	const bookmarkRefresh = document.querySelector<HTMLButtonElement>(
+		'.ldp-reader-floating-window.is-bookmarks .ldp-bookmark-refresh',
+	)!;
+	const bookmarkRequestsBeforeManualRefresh = gateway.requests.length;
+	let releaseManualBookmarkRefresh!: () => void;
+	gateway.barrier = new Promise<void>((resolve) => {
+		releaseManualBookmarkRefresh = resolve;
+	});
+	bookmarkRefresh.click();
+	await flushMicrotasks();
+	assert(
+		gateway.requests.length > bookmarkRequestsBeforeManualRefresh &&
+		bookmarkRefresh.disabled &&
+		bookmarkRefresh.dataset.ldpRequestBusy === '1' &&
+		bookmarkRefresh.classList.contains('is-refreshing') &&
+		bookmarkRefresh.querySelector('[data-icon="loader"]') !== null &&
+		document.querySelector<HTMLElement>(
+			'.ldp-reader-floating-window.is-bookmarks ' +
+			'.ldp-reader-floating-window-meta',
+		)?.textContent?.includes('正在更新收藏与回应') === true,
+		'收藏回应主动更新必须提供旋转忙态和完整状态文案',
+	);
+	gateway.barrier = null;
+	releaseManualBookmarkRefresh();
+	await flushMicrotasks();
+	assert(
+		!bookmarkRefresh.disabled &&
+		bookmarkRefresh.dataset.ldpRequestBusy === '0' &&
+		!bookmarkRefresh.classList.contains('is-refreshing') &&
+		bookmarkRefresh.querySelector('[data-icon="rotate-ccw"]') !== null &&
+		viewNotifications.at(-1) === '收藏与回应已更新',
+		'收藏回应主动更新完成后必须恢复按钮并给出完成反馈',
 	);
 	bookmarkFilterPanel.querySelector<HTMLButtonElement>(
 		'.ldp-user-observation-sort-direction',

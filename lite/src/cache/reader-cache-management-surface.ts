@@ -3,12 +3,13 @@ import type {
 	ResponseCacheRecord,
 	ResponseRepository,
 } from './response-repository.js';
+import {
+	readerChronicleRecord,
+	type ReaderChronicleRepository,
+} from '../history/reader-chronicle-repository.js';
 import type {
 	ReaderHistoryRepository,
 } from '../history/reader-history-repository.js';
-import type {
-	ReaderChronicleRepository,
-} from '../history/reader-chronicle-repository.js';
 import type {
 	ReaderAssetCacheStats,
 	ReaderBrowserAssetCacheRepository,
@@ -133,7 +134,7 @@ const CATEGORIES: readonly CacheCategoryDefinition[] = Object.freeze([
 	{
 		id: 'history',
 		title: '浏览历史与岁月史书',
-		help: '勾选“浏览历史与岁月史书”后再点下方清理，会删除阅读器保存的主题、最近阅读楼层、查看时间和岁月史书 404 记录；不会删除浏览器本身的访问历史，也不会由收到 404 自动触发清理。',
+		help: '勾选“浏览历史与岁月史书”后再点下方清理，会删除阅读器保存的主题、最近阅读楼层、查看时间和岁月史书删除/不可用记录；不会删除浏览器本身的访问历史，也不会因收到失效信号自动触发清理。',
 		retention: '最多 365 天',
 	},
 	{
@@ -285,13 +286,10 @@ function categoryStatText(
 			Number((entry as { readonly topicId?: unknown }).topicId),
 		).filter((topicId) => Number.isSafeInteger(topicId) && topicId > 0));
 		const chronicle = history.filter((entry) =>
-			Number((entry as { readonly status?: unknown }).status) === 404 &&
-			['topic', 'reply', 'boost'].includes(String(
-				(entry as { readonly kind?: unknown }).kind ?? '',
-			)));
+			readerChronicleRecord(entry) !== null);
 		return withApplicationCacheDetail(
 			`${topicIds.size} 个主题 · ${history.length - chronicle.length} 条浏览记录 · ` +
-				`${chronicle.length} 条 404 记录 · ` +
+				`${chronicle.length} 条失效记录 · ` +
 				`${formatBytes(new TextEncoder().encode(JSON.stringify(history)).byteLength)} · 本机保存`,
 			application,
 		);

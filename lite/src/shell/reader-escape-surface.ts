@@ -22,13 +22,32 @@ const ESCAPE_SURFACE_SELECTOR = [
 	'.ldp-selection-toolbar:not([hidden])',
 ].join(',');
 
+const EMBEDDED_COLLECTION_SURFACE_SELECTOR = [
+	'.ldp-notifications-popover',
+	'.ldp-history-popover',
+	'.ldp-bookmarks-popover',
+].join(',');
+
 function visible(document: Document, element: HTMLElement): boolean {
-	if (!element.isConnected || element.hidden) return false;
-	if (element.getAttribute('aria-hidden') === 'true') return false;
 	const viewport = document.defaultView;
-	if (!viewport?.getComputedStyle) return true;
-	const style = viewport.getComputedStyle(element);
-	return style.display !== 'none' && style.visibility !== 'hidden';
+	let current: HTMLElement | null = element;
+	while (current) {
+		if (!current.isConnected || current.hidden) return false;
+		if (current.getAttribute('aria-hidden') === 'true') return false;
+		if (viewport?.getComputedStyle) {
+			const style = viewport.getComputedStyle(current);
+			if (style.display === 'none' || style.visibility === 'hidden') {
+				return false;
+			}
+		}
+		current = current.parentElement;
+	}
+	return true;
+}
+
+function embeddedCollectionSurface(element: HTMLElement): boolean {
+	return element.matches(EMBEDDED_COLLECTION_SURFACE_SELECTOR) &&
+		element.closest('.ldp-reader-floating-window') !== null;
 }
 
 function declaredSurfaceZIndex(element: HTMLElement): number | null {
@@ -131,7 +150,9 @@ export function readerFrontmostEscapeSurface(
 ): HTMLElement | null {
 	const candidates = escapeSurfaceRoots(document).flatMap((root) =>
 		[...root.querySelectorAll<HTMLElement>(ESCAPE_SURFACE_SELECTOR)]
-	).filter((candidate) => visible(document, candidate));
+	).filter((candidate) =>
+		visible(document, candidate) && !embeddedCollectionSurface(candidate)
+	);
 	let frontmost: HTMLElement | null = null;
 	let frontmostVector: readonly number[] = Object.freeze([]);
 	for (const candidate of candidates) {

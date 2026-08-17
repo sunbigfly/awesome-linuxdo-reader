@@ -20,11 +20,13 @@ export const READER_CHRONICLE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1_000;
 export const READER_CHRONICLE_MAX_RECORDS = 1_000;
 
 export type ReaderChronicleKind = 'topic' | 'reply' | 'boost';
+export type ReaderChronicleHttpStatus = 403 | 404 | 410;
+export type ReaderChronicleStatus = ReaderChronicleHttpStatus | 'deleted';
 
 export interface ReaderChronicleRecord {
 	readonly identity: string;
 	readonly kind: ReaderChronicleKind;
-	readonly status: 404;
+	readonly status: ReaderChronicleStatus;
 	readonly bodyCached: true;
 	readonly topicId: DiscourseTopicId;
 	readonly topicTitle: string;
@@ -141,6 +143,25 @@ function kind(value: unknown): ReaderChronicleKind | null {
 		: null;
 }
 
+export function readerChronicleStatus(
+	value: unknown,
+): ReaderChronicleStatus | null {
+	if (value === 'deleted') return 'deleted';
+	const numeric = Number(value);
+	return numeric === 403 || numeric === 404 || numeric === 410
+		? numeric
+		: null;
+}
+
+export function readerChronicleHttpStatus(
+	value: unknown,
+): ReaderChronicleHttpStatus | null {
+	const status = readerChronicleStatus(value);
+	return status === 403 || status === 404 || status === 410
+		? status
+		: null;
+}
+
 function hash(value: string): string {
 	let result = 2_166_136_261;
 	for (let index = 0; index < value.length; index += 1) {
@@ -182,7 +203,7 @@ function searchText(input: Omit<ReaderChronicleRecord, 'searchText'>): string {
 		input.postNumber === null ? '' : `楼层 ${input.postNumber}`,
 		input.postId === null ? '' : `post ${input.postId}`,
 		input.boostId === null ? '' : `boost ${input.boostId}`,
-		'404',
+		input.status === 'deleted' ? '已删除 deleted' : String(input.status),
 		input.requestMethod,
 		input.requestPath,
 		input.requestSource,
@@ -208,11 +229,12 @@ function normalizeRecord(value: unknown): ReaderChronicleRecord | null {
 	const source = record(value);
 	const targetKind = kind(source?.kind);
 	const topicId = tryDiscourseTopicId(source?.topicId);
+	const status = readerChronicleStatus(source?.status);
 	if (
 		!source ||
 		!targetKind ||
 		topicId === null ||
-		Number(source.status) !== 404 ||
+		status === null ||
 		source.bodyCached !== true
 	) {
 		return null;
@@ -230,7 +252,7 @@ function normalizeRecord(value: unknown): ReaderChronicleRecord | null {
 	const base = Object.freeze({
 		identity: '',
 		kind: targetKind,
-		status: 404 as const,
+		status,
 		bodyCached: true as const,
 		topicId,
 		topicTitle: normalizedTitle(source.topicTitle, topicId),
@@ -262,20 +284,19 @@ function inputRecord(
 	const topicId = discourseTopicId(input.topicId);
 	const targetKind = kind(input.kind);
 	if (!targetKind) throw new Error('岁月史书记录类型无效');
-	if (input.status !== undefined && Number(input.status) !== 404) {
-		throw new Error('岁月史书只接受 HTTP 404 信号');
-	}
+	const status = readerChronicleStatus(input.status ?? 404);
+	if (status === null) throw new Error('岁月史书只接受删除或 403/404/410 信号');
 	if (input.bodyCached !== true) {
-		throw new Error('岁月史书只接受本机仍有正文的 404');
+		throw new Error('岁月史书只接受本机仍有可定位内容的失效记录');
 	}
 	const postNumber = tryDiscoursePostNumber(input.postNumber);
 	const postId = tryDiscoursePostId(input.postId);
 	const boostId = positiveInteger(input.boostId);
 	if (targetKind === 'reply' && postNumber === null && postId === null) {
-		throw new Error('回复 404 必须包含楼层或 post.id');
+		throw new Error('回复失效记录必须包含楼层或 post.id');
 	}
 	if (targetKind === 'boost' && boostId === null) {
-		throw new Error('Boost 404 必须包含 boost.id');
+		throw new Error('Boost 失效记录必须包含 boost.id');
 	}
 	const observedAt = timestamp(input.observedAt) || now;
 	const requestPath = text(input.requestPath) || `/t/${topicId}`;
@@ -283,7 +304,7 @@ function inputRecord(
 	const base = Object.freeze({
 		identity: '',
 		kind: targetKind,
-		status: 404 as const,
+		status,
 		bodyCached: true as const,
 		topicId,
 		topicTitle: normalizedTitle(input.topicTitle, topicId),
@@ -340,7 +361,7 @@ export function mergeReaderChronicleValues(
 }
 
 /**
- * RequestObserver 已去除 query 和凭据；这里只从其安全 path 投影可定位的 404 目标。
+ * RequestObserver 已去除 query 和凭据；这里只从其安全 path 投影可定位的失效目标。
  */
 export function readerChronicleRequestTarget(
 	pathValue: unknown,
@@ -412,7 +433,7 @@ function quotaError(error: unknown): boolean {
 		source?.code === 22 || source?.code === 1014;
 }
 
-/** 账号隔离、限龄并按真实 404 请求位置去重的岁月史书唯一持久 owner。 */
+/** 账号隔离、限龄并按真实失效请求位置去重的岁月史书唯一持久 owner。 */
 export class ReaderChronicleRepository {
 	readonly changes = new Signal<ReaderChronicleSnapshot>();
 	readonly diagnostics = new Signal<ReaderChronicleDiagnostic>();

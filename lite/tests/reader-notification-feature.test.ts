@@ -332,6 +332,8 @@ class FakeGateway {
 	readonly notificationCache = new Map<string, unknown>();
 	readonly collectionCache = new Map<string, unknown>();
 	readonly topicCache = new Map<string, unknown>();
+	notificationBarrier: Promise<void> | null = null;
+	reactionBarrier: Promise<void> | null = null;
 
 	async cachedNotificationPage<T>(
 		input: NotificationPageCacheLookup,
@@ -371,6 +373,12 @@ class FakeGateway {
 		input: NotificationPageRequest<T>,
 	): Promise<T> {
 		this.requests.push(input as NotificationPageRequest<unknown>);
+		const barrier = this.notificationBarrier;
+		if (barrier) await barrier;
+		const reactionBarrier = input.group === 'reactions'
+			? this.reactionBarrier
+			: null;
+		if (reactionBarrier) await reactionBarrier;
 		const response = await input.transport({
 			signal: input.signal,
 			attempt: 1,
@@ -482,6 +490,12 @@ for (const groupKey of READER_NOTIFICATION_GROUP_ORDER) {
 	}
 }
 const rawReplyPage = await requests.load('replies', 0);
+const refreshedReplyPage = await requests.load('replies', 0, { refresh: true });
+assert(
+	refreshedReplyPage.records.length === rawReplyPage.records.length &&
+		gateway.requests.at(-1)?.parallelHead === true,
+	'通知头页刷新必须标记为中央批次请求，普通分页不得擅自放大并发',
+);
 const [enrichedReplyPage] = await requests.enrichTopicTaxonomy([rawReplyPage]);
 assert(
 	enrichedReplyPage?.records.every((record) => record.tags.includes('alpha')) &&
@@ -758,7 +772,7 @@ for (let step = 0; step < 20; step += 1) {
 const warmLoadsBeforeOpen = warmLoads.length;
 await warmController.open();
 assert(
-	warmLoads.join(',') ===
+	warmLoads.slice(0, warmLoadsBeforeOpen).join(',') ===
 		'replies:0:undefined:true:undefined,' +
 		'likes:0:undefined:true:undefined,' +
 		'mentions:0:undefined:true:undefined,' +
@@ -766,14 +780,22 @@ assert(
 		'links:0:undefined:true:undefined,' +
 		'boosts:0:undefined:true:undefined,' +
 		'reactions:0:undefined:true:undefined' &&
+	warmLoads.slice(warmLoadsBeforeOpen).join(',') ===
+		'replies:0:undefined:undefined:undefined,' +
+		'likes:0:undefined:undefined:undefined,' +
+		'mentions:0:undefined:undefined:undefined,' +
+		'edits:0:undefined:undefined:undefined,' +
+		'links:0:undefined:undefined:undefined,' +
+		'boosts:0:undefined:undefined:undefined,' +
+		'reactions:0:true:undefined:undefined,' +
+		'all:0:true:undefined:false' &&
 	warmController.snapshot.open &&
 	warmController.snapshot.records.length === 1 &&
 	warmController.snapshot.records[0]?.identity === warmReplyRecord.identity &&
 	warmController.snapshot.records[0]?.source === 'user-actions' &&
 	warmController.snapshot.records[0]?.aggregateCount === null &&
-	warmController.snapshot.error === null &&
-	warmLoads.length === warmLoadsBeforeOpen,
-	'application 后台必须在关闭态补齐通知身份与私信；打开“全部”只能回放缓存：' +
+	warmController.snapshot.error === null,
+	'application 后台必须先恢复通知缓存；打开“全部”要立即增量回查七条头流与原生通知身份：' +
 		JSON.stringify({
 			loads: warmLoads,
 			beforeOpen: warmLoadsBeforeOpen,
@@ -1296,7 +1318,11 @@ assert(
 	historyController.snapshot.history.loadedPages === 8 &&
 	historyController.snapshot.history.cachedRecords === 8 &&
 	historyController.snapshot.history.progress === 1,
-	'历史回填必须从首屏水位续取唯一缺页，并完成七类统一进度与去重记录索引',
+	'历史回填必须从首屏水位续取唯一缺页，并完成七类统一进度与去重记录索引：' +
+		JSON.stringify({
+			loads: historyLoads,
+			history: historyController.snapshot.history,
+		}),
 );
 historyController.setQuery('深层回复命中');
 assert(
@@ -1686,11 +1712,20 @@ assert(
 	'声明 offset 600 却只有 100 条的残缺完成投影必须保留记录并重置断点，不能继续显示历史已到底',
 );
 await corruptCheckpointController.open();
-const corruptCheckpointTask = [...corruptCheckpointCallbacks][0];
-assert(corruptCheckpointTask !== undefined, '修复后的残缺通知必须立即排入续传');
-corruptCheckpointCallbacks.delete(corruptCheckpointTask[0]);
-corruptCheckpointTask[1].callback();
-await flushMicrotasks();
+for (let step = 0; step < 8 && corruptCheckpointLoads.length < 3; step += 1) {
+	const corruptCheckpointTask = [...corruptCheckpointCallbacks][0];
+	assert(
+		corruptCheckpointTask !== undefined,
+		'修复后的残缺通知必须立即排入续传：' + JSON.stringify({
+			history: corruptCheckpointController.snapshot.history,
+			loads: corruptCheckpointLoads,
+			writes: corruptCheckpointWrites,
+		}),
+	);
+	corruptCheckpointCallbacks.delete(corruptCheckpointTask[0]);
+	corruptCheckpointTask[1].callback();
+	await flushMicrotasks();
+}
 assert(
 	corruptCheckpointLoads.join(',') === '0,1,2' &&
 	corruptCheckpointPeak === 3,
@@ -2044,7 +2079,7 @@ const fastCategoryController = new ReaderNotificationController({
 	cache: { async invalidate(): Promise<void> {} },
 	target: { async openTarget(): Promise<boolean> { return true; } },
 	backgroundWarmDelayMs: 60_000,
-	openRevalidateMs: 0,
+	openRevalidateMs: 60_000,
 	schedule() {
 		return ++fastScheduleId;
 	},
@@ -2206,7 +2241,7 @@ const normalizedProjectionController = new ReaderNotificationController({
 	cache: { async invalidate(): Promise<void> {} },
 	target: { async openTarget(): Promise<boolean> { return true; } },
 	backgroundWarmDelayMs: 60_000,
-	openRevalidateMs: 0,
+	openRevalidateMs: 60_000,
 });
 await normalizedProjectionController.selectGroup('replies');
 await normalizedProjectionController.open();
@@ -2221,10 +2256,10 @@ assert(
 			normalizedProjectedReplies.length &&
 		normalizedProjectionController.syncHistoryRecords().length === 40 &&
 	normalizedProjectionController.cacheStats().records === 40 &&
-	normalizedProjectionNetworkLoads === 0 &&
+	normalizedProjectionNetworkLoads === 4 &&
 	normalizedProjectionController.snapshot.history.status === 'complete' &&
 	normalizedProjectionController.snapshot.history.loadedPages === 9,
-	'通知必须先恢复完整账号归一分页投影；重复打开只回放缓存，不能按打开时刻重新联网：' +
+	'通知必须先恢复完整账号归一分页投影；重复打开仍立即校验头部且失败不得清空投影：' +
 		JSON.stringify({
 			first: normalizedProjectionController.snapshot.records[0]?.identity,
 			visible: normalizedProjectionController.snapshot.records.length,
@@ -2234,6 +2269,63 @@ assert(
 		}),
 );
 normalizedProjectionController.destroy();
+
+const nonRegressingProjectionRecords = Object.freeze(Array.from(
+	{ length: 3 },
+	(_, index) => normalizeUserActionNotification({
+		action_type: 6,
+		post_id: 45_000 + index,
+		acting_user_id: 46_000 + index,
+		acting_username: `projection-user-${index}`,
+		created_at: `2026-08-17T0${index}:00:00.000Z`,
+		topic_id: 47_000 + index,
+		post_number: 2,
+		title: `投影历史 ${index + 1}`,
+	}, 'replies'),
+));
+let freshProjectionRecords = nonRegressingProjectionRecords;
+const nonRegressingProjectionController = new ReaderNotificationController({
+	requests: {
+		async load(): Promise<never> {
+			throw new Error('完整投影恢复不得触发网络');
+		},
+	} as unknown as DiscourseNotificationRequestAdapter,
+	projection: {
+		async read(group) {
+			const records = group === 'replies'
+				? freshProjectionRecords
+				: Object.freeze([]);
+			return Object.freeze({
+				records,
+				totalHint: records.length,
+				complete: true,
+				updatedAt: 1_000,
+				sourceNextPage: 1,
+			});
+		},
+		async write(): Promise<void> {},
+	},
+	native,
+	actions: {} as PostActionController,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+	backgroundWarmDelayMs: 60_000,
+});
+nonRegressingProjectionController.startBackgroundCache();
+await flushMicrotasks();
+assert(
+	nonRegressingProjectionController.snapshot.history.cachedRecords === 3 &&
+		nonRegressingProjectionController.snapshot.groupCounts.get('replies') === 3,
+	'通知后台启动必须先恢复完整持久投影',
+);
+freshProjectionRecords = Object.freeze([nonRegressingProjectionRecords[0]!]);
+await nonRegressingProjectionController.reloadExternalProjection();
+assert(
+	nonRegressingProjectionController.snapshot.history.cachedRecords === 3 &&
+		nonRegressingProjectionController.snapshot.groupCounts.get('replies') === 3,
+	'fresh 部分快照必须与本机完整活动历史合并，刷新期间缓存和分类计数不得回退',
+);
+nonRegressingProjectionController.destroy();
 
 const incompleteGateway = new FakeGateway();
 const incompleteAjax: ReaderNotificationNativeAjaxPort = {
@@ -2347,7 +2439,6 @@ retryController.changes.subscribe((snapshot) => {
 	retryingStates.push(snapshot.retrying);
 });
 await retryController.selectGroup('replies');
-await retryController.open();
 assert(
 	retryLoads === 2 &&
 	retryDelays.join(',') === '600' &&
@@ -2491,7 +2582,7 @@ const activityController = new ReaderNotificationController({
 await activityController.open();
 assert(
 	activitySchedules.size === 0,
-	'逐条活动“全部”打开且页面可见时不得创建周期轮询',
+	'显式关闭通知轮询后，逐条活动“全部”打开不得创建周期任务',
 );
 await activityController.selectGroup('replies');
 assert(
@@ -2520,6 +2611,70 @@ activityController.close();
 assert(Number(activitySchedules.size) === 0, '关闭消息面板不得创建恢复轮询');
 activityController.destroy();
 assert(Number(activityListeners.size) === 0, '通知 activity 监听必须随 owner 精确释放');
+
+const fallbackPollSchedules = new Map<
+	number,
+	Readonly<{ callback: () => void; delayMs: number }>
+>();
+let fallbackPollScheduleId = 0;
+let fallbackPollLoads = 0;
+const fallbackPollController = new ReaderNotificationController({
+	requests: {
+		async load(group: ReaderNotificationGroupKey, page: number) {
+			fallbackPollLoads += 1;
+			return Object.freeze({
+				group,
+				page,
+				records: Object.freeze([]),
+				total: 0,
+				hasNext: false,
+				nextCursor: null,
+			});
+		},
+	} as unknown as DiscourseNotificationRequestAdapter,
+	native,
+	actions,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+	activity: {
+		visible: () => true,
+		subscribe: () => () => {},
+	},
+	nativePollIntervalMs: 10_000,
+	syntheticPollIntervalMs: 10_000,
+	openRevalidateMs: 60_000,
+	now: () => 0,
+	schedule(callback, delayMs) {
+		const id = ++fallbackPollScheduleId;
+		fallbackPollSchedules.set(id, Object.freeze({ callback, delayMs }));
+		return id;
+	},
+	cancel(handle) {
+		fallbackPollSchedules.delete(Number(handle));
+	},
+});
+await fallbackPollController.open();
+assert(
+	fallbackPollSchedules.size === 1 &&
+		[...fallbackPollSchedules.values()][0]?.delayMs === 10_000,
+	'通知面板可见时必须安排唯一低频兜底轮询，以覆盖宿主漏发事件',
+);
+const fallbackLoadsBeforePoll = fallbackPollLoads;
+const fallbackPollEntry = fallbackPollSchedules.entries().next().value as
+	| [number, Readonly<{ callback: () => void; delayMs: number }>]
+	| undefined;
+if (!fallbackPollEntry) throw new Error('通知兜底轮询尚未排入');
+fallbackPollSchedules.delete(fallbackPollEntry[0]);
+fallbackPollEntry[1].callback();
+await flushMicrotasks();
+assert(
+	fallbackPollLoads > fallbackLoadsBeforePoll &&
+		fallbackPollSchedules.size === 1,
+	'通知兜底轮询到期后必须执行增量更新，并续排下一次唯一轮询',
+);
+fallbackPollController.close();
+assert(fallbackPollSchedules.size === 0, '关闭通知面板必须撤销兜底轮询');
+fallbackPollController.destroy();
 
 const clickNative = new FakeNotificationNative();
 clickNative.unread = 1;
@@ -2900,6 +3055,26 @@ assert(
 	String(controller.snapshot.group) === 'replies',
 	'Discourse 消息事件必须就近刷新当前分类与原生关联，不能先扇出全部分类请求',
 );
+scheduled.clear();
+scheduledDelays.clear();
+const replyLoadsBeforeExplicitRefresh = gateway.requests.filter((request) =>
+	request.group === 'replies').length;
+native.emitChanged();
+await flushMicrotasks();
+assert(
+	[...scheduledDelays.values()].includes(0),
+	'宿主事件必须先排入零延迟头页校验',
+);
+await controller.refresh();
+assert(
+	gateway.requests.filter((request) => request.group === 'replies').length ===
+		replyLoadsBeforeExplicitRefresh + 1 &&
+		![...scheduledDelays.values()].includes(0),
+	'主动打开或刷新必须吞掉尚未执行的同类宿主事件，不得串行重复两轮',
+);
+scheduled.clear();
+scheduledDelays.clear();
+await flushMicrotasks();
 const requestsAfterEventRefresh = gateway.requests.length;
 // MessageBus 失效已经刷新并提交 controller 头页；FakeGateway 不模拟真实
 // ResponseRepository 的同标签失效，切 tab 时不得再次回放测试双缓存的旧快照。
@@ -2938,6 +3113,284 @@ assert(
 	partiallyReadReplies.get(5) === false,
 	'同一父通知的多个未读子记录必须逐条已读，最后一条之前不得提前提交父通知',
 );
+
+const catchUpKnown = normalizeUserActionNotification({
+	action_type: 6,
+	post_id: 9_100,
+	acting_user_id: 91,
+	acting_username: 'known-user',
+	created_at: '2026-08-16T00:00:00.000Z',
+	topic_id: 910,
+	post_number: 2,
+	title: '已知通知',
+}, 'replies');
+const catchUpNew = [9_101, 9_102].map((postId, index) =>
+	normalizeUserActionNotification({
+		action_type: 6,
+		post_id: postId,
+		acting_user_id: 92 + index,
+		acting_username: `new-user-${index}`,
+		created_at: `2026-08-17T00:0${index}:00.000Z`,
+		topic_id: 911 + index,
+		post_number: 2,
+		title: `新增通知 ${index + 1}`,
+	}, 'replies'));
+let catchUpRefresh = false;
+const catchUpLoads: Array<Readonly<{
+	group: ReaderNotificationGroupKey;
+	page: number;
+}>> = [];
+const catchUpController = new ReaderNotificationController({
+	requests: {
+		authScope: requests.authScope,
+		async load(group: ReaderNotificationGroupKey, page: number) {
+			catchUpLoads.push(Object.freeze({ group, page }));
+			if (group !== 'replies') return Object.freeze({
+				group,
+				page,
+				records: Object.freeze([]),
+				total: 0,
+				hasNext: false,
+				nextCursor: null,
+			});
+			if (!catchUpRefresh) return Object.freeze({
+				group,
+				page,
+				records: Object.freeze([catchUpKnown]),
+				total: 1,
+				hasNext: false,
+				nextCursor: null,
+			});
+			if (page === 0) return Object.freeze({
+				group,
+				page,
+				records: Object.freeze(catchUpNew),
+				total: 3,
+				hasNext: true,
+				nextCursor: 100,
+			});
+			if (page === 1) return Object.freeze({
+				group,
+				page,
+				records: Object.freeze([catchUpKnown]),
+				total: 3,
+				hasNext: true,
+				nextCursor: 200,
+			});
+			throw new Error('命中已知通知后不得继续请求第三页');
+		},
+	} as unknown as DiscourseNotificationRequestAdapter,
+	native,
+	actions,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+});
+await catchUpController.open();
+await catchUpController.selectGroup('replies');
+catchUpRefresh = true;
+catchUpLoads.length = 0;
+await catchUpController.refresh();
+assert(
+	catchUpLoads.filter((entry) => entry.group === 'replies')
+		.map((entry) => entry.page).join(',') === '0,1' &&
+	catchUpController.snapshot.groupCounts.get('replies') === 3,
+	'通知事件刷新必须从首页追到首个已知 identity 所在页，合并新记录后立即停止',
+);
+catchUpLoads.length = 0;
+catchUpController.close();
+await catchUpController.open();
+assert(
+	catchUpLoads.filter((entry) => entry.group === 'replies')
+		.map((entry) => entry.page).join(',') === '0',
+	'通知浮窗每次打开都必须立即刷新头页，并在首页命中已知 identity 后结束',
+);
+catchUpController.destroy();
+
+const backgroundExpansionParent = normalizeNativeNotification({
+	id: 9_200,
+	notification_type: 1,
+	read: false,
+	created_at: '2026-08-17T01:00:00.000Z',
+	topic_id: 920,
+	post_number: 3,
+	data: {
+		display_username: 'reply-user',
+		topic_title: '合并回复主题',
+		consolidated_count: 2,
+		reply_to_post_number: 1,
+	},
+}, {
+	actor: 'reply-user',
+	typeName: 'replied',
+	typeLabel: '回复',
+	topicId: 920,
+	postNumber: 3,
+}, 'all');
+let backgroundExpansionStarted = false;
+let releaseBackgroundExpansion!: () => void;
+const backgroundExpansionBarrier = new Promise<void>((resolve) => {
+	releaseBackgroundExpansion = resolve;
+});
+const quickRefreshController = new ReaderNotificationController({
+	requests: {
+		authScope: requests.authScope,
+		async load(
+			group: ReaderNotificationGroupKey,
+			page: number,
+			options?: Parameters<DiscourseNotificationRequestAdapter['load']>[2],
+		) {
+			if (group === 'all') {
+				if (options?.expandConsolidated === true) {
+					backgroundExpansionStarted = true;
+					await backgroundExpansionBarrier;
+				}
+				return Object.freeze({
+					group,
+					page,
+					records: Object.freeze([backgroundExpansionParent]),
+					total: 1,
+					hasNext: false,
+					nextCursor: null,
+				});
+			}
+			return Object.freeze({
+				group,
+				page,
+				records: Object.freeze([]),
+				total: 0,
+				hasNext: false,
+				nextCursor: null,
+			});
+		},
+	} as unknown as DiscourseNotificationRequestAdapter,
+	native,
+	actions,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+	backgroundWarmDelayMs: 60_000,
+	schedule: () => 1,
+	cancel: () => {},
+});
+await quickRefreshController.open();
+let quickRefreshCompleted = false;
+const quickRefresh = quickRefreshController.refresh().then(() => {
+	quickRefreshCompleted = true;
+});
+await flushMicrotasks();
+assert(
+	backgroundExpansionStarted && quickRefreshCompleted,
+	'主动更新命中倒序 identity 边界后必须立即完成，合并回复 Topic 展开只能后台补齐',
+);
+releaseBackgroundExpansion();
+await quickRefresh;
+await flushMicrotasks();
+quickRefreshController.destroy();
+
+const cachedSlowReaction = Object.freeze({
+	...catchUpKnown,
+	identity: 'reaction:cached',
+	group: 'reactions' as const,
+	source: 'reactions-received' as const,
+	typeName: 'reaction',
+	typeLabel: '回应',
+	summary: '@cached-user · 回应了你的帖子 · 已缓存回应',
+});
+const freshSlowReaction = Object.freeze({
+	...cachedSlowReaction,
+	identity: 'reaction:fresh',
+	actor: 'fresh-user',
+	createdAt: '2026-08-17T02:00:00.000Z',
+	summary: '@fresh-user · 回应了你的帖子 · 新回应',
+});
+let releaseSlowReaction!: () => void;
+let slowReactionBarrier = new Promise<void>((resolve) => {
+	releaseSlowReaction = resolve;
+});
+let slowReactionLoads = 0;
+let slowReactionFailure = false;
+const slowReactionController = new ReaderNotificationController({
+	requests: {
+		authScope: requests.authScope,
+		async load(group: ReaderNotificationGroupKey, page: number) {
+			if (group !== 'reactions') return Object.freeze({
+				group,
+				page,
+				records: Object.freeze([]),
+				total: 0,
+				hasNext: false,
+				nextCursor: null,
+			});
+			slowReactionLoads += 1;
+			if (slowReactionFailure) throw new Error('回应接口超时');
+			await slowReactionBarrier;
+			return Object.freeze({
+				group,
+				page,
+				records: Object.freeze([freshSlowReaction, cachedSlowReaction]),
+				total: 2,
+				hasNext: false,
+				nextCursor: null,
+			});
+		},
+	} as unknown as DiscourseNotificationRequestAdapter,
+	native,
+	actions,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+	backgroundWarmDelayMs: 60_000,
+	schedule: () => 1,
+	cancel: () => {},
+});
+slowReactionController.applySyncedHistoryRecords([cachedSlowReaction]);
+await slowReactionController.open();
+assert(
+	!slowReactionController.snapshot.refreshing &&
+	slowReactionController.snapshot.backgroundRefreshingGroups.includes(
+		'reactions',
+	) && slowReactionLoads === 1,
+	'已有回应缓存时，主刷新必须先完成并把慢回应接口留在可观察的后台任务中',
+);
+await slowReactionController.refresh();
+assert(
+	slowReactionLoads === 1,
+	'回应后台更新未结束时，重复打开或主动刷新不得发出第二个相同请求',
+);
+releaseSlowReaction();
+await flushMicrotasks();
+assert(
+	!slowReactionController.snapshot.backgroundRefreshingGroups.length &&
+	slowReactionController.snapshot.groupCounts.get('reactions') === 2,
+	'回应后台更新完成后必须自动合并新记录并更新分类计数',
+);
+slowReactionFailure = true;
+await slowReactionController.refresh();
+await flushMicrotasks();
+assert(
+	slowReactionController.snapshot.backgroundRefreshFailedGroups.includes(
+		'reactions',
+	) && !slowReactionController.snapshot.error,
+	'回应后台更新失败必须独立暴露状态，不能把已完成的主要通知刷新改成失败',
+);
+slowReactionFailure = false;
+slowReactionBarrier = new Promise<void>((resolve) => {
+	releaseSlowReaction = resolve;
+});
+await slowReactionController.refresh();
+assert(
+	slowReactionController.snapshot.backgroundRefreshingGroups.includes(
+		'reactions',
+	),
+	'回应后台失败后再次主动刷新必须允许重试',
+);
+slowReactionController.clearCache();
+releaseSlowReaction();
+await flushMicrotasks();
+assert(
+	slowReactionController.cacheStats().records === 0 &&
+	!slowReactionController.snapshot.backgroundRefreshingGroups.length,
+	'清空缓存后，旧回应后台请求的迟到结果不得重新写回缓存',
+);
+slowReactionController.destroy();
 
 const { document: parsedDocument } = parseHTML(
 	'<!doctype html><html><body></body></html>',
@@ -3177,6 +3630,84 @@ assert(
 		'.ldp-reader-floating-window-actions',
 	) !== null,
 	'消息入口必须迁入用户观察同款独立浮窗，而不是继续锚定标题栏',
+);
+const notificationRefresh = document.querySelector<HTMLButtonElement>(
+	'.ldp-reader-floating-window.is-notifications .ldp-notification-refresh',
+);
+assert(
+	notificationRefresh?.getAttribute('aria-label') === '更新通知' &&
+		notificationRefresh.closest('.ldp-reader-floating-window-actions') !== null &&
+		notificationRefresh.querySelector('[data-icon="rotate-ccw"]') !== null,
+	'通知浮窗标题栏必须提供可访问的主动更新图标',
+);
+const notificationRequestsBeforeManualRefresh = gateway.requests.length;
+let releaseManualNotificationRefresh!: () => void;
+gateway.notificationBarrier = new Promise<void>((resolve) => {
+	releaseManualNotificationRefresh = resolve;
+});
+notificationRefresh.click();
+await flushMicrotasks();
+assert(
+	gateway.requests.length > notificationRequestsBeforeManualRefresh &&
+		notificationRefresh.disabled &&
+		notificationRefresh.dataset.ldpRequestBusy === '1' &&
+		notificationRefresh.dataset.refreshState === 'running' &&
+		notificationRefresh.classList.contains('is-refreshing') &&
+		notificationRefresh.querySelector('[data-icon="loader"]') !== null &&
+		document.querySelector<HTMLElement>(
+			'.ldp-reader-floating-window.is-notifications ' +
+			'.ldp-reader-floating-window-meta',
+		)?.textContent?.includes('正在更新通知') === true,
+	'主动更新期间必须显示真实旋转忙态和完整的“正在更新通知”状态',
+);
+gateway.notificationBarrier = null;
+releaseManualNotificationRefresh();
+await flushMicrotasks();
+assert(
+	!notificationRefresh.disabled &&
+		notificationRefresh.dataset.ldpRequestBusy === '0' &&
+		notificationRefresh.dataset.refreshState === 'success' &&
+		!notificationRefresh.classList.contains('is-refreshing') &&
+		notificationRefresh.querySelector('[data-icon="check-square"]') !== null &&
+		viewNotifications.at(-1) === '通知已更新',
+	'主动更新完成后必须显示成功状态并恢复可操作，不能停在忙态',
+);
+let releaseBackgroundReaction!: () => void;
+gateway.reactionBarrier = new Promise<void>((resolve) => {
+	releaseBackgroundReaction = resolve;
+});
+const reactionRequestsBeforeBackgroundRefresh = gateway.requests.filter(
+	(request) => request.group === 'reactions',
+).length;
+notificationRefresh.click();
+await flushMicrotasks();
+const backgroundReactionMeta = document.querySelector<HTMLElement>(
+	'.ldp-reader-floating-window.is-notifications ' +
+	'.ldp-reader-floating-window-meta',
+);
+assert(
+	!notificationRefresh.disabled &&
+	notificationRefresh.dataset.ldpRequestBusy === '0' &&
+	!notificationRefresh.classList.contains('is-refreshing') &&
+	notificationRefresh.getAttribute('aria-label') ===
+		'主要通知已更新，回应后台更新中' &&
+	backgroundReactionMeta?.textContent?.includes('后台更新回应') === true,
+	'主要通知完成后必须停止转圈并明确显示回应仍在后台更新',
+);
+notificationRefresh.click();
+await flushMicrotasks();
+assert(
+	gateway.requests.filter((request) => request.group === 'reactions').length ===
+		reactionRequestsBeforeBackgroundRefresh + 1,
+	'回应后台更新期间再次主动刷新必须复用同一回应请求',
+);
+gateway.reactionBarrier = null;
+releaseBackgroundReaction();
+await flushMicrotasks();
+assert(
+	!backgroundReactionMeta?.textContent?.includes('后台更新回应') &&
+	notificationRefresh.getAttribute('aria-label') === '通知更新完成',
+	'回应后台更新结束后必须自动清除独立状态并保留本轮成功反馈',
 );
 notificationToggleTop = 72;
 	await controller.selectGroup('replies');

@@ -1623,9 +1623,15 @@ export interface DiscourseNativeBookmarkStatePort {
 		beforeReactionUserId?: number,
 	): Promise<unknown>;
 	subscribeChanged(
-		listener: (source: 'bookmarks' | 'reactions') => void,
+		listener: (source: DiscourseNativeBookmarkChangeSource) => void,
 	): Cleanup;
 }
+
+export type DiscourseNativeBookmarkChangeSource =
+	| 'bookmarks'
+	| 'reactions'
+	| 'replies'
+	| 'boosts';
 
 function nativeModelValue(value: unknown, key: string): unknown {
 	const record = objectRecord(value);
@@ -2057,7 +2063,7 @@ implements DiscourseNativeBookmarkStatePort {
 	}
 
 	subscribeChanged(
-		listener: (source: 'bookmarks' | 'reactions') => void,
+		listener: (source: DiscourseNativeBookmarkChangeSource) => void,
 	): Cleanup {
 		return discourseDeferredSubscription(() => {
 			const appEvents = objectRecord(
@@ -2070,13 +2076,30 @@ implements DiscourseNativeBookmarkStatePort {
 			const subscriptions = Object.freeze([
 				['bookmarks:changed', 'bookmarks'],
 				['discourse-reactions:reaction-toggled', 'reactions'],
+				['composer:created-post', 'replies'],
+				['post:created', 'replies'],
 			] as const);
 			const attached: Array<Readonly<{
 				name: string;
 				handler: () => void;
 			}>> = [];
+			const pending = new Set<DiscourseNativeBookmarkChangeSource>();
+			let publishScheduled = false;
+			let active = true;
+			const publish = (): void => {
+				publishScheduled = false;
+				if (!active) return;
+				const sources = [...pending];
+				pending.clear();
+				for (const source of sources) listener(source);
+			};
 			for (const [name, source] of subscriptions) {
-				const handler = () => listener(source);
+				const handler = () => {
+					pending.add(source);
+					if (publishScheduled) return;
+					publishScheduled = true;
+					void Promise.resolve().then(publish);
+				};
 				try {
 					on.call(appEvents, name, context, handler);
 					attached.push(Object.freeze({ name, handler }));
@@ -2084,10 +2107,10 @@ implements DiscourseNativeBookmarkStatePort {
 					// 单个可选插件事件缺失不能阻止收藏事件订阅。
 				}
 			}
-			let active = true;
 			return () => {
 				if (!active) return;
 				active = false;
+				pending.clear();
 				for (const entry of attached) {
 					try {
 						off.call(

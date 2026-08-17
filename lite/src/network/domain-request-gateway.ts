@@ -115,6 +115,8 @@ export interface NotificationPageRequest<T> extends DomainRequestExecution<T> {
 	readonly group: string;
 	readonly page: number;
 	readonly variant?: string;
+	/** 同一次通知头部校验的多条来源可在中央总并发内批次启动。 */
+	readonly parallelHead?: boolean;
 	readonly profile?:
 		| 'notification-visible'
 		| 'surface-prefetch'
@@ -362,7 +364,7 @@ export class DomainRequestGateway {
 		return this.#execute({
 			...input,
 			profile: input.profile ?? 'notification-visible',
-			lane: 'standard',
+			lane: input.parallelHead ? 'topic-batch' : 'standard',
 			namespace: 'notifications',
 			identity: notificationRequestIdentity(input),
 		});

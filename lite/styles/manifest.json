@@ -559,7 +559,8 @@
       ],
       "styles": [
         "50-components.css",
-        "55-collections.css"
+        "55-collections.css",
+        "80-motion.css"
       ],
       "tests": [
         "lite/tests/reader-history-panel-view.test.ts",
@@ -615,6 +616,7 @@
 		"overflow-wrap: anywhere;\n  text-align: right;\n  white-space: normal;",
         ".ldp-reader-floating-window-tab-action {\n  display: grid;",
         ".ldp-reader-floating-window-tab-action +\n  .ldp-reader-floating-window-close {",
+		":is(.ldp-notification-refresh, .ldp-bookmark-refresh).is-refreshing",
         "grid-template-areas:\n    \"tools\"\n    \"bulk\"\n    \"list\"\n    \"footer\";",
         ".ldp-unwanted-topic-tools {\n  display: grid;\n  min-width: 0;\n  grid-area: tools;",
         ".ldp-unwanted-topic-bulk-bar {\n  display: flex;\n  min-width: 0;\n  grid-area: bulk;",

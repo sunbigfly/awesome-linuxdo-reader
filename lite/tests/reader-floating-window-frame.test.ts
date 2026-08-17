@@ -4,6 +4,7 @@ import {
 	ReaderCollectionNodeCache,
 } from '../src/collection/reader-collection-floating-window.js';
 import {
+	dismissReaderFloatingWindowTabSessionFromEscape,
 	ReaderFloatingWindowFrame,
 	restoreReaderFloatingWindowTabSession,
 } from '../src/shell/reader-floating-window-frame.js';
@@ -85,6 +86,15 @@ frames = definitions.map(([tabId, title, icon], index) =>
 		},
 	}),
 );
+for (const [frame, className] of [
+	[frames[0]!, 'ldp-notifications-popover'],
+	[frames[1]!, 'ldp-history-popover'],
+	[frames[2]!, 'ldp-bookmarks-popover'],
+] as const) {
+	const collectionContent = document.createElement('section');
+	collectionContent.className = className;
+	frame.body.append(collectionContent);
+}
 const dismissFromPointer: EventListener = (event) => {
 	frames.find((frame) => frame.active)?.dismissFromPointerEvent(event);
 };
@@ -233,6 +243,25 @@ assert(
 	frames[1]!.active && frames[1]!.tabList.scrollLeft === 137 &&
 	frames[0]!.body.scrollTop === 420,
 	'快捷键唤回必须恢复动作指定标签、标签滚动且保留各标签内容会话位置',
+);
+const earlyWindowEscape = new window.Event('keydown', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperty(earlyWindowEscape, 'key', { value: 'Escape' });
+assert(
+	dismissReaderFloatingWindowTabSessionFromEscape(
+		mount,
+		earlyWindowEscape as unknown as KeyboardEvent,
+	) &&
+	earlyWindowEscape.defaultPrevented &&
+	frames.every((frame) => frame.isOpen && frame.element.hidden),
+	'Window capture 的早期 Esc 桥必须在宿主截断 Document 传播前收起未置顶整组',
+);
+assert(
+	restoreReaderFloatingWindowTabSession(mount, 'notifications') &&
+	frames[0]!.active,
+	'早期 Esc 收起后必须仍可恢复指定标签和既有会话',
 );
 active.open();
 Object.defineProperties(active.tabList, {

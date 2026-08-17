@@ -316,6 +316,13 @@ const secondAdapterPage = await adapter.loadPage({
 	signal: adapterSignal,
 	background: true,
 });
+const thirdAdapterPage = await adapter.loadPage({
+	username: 'target-user',
+	page: 2,
+	offset: secondAdapterPage.nextOffset,
+	signal: adapterSignal,
+	background: true,
+});
 const cachedAdapterPage = await adapter.loadCachedPage({
 	username: 'target-user',
 	page: 2,
@@ -325,7 +332,7 @@ const cachedAdapterPage = await adapter.loadCachedPage({
 });
 const cachedAdapterBatch = await adapter.loadCachedPages({
 	username: 'target-user',
-	stream: 'activity',
+	stream: 'topics',
 	startPage: 3,
 	pageCount: 2,
 	signal: adapterSignal,
@@ -353,16 +360,22 @@ for (const stream of READER_USER_OBSERVATION_STREAMS.filter(
 	}));
 }
 assert(
-	adapterRequests.length === 8 &&
+	adapterRequests.length === 9 &&
 	adapterRequests.every((request) =>
 		request.profile === 'background-prefetch' &&
-		request.variant === 'v1:target-user' &&
+		request.variant === (
+			request.collection === 'user-observation-boosts'
+				? 'v2:target-user'
+				: 'v1:target-user'
+		) &&
 		request.cache?.persist === true &&
 		request.allowStaleOnError === false) &&
-	adapterRequests.slice(0, 2).every((request) =>
+	adapterRequests.slice(0, 3).every((request) =>
 		request.collection === 'user-observation-activity') &&
 	new URL(String(adapterRequests[0]!.input), 'https://linux.do')
 		.searchParams.get('username') === 'target-user' &&
+	new URL(String(adapterRequests[0]!.input), 'https://linux.do')
+		.searchParams.get('filter') === '1,4,5,15,16,17' &&
 	firstAdapterPage.records.length === 60 &&
 	firstAdapterPage.identity?.username === 'target-user' &&
 	firstAdapterPage.identity.avatarTemplate ===
@@ -370,13 +383,16 @@ assert(
 	firstAdapterPage.records[0]?.categoryName === '开发调优' &&
 	!firstAdapterPage.complete &&
 	secondAdapterPage.records.length === 1 &&
-	secondAdapterPage.complete &&
+	!secondAdapterPage.complete &&
+	thirdAdapterPage.records.length === 0 &&
+	thirdAdapterPage.complete &&
+	thirdAdapterPage.nextOffset === secondAdapterPage.nextOffset &&
 	adapterCacheLookups.length === 3 &&
 	adapterCacheLookups[0]?.variant === 'v1:target-user' &&
 	cachedAdapterPage?.records.length === 1 &&
 	cachedAdapterBatch?.length === 2 &&
 	adapterCacheLookups.slice(1).map((request) => request.cursor).join(',') ===
-		'180,240' &&
+		'3,4' &&
 	cursorCachedAdapterBatch === null &&
 	categoryPages.map((page) => page.records[0]?.kind).join(',') ===
 		'topic,assigned,boost,reaction,solved,vote' &&
@@ -392,7 +408,7 @@ assert(
 		?.records[0]?.reactionId === 'eyes' &&
 	categoryPages.find((page) => page.stream === 'reactions')
 		?.records[0]?.label === '回应' &&
-	adapterRequests.slice(2).map((request) => request.collection).join(',') ===
+	adapterRequests.slice(3).map((request) => request.collection).join(',') ===
 		'user-observation-topics,user-observation-assigned,' +
 		'user-observation-boosts,' +
 		'user-observation-reactions,user-observation-solved,' +
@@ -406,7 +422,7 @@ const adapterTopicMetadata = await adapter.loadTopicMetadata({
 });
 const adapterTopicMetadataRequest = adapterRequests.at(-1)!;
 assert(
-	Number(adapterRequests.length) === 9 &&
+	Number(adapterRequests.length) === 10 &&
 	adapterTopicMetadataRequest.collection ===
 		'user-observation-topic-metadata' &&
 	new URL(String(adapterTopicMetadataRequest.input), 'https://linux.do')
@@ -1327,6 +1343,313 @@ assert(
 );
 retrySession.destroy();
 
+const stalledProgressOrder: string[] = [];
+const stalledProgressNotifications: string[] = [];
+let releaseStalledProgress = false;
+const stalledProgressSession = new ReaderUserObservationSession({
+	requests: {
+		loadPage(request) {
+			const stream = request.stream ?? 'activity';
+			stalledProgressOrder.push(`${stream}:${request.page}:${request.offset}`);
+			if (stream === 'topics' && request.page === 0) {
+				return Promise.resolve(Object.freeze({
+					stream,
+					page: request.page,
+					offset: request.offset,
+					records: Object.freeze([]),
+					complete: false,
+					nextOffset: 1,
+				}));
+			}
+			if (stream === 'topics' && request.page === 1 && !releaseStalledProgress) {
+				return new Promise<never>((_resolve, reject) => {
+					request.signal.addEventListener(
+						'abort',
+						() => reject(request.signal.reason),
+						{ once: true },
+					);
+				});
+			}
+			return Promise.resolve(Object.freeze({
+				stream,
+				page: request.page,
+				offset: request.offset,
+				records: Object.freeze([]),
+				complete: true,
+				nextOffset: request.offset + 1,
+			}));
+		},
+	},
+	storage: { getItem: () => null, setItem: () => {} },
+	authScope: 'account:viewer',
+	stallTimeoutMs: 15,
+	notify: (message) => stalledProgressNotifications.push(message),
+});
+stalledProgressSession.observe(identity('stalled-progress'));
+for (let index = 0; index < 30; index += 1) {
+	if (stalledProgressSession.entry('stalled-progress')?.phase === 'error') break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 2));
+}
+const stalledProgressEntry = stalledProgressSession.entry('stalled-progress');
+const { document: stalledProgressDocument } = parseHTML(
+	'<html><body><main id="stalled-progress-mount"></main></body></html>',
+);
+const stalledProgressMount = stalledProgressDocument.querySelector<HTMLElement>(
+	'#stalled-progress-mount',
+)!;
+const stalledProgressView = new ReaderUserObservationView({
+	document: stalledProgressDocument,
+	mount: stalledProgressMount,
+	session: stalledProgressSession,
+});
+stalledProgressView.openList();
+const stalledProgressListRetry = stalledProgressView.listWindow.body
+	.querySelector<HTMLButtonElement>(
+		'[data-user-observation-retry="stalled-progress"]',
+	);
+assert(
+	stalledProgressEntry?.phase === 'error' &&
+	stalledProgressEntry.pages === 1 &&
+	stalledProgressEntry.error.includes('没有新进展') &&
+	stalledProgressEntry.error.includes('当前断点重试') &&
+	stalledProgressNotifications.some((message) =>
+		message.includes('已暂停，可从断点重试')) &&
+	stalledProgressListRetry?.disabled === false &&
+	stalledProgressView.listWindow.body.querySelector(
+		'.ldp-user-observation-user-status',
+	)?.textContent?.includes('没有新进展') === true,
+	'采集连续无进展必须自动暂停，在观察列表明确提示并启用断点重试入口',
+);
+stalledProgressView.listWindow.body.querySelector<HTMLButtonElement>(
+	'[data-user-observation-open="stalled-progress"]',
+)!.click();
+assert(
+	stalledProgressView.listWindow.body.querySelector(
+		'.ldp-user-observation-progress',
+	)?.textContent?.includes('没有新进展') === true &&
+	stalledProgressView.listWindow.body.querySelector(
+		'.ldp-user-observation-progress-segments > .is-error',
+	) !== null &&
+	stalledProgressView.listWindow.body.querySelector<HTMLButtonElement>(
+		'.ldp-user-observation-progress-retry',
+	)?.getAttribute('aria-label') ===
+		'从断点重试 @stalled-progress 的公开历史',
+	'停滞详情必须显示失败来源、停滞原因和可访问的断点重试按钮',
+);
+releaseStalledProgress = true;
+stalledProgressView.listWindow.body.querySelector<HTMLButtonElement>(
+	'.ldp-user-observation-progress-retry',
+)!.click();
+for (let index = 0; index < 30; index += 1) {
+	if (stalledProgressSession.entry('stalled-progress')?.phase === 'ready') break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+assert(
+	stalledProgressOrder.slice(0, 3).join(',') ===
+		'topics:0:0,topics:1:1,topics:1:1' &&
+	stalledProgressSession.entry('stalled-progress')?.phase === 'ready',
+	'停滞重试必须中止悬挂请求并从当前 page/offset 断点续传，不能退回第 0 页',
+);
+stalledProgressView.destroy();
+stalledProgressSession.destroy();
+stalledProgressMount.remove();
+
+let activeRetryTopicAttempts = 0;
+let activeRetryAborted = false;
+let activeRetryFlightActive = false;
+let activeRetryReleaseAttempts = 0;
+const activeRetrySession = new ReaderUserObservationSession({
+	requests: {
+		loadPage(request) {
+			const stream = request.stream ?? 'activity';
+			if (stream === 'topics') {
+				activeRetryTopicAttempts += 1;
+				if (activeRetryTopicAttempts === 1) {
+					return new Promise<never>((_resolve, reject) => {
+						request.signal.addEventListener('abort', () => {
+							activeRetryAborted = true;
+							reject(request.signal.reason);
+						}, { once: true });
+					});
+				}
+			}
+			return Promise.resolve(Object.freeze({
+				stream,
+				page: request.page,
+				offset: request.offset,
+				records: Object.freeze([]),
+				complete: true,
+				nextOffset: request.offset,
+			}));
+		},
+	},
+	storage: { getItem: () => null, setItem: () => {} },
+	authScope: 'account:viewer',
+	historyCoordination: {
+		acquireFlight(token) {
+			const producer = !activeRetryFlightActive;
+			if (producer) activeRetryFlightActive = true;
+			return Promise.resolve(Object.freeze({
+				producer,
+				token,
+				flightId: token,
+				epoch: 0,
+				expiresAt: Number.MAX_SAFE_INTEGER,
+				coordinated: true,
+			}));
+		},
+		renewFlight: () => Promise.resolve(true),
+		releaseFlight() {
+			activeRetryFlightActive = false;
+			activeRetryReleaseAttempts += 1;
+			return activeRetryReleaseAttempts === 1
+				? Promise.reject(new DOMException(
+					'lease handoff interrupted',
+					'AbortError',
+				))
+				: Promise.resolve();
+		},
+		waitForFlight: () => Promise.resolve(!activeRetryFlightActive),
+	},
+});
+activeRetrySession.observe(identity('active-retry'));
+for (let index = 0; index < 20; index += 1) {
+	if (activeRetrySession.entry('active-retry')?.phase === 'loading') break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+activeRetrySession.retry('active-retry');
+for (let index = 0; index < 30; index += 1) {
+	if (activeRetrySession.entry('active-retry')?.phase === 'ready') break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+assert(
+	activeRetryAborted &&
+	activeRetryTopicAttempts === 2 &&
+	activeRetryReleaseAttempts === 2 &&
+	activeRetrySession.entry('active-retry')?.phase === 'ready',
+	'采集中手动断点重试必须立刻中止当前悬挂请求；即使 lease 交接抛出中止异常，替代任务也要继续',
+);
+activeRetrySession.destroy();
+
+const legacyTerminalUsername = 'legacy-terminal';
+const legacyTerminalStorage = new Map<string, string>();
+const legacyTerminalStorageKey = readerAccountScopedStorageIdentity(
+	READER_USER_OBSERVATION_STORAGE_KEY,
+	'account:legacy-terminal',
+).key;
+legacyTerminalStorage.set(legacyTerminalStorageKey, JSON.stringify({
+	schemaVersion: 1,
+	users: [{
+		username: legacyTerminalUsername,
+		name: 'Legacy Terminal',
+		avatarTemplate: '',
+		addedAt: 1,
+		completedAt: 2,
+		lastRecordCount: 1,
+		pages: 3,
+		streamCheckpoints: {
+			topics: { page: 1, offset: 1, complete: true },
+			activity: { page: 3, offset: 121, complete: true },
+			assigned: { page: 1, offset: 1, complete: true },
+			boosts: {
+				page: 1,
+				offset: 0,
+				complete: true,
+				terminalVerified: true,
+			},
+			reactions: {
+				page: 1,
+				offset: 0,
+				complete: true,
+				terminalVerified: true,
+			},
+			solved: {
+				page: 1,
+				offset: 0,
+				complete: true,
+				terminalVerified: true,
+			},
+			votes: { page: 1, offset: 1, complete: true },
+		},
+	}],
+}));
+const legacyTerminalPageStore = new ObservationMemoryStore();
+const legacyTerminalPages = new ReaderUserObservationPageRepository(
+	new ResponseRepository({
+		store: legacyTerminalPageStore,
+		maxMemoryEntries: 8,
+		maxMemoryBytes: 2_000_000,
+	}),
+	'account:legacy-terminal',
+);
+await legacyTerminalPages.write(
+	legacyTerminalUsername,
+	Object.freeze([normalizeReaderUserActivity(
+		activity(900, legacyTerminalUsername),
+		legacyTerminalUsername,
+	)!]),
+	2,
+);
+const legacyTerminalRequests: string[] = [];
+const legacyTerminalSession = new ReaderUserObservationSession({
+	requests: {
+		loadPage(request) {
+			const stream = request.stream ?? 'activity';
+			legacyTerminalRequests.push(
+				`${stream}:${request.page}:${request.offset}`,
+			);
+			return Promise.resolve(Object.freeze({
+				stream,
+				page: request.page,
+				offset: request.offset,
+				records: Object.freeze([]),
+				complete: true,
+				nextOffset: request.offset,
+			}));
+		},
+	},
+	storage: {
+		getItem: (key) => legacyTerminalStorage.get(key) ?? null,
+		setItem: (key, value) => legacyTerminalStorage.set(key, value),
+	},
+	pages: legacyTerminalPages,
+	authScope: 'account:legacy-terminal',
+});
+legacyTerminalSession.resume({ allowNetwork: false });
+for (let index = 0; index < 20; index += 1) {
+	if (legacyTerminalSession.entry(legacyTerminalUsername)?.storedRecordCount === 1) {
+		break;
+	}
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+assert(
+	legacyTerminalSession.entry(legacyTerminalUsername)?.phase === 'idle' &&
+	legacyTerminalSession.entry(legacyTerminalUsername)?.detail.includes(
+		'旧版终点待续传确认',
+	),
+	'旧版短页完成标记不得继续把本地分页缓存冒充真实终点',
+);
+legacyTerminalSession.retry(legacyTerminalUsername);
+for (let index = 0; index < 30; index += 1) {
+	if (legacyTerminalSession.entry(legacyTerminalUsername)?.phase === 'ready') break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+const migratedTerminal = JSON.parse(
+	legacyTerminalStorage.get(legacyTerminalStorageKey) ?? '{}',
+) as {
+	users?: Array<{
+		streamCheckpoints?: Record<string, { terminalVerified?: boolean }>;
+	}>;
+};
+assert(
+	legacyTerminalRequests.join(',') === 'activity:3:121' &&
+	legacyTerminalSession.entry(legacyTerminalUsername)?.phase === 'ready' &&
+	migratedTerminal.users?.[0]?.streamCheckpoints?.activity
+		?.terminalVerified === true,
+	'升级后必须从旧 activity offset 原地续传到空页，并保存可验证的终点标记',
+);
+legacyTerminalSession.destroy();
+
 let recoveryChallengeBlocked = false;
 const recoveryRequestOrder: string[] = [];
 const recoverySession = new ReaderUserObservationSession({
@@ -1631,8 +1954,11 @@ assert(
 		legacyPartialSummary?.complete === false &&
 		legacyPartialSummary.total === 1_500 &&
 		legacySession.entry(legacyUsername)?.storedRecordCount === 1_500 &&
-		legacySession.entry(legacyUsername)?.records.length === 120,
-	'旧版逐页缓存必须按最多 12 页后台迁移为断点索引，前端内存只保留一个小窗口并从原断点续传',
+		legacySession.entry(legacyUsername)?.records.length === 120 &&
+		legacySession.entry(legacyUsername)?.detail.includes(
+			'断点回放 25/25 页',
+		) === true,
+	'旧版逐页缓存必须按最多 12 页后台迁移为断点索引，实时报告回放页数，前端内存只保留一个小窗口并从原断点续传',
 );
 releaseLegacyNetwork();
 for (let index = 0; index < 100; index += 1) {
@@ -1789,84 +2115,52 @@ idleDetailView.destroy();
 idleDetailSession.destroy();
 idleDetailMount.remove();
 
-let selfPrivateRetries = 0;
 const selfPublicRequests: string[] = [];
+let selfRefreshIncludesNewestReply = false;
+const knownSelfReply = normalizeReaderUserActivity(Object.freeze({
+	...activity(5, 'viewer'),
+	title: '自己此前回复的主题',
+	created_at: '2026-08-11T10:00:00.000Z',
+}), 'viewer')!;
+const newestSelfReply = normalizeReaderUserActivity(Object.freeze({
+	...activity(1, 'viewer'),
+	title: '自己刚刚回复的新主题',
+	created_at: '2026-08-11T11:00:00.000Z',
+}), 'viewer')!;
 const selfSession = new ReaderUserObservationSession({
 	requests: {
 		loadPage(request) {
+			const stream = request.stream ?? 'activity';
 			selfPublicRequests.push(
-				`${request.username}:${request.stream ?? 'activity'}:${request.page}`,
+				`${request.username}:${stream}:${request.page}:` +
+					`${request.refresh === true ? 'refresh' : 'normal'}`,
 			);
 			return Promise.resolve(Object.freeze({
-				stream: request.stream ?? 'activity',
+				stream,
 				page: request.page,
 				offset: request.offset,
-				records: Object.freeze([]),
+				records: Object.freeze(stream === 'activity'
+					? selfRefreshIncludesNewestReply
+						? [newestSelfReply, knownSelfReply]
+						: [knownSelfReply]
+					: []),
 				complete: true,
-				nextOffset: request.offset,
+				nextOffset: request.offset + 1,
 			}));
 		},
 	},
 	storage: { getItem: () => null, setItem: () => {} },
 	authScope: 'account:self-observation',
 });
-selfSession.observeSelf(identity('viewer'), () => {
-	selfPrivateRetries += 1;
-});
+selfSession.observeSelf(identity('viewer'));
 await Promise.resolve();
 await Promise.resolve();
 assert(
 	selfPublicRequests.length === 0 &&
-		selfSession.entry('viewer')?.phase === 'idle',
-	'当前账号启动注册必须只恢复本地投影，不能因页面刷新自动采集七类公开历史',
-);
-const privateNotification = Object.freeze({
-	...normalizeReaderUserActivity(activity(0, 'sender'), 'sender')!,
-	identity: 'self:notifications:1',
-	label: 'sender · 回复了你',
-	title: '只有当前账号可见的通知',
-	selfStream: 'notifications' as const,
-	read: false,
-});
-selfSession.updateSelfObservation(Object.freeze({
-	records: Object.freeze([privateNotification]),
-	streams: Object.freeze([
-		Object.freeze({
-			stream: 'account-notifications' as const,
-			label: '通知与私信',
-			status: 'error' as const,
-			progress: 0.5,
-			detail: '1/2 分类 · 1 页 · 1 条',
-			error: '缓存更新失败',
-			retryAt: null,
-		}),
-		Object.freeze({
-			stream: 'account-collections' as const,
-			label: '收藏与回应',
-			status: 'complete' as const,
-			progress: 1,
-			detail: '收藏与回应已缓存 · 0 条',
-			error: '',
-			retryAt: null,
-		}),
-	]),
-}));
-selfSession.observe(identity('other-viewer'));
-for (let index = 0; index < 30; index += 1) {
-	if (selfSession.entry('other-viewer')?.phase === 'ready') break;
-	await new Promise<void>((resolve) => setTimeout(resolve, 0));
-}
-const selfEntry = selfSession.entry('viewer');
-assert(
-	selfEntry?.isSelf === true &&
-		selfEntry.phase === 'error' &&
-		selfPublicRequests.every((request) => request.startsWith('other-viewer:')) &&
-	selfEntry.totalStreams === READER_USER_OBSERVATION_STREAMS.length + 2 &&
-	selfEntry.privateRecordCount === 1 &&
-	selfEntry.privateRecords[0]?.read === false &&
-	selfSession.entry('other-viewer')?.privateRecordCount === 0 &&
-	selfSession.remove('viewer') === false,
-	'当前账号必须成为不可移除的持续观察条目，私有通知只附加到自己且进入同一进度',
+	selfSession.entry('viewer')?.phase === 'idle' &&
+	selfSession.entry('viewer')?.totalStreams ===
+		READER_USER_OBSERVATION_STREAMS.length,
+	'当前账号启动注册不得自动联网，且观察字段必须与其他用户相同的七类公开历史一致',
 );
 const selfMount = document.createElement('main');
 document.body.append(selfMount);
@@ -1875,27 +2169,60 @@ const selfView = new ReaderUserObservationView({
 	mount: selfMount,
 	session: selfSession,
 });
+selfView.openList();
+const selfInitialRetry = selfView.listWindow.body.querySelector<HTMLButtonElement>(
+	'[data-user-observation-retry="viewer"]',
+);
 assert(
-	selfView.openSelf('notifications') &&
+	selfInitialRetry !== null,
+	'当前账号公开历史尚未采集时必须提供同一断点采集入口',
+);
+selfInitialRetry.click();
+for (let index = 0; index < 30; index += 1) {
+	if (selfSession.entry('viewer')?.phase === 'ready') break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+const selfEntry = selfSession.entry('viewer');
+assert(
+	selfEntry?.isSelf === true &&
+	selfEntry.phase === 'ready' &&
+	selfEntry.totalStreams === READER_USER_OBSERVATION_STREAMS.length &&
+	selfEntry.recordCount === 1 &&
+	selfSession.remove('viewer') === false &&
+	selfView.openSelf('all') &&
 	selfView.listWindow.title.textContent === '我的持续观察' &&
 	selfView.listWindow.body.querySelector(
-		'[data-user-observation-tab="notifications"]',
+		'[data-user-observation-tab="reply"]',
 	) !== null &&
 	selfView.listWindow.body.querySelector(
-		'.ldp-user-observation-activity.is-unread ' +
-		'.ldp-user-observation-read-state',
-	)?.textContent === '未读' &&
+		'[data-user-observation-tab="notifications"], ' +
+		'[data-user-observation-tab="messages"], ' +
+		'[data-user-observation-tab="collections"]',
+	) === null &&
 	selfView.listWindow.body.querySelector(
-		'.ldp-user-observation-progress-retry',
-	) !== null,
-	'用户观察原浮窗必须能直接打开自己的通知分类，并显示未读标注、统一进度与重试',
+		'.ldp-user-observation-timeline',
+	)?.textContent?.includes('自己此前回复的主题') === true,
+	'当前账号必须只显示与其他用户相同的公开观察 Tab 和公开活动，不能拼入通知、私信或收藏字段',
 );
+selfRefreshIncludesNewestReply = true;
+selfView.openList();
 selfView.listWindow.body.querySelector<HTMLButtonElement>(
-	'.ldp-user-observation-progress-retry',
+	'[data-user-observation-refresh="viewer"]',
 )!.click();
+for (let index = 0; index < 30; index += 1) {
+	const refreshed = selfSession.entry('viewer');
+	if (refreshed?.phase === 'ready' && refreshed.recordCount === 2) break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+selfView.openSelf('all');
 assert(
-	selfPrivateRetries === 1,
-	'自己的私有来源失败时必须由用户观察原重试入口重排 controller 断点',
+	selfPublicRequests.some((request) =>
+		request === 'viewer:activity:0:refresh') &&
+	selfSession.entry('viewer')?.recordCount === 2 &&
+	selfView.listWindow.body.querySelector(
+		'.ldp-user-observation-timeline',
+	)?.textContent?.includes('自己刚刚回复的新主题') === true,
+	'点击更新自己的观察必须绕过旧缓存增量读取最近公开活动，并立即显示刚回复的新记录',
 );
 selfView.destroy();
 selfSession.destroy();
@@ -1992,15 +2319,15 @@ assert(
 	!view.backButton.hidden &&
 	view.backButton.parentElement === view.listWindow.toolbarRow &&
 	view.listWindow.tabRow.nextElementSibling === view.listWindow.toolbarRow &&
-	view.listWindow.body.querySelectorAll('.ldp-user-observation-tabs > button').length === 9 &&
+	view.listWindow.body.querySelectorAll('.ldp-user-observation-tabs > button').length === 7 &&
 	[...view.listWindow.body.querySelectorAll<HTMLButtonElement>(
 		'.ldp-user-observation-tabs > button',
 	)].map((button) => button.dataset.userObservationTab).join(',') ===
-		'all,topic,reply,boost,reaction-like,mention,edit,linked,other-actions' &&
+		'all,topic,reply,boost,reaction-like,linked,other-actions' &&
 	[...view.listWindow.body.querySelectorAll<HTMLButtonElement>(
 		'.ldp-user-observation-tabs > button',
 	)].map((button) => button.textContent).join(',') ===
-		'全部 42,主题 11,回复 10,Boost 0,回应与赞 21,@提及 0,编辑 0,链接 0,其他 0' &&
+		'全部 42,主题 11,回复 10,Boost 0,回应与赞 21,链接 0,其他 0' &&
 	view.listWindow.body.querySelectorAll('.ldp-user-observation-activity').length === 36 &&
 	view.listWindow.body.querySelector(
 		'.ldp-user-observation-detail-profile ' +
@@ -2481,9 +2808,9 @@ assert(
 	!view.listWindow.element.classList.contains(
 		'ldp-reader-floating-window-interacting',
 	) &&
-	view.listWindow.body.querySelector<HTMLButtonElement>(
-		'[data-user-observation-refresh="alice"]',
-	)?.disabled === true &&
+	view.listWindow.body.querySelector(
+		'.ldp-user-observation-progress-retry',
+	) === null &&
 	view.listWindow.body.querySelector(
 		'.ldp-user-observation-progress:not([hidden])',
 	) !== null &&
@@ -2496,7 +2823,7 @@ assert(
 	view.listWindow.body.querySelector(
 		'[data-user-observation-challenge="alice"]',
 	) !== null,
-	'cf-mitigated 429 必须显示共享 Cloudflare 等待和来源断点，不能借用普通 Retry-After 文案',
+	'cf-mitigated 429 必须显示共享 Cloudflare 等待和来源断点；自动续传期间不得显示停滞重试按钮',
 );
 view.listWindow.body.querySelector<HTMLButtonElement>(
 	'[data-user-observation-challenge="alice"]',

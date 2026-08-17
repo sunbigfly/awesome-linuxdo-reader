@@ -105,6 +105,36 @@ assert(
 lightbox.remove();
 assert(
 	readerFrontmostEscapeSurface(document) === null &&
-		readerEscapeOwnedBy(document, settings),
+	readerEscapeOwnedBy(document, settings),
 	'没有可见浮层时不得残留陈旧 Esc owner 阻止 Reader 自身关闭策略',
+);
+
+const floatingWindow = document.createElement('section');
+floatingWindow.className =
+	'ldp-reader-floating-window is-user-observation-list';
+const embeddedNotifications = document.createElement('section');
+embeddedNotifications.className = 'ldp-notifications-popover';
+floatingWindow.append(embeddedNotifications);
+const inactiveWindow = document.createElement('section');
+inactiveWindow.className =
+	'ldp-reader-floating-window is-user-observation-list';
+inactiveWindow.hidden = true;
+const inactiveToolbar = document.createElement('section');
+inactiveToolbar.className = 'ldp-selection-toolbar';
+inactiveWindow.append(inactiveToolbar);
+shadowRoot.append(floatingWindow, inactiveWindow);
+assert(
+	readerFrontmostEscapeSurface(document) === floatingWindow &&
+	readerEscapeOwnedBy(document, floatingWindow),
+	'嵌入共享浮窗的通知内容和隐藏标签后代不得冒充独立 Esc surface',
+);
+
+const nestedPicker = document.createElement('section');
+nestedPicker.className = 'ldp-reaction-picker';
+embeddedNotifications.append(nestedPicker);
+assert(
+	readerFrontmostEscapeSurface(document) === nestedPicker &&
+	readerEscapeOwnedBy(document, nestedPicker) &&
+	!readerEscapeOwnedBy(document, floatingWindow),
+	'共享浮窗内真正打开的子浮层仍须优先取得 Esc，不能连带关闭外层',
 );

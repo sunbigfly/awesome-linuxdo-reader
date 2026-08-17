@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.2
+// @version      1.5.3
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.2 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.5.3 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.2",
+			sourceVersion: "1.5.3",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.2") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.3") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -375,7 +375,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	  readerWebDavCacheClearPlan: () => readerWebDavCacheClearPlan
 	});
 	module.exports = __toCommonJS(reader_browser_runtime_exports);
-	var import_native_host_api = require("../discourse/native-host-api.js"), import_native_request_descriptors = require("../discourse/native-request-descriptors.js"), import_reader_cache_management_surface = require("../cache/reader-cache-management-surface.js"), import_reader_collection_page_repository = require("../cache/reader-collection-page-repository.js"), import_browser_asset_cache = require("../cache/browser-asset-cache.js"), import_discourse_application_cache_invalidation = require("../cache/discourse-application-cache-invalidation.js"), import_reader_settings_config_manager = require("../state/reader-settings-config-manager.js"), import_native_composer = require("../discourse/native-composer.js"), import_reader_control_tooltip = require("../components/reader-control-tooltip.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_reader_native_post_admin_menu = require("../discourse/reader-native-post-admin-menu.js"), import_native_post_model_factory = require("../discourse/native-post-model-factory.js"), import_native_presence = require("../discourse/native-presence.js"), import_identifiers = require("../discourse/identifiers.js"), import_reader_history_navigation_controller = require("../history/reader-history-navigation-controller.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_history_navigation_view = require("../history/reader-history-navigation-view.js"), import_reader_history_panel_view = require("../history/reader-history-panel-view.js"), import_reader_chronicle_repository = require("../history/reader-chronicle-repository.js"), import_reader_chronicle_view = require("../history/reader-chronicle-view.js"), import_reader_unwanted_topic_repository = require("../collection/reader-unwanted-topic-repository.js"), import_reader_unwanted_topic_view = require("../collection/reader-unwanted-topic-view.js"), import_discourse_bookmark_adapter = require("../bookmark/discourse-bookmark-adapter.js"), import_reader_bookmark_controller = require("../bookmark/reader-bookmark-controller.js"), import_reader_bookmark_panel_view = require("../bookmark/reader-bookmark-panel-view.js"), import_reader_bookmark_model = require("../bookmark/reader-bookmark-model.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_post_author_filter_feature = require("../topic/reader-post-author-filter-feature.js"), import_signal = require("../kernel/signal.js"), import_reader_topic_live_navigation_controller = require("../live/reader-topic-live-navigation-controller.js"), import_reader_resource_monitor = require("../monitor/reader-resource-monitor.js"), import_browser_request_observation = require("../network/browser-request-observation.js"), import_reader_topic_live_navigation_view = require("../live/reader-topic-live-navigation-view.js"), import_reader_rate_limit_notice = require("../shell/reader-rate-limit-notice.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_reader_image_download_service = require("../media/reader-image-download-service.js"), import_reader_image_resource_service = require("../media/reader-image-resource-service.js"), import_reader_lightbox_image_picker = require("../media/reader-lightbox-image-picker.js"), import_reader_media_prefetch_service = require("../media/reader-media-prefetch-service.js"), import_reader_topic_image_index = require("../media/reader-topic-image-index.js"), import_reader_topic_image_interaction = require("../media/reader-topic-image-interaction.js"), import_reader_lightbox_feature = require("../media/reader-lightbox-feature.js"), import_reader_compact_image_viewer = require("../media/reader-compact-image-viewer.js"), import_reader_topic_media_feature = require("../media/reader-topic-media-feature.js"), import_reader_media_controller = require("../media/reader-media-controller.js"), import_reader_cooked_content_feature = require("../media/reader-cooked-content-feature.js"), import_reader_poll_feature = require("../media/reader-poll-feature.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js"), import_discourse_native_read_transport = require("../network/discourse-native-read-transport.js"), import_public_resource_request_adapter = require("../network/public-resource-request-adapter.js"), import_discourse_native_user_port = require("../user/discourse-native-user-port.js"), import_reader_user_domain_session = require("../user/reader-user-domain-session.js"), import_reader_credit_account_adapter = require("../user/reader-credit-account-adapter.js"), import_reader_connect_trust_adapter = require("../user/reader-connect-trust-adapter.js"), import_reader_user_endorsement_adapter = require("../user/reader-user-endorsement-adapter.js"), import_reader_user_card_view = require("../user/reader-user-card-view.js"), import_discourse_user_observation_adapter = require("../user/discourse-user-observation-adapter.js"), import_reader_user_observation_session = require("../user/reader-user-observation-session.js"), import_reader_user_observation_page_repository = require("../user/reader-user-observation-page-repository.js"), import_reader_user_observation_model = require("../user/reader-user-observation-model.js"), import_reader_user_observation_view = require("../user/reader-user-observation-view.js"), import_reader_self_observation_projection = require("../user/reader-self-observation-projection.js"), import_reader_settings_user_view = require("../user/reader-settings-user-view.js"), import_discourse_notification_adapter = require("../notification/discourse-notification-adapter.js"), import_reader_notification_controller = require("../notification/reader-notification-controller.js"), import_reader_notification_model = require("../notification/reader-notification-model.js"), import_reader_notification_panel_view = require("../notification/reader-notification-panel-view.js"), import_action_request_adapter = require("../post/action-request-adapter.js"), import_discourse_action_transport = require("../post/discourse-action-transport.js"), import_post_action_controller = require("../post/post-action-controller.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_post_action_feature_commands = require("../post/post-action-feature-commands.js"), import_user_action_feature_commands = require("../post/user-action-feature-commands.js"), import_reader_post_action_feature = require("../post/reader-post-action-feature.js"), import_reader_bookmark_action_coordinator = require("../post/reader-bookmark-action-coordinator.js"), import_reader_share_action_coordinator = require("../post/reader-share-action-coordinator.js"), import_reader_topic_notification_coordinator = require("../post/reader-topic-notification-coordinator.js"), import_reader_topic_shared_issue_coordinator = require("../post/reader-topic-shared-issue-coordinator.js"), import_topic_action_feature_commands = require("../post/topic-action-feature-commands.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_topic_summary_request_adapter = require("../post/reader-topic-summary-request-adapter.js"), import_reader_topic_summary_surface = require("../post/reader-topic-summary-surface.js"), import_reader_topic_custom_summary = require("../post/reader-topic-custom-summary.js"), import_reader_post_management_action_coordinator = require("../post/reader-post-management-action-coordinator.js"), import_reader_selection_quote_feature = require("../post/reader-selection-quote-feature.js"), import_reader_workspace_coordinator = require("../shell/reader-workspace-coordinator.js"), import_reader_feedback_surface = require("../shell/reader-feedback-surface.js"), import_reader_action_surface_coordinator = require("../shell/reader-action-surface-coordinator.js"), import_reader_exclusive_panel_coordinator = require("../shell/reader-exclusive-panel-coordinator.js"), import_reader_shell_recovery_view = require("../shell/reader-shell-recovery-view.js"), import_reader_report_form_surface = require("../shell/reader-report-form-surface.js"), import_reader_assignment_form_surface = require("../shell/reader-assignment-form-surface.js"), import_reader_choice_form_surface = require("../shell/reader-choice-form-surface.js"), import_reader_topic_edit_form_surface = require("../shell/reader-topic-edit-form-surface.js"), import_reader_settings_controller = require("../settings/reader-settings-controller.js"), import_reader_settings_view = require("../settings/reader-settings-view.js"), import_reader_theme_settings_control = require("../settings/reader-theme-settings-control.js"), import_reader_window_settings_form = require("../settings/reader-window-settings-form.js"), import_reader_shortcut_settings_form = require("../settings/reader-shortcut-settings-form.js"), import_reader_custom_site_settings_form = require("../settings/reader-custom-site-settings-form.js"), import_reader_webdav_settings_form = require("../settings/reader-webdav-settings-form.js"), import_browser_discourse_site_probe = require("../site/browser-discourse-site-probe.js"), import_reader_webdav_coordinator = require("../sync/reader-webdav-coordinator.js"), import_reader_webdav_category_ports = require("../sync/reader-webdav-category-ports.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_translation_settings_form = require("../settings/reader-translation-settings-form.js"), import_reader_ai_service_settings_form = require("../settings/reader-ai-service-settings-form.js"), import_reader_appearance_settings_form = require("../settings/reader-appearance-settings-form.js"), import_reader_font_settings_form = require("../settings/reader-font-settings-form.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_reader_layout_settings_form = require("../settings/reader-layout-settings-form.js"), import_reader_interaction_settings_form = require("../settings/reader-interaction-settings-form.js"), import_reader_image_settings_form = require("../settings/reader-image-settings-form.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_reader_about_settings_content = require("../settings/reader-about-settings-content.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_topic_download_manager = require("../queue/reader-topic-download-manager.js"), import_reader_topic_offline_document = require("../archive/reader-topic-offline-document.js"), import_reader_topic_offline_artifact_repository = require("../archive/reader-topic-offline-artifact-repository.js"), import_reader_cooked_content_feature2 = require("../media/reader-cooked-content-feature.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_loading_animation_view = require("../motion/reader-loading-animation-view.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_topic_factory = require("../topic/reader-topic-factory.js"), import_reader_topic_navigation_controller = require("../topic/reader-topic-navigation-controller.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_topic_flow_controller = require("../topic/reader-topic-flow-controller.js"), import_reader_topic_navigation_preferences = require("../topic/reader-topic-navigation-preferences.js"), import_reader_topic_scroll_adapter = require("../topic/reader-topic-scroll-adapter.js"), import_reader_topic_local_archive_feature = require("../topic/reader-topic-local-archive-feature.js"), import_reader_topic_timeline_controller = require("../topic/reader-topic-timeline-controller.js"), import_reader_topic_timeline_view = require("../topic/reader-topic-timeline-view.js"), import_reader_topic_header = require("../topic/reader-topic-header.js"), import_reader_topic_edit_controller = require("../topic/reader-topic-edit-controller.js"), import_reader_topic_comments_header = require("../topic/reader-topic-comments-header.js"), import_reader_topic_only_op_controller = require("../topic/reader-topic-only-op-controller.js"), import_reader_topic_special_content_feature = require("../topic/reader-topic-special-content-feature.js"), import_reader_topic_context_controller = require("../topic/reader-topic-context-controller.js"), import_reader_topic_context_surface = require("../topic/reader-topic-context-surface.js"), import_reader_topic_context_state = require("../topic/reader-topic-context-state.js"), import_reader_information_flow_coordinator = require("../state/reader-information-flow-coordinator.js"), import_topic_session = require("../topic/topic-session.js"), import_reader_translation_feature = require("../translation/reader-translation-feature.js"), import_translation_request_adapter = require("../translation/translation-request-adapter.js"), import_reader_data_runtime = require("./reader-data-runtime.js"), import_reader_performance_policy = require("./reader-performance-policy.js");
+	var import_native_host_api = require("../discourse/native-host-api.js"), import_native_request_descriptors = require("../discourse/native-request-descriptors.js"), import_reader_cache_management_surface = require("../cache/reader-cache-management-surface.js"), import_reader_collection_page_repository = require("../cache/reader-collection-page-repository.js"), import_browser_asset_cache = require("../cache/browser-asset-cache.js"), import_discourse_application_cache_invalidation = require("../cache/discourse-application-cache-invalidation.js"), import_reader_settings_config_manager = require("../state/reader-settings-config-manager.js"), import_native_composer = require("../discourse/native-composer.js"), import_reader_control_tooltip = require("../components/reader-control-tooltip.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_reader_native_post_admin_menu = require("../discourse/reader-native-post-admin-menu.js"), import_native_post_model_factory = require("../discourse/native-post-model-factory.js"), import_native_presence = require("../discourse/native-presence.js"), import_identifiers = require("../discourse/identifiers.js"), import_reader_history_navigation_controller = require("../history/reader-history-navigation-controller.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_history_navigation_view = require("../history/reader-history-navigation-view.js"), import_reader_history_panel_view = require("../history/reader-history-panel-view.js"), import_reader_chronicle_repository = require("../history/reader-chronicle-repository.js"), import_reader_chronicle_view = require("../history/reader-chronicle-view.js"), import_reader_unwanted_topic_repository = require("../collection/reader-unwanted-topic-repository.js"), import_reader_unwanted_topic_view = require("../collection/reader-unwanted-topic-view.js"), import_discourse_bookmark_adapter = require("../bookmark/discourse-bookmark-adapter.js"), import_reader_bookmark_controller = require("../bookmark/reader-bookmark-controller.js"), import_reader_bookmark_panel_view = require("../bookmark/reader-bookmark-panel-view.js"), import_reader_bookmark_model = require("../bookmark/reader-bookmark-model.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_post_author_filter_feature = require("../topic/reader-post-author-filter-feature.js"), import_signal = require("../kernel/signal.js"), import_reader_topic_live_navigation_controller = require("../live/reader-topic-live-navigation-controller.js"), import_reader_resource_monitor = require("../monitor/reader-resource-monitor.js"), import_browser_request_observation = require("../network/browser-request-observation.js"), import_reader_topic_live_navigation_view = require("../live/reader-topic-live-navigation-view.js"), import_reader_rate_limit_notice = require("../shell/reader-rate-limit-notice.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_reader_image_download_service = require("../media/reader-image-download-service.js"), import_reader_image_resource_service = require("../media/reader-image-resource-service.js"), import_reader_lightbox_image_picker = require("../media/reader-lightbox-image-picker.js"), import_reader_media_prefetch_service = require("../media/reader-media-prefetch-service.js"), import_reader_topic_image_index = require("../media/reader-topic-image-index.js"), import_reader_topic_image_interaction = require("../media/reader-topic-image-interaction.js"), import_reader_lightbox_feature = require("../media/reader-lightbox-feature.js"), import_reader_compact_image_viewer = require("../media/reader-compact-image-viewer.js"), import_reader_topic_media_feature = require("../media/reader-topic-media-feature.js"), import_reader_media_controller = require("../media/reader-media-controller.js"), import_reader_cooked_content_feature = require("../media/reader-cooked-content-feature.js"), import_reader_poll_feature = require("../media/reader-poll-feature.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js"), import_discourse_native_read_transport = require("../network/discourse-native-read-transport.js"), import_public_resource_request_adapter = require("../network/public-resource-request-adapter.js"), import_discourse_native_user_port = require("../user/discourse-native-user-port.js"), import_reader_user_domain_session = require("../user/reader-user-domain-session.js"), import_reader_credit_account_adapter = require("../user/reader-credit-account-adapter.js"), import_reader_connect_trust_adapter = require("../user/reader-connect-trust-adapter.js"), import_reader_user_endorsement_adapter = require("../user/reader-user-endorsement-adapter.js"), import_reader_user_card_view = require("../user/reader-user-card-view.js"), import_discourse_user_observation_adapter = require("../user/discourse-user-observation-adapter.js"), import_reader_user_observation_session = require("../user/reader-user-observation-session.js"), import_reader_user_observation_page_repository = require("../user/reader-user-observation-page-repository.js"), import_reader_user_observation_model = require("../user/reader-user-observation-model.js"), import_reader_user_observation_view = require("../user/reader-user-observation-view.js"), import_reader_settings_user_view = require("../user/reader-settings-user-view.js"), import_discourse_notification_adapter = require("../notification/discourse-notification-adapter.js"), import_reader_notification_controller = require("../notification/reader-notification-controller.js"), import_reader_notification_model = require("../notification/reader-notification-model.js"), import_reader_notification_panel_view = require("../notification/reader-notification-panel-view.js"), import_action_request_adapter = require("../post/action-request-adapter.js"), import_discourse_action_transport = require("../post/discourse-action-transport.js"), import_post_action_controller = require("../post/post-action-controller.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_post_action_feature_commands = require("../post/post-action-feature-commands.js"), import_user_action_feature_commands = require("../post/user-action-feature-commands.js"), import_reader_post_action_feature = require("../post/reader-post-action-feature.js"), import_reader_bookmark_action_coordinator = require("../post/reader-bookmark-action-coordinator.js"), import_reader_share_action_coordinator = require("../post/reader-share-action-coordinator.js"), import_reader_topic_notification_coordinator = require("../post/reader-topic-notification-coordinator.js"), import_reader_topic_shared_issue_coordinator = require("../post/reader-topic-shared-issue-coordinator.js"), import_topic_action_feature_commands = require("../post/topic-action-feature-commands.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_topic_summary_request_adapter = require("../post/reader-topic-summary-request-adapter.js"), import_reader_topic_summary_surface = require("../post/reader-topic-summary-surface.js"), import_reader_topic_custom_summary = require("../post/reader-topic-custom-summary.js"), import_reader_post_management_action_coordinator = require("../post/reader-post-management-action-coordinator.js"), import_reader_selection_quote_feature = require("../post/reader-selection-quote-feature.js"), import_reader_workspace_coordinator = require("../shell/reader-workspace-coordinator.js"), import_reader_feedback_surface = require("../shell/reader-feedback-surface.js"), import_reader_action_surface_coordinator = require("../shell/reader-action-surface-coordinator.js"), import_reader_exclusive_panel_coordinator = require("../shell/reader-exclusive-panel-coordinator.js"), import_reader_shell_recovery_view = require("../shell/reader-shell-recovery-view.js"), import_reader_report_form_surface = require("../shell/reader-report-form-surface.js"), import_reader_assignment_form_surface = require("../shell/reader-assignment-form-surface.js"), import_reader_choice_form_surface = require("../shell/reader-choice-form-surface.js"), import_reader_topic_edit_form_surface = require("../shell/reader-topic-edit-form-surface.js"), import_reader_settings_controller = require("../settings/reader-settings-controller.js"), import_reader_settings_view = require("../settings/reader-settings-view.js"), import_reader_theme_settings_control = require("../settings/reader-theme-settings-control.js"), import_reader_window_settings_form = require("../settings/reader-window-settings-form.js"), import_reader_shortcut_settings_form = require("../settings/reader-shortcut-settings-form.js"), import_reader_custom_site_settings_form = require("../settings/reader-custom-site-settings-form.js"), import_reader_webdav_settings_form = require("../settings/reader-webdav-settings-form.js"), import_browser_discourse_site_probe = require("../site/browser-discourse-site-probe.js"), import_reader_webdav_coordinator = require("../sync/reader-webdav-coordinator.js"), import_reader_webdav_category_ports = require("../sync/reader-webdav-category-ports.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_translation_settings_form = require("../settings/reader-translation-settings-form.js"), import_reader_ai_service_settings_form = require("../settings/reader-ai-service-settings-form.js"), import_reader_appearance_settings_form = require("../settings/reader-appearance-settings-form.js"), import_reader_font_settings_form = require("../settings/reader-font-settings-form.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_reader_layout_settings_form = require("../settings/reader-layout-settings-form.js"), import_reader_interaction_settings_form = require("../settings/reader-interaction-settings-form.js"), import_reader_image_settings_form = require("../settings/reader-image-settings-form.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_reader_about_settings_content = require("../settings/reader-about-settings-content.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_topic_download_manager = require("../queue/reader-topic-download-manager.js"), import_reader_topic_offline_document = require("../archive/reader-topic-offline-document.js"), import_reader_topic_offline_artifact_repository = require("../archive/reader-topic-offline-artifact-repository.js"), import_reader_cooked_content_feature2 = require("../media/reader-cooked-content-feature.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_loading_animation_view = require("../motion/reader-loading-animation-view.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_topic_factory = require("../topic/reader-topic-factory.js"), import_reader_topic_navigation_controller = require("../topic/reader-topic-navigation-controller.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_topic_flow_controller = require("../topic/reader-topic-flow-controller.js"), import_reader_topic_navigation_preferences = require("../topic/reader-topic-navigation-preferences.js"), import_reader_topic_scroll_adapter = require("../topic/reader-topic-scroll-adapter.js"), import_reader_topic_local_archive_feature = require("../topic/reader-topic-local-archive-feature.js"), import_reader_topic_timeline_controller = require("../topic/reader-topic-timeline-controller.js"), import_reader_topic_timeline_view = require("../topic/reader-topic-timeline-view.js"), import_reader_topic_header = require("../topic/reader-topic-header.js"), import_reader_topic_edit_controller = require("../topic/reader-topic-edit-controller.js"), import_reader_topic_comments_header = require("../topic/reader-topic-comments-header.js"), import_reader_topic_only_op_controller = require("../topic/reader-topic-only-op-controller.js"), import_reader_topic_special_content_feature = require("../topic/reader-topic-special-content-feature.js"), import_reader_topic_context_controller = require("../topic/reader-topic-context-controller.js"), import_reader_topic_context_surface = require("../topic/reader-topic-context-surface.js"), import_reader_topic_context_state = require("../topic/reader-topic-context-state.js"), import_reader_information_flow_coordinator = require("../state/reader-information-flow-coordinator.js"), import_topic_session = require("../topic/topic-session.js"), import_reader_translation_feature = require("../translation/reader-translation-feature.js"), import_translation_request_adapter = require("../translation/translation-request-adapter.js"), import_reader_data_runtime = require("./reader-data-runtime.js"), import_reader_performance_policy = require("./reader-performance-policy.js");
 	const readerSurfaceOnlyCloseEvents = /* @__PURE__ */ new WeakSet(), hostTopicUserCardSelector = "html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item) :is(.posters,.topic-poster) [data-user-card]";
 	function readerWebDavCacheClearPlan(categories) {
 	  const webDavCategories = [], protectedCategories = [];
@@ -1202,7 +1202,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	              cachedOnly: !0,
 	              revealAsFloor: !0,
 	              localArchive: Object.freeze({
-	                status: 404,
+	                status: record.status === "deleted" ? 410 : record.status,
 	                confirmedAt: record.lastObservedAt,
 	                requestPath: record.requestPath
 	              })
@@ -1770,41 +1770,14 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	      this.notificationController?.startBackgroundCache(), this.bookmarkController?.startBackgroundCache();
 	      const selfObservationUsername = (0, import_native_host_api.discourseNativeCurrentUsername)(options.host);
 	      if (selfObservationUsername) {
-	        const currentUser = options.host.lookup("service:current-user"), retrySelfPrivateSources = () => {
-	          this.notificationController?.startBackgroundCache(), this.notificationController?.retryBackgroundCache(), this.bookmarkController?.startBackgroundCache(), this.bookmarkController?.retryBackgroundCache();
-	        };
+	        const currentUser = options.host.lookup("service:current-user");
 	        this.userObservations.observeSelf({
 	          username: selfObservationUsername,
 	          name: String(readerNativeModelValue(currentUser, "name") ?? "").trim(),
 	          avatarTemplate: String(
 	            readerNativeModelValue(currentUser, "avatar_template") ?? ""
 	          ).trim()
-	        }, retrySelfPrivateSources);
-	        const publishSelfObservation = () => {
-	          this.userObservations.updateSelfObservation(
-	            (0, import_reader_self_observation_projection.readerSelfObservationProjection)({
-	              ...this.notificationController ? {
-	                notifications: {
-	                  snapshot: this.notificationController.snapshot,
-	                  records: this.notificationController.syncHistoryRecords()
-	                }
-	              } : {},
-	              ...this.bookmarkController ? {
-	                collections: {
-	                  snapshot: this.bookmarkController.snapshot,
-	                  records: this.bookmarkController.observationRecords()
-	                }
-	              } : {}
-	            })
-	          );
-	        };
-	        this.notificationController?.changes.subscribe(
-	          publishSelfObservation,
-	          this.scope
-	        ), this.bookmarkController?.changes.subscribe(
-	          publishSelfObservation,
-	          this.scope
-	        ), publishSelfObservation();
+	        });
 	      }
 	      const coreTopicFactory = (0, import_reader_topic_factory.createReaderTopicFactory)({
 	        ...topicFactoryOptions,
@@ -2591,6 +2564,11 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	              ...commit.tree.mountedReplies
 	            ]), updateTranslationWindow(), this.translationFeature?.syncMountedPosts();
 	          }, context.scope), value.services.session.changes.subscribe((commit) => {
+	            this.#rememberChronicleDeletedPosts(
+	              value,
+	              commit.changedPostNumbers,
+	              commit.observedAt
+	            );
 	            let changedWindow = !1;
 	            for (const postNumber of commit.changedPostNumbers) {
 	              const post = value.services.session.postByNumber(postNumber), parentPostNumber = (0, import_identifiers.tryDiscoursePostNumber)(
@@ -2599,10 +2577,21 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	              !translationWindowPostNumbers.has(postNumber) && (parentPostNumber === null || !translationWindowPostNumbers.has(parentPostNumber)) || (translationWindowPostNumbers.add(postNumber), changedWindow = !0);
 	            }
 	            changedWindow && updateTranslationWindow();
+	          }, context.scope), value.services.live.changes.subscribe((change) => {
+	            change.kind === "deleted" && this.#rememberChronicleDeletedPost(
+	              value,
+	              change.postNumber,
+	              Date.now(),
+	              "message-bus:deleted",
+	              !1
+	            );
 	          }, context.scope), value.services.session.archiveChanges.subscribe(() => {
 	            const active = this.shell.activeValue;
 	            active?.services.session === value.services.session && (this.#rememberHistoryTopicMetadata(active), this.#rememberChronicleArchives(active), this.#collectChronicleRequests(this.data.requests.snapshot));
-	          }, context.scope), this.#rememberChronicleArchives(value);
+	          }, context.scope), this.#rememberChronicleArchives(value), this.#rememberChronicleDeletedPosts(value), this.#collectChronicleRequests(
+	            this.data.requests.snapshot,
+	            value
+	          );
 	          let contextSurface = null;
 	          const navigation = new import_reader_topic_navigation_controller.ReaderTopicNavigationController({
 	            session: value.services.session,
@@ -3695,13 +3684,14 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	      quoteHighlight: value.topicContextFeature.captureQuoteHighlightState()
 	    }) : null;
 	  }
-	  #collectChronicleRequests(snapshot) {
+	  #collectChronicleRequests(snapshot, context) {
 	    const retained = new Set(snapshot.events.map((event) => event.id));
 	    for (const id of this.#chronicleRequestIds)
 	      retained.has(id) || this.#chronicleRequestIds.delete(id);
 	    for (const event of snapshot.events) {
 	      if (this.#chronicleRequestIds.has(event.id) || event.pending) continue;
-	      if (event.phase !== "finished" || event.status !== 404 || !event.sameOrigin) {
+	      const status = (0, import_reader_chronicle_repository.readerChronicleHttpStatus)(event.status);
+	      if (event.phase !== "finished" || status === null || event.cloudflareMitigated || !event.sameOrigin) {
 	        this.#chronicleRequestIds.add(event.id);
 	        continue;
 	      }
@@ -3710,7 +3700,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        this.#chronicleRequestIds.add(event.id);
 	        continue;
 	      }
-	      const input = this.#chronicleInput(target, event);
+	      const input = this.#chronicleInput(target, event, context);
 	      if (input)
 	        try {
 	          this.chronicle.remember(input);
@@ -3723,17 +3713,17 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	  #rememberChronicleArchives(value) {
 	    const session = value.services.session, topicId = Number(session.topicId);
 	    if (!Number.isSafeInteger(topicId) || topicId <= 0) return;
-	    const topic = session.topic ?? value.topic, topicTitle = String(topic?.title ?? "").trim() || this.history.entry(topicId)?.title || `帖子 #${topicId}`, alreadyRemembered = (kind, postNumber) => this.chronicle.snapshot.records.some(
-	      (record) => record.kind === kind && Number(record.topicId) === topicId && (kind === "topic" || Number(record.postNumber) === postNumber)
-	    ), remember = (kind, postNumber, confirmedAt) => {
-	      if (alreadyRemembered(kind, postNumber)) return;
+	    const topic = session.topic ?? value.topic, topicTitle = String(topic?.title ?? "").trim() || this.history.entry(topicId)?.title || `帖子 #${topicId}`, alreadyRemembered = (kind, postNumber, status) => this.chronicle.snapshot.records.some(
+	      (record) => record.kind === kind && Number(record.topicId) === topicId && (kind === "topic" || Number(record.postNumber) === postNumber) && record.status === status
+	    ), remember = (kind, postNumber, status, confirmedAt) => {
+	      if (alreadyRemembered(kind, postNumber, status)) return;
 	      const post = postNumber === null ? session.postByNumber(1) : session.postByNumber(postNumber);
 	      if (kind === "reply" && (!post || post.reader_local_archive_placeholder === !0) || kind === "topic" && !topic && !session.cachedPosts().length) return;
 	      const rawPostId = Number(post?.id);
 	      try {
 	        this.chronicle.remember({
 	          kind,
-	          status: 404,
+	          status,
 	          bodyCached: !0,
 	          topicId,
 	          topicTitle,
@@ -3748,16 +3738,66 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	      } catch {
 	      }
 	    }, archive = session.localArchiveState();
-	    archive.topic?.status === 404 && remember("topic", null, archive.topic.confirmedAt);
+	    archive.topic && remember(
+	      "topic",
+	      null,
+	      archive.topic.status,
+	      archive.topic.confirmedAt
+	    );
 	    for (const entry of archive.posts)
-	      entry.status === 404 && remember("reply", Number(entry.postNumber), entry.confirmedAt);
+	      remember(
+	        "reply",
+	        Number(entry.postNumber),
+	        entry.status,
+	        entry.confirmedAt
+	      );
+	  }
+	  #rememberChronicleDeletedPosts(value, postNumbers = value.services.session.cachedPosts().map((post) => Number(post.post_number)), observedAt = Date.now()) {
+	    for (const postNumber of postNumbers)
+	      this.#rememberChronicleDeletedPost(
+	        value,
+	        Number(postNumber),
+	        observedAt,
+	        "post-model:deleted_at",
+	        !0
+	      );
+	  }
+	  #rememberChronicleDeletedPost(value, postNumber, observedAt, callSite, requireDeletedModel) {
+	    if (!Number.isSafeInteger(postNumber) || postNumber < 1) return;
+	    const post = value.services.session.postByNumber(postNumber);
+	    if (!post) return;
+	    const source = post, deletedAt = source.deleted_at ?? source.deletedAt;
+	    if (requireDeletedModel && !deletedAt) return;
+	    const topicId = Number(value.services.session.topicId), kind = postNumber === 1 ? "topic" : "reply";
+	    if (this.chronicle.snapshot.records.some(
+	      (record) => record.kind === kind && Number(record.topicId) === topicId && (kind === "topic" || Number(record.postNumber) === postNumber) && record.status === "deleted"
+	    )) return;
+	    const topic = value.services.session.topic ?? value.topic, parsedDeletedAt = Date.parse(String(deletedAt ?? ""));
+	    try {
+	      this.chronicle.remember({
+	        kind,
+	        status: "deleted",
+	        bodyCached: !0,
+	        topicId,
+	        topicTitle: String(topic.title ?? "").trim() || this.history.entry(topicId)?.title,
+	        ...kind === "reply" ? { postNumber } : {},
+	        postId: Number(post.id),
+	        requestPath: kind === "topic" ? `/t/${topicId}.json` : `/posts/by_number/${topicId}/${postNumber}.json`,
+	        requestMethod: "GET",
+	        requestSource: "host",
+	        callSite,
+	        observedAt: Number.isFinite(parsedDeletedAt) ? parsedDeletedAt : observedAt
+	      });
+	    } catch {
+	    }
 	  }
 	  #rememberBoostChronicleRequest(request, requestFloor) {
 	    const boostId = Number(request.boostId);
 	    if (!Number.isSafeInteger(boostId) || boostId <= 0) return;
 	    const resolvedBoost = this.#chronicleBoostTarget(boostId);
 	    for (const event of this.data.requests.snapshot.events) {
-	      if (event.id <= requestFloor || event.phase !== "finished" || event.status !== 404 || !event.sameOrigin) continue;
+	      const status = (0, import_reader_chronicle_repository.readerChronicleHttpStatus)(event.status);
+	      if (event.id <= requestFloor || event.phase !== "finished" || status === null || event.cloudflareMitigated || !event.sameOrigin) continue;
 	      const target = (0, import_reader_chronicle_repository.readerChronicleRequestTarget)(event.path);
 	      if (!target || target.kind === "boost") continue;
 	      const resolvedRequest = this.#chronicleInput(target, event);
@@ -3765,7 +3805,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        try {
 	          this.chronicle.remember({
 	            kind: "boost",
-	            status: 404,
+	            status,
 	            bodyCached: !0,
 	            topicId: request.topicId,
 	            topicTitle: resolvedBoost?.topicTitle || this.history.entry(request.topicId)?.title,
@@ -3785,11 +3825,13 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        }
 	    }
 	  }
-	  #chronicleInput(target, event) {
+	  #chronicleInput(target, event, context) {
+	    const status = (0, import_reader_chronicle_repository.readerChronicleHttpStatus)(event.status);
+	    if (status === null || event.cloudflareMitigated) return null;
 	    let targetKind = target.kind, topicId = target.topicId, postNumber = target.postNumber, postId = target.postId;
 	    const boostId = target.boostId;
 	    let topicTitle = "";
-	    const active = this.shell.activeValue;
+	    const active = context ?? this.shell.activeValue;
 	    if (postId !== null && active) {
 	      const post = active.services.session.postById(postId), resolved = (0, import_identifiers.tryDiscoursePostNumber)(post?.post_number);
 	      resolved !== null && (topicId = Number(active.services.session.topicId), postNumber = resolved, targetKind = resolved === 1 ? "topic" : "reply");
@@ -3813,7 +3855,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    const cachedPost = active && Number(active.services.session.topicId) === topicId ? postNumber !== null ? active.services.session.postByNumber(postNumber) : postId !== null ? active.services.session.postById(postId) : targetKind === "topic" ? active.services.session.postByNumber(1) : void 0 : void 0;
 	    return !cachedPost || cachedPost.reader_local_archive_placeholder === !0 ? null : Object.freeze({
 	      kind: targetKind,
-	      status: 404,
+	      status,
 	      bodyCached: !0,
 	      topicId,
 	      topicTitle,
@@ -5946,7 +5988,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    }
 	  });
 	}
-}, "5f7683ee9507a3ded426b2f95b7e829e20b64b967294eb2f6fcf26ab4b3273a5");
+}, "6bcb2cb190dc16fbf85d8f20b1a8014889d9b789d58c76512c618e5e7b91309c");
 
 /* Source: lite/src/app/reader-data-runtime.ts */
 runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -9153,7 +9195,11 @@ runtime.register("src/live/topic-live-controller.js", function(module, exports, 
 	      try {
 	        const preserved = this.#session.preserveDeletedPostById(postId);
 	        if (!this.#acceptsWork(epoch)) return;
-	        preserved.topicArchived && this.#deactivate();
+	        this.#emit(Object.freeze({
+	          kind: "deleted",
+	          postId,
+	          postNumber: preserved.postNumber
+	        })), preserved.topicArchived && this.#deactivate();
 	      } catch (error) {
 	        this.#onError(error);
 	      }
@@ -9291,7 +9337,7 @@ runtime.register("src/live/topic-live-controller.js", function(module, exports, 
 	    return this.#active && !this.#closed && epoch === this.#activationEpoch;
 	  }
 	}
-}, "0f86bfc921f880ef5e0c6c76f729d5161c57bf44a2700b4415cfbcd675b43d60");
+}, "8aa0c2a80e1a824f1e231b439090c363dd90e40478ed5733ff9cacedbd6b1bb9");
 
 /* Source: lite/src/shell/embedded-host-appearance.ts */
 runtime.register("src/shell/embedded-host-appearance.js", function(module, exports, require) {
@@ -11174,13 +11220,27 @@ runtime.register("src/shell/reader-escape-surface.js", function(module, exports,
 	  ".ldp-reader-floating-window:not([hidden])",
 	  ".ldp-reaction-picker:not([hidden])",
 	  ".ldp-selection-toolbar:not([hidden])"
+	].join(","), EMBEDDED_COLLECTION_SURFACE_SELECTOR = [
+	  ".ldp-notifications-popover",
+	  ".ldp-history-popover",
+	  ".ldp-bookmarks-popover"
 	].join(",");
 	function visible(document, element) {
-	  if (!element.isConnected || element.hidden || element.getAttribute("aria-hidden") === "true") return !1;
 	  const viewport = document.defaultView;
-	  if (!viewport?.getComputedStyle) return !0;
-	  const style = viewport.getComputedStyle(element);
-	  return style.display !== "none" && style.visibility !== "hidden";
+	  let current = element;
+	  for (; current; ) {
+	    if (!current.isConnected || current.hidden || current.getAttribute("aria-hidden") === "true") return !1;
+	    if (viewport?.getComputedStyle) {
+	      const style = viewport.getComputedStyle(current);
+	      if (style.display === "none" || style.visibility === "hidden")
+	        return !1;
+	    }
+	    current = current.parentElement;
+	  }
+	  return !0;
+	}
+	function embeddedCollectionSurface(element) {
+	  return element.matches(EMBEDDED_COLLECTION_SURFACE_SELECTOR) && element.closest(".ldp-reader-floating-window") !== null;
 	}
 	function declaredSurfaceZIndex(element) {
 	  for (const [selector, zIndex] of [
@@ -11252,7 +11312,9 @@ runtime.register("src/shell/reader-escape-surface.js", function(module, exports,
 	function readerFrontmostEscapeSurface(document) {
 	  const candidates = escapeSurfaceRoots(document).flatMap(
 	    (root) => [...root.querySelectorAll(ESCAPE_SURFACE_SELECTOR)]
-	  ).filter((candidate) => visible(document, candidate));
+	  ).filter(
+	    (candidate) => visible(document, candidate) && !embeddedCollectionSurface(candidate)
+	  );
 	  let frontmost = null, frontmostVector = Object.freeze([]);
 	  for (const candidate of candidates) {
 	    const vector = stackingVector(document, candidate), comparison = compareVector(vector, frontmostVector), order = frontmost?.compareDocumentPosition(candidate) ?? 0;
@@ -11264,7 +11326,7 @@ runtime.register("src/shell/reader-escape-surface.js", function(module, exports,
 	  const frontmost = readerFrontmostEscapeSurface(document);
 	  return frontmost ? (Array.isArray(owners) ? owners : [owners]).some((owner) => owner === frontmost) : !0;
 	}
-}, "2c7a02acf9e893a104eef25e40506f26cad42004754ff606c5be4c7e3e345dfc");
+}, "f575719191cddf183e99d05b99c8d2818276fff1d33aee16ca074222103ad239");
 
 /* Source: lite/src/shell/reader-exclusive-panel-coordinator.ts */
 runtime.register("src/shell/reader-exclusive-panel-coordinator.js", function(module, exports, require) {
@@ -11480,6 +11542,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	var reader_floating_window_frame_exports = {};
 	__export(reader_floating_window_frame_exports, {
 	  ReaderFloatingWindowFrame: () => ReaderFloatingWindowFrame,
+	  dismissReaderFloatingWindowTabSessionFromEscape: () => dismissReaderFloatingWindowTabSessionFromEscape,
 	  reloadReaderFloatingWindowTabGeometry: () => reloadReaderFloatingWindowTabGeometry,
 	  restoreReaderFloatingWindowTabSession: () => restoreReaderFloatingWindowTabSession
 	});
@@ -11582,6 +11645,9 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	  dismissFromEscapeEvent(frame, event) {
 	    return event.key !== "Escape" || this.#active !== frame || !(0, import_reader_escape_surface.readerEscapeOwnedBy)(this.#document, [frame.element]) ? !1 : (event.preventDefault(), event.stopImmediatePropagation(), this.#pinned ? this.#closeMenus() : this.#dismiss(), !0);
 	  }
+	  dismissActiveFromEarlyEscapeEvent(event) {
+	    return !this.#visible || !this.#active?.active ? !1 : this.dismissFromEscapeEvent(this.#active, event);
+	  }
 	  isLauncherEvent(event) {
 	    return eventPathMatches(event, READER_FLOATING_WINDOW_LAUNCHER_SELECTOR);
 	  }
@@ -11646,6 +11712,9 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	}
 	function restoreReaderFloatingWindowTabSession(mount, tabId) {
 	  return floatingWindowTabGroups.get(mount)?.restore(tabId) ?? !1;
+	}
+	function dismissReaderFloatingWindowTabSessionFromEscape(mount, event) {
+	  return floatingWindowTabGroups.get(mount)?.dismissActiveFromEarlyEscapeEvent(event) ?? !1;
 	}
 	function reloadReaderFloatingWindowTabGeometry(mount) {
 	  floatingWindowTabGroups.get(mount)?.reloadStoredGeometry();
@@ -12040,7 +12109,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    return this.element.ownerDocument;
 	  }
 	}
-}, "92d43d8123dccb8ec67a08ce31a2bec9ff664c3c83f58b00352388478109dea5");
+}, "bea39eb01b40c1dba9d36a30a896a076d1cc44d7e38e0ef8c9107b6e86f4e2d6");
 
 /* Source: lite/src/shell/reader-rate-limit-notice.ts */
 runtime.register("src/shell/reader-rate-limit-notice.js", function(module, exports, require) {
@@ -28771,7 +28840,7 @@ runtime.register("src/userscript/main-lite-bootstrap.js", function(module, expor
 	  startMianLiteUserscript: () => startMianLiteUserscript
 	});
 	module.exports = __toCommonJS(main_lite_bootstrap_exports);
-	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_local_sun_clock = require("../appearance/reader-local-sun-clock.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_shell_template = require("../shell/reader-shell-template.js"), import_reader_surface_portal = require("../shell/reader-surface-portal.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_workspace = require("../shell/reader-workspace.js"), import_embedded_host_topic_card_enhancement = require("../shell/embedded-host-topic-card-enhancement.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_boost_copy_rule = require("../post/boost-copy-rule.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_unwanted_topic_filter = require("../collection/reader-unwanted-topic-filter.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_settings_reset_reminder = require("../settings/reader-settings-reset-reminder.js"), import_read_viewport_adapter = require("../reading/read-viewport-adapter.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_information_flow_coordinator = require("../state/reader-information-flow-coordinator.js"), import_reader_post_presentation = require("../topic/reader-post-presentation.js"), import_translation_text = require("../translation/translation-text.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_browser_userscript_environment = require("./browser-userscript-environment.js"), import_reader_userscript_application = require("./reader-userscript-application.js"), import_reader_userscript_target_adapter = require("./reader-userscript-target-adapter.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_credit_account_bridge = require("../user/reader-credit-account-bridge.js"), import_reader_custom_site_repository = require("../site/reader-custom-site-repository.js"), import_reader_embedded_reload_coordinator = require("./reader-embedded-reload-coordinator.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_reader_webdav_config_repository = require("../sync/reader-webdav-config-repository.js");
+	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_local_sun_clock = require("../appearance/reader-local-sun-clock.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_shell_template = require("../shell/reader-shell-template.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_surface_portal = require("../shell/reader-surface-portal.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_workspace = require("../shell/reader-workspace.js"), import_embedded_host_topic_card_enhancement = require("../shell/embedded-host-topic-card-enhancement.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_boost_copy_rule = require("../post/boost-copy-rule.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_unwanted_topic_filter = require("../collection/reader-unwanted-topic-filter.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_settings_reset_reminder = require("../settings/reader-settings-reset-reminder.js"), import_read_viewport_adapter = require("../reading/read-viewport-adapter.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_information_flow_coordinator = require("../state/reader-information-flow-coordinator.js"), import_reader_post_presentation = require("../topic/reader-post-presentation.js"), import_translation_text = require("../translation/translation-text.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_browser_userscript_environment = require("./browser-userscript-environment.js"), import_reader_userscript_application = require("./reader-userscript-application.js"), import_reader_userscript_target_adapter = require("./reader-userscript-target-adapter.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_credit_account_bridge = require("../user/reader-credit-account-bridge.js"), import_reader_custom_site_repository = require("../site/reader-custom-site-repository.js"), import_reader_embedded_reload_coordinator = require("./reader-embedded-reload-coordinator.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_reader_webdav_config_repository = require("../sync/reader-webdav-config-repository.js");
 	const DEBUG_HANDLE_KEY = "__LDP_MAIN_LITE__", LEGACY_DEBUG_HANDLE_KEY = "__LDP_MIAN_LITE__", CHALLENGE_MONITOR_KEY = "__LDP_CLOUDFLARE_CHALLENGE_MONITOR__", STYLE_ID = "ldp-mian-lite-styles", STYLE_RESOURCE = "ldpReaderStyles", KATEX_STYLE_RESOURCE = "ldpKatexStyles", KATEX_STYLESHEET_URL = "https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css";
 	function pageRecord(value) {
 	  if (value === null || typeof value != "object" && typeof value != "function")
@@ -29626,7 +29695,11 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	    informationFlow: null,
 	    diagnostics: []
 	  }, onWindowKeyDown = (event) => {
-	    state.runtime?.shell.activeValue?.topicContextSurface.handleEscape(event);
+	    const runtime = state.runtime;
+	    runtime && ((0, import_reader_floating_window_frame.dismissReaderFloatingWindowTabSessionFromEscape)(
+	      runtime.shell.view.surfaceHost,
+	      event
+	    ) || runtime.shell.activeValue?.topicContextSurface.handleEscape(event));
 	  };
 	  window.addEventListener("keydown", onWindowKeyDown, !0);
 	  const application = (0, import_reader_userscript_application.createReaderUserscriptApplication)({
@@ -29719,7 +29792,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	  }), handle;
 	}
 	const startMianLiteUserscript = startMainLiteUserscript;
-}, "2b45e65397efeecaf05ca13fca9c98ae8ffcb370bb9fbeddcc8e00548636f0a9");
+}, "818af0ad446575b66bb7d08209b96b59659686c4c0bb57e6aaefde082b19216e");
 
 /* Source: lite/src/userscript/main-lite-entry.ts */
 runtime.register("src/userscript/main-lite-entry.js", function(module, exports, require) {

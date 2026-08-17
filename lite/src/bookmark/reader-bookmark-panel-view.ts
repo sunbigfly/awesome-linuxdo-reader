@@ -153,6 +153,7 @@ export class ReaderBookmarkPanelView {
 	readonly #surface: ReaderCollectionFloatingWindow;
 	readonly #progress: ReaderCollectionProgressView;
 	readonly #filterDisclosure: ReaderPopoverFilterDisclosure;
+	readonly #refreshHeaderAction: HTMLButtonElement;
 	readonly #scrollWindow: ReaderCollectionScrollWindow<ReaderBookmarkRecord>;
 	readonly #recordNodes = new ReaderCollectionNodeCache<
 		ReaderBookmarkRecord,
@@ -201,10 +202,21 @@ export class ReaderBookmarkPanelView {
 			requestClose: () => this.#controller.close(),
 			notify: this.#notify,
 		});
+		this.#refreshHeaderAction = this.#document.createElement('button');
+		this.#refreshHeaderAction.type = 'button';
+		this.#refreshHeaderAction.className = 'ldp-bookmark-refresh';
+		this.#refreshHeaderAction.title = '更新收藏与回应';
+		this.#refreshHeaderAction.setAttribute('aria-label', '更新收藏与回应');
+		this.#refreshHeaderAction.replaceChildren(renderReaderIcon(
+			this.#document,
+			'rotate-ccw',
+			this.#renderIcon,
+		));
+		this.#elements.defaultActions.prepend(this.#refreshHeaderAction);
 		this.#surface.attachHeaderActions({
 			root: this.#elements.defaultActions,
-			buttons: [this.#elements.multiButton],
-			label: '收藏批量操作',
+			buttons: [this.#refreshHeaderAction, this.#elements.multiButton],
+			label: '收藏更新与批量操作',
 		});
 		this.#surface.attachHeaderActions({
 			root: this.#elements.bulkActions,
@@ -375,6 +387,17 @@ export class ReaderBookmarkPanelView {
 				target.dataset.reactionFilter ?? '',
 			);
 		});
+		this.scope.listen(this.#refreshHeaderAction, 'click', () => {
+			if (this.#refreshHeaderAction.dataset.ldpRequestBusy === '1') return;
+			void this.#controller.refresh().then(() => {
+				const error = this.#controller.snapshot.error;
+				if (error !== null) throw error;
+				this.#notify('收藏与回应已更新');
+			}).catch((cause) => {
+				this.#onError(cause);
+				this.#notify(`收藏与回应更新失败：${errorMessage(cause)}`);
+			});
+		});
 		this.scope.listen(this.#elements.multiButton, 'click', () =>
 			this.#controller.enterMulti());
 		this.scope.listen(this.#elements.multiDone, 'click', () =>
@@ -490,6 +513,7 @@ export class ReaderBookmarkPanelView {
 	#render(snapshot: ReaderBookmarkControllerSnapshot): void {
 		const elements = this.#elements;
 		this.#surface.sync(snapshot.open);
+		this.#syncRefreshHeaderAction(snapshot);
 		this.#syncWindowStatus(snapshot);
 		const records = this.#scrollWindow.project({
 			streamKey: JSON.stringify([
@@ -630,6 +654,7 @@ export class ReaderBookmarkPanelView {
 		this.#surface.frame.meta.textContent = [
 			snapshot.total > 0 ? `${snapshot.total} 条` : '',
 			history.records > 0 ? `缓存 ${history.records}` : '',
+			snapshot.refreshing ? '正在更新收藏与回应' : '',
 		].filter(Boolean).join(' · ');
 		const complete = history.status === 'complete';
 		if (
@@ -693,6 +718,28 @@ export class ReaderBookmarkPanelView {
 			valueText: `${history.completedTabs}/${history.totalTabs} 来源`,
 			retryable: failed,
 		});
+	}
+
+	#syncRefreshHeaderAction(snapshot: ReaderBookmarkControllerSnapshot): void {
+		const busy = snapshot.loading || snapshot.refreshing;
+		const failed = !busy && snapshot.stale && snapshot.error !== null;
+		const label = busy
+			? '正在更新收藏与回应'
+			: failed ? '收藏与回应更新失败，点击重试' : '更新收藏与回应';
+		this.#refreshHeaderAction.disabled = busy;
+		this.#refreshHeaderAction.dataset.ldpRequestBusy = busy ? '1' : '0';
+		this.#refreshHeaderAction.dataset.refreshState = busy
+			? 'running'
+			: failed ? 'error' : 'idle';
+		this.#refreshHeaderAction.classList.toggle('is-refreshing', busy);
+		this.#refreshHeaderAction.setAttribute('aria-busy', String(busy));
+		this.#refreshHeaderAction.setAttribute('aria-label', label);
+		this.#refreshHeaderAction.title = label;
+		this.#refreshHeaderAction.replaceChildren(renderReaderIcon(
+			this.#document,
+			busy ? 'loader' : failed ? 'x' : 'rotate-ccw',
+			this.#renderIcon,
+		));
 	}
 
 	#renderReactionFilters(snapshot: ReaderBookmarkControllerSnapshot): void {
