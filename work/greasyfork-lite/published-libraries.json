@@ -1,35 +1,35 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "1.5.4",
+  "sourceVersion": "1.5.5",
   "publishedAt": "2026-08-17",
   "provider": "greasyfork",
   "libraries": [
     {
       "name": "main-lite-core",
       "scriptId": 590254,
-      "versionId": 1905010,
-      "url": "https://update.greasyfork.org/scripts/590254/1905010/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1905010",
+      "versionId": 1905073,
+      "url": "https://update.greasyfork.org/scripts/590254/1905073/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1905073",
       "syncUrl": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/main-lite-core.js",
-      "bytes": 1577128,
-      "sha256": "3fa3487b444baf95ab951e2a98296d0822a1fd49f4ab4b932ab28473c86429db"
+      "bytes": 1578578,
+      "sha256": "c800a4ecf7ddbfdf8fa797fe2af91f27e01a0389aff51661af07f348376028b5"
     },
     {
       "name": "main-lite-platform",
       "scriptId": 591595,
-      "versionId": 1905012,
-      "url": "https://update.greasyfork.org/scripts/591595/1905012/Awesome%20LinuxDo%20Reader%20Lite%20Platform%20Library.js?version=1905012",
+      "versionId": 1905075,
+      "url": "https://update.greasyfork.org/scripts/591595/1905075/Awesome%20LinuxDo%20Reader%20Lite%20Platform%20Library.js?version=1905075",
       "syncUrl": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/main-lite-platform.js",
-      "bytes": 1257549,
-      "sha256": "fe3451175591ba4e283a347064538c6bba95e0b8bceb9d513c259cb3be25706a"
+      "bytes": 1259412,
+      "sha256": "22d0870e9882f542b8b4655c64b2e53970d45824359b3ea853ed88960b78a2ba"
     },
     {
       "name": "main-lite-features",
       "scriptId": 590255,
-      "versionId": 1905011,
-      "url": "https://update.greasyfork.org/scripts/590255/1905011/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1905011",
+      "versionId": 1905074,
+      "url": "https://update.greasyfork.org/scripts/590255/1905074/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1905074",
       "syncUrl": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/main-lite-features.js",
       "bytes": 1974596,
-      "sha256": "f7ec6a944e15e1f065ff26c1f7f36420514eaf5dc5b5455d18af5265a29f2d29"
+      "sha256": "163b9eada11b3ac7b305e11fd5e6fb15cd627fcfaa9248b14fb0e6ca2c361337"
     }
   ]
 }
