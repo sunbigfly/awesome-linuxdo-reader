@@ -4,7 +4,7 @@ description: 分别调整普通与全屏阅读器的左右留白、正文区域�
 feature_ids: ["SET-007"]
 source_anchors: ["lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
-version: 1.5.4
+version: 1.5.5
 status: current
 last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-05-layout-settings-v1.5.0.png"]

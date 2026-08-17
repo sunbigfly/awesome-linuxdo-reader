@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.5.4
+version: 1.5.5
 status: current
 last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
@@ -15,6 +15,29 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.5.5 — 请求恢复与原生回复加固
+
+核验日期：2026-08-17。
+
+### 请求与恢复
+
+- Cloudflare 验证窗口导航完成后会清除探针退避并立即复核；若导航撞上在途失败探针，修订状态会阻止失败结算覆盖即时复核。
+- 验证成功通过共享通道和存储事件即时通知所有 Reader 标签页，过盾窗口、暂停提示和请求许可随即恢复，不再只依赖定时轮询。
+- 普通 `429` 继续留在共享限流流程，收到状态变化后立即刷新提示；不会显示过盾入口，也不会触发 Cloudflare 恢复窗口。
+
+### 原生回复与讨论结构
+
+- Reader 只在有效回复或编辑会话中接管宿主 Composer；宿主自行打开的编辑器不会被提前隐藏、定位或套用 Reader 窗口样式。
+- Composer 顶层提升不可用时使用显式回退层级，关闭后同步清理；回复窗口重新绑定宿主节点时仍保留当前会话所有权。
+- 回复树只在根楼、父子关系、深度或条目集合实际变化时递增结构修订，普通内容刷新不再触发无效拓扑失效。
+
+### 发布状态
+
+- `1.5.5` 已发布到 Greasy Fork：主 Loader 固定版本为 `1905077`，加载 Core `1905073`、Platform `1905075` 与 Features `1905074`。
+- 固定 Loader 原始文件为 4,141 字节，SHA-256 `0c1b2ee8c8962326ddac703677cab7672f1d48254948e530ae763a91ea3f6e54`；移除平台加入的 `@downloadURL none` 后为 4,120 字节，SHA-256 `08cad5236f0780e7010bde7fbf01e373d6595485323c9777c1cf02586a370ab3`，与仓库 Loader 逐字节一致。
+- Core 为 1,578,578 字节，SHA-256 `c800a4ecf7ddbfdf8fa797fe2af91f27e01a0389aff51661af07f348376028b5`；Platform 为 1,259,412 字节，SHA-256 `22d0870e9882f542b8b4655c64b2e53970d45824359b3ea853ed88960b78a2ba`；Features 为 1,974,596 字节，SHA-256 `163b9eada11b3ac7b305e11fd5e6fb15cd627fcfaa9248b14fb0e6ca2c361337`。
+- CSS 固定到 Git `a5bd471c10bf1d40b85e50148c90087489cae584`：612,476 字节，SHA-256 `e3801f8a0c868d101cd0a9d798146b1fc394c82e5535ed9a89b8cf9501f1ed2b`；源码与分包 runtime 各通过 223 文件契约，287 个模块通过 parity 门禁。
 
 ## 1.5.4 — 恢复默认保留免打扰设置
 

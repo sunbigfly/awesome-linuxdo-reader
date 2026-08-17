@@ -4,7 +4,7 @@ description: 导出、导入与恢复设置，查看六类本地缓存并按选�
 feature_ids: ["DATA-001", "DATA-002", "DATA-007"]
 source_anchors: ["lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.5.4
+version: 1.5.5
 status: current
 last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-30-settings-update-reminder-v1.5.0.png"]

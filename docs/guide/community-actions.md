@@ -4,7 +4,7 @@ description: 使用主帖操作列，并在阅读器内回复、引用、点赞�
 feature_ids: ["MEDIA-010", "ACTION-001", "ACTION-002", "ACTION-003", "ACTION-004", "ACTION-005", "ACTION-006", "ACTION-007", "ACTION-008", "ACTION-009", "ACTION-010", "ACTION-011", "ACTION-012", "ACTION-013", "ACTION-014"]
 source_anchors: ["lite/src/media/reader-poll-model.ts","lite/src/app/reader-browser-runtime.ts","lite/src/post/reader-post-action-feature.ts","lite/src/post/reader-selection-quote-feature.ts","lite/src/post/boost-copy-rule.ts","lite/src/discourse/native-host-api.ts","lite/src/discourse/native-composer.ts","lite/src/post/reader-topic-shared-issue-coordinator.ts","lite/src/post/reader-topic-action-rail.ts"]
 since: 0.1.2
-version: 1.5.4
+version: 1.5.5
 status: current
 last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-20-community-actions-v1.5.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.5.0.png", "/screenshots/guide-15-notifications-replies-v1.5.0.png"]
@@ -51,7 +51,7 @@ screenshots: ["/screenshots/guide-20-community-actions-v1.5.0.png", "/screenshot
 - **引用**：把选中内容和来源信息插入回复编辑器；
 - **复制引用**：生成可粘贴的引用文本，不打开编辑器。
 
-发送前仍应检查目标用户、引用范围和草稿内容。切换工作区形态时，编辑器窗口按浮窗、全屏、移动分别保存几何设置。
+发送前仍应检查目标用户、引用范围和草稿内容。切换工作区形态时，编辑器窗口按浮窗、全屏、移动分别保存几何设置。阅读器只在自己发起的有效回复或编辑会话中接管原生 Composer；宿主自行打开的编辑器不会被提前隐藏或搬移。浏览器不支持顶层浮窗提升时会自动回退到 Reader 内的安全层级。
 
 “设置 → 阅读与导航 → 关闭原生回复窗口前再次确认”默认开启。开启后，按 `Esc`、关闭或舍弃草稿都需要在 1.5 秒内重复同一操作；这个保护只作用于原生回复窗口，不改变阅读器本体的退出偏好。
 

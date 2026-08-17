@@ -4,7 +4,7 @@ description: 阅读资源趋势、请求脉络、429 状态和 Cloudflare 恢复
 feature_ids: ["MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
 source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/request-observer.ts"]
 since: 0.1.2
-version: 1.5.4
+version: 1.5.5
 status: current
 last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-10-resource-monitor-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png"]
@@ -76,11 +76,11 @@ screenshots: ["/screenshots/guide-10-resource-monitor-v1.5.0.png", "/screenshots
 - 全局 429 退避；
 - 单端点冷却。
 
-LINUX DO 可覆盖 Discourse 默认限流，搜索、发帖、私信和插件也可能有独立边界。面板中的公开数字只是风险刻度，实际以 `429`、`Retry-After` 和错误码为准。
+LINUX DO 可覆盖 Discourse 默认限流，搜索、发帖、私信和插件也可能有独立边界。面板中的公开数字只是风险刻度，实际以 `429`、`Retry-After` 和错误码为准。普通 `429` 会在标签页之间共享暂停状态，状态变化到达后立即刷新提示和放行判断；它不会被误判为 Cloudflare 挑战，也不会显示过盾入口。
 
 ## Cloudflare 验证
 
-遇到挑战时，阅读器在多个标签页之间协调一个验证窗口。验证成功后关闭窗口并逐步恢复速率；失败或被用户关闭时保留冷却，避免请求风暴。会话探针会进入 Reader 请求账本，并把“仍被盾拦截”与“已经过盾但接口仍返回普通 429”分开记录。
+遇到挑战时，阅读器在多个标签页之间协调一个验证窗口。验证页完成导航后会清除探针退避并立即复核；即使此时正有失败探针结算，也不会覆盖这次即时复核。验证成功状态通过共享通道和存储事件传回各标签页，窗口、暂停提示与请求许可随即收口；失败或被用户关闭时保留冷却，避免请求风暴。会话探针会进入 Reader 请求账本，并把“仍被盾拦截”与“已经过盾但接口仍返回普通 429”分开记录。
 
 ## 隐私
 
