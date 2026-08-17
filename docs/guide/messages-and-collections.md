@@ -4,7 +4,7 @@ description: 使用消息、历史、收藏、用户观察、岁月史书和不�
 feature_ids: ["ACTION-004", "ACTION-007", "COLLECT-001", "COLLECT-002", "COLLECT-003", "COLLECT-004", "COLLECT-005", "COLLECT-006", "COLLECT-007", "COLLECT-009", "USER-007"]
 source_anchors: ["lite/src/app/reader-browser-runtime.ts","lite/src/discourse/native-host-api.ts","lite/src/notification/reader-notification-model.ts","lite/src/notification/reader-notification-controller.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-repository.ts","lite/src/history/reader-chronicle-repository.ts","lite/src/bookmark/reader-bookmark-model.ts","lite/src/bookmark/reader-bookmark-controller.ts","lite/src/collection/reader-unwanted-topic-repository.ts","lite/src/user/reader-user-observation-session.ts"]
 since: 0.1.2
-version: 1.5.5
+version: 1.5.6
 status: current
 last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-15-notifications-replies-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.5.0.png"]
@@ -20,7 +20,7 @@ screenshots: ["/screenshots/guide-15-notifications-replies-v1.5.0.png", "/screen
 
 | 分类 | 数据与常见内容 |
 | --- | --- |
-| 全部 | 原站通知流中的全部通知 |
+| 全部 | 各具体通知分类去重后的汇总；具体分类记录优先于原生泛化记录 |
 | 回复 | 用户动态中的回复和引用 |
 | 赞 | 用户动态中的点赞 |
 | @提及 | 用户动态中的个人或群组提及 |
@@ -28,6 +28,7 @@ screenshots: ["/screenshots/guide-15-notifications-replies-v1.5.0.png", "/screen
 | 链接 | 用户动态中的普通和合并链接 |
 | Boosts | 当前账号收到的 Boost |
 | 回应 | 当前账号收到的 Reactions |
+| 其他 | 现有具体分类和私信模式未覆盖的原生通知；每条在摘要前标注实际类型 |
 
 私信模式提供最新、已发送、新、未读、归档和机器人聊天六类主题列表。每条私信显示参与者、标题、摘要、最后活动时间和“新 / 未读 / 已读”状态；未读主题优先定位到最后已读楼层之后，否则进入最新楼层。
 
@@ -35,7 +36,7 @@ screenshots: ["/screenshots/guide-15-notifications-replies-v1.5.0.png", "/screen
 
 <p class="image-caption">从标题栏打开消息中心，先选择消息类别，再点击具体通知；阅读器会进入对应主题并定位到目标楼层。</p>
 
-模式、分类标签和每条消息都使用可访问的 Lucide 图标。每种通知类型优先使用自己的语义图标，例如提及使用 `@`、回复使用回箭头、赞使用爱心、Boost 使用火箭；无法识别时才回退到所属分类图标。消息卡片把类型图标放在独立圆形栏位，并按类别使用不同强调色，同时保留摘要、最多两行正文摘录、相对时间和明确状态。
+模式、分类标签和每条消息都使用可访问的 Lucide 图标。分类标签在空间足够时保持一行，只有浮窗宽度容纳不下完整标签和数量时才自动换行。每种通知类型优先使用自己的语义图标，例如提及使用 `@`、回复使用回箭头、赞使用爱心、Boost 使用火箭；无法识别时才回退到所属分类图标。“其他”严格排除已经由具体通知 Tab 或私信模式承载的记录，后台遍历原生“所有”的完整分页，并在每条摘要前显示 Discourse 解析出的具体类型。消息卡片把类型图标放在独立圆形栏位，并按类别使用不同强调色，同时保留摘要、最多两行正文摘录、相对时间和明确状态。
 
 通知或私信每页使用对应来源的原站分页大小，通常为 20 或 30 条。检索只筛选已经加载或缓存的消息；没有匹配不等于服务器上不存在。点击消息时，阅读器会打开目标主题、等待楼层挂载并定位。同一主题内的新目标楼层会在现有阅读器中直接跳转；Boost 通知会强制刷新目标附近数据，避免继续显示旧缓存。
 
@@ -55,7 +56,7 @@ screenshots: ["/screenshots/guide-15-notifications-replies-v1.5.0.png", "/screen
 
 当前登录账号会自动成为“用户观察”中的固定“自己”条目，并复用同一个浮窗、后台串行队列、分页断点、进度段和重试入口。页面启动或刷新不会自动重放普通用户观察的公开历史；账号私有的通知与收藏集合则会先恢复本地投影，再由 application 级低优先级任务补齐缺失断点。公开主题、回复、Boost、回应等仍按普通用户观察采集；只有“自己”的详情额外提供“通知”“私信”“收藏与回应”分类，其中通知逐条标注“已读/未读”。这些账号私有记录直接读取消息与收藏控制器已归一化的本地缓存，不会写入公开用户观察分页仓库，也不会出现在其他被观察用户中。原消息与收藏面板继续负责全部已读、删除收藏等原站动作。
 
-私有集合补齐任务与浮窗开关无关，会从持久化的来源分页水位渐进执行；打开面板只回放已有投影，不会另起任务或提高网络优先级。续传会先直接消费仍在本地的原始分页，只有水位后的真实缺页才进入后台网络。部分原站接口不提供固定总页数，因此未完成时只显示“已缓存页数”和固定的来源完成数，不用不断增长的估算页数充当分母；只有七个来源都返回“无下一页”时，`7/7 来源`才表示历史真正到底。列表正文一旦可用就结束前台加载；类别、标签等补充信息在后台请求并合并回同一缓存，不阻塞翻页。“我的持续观察”会统一显示公开来源、通知与私信、收藏与回应的完成进度；单个来源遇到 429、Cloudflare 或网络失败时会保留已提交分页断点、独立退避并自动续传，其余可用来源继续推进，所有恢复仍服从中央请求许可。
+私有集合补齐任务与浮窗开关无关，会从持久化的来源分页水位渐进执行；打开面板只回放已有投影，不会另起任务或提高网络优先级。续传会先直接消费仍在本地的原始分页，只有水位后的真实缺页才进入后台网络。部分原站接口不提供固定总页数，因此未完成时只显示“已缓存页数”和固定的来源完成数，不用不断增长的估算页数充当分母；只有八个来源都返回“无下一页”时，`8/8 来源`才表示历史真正到底。列表正文一旦可用就结束前台加载；类别、标签等补充信息在后台请求并合并回同一缓存，不阻塞翻页。“我的持续观察”会统一显示公开来源、通知与私信、收藏与回应的完成进度；单个来源遇到 429、Cloudflare 或网络失败时会保留已提交分页断点、独立退避并自动续传，其余可用来源继续推进，所有恢复仍服从中央请求许可。
 
 ## 浏览历史
 

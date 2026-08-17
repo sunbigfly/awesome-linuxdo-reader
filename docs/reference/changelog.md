@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.5.5
+version: 1.5.6
 status: current
 last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
@@ -15,6 +15,29 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.5.6 — 通知补集与历史投影修复
+
+核验日期：2026-08-17。
+
+### 通知分类
+
+- 消息中心新增“其他”分类，承接现有具体通知分类与私信模式未覆盖的原生通知，并严格排除已经被其他入口承载的记录。
+- 未知原生通知会显示 Discourse 解析出的实际类型与对应语义图标；“全部”按具体分类去重汇总，优先保留信息更完整的记录。
+- 分类标签仅在浮窗宽度无法容纳完整标签与数量时换行，不再固定挤压或截断新分类。
+
+### 历史投影与续传
+
+- 稀疏的“其他”历史把展示总数与原生来源总数分离，保留真实来源页码和检查点，避免少量命中被误判为已经到底。
+- 刷新先更新首个来源页，再从已有深层检查点继续补齐，不重复扫描已经提交的分页，也不会因打开面板放大请求。
+- 投影缓存升级到新记录结构；旧缓存会自动修复缺失的类型标签与来源水位，同时保留已有消息记录。
+
+### 发布状态
+
+- `1.5.6` 已发布到 Greasy Fork：主 Loader 固定版本为 `1905255`，加载 Core `1905251`、Platform `1905253` 与 Features `1905252`。
+- 固定 Loader 原始文件为 4,141 字节，SHA-256 `4f3d6a36555366d861102770d1afa86e2734101e7f4a99ad86287d4c9491c91b`；移除平台加入的 `@downloadURL none` 后为 4,120 字节，SHA-256 `bf5b30b9e9f32357e6b7b209ccce6ea58337933fa73145e1960c60b590c4c57f`，与仓库 Loader 逐字节一致。
+- Core 为 1,579,089 字节，SHA-256 `972a573d72ce74adfec25533b6246a2cb2606ef287c68a23949a9bf7138859c3`；Platform 为 1,270,005 字节，SHA-256 `6ee6f3753b1526b0123902cc3f0f90d42b650eac2acab0e312814e50d881a643`；Features 为 1,974,596 字节，SHA-256 `1afc5183bdd7299bd96b8c9ded9c63e1af492208355671753327c51af9726e56`。
+- CSS 固定到 Git `4556cdb2353b721ac38bc2a6a27f17d171b025ee`：613,145 字节，SHA-256 `c5bee6e150df42c17f121c4e049822b2babca3caf0138b9cf5d43595d7958c14`；源码与分包 runtime 各通过 223 文件契约，287 个模块通过 parity 门禁。
 
 ## 1.5.5 — 请求恢复与原生回复加固
 
