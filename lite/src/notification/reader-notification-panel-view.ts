@@ -795,6 +795,7 @@ export class ReaderNotificationPanelView {
 			: 'notifications';
 		item.dataset.notificationId = String(record.sourceNotificationId ?? 0);
 		item.dataset.notificationKey = record.identity;
+		item.dataset.notificationType = record.typeName;
 		item.dataset.readerTargetSource =
 			record.source === 'private-messages' ? 'message' : 'notification';
 		item.dataset.readerTargetInterception = 'off';
@@ -855,6 +856,12 @@ export class ReaderNotificationPanelView {
 		const typeIcon = this.#document.createElement('span');
 		typeIcon.className = 'ldp-notification-type-icon';
 		typeIcon.dataset.notificationGroup = record.group;
+		typeIcon.dataset.notificationType = record.typeName;
+		typeIcon.dataset.notificationIcon = record.icon;
+		if (record.group === 'other') {
+			typeIcon.title = record.typeLabel.trim() ||
+				record.typeName.trim() || '通知';
+		}
 		typeIcon.setAttribute('aria-hidden', 'true');
 		const reactionEmojiId = record.group === 'reactions' &&
 			record.icon.startsWith('emoji:')
@@ -905,7 +912,13 @@ export class ReaderNotificationPanelView {
 		title.className = 'ldp-notification-title';
 		const titleText = this.#document.createElement('span');
 		titleText.className = 'ldp-notification-title-text';
-		titleText.textContent = recordDisplayTitle(record, archiveMarker);
+		const displayTitle = recordDisplayTitle(record, archiveMarker);
+		const specificType = record.group === 'other'
+			? record.typeLabel.trim() || record.typeName.trim() || '通知'
+			: '';
+		titleText.textContent = specificType
+			? `【${specificType}】${displayTitle}`
+			: displayTitle;
 		title.append(titleText);
 		copy.append(title);
 		if (record.excerpt) {

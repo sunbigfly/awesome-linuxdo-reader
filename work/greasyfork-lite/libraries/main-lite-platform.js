@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.5
+// @version      1.5.6
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.5 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.5.6 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.5",
+			sourceVersion: "1.5.6",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.5") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.6") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -1684,6 +1684,8 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	    return records.length !== manifest.total ? null : Object.freeze({
 	      records: Object.freeze([...this.#sortRecords(records)]),
 	      totalHint: Math.max(manifest.total, manifest.totalHint),
+	      ...manifest.recordVersion === void 0 ? {} : { recordVersion: manifest.recordVersion },
+	      ...manifest.sourceTotalHint === void 0 ? {} : { sourceTotalHint: manifest.sourceTotalHint },
 	      complete: manifest.complete,
 	      updatedAt: manifest.updatedAt,
 	      ...manifest.sourceNextPage === void 0 ? {} : { sourceNextPage: manifest.sourceNextPage },
@@ -1731,6 +1733,12 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	    ), requestedSourcePageSize = options.sourcePageSize === void 0 ? previousManifest?.sourcePageSize : positiveSafeInteger(options.sourcePageSize);
 	    if (requestedSourcePageSize === null)
 	      throw new RangeError("集合投影 sourcePageSize 必须是正安全整数");
+	    const requestedRecordVersion = options.recordVersion === void 0 ? previousManifest?.recordVersion : positiveSafeInteger(options.recordVersion);
+	    if (requestedRecordVersion === null)
+	      throw new RangeError("集合投影 recordVersion 必须是正安全整数");
+	    const requestedSourceTotalHint = options.sourceTotalHint === void 0 ? previousManifest?.sourceTotalHint : safeInteger(options.sourceTotalHint);
+	    if (requestedSourceTotalHint === null)
+	      throw new RangeError("集合投影 sourceTotalHint 必须是非负安全整数");
 	    const requestedSourceOffsetValue = options.sourceOffset === void 0 ? previousManifest?.sourceOffset : safeInteger(options.sourceOffset);
 	    if (requestedSourceOffsetValue === null)
 	      throw new RangeError("集合投影 sourceOffset 必须是非负安全整数");
@@ -1770,6 +1778,8 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	          records.length,
 	          Math.floor(Number(options.totalHint) || 0)
 	        ),
+	        ...requestedRecordVersion === void 0 ? {} : { recordVersion: requestedRecordVersion },
+	        ...requestedSourceTotalHint === void 0 ? {} : { sourceTotalHint: requestedSourceTotalHint },
 	        pages,
 	        complete: options.checkpointMode === "advance" && previousManifest?.complete === !0 || options.complete === !0,
 	        updatedAt,
@@ -1791,14 +1801,16 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	  }
 	  #manifest(value, partition) {
 	    if (!value || typeof value != "object" || Array.isArray(value)) return null;
-	    const source = value, total = safeInteger(source.total), totalHint = safeInteger(source.totalHint), pages = safeInteger(source.pages), updatedAt = safeInteger(source.updatedAt), sourceNextPage = source.sourceNextPage === void 0 ? void 0 : safeInteger(source.sourceNextPage), sourcePageSize = source.sourcePageSize === void 0 ? void 0 : positiveSafeInteger(source.sourcePageSize), sourceOffset = source.sourceOffset === void 0 ? void 0 : safeInteger(source.sourceOffset);
-	    return source.schemaVersion !== 1 || source.partition !== partition || typeof source.generation != "string" || !source.generation || source.pageSize !== this.#pageSize || total === null || totalHint === null || pages === null || updatedAt === null || sourceNextPage === null || sourcePageSize === null || sourceOffset === null || typeof source.complete != "boolean" || pages !== Math.ceil(total / this.#pageSize) ? null : Object.freeze({
+	    const source = value, total = safeInteger(source.total), totalHint = safeInteger(source.totalHint), pages = safeInteger(source.pages), updatedAt = safeInteger(source.updatedAt), sourceNextPage = source.sourceNextPage === void 0 ? void 0 : safeInteger(source.sourceNextPage), sourcePageSize = source.sourcePageSize === void 0 ? void 0 : positiveSafeInteger(source.sourcePageSize), sourceOffset = source.sourceOffset === void 0 ? void 0 : safeInteger(source.sourceOffset), sourceTotalHint = source.sourceTotalHint === void 0 ? void 0 : safeInteger(source.sourceTotalHint), recordVersion = source.recordVersion === void 0 ? void 0 : positiveSafeInteger(source.recordVersion);
+	    return source.schemaVersion !== 1 || source.partition !== partition || typeof source.generation != "string" || !source.generation || source.pageSize !== this.#pageSize || total === null || totalHint === null || pages === null || updatedAt === null || sourceNextPage === null || sourcePageSize === null || recordVersion === null || sourceTotalHint === null || sourceOffset === null || typeof source.complete != "boolean" || pages !== Math.ceil(total / this.#pageSize) ? null : Object.freeze({
 	      schemaVersion: 1,
 	      partition,
 	      generation: source.generation,
 	      pageSize: this.#pageSize,
 	      total,
 	      totalHint: Math.max(total, totalHint),
+	      ...recordVersion === void 0 ? {} : { recordVersion },
+	      ...sourceTotalHint === void 0 ? {} : { sourceTotalHint },
 	      pages,
 	      complete: source.complete,
 	      updatedAt,
@@ -1874,7 +1886,7 @@ runtime.register("src/cache/reader-collection-page-repository.js", function(modu
 	    });
 	  }
 	}
-}, "2c54916ac80b81ab088a90cd4e2a7c65fb2e83b6fe617fd31092c7c64abe1452");
+}, "35a404a1e681cc90f584c248acfde2e77c19985f209743c97e0a2ab29d312d69");
 
 /* Source: lite/src/cache/response-repository.ts */
 runtime.register("src/cache/response-repository.js", function(module, exports, require) {
@@ -7541,6 +7553,18 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	    }
 	  return String(source ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 	}
+	function nativeNotificationTitleLabel(host, data) {
+	  const key = String(data.title ?? "").trim();
+	  if (!key) return "";
+	  try {
+	    const module2 = (0, import_value_record.objectRecord)(host.lookupModule("discourse-i18n")), i18n = (0, import_value_record.objectRecord)(module2?.default ?? module2?.I18n ?? module2), translate = i18n?.t;
+	    if (typeof translate != "function") return "";
+	    const label = nativePresentationText(translate.call(i18n, key));
+	    return label && label !== key && !label.startsWith("[missing ") ? label : "";
+	  } catch {
+	    return "";
+	  }
+	}
 	function fallbackNotificationPresentation(notification, typeName) {
 	  const source = nativeNotificationRecord(notification), data = nativeNotificationData(source);
 	  return Object.freeze({
@@ -7614,7 +7638,9 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	      return String(lookup?.[String(Number(source.notification_type))] ?? "");
 	    }, notificationModule = (0, import_value_record.objectRecord)(
 	      this.#host.lookupModule("discourse/models/notification")
-	    ), Notification = (0, import_value_record.objectRecord)(notificationModule?.default), initialize = Notification?.initializeNotifications, managerModule = (0, import_value_record.objectRecord)(
+	    ), Notification = (0, import_value_record.valueRecord)(
+	      notificationModule?.default ?? notificationModule
+	    ), initialize = Notification?.initializeNotifications, managerModule = (0, import_value_record.objectRecord)(
 	      this.#host.lookupModule("discourse/lib/notification-types-manager")
 	    ), manager = typeof managerModule?.getRenderDirector == "function" ? managerModule : (0, import_value_record.objectRecord)(managerModule?.default), getRenderDirector = manager?.getRenderDirector, currentUser = this.#host.lookup("service:current-user"), siteSettings = this.#host.lookup("service:site-settings");
 	    if (typeof initialize != "function" || typeof getRenderDirector != "function" || !currentUser || !siteSettings || !site)
@@ -7636,7 +7662,10 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	      )));
 	    }
 	    return Object.freeze(notifications.map((notification, index) => {
-	      const model = models[index] ?? notification, modelData = nativeNotificationData(model), resolvedType = typeName(model) || typeName(notification);
+	      const model = models[index] ?? notification, modelData = Object.freeze({
+	        ...nativeNotificationData(notification),
+	        ...nativeNotificationData(model)
+	      }), resolvedType = typeName(model) || typeName(notification);
 	      try {
 	        const director = (0, import_value_record.objectRecord)(getRenderDirector.call(
 	          manager,
@@ -7651,11 +7680,14 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	            notification,
 	            resolvedType
 	          );
-	        const label = nativePresentationText(director.label), description = nativePresentationText(director.description);
+	        const label = nativePresentationText(director.label), description = nativePresentationText(director.description), linkTitle = nativePresentationText(director.linkTitle), translatedTitle = nativeNotificationTitleLabel(
+	          this.#host,
+	          modelData
+	        );
 	        return Object.freeze({
 	          actor: modelData.display_username ?? modelData.username ?? nativeModelValue(model, "username"),
 	          typeName: resolvedType,
-	          typeLabel: nativePresentationText(director.linkTitle) || resolvedType || "通知",
+	          typeLabel: (linkTitle && linkTitle !== resolvedType ? linkTitle : "") || translatedTitle || linkTitle || resolvedType || "通知",
 	          summary: [label, description].filter(Boolean).join(" · "),
 	          href: String(director.linkHref ?? "").trim(),
 	          topicId: nativeModelValue(model, "topic_id") ?? nativeModelValue(model, "topicId") ?? modelData.topic_id,
@@ -7877,7 +7909,7 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	    return this.#container = urlContainer ?? fallbackContainer, this.#container;
 	  }
 	}
-}, "9e02e336d833c851376e18b8c206a166c5484195014ff6b40ceb0a94948aa488");
+}, "53f3dcccd3da5ae08525cb2bf7c72d015613508e86c7938810afd882594b7135");
 
 /* Source: lite/src/discourse/native-message-bus.ts */
 runtime.register("src/discourse/native-message-bus.js", function(module, exports, require) {
@@ -17957,17 +17989,17 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	  async loadCached(groupValue, pageValue, options = {}) {
 	    const cachedNotificationPage = this.#gateway.cachedNotificationPage;
 	    if (typeof cachedNotificationPage != "function") return null;
-	    const group = (0, import_reader_notification_model.readerNotificationGroup)(groupValue), page = nonNegativePage(pageValue), variant = notificationPageVariant(group), payload = await cachedNotificationPage.call(this.#gateway, {
+	    const group = (0, import_reader_notification_model.readerNotificationGroup)(groupValue), requestGroup = group.key === "other" ? (0, import_reader_notification_model.readerNotificationGroup)("all") : group, page = nonNegativePage(pageValue), variant = notificationPageVariant(requestGroup), payload = await cachedNotificationPage.call(this.#gateway, {
 	      authScope: this.authScope,
-	      group: group.key,
+	      group: requestGroup.key,
 	      page,
 	      ...variant ? { variant } : {},
-	      cache: notificationPageCacheSettings(group.key, page)
+	      cache: notificationPageCacheSettings(requestGroup.key, page)
 	    });
 	    return payload === null ? null : this.#pageFromPayload(group.key, page, payload, options, !0);
 	  }
 	  async load(groupValue, pageValue, options = {}) {
-	    const group = (0, import_reader_notification_model.readerNotificationGroup)(groupValue), page = nonNegativePage(pageValue), variant = notificationPageVariant(group);
+	    const group = (0, import_reader_notification_model.readerNotificationGroup)(groupValue), requestGroup = group.key === "other" ? (0, import_reader_notification_model.readerNotificationGroup)("all") : group, page = nonNegativePage(pageValue), variant = notificationPageVariant(requestGroup);
 	    let previousCursor = null;
 	    if (page > 0 && (group.source === "boosts-received" || group.source === "reactions-received")) {
 	      let previous = null;
@@ -17988,7 +18020,7 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	        });
 	    }
 	    const descriptor = notificationDescriptor(
-	      group.key,
+	      requestGroup.key,
 	      page,
 	      this.#native.username(),
 	      previousCursor
@@ -17996,7 +18028,7 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	    assertNotificationDescriptor(descriptor);
 	    const payload = await this.#gateway.loadNotificationPage({
 	      authScope: this.authScope,
-	      group: group.key,
+	      group: requestGroup.key,
 	      page,
 	      ...options.refresh ? { parallelHead: !0 } : {},
 	      ...variant ? { variant } : {},
@@ -18007,7 +18039,7 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	      signal: this.#signal,
 	      ...options.refresh ? { cacheMode: "refresh" } : {},
 	      timeoutMs: group.source === "reactions-received" ? 3e4 : 15e3,
-	      cache: notificationPageCacheSettings(group.key, page),
+	      cache: notificationPageCacheSettings(requestGroup.key, page),
 	      transport: (request) => this.#ajax.request({
 	        path: descriptor.path,
 	        method: "GET",
@@ -18041,7 +18073,7 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	          },
 	          categoryNameFor: this.#categoryNameFor
 	        }
-	      )).filter((record) => !group.typeNames.length || group.typeNames.includes(record.typeName));
+	      )).filter((record) => group.key === "other" ? (0, import_reader_notification_model.readerNotificationTypeBelongsToOther)(record.typeName) : !group.typeNames.length || group.typeNames.includes(record.typeName));
 	    } else group.source === "user-actions" ? records = rawEntries.map((entry) => (0, import_reader_notification_model.normalizeUserActionNotification)(
 	      entry,
 	      group.key,
@@ -18055,18 +18087,21 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	    ));
 	    const topicList = (0, import_reader_notification_model.notificationRecord)(source.topic_list), serverTotal = positiveTotal(
 	      source.total_rows_notifications ?? topicList.total_rows
-	    ), hasNext = group.source === "notifications" ? source.load_more_notifications === !0 || serverTotal > 0 && (page + 1) * group.pageSize < serverTotal : group.source === "private-messages" && !!topicList.more_topics_url || rawEntries.length >= group.pageSize, total = serverTotal > 0 ? serverTotal + (group.source === "notifications" ? Math.max(0, records.length - rawEntries.length) : 0) : page * group.pageSize + records.length + (hasNext ? group.pageSize : 0), last = (0, import_reader_notification_model.notificationRecord)(rawEntries.at(-1)), nextCursorValue = last.reaction_user_id ?? last.id, nextCursor = String(nextCursorValue ?? "").trim() || null;
+	    ), hasNext = group.source === "notifications" ? source.load_more_notifications === !0 || serverTotal > 0 && (page + 1) * group.pageSize < serverTotal : group.source === "private-messages" && !!topicList.more_topics_url || rawEntries.length >= group.pageSize, total = group.key === "other" ? page * group.pageSize + records.length + (hasNext ? group.pageSize : 0) : serverTotal > 0 ? serverTotal + (group.source === "notifications" ? Math.max(0, records.length - rawEntries.length) : 0) : page * group.pageSize + records.length + (hasNext ? group.pageSize : 0), last = (0, import_reader_notification_model.notificationRecord)(rawEntries.at(-1)), nextCursorValue = last.reaction_user_id ?? last.id, nextCursor = String(nextCursorValue ?? "").trim() || null;
 	    return Object.freeze({
 	      group: group.key,
 	      page,
 	      records: (0, import_reader_notification_model.sortReaderNotifications)(records),
 	      total,
+	      ...group.key === "other" ? {
+	        sourceTotal: serverTotal > 0 ? serverTotal : page * group.pageSize + rawEntries.length + (hasNext ? group.pageSize : 0)
+	      } : {},
 	      hasNext,
 	      nextCursor
 	    });
 	  }
 	}
-}, "f94bfca1eaf8ba5f57676099478ed72fcd51c6fc724fb57452ca7e5556ee20c7");
+}, "16087e694cc4a313caf77972cbe30e4930bda605b4d862b94c12edfb8b344b8b");
 
 /* Source: lite/src/notification/reader-notification-controller.ts */
 runtime.register("src/notification/reader-notification-controller.js", function(module, exports, require) {
@@ -18080,9 +18115,12 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	const DEFAULT_MAX_CACHED_PAGES = 32, DEFAULT_LIVE_REFRESH_DELAY_MS = 240, DEFAULT_RETRY_DELAY_MS = 600, DEFAULT_OPEN_REVALIDATE_MS = 30 * 6e4, DEFAULT_NATIVE_POLL_INTERVAL_MS = 30 * 6e4, DEFAULT_SYNTHETIC_POLL_INTERVAL_MS = 30 * 6e4, DEFAULT_HISTORY_STEP_DELAY_MS = 250, DEFAULT_HISTORY_RETRY_DELAY_MS = 15e3, DEFAULT_HEAD_CATCH_UP_MAX_PAGES = 20, LEGACY_USER_ACTION_PAGE_SIZE = 30, HISTORY_PROJECTION_BATCH_PAGES = 4, VISIBLE_HISTORY_LEASE_ROUNDS = 2, READER_NOTIFICATION_REACTION_LIKE_GROUPS = Object.freeze([
 	  "likes",
 	  "reactions"
-	]);
+	]), OTHER_NOTIFICATION_RECORD_VERSION = 2;
 	function notificationProjectionCheckpointNeedsRepair(group, snapshot) {
 	  const descriptor = (0, import_reader_notification_model.readerNotificationGroup)(group);
+	  if (group === "other" && snapshot.recordVersion !== OTHER_NOTIFICATION_RECORD_VERSION && snapshot.records.some((record) => record.group === "other" && record.typeName.trim() !== "" && record.typeLabel.trim() === record.typeName.trim())) return !0;
+	  if (group === "other" && snapshot.complete && snapshot.sourceTotalHint !== void 0 && snapshot.sourceOffset !== void 0)
+	    return snapshot.sourceOffset < snapshot.sourceTotalHint;
 	  if (!snapshot.complete || descriptor.source !== "user-actions" || snapshot.sourceOffset === void 0) return !1;
 	  const sourcePageSize = Math.max(
 	    1,
@@ -18172,6 +18210,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      nextPage: 0,
 	      terminalPage: null,
 	      estimatedPages: 1,
+	      sourceTotalHint: 0,
 	      complete: !1,
 	      retryAt: null,
 	      error: null
@@ -18435,13 +18474,20 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      );
 	      for (const record of snapshot.records)
 	        records.set(record.identity, record);
-	      this.#historyRecords.set(group, records), state.estimatedPages = Math.max(
+	      this.#historyRecords.set(group, records), state.sourceTotalHint = Math.max(
+	        0,
+	        Math.floor(Number(snapshot.sourceTotalHint) || 0)
+	      ), state.estimatedPages = Math.max(
 	        state.estimatedPages,
 	        repairCheckpoint ? Math.max(1, Math.floor(Number(snapshot.sourceNextPage) || 0)) : 1,
 	        Math.max(
 	          1,
 	          Math.ceil(
-	            Math.max(snapshot.totalHint, records.size) / (0, import_reader_notification_model.readerNotificationGroup)(group).pageSize
+	            Math.max(
+	              snapshot.totalHint,
+	              state.sourceTotalHint,
+	              records.size
+	            ) / (0, import_reader_notification_model.readerNotificationGroup)(group).pageSize
 	          )
 	        )
 	      );
@@ -18465,8 +18511,10 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	        for (let page = 0; page < completedPages; page += 1)
 	          state.pages.add(page);
 	      } else repairCheckpoint && (this.#projectionCheckpointReplacements.add(group), checkpointRepairs.push(group));
-	      for (const entry of this.#pages.values())
-	        entry.page.group === group && entry.advancesHistory !== !1 && this.#indexHistoryPage(entry.page);
+	      for (const entry of this.#pages.values()) {
+	        const historyPage = entry.historyPage ?? entry.page;
+	        historyPage.group === group && entry.advancesHistory !== !1 && this.#indexHistoryPage(historyPage);
+	      }
 	    }
 	    this.#refreshAggregateHistoryPages(), this.#historyStatus = [...this.#historyGroups.values()].every(
 	      (state) => state.complete
@@ -18527,7 +18575,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  #resetHistoryHydration() {
 	    this.#historyEpoch += 1, this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#historySchedule = null, this.#historyLoading = !1, this.#historyInFlightGroups.clear(), this.#historyCursor = 0, this.#historyStatus = "idle", this.#historyCurrentGroup = null, this.#historyError = null, this.#historyRetryAt = null, this.#historyRecords.clear();
 	    for (const state of this.#historyGroups.values())
-	      state.pages.clear(), state.nextPage = 0, state.terminalPage = null, state.estimatedPages = 1, state.complete = !1, state.retryAt = null, state.error = null;
+	      state.pages.clear(), state.nextPage = 0, state.terminalPage = null, state.estimatedPages = 1, state.sourceTotalHint = 0, state.complete = !1, state.retryAt = null, state.error = null;
 	  }
 	  clearCache() {
 	    this.scope.destroyed || (this.#loadEpoch += 1, this.#navigationEpoch += 1, this.#backgroundWarmEpoch += 1, this.#backgroundHeadRefreshEpoch += 1, this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#poll !== null && this.#cancel(this.#poll), this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#poll = null, this.#historySchedule = null, this.#backgroundWarm = null, this.#backgroundWarmPending = !1, this.#nativeRefreshPending = !1, this.#nativeChangePending = !1, this.#backgroundHeadRefreshes.clear(), this.#backgroundRefreshingGroups.clear(), this.#backgroundRefreshFailedGroups.clear(), this.#pollNotBefore = 0, this.#pages.clear(), this.#resetHistoryHydration(), this.#projectionRecords.clear(), this.#lastAuthoritativeAt.clear(), this.#readRecordKeys.clear(), this.#records = Object.freeze([]), this.#categoryFilter = "", this.#tagFilter = "", this.#dateFilter = "", this.#sortDirection = "desc", this.#total = 0, this.#hasNext = !1, this.#loading = !1, this.#refreshing = !1, this.#retrying = !1, this.#stale = !1, this.#error = null, this.#emit(), this.#schedulePoll(), this.#scheduleBackgroundWarm(), this.#scheduleHistoryHydration(this.#historyContinuationDelay()));
@@ -18831,10 +18879,14 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  async #loadHeadPagesUntilKnown(group, options) {
 	    const knownIdentities = this.#knownIdentitiesForGroup(group), pages = [];
 	    for (let page = 0; ; page += 1) {
-	      const loaded = await this.#requests.load(group, page, options);
+	      const sparseComplement = group === "other", loaded = await this.#requests.load(
+	        group,
+	        page,
+	        sparseComplement && page > 0 && options.refresh ? { ...options, refresh: !1 } : options
+	      );
 	      pages.push(loaded);
 	      const reachedKnownIdentity = loaded.records.some((record) => knownIdentities.has(record.identity));
-	      if (!loaded.hasNext || loaded.records.length === 0 || knownIdentities.size === 0 || reachedKnownIdentity || page + 1 >= DEFAULT_HEAD_CATCH_UP_MAX_PAGES) break;
+	      if (!loaded.hasNext || !sparseComplement && loaded.records.length === 0 || knownIdentities.size === 0 || reachedKnownIdentity || page + 1 >= DEFAULT_HEAD_CATCH_UP_MAX_PAGES) break;
 	    }
 	    return Object.freeze(pages);
 	  }
@@ -19058,6 +19110,22 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      import_reader_notification_model.READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.flatMap((group) => [...this.#historyRecords.get(group)?.values() ?? []].filter((record) => seen.has(record.identity) ? !1 : (seen.add(record.identity), !0)))
 	    );
 	  }
+	  #indexedOtherRecords() {
+	    return (0, import_reader_notification_model.sortReaderNotifications)([
+	      ...this.#historyRecords.get("other")?.values() ?? []
+	    ]);
+	  }
+	  #indexedOtherPage(page, indexed = this.#indexedOtherRecords()) {
+	    const descriptor = (0, import_reader_notification_model.readerNotificationGroup)("other"), start = page * descriptor.pageSize, end = start + descriptor.pageSize;
+	    return Object.freeze({
+	      group: "other",
+	      page,
+	      records: Object.freeze(indexed.slice(start, end)),
+	      total: indexed.length,
+	      hasNext: end < indexed.length,
+	      nextCursor: null
+	    });
+	  }
 	  #indexedReactionLikeRecords() {
 	    const seen = /* @__PURE__ */ new Set();
 	    return (0, import_reader_notification_model.sortReaderNotifications)(
@@ -19095,7 +19163,28 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    });
 	  }
 	  #refreshAggregateHistoryPages() {
-	    const indexed = this.#indexedAggregateRecords(), reactionLikes = this.#indexedReactionLikeRecords();
+	    const indexed = this.#indexedAggregateRecords(), reactionLikes = this.#indexedReactionLikeRecords(), other = this.#indexedOtherRecords();
+	    for (const [key, entry] of [...this.#pages])
+	      key.startsWith("other:") && this.#pages.set(key, Object.freeze({
+	        page: this.#indexedOtherPage(entry.page.page, other),
+	        loadedAt: entry.loadedAt,
+	        ...entry.advancesHistory === void 0 ? {} : { advancesHistory: entry.advancesHistory },
+	        ...entry.historyPage === void 0 ? {} : { historyPage: entry.historyPage }
+	      }));
+	    if (other.length && !this.#pages.has(pageKey("other", 0)) && this.#pages.set(pageKey("other", 0), Object.freeze({
+	      page: this.#indexedOtherPage(0, other),
+	      loadedAt: this.#now()
+	    })), this.#group === "other" && !this.#hasLocalFilters()) {
+	      const pageSize2 = (0, import_reader_notification_model.readerNotificationGroup)("other").pageSize, totalPages2 = Math.max(1, Math.ceil(other.length / pageSize2));
+	      this.#page >= totalPages2 && (this.#page = totalPages2 - 1);
+	      const page2 = this.#indexedOtherPage(this.#page, other), existing = this.#pages.get(pageKey("other", this.#page));
+	      this.#pages.set(pageKey("other", this.#page), Object.freeze({
+	        page: page2,
+	        loadedAt: this.#now(),
+	        ...existing?.advancesHistory === void 0 ? {} : { advancesHistory: existing.advancesHistory },
+	        ...existing?.historyPage === void 0 ? {} : { historyPage: existing.historyPage }
+	      })), this.#applyPage(page2);
+	    }
 	    for (const [key, entry] of [...this.#pages])
 	      key.startsWith("reactionLikes:") && this.#pages.set(key, Object.freeze({
 	        page: this.#indexedReactionLikePage(entry.page.page, reactionLikes),
@@ -19179,19 +19268,25 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    for (const record of page.records) records.set(record.identity, record);
 	    this.#historyRecords.set(page.group, records), state.pages.add(page.page);
 	    const group = (0, import_reader_notification_model.readerNotificationGroup)(page.group);
-	    for (state.estimatedPages = Math.max(
+	    for (page.sourceTotal !== void 0 && (state.sourceTotalHint = Math.max(
+	      0,
+	      Math.floor(Number(page.sourceTotal) || 0)
+	    )), state.estimatedPages = Math.max(
 	      state.estimatedPages,
 	      page.page + 1 + (page.hasNext ? 1 : 0),
-	      Math.ceil(page.total / group.pageSize)
-	    ), page.hasNext || (state.terminalPage = page.page); state.pages.has(state.nextPage); ) state.nextPage += 1;
+	      Math.ceil(Math.max(page.total, state.sourceTotalHint) / group.pageSize)
+	    ), page.hasNext && state.terminalPage === page.page ? state.terminalPage = null : page.hasNext || (state.terminalPage = page.page); state.pages.has(state.nextPage); ) state.nextPage += 1;
 	    state.complete = state.terminalPage !== null && state.nextPage > state.terminalPage, state.complete && state.terminalPage !== null && (state.estimatedPages = Math.max(1, state.terminalPage + 1));
 	  }
 	  #cachePage(page, loadedAt = this.#now(), persist = !0, advanceHistory = !0) {
-	    const key = pageKey(page.group, page.page), nativeRecords = this.#inheritNativeState(page.records), records = this.#inheritReadRecordState(nativeRecords), inherited = records === page.records ? page : Object.freeze({ ...page, records }), historyState = this.#historyGroups.get(inherited.group), hasHistoryCheckpoint = historyState !== void 0 && (historyState.pages.size > 0 || historyState.nextPage > 0 || historyState.terminalPage !== null || historyState.complete || (this.#historyRecords.get(inherited.group)?.size ?? 0) > 0), advancesHistory = advanceHistory || !hasHistoryCheckpoint;
+	    const key = pageKey(page.group, page.page), nativeRecords = this.#inheritNativeState(page.records), records = this.#inheritReadRecordState(nativeRecords), inherited = records === page.records ? page : Object.freeze({ ...page, records }), historyState = this.#historyGroups.get(inherited.group), group = (0, import_reader_notification_model.readerNotificationGroup)(inherited.group), reopensSparseCheckpoint = inherited.group === "other" && inherited.page === 0 && (inherited.sourceTotal ?? 0) > (historyState?.nextPage ?? 0) * group.pageSize && historyState?.complete === !0;
+	    historyState && reopensSparseCheckpoint && (historyState.complete = !1, historyState.terminalPage = null, historyState.retryAt = null, historyState.error = null, this.#historyStatus = "idle", this.#historyCurrentGroup = null, this.#historyError = null, this.#historyRetryAt = null, this.#projectionCheckpointReplacements.add(inherited.group));
+	    const hasHistoryCheckpoint = historyState !== void 0 && (historyState.pages.size > 0 || historyState.nextPage > 0 || historyState.terminalPage !== null || historyState.complete || (this.#historyRecords.get(inherited.group)?.size ?? 0) > 0), advancesHistory = advanceHistory || reopensSparseCheckpoint || !hasHistoryCheckpoint;
 	    if (this.#pages.delete(key), this.#pages.set(key, Object.freeze({
 	      page: inherited,
 	      loadedAt,
-	      advancesHistory
+	      advancesHistory,
+	      ...advancesHistory ? { historyPage: inherited } : {}
 	    })), advancesHistory)
 	      this.#indexHistoryPage(inherited);
 	    else {
@@ -19233,10 +19328,15 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    const totalHint = cachedPages.reduce(
 	      (total, page) => Math.max(total, page.total),
 	      committedRecords.length
+	    ), sourceTotalHint = cachedPages.reduce(
+	      (total, page) => Math.max(total, page.sourceTotal ?? 0),
+	      state?.sourceTotalHint ?? 0
 	    ), replaceCheckpoint = this.#projectionCheckpointReplacements.has(group);
 	    return this.#projection.write(group, committedRecords, {
 	      mergeStored: !exactReplacement,
 	      totalHint,
+	      ...group === "other" && complete ? { recordVersion: OTHER_NOTIFICATION_RECORD_VERSION } : {},
+	      ...sourceTotalHint > 0 ? { sourceTotalHint } : {},
 	      complete,
 	      updatedAt: this.#now(),
 	      checkpointMode: replaceCheckpoint ? "replace" : "advance",
@@ -19586,7 +19686,8 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      if (!valid() || (this.#cachePage(page), this.#lastAuthoritativeAt.set(pageKey("all", 0), this.#now()), this.#raiseUnreadCountForCachedRecords(), this.#open && !selectedFiltering && selectedPage === 0 && selectedGroup === this.#group && (selectedGroup === "all" || selectedGroup === "reactionLikes" || import_reader_notification_model.READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.includes(selectedGroup)) && this.#renderFromCache(), await this.#refreshNativeAssociation(
 	        changeEpoch,
 	        selectedGroup,
-	        selectedPage
+	        selectedPage,
+	        !1
 	      ), !valid())) return;
 	      const inboxKey = pageKey("inbox", 0);
 	      if (this.#native.username().trim() && !this.#pages.has(inboxKey)) {
@@ -19612,10 +19713,10 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	      valid() && (this.#nativeChangePending = !1, this.#nativeRefreshPending = !!(this.#hasLocalFilters() && (0, import_reader_notification_model.readerNotificationGroup)(this.#group).source === "private-messages"));
 	    }
 	  }
-	  async #refreshNativeAssociation(changeEpoch, selectedGroup, selectedPage) {
+	  async #refreshNativeAssociation(changeEpoch, selectedGroup, selectedPage, refresh = !0) {
 	    try {
 	      const nativePage = await this.#requests.load("all", 0, {
-	        refresh: !0,
+	        ...refresh ? { refresh: !0 } : {},
 	        background: !0,
 	        expandConsolidated: !1
 	      });
@@ -19943,7 +20044,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    this.#revision += 1, this.#snapshotCache = null, this.changes.emit(this.snapshot).forEach(this.#onError);
 	  }
 	}
-}, "80e091bc5112151f86ad329a230ee19724d9d929eedbe63a001a60896be804d6");
+}, "1eca7bcb2e6bde5fa4d74a32fbeea49abd517cc4a94ed8bd7412c68e687b8564");
 
 /* Source: lite/src/notification/reader-notification-model.ts */
 runtime.register("src/notification/reader-notification-model.js", function(module, exports, require) {
@@ -19967,6 +20068,7 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	  readerNotificationCategoryFilterKey: () => readerNotificationCategoryFilterKey,
 	  readerNotificationGroup: () => readerNotificationGroup,
 	  readerNotificationTagFilterKey: () => readerNotificationTagFilterKey,
+	  readerNotificationTypeBelongsToOther: () => readerNotificationTypeBelongsToOther,
 	  sortReaderNotifications: () => sortReaderNotifications,
 	  withReaderNotificationTopicTaxonomy: () => withReaderNotificationTopicTaxonomy
 	});
@@ -20038,6 +20140,14 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	    pageSize: 100,
 	    typeNames: ["linked", "linked_consolidated"],
 	    actionTypes: [17]
+	  }),
+	  other: group({
+	    key: "other",
+	    mode: "notifications",
+	    source: "notifications",
+	    label: "其他",
+	    icon: "list-checks",
+	    pageSize: 24
 	  }),
 	  boosts: group({
 	    key: "boosts",
@@ -20130,6 +20240,7 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	  "reactions",
 	  "edits",
 	  "links",
+	  "other",
 	  "inbox",
 	  "sent",
 	  "newMessages",
@@ -20144,6 +20255,7 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	  "mentions",
 	  "edits",
 	  "links",
+	  "other",
 	  "inbox",
 	  "sent",
 	  "newMessages",
@@ -20157,8 +20269,19 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	  "edits",
 	  "links",
 	  "boosts",
-	  "reactions"
-	]);
+	  "reactions",
+	  "other"
+	]), READER_NOTIFICATION_OTHER_EXCLUDED_TYPE_NAMES = Object.freeze(/* @__PURE__ */ new Set([
+	  ...Object.values(READER_NOTIFICATION_GROUPS).filter((candidate) => candidate.mode === "notifications" && candidate.key !== "other").flatMap((candidate) => candidate.typeNames),
+	  // 私信已有独立模式；原生通知只用于已读身份关联，不能再混入“其他”。
+	  "private_message",
+	  "invited_to_private_message",
+	  "group_message_summary"
+	]));
+	function readerNotificationTypeBelongsToOther(value) {
+	  const typeName = String(value ?? "").trim().toLocaleLowerCase("en-US");
+	  return !READER_NOTIFICATION_OTHER_EXCLUDED_TYPE_NAMES.has(typeName);
+	}
 	function readerNotificationGroup(value) {
 	  const key = String(value ?? "");
 	  return READER_NOTIFICATION_GROUPS[key] ?? READER_NOTIFICATION_GROUPS.all;
@@ -20170,7 +20293,7 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	    if (candidate.mode === "notifications" && candidate.typeNames.includes(typeName))
 	      return candidate;
 	  }
-	  return READER_NOTIFICATION_GROUPS.all;
+	  return READER_NOTIFICATION_GROUPS.other;
 	}
 	function notificationRecord(value) {
 	  return value !== null && typeof value == "object" ? value : Object.freeze({});
@@ -20267,6 +20390,7 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	  return idIndex < 0 ? null : targetFrom(tail[idIndex], tail[idIndex + 1] ?? 1);
 	}
 	const TYPE_ICONS = Object.freeze({
+	  custom: "sparkles",
 	  mentioned: "at",
 	  group_mentioned: "at",
 	  replied: "reply",
@@ -20281,7 +20405,10 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	  group_message_summary: "mail",
 	  edited: "pencil",
 	  linked: "link",
-	  linked_consolidated: "link"
+	  linked_consolidated: "link",
+	  following_created_topic: "followed-topic",
+	  post_approved: "post-approved",
+	  topic_reminder: "calendar-clock"
 	});
 	function recordResult(input) {
 	  return Object.freeze({
@@ -20310,7 +20437,10 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	    "reactions-received",
 	    "private-messages"
 	  ].includes(notificationSource)) return null;
-	  const targetValue = notificationRecord(source.target), topicId = (0, import_identifiers.tryDiscourseTopicId)(targetValue.topicId), postNumber = (0, import_identifiers.tryDiscoursePostNumber)(targetValue.postNumber), target = topicId && postNumber ? Object.freeze({ topicId, postNumber }) : null, tags = Object.freeze((Array.isArray(source.tags) ? source.tags : []).map(notificationText).filter(Boolean)), read = source.read === !0 ? !0 : source.read === !1 ? !1 : null;
+	  const targetValue = notificationRecord(source.target), topicId = (0, import_identifiers.tryDiscourseTopicId)(targetValue.topicId), postNumber = (0, import_identifiers.tryDiscoursePostNumber)(targetValue.postNumber), target = topicId && postNumber ? Object.freeze({ topicId, postNumber }) : null, tags = Object.freeze((Array.isArray(source.tags) ? source.tags : []).map(notificationText).filter(Boolean)), read = source.read === !0 ? !0 : source.read === !1 ? !1 : null, typeName = notificationText(source.typeName), storedTypeLabel = notificationText(source.typeLabel), typeLabel = notificationSource === "notifications" ? nativeNotificationTypeLabel(typeName, {
+	    typeName,
+	    typeLabel: storedTypeLabel
+	  }, Object.freeze({})) : storedTypeLabel;
 	  return recordResult({
 	    identity,
 	    group: group2,
@@ -20318,10 +20448,14 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	    sourceNotificationId: positiveId(source.sourceNotificationId),
 	    notificationTypeId: positiveId(source.notificationTypeId),
 	    highPriority: source.highPriority === !0,
-	    typeName: notificationText(source.typeName),
-	    typeLabel: notificationText(source.typeLabel),
+	    typeName,
+	    typeLabel,
 	    aggregateCount: aggregateCount(source.aggregateCount),
-	    icon: notificationText(source.icon) || "bell",
+	    icon: notificationSource === "notifications" ? nativeNotificationTypeIcon(
+	      typeName,
+	      typeLabel,
+	      notificationText(source.icon) || "bell"
+	    ) : notificationText(source.icon) || "bell",
 	    actor: notificationUsername(source.actor),
 	    avatarFallback: notificationText(source.avatarFallback),
 	    avatarTemplate: String(source.avatarTemplate ?? "").trim(),
@@ -20361,6 +20495,29 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	  const verb = notificationActivityVerb(input.group, input.typeName);
 	  return verb ? `${input.actor ? `@${input.actor} · ` : ""}${verb}${input.title ? ` · ${input.title}` : ""}` : "";
 	}
+	const NATIVE_OTHER_TYPE_LABELS = Object.freeze({
+	  custom: "自定义通知",
+	  following_created_topic: "您关注的人新话题",
+	  post_approved: "已批准帖子",
+	  topic_reminder: "话题提醒"
+	}), NATIVE_CUSTOM_TITLE_LABELS = Object.freeze({
+	  "solved.notification.title": "您的帖子被标记为解决方案",
+	  "solved.notification.topic_solved_title": "话题已解决"
+	});
+	function nativeNotificationTypeLabel(typeName, presented, data) {
+	  const presentedLabel = notificationText(presented.typeLabel);
+	  if (typeName === "custom") {
+	    const customLabel = NATIVE_CUSTOM_TITLE_LABELS[String(data.title ?? "")];
+	    if (customLabel) return customLabel;
+	    if (presentedLabel === "您的帖子已被标记为解决方案")
+	      return "您的帖子被标记为解决方案";
+	  }
+	  const canonicalLabel = NATIVE_OTHER_TYPE_LABELS[typeName];
+	  return canonicalLabel && typeName !== "custom" ? canonicalLabel : presentedLabel && presentedLabel !== typeName ? presentedLabel : (NATIVE_OTHER_TYPE_LABELS[typeName] ?? presentedLabel) || typeName || "通知";
+	}
+	function nativeNotificationTypeIcon(typeName, typeLabel, fallback = "bell") {
+	  return typeName === "custom" && /(?:解决方案|已解决|话题解决)/.test(typeLabel) ? "solution-badge" : TYPE_ICONS[typeName] ?? fallback;
+	}
 	function normalizeNativeNotification(value, presented, groupValue, options = {}) {
 	  const source = notificationRecord(value), data = notificationData(source), typeName = String(presented.typeName ?? source.type_name ?? "").trim(), group2 = nativeNotificationGroup(typeName, groupValue), presentedActor = notificationUsername(
 	    presented.actor ?? data.display_username ?? data.original_username ?? data.acting_user_name ?? data.username ?? source.username
@@ -20378,7 +20535,7 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	    title
 	  }) : `${namedAggregateActor ? `@${namedAggregateActor} 等 · ` : ""}${count} 条回复${title ? ` · ${title}` : ""}`) || notificationText(
 	    presented.summary ?? data.topic_title ?? presented.typeLabel ?? typeName ?? "通知"
-	  ), taxonomy = notificationTaxonomy(
+	  ), typeLabel = nativeNotificationTypeLabel(typeName, presented, data), taxonomy = notificationTaxonomy(
 	    options.categoryNameFor,
 	    data,
 	    source
@@ -20391,9 +20548,9 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	    notificationTypeId: positiveId(source.notification_type),
 	    highPriority: source.high_priority === !0,
 	    typeName,
-	    typeLabel: notificationText(presented.typeLabel ?? (typeName || "通知")),
+	    typeLabel,
 	    aggregateCount: count,
-	    icon: TYPE_ICONS[typeName] ?? group2.icon,
+	    icon: nativeNotificationTypeIcon(typeName, typeLabel, group2.icon),
 	    actor,
 	    avatarFallback: count === null ? actor.slice(0, 1).toLocaleUpperCase() || "?" : String(count),
 	    avatarTemplate: count === null ? String(
@@ -20549,7 +20706,7 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	function sortReaderNotifications(records) {
 	  return Object.freeze([...records].sort((left, right) => (Date.parse(right.createdAt) || 0) - (Date.parse(left.createdAt) || 0) || right.identity.localeCompare(left.identity)));
 	}
-}, "992b745f59dbfbaab399af7dabbcc5cf897fef4d41d9cc650cfba1a0a894c935");
+}, "c7ae36f309ef972277e3343b361efec404729b7e38c7939105b9c8c4fb30c5aa");
 
 /* Source: lite/src/notification/reader-notification-panel-view.ts */
 runtime.register("src/notification/reader-notification-panel-view.js", function(module, exports, require) {
@@ -20971,7 +21128,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    const item = this.#document.createElement("a");
 	    item.className = "ldp-notification-item ldp-notification-message-item";
 	    const unread = record.read === !1, readStateLabel = unread ? "未读" : "已读";
-	    item.classList.toggle("unread", unread), item.classList.toggle("read", !unread), item.dataset.notificationReadState = unread ? "unread" : "read", item.href = recordHref(record, this.#baseUrl), item.dataset.notificationSource = record.sourceNotificationId === null ? record.source : "notifications", item.dataset.notificationId = String(record.sourceNotificationId ?? 0), item.dataset.notificationKey = record.identity, item.dataset.readerTargetSource = record.source === "private-messages" ? "message" : "notification", item.dataset.readerTargetInterception = "off", item.dataset.ldpPreserveTargetPost = "1", record.target && (item.dataset.notificationTopicId = String(record.target.topicId), item.dataset.notificationPostNumber = String(record.target.postNumber));
+	    item.classList.toggle("unread", unread), item.classList.toggle("read", !unread), item.dataset.notificationReadState = unread ? "unread" : "read", item.href = recordHref(record, this.#baseUrl), item.dataset.notificationSource = record.sourceNotificationId === null ? record.source : "notifications", item.dataset.notificationId = String(record.sourceNotificationId ?? 0), item.dataset.notificationKey = record.identity, item.dataset.notificationType = record.typeName, item.dataset.readerTargetSource = record.source === "private-messages" ? "message" : "notification", item.dataset.readerTargetInterception = "off", item.dataset.ldpPreserveTargetPost = "1", record.target && (item.dataset.notificationTopicId = String(record.target.topicId), item.dataset.notificationPostNumber = String(record.target.postNumber));
 	    const archiveMarker = markerValue !== void 0 ? markerValue : record.target ? this.#archiveMarker(record.target.topicId, record.target.postNumber) : null, archiveLabel = archiveMarker ? (0, import_reader_history_repository.readerHistoryArchiveMarkerLabel)(archiveMarker) : "";
 	    archiveMarker && (item.dataset.localArchiveStatus = String(archiveMarker.status), item.dataset.localArchiveScope = archiveMarker.postNumber === null ? "topic" : "post");
 	    const avatarUrl = this.#avatarSource(record.avatarTemplate, 48);
@@ -20992,7 +21149,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    } else
 	      avatar.setAttribute("aria-hidden", "true"), item.append(avatar);
 	    const typeIcon = this.#document.createElement("span");
-	    typeIcon.className = "ldp-notification-type-icon", typeIcon.dataset.notificationGroup = record.group, typeIcon.setAttribute("aria-hidden", "true");
+	    typeIcon.className = "ldp-notification-type-icon", typeIcon.dataset.notificationGroup = record.group, typeIcon.dataset.notificationType = record.typeName, typeIcon.dataset.notificationIcon = record.icon, record.group === "other" && (typeIcon.title = record.typeLabel.trim() || record.typeName.trim() || "通知"), typeIcon.setAttribute("aria-hidden", "true");
 	    const reactionEmojiId = record.group === "reactions" && record.icon.startsWith("emoji:") ? record.icon.slice(6) : "";
 	    if (record.group === "likes") {
 	      const emoji = this.#document.createElement("span");
@@ -21025,7 +21182,9 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    const title = this.#document.createElement("span");
 	    title.className = "ldp-notification-title";
 	    const titleText = this.#document.createElement("span");
-	    if (titleText.className = "ldp-notification-title-text", titleText.textContent = recordDisplayTitle(record, archiveMarker), title.append(titleText), copy.append(title), record.excerpt) {
+	    titleText.className = "ldp-notification-title-text";
+	    const displayTitle = recordDisplayTitle(record, archiveMarker), specificType = record.group === "other" ? record.typeLabel.trim() || record.typeName.trim() || "通知" : "";
+	    if (titleText.textContent = specificType ? `【${specificType}】${displayTitle}` : displayTitle, title.append(titleText), copy.append(title), record.excerpt) {
 	      const excerpt = this.#document.createElement("span");
 	      excerpt.className = "ldp-notification-excerpt", excerpt.textContent = record.excerpt, copy.append(excerpt);
 	    }
@@ -21053,7 +21212,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    this.#relativeTimer !== null && (this.#cancel(this.#relativeTimer), this.#relativeTimer = null);
 	  }
 	}
-}, "2dcf8859630bde83ef7de1991252b8a16930e2eb88b1ae65282d7a74bd02fdeb");
+}, "a8ee1081f593a7a1b4a4a12c1d1995dcc0542b4ee8c904523eb04c4fd0c373d0");
 
 /* Source: lite/src/queue/reader-open-queue-session.ts */
 runtime.register("src/queue/reader-open-queue-session.js", function(module, exports, require) {

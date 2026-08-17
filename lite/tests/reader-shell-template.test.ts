@@ -213,11 +213,11 @@ assert(
 		template.notificationsPopover.hidden &&
 		template.notificationModeTabs.length === 2 &&
 		template.notificationGroupPanels.length === 2 &&
-		template.notificationGroupTabs.length === 13 &&
+			template.notificationGroupTabs.length === 14 &&
 		template.notificationList.querySelector('.ldp-notification-empty') !== null &&
 		template.notificationPagePrevious.disabled &&
 		template.notificationPageNext.disabled,
-	'消息按钮、2 模式、13 个可见分类、工具栏、列表与分页必须由稳定 Shell 提供完整命名锚点',
+	'消息按钮、2 模式、14 个可见分类、工具栏、列表与分页必须由稳定 Shell 提供完整命名锚点',
 );
 assert(
 	template.notificationSearch.className ===

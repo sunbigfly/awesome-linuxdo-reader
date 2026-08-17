@@ -36,6 +36,7 @@ import {
 	notificationData,
 	notificationRecord,
 	readerNotificationGroup,
+	readerNotificationTypeBelongsToOther,
 	sortReaderNotifications,
 	withReaderNotificationTopicTaxonomy,
 	type ReaderNotificationGroupKey,
@@ -332,7 +333,7 @@ function expandedReplyValue(
 }
 
 /**
- * 14 个通知/私信分类的唯一 read adapter。
+ * 15 个通知/私信分类的唯一 read adapter。
  *
  * 端点、分页、cursor、归一化和 cache contract 在此集中；View/Controller 只提交 group/page。
  * 每次读取仍经过 DomainRequestGateway 的 scheduler、限流、single-flight 和 ResponseRepository，
@@ -633,14 +634,17 @@ export class DiscourseNotificationRequestAdapter {
 		const cachedNotificationPage = this.#gateway.cachedNotificationPage;
 		if (typeof cachedNotificationPage !== 'function') return null;
 		const group = readerNotificationGroup(groupValue);
+		const requestGroup = group.key === 'other'
+			? readerNotificationGroup('all')
+			: group;
 		const page = nonNegativePage(pageValue);
-		const variant = notificationPageVariant(group);
+		const variant = notificationPageVariant(requestGroup);
 		const payload = await cachedNotificationPage.call(this.#gateway, {
 			authScope: this.authScope,
-			group: group.key,
+			group: requestGroup.key,
 			page,
 			...(variant ? { variant } : {}),
-			cache: notificationPageCacheSettings(group.key, page),
+			cache: notificationPageCacheSettings(requestGroup.key, page),
 		});
 		if (payload === null) return null;
 		return this.#pageFromPayload(group.key, page, payload, options, true);
@@ -652,8 +656,11 @@ export class DiscourseNotificationRequestAdapter {
 		options: ReaderNotificationLoadOptions = {},
 	): Promise<ReaderNotificationPage> {
 		const group = readerNotificationGroup(groupValue);
+		const requestGroup = group.key === 'other'
+			? readerNotificationGroup('all')
+			: group;
 		const page = nonNegativePage(pageValue);
-		const variant = notificationPageVariant(group);
+		const variant = notificationPageVariant(requestGroup);
 		let previousCursor: string | null = null;
 		if (
 			page > 0 &&
@@ -687,7 +694,7 @@ export class DiscourseNotificationRequestAdapter {
 			}
 		}
 		const descriptor = notificationDescriptor(
-			group.key,
+			requestGroup.key,
 			page,
 			this.#native.username(),
 			previousCursor,
@@ -695,7 +702,7 @@ export class DiscourseNotificationRequestAdapter {
 		assertNotificationDescriptor(descriptor);
 		const payload = await this.#gateway.loadNotificationPage<unknown>({
 			authScope: this.authScope,
-			group: group.key,
+			group: requestGroup.key,
 			page,
 			...(options.refresh ? { parallelHead: true } : {}),
 			...(variant ? { variant } : {}),
@@ -712,7 +719,7 @@ export class DiscourseNotificationRequestAdapter {
 			signal: this.#signal,
 			...(options.refresh ? { cacheMode: 'refresh' as const } : {}),
 			timeoutMs: group.source === 'reactions-received' ? 30_000 : 15_000,
-			cache: notificationPageCacheSettings(group.key, page),
+			cache: notificationPageCacheSettings(requestGroup.key, page),
 			transport: (request) => this.#ajax.request({
 				path: descriptor.path,
 				method: 'GET',
@@ -767,8 +774,10 @@ export class DiscourseNotificationRequestAdapter {
 					},
 				))
 				.filter((record) =>
-					!group.typeNames.length ||
-					group.typeNames.includes(record.typeName));
+					group.key === 'other'
+						? readerNotificationTypeBelongsToOther(record.typeName)
+						: !group.typeNames.length ||
+							group.typeNames.includes(record.typeName));
 		} else if (group.source === 'user-actions') {
 			records = rawEntries.map((entry) =>
 				normalizeUserActionNotification(
@@ -803,7 +812,10 @@ export class DiscourseNotificationRequestAdapter {
 				? Boolean(topicList.more_topics_url) ||
 					rawEntries.length >= group.pageSize
 				: rawEntries.length >= group.pageSize;
-		const total = serverTotal > 0
+		const total = group.key === 'other'
+			? page * group.pageSize + records.length +
+				(hasNext ? group.pageSize : 0)
+			: serverTotal > 0
 			? serverTotal +
 				(group.source === 'notifications'
 					? Math.max(0, records.length - rawEntries.length)
@@ -819,6 +831,14 @@ export class DiscourseNotificationRequestAdapter {
 			page,
 			records: sortReaderNotifications(records),
 			total,
+			...(group.key === 'other'
+				? {
+						sourceTotal: serverTotal > 0
+							? serverTotal
+							: page * group.pageSize + rawEntries.length +
+								(hasNext ? group.pageSize : 0),
+					}
+				: {}),
 			hasNext,
 			nextCursor,
 		});

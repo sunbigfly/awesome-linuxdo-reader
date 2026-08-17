@@ -1723,6 +1723,26 @@ function nativePresentationText(value: unknown): string {
 		.trim();
 }
 
+function nativeNotificationTitleLabel(
+	host: DiscourseHostApiPort,
+	data: UnknownRecord,
+): string {
+	const key = String(data.title ?? '').trim();
+	if (!key) return '';
+	try {
+		const module = objectRecord(host.lookupModule('discourse-i18n'));
+		const i18n = objectRecord(module?.default ?? module?.I18n ?? module);
+		const translate = i18n?.t;
+		if (typeof translate !== 'function') return '';
+		const label = nativePresentationText(translate.call(i18n, key));
+		return label && label !== key && !label.startsWith('[missing ')
+			? label
+			: '';
+	} catch {
+		return '';
+	}
+}
+
 function fallbackNotificationPresentation(
 	notification: unknown,
 	typeName: string,
@@ -1842,7 +1862,10 @@ implements DiscourseNativeNotificationStatePort {
 		const notificationModule = objectRecord(
 			this.#host.lookupModule('discourse/models/notification'),
 		);
-		const Notification = objectRecord(notificationModule?.default);
+		// Discourse 实际导出的是带静态初始化方法的 class；测试替身也允许对象。
+		const Notification = valueRecord(
+			notificationModule?.default ?? notificationModule,
+		);
 		const initialize = Notification?.initializeNotifications;
 		const managerModule = objectRecord(
 			this.#host.lookupModule('discourse/lib/notification-types-manager'),
@@ -1883,7 +1906,10 @@ implements DiscourseNativeNotificationStatePort {
 		}
 		return Object.freeze(notifications.map((notification, index) => {
 			const model = models[index] ?? notification;
-			const modelData = nativeNotificationData(model);
+			const modelData = Object.freeze({
+				...nativeNotificationData(notification),
+				...nativeNotificationData(model),
+			});
 			const resolvedType = typeName(model) || typeName(notification);
 			try {
 				const director = objectRecord(getRenderDirector.call(
@@ -1902,6 +1928,11 @@ implements DiscourseNativeNotificationStatePort {
 				}
 				const label = nativePresentationText(director.label);
 				const description = nativePresentationText(director.description);
+				const linkTitle = nativePresentationText(director.linkTitle);
+				const translatedTitle = nativeNotificationTitleLabel(
+					this.#host,
+					modelData,
+				);
 				return Object.freeze({
 					actor:
 						modelData.display_username ??
@@ -1909,7 +1940,9 @@ implements DiscourseNativeNotificationStatePort {
 						nativeModelValue(model, 'username'),
 					typeName: resolvedType,
 					typeLabel:
-						nativePresentationText(director.linkTitle) ||
+						(linkTitle && linkTitle !== resolvedType ? linkTitle : '') ||
+						translatedTitle ||
+						linkTitle ||
 						resolvedType ||
 						'通知',
 					summary: [label, description].filter(Boolean).join(' · '),

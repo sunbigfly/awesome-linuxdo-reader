@@ -1355,7 +1355,7 @@ assert(
 				appEventSubscriptions.has(
 					'discourse-reactions:reaction-toggled',
 				) &&
-				shellRoot.querySelectorAll('.ldp-notification-tab').length === 13 &&
+				shellRoot.querySelectorAll('.ldp-notification-tab').length === 14 &&
 				shellRoot.querySelectorAll('.ldp-bookmark-tab').length === 5 &&
 				shellRoot.querySelector('.ldp-history-sort-toggle')
 					?.getAttribute('aria-pressed') === 'true' &&

@@ -21,6 +21,7 @@ import {
 	READER_NOTIFICATION_PANEL_GROUP_ORDER,
 	READER_NOTIFICATION_GROUPS,
 	normalizeNativeNotification,
+	normalizeStoredReaderNotification,
 	normalizeUserActionNotification,
 	readerNotificationCategoryFilterKey,
 	type ReaderNotificationGroupKey,
@@ -456,9 +457,11 @@ for (const groupKey of READER_NOTIFICATION_GROUP_ORDER) {
 	const page = await requests.load(groupKey, 0);
 	assert(
 		page.group === groupKey &&
-		gateway.requests.at(-1)?.group === groupKey &&
+		gateway.requests.at(-1)?.group === (groupKey === 'other' ? 'all' : groupKey) &&
 		page.records.length === (
-			groupKey === 'all' || groupKey === 'replies' ? 2 : 1
+			groupKey === 'all' || groupKey === 'replies'
+				? 2
+				: groupKey === 'other' ? 0 : 1
 		),
 		`分类 ${groupKey} 必须通过统一 adapter 返回归一化记录`,
 	);
@@ -538,21 +541,240 @@ assert(
 	ajax.paths.some((path) => path.includes(
 		'/topics/private-messages-warnings/viewer.json?page=0',
 	)),
-	'14 分类必须覆盖原生通知、用户动作、Boost、回应和六种私信端点',
+		'15 分类必须覆盖原生通知、其他类型、用户动作、Boost、回应和六种私信端点',
 );
 assert(
 	Object.values(READER_NOTIFICATION_GROUPS)
-		.filter((group) => group.mode === 'notifications').length === 9 &&
+		.filter((group) => group.mode === 'notifications').length === 10 &&
 	Object.values(READER_NOTIFICATION_GROUPS)
 		.filter((group) => group.mode === 'messages').length === 6,
-	'通知模型必须保留 8 个底层分类、1 个回应与赞合并投影和 6 个私信分类',
+	'通知模型必须保留 9 个底层分类、1 个回应与赞合并投影和 6 个私信分类',
 );
 assert(
 	READER_NOTIFICATION_PANEL_GROUP_ORDER.filter((key) =>
 		READER_NOTIFICATION_GROUPS[key].mode === 'notifications').join(',') ===
-		'all,replies,boosts,reactionLikes,mentions,edits,links',
-	'通知子 tab 必须按全部、回复、Boost、回应与赞、@提及、编辑、链接排列',
+		'all,replies,boosts,reactionLikes,mentions,edits,links,other',
+	'通知子 tab 必须按全部、回复、Boost、回应与赞、@提及、编辑、链接、其他排列',
 );
+
+class OtherTypeNotificationNative extends FakeNotificationNative {
+	override async present(
+		notifications: readonly unknown[],
+	): Promise<readonly ReaderNotificationPresentedRecord[]> {
+		const types = new Map<number, readonly [string, string]>([
+			[1, ['replied', '回复']],
+			[6, ['private_message', '私信']],
+			[14, ['custom', '已解决']],
+			[25, ['reaction', '回应']],
+			[34, ['assigned', '已指派']],
+		]);
+		return Object.freeze(notifications.map((value) => {
+			const source = value as Readonly<Record<string, unknown>>;
+			const type = types.get(Number(source.notification_type)) ??
+				['unknown', '未知通知'];
+			const data = source.data as Readonly<Record<string, unknown>>;
+			return Object.freeze({
+				actor: data.display_username,
+				typeName: type[0],
+				typeLabel: type[1],
+				summary: `${type[1]} · ${String(data.topic_title ?? '')}`,
+				href: `/t/test/${source.topic_id}/${source.post_number}`,
+				topicId: source.topic_id,
+				postNumber: source.post_number,
+			});
+		}));
+	}
+}
+
+const otherTypePayload = Object.freeze({
+	notifications: Object.freeze([
+		[901, 1, 'alice'],
+		[902, 25, 'reactor'],
+		[903, 6, 'sender'],
+		[904, 14, 'solver'],
+		[905, 34, 'assigner'],
+	].map(([id, notificationType, actor], index) => Object.freeze({
+		id,
+		notification_type: notificationType,
+		read: false,
+		created_at: `2026-08-17T00:0${index}:00.000Z`,
+		topic_id: 90 + index,
+		post_number: 2,
+		data: Object.freeze({
+			display_username: actor,
+			topic_title: `通知 ${id}`,
+		}),
+	}))),
+	total_rows_notifications: 5,
+	load_more_notifications: false,
+});
+const otherTypeGateway = new FakeGateway();
+const otherTypeRequests = new DiscourseNotificationRequestAdapter({
+	gateway: otherTypeGateway,
+	ajax: {
+		nativeBinding: 'discourse/lib/ajax#ajax',
+		async request<T>(): Promise<RequestTransportResponse<T>> {
+			return {
+				ok: true,
+				status: 200,
+				value: otherTypePayload as T,
+			};
+		},
+	},
+	native: new OtherTypeNotificationNative(),
+	authScope: 'account:other-types',
+	signal: abort.signal,
+	replyExpansionCache: {
+		kind: 'discourse-topic-posts',
+		tags: ['notifications'],
+		freshForMs: 60_000,
+		retainForMs: 86_400_000,
+		persist: true,
+	},
+});
+const otherTypePage = await otherTypeRequests.load('other', 0, {
+	expandConsolidated: false,
+});
+const cachedOtherTypePage = await otherTypeRequests.loadCached('other', 0, {
+	expandConsolidated: false,
+});
+assert(
+	otherTypeGateway.requests.length === 1 &&
+		otherTypeGateway.requests[0]?.group === 'all' &&
+		otherTypePage.group === 'other' &&
+		otherTypePage.sourceTotal === 5 &&
+		otherTypePage.records.map((record) => record.sourceNotificationId)
+			.join(',') === '905,904' &&
+		otherTypePage.records.every((record) => record.group === 'other') &&
+		cachedOtherTypePage?.records.map((record) => record.typeLabel)
+			.join(',') === '已指派,已解决',
+	'“其他”必须复用原生所有页，只保留具体分类和私信未覆盖的类型，并可从同一原始缓存回放',
+);
+
+const sparseOtherCallbacks = new Map<number, () => void>();
+const sparseOtherLoads: string[] = [];
+const sparseOtherWrites: Array<Readonly<{
+	complete: boolean;
+	checkpointMode: string;
+	sourceNextPage: number;
+	sourceTotalHint: number;
+	recordVersion: number;
+}>> = [];
+let sparseOtherScheduleId = 0;
+const sparseOtherRecords = otherTypePage.records;
+const sparseOtherController = new ReaderNotificationController({
+	requests: {
+		async load(group: ReaderNotificationGroupKey, page: number) {
+			sparseOtherLoads.push(`${group}:${page}`);
+			if (group === 'other') {
+				return Object.freeze({
+					group,
+					page,
+					records: Object.freeze([
+						sparseOtherRecords[Math.min(page, 1)]!,
+					]),
+					total: page + 1,
+					sourceTotal: 48,
+					hasNext: page === 0,
+					nextCursor: null,
+				});
+			}
+			return Object.freeze({
+				group,
+				page,
+				records: Object.freeze([]),
+				total: 0,
+				hasNext: false,
+				nextCursor: null,
+			});
+		},
+	} as unknown as DiscourseNotificationRequestAdapter,
+	projection: {
+		async read(group) {
+			return group === 'other'
+				? Object.freeze({
+					records: Object.freeze([sparseOtherRecords[0]!]),
+					totalHint: 1,
+					complete: true,
+					updatedAt: 1,
+					sourceNextPage: 1,
+					sourcePageSize: 24,
+					sourceOffset: 24,
+				})
+				: Object.freeze({
+					records: Object.freeze([]),
+					totalHint: 0,
+					complete: true,
+					updatedAt: 1,
+				});
+		},
+		async write(group, _records, options) {
+			if (group !== 'other') return;
+			sparseOtherWrites.push(Object.freeze({
+				complete: options?.complete === true,
+				checkpointMode: String(options?.checkpointMode ?? ''),
+				sourceNextPage: Number(options?.sourceNextPage ?? 0),
+				sourceTotalHint: Number(options?.sourceTotalHint ?? 0),
+				recordVersion: Number(options?.recordVersion ?? 0),
+			}));
+		},
+	},
+	native: new OtherTypeNotificationNative(),
+	actions: {} as PostActionController,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+	backgroundWarmDelayMs: 0,
+	historyStepDelayMs: 0,
+	schedule(callback) {
+		const id = ++sparseOtherScheduleId;
+		sparseOtherCallbacks.set(id, callback);
+		return id;
+	},
+	cancel(handle) {
+		sparseOtherCallbacks.delete(Number(handle));
+	},
+});
+sparseOtherController.startBackgroundCache();
+await flushMicrotasks();
+await sparseOtherController.selectGroup('other');
+await sparseOtherController.open();
+await flushMicrotasks();
+for (let step = 0; step < 4; step += 1) {
+	if (sparseOtherController.snapshot.history.status === 'complete') break;
+	const scheduled = sparseOtherCallbacks.entries().next().value as
+		| [number, () => void]
+		| undefined;
+	if (!scheduled) break;
+	sparseOtherCallbacks.delete(scheduled[0]);
+	scheduled[1]();
+	await flushMicrotasks();
+}
+assert(
+	sparseOtherLoads.filter((entry) => entry === 'other:0').length >= 1 &&
+	sparseOtherLoads.at(-1) === 'other:1' &&
+	sparseOtherLoads.every((entry) => entry === 'other:0' || entry === 'other:1') &&
+		sparseOtherController.snapshot.groupCounts.get('other') === 2 &&
+		sparseOtherController.snapshot.history.status === 'complete' &&
+		sparseOtherWrites.some((entry) =>
+			entry.checkpointMode === 'replace' &&
+			entry.complete === false &&
+			entry.sourceNextPage === 1 &&
+			entry.sourceTotalHint === 48) &&
+		sparseOtherWrites.some((entry) =>
+			entry.complete &&
+			entry.sourceNextPage === 2 &&
+			entry.sourceTotalHint === 48 &&
+			entry.recordVersion === 2),
+	'“其他”首屏发现原始总量超过错误完成断点时，必须替换断点并自动续传全部原生页：' +
+		JSON.stringify({
+			loads: sparseOtherLoads,
+			writes: sparseOtherWrites,
+			count: sparseOtherController.snapshot.groupCounts.get('other'),
+			history: sparseOtherController.snapshot.history,
+			callbacks: sparseOtherCallbacks.size,
+		}),
+);
+sparseOtherController.destroy();
 
 await requests.load('inbox', 0, {
 	background: true,
@@ -662,7 +884,7 @@ assert(
 	persistentReplayController.snapshot.loading === false &&
 	persistentReplayController.snapshot.records[0]?.identity ===
 		persistentReplayRecord.identity,
-	'页面刷新后的“全部”必须直接回放七类持久缓存，首屏不得强制刷新或等待 transport',
+	'页面刷新后的“全部”必须直接回放八类持久缓存，首屏不得强制刷新或等待 transport',
 );
 persistentReplayController.destroy();
 
@@ -779,7 +1001,8 @@ assert(
 		'edits:0:undefined:true:undefined,' +
 		'links:0:undefined:true:undefined,' +
 		'boosts:0:undefined:true:undefined,' +
-		'reactions:0:undefined:true:undefined' &&
+		'reactions:0:undefined:true:undefined,' +
+		'other:0:undefined:true:undefined' &&
 	warmLoads.slice(warmLoadsBeforeOpen).join(',') ===
 		'replies:0:undefined:undefined:undefined,' +
 		'likes:0:undefined:undefined:undefined,' +
@@ -788,6 +1011,7 @@ assert(
 		'links:0:undefined:undefined:undefined,' +
 		'boosts:0:undefined:undefined:undefined,' +
 		'reactions:0:true:undefined:undefined,' +
+		'other:0:undefined:undefined:undefined,' +
 		'all:0:true:undefined:false' &&
 	warmController.snapshot.open &&
 	warmController.snapshot.records.length === 1 &&
@@ -795,7 +1019,7 @@ assert(
 	warmController.snapshot.records[0]?.source === 'user-actions' &&
 	warmController.snapshot.records[0]?.aggregateCount === null &&
 	warmController.snapshot.error === null,
-	'application 后台必须先恢复通知缓存；打开“全部”要立即增量回查七条头流与原生通知身份：' +
+	'application 后台必须先恢复通知缓存；打开“全部”要立即增量回查八条头流与原生通知身份：' +
 		JSON.stringify({
 			loads: warmLoads,
 			beforeOpen: warmLoadsBeforeOpen,
@@ -1054,7 +1278,7 @@ assert(
 	deferredWarmLoads.join(',') ===
 		'replies:0:undefined,likes:0:undefined,mentions:0:undefined,' +
 		'edits:0:undefined,links:0:undefined,boosts:0:undefined,' +
-		'reactions:0:undefined,all:0:true' &&
+		'reactions:0:undefined,other:0:undefined,all:0:true' &&
 	deferredWarmErrors.length === 0,
 	'用户显式打开面板后可读取公共通知，但身份未就绪时不得请求私信',
 );
@@ -1075,13 +1299,18 @@ assert(
 	deferredWarmLoads.join(',') ===
 		'replies:0:undefined,likes:0:undefined,mentions:0:undefined,' +
 		'edits:0:undefined,links:0:undefined,boosts:0:undefined,' +
-		'reactions:0:undefined,all:0:true,' +
+		'reactions:0:undefined,other:0:undefined,all:0:true,' +
 		'replies:0:true,likes:0:true,mentions:0:true,' +
 		'edits:0:true,links:0:true,boosts:0:true,reactions:0:true,' +
-		'all:0:true,inbox:0:true' &&
+		'other:0:true,all:0:true,inbox:0:true' &&
 	deferredWarmErrors.length === 0 &&
 	deferredWarmCallbacks.size === 0,
-	'关闭态原生变更只能即时刷新头页，不得续跑深历史回填',
+	'关闭态原生变更只能即时刷新头页，不得续跑深历史回填：' +
+		JSON.stringify({
+			loads: deferredWarmLoads,
+			errors: deferredWarmErrors.map((error) => String(error)),
+			callbacks: deferredWarmCallbacks.size,
+		}),
 );
 deferredWarmController.destroy();
 
@@ -1314,11 +1543,11 @@ assert(
 	historyLoads.filter((entry) => entry.endsWith(':history')).join(',') ===
 		'replies:1:history' &&
 	historyController.snapshot.history.status === 'complete' &&
-	historyController.snapshot.history.completedGroups === 7 &&
-	historyController.snapshot.history.loadedPages === 8 &&
-	historyController.snapshot.history.cachedRecords === 8 &&
+	historyController.snapshot.history.completedGroups === 8 &&
+	historyController.snapshot.history.loadedPages === 9 &&
+	historyController.snapshot.history.cachedRecords === 9 &&
 	historyController.snapshot.history.progress === 1,
-	'历史回填必须从首屏水位续取唯一缺页，并完成七类统一进度与去重记录索引：' +
+	'历史回填必须从首屏水位续取唯一缺页，并完成八类统一进度与去重记录索引：' +
 		JSON.stringify({
 			loads: historyLoads,
 			history: historyController.snapshot.history,
@@ -1462,9 +1691,9 @@ resilientHistoryNow = 2_120;
 await runResilientHistoryCallback();
 assert(
 	resilientHistoryLoads.at(-1) === 'replies:1:true:undefined' &&
-		resilientRepliesAttempts === 2 &&
-		String(resilientHistoryController.snapshot.history.status) === 'complete' &&
-		resilientHistoryController.snapshot.history.completedGroups === 7 &&
+	resilientRepliesAttempts === 2 &&
+	String(resilientHistoryController.snapshot.history.status) === 'complete' &&
+		resilientHistoryController.snapshot.history.completedGroups === 8 &&
 		resilientHistoryCallbacks.size === 0,
 	'失败来源到期后必须自行重新入队并完成，不能停在需要手工点击的重试状态',
 );
@@ -1562,10 +1791,10 @@ await flushMicrotasks();
 const resumedHistoryEntry = [...resumedHistoryCallbacks][0];
 assert(
 	resumedHistoryEntry?.[1].delayMs === 250 &&
-		resumedHistoryController.snapshot.history.loadedPages === 10 &&
-		resumedHistoryController.snapshot.history.progress === 6 / 7 &&
+		resumedHistoryController.snapshot.history.loadedPages === 11 &&
+		resumedHistoryController.snapshot.history.progress === 7 / 8 &&
 		resumedHistoryLoads.length === 0,
-	'恢复归一投影时必须同时恢复六个完整来源和未完成来源的四页水位；进度只按固定来源完成数计算，不能先重放旧请求',
+	'恢复归一投影时必须同时恢复七个完整来源和未完成来源的四页水位；进度只按固定来源完成数计算，不能先重放旧请求',
 );
 resumedHistoryCallbacks.delete(resumedHistoryEntry[0]);
 resumedHistoryEntry[1].callback();
@@ -1793,13 +2022,13 @@ const startupSourceWrites = startupProjectionWrites.filter((entry) =>
 		entry.group as ReaderNotificationGroupKey,
 	));
 assert(
-	startupSourceWrites.length === 7 &&
+	startupSourceWrites.length === 8 &&
 		startupSourceWrites.every((entry) => entry.complete) &&
 		startupSourceWrites.find((entry) => entry.group === 'replies')
 			?.sourceNextPage === 3 &&
 		startupProjectionController.snapshot.history.status === 'complete' &&
-		startupProjectionController.snapshot.history.loadedPages === 9,
-	'启动恢复完成后必须合并并刷新待写投影，同时保留七个来源的完成状态与真实终止页水位',
+		startupProjectionController.snapshot.history.loadedPages === 10,
+	'启动恢复完成后必须合并并刷新待写投影，同时保留八个来源的完成状态与真实终止页水位',
 );
 startupProjectionController.destroy();
 
@@ -1862,7 +2091,7 @@ assert(
 		deepAggregateController.snapshot.records.length === 24 &&
 		deepAggregateController.snapshot.total === 400 &&
 		deepAggregateController.snapshot.totalPages === 17,
-	'“全部”深页必须只切本地历史索引，翻到第 16 页不得按七类从头扇出前台请求',
+	'“全部”深页必须只切本地历史索引，翻到第 16 页不得按八类从头扇出前台请求',
 );
 deepAggregateController.destroy();
 
@@ -2258,7 +2487,7 @@ assert(
 	normalizedProjectionController.cacheStats().records === 40 &&
 	normalizedProjectionNetworkLoads === 4 &&
 	normalizedProjectionController.snapshot.history.status === 'complete' &&
-	normalizedProjectionController.snapshot.history.loadedPages === 9,
+	normalizedProjectionController.snapshot.history.loadedPages === 10,
 	'通知必须先恢复完整账号归一分页投影；重复打开仍立即校验头部且失败不得清空投影：' +
 		JSON.stringify({
 			first: normalizedProjectionController.snapshot.records[0]?.identity,
@@ -2862,7 +3091,13 @@ assert(
 	ajax.paths.filter((path) =>
 		path.startsWith('/notifications.json?offset=24&')).length ===
 		pageOneLoadsBeforeChange,
-	'notifications:changed 只能刷新头部增量，不得重新请求已缓存的原生深层历史',
+	'notifications:changed 只能刷新头部增量，不得重新请求已缓存的原生深层历史：' +
+		JSON.stringify({
+			before: pageOneLoadsBeforeChange,
+			after: ajax.paths.filter((path) =>
+				path.startsWith('/notifications.json?offset=24&')).length,
+			paths: ajax.paths.filter((path) => path.startsWith('/notifications.json')),
+		}),
 );
 await controller.previousPage();
 await controller.selectGroup('replies');
@@ -3713,12 +3948,12 @@ notificationToggleTop = 72;
 	await controller.selectGroup('replies');
 assert(
 	template.notificationModeTabs.length === 2 &&
-	template.notificationGroupTabs.length === 13 &&
-	template.notificationGroupTabs.slice(0, 7)
+		template.notificationGroupTabs.length === 14 &&
+		template.notificationGroupTabs.slice(0, 8)
 		.map((tab) => READER_NOTIFICATION_GROUPS[
 			tab.dataset.notificationGroup as ReaderNotificationGroupKey
 		].label).join(',') ===
-		'全部,回复,Boost,回应与赞,@提及,编辑,链接' &&
+			'全部,回复,Boost,回应与赞,@提及,编辑,链接,其他' &&
 	template.notificationGroupTabs.every((tab) => {
 		const group = tab.dataset.notificationGroup as
 			ReaderNotificationGroupKey;
@@ -3865,7 +4100,73 @@ assert(
 			?.includes('heart')),
 	'回应与赞条目必须在标题左侧显示真实心形和回应 emoji，标题不显示字段名',
 );
-	await controller.selectGroup('replies');
+	const otherDisplayRecord = normalizeNativeNotification({
+		id: 990,
+		notification_type: 14,
+		read: false,
+		created_at: '2026-08-17T00:10:00.000Z',
+		data: { display_username: 'solver' },
+	}, {
+		actor: 'solver',
+		typeName: 'custom',
+		typeLabel: '已解决',
+		summary: '你的回答已被采纳',
+	}, 'other');
+	controller.applySyncedHistoryRecords([otherDisplayRecord]);
+	await controller.selectGroup('other');
+	const otherDisplayItem = template.notificationList.querySelector<HTMLElement>(
+		'.ldp-notification-message-item',
+	);
+	assert(
+		controller.snapshot.records.length === 1 &&
+		otherDisplayItem?.dataset.notificationType === 'custom' &&
+		otherDisplayItem.querySelector<HTMLElement>(
+			'.ldp-notification-type-icon',
+		)?.title === '已解决' &&
+		otherDisplayItem.querySelector<HTMLElement>(
+			'.ldp-notification-type-icon',
+		)?.dataset.notificationIcon === 'solution-badge' &&
+		Boolean(otherDisplayItem.querySelector(
+			'.ldp-notification-type-icon [data-icon="solution-badge"]',
+		)) &&
+		otherDisplayItem.querySelector('.ldp-notification-title-text')?.textContent ===
+			'【已解决】你的回答已被采纳',
+		'“其他”必须在每条信息前标注原生展示模型解析出的具体通知类型',
+	);
+	const rawOtherLabels = [
+		normalizeNativeNotification({
+			id: 991,
+			data: { title: 'solved.notification.title' },
+		}, { typeName: 'custom', typeLabel: 'custom' }, 'other'),
+		normalizeNativeNotification({ id: 992 }, {
+			typeName: 'following_created_topic',
+			typeLabel: 'following_created_topic',
+		}, 'other'),
+		normalizeNativeNotification({ id: 993 }, {
+			typeName: 'topic_reminder',
+			typeLabel: 'topic_reminder',
+		}, 'other'),
+		normalizeNativeNotification({ id: 994 }, {
+			typeName: 'post_approved',
+			typeLabel: 'post_approved',
+		}, 'other'),
+	];
+	assert(
+		rawOtherLabels.map((record) => record.typeLabel).join('|') ===
+			'您的帖子被标记为解决方案|您关注的人新话题|话题提醒|已批准帖子' &&
+		rawOtherLabels.map((record) => record.icon).join('|') ===
+			'solution-badge|followed-topic|calendar-clock|post-approved',
+		'宿主展示模型不可用时，“其他”仍须把已知原生类型和 custom 翻译键转成可读中文',
+	);
+	const migratedSolvedRecord = normalizeStoredReaderNotification({
+		...rawOtherLabels[0],
+		icon: 'check-square',
+	});
+	assert(
+		migratedSolvedRecord?.icon === 'solution-badge',
+		'读取历史缓存时必须把解决方案通知的旧通用图标迁移为专属 SVG',
+	);
+		await controller.selectGroup('replies');
 	const LinkedomEvent = (
 		parsedDocument.defaultView as unknown as { Event: typeof Event }
 	).Event;

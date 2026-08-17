@@ -160,6 +160,8 @@ interface CachedNotificationPage {
 	readonly page: ReaderNotificationPage;
 	readonly loadedAt: number;
 	readonly advancesHistory?: boolean;
+	/** 展示页被稀疏投影压实后，仍保留原始来源页用于恢复断点。 */
+	readonly historyPage?: ReaderNotificationPage;
 }
 
 interface NotificationHistoryGroupState {
@@ -167,6 +169,7 @@ interface NotificationHistoryGroupState {
 	nextPage: number;
 	terminalPage: number | null;
 	estimatedPages: number;
+	sourceTotalHint: number;
 	complete: boolean;
 	retryAt: number | null;
 	error: unknown | null;
@@ -195,12 +198,29 @@ const READER_NOTIFICATION_REACTION_LIKE_GROUPS = Object.freeze([
 	'likes',
 	'reactions',
 ] as const satisfies readonly ReaderNotificationGroupKey[]);
+const OTHER_NOTIFICATION_RECORD_VERSION = 2;
 
 function notificationProjectionCheckpointNeedsRepair(
 	group: ReaderNotificationGroupKey,
 	snapshot: ReaderCollectionProjectionSnapshot<ReaderNotificationRecord>,
 ): boolean {
 	const descriptor = readerNotificationGroup(group);
+	if (
+		group === 'other' &&
+		snapshot.recordVersion !== OTHER_NOTIFICATION_RECORD_VERSION &&
+		snapshot.records.some((record) =>
+			record.group === 'other' &&
+			record.typeName.trim() !== '' &&
+			record.typeLabel.trim() === record.typeName.trim())
+	) return true;
+	if (
+		group === 'other' &&
+		snapshot.complete &&
+		snapshot.sourceTotalHint !== undefined &&
+		snapshot.sourceOffset !== undefined
+	) {
+		return snapshot.sourceOffset < snapshot.sourceTotalHint;
+	}
 	if (
 		!snapshot.complete ||
 		descriptor.source !== 'user-actions' ||
@@ -351,6 +371,7 @@ export class ReaderNotificationController {
 			nextPage: 0,
 			terminalPage: null,
 			estimatedPages: 1,
+			sourceTotalHint: 0,
 			complete: false,
 			retryAt: null,
 			error: null,
@@ -766,6 +787,10 @@ export class ReaderNotificationController {
 			// 归档的逐条活动；部分快照必须按 identity 合并，不能让刷新中
 			// 的缓存数和分类计数先缩水、再等待历史续传补回。
 			this.#historyRecords.set(group, records);
+			state.sourceTotalHint = Math.max(
+				0,
+				Math.floor(Number(snapshot.sourceTotalHint) || 0),
+			);
 			state.estimatedPages = Math.max(
 				state.estimatedPages,
 				repairCheckpoint
@@ -774,8 +799,12 @@ export class ReaderNotificationController {
 				Math.max(
 					1,
 					Math.ceil(
-						Math.max(snapshot.totalHint, records.size) /
-						readerNotificationGroup(group).pageSize,
+						Math.max(
+							snapshot.totalHint,
+							state.sourceTotalHint,
+							records.size,
+						) /
+							readerNotificationGroup(group).pageSize,
 					),
 				),
 			);
@@ -825,10 +854,11 @@ export class ReaderNotificationController {
 			// 启动恢复期间可能已有头页刷新完成；重新索引这些页，避免
 			// 持久断点覆盖刚取得的权威页状态。
 			for (const entry of this.#pages.values()) {
+				const historyPage = entry.historyPage ?? entry.page;
 				if (
-					entry.page.group === group &&
+					historyPage.group === group &&
 					entry.advancesHistory !== false
-				) this.#indexHistoryPage(entry.page);
+				) this.#indexHistoryPage(historyPage);
 			}
 		}
 		this.#refreshAggregateHistoryPages();
@@ -940,6 +970,7 @@ export class ReaderNotificationController {
 			state.nextPage = 0;
 			state.terminalPage = null;
 			state.estimatedPages = 1;
+			state.sourceTotalHint = 0;
 			state.complete = false;
 			state.retryAt = null;
 			state.error = null;
@@ -1527,13 +1558,18 @@ export class ReaderNotificationController {
 		const knownIdentities = this.#knownIdentitiesForGroup(group);
 		const pages: ReaderNotificationPage[] = [];
 		for (let page = 0; ; page += 1) {
-			const loaded = await this.#requests.load(group, page, options);
+			const sparseComplement = group === 'other';
+			const loaded = await this.#requests.load(group, page,
+				sparseComplement && page > 0 && options.refresh
+					? { ...options, refresh: false }
+					: options,
+			);
 			pages.push(loaded);
 			const reachedKnownIdentity = loaded.records.some((record) =>
 				knownIdentities.has(record.identity));
 			if (
 				!loaded.hasNext ||
-				loaded.records.length === 0 ||
+				(!sparseComplement && loaded.records.length === 0) ||
 				knownIdentities.size === 0 ||
 				reachedKnownIdentity ||
 				page + 1 >= DEFAULT_HEAD_CATCH_UP_MAX_PAGES
@@ -1807,7 +1843,7 @@ export class ReaderNotificationController {
 		} = {},
 	): Promise<ReaderNotificationPage> {
 		// “全部”深页只消费后台已建立的统一索引。若按目标页深度重新读取
-		// 七条分类流，第 N 页会放大成 O(7N) 个前台请求并直接制造 429。
+		// 八条分类流，第 N 页会放大成 O(8N) 个前台请求并直接制造 429。
 		if (page > 0) return this.#indexedAggregatePage(page);
 		const aggregate = readerNotificationGroup('all');
 		const end = aggregate.pageSize;
@@ -1913,6 +1949,29 @@ export class ReaderNotificationController {
 		);
 	}
 
+	#indexedOtherRecords(): readonly ReaderNotificationRecord[] {
+		return sortReaderNotifications([
+			...(this.#historyRecords.get('other')?.values() ?? []),
+		]);
+	}
+
+	#indexedOtherPage(
+		page: number,
+		indexed = this.#indexedOtherRecords(),
+	): ReaderNotificationPage {
+		const descriptor = readerNotificationGroup('other');
+		const start = page * descriptor.pageSize;
+		const end = start + descriptor.pageSize;
+		return Object.freeze({
+			group: 'other',
+			page,
+			records: Object.freeze(indexed.slice(start, end)),
+			total: indexed.length,
+			hasNext: end < indexed.length,
+			nextCursor: null,
+		});
+	}
+
 	#indexedReactionLikeRecords(): readonly ReaderNotificationRecord[] {
 		const seen = new Set<string>();
 		return sortReaderNotifications(
@@ -1973,6 +2032,44 @@ export class ReaderNotificationController {
 	#refreshAggregateHistoryPages(): void {
 		const indexed = this.#indexedAggregateRecords();
 		const reactionLikes = this.#indexedReactionLikeRecords();
+		const other = this.#indexedOtherRecords();
+		for (const [key, entry] of [...this.#pages]) {
+			if (!key.startsWith('other:')) continue;
+			this.#pages.set(key, Object.freeze({
+				page: this.#indexedOtherPage(entry.page.page, other),
+				loadedAt: entry.loadedAt,
+				...(entry.advancesHistory === undefined
+					? {}
+					: { advancesHistory: entry.advancesHistory }),
+				...(entry.historyPage === undefined
+					? {}
+					: { historyPage: entry.historyPage }),
+			}));
+		}
+		if (other.length && !this.#pages.has(pageKey('other', 0))) {
+			this.#pages.set(pageKey('other', 0), Object.freeze({
+				page: this.#indexedOtherPage(0, other),
+				loadedAt: this.#now(),
+			}));
+		}
+		if (this.#group === 'other' && !this.#hasLocalFilters()) {
+			const pageSize = readerNotificationGroup('other').pageSize;
+			const totalPages = Math.max(1, Math.ceil(other.length / pageSize));
+			if (this.#page >= totalPages) this.#page = totalPages - 1;
+			const page = this.#indexedOtherPage(this.#page, other);
+			const existing = this.#pages.get(pageKey('other', this.#page));
+			this.#pages.set(pageKey('other', this.#page), Object.freeze({
+				page,
+				loadedAt: this.#now(),
+				...(existing?.advancesHistory === undefined
+					? {}
+					: { advancesHistory: existing.advancesHistory }),
+				...(existing?.historyPage === undefined
+					? {}
+					: { historyPage: existing.historyPage }),
+			}));
+			this.#applyPage(page);
+		}
 		for (const [key, entry] of [...this.#pages]) {
 			if (!key.startsWith('reactionLikes:')) continue;
 			this.#pages.set(key, Object.freeze({
@@ -2123,12 +2220,22 @@ export class ReaderNotificationController {
 		this.#historyRecords.set(page.group, records);
 		state.pages.add(page.page);
 		const group = readerNotificationGroup(page.group);
+		if (page.sourceTotal !== undefined) {
+			state.sourceTotalHint = Math.max(
+				0,
+				Math.floor(Number(page.sourceTotal) || 0),
+			);
+		}
 		state.estimatedPages = Math.max(
 			state.estimatedPages,
 			page.page + 1 + (page.hasNext ? 1 : 0),
-			Math.ceil(page.total / group.pageSize),
+			Math.ceil(Math.max(page.total, state.sourceTotalHint) / group.pageSize),
 		);
-		if (!page.hasNext) state.terminalPage = page.page;
+		if (page.hasNext && state.terminalPage === page.page) {
+			state.terminalPage = null;
+		} else if (!page.hasNext) {
+			state.terminalPage = page.page;
+		}
 		while (state.pages.has(state.nextPage)) state.nextPage += 1;
 		state.complete = state.terminalPage !== null &&
 			state.nextPage > state.terminalPage;
@@ -2150,6 +2257,23 @@ export class ReaderNotificationController {
 			? page
 			: Object.freeze({ ...page, records });
 		const historyState = this.#historyGroups.get(inherited.group);
+		const group = readerNotificationGroup(inherited.group);
+		const reopensSparseCheckpoint = inherited.group === 'other' &&
+			inherited.page === 0 &&
+			(inherited.sourceTotal ?? 0) >
+				(historyState?.nextPage ?? 0) * group.pageSize &&
+			historyState?.complete === true;
+		if (historyState && reopensSparseCheckpoint) {
+			historyState.complete = false;
+			historyState.terminalPage = null;
+			historyState.retryAt = null;
+			historyState.error = null;
+			this.#historyStatus = 'idle';
+			this.#historyCurrentGroup = null;
+			this.#historyError = null;
+			this.#historyRetryAt = null;
+			this.#projectionCheckpointReplacements.add(inherited.group);
+		}
 		const hasHistoryCheckpoint = historyState !== undefined && (
 			historyState.pages.size > 0 ||
 			historyState.nextPage > 0 ||
@@ -2157,12 +2281,14 @@ export class ReaderNotificationController {
 			historyState.complete ||
 			(this.#historyRecords.get(inherited.group)?.size ?? 0) > 0
 		);
-		const advancesHistory = advanceHistory || !hasHistoryCheckpoint;
+		const advancesHistory = advanceHistory || reopensSparseCheckpoint ||
+			!hasHistoryCheckpoint;
 		this.#pages.delete(key);
 		this.#pages.set(key, Object.freeze({
 			page: inherited,
 			loadedAt,
 			advancesHistory,
+			...(advancesHistory ? { historyPage: inherited } : {}),
 		}));
 		if (advancesHistory) {
 			this.#indexHistoryPage(inherited);
@@ -2238,11 +2364,19 @@ export class ReaderNotificationController {
 			(total, page) => Math.max(total, page.total),
 			committedRecords.length,
 		);
+		const sourceTotalHint = cachedPages.reduce(
+			(total, page) => Math.max(total, page.sourceTotal ?? 0),
+			state?.sourceTotalHint ?? 0,
+		);
 		const replaceCheckpoint =
 			this.#projectionCheckpointReplacements.has(group);
 		return this.#projection.write(group, committedRecords, {
 			mergeStored: !exactReplacement,
 			totalHint,
+			...(group === 'other' && complete
+				? { recordVersion: OTHER_NOTIFICATION_RECORD_VERSION }
+				: {}),
+			...(sourceTotalHint > 0 ? { sourceTotalHint } : {}),
 			complete,
 			updatedAt: this.#now(),
 			checkpointMode: replaceCheckpoint ? 'replace' : 'advance',
@@ -2871,6 +3005,7 @@ export class ReaderNotificationController {
 				changeEpoch,
 				selectedGroup,
 				selectedPage,
+				false,
 			);
 			if (!valid()) return;
 			const inboxKey = pageKey('inbox', 0);
@@ -2932,10 +3067,11 @@ export class ReaderNotificationController {
 		changeEpoch: number,
 		selectedGroup: ReaderNotificationGroupKey,
 		selectedPage: number,
+		refresh = true,
 	): Promise<void> {
 		try {
 			const nativePage = await this.#requests.load('all', 0, {
-				refresh: true,
+				...(refresh ? { refresh: true } : {}),
 				background: true,
 				expandConsolidated: false,
 			});

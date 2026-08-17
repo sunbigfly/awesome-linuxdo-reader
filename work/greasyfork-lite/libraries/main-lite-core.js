@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.5
+// @version      1.5.6
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.5 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.5.6 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.5",
+			sourceVersion: "1.5.6",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.5") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.6") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -499,8 +499,8 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	  )], groupTabs = [...root.querySelectorAll(
 	    ".ldp-notification-tab"
 	  )];
-	  if (modeTabs.length !== 2 || groupPanels.length !== 2 || groupTabs.length !== 13)
-	    throw new Error("消息面板必须提供 2 个模式与完整 13 个分类锚点");
+	  if (modeTabs.length !== 2 || groupPanels.length !== 2 || groupTabs.length !== 14)
+	    throw new Error("消息面板必须提供 2 个模式与完整 14 个分类锚点");
 	  return Object.freeze({
 	    root,
 	    toggle: query(".ldp-notifications-toggle"),
@@ -5992,7 +5992,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    }
 	  });
 	}
-}, "68fb2239063f69c11fbbd6d1c85945bfbd00a750f82c0a6485ae41c4dca80887");
+}, "63096bf69011bb2b4772568ff27f53163a01cfa32a7349e770503fde4ee3b11b");
 
 /* Source: lite/src/app/reader-data-runtime.ts */
 runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -6633,8 +6633,10 @@ runtime.register("src/components/reader-icon.js", function(module, exports, requ
 	}), ICON_MARKUP = Object.freeze({
 	  at: '<path d="M12 2a10 10 0 1 0 5.8 18.2l-1.3-1.7A7.8 7.8 0 1 1 19.8 12v1.2c0 1.2-.5 1.8-1.4 1.8-.8 0-1.3-.5-1.3-1.5V8h-2v1A5 5 0 1 0 16 16c.7.8 1.6 1.2 2.7 1.2 2.1 0 3.3-1.5 3.3-4V12c0-5.5-4.5-10-10-10Zm0 12.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z" fill="currentColor" stroke="none" fill-rule="evenodd"/>',
 	  boost: '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09Z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2Z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>',
+	  "calendar-clock": '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18"/><circle cx="14.5" cy="15" r="3.5"/><path d="M14.5 13v2.2l1.5 1"/>',
 	  database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
 	  flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1Z"/><path d="M4 22v-7"/>',
+	  "followed-topic": '<circle cx="7" cy="8" r="3"/><path d="M2 21v-1a5 5 0 0 1 10 0v1M13 4h8v7h-4l-4 3V4Z"/><path d="M15.5 7.5h3M17 6v3"/>',
 	  "floating-window": '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16M7 7h.01M10 7h.01"/>',
 	  flask: '<path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3M7.5 14h9"/>',
 	  "git-branch": '<path d="M6 3v12"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
@@ -6651,11 +6653,13 @@ runtime.register("src/components/reader-icon.js", function(module, exports, requ
 	  "panel-right": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
 	  palette: '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor" stroke="none"/><path d="M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.6-1.4-.4-.4-.6-.9-.6-1.4a2 2 0 0 1 2-2H17a5 5 0 0 0 5-5C22 5.7 17.5 2 12 2Z"/>',
 	  pin: '<path d="M12 17v5M5 17h14m-13-14 1 7-3 3h16l-3-3 1-7Z"/>',
+	  "post-approved": '<path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v6h4M9 15l2 2 4-4"/>',
 	  share: '<path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="m16 6-4-4-4 4M12 2v13"/>',
 	  "select-items": '<rect x="7" y="7" width="14" height="14" rx="3"/><path d="M3 15V6a3 3 0 0 1 3-3h9"/>',
 	  "select-items-check": '<rect x="7" y="7" width="14" height="14" rx="3"/><path d="M3 15V6a3 3 0 0 1 3-3h9M10.5 14l2 2 4-4"/>',
 	  "shield-halved": '<path d="M12 2 4 5v6c0 5 3.3 9.4 8 11 4.7-1.6 8-6 8-11V5l-8-3Z"/><path d="M12 2 4 5v6c0 5 3.3 9.4 8 11V2Z" fill="currentColor" stroke="none"/>',
 	  smile: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>',
+	  "solution-badge": '<circle cx="12" cy="10" r="7"/><path d="m9 10 2 2 4-4M8.5 16.5 7 22l5-3 5 3-1.5-5.5"/>',
 	  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
 	  tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor" stroke="none"/>',
 	  trash: '<path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6M10 11v5M14 11v5"/>',
@@ -6717,7 +6721,7 @@ runtime.register("src/components/reader-icon.js", function(module, exports, requ
 	  }
 	  return resolveReaderIcon(document, name, rendered);
 	}
-}, "44c88f76d9ed017c46ff4443d6d9668e460663d76eef84e2f284ca9d736d825b");
+}, "493997557cd9e65f0e6a5e571fc949b187d4d59342ef97cf43ae7019cc7b9a77");
 
 /* Source: lite/src/components/reader-image-fallback.ts */
 runtime.register("src/components/reader-image-fallback.js", function(module, exports, require) {

@@ -14,6 +14,7 @@ export type ReaderNotificationGroupKey =
 	| 'mentions'
 	| 'edits'
 	| 'links'
+	| 'other'
 	| 'boosts'
 	| 'reactions'
 	| 'reactionLikes'
@@ -120,6 +121,14 @@ export const READER_NOTIFICATION_GROUPS: Readonly<
 		typeNames: ['linked', 'linked_consolidated'],
 		actionTypes: [17],
 	}),
+	other: group({
+		key: 'other',
+		mode: 'notifications',
+		source: 'notifications',
+		label: '其他',
+		icon: 'list-checks',
+		pageSize: 24,
+	}),
 	boosts: group({
 		key: 'boosts',
 		mode: 'notifications',
@@ -214,6 +223,7 @@ export const READER_NOTIFICATION_GROUP_ORDER: readonly ReaderNotificationGroupKe
 		'reactions',
 		'edits',
 		'links',
+		'other',
 		'inbox',
 		'sent',
 		'newMessages',
@@ -232,6 +242,7 @@ export const READER_NOTIFICATION_PANEL_GROUP_ORDER:
 		'mentions',
 		'edits',
 		'links',
+		'other',
 		'inbox',
 		'sent',
 		'newMessages',
@@ -255,7 +266,25 @@ export const READER_NOTIFICATION_AGGREGATE_GROUP_ORDER: readonly ReaderNotificat
 		'links',
 		'boosts',
 		'reactions',
+		'other',
 	]);
+
+const READER_NOTIFICATION_OTHER_EXCLUDED_TYPE_NAMES = Object.freeze(new Set([
+	...Object.values(READER_NOTIFICATION_GROUPS)
+		.filter((candidate) =>
+			candidate.mode === 'notifications' && candidate.key !== 'other')
+		.flatMap((candidate) => candidate.typeNames),
+	// 私信已有独立模式；原生通知只用于已读身份关联，不能再混入“其他”。
+	'private_message',
+	'invited_to_private_message',
+	'group_message_summary',
+]));
+
+/** “其他”只补现有具体分类与私信模式没有覆盖的原生通知类型。 */
+export function readerNotificationTypeBelongsToOther(value: unknown): boolean {
+	const typeName = String(value ?? '').trim().toLocaleLowerCase('en-US');
+	return !READER_NOTIFICATION_OTHER_EXCLUDED_TYPE_NAMES.has(typeName);
+}
 
 export function readerNotificationGroup(
 	value: unknown,
@@ -278,7 +307,7 @@ function nativeNotificationGroup(
 			return candidate;
 		}
 	}
-	return READER_NOTIFICATION_GROUPS.all;
+	return READER_NOTIFICATION_GROUPS.other;
 }
 
 export interface ReaderNotificationTarget {
@@ -318,6 +347,8 @@ export interface ReaderNotificationPage {
 	readonly page: number;
 	readonly records: readonly ReaderNotificationRecord[];
 	readonly total: number;
+	/** 稀疏补集背后的原始来源总量；不得直接作为当前分类条数展示。 */
+	readonly sourceTotal?: number;
 	readonly hasNext: boolean;
 	readonly nextCursor: string | null;
 }
@@ -484,6 +515,7 @@ function targetFromHref(value: unknown): ReaderNotificationTarget | null {
 }
 
 const TYPE_ICONS: Readonly<Record<string, string>> = Object.freeze({
+	custom: 'sparkles',
 	mentioned: 'at',
 	group_mentioned: 'at',
 	replied: 'reply',
@@ -499,6 +531,9 @@ const TYPE_ICONS: Readonly<Record<string, string>> = Object.freeze({
 	edited: 'pencil',
 	linked: 'link',
 	linked_consolidated: 'link',
+	following_created_topic: 'followed-topic',
+	post_approved: 'post-approved',
+	topic_reminder: 'calendar-clock',
 });
 
 function recordResult(
@@ -550,6 +585,14 @@ export function normalizeStoredReaderNotification(
 	const tags = Object.freeze((Array.isArray(source.tags) ? source.tags : [])
 		.map(notificationText).filter(Boolean));
 	const read = source.read === true ? true : source.read === false ? false : null;
+	const typeName = notificationText(source.typeName);
+	const storedTypeLabel = notificationText(source.typeLabel);
+	const typeLabel = notificationSource === 'notifications'
+		? nativeNotificationTypeLabel(typeName, {
+			typeName,
+			typeLabel: storedTypeLabel,
+		}, Object.freeze({}))
+		: storedTypeLabel;
 	return recordResult({
 		identity,
 		group,
@@ -557,10 +600,16 @@ export function normalizeStoredReaderNotification(
 		sourceNotificationId: positiveId(source.sourceNotificationId),
 		notificationTypeId: positiveId(source.notificationTypeId),
 		highPriority: source.highPriority === true,
-		typeName: notificationText(source.typeName),
-		typeLabel: notificationText(source.typeLabel),
+		typeName,
+		typeLabel,
 		aggregateCount: aggregateCount(source.aggregateCount),
-		icon: notificationText(source.icon) || 'bell',
+		icon: notificationSource === 'notifications'
+			? nativeNotificationTypeIcon(
+				typeName,
+				typeLabel,
+				notificationText(source.icon) || 'bell',
+			)
+			: notificationText(source.icon) || 'bell',
 		actor: notificationUsername(source.actor),
 		avatarFallback: notificationText(source.avatarFallback),
 		avatarTemplate: String(source.avatarTemplate ?? '').trim(),
@@ -637,6 +686,50 @@ function notificationActivitySummary(input: {
 		`${input.title ? ` · ${input.title}` : ''}`;
 }
 
+const NATIVE_OTHER_TYPE_LABELS = Object.freeze<Record<string, string>>({
+	custom: '自定义通知',
+	following_created_topic: '您关注的人新话题',
+	post_approved: '已批准帖子',
+	topic_reminder: '话题提醒',
+});
+
+const NATIVE_CUSTOM_TITLE_LABELS = Object.freeze<Record<string, string>>({
+	'solved.notification.title': '您的帖子被标记为解决方案',
+	'solved.notification.topic_solved_title': '话题已解决',
+});
+
+function nativeNotificationTypeLabel(
+	typeName: string,
+	presented: ReaderNotificationPresentedRecord,
+	data: UnknownRecord,
+): string {
+	const presentedLabel = notificationText(presented.typeLabel);
+	if (typeName === 'custom') {
+		const customLabel = NATIVE_CUSTOM_TITLE_LABELS[String(data.title ?? '')];
+		if (customLabel) return customLabel;
+		if (presentedLabel === '您的帖子已被标记为解决方案') {
+			return '您的帖子被标记为解决方案';
+		}
+	}
+	const canonicalLabel = NATIVE_OTHER_TYPE_LABELS[typeName];
+	if (canonicalLabel && typeName !== 'custom') return canonicalLabel;
+	if (presentedLabel && presentedLabel !== typeName) return presentedLabel;
+	return (NATIVE_OTHER_TYPE_LABELS[typeName] ?? presentedLabel) ||
+		typeName || '通知';
+}
+
+function nativeNotificationTypeIcon(
+	typeName: string,
+	typeLabel: string,
+	fallback = 'bell',
+): string {
+	if (
+		typeName === 'custom' &&
+		/(?:解决方案|已解决|话题解决)/.test(typeLabel)
+	) return 'solution-badge';
+	return TYPE_ICONS[typeName] ?? fallback;
+}
+
 export function normalizeNativeNotification(
 	value: unknown,
 	presented: ReaderNotificationPresentedRecord,
@@ -708,6 +801,7 @@ export function normalizeNativeNotification(
 		typeName ??
 		'通知',
 	);
+	const typeLabel = nativeNotificationTypeLabel(typeName, presented, data);
 	const taxonomy = notificationTaxonomy(
 		options.categoryNameFor,
 		data,
@@ -725,9 +819,9 @@ export function normalizeNativeNotification(
 		notificationTypeId: positiveId(source.notification_type),
 		highPriority: source.high_priority === true,
 		typeName,
-		typeLabel: notificationText(presented.typeLabel ?? (typeName || '通知')),
+		typeLabel,
 		aggregateCount: count,
-		icon: TYPE_ICONS[typeName] ?? group.icon,
+		icon: nativeNotificationTypeIcon(typeName, typeLabel, group.icon),
 		actor,
 		avatarFallback: count === null
 			? actor.slice(0, 1).toLocaleUpperCase() || '?'

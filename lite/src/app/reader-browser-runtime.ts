@@ -1466,8 +1466,8 @@ function readerNotificationPanelElements(
 	const groupTabs = [...root.querySelectorAll<HTMLButtonElement>(
 		'.ldp-notification-tab',
 	)];
-	if (modeTabs.length !== 2 || groupPanels.length !== 2 || groupTabs.length !== 13) {
-		throw new Error('消息面板必须提供 2 个模式与完整 13 个分类锚点');
+	if (modeTabs.length !== 2 || groupPanels.length !== 2 || groupTabs.length !== 14) {
+		throw new Error('消息面板必须提供 2 个模式与完整 14 个分类锚点');
 	}
 	return Object.freeze({
 		root,

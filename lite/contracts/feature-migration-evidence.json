@@ -509,7 +509,7 @@
         "lite/tests/reader-shell-template.test.ts",
         "lite/tests/reader-browser-runtime.test.ts"
       ],
-      "note": "通知/私信双模式、8+6 分类目录、五类原生来源、cursor/offset/page 分页、原生 Notification presentation、摘要/摘录/状态归一化和现行 class View 已进入 application 唯一 runtime。所有读取经 DomainRequestGateway 与 discourse/lib/ajax，controller 只保留 32 页有界热缓存并在 notifications:changed 后失效/去抖刷新；408/425/5xx/网络/超时只在同一 load owner 等待 600ms 后重试一次，429 明确留给中央协调器。replied consolidated_count 通过 Discourse 原生 Topic around 目录完整拆分，数量不足或请求失败原样保留。真实端点、重试文案时序、头像与三形态像素仍待浏览器验收。"
+      "note": "通知/私信双模式、9+6 分类目录、五类原生来源、cursor/offset/page 分页、原生 Notification presentation、摘要/摘录/状态归一化和现行 class View 已进入 application 唯一 runtime。原生通知中已被具体分类或私信模式覆盖的记录不会重复进入“其他”，聚合时具体分类优先并按 identity 去重；“其他”逐条标注实际类型。所有读取经 DomainRequestGateway 与 discourse/lib/ajax，controller 只保留 32 页有界热缓存并在 notifications:changed 后失效/去抖刷新；408/425/5xx/网络/超时只在同一 load owner 等待 600ms 后重试一次，429 明确留给中央协调器。replied consolidated_count 通过 Discourse 原生 Topic around 目录完整拆分，数量不足或请求失败原样保留。真实端点、重试文案时序、头像与三形态像素仍待浏览器验收。"
     },
   "COLLECT-002": {
     "implementationStatus": "static-complete",

@@ -11,6 +11,10 @@ export interface ReaderCollectionProjectionRecord {
 export interface ReaderCollectionProjectionSnapshot<TRecord> {
 	readonly records: readonly TRecord[];
 	readonly totalHint: number;
+	/** 归一记录展示结构版本；领域升级后可据此重建持久投影。 */
+	readonly recordVersion?: number;
+	/** 稀疏投影背后的原始来源总量，不等于归一投影记录数。 */
+	readonly sourceTotalHint?: number;
 	readonly complete: boolean;
 	readonly updatedAt: number;
 	/** 领域接口已连续提交的下一远端页；与投影自身的存储分页无关。 */
@@ -24,6 +28,10 @@ export interface ReaderCollectionProjectionSnapshot<TRecord> {
 export interface ReaderCollectionProjectionWriteOptions {
 	readonly mergeStored?: boolean;
 	readonly totalHint?: number;
+	/** 当前写入的归一记录展示结构版本。 */
+	readonly recordVersion?: number;
+	/** 稀疏投影背后的原始来源总量，不得作为投影记录数展示。 */
+	readonly sourceTotalHint?: number;
 	readonly complete?: boolean;
 	readonly updatedAt?: number;
 	/** 领域接口已连续提交的下一远端页；省略时保留原水位。 */
@@ -82,6 +90,8 @@ interface StoredManifest {
 	readonly pageSize: number;
 	readonly total: number;
 	readonly totalHint: number;
+	readonly recordVersion?: number;
+	readonly sourceTotalHint?: number;
 	readonly pages: number;
 	readonly complete: boolean;
 	readonly updatedAt: number;
@@ -214,6 +224,12 @@ export class ReaderCollectionPageRepository<
 		return Object.freeze({
 			records: Object.freeze([...this.#sortRecords(records)]),
 			totalHint: Math.max(manifest.total, manifest.totalHint),
+			...(manifest.recordVersion === undefined
+				? {}
+				: { recordVersion: manifest.recordVersion }),
+			...(manifest.sourceTotalHint === undefined
+				? {}
+				: { sourceTotalHint: manifest.sourceTotalHint }),
 			complete: manifest.complete,
 			updatedAt: manifest.updatedAt,
 			...(manifest.sourceNextPage === undefined
@@ -303,6 +319,18 @@ export class ReaderCollectionPageRepository<
 		if (requestedSourcePageSize === null) {
 			throw new RangeError('集合投影 sourcePageSize 必须是正安全整数');
 		}
+		const requestedRecordVersion = options.recordVersion === undefined
+			? previousManifest?.recordVersion
+			: positiveSafeInteger(options.recordVersion);
+		if (requestedRecordVersion === null) {
+			throw new RangeError('集合投影 recordVersion 必须是正安全整数');
+		}
+		const requestedSourceTotalHint = options.sourceTotalHint === undefined
+			? previousManifest?.sourceTotalHint
+			: safeInteger(options.sourceTotalHint);
+		if (requestedSourceTotalHint === null) {
+			throw new RangeError('集合投影 sourceTotalHint 必须是非负安全整数');
+		}
 		const requestedSourceOffsetValue = options.sourceOffset === undefined
 			? previousManifest?.sourceOffset
 			: safeInteger(options.sourceOffset);
@@ -369,6 +397,12 @@ export class ReaderCollectionPageRepository<
 					records.length,
 					Math.floor(Number(options.totalHint) || 0),
 				),
+				...(requestedRecordVersion === undefined
+					? {}
+					: { recordVersion: requestedRecordVersion }),
+				...(requestedSourceTotalHint === undefined
+					? {}
+					: { sourceTotalHint: requestedSourceTotalHint }),
 				pages,
 				complete: options.checkpointMode === 'advance'
 					? previousManifest?.complete === true || options.complete === true
@@ -420,6 +454,12 @@ export class ReaderCollectionPageRepository<
 		const sourceOffset = source.sourceOffset === undefined
 			? undefined
 			: safeInteger(source.sourceOffset);
+		const sourceTotalHint = source.sourceTotalHint === undefined
+			? undefined
+			: safeInteger(source.sourceTotalHint);
+		const recordVersion = source.recordVersion === undefined
+			? undefined
+			: positiveSafeInteger(source.recordVersion);
 		if (
 			source.schemaVersion !== 1 ||
 			source.partition !== partition ||
@@ -428,6 +468,8 @@ export class ReaderCollectionPageRepository<
 			total === null || totalHint === null || pages === null ||
 			updatedAt === null || sourceNextPage === null ||
 			sourcePageSize === null ||
+			recordVersion === null ||
+			sourceTotalHint === null ||
 			sourceOffset === null ||
 			typeof source.complete !== 'boolean' ||
 			pages !== Math.ceil(total / this.#pageSize)
@@ -439,6 +481,8 @@ export class ReaderCollectionPageRepository<
 			pageSize: this.#pageSize,
 			total,
 			totalHint: Math.max(total, totalHint),
+			...(recordVersion === undefined ? {} : { recordVersion }),
+			...(sourceTotalHint === undefined ? {} : { sourceTotalHint }),
 			pages,
 			complete: source.complete,
 			updatedAt,

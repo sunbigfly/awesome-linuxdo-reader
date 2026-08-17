@@ -39,10 +39,9 @@
 }
 
 .ldp-notification-tabs {
-  grid-template-columns: repeat(
-    var(--ldp-notification-tab-count, 8),
-    minmax(0, 1fr)
-  );
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
 }
 
 .ldp-notification-mode-tab,
@@ -64,6 +63,14 @@
   font-weight: 650;
   line-height: 1;
   white-space: nowrap;
+}
+
+.ldp-notification-tab {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 100%;
+  min-width: max-content;
+  padding-inline: 6px;
 }
 
 .ldp-notification-mode-tab .ldp-icon,
@@ -837,6 +844,26 @@
 .ldp-notification-type-icon[data-notification-group="edits"],
 .ldp-notification-type-icon[data-notification-group="links"] {
   --ldp-notification-type-color: #2f9e72;
+}
+
+.ldp-notification-type-icon[data-notification-type="custom"] {
+  --ldp-notification-type-color: #8b5cf6;
+}
+
+.ldp-notification-type-icon[data-notification-icon="solution-badge"] {
+  --ldp-notification-type-color: #16a34a;
+}
+
+.ldp-notification-type-icon[data-notification-type="following_created_topic"] {
+  --ldp-notification-type-color: #2563eb;
+}
+
+.ldp-notification-type-icon[data-notification-type="post_approved"] {
+  --ldp-notification-type-color: #0891b2;
+}
+
+.ldp-notification-type-icon[data-notification-type="topic_reminder"] {
+  --ldp-notification-type-color: #d97706;
 }
 
 .ldp-notification-type-icon[data-notification-group="inbox"],

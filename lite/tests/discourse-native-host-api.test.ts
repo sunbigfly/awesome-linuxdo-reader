@@ -1249,27 +1249,42 @@ const notificationHost: DiscourseHostApiPort = {
 		};
 		if (name === 'service:site-settings') return {};
 		if (name === 'service:site') return {
-			notificationLookup: { 1: 'replied' },
+			notificationLookup: { 1: 'replied', 14: 'custom' },
 		};
 		return null;
 	},
 	lookupModule(name) {
 		if (name === 'discourse/models/notification') {
+			class NotificationModel {
+				static async initializeNotifications(values: readonly unknown[]) {
+					return values.map((value) => ({
+						...(value as Readonly<Record<string, unknown>>),
+						data: undefined,
+					}));
+				}
+			}
+			return {
+				default: NotificationModel,
+			};
+		}
+		if (name === 'discourse-i18n') {
 			return {
 				default: {
-					async initializeNotifications(values: readonly unknown[]) {
-						return values;
+					t(key: string) {
+						return key === 'solved.notification.title'
+							? '您的帖子已被标记为解决方案'
+							: key;
 					},
 				},
 			};
 		}
 		if (name === 'discourse/lib/notification-types-manager') {
 			return {
-				getRenderDirector() {
+				getRenderDirector(typeName: string) {
 					return {
 						label: 'alice 回复了你',
 						description: '测试主题',
-						linkTitle: '回复',
+						linkTitle: typeName === 'custom' ? 'custom' : '回复',
 						linkHref: '/t/test/42/3',
 					};
 				},
@@ -1285,18 +1300,32 @@ assert(
 	notificationNative.unreadCount() === 3,
 	'通知宿主桥必须从唯一 current-user model 读取账号和未读计数',
 );
-const presented = await notificationNative.present([{
-	id: 5,
-	notification_type: 1,
-	topic_id: 42,
-	post_number: 3,
-	data: { display_username: 'alice' },
-}]);
+const presented = await notificationNative.present([
+	{
+		id: 5,
+		notification_type: 1,
+		topic_id: 42,
+		post_number: 3,
+		data: { display_username: 'alice' },
+	},
+	{
+		id: 6,
+		notification_type: 14,
+		topic_id: 43,
+		post_number: 2,
+		data: {
+			display_username: 'solver',
+			title: 'solved.notification.title',
+		},
+	},
+]);
 assert(
 	presented[0]?.typeName === 'replied' &&
 	presented[0]?.summary === 'alice 回复了你 · 测试主题' &&
-	presented[0]?.topicId === 42,
-	'原生 Notification model/manager 必须在宿主桥内完成 presentation',
+	presented[0]?.topicId === 42 &&
+	presented[1]?.typeName === 'custom' &&
+	presented[1]?.typeLabel === '您的帖子已被标记为解决方案',
+	'原生 Notification model/manager 必须在宿主桥内完成 presentation，并把 custom 翻译键解析为具体类型',
 );
 notificationNative.markRead({
 	notificationTypeId: 1,

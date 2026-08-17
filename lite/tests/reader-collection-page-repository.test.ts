@@ -91,6 +91,8 @@ await alice.write('replies', Object.freeze([
 	sourceNextPage: 3,
 	sourcePageSize: 100,
 	sourceOffset: 300,
+	sourceTotalHint: 757,
+	recordVersion: 2,
 });
 
 const restored = await repository('account:alice').read('replies');
@@ -100,6 +102,8 @@ assert(
 		restored.sourceNextPage === 3 &&
 		restored.sourcePageSize === 100 &&
 		restored.sourceOffset === 300 &&
+		restored.sourceTotalHint === 757 &&
+		restored.recordVersion === 2 &&
 		restored.records.map((entry) => entry.identity).join(',') === 'b,c,a',
 	'归一集合投影必须跨 repository 恢复排序、完整性、更新时间与领域分页水位',
 );
@@ -167,6 +171,7 @@ assert(
 		merged.sourceNextPage === 3 &&
 		merged.sourcePageSize === 100 &&
 		merged.sourceOffset === 300 &&
+		merged.sourceTotalHint === 757 &&
 		merged.records.map((entry) => entry.identity).join(',') === 'd,a,b,c' &&
 		merged.records.find((entry) => entry.identity === 'a')?.label === '新',
 	'断点页必须按 identity 单调合并，并在普通投影写入时保留既有远端分页水位',
@@ -179,12 +184,14 @@ await alice.write('replies', Object.freeze([]), {
 	sourceNextPage: 1,
 	sourcePageSize: 100,
 	sourceOffset: 100,
+	sourceTotalHint: 820,
 	checkpointMode: 'replace',
 });
 const replacedCheckpoint = await repository('account:alice').read('replies');
 assert(
 	replacedCheckpoint?.sourceNextPage === 1 &&
 		replacedCheckpoint.sourceOffset === 100 &&
+		replacedCheckpoint.sourceTotalHint === 820 &&
 		replacedCheckpoint.complete === false &&
 		replacedCheckpoint.records.length === 4,
 	'显式刷新世代必须只重置远端断点，继续保留已经归一化的历史记录',
