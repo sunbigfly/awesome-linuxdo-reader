@@ -4,9 +4,9 @@ description: 导出、导入与恢复设置，查看六类本地缓存并按选�
 feature_ids: ["DATA-001", "DATA-002", "DATA-007"]
 source_anchors: ["lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.5.2
+version: 1.5.3
 status: current
-last_verified: 2026-08-16
+last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-30-settings-update-reminder-v1.5.0.png"]
 ---
 
@@ -54,7 +54,7 @@ v9 导出文件包含当前版本规范化的 85 项图片、字体、布局、�
 
 该操作经确认后覆盖偏好、其他适用站点、翻译和 WebDAV 设置并立即投影，同时清除本机翻译 API Key、WebDAV 用户名与密码，并把阅读队列图标恢复到默认位置。它不会删除阅读队列条目、浏览历史或缓存，也不会撤销原站收藏、回应或通知状态。若只需恢复某一类设置，进入对应面板使用该面板自己的“恢复默认”。
 
-v1.5.0 会再次为已有设置的用户递增“大版本设置更新”提示锚点；即使已经消费过 v1.3.1 的提示锁，升级后仍会收到一次新版默认值建议。选择“保留当前设置”不会改动任何值；选择“恢复默认值”会重置设置和阅读队列图标位置，但不删除队列条目、历史、下载记录、帖子缓存或账号数据。新用户首次安装仍保持静默，同一锚点不会重复提示。
+v1.5.3 会再次为已有设置的用户递增“大版本设置更新”提示锚点；即使已经消费过 v1.5.0 的提示锁，升级后仍会收到一次新版默认值建议。选择“保留当前设置”不会改动任何值；选择“恢复默认值”会重置设置和阅读队列图标位置，但不删除队列条目、历史、下载记录、帖子缓存或账号数据。新用户首次安装仍保持静默，同一锚点不会重复提示。
 
 ![当前设置契约的一次性更新提示与重置入口](/screenshots/guide-30-settings-update-reminder-v1.5.0.png)
 
@@ -66,7 +66,7 @@ v1.5.0 会再次为已有设置的用户递增“大版本设置更新”提示�
 
 | 类别 | 包含 | 清理时保留 |
 | --- | --- | --- |
-| 浏览历史与岁月史书 | 阅读位置、查看时间和服务器 404 后保留的岁月史书记录 | 浏览器自身访问历史、原站状态 |
+| 浏览历史与岁月史书 | 阅读位置、查看时间和服务器确认删除或 403/404/410 后保留的岁月史书记录 | 浏览器自身访问历史、原站状态 |
 | 帖子与楼层内容 | 帖子信息、楼层正文、回复关系、主题快照和接口缓存 | 离线 Topic HTML 与下载记录 |
 | 用户资料卡 | 资料、徽章、用户组、关注列表、账户摘要、用户观察公开历史与采集断点 | 用户观察名单、Connect 近 400 天信任观察历史 |
 | 通知与消息 | 通知分页、回复展开、已读投影和跳转位置 | 原站真实消息与未读状态 |

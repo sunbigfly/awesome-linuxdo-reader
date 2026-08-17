@@ -4,9 +4,9 @@ description: 使用消息、历史、收藏、用户观察、岁月史书和不�
 feature_ids: ["ACTION-004", "ACTION-007", "COLLECT-001", "COLLECT-002", "COLLECT-003", "COLLECT-004", "COLLECT-005", "COLLECT-006", "COLLECT-007", "COLLECT-009", "USER-007"]
 source_anchors: ["lite/src/app/reader-browser-runtime.ts","lite/src/discourse/native-host-api.ts","lite/src/notification/reader-notification-model.ts","lite/src/notification/reader-notification-controller.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-repository.ts","lite/src/history/reader-chronicle-repository.ts","lite/src/bookmark/reader-bookmark-model.ts","lite/src/bookmark/reader-bookmark-controller.ts","lite/src/collection/reader-unwanted-topic-repository.ts","lite/src/user/reader-user-observation-session.ts"]
 since: 0.1.2
-version: 1.5.2
+version: 1.5.3
 status: current
-last_verified: 2026-08-16
+last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-15-notifications-replies-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.5.0.png"]
 ---
 
@@ -96,9 +96,9 @@ screenshots: ["/screenshots/guide-15-notifications-replies-v1.5.0.png", "/screen
 
 ## 岁月史书
 
-“岁月史书”保存原站已经返回 `404`、但本机缓存仍能提供正文的 Topic、楼层或 Boost 入口。它不会主动扫描全站，也不会把普通网络失败、权限错误或尚未确认的请求写入历史。
+“岁月史书”保存原站已经明确软删除，或返回 `403`、`404`、`410`，并且本机缓存仍能提供可定位内容的 Topic、楼层或 Boost 入口。它不会主动扫描全站，也不会把普通网络失败、Cloudflare 验证、跨域请求、无法定位目标或本机没有内容的信号写入历史。
 
-记录按当前站点账号隔离，按目标和请求位置去重，并保留首次、最近观察时间与出现次数。面板可按 Topic、回复或 Boost 分类检索和展开；点击记录会优先从本地正文恢复阅读。若对应本地正文已经清理，打开时会移除失效记录。岁月史书最多保留 1,000 条、最长一年，不进入 WebDAV；在“数据管理”清理“浏览历史与岁月史书”时会与普通阅读历史一起删除。
+记录按当前站点账号隔离，按目标和请求位置去重，保留真实状态、首次与最近观察时间及出现次数。活动 Topic 的 `deleted_at` 模型和标准 `deleted/destroyed` 实时事件会直接入史；先于正文到达的请求信号会在当前请求观察保留期内等待 Topic 挂载后重放。面板可按 Topic、回复或 Boost 分类检索和展开；点击记录会优先从本地内容恢复阅读。若对应本地内容已经清理，打开时会移除失效记录。岁月史书最多保留 1,000 条、最长一年，不进入 WebDAV；在“数据管理”清理“浏览历史与岁月史书”时会与普通阅读历史一起删除。
 
 ## 不想看
 

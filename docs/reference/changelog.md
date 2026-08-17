@@ -4,9 +4,9 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.5.2
+version: 1.5.3
 status: current
-last_verified: 2026-08-16
+last_verified: 2026-08-17
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ---
 
@@ -15,6 +15,31 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.5.3 — 集合增量更新与失效恢复
+
+核验日期：2026-08-17。
+
+### 消息、收藏与观察
+
+- 通知、收藏、回复、Boost 与回应先恢复账号隔离的完整分页投影；每次打开面板立即从头页回查，遇到首个已知 identity 后停止，避免重复扫描完整历史。
+- 通知与收藏面板新增统一主动更新入口、旋转忙态和完成反馈；主要通知完成后，较慢的回应更新继续留在唯一后台任务，不阻塞已恢复内容。
+- 宿主发帖与通知事件合并同一 tick 的头页校验，可见面板使用前台优先级，后台补齐仍受中央调度、批次车道和并发上限约束。
+- 用户观察遇到连续无进展会暂停并展示失败来源与断点重试；旧逐页缓存分批迁移为断点索引，恢复时从原 page/offset 续传，不把短页缓存冒充真实终点。
+
+### 失效记录与交互恢复
+
+- 岁月史书扩展到 Topic 软删除及 403、404、410；只有本机仍有可定位内容时才记录，先于正文到达的信号会在当前请求观察窗口内等待并重放。
+- 删除事件保留 canonical 正文，只更新失效状态；相同目标按请求定位去重并累计观察次数，普通网络失败、Cloudflare 验证和无内容信号不会入史。
+- 共享多标签浮窗统一由最前层 Esc owner 收纳，宿主提前截断键盘传播时仍可关闭未置顶会话；通知与收藏刷新反馈复用同一动效规则。
+- 1.5.3 再次递增已有用户的设置恢复提示锚点；升级后会收到一次“建议恢复默认值”，新用户静默，选择保留不会修改设置。
+
+### 发布状态
+
+- `1.5.3` 已发布到 Greasy Fork：主 Loader 固定版本为 `1904932`，加载 Core `1904928`、Platform `1904930` 与 Features `1904929`。
+- 固定 Loader 原始文件为 4,141 字节，SHA-256 `bb6374f118161cc03d95e034604dc12f6c6632d60d1356ff95407eaa48145125`；移除平台加入的 `@downloadURL none` 后为 4,120 字节，SHA-256 `286aa954fd84f05dc655595829a06d8e89840ef7ebb28ed449e5c52b3a0fb2e6`，与仓库 Loader 逐字节一致。
+- Core 为 1,576,024 字节，SHA-256 `9f44b8cb4350ba6329fb9a2695f7763c981543de39cf48ffb003f96dcc4133d6`；Platform 为 1,257,429 字节，SHA-256 `ddcbd496344a0fb0f56eabf8cee488bc7b5809013b4384dd45fb76bcf52eaebf`；Features 为 1,974,461 字节，SHA-256 `aa66562e721213e6c13432848be564b2c7fbefd77a2eb7d3dc849f237ef980bf`。
+- CSS 固定到 Git `25fb1508884e8e524e381c1a7942e9729f41d52d`：611,633 字节，SHA-256 `1bce472ab2eecf03f62579975724661d11c8e1839b13cb837c92ae2edbe2f40d`；源码与分包 runtime 各通过 223 文件契约，287 个模块通过 parity 门禁。
 
 ## 1.5.2 — 跨标签页信息流与交互加固
 
