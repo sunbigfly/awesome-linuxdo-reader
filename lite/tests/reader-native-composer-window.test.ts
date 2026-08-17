@@ -69,25 +69,6 @@ Object.defineProperties(window, {
 	innerWidth: { configurable: true, value: 1_000 },
 	innerHeight: { configurable: true, value: 800 },
 });
-const nativeGetComputedStyle = window.getComputedStyle?.bind(window);
-let stageUnpositionedComposer = false;
-Object.defineProperty(window, 'getComputedStyle', {
-	configurable: true,
-	value: (element: Element) => {
-		if (
-			stageUnpositionedComposer &&
-			element.id === 'reply-control' &&
-			!(element as HTMLElement).dataset.ldpReaderComposerPositioned
-		) {
-			return { display: 'block', visibility: 'hidden' };
-		}
-		return nativeGetComputedStyle?.(element) ?? {
-			display: 'block',
-			visibility: 'visible',
-		};
-	},
-});
-
 let preferences: Readonly<ReaderPreferences> = Object.freeze({
 	...defaults,
 	composerWindowWidth: 700,
@@ -116,6 +97,7 @@ let nextTimer = 0;
 const timers = new Map<number, () => void>();
 const observers: Array<{ disconnected: boolean }> = [];
 const topLayers = new Set<HTMLElement>();
+let topLayerAvailable = true;
 const parentScope = new LifecycleScope();
 
 function flushFrames(): void {
@@ -172,7 +154,7 @@ const controller = new ReaderNativeComposerWindowController({
 	topLayer: {
 		isOpen: (element) => topLayers.has(element),
 		show: (element) => {
-			topLayers.add(element);
+			if (topLayerAvailable) topLayers.add(element);
 		},
 		hide: (element) => {
 			topLayers.delete(element);
@@ -188,15 +170,19 @@ assert(
 	'关闭的宿主 Composer 不得占用 Reader top-layer 或窗口几何',
 );
 
-stageUnpositionedComposer = true;
 composer.classList.remove('closed');
 controller.sync();
+window.dispatchEvent(new (window as unknown as { Event: typeof Event }).Event(
+	'resize',
+));
+preferenceChanges.emit(preferences);
+flushFrames();
 assert(
-	composer.dataset.ldpReaderComposerPositioned === '1' &&
-	topLayers.has(composer),
-	'宿主自行打开新建、回复、编辑或私信 Composer 时，Reader 的防闪隐藏不得阻断窗口接管与 top-layer 提升',
+	!composer.dataset.ldpReaderComposerPositioned &&
+	topLayers.size === 0 &&
+	!document.querySelector('.ldp-composer-window-chrome'),
+	'宿主自行打开的 Composer 不得被 Reader 自动接管几何、样式或 top-layer',
 );
-stageUnpositionedComposer = false;
 composer.classList.add('closed');
 controller.sync();
 assert(
@@ -221,7 +207,10 @@ assert(
 	composer.style.getPropertyValue('--ldp-composer-height') === '500px' &&
 	chrome && !chrome.hidden &&
 	chrome.querySelectorAll('[data-resize]').length === 8 &&
-	topLayers.has(composer) && topLayers.has(chrome),
+	topLayers.has(composer) && topLayers.has(chrome) &&
+	!document.documentElement.classList.contains(
+		'ldp-composer-top-layer-fallback',
+	),
 	'打开 Composer 必须一次投影窗口、八向拖缩、内部滚轮隔离和 top-layer，而不是复制草稿 DOM',
 );
 const backgroundWheel = new (window as unknown as { Event: typeof Event }).Event(
@@ -330,8 +319,30 @@ assert(
 	!composerRoot.style.getPropertyValue('--tertiary-low') &&
 	!composerRoot.style.getPropertyValue('--d-link-color') &&
 	chrome.hidden &&
-	topLayers.size === 0,
+	topLayers.size === 0 &&
+	!document.documentElement.classList.contains(
+		'ldp-composer-top-layer-fallback',
+	),
 	'关闭 Composer 必须完整释放几何、top-layer 和窗口状态',
+);
+
+topLayerAvailable = false;
+composer.classList.remove('closed');
+assert(
+	controller.open(composer) &&
+	document.documentElement.classList.contains(
+		'ldp-composer-top-layer-fallback',
+	) &&
+	!composer.hasAttribute('popover'),
+	'Top Layer 不可用时才允许启用宿主根层级兜底',
+);
+composer.classList.add('closed');
+controller.sync();
+assert(
+	!document.documentElement.classList.contains(
+		'ldp-composer-top-layer-fallback',
+	),
+	'Composer 关闭后必须释放宿主根层级兜底，不能继续覆盖 Reader 浮窗',
 );
 
 parentScope.destroy();

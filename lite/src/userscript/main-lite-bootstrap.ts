@@ -1272,10 +1272,14 @@ export function startMainLiteUserscript(
 	if (isReaderCloudflareChallengeWindow(window)) {
 		(existing as MainLiteUserscriptHandle | undefined)?.destroy?.();
 		(page[CHALLENGE_MONITOR_KEY] as (() => void) | undefined)?.();
-		const stopMonitor = monitorReaderCloudflareChallengeWindow({
-			storage: window.localStorage,
-			storageEvents: window,
-			close: () => window.close(),
+			const stopMonitor = monitorReaderCloudflareChallengeWindow({
+				storage: window.localStorage,
+				storageEvents: window,
+				broadcastChannelFactory:
+					typeof BroadcastChannel === 'function'
+						? (name) => new BroadcastChannel(name)
+						: null,
+				close: () => window.close(),
 			schedule: (callback, intervalMs) =>
 				window.setInterval(callback, intervalMs),
 			cancel: (handle) => window.clearInterval(Number(handle)),

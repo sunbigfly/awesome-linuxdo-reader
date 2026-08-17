@@ -562,7 +562,7 @@ export class DiscourseComposerCoordinator {
 	bindWindow(port: DiscourseComposerWindowPort): Cleanup {
 		this.#assertActive();
 		this.#windowPort = port;
-		this.#presentComposerWindow();
+		if (this.#session) this.#presentComposerWindow();
 		return () => {
 			if (this.#windowPort === port) this.#windowPort = null;
 		};

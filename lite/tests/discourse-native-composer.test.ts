@@ -191,6 +191,8 @@ const coordinator = new DiscourseComposerCoordinator({
 	waitForDelay: async () => {},
 	onError: (error) => errors.push(error),
 });
+const initialReplyControl = composerWindowDocument.querySelector('#reply-control')!;
+initialReplyControl.classList.remove('closed');
 coordinator.bindWindow({
 	open(element) {
 		if (element) presentedComposerWindows.push(element);
@@ -203,10 +205,8 @@ assert(
 		Number(openOptions.length) === 0 &&
 		Reflect.get(service, 'model') === null &&
 		Number(presentedComposerWindows.length) === 0,
-	'回复预热只能解析宿主 service/module，不能读取 draft、打开 Composer 或创建窗口',
+	'绑定窗口与回复预热不得接管既有宿主 Composer，也不能读取 draft、打开 Composer 或创建窗口',
 );
-const initialReplyControl = composerWindowDocument.querySelector('#reply-control')!;
-initialReplyControl.classList.remove('closed');
 initialReplyControl.innerHTML = '<textarea class="d-editor-input"></textarea>';
 const [opened, sameOpened] = await Promise.all([
 	coordinator.openReply({ topic, post, initialRaw: '图片引用' }),

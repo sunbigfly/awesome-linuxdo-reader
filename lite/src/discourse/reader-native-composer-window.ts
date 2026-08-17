@@ -98,6 +98,8 @@ const APPEARANCE_PROPERTIES = Object.freeze([
 	'--tertiary-low',
 	'--d-link-color',
 ]);
+const COMPOSER_TOP_LAYER_FALLBACK_CLASS =
+	'ldp-composer-top-layer-fallback';
 const RESIZE_DIRECTIONS = Object.freeze<readonly ResizeDirection[]>([
 	'n',
 	's',
@@ -318,6 +320,7 @@ export class ReaderNativeComposerWindowController {
 	#overflowFrame = 0;
 	#floatingFrame = 0;
 	#persistTimer = 0;
+	#managed = false;
 	#destroyed = false;
 
 	constructor(options: ReaderNativeComposerWindowOptions) {
@@ -386,6 +389,7 @@ export class ReaderNativeComposerWindowController {
 			this.#deactivate();
 			return false;
 		}
+		this.#managed = true;
 		this.#activate();
 		return true;
 	}
@@ -393,7 +397,12 @@ export class ReaderNativeComposerWindowController {
 	sync(): void {
 		if (this.#destroyed) return;
 		const candidate = this.#document.querySelector<HTMLElement>('#reply-control');
-		if (candidate !== this.#composer) this.#bindComposer(candidate);
+		const managed = this.#managed;
+		if (candidate !== this.#composer) {
+			this.#bindComposer(candidate);
+			this.#managed = managed;
+		}
+		if (!this.#managed) return;
 		if (!this.#composerVisible()) {
 			this.#deactivate();
 			return;
@@ -452,16 +461,12 @@ export class ReaderNativeComposerWindowController {
 
 	#composerVisible(): boolean {
 		const composer = this.#composer;
-		if (!composer || !this.#composerAvailable()) return false;
+		if (!this.#managed || !composer || !this.#composerAvailable()) return false;
 		try {
 			const style = this.#window.getComputedStyle?.(composer);
-			const stagedByReader =
-				style?.visibility === 'hidden' &&
-				this.#pageRoot.classList.contains('ldp-reader-open') &&
-				!composer.dataset.ldpReaderComposerPositioned;
 			if (
 				style?.display === 'none' ||
-				(style?.visibility === 'hidden' && !stagedByReader)
+				style?.visibility === 'hidden'
 			) {
 				return false;
 			}
@@ -548,6 +553,7 @@ export class ReaderNativeComposerWindowController {
 	}
 
 	#deactivate(): void {
+		this.#managed = false;
 		this.#stopPointer();
 		this.#persistGeometry();
 		this.#releaseTopLayers();
@@ -1044,9 +1050,11 @@ export class ReaderNativeComposerWindowController {
 			return;
 		}
 		if (!this.#promoteTopLayer(composer, 'composer')) {
+			this.#pageRoot.classList.add(COMPOSER_TOP_LAYER_FALLBACK_CLASS);
 			this.#releaseFloatingTopLayers();
 			return;
 		}
+		this.#pageRoot.classList.remove(COMPOSER_TOP_LAYER_FALLBACK_CLASS);
 		if (this.#chrome && !this.#chrome.hidden) {
 			this.#promoteTopLayer(this.#chrome, 'chrome');
 		}
@@ -1133,6 +1141,7 @@ export class ReaderNativeComposerWindowController {
 	}
 
 	#releaseTopLayers(): void {
+		this.#pageRoot.classList.remove(COMPOSER_TOP_LAYER_FALLBACK_CLASS);
 		this.#releaseFloatingTopLayers();
 		for (const element of [...this.#ownedTopLayers].reverse()) {
 			this.#releaseTopLayer(element);

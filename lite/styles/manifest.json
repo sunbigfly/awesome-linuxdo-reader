@@ -341,12 +341,14 @@
       ],
       "runtimeClasses": [
         "ldp-composer-window-interacting",
+        "ldp-composer-top-layer-fallback",
         "ldp-composer-window-chrome",
         "ldp-composer-drag-handle",
         "ldp-composer-resize-handle"
       ],
       "styleSignatures": [
-        "#reply-control:not(.closed):not([data-ldp-reader-composer-positioned=\"1\"])",
+        "#reply-control[data-ldp-reader-composer-positioned=\"1\"]:not(.closed)",
+        ".ldp-composer-top-layer-fallback",
         "--ldp-composer-width",
         "[data-ldp-reader-top-layer=\"portal\"][popover]",
 		"[data-identifier=\"admin-post-menu\"][data-ldp-reader-admin-menu=\"positioned\"]",

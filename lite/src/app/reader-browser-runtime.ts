@@ -2126,6 +2126,8 @@ export class ReaderBrowserRuntime<
 				},
 				challengeHref: this.#challengeHref,
 				snapshot: () => this.permit.snapshot(),
+				subscribe: (listener) =>
+					this.permit.subscribeStateChanges(listener),
 				parentScope: this.scope,
 			});
 			this.scope.listen(this.shell.view.root, 'click', (event) => {

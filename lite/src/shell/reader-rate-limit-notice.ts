@@ -3,6 +3,8 @@ import { LifecycleScope } from '../kernel/lifecycle.js';
 export interface ReaderRateLimitNoticeSnapshot {
 	readonly challengeState: 'idle' | 'required' | 'active' | 'passed';
 	readonly challengeOwned: boolean;
+	readonly blockingReason: string;
+	readonly nextPermitDelay: number;
 }
 
 export interface ReaderRateLimitNoticeElements {
@@ -16,6 +18,7 @@ export interface ReaderRateLimitNoticeOptions {
 	readonly elements: ReaderRateLimitNoticeElements;
 	readonly challengeHref: string;
 	readonly snapshot: () => Promise<ReaderRateLimitNoticeSnapshot>;
+	readonly subscribe?: (listener: () => void) => () => void;
 	readonly intervalMs?: number;
 	readonly parentScope?: LifecycleScope;
 }
@@ -31,6 +34,7 @@ export class ReaderRateLimitNotice {
 	readonly #document: Document;
 	readonly #elements: ReaderRateLimitNoticeElements;
 	readonly #snapshot: () => Promise<ReaderRateLimitNoticeSnapshot>;
+	readonly #challengeAvailable: boolean;
 	readonly #intervalMs: number;
 	#timer: ReturnType<typeof setInterval> | null = null;
 	#epoch = 0;
@@ -40,6 +44,7 @@ export class ReaderRateLimitNotice {
 		this.#document = options.document;
 		this.#elements = options.elements;
 		this.#snapshot = options.snapshot;
+		this.#challengeAvailable = Boolean(options.challengeHref);
 		this.#intervalMs = Math.max(250, options.intervalMs ?? 1_000);
 		if (options.challengeHref) {
 			this.#elements.challenge.href = options.challengeHref;
@@ -51,6 +56,10 @@ export class ReaderRateLimitNotice {
 		this.scope.listen(this.#document, 'visibilitychange', () => {
 			this.#syncPolling();
 		});
+		const unsubscribe = options.subscribe?.(() => {
+			void this.refresh();
+		});
+		if (unsubscribe) this.scope.add(unsubscribe);
 		this.scope.add(() => {
 			this.#epoch += 1;
 			this.#stopPolling();
@@ -66,15 +75,27 @@ export class ReaderRateLimitNotice {
 			const snapshot = await this.#snapshot();
 			if (this.scope.destroyed || epoch !== this.#epoch) return;
 			if (snapshot.challengeState === 'required') {
+				this.#showChallenge();
 				this.#elements.detail.textContent =
 					'关键 Reader 请求遇到 Cloudflare 验证，已暂停后续请求；Reader 会先自动探测，确有需要时只打开一个过盾页。若浏览器拦截，请点击右侧按钮。';
 				this.#show();
 				return;
 			}
 			if (snapshot.challengeState === 'active') {
+				this.#showChallenge();
 				this.#elements.detail.textContent = snapshot.challengeOwned
 					? '本页过盾浮窗已打开；若未显示，点击右侧按钮唤起。验证完成后请求自动恢复。'
 					: '其他标签页已有唯一过盾浮窗；点击右侧按钮可唤起。验证完成后请求自动恢复。';
+				this.#show();
+				return;
+			}
+			if (
+				snapshot.blockingReason === 'rate-limit' &&
+				snapshot.nextPermitDelay > 0
+			) {
+				this.#elements.detail.textContent =
+					'站点返回 429，所有 Reader 标签页已共享暂停；收到恢复状态后会立即解除。';
+				this.#elements.challenge.hidden = true;
 				this.#show();
 				return;
 			}
@@ -91,6 +112,10 @@ export class ReaderRateLimitNotice {
 	#show(): void {
 		delete this.#elements.root.dataset.cooldownSeconds;
 		this.#elements.root.hidden = false;
+	}
+
+	#showChallenge(): void {
+		this.#elements.challenge.hidden = !this.#challengeAvailable;
 	}
 
 	#hide(): void {

@@ -20,13 +20,24 @@ if (!root || !detail || !challenge) throw new Error('测试 DOM 创建失败');
 let snapshot: ReaderRateLimitNoticeSnapshot = {
 	challengeState: 'idle',
 	challengeOwned: false,
+	blockingReason: '',
+	nextPermitDelay: 0,
 };
+let stateChangeListener: (() => void) | null = null;
+let stateChangeUnsubscribed = false;
 const notice = new ReaderRateLimitNotice({
 	document,
 	elements: { root, detail, challenge },
 	challengeHref:
 		'https://linux.do/challenge?redirect=https%3A%2F%2Flinux.do%2Ft%2F1',
 	snapshot: async () => snapshot,
+	subscribe: (listener) => {
+		stateChangeListener = listener;
+		return () => {
+			stateChangeUnsubscribed = true;
+			stateChangeListener = null;
+		};
+	},
 	intervalMs: 60_000,
 });
 await notice.refresh();
@@ -43,6 +54,8 @@ assert(
 snapshot = {
 	challengeState: 'required',
 	challengeOwned: false,
+	blockingReason: 'challenge',
+	nextPermitDelay: 1_000,
 };
 await notice.refresh();
 assert(
@@ -55,6 +68,8 @@ assert(
 snapshot = {
 	challengeState: 'active',
 	challengeOwned: false,
+	blockingReason: 'challenge',
+	nextPermitDelay: 1_000,
 };
 await notice.refresh();
 assert(
@@ -65,6 +80,8 @@ assert(
 snapshot = {
 	challengeState: 'active',
 	challengeOwned: true,
+	blockingReason: 'challenge',
+	nextPermitDelay: 1_000,
 };
 await notice.refresh();
 assert(
@@ -75,6 +92,8 @@ assert(
 snapshot = {
 	challengeState: 'passed',
 	challengeOwned: false,
+	blockingReason: '',
+	nextPermitDelay: 0,
 };
 await notice.refresh();
 assert(root.hidden, '验证完成后必须隐藏提示');
@@ -82,4 +101,30 @@ assert(
 	root.dataset.cooldownSeconds === undefined,
 	'隐藏时必须清理陈旧的倒计时 dataset',
 );
+snapshot = {
+	challengeState: 'idle',
+	challengeOwned: false,
+	blockingReason: 'rate-limit',
+	nextPermitDelay: 2_000,
+};
+stateChangeListener?.();
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	!root.hidden &&
+		detail.textContent?.includes('所有 Reader 标签页已共享暂停') &&
+		challenge.hidden,
+	'普通 429 广播必须立即显示共享暂停，并隐藏不适用的 Cloudflare 验证入口',
+);
+snapshot = {
+	challengeState: 'idle',
+	challengeOwned: false,
+	blockingReason: '',
+	nextPermitDelay: 0,
+};
+stateChangeListener?.();
+await Promise.resolve();
+await Promise.resolve();
+assert(root.hidden, '收到共享恢复广播后必须立即解除普通 429 横幅');
 notice.destroy();
+assert(stateChangeUnsubscribed, '销毁 429 投影时必须退订共享状态事件');

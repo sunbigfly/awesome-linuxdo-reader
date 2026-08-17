@@ -1953,15 +1953,34 @@ class ReaderTopicDiscussionTopology<
 	TPost extends DiscourseTopicPostInput,
 > implements ReplyTreeDomTopology {
 	#snapshot: ReaderTopicDiscussionSnapshot<TPost> | null = null;
+	#revision = 0;
 	readonly #entries = new Map<
 		PostNumber,
 		ReaderTopicDiscussionEntry<TPost>
 	>();
 
+	get revision(): number {
+		return this.#revision;
+	}
+
 	update(snapshot: ReaderTopicDiscussionSnapshot<TPost> | null): void {
+		const nextEntries = snapshot?.entries ?? [];
+		let structureChanged =
+			(snapshot === null) !== (this.#snapshot === null) ||
+			snapshot?.rootPostNumber !== this.#snapshot?.rootPostNumber ||
+			nextEntries.length !== this.#entries.size;
+		if (!structureChanged) {
+			structureChanged = nextEntries.some((entry) => {
+				const previous = this.#entries.get(entry.postNumber);
+				return !previous ||
+					previous.parentPostNumber !== entry.parentPostNumber ||
+					previous.depth !== entry.depth;
+			});
+		}
+		if (structureChanged) this.#revision += 1;
 		this.#snapshot = snapshot;
 		this.#entries.clear();
-		for (const entry of snapshot?.entries ?? []) {
+		for (const entry of nextEntries) {
 			this.#entries.set(entry.postNumber, entry);
 		}
 	}

@@ -1,5 +1,6 @@
 /* Discourse 原生 Composer 的 Reader 窗口外壳；draft/model/save 继续由宿主拥有。 */
-html.ldp-reader-open body > [data-ldp-reader-composer-root] {
+html.ldp-reader-open.ldp-composer-top-layer-fallback
+  body > [data-ldp-reader-composer-root] {
   position: relative !important;
   z-index: 2147483604 !important;
   overflow: visible !important;
@@ -9,17 +10,13 @@ html.ldp-reader-open [data-ldp-reader-composer-overflow] {
   overflow-x: clip !important;
 }
 
-html.ldp-reader-open #reply-control:not(.closed),
-html.ldp-reader-open .composer-popup:not(.closed) {
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"]:not(.closed),
+html.ldp-reader-open .composer-popup[data-ldp-reader-composer-positioned="1"]:not(.closed) {
   visibility: visible !important;
   z-index: 2147483605 !important;
 }
 
-html.ldp-reader-open #reply-control:not(.closed):not([data-ldp-reader-composer-positioned="1"]) {
-  visibility: hidden !important;
-}
-
-html.ldp-reader-open :is(#d-menu-portals, .fk-d-menu, .emoji-picker, .composer-popup, .dialog-holder, .d-modal) {
+html.ldp-reader-open :is(#d-menu-portals, .fk-d-menu, .emoji-picker, .composer-popup[data-ldp-reader-composer-positioned="1"], .dialog-holder, .d-modal) {
   visibility: visible !important;
   z-index: 2147483610 !important;
 }
@@ -28,7 +25,7 @@ html.ldp-reader-open #reply-control[data-ldp-reader-top-layer="composer"][popove
   margin: 0 !important;
 }
 
-html.ldp-reader-open #reply-control:not(.closed) {
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"]:not(.closed) {
   position: fixed !important;
   left: var(--ldp-composer-left, 50%) !important;
   top: var(--ldp-composer-top, 25vh) !important;
@@ -56,7 +53,7 @@ html.ldp-reader-open #reply-control:not(.closed) {
   transition: none !important;
 }
 
-html.ldp-reader-open #reply-control:not(.closed).fullscreen {
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"]:not(.closed).fullscreen {
   inset: 16px !important;
   width: auto !important;
   height: auto !important;
@@ -68,58 +65,58 @@ html.ldp-reader-open #reply-control:not(.closed).fullscreen {
   border-radius: 10px !important;
 }
 
-html.ldp-reader-open #reply-control .reply-area,
-html.ldp-reader-open #reply-control .d-editor-container {
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] .reply-area,
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] .d-editor-container {
   min-width: 0 !important;
 }
 
-html.ldp-reader-open #reply-control .reply-area {
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] .reply-area {
   overflow: hidden !important;
 }
 
-html.ldp-reader-open #reply-control .toggle-minimize {
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] .toggle-minimize {
   display: none !important;
 }
 
-html.ldp-reader-open #reply-control .reply-to .presence-users,
-html.ldp-reader-open #reply-control .reply-to .presence-avatars {
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] .reply-to .presence-users,
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] .reply-to .presence-avatars {
   align-items: center !important;
   flex: 0 0 auto !important;
   overflow: visible !important;
 }
 
-html.ldp-reader-open #reply-control .reply-to .presence-users,
-html.ldp-reader-open #reply-control .reply-to span.presence-text {
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] .reply-to .presence-users,
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] .reply-to span.presence-text {
   min-width: max-content !important;
   white-space: nowrap !important;
 }
 
-html.ldp-reader-open #reply-control .reply-to .presence-avatars {
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] .reply-to .presence-avatars {
   flex-wrap: nowrap !important;
 }
 
-html.ldp-reader-open #reply-control .reply-to .presence-avatars > * {
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] .reply-to .presence-avatars > * {
   display: inline-flex !important;
   flex: 0 0 auto !important;
   line-height: 0 !important;
 }
 
-html.ldp-reader-open #reply-control .reply-to .presence-avatars img.avatar {
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] .reply-to .presence-avatars img.avatar {
   display: block !important;
   flex: none !important;
 }
 
-html.ldp-reader-open #reply-control .reply-to span.presence-text {
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] .reply-to span.presence-text {
   flex: 0 0 auto !important;
   overflow: visible !important;
 }
 
-html.ldp-reader-open #reply-control .submit-panel {
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] .submit-panel {
   box-sizing: border-box !important;
   padding-bottom: 18px !important;
 }
 
-html.ldp-reader-open #reply-control :is(
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] :is(
   .d-editor-textarea-wrapper,
   .d-editor-preview-wrapper,
   .composer-preview,
@@ -131,7 +128,7 @@ html.ldp-reader-open #reply-control :is(
   overflow: auto !important;
 }
 
-html.ldp-reader-open #reply-control :is(
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] :is(
   .d-editor-input,
   textarea,
   .d-editor-preview,
@@ -144,7 +141,7 @@ html.ldp-reader-open #reply-control :is(
   line-height: 1.5 !important;
 }
 
-html.ldp-reader-open #reply-control :is(.d-editor-preview, .composer-preview, .preview-area)
+html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] :is(.d-editor-preview, .composer-preview, .preview-area)
   aside.quote blockquote img:not(.emoji) {
   display: block !important;
   width: auto !important;
@@ -439,7 +436,7 @@ html.ldp-composer-window-interacting * {
 }
 
 @media (max-width: 760px) {
-  html.ldp-reader-open #reply-control:not(.closed) {
+  html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"]:not(.closed) {
     top: auto !important;
     right: 6px !important;
     bottom: 0 !important;
@@ -458,7 +455,7 @@ html.ldp-composer-window-interacting * {
     display: none !important;
   }
 
-  html.ldp-reader-open #reply-control :is(.d-editor-preview-wrapper, .composer-preview, .preview-area) {
+  html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"] :is(.d-editor-preview-wrapper, .composer-preview, .preview-area) {
     min-height: 140px !important;
   }
 }

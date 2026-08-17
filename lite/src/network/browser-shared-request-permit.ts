@@ -44,6 +44,7 @@ export interface ReaderCloudflareChallengeWindowMonitorOptions {
 	readonly storage: Pick<Storage, 'getItem'>;
 	readonly close: () => void;
 	readonly storageEvents?: EventTarget | null;
+	readonly broadcastChannelFactory?: ((name: string) => BroadcastChannel) | null;
 	readonly schedule?: (callback: () => void, intervalMs: number) => unknown;
 	readonly cancel?: (handle: unknown) => void;
 	readonly intervalMs?: number;
@@ -96,13 +97,24 @@ export function monitorReaderCloudflareChallengeWindow(
 	const now = options.now ?? Date.now;
 	const onError = options.onError ?? (() => {});
 	let timer: unknown = null;
+	let channel: BroadcastChannel | null = null;
 	let stopped = false;
+	const onBroadcastMessage = (event: MessageEvent<unknown>): void => {
+		const message = event.data as Readonly<{
+			readonly schemaVersion?: unknown;
+			readonly type?: unknown;
+		}> | null;
+		if (message?.schemaVersion === 1 && message.type === 'updated') check();
+	};
 	const stop = (): void => {
 		if (stopped) return;
 		stopped = true;
 		if (timer !== null) cancel(timer);
 		timer = null;
 		options.storageEvents?.removeEventListener('storage', onStorage);
+		channel?.removeEventListener('message', onBroadcastMessage);
+		channel?.close();
+		channel = null;
 	};
 	const check = (): void => {
 		if (
@@ -124,6 +136,15 @@ export function monitorReaderCloudflareChallengeWindow(
 		}
 	};
 	options.storageEvents?.addEventListener('storage', onStorage);
+	try {
+		channel = options.broadcastChannelFactory?.(
+			READER_REQUEST_PERMIT_CHANNEL,
+		) ?? null;
+		channel?.addEventListener('message', onBroadcastMessage);
+	} catch (error) {
+		onError(error);
+		channel = null;
+	}
 	check();
 	if (!stopped) timer = schedule(check, intervalMs);
 	return stop;
@@ -720,6 +741,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 	) => 'pending' | 'passed';
 	readonly #verifyChallenge: ((signal: AbortSignal) => Promise<boolean>) | null;
 	readonly #waiters = new Set<() => void>();
+	readonly #stateChangeListeners = new Set<() => void>();
 	readonly #channel: BroadcastChannel | null;
 	#fallbackState = emptyState();
 	#localTransactionTail: Promise<void> = Promise.resolve();
@@ -859,9 +881,16 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 				// 销毁只做尽力回收，不让浏览器窗口异常阻断其他 cleanup。
 			}
 			this.#challengeWindow = null;
+			this.#stateChangeListeners.clear();
 			this.#wake();
 			void this.#removeOwnedState();
 		});
+	}
+
+	subscribeStateChanges(listener: () => void): () => void {
+		this.#assertOpen();
+		this.#stateChangeListeners.add(listener);
+		return () => this.#stateChangeListeners.delete(listener);
 	}
 
 	async acquire(input: RequestStartGateInput): Promise<RequestStartPermit> {
@@ -1438,13 +1467,19 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			READER_CLOUDFLARE_CHALLENGE_MAX_PROBE_INTERVAL_MS,
 		);
 		let nextVerifyAt = this.#now() + verifyDelayMs;
+		let popupLoadRevision = 0;
+		let popupLoadExpeditePromise = Promise.resolve();
 		const onPopupLoad: EventListener = () => {
 			/*
 			 * 用户完成 Turnstile 后通常会触发同窗导航/load。此时不能继续等待
-			 * 最长 10 秒的指数退避；立刻允许共享 session 探针确认并收窗。
+			 * 最长 10 秒的指数退避；串行清除共享探针退避，并用 revision 保证
+			 * load 若撞上在途失败探针，失败结算也不能覆盖这次即时复核。
 			 */
+			popupLoadRevision += 1;
 			nextVerifyAt = this.#now();
-			void this.#expediteChallengeProbeAfterLoad();
+			popupLoadExpeditePromise = popupLoadExpeditePromise.then(() =>
+				this.#expediteChallengeProbeAfterLoad());
+			void popupLoadExpeditePromise;
 		};
 		popup.addEventListener?.('load', onPopupLoad);
 		this.#focusChallengeWindow();
@@ -1477,9 +1512,9 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 					return true;
 				}
 				if (probeDue) {
+					const loadRevisionBeforeProbe = popupLoadRevision;
+					await popupLoadExpeditePromise;
 					const verified = await this.#challengePassesProbe(signal);
-					verifyDelayMs = Math.min(maxVerifyDelayMs, verifyDelayMs * 2);
-					nextVerifyAt = this.#now() + verifyDelayMs;
 					if (verified) {
 						await this.#completeChallengeLease();
 						try {
@@ -1490,6 +1525,14 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 						this.#challengeWindow = null;
 						return true;
 					}
+					if (popupLoadRevision !== loadRevisionBeforeProbe) {
+						await popupLoadExpeditePromise;
+						verifyDelayMs = this.#challengeVerifyIntervalMs;
+						nextVerifyAt = this.#now();
+						continue;
+					}
+					verifyDelayMs = Math.min(maxVerifyDelayMs, verifyDelayMs * 2);
+					nextVerifyAt = this.#now() + verifyDelayMs;
 				}
 				const owned = await this.#transact((state, now) => {
 					if (
@@ -2108,6 +2151,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			state.updatedAt = now;
 			this.#write(state);
 			this.#publish();
+			this.#notifyStateChange();
 			this.#wake();
 			return result;
 		};
@@ -2178,6 +2222,16 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			}));
 		} catch (error) {
 			this.#onError(error);
+		}
+	}
+
+	#notifyStateChange(): void {
+		for (const listener of [...this.#stateChangeListeners]) {
+			try {
+				listener();
+			} catch (error) {
+				this.#onError(error);
+			}
 		}
 	}
 
@@ -2295,11 +2349,21 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			this.#challengeFocusRequested = true;
 			this.#focusChallengeWindow();
 		}
+		if (
+			message?.schemaVersion === 1 &&
+			message.sourceId !== this.#sourceId &&
+			message.type === 'updated'
+		) {
+			this.#notifyStateChange();
+		}
 		this.#wake();
 	};
 
 	readonly #onStorage = (event: Event): void => {
 		const key = (event as StorageEvent).key;
-		if (key === null || key === READER_REQUEST_PERMIT_STORAGE_KEY) this.#wake();
+		if (key === null || key === READER_REQUEST_PERMIT_STORAGE_KEY) {
+			this.#notifyStateChange();
+			this.#wake();
+		}
 	};
 }

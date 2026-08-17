@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.4
+// @version      1.5.5
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.4 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.5.5 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.4",
+			sourceVersion: "1.5.5",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.4") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.5") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -5850,7 +5850,7 @@ ${inserted}`), after && !/^\s/.test(after) && (inserted += `
 	    );
 	  }
 	  bindWindow(port) {
-	    return this.#assertActive(), this.#windowPort = port, this.#presentComposerWindow(), () => {
+	    return this.#assertActive(), this.#windowPort = port, this.#session && this.#presentComposerWindow(), () => {
 	      this.#windowPort === port && (this.#windowPort = null);
 	    };
 	  }
@@ -6601,7 +6601,7 @@ ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer,
 	      throw new Error("DiscourseComposerTopicSyncController 已销毁");
 	  }
 	}
-}, "41f7e0c2861c4a517ecb56480e90811536d897e16b376788be46012bd6349ea5");
+}, "15a15d4ab9fbacbed02df246d9066f3d29e78cbcf408dc595536d1564fb0aa00");
 
 /* Source: lite/src/discourse/native-host-api.ts */
 runtime.register("src/discourse/native-host-api.js", function(module, exports, require) {
@@ -8603,7 +8603,7 @@ runtime.register("src/discourse/reader-native-composer-window.js", function(modu
 	  "--tertiary",
 	  "--tertiary-low",
 	  "--d-link-color"
-	]), RESIZE_DIRECTIONS = Object.freeze([
+	]), COMPOSER_TOP_LAYER_FALLBACK_CLASS = "ldp-composer-top-layer-fallback", RESIZE_DIRECTIONS = Object.freeze([
 	  "n",
 	  "s",
 	  "e",
@@ -8746,6 +8746,7 @@ runtime.register("src/discourse/reader-native-composer-window.js", function(modu
 	  #overflowFrame = 0;
 	  #floatingFrame = 0;
 	  #persistTimer = 0;
+	  #managed = !1;
 	  #destroyed = !1;
 	  constructor(options) {
 	    this.#document = options.document, this.#window = options.window, this.#mount = options.mount, this.#pageRoot = options.pageRoot ?? options.document.documentElement, this.#readPreferences = options.readPreferences, this.#updatePreferences = options.updatePreferences ?? null, this.#readFontProfile = options.readFontProfile ?? (() => this.#readPreferences().fontProfile), this.#readAppearance = options.readAppearance ?? null, this.#createMutationObserver = options.createMutationObserver ?? ((callback) => new MutationObserver(callback)), this.#requestFrame = options.requestFrame ?? ((callback) => this.#window.requestAnimationFrame(callback)), this.#cancelFrame = options.cancelFrame ?? ((frameId) => this.#window.cancelAnimationFrame(frameId)), this.#setTimer = options.setTimer ?? ((callback, milliseconds) => this.#window.setTimeout(callback, milliseconds)), this.#clearTimer = options.clearTimer ?? ((timerId) => this.#window.clearTimeout(timerId)), this.#topLayer = options.topLayer ?? readerNativeTopLayerPort(), this.#onError = options.onError ?? (() => {
@@ -8767,16 +8768,18 @@ runtime.register("src/discourse/reader-native-composer-window.js", function(modu
 	  open(element = null) {
 	    if (this.#destroyed) return !1;
 	    const candidate = element ?? this.#document.querySelector("#reply-control");
-	    return candidate !== this.#composer && this.#bindComposer(candidate), this.#composerAvailable() ? (this.#activate(), !0) : (this.#deactivate(), !1);
+	    return candidate !== this.#composer && this.#bindComposer(candidate), this.#composerAvailable() ? (this.#managed = !0, this.#activate(), !0) : (this.#deactivate(), !1);
 	  }
 	  sync() {
 	    if (this.#destroyed) return;
-	    const candidate = this.#document.querySelector("#reply-control");
-	    if (candidate !== this.#composer && this.#bindComposer(candidate), !this.#composerVisible()) {
-	      this.#deactivate();
-	      return;
+	    const candidate = this.#document.querySelector("#reply-control"), managed = this.#managed;
+	    if (candidate !== this.#composer && (this.#bindComposer(candidate), this.#managed = managed), !!this.#managed) {
+	      if (!this.#composerVisible()) {
+	        this.#deactivate();
+	        return;
+	      }
+	      this.#activate();
 	    }
-	    this.#activate();
 	  }
 	  syncFont(profile = this.#readFontProfile()) {
 	    !this.#composer || !this.#geometry || this.#composer.style.setProperty(
@@ -8814,10 +8817,10 @@ runtime.register("src/discourse/reader-native-composer-window.js", function(modu
 	  }
 	  #composerVisible() {
 	    const composer = this.#composer;
-	    if (!composer || !this.#composerAvailable()) return !1;
+	    if (!this.#managed || !composer || !this.#composerAvailable()) return !1;
 	    try {
-	      const style = this.#window.getComputedStyle?.(composer), stagedByReader = style?.visibility === "hidden" && this.#pageRoot.classList.contains("ldp-reader-open") && !composer.dataset.ldpReaderComposerPositioned;
-	      if (style?.display === "none" || style?.visibility === "hidden" && !stagedByReader)
+	      const style = this.#window.getComputedStyle?.(composer);
+	      if (style?.display === "none" || style?.visibility === "hidden")
 	        return !1;
 	    } catch {
 	    }
@@ -8861,7 +8864,7 @@ runtime.register("src/discourse/reader-native-composer-window.js", function(modu
 	    composer && (this.#ensureChrome(), this.#syncComposerRoot(), this.#applyGeometry(this.#geometry ?? this.#preferredGeometry()), composer.classList.contains("fullscreen") && (this.#stopPointer(), composer.style.removeProperty("translate")), this.#syncTopLayers(), this.#scheduleOverflow());
 	  }
 	  #deactivate() {
-	    this.#stopPointer(), this.#persistGeometry(), this.#releaseTopLayers(), this.#chrome && (this.#chrome.hidden = !0), this.#geometry = null, this.#clearGeometry(), this.#clearOverflow(), this.#clearComposerRoot();
+	    this.#managed = !1, this.#stopPointer(), this.#persistGeometry(), this.#releaseTopLayers(), this.#chrome && (this.#chrome.hidden = !0), this.#geometry = null, this.#clearGeometry(), this.#clearOverflow(), this.#clearComposerRoot();
 	  }
 	  #applyGeometry(value) {
 	    const composer = this.#composer;
@@ -9148,10 +9151,10 @@ runtime.register("src/discourse/reader-native-composer-window.js", function(modu
 	      return;
 	    }
 	    if (!this.#promoteTopLayer(composer, "composer")) {
-	      this.#releaseFloatingTopLayers();
+	      this.#pageRoot.classList.add(COMPOSER_TOP_LAYER_FALLBACK_CLASS), this.#releaseFloatingTopLayers();
 	      return;
 	    }
-	    this.#chrome && !this.#chrome.hidden && this.#promoteTopLayer(this.#chrome, "chrome"), this.#startFloatingObservation(), this.#scheduleFloating();
+	    this.#pageRoot.classList.remove(COMPOSER_TOP_LAYER_FALLBACK_CLASS), this.#chrome && !this.#chrome.hidden && this.#promoteTopLayer(this.#chrome, "chrome"), this.#startFloatingObservation(), this.#scheduleFloating();
 	  }
 	  #startFloatingObservation() {
 	    this.#floatingObserver || !this.#document.body || (this.#floatingObserver = this.#createMutationObserver((mutations) => {
@@ -9190,7 +9193,7 @@ runtime.register("src/discourse/reader-native-composer-window.js", function(modu
 	      element.dataset.ldpReaderTopLayer === "portal" && this.#releaseTopLayer(element);
 	  }
 	  #releaseTopLayers() {
-	    this.#releaseFloatingTopLayers();
+	    this.#pageRoot.classList.remove(COMPOSER_TOP_LAYER_FALLBACK_CLASS), this.#releaseFloatingTopLayers();
 	    for (const element of [...this.#ownedTopLayers].reverse())
 	      this.#releaseTopLayer(element);
 	  }
@@ -9210,7 +9213,7 @@ runtime.register("src/discourse/reader-native-composer-window.js", function(modu
 	    }
 	  }
 	}
-}, "7d6bc57aadd215f81aea59593a589569369ea0826545f18133f7b4fc44597805");
+}, "3512a7c5d26fb9ad519f866ba8816c86db4e4929df4ee374daa361483e280fce");
 
 /* Source: lite/src/discourse/reader-native-post-admin-menu.ts */
 runtime.register("src/discourse/reader-native-post-admin-menu.js", function(module, exports, require) {
@@ -13872,9 +13875,12 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	function monitorReaderCloudflareChallengeWindow(options) {
 	  const schedule = options.schedule ?? ((callback, intervalMs2) => setInterval(callback, intervalMs2)), cancel = options.cancel ?? ((handle) => clearInterval(handle)), intervalMs = Math.max(250, Number(options.intervalMs ?? 1e3)), now = options.now ?? Date.now, onError = options.onError ?? (() => {
 	  });
-	  let timer = null, stopped = !1;
-	  const stop = () => {
-	    stopped || (stopped = !0, timer !== null && cancel(timer), timer = null, options.storageEvents?.removeEventListener("storage", onStorage));
+	  let timer = null, channel = null, stopped = !1;
+	  const onBroadcastMessage = (event) => {
+	    const message = event.data;
+	    message?.schemaVersion === 1 && message.type === "updated" && check();
+	  }, stop = () => {
+	    stopped || (stopped = !0, timer !== null && cancel(timer), timer = null, options.storageEvents?.removeEventListener("storage", onStorage), channel?.removeEventListener("message", onBroadcastMessage), channel?.close(), channel = null);
 	  }, check = () => {
 	    if (!(stopped || readerCloudflareChallengeLeaseState(options.storage, now()) !== "released"))
 	      try {
@@ -13886,7 +13892,15 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	    const key = event.key;
 	    (key == null || key === READER_REQUEST_PERMIT_STORAGE_KEY) && check();
 	  };
-	  return options.storageEvents?.addEventListener("storage", onStorage), check(), stopped || (timer = schedule(check, intervalMs)), stop;
+	  options.storageEvents?.addEventListener("storage", onStorage);
+	  try {
+	    channel = options.broadcastChannelFactory?.(
+	      READER_REQUEST_PERMIT_CHANNEL
+	    ) ?? null, channel?.addEventListener("message", onBroadcastMessage);
+	  } catch (error) {
+	    onError(error), channel = null;
+	  }
+	  return check(), stopped || (timer = schedule(check, intervalMs)), stop;
 	}
 	function storedChallengeProbeState(source) {
 	  if (!source) return Object.freeze({});
@@ -14094,6 +14108,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	  #inspectChallenge;
 	  #verifyChallenge;
 	  #waiters = /* @__PURE__ */ new Set();
+	  #stateChangeListeners = /* @__PURE__ */ new Set();
 	  #channel;
 	  #fallbackState = emptyState();
 	  #localTransactionTail = Promise.resolve();
@@ -14175,8 +14190,11 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	        this.#challengeWindow?.close?.();
 	      } catch {
 	      }
-	      this.#challengeWindow = null, this.#wake(), this.#removeOwnedState();
+	      this.#challengeWindow = null, this.#stateChangeListeners.clear(), this.#wake(), this.#removeOwnedState();
 	    });
+	  }
+	  subscribeStateChanges(listener) {
+	    return this.#assertOpen(), this.#stateChangeListeners.add(listener), () => this.#stateChangeListeners.delete(listener);
 	  }
 	  async acquire(input) {
 	    if (this.#assertOpen(), input.signal.aborted) throw this.#abortReason(input.signal);
@@ -14539,9 +14557,9 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	      verifyDelayMs,
 	      READER_CLOUDFLARE_CHALLENGE_MAX_PROBE_INTERVAL_MS
 	    );
-	    let nextVerifyAt = this.#now() + verifyDelayMs;
+	    let nextVerifyAt = this.#now() + verifyDelayMs, popupLoadRevision = 0, popupLoadExpeditePromise = Promise.resolve();
 	    const onPopupLoad = () => {
-	      nextVerifyAt = this.#now(), this.#expediteChallengeProbeAfterLoad();
+	      popupLoadRevision += 1, nextVerifyAt = this.#now(), popupLoadExpeditePromise = popupLoadExpeditePromise.then(() => this.#expediteChallengeProbeAfterLoad());
 	    };
 	    popup.addEventListener?.("load", onPopupLoad), this.#focusChallengeWindow();
 	    try {
@@ -14559,8 +14577,8 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	          return this.#challengeWindow = null, !0;
 	        }
 	        if (probeDue) {
-	          const verified = await this.#challengePassesProbe(signal);
-	          if (verifyDelayMs = Math.min(maxVerifyDelayMs, verifyDelayMs * 2), nextVerifyAt = this.#now() + verifyDelayMs, verified) {
+	          const loadRevisionBeforeProbe = popupLoadRevision;
+	          if (await popupLoadExpeditePromise, await this.#challengePassesProbe(signal)) {
 	            await this.#completeChallengeLease();
 	            try {
 	              popup.close?.();
@@ -14568,6 +14586,11 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	            }
 	            return this.#challengeWindow = null, !0;
 	          }
+	          if (popupLoadRevision !== loadRevisionBeforeProbe) {
+	            await popupLoadExpeditePromise, verifyDelayMs = this.#challengeVerifyIntervalMs, nextVerifyAt = this.#now();
+	            continue;
+	          }
+	          verifyDelayMs = Math.min(maxVerifyDelayMs, verifyDelayMs * 2), nextVerifyAt = this.#now() + verifyDelayMs;
 	        }
 	        if (!await this.#transact((state, now) => state.challenge?.state !== "active" || state.challenge.ownerId !== this.#sourceId ? !1 : (state.challenge = Object.freeze({
 	          ...state.challenge,
@@ -14968,7 +14991,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	  async #transact(operation) {
 	    const execute = async () => {
 	      const now = this.#now(), state = this.#read(now), result = await operation(state, now);
-	      return state.updatedAt = now, this.#write(state), this.#publish(), this.#wake(), result;
+	      return state.updatedAt = now, this.#write(state), this.#publish(), this.#notifyStateChange(), this.#wake(), result;
 	    };
 	    if (this.#locks)
 	      return this.#locks.request(
@@ -15023,6 +15046,14 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	    } catch (error) {
 	      this.#onError(error);
 	    }
+	  }
+	  #notifyStateChange() {
+	    for (const listener of [...this.#stateChangeListeners])
+	      try {
+	        listener();
+	      } catch (error) {
+	        this.#onError(error);
+	      }
 	  }
 	  #wait(milliseconds, signal) {
 	    return new Promise((resolve, reject) => {
@@ -15095,14 +15126,14 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	  }
 	  #onChannelMessage = (event) => {
 	    const message = event.data;
-	    message?.schemaVersion === 1 && message.sourceId !== this.#sourceId && message.type === "challenge-focus" && this.#challengePromise && (this.#challengeFocusRequested = !0, this.#focusChallengeWindow()), this.#wake();
+	    message?.schemaVersion === 1 && message.sourceId !== this.#sourceId && message.type === "challenge-focus" && this.#challengePromise && (this.#challengeFocusRequested = !0, this.#focusChallengeWindow()), message?.schemaVersion === 1 && message.sourceId !== this.#sourceId && message.type === "updated" && this.#notifyStateChange(), this.#wake();
 	  };
 	  #onStorage = (event) => {
 	    const key = event.key;
-	    (key === null || key === READER_REQUEST_PERMIT_STORAGE_KEY) && this.#wake();
+	    (key === null || key === READER_REQUEST_PERMIT_STORAGE_KEY) && (this.#notifyStateChange(), this.#wake());
 	  };
 	}
-}, "adba9b8251b6c7fa63800935d91f471ed0b617fe5dffcb47286acfe406e0a859");
+}, "e4a67daacd8aebd6449c3382c4ee9fb74750bbd7a8e4929b7c2eae87a9dd7696");
 
 /* Source: lite/src/network/coordinated-request-client.ts */
 runtime.register("src/network/coordinated-request-client.js", function(module, exports, require) {

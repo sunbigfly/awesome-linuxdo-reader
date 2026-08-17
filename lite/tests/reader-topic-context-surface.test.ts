@@ -1152,6 +1152,51 @@ assert(
 	'同 Topic 引用在重试等待期间被新定位或用户滚动取消时不得再次拉回，并必须明确说明原因',
 );
 
+Object.defineProperty(session, 'loadReplyBranches', {
+	configurable: true,
+	value: async () => Object.freeze({
+		rootPostNumbers: Object.freeze([discoursePostNumber(2)]),
+		postNumbers: Object.freeze([
+			discoursePostNumber(2),
+			discoursePostNumber(3),
+			discoursePostNumber(4),
+		]),
+		parentPostNumbers: Object.freeze([discoursePostNumber(2)]),
+		expectedReplyCount: 2,
+		loadedReplyCount: 2,
+		complete: true,
+		contextualReplyRelations: Object.freeze([Object.freeze({
+			parentPostNumber: discoursePostNumber(2),
+			postNumber: discoursePostNumber(4),
+		})]),
+		errors: Object.freeze([]),
+	}),
+});
+const reparentedDiscussionReveal = await surface.revealDiscussionPost(4);
+const reparentedDiscussionRoot = surface.discussionDomOwner.view(2)!.slots;
+const reparentedDiscussionChild = surface.discussionDomOwner.view(3)!.slots;
+const reparentedDiscussionDeep = surface.discussionDomOwner.view(4)!.slots;
+surface.discussionBranchOverlay.paint();
+assert(
+	reparentedDiscussionReveal?.element === reparentedDiscussionDeep.root &&
+		reparentedDiscussionDeep.root.parentElement ===
+			reparentedDiscussionRoot.replyList &&
+		!reparentedDiscussionChild.replyList.contains(
+			reparentedDiscussionDeep.root,
+		) &&
+		reparentedDiscussionDeep.root.dataset.ldpNestDepth === '1' &&
+		Boolean(reparentedDiscussionDeep.root.querySelector(
+			':scope > .ldp-reader-branch-rail-toggle' +
+			'[data-reader-branch-toggle="2"]',
+		)),
+	'完整分支接口在同一批预加载楼层中修正父级后，必须递增局部拓扑版本并把 DOM 原位重挂到新父级，使分段回复线继续指向上方锚点',
+);
+controller.closeDiscussion();
+Object.defineProperty(session, 'loadReplyBranches', {
+	configurable: true,
+	value: undefined,
+});
+
 const hiddenDiscussionReveal = await surface.revealDiscussionPost(4);
 const discussionLayer = modal.querySelector<HTMLElement>(
 	'.ldp-descendant-replies-layer',

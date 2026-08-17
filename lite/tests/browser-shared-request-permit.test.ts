@@ -116,10 +116,13 @@ challengeWindowStorage.setItem(
 const selfClosingChallengeWindowMonitor: {
 	check: (() => void) | null;
 } = { check: null };
+const challengeWindowChannels = new Set<MemoryBroadcastChannel>();
 let selfClosingChallengeWindowClosed = 0;
 let selfClosingChallengeWindowMonitorCancelled = 0;
 const stopChallengeWindowMonitor = monitorReaderCloudflareChallengeWindow({
 	storage: challengeWindowStorage,
+	broadcastChannelFactory: () =>
+		new MemoryBroadcastChannel(challengeWindowChannels) as unknown as BroadcastChannel,
 	close: () => {
 		selfClosingChallengeWindowClosed += 1;
 	},
@@ -150,12 +153,21 @@ challengeWindowStorage.setItem(
 		},
 	}),
 );
-selfClosingChallengeWindowMonitor.check?.();
+const challengeWindowBroadcaster = new MemoryBroadcastChannel(
+	challengeWindowChannels,
+);
+challengeWindowBroadcaster.postMessage(Object.freeze({
+	schemaVersion: 1,
+	sourceId: 'reader-owner',
+	type: 'updated',
+}));
+await delay(0);
 assert(
 	Number(selfClosingChallengeWindowClosed) === 1 &&
 		Number(selfClosingChallengeWindowMonitorCancelled) === 1,
 	'共享过盾横幅消失后，challenge 页必须自行关闭并停止轮询',
 );
+challengeWindowBroadcaster.close();
 stopChallengeWindowMonitor();
 
 assert(
@@ -223,6 +235,57 @@ function permitOptions(
 		random: () => 0,
 	};
 }
+
+const sharedStateStorage = new MemoryStorage();
+const sharedStateLocks = new LockQueue();
+const sharedStateChannels = new Set<MemoryBroadcastChannel>();
+const sharedStateOptions = (sourceId: string) => ({
+	...permitOptions(sharedStateStorage, sharedStateLocks, sourceId),
+	broadcastChannelFactory: () =>
+		new MemoryBroadcastChannel(sharedStateChannels) as unknown as BroadcastChannel,
+});
+const sharedStateFirst = new BrowserSharedRequestPermit(
+	sharedStateOptions('shared-state-a'),
+);
+const sharedStateSecond = new BrowserSharedRequestPermit(
+	sharedStateOptions('shared-state-b'),
+);
+let sharedStateFirstEvents = 0;
+let sharedStateSecondEvents = 0;
+const unsubscribeSharedStateFirst = sharedStateFirst.subscribeStateChanges(() => {
+	sharedStateFirstEvents += 1;
+});
+const unsubscribeSharedStateSecond = sharedStateSecond.subscribeStateChanges(() => {
+	sharedStateSecondEvents += 1;
+});
+const sharedStateRateLimitAt = Date.now();
+await sharedStateFirst.noteRateLimit(Object.freeze({
+	scope: 'global',
+	waitMs: 2_000,
+	retryAt: sharedStateRateLimitAt + 2_000,
+	fingerprint: 'GET:https://linux.do/t/429.json',
+	route: 'GET:https://linux.do/t/:id.json',
+	window: 'unknown',
+}));
+await delay(0);
+assert(
+	sharedStateFirstEvents === 1 &&
+		sharedStateSecondEvents === 1 &&
+		(await sharedStateSecond.snapshot()).blockingReason === 'rate-limit',
+	'任一标签建立 429 状态后，本页与其他标签都必须立即收到共享状态事件',
+);
+await sharedStateSecond.resetRateLimits();
+await delay(0);
+assert(
+	sharedStateFirstEvents === 2 &&
+		sharedStateSecondEvents === 2 &&
+		(await sharedStateFirst.snapshot()).blockingReason !== 'rate-limit',
+	'任一标签清除 429 状态后，所有标签都必须通过广播立即解除共享暂停',
+);
+unsubscribeSharedStateFirst();
+unsubscribeSharedStateSecond();
+sharedStateFirst.destroy();
+sharedStateSecond.destroy();
 
 const storage = new MemoryStorage();
 const locks = new LockQueue();
@@ -1514,6 +1577,93 @@ assert(
 	})}`,
 );
 opaquePopupPermit.destroy();
+
+let racingPopupClosed = false;
+let racingPopupLoadListener: EventListener | null = null;
+let racingVerificationCalls = 0;
+let racingVerificationPassed = false;
+let startRacingVerification = (): void => {};
+const racingVerificationStarted = new Promise<void>((resolve) => {
+	startRacingVerification = resolve;
+});
+let finishRacingVerification = (): void => {};
+const racingVerificationGate = new Promise<void>((resolve) => {
+	finishRacingVerification = resolve;
+});
+const racingPopupPermit = new BrowserSharedRequestPermit({
+	...permitOptions(new MemoryStorage(), new LockQueue(), 'challenge-load-race'),
+	challenge: {
+		origin: 'https://linux.do',
+		open: () => ({
+			get closed() {
+				return racingPopupClosed;
+			},
+			addEventListener(type: string, listener: EventListener) {
+				if (type === 'load') racingPopupLoadListener = listener;
+			},
+			removeEventListener(type: string, listener: EventListener) {
+				if (type === 'load' && racingPopupLoadListener === listener) {
+					racingPopupLoadListener = null;
+				}
+			},
+			close() {
+				racingPopupClosed = true;
+			},
+		}),
+		inspect: () => 'pending',
+		verify: async () => {
+			racingVerificationCalls += 1;
+			if (racingVerificationCalls === 1) return false;
+			if (racingVerificationCalls === 2) {
+				startRacingVerification();
+				await racingVerificationGate;
+				return false;
+			}
+			return racingVerificationPassed;
+		},
+		pollIntervalMs: 5,
+		verifyIntervalMs: 5_000,
+		leaseTtlMs: 10_000,
+		maxWaitMs: 15_000,
+	},
+});
+const racingPopupController = new AbortController();
+const racingPopupChallengePending = racingPopupPermit.resolveCloudflareChallenge({
+	href: 'https://linux.do/t/load-race.json',
+	signal: racingPopupController.signal,
+	focus: true,
+});
+for (let turn = 0; turn < 200; turn += 1) {
+	if (racingPopupLoadListener) break;
+	await delay(1);
+}
+(racingPopupLoadListener as EventListener | null)?.({} as Event);
+await racingVerificationStarted;
+racingVerificationPassed = true;
+(racingPopupLoadListener as EventListener | null)?.({} as Event);
+finishRacingVerification();
+const racingPopupChallenge = await Promise.race([
+	racingPopupChallengePending,
+	delay(250).then(() => false),
+]);
+if (!racingPopupChallenge) {
+	racingPopupController.abort(new DOMException('test-complete', 'AbortError'));
+	await racingPopupChallengePending.catch(() => false);
+}
+const racingPopupState = await racingPopupPermit.snapshot();
+racingPopupPermit.destroy();
+assert(
+	racingPopupChallenge &&
+		racingVerificationCalls === 3 &&
+		racingPopupClosed &&
+		racingPopupState.challengeState === 'passed',
+	`验证页 load 撞上在途失败探针时必须立即复核、跨标签解闸并关闭唯一窗口：${JSON.stringify({
+		racingPopupChallenge,
+		racingVerificationCalls,
+		racingPopupClosed,
+		state: racingPopupState.challengeState,
+	})}`,
+);
 
 let closedChallengeWindow = false;
 let closedChallengeOpens = 0;

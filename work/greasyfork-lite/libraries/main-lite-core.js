@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.4
+// @version      1.5.5
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.4 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.5.5 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.4",
+			sourceVersion: "1.5.5",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.4") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.5") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -976,6 +976,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        },
 	        challengeHref: this.#challengeHref,
 	        snapshot: () => this.permit.snapshot(),
+	        subscribe: (listener) => this.permit.subscribeStateChanges(listener),
 	        parentScope: this.scope
 	      }), this.scope.listen(this.shell.view.root, "click", (event) => {
 	        const target = event.target, anchor = typeof target?.closest == "function" ? target.closest(
@@ -5991,7 +5992,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    }
 	  });
 	}
-}, "0abd468df5386942efbe50b9adb8c8868ce985ccdfc21defa3dc6aac7b340d3c");
+}, "68fb2239063f69c11fbbd6d1c85945bfbd00a750f82c0a6485ae41c4dca80887");
 
 /* Source: lite/src/app/reader-data-runtime.ts */
 runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -12127,13 +12128,18 @@ runtime.register("src/shell/reader-rate-limit-notice.js", function(module, expor
 	  #document;
 	  #elements;
 	  #snapshot;
+	  #challengeAvailable;
 	  #intervalMs;
 	  #timer = null;
 	  #epoch = 0;
 	  constructor(options) {
-	    this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#document = options.document, this.#elements = options.elements, this.#snapshot = options.snapshot, this.#intervalMs = Math.max(250, options.intervalMs ?? 1e3), options.challengeHref ? (this.#elements.challenge.href = options.challengeHref, this.#elements.challenge.hidden = !1) : (this.#elements.challenge.removeAttribute("href"), this.#elements.challenge.hidden = !0), this.scope.listen(this.#document, "visibilitychange", () => {
+	    this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#document = options.document, this.#elements = options.elements, this.#snapshot = options.snapshot, this.#challengeAvailable = !!options.challengeHref, this.#intervalMs = Math.max(250, options.intervalMs ?? 1e3), options.challengeHref ? (this.#elements.challenge.href = options.challengeHref, this.#elements.challenge.hidden = !1) : (this.#elements.challenge.removeAttribute("href"), this.#elements.challenge.hidden = !0), this.scope.listen(this.#document, "visibilitychange", () => {
 	      this.#syncPolling();
-	    }), this.scope.add(() => {
+	    });
+	    const unsubscribe = options.subscribe?.(() => {
+	      this.refresh();
+	    });
+	    unsubscribe && this.scope.add(unsubscribe), this.scope.add(() => {
 	      this.#epoch += 1, this.#stopPolling(), this.#hide();
 	    }), this.#syncPolling();
 	  }
@@ -12144,11 +12150,15 @@ runtime.register("src/shell/reader-rate-limit-notice.js", function(module, expor
 	      const snapshot = await this.#snapshot();
 	      if (this.scope.destroyed || epoch !== this.#epoch) return;
 	      if (snapshot.challengeState === "required") {
-	        this.#elements.detail.textContent = "关键 Reader 请求遇到 Cloudflare 验证，已暂停后续请求；Reader 会先自动探测，确有需要时只打开一个过盾页。若浏览器拦截，请点击右侧按钮。", this.#show();
+	        this.#showChallenge(), this.#elements.detail.textContent = "关键 Reader 请求遇到 Cloudflare 验证，已暂停后续请求；Reader 会先自动探测，确有需要时只打开一个过盾页。若浏览器拦截，请点击右侧按钮。", this.#show();
 	        return;
 	      }
 	      if (snapshot.challengeState === "active") {
-	        this.#elements.detail.textContent = snapshot.challengeOwned ? "本页过盾浮窗已打开；若未显示，点击右侧按钮唤起。验证完成后请求自动恢复。" : "其他标签页已有唯一过盾浮窗；点击右侧按钮可唤起。验证完成后请求自动恢复。", this.#show();
+	        this.#showChallenge(), this.#elements.detail.textContent = snapshot.challengeOwned ? "本页过盾浮窗已打开；若未显示，点击右侧按钮唤起。验证完成后请求自动恢复。" : "其他标签页已有唯一过盾浮窗；点击右侧按钮可唤起。验证完成后请求自动恢复。", this.#show();
+	        return;
+	      }
+	      if (snapshot.blockingReason === "rate-limit" && snapshot.nextPermitDelay > 0) {
+	        this.#elements.detail.textContent = "站点返回 429，所有 Reader 标签页已共享暂停；收到恢复状态后会立即解除。", this.#elements.challenge.hidden = !0, this.#show();
 	        return;
 	      }
 	      this.#hide();
@@ -12162,6 +12172,9 @@ runtime.register("src/shell/reader-rate-limit-notice.js", function(module, expor
 	  #show() {
 	    delete this.#elements.root.dataset.cooldownSeconds, this.#elements.root.hidden = !1;
 	  }
+	  #showChallenge() {
+	    this.#elements.challenge.hidden = !this.#challengeAvailable;
+	  }
 	  #hide() {
 	    this.#elements.root.hidden = !0, delete this.#elements.root.dataset.cooldownSeconds;
 	  }
@@ -12174,7 +12187,7 @@ runtime.register("src/shell/reader-rate-limit-notice.js", function(module, expor
 	    this.#timer !== null && (clearInterval(this.#timer), this.#timer = null);
 	  }
 	}
-}, "392d0bce3a596eb5e2e190f56ba98ac4c7628a402e761234d01dd73cc7f0cfd3");
+}, "ffc689757ef08d03e359509dc5638fda944c2e241c88586d62a685b575595b68");
 
 /* Source: lite/src/shell/reader-report-form-surface.ts */
 runtime.register("src/shell/reader-report-form-surface.js", function(module, exports, require) {
@@ -20953,10 +20966,19 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	}
 	class ReaderTopicDiscussionTopology {
 	  #snapshot = null;
+	  #revision = 0;
 	  #entries = /* @__PURE__ */ new Map();
+	  get revision() {
+	    return this.#revision;
+	  }
 	  update(snapshot) {
-	    this.#snapshot = snapshot, this.#entries.clear();
-	    for (const entry of snapshot?.entries ?? [])
+	    const nextEntries = snapshot?.entries ?? [];
+	    let structureChanged = snapshot === null != (this.#snapshot === null) || snapshot?.rootPostNumber !== this.#snapshot?.rootPostNumber || nextEntries.length !== this.#entries.size;
+	    structureChanged || (structureChanged = nextEntries.some((entry) => {
+	      const previous = this.#entries.get(entry.postNumber);
+	      return !previous || previous.parentPostNumber !== entry.parentPostNumber || previous.depth !== entry.depth;
+	    })), structureChanged && (this.#revision += 1), this.#snapshot = snapshot, this.#entries.clear();
+	    for (const entry of nextEntries)
 	      this.#entries.set(entry.postNumber, entry);
 	  }
 	  parentOf(postNumber) {
@@ -21714,7 +21736,7 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	    );
 	  }
 	}
-}, "e45424c3aafd09efdca21b0462127c7afb219c5a6822057c5477bbfeea0ac664");
+}, "4730fc43e035eea5c6a5f9b1fa16c90d8448029d33bdfa66859225188c49bb71");
 
 /* Source: lite/src/topic/reader-topic-core-bundle.ts */
 runtime.register("src/topic/reader-topic-core-bundle.js", function(module, exports, require) {
@@ -29643,6 +29665,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	    const stopMonitor = (0, import_browser_shared_request_permit.monitorReaderCloudflareChallengeWindow)({
 	      storage: window.localStorage,
 	      storageEvents: window,
+	      broadcastChannelFactory: typeof BroadcastChannel == "function" ? (name) => new BroadcastChannel(name) : null,
 	      close: () => window.close(),
 	      schedule: (callback, intervalMs) => window.setInterval(callback, intervalMs),
 	      cancel: (handle2) => window.clearInterval(Number(handle2)),
@@ -29814,7 +29837,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	  }), handle;
 	}
 	const startMianLiteUserscript = startMainLiteUserscript;
-}, "5c5e746795cb6783c6de26a2b11699c0e945f6c825101206e3fdd80a4b43f60f");
+}, "18d9877c450bfeb4f228abf22e98e5156e20c7f0189b6b2e773ee91d97ccb20f");
 
 /* Source: lite/src/userscript/main-lite-entry.ts */
 runtime.register("src/userscript/main-lite-entry.js", function(module, exports, require) {
