@@ -111,6 +111,10 @@ const manager = new ReaderSettingsConfigManager({
 	customSites,
 	translation,
 	webDav,
+	prepareResetPreferences: (resetDefaults, current) => Object.freeze({
+		...resetDefaults,
+		theme: current.theme,
+	}),
 });
 
 const exported = await manager.export();
@@ -445,12 +449,12 @@ assert(
 
 await manager.reset();
 assert(
-	preferences.theme === defaults.theme &&
+	String(preferences.theme) === 'dark' &&
 	preferences.density === defaults.density &&
 	customSites.snapshot.length === 0 &&
 	String(translation.snapshot.config.profiles[0]?.apiKey) === '' &&
 	webDav.snapshot.config.username === '' &&
 	webDav.snapshot.config.password === '' &&
 	!webDav.snapshot.config.autoSyncEnabled,
-	'恢复全部默认必须覆盖四类设置并清除本机翻译/WebDAV 凭据',
+	'恢复全部默认必须允许业务 owner 保留高价值偏好，同时重置其他偏好与三类独立设置',
 );

@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.3
+// @version      1.5.4
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户、翻译与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.3 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.5.4 - main-lite-features
  * 媒体、互动、设置、用户、翻译与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.3",
+			sourceVersion: "1.5.4",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.3") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.4") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -25666,7 +25666,7 @@ runtime.register("src/settings/reader-settings-reset-reminder.js", function(modu
 	    confirmed = await options.feedback.confirm({
 	      title: "设置有较大更新",
 	      message: "本次更新调整了部分设置和默认值，建议恢复默认值，以完整应用新版体验。",
-	      note: "只重置阅读器设置和阅读队列图标位置；队列条目、浏览历史、帖子缓存和账号数据不会删除。此提示仅显示一次。",
+	      note: "只重置普通阅读器设置和阅读队列图标位置；“不想再看”的手动记录与自动过滤设置、队列条目、浏览历史、离线下载、帖子缓存和账号数据不会删除。此提示仅显示一次。",
 	      confirmLabel: "恢复默认值",
 	      cancelLabel: "保留当前设置",
 	      tone: "primary",
@@ -25677,7 +25677,7 @@ runtime.register("src/settings/reader-settings-reset-reminder.js", function(modu
 	  }
 	  if (!confirmed || options.isActive?.() === !1) return "kept";
 	  try {
-	    return options.update(options.defaults), options.feedback.show("全部设置已恢复默认"), "reset";
+	    return options.update(options.prepareResetPreferences(options.defaults)), options.feedback.show("设置已恢复默认，“不想再看”已保留"), "reset";
 	  } catch (cause) {
 	    options.onError?.(cause);
 	    try {
@@ -25687,7 +25687,7 @@ runtime.register("src/settings/reader-settings-reset-reminder.js", function(modu
 	    return "failed";
 	  }
 	}
-}, "ac4428088d31faf1e95d7befd2380cd38a5bdce3a882bd3b47b1f65b146f4753");
+}, "11ba523ec303a825eb6d32a6479b4465341121bb2a46ba0596ff3daaaf81380e");
 
 /* Source: lite/src/settings/reader-settings-view.ts */
 runtime.register("src/settings/reader-settings-view.js", function(module, exports, require) {

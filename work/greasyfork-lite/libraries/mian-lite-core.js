@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.3
+// @version      1.5.4
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.3 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.5.4 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.3",
+			sourceVersion: "1.5.4",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.3") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.4") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -4748,7 +4748,10 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        },
 	        customSites: configuration.customSites,
 	        translation: configuration.translation,
-	        webDav: configuration.webDav
+	        webDav: configuration.webDav,
+	        ...configuration.prepareResetPreferences ? {
+	          prepareResetPreferences: configuration.prepareResetPreferences
+	        } : {}
 	      }) : null, cacheSurface = settingsView ? new import_reader_cache_management_surface.ReaderCacheManagementSurface({
 	        document: options.runtime.document,
 	        host: settingsView.panelHost("cache"),
@@ -5988,7 +5991,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    }
 	  });
 	}
-}, "6bcb2cb190dc16fbf85d8f20b1a8014889d9b789d58c76512c618e5e7b91309c");
+}, "0abd468df5386942efbe50b9adb8c8868ce985ccdfc21defa3dc6aac7b340d3c");
 
 /* Source: lite/src/app/reader-data-runtime.ts */
 runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -16189,6 +16192,7 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	  createReaderPreferencesConfigCodec: () => createReaderPreferencesConfigCodec,
 	  createReaderPreferencesDefaults: () => createReaderPreferencesDefaults,
 	  createReaderPreferencesRepository: () => createReaderPreferencesRepository,
+	  createReaderPreferencesResetValue: () => createReaderPreferencesResetValue,
 	  normalizeImageProfile: () => normalizeImageProfile,
 	  normalizeReaderAppearanceProfile: () => normalizeReaderAppearanceProfile,
 	  normalizeReaderFontProfile: () => normalizeReaderFontProfile,
@@ -17014,6 +17018,14 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	    boostCopyFixedSuffix: import_reader_boost_copy_settings.DEFAULT_BOOST_COPY_SETTINGS.fixedSuffix
 	  });
 	}
+	function createReaderPreferencesResetValue(defaults, current) {
+	  return Object.freeze({
+	    ...defaults,
+	    ...import_reader_unwanted_topic_filter.readerPreferencesUnwantedTopicFilterAdapter.createPatch(
+	      import_reader_unwanted_topic_filter.readerPreferencesUnwantedTopicFilterAdapter.read(current)
+	    )
+	  });
+	}
 	function prepareStoredReaderPreferences(value) {
 	  const source = { ...plainRecord(value) }, preset = source.performancePreset;
 	  if (preset === "low" || preset === "balanced" || preset === "high") {
@@ -17236,7 +17248,7 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	    prepareStored: prepareStoredReaderPreferences
 	  });
 	}
-}, "912c4eddb46b49e2508257294d02732ccf3c2b68e66442d6e7143837ea08df20");
+}, "a16dd10ba7e82af21cb698bbcccf17fd9f9956b69a2035a5571854ee1c4d81a4");
 
 /* Source: lite/src/state/reader-settings-config-manager.ts */
 runtime.register("src/state/reader-settings-config-manager.js", function(module, exports, require) {
@@ -17461,8 +17473,9 @@ runtime.register("src/state/reader-settings-config-manager.js", function(module,
 	  #customSites;
 	  #translation;
 	  #webDav;
+	  #prepareResetPreferences;
 	  constructor(options) {
-	    this.#codec = options.codec, this.#defaults = options.defaults, this.#preferences = options.preferences, this.#customSites = options.customSites, this.#translation = options.translation, this.#webDav = options.webDav;
+	    this.#codec = options.codec, this.#defaults = options.defaults, this.#preferences = options.preferences, this.#customSites = options.customSites, this.#translation = options.translation, this.#webDav = options.webDav, this.#prepareResetPreferences = options.prepareResetPreferences ?? null;
 	  }
 	  async export() {
 	    return await Promise.all([
@@ -17483,10 +17496,14 @@ runtime.register("src/state/reader-settings-config-manager.js", function(module,
 	    return this.#apply(prepared, !0);
 	  }
 	  reset() {
+	    const preferences = this.#prepareResetPreferences?.(
+	      this.#defaults,
+	      this.#preferences.read()
+	    ) ?? this.#defaults;
 	    return this.#apply(Object.freeze({
 	      sourceVersion: READER_SETTINGS_CONFIG_EXPORT_VERSION,
 	      settingsCount: Object.keys(this.#defaults).length,
-	      preferences: this.#defaults,
+	      preferences,
 	      includesPortableSections: !0,
 	      customSites: Object.freeze([]),
 	      translation: (0, import_reader_translation_config.createReaderTranslationDefaultConfig)(),
@@ -17567,7 +17584,7 @@ runtime.register("src/state/reader-settings-config-manager.js", function(module,
 	    }
 	  }
 	}
-}, "de1850d0832f75d8e437786b0c0f3eea5e4989cf60012e3d610c43333e715ccb");
+}, "2a58b4ce6474ec760923ac4782e2ed1c0e922b62c91bd8bbd6ca15335d153d4d");
 
 /* Source: lite/src/stream/reply-tree-viewport-layout.ts */
 runtime.register("src/stream/reply-tree-viewport-layout.js", function(module, exports, require) {
@@ -29417,6 +29434,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	          configuration: {
 	            codec: preferencesCodec,
 	            defaults: preferencesDefaults,
+	            prepareResetPreferences: import_reader_preferences_schema.createReaderPreferencesResetValue,
 	            customSites: customSites.repository,
 	            translation: customSites.translation,
 	            webDav: customSites.webDav?.repository ?? null
@@ -29482,6 +29500,10 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	              storage: window.localStorage,
 	              preferencesStorageKey: import_reader_preferences_schema.READER_PREFERENCES_STORAGE_KEY,
 	              defaults: preferencesDefaults,
+	              prepareResetPreferences: (preferences) => (0, import_reader_preferences_schema.createReaderPreferencesResetValue)(
+	                preferences,
+	                context.readPreferences()
+	              ),
 	              update: (preferences) => {
 	                if (!context.updatePreferences)
 	                  throw new Error("偏好写端口不可用");
@@ -29792,7 +29814,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	  }), handle;
 	}
 	const startMianLiteUserscript = startMainLiteUserscript;
-}, "818af0ad446575b66bb7d08209b96b59659686c4c0bb57e6aaefde082b19216e");
+}, "5c5e746795cb6783c6de26a2b11699c0e945f6c825101206e3fdd80a4b43f60f");
 
 /* Source: lite/src/userscript/main-lite-entry.ts */
 runtime.register("src/userscript/main-lite-entry.js", function(module, exports, require) {

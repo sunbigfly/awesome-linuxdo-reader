@@ -135,6 +135,10 @@ export interface ReaderSettingsConfigManagerOptions<
 	readonly customSites: ReaderCustomSitesConfigPort;
 	readonly translation: ReaderTranslationConfigPort | null;
 	readonly webDav: ReaderWebDavConfigPort | null;
+	readonly prepareResetPreferences?: (
+		defaults: Readonly<TPreferences>,
+		current: Readonly<TPreferences>,
+	) => Readonly<TPreferences>;
 }
 
 function invalidConfig(cause?: unknown): Error {
@@ -463,6 +467,9 @@ export class ReaderSettingsConfigManager<TPreferences extends object> {
 	readonly #customSites: ReaderCustomSitesConfigPort;
 	readonly #translation: ReaderTranslationConfigPort | null;
 	readonly #webDav: ReaderWebDavConfigPort | null;
+	readonly #prepareResetPreferences: NonNullable<
+		ReaderSettingsConfigManagerOptions<TPreferences>['prepareResetPreferences']
+	> | null;
 
 	constructor(options: ReaderSettingsConfigManagerOptions<TPreferences>) {
 		this.#codec = options.codec;
@@ -471,6 +478,8 @@ export class ReaderSettingsConfigManager<TPreferences extends object> {
 		this.#customSites = options.customSites;
 		this.#translation = options.translation;
 		this.#webDav = options.webDav;
+		this.#prepareResetPreferences =
+			options.prepareResetPreferences ?? null;
 	}
 
 	async export(): Promise<ReaderSettingsConfigPayload> {
@@ -498,10 +507,14 @@ export class ReaderSettingsConfigManager<TPreferences extends object> {
 	}
 
 	reset(): Promise<ReaderSettingsConfigApplyResult> {
+		const preferences = this.#prepareResetPreferences?.(
+			this.#defaults,
+			this.#preferences.read(),
+		) ?? this.#defaults;
 		return this.#apply(Object.freeze({
 			sourceVersion: READER_SETTINGS_CONFIG_EXPORT_VERSION,
 			settingsCount: Object.keys(this.#defaults).length,
-			preferences: this.#defaults,
+			preferences,
 			includesPortableSections: true,
 			customSites: Object.freeze([]),
 			translation: createReaderTranslationDefaultConfig(),

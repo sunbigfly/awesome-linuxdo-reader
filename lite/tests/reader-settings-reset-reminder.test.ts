@@ -37,6 +37,7 @@ const freshResult = await showReaderSettingsResetReminder({
 	storage: freshStorage,
 	preferencesStorageKey,
 	defaults,
+	prepareResetPreferences: (preferences) => preferences,
 	update: () => {
 		throw new Error('新用户不得恢复设置');
 	},
@@ -70,6 +71,8 @@ const options = {
 	storage,
 	preferencesStorageKey,
 	defaults,
+	prepareResetPreferences: (preferences: Readonly<typeof defaults>) =>
+		preferences,
 	update: (preferences: Readonly<typeof defaults>) => {
 		updates.push(preferences);
 	},
@@ -87,6 +90,7 @@ assert(
 	confirmations.length === 1 &&
 	confirmations[0]?.message?.includes('完整应用新版体验') === true &&
 	confirmations[0]?.note?.includes('阅读队列图标位置') === true &&
+	confirmations[0]?.note?.includes('“不想再看”') === true &&
 	confirmations[0]?.note?.includes('队列条目') === true &&
 	confirmations[0]?.confirmLabel === '恢复默认值' &&
 	confirmations[0]?.cancelLabel === '保留当前设置' &&
@@ -110,6 +114,6 @@ assert(
 	Number(confirmations.length) === 2 &&
 	Number(updates.length) === 1 &&
 	updates[0] === defaults &&
-	notices.at(-1) === '全部设置已恢复默认',
+	notices.at(-1) === '设置已恢复默认，“不想再看”已保留',
 	'递增 campaign 必须为下一次大改动解锁提示，并在确认后写入同一份 schema 默认值',
 );

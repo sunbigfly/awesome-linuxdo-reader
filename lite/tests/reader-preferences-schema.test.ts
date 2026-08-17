@@ -4,6 +4,7 @@ import {
 	READER_PREFERENCES_STORAGE_KEY,
 	createReaderPreferencesConfigCodec,
 	createReaderPreferencesDefaults,
+	createReaderPreferencesResetValue,
 	createReaderPreferencesRepository,
 	normalizeReaderPreferences,
 	prepareStoredReaderPreferences,
@@ -109,6 +110,26 @@ const expectedKeys = [
 assert(
 	JSON.stringify(Object.keys(defaults)) === JSON.stringify(expectedKeys),
 	'默认偏好必须保持既有字段顺序并追加自动暗色设置',
+);
+const resetValue = createReaderPreferencesResetValue(defaults, Object.freeze({
+	...defaults,
+	themeMode: 'dark',
+	unwantedTopicFilterEnabled: true,
+	unwantedTopicFilterCategories: Object.freeze(['开发调优']),
+	unwantedTopicFilterLabels: Object.freeze(['高级推广']),
+	unwantedTopicFilterTopicAuthors: Object.freeze(['topic-owner']),
+	unwantedTopicFilterTopicFields: Object.freeze(['/富可敌国/i']),
+	unwantedTopicFilterPostAuthors: Object.freeze(['floor-owner']),
+}));
+assert(
+	resetValue.themeMode === defaults.themeMode &&
+	resetValue.unwantedTopicFilterEnabled &&
+	resetValue.unwantedTopicFilterCategories[0] === '开发调优' &&
+	resetValue.unwantedTopicFilterLabels[0] === '高级推广' &&
+	resetValue.unwantedTopicFilterTopicAuthors[0] === 'topic-owner' &&
+	resetValue.unwantedTopicFilterTopicFields[0] === '/富可敌国/i' &&
+	resetValue.unwantedTopicFilterPostAuthors[0] === 'floor-owner',
+	'全局恢复默认必须重置普通偏好并完整保留用户维护的“不想再看”自动过滤设置',
 );
 assert(
 	defaults.listReaderEmbedWidth === 648 &&

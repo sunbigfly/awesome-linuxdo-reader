@@ -1277,6 +1277,10 @@ export interface ReaderBrowserRuntimeStageOptions<
 					'export' | 'import'
 				>;
 				readonly defaults: Readonly<TPreferences>;
+				readonly prepareResetPreferences?: (
+					defaults: Readonly<TPreferences>,
+					current: Readonly<TPreferences>,
+				) => Readonly<TPreferences>;
 				readonly customSites: ReaderCustomSiteRepository;
 				readonly translation: ReaderTranslationConfigRepository | null;
 				readonly webDav: ReaderWebDavConfigRepository | null;
@@ -7919,6 +7923,12 @@ export function createReaderBrowserRuntimeStage<
 					customSites: configuration.customSites,
 					translation: configuration.translation,
 					webDav: configuration.webDav,
+					...(configuration.prepareResetPreferences
+						? {
+							prepareResetPreferences:
+								configuration.prepareResetPreferences,
+						}
+						: {}),
 				})
 				: null;
 			const cacheSurface = settingsView

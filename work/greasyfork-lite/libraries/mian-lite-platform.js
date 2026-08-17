@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.3
+// @version      1.5.4
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.3 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.5.4 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.3",
+			sourceVersion: "1.5.4",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.3") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.4") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -1573,15 +1573,15 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	      try {
 	        if (!await configuration.confirm({
 	          title: "恢复全部默认设置？",
-	          message: "当前偏好（含性能目标）、其他适用站点、翻译和 WebDAV 设置都会恢复默认。",
-	          note: "性能项恢复推荐目标，运行时仍会自适应；请求/性能记录不会被删除。翻译 API Key、WebDAV 用户名和密码会从本机设置中清除；阅读队列图标位置会恢复默认，队列条目、浏览历史、帖子缓存和账号数据不会被删除。",
+	          message: "当前偏好（含性能目标）、其他适用站点、翻译和 WebDAV 设置会恢复默认；“不想再看”的手动记录与自动过滤设置保持不变。",
+	          note: "性能项恢复推荐目标，运行时仍会自适应；请求/性能记录不会被删除。翻译 API Key、WebDAV 用户名和密码会从本机设置中清除；阅读队列图标位置会恢复默认，队列条目、浏览历史、离线下载、帖子缓存和账号数据不会被删除。",
 	          confirmLabel: "恢复全部默认",
 	          tone: "danger",
 	          icon: "rotate-ccw"
 	        }) || this.scope.destroyed) return;
 	        this.#status.textContent = "正在恢复默认设置…", this.#setConfigStatus("正在恢复默认设置…"), await configuration.reset(), this.#setConfigStatus(
-	          "全部设置已恢复默认；性能项将继续按运行环境自适应。"
-	        ), this.#options.notify?.("全部设置已恢复默认");
+	          "设置已恢复默认；“不想再看”内容已保留，性能项将继续自适应。"
+	        ), this.#options.notify?.("设置已恢复默认，“不想再看”已保留");
 	      } catch (cause) {
 	        this.#options.onError?.(cause), this.#setConfigStatus(
 	          cause instanceof Error && cause.message.includes("回滚不完整") ? "恢复失败，部分设置可能未恢复；请重新打开设置逐项核对。" : "恢复失败，当前设置保持不变。"
@@ -1603,7 +1603,7 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	    this.#configStatus && (this.#configStatus.textContent = message);
 	  }
 	}
-}, "fc0208c758d0750baf0d59dc8789a3ab00be6743f87fdafbaa8c6ade2b3a090f");
+}, "f78298bd3cb1be0e04c52c89d01440aa85c7e485ea4b0bf2990b46172e0bba93");
 
 /* Source: lite/src/cache/reader-collection-page-repository.ts */
 runtime.register("src/cache/reader-collection-page-repository.js", function(module, exports, require) {

@@ -23,6 +23,9 @@ export interface ReaderSettingsResetReminderOptions<
 	readonly storage: Pick<Storage, 'getItem' | 'setItem'>;
 	readonly preferencesStorageKey: string;
 	readonly defaults: Readonly<TPreferences>;
+	readonly prepareResetPreferences: (
+		defaults: Readonly<TPreferences>,
+	) => Readonly<TPreferences>;
 	readonly update: (preferences: Readonly<TPreferences>) => void;
 	readonly feedback: Readonly<{
 		confirm(request: ReaderConfirmRequest): Promise<boolean>;
@@ -83,7 +86,7 @@ export async function showReaderSettingsResetReminder<
 			message:
 				'本次更新调整了部分设置和默认值，建议恢复默认值，以完整应用新版体验。',
 			note:
-				'只重置阅读器设置和阅读队列图标位置；队列条目、浏览历史、帖子缓存和账号数据不会删除。此提示仅显示一次。',
+				'只重置普通阅读器设置和阅读队列图标位置；“不想再看”的手动记录与自动过滤设置、队列条目、浏览历史、离线下载、帖子缓存和账号数据不会删除。此提示仅显示一次。',
 			confirmLabel: '恢复默认值',
 			cancelLabel: '保留当前设置',
 			tone: 'primary',
@@ -96,8 +99,8 @@ export async function showReaderSettingsResetReminder<
 	if (!confirmed || options.isActive?.() === false) return 'kept';
 
 	try {
-		options.update(options.defaults);
-		options.feedback.show('全部设置已恢复默认');
+		options.update(options.prepareResetPreferences(options.defaults));
+		options.feedback.show('设置已恢复默认，“不想再看”已保留');
 		return 'reset';
 	} catch (cause) {
 		options.onError?.(cause);

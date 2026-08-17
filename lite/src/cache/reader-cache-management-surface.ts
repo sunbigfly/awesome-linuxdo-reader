@@ -960,8 +960,8 @@ export class ReaderCacheManagementSurface<
 		try {
 			const confirmed = await configuration.confirm({
 				title: '恢复全部默认设置？',
-				message: '当前偏好（含性能目标）、其他适用站点、翻译和 WebDAV 设置都会恢复默认。',
-				note: '性能项恢复推荐目标，运行时仍会自适应；请求/性能记录不会被删除。翻译 API Key、WebDAV 用户名和密码会从本机设置中清除；阅读队列图标位置会恢复默认，队列条目、浏览历史、帖子缓存和账号数据不会被删除。',
+				message: '当前偏好（含性能目标）、其他适用站点、翻译和 WebDAV 设置会恢复默认；“不想再看”的手动记录与自动过滤设置保持不变。',
+				note: '性能项恢复推荐目标，运行时仍会自适应；请求/性能记录不会被删除。翻译 API Key、WebDAV 用户名和密码会从本机设置中清除；阅读队列图标位置会恢复默认，队列条目、浏览历史、离线下载、帖子缓存和账号数据不会被删除。',
 				confirmLabel: '恢复全部默认',
 				tone: 'danger',
 				icon: 'rotate-ccw',
@@ -971,9 +971,9 @@ export class ReaderCacheManagementSurface<
 			this.#setConfigStatus('正在恢复默认设置…');
 			await configuration.reset();
 			this.#setConfigStatus(
-				'全部设置已恢复默认；性能项将继续按运行环境自适应。',
+				'设置已恢复默认；“不想再看”内容已保留，性能项将继续自适应。',
 			);
-			this.#options.notify?.('全部设置已恢复默认');
+			this.#options.notify?.('设置已恢复默认，“不想再看”已保留');
 		} catch (cause) {
 			this.#options.onError?.(cause);
 			this.#setConfigStatus(

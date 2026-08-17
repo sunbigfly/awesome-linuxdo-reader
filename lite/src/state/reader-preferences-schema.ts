@@ -14,6 +14,7 @@ import {
 } from '../translation/reader-translation-presentation.js';
 import {
 	normalizeReaderUnwantedTopicFilterPreferences,
+	readerPreferencesUnwantedTopicFilterAdapter,
 } from '../collection/reader-unwanted-topic-filter.js';
 
 export const READER_PREFERENCES_STORAGE_KEY = 'linuxdo-enhanced-reader:prefs';
@@ -1480,6 +1481,22 @@ export function createReaderPreferencesDefaults(
 			DEFAULT_BOOST_COPY_SETTINGS.counterMarker,
 		boostCopyCounterStep: DEFAULT_BOOST_COPY_SETTINGS.counterStep,
 		boostCopyFixedSuffix: DEFAULT_BOOST_COPY_SETTINGS.fixedSuffix,
+	});
+}
+
+/**
+ * 全局恢复默认只重置普通阅读器偏好。用户在“不想再看”内维护的自动过滤规则
+ * 属于持久内容，与独立仓储中的手动免打扰 Topic 一样保留。
+ */
+export function createReaderPreferencesResetValue(
+	defaults: Readonly<ReaderPreferences>,
+	current: Readonly<ReaderPreferences>,
+): Readonly<ReaderPreferences> {
+	return Object.freeze({
+		...defaults,
+		...readerPreferencesUnwantedTopicFilterAdapter.createPatch(
+			readerPreferencesUnwantedTopicFilterAdapter.read(current),
+		),
 	});
 }
 

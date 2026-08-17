@@ -110,6 +110,7 @@ import {
 	READER_PREFERENCES_STORAGE_KEY,
 	createReaderPreferencesConfigCodec,
 	createReaderPreferencesDefaults,
+	createReaderPreferencesResetValue,
 	createReaderPreferencesRepository,
 	type ReaderPreferences,
 } from '../state/reader-preferences-schema.js';
@@ -969,6 +970,7 @@ function createRuntimeStage(
 			configuration: {
 				codec: preferencesCodec,
 				defaults: preferencesDefaults,
+				prepareResetPreferences: createReaderPreferencesResetValue,
 				customSites: customSites.repository,
 				translation: customSites.translation,
 				webDav: customSites.webDav?.repository ?? null,
@@ -1050,6 +1052,11 @@ function createRuntimeStage(
 					storage: window.localStorage,
 					preferencesStorageKey: READER_PREFERENCES_STORAGE_KEY,
 					defaults: preferencesDefaults,
+					prepareResetPreferences: (preferences) =>
+						createReaderPreferencesResetValue(
+							preferences,
+							context.readPreferences(),
+						),
 					update: (preferences) => {
 						if (!context.updatePreferences) {
 							throw new Error('偏好写端口不可用');
