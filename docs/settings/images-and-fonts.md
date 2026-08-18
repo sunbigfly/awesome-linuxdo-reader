@@ -2,9 +2,9 @@
 title: 图片与字体
 description: 配置帖子图片比例、灯箱默认行为、字体渲染、宿主尺寸和分作用域字体。
 feature_ids: ["MEDIA-001", "MEDIA-003", "MEDIA-005", "SET-002", "SET-003", "SET-004", "SET-005", "SET-006"]
-source_anchors: ["lite/src/media/reader-image-scale.ts","lite/src/network/public-resource-request-adapter.ts","lite/src/media/reader-lightbox-controller.ts","lite/src/state/reader-preferences-schema.ts"]
+source_anchors: ["lite/src/media/reader-image-scale.ts","lite/src/network/public-resource-request-adapter.ts","lite/src/media/reader-lightbox-controller.ts","lite/src/state/reader-preferences-schema.ts","lite/src/font/reader-font-catalog.ts"]
 since: 0.1.2
-version: 1.5.7
+version: 1.5.8
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/guide-04-font-settings-v1.5.0.png", "/screenshots/guide-19-image-lightbox-v1.5.0.png"]
@@ -68,12 +68,14 @@ screenshots: ["/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/g
 
 每个作用域都可设置：
 
-- 字体：跟随站点、系统字体、中文无衬线、衬线、等宽或自定义本机字体；
+- 字体：跟随站点、系统字体、中文无衬线、衬线、等宽、自定义本机字体、精选 Google Fonts 或本机导入字体；
 - 字重：300、400、500、600；
 - 颜色：跟随主题或自定义；
 - 字号：50%–250%。
 
-新配置的界面、正文、回复字号默认分别为 92%、95%、80%，回复仍比界面和正文更紧凑。第一次打开任意字体下拉时，阅读器会直接请求浏览器授权并查询系统提供的全部字体族，不再显示额外获取入口；获取后的当前下拉会原位刷新并显示实际字体预览，常见中文字体优先使用中文名。浏览器不支持、拒绝授权或查询失败时会显示对应状态。自定义字体只引用本机已安装字体，不会上传字体文件。
+新配置的界面、正文、回复字号默认分别为 92%、95%、80%，回复仍比界面和正文更紧凑。第一次打开任意字体下拉时，阅读器会直接请求浏览器授权并查询系统提供的全部字体族，不再显示额外获取入口；获取后的当前下拉会原位刷新并显示实际字体预览，常见中文字体优先使用中文名。浏览器不支持、拒绝授权或查询失败时会显示对应状态。
+
+共享字体库另提供 11 种按需加载的精选 Google Fonts，并可导入 WOFF2、WOFF、TTF 或 OTF 文件。导入字体独立保存在当前浏览器，单个最大 32 MB、最多 64 个、合计最大 128 MB，不进入设置导出或 WebDAV。主题总结选择字体时复用同一目录，并在生成分享图前等待字体加载完成。
 
 ## 跨形态共享
 

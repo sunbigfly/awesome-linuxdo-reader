@@ -4,7 +4,7 @@ description: 使用主帖操作列，并在阅读器内回复、引用、点赞�
 feature_ids: ["MEDIA-010", "ACTION-001", "ACTION-002", "ACTION-003", "ACTION-004", "ACTION-005", "ACTION-006", "ACTION-007", "ACTION-008", "ACTION-009", "ACTION-010", "ACTION-011", "ACTION-012", "ACTION-013", "ACTION-014"]
 source_anchors: ["lite/src/media/reader-poll-model.ts","lite/src/app/reader-browser-runtime.ts","lite/src/post/reader-post-action-feature.ts","lite/src/post/reader-selection-quote-feature.ts","lite/src/post/boost-copy-rule.ts","lite/src/discourse/native-host-api.ts","lite/src/discourse/native-composer.ts","lite/src/post/reader-topic-shared-issue-coordinator.ts","lite/src/post/reader-topic-action-rail.ts"]
 since: 0.1.2
-version: 1.5.7
+version: 1.5.8
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-20-community-actions-v1.5.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.5.0.png", "/screenshots/guide-15-notifications-replies-v1.5.0.png"]

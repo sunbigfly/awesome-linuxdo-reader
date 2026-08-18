@@ -2,9 +2,9 @@
 title: 隐私、权限与边界
 description: 理解 userscript 权限、WebDAV 凭据与同步边界、LDC 只读数据、外部依赖、本地存储和请求脱敏。
 feature_ids: ["MEDIA-014", "USER-006", "DATA-004", "DATA-005", "DATA-006", "DATA-007", "MONITOR-005", "TROUBLE-005"]
-source_anchors: ["lite/src/translation/reader-translation-controller.ts","lite/src/translation/translation-request-adapter.ts","lite/src/cache/response-repository.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/userscript/browser-userscript-environment.ts","lite/src/network/request-observer.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-config-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/userscript.meta.txt"]
+source_anchors: ["lite/src/translation/reader-translation-controller.ts","lite/src/translation/translation-request-adapter.ts","lite/src/cache/response-repository.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/userscript/browser-userscript-environment.ts","lite/src/network/request-observer.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-config-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/font/reader-font-catalog.ts","lite/src/font/reader-imported-font-store.ts","lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.5.7
+version: 1.5.8
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
@@ -18,13 +18,14 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 
 ## userscript 元数据
 
-当前 `1.5.7`：
+当前 `1.5.8`：
 
 | 字段 | 值 | 用途 |
 | --- | --- | --- |
 | `@match` | 21 个内置社区及 `https://*/*` | 在所有 HTTPS 页面进行无网络的轻量 Discourse 识别；成功才初始化阅读器，失败静默退出 |
 | `@grant` | `GM_getValue`、`GM_setValue` | 保存设置、自定义站点和同账号最近一次 LDC 成功缓存 |
 | `@grant` | `GM_xmlhttpRequest` | 检测自定义站点、读取 LDC 只读账户摘要、访问用户配置的 HTTPS WebDAV、获取允许的跨域公开资源，以及执行用户主动开启的正文翻译 |
+| `@grant` | `GM_addElement` | 在用户实际选择精选 Google Font 时追加对应样式表，不因浏览字体目录批量预取 |
 | `@grant` | `GM_getResourceText` | 读取发布版样式资源 |
 | `@grant` | `unsafeWindow` | 与当前 Discourse 页面运行时协作 |
 | `@connect` | `connect.linux.do`、`credit.linux.do`、翻译接口及 `*` | Connect、LDC 只读账户摘要、Google / Microsoft 或用户配置的 OpenAI 兼容翻译、用户输入域名的 Discourse 检测，以及用户主动配置的 WebDAV 服务 |
@@ -42,17 +43,19 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 
 依赖不可用时，相应公式、拼音检索或 HLS 能力可能降级；普通文本阅读不应依赖这些增强全部成功。
 
+字体设置另提供精选 Google Fonts。目录本身是脚本内置数据，只有用户选中具体字体后才从 Google Fonts 加载对应样式；导入的 WOFF2、WOFF、TTF 或 OTF 文件只保存在当前浏览器，不发送给 Google 或项目服务器。
+
 ## 本地数据
 
-当前浏览器会保存设置、历史、主题快照、用户卡、消息分页、通用响应、最多 240 条正文译文以及部分头像/图片。存储按账号作用域和数据类型隔离、有最大容量和保留期。
+当前浏览器会保存设置、历史、主题快照、用户卡、消息分页、通用响应、最多 240 条正文译文以及部分头像/图片。用户主动导入的字体文件另存于独立 IndexedDB，单个最大 32 MB、最多 64 个、合计最大 128 MB；它们不属于可重建缓存。
 
-设置导出可以包含其他适用站点、翻译和 WebDAV 的非敏感规则，但不包含历史、正文、API 响应、图片、Cookie、翻译 API Key、WebDAV 用户名、密码或原站账号凭据。
+设置导出可以包含其他适用站点、翻译和 WebDAV 的非敏感规则，但不包含历史、正文、API 响应、图片、导入字体文件、Cookie、翻译 API Key、WebDAV 用户名、密码或原站账号凭据。
 
 ## WebDAV 数据与凭据
 
 WebDAV 默认关闭，只有用户填写 HTTPS 地址、账号、应用密码并选择类别后才会访问远端。WebDAV 账号和应用密码只保存在 userscript 专属存储，不进入远端 JSON、设置导出、同步的“设置配置”类别或请求 URL。
 
-远端主同步文件只保存所选普通类别的结构化记录、更新时间、写入设备标识和删除标记。Cookie、Authorization、WebDAV 密码、页面缓存与短期限流状态永不上传。离线 Topic、AI 服务集合和已翻译 Section 缓存默认关闭：离线 Topic 只在单独启用时上传轻量清单和每个 Topic 的完整明文 HTML，图片与附件仍保留原 URL；AI 服务只写入 URL、缓存模型目录、翻译业务选择、参数及使用 WebDAV 应用密码加密的 API Key；译文缓存不包含原文。收藏同步只交换阅读器的链接和定位信息，不直接修改原站收藏状态。
+远端主同步文件只保存所选普通类别的结构化记录、更新时间、写入设备标识和删除标记。Cookie、Authorization、WebDAV 密码、页面缓存、导入字体文件与短期限流状态永不上传。离线 Topic、AI 服务集合和已翻译 Section 缓存默认关闭：离线 Topic 只在单独启用时上传轻量清单和每个 Topic 的完整明文 HTML，图片与附件仍保留原 URL；AI 服务只写入 URL、缓存模型目录、翻译业务选择、参数及使用 WebDAV 应用密码加密的 API Key；译文缓存不包含原文。收藏同步只交换阅读器的链接和定位信息，不直接修改原站收藏状态。
 
 远端文件受 WebDAV 服务商账号安全和存储政策约束。应使用独立的第三方应用密码；停用同步时可以关闭定时同步并清空本机凭据，但删除远端文件会影响其他设备，需在服务商侧单独确认。
 

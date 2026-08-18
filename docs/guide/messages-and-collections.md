@@ -4,7 +4,7 @@ description: 使用消息、历史、收藏、用户观察、岁月史书和不�
 feature_ids: ["ACTION-004", "ACTION-007", "COLLECT-001", "COLLECT-002", "COLLECT-003", "COLLECT-004", "COLLECT-005", "COLLECT-006", "COLLECT-007", "COLLECT-009", "USER-007"]
 source_anchors: ["lite/src/app/reader-browser-runtime.ts","lite/src/discourse/native-host-api.ts","lite/src/notification/reader-notification-model.ts","lite/src/notification/reader-notification-controller.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-repository.ts","lite/src/history/reader-chronicle-repository.ts","lite/src/bookmark/reader-bookmark-model.ts","lite/src/bookmark/reader-bookmark-controller.ts","lite/src/collection/reader-unwanted-topic-repository.ts","lite/src/user/reader-user-observation-session.ts"]
 since: 0.1.2
-version: 1.5.7
+version: 1.5.8
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-15-notifications-replies-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.5.0.png"]

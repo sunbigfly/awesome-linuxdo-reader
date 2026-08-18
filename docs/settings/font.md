@@ -2,9 +2,9 @@
 title: 字体设置
 description: 配置字体显示优化、嵌入阅读列表尺寸，以及界面、正文和回复输入框的字体外观。
 feature_ids: ["SET-004", "SET-005", "SET-006"]
-source_anchors: ["lite/src/state/reader-preferences-schema.ts"]
+source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/font/reader-font-catalog.ts","lite/src/font/reader-imported-font-store.ts"]
 since: 0.1.2
-version: 1.5.7
+version: 1.5.8
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-04-font-settings-v1.5.0.png"]
@@ -40,6 +40,17 @@ screenshots: ["/screenshots/guide-04-font-settings-v1.5.0.png"]
 
 修改后立即观察左侧原站列表，确认没有拥挤、截断或信息重叠。
 
+## 共享字体库
+
+字体设置在本机字体之外提供两类共享选项：
+
+- 11 种精选 Google Fonts，覆盖中文、拉丁正文和代码；只有实际选中某个字体后才加载对应样式，不会因为打开下拉列表就预取全部字体。
+- 用户导入的 WOFF2、WOFF、TTF 或 OTF 文件；单个文件最大 32 MB，最多 64 个，合计最大 128 MB。
+
+导入文件独立保存在当前浏览器的 IndexedDB。它们不会上传到项目、进入设置导出、普通缓存清理或 WebDAV；需要在另一台设备或另一个浏览器使用时，应重新导入。删除导入字体前先在“共享字体库”选择目标，删除只影响本机保存的该字体文件。
+
+设置面板和 AI 主题总结共用同一字体目录。总结分享图会先确认所选 Google 或导入字体已经加载，再生成预览、下载文件或上传图片，避免画布回退到系统字体。
+
 ## 三个字体作用域
 
 | 作用域 | 典型内容 |
@@ -59,11 +70,13 @@ screenshots: ["/screenshots/guide-04-font-settings-v1.5.0.png"]
 - 中文无衬线；
 - 衬线；
 - 等宽；
-- 自定义本机字体。
+- 自定义本机字体；
+- 精选 Google Fonts；
+- 导入字体文件。
 
 第一次打开任意字体下拉时，阅读器会直接请求浏览器授权，并尝试读取系统提供的全部字体族，不再显示额外的“获取字体”入口。授权成功后，当前下拉会原位刷新，并按预设字体和本机字体分组；每个选项都使用对应字体显示中英文与数字预览，常见中文字体优先显示中文名，同时保留原名便于搜索。不支持、拒绝授权或读取失败时，仍可使用预设字体或手动填写字体名称；重新打开字体下拉即可再次授权。
 
-自定义字体只引用本机已安装的字体名称，不会上传字体文件，也不会让其他设备自动获得该字体。
+自定义本机字体只引用已经安装的字体名称；导入字体文件只写入当前浏览器的独立字体存储。两者都不会让其他设备自动获得该字体。
 
 ## 配置步骤
 

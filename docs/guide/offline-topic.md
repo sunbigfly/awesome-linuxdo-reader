@@ -4,7 +4,7 @@ description: 在后台补齐 Topic 正文，保存可独立打开的离线 HTML�
 feature_ids: ["DATA-004", "DATA-006", "DATA-007"]
 source_anchors: ["lite/src/queue/reader-topic-download-manager.ts","lite/src/archive/reader-topic-offline-document.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/topic/reader-topic-local-archive-feature.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 1.3.0
-version: 1.5.7
+version: 1.5.8
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-31-topic-download-v1.5.0.png", "/screenshots/guide-32-webdav-sync-v1.5.0.png"]

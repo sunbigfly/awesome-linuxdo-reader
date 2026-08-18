@@ -4,7 +4,7 @@ description: 规定功能目录、页面元数据、截图、版本同步和本�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.5.7
+version: 1.5.8
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-23-documentation-maintenance-v1.5.0.png"]

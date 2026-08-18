@@ -2,9 +2,9 @@
 title: 数据、配置与缓存
 description: 导出导入设置，理解本地与 WebDAV 数据范围，查看和安全清理六类缓存。
 feature_ids: ["COLLECT-004", "DATA-001", "DATA-002", "DATA-003", "DATA-004", "DATA-006", "DATA-007", "TROUBLE-004"]
-source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
+source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/font/reader-imported-font-store.ts"]
 since: 0.1.2
-version: 1.5.7
+version: 1.5.8
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png"]
@@ -17,6 +17,7 @@ screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png"]
 | 类型 | 示例 | 权威位置 | 清理结果 |
 | --- | --- | --- | --- |
 | 阅读器设置 | 图片比例、字体、布局、性能 | 当前浏览器 | 恢复显示和行为默认值 |
+| 导入字体 | 用户选择的 WOFF2、WOFF、TTF 或 OTF 文件 | 当前浏览器的独立 IndexedDB | 只在字体设置中逐项删除；不属于普通缓存 |
 | 阅读器本地数据 | 历史、主题快照、用户卡、消息分页、离线 Topic Artifact | 当前浏览器；启用 WebDAV 后普通记录进入远端 JSON，离线 Topic 使用独立清单和 HTML 对象 | 缓存可重建；已成功同步的所选记录和离线 HTML 可从远端合并恢复 |
 | 原站账号数据 | 帖子、消息、收藏、回应、已读状态 | LINUX DO | 只有对应业务操作才能改变 |
 
@@ -61,6 +62,7 @@ screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png"]
 - 浏览历史；
 - 帖子正文或 API 响应；
 - 图片、头像和表情资源；
+- 用户导入的字体文件；
 - Cookie、账号资料、翻译 API Key、WebDAV 用户名或密码。
 
 导入前建议先导出当前配置作为回退。
@@ -104,6 +106,8 @@ screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png"]
 - IndexedDB。
 
 每层有最大条目、最大字节或保留期。新鲜数据直接读取，过期后联网校准；网络异常时，部分类型可以回退到仍在保留期内的旧数据。
+
+导入字体虽然使用独立 IndexedDB，但它是用户文件而不是可重建缓存：六类缓存清理和“恢复全部默认”都不会删除它；需要释放这部分空间时，使用“字体设置 → 共享字体库”的删除入口。
 
 ## 安全清理顺序
 

@@ -4,7 +4,7 @@ description: 使用坚果云等标准 WebDAV 在设备之间合并同步历史�
 feature_ids: ["DATA-006", "DATA-007"]
 source_anchors: ["lite/src/settings/reader-webdav-settings-form.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-category-ports.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-history-cache-port.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts"]
 since: 1.1.0
-version: 1.5.7
+version: 1.5.8
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-29-webdav-sync-v1.5.0.svg", "/screenshots/guide-32-webdav-sync-v1.5.0.png"]
@@ -70,7 +70,7 @@ WebDAV 用一个小型 JSON 文件在多个浏览器之间交换普通本地记�
 | 已翻译 Section 缓存 | 最近使用的译文 Section | 原文、页面 DOM |
 | 离线 Topic 下载（HTML 正文） | 下载历史、完整离线 HTML 与选择范围；清单和 HTML 分开存放 | 图片和附件二进制、Cookie、页面缓存 |
 
-普通帖子正文、图片、附件、原始分页响应、请求游标、短期限流状态和普通页面缓存不会进入 WebDAV；历史同步只读取已经存在的可搜索记录，不会为了 WebDAV 额外请求 Discourse。旧历史一般不变，因此清单按 identity 单调合并，同一记录只在内容较新时更新，不传播“本机暂时没缓存到”造成的删除。只有主动开启“离线 Topic 下载”时，完整 HTML 才会作为独立明文文件上传。默认只启用浏览历史、收藏记录和阅读队列；两类历史缓存、离线 Topic、翻译服务集合与译文缓存都必须分别主动开启。
+普通帖子正文、图片、附件、用户导入的字体文件、原始分页响应、请求游标、短期限流状态和普通页面缓存不会进入 WebDAV；历史同步只读取已经存在的可搜索记录，不会为了 WebDAV 额外请求 Discourse。旧历史一般不变，因此清单按 identity 单调合并，同一记录只在内容较新时更新，不传播“本机暂时没缓存到”造成的删除。只有主动开启“离线 Topic 下载”时，完整 HTML 才会作为独立明文文件上传。默认只启用浏览历史、收藏记录和阅读队列；两类历史缓存、离线 Topic、翻译服务集合与译文缓存都必须分别主动开启。
 
 十二类同步开关是当前设备的独立授权策略，不写入远端，也不会被另一台设备反向开启。要让两台设备交换“设置配置”，必须在两端都开启该类别、保存设置，再分别执行同步；若需要一次复制地址、远端路径、类别开关和定时策略，可使用设置导出/导入，用户名和密码仍需在每台设备本机确认。
 
