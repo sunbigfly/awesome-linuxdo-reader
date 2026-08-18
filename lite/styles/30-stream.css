@@ -712,8 +712,16 @@ button.ldp-floor:hover {
   padding-inline: 8px;
   overflow-x: auto;
   overflow-wrap: anywhere;
-  color: var(--ldp-ink);
+  color: var(--ldp-post-font-color, var(--ldp-ink));
+  font-family: var(
+    --ldp-post-font-family,
+    var(--ldp-interface-font-family, inherit)
+  );
   font-size: var(--ldp-post-font-size, var(--ldp-font-md));
+  font-weight: var(
+    --ldp-post-font-weight,
+    var(--ldp-interface-font-weight, 400)
+  );
   line-height: 1.65;
 }
 

@@ -3,11 +3,19 @@ import { htmlElement as element } from '../dom/html-element.js';
 import {
 	readerFontFamilyCss,
 } from '../font/reader-font-style-controller.js';
+import {
+	READER_FONT_OPTION_PREVIEW,
+	readerLocalFontPresentation,
+} from '../font/reader-local-font-catalog.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import type { BlobDownloadPort } from '../media/reader-image-download-service.js';
 import type { ReaderImageResourceService } from '../media/reader-image-resource-service.js';
 import type { ReaderLightboxItem } from '../media/reader-lightbox-controller.js';
 import { ReaderFloatingWindowFrame } from '../shell/reader-floating-window-frame.js';
+import {
+	READER_SELECT_OPEN_EVENT,
+	READER_SELECT_OPTIONS_CHANGE_EVENT,
+} from '../shell/reader-select-surface.js';
 import type { TranslationAiModelCatalogPort } from
 	'../translation/translation-request-adapter.js';
 import {
@@ -286,6 +294,17 @@ function selectOption(
 	const option = document.createElement('option');
 	option.value = value;
 	option.textContent = label;
+	return option;
+}
+
+function addFontOptionPreview(
+	option: HTMLOptionElement,
+	fontFamilyCss: string,
+	searchText = '',
+): HTMLOptionElement {
+	option.dataset.readerSelectPreview = READER_FONT_OPTION_PREVIEW;
+	option.dataset.readerSelectFontFamily = fontFamilyCss;
+	if (searchText) option.dataset.readerSelectSearchText = searchText;
 	return option;
 }
 
@@ -1263,6 +1282,7 @@ export class ReaderTopicSummarySurface {
 	#promptExpanded = false;
 	#activeStage: ReaderTopicCustomSummaryStage | null = null;
 	#localFontsLoaded = false;
+	#localFontsLoading = false;
 	#fontRenderEpoch = 0;
 	readonly #fontLoads = new Map<string, Promise<boolean>>();
 	readonly #modelContextTokens = new Map<string, number>();
@@ -1640,7 +1660,7 @@ export class ReaderTopicSummarySurface {
 		);
 		this.#fontStatus.role = 'status';
 		this.#fontStatus.textContent = this.#fonts?.queryLocalFonts
-			? '展开设置后读取设置面板共用的本机字体。'
+			? '打开字体下拉时，将自动请求授权并读取本机字体。'
 			: '当前浏览器仅提供预设字体。';
 		this.#settingsPanel.append(
 			styleField,
@@ -1914,7 +1934,6 @@ export class ReaderTopicSummarySurface {
 				'aria-label',
 				expanded ? '收起图片设置' : '展开图片设置',
 			);
-			if (expanded) void this.#loadLocalFonts();
 		});
 		this.scope.listen(this.styleSelect, 'change', () => {
 			this.#settings = Object.freeze({
@@ -2106,26 +2125,56 @@ export class ReaderTopicSummarySurface {
 			'ldp-reader-select ldp-topic-summary-font-select',
 		) as HTMLSelectElement;
 		select.dataset.readerSelectSearchable = 'true';
+		select.dataset.readerSelectSearchLabel = this.#fonts?.queryLocalFonts
+			? '搜索字体（尚未获取本机字体）'
+			: '搜索预设字体';
 		select.setAttribute('aria-label', label);
-		select.append(selectOption(this.#document, 'reader', '跟随阅读器正文'));
+		const presets = element(this.#document, 'optgroup');
+		presets.label = '预设字体';
+		presets.append(addFontOptionPreview(
+			selectOption(this.#document, 'reader', '跟随阅读器正文'),
+			this.#fonts?.readCurrentFamily() || 'inherit',
+		));
 		if (chinese) {
-			select.append(
-				selectOption(this.#document, 'cjkSans', '中文无衬线'),
-				selectOption(this.#document, 'serif', '中文衬线'),
-				selectOption(this.#document, 'system', '系统默认字体'),
+			presets.append(
+				addFontOptionPreview(
+					selectOption(this.#document, 'cjkSans', '中文无衬线'),
+					readerFontFamilyCss('cjkSans'),
+				),
+				addFontOptionPreview(
+					selectOption(this.#document, 'serif', '中文衬线'),
+					readerFontFamilyCss('serif'),
+				),
+				addFontOptionPreview(
+					selectOption(this.#document, 'system', '系统默认字体'),
+					readerFontFamilyCss('system'),
+				),
 			);
 		} else {
-			select.append(
-				selectOption(this.#document, 'system', '系统默认字体'),
-				selectOption(this.#document, 'serif', '衬线'),
-				selectOption(this.#document, 'monospace', '等宽'),
+			presets.append(
+				addFontOptionPreview(
+					selectOption(this.#document, 'system', '系统默认字体'),
+					readerFontFamilyCss('system'),
+				),
+				addFontOptionPreview(
+					selectOption(this.#document, 'serif', '衬线'),
+					readerFontFamilyCss('serif'),
+				),
+				addFontOptionPreview(
+					selectOption(this.#document, 'monospace', '等宽'),
+					readerFontFamilyCss('monospace'),
+				),
 			);
 		}
+		select.append(presets);
 		const saved = chinese
 			? this.#settings.chineseFont
 			: this.#settings.latinFont;
 		this.#appendSavedLocalFont(select, saved);
 		selectValue(select, saved);
+		this.scope.listen(select, READER_SELECT_OPEN_EVENT, () => {
+			void this.#loadLocalFonts();
+		});
 		return select;
 	}
 
@@ -2133,37 +2182,91 @@ export class ReaderTopicSummarySurface {
 		if (!token.startsWith(LOCAL_FONT_PREFIX)) return;
 		if ([...select.options].some((option) => option.value === token)) return;
 		const family = token.slice(LOCAL_FONT_PREFIX.length);
-		select.append(selectOption(this.#document, token, family));
+		const font = readerLocalFontPresentation(family);
+		const localFonts = element(this.#document, 'optgroup');
+		localFonts.label = '已选本机字体';
+		localFonts.dataset.fontLocalGroup = 'true';
+		localFonts.append(addFontOptionPreview(
+			selectOption(this.#document, token, font.label),
+			font.fontFamilyCss,
+			font.searchText,
+		));
+		select.append(localFonts);
 	}
 
 	async #loadLocalFonts(): Promise<void> {
-		if (this.#localFontsLoaded || !this.#fonts?.queryLocalFonts) return;
-		this.#localFontsLoaded = true;
+		if (
+			this.#localFontsLoaded ||
+			this.#localFontsLoading ||
+			!this.#fonts?.queryLocalFonts
+		) return;
+		this.#localFontsLoading = true;
 		this.#fontStatus.textContent = '正在读取本机字体…';
 		try {
-			const names = [...new Set((await this.#fonts.queryLocalFonts())
+			const fonts = [...new Set((await this.#fonts.queryLocalFonts())
 				.map((name) => String(name).trim())
 				.filter(Boolean))]
-				.sort((left, right) => left.localeCompare(right));
+				.map(readerLocalFontPresentation)
+				.sort((left, right) => left.label.localeCompare(
+					right.label,
+					'zh-CN',
+					{ numeric: true, sensitivity: 'base' },
+				));
 			if (this.scope.destroyed) return;
 			for (const select of [
 				this.chineseFontSelect,
 				this.latinFontSelect,
 			]) {
-				for (const name of names) {
-					const token = `${LOCAL_FONT_PREFIX}${name}`;
-					if ([...select.options].some((option) => option.value === token)) {
-						continue;
-					}
-					select.append(selectOption(this.#document, token, name));
+				select.dataset.readerSelectSearchLabel =
+					`搜索字体 · 本机 ${fonts.length}`;
+				const selected = selectedValue(select);
+				const selectedFamily = selected.startsWith(LOCAL_FONT_PREFIX)
+					? selected.slice(LOCAL_FONT_PREFIX.length)
+					: '';
+				const localFonts = element(this.#document, 'optgroup');
+				localFonts.label = `本机字体 · ${fonts.length}`;
+				localFonts.dataset.fontLocalGroup = 'true';
+				const available = selectedFamily && !fonts.some(
+					(font) => font.family === selectedFamily,
+				)
+					? [...fonts, readerLocalFontPresentation(selectedFamily)]
+					: fonts;
+				for (const font of available) {
+					localFonts.append(addFontOptionPreview(
+						selectOption(
+							this.#document,
+							`${LOCAL_FONT_PREFIX}${font.family}`,
+							font.label,
+						),
+						font.fontFamilyCss,
+						font.searchText,
+					));
 				}
+				for (const previous of select.querySelectorAll(
+					'optgroup[data-font-local-group="true"]',
+				)) previous.remove();
+				select.append(localFonts);
+				selectValue(select, selected);
 			}
-			this.#fontStatus.textContent = names.length
-				? `已与设置面板共用 ${names.length} 种本机字体。`
+			this.#localFontsLoaded = true;
+			this.#localFontsLoading = false;
+			this.#fontStatus.textContent = fonts.length
+				? `已获取 ${fonts.length} 种本机字体；下拉列表已显示字体预览。`
 				: '浏览器未返回可用本机字体。';
+			const EventConstructor = this.#document.defaultView?.Event ?? Event;
+			for (const select of [
+				this.chineseFontSelect,
+				this.latinFontSelect,
+			]) {
+				select.dispatchEvent(new EventConstructor(
+					READER_SELECT_OPTIONS_CHANGE_EVENT,
+					{ bubbles: true },
+				));
+			}
 		} catch (cause) {
-			this.#localFontsLoaded = false;
-			this.#fontStatus.textContent = '未获得本机字体权限，仍可使用预设字体。';
+			this.#localFontsLoading = false;
+			this.#fontStatus.textContent =
+				'未获得本机字体权限；重新打开字体下拉可再次授权。';
 			this.#onError(cause);
 		}
 	}

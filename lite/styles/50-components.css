@@ -1009,6 +1009,11 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   overscroll-behavior: contain;
 }
 
+.ldp-select-menu.has-font-previews {
+  width: min(260px, calc(100vw - 24px));
+  max-width: min(260px, calc(100vw - 24px));
+}
+
 .ldp-select-search {
   box-sizing: border-box;
   width: 100%;
@@ -1019,6 +1024,10 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   background: var(--ldp-canvas);
   color: var(--ldp-ink);
   font: inherit;
+}
+
+.ldp-select-menu.has-font-previews .ldp-select-search {
+  font-size: var(--ldp-font-ui);
 }
 
 .ldp-select-search:focus {
@@ -1034,6 +1043,71 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   gap: 2px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.ldp-select-menu.has-font-previews .ldp-select-options {
+  overflow-y: scroll;
+  scrollbar-color: color-mix(
+    in srgb,
+    var(--ldp-accent) 48%,
+    var(--ldp-canvas)
+  ) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.ldp-select-menu.has-font-previews.has-long-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.ldp-select-menu.has-font-previews.has-long-list .ldp-select-options {
+  width: 100%;
+  height: 0;
+  flex: 1 1 0;
+  max-height: none;
+  touch-action: pan-y;
+}
+
+.ldp-select-menu.has-font-previews .ldp-select-options::-webkit-scrollbar {
+  width: 10px;
+}
+
+.ldp-select-menu.has-font-previews .ldp-select-options::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: transparent;
+}
+
+.ldp-select-menu.has-font-previews .ldp-select-options::-webkit-scrollbar-thumb {
+  border: 2px solid var(--ldp-canvas);
+  border-radius: 999px;
+  background: color-mix(
+    in srgb,
+    var(--ldp-accent) 48%,
+    var(--ldp-canvas)
+  );
+}
+
+.ldp-select-menu.has-font-previews
+  .ldp-select-options::-webkit-scrollbar-thumb:hover {
+  background: color-mix(
+    in srgb,
+    var(--ldp-accent) 68%,
+    var(--ldp-canvas)
+  );
+}
+
+.ldp-select-group {
+  padding: 7px 9px 4px;
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-micro);
+  font-weight: 680;
+  line-height: 1.2;
+}
+
+.ldp-select-group:not(:first-child) {
+  margin-top: 3px;
+  border-top: 1px solid var(--ldp-divider-line-color);
 }
 
 .ldp-select-empty {
@@ -1057,6 +1131,44 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   color: var(--ldp-ink);
   font-size: var(--ldp-font-base);
   font-weight: 550;
+}
+
+.ldp-select-option.has-preview {
+  display: grid;
+  min-height: 32px;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 10px;
+  padding-block: 3px;
+  font-size: var(--ldp-font-ui);
+}
+
+.ldp-select-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ldp-select-option-preview {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-sm);
+  font-weight: 400;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ldp-select-option[aria-selected="true"] > .ldp-select-option-preview {
+  color: color-mix(in srgb, currentColor 72%, var(--ldp-ink-muted));
+}
+
+@media (max-width: 480px) {
+  .ldp-select-option.has-preview {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
 }
 
 .ldp-select-option:disabled {

@@ -295,7 +295,10 @@
         ".ldp-end-tip.show",
         "@keyframes ldp-spin",
         "@keyframes ldp-post-read-confirm",
-        "animation: ldp-post-read-confirm 1.25s ease-in-out both;"
+        "animation: ldp-post-read-confirm 1.25s ease-in-out both;",
+        "color: var(--ldp-post-font-color, var(--ldp-ink));",
+        "--ldp-post-font-family",
+        "--ldp-post-font-weight"
       ]
     },
     {
@@ -811,6 +814,8 @@
       "styleSignatures": [
         ".ldp-reader-window-fields {\n  grid-template-columns: repeat(2, minmax(0, 1fr));",
         ".ldp-performance-fields .ldp-setting-row {\n  grid-template-columns: minmax(0, 1fr) 116px;",
+        ".ldp-font-option-control {\n  display: grid;\n  width: 100%;\n  min-width: 0;\n  max-width: 390px;",
+        ".ldp-font-option-control:has(.ldp-font-family-custom:not([hidden])) {\n  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;",
         ".ldp-boost-rule-preview {\n  display: flex;",
         ".ldp-boost-rule-preview .ldp-boost-copy-preview {",
         ".ldp-settings-category-group[data-settings-category^=\"performance-\"]"

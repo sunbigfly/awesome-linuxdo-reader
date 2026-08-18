@@ -26,6 +26,8 @@ const { document: parsedDocument, window } = parseHTML(
 	'<button class="ldp-topic-timeline-track" aria-label="时间轴"></button>' +
 	'<input class="ldp-theme-time" data-ldp-tooltip-label="当地日落时间">' +
 	'<button class="ldp-avatar-flair" data-ldp-tooltip-label="贡献者"></button>' +
+	'<span class="ldp-notification-type-icon" data-ldp-tooltip-label="回复" ' +
+	'aria-hidden="true"><svg></svg></span>' +
 	'</section><article class="topic-list-item">' +
 	'<button class="ldp-reader-queue-add" aria-label="加入阅读队列" ' +
 	'data-ldp-tooltip-label="加入阅读队列" title="原生提示"></button>' +
@@ -43,6 +45,9 @@ const history = document.querySelector<HTMLElement>('.ldp-reader-history-nav')!;
 const settingsTab = document.querySelector<HTMLElement>('.ldp-settings-tab')!;
 const themeTime = document.querySelector<HTMLElement>('.ldp-theme-time')!;
 const badge = document.querySelector<HTMLElement>('.ldp-avatar-flair')!;
+const notificationTypeIcon = document.querySelector<HTMLElement>(
+	'.ldp-notification-type-icon',
+)!;
 const hostQueueAdd = document.querySelector<HTMLElement>(
 	'.ldp-reader-queue-add',
 )!;
@@ -52,6 +57,9 @@ Object.defineProperty(history, 'getBoundingClientRect', {
 });
 Object.defineProperty(themeTime, 'getBoundingClientRect', {
 	value: () => rect(200, 300, 100, 30),
+});
+Object.defineProperty(notificationTypeIcon, 'getBoundingClientRect', {
+	value: () => rect(260, 300, 16, 16),
 });
 Object.defineProperty(hostQueueAdd, 'getBoundingClientRect', {
 	value: () => rect(250, 420, 40, 40),
@@ -109,6 +117,12 @@ assert(
 		String(tooltip.element.style.left) === '310px' &&
 		String(tooltip.element.style.top) === '170px',
 	'显式命名的输入控件必须复用项目 tooltip 样式并优先显示在控件上方',
+);
+notificationTypeIcon.dispatchEvent(hover);
+assert(
+	String(tooltip.element.textContent) === '回复' &&
+		!notificationTypeIcon.hasAttribute('title'),
+	'每条通知的前置类型图标必须显示可读类型，并且不得叠加浏览器原生 tooltip',
 );
 overlay.dispatchEvent(new window.Event('ldp-reader-window-change'));
 assert(

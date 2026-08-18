@@ -10,6 +10,8 @@ import {
 import {
 	ReaderSettingsController,
 } from '../src/settings/reader-settings-controller.js';
+import { READER_SELECT_OPEN_EVENT } from
+	'../src/shell/reader-select-surface.js';
 import {
 	createReaderPreferencesDefaults,
 	type ReaderPreferences,
@@ -42,6 +44,17 @@ let observedResizeTarget: Element | null = null;
 let readerWidth = 1_080;
 let updateCount = 0;
 let queryCount = 0;
+const queriedLocalFontFamilies = Object.freeze([
+	'Noto Sans CJK SC',
+	'DengXian',
+	'Local Test',
+	'Local Test',
+	...Array.from(
+		{ length: 1_024 },
+		(_, index) => `System Test Font ${index + 1}`,
+	),
+]);
+const queriedLocalFontFamilyCount = new Set(queriedLocalFontFamilies).size;
 const settings = new ReaderSettingsController<ReaderPreferences>({
 	preferences: {
 		read: () => preferences,
@@ -90,7 +103,7 @@ const form = new ReaderFontSettingsForm({
 	font,
 	queryLocalFonts: async () => {
 		queryCount += 1;
-		return ['Noto Sans CJK SC', 'Local Test', 'Local Test'];
+		return queriedLocalFontFamilies;
 	},
 });
 
@@ -112,9 +125,10 @@ assert(
 			'[data-font-setting="hostEmbeddedLabelCardScale"]',
 		)?.closest('.ldp-setting-row')?.textContent?.includes('标签卡片') ===
 			true &&
-		queryCount === 1 &&
-		host.querySelectorAll('datalist option').length === 2 &&
-		host.querySelectorAll('select [data-font-local="true"]').length === 8 &&
+		queryCount === 0 &&
+		host.querySelectorAll('datalist option').length === 0 &&
+		host.querySelectorAll('select [data-font-local="true"]').length === 0 &&
+		host.querySelectorAll('select [data-font-local-query="true"]').length === 0 &&
 		[...host.querySelectorAll<HTMLSelectElement>(
 			'[data-reader-select-searchable="true"]',
 		)].length === 4 &&
@@ -123,7 +137,44 @@ assert(
 			'.ldp-font-rendering-settings input',
 		)].filter((input) => input.role === 'switch').length === 2 &&
 		settings.snapshot.draftCount === 0,
-	'字体 form/runtime 必须投影完整字段、使用统一切换按钮，并自动载入本机字体而不保留手动查询入口',
+	'字体 form/runtime 必须投影完整字段、使用统一切换按钮，且不得保留本机字体获取入口',
+);
+const interfaceFamily = host.querySelector<HTMLSelectElement>(
+	'[data-font-setting="family"]',
+)!;
+interfaceFamily.dispatchEvent(new parsedWindow.Event(
+	READER_SELECT_OPEN_EVENT,
+	{ bubbles: true },
+));
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	Number(queryCount) === 1 &&
+	host.querySelectorAll('datalist option').length ===
+		queriedLocalFontFamilyCount &&
+	host.querySelectorAll('select [data-font-local="true"]').length ===
+		queriedLocalFontFamilyCount * 4 &&
+	[...host.querySelectorAll<HTMLOptionElement>(
+		'select [data-font-local="true"]',
+	)].some((option) =>
+		option.value === 'local-font:DengXian' &&
+		option.textContent === '等线（DengXian）' &&
+		option.dataset.readerSelectPreview === '中文预览 · Aa 0123' &&
+		option.dataset.readerSelectFontFamily?.includes('DengXian')
+	) &&
+	host.querySelector<HTMLOptGroupElement>(
+		'optgroup[data-font-local-group="true"]',
+	)?.label === `本机字体 · ${queriedLocalFontFamilyCount}` &&
+	host.querySelector<HTMLSelectElement>(
+		'[data-font-setting="family"]',
+	)?.dataset.readerSelectSearchLabel ===
+		`搜索字体 · 本机 ${queriedLocalFontFamilyCount}` &&
+	host.querySelectorAll('select [data-font-local-query="true"]').length ===
+		0 &&
+	[...interfaceFamily.options].find((option) => option.selected)?.value ===
+		'system' &&
+	host.querySelector('.ldp-font-query-local') === null,
+	'打开字体下拉必须自动请求授权并载入全部字体，且不改变当前字体草稿',
 );
 const settingsBeforeResize = settings.snapshot;
 readerWidth = 360;
@@ -198,16 +249,19 @@ mutationCallback([
 assert(
 	String(font.snapshot.mode) === 'builtin' &&
 		host.querySelector('.ldp-font-family-source-status')?.textContent ===
-			'已读取 2 个本机字体。',
-	'外部字体工具退出后必须恢复 builtin 状态，同时保留自动读取的本机字体结果',
+			`已获取 ${queriedLocalFontFamilyCount} 个本机字体；` +
+			'下拉列表已显示字体预览。',
+	'外部字体工具退出后必须恢复 builtin 状态，同时保留用户授权读取的本机字体结果',
 );
 
 assert(
 	Number(queryCount) === 1 &&
-	host.querySelectorAll('datalist option').length === 2 &&
+	host.querySelectorAll('datalist option').length ===
+		queriedLocalFontFamilyCount &&
 	host.querySelector('.ldp-font-family-source-status')?.textContent ===
-			'已读取 2 个本机字体。',
-	'本机字体必须仅随面板生命周期自动读取一次，并去重同步到共享输入下拉框',
+			`已获取 ${queriedLocalFontFamilyCount} 个本机字体；` +
+			'下拉列表已显示字体预览。',
+	'本机字体必须仅在用户授权请求后读取一次，并去重同步到共享输入下拉框',
 );
 
 const saved = settings.saveAll();

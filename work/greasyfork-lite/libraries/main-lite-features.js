@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.6
+// @version      1.5.7
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户、翻译与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.6 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.5.7 - main-lite-features
  * 媒体、互动、设置、用户、翻译与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.6",
+			sourceVersion: "1.5.7",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.6") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.7") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -3742,7 +3742,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	});
 	module.exports = __toCommonJS(reader_bookmark_controller_exports);
 	var import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_reader_collection_hydration = require("../collection/reader-collection-hydration.js"), import_bookmark_action_feature_commands = require("../post/bookmark-action-feature-commands.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_reader_search = require("../search/reader-search.js"), import_reader_bookmark_model = require("./reader-bookmark-model.js"), import_reader_collection_filter_model = require("../collection/reader-collection-filter-model.js");
-	const DEFAULT_PAGE_SIZE = 20, DEFAULT_LIVE_REFRESH_DELAY_MS = 240, DEFAULT_OPEN_REVALIDATE_MS = 30 * 6e4, DEFAULT_POLL_INTERVAL_MS = 30 * 6e4, DEFAULT_BACKGROUND_RETRY_DELAY_MS = 6e4, DEFAULT_HISTORY_STEP_DELAY_MS = 4e3, DEFAULT_HISTORY_BATCH_PAGES = 8, DEFAULT_HISTORY_BATCH_DELAY_MS = 6e4, HISTORY_PROJECTION_BATCH_PAGES = 4, VISIBLE_HISTORY_LEASE_ROUNDS = 2, CLOUDFLARE_HISTORY_RETRY_DELAY_MS = 5 * 6e4, BACKGROUND_SOURCE_ORDER = Object.freeze([
+	const DEFAULT_PAGE_SIZE = 20, DEFAULT_LIVE_REFRESH_DELAY_MS = 240, DEFAULT_OPEN_REVALIDATE_MS = 30 * 6e4, DEFAULT_POLL_INTERVAL_MS = 30 * 6e4, DEFAULT_BACKGROUND_RETRY_DELAY_MS = 6e4, DEFAULT_HISTORY_STEP_DELAY_MS = 4e3, DEFAULT_HISTORY_BATCH_PAGES = 8, DEFAULT_HISTORY_BATCH_DELAY_MS = 6e4, HISTORY_PROJECTION_BATCH_PAGES = 4, VISIBLE_HISTORY_LEASE_ROUNDS = 2, CLOUDFLARE_HISTORY_RETRY_DELAY_MS = 5 * 6e4, BOOKMARK_HISTORY_PROJECTION_VERSION = 2, BACKGROUND_SOURCE_ORDER = Object.freeze([
 	  "bookmarks",
 	  "replies",
 	  "boosts",
@@ -3762,7 +3762,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    checkedAt: null
 	  });
 	}
-	function emptyHistoryStreamState(refreshHead = !1) {
+	function emptyHistoryStreamState(refreshHead = !0) {
 	  return Object.freeze({
 	    next: Object.freeze({ page: 0, cursor: 0 }),
 	    pages: 0,
@@ -3777,7 +3777,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  return Object.freeze(source === "reactions" ? ["reaction-plugin", "likes"] : [source]);
 	}
 	function historyProjectionPartition(stream) {
-	  return `history:${stream}`;
+	  return `history:v${BOOKMARK_HISTORY_PROJECTION_VERSION}:${stream}`;
 	}
 	function historyRetryDelayMs(cause, fallbackMs) {
 	  const source = cause !== null && typeof cause == "object" ? cause : Object.freeze({}), decision = source.decision !== null && typeof source.decision == "object" ? source.decision : Object.freeze({}), explicit = Number(
@@ -4195,16 +4195,14 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	        refreshHead: !1
 	      })), this.#historyStreamRecords.set(stream, snapshot.records));
 	    for (const source of sources) {
-	      const streams = historyStreamsForSource(source);
-	      if (!streams.every((stream) => restoredStreamNames.has(stream))) continue;
-	      const records = source === "reactions" ? (0, import_reader_bookmark_model.mergeGivenReactionRecords)(
+	      const streams = historyStreamsForSource(source), streamRecords = source === "reactions" ? (0, import_reader_bookmark_model.mergeGivenReactionRecords)(
 	        this.#historyStreamRecords.get("likes") ?? [],
 	        this.#historyStreamRecords.get("reaction-plugin") ?? []
-	      ) : this.#historyStreamRecords.get(streams[0]) ?? Object.freeze([]);
+	      ) : this.#historyStreamRecords.get(streams[0]) ?? Object.freeze([]), complete = streams.every((stream) => restoredStreamNames.has(stream) && this.#historyStreams.get(stream)?.complete === !0);
 	      this.#applySourceProgress(source, {
 	        pages: streams.reduce((total, stream) => total + (this.#historyStreams.get(stream)?.pages ?? 0), 0),
-	        records: this.#mergeSourceRecords(source, records),
-	        complete: streams.every((stream) => this.#historyStreams.get(stream)?.complete === !0)
+	        records: complete ? streamRecords : this.#mergeSourceRecords(source, streamRecords),
+	        complete
 	      }, !1);
 	    }
 	    this.#backgroundStatus = this.#historyProgress().completedTabs === 5 ? "complete" : "idle", this.#backgroundSource = null, this.#backgroundError = null, this.#backgroundRetryAt = null, this.#render();
@@ -4343,7 +4341,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    let reportedPages = 0, reportedComplete = !1;
 	    selected && (this.#loading = knownIdentities.size === 0, this.#refreshing = knownIdentities.size > 0, this.#stale = !1, this.#error = null, this.#emit());
 	    try {
-	      const loaded = await this.#loadSource(source, {
+	      const reconcileHeadRecords = (records, complete) => complete ? records : this.#mergeSourceRecords(source, records), loaded = await this.#loadSource(source, {
 	        refresh: !0,
 	        signal: refreshAbort.signal,
 	        ...selected ? {} : { background: !0 },
@@ -4353,7 +4351,10 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	        onProgress: (progress) => {
 	          valid() && (reportedPages = progress.pages, reportedComplete = progress.complete, this.#applySourceProgress(source, {
 	            pages: Math.max(previous.pages, progress.pages),
-	            records: progress.records,
+	            records: reconcileHeadRecords(
+	              progress.records,
+	              progress.complete
+	            ),
 	            complete: previous.complete || progress.complete
 	          }), selected && (this.#loading = !1, this.#refreshing = !0), this.#render());
 	        }
@@ -4361,7 +4362,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	      if (!valid()) return;
 	      this.#applySourceProgress(source, {
 	        pages: Math.max(previous.pages, reportedPages || 1),
-	        records: loaded,
+	        records: reconcileHeadRecords(loaded, reportedComplete),
 	        complete: previous.complete || reportedComplete
 	      }), this.#lastAuthoritativeAt.set(source, this.#now()), this.#queueTopicTaxonomyEnrichment(source, loaded), selected && (this.#loading = !1, this.#refreshing = !1, this.#stale = !1, this.#error = null), this.#render();
 	    } catch (cause) {
@@ -4466,8 +4467,8 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  }
 	  #nextBackgroundStream() {
 	    for (let offset = 0; offset < BACKGROUND_STREAM_ORDER.length; offset += 1) {
-	      const index = (this.#backgroundStreamCursor + offset) % BACKGROUND_STREAM_ORDER.length, stream = BACKGROUND_STREAM_ORDER[index], source = sourceForHistoryStream(stream);
-	      if (!(this.#backgroundInFlightStreams.has(stream) || this.#sourceProgress.get(source)?.complete || this.#historyStreams.get(stream)?.complete))
+	      const index = (this.#backgroundStreamCursor + offset) % BACKGROUND_STREAM_ORDER.length, stream = BACKGROUND_STREAM_ORDER[index];
+	      if (!(this.#backgroundInFlightStreams.has(stream) || this.#historyStreams.get(stream)?.complete))
 	        return this.#backgroundStreamCursor = (index + 1) % BACKGROUND_STREAM_ORDER.length, stream;
 	    }
 	    return null;
@@ -4553,10 +4554,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	  }
 	  async #warmBackgroundCollections() {
 	    if (!this.#backgroundCacheActive || this.scope.destroyed || this.#backgroundWarming || !this.#activityVisible() || !this.#native.username().trim()) return;
-	    if (!BACKGROUND_STREAM_ORDER.some((stream) => {
-	      const source = sourceForHistoryStream(stream);
-	      return !this.#sourceProgress.get(source)?.complete && !this.#historyStreams.get(stream)?.complete;
-	    })) {
+	    if (!BACKGROUND_STREAM_ORDER.some((stream) => !this.#historyStreams.get(stream)?.complete)) {
 	      this.#backgroundStatus = "complete", this.#backgroundSource = null, this.#backgroundError = null, this.#backgroundRetryAt = null, this.#emit();
 	      return;
 	    }
@@ -4847,7 +4845,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    this.#revision += 1, this.#snapshotCache = null, this.changes.emit(this.snapshot);
 	  }
 	}
-}, "731279bef07716fa979c41cf34173ea570437400be4b26e3e0b927a8e2417236");
+}, "7bed627f06f3489dd553e4f8615f86546becb82fe491540911495619b871b87c");
 
 /* Source: lite/src/bookmark/reader-bookmark-model.ts */
 runtime.register("src/bookmark/reader-bookmark-model.js", function(module, exports, require) {
@@ -5557,7 +5555,7 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	      snapshot.refreshing ? "正在更新收藏与回应" : ""
 	    ].filter(Boolean).join(" · ");
 	    const complete = history.status === "complete";
-	    if (history.status === "idle" && history.completedTabs === 0 && history.records === 0 && (this.#historyCacheCompleted = !1), complete && (this.#historyCacheCompleted = !0), this.#historyCacheCompleted) {
+	    if (this.#historyCacheCompleted = complete, this.#historyCacheCompleted) {
 	      this.#progress.render({
 	        visible: !1,
 	        label: "",
@@ -5804,7 +5802,7 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	    button.dataset.ldpRequestBusy = busy ? "1" : "0", button.setAttribute("aria-busy", String(busy)), button.disabled = busy;
 	  }
 	}
-}, "6bc4fe514ac4dac15576cc147d26235b6ea0554e54a8ab8385f78796ac75661e");
+}, "7a98b9f3319a9c8b2155836d80f42ee9d05bd00934cceb0a0f8b012d42c0d39e");
 
 /* Source: lite/src/font/reader-font-style-controller.ts */
 runtime.register("src/font/reader-font-style-controller.js", function(module, exports, require) {
@@ -6242,6 +6240,68 @@ runtime.register("src/font/reader-font-style-controller.js", function(module, ex
 	  }
 	}
 }, "e72d3354e4db54f88242dc0e767ac0908f5aeb34dc68b6dc2e338de1e263302d");
+
+/* Source: lite/src/font/reader-local-font-catalog.ts */
+runtime.register("src/font/reader-local-font-catalog.js", function(module, exports, require) {
+	var reader_local_font_catalog_exports = {};
+	__export(reader_local_font_catalog_exports, {
+	  READER_FONT_OPTION_PREVIEW: () => READER_FONT_OPTION_PREVIEW,
+	  readerLocalFontPresentation: () => readerLocalFontPresentation
+	});
+	module.exports = __toCommonJS(reader_local_font_catalog_exports);
+	var import_reader_font_style_controller = require("./reader-font-style-controller.js");
+	const READER_FONT_OPTION_PREVIEW = "中文预览 · Aa 0123", READER_LOCAL_FONT_CHINESE_NAMES = Object.freeze(/* @__PURE__ */ new Map([
+	  ["alibaba puhuiti", "阿里巴巴普惠体"],
+	  ["dengxian", "等线"],
+	  ["dfkai-sb", "标楷体"],
+	  ["fangsong", "仿宋"],
+	  ["fzshuti", "方正舒体"],
+	  ["fzyaoti", "方正姚体"],
+	  ["harmonyos sans sc", "鸿蒙黑体"],
+	  ["heiti sc", "黑体-简"],
+	  ["hiragino sans gb", "冬青黑体简体中文"],
+	  ["kaiti", "楷体"],
+	  ["kaiti sc", "楷体-简"],
+	  ["lisu", "隶书"],
+	  ["lxgw wenkai", "霞鹜文楷"],
+	  ["microsoft jhenghei", "微软正黑体"],
+	  ["microsoft jhenghei ui", "微软正黑体 UI"],
+	  ["microsoft yahei", "微软雅黑"],
+	  ["microsoft yahei ui", "微软雅黑 UI"],
+	  ["mingliu", "细明体"],
+	  ["nsimsun", "新宋体"],
+	  ["pingfang sc", "苹方-简"],
+	  ["pmingliu", "新细明体"],
+	  ["simhei", "黑体"],
+	  ["simsun", "宋体"],
+	  ["songti sc", "宋体-简"],
+	  ["source han sans sc", "思源黑体"],
+	  ["source han serif sc", "思源宋体"],
+	  ["stcaiyun", "华文彩云"],
+	  ["stfangsong", "华文仿宋"],
+	  ["stheiti", "华文黑体"],
+	  ["sthupo", "华文琥珀"],
+	  ["stkaiti", "华文楷体"],
+	  ["stliti", "华文隶书"],
+	  ["stsong", "华文宋体"],
+	  ["stxihei", "华文细黑"],
+	  ["stxingkai", "华文行楷"],
+	  ["stxinwei", "华文新魏"],
+	  ["stzhongsong", "华文中宋"],
+	  ["youyuan", "幼圆"]
+	]));
+	function readerLocalFontPresentation(value) {
+	  const family = String(value ?? "").trim(), chineseName = READER_LOCAL_FONT_CHINESE_NAMES.get(
+	    family.toLocaleLowerCase("en-US")
+	  ), label = chineseName ? `${chineseName}（${family}）` : family;
+	  return Object.freeze({
+	    family,
+	    label,
+	    fontFamilyCss: (0, import_reader_font_style_controller.readerFontFamilyCss)("custom", family),
+	    searchText: chineseName ? `${chineseName} ${family}` : family
+	  });
+	}
+}, "afaeb528f7088d8c2e5d47170ed12efccc8ee661c224f96199afac25e05c9dd2");
 
 /* Source: lite/src/media/reader-compact-image-viewer.ts */
 runtime.register("src/media/reader-compact-image-viewer.js", function(module, exports, require) {
@@ -17378,7 +17438,7 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	  renderReaderTopicSummaryShareImage: () => renderReaderTopicSummaryShareImage
 	});
 	module.exports = __toCommonJS(reader_topic_summary_surface_exports);
-	var import_reader_icon = require("../components/reader-icon.js"), import_html_element = require("../dom/html-element.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_topic_custom_summary = require("./reader-topic-custom-summary.js");
+	var import_reader_icon = require("../components/reader-icon.js"), import_html_element = require("../dom/html-element.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_local_font_catalog = require("../font/reader-local-font-catalog.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_topic_custom_summary = require("./reader-topic-custom-summary.js");
 	const DEFAULT_SHARE_IMAGE_WIDTH = 1080, SOCIAL_SHARE_IMAGE_WIDTH = 1200, MIN_SHARE_IMAGE_WIDTH = 720, MAX_SHARE_IMAGE_WIDTH = 2160, DEFAULT_SHARE_BODY_FONT_SIZE = 31, MIN_SHARE_BODY_FONT_SIZE = 22, MAX_SHARE_BODY_FONT_SIZE = 48, READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY = "ldp:topic-summary-share-settings:v1", READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY = "ldp:topic-summary-results:v1", READER_TOPIC_SUMMARY_WINDOW_GEOMETRY_STORAGE_KEY_PREFIX = "ldp:topic-summary-window-geometry:v1", LOCAL_FONT_PREFIX = "local:";
 	function positionStorage(storage, readMode) {
 	  if (!storage) return;
@@ -17542,6 +17602,9 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	function selectOption(document, value, label) {
 	  const option = document.createElement("option");
 	  return option.value = value, option.textContent = label, option;
+	}
+	function addFontOptionPreview(option, fontFamilyCss, searchText = "") {
+	  return option.dataset.readerSelectPreview = import_reader_local_font_catalog.READER_FONT_OPTION_PREVIEW, option.dataset.readerSelectFontFamily = fontFamilyCss, searchText && (option.dataset.readerSelectSearchText = searchText), option;
 	}
 	function selectValue(select, value) {
 	  for (const option of select.options)
@@ -18151,6 +18214,7 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	  #promptExpanded = !1;
 	  #activeStage = null;
 	  #localFontsLoaded = !1;
+	  #localFontsLoading = !1;
 	  #fontRenderEpoch = 0;
 	  #fontLoads = /* @__PURE__ */ new Map();
 	  #modelContextTokens = /* @__PURE__ */ new Map();
@@ -18370,7 +18434,7 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	      this.#document,
 	      "span",
 	      "ldp-topic-summary-font-status"
-	    ), this.#fontStatus.role = "status", this.#fontStatus.textContent = this.#fonts?.queryLocalFonts ? "展开设置后读取设置面板共用的本机字体。" : "当前浏览器仅提供预设字体。", this.#settingsPanel.append(
+	    ), this.#fontStatus.role = "status", this.#fontStatus.textContent = this.#fonts?.queryLocalFonts ? "打开字体下拉时，将自动请求授权并读取本机字体。" : "当前浏览器仅提供预设字体。", this.#settingsPanel.append(
 	      styleField,
 	      chineseField,
 	      latinField,
@@ -18553,7 +18617,7 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	      this.#historyOpen = !1, this.#settingsPanel.hidden = !expanded, this.settingsButton.setAttribute("aria-expanded", String(expanded)), this.settingsButton.setAttribute(
 	        "aria-label",
 	        expanded ? "收起图片设置" : "展开图片设置"
-	      ), expanded && this.#loadLocalFonts();
+	      );
 	    }), this.scope.listen(this.styleSelect, "change", () => {
 	      this.#settings = Object.freeze({
 	        ...this.#settings,
@@ -18663,40 +18727,99 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	      "select",
 	      "ldp-reader-select ldp-topic-summary-font-select"
 	    );
-	    select.dataset.readerSelectSearchable = "true", select.setAttribute("aria-label", label), select.append(selectOption(this.#document, "reader", "跟随阅读器正文")), chinese ? select.append(
-	      selectOption(this.#document, "cjkSans", "中文无衬线"),
-	      selectOption(this.#document, "serif", "中文衬线"),
-	      selectOption(this.#document, "system", "系统默认字体")
-	    ) : select.append(
-	      selectOption(this.#document, "system", "系统默认字体"),
-	      selectOption(this.#document, "serif", "衬线"),
-	      selectOption(this.#document, "monospace", "等宽")
-	    );
+	    select.dataset.readerSelectSearchable = "true", select.dataset.readerSelectSearchLabel = this.#fonts?.queryLocalFonts ? "搜索字体（尚未获取本机字体）" : "搜索预设字体", select.setAttribute("aria-label", label);
+	    const presets = (0, import_html_element.htmlElement)(this.#document, "optgroup");
+	    presets.label = "预设字体", presets.append(addFontOptionPreview(
+	      selectOption(this.#document, "reader", "跟随阅读器正文"),
+	      this.#fonts?.readCurrentFamily() || "inherit"
+	    )), chinese ? presets.append(
+	      addFontOptionPreview(
+	        selectOption(this.#document, "cjkSans", "中文无衬线"),
+	        (0, import_reader_font_style_controller.readerFontFamilyCss)("cjkSans")
+	      ),
+	      addFontOptionPreview(
+	        selectOption(this.#document, "serif", "中文衬线"),
+	        (0, import_reader_font_style_controller.readerFontFamilyCss)("serif")
+	      ),
+	      addFontOptionPreview(
+	        selectOption(this.#document, "system", "系统默认字体"),
+	        (0, import_reader_font_style_controller.readerFontFamilyCss)("system")
+	      )
+	    ) : presets.append(
+	      addFontOptionPreview(
+	        selectOption(this.#document, "system", "系统默认字体"),
+	        (0, import_reader_font_style_controller.readerFontFamilyCss)("system")
+	      ),
+	      addFontOptionPreview(
+	        selectOption(this.#document, "serif", "衬线"),
+	        (0, import_reader_font_style_controller.readerFontFamilyCss)("serif")
+	      ),
+	      addFontOptionPreview(
+	        selectOption(this.#document, "monospace", "等宽"),
+	        (0, import_reader_font_style_controller.readerFontFamilyCss)("monospace")
+	      )
+	    ), select.append(presets);
 	    const saved = chinese ? this.#settings.chineseFont : this.#settings.latinFont;
-	    return this.#appendSavedLocalFont(select, saved), selectValue(select, saved), select;
+	    return this.#appendSavedLocalFont(select, saved), selectValue(select, saved), this.scope.listen(select, import_reader_select_surface.READER_SELECT_OPEN_EVENT, () => {
+	      this.#loadLocalFonts();
+	    }), select;
 	  }
 	  #appendSavedLocalFont(select, token) {
 	    if (!token.startsWith(LOCAL_FONT_PREFIX) || [...select.options].some((option) => option.value === token)) return;
-	    const family = token.slice(LOCAL_FONT_PREFIX.length);
-	    select.append(selectOption(this.#document, token, family));
+	    const family = token.slice(LOCAL_FONT_PREFIX.length), font = (0, import_reader_local_font_catalog.readerLocalFontPresentation)(family), localFonts = (0, import_html_element.htmlElement)(this.#document, "optgroup");
+	    localFonts.label = "已选本机字体", localFonts.dataset.fontLocalGroup = "true", localFonts.append(addFontOptionPreview(
+	      selectOption(this.#document, token, font.label),
+	      font.fontFamilyCss,
+	      font.searchText
+	    )), select.append(localFonts);
 	  }
 	  async #loadLocalFonts() {
-	    if (!(this.#localFontsLoaded || !this.#fonts?.queryLocalFonts)) {
-	      this.#localFontsLoaded = !0, this.#fontStatus.textContent = "正在读取本机字体…";
+	    if (!(this.#localFontsLoaded || this.#localFontsLoading || !this.#fonts?.queryLocalFonts)) {
+	      this.#localFontsLoading = !0, this.#fontStatus.textContent = "正在读取本机字体…";
 	      try {
-	        const names = [...new Set((await this.#fonts.queryLocalFonts()).map((name) => String(name).trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+	        const fonts = [...new Set((await this.#fonts.queryLocalFonts()).map((name) => String(name).trim()).filter(Boolean))].map(import_reader_local_font_catalog.readerLocalFontPresentation).sort((left, right) => left.label.localeCompare(
+	          right.label,
+	          "zh-CN",
+	          { numeric: !0, sensitivity: "base" }
+	        ));
 	        if (this.scope.destroyed) return;
 	        for (const select of [
 	          this.chineseFontSelect,
 	          this.latinFontSelect
+	        ]) {
+	          select.dataset.readerSelectSearchLabel = `搜索字体 · 本机 ${fonts.length}`;
+	          const selected = selectedValue(select), selectedFamily = selected.startsWith(LOCAL_FONT_PREFIX) ? selected.slice(LOCAL_FONT_PREFIX.length) : "", localFonts = (0, import_html_element.htmlElement)(this.#document, "optgroup");
+	          localFonts.label = `本机字体 · ${fonts.length}`, localFonts.dataset.fontLocalGroup = "true";
+	          const available = selectedFamily && !fonts.some(
+	            (font) => font.family === selectedFamily
+	          ) ? [...fonts, (0, import_reader_local_font_catalog.readerLocalFontPresentation)(selectedFamily)] : fonts;
+	          for (const font of available)
+	            localFonts.append(addFontOptionPreview(
+	              selectOption(
+	                this.#document,
+	                `${LOCAL_FONT_PREFIX}${font.family}`,
+	                font.label
+	              ),
+	              font.fontFamilyCss,
+	              font.searchText
+	            ));
+	          for (const previous of select.querySelectorAll(
+	            'optgroup[data-font-local-group="true"]'
+	          )) previous.remove();
+	          select.append(localFonts), selectValue(select, selected);
+	        }
+	        this.#localFontsLoaded = !0, this.#localFontsLoading = !1, this.#fontStatus.textContent = fonts.length ? `已获取 ${fonts.length} 种本机字体；下拉列表已显示字体预览。` : "浏览器未返回可用本机字体。";
+	        const EventConstructor = this.#document.defaultView?.Event ?? Event;
+	        for (const select of [
+	          this.chineseFontSelect,
+	          this.latinFontSelect
 	        ])
-	          for (const name of names) {
-	            const token = `${LOCAL_FONT_PREFIX}${name}`;
-	            [...select.options].some((option) => option.value === token) || select.append(selectOption(this.#document, token, name));
-	          }
-	        this.#fontStatus.textContent = names.length ? `已与设置面板共用 ${names.length} 种本机字体。` : "浏览器未返回可用本机字体。";
+	          select.dispatchEvent(new EventConstructor(
+	            import_reader_select_surface.READER_SELECT_OPTIONS_CHANGE_EVENT,
+	            { bubbles: !0 }
+	          ));
 	      } catch (cause) {
-	        this.#localFontsLoaded = !1, this.#fontStatus.textContent = "未获得本机字体权限，仍可使用预设字体。", this.#onError(cause);
+	        this.#localFontsLoading = !1, this.#fontStatus.textContent = "未获得本机字体权限；重新打开字体下拉可再次授权。", this.#onError(cause);
 	      }
 	    }
 	  }
@@ -19218,7 +19341,7 @@ ${selectionKey}`;
 	    return this.#uploadedImage = Object.freeze({ key, value }), value;
 	  }
 	}
-}, "9ee05fff1dc8a56adcf6c79f81b4af7120bd29aa1d887bd5ac29ef818dded8ed");
+}, "578672ae0dc34f7834b15af6f27bdeee2ea3a72f26dddbf28efdcaec426292ff");
 
 /* Source: lite/src/post/topic-action-feature-commands.ts */
 runtime.register("src/post/topic-action-feature-commands.js", function(module, exports, require) {
@@ -21777,6 +21900,550 @@ runtime.register("src/settings/reader-appearance-settings-form.js", function(mod
 	}
 }, "311000adafc9b3d1ac8351bdf00d78e4921ad2dd3b8d1f1ff56ffa5e7bd6daa8");
 
+/* Source: lite/src/settings/reader-browser-storage-management.ts */
+runtime.register("src/settings/reader-browser-storage-management.js", function(module, exports, require) {
+	var reader_browser_storage_management_exports = {};
+	__export(reader_browser_storage_management_exports, {
+	  READER_LOCAL_STORAGE_PROBE_PREFIX: () => READER_LOCAL_STORAGE_PROBE_PREFIX,
+	  READER_LOCAL_STORAGE_REMAINING_PROBE_MAX_BYTES: () => READER_LOCAL_STORAGE_REMAINING_PROBE_MAX_BYTES,
+	  READER_LOCAL_STORAGE_STALE_AFTER_MS: () => READER_LOCAL_STORAGE_STALE_AFTER_MS,
+	  READER_LOCAL_STORAGE_STARTUP_HEADROOM_BYTES: () => READER_LOCAL_STORAGE_STARTUP_HEADROOM_BYTES,
+	  ReaderBrowserStorageManagementSurface: () => ReaderBrowserStorageManagementSurface,
+	  measureReaderLocalStorageRemaining: () => measureReaderLocalStorageRemaining,
+	  readReaderBrowserStorageSnapshot: () => readReaderBrowserStorageSnapshot
+	});
+	module.exports = __toCommonJS(reader_browser_storage_management_exports);
+	var import_reader_data_runtime = require("../app/reader-data-runtime.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_reader_settings_dom = require("./reader-settings-dom.js");
+	const READER_LOCAL_STORAGE_PROBE_PREFIX = "linuxdo-enhanced-reader:storage-probe:v1:", READER_LOCAL_STORAGE_STALE_AFTER_MS = 1440 * 60 * 1e3, READER_LOCAL_STORAGE_REMAINING_PROBE_MAX_BYTES = 16 * 1024 * 1024, READER_LOCAL_STORAGE_STARTUP_HEADROOM_BYTES = 64 * 1024;
+	let probeSequence = 0;
+	function record(value) {
+	  return value !== null && typeof value == "object" && !Array.isArray(value) ? value : null;
+	}
+	function finite(value) {
+	  const normalized = Number(value);
+	  return Number.isFinite(normalized) && normalized >= 0 ? normalized : null;
+	}
+	function quotaError(cause) {
+	  const error = cause;
+	  return error?.name === "QuotaExceededError" || error?.name === "NS_ERROR_DOM_QUOTA_REACHED" || error?.code === 22 || error?.code === 1014;
+	}
+	function accessDeniedError(cause) {
+	  const name = String(
+	    cause?.name ?? ""
+	  );
+	  return name === "SecurityError" || name === "NotAllowedError" || name === "InvalidStateError";
+	}
+	function healthFromError(cause) {
+	  return quotaError(cause) ? "quota-exceeded" : accessDeniedError(cause) ? "access-denied" : "unavailable";
+	}
+	function approximateStorageBytes(key, value) {
+	  return Math.max(0, (key.length + value.length) * 2);
+	}
+	function readerOwnedKey(key) {
+	  return key.startsWith("linuxdo-enhanced-reader:") || key.startsWith("awesome-linuxdo-reader:") || key.startsWith("ldp:mian-lite:") || key.endsWith(":mian-lite:v1");
+	}
+	function liveExpiryEntries(value, now) {
+	  return Array.isArray(value) && value.some((entry) => {
+	    const source = record(entry);
+	    return source ? [source.expiresAt, source.retryAt, source.probeExpiresAt].some((timestamp) => (finite(timestamp) ?? 0) > now) : !1;
+	  });
+	}
+	function staleRequestPermit(value, now) {
+	  let source = null;
+	  try {
+	    source = record(JSON.parse(value));
+	  } catch {
+	    return !1;
+	  }
+	  if (!source || source.schemaVersion !== 1) return !1;
+	  const updatedAt = finite(source.updatedAt);
+	  if (updatedAt === null || updatedAt + READER_LOCAL_STORAGE_STALE_AFTER_MS > now) return !1;
+	  const recentWindowEvent = Array.isArray(source.events) && source.events.some((timestamp) => (finite(timestamp) ?? 0) + 6e4 > now), challenge = record(source.challenge), liveChallenge = challenge !== null && String(challenge.state ?? "") !== "passed" && (finite(challenge.expiresAt) ?? 0) > now;
+	  return !recentWindowEvent && !liveChallenge && !liveExpiryEntries(source.intents, now) && !liveExpiryEntries(source.active, now) && !liveExpiryEntries(source.policies, now) && !liveExpiryEntries(source.rateLimits, now);
+	}
+	function staleCacheCoordination(value, now) {
+	  let source = null;
+	  try {
+	    source = record(JSON.parse(value));
+	  } catch {
+	    return !1;
+	  }
+	  if (!source || source.schemaVersion !== 1) return !1;
+	  const updatedAt = finite(source.updatedAt);
+	  return updatedAt !== null && updatedAt + READER_LOCAL_STORAGE_STALE_AFTER_MS <= now && !liveExpiryEntries(source.flights, now) && !liveExpiryEntries(source.failures, now);
+	}
+	function staleReaderEntry(key, value, now) {
+	  return key.startsWith(READER_LOCAL_STORAGE_PROBE_PREFIX) ? !0 : key === import_browser_shared_request_permit.READER_REQUEST_PERMIT_STORAGE_KEY ? staleRequestPermit(value, now) : key === import_reader_data_runtime.READER_CACHE_COORDINATION_STORAGE_KEY ? staleCacheCoordination(value, now) : !1;
+	}
+	function readLocalStorage(storage, now) {
+	  const entries = [];
+	  let bytes = 0, readerBytes = 0, staleBytes = 0;
+	  for (let index = 0; index < storage.length; index += 1) {
+	    const key = storage.key(index);
+	    if (key === null || !readerOwnedKey(key)) continue;
+	    const value = storage.getItem(key) ?? "", entryBytes = approximateStorageBytes(key, value), stale = staleReaderEntry(key, value, now);
+	    bytes += entryBytes, readerBytes += entryBytes, stale && (staleBytes += entryBytes), entries.push(Object.freeze({
+	      key,
+	      bytes: entryBytes,
+	      readerOwned: !0,
+	      stale
+	    }));
+	  }
+	  return entries.sort((left, right) => right.bytes - left.bytes || left.key.localeCompare(right.key)), Object.freeze({
+	    entries: Object.freeze(entries),
+	    bytes,
+	    readerBytes,
+	    staleBytes,
+	    staleCount: entries.filter((entry) => entry.stale).length
+	  });
+	}
+	function probeKey(now) {
+	  return probeSequence += 1, `${READER_LOCAL_STORAGE_PROBE_PREFIX}${now}-${probeSequence}`;
+	}
+	function verifyWritable(storage, now) {
+	  const key = probeKey(now);
+	  try {
+	    storage.setItem(
+	      key,
+	      "1".repeat(READER_LOCAL_STORAGE_STARTUP_HEADROOM_BYTES / 2)
+	    );
+	  } finally {
+	    storage.removeItem(key);
+	  }
+	}
+	function safeMetric(value) {
+	  const normalized = Number(value);
+	  return Number.isFinite(normalized) && normalized >= 0 ? normalized : null;
+	}
+	async function readReaderBrowserStorageSnapshot(options) {
+	  const now = options.now ?? Date.now;
+	  let storageAccess = null, health = "available", cause = options.initialAccessError, local = Object.freeze({
+	    entries: Object.freeze([]),
+	    bytes: 0,
+	    readerBytes: 0,
+	    staleBytes: 0,
+	    staleCount: 0
+	  });
+	  if (options.storageAccess?.hasAccess)
+	    try {
+	      storageAccess = await options.storageAccess.hasAccess(), !storageAccess && cause === void 0 && (health = "access-denied", cause = new DOMException("站点存储访问未授权", "NotAllowedError"));
+	    } catch (error) {
+	      options.onError?.(error);
+	    }
+	  if (cause !== void 0 && (health = healthFromError(cause)), health === "available")
+	    try {
+	      local = readLocalStorage(options.storage, now()), verifyWritable(options.storage, now());
+	    } catch (error) {
+	      health = healthFromError(error), cause = error;
+	    }
+	  let originUsage = null, originQuota = null, persistent = null;
+	  if (options.originStorage?.estimate)
+	    try {
+	      const estimate = await options.originStorage.estimate();
+	      originUsage = safeMetric(estimate.usage), originQuota = safeMetric(estimate.quota);
+	    } catch (error) {
+	      options.onError?.(error);
+	    }
+	  if (options.originStorage?.persisted)
+	    try {
+	      persistent = await options.originStorage.persisted();
+	    } catch (error) {
+	      options.onError?.(error);
+	    }
+	  return Object.freeze({
+	    health,
+	    ...cause === void 0 ? {} : { cause },
+	    ...local,
+	    originUsage,
+	    originQuota,
+	    persistent,
+	    storageAccess
+	  });
+	}
+	function measureReaderLocalStorageRemaining(storage, options = {}) {
+	  const now = options.now ?? Date.now, maxBytes = Math.max(
+	    2,
+	    Math.floor(
+	      Number(options.maxBytes ?? READER_LOCAL_STORAGE_REMAINING_PROBE_MAX_BYTES)
+	    )
+	  ), maxCharacters = Math.max(1, Math.floor(maxBytes / 2)), key = probeKey(now());
+	  let low = 0, high = maxCharacters, capped = !1, unexpected;
+	  const write = (characters) => {
+	    try {
+	      return storage.setItem(key, "0".repeat(characters)), !0;
+	    } catch (cause) {
+	      return quotaError(cause) || (unexpected = cause), !1;
+	    }
+	  };
+	  try {
+	    if (write(maxCharacters))
+	      low = maxCharacters, capped = !0;
+	    else if (unexpected === void 0)
+	      for (; low + 1 < high; ) {
+	        const middle = low + Math.floor((high - low) / 2);
+	        if (write(middle)) low = middle;
+	        else if (high = middle, unexpected !== void 0) break;
+	      }
+	  } finally {
+	    try {
+	      storage.removeItem(key);
+	    } catch (cause) {
+	      unexpected ??= cause;
+	    }
+	  }
+	  return Object.freeze({
+	    bytes: low * 2,
+	    capped,
+	    ...unexpected === void 0 ? {} : { cause: unexpected }
+	  });
+	}
+	function formatBytes(rawBytes) {
+	  const bytes = Math.max(0, Number(rawBytes) || 0);
+	  return bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
+	}
+	function healthLabel(health) {
+	  return health === "available" ? "可读写" : health === "quota-exceeded" ? "空间已满或余量不足" : health === "access-denied" ? "存储访问被拒绝" : "当前环境不可用";
+	}
+	class ReaderBrowserStorageManagementSurface {
+	  scope;
+	  #options;
+	  #section;
+	  #summary;
+	  #picker;
+	  #pickerSummary;
+	  #selectAll;
+	  #list;
+	  #status;
+	  #refreshButton;
+	  #permissionButton;
+	  #staleButton;
+	  #clearButton;
+	  #selects = /* @__PURE__ */ new Map();
+	  #snapshot = null;
+	  #remaining = null;
+	  #refreshToken = 0;
+	  #busy = !1;
+	  #startupChecked = !1;
+	  constructor(options) {
+	    this.#options = options, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
+	    const document = options.document;
+	    this.#section = (0, import_reader_settings_dom.settingsSection)(
+	      document,
+	      "Reader localStorage",
+	      "查看余量，按需清理 Reader 数据。",
+	      !0
+	    ), this.#section.dataset.settingCategory = "browser-local-storage";
+	    const content = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "div",
+	      "ldp-settings-category-content ldp-local-storage-body"
+	    );
+	    this.#summary = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "small",
+	      "ldp-cache-note ldp-local-storage-summary"
+	    ), this.#summary.role = "status", this.#summary.setAttribute("aria-live", "polite");
+	    const actions = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "div",
+	      "ldp-config-actions ldp-local-storage-actions"
+	    );
+	    this.#refreshButton = (0, import_reader_settings_dom.settingsButton)(
+	      document,
+	      "ldp-config-action ldp-local-storage-refresh",
+	      "",
+	      "rotate-ccw",
+	      "检测余量"
+	    ), this.#permissionButton = (0, import_reader_settings_dom.settingsButton)(
+	      document,
+	      "ldp-config-action ldp-local-storage-permission",
+	      "",
+	      "database",
+	      "申请持久保存"
+	    ), this.#staleButton = (0, import_reader_settings_dom.settingsButton)(
+	      document,
+	      "ldp-config-action ldp-local-storage-stale",
+	      "",
+	      "trash",
+	      "清理久远"
+	    ), actions.append(
+	      this.#refreshButton,
+	      this.#permissionButton,
+	      this.#staleButton
+	    );
+	    const guide = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "details",
+	      "ldp-cache-note ldp-local-storage-boundary"
+	    ), guideSummary = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "summary",
+	      "ldp-local-storage-boundary-summary"
+	    );
+	    guideSummary.textContent = "空间仍不足？查看浏览器清理方法";
+	    const guideCopy = (0, import_reader_settings_dom.settingsElement)(document, "small");
+	    guideCopy.textContent = "这里只列出和清理 Reader 数据，不会读取或删除原站及其他脚本数据。若站点总空间仍不足，请从地址栏左侧的站点信息进入“网站设置”，再查看或清理该站点数据；清理整个站点可能退出登录并重置站点设置。", guide.append(guideSummary, guideCopy), this.#picker = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "details",
+	      "ldp-local-storage-picker"
+	    ), this.#pickerSummary = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "summary",
+	      "ldp-local-storage-picker-summary"
+	    ), this.#pickerSummary.textContent = "Reader 数据（暂无）";
+	    const pickerControls = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "div",
+	      "ldp-local-storage-picker-controls"
+	    ), selectAllLabel = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "label",
+	      "ldp-local-storage-select-all-label"
+	    );
+	    this.#selectAll = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "input",
+	      "ldp-local-storage-select-all"
+	    ), this.#selectAll.type = "checkbox";
+	    const selectAllCopy = (0, import_reader_settings_dom.settingsElement)(document, "span");
+	    selectAllCopy.textContent = "全选", selectAllLabel.append(this.#selectAll, selectAllCopy), pickerControls.append(selectAllLabel), this.#list = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "div",
+	      "ldp-cache-list ldp-local-storage-list"
+	    ), this.#picker.append(this.#pickerSummary, pickerControls, this.#list), this.#clearButton = (0, import_reader_settings_dom.settingsButton)(
+	      document,
+	      "ldp-cache-clear ldp-local-storage-clear",
+	      "",
+	      "trash",
+	      "删除已选项"
+	    ), this.#status = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "small",
+	      "ldp-cache-note ldp-local-storage-status"
+	    ), this.#status.role = "status", this.#status.setAttribute("aria-live", "polite"), content.append(
+	      this.#summary,
+	      actions,
+	      guide,
+	      this.#picker,
+	      this.#clearButton,
+	      this.#status
+	    ), this.#section.append(content), options.host.append(this.#section), this.scope.add(() => this.#section.remove()), this.scope.listen(this.#refreshButton, "click", () => {
+	      this.refresh({ measureRemaining: !0 });
+	    }), this.scope.listen(this.#permissionButton, "click", () => {
+	      this.#requestStoragePermission();
+	    }), this.scope.listen(this.#staleButton, "click", () => {
+	      this.#clearStale(!0);
+	    }), this.scope.listen(this.#clearButton, "click", () => {
+	      this.#clearSelected();
+	    }), this.scope.listen(this.#selectAll, "change", () => {
+	      if (!this.#busy) {
+	        for (const input of this.#selects.values())
+	          input.checked = this.#selectAll.checked;
+	        this.#syncButtons();
+	      }
+	    }), this.scope.listen(this.#list, "change", () => this.#syncButtons()), this.#syncButtons(), this.refresh();
+	  }
+	  async refresh(options = {}) {
+	    const token = ++this.#refreshToken;
+	    this.#setBusy(!0), this.#status.textContent = options.measureRemaining ? "正在读取 localStorage 并检测可追加余量…" : "正在读取 localStorage…";
+	    try {
+	      const snapshot = await readReaderBrowserStorageSnapshot(this.#options);
+	      return token !== this.#refreshToken || this.scope.destroyed ? null : (this.#snapshot = snapshot, options.measureRemaining && snapshot.health === "available" && (this.#remaining = measureReaderLocalStorageRemaining(
+	        this.#options.storage,
+	        {
+	          ...this.#options.now ? { now: this.#options.now } : {},
+	          ...this.#options.remainingProbeMaxBytes === void 0 ? {} : { maxBytes: this.#options.remainingProbeMaxBytes }
+	        }
+	      ), this.#remaining.cause !== void 0 && this.#options.onError?.(this.#remaining.cause)), this.#render(), this.#status.textContent = snapshot.health === "available" ? "" : "localStorage 当前不可写；请先处理权限或空间后再刷新。", snapshot);
+	    } catch (cause) {
+	      return token !== this.#refreshToken || this.scope.destroyed || (this.#options.onError?.(cause), this.#status.textContent = "localStorage 统计失败，请稍后重试。"), null;
+	    } finally {
+	      token === this.#refreshToken && this.#setBusy(!1);
+	    }
+	  }
+	  async warnAtStartup() {
+	    if (this.#startupChecked) return !1;
+	    this.#startupChecked = !0;
+	    const snapshot = await this.refresh();
+	    if (!snapshot || snapshot.health === "available" || !this.#options.choose || this.scope.destroyed) return !1;
+	    const canRequestAccess = snapshot.health === "access-denied" && !!this.#options.storageAccess?.requestAccess, canClearStale = snapshot.staleCount > 0, choice = await this.#options.choose({
+	      title: "浏览器本地存储不可写",
+	      message: "阅读器无法写入当前站点的 localStorage，请求协调、设置或本地记录可能保存失败。",
+	      note: "“打开数据管理”可查看占用、检测余量、申请可用权限并选择清理；持久保存不会扩大 localStorage 配额。",
+	      confirmLabel: "打开数据管理",
+	      cancelLabel: "稍后处理",
+	      ...canRequestAccess ? { secondaryLabel: "请求存储访问" } : canClearStale ? { secondaryLabel: "清理久远数据" } : {},
+	      tone: "danger",
+	      icon: "database",
+	      details: Object.freeze([
+	        Object.freeze({
+	          label: "Reader localStorage",
+	          value: healthLabel(snapshot.health)
+	        }),
+	        Object.freeze({
+	          label: "Reader 已知占用",
+	          value: formatBytes(snapshot.readerBytes)
+	        })
+	      ])
+	    });
+	    return choice === "confirm" ? this.#options.openSettings?.() : choice === "secondary" && (canRequestAccess ? await this.#requestStoragePermission() : canClearStale && await this.#clearStale(!1)), !0;
+	  }
+	  destroy() {
+	    this.scope.destroy();
+	  }
+	  #render() {
+	    const snapshot = this.#snapshot;
+	    if (!snapshot) return;
+	    const checked = new Set(
+	      [...this.#selects].filter(([, input]) => input.checked).map(([key]) => key)
+	    );
+	    this.#selects.clear(), this.#list.replaceChildren();
+	    for (const entry of snapshot.entries) {
+	      const row = (0, import_reader_settings_dom.settingsElement)(
+	        this.#options.document,
+	        "label",
+	        `ldp-cache-row ldp-local-storage-row${entry.stale ? " is-stale" : ""}`
+	      );
+	      row.dataset.settingHelp = entry.readerOwned ? entry.stale ? "Reader 24 小时以上未更新且已无有效租约的临时协调数据；可使用“清理久远数据”安全移除。" : "Reader 本地数据。原始删除可能重置设置、历史或阅读队列；优先使用上方对应的配置或缓存入口。" : "";
+	      const input = (0, import_reader_settings_dom.settingsElement)(
+	        this.#options.document,
+	        "input",
+	        "ldp-cache-select ldp-local-storage-select"
+	      );
+	      input.type = "checkbox", input.value = entry.key, input.checked = checked.has(entry.key), input.disabled = this.#busy;
+	      const copy = (0, import_reader_settings_dom.settingsCopy)(
+	        this.#options.document,
+	        "ldp-local-storage-key-copy",
+	        entry.key,
+	        entry.readerOwned ? entry.stale ? "Reader 临时项 · 久远可清理" : "Reader 数据" : ""
+	      ), size = (0, import_reader_settings_dom.settingsElement)(this.#options.document, "em");
+	      size.textContent = formatBytes(entry.bytes), row.append(input, copy, size), this.#list.append(row), this.#selects.set(entry.key, input);
+	    }
+	    if (!snapshot.entries.length) {
+	      const empty = (0, import_reader_settings_dom.settingsElement)(
+	        this.#options.document,
+	        "small",
+	        "ldp-cache-note ldp-local-storage-empty"
+	      );
+	      empty.textContent = snapshot.health === "available" ? "暂无 Reader localStorage 数据。" : "当前无法读取 Reader localStorage。", this.#list.append(empty);
+	    }
+	    const remaining = this.#remaining ? this.#remaining.cause === void 0 ? `${this.#remaining.capped ? "至少 " : "约 "}${formatBytes(this.#remaining.bytes)}` : "检测失败" : "尚未检测", persistent = snapshot.persistent === null ? "" : snapshot.persistent ? " · 已持久保存" : " · 未持久保存", health = snapshot.health === "available" ? "" : `${healthLabel(snapshot.health)} · `;
+	    this.#summary.textContent = `${health}已用 ${formatBytes(snapshot.readerBytes)} · 可追加 ${remaining}${persistent}`, this.#permissionButton.querySelector("span").textContent = snapshot.storageAccess === !1 && this.#options.storageAccess?.requestAccess ? "请求存储访问" : snapshot.persistent ? "已持久保存" : "申请持久保存", this.#syncButtons();
+	  }
+	  async #requestStoragePermission() {
+	    if (this.#busy) return;
+	    const snapshot = this.#snapshot ?? await this.refresh();
+	    if (!(!snapshot || this.scope.destroyed)) {
+	      this.#setBusy(!0);
+	      try {
+	        if (snapshot.storageAccess === !1 && this.#options.storageAccess?.requestAccess) {
+	          this.#status.textContent = "正在请求当前站点的存储访问…", await this.#options.storageAccess.requestAccess(), this.#options.notify?.("已取得存储访问，正在刷新页面"), this.#status.textContent = "已取得存储访问，正在刷新页面…", this.#options.reload?.();
+	          return;
+	        }
+	        if (!this.#options.originStorage?.persist) {
+	          this.#status.textContent = "浏览器未提供网页内申请入口；请在浏览器站点设置中允许 Cookie 与站点数据。";
+	          return;
+	        }
+	        this.#status.textContent = "正在申请浏览器持久保存…";
+	        const granted = await this.#options.originStorage.persist();
+	        this.#options.notify?.(granted ? "浏览器已授予持久保存" : "浏览器未授予持久保存"), this.#status.textContent = granted ? "已授予持久保存；浏览器会尽量避免自动回收站点数据，但 localStorage 配额不会扩大。" : "浏览器未授予持久保存；这不会改变 localStorage 当前配额。", await this.refresh();
+	      } catch (cause) {
+	        this.#options.onError?.(cause), this.#status.textContent = accessDeniedError(cause) ? "存储权限请求被浏览器拒绝；请检查站点 Cookie 与站点数据权限。" : "存储权限请求失败，请稍后重试。";
+	      } finally {
+	        this.#setBusy(!1);
+	      }
+	    }
+	  }
+	  async #clearStale(confirm) {
+	    if (this.#busy) return;
+	    const stale = (this.#snapshot ?? await this.refresh())?.entries.filter((entry) => entry.stale) ?? [];
+	    if (!stale.length) {
+	      this.#status.textContent = "没有可安全自动清理的久远 Reader 临时数据。";
+	      return;
+	    }
+	    this.#setBusy(!0);
+	    try {
+	      if (confirm && !await this.#options.confirm({
+	        title: "清理久远 Reader 数据？",
+	        message: `将删除 ${stale.length} 项、约 ${formatBytes(
+	          stale.reduce((sum, entry) => sum + entry.bytes, 0)
+	        )} 的过期协调状态或遗留探针。`,
+	        note: "不会删除设置、历史、阅读队列、缓存正文、原站登录或 WebDAV 数据；完成后页面会刷新。",
+	        confirmLabel: "清理久远数据",
+	        tone: "danger",
+	        icon: "trash"
+	      })) {
+	        this.#status.textContent = "已取消久远数据清理。";
+	        return;
+	      }
+	      for (const entry of stale) this.#options.storage.removeItem(entry.key);
+	      this.#options.notify?.(`已清理 ${stale.length} 项久远 Reader 数据`), this.#status.textContent = "久远数据已清理，正在刷新页面…", this.#options.reload?.(), this.#options.reload || await this.refresh({ measureRemaining: !0 });
+	    } catch (cause) {
+	      this.#options.onError?.(cause), this.#status.textContent = "久远数据清理失败，未完成的项目仍会保留。";
+	    } finally {
+	      this.#setBusy(!1);
+	    }
+	  }
+	  async #clearSelected() {
+	    if (this.#busy || !this.#snapshot) return;
+	    const selected = this.#snapshot.entries.filter(
+	      (entry) => entry.readerOwned && this.#selects.get(entry.key)?.checked === !0
+	    );
+	    if (selected.length) {
+	      this.#setBusy(!0);
+	      try {
+	        if (!await this.#options.confirm({
+	          title: "删除所选 localStorage 项？",
+	          message: `将删除 ${selected.length} 项、约 ${formatBytes(
+	            selected.reduce((sum, entry) => sum + entry.bytes, 0)
+	          )}，随后立即刷新页面。`,
+	          note: "这里只会删除 Reader 数据，不会删除原站或其他脚本数据。Reader 设置、历史或队列删除后可能恢复默认，已同步数据之后也可能从 WebDAV 重新合并。",
+	          confirmLabel: "删除并刷新",
+	          tone: "danger",
+	          icon: "trash",
+	          details: Object.freeze(selected.slice(0, 5).map((entry) => Object.freeze({
+	            label: entry.key,
+	            value: formatBytes(entry.bytes)
+	          })))
+	        })) {
+	          this.#status.textContent = "已取消 localStorage 删除。";
+	          return;
+	        }
+	        const failures = [];
+	        for (const entry of selected)
+	          try {
+	            this.#options.storage.removeItem(entry.key);
+	          } catch (cause) {
+	            failures.push(entry.key), this.#options.onError?.(cause);
+	          }
+	        if (failures.length) {
+	          this.#status.textContent = `已删除 ${selected.length - failures.length} 项；${failures.length} 项删除失败并保留。`, await this.refresh({ measureRemaining: !0 });
+	          return;
+	        }
+	        this.#options.notify?.(`已删除 ${selected.length} 项 localStorage 数据`), this.#status.textContent = "所选 localStorage 已删除，正在刷新页面…", this.#options.reload?.(), this.#options.reload || await this.refresh({ measureRemaining: !0 });
+	      } catch (cause) {
+	        this.#options.onError?.(cause), this.#status.textContent = "localStorage 删除失败，未完成的项目仍会保留。";
+	      } finally {
+	        this.#setBusy(!1);
+	      }
+	    }
+	  }
+	  #setBusy(busy) {
+	    this.#busy = busy;
+	    for (const input of this.#selects.values()) input.disabled = busy;
+	    this.#syncButtons();
+	  }
+	  #syncButtons() {
+	    const snapshot = this.#snapshot, selectedCount = [...this.#selects.values()].filter(
+	      (input) => input.checked
+	    ).length, totalCount = this.#selects.size;
+	    this.#pickerSummary.textContent = totalCount ? `Reader 数据（${selectedCount} / ${totalCount}）` : "Reader 数据（暂无）", this.#selectAll.checked = totalCount > 0 && selectedCount === totalCount, this.#selectAll.indeterminate = selectedCount > 0 && selectedCount < totalCount, this.#selectAll.disabled = this.#busy || totalCount === 0, this.#picker.classList.toggle("has-selection", selectedCount > 0), this.#clearButton.hidden = selectedCount === 0, this.#clearButton.querySelector("span").textContent = `删除已选 ${selectedCount} 项`, this.#refreshButton.disabled = this.#busy;
+	    const canRequestAccess = snapshot?.storageAccess === !1 && !!this.#options.storageAccess?.requestAccess, canPersist = !snapshot?.persistent && !!this.#options.originStorage?.persist;
+	    this.#permissionButton.hidden = !(canRequestAccess || canPersist), this.#permissionButton.disabled = this.#busy || !!snapshot?.persistent || !this.#options.originStorage?.persist && !(snapshot?.storageAccess === !1 && this.#options.storageAccess?.requestAccess), this.#staleButton.disabled = this.#busy || !snapshot?.staleCount, this.#staleButton.hidden = !snapshot?.staleCount, this.#clearButton.disabled = this.#busy || selectedCount === 0;
+	  }
+	}
+}, "16ee176b37463be8eb44f40bb5ad8e4e4f969a7c0072779bef96784d51f41d75");
+
 /* Source: lite/src/settings/reader-custom-site-settings-form.ts */
 runtime.register("src/settings/reader-custom-site-settings-form.js", function(module, exports, require) {
 	var reader_custom_site_settings_form_exports = {};
@@ -21927,7 +22594,7 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	  ReaderFontSettingsForm: () => ReaderFontSettingsForm
 	});
 	module.exports = __toCommonJS(reader_font_settings_form_exports);
-	var import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_settings_dom = require("./reader-settings-dom.js"), import_reader_object_settings_draft = require("./reader-object-settings-draft.js");
+	var import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_local_font_catalog = require("../font/reader-local-font-catalog.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_settings_dom = require("./reader-settings-dom.js"), import_reader_object_settings_draft = require("./reader-object-settings-draft.js");
 	const LOCAL_FONT_VALUE_PREFIX = "local-font:";
 	function localFontValue(name) {
 	  return `${LOCAL_FONT_VALUE_PREFIX}${name}`;
@@ -22040,8 +22707,12 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	  ));
 	  return (0, import_reader_font_style_controller.normalizeReaderFontSettings)({ ...outer, fontProfile });
 	}
-	function appendOption(document, select, value, label) {
-	  select.append((0, import_reader_settings_dom.settingsOption)(document, value, label));
+	function appendOption(document, parent, value, label) {
+	  const option = (0, import_reader_settings_dom.settingsOption)(document, value, label);
+	  return parent.append(option), option;
+	}
+	function addFontPreview(option, fontFamilyCss, searchText = "") {
+	  option.dataset.readerSelectPreview = import_reader_local_font_catalog.READER_FONT_OPTION_PREVIEW, option.dataset.readerSelectFontFamily = fontFamilyCss, searchText && (option.dataset.readerSelectSearchText = searchText);
 	}
 	function selectValue(select, value) {
 	  const options = [...select.options];
@@ -22071,6 +22742,8 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	  #reset;
 	  #activeScope = "interface";
 	  #fontQueryEpoch = 0;
+	  #localFontsLoaded = !1;
+	  #localFontsLoading = !1;
 	  #syncingFont = !1;
 	  #lastMode;
 	  constructor(options) {
@@ -22090,7 +22763,7 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	      document,
 	      "span",
 	      "ldp-font-family-source-status"
-	    ), this.#fontStatus.role = "status", this.#fontStatus.setAttribute("aria-live", "polite"), this.#fontStatus.textContent = this.#queryLocalFonts ? "准备自动读取本机字体…" : "当前浏览器未开放本机字体列表；仍可手动输入字体名称。";
+	    ), this.#fontStatus.role = "status", this.#fontStatus.setAttribute("aria-live", "polite"), this.#fontStatus.textContent = this.#queryLocalFonts ? "打开任意字体下拉时，将自动请求授权并读取本机字体。" : "当前浏览器未开放本机字体列表；仍可手动输入字体名称。";
 	    const footer = (0, import_reader_settings_dom.settingsFooter)(
 	      document,
 	      "恢复全部默认",
@@ -22119,7 +22792,7 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	      this.#lastMode = snapshot.mode, !(!rebased && beforeCount === afterCount && !modeChanged) && (afterCount > 0 ? this.#preview() : this.#updateFont(() => this.#font.clearPreview()), this.#sync(), this.#controller.refresh());
 	    }, this.scope), this.scope.add(() => {
 	      this.#fontQueryEpoch += 1, this.#updateFont(() => this.#font.clearPreview()), this.#inputs.clear(), this.#selects.clear(), this.#values.clear(), this.#scopePanels.clear(), this.#scopeTabs.clear(), this.#host.replaceChildren();
-	    }), this.#syncScope(), this.#sync(), this.#queryLocalFonts && this.#loadLocalFonts();
+	    }), this.#syncScope(), this.#sync();
 	  }
 	  destroy() {
 	    this.scope.destroy();
@@ -22209,15 +22882,24 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	    const config = SCOPE_FIELDS[scope], row = (0, import_reader_settings_dom.settingsElement)(document, "label", "ldp-setting-row"), title = (0, import_reader_settings_dom.settingsElement)(document, "strong");
 	    title.textContent = "字体";
 	    const control = (0, import_reader_settings_dom.settingsElement)(document, "span", "ldp-font-option-control"), select = (0, import_reader_settings_dom.settingsElement)(document, "select", "ldp-font-weight-select");
-	    select.dataset.fontSetting = config.family, select.dataset.readerSelectSearchable = "true", select.setAttribute("aria-label", `${config.label}字体`);
-	    for (const family of import_reader_preferences_schema.READER_FONT_FAMILIES)
-	      appendOption(
+	    select.dataset.fontSetting = config.family, select.dataset.readerSelectSearchable = "true", select.dataset.readerSelectSearchLabel = this.#queryLocalFonts ? "搜索字体（尚未获取本机字体）" : "搜索预设字体", select.setAttribute("aria-label", `${config.label}字体`);
+	    const presets = (0, import_reader_settings_dom.settingsElement)(document, "optgroup");
+	    presets.label = "预设字体";
+	    for (const family of import_reader_preferences_schema.READER_FONT_FAMILIES) {
+	      const option = appendOption(
 	        document,
-	        select,
+	        presets,
 	        family,
 	        import_reader_font_style_controller.READER_FONT_FAMILY_LABELS[family]
 	      );
-	    this.#selects.set(config.family, select), this.scope.listen(select, "change", () => {
+	      addFontPreview(
+	        option,
+	        family === "site" ? "inherit" : (0, import_reader_font_style_controller.readerFontFamilyCss)(family)
+	      );
+	    }
+	    select.append(presets), this.#selects.set(config.family, select), this.scope.listen(select, import_reader_select_surface.READER_SELECT_OPEN_EVENT, () => {
+	      this.#loadLocalFonts();
+	    }), this.scope.listen(select, "change", () => {
 	      const value = selectedValue(select), localFont = readLocalFontValue(value);
 	      if (localFont !== null) {
 	        const familyChanged = this.#draft.set(config.family, "custom"), customChanged = this.#draft.set(
@@ -22339,39 +23021,59 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	    return Object.freeze(errors);
 	  }
 	  async #loadLocalFonts() {
-	    if (!this.#queryLocalFonts) return;
+	    if (!this.#queryLocalFonts || this.#localFontsLoaded || this.#localFontsLoading) return;
 	    const epoch = ++this.#fontQueryEpoch;
-	    this.#fontStatus.textContent = "正在请求浏览器本机字体权限…";
+	    this.#localFontsLoading = !0, this.#fontStatus.textContent = "正在请求浏览器本机字体权限…";
 	    try {
-	      const names = [...new Set(
+	      const fonts = [...new Set(
 	        (await this.#queryLocalFonts()).map((name) => String(name).trim()).filter(Boolean)
-	      )].sort((left, right) => left.localeCompare(right));
+	      )].map(import_reader_local_font_catalog.readerLocalFontPresentation).sort((left, right) => left.label.localeCompare(
+	        right.label,
+	        "zh-CN",
+	        { numeric: !0, sensitivity: "base" }
+	      ));
 	      if (epoch !== this.#fontQueryEpoch || this.scope.destroyed) return;
 	      this.#fontList.replaceChildren();
-	      for (const name of names) {
+	      for (const font of fonts) {
 	        const option = (0, import_reader_settings_dom.settingsElement)(this.#host.ownerDocument, "option");
-	        option.value = name, this.#fontList.append(option);
+	        option.value = font.family, this.#fontList.append(option);
 	      }
 	      for (const scope of Object.values(SCOPE_FIELDS)) {
 	        const select = this.#selects.get(scope.family);
-	        if (select) {
-	          for (const previous of select.querySelectorAll(
-	            'option[data-font-local="true"]'
-	          )) previous.remove();
-	          for (const name of names) {
-	            const option = (0, import_reader_settings_dom.settingsOption)(
-	              this.#host.ownerDocument,
-	              localFontValue(name),
-	              name
-	            );
-	            option.dataset.fontLocal = "true", select.append(option);
-	          }
+	        if (!select) continue;
+	        select.dataset.readerSelectSearchLabel = `搜索字体 · 本机 ${fonts.length}`;
+	        for (const previous of select.querySelectorAll(
+	          'optgroup[data-font-local-group="true"]'
+	        )) previous.remove();
+	        const localFonts = (0, import_reader_settings_dom.settingsElement)(
+	          this.#host.ownerDocument,
+	          "optgroup"
+	        );
+	        localFonts.label = `本机字体 · ${fonts.length}`, localFonts.dataset.fontLocalGroup = "true";
+	        for (const font of fonts) {
+	          const option = (0, import_reader_settings_dom.settingsOption)(
+	            this.#host.ownerDocument,
+	            localFontValue(font.family),
+	            font.label
+	          );
+	          option.dataset.fontLocal = "true", addFontPreview(
+	            option,
+	            font.fontFamilyCss,
+	            font.searchText
+	          ), localFonts.append(option);
 	        }
+	        select.append(localFonts);
 	      }
-	      this.#sync(), this.#fontStatus.textContent = names.length ? `已读取 ${names.length} 个本机字体。` : "浏览器未返回可用本机字体。";
+	      this.#sync(), this.#localFontsLoaded = !0, this.#localFontsLoading = !1, this.#fontStatus.textContent = fonts.length ? `已获取 ${fonts.length} 个本机字体；下拉列表已显示字体预览。` : "浏览器未返回可用本机字体。";
+	      const EventConstructor = this.#host.ownerDocument.defaultView?.Event ?? Event;
+	      for (const scope of Object.values(SCOPE_FIELDS))
+	        this.#selects.get(scope.family)?.dispatchEvent(new EventConstructor(
+	          import_reader_select_surface.READER_SELECT_OPTIONS_CHANGE_EVENT,
+	          { bubbles: !0 }
+	        ));
 	    } catch {
 	      if (epoch !== this.#fontQueryEpoch || this.scope.destroyed) return;
-	      this.#fontStatus.textContent = "未获得本机字体权限，仍可使用预设或手动输入。";
+	      this.#fontStatus.textContent = "未获得本机字体权限；重新打开字体下拉可再次授权。", this.#localFontsLoading = !1;
 	    }
 	  }
 	  #updateFont(update) {
@@ -22425,7 +23127,7 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	    );
 	  }
 	}
-}, "2c755f4e0b7744d8751e0b0ad8cd4c2badcb0c2f048c5bbaec27a787b88fa9bc");
+}, "a447d59363c8dc02afbd5ff41039e6fc8cf84c29d765c656b077f4373d2eb494");
 
 /* Source: lite/src/settings/reader-image-settings-form.ts */
 runtime.register("src/settings/reader-image-settings-form.js", function(module, exports, require) {
@@ -24612,8 +25314,18 @@ runtime.register("src/settings/reader-settings-controller.js", function(module, 
 	    id: "cache",
 	    groupId: "system-data",
 	    title: "数据管理",
-	    description: "导入导出设置，并查看或清理本地缓存。",
-	    keywords: ["数据库", "indexeddb", "重置", "配置", "清理"]
+	    description: "导入导出设置，并管理本地缓存与浏览器 localStorage 容量。",
+	    keywords: [
+	      "数据库",
+	      "indexeddb",
+	      "localstorage",
+	      "配额",
+	      "余量",
+	      "权限",
+	      "重置",
+	      "配置",
+	      "清理"
+	    ]
 	  },
 	  {
 	    id: "about",
@@ -24896,7 +25608,7 @@ runtime.register("src/settings/reader-settings-controller.js", function(module, 
 	      throw new Error("设置 controller 已销毁");
 	  }
 	}
-}, "47435e7e96cab5c3ead702b206ef5eaf204c5a2457b3b36bf96e1b1816b4922f");
+}, "6f1533d5530346617cc5af3023731bada952bff67c8888a7650e55ce0a99bd18");
 
 /* Source: lite/src/settings/reader-settings-dom.ts */
 runtime.register("src/settings/reader-settings-dom.js", function(module, exports, require) {

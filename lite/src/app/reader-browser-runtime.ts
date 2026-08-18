@@ -1677,7 +1677,11 @@ function createReaderLocalFontQuery(
 	const browserWindow = document.defaultView as
 		| (Window & {
 			queryLocalFonts?: () => Promise<
-				readonly Readonly<{ readonly family?: string }>[]
+				readonly Readonly<{
+					readonly family?: string;
+					readonly fullName?: string;
+					readonly postscriptName?: string;
+				}>[]
 			>;
 		})
 		| null;
@@ -1690,7 +1694,9 @@ function createReaderLocalFontQuery(
 		pending = browserWindow.queryLocalFonts!()
 			.then((entries) => Object.freeze([...new Set(
 				entries
-					.map((entry) => String(entry.family ?? '').trim())
+					.map((entry) => String(
+						entry.family ?? entry.fullName ?? entry.postscriptName ?? '',
+					).trim())
 					.filter(Boolean),
 			)].sort((left, right) => left.localeCompare(right))))
 			.then((names) => {

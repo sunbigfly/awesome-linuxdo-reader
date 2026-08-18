@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.6
+// @version      1.5.7
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.6 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.5.7 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.6",
+			sourceVersion: "1.5.7",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.6") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.7") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -3653,7 +3653,7 @@ runtime.register("src/collection/reader-popover-filter-controls.js", function(mo
 	    calendar
 	  );
 	  const filterToggle = document.createElement("button");
-	  filterToggle.type = "button", filterToggle.className = `ldp-user-observation-filter-toggle ldp-${owner}-filter-toggle`, filterToggle.setAttribute("aria-label", "综合筛选与排序"), filterToggle.setAttribute("aria-expanded", "false"), filterToggle.title = "综合筛选与排序", filterToggle.append((0, import_reader_icon.renderReaderIcon)(
+	  filterToggle.type = "button", filterToggle.className = `ldp-user-observation-filter-toggle ldp-${owner}-filter-toggle`, filterToggle.setAttribute("aria-label", "综合筛选与排序"), filterToggle.setAttribute("aria-expanded", "false"), filterToggle.append((0, import_reader_icon.renderReaderIcon)(
 	    document,
 	    "header-settings",
 	    renderIcon
@@ -3826,7 +3826,7 @@ runtime.register("src/collection/reader-popover-filter-controls.js", function(mo
 	    span.textContent = label, this.#calendarToggle.replaceChildren(
 	      (0, import_reader_icon.renderReaderIcon)(this.#document, "clock"),
 	      span
-	    ), this.#calendarToggle.title = this.#date ? `当前筛选 ${this.#date}` : "按当前分类查看每月活跃程度";
+	    );
 	  }
 	  #syncSortDirectionButton() {
 	    const ascending = this.#direction === "asc";
@@ -3839,7 +3839,7 @@ runtime.register("src/collection/reader-popover-filter-controls.js", function(mo
 	    ), this.#sortDirection.setAttribute(
 	      "aria-label",
 	      ascending ? "切换为降序" : "切换为升序"
-	    ), this.#sortDirection.title = ascending ? "当前升序" : "当前降序";
+	    );
 	  }
 	  #renderCalendar() {
 	    const year = this.#calendarMonth.getFullYear(), month = this.#calendarMonth.getMonth(), today = (0, import_reader_collection_filter_model.readerCollectionDateKey)(Date.now());
@@ -3892,7 +3892,7 @@ runtime.register("src/collection/reader-popover-filter-controls.js", function(mo
 	  }
 	  !matched && select.options[0] && (select.options[0].selected = !0);
 	}
-}, "d2b04a4f50afc67d91bf5c89cabfccf98c192b42a8f7bff81592e11b599dfedf");
+}, "35cd817e858931c3c79559210488f70b0f15a1a229f2656cbba32b6bfcf3f263");
 
 /* Source: lite/src/collection/reader-unwanted-topic-filter-editor.ts */
 runtime.register("src/collection/reader-unwanted-topic-filter-editor.js", function(module, exports, require) {
@@ -20789,7 +20789,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	      requestOpen: () => this.#controller.open(),
 	      requestClose: () => this.#controller.close(),
 	      notify: this.#notify
-	    }), this.#markAllHeaderActions = this.#document.createElement("div"), this.#refreshHeaderAction = this.#document.createElement("button"), this.#refreshHeaderAction.type = "button", this.#refreshHeaderAction.className = "ldp-notification-refresh", this.#refreshHeaderAction.title = "更新通知", this.#refreshHeaderAction.setAttribute("aria-label", "更新通知"), this.#refreshHeaderAction.replaceChildren(
+	    }), this.#markAllHeaderActions = this.#document.createElement("div"), this.#refreshHeaderAction = this.#document.createElement("button"), this.#refreshHeaderAction.type = "button", this.#refreshHeaderAction.className = "ldp-notification-refresh", this.#refreshHeaderAction.setAttribute("aria-label", "更新通知"), this.#refreshHeaderAction.replaceChildren(
 	      (0, import_reader_icon.renderReaderIcon)(
 	        this.#document,
 	        "rotate-ccw",
@@ -21007,11 +21007,19 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    const busy = snapshot.loading || snapshot.refreshing || this.#refreshVisualState === "running", backgroundReaction = snapshot.backgroundRefreshingGroups.includes(
 	      "reactions"
 	    ), backgroundReactionFailed = snapshot.backgroundRefreshFailedGroups.includes("reactions"), state = busy ? "running" : backgroundReactionFailed ? "error" : this.#refreshVisualState, label = state === "running" ? "正在更新通知" : backgroundReaction ? "主要通知已更新，回应后台更新中" : state === "success" ? "通知更新完成" : state === "error" ? backgroundReactionFailed ? "回应后台更新失败，点击重试" : "通知更新失败，点击重试" : "更新通知", icon = state === "running" ? "loader" : backgroundReaction ? "rotate-ccw" : state === "success" ? "check-square" : state === "error" ? "x" : "rotate-ccw";
-	    this.#refreshHeaderAction.disabled = busy, this.#refreshHeaderAction.dataset.ldpRequestBusy = busy ? "1" : "0", this.#refreshHeaderAction.dataset.refreshState = state, this.#refreshHeaderAction.classList.toggle("is-refreshing", busy), this.#refreshHeaderAction.setAttribute("aria-busy", String(busy)), this.#refreshHeaderAction.setAttribute("aria-label", label), this.#refreshHeaderAction.title = label, this.#refreshHeaderAction.replaceChildren((0, import_reader_icon.renderReaderIcon)(
+	    this.#refreshHeaderAction.disabled = busy, this.#refreshHeaderAction.dataset.ldpRequestBusy = busy ? "1" : "0", this.#refreshHeaderAction.dataset.refreshState = state, this.#refreshHeaderAction.classList.toggle("is-refreshing", busy), this.#refreshHeaderAction.setAttribute("aria-busy", String(busy));
+	    const labelChanged = this.#refreshHeaderAction.getAttribute("aria-label") !== label;
+	    if (this.#refreshHeaderAction.setAttribute("aria-label", label), this.#refreshHeaderAction.replaceChildren((0, import_reader_icon.renderReaderIcon)(
 	      this.#document,
 	      icon,
 	      this.#renderIcon
-	    ));
+	    )), labelChanged) {
+	      const EventConstructor = this.#document.defaultView?.Event ?? Event;
+	      this.#refreshHeaderAction.dispatchEvent(new EventConstructor(
+	        "ldp-tooltip-refresh",
+	        { bubbles: !0 }
+	      ));
+	    }
 	  }
 	  #syncWindowStatus(snapshot) {
 	    const history = snapshot.history, complete = history.status === "complete", totalStatus = snapshot.total > 0 && snapshot.total !== history.cachedRecords ? `${snapshot.total} 条` : "", cacheStatus = history.cachedRecords > 0 ? `已缓存 ${history.cachedRecords} 条` : "", refreshStatus = snapshot.refreshing || this.#refreshVisualState === "running" ? "正在更新通知" : this.#refreshVisualState === "success" ? "刚刚更新" : this.#refreshVisualState === "error" ? "更新失败" : "", backgroundRefreshStatus = snapshot.backgroundRefreshingGroups.includes("reactions") ? "后台更新回应" : snapshot.backgroundRefreshFailedGroups.includes("reactions") ? "回应后台更新失败" : "";
@@ -21149,7 +21157,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    } else
 	      avatar.setAttribute("aria-hidden", "true"), item.append(avatar);
 	    const typeIcon = this.#document.createElement("span");
-	    typeIcon.className = "ldp-notification-type-icon", typeIcon.dataset.notificationGroup = record.group, typeIcon.dataset.notificationType = record.typeName, typeIcon.dataset.notificationIcon = record.icon, record.group === "other" && (typeIcon.title = record.typeLabel.trim() || record.typeName.trim() || "通知"), typeIcon.setAttribute("aria-hidden", "true");
+	    typeIcon.className = "ldp-notification-type-icon", typeIcon.dataset.notificationGroup = record.group, typeIcon.dataset.notificationType = record.typeName, typeIcon.dataset.notificationIcon = record.icon, typeIcon.dataset.ldpTooltipLabel = record.typeLabel.trim() || (0, import_reader_notification_model.readerNotificationGroup)(record.group).label || record.typeName.trim() || "通知", typeIcon.setAttribute("aria-hidden", "true");
 	    const reactionEmojiId = record.group === "reactions" && record.icon.startsWith("emoji:") ? record.icon.slice(6) : "";
 	    if (record.group === "likes") {
 	      const emoji = this.#document.createElement("span");
@@ -21212,7 +21220,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    this.#relativeTimer !== null && (this.#cancel(this.#relativeTimer), this.#relativeTimer = null);
 	  }
 	}
-}, "a8ee1081f593a7a1b4a4a12c1d1995dcc0542b4ee8c904523eb04c4fd0c373d0");
+}, "07eae1222ef75418e1ecf9667be354513514aca63b896eeec21f1cc61bd7e783");
 
 /* Source: lite/src/queue/reader-open-queue-session.ts */
 runtime.register("src/queue/reader-open-queue-session.js", function(module, exports, require) {

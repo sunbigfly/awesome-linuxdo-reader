@@ -133,6 +133,7 @@ import './reader-application.test.js';
 import './reader-application-stages.test.js';
 import './reader-browser-runtime.test.js';
 import './reader-cache-management-surface.test.js';
+import './reader-browser-storage-management.test.js';
 import './browser-asset-cache.test.js';
 import './reader-data-runtime.test.js';
 import './reader-embed-resize-controller.test.js';

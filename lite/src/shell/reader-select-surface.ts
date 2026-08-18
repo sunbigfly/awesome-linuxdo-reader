@@ -9,6 +9,9 @@ const SELECTOR = [
 ].join(',');
 
 export const READER_SELECT_DISMISS_EVENT = 'ldp-reader-select-dismiss';
+export const READER_SELECT_OPEN_EVENT = 'ldp-reader-select-open';
+export const READER_SELECT_OPTIONS_CHANGE_EVENT =
+	'ldp-reader-select-options-change';
 export const READER_SELECT_RESELECT_EVENT = 'ldp-reader-select-reselect';
 
 function eventElement(event: Event): Element | null {
@@ -68,6 +71,10 @@ export class ReaderSelectSurface {
 		});
 		this.scope.listen(options.root, READER_SELECT_DISMISS_EVENT, () => {
 			this.#close();
+		});
+		this.scope.listen(options.root, READER_SELECT_OPTIONS_CHANGE_EVENT, (event) => {
+			const select = eventElement(event)?.closest<HTMLSelectElement>(SELECTOR);
+			if (select && this.#openSelect === select) this.#open(select);
 		});
 		this.scope.listen(options.document, 'pointerdown', (event) => {
 			const select = this.#openSelect;
@@ -238,6 +245,11 @@ export class ReaderSelectSurface {
 
 	#open(select: HTMLSelectElement, focusSelected = false): void {
 		this.#close();
+		const EventConstructor = this.#document.defaultView?.Event ?? Event;
+		select.dispatchEvent(new EventConstructor(
+			READER_SELECT_OPEN_EVENT,
+			{ bubbles: true },
+		));
 		const wrapper = this.#states.get(select);
 		const menu = wrapper?.querySelector<HTMLElement>('.ldp-select-menu');
 		if (!wrapper || !menu) return;
@@ -248,18 +260,66 @@ export class ReaderSelectSurface {
 			'aria-label',
 			select.getAttribute('aria-label') || '下拉选项',
 		);
-		options.replaceChildren(...[...select.options].map((nativeOption) => {
+		const optionNodes: HTMLElement[] = [];
+		const groups = new Map<Element, string>();
+		let groupSerial = 0;
+		for (const nativeOption of select.options) {
+			const parent = nativeOption.parentElement;
+			let group = '';
+			if (parent?.tagName === 'OPTGROUP') {
+				const knownGroup = groups.get(parent);
+				group = knownGroup ?? `group-${groupSerial += 1}`;
+				if (!groups.has(parent)) {
+					groups.set(parent, group);
+					const heading = this.#document.createElement('span');
+					heading.className = 'ldp-select-group';
+					heading.dataset.readerSelectGroup = group;
+					heading.textContent = (parent as HTMLOptGroupElement).label;
+					heading.setAttribute('aria-hidden', 'true');
+					optionNodes.push(heading);
+				}
+			}
 			const option = this.#document.createElement('button');
 			option.type = 'button';
 			option.className = 'ldp-select-option ldp-picker-option';
 			option.dataset.readerSelectValue = nativeOption.value;
-			option.textContent = nativeOption.label || nativeOption.textContent || '';
+			option.dataset.readerSelectGroup = group;
+			option.dataset.readerSelectNativeHidden = String(nativeOption.hidden);
+			const labelText = nativeOption.label || nativeOption.textContent || '';
+			option.dataset.readerSelectSearchText = [
+				labelText,
+				nativeOption.dataset.readerSelectSearchText ?? '',
+			].join(' ').trim();
+			const previewText = nativeOption.dataset.readerSelectPreview;
+			if (previewText) {
+				option.classList.add('has-preview');
+				const label = this.#document.createElement('span');
+				label.className = 'ldp-select-option-label';
+				label.textContent = labelText;
+				const preview = this.#document.createElement('span');
+				preview.className = 'ldp-select-option-preview';
+				preview.textContent = previewText;
+				const fontFamily = nativeOption.dataset.readerSelectFontFamily;
+				if (fontFamily) preview.style.fontFamily = fontFamily;
+				option.append(label, preview);
+			} else {
+				option.textContent = labelText;
+			}
 			option.disabled = nativeOption.disabled;
 			option.hidden = nativeOption.hidden;
 			option.setAttribute('role', 'option');
 			option.setAttribute('aria-selected', String(nativeOption.selected));
-			return option;
-		}));
+			optionNodes.push(option);
+		}
+		options.replaceChildren(...optionNodes);
+		menu.classList.toggle(
+			'has-font-previews',
+			Boolean(options.querySelector('.ldp-select-option-preview')),
+		);
+		menu.classList.toggle(
+			'has-long-list',
+			options.querySelectorAll('[data-reader-select-value]').length > 8,
+		);
 		if (select.dataset.readerSelectSearchable === 'true') {
 			const search = this.#document.createElement('input');
 			search.type = 'search';
@@ -278,10 +338,25 @@ export class ReaderSelectSurface {
 				for (const option of options.querySelectorAll<HTMLButtonElement>(
 					'[data-reader-select-value]',
 				)) {
-					const matches = !query || (option.textContent ?? '')
-						.toLocaleLowerCase().includes(query);
+					const matches =
+						option.dataset.readerSelectNativeHidden !== 'true' &&
+						(
+							!query ||
+							(option.dataset.readerSelectSearchText ?? '')
+								.toLocaleLowerCase().includes(query)
+						);
 					option.hidden = !matches;
 					if (matches) visible += 1;
+				}
+				for (const heading of options.querySelectorAll<HTMLElement>(
+					'.ldp-select-group',
+				)) {
+					const group = heading.dataset.readerSelectGroup;
+					heading.hidden = ![...options.querySelectorAll<HTMLButtonElement>(
+						'[data-reader-select-value]',
+					)].some((option) =>
+						!option.hidden && option.dataset.readerSelectGroup === group
+					);
 				}
 				empty.hidden = visible > 0;
 			});
@@ -309,6 +384,8 @@ export class ReaderSelectSurface {
 		const viewport = this.#document.defaultView;
 		if (!select || !wrapper || !menu || menu.hidden || !viewport) return;
 		menu.style.removeProperty('left');
+		menu.style.removeProperty('top');
+		menu.style.removeProperty('height');
 		menu.style.removeProperty('max-height');
 		menu.style.removeProperty('max-width');
 		wrapper.classList.remove('is-menu-above');
@@ -361,6 +438,12 @@ export class ReaderSelectSurface {
 			);
 			menu.style.left = `${Math.round(left - menuRect.left)}px`;
 		}
+		const isSettingsLongFontMenu = Boolean(
+			settingsPanel &&
+			menu.classList.contains('has-font-previews') &&
+			menu.classList.contains('has-long-list')
+		);
+		const preferredMenuHeight = isSettingsLongFontMenu ? 300 : menuHeight;
 		const spaceBelow = Math.max(
 			0,
 			bounds.bottom - selectRect.bottom - gap,
@@ -369,10 +452,18 @@ export class ReaderSelectSurface {
 			0,
 			selectRect.top - bounds.top - gap,
 		);
-		const menuAbove = menuHeight > spaceBelow && spaceAbove > spaceBelow;
+		const menuAbove =
+			preferredMenuHeight > spaceBelow && spaceAbove > spaceBelow;
 		wrapper.classList.toggle('is-menu-above', menuAbove);
 		const availableHeight = menuAbove ? spaceAbove : spaceBelow;
-		if (menuHeight > availableHeight) {
+		if (isSettingsLongFontMenu) {
+			const height = Math.max(
+				1,
+				Math.floor(Math.min(preferredMenuHeight, availableHeight)),
+			);
+			menu.style.height = `${height}px`;
+			menu.style.maxHeight = `${height}px`;
+		} else if (menuHeight > availableHeight) {
 			menu.style.maxHeight = `${Math.max(1, Math.floor(availableHeight))}px`;
 		}
 	}
@@ -407,6 +498,8 @@ export class ReaderSelectSurface {
 		if (menu) {
 			menu.hidden = true;
 			menu.style.removeProperty('left');
+			menu.style.removeProperty('top');
+			menu.style.removeProperty('height');
 			menu.style.removeProperty('max-height');
 			menu.style.removeProperty('max-width');
 		}

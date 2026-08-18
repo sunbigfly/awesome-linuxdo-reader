@@ -2,10 +2,15 @@ import {
 	READER_FONT_FAMILY_LABELS,
 	READER_FONT_SETTINGS_DEFAULT,
 	normalizeReaderFontSettings,
+	readerFontFamilyCss,
 	type ReaderFontRenderingMode,
 	type ReaderFontSettings,
 	type ReaderFontStyleController,
 } from '../font/reader-font-style-controller.js';
+import {
+	READER_FONT_OPTION_PREVIEW,
+	readerLocalFontPresentation,
+} from '../font/reader-local-font-catalog.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import {
 	READER_FONT_FAMILIES,
@@ -16,6 +21,10 @@ import {
 	type ReaderFontProfile,
 	type ReaderFontWeight,
 } from '../state/reader-preferences-schema.js';
+import {
+	READER_SELECT_OPEN_EVENT,
+	READER_SELECT_OPTIONS_CHANGE_EVENT,
+} from '../shell/reader-select-surface.js';
 import type {
 	ReaderSettingsController,
 	ReaderSettingsDraftAdapter,
@@ -174,11 +183,23 @@ function settingsFromDraft(draft: ReaderFontDraft): ReaderFontSettings {
 
 function appendOption(
 	document: Document,
-	select: HTMLSelectElement,
+	parent: HTMLSelectElement | HTMLOptGroupElement,
 	value: string,
 	label: string,
+): HTMLOptionElement {
+	const option = settingsOption(document, value, label);
+	parent.append(option);
+	return option;
+}
+
+function addFontPreview(
+	option: HTMLOptionElement,
+	fontFamilyCss: string,
+	searchText = '',
 ): void {
-	select.append(settingsOption(document, value, label));
+	option.dataset.readerSelectPreview = READER_FONT_OPTION_PREVIEW;
+	option.dataset.readerSelectFontFamily = fontFamilyCss;
+	if (searchText) option.dataset.readerSelectSearchText = searchText;
 }
 
 function selectValue(select: HTMLSelectElement, value: string): void {
@@ -225,6 +246,8 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 	readonly #reset: HTMLButtonElement;
 	#activeScope: ReaderFontScope = 'interface';
 	#fontQueryEpoch = 0;
+	#localFontsLoaded = false;
+	#localFontsLoading = false;
 	#syncingFont = false;
 	#lastMode: ReaderFontRenderingMode;
 
@@ -266,7 +289,7 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 		this.#fontStatus.role = 'status';
 		this.#fontStatus.setAttribute('aria-live', 'polite');
 		this.#fontStatus.textContent = this.#queryLocalFonts
-			? '准备自动读取本机字体…'
+			? '打开任意字体下拉时，将自动请求授权并读取本机字体。'
 			: '当前浏览器未开放本机字体列表；仍可手动输入字体名称。';
 		const footer = settingsFooter(
 			document,
@@ -323,7 +346,6 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 		});
 		this.#syncScope();
 		this.#sync();
-		if (this.#queryLocalFonts) void this.#loadLocalFonts();
 	}
 
 	destroy(): void {
@@ -455,16 +477,29 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 		const select = element(document, 'select', 'ldp-font-weight-select');
 		select.dataset.fontSetting = config.family;
 		select.dataset.readerSelectSearchable = 'true';
+		select.dataset.readerSelectSearchLabel = this.#queryLocalFonts
+			? '搜索字体（尚未获取本机字体）'
+			: '搜索预设字体';
 		select.setAttribute('aria-label', `${config.label}字体`);
+		const presets = element(document, 'optgroup');
+		presets.label = '预设字体';
 		for (const family of READER_FONT_FAMILIES) {
-			appendOption(
+			const option = appendOption(
 				document,
-				select,
+				presets,
 				family,
 				READER_FONT_FAMILY_LABELS[family],
 			);
+			addFontPreview(
+				option,
+				family === 'site' ? 'inherit' : readerFontFamilyCss(family),
+			);
 		}
+		select.append(presets);
 		this.#selects.set(config.family, select);
+		this.scope.listen(select, READER_SELECT_OPEN_EVENT, () => {
+			void this.#loadLocalFonts();
+		});
 		this.scope.listen(select, 'change', () => {
 			const value = selectedValue(select);
 			const localFont = readLocalFontValue(value);
@@ -678,46 +713,82 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 	}
 
 	async #loadLocalFonts(): Promise<void> {
-		if (!this.#queryLocalFonts) return;
+		if (
+			!this.#queryLocalFonts ||
+			this.#localFontsLoaded ||
+			this.#localFontsLoading
+		) return;
 		const epoch = ++this.#fontQueryEpoch;
+		this.#localFontsLoading = true;
 		this.#fontStatus.textContent = '正在请求浏览器本机字体权限…';
 		try {
-			const names = [...new Set(
+			const fonts = [...new Set(
 				(await this.#queryLocalFonts())
 					.map((name) => String(name).trim())
 					.filter(Boolean),
-			)].sort((left, right) => left.localeCompare(right));
+			)]
+				.map(readerLocalFontPresentation)
+				.sort((left, right) => left.label.localeCompare(
+					right.label,
+					'zh-CN',
+					{ numeric: true, sensitivity: 'base' },
+				));
 			if (epoch !== this.#fontQueryEpoch || this.scope.destroyed) return;
 			this.#fontList.replaceChildren();
-			for (const name of names) {
+			for (const font of fonts) {
 				const option = element(this.#host.ownerDocument, 'option');
-				option.value = name;
+				option.value = font.family;
 				this.#fontList.append(option);
 			}
 			for (const scope of Object.values(SCOPE_FIELDS)) {
 				const select = this.#selects.get(scope.family);
 				if (!select) continue;
+				select.dataset.readerSelectSearchLabel =
+					`搜索字体 · 本机 ${fonts.length}`;
 				for (const previous of select.querySelectorAll(
-					'option[data-font-local="true"]',
+					'optgroup[data-font-local-group="true"]',
 				)) previous.remove();
-				for (const name of names) {
+				const localFonts = element(
+					this.#host.ownerDocument,
+					'optgroup',
+				);
+				localFonts.label = `本机字体 · ${fonts.length}`;
+				localFonts.dataset.fontLocalGroup = 'true';
+				for (const font of fonts) {
 					const option = settingsOption(
 						this.#host.ownerDocument,
-						localFontValue(name),
-						name,
+						localFontValue(font.family),
+						font.label,
 					);
 					option.dataset.fontLocal = 'true';
-					select.append(option);
+					addFontPreview(
+						option,
+						font.fontFamilyCss,
+						font.searchText,
+					);
+					localFonts.append(option);
 				}
+				select.append(localFonts);
 			}
 			this.#sync();
-			this.#fontStatus.textContent = names.length
-				? `已读取 ${names.length} 个本机字体。`
+			this.#localFontsLoaded = true;
+			this.#localFontsLoading = false;
+			this.#fontStatus.textContent = fonts.length
+				? `已获取 ${fonts.length} 个本机字体；下拉列表已显示字体预览。`
 				: '浏览器未返回可用本机字体。';
+			const EventConstructor =
+				this.#host.ownerDocument.defaultView?.Event ?? Event;
+			for (const scope of Object.values(SCOPE_FIELDS)) {
+				this.#selects.get(scope.family)?.dispatchEvent(new EventConstructor(
+					READER_SELECT_OPTIONS_CHANGE_EVENT,
+					{ bubbles: true },
+				));
+			}
 		} catch {
 			if (epoch !== this.#fontQueryEpoch || this.scope.destroyed) return;
 			this.#fontStatus.textContent =
-				'未获得本机字体权限，仍可使用预设或手动输入。';
+				'未获得本机字体权限；重新打开字体下拉可再次授权。';
+			this.#localFontsLoading = false;
 		}
 	}
 

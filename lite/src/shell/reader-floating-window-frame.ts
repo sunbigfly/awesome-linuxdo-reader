@@ -1025,8 +1025,17 @@ export class ReaderFloatingWindowFrame {
 		const pinLabel = snapshot.pinned
 			? '取消锁定置顶'
 			: '锁定置顶，点击外部保持显示';
+		const pinLabelChanged =
+			this.pinButton.getAttribute('aria-label') !== pinLabel;
 		this.pinButton.setAttribute('aria-label', pinLabel);
-		this.pinButton.title = pinLabel;
+		if (pinLabelChanged) {
+			const EventConstructor =
+				this.#document().defaultView?.Event ?? Event;
+			this.pinButton.dispatchEvent(new EventConstructor(
+				'ldp-tooltip-refresh',
+				{ bubbles: true },
+			));
+		}
 		const geometry = snapshot.geometry;
 		this.element.style.left = `${geometry.left}px`;
 		this.element.style.top = `${geometry.top}px`;

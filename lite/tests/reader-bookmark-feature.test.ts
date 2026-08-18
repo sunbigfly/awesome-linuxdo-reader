@@ -654,12 +654,226 @@ await flushMicrotasks();
 assert(
 	normalizedBookmarkProjectionController.snapshot.records[0]?.identity ===
 		projectedBookmark.identity && normalizedBookmarkProjectionLoads === 2 &&
-		normalizedBookmarkOpenSchedules === 0 &&
+		normalizedBookmarkOpenSchedules === 1 &&
 		normalizedBookmarkProjectionController.snapshot.historyProgress.status ===
-			'complete',
-	'收藏、回复、Boost 与回应必须先恢复账号归一投影，并在每次打开浮窗时立即增量回查头页',
+			'idle' &&
+		normalizedBookmarkProjectionController.snapshot.historyProgress
+			.completedTabs === 0,
+	'旧聚合投影只能立即恢复展示；缺少当前逐流终点时必须重新排入摸底任务，不能误报缓存完成',
 );
 normalizedBookmarkProjectionController.destroy();
+
+const completeReactionHistory = Object.freeze(Array.from(
+	{ length: 220 },
+	(_, index): ReaderBookmarkRecord => Object.freeze({
+		identity: `reaction:${10_000 + index}`,
+		tab: 'Reaction',
+		bookmarkId: null,
+		topicId: discourseTopicId(20_000 + index),
+		postId: discoursePostId(10_000 + index),
+		postNumber: discoursePostNumber(1),
+		title: `完整回应 ${index + 1}`,
+		authorUsername: 'author',
+		avatarTemplate: '',
+		createdAt: new Date(Date.UTC(2026, 7, 18, 0, 0, index)).toISOString(),
+		name: '',
+		highestPostNumber: 0,
+		reaction: index < 200 ? 'heart' : 'eyes',
+		excerpt: '',
+		categoryId: null,
+		categoryName: '',
+		tags: Object.freeze([]),
+		searchText: `完整回应 ${index + 1}`,
+	}),
+));
+const reactionHead = Object.freeze([
+	...completeReactionHistory.filter((record) => record.reaction === 'heart')
+		.slice(0, 100),
+	...completeReactionHistory.filter((record) => record.reaction === 'eyes'),
+]);
+const completeReactionHistoryController = new ReaderBookmarkController({
+	requests: {
+		async loadGivenReactions(options: ReaderBookmarkLoadOptions = {}) {
+			options.onProgress?.(Object.freeze({
+				pages: 2,
+				records: reactionHead,
+				complete: false,
+			}));
+			return reactionHead;
+		},
+	} as unknown as DiscourseBookmarkRequestAdapter,
+	projection: {
+		async read(partition) {
+			return partition === 'reactions'
+				? Object.freeze({
+					records: completeReactionHistory,
+					totalHint: completeReactionHistory.length,
+					complete: true,
+					updatedAt: Date.now(),
+				})
+				: null;
+		},
+		async write(): Promise<void> {},
+	},
+	native,
+	actions: {} as PostActionController,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+	tabOrder: ['Reaction'],
+});
+await completeReactionHistoryController.open();
+assert(
+	completeReactionHistoryController.snapshot.tabCounts.get('Reaction') === 220 &&
+		completeReactionHistoryController.snapshot.reactionFilters.get('heart') ===
+			200 &&
+		completeReactionHistoryController.snapshot.reactionFilters.get('eyes') ===
+			20,
+	'已完整缓存的 200+ 回应在头页回查时必须保留历史尾部，不能退化为 heart 100 加自定义回应 20',
+);
+completeReactionHistoryController.destroy();
+
+const reactionDepthSchedules = new Map<number, () => void>();
+let reactionDepthScheduleId = 0;
+const reactionDepthCalls: Array<Readonly<{
+	stream: ReaderBookmarkHistoryStream;
+	page: number;
+	refresh: boolean;
+}>> = [];
+const reactionDepthProjection = new Map<string, Readonly<{
+	records: readonly ReaderBookmarkRecord[];
+	totalHint: number;
+	complete: boolean;
+	updatedAt: number;
+	sourceNextPage?: number;
+	sourceOffset?: number;
+}>>([
+	['reactions', Object.freeze({
+		records: reactionHead,
+		totalHint: reactionHead.length,
+		complete: true,
+		updatedAt: Date.now(),
+	})],
+	...(['bookmarks', 'boosts', 'replies'] as const).map((partition) => [
+		partition,
+		Object.freeze({
+			records: Object.freeze([]),
+			totalHint: 0,
+			complete: true,
+			updatedAt: Date.now(),
+		}),
+	] as const),
+]);
+const reactionDepthController = new ReaderBookmarkController({
+	requests: {
+		async loadHistoryPage(
+			stream: ReaderBookmarkHistoryStream,
+			position: ReaderBookmarkHistoryPosition,
+			options: ReaderBookmarkLoadOptions,
+		) {
+			const signal = options.signal ?? new AbortController().signal;
+			await options.beforeNetwork?.(signal);
+			reactionDepthCalls.push(Object.freeze({
+				stream,
+				page: position.page,
+				refresh: options.refresh === true,
+			}));
+			const records = stream === 'reaction-plugin'
+				? completeReactionHistory.filter((record) =>
+					record.reaction === 'eyes')
+				: stream === 'likes' && position.page < 2
+					? completeReactionHistory.filter((record) =>
+						record.reaction === 'heart').slice(
+						position.page * 100,
+						(position.page + 1) * 100,
+					)
+					: Object.freeze([]);
+			return Object.freeze({
+				stream,
+				page: position.page,
+				records,
+				complete: stream === 'likes' ? position.page >= 2 : true,
+				next: Object.freeze({
+					page: position.page + 1,
+					cursor: stream === 'likes'
+						? (position.page + 1) * 100
+						: 0,
+				}),
+			});
+		},
+	} as unknown as DiscourseBookmarkRequestAdapter,
+	projection: {
+		async read(partition) {
+			return reactionDepthProjection.get(partition) ?? null;
+		},
+		async write(partition, records, options = {}): Promise<void> {
+			reactionDepthProjection.set(partition, Object.freeze({
+				records: Object.freeze([...records]),
+				totalHint: Number(options.totalHint ?? records.length),
+				complete: options.complete === true,
+				updatedAt: Number(options.updatedAt ?? Date.now()),
+				...(options.sourceNextPage === undefined
+					? {}
+					: { sourceNextPage: options.sourceNextPage }),
+				...(options.sourceOffset === undefined
+					? {}
+					: { sourceOffset: options.sourceOffset }),
+			}));
+		},
+	},
+	native,
+	actions: {} as PostActionController,
+	cache: { async invalidate(): Promise<void> {} },
+	target: { async openTarget(): Promise<boolean> { return true; } },
+	tabOrder: ['Reaction'],
+	backgroundWarmDelayMs: 0,
+	historyStepDelayMs: 0,
+	historyBatchPages: 20,
+	historyBatchDelayMs: 0,
+	schedule(callback) {
+		const id = ++reactionDepthScheduleId;
+		reactionDepthSchedules.set(id, callback);
+		return id;
+	},
+	cancel(handle) {
+		reactionDepthSchedules.delete(Number(handle));
+	},
+});
+reactionDepthController.startBackgroundCache();
+await flushMicrotasks();
+for (let step = 0; step < 12; step += 1) {
+	const scheduled = reactionDepthSchedules.entries().next().value as
+		| [number, () => void]
+		| undefined;
+	if (!scheduled) break;
+	reactionDepthSchedules.delete(scheduled[0]);
+	scheduled[1]();
+	await flushMicrotasks();
+	if (reactionDepthController.snapshot.historyProgress.status === 'complete') {
+		break;
+	}
+}
+assert(
+	reactionDepthController.snapshot.historyProgress.status === 'complete' &&
+		reactionDepthController.snapshot.historyProgress.completedTabs === 5 &&
+		reactionDepthController.snapshot.tabCounts.get('Reaction') === 220 &&
+		reactionDepthController.snapshot.reactionFilters.get('heart') === 200 &&
+		reactionDepthCalls.length === 7 &&
+		reactionDepthCalls[4]?.stream === 'likes' &&
+		reactionDepthCalls[6]?.page === 2 &&
+		reactionDepthCalls.filter((call) => call.page === 0)
+			.every((call) => call.refresh),
+	'旧首批缓存必须从五条流首页强制回源，并让点赞连续读取到空终止页后才完成 200+ 回应计数：' +
+		JSON.stringify({
+			status: reactionDepthController.snapshot.historyProgress.status,
+			completedTabs:
+				reactionDepthController.snapshot.historyProgress.completedTabs,
+			reactions:
+				reactionDepthController.snapshot.tabCounts.get('Reaction'),
+			hearts: reactionDepthController.snapshot.reactionFilters.get('heart'),
+			calls: reactionDepthCalls,
+		}),
+);
+reactionDepthController.destroy();
 
 let bookmarkPollVisible = true;
 let bookmarkPollLoads = 0;

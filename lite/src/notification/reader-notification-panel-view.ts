@@ -201,7 +201,6 @@ export class ReaderNotificationPanelView {
 		this.#refreshHeaderAction = this.#document.createElement('button');
 		this.#refreshHeaderAction.type = 'button';
 		this.#refreshHeaderAction.className = 'ldp-notification-refresh';
-		this.#refreshHeaderAction.title = '更新通知';
 		this.#refreshHeaderAction.setAttribute('aria-label', '更新通知');
 		this.#refreshHeaderAction.replaceChildren(
 			renderReaderIcon(
@@ -579,13 +578,22 @@ export class ReaderNotificationPanelView {
 		this.#refreshHeaderAction.dataset.refreshState = state;
 		this.#refreshHeaderAction.classList.toggle('is-refreshing', busy);
 		this.#refreshHeaderAction.setAttribute('aria-busy', String(busy));
+		const labelChanged =
+			this.#refreshHeaderAction.getAttribute('aria-label') !== label;
 		this.#refreshHeaderAction.setAttribute('aria-label', label);
-		this.#refreshHeaderAction.title = label;
 		this.#refreshHeaderAction.replaceChildren(renderReaderIcon(
 			this.#document,
 			icon,
 			this.#renderIcon,
 		));
+		if (labelChanged) {
+			const EventConstructor =
+				this.#document.defaultView?.Event ?? Event;
+			this.#refreshHeaderAction.dispatchEvent(new EventConstructor(
+				'ldp-tooltip-refresh',
+				{ bubbles: true },
+			));
+		}
 	}
 
 	#syncWindowStatus(snapshot: ReaderNotificationControllerSnapshot): void {
@@ -858,10 +866,9 @@ export class ReaderNotificationPanelView {
 		typeIcon.dataset.notificationGroup = record.group;
 		typeIcon.dataset.notificationType = record.typeName;
 		typeIcon.dataset.notificationIcon = record.icon;
-		if (record.group === 'other') {
-			typeIcon.title = record.typeLabel.trim() ||
-				record.typeName.trim() || '通知';
-		}
+		typeIcon.dataset.ldpTooltipLabel = record.typeLabel.trim() ||
+			readerNotificationGroup(record.group).label ||
+			record.typeName.trim() || '通知';
 		typeIcon.setAttribute('aria-hidden', 'true');
 		const reactionEmojiId = record.group === 'reactions' &&
 			record.icon.startsWith('emoji:')

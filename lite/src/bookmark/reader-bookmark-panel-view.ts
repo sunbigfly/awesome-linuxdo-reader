@@ -657,11 +657,7 @@ export class ReaderBookmarkPanelView {
 			snapshot.refreshing ? '正在更新收藏与回应' : '',
 		].filter(Boolean).join(' · ');
 		const complete = history.status === 'complete';
-		if (
-			history.status === 'idle' && history.completedTabs === 0 &&
-			history.records === 0
-		) this.#historyCacheCompleted = false;
-		if (complete) this.#historyCacheCompleted = true;
+		this.#historyCacheCompleted = complete;
 		if (this.#historyCacheCompleted) {
 			this.#progress.render({
 				visible: false,

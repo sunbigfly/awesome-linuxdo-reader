@@ -3871,9 +3871,10 @@ const notificationRefresh = document.querySelector<HTMLButtonElement>(
 );
 assert(
 	notificationRefresh?.getAttribute('aria-label') === '更新通知' &&
+		!notificationRefresh.hasAttribute('title') &&
 		notificationRefresh.closest('.ldp-reader-floating-window-actions') !== null &&
 		notificationRefresh.querySelector('[data-icon="rotate-ccw"]') !== null,
-	'通知浮窗标题栏必须提供可访问的主动更新图标',
+	'通知浮窗标题栏必须提供由 Reader tooltip 接管的可访问主动更新图标',
 );
 const notificationRequestsBeforeManualRefresh = gateway.requests.length;
 let releaseManualNotificationRefresh!: () => void;
@@ -4004,8 +4005,9 @@ assert(
 		.querySelector<HTMLElement>('.ldp-user-observation-filter-panel');
 	assert(
 		notificationFilterToggle !== null &&
+			!notificationFilterToggle.hasAttribute('title') &&
 			notificationFilterPanel?.hidden === true,
-		'消息搜索必须复用用户观察的折叠筛选入口',
+		'消息搜索必须复用统一 tooltip 接管的折叠筛选入口',
 	);
 	notificationFilterToggle.click();
 	assert(
@@ -4049,8 +4051,10 @@ assert(
 	>('.ldp-user-observation-sort-direction')!;
 	notificationDirection.click();
 	assert(
-		controller.snapshot.sortDirection === 'asc',
-		'消息排序方向必须提交给本地缓存投影 owner',
+		controller.snapshot.sortDirection === 'asc' &&
+			!notificationDirection.hasAttribute('title') &&
+			!notificationCalendarToggle.hasAttribute('title'),
+		'消息日期与排序控件必须提交本地投影，并且不得叠加浏览器原生 tooltip',
 	);
 	notificationFilterPanel.querySelector<HTMLButtonElement>(
 		'.ldp-user-observation-filter-reset',
@@ -4067,6 +4071,12 @@ assert(
 	Boolean(visibleNotification?.querySelector(
 		'.ldp-notification-type-icon svg[data-ldp-reader-icon]',
 	)) &&
+	visibleNotification?.querySelector<HTMLElement>(
+		'.ldp-notification-type-icon',
+	)?.dataset.ldpTooltipLabel === '回复' &&
+	!visibleNotification?.querySelector<HTMLElement>(
+		'.ldp-notification-type-icon',
+	)?.hasAttribute('title') &&
 	visibleNotification?.querySelector(
 		'.ldp-notification-title-text',
 	)?.textContent?.endsWith('标题已删除') === true &&
@@ -4081,7 +4091,7 @@ assert(
 	Boolean(visibleNotification?.querySelector(
 		'.ldp-notification-meta',
 	)?.textContent?.includes('404 已删除 Topic')),
-	'消息与回复条目必须保留动作语义，隐去已删除 Topic 原标题，并投影 404 元信息',
+	'消息与回复条目必须投影统一类型 tooltip、保留动作语义并隐去已删除 Topic 原标题',
 );
 await controller.selectGroup('reactionLikes');
 const reactionLikeItems = [...template.notificationList.querySelectorAll<HTMLElement>(
@@ -4095,10 +4105,17 @@ assert(
 		item.querySelector<HTMLImageElement>(
 			'[data-notification-group="reactions"] > img.emoji',
 		)?.src.endsWith('/emoji/heart.png') === true) &&
+	reactionLikeItems.every((item) => {
+		const icon = item.querySelector<HTMLElement>(
+			'.ldp-notification-type-icon',
+		);
+		return Boolean(icon?.dataset.ldpTooltipLabel) &&
+			!icon?.hasAttribute('title');
+	}) &&
 	!reactionLikeItems.some((item) =>
 		item.querySelector('.ldp-notification-title-text')?.textContent
 			?.includes('heart')),
-	'回应与赞条目必须在标题左侧显示真实心形和回应 emoji，标题不显示字段名',
+	'回应与赞条目必须显示真实图形及统一类型 tooltip，标题不显示字段名',
 );
 	const otherDisplayRecord = normalizeNativeNotification({
 		id: 990,
@@ -4122,7 +4139,10 @@ assert(
 		otherDisplayItem?.dataset.notificationType === 'custom' &&
 		otherDisplayItem.querySelector<HTMLElement>(
 			'.ldp-notification-type-icon',
-		)?.title === '已解决' &&
+		)?.dataset.ldpTooltipLabel === '已解决' &&
+		!otherDisplayItem.querySelector<HTMLElement>(
+			'.ldp-notification-type-icon',
+		)?.hasAttribute('title') &&
 		otherDisplayItem.querySelector<HTMLElement>(
 			'.ldp-notification-type-icon',
 		)?.dataset.notificationIcon === 'solution-badge' &&
@@ -4131,8 +4151,8 @@ assert(
 		)) &&
 		otherDisplayItem.querySelector('.ldp-notification-title-text')?.textContent ===
 			'【已解决】你的回答已被采纳',
-		'“其他”必须在每条信息前标注原生展示模型解析出的具体通知类型',
-	);
+		'“其他”必须标注原生展示模型解析出的具体类型，并由 Reader tooltip 接管 hover 提示',
+);
 	const rawOtherLabels = [
 		normalizeNativeNotification({
 			id: 991,

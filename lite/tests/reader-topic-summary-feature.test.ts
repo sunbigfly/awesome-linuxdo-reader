@@ -18,6 +18,8 @@ import {
 	ReaderTopicSummarySurface,
 	type ReaderTopicSummaryShareImageOptions,
 } from '../src/post/reader-topic-summary-surface.js';
+import { READER_SELECT_OPEN_EVENT } from
+	'../src/shell/reader-select-surface.js';
 import { normalizeReaderAiModelCatalogEntry } from
 	'../src/translation/reader-translation-config.js';
 
@@ -681,18 +683,46 @@ click(surface.settingsButton);
 await flush();
 assert(
 	surface.settingsButton.getAttribute('aria-expanded') === 'true' &&
-	localFontQueries === 1 &&
+	localFontQueries === 0 &&
+	surface.chineseFontSelect.querySelector(
+		'[data-font-local-query="true"]',
+	) === null &&
+	surface.root.querySelector('.ldp-topic-summary-font-query') === null,
+	'展开图片设置前不得请求本机字体，界面也不得保留额外获取入口',
+);
+surface.chineseFontSelect.dispatchEvent(new EventConstructor(
+	READER_SELECT_OPEN_EVENT,
+	{ bubbles: true },
+));
+await flush();
+assert(
+	Number(localFontQueries) === 1 &&
 	surface.chineseFontSelect.dataset.readerSelectSearchable === 'true' &&
 	[...surface.chineseFontSelect.options]
 		.some((option) =>
 			option.value === 'local:Noto Sans CJK SC' &&
-			option.textContent === 'Noto Sans CJK SC'
+			option.textContent === 'Noto Sans CJK SC' &&
+			option.dataset.readerSelectPreview === '中文预览 · Aa 0123'
+		) &&
+	[...surface.chineseFontSelect.options]
+		.some((option) =>
+			option.value === 'local:Source Han Serif SC' &&
+			option.textContent === '思源宋体（Source Han Serif SC）'
 		) &&
 	[...surface.latinFontSelect.options]
 		.some((option) => option.value === 'local:Inter') &&
+	surface.chineseFontSelect.querySelector<HTMLOptGroupElement>(
+		'optgroup[data-font-local-group="true"]',
+	)?.label === '本机字体 · 4' &&
+	surface.chineseFontSelect.dataset.readerSelectSearchLabel ===
+		'搜索字体 · 本机 4' &&
+	surface.chineseFontSelect.querySelector(
+		'[data-font-local-query="true"]',
+	) === null &&
+	surface.chineseFontSelect.value === 'system' &&
 	surface.customWidthInput.hidden &&
 	surface.customFontSizeInput.hidden,
-	'齿轮必须按需展开风格及中英文字体，并共用设置面板本机字体搜索源',
+	'打开字体下拉并由用户授权后必须加载全部字体族，中文字体优先显示中文名并共用字体预览契约',
 );
 
 selectValue(surface.styleSelect, 'wisteria');

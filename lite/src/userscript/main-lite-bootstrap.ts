@@ -104,6 +104,9 @@ import {
 	showReaderSettingsResetReminder,
 } from '../settings/reader-settings-reset-reminder.js';
 import {
+	ReaderBrowserStorageManagementSurface,
+} from '../settings/reader-browser-storage-management.js';
+import {
 	ReaderPostReadViewportFeature,
 } from '../reading/read-viewport-adapter.js';
 import {
@@ -238,6 +241,31 @@ function sourceId(window: Window): string {
 		: `main-lite:${Date.now()}`;
 }
 
+function unavailableLocalStorage(cause: unknown): Storage {
+	const error = cause instanceof Error
+		? cause
+		: new DOMException('当前页面无法访问 localStorage', 'SecurityError');
+	return Object.freeze({
+		length: 0,
+		clear(): void {
+			throw error;
+		},
+		getItem(): string | null {
+			// 允许 Reader 以默认设置建立错误提示 surface；所有写入仍保持硬失败。
+			return null;
+		},
+		key(): string | null {
+			return null;
+		},
+		removeItem(): void {
+			throw error;
+		},
+		setItem(): void {
+			throw error;
+		},
+	});
+}
+
 function createStyleStage(
 	environment: BrowserUserscriptEnvironment,
 	document: Document,
@@ -343,6 +371,8 @@ function createRuntimeStage(
 	environment: BrowserUserscriptEnvironment,
 	document: Document,
 	window: Window,
+	localStorage: Storage,
+	localStorageAccessError: unknown,
 	state: MutableMainLiteState,
 	serviceWorkerMessages: ReaderUserscriptServiceWorkerMessageRelay | null,
 	suppressInitialTopicOpen: boolean,
@@ -534,7 +564,7 @@ function createRuntimeStage(
 					document,
 					environment.discourseHost,
 					{
-						openedTopicStorage: window.localStorage,
+						openedTopicStorage: localStorage,
 						openedTopicStorageScope: currentUsername,
 						isTopicHidden: (topicId) =>
 							state.runtime?.unwantedTopics.isManuallyHidden(topicId) === true,
@@ -683,7 +713,7 @@ function createRuntimeStage(
 						: {}),
 				}
 				: false,
-			storage: window.localStorage,
+			storage: localStorage,
 			sourceId: sourceId(window),
 			locks: window.navigator.locks ?? null,
 			indexedDb: window.indexedDB ?? null,
@@ -1036,20 +1066,89 @@ function createRuntimeStage(
 				console.error('[main-lite:target]', error);
 			},
 		},
-		onReady(runtime, context, _settings, _settingsView, _layout, appearance, font) {
+		onReady(runtime, context, _settings, settingsView, _layout, appearance, font) {
 			state.runtime = runtime;
 			persistTranslationMode = (translationMode) => {
 				context.updatePreferences?.({ translationMode });
 			};
+			const storageAccessDocument = document as Document & Readonly<{
+				hasStorageAccess?: () => Promise<boolean>;
+				requestStorageAccess?: () => Promise<unknown>;
+			}>;
+			const browserStorage = window.navigator.storage;
+			const storageSurface = settingsView
+				? new ReaderBrowserStorageManagementSurface({
+					document,
+					host: settingsView.panelHost('cache'),
+					storage: localStorage,
+					...(localStorageAccessError === undefined
+						? {}
+						: { initialAccessError: localStorageAccessError }),
+					...(
+						typeof storageAccessDocument.hasStorageAccess === 'function' ||
+						typeof storageAccessDocument.requestStorageAccess === 'function'
+							? {
+								storageAccess: {
+									...(typeof storageAccessDocument.hasStorageAccess ===
+										'function'
+										? {
+											hasAccess: () => storageAccessDocument
+												.hasStorageAccess!(),
+										}
+										: {}),
+									...(typeof storageAccessDocument.requestStorageAccess ===
+										'function'
+										? {
+											requestAccess: () => storageAccessDocument
+												.requestStorageAccess!(),
+										}
+										: {}),
+								},
+							}
+							: {}
+					),
+					...(browserStorage
+						? {
+							originStorage: {
+								estimate: () => browserStorage.estimate(),
+								persisted: () => browserStorage.persisted(),
+								persist: () => browserStorage.persist(),
+							},
+						}
+						: {}),
+					confirm: (request) => runtime.feedback.confirm(request),
+					choose: (request) => runtime.feedback.choose(request),
+					notify: (message) => runtime.feedback.show(message),
+					openSettings: () => settingsView.open('cache'),
+					reload: () => window.location.reload(),
+					onError: (cause) => {
+						console.error('[main-lite:local-storage]', cause);
+					},
+					parentScope: runtime.scope,
+				})
+				: null;
+			if (settingsView && storageSurface) {
+				let storagePanelVisible = false;
+				settingsView.changes.subscribe((snapshot) => {
+					const visible = snapshot.open &&
+						snapshot.activePanelId === 'cache';
+					if (visible && !storagePanelVisible) {
+						void storageSurface.refresh({ measureRemaining: true });
+					}
+					storagePanelVisible = visible;
+				}, runtime.scope);
+			}
+			let storageWarningSettled = storageSurface === null;
 			let settingsResetReminderChecked = false;
 			const checkSettingsResetReminder = (): void => {
 				if (
+					!storageWarningSettled ||
 					settingsResetReminderChecked ||
 					!['opening', 'running', 'failed'].includes(runtime.shell.state)
 				) return;
 				settingsResetReminderChecked = true;
 				void showReaderSettingsResetReminder({
-					storage: window.localStorage,
+					storage: localStorage,
 					preferencesStorageKey: READER_PREFERENCES_STORAGE_KEY,
 					defaults: preferencesDefaults,
 					prepareResetPreferences: (preferences) =>
@@ -1071,6 +1170,16 @@ function createRuntimeStage(
 					},
 				});
 			};
+			if (storageSurface) {
+				void storageSurface.warnAtStartup()
+					.catch((cause) => {
+						console.error('[main-lite:local-storage-warning]', cause);
+					})
+					.finally(() => {
+						storageWarningSettled = true;
+						checkSettingsResetReminder();
+					});
+			}
 			const restoreOpenedHostTopicTitle = (): void => {
 				if (runtime.shell.state !== 'running') return;
 				const topicId = runtime.shell.activeTopicId;
@@ -1269,11 +1378,19 @@ export function startMainLiteUserscript(
 	const document = page.document as Document | undefined;
 	const window = environment.pageWindow as Window;
 	if (!document) throw new Error('main-lite document 不可用');
+	let localStorageAccessError: unknown;
+	let localStorage: Storage;
+	try {
+		localStorage = window.localStorage;
+	} catch (cause) {
+		localStorageAccessError = cause;
+		localStorage = unavailableLocalStorage(cause);
+	}
 	if (isReaderCloudflareChallengeWindow(window)) {
 		(existing as MainLiteUserscriptHandle | undefined)?.destroy?.();
 		(page[CHALLENGE_MONITOR_KEY] as (() => void) | undefined)?.();
 			const stopMonitor = monitorReaderCloudflareChallengeWindow({
-				storage: window.localStorage,
+				storage: localStorage,
 				storageEvents: window,
 				broadcastChannelFactory:
 					typeof BroadcastChannel === 'function'
@@ -1369,7 +1486,7 @@ export function startMainLiteUserscript(
 			viewportWidth: window.innerWidth,
 			viewportHeight: window.innerHeight,
 		},
-		storage: window.localStorage,
+		storage: localStorage,
 	});
 	const state: MutableMainLiteState = {
 		runtime: null,
@@ -1434,6 +1551,8 @@ export function startMainLiteUserscript(
 				environment,
 				document,
 				window,
+				localStorage,
+				localStorageAccessError,
 				state,
 				serviceWorkerMessages,
 				suppressInitialTopicOpen,

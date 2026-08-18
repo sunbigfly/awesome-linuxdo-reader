@@ -2,6 +2,8 @@ import { parseHTML } from 'linkedom';
 import {
 	ReaderSelectSurface,
 	READER_SELECT_DISMISS_EVENT,
+	READER_SELECT_OPEN_EVENT,
+	READER_SELECT_OPTIONS_CHANGE_EVENT,
 	READER_SELECT_RESELECT_EVENT,
 } from '../src/shell/reader-select-surface.js';
 
@@ -10,7 +12,16 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const { document: parsedDocument, window: parsedWindow } = parseHTML(
-	'<!doctype html><html><body><main class="ldp-reader-floating-window"><select class="ldp-reader-select" data-reader-select-searchable="true" aria-label="字体"><option value="1" hidden>系统默认字体</option><option value="2" selected>本机字体 A</option><option value="3">本机字体 B</option></select></main></body></html>',
+	'<!doctype html><html><body><main class="ldp-reader-floating-window">' +
+	'<select class="ldp-reader-select" data-reader-select-searchable="true" ' +
+	'aria-label="字体"><optgroup label="预设字体"><option value="1" hidden>' +
+	'系统默认字体</option></optgroup><optgroup label="本机字体 · 2">' +
+	'<option value="2" selected data-reader-select-preview="中文预览 · Aa 0123" ' +
+	'data-reader-select-font-family="DengXian, sans-serif" ' +
+	'data-reader-select-search-text="等线 DengXian">等线（DengXian）</option>' +
+	'<option value="3" data-reader-select-preview="中文预览 · Aa 0123" ' +
+	'data-reader-select-font-family="Local B, sans-serif">本机字体 B</option>' +
+	'</optgroup></select></main></body></html>',
 );
 const document = parsedDocument as unknown as Document;
 const constructors = parsedWindow as unknown as { readonly Event: typeof Event };
@@ -73,8 +84,10 @@ Object.defineProperty(menu, 'getBoundingClientRect', {
 	}),
 });
 let changes = 0;
+let openings = 0;
 let reselections = 0;
 select.addEventListener('change', () => changes += 1);
+select.addEventListener(READER_SELECT_OPEN_EVENT, () => openings += 1);
 select.addEventListener(READER_SELECT_RESELECT_EVENT, () => reselections += 1);
 
 assert(
@@ -91,13 +104,40 @@ select.dispatchEvent(pointerDown);
 assert(
 	!menu.hidden &&
 		menu.querySelectorAll('[data-reader-select-value]').length === 3 &&
+		menu.querySelectorAll('.ldp-select-group').length === 2 &&
 		menu.querySelector<HTMLElement>('[data-reader-select-value="1"]')?.hidden &&
 		menu.querySelector<HTMLInputElement>('.ldp-select-search') !== null &&
+		menu.querySelector<HTMLElement>(
+			'[data-reader-select-value="2"] .ldp-select-option-preview',
+		)?.textContent === '中文预览 · Aa 0123' &&
+		menu.querySelector<HTMLElement>(
+			'[data-reader-select-value="2"] .ldp-select-option-preview',
+		)?.style.fontFamily.includes('DengXian') &&
+		menu.classList.contains('has-font-previews') &&
+		openings === 1 &&
 		select.getAttribute('aria-expanded') === 'true' &&
 		menu.style.left === '-162px' &&
 		select.parentElement?.classList.contains('is-menu-above'),
-	'可搜索下拉必须隐藏原生隐藏项，并在所属浮窗内完成水平回夹与上下碰撞',
+	'可搜索字体下拉必须隐藏原生隐藏项、保留分组与实际字体预览，并在所属浮窗内完成碰撞回夹',
 );
+const refreshedFont = document.createElement('option');
+refreshedFont.value = '4';
+refreshedFont.textContent = '自动获取字体';
+select.querySelector('optgroup:last-child')?.append(refreshedFont);
+select.dispatchEvent(new constructors.Event(
+	READER_SELECT_OPTIONS_CHANGE_EVENT,
+	{ bubbles: true },
+));
+assert(
+	menu.querySelector('[data-reader-select-value="4"]') !== null &&
+		openings === 2,
+	'字体查询完成后必须原位刷新当前展开菜单，不要求用户关闭后重新打开',
+);
+refreshedFont.remove();
+select.dispatchEvent(new constructors.Event(
+	READER_SELECT_OPTIONS_CHANGE_EVENT,
+	{ bubbles: true },
+));
 const search = menu.querySelector<HTMLInputElement>('.ldp-select-search')!;
 search.value = 'B';
 search.dispatchEvent(new constructors.Event('input', { bubbles: true }));
@@ -199,6 +239,17 @@ assert(
 	'Reader 操作区收纳时必须通过统一事件关闭已展开的下拉菜单',
 );
 
+const localFontGroup = select.querySelector<HTMLOptGroupElement>(
+	'optgroup:last-child',
+)!;
+for (let index = 0; index < 9; index += 1) {
+	const option = document.createElement('option');
+	option.value = `font-${index}`;
+	option.textContent = `本机字体 ${index}`;
+	option.dataset.readerSelectPreview = '中文预览 · Aa 0123';
+	option.dataset.readerSelectFontFamily = `System Font ${index}, sans-serif`;
+	localFontGroup.append(option);
+}
 const settingsPanel = document.createElement('section');
 settingsPanel.className = 'ldp-settings-panel';
 const settingsSection = document.createElement('section');
@@ -233,12 +284,25 @@ Object.defineProperty(settingsIntro, 'getBoundingClientRect', {
 		height: 80,
 	}),
 });
-selectTop = 280;
+selectTop = 120;
 select.dispatchEvent(notificationPointerDown);
 assert(
+	!select.parentElement?.classList.contains('is-menu-above') &&
+		menu.classList.contains('has-long-list') &&
+		menu.querySelectorAll('[data-reader-select-value]').length === 12 &&
+		menu.style.top === '' &&
+		menu.style.height === '168px' &&
+		menu.style.maxHeight === '168px',
+	'设置面板内的长字体列表必须吸附在字段下方，并按面板底边限制滚动高度',
+);
+selectTop = 280;
+root.dispatchEvent(new constructors.Event('ldp-reader-window-change'));
+assert(
 	select.parentElement?.classList.contains('is-menu-above') &&
+		menu.style.top === '' &&
+		menu.style.height === '162px' &&
 		menu.style.maxHeight === '162px',
-	'设置下拉向上展开时必须以滚动面板和冻结标题下沿为碰撞边界',
+	'字段下方空间不足时必须按碰撞结果翻到上方，并继续限制长列表高度',
 );
 root.dispatchEvent(new constructors.Event(READER_SELECT_DISMISS_EVENT));
 

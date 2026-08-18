@@ -177,6 +177,7 @@ const DEFAULT_HISTORY_BATCH_DELAY_MS = 60_000;
 const HISTORY_PROJECTION_BATCH_PAGES = 4;
 const VISIBLE_HISTORY_LEASE_ROUNDS = 2;
 const CLOUDFLARE_HISTORY_RETRY_DELAY_MS = 5 * 60_000;
+const BOOKMARK_HISTORY_PROJECTION_VERSION = 2;
 const BACKGROUND_SOURCE_ORDER: readonly ReaderBookmarkSource[] = Object.freeze([
 	'bookmarks',
 	'replies',
@@ -216,7 +217,7 @@ function emptySourceProgress(): ReaderBookmarkSourceProgress {
 }
 
 function emptyHistoryStreamState(
-	refreshHead = false,
+	refreshHead = true,
 ): ReaderBookmarkHistoryStreamState {
 	return Object.freeze({
 		next: Object.freeze({ page: 0, cursor: 0 }),
@@ -242,7 +243,7 @@ function historyStreamsForSource(
 }
 
 function historyProjectionPartition(stream: ReaderBookmarkHistoryStream): string {
-	return `history:${stream}`;
+	return `history:v${BOOKMARK_HISTORY_PROJECTION_VERSION}:${stream}`;
 }
 
 function historyRetryDelayMs(cause: unknown, fallbackMs: number): number {
@@ -1022,19 +1023,22 @@ export class ReaderBookmarkController {
 		}
 		for (const source of sources) {
 			const streams = historyStreamsForSource(source);
-			if (!streams.every((stream) => restoredStreamNames.has(stream))) continue;
-			const records = source === 'reactions'
+			const streamRecords = source === 'reactions'
 				? mergeGivenReactionRecords(
 					this.#historyStreamRecords.get('likes') ?? [],
 					this.#historyStreamRecords.get('reaction-plugin') ?? [],
 				)
 				: this.#historyStreamRecords.get(streams[0]!) ?? Object.freeze([]);
+			const complete = streams.every((stream) =>
+				restoredStreamNames.has(stream) &&
+				this.#historyStreams.get(stream)?.complete === true);
 			this.#applySourceProgress(source, {
 				pages: streams.reduce((total, stream) =>
 					total + (this.#historyStreams.get(stream)?.pages ?? 0), 0),
-				records: this.#mergeSourceRecords(source, records),
-				complete: streams.every((stream) =>
-					this.#historyStreams.get(stream)?.complete === true),
+				records: complete
+					? streamRecords
+					: this.#mergeSourceRecords(source, streamRecords),
+				complete,
 			}, false);
 		}
 		this.#backgroundStatus = this.#historyProgress().completedTabs === 5
@@ -1315,6 +1319,12 @@ export class ReaderBookmarkController {
 			this.#emit();
 		}
 		try {
+			const reconcileHeadRecords = (
+				records: readonly ReaderBookmarkRecord[],
+				complete: boolean,
+			): readonly ReaderBookmarkRecord[] => complete
+				? records
+				: this.#mergeSourceRecords(source, records);
 			const loaded = await this.#loadSource(source, {
 				refresh: true,
 				signal: refreshAbort.signal,
@@ -1331,7 +1341,10 @@ export class ReaderBookmarkController {
 					reportedComplete = progress.complete;
 					this.#applySourceProgress(source, {
 						pages: Math.max(previous.pages, progress.pages),
-						records: progress.records,
+						records: reconcileHeadRecords(
+							progress.records,
+							progress.complete,
+						),
 						complete: previous.complete || progress.complete,
 					});
 					if (selected) {
@@ -1344,7 +1357,7 @@ export class ReaderBookmarkController {
 			if (!valid()) return;
 			this.#applySourceProgress(source, {
 				pages: Math.max(previous.pages, reportedPages || 1),
-				records: loaded,
+				records: reconcileHeadRecords(loaded, reportedComplete),
 				complete: previous.complete || reportedComplete,
 			});
 			this.#lastAuthoritativeAt.set(source, this.#now());
@@ -1556,10 +1569,8 @@ export class ReaderBookmarkController {
 			const index = (this.#backgroundStreamCursor + offset) %
 				BACKGROUND_STREAM_ORDER.length;
 			const stream = BACKGROUND_STREAM_ORDER[index]!;
-			const source = sourceForHistoryStream(stream);
 			if (
 				this.#backgroundInFlightStreams.has(stream) ||
-				this.#sourceProgress.get(source)?.complete ||
 				this.#historyStreams.get(stream)?.complete
 			) continue;
 			this.#backgroundStreamCursor = (index + 1) %
@@ -1722,11 +1733,8 @@ export class ReaderBookmarkController {
 			!this.#activityVisible()
 		) return;
 		if (!this.#native.username().trim()) return;
-		if (!BACKGROUND_STREAM_ORDER.some((stream) => {
-			const source = sourceForHistoryStream(stream);
-			return !this.#sourceProgress.get(source)?.complete &&
-				!this.#historyStreams.get(stream)?.complete;
-		})) {
+		if (!BACKGROUND_STREAM_ORDER.some((stream) =>
+			!this.#historyStreams.get(stream)?.complete)) {
 			this.#backgroundStatus = 'complete';
 			this.#backgroundSource = null;
 			this.#backgroundError = null;

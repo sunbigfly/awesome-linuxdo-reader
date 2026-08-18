@@ -2654,6 +2654,177 @@
   gap: 7px;
 }
 
+.ldp-local-storage-body {
+  gap: 8px;
+  padding: 12px 14px 14px;
+}
+
+.ldp-local-storage-summary {
+  min-height: 0;
+  color: var(--ldp-ink);
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.ldp-local-storage-actions {
+  gap: 6px;
+}
+
+.ldp-local-storage-actions > .ldp-config-action {
+  min-height: 30px;
+  padding: 4px 9px;
+  font-size: var(--ldp-font-sm);
+}
+
+.ldp-local-storage-boundary {
+  margin: 0;
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-sm);
+}
+
+.ldp-local-storage-boundary-summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ldp-local-storage-boundary > small {
+  display: block;
+  margin-top: 6px;
+  padding: 7px 9px;
+  border-left: 2px solid var(--ldp-border);
+  line-height: 1.5;
+}
+
+.ldp-local-storage-picker {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ldp-border);
+  border-radius: var(--ldp-radius-sm);
+  background: var(--ldp-surface-raised);
+}
+
+.ldp-local-storage-picker-summary {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  color: var(--ldp-ink);
+  font-size: var(--ldp-font-ui);
+  font-weight: 650;
+  line-height: 1.4;
+  list-style: none;
+  cursor: pointer;
+}
+
+.ldp-local-storage-picker-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ldp-local-storage-picker-summary::after {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  content: "";
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 140ms ease;
+}
+
+.ldp-local-storage-picker[open] > .ldp-local-storage-picker-summary {
+  border-bottom: 1px solid var(--ldp-border);
+}
+
+.ldp-local-storage-picker[open] > .ldp-local-storage-picker-summary::after {
+  transform: translateY(2px) rotate(225deg);
+}
+
+.ldp-local-storage-picker.has-selection > .ldp-local-storage-picker-summary {
+  color: var(--ldp-accent);
+}
+
+.ldp-local-storage-picker-controls {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ldp-border);
+  background: color-mix(in srgb, var(--ldp-surface-muted) 68%, transparent);
+}
+
+.ldp-local-storage-select-all-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-sm);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.ldp-local-storage-select-all {
+  width: 15px;
+  height: 15px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--ldp-accent);
+}
+
+.ldp-local-storage-select-all:disabled + span {
+  opacity: .45;
+}
+
+.ldp-local-storage-picker > .ldp-local-storage-list {
+  max-height: min(44vh, 360px);
+  overflow: auto;
+  padding: 8px;
+}
+
+.ldp-local-storage-key-copy {
+  min-width: 0;
+}
+
+.ldp-local-storage-key-copy > strong,
+.ldp-local-storage-key-copy > small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ldp-local-storage-key-copy > small {
+  margin-top: 2px;
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-sm);
+}
+
+.ldp-local-storage-row.is-stale {
+  border-color: color-mix(in srgb, var(--ldp-warning, #b45309) 42%, var(--ldp-border));
+  background: color-mix(in srgb, var(--ldp-warning, #b45309) 6%, transparent);
+}
+
+.ldp-local-storage-actions > .ldp-config-action:disabled {
+  cursor: default;
+  opacity: .42;
+}
+
+.ldp-local-storage-stale:not(:disabled) {
+  color: var(--ldp-warning, #b45309);
+}
+
+.ldp-local-storage-clear {
+  padding: 6px 9px;
+}
+
+.ldp-local-storage-status {
+  margin: 0;
+}
+
+.ldp-local-storage-status:empty {
+  display: none;
+}
+
 .ldp-cache-row {
   grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
@@ -2778,15 +2949,17 @@
 
 .ldp-font-option-control {
   display: grid;
-  width: min(100%, 390px);
-  grid-template-columns: minmax(112px, 1fr) auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 390px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   justify-self: end;
   gap: 7px;
 }
 
 .ldp-font-option-control:has(.ldp-font-family-custom:not([hidden])) {
-  grid-template-columns: minmax(112px, 1fr) minmax(120px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
 }
 
 .ldp-font-weight-select,

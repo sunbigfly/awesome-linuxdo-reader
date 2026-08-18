@@ -159,8 +159,10 @@ assert(
 active.pinButton.click();
 assert(
 	frames.every((frame) =>
-		frame.pinned && frame.pinButton.getAttribute('aria-pressed') === 'true'),
-	'任一标签切换置顶后必须同步整组状态与按钮反馈',
+		frame.pinned &&
+			frame.pinButton.getAttribute('aria-pressed') === 'true' &&
+			!frame.pinButton.hasAttribute('title')),
+	'任一标签切换置顶后必须同步整组状态，且按钮提示只由 Reader tooltip 接管',
 );
 active.tabList.querySelector<HTMLButtonElement>(
 	'[data-floating-tab="notifications"] ' +

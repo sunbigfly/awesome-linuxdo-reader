@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.6
+// @version      1.5.7
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.6 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.5.7 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.6",
+			sourceVersion: "1.5.7",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.6") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.7") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -675,7 +675,9 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    if (resolved) return resolved;
 	    if (pending) return pending;
 	    pending = browserWindow.queryLocalFonts().then((entries) => Object.freeze([...new Set(
-	      entries.map((entry) => String(entry.family ?? "").trim()).filter(Boolean)
+	      entries.map((entry) => String(
+	        entry.family ?? entry.fullName ?? entry.postscriptName ?? ""
+	      ).trim()).filter(Boolean)
 	    )].sort((left, right) => left.localeCompare(right)))).then((names) => (resolved = names, names));
 	    try {
 	      return await pending;
@@ -5992,7 +5994,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    }
 	  });
 	}
-}, "63096bf69011bb2b4772568ff27f53163a01cfa32a7349e770503fde4ee3b11b");
+}, "fac73afe5bd1fc8cfec43c39b0617e1bf7507a8a92e90fab1610d7ec7d6fc2cd");
 
 /* Source: lite/src/app/reader-data-runtime.ts */
 runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -12108,8 +12110,14 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	  #applyGeometry(snapshot) {
 	    if (!snapshot.managed) return;
 	    this.host.classList.toggle("is-pinned", snapshot.pinned), this.element.classList.toggle("is-pinned", snapshot.pinned), this.host.style.zIndex = String(snapshot.pinned ? Math.min(2147483647, this.#baseZIndex + 32) : this.#baseZIndex), this.pinButton.classList.toggle("is-active", snapshot.pinned), this.pinButton.setAttribute("aria-pressed", String(snapshot.pinned));
-	    const pinLabel = snapshot.pinned ? "取消锁定置顶" : "锁定置顶，点击外部保持显示";
-	    this.pinButton.setAttribute("aria-label", pinLabel), this.pinButton.title = pinLabel;
+	    const pinLabel = snapshot.pinned ? "取消锁定置顶" : "锁定置顶，点击外部保持显示", pinLabelChanged = this.pinButton.getAttribute("aria-label") !== pinLabel;
+	    if (this.pinButton.setAttribute("aria-label", pinLabel), pinLabelChanged) {
+	      const EventConstructor = this.#document().defaultView?.Event ?? Event;
+	      this.pinButton.dispatchEvent(new EventConstructor(
+	        "ldp-tooltip-refresh",
+	        { bubbles: !0 }
+	      ));
+	    }
 	    const geometry = snapshot.geometry;
 	    this.element.style.left = `${geometry.left}px`, this.element.style.top = `${geometry.top}px`, this.element.style.width = `${geometry.width}px`, this.element.style.height = `${geometry.height}px`;
 	  }
@@ -12117,7 +12125,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    return this.element.ownerDocument;
 	  }
 	}
-}, "bea39eb01b40c1dba9d36a30a896a076d1cc44d7e38e0ef8c9107b6e86f4e2d6");
+}, "3f8914bdc9fb08d11fdc41b5e366a21a92aa9145ccc11cfd59f4b28aa7766fe1");
 
 /* Source: lite/src/shell/reader-rate-limit-notice.ts */
 runtime.register("src/shell/reader-rate-limit-notice.js", function(module, exports, require) {
@@ -12299,6 +12307,8 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	var reader_select_surface_exports = {};
 	__export(reader_select_surface_exports, {
 	  READER_SELECT_DISMISS_EVENT: () => READER_SELECT_DISMISS_EVENT,
+	  READER_SELECT_OPEN_EVENT: () => READER_SELECT_OPEN_EVENT,
+	  READER_SELECT_OPTIONS_CHANGE_EVENT: () => READER_SELECT_OPTIONS_CHANGE_EVENT,
 	  READER_SELECT_RESELECT_EVENT: () => READER_SELECT_RESELECT_EVENT,
 	  ReaderSelectSurface: () => ReaderSelectSurface
 	});
@@ -12309,7 +12319,7 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	  "select.ldp-cache-select",
 	  "select.ldp-collection-scope",
 	  "select.ldp-font-weight-select"
-	].join(","), READER_SELECT_DISMISS_EVENT = "ldp-reader-select-dismiss", READER_SELECT_RESELECT_EVENT = "ldp-reader-select-reselect";
+	].join(","), READER_SELECT_DISMISS_EVENT = "ldp-reader-select-dismiss", READER_SELECT_OPEN_EVENT = "ldp-reader-select-open", READER_SELECT_OPTIONS_CHANGE_EVENT = "ldp-reader-select-options-change", READER_SELECT_RESELECT_EVENT = "ldp-reader-select-reselect";
 	function eventElement(event) {
 	  const target = event.target;
 	  return target && typeof target.closest == "function" ? target : null;
@@ -12342,6 +12352,9 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	      select && this.#sync(select);
 	    }), this.scope.listen(options.root, READER_SELECT_DISMISS_EVENT, () => {
 	      this.#close();
+	    }), this.scope.listen(options.root, READER_SELECT_OPTIONS_CHANGE_EVENT, (event) => {
+	      const select = eventElement(event)?.closest(SELECTOR);
+	      select && this.#openSelect === select && this.#open(select);
 	    }), this.scope.listen(options.document, "pointerdown", (event) => {
 	      const select = this.#openSelect;
 	      if (!select) return;
@@ -12453,16 +12466,55 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	  }
 	  #open(select, focusSelected = !1) {
 	    this.#close();
+	    const EventConstructor = this.#document.defaultView?.Event ?? Event;
+	    select.dispatchEvent(new EventConstructor(
+	      READER_SELECT_OPEN_EVENT,
+	      { bubbles: !0 }
+	    ));
 	    const wrapper = this.#states.get(select), menu = wrapper?.querySelector(".ldp-select-menu");
 	    if (!wrapper || !menu) return;
 	    const options = this.#document.createElement("span");
-	    if (options.className = "ldp-select-options", options.setAttribute("role", "listbox"), options.setAttribute(
+	    options.className = "ldp-select-options", options.setAttribute("role", "listbox"), options.setAttribute(
 	      "aria-label",
 	      select.getAttribute("aria-label") || "下拉选项"
-	    ), options.replaceChildren(...[...select.options].map((nativeOption) => {
+	    );
+	    const optionNodes = [], groups = /* @__PURE__ */ new Map();
+	    let groupSerial = 0;
+	    for (const nativeOption of select.options) {
+	      const parent = nativeOption.parentElement;
+	      let group = "";
+	      if (parent?.tagName === "OPTGROUP" && (group = groups.get(parent) ?? `group-${groupSerial += 1}`, !groups.has(parent))) {
+	        groups.set(parent, group);
+	        const heading = this.#document.createElement("span");
+	        heading.className = "ldp-select-group", heading.dataset.readerSelectGroup = group, heading.textContent = parent.label, heading.setAttribute("aria-hidden", "true"), optionNodes.push(heading);
+	      }
 	      const option = this.#document.createElement("button");
-	      return option.type = "button", option.className = "ldp-select-option ldp-picker-option", option.dataset.readerSelectValue = nativeOption.value, option.textContent = nativeOption.label || nativeOption.textContent || "", option.disabled = nativeOption.disabled, option.hidden = nativeOption.hidden, option.setAttribute("role", "option"), option.setAttribute("aria-selected", String(nativeOption.selected)), option;
-	    })), select.dataset.readerSelectSearchable === "true") {
+	      option.type = "button", option.className = "ldp-select-option ldp-picker-option", option.dataset.readerSelectValue = nativeOption.value, option.dataset.readerSelectGroup = group, option.dataset.readerSelectNativeHidden = String(nativeOption.hidden);
+	      const labelText = nativeOption.label || nativeOption.textContent || "";
+	      option.dataset.readerSelectSearchText = [
+	        labelText,
+	        nativeOption.dataset.readerSelectSearchText ?? ""
+	      ].join(" ").trim();
+	      const previewText = nativeOption.dataset.readerSelectPreview;
+	      if (previewText) {
+	        option.classList.add("has-preview");
+	        const label = this.#document.createElement("span");
+	        label.className = "ldp-select-option-label", label.textContent = labelText;
+	        const preview = this.#document.createElement("span");
+	        preview.className = "ldp-select-option-preview", preview.textContent = previewText;
+	        const fontFamily = nativeOption.dataset.readerSelectFontFamily;
+	        fontFamily && (preview.style.fontFamily = fontFamily), option.append(label, preview);
+	      } else
+	        option.textContent = labelText;
+	      option.disabled = nativeOption.disabled, option.hidden = nativeOption.hidden, option.setAttribute("role", "option"), option.setAttribute("aria-selected", String(nativeOption.selected)), optionNodes.push(option);
+	    }
+	    if (options.replaceChildren(...optionNodes), menu.classList.toggle(
+	      "has-font-previews",
+	      !!options.querySelector(".ldp-select-option-preview")
+	    ), menu.classList.toggle(
+	      "has-long-list",
+	      options.querySelectorAll("[data-reader-select-value]").length > 8
+	    ), select.dataset.readerSelectSearchable === "true") {
 	      const search2 = this.#document.createElement("input");
 	      search2.type = "search", search2.className = "ldp-select-search";
 	      const searchLabel = select.dataset.readerSelectSearchLabel ?? "搜索字体";
@@ -12474,8 +12526,18 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	        for (const option of options.querySelectorAll(
 	          "[data-reader-select-value]"
 	        )) {
-	          const matches = !query || (option.textContent ?? "").toLocaleLowerCase().includes(query);
+	          const matches = option.dataset.readerSelectNativeHidden !== "true" && (!query || (option.dataset.readerSelectSearchText ?? "").toLocaleLowerCase().includes(query));
 	          option.hidden = !matches, matches && (visible += 1);
+	        }
+	        for (const heading of options.querySelectorAll(
+	          ".ldp-select-group"
+	        )) {
+	          const group = heading.dataset.readerSelectGroup;
+	          heading.hidden = ![...options.querySelectorAll(
+	            "[data-reader-select-value]"
+	          )].some(
+	            (option) => !option.hidden && option.dataset.readerSelectGroup === group
+	          );
 	        }
 	        empty.hidden = visible > 0;
 	      }), menu.replaceChildren(search2, options, empty);
@@ -12488,7 +12550,7 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	  #positionOpenMenu() {
 	    const select = this.#openSelect, wrapper = select ? this.#states.get(select) : null, menu = wrapper?.querySelector(".ldp-select-menu"), viewport = this.#document.defaultView;
 	    if (!select || !wrapper || !menu || menu.hidden || !viewport) return;
-	    menu.style.removeProperty("left"), menu.style.removeProperty("max-height"), menu.style.removeProperty("max-width"), wrapper.classList.remove("is-menu-above");
+	    menu.style.removeProperty("left"), menu.style.removeProperty("top"), menu.style.removeProperty("height"), menu.style.removeProperty("max-height"), menu.style.removeProperty("max-width"), wrapper.classList.remove("is-menu-above");
 	    const selectRect = select.getBoundingClientRect(), menuRect = menu.getBoundingClientRect(), menuWidth = menuRect.width || menu.offsetWidth, menuHeight = menuRect.height || menu.offsetHeight, margin = 12, gap = 6, settingsPanel = select.closest(".ldp-settings-panel"), collisionRect = (settingsPanel ?? select.closest(
 	      ".ldp-unwanted-topic-filter-content,.ldp-settings-popover,.ldp-reader-floating-window,.ldp-notifications-popover,.ldp-history-popover,.ldp-bookmarks-popover,.ldp-topic-summary-surface"
 	    ))?.getBoundingClientRect(), frozenIntroRect = (settingsPanel ? select.closest(".ldp-settings-section") : null)?.querySelector(".ldp-settings-intro")?.getBoundingClientRect(), bounds = Object.freeze({
@@ -12516,16 +12578,22 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	      );
 	      menu.style.left = `${Math.round(left - menuRect.left)}px`;
 	    }
-	    const spaceBelow = Math.max(
+	    const isSettingsLongFontMenu = !!(settingsPanel && menu.classList.contains("has-font-previews") && menu.classList.contains("has-long-list")), preferredMenuHeight = isSettingsLongFontMenu ? 300 : menuHeight, spaceBelow = Math.max(
 	      0,
 	      bounds.bottom - selectRect.bottom - gap
 	    ), spaceAbove = Math.max(
 	      0,
 	      selectRect.top - bounds.top - gap
-	    ), menuAbove = menuHeight > spaceBelow && spaceAbove > spaceBelow;
+	    ), menuAbove = preferredMenuHeight > spaceBelow && spaceAbove > spaceBelow;
 	    wrapper.classList.toggle("is-menu-above", menuAbove);
 	    const availableHeight = menuAbove ? spaceAbove : spaceBelow;
-	    menuHeight > availableHeight && (menu.style.maxHeight = `${Math.max(1, Math.floor(availableHeight))}px`);
+	    if (isSettingsLongFontMenu) {
+	      const height = Math.max(
+	        1,
+	        Math.floor(Math.min(preferredMenuHeight, availableHeight))
+	      );
+	      menu.style.height = `${height}px`, menu.style.maxHeight = `${height}px`;
+	    } else menuHeight > availableHeight && (menu.style.maxHeight = `${Math.max(1, Math.floor(availableHeight))}px`);
 	  }
 	  #sync(select) {
 	    const wrapper = this.#states.get(select);
@@ -12550,10 +12618,10 @@ runtime.register("src/shell/reader-select-surface.js", function(module, exports,
 	    const wrapper = this.#states.get(select);
 	    wrapper?.classList.remove("is-menu-above");
 	    const menu = wrapper?.querySelector(".ldp-select-menu");
-	    menu && (menu.hidden = !0, menu.style.removeProperty("left"), menu.style.removeProperty("max-height"), menu.style.removeProperty("max-width")), restoreFocus && select.focus({ preventScroll: !0 });
+	    menu && (menu.hidden = !0, menu.style.removeProperty("left"), menu.style.removeProperty("top"), menu.style.removeProperty("height"), menu.style.removeProperty("max-height"), menu.style.removeProperty("max-width")), restoreFocus && select.focus({ preventScroll: !0 });
 	  }
 	}
-}, "a316312b868e84deede49135f4c40fc6af6b415272cf9ab806c313e391ee3067");
+}, "51f9cd6cbc65b80cc0e0fb2e847847e5f3838d7d140f64b9d03a6b2acd0023ff");
 
 /* Source: lite/src/shell/reader-shell-recovery-view.ts */
 runtime.register("src/shell/reader-shell-recovery-view.js", function(module, exports, require) {
@@ -28883,7 +28951,7 @@ runtime.register("src/userscript/main-lite-bootstrap.js", function(module, expor
 	  startMianLiteUserscript: () => startMianLiteUserscript
 	});
 	module.exports = __toCommonJS(main_lite_bootstrap_exports);
-	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_local_sun_clock = require("../appearance/reader-local-sun-clock.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_shell_template = require("../shell/reader-shell-template.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_surface_portal = require("../shell/reader-surface-portal.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_workspace = require("../shell/reader-workspace.js"), import_embedded_host_topic_card_enhancement = require("../shell/embedded-host-topic-card-enhancement.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_boost_copy_rule = require("../post/boost-copy-rule.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_unwanted_topic_filter = require("../collection/reader-unwanted-topic-filter.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_settings_reset_reminder = require("../settings/reader-settings-reset-reminder.js"), import_read_viewport_adapter = require("../reading/read-viewport-adapter.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_information_flow_coordinator = require("../state/reader-information-flow-coordinator.js"), import_reader_post_presentation = require("../topic/reader-post-presentation.js"), import_translation_text = require("../translation/translation-text.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_browser_userscript_environment = require("./browser-userscript-environment.js"), import_reader_userscript_application = require("./reader-userscript-application.js"), import_reader_userscript_target_adapter = require("./reader-userscript-target-adapter.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_credit_account_bridge = require("../user/reader-credit-account-bridge.js"), import_reader_custom_site_repository = require("../site/reader-custom-site-repository.js"), import_reader_embedded_reload_coordinator = require("./reader-embedded-reload-coordinator.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_reader_webdav_config_repository = require("../sync/reader-webdav-config-repository.js");
+	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_local_sun_clock = require("../appearance/reader-local-sun-clock.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_shell_template = require("../shell/reader-shell-template.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_surface_portal = require("../shell/reader-surface-portal.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_workspace = require("../shell/reader-workspace.js"), import_embedded_host_topic_card_enhancement = require("../shell/embedded-host-topic-card-enhancement.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_boost_copy_rule = require("../post/boost-copy-rule.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_unwanted_topic_filter = require("../collection/reader-unwanted-topic-filter.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_settings_reset_reminder = require("../settings/reader-settings-reset-reminder.js"), import_reader_browser_storage_management = require("../settings/reader-browser-storage-management.js"), import_read_viewport_adapter = require("../reading/read-viewport-adapter.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_information_flow_coordinator = require("../state/reader-information-flow-coordinator.js"), import_reader_post_presentation = require("../topic/reader-post-presentation.js"), import_translation_text = require("../translation/translation-text.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_browser_userscript_environment = require("./browser-userscript-environment.js"), import_reader_userscript_application = require("./reader-userscript-application.js"), import_reader_userscript_target_adapter = require("./reader-userscript-target-adapter.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_credit_account_bridge = require("../user/reader-credit-account-bridge.js"), import_reader_custom_site_repository = require("../site/reader-custom-site-repository.js"), import_reader_embedded_reload_coordinator = require("./reader-embedded-reload-coordinator.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_reader_webdav_config_repository = require("../sync/reader-webdav-config-repository.js");
 	const DEBUG_HANDLE_KEY = "__LDP_MAIN_LITE__", LEGACY_DEBUG_HANDLE_KEY = "__LDP_MIAN_LITE__", CHALLENGE_MONITOR_KEY = "__LDP_CLOUDFLARE_CHALLENGE_MONITOR__", STYLE_ID = "ldp-mian-lite-styles", STYLE_RESOURCE = "ldpReaderStyles", KATEX_STYLE_RESOURCE = "ldpKatexStyles", KATEX_STYLESHEET_URL = "https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css";
 	function pageRecord(value) {
 	  if (value === null || typeof value != "object" && typeof value != "function")
@@ -28896,6 +28964,27 @@ runtime.register("src/userscript/main-lite-bootstrap.js", function(module, expor
 	function sourceId(window) {
 	  const value = window.crypto?.randomUUID?.();
 	  return value ? `main-lite:${value}` : `main-lite:${Date.now()}`;
+	}
+	function unavailableLocalStorage(cause) {
+	  const error = cause instanceof Error ? cause : new DOMException("当前页面无法访问 localStorage", "SecurityError");
+	  return Object.freeze({
+	    length: 0,
+	    clear() {
+	      throw error;
+	    },
+	    getItem() {
+	      return null;
+	    },
+	    key() {
+	      return null;
+	    },
+	    removeItem() {
+	      throw error;
+	    },
+	    setItem() {
+	      throw error;
+	    }
+	  });
 	}
 	function createStyleStage(environment, document, state) {
 	  return Object.freeze({
@@ -28965,7 +29054,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	function requestedMode(preferences, routeKind) {
 	  return routeKind === "direct-topic" ? preferences.topicReaderMode : preferences.listReaderMode;
 	}
-	function createRuntimeStage(environment, document, window, state, serviceWorkerMessages, suppressInitialTopicOpen, customSites) {
+	function createRuntimeStage(environment, document, window, localStorage, localStorageAccessError, state, serviceWorkerMessages, suppressInitialTopicOpen, customSites) {
 	  let template = null;
 	  const origin = document.location.origin, siteName = (0, import_reader_custom_site_repository.readerDiscourseSiteDisplayName)(document.location.hostname), routeKind = (0, import_reader_userscript_target_adapter.readerUserscriptRouteKind)(
 	    document.location.href,
@@ -29094,7 +29183,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	              document,
 	              environment.discourseHost,
 	              {
-	                openedTopicStorage: window.localStorage,
+	                openedTopicStorage: localStorage,
 	                openedTopicStorageScope: currentUsername,
 	                isTopicHidden: (topicId) => state.runtime?.unwantedTopics.isManuallyHidden(topicId) === !0,
 	                hideTopic: (input) => {
@@ -29212,7 +29301,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	              }
 	            } : {}
 	          } : !1,
-	          storage: window.localStorage,
+	          storage: localStorage,
 	          sourceId: sourceId(window),
 	          locks: window.navigator.locks ?? null,
 	          indexedDb: window.indexedDB ?? null,
@@ -29516,14 +29605,53 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	            console.error("[main-lite:target]", error);
 	          }
 	        },
-	        onReady(runtime, context, _settings, _settingsView, _layout, appearance, font) {
+	        onReady(runtime, context, _settings, settingsView, _layout, appearance, font) {
 	          state.runtime = runtime, persistTranslationMode = (translationMode) => {
 	            context.updatePreferences?.({ translationMode });
 	          };
-	          let settingsResetReminderChecked = !1;
+	          const storageAccessDocument = document, browserStorage = window.navigator.storage, storageSurface = settingsView ? new import_reader_browser_storage_management.ReaderBrowserStorageManagementSurface({
+	            document,
+	            host: settingsView.panelHost("cache"),
+	            storage: localStorage,
+	            ...localStorageAccessError === void 0 ? {} : { initialAccessError: localStorageAccessError },
+	            ...typeof storageAccessDocument.hasStorageAccess == "function" || typeof storageAccessDocument.requestStorageAccess == "function" ? {
+	              storageAccess: {
+	                ...typeof storageAccessDocument.hasStorageAccess == "function" ? {
+	                  hasAccess: () => storageAccessDocument.hasStorageAccess()
+	                } : {},
+	                ...typeof storageAccessDocument.requestStorageAccess == "function" ? {
+	                  requestAccess: () => storageAccessDocument.requestStorageAccess()
+	                } : {}
+	              }
+	            } : {},
+	            ...browserStorage ? {
+	              originStorage: {
+	                estimate: () => browserStorage.estimate(),
+	                persisted: () => browserStorage.persisted(),
+	                persist: () => browserStorage.persist()
+	              }
+	            } : {},
+	            confirm: (request) => runtime.feedback.confirm(request),
+	            choose: (request) => runtime.feedback.choose(request),
+	            notify: (message) => runtime.feedback.show(message),
+	            openSettings: () => settingsView.open("cache"),
+	            reload: () => window.location.reload(),
+	            onError: (cause) => {
+	              console.error("[main-lite:local-storage]", cause);
+	            },
+	            parentScope: runtime.scope
+	          }) : null;
+	          if (settingsView && storageSurface) {
+	            let storagePanelVisible = !1;
+	            settingsView.changes.subscribe((snapshot) => {
+	              const visible = snapshot.open && snapshot.activePanelId === "cache";
+	              visible && !storagePanelVisible && storageSurface.refresh({ measureRemaining: !0 }), storagePanelVisible = visible;
+	            }, runtime.scope);
+	          }
+	          let storageWarningSettled = storageSurface === null, settingsResetReminderChecked = !1;
 	          const checkSettingsResetReminder = () => {
-	            settingsResetReminderChecked || !["opening", "running", "failed"].includes(runtime.shell.state) || (settingsResetReminderChecked = !0, (0, import_reader_settings_reset_reminder.showReaderSettingsResetReminder)({
-	              storage: window.localStorage,
+	            !storageWarningSettled || settingsResetReminderChecked || !["opening", "running", "failed"].includes(runtime.shell.state) || (settingsResetReminderChecked = !0, (0, import_reader_settings_reset_reminder.showReaderSettingsResetReminder)({
+	              storage: localStorage,
 	              preferencesStorageKey: import_reader_preferences_schema.READER_PREFERENCES_STORAGE_KEY,
 	              defaults: preferencesDefaults,
 	              prepareResetPreferences: (preferences) => (0, import_reader_preferences_schema.createReaderPreferencesResetValue)(
@@ -29541,7 +29669,13 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	                console.error("[main-lite:settings-reset-reminder]", error);
 	              }
 	            }));
-	          }, restoreOpenedHostTopicTitle = () => {
+	          };
+	          storageSurface && storageSurface.warnAtStartup().catch((cause) => {
+	            console.error("[main-lite:local-storage-warning]", cause);
+	          }).finally(() => {
+	            storageWarningSettled = !0, checkSettingsResetReminder();
+	          });
+	          const restoreOpenedHostTopicTitle = () => {
 	            if (runtime.shell.state !== "running") return;
 	            const topicId = runtime.shell.activeTopicId;
 	            topicId !== null && hostTopicEnhancement?.markTopicOpened(topicId);
@@ -29664,10 +29798,16 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	    userscriptGlobal
 	  }), page = pageRecord(environment.pageWindow), existing = page[DEBUG_HANDLE_KEY] ?? page[LEGACY_DEBUG_HANDLE_KEY], document = page.document, window = environment.pageWindow;
 	  if (!document) throw new Error("main-lite document 不可用");
+	  let localStorageAccessError, localStorage;
+	  try {
+	    localStorage = window.localStorage;
+	  } catch (cause) {
+	    localStorageAccessError = cause, localStorage = unavailableLocalStorage(cause);
+	  }
 	  if ((0, import_browser_shared_request_permit.isReaderCloudflareChallengeWindow)(window)) {
 	    existing?.destroy?.(), page[CHALLENGE_MONITOR_KEY]?.();
 	    const stopMonitor = (0, import_browser_shared_request_permit.monitorReaderCloudflareChallengeWindow)({
-	      storage: window.localStorage,
+	      storage: localStorage,
 	      storageEvents: window,
 	      broadcastChannelFactory: typeof BroadcastChannel == "function" ? (name) => new BroadcastChannel(name) : null,
 	      close: () => window.close(),
@@ -29737,7 +29877,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	      viewportWidth: window.innerWidth,
 	      viewportHeight: window.innerHeight
 	    },
-	    storage: window.localStorage
+	    storage: localStorage
 	  }), state = {
 	    runtime: null,
 	    portal: null,
@@ -29792,6 +29932,8 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	        environment,
 	        document,
 	        window,
+	        localStorage,
+	        localStorageAccessError,
 	        state,
 	        serviceWorkerMessages,
 	        suppressInitialTopicOpen,
@@ -29841,7 +29983,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	  }), handle;
 	}
 	const startMianLiteUserscript = startMainLiteUserscript;
-}, "18d9877c450bfeb4f228abf22e98e5156e20c7f0189b6b2e773ee91d97ccb20f");
+}, "f9a0e21282d4e08c3e41428a69ae1e18aac6dcc5381fe885e1e2fabc3cbdf5a4");
 
 /* Source: lite/src/userscript/main-lite-entry.ts */
 runtime.register("src/userscript/main-lite-entry.js", function(module, exports, require) {

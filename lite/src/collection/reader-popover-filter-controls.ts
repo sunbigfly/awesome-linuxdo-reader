@@ -247,7 +247,6 @@ export function createReaderPopoverSearchTools(
 		`ldp-user-observation-filter-toggle ldp-${owner}-filter-toggle`;
 	filterToggle.setAttribute('aria-label', '综合筛选与排序');
 	filterToggle.setAttribute('aria-expanded', 'false');
-	filterToggle.title = '综合筛选与排序';
 	filterToggle.append(renderReaderIcon(
 		document,
 		'header-settings',
@@ -522,9 +521,6 @@ export class ReaderPopoverFilterDisclosure {
 			renderReaderIcon(this.#document, 'clock'),
 			span,
 		);
-		this.#calendarToggle.title = this.#date
-			? `当前筛选 ${this.#date}`
-			: '按当前分类查看每月活跃程度';
 	}
 
 	#syncSortDirectionButton(): void {
@@ -540,7 +536,6 @@ export class ReaderPopoverFilterDisclosure {
 			'aria-label',
 			ascending ? '切换为降序' : '切换为升序',
 		);
-		this.#sortDirection.title = ascending ? '当前升序' : '当前降序';
 	}
 
 	#renderCalendar(): void {
