@@ -4,9 +4,9 @@ description: 配置主题模式、当地日落自动暗色、强调色、斑马�
 feature_ids: ["SET-001", "SET-009", "SET-022"]
 source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/appearance/reader-theme-controller.ts","lite/src/appearance/reader-local-sun-clock.ts","lite/src/appearance/reader-appearance-style-controller.ts"]
 since: 0.1.2
-version: 1.5.6
+version: 1.5.7
 status: current
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-07-appearance-settings-v1.5.0.png"]
 ---
 

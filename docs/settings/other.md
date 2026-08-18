@@ -4,9 +4,9 @@ description: 配置队列入口、历史、退出、键盘与鼠标快捷方式�
 feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "COLLECT-007", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/app/reader-application.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-context-controller.ts","lite/src/post/boost-copy-rule.ts","lite/src/post/reader-topic-action-rail.ts","lite/src/collection/reader-unwanted-topic-filter.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts"]
 since: 0.1.2
-version: 1.5.6
+version: 1.5.7
 status: current
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/guide-18-thread-context-v1.5.0.png", "/screenshots/guide-26-reading-navigation-v1.5.0.png", "/screenshots/guide-27-shortcuts-v1.5.0.png", "/screenshots/guide-28-applicable-sites-v1.5.0.png"]
 ---
 

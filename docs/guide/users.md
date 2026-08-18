@@ -4,9 +4,9 @@ description: 查看用户卡、资料、徽章、统计、关注关系并持续�
 feature_ids: ["MEDIA-007", "USER-001", "USER-002", "USER-003", "USER-004", "USER-005", "USER-007"]
 source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/discourse/native-request-descriptors.ts","lite/src/discourse/native-host-api.ts","lite/src/user/reader-user-observation-session.ts"]
 since: 0.1.2
-version: 1.5.6
+version: 1.5.7
 status: current
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-25-user-card-v1.5.0.png", "/screenshots/guide-02-settings-overview-v1.5.0.png"]
 ---
 

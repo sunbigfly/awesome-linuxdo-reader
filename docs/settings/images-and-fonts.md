@@ -4,9 +4,9 @@ description: 配置帖子图片比例、灯箱默认行为、字体渲染、宿�
 feature_ids: ["MEDIA-001", "MEDIA-003", "MEDIA-005", "SET-002", "SET-003", "SET-004", "SET-005", "SET-006"]
 source_anchors: ["lite/src/media/reader-image-scale.ts","lite/src/network/public-resource-request-adapter.ts","lite/src/media/reader-lightbox-controller.ts","lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
-version: 1.5.6
+version: 1.5.7
 status: current
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/guide-04-font-settings-v1.5.0.png", "/screenshots/guide-19-image-lightbox-v1.5.0.png"]
 ---
 
@@ -73,7 +73,7 @@ screenshots: ["/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/g
 - 颜色：跟随主题或自定义；
 - 字号：50%–250%。
 
-新配置的界面、正文、回复字号默认分别为 92%、95%、80%，回复仍比界面和正文更紧凑。打开字体菜单时，阅读器会通过 LINUX DO 宿主页面能力查询本机字体；浏览器不支持、拒绝授权或查询失败时会显示对应状态。自定义字体只引用本机已安装字体，不会上传字体文件。
+新配置的界面、正文、回复字号默认分别为 92%、95%、80%，回复仍比界面和正文更紧凑。第一次打开任意字体下拉时，阅读器会直接请求浏览器授权并查询系统提供的全部字体族，不再显示额外获取入口；获取后的当前下拉会原位刷新并显示实际字体预览，常见中文字体优先使用中文名。浏览器不支持、拒绝授权或查询失败时会显示对应状态。自定义字体只引用本机已安装字体，不会上传字体文件。
 
 ## 跨形态共享
 

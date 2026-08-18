@@ -1,12 +1,12 @@
 ---
 title: 数据管理
-description: 导出、导入与恢复设置，查看六类本地缓存并按选择范围清理。
+description: 导出、导入与恢复设置，管理六类本地缓存与浏览器 localStorage 空间。
 feature_ids: ["DATA-001", "DATA-002", "DATA-007"]
-source_anchors: ["lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
+source_anchors: ["lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/settings/reader-browser-storage-management.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.5.6
+version: 1.5.7
 status: current
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-30-settings-update-reminder-v1.5.0.png"]
 ---
 
@@ -93,6 +93,22 @@ v1.5.3 会再次为已有设置的用户递增“大版本设置更新”提示�
 清理浏览历史、通知或收藏/回应缓存时，会先等待正在进行的 WebDAV 同步结束并封锁新同步，再解除对应本机三方合并基线。屏障或基线写入失败时，该类别保持勾选且不执行本地删除；清理成功后释放屏障，下一次同步仍可从远端恢复尚未被业务删除的记录。清理本地缓存本身不会在远端生成删除标记。
 
 若只有当前主题出现缓存异常，优先使用标题栏的“清除当前帖子缓存并刷新”入口。它会保留当前阅读锚点，只失效该主题及关联图片，再通过统一 Topic 打开事务重新获取；不要求手动清空所有缓存。
+
+## 浏览器 localStorage
+
+面板以紧凑摘要显示 Reader 占用、受控探针实测的当前可追加余量和持久保存状态；已经授予的权限、当前没有可清项目的操作按钮以及空状态说明不会持续占用空间。Reader 键列表和浏览器清理方法分别默认折叠：键列表展开后可逐项多选或一键全选，并在标题中查看已选数量；清理浏览器站点数据的完整风险说明只在用户主动展开时显示。
+
+面板只读取 Reader 自己的 localStorage 键值，不读取其余键的值，也不列出或删除原站及其他脚本数据。若站点总空间不足，界面只提示从地址栏左侧站点信息进入“网站设置”查看或清理该站点数据；清理整个站点可能退出登录并重置站点设置。
+
+localStorage 没有标准余量查询接口，因此可追加余量通过临时写入探针测量，检测完成后立即删除探针；数值按 UTF-16 字符近似计算，浏览器的内部元数据可能产生少量差异。
+
+“申请持久保存”调用浏览器站点存储能力，只降低浏览器在空间压力下自动回收站点数据的概率，不会扩大 localStorage 配额。若浏览器报告当前页面没有存储访问权限，按钮会改为“请求存储访问”；浏览器未提供网页内申请入口时，需要在浏览器的 Cookie 与站点数据设置中手动允许当前站点。
+
+“清理久远数据”默认只删除超过 24 小时未更新、且已经没有有效请求或缓存租约的 Reader 跨标签协调状态，以及异常中断后遗留的余量探针。它不会猜测无时间元数据的设置、历史、阅读队列、正文缓存、登录或 WebDAV 数据是否过期。
+
+键级删除属于排障用的原始操作，只能删除 Reader 项，并且必须二次确认后立即刷新页面。删除 Reader 设置、历史或队列可能恢复默认，已同步数据之后仍可能从 WebDAV 重新合并。常规清理仍应优先使用上方六类缓存入口。
+
+Reader 启动时会用临时探针确认 localStorage 可写并保留约 64 KB 的请求协调余量；若遇到配额不足、Cookie/站点数据权限被拒绝或 localStorage 不可用，会显示一次警告并提供进入数据管理、请求可用存储权限或清理已确认久远临时数据的入口。
 
 ## 操作边界
 

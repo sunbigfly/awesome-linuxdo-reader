@@ -4,9 +4,9 @@ description: 阅读日志面板中的性能快照、前后台事件、页面元�
 feature_ids: ["MONITOR-001"]
 source_anchors: ["lite/src/monitor/reader-resource-monitor.ts"]
 since: 0.1.2
-version: 1.5.6
+version: 1.5.7
 status: current
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-10-resource-monitor-v1.5.0.png"]
 ---
 

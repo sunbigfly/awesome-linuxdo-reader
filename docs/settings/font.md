@@ -4,9 +4,9 @@ description: 配置字体显示优化、嵌入阅读列表尺寸，以及界面�
 feature_ids: ["SET-004", "SET-005", "SET-006"]
 source_anchors: ["lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
-version: 1.5.6
+version: 1.5.7
 status: current
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-04-font-settings-v1.5.0.png"]
 ---
 
@@ -61,7 +61,7 @@ screenshots: ["/screenshots/guide-04-font-settings-v1.5.0.png"]
 - 等宽；
 - 自定义本机字体。
 
-打开字体选择器时，阅读器会优先通过当前 LINUX DO 宿主页面提供的本地字体能力读取可用字体名称。浏览器可能要求授权；不支持、拒绝授权或读取失败时，菜单会显示相应状态，仍可使用预设字体或手动填写字体名称。
+第一次打开任意字体下拉时，阅读器会直接请求浏览器授权，并尝试读取系统提供的全部字体族，不再显示额外的“获取字体”入口。授权成功后，当前下拉会原位刷新，并按预设字体和本机字体分组；每个选项都使用对应字体显示中英文与数字预览，常见中文字体优先显示中文名，同时保留原名便于搜索。不支持、拒绝授权或读取失败时，仍可使用预设字体或手动填写字体名称；重新打开字体下拉即可再次授权。
 
 自定义字体只引用本机已安装的字体名称，不会上传字体文件，也不会让其他设备自动获得该字体。
 

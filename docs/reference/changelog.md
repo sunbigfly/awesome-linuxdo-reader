@@ -4,9 +4,9 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.5.6
+version: 1.5.7
 status: current
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ---
 
@@ -15,6 +15,34 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.5.7 — 本机字体、存储诊断与历史补齐
+
+核验日期：2026-08-18。
+
+### 字体选择与内容呈现
+
+- 首次打开字体下拉时直接请求本机字体授权；成功后原位刷新预设与本机字体分组，不再保留额外的获取入口。
+- 字体菜单显示中文名、原名和实际字形预览，并支持统一搜索；主题摘要与设置面板共用相同字体目录和授权语义。
+- 帖子正文重新服从正文作用域的字体、字号、字重与颜色变量，避免界面字体覆盖内容设置。
+
+### 浏览器存储诊断
+
+- 数据管理新增 Reader localStorage 占用、可追加余量、持久保存和存储访问状态；余量探针完成后立即清理，并为请求协调保留安全空间。
+- Reader 键支持折叠查看、逐项选择和二次确认删除；久远数据清理只处理已经失效的协调状态与遗留探针，不触及原站、登录、WebDAV 或其他脚本数据。
+- localStorage 不可用、配额不足或站点存储权限受限时显示一次可操作警告，并保持设置 surface 可进入排障。
+
+### 历史投影与交互提示
+
+- 收藏、回复、Boost 与回应的旧聚合投影不再冒充完整终点；逐流首页会重新核对，并续读到真实空终止页，保留 200 条以上回应的历史尾部。
+- 通知类型、刷新、筛选、排序与浮窗置顶统一交给 Reader tooltip，避免浏览器原生提示与应用提示重叠；动态标签变化会即时刷新提示内容。
+
+### 发布状态
+
+- `1.5.7` 已发布到 Greasy Fork：主 Loader 固定版本为 `1905671`，加载 Core `1905668`、Platform `1905670` 与 Features `1905669`。
+- 固定 Loader 原始文件为 4,141 字节，SHA-256 `015ebc99782d0931168ffdf4c3156c3e454c1adacb9f9b07b2e9ddf93e571d6e`；移除平台加入的 `@downloadURL none` 后为 4,120 字节，SHA-256 `ac327dd89f9414fb5ebb86792947c10d5c0bd1c6ac122d08e6834afd6460de91`，与仓库 Loader 逐字节一致。
+- Core 为 1,586,385 字节，SHA-256 `9088ae605be56fb1290cc5078387f6c0bb28f59bf9cff1db0ecc0e269bc87454`；Platform 为 1,270,087 字节，SHA-256 `ed946f30a5c9ad22f9848344d87456597d9c05557570d48f85cbde668075c625`；Features 为 2,011,170 字节，SHA-256 `db9097d4cbbacaee2802c297938b669d03cdda2f4d9fd34aa0dc69c828c05e09`。
+- CSS 固定到 Git `4efa0f4b3521432b021d739cb7ae07fadb51ac54`：619,328 字节，SHA-256 `84a60f90455c91470883300f0505e0c9c744b5e6ae2c02626989ef85e00ed4e1`；源码与分包 runtime 各通过 224 文件契约，289 个模块通过 parity 门禁。
 
 ## 1.5.6 — 通知补集与历史投影修复
 
