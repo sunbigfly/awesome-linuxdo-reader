@@ -90,12 +90,12 @@ Library 与待发布文件完全相同。快速调试版和四文件本地测试
 
 | 发布单元 | Greasy Fork | 固定版本 | 核验结果 |
 | --- | --- | --- | --- |
-| 主 Loader | [588185](https://greasyfork.org/scripts/588185) | `1905745` | 固定文件 4,172 字节，SHA-256 `d216a698f072d6c64bb7701ba3715f6df48acbab4895d319b8fd3c3055ac608c`；移除平台加入的 `@downloadURL none` 后为 4,151 字节，SHA-256 `46b5c7649743738ca4c0d1845166c87ce0530b948b389456a66a62d1db503f70` |
-| Core | [590254](https://greasyfork.org/scripts/590254) | `1905741` | 1,588,009 字节，SHA-256 `15276afb856ba704de4215816f468875e20b841fa63d081a4856b6f02fb87e53` |
-| Platform | [591595](https://greasyfork.org/scripts/591595) | `1905743` | 1,270,306 字节，SHA-256 `786ef5d03b8a3dda6bc0369fed377cc59c430caa930a8adac482a881b12bbcb9` |
+| 主 Loader | [588185](https://greasyfork.org/scripts/588185) | `1905757` | 固定文件 4,172 字节，SHA-256 `88e374895507054b891e38f65e11f15675efa8ff7812c245530e377f60c85283`；移除平台加入的 `@downloadURL none` 后为 4,151 字节，SHA-256 `bcfac33f6930e9503084b5a517568fbe63d06ad3eac43dfeccc2d768cd529e31` |
+| Core | [590254](https://greasyfork.org/scripts/590254) | `1905755` | 1,588,128 字节，SHA-256 `e915a5b265c8e9489ec5950de7759a3009ff4a39b357cedb504bb0697faea7a9` |
+| Platform | [591595](https://greasyfork.org/scripts/591595) | `1905756` | 1,271,756 字节，SHA-256 `800e8d44f12ef436c0fdd41f09f652407ad43f6347c34ed6013cd4aff58e3cf2` |
 | Features | [590255](https://greasyfork.org/scripts/590255) | `1905742` | 2,045,403 字节，SHA-256 `d45214197eabafce29f09ce2b1b3ae1248668b46fb1be1716758b598a41032ff` |
 
-四个发布单元已在 `update.greasyfork.org` 固定版本 URL 核验；主 Loader 归一化后与仓库产物逐字节一致。CSS 固定到 Git `1b8e1fa3e8cb32923eab8d79dacc59ce4a0a425c`，619,317 字节，SHA-256 `c7a7dbb707401af715437929e678992604e6a88ac6cb2e0f79bb93bc26dddbd1`。
+四个发布单元已在 `update.greasyfork.org` 固定版本 URL 核验；主 Loader 归一化后与仓库产物逐字节一致。CSS 固定到 Git `ac10f7f3dfed908f2e3b184690eca734503e5fb9`，619,781 字节，SHA-256 `442ff6a5ffbfd3f0f3cd17d61fccac07cf680d80dfae8abf1cee571dd5502eb4`。
 
 ### v1.5.7 已发布坐标
 

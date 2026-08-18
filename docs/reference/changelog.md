@@ -16,7 +16,7 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
 
-## 1.5.8 — 共享字体库、浮窗滚动与自动过滤
+## 1.5.8 — 共享字体库、浮窗滚动与通知定位
 
 核验日期：2026-08-18。
 
@@ -31,12 +31,17 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 - 只有全屏阅读器接管宿主页面滚动；浮窗与嵌入模式保留原站滚动条，锁定浮窗时背景滚轮也不再被无条件阻止，避免开关浮窗引发布局抖动。
 - “不想看”自动过滤不再依赖 Reader 工作区处于打开状态；Reader 关闭后规则变化仍会重扫宿主列表，并持续隐藏新出现的匹配主题。
 
+### 通知中心
+
+- 未读数量改为可访问按钮；点击后回到“全部”、清除筛选、恢复最新优先排序，并滚动聚焦第一条真实未读通知。
+- 原站以 `reaction + heart` 表示的标准点赞统一归入“赞”，同一用户的活动继续继承真实通知 ID 与未读状态。
+
 ### 发布状态
 
-- `1.5.8` 已发布到 Greasy Fork：主 Loader 固定版本为 `1905745`，加载 Core `1905741`、Platform `1905743` 与 Features `1905742`。
-- 固定 Loader 原始文件为 4,172 字节，SHA-256 `d216a698f072d6c64bb7701ba3715f6df48acbab4895d319b8fd3c3055ac608c`；移除平台加入的 `@downloadURL none` 后为 4,151 字节，SHA-256 `46b5c7649743738ca4c0d1845166c87ce0530b948b389456a66a62d1db503f70`，与仓库 Loader 逐字节一致。
-- Core 为 1,588,009 字节，SHA-256 `15276afb856ba704de4215816f468875e20b841fa63d081a4856b6f02fb87e53`；Platform 为 1,270,306 字节，SHA-256 `786ef5d03b8a3dda6bc0369fed377cc59c430caa930a8adac482a881b12bbcb9`；Features 为 2,045,403 字节，SHA-256 `d45214197eabafce29f09ce2b1b3ae1248668b46fb1be1716758b598a41032ff`。
-- CSS 固定到 Git `1b8e1fa3e8cb32923eab8d79dacc59ce4a0a425c`：619,317 字节，SHA-256 `c7a7dbb707401af715437929e678992604e6a88ac6cb2e0f79bb93bc26dddbd1`；源码与分包 runtime 各通过 225 文件契约，291 个模块通过 parity 门禁。
+- `1.5.8` 已发布到 Greasy Fork：主 Loader 固定版本为 `1905757`，加载 Core `1905755`、Platform `1905756` 与 Features `1905742`。
+- 固定 Loader 原始文件为 4,172 字节，SHA-256 `88e374895507054b891e38f65e11f15675efa8ff7812c245530e377f60c85283`；移除平台加入的 `@downloadURL none` 后为 4,151 字节，SHA-256 `bcfac33f6930e9503084b5a517568fbe63d06ad3eac43dfeccc2d768cd529e31`，与仓库 Loader 逐字节一致。
+- Core 为 1,588,128 字节，SHA-256 `e915a5b265c8e9489ec5950de7759a3009ff4a39b357cedb504bb0697faea7a9`；Platform 为 1,271,756 字节，SHA-256 `800e8d44f12ef436c0fdd41f09f652407ad43f6347c34ed6013cd4aff58e3cf2`；Features 为 2,045,403 字节，SHA-256 `d45214197eabafce29f09ce2b1b3ae1248668b46fb1be1716758b598a41032ff`。
+- CSS 固定到 Git `ac10f7f3dfed908f2e3b184690eca734503e5fb9`：619,781 字节，SHA-256 `442ff6a5ffbfd3f0f3cd17d61fccac07cf680d80dfae8abf1cee571dd5502eb4`；源码与分包 runtime 各通过 225 文件契约，291 个模块通过 parity 门禁。
 
 ## 1.5.7 — 本机字体、存储诊断与历史补齐
 
