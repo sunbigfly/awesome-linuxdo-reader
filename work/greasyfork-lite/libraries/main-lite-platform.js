@@ -20290,8 +20290,9 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	  const key = String(value ?? "");
 	  return READER_NOTIFICATION_GROUPS[key] ?? READER_NOTIFICATION_GROUPS.all;
 	}
-	function nativeNotificationGroup(typeName, requested) {
+	function nativeNotificationGroup(typeName, requested, data = Object.freeze({})) {
 	  if (requested !== "all") return readerNotificationGroup(requested);
+	  if (typeName === "reaction" && String(data.reaction_icon ?? "").trim().toLocaleLowerCase("en-US") === "heart") return READER_NOTIFICATION_GROUPS.likes;
 	  for (const key of READER_NOTIFICATION_GROUP_ORDER) {
 	    const candidate = READER_NOTIFICATION_GROUPS[key];
 	    if (candidate.mode === "notifications" && candidate.typeNames.includes(typeName))
@@ -20523,7 +20524,7 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	  return typeName === "custom" && /(?:解决方案|已解决|话题解决)/.test(typeLabel) ? "solution-badge" : TYPE_ICONS[typeName] ?? fallback;
 	}
 	function normalizeNativeNotification(value, presented, groupValue, options = {}) {
-	  const source = notificationRecord(value), data = notificationData(source), typeName = String(presented.typeName ?? source.type_name ?? "").trim(), group2 = nativeNotificationGroup(typeName, groupValue), presentedActor = notificationUsername(
+	  const source = notificationRecord(value), data = notificationData(source), typeName = String(presented.typeName ?? source.type_name ?? "").trim(), group2 = nativeNotificationGroup(typeName, groupValue, data), presentedActor = notificationUsername(
 	    presented.actor ?? data.display_username ?? data.original_username ?? data.acting_user_name ?? data.username ?? source.username
 	  ), count = typeName === "replied" ? aggregateCount(data.consolidated_count) : null, aggregateActor = count === null ? "" : notificationUsername(
 	    data.original_username ?? data.acting_user_name ?? data.username ?? data.display_username ?? presented.actor
@@ -20710,7 +20711,7 @@ runtime.register("src/notification/reader-notification-model.js", function(modul
 	function sortReaderNotifications(records) {
 	  return Object.freeze([...records].sort((left, right) => (Date.parse(right.createdAt) || 0) - (Date.parse(left.createdAt) || 0) || right.identity.localeCompare(left.identity)));
 	}
-}, "c7ae36f309ef972277e3343b361efec404729b7e38c7939105b9c8c4fb30c5aa");
+}, "72b60c2e7f479b2d836a705bfc92af3ade04e9a05488f3db74ca41b8a6131769");
 
 /* Source: lite/src/notification/reader-notification-panel-view.ts */
 runtime.register("src/notification/reader-notification-panel-view.js", function(module, exports, require) {
@@ -20877,6 +20878,10 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	      );
 	    }), this.scope.listen(this.#elements.tagFilter, "change", () => {
 	      this.#controller.setTagFilter(this.#elements.tagFilter.value);
+	    }), this.scope.listen(this.#elements.unreadStatus, "click", () => {
+	      this.#focusFirstUnread().catch((cause) => {
+	        this.#onError(cause), this.#notify("未读通知暂时无法定位");
+	      });
 	    }), this.scope.listen(this.#elements.markAll, "click", () => {
 	      this.#controller.markAllAsRead().then(() => {
 	        this.#scrollWindow.replaceWhere(
@@ -20913,6 +20918,24 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	      }
 	    });
 	  }
+	  async #focusFirstUnread() {
+	    const snapshot = this.#controller.snapshot;
+	    (snapshot.mode !== "notifications" || snapshot.group !== "all" || snapshot.query || snapshot.categoryFilter || snapshot.tagFilter || snapshot.dateFilter || snapshot.sortDirection !== "desc") && await this.#controller.selectGroup("all");
+	    let unread = this.#elements.list.querySelector(
+	      ".ldp-notification-item.unread"
+	    );
+	    if (!unread && this.#controller.snapshot.unreadCount > 0 && (await this.#controller.refresh(), unread = this.#elements.list.querySelector(
+	      ".ldp-notification-item.unread"
+	    )), !unread) {
+	      this.#notify("未读状态正在同步，请稍后重试");
+	      return;
+	    }
+	    unread.scrollIntoView?.({
+	      behavior: "smooth",
+	      block: "center",
+	      inline: "nearest"
+	    }), unread.focus({ preventScroll: !0 });
+	  }
 	  #render(snapshot) {
 	    const {
 	      toggle,
@@ -20933,7 +20956,10 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    ), toggle.setAttribute(
 	      "aria-label",
 	      snapshot.unreadCount > 0 ? `消息，${snapshot.unreadCount} 条未读` : "消息"
-	    ), unreadStatus.hidden = snapshot.unreadCount <= 0, unreadStatus.textContent = snapshot.unreadCount > 0 ? `未读 ${snapshot.unreadCount} 条` : "", unreadStatus.parentElement?.classList.toggle(
+	    ), unreadStatus.hidden = snapshot.unreadCount <= 0, unreadStatus.textContent = snapshot.unreadCount > 0 ? `未读 ${snapshot.unreadCount} 条` : "", unreadStatus.setAttribute(
+	      "aria-label",
+	      snapshot.unreadCount > 0 ? `定位第一条未读通知，共 ${snapshot.unreadCount} 条` : "没有未读通知"
+	    ), unreadStatus.parentElement?.classList.toggle(
 	      "is-empty",
 	      snapshot.unreadCount <= 0
 	    ), markAll.disabled = snapshot.unreadCount <= 0 || snapshot.refreshing || snapshot.markingAll, markAll.dataset.ldpRequestBusy = snapshot.markingAll ? "1" : "0", markAll.setAttribute("aria-busy", String(snapshot.markingAll));
@@ -21224,7 +21250,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    this.#relativeTimer !== null && (this.#cancel(this.#relativeTimer), this.#relativeTimer = null);
 	  }
 	}
-}, "07eae1222ef75418e1ecf9667be354513514aca63b896eeec21f1cc61bd7e783");
+}, "e7392a6edeb7ad1e6699225e9a6bc70545c9e2bdb1fc0840a67448ac0b0d96ba");
 
 /* Source: lite/src/queue/reader-open-queue-session.ts */
 runtime.register("src/queue/reader-open-queue-session.js", function(module, exports, require) {

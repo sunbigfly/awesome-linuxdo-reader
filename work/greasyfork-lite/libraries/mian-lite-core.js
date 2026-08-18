@@ -6007,7 +6007,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    }
 	  });
 	}
-}, "f9883326a127cad615d8e1959281d3f094e0677241e17dead366ef3036c45ed0");
+}, "c2abccabad3e6906cac4b8c0c24b0bd193ef84bdb2cb5da3f60dc166e0f5b185");
 
 /* Source: lite/src/app/reader-data-runtime.ts */
 runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -13010,10 +13010,10 @@ runtime.register("src/shell/reader-shell-template.js", function(module, exports,
 	    "ldp-notification-toolbar"
 	  ), notificationUnreadStatus = (0, import_html_element.htmlElement)(
 	    document,
-	    "span",
+	    "button",
 	    "ldp-notification-unread-status"
 	  );
-	  notificationUnreadStatus.textContent = "没有未读消息";
+	  notificationUnreadStatus.type = "button", notificationUnreadStatus.setAttribute("aria-label", "没有未读通知"), notificationUnreadStatus.textContent = "没有未读消息";
 	  const notificationMarkAll = button(
 	    options,
 	    "ldp-notification-mark-all",
@@ -13630,7 +13630,7 @@ runtime.register("src/shell/reader-shell-template.js", function(module, exports,
 	    liveUpdateDismiss
 	  });
 	}
-}, "8758d79a8f95f3609795ca6fe1b0511cac27d0e242a47fe0a98186c4d0b6cb94");
+}, "a80f4a1a86cd529330311e8255d3ca050fa63e63d1002047a837f3e4313e1255");
 
 /* Source: lite/src/shell/reader-shell.ts */
 runtime.register("src/shell/reader-shell.js", function(module, exports, require) {

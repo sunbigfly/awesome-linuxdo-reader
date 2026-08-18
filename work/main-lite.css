@@ -1,6 +1,6 @@
 /* Awesome LinuxDo Reader Lite stylesheet.
  * Generated only from lite/styles/*.css; do not edit generated outputs.
- * source-sha256: d64b924cf4a358468eeb4369f77595ebb53bf670e7aabd5ebfad46731adadb45
+ * source-sha256: 2a151fa37339c48a89fb6b92a4750b1e6b51b014d6cb9d4bda91e0d40dedf3cf
  */
 
 /* source: 00-foundation.css */
@@ -15505,11 +15505,31 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 .ldp-notification-unread-status {
+  display: inline-flex;
   min-width: 0;
+  align-items: center;
   margin-right: auto;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ldp-notification-unread-status:hover {
+  background: var(--primary-very-low, #f5f5f5);
+  color: var(--primary, #222);
+}
+
+.ldp-notification-unread-status:focus-visible,
+.ldp-notification-item:focus-visible {
+  outline: 2px solid var(--tertiary, #47855f);
+  outline-offset: 2px;
 }
 
 .ldp-notification-mark-all,

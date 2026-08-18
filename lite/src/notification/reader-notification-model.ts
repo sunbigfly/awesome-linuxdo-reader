@@ -296,8 +296,17 @@ export function readerNotificationGroup(
 function nativeNotificationGroup(
 	typeName: string,
 	requested: ReaderNotificationGroupKey,
+	data: UnknownRecord = Object.freeze({}),
 ): ReaderNotificationGroup {
 	if (requested !== 'all') return readerNotificationGroup(requested);
+	// LINUX DO 的标准点赞会由原生通知模型投影成 reaction + heart，
+	// 同一活动在 user_actions 中仍是 action_type=2（likes）。两端必须落到
+	// 同一 canonical group，才能继承真实通知 ID 与未读状态。
+	if (
+		typeName === 'reaction' &&
+		String(data.reaction_icon ?? '').trim().toLocaleLowerCase('en-US') ===
+			'heart'
+	) return READER_NOTIFICATION_GROUPS.likes;
 	for (const key of READER_NOTIFICATION_GROUP_ORDER) {
 		const candidate = READER_NOTIFICATION_GROUPS[key];
 		if (
@@ -743,7 +752,7 @@ export function normalizeNativeNotification(
 	const source = notificationRecord(value);
 	const data = notificationData(source);
 	const typeName = String(presented.typeName ?? source.type_name ?? '').trim();
-	const group = nativeNotificationGroup(typeName, groupValue);
+	const group = nativeNotificationGroup(typeName, groupValue, data);
 	const presentedActor = notificationUsername(
 		presented.actor ??
 		data.display_username ??

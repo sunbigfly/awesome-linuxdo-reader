@@ -1483,7 +1483,7 @@ function readerNotificationPanelElements(
 		groupPanels: Object.freeze(groupPanels),
 		groupTabs: Object.freeze(groupTabs),
 		toolbar: query<HTMLElement>('.ldp-notification-toolbar'),
-		unreadStatus: query<HTMLElement>('.ldp-notification-unread-status'),
+		unreadStatus: query<HTMLButtonElement>('.ldp-notification-unread-status'),
 		markAll: query<HTMLButtonElement>('.ldp-notification-mark-all'),
 		newMessage: query<HTMLAnchorElement>('.ldp-notification-new-message'),
 		search: query<HTMLInputElement>('.ldp-notification-search'),

@@ -2953,19 +2953,24 @@ assert(
 clickController.destroy();
 consolidatedReplyCount = 2;
 
-const consolidatedLike = normalizeNativeNotification({
+const heartReactionLike = normalizeNativeNotification({
 	id: 701,
-	notification_type: 5,
+	notification_type: 25,
 	read: false,
 	created_at: '2026-07-30T02:00:00.000Z',
+	data: { reaction_icon: 'heart' },
 }, {
 	actor: 'alice',
-	typeName: 'liked_consolidated',
-	typeLabel: '赞',
-	summary: '多人赞了你的帖子',
+	typeName: 'reaction',
+	typeLabel: '回应',
+	summary: '回应了你的帖子',
 	topicId: 42,
 	postNumber: 3,
 }, 'all');
+assert(
+	heartReactionLike.group === 'likes',
+	'原生 reaction + heart 必须与 user_actions 点赞落到同一 canonical group',
+);
 const likeActions = Object.freeze([
 	normalizeUserActionNotification({
 		action_type: 2,
@@ -2993,7 +2998,7 @@ const associationController = new ReaderNotificationController({
 		authScope: requests.authScope,
 		async load(group: ReaderNotificationGroupKey, page: number) {
 			const records = group === 'all'
-				? Object.freeze([consolidatedLike])
+				? Object.freeze([heartReactionLike])
 				: group === 'likes' ? likeActions : Object.freeze([]);
 			return {
 				group,
@@ -3018,7 +3023,7 @@ const linkedLikes = new Map(associationController.snapshot.records.map((record) 
 ]));
 assert(
 	linkedLikes.get('alice') === 701 && linkedLikes.get('bob') === null,
-	'聚合通知只能继承 actor 精确匹配的原生 ID，不能把单候选强套给其他子记录',
+	'heart 回应必须关联同一 actor 的点赞记录，且不能把单候选强套给其他用户',
 );
 associationController.destroy();
 
@@ -4223,6 +4228,27 @@ const modifierNotification = template.notificationList.querySelector<HTMLElement
 	'.ldp-notification-message-item.unread',
 );
 assert(modifierNotification !== null, '全部通知必须保留可点击的未读记录');
+let unreadFocusScrolls = 0;
+let unreadFocusCalls = 0;
+Object.defineProperties(modifierNotification, {
+	scrollIntoView: {
+		configurable: true,
+		value: () => { unreadFocusScrolls += 1; },
+	},
+	focus: {
+		configurable: true,
+		value: () => { unreadFocusCalls += 1; },
+	},
+});
+template.notificationUnreadStatus.click();
+await flushMicrotasks();
+assert(
+	template.notificationUnreadStatus.tagName === 'BUTTON' &&
+	template.notificationUnreadStatus.getAttribute('aria-label') ===
+		`定位第一条未读通知，共 ${controller.snapshot.unreadCount} 条` &&
+	unreadFocusScrolls === 1 && unreadFocusCalls === 1,
+	'点击未读数量必须滚动并聚焦当前第一条真实未读通知',
+);
 const readCommitsBeforeModifierClick = native.readCommits;
 const modifierClick = new LinkedomEvent('click', {
 	bubbles: true,

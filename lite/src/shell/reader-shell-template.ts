@@ -101,7 +101,7 @@ export interface ReaderShellTemplate {
 	readonly notificationGroupPanels: readonly HTMLDivElement[];
 	readonly notificationGroupTabs: readonly HTMLButtonElement[];
 	readonly notificationToolbar: HTMLDivElement;
-	readonly notificationUnreadStatus: HTMLSpanElement;
+	readonly notificationUnreadStatus: HTMLButtonElement;
 	readonly notificationMarkAll: HTMLButtonElement;
 	readonly notificationNewMessage: HTMLAnchorElement;
 	readonly notificationSearch: HTMLInputElement;
@@ -628,9 +628,11 @@ export function createReaderShellTemplate(
 	);
 	const notificationUnreadStatus = element(
 		document,
-		'span',
+		'button',
 		'ldp-notification-unread-status',
 	);
+	notificationUnreadStatus.type = 'button';
+	notificationUnreadStatus.setAttribute('aria-label', '没有未读通知');
 	notificationUnreadStatus.textContent = '没有未读消息';
 	const notificationMarkAll = button(
 		options,

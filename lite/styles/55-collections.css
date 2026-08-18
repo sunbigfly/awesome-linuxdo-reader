@@ -131,11 +131,31 @@
 }
 
 .ldp-notification-unread-status {
+  display: inline-flex;
   min-width: 0;
+  align-items: center;
   margin-right: auto;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ldp-notification-unread-status:hover {
+  background: var(--primary-very-low, #f5f5f5);
+  color: var(--primary, #222);
+}
+
+.ldp-notification-unread-status:focus-visible,
+.ldp-notification-item:focus-visible {
+  outline: 2px solid var(--tertiary, #47855f);
+  outline-offset: 2px;
 }
 
 .ldp-notification-mark-all,

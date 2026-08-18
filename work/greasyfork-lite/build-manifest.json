@@ -15,7 +15,7 @@
     "sharedHelperDeclarations": 10
   },
   "modules": 291,
-  "projectTotalExecutableBytes": 4907101,
+  "projectTotalExecutableBytes": 4908670,
   "libraries": [
     {
       "name": "main-lite-core",
@@ -25,8 +25,8 @@
       ],
       "description": "应用、Shell、主题、流、布局与 userscript 运行核心",
       "modules": 101,
-      "bytes": 1588009,
-      "sha256": "15276afb856ba704de4215816f468875e20b841fa63d081a4856b6f02fb87e53"
+      "bytes": 1588128,
+      "sha256": "e915a5b265c8e9489ec5950de7759a3009ff4a39b357cedb504bb0697faea7a9"
     },
     {
       "name": "main-lite-platform",
@@ -36,8 +36,8 @@
       ],
       "description": "缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块",
       "modules": 62,
-      "bytes": 1270306,
-      "sha256": "786ef5d03b8a3dda6bc0369fed377cc59c430caa930a8adac482a881b12bbcb9"
+      "bytes": 1271756,
+      "sha256": "800e8d44f12ef436c0fdd41f09f652407ad43f6347c34ed6013cd4aff58e3cf2"
     },
     {
       "name": "main-lite-features",

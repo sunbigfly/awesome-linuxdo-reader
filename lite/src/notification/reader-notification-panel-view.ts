@@ -39,7 +39,7 @@ export interface ReaderNotificationPanelElements {
 	readonly groupPanels: readonly HTMLElement[];
 	readonly groupTabs: readonly HTMLButtonElement[];
 	readonly toolbar: HTMLElement;
-	readonly unreadStatus: HTMLElement;
+	readonly unreadStatus: HTMLButtonElement;
 	readonly markAll: HTMLButtonElement;
 	readonly newMessage: HTMLAnchorElement;
 	readonly search: HTMLInputElement;
@@ -316,6 +316,12 @@ export class ReaderNotificationPanelView {
 		this.scope.listen(this.#elements.tagFilter, 'change', () => {
 			this.#controller.setTagFilter(this.#elements.tagFilter.value);
 		});
+		this.scope.listen(this.#elements.unreadStatus, 'click', () => {
+			void this.#focusFirstUnread().catch((cause) => {
+				this.#onError(cause);
+				this.#notify('未读通知暂时无法定位');
+			});
+		});
 		this.scope.listen(this.#elements.markAll, 'click', () => {
 			void this.#controller.markAllAsRead().then(() => {
 				this.#scrollWindow.replaceWhere(
@@ -375,6 +381,40 @@ export class ReaderNotificationPanelView {
 		});
 	}
 
+	async #focusFirstUnread(): Promise<void> {
+		const snapshot = this.#controller.snapshot;
+		if (
+			snapshot.mode !== 'notifications' ||
+			snapshot.group !== 'all' ||
+			snapshot.query ||
+			snapshot.categoryFilter ||
+			snapshot.tagFilter ||
+			snapshot.dateFilter ||
+			snapshot.sortDirection !== 'desc'
+		) {
+			await this.#controller.selectGroup('all');
+		}
+		let unread = this.#elements.list.querySelector<HTMLAnchorElement>(
+			'.ldp-notification-item.unread',
+		);
+		if (!unread && this.#controller.snapshot.unreadCount > 0) {
+			await this.#controller.refresh();
+			unread = this.#elements.list.querySelector<HTMLAnchorElement>(
+				'.ldp-notification-item.unread',
+			);
+		}
+		if (!unread) {
+			this.#notify('未读状态正在同步，请稍后重试');
+			return;
+		}
+		unread.scrollIntoView?.({
+			behavior: 'smooth',
+			block: 'center',
+			inline: 'nearest',
+		});
+		unread.focus({ preventScroll: true });
+	}
+
 	#render(snapshot: ReaderNotificationControllerSnapshot): void {
 		const {
 			toggle,
@@ -409,6 +449,12 @@ export class ReaderNotificationPanelView {
 		unreadStatus.textContent = snapshot.unreadCount > 0
 			? `未读 ${snapshot.unreadCount} 条`
 			: '';
+		unreadStatus.setAttribute(
+			'aria-label',
+			snapshot.unreadCount > 0
+				? `定位第一条未读通知，共 ${snapshot.unreadCount} 条`
+				: '没有未读通知',
+		);
 		unreadStatus.parentElement?.classList.toggle(
 			'is-empty',
 			snapshot.unreadCount <= 0,
