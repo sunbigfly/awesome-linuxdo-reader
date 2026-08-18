@@ -47,13 +47,13 @@
 // @connect      api-edge.cognitive.microsofttranslator.com
 // @connect      *
 // @run-at       document-start
-// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@1b8e1fa3e8cb32923eab8d79dacc59ce4a0a425c/work/main-lite.css#sha256=c7a7dbb707401af715437929e678992604e6a88ac6cb2e0f79bb93bc26dddbd1
+// @resource     ldpReaderStyles https://cdn.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@ac10f7f3dfed908f2e3b184690eca734503e5fb9/work/main-lite.css#sha256=442ff6a5ffbfd3f0f3cd17d61fccac07cf680d80dfae8abf1cee571dd5502eb4
 // @resource     ldpKatexStyles https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
-// @require      https://update.greasyfork.org/scripts/590254/1905741/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1905741#sha256=15276afb856ba704de4215816f468875e20b841fa63d081a4856b6f02fb87e53
-// @require      https://update.greasyfork.org/scripts/591595/1905743/Awesome%20LinuxDo%20Reader%20Lite%20Platform%20Library.js?version=1905743#sha256=786ef5d03b8a3dda6bc0369fed377cc59c430caa930a8adac482a881b12bbcb9
+// @require      https://update.greasyfork.org/scripts/590254/1905755/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1905755#sha256=e915a5b265c8e9489ec5950de7759a3009ff4a39b357cedb504bb0697faea7a9
+// @require      https://update.greasyfork.org/scripts/591595/1905756/Awesome%20LinuxDo%20Reader%20Lite%20Platform%20Library.js?version=1905756#sha256=800e8d44f12ef436c0fdd41f09f652407ad43f6347c34ed6013cd4aff58e3cf2
 // @require      https://update.greasyfork.org/scripts/590255/1905742/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1905742#sha256=d45214197eabafce29f09ce2b1b3ae1248668b46fb1be1716758b598a41032ff
 // ==/UserScript==
 
