@@ -99,6 +99,7 @@ export interface ReaderUserscriptRuntimeBindings {
 	readonly credit?: ReaderBrowserCreditOptions;
 	readonly resources?: ReaderBrowserResourceOptions;
 	readonly assetCacheStorage?: BrowserAssetCacheStoragePort;
+	readonly fontStylesheet?: (href: string) => HTMLLinkElement;
 }
 
 export interface ReaderUserscriptTargetStageOptions<
@@ -132,7 +133,12 @@ export interface ReaderUserscriptRuntimeStageOptions<
 	>['shell'];
 	readonly runtime: Omit<
 		ReaderBrowserRuntimeStageOptions<TPreferences, TTopic, TPost>['runtime'],
-		'host' | 'share' | 'translation' | 'resources' | 'assetCacheStorage'
+		| 'host'
+		| 'share'
+		| 'translation'
+		| 'resources'
+		| 'assetCacheStorage'
+		| 'fontStylesheet'
 	>;
 	readonly translation?: ReaderUserscriptTranslationOptions;
 	readonly resources?: ReaderUserscriptResourceOptions;
@@ -385,6 +391,12 @@ export function createReaderUserscriptRuntimeBindings(
 	}
 	const valueStorage = environment.createValueStorage();
 	const assetCacheStorage = environment.createAssetCacheStorage();
+	let fontStylesheet: ((href: string) => HTMLLinkElement) | undefined;
+	try {
+		fontStylesheet = environment.createExternalStylesheetAppender();
+	} catch {
+		// 旧 userscript host 无 GM_addElement 时保留本机/导入字体，Google 加载由 DOM 回退。
+	}
 	return Object.freeze({
 		host: environment.discourseHost,
 		share: environment.createShareSurface(),
@@ -402,6 +414,7 @@ export function createReaderUserscriptRuntimeBindings(
 		...(translation === undefined ? {} : { translation }),
 		...(resources === undefined ? {} : { resources }),
 		...(assetCacheStorage ? { assetCacheStorage } : {}),
+		...(fontStylesheet ? { fontStylesheet } : {}),
 	});
 }
 
@@ -456,6 +469,9 @@ export function createReaderUserscriptRuntimeStage<
 			...(bindings.assetCacheStorage === undefined
 				? {}
 				: { assetCacheStorage: bindings.assetCacheStorage }),
+			...(bindings.fontStylesheet === undefined
+				? {}
+				: { fontStylesheet: bindings.fontStylesheet }),
 			...(options.runtime.threadContextStorage !== undefined ||
 					!valueStorage
 				? {}

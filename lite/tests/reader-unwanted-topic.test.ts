@@ -4,6 +4,7 @@ import {
 	readerUnwantedPostAuthorMatches,
 	readerUnwantedTopicFieldRuleIsValid,
 	readerUnwantedTopicFilterMatch,
+	readerUnwantedTopicFilterPortMatch,
 	readerUnwantedTopicFilterPreferencesEqual,
 	type ReaderUnwantedTopicFilterPreferences,
 } from '../src/collection/reader-unwanted-topic-filter.js';
@@ -43,6 +44,21 @@ const storage: Storage = {
 		memory.set(key, value);
 	},
 };
+
+assert(
+	readerUnwantedTopicFilterPortMatch({
+		read: () => Object.freeze({
+			...DEFAULT_READER_UNWANTED_TOPIC_FILTER_PREFERENCES,
+			enabled: true,
+			labels: Object.freeze(['高级推广']),
+		}),
+	}, {
+		topicId: 47,
+		title: '宿主推广 Topic',
+		labels: Object.freeze(['高级推广']),
+	})?.kind === 'label',
+	'宿主首次投影必须直接读取已保存自动过滤偏好，不得依赖 runtime 就绪状态',
+);
 let now = 1_000;
 const repository = new ReaderUnwantedTopicRepository({
 	storage,
@@ -380,6 +396,7 @@ document.querySelector<HTMLButtonElement>(
 )?.click();
 assert(!reloaded.has(2) && reloaded.has(1), '行内恢复必须从不想看集合移除对应 Topic');
 
+view.open();
 document.querySelector<HTMLButtonElement>(
 	'.ldp-unwanted-topic-settings-button',
 )?.click();
@@ -395,6 +412,9 @@ assert(
 	document.querySelector<HTMLElement>(
 		'.ldp-reader-floating-window-title',
 )?.textContent === '免打扰与自动过滤' &&
+	document.querySelector(
+		'.ldp-reader-floating-window-tab-activate [data-icon="eye-off"]',
+	) !== null &&
 	document.querySelector('.ldp-unwanted-topic-filter-master')?.parentElement
 		?.matches('.ldp-unwanted-topic-filter-footer') === true &&
 	document.querySelector('.ldp-unwanted-topic-filter-master')?.nextElementSibling

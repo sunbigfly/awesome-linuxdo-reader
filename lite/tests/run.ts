@@ -125,6 +125,7 @@ import './reader-object-settings-draft.test.js';
 import './reader-layout-settings-form.test.js';
 import './reader-appearance-settings-form.test.js';
 import './reader-branch-overlay-controller.test.js';
+import './reader-font-catalog.test.js';
 import './reader-font-settings-form.test.js';
 import './reader-interaction-settings-form.test.js';
 import './reader-motion-settings-form.test.js';

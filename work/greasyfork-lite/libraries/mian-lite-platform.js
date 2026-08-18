@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.7
+// @version      1.5.8
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.7 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.5.8 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.7",
+			sourceVersion: "1.5.8",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.7") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.8") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -4414,6 +4414,7 @@ runtime.register("src/collection/reader-unwanted-topic-filter.js", function(modu
 	  readerUnwantedPostAuthorMatches: () => readerUnwantedPostAuthorMatches,
 	  readerUnwantedTopicFieldRuleIsValid: () => readerUnwantedTopicFieldRuleIsValid,
 	  readerUnwantedTopicFilterMatch: () => readerUnwantedTopicFilterMatch,
+	  readerUnwantedTopicFilterPortMatch: () => readerUnwantedTopicFilterPortMatch,
 	  readerUnwantedTopicFilterPreferencesEqual: () => readerUnwantedTopicFilterPreferencesEqual
 	});
 	module.exports = __toCommonJS(reader_unwanted_topic_filter_exports);
@@ -4563,6 +4564,9 @@ runtime.register("src/collection/reader-unwanted-topic-filter.js", function(modu
 	    matches: Object.freeze(matches)
 	  }) : null;
 	}
+	function readerUnwantedTopicFilterPortMatch(preferences, input) {
+	  return readerUnwantedTopicFilterMatch(preferences.read(), input);
+	}
 	function readerUnwantedPostAuthorMatches(preferencesValue, username) {
 	  const preferences = normalizeReaderUnwantedTopicFilterPreferences(
 	    preferencesValue
@@ -4571,7 +4575,7 @@ runtime.register("src/collection/reader-unwanted-topic-filter.js", function(modu
 	  const candidate = comparisonKey(String(username ?? "").replace(/^@+/, ""));
 	  return !!(candidate && preferences.postAuthors.some((entry) => comparisonKey(entry) === candidate));
 	}
-}, "2abe1ca947c6902a70fee8e99a0637c6f4705c9fe64ed7f5739e1d3df5fd42da");
+}, "9d78d7d96be176675e45f11f11c88f90577bbc0bf4539a8066c6e8fb5aa83266");
 
 /* Source: lite/src/collection/reader-unwanted-topic-repository.ts */
 runtime.register("src/collection/reader-unwanted-topic-repository.js", function(module, exports, require) {
@@ -5124,7 +5128,7 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	    this.#mode = "topics", this.#topicPane.hidden = !1, this.#settingsPane.hidden = !0, this.#backButton.hidden = !0, this.#settingsButton.hidden = typeof this.#filterPreferences?.update != "function" || !this.#filterEditor, this.window.setTitle("不想再看"), this.window.meta.textContent = "", this.window.setIcon("eye-off"), this.#render();
 	  }
 	  #showSettings() {
-	    typeof this.#filterPreferences?.update != "function" || !this.#filterEditor || (this.#mode = "settings", this.#topicPane.hidden = !0, this.#settingsPane.hidden = !1, this.#backButton.hidden = !1, this.#settingsButton.hidden = !0, this.window.setTitle("免打扰与自动过滤"), this.window.meta.textContent = "", this.window.setIcon("settings"), this.#filterEditor.open());
+	    typeof this.#filterPreferences?.update != "function" || !this.#filterEditor || (this.#mode = "settings", this.#topicPane.hidden = !0, this.#settingsPane.hidden = !1, this.#backButton.hidden = !1, this.#settingsButton.hidden = !0, this.window.setTitle("免打扰与自动过滤"), this.window.meta.textContent = "", this.window.setIcon("eye-off"), this.#filterEditor.open());
 	  }
 	  async #returnToTopics() {
 	    this.#filterEditor && !await this.#filterEditor.saveIfChanged(!1) || this.#showTopics();
@@ -5446,7 +5450,7 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	    this.#topicDraft?.topicId === topicId && (input.value = "", !this.#topicDraft.labels.some((label) => labelKey(label) === key) && (this.#topicDraft.labels = [...this.#topicDraft.labels, raw], this.#render()));
 	  }
 	}
-}, "a5b50e51c9df89fb2e912708df37a4c4141837abeee36e75cd5563e734a45249");
+}, "ba45ed198cd57c368a5de3b387f960a902e2bf3a1249c25d83626fef61834a6d");
 
 /* Source: lite/src/discourse/identifiers.ts */
 runtime.register("src/discourse/identifiers.js", function(module, exports, require) {

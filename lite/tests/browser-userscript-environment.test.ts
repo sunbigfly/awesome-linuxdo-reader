@@ -28,6 +28,7 @@ const copiedTexts: string[] = [];
 const katexCalls: string[] = [];
 const hlsCalls: string[] = [];
 const assetCacheCalls: string[] = [];
+const addedStylesheets: string[] = [];
 class TestHls {
 	static isSupported(): boolean {
 		return true;
@@ -151,6 +152,15 @@ const userscriptGlobal = {
 		});
 		return { abort() {} };
 	},
+	GM_addElement(
+		tagName: string,
+		attributes: Readonly<Record<string, string>>,
+	) {
+		assert(tagName === 'link' && attributes.rel === 'stylesheet',
+			'Google 字体必须通过 GM_addElement 注入样式链接');
+		addedStylesheets.push(attributes.href ?? '');
+		return { href: attributes.href } as HTMLLinkElement;
+	},
 	GM_getValue(key: string, fallback: unknown) {
 		return gmValues.get(key) ?? fallback;
 	},
@@ -256,6 +266,14 @@ assert(
 	environment.createPublicResourceHttp().constructor.name ===
 		'BrowserPublicResourceHttpPort',
 	'公共资源端口必须由 userscript 环境集中绑定 page fetch',
+);
+const fontLink = environment.createExternalStylesheetAppender()(
+	'https://fonts.googleapis.com/css2?family=Inter',
+);
+assert(
+	fontLink.href.includes('fonts.googleapis.com') &&
+	addedStylesheets.length === 1,
+	'Google Fonts 样式必须经 GM_addElement 穿过原站 CSP，不能依赖页面白名单',
 );
 assert(
 	(await environment.createCreditBridgeHttp().loadUserInfo(

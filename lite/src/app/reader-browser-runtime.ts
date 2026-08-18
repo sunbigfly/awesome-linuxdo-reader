@@ -548,6 +548,10 @@ import {
 	type ReaderFontPreferencesAdapter,
 } from '../font/reader-font-style-controller.js';
 import {
+	ReaderFontCatalog,
+	type ReaderFontCatalogOptions,
+} from '../font/reader-font-catalog.js';
+import {
 	ReaderLoadingAnimationView,
 	type ReaderLoadingProgressPort,
 } from '../motion/reader-loading-animation-view.js';
@@ -1057,6 +1061,7 @@ export interface ReaderBrowserRuntimeOptions<
 	readonly sourceId: string;
 	readonly locks?: Pick<LockManager, 'request'> | null;
 	readonly indexedDb?: IDBFactory | null;
+	readonly fontStylesheet?: ReaderFontCatalogOptions['appendStylesheet'];
 	readonly assetCacheStorage?: BrowserAssetCacheStoragePort | null;
 	readonly storageEvents?: EventTarget | null;
 	readonly broadcastChannelFactory?: ((name: string) => BroadcastChannel) | null;
@@ -6865,6 +6870,17 @@ export function createReaderBrowserRuntimeStage<
 			const queryLocalFonts = createReaderLocalFontQuery(
 				options.runtime.document,
 			);
+			const sharedFontCatalog = new ReaderFontCatalog({
+				document: options.runtime.document,
+				indexedDb: options.runtime.indexedDb ?? null,
+				...(queryLocalFonts ? { queryLocalFonts } : {}),
+				...(options.runtime.fontStylesheet
+					? { appendStylesheet: options.runtime.fontStylesheet }
+					: {}),
+			});
+			shell.scope.add(() => {
+				void sharedFontCatalog.destroy();
+			});
 			const rawNavigation = options.runtime.navigation;
 			if (boostCopyPreferences && options.runtime.boostCopy) {
 				throw new Error(
@@ -7213,6 +7229,12 @@ export function createReaderBrowserRuntimeStage<
 								.getPropertyValue('--ldp-post-font-family')
 								.trim() || 'system-ui,sans-serif',
 						...(queryLocalFonts ? { queryLocalFonts } : {}),
+						entries: () => sharedFontCatalog.entries(),
+						entry: (id: string) => sharedFontCatalog.entry(id),
+						ensureLoaded: (id: string) =>
+							sharedFontCatalog.ensureLoaded(id),
+						subscribe: (listener: () => void) =>
+							sharedFontCatalog.subscribe(listener),
 					}),
 					...(options.openQueue && options.runtime.resources
 						? {
@@ -7890,7 +7912,7 @@ export function createReaderBrowserRuntimeStage<
 					host: settingsView.panelHost('font'),
 					controller: settings!,
 					font,
-					...(queryLocalFonts ? { queryLocalFonts } : {}),
+					fontCatalog: sharedFontCatalog,
 					parentScope: runtime.scope,
 				});
 			}

@@ -86,8 +86,8 @@ import {
 } from '../post/reader-topic-action-rail.js';
 import {
 	readerPreferencesUnwantedTopicFilterAdapter,
+	readerUnwantedTopicFilterPortMatch,
 	readerUnwantedTopicFilterPreferencesEqual,
-	readerUnwantedTopicFilterMatch,
 	type ReaderUnwantedTopicFilterPreferences,
 	type ReaderUnwantedTopicFilterPreferencesPort,
 } from '../collection/reader-unwanted-topic-filter.js';
@@ -573,14 +573,11 @@ function createRuntimeStage(
 							if (!runtime) throw new Error('不想看仓库尚未就绪');
 							runtime.unwantedTopics.remember(input);
 						},
-						automaticFilter: (input) => state.runtime
-							? readerUnwantedTopicFilterMatch(
-								readerPreferencesUnwantedTopicFilterAdapter.read(
-									applicationContext.readPreferences(),
-								),
+						automaticFilter: (input) =>
+							readerUnwantedTopicFilterPortMatch(
+								unwantedTopicFilter,
 								input,
-							)
-							: null,
+							),
 						notify: (message) =>
 							state.runtime?.feedback.show(message),
 						onError: (cause) => {

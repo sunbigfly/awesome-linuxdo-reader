@@ -274,6 +274,13 @@ export function readerUnwantedTopicFilterMatch(
 	});
 }
 
+export function readerUnwantedTopicFilterPortMatch(
+	preferences: Pick<ReaderUnwantedTopicFilterPreferencesPort, 'read'>,
+	input: ReaderUnwantedTopicFilterInput,
+): ReaderUnwantedTopicFilterMatch | null {
+	return readerUnwantedTopicFilterMatch(preferences.read(), input);
+}
+
 export function readerUnwantedPostAuthorMatches(
 	preferencesValue: ReaderUnwantedTopicFilterPreferences,
 	username: unknown,

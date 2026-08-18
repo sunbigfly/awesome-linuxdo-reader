@@ -250,6 +250,20 @@ for (let index = 0; index < 9; index += 1) {
 	option.dataset.readerSelectFontFamily = `System Font ${index}, sans-serif`;
 	localFontGroup.append(option);
 }
+root.className = 'ldp-topic-summary-surface';
+rootRight = 320;
+selectTop = 120;
+select.dispatchEvent(notificationPointerDown);
+assert(
+	!select.parentElement?.classList.contains('is-menu-above') &&
+		menu.classList.contains('has-long-list') &&
+		menu.querySelectorAll('[data-reader-select-value]').length === 12 &&
+		menu.style.height === '168px' &&
+		menu.style.maxHeight === '168px',
+	'AI 总结内的长字体列表必须取得可滚动高度，不能只剩搜索框',
+);
+root.dispatchEvent(new constructors.Event(READER_SELECT_DISMISS_EVENT));
+
 const settingsPanel = document.createElement('section');
 settingsPanel.className = 'ldp-settings-panel';
 const settingsSection = document.createElement('section');

@@ -950,8 +950,14 @@ export class ReaderWindowDomAdapter {
 
 	#apply(snapshot: ReaderWindowSnapshot, changed: boolean): void {
 		if (this.#destroyed) return;
-		this.#overlay.classList.toggle('ldp-window-locked', snapshot.locked);
-		this.#overlay.classList.toggle('ldp-window-pinned', snapshot.pinned);
+		this.#overlay.classList.toggle(
+			'ldp-window-locked',
+			snapshot.managed && snapshot.locked,
+		);
+		this.#overlay.classList.toggle(
+			'ldp-window-pinned',
+			snapshot.managed && snapshot.pinned,
+		);
 		this.#overlay.classList.toggle('ldp-window-managed', snapshot.managed);
 		this.#header?.toggleAttribute(
 			'data-ldp-reader-drag-surface',
@@ -981,35 +987,37 @@ export class ReaderWindowDomAdapter {
 	}
 
 	#syncWindowButtons(snapshot: ReaderWindowSnapshot): void {
+		const locked = snapshot.managed && snapshot.locked;
+		const pinned = snapshot.managed && snapshot.pinned;
 		if (this.#lockButton) {
-			const label = snapshot.locked ? '解锁浮窗' : '锁定浮窗';
-			this.#lockButton.classList.toggle('active', snapshot.locked);
-			this.#lockButton.setAttribute('aria-pressed', String(snapshot.locked));
+			const label = locked ? '解锁浮窗' : '锁定浮窗';
+			this.#lockButton.classList.toggle('active', locked);
+			this.#lockButton.setAttribute('aria-pressed', String(locked));
 			this.#lockButton.setAttribute('aria-label', label);
 			this.#lockButton.title = label;
-			this.#lockButton.dataset.locked = String(snapshot.locked);
+			this.#lockButton.dataset.locked = String(locked);
 			for (const icon of this.#lockButton.querySelectorAll<HTMLElement>(
 				'[data-reader-lock-icon]',
 			)) {
 				icon.hidden = icon.dataset.readerLockIcon !==
-					(snapshot.locked ? 'locked' : 'unlocked');
+					(locked ? 'locked' : 'unlocked');
 			}
 			if (
 				this.#previousLocked !== null &&
-				this.#previousLocked !== snapshot.locked
+				this.#previousLocked !== locked
 			) {
 				this.#lockButton.classList.remove('ldp-lock-state-changing');
 				void this.#lockButton.offsetWidth;
 				this.#lockButton.classList.add('ldp-lock-state-changing');
 			}
 		}
-		this.#previousLocked = snapshot.locked;
+		this.#previousLocked = locked;
 		if (this.#pinButton) {
-			const label = snapshot.pinned
+			const label = pinned
 				? '恢复点击外部关闭'
 				: '点击外部时保持显示';
-			this.#pinButton.classList.toggle('active', snapshot.pinned);
-			this.#pinButton.setAttribute('aria-pressed', String(snapshot.pinned));
+			this.#pinButton.classList.toggle('active', pinned);
+			this.#pinButton.setAttribute('aria-pressed', String(pinned));
 			this.#pinButton.setAttribute('aria-label', label);
 			this.#pinButton.title = label;
 		}

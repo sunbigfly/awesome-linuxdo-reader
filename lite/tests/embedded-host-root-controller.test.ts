@@ -218,5 +218,15 @@ assert(
 	cardModes.at(-1) === 'actions-only' && cards.at(-1)?.[0] === floatingCard,
 	'非嵌入列表仍必须通过共享 mutation hub 增量补齐免打扰入口',
 );
+const closedRootSyncCount = roots.length;
+model.setActive(false);
+topicFilterChanges.emit(undefined);
+flushFrames();
+assert(
+	roots.length === closedRootSyncCount + 1 &&
+	rootModes.at(-1) === 'actions-only' &&
+	roots.at(-1) === nextShell,
+	'Reader 关闭后自动过滤变化仍必须重扫宿主列表并保留过滤投影',
+);
 controller.destroy();
 hub.destroy();

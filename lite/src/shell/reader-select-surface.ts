@@ -438,12 +438,11 @@ export class ReaderSelectSurface {
 			);
 			menu.style.left = `${Math.round(left - menuRect.left)}px`;
 		}
-		const isSettingsLongFontMenu = Boolean(
-			settingsPanel &&
+		const isLongFontMenu = Boolean(
 			menu.classList.contains('has-font-previews') &&
 			menu.classList.contains('has-long-list')
 		);
-		const preferredMenuHeight = isSettingsLongFontMenu ? 300 : menuHeight;
+		const preferredMenuHeight = isLongFontMenu ? 300 : menuHeight;
 		const spaceBelow = Math.max(
 			0,
 			bounds.bottom - selectRect.bottom - gap,
@@ -456,7 +455,7 @@ export class ReaderSelectSurface {
 			preferredMenuHeight > spaceBelow && spaceAbove > spaceBelow;
 		wrapper.classList.toggle('is-menu-above', menuAbove);
 		const availableHeight = menuAbove ? spaceAbove : spaceBelow;
-		if (isSettingsLongFontMenu) {
+		if (isLongFontMenu) {
 			const height = Math.max(
 				1,
 				Math.floor(Math.min(preferredMenuHeight, availableHeight)),

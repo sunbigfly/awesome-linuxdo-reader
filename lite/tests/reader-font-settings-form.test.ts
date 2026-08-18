@@ -3,6 +3,10 @@ import {
 	ReaderFontStyleController,
 	readerPreferencesFontAdapter,
 } from '../src/font/reader-font-style-controller.js';
+import type {
+	ReaderFontCatalogEntry,
+	ReaderFontCatalogPort,
+} from '../src/font/reader-font-catalog.js';
 import { Signal } from '../src/kernel/signal.js';
 import {
 	ReaderFontSettingsForm,
@@ -55,6 +59,46 @@ const queriedLocalFontFamilies = Object.freeze([
 	),
 ]);
 const queriedLocalFontFamilyCount = new Set(queriedLocalFontFamilies).size;
+const sharedFontEntries = Object.freeze<readonly ReaderFontCatalogEntry[]>([
+	Object.freeze({
+		id: 'google:jetbrains-mono',
+		source: 'google',
+		label: 'JetBrains Mono',
+		family: 'JetBrains Mono',
+		fontFamilyCss: '"JetBrains Mono",monospace',
+		searchText: 'JetBrains Mono Google Fonts',
+		scripts: Object.freeze(['latin', 'code'] as const),
+		googleCssUrl: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono',
+	}),
+	Object.freeze({
+		id: 'imported:test-font',
+		source: 'imported',
+		label: 'Test Imported',
+		family: 'LDP Import test-font Test Imported',
+		fontFamilyCss: '"LDP Import test-font Test Imported",sans-serif',
+		searchText: 'Test Imported test.woff2',
+		scripts: Object.freeze(['cjk', 'latin', 'code'] as const),
+		fileName: 'test.woff2',
+		size: 1_024,
+	}),
+]);
+const sharedFontCatalog: ReaderFontCatalogPort = {
+	entries: async () => sharedFontEntries,
+	entry: (id) => sharedFontEntries.find((entry) => entry.id === id) ?? null,
+	findByFamily: (family) => sharedFontEntries.find(
+		(entry) => entry.family === family,
+	) ?? null,
+	queryLocalFonts: async () => {
+		queryCount += 1;
+		return queriedLocalFontFamilies;
+	},
+	ensureLoaded: async () => true,
+	importFile: async () => {
+		throw new Error('test import not configured');
+	},
+	removeImported: async () => false,
+	subscribe: () => () => {},
+};
 const settings = new ReaderSettingsController<ReaderPreferences>({
 	preferences: {
 		read: () => preferences,
@@ -101,14 +145,12 @@ const form = new ReaderFontSettingsForm({
 	host,
 	controller: settings,
 	font,
-	queryLocalFonts: async () => {
-		queryCount += 1;
-		return queriedLocalFontFamilies;
-	},
+	fontCatalog: sharedFontCatalog,
 });
 
 await Promise.resolve();
 await Promise.resolve();
+await new Promise((resolve) => setTimeout(resolve, 0));
 
 assert(
 	host.querySelectorAll('[data-font-setting]').length === 25 &&
@@ -129,6 +171,15 @@ assert(
 		host.querySelectorAll('datalist option').length === 0 &&
 		host.querySelectorAll('select [data-font-local="true"]').length === 0 &&
 		host.querySelectorAll('select [data-font-local-query="true"]').length === 0 &&
+		host.querySelectorAll('select [data-font-catalog]').length === 8 &&
+		host.querySelector<HTMLOptGroupElement>(
+			'[data-font-catalog-group="google"]',
+		)?.label === '精选 Google Fonts · 1' &&
+		host.querySelector<HTMLOptGroupElement>(
+			'[data-font-catalog-group="imported"]',
+		)?.label === '导入字体 · 1' &&
+		host.querySelector('[data-font-imported-select="true"]') !== null &&
+		host.textContent?.includes('导入字体文件') &&
 		[...host.querySelectorAll<HTMLSelectElement>(
 			'[data-reader-select-searchable="true"]',
 		)].length === 4 &&
@@ -137,7 +188,18 @@ assert(
 			'.ldp-font-rendering-settings input',
 		)].filter((input) => input.role === 'switch').length === 2 &&
 		settings.snapshot.draftCount === 0,
-	'字体 form/runtime 必须投影完整字段、使用统一切换按钮，且不得保留本机字体获取入口',
+	`字体 form/runtime 必须投影完整字段，并共享 Google、导入与本机字体目录：${JSON.stringify({
+		settings: host.querySelectorAll('[data-font-setting]').length,
+		catalog: host.querySelectorAll('select [data-font-catalog]').length,
+		google: host.querySelector<HTMLOptGroupElement>(
+			'[data-font-catalog-group="google"]',
+		)?.label,
+		imported: host.querySelector<HTMLOptGroupElement>(
+			'[data-font-catalog-group="imported"]',
+		)?.label,
+		management: Boolean(host.querySelector('[data-font-imported-select="true"]')),
+		text: host.textContent,
+	})}`,
 );
 const interfaceFamily = host.querySelector<HTMLSelectElement>(
 	'[data-font-setting="family"]',
@@ -168,7 +230,7 @@ assert(
 	host.querySelector<HTMLSelectElement>(
 		'[data-font-setting="family"]',
 	)?.dataset.readerSelectSearchLabel ===
-		`搜索字体 · 本机 ${queriedLocalFontFamilyCount}` &&
+		`搜索字体 · Google 1 · 导入 1 · 本机 ${queriedLocalFontFamilyCount}` &&
 	host.querySelectorAll('select [data-font-local-query="true"]').length ===
 		0 &&
 	[...interfaceFamily.options].find((option) => option.selected)?.value ===
@@ -249,8 +311,8 @@ mutationCallback([
 assert(
 	String(font.snapshot.mode) === 'builtin' &&
 		host.querySelector('.ldp-font-family-source-status')?.textContent ===
-			`已获取 ${queriedLocalFontFamilyCount} 个本机字体；` +
-			'下拉列表已显示字体预览。',
+			'可用精选 Google Fonts 1 种、导入字体 1 种；' +
+			`本机 ${queriedLocalFontFamilyCount} 种。`,
 	'外部字体工具退出后必须恢复 builtin 状态，同时保留用户授权读取的本机字体结果',
 );
 
@@ -259,8 +321,8 @@ assert(
 	host.querySelectorAll('datalist option').length ===
 		queriedLocalFontFamilyCount &&
 	host.querySelector('.ldp-font-family-source-status')?.textContent ===
-			`已获取 ${queriedLocalFontFamilyCount} 个本机字体；` +
-			'下拉列表已显示字体预览。',
+			'可用精选 Google Fonts 1 种、导入字体 1 种；' +
+			`本机 ${queriedLocalFontFamilyCount} 种。`,
 	'本机字体必须仅在用户授权请求后读取一次，并去重同步到共享输入下拉框',
 );
 

@@ -127,8 +127,8 @@ const READER_VISIBLE_STATES = new Set<ReaderShellState>([
 /**
  * Reader 对宿主页面状态类的唯一 owner。
  *
- * 打开态统一接管原站滚动；嵌入态保留宿主滚动；直达主题还需要隐藏原站主题，
- * 关闭或销毁时一次撤销，避免覆盖层宽度被原站滚动条挤压或退出后留下空白页。
+ * 只有全屏态接管原站滚动；浮窗与嵌入态保留宿主滚动条，避免浮窗开关引发布局抖动；
+ * 直达主题还需要隐藏原站主题，关闭或销毁时一次撤销全部接管标记。
  */
 export class ReaderHostTakeoverController {
 	readonly scope: LifecycleScope;
@@ -165,11 +165,11 @@ export class ReaderHostTakeoverController {
 	#sync(): void {
 		if (this.#destroyed) return;
 		const visible = READER_VISIBLE_STATES.has(this.#shell.state);
-		const embedded = this.#workspace.snapshot.presentation.embedded;
+		const presentation = this.#workspace.snapshot.presentation;
 		this.#pageRoot.classList.toggle('ldp-reader-open', visible);
 		this.#pageRoot.classList.toggle(
 			'ldp-scroll-lock',
-			visible && !embedded,
+			visible && presentation.fullPage,
 		);
 		this.#pageRoot.classList.toggle(
 			'ldp-route-takeover',

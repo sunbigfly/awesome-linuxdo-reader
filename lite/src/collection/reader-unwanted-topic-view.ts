@@ -526,7 +526,7 @@ export class ReaderUnwantedTopicView {
 		this.#settingsButton.hidden = true;
 		this.window.setTitle('免打扰与自动过滤');
 		this.window.meta.textContent = '';
-		this.window.setIcon('settings');
+		this.window.setIcon('eye-off');
 		this.#filterEditor.open();
 	}
 

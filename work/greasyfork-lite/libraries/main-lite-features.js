@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.7
+// @version      1.5.8
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户、翻译与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.7 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.5.8 - main-lite-features
  * 媒体、互动、设置、用户、翻译与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.7",
+			sourceVersion: "1.5.8",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.7") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.8") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -5804,6 +5804,252 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	}
 }, "7a98b9f3319a9c8b2155836d80f42ee9d05bd00934cceb0a0f8b012d42c0d39e");
 
+/* Source: lite/src/font/reader-font-catalog.ts */
+runtime.register("src/font/reader-font-catalog.js", function(module, exports, require) {
+	var reader_font_catalog_exports = {};
+	__export(reader_font_catalog_exports, {
+	  READER_CURATED_GOOGLE_FONTS: () => READER_CURATED_GOOGLE_FONTS,
+	  READER_FONT_CATALOG_VALUE_PREFIX: () => READER_FONT_CATALOG_VALUE_PREFIX,
+	  READER_IMPORTED_FONT_MAX_BYTES: () => READER_IMPORTED_FONT_MAX_BYTES,
+	  READER_IMPORTED_FONT_MAX_COUNT: () => READER_IMPORTED_FONT_MAX_COUNT,
+	  READER_IMPORTED_FONT_TOTAL_MAX_BYTES: () => READER_IMPORTED_FONT_TOTAL_MAX_BYTES,
+	  ReaderFontCatalog: () => ReaderFontCatalog,
+	  readReaderFontCatalogValue: () => readReaderFontCatalogValue,
+	  readerFontCatalogValue: () => readerFontCatalogValue
+	});
+	module.exports = __toCommonJS(reader_font_catalog_exports);
+	var import_reader_imported_font_store = require("./reader-imported-font-store.js"), import_reader_local_font_catalog = require("./reader-local-font-catalog.js");
+	const READER_FONT_CATALOG_VALUE_PREFIX = "font-catalog:", READER_IMPORTED_FONT_MAX_BYTES = 32 * 1024 * 1024, READER_IMPORTED_FONT_TOTAL_MAX_BYTES = 128 * 1024 * 1024, READER_IMPORTED_FONT_MAX_COUNT = 64;
+	function googleCssUrl(family, weights = "400;600") {
+	  return `https://fonts.googleapis.com/css2?family=${family.trim().replace(/\s+/g, "+")}` + (weights ? `:wght@${weights}` : "") + "&display=swap";
+	}
+	function googleEntry(id, label, scripts, weights = "400;600") {
+	  const presentation = (0, import_reader_local_font_catalog.readerLocalFontPresentation)(label);
+	  return Object.freeze({
+	    id: `google:${id}`,
+	    source: "google",
+	    label,
+	    family: label,
+	    fontFamilyCss: presentation.fontFamilyCss,
+	    searchText: `${presentation.searchText} Google Fonts`,
+	    scripts: Object.freeze([...scripts]),
+	    googleCssUrl: googleCssUrl(label, weights)
+	  });
+	}
+	const READER_CURATED_GOOGLE_FONTS = Object.freeze([
+	  googleEntry("noto-sans-sc", "Noto Sans SC", ["cjk", "latin"]),
+	  googleEntry("noto-serif-sc", "Noto Serif SC", ["cjk", "latin"]),
+	  googleEntry("ma-shan-zheng", "Ma Shan Zheng", ["cjk"], ""),
+	  googleEntry("zcool-xiaowei", "ZCOOL XiaoWei", ["cjk"], ""),
+	  googleEntry(
+	    "zcool-qingke-huangyou",
+	    "ZCOOL QingKe HuangYou",
+	    ["cjk"],
+	    ""
+	  ),
+	  googleEntry("inter", "Inter", ["latin"]),
+	  googleEntry("jetbrains-mono", "JetBrains Mono", ["latin", "code"]),
+	  googleEntry("source-code-pro", "Source Code Pro", ["latin", "code"]),
+	  googleEntry("roboto-slab", "Roboto Slab", ["latin"]),
+	  googleEntry("merriweather", "Merriweather", ["latin"]),
+	  googleEntry("playfair-display", "Playfair Display", ["latin"])
+	]);
+	function importedEntry(record) {
+	  const presentation = (0, import_reader_local_font_catalog.readerLocalFontPresentation)(record.family);
+	  return Object.freeze({
+	    id: record.id,
+	    source: "imported",
+	    label: record.label,
+	    family: record.family,
+	    fontFamilyCss: presentation.fontFamilyCss,
+	    searchText: `${record.label} ${record.fileName} ${record.family}`,
+	    scripts: Object.freeze(["cjk", "latin", "code"]),
+	    fileName: record.fileName,
+	    size: record.size
+	  });
+	}
+	function normalizedImportLabel(fileName) {
+	  return [...String(fileName).replace(/\.(?:woff2?|ttf|otf)$/i, "").replace(/[_-]+/g, " ").replace(/[\u0000-\u001f\u007f"'`,;{}<>\\]/g, "").replace(/\s+/g, " ").trim() || "导入字体"].slice(0, 40).join("");
+	}
+	function importedFamily(id, label) {
+	  return [...`LDP Import ${id.replace(/^imported:/, "").slice(0, 16)} ${label}`].slice(0, 64).join("");
+	}
+	function acceptedFontFile(file) {
+	  return /\.(?:woff2?|ttf|otf)$/i.test(file.name) || [
+	    "font/woff2",
+	    "font/woff",
+	    "font/ttf",
+	    "font/otf",
+	    "application/font-woff",
+	    "application/x-font-ttf",
+	    "application/x-font-opentype"
+	  ].includes(String(file.type).toLowerCase());
+	}
+	function defaultRandomId(document) {
+	  const cryptoPort = document.defaultView?.crypto;
+	  return typeof cryptoPort?.randomUUID == "function" ? cryptoPort.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+	}
+	class ReaderFontCatalog {
+	  queryLocalFonts;
+	  #document;
+	  #store;
+	  #now;
+	  #randomId;
+	  #loadImportedFont;
+	  #loadGoogleFont;
+	  #appendStylesheet;
+	  #onError;
+	  #listeners = /* @__PURE__ */ new Set();
+	  #entries = new Map(
+	    READER_CURATED_GOOGLE_FONTS.map((entry) => [entry.id, entry])
+	  );
+	  #imports = /* @__PURE__ */ new Map();
+	  #loads = /* @__PURE__ */ new Map();
+	  #faces = /* @__PURE__ */ new Map();
+	  #googleLinks = /* @__PURE__ */ new Map();
+	  #importsLoaded = !1;
+	  #importsPending = null;
+	  #destroyed = !1;
+	  constructor(options) {
+	    this.#document = options.document, options.queryLocalFonts && (this.queryLocalFonts = options.queryLocalFonts), this.#store = options.importedStore ?? new import_reader_imported_font_store.BrowserReaderImportedFontStore({
+	      ...options.indexedDb === void 0 ? {} : { factory: options.indexedDb }
+	    }), this.#now = options.now ?? Date.now, this.#randomId = options.randomId ?? (() => defaultRandomId(this.#document)), this.#loadImportedFont = options.loadImportedFont ?? ((record) => this.#loadImported(record)), this.#loadGoogleFont = options.loadGoogleFont ?? ((entry) => this.#loadGoogle(entry)), this.#appendStylesheet = options.appendStylesheet ?? ((href) => {
+	      const link = this.#document.createElement("link");
+	      return link.rel = "stylesheet", link.href = href, (this.#document.head ?? this.#document.documentElement).append(link), link;
+	    }), this.#onError = options.onError ?? (() => {
+	    });
+	  }
+	  async entries() {
+	    return await this.#loadImports(), Object.freeze([...this.#entries.values()]);
+	  }
+	  entry(id) {
+	    return this.#entries.get(String(id)) ?? null;
+	  }
+	  findByFamily(family) {
+	    const normalized = String(family).trim();
+	    return [...this.#entries.values()].find(
+	      (entry) => entry.family === normalized
+	    ) ?? null;
+	  }
+	  async ensureLoaded(id) {
+	    const normalized = String(id), entry = this.#entries.get(normalized);
+	    if (!entry || this.#destroyed) return !1;
+	    let pending = this.#loads.get(normalized);
+	    return pending || (pending = (entry.source === "google" ? this.#loadGoogleFont(entry) : this.#loadImportedFont(this.#imports.get(normalized)).then((loaded) => loaded ? (this.#faces.set(normalized, loaded), !0) : !1)).catch((cause) => (this.#onError(cause), !1)), this.#loads.set(normalized, pending), pending.then((loaded) => {
+	      !loaded && this.#loads.get(normalized) === pending && this.#loads.delete(normalized);
+	    })), pending;
+	  }
+	  async importFile(file) {
+	    if (!acceptedFontFile(file))
+	      throw new Error("仅支持 WOFF2、WOFF、TTF 和 OTF 字体文件");
+	    if (file.size <= 0 || file.size > READER_IMPORTED_FONT_MAX_BYTES)
+	      throw new Error("单个字体文件需小于 32 MB");
+	    await this.#loadImports();
+	    const records = [...this.#imports.values()];
+	    if (records.length >= READER_IMPORTED_FONT_MAX_COUNT)
+	      throw new Error(`最多可导入 ${READER_IMPORTED_FONT_MAX_COUNT} 个字体`);
+	    if (records.reduce((sum, record2) => sum + record2.size, 0) + file.size > READER_IMPORTED_FONT_TOTAL_MAX_BYTES)
+	      throw new Error("导入字体总大小不能超过 128 MB");
+	    const id = `imported:${this.#randomId()}`, label = normalizedImportLabel(file.name), record = Object.freeze({
+	      id,
+	      label,
+	      family: importedFamily(id, label),
+	      fileName: file.name,
+	      mimeType: file.type || "application/octet-stream",
+	      size: file.size,
+	      importedAt: this.#now(),
+	      blob: file
+	    }), loaded = await this.#loadImportedFont(record);
+	    if (!loaded) throw new Error("字体文件无法解码");
+	    try {
+	      await this.#store.write(record);
+	    } catch (cause) {
+	      throw loaded.remove(), cause;
+	    }
+	    this.#imports.set(id, record);
+	    const entry = importedEntry(record);
+	    return this.#entries.set(id, entry), this.#faces.set(id, loaded), this.#loads.set(id, Promise.resolve(!0)), this.#emit(), entry;
+	  }
+	  async removeImported(id) {
+	    const normalized = String(id);
+	    return this.#entries.get(normalized)?.source !== "imported" ? !1 : (await this.#store.remove(normalized), this.#faces.get(normalized)?.remove(), this.#faces.delete(normalized), this.#imports.delete(normalized), this.#entries.delete(normalized), this.#loads.delete(normalized), this.#emit(), !0);
+	  }
+	  subscribe(listener) {
+	    return this.#listeners.add(listener), () => this.#listeners.delete(listener);
+	  }
+	  async destroy() {
+	    if (!this.#destroyed) {
+	      this.#destroyed = !0, this.#listeners.clear();
+	      for (const loaded of this.#faces.values()) loaded.remove();
+	      this.#faces.clear();
+	      for (const link of this.#googleLinks.values()) link.remove();
+	      this.#googleLinks.clear(), await this.#store.close();
+	    }
+	  }
+	  async #loadImports() {
+	    if (!this.#importsLoaded)
+	      return this.#importsPending ? this.#importsPending : (this.#importsPending = this.#store.list().then((records) => {
+	        for (const record of records)
+	          this.#imports.set(record.id, record), this.#entries.set(record.id, importedEntry(record));
+	        this.#importsLoaded = !0;
+	      }).catch((cause) => {
+	        this.#onError(cause);
+	      }).finally(() => {
+	        this.#importsPending = null;
+	      }), this.#importsPending);
+	  }
+	  async #loadImported(record) {
+	    const Constructor = this.#document.defaultView?.FontFace ?? (typeof FontFace > "u" ? null : FontFace), fontSet = this.#document.fonts;
+	    if (!Constructor || !fontSet || typeof fontSet.add != "function")
+	      throw new Error("当前浏览器不支持动态字体加载");
+	    const face = new Constructor(record.family, await record.blob.arrayBuffer());
+	    return await face.load(), fontSet.add(face), Object.freeze({
+	      face,
+	      remove: () => fontSet.delete(face)
+	    });
+	  }
+	  async #loadGoogle(entry) {
+	    if (!entry.googleCssUrl) return !1;
+	    const link = this.#appendStylesheet(entry.googleCssUrl);
+	    link.dataset.readerGoogleFont = entry.id, this.#googleLinks.set(entry.id, link);
+	    const loaded = new Promise((resolve, reject) => {
+	      let settled = !1;
+	      const finish = (cause) => {
+	        settled || (settled = !0, clearTimeout(timeout), cause === void 0 ? resolve() : reject(cause));
+	      }, timeout = setTimeout(
+	        () => finish(new Error(`Google 字体加载超时：${entry.label}`)),
+	        15e3
+	      );
+	      link.addEventListener("load", () => finish(), { once: !0 }), link.addEventListener("error", () => finish(
+	        new Error(`Google 字体样式加载失败：${entry.label}`)
+	      ), { once: !0 }), queueMicrotask(() => {
+	        link.sheet && finish();
+	      });
+	    });
+	    try {
+	      await loaded;
+	      const fontSet = this.#document.fonts;
+	      return !fontSet || typeof fontSet.load != "function" || await fontSet.load(
+	        `400 16px ${JSON.stringify(entry.family)}`,
+	        import_reader_local_font_catalog.READER_FONT_OPTION_PREVIEW
+	      ), !0;
+	    } catch (cause) {
+	      throw link.remove(), this.#googleLinks.delete(entry.id), cause;
+	    }
+	  }
+	  #emit() {
+	    for (const listener of [...this.#listeners]) listener();
+	  }
+	}
+	function readerFontCatalogValue(id) {
+	  return `${READER_FONT_CATALOG_VALUE_PREFIX}${id}`;
+	}
+	function readReaderFontCatalogValue(value) {
+	  const normalized = String(value);
+	  return normalized.startsWith(READER_FONT_CATALOG_VALUE_PREFIX) ? normalized.slice(READER_FONT_CATALOG_VALUE_PREFIX.length) : null;
+	}
+}, "21acba29029dec1afde9f9c520d1d48c8e4ae5d1b61931e7b329e0ab20248977");
+
 /* Source: lite/src/font/reader-font-style-controller.ts */
 runtime.register("src/font/reader-font-style-controller.js", function(module, exports, require) {
 	var reader_font_style_controller_exports = {};
@@ -6240,6 +6486,158 @@ runtime.register("src/font/reader-font-style-controller.js", function(module, ex
 	  }
 	}
 }, "e72d3354e4db54f88242dc0e767ac0908f5aeb34dc68b6dc2e338de1e263302d");
+
+/* Source: lite/src/font/reader-imported-font-store.ts */
+runtime.register("src/font/reader-imported-font-store.js", function(module, exports, require) {
+	var reader_imported_font_store_exports = {};
+	__export(reader_imported_font_store_exports, {
+	  BrowserReaderImportedFontStore: () => BrowserReaderImportedFontStore,
+	  READER_IMPORTED_FONT_DATABASE: () => READER_IMPORTED_FONT_DATABASE,
+	  READER_IMPORTED_FONT_STORE: () => READER_IMPORTED_FONT_STORE
+	});
+	module.exports = __toCommonJS(reader_imported_font_store_exports);
+	const READER_IMPORTED_FONT_DATABASE = "linuxdo-enhanced-reader:fonts:v1", READER_IMPORTED_FONT_STORE = "fonts";
+	function positiveInteger(value, name) {
+	  if (!Number.isSafeInteger(value) || value < 1)
+	    throw new RangeError(`${name} 必须是正安全整数`);
+	  return value;
+	}
+	function frozenRecord(value) {
+	  return Object.freeze({
+	    id: String(value.id),
+	    label: String(value.label),
+	    family: String(value.family),
+	    fileName: String(value.fileName),
+	    mimeType: String(value.mimeType),
+	    size: Math.max(0, Number(value.size) || 0),
+	    importedAt: Math.max(0, Number(value.importedAt) || 0),
+	    blob: value.blob
+	  });
+	}
+	class BrowserReaderImportedFontStore {
+	  #factory;
+	  #databaseName;
+	  #storeName;
+	  #operationTimeoutMs;
+	  #databasePromise = null;
+	  constructor(options = {}) {
+	    if (this.#factory = options.factory === void 0 ? typeof indexedDB > "u" ? null : indexedDB : options.factory, this.#databaseName = String(
+	      options.databaseName ?? READER_IMPORTED_FONT_DATABASE
+	    ).trim(), this.#storeName = String(
+	      options.storeName ?? READER_IMPORTED_FONT_STORE
+	    ).trim(), this.#operationTimeoutMs = positiveInteger(
+	      options.operationTimeoutMs ?? 8e3,
+	      "operationTimeoutMs"
+	    ), !this.#databaseName || !this.#storeName)
+	      throw new Error("IndexedDB databaseName/storeName 不能为空");
+	  }
+	  async list() {
+	    return Object.freeze((await this.#request(
+	      "readonly",
+	      (store) => store.getAll()
+	    )).map(frozenRecord).sort(
+	      (left, right) => left.importedAt - right.importedAt || left.label.localeCompare(right.label)
+	    ));
+	  }
+	  async read(id) {
+	    const value = await this.#request(
+	      "readonly",
+	      (store) => store.get(String(id))
+	    );
+	    return value ? frozenRecord(value) : null;
+	  }
+	  async write(record) {
+	    await this.#request(
+	      "readwrite",
+	      (store) => store.put(frozenRecord(record))
+	    );
+	  }
+	  async remove(id) {
+	    await this.#request(
+	      "readwrite",
+	      (store) => store.delete(String(id))
+	    );
+	  }
+	  async close() {
+	    const pending = this.#databasePromise;
+	    if (this.#databasePromise = null, !!pending)
+	      try {
+	        (await pending).close();
+	      } catch {
+	      }
+	  }
+	  #open() {
+	    if (this.#databasePromise) return this.#databasePromise;
+	    const factory = this.#factory;
+	    if (!factory)
+	      return Promise.reject(new Error("当前浏览器不支持 IndexedDB"));
+	    let promise;
+	    return promise = new Promise((resolve, reject) => {
+	      let settled = !1, request;
+	      const finish = (database, cause) => {
+	        if (settled) {
+	          database?.close();
+	          return;
+	        }
+	        settled = !0, clearTimeout(timeout), database ? resolve(database) : reject(cause ?? new Error("IndexedDB 打开失败"));
+	      }, timeout = setTimeout(
+	        () => finish(null, new Error("IndexedDB 打开超时")),
+	        this.#operationTimeoutMs
+	      );
+	      try {
+	        request = factory.open(this.#databaseName, 1);
+	      } catch (cause) {
+	        finish(null, cause);
+	        return;
+	      }
+	      request.onupgradeneeded = () => {
+	        const database = request.result;
+	        database.objectStoreNames.contains(this.#storeName) || database.createObjectStore(this.#storeName, { keyPath: "id" });
+	      }, request.onsuccess = () => {
+	        const database = request.result;
+	        database.onversionchange = () => {
+	          database.close(), this.#databasePromise === promise && (this.#databasePromise = null);
+	        }, finish(database);
+	      }, request.onerror = () => finish(null, request.error), request.onblocked = () => finish(
+	        null,
+	        new Error("IndexedDB 升级被其他页面阻塞")
+	      );
+	    }), this.#databasePromise = promise, promise.catch(() => {
+	      this.#databasePromise === promise && (this.#databasePromise = null);
+	    }), promise;
+	  }
+	  async #request(mode, operation) {
+	    const database = await this.#open();
+	    return new Promise((resolve, reject) => {
+	      let settled = !1, transaction = null, requestValue;
+	      const finish = (value, cause) => {
+	        settled || (settled = !0, clearTimeout(timeout), cause !== void 0 ? reject(cause) : resolve(value));
+	      }, timeout = setTimeout(() => {
+	        try {
+	          transaction?.abort();
+	        } catch {
+	        }
+	        finish(void 0, new Error("IndexedDB 事务超时"));
+	      }, this.#operationTimeoutMs);
+	      try {
+	        transaction = database.transaction(this.#storeName, mode);
+	        const request = operation(transaction.objectStore(this.#storeName));
+	        request.onsuccess = () => {
+	          requestValue = request.result;
+	        }, request.onerror = () => finish(void 0, request.error), transaction.oncomplete = () => finish(requestValue), transaction.onabort = () => finish(
+	          void 0,
+	          transaction?.error ?? new Error("IndexedDB 事务已中止")
+	        ), transaction.onerror = () => finish(
+	          void 0,
+	          transaction?.error ?? new Error("IndexedDB 事务失败")
+	        );
+	      } catch (cause) {
+	        finish(void 0, cause);
+	      }
+	    });
+	  }
+	}
+}, "0b26e8041a6833dc5e1b9df66345f398bbd029eb3a2ac3d2a9e069a830f2af30");
 
 /* Source: lite/src/font/reader-local-font-catalog.ts */
 runtime.register("src/font/reader-local-font-catalog.js", function(module, exports, require) {
@@ -17438,7 +17836,7 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	  renderReaderTopicSummaryShareImage: () => renderReaderTopicSummaryShareImage
 	});
 	module.exports = __toCommonJS(reader_topic_summary_surface_exports);
-	var import_reader_icon = require("../components/reader-icon.js"), import_html_element = require("../dom/html-element.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_local_font_catalog = require("../font/reader-local-font-catalog.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_topic_custom_summary = require("./reader-topic-custom-summary.js");
+	var import_reader_icon = require("../components/reader-icon.js"), import_html_element = require("../dom/html-element.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_local_font_catalog = require("../font/reader-local-font-catalog.js"), import_reader_font_catalog = require("../font/reader-font-catalog.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_topic_custom_summary = require("./reader-topic-custom-summary.js");
 	const DEFAULT_SHARE_IMAGE_WIDTH = 1080, SOCIAL_SHARE_IMAGE_WIDTH = 1200, MIN_SHARE_IMAGE_WIDTH = 720, MAX_SHARE_IMAGE_WIDTH = 2160, DEFAULT_SHARE_BODY_FONT_SIZE = 31, MIN_SHARE_BODY_FONT_SIZE = 22, MAX_SHARE_BODY_FONT_SIZE = 48, READER_TOPIC_SUMMARY_SHARE_SETTINGS_KEY = "ldp:topic-summary-share-settings:v1", READER_TOPIC_SUMMARY_RESULTS_STORAGE_KEY = "ldp:topic-summary-results:v1", READER_TOPIC_SUMMARY_WINDOW_GEOMETRY_STORAGE_KEY_PREFIX = "ldp:topic-summary-window-geometry:v1", LOCAL_FONT_PREFIX = "local:";
 	function positionStorage(storage, readMode) {
 	  if (!storage) return;
@@ -17641,6 +18039,9 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	function normalizedFontToken(value, fallback) {
 	  const token = String(value ?? "").trim();
 	  if (FONT_TOKENS.has(token)) return token;
+	  const catalogId = (0, import_reader_font_catalog.readReaderFontCatalogValue)(token);
+	  if (/^(?:google|imported):[a-z0-9-]+$/i.test(catalogId ?? ""))
+	    return (0, import_reader_font_catalog.readerFontCatalogValue)(catalogId);
 	  if (token.startsWith(LOCAL_FONT_PREFIX)) {
 	    const family = token.slice(LOCAL_FONT_PREFIX.length).replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 96);
 	    if (family) return `${LOCAL_FONT_PREFIX}${family}`;
@@ -18215,6 +18616,7 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	  #activeStage = null;
 	  #localFontsLoaded = !1;
 	  #localFontsLoading = !1;
+	  #sharedFontsLoading = !1;
 	  #fontRenderEpoch = 0;
 	  #fontLoads = /* @__PURE__ */ new Map();
 	  #modelContextTokens = /* @__PURE__ */ new Map();
@@ -18434,7 +18836,7 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	      this.#document,
 	      "span",
 	      "ldp-topic-summary-font-status"
-	    ), this.#fontStatus.role = "status", this.#fontStatus.textContent = this.#fonts?.queryLocalFonts ? "打开字体下拉时，将自动请求授权并读取本机字体。" : "当前浏览器仅提供预设字体。", this.#settingsPanel.append(
+	    ), this.#fontStatus.role = "status", this.#fontStatus.textContent = this.#fonts?.entries ? "可共用字体设置中的导入字体与精选 Google Fonts。" : this.#fonts?.queryLocalFonts ? "打开字体下拉时，将自动请求授权并读取本机字体。" : "当前浏览器仅提供预设字体。", this.#settingsPanel.append(
 	      styleField,
 	      chineseField,
 	      latinField,
@@ -18693,7 +19095,9 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	      !this.root.hidden && !this.#imagePickerActive && this.frame.dismissFromPointerEvent(event);
 	    }, !0), this.scope.listen(options.mount, "ldp-reader-workspace-change", () => {
 	      this.frame.isOpen && this.frame.open();
-	    }), this.#restoreSelectionSummary(), this.#render();
+	    }), this.#fonts?.entries && (this.#fonts.subscribe && this.scope.add(this.#fonts.subscribe(() => {
+	      this.#loadSharedFonts();
+	    })), this.#loadSharedFonts()), this.#restoreSelectionSummary(), this.#render();
 	  }
 	  open() {
 	    this.scope.destroyed || (this.#historyOpen = !1, this.#viewingHistoryId = null, this.#restoreSelectionSummary(), this.root.hidden = !1, this.frame.open(), this.#render(), this.#loadAiModels());
@@ -18760,9 +19164,20 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	      )
 	    ), select.append(presets);
 	    const saved = chinese ? this.#settings.chineseFont : this.#settings.latinFont;
-	    return this.#appendSavedLocalFont(select, saved), selectValue(select, saved), this.scope.listen(select, import_reader_select_surface.READER_SELECT_OPEN_EVENT, () => {
+	    return this.#appendSavedLocalFont(select, saved), this.#appendSavedCatalogFont(select, saved), selectValue(select, saved), this.scope.listen(select, import_reader_select_surface.READER_SELECT_OPEN_EVENT, () => {
 	      this.#loadLocalFonts();
 	    }), select;
+	  }
+	  #appendSavedCatalogFont(select, token) {
+	    const id = (0, import_reader_font_catalog.readReaderFontCatalogValue)(token), entry = id ? this.#fonts?.entry?.(id) : null;
+	    if (!entry || [...select.options].some((option) => option.value === token))
+	      return;
+	    const group = (0, import_html_element.htmlElement)(this.#document, "optgroup");
+	    group.label = "已选共享字体", group.dataset.fontCatalogGroup = "saved", group.append(addFontOptionPreview(
+	      selectOption(this.#document, token, entry.label),
+	      entry.fontFamilyCss,
+	      entry.searchText
+	    )), select.append(group);
 	  }
 	  #appendSavedLocalFont(select, token) {
 	    if (!token.startsWith(LOCAL_FONT_PREFIX) || [...select.options].some((option) => option.value === token)) return;
@@ -18772,6 +19187,59 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	      font.fontFamilyCss,
 	      font.searchText
 	    )), select.append(localFonts);
+	  }
+	  async #loadSharedFonts() {
+	    if (!(this.#sharedFontsLoading || !this.#fonts?.entries)) {
+	      this.#sharedFontsLoading = !0;
+	      try {
+	        const entries = await this.#fonts.entries();
+	        if (this.scope.destroyed) return;
+	        for (const [select, script] of [
+	          [this.chineseFontSelect, "cjk"],
+	          [this.latinFontSelect, "latin"]
+	        ]) {
+	          const configured = script === "cjk" ? this.#settings.chineseFont : this.#settings.latinFont, current = selectedValue(select), selected = (0, import_reader_font_catalog.readReaderFontCatalogValue)(configured) && ![...select.options].some((option) => option.value === configured) ? configured : current || configured;
+	          for (const previous of select.querySelectorAll(
+	            "optgroup[data-font-catalog-group]"
+	          )) previous.remove();
+	          const localGroup = select.querySelector(
+	            'optgroup[data-font-local-group="true"]'
+	          );
+	          for (const source of ["google", "imported"]) {
+	            const available = entries.filter(
+	              (entry) => entry.source === source && (entry.source === "imported" || entry.scripts.includes(script))
+	            );
+	            if (!available.length) continue;
+	            const group = (0, import_html_element.htmlElement)(this.#document, "optgroup");
+	            group.dataset.fontCatalogGroup = source, group.label = source === "google" ? `精选 Google Fonts · ${available.length}` : `导入字体 · ${available.length}`;
+	            for (const entry of available)
+	              group.append(addFontOptionPreview(
+	                selectOption(
+	                  this.#document,
+	                  (0, import_reader_font_catalog.readerFontCatalogValue)(entry.id),
+	                  entry.label
+	                ),
+	                entry.fontFamilyCss,
+	                entry.searchText
+	              ));
+	            select.insertBefore(group, localGroup);
+	          }
+	          selectValue(select, selected), select.dataset.readerSelectSearchLabel = `搜索字体 · 共享 ${entries.length}` + (this.#fonts.queryLocalFonts ? " · 本机待获取" : "");
+	        }
+	        this.#fontStatus.textContent = `已共享 ${entries.filter((entry) => entry.source === "google").length} 种 Google Fonts、${entries.filter((entry) => entry.source === "imported").length} 种导入字体。`;
+	        const EventConstructor = this.#document.defaultView?.Event ?? Event;
+	        for (const select of [this.chineseFontSelect, this.latinFontSelect])
+	          select.dispatchEvent(new EventConstructor(
+	            import_reader_select_surface.READER_SELECT_OPTIONS_CHANGE_EVENT,
+	            { bubbles: !0 }
+	          ));
+	        this.#ensureSelectedFonts();
+	      } catch (cause) {
+	        this.#fontStatus.textContent = "共享字体目录读取失败。", this.#onError(cause);
+	      } finally {
+	        this.#sharedFontsLoading = !1;
+	      }
+	    }
 	  }
 	  async #loadLocalFonts() {
 	    if (!(this.#localFontsLoaded || this.#localFontsLoading || !this.#fonts?.queryLocalFonts)) {
@@ -18827,7 +19295,7 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	    this.customWidthInput.hidden = this.#settings.widthMode !== "custom", this.customFontSizeInput.hidden = this.#settings.fontSizeMode !== "custom";
 	  }
 	  #afterSettingsChange() {
-	    this.#uploadedImage = null, this.#persistSettings(), this.#applyTheme(), this.#renderPreview();
+	    this.#uploadedImage = null, this.#persistSettings(), this.#applyTheme(), this.#renderPreview(), this.#ensureSelectedFonts();
 	  }
 	  #persistSettings() {
 	    try {
@@ -18852,10 +19320,29 @@ runtime.register("src/post/reader-topic-summary-surface.js", function(module, ex
 	    ]) this.root.style.removeProperty(property);
 	  }
 	  #fontFamily(token) {
-	    return token === "reader" ? canvasFamily(this.#fonts?.readCurrentFamily() ?? "") : token.startsWith(LOCAL_FONT_PREFIX) ? (0, import_reader_font_style_controller.readerFontFamilyCss)(
-	      "custom",
-	      token.slice(LOCAL_FONT_PREFIX.length)
-	    ) : token === "cjkSans" || token === "serif" || token === "monospace" ? (0, import_reader_font_style_controller.readerFontFamilyCss)(token) : (0, import_reader_font_style_controller.readerFontFamilyCss)("system");
+	    if (token === "reader")
+	      return canvasFamily(this.#fonts?.readCurrentFamily() ?? "");
+	    if (token.startsWith(LOCAL_FONT_PREFIX))
+	      return (0, import_reader_font_style_controller.readerFontFamilyCss)(
+	        "custom",
+	        token.slice(LOCAL_FONT_PREFIX.length)
+	      );
+	    const catalogId = (0, import_reader_font_catalog.readReaderFontCatalogValue)(token), catalogEntry = catalogId ? this.#fonts?.entry?.(catalogId) ?? null : null;
+	    return catalogEntry ? (0, import_reader_font_style_controller.readerFontFamilyCss)("custom", catalogEntry.family) : token === "cjkSans" || token === "serif" || token === "monospace" ? (0, import_reader_font_style_controller.readerFontFamilyCss)(token) : (0, import_reader_font_style_controller.readerFontFamilyCss)("system");
+	  }
+	  async #ensureSelectedFonts() {
+	    const ensure = this.#fonts?.ensureLoaded;
+	    if (!ensure) return !1;
+	    const ids = [...new Set([
+	      this.#settings.chineseFont,
+	      this.#settings.latinFont
+	    ].map((token) => (0, import_reader_font_catalog.readReaderFontCatalogValue)(token)).filter(
+	      (value) => !!value
+	    ))];
+	    return ids.length ? (await Promise.all(ids.map((id) => ensure(id)))).some(Boolean) : !1;
+	  }
+	  async #createLoadedShareImage(options) {
+	    return await this.#ensureSelectedFonts(), this.#createShareImage(options);
 	  }
 	  #shareImageOptions() {
 	    if (!this.#summary) return null;
@@ -19222,7 +19709,7 @@ ${selectionKey}`;
 	    if (!(!imageOptions || !this.#previewImage || this.#previewPending || this.#busy)) {
 	      this.#previewPending = !0, this.previewCanvas.setAttribute("aria-busy", "true");
 	      try {
-	        const blob = await this.#createShareImage(imageOptions);
+	        const blob = await this.#createLoadedShareImage(imageOptions);
 	        await this.#previewImage({
 	          blob,
 	          alt: `${imageOptions.topicTitle} · AI 总结分享图`,
@@ -19242,7 +19729,7 @@ ${selectionKey}`;
 	      imageOptions.bodyFontSize
 	    ]);
 	    let pending = this.#fontLoads.get(key);
-	    pending || (pending = loadShareImageFonts(this.#document, imageOptions), this.#fontLoads.set(key, pending));
+	    pending || (pending = this.#ensureSelectedFonts().then(() => loadShareImageFonts(this.#document, imageOptions)), this.#fontLoads.set(key, pending));
 	    const epoch = ++this.#fontRenderEpoch;
 	    pending.then((loaded) => {
 	      if (!loaded || this.scope.destroyed || this.#preview.hidden || epoch !== this.#fontRenderEpoch) return;
@@ -19274,7 +19761,7 @@ ${selectionKey}`;
 	    if (!(!imageOptions || !this.#downloads || this.#busy)) {
 	      this.#busy = "download", this.downloadButton.classList.add("is-busy"), this.#render();
 	      try {
-	        const blob = await this.#createShareImage(imageOptions);
+	        const blob = await this.#createLoadedShareImage(imageOptions);
 	        await this.#downloads.save(
 	          blob,
 	          safeTopicFilename(imageOptions.topicTitle)
@@ -19337,11 +19824,11 @@ ${selectionKey}`;
 	      summarizedText: imageOptions.summary.summarizedText
 	    });
 	    if (this.#uploadedImage?.key === key) return this.#uploadedImage.value;
-	    const filename = safeTopicFilename(imageOptions.topicTitle), blob = await this.#createShareImage(imageOptions), value = await this.#uploader.upload(blob, filename);
+	    const filename = safeTopicFilename(imageOptions.topicTitle), blob = await this.#createLoadedShareImage(imageOptions), value = await this.#uploader.upload(blob, filename);
 	    return this.#uploadedImage = Object.freeze({ key, value }), value;
 	  }
 	}
-}, "578672ae0dc34f7834b15af6f27bdeee2ea3a72f26dddbf28efdcaec426292ff");
+}, "9f51304cc2cf3f828d622862c06881c91bd7bb05ab6deb84854ca6a0d340621b");
 
 /* Source: lite/src/post/topic-action-feature-commands.ts */
 runtime.register("src/post/topic-action-feature-commands.js", function(module, exports, require) {
@@ -22594,7 +23081,7 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	  ReaderFontSettingsForm: () => ReaderFontSettingsForm
 	});
 	module.exports = __toCommonJS(reader_font_settings_form_exports);
-	var import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_local_font_catalog = require("../font/reader-local-font-catalog.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_settings_dom = require("./reader-settings-dom.js"), import_reader_object_settings_draft = require("./reader-object-settings-draft.js");
+	var import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_local_font_catalog = require("../font/reader-local-font-catalog.js"), import_reader_font_catalog = require("../font/reader-font-catalog.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_settings_dom = require("./reader-settings-dom.js"), import_reader_object_settings_draft = require("./reader-object-settings-draft.js");
 	const LOCAL_FONT_VALUE_PREFIX = "local-font:";
 	function localFontValue(name) {
 	  return `${LOCAL_FONT_VALUE_PREFIX}${name}`;
@@ -22730,6 +23217,7 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	  #controller;
 	  #font;
 	  #queryLocalFonts;
+	  #fontCatalog;
 	  #draft;
 	  #inputs = /* @__PURE__ */ new Map();
 	  #selects = /* @__PURE__ */ new Map();
@@ -22740,14 +23228,19 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	  #fontStatus;
 	  #status;
 	  #reset;
+	  #importFile = null;
+	  #importedSelect = null;
+	  #removeImported = null;
+	  #sharedFonts = Object.freeze([]);
 	  #activeScope = "interface";
 	  #fontQueryEpoch = 0;
 	  #localFontsLoaded = !1;
 	  #localFontsLoading = !1;
+	  #localFontCount = null;
 	  #syncingFont = !1;
 	  #lastMode;
 	  constructor(options) {
-	    this.#host = options.host, this.#controller = options.controller, this.#font = options.font, this.#queryLocalFonts = options.queryLocalFonts, this.#lastMode = this.#font.snapshot.mode, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#draft = new import_reader_object_settings_draft.ReaderObjectSettingsDraft(
+	    this.#host = options.host, this.#controller = options.controller, this.#font = options.font, this.#fontCatalog = options.fontCatalog ?? null, this.#queryLocalFonts = this.#fontCatalog?.queryLocalFonts ?? options.queryLocalFonts, this.#lastMode = this.#font.snapshot.mode, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#draft = new import_reader_object_settings_draft.ReaderObjectSettingsDraft(
 	      ALL_NAMES,
 	      draftFromSettings(this.#font.settings())
 	    );
@@ -22756,7 +23249,7 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	      "div",
 	      "ldp-settings-category-groups ldp-font-groups"
 	    );
-	    content.append(this.#renderRendering(document)), content.append(this.#renderHostSizes(document)), content.append(this.#renderScopes(document)), this.#fontList = (0, import_reader_settings_dom.settingsElement)(document, "datalist"), this.#fontList.id = "ldp-local-fonts";
+	    content.append(this.#renderRendering(document)), content.append(this.#renderHostSizes(document)), this.#fontCatalog && content.append(this.#renderFontLibrary(document)), content.append(this.#renderScopes(document)), this.#fontList = (0, import_reader_settings_dom.settingsElement)(document, "datalist"), this.#fontList.id = "ldp-local-fonts";
 	    for (const input of this.#inputs.values())
 	      input.dataset.fontCustom === "true" && input.setAttribute("list", this.#fontList.id);
 	    content.append(this.#fontList), this.#fontStatus = (0, import_reader_settings_dom.settingsElement)(
@@ -22784,15 +23277,63 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	      acceptPersisted: (preferences) => this.#accept(preferences),
 	      discard: (preferences) => this.#accept(preferences)
 	    };
-	    this.scope.add(this.#controller.registerDraft(adapter)), this.#font.changes.subscribe((snapshot) => {
+	    this.scope.add(this.#controller.registerDraft(adapter)), this.#fontCatalog && (this.scope.add(this.#fontCatalog.subscribe(() => {
+	      this.#loadSharedFonts(!0);
+	    })), this.#loadSharedFonts()), this.#font.changes.subscribe((snapshot) => {
 	      if (this.#syncingFont) return;
 	      const beforeCount = this.#draft.changeCount(), rebased = this.#draft.rebase(
 	        draftFromSettings(this.#font.settings())
 	      ), afterCount = this.#draft.changeCount(), modeChanged = snapshot.mode !== this.#lastMode;
 	      this.#lastMode = snapshot.mode, !(!rebased && beforeCount === afterCount && !modeChanged) && (afterCount > 0 ? this.#preview() : this.#updateFont(() => this.#font.clearPreview()), this.#sync(), this.#controller.refresh());
 	    }, this.scope), this.scope.add(() => {
-	      this.#fontQueryEpoch += 1, this.#updateFont(() => this.#font.clearPreview()), this.#inputs.clear(), this.#selects.clear(), this.#values.clear(), this.#scopePanels.clear(), this.#scopeTabs.clear(), this.#host.replaceChildren();
+	      this.#fontQueryEpoch += 1, this.#updateFont(() => this.#font.clearPreview()), this.#inputs.clear(), this.#selects.clear(), this.#values.clear(), this.#scopePanels.clear(), this.#scopeTabs.clear(), this.#sharedFonts = Object.freeze([]), this.#host.replaceChildren();
 	    }), this.#syncScope(), this.#sync();
+	  }
+	  #renderFontLibrary(document) {
+	    const section = (0, import_reader_settings_dom.settingsSection)(
+	      document,
+	      "共享字体库",
+	      "保留浏览器本机字体，可导入 WOFF2、WOFF、TTF 或 OTF 文件，并提供精选 Google Fonts。Google 字体只在选中时联网；导入文件仅保存在当前设备。"
+	    ), list = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "div",
+	      "ldp-settings-fields ldp-settings-category-list"
+	    ), importRow = (0, import_reader_settings_dom.settingsElement)(document, "div", "ldp-setting-row"), importCopy = (0, import_reader_settings_dom.settingsCopy)(
+	      document,
+	      "ldp-appearance-copy",
+	      "导入字体文件",
+	      "单个文件最大 32 MB，最多 64 个。请确保你有权在本机使用该字体。"
+	    ), importButton = (0, import_reader_settings_dom.settingsButton)(
+	      document,
+	      "ldp-config-action",
+	      "",
+	      "upload",
+	      "导入字体"
+	    ), file = (0, import_reader_settings_dom.settingsElement)(document, "input", "ldp-config-file");
+	    file.type = "file", file.accept = ".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf", file.hidden = !0, this.#importFile = file, this.scope.listen(importButton, "click", () => {
+	      file.value = "", file.click();
+	    }), this.scope.listen(file, "change", () => void this.#importFont());
+	    const importControl = (0, import_reader_settings_dom.settingsElement)(document, "span", "ldp-font-option-control");
+	    importControl.append(importButton, file), importRow.append(importCopy, importControl);
+	    const removeRow = (0, import_reader_settings_dom.settingsElement)(document, "div", "ldp-setting-row"), removeCopy = (0, import_reader_settings_dom.settingsCopy)(
+	      document,
+	      "ldp-appearance-copy",
+	      "已导入字体",
+	      "删除后，正在使用该字体的范围会恢复默认字体。"
+	    ), imported = (0, import_reader_settings_dom.settingsElement)(document, "select", "ldp-font-weight-select");
+	    imported.setAttribute("aria-label", "选择要删除的已导入字体"), imported.dataset.fontImportedSelect = "true", this.#importedSelect = imported;
+	    const remove = (0, import_reader_settings_dom.settingsButton)(
+	      document,
+	      "ldp-font-field-reset",
+	      "删除所选导入字体",
+	      "trash",
+	      "删除"
+	    );
+	    remove.disabled = !0, this.#removeImported = remove, this.scope.listen(imported, "change", () => {
+	      remove.disabled = !imported.value;
+	    }), this.scope.listen(remove, "click", () => void this.#removeImportedFont());
+	    const removeControl = (0, import_reader_settings_dom.settingsElement)(document, "span", "ldp-font-option-control");
+	    return removeControl.append(imported, remove), removeRow.append(removeCopy, removeControl), list.append(importRow, removeRow), section.append(list), section;
 	  }
 	  destroy() {
 	    this.scope.destroy();
@@ -22900,7 +23441,18 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	    select.append(presets), this.#selects.set(config.family, select), this.scope.listen(select, import_reader_select_surface.READER_SELECT_OPEN_EVENT, () => {
 	      this.#loadLocalFonts();
 	    }), this.scope.listen(select, "change", () => {
-	      const value = selectedValue(select), localFont = readLocalFontValue(value);
+	      const value = selectedValue(select), catalogId = (0, import_reader_font_catalog.readReaderFontCatalogValue)(value);
+	      if (catalogId !== null) {
+	        const entry = this.#fontCatalog?.entry(catalogId);
+	        if (!entry) return;
+	        const familyChanged = this.#draft.set(config.family, "custom"), customChanged = this.#draft.set(
+	          config.customFamily,
+	          entry.family
+	        );
+	        (familyChanged || customChanged) && this.#afterEdit(), this.#ensureCatalogFont(entry);
+	        return;
+	      }
+	      const localFont = readLocalFontValue(value);
 	      if (localFont !== null) {
 	        const familyChanged = this.#draft.set(config.family, "custom"), customChanged = this.#draft.set(
 	          config.customFamily,
@@ -22912,7 +23464,7 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	      this.#edit(config.family, value);
 	    });
 	    const custom = (0, import_reader_settings_dom.settingsElement)(document, "input", "ldp-font-family-custom");
-	    return custom.type = "text", custom.maxLength = 64, custom.placeholder = "输入或读取本机字体名称", custom.dataset.fontSetting = config.customFamily, custom.dataset.fontCustom = "true", this.#inputs.set(config.customFamily, custom), this.scope.listen(custom, "input", () => {
+	    return custom.type = "text", custom.maxLength = 64, custom.placeholder = "输入、读取或导入字体", custom.dataset.fontSetting = config.customFamily, custom.dataset.fontCustom = "true", this.#inputs.set(config.customFamily, custom), this.scope.listen(custom, "input", () => {
 	      this.#edit(config.customFamily, custom.value);
 	    }), control.append(
 	      select,
@@ -23020,6 +23572,136 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	      values[scope.family] === "custom" && !String(values[scope.customFamily]).trim() && errors.push(`${scope.label}的自定义字体名称不能为空`);
 	    return Object.freeze(errors);
 	  }
+	  async #loadSharedFonts(force = !1) {
+	    const catalog = this.#fontCatalog;
+	    if (!(!catalog || this.scope.destroyed))
+	      try {
+	        const entries = await catalog.entries();
+	        if (this.scope.destroyed || !force && entries === this.#sharedFonts) return;
+	        this.#sharedFonts = entries;
+	        for (const scope of Object.values(SCOPE_FIELDS)) {
+	          const select = this.#selects.get(scope.family);
+	          if (!select) continue;
+	          for (const previous of select.querySelectorAll(
+	            "optgroup[data-font-catalog-group]"
+	          )) previous.remove();
+	          const localGroup = select.querySelector(
+	            'optgroup[data-font-local-group="true"]'
+	          );
+	          for (const source of ["google", "imported"]) {
+	            const available = entries.filter((entry) => entry.source === source);
+	            if (!available.length) continue;
+	            const group = (0, import_reader_settings_dom.settingsElement)(this.#host.ownerDocument, "optgroup");
+	            group.dataset.fontCatalogGroup = source, group.label = source === "google" ? `精选 Google Fonts · ${available.length}` : `导入字体 · ${available.length}`;
+	            for (const entry of available) {
+	              const option = (0, import_reader_settings_dom.settingsOption)(
+	                this.#host.ownerDocument,
+	                (0, import_reader_font_catalog.readerFontCatalogValue)(entry.id),
+	                entry.label
+	              );
+	              option.dataset.fontCatalog = entry.source, addFontPreview(
+	                option,
+	                entry.fontFamilyCss,
+	                entry.searchText
+	              ), group.append(option);
+	            }
+	            select.insertBefore(group, localGroup);
+	          }
+	        }
+	        this.#syncImportedManagement(), this.#sync(), this.#updateFontSearchLabels(), this.#fontStatus.textContent = this.#fontCatalogStatus();
+	        const EventConstructor = this.#host.ownerDocument.defaultView?.Event ?? Event;
+	        for (const scope of Object.values(SCOPE_FIELDS))
+	          this.#selects.get(scope.family)?.dispatchEvent(new EventConstructor(
+	            import_reader_select_surface.READER_SELECT_OPTIONS_CHANGE_EVENT,
+	            { bubbles: !0 }
+	          ));
+	        for (const scope of Object.values(SCOPE_FIELDS)) {
+	          const values = this.#draft.read();
+	          if (values[scope.family] !== "custom") continue;
+	          const entry = catalog.findByFamily(
+	            String(values[scope.customFamily])
+	          );
+	          entry && this.#ensureCatalogFont(entry, !1);
+	        }
+	      } catch {
+	        this.#fontStatus.textContent = "导入字体库暂时不可用；本机字体和 Google Fonts 仍可选择。";
+	      }
+	  }
+	  #syncImportedManagement() {
+	    const select = this.#importedSelect, remove = this.#removeImported;
+	    if (!select || !remove) return;
+	    const selected = select.value;
+	    select.replaceChildren();
+	    const imported = this.#sharedFonts.filter((entry) => entry.source === "imported");
+	    if (!imported.length) {
+	      appendOption(this.#host.ownerDocument, select, "", "暂无导入字体"), select.disabled = !0, remove.disabled = !0;
+	      return;
+	    }
+	    for (const entry of imported)
+	      appendOption(this.#host.ownerDocument, select, entry.id, entry.label);
+	    select.disabled = !1, selectValue(
+	      select,
+	      imported.some((entry) => entry.id === selected) ? selected : imported[0].id
+	    ), remove.disabled = !1;
+	  }
+	  async #importFont() {
+	    const file = this.#importFile?.files?.[0], catalog = this.#fontCatalog;
+	    if (!(!file || !catalog)) {
+	      this.#fontStatus.textContent = `正在验证并导入 ${file.name}…`;
+	      try {
+	        const entry = await catalog.importFile(file);
+	        if (this.scope.destroyed) return;
+	        await this.#loadSharedFonts(!0);
+	        const scope = SCOPE_FIELDS[this.#activeScope];
+	        this.#draft.set(scope.family, "custom"), this.#draft.set(scope.customFamily, entry.family), this.#afterEdit(), this.#fontStatus.textContent = `已导入并应用 ${entry.label}；文件仅保存在当前设备。`;
+	      } catch (cause) {
+	        this.#fontStatus.textContent = cause instanceof Error ? `导入失败：${cause.message}` : "导入字体失败";
+	      }
+	    }
+	  }
+	  async #removeImportedFont() {
+	    const id = this.#importedSelect?.value ?? "", catalog = this.#fontCatalog, entry = catalog?.entry(id);
+	    if (!(!catalog || entry?.source !== "imported")) {
+	      this.#fontStatus.textContent = `正在删除 ${entry.label}…`;
+	      try {
+	        const values = this.#draft.read();
+	        let changed = !1;
+	        for (const scope of Object.values(SCOPE_FIELDS))
+	          values[scope.family] !== "custom" || values[scope.customFamily] !== entry.family || (changed = this.#draft.set(
+	            scope.family,
+	            READER_FONT_DRAFT_DEFAULT[scope.family]
+	          ) || changed, changed = this.#draft.set(
+	            scope.customFamily,
+	            READER_FONT_DRAFT_DEFAULT[scope.customFamily]
+	          ) || changed);
+	        await catalog.removeImported(id), await this.#loadSharedFonts(!0), changed && this.#afterEdit(), this.#fontStatus.textContent = `已删除 ${entry.label}。`;
+	      } catch (cause) {
+	        this.#fontStatus.textContent = cause instanceof Error ? `删除失败：${cause.message}` : "删除导入字体失败";
+	      }
+	    }
+	  }
+	  async #ensureCatalogFont(entry, report = !0) {
+	    const catalog = this.#fontCatalog;
+	    if (!catalog) return;
+	    report && (this.#fontStatus.textContent = entry.source === "google" ? `正在从 Google Fonts 加载 ${entry.label}…` : `正在读取已导入字体 ${entry.label}…`);
+	    const loaded = await catalog.ensureLoaded(entry.id);
+	    this.scope.destroyed || (loaded ? report && (this.#fontStatus.textContent = `已加载 ${entry.label}。`) : report && (this.#fontStatus.textContent = `${entry.label} 加载失败，已保留系统字体回退。`));
+	  }
+	  #fontCatalogStatus() {
+	    const google = this.#sharedFonts.filter((entry) => entry.source === "google").length, imported = this.#sharedFonts.length - google, local = this.#queryLocalFonts ? this.#localFontCount === null ? "本机字体待授权读取" : `本机 ${this.#localFontCount} 种` : "浏览器未开放本机字体列表";
+	    return `可用精选 Google Fonts ${google} 种、导入字体 ${imported} 种；${local}。`;
+	  }
+	  #updateFontSearchLabels() {
+	    const google = this.#sharedFonts.filter((entry) => entry.source === "google").length, imported = this.#sharedFonts.length - google, local = this.#queryLocalFonts ? this.#localFontCount === null ? "本机待获取" : `本机 ${this.#localFontCount}` : "", parts = [
+	      google ? `Google ${google}` : "",
+	      imported ? `导入 ${imported}` : "",
+	      local
+	    ].filter(Boolean);
+	    for (const scope of Object.values(SCOPE_FIELDS)) {
+	      const select = this.#selects.get(scope.family);
+	      select && (select.dataset.readerSelectSearchLabel = parts.length ? `搜索字体 · ${parts.join(" · ")}` : "搜索预设字体");
+	    }
+	  }
 	  async #loadLocalFonts() {
 	    if (!this.#queryLocalFonts || this.#localFontsLoaded || this.#localFontsLoading) return;
 	    const epoch = ++this.#fontQueryEpoch;
@@ -23032,7 +23714,7 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	        "zh-CN",
 	        { numeric: !0, sensitivity: "base" }
 	      ));
-	      if (epoch !== this.#fontQueryEpoch || this.scope.destroyed) return;
+	      if (this.#localFontCount = fonts.length, epoch !== this.#fontQueryEpoch || this.scope.destroyed) return;
 	      this.#fontList.replaceChildren();
 	      for (const font of fonts) {
 	        const option = (0, import_reader_settings_dom.settingsElement)(this.#host.ownerDocument, "option");
@@ -23041,7 +23723,6 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	      for (const scope of Object.values(SCOPE_FIELDS)) {
 	        const select = this.#selects.get(scope.family);
 	        if (!select) continue;
-	        select.dataset.readerSelectSearchLabel = `搜索字体 · 本机 ${fonts.length}`;
 	        for (const previous of select.querySelectorAll(
 	          'optgroup[data-font-local-group="true"]'
 	        )) previous.remove();
@@ -23064,7 +23745,7 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	        }
 	        select.append(localFonts);
 	      }
-	      this.#sync(), this.#localFontsLoaded = !0, this.#localFontsLoading = !1, this.#fontStatus.textContent = fonts.length ? `已获取 ${fonts.length} 个本机字体；下拉列表已显示字体预览。` : "浏览器未返回可用本机字体。";
+	      this.#sync(), this.#updateFontSearchLabels(), this.#localFontsLoaded = !0, this.#localFontsLoading = !1, this.#fontStatus.textContent = this.#fontCatalog ? this.#fontCatalogStatus() : fonts.length ? `已获取 ${fonts.length} 个本机字体；下拉列表已显示字体预览。` : "浏览器未返回可用本机字体。";
 	      const EventConstructor = this.#host.ownerDocument.defaultView?.Event ?? Event;
 	      for (const scope of Object.values(SCOPE_FIELDS))
 	        this.#selects.get(scope.family)?.dispatchEvent(new EventConstructor(
@@ -23101,12 +23782,12 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	      if (select) {
 	        const scope = Object.values(SCOPE_FIELDS).find(
 	          (entry) => entry.family === name
-	        ), localValue = scope && values[scope.family] === "custom" ? localFontValue(String(values[scope.customFamily]).trim()) : "";
+	        ), customFamily = scope && values[scope.family] === "custom" ? String(values[scope.customFamily]).trim() : "", catalogEntry = customFamily ? this.#fontCatalog?.findByFamily(customFamily) ?? null : null, customValue = catalogEntry ? (0, import_reader_font_catalog.readerFontCatalogValue)(catalogEntry.id) : customFamily ? localFontValue(customFamily) : "";
 	        selectValue(
 	          select,
-	          localValue && [...select.options].some(
-	            (option) => option.value === localValue
-	          ) ? localValue : String(values[name])
+	          customValue && [...select.options].some(
+	            (option) => option.value === customValue
+	          ) ? customValue : String(values[name])
 	        );
 	      }
 	      const value = this.#values.get(name);
@@ -23127,7 +23808,7 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	    );
 	  }
 	}
-}, "a447d59363c8dc02afbd5ff41039e6fc8cf84c29d765c656b077f4373d2eb494");
+}, "18c19db598085a39c2d90c79f56daab0c45a6e2318c7cfc75cf6e155e4a88fbd");
 
 /* Source: lite/src/settings/reader-image-settings-form.ts */
 runtime.register("src/settings/reader-image-settings-form.js", function(module, exports, require) {

@@ -11,6 +11,12 @@ import {
 	READER_FONT_OPTION_PREVIEW,
 	readerLocalFontPresentation,
 } from '../font/reader-local-font-catalog.js';
+import {
+	readReaderFontCatalogValue,
+	readerFontCatalogValue,
+	type ReaderFontCatalogEntry,
+	type ReaderFontCatalogPort,
+} from '../font/reader-font-catalog.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import {
 	READER_FONT_FAMILIES,
@@ -53,6 +59,7 @@ export interface ReaderFontSettingsFormOptions<TPreferences extends object> {
 	readonly controller: ReaderSettingsController<TPreferences>;
 	readonly font: ReaderFontStyleController<TPreferences>;
 	readonly queryLocalFonts?: () => Promise<readonly string[]>;
+	readonly fontCatalog?: ReaderFontCatalogPort;
 	readonly parentScope?: LifecycleScope;
 }
 
@@ -231,6 +238,7 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 	readonly #queryLocalFonts:
 		| (() => Promise<readonly string[]>)
 		| undefined;
+	readonly #fontCatalog: ReaderFontCatalogPort | null;
 	readonly #draft: ReaderObjectSettingsDraft<
 		ReaderFontDraft,
 		ReaderFontSettingName
@@ -244,10 +252,15 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 	readonly #fontStatus: HTMLElement;
 	readonly #status: HTMLElement;
 	readonly #reset: HTMLButtonElement;
+	#importFile: HTMLInputElement | null = null;
+	#importedSelect: HTMLSelectElement | null = null;
+	#removeImported: HTMLButtonElement | null = null;
+	#sharedFonts: readonly ReaderFontCatalogEntry[] = Object.freeze([]);
 	#activeScope: ReaderFontScope = 'interface';
 	#fontQueryEpoch = 0;
 	#localFontsLoaded = false;
 	#localFontsLoading = false;
+	#localFontCount: number | null = null;
 	#syncingFont = false;
 	#lastMode: ReaderFontRenderingMode;
 
@@ -255,7 +268,9 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 		this.#host = options.host;
 		this.#controller = options.controller;
 		this.#font = options.font;
-		this.#queryLocalFonts = options.queryLocalFonts;
+		this.#fontCatalog = options.fontCatalog ?? null;
+		this.#queryLocalFonts = this.#fontCatalog?.queryLocalFonts ??
+			options.queryLocalFonts;
 		this.#lastMode = this.#font.snapshot.mode;
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		this.#draft = new ReaderObjectSettingsDraft(
@@ -270,6 +285,7 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 		);
 		content.append(this.#renderRendering(document));
 		content.append(this.#renderHostSizes(document));
+		if (this.#fontCatalog) content.append(this.#renderFontLibrary(document));
 		content.append(this.#renderScopes(document));
 
 		this.#fontList = element(document, 'datalist');
@@ -319,6 +335,12 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 			discard: (preferences) => this.#accept(preferences),
 		};
 		this.scope.add(this.#controller.registerDraft(adapter));
+		if (this.#fontCatalog) {
+			this.scope.add(this.#fontCatalog.subscribe(() => {
+				void this.#loadSharedFonts(true);
+			}));
+			void this.#loadSharedFonts();
+		}
 		this.#font.changes.subscribe((snapshot) => {
 			if (this.#syncingFont) return;
 			const beforeCount = this.#draft.changeCount();
@@ -342,10 +364,82 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 			this.#values.clear();
 			this.#scopePanels.clear();
 			this.#scopeTabs.clear();
+			this.#sharedFonts = Object.freeze([]);
 			this.#host.replaceChildren();
 		});
 		this.#syncScope();
 		this.#sync();
+	}
+
+	#renderFontLibrary(document: Document): HTMLElement {
+		const section = settingsSection(
+			document,
+			'共享字体库',
+			'保留浏览器本机字体，可导入 WOFF2、WOFF、TTF 或 OTF 文件，并提供精选 Google Fonts。Google 字体只在选中时联网；导入文件仅保存在当前设备。',
+		);
+		const list = element(
+			document,
+			'div',
+			'ldp-settings-fields ldp-settings-category-list',
+		);
+		const importRow = element(document, 'div', 'ldp-setting-row');
+		const importCopy = settingsCopy(
+			document,
+			'ldp-appearance-copy',
+			'导入字体文件',
+			'单个文件最大 32 MB，最多 64 个。请确保你有权在本机使用该字体。',
+		);
+		const importButton = settingsButton(
+			document,
+			'ldp-config-action',
+			'',
+			'upload',
+			'导入字体',
+		);
+		const file = element(document, 'input', 'ldp-config-file');
+		file.type = 'file';
+		file.accept = '.woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf';
+		file.hidden = true;
+		this.#importFile = file;
+		this.scope.listen(importButton, 'click', () => {
+			file.value = '';
+			file.click();
+		});
+		this.scope.listen(file, 'change', () => void this.#importFont());
+		const importControl = element(document, 'span', 'ldp-font-option-control');
+		importControl.append(importButton, file);
+		importRow.append(importCopy, importControl);
+
+		const removeRow = element(document, 'div', 'ldp-setting-row');
+		const removeCopy = settingsCopy(
+			document,
+			'ldp-appearance-copy',
+			'已导入字体',
+			'删除后，正在使用该字体的范围会恢复默认字体。',
+		);
+		const imported = element(document, 'select', 'ldp-font-weight-select');
+		imported.setAttribute('aria-label', '选择要删除的已导入字体');
+		imported.dataset.fontImportedSelect = 'true';
+		this.#importedSelect = imported;
+		const remove = settingsButton(
+			document,
+			'ldp-font-field-reset',
+			'删除所选导入字体',
+			'trash',
+			'删除',
+		);
+		remove.disabled = true;
+		this.#removeImported = remove;
+		this.scope.listen(imported, 'change', () => {
+			remove.disabled = !imported.value;
+		});
+		this.scope.listen(remove, 'click', () => void this.#removeImportedFont());
+		const removeControl = element(document, 'span', 'ldp-font-option-control');
+		removeControl.append(imported, remove);
+		removeRow.append(removeCopy, removeControl);
+		list.append(importRow, removeRow);
+		section.append(list);
+		return section;
 	}
 
 	destroy(): void {
@@ -502,6 +596,19 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 		});
 		this.scope.listen(select, 'change', () => {
 			const value = selectedValue(select);
+			const catalogId = readReaderFontCatalogValue(value);
+			if (catalogId !== null) {
+				const entry = this.#fontCatalog?.entry(catalogId);
+				if (!entry) return;
+				const familyChanged = this.#draft.set(config.family, 'custom');
+				const customChanged = this.#draft.set(
+					config.customFamily,
+					entry.family,
+				);
+				if (familyChanged || customChanged) this.#afterEdit();
+				void this.#ensureCatalogFont(entry);
+				return;
+			}
 			const localFont = readLocalFontValue(value);
 			if (localFont !== null) {
 				const familyChanged = this.#draft.set(config.family, 'custom');
@@ -517,7 +624,7 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 		const custom = element(document, 'input', 'ldp-font-family-custom');
 		custom.type = 'text';
 		custom.maxLength = 64;
-		custom.placeholder = '输入或读取本机字体名称';
+		custom.placeholder = '输入、读取或导入字体';
 		custom.dataset.fontSetting = config.customFamily;
 		custom.dataset.fontCustom = 'true';
 		this.#inputs.set(config.customFamily, custom);
@@ -712,6 +819,213 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 		return Object.freeze(errors);
 	}
 
+	async #loadSharedFonts(force = false): Promise<void> {
+		const catalog = this.#fontCatalog;
+		if (!catalog || this.scope.destroyed) return;
+		try {
+			const entries = await catalog.entries();
+			if (this.scope.destroyed) return;
+			if (!force && entries === this.#sharedFonts) return;
+			this.#sharedFonts = entries;
+			for (const scope of Object.values(SCOPE_FIELDS)) {
+				const select = this.#selects.get(scope.family);
+				if (!select) continue;
+				for (const previous of select.querySelectorAll(
+					'optgroup[data-font-catalog-group]',
+				)) previous.remove();
+				const localGroup = select.querySelector(
+					'optgroup[data-font-local-group="true"]',
+				);
+				for (const source of ['google', 'imported'] as const) {
+					const available = entries.filter((entry) =>
+						entry.source === source);
+					if (!available.length) continue;
+					const group = element(this.#host.ownerDocument, 'optgroup');
+					group.dataset.fontCatalogGroup = source;
+					group.label = source === 'google'
+						? `精选 Google Fonts · ${available.length}`
+						: `导入字体 · ${available.length}`;
+					for (const entry of available) {
+						const option = settingsOption(
+							this.#host.ownerDocument,
+							readerFontCatalogValue(entry.id),
+							entry.label,
+						);
+						option.dataset.fontCatalog = entry.source;
+						addFontPreview(
+							option,
+							entry.fontFamilyCss,
+							entry.searchText,
+						);
+						group.append(option);
+					}
+					select.insertBefore(group, localGroup);
+				}
+			}
+			this.#syncImportedManagement();
+			this.#sync();
+			this.#updateFontSearchLabels();
+			this.#fontStatus.textContent = this.#fontCatalogStatus();
+			const EventConstructor =
+				this.#host.ownerDocument.defaultView?.Event ?? Event;
+			for (const scope of Object.values(SCOPE_FIELDS)) {
+				this.#selects.get(scope.family)?.dispatchEvent(new EventConstructor(
+					READER_SELECT_OPTIONS_CHANGE_EVENT,
+					{ bubbles: true },
+				));
+			}
+			for (const scope of Object.values(SCOPE_FIELDS)) {
+				const values = this.#draft.read();
+				if (values[scope.family] !== 'custom') continue;
+				const entry = catalog.findByFamily(
+					String(values[scope.customFamily]),
+				);
+				if (entry) void this.#ensureCatalogFont(entry, false);
+			}
+		} catch {
+			this.#fontStatus.textContent =
+				'导入字体库暂时不可用；本机字体和 Google Fonts 仍可选择。';
+		}
+	}
+
+	#syncImportedManagement(): void {
+		const select = this.#importedSelect;
+		const remove = this.#removeImported;
+		if (!select || !remove) return;
+		const selected = select.value;
+		select.replaceChildren();
+		const imported = this.#sharedFonts.filter((entry) =>
+			entry.source === 'imported');
+		if (!imported.length) {
+			appendOption(this.#host.ownerDocument, select, '', '暂无导入字体');
+			select.disabled = true;
+			remove.disabled = true;
+			return;
+		}
+		for (const entry of imported) {
+			appendOption(this.#host.ownerDocument, select, entry.id, entry.label);
+		}
+		select.disabled = false;
+		selectValue(
+			select,
+			imported.some((entry) => entry.id === selected)
+				? selected
+				: imported[0]!.id,
+		);
+		remove.disabled = false;
+	}
+
+	async #importFont(): Promise<void> {
+		const file = this.#importFile?.files?.[0];
+		const catalog = this.#fontCatalog;
+		if (!file || !catalog) return;
+		this.#fontStatus.textContent = `正在验证并导入 ${file.name}…`;
+		try {
+			const entry = await catalog.importFile(file);
+			if (this.scope.destroyed) return;
+			await this.#loadSharedFonts(true);
+			const scope = SCOPE_FIELDS[this.#activeScope];
+			this.#draft.set(scope.family, 'custom');
+			this.#draft.set(scope.customFamily, entry.family);
+			this.#afterEdit();
+			this.#fontStatus.textContent =
+				`已导入并应用 ${entry.label}；文件仅保存在当前设备。`;
+		} catch (cause) {
+			this.#fontStatus.textContent = cause instanceof Error
+				? `导入失败：${cause.message}`
+				: '导入字体失败';
+		}
+	}
+
+	async #removeImportedFont(): Promise<void> {
+		const id = this.#importedSelect?.value ?? '';
+		const catalog = this.#fontCatalog;
+		const entry = catalog?.entry(id);
+		if (!catalog || entry?.source !== 'imported') return;
+		this.#fontStatus.textContent = `正在删除 ${entry.label}…`;
+		try {
+			const values = this.#draft.read();
+			let changed = false;
+			for (const scope of Object.values(SCOPE_FIELDS)) {
+				if (
+					values[scope.family] !== 'custom' ||
+					values[scope.customFamily] !== entry.family
+				) continue;
+				changed = this.#draft.set(
+					scope.family,
+					READER_FONT_DRAFT_DEFAULT[scope.family],
+				) || changed;
+				changed = this.#draft.set(
+					scope.customFamily,
+					READER_FONT_DRAFT_DEFAULT[scope.customFamily],
+				) || changed;
+			}
+			await catalog.removeImported(id);
+			await this.#loadSharedFonts(true);
+			if (changed) this.#afterEdit();
+			this.#fontStatus.textContent = `已删除 ${entry.label}。`;
+		} catch (cause) {
+			this.#fontStatus.textContent = cause instanceof Error
+				? `删除失败：${cause.message}`
+				: '删除导入字体失败';
+		}
+	}
+
+	async #ensureCatalogFont(
+		entry: ReaderFontCatalogEntry,
+		report = true,
+	): Promise<void> {
+		const catalog = this.#fontCatalog;
+		if (!catalog) return;
+		if (report) {
+			this.#fontStatus.textContent = entry.source === 'google'
+				? `正在从 Google Fonts 加载 ${entry.label}…`
+				: `正在读取已导入字体 ${entry.label}…`;
+		}
+		const loaded = await catalog.ensureLoaded(entry.id);
+		if (this.scope.destroyed) return;
+		if (loaded) {
+			if (report) this.#fontStatus.textContent = `已加载 ${entry.label}。`;
+		} else if (report) {
+			this.#fontStatus.textContent =
+				`${entry.label} 加载失败，已保留系统字体回退。`;
+		}
+	}
+
+	#fontCatalogStatus(): string {
+		const google = this.#sharedFonts.filter((entry) =>
+			entry.source === 'google').length;
+		const imported = this.#sharedFonts.length - google;
+		const local = this.#queryLocalFonts
+			? this.#localFontCount === null
+				? '本机字体待授权读取'
+				: `本机 ${this.#localFontCount} 种`
+			: '浏览器未开放本机字体列表';
+		return `可用精选 Google Fonts ${google} 种、导入字体 ${imported} 种；${local}。`;
+	}
+
+	#updateFontSearchLabels(): void {
+		const google = this.#sharedFonts.filter((entry) =>
+			entry.source === 'google').length;
+		const imported = this.#sharedFonts.length - google;
+		const local = this.#queryLocalFonts
+			? this.#localFontCount === null ? '本机待获取' : `本机 ${this.#localFontCount}`
+			: '';
+		const parts = [
+			google ? `Google ${google}` : '',
+			imported ? `导入 ${imported}` : '',
+			local,
+		].filter(Boolean);
+		for (const scope of Object.values(SCOPE_FIELDS)) {
+			const select = this.#selects.get(scope.family);
+			if (select) {
+				select.dataset.readerSelectSearchLabel = parts.length
+					? `搜索字体 · ${parts.join(' · ')}`
+					: '搜索预设字体';
+			}
+		}
+	}
+
 	async #loadLocalFonts(): Promise<void> {
 		if (
 			!this.#queryLocalFonts ||
@@ -733,6 +1047,7 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 					'zh-CN',
 					{ numeric: true, sensitivity: 'base' },
 				));
+			this.#localFontCount = fonts.length;
 			if (epoch !== this.#fontQueryEpoch || this.scope.destroyed) return;
 			this.#fontList.replaceChildren();
 			for (const font of fonts) {
@@ -743,8 +1058,6 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 			for (const scope of Object.values(SCOPE_FIELDS)) {
 				const select = this.#selects.get(scope.family);
 				if (!select) continue;
-				select.dataset.readerSelectSearchLabel =
-					`搜索字体 · 本机 ${fonts.length}`;
 				for (const previous of select.querySelectorAll(
 					'optgroup[data-font-local-group="true"]',
 				)) previous.remove();
@@ -771,11 +1084,14 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 				select.append(localFonts);
 			}
 			this.#sync();
+			this.#updateFontSearchLabels();
 			this.#localFontsLoaded = true;
 			this.#localFontsLoading = false;
-			this.#fontStatus.textContent = fonts.length
-				? `已获取 ${fonts.length} 个本机字体；下拉列表已显示字体预览。`
-				: '浏览器未返回可用本机字体。';
+			this.#fontStatus.textContent = this.#fontCatalog
+				? this.#fontCatalogStatus()
+				: fonts.length
+					? `已获取 ${fonts.length} 个本机字体；下拉列表已显示字体预览。`
+					: '浏览器未返回可用本机字体。';
 			const EventConstructor =
 				this.#host.ownerDocument.defaultView?.Event ?? Event;
 			for (const scope of Object.values(SCOPE_FIELDS)) {
@@ -831,15 +1147,23 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 				const scope = Object.values(SCOPE_FIELDS).find(
 					(entry) => entry.family === name,
 				);
-				const localValue = scope && values[scope.family] === 'custom'
-					? localFontValue(String(values[scope.customFamily]).trim())
+				const customFamily = scope && values[scope.family] === 'custom'
+					? String(values[scope.customFamily]).trim()
 					: '';
+				const catalogEntry = customFamily
+					? this.#fontCatalog?.findByFamily(customFamily) ?? null
+					: null;
+				const customValue = catalogEntry
+					? readerFontCatalogValue(catalogEntry.id)
+					: customFamily
+						? localFontValue(customFamily)
+						: '';
 				selectValue(
 					select,
-					localValue && [...select.options].some(
-						(option) => option.value === localValue,
+					customValue && [...select.options].some(
+						(option) => option.value === customValue,
 					)
-						? localValue
+						? customValue
 						: String(values[name]),
 				);
 			}

@@ -234,12 +234,32 @@ assert(
 	!header.hasAttribute('data-ldp-reader-drag-surface'),
 	'锁定/固定状态必须由模型统一投影，锁定时撤销拖动锚点',
 );
+windowModel.setMode('embed-right');
+assert(
+	!overlay.classList.contains('ldp-window-managed') &&
+	!overlay.classList.contains('ldp-window-locked') &&
+	!overlay.classList.contains('ldp-window-pinned') &&
+	windowModel.snapshot.locked &&
+	windowModel.snapshot.pinned &&
+	!modal.style.left &&
+	!modal.style.width,
+	'嵌入态必须暂停浮窗锁定与置顶投影，同时保留返回浮窗后的偏好',
+);
+windowModel.setMode('floating');
+assert(
+	overlay.classList.contains('ldp-window-managed') &&
+	overlay.classList.contains('ldp-window-locked') &&
+	overlay.classList.contains('ldp-window-pinned'),
+	'返回浮窗后必须恢复此前保存的锁定与置顶状态',
+);
 windowModel.setMode('fullpage');
 assert(
 	!overlay.classList.contains('ldp-window-managed') &&
+	!overlay.classList.contains('ldp-window-locked') &&
+	!overlay.classList.contains('ldp-window-pinned') &&
 	!modal.style.left &&
 	!modal.style.width,
-	'非 floating 模式必须清除浮窗 inline geometry',
+	'全屏态同样不得残留浮窗状态类或 inline geometry',
 );
 windowModel.setMode('floating');
 windowModel.reset();
@@ -596,6 +616,24 @@ assert(
 	pinButton.getAttribute('aria-pressed') === 'true' &&
 	pinButton.getAttribute('aria-label') === '恢复点击外部关闭',
 	'固定状态必须同步原版按钮标签、ARIA 与强调态',
+);
+pointerModel.setMode('embed-right');
+assert(
+	!pointerOverlay.classList.contains('ldp-window-locked') &&
+	!pointerOverlay.classList.contains('ldp-window-pinned') &&
+	lockButton.getAttribute('aria-pressed') === 'false' &&
+	pinButton.getAttribute('aria-pressed') === 'false' &&
+	pointerModel.snapshot.locked &&
+	pointerModel.snapshot.pinned,
+	'嵌入态的浮窗按钮与胶囊不得继续投影已保存锁定和置顶状态',
+);
+pointerModel.setMode('floating');
+assert(
+	pointerOverlay.classList.contains('ldp-window-locked') &&
+	pointerOverlay.classList.contains('ldp-window-pinned') &&
+	lockButton.getAttribute('aria-pressed') === 'true' &&
+	pinButton.getAttribute('aria-pressed') === 'true',
+	'返回浮窗时按钮与胶囊必须恢复已保存锁定和置顶状态',
 );
 
 const persistCountBeforeViewport = persisted.length;

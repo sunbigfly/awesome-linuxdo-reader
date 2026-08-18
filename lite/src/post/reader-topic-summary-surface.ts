@@ -7,7 +7,12 @@ import {
 	READER_FONT_OPTION_PREVIEW,
 	readerLocalFontPresentation,
 } from '../font/reader-local-font-catalog.js';
-import { LifecycleScope } from '../kernel/lifecycle.js';
+import {
+	readReaderFontCatalogValue,
+	readerFontCatalogValue,
+	type ReaderFontCatalogEntry,
+} from '../font/reader-font-catalog.js';
+import { LifecycleScope, type Cleanup } from '../kernel/lifecycle.js';
 import type { BlobDownloadPort } from '../media/reader-image-download-service.js';
 import type { ReaderImageResourceService } from '../media/reader-image-resource-service.js';
 import type { ReaderLightboxItem } from '../media/reader-lightbox-controller.js';
@@ -70,6 +75,10 @@ export type ReaderTopicSummaryShareStyle =
 export interface ReaderTopicSummaryFontCatalogPort {
 	readonly readCurrentFamily: () => string;
 	readonly queryLocalFonts?: () => Promise<readonly string[]>;
+	readonly entries?: () => Promise<readonly ReaderFontCatalogEntry[]>;
+	readonly entry?: (id: string) => ReaderFontCatalogEntry | null;
+	readonly ensureLoaded?: (id: string) => Promise<boolean>;
+	readonly subscribe?: (listener: () => void) => Cleanup;
 }
 
 export interface ReaderTopicSummaryShareImageOptions {
@@ -366,6 +375,10 @@ function styleTheme(value: unknown): ShareStyleTheme {
 function normalizedFontToken(value: unknown, fallback: string): string {
 	const token = String(value ?? '').trim();
 	if (FONT_TOKENS.has(token)) return token;
+	const catalogId = readReaderFontCatalogValue(token);
+	if (/^(?:google|imported):[a-z0-9-]+$/i.test(catalogId ?? '')) {
+		return readerFontCatalogValue(catalogId!);
+	}
 	if (token.startsWith(LOCAL_FONT_PREFIX)) {
 		const family = token.slice(LOCAL_FONT_PREFIX.length)
 			.replace(/[\u0000-\u001f\u007f]/g, '')
@@ -1283,6 +1296,7 @@ export class ReaderTopicSummarySurface {
 	#activeStage: ReaderTopicCustomSummaryStage | null = null;
 	#localFontsLoaded = false;
 	#localFontsLoading = false;
+	#sharedFontsLoading = false;
 	#fontRenderEpoch = 0;
 	readonly #fontLoads = new Map<string, Promise<boolean>>();
 	readonly #modelContextTokens = new Map<string, number>();
@@ -1659,9 +1673,11 @@ export class ReaderTopicSummarySurface {
 			'ldp-topic-summary-font-status',
 		);
 		this.#fontStatus.role = 'status';
-		this.#fontStatus.textContent = this.#fonts?.queryLocalFonts
-			? '打开字体下拉时，将自动请求授权并读取本机字体。'
-			: '当前浏览器仅提供预设字体。';
+		this.#fontStatus.textContent = this.#fonts?.entries
+			? '可共用字体设置中的导入字体与精选 Google Fonts。'
+			: this.#fonts?.queryLocalFonts
+				? '打开字体下拉时，将自动请求授权并读取本机字体。'
+				: '当前浏览器仅提供预设字体。';
 		this.#settingsPanel.append(
 			styleField,
 			chineseField,
@@ -2050,6 +2066,14 @@ export class ReaderTopicSummarySurface {
 		this.scope.listen(options.mount, 'ldp-reader-workspace-change', () => {
 			if (this.frame.isOpen) this.frame.open();
 		});
+		if (this.#fonts?.entries) {
+			if (this.#fonts.subscribe) {
+				this.scope.add(this.#fonts.subscribe(() => {
+					void this.#loadSharedFonts();
+				}));
+			}
+			void this.#loadSharedFonts();
+		}
 		this.#restoreSelectionSummary();
 		this.#render();
 	}
@@ -2171,11 +2195,29 @@ export class ReaderTopicSummarySurface {
 			? this.#settings.chineseFont
 			: this.#settings.latinFont;
 		this.#appendSavedLocalFont(select, saved);
+		this.#appendSavedCatalogFont(select, saved);
 		selectValue(select, saved);
 		this.scope.listen(select, READER_SELECT_OPEN_EVENT, () => {
 			void this.#loadLocalFonts();
 		});
 		return select;
+	}
+
+	#appendSavedCatalogFont(select: HTMLSelectElement, token: string): void {
+		const id = readReaderFontCatalogValue(token);
+		const entry = id ? this.#fonts?.entry?.(id) : null;
+		if (!entry || [...select.options].some((option) => option.value === token)) {
+			return;
+		}
+		const group = element(this.#document, 'optgroup');
+		group.label = '已选共享字体';
+		group.dataset.fontCatalogGroup = 'saved';
+		group.append(addFontOptionPreview(
+			selectOption(this.#document, token, entry.label),
+			entry.fontFamilyCss,
+			entry.searchText,
+		));
+		select.append(group);
 	}
 
 	#appendSavedLocalFont(select: HTMLSelectElement, token: string): void {
@@ -2192,6 +2234,80 @@ export class ReaderTopicSummarySurface {
 			font.searchText,
 		));
 		select.append(localFonts);
+	}
+
+	async #loadSharedFonts(): Promise<void> {
+		if (this.#sharedFontsLoading || !this.#fonts?.entries) return;
+		this.#sharedFontsLoading = true;
+		try {
+			const entries = await this.#fonts.entries();
+			if (this.scope.destroyed) return;
+			for (const [select, script] of [
+				[this.chineseFontSelect, 'cjk'],
+				[this.latinFontSelect, 'latin'],
+			] as const) {
+				const configured = (
+					script === 'cjk'
+						? this.#settings.chineseFont
+						: this.#settings.latinFont
+				);
+				const current = selectedValue(select);
+				const selected = readReaderFontCatalogValue(configured) &&
+					![...select.options].some((option) => option.value === configured)
+					? configured
+					: current || configured;
+				for (const previous of select.querySelectorAll(
+					'optgroup[data-font-catalog-group]',
+				)) previous.remove();
+				const localGroup = select.querySelector(
+					'optgroup[data-font-local-group="true"]',
+				);
+				for (const source of ['google', 'imported'] as const) {
+					const available = entries.filter((entry) =>
+						entry.source === source &&
+						(entry.source === 'imported' || entry.scripts.includes(script))
+					);
+					if (!available.length) continue;
+					const group = element(this.#document, 'optgroup');
+					group.dataset.fontCatalogGroup = source;
+					group.label = source === 'google'
+						? `精选 Google Fonts · ${available.length}`
+						: `导入字体 · ${available.length}`;
+					for (const entry of available) {
+						group.append(addFontOptionPreview(
+							selectOption(
+								this.#document,
+								readerFontCatalogValue(entry.id),
+								entry.label,
+							),
+							entry.fontFamilyCss,
+							entry.searchText,
+						));
+					}
+					select.insertBefore(group, localGroup);
+				}
+				selectValue(select, selected);
+				select.dataset.readerSelectSearchLabel =
+					`搜索字体 · 共享 ${entries.length}` +
+					(this.#fonts.queryLocalFonts ? ' · 本机待获取' : '');
+			}
+			this.#fontStatus.textContent =
+				`已共享 ${entries.filter((entry) => entry.source === 'google').length} 种 Google Fonts` +
+				`、${entries.filter((entry) => entry.source === 'imported').length} 种导入字体。`;
+			const EventConstructor = this.#document.defaultView?.Event ?? Event;
+			for (const select of [this.chineseFontSelect, this.latinFontSelect]) {
+				select.dispatchEvent(new EventConstructor(
+					READER_SELECT_OPTIONS_CHANGE_EVENT,
+					{ bubbles: true },
+				));
+			}
+			void this.#ensureSelectedFonts();
+		} catch (cause) {
+			this.#fontStatus.textContent = '共享字体目录读取失败。';
+			this.#onError(cause);
+		} finally {
+			this.#sharedFontsLoading = false;
+		}
 	}
 
 	async #loadLocalFonts(): Promise<void> {
@@ -2282,6 +2398,7 @@ export class ReaderTopicSummarySurface {
 		this.#persistSettings();
 		this.#applyTheme();
 		this.#renderPreview();
+		void this.#ensureSelectedFonts();
 	}
 
 	#persistSettings(): void {
@@ -2318,10 +2435,38 @@ export class ReaderTopicSummarySurface {
 				token.slice(LOCAL_FONT_PREFIX.length),
 			);
 		}
+		const catalogId = readReaderFontCatalogValue(token);
+		const catalogEntry = catalogId
+			? this.#fonts?.entry?.(catalogId) ?? null
+			: null;
+		if (catalogEntry) {
+			return readerFontFamilyCss('custom', catalogEntry.family);
+		}
 		if (token === 'cjkSans' || token === 'serif' || token === 'monospace') {
 			return readerFontFamilyCss(token);
 		}
 		return readerFontFamilyCss('system');
+	}
+
+	async #ensureSelectedFonts(): Promise<boolean> {
+		const ensure = this.#fonts?.ensureLoaded;
+		if (!ensure) return false;
+		const ids = [...new Set([
+			this.#settings.chineseFont,
+			this.#settings.latinFont,
+		].map((token) => readReaderFontCatalogValue(token)).filter(
+			(value): value is string => Boolean(value),
+		))];
+		if (!ids.length) return false;
+		const results = await Promise.all(ids.map((id) => ensure(id)));
+		return results.some(Boolean);
+	}
+
+	async #createLoadedShareImage(
+		options: ReaderTopicSummaryShareImageOptions,
+	): Promise<Blob> {
+		await this.#ensureSelectedFonts();
+		return this.#createShareImage(options);
 	}
 
 	#shareImageOptions(): ReaderTopicSummaryShareImageOptions | null {
@@ -2955,7 +3100,7 @@ export class ReaderTopicSummarySurface {
 		this.#previewPending = true;
 		this.previewCanvas.setAttribute('aria-busy', 'true');
 		try {
-			const blob = await this.#createShareImage(imageOptions);
+			const blob = await this.#createLoadedShareImage(imageOptions);
 			await this.#previewImage({
 				blob,
 				alt: `${imageOptions.topicTitle} · AI 总结分享图`,
@@ -2980,7 +3125,8 @@ export class ReaderTopicSummarySurface {
 		]);
 		let pending = this.#fontLoads.get(key);
 		if (!pending) {
-			pending = loadShareImageFonts(this.#document, imageOptions);
+			pending = this.#ensureSelectedFonts().then(() =>
+				loadShareImageFonts(this.#document, imageOptions));
 			this.#fontLoads.set(key, pending);
 		}
 		const epoch = ++this.#fontRenderEpoch;
@@ -3023,7 +3169,7 @@ export class ReaderTopicSummarySurface {
 		this.downloadButton.classList.add('is-busy');
 		this.#render();
 		try {
-			const blob = await this.#createShareImage(imageOptions);
+			const blob = await this.#createLoadedShareImage(imageOptions);
 			await this.#downloads.save(
 				blob,
 				safeTopicFilename(imageOptions.topicTitle),
@@ -3112,7 +3258,7 @@ export class ReaderTopicSummarySurface {
 		});
 		if (this.#uploadedImage?.key === key) return this.#uploadedImage.value;
 		const filename = safeTopicFilename(imageOptions.topicTitle);
-		const blob = await this.#createShareImage(imageOptions);
+		const blob = await this.#createLoadedShareImage(imageOptions);
 		const value = await this.#uploader.upload(blob, filename);
 		this.#uploadedImage = Object.freeze({ key, value });
 		return value;

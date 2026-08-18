@@ -22,6 +22,10 @@ import { READER_SELECT_OPEN_EVENT } from
 	'../src/shell/reader-select-surface.js';
 import { normalizeReaderAiModelCatalogEntry } from
 	'../src/translation/reader-translation-config.js';
+import {
+	readerFontCatalogValue,
+	type ReaderFontCatalogEntry,
+} from '../src/font/reader-font-catalog.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -206,6 +210,30 @@ let resolveDeferredImagePicker:
 	| ((items: readonly ReaderLightboxItem[] | null) => void)
 	| null = null;
 let localFontQueries = 0;
+let sharedFontLoads = 0;
+const summarySharedFonts = Object.freeze<readonly ReaderFontCatalogEntry[]>([
+	Object.freeze({
+		id: 'google:jetbrains-mono',
+		source: 'google',
+		label: 'JetBrains Mono',
+		family: 'JetBrains Mono',
+		fontFamilyCss: '"JetBrains Mono",monospace',
+		searchText: 'JetBrains Mono Google Fonts',
+		scripts: Object.freeze(['latin', 'code'] as const),
+		googleCssUrl: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono',
+	}),
+	Object.freeze({
+		id: 'imported:summary-test',
+		source: 'imported',
+		label: '总结导入字体',
+		family: 'LDP Import summary-test',
+		fontFamilyCss: '"LDP Import summary-test",sans-serif',
+		searchText: '总结导入字体',
+		scripts: Object.freeze(['cjk', 'latin', 'code'] as const),
+		fileName: 'summary-test.woff2',
+		size: 2_048,
+	}),
+]);
 const stored = new Map<string, string>([[
 	'ldp:topic-summary-share-settings:v1',
 	JSON.stringify({
@@ -350,6 +378,13 @@ const surface = new ReaderTopicSummarySurface({
 	},
 	fonts: {
 		readCurrentFamily: () => 'Reader Current, sans-serif',
+		entries: async () => summarySharedFonts,
+		entry: (id) => summarySharedFonts.find((entry) => entry.id === id) ?? null,
+		ensureLoaded: async () => {
+			sharedFontLoads += 1;
+			return true;
+		},
+		subscribe: () => () => {},
 		async queryLocalFonts() {
 			localFontQueries += 1;
 			return [
@@ -711,6 +746,10 @@ assert(
 		) &&
 	[...surface.latinFontSelect.options]
 		.some((option) => option.value === 'local:Inter') &&
+	[...surface.latinFontSelect.options].some((option) =>
+		option.value === readerFontCatalogValue('google:jetbrains-mono')) &&
+	[...surface.chineseFontSelect.options].some((option) =>
+		option.value === readerFontCatalogValue('imported:summary-test')) &&
 	surface.chineseFontSelect.querySelector<HTMLOptGroupElement>(
 		'optgroup[data-font-local-group="true"]',
 	)?.label === '本机字体 · 4' &&
@@ -735,7 +774,10 @@ assert(
 change(surface.styleSelect);
 selectValue(surface.chineseFontSelect, 'local:Source Han Serif SC');
 change(surface.chineseFontSelect);
-selectValue(surface.latinFontSelect, 'local:JetBrains Mono');
+selectValue(
+	surface.latinFontSelect,
+	readerFontCatalogValue('google:jetbrains-mono'),
+);
 change(surface.latinFontSelect);
 selectValue(surface.widthModeSelect, 'social');
 change(surface.widthModeSelect);
@@ -758,7 +800,7 @@ const persisted = JSON.parse(
 assert(
 	persisted.style === 'wisteria' &&
 	persisted.chineseFont === 'local:Source Han Serif SC' &&
-	persisted.latinFont === 'local:JetBrains Mono' &&
+	persisted.latinFont === readerFontCatalogValue('google:jetbrains-mono') &&
 	persisted.schemaVersion === 5 &&
 	persisted.widthMode === 'custom' &&
 	persisted.customWidth === 1_360 &&
@@ -780,7 +822,7 @@ assert(
 	) &&
 	fontLoads.some(({ font, text }) =>
 		font.includes('JetBrains Mono') && text.includes('LinuxDo')
-	),
+	) && sharedFontLoads > 0,
 	`中英文字体必须分别加载字形并在就绪后即时重绘：${JSON.stringify({
 		preview: previewOptions.at(-1),
 		fontLoads,

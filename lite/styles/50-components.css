@@ -1010,8 +1010,8 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 .ldp-select-menu.has-font-previews {
-  width: min(260px, calc(100vw - 24px));
-  max-width: min(260px, calc(100vw - 24px));
+  width: min(390px, calc(100vw - 24px));
+  max-width: min(390px, calc(100vw - 24px));
 }
 
 .ldp-select-search {

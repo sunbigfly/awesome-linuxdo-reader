@@ -134,9 +134,28 @@ assert(
 await activeShell.open(1, () => ({ value: Object.freeze({}) }));
 assert(
 	document.documentElement.classList.contains('ldp-reader-open') &&
-	document.documentElement.classList.contains('ldp-scroll-lock') &&
+	!document.documentElement.classList.contains('ldp-scroll-lock') &&
 	!document.documentElement.classList.contains('ldp-route-takeover'),
-	'列表浮窗打开后必须统一标记 Reader 与滚动接管，不能误用直达主题标记',
+	'列表浮窗打开后必须保留宿主滚动条，且不能误用直达主题标记',
+);
+activeCoordinator.setWindowLocked(true);
+const lockedFloatingWheel = new document.defaultView!.Event('wheel', {
+	bubbles: true,
+	cancelable: true,
+});
+overlay.dispatchEvent(lockedFloatingWheel);
+assert(
+	overlay.classList.contains('ldp-window-locked') &&
+	!document.documentElement.classList.contains('ldp-scroll-lock') &&
+	!lockedFloatingWheel.defaultPrevented,
+	'锁定浮窗必须保留宿主根滚动，并允许背景滚轮继续执行默认滚动',
+);
+activeCoordinator.setMode('fullpage');
+assert(
+	document.documentElement.classList.contains('ldp-reader-open') &&
+	document.documentElement.classList.contains('ldp-scroll-lock') &&
+	!document.documentElement.classList.contains('ldp-reader-workspace'),
+	'全屏 Reader 打开后必须接管宿主滚动',
 );
 activeCoordinator.setMode('embed-right');
 assert(

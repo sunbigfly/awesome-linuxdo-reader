@@ -1,6 +1,6 @@
 /* Awesome LinuxDo Reader Lite stylesheet.
  * Generated only from lite/styles/*.css; do not edit generated outputs.
- * source-sha256: f04131420f7153b23c1805d160afa220ba162c26463d5cdb297da4b7cf65e938
+ * source-sha256: d64b924cf4a358468eeb4369f77595ebb53bf670e7aabd5ebfad46731adadb45
  */
 
 /* source: 00-foundation.css */
@@ -1292,7 +1292,7 @@ html.ldp-reader-workspace [data-ldp-native-new-topic-marker] {
   display: none !important;
 }
 
-html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item)[data-ldp-unwanted-auto-filter] {
+html:root body :is(.topic-list-item,.latest-topic-list-item)[data-ldp-unwanted-auto-filter] {
   display: none !important;
 }
 
@@ -11063,8 +11063,8 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 .ldp-select-menu.has-font-previews {
-  width: min(260px, calc(100vw - 24px));
-  max-width: min(260px, calc(100vw - 24px));
+  width: min(390px, calc(100vw - 24px));
+  max-width: min(390px, calc(100vw - 24px));
 }
 
 .ldp-select-search {

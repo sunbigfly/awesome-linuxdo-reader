@@ -6,6 +6,8 @@ import {
 import type { DiscourseHostApiPort } from '../src/discourse/native-host-api.js';
 import type { ReaderUnwantedTopicInput } from
 	'../src/collection/reader-unwanted-topic-repository.js';
+import { readerUnwantedTopicFilterMatch } from
+	'../src/collection/reader-unwanted-topic-filter.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -40,6 +42,12 @@ const { document: parsedDocument } = parseHTML(
 	'<td class="main-link"><div class="link-top-line">' +
 	'<a class="raw-topic-link" href="/t/hidden/46">已在不想看</a></div></td>' +
 	'<td class="posters"></td><td class="posts">1</td><td class="views">2</td><td class="activity">刚刚</td></tr>' +
+	'<tr class="topic-list-item" data-topic-id="47">' +
+	'<td class="main-link"><div class="link-top-line">' +
+	'<a class="raw-topic-link" href="/t/promo/47">宿主推广 Topic</a></div>' +
+	'<div class="link-bottom-line"><a class="discourse-tag">高级推广</a></div></td>' +
+	'<td class="posters"></td><td class="posts">1</td><td class="views">2</td>' +
+	'<td class="activity">刚刚</td></tr>' +
 	'</tbody></table></body></html>',
 );
 const document = parsedDocument as unknown as Document;
@@ -106,26 +114,14 @@ const enhancementOptions: EmbeddedHostTopicCardEnhancementOptions = {
 	hideTopic: (input) => {
 		hidden.push(input);
 	},
-	automaticFilter: (input) =>
-		automaticFilterEnabled && input.categoryName === '国产替代'
-		? {
-			kind: 'category',
-			rule: '国产替代',
-			label: '类别：国产替代；OP：@blockedop',
-			matches: Object.freeze([
-				Object.freeze({
-					kind: 'category' as const,
-					rule: '国产替代',
-					label: '类别：国产替代',
-				}),
-				Object.freeze({
-					kind: 'topic-author' as const,
-					rule: 'blockedop',
-					label: 'OP：@blockedop',
-				}),
-			]),
-		}
-		: null,
+	automaticFilter: (input) => readerUnwantedTopicFilterMatch({
+		enabled: automaticFilterEnabled,
+		categories: Object.freeze(['国产替代']),
+		labels: Object.freeze(['高级推广']),
+		topicAuthors: Object.freeze(['blockedop']),
+		topicFields: Object.freeze([]),
+		postAuthors: Object.freeze([]),
+	}, input),
 	notify: (message) => notices.push(message),
 	onError: (cause) => actionErrors.push(cause),
 };
@@ -138,6 +134,9 @@ const root = document.querySelector('.topic-list')!;
 const card = document.querySelector<HTMLElement>('[data-topic-id="42"]')!;
 const automaticCard = document.querySelector<HTMLElement>(
 	'[data-topic-id="45"]',
+)!;
+const promotionCard = document.querySelector<HTMLElement>(
+	'[data-topic-id="47"]',
 )!;
 enhancement.syncRoot(root, 'embedded');
 await Promise.resolve();
@@ -218,6 +217,7 @@ assert(
 assert(
 	automaticCard.isConnected &&
 	automaticCard.hasAttribute('data-ldp-unwanted-auto-filter') &&
+	promotionCard.hasAttribute('data-ldp-unwanted-auto-filter') &&
 	!document.querySelector('[data-topic-id="46"]') &&
 	hidden.every((input) => input.topicId !== 45),
 	'自动规则必须只投影隐藏、不得写入不想看持久层，手动记录仍应直接移除',
@@ -297,6 +297,7 @@ assert(
 	!card.hasAttribute('data-ldp-native-topic-date-row') &&
 	!card.hasAttribute('data-ldp-native-new-topic') &&
 	!automaticCard.hasAttribute('data-ldp-unwanted-auto-filter') &&
+	!promotionCard.hasAttribute('data-ldp-unwanted-auto-filter') &&
 	!newTopicMarker?.hasAttribute('data-ldp-native-new-topic-marker') &&
 	dnd?.getAttribute('title') === '宿主免打扰' &&
 	dnd.getAttribute('data-tooltip') === '宿主提示' &&

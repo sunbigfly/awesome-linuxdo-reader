@@ -187,6 +187,29 @@ export class BrowserUserscriptEnvironment {
 		return new BrowserPublicResourceHttpPort({ request });
 	}
 
+	createExternalStylesheetAppender(): (href: string) => HTMLLinkElement {
+		const rawAddElement = this.#userscriptGlobal.GM_addElement;
+		if (typeof rawAddElement === 'function') {
+			return (href) => rawAddElement.call(
+				this.#userscriptGlobal,
+				'link',
+				Object.freeze({ rel: 'stylesheet', href }),
+			) as HTMLLinkElement;
+		}
+		const page = objectRecord(this.pageWindow);
+		const document = page?.document as Document | undefined;
+		if (!document?.createElement) {
+			throw new Error('页面无法创建外部字体样式');
+		}
+		return (href) => {
+			const link = document.createElement('link');
+			link.rel = 'stylesheet';
+			link.href = href;
+			(document.head ?? document.documentElement).append(link);
+			return link;
+		};
+	}
+
 	createCreditBridgeHttp(): BrowserCreditBridgeHttpPort {
 		const page = objectRecord(this.pageWindow);
 		const rawRequest = page?.fetch;

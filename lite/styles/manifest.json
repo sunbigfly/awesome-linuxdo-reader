@@ -135,7 +135,7 @@
         "grid-template-columns: minmax(0, 1fr) minmax(18rem, 32%) !important;",
         "max-width: 20px !important;\n  height: 20px !important;\n  flex: 0 0 20px;",
         "html .link-top-line [data-ldp-native-dnd]::after",
-        "html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item)[data-ldp-unwanted-auto-filter] {\n  display: none !important;",
+        "html:root body :is(.topic-list-item,.latest-topic-list-item)[data-ldp-unwanted-auto-filter] {\n  display: none !important;",
         "var(--ldp-host-topic-stats-label-size, var(--ldp-font-micro, 9px))"
       ]
     },

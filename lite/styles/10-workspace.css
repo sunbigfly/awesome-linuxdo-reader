@@ -936,7 +936,7 @@ html.ldp-reader-workspace [data-ldp-native-new-topic-marker] {
   display: none !important;
 }
 
-html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item)[data-ldp-unwanted-auto-filter] {
+html:root body :is(.topic-list-item,.latest-topic-list-item)[data-ldp-unwanted-auto-filter] {
   display: none !important;
 }
 
