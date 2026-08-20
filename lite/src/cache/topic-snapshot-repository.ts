@@ -115,12 +115,16 @@ export interface TopicSnapshotRestoreResult<
 	readonly streamFilled: boolean;
 }
 
-export interface TopicSnapshotRepositoryOptions {
+export interface TopicSnapshotRepositoryOptions<
+	TTopic = unknown,
+	TPost extends ReplyTreePostInput = ReplyTreePostInput,
+> {
 	readonly responseRepository: ResponseRepository;
 	readonly topicId: string | number;
 	readonly authScope: string;
 	readonly freshForMs: number;
 	readonly retainForMs: number;
+	readonly initialSnapshot?: StoredTopicSnapshot<TTopic, TPost>;
 	readonly persistenceIdleMs?: number;
 	readonly persistenceWait?: (delayMs: number) => Promise<void>;
 	readonly now?: () => number;
@@ -349,8 +353,9 @@ export class TopicSnapshotRepository<
 	#persistenceReadyAt = 0;
 	#readPersistenceDelayMs: TopicSnapshotPersistenceDelayReader = () => 0;
 	#archiveRecordKnown = false;
+	#initialSnapshot: StoredTopicSnapshot<TTopic, TPost> | null;
 
-	constructor(options: TopicSnapshotRepositoryOptions) {
+	constructor(options: TopicSnapshotRepositoryOptions<TTopic, TPost>) {
 		const topicId = String(discourseTopicId(options.topicId));
 		const authScope = discourseAuthScope(options.authScope);
 		this.topicId = topicId;
@@ -365,6 +370,7 @@ export class TopicSnapshotRepository<
 			new Promise((resolve) => setTimeout(resolve, delayMs)));
 		this.#onInvalidSnapshot = options.onInvalidSnapshot ?? (() => {});
 		this.#onInvalidTreeSnapshot = options.onInvalidTreeSnapshot ?? (() => {});
+		this.#initialSnapshot = options.initialSnapshot ?? null;
 		this.#policy = Object.freeze({
 			id: `${authScope}|snapshot:topic:${topicId}`,
 			kind: 'topics',
@@ -758,15 +764,14 @@ export class TopicSnapshotRepository<
 	}
 
 	async #restoreFromCache(): Promise<TopicSnapshotRestoreResult<TTopic, TPost> | null> {
+		type RestoredCandidate = Readonly<{
+			policy: ResponseCachePolicy;
+			raw: StoredTopicSnapshot<TTopic, TPost>;
+			stored: StoredTopicSnapshot<TTopic, TPost>;
+		}>;
 		const read = async (
 			policy: ResponseCachePolicy,
-		): Promise<Readonly<{
-			policy: ResponseCachePolicy;
-			cached: Awaited<ReturnType<ResponseRepository['read']>> & {
-				readonly value: StoredTopicSnapshot<TTopic, TPost>;
-			};
-			stored: StoredTopicSnapshot<TTopic, TPost>;
-		}> | null> => {
+		): Promise<RestoredCandidate | null> => {
 			const cached = await this.#responses.read<StoredTopicSnapshot<TTopic, TPost>>(
 				policy,
 			);
@@ -780,9 +785,7 @@ export class TopicSnapshotRepository<
 				}
 				return Object.freeze({
 					policy,
-					cached: cached as Awaited<ReturnType<ResponseRepository['read']>> & {
-						readonly value: StoredTopicSnapshot<TTopic, TPost>;
-					},
+					raw: cached.value,
 					stored,
 				});
 			} catch (error) {
@@ -791,22 +794,47 @@ export class TopicSnapshotRepository<
 				return null;
 			}
 		};
-		const [archived, regular] = await Promise.all([
-			read(this.#archivePolicy),
-			read(this.#policy),
-		]);
+		let archived: RestoredCandidate | null = null;
+		let regular: RestoredCandidate | null = null;
+		const initial = this.#initialSnapshot;
+		this.#initialSnapshot = null;
+		if (initial) {
+			try {
+				const stored = this.#normalizeStoredSnapshot(initial);
+				if (initial.tree !== null && stored.tree === null) {
+					throw new Error(`Topic ${this.topicId} 的预热回复树快照无效`);
+				}
+				const candidate = Object.freeze({
+					policy: stored.unavailableTopic || stored.unavailablePosts?.length
+						? this.#archivePolicy
+						: this.#policy,
+					raw: initial,
+					stored,
+				});
+				if (candidate.policy === this.#archivePolicy) archived = candidate;
+				else regular = candidate;
+			} catch (error) {
+				this.#onInvalidSnapshot(error);
+			}
+		}
+		if (!archived && !regular) {
+			[archived, regular] = await Promise.all([
+				read(this.#archivePolicy),
+				read(this.#policy),
+			]);
+		}
 		const restored = archived && regular
 			? archived.stored.updatedAt >= regular.stored.updatedAt
 				? archived
 				: regular
 			: archived ?? regular;
 		if (!restored) return null;
-		const { cached, policy: restoredPolicy, stored } = restored;
+		const { raw, policy: restoredPolicy, stored } = restored;
 		this.#archiveRecordKnown = archived !== null;
 		const staleArchive = archived !== null && restored === regular;
 		const discardedInvalidTree =
-			cached.value.tree !== null &&
-			cached.value.tree !== undefined &&
+			raw.tree !== null &&
+			raw.tree !== undefined &&
 			stored.tree === null;
 
 		const hadLocalState = this.#topic !== null || this.#posts.size > 0 ||

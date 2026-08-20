@@ -332,7 +332,7 @@ selectionView.slots.download.dispatchEvent(new window.Event('click', {
 await tick();
 assert(
 	confirmedSelections[0]?.length === 2 &&
-	selectionClosed === 1 &&
+		Number(selectionClosed) === 1 &&
 	selectionView.slots.root.hidden,
 	'选择确认必须返回媒体引用并关闭 overlay，不得复制图片请求或下载逻辑',
 );

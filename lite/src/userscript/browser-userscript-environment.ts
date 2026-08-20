@@ -85,6 +85,25 @@ export interface BrowserUserscriptRuntimeReadinessOptions {
 	) => Promise<void>;
 }
 
+function runtimeReadinessTimeout(pageWindow: unknown): number {
+	const page = objectRecord(pageWindow);
+	const navigatorValue = objectRecord(page?.navigator);
+	const connection = objectRecord(navigatorValue?.connection);
+	const documentValue = objectRecord(page?.document);
+	const cores = Number(navigatorValue?.hardwareConcurrency);
+	const memory = Number(navigatorValue?.deviceMemory);
+	const effectiveType = String(connection?.effectiveType ?? '')
+		.trim()
+		.toLowerCase();
+	if (String(documentValue?.visibilityState ?? '') === 'hidden') return 60_000;
+	const constrained =
+		(Number.isFinite(cores) && cores > 0 && cores <= 4) ||
+		(Number.isFinite(memory) && memory > 0 && memory <= 4) ||
+		connection?.saveData === true ||
+		['slow-2g', '2g', '3g'].includes(effectiveType);
+	return constrained ? 45_000 : 25_000;
+}
+
 /**
  * Greasemonkey/Tampermonkey 全局能力的唯一适配器。
  *
@@ -113,7 +132,12 @@ export class BrowserUserscriptEnvironment {
 		signal: AbortSignal,
 		options: BrowserUserscriptRuntimeReadinessOptions = {},
 	): Promise<void> {
-		const timeoutMs = Math.max(1, Math.floor(options.timeoutMs ?? 15_000));
+		const timeoutMs = Math.max(
+			1,
+			Math.floor(
+				options.timeoutMs ?? runtimeReadinessTimeout(this.pageWindow),
+			),
+		);
 		const pollIntervalMs = Math.max(
 			1,
 			Math.floor(options.pollIntervalMs ?? 50),

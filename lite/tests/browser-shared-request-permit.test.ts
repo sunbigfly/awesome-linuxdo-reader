@@ -277,8 +277,8 @@ assert(
 await sharedStateSecond.resetRateLimits();
 await delay(0);
 assert(
-	sharedStateFirstEvents === 2 &&
-		sharedStateSecondEvents === 2 &&
+	Number(sharedStateFirstEvents) === 2 &&
+		Number(sharedStateSecondEvents) === 2 &&
 		(await sharedStateFirst.snapshot()).blockingReason !== 'rate-limit',
 	'任一标签清除 429 状态后，所有标签都必须通过广播立即解除共享暂停',
 );

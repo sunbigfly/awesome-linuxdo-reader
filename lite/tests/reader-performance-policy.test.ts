@@ -58,8 +58,14 @@ assert(
 	lowPreset.requestShortBudget < balancedPreset.requestShortBudget &&
 	balancedPreset.requestShortBudget < highPreset.requestShortBudget &&
 	lowPreset.requestLongBudget < balancedPreset.requestLongBudget &&
-	balancedPreset.requestLongBudget < highPreset.requestLongBudget,
-	'省流、自动与快速预取必须让七个真实运行目标逐档区分，不能只有预设名称不同',
+	balancedPreset.requestLongBudget < highPreset.requestLongBudget &&
+	lowPreset.preheatMaxConcurrent < balancedPreset.preheatMaxConcurrent &&
+	balancedPreset.preheatMaxConcurrent < highPreset.preheatMaxConcurrent &&
+	lowPreset.preheatHandoffMaxBytes < balancedPreset.preheatHandoffMaxBytes &&
+	balancedPreset.preheatHandoffMaxBytes < highPreset.preheatHandoffMaxBytes &&
+	lowPreset.responseMemoryMaxBytes < balancedPreset.responseMemoryMaxBytes &&
+	balancedPreset.responseMemoryMaxBytes < highPreset.responseMemoryMaxBytes,
+	'省流、自动与快速预取必须让请求、DOM、预热与内存缓存运行目标逐档区分',
 );
 
 assert(
@@ -211,10 +217,16 @@ const constrained = new ReaderPerformancePolicy({
 });
 assert(
 	constrained.value.pageSize === 26 &&
-	constrained.value.streamOverscanScreens === 1.5 &&
+	Math.abs(constrained.value.streamOverscanScreens - 0.825) < 0.000_001 &&
 	constrained.value.streamMaxMountedPostCount === 44 &&
 	constrained.value.nestedPrefetchScreens === 1.1 &&
 	constrained.value.requestMaxConcurrent === 2 &&
-	constrained.value.requestMinIntervalMs === 182,
-	'低配或省流设备只能在用户上限内收紧批次、树节点 DOM、后台预取与请求节奏，不能关闭可见区 overscan',
+	constrained.value.requestMinIntervalMs === 182 &&
+	constrained.value.preheatMaxConcurrent === 1 &&
+	constrained.value.preheatHandoffMaxEntries === 1 &&
+	constrained.value.preheatHandoffMaxBytes === 2 * 1024 * 1024 &&
+	constrained.value.responseMemoryMaxEntries === 48 &&
+	constrained.value.responseMemoryMaxBytes === 8 * 1024 * 1024 &&
+	constrained.value.projectionHydrationBatchSize === 1,
+	'低配或省流设备必须同时收紧批次、overscan、DOM、预热、缓存、水合与请求节奏',
 );

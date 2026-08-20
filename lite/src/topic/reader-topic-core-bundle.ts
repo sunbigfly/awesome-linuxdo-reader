@@ -1,5 +1,6 @@
 import {
 	TopicSnapshotRepository,
+	type StoredTopicSnapshot,
 } from '../cache/topic-snapshot-repository.js';
 import type { ResponseRepository } from '../cache/response-repository.js';
 import { BrowserDiscourseMessageBusPort } from '../discourse/native-message-bus.js';
@@ -92,7 +93,10 @@ export interface ReaderTopicCoreDiagnostic {
 	readonly cause: unknown;
 }
 
-export interface ReaderTopicCoreBundleOptions {
+export interface ReaderTopicCoreBundleOptions<
+	TTopic extends DiscourseTopicPayload<TPost>,
+	TPost extends DiscourseTopicPostInput,
+> {
 	readonly host: DiscourseHostApiPort;
 	readonly nativeAjax?: BrowserDiscourseNativeAjaxPort;
 	readonly nativeActions?: DiscourseNativeActionPort;
@@ -112,6 +116,7 @@ export interface ReaderTopicCoreBundleOptions {
 	readonly readMaxAutomaticRetries?: number;
 	readonly livePostDelayMs?: number;
 	readonly liveTopicDelayMs?: number;
+	readonly initialSnapshot?: StoredTopicSnapshot<TTopic, TPost>;
 	readonly now?: () => number;
 	readonly onDiagnostic?: (diagnostic: ReaderTopicCoreDiagnostic) => void;
 	readonly onLoadingSource?: NonNullable<
@@ -190,7 +195,7 @@ export function createReaderTopicCoreBundle<
 	TPost extends DiscourseTopicPostInput,
 >(
 	context: ReaderTopicFactoryContext,
-	options: ReaderTopicCoreBundleOptions,
+	options: ReaderTopicCoreBundleOptions<TTopic, TPost>,
 ): ReaderTopicRuntimeBundle<
 	TTopic,
 	TPost,
@@ -232,6 +237,9 @@ export function createReaderTopicCoreBundle<
 		freshForMs: options.caches.snapshot.freshForMs,
 		retainForMs: options.caches.snapshot.retainForMs,
 		persistenceIdleMs: TOPIC_SNAPSHOT_PERSISTENCE_IDLE_MS,
+		...(options.initialSnapshot === undefined
+			? {}
+			: { initialSnapshot: options.initialSnapshot }),
 		...(options.now === undefined ? {} : { now: options.now }),
 		onInvalidSnapshot: (cause) => report('snapshot', cause),
 		onInvalidTreeSnapshot: (cause) => report('reply-tree', cause),

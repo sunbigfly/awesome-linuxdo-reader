@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.8
+// @version      1.5.9
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.8 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.5.9 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.8",
+			sourceVersion: "1.5.9",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.8") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.9") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -375,7 +375,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	  readerWebDavCacheClearPlan: () => readerWebDavCacheClearPlan
 	});
 	module.exports = __toCommonJS(reader_browser_runtime_exports);
-	var import_native_host_api = require("../discourse/native-host-api.js"), import_native_request_descriptors = require("../discourse/native-request-descriptors.js"), import_reader_cache_management_surface = require("../cache/reader-cache-management-surface.js"), import_reader_collection_page_repository = require("../cache/reader-collection-page-repository.js"), import_browser_asset_cache = require("../cache/browser-asset-cache.js"), import_discourse_application_cache_invalidation = require("../cache/discourse-application-cache-invalidation.js"), import_reader_settings_config_manager = require("../state/reader-settings-config-manager.js"), import_native_composer = require("../discourse/native-composer.js"), import_reader_control_tooltip = require("../components/reader-control-tooltip.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_reader_native_post_admin_menu = require("../discourse/reader-native-post-admin-menu.js"), import_native_post_model_factory = require("../discourse/native-post-model-factory.js"), import_native_presence = require("../discourse/native-presence.js"), import_identifiers = require("../discourse/identifiers.js"), import_reader_history_navigation_controller = require("../history/reader-history-navigation-controller.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_history_navigation_view = require("../history/reader-history-navigation-view.js"), import_reader_history_panel_view = require("../history/reader-history-panel-view.js"), import_reader_chronicle_repository = require("../history/reader-chronicle-repository.js"), import_reader_chronicle_view = require("../history/reader-chronicle-view.js"), import_reader_unwanted_topic_repository = require("../collection/reader-unwanted-topic-repository.js"), import_reader_unwanted_topic_view = require("../collection/reader-unwanted-topic-view.js"), import_discourse_bookmark_adapter = require("../bookmark/discourse-bookmark-adapter.js"), import_reader_bookmark_controller = require("../bookmark/reader-bookmark-controller.js"), import_reader_bookmark_panel_view = require("../bookmark/reader-bookmark-panel-view.js"), import_reader_bookmark_model = require("../bookmark/reader-bookmark-model.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_post_author_filter_feature = require("../topic/reader-post-author-filter-feature.js"), import_signal = require("../kernel/signal.js"), import_reader_topic_live_navigation_controller = require("../live/reader-topic-live-navigation-controller.js"), import_reader_resource_monitor = require("../monitor/reader-resource-monitor.js"), import_browser_request_observation = require("../network/browser-request-observation.js"), import_reader_topic_live_navigation_view = require("../live/reader-topic-live-navigation-view.js"), import_reader_rate_limit_notice = require("../shell/reader-rate-limit-notice.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_reader_image_download_service = require("../media/reader-image-download-service.js"), import_reader_image_resource_service = require("../media/reader-image-resource-service.js"), import_reader_lightbox_image_picker = require("../media/reader-lightbox-image-picker.js"), import_reader_media_prefetch_service = require("../media/reader-media-prefetch-service.js"), import_reader_topic_image_index = require("../media/reader-topic-image-index.js"), import_reader_topic_image_interaction = require("../media/reader-topic-image-interaction.js"), import_reader_lightbox_feature = require("../media/reader-lightbox-feature.js"), import_reader_compact_image_viewer = require("../media/reader-compact-image-viewer.js"), import_reader_topic_media_feature = require("../media/reader-topic-media-feature.js"), import_reader_media_controller = require("../media/reader-media-controller.js"), import_reader_cooked_content_feature = require("../media/reader-cooked-content-feature.js"), import_reader_poll_feature = require("../media/reader-poll-feature.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js"), import_discourse_native_read_transport = require("../network/discourse-native-read-transport.js"), import_public_resource_request_adapter = require("../network/public-resource-request-adapter.js"), import_discourse_native_user_port = require("../user/discourse-native-user-port.js"), import_reader_user_domain_session = require("../user/reader-user-domain-session.js"), import_reader_credit_account_adapter = require("../user/reader-credit-account-adapter.js"), import_reader_connect_trust_adapter = require("../user/reader-connect-trust-adapter.js"), import_reader_user_endorsement_adapter = require("../user/reader-user-endorsement-adapter.js"), import_reader_user_card_view = require("../user/reader-user-card-view.js"), import_discourse_user_observation_adapter = require("../user/discourse-user-observation-adapter.js"), import_reader_user_observation_session = require("../user/reader-user-observation-session.js"), import_reader_user_observation_page_repository = require("../user/reader-user-observation-page-repository.js"), import_reader_user_observation_model = require("../user/reader-user-observation-model.js"), import_reader_user_observation_view = require("../user/reader-user-observation-view.js"), import_reader_settings_user_view = require("../user/reader-settings-user-view.js"), import_discourse_notification_adapter = require("../notification/discourse-notification-adapter.js"), import_reader_notification_controller = require("../notification/reader-notification-controller.js"), import_reader_notification_model = require("../notification/reader-notification-model.js"), import_reader_notification_panel_view = require("../notification/reader-notification-panel-view.js"), import_action_request_adapter = require("../post/action-request-adapter.js"), import_discourse_action_transport = require("../post/discourse-action-transport.js"), import_post_action_controller = require("../post/post-action-controller.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_post_action_feature_commands = require("../post/post-action-feature-commands.js"), import_user_action_feature_commands = require("../post/user-action-feature-commands.js"), import_reader_post_action_feature = require("../post/reader-post-action-feature.js"), import_reader_bookmark_action_coordinator = require("../post/reader-bookmark-action-coordinator.js"), import_reader_share_action_coordinator = require("../post/reader-share-action-coordinator.js"), import_reader_topic_notification_coordinator = require("../post/reader-topic-notification-coordinator.js"), import_reader_topic_shared_issue_coordinator = require("../post/reader-topic-shared-issue-coordinator.js"), import_topic_action_feature_commands = require("../post/topic-action-feature-commands.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_topic_summary_request_adapter = require("../post/reader-topic-summary-request-adapter.js"), import_reader_topic_summary_surface = require("../post/reader-topic-summary-surface.js"), import_reader_topic_custom_summary = require("../post/reader-topic-custom-summary.js"), import_reader_post_management_action_coordinator = require("../post/reader-post-management-action-coordinator.js"), import_reader_selection_quote_feature = require("../post/reader-selection-quote-feature.js"), import_reader_workspace_coordinator = require("../shell/reader-workspace-coordinator.js"), import_reader_feedback_surface = require("../shell/reader-feedback-surface.js"), import_reader_action_surface_coordinator = require("../shell/reader-action-surface-coordinator.js"), import_reader_exclusive_panel_coordinator = require("../shell/reader-exclusive-panel-coordinator.js"), import_reader_shell_recovery_view = require("../shell/reader-shell-recovery-view.js"), import_reader_report_form_surface = require("../shell/reader-report-form-surface.js"), import_reader_assignment_form_surface = require("../shell/reader-assignment-form-surface.js"), import_reader_choice_form_surface = require("../shell/reader-choice-form-surface.js"), import_reader_topic_edit_form_surface = require("../shell/reader-topic-edit-form-surface.js"), import_reader_settings_controller = require("../settings/reader-settings-controller.js"), import_reader_settings_view = require("../settings/reader-settings-view.js"), import_reader_theme_settings_control = require("../settings/reader-theme-settings-control.js"), import_reader_window_settings_form = require("../settings/reader-window-settings-form.js"), import_reader_shortcut_settings_form = require("../settings/reader-shortcut-settings-form.js"), import_reader_custom_site_settings_form = require("../settings/reader-custom-site-settings-form.js"), import_reader_webdav_settings_form = require("../settings/reader-webdav-settings-form.js"), import_browser_discourse_site_probe = require("../site/browser-discourse-site-probe.js"), import_reader_webdav_coordinator = require("../sync/reader-webdav-coordinator.js"), import_reader_webdav_category_ports = require("../sync/reader-webdav-category-ports.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_translation_settings_form = require("../settings/reader-translation-settings-form.js"), import_reader_ai_service_settings_form = require("../settings/reader-ai-service-settings-form.js"), import_reader_appearance_settings_form = require("../settings/reader-appearance-settings-form.js"), import_reader_font_settings_form = require("../settings/reader-font-settings-form.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_reader_layout_settings_form = require("../settings/reader-layout-settings-form.js"), import_reader_interaction_settings_form = require("../settings/reader-interaction-settings-form.js"), import_reader_image_settings_form = require("../settings/reader-image-settings-form.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_reader_about_settings_content = require("../settings/reader-about-settings-content.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_topic_download_manager = require("../queue/reader-topic-download-manager.js"), import_reader_topic_offline_document = require("../archive/reader-topic-offline-document.js"), import_reader_topic_offline_artifact_repository = require("../archive/reader-topic-offline-artifact-repository.js"), import_reader_cooked_content_feature2 = require("../media/reader-cooked-content-feature.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_font_catalog = require("../font/reader-font-catalog.js"), import_reader_loading_animation_view = require("../motion/reader-loading-animation-view.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_topic_factory = require("../topic/reader-topic-factory.js"), import_reader_topic_navigation_controller = require("../topic/reader-topic-navigation-controller.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_topic_flow_controller = require("../topic/reader-topic-flow-controller.js"), import_reader_topic_navigation_preferences = require("../topic/reader-topic-navigation-preferences.js"), import_reader_topic_scroll_adapter = require("../topic/reader-topic-scroll-adapter.js"), import_reader_topic_local_archive_feature = require("../topic/reader-topic-local-archive-feature.js"), import_reader_topic_timeline_controller = require("../topic/reader-topic-timeline-controller.js"), import_reader_topic_timeline_view = require("../topic/reader-topic-timeline-view.js"), import_reader_topic_header = require("../topic/reader-topic-header.js"), import_reader_topic_edit_controller = require("../topic/reader-topic-edit-controller.js"), import_reader_topic_comments_header = require("../topic/reader-topic-comments-header.js"), import_reader_topic_only_op_controller = require("../topic/reader-topic-only-op-controller.js"), import_reader_topic_special_content_feature = require("../topic/reader-topic-special-content-feature.js"), import_reader_topic_context_controller = require("../topic/reader-topic-context-controller.js"), import_reader_topic_context_surface = require("../topic/reader-topic-context-surface.js"), import_reader_topic_context_state = require("../topic/reader-topic-context-state.js"), import_reader_information_flow_coordinator = require("../state/reader-information-flow-coordinator.js"), import_topic_session = require("../topic/topic-session.js"), import_reader_translation_feature = require("../translation/reader-translation-feature.js"), import_translation_request_adapter = require("../translation/translation-request-adapter.js"), import_reader_data_runtime = require("./reader-data-runtime.js"), import_reader_performance_policy = require("./reader-performance-policy.js");
+	var import_native_host_api = require("../discourse/native-host-api.js"), import_native_request_descriptors = require("../discourse/native-request-descriptors.js"), import_reader_cache_management_surface = require("../cache/reader-cache-management-surface.js"), import_reader_collection_page_repository = require("../cache/reader-collection-page-repository.js"), import_browser_asset_cache = require("../cache/browser-asset-cache.js"), import_discourse_application_cache_invalidation = require("../cache/discourse-application-cache-invalidation.js"), import_topic_snapshot_handoff = require("../cache/topic-snapshot-handoff.js"), import_reader_settings_config_manager = require("../state/reader-settings-config-manager.js"), import_native_composer = require("../discourse/native-composer.js"), import_reader_control_tooltip = require("../components/reader-control-tooltip.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_reader_native_post_admin_menu = require("../discourse/reader-native-post-admin-menu.js"), import_native_post_model_factory = require("../discourse/native-post-model-factory.js"), import_native_presence = require("../discourse/native-presence.js"), import_identifiers = require("../discourse/identifiers.js"), import_reader_history_navigation_controller = require("../history/reader-history-navigation-controller.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_history_navigation_view = require("../history/reader-history-navigation-view.js"), import_reader_history_panel_view = require("../history/reader-history-panel-view.js"), import_reader_chronicle_repository = require("../history/reader-chronicle-repository.js"), import_reader_chronicle_view = require("../history/reader-chronicle-view.js"), import_reader_unwanted_topic_repository = require("../collection/reader-unwanted-topic-repository.js"), import_reader_unwanted_topic_view = require("../collection/reader-unwanted-topic-view.js"), import_discourse_bookmark_adapter = require("../bookmark/discourse-bookmark-adapter.js"), import_reader_bookmark_controller = require("../bookmark/reader-bookmark-controller.js"), import_reader_bookmark_panel_view = require("../bookmark/reader-bookmark-panel-view.js"), import_reader_bookmark_model = require("../bookmark/reader-bookmark-model.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_post_author_filter_feature = require("../topic/reader-post-author-filter-feature.js"), import_signal = require("../kernel/signal.js"), import_reader_topic_live_navigation_controller = require("../live/reader-topic-live-navigation-controller.js"), import_reader_resource_monitor = require("../monitor/reader-resource-monitor.js"), import_reader_pipeline_observer = require("../monitor/reader-pipeline-observer.js"), import_browser_request_observation = require("../network/browser-request-observation.js"), import_reader_topic_live_navigation_view = require("../live/reader-topic-live-navigation-view.js"), import_reader_rate_limit_notice = require("../shell/reader-rate-limit-notice.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_reader_image_download_service = require("../media/reader-image-download-service.js"), import_reader_image_resource_service = require("../media/reader-image-resource-service.js"), import_reader_lightbox_image_picker = require("../media/reader-lightbox-image-picker.js"), import_reader_media_prefetch_service = require("../media/reader-media-prefetch-service.js"), import_reader_topic_image_index = require("../media/reader-topic-image-index.js"), import_reader_topic_image_interaction = require("../media/reader-topic-image-interaction.js"), import_reader_lightbox_feature = require("../media/reader-lightbox-feature.js"), import_reader_compact_image_viewer = require("../media/reader-compact-image-viewer.js"), import_reader_topic_media_feature = require("../media/reader-topic-media-feature.js"), import_reader_media_controller = require("../media/reader-media-controller.js"), import_reader_cooked_content_feature = require("../media/reader-cooked-content-feature.js"), import_reader_poll_feature = require("../media/reader-poll-feature.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js"), import_discourse_native_read_transport = require("../network/discourse-native-read-transport.js"), import_public_resource_request_adapter = require("../network/public-resource-request-adapter.js"), import_discourse_native_user_port = require("../user/discourse-native-user-port.js"), import_reader_user_domain_session = require("../user/reader-user-domain-session.js"), import_reader_credit_account_adapter = require("../user/reader-credit-account-adapter.js"), import_reader_connect_trust_adapter = require("../user/reader-connect-trust-adapter.js"), import_reader_user_endorsement_adapter = require("../user/reader-user-endorsement-adapter.js"), import_reader_user_card_view = require("../user/reader-user-card-view.js"), import_discourse_user_observation_adapter = require("../user/discourse-user-observation-adapter.js"), import_reader_user_observation_session = require("../user/reader-user-observation-session.js"), import_reader_user_observation_page_repository = require("../user/reader-user-observation-page-repository.js"), import_reader_user_observation_model = require("../user/reader-user-observation-model.js"), import_reader_user_observation_view = require("../user/reader-user-observation-view.js"), import_reader_settings_user_view = require("../user/reader-settings-user-view.js"), import_discourse_notification_adapter = require("../notification/discourse-notification-adapter.js"), import_reader_notification_controller = require("../notification/reader-notification-controller.js"), import_reader_notification_model = require("../notification/reader-notification-model.js"), import_reader_notification_panel_view = require("../notification/reader-notification-panel-view.js"), import_action_request_adapter = require("../post/action-request-adapter.js"), import_discourse_action_transport = require("../post/discourse-action-transport.js"), import_post_action_controller = require("../post/post-action-controller.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_post_action_feature_commands = require("../post/post-action-feature-commands.js"), import_user_action_feature_commands = require("../post/user-action-feature-commands.js"), import_reader_post_action_feature = require("../post/reader-post-action-feature.js"), import_reader_bookmark_action_coordinator = require("../post/reader-bookmark-action-coordinator.js"), import_reader_share_action_coordinator = require("../post/reader-share-action-coordinator.js"), import_reader_topic_notification_coordinator = require("../post/reader-topic-notification-coordinator.js"), import_reader_topic_shared_issue_coordinator = require("../post/reader-topic-shared-issue-coordinator.js"), import_topic_action_feature_commands = require("../post/topic-action-feature-commands.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_topic_summary_request_adapter = require("../post/reader-topic-summary-request-adapter.js"), import_reader_topic_summary_surface = require("../post/reader-topic-summary-surface.js"), import_reader_topic_custom_summary = require("../post/reader-topic-custom-summary.js"), import_reader_post_management_action_coordinator = require("../post/reader-post-management-action-coordinator.js"), import_reader_selection_quote_feature = require("../post/reader-selection-quote-feature.js"), import_reader_workspace_coordinator = require("../shell/reader-workspace-coordinator.js"), import_reader_feedback_surface = require("../shell/reader-feedback-surface.js"), import_reader_action_surface_coordinator = require("../shell/reader-action-surface-coordinator.js"), import_reader_exclusive_panel_coordinator = require("../shell/reader-exclusive-panel-coordinator.js"), import_reader_shell_recovery_view = require("../shell/reader-shell-recovery-view.js"), import_reader_report_form_surface = require("../shell/reader-report-form-surface.js"), import_reader_assignment_form_surface = require("../shell/reader-assignment-form-surface.js"), import_reader_choice_form_surface = require("../shell/reader-choice-form-surface.js"), import_reader_topic_edit_form_surface = require("../shell/reader-topic-edit-form-surface.js"), import_reader_settings_controller = require("../settings/reader-settings-controller.js"), import_reader_settings_view = require("../settings/reader-settings-view.js"), import_reader_theme_settings_control = require("../settings/reader-theme-settings-control.js"), import_reader_window_settings_form = require("../settings/reader-window-settings-form.js"), import_reader_shortcut_settings_form = require("../settings/reader-shortcut-settings-form.js"), import_reader_custom_site_settings_form = require("../settings/reader-custom-site-settings-form.js"), import_reader_webdav_settings_form = require("../settings/reader-webdav-settings-form.js"), import_browser_discourse_site_probe = require("../site/browser-discourse-site-probe.js"), import_reader_webdav_coordinator = require("../sync/reader-webdav-coordinator.js"), import_reader_webdav_category_ports = require("../sync/reader-webdav-category-ports.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_translation_settings_form = require("../settings/reader-translation-settings-form.js"), import_reader_ai_service_settings_form = require("../settings/reader-ai-service-settings-form.js"), import_reader_appearance_settings_form = require("../settings/reader-appearance-settings-form.js"), import_reader_font_settings_form = require("../settings/reader-font-settings-form.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_reader_layout_settings_form = require("../settings/reader-layout-settings-form.js"), import_reader_interaction_settings_form = require("../settings/reader-interaction-settings-form.js"), import_reader_image_settings_form = require("../settings/reader-image-settings-form.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_reader_about_settings_content = require("../settings/reader-about-settings-content.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_topic_download_manager = require("../queue/reader-topic-download-manager.js"), import_reader_topic_offline_document = require("../archive/reader-topic-offline-document.js"), import_reader_topic_offline_artifact_repository = require("../archive/reader-topic-offline-artifact-repository.js"), import_reader_cooked_content_feature2 = require("../media/reader-cooked-content-feature.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_font_catalog = require("../font/reader-font-catalog.js"), import_reader_loading_animation_view = require("../motion/reader-loading-animation-view.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_topic_factory = require("../topic/reader-topic-factory.js"), import_reader_topic_navigation_controller = require("../topic/reader-topic-navigation-controller.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_topic_flow_controller = require("../topic/reader-topic-flow-controller.js"), import_reader_topic_navigation_preferences = require("../topic/reader-topic-navigation-preferences.js"), import_reader_topic_scroll_adapter = require("../topic/reader-topic-scroll-adapter.js"), import_reader_topic_local_archive_feature = require("../topic/reader-topic-local-archive-feature.js"), import_reader_topic_timeline_controller = require("../topic/reader-topic-timeline-controller.js"), import_reader_topic_timeline_view = require("../topic/reader-topic-timeline-view.js"), import_reader_topic_header = require("../topic/reader-topic-header.js"), import_reader_topic_edit_controller = require("../topic/reader-topic-edit-controller.js"), import_reader_topic_comments_header = require("../topic/reader-topic-comments-header.js"), import_reader_topic_only_op_controller = require("../topic/reader-topic-only-op-controller.js"), import_reader_topic_special_content_feature = require("../topic/reader-topic-special-content-feature.js"), import_reader_topic_context_controller = require("../topic/reader-topic-context-controller.js"), import_reader_topic_context_surface = require("../topic/reader-topic-context-surface.js"), import_reader_topic_context_state = require("../topic/reader-topic-context-state.js"), import_reader_information_flow_coordinator = require("../state/reader-information-flow-coordinator.js"), import_reader_topic_state_projection = require("../state/reader-topic-state-projection.js"), import_topic_session = require("../topic/topic-session.js"), import_reader_translation_feature = require("../translation/reader-translation-feature.js"), import_translation_request_adapter = require("../translation/translation-request-adapter.js"), import_reader_data_runtime = require("./reader-data-runtime.js"), import_reader_performance_policy = require("./reader-performance-policy.js");
 	const readerSurfaceOnlyCloseEvents = /* @__PURE__ */ new WeakSet(), hostTopicUserCardSelector = "html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item) :is(.posters,.topic-poster) [data-user-card]";
 	function readerWebDavCacheClearPlan(categories) {
 	  const webDavCategories = [], protectedCategories = [];
@@ -728,6 +728,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	  selectSurface;
 	  threadContextState;
 	  history;
+	  topicStates;
 	  chronicle;
 	  chronicleView;
 	  unwantedTopics;
@@ -748,6 +749,8 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	  #collectionActionEvents = new import_signal.Signal();
 	  #chronicleRequestIds = /* @__PURE__ */ new Set();
 	  #topicSummarySurfaces = /* @__PURE__ */ new Set();
+	  #preheatedTopicSnapshots;
+	  pipeline;
 	  topicFactory;
 	  #performance;
 	  #openRecoveryController = null;
@@ -760,7 +763,9 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	  #manualChallengePromise = null;
 	  #destroyed = !1;
 	  constructor(options) {
-	    this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.scope.add(() => this.#collectionActionEvents.clear()), this.activity = createReaderBrowserActivity(options.document, this.scope), this.#manualChallengeController = this.scope.abortController(
+	    this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.scope.add(() => this.#collectionActionEvents.clear()), this.activity = createReaderBrowserActivity(options.document, this.scope), this.pipeline = new import_reader_pipeline_observer.ReaderPipelineObserver({
+	      sourceId: options.sourceId
+	    }), this.#manualChallengeController = this.scope.abortController(
 	      new DOMException("Reader runtime 已销毁", "AbortError")
 	    ), this.shell = options.shell, this.workspace = options.workspace, this.#openRetryDelay = options.openRetryDelay ?? import_coordinated_request_client.abortableDelay, this.#loadingProgress = options.loadingProgress ?? null, this.#boostTargetHighlight = new import_reader_topic_scroll_adapter.ReaderBoostTargetHighlightController({
 	      ...options.navigation?.readLifetimeMs ? { readLifetimeMs: options.navigation.readLifetimeMs } : {},
@@ -777,8 +782,20 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	      requestMinIntervalMs: options.permit.minIntervalMs,
 	      requestRateTargetPercent: 85,
 	      requestShortBudget: options.permit.shortBudget,
-	      requestLongBudget: options.permit.longBudget
-	    }), this.assetCaches = options.assetCacheStorage ? new import_browser_asset_cache.ReaderBrowserAssetCacheRepository(options.assetCacheStorage) : null;
+	      requestLongBudget: options.permit.longBudget,
+	      preheatMaxConcurrent: 2,
+	      preheatHandoffMaxEntries: 3,
+	      preheatHandoffMaxBytes: 8 * 1024 * 1024,
+	      preheatHandoffTtlMs: 6e4,
+	      responseMemoryMaxEntries: 72,
+	      responseMemoryMaxBytes: 16 * 1024 * 1024,
+	      projectionHydrationBatchSize: 1
+	    }), this.#preheatedTopicSnapshots = new import_topic_snapshot_handoff.TopicSnapshotHandoff({
+	      authScope: options.topic.authScope,
+	      maxEntries: this.#performance.preheatHandoffMaxEntries,
+	      maxBytes: this.#performance.preheatHandoffMaxBytes,
+	      ttlMs: this.#performance.preheatHandoffTtlMs
+	    }), this.scope.add(() => this.#preheatedTopicSnapshots.clear()), this.assetCaches = options.assetCacheStorage ? new import_browser_asset_cache.ReaderBrowserAssetCacheRepository(options.assetCacheStorage) : null;
 	    let challengeHref = "";
 	    try {
 	      challengeHref = (0, import_browser_shared_request_permit.browserCloudflareChallengeHref)(
@@ -987,6 +1004,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        !anchor?.href || !this.#challengeHref || (event.preventDefault(), event.stopPropagation(), this.#openManualCloudflareChallenge(anchor.href));
 	      }), this.data = new import_reader_data_runtime.ReaderDataRuntime({
 	        ...options.data,
+	        trace: this.pipeline,
 	        permit: this.permit,
 	        storage: options.storage,
 	        sourceId: options.sourceId,
@@ -994,7 +1012,9 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        indexedDb: options.indexedDb ?? null,
 	        ...options.broadcastChannelFactory === void 0 ? {} : { broadcastChannelFactory: options.broadcastChannelFactory },
 	        parentScope: this.scope
-	      }), challengeRequestObserver = this.data.requests, this.permit.reconcileCloudflareChallenge().then(() => this.rateLimitNotice.refresh()).catch(() => {
+	      }), this.scope.add(this.data.responses.subscribeInvalidation((query) => {
+	        this.#preheatedTopicSnapshots.invalidate(query);
+	      })), challengeRequestObserver = this.data.requests, this.permit.reconcileCloudflareChallenge().then(() => this.rateLimitNotice.refresh()).catch(() => {
 	      }), this.composerIsolation = new import_native_composer.DiscourseComposerHostIsolation({
 	        host: options.host,
 	        parentScope: this.scope,
@@ -1775,7 +1795,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	      this.notificationController?.startBackgroundCache(), this.bookmarkController?.startBackgroundCache();
 	      const selfObservationUsername = (0, import_native_host_api.discourseNativeCurrentUsername)(options.host);
 	      if (selfObservationUsername) {
-	        const currentUser = options.host.lookup("service:current-user");
+	        const currentUser = (0, import_native_host_api.discourseNativeCurrentUser)(options.host);
 	        this.userObservations.observeSelf({
 	          username: selfObservationUsername,
 	          name: String(readerNativeModelValue(currentUser, "name") ?? "").trim(),
@@ -2525,6 +2545,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	                this.#performance.requestMaxConcurrent - 1
 	              )
 	            ),
+	            readProjectionHydrationBatchSize: () => this.#performance.projectionHydrationBatchSize,
 	            ...options.topicFlowScheduler === void 0 ? {} : {
 	              directReplyPrefetchScheduler: {
 	                schedule: (callback, delayMs) => options.topicFlowScheduler.schedule(
@@ -2539,29 +2560,117 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            }
 	          });
 	        },
-	        createBundle: (context) => this.data.createTopicBundle(
-	          context,
-	          {
-	            ...options.topic,
-	            pageSize: this.#performance.pageSize,
-	            host: options.host,
-	            nativeAjax: this.nativeAjax,
-	            nativeActions,
-	            composerEvents: this.composerIsolation,
-	            ...options.loadingProgress ? {
-	              onLoadingSource: (source, counts) => {
-	                options.loadingProgress.update({
-	                  topicId: Number(context.topicId),
-	                  phase: source,
-	                  cachedCount: counts.cachedCount,
-	                  missingCount: counts.missingCount
-	                });
+	        createBundle: (context) => {
+	          const handoff = this.#preheatedTopicSnapshots.takeEntry(
+	            context.topicId
+	          );
+	          return handoff && this.pipeline.markTopic(
+	            context.topicId,
+	            "preheat-handoff-hit",
+	            {
+	              detail: {
+	                preheatTraceId: handoff.traceId
 	              }
-	            } : {}
-	          }
-	        ),
+	            }
+	          ), this.data.createTopicBundle(
+	            context,
+	            {
+	              ...options.topic,
+	              ...handoff === null ? {} : { initialSnapshot: handoff.snapshot },
+	              pageSize: this.#performance.pageSize,
+	              host: options.host,
+	              nativeAjax: this.nativeAjax,
+	              nativeActions,
+	              composerEvents: this.composerIsolation,
+	              ...options.loadingProgress ? {
+	                onLoadingSource: (source, counts) => {
+	                  options.loadingProgress.update({
+	                    topicId: Number(context.topicId),
+	                    phase: source,
+	                    cachedCount: counts.cachedCount,
+	                    missingCount: counts.missingCount
+	                  });
+	                }
+	              } : {}
+	            }
+	          );
+	        },
 	        onAssembled: (value, context) => {
-	          topicDoms.set(context.scope, value.dom);
+	          topicDoms.set(context.scope, value.dom), this.pipeline.markTopic(context.topicId, "canonical-ready", {
+	            detail: {
+	              initializedFromCache: value.services.session.initializedFromCache,
+	              cachedPosts: value.services.session.cachedPosts().length
+	            }
+	          });
+	          const assemblyTraceId = this.pipeline.activeTrace(context.topicId);
+	          let firstDomRecorded = !1, firstVisibleFrame = 0, scrollTraceId = null, scrollFrameRecorded = !1, scrollTraceGeneration = 0;
+	          const browserWindow2 = options.document.defaultView, recordDomCommit = (commit) => {
+	            if (!firstDomRecorded) {
+	              firstDomRecorded = !0, this.pipeline.markTopic(context.topicId, "dom-first-commit", {
+	                detail: {
+	                  attachedRoots: commit.attachedRoots.length,
+	                  mountedRoots: commit.tree.mountedRoots.length
+	                }
+	              });
+	              const visible = () => {
+	                firstVisibleFrame = 0, assemblyTraceId ? this.pipeline.mark(
+	                  assemblyTraceId,
+	                  "first-visible-frame"
+	                ) : this.pipeline.markTopic(
+	                  context.topicId,
+	                  "first-visible-frame"
+	                );
+	              };
+	              typeof browserWindow2?.requestAnimationFrame == "function" ? firstVisibleFrame = browserWindow2.requestAnimationFrame(visible) : queueMicrotask(visible);
+	            }
+	            const activeTrace = this.pipeline.activeTrace(context.topicId);
+	            if (scrollTraceId && activeTrace === scrollTraceId) {
+	              const userScrollAt = value.dom.lastUserScrollAt(), scrollDuration = userScrollAt > 0 ? Math.max(
+	                0,
+	                (browserWindow2?.performance.now() ?? userScrollAt) - userScrollAt
+	              ) : 0;
+	              this.pipeline.mark(scrollTraceId, "scroll-dom-commit", {
+	                durationMs: scrollDuration,
+	                detail: {
+	                  attachedRoots: commit.attachedRoots.length,
+	                  detachedRoots: commit.detachedRoots.length
+	                }
+	              }), this.pipeline.finish(scrollTraceId), scrollTraceId = null;
+	            } else
+	              this.pipeline.markTopic(context.topicId, "dom-commit", {
+	                detail: {
+	                  attachedRoots: commit.attachedRoots.length,
+	                  detachedRoots: commit.detachedRoots.length
+	                }
+	              });
+	          }, initialDomCommit = value.dom.frame.lastCommit;
+	          initialDomCommit && recordDomCommit(initialDomCommit), context.scope.add(value.dom.listenDirectUserScrollIntent(() => {
+	            scrollTraceId && this.pipeline.finish(scrollTraceId, "superseded"), scrollFrameRecorded = !1;
+	            const traceId = this.pipeline.begin({
+	              kind: "scroll",
+	              topicId: context.topicId,
+	              source: "direct-user-scroll"
+	            });
+	            scrollTraceId = traceId;
+	            const generation = ++scrollTraceGeneration;
+	            value.dom.waitForScrollIdle().then(() => {
+	              context.scope.destroyed || generation !== scrollTraceGeneration || scrollTraceId !== traceId || (this.pipeline.finish(traceId), scrollTraceId = null);
+	            }).catch((cause) => {
+	              generation === scrollTraceGeneration && scrollTraceId === traceId && (this.pipeline.finish(traceId, "failed"), scrollTraceId = null), reportTopicFeature(context.topicId, "navigation", cause);
+	            });
+	          })), context.scope.add(value.dom.listenScrollFrameCommit(() => {
+	            if (!scrollTraceId || scrollFrameRecorded || this.pipeline.activeTrace(context.topicId) !== scrollTraceId) return;
+	            scrollFrameRecorded = !0;
+	            const userScrollAt = value.dom.lastUserScrollAt();
+	            this.pipeline.mark(scrollTraceId, "scroll-frame-commit", {
+	              durationMs: userScrollAt > 0 ? Math.max(
+	                0,
+	                (browserWindow2?.performance.now() ?? userScrollAt) - userScrollAt
+	              ) : 0
+	            });
+	          })), context.scope.add(() => {
+	            scrollTraceGeneration += 1, firstVisibleFrame && typeof browserWindow2?.cancelAnimationFrame == "function" && browserWindow2.cancelAnimationFrame(firstVisibleFrame), scrollTraceId && this.pipeline.finish(scrollTraceId);
+	          });
 	          const features = topicFeatures.get(context.scope);
 	          if (!features)
 	            throw new Error(
@@ -2582,12 +2691,18 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            );
 	          };
 	          value.dom.windowChanges.subscribe((commit) => {
-	            translationWindowPostNumbers = /* @__PURE__ */ new Set([
+	            recordDomCommit(commit), translationWindowPostNumbers = /* @__PURE__ */ new Set([
 	              ...commit.tree.mountedRoots,
 	              ...commit.tree.mountedReplies
 	            ]), updateTranslationWindow(), this.translationFeature?.syncMountedPosts();
 	          }, context.scope), value.services.session.changes.subscribe((commit) => {
-	            this.#rememberChronicleDeletedPosts(
+	            this.pipeline.markTopic(context.topicId, "canonical-commit", {
+	              detail: {
+	                source: commit.source,
+	                acceptedPosts: commit.acceptedPosts,
+	                changedPosts: commit.changedPostNumbers.length
+	              }
+	            }), this.#rememberChronicleDeletedPosts(
 	              value,
 	              commit.changedPostNumbers,
 	              commit.observedAt
@@ -2627,6 +2742,19 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	              }
 	            },
 	            listenUserScrollIntent: (listener) => value.dom.listenUserScrollIntent(listener),
+	            onMilestone: (milestone) => {
+	              this.pipeline.markTopic(
+	                context.topicId,
+	                milestone.stage,
+	                {
+	                  durationMs: milestone.durationMs,
+	                  detail: {
+	                    postNumber: Number(milestone.postNumber),
+	                    source: milestone.source
+	                  }
+	                }
+	              );
+	            },
 	            parentScope: context.scope,
 	            onError: (cause) => reportTopicFeature(
 	              context.topicId,
@@ -2705,6 +2833,18 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            }
 	          });
 	          topicHeaders.set(context.scope, header);
+	          const hostDocumentTitle = options.document.title;
+	          let readerDocumentTitle = "";
+	          const syncDocumentTitle = (title) => {
+	            const next = title.trim();
+	            next && (readerDocumentTitle = next, options.document.title = next);
+	          };
+	          syncDocumentTitle(header.snapshot.title), header.changes.subscribe(
+	            (snapshot) => syncDocumentTitle(snapshot.title),
+	            context.scope
+	          ), context.scope.add(() => {
+	            options.document.title === readerDocumentTitle && (options.document.title = hostDocumentTitle);
+	          });
 	          const onlyOp = new import_reader_topic_only_op_controller.ReaderTopicOnlyOpController({
 	            session: value.services.session,
 	            presentationChanges: value.dom.presentationChanges,
@@ -3117,7 +3257,16 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        ...options.history?.key === void 0 ? {} : { key: options.history.key },
 	        ...options.history?.maxAgeMs === void 0 ? {} : { maxAgeMs: options.history.maxAgeMs },
 	        ...options.history?.now === void 0 ? {} : { now: options.history.now }
-	      }), this.history.load(), this.data.requests.changes.subscribe(
+	      }), this.history.load(), this.topicStates = new import_reader_topic_state_projection.ReaderTopicStateProjection({
+	        history: this.history,
+	        unwanted: this.unwantedTopics,
+	        parentScope: this.scope,
+	        onError: (cause) => reportTopicFeature(
+	          this.shell.activeTopicId ?? 0,
+	          "history",
+	          cause
+	        )
+	      }), this.data.requests.changes.subscribe(
 	        (snapshot) => this.#collectChronicleRequests(snapshot),
 	        this.scope
 	      ), this.#collectChronicleRequests(this.data.requests.snapshot), this.history.changes.subscribe(() => {
@@ -3274,6 +3423,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	          mount: this.shell.view.surfaceHost,
 	          storage: options.storage,
 	          history: this.history,
+	          topicStates: this.topicStates,
 	          elements: {
 	            root,
 	            toggle,
@@ -3320,13 +3470,33 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	  get performance() {
 	    return this.#performance;
 	  }
+	  rememberPreheatedTopicSnapshot(snapshot, traceId = "") {
+	    return this.#destroyed || this.scope.destroyed ? !1 : this.#preheatedTopicSnapshots.remember(snapshot, traceId);
+	  }
+	  beginPreheatTrace(topicId, source) {
+	    return this.pipeline.begin({
+	      kind: "topic-preheat",
+	      topicId,
+	      source
+	    });
+	  }
+	  finishPreheatTrace(traceId, stage = "finished") {
+	    this.pipeline.finish(traceId, stage);
+	  }
+	  forgetPreheatedTopicSnapshot(topicId) {
+	    return this.#preheatedTopicSnapshots.forget(topicId);
+	  }
 	  reloadExternalTopicSummaryState() {
 	    for (const surface of this.#topicSummarySurfaces)
 	      surface.reloadExternalState();
 	  }
 	  applyPerformance(snapshot) {
 	    if (this.#destroyed || this.scope.destroyed) return;
-	    this.#performance = snapshot, this.#applyPerformanceInfrastructure();
+	    this.#performance = snapshot, this.#preheatedTopicSnapshots.applyPolicy({
+	      maxEntries: snapshot.preheatHandoffMaxEntries,
+	      maxBytes: snapshot.preheatHandoffMaxBytes,
+	      ttlMs: snapshot.preheatHandoffTtlMs
+	    }), this.#applyPerformanceInfrastructure();
 	    const active = this.shell.activeValue;
 	    active?.services.session.applyPageSize(snapshot.pageSize), active?.topicFlow.refreshPerformance();
 	  }
@@ -3347,19 +3517,24 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        navigation: null
 	      });
 	    this.#boostTargetHighlight.clear();
-	    const normalizedTopicId = (0, import_identifiers.discourseTopicId)(request.topicId), chronicleRequestFloor = this.data.requests.snapshot.events.at(-1)?.id ?? 0;
+	    const normalizedTopicId = (0, import_identifiers.discourseTopicId)(request.topicId), traceId = this.pipeline.begin({
+	      kind: "topic-open",
+	      topicId: normalizedTopicId,
+	      source: request.source,
+	      ...request.postNumber === void 0 ? {} : { targetPostNumber: request.postNumber }
+	    }), chronicleRequestFloor = this.data.requests.snapshot.events.at(-1)?.id ?? 0;
 	    this.#openRecoveryController?.abort(
 	      new DOMException("新的打开事务已开始", "AbortError")
 	    );
 	    const recoveryController = new AbortController();
 	    this.#openRecoveryController = recoveryController;
-	    const transactionIsCurrent = () => !this.#destroyed && !this.scope.destroyed && !recoveryController.signal.aborted && this.#openRecoveryController === recoveryController, superseded = () => Object.freeze({
+	    const transactionIsCurrent = () => !this.#destroyed && !this.scope.destroyed && !recoveryController.signal.aborted && this.#openRecoveryController === recoveryController, superseded = () => (this.pipeline.finish(traceId, "superseded"), Object.freeze({
 	      topic: Object.freeze({
 	        status: "superseded",
 	        topicId: normalizedTopicId
 	      }),
 	      navigation: null
-	    }), releaseLoading = this.#loadingProgress?.begin(
+	    })), releaseLoading = this.#loadingProgress?.begin(
 	      Number(normalizedTopicId),
 	      request.postNumber
 	    );
@@ -3387,7 +3562,12 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        }
 	      }
 	      if (result.status === "opened" || result.status === "reused") {
-	        this.#lastFailedRequest = null, this.#rememberHistoryTopicMetadata(result.value), this.historyNavigation.snapshot.activeTopicId !== result.topicId && this.historyNavigation.activate(result.topicId);
+	        this.pipeline.mark(traceId, "topic-ready", {
+	          detail: {
+	            status: result.status,
+	            initializedFromCache: result.value.services.session.initializedFromCache
+	          }
+	        }), this.#lastFailedRequest = null, this.#rememberHistoryTopicMetadata(result.value), this.historyNavigation.snapshot.activeTopicId !== result.topicId && this.historyNavigation.activate(result.topicId);
 	        let navigation = null;
 	        try {
 	          if (request.postNumber !== void 0) {
@@ -3465,7 +3645,9 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        }
 	      }
 	      if (result.status === "failed") {
-	        if (!transactionIsCurrent()) return superseded();
+	        if (this.pipeline.finish(traceId, "failed", {
+	          detail: { phase: "topic-open" }
+	        }), !transactionIsCurrent()) return superseded();
 	        this.#lastFailedRequest = Object.freeze({ ...request }), readerShellFailureKind(result.cause) === "cloudflare" && (await this.permit.noteCloudflareChallenge({
 	          href: this.#challengeHref,
 	          force: !0
@@ -3501,8 +3683,14 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        );
 	      }
 	      return Object.freeze({ topic: result, navigation: null });
+	    } catch (error) {
+	      throw this.pipeline.finish(traceId, "failed", {
+	        detail: {
+	          error: error instanceof Error ? error.name : "unknown"
+	        }
+	      }), error;
 	    } finally {
-	      this.#rememberBoostChronicleRequest(request, chronicleRequestFloor), this.#openRecoveryController === recoveryController && (this.#openRecoveryController = null), releaseLoading?.();
+	      this.pipeline.finish(traceId), this.#rememberBoostChronicleRequest(request, chronicleRequestFloor), this.#openRecoveryController === recoveryController && (this.#openRecoveryController = null), releaseLoading?.();
 	    }
 	  }
 	  #highlightBoostTarget(request, navigationElement) {
@@ -3684,7 +3872,9 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	      minIntervalMs: snapshot.requestMinIntervalMs,
 	      maxConcurrent: snapshot.requestMaxConcurrent
 	    }), this.data.applyRequestRuntimePolicy({
-	      maxConcurrent: snapshot.requestMaxConcurrent
+	      maxConcurrent: snapshot.requestMaxConcurrent,
+	      responseMemoryMaxEntries: snapshot.responseMemoryMaxEntries,
+	      responseMemoryMaxBytes: snapshot.responseMemoryMaxBytes
 	    });
 	  }
 	  #historyArchiveMarker(topicId, postNumber) {
@@ -4973,6 +5163,8 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        host: settingsView.panelHost("logs"),
 	        readerRoot: shell.view.root,
 	        requests: runtime.data.requests,
+	        cacheEvents: runtime.data.cacheEvents,
+	        pipeline: runtime.pipeline,
 	        schedulerSnapshot: () => runtime.data.client.scheduler.snapshot(),
 	        permitSnapshot: () => runtime.permit.snapshot(),
 	        performancePolicySnapshot: () => runtime.performance,
@@ -5719,7 +5911,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	      registerInformationFlow({
 	        domain: "reading-history",
 	        storageKeys: [runtime.history.storageKey],
-	        refresh: () => runtime.history.reloadExternal()
+	        refresh: () => runtime.topicStates.reloadExternal()
 	      }), registerInformationFlow({
 	        domain: "chronicle",
 	        storageKeys: [runtime.chronicle.storageKey],
@@ -5727,7 +5919,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	      }), registerInformationFlow({
 	        domain: "unwanted-topics",
 	        storageKeys: [runtime.unwantedTopics.storageKey],
-	        refresh: () => runtime.unwantedTopics.reloadExternal()
+	        refresh: () => runtime.topicStates.reloadExternal()
 	      }), registerInformationFlow({
 	        domain: "user-observations",
 	        storageKeys: [runtime.userObservations.storageKey],
@@ -6063,7 +6255,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    }
 	  });
 	}
-}, "21fdf20041acdd7a1e55cfcf4aef45bcec16b43d848d025eaa5a12f34640c8bc");
+}, "48b8521231026780ee6f03cd7e71dfc0403e9c360c3d97baf77a836b8f54311b");
 
 /* Source: lite/src/app/reader-data-runtime.ts */
 runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -6192,7 +6384,11 @@ runtime.register("src/app/reader-data-runtime.js", function(module, exports, req
 	        ...options.now === void 0 ? {} : { now: options.now },
 	        ...options.defaultMax429Retries === void 0 ? {} : { defaultMax429Retries: options.defaultMax429Retries },
 	        onCoordinationError: (cause) => report("request-coordination", cause)
-	      }), this.scope.add(() => this.client.destroy()), this.gateway = new import_domain_request_gateway.DomainRequestGateway(this.client, this.responses);
+	      }), this.scope.add(() => this.client.destroy()), this.gateway = new import_domain_request_gateway.DomainRequestGateway(
+	        this.client,
+	        this.responses,
+	        options.trace
+	      );
 	    } catch (error) {
 	      throw this.scope.destroy(), error;
 	    }
@@ -6208,13 +6404,16 @@ runtime.register("src/app/reader-data-runtime.js", function(module, exports, req
 	    });
 	  }
 	  applyRequestRuntimePolicy(policy) {
-	    this.#destroyed || this.scope.destroyed || this.client.applyRuntimePolicy(policy);
+	    this.#destroyed || this.scope.destroyed || (this.client.applyRuntimePolicy(policy), policy.responseMemoryMaxEntries !== void 0 && policy.responseMemoryMaxBytes !== void 0 && this.responses.applyMemoryPolicy({
+	      maxEntries: policy.responseMemoryMaxEntries,
+	      maxBytes: policy.responseMemoryMaxBytes
+	    }));
 	  }
 	  destroy() {
 	    this.#destroyed || (this.#destroyed = !0, this.scope.destroy());
 	  }
 	}
-}, "32d64f7c2167f34bef75625a2901109b6e6867a224cf442b5f165200013a1bc3");
+}, "ea2a48d4849199f7d1aa5c503cf4302891e0da26f8674ea136a0297cf4c5a18d");
 
 /* Source: lite/src/app/reader-performance-policy.ts */
 runtime.register("src/app/reader-performance-policy.js", function(module, exports, require) {
@@ -6340,38 +6539,43 @@ runtime.register("src/app/reader-performance-policy.js", function(module, export
 	    DEFAULTS.requestRateTargetPercent,
 	    50,
 	    95
-	  ), target = requestRateTargetPercent / 100;
+	  ), target = requestRateTargetPercent / 100, scaledPageSize = integerRange(
+	    Math.floor(pageSize * batchScale),
+	    pageSize,
+	    12,
+	    64
+	  ), scaledMountedPostCount = integerRange(
+	    Math.floor(streamMaxMountedPostCount * scales.render),
+	    streamMaxMountedPostCount,
+	    24,
+	    128
+	  ), scaledRequestConcurrency = integerRange(
+	    Math.round(requestMaxConcurrent * batchScale),
+	    requestMaxConcurrent,
+	    1,
+	    4
+	  ), resourceTier = scaledRequestConcurrency <= 2 || scaledMountedPostCount <= 48 ? "low" : scaledRequestConcurrency >= 4 && scaledMountedPostCount >= 90 ? "high" : "balanced", overscanScreens = finiteRange(
+	    preferences.performanceStreamOverscan,
+	    DEFAULTS.streamOverscanScreens,
+	    0.25,
+	    3
+	  );
 	  return Object.freeze({
-	    pageSize: integerRange(
-	      Math.floor(pageSize * batchScale),
-	      pageSize,
-	      12,
-	      64
-	    ),
+	    pageSize: scaledPageSize,
 	    streamOverscanScreens: finiteRange(
-	      preferences.performanceStreamOverscan,
-	      DEFAULTS.streamOverscanScreens,
+	      overscanScreens * scales.render,
+	      overscanScreens,
 	      0.25,
 	      3
 	    ),
-	    streamMaxMountedPostCount: integerRange(
-	      Math.floor(streamMaxMountedPostCount * scales.render),
-	      streamMaxMountedPostCount,
-	      24,
-	      128
-	    ),
+	    streamMaxMountedPostCount: scaledMountedPostCount,
 	    nestedPrefetchScreens: finiteRange(
 	      nestedPrefetchScreens * scales.network,
 	      nestedPrefetchScreens,
 	      1,
 	      3
 	    ),
-	    requestMaxConcurrent: integerRange(
-	      Math.round(requestMaxConcurrent * batchScale),
-	      requestMaxConcurrent,
-	      1,
-	      4
-	    ),
+	    requestMaxConcurrent: scaledRequestConcurrency,
 	    requestMinIntervalMs: integerRange(
 	      Math.ceil(requestMinIntervalMs / Math.max(0.35, batchScale)),
 	      requestMinIntervalMs,
@@ -6386,7 +6590,14 @@ runtime.register("src/app/reader-performance-policy.js", function(module, export
 	    requestLongBudget: Math.max(
 	      1,
 	      Math.floor(longBudgetCeiling * target)
-	    )
+	    ),
+	    preheatMaxConcurrent: resourceTier === "low" ? 1 : resourceTier === "high" ? 3 : 2,
+	    preheatHandoffMaxEntries: resourceTier === "low" ? 1 : resourceTier === "high" ? 6 : 3,
+	    preheatHandoffMaxBytes: (resourceTier === "low" ? 2 : resourceTier === "high" ? 16 : 8) * 1024 * 1024,
+	    preheatHandoffTtlMs: 6e4,
+	    responseMemoryMaxEntries: resourceTier === "low" ? 48 : resourceTier === "high" ? 96 : 72,
+	    responseMemoryMaxBytes: (resourceTier === "low" ? 8 : resourceTier === "high" ? 24 : 16) * 1024 * 1024,
+	    projectionHydrationBatchSize: resourceTier === "high" ? 2 : 1
 	  });
 	}
 	class ReaderPerformancePolicy {
@@ -6425,7 +6636,7 @@ runtime.register("src/app/reader-performance-policy.js", function(module, export
 	    ) ? this.#snapshot : (this.#snapshot = next, next);
 	  }
 	}
-}, "f4736053ffeb43148dd948d0c45db5e91fc3b35141e277b994abe0bf2b64f814");
+}, "caa970c2928af65c0254361fcd0a49a4b6b78d3aafccb404b87764103e2e9b05");
 
 /* Source: lite/src/components/reader-control-tooltip.ts */
 runtime.register("src/components/reader-control-tooltip.js", function(module, exports, require) {
@@ -18033,6 +18244,104 @@ runtime.register("src/state/reader-settings-config-manager.js", function(module,
 	}
 }, "2a58b4ce6474ec760923ac4782e2ed1c0e922b62c91bd8bbd6ca15335d153d4d");
 
+/* Source: lite/src/state/reader-topic-state-projection.ts */
+runtime.register("src/state/reader-topic-state-projection.js", function(module, exports, require) {
+	var reader_topic_state_projection_exports = {};
+	__export(reader_topic_state_projection_exports, {
+	  ReaderTopicStateProjection: () => ReaderTopicStateProjection
+	});
+	module.exports = __toCommonJS(reader_topic_state_projection_exports);
+	var import_identifiers = require("../discourse/identifiers.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js");
+	class ReaderTopicStateProjection {
+	  scope;
+	  changes = new import_signal.Signal();
+	  #history;
+	  #unwanted;
+	  #schedule;
+	  #onError;
+	  #snapshot = Object.freeze({
+	    records: Object.freeze([]),
+	    historyRevision: 0,
+	    unwantedRevision: 0,
+	    revision: 0
+	  });
+	  #scheduled = !1;
+	  #externalReload = null;
+	  constructor(options) {
+	    this.#history = options.history, this.#unwanted = options.unwanted, this.#schedule = options.schedule ?? queueMicrotask, this.#onError = options.onError ?? (() => {
+	    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
+	    const enqueue = () => this.#enqueue();
+	    this.#history.changes.subscribe(enqueue, this.scope), this.#unwanted.changes.subscribe(enqueue, this.scope), this.#commit(), this.scope.add(() => {
+	      this.#scheduled = !1, this.#externalReload = null, this.changes.clear();
+	    });
+	  }
+	  get snapshot() {
+	    return this.#snapshot;
+	  }
+	  state(topicIdValue) {
+	    const topicId = (0, import_identifiers.discourseTopicId)(topicIdValue);
+	    return this.#snapshot.records.find((entry) => entry.topicId === topicId) ?? null;
+	  }
+	  isManuallyHidden(topicIdValue) {
+	    return this.state(topicIdValue)?.manuallyHidden === !0;
+	  }
+	  reloadExternal() {
+	    return this.#externalReload ? this.#externalReload : (this.#externalReload = new Promise((resolve) => {
+	      this.#schedule(() => {
+	        if (this.scope.destroyed) {
+	          resolve(this.#snapshot);
+	          return;
+	        }
+	        this.#history.reloadExternal(), this.#unwanted.reloadExternal(), this.#scheduled = !1;
+	        const snapshot = this.#commit();
+	        this.#externalReload = null, resolve(snapshot);
+	      });
+	    }), this.#externalReload);
+	  }
+	  destroy() {
+	    this.scope.destroy();
+	  }
+	  #enqueue() {
+	    this.scope.destroyed || this.#scheduled || this.#externalReload || (this.#scheduled = !0, this.#schedule(() => {
+	      this.#scheduled = !1, this.scope.destroyed || this.#commit();
+	    }));
+	  }
+	  #commit() {
+	    const records = /* @__PURE__ */ new Map();
+	    for (const history of this.#history.snapshot.entries)
+	      records.set(history.topicId, Object.freeze({
+	        topicId: history.topicId,
+	        history,
+	        unwanted: null,
+	        manuallyHidden: !1,
+	        automaticallyMatched: !1
+	      }));
+	    for (const unwanted of this.#unwanted.snapshot.records) {
+	      const current = records.get(unwanted.topicId);
+	      records.set(unwanted.topicId, Object.freeze({
+	        topicId: unwanted.topicId,
+	        history: current?.history ?? null,
+	        unwanted,
+	        manuallyHidden: unwanted.source === "manual",
+	        automaticallyMatched: unwanted.source === "automatic"
+	      }));
+	    }
+	    const snapshot = Object.freeze({
+	      records: Object.freeze([...records.values()].sort(
+	        (left, right) => Number(left.topicId) - Number(right.topicId)
+	      )),
+	      historyRevision: this.#history.snapshot.revision,
+	      unwantedRevision: this.#unwanted.snapshot.revision,
+	      revision: this.#snapshot.revision + 1
+	    });
+	    this.#snapshot = snapshot;
+	    for (const cause of this.changes.emit(snapshot))
+	      this.#onError(cause);
+	    return snapshot;
+	  }
+	}
+}, "a6eb09114c5c3372cce192544d24a08d54e8370fa5a5f1b20689df3ea6a585b8");
+
 /* Source: lite/src/stream/reply-tree-viewport-layout.ts */
 runtime.register("src/stream/reply-tree-viewport-layout.js", function(module, exports, require) {
 	var reply_tree_viewport_layout_exports = {};
@@ -22247,6 +22556,7 @@ runtime.register("src/topic/reader-topic-core-bundle.js", function(module, expor
 	    freshForMs: options.caches.snapshot.freshForMs,
 	    retainForMs: options.caches.snapshot.retainForMs,
 	    persistenceIdleMs: TOPIC_SNAPSHOT_PERSISTENCE_IDLE_MS,
+	    ...options.initialSnapshot === void 0 ? {} : { initialSnapshot: options.initialSnapshot },
 	    ...options.now === void 0 ? {} : { now: options.now },
 	    onInvalidSnapshot: (cause) => report("snapshot", cause),
 	    onInvalidTreeSnapshot: (cause) => report("reply-tree", cause)
@@ -22384,7 +22694,7 @@ runtime.register("src/topic/reader-topic-core-bundle.js", function(module, expor
 	    })(), closePromise)
 	  });
 	}
-}, "8bf41c6e63221b26fef77731b5a672a978ff5e7bbb71e2854b269cbc3bd579e1");
+}, "2f9e51e062db101c6df37558dc009077e4a8a5082bd2bd3586adab0574ed4c31");
 
 /* Source: lite/src/topic/reader-topic-dom-coordinator.ts */
 runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, exports, require) {
@@ -22394,7 +22704,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	});
 	module.exports = __toCommonJS(reader_topic_dom_coordinator_exports);
 	var import_identifiers = require("../discourse/identifiers.js"), import_reply_tree_dom_owner = require("../dom/reply-tree-dom-owner.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_branch_overlay = require("../layout/branch-overlay.js"), import_reader_reply_tree_preferences = require("./reader-reply-tree-preferences.js"), import_reply_tree_virtual_layout_controller = require("../stream/reply-tree-virtual-layout-controller.js"), import_reply_tree_viewport_layout = require("../stream/reply-tree-viewport-layout.js"), import_virtual_root_layout = require("../stream/virtual-root-layout.js"), import_virtual_stream_dom_controller = require("../stream/virtual-stream-dom-controller.js"), import_virtual_stream_frame_controller = require("../stream/virtual-stream-frame-controller.js"), import_virtual_stream_view = require("../stream/virtual-stream-view.js"), import_reader_post_view_projector = require("./reader-post-view-projector.js"), import_reader_topic_scroll_lifecycle = require("./reader-topic-scroll-lifecycle.js");
-	const DIRECT_REPLY_VISIBLE_PIPELINE_DEPTH = 3, DIRECT_REPLY_NEARBY_PIPELINE_DEPTH = 2, DIRECT_REPLY_PREFETCH_MAX_PAGES = 5, MATERIALIZATION_STEP_SCREENS = 0.5, HIDDEN_REPLY_MARKER_BLOCK_SIZE = 18, PROJECTION_HYDRATION_MIN_IDLE_MS = 120, PROJECTION_HYDRATION_BATCH_DELAY_MS = 16, PROJECTION_HYDRATION_BATCH_SIZE = 1;
+	const DIRECT_REPLY_VISIBLE_PIPELINE_DEPTH = 3, DIRECT_REPLY_NEARBY_PIPELINE_DEPTH = 2, DIRECT_REPLY_PREFETCH_MAX_PAGES = 5, MATERIALIZATION_STEP_SCREENS = 0.5, HIDDEN_REPLY_MARKER_BLOCK_SIZE = 18, PROJECTION_HYDRATION_MIN_IDLE_MS = 120, PROJECTION_HYDRATION_BATCH_DELAY_MS = 16, DEFAULT_PROJECTION_HYDRATION_BATCH_SIZE = 1;
 	function isAbortFailure(error) {
 	  return error instanceof DOMException && error.name === "AbortError" || String(error?.name ?? "") === "AbortError";
 	}
@@ -22420,6 +22730,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	  #readDirectReplyPrefetchScreens;
 	  #readDirectReplyPrefetchIdleMs;
 	  #readDirectReplyPrefetchConcurrency;
+	  #readProjectionHydrationBatchSize;
 	  #now;
 	  #scrollLifecycle;
 	  #ownsPresentationChanges;
@@ -22461,6 +22772,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	  #lastVisibleRootChangeKey = "";
 	  #lastPostStreamRevision;
 	  #pendingViewportMutation = null;
+	  #anchorSettlementController = null;
 	  #destroyed = !1;
 	  constructor(options) {
 	    if (this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#session = options.session, this.#scroll = options.scroll, this.#lastPostStreamRevision = options.session.postStreamRevision ?? 0, this.#onError = options.onError ?? (() => {
@@ -22479,7 +22791,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	    }), this.#projectionHydrationScheduler = options.projectionHydrationScheduler ?? Object.freeze({
 	      schedule: (callback, delayMs) => setTimeout(callback, delayMs),
 	      cancel: (handle) => clearTimeout(handle)
-	    }), this.#readDirectReplyPrefetchScreens = options.readDirectReplyPrefetchScreens ?? (() => 0), this.#readDirectReplyPrefetchIdleMs = options.readDirectReplyPrefetchIdleMs ?? (() => 180), this.#readDirectReplyPrefetchConcurrency = options.readDirectReplyPrefetchConcurrency ?? (() => 1), this.#now = options.now ?? (() => performance.now()), this.#scrollLifecycle = new import_reader_topic_scroll_lifecycle.ReaderTopicScrollLifecycle({
+	    }), this.#readDirectReplyPrefetchScreens = options.readDirectReplyPrefetchScreens ?? (() => 0), this.#readDirectReplyPrefetchIdleMs = options.readDirectReplyPrefetchIdleMs ?? (() => 180), this.#readDirectReplyPrefetchConcurrency = options.readDirectReplyPrefetchConcurrency ?? (() => 1), this.#readProjectionHydrationBatchSize = options.readProjectionHydrationBatchSize ?? (() => DEFAULT_PROJECTION_HYDRATION_BATCH_SIZE), this.#now = options.now ?? (() => performance.now()), this.#scrollLifecycle = new import_reader_topic_scroll_lifecycle.ReaderTopicScrollLifecycle({
 	      readLastUserScrollAt: () => options.scroll.lastUserScrollAt?.() ?? 0,
 	      readIdleMs: this.#readDirectReplyPrefetchIdleMs,
 	      scheduler: this.#directReplyPrefetchScheduler,
@@ -22641,7 +22953,10 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	      this.#freezeCanonicalUntilScrollIdle();
 	    }) ?? (() => {
 	    })), this.scope.add(() => {
-	      this.#cancelProjectionHydration(), this.#projectionHydrationFailedPostNumbers.clear(), this.#directReplyPrefetchHandle !== null && this.#directReplyPrefetchScheduler.cancel(
+	      this.#anchorSettlementController?.abort(new DOMException(
+	        "Topic 锚点结算已释放",
+	        "AbortError"
+	      )), this.#anchorSettlementController = null, this.#cancelProjectionHydration(), this.#projectionHydrationFailedPostNumbers.clear(), this.#directReplyPrefetchHandle !== null && this.#directReplyPrefetchScheduler.cancel(
 	        this.#directReplyPrefetchHandle
 	      ), this.#directReplyPrefetchHandle = null;
 	      for (const [postNumber, request] of this.#directReplyPrefetches)
@@ -22780,6 +23095,13 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	    return this.#assertActive(), this.#scroll.listenDirectUserScrollIntent?.(listener) ?? (() => {
 	    });
 	  }
+	  /** 主滚动坐标已在统一 scroll owner 中提交；早于可能发生的虚拟 DOM 换窗。 */
+	  listenScrollFrameCommit(listener) {
+	    return this.#assertActive(), this.#scroll.listenScroll(listener);
+	  }
+	  waitForScrollIdle() {
+	    return this.#assertActive(), this.#scrollLifecycle.waitForIdle();
+	  }
 	  captureViewportAnchor() {
 	    this.#assertActive();
 	    const physicalAnchor = this.#scroll.readVisibleViewportAnchor?.(
@@ -22870,7 +23192,10 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	  }
 	  /** 目的性导航取代当前滚动手势，并用最新回复关系判定目标属于正文还是隐藏子树。 */
 	  prepareRevealPost(rawPostNumber) {
-	    this.#assertActive(), (0, import_identifiers.discoursePostReference)({ post_number: rawPostNumber }), this.#adoptLatestCanonicalProjection();
+	    this.#assertActive(), (0, import_identifiers.discoursePostReference)({ post_number: rawPostNumber }), this.#anchorSettlementController?.abort(new DOMException(
+	      "新导航已取代旧锚点结算",
+	      "AbortError"
+	    )), this.#anchorSettlementController = null, this.#adoptLatestCanonicalProjection();
 	  }
 	  revealPost(rawPostNumber, options) {
 	    this.#assertActive();
@@ -22894,6 +23219,80 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	      element,
 	      mounted: !wasMaterialized
 	    }));
+	  }
+	  /**
+	   * 在 canonical/DOM 提交静稳后结算一次目标锚点。任何新布局提交都重启
+	   * quiet window；新导航、直接用户滚动或 Topic 销毁立即取消。
+	   */
+	  settleRevealedPost(rawPostNumber, options, settlement = {}) {
+	    this.#assertActive();
+	    const postNumber = (0, import_identifiers.discoursePostReference)({
+	      post_number: rawPostNumber
+	    }).postNumber;
+	    this.#anchorSettlementController?.abort(new DOMException(
+	      "新锚点结算已取代旧交易",
+	      "AbortError"
+	    ));
+	    const controller = new AbortController();
+	    this.#anchorSettlementController = controller;
+	    const tolerancePx = Math.max(0, Number.isFinite(settlement.tolerancePx) ? Number(settlement.tolerancePx) : 2), quietMs = Math.max(0, Number.isFinite(settlement.quietMs) ? Number(settlement.quietMs) : 120), maxWaitMs = Math.max(quietMs, Number.isFinite(settlement.maxWaitMs) ? Number(settlement.maxWaitMs) : 2e3), startedAt = this.#now();
+	    return new Promise((resolve) => {
+	      let quietHandle = null, deadlineHandle = null, attempts = 0, stablePasses = 0, lastError = null, completed = !1, attempting = !1, releaseWindowChanges = () => {
+	      }, releaseUserIntent = () => {
+	      };
+	      const cancelHandle = (handle) => {
+	        handle !== null && this.#projectionHydrationScheduler.cancel(handle);
+	      }, finish = (status) => {
+	        completed || (completed = !0, cancelHandle(quietHandle), cancelHandle(deadlineHandle), releaseWindowChanges(), releaseUserIntent(), controller.signal.removeEventListener("abort", abortSettlement), this.#anchorSettlementController === controller && (this.#anchorSettlementController = null), resolve(Object.freeze({
+	          status,
+	          errorPx: lastError,
+	          attempts,
+	          durationMs: Math.max(0, this.#now() - startedAt)
+	        })));
+	      }, abortSettlement = () => finish("cancelled"), scheduleQuiet = () => {
+	        cancelHandle(quietHandle), quietHandle = this.#projectionHydrationScheduler.schedule(
+	          attemptSettlement,
+	          quietMs
+	        );
+	      }, attemptSettlement = () => {
+	        if (quietHandle = null, completed || controller.signal.aborted) return;
+	        attempts += 1;
+	        let revealed = null;
+	        attempting = !0;
+	        try {
+	          this.frame.flushNow(), revealed = this.revealPost(postNumber, options), this.frame.flushNow();
+	        } catch (error) {
+	          this.#onError(error), finish("unavailable");
+	          return;
+	        } finally {
+	          attempting = !1;
+	        }
+	        if (!revealed || !this.#scroll.alignmentError) {
+	          finish("unavailable");
+	          return;
+	        }
+	        if (lastError = Math.abs(this.#scroll.alignmentError(
+	          revealed.element,
+	          options
+	        )), stablePasses = lastError <= tolerancePx ? stablePasses + 1 : 0, stablePasses >= 2) {
+	          finish("settled");
+	          return;
+	        }
+	        scheduleQuiet();
+	      };
+	      releaseWindowChanges = this.windowChanges.subscribe(() => {
+	        attempting || (stablePasses = 0, scheduleQuiet());
+	      }), releaseUserIntent = this.listenDirectUserScrollIntent(() => {
+	        finish("cancelled");
+	      }), controller.signal.addEventListener("abort", abortSettlement, { once: !0 }), scheduleQuiet(), deadlineHandle = this.#projectionHydrationScheduler.schedule(
+	        () => {
+	          if (deadlineHandle = null, completed) return;
+	          const pendingQuiet = quietHandle;
+	          quietHandle = null, cancelHandle(pendingQuiet), stablePasses > 0 && lastError !== null && attemptSettlement(), completed || finish("timeout");
+	        },
+	        maxWaitMs
+	      );
+	    });
 	  }
 	  #writeVirtualOffset(readOffset) {
 	    let written = !1;
@@ -23176,12 +23575,16 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	  #hydrateProjectionBatch(urgentOnly = !1) {
 	    const remaining = [];
 	    let hydrated = 0;
+	    const batchSize = Math.max(
+	      1,
+	      Math.min(4, Math.floor(this.#readProjectionHydrationBatchSize()) || 1)
+	    );
 	    for (const postNumber of this.#projectionHydrationPostNumbers) {
 	      if (urgentOnly && !this.#projectionHydrationUrgentPostNumbers.has(postNumber)) {
 	        remaining.push(postNumber);
 	        continue;
 	      }
-	      if (hydrated < PROJECTION_HYDRATION_BATCH_SIZE && this.#materializeProjection(postNumber)) {
+	      if (hydrated < batchSize && this.#materializeProjection(postNumber)) {
 	        hydrated += 1;
 	        continue;
 	      }
@@ -23525,7 +23928,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	      throw new Error("ReaderTopicDomCoordinator 已销毁");
 	  }
 	}
-}, "6bd5d29e1011979f7959b898a67fdbb1b2300f0228938dcda475cb9336c0c0a5");
+}, "a142a3c4647905bb65769d94af431cad7a4de4e21bc8a222ea12c27a1ce41f40");
 
 /* Source: lite/src/topic/reader-topic-edit-controller.ts */
 runtime.register("src/topic/reader-topic-edit-controller.js", function(module, exports, require) {
@@ -24679,10 +25082,13 @@ runtime.register("src/topic/reader-topic-navigation-controller.js", function(mod
 	  #dom;
 	  #hidden;
 	  #onError;
+	  #onMilestone;
+	  #now;
 	  #epoch = 0;
 	  constructor(options) {
 	    this.#session = options.session, this.#dom = options.dom, this.#hidden = options.hidden ?? null, this.#onError = options.onError ?? (() => {
-	    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), options.listenUserScrollIntent && this.scope.add(options.listenUserScrollIntent(() => {
+	    }), this.#onMilestone = options.onMilestone ?? (() => {
+	    }), this.#now = options.now ?? (() => performance.now()), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), options.listenUserScrollIntent && this.scope.add(options.listenUserScrollIntent(() => {
 	      this.scope.destroyed || (this.#epoch += 1);
 	    })), this.scope.add(() => {
 	      this.#epoch += 1, this.changes.clear();
@@ -24698,7 +25104,7 @@ runtime.register("src/topic/reader-topic-navigation-controller.js", function(mod
 	    this.#assertActive();
 	    const postNumber = (0, import_identifiers.discoursePostReference)({
 	      post_number: request.postNumber
-	    }).postNumber, epoch = ++this.#epoch;
+	    }).postNumber, epoch = ++this.#epoch, startedAt = this.#now();
 	    try {
 	      if (request.cachedOnly !== !0 && (request.forceRefresh === !0 || !this.#session.postByNumber(postNumber)) && await this.#session.loadTarget(postNumber, {
 	        scope: "around",
@@ -24713,6 +25119,7 @@ runtime.register("src/topic/reader-topic-navigation-controller.js", function(mod
 	          postNumber,
 	          "unavailable"
 	        ));
+	      this.#milestone("target-data-ready", postNumber, request, startedAt);
 	      const ancestorResolution = request.cachedOnly === !0 ? null : await (0, import_reader_reply_ancestor_resolver.resolveReaderReplyAncestors)(
 	        this.#session,
 	        postNumber,
@@ -24735,7 +25142,7 @@ runtime.register("src/topic/reader-topic-navigation-controller.js", function(mod
 	      };
 	      this.#dom.prepareRevealPost?.(postNumber);
 	      const reveal = request.revealAsFloor !== !0 && this.#hidden?.isHidden(postNumber) ? await this.#hidden.revealPost(postNumber, revealOptions) : this.#dom.revealPost(postNumber, revealOptions);
-	      return epoch !== this.#epoch || this.scope.destroyed ? this.#result(request, postNumber, "superseded") : reveal ? this.#emit(Object.freeze({
+	      return epoch !== this.#epoch || this.scope.destroyed ? this.#result(request, postNumber, "superseded") : reveal ? (this.#milestone("target-dom-ready", postNumber, request, startedAt), this.#milestone("target-aligned", postNumber, request, startedAt), this.#emit(Object.freeze({
 	        postNumber,
 	        source: request.source,
 	        status: "revealed",
@@ -24744,7 +25151,7 @@ runtime.register("src/topic/reader-topic-navigation-controller.js", function(mod
 	        }).postNumber,
 	        mounted: reveal.mounted,
 	        element: reveal.element
-	      })) : this.#emit(this.#result(
+	      }))) : this.#emit(this.#result(
 	        request,
 	        postNumber,
 	        "unresolved-tree"
@@ -24774,12 +25181,24 @@ runtime.register("src/topic/reader-topic-navigation-controller.js", function(mod
 	    for (const error of this.changes.emit(result)) this.#onError(error);
 	    return result;
 	  }
+	  #milestone(stage, postNumber, request, startedAt) {
+	    try {
+	      this.#onMilestone(Object.freeze({
+	        stage,
+	        postNumber,
+	        source: request.source,
+	        durationMs: Math.max(0, this.#now() - startedAt)
+	      }));
+	    } catch (error) {
+	      this.#onError(error);
+	    }
+	  }
 	  #assertActive() {
 	    if (this.scope.destroyed)
 	      throw new Error("ReaderTopicNavigationController 已销毁");
 	  }
 	}
-}, "bda9dbdd4bf61753d4f769cdb94cf4e63e6b32548bfc17885f6dba793e94458c");
+}, "37fa390e0906a98ee8c2b0c41289ea8600c6272bf0af01201a3c5406862ccc46");
 
 /* Source: lite/src/topic/reader-topic-navigation-preferences.ts */
 runtime.register("src/topic/reader-topic-navigation-preferences.js", function(module, exports, require) {
@@ -25221,7 +25640,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	function isEditableScrollTarget(target) {
 	  const candidate = target;
 	  return !candidate || typeof candidate.closest != "function" ? !1 : !!candidate.closest(
-	    'input, textarea, select, [contenteditable=""], [contenteditable="true"]'
+	    'input, textarea, select, button, [role="button"], [contenteditable=""], [contenteditable="true"]'
 	  );
 	}
 	class ReaderTopicScrollAdapter {
@@ -25334,7 +25753,12 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	      }, { passive: !0 });
 	    this.scope.listen(this.#scrollRoot, "keydown", (event) => {
 	      const keyboard = event;
-	      keyboard.defaultPrevented || keyboard.altKey || keyboard.ctrlKey || keyboard.metaKey || !SCROLLING_KEYS.has(keyboard.key) || isEditableScrollTarget(keyboard.target) || this.#markUserScrollIntent(this.#keyboardDirection(keyboard));
+	      if (keyboard.defaultPrevented || keyboard.altKey || keyboard.ctrlKey || keyboard.metaKey || !SCROLLING_KEYS.has(keyboard.key) || isEditableScrollTarget(keyboard.target)) return;
+	      keyboard.preventDefault(), this.#markUserScrollIntent(this.#keyboardDirection(keyboard));
+	      const actualOffset = this.#writeScrollRootOffset(
+	        this.#keyboardScrollOffset(keyboard)
+	      );
+	      this.#scrollOffset = actualOffset, this.#pendingScrollOffset = actualOffset, this.#scrollOffsetDirty = !1, this.#notifyWindowChange();
 	    }), this.scope.listen(this.#scrollRoot.ownerDocument, "keydown", (event) => {
 	      const keyboard = event;
 	      (typeof keyboard.composedPath == "function" ? keyboard.composedPath() : []).includes(this.#scrollRoot) || this.#scrollRoot.contains(keyboard.target) || keyboard.defaultPrevented || keyboard.altKey || keyboard.ctrlKey || keyboard.metaKey || !SCROLLING_KEYS.has(keyboard.key) || isEditableScrollTarget(keyboard.target) || (this.#pendingExternalKeyboardScroll = Object.freeze({
@@ -25473,6 +25897,11 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	  }
 	  alignPost(target, options) {
 	    if (!target.isConnected) return;
+	    const correction = this.alignmentError(target, options);
+	    Math.abs(correction) >= 1 && this.writeScrollOffset(this.#scrollOffset + correction), options.focus && this.#focus(target), options.highlight !== !1 && this.highlight.highlight(target);
+	  }
+	  alignmentError(target, options) {
+	    if (!target.isConnected) return Number.POSITIVE_INFINITY;
 	    const rootRect = this.#scrollRoot.getBoundingClientRect(), targetRect = target.getBoundingClientRect(), topInset = Math.min(
 	      rootRect.height,
 	      finiteNonNegative(this.#readTopInset())
@@ -25481,7 +25910,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	      Math.max(configuredVisibleTop, frozenHeaderBottom) + finiteNonNegative(options.viewportOffset ?? 0)
 	    ), visibleBottom = rootRect.bottom, visibleHeight = Math.max(1, visibleBottom - visibleTop), fits = targetRect.height <= visibleHeight, alignment = options.alignment ?? (target.dataset.postNumber === "1" ? "start" : "center");
 	    let correction = 0;
-	    alignment === "nearest" ? targetRect.top < visibleTop && targetRect.bottom > visibleBottom ? correction = 0 : targetRect.top < visibleTop ? correction = targetRect.top - visibleTop : targetRect.bottom > visibleBottom && (correction = targetRect.bottom - visibleBottom) : alignment === "center" && fits ? correction = targetRect.top + targetRect.height / 2 - (visibleTop + visibleHeight / 2) : correction = targetRect.top - visibleTop, Math.abs(correction) >= 1 && this.writeScrollOffset(this.#scrollOffset + correction), options.focus && this.#focus(target), options.highlight !== !1 && this.highlight.highlight(target);
+	    return alignment === "nearest" ? targetRect.top < visibleTop && targetRect.bottom > visibleBottom ? correction = 0 : targetRect.top < visibleTop ? correction = targetRect.top - visibleTop : targetRect.bottom > visibleBottom && (correction = targetRect.bottom - visibleBottom) : alignment === "center" && fits ? correction = targetRect.top + targetRect.height / 2 - (visibleTop + visibleHeight / 2) : correction = targetRect.top - visibleTop, correction;
 	  }
 	  highlightPost(target) {
 	    target.isConnected && this.highlight.highlight(target);
@@ -25723,6 +26152,16 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	  #keyboardDirection(event) {
 	    return event.key === "ArrowUp" || event.key === "PageUp" || event.key === "Home" || event.key === " " && event.shiftKey ? -1 : event.key === "ArrowDown" || event.key === "PageDown" || event.key === "End" || event.key === " " ? 1 : 0;
 	  }
+	  #keyboardScrollOffset(event) {
+	    const current = finiteNonNegative(this.#scrollRoot.scrollTop), maximum = Math.max(
+	      0,
+	      finiteNonNegative(this.#scrollRoot.scrollHeight) - finiteNonNegative(this.#scrollRoot.clientHeight)
+	    );
+	    if (event.key === "Home") return 0;
+	    if (event.key === "End") return maximum;
+	    const direction = this.#keyboardDirection(event), distance = event.key === "ArrowUp" || event.key === "ArrowDown" ? 40 : Math.max(1, finiteNonNegative(this.#scrollRoot.clientHeight) * 0.875);
+	    return Math.min(maximum, Math.max(0, current + direction * distance));
+	  }
 	  #scheduleScrollCommit() {
 	    if (this.#scrollFrame || this.scope.destroyed) return;
 	    let completed = !1;
@@ -25739,7 +26178,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    ), this.#scrollOffsetDirty = !1), this.#pendingScrollOffset ?? this.#scrollOffset;
 	  }
 	}
-}, "2c601a84e2397b8ee55d60b52164de5ca2f450cc182d9903c12bc9cd9e91b32b");
+}, "584f9a0800f34bc6e25c27478d15309c7828fdd69d2c774b2fd7605169770f4e");
 
 /* Source: lite/src/topic/reader-topic-scroll-lifecycle.ts */
 runtime.register("src/topic/reader-topic-scroll-lifecycle.js", function(module, exports, require) {
@@ -29181,6 +29620,10 @@ runtime.register("src/userscript/browser-userscript-environment.js", function(mo
 	});
 	module.exports = __toCommonJS(browser_userscript_environment_exports);
 	var import_native_host_api = require("../discourse/native-host-api.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js"), import_discourse_native_read_transport = require("../network/discourse-native-read-transport.js"), import_public_resource_request_adapter = require("../network/public-resource-request-adapter.js"), import_reader_search = require("../search/reader-search.js"), import_translation_request_adapter = require("../translation/translation-request-adapter.js"), import_browser_share_surface = require("./browser-share-surface.js"), import_browser_discourse_site_probe = require("../site/browser-discourse-site-probe.js"), import_value_record = require("../kernel/value-record.js"), import_reader_webdav_client = require("../sync/reader-webdav-client.js");
+	function runtimeReadinessTimeout(pageWindow) {
+	  const page = (0, import_value_record.objectRecord)(pageWindow), navigatorValue = (0, import_value_record.objectRecord)(page?.navigator), connection = (0, import_value_record.objectRecord)(navigatorValue?.connection), documentValue = (0, import_value_record.objectRecord)(page?.document), cores = Number(navigatorValue?.hardwareConcurrency), memory = Number(navigatorValue?.deviceMemory), effectiveType = String(connection?.effectiveType ?? "").trim().toLowerCase();
+	  return String(documentValue?.visibilityState ?? "") === "hidden" ? 6e4 : Number.isFinite(cores) && cores > 0 && cores <= 4 || Number.isFinite(memory) && memory > 0 && memory <= 4 || connection?.saveData === !0 || ["slow-2g", "2g", "3g"].includes(effectiveType) ? 45e3 : 25e3;
+	}
 	class BrowserUserscriptEnvironment {
 	  #userscriptGlobal;
 	  pageWindow;
@@ -29194,7 +29637,12 @@ runtime.register("src/userscript/browser-userscript-environment.js", function(mo
 	    this.#userscriptGlobal = userscriptGlobal, this.pageWindow = pageWindow, this.discourseHost = new import_native_host_api.BrowserDiscourseHostApiPort({ pageWindow });
 	  }
 	  async waitForDiscourseRuntime(signal, options = {}) {
-	    const timeoutMs = Math.max(1, Math.floor(options.timeoutMs ?? 15e3)), pollIntervalMs = Math.max(
+	    const timeoutMs = Math.max(
+	      1,
+	      Math.floor(
+	        options.timeoutMs ?? runtimeReadinessTimeout(this.pageWindow)
+	      )
+	    ), pollIntervalMs = Math.max(
 	      1,
 	      Math.floor(options.pollIntervalMs ?? 50)
 	    ), now = options.now ?? Date.now, delay = options.delay ?? import_coordinated_request_client.abortableDelay, startedAt = now();
@@ -29421,7 +29869,7 @@ runtime.register("src/userscript/browser-userscript-environment.js", function(mo
 	    };
 	  }
 	}
-}, "9653180d4bc7ca4abf11138a627839c7ef5d3d7fc59d94d425b00a72c6826492");
+}, "f7ae985b3af258589b78ad9bfe575b95dec7d094f424902dfffcd6ae2db45112");
 
 /* Source: lite/src/userscript/main-lite-bootstrap.ts */
 runtime.register("src/userscript/main-lite-bootstrap.js", function(module, exports, require) {
@@ -29670,7 +30118,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	              {
 	                openedTopicStorage: localStorage,
 	                openedTopicStorageScope: currentUsername,
-	                isTopicHidden: (topicId) => state.runtime?.unwantedTopics.isManuallyHidden(topicId) === !0,
+	                isTopicHidden: (topicId) => state.runtime?.topicStates.isManuallyHidden(topicId) === !0,
 	                hideTopic: (input) => {
 	                  const runtime = state.runtime;
 	                  if (!runtime) throw new Error("不想看仓库尚未就绪");
@@ -30097,9 +30545,9 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	            } catch (cause) {
 	              console.error("[main-lite:automatic-unwanted-history]", cause);
 	            }
-	          let manualTopicSignature = runtime.unwantedTopics.snapshot.records.filter((record) => record.source === "manual").map((record) => record.topicId).sort((left, right) => left - right).join(",");
-	          if (hostTopicEnhancement?.refreshHiddenTopics(), runtime.unwantedTopics.changes.subscribe((snapshot) => {
-	            const nextSignature = snapshot.records.filter((record) => record.source === "manual").map((record) => record.topicId).sort((left, right) => left - right).join(",");
+	          let manualTopicSignature = runtime.topicStates.snapshot.records.filter((record) => record.manuallyHidden).map((record) => record.topicId).sort((left, right) => left - right).join(",");
+	          if (hostTopicEnhancement?.refreshHiddenTopics(), runtime.topicStates.changes.subscribe((snapshot) => {
+	            const nextSignature = snapshot.records.filter((record) => record.manuallyHidden).map((record) => record.topicId).sort((left, right) => left - right).join(",");
 	            nextSignature !== manualTopicSignature && (manualTopicSignature = nextSignature, hostTopicEnhancement?.refreshHiddenTopics());
 	          }, runtime.scope), document.location.hostname.toLowerCase() === "linux.do") {
 	            const hostTurnstile = new import_reader_host_turnstile_background_controller.ReaderHostTurnstileBackgroundController({
@@ -30500,7 +30948,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	  }), handle;
 	}
 	const startMianLiteUserscript = startMainLiteUserscript;
-}, "4312cd77f28fbe7588f68c56af6894999480dbb00b90d4b62dda2c7942a825c0");
+}, "e06aa6d58f5ea5c92ac830cfa2da95947f13ff482325fe12161550f620cd986e");
 
 /* Source: lite/src/userscript/main-lite-entry.ts */
 runtime.register("src/userscript/main-lite-entry.js", function(module, exports, require) {
@@ -30809,7 +31257,7 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	  #options;
 	  #document;
 	  #maxQueuedTopics;
-	  #maxConcurrentPreheats;
+	  #readMaxConcurrentPreheats;
 	  #requestFrame;
 	  #cancelFrame;
 	  #cards = /* @__PURE__ */ new Map();
@@ -30823,21 +31271,19 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	  #observer;
 	  #resumePromise = null;
 	  #paused = !1;
+	  #readerForeground = !1;
+	  #readerShellBusy = !1;
+	  #readerBusy = !1;
+	  #readerInteractionSequence = 0;
+	  #activeReaderOpen = 0;
+	  #activeReaderInteraction = 0;
 	  #frame = 0;
 	  #destroyed = !1;
 	  constructor(options) {
 	    this.#options = options, this.#document = options.document, this.#maxQueuedTopics = Math.max(
 	      1,
 	      Math.floor(options.maxQueuedTopics ?? DEFAULT_MAX_QUEUED_TOPICS)
-	    ), this.#maxConcurrentPreheats = Math.min(
-	      MAX_CONCURRENT_PREHEATS,
-	      Math.max(
-	        1,
-	        Math.floor(
-	          options.maxConcurrentPreheats ?? DEFAULT_MAX_CONCURRENT_PREHEATS
-	        )
-	      )
-	    );
+	    ), this.#readMaxConcurrentPreheats = options.readMaxConcurrentPreheats ?? (() => options.maxConcurrentPreheats ?? DEFAULT_MAX_CONCURRENT_PREHEATS);
 	    const view = this.#document.defaultView;
 	    this.#requestFrame = options.requestFrame ?? ((callback) => {
 	      const request = view?.requestAnimationFrame;
@@ -30873,6 +31319,29 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	    if (!(this.#destroyed || this.scope.destroyed))
 	      for (const topic of this.#topics.values())
 	        topicId !== void 0 && topic.topicId !== topicId || (topic.confirmedReadCount = this.#confirmedReadCount(topic.topicId), this.#renderTopic(topic));
+	  }
+	  beginReaderOpen(topicId) {
+	    if (this.#destroyed || this.scope.destroyed) return 0;
+	    this.#readerForeground = !0;
+	    const generation = ++this.#readerInteractionSequence;
+	    return this.#activeReaderOpen = generation, this.#syncReaderBusy(topicId), generation;
+	  }
+	  finishReaderOpen(generation) {
+	    this.#destroyed || this.scope.destroyed || generation <= 0 || this.#activeReaderOpen !== generation || (this.#activeReaderOpen = 0, this.#syncReaderBusy());
+	  }
+	  beginReaderInteraction() {
+	    if (this.#destroyed || this.scope.destroyed) return 0;
+	    const generation = ++this.#readerInteractionSequence;
+	    return this.#activeReaderInteraction = generation, this.#syncReaderBusy(), generation;
+	  }
+	  finishReaderInteraction(generation) {
+	    this.#destroyed || this.scope.destroyed || generation <= 0 || this.#activeReaderInteraction !== generation || (this.#activeReaderInteraction = 0, this.#syncReaderBusy());
+	  }
+	  setReaderForeground(active) {
+	    this.#destroyed || this.scope.destroyed || this.#readerForeground !== active && (this.#readerForeground = active, active || (this.#readerShellBusy = !1, this.#activeReaderOpen = 0, this.#activeReaderInteraction = 0), this.#syncReaderBusy(), !this.#readerBusy && (this.#enforceForegroundNetworkBudget(), this.#fillQueue(), this.#pump()));
+	  }
+	  setReaderShellBusy(active) {
+	    this.#destroyed || this.scope.destroyed || this.#readerShellBusy !== active && (this.#readerShellBusy = active, this.#syncReaderBusy());
 	  }
 	  updateLiveReading(topicId, postNumber, confirmedReadCount, viewedAt = Date.now()) {
 	    if (this.#destroyed || this.scope.destroyed) return;
@@ -30999,7 +31468,7 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	    const topic = this.#topics.get(current.topicId);
 	    topic?.cards.delete(card), topic && ![...topic.cards].some(
 	      (candidate) => this.#cards.get(candidate)?.near === !0
-	    ) && this.#nearTopics.delete(topic.topicId), topic && !topic.cards.size && (topic.status === "queued" && (this.#removeFromQueue(topic.topicId), topic.status = "idle"), topic.restoreController?.abort(
+	    ) && this.#leavePreheatArea(topic), topic && !topic.cards.size && (topic.status === "queued" && (this.#removeFromQueue(topic.topicId), topic.status = "idle"), topic.restoreController?.abort(
 	      new DOMException("Topic 已离开宿主预热区", "AbortError")
 	    ), topic.restoreController = null, topic.restorePending = !1, this.#activeControllers.get(topic.topicId)?.abort(
 	      new DOMException("Topic 已离开宿主预热区", "AbortError")
@@ -31022,7 +31491,7 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	      if (cardState.near = entry.isIntersecting, !entry.isIntersecting) {
 	        [...topic.cards].some(
 	          (candidate) => this.#cards.get(candidate)?.near === !0
-	        ) || this.#nearTopics.delete(topic.topicId);
+	        ) || this.#leavePreheatArea(topic);
 	        continue;
 	      }
 	      const rect = entry.boundingClientRect, viewportCenter = entry.rootBounds ? (entry.rootBounds.top + entry.rootBounds.bottom) / 2 : Number(this.#document.defaultView?.innerHeight ?? 0) / 2, cardCenter = Number.isFinite(rect?.top) && Number.isFinite(rect?.bottom) ? (rect.top + rect.bottom) / 2 : viewportCenter;
@@ -31044,7 +31513,7 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	    this.#fillQueue();
 	  }
 	  #fillQueue() {
-	    if (!(this.#paused || !this.#activityVisible())) {
+	    if (!(this.#paused || this.#readerBusy || !this.#activityVisible())) {
 	      this.#dropStaleQueuedTopics();
 	      for (const [topicId] of [...this.#nearTopics.entries()].sort((left, right) => left[1] - right[1])) {
 	        if (this.#queue.length >= this.#maxQueuedTopics) break;
@@ -31061,49 +31530,55 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	    retained.sort((left, right) => (this.#nearTopics.get(left) ?? Number.POSITIVE_INFINITY) - (this.#nearTopics.get(right) ?? Number.POSITIVE_INFINITY)), this.#queue.splice(0, this.#queue.length, ...retained);
 	  }
 	  #enqueue(topic) {
-	    !this.#activityVisible() || this.#liveReading.has(topic.topicId) || topic.status === "queued" || topic.status === "loading" || topic.status === "partial" || topic.status === "ready" || topic.attempts >= 2 || this.#queue.length >= this.#maxQueuedTopics || (topic.status = "queued", this.#queue.push(topic.topicId), this.#renderTopic(topic), this.#restorePreheat(topic), this.#pump());
+	    this.#readerBusy || !this.#activityVisible() || this.#liveReading.has(topic.topicId) || topic.status === "queued" || topic.status === "loading" || topic.status === "partial" || topic.status === "ready" || topic.attempts >= 2 || this.#queue.length >= this.#maxQueuedTopics || (topic.status = "queued", this.#queue.push(topic.topicId), this.#renderTopic(topic), this.#restorePreheat(topic), this.#pump());
 	  }
 	  #pump() {
-	    if (!(this.#destroyed || this.scope.destroyed || this.#paused || !this.#activityVisible())) {
-	      for (let index = this.#queue.length - 1; index >= 0; index -= 1) {
-	        const topicId = this.#queue[index], topic = this.#topics.get(topicId);
-	        topic?.status === "queued" && !this.#liveReading.has(topicId) || (this.#queue.splice(index, 1), topic?.status === "queued" && (topic.status = "idle", this.#renderTopic(topic)));
+	    if (this.#destroyed || this.scope.destroyed || this.#paused || this.#readerBusy || !this.#activityVisible()) return;
+	    for (let index = this.#queue.length - 1; index >= 0; index -= 1) {
+	      const topicId = this.#queue[index], topic = this.#topics.get(topicId);
+	      topic?.status === "queued" && !this.#liveReading.has(topicId) || (this.#queue.splice(index, 1), topic?.status === "queued" && (topic.status = "idle", this.#renderTopic(topic)));
+	    }
+	    const configuredMaxConcurrentPreheats = Math.min(
+	      MAX_CONCURRENT_PREHEATS,
+	      Math.max(
+	        1,
+	        Math.floor(Number(this.#readMaxConcurrentPreheats()) || 1)
+	      )
+	    ), maxConcurrentPreheats = this.#readerForeground ? Math.min(1, configuredMaxConcurrentPreheats) : configuredMaxConcurrentPreheats;
+	    for (; this.#networkActiveTopics.size < maxConcurrentPreheats && this.#activeControllers.size < this.#maxQueuedTopics + maxConcurrentPreheats; ) {
+	      const queueIndex = this.#queue.findIndex((topicId2) => this.#topics.get(topicId2)?.restorePending !== !0);
+	      if (queueIndex < 0) return;
+	      const [topicId] = this.#queue.splice(queueIndex, 1);
+	      if (topicId === void 0) return;
+	      const topic = this.#topics.get(topicId);
+	      if (!topic || topic.status !== "queued") continue;
+	      const controller = new AbortController();
+	      this.#activeControllers.set(topicId, controller), this.#networkActiveTopics.add(topicId), topic.status = "loading", topic.attempts += 1, this.#renderTopic(topic);
+	      let task;
+	      try {
+	        task = this.#options.preheat(
+	          topic.topicId,
+	          topic.targetPostNumber,
+	          controller.signal,
+	          (progress) => {
+	            this.#applyProgress(topic, progress, !1), progress.complete && !controller.signal.aborted && this.#releaseNetworkSlot(topicId, controller);
+	          },
+	          topic.totalCount
+	        );
+	      } catch (error) {
+	        task = Promise.reject(error);
 	      }
-	      for (; this.#networkActiveTopics.size < this.#maxConcurrentPreheats && this.#activeControllers.size < this.#maxQueuedTopics + this.#maxConcurrentPreheats; ) {
-	        const queueIndex = this.#queue.findIndex((topicId2) => this.#topics.get(topicId2)?.restorePending !== !0);
-	        if (queueIndex < 0) return;
-	        const [topicId] = this.#queue.splice(queueIndex, 1);
-	        if (topicId === void 0) return;
-	        const topic = this.#topics.get(topicId);
-	        if (!topic || topic.status !== "queued") continue;
-	        const controller = new AbortController();
-	        this.#activeControllers.set(topicId, controller), this.#networkActiveTopics.add(topicId), topic.status = "loading", topic.attempts += 1, this.#renderTopic(topic);
-	        let task;
-	        try {
-	          task = this.#options.preheat(
-	            topic.topicId,
-	            topic.targetPostNumber,
-	            controller.signal,
-	            (progress) => {
-	              this.#applyProgress(topic, progress, !1), progress.complete && !controller.signal.aborted && this.#releaseNetworkSlot(topicId, controller);
-	            },
-	            topic.totalCount
-	          );
-	        } catch (error) {
-	          task = Promise.reject(error);
+	      task.then((result) => {
+	        controller.signal.aborted || this.#applyProgress(topic, result, !0);
+	      }).catch((error) => {
+	        if (controller.signal.aborted) {
+	          topic.status = "idle", topic.attempts = Math.max(0, topic.attempts - 1), this.#renderTopic(topic);
+	          return;
 	        }
-	        task.then((result) => {
-	          controller.signal.aborted || this.#applyProgress(topic, result, !0);
-	        }).catch((error) => {
-	          if (controller.signal.aborted) {
-	            topic.status = "idle", topic.attempts = Math.max(0, topic.attempts - 1), this.#renderTopic(topic);
-	            return;
-	          }
-	          topic.status = "error", this.#renderTopic(topic), this.#shouldPause(error) && this.#pauseQueue(), this.#report(error), topic.cards.size || this.#topics.delete(topic.topicId);
-	        }).finally(() => {
-	          this.#networkActiveTopics.delete(topicId), this.#activeControllers.get(topicId) === controller && (this.#activeControllers.delete(topicId), controller.signal.aborted && topic.status === "loading" && (topic.status = "idle", topic.attempts = Math.max(0, topic.attempts - 1), this.#renderTopic(topic)), !this.#paused && this.#activityVisible() && (this.#fillQueue(), this.#pump()));
-	        });
-	      }
+	        topic.status = "error", this.#renderTopic(topic), this.#shouldPause(error) && this.#pauseQueue(), this.#report(error), topic.cards.size || this.#topics.delete(topic.topicId);
+	      }).finally(() => {
+	        this.#networkActiveTopics.delete(topicId), this.#activeControllers.get(topicId) === controller && (this.#activeControllers.delete(topicId), controller.signal.aborted && topic.status === "loading" && (topic.status = "idle", topic.attempts = Math.max(0, topic.attempts - 1), this.#renderTopic(topic)), !this.#paused && this.#activityVisible() && (this.#fillQueue(), this.#pump()));
+	      });
 	    }
 	  }
 	  #restorePreheat(topic) {
@@ -31169,6 +31644,55 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	        new DOMException("页面进入后台，暂停宿主 Topic 预热", "AbortError")
 	      );
 	  }
+	  #suspendForReader(topicId) {
+	    for (const queuedTopicId of this.#queue.splice(0)) {
+	      const queued = this.#topics.get(queuedTopicId);
+	      queued?.status === "queued" && (queued.status = "idle", this.#renderTopic(queued));
+	    }
+	    const target = topicId === void 0 ? "" : ` ${String(topicId)}`;
+	    for (const controller of this.#activeControllers.values())
+	      controller.abort(
+	        new DOMException(
+	          `Reader 打开 Topic${target}，抢占宿主预热`,
+	          "AbortError"
+	        )
+	      );
+	    for (const topic of this.#topics.values()) this.#renderTopic(topic);
+	  }
+	  #enforceForegroundNetworkBudget() {
+	    if (!this.#readerForeground) return;
+	    let retained = 0;
+	    for (const [topicId, controller] of this.#activeControllers)
+	      this.#networkActiveTopics.has(topicId) && (retained += 1, !(retained <= 1) && controller.abort(new DOMException(
+	        "Reader 前台阅读收紧宿主预热并发",
+	        "AbortError"
+	      )));
+	  }
+	  #syncReaderBusy(topicId) {
+	    const busy = this.#readerShellBusy || this.#activeReaderOpen > 0 || this.#activeReaderInteraction > 0;
+	    if (busy !== this.#readerBusy) {
+	      if (this.#readerBusy = busy, busy) {
+	        this.#suspendForReader(topicId);
+	        return;
+	      }
+	      for (const topic of this.#topics.values()) this.#renderTopic(topic);
+	      if (this.#paused) {
+	        this.#tryResume();
+	        return;
+	      }
+	      this.#fillQueue(), this.#pump();
+	    }
+	  }
+	  #leavePreheatArea(topic) {
+	    if (this.#nearTopics.delete(topic.topicId), topic.status === "ready") {
+	      try {
+	        this.#options.forgetPreheat?.(topic.topicId);
+	      } catch (error) {
+	        this.#report(error);
+	      }
+	      topic.status = "idle", topic.attempts = 0, topic.restoreAttempted = !1, topic.cacheHit = !1, this.#renderTopic(topic);
+	    }
+	  }
 	  #onActivityChanged() {
 	    if (!(this.#destroyed || this.scope.destroyed)) {
 	      if (!this.#activityVisible()) {
@@ -31210,7 +31734,17 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	      this.#options.historyEntry(topic.topicId)?.postsCount ?? 0,
 	      hostCardPostCount(card)
 	    );
-	    return totalCount <= topic.totalCount ? !1 : (topic.totalCount = totalCount, (topic.status === "ready" || topic.status === "partial" || topic.status === "error") && (topic.status = "idle", topic.attempts = 0), !0);
+	    if (totalCount <= topic.totalCount) return !1;
+	    if (topic.totalCount = totalCount, topic.status === "ready" || topic.status === "partial" || topic.status === "error") {
+	      if (topic.status === "ready")
+	        try {
+	          this.#options.forgetPreheat?.(topic.topicId);
+	        } catch (error) {
+	          this.#report(error);
+	        }
+	      topic.status = "idle", topic.attempts = 0;
+	    }
+	    return !0;
 	  }
 	  #renderTopic(topic) {
 	    for (const card of [...topic.cards])
@@ -31219,7 +31753,7 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	  #renderCard(card, topic) {
 	    const cardState = this.#cards.get(card);
 	    if (!cardState) return;
-	    const history = this.#options.historyEntry(topic.topicId), live = this.#liveReading.get(topic.topicId), floor = live?.postNumber ?? historyPostNumber(history) ?? topic.targetPostNumber, viewedAt = live?.viewedAt ?? history?.viewedAt ?? 0, historyLabel = live || history ? `上次阅读 ${historyDate(viewedAt)} · 定位 #${floor}` : "", total = topic.totalCount || history?.postsCount || 0, suffix = topic.status === "queued" ? "（排队）" : topic.status === "loading" ? "（后台）" : topic.status === "error" ? "（失败）" : topic.status === "partial" ? "（部分）" : "", preheatLabel = `预热 ${topic.warmedCount}/${total || "?"}${suffix}`, activityLabel = live ? "阅读中" : preheatLabel, readLabel = `已读 ${topic.confirmedReadCount}`;
+	    const history = this.#options.historyEntry(topic.topicId), live = this.#liveReading.get(topic.topicId), floor = live?.postNumber ?? historyPostNumber(history) ?? topic.targetPostNumber, viewedAt = live?.viewedAt ?? history?.viewedAt ?? 0, historyLabel = live || history ? `上次阅读 ${historyDate(viewedAt)} · 定位 #${floor}` : "", total = topic.totalCount || history?.postsCount || 0, suffix = this.#readerBusy && topic.status === "idle" && this.#nearTopics.has(topic.topicId) ? "（暂停：阅读优先）" : topic.status === "queued" ? "（排队）" : topic.status === "loading" ? "（后台）" : topic.status === "error" ? "（失败）" : topic.status === "partial" ? "（部分）" : "", preheatLabel = `预热 ${topic.warmedCount}/${total || "?"}${suffix}`, activityLabel = live ? "阅读中" : preheatLabel, readLabel = `已读 ${topic.confirmedReadCount}`;
 	    cardState.meta.textContent = historyLabel ? `${historyLabel} · ${activityLabel} · ${readLabel}` : `${activityLabel} · ${readLabel}`, cardState.meta.dataset.ldpPreheatState = live ? "reading" : topic.status, cardState.meta.title = live || history ? `上次阅读：${new Date(viewedAt).toLocaleString("zh-CN")}；定位：#${floor}；${activityLabel}；${readLabel}` : `${activityLabel}；${readLabel}`;
 	  }
 	  #confirmedReadCount(topicId) {
@@ -31236,7 +31770,7 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	      controller.abort(
 	        new DOMException("宿主 Topic 预热已释放", "AbortError")
 	      );
-	    this.#activeControllers.clear(), this.#networkActiveTopics.clear(), this.#resumePromise = null, this.#paused = !1, this.#queue.length = 0, this.#nearTopics.clear(), this.#liveReading.clear();
+	    this.#activeControllers.clear(), this.#networkActiveTopics.clear(), this.#resumePromise = null, this.#paused = !1, this.#readerForeground = !1, this.#readerShellBusy = !1, this.#readerBusy = !1, this.#activeReaderOpen = 0, this.#activeReaderInteraction = 0, this.#queue.length = 0, this.#nearTopics.clear(), this.#liveReading.clear();
 	    for (const topic of this.#topics.values())
 	      topic.restoreController?.abort(
 	        new DOMException("宿主 Topic 预热已释放", "AbortError")
@@ -31253,7 +31787,7 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	    }
 	  }
 	}
-}, "94b68c4f98cbdb8b4ef900f341cea092338042206a7292006e627033902d0624");
+}, "ff7c6f398669f68fe281d9a6dd95c6ff9d51d19115c369a312d90c49a5422d5e");
 
 /* Source: lite/src/userscript/reader-host-topic-source-coordinator.ts */
 runtime.register("src/userscript/reader-host-topic-source-coordinator.js", function(module, exports, require) {
@@ -31725,109 +32259,153 @@ runtime.register("src/userscript/reader-userscript-application.js", function(mod
 	              confirmed.topicId,
 	              [confirmed.postNumber]
 	            );
+	          const withPreheatTrace = async (topicId, source, signal, task) => {
+	            const traceId = runtime.beginPreheatTrace(topicId, source);
+	            try {
+	              const result = await task(traceId);
+	              return signal.throwIfAborted(), runtime.finishPreheatTrace(traceId), result;
+	            } catch (cause) {
+	              throw signal.aborted && runtime.pipeline.mark(traceId, "preheat-aborted"), runtime.finishPreheatTrace(
+	                traceId,
+	                signal.aborted ? "superseded" : "failed"
+	              ), cause;
+	            }
+	          };
 	          hostPreheat = new import_reader_host_topic_preheat_controller.ReaderHostTopicPreheatController({
 	            document: options.runtime.document,
 	            mutations: runtime.workspace.mutations,
 	            activity: runtime.activity,
-	            maxConcurrentPreheats: 3,
+	            readMaxConcurrentPreheats: () => runtime.performance.preheatMaxConcurrent,
 	            historyEntry: (topicId) => runtime.history.entry(topicId),
 	            readConfirmedCount: (topicId) => confirmedReadPosts.get(topicId)?.size ?? 0,
 	            readOpenTopicsAtFirstPost: () => targetOptions.selectOpenTopicsAtFirstPost?.(
 	              context.readPreferences()
 	            ) === !0,
-	            restorePreheat: async (topicId, postNumber, signal) => {
-	              const active = runtime.shell.activeValue;
-	              if (active?.services.session.topicId === topicId)
-	                return signal.throwIfAborted(), active.services.session.applyPageSize(
-	                  runtime.performance.pageSize
-	                ), active.services.session.restorePreheatEntry(
-	                  postNumber
-	                );
-	              const scope = runtime.scope.child(), abort = scope.abortController(
-	                new DOMException("宿主 Topic 缓存恢复已释放", "AbortError"),
-	                signal
-	              ), bundle = runtime.data.createTopicBundle({
-	                topicId,
-	                scope,
-	                signal: abort.signal,
-	                mount: () => () => {
+	            restorePreheat: async (topicId, postNumber, signal) => withPreheatTrace(
+	              topicId,
+	              "host-cache-restore",
+	              signal,
+	              async (traceId) => {
+	                const active = runtime.shell.activeValue;
+	                if (active?.services.session.topicId === topicId) {
+	                  signal.throwIfAborted(), active.services.session.applyPageSize(
+	                    runtime.performance.pageSize
+	                  );
+	                  const result = await active.services.session.restorePreheatEntry(
+	                    postNumber
+	                  );
+	                  return runtime.pipeline.mark(traceId, "preheat-restored", {
+	                    detail: { complete: result?.complete === !0 }
+	                  }), result?.complete && runtime.pipeline.mark(traceId, "preheat-ready"), result;
 	                }
-	              }, {
-	                ...options.runtime.topic,
-	                pageSize: runtime.performance.pageSize,
-	                refreshCachedInBackground: !1,
-	                host: options.environment.discourseHost,
-	                nativeAjax: runtime.nativeAjax
-	              });
-	              try {
-	                return await bundle.services.session.restorePreheatEntry(
-	                  postNumber
-	                );
-	              } finally {
-	                await bundle.prepareClose?.("close"), scope.destroy();
-	              }
-	            },
-	            preheat: async (topicId, postNumber, signal, report, minimumTotalCount) => {
-	              const active = runtime.shell.activeValue;
-	              if (active?.services.session.topicId === topicId) {
-	                signal.throwIfAborted(), active.services.session.applyPageSize(
-	                  runtime.performance.pageSize
-	                );
-	                const result = await active.services.session.preheatEntry(
-	                  postNumber,
-	                  {
-	                    background: !0,
-	                    prefetchTier: "nearby",
-	                    maxAttempts: 1,
-	                    minimumTotalCount,
-	                    onProgress: report,
-	                    beforeNetwork: (requestSignal) => {
-	                      signal.throwIfAborted(), requestSignal.throwIfAborted();
-	                    }
+	                const scope = runtime.scope.child(), abort = scope.abortController(
+	                  new DOMException("宿主 Topic 缓存恢复已释放", "AbortError"),
+	                  signal
+	                ), bundle = runtime.data.createTopicBundle({
+	                  topicId,
+	                  scope,
+	                  signal: abort.signal,
+	                  mount: () => () => {
 	                  }
-	                );
-	                return signal.throwIfAborted(), await active.services.session.flush(), result;
-	              }
-	              const scope = runtime.scope.child(), abort = scope.abortController(
-	                new DOMException("宿主 Topic 预热已释放", "AbortError"),
-	                signal
-	              ), bundle = runtime.data.createTopicBundle({
-	                topicId,
-	                scope,
-	                signal: abort.signal,
-	                mount: () => () => {
-	                }
-	              }, {
-	                ...options.runtime.topic,
-	                pageSize: runtime.performance.pageSize,
-	                refreshCachedInBackground: !1,
-	                host: options.environment.discourseHost,
-	                nativeAjax: runtime.nativeAjax
-	              });
-	              try {
-	                await bundle.services.session.init({
-	                  background: !0,
-	                  prefetchTier: "nearby"
+	                }, {
+	                  ...options.runtime.topic,
+	                  pageSize: runtime.performance.pageSize,
+	                  refreshCachedInBackground: !1,
+	                  host: options.environment.discourseHost,
+	                  nativeAjax: runtime.nativeAjax
 	                });
-	                const restoredMinimumTotalCount = bundle.services.session.initializedFromCache ? minimumTotalCount : 0, result = await bundle.services.session.preheatEntry(
-	                  postNumber,
-	                  {
-	                    background: !0,
-	                    prefetchTier: "nearby",
-	                    maxAttempts: 1,
-	                    minimumTotalCount: restoredMinimumTotalCount,
-	                    onProgress: report
-	                  }
-	                );
-	                return await bundle.services.session.flush(), result;
-	              } finally {
-	                await bundle.prepareClose?.("close"), scope.destroy();
+	                try {
+	                  const result = await bundle.services.session.restorePreheatEntry(
+	                    postNumber
+	                  );
+	                  return result?.complete && runtime.rememberPreheatedTopicSnapshot(
+	                    bundle.services.snapshots.snapshot(),
+	                    traceId
+	                  ), runtime.pipeline.mark(traceId, "preheat-restored", {
+	                    detail: { complete: result?.complete === !0 }
+	                  }), result?.complete && runtime.pipeline.mark(traceId, "preheat-ready"), result;
+	                } finally {
+	                  await bundle.prepareClose?.("close"), scope.destroy();
+	                }
 	              }
-	            },
+	            ),
+	            preheat: async (topicId, postNumber, signal, report, minimumTotalCount) => withPreheatTrace(
+	              topicId,
+	              "host-visible-preheat",
+	              signal,
+	              async (traceId) => {
+	                const active = runtime.shell.activeValue;
+	                if (active?.services.session.topicId === topicId) {
+	                  signal.throwIfAborted(), active.services.session.applyPageSize(
+	                    runtime.performance.pageSize
+	                  );
+	                  const result = await active.services.session.preheatEntry(
+	                    postNumber,
+	                    {
+	                      background: !0,
+	                      prefetchTier: "nearby",
+	                      maxAttempts: 1,
+	                      minimumTotalCount,
+	                      onProgress: report,
+	                      beforeNetwork: (requestSignal) => {
+	                        signal.throwIfAborted(), requestSignal.throwIfAborted();
+	                      }
+	                    }
+	                  );
+	                  return signal.throwIfAborted(), await active.services.session.flush(), result.complete && runtime.pipeline.mark(traceId, "preheat-ready"), result;
+	                }
+	                const scope = runtime.scope.child(), abort = scope.abortController(
+	                  new DOMException("宿主 Topic 预热已释放", "AbortError"),
+	                  signal
+	                ), bundle = runtime.data.createTopicBundle({
+	                  topicId,
+	                  scope,
+	                  signal: abort.signal,
+	                  mount: () => () => {
+	                  }
+	                }, {
+	                  ...options.runtime.topic,
+	                  pageSize: runtime.performance.pageSize,
+	                  refreshCachedInBackground: !1,
+	                  host: options.environment.discourseHost,
+	                  nativeAjax: runtime.nativeAjax
+	                });
+	                try {
+	                  await bundle.services.session.init({
+	                    background: !0,
+	                    prefetchTier: "nearby"
+	                  });
+	                  const restoredMinimumTotalCount = bundle.services.session.initializedFromCache ? minimumTotalCount : 0, result = await bundle.services.session.preheatEntry(
+	                    postNumber,
+	                    {
+	                      background: !0,
+	                      prefetchTier: "nearby",
+	                      maxAttempts: 1,
+	                      minimumTotalCount: restoredMinimumTotalCount,
+	                      onProgress: (progress) => {
+	                        progress.complete && runtime.rememberPreheatedTopicSnapshot(
+	                          bundle.services.snapshots.snapshot(),
+	                          traceId
+	                        ), report(progress);
+	                      }
+	                    }
+	                  );
+	                  return result.complete && (runtime.rememberPreheatedTopicSnapshot(
+	                    bundle.services.snapshots.snapshot(),
+	                    traceId
+	                  ), runtime.pipeline.mark(traceId, "preheat-ready")), await bundle.services.session.flush(), result;
+	                } finally {
+	                  await bundle.prepareClose?.("close"), scope.destroy();
+	                }
+	              }
+	            ),
 	            shouldPauseAfterError: (error) => runtime.data.client.requestResume(error) !== null,
 	            canResume: async () => {
 	              const snapshot = await runtime.permit.snapshot();
 	              return snapshot.challengeState === "idle" && snapshot.nextPermitDelay <= 0;
+	            },
+	            forgetPreheat: (topicId) => {
+	              runtime.forgetPreheatedTopicSnapshot(topicId);
 	            },
 	            parentScope: runtime.scope,
 	            ...targetOptions.onError === void 0 ? {} : { onError: targetOptions.onError }
@@ -31870,14 +32448,27 @@ runtime.register("src/userscript/reader-userscript-application.js", function(mod
 	              (change) => {
 	                change.kind === "confirmed" && (rememberConfirmedReadPosts(topicId, change.postNumbers), sync());
 	              }
-	            );
+	            ), releaseScrollIntent = active.dom.listenDirectUserScrollIntent(() => {
+	              const generation = hostPreheat?.beginReaderInteraction() ?? 0;
+	              active.dom.waitForScrollIdle().then(() => {
+	                hostPreheat?.finishReaderInteraction(generation);
+	              });
+	            });
 	            releaseActiveReadingProjection = () => {
-	              releaseTimeline(), releaseRead();
+	              releaseTimeline(), releaseRead(), releaseScrollIntent();
 	            }, sync();
+	          }, syncReaderPreheatState = (state) => {
+	            hostPreheat?.setReaderForeground(
+	              state === "opening" || state === "switching" || state === "running"
+	            ), hostPreheat?.setReaderShellBusy(
+	              state === "opening" || state === "switching"
+	            );
 	          };
 	          runtime.shell.changes.subscribe((state) => {
-	            state === "running" ? bindActiveReadingProjection() : (state === "switching" || state === "closed" || state === "failed") && clearActiveReadingProjection();
-	          }, hostPreheat.scope), hostPreheat.scope.add(clearActiveReadingProjection), runtime.shell.state === "running" && bindActiveReadingProjection(), targetAdapter = new import_reader_userscript_target_adapter.ReaderUserscriptTargetAdapter({
+	            syncReaderPreheatState(state), state === "running" ? bindActiveReadingProjection() : (state === "switching" || state === "closed" || state === "failed") && clearActiveReadingProjection();
+	          }, hostPreheat.scope), hostPreheat.scope.add(clearActiveReadingProjection), syncReaderPreheatState(runtime.shell.state), runtime.shell.state === "running" && bindActiveReadingProjection();
+	          const preheatOpenTransactions = /* @__PURE__ */ new WeakMap();
+	          targetAdapter = new import_reader_userscript_target_adapter.ReaderUserscriptTargetAdapter({
 	            document: options.runtime.document,
 	            currentUrl: () => options.runtime.document.location.href,
 	            target: {
@@ -31915,43 +32506,42 @@ runtime.register("src/userscript/reader-userscript-application.js", function(mod
 	                  highlight: !1
 	                }) : null;
 	                if (navigation?.status === "revealed" && active) {
-	                  active.dom.flushNow();
 	                  const releaseTimelineHold = active.topicTimeline.holdVisiblePost(
 	                    exactFloorAnchor.viewport.postNumber
-	                  ), settleTimers = /* @__PURE__ */ new Set(), clearSettleTimers = () => {
-	                    for (const timer of settleTimers)
-	                      options.runtime.document.defaultView?.clearTimeout(timer);
-	                    settleTimers.clear();
-	                  };
-	                  let releaseUserIntent = () => {
-	                  }, releaseReaderInteraction = () => {
-	                  };
-	                  const releaseHistorySettle = () => {
-	                    clearSettleTimers(), releaseTimelineHold(), releaseUserIntent(), releaseReaderInteraction();
-	                  };
-	                  releaseUserIntent = active.dom.listenDirectUserScrollIntent(
-	                    releaseHistorySettle
-	                  ), releaseReaderInteraction = active.topicTimeline.scope.listen(
-	                    runtime.shell.view.root,
-	                    "click",
-	                    releaseHistorySettle
-	                  ), active.topicTimeline.scope.add(clearSettleTimers);
-	                  for (const delayMs of [200, 800, 2e3]) {
-	                    const timerWindow = options.runtime.document.defaultView;
-	                    if (!timerWindow) break;
-	                    const timer = timerWindow.setTimeout(() => {
-	                      settleTimers.delete(timer), !(runtime.shell.activeValue !== active || active.services.session.topicId !== request.topicId) && active.topicNavigation.navigate({
-	                        postNumber: exactFloorAnchor.viewport.postNumber,
+	                  ), settlementTraceId = runtime.pipeline.begin({
+	                    kind: "topic-open",
+	                    topicId: request.topicId,
+	                    source: "history-anchor-settlement",
+	                    targetPostNumber: exactFloorAnchor.viewport.postNumber
+	                  });
+	                  try {
+	                    const settled = await active.dom.settleRevealedPost(
+	                      exactFloorAnchor.viewport.postNumber,
+	                      {
 	                        source: "history",
 	                        alignment: "center",
-	                        highlight: !1,
-	                        cachedOnly: !0
-	                      }).then((settled) => {
-	                        settled.status === "revealed" && runtime.shell.activeValue === active && active.dom.flushNow();
-	                      }).catch(() => {
-	                      });
-	                    }, delayMs);
-	                    settleTimers.add(timer);
+	                        highlight: !1
+	                      },
+	                      {
+	                        tolerancePx: 2,
+	                        quietMs: 120,
+	                        maxWaitMs: 2e3
+	                      }
+	                    );
+	                    runtime.pipeline.mark(
+	                      settlementTraceId,
+	                      "anchor-settled",
+	                      {
+	                        durationMs: settled.durationMs,
+	                        detail: {
+	                          status: settled.status,
+	                          errorPx: settled.errorPx,
+	                          attempts: settled.attempts
+	                        }
+	                      }
+	                    );
+	                  } finally {
+	                    releaseTimelineHold(), runtime.pipeline.finish(settlementTraceId);
 	                  }
 	                }
 	                return Object.freeze({
@@ -31978,10 +32568,19 @@ runtime.register("src/userscript/reader-userscript-application.js", function(mod
 	              interceptTopicLinks: targetOptions.interceptTopicLinks
 	            },
 	            beforeOpenTarget: async (target) => {
-	              await hostSource.prepare(target), await targetOptions.beforeOpenTarget?.(target);
+	              preheatOpenTransactions.set(
+	                target,
+	                hostPreheat.beginReaderOpen(target.request.topicId)
+	              ), await hostSource.prepare(target), await targetOptions.beforeOpenTarget?.(target);
 	            },
 	            afterOpenTarget: async (target, opened) => {
-	              await hostSource.settle(target, opened);
+	              try {
+	                await hostSource.settle(target, opened);
+	              } finally {
+	                hostPreheat.finishReaderOpen(
+	                  preheatOpenTransactions.get(target) ?? 0
+	                ), preheatOpenTransactions.delete(target), syncReaderPreheatState(runtime.shell.state);
+	              }
 	            },
 	            parentScope: runtime.scope,
 	            ...targetOptions.onError === void 0 ? {} : { onError: targetOptions.onError }
@@ -32021,7 +32620,7 @@ runtime.register("src/userscript/reader-userscript-application.js", function(mod
 	    }
 	  });
 	}
-}, "c4eb059d24b25a7d08b146d3e56e275552dff6cd0274c6201c18dc0dd9b74a71");
+}, "007d22a16bce5c206a411c33c173af55da91e15a8ff698918878d578ff898d3e");
 
 /* Source: lite/src/userscript/reader-userscript-target-adapter.ts */
 runtime.register("src/userscript/reader-userscript-target-adapter.js", function(module, exports, require) {

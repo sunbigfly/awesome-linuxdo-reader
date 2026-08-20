@@ -409,18 +409,23 @@ for (const surface of surfaceContracts) {
 			await readContractFiles(styles, 'lite/styles')
 		).join('\n');
 		await readContractFiles(tests);
-		const ownerClasses = new Set(runtimeClasses(ownerSources));
-		const surfaceStyledClasses = new Set(
-			[...styleTexts.matchAll(/\.((?:ldp-)[a-z0-9_-]+)/gi)]
-				.map((match) => match[1]),
-		);
 		for (const className of classes) {
-			if (!ownerClasses.has(className)) {
+			const escapedClassName = String(className).replace(
+				/[.*+?^${}()|[\]\\]/g,
+				'\\$&',
+			);
+			if (!new RegExp(
+				`(?<![a-z0-9_-])${escapedClassName}(?![a-z0-9_-])`,
+				'i',
+			).test(ownerSources)) {
 				surfaceContractErrors.push(
 					`${id} owner 未产出 ${className}`,
 				);
 			}
-			if (!surfaceStyledClasses.has(className)) {
+			if (!new RegExp(
+				`\\.${escapedClassName}(?![a-z0-9_-])`,
+				'i',
+			).test(styleTexts)) {
 				surfaceContractErrors.push(
 					`${id} style 未拥有 ${className}`,
 				);
@@ -557,8 +562,8 @@ const requiredLayoutContracts = [
 		/\.ldp-virtual-stream\s*\{[^}]*overflow-anchor:\s*auto\s*;/s,
 	],
 	[
-		'programmatic body explicit anchor owner',
-		/\.ldp-body:is\(\.ldp-stream-programmatic-scroll,\.ldp-quote-positioning\)\s*\{[^}]*overflow-anchor:\s*none\s*;/s,
+		'programmatic and mutation body explicit anchor owner',
+		/\.ldp-body:is\(\s*\.ldp-stream-programmatic-scroll,\s*\.ldp-quote-positioning,\s*\.ldp-stream-viewport-mutation\s*\)\s*\{[^}]*overflow-anchor:\s*none\s*;/s,
 	],
 	[
 		'detached managed floating stream explicit anchor owner',

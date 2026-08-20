@@ -86,6 +86,13 @@ export interface ReaderTopicNavigationControllerOptions<TPost> {
 	readonly dom: ReaderTopicNavigationDomPort;
 	readonly hidden?: ReaderTopicHiddenNavigationPort;
 	readonly listenUserScrollIntent?: (listener: () => void) => Cleanup;
+	readonly onMilestone?: (input: Readonly<{
+		readonly stage: 'target-data-ready' | 'target-dom-ready' | 'target-aligned';
+		readonly postNumber: DiscoursePostNumber;
+		readonly source: ReaderTopicNavigationSource;
+		readonly durationMs: number;
+	}>) => void;
+	readonly now?: () => number;
 	readonly parentScope?: LifecycleScope;
 	readonly onError?: (error: unknown) => void;
 }
@@ -106,6 +113,10 @@ export class ReaderTopicNavigationController<
 	readonly #dom: ReaderTopicNavigationDomPort;
 	readonly #hidden: ReaderTopicHiddenNavigationPort | null;
 	readonly #onError: (error: unknown) => void;
+	readonly #onMilestone: NonNullable<
+		ReaderTopicNavigationControllerOptions<TPost>['onMilestone']
+	>;
+	readonly #now: () => number;
 	#epoch = 0;
 
 	constructor(options: ReaderTopicNavigationControllerOptions<TPost>) {
@@ -113,6 +124,8 @@ export class ReaderTopicNavigationController<
 		this.#dom = options.dom;
 		this.#hidden = options.hidden ?? null;
 		this.#onError = options.onError ?? (() => {});
+		this.#onMilestone = options.onMilestone ?? (() => {});
+		this.#now = options.now ?? (() => performance.now());
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		if (options.listenUserScrollIntent) {
 			this.scope.add(options.listenUserScrollIntent(() => {
@@ -141,6 +154,7 @@ export class ReaderTopicNavigationController<
 			post_number: request.postNumber,
 		}).postNumber;
 		const epoch = ++this.#epoch;
+		const startedAt = this.#now();
 		try {
 			if (
 				request.cachedOnly !== true &&
@@ -168,6 +182,7 @@ export class ReaderTopicNavigationController<
 					'unavailable',
 				));
 			}
+			this.#milestone('target-data-ready', postNumber, request, startedAt);
 			const ancestorResolution = request.cachedOnly === true
 				? null
 				: await resolveReaderReplyAncestors(
@@ -219,6 +234,8 @@ export class ReaderTopicNavigationController<
 					'unresolved-tree',
 				));
 			}
+			this.#milestone('target-dom-ready', postNumber, request, startedAt);
+			this.#milestone('target-aligned', postNumber, request, startedAt);
 			return this.#emit(Object.freeze({
 				postNumber,
 				source: request.source,
@@ -264,6 +281,24 @@ export class ReaderTopicNavigationController<
 	#emit(result: ReaderTopicNavigationResult): ReaderTopicNavigationResult {
 		for (const error of this.changes.emit(result)) this.#onError(error);
 		return result;
+	}
+
+	#milestone(
+		stage: 'target-data-ready' | 'target-dom-ready' | 'target-aligned',
+		postNumber: DiscoursePostNumber,
+		request: ReaderTopicNavigationRequest,
+		startedAt: number,
+	): void {
+		try {
+			this.#onMilestone(Object.freeze({
+				stage,
+				postNumber,
+				source: request.source,
+				durationMs: Math.max(0, this.#now() - startedAt),
+			}));
+		} catch (error) {
+			this.#onError(error);
+		}
 	}
 
 	#assertActive(): void {

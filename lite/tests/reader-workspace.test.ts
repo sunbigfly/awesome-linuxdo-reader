@@ -516,7 +516,7 @@ assert(
 	pointerModel.snapshot.geometry.top === expectedDrag.top &&
 	!pointerOverlay.classList.contains('ldp-window-interacting') &&
 	pointerOverlay.dataset.readerWindowInteraction === undefined &&
-	interactionStarts === 1 && interactionEnds === 1 &&
+	Number(interactionStarts) === 1 && Number(interactionEnds) === 1 &&
 	!pointerModal.style.transform &&
 	persisted.length === 1,
 	'拖动结束必须一次提交模型、清理预览并持久化一次',
@@ -559,7 +559,7 @@ assert(
 	pointerModel.snapshot.geometry.left === 440 &&
 	pointerModel.snapshot.geometry.width === 360 &&
 	pointerOverlay.dataset.readerWindowInteraction === 'w' &&
-	interactionStarts === 2 && interactionEnds === 1 &&
+	Number(interactionStarts) === 2 && Number(interactionEnds) === 1 &&
 	pointerModel.snapshot.geometry.left + pointerModel.snapshot.geometry.width === 800,
 	'西向缩放触及最小宽度时必须固定右边界，不能让整个浮窗漂移',
 );
@@ -570,7 +570,7 @@ dispatchPointer(resizeWest, 'pointerup', {
 });
 assert(
 	pointerOverlay.dataset.readerWindowInteraction === undefined &&
-	interactionStarts === 2 && interactionEnds === 2,
+		Number(interactionStarts) === 2 && Number(interactionEnds) === 2,
 	'缩放结束也必须发出一次交互结束信号并清理临时 mode',
 );
 

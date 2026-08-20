@@ -44,6 +44,10 @@ export interface CoordinatedRequestPort {
 	): boolean;
 }
 
+export interface DomainRequestTracePort {
+	resolve(identity: Readonly<Record<string, string | number | boolean>>): string;
+}
+
 export interface DomainResponseCacheSettings {
 	readonly kind: string;
 	readonly tags: readonly string[];
@@ -270,11 +274,17 @@ function cachePolicy(
 export class DomainRequestGateway {
 	readonly #client: CoordinatedRequestPort;
 	readonly #responses: ResponseRepository;
+	readonly #trace: DomainRequestTracePort | null;
 	readonly #executions = new Map<string, DomainRequestExecutionState>();
 
-	constructor(client: CoordinatedRequestPort, responses: ResponseRepository) {
+	constructor(
+		client: CoordinatedRequestPort,
+		responses: ResponseRepository,
+		trace?: DomainRequestTracePort | null,
+	) {
 		this.#client = client;
 		this.#responses = responses;
+		this.#trace = trace ?? null;
 	}
 
 	loadTopicPosts<T>(input: TopicPostsRequest<T>): Promise<T> {
@@ -298,12 +308,14 @@ export class DomainRequestGateway {
 	}
 
 	async cachedTopicTarget<T>(input: TopicTargetCacheLookup): Promise<T | null> {
+		const identity = topicRequestIdentity(input);
 		const contract = createRequestContract(input.profile ?? 'topic-visible', {
 			namespace: 'topic-target',
-			identity: topicRequestIdentity(input),
+			identity,
 		});
 		const cached = await this.#responses.read<T>(
 			cachePolicy(contract, input.cache),
+			{ traceId: this.#trace?.resolve(identity) ?? '' },
 		);
 		return cached.state === 'miss' ? null : cached.value as T;
 	}
@@ -570,6 +582,7 @@ export class DomainRequestGateway {
 			return Promise.reject(new Error(`${input.profile} 缺少 response cache settings`));
 		}
 		const execution = this.#acquireExecution(contract);
+		const traceId = this.#trace?.resolve(input.identity) ?? '';
 		const network = async (signal: AbortSignal): Promise<T> => {
 			if (
 				input.beforeNetwork &&
@@ -581,6 +594,9 @@ export class DomainRequestGateway {
 			execution.started = true;
 			const effective = execution.contract;
 			const requestOptions: CoordinatedRequestOptions = {
+				...(traceId
+					? { traceId }
+					: {}),
 				key: effective.key,
 				input: input.input,
 				priority: effective.priority,
@@ -612,6 +628,7 @@ export class DomainRequestGateway {
 				cachePolicy(contract, input.cache!),
 				network,
 				{
+					traceId,
 					cacheMode: contract.cacheMode,
 					signal: input.signal,
 					...(input.allowStaleOnError === undefined

@@ -34,6 +34,8 @@ import {
 	type ReaderHistoryRepository,
 	type ReaderHistorySortMode,
 } from './reader-history-repository.js';
+import type { ReaderTopicStateProjection } from
+	'../state/reader-topic-state-projection.js';
 
 export type ReaderHistorySelectionScope = 'page' | 'all';
 
@@ -95,6 +97,10 @@ export interface ReaderHistoryPanelViewOptions {
 	readonly document: Document;
 	readonly mount: HTMLElement;
 	readonly history: ReaderHistoryRepository;
+	readonly topicStates?: Pick<
+		ReaderTopicStateProjection,
+		'changes' | 'isManuallyHidden'
+	>;
 	readonly elements: ReaderHistoryPanelElements;
 	readonly storage?: Pick<Storage, 'getItem' | 'setItem'>;
 	readonly preferences: ReaderHistoryPanelPreferences;
@@ -143,6 +149,7 @@ export class ReaderHistoryPanelView {
 	readonly scope: LifecycleScope;
 	readonly #document: Document;
 	readonly #history: ReaderHistoryRepository;
+	readonly #topicStates: ReaderHistoryPanelViewOptions['topicStates'];
 	readonly #elements: ReaderHistoryPanelElements;
 	readonly #pageSize: number;
 	readonly #topicHref: ReaderHistoryPanelViewOptions['topicHref'];
@@ -186,6 +193,7 @@ export class ReaderHistoryPanelView {
 	constructor(options: ReaderHistoryPanelViewOptions) {
 		this.#document = options.document;
 		this.#history = options.history;
+		this.#topicStates = options.topicStates;
 		this.#elements = options.elements;
 		this.#pageSize = Math.floor(
 			Number(options.pageSize ?? DEFAULT_PAGE_SIZE),
@@ -295,7 +303,7 @@ export class ReaderHistoryPanelView {
 			parentScope: this.scope,
 		});
 		this.#bind();
-		this.#history.changes.subscribe(() => {
+		const syncRepositoryState = (): void => {
 			this.#pruneSelection();
 			if (
 				this.#preferences.sortMode === 'recent-viewed' &&
@@ -304,7 +312,12 @@ export class ReaderHistoryPanelView {
 				this.#page = 0;
 			}
 			this.#render();
-		}, this.scope);
+		};
+		if (this.#topicStates) {
+			this.#topicStates.changes.subscribe(syncRepositoryState, this.scope);
+		} else {
+			this.#history.changes.subscribe(syncRepositoryState, this.scope);
+		}
 		this.scope.add(() => {
 			this.#openEpoch += 1;
 			this.#selection.clear();
@@ -583,6 +596,8 @@ export class ReaderHistoryPanelView {
 	}
 
 	#renderEntry(entry: ReaderHistoryEntry): HTMLElement {
+		const manuallyHidden =
+			this.#topicStates?.isManuallyHidden(entry.topicId) === true;
 		const archiveMarker = entry.archiveStatus === null
 			? null
 			: Object.freeze({
@@ -602,6 +617,7 @@ export class ReaderHistoryPanelView {
 			this.#selection.has(entry.topicId) ? 'selected' : '',
 		].filter(Boolean).join(' ');
 		item.dataset.historyTopicId = String(entry.topicId);
+		item.dataset.historyManuallyHidden = String(manuallyHidden);
 		item.dataset.historyActor = entry.ownerUsername;
 		if (entry.archiveStatus !== null) {
 			item.dataset.historyArchiveStatus = String(entry.archiveStatus);
@@ -639,6 +655,7 @@ export class ReaderHistoryPanelView {
 		const category = entry.categoryName ||
 			(entry.categoryId === null ? '' : `类别 #${entry.categoryId}`);
 		meta.textContent = [
+			manuallyHidden ? '不想再看' : '',
 			archiveMarker === null
 				? ''
 				: readerHistoryArchiveMarkerLabel(archiveMarker),

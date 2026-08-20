@@ -67,7 +67,7 @@ const MATERIALIZATION_STEP_SCREENS = 0.5;
 const HIDDEN_REPLY_MARKER_BLOCK_SIZE = 18;
 const PROJECTION_HYDRATION_MIN_IDLE_MS = 120;
 const PROJECTION_HYDRATION_BATCH_DELAY_MS = 16;
-const PROJECTION_HYDRATION_BATCH_SIZE = 1;
+const DEFAULT_PROJECTION_HYDRATION_BATCH_SIZE = 1;
 
 function isAbortFailure(error: unknown): boolean {
 	return (error instanceof DOMException && error.name === 'AbortError') ||
@@ -141,6 +141,19 @@ export interface ReaderTopicRevealResult {
 	readonly mounted: boolean;
 }
 
+export interface ReaderTopicAnchorSettlementOptions {
+	readonly tolerancePx?: number;
+	readonly quietMs?: number;
+	readonly maxWaitMs?: number;
+}
+
+export interface ReaderTopicAnchorSettlementResult {
+	readonly status: 'settled' | 'cancelled' | 'timeout' | 'unavailable';
+	readonly errorPx: number | null;
+	readonly attempts: number;
+	readonly durationMs: number;
+}
+
 export interface ReaderTopicViewportAnchor {
 	readonly postNumber: PostNumber;
 	readonly postOffset: number;
@@ -178,6 +191,10 @@ export interface ReaderTopicScrollPort {
 	writeScrollOffset(offset: number): void;
 	readScrollRange?(): number;
 	alignPost(element: HTMLElement, options: ReaderTopicRevealOptions): void;
+	alignmentError?(
+		element: HTMLElement,
+		options: ReaderTopicRevealOptions,
+	): number;
 	highlightPost?(element: HTMLElement): void;
 	readVisibleViewportAnchor?(
 		elements: readonly HTMLElement[],
@@ -229,6 +246,7 @@ export interface ReaderTopicDomCoordinatorOptions<
 	readonly readDirectReplyPrefetchScreens?: () => number;
 	readonly readDirectReplyPrefetchIdleMs?: () => number;
 	readonly readDirectReplyPrefetchConcurrency?: () => number;
+	readonly readProjectionHydrationBatchSize?: () => number;
 	readonly now?: () => number;
 	readonly parentScope?: LifecycleScope;
 	readonly onError?: (error: unknown) => void;
@@ -267,6 +285,7 @@ export class ReaderTopicDomCoordinator<
 	readonly #readDirectReplyPrefetchScreens: () => number;
 	readonly #readDirectReplyPrefetchIdleMs: () => number;
 	readonly #readDirectReplyPrefetchConcurrency: () => number;
+	readonly #readProjectionHydrationBatchSize: () => number;
 	readonly #now: () => number;
 	readonly #scrollLifecycle: ReaderTopicScrollLifecycle;
 	readonly #ownsPresentationChanges: boolean;
@@ -324,6 +343,7 @@ export class ReaderTopicDomCoordinator<
 	#lastVisibleRootChangeKey = '';
 	#lastPostStreamRevision: number;
 	#pendingViewportMutation: ReaderTopicViewportMutation | null = null;
+	#anchorSettlementController: AbortController | null = null;
 	#destroyed = false;
 
 	constructor(options: ReaderTopicDomCoordinatorOptions<TTopic, TPost>) {
@@ -369,6 +389,9 @@ export class ReaderTopicDomCoordinator<
 			options.readDirectReplyPrefetchIdleMs ?? (() => 180);
 		this.#readDirectReplyPrefetchConcurrency =
 			options.readDirectReplyPrefetchConcurrency ?? (() => 1);
+		this.#readProjectionHydrationBatchSize =
+			options.readProjectionHydrationBatchSize ??
+			(() => DEFAULT_PROJECTION_HYDRATION_BATCH_SIZE);
 		this.#now = options.now ?? (() => performance.now());
 		this.#scrollLifecycle = new ReaderTopicScrollLifecycle({
 			readLastUserScrollAt: () => options.scroll.lastUserScrollAt?.() ?? 0,
@@ -665,6 +688,11 @@ export class ReaderTopicDomCoordinator<
 			this.#freezeCanonicalUntilScrollIdle();
 		}) ?? (() => {}));
 		this.scope.add(() => {
+			this.#anchorSettlementController?.abort(new DOMException(
+				'Topic 锚点结算已释放',
+				'AbortError',
+			));
+			this.#anchorSettlementController = null;
 			this.#cancelProjectionHydration();
 			this.#projectionHydrationFailedPostNumbers.clear();
 			if (this.#directReplyPrefetchHandle !== null) {
@@ -942,6 +970,17 @@ export class ReaderTopicDomCoordinator<
 		return this.#scroll.listenDirectUserScrollIntent?.(listener) ?? (() => {});
 	}
 
+	/** 主滚动坐标已在统一 scroll owner 中提交；早于可能发生的虚拟 DOM 换窗。 */
+	listenScrollFrameCommit(listener: () => void): Cleanup {
+		this.#assertActive();
+		return this.#scroll.listenScroll(listener);
+	}
+
+	waitForScrollIdle(): Promise<void> {
+		this.#assertActive();
+		return this.#scrollLifecycle.waitForIdle();
+	}
+
 	captureViewportAnchor(): ReaderTopicViewportAnchor | null {
 		this.#assertActive();
 		const physicalAnchor = this.#scroll.readVisibleViewportAnchor?.(
@@ -1076,6 +1115,11 @@ export class ReaderTopicDomCoordinator<
 	prepareRevealPost(rawPostNumber: number): void {
 		this.#assertActive();
 		discoursePostReference({ post_number: rawPostNumber });
+		this.#anchorSettlementController?.abort(new DOMException(
+			'新导航已取代旧锚点结算',
+			'AbortError',
+		));
+		this.#anchorSettlementController = null;
 		this.#adoptLatestCanonicalProjection();
 	}
 
@@ -1143,6 +1187,140 @@ export class ReaderTopicDomCoordinator<
 			rootPostNumber,
 			element,
 			mounted: !wasMaterialized,
+		});
+	}
+
+	/**
+	 * 在 canonical/DOM 提交静稳后结算一次目标锚点。任何新布局提交都重启
+	 * quiet window；新导航、直接用户滚动或 Topic 销毁立即取消。
+	 */
+	settleRevealedPost(
+		rawPostNumber: number,
+		options: ReaderTopicRevealOptions,
+		settlement: ReaderTopicAnchorSettlementOptions = {},
+	): Promise<ReaderTopicAnchorSettlementResult> {
+		this.#assertActive();
+		const postNumber = discoursePostReference({
+			post_number: rawPostNumber,
+		}).postNumber;
+		this.#anchorSettlementController?.abort(new DOMException(
+			'新锚点结算已取代旧交易',
+			'AbortError',
+		));
+		const controller = new AbortController();
+		this.#anchorSettlementController = controller;
+		const tolerancePx = Math.max(0, Number.isFinite(settlement.tolerancePx)
+			? Number(settlement.tolerancePx)
+			: 2);
+		const quietMs = Math.max(0, Number.isFinite(settlement.quietMs)
+			? Number(settlement.quietMs)
+			: 120);
+		const maxWaitMs = Math.max(quietMs, Number.isFinite(settlement.maxWaitMs)
+			? Number(settlement.maxWaitMs)
+			: 2_000);
+		const startedAt = this.#now();
+		return new Promise((resolve) => {
+			let quietHandle: unknown = null;
+			let deadlineHandle: unknown = null;
+			let attempts = 0;
+			let stablePasses = 0;
+			let lastError: number | null = null;
+			let completed = false;
+			let attempting = false;
+			let releaseWindowChanges: Cleanup = () => {};
+			let releaseUserIntent: Cleanup = () => {};
+			const cancelHandle = (handle: unknown): void => {
+				if (handle !== null) this.#projectionHydrationScheduler.cancel(handle);
+			};
+			const finish = (
+				status: ReaderTopicAnchorSettlementResult['status'],
+			): void => {
+				if (completed) return;
+				completed = true;
+				cancelHandle(quietHandle);
+				cancelHandle(deadlineHandle);
+				releaseWindowChanges();
+				releaseUserIntent();
+				controller.signal.removeEventListener('abort', abortSettlement);
+				if (this.#anchorSettlementController === controller) {
+					this.#anchorSettlementController = null;
+				}
+				resolve(Object.freeze({
+					status,
+					errorPx: lastError,
+					attempts,
+					durationMs: Math.max(0, this.#now() - startedAt),
+				}));
+			};
+			const abortSettlement = (): void => finish('cancelled');
+			const scheduleQuiet = (): void => {
+				cancelHandle(quietHandle);
+				quietHandle = this.#projectionHydrationScheduler.schedule(
+					attemptSettlement,
+					quietMs,
+				);
+			};
+			const attemptSettlement = (): void => {
+				quietHandle = null;
+				if (completed || controller.signal.aborted) return;
+				attempts += 1;
+				let revealed: ReaderTopicRevealResult | null = null;
+				attempting = true;
+				try {
+					this.frame.flushNow();
+					revealed = this.revealPost(postNumber, options);
+					this.frame.flushNow();
+				} catch (error) {
+					this.#onError(error);
+					finish('unavailable');
+					return;
+				} finally {
+					attempting = false;
+				}
+				if (!revealed || !this.#scroll.alignmentError) {
+					finish('unavailable');
+					return;
+				}
+				lastError = Math.abs(this.#scroll.alignmentError(
+					revealed.element,
+					options,
+				));
+				stablePasses = lastError <= tolerancePx ? stablePasses + 1 : 0;
+				if (stablePasses >= 2) {
+					finish('settled');
+					return;
+				}
+				scheduleQuiet();
+			};
+			releaseWindowChanges = this.windowChanges.subscribe(() => {
+				if (attempting) return;
+				stablePasses = 0;
+				scheduleQuiet();
+			});
+			releaseUserIntent = this.listenDirectUserScrollIntent(() => {
+				finish('cancelled');
+			});
+			controller.signal.addEventListener('abort', abortSettlement, { once: true });
+			scheduleQuiet();
+			deadlineHandle = this.#projectionHydrationScheduler.schedule(
+				() => {
+					deadlineHandle = null;
+					if (completed) return;
+					/*
+					 * 低配或强节流设备可能把第二次 quiet callback 与 deadline
+					 * 挤进同一长任务。若第一遍已经落入容差，deadline 必须同步
+					 * 完成第二遍确认，不能把实际已稳定的锚点误记为 timeout。
+					 */
+					const pendingQuiet = quietHandle;
+					quietHandle = null;
+					cancelHandle(pendingQuiet);
+					if (stablePasses > 0 && lastError !== null) {
+						attemptSettlement();
+					}
+					if (!completed) finish('timeout');
+				},
+				maxWaitMs,
+			);
 		});
 	}
 
@@ -1655,6 +1833,10 @@ export class ReaderTopicDomCoordinator<
 	#hydrateProjectionBatch(urgentOnly = false): void {
 		const remaining: PostNumber[] = [];
 		let hydrated = 0;
+		const batchSize = Math.max(
+			1,
+			Math.min(4, Math.floor(this.#readProjectionHydrationBatchSize()) || 1),
+		);
 		for (const postNumber of this.#projectionHydrationPostNumbers) {
 			if (
 				urgentOnly &&
@@ -1664,7 +1846,7 @@ export class ReaderTopicDomCoordinator<
 				continue;
 			}
 			if (
-				hydrated < PROJECTION_HYDRATION_BATCH_SIZE &&
+				hydrated < batchSize &&
 				this.#materializeProjection(postNumber)
 			) {
 				hydrated += 1;

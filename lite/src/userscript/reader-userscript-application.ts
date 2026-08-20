@@ -642,11 +642,35 @@ export function createReaderUserscriptRuntimeStage<
 							[confirmed.postNumber],
 						);
 					}
+					const withPreheatTrace = async <TResult>(
+						topicId: number,
+						source: string,
+						signal: AbortSignal,
+						task: (traceId: string) => Promise<TResult>,
+					): Promise<TResult> => {
+						const traceId = runtime.beginPreheatTrace(topicId, source);
+						try {
+							const result = await task(traceId);
+							signal.throwIfAborted();
+							runtime.finishPreheatTrace(traceId);
+							return result;
+						} catch (cause) {
+							if (signal.aborted) {
+								runtime.pipeline.mark(traceId, 'preheat-aborted');
+							}
+							runtime.finishPreheatTrace(
+								traceId,
+								signal.aborted ? 'superseded' : 'failed',
+							);
+							throw cause;
+						}
+					};
 					hostPreheat = new ReaderHostTopicPreheatController({
 						document: options.runtime.document,
 						mutations: runtime.workspace.mutations,
 						activity: runtime.activity,
-						maxConcurrentPreheats: 3,
+						readMaxConcurrentPreheats: () =>
+							runtime.performance.preheatMaxConcurrent,
 						historyEntry: (topicId) => runtime.history.entry(topicId),
 						readConfirmedCount: (topicId) =>
 							confirmedReadPosts.get(topicId)?.size ?? 0,
@@ -658,16 +682,27 @@ export function createReaderUserscriptRuntimeStage<
 							topicId,
 							postNumber,
 							signal,
-						) => {
+						) => withPreheatTrace(
+							topicId,
+							'host-cache-restore',
+							signal,
+							async (traceId) => {
 							const active = runtime.shell.activeValue;
 							if (active?.services.session.topicId === topicId) {
 								signal.throwIfAborted();
 								active.services.session.applyPageSize(
 									runtime.performance.pageSize,
 								);
-								return active.services.session.restorePreheatEntry(
+								const result = await active.services.session.restorePreheatEntry(
 									postNumber,
 								);
+								runtime.pipeline.mark(traceId, 'preheat-restored', {
+									detail: { complete: result?.complete === true },
+								});
+								if (result?.complete) {
+									runtime.pipeline.mark(traceId, 'preheat-ready');
+								}
+								return result;
 							}
 							const scope = runtime.scope.child();
 							const abort = scope.abortController(
@@ -687,21 +722,39 @@ export function createReaderUserscriptRuntimeStage<
 								nativeAjax: runtime.nativeAjax,
 							});
 							try {
-								return await bundle.services.session.restorePreheatEntry(
+								const result = await bundle.services.session.restorePreheatEntry(
 									postNumber,
 								);
+								if (result?.complete) {
+									runtime.rememberPreheatedTopicSnapshot(
+										bundle.services.snapshots.snapshot(),
+										traceId,
+									);
+								}
+								runtime.pipeline.mark(traceId, 'preheat-restored', {
+									detail: { complete: result?.complete === true },
+								});
+								if (result?.complete) {
+									runtime.pipeline.mark(traceId, 'preheat-ready');
+								}
+								return result;
 							} finally {
 								await bundle.prepareClose?.('close');
 								scope.destroy();
 							}
-						},
+							},
+						),
 						preheat: async (
 							topicId,
 							postNumber,
 							signal,
 							report,
 							minimumTotalCount,
-						) => {
+						) => withPreheatTrace(
+							topicId,
+							'host-visible-preheat',
+							signal,
+							async (traceId) => {
 							const active = runtime.shell.activeValue;
 							if (active?.services.session.topicId === topicId) {
 								signal.throwIfAborted();
@@ -724,6 +777,9 @@ export function createReaderUserscriptRuntimeStage<
 								);
 								signal.throwIfAborted();
 								await active.services.session.flush();
+								if (result.complete) {
+									runtime.pipeline.mark(traceId, 'preheat-ready');
+								}
 								return result;
 							}
 							const scope = runtime.scope.child();
@@ -759,22 +815,41 @@ export function createReaderUserscriptRuntimeStage<
 										prefetchTier: 'nearby',
 										maxAttempts: 1,
 										minimumTotalCount: restoredMinimumTotalCount,
-										onProgress: report,
+										onProgress: (progress) => {
+											if (progress.complete) {
+											runtime.rememberPreheatedTopicSnapshot(
+												bundle.services.snapshots.snapshot(),
+												traceId,
+											);
+											}
+											report(progress);
+										},
 									},
 								);
+								if (result.complete) {
+									runtime.rememberPreheatedTopicSnapshot(
+										bundle.services.snapshots.snapshot(),
+										traceId,
+									);
+									runtime.pipeline.mark(traceId, 'preheat-ready');
+								}
 								await bundle.services.session.flush();
 								return result;
 							} finally {
 								await bundle.prepareClose?.('close');
 								scope.destroy();
 							}
-						},
+							},
+						),
 						shouldPauseAfterError: (error) =>
 							runtime.data.client.requestResume(error) !== null,
 						canResume: async () => {
 							const snapshot = await runtime.permit.snapshot();
 							return snapshot.challengeState === 'idle' &&
 								snapshot.nextPermitDelay <= 0;
+						},
+						forgetPreheat: (topicId) => {
+							runtime.forgetPreheatedTopicSnapshot(topicId);
 						},
 						parentScope: runtime.scope,
 						...(targetOptions.onError === undefined
@@ -832,13 +907,35 @@ export function createReaderUserscriptRuntimeStage<
 								sync();
 							},
 						);
+						const releaseScrollIntent =
+							active.dom.listenDirectUserScrollIntent(() => {
+								const generation =
+									hostPreheat?.beginReaderInteraction() ?? 0;
+								void active.dom.waitForScrollIdle().then(() => {
+									hostPreheat?.finishReaderInteraction(generation);
+								});
+							});
 						releaseActiveReadingProjection = () => {
 							releaseTimeline();
 							releaseRead();
+							releaseScrollIntent();
 						};
 						sync();
 					};
+					const syncReaderPreheatState = (
+						state: typeof runtime.shell.state,
+					): void => {
+						hostPreheat?.setReaderForeground(
+							state === 'opening' ||
+							state === 'switching' ||
+							state === 'running',
+						);
+						hostPreheat?.setReaderShellBusy(
+							state === 'opening' || state === 'switching',
+						);
+					};
 					runtime.shell.changes.subscribe((state) => {
+						syncReaderPreheatState(state);
 						if (state === 'running') bindActiveReadingProjection();
 						else if (
 							state === 'switching' ||
@@ -847,7 +944,9 @@ export function createReaderUserscriptRuntimeStage<
 						) clearActiveReadingProjection();
 					}, hostPreheat.scope);
 					hostPreheat.scope.add(clearActiveReadingProjection);
+					syncReaderPreheatState(runtime.shell.state);
 					if (runtime.shell.state === 'running') bindActiveReadingProjection();
+					const preheatOpenTransactions = new WeakMap<object, number>();
 					targetAdapter = new ReaderUserscriptTargetAdapter({
 						document: options.runtime.document,
 						currentUrl: () =>
@@ -905,62 +1004,46 @@ export function createReaderUserscriptRuntimeStage<
 										})
 										: null;
 									if (navigation?.status === 'revealed' && active) {
-										active.dom.flushNow();
 										const releaseTimelineHold =
 											active.topicTimeline.holdVisiblePost(
 												exactFloorAnchor.viewport.postNumber,
 											);
-										const settleTimers = new Set<number>();
-										const clearSettleTimers = (): void => {
-											for (const timer of settleTimers) {
-												options.runtime.document.defaultView?.clearTimeout(timer);
-											}
-											settleTimers.clear();
-										};
-										let releaseUserIntent: Cleanup = () => {};
-										let releaseReaderInteraction: Cleanup = () => {};
-										const releaseHistorySettle = (): void => {
-											clearSettleTimers();
-											releaseTimelineHold();
-											releaseUserIntent();
-											releaseReaderInteraction();
-										};
-										releaseUserIntent =
-											active.dom.listenDirectUserScrollIntent(
-												releaseHistorySettle,
-											);
-										releaseReaderInteraction =
-											active.topicTimeline.scope.listen(
-												runtime.shell.view.root,
-												'click',
-												releaseHistorySettle,
-											);
-										active.topicTimeline.scope.add(clearSettleTimers);
-										for (const delayMs of [200, 800, 2_000]) {
-											const timerWindow = options.runtime.document.defaultView;
-											if (!timerWindow) break;
-											const timer = timerWindow.setTimeout(() => {
-												settleTimers.delete(timer);
-												if (
-													runtime.shell.activeValue !== active ||
-													active.services.session.topicId !== request.topicId
-												) return;
-												void active.topicNavigation.navigate({
-													postNumber: exactFloorAnchor.viewport.postNumber,
+										const settlementTraceId = runtime.pipeline.begin({
+											kind: 'topic-open',
+											topicId: request.topicId,
+											source: 'history-anchor-settlement',
+											targetPostNumber:
+												exactFloorAnchor.viewport.postNumber,
+										});
+										try {
+											const settled = await active.dom.settleRevealedPost(
+												exactFloorAnchor.viewport.postNumber,
+												{
 													source: 'history',
 													alignment: 'center',
 													highlight: false,
-													cachedOnly: true,
-												}).then((settled) => {
-													if (
-														settled.status === 'revealed' &&
-														runtime.shell.activeValue === active
-													) active.dom.flushNow();
-												}).catch(() => {
-													/* 初次恢复已成功；结算期重对齐是可取消的缓存内增强。 */
-												});
-											}, delayMs);
-											settleTimers.add(timer);
+												},
+												{
+													tolerancePx: 2,
+													quietMs: 120,
+													maxWaitMs: 2_000,
+												},
+											);
+											runtime.pipeline.mark(
+												settlementTraceId,
+												'anchor-settled',
+												{
+													durationMs: settled.durationMs,
+													detail: {
+														status: settled.status,
+														errorPx: settled.errorPx,
+														attempts: settled.attempts,
+													},
+												},
+											);
+										} finally {
+											releaseTimelineHold();
+											runtime.pipeline.finish(settlementTraceId);
 										}
 									}
 									return Object.freeze({
@@ -999,11 +1082,23 @@ export function createReaderUserscriptRuntimeStage<
 									targetOptions.interceptTopicLinks,
 							}),
 						beforeOpenTarget: async (target) => {
+							preheatOpenTransactions.set(
+								target,
+								hostPreheat!.beginReaderOpen(target.request.topicId),
+							);
 							await hostSource!.prepare(target);
 							await targetOptions.beforeOpenTarget?.(target);
 						},
 						afterOpenTarget: async (target, opened) => {
-							await hostSource!.settle(target, opened);
+							try {
+								await hostSource!.settle(target, opened);
+							} finally {
+								hostPreheat!.finishReaderOpen(
+									preheatOpenTransactions.get(target) ?? 0,
+								);
+								preheatOpenTransactions.delete(target);
+								syncReaderPreheatState(runtime.shell.state);
+							}
 						},
 						parentScope: runtime.scope,
 						...(targetOptions.onError === undefined

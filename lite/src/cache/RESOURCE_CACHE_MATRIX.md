@@ -1,13 +1,13 @@
-# mian-lite 资源、缓存与更新矩阵
+# main-lite 资源、缓存与更新矩阵
 
 审计边界仅为 `lite/src` 与 `lite/tests`。本文件记录源码中的远端读取、派生数据、持久状态、缓存身份、读取者和更新路径；生成文件只承载这些模块，不另建资源 owner。
 
 ## 中央契约
 
 - 所有自动读取的 Discourse/外部资源由 `DomainRequestGateway` 归一为 Topic、楼层、二级回复、通知、集合、用户、翻译或公共资源请求，再进入 `CoordinatedRequestClient` 的 scheduler、single-flight、429/challenge、timeout 和 AbortSignal 链。
-- `ResponseRepository` 是远端响应唯一缓存 owner：application 内存 LRU 上限 96 项/24 MiB；IndexedDB `awesome linuxdo reader` / `responses` 上限 600 项/96 MiB。首次升级会把旧库 `linuxdo-enhanced-reader:responses:v1` 的记录按 `storedAt` 合并到新库（较新记录胜出），目标事务提交后才删除旧库；删除受其他标签阻塞或失败时保留旧库，并在下次启动继续幂等迁移，避免历史缓存丢失或两库同时参与读取。fresh 命中不联网，stale 默认尝试联网且失败回退旧值，retain 超期才删除。持久层每 32 次成功 write/merge 主动执行一次过期、条数和字节淘汰，quota 时立即淘汰并重试。
+- `ResponseRepository` 是远端响应唯一缓存 owner：application 内存 LRU 随设备档位在 48–96 项 / 8–24 MiB 之间收紧，档位下调会立即裁剪现有 LRU；IndexedDB `awesome linuxdo reader` / `responses` 上限 600 项/96 MiB。首次升级会把旧库 `linuxdo-enhanced-reader:responses:v1` 的记录按 `storedAt` 合并到新库（较新记录胜出），目标事务提交后才删除旧库；删除受其他标签阻塞或失败时保留旧库，并在下次启动继续幂等迁移，避免历史缓存丢失或两库同时参与读取。fresh 命中不联网，stale 默认尝试联网且失败回退旧值，retain 超期才删除。持久层每 32 次成功 write/merge 主动执行一次过期、条数和字节淘汰，quota 时立即淘汰并重试。
 - Response 之上的业务热缓存不再被当成“只是 View 状态”：当前 TopicSession、通知分页（最多 32 页）、收藏/回应完整集合、用户资料/关注/外部摘要（最多 32 个用户）、用户观察归一化历史分页、图片 Object URL（最多 32 个）和 LDC 兼容 bridge 都有明确统计与清理生命周期。设置清理先暂停通知、收藏等后台 producer，并用 epoch 让晚到异步结果失效，再清应用热缓存、持久响应与跨标签失效状态；当前 Topic 只在持久层完成后重建，最后才恢复 producer，不能只删 IndexedDB 后继续命中或写回旧内存。
-- 持久缓存提交与失效通过 `linuxdo-enhanced-reader:cache-coordination:v1`、BroadcastChannel 和 Web Locks 跨标签同步；成功的 `write`、`restore`、`merge` 都让其他标签丢弃同 ID 的旧 memory LRU。分页投影的新 generation 物理页静默落盘，最终 manifest 只广播一次，避免逐页消息风暴。账号相关远端身份都含 `authScope`。已登录文档固定使用 `account:<username>` 并按账号隔离，未登录文档按站点统一使用 `anonymous:<origin>` 并在匿名标签间共享；两类 scope 绝不互读。翻译按内容指纹隔离，公共图片按绝对 URL/variant 隔离，二者不含账号数据。
+- 持久缓存提交与失效通过 `linuxdo-enhanced-reader:cache-coordination:v1`、BroadcastChannel 和 Web Locks 跨标签同步；同一 `authScope + cacheId` 在所有标签中只允许一个网络 producer，其他 consumer 等待并重读共享 IndexedDB。成功的 `write`、`restore`、`merge` 都让其他标签丢弃同 ID 的旧 memory LRU。分页投影的新 generation 物理页静默落盘，最终 manifest 只广播一次，避免逐页消息风暴。账号相关远端身份都含 `authScope`。已登录文档固定使用 `account:<username>` 并按账号隔离，未登录文档按站点统一使用 `anonymous:<origin>` 并在匿名标签间共享；两类 scope 绝不互读。翻译按内容指纹隔离，公共图片按绝对 URL/variant 隔离，二者不含账号数据。
 - mutation、权限探测和已读提交一律 `no-store`，不能用旧响应代替服务端权威结果。
 - “缓存覆盖所有业务”不是目标：能安全重取且允许 stale 的读取结果进入缓存；设置、历史、队列、离线 HTML、导入字体、AI 总结历史等用户数据由各自 repository 持久化；mutation、上传、权限与已读提交保持 `no-store`；宿主 service/model 和普通 `<img>` 字节分别由 Discourse 与浏览器拥有。设置页只清理前一类可重取数据和明确列出的历史，不把后几类伪装成缓存。
 
@@ -73,7 +73,8 @@
 
 | 类别 | owner / 代表字段 | 上限与失效 | 是否进入数据管理 |
 | --- | --- | --- | --- |
-| 中央响应与写 flight | `ResponseRepository.#memory/#writes`、IndexedDB store、`CrossTabCacheCoordinator` flights | 内存 96/24 MiB、持久 600/96 MiB；writes 完成即删；flight TTL/stale + 最多 128 | 是：六类目录/失效；flight 是协调元数据，不计内容记录 |
+| 中央响应与写 flight | `ResponseRepository.#memory/#writes`、IndexedDB store、`CrossTabCacheCoordinator` flights | 内存随档位 48–96 / 8–24 MiB、持久 600/96 MiB；writes 完成即删；flight TTL/stale + 最多 128；失效只标记命中同 id/kind/tag 的在途读写 | 是：六类目录/失效；flight 是协调元数据，不计内容记录 |
+| 宿主 Topic 预热交接 | `TopicSnapshotHandoff` | 低/中/高档 1/3/6 个 Topic，2/8/16 MiB，TTL 60 秒；消费、离开预热区、超期、超额或 application destroy 释放 | 否：只是已持久 canonical 快照的一次性同页交接 |
 | 当前 Topic canonical | `TopicSession.#postById/#postByNumber/#unavailablePostNumbers`、`ReplyTreeRepository`、`TopicSnapshotRepository` 内存实体与 pending write | 单 Topic scope；切帖/关闭销毁；unavailable 只在当前会话；snapshot flush 后持久层按策略管理 | 当前会话计 1；帖子分类通过 close/flush/rebuild 释放，不能直接清 Map 破坏正在阅读的实体 |
 | Topic 显示投影 memo | `ReaderReplyTreePresentation.#cachedRoots/#cachedRootBranches/#cachedHiddenFloorRunsAfter` | 只对应当前 canonical/projection revision，revision 改变整份替换，Topic scope 释放 | 否：纯计算投影，无跨会话命中 |
 | Topic DOM/几何窗口 | `ReaderTopicDomCoordinator.#retainedViews`、direct-reply prefetch registries，`ReaderTopicContextSurface.#discussionMaterializedLru`，virtual/reply layout 的 measured/index Map | retained view 跟随性能 `maxMountedPostCount`；完整讨论 materialized 默认至少 24、通常 eager×3；其余跟当前 mounted roots/observer/scope 清理 | 否：DOM/测量与当前交互状态，不是可重取响应；强清会破坏当前视图 |
@@ -86,6 +87,8 @@
 | 请求与动作进行中 registry | scheduler `#tasksByKey`、client `#requests`、Topic pending loads、translation queue、post/action/share/bookmark flights、RepeatActionGate deadlines | 完成/abort/destroy 即删；scheduler queueLimit；只保存 Promise/计时/意图，不保存可再次消费的成功响应 | 否：进行中事务；用户清理内容缓存不能取消无关 mutation |
 | 请求事实与性能诊断 | `RequestObserver.#events/#active`、`ReaderResourceMonitor` samples/evidence/visibility | 默认 5 分钟/500 个完成请求（pending 保留）；资源趋势 10 分钟、evidence 最多 1,200 | 不进六类数据缓存；日志页有自己的 completed 清理/active-scope 生命周期 |
 | 缓存事件诊断 | `ReaderCacheObserver` | 最近 15 分钟、最多 1,200 条；记录 operation/outcome/source/key、类型/tag、耗时、大小/条数与失败原因，不保存响应正文、缓存值、Cookie 或凭据 | 不进六类内容缓存；数据管理页可导出 NDJSON，应用退出即释放 |
+| 端到端流水线诊断 | `ReaderPipelineObserver` + request/cache `traceId` | 最近 15 分钟、最多 1,600 个阶段事件；聚合首 DOM、首可见帧、目标数据/DOM、锚定与滚动首帧 p50/p95/max；滚动后的虚拟 DOM 换窗保留为独立阶段 | 不进内容缓存；日志页可导出按 traceId 合并的 JSONL，不保存正文、查询值或凭据 |
+| 历史/不想再看联合投影 | `ReaderTopicStateProjection` | 只读两个 repository 当前快照；同 tick 变化合并一个 revision；跨标签页一次重读两者；application scope 释放 | 否：历史仍是阅读事实，只有 manual unwanted 是隐藏事实 |
 | View/DOM/lifecycle registry | 各 View 的 element→state Map、listener Set、PostView WeakMap、frame/timer Map、Signal listeners | 归所属 `LifecycleScope`；destroy 反向释放，WeakMap 不阻止 GC | 否：UI owner 状态，不是业务缓存 |
 | 单次计算与静态 catalog | normalize/dedupe 用局部 Map/Set，动作 descriptor、设置 schema、保留键集合等 module 常量 | 单次调用返回后 GC；静态 catalog 大小由源码固定 | 否：无运行时增长或跨请求陈旧命中 |
 

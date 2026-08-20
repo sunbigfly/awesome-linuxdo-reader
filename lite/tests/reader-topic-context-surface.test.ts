@@ -900,7 +900,7 @@ await Promise.resolve();
 await Promise.resolve();
 assert(
 	selectedQuote.querySelector('blockquote') === collapsedQuoteBody &&
-	collapsedQuoteBody?.textContent === 'canonical parent full content' &&
+	String(collapsedQuoteBody?.textContent) === 'canonical parent full content' &&
 	collapsedQuoteBody.innerHTML === quotedPostCooked &&
 	collapsedQuoteBody.querySelector(':scope > h2 > strong')?.textContent ===
 		'canonical parent' &&
@@ -1018,7 +1018,8 @@ try {
 	});
 	highlighted.dispatchEvent(quoteHoverNearTop);
 	assert(
-		quoteHint.style.left === '200px' && quoteHint.style.top === '44px',
+		String(quoteHint.style.left) === '200px' &&
+			String(quoteHint.style.top) === '44px',
 		`上方空间不足时引用浮层必须翻转到高亮下方，仍不得跑到左右两侧：${quoteHint.style.left},${quoteHint.style.top}`,
 	);
 	highlighted.dispatchEvent(new window.Event('mouseleave'));

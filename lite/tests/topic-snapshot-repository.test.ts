@@ -8,6 +8,7 @@ import {
 	TopicSnapshotRepository,
 	type StoredTopicSnapshot,
 } from '../src/cache/topic-snapshot-repository.js';
+import { TopicSnapshotHandoff } from '../src/cache/topic-snapshot-handoff.js';
 import { discoursePostIds } from '../src/discourse/identifiers.js';
 import { ReplyTreeRepository } from '../src/dom/reply-tree-repository.js';
 
@@ -37,9 +38,11 @@ function matches(entry: ResponseCacheEntry, query: ResponseCacheInvalidation): b
 
 class MemoryStore implements ResponseCacheStore {
 	readonly entries = new Map<string, ResponseCacheEntry>();
+	readCalls = 0;
 	mergeCalls = 0;
 
 	async read(id: string): Promise<ResponseCacheEntry | null> {
+		this.readCalls += 1;
 		return this.entries.get(id) ?? null;
 	}
 
@@ -280,6 +283,94 @@ assert(restoredTopics.posts().length === 2, '冷启必须恢复两个楼层正�
 assert(restoredTopics.post(2)?.cooked === 'child-live', 'Topic 快照恢复丢失楼层正文');
 assert(restoredTopics.streamPostIds().join(',') === '101,102', '冷启必须保留 Discourse post ID 流');
 assert(restoredTrees.topology.parentOf(2) === 1, '树快照 adapter 未恢复父子关系');
+
+const handoff = new TopicSnapshotHandoff<TestTopic, TestPost>({
+	authScope: 'account:test',
+	maxEntries: 2,
+});
+const preheatedSnapshot = topics.snapshot();
+assert(handoff.remember(preheatedSnapshot), '同鉴权 Topic 预热快照必须进入内存交接');
+assert(
+	handoff.forget(10) && handoff.take(10) === null,
+	'Topic 离开宿主预热区后必须释放对应内存交接，不能保留失真的就绪状态',
+);
+assert(handoff.remember(preheatedSnapshot), '重新进入预热区后必须允许再次交接同一 Topic');
+const handedSnapshot = handoff.take(10);
+assert(
+	handedSnapshot === preheatedSnapshot && handoff.take(10) === null,
+	'预热快照必须按 Topic 一次性交给正式 Reader，不能被后续 bundle 重复消费',
+);
+const handedStore = new MemoryStore();
+const handedResponses = new ResponseRepository({
+	store: handedStore,
+	maxMemoryEntries: 8,
+	maxMemoryBytes: 100_000,
+	now: () => 1000,
+});
+const handedTopics = new TopicSnapshotRepository<TestTopic, TestPost>({
+	responseRepository: handedResponses,
+	topicId: 10,
+	authScope: 'account:test',
+	freshForMs: 100,
+	retainForMs: 1000,
+	now: () => 1000,
+	initialSnapshot: handedSnapshot!,
+});
+const handedTrees = new ReplyTreeRepository(
+	10,
+	handedTopics.replyTreeSnapshotStore(),
+);
+await Promise.all([handedTopics.restore(), handedTrees.restore()]);
+assert(
+	handedStore.readCalls === 0 &&
+		handedTopics.posts().length === 2 &&
+		handedTrees.topology.parentOf(2) === 1,
+	'正式 Reader 必须从预热内存快照恢复正文与回复树，首屏不得再次查询持久缓存',
+);
+assert(
+	!handoff.remember({ ...preheatedSnapshot, authScope: 'account:other' }),
+	'跨鉴权预热快照不得进入当前 Reader 的内存交接',
+);
+let handoffNow = 2_000;
+const boundedHandoff = new TopicSnapshotHandoff<TestTopic, TestPost>({
+	authScope: 'account:test',
+	maxEntries: 2,
+	maxBytes: 10,
+	ttlMs: 100,
+	now: () => handoffNow,
+	estimateBytes: (snapshot) => snapshot.topicId === '10' ? 6 : 5,
+});
+assert(
+	boundedHandoff.remember(preheatedSnapshot, 'trace:preheat:10') &&
+	boundedHandoff.remember({ ...preheatedSnapshot, topicId: '11' }, 'trace:11') &&
+	boundedHandoff.take(10) === null,
+	'交接缓存超过字节上限时必须按 LRU 释放最旧 Topic',
+);
+const tracedHandoff = boundedHandoff.takeEntry(11);
+assert(
+	tracedHandoff?.traceId === 'trace:11' &&
+	tracedHandoff.snapshot.topicId === '11',
+	'预热快照交接必须保留 traceId，供正式打开流水线关联',
+);
+assert(
+	boundedHandoff.remember(preheatedSnapshot) &&
+	(handoffNow += 101) > 0 &&
+	boundedHandoff.take(10) === null,
+	'超过 TTL 的预热快照必须在消费前失效，不能被当作新首屏',
+);
+assert(
+	boundedHandoff.remember(preheatedSnapshot) &&
+	boundedHandoff.invalidate({ ids: ['unrelated-cache-entry'] }) === 0 &&
+	boundedHandoff.invalidate({ tags: ['topic:10'] }) === 1 &&
+	boundedHandoff.take(10) === null,
+	'同 Topic 缓存失效必须释放预热交接，无关身份失效不得误伤其他 Topic',
+);
+assert(
+	handoff.remember(preheatedSnapshot) &&
+	handoff.remember({ ...preheatedSnapshot, topicId: '11' }) &&
+	handoff.invalidate({ kinds: ['topics'] }) === 2,
+	'Topic 分类整体清理必须同步释放全部预热交接',
+);
 
 const sharedSnapshotStore = new MemoryStore();
 const sharedResponses = () => new ResponseRepository({

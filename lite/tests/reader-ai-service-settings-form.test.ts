@@ -296,7 +296,7 @@ host.querySelector<HTMLButtonElement>(
 await new Promise<void>((resolve) => setTimeout(resolve, 0));
 await new Promise<void>((resolve) => setTimeout(resolve, 0));
 assert(
-	publicCatalogRequests === 2 && forcedPublicRefreshes === 1 &&
+	Number(publicCatalogRequests) === 2 && Number(forcedPublicRefreshes) === 1 &&
 	repository.snapshot.config === catalogConfig &&
 	modelMetadata.textContent?.includes('公共目录已更新说明。') &&
 	host.textContent?.includes('已强制刷新 1 个公共模型'),
@@ -433,7 +433,7 @@ const restarted = new ReaderAiServiceSettingsForm({
 await new Promise<void>((resolve) => setTimeout(resolve, 0));
 await new Promise<void>((resolve) => setTimeout(resolve, 0));
 assert(
-	publicCatalogRequests === 3 && forcedPublicRefreshes === 2 &&
+	Number(publicCatalogRequests) === 3 && Number(forcedPublicRefreshes) === 2 &&
 	repository.snapshot.config === restartConfig &&
 	host.textContent?.includes('已缓存 1 个公共模型'),
 	'设置重开必须先读过期缓存并后台强制更新公共资料，不得请求或改写供应商目录',

@@ -33,6 +33,7 @@ export type ReaderCacheSource =
 	| 'management';
 
 export interface ReaderCacheEventInput {
+	readonly traceId?: string;
 	readonly operation: ReaderCacheOperation;
 	readonly outcome: ReaderCacheOutcome;
 	readonly source: ReaderCacheSource;
@@ -70,12 +71,25 @@ function positiveInteger(value: number, name: string): number {
 	return value;
 }
 
+function diagnosticText(value: unknown): string {
+	return String(value)
+		.replace(/([?&][A-Za-z0-9_.~-]+)=[^&#\s]*/g, '$1')
+		.replace(
+			/\b(authorization|cookie|set-cookie|api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret)\b(["']?\s*[:=]\s*)[^\r\n]*/gi,
+			'$1$2[redacted]',
+		)
+		.replace(/[\r\n\t]+/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.slice(0, 500);
+}
+
 function diagnosticError(value: unknown): string {
 	if (value === undefined || value === null) return '';
 	if (value instanceof Error) {
-		return `${value.name}: ${value.message}`.slice(0, 500);
+		return diagnosticText(`${value.name}: ${value.message}`);
 	}
-	return String(value).slice(0, 500);
+	return diagnosticText(value);
 }
 
 /**
@@ -109,6 +123,9 @@ export class ReaderCacheObserver {
 		const event = Object.freeze({
 			id: ++this.#sequence,
 			at,
+			...(input.traceId
+				? { traceId: String(input.traceId).slice(0, 180) }
+				: {}),
 			operation: input.operation,
 			outcome: input.outcome,
 			source: input.source,

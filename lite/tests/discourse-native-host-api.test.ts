@@ -5,6 +5,7 @@ import {
 	BrowserDiscourseHostApiPort,
 	discourseNativeAppEventSubscription,
 	discourseNativeBoostsAvailable,
+	discourseNativeCurrentUser,
 	discourseNativeCurrentUserBindingAvailable,
 	discourseNativeDefaultSiteTheme,
 	discourseNativeEmojiUrl,
@@ -335,7 +336,8 @@ assert(
 );
 lateCurrentUser = Object.freeze({ username: 'Viewer' });
 assert(
-	discourseNativeCurrentUsername(lateCurrentUserHost) === 'Viewer',
+	discourseNativeCurrentUsername(lateCurrentUserHost) === 'Viewer' &&
+		discourseNativeCurrentUser(lateCurrentUserHost) === lateCurrentUser,
 	'current-user miss 不得缓存，设置面板稍后打开时必须能重新解析已登录账号',
 );
 lateCurrentUser = Object.freeze({ username: '' });

@@ -1923,6 +1923,22 @@
       ],
       "note": "自动暗色可按本机计算的当地日落或固定时间进入暗色，并在次日日出恢复启用前的主题；自动切换复用手动主题与宿主原生主题链路。位置只用于本机 NOAA 近似计算，不发送网络；授权失败、非法坐标和极区结果使用明确回退。真实定位授权、跨日边界和宿主主题像素仍待浏览器验收。"
     },
+    "SET-023": {
+      "implementationStatus": "static-complete",
+      "browserStatus": "pending",
+      "owners": [
+        "lite/src/network/reader-host-turnstile-background-controller.ts",
+        "lite/src/settings/reader-performance-settings-form.ts",
+        "lite/src/state/reader-preferences-schema.ts",
+        "lite/src/userscript/main-lite-bootstrap.ts"
+      ],
+      "tests": [
+        "lite/tests/reader-host-turnstile-background-controller.test.ts",
+        "lite/tests/reader-performance-settings-form.test.ts",
+        "lite/tests/reader-preferences-schema.test.ts"
+      ],
+      "note": "后台暂停宿主 Turnstile 默认关闭；启用后只在标签隐藏满 30 秒、宿主已有响应且无编辑或支付交互时调用官方 remove，恢复前台、关闭设置或退出生命周期时调用 render。偏好默认值、设置草稿、序列化兼容与控制器暂停/恢复均有契约测试；真实宿主 Turnstile API、支付插件并存和前后台时序仍待浏览器验收。"
+    },
     "DATA-001": {
       "implementationStatus": "static-complete",
       "browserStatus": "pending",

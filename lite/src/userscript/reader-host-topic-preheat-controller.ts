@@ -120,9 +120,11 @@ export interface ReaderHostTopicPreheatControllerOptions {
 	readonly cancelFrame?: (id: number) => void;
 	readonly maxQueuedTopics?: number;
 	readonly maxConcurrentPreheats?: number;
+	readonly readMaxConcurrentPreheats?: () => number;
 	readonly activity?: ReaderHostTopicPreheatActivityPort;
 	readonly shouldPauseAfterError?: (error: unknown) => boolean;
 	readonly canResume?: () => boolean | Promise<boolean>;
+	readonly forgetPreheat?: (topicId: DiscourseTopicId) => void;
 	readonly onError?: (error: unknown) => void;
 	readonly parentScope?: LifecycleScope;
 }
@@ -198,7 +200,7 @@ export class ReaderHostTopicPreheatController {
 	readonly #options: ReaderHostTopicPreheatControllerOptions;
 	readonly #document: Document;
 	readonly #maxQueuedTopics: number;
-	readonly #maxConcurrentPreheats: number;
+	readonly #readMaxConcurrentPreheats: () => number;
 	readonly #requestFrame: (callback: FrameRequestCallback) => number;
 	readonly #cancelFrame: (id: number) => void;
 	readonly #cards = new Map<Element, CardState>();
@@ -212,6 +214,12 @@ export class ReaderHostTopicPreheatController {
 	#observer: Pick<IntersectionObserver, 'observe' | 'unobserve' | 'disconnect'> | null;
 	#resumePromise: Promise<void> | null = null;
 	#paused = false;
+	#readerForeground = false;
+	#readerShellBusy = false;
+	#readerBusy = false;
+	#readerInteractionSequence = 0;
+	#activeReaderOpen = 0;
+	#activeReaderInteraction = 0;
 	#frame = 0;
 	#destroyed = false;
 
@@ -222,15 +230,8 @@ export class ReaderHostTopicPreheatController {
 			1,
 			Math.floor(options.maxQueuedTopics ?? DEFAULT_MAX_QUEUED_TOPICS),
 		);
-		this.#maxConcurrentPreheats = Math.min(
-			MAX_CONCURRENT_PREHEATS,
-			Math.max(
-				1,
-				Math.floor(
-					options.maxConcurrentPreheats ?? DEFAULT_MAX_CONCURRENT_PREHEATS,
-				),
-			),
-		);
+		this.#readMaxConcurrentPreheats = options.readMaxConcurrentPreheats ??
+			(() => options.maxConcurrentPreheats ?? DEFAULT_MAX_CONCURRENT_PREHEATS);
 		const view = this.#document.defaultView;
 		this.#requestFrame = options.requestFrame ?? ((callback) => {
 			const request = view?.requestAnimationFrame;
@@ -291,6 +292,68 @@ export class ReaderHostTopicPreheatController {
 			topic.confirmedReadCount = this.#confirmedReadCount(topic.topicId);
 			this.#renderTopic(topic);
 		}
+	}
+
+	beginReaderOpen(topicId: string | number): number {
+		if (this.#destroyed || this.scope.destroyed) return 0;
+		this.#readerForeground = true;
+		const generation = ++this.#readerInteractionSequence;
+		this.#activeReaderOpen = generation;
+		this.#syncReaderBusy(topicId);
+		return generation;
+	}
+
+	finishReaderOpen(generation: number): void {
+		if (
+			this.#destroyed ||
+			this.scope.destroyed ||
+			generation <= 0 ||
+			this.#activeReaderOpen !== generation
+		) return;
+		this.#activeReaderOpen = 0;
+		this.#syncReaderBusy();
+	}
+
+	beginReaderInteraction(): number {
+		if (this.#destroyed || this.scope.destroyed) return 0;
+		const generation = ++this.#readerInteractionSequence;
+		this.#activeReaderInteraction = generation;
+		this.#syncReaderBusy();
+		return generation;
+	}
+
+	finishReaderInteraction(generation: number): void {
+		if (
+			this.#destroyed ||
+			this.scope.destroyed ||
+			generation <= 0 ||
+			this.#activeReaderInteraction !== generation
+		) return;
+		this.#activeReaderInteraction = 0;
+		this.#syncReaderBusy();
+	}
+
+	setReaderForeground(active: boolean): void {
+		if (this.#destroyed || this.scope.destroyed) return;
+		if (this.#readerForeground === active) return;
+		this.#readerForeground = active;
+		if (!active) {
+			this.#readerShellBusy = false;
+			this.#activeReaderOpen = 0;
+			this.#activeReaderInteraction = 0;
+		}
+		this.#syncReaderBusy();
+		if (this.#readerBusy) return;
+		this.#enforceForegroundNetworkBudget();
+		this.#fillQueue();
+		this.#pump();
+	}
+
+	setReaderShellBusy(active: boolean): void {
+		if (this.#destroyed || this.scope.destroyed) return;
+		if (this.#readerShellBusy === active) return;
+		this.#readerShellBusy = active;
+		this.#syncReaderBusy();
 	}
 
 	updateLiveReading(
@@ -471,7 +534,7 @@ export class ReaderHostTopicPreheatController {
 		if (topic && ![...topic.cards].some(
 			(candidate) => this.#cards.get(candidate)?.near === true,
 		)) {
-			this.#nearTopics.delete(topic.topicId);
+			this.#leavePreheatArea(topic);
 		}
 		if (topic && !topic.cards.size) {
 			if (topic.status === 'queued') {
@@ -514,7 +577,7 @@ export class ReaderHostTopicPreheatController {
 			if (!entry.isIntersecting) {
 				if (![...topic.cards].some(
 					(candidate) => this.#cards.get(candidate)?.near === true,
-				)) this.#nearTopics.delete(topic.topicId);
+				)) this.#leavePreheatArea(topic);
 				continue;
 			}
 			const rect = entry.boundingClientRect;
@@ -547,7 +610,7 @@ export class ReaderHostTopicPreheatController {
 	}
 
 	#fillQueue(): void {
-		if (this.#paused || !this.#activityVisible()) return;
+		if (this.#paused || this.#readerBusy || !this.#activityVisible()) return;
 		this.#dropStaleQueuedTopics();
 		for (const [topicId] of [...this.#nearTopics.entries()]
 			.sort((left, right) => left[1] - right[1])) {
@@ -574,6 +637,7 @@ export class ReaderHostTopicPreheatController {
 
 	#enqueue(topic: TopicState): void {
 		if (
+			this.#readerBusy ||
 			!this.#activityVisible() ||
 			this.#liveReading.has(topic.topicId) ||
 			topic.status === 'queued' ||
@@ -595,6 +659,7 @@ export class ReaderHostTopicPreheatController {
 			this.#destroyed ||
 			this.scope.destroyed ||
 			this.#paused ||
+			this.#readerBusy ||
 			!this.#activityVisible()
 		) return;
 		for (let index = this.#queue.length - 1; index >= 0; index -= 1) {
@@ -610,10 +675,20 @@ export class ReaderHostTopicPreheatController {
 				this.#renderTopic(topic);
 			}
 		}
+		const configuredMaxConcurrentPreheats = Math.min(
+			MAX_CONCURRENT_PREHEATS,
+			Math.max(
+				1,
+				Math.floor(Number(this.#readMaxConcurrentPreheats()) || 1),
+			),
+		);
+		const maxConcurrentPreheats = this.#readerForeground
+			? Math.min(1, configuredMaxConcurrentPreheats)
+			: configuredMaxConcurrentPreheats;
 		while (
-			this.#networkActiveTopics.size < this.#maxConcurrentPreheats &&
+			this.#networkActiveTopics.size < maxConcurrentPreheats &&
 			this.#activeControllers.size <
-				this.#maxQueuedTopics + this.#maxConcurrentPreheats
+				this.#maxQueuedTopics + maxConcurrentPreheats
 		) {
 			const queueIndex = this.#queue.findIndex((topicId) =>
 				this.#topics.get(topicId)?.restorePending !== true);
@@ -796,6 +871,73 @@ export class ReaderHostTopicPreheatController {
 		}
 	}
 
+	#suspendForReader(topicId?: string | number): void {
+		for (const queuedTopicId of this.#queue.splice(0)) {
+			const queued = this.#topics.get(queuedTopicId);
+			if (queued?.status !== 'queued') continue;
+			queued.status = 'idle';
+			this.#renderTopic(queued);
+		}
+		const target = topicId === undefined ? '' : ` ${String(topicId)}`;
+		for (const controller of this.#activeControllers.values()) {
+			controller.abort(
+				new DOMException(
+					`Reader 打开 Topic${target}，抢占宿主预热`,
+					'AbortError',
+				),
+			);
+		}
+		for (const topic of this.#topics.values()) this.#renderTopic(topic);
+	}
+
+	#enforceForegroundNetworkBudget(): void {
+		if (!this.#readerForeground) return;
+		let retained = 0;
+		for (const [topicId, controller] of this.#activeControllers) {
+			if (!this.#networkActiveTopics.has(topicId)) continue;
+			retained += 1;
+			if (retained <= 1) continue;
+			controller.abort(new DOMException(
+				'Reader 前台阅读收紧宿主预热并发',
+				'AbortError',
+			));
+		}
+	}
+
+	#syncReaderBusy(topicId?: string | number): void {
+		const busy = this.#readerShellBusy ||
+			this.#activeReaderOpen > 0 ||
+			this.#activeReaderInteraction > 0;
+		if (busy === this.#readerBusy) return;
+		this.#readerBusy = busy;
+		if (busy) {
+			this.#suspendForReader(topicId);
+			return;
+		}
+		for (const topic of this.#topics.values()) this.#renderTopic(topic);
+		if (this.#paused) {
+			void this.#tryResume();
+			return;
+		}
+		this.#fillQueue();
+		this.#pump();
+	}
+
+	#leavePreheatArea(topic: TopicState): void {
+		this.#nearTopics.delete(topic.topicId);
+		if (topic.status !== 'ready') return;
+		try {
+			this.#options.forgetPreheat?.(topic.topicId);
+		} catch (error) {
+			this.#report(error);
+		}
+		topic.status = 'idle';
+		topic.attempts = 0;
+		topic.restoreAttempted = false;
+		topic.cacheHit = false;
+		this.#renderTopic(topic);
+	}
+
 	#onActivityChanged(): void {
 		if (this.#destroyed || this.scope.destroyed) return;
 		if (!this.#activityVisible()) {
@@ -881,6 +1023,13 @@ export class ReaderHostTopicPreheatController {
 			topic.status === 'partial' ||
 			topic.status === 'error'
 		) {
+			if (topic.status === 'ready') {
+				try {
+					this.#options.forgetPreheat?.(topic.topicId);
+				} catch (error) {
+					this.#report(error);
+				}
+			}
 			topic.status = 'idle';
 			topic.attempts = 0;
 		}
@@ -906,7 +1055,12 @@ export class ReaderHostTopicPreheatController {
 			? `上次阅读 ${historyDate(viewedAt)} · 定位 #${floor}`
 			: '';
 		const total = topic.totalCount || history?.postsCount || 0;
-		const suffix = topic.status === 'queued'
+		const pausedForReader = this.#readerBusy &&
+			topic.status === 'idle' &&
+			this.#nearTopics.has(topic.topicId);
+		const suffix = pausedForReader
+			? '（暂停：阅读优先）'
+			: topic.status === 'queued'
 			? '（排队）'
 			: topic.status === 'loading'
 				? '（后台）'
@@ -951,6 +1105,11 @@ export class ReaderHostTopicPreheatController {
 		this.#networkActiveTopics.clear();
 		this.#resumePromise = null;
 		this.#paused = false;
+		this.#readerForeground = false;
+		this.#readerShellBusy = false;
+		this.#readerBusy = false;
+		this.#activeReaderOpen = 0;
+		this.#activeReaderInteraction = 0;
 		this.#queue.length = 0;
 		this.#nearTopics.clear();
 		this.#liveReading.clear();

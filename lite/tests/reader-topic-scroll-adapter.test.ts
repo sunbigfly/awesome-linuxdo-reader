@@ -565,6 +565,14 @@ assert(
 );
 
 adapter.writeScrollOffset(500);
+assert(
+	adapter.alignmentError(second, {
+		source: 'composer',
+		alignment: 'nearest',
+		highlight: false,
+	}) === -60,
+	'滚动 owner 必须暴露与实际 alignPost 同源的有符号像素误差',
+);
 adapter.alignPost(second, {
 	source: 'composer',
 	alignment: 'nearest',
@@ -809,11 +817,81 @@ externalKeyboardRoot.dispatchEvent(
 assert(
 	externalKeyboardAdapter.lastUserScrollAt() === 200 &&
 		externalKeyboardAdapter.lastUserScrollDirection() === 1 &&
-		externalKeyboardIntents === 1 &&
+		Number(externalKeyboardIntents) === 1 &&
 		externalKeyboardDirectIntents === 0,
 	'宿主 body 的 PageDown 真正推动 Reader 后必须取得一次 scroll-only 用户令牌，让稀疏远跳段能够定向补窗',
 );
 externalKeyboardAdapter.destroy();
+
+const { document: ownedKeyboardDocument } = parseHTML(
+	'<!doctype html><html><body><main id="owned-reader-scroll"></main></body></html>',
+);
+const ownedKeyboardRoot =
+	ownedKeyboardDocument.querySelector<HTMLElement>('#owned-reader-scroll')!;
+Object.defineProperties(ownedKeyboardRoot, {
+	clientHeight: { get: () => 400 },
+	scrollHeight: { get: () => 2_000 },
+	scrollTo: {
+		value: (options: ScrollToOptions) => {
+			ownedKeyboardRoot.scrollTop = Number(options.top);
+		},
+	},
+});
+ownedKeyboardRoot.scrollTop = 800;
+let ownedKeyboardIntents = 0;
+let ownedKeyboardCommits = 0;
+const ownedKeyboardAdapter = new ReaderTopicScrollAdapter({
+	scrollRoot: ownedKeyboardRoot,
+	createResizeObserver: () => null,
+	requestFrame: () => 1,
+	cancelFrame() {},
+	now: () => 300,
+});
+ownedKeyboardAdapter.listenDirectUserScrollIntent(() => {
+	ownedKeyboardIntents += 1;
+});
+ownedKeyboardAdapter.listenScroll(() => {
+	ownedKeyboardCommits += 1;
+});
+const ownedPageUp = new ownedKeyboardDocument.defaultView!.Event('keydown', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperties(ownedPageUp, {
+	key: { value: 'PageUp' },
+	altKey: { value: false },
+	ctrlKey: { value: false },
+	metaKey: { value: false },
+});
+ownedKeyboardRoot.dispatchEvent(ownedPageUp);
+assert(
+	ownedPageUp.defaultPrevented &&
+	ownedKeyboardRoot.scrollTop === 450 &&
+	ownedKeyboardIntents === 1 &&
+	ownedKeyboardCommits === 1,
+	'焦点属于 Reader 的 PageUp 必须由唯一 scroll owner 同步提交 7/8 视口位移，不能等待低配浏览器迟到的默认滚动',
+);
+const ownedButton = ownedKeyboardDocument.createElement('button');
+ownedKeyboardRoot.append(ownedButton);
+const ownedButtonSpace = new ownedKeyboardDocument.defaultView!.Event(
+	'keydown',
+	{ bubbles: true, cancelable: true },
+);
+Object.defineProperties(ownedButtonSpace, {
+	key: { value: ' ' },
+	altKey: { value: false },
+	ctrlKey: { value: false },
+	metaKey: { value: false },
+});
+ownedButton.dispatchEvent(ownedButtonSpace);
+assert(
+	!ownedButtonSpace.defaultPrevented &&
+	ownedKeyboardRoot.scrollTop === 450 &&
+	ownedKeyboardIntents === 1 &&
+	ownedKeyboardCommits === 1,
+	'Reader 内按钮的空格激活语义必须优先于主滚动 owner，不能误滚正文并吞掉点击',
+);
+ownedKeyboardAdapter.destroy();
 
 const { document: upwardDocument } = parseHTML(
 	'<!doctype html><html><body><main id="root"><article id="inner"></article></main></body></html>',
@@ -869,7 +947,7 @@ assert(
 	secondUpwardWheel.defaultPrevented &&
 		Number(upwardRoot.scrollTop) === 260 &&
 		upwardAdapter.readWindowInput().scrollOffset === 260 &&
-		upwardWindowChanges === 2 &&
+		Number(upwardWindowChanges) === 2 &&
 		upwardFrame === null,
 	'连续向上 wheel 必须逐次同步发布最新窗口坐标，不能等适配器 rAF 后才让虚拟 DOM 获得排期',
 );

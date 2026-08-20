@@ -387,7 +387,7 @@ assert(
 	queue.size === 1 &&
 		prefetched.join(',') === '42' &&
 		add.getAttribute('aria-pressed') === 'true' &&
-		add.dataset.ldpTooltipLabel === '移出阅读队列' &&
+		String(add.dataset.ldpTooltipLabel) === '移出阅读队列' &&
 		storage.getItem(READER_QUEUE_STORAGE_KEY)?.includes('"topicId":42') &&
 		storage.getItem(READER_QUEUE_STORAGE_KEY)?.includes(
 			'"avatarTemplate":"/avatar/{size}.png"',
@@ -1262,7 +1262,7 @@ const resetQueueSnapshot = JSON.parse(
 	surfaces: Record<string, { x: number; y: number; dock: string }>;
 };
 assert(
-	clearQueue.size === 1 &&
+	Number(clearQueue.size) === 1 &&
 		resetQueueSnapshot.entries.length === 1 &&
 		Object.values(resetQueueSnapshot.surfaces).every((surface) =>
 			surface.x === 0.02 &&

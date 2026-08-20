@@ -238,6 +238,52 @@ assert(
 		'bigfly_sun',
 	'刷新启动必须同时等待原生 Ajax 与 current-user，不得用匿名作用域提前恢复队列',
 );
+let constrainedReadinessNow = 0;
+const constrainedRuntimeEnvironment = new BrowserUserscriptEnvironment({
+	userscriptGlobal: {
+		unsafeWindow: {
+			navigator: {
+				hardwareConcurrency: 2,
+				deviceMemory: 2,
+				connection: { effectiveType: '3g' },
+			},
+			document: { visibilityState: 'visible' },
+			moduleBroker: {
+				lookup(name: string): unknown {
+					if (constrainedReadinessNow < 30_000) return null;
+					if (name === 'discourse/lib/ajax') {
+						return { ajax: () => Promise.resolve({}) };
+					}
+					if (name === 'discourse/models/user') {
+						return {
+							default: {
+								current: () => ({ username: 'low-device' }),
+							},
+						};
+					}
+					return null;
+				},
+			},
+		},
+	},
+});
+await constrainedRuntimeEnvironment.waitForDiscourseRuntime(
+	new AbortController().signal,
+	{
+		pollIntervalMs: 5_000,
+		now: () => constrainedReadinessNow,
+		delay: async (milliseconds) => {
+			constrainedReadinessNow += milliseconds;
+		},
+	},
+);
+assert(
+	constrainedReadinessNow === 30_000 &&
+	discourseNativeCurrentUsername(
+		constrainedRuntimeEnvironment.discourseHost,
+	) === 'low-device',
+	'低核、低内存或 3G 启动必须使用扩展 readiness 窗口，不能沿用普通设备固定 15 秒期限',
+);
 assert(
 	environment.readScriptVersion() === '0.1.16',
 	'脚本版本必须从 userscript 原生 GM_info 读取，不能在运行时复制 metadata 常量',

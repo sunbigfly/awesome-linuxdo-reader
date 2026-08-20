@@ -13,7 +13,10 @@ import {
 	CoordinatedRequestClient,
 	type SharedRequestPermitPort,
 } from '../network/coordinated-request-client.js';
-import { DomainRequestGateway } from '../network/domain-request-gateway.js';
+import {
+	DomainRequestGateway,
+	type DomainRequestTracePort,
+} from '../network/domain-request-gateway.js';
 import type { RequestSchedulerOptions } from '../network/request-scheduler.js';
 import {
 	RequestRateLimitPolicy,
@@ -64,6 +67,7 @@ export interface ReaderDataRuntimeOptions {
 	readonly indexedDb?: IDBFactory | null;
 	readonly broadcastChannelFactory?: ((name: string) => BroadcastChannel) | null;
 	readonly sourceId: string;
+	readonly trace?: DomainRequestTracePort;
 	readonly scheduler: Omit<RequestSchedulerOptions, 'startGate'>;
 	readonly rateLimit: RequestRateLimitPolicyOptions;
 	readonly defaultMax429Retries?: number;
@@ -83,8 +87,11 @@ export interface ReaderDataRuntimeOptions {
 	readonly onDiagnostic?: (diagnostic: ReaderDataRuntimeDiagnostic) => void;
 }
 
-export type ReaderDataTopicBundleOptions = Omit<
-	ReaderTopicCoreBundleOptions,
+export type ReaderDataTopicBundleOptions<
+	TTopic extends DiscourseTopicPayload<TPost>,
+	TPost extends DiscourseTopicPostInput,
+> = Omit<
+	ReaderTopicCoreBundleOptions<TTopic, TPost>,
 	'gateway' | 'responses' | 'readCoordination'
 >;
 
@@ -248,7 +255,11 @@ export class ReaderDataRuntime {
 				onCoordinationError: (cause) => report('request-coordination', cause),
 			});
 			this.scope.add(() => this.client.destroy());
-			this.gateway = new DomainRequestGateway(this.client, this.responses);
+			this.gateway = new DomainRequestGateway(
+				this.client,
+				this.responses,
+				options.trace,
+			);
 		} catch (error) {
 			this.scope.destroy();
 			throw error;
@@ -260,7 +271,7 @@ export class ReaderDataRuntime {
 		TPost extends DiscourseTopicPostInput,
 	>(
 		context: ReaderTopicFactoryContext,
-		options: ReaderDataTopicBundleOptions,
+		options: ReaderDataTopicBundleOptions<TTopic, TPost>,
 	) {
 		if (this.#destroyed || this.scope.destroyed) {
 			throw new Error('ReaderDataRuntime 已销毁');
@@ -273,9 +284,22 @@ export class ReaderDataRuntime {
 		});
 	}
 
-	applyRequestRuntimePolicy(policy: Readonly<{ maxConcurrent: number }>): void {
+	applyRequestRuntimePolicy(policy: Readonly<{
+		maxConcurrent: number;
+		responseMemoryMaxEntries?: number;
+		responseMemoryMaxBytes?: number;
+	}>): void {
 		if (this.#destroyed || this.scope.destroyed) return;
 		this.client.applyRuntimePolicy(policy);
+		if (
+			policy.responseMemoryMaxEntries !== undefined &&
+			policy.responseMemoryMaxBytes !== undefined
+		) {
+			this.responses.applyMemoryPolicy({
+				maxEntries: policy.responseMemoryMaxEntries,
+				maxBytes: policy.responseMemoryMaxBytes,
+			});
+		}
 	}
 
 	destroy(): void {

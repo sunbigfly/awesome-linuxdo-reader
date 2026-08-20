@@ -588,7 +588,7 @@ function createRuntimeStage(
 						openedTopicStorage: localStorage,
 						openedTopicStorageScope: currentUsername,
 						isTopicHidden: (topicId) =>
-							state.runtime?.unwantedTopics.isManuallyHidden(topicId) === true,
+							state.runtime?.topicStates.isManuallyHidden(topicId) === true,
 						hideTopic: (input) => {
 							const runtime = state.runtime;
 							if (!runtime) throw new Error('不想看仓库尚未就绪');
@@ -1095,15 +1095,15 @@ function createRuntimeStage(
 					console.error('[main-lite:automatic-unwanted-history]', cause);
 				}
 			}
-			let manualTopicSignature = runtime.unwantedTopics.snapshot.records
-				.filter((record) => record.source === 'manual')
+			let manualTopicSignature = runtime.topicStates.snapshot.records
+				.filter((record) => record.manuallyHidden)
 				.map((record) => record.topicId)
 				.sort((left, right) => left - right)
 				.join(',');
 			hostTopicEnhancement?.refreshHiddenTopics();
-			runtime.unwantedTopics.changes.subscribe((snapshot) => {
+			runtime.topicStates.changes.subscribe((snapshot) => {
 				const nextSignature = snapshot.records
-					.filter((record) => record.source === 'manual')
+					.filter((record) => record.manuallyHidden)
 					.map((record) => record.topicId)
 					.sort((left, right) => left - right)
 					.join(',');

@@ -29,6 +29,7 @@ export type RequestObservationType =
 	| 'other';
 
 export interface RequestObservationStart {
+	readonly traceId?: string;
 	readonly href: string;
 	readonly method?: string;
 	readonly transport: RequestObservationTransport;
@@ -83,6 +84,7 @@ export interface RequestObservationUpdate {
 
 export interface RequestObservationEvent {
 	readonly id: number;
+	readonly traceId: string;
 	readonly href: string;
 	readonly path: string;
 	readonly queryShape: string;
@@ -384,6 +386,7 @@ export class RequestObserver {
 		const baseOrigin = new URL(this.#baseHref).origin;
 		const event: RequestObservationEvent = Object.freeze({
 			id: ++this.#sequence,
+			traceId: diagnosticCode(input.traceId),
 			href: normalizedHref,
 			path: requestObservationPath(url, baseOrigin),
 			queryShape: requestObservationQueryShape(url),

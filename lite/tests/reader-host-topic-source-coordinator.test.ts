@@ -105,6 +105,7 @@ const coordinator = new ReaderHostTopicSourceCoordinator({
 });
 
 const target = Object.freeze({
+	historical: false,
 	request: Object.freeze({
 		topicId: discourseTopicId(42),
 		source: 'link' as const,
@@ -147,6 +148,7 @@ assert(
 );
 
 const menuTarget = Object.freeze({
+	historical: false,
 	request: Object.freeze({
 		topicId: discourseTopicId(43),
 		source: 'link' as const,
@@ -195,6 +197,7 @@ nativeNotification.addEventListener('click', (event) => {
 	if (!event.defaultPrevented) nativeNotificationNavigations += 1;
 });
 const nativeNotificationTarget = Object.freeze({
+	historical: false,
 	request: Object.freeze({
 		topicId: discourseTopicId(44),
 		postNumber: discoursePostNumber(7),
@@ -211,9 +214,9 @@ assert(
 );
 await coordinator.settle(nativeNotificationTarget, true);
 assert(
-	nativeNotificationCallbacks === 1 &&
-	nativeNotificationNavigations === 0 &&
-	userMenuCloseCalls === 2 &&
+	Number(nativeNotificationCallbacks) === 1 &&
+	Number(nativeNotificationNavigations) === 0 &&
+	Number(userMenuCloseCalls) === 2 &&
 	userMenu.hidden,
 	'Reader 成功进入后必须只补发一次宿主通知回调，更新已读但不得触发原生路由',
 );
@@ -223,9 +226,9 @@ userMenuTrigger.setAttribute('aria-expanded', 'true');
 await coordinator.prepare(nativeNotificationTarget);
 await coordinator.settle(nativeNotificationTarget, false);
 assert(
-	nativeNotificationCallbacks === 1 &&
-	nativeNotificationNavigations === 0 &&
-	userMenuCloseCalls === 3 &&
+	Number(nativeNotificationCallbacks) === 1 &&
+	Number(nativeNotificationNavigations) === 0 &&
+	Number(userMenuCloseCalls) === 3 &&
 	userMenu.hidden,
 	'Reader 打开失败只能收口宿主菜单，不得伪造通知已读回调',
 );

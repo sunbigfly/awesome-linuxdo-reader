@@ -556,7 +556,7 @@ assert(
 assert(
 	historyHeading?.nextElementSibling === historyHelp &&
 		historyNotice?.parentElement === historyHelp &&
-		historyNotice.getAttribute('role') === 'tooltip' &&
+		historyNotice?.getAttribute('role') === 'tooltip' &&
 		historyInfo?.getAttribute('aria-expanded') === 'false',
 	'数据来源说明必须收进下拉右侧的信息按钮，不再占用日历下方空间',
 );

@@ -108,6 +108,13 @@ const performance: ReaderPerformanceSnapshot = Object.freeze({
 	requestRateTargetPercent: 80,
 	requestShortBudget: 40,
 	requestLongBudget: 160,
+	preheatMaxConcurrent: 2,
+	preheatHandoffMaxEntries: 3,
+	preheatHandoffMaxBytes: 8 * 1024 * 1024,
+	preheatHandoffTtlMs: 60_000,
+	responseMemoryMaxEntries: 72,
+	responseMemoryMaxBytes: 16 * 1024 * 1024,
+	projectionHydrationBatchSize: 1,
 });
 const windowChanges = new Signal<VirtualStreamDomCommit>();
 const sessionChanges = new Signal<TopicSessionCommit>();

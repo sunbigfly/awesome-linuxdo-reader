@@ -401,6 +401,13 @@ await repository.write(memoryOnlyPolicy('memory-1'), 1);
 await repository.write(memoryOnlyPolicy('memory-2'), 2);
 await repository.write(memoryOnlyPolicy('memory-3'), 3);
 assert(repository.memoryStats().entries === 2, 'memory LRU 必须执行 maxEntries 淘汰');
+repository.applyMemoryPolicy({ maxEntries: 1, maxBytes: 100 });
+assert(
+	repository.memoryStats().entries === 1 &&
+	(await repository.read(memoryOnlyPolicy('memory-3'))).state === 'fresh' &&
+	(await repository.read(memoryOnlyPolicy('memory-2'))).state === 'miss',
+	'设备档位下调时必须立即裁剪现有 memory LRU，并保留最新热点',
+);
 
 const delayedPersistentRead = deferred<ResponseCacheEntry | null>();
 const delayedStore: ResponseCacheStore = {

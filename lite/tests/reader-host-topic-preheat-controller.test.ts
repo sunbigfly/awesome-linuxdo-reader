@@ -545,6 +545,12 @@ assert(
 
 const restoredPreheatCalls: string[] = [];
 const restoredNetworkCalls: string[] = [];
+let restoredSignal: AbortSignal | null = null;
+const currentRestoredSignal = (): AbortSignal | null => restoredSignal;
+let resolveRestoredPreheat!: (result: ReaderHostTopicPreheatProgress) => void;
+const restoredPreheat = new Promise<ReaderHostTopicPreheatProgress>((resolve) => {
+	resolveRestoredPreheat = resolve;
+});
 const restoredCard = document.querySelector<HTMLElement>('[data-topic-id="11"]')!;
 const hostStats = document.createElement('span');
 hostStats.className = 'topic-stats';
@@ -555,17 +561,10 @@ const restored = new ReaderHostTopicPreheatController({
 	mutations,
 	historyEntry: (topicId) => history.get(Number(topicId)) ?? null,
 	readOpenTopicsAtFirstPost: () => false,
-	restorePreheat(topicId, postNumber) {
+	restorePreheat(topicId, postNumber, signal) {
 		restoredPreheatCalls.push(`${topicId}:${postNumber}`);
-		return Promise.resolve(Number(topicId) === 11
-			? Object.freeze({
-				warmedCount: 48,
-				requestedCount: 48,
-				totalCount: 90,
-				cacheHit: true,
-				complete: true,
-			})
-			: null);
+		restoredSignal = signal;
+		return restoredPreheat;
 	},
 	preheat(topicId, postNumber, _signal, _report, minimumTotalCount) {
 		restoredNetworkCalls.push(`${topicId}:${postNumber}:${minimumTotalCount}`);
@@ -606,7 +605,22 @@ intersectionCallback([{
 	target: restoredCard,
 	isIntersecting: true,
 }] as unknown as IntersectionObserverEntry[], {} as IntersectionObserver);
+const restoredOpenGeneration = restored.beginReaderOpen(discourseTopicId(11));
+assert(
+	currentRestoredSignal()?.aborted === false &&
+		restoredCard.querySelector('.ldp-host-topic-reader-meta')?.textContent
+			?.includes('暂停：阅读优先'),
+	'Reader 抢占联网预热时必须保留在途缓存恢复，并明确显示阅读优先暂停态',
+);
+resolveRestoredPreheat(Object.freeze({
+	warmedCount: 48,
+	requestedCount: 48,
+	totalCount: 90,
+	cacheHit: true,
+	complete: true,
+}));
 await flushMicrotasks();
+restored.finishReaderOpen(restoredOpenGeneration);
 assert(
 	restoredPreheatCalls.join(',') === '11:22' &&
 	restoredNetworkCalls.length === 0 &&
@@ -706,6 +720,7 @@ let activityVisible = false;
 const activityListeners = new Set<() => void>();
 let activityPreheatCalls = 0;
 let activityPreheatSignal: AbortSignal | null = null;
+const forgottenPreheats: number[] = [];
 const currentActivityPreheatSignal = (): AbortSignal | null =>
 	activityPreheatSignal;
 const activityAware = new ReaderHostTopicPreheatController({
@@ -719,6 +734,9 @@ const activityAware = new ReaderHostTopicPreheatController({
 			activityListeners.add(listener);
 			return () => activityListeners.delete(listener);
 		},
+	},
+	forgetPreheat(topicId) {
+		forgottenPreheats.push(Number(topicId));
 	},
 	preheat(_topicId, _postNumber, signal) {
 		activityPreheatCalls += 1;
@@ -790,9 +808,112 @@ activityVisible = true;
 for (const listener of [...activityListeners]) listener();
 await flushMicrotasks();
 assert(
-	activityPreheatCalls === 2,
+	Number(activityPreheatCalls) === 2,
 	'标签再次可见时必须从 canonical 缓存状态重新接管预热，不能永久停在 loading',
+);
+intersectionCallback([{
+	target: restoredCard,
+	isIntersecting: false,
+}] as unknown as IntersectionObserverEntry[], {} as IntersectionObserver);
+assert(
+	forgottenPreheats.includes(11) &&
+		restoredCard.querySelector('.ldp-host-topic-reader-meta')
+			?.getAttribute('data-ldp-preheat-state') === 'idle',
+	'就绪 Topic 离开预热区时必须释放内存交接并取消就绪，回到近视口后才能重新交接',
 );
 activityAware.destroy();
 assert(activityListeners.size === 0, '宿主预热活跃监听必须随 owner 释放');
+
+let foregroundPreheatCalls = 0;
+let foregroundPreheatAborts = 0;
+let foregroundPreheatConcurrency = 1;
+const foregroundAware = new ReaderHostTopicPreheatController({
+	document,
+	mutations,
+	historyEntry: () => null,
+	readOpenTopicsAtFirstPost: () => true,
+	readMaxConcurrentPreheats: () => foregroundPreheatConcurrency,
+	preheat(_topicId, _postNumber, signal) {
+		foregroundPreheatCalls += 1;
+		return new Promise((_resolve, reject) => {
+			signal.addEventListener('abort', () => {
+				foregroundPreheatAborts += 1;
+				reject(signal.reason);
+			}, { once: true });
+		});
+	},
+	createIntersectionObserver(callback) {
+		intersectionCallback = callback;
+		return {
+			observe(target) {
+				observed.add(target);
+			},
+			unobserve(target) {
+				observed.delete(target);
+			},
+			disconnect() {
+				intersectionDisconnects += 1;
+				observed.clear();
+			},
+		};
+	},
+	requestFrame(callback) {
+		const id = nextFrame++;
+		frames.set(id, callback);
+		return id;
+	},
+	cancelFrame(id) {
+		frames.delete(id);
+	},
+});
+flushFrames();
+const foregroundCards = [...document.querySelectorAll('.topic-list-item')].slice(0, 2);
+intersectionCallback(foregroundCards.map((target) => ({
+	target,
+	isIntersecting: true,
+} as unknown as IntersectionObserverEntry)), {} as IntersectionObserver);
+assert(
+	foregroundPreheatCalls === 1,
+	'低配档必须把近视口 Topic 网络预热限制为单槽',
+);
+const foregroundOpenGeneration = foregroundAware.beginReaderOpen(
+	discourseTopicId(11),
+);
+await flushMicrotasks();
+assert(
+	foregroundPreheatAborts === 1 &&
+		foregroundPreheatCalls === 1 &&
+		foregroundCards.some((card) =>
+			card.querySelector('.ldp-host-topic-reader-meta')?.textContent
+				?.includes('暂停：阅读优先')),
+	'用户点击 Topic 时必须立即中止宿主联网预热，并明确显示阅读优先暂停态',
+);
+foregroundPreheatConcurrency = 2;
+foregroundAware.finishReaderOpen(foregroundOpenGeneration);
+await flushMicrotasks();
+assert(
+	Number(foregroundPreheatCalls) === 2,
+	'Reader 稳定后必须恢复低优先级预热，且前台阅读期间至多使用一个联网槽',
+);
+const foregroundInteractionGeneration =
+	foregroundAware.beginReaderInteraction();
+await flushMicrotasks();
+assert(
+	Number(foregroundPreheatAborts) === 2 &&
+		Number(foregroundPreheatCalls) === 2,
+	'用户主动滚动 Reader 时必须再次抢占宿主联网预热',
+);
+foregroundAware.finishReaderInteraction(foregroundInteractionGeneration);
+await flushMicrotasks();
+assert(
+	Number(foregroundPreheatCalls) === 3,
+	'Reader 滚动稳定后必须恢复单槽预热，不能一直停在零进度',
+);
+foregroundAware.setReaderForeground(false);
+await flushMicrotasks();
+assert(
+	Number(foregroundPreheatCalls) === 4,
+	'Reader 关闭后必须按最新设备档位恢复近视口预热，不能固化启动时并发值',
+);
+foregroundAware.destroy();
 mutations.destroy();

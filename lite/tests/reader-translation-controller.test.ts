@@ -146,7 +146,7 @@ assert(
 controller.setTheme('dividing-line');
 assert(
 	controller.theme === 'dividing-line' &&
-	comments.dataset.translationTheme === 'dividing-line' &&
+	String(comments.dataset.translationTheme) === 'dividing-line' &&
 	discussion.dataset.translationTheme === 'dividing-line',
 	'切换译文主题必须立即投影到全部已登记 surface',
 );

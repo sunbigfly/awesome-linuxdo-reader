@@ -93,6 +93,11 @@ export interface ResponseCacheMutationPort {
 export interface ResponseCacheWriteOptions {
 	/** 内部 generation 页面由最终 manifest 统一公布，避免逐页广播。 */
 	readonly publish?: boolean;
+	readonly traceId?: string;
+}
+
+export interface ResponseCacheReadOptions {
+	readonly traceId?: string;
 }
 
 export interface ResponseCacheFlightLease {
@@ -169,6 +174,7 @@ export interface ResponseCacheRead<T> {
 }
 
 export interface ResponseLoadOptions<T = unknown> {
+	readonly traceId?: string;
 	readonly cacheMode?: ResponseCacheMode;
 	readonly allowStaleOnError?: boolean;
 	readonly canFallback?: (error: unknown) => boolean;
@@ -180,9 +186,15 @@ interface InflightLoad {
 	readonly promise: Promise<unknown>;
 	readonly policy: ResponseCachePolicy;
 	readonly controller: AbortController;
+	readonly invalidation: ResponseInvalidationGuard;
 	readonly consumers: Set<symbol>;
 	unabortableConsumer: boolean;
 	settled: boolean;
+}
+
+interface ResponseInvalidationGuard {
+	readonly policy: ResponseCachePolicy;
+	invalidated: boolean;
 }
 
 type ResponseCacheFlightRead<T> =
@@ -293,8 +305,8 @@ function invalidationKey(query: ResponseCacheInvalidation): string {
  */
 export class ResponseRepository {
 	readonly #store: ResponseCacheStore;
-	readonly #maxMemoryEntries: number;
-	readonly #maxMemoryBytes: number;
+	#maxMemoryEntries: number;
+	#maxMemoryBytes: number;
 	readonly #now: () => number;
 	readonly #estimateBytes: (value: unknown) => number;
 	readonly #mutationPort: ResponseCacheMutationPort | undefined;
@@ -306,7 +318,10 @@ export class ResponseRepository {
 	readonly #memory = new Map<string, ResponseCacheEntry>();
 	readonly #inflight = new Map<string, InflightLoad>();
 	readonly #writes = new Map<string, Promise<void>>();
-	#epoch = 0;
+	readonly #invalidationGuards = new Set<ResponseInvalidationGuard>();
+	readonly #invalidationListeners = new Set<(
+		query: ResponseCacheInvalidation,
+	) => void>();
 
 	constructor(options: ResponseRepositoryOptions) {
 		this.#store = options.store;
@@ -328,8 +343,28 @@ export class ResponseRepository {
 		this.#observer = options.observer;
 	}
 
-	async read<T>(rawPolicy: ResponseCachePolicy): Promise<ResponseCacheRead<T>> {
+	read<T>(
+		rawPolicy: ResponseCachePolicy,
+		options: ResponseCacheReadOptions = {},
+	): Promise<ResponseCacheRead<T>> {
 		const policy = normalizePolicy(rawPolicy);
+		const invalidation: ResponseInvalidationGuard = {
+			policy,
+			invalidated: false,
+		};
+		this.#invalidationGuards.add(invalidation);
+		const result = this.#read<T>(policy, invalidation, options.traceId ?? '');
+		void result.finally(() => {
+			this.#invalidationGuards.delete(invalidation);
+		}).catch(() => {});
+		return result;
+	}
+
+	async #read<T>(
+		policy: ResponseCachePolicy,
+		invalidation: ResponseInvalidationGuard,
+		traceId: string,
+	): Promise<ResponseCacheRead<T>> {
 		const startedAt = this.#now();
 		let entry = this.#memory.get(policy.id);
 		let source: 'memory' | 'indexeddb' = entry ? 'memory' : 'indexeddb';
@@ -339,16 +374,15 @@ export class ResponseRepository {
 			this.#memory.delete(policy.id);
 			this.#memory.set(policy.id, entry);
 		} else {
-			const epoch = this.#epoch;
 			try {
 				entry = await this.#store.read(policy.id) ?? undefined;
 			} catch (error) {
 				this.#onPersistenceError(error);
 				readError = error;
 			}
-			if (epoch !== this.#epoch) {
+			if (invalidation.invalidated) {
 				entry = undefined;
-				reason = '读取期间缓存世代已失效';
+				reason = '读取期间该缓存身份已失效';
 			} else if (entry && this.#validEntry(entry, policy)) {
 				this.#remember(entry);
 			} else {
@@ -365,6 +399,7 @@ export class ResponseRepository {
 		}
 		if (!entry || !this.#validEntry(entry, policy)) {
 			this.#record({
+				...(traceId ? { traceId } : {}),
 				operation: 'read',
 				outcome: 'miss',
 				source,
@@ -384,6 +419,7 @@ export class ResponseRepository {
 		) {
 			await this.#invalidateWithReport({ ids: [policy.id] }, true);
 			this.#record({
+				...(traceId ? { traceId } : {}),
 				operation: 'read',
 				outcome: 'miss',
 				source,
@@ -398,6 +434,7 @@ export class ResponseRepository {
 		}
 		const state = age <= policy.freshForMs ? 'fresh' : 'stale';
 		this.#record({
+			...(traceId ? { traceId } : {}),
 			operation: 'read',
 			outcome: state,
 			source,
@@ -491,6 +528,12 @@ export class ResponseRepository {
 		const requestKey = `${cacheMode}:${policy.id}`;
 		const existing = this.#inflight.get(requestKey);
 		if (existing && !existing.controller.signal.aborted) {
+			this.#record({
+				...(options.traceId ? { traceId: options.traceId } : {}),
+				operation: 'load', outcome: 'hit', source: 'application',
+				key: policy.id, kind: policy.kind, tags: policy.tags,
+				reason: '加入当前标签页同键 single-flight',
+			});
 			return this.#join(existing as InflightLoad & {
 				readonly promise: Promise<T>;
 			}, options.signal);
@@ -500,17 +543,24 @@ export class ResponseRepository {
 			promise: Promise.resolve(undefined as T),
 			policy,
 			controller,
+			invalidation: {
+				policy,
+				invalidated: false,
+			},
 			consumers: new Set(),
 			unabortableConsumer: false,
 			settled: false,
 		};
+		this.#invalidationGuards.add(inflight.invalidation);
 		const promise = this.#load(
 			policy,
 			loader,
 			{ ...options, signal: controller.signal },
 			cacheMode,
+			inflight.invalidation,
 		).finally(() => {
 			inflight.settled = true;
+			this.#invalidationGuards.delete(inflight.invalidation);
 		});
 		(inflight as { promise: Promise<T> }).promise = promise;
 		this.#inflight.set(requestKey, inflight);
@@ -593,6 +643,7 @@ export class ResponseRepository {
 		this.#remember(entry);
 		if (!policy.persist) {
 			this.#record({
+				...(options.traceId ? { traceId: options.traceId } : {}),
 				operation: 'write', outcome: 'success', source: 'memory',
 				key: policy.id, kind: policy.kind, tags: policy.tags,
 				durationMs: this.#now() - startedAt,
@@ -624,6 +675,7 @@ export class ResponseRepository {
 		}
 		if (this.#writes.get(policy.id) === write) this.#writes.delete(policy.id);
 		this.#record({
+			...(options.traceId ? { traceId: options.traceId } : {}),
 			operation: 'write',
 			outcome: persisted ? 'success' : 'failure',
 			source: 'indexeddb',
@@ -843,6 +895,13 @@ export class ResponseRepository {
 		if (!report.complete) throw new ResponseCacheInvalidationError(report);
 	}
 
+	subscribeInvalidation(
+		listener: (query: ResponseCacheInvalidation) => void,
+	): () => void {
+		this.#invalidationListeners.add(listener);
+		return () => this.#invalidationListeners.delete(listener);
+	}
+
 	/**
 	 * 删除只由当前 owner 判定为不可达的内部 generation。不广播、不提升全局 epoch、
 	 * 不撤销其他 cache flight；不得用于用户可见缓存清理或领域失效。
@@ -903,7 +962,8 @@ export class ResponseRepository {
 		publish: boolean,
 	): Promise<ResponseCacheInvalidationReport> {
 		const startedAt = this.#now();
-		this.#epoch += 1;
+		this.#markInvalidated(query);
+		this.#emitInvalidation(query);
 		let memoryEntries = 0;
 		for (const [id, entry] of this.#memory) {
 			if (!matchesInvalidation(entry, query)) continue;
@@ -964,7 +1024,8 @@ export class ResponseRepository {
 	}
 
 	applyExternalInvalidation(query: ResponseCacheInvalidation): void {
-		this.#epoch += 1;
+		this.#markInvalidated(query);
+		this.#emitInvalidation(query);
 		let removed = 0;
 		for (const [id, entry] of this.#memory) {
 			if (!matchesInvalidation(entry, query)) continue;
@@ -1091,11 +1152,13 @@ export class ResponseRepository {
 		loader: (signal: AbortSignal) => Promise<T>,
 		options: ResponseLoadOptions<T>,
 		cacheMode: ResponseCacheMode,
+		invalidation: ResponseInvalidationGuard,
 	): Promise<T> {
 		const throwIfAborted = (): void => options.signal?.throwIfAborted();
+		const traceId = options.traceId ?? '';
 		const cached: ResponseCacheRead<T> = cacheMode === 'no-store'
 			? Object.freeze({ state: 'miss' as const })
-			: await this.read<T>(policy);
+			: await this.read<T>(policy, { traceId });
 		throwIfAborted();
 		if (cacheMode === 'default' && cached.state === 'fresh') return cached.value as T;
 		const cachedBeforeRequest = cached.storedAt ?? 0;
@@ -1108,9 +1171,26 @@ export class ResponseRepository {
 			if (flightToken && this.#flightPort) {
 				const deadline = this.#now() + this.#flightWaitTimeoutMs;
 				while (true) {
+					const flightStartedAt = this.#now();
 					lease = await this.#flightPort.acquireFlight(flightToken);
 					throwIfAborted();
+					this.#record({
+						...(traceId ? { traceId } : {}),
+						operation: 'load',
+						outcome: lease.producer ? 'success' : 'hit',
+						source: 'cross-tab',
+						key: policy.id,
+						kind: policy.kind,
+						tags: policy.tags,
+						durationMs: this.#now() - flightStartedAt,
+						reason: lease.producer
+							? lease.coordinated
+								? '获得跨标签网络 producer 租约'
+								: '协调不可用，当前标签独立生产'
+							: '加入跨标签同键 flight 并等待共享写入',
+					});
 					if (lease.producer) break;
+					const waitStartedAt = this.#now();
 					const released = await this.#flightPort.waitForFlight(
 						flightToken,
 						options.signal,
@@ -1122,8 +1202,20 @@ export class ResponseRepository {
 						policy,
 						cacheMode,
 						cachedBeforeRequest,
+						traceId,
 					);
 					throwIfAborted();
+					this.#record({
+						...(traceId ? { traceId } : {}),
+						operation: 'read',
+						outcome: shared.state,
+						source: 'cross-tab',
+						key: policy.id,
+						kind: policy.kind,
+						tags: policy.tags,
+						durationMs: this.#now() - waitStartedAt,
+						reason: '跨标签 producer 释放后重读持久缓存',
+					});
 					if (shared.state === 'hit') return shared.value;
 					const failure = await this.#flightPort.readFlightFailure(lease);
 					throwIfAborted();
@@ -1133,6 +1225,7 @@ export class ResponseRepository {
 					policy,
 					cacheMode,
 					cachedBeforeRequest,
+					traceId,
 				);
 				throwIfAborted();
 				if (shared.state === 'hit') return shared.value;
@@ -1156,12 +1249,12 @@ export class ResponseRepository {
 					}, this.#flightHeartbeatMs);
 				}
 			}
-			const epoch = this.#epoch;
 			const loadStartedAt = this.#now();
 			let value: T;
 			try {
 				value = await loader(options.signal!);
 				this.#record({
+					...(traceId ? { traceId } : {}),
 					operation: 'load', outcome: 'success', source: 'network',
 					key: policy.id, kind: policy.kind, tags: policy.tags,
 					durationMs: this.#now() - loadStartedAt,
@@ -1169,6 +1262,7 @@ export class ResponseRepository {
 				});
 			} catch (error) {
 				this.#record({
+					...(traceId ? { traceId } : {}),
 					operation: 'load', outcome: 'failure', source: 'network',
 					key: policy.id, kind: policy.kind, tags: policy.tags,
 					durationMs: this.#now() - loadStartedAt,
@@ -1177,11 +1271,14 @@ export class ResponseRepository {
 				throw error;
 			}
 			throwIfAborted();
-			if (cacheMode !== 'no-store' && epoch === this.#epoch) {
+			if (cacheMode !== 'no-store' && !invalidation.invalidated) {
 				if (lease && this.#flightPort) {
-					await this.#flightPort.commitFlight(lease, () => this.write(policy, value));
+					await this.#flightPort.commitFlight(
+						lease,
+						() => this.write(policy, value, { traceId }),
+					);
 				} else {
-					await this.write(policy, value);
+					await this.write(policy, value, { traceId });
 				}
 			}
 			return value;
@@ -1205,6 +1302,7 @@ export class ResponseRepository {
 			) {
 				const value = cached.value as T;
 				this.#record({
+					...(traceId ? { traceId } : {}),
 					operation: 'load', outcome: 'fallback', source: 'memory',
 					key: policy.id, kind: policy.kind, tags: policy.tags,
 					reason: error instanceof Error ? error.message : String(error),
@@ -1230,9 +1328,10 @@ export class ResponseRepository {
 		policy: ResponseCachePolicy,
 		cacheMode: ResponseCacheMode,
 		cachedBeforeRequest: number,
+		traceId: string,
 	): Promise<ResponseCacheFlightRead<T>> {
 		this.#memory.delete(policy.id);
-		const latest = await this.read<T>(policy);
+		const latest = await this.read<T>(policy, { traceId });
 		if (latest.state === 'miss') return Object.freeze({ state: 'miss' });
 		if (cacheMode === 'refresh') {
 			return (latest.storedAt ?? 0) > cachedBeforeRequest
@@ -1250,6 +1349,10 @@ export class ResponseRepository {
 			return;
 		}
 		this.#memory.set(entry.id, entry);
+		this.#pruneMemory();
+	}
+
+	#pruneMemory(): void {
 		let bytes = 0;
 		for (const value of this.#memory.values()) bytes += value.bytes;
 		while (
@@ -1267,6 +1370,33 @@ export class ResponseRepository {
 			const oldest = this.#memory.get(evictedId);
 			this.#memory.delete(evictedId);
 			bytes -= oldest?.bytes ?? 0;
+		}
+	}
+
+	applyMemoryPolicy(input: Readonly<{
+		maxEntries: number;
+		maxBytes: number;
+	}>): void {
+		this.#maxMemoryEntries = positiveInteger(input.maxEntries, 'maxEntries');
+		this.#maxMemoryBytes = positiveInteger(input.maxBytes, 'maxBytes');
+		this.#pruneMemory();
+	}
+
+	#markInvalidated(query: ResponseCacheInvalidation): void {
+		for (const guard of this.#invalidationGuards) {
+			if (matchesInvalidation(guard.policy, query)) {
+				guard.invalidated = true;
+			}
+		}
+	}
+
+	#emitInvalidation(query: ResponseCacheInvalidation): void {
+		for (const listener of [...this.#invalidationListeners]) {
+			try {
+				listener(query);
+			} catch {
+				// 派生内存消费者失败不得改变 canonical cache 失效事务。
+			}
 		}
 	}
 

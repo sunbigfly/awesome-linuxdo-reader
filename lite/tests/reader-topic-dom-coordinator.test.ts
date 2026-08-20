@@ -27,6 +27,10 @@ interface TestPost {
 	readonly reply_count?: number;
 }
 
+interface TestTopic {
+	readonly id: number;
+}
+
 const { document: parsedDocument } = parseHTML(
 	'<!doctype html><html><body><main class="topic-host"></main></body></html>',
 );
@@ -211,6 +215,7 @@ let virtualWindowCommitNotifications = 0;
 let stagedPhysicalMaxScrollOffset: number | null = null;
 let programmaticScrollTransactions = 0;
 let programmaticScrollActive = false;
+let blockNextAlignmentErrorMs = 0;
 const virtualCommitProgrammaticStates: boolean[] = [];
 let presentationObservedDuringViewportMutation = false;
 let treePreferences = normalizeReaderReplyTreePreferences({
@@ -316,6 +321,16 @@ const coordinator = new ReaderTopicDomCoordinator({
 			revealEvents.push(
 				`${element.getAttribute('data-post-number')}:${options.source}:${options.alignment}`,
 			);
+		},
+		alignmentError() {
+			if (blockNextAlignmentErrorMs > 0) {
+				const deadline = Date.now() + blockNextAlignmentErrorMs;
+				blockNextAlignmentErrorMs = 0;
+				while (Date.now() < deadline) {
+					// 模拟低配设备中与 quiet callback 重叠的同步长任务。
+				}
+			}
+			return 0;
 		},
 	},
 	identity: (post) => ({
@@ -679,6 +694,50 @@ assert(
 assert(
 	revealEvents.at(-1) === '5:timeline:center',
 	'DOM owner 只能把精确对齐交给注入的 scroll adapter',
+);
+const settledAnchor = await coordinator.settleRevealedPost(5, {
+	source: 'history',
+	alignment: 'center',
+	highlight: false,
+}, {
+	tolerancePx: 2,
+	quietMs: 0,
+	maxWaitMs: 100,
+});
+assert(
+	settledAnchor.status === 'settled' &&
+	settledAnchor.errorPx === 0 &&
+	settledAnchor.attempts === 2,
+	'锚点结算必须在连续两个静稳检查均不超过 2px 后才完成',
+);
+blockNextAlignmentErrorMs = 10;
+const throttledSettlement = await coordinator.settleRevealedPost(5, {
+	source: 'history',
+	alignment: 'center',
+	highlight: false,
+}, {
+	tolerancePx: 2,
+	quietMs: 0,
+	maxWaitMs: 1,
+});
+assert(
+	throttledSettlement.status === 'settled' &&
+	throttledSettlement.errorPx === 0 &&
+	throttledSettlement.attempts === 2,
+	'低配长任务把第二遍 quiet 检查挤到 deadline 后时，deadline 必须同步完成第二遍容差确认，不能误记 timeout',
+);
+const cancelledSettlement = coordinator.settleRevealedPost(5, {
+	source: 'history',
+	alignment: 'center',
+	highlight: false,
+}, {
+	quietMs: 50,
+	maxWaitMs: 100,
+});
+coordinator.prepareRevealPost(5);
+assert(
+	(await cancelledSettlement).status === 'cancelled',
+	'新导航必须立即取消旧锚点交易，不得留下定时回拉滚动位置',
 );
 assert(
 	featureEvents.includes('detach:1') &&
@@ -1787,10 +1846,13 @@ staleCompleteReplies.setExpectedPostCount(2);
 staleCompleteReplies.ingest([
 	{ post_number: 1, reply_to_post_number: null },
 	{ post_number: 20, reply_to_post_number: null },
-], 'cache-snapshot');
+], 'topic-json');
 const staleCompleteHost = document.createElement('main');
 document.body.append(staleCompleteHost);
-const staleCompleteCoordinator = new ReaderTopicDomCoordinator({
+const staleCompleteCoordinator = new ReaderTopicDomCoordinator<
+	TestTopic,
+	TestPost
+>({
 	document,
 	topicHost: staleCompleteHost,
 	session: {

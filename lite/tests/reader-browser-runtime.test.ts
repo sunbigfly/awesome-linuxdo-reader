@@ -427,7 +427,8 @@ const topic16: TestTopic = Object.freeze({
 });
 const topic13Gate = deferred<TestTopic>();
 const { document: parsedDocument, window: parsedWindow } = parseHTML(
-	'<!doctype html><html><head><meta name="generator" content="Discourse"></head>' +
+	'<!doctype html><html><head><title>LINUX DO - 新的理想型社区</title>' +
+	'<meta name="generator" content="Discourse"></head>' +
 	'<body><div id="ember-app"><main id="main-outlet"></main></div></body></html>',
 );
 const document = parsedDocument as unknown as Document;
@@ -1434,6 +1435,22 @@ if (opened.status === 'opened') {
 				record.status === 410),
 		'正文与 410 存档稍后提交时，运行时必须重放尚未处理的请求并补记真实状态',
 	);
+	const invalidatedPreheatSnapshot = Object.freeze({
+		...opened.value.services.snapshots.snapshot(),
+		topicId: '999',
+	});
+	assert(
+		activeRuntime.rememberPreheatedTopicSnapshot(invalidatedPreheatSnapshot),
+		'运行时必须接收同鉴权预热快照',
+	);
+	await activeRuntime.data.responses.invalidateWithReport(
+		{ tags: ['topic:999'] },
+		false,
+	);
+	assert(
+		!activeRuntime.forgetPreheatedTopicSnapshot(999),
+		'本地 Topic 缓存失效必须同步释放同 Topic 预热交接，不能绕过 canonical invalidation',
+	);
 	activeRuntime.chronicle.clear();
 	assert(
 		activeSession.preserveUnavailablePost(2, 403, archiveConfirmedAt + 1) &&
@@ -1600,6 +1617,7 @@ assert(
 );
 assert(
 	opened.value.topicHeader.snapshot.title === 'Initial topic title' &&
+	document.title === 'Initial topic title' &&
 	shellRoot.querySelector('.ldp-title-jump')?.textContent ===
 		'Initial topic title' &&
 	shellRoot.querySelector('.ldp-meta-stats')?.textContent ===
@@ -1759,9 +1777,10 @@ assert(
 		'Refreshed topic title' &&
 	String(opened.value.topicHeader.snapshot.title) ===
 		'Refreshed topic title' &&
+	document.title === 'Refreshed topic title' &&
 	shellRoot.querySelector('.ldp-title-jump')?.textContent ===
 		'Refreshed topic title',
-	'Topic refresh 后 Lightbox 与 Header 必须共同读取最新 canonical Topic，而不是冻结初始对象',
+	'Topic refresh 后浏览器标签、Lightbox 与 Header 必须共同读取最新 canonical Topic，而不是冻结初始对象',
 );
 assert(
 	child.parentElement === root.querySelector('.ldp-reply-list'),
@@ -2240,6 +2259,7 @@ assert(
 assert(
 	activeRuntime.shell.state === 'closed' &&
 	activeRuntime.shell.activeTopicId === null &&
+	document.title === 'LINUX DO - 新的理想型社区' &&
 	activeRuntime.workspace.workspace.snapshot.requestedMode === 'embed-right' &&
 	activeRuntime.workspace.workspace.snapshot.presentation.mode === 'floating' &&
 	!document.documentElement.classList.contains('ldp-reader-workspace') &&
@@ -2339,6 +2359,7 @@ const openedNext = openedNextTarget.topic;
 assert(
 	openedNext.status === 'opened' &&
 	openedNextTarget.navigation?.status === 'revealed' &&
+	document.title === 'Next topic title' &&
 	shellRoot.querySelector('[data-post-number="1"] mark.ldp-quote-match')
 		?.textContent === 'next-content' &&
 	!shellRoot.querySelector('[data-post-number="1"]')
@@ -2534,6 +2555,7 @@ assert(
 		restoredActive.topicHeader.scope.destroyed &&
 		activeRuntime.shell.activeValue?.topicHeader.snapshot.title ===
 			'Rebuilt topic title' &&
+		document.title === 'Rebuilt topic title' &&
 		activeRuntime.shell.activeValue?.topicOnlyOp.snapshot.enabled &&
 		activeRuntime.shell.activeValue?.topicTimeline.snapshot
 			.currentPostNumber === 2 &&

@@ -53,6 +53,7 @@ export interface RequestTransportInput {
 }
 
 export interface CoordinatedRequestOptions {
+	readonly traceId?: string;
 	readonly key: string;
 	readonly input: string | URL;
 	readonly method?: string;
@@ -829,6 +830,7 @@ export class CoordinatedRequestClient {
 		if (!this.#observer) return null;
 		try {
 			return this.#observer.begin({
+				...(options.traceId ? { traceId: options.traceId } : {}),
 				href: String(options.input),
 				method,
 				transport: 'scheduler',
@@ -892,6 +894,7 @@ export class CoordinatedRequestClient {
 						: ''),
 			})) return id;
 			return this.#observer.begin({
+				...(options.traceId ? { traceId: options.traceId } : {}),
 				href: String(options.input),
 				method,
 				transport: 'scheduler',
@@ -975,6 +978,7 @@ export class CoordinatedRequestClient {
 		if (!this.#observer) return;
 		try {
 			this.#observer.begin({
+				...(options.traceId ? { traceId: options.traceId } : {}),
 				href: String(options.input),
 				method,
 				transport: 'scheduler',

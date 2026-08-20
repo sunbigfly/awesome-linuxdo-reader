@@ -364,7 +364,7 @@ function isEditableScrollTarget(target: EventTarget | null): boolean {
 	const candidate = target as (EventTarget & Pick<Element, 'closest'>) | null;
 	if (!candidate || typeof candidate.closest !== 'function') return false;
 	return !!candidate.closest(
-		'input, textarea, select, [contenteditable=""], [contenteditable="true"]',
+		'input, textarea, select, button, [role="button"], [contenteditable=""], [contenteditable="true"]',
 	);
 }
 
@@ -601,7 +601,20 @@ export class ReaderTopicScrollAdapter {
 				!SCROLLING_KEYS.has(keyboard.key) ||
 				isEditableScrollTarget(keyboard.target)
 			) return;
+			keyboard.preventDefault();
 			this.#markUserScrollIntent(this.#keyboardDirection(keyboard));
+			const actualOffset = this.#writeScrollRootOffset(
+				this.#keyboardScrollOffset(keyboard),
+			);
+			/*
+			 * 低配 Chromium 的默认 PageUp/Arrow 滚动可能在 keydown 后很久
+			 * 才派发首个 scroll。焦点已明确属于 Reader 时由唯一 scroll owner
+			 * 同步提交 instant 坐标；随后原生 scroll 回声会按内部写入去重。
+			 */
+			this.#scrollOffset = actualOffset;
+			this.#pendingScrollOffset = actualOffset;
+			this.#scrollOffsetDirty = false;
+			this.#notifyWindowChange();
 		});
 		this.scope.listen(this.#scrollRoot.ownerDocument, 'keydown', (event) => {
 			const keyboard = event as KeyboardEvent;
@@ -871,6 +884,19 @@ export class ReaderTopicScrollAdapter {
 
 	alignPost(target: HTMLElement, options: ReaderTopicRevealOptions): void {
 		if (!target.isConnected) return;
+		const correction = this.alignmentError(target, options);
+		if (Math.abs(correction) >= 1) {
+			this.writeScrollOffset(this.#scrollOffset + correction);
+		}
+		if (options.focus) this.#focus(target);
+		if (options.highlight !== false) this.highlight.highlight(target);
+	}
+
+	alignmentError(
+		target: HTMLElement,
+		options: ReaderTopicRevealOptions,
+	): number {
+		if (!target.isConnected) return Number.POSITIVE_INFINITY;
 		const rootRect = this.#scrollRoot.getBoundingClientRect();
 		const targetRect = target.getBoundingClientRect();
 		const topInset = Math.min(
@@ -913,11 +939,7 @@ export class ReaderTopicScrollAdapter {
 		} else {
 			correction = targetRect.top - visibleTop;
 		}
-		if (Math.abs(correction) >= 1) {
-			this.writeScrollOffset(this.#scrollOffset + correction);
-		}
-		if (options.focus) this.#focus(target);
-		if (options.highlight !== false) this.highlight.highlight(target);
+		return correction;
 	}
 
 	highlightPost(target: HTMLElement): void {
@@ -1433,6 +1455,22 @@ export class ReaderTopicScrollAdapter {
 			event.key === ' '
 		) return 1;
 		return 0;
+	}
+
+	#keyboardScrollOffset(event: KeyboardEvent): number {
+		const current = finiteNonNegative(this.#scrollRoot.scrollTop);
+		const maximum = Math.max(
+			0,
+			finiteNonNegative(this.#scrollRoot.scrollHeight) -
+				finiteNonNegative(this.#scrollRoot.clientHeight),
+		);
+		if (event.key === 'Home') return 0;
+		if (event.key === 'End') return maximum;
+		const direction = this.#keyboardDirection(event);
+		const distance = event.key === 'ArrowUp' || event.key === 'ArrowDown'
+			? 40
+			: Math.max(1, finiteNonNegative(this.#scrollRoot.clientHeight) * 0.875);
+		return Math.min(maximum, Math.max(0, current + direction * distance));
 	}
 
 	#scheduleScrollCommit(): void {

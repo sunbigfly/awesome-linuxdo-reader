@@ -18,6 +18,13 @@ export interface ReaderPerformanceSnapshot {
 	readonly requestRateTargetPercent: number;
 	readonly requestShortBudget: number;
 	readonly requestLongBudget: number;
+	readonly preheatMaxConcurrent: number;
+	readonly preheatHandoffMaxEntries: number;
+	readonly preheatHandoffMaxBytes: number;
+	readonly preheatHandoffTtlMs: number;
+	readonly responseMemoryMaxEntries: number;
+	readonly responseMemoryMaxBytes: number;
+	readonly projectionHydrationBatchSize: number;
 }
 
 export interface ReaderRuntimePerformanceCapabilities {
@@ -274,37 +281,52 @@ function snapshot(
 		95,
 	);
 	const target = requestRateTargetPercent / 100;
+	const scaledPageSize = integerRange(
+		Math.floor(pageSize * batchScale),
+		pageSize,
+		12,
+		64,
+	);
+	const scaledMountedPostCount = integerRange(
+		Math.floor(streamMaxMountedPostCount * scales.render),
+		streamMaxMountedPostCount,
+		24,
+		128,
+	);
+	const scaledRequestConcurrency = integerRange(
+		Math.round(requestMaxConcurrent * batchScale),
+		requestMaxConcurrent,
+		1,
+		4,
+	);
+	const resourceTier =
+		scaledRequestConcurrency <= 2 || scaledMountedPostCount <= 48
+			? 'low'
+			: scaledRequestConcurrency >= 4 && scaledMountedPostCount >= 90
+				? 'high'
+				: 'balanced';
+	const overscanScreens = finiteRange(
+		preferences.performanceStreamOverscan,
+		DEFAULTS.streamOverscanScreens,
+		0.25,
+		3,
+	);
 	return Object.freeze({
-		pageSize: integerRange(
-			Math.floor(pageSize * batchScale),
-			pageSize,
-			12,
-			64,
-		),
+		pageSize: scaledPageSize,
 		streamOverscanScreens: finiteRange(
-			preferences.performanceStreamOverscan,
-			DEFAULTS.streamOverscanScreens,
+			overscanScreens * scales.render,
+			overscanScreens,
 			0.25,
 			3,
 		),
-		streamMaxMountedPostCount: integerRange(
-			Math.floor(streamMaxMountedPostCount * scales.render),
-			streamMaxMountedPostCount,
-			24,
-			128,
-		),
+		streamMaxMountedPostCount: scaledMountedPostCount,
 		nestedPrefetchScreens: finiteRange(
 			nestedPrefetchScreens * scales.network,
 			nestedPrefetchScreens,
 			1,
 			3,
 		),
-		requestMaxConcurrent: integerRange(
-			Math.round(requestMaxConcurrent * batchScale),
-			requestMaxConcurrent,
-			1,
-			4,
-		),
+		requestMaxConcurrent: scaledRequestConcurrency,
 		requestMinIntervalMs: integerRange(
 			Math.ceil(requestMinIntervalMs / Math.max(0.35, batchScale)),
 			requestMinIntervalMs,
@@ -320,6 +342,20 @@ function snapshot(
 			1,
 			Math.floor(longBudgetCeiling * target),
 		),
+		preheatMaxConcurrent:
+			resourceTier === 'low' ? 1 : resourceTier === 'high' ? 3 : 2,
+		preheatHandoffMaxEntries:
+			resourceTier === 'low' ? 1 : resourceTier === 'high' ? 6 : 3,
+		preheatHandoffMaxBytes:
+			(resourceTier === 'low' ? 2 : resourceTier === 'high' ? 16 : 8) *
+			1024 * 1024,
+		preheatHandoffTtlMs: 60_000,
+		responseMemoryMaxEntries:
+			resourceTier === 'low' ? 48 : resourceTier === 'high' ? 96 : 72,
+		responseMemoryMaxBytes:
+			(resourceTier === 'low' ? 8 : resourceTier === 'high' ? 24 : 16) *
+			1024 * 1024,
+		projectionHydrationBatchSize: resourceTier === 'high' ? 2 : 1,
 	});
 }
 

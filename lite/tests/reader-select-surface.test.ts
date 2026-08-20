@@ -130,7 +130,7 @@ select.dispatchEvent(new constructors.Event(
 ));
 assert(
 	menu.querySelector('[data-reader-select-value="4"]') !== null &&
-		openings === 2,
+		Number(openings) === 2,
 	'字体查询完成后必须原位刷新当前展开菜单，不要求用户关闭后重新打开',
 );
 refreshedFont.remove();
@@ -312,10 +312,10 @@ assert(
 selectTop = 280;
 root.dispatchEvent(new constructors.Event('ldp-reader-window-change'));
 assert(
-	select.parentElement?.classList.contains('is-menu-above') &&
+		select.parentElement?.classList.contains('is-menu-above') &&
 		menu.style.top === '' &&
-		menu.style.height === '162px' &&
-		menu.style.maxHeight === '162px',
+		String(menu.style.height) === '162px' &&
+		String(menu.style.maxHeight) === '162px',
 	'字段下方空间不足时必须按碰撞结果翻到上方，并继续限制长列表高度',
 );
 root.dispatchEvent(new constructors.Event(READER_SELECT_DISMISS_EVENT));
@@ -341,7 +341,7 @@ selectTop = 200;
 select.dispatchEvent(notificationPointerDown);
 assert(
 	select.parentElement?.classList.contains('is-menu-above') &&
-	menu.style.maxHeight === '82px',
+		String(menu.style.maxHeight) === '82px',
 	'自动过滤字段下拉必须以内容区而非含固定页脚的整窗为碰撞边界，' +
 		'空间不足时向上展开并限制菜单高度',
 );

@@ -869,10 +869,10 @@ assert(
 	),
 	'全展开收纳箱必须合并楼层与主题操作、去重举报和负责人、移除重复回复，并把共享问题放到独立书签后',
 );
-const railTopicShare = topicRailActions.querySelector<HTMLButtonElement>(
+const railTopicShare = topicRailActions!.querySelector<HTMLButtonElement>(
 	'[data-topic-share]',
 )!;
-const railTopicNotification = topicRailActions.querySelector<HTMLSelectElement>(
+const railTopicNotification = topicRailActions!.querySelector<HTMLSelectElement>(
 	'[data-topic-notification]',
 )!;
 assert(
@@ -2579,7 +2579,7 @@ click(queuedLaughing);
 await Promise.resolve();
 assert(
 	mutation.calls.length === queuedReactionStart + 1 &&
-		mutation.calls[queuedReactionStart]?.variant === 'clap',
+		String(mutation.calls[queuedReactionStart]?.variant) === 'clap',
 	'同一楼层回应在途时不得并发发送第二个 POST',
 );
 mutation.resolve(queuedReactionStart, {

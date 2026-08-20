@@ -255,7 +255,11 @@ export function createReaderPopoverSearchTools(
 	const root = document.createElement('div');
 	root.className =
 		'ldp-popover-search-tools ldp-user-observation-detail-tools ' +
-		`ldp-${owner}-search-tools`;
+		(owner === 'notification'
+			? 'ldp-notification-search-tools'
+			: owner === 'history'
+				? 'ldp-history-search-tools'
+				: 'ldp-bookmarks-search-tools');
 	search.root.classList.add('ldp-user-observation-search', 'is-detail');
 	root.append(search.root, filterToggle, filters);
 	return Object.freeze({

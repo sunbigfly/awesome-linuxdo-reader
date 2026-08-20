@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.8
+// @version      1.5.9
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.8 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.5.9 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.8",
+			sourceVersion: "1.5.9",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.8") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.9") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -653,8 +653,14 @@ runtime.register("src/cache/cache-observer.js", function(module, exports, requir
 	    throw new RangeError(`${name} 必须是正安全整数`);
 	  return value;
 	}
+	function diagnosticText(value) {
+	  return String(value).replace(/([?&][A-Za-z0-9_.~-]+)=[^&#\s]*/g, "$1").replace(
+	    /\b(authorization|cookie|set-cookie|api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret)\b(["']?\s*[:=]\s*)[^\r\n]*/gi,
+	    "$1$2[redacted]"
+	  ).replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 500);
+	}
 	function diagnosticError(value) {
-	  return value == null ? "" : value instanceof Error ? `${value.name}: ${value.message}`.slice(0, 500) : String(value).slice(0, 500);
+	  return value == null ? "" : value instanceof Error ? diagnosticText(`${value.name}: ${value.message}`) : diagnosticText(value);
 	}
 	class ReaderCacheObserver {
 	  #retentionMs;
@@ -676,6 +682,7 @@ runtime.register("src/cache/cache-observer.js", function(module, exports, requir
 	    const at = this.#now(), event = Object.freeze({
 	      id: ++this.#sequence,
 	      at,
+	      ...input.traceId ? { traceId: String(input.traceId).slice(0, 180) } : {},
 	      operation: input.operation,
 	      outcome: input.outcome,
 	      source: input.source,
@@ -708,7 +715,7 @@ runtime.register("src/cache/cache-observer.js", function(module, exports, requir
 	    this.#events.splice(0, overflow), this.#dropped += overflow;
 	  }
 	}
-}, "fe12d21efa0f5fed87d616b20dd7b9d1115ebad6f6305081a8eb2ae5d3ca1e01");
+}, "0b8fef46317b9207460e0975f5a9b562649926130a514764008e3791e76a846f");
 
 /* Source: lite/src/cache/discourse-application-cache-invalidation.ts */
 runtime.register("src/cache/discourse-application-cache-invalidation.js", function(module, exports, require) {
@@ -2295,7 +2302,8 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	  #memory = /* @__PURE__ */ new Map();
 	  #inflight = /* @__PURE__ */ new Map();
 	  #writes = /* @__PURE__ */ new Map();
-	  #epoch = 0;
+	  #invalidationGuards = /* @__PURE__ */ new Set();
+	  #invalidationListeners = /* @__PURE__ */ new Set();
 	  constructor(options) {
 	    this.#store = options.store, this.#maxMemoryEntries = positiveInteger(options.maxMemoryEntries, "maxMemoryEntries"), this.#maxMemoryBytes = positiveInteger(options.maxMemoryBytes, "maxMemoryBytes"), this.#now = options.now ?? Date.now, this.#estimateBytes = options.estimateBytes ?? defaultEstimateBytes, this.#mutationPort = options.mutationPort, this.#flightPort = options.flightPort, this.#flightHeartbeatMs = positiveInteger(
 	      options.flightHeartbeatMs ?? 15e3,
@@ -2306,20 +2314,31 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    ), this.#onPersistenceError = options.onPersistenceError ?? (() => {
 	    }), this.#observer = options.observer;
 	  }
-	  async read(rawPolicy) {
-	    const policy = normalizePolicy(rawPolicy), startedAt = this.#now();
+	  read(rawPolicy, options = {}) {
+	    const policy = normalizePolicy(rawPolicy), invalidation = {
+	      policy,
+	      invalidated: !1
+	    };
+	    this.#invalidationGuards.add(invalidation);
+	    const result = this.#read(policy, invalidation, options.traceId ?? "");
+	    return result.finally(() => {
+	      this.#invalidationGuards.delete(invalidation);
+	    }).catch(() => {
+	    }), result;
+	  }
+	  async #read(policy, invalidation, traceId) {
+	    const startedAt = this.#now();
 	    let entry = this.#memory.get(policy.id), source = entry ? "memory" : "indexeddb", readError, reason = "";
 	    if (entry)
 	      this.#memory.delete(policy.id), this.#memory.set(policy.id, entry);
 	    else {
-	      const epoch = this.#epoch;
 	      try {
 	        entry = await this.#store.read(policy.id) ?? void 0;
 	      } catch (error) {
 	        this.#onPersistenceError(error), readError = error;
 	      }
-	      if (epoch !== this.#epoch)
-	        entry = void 0, reason = "读取期间缓存世代已失效";
+	      if (invalidation.invalidated)
+	        entry = void 0, reason = "读取期间该缓存身份已失效";
 	      else if (entry && this.#validEntry(entry, policy))
 	        this.#remember(entry);
 	      else {
@@ -2336,6 +2355,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    }
 	    if (!entry || !this.#validEntry(entry, policy))
 	      return this.#record({
+	        ...traceId ? { traceId } : {},
 	        operation: "read",
 	        outcome: "miss",
 	        source,
@@ -2349,6 +2369,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    const age = Math.max(0, this.#now() - entry.storedAt);
 	    if (entry.permanent !== !0 && (age > policy.retainForMs || entry.expiresAt <= this.#now()))
 	      return await this.#invalidateWithReport({ ids: [policy.id] }, !0), this.#record({
+	        ...traceId ? { traceId } : {},
 	        operation: "read",
 	        outcome: "miss",
 	        source,
@@ -2361,6 +2382,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      }), Object.freeze({ state: "miss" });
 	    const state = age <= policy.freshForMs ? "fresh" : "stale";
 	    return this.#record({
+	      ...traceId ? { traceId } : {},
 	      operation: "read",
 	      outcome: state,
 	      source,
@@ -2443,21 +2465,37 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    options.signal?.throwIfAborted();
 	    const cacheMode = options.cacheMode ?? "default", requestKey = `${cacheMode}:${policy.id}`, existing = this.#inflight.get(requestKey);
 	    if (existing && !existing.controller.signal.aborted)
-	      return this.#join(existing, options.signal);
+	      return this.#record({
+	        ...options.traceId ? { traceId: options.traceId } : {},
+	        operation: "load",
+	        outcome: "hit",
+	        source: "application",
+	        key: policy.id,
+	        kind: policy.kind,
+	        tags: policy.tags,
+	        reason: "加入当前标签页同键 single-flight"
+	      }), this.#join(existing, options.signal);
 	    const controller = new AbortController(), inflight = {
 	      promise: Promise.resolve(void 0),
 	      policy,
 	      controller,
+	      invalidation: {
+	        policy,
+	        invalidated: !1
+	      },
 	      consumers: /* @__PURE__ */ new Set(),
 	      unabortableConsumer: !1,
 	      settled: !1
-	    }, promise = this.#load(
+	    };
+	    this.#invalidationGuards.add(inflight.invalidation);
+	    const promise = this.#load(
 	      policy,
 	      loader,
 	      { ...options, signal: controller.signal },
-	      cacheMode
+	      cacheMode,
+	      inflight.invalidation
 	    ).finally(() => {
-	      inflight.settled = !0;
+	      inflight.settled = !0, this.#invalidationGuards.delete(inflight.invalidation);
 	    });
 	    inflight.promise = promise, this.#inflight.set(requestKey, inflight);
 	    const clearInflight = () => {
@@ -2499,6 +2537,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    });
 	    if (this.#remember(entry), !policy.persist) {
 	      this.#record({
+	        ...options.traceId ? { traceId: options.traceId } : {},
 	        operation: "write",
 	        outcome: "success",
 	        source: "memory",
@@ -2525,6 +2564,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	        this.#onPersistenceError(error);
 	      }
 	    this.#writes.get(policy.id) === write && this.#writes.delete(policy.id), this.#record({
+	      ...options.traceId ? { traceId: options.traceId } : {},
 	      operation: "write",
 	      outcome: persisted ? "success" : "failure",
 	      source: "indexeddb",
@@ -2698,6 +2738,9 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    const report = await this.#invalidateWithReport(query, publish);
 	    if (!report.complete) throw new ResponseCacheInvalidationError(report);
 	  }
+	  subscribeInvalidation(listener) {
+	    return this.#invalidationListeners.add(listener), () => this.#invalidationListeners.delete(listener);
+	  }
 	  /**
 	   * 删除只由当前 owner 判定为不可达的内部 generation。不广播、不提升全局 epoch、
 	   * 不撤销其他 cache flight；不得用于用户可见缓存清理或领域失效。
@@ -2750,7 +2793,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	  }
 	  async #invalidateWithReport(query, publish) {
 	    const startedAt = this.#now();
-	    this.#epoch += 1;
+	    this.#markInvalidated(query), this.#emitInvalidation(query);
 	    let memoryEntries = 0;
 	    for (const [id, entry] of this.#memory)
 	      matchesInvalidation(entry, query) && (this.#memory.delete(id), memoryEntries += 1);
@@ -2798,7 +2841,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    }), report;
 	  }
 	  applyExternalInvalidation(query) {
-	    this.#epoch += 1;
+	    this.#markInvalidated(query), this.#emitInvalidation(query);
 	    let removed = 0;
 	    for (const [id, entry] of this.#memory)
 	      matchesInvalidation(entry, query) && (this.#memory.delete(id), removed += 1);
@@ -2882,16 +2925,28 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    const tags = Array.isArray(entry.tags) && entry.tags.every((tag) => typeof tag == "string") ? [...new Set(entry.tags)].sort() : null;
 	    return entry.schemaVersion === 1 && entry.id === policy.id && entry.kind === policy.kind && Number.isFinite(entry.storedAt) && entry.storedAt >= 0 && Number.isFinite(entry.expiresAt) && entry.expiresAt >= entry.storedAt && Number.isFinite(entry.bytes) && entry.bytes >= 0 && entry.permanent === !0 == (policy.permanent === !0) && tags !== null && tags.length === policy.tags.length && tags.every((tag, index) => tag === policy.tags[index]);
 	  }
-	  async #load(policy, loader, options, cacheMode) {
-	    const throwIfAborted = () => options.signal?.throwIfAborted(), cached = cacheMode === "no-store" ? Object.freeze({ state: "miss" }) : await this.read(policy);
+	  async #load(policy, loader, options, cacheMode, invalidation) {
+	    const throwIfAborted = () => options.signal?.throwIfAborted(), traceId = options.traceId ?? "", cached = cacheMode === "no-store" ? Object.freeze({ state: "miss" }) : await this.read(policy, { traceId });
 	    if (throwIfAborted(), cacheMode === "default" && cached.state === "fresh") return cached.value;
 	    const cachedBeforeRequest = cached.storedAt ?? 0, flightToken = this.#flightPort && policy.persist && cacheMode !== "no-store" ? `v1:${(0, import_cache_identity.sharedCacheIdToken)(policy.id)}:${policy.id.length}` : "";
 	    let lease = null, heartbeat = null;
 	    try {
 	      if (flightToken && this.#flightPort) {
 	        const deadline = this.#now() + this.#flightWaitTimeoutMs;
-	        for (; lease = await this.#flightPort.acquireFlight(flightToken), throwIfAborted(), !lease.producer; ) {
-	          const released = await this.#flightPort.waitForFlight(
+	        for (; ; ) {
+	          const flightStartedAt = this.#now();
+	          if (lease = await this.#flightPort.acquireFlight(flightToken), throwIfAborted(), this.#record({
+	            ...traceId ? { traceId } : {},
+	            operation: "load",
+	            outcome: lease.producer ? "success" : "hit",
+	            source: "cross-tab",
+	            key: policy.id,
+	            kind: policy.kind,
+	            tags: policy.tags,
+	            durationMs: this.#now() - flightStartedAt,
+	            reason: lease.producer ? lease.coordinated ? "获得跨标签网络 producer 租约" : "协调不可用，当前标签独立生产" : "加入跨标签同键 flight 并等待共享写入"
+	          }), lease.producer) break;
+	          const waitStartedAt = this.#now(), released = await this.#flightPort.waitForFlight(
 	            flightToken,
 	            options.signal,
 	            deadline
@@ -2900,16 +2955,28 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	          const shared2 = await this.#readAfterFlight(
 	            policy,
 	            cacheMode,
-	            cachedBeforeRequest
+	            cachedBeforeRequest,
+	            traceId
 	          );
-	          if (throwIfAborted(), shared2.state === "hit") return shared2.value;
+	          if (throwIfAborted(), this.#record({
+	            ...traceId ? { traceId } : {},
+	            operation: "read",
+	            outcome: shared2.state,
+	            source: "cross-tab",
+	            key: policy.id,
+	            kind: policy.kind,
+	            tags: policy.tags,
+	            durationMs: this.#now() - waitStartedAt,
+	            reason: "跨标签 producer 释放后重读持久缓存"
+	          }), shared2.state === "hit") return shared2.value;
 	          const failure = await this.#flightPort.readFlightFailure(lease);
 	          if (throwIfAborted(), failure) throw new ResponseCacheSharedFlightFailureError(failure);
 	        }
 	        const shared = await this.#readAfterFlight(
 	          policy,
 	          cacheMode,
-	          cachedBeforeRequest
+	          cachedBeforeRequest,
+	          traceId
 	        );
 	        if (throwIfAborted(), shared.state === "hit") return shared.value;
 	        if (lease.coordinated) {
@@ -2923,10 +2990,11 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	          }, this.#flightHeartbeatMs);
 	        }
 	      }
-	      const epoch = this.#epoch, loadStartedAt = this.#now();
+	      const loadStartedAt = this.#now();
 	      let value;
 	      try {
 	        value = await loader(options.signal), this.#record({
+	          ...traceId ? { traceId } : {},
 	          operation: "load",
 	          outcome: "success",
 	          source: "network",
@@ -2938,6 +3006,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	        });
 	      } catch (error) {
 	        throw this.#record({
+	          ...traceId ? { traceId } : {},
 	          operation: "load",
 	          outcome: "failure",
 	          source: "network",
@@ -2948,7 +3017,10 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	          error
 	        }), error;
 	      }
-	      return throwIfAborted(), cacheMode !== "no-store" && epoch === this.#epoch && (lease && this.#flightPort ? await this.#flightPort.commitFlight(lease, () => this.write(policy, value)) : await this.write(policy, value)), value;
+	      return throwIfAborted(), cacheMode !== "no-store" && !invalidation.invalidated && (lease && this.#flightPort ? await this.#flightPort.commitFlight(
+	        lease,
+	        () => this.write(policy, value, { traceId })
+	      ) : await this.write(policy, value, { traceId })), value;
 	    } catch (error) {
 	      throwIfAborted();
 	      const failure = lease?.producer ? sharedFlightFailure(error) : null;
@@ -2962,6 +3034,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      if (options.allowStaleOnError !== !1 && cached.state === "stale" && canFallback) {
 	        const value = cached.value;
 	        return this.#record({
+	          ...traceId ? { traceId } : {},
 	          operation: "load",
 	          outcome: "fallback",
 	          source: "memory",
@@ -2981,15 +3054,15 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	        }
 	    }
 	  }
-	  async #readAfterFlight(policy, cacheMode, cachedBeforeRequest) {
+	  async #readAfterFlight(policy, cacheMode, cachedBeforeRequest, traceId) {
 	    this.#memory.delete(policy.id);
-	    const latest = await this.read(policy);
+	    const latest = await this.read(policy, { traceId });
 	    return latest.state === "miss" ? Object.freeze({ state: "miss" }) : cacheMode === "refresh" ? (latest.storedAt ?? 0) > cachedBeforeRequest ? Object.freeze({ state: "hit", value: latest.value }) : Object.freeze({ state: "miss" }) : latest.state === "fresh" ? Object.freeze({ state: "hit", value: latest.value }) : Object.freeze({ state: "miss" });
 	  }
 	  #remember(entry) {
-	    if (this.#memory.delete(entry.id), entry.permanent === !0 && entry.bytes > this.#maxMemoryBytes)
-	      return;
-	    this.#memory.set(entry.id, entry);
+	    this.#memory.delete(entry.id), !(entry.permanent === !0 && entry.bytes > this.#maxMemoryBytes) && (this.#memory.set(entry.id, entry), this.#pruneMemory());
+	  }
+	  #pruneMemory() {
 	    let bytes = 0;
 	    for (const value of this.#memory.values()) bytes += value.bytes;
 	    for (; this.#memory.size > this.#maxMemoryEntries || bytes > this.#maxMemoryBytes && this.#memory.size > 1; ) {
@@ -3004,6 +3077,20 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      this.#memory.delete(evictedId), bytes -= oldest?.bytes ?? 0;
 	    }
 	  }
+	  applyMemoryPolicy(input) {
+	    this.#maxMemoryEntries = positiveInteger(input.maxEntries, "maxEntries"), this.#maxMemoryBytes = positiveInteger(input.maxBytes, "maxBytes"), this.#pruneMemory();
+	  }
+	  #markInvalidated(query) {
+	    for (const guard of this.#invalidationGuards)
+	      matchesInvalidation(guard.policy, query) && (guard.invalidated = !0);
+	  }
+	  #emitInvalidation(query) {
+	    for (const listener of [...this.#invalidationListeners])
+	      try {
+	        listener(query);
+	      } catch {
+	      }
+	  }
 	  #record(event) {
 	    try {
 	      this.#observer?.record(event);
@@ -3016,7 +3103,113 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    super("等待共享缓存请求超时"), this.name = "TimeoutError";
 	  }
 	}
-}, "25b189122c9189ea581a2d5fdd407f67be6d4d85838ab4de9185467741e5e915");
+}, "a68b9587b3e37a7a87396d9eb3b160b2f82d9d1114ef2a028b499be2f3c0dc82");
+
+/* Source: lite/src/cache/topic-snapshot-handoff.ts */
+runtime.register("src/cache/topic-snapshot-handoff.js", function(module, exports, require) {
+	var topic_snapshot_handoff_exports = {};
+	__export(topic_snapshot_handoff_exports, {
+	  TopicSnapshotHandoff: () => TopicSnapshotHandoff
+	});
+	module.exports = __toCommonJS(topic_snapshot_handoff_exports);
+	var import_identifiers = require("../discourse/identifiers.js");
+	function positiveInteger(value, name) {
+	  const normalized = Number(value);
+	  if (!Number.isSafeInteger(normalized) || normalized < 1)
+	    throw new RangeError(`${name} 必须是正安全整数`);
+	  return normalized;
+	}
+	function estimateSnapshotBytes(snapshot) {
+	  try {
+	    return Math.max(1, JSON.stringify(snapshot).length * 2);
+	  } catch {
+	    return Number.MAX_SAFE_INTEGER;
+	  }
+	}
+	class TopicSnapshotHandoff {
+	  #authScope;
+	  #now;
+	  #estimateBytes;
+	  #snapshots = /* @__PURE__ */ new Map();
+	  #maxEntries;
+	  #maxBytes;
+	  #ttlMs;
+	  #bytes = 0;
+	  constructor(options) {
+	    this.#authScope = (0, import_identifiers.discourseAuthScope)(options.authScope), this.#maxEntries = positiveInteger(options.maxEntries ?? 6, "maxEntries"), this.#maxBytes = positiveInteger(
+	      options.maxBytes ?? 16 * 1024 * 1024,
+	      "maxBytes"
+	    ), this.#ttlMs = positiveInteger(options.ttlMs ?? 6e4, "ttlMs"), this.#now = options.now ?? Date.now, this.#estimateBytes = options.estimateBytes ?? estimateSnapshotBytes;
+	  }
+	  remember(snapshot, traceId = "") {
+	    let topicId;
+	    try {
+	      topicId = String((0, import_identifiers.discourseTopicId)(snapshot.topicId));
+	    } catch {
+	      return !1;
+	    }
+	    if (snapshot.schemaVersion !== 2 || snapshot.authScope !== this.#authScope || snapshot.topicId !== topicId) return !1;
+	    this.#pruneExpired();
+	    const bytes = Math.max(1, Math.floor(this.#estimateBytes(snapshot)));
+	    return !Number.isSafeInteger(bytes) || bytes > this.#maxBytes ? !1 : (this.#delete(topicId), this.#snapshots.set(topicId, Object.freeze({
+	      snapshot,
+	      traceId: String(traceId).slice(0, 180),
+	      bytes,
+	      expiresAt: this.#now() + this.#ttlMs
+	    })), this.#bytes += bytes, this.#pruneLimits(), !0);
+	  }
+	  take(topicId) {
+	    return this.takeEntry(topicId)?.snapshot ?? null;
+	  }
+	  takeEntry(topicId) {
+	    this.#pruneExpired();
+	    const key = String((0, import_identifiers.discourseTopicId)(topicId)), entry = this.#snapshots.get(key) ?? null;
+	    return this.#delete(key), entry === null ? null : Object.freeze({
+	      snapshot: entry.snapshot,
+	      traceId: entry.traceId
+	    });
+	  }
+	  forget(topicId) {
+	    return this.#delete(String((0, import_identifiers.discourseTopicId)(topicId)));
+	  }
+	  /** canonical 响应缓存失效时同步释放同 Topic 的同页交接。 */
+	  invalidate(query) {
+	    if (this.#pruneExpired(), query.all || query.kinds?.includes("topics")) {
+	      const removed2 = this.#snapshots.size;
+	      return this.clear(), removed2;
+	    }
+	    const ids = new Set(query.ids ?? []), tags = new Set(query.tags ?? []);
+	    let removed = 0;
+	    for (const [topicId, entry] of this.#snapshots) {
+	      const regularId = `${this.#authScope}|snapshot:topic:${topicId}`, archiveId = `${this.#authScope}|snapshot:topic-archive:${topicId}`, archive = entry.snapshot.unavailableTopic !== null && entry.snapshot.unavailableTopic !== void 0 || (entry.snapshot.unavailablePosts?.length ?? 0) > 0;
+	      (ids.has(regularId) || ids.has(archiveId) || tags.has(`topic:${topicId}`) || archive && tags.has("topic-local-archive")) && this.#delete(topicId) && (removed += 1);
+	    }
+	    return removed;
+	  }
+	  applyPolicy(input) {
+	    this.#maxEntries = positiveInteger(input.maxEntries, "maxEntries"), this.#maxBytes = positiveInteger(input.maxBytes, "maxBytes"), this.#ttlMs = positiveInteger(input.ttlMs, "ttlMs"), this.#pruneExpired(), this.#pruneLimits();
+	  }
+	  clear() {
+	    this.#snapshots.clear(), this.#bytes = 0;
+	  }
+	  #delete(topicId) {
+	    const entry = this.#snapshots.get(topicId);
+	    return entry ? (this.#snapshots.delete(topicId), this.#bytes = Math.max(0, this.#bytes - entry.bytes), !0) : !1;
+	  }
+	  #pruneExpired() {
+	    const now = this.#now();
+	    for (const [topicId, entry] of this.#snapshots)
+	      entry.expiresAt <= now && this.#delete(topicId);
+	  }
+	  #pruneLimits() {
+	    for (; this.#snapshots.size > this.#maxEntries || this.#bytes > this.#maxBytes; ) {
+	      const oldest = this.#snapshots.keys().next().value;
+	      if (oldest === void 0) break;
+	      this.#delete(oldest);
+	    }
+	  }
+	}
+}, "b73d8967277f75b7606bf9b1a5c7be8c734577ad625958fa6fc10594e7c7cf42");
 
 /* Source: lite/src/cache/topic-snapshot-repository.ts */
 runtime.register("src/cache/topic-snapshot-repository.js", function(module, exports, require) {
@@ -3136,6 +3329,7 @@ runtime.register("src/cache/topic-snapshot-repository.js", function(module, expo
 	  #persistenceReadyAt = 0;
 	  #readPersistenceDelayMs = () => 0;
 	  #archiveRecordKnown = !1;
+	  #initialSnapshot;
 	  constructor(options) {
 	    const topicId = String((0, import_identifiers.discourseTopicId)(options.topicId)), authScope = (0, import_identifiers.discourseAuthScope)(options.authScope);
 	    if (this.topicId = topicId, this.authScope = authScope, this.#responses = options.responseRepository, this.#now = options.now ?? Date.now, this.#persistenceIdleMs = finiteTimestamp(
@@ -3143,7 +3337,7 @@ runtime.register("src/cache/topic-snapshot-repository.js", function(module, expo
 	      "persistenceIdleMs"
 	    ), this.#persistenceWait = options.persistenceWait ?? ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs))), this.#onInvalidSnapshot = options.onInvalidSnapshot ?? (() => {
 	    }), this.#onInvalidTreeSnapshot = options.onInvalidTreeSnapshot ?? (() => {
-	    }), this.#policy = Object.freeze({
+	    }), this.#initialSnapshot = options.initialSnapshot ?? null, this.#policy = Object.freeze({
 	      id: `${authScope}|snapshot:topic:${topicId}`,
 	      kind: "topics",
 	      tags: Object.freeze([`topic:${topicId}`]),
@@ -3364,30 +3558,48 @@ runtime.register("src/cache/topic-snapshot-repository.js", function(module, expo
 	  }
 	  async #restoreFromCache() {
 	    const read = async (policy) => {
-	      const cached2 = await this.#responses.read(
+	      const cached = await this.#responses.read(
 	        policy
 	      );
-	      if (cached2.state === "miss" || cached2.value === void 0) return null;
+	      if (cached.state === "miss" || cached.value === void 0) return null;
 	      try {
-	        const stored2 = this.#normalizeStoredSnapshot(cached2.value);
+	        const stored2 = this.#normalizeStoredSnapshot(cached.value);
 	        if (policy === this.#archivePolicy && !(stored2.unavailableTopic || stored2.unavailablePosts?.length))
 	          throw new Error(`Topic ${this.topicId} 的永久存档缺少失效标记`);
 	        return Object.freeze({
 	          policy,
-	          cached: cached2,
+	          raw: cached.value,
 	          stored: stored2
 	        });
 	      } catch (error) {
 	        return this.#onInvalidSnapshot(error), await this.#responses.invalidate({ ids: [policy.id] }), null;
 	      }
-	    }, [archived, regular] = await Promise.all([
+	    };
+	    let archived = null, regular = null;
+	    const initial = this.#initialSnapshot;
+	    if (this.#initialSnapshot = null, initial)
+	      try {
+	        const stored2 = this.#normalizeStoredSnapshot(initial);
+	        if (initial.tree !== null && stored2.tree === null)
+	          throw new Error(`Topic ${this.topicId} 的预热回复树快照无效`);
+	        const candidate = Object.freeze({
+	          policy: stored2.unavailableTopic || stored2.unavailablePosts?.length ? this.#archivePolicy : this.#policy,
+	          raw: initial,
+	          stored: stored2
+	        });
+	        candidate.policy === this.#archivePolicy ? archived = candidate : regular = candidate;
+	      } catch (error) {
+	        this.#onInvalidSnapshot(error);
+	      }
+	    !archived && !regular && ([archived, regular] = await Promise.all([
 	      read(this.#archivePolicy),
 	      read(this.#policy)
-	    ]), restored = archived && regular ? archived.stored.updatedAt >= regular.stored.updatedAt ? archived : regular : archived ?? regular;
+	    ]));
+	    const restored = archived && regular ? archived.stored.updatedAt >= regular.stored.updatedAt ? archived : regular : archived ?? regular;
 	    if (!restored) return null;
-	    const { cached, policy: restoredPolicy, stored } = restored;
+	    const { raw, policy: restoredPolicy, stored } = restored;
 	    this.#archiveRecordKnown = archived !== null;
-	    const staleArchive = archived !== null && restored === regular, discardedInvalidTree = cached.value.tree !== null && cached.value.tree !== void 0 && stored.tree === null, hadLocalState = this.#topic !== null || this.#posts.size > 0 || this.#removedPosts.size > 0 || this.#streamPostIds.length > 0 || this.#tree !== null || this.hasLocalArchive();
+	    const staleArchive = archived !== null && restored === regular, discardedInvalidTree = raw.tree !== null && raw.tree !== void 0 && stored.tree === null, hadLocalState = this.#topic !== null || this.#posts.size > 0 || this.#removedPosts.size > 0 || this.#streamPostIds.length > 0 || this.#tree !== null || this.hasLocalArchive();
 	    let topicFilled = !1, streamFilled = !1, removalFilled = !1, availabilityFilled = !1;
 	    const addedPostNumbers = [];
 	    this.#topic === null && stored.topic !== null && (this.#topic = stored.topic, this.#topicObservedAt = stored.topicObservedAt, this.#topicSource = stored.topicSource, topicFilled = !0), !this.#streamPostIds.length && stored.streamPostIds.length && (this.#streamPostIds = stored.streamPostIds, this.#streamObservedAt = stored.streamObservedAt, streamFilled = !0);
@@ -3661,7 +3873,7 @@ runtime.register("src/cache/topic-snapshot-repository.js", function(module, expo
 	    });
 	  }
 	}
-}, "4191d5f0aa579070c51658fd34a3cf1a3282be259d952a99d24efbb012f1fae4");
+}, "71f916557758e290ac815f7b7f9f791e9361dce92b2c70f5faa8e121fab3b5c0");
 
 /* Source: lite/src/collection/reader-collection-filter-model.ts */
 runtime.register("src/collection/reader-collection-filter-model.js", function(module, exports, require) {
@@ -4233,7 +4445,7 @@ runtime.register("src/collection/reader-popover-filter-controls.js", function(mo
 	    renderIcon
 	  ));
 	  const root = document.createElement("div");
-	  return root.className = `ldp-popover-search-tools ldp-user-observation-detail-tools ldp-${owner}-search-tools`, search.root.classList.add("ldp-user-observation-search", "is-detail"), root.append(search.root, filterToggle, filters), Object.freeze({
+	  return root.className = "ldp-popover-search-tools ldp-user-observation-detail-tools " + (owner === "notification" ? "ldp-notification-search-tools" : owner === "history" ? "ldp-history-search-tools" : "ldp-bookmarks-search-tools"), search.root.classList.add("ldp-user-observation-search", "is-detail"), root.append(search.root, filterToggle, filters), Object.freeze({
 	    root,
 	    search,
 	    filters,
@@ -4466,7 +4678,7 @@ runtime.register("src/collection/reader-popover-filter-controls.js", function(mo
 	  }
 	  !matched && select.options[0] && (select.options[0].selected = !0);
 	}
-}, "35cd817e858931c3c79559210488f70b0f15a1a229f2656cbba32b6bfcf3f263");
+}, "662ba0daa1e7d37c31612838f76dc04ab04bd8bf40959c4e2405a50e3e2ef4e4");
 
 /* Source: lite/src/collection/reader-unwanted-topic-filter-editor.ts */
 runtime.register("src/collection/reader-unwanted-topic-filter-editor.js", function(module, exports, require) {
@@ -7241,6 +7453,7 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	  discourseDeferredSubscription: () => discourseDeferredSubscription,
 	  discourseNativeAppEventSubscription: () => discourseNativeAppEventSubscription,
 	  discourseNativeBoostsAvailable: () => discourseNativeBoostsAvailable,
+	  discourseNativeCurrentUser: () => discourseNativeCurrentUser,
 	  discourseNativeCurrentUserBindingAvailable: () => discourseNativeCurrentUserBindingAvailable,
 	  discourseNativeCurrentUsername: () => discourseNativeCurrentUsername,
 	  discourseNativeDefaultSiteTheme: () => discourseNativeDefaultSiteTheme,
@@ -8526,7 +8739,7 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	    return this.#container = urlContainer ?? fallbackContainer, this.#container;
 	  }
 	}
-}, "162ada04595d103bec83e0ffa25fe5176ef24fd3b12df7638308110ebda2a990");
+}, "93247731292c0f3613186d680c15aa02586345c16a4e7dedda450d7b368efe72");
 
 /* Source: lite/src/discourse/native-message-bus.ts */
 runtime.register("src/discourse/native-message-bus.js", function(module, exports, require) {
@@ -11148,6 +11361,7 @@ runtime.register("src/history/reader-history-panel-view.js", function(module, ex
 	  scope;
 	  #document;
 	  #history;
+	  #topicStates;
 	  #elements;
 	  #pageSize;
 	  #topicHref;
@@ -11180,7 +11394,7 @@ runtime.register("src/history/reader-history-panel-view.js", function(module, ex
 	  #revision = 0;
 	  #openEpoch = 0;
 	  constructor(options) {
-	    if (this.#document = options.document, this.#history = options.history, this.#elements = options.elements, this.#pageSize = Math.floor(
+	    if (this.#document = options.document, this.#history = options.history, this.#topicStates = options.topicStates, this.#elements = options.elements, this.#pageSize = Math.floor(
 	      Number(options.pageSize ?? DEFAULT_PAGE_SIZE)
 	    ), !Number.isSafeInteger(this.#pageSize) || this.#pageSize <= 0)
 	      throw new RangeError("历史面板 pageSize 必须是正整数");
@@ -11254,9 +11468,11 @@ runtime.register("src/history/reader-history-panel-view.js", function(module, ex
 	      },
 	      onError: this.#onError,
 	      parentScope: this.scope
-	    }), this.#bind(), this.#history.changes.subscribe(() => {
+	    }), this.#bind();
+	    const syncRepositoryState = () => {
 	      this.#pruneSelection(), this.#preferences.sortMode === "recent-viewed" && this.#surface.isOpen && (this.#page = 0), this.#render();
-	    }, this.scope), this.scope.add(() => {
+	    };
+	    this.#topicStates ? this.#topicStates.changes.subscribe(syncRepositoryState, this.scope) : this.#history.changes.subscribe(syncRepositoryState, this.scope), this.scope.add(() => {
 	      this.#openEpoch += 1, this.#selection.clear();
 	    }), this.#render();
 	  }
@@ -11407,7 +11623,7 @@ runtime.register("src/history/reader-history-panel-view.js", function(module, ex
 	    }), this.#revision += 1;
 	  }
 	  #renderEntry(entry) {
-	    const archiveMarker = entry.archiveStatus === null ? null : Object.freeze({
+	    const manuallyHidden = this.#topicStates?.isManuallyHidden(entry.topicId) === !0, archiveMarker = entry.archiveStatus === null ? null : Object.freeze({
 	      status: entry.archiveStatus,
 	      postNumber: entry.archivePostNumber,
 	      topicTitle: entry.title
@@ -11420,7 +11636,7 @@ runtime.register("src/history/reader-history-panel-view.js", function(module, ex
 	      "ldp-collection-item",
 	      this.#multi ? "multi" : "",
 	      this.#selection.has(entry.topicId) ? "selected" : ""
-	    ].filter(Boolean).join(" "), item.dataset.historyTopicId = String(entry.topicId), item.dataset.historyActor = entry.ownerUsername, entry.archiveStatus !== null && (item.dataset.historyArchiveStatus = String(entry.archiveStatus), entry.archivePostNumber !== null && (item.dataset.historyArchivePostNumber = String(entry.archivePostNumber))), this.#multi) {
+	    ].filter(Boolean).join(" "), item.dataset.historyTopicId = String(entry.topicId), item.dataset.historyManuallyHidden = String(manuallyHidden), item.dataset.historyActor = entry.ownerUsername, entry.archiveStatus !== null && (item.dataset.historyArchiveStatus = String(entry.archiveStatus), entry.archivePostNumber !== null && (item.dataset.historyArchivePostNumber = String(entry.archivePostNumber))), this.#multi) {
 	      const select = this.#document.createElement("label");
 	      select.className = "ldp-history-select ldp-collection-select", select.dataset.ldpTooltipLabel = "选择这条浏览历史";
 	      const checkbox = this.#document.createElement("input");
@@ -11436,6 +11652,7 @@ runtime.register("src/history/reader-history-panel-view.js", function(module, ex
 	    meta.className = "ldp-notification-meta ldp-history-subtitle";
 	    const sortTime = this.#preferences.sortMode === "first-viewed" ? entry.firstViewedAt : entry.viewedAt, category = entry.categoryName || (entry.categoryId === null ? "" : `类别 #${entry.categoryId}`);
 	    if (meta.textContent = [
+	      manuallyHidden ? "不想再看" : "",
 	      archiveMarker === null ? "" : (0, import_reader_history_repository.readerHistoryArchiveMarkerLabel)(archiveMarker),
 	      entry.topicSubtitle || `${entry.postsCount} 帖`,
 	      category,
@@ -11561,7 +11778,7 @@ runtime.register("src/history/reader-history-panel-view.js", function(module, ex
 	      throw new Error("ReaderHistoryPanelView 已销毁");
 	  }
 	}
-}, "fe8547709fff432618904b6a98da8801b935e8364601f84bc0b862918167e2d7");
+}, "64e1c89cc5f0176f8dc2faba576ab01aa777385fb0b981c212c8730d5658ff25");
 
 /* Source: lite/src/history/reader-history-repository.ts */
 runtime.register("src/history/reader-history-repository.js", function(module, exports, require) {
@@ -11947,6 +12164,182 @@ runtime.register("src/history/reader-history-repository.js", function(module, ex
 	}
 }, "ae73da022ef835f9162058dd24d22f3bea8357614a327b9aab9033034bc763d0");
 
+/* Source: lite/src/monitor/reader-pipeline-observer.ts */
+runtime.register("src/monitor/reader-pipeline-observer.js", function(module, exports, require) {
+	var reader_pipeline_observer_exports = {};
+	__export(reader_pipeline_observer_exports, {
+	  ReaderPipelineObserver: () => ReaderPipelineObserver
+	});
+	module.exports = __toCommonJS(reader_pipeline_observer_exports);
+	var import_identifiers = require("../discourse/identifiers.js");
+	function positiveInteger(value, name) {
+	  const normalized = Number(value);
+	  if (!Number.isSafeInteger(normalized) || normalized < 1)
+	    throw new RangeError(`${name} 必须是正安全整数`);
+	  return normalized;
+	}
+	function diagnosticCode(value, maximum = 160) {
+	  return String(value ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, maximum);
+	}
+	function normalizedDetail(value) {
+	  const entries = Object.entries(value ?? {}).slice(0, 24).map(([rawKey, rawValue]) => {
+	    const key = diagnosticCode(rawKey, 80);
+	    if (!key) return null;
+	    const next = typeof rawValue == "string" ? diagnosticCode(rawValue, 240) : typeof rawValue == "number" ? Number.isFinite(rawValue) ? rawValue : null : rawValue;
+	    return [key, next];
+	  }).filter((entry) => entry !== null);
+	  return Object.freeze(Object.fromEntries(entries));
+	}
+	function metric(values) {
+	  const sorted = values.filter((value) => Number.isFinite(value) && value >= 0).slice().sort((left, right) => left - right), quantile = (ratio) => sorted.length ? sorted[Math.min(
+	    sorted.length - 1,
+	    Math.max(0, Math.ceil(sorted.length * ratio) - 1)
+	  )] ?? null : null;
+	  return Object.freeze({
+	    count: sorted.length,
+	    p50Ms: quantile(0.5),
+	    p95Ms: quantile(0.95),
+	    maximumMs: sorted.at(-1) ?? null
+	  });
+	}
+	class ReaderPipelineObserver {
+	  #sourceId;
+	  #retentionMs;
+	  #maxEntries;
+	  #now;
+	  #events = [];
+	  #traces = /* @__PURE__ */ new Map();
+	  #activeByTopic = /* @__PURE__ */ new Map();
+	  #sequence = 0;
+	  #dropped = 0;
+	  constructor(options) {
+	    this.#sourceId = diagnosticCode(options.sourceId, 80) || "reader", this.#retentionMs = positiveInteger(
+	      options.retentionMs ?? 15 * 6e4,
+	      "retentionMs"
+	    ), this.#maxEntries = positiveInteger(options.maxEntries ?? 1600, "maxEntries"), this.#now = options.now ?? Date.now;
+	  }
+	  begin(input) {
+	    const topicId = (0, import_identifiers.discourseTopicId)(input.topicId);
+	    for (const previous of this.#activeByTopic.get(topicId) ?? [])
+	      this.#traces.get(previous)?.kind === input.kind && this.finish(previous, "superseded");
+	    const startedAt = this.#now(), traceId = `${this.#sourceId}:${startedAt}:${++this.#sequence}`, state = Object.freeze({
+	      traceId,
+	      parentTraceId: diagnosticCode(input.parentTraceId, 180),
+	      kind: input.kind,
+	      topicId,
+	      source: diagnosticCode(input.source, 120),
+	      targetPostNumber: Number.isSafeInteger(input.targetPostNumber) && Number(input.targetPostNumber) > 0 ? Number(input.targetPostNumber) : null,
+	      startedAt
+	    });
+	    this.#traces.set(traceId, state);
+	    let active = this.#activeByTopic.get(topicId);
+	    return active || (active = /* @__PURE__ */ new Set(), this.#activeByTopic.set(topicId, active)), active.add(traceId), this.mark(
+	      traceId,
+	      input.kind === "topic-open" ? "entry-accepted" : input.kind === "topic-preheat" ? "preheat-start" : "scroll-intent"
+	    ), traceId;
+	  }
+	  resolve(identity) {
+	    const topicIdValue = identity.topicId ?? identity.topic_id;
+	    if (topicIdValue === void 0) return "";
+	    try {
+	      return this.#latestActiveTrace((0, import_identifiers.discourseTopicId)(topicIdValue));
+	    } catch {
+	      return "";
+	    }
+	  }
+	  activeTrace(topicIdValue) {
+	    try {
+	      return this.#latestActiveTrace((0, import_identifiers.discourseTopicId)(topicIdValue));
+	    } catch {
+	      return "";
+	    }
+	  }
+	  traceKind(traceIdValue) {
+	    return this.#traces.get(diagnosticCode(traceIdValue, 180))?.kind ?? null;
+	  }
+	  markTopic(topicIdValue, stage, input = {}) {
+	    const traceId = this.activeTrace(topicIdValue);
+	    return traceId ? this.mark(traceId, stage, input) : null;
+	  }
+	  mark(traceIdValue, stage, input = {}) {
+	    const traceId = diagnosticCode(traceIdValue, 180), trace = this.#traces.get(traceId) ?? (() => {
+	      const entry = this.#events.find((event2) => event2.traceId === traceId && ["entry-accepted", "preheat-start", "scroll-intent"].includes(
+	        event2.stage
+	      ));
+	      return entry === void 0 ? void 0 : Object.freeze({
+	        traceId,
+	        parentTraceId: entry.parentTraceId,
+	        kind: entry.kind,
+	        topicId: entry.topicId,
+	        source: entry.source,
+	        targetPostNumber: entry.targetPostNumber,
+	        startedAt: entry.at - entry.elapsedMs
+	      });
+	    })();
+	    if (!trace) return null;
+	    const at = this.#now(), duration = Number(input.durationMs), event = Object.freeze({
+	      id: ++this.#sequence,
+	      traceId,
+	      parentTraceId: trace.parentTraceId,
+	      at,
+	      elapsedMs: Math.max(0, at - trace.startedAt),
+	      kind: trace.kind,
+	      topicId: trace.topicId,
+	      source: trace.source,
+	      targetPostNumber: trace.targetPostNumber,
+	      stage,
+	      durationMs: Number.isFinite(duration) && duration >= 0 ? duration : null,
+	      detail: normalizedDetail(input.detail)
+	    });
+	    return this.#events.push(event), this.#prune(at), event;
+	  }
+	  finish(traceIdValue, stage = "finished", input = {}) {
+	    const traceId = diagnosticCode(traceIdValue, 180), trace = this.#traces.get(traceId);
+	    if (!trace) return null;
+	    const event = this.mark(traceId, stage, input);
+	    this.#traces.delete(traceId);
+	    const active = this.#activeByTopic.get(trace.topicId);
+	    return active?.delete(traceId), active?.size === 0 && this.#activeByTopic.delete(trace.topicId), event;
+	  }
+	  get snapshot() {
+	    this.#prune(this.#now());
+	    const values = (stage, useDuration = !1) => this.#events.filter((event) => event.stage === stage).map((event) => useDuration ? event.durationMs ?? event.elapsedMs : event.elapsedMs);
+	    return Object.freeze({
+	      events: Object.freeze([...this.#events]),
+	      activeTraces: this.#traces.size,
+	      dropped: this.#dropped,
+	      metrics: Object.freeze({
+	        firstDom: metric(values("dom-first-commit")),
+	        firstVisible: metric(values("first-visible-frame")),
+	        targetDataReady: metric(values("target-data-ready")),
+	        targetDomReady: metric(values("target-dom-ready")),
+	        anchorSettled: metric(values("anchor-settled", !0)),
+	        scrollCommit: metric(values("scroll-frame-commit", !0))
+	      })
+	    });
+	  }
+	  clear() {
+	    this.#events.length = 0, this.#dropped = 0;
+	  }
+	  #latestActiveTrace(topicId) {
+	    let latest = null;
+	    for (const traceId of this.#activeByTopic.get(topicId) ?? []) {
+	      const trace = this.#traces.get(traceId);
+	      trace && (!latest || trace.startedAt >= latest.startedAt) && (latest = trace);
+	    }
+	    return latest?.traceId ?? "";
+	  }
+	  #prune(at) {
+	    const cutoff = at - this.#retentionMs;
+	    let expired = 0;
+	    for (; expired < this.#events.length && this.#events[expired].at < cutoff; ) expired += 1;
+	    if (expired && (this.#events.splice(0, expired), this.#dropped += expired), this.#events.length <= this.#maxEntries) return;
+	    const overflow = this.#events.length - this.#maxEntries;
+	    this.#events.splice(0, overflow), this.#dropped += overflow;
+	  }
+	}
+}, "abf63e2ff3c2979ab22a9e10a7a1e1343d4bd4a5bcd7c1823cfe60eea0258461");
+
 /* Source: lite/src/monitor/reader-resource-monitor.ts */
 runtime.register("src/monitor/reader-resource-monitor.js", function(module, exports, require) {
 	var reader_resource_monitor_exports = {};
@@ -12155,6 +12548,7 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	  return Object.freeze({
 	    recordType: "request",
 	    id: event.id,
+	    traceId: event.traceId,
 	    logicalId: event.logicalId,
 	    phase: event.phase,
 	    visibility,
@@ -12511,7 +12905,11 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	      "request",
 	      "导出请求日志",
 	      "导出当前内存中的完整脱敏请求账本、调度和共享限流快照（JSONL）。"
-	    ), performanceExport = this.#createExportControl(
+	    ), pipelineExport = options.cacheEvents && options.pipeline ? this.#createExportControl(
+	      "pipeline",
+	      "导出流水线日志",
+	      "按 traceId 合并入口、请求、缓存、canonical、DOM、锚定与滚动事实（JSONL）。"
+	    ) : null, performanceExport = this.#createExportControl(
 	      "performance",
 	      "导出性能日志",
 	      "导出十分钟快照、毫秒事件、前后台时间线、关联请求及能力/缺口声明（JSONL）。"
@@ -12931,6 +13329,7 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	      limitBoundary
 	    ), requestPanel.append(
 	      requestExport,
+	      ...pipelineExport ? [pipelineExport] : [],
 	      requestSummary,
 	      traceBlock,
 	      this.#requestBottleneck,
@@ -12991,15 +13390,15 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	          permit,
 	          "export"
 	        );
-	        const file = kind === "request" ? this.#requestLogFile(generatedAt, requests, scheduler, permit) : this.#performanceLogFile(
+	        const file = kind === "request" ? this.#requestLogFile(generatedAt, requests, scheduler, permit) : kind === "pipeline" ? this.#pipelineLogFile(generatedAt, requests, scheduler, permit) : this.#performanceLogFile(
 	          generatedAt,
 	          requests,
 	          scheduler,
 	          permit
 	        );
 	        await this.#saveDiagnosticLog(file);
-	        const count = kind === "request" ? requests.length : this.#samples.length + this.#performanceEvents.length;
-	        status.textContent = `已导出 ${count} 条${kind === "request" ? "请求" : "性能事实"}`;
+	        const count = kind === "request" ? requests.length : kind === "pipeline" ? (this.#options.pipeline?.snapshot.events.length ?? 0) + (this.#options.cacheEvents?.snapshot.events.length ?? 0) + requests.length : this.#samples.length + this.#performanceEvents.length;
+	        status.textContent = `已导出 ${count} 条${kind === "request" ? "请求" : kind === "pipeline" ? "流水线事实" : "性能事实"}`;
 	      } catch (error) {
 	        status.textContent = `导出失败：${error instanceof Error ? error.message : "未知错误"}`;
 	      } finally {
@@ -13037,6 +13436,47 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	    ];
 	    return Object.freeze({
 	      filename: diagnosticLogFilename("request", generatedAt),
+	      mimeType: "application/x-ndjson;charset=utf-8",
+	      text: diagnosticJsonLines(records)
+	    });
+	  }
+	  #pipelineLogFile(generatedAt, requests, scheduler, permit) {
+	    const pipeline = this.#options.pipeline?.snapshot, cache = this.#options.cacheEvents?.snapshot, timeline = [
+	      ...(pipeline?.events ?? []).map((event) => ({
+	        at: event.at,
+	        record: { recordType: "pipeline", ...event }
+	      })),
+	      ...(cache?.events ?? []).map((event) => ({
+	        at: event.at,
+	        record: { recordType: "cache", ...event }
+	      })),
+	      ...requests.map((event) => ({
+	        at: event.queuedAt,
+	        record: requestDiagnosticRecord(event)
+	      }))
+	    ].sort((left, right) => left.at - right.at), records = [
+	      {
+	        recordType: "meta",
+	        logType: "pipeline",
+	        schemaVersion: 1,
+	        generatedAt,
+	        generatedAtIso: diagnosticIsoTime(generatedAt),
+	        pipelineMetrics: pipeline?.metrics ?? null,
+	        pipelineDropped: pipeline?.dropped ?? 0,
+	        cacheDropped: cache?.dropped ?? 0,
+	        privacy: "bounded topic and timing metadata only; no query values, headers, bodies, cookies, authorization, cache values, or response content"
+	      },
+	      {
+	        recordType: "runtime-state",
+	        at: generatedAt,
+	        atIso: diagnosticIsoTime(generatedAt),
+	        scheduler,
+	        permit
+	      },
+	      ...timeline.map((entry) => entry.record)
+	    ];
+	    return Object.freeze({
+	      filename: diagnosticLogFilename("pipeline", generatedAt),
 	      mimeType: "application/x-ndjson;charset=utf-8",
 	      text: diagnosticJsonLines(records)
 	    });
@@ -13616,8 +14056,8 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	    ));
 	    const establishing = baselineSamples.length < 10;
 	    this.#health.dataset.level = establishing ? "normal" : level, this.#healthState.textContent = establishing ? "建立基线" : warnings.length ? level === "danger" ? "资源压力高" : "需要关注" : "采样正常", this.#healthDetail.textContent = establishing ? `最近 12 秒已取得 ${baselineSamples.length}/10 个真实快照。` : warnings.length ? `${warnings.join("；")}。继续观察趋势，回落后会自动恢复。` : "未发现阅读器页面元素快速膨胀、页面共享主线程卡顿或阅读器请求积压；内存估计不参与自动判定。", this.#updated.textContent = `最近快照 ${new Date(current.at).toLocaleTimeString()} · ${current.visibility === "visible" ? "前台" : "后台"} · 仅内存保留`;
-	    const performancePolicy = this.#options.performancePolicySnapshot?.() ?? null;
-	    this.#performancePolicy.textContent = performancePolicy ? `已含设备与网络自适应：正文批次 ${performancePolicy.pageSize} 楼 · DOM 最多 ${performancePolicy.streamMaxMountedPostCount} 楼 · 屏外预留 ${formatPolicyNumber(performancePolicy.streamOverscanScreens)} 屏 · API 提前 ${formatPolicyNumber(performancePolicy.nestedPrefetchScreens)} 屏 · 本页请求策略上限 ${performancePolicy.requestMaxConcurrent} 路 / ${performancePolicy.requestMinIntervalMs}ms · 窗口目标 ${performancePolicy.requestRateTargetPercent}%；跨标签与服务器实时约束见请求记录。` : "当前运行环境未提供性能策略快照；下方仍显示实际 DOM、请求与主线程记录。", this.#renderTrendCharts(current), this.#renderEvidence(current, requestEvents);
+	    const performancePolicy = this.#options.performancePolicySnapshot?.() ?? null, adaptivePolicy = performancePolicy && performancePolicy.preheatMaxConcurrent !== void 0 && performancePolicy.preheatHandoffMaxEntries !== void 0 && performancePolicy.preheatHandoffMaxBytes !== void 0 && performancePolicy.responseMemoryMaxEntries !== void 0 && performancePolicy.responseMemoryMaxBytes !== void 0 && performancePolicy.projectionHydrationBatchSize !== void 0 ? ` · 预热 ${performancePolicy.preheatMaxConcurrent} 路 / 交接 ${performancePolicy.preheatHandoffMaxEntries} 帖 ${formatBytes(performancePolicy.preheatHandoffMaxBytes)} · 响应内存 ${performancePolicy.responseMemoryMaxEntries} 项 ${formatBytes(performancePolicy.responseMemoryMaxBytes)} · 水合批次 ${performancePolicy.projectionHydrationBatchSize}` : "";
+	    this.#performancePolicy.textContent = performancePolicy ? `已含设备与网络自适应：正文批次 ${performancePolicy.pageSize} 楼 · DOM 最多 ${performancePolicy.streamMaxMountedPostCount} 楼 · 屏外预留 ${formatPolicyNumber(performancePolicy.streamOverscanScreens)} 屏 · API 提前 ${formatPolicyNumber(performancePolicy.nestedPrefetchScreens)} 屏 · 本页请求策略上限 ${performancePolicy.requestMaxConcurrent} 路 / ${performancePolicy.requestMinIntervalMs}ms · 窗口目标 ${performancePolicy.requestRateTargetPercent}%${adaptivePolicy}；跨标签与服务器实时约束见请求记录。` : "当前运行环境未提供性能策略快照；下方仍显示实际 DOM、请求与主线程记录。", this.#renderTrendCharts(current), this.#renderEvidence(current, requestEvents);
 	  }
 	  #renderTrendCharts(current) {
 	    const rows = {
@@ -14306,7 +14746,7 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	    return this.#options.document.visibilityState === "hidden" ? "hidden" : "visible";
 	  }
 	}
-}, "dbfc6ab158c36589dbac7e928c029b1dd526be39f47ed1a8be7fca8d52e224c5");
+}, "0d754f9f2724a35bc1a42dffee2ec7654bbe849fab52c4070c2f7def3504e620");
 
 /* Source: lite/src/network/browser-request-observation.ts */
 runtime.register("src/network/browser-request-observation.js", function(module, exports, require) {
@@ -16214,6 +16654,7 @@ runtime.register("src/network/coordinated-request-client.js", function(module, e
 	    if (!this.#observer) return null;
 	    try {
 	      return this.#observer.begin({
+	        ...options.traceId ? { traceId: options.traceId } : {},
 	        href: String(options.input),
 	        method,
 	        transport: "scheduler",
@@ -16252,6 +16693,7 @@ runtime.register("src/network/coordinated-request-client.js", function(module, e
 	        recoveryProbe: timing.recoveryProbe,
 	        waitReason: timing.waitReason || (timing.permittedAt - timing.queuedAt > 0.5 ? "scheduler" : "")
 	      }) ? id : this.#observer.begin({
+	        ...options.traceId ? { traceId: options.traceId } : {},
 	        href: String(options.input),
 	        method,
 	        transport: "scheduler",
@@ -16301,6 +16743,7 @@ runtime.register("src/network/coordinated-request-client.js", function(module, e
 	    if (this.#observer)
 	      try {
 	        this.#observer.begin({
+	          ...options.traceId ? { traceId: options.traceId } : {},
 	          href: String(options.input),
 	          method,
 	          transport: "scheduler",
@@ -16353,7 +16796,7 @@ runtime.register("src/network/coordinated-request-client.js", function(module, e
 	    return "request-failed";
 	  }
 	}
-}, "4a89e55d79098b3bef1201dae3652bb342c9bdd9a480f4ed7668b60a1ce7e828");
+}, "2ce85ceb3d5b928980a277ceb62eeea0f4dc7169df41cb7a58cdb63c74a211c4");
 
 /* Source: lite/src/network/discourse-native-read-transport.ts */
 runtime.register("src/network/discourse-native-read-transport.js", function(module, exports, require) {
@@ -16597,9 +17040,10 @@ runtime.register("src/network/domain-request-gateway.js", function(module, expor
 	class DomainRequestGateway {
 	  #client;
 	  #responses;
+	  #trace;
 	  #executions = /* @__PURE__ */ new Map();
-	  constructor(client, responses) {
-	    this.#client = client, this.#responses = responses;
+	  constructor(client, responses, trace) {
+	    this.#client = client, this.#responses = responses, this.#trace = trace ?? null;
 	  }
 	  loadTopicPosts(input) {
 	    return this.#execute({
@@ -16620,11 +17064,12 @@ runtime.register("src/network/domain-request-gateway.js", function(module, expor
 	    });
 	  }
 	  async cachedTopicTarget(input) {
-	    const contract = (0, import_request_contract.createRequestContract)(input.profile ?? "topic-visible", {
+	    const identity = (0, import_request_identities.topicRequestIdentity)(input), contract = (0, import_request_contract.createRequestContract)(input.profile ?? "topic-visible", {
 	      namespace: "topic-target",
-	      identity: (0, import_request_identities.topicRequestIdentity)(input)
+	      identity
 	    }), cached = await this.#responses.read(
-	      cachePolicy(contract, input.cache)
+	      cachePolicy(contract, input.cache),
+	      { traceId: this.#trace?.resolve(identity) ?? "" }
 	    );
 	    return cached.state === "miss" ? null : cached.value;
 	  }
@@ -16825,11 +17270,12 @@ runtime.register("src/network/domain-request-gateway.js", function(module, expor
 	    });
 	    if (contract.cacheMode !== "no-store" && !input.cache)
 	      return Promise.reject(new Error(`${input.profile} 缺少 response cache settings`));
-	    const execution = this.#acquireExecution(contract), network = async (signal) => {
+	    const execution = this.#acquireExecution(contract), traceId = this.#trace?.resolve(input.identity) ?? "", network = async (signal) => {
 	      if (input.beforeNetwork && execution.contract.priority === "background" && (await input.beforeNetwork(signal), signal.aborted))
 	        throw signal.reason;
 	      execution.started = !0;
 	      const effective = execution.contract, requestOptions = {
+	        ...traceId ? { traceId } : {},
 	        key: effective.key,
 	        input: input.input,
 	        priority: effective.priority,
@@ -16856,6 +17302,7 @@ runtime.register("src/network/domain-request-gateway.js", function(module, expor
 	      cachePolicy(contract, input.cache),
 	      network,
 	      {
+	        traceId,
 	        cacheMode: contract.cacheMode,
 	        signal: input.signal,
 	        ...input.allowStaleOnError === void 0 ? {} : { allowStaleOnError: input.allowStaleOnError },
@@ -16913,7 +17360,7 @@ runtime.register("src/network/domain-request-gateway.js", function(module, expor
 	    execution.consumers = Math.max(0, execution.consumers - 1), execution.consumers === 0 && this.#executions.get(key) === execution && this.#executions.delete(key);
 	  }
 	}
-}, "ef7d95ec50f5eb0f2179c0448de3331733c936854c1a419b64445060d675f868");
+}, "82af4c6f93c996720dc6c6a5eb66232503a83d9d6d33133fdcde894368195df0");
 
 /* Source: lite/src/network/public-resource-request-adapter.ts */
 runtime.register("src/network/public-resource-request-adapter.js", function(module, exports, require) {
@@ -17659,6 +18106,7 @@ runtime.register("src/network/request-observer.js", function(module, exports, re
 	      Math.max(queuedAt, nonNegative(input.permittedAt, startedAt))
 	    ), method = String(input.method ?? "GET").trim().toUpperCase().slice(0, 16) || "GET", url = requestUrl(input.href, this.#baseHref), normalizedHref = requestObservationHref(url), baseOrigin = new URL(this.#baseHref).origin, event = Object.freeze({
 	      id: ++this.#sequence,
+	      traceId: diagnosticCode(input.traceId),
 	      href: normalizedHref,
 	      path: requestObservationPath(url, baseOrigin),
 	      queryShape: requestObservationQueryShape(url),
@@ -17894,7 +18342,7 @@ runtime.register("src/network/request-observer.js", function(module, exports, re
 	    });
 	  }
 	}
-}, "64374a589ac7e6bc0726c98e064bcb3965bf317bd095010e034716e8d8cd2222");
+}, "83139c1716364d713b2f3eca34af599da093d34e037b0f139585a9ae92c544b0");
 
 /* Source: lite/src/network/request-rate-limit-policy.ts */
 runtime.register("src/network/request-rate-limit-policy.js", function(module, exports, require) {

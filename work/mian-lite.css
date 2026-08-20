@@ -1,6 +1,6 @@
 /* Awesome LinuxDo Reader Lite stylesheet.
  * Generated only from lite/styles/*.css; do not edit generated outputs.
- * source-sha256: 4431bd48497d99e44a0edbaadd21030298202b7cad0e9d836e4816105148472a
+ * source-sha256: 76dd9636ef6f3eb4049bdd98abf72ecbc7156dbfae4230ab60faf30ed317f05c
  */
 
 /* source: 00-foundation.css */
@@ -14803,7 +14803,7 @@ img.emoji[data-ldp-inline-emoji] {
 .ldp-unwanted-topic-filter-master small,
 .ldp-unwanted-topic-filter-active-head small,
 .ldp-unwanted-topic-filter-card small,
-.ldp-unwanted-topic-filter-result small,
+.ldp-unwanted-topic-filter-results small,
 .ldp-unwanted-topic-filter-status,
 .ldp-unwanted-topic-filter-lookup-status {
   color: var(--ldp-ink-muted);

@@ -923,12 +923,12 @@ bookmarkPollSchedules.delete(bookmarkPollEntry[0]);
 bookmarkPollEntry[1].callback();
 await flushMicrotasks();
 assert(
-	bookmarkPollLoads === 2 && bookmarkPollSchedules.size === 1,
+	Number(bookmarkPollLoads) === 2 && Number(bookmarkPollSchedules.size) === 1,
 	'收藏回应兜底轮询到期后必须增量刷新，并续排下一次唯一轮询',
 );
 bookmarkPollVisible = false;
 bookmarkPollController.close();
-assert(bookmarkPollSchedules.size === 0, '关闭收藏回应浮窗必须撤销兜底轮询');
+assert(Number(bookmarkPollSchedules.size) === 0, '关闭收藏回应浮窗必须撤销兜底轮询');
 bookmarkPollController.destroy();
 
 const mutations: ActionMutationDescriptor<unknown>[] = [];
@@ -1102,7 +1102,7 @@ const deferredTaxonomyController = new ReaderBookmarkController({
 			}));
 			return replyRecords;
 		},
-		async enrichTopicTaxonomy(records) {
+		async enrichTopicTaxonomy(records: readonly ReaderBookmarkRecord[]) {
 			await new Promise<void>((resolve) => {
 				releaseBookmarkTaxonomy = resolve;
 			});
@@ -1122,13 +1122,15 @@ const deferredTaxonomyOpen = deferredTaxonomyController.open().then(() => {
 });
 await flushMicrotasks();
 assert(
-	bookmarkOpenSettled &&
+	Boolean(bookmarkOpenSettled) &&
 	!deferredTaxonomyController.snapshot.loading &&
 	deferredTaxonomyController.snapshot.records[0]?.tags.length === 0 &&
 	releaseBookmarkTaxonomy !== null,
 	'收藏正文完成后必须立即结束加载，不能等待 Topic 类别与标签补充请求',
 );
-releaseBookmarkTaxonomy();
+const resolvedBookmarkTaxonomy = releaseBookmarkTaxonomy as (() => void) | null;
+if (!resolvedBookmarkTaxonomy) throw new Error('收藏 taxonomy 释放器未就绪');
+resolvedBookmarkTaxonomy();
 await deferredTaxonomyOpen;
 await flushMicrotasks();
 assert(
@@ -1197,8 +1199,14 @@ closedWarmTask[1]();
 await flushMicrotasks();
 assert(
 	!closedWarmController.snapshot.open &&
-	closedWarmRequest?.stream === 'bookmarks' &&
-	closedWarmRequest.background &&
+		(closedWarmRequest as typeof closedWarmRequest | Readonly<{
+			stream: ReaderBookmarkHistoryStream;
+			background: boolean;
+		}>)?.stream === 'bookmarks' &&
+		(closedWarmRequest as Readonly<{
+			stream: ReaderBookmarkHistoryStream;
+			background: boolean;
+		}> | null)?.background === true &&
 	closedWarmController.cacheStats().bookmarks === 1,
 	'收藏面板关闭时必须以 background 优先级请求并保存归一化历史缓存',
 );
@@ -1288,8 +1296,8 @@ const runPacedStep = async (): Promise<void> => {
 };
 await runPacedStep();
 assert(
-	pacedCalls.length === 1 &&
-		pacedSchedules.size === 1 &&
+	Number(pacedCalls.length) === 1 &&
+		Number(pacedSchedules.size) === 1 &&
 		[...pacedSchedules.values()][0]?.delayMs === 7,
 	'后台历史每次调度只能发起一页请求，不能在一个任务中连续扫描深分页',
 );
@@ -1402,7 +1410,7 @@ assert(
 parallelBookmarkResolvers.shift()?.();
 await flushMicrotasks();
 assert(
-	parallelBookmarkCalls.length === 4 &&
+	Number(parallelBookmarkCalls.length) === 4 &&
 		parallelBookmarkPeak === 3 &&
 		parallelBookmarkSchedules.size === 0,
 	'收藏历史必须在单个槽释放后立即补位，不能等待整批来源完成',
@@ -1423,7 +1431,7 @@ parallelBookmarkSchedules.delete(parallelBookmarkBackgroundTask[0]);
 parallelBookmarkBackgroundTask[1].callback();
 await flushMicrotasks();
 assert(
-	parallelBookmarkCalls.length === 5 &&
+	Number(parallelBookmarkCalls.length) === 5 &&
 		parallelBookmarkCalls.at(-1)?.background === true,
 	'收藏浮窗关闭后必须降回单来源 background-prefetch 请求',
 );
@@ -1500,7 +1508,7 @@ assert(
 );
 retryController.retryBackgroundCache();
 assert(
-	retryController.snapshot.historyProgress.status === 'idle' &&
+	String(retryController.snapshot.historyProgress.status) === 'idle' &&
 	retryController.snapshot.historyProgress.error === null &&
 	retryController.snapshot.historyProgress.retryAt === null &&
 	[...retrySchedules.values()][0]?.delayMs === 0,
@@ -2076,7 +2084,7 @@ assert(
 	);
 	bookmarkFilterToggle.click();
 	assert(
-		bookmarkFilterPanel?.hidden === false &&
+		Boolean(bookmarkFilterPanel?.hidden) === false &&
 			bookmarkFilterToggle.getAttribute('aria-expanded') === 'true' &&
 			bookmarkFilterPanel.querySelector(
 				'.ldp-user-observation-calendar-toggle',
@@ -2151,7 +2159,7 @@ assert(
 	await flushMicrotasks();
 	assert(
 		!bookmarkRefresh.disabled &&
-		bookmarkRefresh.dataset.ldpRequestBusy === '0' &&
+		String(bookmarkRefresh.dataset.ldpRequestBusy) === '0' &&
 		!bookmarkRefresh.classList.contains('is-refreshing') &&
 		bookmarkRefresh.querySelector('[data-icon="rotate-ccw"]') !== null &&
 		viewNotifications.at(-1) === '收藏与回应已更新',
@@ -2168,7 +2176,7 @@ assert(
 		'.ldp-user-observation-filter-reset',
 	)!.click();
 	assert(
-		controller.snapshot.sortDirection === 'desc' &&
+		String(controller.snapshot.sortDirection) === 'desc' &&
 			controller.snapshot.dateFilter === '',
 		'收藏重置必须恢复默认日期与时间降序',
 	);

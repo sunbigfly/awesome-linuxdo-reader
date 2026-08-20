@@ -11,6 +11,7 @@ import {
 	type ResponseCachePolicy,
 	type ResponseCacheStore,
 } from '../src/cache/response-repository.js';
+import { ReaderCacheObserver } from '../src/cache/cache-observer.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -285,6 +286,9 @@ const secondRepositoryCoordinator = new CrossTabCacheCoordinator({
 	now: () => repositoryNow,
 });
 const sharedStore = new SharedResponseStore();
+const repositoryCacheEvents = new ReaderCacheObserver({
+	now: () => repositoryNow,
+});
 const createRepository = (coordinator: CrossTabCacheCoordinator): ResponseRepository =>
 	new ResponseRepository({
 		store: sharedStore,
@@ -295,6 +299,7 @@ const createRepository = (coordinator: CrossTabCacheCoordinator): ResponseReposi
 		flightHeartbeatMs: 500,
 		flightWaitTimeoutMs: 5_000,
 		now: () => repositoryNow,
+		observer: repositoryCacheEvents,
 	});
 const firstRepository = createRepository(firstRepositoryCoordinator);
 const secondRepository = createRepository(secondRepositoryCoordinator);
@@ -313,6 +318,47 @@ const repositoryPolicy = (id: string): ResponseCachePolicy => ({
 	persist: true,
 });
 
+const delayedReadPolicy = repositoryPolicy('delayed-read');
+await sharedStore.write(Object.freeze({
+	schemaVersion: 1,
+	id: delayedReadPolicy.id,
+	kind: delayedReadPolicy.kind,
+	tags: delayedReadPolicy.tags,
+	storedAt: repositoryNow,
+	expiresAt: repositoryNow + delayedReadPolicy.retainForMs,
+	bytes: 16,
+	value: { version: 5 },
+}));
+const delayedReadStarted = deferred<void>();
+const releaseDelayedRead = deferred<void>();
+const delayedReadRepository = new ResponseRepository({
+	store: {
+		read: async (id) => {
+			delayedReadStarted.resolve();
+			await releaseDelayedRead.promise;
+			return sharedStore.read(id);
+		},
+		write: (entry) => sharedStore.write(entry),
+		invalidate: (query) => sharedStore.invalidate(query),
+	},
+	maxMemoryEntries: 8,
+	maxMemoryBytes: 100_000,
+	now: () => repositoryNow,
+});
+const delayedRead = delayedReadRepository.read<{ version: number }>(
+	delayedReadPolicy,
+);
+await delayedReadStarted.promise;
+delayedReadRepository.applyExternalInvalidation({
+	ids: ['unrelated-delayed-read'],
+});
+releaseDelayedRead.resolve();
+const delayedReadResult = await delayedRead;
+assert(
+	delayedReadResult.state === 'fresh' && delayedReadResult.value?.version === 5,
+	'无关跨 context 失效不得把正在读取的有效持久记录降级为 miss',
+);
+
 const sharedLoad = deferred<{ version: number }>();
 const firstLoaderStarted = deferred<void>();
 let secondLoaderCalls = 0;
@@ -322,14 +368,20 @@ const firstSharedResult = firstRepository.getOrLoad(
 		firstLoaderStarted.resolve();
 		return sharedLoad.promise;
 	},
+	{ traceId: 'trace:shared-load' },
 );
 await firstLoaderStarted.promise;
+await secondRepository.write(
+	repositoryPolicy('unrelated-cross-tab-write'),
+	{ version: 7 },
+);
 const secondSharedResult = secondRepository.getOrLoad(
 	repositoryPolicy('shared-load'),
 	async () => {
 		secondLoaderCalls += 1;
 		return { version: 99 };
 	},
+	{ traceId: 'trace:shared-load' },
 );
 sharedLoad.resolve({ version: 1 });
 const [firstSharedValue, secondSharedValue] = await Promise.all([
@@ -340,7 +392,18 @@ assert(firstSharedValue.version === 1 && secondSharedValue.version === 1, '跨 c
 assert(secondLoaderCalls === 0, 'follower 不得重复执行网络 loader');
 assert(
 	sharedStore.writes.filter((entry) => entry.id === 'shared-load').length === 1,
-	'跨 context 单飞只能持久化一次',
+	'无关跨 context 写入不得取消当前身份的持久化，同键单飞仍只能写入一次',
+);
+assert(
+	repositoryCacheEvents.snapshot.events.some((event) =>
+		event.traceId === 'trace:shared-load' &&
+		event.source === 'cross-tab' &&
+		event.reason?.includes('producer 租约')) &&
+	repositoryCacheEvents.snapshot.events.some((event) =>
+		event.traceId === 'trace:shared-load' &&
+		event.source === 'cross-tab' &&
+		event.reason?.includes('重读持久缓存')),
+	'跨标签单 producer 的租约、follower 等待与共享重读必须纳入同一 trace 缓存账本',
 );
 
 const sameTickPolicy = repositoryPolicy('same-tick-refresh');

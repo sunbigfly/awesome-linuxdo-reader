@@ -13,6 +13,9 @@ import {
 } from
 	'../src/collection/reader-header-popover-position.js';
 import { LifecycleScope } from '../src/kernel/lifecycle.js';
+import { Signal } from '../src/kernel/signal.js';
+import type { ReaderTopicStateSnapshot } from
+	'../src/state/reader-topic-state-projection.js';
 import {
 	createReaderShellTemplate,
 } from '../src/shell/reader-shell-template.js';
@@ -236,8 +239,8 @@ assert(
 preferredTop = 20;
 preferredTopPosition.position();
 assert(
-	preferredTopPopover.dataset.placement === 'bottom' &&
-	preferredTopPopover.style.top === '68px',
+	String(preferredTopPopover.dataset.placement) === 'bottom' &&
+	String(preferredTopPopover.style.top) === '68px',
 	'上方发生 viewport 碰撞时，锚定浮层必须自动翻到控件下方',
 );
 surfaceScope.destroy();
@@ -336,11 +339,26 @@ const opened: number[] = [];
 const openedPostNumbers: number[] = [];
 const confirmations: string[] = [];
 const notifications: string[] = [];
+const hiddenTopics = new Set([1]);
+const topicStateChanges = new Signal<ReaderTopicStateSnapshot>();
+let topicStateRevision = 0;
+history.changes.subscribe(() => {
+	topicStateChanges.emit(Object.freeze({
+		records: Object.freeze([]),
+		historyRevision: history.snapshot.revision,
+		unwantedRevision: 0,
+		revision: ++topicStateRevision,
+	}));
+});
 let view: ReaderHistoryPanelView;
 view = new ReaderHistoryPanelView({
 	document,
 	mount: template.view.surfaceHost,
 	history,
+	topicStates: {
+		changes: topicStateChanges,
+		isManuallyHidden: (topicId) => hiddenTopics.has(Number(topicId)),
+	},
 	elements: {
 		root: template.view.root,
 		toggle: template.historyToggle,
@@ -411,6 +429,12 @@ assert(
 		template.historyToggle.getAttribute('aria-expanded') === 'true' &&
 		template.historyList.querySelectorAll('[data-history-topic-id]').length ===
 			20 &&
+		template.historyList.querySelector(
+			'[data-history-topic-id="1"]',
+		)?.getAttribute('data-history-manually-hidden') === 'true' &&
+		template.historyList.querySelector(
+			'[data-history-topic-id="1"] .ldp-history-subtitle',
+		)?.textContent?.includes('不想再看') === true &&
 		template.historyPageInfo.parentElement?.hidden === true &&
 		template.historyDefaultActions.closest(
 			'.ldp-reader-floating-window-actions',
@@ -430,7 +454,7 @@ assert(
 );
 historyFilterToggle.click();
 assert(
-	historyFilterPanel?.hidden === false &&
+	Boolean(historyFilterPanel?.hidden) === false &&
 		historyFilterToggle.getAttribute('aria-expanded') === 'true' &&
 		historyFilterPanel.querySelector(
 			'.ldp-user-observation-calendar-toggle',
@@ -474,7 +498,7 @@ historyFilterPanel.querySelector<HTMLButtonElement>(
 	'.ldp-user-observation-filter-reset',
 )!.click();
 assert(
-	view.snapshot.sortDirection === 'desc' && view.snapshot.dateFilter === '',
+	String(view.snapshot.sortDirection) === 'desc' && view.snapshot.dateFilter === '',
 	'历史重置必须恢复默认日期与最近查看降序',
 );
 const newestHistoryItem = template.historyList.querySelector<HTMLElement>(

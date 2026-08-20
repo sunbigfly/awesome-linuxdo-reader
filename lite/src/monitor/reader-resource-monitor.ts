@@ -1,4 +1,6 @@
 import { LifecycleScope } from '../kernel/lifecycle.js';
+import type { ReaderCacheObserver } from '../cache/cache-observer.js';
+import type { ReaderPipelineObserver } from './reader-pipeline-observer.js';
 import {
 	BrowserResourceObservationAdapter,
 } from '../network/browser-request-observation.js';
@@ -69,6 +71,12 @@ export interface ReaderResourcePerformancePolicySnapshot {
 	readonly requestMaxConcurrent: number;
 	readonly requestMinIntervalMs: number;
 	readonly requestRateTargetPercent: number;
+	readonly preheatMaxConcurrent?: number;
+	readonly preheatHandoffMaxEntries?: number;
+	readonly preheatHandoffMaxBytes?: number;
+	readonly responseMemoryMaxEntries?: number;
+	readonly responseMemoryMaxBytes?: number;
+	readonly projectionHydrationBatchSize?: number;
 }
 
 export interface ReaderResourceMonitorOptions {
@@ -76,6 +84,8 @@ export interface ReaderResourceMonitorOptions {
 	readonly host: HTMLElement;
 	readonly readerRoot: HTMLElement;
 	readonly requests: RequestObserver;
+	readonly cacheEvents?: ReaderCacheObserver;
+	readonly pipeline?: ReaderPipelineObserver;
 	readonly schedulerSnapshot: () => RequestSchedulerSnapshot | null;
 	readonly permitSnapshot: () =>
 		Promise<BrowserSharedRequestPermitSnapshot | null>;
@@ -169,7 +179,7 @@ interface ResourceVisibilityMarker {
 	readonly state: ReaderResourceSample['visibility'] | 'stopped';
 }
 
-type ReaderDiagnosticLogKind = 'request' | 'performance';
+type ReaderDiagnosticLogKind = 'request' | 'performance' | 'pipeline';
 type ReaderDiagnosticCapturePanel = 'request' | 'performance' | 'export';
 
 interface RequestRuntimeStateEvent {
@@ -466,6 +476,7 @@ function requestDiagnosticRecord(
 	return Object.freeze({
 		recordType: 'request',
 		id: event.id,
+		traceId: event.traceId,
 		logicalId: event.logicalId,
 		phase: event.phase,
 		visibility,
@@ -975,6 +986,13 @@ export class ReaderResourceMonitor {
 			'导出请求日志',
 			'导出当前内存中的完整脱敏请求账本、调度和共享限流快照（JSONL）。',
 		);
+		const pipelineExport = options.cacheEvents && options.pipeline
+			? this.#createExportControl(
+				'pipeline',
+				'导出流水线日志',
+				'按 traceId 合并入口、请求、缓存、canonical、DOM、锚定与滚动事实（JSONL）。',
+			)
+			: null;
 		const performanceExport = this.#createExportControl(
 			'performance',
 			'导出性能日志',
@@ -1545,6 +1563,7 @@ export class ReaderResourceMonitor {
 		);
 		requestPanel.append(
 			requestExport,
+			...(pipelineExport ? [pipelineExport] : []),
 			requestSummary,
 			traceBlock,
 			this.#requestBottleneck,
@@ -1635,7 +1654,9 @@ export class ReaderResourceMonitor {
 			);
 			const file = kind === 'request'
 				? this.#requestLogFile(generatedAt, requests, scheduler, permit)
-				: this.#performanceLogFile(
+				: kind === 'pipeline'
+					? this.#pipelineLogFile(generatedAt, requests, scheduler, permit)
+					: this.#performanceLogFile(
 					generatedAt,
 					requests,
 					scheduler,
@@ -1644,9 +1665,15 @@ export class ReaderResourceMonitor {
 			await this.#saveDiagnosticLog(file);
 			const count = kind === 'request'
 				? requests.length
-				: this.#samples.length + this.#performanceEvents.length;
+				: kind === 'pipeline'
+					? (this.#options.pipeline?.snapshot.events.length ?? 0) +
+						(this.#options.cacheEvents?.snapshot.events.length ?? 0) +
+						requests.length
+					: this.#samples.length + this.#performanceEvents.length;
 			status.textContent = `已导出 ${count} 条${
-				kind === 'request' ? '请求' : '性能事实'
+				kind === 'request'
+					? '请求'
+					: kind === 'pipeline' ? '流水线事实' : '性能事实'
 			}`;
 		} catch (error) {
 			status.textContent = `导出失败：${
@@ -1693,6 +1720,57 @@ export class ReaderResourceMonitor {
 		];
 		return Object.freeze({
 			filename: diagnosticLogFilename('request', generatedAt),
+			mimeType: 'application/x-ndjson;charset=utf-8',
+			text: diagnosticJsonLines(records),
+		});
+	}
+
+	#pipelineLogFile(
+		generatedAt: number,
+		requests: readonly RequestObservationEvent[],
+		scheduler: Readonly<Record<string, unknown>> | null,
+		permit: Readonly<Record<string, unknown>> | null,
+	): ReaderDiagnosticLogFile {
+		const pipeline = this.#options.pipeline?.snapshot;
+		const cache = this.#options.cacheEvents?.snapshot;
+		const timeline: Array<{ readonly at: number; readonly record: unknown }> = [
+			...(pipeline?.events ?? []).map((event) => ({
+				at: event.at,
+				record: { recordType: 'pipeline', ...event },
+			})),
+			...(cache?.events ?? []).map((event) => ({
+				at: event.at,
+				record: { recordType: 'cache', ...event },
+			})),
+			...requests.map((event) => ({
+				at: event.queuedAt,
+				record: requestDiagnosticRecord(event),
+			})),
+		].sort((left, right) => left.at - right.at);
+		const records: unknown[] = [
+			{
+				recordType: 'meta',
+				logType: 'pipeline',
+				schemaVersion: 1,
+				generatedAt,
+				generatedAtIso: diagnosticIsoTime(generatedAt),
+				pipelineMetrics: pipeline?.metrics ?? null,
+				pipelineDropped: pipeline?.dropped ?? 0,
+				cacheDropped: cache?.dropped ?? 0,
+				privacy:
+					'bounded topic and timing metadata only; no query values, headers, bodies, cookies, authorization, cache values, or response content',
+			},
+			{
+				recordType: 'runtime-state',
+				at: generatedAt,
+				atIso: diagnosticIsoTime(generatedAt),
+				scheduler,
+				permit,
+			},
+			...timeline.map((entry) => entry.record),
+		];
+		return Object.freeze({
+			filename: diagnosticLogFilename('pipeline', generatedAt),
 			mimeType: 'application/x-ndjson;charset=utf-8',
 			text: diagnosticJsonLines(records),
 		});
@@ -2629,13 +2707,28 @@ export class ReaderResourceMonitor {
 			'仅内存保留';
 		const performancePolicy =
 			this.#options.performancePolicySnapshot?.() ?? null;
+		const adaptivePolicy = performancePolicy &&
+			performancePolicy.preheatMaxConcurrent !== undefined &&
+			performancePolicy.preheatHandoffMaxEntries !== undefined &&
+			performancePolicy.preheatHandoffMaxBytes !== undefined &&
+			performancePolicy.responseMemoryMaxEntries !== undefined &&
+			performancePolicy.responseMemoryMaxBytes !== undefined &&
+			performancePolicy.projectionHydrationBatchSize !== undefined
+			? ` · 预热 ${performancePolicy.preheatMaxConcurrent} 路 / ` +
+				`交接 ${performancePolicy.preheatHandoffMaxEntries} 帖 ` +
+				`${formatBytes(performancePolicy.preheatHandoffMaxBytes)} · ` +
+				`响应内存 ${performancePolicy.responseMemoryMaxEntries} 项 ` +
+				`${formatBytes(performancePolicy.responseMemoryMaxBytes)} · ` +
+				`水合批次 ${performancePolicy.projectionHydrationBatchSize}`
+			: '';
 		this.#performancePolicy.textContent = performancePolicy
 			? `已含设备与网络自适应：正文批次 ${performancePolicy.pageSize} 楼 · ` +
 				`DOM 最多 ${performancePolicy.streamMaxMountedPostCount} 楼 · ` +
 				`屏外预留 ${formatPolicyNumber(performancePolicy.streamOverscanScreens)} 屏 · ` +
 				`API 提前 ${formatPolicyNumber(performancePolicy.nestedPrefetchScreens)} 屏 · ` +
 				`本页请求策略上限 ${performancePolicy.requestMaxConcurrent} 路 / ${performancePolicy.requestMinIntervalMs}ms · ` +
-				`窗口目标 ${performancePolicy.requestRateTargetPercent}%；跨标签与服务器实时约束见请求记录。`
+				`窗口目标 ${performancePolicy.requestRateTargetPercent}%` +
+				`${adaptivePolicy}；跨标签与服务器实时约束见请求记录。`
 			: '当前运行环境未提供性能策略快照；下方仍显示实际 DOM、请求与主线程记录。';
 		this.#renderTrendCharts(current);
 		this.#renderEvidence(current, requestEvents);

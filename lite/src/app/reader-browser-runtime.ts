@@ -1,4 +1,5 @@
 import {
+	discourseNativeCurrentUser,
 	discourseNativeCurrentUsername,
 	discourseNativeBoostsAvailable,
 	discourseNativeEmojiMenu,
@@ -40,6 +41,8 @@ import {
 import {
 	DiscourseApplicationCacheInvalidationCoordinator,
 } from '../cache/discourse-application-cache-invalidation.js';
+import { TopicSnapshotHandoff } from '../cache/topic-snapshot-handoff.js';
+import type { StoredTopicSnapshot } from '../cache/topic-snapshot-repository.js';
 import type {
 	PreferencesConfigCodec,
 } from '../state/preferences-config-codec.js';
@@ -142,6 +145,8 @@ import {
 import {
 	ReaderResourceMonitor,
 } from '../monitor/reader-resource-monitor.js';
+import { ReaderPipelineObserver } from
+	'../monitor/reader-pipeline-observer.js';
 import {
 	DiscourseNativeAjaxObservationAdapter,
 } from '../network/browser-request-observation.js';
@@ -638,6 +643,8 @@ import {
 import {
 	ReaderInformationFlowCoordinator,
 } from '../state/reader-information-flow-coordinator.js';
+import { ReaderTopicStateProjection } from
+	'../state/reader-topic-state-projection.js';
 import type {
 	ReaderTopicPostFeature,
 } from '../topic/reader-topic-dom-coordinator.js';
@@ -1083,7 +1090,7 @@ export interface ReaderBrowserRuntimeOptions<
 	readonly translationView?: false | ReaderBrowserTranslationViewOptions;
 	readonly resources?: ReaderBrowserResourceOptions;
 	readonly topic: Omit<
-		ReaderDataTopicBundleOptions,
+		ReaderDataTopicBundleOptions<TTopic, TPost>,
 		'host' | 'nativeAjax' | 'onLoadingSource'
 	>;
 	readonly media?: Omit<
@@ -1775,6 +1782,7 @@ export class ReaderBrowserRuntime<
 	readonly selectSurface: ReaderSelectSurface;
 	readonly threadContextState: ReaderTopicContextStateRepository;
 	readonly history: ReaderHistoryRepository;
+	readonly topicStates: ReaderTopicStateProjection;
 	readonly chronicle: ReaderChronicleRepository;
 	readonly chronicleView: ReaderChronicleView;
 	readonly unwantedTopics: ReaderUnwantedTopicRepository;
@@ -1795,6 +1803,8 @@ export class ReaderBrowserRuntime<
 	readonly #collectionActionEvents = new Signal<ActionCommandEvent>();
 	readonly #chronicleRequestIds = new Set<number>();
 	readonly #topicSummarySurfaces = new Set<ReaderTopicSummarySurface>();
+	readonly #preheatedTopicSnapshots: TopicSnapshotHandoff<TTopic, TPost>;
+	readonly pipeline: ReaderPipelineObserver;
 	readonly topicFactory: ReaderTopicFactory<
 		ReaderBrowserTopicContext<TTopic, TPost>
 	>;
@@ -1816,6 +1826,9 @@ export class ReaderBrowserRuntime<
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		this.scope.add(() => this.#collectionActionEvents.clear());
 		this.activity = createReaderBrowserActivity(options.document, this.scope);
+		this.pipeline = new ReaderPipelineObserver({
+			sourceId: options.sourceId,
+		});
 		this.#manualChallengeController = this.scope.abortController(
 			new DOMException('Reader runtime 已销毁', 'AbortError'),
 		);
@@ -1848,7 +1861,21 @@ export class ReaderBrowserRuntime<
 			requestRateTargetPercent: 85,
 			requestShortBudget: options.permit.shortBudget,
 			requestLongBudget: options.permit.longBudget,
+			preheatMaxConcurrent: 2,
+			preheatHandoffMaxEntries: 3,
+			preheatHandoffMaxBytes: 8 * 1024 * 1024,
+			preheatHandoffTtlMs: 60_000,
+			responseMemoryMaxEntries: 72,
+			responseMemoryMaxBytes: 16 * 1024 * 1024,
+			projectionHydrationBatchSize: 1,
 		});
+		this.#preheatedTopicSnapshots = new TopicSnapshotHandoff<TTopic, TPost>({
+			authScope: options.topic.authScope,
+			maxEntries: this.#performance.preheatHandoffMaxEntries,
+			maxBytes: this.#performance.preheatHandoffMaxBytes,
+			ttlMs: this.#performance.preheatHandoffTtlMs,
+		});
+		this.scope.add(() => this.#preheatedTopicSnapshots.clear());
 		this.assetCaches = options.assetCacheStorage
 			? new ReaderBrowserAssetCacheRepository(options.assetCacheStorage)
 			: null;
@@ -2158,6 +2185,7 @@ export class ReaderBrowserRuntime<
 			});
 			this.data = new ReaderDataRuntime({
 				...options.data,
+				trace: this.pipeline,
 				permit: this.permit,
 				storage: options.storage,
 				sourceId: options.sourceId,
@@ -2168,6 +2196,9 @@ export class ReaderBrowserRuntime<
 					: { broadcastChannelFactory: options.broadcastChannelFactory }),
 				parentScope: this.scope,
 			});
+			this.scope.add(this.data.responses.subscribeInvalidation((query) => {
+				this.#preheatedTopicSnapshots.invalidate(query);
+			}));
 			challengeRequestObserver = this.data.requests;
 			void this.permit.reconcileCloudflareChallenge()
 				.then(() => this.rateLimitNotice.refresh())
@@ -3330,7 +3361,7 @@ export class ReaderBrowserRuntime<
 			const selfObservationUsername =
 				discourseNativeCurrentUsername(options.host);
 			if (selfObservationUsername) {
-				const currentUser = options.host.lookup('service:current-user');
+				const currentUser = discourseNativeCurrentUser(options.host);
 				this.userObservations.observeSelf({
 					username: selfObservationUsername,
 					name: String(readerNativeModelValue(currentUser, 'name') ?? '')
@@ -4336,6 +4367,8 @@ export class ReaderBrowserRuntime<
 								this.#performance.requestMaxConcurrent - 1,
 							),
 						),
+						readProjectionHydrationBatchSize: () =>
+							this.#performance.projectionHydrationBatchSize,
 						...(options.topicFlowScheduler === undefined
 							? {}
 							: {
@@ -4356,11 +4389,29 @@ export class ReaderBrowserRuntime<
 							}),
 					});
 				},
-				createBundle: (context) => this.data.createTopicBundle<TTopic, TPost>(
-					context,
-					{
-						...options.topic,
-						pageSize: this.#performance.pageSize,
+				createBundle: (context) => {
+					const handoff = this.#preheatedTopicSnapshots.takeEntry(
+						context.topicId,
+					);
+					if (handoff) {
+						this.pipeline.markTopic(
+							context.topicId,
+							'preheat-handoff-hit',
+							{
+								detail: {
+									preheatTraceId: handoff.traceId,
+								},
+							},
+						);
+					}
+					return this.data.createTopicBundle<TTopic, TPost>(
+						context,
+						{
+							...options.topic,
+							...(handoff === null
+								? {}
+								: { initialSnapshot: handoff.snapshot }),
+							pageSize: this.#performance.pageSize,
 						host: options.host,
 						nativeAjax: this.nativeAjax,
 						nativeActions,
@@ -4377,10 +4428,145 @@ export class ReaderBrowserRuntime<
 								},
 							}
 							: {}),
-					},
-				),
+						},
+					);
+				},
 					onAssembled: (value, context) => {
 						topicDoms.set(context.scope, value.dom);
+						this.pipeline.markTopic(context.topicId, 'canonical-ready', {
+							detail: {
+								initializedFromCache:
+									value.services.session.initializedFromCache,
+								cachedPosts: value.services.session.cachedPosts().length,
+							},
+						});
+						const assemblyTraceId = this.pipeline.activeTrace(context.topicId);
+						let firstDomRecorded = false;
+						let firstVisibleFrame = 0;
+						let scrollTraceId: string | null = null;
+						let scrollFrameRecorded = false;
+						let scrollTraceGeneration = 0;
+						const browserWindow = options.document.defaultView;
+						const recordDomCommit = (
+							commit: Parameters<
+								typeof value.dom.windowChanges.emit
+							>[0],
+						): void => {
+							if (!firstDomRecorded) {
+								firstDomRecorded = true;
+								this.pipeline.markTopic(context.topicId, 'dom-first-commit', {
+									detail: {
+										attachedRoots: commit.attachedRoots.length,
+										mountedRoots: commit.tree.mountedRoots.length,
+									},
+								});
+								const visible = (): void => {
+									firstVisibleFrame = 0;
+									if (assemblyTraceId) {
+										this.pipeline.mark(
+											assemblyTraceId,
+											'first-visible-frame',
+										);
+									} else {
+										this.pipeline.markTopic(
+											context.topicId,
+											'first-visible-frame',
+										);
+									}
+								};
+								if (typeof browserWindow?.requestAnimationFrame === 'function') {
+									firstVisibleFrame = browserWindow.requestAnimationFrame(visible);
+								} else {
+									queueMicrotask(visible);
+								}
+							}
+							const activeTrace = this.pipeline.activeTrace(context.topicId);
+							if (scrollTraceId && activeTrace === scrollTraceId) {
+								const userScrollAt = value.dom.lastUserScrollAt();
+								const scrollDuration = userScrollAt > 0
+									? Math.max(
+										0,
+										(browserWindow?.performance.now() ?? userScrollAt) -
+											userScrollAt,
+									)
+									: 0;
+								this.pipeline.mark(scrollTraceId, 'scroll-dom-commit', {
+									durationMs: scrollDuration,
+									detail: {
+										attachedRoots: commit.attachedRoots.length,
+										detachedRoots: commit.detachedRoots.length,
+									},
+								});
+								this.pipeline.finish(scrollTraceId);
+								scrollTraceId = null;
+							} else {
+								this.pipeline.markTopic(context.topicId, 'dom-commit', {
+									detail: {
+										attachedRoots: commit.attachedRoots.length,
+										detachedRoots: commit.detachedRoots.length,
+									},
+								});
+							}
+						};
+						const initialDomCommit = value.dom.frame.lastCommit;
+						if (initialDomCommit) recordDomCommit(initialDomCommit);
+						context.scope.add(value.dom.listenDirectUserScrollIntent(() => {
+							if (scrollTraceId) {
+								this.pipeline.finish(scrollTraceId, 'superseded');
+							}
+							scrollFrameRecorded = false;
+							const traceId = this.pipeline.begin({
+								kind: 'scroll',
+								topicId: context.topicId,
+								source: 'direct-user-scroll',
+							});
+							scrollTraceId = traceId;
+							const generation = ++scrollTraceGeneration;
+							void value.dom.waitForScrollIdle().then(() => {
+								if (
+									context.scope.destroyed ||
+									generation !== scrollTraceGeneration ||
+									scrollTraceId !== traceId
+								) return;
+								this.pipeline.finish(traceId);
+								scrollTraceId = null;
+							}).catch((cause) => {
+								if (
+									generation === scrollTraceGeneration &&
+									scrollTraceId === traceId
+								) {
+									this.pipeline.finish(traceId, 'failed');
+									scrollTraceId = null;
+								}
+								reportTopicFeature(context.topicId, 'navigation', cause);
+							});
+						}));
+						context.scope.add(value.dom.listenScrollFrameCommit(() => {
+							if (!scrollTraceId || scrollFrameRecorded) return;
+							const activeTrace = this.pipeline.activeTrace(context.topicId);
+							if (activeTrace !== scrollTraceId) return;
+							scrollFrameRecorded = true;
+							const userScrollAt = value.dom.lastUserScrollAt();
+							this.pipeline.mark(scrollTraceId, 'scroll-frame-commit', {
+								durationMs: userScrollAt > 0
+									? Math.max(
+										0,
+										(browserWindow?.performance.now() ?? userScrollAt) -
+											userScrollAt,
+									)
+									: 0,
+							});
+						}));
+						context.scope.add(() => {
+							scrollTraceGeneration += 1;
+							if (
+								firstVisibleFrame &&
+								typeof browserWindow?.cancelAnimationFrame === 'function'
+							) {
+								browserWindow.cancelAnimationFrame(firstVisibleFrame);
+							}
+							if (scrollTraceId) this.pipeline.finish(scrollTraceId);
+						});
 						const features = topicFeatures.get(context.scope);
 						if (!features) {
 							throw new Error(
@@ -4407,6 +4593,7 @@ export class ReaderBrowserRuntime<
 							);
 						};
 						value.dom.windowChanges.subscribe((commit) => {
+							recordDomCommit(commit);
 							translationWindowPostNumbers = new Set([
 								...commit.tree.mountedRoots,
 								...commit.tree.mountedReplies,
@@ -4415,6 +4602,13 @@ export class ReaderBrowserRuntime<
 							this.translationFeature?.syncMountedPosts();
 						}, context.scope);
 						value.services.session.changes.subscribe((commit) => {
+							this.pipeline.markTopic(context.topicId, 'canonical-commit', {
+								detail: {
+									source: commit.source,
+									acceptedPosts: commit.acceptedPosts,
+									changedPosts: commit.changedPostNumbers.length,
+								},
+							});
 							this.#rememberChronicleDeletedPosts(
 								value,
 								commit.changedPostNumbers,
@@ -4484,6 +4678,19 @@ export class ReaderBrowserRuntime<
 							},
 							listenUserScrollIntent: (listener) =>
 								value.dom.listenUserScrollIntent(listener),
+							onMilestone: (milestone) => {
+								this.pipeline.markTopic(
+									context.topicId,
+									milestone.stage,
+									{
+										durationMs: milestone.durationMs,
+										detail: {
+											postNumber: Number(milestone.postNumber),
+											source: milestone.source,
+										},
+									},
+								);
+							},
 						parentScope: context.scope,
 						onError: (cause) => reportTopicFeature(
 							context.topicId,
@@ -4565,7 +4772,7 @@ export class ReaderBrowserRuntime<
 							},
 						});
 						this.translationFeature?.syncMountedPosts();
-						const header = new ReaderTopicHeaderController<TTopic, TPost>({
+					const header = new ReaderTopicHeaderController<TTopic, TPost>({
 						session: value.services.session,
 						presentation: nativeTopicPresentation,
 						parentScope: context.scope,
@@ -4583,6 +4790,24 @@ export class ReaderBrowserRuntime<
 						},
 					});
 					topicHeaders.set(context.scope, header);
+					const hostDocumentTitle = options.document.title;
+					let readerDocumentTitle = '';
+					const syncDocumentTitle = (title: string): void => {
+						const next = title.trim();
+						if (!next) return;
+						readerDocumentTitle = next;
+						options.document.title = next;
+					};
+					syncDocumentTitle(header.snapshot.title);
+					header.changes.subscribe(
+						(snapshot) => syncDocumentTitle(snapshot.title),
+						context.scope,
+					);
+					context.scope.add(() => {
+						if (options.document.title === readerDocumentTitle) {
+							options.document.title = hostDocumentTitle;
+						}
+					});
 					const onlyOp =
 						new ReaderTopicOnlyOpController<TPost>({
 							session: value.services.session,
@@ -5136,8 +5361,18 @@ export class ReaderBrowserRuntime<
 				...(options.history?.now === undefined
 					? {}
 					: { now: options.history.now }),
-				});
+			});
 				this.history.load();
+				this.topicStates = new ReaderTopicStateProjection({
+					history: this.history,
+					unwanted: this.unwantedTopics,
+					parentScope: this.scope,
+					onError: (cause) => reportTopicFeature(
+						this.shell.activeTopicId ?? 0,
+						'history',
+						cause,
+					),
+				});
 				this.data.requests.changes.subscribe(
 					(snapshot) => this.#collectChronicleRequests(snapshot),
 					this.scope,
@@ -5413,6 +5648,7 @@ export class ReaderBrowserRuntime<
 					mount: this.shell.view.surfaceHost,
 					storage: options.storage,
 					history: this.history,
+					topicStates: this.topicStates,
 					elements: {
 						root,
 						toggle,
@@ -5466,6 +5702,33 @@ export class ReaderBrowserRuntime<
 		return this.#performance;
 	}
 
+	rememberPreheatedTopicSnapshot(
+		snapshot: StoredTopicSnapshot<TTopic, TPost>,
+		traceId = '',
+	): boolean {
+		if (this.#destroyed || this.scope.destroyed) return false;
+		return this.#preheatedTopicSnapshots.remember(snapshot, traceId);
+	}
+
+	beginPreheatTrace(topicId: string | number, source: string): string {
+		return this.pipeline.begin({
+			kind: 'topic-preheat',
+			topicId,
+			source,
+		});
+	}
+
+	finishPreheatTrace(
+		traceId: string,
+		stage: 'finished' | 'failed' | 'superseded' = 'finished',
+	): void {
+		this.pipeline.finish(traceId, stage);
+	}
+
+	forgetPreheatedTopicSnapshot(topicId: string | number): boolean {
+		return this.#preheatedTopicSnapshots.forget(topicId);
+	}
+
 	reloadExternalTopicSummaryState(): void {
 		for (const surface of this.#topicSummarySurfaces) {
 			surface.reloadExternalState();
@@ -5475,6 +5738,11 @@ export class ReaderBrowserRuntime<
 	applyPerformance(snapshot: ReaderPerformanceSnapshot): void {
 		if (this.#destroyed || this.scope.destroyed) return;
 		this.#performance = snapshot;
+		this.#preheatedTopicSnapshots.applyPolicy({
+			maxEntries: snapshot.preheatHandoffMaxEntries,
+			maxBytes: snapshot.preheatHandoffMaxBytes,
+			ttlMs: snapshot.preheatHandoffTtlMs,
+		});
 		this.#applyPerformanceInfrastructure();
 		const active = this.shell.activeValue;
 		active?.services.session.applyPageSize(snapshot.pageSize);
@@ -5505,6 +5773,14 @@ export class ReaderBrowserRuntime<
 		}
 		this.#boostTargetHighlight.clear();
 		const normalizedTopicId = discourseTopicId(request.topicId);
+		const traceId = this.pipeline.begin({
+			kind: 'topic-open',
+			topicId: normalizedTopicId,
+			source: request.source,
+			...(request.postNumber === undefined
+				? {}
+				: { targetPostNumber: request.postNumber }),
+		});
 		const chronicleRequestFloor =
 			this.data.requests.snapshot.events.at(-1)?.id ?? 0;
 		this.#openRecoveryController?.abort(
@@ -5517,14 +5793,16 @@ export class ReaderBrowserRuntime<
 			!this.scope.destroyed &&
 			!recoveryController.signal.aborted &&
 			this.#openRecoveryController === recoveryController;
-		const superseded = (): ReaderBrowserTargetResult<TTopic, TPost> =>
-			Object.freeze({
+		const superseded = (): ReaderBrowserTargetResult<TTopic, TPost> => {
+			this.pipeline.finish(traceId, 'superseded');
+			return Object.freeze({
 				topic: Object.freeze({
 					status: 'superseded',
 					topicId: normalizedTopicId,
 				}),
 				navigation: null,
 			});
+		};
 		const releaseLoading = this.#loadingProgress?.begin(
 			Number(normalizedTopicId),
 			request.postNumber,
@@ -5568,6 +5846,13 @@ export class ReaderBrowserRuntime<
 				}
 			}
 			if (result.status === 'opened' || result.status === 'reused') {
+				this.pipeline.mark(traceId, 'topic-ready', {
+					detail: {
+						status: result.status,
+						initializedFromCache:
+							result.value.services.session.initializedFromCache,
+					},
+				});
 				this.#lastFailedRequest = null;
 				/*
 				 * Shell 已打开即属于浏览历史；目标楼层定位和讨论树补载可能很慢，
@@ -5713,6 +5998,9 @@ export class ReaderBrowserRuntime<
 				}
 			}
 			if (result.status === 'failed') {
+				this.pipeline.finish(traceId, 'failed', {
+					detail: { phase: 'topic-open' },
+				});
 				if (!transactionIsCurrent()) return superseded();
 				this.#lastFailedRequest = Object.freeze({ ...request });
 				if (readerShellFailureKind(result.cause) === 'cloudflare') {
@@ -5778,7 +6066,15 @@ export class ReaderBrowserRuntime<
 				}
 			}
 			return Object.freeze({ topic: result, navigation: null });
+		} catch (error) {
+			this.pipeline.finish(traceId, 'failed', {
+				detail: {
+					error: error instanceof Error ? error.name : 'unknown',
+				},
+			});
+			throw error;
 		} finally {
+			this.pipeline.finish(traceId);
 			this.#rememberBoostChronicleRequest(request, chronicleRequestFloor);
 			if (this.#openRecoveryController === recoveryController) {
 				this.#openRecoveryController = null;
@@ -6131,6 +6427,8 @@ export class ReaderBrowserRuntime<
 		});
 		this.data.applyRequestRuntimePolicy({
 			maxConcurrent: snapshot.requestMaxConcurrent,
+			responseMemoryMaxEntries: snapshot.responseMemoryMaxEntries,
+			responseMemoryMaxBytes: snapshot.responseMemoryMaxBytes,
 		});
 	}
 
@@ -8275,6 +8573,8 @@ export function createReaderBrowserRuntimeStage<
 					host: settingsView.panelHost('logs'),
 					readerRoot: shell.view.root,
 					requests: runtime.data.requests,
+					cacheEvents: runtime.data.cacheEvents,
+					pipeline: runtime.pipeline,
 					schedulerSnapshot: () =>
 						runtime.data.client.scheduler.snapshot(),
 					permitSnapshot: () => runtime.permit.snapshot(),
@@ -9453,7 +9753,7 @@ export function createReaderBrowserRuntimeStage<
 			registerInformationFlow({
 				domain: 'reading-history',
 				storageKeys: [runtime.history.storageKey],
-				refresh: () => runtime.history.reloadExternal(),
+				refresh: () => runtime.topicStates.reloadExternal(),
 			});
 			registerInformationFlow({
 				domain: 'chronicle',
@@ -9463,7 +9763,7 @@ export function createReaderBrowserRuntimeStage<
 			registerInformationFlow({
 				domain: 'unwanted-topics',
 				storageKeys: [runtime.unwantedTopics.storageKey],
-				refresh: () => runtime.unwantedTopics.reloadExternal(),
+				refresh: () => runtime.topicStates.reloadExternal(),
 			});
 			registerInformationFlow({
 				domain: 'user-observations',

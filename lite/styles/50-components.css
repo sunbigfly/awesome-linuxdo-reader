@@ -4679,7 +4679,7 @@ img.emoji[data-ldp-inline-emoji] {
 .ldp-unwanted-topic-filter-master small,
 .ldp-unwanted-topic-filter-active-head small,
 .ldp-unwanted-topic-filter-card small,
-.ldp-unwanted-topic-filter-result small,
+.ldp-unwanted-topic-filter-results small,
 .ldp-unwanted-topic-filter-status,
 .ldp-unwanted-topic-filter-lookup-status {
   color: var(--ldp-ink-muted);

@@ -24,6 +24,10 @@ let snapshot: ReaderRateLimitNoticeSnapshot = {
 	nextPermitDelay: 0,
 };
 let stateChangeListener: (() => void) | null = null;
+const emitStateChange = (): void => {
+	const listener = stateChangeListener;
+	listener?.();
+};
 let stateChangeUnsubscribed = false;
 const notice = new ReaderRateLimitNotice({
 	document,
@@ -107,7 +111,7 @@ snapshot = {
 	blockingReason: 'rate-limit',
 	nextPermitDelay: 2_000,
 };
-stateChangeListener?.();
+emitStateChange();
 await Promise.resolve();
 await Promise.resolve();
 assert(
@@ -122,7 +126,7 @@ snapshot = {
 	blockingReason: '',
 	nextPermitDelay: 0,
 };
-stateChangeListener?.();
+emitStateChange();
 await Promise.resolve();
 await Promise.resolve();
 assert(root.hidden, '收到共享恢复广播后必须立即解除普通 429 横幅');

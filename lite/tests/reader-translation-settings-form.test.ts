@@ -182,8 +182,8 @@ for (const option of theme.options) {
 }
 theme.dispatchEvent(new parsedWindow.Event('change', { bubbles: true }));
 assert(
-	translationTheme === 'highlight' &&
-	themePreview.dataset.translationTheme === 'highlight' &&
+	String(translationTheme) === 'highlight' &&
+		String(themePreview.dataset.translationTheme) === 'highlight' &&
 	host.textContent?.includes('译文样式已更新'),
 	'译文样式必须独立保存、立即生效并同步更新预览实例',
 );
@@ -196,7 +196,7 @@ assert(
 	repository.snapshot.config.animation === 'typewriter' &&
 	repository.snapshot.config.profiles.every((profile) =>
 		profile.animation === 'typewriter') &&
-	animationPreview.dataset.translationAnimation === 'typewriter' &&
+		String(animationPreview.dataset.translationAnimation) === 'typewriter' &&
 	animationPreviewOutput.classList.contains('ldp-translation-enter') &&
 	!animationPreviewOutput.classList.contains('ldp-translation-segmented') &&
 	animationPreviewOutput.firstElementChild !== null,

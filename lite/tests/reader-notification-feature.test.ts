@@ -3,6 +3,9 @@ import {
 	ReaderCollectionProgressView,
 	ReaderCollectionScrollWindow,
 } from '../src/collection/reader-collection-floating-window.js';
+import type {
+	ReaderCollectionProjectionSnapshot,
+} from '../src/cache/reader-collection-page-repository.js';
 import type { Cleanup } from '../src/kernel/lifecycle.js';
 import {
 	DiscourseNotificationRequestAdapter,
@@ -25,7 +28,9 @@ import {
 	normalizeUserActionNotification,
 	readerNotificationCategoryFilterKey,
 	type ReaderNotificationGroupKey,
+	type ReaderNotificationPage,
 	type ReaderNotificationPresentedRecord,
+	type ReaderNotificationRecord,
 } from '../src/notification/reader-notification-model.js';
 import type {
 	DiscourseNativeNotificationClick,
@@ -1114,7 +1119,7 @@ const deferredTaxonomyController = new ReaderNotificationController({
 				nextCursor: null,
 			});
 		},
-		async enrichTopicTaxonomy(pages) {
+		async enrichTopicTaxonomy(pages: readonly ReaderNotificationPage[]) {
 			await new Promise<void>((resolve) => {
 				releaseNotificationTaxonomy = resolve;
 			});
@@ -1137,13 +1142,19 @@ const deferredTaxonomyOpen = deferredTaxonomyController.open().then(() => {
 });
 await flushMicrotasks();
 assert(
-	notificationOpenSettled &&
+	Boolean(notificationOpenSettled) &&
 	!deferredTaxonomyController.snapshot.loading &&
 	deferredTaxonomyController.snapshot.records[0]?.tags.length === 0 &&
 	releaseNotificationTaxonomy !== null,
 	'通知正文完成后必须立即结束加载，不能等待 Topic 类别与标签补充请求',
 );
-releaseNotificationTaxonomy();
+const resolvedNotificationTaxonomy = releaseNotificationTaxonomy as
+	| (() => void)
+	| null;
+if (!resolvedNotificationTaxonomy) {
+	throw new Error('通知 taxonomy 释放器未就绪');
+}
+resolvedNotificationTaxonomy();
 await deferredTaxonomyOpen;
 await flushMicrotasks();
 assert(
@@ -1422,7 +1433,7 @@ parallelHistoryCallbacks.delete(closedParallelHistoryTask[0]);
 closedParallelHistoryTask[1].callback();
 await flushMicrotasks();
 assert(
-	parallelHistoryLoads.length === 5 &&
+	Number(parallelHistoryLoads.length) === 5 &&
 		parallelHistoryLoads.at(-1)?.visible === false,
 	'浮窗关闭后必须降回单来源 background 请求，不能保持可见并发优先级',
 );
@@ -1834,7 +1845,9 @@ const corruptCheckpointResolvers: Array<() => void> = [];
 let corruptCheckpointScheduleId = 0;
 let corruptCheckpointActive = 0;
 let corruptCheckpointPeak = 0;
-let corruptRepliesProjection = Object.freeze({
+let corruptRepliesProjection: ReaderCollectionProjectionSnapshot<
+	ReaderNotificationRecord
+> = Object.freeze({
 	records: Object.freeze([resumedHistoryRecord]),
 	totalHint: 200,
 	complete: true,
@@ -2155,9 +2168,9 @@ assert(
 	'前台刷新占用请求槽时，下一页必须先进入等待缓存的 loading 状态',
 );
 pagingRaceController.applySyncedHistoryRecords(pagingRaceHistory);
-assert(
-	pagingRaceController.snapshot.page === 1 &&
-		pagingRaceController.snapshot.loading === false &&
+	assert(
+		pagingRaceController.snapshot.page === 1 &&
+			Boolean(pagingRaceController.snapshot.loading) === false &&
 		pagingRaceController.snapshot.records.length === 24 &&
 		pagingRaceController.snapshot.totalPages === 3,
 	'后台历史先补齐当前页后必须立即释放 loading，恢复左右分页按钮交互',
@@ -2902,7 +2915,7 @@ assert(
 	'通知兜底轮询到期后必须执行增量更新，并续排下一次唯一轮询',
 );
 fallbackPollController.close();
-assert(fallbackPollSchedules.size === 0, '关闭通知面板必须撤销兜底轮询');
+assert(Number(fallbackPollSchedules.size) === 0, '关闭通知面板必须撤销兜底轮询');
 fallbackPollController.destroy();
 
 const clickNative = new FakeNotificationNative();
@@ -3658,6 +3671,7 @@ const paginationWindow = new ReaderCollectionScrollWindow({
 				finishFirstPagination = resolve;
 			});
 		}
+		return undefined;
 	},
 });
 paginationWindow.sync({ loading: true, hasMore: false });
@@ -3672,7 +3686,7 @@ assert(
 paginationWindow.sync({ loading: false, hasMore: true });
 await flushMicrotasks();
 assert(
-	paginationLoads === 1,
+	Number(paginationLoads) === 1,
 	'触底先于分页状态就绪时，状态解锁必须主动加载下一页，不能依赖切换浮窗标签',
 );
 paginationList.dispatchEvent(new (
@@ -3680,13 +3694,13 @@ paginationList.dispatchEvent(new (
 ).Event('scroll'));
 await flushMicrotasks();
 assert(
-	paginationLoads === 1,
+	Number(paginationLoads) === 1,
 	'上一页请求尚未结束时，连续触底不得并发加载下一页',
 );
 finishFirstPagination();
 await flushMicrotasks();
 assert(
-	paginationLoads === 2,
+	Number(paginationLoads) === 2,
 	'上一页结束时若视口仍在底部，必须补做一次边界检查而不是等待切换标签',
 );
 paginationWindow.scope.destroy();
@@ -3732,7 +3746,8 @@ hiddenPaginationSurface.hidden = false;
 hiddenPaginationWindow.sync({ loading: false, hasMore: true });
 await flushMicrotasks();
 assert(
-	hiddenPaginationLoads === 1 && hiddenPaginationGeometryReads === 3,
+	Number(hiddenPaginationLoads) === 1 &&
+		Number(hiddenPaginationGeometryReads) === 3,
 	'集合浮窗恢复显示后必须按真实滚动几何继续触底分页',
 );
 hiddenPaginationWindow.scope.destroy();
@@ -3773,8 +3788,8 @@ finishProgressRetry();
 await flushMicrotasks();
 assert(
 	!progressRetryButton.disabled &&
-	progressRetryButton.dataset.ldpRequestBusy === '0' &&
-	progressRetryButton.textContent === '重试',
+		String(progressRetryButton.dataset.ldpRequestBusy) === '0' &&
+		String(progressRetryButton.textContent) === '重试',
 	'集合缓存重试完成后必须恢复可操作状态',
 );
 progressRetry.render({
@@ -3951,8 +3966,8 @@ releaseManualNotificationRefresh();
 await flushMicrotasks();
 assert(
 	!notificationRefresh.disabled &&
-		notificationRefresh.dataset.ldpRequestBusy === '0' &&
-		notificationRefresh.dataset.refreshState === 'success' &&
+		String(notificationRefresh.dataset.ldpRequestBusy) === '0' &&
+		String(notificationRefresh.dataset.refreshState) === 'success' &&
 		!notificationRefresh.classList.contains('is-refreshing') &&
 		notificationRefresh.querySelector('[data-icon="check-square"]') !== null &&
 		viewNotifications.at(-1) === '通知已更新',
@@ -3973,7 +3988,7 @@ const backgroundReactionMeta = document.querySelector<HTMLElement>(
 );
 assert(
 	!notificationRefresh.disabled &&
-	notificationRefresh.dataset.ldpRequestBusy === '0' &&
+		String(notificationRefresh.dataset.ldpRequestBusy) === '0' &&
 	!notificationRefresh.classList.contains('is-refreshing') &&
 	notificationRefresh.getAttribute('aria-label') ===
 		'主要通知已更新，回应后台更新中' &&
@@ -4061,7 +4076,7 @@ assert(
 	);
 	notificationFilterToggle.click();
 	assert(
-		notificationFilterPanel?.hidden === false &&
+		Boolean(notificationFilterPanel?.hidden) === false &&
 			notificationFilterToggle.getAttribute('aria-expanded') === 'true' &&
 			notificationFilterPanel.querySelector(
 				'.ldp-user-observation-calendar-toggle',
@@ -4110,7 +4125,7 @@ assert(
 		'.ldp-user-observation-filter-reset',
 	)!.click();
 	assert(
-		controller.snapshot.sortDirection === 'desc' &&
+		String(controller.snapshot.sortDirection) === 'desc' &&
 			controller.snapshot.dateFilter === '',
 		'消息重置必须恢复默认日期与时间降序',
 	);

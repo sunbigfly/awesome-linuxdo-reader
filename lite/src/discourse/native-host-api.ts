@@ -856,8 +856,8 @@ export interface DiscourseNativeBookmarkFormPort {
 
 type BookmarkFormDataConstructor = new (bookmark: object) => object;
 
-/** PostView、设置与收藏共用的 Discourse 原生 current-user 入口。 */
-function discourseNativeCurrentUser(host: DiscourseHostApiPort): unknown {
+/** PostView、设置、监控与收藏共用的 Discourse 原生 current-user 入口。 */
+export function discourseNativeCurrentUser(host: DiscourseHostApiPort): unknown {
 	const serviceUser = host.lookup('service:current-user');
 	if (String(nativeModelValue(serviceUser, 'username') ?? '').trim()) {
 		return serviceUser;

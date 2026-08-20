@@ -4,6 +4,9 @@ import {
 	type ReaderDiagnosticLogFile,
 } from '../src/monitor/reader-resource-monitor.js';
 import { RequestObserver } from '../src/network/request-observer.js';
+import { ReaderCacheObserver } from '../src/cache/cache-observer.js';
+import { ReaderPipelineObserver } from
+	'../src/monitor/reader-pipeline-observer.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -67,7 +70,31 @@ const requests = new RequestObserver({
 	baseHref: 'https://linux.do/latest',
 	now: () => now,
 });
+const cacheEvents = new ReaderCacheObserver({ now: () => now });
+const pipeline = new ReaderPipelineObserver({
+	sourceId: 'resource-monitor-test',
+	now: () => now,
+});
+const pipelineTraceId = pipeline.begin({
+	kind: 'topic-open',
+	topicId: 9,
+	source: 'history',
+	targetPostNumber: 7,
+});
+pipeline.mark(pipelineTraceId, 'canonical-ready');
+cacheEvents.record({
+	traceId: pipelineTraceId,
+	operation: 'read',
+	outcome: 'fresh',
+	source: 'indexeddb',
+	key: 'topic:9',
+	kind: 'topic',
+	error: new Error(
+		'GET https://linux.do/t/9.json?token=cache-private&api_key=cache-secret; Authorization: Bearer auth-private',
+	),
+});
 const limitedRequest = requests.begin({
+	traceId: pipelineTraceId,
 	href: '/posts/9/replies.json?token=private',
 	method: 'GET',
 	transport: 'scheduler',
@@ -100,6 +127,8 @@ const monitor = new ReaderResourceMonitor({
 	host,
 	readerRoot,
 	requests,
+	cacheEvents,
+	pipeline,
 	schedulerSnapshot: () => ({
 		active: 1,
 		queued: 4,
@@ -148,6 +177,12 @@ const monitor = new ReaderResourceMonitor({
 		requestMaxConcurrent: 3,
 		requestMinIntervalMs: 120,
 		requestRateTargetPercent: 85,
+		preheatMaxConcurrent: 2,
+		preheatHandoffMaxEntries: 3,
+		preheatHandoffMaxBytes: 8 * 1024 * 1024,
+		responseMemoryMaxEntries: 72,
+		responseMemoryMaxBytes: 16 * 1024 * 1024,
+		projectionHydrationBatchSize: 1,
 	}),
 	topicSnapshot: () => ({
 		topicId: 9,
@@ -233,6 +268,27 @@ assert(
 	host.querySelector('[data-log-export="performance"]')?.textContent
 		?.includes('导出 JSONL'),
 	'日志页必须只有页面级标题，切换标签置于独立内容卡之外，不能再生成第二个日志标题',
+);
+
+host.querySelector<HTMLButtonElement>('[data-log-export="pipeline"]')
+	?.click();
+await new Promise<void>((resolve) => setTimeout(resolve, 0));
+const pipelineLog = savedLogs.find((file) =>
+	file.filename.includes('-pipeline-log-'));
+const pipelineRecords = pipelineLog?.text.trim().split('\n').map(
+	(line) => JSON.parse(line) as Record<string, unknown>,
+) ?? [];
+assert(
+	pipelineRecords.some((record) =>
+		record.recordType === 'pipeline' && record.traceId === pipelineTraceId) &&
+	pipelineRecords.some((record) =>
+		record.recordType === 'cache' && record.traceId === pipelineTraceId) &&
+	pipelineRecords.some((record) =>
+		record.recordType === 'request' && record.traceId === pipelineTraceId) &&
+	!pipelineLog?.text.includes('private') &&
+	!pipelineLog?.text.includes('cache-secret') &&
+	!pipelineLog?.text.includes('auth-private'),
+	'流水线日志必须用同一 traceId 关联阶段、缓存与脱敏请求，不得泄露查询值',
 );
 
 monitor.start();
@@ -363,6 +419,10 @@ assert(
 			?.textContent?.includes('API 提前 1.38 屏') &&
 		host.querySelector('[data-resource-monitor-policy]')
 			?.textContent?.includes('本页请求策略上限 3 路 / 120ms') &&
+		host.querySelector('[data-resource-monitor-policy]')
+			?.textContent?.includes('预热 2 路 / 交接 3 帖 8.0 MB') &&
+		host.querySelector('[data-resource-monitor-policy]')
+			?.textContent?.includes('响应内存 72 项 16.0 MB · 水合批次 1') &&
 		host.querySelector(
 			'[data-resource-monitor-chart="retainedFloors"] polyline',
 		)?.getAttribute('points')?.includes('240.0') === true,
