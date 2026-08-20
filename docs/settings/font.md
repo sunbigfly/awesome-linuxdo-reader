@@ -4,7 +4,7 @@ description: 配置字体显示优化、嵌入阅读列表尺寸，以及界面�
 feature_ids: ["SET-004", "SET-005", "SET-006"]
 source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/font/reader-font-catalog.ts","lite/src/font/reader-imported-font-store.ts"]
 since: 0.1.2
-version: 1.5.8
+version: 1.5.9
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-04-font-settings-v1.5.0.png"]

@@ -4,9 +4,9 @@ description: 导出、导入与恢复设置，管理六类本地缓存与浏览�
 feature_ids: ["DATA-001", "DATA-002", "DATA-007"]
 source_anchors: ["lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/cache-observer.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/browser-asset-cache.ts","lite/src/settings/reader-browser-storage-management.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.5.8
+version: 1.5.9
 status: current
-last_verified: 2026-08-20
+last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-30-settings-update-reminder-v1.5.0.png"]
 ---
 
@@ -105,6 +105,8 @@ v1.5.3 会再次为已有设置的用户递增“大版本设置更新”提示�
 ## 缓存日志
 
 “导出缓存日志”会生成最近 15 分钟、最多 1,200 条的 NDJSON 诊断文件。事件覆盖内存、IndexedDB、网络、跨标签和清理控制面中的读取、命中/未命中、写入、恢复、合并、更新、失效、淘汰、清理与旧库迁移，并记录缓存键、数据类型/tag、耗时、估算大小或条数及失败原因。
+
+缓存事件使用同一 `traceId` 与流水线日志关联。定向失效只取消 identity 匹配的在途请求；无关请求可以正常完成并写入，避免清理一个主题时扩大到其他正在读取的内容。
 
 日志只保存缓存事实，不保存响应正文、缓存值、Cookie、Token 或账号凭据；关闭阅读器后内存日志即释放。导出适合定位某个缓存为何未命中、清理后为何又出现，或旧数据库为何暂未删除。
 

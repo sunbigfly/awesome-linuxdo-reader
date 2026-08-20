@@ -8,7 +8,7 @@
 
 在一个连续界面中完成长帖阅读、上下文追踪、跨语翻译、原站互动与资料整理。为 LINUX DO 深度定制，也适用于标准 HTTPS Discourse 社区。
 
-[安装脚本](https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js) · [在线用户手册](https://sunbigfly.github.io/awesome-linuxdo-reader/) · [110 项功能目录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/feature-catalog) · [GitHub 项目](https://github.com/sunbigfly/awesome-linuxdo-reader) · [问题反馈](https://github.com/sunbigfly/awesome-linuxdo-reader/issues)
+[安装脚本](https://update.greasyfork.org/scripts/588185/Awesome%20LinuxDo%20Reader.user.js) · [在线用户手册](https://sunbigfly.github.io/awesome-linuxdo-reader/) · [111 项功能目录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/feature-catalog) · [GitHub 项目](https://github.com/sunbigfly/awesome-linuxdo-reader) · [问题反馈](https://github.com/sunbigfly/awesome-linuxdo-reader/issues)
 
 ![LINUX DO 主题列表与增强阅读工作区](https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/assets/screenshots/guide-01-reader-overview-v1.5.0.png)
 
@@ -52,7 +52,7 @@ LINUX DO 是完整功能基线。其他标准 Discourse 社区会根据站点运
 2. 在本页点击“安装此脚本”。普通用户只需安装主脚本，不需要单独安装 Core、Platform 或 Features Library。
 3. 打开或刷新 LINUX DO、内置社区或其他标准 HTTPS Discourse，点击主题标题开始使用。
 
-> 当前正式版为 Lite `1.5.8`。发布坐标：Loader `588185 / 1905757`、Core `590254 / 1905755`、Platform `591595 / 1905756`、Features `590255 / 1905742`。更新后刷新已打开的 Discourse 页面，并在“设置 → 关于”或脚本管理器中核对实际运行版本。
+> 当前正式版为 Lite `1.5.9`。发布坐标：Loader `588185 / 1908038`、Core `590254 / 1908030`、Platform `591595 / 1908032`、Features `590255 / 1908031`。更新后刷新已打开的 Discourse 页面，并在“设置 → 关于”或脚本管理器中核对实际运行版本。
 
 ## 数据与权限边界
 
@@ -64,6 +64,6 @@ LINUX DO 是完整功能基线。其他标准 Discourse 社区会根据站点运
 - **透明诊断**：请求、429、Cloudflare、缓存和资源状态可以脱敏查看，不导出 Cookie 或 Authorization。
 - 离线 HTML 可能包含帖子正文和公开用户名；只应保存或同步到你控制的位置。
 
-完整的 110 项用户可见能力、设置、兼容性与故障排查请查看[在线用户手册](https://sunbigfly.github.io/awesome-linuxdo-reader/)。
+完整的 111 项用户可见能力、设置、兼容性与故障排查请查看[在线用户手册](https://sunbigfly.github.io/awesome-linuxdo-reader/)。
 
 许可证：[MIT License](https://github.com/sunbigfly/awesome-linuxdo-reader/blob/main/LICENSE)

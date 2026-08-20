@@ -2,11 +2,11 @@
 title: 数据、配置与缓存
 description: 导出导入设置，理解本地与 WebDAV 数据范围，查看和安全清理六类缓存。
 feature_ids: ["COLLECT-004", "DATA-001", "DATA-002", "DATA-003", "DATA-004", "DATA-006", "DATA-007", "TROUBLE-004"]
-source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/font/reader-imported-font-store.ts"]
+source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts","lite/src/cache/topic-snapshot-handoff.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/font/reader-imported-font-store.ts"]
 since: 0.1.2
-version: 1.5.8
+version: 1.5.9
 status: current
-last_verified: 2026-08-18
+last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png"]
 ---
 
@@ -106,6 +106,8 @@ screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png"]
 - IndexedDB。
 
 每层有最大条目、最大字节或保留期。新鲜数据直接读取，过期后联网校准；网络异常时，部分类型可以回退到仍在保留期内的旧数据。
+
+当前通用响应内存层最多保留 72 条、16 MiB；宿主预热与 Reader 之间的一次性主题快照交接最多保留 3 个主题、8 MiB、60 秒。主题定向失效会同时丢弃匹配交接并只取消匹配 identity 的在途请求，不会阻断无关请求完成写入。
 
 导入字体虽然使用独立 IndexedDB，但它是用户文件而不是可重建缓存：六类缓存清理和“恢复全部默认”都不会删除它；需要释放这部分空间时，使用“字体设置 → 共享字体库”的删除入口。
 

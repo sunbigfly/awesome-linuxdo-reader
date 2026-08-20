@@ -4,9 +4,9 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.5.8
+version: 1.5.9
 status: current
-last_verified: 2026-08-18
+last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ---
 
@@ -15,6 +15,32 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.5.9 — 阅读流水线、缓存交接与锚点结算
+
+核验日期：2026-08-21。
+
+### 阅读打开与预热
+
+- 宿主列表已经完成的预热快照会一次性交给 Reader 打开事务，避免重复读取和反序列化同一主题；交接最多保留 3 个主题、8 MiB、60 秒，主题失效时同步丢弃对应交接。
+- 打开、切换和用户直接滚动期间会暂停或中止宿主预热；前台最多保留 1 个后台预热槽，当前阅读请求始终优先。
+
+### 缓存与状态
+
+- 通用响应内存缓存限定为 72 条、16 MiB；定向失效只取消匹配 identity 的在途请求，不影响无关请求完成写入。
+- 主题历史与“不想再看”等状态投影统一通过同一刷新事务恢复，避免存储更新后只刷新部分界面。
+
+### 导航与诊断
+
+- 数据和 DOM 安静后，锚点会继续结算到 2 px 内；安静窗口为 120 ms、最长等待 2 秒，新导航或用户滚动会取消旧目标。Reader 聚焦时的方向键、翻页键和首尾键统一交给唯一滚动 owner。
+- 文档标题随当前主题更新，关闭 Reader 后恢复宿主标题；新增流水线 JSONL，以 `traceId` 串联入口、请求、缓存、canonical、DOM、锚点和滚动阶段，并提供 p50/p95，不记录正文、请求头或凭据。
+
+### 发布状态
+
+- `1.5.9` 已发布到 Greasy Fork：主 Loader 固定版本为 `1908038`，加载 Core `1908030`、Platform `1908032` 与 Features `1908031`。
+- 固定 Loader 原始文件为 4,172 字节，SHA-256 `572bf549b8f4e6f78e55f790f767e747f4ac5b7c889f06a3ed933cc5847b4bfa`；移除平台加入的 `@downloadURL none` 后为 4,151 字节，SHA-256 `447b76c84b37710b0f96e716630bbaa7703f2d776fb24ff28b3ed83edf1e80ba`，与仓库 Loader 逐字节一致。
+- Core 为 1,648,152 字节，SHA-256 `b9b6a04fad31f9a4a95897280cb4f71338e8f190a8c1cbd1888a87bbf8ea2067`；Platform 为 1,324,604 字节，SHA-256 `feb52296c03beb63c10913f5ac42d0c10a94afa9acfef7b21d5f93891cdbfde8`；Features 为 2,055,551 字节，SHA-256 `f2b624cc16bcb3bda9b9c9976dc4e9c8fea9eb0a0a6c5b95e50c919555ececa4`。
+- CSS 固定到 Git `f69dcab7529c58401416fa37f2226d28801423b4`：621,735 字节，SHA-256 `637ea0390be63c8f8b39a5282dcf3a5d211d50b906ed1b193333ca0e0d588e0a`；源码与分包 runtime 各通过 228 文件契约，297 个模块通过 parity 门禁。
 
 ## 1.5.8 — 共享字体库、浮窗滚动与通知定位
 

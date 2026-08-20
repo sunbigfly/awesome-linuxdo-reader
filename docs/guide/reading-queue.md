@@ -2,11 +2,11 @@
 title: 阅读队列
 description: 从主题列表建立多主题阅读队列，管理后台预加载、阅读进度、固定、清理、位置恢复与异常重试。
 feature_ids: ["CORE-006"]
-source_anchors: ["lite/src/queue/reader-open-queue-session.ts"]
+source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/userscript/reader-host-topic-preheat-controller.ts","lite/src/cache/topic-snapshot-handoff.ts"]
 since: 0.1.2
-version: 1.5.8
+version: 1.5.9
 status: current
-last_verified: 2026-08-18
+last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-21-reading-queue-v1.5.0.png", "/screenshots/guide-24-reading-queue-entry-v1.5.0.png", "/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png"]
 ---
 
@@ -76,7 +76,7 @@ screenshots: ["/screenshots/guide-21-reading-queue-v1.5.0.png", "/screenshots/gu
 - 上次停留在完整讨论时，优先恢复对应分支和窗口内锚点；
 - 如果主题链接明确带有楼层号，则优先打开该楼层；
 - 如果启用了“普通主题从 #1 打开”，则从第 1 楼开始；
-- 已经取得的主题数据会优先复用，缺失部分再按需请求。
+- 已经取得的主题数据会优先复用，缺失部分再按需请求；宿主预热已经完成的快照会通过一次性内存交接直接进入 Reader，避免重复读取和反序列化，过期或已失效的快照不会复用。
 
 切换期间不要连续点击多个队列项。阅读器需要先保存当前视口、停止旧主题运行态，再稳定定位到新主题。
 
@@ -104,6 +104,8 @@ screenshots: ["/screenshots/guide-21-reading-queue-v1.5.0.png", "/screenshots/gu
 - 从历史位置继续时，同时保留主题开头的一部分楼层和当前位置附近的楼层；
 - 对预加载范围内的楼中楼继续分页补齐；
 - 相关图片最多使用 2 路并发写入图片缓存；
+- Reader 正在打开或切换主题、用户直接滚动时，宿主预热会暂停或中止；前台最多只保留 1 个后台预热槽；
+- 完成快照的内存交接最多保留 3 个主题、8 MiB、60 秒，超限、过期或命中主题失效后立即释放；
 - 当前主题、宿主操作和可见楼层始终优先于队列预加载。
 
 预加载仍受共享请求调度、缓存策略、网络状态、端点冷却和 `429` 退避约束。长帖显示“已分层预加载”是正常结果，不代表数据损坏。

@@ -2,11 +2,11 @@
 title: 日志记录
 description: 在请求记录和性能记录间切换，查看请求预算、异常、P95、页面元素、长任务和网络趋势。
 feature_ids: ["MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
-source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/request-observer.ts"]
+source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/monitor/reader-pipeline-observer.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/request-observer.ts"]
 since: 0.1.2
-version: 1.5.8
+version: 1.5.9
 status: current
-last_verified: 2026-08-18
+last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-10-resource-monitor-v1.5.0.png"]
 ---
 
@@ -63,6 +63,8 @@ screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/gui
 同一逻辑链的多次实际尝试使用相同链编号，便于判断是一次请求重试，还是页面又发起了新的请求。原站或浏览器资源只能被动观测时，可能没有逻辑链和 typed contract，面板会标为“未标记契约”，不会猜测发起 owner。
 
 请求记录顶部的“导出 JSONL”会导出当前内存中的完整脱敏请求账本，包括每次尝试、逻辑链、typed contract，以及日志面板采集期间调度和跨标签共享限流状态的变化时间线。相同状态会合并并记录首次、末次观察时间与观察次数；导出瞬间的状态另外保留。文件不包含查询值、请求/响应正文、Cookie、Authorization 或完整请求头；查询部分仍只有键名及重复数量。
+
+“导出流水线日志”是第三类独立 JSONL：它用 `traceId` 串联主题入口、预热、请求、缓存、canonical、DOM、锚点与滚动阶段，并汇总关键阶段 p50/p95。流水线记录同样有界且脱敏，不保存正文、查询值、请求头、Cookie、Authorization、缓存值或账号凭据。
 
 ## 调度状态
 

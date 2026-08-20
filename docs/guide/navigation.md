@@ -2,11 +2,11 @@
 title: 楼层、时间轴与历史
 description: 使用时间轴、只看楼主、历史前后切换、多主题队列和实时阅读进度。
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014", "READ-016"]
-source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-only-op-controller.ts","lite/src/topic/reader-topic-navigation-controller.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/reading/read-state-controller.ts","lite/src/live/topic-live-controller.ts","lite/src/components/reader-icon.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/topic/reader-topic-header.ts"]
+source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-only-op-controller.ts","lite/src/topic/reader-topic-navigation-controller.ts","lite/src/topic/reader-topic-dom-coordinator.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/reading/read-state-controller.ts","lite/src/live/topic-live-controller.ts","lite/src/components/reader-icon.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/topic/reader-topic-header.ts"]
 since: 0.1.2
-version: 1.5.8
+version: 1.5.9
 status: current
-last_verified: 2026-08-18
+last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png", "/screenshots/guide-21-reading-queue-v1.5.0.png"]
 ---
 
@@ -19,7 +19,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/
 - 点击或拖动轨道可连续选择目标；
 - 点击 `#` 可输入楼层号，输入范围随主题总楼层更新；无效、超出范围或非整数输入不会提交；
 - 目标楼层未加载时，阅读器先补齐数据和虚拟窗口；
-- 跳转会等待最新目标的数据、挂载和可见位置稳定，旧请求不会在随后覆盖新目标；
+- 跳转会等待最新目标的数据、DOM 挂载和可见位置安静，并继续把锚点结算到 2 px 内；旧请求不会在随后覆盖新目标，新目标或用户直接滚动会取消旧结算；
 - 跳转完成后目标楼层按设置闪烁；
 - 滚动到已经加载内容的真实底部时，当前楼层会校准为主题总楼层；
 - 底部回顶按钮返回当前主题顶部，而不是宿主页面顶部。
@@ -47,7 +47,9 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/
 
 带侧键的鼠标可以直接使用“后退”键进入更早的阅读记录，使用“前进”键回到更新的阅读记录。阅读器打开时会拦截这两个按键的浏览器默认历史跳转；没有可用目标时只显示提示，不会离开当前页面。
 
-0.1.15 的阅读锚点不再只有楼层号，还会记录当前虚拟流视口及偏移、完整讨论窗口的根楼层与分支位置，以及仍有效的引用高亮。切换到另一个主题前会先捕获当前状态，返回时再按“分支上下文 → 目标楼层 → 精确偏移”的顺序恢复。
+0.1.15 的阅读锚点不再只有楼层号，还会记录当前虚拟流视口及偏移、完整讨论窗口的根楼层与分支位置，以及仍有效的引用高亮。切换到另一个主题前会先捕获当前状态，返回时再按“分支上下文 → 目标楼层 → 精确偏移”的顺序恢复。1.5.9 会在数据与 DOM 安静 120 ms 后继续结算，最长等待 2 秒；新的导航目标或用户滚动会立即取消旧恢复。文档标题随当前主题更新，关闭 Reader 后恢复宿主页面标题。
+
+Reader 工作区获得焦点时，`ArrowUp`、`ArrowDown`、`PageUp`、`PageDown`、`Home` 和 `End` 由唯一滚动 owner 同步处理；输入框、按钮、编辑器等原生交互控件继续保留浏览器默认行为。
 
 ![浏览历史中的顺序、检索、目标位置和前后翻页](/screenshots/guide-16-history-v1.5.0.png)
 

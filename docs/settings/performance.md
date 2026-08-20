@@ -2,11 +2,11 @@
 title: 性能与请求调度
 description: 按 Discourse 正文与直属回复 API 调整批量、预知请求、DOM 窗口和共享安全边界。
 feature_ids: ["READ-001", "READ-002", "SET-012", "SET-013", "SET-014", "SET-015", "SET-023", "MONITOR-003"]
-source_anchors: ["lite/src/settings/reader-performance-settings-form.ts","lite/src/app/reader-performance-policy.ts","lite/src/topic/topic-session.ts","lite/src/topic/reader-topic-flow-controller.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/reader-host-turnstile-background-controller.ts","lite/src/network/request-contract.ts"]
+source_anchors: ["lite/src/settings/reader-performance-settings-form.ts","lite/src/app/reader-performance-policy.ts","lite/src/topic/topic-session.ts","lite/src/topic/reader-topic-flow-controller.ts","lite/src/cache/topic-snapshot-handoff.ts","lite/src/cache/response-repository.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/reader-host-turnstile-background-controller.ts","lite/src/network/request-contract.ts"]
 since: 0.1.2
-version: 1.5.8
+version: 1.5.9
 status: current
-last_verified: 2026-08-18
+last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-09-performance-settings-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png"]
 ---
 
@@ -44,6 +44,10 @@ screenshots: ["/screenshots/guide-09-performance-settings-v1.5.0.png", "/screens
 “快速预取”是实验档，不作为普通推荐；选择它或把任一自定义目标调得比“自动”更激进时，设置页会提示卡顿与 429 风险。提示不修改目标值，也不替代运行时安全规则。
 
 任何手动改动都会进入“自定义”。保存后当前与后续阅读器立即采用；已经启动的请求自然完成。不确定设备或站点余量时使用“自动（推荐）”，出现卡顿或频繁 429 时切回“自动”或“省流”。
+
+## 自适应内存与前台优先
+
+“自动”档位还应用不额外暴露为设置项的运行时保护：宿主预热最多 2 个候选，前台最多 1 个后台预热槽；完成快照交接最多保留 3 个主题、8 MiB、60 秒；通用响应内存最多保留 72 条、16 MiB；状态投影恢复按单批处理。设备能力、页面压力或共享调度规则可以继续收紧这些值，日志记录会显示最终生效策略。
 
 ## 宿主后台 Turnstile（实验）
 

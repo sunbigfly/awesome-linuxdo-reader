@@ -2,11 +2,11 @@
 title: 资源与请求监控
 description: 阅读资源趋势、请求脉络、429 状态和 Cloudflare 恢复信息，并理解观测边界。
 feature_ids: ["SET-023", "MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
-source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/reader-host-turnstile-background-controller.ts","lite/src/network/request-observer.ts"]
+source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/monitor/reader-pipeline-observer.ts","lite/src/cache/cache-observer.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/reader-host-turnstile-background-controller.ts","lite/src/network/request-observer.ts"]
 since: 0.1.2
-version: 1.5.8
+version: 1.5.9
 status: current
-last_verified: 2026-08-18
+last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-10-resource-monitor-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png"]
 ---
 
@@ -57,7 +57,11 @@ screenshots: ["/screenshots/guide-10-resource-monitor-v1.5.0.png", "/screenshots
 
 详细区域展示最近 10 秒排队/放行/网络脉络、主要瓶颈、异常点、按类型 P95 和毫秒请求记录。阅读器请求还显示贯穿重试的逻辑链、typed contract、缓存模式、安全 identity、单飞合并、优先级晋升、重试预算和最终决策。请求页可把当前完整脱敏账本、导出瞬间状态及采集期间调度/共享限流状态变化导出为 JSONL。
 
-性能事件按毫秒时间分别记录类型、耗时或 DOM 增减、前后台、归因范围与浏览器依据；界面只显示最近事件，JSONL 导出保留内存中的十分钟样本、完整事件、前后台时间线、性能策略、关联脱敏请求，以及浏览器能力、观察器安装结果、数据来源、保留上限和淘汰计数。两类日志导出互相独立，不进入设置配置导出或 WebDAV。
+性能事件按毫秒时间分别记录类型、耗时或 DOM 增减、前后台、归因范围与浏览器依据；界面只显示最近事件，JSONL 导出保留内存中的十分钟样本、完整事件、前后台时间线、性能策略、关联脱敏请求，以及浏览器能力、观察器安装结果、数据来源、保留上限和淘汰计数。请求、性能与流水线三类导出互相独立，不进入设置配置导出或 WebDAV。
+
+## 流水线记录
+
+“导出流水线日志”把主题入口、宿主预热、Reader 打开、请求与缓存、canonical 合并、DOM 挂载、锚点结算和滚动阶段通过同一 `traceId` 串联，并给出关键阶段的 p50/p95。记录有固定保留上限，只保存阶段、耗时、安全 identity 与脱敏诊断字段，不保存正文、查询值、请求头、Cookie、Authorization、缓存值或账号凭据。
 
 ## 来源与类型
 

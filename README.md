@@ -21,7 +21,7 @@
   <a href="CONTRIBUTING.md">参与开发</a>
 </p>
 
-<p align="center"><sub>Lite 1.5.8 · TypeScript · MIT License · Tampermonkey</sub></p>
+<p align="center"><sub>Lite 1.5.9 · TypeScript · MIT License · Tampermonkey</sub></p>
 
 <p align="center">
   <a href="assets/screenshots/guide-01-reader-overview-v1.5.0.png">
@@ -70,7 +70,7 @@ LINUX DO 是完整功能基线。对于其他标准 Discourse 社区，阅读器
   </tr>
 </table>
 
-完整的 110 项用户可见能力、适用范围和对应说明见[功能覆盖目录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/feature-catalog)。
+完整的 111 项用户可见能力、适用范围和对应说明见[功能覆盖目录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/feature-catalog)。
 
 ## 产品界面
 
@@ -139,7 +139,7 @@ LINUX DO 是完整功能基线。对于其他标准 Discourse 社区，阅读器
 
 ## 开始使用
 
-当前项目版本为 `1.5.8`。
+当前项目版本为 `1.5.9`。
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 前往 [Greasy Fork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 安装 **Awesome LinuxDo Reader**。
