@@ -629,12 +629,21 @@ assert(
 		call.provider === 'model-metadata-openrouter').length === 1,
 	'默认模型能力查询必须复用内存公共目录，不重复请求公共 API',
 );
-await aiAdapter.listPublicModels(signal, true);
+aiAdapter.clearPublicModelMetadataCache();
+await aiAdapter.listPublicModels(signal);
 assert(
 	aiHttp.calls.filter((call) =>
 		call.provider === 'model-metadata-models-dev').length === 2 &&
 	aiHttp.calls.filter((call) =>
 		call.provider === 'model-metadata-openrouter').length === 2,
+	'公共模型元数据清理必须同时丢弃 adapter 内存目录，不能从内存把已清持久缓存写回',
+);
+await aiAdapter.listPublicModels(signal, true);
+assert(
+	aiHttp.calls.filter((call) =>
+		call.provider === 'model-metadata-models-dev').length === 3 &&
+	aiHttp.calls.filter((call) =>
+		call.provider === 'model-metadata-openrouter').length === 3,
 	'强制刷新公共模型能力必须绕过运行时内存目录并重新请求两个固定来源',
 );
 const openRouterCatalogRequest = providerRequests.aiModels({

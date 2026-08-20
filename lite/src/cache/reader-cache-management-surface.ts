@@ -3,6 +3,7 @@ import type {
 	ResponseCacheRecord,
 	ResponseRepository,
 } from './response-repository.js';
+import type { ReaderCacheObserver } from './cache-observer.js';
 import {
 	readerChronicleRecord,
 	type ReaderChronicleRepository,
@@ -81,6 +82,8 @@ export interface ReaderCacheManagementSurfaceOptions<
 	) => ReaderCacheClearPreparation | Promise<ReaderCacheClearPreparation>;
 	readonly applicationCaches?: ReaderApplicationCacheManagementPort;
 	readonly clearImageObjectUrls?: () => void;
+	readonly cacheLog?: ReaderCacheObserver;
+	readonly saveCacheLog?: (content: string, filename: string) => void | Promise<void>;
 	readonly currentTopicAvailable: () => boolean;
 	readonly clearCurrentTopic: () => Promise<
 		void | ReaderCurrentTopicRefreshResult
@@ -109,6 +112,7 @@ export interface ReaderApplicationCacheStats {
 
 export interface ReaderApplicationCacheClearResult {
 	readonly failed: readonly ReaderCacheCategory[];
+	readonly resume?: () => void;
 }
 
 export interface ReaderCacheClearPreparation {
@@ -158,7 +162,7 @@ const CATEGORIES: readonly CacheCategoryDefinition[] = Object.freeze([
 	{
 		id: 'responses',
 		title: '收藏、回应与其他数据',
-		help: '勾选“收藏、回应与其他数据”后清理，会删除收藏列表、给出的回应与点赞、翻译和其他通用接口结果；不会撤销站点上的真实收藏或回应。',
+		help: '勾选“收藏、回应与其他数据”后清理，会删除收藏列表、给出的回应与点赞、翻译、公共 AI 模型元数据和其他可重新获取的接口结果；不会撤销站点上的真实收藏或回应，也不会删除 AI 服务配置、供应商模型目录或主题总结历史。',
 		retention: '按接口 8 分钟–180 天',
 	},
 	{
@@ -523,7 +527,23 @@ export class ReaderCacheManagementSurface<
 		this.#status = settingsElement(document, 'small', 'ldp-cache-note');
 		this.#status.role = 'status';
 		this.#status.setAttribute('aria-live', 'polite');
-		content.append(list, this.#clear, this.#status);
+		content.append(list, this.#clear);
+		if (options.cacheLog && options.saveCacheLog) {
+			const exportCacheLog = settingsButton(
+				document,
+				'ldp-config-action ldp-cache-log-export',
+				'',
+				'download',
+				'导出缓存日志',
+			);
+			exportCacheLog.dataset.settingHelp =
+				'导出最近 15 分钟的缓存读写、命中、更新、失效、清理与迁移事实；不包含响应正文、Cookie、凭据或缓存值。';
+			content.append(exportCacheLog);
+			this.scope.listen(exportCacheLog, 'click', () => {
+				void this.#exportCacheLog(exportCacheLog);
+			});
+		}
+		content.append(this.#status);
 		section.append(content);
 		this.#root.append(section);
 		options.host.append(this.#root);
@@ -660,8 +680,54 @@ export class ReaderCacheManagementSurface<
 		this.scope.destroy();
 	}
 
+	async #exportCacheLog(button: HTMLButtonElement): Promise<void> {
+		const observer = this.#options.cacheLog;
+		const save = this.#options.saveCacheLog;
+		if (!observer || !save || button.disabled) return;
+		button.disabled = true;
+		try {
+			const generatedAt = Date.now();
+			const snapshot = observer.snapshot;
+			const records: unknown[] = [
+				{
+					recordType: 'meta',
+					logType: 'cache',
+					schemaVersion: 1,
+					generatedAt,
+					generatedAtIso: new Date(generatedAt).toISOString(),
+					retentionMs: 15 * 60_000,
+					eventCount: snapshot.events.length,
+					dropped: snapshot.dropped,
+					privacy: 'cache keys and metadata only; no values, bodies, headers, cookies, authorization, or credentials',
+				},
+				...snapshot.events.map((event) => ({
+					recordType: 'cache-event',
+					...event,
+					atIso: new Date(event.at).toISOString(),
+				})),
+			];
+			const timestamp = new Date(generatedAt).toISOString()
+				.replace(/\.\d{3}Z$/, 'Z')
+				.replace(/[:]/g, '-')
+				.replace('T', '_');
+			await save(
+				`${records.map((record) => JSON.stringify(record)).join('\n')}\n`,
+				`awesome-linuxdo-reader-cache-log-${timestamp}.jsonl`,
+			);
+			this.#status.textContent = `已导出 ${snapshot.events.length} 条缓存事实。`;
+		} catch (cause) {
+			this.#options.onError?.(cause);
+			this.#status.textContent = `缓存日志导出失败：${
+				cause instanceof Error ? cause.message : '未知错误'
+			}`;
+		} finally {
+			button.disabled = false;
+		}
+	}
+
 	async #clearSelected(): Promise<void> {
 		if (this.#busy) return;
+		const startedAt = Date.now();
 		const selected = new Set(
 			[...this.#selects]
 				.filter(([, input]) => input.checked)
@@ -670,6 +736,16 @@ export class ReaderCacheManagementSurface<
 		if (!selected.size) return;
 		this.#setBusy(true, '等待确认清理已选缓存…');
 		let releasePreparation = (): void => {};
+		const applicationResumes: Array<() => void> = [];
+		const resumeApplications = (): void => {
+			for (const resume of applicationResumes.splice(0)) {
+				try {
+					resume();
+				} catch (cause) {
+					this.#options.onError?.(cause);
+				}
+			}
+		};
 		try {
 			if (this.#options.configuration) {
 				const labels = CATEGORIES
@@ -704,6 +780,22 @@ export class ReaderCacheManagementSurface<
 				}
 				if (cause !== undefined) this.#options.onError?.(cause);
 			};
+			const clearApplication = async (
+				categories: readonly ReaderCacheCategory[],
+			): Promise<void> => {
+				if (!categories.length || !this.#options.applicationCaches) return;
+				try {
+					const result = await this.#options.applicationCaches.clear(categories);
+					if (result.resume) applicationResumes.push(result.resume);
+					for (const category of result.failed) {
+						if (categories.includes(category)) {
+							fail([category], '应用内存热缓存未清理');
+						}
+					}
+				} catch (cause) {
+					fail(categories, '应用内存热缓存未清理', cause);
+				}
+			};
 			const clearing = new Set(selected);
 			if (this.#options.prepareClear) {
 				try {
@@ -718,6 +810,16 @@ export class ReaderCacheManagementSurface<
 					fail([...selected], '缓存清理准备失败', cause);
 				}
 			}
+			for (const category of failures.keys()) clearing.delete(category);
+			/*
+			 * 先暂停会自动恢复/续传的业务热缓存并提升各自 epoch，再删除持久记录；
+			 * 否则晚到的通知、收藏或用户请求可能在 IndexedDB 清空后重新写回。
+			 * 当前 Topic 必须保留到持久失效之后再关闭并联网重建，不能在这里提前刷新。
+			 */
+			await clearApplication([...clearing].filter((category) =>
+				category === 'users' ||
+				category === 'notifications' ||
+				category === 'responses'));
 			for (const category of failures.keys()) clearing.delete(category);
 			if (clearing.has('assets') && this.#options.assetCaches) {
 				try {
@@ -762,18 +864,7 @@ export class ReaderCacheManagementSurface<
 					fail(responseCategories, '统一响应缓存未清理', cause);
 				}
 			}
-			if (clearing.size && this.#options.applicationCaches) {
-				try {
-					const result = await this.#options.applicationCaches.clear([...clearing]);
-					for (const category of result.failed) {
-						if (clearing.has(category)) {
-							fail([category], '应用内存热缓存未清理');
-						}
-					}
-				} catch (cause) {
-					fail([...clearing], '应用内存热缓存未清理', cause);
-				}
-			}
+			if (clearing.has('topics')) await clearApplication(['topics']);
 			if (clearing.has('history')) {
 				try {
 					this.#options.history.clear();
@@ -795,6 +886,19 @@ export class ReaderCacheManagementSurface<
 			releasePreparation();
 			releasePreparation = () => {};
 			const refreshed = await this.refresh();
+			for (const category of selected) {
+				this.#options.cacheLog?.record({
+					operation: 'clear',
+					outcome: failures.has(category) ? 'partial' : 'success',
+					source: 'management',
+					key: category,
+					durationMs: Date.now() - startedAt,
+					...(failures.has(category)
+						? { reason: failures.get(category)!.join('；') }
+						: {}),
+				});
+			}
+			resumeApplications();
 			if (failures.size) {
 				const labels = CATEGORIES
 					.filter(({ id }) => failures.has(id))
@@ -810,6 +914,12 @@ export class ReaderCacheManagementSurface<
 			}
 		} catch (cause) {
 			this.#options.onError?.(cause);
+			for (const category of selected) {
+				this.#options.cacheLog?.record({
+					operation: 'clear', outcome: 'failure', source: 'management',
+					key: category, durationMs: Date.now() - startedAt, error: cause,
+				});
+			}
 			this.#status.textContent = '清理失败，请稍后重试。';
 		} finally {
 			try {
@@ -817,6 +927,7 @@ export class ReaderCacheManagementSurface<
 			} catch (cause) {
 				this.#options.onError?.(cause);
 			}
+			resumeApplications();
 			this.#setBusy(false);
 		}
 	}

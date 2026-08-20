@@ -1,4 +1,6 @@
 import { createReaderIcon } from '../components/reader-icon.js';
+import { renderReaderInlineEmoji } from
+	'../components/reader-inline-emoji.js';
 import { htmlElement as node } from '../dom/html-element.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import type {
@@ -32,6 +34,7 @@ export interface ReaderUnwantedTopicViewOptions {
 		record: ReaderUnwantedTopicRecord,
 	) => boolean | Promise<boolean>;
 	readonly relativeTime?: (timestamp: number) => string;
+	readonly emojiSource?: (id: string) => string;
 	readonly notify?: (message: string) => void;
 	readonly onError?: (cause: unknown) => void;
 	readonly parentScope?: LifecycleScope;
@@ -133,6 +136,7 @@ export class ReaderUnwantedTopicView {
 	readonly #filterCatalog: DiscourseNativeUnwantedTopicRuleCatalogPort | undefined;
 	readonly #openTarget: NonNullable<ReaderUnwantedTopicViewOptions['openTarget']>;
 	readonly #relativeTime: NonNullable<ReaderUnwantedTopicViewOptions['relativeTime']>;
+	readonly #emojiSource: NonNullable<ReaderUnwantedTopicViewOptions['emojiSource']>;
 	readonly #notify: (message: string) => void;
 	readonly #onError: (cause: unknown) => void;
 	readonly #topicPane: HTMLElement;
@@ -173,6 +177,7 @@ export class ReaderUnwantedTopicView {
 
 	constructor(options: ReaderUnwantedTopicViewOptions) {
 		this.#document = options.document;
+		this.#emojiSource = options.emojiSource ?? (() => '');
 		this.#topics = options.topics;
 		this.#filterPreferences = options.filterPreferences;
 		this.#filterCatalog = options.filterCatalog;
@@ -409,7 +414,8 @@ export class ReaderUnwantedTopicView {
 			this.#render();
 		});
 		this.scope.listen(this.#bulkSelectAll, 'click', () => {
-			const records = this.#matchingRecords(this.#topics.ordered());
+			const records = this.#matchingRecords(this.#topics.ordered())
+				.filter((record) => record.source === 'manual');
 			const allSelected = records.length > 0 && records.every((record) =>
 				this.#bulkSelection.has(record.topicId));
 			for (const record of records) {
@@ -757,7 +763,10 @@ export class ReaderUnwantedTopicView {
 		);
 		this.#addFilter.disabled = availableConditions.length === 0;
 		const records = this.#matchingRecords(all);
-		const matchingIds = new Set<number>(records.map((record) => record.topicId));
+		const restorableRecords = records.filter((record) =>
+			record.source === 'manual');
+		const matchingIds = new Set<number>(restorableRecords.map((record) =>
+			record.topicId));
 		for (const topicId of this.#bulkSelection) {
 			if (!matchingIds.has(topicId)) this.#bulkSelection.delete(topicId);
 		}
@@ -776,15 +785,17 @@ export class ReaderUnwantedTopicView {
 		this.#searchResult.hidden = !filtering;
 		this.#searchResult.textContent = filtering ? `${records.length} 条` : '';
 		this.#bulkToggle.hidden = this.#bulkMode;
-		this.#bulkToggle.disabled = all.length === 0;
+		this.#bulkToggle.disabled = !all.some((record) => record.source === 'manual');
 		this.#bulkBar.hidden = !this.#bulkMode;
 		if (this.#bulkMode) {
 			const selectedCount = this.#bulkSelection.size;
-			const allSelected = records.length > 0 && records.every((record) =>
+			const allSelected = restorableRecords.length > 0 &&
+				restorableRecords.every((record) =>
 				this.#bulkSelection.has(record.topicId));
 			this.#bulkStatus.textContent =
-				`当前结果 ${records.length} 个 · 已选 ${selectedCount} 个`;
-			this.#bulkSelectAll.disabled = records.length === 0;
+				`当前结果 ${records.length} 个 · ` +
+				`可恢复 ${restorableRecords.length} 个 · 已选 ${selectedCount} 个`;
+			this.#bulkSelectAll.disabled = restorableRecords.length === 0;
 			this.#bulkSelectAll.querySelector('span')!.textContent = allSelected
 				? '取消全选'
 				: '全选当前结果';
@@ -803,13 +814,13 @@ export class ReaderUnwantedTopicView {
 				'ldp-unwanted-topic-empty',
 				filtering
 					? '没有匹配的 Topic。'
-					: '点击列表里的免打扰图标后，Topic 会消失并收进这里。',
+					: '手动免打扰和自动过滤命中都会记录在这里。',
 			));
 		}
 		this.#footerStatus.textContent = all.length
 			? this.#bulkMode
-				? '批量管理只作用于当前搜索与筛选结果。'
-				: '点击 Topic 右侧编辑，可添加标注和多个标签。'
+				? '批量恢复只作用于当前结果中的手动免打扰条目。'
+				: '手动条目可恢复显示；自动条目的显示仍由当前规则控制。'
 			: '这里不会修改原站通知级别。';
 		this.#loadMore.hidden = visibleRecords.length >= records.length;
 		this.#loadMore.textContent = this.#loadMore.hidden
@@ -834,8 +845,14 @@ export class ReaderUnwantedTopicView {
 				const checkbox = this.#document.createElement('input');
 				checkbox.type = 'checkbox';
 				checkbox.checked = this.#bulkSelection.has(record.topicId);
+				checkbox.disabled = record.source !== 'manual';
 				checkbox.dataset.unwantedTopicSelect = String(record.topicId);
-				checkbox.setAttribute('aria-label', `选择 ${record.title}`);
+				checkbox.setAttribute(
+					'aria-label',
+					record.source === 'manual'
+						? `选择 ${record.title}`
+						: `${record.title} 由自动规则管理，不可批量恢复`,
+				);
 				select.append(checkbox);
 				leading = select;
 			} else {
@@ -870,14 +887,16 @@ export class ReaderUnwantedTopicView {
 			if (record.source === 'automatic' && remainingRule) {
 				meta.append(this.#document.createTextNode(` · ${remainingRule}`));
 			}
-			copy.append(node(this.#document, 'strong', '', record.title), meta);
+			const title = node(this.#document, 'strong');
+			renderReaderInlineEmoji(title, record.title, this.#emojiSource);
+			copy.append(title, meta);
 			const rowActions = node(
 				this.#document,
 				'div',
 				'ldp-unwanted-topic-row-actions',
 			);
 			if (!this.#bulkMode) {
-				rowActions.append(this.#restoreButton(record));
+				rowActions.append(this.#recordActionButton(record));
 				const edit = this.#document.createElement('button');
 				edit.type = 'button';
 				edit.className = 'ldp-unwanted-topic-edit';
@@ -936,7 +955,7 @@ export class ReaderUnwantedTopicView {
 			'div',
 			'ldp-unwanted-topic-row-actions',
 		);
-		rowActions.append(this.#restoreButton(record));
+		rowActions.append(this.#recordActionButton(record));
 		const confirm = this.#document.createElement('button');
 		confirm.type = 'button';
 		confirm.className = 'ldp-unwanted-topic-confirm';
@@ -950,15 +969,24 @@ export class ReaderUnwantedTopicView {
 		return row;
 	}
 
-	#restoreButton(record: ReaderUnwantedTopicRecord): HTMLButtonElement {
-		const restore = this.#document.createElement('button');
-		restore.type = 'button';
-		restore.className = 'ldp-unwanted-topic-restore';
-		restore.dataset.unwantedTopicRestore = String(record.topicId);
-		restore.setAttribute('aria-label', `恢复显示 ${record.title}`);
-		restore.title = '恢复显示';
-		restore.append(createReaderIcon(this.#document, 'rotate-ccw'));
-		return restore;
+	#recordActionButton(record: ReaderUnwantedTopicRecord): HTMLButtonElement {
+		const action = this.#document.createElement('button');
+		action.type = 'button';
+		action.className = 'ldp-unwanted-topic-restore';
+		if (record.source === 'manual') {
+			action.dataset.unwantedTopicRestore = String(record.topicId);
+			action.setAttribute('aria-label', `恢复显示 ${record.title}`);
+			action.title = '恢复显示';
+			action.append(createReaderIcon(this.#document, 'rotate-ccw'));
+			return action;
+		}
+		action.dataset.unwantedTopicManageRules = String(record.topicId);
+		action.setAttribute('aria-label', `管理 ${record.title} 的自动过滤规则`);
+		action.title = '管理自动过滤规则';
+		action.disabled = !this.#filterEditor ||
+			typeof this.#filterPreferences?.update !== 'function';
+		action.append(createReaderIcon(this.#document, 'settings'));
+		return action;
 	}
 
 	#onClick(event: Event): void {
@@ -1026,7 +1054,16 @@ export class ReaderUnwantedTopicView {
 			const topicId = Number(restore.dataset.unwantedTopicRestore);
 			this.#topicDraft = null;
 			this.#topics.remove(topicId);
-			this.#notify('已移出不想看；列表下次渲染时恢复显示');
+			this.#notify('已移出不想看并恢复显示');
+			return;
+		}
+		const manageRules = closestTarget<HTMLButtonElement>(
+			event,
+			'[data-unwanted-topic-manage-rules]',
+		);
+		if (manageRules) {
+			this.#topicDraft = null;
+			this.#showSettings();
 			return;
 		}
 		const removeLabel = closestTarget<HTMLButtonElement>(
@@ -1074,6 +1111,12 @@ export class ReaderUnwantedTopicView {
 		);
 		if (selection) {
 			const topicId = Number(selection.dataset.unwantedTopicSelect);
+			const record = this.#topics.snapshot.records.find((entry) =>
+				entry.topicId === topicId);
+			if (record?.source !== 'manual') {
+				selection.checked = false;
+				return;
+			}
 			if (selection.checked) this.#bulkSelection.add(topicId);
 			else this.#bulkSelection.delete(topicId);
 			this.#render();

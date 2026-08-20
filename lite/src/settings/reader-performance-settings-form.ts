@@ -19,6 +19,8 @@ import {
 	settingsCopy,
 	settingsElement as element,
 	settingsFooter,
+	settingsOptionRow,
+	settingsSwitch,
 } from './reader-settings-dom.js';
 import {
 	ReaderNumericSettingsDraft,
@@ -32,12 +34,25 @@ export interface ReaderPerformanceSettingsPreferencesAdapter<
 		config: ReaderPerformanceConfig,
 		preset: ReaderPerformancePreset,
 	): Partial<TPreferences>;
+	readSuspendHostTurnstileInBackground?(
+		preferences: Readonly<TPreferences>,
+	): boolean;
+	createSuspendHostTurnstileInBackgroundPatch?(
+		enabled: boolean,
+	): Partial<TPreferences>;
 }
 
 export const readerPreferencesPerformanceSettingsAdapter:
 ReaderPerformanceSettingsPreferencesAdapter<ReaderPreferences> = Object.freeze({
 	readConfig: readReaderPerformanceConfig,
 	createPatch: createReaderPerformancePreferencesPatch,
+	readSuspendHostTurnstileInBackground: (
+		preferences: Readonly<ReaderPreferences>,
+	) =>
+		preferences.performanceSuspendHostTurnstileInBackground,
+	createSuspendHostTurnstileInBackgroundPatch: (enabled: boolean) => ({
+		performanceSuspendHostTurnstileInBackground: enabled,
+	}),
 });
 
 export interface ReaderPerformanceSettingsFormOptions<
@@ -238,6 +253,9 @@ export class ReaderPerformanceSettingsForm<TPreferences extends object> {
 	readonly #status: HTMLElement;
 	readonly #reset: HTMLButtonElement;
 	readonly #draft: ReaderNumericSettingsDraft<ReaderPerformanceName>;
+	readonly #suspendHostTurnstile: HTMLInputElement;
+	#suspendHostTurnstileOriginal: boolean;
+	#suspendHostTurnstileDraft: boolean;
 
 	constructor(options: ReaderPerformanceSettingsFormOptions<TPreferences>) {
 		this.#controller = options.controller;
@@ -248,6 +266,10 @@ export class ReaderPerformanceSettingsForm<TPreferences extends object> {
 			numericDefinitions,
 			this.#preferences.readConfig(options.readPreferences()),
 		);
+		this.#suspendHostTurnstileOriginal =
+			this.#readSuspendHostTurnstile(options.readPreferences());
+		this.#suspendHostTurnstileDraft =
+			this.#suspendHostTurnstileOriginal;
 
 		const presets = element(
 			options.document,
@@ -352,6 +374,60 @@ export class ReaderPerformanceSettingsForm<TPreferences extends object> {
 			groupNode.append(head, content);
 			categoryGroups.append(groupNode);
 		}
+		const hostTurnstileSupported =
+			typeof this.#preferences
+				.readSuspendHostTurnstileInBackground === 'function' &&
+			typeof this.#preferences
+				.createSuspendHostTurnstileInBackgroundPatch === 'function';
+		const hostRuntimeGroup = element(
+			options.document,
+			'section',
+			'ldp-settings-category-group',
+		);
+		hostRuntimeGroup.dataset.settingsCategory = 'performance-host-runtime';
+		const hostRuntimeHead = element(
+			options.document,
+			'div',
+			'ldp-settings-category-head',
+		);
+		const hostRuntimeTitle = element(options.document, 'strong');
+		hostRuntimeTitle.textContent = '宿主后台资源（实验）';
+		const hostRuntimeDescription = element(options.document, 'small');
+		hostRuntimeDescription.textContent =
+			'只管理 LinuxDo 页面自身的隐藏验证控件，不改变 Reader 请求预算。';
+		hostRuntimeHead.append(hostRuntimeTitle, hostRuntimeDescription);
+		const hostRuntimeContent = element(
+			options.document,
+			'div',
+			'ldp-settings-fields ldp-settings-category-list',
+		);
+		const hostTurnstileSwitch = settingsSwitch(
+			options.document,
+			'后台暂停宿主 Turnstile',
+			'ldp-performance-host-turnstile-input',
+		);
+		this.#suspendHostTurnstile = hostTurnstileSwitch.input;
+		this.#suspendHostTurnstile.dataset.performanceHostKey =
+			'suspendHostTurnstileInBackground';
+		const hostTurnstileRow = settingsOptionRow(
+			options.document,
+			'后台暂停宿主 Turnstile',
+			'标签后台停留 30 秒、验证已完成且没有编辑或支付交互时释放隐藏挑战；回到前台立即恢复。默认关闭。',
+			hostTurnstileSwitch.root,
+		);
+		hostTurnstileRow.dataset.settingHelp =
+			'实验项：只处理 body 直属、已有有效响应的 LinuxDo 宿主控件；不会读取或保存令牌，也不会处理 Reader Cloudflare 验证窗口。';
+		hostRuntimeContent.append(hostTurnstileRow);
+		hostRuntimeGroup.append(hostRuntimeHead, hostRuntimeContent);
+		if (hostTurnstileSupported) {
+			categoryGroups.append(hostRuntimeGroup);
+			this.scope.listen(this.#suspendHostTurnstile, 'change', () => {
+				this.#suspendHostTurnstileDraft =
+					this.#suspendHostTurnstile.checked;
+				this.#render();
+				this.#controller.refresh();
+			});
+		}
 
 		const footer = settingsFooter(
 			options.document,
@@ -376,10 +452,15 @@ export class ReaderPerformanceSettingsForm<TPreferences extends object> {
 			validate: () => this.#validate(),
 			createPatch: () => {
 				const config = this.#readConfig()!;
-				return this.#preferences.createPatch(
-					config,
-					readerPerformancePresetForConfig(config),
-				);
+				return {
+					...this.#preferences.createPatch(
+						config,
+						readerPerformancePresetForConfig(config),
+					),
+					...this.#createSuspendHostTurnstilePatch(
+						this.#suspendHostTurnstileDraft,
+					),
+				};
 			},
 			acceptPersisted: (preferences) => {
 				this.#acceptPreferences(preferences);
@@ -403,6 +484,15 @@ export class ReaderPerformanceSettingsForm<TPreferences extends object> {
 	applyPreferences(preferences: Readonly<TPreferences>): void {
 		if (this.scope.destroyed) return;
 		this.#draft.rebase(this.#preferences.readConfig(preferences));
+		const nextSuspendHostTurnstile =
+			this.#readSuspendHostTurnstile(preferences);
+		if (
+			this.#suspendHostTurnstileDraft ===
+			this.#suspendHostTurnstileOriginal
+		) {
+			this.#suspendHostTurnstileDraft = nextSuspendHostTurnstile;
+		}
+		this.#suspendHostTurnstileOriginal = nextSuspendHostTurnstile;
 		this.#syncInputs();
 		this.#render();
 		this.#controller.refresh();
@@ -414,6 +504,10 @@ export class ReaderPerformanceSettingsForm<TPreferences extends object> {
 
 	#acceptPreferences(preferences: Readonly<TPreferences>): void {
 		this.#draft.accept(this.#preferences.readConfig(preferences));
+		this.#suspendHostTurnstileOriginal =
+			this.#readSuspendHostTurnstile(preferences);
+		this.#suspendHostTurnstileDraft =
+			this.#suspendHostTurnstileOriginal;
 		this.#syncInputs();
 		this.#render();
 	}
@@ -429,12 +523,27 @@ export class ReaderPerformanceSettingsForm<TPreferences extends object> {
 		return this.#draft.read() as ReaderPerformanceConfig | null;
 	}
 
+	#readSuspendHostTurnstile(preferences: Readonly<TPreferences>): boolean {
+		return this.#preferences.readSuspendHostTurnstileInBackground?.(
+			preferences,
+		) === true;
+	}
+
+	#createSuspendHostTurnstilePatch(enabled: boolean): Partial<TPreferences> {
+		return this.#preferences.createSuspendHostTurnstileInBackgroundPatch?.(
+			enabled,
+		) ?? {};
+	}
+
 	#validate(): readonly string[] {
 		return this.#draft.issues();
 	}
 
 	#changeCount(): number {
-		return this.#draft.changeCount();
+		return this.#draft.changeCount() + Number(
+			this.#suspendHostTurnstileDraft !==
+				this.#suspendHostTurnstileOriginal,
+		);
 	}
 
 	#syncInputs(): void {
@@ -442,6 +551,8 @@ export class ReaderPerformanceSettingsForm<TPreferences extends object> {
 			this.#inputs.get(field.name)!.value =
 				this.#draft.rawValue(field.name);
 		}
+		this.#suspendHostTurnstile.checked =
+			this.#suspendHostTurnstileDraft;
 	}
 
 	#render(): void {

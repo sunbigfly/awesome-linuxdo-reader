@@ -411,6 +411,20 @@ assert(
 		snapshotFullScanCount === 0,
 	'预知正文必须用 cursor 后一批 post_ids 后台取数、增量刷新 canonical 索引，且不得提前推进顺序游标',
 );
+let cachedBatchNetworkPermits = 0;
+const cachedBatchCalls = requests.batchCalls.length;
+const cachedBatch = await session.loadPostsByIds([103], {
+	background: true,
+	beforeNetwork: () => {
+		cachedBatchNetworkPermits += 1;
+	},
+});
+assert(
+	cachedBatch.posts[0]?.post_number === 3 &&
+		cachedBatchNetworkPermits === 0 &&
+		requests.batchCalls.length === cachedBatchCalls,
+	'canonical 已命中的 post_ids 必须直通，不得消费 beforeNetwork 额度或重复发请求',
+);
 assert(
 	session.postStreamGapCount(1, 3) === 1 &&
 		session.postStreamRevision > initialPostStreamRevision,

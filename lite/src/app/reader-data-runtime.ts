@@ -6,6 +6,7 @@ import {
 import {
 	IndexedDbResponseCacheStore,
 } from '../cache/indexeddb-response-cache-store.js';
+import { ReaderCacheObserver } from '../cache/cache-observer.js';
 import { ResponseRepository } from '../cache/response-repository.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import {
@@ -33,7 +34,10 @@ import type {
 	DiscourseTopicPostInput,
 } from '../topic/topic-session.js';
 
-export const READER_RESPONSE_CACHE_DATABASE = 'linuxdo-enhanced-reader:responses:v1';
+export const READER_RESPONSE_CACHE_DATABASE = 'awesome linuxdo reader';
+export const READER_RESPONSE_CACHE_LEGACY_DATABASES = Object.freeze([
+	'linuxdo-enhanced-reader:responses:v1',
+]);
 export const READER_RESPONSE_CACHE_STORE = 'responses';
 export const READER_CACHE_COORDINATION_STORAGE_KEY =
 	'linuxdo-enhanced-reader:cache-coordination:v1';
@@ -110,6 +114,7 @@ export class ReaderDataRuntime {
 	readonly scope: LifecycleScope;
 	readonly rateLimit: RequestRateLimitPolicy;
 	readonly requests: RequestObserver;
+	readonly cacheEvents: ReaderCacheObserver;
 	readonly client: CoordinatedRequestClient;
 	readonly responses: ResponseRepository;
 	readonly gateway: DomainRequestGateway;
@@ -119,10 +124,22 @@ export class ReaderDataRuntime {
 
 	constructor(options: ReaderDataRuntimeOptions) {
 		const id = sourceId(options.sourceId);
+		this.cacheEvents = new ReaderCacheObserver({
+			...(options.now === undefined ? {} : { now: options.now }),
+		});
 		const report = (
 			phase: ReaderDataRuntimeDiagnosticPhase,
 			cause: unknown,
 		): void => {
+			if (phase === 'indexeddb' || phase === 'cache-coordination') {
+				this.cacheEvents.record({
+					operation: phase === 'indexeddb' ? 'read' : 'invalidate',
+					outcome: 'failure',
+					source: phase === 'indexeddb' ? 'indexeddb' : 'cross-tab',
+					key: phase,
+					error: cause,
+				});
+			}
 			options.onDiagnostic?.(Object.freeze({ phase, cause }));
 		};
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
@@ -154,6 +171,7 @@ export class ReaderDataRuntime {
 			this.scope.add(() => this.cacheCoordination.close());
 			const store = new IndexedDbResponseCacheStore({
 				databaseName: READER_RESPONSE_CACHE_DATABASE,
+				legacyDatabaseNames: READER_RESPONSE_CACHE_LEGACY_DATABASES,
 				storeName: READER_RESPONSE_CACHE_STORE,
 				operationTimeoutMs: options.responseOperationTimeoutMs,
 				maxEntries: options.responsePersistentMaxEntries,
@@ -161,6 +179,7 @@ export class ReaderDataRuntime {
 				factory: options.indexedDb ?? null,
 				...(options.now === undefined ? {} : { now: options.now }),
 				onError: (cause) => report('indexeddb', cause),
+				observer: this.cacheEvents,
 			});
 			this.scope.add(() => {
 				void store.close();
@@ -171,6 +190,7 @@ export class ReaderDataRuntime {
 				maxMemoryBytes: options.responseMemoryMaxBytes,
 				mutationPort: this.cacheCoordination,
 				flightPort: this.cacheCoordination,
+				observer: this.cacheEvents,
 				...(options.cacheFlightHeartbeatMs === undefined
 					? {}
 					: { flightHeartbeatMs: options.cacheFlightHeartbeatMs }),

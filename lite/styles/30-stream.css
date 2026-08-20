@@ -12,8 +12,9 @@
    * Root replacement and first-time height measurements change both virtual
    * spacers while the user is scrolling. Keep Chromium's native anchor on the
    * real stream in embedded/full-page readers so those deltas do not consume
-   * upward wheel/key distance. The scroll adapter disables it only while its
-   * explicit stationary/programmatic anchor owns the viewport.
+   * upward wheel/key distance. Only explicit programmatic/quote positioning
+   * temporarily disables the body anchor; a stationary marker remains a
+   * fallback observer and must not override Chromium's native owner.
    */
   overflow-anchor: auto;
   contain: layout style;
@@ -801,6 +802,14 @@ button.ldp-floor:hover {
   background: var(--ldp-canvas);
   color: var(--ldp-ink);
   box-shadow: 0 1px 2px rgb(0 0 0 / 12%), 0 4px 8px rgb(0 0 0 / 8%);
+}
+
+.ldp-content aside.onebox:is(
+  [class*="github" i],
+  [data-onebox-src*="github.com" i],
+  :has(a[href*="github.com/" i])
+) {
+  max-block-size: 18rem;
 }
 
 .ldp-content aside.onebox > header.source {

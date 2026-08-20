@@ -50,8 +50,18 @@ const form = new ReaderPerformanceSettingsForm({
 
 assert(
 	host.querySelectorAll('.ldp-performance-preset').length === 4 &&
-		host.querySelectorAll('.ldp-settings-category-group').length === 4 &&
+		host.querySelectorAll('.ldp-settings-category-group').length === 5 &&
 		host.querySelectorAll('[data-performance-key]').length === 7 &&
+		!host.querySelector<HTMLInputElement>(
+			'[data-performance-host-key="suspendHostTurnstileInBackground"]',
+		)?.checked &&
+		host.querySelector(
+			'[data-settings-category="performance-host-runtime"]',
+		)?.textContent?.includes('宿主后台资源（实验）') &&
+		host.querySelector(
+			'[data-performance-host-key="suspendHostTurnstileInBackground"]',
+		)?.closest<HTMLElement>('.ldp-setting-row')?.dataset.settingHelp
+			?.includes('不会读取或保存令牌') &&
 		host.querySelector('[data-performance-preset="balanced"]')
 			?.classList.contains('active') &&
 		host.querySelector('[data-performance-preset="high"]')?.textContent ===
@@ -229,6 +239,35 @@ assert(
 		preferences.performancePageSize === 32 &&
 		preferences.performanceRequestConcurrency === 2,
 	'局部草稿保存不得用旧表单值覆盖同期外部更新',
+);
+
+const suspendHostTurnstile = host.querySelector<HTMLInputElement>(
+	'[data-performance-host-key="suspendHostTurnstileInBackground"]',
+)!;
+suspendHostTurnstile.checked = true;
+suspendHostTurnstile.dispatchEvent(
+	new parsedWindow.Event('change', { bubbles: true }),
+);
+assert(
+	Number(controller.snapshot.draftCount) === 1 &&
+	!preferences.performanceSuspendHostTurnstileInBackground,
+	'宿主后台资源开关必须先进入同一性能设置草稿，不能即时改写偏好',
+);
+const suspendSave = controller.saveAll();
+assert(
+	suspendSave.kind === 'saved' &&
+	preferences.performanceSuspendHostTurnstileInBackground &&
+	controller.snapshot.draftCount === 0,
+	'实验开关必须与七个性能目标共用 Settings controller 保存入口',
+);
+preferences = Object.freeze({
+	...preferences,
+	performanceSuspendHostTurnstileInBackground: false,
+});
+preferenceChanges.emit(preferences);
+assert(
+	!suspendHostTurnstile.checked && controller.snapshot.draftCount === 0,
+	'无本地草稿时外部配置或 WebDAV 偏好更新必须热应用实验开关',
 );
 
 form.destroy();

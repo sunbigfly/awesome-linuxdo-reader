@@ -9,6 +9,8 @@ import type { ReaderTopicPostFeature } from './reader-topic-dom-coordinator.js';
 
 export interface ReaderPostAuthorFilterFeatureOptions {
 	readonly preferences: ReaderUnwantedTopicFilterPreferencesPort;
+	readonly recordHiddenPostAuthor?: (username: string) => void;
+	readonly onError?: (cause: unknown) => void;
 	readonly parentScope: LifecycleScope;
 }
 
@@ -18,9 +20,14 @@ implements ReaderTopicPostFeature<TPost> {
 	readonly activationScope = 'node' as const;
 	readonly #views = new Map<PostView, string>();
 	readonly #boundViews = new WeakSet<PostView>();
+	readonly #recordedUsernames = new Set<string>();
+	readonly #recordHiddenPostAuthor: (username: string) => void;
+	readonly #onError: (cause: unknown) => void;
 	#preferences: ReaderUnwantedTopicFilterPreferences;
 
 	constructor(options: ReaderPostAuthorFilterFeatureOptions) {
+		this.#recordHiddenPostAuthor = options.recordHiddenPostAuthor ?? (() => {});
+		this.#onError = options.onError ?? (() => {});
 		this.#preferences = options.preferences.read();
 		options.preferences.subscribe((preferences) => {
 			this.#preferences = preferences;
@@ -28,7 +35,10 @@ implements ReaderTopicPostFeature<TPost> {
 				this.#project(view, username);
 			}
 		}, options.parentScope);
-		options.parentScope.add(() => this.#views.clear());
+		options.parentScope.add(() => {
+			this.#views.clear();
+			this.#recordedUsernames.clear();
+		});
 	}
 
 	afterRender(_post: TPost, view: PostView): void {
@@ -47,7 +57,21 @@ implements ReaderTopicPostFeature<TPost> {
 			username,
 		);
 		view.slots.root.classList.toggle('ldp-post-unwanted-author', hidden);
-		if (hidden) view.slots.root.dataset.unwantedPostAuthor = username;
-		else delete view.slots.root.dataset.unwantedPostAuthor;
+		const normalizedUsername = username.replace(/^@+/, '').trim();
+		const usernameKey = normalizedUsername.toLocaleLowerCase('en-US');
+		if (hidden) {
+			view.slots.root.dataset.unwantedPostAuthor = normalizedUsername;
+			if (usernameKey && !this.#recordedUsernames.has(usernameKey)) {
+				try {
+					this.#recordHiddenPostAuthor(normalizedUsername);
+					this.#recordedUsernames.add(usernameKey);
+				} catch (cause) {
+					this.#onError(cause);
+				}
+			}
+		} else {
+			delete view.slots.root.dataset.unwantedPostAuthor;
+			this.#recordedUsernames.delete(usernameKey);
+		}
 	}
 }

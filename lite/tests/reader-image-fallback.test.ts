@@ -1,5 +1,6 @@
 import { parseHTML } from 'linkedom';
 import {
+	installReaderImageSourceFallback,
 	installReaderSiteLogoFallback,
 	replaceImageWithFallbackOnError,
 } from '../src/components/reader-image-fallback.js';
@@ -26,6 +27,34 @@ assert(
 	host.querySelector('img') === null &&
 	host.querySelector('.semantic-avatar-fallback')?.textContent === 'A',
 	'共享图片失败链必须原位替换为调用方语义回退',
+);
+
+const recoveryHost = document.createElement('span');
+const recoveryImage = document.createElement('img');
+let recoverySignal: AbortSignal | undefined;
+installReaderImageSourceFallback(
+	recoveryImage,
+	['https://linux.do/avatar/recovery.png'],
+	() => document.createElement('span'),
+	(_source, signal) => {
+		recoverySignal = signal;
+		return new Promise<string>((_resolve, reject) => {
+			signal?.addEventListener('abort', () => reject(signal.reason), {
+				once: true,
+			});
+		});
+	},
+	'https://linux.do/avatar/visible.png',
+);
+recoveryHost.append(recoveryImage);
+document.body.append(recoveryHost);
+await Promise.resolve();
+recoveryHost.remove();
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	recoverySignal?.aborted === true,
+	'头像宿主离开 Document 或 ShadowRoot 后必须取消该 DOM 的恢复消费者，不能由在途请求继续保留 detached DOM',
 );
 
 const siteLogo = document.createElement('img');

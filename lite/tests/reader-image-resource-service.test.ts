@@ -237,6 +237,48 @@ assert(
 );
 avatarService.destroy();
 
+let avatarConsumerSignal: AbortSignal | null = null;
+const cancellableAvatarResources = {
+	normalize(source: string) {
+		return normalize(source);
+	},
+	load(_source: string, options: { readonly signal: AbortSignal }) {
+		avatarConsumerSignal = options.signal;
+		return new Promise<Blob>((_resolve, reject) => {
+			options.signal.addEventListener(
+				'abort',
+				() => reject(options.signal.reason),
+				{ once: true },
+			);
+		});
+	},
+} as unknown as PublicResourceRequestAdapter;
+const cancellableAvatarService = new ReaderImageResourceService({
+	resources: cancellableAvatarResources,
+	objectUrls: {
+		createObjectURL() {
+			return 'blob:cancellable-avatar';
+		},
+		revokeObjectURL() {},
+	},
+});
+const avatarConsumer = new AbortController();
+const cancelledAvatar = cancellableAvatarService.resolveAvatarSource(
+	first.previewSrc,
+	avatarConsumer.signal,
+).then(
+	() => null,
+	(error: unknown) => error,
+);
+const avatarCancellationReason = new Error('avatar host detached');
+avatarConsumer.abort(avatarCancellationReason);
+assert(
+	await cancelledAvatar === avatarCancellationReason &&
+		(avatarConsumerSignal as AbortSignal | null)?.aborted === true,
+	'头像 DOM 生命周期取消必须贯通到资源仓库消费者，最后一个消费者离开后允许统一请求链终止 producer',
+);
+cancellableAvatarService.destroy();
+
 let resolveShared!: (blob: Blob) => void;
 let rejectShared!: (error: unknown) => void;
 const sharedBlob = new Promise<Blob>((resolve, reject) => {

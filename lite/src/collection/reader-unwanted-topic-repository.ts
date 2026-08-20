@@ -105,6 +105,18 @@ function matchedCategoryValue(value: string): string {
 	return '';
 }
 
+function mergeMatchedRules(...values: readonly unknown[]): string {
+	const rules = new Map<string, string>();
+	for (const value of values) {
+		for (const part of text(value, 2_000).split('；')) {
+			const rule = part.trim();
+			const key = rule.toLocaleLowerCase('zh-CN');
+			if (key && !rules.has(key)) rules.set(key, rule);
+		}
+	}
+	return [...rules.values()].join('；').slice(0, 2_000);
+}
+
 function normalizeHref(value: unknown, topicId: DiscourseTopicId): string {
 	const href = text(value, 512);
 	if (!href) return `/t/${topicId}`;
@@ -209,6 +221,9 @@ export function mergeReaderUnwantedTopicValues(
 	}
 	const recent = left.updatedAt >= right.updatedAt ? left : right;
 	const older = recent === left ? right : left;
+	const manual = left.source === 'manual'
+		? right.source === 'manual' ? recent : left
+		: right.source === 'manual' ? right : null;
 	return normalizeReaderUnwantedTopicRecord({
 		...older,
 		...recent,
@@ -218,9 +233,16 @@ export function mergeReaderUnwantedTopicValues(
 		categoryId: recent.categoryId ?? older.categoryId,
 		categoryName: recent.categoryName || older.categoryName,
 		categorySlug: recent.categorySlug || older.categorySlug,
-		matchedRule: recent.matchedRule || older.matchedRule,
-		matchedCategory: recent.matchedCategory || older.matchedCategory,
-		hiddenAt: Math.min(left.hiddenAt, right.hiddenAt),
+		source: manual ? 'manual' : 'automatic',
+		matchedRule: manual
+			? manual.matchedRule
+			: mergeMatchedRules(older.matchedRule, recent.matchedRule),
+		matchedCategory: manual
+			? manual.matchedCategory
+			: recent.matchedCategory || older.matchedCategory,
+		hiddenAt: manual && left.source !== right.source
+			? manual.hiddenAt
+			: Math.min(left.hiddenAt, right.hiddenAt),
 		updatedAt: Math.max(left.updatedAt, right.updatedAt),
 	});
 }
@@ -316,10 +338,14 @@ export class ReaderUnwantedTopicRepository {
 		const previous = this.#snapshot.records.find((entry) =>
 			entry.topicId === topicId);
 		const now = this.#now();
-		const incoming = normalizeReaderUnwantedTopicRecord({
+		const source = input.source ?? previous?.source ?? 'manual';
+		if (source === 'automatic' && previous?.source === 'manual') {
+			return this.#snapshot;
+		}
+		const base = {
 			topicId,
-			title: input.title,
-			href: input.href,
+			title: input.title === undefined ? previous?.title : input.title,
+			href: input.href === undefined ? previous?.href : input.href,
 			note: previous?.note ?? '',
 			labels: previous?.labels ?? [],
 			categoryId: input.categoryId === undefined
@@ -331,11 +357,29 @@ export class ReaderUnwantedTopicRepository {
 			categorySlug: input.categorySlug === undefined
 				? previous?.categorySlug ?? ''
 				: input.categorySlug,
-			source: input.source ?? previous?.source ?? 'manual',
-			matchedRule: input.matchedRule ?? previous?.matchedRule ?? '',
-			matchedCategory: input.matchedCategory ??
-				previous?.matchedCategory ?? false,
-			hiddenAt: previous?.hiddenAt ?? now,
+			source,
+			matchedRule: source === 'automatic'
+				? mergeMatchedRules(previous?.matchedRule, input.matchedRule)
+				: input.matchedRule ??
+					(previous?.source === 'manual' ? previous.matchedRule : ''),
+			matchedCategory: source === 'automatic'
+				? (previous?.source === 'automatic' && previous.matchedCategory) ||
+					input.matchedCategory === true
+				: input.matchedCategory ??
+					(previous?.source === 'manual' && previous.matchedCategory),
+			hiddenAt: previous?.source === 'automatic' && source === 'manual'
+				? now
+				: previous?.hiddenAt ?? now,
+		};
+		let incoming = normalizeReaderUnwantedTopicRecord({
+			...base,
+			updatedAt: previous?.updatedAt ?? now,
+		})!;
+		if (previous && JSON.stringify(incoming) === JSON.stringify(previous)) {
+			return this.#snapshot;
+		}
+		incoming = normalizeReaderUnwantedTopicRecord({
+			...base,
 			updatedAt: now,
 		})!;
 		return this.#persistAndCommit([

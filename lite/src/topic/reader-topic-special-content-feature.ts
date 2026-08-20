@@ -9,6 +9,8 @@ import type { DiscourseIngestSource } from '../discourse/ingest-version.js';
 import type { PostView } from '../dom/post-view.js';
 import { htmlElement } from '../dom/html-element.js';
 import { renderReaderIcon } from '../components/reader-icon.js';
+import { renderReaderInlineEmoji } from
+	'../components/reader-inline-emoji.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import {
 	valueRecord as record,
@@ -769,7 +771,11 @@ export class ReaderTopicSpecialContentFeature<
 			'ldp-solved-excerpt ldp-content cooked',
 		);
 		if (answer.cooked) excerpt.innerHTML = answer.cooked;
-		else excerpt.textContent = answer.excerpt || '查看被采纳的完整回复。';
+		else renderReaderInlineEmoji(
+			excerpt,
+			answer.excerpt || '查看被采纳的完整回复。',
+			(id) => this.#presentation.emojiSource?.(id) ?? '',
+		);
 		body.append(excerpt);
 		const jump = htmlElement(
 			this.#document,

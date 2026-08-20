@@ -1,6 +1,6 @@
 /* Awesome LinuxDo Reader Lite stylesheet.
  * Generated only from lite/styles/*.css; do not edit generated outputs.
- * source-sha256: 2a151fa37339c48a89fb6b92a4750b1e6b51b014d6cb9d4bda91e0d40dedf3cf
+ * source-sha256: 4431bd48497d99e44a0edbaadd21030298202b7cad0e9d836e4816105148472a
  */
 
 /* source: 00-foundation.css */
@@ -1292,8 +1292,28 @@ html.ldp-reader-workspace [data-ldp-native-new-topic-marker] {
   display: none !important;
 }
 
-html:root body :is(.topic-list-item,.latest-topic-list-item)[data-ldp-unwanted-auto-filter] {
+html:root body :is(.topic-list-item,.latest-topic-list-item):is(
+  [data-ldp-unwanted-auto-filter],
+  [data-ldp-unwanted-manual-filter]
+) {
   display: none !important;
+}
+
+html:root body .ldp-host-topic-exposure-count {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--primary-medium, #777) !important;
+  font-family: var(--ldp-host-font-family, inherit);
+  font-size: var(--ldp-font-micro, 9px) !important;
+  font-weight: 400 !important;
+  line-height: 1.2 !important;
+  opacity: .78;
+  white-space: nowrap;
 }
 
 html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item)[data-ldp-native-new-topic]
@@ -1688,11 +1708,11 @@ html.ldp-reader-workspace .topic-list-item[data-ldp-topic-stats="true"] {
   min-height: 0 !important;
   justify-self: stretch !important;
   justify-content: stretch !important;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 32%) !important;
+  grid-template-columns: minmax(0, 1fr) max-content !important;
   grid-template-rows: max-content max-content;
   align-content: start;
   align-items: start;
-  column-gap: 16px;
+  column-gap: 2px;
   row-gap: 0;
   padding-block: 4px !important;
 }
@@ -1786,21 +1806,25 @@ html.ldp-reader-workspace .topic-list-item[data-ldp-topic-stats="true"] > td.mai
 html.ldp-reader-workspace .topic-list-item[data-ldp-topic-stats="true"] > td.posters {
   width: max-content !important;
   max-width: 100% !important;
+  box-sizing: border-box;
   align-self: center !important;
   justify-self: end !important;
   grid-column: 2 !important;
   grid-row: 1 !important;
+  padding-inline: 2px !important;
 }
 
 html.ldp-reader-workspace .topic-list-item[data-ldp-topic-stats="true"] > td.posts {
   display: block !important;
   width: 100% !important;
   min-width: 0;
+  box-sizing: border-box;
   align-self: center !important;
   justify-self: stretch !important;
   grid-column: 2 !important;
   grid-row: 2 !important;
   overflow: visible !important;
+  padding-inline: 2px !important;
   font-size: 0 !important;
   white-space: nowrap;
   transform: none;
@@ -1903,19 +1927,29 @@ html.ldp-reader-workspace :is(
 }
 
 .ldp-host-topic-card-performance .link-bottom-line:has(
-  > .ldp-host-topic-reader-meta
+  > .ldp-host-topic-reader-meta-row
 ) {
   flex-wrap: wrap !important;
 }
 
-.ldp-host-topic-reader-meta {
-  display: inline-flex;
+.ldp-host-topic-reader-meta-row {
+  display: flex;
   width: 100%;
   min-width: 0;
-  flex: 0 0 100%;
+  flex: 0 0 100% !important;
   align-items: center;
   margin-block-start: 3px;
   margin-inline-start: 0;
+  white-space: nowrap;
+}
+
+.ldp-host-topic-reader-meta {
+  display: inline-flex;
+  width: auto;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  margin: 0;
   color: var(--primary-medium, #777) !important;
   font-family: var(--ldp-host-font-family, inherit);
   font-size: var(--ldp-font-micro, 9px) !important;
@@ -1923,6 +1957,15 @@ html.ldp-reader-workspace :is(
   line-height: 1.2 !important;
   opacity: .78;
   white-space: nowrap;
+}
+
+.ldp-host-topic-reader-meta + .ldp-host-topic-exposure-count {
+  margin-inline-start: 4px;
+}
+
+.ldp-host-topic-reader-meta + .ldp-host-topic-exposure-count::before {
+  margin-inline-end: 4px;
+  content: "·";
 }
 
 /* source: 20-shell.css */
@@ -2729,14 +2772,13 @@ html.ldp-reader-workspace :is(
   padding: 0;
 }
 
-.ldp-body:is(.ldp-stream-programmatic-scroll,.ldp-quote-positioning) {
-  /* 程序化换位或引用定位接管期间只允许一个物理锚定 owner。 */
+.ldp-body:is(
+  .ldp-stream-programmatic-scroll,
+  .ldp-quote-positioning,
+  .ldp-stream-viewport-mutation
+) {
+  /* 程序化换位、引用定位或显式高度事务期间只允许一个物理锚定 owner。 */
   overflow-anchor: none;
-}
-
-.ldp-body.ldp-stream-viewport-anchor {
-	/* 显式楼层锚点已由唯一 scroll owner 持有，不能再叠加 Chromium 补偿。 */
-	overflow-anchor: none;
 }
 
 .ldp-body > * {
@@ -6052,8 +6094,9 @@ html.ldp-reader-workspace :is(
    * Root replacement and first-time height measurements change both virtual
    * spacers while the user is scrolling. Keep Chromium's native anchor on the
    * real stream in embedded/full-page readers so those deltas do not consume
-   * upward wheel/key distance. The scroll adapter disables it only while its
-   * explicit stationary/programmatic anchor owns the viewport.
+   * upward wheel/key distance. Only explicit programmatic/quote positioning
+   * temporarily disables the body anchor; a stationary marker remains a
+   * fallback observer and must not override Chromium's native owner.
    */
   overflow-anchor: auto;
   contain: layout style;
@@ -6841,6 +6884,14 @@ button.ldp-floor:hover {
   background: var(--ldp-canvas);
   color: var(--ldp-ink);
   box-shadow: 0 1px 2px rgb(0 0 0 / 12%), 0 4px 8px rgb(0 0 0 / 8%);
+}
+
+.ldp-content aside.onebox:is(
+  [class*="github" i],
+  [data-onebox-src*="github.com" i],
+  :has(a[href*="github.com/" i])
+) {
+  max-block-size: 18rem;
 }
 
 .ldp-content aside.onebox > header.source {
@@ -8484,6 +8535,26 @@ button.ldp-floor:hover {
   left: calc(var(--ldp-thread-avatar-size) / -2);
   width: 0;
   height: auto;
+  border-left: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
+  content: "";
+  pointer-events: none;
+}
+
+/*
+ * 父楼层正文被虚拟窗口回收时，ancestor shell 仍持有当前可见的子树。若它在
+ * canonical 同级中不是最后一项，就用无交互虚线段代理被回收楼层的入线；真实楼层
+ * 重新物化后 shell class 消失，上一条物理线规则自然接管且不会叠画。
+ */
+.ldp-segmented-branches .ldp-reply-list >
+.ldp-post.ldp-virtual-ancestor-shell:not(
+  .ldp-segmented-branch-last
+)::after {
+  position: absolute;
+  z-index: 0;
+  top: -1px;
+  bottom: -1px;
+  left: calc(var(--ldp-thread-avatar-size) / -2);
+  width: 0;
   border-left: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
   content: "";
   pointer-events: none;
@@ -13802,6 +13873,15 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   margin: 0 .05em;
   object-fit: contain;
   vertical-align: -.2em;
+}
+
+img.emoji[data-ldp-inline-emoji] {
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  margin: 0 .04em;
+  object-fit: contain;
+  vertical-align: -.18em;
 }
 
 .ldp-user-observation-activity mark {

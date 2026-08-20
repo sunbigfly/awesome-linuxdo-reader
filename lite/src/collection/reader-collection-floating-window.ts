@@ -252,6 +252,13 @@ export class ReaderCollectionScrollWindow<T> {
 	}
 
 	#requestMoreIfNearEnd(explicitScroll = false): void {
+		/*
+		 * 通知、收藏、历史等浮窗关闭时仍可能收到领域状态同步。隐藏 surface 的
+		 * clientHeight/scrollHeight 既不具备分页语义，还会在 Topic 开关热路径中
+		 * 强制整棵 Reader DOM 做 layout；等浮窗重新显示后由 scroll 或下一次 sync
+		 * 再检查真实边界。
+		 */
+		if (!this.#list.isConnected || this.#list.closest('[hidden]')) return;
 		const scrollTop = Math.max(0, Number(this.#list.scrollTop) || 0);
 		const clientHeight = Math.max(0, Number(this.#list.clientHeight) || 0);
 		const scrollHeight = Math.max(0, Number(this.#list.scrollHeight) || 0);

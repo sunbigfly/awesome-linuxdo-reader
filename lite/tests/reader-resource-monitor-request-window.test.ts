@@ -391,14 +391,18 @@ assert(
 now += 30;
 requests.finish(userCardRequest, { status: 200, decision: 'complete' });
 await new Promise<void>((resolve) => setTimeout(resolve, 0));
+const requestLogElement = host.querySelector<HTMLElement>('.ldp-request-flow-log')!;
+requestLogElement.scrollTop = 48;
+await monitor.sampleNow();
 assert(
 	host.querySelector<HTMLElement>(
 		'.ldp-request-flow-log-row[data-request-phase="finished"]',
 	)?.textContent?.includes('200') &&
 	host.querySelector<HTMLElement>(
 		'.ldp-request-flow-log-row[data-request-phase="finished"]',
-	)?.textContent?.includes('决策 完成'),
-	'同一条用户卡请求完成后必须同步显示最终 HTTP 状态和终止决策',
+	)?.textContent?.includes('决策 完成') &&
+	requestLogElement.scrollTop === 48,
+	'同一条用户卡请求完成后必须同步显示最终 HTTP 状态和终止决策，并在批量重绘前读取和恢复日志滚动位置',
 );
 
 now += 10;

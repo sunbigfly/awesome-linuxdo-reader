@@ -1,5 +1,6 @@
 import {
 	IndexedDbResponseCacheStore,
+	selectResponseCacheMigrationEntry,
 	selectResponseCachePruneIds,
 } from '../src/cache/indexeddb-response-cache-store.js';
 import type { ResponseCacheEntry } from '../src/cache/response-repository.js';
@@ -53,6 +54,17 @@ const permanent = Object.freeze({
 	permanent: true as const,
 });
 assert(
+	selectResponseCacheMigrationEntry(
+		entry('same', 20, 1_000, 20),
+		entry('same', 10, 1_000, 10),
+	).bytes === 20 &&
+	selectResponseCacheMigrationEntry(
+		entry('same', 20, 1_000, 20),
+		entry('same', 30, 1_000, 30),
+	).bytes === 30,
+	'旧库迁移必须按 storedAt 保留较新记录，重复启动不能用旧值覆盖新库',
+);
+assert(
 	selectResponseCachePruneIds(
 		[
 			permanent,
@@ -83,6 +95,7 @@ const unavailable = new IndexedDbResponseCacheStore({
 	maxEntries: 10,
 	maxBytes: 1000,
 	factory: null,
+	legacyDatabaseNames: ['legacy', 'test', 'legacy'],
 	onError: (error) => errors.push(error),
 });
 assert(await unavailable.read('missing') === null, '无 IndexedDB 时 read 必须降级为 miss');

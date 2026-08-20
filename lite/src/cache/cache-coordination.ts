@@ -280,6 +280,15 @@ export class BroadcastCacheCoordinationChannel implements CacheCoordinationMessa
 			this.#channel?.postMessage(message);
 		} catch (error) {
 			this.#onError(error);
+			/*
+			 * state 只是共享 flight 的唤醒提示，失败可以由 TTL/polling 降级；
+			 * invalidate 决定其他标签是否仍会命中旧 memory LRU，必须把失败交给
+			 * ResponseRepository 的失效报告，不能把残留状态误报为清理完成。
+			 */
+			if (
+				message && typeof message === 'object' &&
+				(message as { readonly type?: unknown }).type === 'invalidate'
+			) throw error;
 		}
 	}
 

@@ -153,6 +153,7 @@ export interface ReaderPreferences {
 	readonly performanceRequestConcurrency: number;
 	readonly performanceRequestInterval: number;
 	readonly performanceRequestRateTarget: number;
+	readonly performanceSuspendHostTurnstileInBackground: boolean;
 	readonly layoutProfile: ReaderLayoutProfile;
 	readonly fullpageLayoutProfile: ReaderLayoutProfile;
 	readonly readerWindowWidth: number;
@@ -1424,6 +1425,7 @@ export function createReaderPreferencesDefaults(
 		fontProfile: READER_FONT_DEFAULT,
 		appearanceProfile: APPEARANCE_PROFILE_DEFAULT,
 		...performance,
+		performanceSuspendHostTurnstileInBackground: false,
 		layoutProfile: READER_LAYOUT_DEFAULT,
 		fullpageLayoutProfile: READER_FULLPAGE_LAYOUT_DEFAULT,
 		readerWindowWidth: 0,
@@ -1666,6 +1668,8 @@ export function normalizeReaderPreferences(
 		fontProfile: normalizeFontProfile(source.fontProfile),
 		appearanceProfile: normalizeAppearanceProfile(source.appearanceProfile),
 		...performance,
+		performanceSuspendHostTurnstileInBackground:
+			source.performanceSuspendHostTurnstileInBackground === true,
 		layoutProfile: normalizeLayoutProfile(source.layoutProfile, READER_LAYOUT_DEFAULT),
 		fullpageLayoutProfile: normalizeLayoutProfile(
 			source.fullpageLayoutProfile,
@@ -1759,6 +1763,9 @@ export function createReaderPreferencesConfigCodec(
 		unwantedTopicFilterTopicFields: Object.freeze([]),
 		unwantedTopicFilterPostAuthors: Object.freeze([]),
 	});
+	const hostTurnstileBackgroundDefaults = Object.freeze({
+		performanceSuspendHostTurnstileInBackground: false,
+	});
 	return new PreferencesConfigCodec({
 		format: READER_CONFIG_EXPORT_FORMAT,
 		schemaVersion: READER_CONFIG_EXPORT_VERSION,
@@ -1767,10 +1774,17 @@ export function createReaderPreferencesConfigCodec(
 		normalize,
 		legacyImportRules: [
 			{
-				missingDefaults: unwantedTopicFilterDefaults,
+				missingDefaults: hostTurnstileBackgroundDefaults,
 			},
 			{
 				missingDefaults: {
+					...hostTurnstileBackgroundDefaults,
+					...unwantedTopicFilterDefaults,
+				},
+			},
+			{
+				missingDefaults: {
+					...hostTurnstileBackgroundDefaults,
 					...unwantedTopicFilterDefaults,
 					autoDarkModeEnabled: false,
 					autoDarkModeStartTime: 'sunset',
@@ -1778,6 +1792,7 @@ export function createReaderPreferencesConfigCodec(
 			},
 			{
 				missingDefaults: {
+					...hostTurnstileBackgroundDefaults,
 					...unwantedTopicFilterDefaults,
 					autoDarkModeEnabled: false,
 					autoDarkModeStartTime: 'sunset',
@@ -1786,6 +1801,7 @@ export function createReaderPreferencesConfigCodec(
 			},
 			{
 				missingDefaults: {
+					...hostTurnstileBackgroundDefaults,
 					...unwantedTopicFilterDefaults,
 					autoDarkModeEnabled: false,
 					autoDarkModeStartTime: 'sunset',
@@ -1795,6 +1811,7 @@ export function createReaderPreferencesConfigCodec(
 			},
 			{
 				missingDefaults: {
+					...hostTurnstileBackgroundDefaults,
 					...unwantedTopicFilterDefaults,
 					autoDarkModeEnabled: false,
 					autoDarkModeStartTime: 'sunset',

@@ -378,7 +378,7 @@ runtime.register("src/cache/cache-coordination.js", function(module, exports, re
 	    try {
 	      this.#channel?.postMessage(message);
 	    } catch (error) {
-	      this.#onError(error);
+	      if (this.#onError(error), message && typeof message == "object" && message.type === "invalidate") throw error;
 	    }
 	  }
 	  subscribe(listener) {
@@ -623,7 +623,7 @@ runtime.register("src/cache/cache-coordination.js", function(module, exports, re
 	    });
 	  }
 	}
-}, "426097a26de19d79f96aa759e8005745ffdcb42c7015d0cc7750b2e276348878");
+}, "9c1791d04b4086ad56a8c11f1d5de645d2b2a2c0887ffc34242cae632f0b2159");
 
 /* Source: lite/src/cache/cache-identity.ts */
 runtime.register("src/cache/cache-identity.js", function(module, exports, require) {
@@ -640,6 +640,75 @@ runtime.register("src/cache/cache-identity.js", function(module, exports, requir
 	  return (hash >>> 0).toString(36);
 	}
 }, "fca985f86f39ba26872e25e42a855fbaff32da679df43591f16ca5e46a5e1157");
+
+/* Source: lite/src/cache/cache-observer.ts */
+runtime.register("src/cache/cache-observer.js", function(module, exports, require) {
+	var cache_observer_exports = {};
+	__export(cache_observer_exports, {
+	  ReaderCacheObserver: () => ReaderCacheObserver
+	});
+	module.exports = __toCommonJS(cache_observer_exports);
+	function positiveInteger(value, name) {
+	  if (!Number.isSafeInteger(value) || value < 1)
+	    throw new RangeError(`${name} 必须是正安全整数`);
+	  return value;
+	}
+	function diagnosticError(value) {
+	  return value == null ? "" : value instanceof Error ? `${value.name}: ${value.message}`.slice(0, 500) : String(value).slice(0, 500);
+	}
+	class ReaderCacheObserver {
+	  #retentionMs;
+	  #maxEntries;
+	  #now;
+	  #events = [];
+	  #sequence = 0;
+	  #dropped = 0;
+	  constructor(options = {}) {
+	    this.#retentionMs = positiveInteger(
+	      options.retentionMs ?? 15 * 6e4,
+	      "retentionMs"
+	    ), this.#maxEntries = positiveInteger(
+	      options.maxEntries ?? 1200,
+	      "maxEntries"
+	    ), this.#now = options.now ?? Date.now;
+	  }
+	  record(input) {
+	    const at = this.#now(), event = Object.freeze({
+	      id: ++this.#sequence,
+	      at,
+	      operation: input.operation,
+	      outcome: input.outcome,
+	      source: input.source,
+	      key: String(input.key).slice(0, 1e3),
+	      ...input.kind ? { kind: String(input.kind).slice(0, 120) } : {},
+	      ...input.tags?.length ? { tags: Object.freeze([...new Set(input.tags.map(String))].slice(0, 64)) } : {},
+	      ...input.durationMs === void 0 ? {} : { durationMs: Math.max(0, Number(input.durationMs) || 0) },
+	      ...input.sizeBytes === void 0 ? {} : { sizeBytes: Math.max(0, Number(input.sizeBytes) || 0) },
+	      ...input.records === void 0 ? {} : { records: Math.max(0, Math.floor(Number(input.records) || 0)) },
+	      ...input.reason ? { reason: String(input.reason).slice(0, 500) } : {},
+	      error: diagnosticError(input.error)
+	    });
+	    return this.#events.push(event), this.#prune(at), event;
+	  }
+	  get snapshot() {
+	    return this.#prune(this.#now()), Object.freeze({
+	      events: Object.freeze([...this.#events]),
+	      dropped: this.#dropped
+	    });
+	  }
+	  clear() {
+	    this.#events.length = 0, this.#dropped = 0;
+	  }
+	  #prune(at) {
+	    const cutoff = at - this.#retentionMs;
+	    let expired = 0;
+	    for (; expired < this.#events.length && this.#events[expired].at < cutoff; ) expired += 1;
+	    if (expired && (this.#events.splice(0, expired), this.#dropped += expired), this.#events.length <= this.#maxEntries) return;
+	    const overflow = this.#events.length - this.#maxEntries;
+	    this.#events.splice(0, overflow), this.#dropped += overflow;
+	  }
+	}
+}, "fe12d21efa0f5fed87d616b20dd7b9d1115ebad6f6305081a8eb2ae5d3ca1e01");
 
 /* Source: lite/src/cache/discourse-application-cache-invalidation.ts */
 runtime.register("src/cache/discourse-application-cache-invalidation.js", function(module, exports, require) {
@@ -757,9 +826,13 @@ runtime.register("src/cache/indexeddb-response-cache-store.js", function(module,
 	var indexeddb_response_cache_store_exports = {};
 	__export(indexeddb_response_cache_store_exports, {
 	  IndexedDbResponseCacheStore: () => IndexedDbResponseCacheStore,
+	  selectResponseCacheMigrationEntry: () => selectResponseCacheMigrationEntry,
 	  selectResponseCachePruneIds: () => selectResponseCachePruneIds
 	});
 	module.exports = __toCommonJS(indexeddb_response_cache_store_exports);
+	function selectResponseCacheMigrationEntry(current, legacy) {
+	  return current ? Number(legacy.storedAt) > Number(current.storedAt) ? legacy : current : legacy;
+	}
 	function positiveInteger(value, name) {
 	  if (!Number.isSafeInteger(value) || value < 1)
 	    throw new RangeError(`${name} 必须是正安全整数`);
@@ -796,6 +869,8 @@ runtime.register("src/cache/indexeddb-response-cache-store.js", function(module,
 	  #factory;
 	  #now;
 	  #onError;
+	  #legacyDatabaseNames;
+	  #observer;
 	  #databasePromise = null;
 	  #writesSincePrune = 0;
 	  #prunePromise = null;
@@ -806,7 +881,9 @@ runtime.register("src/cache/indexeddb-response-cache-store.js", function(module,
 	      options.operationTimeoutMs,
 	      "operationTimeoutMs"
 	    ), this.#maxEntries = positiveInteger(options.maxEntries, "maxEntries"), this.#maxBytes = positiveInteger(options.maxBytes, "maxBytes"), this.#factory = options.factory === void 0 ? typeof indexedDB > "u" ? null : indexedDB : options.factory, this.#now = options.now ?? Date.now, this.#onError = options.onError ?? (() => {
-	    });
+	    }), this.#legacyDatabaseNames = Object.freeze([
+	      ...new Set((options.legacyDatabaseNames ?? []).map(String).map((name) => name.trim()).filter((name) => name && name !== this.#databaseName))
+	    ]), this.#observer = options.observer;
 	  }
 	  async read(id) {
 	    const result = await this.#transaction(
@@ -954,13 +1031,155 @@ runtime.register("src/cache/indexeddb-response-cache-store.js", function(module,
 	        store && (store.indexNames.contains("kind") || store.createIndex("kind", "kind"), store.indexNames.contains("tags") || store.createIndex("tags", "tags", { multiEntry: !0 }), store.indexNames.contains("storedAt") || store.createIndex("storedAt", "storedAt"));
 	      }, request.onsuccess = () => {
 	        const database = request.result;
-	        database.onversionchange = () => {
+	        clearTimeout(timeoutId), database.onversionchange = () => {
 	          database.close(), this.#databasePromise === promise && (this.#databasePromise = null);
-	        }, finish(database);
+	        }, this.#migrateLegacyDatabases(database).then(
+	          () => finish(database),
+	          (error) => {
+	            this.#report(error), finish(database);
+	          }
+	        );
 	      }, request.onerror = () => finish(null, request.error), request.onblocked = () => finish(null, new Error("IndexedDB open blocked"));
 	    }), this.#databasePromise = promise, promise.then((database) => {
 	      !database && this.#databasePromise === promise && (this.#databasePromise = null);
 	    }), promise;
+	  }
+	  async #migrateLegacyDatabases(target) {
+	    if (!(!this.#legacyDatabaseNames.length || !this.#factory))
+	      for (const legacyName of this.#legacyDatabaseNames) {
+	        const startedAt = this.#now();
+	        try {
+	          if (await this.#legacyDatabaseMissing(legacyName)) {
+	            this.#observer?.record({
+	              operation: "migrate",
+	              outcome: "skipped",
+	              source: "migration",
+	              key: `${legacyName} -> ${this.#databaseName}`,
+	              durationMs: this.#now() - startedAt,
+	              reason: "旧数据库不存在"
+	            });
+	            continue;
+	          }
+	          const legacy = await this.#readLegacyDatabase(legacyName);
+	          if (legacy === null) {
+	            this.#observer?.record({
+	              operation: "migrate",
+	              outcome: "skipped",
+	              source: "migration",
+	              key: `${legacyName} -> ${this.#databaseName}`,
+	              durationMs: this.#now() - startedAt,
+	              reason: "旧数据库不存在"
+	            });
+	            continue;
+	          }
+	          const migrated = await this.#mergeLegacyEntries(target, legacy.entries), deleted = await this.#deleteLegacyDatabase(legacyName);
+	          this.#observer?.record({
+	            operation: "migrate",
+	            outcome: deleted ? "success" : "partial",
+	            source: "migration",
+	            key: `${legacyName} -> ${this.#databaseName}`,
+	            durationMs: this.#now() - startedAt,
+	            records: migrated,
+	            reason: deleted ? "迁移提交后已删除旧数据库" : "迁移已提交；旧数据库删除被其他页面连接阻塞，将在下次启动重试"
+	          });
+	        } catch (error) {
+	          this.#observer?.record({
+	            operation: "migrate",
+	            outcome: "failure",
+	            source: "migration",
+	            key: `${legacyName} -> ${this.#databaseName}`,
+	            durationMs: this.#now() - startedAt,
+	            error
+	          }), this.#report(error);
+	        }
+	      }
+	  }
+	  async #legacyDatabaseMissing(name) {
+	    const factory = this.#factory;
+	    if (!factory || typeof factory.databases != "function") return !1;
+	    try {
+	      return !(await factory.databases()).some((database) => database.name === name);
+	    } catch {
+	      return !1;
+	    }
+	  }
+	  #readLegacyDatabase(name) {
+	    const factory = this.#factory;
+	    return factory ? new Promise((resolve, reject) => {
+	      let settled = !1, created = !1, database = null;
+	      const finish = (value, cause) => {
+	        settled || (settled = !0, clearTimeout(timeout), database?.close(), cause !== void 0 ? reject(cause) : resolve(value));
+	      }, timeout = setTimeout(
+	        () => finish(null, new Error(`旧 IndexedDB ${name} 读取超时`)),
+	        this.#operationTimeoutMs
+	      );
+	      let request;
+	      try {
+	        request = factory.open(name);
+	      } catch (error) {
+	        finish(null, error);
+	        return;
+	      }
+	      request.onupgradeneeded = () => {
+	        created = !0;
+	      }, request.onerror = () => finish(null, request.error), request.onsuccess = () => {
+	        if (database = request.result, created || !database.objectStoreNames.contains(this.#storeName)) {
+	          finish(Object.freeze({ entries: Object.freeze([]) }));
+	          return;
+	        }
+	        let transaction;
+	        try {
+	          transaction = database.transaction(this.#storeName, "readonly");
+	          const read = transaction.objectStore(this.#storeName).getAll();
+	          read.onsuccess = () => finish(Object.freeze({
+	            entries: Object.freeze(Array.isArray(read.result) ? read.result : [])
+	          })), read.onerror = () => finish(null, read.error), transaction.onabort = () => finish(null, transaction.error), transaction.onerror = () => finish(null, transaction.error);
+	        } catch (error) {
+	          finish(null, error);
+	        }
+	      };
+	    }) : Promise.resolve(null);
+	  }
+	  #mergeLegacyEntries(target, entries) {
+	    return entries.length ? new Promise((resolve, reject) => {
+	      let migrated = 0, transaction;
+	      try {
+	        transaction = target.transaction(this.#storeName, "readwrite");
+	        const store = transaction.objectStore(this.#storeName);
+	        for (const legacy of entries) {
+	          const read = store.get(legacy.id);
+	          read.onsuccess = () => {
+	            const current = read.result ?? null;
+	            selectResponseCacheMigrationEntry(current, legacy) !== current && (store.put(legacy), migrated += 1);
+	          };
+	        }
+	        transaction.oncomplete = () => resolve(migrated), transaction.onabort = () => reject(
+	          transaction.error ?? new Error("旧响应缓存迁移事务已中止")
+	        ), transaction.onerror = () => reject(
+	          transaction.error ?? new Error("旧响应缓存迁移事务失败")
+	        );
+	      } catch (error) {
+	        reject(error);
+	      }
+	    }) : Promise.resolve(0);
+	  }
+	  #deleteLegacyDatabase(name) {
+	    const factory = this.#factory;
+	    return factory ? new Promise((resolve) => {
+	      let settled = !1;
+	      const finish = (deleted) => {
+	        settled || (settled = !0, clearTimeout(timeout), resolve(deleted));
+	      }, timeout = setTimeout(
+	        () => finish(!1),
+	        this.#operationTimeoutMs
+	      );
+	      try {
+	        const request = factory.deleteDatabase(name);
+	        request.onsuccess = () => finish(!0), request.onerror = () => finish(!1), request.onblocked = () => finish(!1);
+	      } catch {
+	        finish(!1);
+	      }
+	    }) : Promise.resolve(!1);
 	  }
 	  async #transaction(mode, initialValue, operation) {
 	    const database = await this.#open();
@@ -1024,7 +1243,7 @@ runtime.register("src/cache/indexeddb-response-cache-store.js", function(module,
 	    error != null && this.#onError(error);
 	  }
 	}
-}, "9e8743dbf8e5060e156abde4e4e0a5e5eb3815966802707f2a91a9c54243500b");
+}, "365147df87141464830cdcfbea329eac717ecd1a11fb605e4284f5a0c6415994");
 
 /* Source: lite/src/cache/reader-cache-management-surface.ts */
 runtime.register("src/cache/reader-cache-management-surface.js", function(module, exports, require) {
@@ -1062,7 +1281,7 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	  {
 	    id: "responses",
 	    title: "收藏、回应与其他数据",
-	    help: "勾选“收藏、回应与其他数据”后清理，会删除收藏列表、给出的回应与点赞、翻译和其他通用接口结果；不会撤销站点上的真实收藏或回应。",
+	    help: "勾选“收藏、回应与其他数据”后清理，会删除收藏列表、给出的回应与点赞、翻译、公共 AI 模型元数据和其他可重新获取的接口结果；不会撤销站点上的真实收藏或回应，也不会删除 AI 服务配置、供应商模型目录或主题总结历史。",
 	    retention: "按接口 8 分钟–180 天"
 	  },
 	  {
@@ -1279,13 +1498,25 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	      const retention = (0, import_reader_settings_dom.settingsElement)(document, "em");
 	      retention.dataset.cacheRetention = definition.id, retention.textContent = definition.retention, row.append(input, copy, retention), list.append(row), this.#selects.set(definition.id, input), this.#stats.set(definition.id, stat), this.scope.listen(input, "change", () => this.#syncButtons());
 	    }
-	    this.#clear = (0, import_reader_settings_dom.settingsButton)(
+	    if (this.#clear = (0, import_reader_settings_dom.settingsButton)(
 	      document,
 	      "ldp-cache-clear",
 	      "",
 	      "trash",
 	      "清理已选缓存"
-	    ), this.#clear.disabled = !0, this.#clear.dataset.settingHelp = "只清理上面已经勾选的缓存类型。不会退出登录，也不会删除站点上的帖子、消息或图片；清理后需要时会重新联网获取。", this.#status = (0, import_reader_settings_dom.settingsElement)(document, "small", "ldp-cache-note"), this.#status.role = "status", this.#status.setAttribute("aria-live", "polite"), content.append(list, this.#clear, this.#status), section.append(content), this.#root.append(section), options.host.append(this.#root), this.scope.add(() => this.#root.remove()), this.scope.listen(this.#clear, "click", () => void this.#clearSelected()), options.headerActions ? (this.#refreshCurrent = (0, import_reader_settings_dom.settingsButton)(
+	    ), this.#clear.disabled = !0, this.#clear.dataset.settingHelp = "只清理上面已经勾选的缓存类型。不会退出登录，也不会删除站点上的帖子、消息或图片；清理后需要时会重新联网获取。", this.#status = (0, import_reader_settings_dom.settingsElement)(document, "small", "ldp-cache-note"), this.#status.role = "status", this.#status.setAttribute("aria-live", "polite"), content.append(list, this.#clear), options.cacheLog && options.saveCacheLog) {
+	      const exportCacheLog = (0, import_reader_settings_dom.settingsButton)(
+	        document,
+	        "ldp-config-action ldp-cache-log-export",
+	        "",
+	        "download",
+	        "导出缓存日志"
+	      );
+	      exportCacheLog.dataset.settingHelp = "导出最近 15 分钟的缓存读写、命中、更新、失效、清理与迁移事实；不包含响应正文、Cookie、凭据或缓存值。", content.append(exportCacheLog), this.scope.listen(exportCacheLog, "click", () => {
+	        this.#exportCacheLog(exportCacheLog);
+	      });
+	    }
+	    content.append(this.#status), section.append(content), this.#root.append(section), options.host.append(this.#root), this.scope.add(() => this.#root.remove()), this.scope.listen(this.#clear, "click", () => void this.#clearSelected()), options.headerActions ? (this.#refreshCurrent = (0, import_reader_settings_dom.settingsButton)(
 	      document,
 	      "ldp-reader-refresh ldp-icon-btn",
 	      "清除当前帖子缓存并刷新",
@@ -1367,14 +1598,58 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	  destroy() {
 	    this.scope.destroy();
 	  }
+	  async #exportCacheLog(button) {
+	    const observer = this.#options.cacheLog, save = this.#options.saveCacheLog;
+	    if (!(!observer || !save || button.disabled)) {
+	      button.disabled = !0;
+	      try {
+	        const generatedAt = Date.now(), snapshot = observer.snapshot, records = [
+	          {
+	            recordType: "meta",
+	            logType: "cache",
+	            schemaVersion: 1,
+	            generatedAt,
+	            generatedAtIso: new Date(generatedAt).toISOString(),
+	            retentionMs: 15 * 6e4,
+	            eventCount: snapshot.events.length,
+	            dropped: snapshot.dropped,
+	            privacy: "cache keys and metadata only; no values, bodies, headers, cookies, authorization, or credentials"
+	          },
+	          ...snapshot.events.map((event) => ({
+	            recordType: "cache-event",
+	            ...event,
+	            atIso: new Date(event.at).toISOString()
+	          }))
+	        ], timestamp = new Date(generatedAt).toISOString().replace(/\.\d{3}Z$/, "Z").replace(/[:]/g, "-").replace("T", "_");
+	        await save(
+	          `${records.map((record) => JSON.stringify(record)).join(`
+`)}
+`,
+	          `awesome-linuxdo-reader-cache-log-${timestamp}.jsonl`
+	        ), this.#status.textContent = `已导出 ${snapshot.events.length} 条缓存事实。`;
+	      } catch (cause) {
+	        this.#options.onError?.(cause), this.#status.textContent = `缓存日志导出失败：${cause instanceof Error ? cause.message : "未知错误"}`;
+	      } finally {
+	        button.disabled = !1;
+	      }
+	    }
+	  }
 	  async #clearSelected() {
 	    if (this.#busy) return;
-	    const selected = new Set(
+	    const startedAt = Date.now(), selected = new Set(
 	      [...this.#selects].filter(([, input]) => input.checked).map(([id]) => id)
 	    );
 	    if (!selected.size) return;
 	    this.#setBusy(!0, "等待确认清理已选缓存…");
 	    let releasePreparation = () => {
+	    };
+	    const applicationResumes = [], resumeApplications = () => {
+	      for (const resume of applicationResumes.splice(0))
+	        try {
+	          resume();
+	        } catch (cause) {
+	          this.#options.onError?.(cause);
+	        }
 	    };
 	    try {
 	      if (this.#options.configuration) {
@@ -1398,6 +1673,16 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	          messages.push(message), failures.set(category, messages);
 	        }
 	        cause !== void 0 && this.#options.onError?.(cause);
+	      }, clearApplication = async (categories) => {
+	        if (!(!categories.length || !this.#options.applicationCaches))
+	          try {
+	            const result = await this.#options.applicationCaches.clear(categories);
+	            result.resume && applicationResumes.push(result.resume);
+	            for (const category of result.failed)
+	              categories.includes(category) && fail([category], "应用内存热缓存未清理");
+	          } catch (cause) {
+	            fail(categories, "应用内存热缓存未清理", cause);
+	          }
 	      }, clearing = new Set(selected);
 	      if (this.#options.prepareClear)
 	        try {
@@ -1408,6 +1693,8 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	        } catch (cause) {
 	          fail([...selected], "缓存清理准备失败", cause);
 	        }
+	      for (const category of failures.keys()) clearing.delete(category);
+	      await clearApplication([...clearing].filter((category) => category === "users" || category === "notifications" || category === "responses"));
 	      for (const category of failures.keys()) clearing.delete(category);
 	      if (clearing.has("assets") && this.#options.assetCaches)
 	        try {
@@ -1439,15 +1726,7 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	        } catch (cause) {
 	          fail(responseCategories, "统一响应缓存未清理", cause);
 	        }
-	      if (clearing.size && this.#options.applicationCaches)
-	        try {
-	          const result = await this.#options.applicationCaches.clear([...clearing]);
-	          for (const category of result.failed)
-	            clearing.has(category) && fail([category], "应用内存热缓存未清理");
-	        } catch (cause) {
-	          fail([...clearing], "应用内存热缓存未清理", cause);
-	        }
-	      if (clearing.has("history"))
+	      if (clearing.has("topics") && await clearApplication(["topics"]), clearing.has("history"))
 	        try {
 	          this.#options.history.clear(), this.#options.chronicle?.clear();
 	        } catch (cause) {
@@ -1464,20 +1743,39 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	      releasePreparation(), releasePreparation = () => {
 	      };
 	      const refreshed = await this.refresh();
-	      if (failures.size) {
+	      for (const category of selected)
+	        this.#options.cacheLog?.record({
+	          operation: "clear",
+	          outcome: failures.has(category) ? "partial" : "success",
+	          source: "management",
+	          key: category,
+	          durationMs: Date.now() - startedAt,
+	          ...failures.has(category) ? { reason: failures.get(category).join("；") } : {}
+	        });
+	      if (resumeApplications(), failures.size) {
 	        const labels = CATEGORIES.filter(({ id }) => failures.has(id)).map(({ title }) => title);
 	        this.#options.notify?.("部分本地缓存未能清理"), this.#status.textContent = `部分缓存已清理；未完成：${labels.join("、")}。已保留勾选，可重试。`;
 	      } else
 	        this.#options.notify?.("已清理所选本地缓存"), this.#status.textContent = refreshed ? "清理完成；需要的数据会按需重新获取。" : "清理已完成，但最新缓存统计读取失败；可稍后重新打开数据管理确认。";
 	    } catch (cause) {
-	      this.#options.onError?.(cause), this.#status.textContent = "清理失败，请稍后重试。";
+	      this.#options.onError?.(cause);
+	      for (const category of selected)
+	        this.#options.cacheLog?.record({
+	          operation: "clear",
+	          outcome: "failure",
+	          source: "management",
+	          key: category,
+	          durationMs: Date.now() - startedAt,
+	          error: cause
+	        });
+	      this.#status.textContent = "清理失败，请稍后重试。";
 	    } finally {
 	      try {
 	        releasePreparation();
 	      } catch (cause) {
 	        this.#options.onError?.(cause);
 	      }
-	      this.#setBusy(!1);
+	      resumeApplications(), this.#setBusy(!1);
 	    }
 	  }
 	  async #clearCurrent() {
@@ -1603,7 +1901,7 @@ runtime.register("src/cache/reader-cache-management-surface.js", function(module
 	    this.#configStatus && (this.#configStatus.textContent = message);
 	  }
 	}
-}, "f78298bd3cb1be0e04c52c89d01440aa85c7e485ea4b0bf2990b46172e0bba93");
+}, "8dc036f4f82253f2ad660a24f919bef2fc389f71b81af98edbab7591ea70f5e1");
 
 /* Source: lite/src/cache/reader-collection-page-repository.ts */
 runtime.register("src/cache/reader-collection-page-repository.js", function(module, exports, require) {
@@ -1975,6 +2273,13 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	function matchesInvalidation(entry, query) {
 	  return !!(query.all || query.ids?.includes(entry.id) || query.kinds?.includes(entry.kind) || query.tags?.some((tag) => entry.tags.includes(tag)));
 	}
+	function invalidationKey(query) {
+	  return query.all ? "*" : [
+	    ...(query.ids ?? []).map((value) => `id:${value}`),
+	    ...(query.kinds ?? []).map((value) => `kind:${value}`),
+	    ...(query.tags ?? []).map((value) => `tag:${value}`)
+	  ].join("|") || "(empty)";
+	}
 	class ResponseRepository {
 	  #store;
 	  #maxMemoryEntries;
@@ -1986,6 +2291,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	  #flightHeartbeatMs;
 	  #flightWaitTimeoutMs;
 	  #onPersistenceError;
+	  #observer;
 	  #memory = /* @__PURE__ */ new Map();
 	  #inflight = /* @__PURE__ */ new Map();
 	  #writes = /* @__PURE__ */ new Map();
@@ -1998,11 +2304,11 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      options.flightWaitTimeoutMs ?? 65e3,
 	      "flightWaitTimeoutMs"
 	    ), this.#onPersistenceError = options.onPersistenceError ?? (() => {
-	    });
+	    }), this.#observer = options.observer;
 	  }
 	  async read(rawPolicy) {
-	    const policy = normalizePolicy(rawPolicy);
-	    let entry = this.#memory.get(policy.id);
+	    const policy = normalizePolicy(rawPolicy), startedAt = this.#now();
+	    let entry = this.#memory.get(policy.id), source = entry ? "memory" : "indexeddb", readError, reason = "";
 	    if (entry)
 	      this.#memory.delete(policy.id), this.#memory.set(policy.id, entry);
 	    else {
@@ -2010,27 +2316,61 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      try {
 	        entry = await this.#store.read(policy.id) ?? void 0;
 	      } catch (error) {
-	        this.#onPersistenceError(error);
+	        this.#onPersistenceError(error), readError = error;
 	      }
 	      if (epoch !== this.#epoch)
-	        entry = void 0;
+	        entry = void 0, reason = "读取期间缓存世代已失效";
 	      else if (entry && this.#validEntry(entry, policy))
 	        this.#remember(entry);
 	      else {
-	        if (entry)
+	        if (entry) {
+	          reason = "持久记录与当前 schema 或缓存身份不兼容";
 	          try {
 	            await this.#store.invalidate({ ids: [policy.id] });
 	          } catch (error) {
 	            this.#onPersistenceError(error);
 	          }
+	        }
 	        entry = void 0;
 	      }
 	    }
 	    if (!entry || !this.#validEntry(entry, policy))
-	      return Object.freeze({ state: "miss" });
+	      return this.#record({
+	        operation: "read",
+	        outcome: "miss",
+	        source,
+	        key: policy.id,
+	        kind: policy.kind,
+	        tags: policy.tags,
+	        durationMs: this.#now() - startedAt,
+	        ...reason ? { reason } : {},
+	        ...readError === void 0 ? {} : { error: readError }
+	      }), Object.freeze({ state: "miss" });
 	    const age = Math.max(0, this.#now() - entry.storedAt);
-	    return entry.permanent !== !0 && (age > policy.retainForMs || entry.expiresAt <= this.#now()) ? (await this.#invalidateWithReport({ ids: [policy.id] }, !0), Object.freeze({ state: "miss" })) : Object.freeze({
-	      state: age <= policy.freshForMs ? "fresh" : "stale",
+	    if (entry.permanent !== !0 && (age > policy.retainForMs || entry.expiresAt <= this.#now()))
+	      return await this.#invalidateWithReport({ ids: [policy.id] }, !0), this.#record({
+	        operation: "read",
+	        outcome: "miss",
+	        source,
+	        key: policy.id,
+	        kind: policy.kind,
+	        tags: policy.tags,
+	        durationMs: this.#now() - startedAt,
+	        sizeBytes: entry.bytes,
+	        reason: "超过 retain 生命周期"
+	      }), Object.freeze({ state: "miss" });
+	    const state = age <= policy.freshForMs ? "fresh" : "stale";
+	    return this.#record({
+	      operation: "read",
+	      outcome: state,
+	      source,
+	      key: policy.id,
+	      kind: policy.kind,
+	      tags: policy.tags,
+	      durationMs: this.#now() - startedAt,
+	      sizeBytes: entry.bytes
+	    }), Object.freeze({
+	      state,
 	      value: entry.value,
 	      storedAt: entry.storedAt
 	    });
@@ -2042,19 +2382,58 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	   * 普通响应仍使用 read() 的容错路径，持久层故障不会扩大成正文请求失败。
 	   */
 	  async readPersistent(rawPolicy) {
-	    const policy = normalizePolicy(rawPolicy), pending = this.#writes.get(policy.id);
+	    const policy = normalizePolicy(rawPolicy), startedAt = this.#now(), pending = this.#writes.get(policy.id);
 	    pending && await pending;
 	    let entry;
 	    try {
 	      entry = await this.#store.read(policy.id);
 	    } catch (error) {
-	      throw this.#onPersistenceError(error), error;
+	      throw this.#onPersistenceError(error), this.#record({
+	        operation: "read",
+	        outcome: "failure",
+	        source: "indexeddb",
+	        key: policy.id,
+	        kind: policy.kind,
+	        tags: policy.tags,
+	        durationMs: this.#now() - startedAt,
+	        error
+	      }), error;
 	    }
 	    if (!entry || !this.#validEntry(entry, policy))
-	      return Object.freeze({ state: "miss" });
+	      return this.#record({
+	        operation: "read",
+	        outcome: "miss",
+	        source: "indexeddb",
+	        key: policy.id,
+	        kind: policy.kind,
+	        tags: policy.tags,
+	        durationMs: this.#now() - startedAt
+	      }), Object.freeze({ state: "miss" });
 	    const age = Math.max(0, this.#now() - entry.storedAt);
-	    return entry.permanent !== !0 && (age > policy.retainForMs || entry.expiresAt <= this.#now()) ? Object.freeze({ state: "miss" }) : Object.freeze({
-	      state: age <= policy.freshForMs ? "fresh" : "stale",
+	    if (entry.permanent !== !0 && (age > policy.retainForMs || entry.expiresAt <= this.#now()))
+	      return this.#record({
+	        operation: "read",
+	        outcome: "miss",
+	        source: "indexeddb",
+	        key: policy.id,
+	        kind: policy.kind,
+	        tags: policy.tags,
+	        durationMs: this.#now() - startedAt,
+	        sizeBytes: entry.bytes,
+	        reason: "超过 retain 生命周期"
+	      }), Object.freeze({ state: "miss" });
+	    const state = age <= policy.freshForMs ? "fresh" : "stale";
+	    return this.#record({
+	      operation: "read",
+	      outcome: state,
+	      source: "indexeddb",
+	      key: policy.id,
+	      kind: policy.kind,
+	      tags: policy.tags,
+	      durationMs: this.#now() - startedAt,
+	      sizeBytes: entry.bytes
+	    }), Object.freeze({
+	      state,
 	      value: entry.value,
 	      storedAt: entry.storedAt
 	    });
@@ -2104,7 +2483,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    });
 	  }
 	  async write(rawPolicy, value, options = {}) {
-	    const policy = normalizePolicy(rawPolicy), storedAt = Math.max(
+	    const policy = normalizePolicy(rawPolicy), startedAt = this.#now(), storedAt = Math.max(
 	      this.#now(),
 	      (this.#memory.get(policy.id)?.storedAt ?? -1) + 1
 	    ), entry = Object.freeze({
@@ -2118,14 +2497,26 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      value,
 	      ...policy.permanent === !0 ? { permanent: !0 } : {}
 	    });
-	    if (this.#remember(entry), !policy.persist) return;
+	    if (this.#remember(entry), !policy.persist) {
+	      this.#record({
+	        operation: "write",
+	        outcome: "success",
+	        source: "memory",
+	        key: policy.id,
+	        kind: policy.kind,
+	        tags: policy.tags,
+	        durationMs: this.#now() - startedAt,
+	        sizeBytes: entry.bytes
+	      });
+	      return;
+	    }
 	    const previous = this.#writes.get(policy.id) ?? Promise.resolve();
-	    let persisted = !1;
+	    let persisted = !1, persistenceError;
 	    const write = previous.catch(() => {
 	    }).then(async () => {
 	      await this.#store.write(entry), persisted = !0;
 	    }).catch((error) => {
-	      this.#onPersistenceError(error);
+	      this.#onPersistenceError(error), persistenceError = error;
 	    });
 	    if (this.#writes.set(policy.id, write), await write, persisted && options.publish !== !1)
 	      try {
@@ -2133,12 +2524,47 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      } catch (error) {
 	        this.#onPersistenceError(error);
 	      }
-	    this.#writes.get(policy.id) === write && this.#writes.delete(policy.id);
+	    this.#writes.get(policy.id) === write && this.#writes.delete(policy.id), this.#record({
+	      operation: "write",
+	      outcome: persisted ? "success" : "failure",
+	      source: "indexeddb",
+	      key: policy.id,
+	      kind: policy.kind,
+	      tags: policy.tags,
+	      durationMs: this.#now() - startedAt,
+	      sizeBytes: entry.bytes,
+	      ...persistenceError === void 0 ? {} : { error: persistenceError }
+	    });
 	  }
 	  /** WebDAV 等受控迁移入口：仅在远端版本更新时保留原 storedAt 写回。 */
 	  async restore(rawPolicy, value, storedAtValue, options = {}) {
-	    const policy = normalizePolicy(rawPolicy), storedAt = Math.max(0, Math.floor(storedAtValue));
-	    if (!Number.isSafeInteger(storedAt) || policy.permanent !== !0 && storedAt + policy.retainForMs <= this.#now() || ((await this.read(policy)).storedAt ?? -1) >= storedAt) return;
+	    const policy = normalizePolicy(rawPolicy), startedAt = this.#now(), storedAt = Math.max(0, Math.floor(storedAtValue));
+	    if (!Number.isSafeInteger(storedAt) || policy.permanent !== !0 && storedAt + policy.retainForMs <= this.#now()) {
+	      this.#record({
+	        operation: "restore",
+	        outcome: "skipped",
+	        source: "memory",
+	        key: policy.id,
+	        kind: policy.kind,
+	        tags: policy.tags,
+	        durationMs: this.#now() - startedAt,
+	        reason: "传入版本已超期或时间无效"
+	      });
+	      return;
+	    }
+	    if (((await this.read(policy)).storedAt ?? -1) >= storedAt) {
+	      this.#record({
+	        operation: "restore",
+	        outcome: "skipped",
+	        source: "memory",
+	        key: policy.id,
+	        kind: policy.kind,
+	        tags: policy.tags,
+	        durationMs: this.#now() - startedAt,
+	        reason: "本机版本不旧于待恢复版本"
+	      });
+	      return;
+	    }
 	    const entry = Object.freeze({
 	      schemaVersion: 1,
 	      id: policy.id,
@@ -2150,14 +2576,26 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      value,
 	      ...policy.permanent === !0 ? { permanent: !0 } : {}
 	    });
-	    if (this.#remember(entry), !policy.persist) return;
+	    if (this.#remember(entry), !policy.persist) {
+	      this.#record({
+	        operation: "restore",
+	        outcome: "success",
+	        source: "memory",
+	        key: policy.id,
+	        kind: policy.kind,
+	        tags: policy.tags,
+	        durationMs: this.#now() - startedAt,
+	        sizeBytes: entry.bytes
+	      });
+	      return;
+	    }
 	    const previous = this.#writes.get(policy.id) ?? Promise.resolve();
-	    let persisted = !1;
+	    let persisted = !1, persistenceError;
 	    const write = previous.catch(() => {
 	    }).then(async () => {
 	      await this.#store.write(entry), persisted = !0;
 	    }).catch((error) => {
-	      this.#onPersistenceError(error);
+	      this.#onPersistenceError(error), persistenceError = error;
 	    });
 	    if (this.#writes.set(policy.id, write), await write, persisted && options.publish !== !1)
 	      try {
@@ -2165,10 +2603,20 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      } catch (error) {
 	        this.#onPersistenceError(error);
 	      }
-	    this.#writes.get(policy.id) === write && this.#writes.delete(policy.id);
+	    this.#writes.get(policy.id) === write && this.#writes.delete(policy.id), this.#record({
+	      operation: "restore",
+	      outcome: persisted ? "success" : "failure",
+	      source: "indexeddb",
+	      key: policy.id,
+	      kind: policy.kind,
+	      tags: policy.tags,
+	      durationMs: this.#now() - startedAt,
+	      sizeBytes: entry.bytes,
+	      ...persistenceError === void 0 ? {} : { error: persistenceError }
+	    });
 	  }
 	  async merge(rawPolicy, incoming, mergeValues) {
-	    const policy = normalizePolicy(rawPolicy), memory = this.#memory.get(policy.id), localValue = !this.#store.merge && memory && this.#validEntry(memory, policy) ? mergeValues(memory.value, incoming) : incoming;
+	    const policy = normalizePolicy(rawPolicy), startedAt = this.#now(), memory = this.#memory.get(policy.id), localValue = !this.#store.merge && memory && this.#validEntry(memory, policy) ? mergeValues(memory.value, incoming) : incoming;
 	    let committed = Object.freeze({
 	      schemaVersion: 1,
 	      id: policy.id,
@@ -2183,9 +2631,19 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    if (committed = Object.freeze({
 	      ...committed,
 	      expiresAt: policy.permanent === !0 ? Number.MAX_SAFE_INTEGER : committed.storedAt + policy.retainForMs
-	    }), this.#remember(committed), !policy.persist) return committed.value;
+	    }), this.#remember(committed), !policy.persist)
+	      return this.#record({
+	        operation: "merge",
+	        outcome: "success",
+	        source: "memory",
+	        key: policy.id,
+	        kind: policy.kind,
+	        tags: policy.tags,
+	        durationMs: this.#now() - startedAt,
+	        sizeBytes: committed.bytes
+	      }), committed.value;
 	    const previous = this.#writes.get(policy.id) ?? Promise.resolve();
-	    let persisted = !1;
+	    let persisted = !1, persistenceError;
 	    const write = previous.catch(() => {
 	    }).then(async () => {
 	      if (this.#store.merge) {
@@ -2216,7 +2674,7 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	        await this.#store.write(committed);
 	      persisted = !0;
 	    }).catch((error) => {
-	      this.#onPersistenceError(error);
+	      this.#onPersistenceError(error), persistenceError = error;
 	    });
 	    if (this.#writes.set(policy.id, write), await write, persisted)
 	      try {
@@ -2224,7 +2682,17 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      } catch (error) {
 	        this.#onPersistenceError(error);
 	      }
-	    return this.#writes.get(policy.id) === write && (this.#writes.delete(policy.id), persisted && this.#remember(committed)), committed.value;
+	    return this.#writes.get(policy.id) === write && (this.#writes.delete(policy.id), persisted && this.#remember(committed)), this.#record({
+	      operation: "merge",
+	      outcome: persisted ? "success" : "failure",
+	      source: "indexeddb",
+	      key: policy.id,
+	      kind: policy.kind,
+	      tags: policy.tags,
+	      durationMs: this.#now() - startedAt,
+	      sizeBytes: committed.bytes,
+	      ...persistenceError === void 0 ? {} : { error: persistenceError }
+	    }), committed.value;
 	  }
 	  async invalidate(query, publish = !0) {
 	    const report = await this.#invalidateWithReport(query, publish);
@@ -2235,12 +2703,30 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	   * 不撤销其他 cache flight；不得用于用户可见缓存清理或领域失效。
 	   */
 	  async prune(query) {
+	    const startedAt = this.#now();
+	    let memoryEntries = 0;
 	    for (const [id, entry] of this.#memory)
-	      matchesInvalidation(entry, query) && this.#memory.delete(id);
+	      matchesInvalidation(entry, query) && (this.#memory.delete(id), memoryEntries += 1);
 	    this.#writes.size && await Promise.all(this.#writes.values());
 	    const result = await this.#store.invalidate(query);
 	    if (result && !result.ok)
-	      throw result.error ?? new Error("响应缓存内部 generation 修剪失败");
+	      throw this.#record({
+	        operation: "prune",
+	        outcome: "failure",
+	        source: "indexeddb",
+	        key: invalidationKey(query),
+	        durationMs: this.#now() - startedAt,
+	        records: memoryEntries,
+	        error: result.error
+	      }), result.error ?? new Error("响应缓存内部 generation 修剪失败");
+	    this.#record({
+	      operation: "prune",
+	      outcome: "success",
+	      source: "indexeddb",
+	      key: invalidationKey(query),
+	      durationMs: this.#now() - startedAt,
+	      records: memoryEntries
+	    });
 	  }
 	  /**
 	   * 只忘记当前标签页的内存副本，让 owner 重新读取共享持久缓存。
@@ -2250,12 +2736,20 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    let removed = 0;
 	    for (const [id, entry] of this.#memory)
 	      matchesInvalidation(entry, query) && (this.#memory.delete(id), removed += 1);
-	    return removed;
+	    return this.#record({
+	      operation: "invalidate",
+	      outcome: "success",
+	      source: "memory",
+	      key: invalidationKey(query),
+	      records: removed,
+	      reason: "仅丢弃当前标签页内存副本"
+	    }), removed;
 	  }
 	  async invalidateWithReport(query, publish = !0) {
 	    return this.#invalidateWithReport(query, publish);
 	  }
 	  async #invalidateWithReport(query, publish) {
+	    const startedAt = this.#now();
 	    this.#epoch += 1;
 	    let memoryEntries = 0;
 	    for (const [id, entry] of this.#memory)
@@ -2282,16 +2776,40 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      } catch (error) {
 	        this.#onPersistenceError(error), failures.push(Object.freeze({ stage: "broadcast", cause: error }));
 	      }
-	    return Object.freeze({
+	    const report = Object.freeze({
 	      memoryEntries,
 	      failures: Object.freeze(failures),
 	      complete: failures.length === 0
 	    });
+	    return this.#record({
+	      operation: "invalidate",
+	      outcome: report.complete ? "success" : "partial",
+	      source: publish ? "cross-tab" : "indexeddb",
+	      key: invalidationKey(query),
+	      durationMs: this.#now() - startedAt,
+	      records: memoryEntries,
+	      ...failures.length ? {
+	        reason: failures.map(({ stage }) => stage).join(","),
+	        error: new AggregateError(
+	          failures.map(({ cause }) => cause),
+	          "响应缓存失效部分失败"
+	        )
+	      } : {}
+	    }), report;
 	  }
 	  applyExternalInvalidation(query) {
 	    this.#epoch += 1;
+	    let removed = 0;
 	    for (const [id, entry] of this.#memory)
-	      matchesInvalidation(entry, query) && this.#memory.delete(id);
+	      matchesInvalidation(entry, query) && (this.#memory.delete(id), removed += 1);
+	    this.#record({
+	      operation: "invalidate",
+	      outcome: "success",
+	      source: "cross-tab",
+	      key: invalidationKey(query),
+	      records: removed,
+	      reason: "接收其他标签页失效广播"
+	    });
 	  }
 	  memoryStats() {
 	    let bytes = 0;
@@ -2299,12 +2817,20 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	    return Object.freeze({ entries: this.#memory.size, bytes });
 	  }
 	  async records() {
+	    const startedAt = this.#now();
 	    this.#writes.size && await Promise.all(this.#writes.values());
 	    let persistent = [];
 	    try {
 	      persistent = await this.#store.records?.() ?? [];
 	    } catch (error) {
-	      throw this.#onPersistenceError(error), error;
+	      throw this.#onPersistenceError(error), this.#record({
+	        operation: "read",
+	        outcome: "failure",
+	        source: "indexeddb",
+	        key: "*directory*",
+	        durationMs: this.#now() - startedAt,
+	        error
+	      }), error;
 	    }
 	    const records = new Map(
 	      persistent.map((entry) => [entry.id, entry])
@@ -2319,7 +2845,16 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	        bytes: entry.bytes,
 	        ...entry.permanent === !0 ? { permanent: !0 } : {}
 	      }));
-	    return Object.freeze([...records.values()]);
+	    const snapshot = Object.freeze([...records.values()]);
+	    return this.#record({
+	      operation: "read",
+	      outcome: snapshot.length ? "hit" : "miss",
+	      source: "indexeddb",
+	      key: "*directory*",
+	      durationMs: this.#now() - startedAt,
+	      records: snapshot.length,
+	      sizeBytes: snapshot.reduce((sum, entry) => sum + entry.bytes, 0)
+	    }), snapshot;
 	  }
 	  /**
 	   * 仅供受控的数据迁移 owner 导出仍在保留期内的完整缓存记录。
@@ -2388,7 +2923,31 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	          }, this.#flightHeartbeatMs);
 	        }
 	      }
-	      const epoch = this.#epoch, value = await loader(options.signal);
+	      const epoch = this.#epoch, loadStartedAt = this.#now();
+	      let value;
+	      try {
+	        value = await loader(options.signal), this.#record({
+	          operation: "load",
+	          outcome: "success",
+	          source: "network",
+	          key: policy.id,
+	          kind: policy.kind,
+	          tags: policy.tags,
+	          durationMs: this.#now() - loadStartedAt,
+	          sizeBytes: this.#estimateBytes(value)
+	        });
+	      } catch (error) {
+	        throw this.#record({
+	          operation: "load",
+	          outcome: "failure",
+	          source: "network",
+	          key: policy.id,
+	          kind: policy.kind,
+	          tags: policy.tags,
+	          durationMs: this.#now() - loadStartedAt,
+	          error
+	        }), error;
+	      }
 	      return throwIfAborted(), cacheMode !== "no-store" && epoch === this.#epoch && (lease && this.#flightPort ? await this.#flightPort.commitFlight(lease, () => this.write(policy, value)) : await this.write(policy, value)), value;
 	    } catch (error) {
 	      throwIfAborted();
@@ -2402,7 +2961,15 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      const canFallback = options.canFallback?.(error) ?? !0;
 	      if (options.allowStaleOnError !== !1 && cached.state === "stale" && canFallback) {
 	        const value = cached.value;
-	        return options.mapStaleFallback ? options.mapStaleFallback(value, error) : value;
+	        return this.#record({
+	          operation: "load",
+	          outcome: "fallback",
+	          source: "memory",
+	          key: policy.id,
+	          kind: policy.kind,
+	          tags: policy.tags,
+	          reason: error instanceof Error ? error.message : String(error)
+	        }), options.mapStaleFallback ? options.mapStaleFallback(value, error) : value;
 	      }
 	      throw error;
 	    } finally {
@@ -2437,13 +3004,19 @@ runtime.register("src/cache/response-repository.js", function(module, exports, r
 	      this.#memory.delete(evictedId), bytes -= oldest?.bytes ?? 0;
 	    }
 	  }
+	  #record(event) {
+	    try {
+	      this.#observer?.record(event);
+	    } catch {
+	    }
+	  }
 	}
 	class ResponseCacheFlightTimeoutError extends Error {
 	  constructor() {
 	    super("等待共享缓存请求超时"), this.name = "TimeoutError";
 	  }
 	}
-}, "4071456c5d0195d1a502791abf8f9b0f4ee8e2fa3bcdc9edaaa347bb394eedc2");
+}, "25b189122c9189ea581a2d5fdd407f67be6d4d85838ab4de9185467741e5e915");
 
 /* Source: lite/src/cache/topic-snapshot-repository.ts */
 runtime.register("src/cache/topic-snapshot-repository.js", function(module, exports, require) {
@@ -3225,6 +3798,7 @@ runtime.register("src/collection/reader-collection-floating-window.js", function
 	    }));
 	  }
 	  #requestMoreIfNearEnd(explicitScroll = !1) {
+	    if (!this.#list.isConnected || this.#list.closest("[hidden]")) return;
 	    const scrollTop = Math.max(0, Number(this.#list.scrollTop) || 0), clientHeight = Math.max(0, Number(this.#list.clientHeight) || 0), scrollHeight = Math.max(0, Number(this.#list.scrollHeight) || 0);
 	    (explicitScroll || clientHeight > 0) && scrollTop + clientHeight >= scrollHeight - 96 && this.#requestMore();
 	  }
@@ -3372,7 +3946,7 @@ runtime.register("src/collection/reader-collection-floating-window.js", function
 	    this.scope.destroy();
 	  }
 	}
-}, "2d28396e95b4a7c0c9dca6205a0446b7d172f0fb6ef10cb582d94e4e030c5957");
+}, "6eb405780e4cf5dad1dfa967dde70ffc7a22ea66359c9a2d301d95698eb70809");
 
 /* Source: lite/src/collection/reader-collection-hydration.ts */
 runtime.register("src/collection/reader-collection-hydration.js", function(module, exports, require) {
@@ -4611,6 +5185,15 @@ runtime.register("src/collection/reader-unwanted-topic-repository.js", function(
 	  }
 	  return "";
 	}
+	function mergeMatchedRules(...values) {
+	  const rules = /* @__PURE__ */ new Map();
+	  for (const value of values)
+	    for (const part of text(value, 2e3).split("；")) {
+	      const rule = part.trim(), key = rule.toLocaleLowerCase("zh-CN");
+	      key && !rules.has(key) && rules.set(key, rule);
+	    }
+	  return [...rules.values()].join("；").slice(0, 2e3);
+	}
 	function normalizeHref(value, topicId) {
 	  const href = text(value, 512);
 	  if (!href) return `/t/${topicId}`;
@@ -4677,7 +5260,7 @@ runtime.register("src/collection/reader-unwanted-topic-repository.js", function(
 	  if (!right) return left;
 	  if (left.topicId !== right.topicId)
 	    return left.updatedAt >= right.updatedAt ? left : right;
-	  const recent = left.updatedAt >= right.updatedAt ? left : right, older = recent === left ? right : left;
+	  const recent = left.updatedAt >= right.updatedAt ? left : right, older = recent === left ? right : left, manual = left.source === "manual" ? right.source === "manual" ? recent : left : right.source === "manual" ? right : null;
 	  return normalizeReaderUnwantedTopicRecord({
 	    ...older,
 	    ...recent,
@@ -4687,9 +5270,10 @@ runtime.register("src/collection/reader-unwanted-topic-repository.js", function(
 	    categoryId: recent.categoryId ?? older.categoryId,
 	    categoryName: recent.categoryName || older.categoryName,
 	    categorySlug: recent.categorySlug || older.categorySlug,
-	    matchedRule: recent.matchedRule || older.matchedRule,
-	    matchedCategory: recent.matchedCategory || older.matchedCategory,
-	    hiddenAt: Math.min(left.hiddenAt, right.hiddenAt),
+	    source: manual ? "manual" : "automatic",
+	    matchedRule: manual ? manual.matchedRule : mergeMatchedRules(older.matchedRule, recent.matchedRule),
+	    matchedCategory: manual ? manual.matchedCategory : recent.matchedCategory || older.matchedCategory,
+	    hiddenAt: manual && left.source !== right.source ? manual.hiddenAt : Math.min(left.hiddenAt, right.hiddenAt),
 	    updatedAt: Math.max(left.updatedAt, right.updatedAt)
 	  });
 	}
@@ -4754,25 +5338,34 @@ runtime.register("src/collection/reader-unwanted-topic-repository.js", function(
 	  }
 	  remember(input) {
 	    this.#mergeStoredBeforeMutation();
-	    const topicId = (0, import_identifiers.discourseTopicId)(input.topicId), previous = this.#snapshot.records.find((entry) => entry.topicId === topicId), now = this.#now(), incoming = normalizeReaderUnwantedTopicRecord({
+	    const topicId = (0, import_identifiers.discourseTopicId)(input.topicId), previous = this.#snapshot.records.find((entry) => entry.topicId === topicId), now = this.#now(), source = input.source ?? previous?.source ?? "manual";
+	    if (source === "automatic" && previous?.source === "manual")
+	      return this.#snapshot;
+	    const base = {
 	      topicId,
-	      title: input.title,
-	      href: input.href,
+	      title: input.title === void 0 ? previous?.title : input.title,
+	      href: input.href === void 0 ? previous?.href : input.href,
 	      note: previous?.note ?? "",
 	      labels: previous?.labels ?? [],
 	      categoryId: input.categoryId === void 0 ? previous?.categoryId ?? null : input.categoryId,
 	      categoryName: input.categoryName === void 0 ? previous?.categoryName ?? "" : input.categoryName,
 	      categorySlug: input.categorySlug === void 0 ? previous?.categorySlug ?? "" : input.categorySlug,
-	      source: input.source ?? previous?.source ?? "manual",
-	      matchedRule: input.matchedRule ?? previous?.matchedRule ?? "",
-	      matchedCategory: input.matchedCategory ?? previous?.matchedCategory ?? !1,
-	      hiddenAt: previous?.hiddenAt ?? now,
-	      updatedAt: now
+	      source,
+	      matchedRule: source === "automatic" ? mergeMatchedRules(previous?.matchedRule, input.matchedRule) : input.matchedRule ?? (previous?.source === "manual" ? previous.matchedRule : ""),
+	      matchedCategory: source === "automatic" ? previous?.source === "automatic" && previous.matchedCategory || input.matchedCategory === !0 : input.matchedCategory ?? (previous?.source === "manual" && previous.matchedCategory),
+	      hiddenAt: previous?.source === "automatic" && source === "manual" ? now : previous?.hiddenAt ?? now
+	    };
+	    let incoming = normalizeReaderUnwantedTopicRecord({
+	      ...base,
+	      updatedAt: previous?.updatedAt ?? now
 	    });
-	    return this.#persistAndCommit([
+	    return previous && JSON.stringify(incoming) === JSON.stringify(previous) ? this.#snapshot : (incoming = normalizeReaderUnwantedTopicRecord({
+	      ...base,
+	      updatedAt: now
+	    }), this.#persistAndCommit([
 	      incoming,
 	      ...this.#snapshot.records.filter((entry) => entry.topicId !== topicId)
-	    ], "remember");
+	    ], "remember"));
 	  }
 	  update(topicIdValue, patch) {
 	    this.#mergeStoredBeforeMutation();
@@ -4851,7 +5444,7 @@ runtime.register("src/collection/reader-unwanted-topic-repository.js", function(
 	    }), this.changes.emit(this.#snapshot), this.#snapshot;
 	  }
 	}
-}, "4052c2d17b20114900ba83d03eddd38803c002a64c71c446c2b7bc4cfcddf00a");
+}, "63363890f9a734c85777aaccb211027c9354a7ee872299542df36539d4e90e50");
 
 /* Source: lite/src/collection/reader-unwanted-topic-view.ts */
 runtime.register("src/collection/reader-unwanted-topic-view.js", function(module, exports, require) {
@@ -4860,7 +5453,7 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	  ReaderUnwantedTopicView: () => ReaderUnwantedTopicView
 	});
 	module.exports = __toCommonJS(reader_unwanted_topic_view_exports);
-	var import_reader_icon = require("../components/reader-icon.js"), import_html_element = require("../dom/html-element.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_unwanted_topic_filter_editor = require("./reader-unwanted-topic-filter-editor.js"), import_reader_collection_floating_window = require("./reader-collection-floating-window.js");
+	var import_reader_icon = require("../components/reader-icon.js"), import_reader_inline_emoji = require("../components/reader-inline-emoji.js"), import_html_element = require("../dom/html-element.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_unwanted_topic_filter_editor = require("./reader-unwanted-topic-filter-editor.js"), import_reader_collection_floating_window = require("./reader-collection-floating-window.js");
 	function closestTarget(event, selector) {
 	  const target = event.target;
 	  return typeof target?.closest == "function" ? target.closest(selector) : null;
@@ -4894,6 +5487,7 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	  #filterCatalog;
 	  #openTarget;
 	  #relativeTime;
+	  #emojiSource;
 	  #notify;
 	  #onError;
 	  #topicPane;
@@ -4932,7 +5526,7 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	  #filterControls = /* @__PURE__ */ new Map();
 	  #categoryLabels = /* @__PURE__ */ new Map();
 	  constructor(options) {
-	    this.#document = options.document, this.#topics = options.topics, this.#filterPreferences = options.filterPreferences, this.#filterCatalog = options.filterCatalog, this.#openTarget = options.openTarget ?? (() => !1), this.#relativeTime = options.relativeTime ?? defaultRelativeTime, this.#notify = options.notify ?? (() => {
+	    this.#document = options.document, this.#emojiSource = options.emojiSource ?? (() => ""), this.#topics = options.topics, this.#filterPreferences = options.filterPreferences, this.#filterCatalog = options.filterCatalog, this.#openTarget = options.openTarget ?? (() => !1), this.#relativeTime = options.relativeTime ?? defaultRelativeTime, this.#notify = options.notify ?? (() => {
 	    }), this.#onError = options.onError ?? (() => {
 	    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.window = new import_reader_floating_window_frame.ReaderFloatingWindowFrame({
 	      document: options.document,
@@ -5074,7 +5668,7 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	    }), this.scope.listen(this.#bulkDone, "click", () => {
 	      this.#bulkMode = !1, this.#bulkSelection.clear(), this.#render();
 	    }), this.scope.listen(this.#bulkSelectAll, "click", () => {
-	      const records = this.#matchingRecords(this.#topics.ordered()), allSelected = records.length > 0 && records.every((record) => this.#bulkSelection.has(record.topicId));
+	      const records = this.#matchingRecords(this.#topics.ordered()).filter((record) => record.source === "manual"), allSelected = records.length > 0 && records.every((record) => this.#bulkSelection.has(record.topicId));
 	      for (const record of records)
 	        allSelected ? this.#bulkSelection.delete(record.topicId) : this.#bulkSelection.add(record.topicId);
 	      this.#render();
@@ -5240,7 +5834,7 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	        return option.value = control.kind, option.textContent = control.label, option;
 	      })
 	    ), this.#addFilter.disabled = availableConditions.length === 0;
-	    const records = this.#matchingRecords(all), matchingIds = new Set(records.map((record) => record.topicId));
+	    const records = this.#matchingRecords(all), restorableRecords = records.filter((record) => record.source === "manual"), matchingIds = new Set(restorableRecords.map((record) => record.topicId));
 	    for (const topicId of this.#bulkSelection)
 	      matchingIds.has(topicId) || this.#bulkSelection.delete(topicId);
 	    this.#mode === "topics" && (this.window.meta.textContent = [
@@ -5249,17 +5843,17 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	      ...categories.length ? [`${categories.length} 个命中类别`] : []
 	    ].join(" · "));
 	    const filtering = !!(this.#search.value.trim() || [...this.#filterControls.values()].some((control) => !!control.select.value));
-	    if (this.#searchResult.hidden = !filtering, this.#searchResult.textContent = filtering ? `${records.length} 条` : "", this.#bulkToggle.hidden = this.#bulkMode, this.#bulkToggle.disabled = all.length === 0, this.#bulkBar.hidden = !this.#bulkMode, this.#bulkMode) {
-	      const selectedCount = this.#bulkSelection.size, allSelected = records.length > 0 && records.every((record) => this.#bulkSelection.has(record.topicId));
-	      this.#bulkStatus.textContent = `当前结果 ${records.length} 个 · 已选 ${selectedCount} 个`, this.#bulkSelectAll.disabled = records.length === 0, this.#bulkSelectAll.querySelector("span").textContent = allSelected ? "取消全选" : "全选当前结果", this.#bulkRestore.disabled = selectedCount === 0, this.#bulkRestore.querySelector("span").textContent = selectedCount ? `批量恢复 ${selectedCount} 个` : "批量恢复";
+	    if (this.#searchResult.hidden = !filtering, this.#searchResult.textContent = filtering ? `${records.length} 条` : "", this.#bulkToggle.hidden = this.#bulkMode, this.#bulkToggle.disabled = !all.some((record) => record.source === "manual"), this.#bulkBar.hidden = !this.#bulkMode, this.#bulkMode) {
+	      const selectedCount = this.#bulkSelection.size, allSelected = restorableRecords.length > 0 && restorableRecords.every((record) => this.#bulkSelection.has(record.topicId));
+	      this.#bulkStatus.textContent = `当前结果 ${records.length} 个 · 可恢复 ${restorableRecords.length} 个 · 已选 ${selectedCount} 个`, this.#bulkSelectAll.disabled = restorableRecords.length === 0, this.#bulkSelectAll.querySelector("span").textContent = allSelected ? "取消全选" : "全选当前结果", this.#bulkRestore.disabled = selectedCount === 0, this.#bulkRestore.querySelector("span").textContent = selectedCount ? `批量恢复 ${selectedCount} 个` : "批量恢复";
 	    }
 	    const visibleRecords = records.slice(0, this.#visibleLimit);
 	    this.#list.replaceChildren(...visibleRecords.map((entry) => this.#topicRow(entry))), records.length || this.#list.append((0, import_html_element.htmlElement)(
 	      this.#document,
 	      "p",
 	      "ldp-unwanted-topic-empty",
-	      filtering ? "没有匹配的 Topic。" : "点击列表里的免打扰图标后，Topic 会消失并收进这里。"
-	    )), this.#footerStatus.textContent = all.length ? this.#bulkMode ? "批量管理只作用于当前搜索与筛选结果。" : "点击 Topic 右侧编辑，可添加标注和多个标签。" : "这里不会修改原站通知级别。", this.#loadMore.hidden = visibleRecords.length >= records.length, this.#loadMore.textContent = this.#loadMore.hidden ? "已全部加载" : `加载更多（${visibleRecords.length}/${records.length}）`;
+	      filtering ? "没有匹配的 Topic。" : "手动免打扰和自动过滤命中都会记录在这里。"
+	    )), this.#footerStatus.textContent = all.length ? this.#bulkMode ? "批量恢复只作用于当前结果中的手动免打扰条目。" : "手动条目可恢复显示；自动条目的显示仍由当前规则控制。" : "这里不会修改原站通知级别。", this.#loadMore.hidden = visibleRecords.length >= records.length, this.#loadMore.textContent = this.#loadMore.hidden ? "已全部加载" : `加载更多（${visibleRecords.length}/${records.length}）`;
 	  }
 	  #topicRow(record) {
 	    const row = (0, import_html_element.htmlElement)(this.#document, "article", "ldp-unwanted-topic-row");
@@ -5275,7 +5869,10 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	          "label",
 	          "ldp-unwanted-topic-select"
 	        ), checkbox = this.#document.createElement("input");
-	        checkbox.type = "checkbox", checkbox.checked = this.#bulkSelection.has(record.topicId), checkbox.dataset.unwantedTopicSelect = String(record.topicId), checkbox.setAttribute("aria-label", `选择 ${record.title}`), select.append(checkbox), leading = select;
+	        checkbox.type = "checkbox", checkbox.checked = this.#bulkSelection.has(record.topicId), checkbox.disabled = record.source !== "manual", checkbox.dataset.unwantedTopicSelect = String(record.topicId), checkbox.setAttribute(
+	          "aria-label",
+	          record.source === "manual" ? `选择 ${record.title}` : `${record.title} 由自动规则管理，不可批量恢复`
+	        ), select.append(checkbox), leading = select;
 	      } else {
 	        const open = this.#document.createElement("button");
 	        open.type = "button", open.className = "ldp-unwanted-topic-open", open.dataset.unwantedTopicOpen = String(record.topicId), open.setAttribute("aria-label", `打开 ${record.title}`), open.append((0, import_reader_icon.createReaderIcon)(this.#document, "eye-off")), leading = open;
@@ -5297,14 +5894,16 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	        )
 	      );
 	      const remainingRule = this.#matchedRuleWithoutCategory(record);
-	      record.source === "automatic" && remainingRule && meta.append(this.#document.createTextNode(` · ${remainingRule}`)), copy.append((0, import_html_element.htmlElement)(this.#document, "strong", "", record.title), meta);
+	      record.source === "automatic" && remainingRule && meta.append(this.#document.createTextNode(` · ${remainingRule}`));
+	      const title = (0, import_html_element.htmlElement)(this.#document, "strong");
+	      (0, import_reader_inline_emoji.renderReaderInlineEmoji)(title, record.title, this.#emojiSource), copy.append(title, meta);
 	      const rowActions2 = (0, import_html_element.htmlElement)(
 	        this.#document,
 	        "div",
 	        "ldp-unwanted-topic-row-actions"
 	      );
 	      if (!this.#bulkMode) {
-	        rowActions2.append(this.#restoreButton(record));
+	        rowActions2.append(this.#recordActionButton(record));
 	        const edit = this.#document.createElement("button");
 	        edit.type = "button", edit.className = "ldp-unwanted-topic-edit", edit.dataset.unwantedTopicEdit = String(record.topicId), edit.setAttribute("aria-label", `编辑 ${record.title} 的标注和标签`), edit.title = "编辑标注和标签", edit.append((0, import_reader_icon.createReaderIcon)(this.#document, "pencil")), rowActions2.append(edit);
 	      }
@@ -5331,13 +5930,13 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	      "div",
 	      "ldp-unwanted-topic-row-actions"
 	    );
-	    rowActions.append(this.#restoreButton(record));
+	    rowActions.append(this.#recordActionButton(record));
 	    const confirm = this.#document.createElement("button");
 	    return confirm.type = "button", confirm.className = "ldp-unwanted-topic-confirm", confirm.dataset.unwantedTopicConfirm = String(record.topicId), confirm.setAttribute("aria-label", `确认 ${record.title} 的标注和标签`), confirm.title = "确认", confirm.append((0, import_reader_icon.createReaderIcon)(this.#document, "check")), rowActions.append(confirm), heading.append(fields, rowActions), row.append(heading), row;
 	  }
-	  #restoreButton(record) {
-	    const restore = this.#document.createElement("button");
-	    return restore.type = "button", restore.className = "ldp-unwanted-topic-restore", restore.dataset.unwantedTopicRestore = String(record.topicId), restore.setAttribute("aria-label", `恢复显示 ${record.title}`), restore.title = "恢复显示", restore.append((0, import_reader_icon.createReaderIcon)(this.#document, "rotate-ccw")), restore;
+	  #recordActionButton(record) {
+	    const action = this.#document.createElement("button");
+	    return action.type = "button", action.className = "ldp-unwanted-topic-restore", record.source === "manual" ? (action.dataset.unwantedTopicRestore = String(record.topicId), action.setAttribute("aria-label", `恢复显示 ${record.title}`), action.title = "恢复显示", action.append((0, import_reader_icon.createReaderIcon)(this.#document, "rotate-ccw")), action) : (action.dataset.unwantedTopicManageRules = String(record.topicId), action.setAttribute("aria-label", `管理 ${record.title} 的自动过滤规则`), action.title = "管理自动过滤规则", action.disabled = !this.#filterEditor || typeof this.#filterPreferences?.update != "function", action.append((0, import_reader_icon.createReaderIcon)(this.#document, "settings")), action);
 	  }
 	  #onClick(event) {
 	    const removeFilter = closestTarget(
@@ -5388,7 +5987,14 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	    );
 	    if (restore) {
 	      const topicId2 = Number(restore.dataset.unwantedTopicRestore);
-	      this.#topicDraft = null, this.#topics.remove(topicId2), this.#notify("已移出不想看；列表下次渲染时恢复显示");
+	      this.#topicDraft = null, this.#topics.remove(topicId2), this.#notify("已移出不想看并恢复显示");
+	      return;
+	    }
+	    if (closestTarget(
+	      event,
+	      "[data-unwanted-topic-manage-rules]"
+	    )) {
+	      this.#topicDraft = null, this.#showSettings();
 	      return;
 	    }
 	    const removeLabel = closestTarget(
@@ -5424,6 +6030,10 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	    );
 	    if (selection) {
 	      const topicId = Number(selection.dataset.unwantedTopicSelect);
+	      if (this.#topics.snapshot.records.find((entry) => entry.topicId === topicId)?.source !== "manual") {
+	        selection.checked = !1;
+	        return;
+	      }
 	      selection.checked ? this.#bulkSelection.add(topicId) : this.#bulkSelection.delete(topicId), this.#render();
 	      return;
 	    }
@@ -5450,7 +6060,7 @@ runtime.register("src/collection/reader-unwanted-topic-view.js", function(module
 	    this.#topicDraft?.topicId === topicId && (input.value = "", !this.#topicDraft.labels.some((label) => labelKey(label) === key) && (this.#topicDraft.labels = [...this.#topicDraft.labels, raw], this.#render()));
 	  }
 	}
-}, "ba45ed198cd57c368a5de3b387f960a902e2bf3a1249c25d83626fef61834a6d");
+}, "ef23b91975291b99f8ac6c11ff822128d9aa5556af3eb5b0010c66117481a419");
 
 /* Source: lite/src/discourse/identifiers.ts */
 runtime.register("src/discourse/identifiers.js", function(module, exports, require) {
@@ -7430,6 +8040,9 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	        return normalized.replace(/\{size\}/g, String(size));
 	      }
 	    },
+	    emojiSource(id) {
+	      return discourseNativeEmojiUrl(host, id);
+	    },
 	    categoryName(categoryId) {
 	      return !Number.isSafeInteger(categoryId) || categoryId < 1 ? "" : String(
 	        nativeModelValue(categoryModel(categoryId), "name") ?? ""
@@ -7913,7 +8526,7 @@ runtime.register("src/discourse/native-host-api.js", function(module, exports, r
 	    return this.#container = urlContainer ?? fallbackContainer, this.#container;
 	  }
 	}
-}, "53f3dcccd3da5ae08525cb2bf7c72d015613508e86c7938810afd882594b7135");
+}, "162ada04595d103bec83e0ffa25fe5176ef24fd3b12df7638308110ebda2a990");
 
 /* Source: lite/src/discourse/native-message-bus.ts */
 runtime.register("src/discourse/native-message-bus.js", function(module, exports, require) {
@@ -10525,7 +11138,7 @@ runtime.register("src/history/reader-history-panel-view.js", function(module, ex
 	  ReaderHistoryPanelView: () => ReaderHistoryPanelView
 	});
 	module.exports = __toCommonJS(reader_history_panel_view_exports);
-	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_popover_filter_controls = require("../collection/reader-popover-filter-controls.js"), import_reader_collection_filter_model = require("../collection/reader-collection-filter-model.js"), import_reader_image_fallback = require("../components/reader-image-fallback.js"), import_reader_icon = require("../components/reader-icon.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_search = require("../search/reader-search.js"), import_reader_history_repository = require("./reader-history-repository.js");
+	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_popover_filter_controls = require("../collection/reader-popover-filter-controls.js"), import_reader_collection_filter_model = require("../collection/reader-collection-filter-model.js"), import_reader_image_fallback = require("../components/reader-image-fallback.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_inline_emoji = require("../components/reader-inline-emoji.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_search = require("../search/reader-search.js"), import_reader_history_repository = require("./reader-history-repository.js");
 	const DEFAULT_PAGE_SIZE = 20;
 	function defaultRelativeTime(timestamp, now) {
 	  const elapsed = Math.max(0, now - timestamp), minute = 6e4, hour = 60 * minute, day = 24 * hour;
@@ -10544,6 +11157,7 @@ runtime.register("src/history/reader-history-panel-view.js", function(module, ex
 	  #notify;
 	  #searchForms;
 	  #avatarSource;
+	  #emojiSource;
 	  #relativeTime;
 	  #now;
 	  #onError;
@@ -10575,7 +11189,7 @@ runtime.register("src/history/reader-history-panel-view.js", function(module, ex
 	      template,
 	      size,
 	      this.#document.baseURI
-	    )), this.#now = options.now ?? Date.now, this.#relativeTime = options.relativeTime ?? ((timestamp) => defaultRelativeTime(timestamp, this.#now())), this.#onError = options.onError ?? (() => {
+	    )), this.#emojiSource = options.emojiSource ?? (() => ""), this.#now = options.now ?? Date.now, this.#relativeTime = options.relativeTime ?? ((timestamp) => defaultRelativeTime(timestamp, this.#now())), this.#onError = options.onError ?? (() => {
 	    }), this.#preferences = this.#normalizePreferences(options.preferences), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#surface = new import_reader_collection_floating_window.ReaderCollectionFloatingWindow({
 	      document: this.#document,
 	      mount: options.mount,
@@ -10817,7 +11431,7 @@ runtime.register("src/history/reader-history-panel-view.js", function(module, ex
 	    const copy = this.#document.createElement("span");
 	    copy.className = "ldp-notification-copy";
 	    const title = this.#document.createElement("span");
-	    title.className = "ldp-notification-title", title.textContent = displayTitle;
+	    title.className = "ldp-notification-title", (0, import_reader_inline_emoji.renderReaderInlineEmoji)(title, displayTitle, this.#emojiSource);
 	    const meta = this.#document.createElement("span");
 	    meta.className = "ldp-notification-meta ldp-history-subtitle";
 	    const sortTime = this.#preferences.sortMode === "first-viewed" ? entry.firstViewedAt : entry.viewedAt, category = entry.categoryName || (entry.categoryId === null ? "" : `类别 #${entry.categoryId}`);
@@ -10947,7 +11561,7 @@ runtime.register("src/history/reader-history-panel-view.js", function(module, ex
 	      throw new Error("ReaderHistoryPanelView 已销毁");
 	  }
 	}
-}, "3d8b1ed1e4345d2f9e5cc5741eb4a27d0bc28d2a823e27dca8bda27f68fc5202");
+}, "fe8547709fff432618904b6a98da8801b935e8364601f84bc0b862918167e2d7");
 
 /* Source: lite/src/history/reader-history-repository.ts */
 runtime.register("src/history/reader-history-repository.js", function(module, exports, require) {
@@ -13167,7 +13781,7 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	    }
 	  }
 	  #renderRequests(current, events) {
-	    const at = current.at, sent60 = events.filter(
+	    const requestLogScrollTop = this.#requestLog.scrollTop, at = current.at, sent60 = events.filter(
 	      (event) => (event.endedAt || event.queuedAt) >= at - 6e4
 	    ).filter(
 	      (event) => event.phase !== "queued" && !event.controlReason
@@ -13215,7 +13829,7 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	      const lifecycleStart = event.queuedAt || event.startedAt, lifecycleEnd = event.pending ? at : event.endedAt || event.startedAt;
 	      return lifecycleStart <= at && lifecycleEnd >= at - REQUEST_TRACE_MS;
 	    });
-	    this.#renderRequestTrace(traceEvents, at), this.#renderRequestTypes(sent60, at), this.#renderRequestIssues(issues, at), this.#renderRequestLog(events, at), this.#renderTopicDiagnostics(current, issues), this.#renderMediaDiagnostics(current, issues);
+	    this.#renderRequestTrace(traceEvents, at), this.#renderRequestTypes(sent60, at), this.#renderRequestIssues(issues, at), this.#renderRequestLog(events, at, requestLogScrollTop), this.#renderTopicDiagnostics(current, issues), this.#renderMediaDiagnostics(current, issues);
 	    const completedDurations = sent60.filter(
 	      (event) => !event.pending && !["realtime", "presence"].includes(event.type) && event.duration > 0
 	    ).map((event) => event.duration), p95 = percentile95(completedDurations), active = events.filter(
@@ -13577,8 +14191,8 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	      )
 	    );
 	  }
-	  #renderRequestLog(events, at) {
-	    const scrollTop = this.#requestLog.scrollTop, latest = events.slice(-60).reverse();
+	  #renderRequestLog(events, at, scrollTop) {
+	    const latest = events.slice(-60).reverse();
 	    this.#requestLog.replaceChildren(...latest.map((event) => {
 	      const row = (0, import_reader_settings_dom.settingsElement)(
 	        this.#options.document,
@@ -13692,7 +14306,7 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	    return this.#options.document.visibilityState === "hidden" ? "hidden" : "visible";
 	  }
 	}
-}, "7450ca3f7fc1d41ee2644517bb2e30a1a7abd16b7be0c13fe662f126d912605f");
+}, "dbfc6ab158c36589dbac7e928c029b1dd526be39f47ed1a8be7fca8d52e224c5");
 
 /* Source: lite/src/network/browser-request-observation.ts */
 runtime.register("src/network/browser-request-observation.js", function(module, exports, require) {
@@ -13889,7 +14503,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	});
 	module.exports = __toCommonJS(browser_shared_request_permit_exports);
 	var import_lifecycle = require("../kernel/lifecycle.js"), import_request_rate_limit_policy = require("./request-rate-limit-policy.js"), import_request_scheduler = require("./request-scheduler.js");
-	const READER_REQUEST_PERMIT_STORAGE_KEY = "linuxdo-enhanced-reader:request-permit:v1", READER_REQUEST_PERMIT_LOCK = "linuxdo-enhanced-reader:request-permit-lock:v1", READER_REQUEST_PERMIT_CHANNEL = "linuxdo-enhanced-reader:request-permit-channel:v1", READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME = "ldp-cloudflare-challenge", READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS = 2500, READER_BACKGROUND_REQUEST_MAX_DEFER_MS = 15e3, READER_CLOUDFLARE_CHALLENGE_MAX_PROBE_INTERVAL_MS = 1e4, READER_RATE_LIMIT_EVIDENCE_WINDOW_MS = 4e3, READER_RATE_LIMIT_MAX_BACKOFF_MS = 6e4, READER_RATE_LIMIT_PROBE_FAILURE_WAIT_MS = 1e3, READER_RATE_LIMIT_PROBE_RECHECK_MS = 500;
+	const READER_REQUEST_PERMIT_STORAGE_KEY = "linuxdo-enhanced-reader:request-permit:v1", READER_REQUEST_PERMIT_LOCK = "linuxdo-enhanced-reader:request-permit-lock:v1", READER_REQUEST_PERMIT_CHANNEL = "linuxdo-enhanced-reader:request-permit-channel:v1", READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME = "ldp-cloudflare-challenge", READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS = 2500, READER_BACKGROUND_REQUEST_MAX_DEFER_MS = 15e3, READER_CLOUDFLARE_CHALLENGE_MAX_PROBE_INTERVAL_MS = 1e4, READER_CLOUDFLARE_AUTOMATIC_CHALLENGE_MAX_WAIT_MS = 3e4, READER_RATE_LIMIT_EVIDENCE_WINDOW_MS = 4e3, READER_RATE_LIMIT_MAX_BACKOFF_MS = 6e4, READER_RATE_LIMIT_PROBE_FAILURE_WAIT_MS = 1e3, READER_RATE_LIMIT_PROBE_RECHECK_MS = 500;
 	function isReaderCloudflareChallengeWindow(window) {
 	  return window.name === READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME;
 	}
@@ -14140,6 +14754,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	  #challengePassedTtlMs;
 	  #challengePollIntervalMs;
 	  #challengeVerifyIntervalMs;
+	  #challengeAutomaticMaxWaitMs;
 	  #challengeMaxWaitMs;
 	  #inspectChallenge;
 	  #verifyChallenge;
@@ -14153,6 +14768,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	  #challengePromise = null;
 	  #challengeController = null;
 	  #challengeFocusRequested = !1;
+	  #challengeUserRequested = !1;
 	  #challengeWindow = null;
 	  #challengeReconcilePromise = null;
 	  #challengeProbePromise = null;
@@ -14202,6 +14818,13 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	      this.#challenge?.maxWaitMs,
 	      12e4,
 	      "challenge.maxWaitMs"
+	    ), this.#challengeAutomaticMaxWaitMs = Math.min(
+	      this.#challengeMaxWaitMs,
+	      positiveInteger(
+	        this.#challenge?.automaticMaxWaitMs,
+	        READER_CLOUDFLARE_AUTOMATIC_CHALLENGE_MAX_WAIT_MS,
+	        "challenge.automaticMaxWaitMs"
+	      )
 	    ), this.#inspectChallenge = this.#challenge?.inspect ?? inspectChallengeWindow, this.#verifyChallenge = this.#challenge?.verify ?? null, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
 	    const factory = options.broadcastChannelFactory === void 0 ? typeof BroadcastChannel > "u" ? null : (name) => new BroadcastChannel(name) : options.broadcastChannelFactory;
 	    let channel = null;
@@ -14446,11 +15069,11 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	        ...state.challenge,
 	        automaticAttempted: !0
 	      }));
-	    })), input.focus === !0 && (this.#challengeFocusRequested = !0, this.#focusChallengeWindow(), this.#postChannelMessage("challenge-focus"), this.#wake()), !this.#challengePromise) {
+	    })), input.focus === !0 && (this.#challengeFocusRequested = !0, this.#challengeUserRequested = !0, this.#focusChallengeWindow(), this.#postChannelMessage("challenge-focus"), this.#wake()), !this.#challengePromise) {
 	      const controller = new AbortController();
 	      this.#challengeController = controller;
 	      const promise = this.#runChallenge(controller.signal).finally(() => {
-	        this.#challengePromise === promise && (this.#challengePromise = null, this.#challengeController = null, this.#challengeFocusRequested = !1);
+	        this.#challengePromise === promise && (this.#challengePromise = null, this.#challengeController = null, this.#challengeFocusRequested = !1, this.#challengeUserRequested = !1);
 	      });
 	      this.#challengePromise = promise;
 	    }
@@ -14599,7 +15222,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	    };
 	    popup.addEventListener?.("load", onPopupLoad), this.#focusChallengeWindow();
 	    try {
-	      for (; !this.#closed && this.#now() - startedAt < this.#challengeMaxWaitMs; ) {
+	      for (; !this.#closed && this.#now() - startedAt < (this.#challengeUserRequested ? this.#challengeMaxWaitMs : this.#challengeAutomaticMaxWaitMs); ) {
 	        if (signal.aborted) throw this.#abortReason(signal);
 	        if (popup.closed === !0)
 	          return this.#challengeWindow = null, await this.#challengePassesProbe(signal) ? (await this.#completeChallengeLease(), !0) : (await this.#releaseChallengeLease(), !1);
@@ -15162,14 +15785,14 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	  }
 	  #onChannelMessage = (event) => {
 	    const message = event.data;
-	    message?.schemaVersion === 1 && message.sourceId !== this.#sourceId && message.type === "challenge-focus" && this.#challengePromise && (this.#challengeFocusRequested = !0, this.#focusChallengeWindow()), message?.schemaVersion === 1 && message.sourceId !== this.#sourceId && message.type === "updated" && this.#notifyStateChange(), this.#wake();
+	    message?.schemaVersion === 1 && message.sourceId !== this.#sourceId && message.type === "challenge-focus" && this.#challengePromise && (this.#challengeFocusRequested = !0, this.#challengeUserRequested = !0, this.#focusChallengeWindow()), message?.schemaVersion === 1 && message.sourceId !== this.#sourceId && message.type === "updated" && this.#notifyStateChange(), this.#wake();
 	  };
 	  #onStorage = (event) => {
 	    const key = event.key;
 	    (key === null || key === READER_REQUEST_PERMIT_STORAGE_KEY) && (this.#notifyStateChange(), this.#wake());
 	  };
 	}
-}, "e4a67daacd8aebd6449c3382c4ee9fb74750bbd7a8e4929b7c2eae87a9dd7696");
+}, "eb21f36175a5272574ef096e21964e16bd1d27e1f838bb4b8ef17eace27861dc");
 
 /* Source: lite/src/network/coordinated-request-client.ts */
 runtime.register("src/network/coordinated-request-client.js", function(module, exports, require) {
@@ -16424,6 +17047,114 @@ runtime.register("src/network/public-resource-request-adapter.js", function(modu
 	  }
 	}
 }, "f4ce9f1cb8ba6a9e8c20b379a43ee1d44816760142d61347ee497ed2000549d5");
+
+/* Source: lite/src/network/reader-host-turnstile-background-controller.ts */
+runtime.register("src/network/reader-host-turnstile-background-controller.js", function(module, exports, require) {
+	var reader_host_turnstile_background_controller_exports = {};
+	__export(reader_host_turnstile_background_controller_exports, {
+	  ReaderHostTurnstileBackgroundController: () => ReaderHostTurnstileBackgroundController
+	});
+	module.exports = __toCommonJS(reader_host_turnstile_background_controller_exports);
+	var import_lifecycle = require("../kernel/lifecycle.js");
+	const HOST_TURNSTILE_SELECTOR = "body > .cf-turnstile[data-sitekey]", HOST_TURNSTILE_RESPONSE_SELECTOR = 'input[name="cf-turnstile-response"][id^="cf-chl-widget-"]', HOST_TURNSTILE_WIDGET_ID = /^cf-chl-widget-(.+)_response$/, HOST_TURNSTILE_SUSPENDED_ATTRIBUTE = "data-ldp-host-turnstile-suspended", HOST_TURNSTILE_DEFAULT_HIDDEN_DELAY_MS = 3e4;
+	function visibleElement(element) {
+	  const rect = element.getBoundingClientRect();
+	  return rect.width > 8 && rect.height > 8;
+	}
+	function hostHasBlockingInteraction(document) {
+	  return document.querySelector(
+	    "#reply-control.open,#reply-control.draft,#reply-control.composer-open"
+	  ) ? !0 : [...document.querySelectorAll(
+	    'stripe-pricing-table,iframe[src*="stripe.com/"],iframe[src*="stripe.network/"]'
+	  )].some(visibleElement);
+	}
+	function hostTurnstileWidgetId(container) {
+	  return container.querySelector(
+	    HOST_TURNSTILE_RESPONSE_SELECTOR
+	  )?.id.match(HOST_TURNSTILE_WIDGET_ID)?.[1] ?? "";
+	}
+	class ReaderHostTurnstileBackgroundController {
+	  scope;
+	  #document;
+	  #turnstile;
+	  #visibility;
+	  #hiddenDelayMs;
+	  #schedule;
+	  #cancel;
+	  #hasBlockingInteraction;
+	  #onError;
+	  #enabled;
+	  #scheduled = null;
+	  #suspended = null;
+	  constructor(options) {
+	    this.#document = options.document, this.#enabled = options.enabled, this.#turnstile = options.turnstile, this.#visibility = options.visibility ?? (() => options.document.visibilityState), this.#hiddenDelayMs = Math.max(
+	      0,
+	      Number(options.hiddenDelayMs) || HOST_TURNSTILE_DEFAULT_HIDDEN_DELAY_MS
+	    ), this.#schedule = options.schedule ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs)), this.#cancel = options.cancel ?? ((handle) => globalThis.clearTimeout(Number(handle))), this.#hasBlockingInteraction = options.hasBlockingInteraction ?? (() => hostHasBlockingInteraction(options.document)), this.#onError = options.onError ?? (() => {
+	    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.scope.listen(this.#document, "visibilitychange", () => {
+	      this.#reconcile();
+	    }), this.scope.add(() => {
+	      this.#cancelScheduled(), this.#restore();
+	    }), this.#reconcile();
+	  }
+	  get snapshot() {
+	    return Object.freeze({
+	      enabled: this.#enabled,
+	      state: this.#suspended ? "suspended" : this.#scheduled !== null ? "scheduled" : "idle"
+	    });
+	  }
+	  applyEnabled(enabled) {
+	    this.scope.destroyed || (this.#enabled = enabled, this.#reconcile());
+	  }
+	  destroy() {
+	    this.scope.destroy();
+	  }
+	  #reconcile() {
+	    if (this.#cancelScheduled(), !this.#enabled || this.#visibility() !== "hidden") {
+	      this.#restore();
+	      return;
+	    }
+	    this.#suspended || (this.#scheduled = this.#schedule(() => {
+	      this.#scheduled = null, this.#suspend();
+	    }, this.#hiddenDelayMs));
+	  }
+	  #suspend() {
+	    if (this.scope.destroyed || !this.#enabled || this.#visibility() !== "hidden" || this.#hasBlockingInteraction()) return;
+	    const container = this.#document.querySelector(
+	      HOST_TURNSTILE_SELECTOR
+	    ), sitekey = container?.dataset.sitekey ?? "", widgetId = container ? hostTurnstileWidgetId(container) : "", turnstile = this.#turnstile();
+	    if (!(!container || !sitekey || !widgetId || !turnstile))
+	      try {
+	        if (!turnstile.getResponse(widgetId)) return;
+	        turnstile.remove(widgetId), container.setAttribute(HOST_TURNSTILE_SUSPENDED_ATTRIBUTE, "true"), this.#suspended = Object.freeze({ container, sitekey });
+	      } catch (cause) {
+	        this.#onError(cause);
+	      }
+	  }
+	  #restore() {
+	    const suspended = this.#suspended;
+	    if (!suspended) return;
+	    if (!suspended.container.isConnected) {
+	      this.#suspended = null;
+	      return;
+	    }
+	    const turnstile = this.#turnstile();
+	    if (turnstile)
+	      try {
+	        turnstile.render(suspended.container, {
+	          sitekey: suspended.sitekey
+	        }), suspended.container.removeAttribute(
+	          HOST_TURNSTILE_SUSPENDED_ATTRIBUTE
+	        ), this.#suspended = null;
+	      } catch (cause) {
+	        this.#onError(cause);
+	      }
+	  }
+	  #cancelScheduled() {
+	    this.#scheduled !== null && (this.#cancel(this.#scheduled), this.#scheduled = null);
+	  }
+	}
+}, "cb526331db246ff1db932aea4f617e893a0884709665189406ddef9c0dd5f699");
 
 /* Source: lite/src/network/request-contract.ts */
 runtime.register("src/network/request-contract.js", function(module, exports, require) {
@@ -18267,6 +18998,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  #backgroundWarmEpoch = 0;
 	  #backgroundCacheActive = !1;
 	  #backgroundRestore = null;
+	  #backgroundRestoreEpoch = 0;
 	  #projectionPersistAfterRestore = /* @__PURE__ */ new Set();
 	  #projectionCheckpointReplacements = /* @__PURE__ */ new Set();
 	  #historyInFlightGroups = /* @__PURE__ */ new Set();
@@ -18422,7 +19154,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  startBackgroundCache() {
 	    if (this.scope.destroyed || this.#backgroundCacheActive || this.#backgroundWarmDelayMs === null || this.#activity !== null && !this.#activityVisible()) return;
 	    this.#backgroundCacheActive = !0;
-	    const restore = this.#restoreBackgroundProjections();
+	    const epoch = ++this.#backgroundRestoreEpoch, restore = this.#restoreBackgroundProjections(epoch);
 	    this.#backgroundRestore = restore, restore.catch(this.#onError).finally(() => {
 	      if (this.#backgroundRestore !== restore) return;
 	      this.#backgroundRestore = null;
@@ -18444,13 +19176,13 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	  }
 	  reloadExternalProjection() {
 	    if (!this.#projection || this.scope.destroyed) return Promise.resolve();
-	    const restore = (this.#backgroundRestore ?? Promise.resolve()).catch(() => {
-	    }).then(() => this.#restoreBackgroundProjections(!0));
+	    const previous = this.#backgroundRestore ?? Promise.resolve(), epoch = ++this.#backgroundRestoreEpoch, restore = previous.catch(() => {
+	    }).then(() => this.#restoreBackgroundProjections(epoch, !0));
 	    return this.#backgroundRestore = restore, restore.finally(() => {
 	      this.#backgroundRestore === restore && (this.#backgroundRestore = null);
 	    });
 	  }
-	  async #restoreBackgroundProjections(fresh = !1) {
+	  async #restoreBackgroundProjections(epoch, fresh = !1) {
 	    if (!this.#projection || this.scope.destroyed) return;
 	    const restored = await Promise.all(
 	      import_reader_notification_model.READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.map(async (group) => {
@@ -18467,7 +19199,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	        }
 	      })
 	    );
-	    if (this.scope.destroyed) return;
+	    if (this.scope.destroyed || epoch !== this.#backgroundRestoreEpoch) return;
 	    const checkpointRepairs = [];
 	    for (const { group, snapshot } of restored) {
 	      if (!snapshot) continue;
@@ -18581,8 +19313,10 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    for (const state of this.#historyGroups.values())
 	      state.pages.clear(), state.nextPage = 0, state.terminalPage = null, state.estimatedPages = 1, state.sourceTotalHint = 0, state.complete = !1, state.retryAt = null, state.error = null;
 	  }
-	  clearCache() {
-	    this.scope.destroyed || (this.#loadEpoch += 1, this.#navigationEpoch += 1, this.#backgroundWarmEpoch += 1, this.#backgroundHeadRefreshEpoch += 1, this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#poll !== null && this.#cancel(this.#poll), this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#poll = null, this.#historySchedule = null, this.#backgroundWarm = null, this.#backgroundWarmPending = !1, this.#nativeRefreshPending = !1, this.#nativeChangePending = !1, this.#backgroundHeadRefreshes.clear(), this.#backgroundRefreshingGroups.clear(), this.#backgroundRefreshFailedGroups.clear(), this.#pollNotBefore = 0, this.#pages.clear(), this.#resetHistoryHydration(), this.#projectionRecords.clear(), this.#lastAuthoritativeAt.clear(), this.#readRecordKeys.clear(), this.#records = Object.freeze([]), this.#categoryFilter = "", this.#tagFilter = "", this.#dateFilter = "", this.#sortDirection = "desc", this.#total = 0, this.#hasNext = !1, this.#loading = !1, this.#refreshing = !1, this.#retrying = !1, this.#stale = !1, this.#error = null, this.#emit(), this.#schedulePoll(), this.#scheduleBackgroundWarm(), this.#scheduleHistoryHydration(this.#historyContinuationDelay()));
+	  clearCache(options = {}) {
+	    if (this.scope.destroyed) return;
+	    const resume = options.resume !== !1;
+	    this.#loadEpoch += 1, this.#navigationEpoch += 1, this.#backgroundWarmEpoch += 1, this.#backgroundHeadRefreshEpoch += 1, this.#backgroundRestoreEpoch += 1, this.#backgroundCacheActive = !1, this.#backgroundRestore = null, this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#poll !== null && this.#cancel(this.#poll), this.#historySchedule !== null && this.#cancel(this.#historySchedule), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#poll = null, this.#historySchedule = null, this.#backgroundWarm = null, this.#backgroundWarmPending = !1, this.#nativeRefreshPending = !1, this.#nativeChangePending = !1, this.#backgroundHeadRefreshes.clear(), this.#backgroundRefreshingGroups.clear(), this.#backgroundRefreshFailedGroups.clear(), this.#projectionPersistAfterRestore.clear(), this.#projectionCheckpointReplacements.clear(), this.#taxonomyFlights.clear(), this.#pollNotBefore = 0, this.#pages.clear(), this.#resetHistoryHydration(), this.#projectionRecords.clear(), this.#lastAuthoritativeAt.clear(), this.#readRecordKeys.clear(), this.#records = Object.freeze([]), this.#categoryFilter = "", this.#tagFilter = "", this.#dateFilter = "", this.#sortDirection = "desc", this.#total = 0, this.#hasNext = !1, this.#loading = !1, this.#refreshing = !1, this.#retrying = !1, this.#stale = !1, this.#error = null, this.#emit(), resume && (this.#schedulePoll(), this.startBackgroundCache()), this.#scheduleHistoryHydration(this.#historyContinuationDelay());
 	  }
 	  async open() {
 	    if (this.scope.destroyed) throw new Error("通知控制器已销毁");
@@ -19906,7 +20640,10 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	        token: this.#historyCoordinationKey,
 	        signal: this.#historyAbort.signal,
 	        onError: this.#onError,
-	        beforeRun: () => this.#restoreBackgroundProjections(!0),
+	        beforeRun: () => this.#restoreBackgroundProjections(
+	          this.#backgroundRestoreEpoch,
+	          !0
+	        ),
 	        run: async () => {
 	          await (0, import_reader_collection_hydration.runReaderCollectionWorkers)({
 	            concurrency,
@@ -19930,7 +20667,10 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	            }
 	          }), dirtyGroups.size && (await Promise.all([...dirtyGroups].map((group) => this.#persistProjection(group))), dirtyGroups.clear());
 	        }
-	      }) !== "producer" && !this.scope.destroyed && epoch === this.#historyEpoch && await this.#restoreBackgroundProjections(!0);
+	      }) !== "producer" && !this.scope.destroyed && epoch === this.#historyEpoch && await this.#restoreBackgroundProjections(
+	        this.#backgroundRestoreEpoch,
+	        !0
+	      );
 	    } catch (cause) {
 	      !this.scope.destroyed && epoch === this.#historyEpoch && (this.#onError(cause), this.#historyError = cause, this.#historyRetryAt = this.#now() + this.#historyRetryDelayMs);
 	    } finally {
@@ -20048,7 +20788,7 @@ runtime.register("src/notification/reader-notification-controller.js", function(
 	    this.#revision += 1, this.#snapshotCache = null, this.changes.emit(this.snapshot).forEach(this.#onError);
 	  }
 	}
-}, "1eca7bcb2e6bde5fa4d74a32fbeea49abd517cc4a94ed8bd7412c68e687b8564");
+}, "366d8c69203f302e27133f942f6b6da615fd56c33958cc56d9bd4e0207caea53");
 
 /* Source: lite/src/notification/reader-notification-model.ts */
 runtime.register("src/notification/reader-notification-model.js", function(module, exports, require) {
@@ -20720,7 +21460,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	  ReaderNotificationPanelView: () => ReaderNotificationPanelView
 	});
 	module.exports = __toCommonJS(reader_notification_panel_view_exports);
-	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_popover_filter_controls = require("../collection/reader-popover-filter-controls.js"), import_event_target = require("../dom/event-target.js"), import_reader_image_fallback = require("../components/reader-image-fallback.js"), import_reader_icon = require("../components/reader-icon.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_notification_model = require("./reader-notification-model.js");
+	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_popover_filter_controls = require("../collection/reader-popover-filter-controls.js"), import_event_target = require("../dom/event-target.js"), import_reader_image_fallback = require("../components/reader-image-fallback.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_inline_emoji = require("../components/reader-inline-emoji.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_notification_model = require("./reader-notification-model.js");
 	function recordHref(record, baseUrl) {
 	  if (record.target)
 	    return new URL(
@@ -21222,9 +21962,13 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    const titleText = this.#document.createElement("span");
 	    titleText.className = "ldp-notification-title-text";
 	    const displayTitle = recordDisplayTitle(record, archiveMarker), specificType = record.group === "other" ? record.typeLabel.trim() || record.typeName.trim() || "通知" : "";
-	    if (titleText.textContent = specificType ? `【${specificType}】${displayTitle}` : displayTitle, title.append(titleText), copy.append(title), record.excerpt) {
+	    if ((0, import_reader_inline_emoji.renderReaderInlineEmoji)(titleText, specificType ? `【${specificType}】${displayTitle}` : displayTitle, this.#emojiSource), title.append(titleText), copy.append(title), record.excerpt) {
 	      const excerpt = this.#document.createElement("span");
-	      excerpt.className = "ldp-notification-excerpt", excerpt.textContent = record.excerpt, copy.append(excerpt);
+	      excerpt.className = "ldp-notification-excerpt", (0, import_reader_inline_emoji.renderReaderInlineEmoji)(
+	        excerpt,
+	        record.excerpt,
+	        this.#emojiSource
+	      ), copy.append(excerpt);
 	    }
 	    const meta = this.#document.createElement("span");
 	    meta.className = "ldp-notification-meta", meta.dataset.notificationCreatedAt = record.createdAt, meta.dataset.notificationArchiveLabel = archiveLabel, meta.textContent = `${archiveLabel ? `${archiveLabel} · ` : ""}${this.#relativeTime(record.createdAt)}`, copy.append(meta), item.append(typeIcon, copy);
@@ -21250,7 +21994,7 @@ runtime.register("src/notification/reader-notification-panel-view.js", function(
 	    this.#relativeTimer !== null && (this.#cancel(this.#relativeTimer), this.#relativeTimer = null);
 	  }
 	}
-}, "e7392a6edeb7ad1e6699225e9a6bc70545c9e2bdb1fc0840a67448ac0b0d96ba");
+}, "2cf9ce6a429b1ba9a334df36e1f01370e9fbd05fdc619c679ebd9c82c8b33f8d");
 
 /* Source: lite/src/queue/reader-open-queue-session.ts */
 runtime.register("src/queue/reader-open-queue-session.js", function(module, exports, require) {
@@ -21262,7 +22006,7 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	  requestReaderQueueSurfacePositionsReset: () => requestReaderQueueSurfacePositionsReset
 	});
 	module.exports = __toCommonJS(reader_open_queue_session_exports);
-	var import_identifiers = require("../discourse/identifiers.js"), import_reader_icon = require("../components/reader-icon.js"), import_event_target = require("../dom/event-target.js"), import_floating_surface_wheel = require("../dom/floating-surface-wheel.js"), import_html_element = require("../dom/html-element.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_repeat_action_gate = require("../kernel/repeat-action-gate.js"), import_reader_workspace = require("../shell/reader-workspace.js"), import_reader_account_scoped_storage = require("../state/reader-account-scoped-storage.js"), import_reader_userscript_target_adapter = require("../userscript/reader-userscript-target-adapter.js"), import_reader_topic_download_manager = require("./reader-topic-download-manager.js");
+	var import_identifiers = require("../discourse/identifiers.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_inline_emoji = require("../components/reader-inline-emoji.js"), import_event_target = require("../dom/event-target.js"), import_floating_surface_wheel = require("../dom/floating-surface-wheel.js"), import_html_element = require("../dom/html-element.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_repeat_action_gate = require("../kernel/repeat-action-gate.js"), import_reader_workspace = require("../shell/reader-workspace.js"), import_reader_account_scoped_storage = require("../state/reader-account-scoped-storage.js"), import_reader_userscript_target_adapter = require("../userscript/reader-userscript-target-adapter.js"), import_reader_topic_download_manager = require("./reader-topic-download-manager.js");
 	const READER_QUEUE_STORAGE_KEY = "linuxdo-enhanced-reader:reader-queue:v1", READER_QUEUE_RESET_SURFACE_POSITIONS_EVENT = "ldp-reader-queue-reset-surface-positions", READER_QUEUE_DOCK_THRESHOLD_PX = 2, READER_QUEUE_PANEL_SHOW_DELAY_MS = 180, READER_QUEUE_PANEL_HIDE_GRACE_MS = 480, READER_QUEUE_CLEAR_CONFIRM_MS = 3e3;
 	function requestReaderQueueSurfacePositionsReset(document) {
 	  const EventConstructor = document.defaultView?.Event ?? Event;
@@ -21489,6 +22233,9 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	    );
 	    head.append(title, this.#count), head.append(this.#clear, close), this.#list = (0, import_html_element.htmlElement)(document, "div", "ldp-reader-queue-list"), this.#list.setAttribute("role", "listbox"), this.#list.setAttribute("aria-label", "队列文章"), this.#panel.append(head, this.#list), this.#downloadManager = options.topicDownloads ? new import_reader_topic_download_manager.ReaderTopicDownloadManager({
 	      ...options.topicDownloads,
+	      ...(options.emojiSource ?? options.topicDownloads.emojiSource) === void 0 ? {} : {
+	        emojiSource: options.emojiSource ?? options.topicDownloads.emojiSource
+	      },
 	      document,
 	      mount: options.topicDownloads.mount ?? this.#panel,
 	      geometryStorage: options.storage,
@@ -21727,7 +22474,11 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	      `${progressValue * 3.6}deg`
 	    ), this.#avatar(progress, entry, history, reusableAvatar);
 	    const copy = (0, import_html_element.htmlElement)(document, "span", "ldp-reader-queue-row-copy"), title = (0, import_html_element.htmlElement)(document, "strong");
-	    title.textContent = entry.title;
+	    (0, import_reader_inline_emoji.renderReaderInlineEmoji)(
+	      title,
+	      entry.title,
+	      this.#options.emojiSource ?? (() => "")
+	    );
 	    const status = (0, import_html_element.htmlElement)(document, "small");
 	    status.textContent = queueStatus(
 	      entry,
@@ -22473,7 +23224,7 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	    }
 	  }
 	}
-}, "afd82564a21c347c6f3c72f83d364486a2b444017c4209c0ca6ce08336863f1c");
+}, "1422424e5eb982c503938f48735862b53b0f900929188277fd4cbde6a7075d3e");
 
 /* Source: lite/src/queue/reader-topic-download-manager.ts */
 runtime.register("src/queue/reader-topic-download-manager.js", function(module, exports, require) {
@@ -22487,7 +23238,7 @@ runtime.register("src/queue/reader-topic-download-manager.js", function(module, 
 	  selectReaderTopicDownloadPosts: () => selectReaderTopicDownloadPosts
 	});
 	module.exports = __toCommonJS(reader_topic_download_manager_exports);
-	var import_reader_icon = require("../components/reader-icon.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_topic_offline_document = require("../archive/reader-topic-offline-document.js"), import_event_target = require("../dom/event-target.js"), import_html_element = require("../dom/html-element.js"), import_identifiers = require("../discourse/identifiers.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_reader_select_surface = require("../shell/reader-select-surface.js");
+	var import_reader_icon = require("../components/reader-icon.js"), import_reader_inline_emoji = require("../components/reader-inline-emoji.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_topic_offline_document = require("../archive/reader-topic-offline-document.js"), import_event_target = require("../dom/event-target.js"), import_html_element = require("../dom/html-element.js"), import_identifiers = require("../discourse/identifiers.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_reader_select_surface = require("../shell/reader-select-surface.js");
 	const MAX_CUSTOM_POST_NUMBERS = 1e5, DOWNLOAD_HISTORY_PAGE_SIZE = 8, DOWNLOAD_REQUEST_AUTO_RESUME_LIMIT = 8, DOWNLOAD_CHALLENGE_AUTO_RESUME_LIMIT = 1, READER_TOPIC_DOWNLOAD_WINDOW_GEOMETRY_STORAGE_KEY = import_reader_collection_floating_window.READER_COLLECTION_FLOATING_WINDOW_GEOMETRY_KEY, ALL_POSTS_SELECTION = Object.freeze({
 	  mode: "all",
 	  expression: "",
@@ -22913,7 +23664,11 @@ runtime.register("src/queue/reader-topic-download-manager.js", function(module, 
 	    this.#downloadCurrent.disabled = current === null || active, this.#downloadCurrent.classList.toggle("is-active", active), this.#downloadCurrentLabel.textContent = duplicateReady ? "重新生成离线 HTML" : active ? task?.phase === "waiting-rate-limit" ? "等待断点续传" : task?.phase === "waiting-challenge" ? "等待过盾续传" : task?.phase === "queued" ? "已加入下载队列" : "正在后台下载" : "开始后台下载", this.#downloadCurrent.setAttribute(
 	      "aria-label",
 	      duplicateReady && current ? `重新生成 ${current.title} 的${selectionLabel(selection)}离线 HTML` : active && current ? `${current.title} 正在后台下载` : "开始后台下载当前 Topic"
-	    ), this.#downloadCurrent.dataset.topicId = current ? String(current.topicId) : "", this.#downloadCurrent.dataset.topicTitle = current?.title ?? "", this.#downloadPreview.hidden = current === null || active || duplicateReady, this.#downloadPreviewTitle.textContent = current?.title ?? "", this.#downloadPreviewMeta.textContent = current ? `Topic #${current.topicId} · ${this.#selectionPreviewLabel()}` : "";
+	    ), this.#downloadCurrent.dataset.topicId = current ? String(current.topicId) : "", this.#downloadCurrent.dataset.topicTitle = current?.title ?? "", this.#downloadPreview.hidden = current === null || active || duplicateReady, (0, import_reader_inline_emoji.renderReaderInlineEmoji)(
+	      this.#downloadPreviewTitle,
+	      current?.title ?? "",
+	      this.#options.emojiSource ?? (() => "")
+	    ), this.#downloadPreviewMeta.textContent = current ? `Topic #${current.topicId} · ${this.#selectionPreviewLabel()}` : "";
 	  }
 	  #selectionForDuplicateCheck() {
 	    const mode = this.#selectionMode.value;
@@ -23407,7 +24162,11 @@ runtime.register("src/queue/reader-topic-download-manager.js", function(module, 
 	      ), selectionLabelNode.append(selectionInput), row.append(selectionLabelNode);
 	    }
 	    const copy = (0, import_html_element.htmlElement)(document, "span", "ldp-topic-download-task-copy"), title = (0, import_html_element.htmlElement)(document, "strong");
-	    title.textContent = task.title;
+	    (0, import_reader_inline_emoji.renderReaderInlineEmoji)(
+	      title,
+	      task.title,
+	      this.#options.emojiSource ?? (() => "")
+	    );
 	    const state = (0, import_html_element.htmlElement)(document, "small");
 	    if (state.textContent = task.archiveStatus === null ? phaseLabel(task) : `${task.archiveStatus} 版本 · ${phaseLabel(task)}`, copy.append(title, state), ["loading-posts", "loading-replies", "waiting-rate-limit", "waiting-challenge"].includes(task.phase) && task.total > 0) {
 	      const progress = (0, import_html_element.htmlElement)(document, "progress");
@@ -23464,7 +24223,7 @@ runtime.register("src/queue/reader-topic-download-manager.js", function(module, 
 	      this.#options.notify?.(`Topic 下载管理更新失败：${String(error)}`);
 	  }
 	}
-}, "62b74758e846074d345e19770e0162308c50698704cc6b1c8dc965f7247f90c3");
+}, "d5f7ac15428794fee472a17d98edeeba1b40f9cdf8a9acab2bb4f1b10c321688");
 
 /* Source: lite/src/sync/reader-webdav-category-ports.ts */
 runtime.register("src/sync/reader-webdav-category-ports.js", function(module, exports, require) {

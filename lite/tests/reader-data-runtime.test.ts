@@ -1,6 +1,7 @@
 import {
 	ReaderDataRuntime,
 	READER_RESPONSE_CACHE_DATABASE,
+	READER_RESPONSE_CACHE_LEGACY_DATABASES,
 	READER_RESPONSE_CACHE_STORE,
 } from '../src/app/reader-data-runtime.js';
 import {
@@ -137,9 +138,11 @@ const runtime = new ReaderDataRuntime({
 });
 
 assert(
-	READER_RESPONSE_CACHE_DATABASE === 'linuxdo-enhanced-reader:responses:v1' &&
+	READER_RESPONSE_CACHE_DATABASE === 'awesome linuxdo reader' &&
+	READER_RESPONSE_CACHE_LEGACY_DATABASES.join(',') ===
+		'linuxdo-enhanced-reader:responses:v1' &&
 		READER_RESPONSE_CACHE_STORE === 'responses',
-	'Application 数据内核必须保持旧 response IndexedDB 名称兼容',
+	'Application 数据内核必须使用确认后的新库名，并只把旧 response 库登记为迁移来源',
 );
 assert(
 	runtime.cacheCoordination.coordinationMode === 'mutation-only',

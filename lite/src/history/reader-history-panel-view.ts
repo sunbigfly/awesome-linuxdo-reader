@@ -16,6 +16,8 @@ import {
 } from '../collection/reader-collection-filter-model.js';
 import { replaceImageWithFallbackOnError } from '../components/reader-image-fallback.js';
 import { createReaderIcon } from '../components/reader-icon.js';
+import { renderReaderInlineEmoji } from
+	'../components/reader-inline-emoji.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import {
 	normalizeReaderSearchText,
@@ -111,6 +113,7 @@ export interface ReaderHistoryPanelViewOptions {
 		template: string,
 		size: number,
 	) => string | null;
+	readonly emojiSource?: (id: string) => string;
 	readonly relativeTime?: (timestamp: number) => string;
 	readonly now?: () => number;
 	readonly parentScope?: LifecycleScope;
@@ -152,6 +155,9 @@ export class ReaderHistoryPanelView {
 	>;
 	readonly #avatarSource: NonNullable<
 		ReaderHistoryPanelViewOptions['avatarSource']
+	>;
+	readonly #emojiSource: NonNullable<
+		ReaderHistoryPanelViewOptions['emojiSource']
 	>;
 	readonly #relativeTime: NonNullable<
 		ReaderHistoryPanelViewOptions['relativeTime']
@@ -201,6 +207,7 @@ export class ReaderHistoryPanelView {
 					size,
 					this.#document.baseURI,
 				));
+		this.#emojiSource = options.emojiSource ?? (() => '');
 		this.#now = options.now ?? Date.now;
 		this.#relativeTime = options.relativeTime ??
 			((timestamp) => defaultRelativeTime(timestamp, this.#now()));
@@ -623,7 +630,7 @@ export class ReaderHistoryPanelView {
 		copy.className = 'ldp-notification-copy';
 		const title = this.#document.createElement('span');
 		title.className = 'ldp-notification-title';
-		title.textContent = displayTitle;
+		renderReaderInlineEmoji(title, displayTitle, this.#emojiSource);
 		const meta = this.#document.createElement('span');
 		meta.className = 'ldp-notification-meta ldp-history-subtitle';
 		const sortTime = this.#preferences.sortMode === 'first-viewed'

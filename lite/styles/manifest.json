@@ -125,17 +125,19 @@
         "ldp-topic-stats-component",
         "ldp-topic-stats-row",
         "ldp-topic-stat",
-        "ldp-native-topic-title-tools"
+        "ldp-native-topic-title-tools",
+        "ldp-host-topic-exposure-count"
       ],
       "styleSignatures": [
         "html.ldp-reader-embedded-right body",
         "box-shadow: none !important",
         "margin-top: 0",
         "transform: none",
-        "grid-template-columns: minmax(0, 1fr) minmax(18rem, 32%) !important;",
+        "grid-template-columns: minmax(0, 1fr) max-content !important;",
         "max-width: 20px !important;\n  height: 20px !important;\n  flex: 0 0 20px;",
         "html .link-top-line [data-ldp-native-dnd]::after",
-        "html:root body :is(.topic-list-item,.latest-topic-list-item)[data-ldp-unwanted-auto-filter] {\n  display: none !important;",
+        "html:root body :is(.topic-list-item,.latest-topic-list-item):is(\n  [data-ldp-unwanted-auto-filter],\n  [data-ldp-unwanted-manual-filter]\n) {\n  display: none !important;",
+        "html:root body .ldp-host-topic-exposure-count {",
         "var(--ldp-host-topic-stats-label-size, var(--ldp-font-micro, 9px))"
       ]
     },
@@ -168,6 +170,7 @@
         "ldp-native-reader-trigger-item",
         "ldp-native-reader-trigger",
         "ldp-host-topic-card-performance",
+        "ldp-host-topic-reader-meta-row",
         "ldp-host-topic-reader-meta",
         "ldp-host-user-observation-entry",
         "ldp-reader-queue-add",
@@ -184,6 +187,7 @@
       "styleSignatures": [
         ".ldp-reader-queue .ldp-reader-queue-panel.is-collision-positioned",
         ".ldp-host-topic-card-performance",
+        ".ldp-host-topic-reader-meta-row",
         ".ldp-host-topic-reader-meta",
         "translateY(-5px) scale(.94)",
         ".ldp-reader-queue-add:is(:focus-visible, .is-added)",
@@ -324,6 +328,10 @@
         "ldp-branch-visible-path",
         "ldp-branch-hit-path",
         "ldp-segmented-branch-last"
+      ],
+      "styleSignatures": [
+        ".ldp-post.ldp-virtual-ancestor-shell:not(\n  .ldp-segmented-branch-last\n)::after",
+        "z-index: 0;\n  top: -1px;\n  bottom: -1px;"
       ]
     },
     {

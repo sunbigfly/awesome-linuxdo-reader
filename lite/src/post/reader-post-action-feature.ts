@@ -557,6 +557,7 @@ export class ReaderPostActionFeature<
 	readonly #byRoot = new Map<HTMLElement, BoundReactionSurface<TPost>>();
 	readonly #reactionHoverOpenTimers = new Map<HTMLElement, number>();
 	readonly #reactionHoverCloseTimers = new Map<HTMLElement, number>();
+	readonly #queuedReactionIntentByPostId = new Map<number, string>();
 	readonly #capabilityRefreshes = new Map<number, Promise<void>>();
 	readonly #capabilityRefreshAttempts = new Set<number>();
 	#boostQuickActionBubble: HTMLElement | null = null;
@@ -763,6 +764,7 @@ export class ReaderPostActionFeature<
 			this.#cancelHostRuntimeReadyRetry();
 			this.#closeBoostQuickActions();
 			this.#clearReactionHoverTimers();
+			this.#queuedReactionIntentByPostId.clear();
 			this.#closeBoost();
 			for (const binding of this.#byRoot.values()) {
 				if (binding.kind === 'post') binding.unbind?.();
@@ -1068,7 +1070,6 @@ export class ReaderPostActionFeature<
 			for (const option of selectable) {
 				const button = this.#reactionButton(option, null);
 				button.classList.toggle('on', option.id === current);
-				button.disabled = pending;
 				picker.append(button);
 			}
 			anchor.append(trigger, picker);
@@ -1175,7 +1176,6 @@ export class ReaderPostActionFeature<
 			const count = counts.get(option.id) ?? 0;
 			const button = this.#reactionButton(option, count);
 			button.classList.toggle('on', option.id === current);
-			button.disabled = pending;
 			if (!count) button.querySelector('b')!.textContent = '';
 			picker.append(button);
 		}
@@ -3907,7 +3907,10 @@ export class ReaderPostActionFeature<
 		reaction: string,
 	): void {
 		const postId = Number(binding.post.id);
-		if (this.#actionPending(postId, 'reactions')) return;
+		if (this.#actionPending(postId, 'reactions')) {
+			this.#queueReactionIntent(binding, reaction);
+			return;
+		}
 		binding.open = false;
 		let snapshots = new Map<BoundReactionSurface<TPost>, TPost>();
 		try {
@@ -3924,14 +3927,48 @@ export class ReaderPostActionFeature<
 			snapshots = this.#projectReaction(postId, reaction);
 			void this.#actions.dispatch(
 				this.#commands.reaction(postId, mutation),
-			).catch((cause: unknown) => {
+			).then(() => {
+				this.#drainQueuedReactionIntent(postId);
+			}, (cause: unknown) => {
 				this.#restoreReaction(snapshots);
+				this.#queuedReactionIntentByPostId.delete(postId);
 				this.#reportActionFailure('回应失败', cause);
 			});
 		} catch (error) {
 			this.#restoreReaction(snapshots);
 			this.#reportActionFailure('回应失败', error);
 		}
+	}
+
+	#queueReactionIntent(
+		binding: BoundReactionSurface<TPost>,
+		reaction: string,
+	): void {
+		const postId = Number(binding.post.id);
+		const queued = this.#queuedReactionIntentByPostId;
+		const currentIntent = queued.has(postId)
+			? queued.get(postId) ?? ''
+			: reactionId(record(binding.post.current_user_reaction)?.id);
+		queued.set(postId, currentIntent === reaction ? '' : reaction);
+		binding.open = false;
+		this.#syncReactionPickerVisibility(binding);
+	}
+
+	#drainQueuedReactionIntent(postId: number): void {
+		const queued = this.#queuedReactionIntentByPostId;
+		if (!queued.has(postId)) return;
+		const desired = queued.get(postId) ?? '';
+		queued.delete(postId);
+		if (this.scope.destroyed) return;
+		const binding = [...this.#byRoot.values()].find((candidate) =>
+			Number(candidate.post.id) === postId);
+		if (!binding) return;
+		const current = reactionId(
+			record(binding.post.current_user_reaction)?.id,
+		);
+		if (current === desired) return;
+		const target = desired || current;
+		if (target) this.#dispatchReaction(binding, target);
 	}
 
 	#projectReaction(

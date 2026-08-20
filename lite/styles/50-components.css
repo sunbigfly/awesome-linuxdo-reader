@@ -3751,6 +3751,15 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   vertical-align: -.2em;
 }
 
+img.emoji[data-ldp-inline-emoji] {
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  margin: 0 .04em;
+  object-fit: contain;
+  vertical-align: -.18em;
+}
+
 .ldp-user-observation-activity mark {
   padding: 0 1px;
   border-radius: 2px;

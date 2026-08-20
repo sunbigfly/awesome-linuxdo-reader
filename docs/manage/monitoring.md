@@ -1,8 +1,8 @@
 ---
 title: 资源与请求监控
 description: 阅读资源趋势、请求脉络、429 状态和 Cloudflare 恢复信息，并理解观测边界。
-feature_ids: ["MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
-source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/request-observer.ts"]
+feature_ids: ["SET-023", "MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
+source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/reader-host-turnstile-background-controller.ts","lite/src/network/request-observer.ts"]
 since: 0.1.2
 version: 1.5.8
 status: current
@@ -80,7 +80,9 @@ LINUX DO 可覆盖 Discourse 默认限流，搜索、发帖、私信和插件也
 
 ## Cloudflare 验证
 
-遇到挑战时，阅读器在多个标签页之间协调一个验证窗口。验证页完成导航后会清除探针退避并立即复核；即使此时正有失败探针结算，也不会覆盖这次即时复核。验证成功状态通过共享通道和存储事件传回各标签页，窗口、暂停提示与请求许可随即收口；失败或被用户关闭时保留冷却，避免请求风暴。会话探针会进入 Reader 请求账本，并把“仍被盾拦截”与“已经过盾但接口仍返回普通 429”分开记录。
+遇到挑战时，阅读器在多个标签页之间协调一个验证窗口。无人操作的自动窗口会在短时间内止损关闭；用户从提示中手动进入验证后仍保留完整处理时间。验证页完成导航后会清除探针退避并立即复核；即使此时正有失败探针结算，也不会覆盖这次即时复核。验证成功状态通过共享通道和存储事件传回各标签页，窗口、暂停提示与请求许可随即收口；失败或被用户关闭时保留冷却，避免请求风暴。会话探针会进入 Reader 请求账本，并把“仍被盾拦截”与“已经过盾但接口仍返回普通 429”分开记录。
+
+性能设置中的“后台暂停宿主 Turnstile”是独立且默认关闭的实验项：它只在 LinuxDo 标签后台停留 30 秒、宿主控件已有有效响应且没有编辑或支付交互时释放页面底部的隐藏 widget，回到前台立即恢复。它不处理上面的 Reader 验证窗口，也不改变共享请求许可；挑战进行中或宿主结构不匹配时保持原状。
 
 ## 隐私
 

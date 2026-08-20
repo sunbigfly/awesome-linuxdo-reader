@@ -133,6 +133,7 @@ export class ReaderAiServiceSettingsForm {
 	#editingBaseUrl: string | null = null;
 	#operation: AbortController | null = null;
 	#publicOperation: AbortController | null = null;
+	#publicCacheEpoch = 0;
 	#metadataAnchor: HTMLSelectElement | null = null;
 
 	constructor(options: ReaderAiServiceSettingsFormOptions) {
@@ -498,7 +499,18 @@ export class ReaderAiServiceSettingsForm {
 			this.#loadProfile(readerTranslationActiveProfile(config));
 		}, this.scope);
 		this.#repository.metadataChanges.subscribe((cache) => {
-			if (!cache || this.scope.destroyed) return;
+			if (this.scope.destroyed) return;
+			if (!cache) {
+				this.#publicCacheEpoch += 1;
+				this.#publicOperation?.abort(
+					new Error('公共模型元数据缓存已清理'),
+				);
+				this.#publicCacheLoaded = true;
+				this.#publicCatalogFetchedAt = 0;
+				this.#replacePublicModelCatalog(Object.freeze([]));
+				this.#publicExplorerStatus.textContent = '公共模型元数据缓存已清理';
+				return;
+			}
 			this.#publicCacheLoaded = true;
 			this.#publicCatalogFetchedAt = cache.fetchedAt;
 			this.#replacePublicModelCatalog(cache.catalog);
@@ -873,10 +885,14 @@ export class ReaderAiServiceSettingsForm {
 	async #ensurePublicMetadataCacheLoaded(): Promise<void> {
 		if (this.#publicCacheLoaded) return;
 		if (this.#publicCacheLoadPromise) return this.#publicCacheLoadPromise;
+		const epoch = this.#publicCacheEpoch;
 		const pending = (async () => {
 			try {
 				const cached = await this.#repository.loadModelMetadataCache();
-				if (!cached || this.scope.destroyed) return;
+				if (
+					!cached || this.scope.destroyed ||
+					epoch !== this.#publicCacheEpoch
+				) return;
 				this.#publicCatalogFetchedAt = cached.fetchedAt;
 				this.#replacePublicModelCatalog(cached.catalog);
 				this.#publicExplorerStatus.textContent =

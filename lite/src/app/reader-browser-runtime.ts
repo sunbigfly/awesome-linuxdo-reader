@@ -764,7 +764,10 @@ export interface ReaderBrowserTopicFactoryServices {
 	readonly relativeTime: DiscourseNativeRelativeTimeFormatter;
 	readonly exactTime: DiscourseNativeExactTimeFormatter;
 	readonly currentUsername: string;
-	readonly recoverAvatarSource: (source: string) => Promise<string>;
+	readonly recoverAvatarSource: (
+		source: string,
+		signal?: AbortSignal,
+	) => Promise<string>;
 }
 
 export interface ReaderBrowserLightboxOptions<
@@ -2472,6 +2475,8 @@ export class ReaderBrowserRuntime<
 						}
 						: {}),
 					storage: options.storage,
+					emojiSource: (id) =>
+						discourseNativeEmojiUrl(options.host, id),
 					openTarget: async (record) => {
 						const result = await this.openTarget({
 							topicId: record.topicId,
@@ -2508,8 +2513,8 @@ export class ReaderBrowserRuntime<
 					this.userNative.requestIdentity(username),
 				avatarSource: (template, size) =>
 					this.userNative.avatarSource(template, size),
-				recoverAvatarSource: (source: string) =>
-					this.#recoverAvatarSource(source),
+				recoverAvatarSource: (source: string, signal?: AbortSignal) =>
+					this.#recoverAvatarSource(source, signal),
 				toggleFollow: async (username, followed) => {
 					await this.userActions.dispatch(userCommands.follow(
 						username,
@@ -3287,6 +3292,8 @@ export class ReaderBrowserRuntime<
 					),
 					baseUrl: topicBaseUrl,
 					relativeTime: nativeRelativeTime,
+					emojiSource: bookmarkOptions.emojiSource ?? ((id) =>
+						discourseNativeEmojiUrl(options.host, id)),
 					archiveMarker: (topicId, postNumber) =>
 						this.#historyArchiveMarker(topicId, postNumber),
 					reactionIconSource:
@@ -3455,8 +3462,8 @@ export class ReaderBrowserRuntime<
 							relativeTime: nativeRelativeTime,
 							exactTime: nativeExactTime,
 							currentUsername,
-							recoverAvatarSource: (source: string) =>
-								this.#recoverAvatarSource(source),
+							recoverAvatarSource: (source: string, signal?: AbortSignal) =>
+								this.#recoverAvatarSource(source, signal),
 							}),
 					);
 					const replyTreePresentation =
@@ -3500,6 +3507,8 @@ export class ReaderBrowserRuntime<
 									| null;
 								return topic?.archived === true;
 							},
+							emojiSource: (id) =>
+								discourseNativeEmojiUrl(options.host, id),
 							notify: (message) => this.feedback.show(message),
 							parentScope: context.scope,
 							onError: (cause) => reportTopicFeature(
@@ -4206,7 +4215,25 @@ export class ReaderBrowserRuntime<
 						const postAuthorFilter = options.unwantedTopicFilter
 							? new ReaderPostAuthorFilterFeature<TPost>({
 								preferences: options.unwantedTopicFilter,
+								recordHiddenPostAuthor: (username) => {
+									const topic = bundle.services.session.topic;
+									this.unwantedTopics.remember({
+										topicId: context.topicId,
+										title: String(topic?.title ?? '').trim() ||
+											`帖子 #${context.topicId}`,
+										href: nativeTopicLinks.topicHref(context.topicId),
+										categoryId: topic?.category_id,
+										source: 'automatic',
+										matchedRule: `楼层用户：@${username}`,
+										matchedCategory: false,
+									});
+								},
 								parentScope: context.scope,
+								onError: (cause) => reportTopicFeature(
+									context.topicId,
+									'history',
+									cause,
+								),
 							})
 							: null;
 						context.scope.add(
@@ -5412,6 +5439,8 @@ export class ReaderBrowserRuntime<
 					openEntry: async (entry) => {
 						await this.#openHistoryEntry(entry);
 					},
+					emojiSource: historyPanelOptions.emojiSource ?? ((id) =>
+						discourseNativeEmojiUrl(options.host, id)),
 					parentScope: this.scope,
 					onError: (cause) => reportTopicFeature(
 						this.shell.activeTopicId ?? 0,
@@ -5805,8 +5834,11 @@ export class ReaderBrowserRuntime<
 		if (target) this.#boostTargetHighlight.highlight(target);
 	}
 
-	async #recoverAvatarSource(source: string): Promise<string> {
-		return this.imageResources?.resolveAvatarSource(source) ?? '';
+	async #recoverAvatarSource(
+		source: string,
+		signal?: AbortSignal,
+	): Promise<string> {
+		return this.imageResources?.resolveAvatarSource(source, signal) ?? '';
 	}
 
 	async close(): Promise<boolean> {
@@ -7828,6 +7860,18 @@ export function createReaderBrowserRuntimeStage<
 					'翻译与 AI 服务设置 form 需要启用 Settings View 与 TranslationRequestAdapter',
 				);
 			}
+			if (translationFormOptions && runtime.translationRequests) {
+				runtime.scope.add(
+					translationFormOptions.repository.attachCacheObserver(
+						runtime.data.cacheEvents,
+					),
+				);
+				translationFormOptions.repository.metadataChanges.subscribe((cache) => {
+					if (!cache) {
+						runtime.translationRequests?.clearPublicModelMetadataCache();
+					}
+				}, runtime.scope);
+			}
 			if (settingsView && translationFormOptions && runtime.translationRequests) {
 				new ReaderTranslationSettingsForm({
 					document: options.runtime.document,
@@ -8054,6 +8098,10 @@ export function createReaderBrowserRuntimeStage<
 									boosts: 0,
 									replies: 0,
 								};
+							const publicModelMetadata = translationFormOptions
+								? await translationFormOptions.repository
+									.loadModelMetadataCache()
+								: null;
 							const creditBridge = await runtime.creditAccount?.cacheStats() ?? {
 								records: 0,
 								bytes: 0,
@@ -8097,13 +8145,15 @@ export function createReaderBrowserRuntimeStage<
 										detail: `内存热缓存：${notifications.pages} 页 · ` +
 											`${notifications.records} 条消息`,
 									}),
-									responses: Object.freeze({
-											records: bookmarks.bookmarks + bookmarks.reactions +
-												bookmarks.boosts + bookmarks.replies,
-											detail: `内存热缓存：${bookmarks.bookmarks} 条收藏 · ` +
-												`${bookmarks.reactions} 条回应 · ` +
-												`${bookmarks.boosts} 条 Boost · ` +
-												`${bookmarks.replies} 条回复`,
+								responses: Object.freeze({
+									records: bookmarks.bookmarks + bookmarks.reactions +
+										bookmarks.boosts + bookmarks.replies +
+										(publicModelMetadata ? 1 : 0),
+									detail: `内存热缓存：${bookmarks.bookmarks} 条收藏 · ` +
+										`${bookmarks.reactions} 条回应 · ` +
+										`${bookmarks.boosts} 条 Boost · ` +
+										`${bookmarks.replies} 条回复；` +
+										`公共模型元数据：${publicModelMetadata?.catalog.length ?? 0} 个模型`,
 									}),
 									assets: Object.freeze({
 										records: imageObjects.objectUrls,
@@ -8116,6 +8166,7 @@ export function createReaderBrowserRuntimeStage<
 						clear: async (categories) => {
 							const selected = new Set(categories);
 							const failed: ReaderCacheCategory[] = [];
+							const resumes: Array<() => void> = [];
 							if (selected.has('users')) {
 								try {
 									runtime.users.clearCache();
@@ -8128,7 +8179,11 @@ export function createReaderBrowserRuntimeStage<
 							}
 							if (selected.has('notifications')) {
 								try {
-									runtime.notificationController?.clearCache();
+									if (runtime.notificationController) {
+										runtime.notificationController.clearCache({ resume: false });
+										resumes.push(() =>
+											runtime.notificationController?.startBackgroundCache());
+									}
 								} catch (cause) {
 									failed.push('notifications');
 									reportCacheError(cause);
@@ -8136,7 +8191,15 @@ export function createReaderBrowserRuntimeStage<
 							}
 							if (selected.has('responses')) {
 								try {
-									runtime.bookmarkController?.clearCache();
+									if (runtime.bookmarkController) {
+										runtime.bookmarkController.clearCache({ resume: false });
+										resumes.push(() =>
+											runtime.bookmarkController?.startBackgroundCache());
+									}
+									if (translationFormOptions) {
+										await translationFormOptions.repository
+											.clearModelMetadataCache();
+									}
 								} catch (cause) {
 									failed.push('responses');
 									reportCacheError(cause);
@@ -8159,11 +8222,33 @@ export function createReaderBrowserRuntimeStage<
 									);
 								}
 							}
-							return Object.freeze({ failed: Object.freeze(failed) });
+							return Object.freeze({
+								failed: Object.freeze(failed),
+								...(resumes.length
+									? {
+										resume: () => {
+											for (const resume of resumes) resume();
+										},
+									}
+									: {}),
+							});
 						},
 					},
 					clearImageObjectUrls: () =>
 						runtime.imageResources?.clearObjectUrls(),
+					cacheLog: runtime.data.cacheEvents,
+					...(runtime.blobDownloads
+						? {
+							saveCacheLog: (content: string, filename: string) => {
+								runtime.blobDownloads!.save(
+									new Blob([content], {
+										type: 'application/x-ndjson;charset=utf-8',
+									}),
+									filename,
+								);
+							},
+						}
+						: {}),
 					currentTopicAvailable: () =>
 						runtime.shell.activeTopicId !== null,
 					clearCurrentTopic: () => refreshCurrentTopic(),
@@ -8486,6 +8571,8 @@ export function createReaderBrowserRuntimeStage<
 						: runtime.history.ordered('recent-viewed')[0] ?? null,
 					avatarSource: (template, size) =>
 						queueTopicPresentation?.avatarSource(template, size) ?? '',
+					emojiSource: (id) =>
+						queueTopicPresentation?.emojiSource?.(id) ?? '',
 					historyAnchor: (topicId) => {
 						const activeAnchor =
 							runtime.historyNavigation.snapshot.states[
@@ -8583,16 +8670,26 @@ export function createReaderBrowserRuntimeStage<
 								offset += session.pageSize
 							) {
 								const batch = ids.slice(offset, offset + session.pageSize);
-									const loadedBefore = batch.reduce(
+								const loadedBefore = batch.reduce(
 									(count, postId) => count + Number(Boolean(
 										session.postById(Number(postId)),
 									)),
-										0,
-									);
-									await waitForQueuePrefetchRequestHeadroom(abort.signal);
-									await session.loadPostsByIds(
+									0,
+								);
+								await session.loadPostsByIds(
 									batch,
-									{ background: true, maxAttempts: 1 },
+									{
+										background: true,
+										maxAttempts: 1,
+										/*
+										 * TopicSession 只在 canonical 缓存与在飞单飞
+										 * 都未命中时调用 beforeNetwork。额度等待必须
+										 * 放在这个真实缺口边界，不能阻塞纯缓存
+										 * 队列或重复消费者加入已有请求。
+										 */
+										beforeNetwork: () =>
+											waitForQueuePrefetchRequestHeadroom(abort.signal),
+									},
 								);
 								const loadedAfter = batch.reduce(
 									(count, postId) => count + Number(Boolean(

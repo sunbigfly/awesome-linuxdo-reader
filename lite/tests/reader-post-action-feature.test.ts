@@ -2560,6 +2560,78 @@ assert(
 );
 closeReactionPicker(regular.slots.actions);
 
+const queuedReactionStart = mutation.calls.length;
+openReactionPicker(regular.slots.actions);
+const queuedClap = regular.slots.actions.querySelector<HTMLButtonElement>(
+	'.ldp-reaction-picker [data-reaction="clap"]',
+)!;
+click(queuedClap);
+await Promise.resolve();
+openReactionPicker(regular.slots.actions);
+const queuedLaughing = regular.slots.actions.querySelector<HTMLButtonElement>(
+	'.ldp-reaction-picker [data-reaction="laughing"]',
+)!;
+assert(
+	!queuedLaughing.disabled,
+	'首个回应 POST 在途时 picker 必须继续接收切换意图',
+);
+click(queuedLaughing);
+await Promise.resolve();
+assert(
+	mutation.calls.length === queuedReactionStart + 1 &&
+		mutation.calls[queuedReactionStart]?.variant === 'clap',
+	'同一楼层回应在途时不得并发发送第二个 POST',
+);
+mutation.resolve(queuedReactionStart, {
+	...session.postById(2)!,
+	reactions: [{ id: 'clap', count: 1 }],
+	current_user_reaction: { id: 'clap' },
+	reaction_users_count: 1,
+});
+await new Promise((resolve) => setTimeout(resolve, 0));
+const queuedSwitchNativePost = (
+	mutation.calls[queuedReactionStart + 1]?.payload as Readonly<{
+		readonly args?: readonly unknown[];
+	}> | undefined
+)?.args?.[0] as TestPost | undefined;
+assert(
+	mutation.calls.length === queuedReactionStart + 2 &&
+		mutation.calls[queuedReactionStart + 1]?.variant === 'laughing' &&
+		queuedSwitchNativePost?.current_user_reaction?.id === 'clap',
+	'首个回应 settled 后必须按点击前权威状态发送排队的表情切换 POST',
+);
+mutation.resolve(queuedReactionStart + 1, {
+	...session.postById(2)!,
+	reactions: [{ id: 'laughing', count: 1 }],
+	current_user_reaction: { id: 'laughing' },
+	reaction_users_count: 1,
+});
+await new Promise((resolve) => setTimeout(resolve, 0));
+
+const failedQueuedReactionStart = mutation.calls.length;
+openReactionPicker(regular.slots.actions);
+click(regular.slots.actions.querySelector<HTMLButtonElement>(
+	'.ldp-reaction-picker [data-reaction="clap"]',
+)!);
+await Promise.resolve();
+openReactionPicker(regular.slots.actions);
+click(regular.slots.actions.querySelector<HTMLButtonElement>(
+	'.ldp-reaction-picker [data-reaction="heart"]',
+)!);
+const rateLimitedReaction = Object.assign(new Error('rate limited'), {
+	status: 429,
+});
+mutation.reject(failedQueuedReactionStart, rateLimitedReaction);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert(
+	mutation.calls.length === failedQueuedReactionStart + 1 &&
+		notices.at(-1) === '回应失败：rate limited' &&
+		regular.slots.actions.querySelector(
+			'[data-post-like][data-reaction="laughing"]',
+		)?.classList.contains('liked'),
+	'首个回应收到失败状态后必须回滚并丢弃排队切换，不能继续发送第二个 POST',
+);
+
 lightbox.destroy();
 regular.destroy();
 ownView.destroy();

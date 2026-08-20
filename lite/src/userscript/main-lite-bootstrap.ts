@@ -91,6 +91,8 @@ import {
 	type ReaderUnwantedTopicFilterPreferences,
 	type ReaderUnwantedTopicFilterPreferencesPort,
 } from '../collection/reader-unwanted-topic-filter.js';
+import type { ReaderUnwantedTopicInput } from
+	'../collection/reader-unwanted-topic-repository.js';
 import {
 	readerPreferencesPerformanceSettingsAdapter,
 } from '../settings/reader-performance-settings-form.js';
@@ -174,6 +176,10 @@ import {
 	READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS,
 	READER_BACKGROUND_REQUEST_MAX_DEFER_MS,
 } from '../network/browser-shared-request-permit.js';
+import {
+	ReaderHostTurnstileBackgroundController,
+	type ReaderHostTurnstileApi,
+} from '../network/reader-host-turnstile-background-controller.js';
 import {
 	ReaderWebDavConfigRepository,
 } from '../sync/reader-webdav-config-repository.js';
@@ -528,6 +534,21 @@ function createRuntimeStage(
 						);
 					},
 				});
+			const pendingAutomaticTopics = new Map<number, ReaderUnwantedTopicInput>();
+			scope.add(() => pendingAutomaticTopics.clear());
+			const recordAutomaticTopic = (
+				input: ReaderUnwantedTopicInput,
+			): boolean => {
+				const topicId = Number(input.topicId);
+				const runtime = state.runtime;
+				if (!runtime) {
+					pendingAutomaticTopics.set(topicId, input);
+					return false;
+				}
+				runtime.unwantedTopics.remember(input);
+				pendingAutomaticTopics.delete(topicId);
+				return true;
+			};
 			const informationFlow = state.informationFlow;
 			if (!informationFlow) {
 				throw new Error('main-lite 统一信息流协调器尚未就绪');
@@ -573,6 +594,7 @@ function createRuntimeStage(
 							if (!runtime) throw new Error('不想看仓库尚未就绪');
 							runtime.unwantedTopics.remember(input);
 						},
+						recordAutomaticTopic,
 						automaticFilter: (input) =>
 							readerUnwantedTopicFilterPortMatch(
 								unwantedTopicFilter,
@@ -1065,6 +1087,60 @@ function createRuntimeStage(
 		},
 		onReady(runtime, context, _settings, settingsView, _layout, appearance, font) {
 			state.runtime = runtime;
+			for (const [topicId, input] of pendingAutomaticTopics) {
+				try {
+					runtime.unwantedTopics.remember(input);
+					pendingAutomaticTopics.delete(topicId);
+				} catch (cause) {
+					console.error('[main-lite:automatic-unwanted-history]', cause);
+				}
+			}
+			let manualTopicSignature = runtime.unwantedTopics.snapshot.records
+				.filter((record) => record.source === 'manual')
+				.map((record) => record.topicId)
+				.sort((left, right) => left - right)
+				.join(',');
+			hostTopicEnhancement?.refreshHiddenTopics();
+			runtime.unwantedTopics.changes.subscribe((snapshot) => {
+				const nextSignature = snapshot.records
+					.filter((record) => record.source === 'manual')
+					.map((record) => record.topicId)
+					.sort((left, right) => left - right)
+					.join(',');
+				if (nextSignature === manualTopicSignature) return;
+				manualTopicSignature = nextSignature;
+				hostTopicEnhancement?.refreshHiddenTopics();
+			}, runtime.scope);
+			if (document.location.hostname.toLowerCase() === 'linux.do') {
+				const hostTurnstile = new ReaderHostTurnstileBackgroundController({
+					document,
+					enabled: context.readPreferences()
+						.performanceSuspendHostTurnstileInBackground,
+					turnstile: () => {
+						const candidate = (window as Window & Readonly<{
+							turnstile?: ReaderHostTurnstileApi;
+						}>).turnstile;
+						return candidate &&
+							typeof candidate.getResponse === 'function' &&
+							typeof candidate.remove === 'function' &&
+							typeof candidate.render === 'function'
+							? candidate
+							: null;
+					},
+					parentScope: runtime.scope,
+					onError: (cause) => {
+						console.warn(
+							'[main-lite:host-turnstile-background]',
+							cause,
+						);
+					},
+				});
+				context.preferenceChanges.subscribe((preferences) => {
+					hostTurnstile.applyEnabled(
+						preferences.performanceSuspendHostTurnstileInBackground,
+					);
+				}, runtime.scope);
+			}
 			persistTranslationMode = (translationMode) => {
 				context.updatePreferences?.({ translationMode });
 			};

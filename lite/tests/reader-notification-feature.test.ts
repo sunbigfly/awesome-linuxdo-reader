@@ -3693,6 +3693,51 @@ paginationWindow.scope.destroy();
 paginationList.remove();
 paginationPager.remove();
 
+const hiddenPaginationSurface = document.createElement('section');
+const hiddenPaginationList = document.createElement('div');
+const hiddenPaginationPager = document.createElement('div');
+hiddenPaginationSurface.hidden = true;
+hiddenPaginationSurface.append(hiddenPaginationList, hiddenPaginationPager);
+document.body.append(hiddenPaginationSurface);
+let hiddenPaginationGeometryReads = 0;
+for (const [key, value] of [
+	['scrollTop', 600],
+	['clientHeight', 400],
+	['scrollHeight', 1_000],
+] as const) {
+	Object.defineProperty(hiddenPaginationList, key, {
+		configurable: true,
+		get: () => {
+			hiddenPaginationGeometryReads += 1;
+			return value;
+		},
+	});
+}
+let hiddenPaginationLoads = 0;
+const hiddenPaginationWindow = new ReaderCollectionScrollWindow({
+	list: hiddenPaginationList,
+	pager: hiddenPaginationPager,
+	identity: (record: Readonly<{ identity: string }>) => record.identity,
+	loadMore: () => {
+		hiddenPaginationLoads += 1;
+	},
+});
+hiddenPaginationWindow.sync({ loading: false, hasMore: true });
+await flushMicrotasks();
+assert(
+	hiddenPaginationLoads === 0 && hiddenPaginationGeometryReads === 0,
+	'集合浮窗隐藏时同步状态不得读取滚动几何或触发下一页请求',
+);
+hiddenPaginationSurface.hidden = false;
+hiddenPaginationWindow.sync({ loading: false, hasMore: true });
+await flushMicrotasks();
+assert(
+	hiddenPaginationLoads === 1 && hiddenPaginationGeometryReads === 3,
+	'集合浮窗恢复显示后必须按真实滚动几何继续触底分页',
+);
+hiddenPaginationWindow.scope.destroy();
+hiddenPaginationSurface.remove();
+
 let finishProgressRetry!: () => void;
 let progressRetryCalls = 0;
 const progressRetry = new ReaderCollectionProgressView({

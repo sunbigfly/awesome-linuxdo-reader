@@ -5,10 +5,11 @@
 ## 中央契约
 
 - 所有自动读取的 Discourse/外部资源由 `DomainRequestGateway` 归一为 Topic、楼层、二级回复、通知、集合、用户、翻译或公共资源请求，再进入 `CoordinatedRequestClient` 的 scheduler、single-flight、429/challenge、timeout 和 AbortSignal 链。
-- `ResponseRepository` 是远端响应唯一缓存 owner：application 内存 LRU 上限 96 项/24 MiB；IndexedDB `linuxdo-enhanced-reader:responses:v1` / `responses` 上限 600 项/96 MiB。fresh 命中不联网，stale 默认尝试联网且失败回退旧值，retain 超期才删除。持久层每 32 次成功 write/merge 主动执行一次过期、条数和字节淘汰，quota 时立即淘汰并重试。
-- Response 之上的业务热缓存不再被当成“只是 View 状态”：当前 TopicSession、通知分页（最多 32 页）、收藏/回应完整集合、用户资料/关注/外部摘要（最多 32 个用户）、用户观察归一化历史分页、图片 Object URL（最多 32 个）和 LDC 兼容 bridge 都有明确统计与清理生命周期。清理会先让晚到异步结果失效，再释放投影；不能只删 IndexedDB 后继续命中旧内存。
+- `ResponseRepository` 是远端响应唯一缓存 owner：application 内存 LRU 上限 96 项/24 MiB；IndexedDB `awesome linuxdo reader` / `responses` 上限 600 项/96 MiB。首次升级会把旧库 `linuxdo-enhanced-reader:responses:v1` 的记录按 `storedAt` 合并到新库（较新记录胜出），目标事务提交后才删除旧库；删除受其他标签阻塞或失败时保留旧库，并在下次启动继续幂等迁移，避免历史缓存丢失或两库同时参与读取。fresh 命中不联网，stale 默认尝试联网且失败回退旧值，retain 超期才删除。持久层每 32 次成功 write/merge 主动执行一次过期、条数和字节淘汰，quota 时立即淘汰并重试。
+- Response 之上的业务热缓存不再被当成“只是 View 状态”：当前 TopicSession、通知分页（最多 32 页）、收藏/回应完整集合、用户资料/关注/外部摘要（最多 32 个用户）、用户观察归一化历史分页、图片 Object URL（最多 32 个）和 LDC 兼容 bridge 都有明确统计与清理生命周期。设置清理先暂停通知、收藏等后台 producer，并用 epoch 让晚到异步结果失效，再清应用热缓存、持久响应与跨标签失效状态；当前 Topic 只在持久层完成后重建，最后才恢复 producer，不能只删 IndexedDB 后继续命中或写回旧内存。
 - 持久缓存提交与失效通过 `linuxdo-enhanced-reader:cache-coordination:v1`、BroadcastChannel 和 Web Locks 跨标签同步；成功的 `write`、`restore`、`merge` 都让其他标签丢弃同 ID 的旧 memory LRU。分页投影的新 generation 物理页静默落盘，最终 manifest 只广播一次，避免逐页消息风暴。账号相关远端身份都含 `authScope`。已登录文档固定使用 `account:<username>` 并按账号隔离，未登录文档按站点统一使用 `anonymous:<origin>` 并在匿名标签间共享；两类 scope 绝不互读。翻译按内容指纹隔离，公共图片按绝对 URL/variant 隔离，二者不含账号数据。
 - mutation、权限探测和已读提交一律 `no-store`，不能用旧响应代替服务端权威结果。
+- “缓存覆盖所有业务”不是目标：能安全重取且允许 stale 的读取结果进入缓存；设置、历史、队列、离线 HTML、导入字体、AI 总结历史等用户数据由各自 repository 持久化；mutation、上传、权限与已读提交保持 `no-store`；宿主 service/model 和普通 `<img>` 字节分别由 Discourse 与浏览器拥有。设置页只清理前一类可重取数据和明确列出的历史，不把后几类伪装成缓存。
 
 ## 远端与派生资源
 
@@ -31,6 +32,7 @@
 | LDC 账户摘要 | 固定带凭据 credit user-info；账号、username、resource | 中央 `external-user-summary` 30 分钟 / 24 小时；兼容 GM bridge `awesome-linuxdo-reader:ldc-user-bridge:v1` 30 分钟 | 设置用户页 LDC tab | 无可靠事件，打开/显式刷新时校验；账号不一致拒绝消费。bridge 过期即回收，用户资料清理同时清中央响应、会话投影和 bridge，晚到请求不能复写已清记录 |
 | 可认可类别 | 原生 endorsable categories；账号、username | `users`，1 分钟内存 / 5 分钟，不持久化 | 用户认可动作菜单 | 容量变化快且只在动作前需要，短内存缓存；显式刷新可绕过 |
 | 翻译 | provider + 文本 SHA 指纹 + source/target language | `translations`，30 天 / 180 天，持久化；Microsoft token 8 分钟内存且不持久化 | 翻译 controller | 内容不可变，命中期间零请求；provider 失败按登记顺序回退。凭据永不写 IDB |
+| 公共 AI 模型元数据 | 固定匿名 `models.dev/models.json` 与 OpenRouter 公共目录 | GM `awesome-linuxdo-reader:ai-model-metadata:v1` 最长 7 天；`TranslationRequestAdapter.#publicCatalogs` 为 application 内存副本 | AI 服务公共能力查询、供应商目录字段补全 | 本地有效时命中；过期后台更新，显式刷新绕过。归“收藏、回应与其他数据”清理：先清 GM 值并广播，再中止设置页晚到请求、清当前/其他标签投影和 adapter 内存副本，避免立即写回；供应商 `/models` 目录仍是用户配置，不随缓存删除 |
 | 原图/预取图片 Blob | 绝对 URL + `preview/original` variant | `images`，24 小时 / 30 天；object URL 最多 32 个 | 灯箱、下载、媒体预取 | 同 URL/variant single-flight；手动重试可 refresh；对象 URL 按 LRU revoke，Blob 由中央 IDB 淘汰 |
 | 头像、emoji、帖子内预览图 | URL/template 由 Topic、用户、通知、收藏、历史等记录保存；`<img src>` 直接消费 | 图片字节由浏览器 HTTP cache 管理，不另写 Lite IDB；仅进入灯箱/预取时才走上行 Blob cache | 各 View 与浏览器图片加载器 | 用户/帖子事件更新 URL 后自然重渲染；站点 `site-settings` 与 emoji helper 使用宿主已有 registry，不重复请求 emoji 目录 |
 | 站点配置、当前用户、presence | 读取 Discourse 原生 service/model | 只持宿主对象或纯数据快照，不建立第二份远端持久缓存 | 主题、回应目录、在线成员、权限展示 | 路由/宿主 service 与 MessageBus 是权威来源；缺能力时降级为空，不增加轮询 |
@@ -46,6 +48,8 @@
 | Topic 窗口几何/锚点 | `linuxdo-enhanced-reader:reply-window:v1:scope:v2:<authScope>`；最多 128 个 view | 保存 host/topic/root 的滚动锚点与窗口几何 | 首个已登录账号无损复制旧几何/锚点；其他账号从空状态开始，LRU 各自保留最近 128 项 |
 | 离线 Topic Artifact | `reader-topic-offline-artifacts:manifest:scope:v2:<authScope>` 与 `reader-topic-offline-artifact:scope:v2:<authScope>:<topicId>`；永久 | 当前账号的轻量目录与完整 HTML；显式移除才删除，普通响应缓存清理不触及 | 同站点账号隔离；正文覆盖、目录合并和删除都广播对应 ID，其他标签不会继续命中旧 HTML/manifest；首个已登录账号通过持久 legacy-owner 无损复制旧无账号目录，其他账号不可读取或重复认领；WebDAV 继续使用同一账号 scope |
 | 偏好 | `linuxdo-enhanced-reader:prefs` | `PreferencesRepository` 原子读写、normalize、跨页面同步 | 设备级而非账号级，属于用户明确设置，不按远端账号分裂 |
+| AI 服务与主题总结历史 | AI 服务 `awesome-linuxdo-reader:translation:v1`；总结结果 `ldp:topic-summary-results:v1` 最多 80 条；分享设置与窗口几何另有独立 key | 服务 URL、供应商 `/models` 目录、业务选型和参数属于配置；主题总结含生成上下文、时间与结果，可供历史回看 | 都是用户保存或生成的数据，不按“帖子内容”或“其他响应”清理；只有独立的 7 天公共模型元数据是可重取缓存 |
+| 导入字体 | IndexedDB `linuxdo-enhanced-reader:fonts:v1` / `fonts`，最多 64 个、单个 32 MiB、合计 128 MiB | 字体设置、AI 总结图片等共用目录；加载后 FontFace/Google stylesheet 只保留到 application destroy | 用户显式导入的二进制资产，只能在字体管理中逐项移除；数据库改名和六类缓存清理均不触及 |
 | 自定义站点 | `awesome-linuxdo-reader:custom-discourse-sites:v1` | GM value storage 保存已验证 `{host,title}` | 设备级用户配置；仅显式增删改写 |
 | Connect 信任观察历史 | `linuxdo-enhanced-reader:connect-trust-history:v1:scope:v2:<authScope>`；本地观察最长 400 天，界面投影 50 天 | 保存本机观察到的 Connect 指标首末值和已确认阅读指纹；服务端 user-actions 另走 10 分钟 / 24 小时中央响应缓存 | 账号隔离、不可由服务端完整重建，属于用户本地数据；“用户资料卡”清理只删可重取的服务端响应，不删除这份观察历史 |
 | LDC 兼容 bridge | `awesome-linuxdo-reader:ldc-user-bridge:v1`；30 分钟 | LDC 页面同源桥与 Reader 中央请求的短期兼容交接，只保存白名单数据和 `cachedAt` | 可重新获取；过期加载主动置空，设置“用户资料卡”清理也会置空，并以 epoch 阻止晚到请求复写 |
@@ -65,7 +69,7 @@
 
 ## 会话派生、诊断与进行中 registry 穷举
 
-下表是对 `lite/src` 237 个 TypeScript 文件机械扫描 cache/memo 命名、88 个 storage/capability 调用和 139 个含 Map/Set 构造文件后的分类。这里的 Map/Set 不能一概当成用户数据缓存；每类都给出 owner、上限或释放边界，避免“未进设置页”变成未解释遗漏。
+下表是对 `lite/src` 当前 294 个 TypeScript 文件机械扫描 cache/memo、storage/capability 与 Map/Set 构造后，再按 owner 回读源码形成的分类；其中 184 个文件包含 Map/Set/WeakMap/WeakSet，但这些容器不能一概当成用户数据缓存。每类都给出 owner、上限或释放边界，避免“未进设置页”变成未解释遗漏。
 
 | 类别 | owner / 代表字段 | 上限与失效 | 是否进入数据管理 |
 | --- | --- | --- | --- |
@@ -78,8 +82,10 @@
 | 拼音搜索投影 | `BrowserUserscriptEnvironment.createPinyinSearchForms()` closure Map | 512 字符串 LRU；application bindings 释放后回收 | 否：跨历史/通知/收藏/用户共享的 CPU 派生，不能在单分类清理中假装有精确归属 |
 | 图片 Object URL | `ReaderImageResourceService.#sources` | 默认 32 LRU；refresh/源失效/图片分类/scope destroy 都 revoke | 是：归图片分类 |
 | 业务集合热缓存 | notification pages、bookmark/reaction arrays、user entries/follow/external maps、LDC bridge | 32 页、32 用户、完整当前集合、bridge 30 分钟；epoch/abort/timer/scope 门禁 | 是：分别归通知、其他数据、用户资料 |
+| AI 公共目录两级缓存 | GM 元数据 key、`TranslationRequestAdapter.#publicCatalogs`、设置页公共目录投影/请求 | GM 7 天；adapter/surface 到 application/scope 销毁；清理会广播 null、中止晚到请求并同时清三层 | 是：归其他数据；供应商目录和主题总结历史是用户配置/结果，明确排除 |
 | 请求与动作进行中 registry | scheduler `#tasksByKey`、client `#requests`、Topic pending loads、translation queue、post/action/share/bookmark flights、RepeatActionGate deadlines | 完成/abort/destroy 即删；scheduler queueLimit；只保存 Promise/计时/意图，不保存可再次消费的成功响应 | 否：进行中事务；用户清理内容缓存不能取消无关 mutation |
 | 请求事实与性能诊断 | `RequestObserver.#events/#active`、`ReaderResourceMonitor` samples/evidence/visibility | 默认 5 分钟/500 个完成请求（pending 保留）；资源趋势 10 分钟、evidence 最多 1,200 | 不进六类数据缓存；日志页有自己的 completed 清理/active-scope 生命周期 |
+| 缓存事件诊断 | `ReaderCacheObserver` | 最近 15 分钟、最多 1,200 条；记录 operation/outcome/source/key、类型/tag、耗时、大小/条数与失败原因，不保存响应正文、缓存值、Cookie 或凭据 | 不进六类内容缓存；数据管理页可导出 NDJSON，应用退出即释放 |
 | View/DOM/lifecycle registry | 各 View 的 element→state Map、listener Set、PostView WeakMap、frame/timer Map、Signal listeners | 归所属 `LifecycleScope`；destroy 反向释放，WeakMap 不阻止 GC | 否：UI owner 状态，不是业务缓存 |
 | 单次计算与静态 catalog | normalize/dedupe 用局部 Map/Set，动作 descriptor、设置 schema、保留键集合等 module 常量 | 单次调用返回后 GC；静态 catalog 大小由源码固定 | 否：无运行时增长或跨请求陈旧命中 |
 
@@ -88,10 +94,10 @@
 | 设置分类 | 统计层 | 清理层 | 明确保留 |
 | --- | --- | --- | --- |
 | 浏览历史与岁月史书 | 账号隔离 History 条目、本机仍有可定位内容的删除及 403/404/410 事件、主题数与估算字节 | `ReaderHistoryRepository.clear()` + `ReaderChronicleRepository.clear()`（手动清理；正文消失的史书记录读取或点击时自愈移除） | 阅读队列、Topic 正文/快照、Topic 锚点/几何、偏好、自定义站点、浏览器访问历史；收到失效信号不触发正文清理 |
-| 帖子与楼层内容 | 中央 Topic/Post/Tree 记录 + 当前 TopicSession + 宿主分类/标签派生 LRU | 中央分类失效；若当前有主题，先结束旧 session 并 flush，再按 `topic:id` 精确失效并联网重建；最后清宿主身份 LRU | 历史、队列、偏好；分类清理不额外清图片，顶部“清除当前帖子缓存并刷新”才同时清该 Topic 图片 |
+| 帖子与楼层内容 | 中央 Topic/Post/Tree 记录 + 当前 TopicSession + 宿主分类/标签派生 LRU | 先结束旧 session 并 flush，再失效中央分类与跨标签内存；持久层完成后按 `topic:id` 联网重建，最后清宿主身份 LRU | 历史、队列、偏好；分类清理不额外清图片，顶部“清除当前帖子缓存并刷新”才同时清该 Topic 图片 |
 | 用户资料卡 | 中央 user/external response + 用户域热缓存 + LDC bridge | 中央分类失效、用户 session epoch 清理、LDC bridge 置空 | Connect 400 天本机观察历史、原站账号资料、头像字节 |
 | 通知与消息 | 中央通知/展开记录 + controller 32 页热缓存 | 中央分类失效、取消后台 warm/live timer、load epoch 清理分页与投影 | 原站真实通知与私信 |
-| 收藏、回应与其他数据 | 中央收藏/回应/翻译/短时通用响应 + 收藏 controller 完整集合 | 中央分类失效、取消收藏 load/live 并清完整集合 | 原站真实收藏、回应与点赞 |
+| 收藏、回应与其他数据 | 中央收藏/回应/翻译/短时通用响应 + 收藏 controller 完整集合 + 公共 AI 模型元数据两级缓存 | 中央分类失效、取消收藏 load/live 并清完整集合；公共目录清 GM、adapter 内存、当前/其他标签投影及晚到请求 | 原站真实收藏、回应与点赞；AI 服务配置、供应商模型目录、主题总结历史 |
 | 头像、表情与原图 | 中央图片 Blob + Object URL + 三个旧 CacheStorage allowlist | 先清旧 bucket，再失效中央图片记录并 revoke Object URL | 普通 `<img>` 的浏览器 HTTP cache、帖子线上图片 |
 
-目录统计是清理决策的一部分：IndexedDB 目录不可读时必须显示“统计失败”，选择性清理不得把未知持久状态当空目录；全选所有 response 类别仍可直接执行 `all` 失效。每层清理失败都保留对应勾选并报告部分完成，不能以成功 toast 掩盖持久层、广播层或应用热缓存失败。
+目录统计是清理决策的一部分：IndexedDB 目录不可读时必须显示“统计失败”，选择性清理不得把未知持久状态当空目录；全选所有 response 类别仍可直接执行 `all` 失效。每层清理失败都保留对应勾选并报告部分完成，不能以成功 toast 掩盖持久层、广播层或应用热缓存失败。跨标签广播发送失败属于该类别清理失败，不能把其他标签可能保留的内存副本误报成已清理。

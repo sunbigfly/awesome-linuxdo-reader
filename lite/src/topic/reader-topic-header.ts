@@ -5,6 +5,8 @@ import {
 	createReaderIcon,
 	renderReaderIcon,
 } from '../components/reader-icon.js';
+import { renderReaderInlineEmoji } from
+	'../components/reader-inline-emoji.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import { Signal } from '../kernel/signal.js';
 import {
@@ -286,6 +288,10 @@ export class ReaderTopicHeaderController<TTopic, TPost> {
 
 	get snapshot(): ReaderTopicHeaderSnapshot {
 		return this.#snapshot;
+	}
+
+	emojiSource(id: string): string {
+		return this.#presentation.emojiSource?.(id) ?? '';
 	}
 
 	refresh(): ReaderTopicHeaderSnapshot {
@@ -713,6 +719,7 @@ export class ReaderTopicHeaderView {
 	#hostMetadataRetryTimer = 0;
 	#hostMetadataRetryDelay = 80;
 	#topicVotePending = false;
+	#titleEmojiPending = false;
 
 	constructor(options: ReaderTopicHeaderViewOptions) {
 		this.#controller = options.controller;
@@ -842,7 +849,11 @@ export class ReaderTopicHeaderView {
 			this.#hostDocument,
 			snapshot,
 		);
-		this.#elements.titleJump.textContent = snapshot.title;
+		this.#titleEmojiPending = renderReaderInlineEmoji(
+			this.#elements.titleJump,
+			snapshot.title,
+			(id) => this.#controller.emojiSource(id),
+		).unresolved > 0;
 		this.#elements.metaStats.textContent = snapshot.statsText;
 		this.#elements.metaOwner.hidden = !snapshot.ownerUsername;
 		this.#elements.metaOwnerValue.textContent = snapshot.ownerUsername
@@ -909,6 +920,7 @@ export class ReaderTopicHeaderView {
 		this.#renderTopicVote(snapshot.vote);
 		this.#queueTopicHints();
 		if (
+			!this.#titleEmojiPending &&
 			hasCompleteHostIdentityIcons(hostIcons, snapshot) &&
 			!(
 				snapshot.categoryId > 0 &&
@@ -934,6 +946,7 @@ export class ReaderTopicHeaderView {
 			refreshed,
 		);
 		if (
+			!this.#titleEmojiPending &&
 			!(
 				refreshed.categoryId > 0 &&
 				!refreshed.category &&

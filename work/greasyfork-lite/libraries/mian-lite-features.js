@@ -4240,15 +4240,15 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	      (entry) => entry.tab === "Reaction" || entry.tab === "Boost" || entry.tab === "Reply"
 	    )), this.#reactionFilterCounts = this.#reactionFilters(), this.#persistSource("reactions"), this.#persistSource("boosts"), this.#persistSource("replies"), this.#render());
 	  }
-	  clearCache() {
-	    if (!this.scope.destroyed) {
-	      this.#backgroundRestoreEpoch += 1, this.#cancelLoad(), this.#loadEpoch += 1, this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#backgroundWarm = null, this.#cancelBackgroundWarm(), this.#backgroundStatus = "idle", this.#backgroundSource = null, this.#backgroundError = null, this.#backgroundRetryAt = null, this.#backgroundStreamCursor = 0, this.#backgroundNetworkPages = 0, this.#lastAuthoritativeAt.clear(), this.#headRefreshPending.clear();
-	      for (const source of BACKGROUND_SOURCE_ORDER)
-	        this.#sourceProgress.set(source, emptySourceProgress());
-	      for (const stream of BACKGROUND_STREAM_ORDER)
-	        this.#historyStreams.set(stream, emptyHistoryStreamState()), this.#historyStreamRecords.set(stream, Object.freeze([]));
-	      this.#bookmarkRecords = Object.freeze([]), this.#syncedBookmarkRecords = Object.freeze([]), this.#syncedActivityRecords = Object.freeze([]), this.#reactionRecords = Object.freeze([]), this.#boostRecords = Object.freeze([]), this.#replyRecords = Object.freeze([]), this.#bookmarksLoaded = !1, this.#reactionsLoaded = !1, this.#boostsLoaded = !1, this.#repliesLoaded = !1, this.#categoryFilter = "", this.#tagFilter = "", this.#dateFilter = "", this.#sortDirection = "desc", this.#reactionFilterCounts = /* @__PURE__ */ new Map(), this.#selection.clear(), this.#stale = !1, this.#error = null, this.#render(), this.#scheduleBackgroundWarm();
-	    }
+	  clearCache(options = {}) {
+	    if (this.scope.destroyed) return;
+	    const resume = options.resume !== !1;
+	    this.#backgroundRestoreEpoch += 1, this.#backgroundCacheActive = !1, this.#backgroundRestore = null, this.#cancelLoad(), this.#loadEpoch += 1, this.#liveRefresh !== null && this.#cancel(this.#liveRefresh), this.#backgroundWarm !== null && this.#cancel(this.#backgroundWarm), this.#liveRefresh = null, this.#backgroundWarm = null, this.#cancelBackgroundWarm(), this.#backgroundStatus = "idle", this.#backgroundSource = null, this.#backgroundError = null, this.#backgroundRetryAt = null, this.#backgroundStreamCursor = 0, this.#backgroundNetworkPages = 0, this.#lastAuthoritativeAt.clear(), this.#headRefreshPending.clear();
+	    for (const source of BACKGROUND_SOURCE_ORDER)
+	      this.#sourceProgress.set(source, emptySourceProgress());
+	    for (const stream of BACKGROUND_STREAM_ORDER)
+	      this.#historyStreams.set(stream, emptyHistoryStreamState()), this.#historyStreamRecords.set(stream, Object.freeze([]));
+	    this.#bookmarkRecords = Object.freeze([]), this.#syncedBookmarkRecords = Object.freeze([]), this.#syncedActivityRecords = Object.freeze([]), this.#reactionRecords = Object.freeze([]), this.#boostRecords = Object.freeze([]), this.#replyRecords = Object.freeze([]), this.#bookmarksLoaded = !1, this.#reactionsLoaded = !1, this.#boostsLoaded = !1, this.#repliesLoaded = !1, this.#categoryFilter = "", this.#tagFilter = "", this.#dateFilter = "", this.#sortDirection = "desc", this.#reactionFilterCounts = /* @__PURE__ */ new Map(), this.#selection.clear(), this.#stale = !1, this.#error = null, this.#render(), resume && this.startBackgroundCache();
 	  }
 	  destroy() {
 	    this.scope.destroy();
@@ -4845,7 +4845,7 @@ runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, 
 	    this.#revision += 1, this.#snapshotCache = null, this.changes.emit(this.snapshot);
 	  }
 	}
-}, "7bed627f06f3489dd553e4f8615f86546becb82fe491540911495619b871b87c");
+}, "158dc2c6f6cd93c4dde9e81b1091aff1e1bc24bfd55d660e0e0045b7e180df54");
 
 /* Source: lite/src/bookmark/reader-bookmark-model.ts */
 runtime.register("src/bookmark/reader-bookmark-model.js", function(module, exports, require) {
@@ -5187,7 +5187,7 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	  ReaderBookmarkPanelView: () => ReaderBookmarkPanelView
 	});
 	module.exports = __toCommonJS(reader_bookmark_panel_view_exports);
-	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_image_fallback = require("../components/reader-image-fallback.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_popover_filter_controls = require("../collection/reader-popover-filter-controls.js"), import_reader_bookmark_model = require("./reader-bookmark-model.js");
+	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_image_fallback = require("../components/reader-image-fallback.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_inline_emoji = require("../components/reader-inline-emoji.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_popover_filter_controls = require("../collection/reader-popover-filter-controls.js"), import_reader_bookmark_model = require("./reader-bookmark-model.js");
 	const BOOKMARK_TAB_DRAG_THRESHOLD_PX = 8;
 	function targetHref(record, baseUrl) {
 	  return new URL(
@@ -5216,6 +5216,7 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	  #relativeTime;
 	  #renderIcon;
 	  #reactionIconSource;
+	  #emojiSource;
 	  #avatarSource;
 	  #archiveMarker;
 	  #confirmDelete;
@@ -5233,7 +5234,7 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	  #historyCacheCompleted = !1;
 	  #reactionFilterSignature = "";
 	  constructor(options) {
-	    this.#document = options.document, this.#controller = options.controller, this.#elements = options.elements, this.#baseUrl = new URL(options.baseUrl).href, this.#relativeTime = options.relativeTime, this.#renderIcon = options.renderIcon ?? null, this.#reactionIconSource = options.reactionIconSource ?? (() => null), this.#avatarSource = options.avatarSource ?? ((template, size) => (0, import_native_host_api.discourseAvatarTemplateUrl)(template, size, this.#baseUrl)), this.#archiveMarker = options.archiveMarker ?? (() => null), this.#confirmDelete = options.confirmDelete ?? (() => !0), this.#notify = options.notify ?? (() => {
+	    this.#document = options.document, this.#controller = options.controller, this.#elements = options.elements, this.#baseUrl = new URL(options.baseUrl).href, this.#relativeTime = options.relativeTime, this.#renderIcon = options.renderIcon ?? null, this.#reactionIconSource = options.reactionIconSource ?? (() => null), this.#emojiSource = options.emojiSource ?? (() => ""), this.#avatarSource = options.avatarSource ?? ((template, size) => (0, import_native_host_api.discourseAvatarTemplateUrl)(template, size, this.#baseUrl)), this.#archiveMarker = options.archiveMarker ?? (() => null), this.#confirmDelete = options.confirmDelete ?? (() => !0), this.#notify = options.notify ?? (() => {
 	    }), this.#onError = options.onError ?? (() => {
 	    });
 	    const tabList = this.#elements.tabs[0]?.parentElement;
@@ -5701,7 +5702,7 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	    const copy = this.#document.createElement("span");
 	    copy.className = "ldp-notification-copy";
 	    const title = this.#document.createElement("strong");
-	    title.className = "ldp-notification-title", title.textContent = displayTitle;
+	    title.className = "ldp-notification-title", (0, import_reader_inline_emoji.renderReaderInlineEmoji)(title, displayTitle, this.#emojiSource);
 	    const meta = this.#document.createElement("span");
 	    meta.className = "ldp-notification-meta";
 	    const user = record.authorUsername ? ` · @${record.authorUsername}` : "", time = record.createdAt ? ` · ${this.#relativeTime(record.createdAt)}` : "";
@@ -5728,7 +5729,11 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	      meta.textContent = archivePrefix + `${record.tab === "Post" ? `楼层 #${record.postNumber}` : "帖子"}${record.highestPostNumber ? ` · ${record.highestPostNumber} 帖` : ""}${record.name ? ` · ${record.name}` : ""}${time}`;
 	    if (copy.append(title, meta), record.excerpt && activityTab(record.tab)) {
 	      const excerpt = this.#document.createElement("span");
-	      excerpt.className = "ldp-notification-excerpt", excerpt.textContent = record.excerpt, copy.append(excerpt);
+	      excerpt.className = "ldp-notification-excerpt", (0, import_reader_inline_emoji.renderReaderInlineEmoji)(
+	        excerpt,
+	        record.excerpt,
+	        this.#emojiSource
+	      ), copy.append(excerpt);
 	    }
 	    if (link.append(copy), item.append(link), record.bookmarkId !== null && !snapshot.multi) {
 	      const remove = this.#document.createElement("button");
@@ -5802,7 +5807,7 @@ runtime.register("src/bookmark/reader-bookmark-panel-view.js", function(module, 
 	    button.dataset.ldpRequestBusy = busy ? "1" : "0", button.setAttribute("aria-busy", String(busy)), button.disabled = busy;
 	  }
 	}
-}, "7a98b9f3319a9c8b2155836d80f42ee9d05bd00934cceb0a0f8b012d42c0d39e");
+}, "d866e16db27c535baf10658b04ff555ac7a5b4df6bd24a16762b4513ef99bd41");
 
 /* Source: lite/src/font/reader-font-catalog.ts */
 runtime.register("src/font/reader-font-catalog.js", function(module, exports, require) {
@@ -7961,6 +7966,16 @@ runtime.register("src/media/reader-image-resource-service.js", function(module, 
 	    );
 	  }) : operation;
 	}
+	function linkedConsumerSignal(lifecycle, consumer) {
+	  lifecycle.throwIfAborted(), consumer.throwIfAborted();
+	  const controller = new AbortController(), abortLifecycle = () => controller.abort(lifecycle.reason), abortConsumer = () => controller.abort(consumer.reason);
+	  return lifecycle.addEventListener("abort", abortLifecycle, { once: !0 }), consumer.addEventListener("abort", abortConsumer, { once: !0 }), Object.freeze({
+	    signal: controller.signal,
+	    release: () => {
+	      lifecycle.removeEventListener("abort", abortLifecycle), consumer.removeEventListener("abort", abortConsumer);
+	    }
+	  });
+	}
 	function canDegrade(error) {
 	  return error instanceof import_coordinated_request_client.RequestStatusError && [
 	    "authentication",
@@ -8045,14 +8060,20 @@ runtime.register("src/media/reader-image-resource-service.js", function(module, 
 	    }));
 	    return this.#assertActive(), this.#objectUrl(source, blob);
 	  }
-	  async resolveAvatarSource(rawSource) {
+	  async resolveAvatarSource(rawSource, consumerSignal) {
 	    this.#assertActive();
 	    const source = this.#resources.normalize(rawSource);
-	    return source.startsWith("blob:") || source.startsWith("data:") || (this.#nonEmpty(await this.#resources.load(source, {
-	      signal: this.#lifecycle.signal,
-	      profile: "resource-visible",
-	      validation: "discourse-avatar"
-	    })), this.#assertActive()), source;
+	    if (source.startsWith("blob:") || source.startsWith("data:")) return source;
+	    const linked = consumerSignal ? linkedConsumerSignal(this.#lifecycle.signal, consumerSignal) : null;
+	    try {
+	      return this.#nonEmpty(await this.#resources.load(source, {
+	        signal: linked?.signal ?? this.#lifecycle.signal,
+	        profile: "resource-visible",
+	        validation: "discourse-avatar"
+	      })), this.#assertActive(), consumerSignal?.throwIfAborted(), source;
+	    } finally {
+	      linked?.release();
+	    }
 	  }
 	  async missingOriginalCount(items) {
 	    this.#assertActive();
@@ -8130,7 +8151,7 @@ runtime.register("src/media/reader-image-resource-service.js", function(module, 
 	    if (this.scope.destroyed) throw new Error("ReaderImageResourceService 已销毁");
 	  }
 	}
-}, "a2abe7305f1a64ca56952422336f580de82f822c40641aaddab16e166e4f5c7c");
+}, "7797b52c43ab6e44c21c5cbcbd84f886fccb0219215d8241f19e3ccc00436540");
 
 /* Source: lite/src/media/reader-image-retry-controller.ts */
 runtime.register("src/media/reader-image-retry-controller.js", function(module, exports, require) {
@@ -11004,7 +11025,7 @@ runtime.register("src/media/reader-poll-feature.js", function(module, exports, r
 	  ReaderTopicPollFeature: () => ReaderTopicPollFeature
 	});
 	module.exports = __toCommonJS(reader_poll_feature_exports);
-	var import_html_element = require("../dom/html-element.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_reader_poll_model = require("./reader-poll-model.js");
+	var import_html_element = require("../dom/html-element.js"), import_reader_inline_emoji = require("../components/reader-inline-emoji.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_reader_poll_model = require("./reader-poll-model.js");
 	class ReaderPollController {
 	  scope;
 	  changes = new import_signal.Signal();
@@ -11129,8 +11150,9 @@ runtime.register("src/media/reader-poll-feature.js", function(module, exports, r
 	  #controller;
 	  #originalHtml;
 	  #titleHtml;
+	  #emojiSource;
 	  constructor(options) {
-	    this.#document = options.document, this.#container = options.container, this.#controller = options.controller, this.#originalHtml = options.container.innerHTML, this.#titleHtml = options.container.querySelector(".poll-title, .ldp-poll-title")?.innerHTML ?? "", this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#render(options.controller.snapshot()), options.controller.changes.subscribe((snapshot) => this.#render(snapshot), this.scope), this.scope.listen(this.#container, "change", (event) => this.#onChange(event)), this.scope.listen(this.#container, "click", (event) => this.#onClick(event)), this.scope.add(() => {
+	    this.#document = options.document, this.#container = options.container, this.#controller = options.controller, this.#emojiSource = options.emojiSource ?? (() => ""), this.#originalHtml = options.container.innerHTML, this.#titleHtml = options.container.querySelector(".poll-title, .ldp-poll-title")?.innerHTML ?? "", this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#render(options.controller.snapshot()), options.controller.changes.subscribe((snapshot) => this.#render(snapshot), this.scope), this.scope.listen(this.#container, "change", (event) => this.#onChange(event)), this.scope.listen(this.#container, "click", (event) => this.#onClick(event)), this.scope.add(() => {
 	      this.#container.classList.remove("ldp-reader-poll"), delete this.#container.dataset.ldpPollName, delete this.#container.dataset.ldpPollShowResults, this.#container.removeAttribute("aria-busy"), this.#container.innerHTML = this.#originalHtml;
 	    });
 	  }
@@ -11142,11 +11164,19 @@ runtime.register("src/media/reader-poll-feature.js", function(module, exports, r
 	    const fragment = this.#document.createDocumentFragment();
 	    if (this.#titleHtml || snapshot.title) {
 	      const title = (0, import_html_element.htmlElement)(this.#document, "div", "ldp-poll-title");
-	      this.#titleHtml ? title.innerHTML = this.#titleHtml : title.textContent = snapshot.title, fragment.append(title);
+	      this.#titleHtml ? title.innerHTML = this.#titleHtml : (0, import_reader_inline_emoji.renderReaderInlineEmoji)(
+	        title,
+	        snapshot.title,
+	        this.#emojiSource
+	      ), fragment.append(title);
 	    }
 	    if (snapshot.showResults ? fragment.append(this.#results(snapshot)) : fragment.append(this.#choices(snapshot)), snapshot.note) {
 	      const note = (0, import_html_element.htmlElement)(this.#document, "div", "ldp-poll-note");
-	      note.textContent = snapshot.note, fragment.append(note);
+	      (0, import_reader_inline_emoji.renderReaderInlineEmoji)(
+	        note,
+	        snapshot.note,
+	        this.#emojiSource
+	      ), fragment.append(note);
 	    }
 	    fragment.append(this.#footer(snapshot)), this.#container.replaceChildren(fragment);
 	  }
@@ -11263,6 +11293,7 @@ runtime.register("src/media/reader-poll-feature.js", function(module, exports, r
 	          document: this.#options.document,
 	          container,
 	          controller,
+	          ...this.#options.emojiSource ? { emojiSource: this.#options.emojiSource } : {},
 	          parentScope: scope
 	        });
 	      } catch (error) {
@@ -11276,7 +11307,7 @@ runtime.register("src/media/reader-poll-feature.js", function(module, exports, r
 	    this.#views.get(view)?.destroy(), this.#views.delete(view);
 	  }
 	}
-}, "be8f51054603f620796be0926ae34dcefc88345869b8714a135037ce5fc85685");
+}, "e1fe6e782557b079743c12d13304202fd1f30abd892fd32380303545271c4218");
 
 /* Source: lite/src/media/reader-poll-model.ts */
 runtime.register("src/media/reader-poll-model.js", function(module, exports, require) {
@@ -14193,6 +14224,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	  #byRoot = /* @__PURE__ */ new Map();
 	  #reactionHoverOpenTimers = /* @__PURE__ */ new Map();
 	  #reactionHoverCloseTimers = /* @__PURE__ */ new Map();
+	  #queuedReactionIntentByPostId = /* @__PURE__ */ new Map();
 	  #capabilityRefreshes = /* @__PURE__ */ new Map();
 	  #capabilityRefreshAttempts = /* @__PURE__ */ new Set();
 	  #boostQuickActionBubble = null;
@@ -14294,7 +14326,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	      for (const binding of this.#byRoot.values())
 	        binding.manifest.update(this.#capabilityInput(binding.post));
 	    })), this.scope.add(() => {
-	      this.#cancelHostRuntimeReadyRetry(), this.#closeBoostQuickActions(), this.#clearReactionHoverTimers(), this.#closeBoost();
+	      this.#cancelHostRuntimeReadyRetry(), this.#closeBoostQuickActions(), this.#clearReactionHoverTimers(), this.#queuedReactionIntentByPostId.clear(), this.#closeBoost();
 	      for (const binding of this.#byRoot.values())
 	        binding.kind === "post" && binding.unbind?.(), binding.manifest.destroy();
 	      this.#byRoot.clear(), this.#capabilityRefreshes.clear(), this.#capabilityRefreshAttempts.clear();
@@ -14459,7 +14491,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	      picker.className = "ldp-reaction-picker", picker.hidden = !binding.open;
 	      for (const option of selectable) {
 	        const button = this.#reactionButton(option, null);
-	        button.classList.toggle("on", option.id === current), button.disabled = pending, picker.append(button);
+	        button.classList.toggle("on", option.id === current), picker.append(button);
 	      }
 	      anchor.append(trigger, picker), fragment.append(anchor);
 	    } else postLikePicker || (binding.open = !1);
@@ -14499,7 +14531,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	    const current = reactionId((0, import_value_record.valueRecord)(post.current_user_reaction)?.id), options = selectable.map((option, order) => ({ option, order })).sort((left, right) => (counts.get(right.option.id) ?? 0) - (counts.get(left.option.id) ?? 0) || left.order - right.order);
 	    for (const { option } of options) {
 	      const count = counts.get(option.id) ?? 0, button = this.#reactionButton(option, count);
-	      button.classList.toggle("on", option.id === current), button.disabled = pending, count || (button.querySelector("b").textContent = ""), picker.append(button);
+	      button.classList.toggle("on", option.id === current), count || (button.querySelector("b").textContent = ""), picker.append(button);
 	    }
 	    anchor.append(picker);
 	    let badge = like.querySelector(
@@ -15904,7 +15936,10 @@ ${content}
 	  }
 	  #dispatchReaction(binding, reaction) {
 	    const postId = Number(binding.post.id);
-	    if (this.#actionPending(postId, "reactions")) return;
+	    if (this.#actionPending(postId, "reactions")) {
+	      this.#queueReactionIntent(binding, reaction);
+	      return;
+	    }
 	    binding.open = !1;
 	    let snapshots = /* @__PURE__ */ new Map();
 	    try {
@@ -15917,12 +15952,32 @@ ${content}
 	      });
 	      snapshots = this.#projectReaction(postId, reaction), this.#actions.dispatch(
 	        this.#commands.reaction(postId, mutation)
-	      ).catch((cause) => {
-	        this.#restoreReaction(snapshots), this.#reportActionFailure("回应失败", cause);
+	      ).then(() => {
+	        this.#drainQueuedReactionIntent(postId);
+	      }, (cause) => {
+	        this.#restoreReaction(snapshots), this.#queuedReactionIntentByPostId.delete(postId), this.#reportActionFailure("回应失败", cause);
 	      });
 	    } catch (error) {
 	      this.#restoreReaction(snapshots), this.#reportActionFailure("回应失败", error);
 	    }
+	  }
+	  #queueReactionIntent(binding, reaction) {
+	    const postId = Number(binding.post.id), queued = this.#queuedReactionIntentByPostId, currentIntent = queued.has(postId) ? queued.get(postId) ?? "" : reactionId((0, import_value_record.valueRecord)(binding.post.current_user_reaction)?.id);
+	    queued.set(postId, currentIntent === reaction ? "" : reaction), binding.open = !1, this.#syncReactionPickerVisibility(binding);
+	  }
+	  #drainQueuedReactionIntent(postId) {
+	    const queued = this.#queuedReactionIntentByPostId;
+	    if (!queued.has(postId)) return;
+	    const desired = queued.get(postId) ?? "";
+	    if (queued.delete(postId), this.scope.destroyed) return;
+	    const binding = [...this.#byRoot.values()].find((candidate) => Number(candidate.post.id) === postId);
+	    if (!binding) return;
+	    const current = reactionId(
+	      (0, import_value_record.valueRecord)(binding.post.current_user_reaction)?.id
+	    );
+	    if (current === desired) return;
+	    const target = desired || current;
+	    target && this.#dispatchReaction(binding, target);
 	  }
 	  #projectReaction(postId, reaction) {
 	    const snapshots = /* @__PURE__ */ new Map();
@@ -15973,7 +16028,7 @@ ${content}
 	    !binding || !binding.root.classList.contains("ldp-topic-action-rail-post") || (binding.open = !1, expanded && !binding.contextHydrated && (binding.contextHydrated = !0, this.#renderActions(binding), this.#renderTopicFooter(binding)), this.#clearReactionHoverTimers(binding.slot), this.#syncReactionPickerVisibility(binding));
 	  }
 	}
-}, "d7ed53b90516f15aeb6a500f049e27e908dfc469c2487dc689bd8fb46189277a");
+}, "68d99241c5ed368a2d1a266833b1343db3f6c7d5284cdd34c8df5267965e6293");
 
 /* Source: lite/src/post/reader-post-management-action-coordinator.ts */
 runtime.register("src/post/reader-post-management-action-coordinator.js", function(module, exports, require) {
@@ -21384,6 +21439,7 @@ runtime.register("src/settings/reader-ai-service-settings-form.js", function(mod
 	  #editingBaseUrl = null;
 	  #operation = null;
 	  #publicOperation = null;
+	  #publicCacheEpoch = 0;
 	  #metadataAnchor = null;
 	  constructor(options) {
 	    this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#document = options.document, this.#host = options.host, this.#surfaceHost = options.surfaceHost ?? options.host, this.#repository = options.repository, this.#access = options.access;
@@ -21612,7 +21668,15 @@ runtime.register("src/settings/reader-ai-service-settings-form.js", function(mod
 	    }), this.scope.listen(this.#addProfile, "click", () => this.#startNewProfile()), this.scope.listen(this.#removeProfile, "click", () => void this.#removeCurrentProfile()), this.scope.listen(this.#save, "click", () => void this.#saveConfig()), this.scope.listen(this.#loadModels, "click", () => void this.#fetchModels()), this.#repository.changes.subscribe(({ config }) => {
 	      this.scope.destroyed || (this.#renderProfileOptions(config), this.#loadProfile((0, import_reader_translation_config.readerTranslationActiveProfile)(config)));
 	    }, this.scope), this.#repository.metadataChanges.subscribe((cache) => {
-	      !cache || this.scope.destroyed || (this.#publicCacheLoaded = !0, this.#publicCatalogFetchedAt = cache.fetchedAt, this.#replacePublicModelCatalog(cache.catalog), this.#publicExplorerStatus.textContent = `已同步其他标签的模型目录 · ${cache.catalog.length} 个`);
+	      if (!this.scope.destroyed) {
+	        if (!cache) {
+	          this.#publicCacheEpoch += 1, this.#publicOperation?.abort(
+	            new Error("公共模型元数据缓存已清理")
+	          ), this.#publicCacheLoaded = !0, this.#publicCatalogFetchedAt = 0, this.#replacePublicModelCatalog(Object.freeze([])), this.#publicExplorerStatus.textContent = "公共模型元数据缓存已清理";
+	          return;
+	        }
+	        this.#publicCacheLoaded = !0, this.#publicCatalogFetchedAt = cache.fetchedAt, this.#replacePublicModelCatalog(cache.catalog), this.#publicExplorerStatus.textContent = `已同步其他标签的模型目录 · ${cache.catalog.length} 个`;
+	      }
 	    }, this.scope), this.scope.add(() => {
 	      this.#operation?.abort(new Error("AI 服务设置已关闭")), this.#publicOperation?.abort(new Error("AI 服务设置已关闭")), this.#modelMetadata.remove(), this.#host.replaceChildren();
 	    }), this.#load();
@@ -21839,10 +21903,10 @@ runtime.register("src/settings/reader-ai-service-settings-form.js", function(mod
 	  async #ensurePublicMetadataCacheLoaded() {
 	    if (this.#publicCacheLoaded) return;
 	    if (this.#publicCacheLoadPromise) return this.#publicCacheLoadPromise;
-	    const pending = (async () => {
+	    const epoch = this.#publicCacheEpoch, pending = (async () => {
 	      try {
 	        const cached = await this.#repository.loadModelMetadataCache();
-	        if (!cached || this.scope.destroyed) return;
+	        if (!cached || this.scope.destroyed || epoch !== this.#publicCacheEpoch) return;
 	        this.#publicCatalogFetchedAt = cached.fetchedAt, this.#replacePublicModelCatalog(cached.catalog), this.#publicExplorerStatus.textContent = `已读取本地缓存 · ${new Date(cached.fetchedAt).toLocaleDateString("zh-CN")}`;
 	      } catch {
 	      }
@@ -22021,7 +22085,7 @@ runtime.register("src/settings/reader-ai-service-settings-form.js", function(mod
 	    this.#status.textContent = message, kind === "idle" ? this.#status.removeAttribute("data-status-kind") : this.#status.dataset.statusKind = kind;
 	  }
 	}
-}, "d417d5388dbf0a4281b8fc28940a2b200305e918abe630dd55e2fcedcdfc844c");
+}, "d1f4e8ab5067b0712d0d13b0014e16f985c03e0f9d0c4c0d45427effb6d008c0");
 
 /* Source: lite/src/settings/reader-appearance-settings-form.ts */
 runtime.register("src/settings/reader-appearance-settings-form.js", function(module, exports, require) {
@@ -25292,7 +25356,11 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	var import_lifecycle = require("../kernel/lifecycle.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_settings_dom = require("./reader-settings-dom.js"), import_reader_numeric_settings_draft = require("./reader-numeric-settings-draft.js");
 	const readerPreferencesPerformanceSettingsAdapter = Object.freeze({
 	  readConfig: import_reader_preferences_schema.readReaderPerformanceConfig,
-	  createPatch: import_reader_preferences_schema.createReaderPerformancePreferencesPatch
+	  createPatch: import_reader_preferences_schema.createReaderPerformancePreferencesPatch,
+	  readSuspendHostTurnstileInBackground: (preferences) => preferences.performanceSuspendHostTurnstileInBackground,
+	  createSuspendHostTurnstileInBackgroundPatch: (enabled) => ({
+	    performanceSuspendHostTurnstileInBackground: enabled
+	  })
 	}), groups = Object.freeze([
 	  Object.freeze({
 	    id: "main-request",
@@ -25417,11 +25485,14 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	  #status;
 	  #reset;
 	  #draft;
+	  #suspendHostTurnstile;
+	  #suspendHostTurnstileOriginal;
+	  #suspendHostTurnstileDraft;
 	  constructor(options) {
 	    this.#controller = options.controller, this.#preferences = options.preferences, this.#host = options.host, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#draft = new import_reader_numeric_settings_draft.ReaderNumericSettingsDraft(
 	      numericDefinitions,
 	      this.#preferences.readConfig(options.readPreferences())
-	    );
+	    ), this.#suspendHostTurnstileOriginal = this.#readSuspendHostTurnstile(options.readPreferences()), this.#suspendHostTurnstileDraft = this.#suspendHostTurnstileOriginal;
 	    const presets = (0, import_reader_settings_dom.settingsElement)(
 	      options.document,
 	      "div",
@@ -25499,6 +25570,39 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	      }
 	      groupNode.append(head, content), categoryGroups.append(groupNode);
 	    }
+	    const hostTurnstileSupported = typeof this.#preferences.readSuspendHostTurnstileInBackground == "function" && typeof this.#preferences.createSuspendHostTurnstileInBackgroundPatch == "function", hostRuntimeGroup = (0, import_reader_settings_dom.settingsElement)(
+	      options.document,
+	      "section",
+	      "ldp-settings-category-group"
+	    );
+	    hostRuntimeGroup.dataset.settingsCategory = "performance-host-runtime";
+	    const hostRuntimeHead = (0, import_reader_settings_dom.settingsElement)(
+	      options.document,
+	      "div",
+	      "ldp-settings-category-head"
+	    ), hostRuntimeTitle = (0, import_reader_settings_dom.settingsElement)(options.document, "strong");
+	    hostRuntimeTitle.textContent = "宿主后台资源（实验）";
+	    const hostRuntimeDescription = (0, import_reader_settings_dom.settingsElement)(options.document, "small");
+	    hostRuntimeDescription.textContent = "只管理 LinuxDo 页面自身的隐藏验证控件，不改变 Reader 请求预算。", hostRuntimeHead.append(hostRuntimeTitle, hostRuntimeDescription);
+	    const hostRuntimeContent = (0, import_reader_settings_dom.settingsElement)(
+	      options.document,
+	      "div",
+	      "ldp-settings-fields ldp-settings-category-list"
+	    ), hostTurnstileSwitch = (0, import_reader_settings_dom.settingsSwitch)(
+	      options.document,
+	      "后台暂停宿主 Turnstile",
+	      "ldp-performance-host-turnstile-input"
+	    );
+	    this.#suspendHostTurnstile = hostTurnstileSwitch.input, this.#suspendHostTurnstile.dataset.performanceHostKey = "suspendHostTurnstileInBackground";
+	    const hostTurnstileRow = (0, import_reader_settings_dom.settingsOptionRow)(
+	      options.document,
+	      "后台暂停宿主 Turnstile",
+	      "标签后台停留 30 秒、验证已完成且没有编辑或支付交互时释放隐藏挑战；回到前台立即恢复。默认关闭。",
+	      hostTurnstileSwitch.root
+	    );
+	    hostTurnstileRow.dataset.settingHelp = "实验项：只处理 body 直属、已有有效响应的 LinuxDo 宿主控件；不会读取或保存令牌，也不会处理 Reader Cloudflare 验证窗口。", hostRuntimeContent.append(hostTurnstileRow), hostRuntimeGroup.append(hostRuntimeHead, hostRuntimeContent), hostTurnstileSupported && (categoryGroups.append(hostRuntimeGroup), this.scope.listen(this.#suspendHostTurnstile, "change", () => {
+	      this.#suspendHostTurnstileDraft = this.#suspendHostTurnstile.checked, this.#render(), this.#controller.refresh();
+	    }));
 	    const footer = (0, import_reader_settings_dom.settingsFooter)(
 	      options.document,
 	      "恢复默认",
@@ -25517,10 +25621,15 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	      validate: () => this.#validate(),
 	      createPatch: () => {
 	        const config = this.#readConfig();
-	        return this.#preferences.createPatch(
-	          config,
-	          (0, import_reader_preferences_schema.readerPerformancePresetForConfig)(config)
-	        );
+	        return {
+	          ...this.#preferences.createPatch(
+	            config,
+	            (0, import_reader_preferences_schema.readerPerformancePresetForConfig)(config)
+	          ),
+	          ...this.#createSuspendHostTurnstilePatch(
+	            this.#suspendHostTurnstileDraft
+	          )
+	        };
 	      },
 	      acceptPersisted: (preferences) => {
 	        this.#acceptPreferences(preferences);
@@ -25536,13 +25645,16 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	    }), this.#render();
 	  }
 	  applyPreferences(preferences) {
-	    this.scope.destroyed || (this.#draft.rebase(this.#preferences.readConfig(preferences)), this.#syncInputs(), this.#render(), this.#controller.refresh());
+	    if (this.scope.destroyed) return;
+	    this.#draft.rebase(this.#preferences.readConfig(preferences));
+	    const nextSuspendHostTurnstile = this.#readSuspendHostTurnstile(preferences);
+	    this.#suspendHostTurnstileDraft === this.#suspendHostTurnstileOriginal && (this.#suspendHostTurnstileDraft = nextSuspendHostTurnstile), this.#suspendHostTurnstileOriginal = nextSuspendHostTurnstile, this.#syncInputs(), this.#render(), this.#controller.refresh();
 	  }
 	  destroy() {
 	    this.scope.destroy();
 	  }
 	  #acceptPreferences(preferences) {
-	    this.#draft.accept(this.#preferences.readConfig(preferences)), this.#syncInputs(), this.#render();
+	    this.#draft.accept(this.#preferences.readConfig(preferences)), this.#suspendHostTurnstileOriginal = this.#readSuspendHostTurnstile(preferences), this.#suspendHostTurnstileDraft = this.#suspendHostTurnstileOriginal, this.#syncInputs(), this.#render();
 	  }
 	  #writeConfig(config, refresh = !0) {
 	    this.#draft.setValues(config), this.#syncInputs(), this.#render(), refresh && this.#controller.refresh();
@@ -25550,15 +25662,26 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	  #readConfig() {
 	    return this.#draft.read();
 	  }
+	  #readSuspendHostTurnstile(preferences) {
+	    return this.#preferences.readSuspendHostTurnstileInBackground?.(
+	      preferences
+	    ) === !0;
+	  }
+	  #createSuspendHostTurnstilePatch(enabled) {
+	    return this.#preferences.createSuspendHostTurnstileInBackgroundPatch?.(
+	      enabled
+	    ) ?? {};
+	  }
 	  #validate() {
 	    return this.#draft.issues();
 	  }
 	  #changeCount() {
-	    return this.#draft.changeCount();
+	    return this.#draft.changeCount() + +(this.#suspendHostTurnstileDraft !== this.#suspendHostTurnstileOriginal);
 	  }
 	  #syncInputs() {
 	    for (const field of fields)
 	      this.#inputs.get(field.name).value = this.#draft.rawValue(field.name);
+	    this.#suspendHostTurnstile.checked = this.#suspendHostTurnstileDraft;
 	  }
 	  #render() {
 	    const config = this.#readConfig(), preset = config ? (0, import_reader_preferences_schema.readerPerformancePresetForConfig)(config) : "custom", risky = config !== null && (preset === "high" || preset === "custom" && performanceConfigExceedsBalanced(config));
@@ -25572,7 +25695,7 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	    this.#status.textContent = risky ? `${status} 风险提示：高负载目标可能增加卡顿或 429；不确定时请使用自动（推荐）。` : status, this.#status.classList.toggle("is-risk", risky);
 	  }
 	}
-}, "e3218440d8ede4d51c9b5c2b63055122845df3d0d2d6094a882770ca9267d23c");
+}, "eec051642a0cb632534f7a104a5c843b151808eefc51d17580d6c5ace10627bd");
 
 /* Source: lite/src/settings/reader-reading-settings-form.ts */
 runtime.register("src/settings/reader-reading-settings-form.js", function(module, exports, require) {
@@ -29949,6 +30072,7 @@ runtime.register("src/translation/reader-translation-config.js", function(module
 	  });
 	  #loadPromise = null;
 	  #writeTail = Promise.resolve();
+	  #cacheObserver;
 	  constructor(options) {
 	    this.#storage = options.storage, this.#storageKey = options.storageKey ?? READER_TRANSLATION_CONFIG_STORAGE_KEY, this.#metadataCacheStorageKey = options.metadataCacheStorageKey ?? READER_AI_MODEL_METADATA_CACHE_STORAGE_KEY;
 	  }
@@ -29960,6 +30084,11 @@ runtime.register("src/translation/reader-translation-config.js", function(module
 	  }
 	  get metadataStorageKey() {
 	    return this.#metadataCacheStorageKey;
+	  }
+	  attachCacheObserver(observer) {
+	    return this.#cacheObserver = observer, () => {
+	      this.#cacheObserver === observer && (this.#cacheObserver = void 0);
+	    };
 	  }
 	  async load() {
 	    if (this.#snapshot.loaded) return this.#snapshot;
@@ -30006,9 +30135,29 @@ runtime.register("src/translation/reader-translation-config.js", function(module
 	    }), await write, snapshot;
 	  }
 	  async loadModelMetadataCache() {
-	    return normalizeReaderAiModelMetadataCache(
-	      await this.#storage.getValue(this.#metadataCacheStorageKey)
-	    );
+	    const startedAt = Date.now();
+	    try {
+	      const cache = normalizeReaderAiModelMetadataCache(
+	        await this.#storage.getValue(this.#metadataCacheStorageKey)
+	      );
+	      return this.#cacheObserver?.record({
+	        operation: "read",
+	        outcome: cache ? "hit" : "miss",
+	        source: "userscript-value",
+	        key: this.#metadataCacheStorageKey,
+	        durationMs: Date.now() - startedAt,
+	        records: cache ? cache.catalog.length : 0
+	      }), cache;
+	    } catch (error) {
+	      throw this.#cacheObserver?.record({
+	        operation: "read",
+	        outcome: "failure",
+	        source: "userscript-value",
+	        key: this.#metadataCacheStorageKey,
+	        durationMs: Date.now() - startedAt,
+	        error
+	      }), error;
+	    }
 	  }
 	  async reloadExternalMetadata() {
 	    await this.#writeTail;
@@ -30018,15 +30167,62 @@ runtime.register("src/translation/reader-translation-config.js", function(module
 	  async saveModelMetadataCache(value) {
 	    const normalized = normalizeReaderAiModelMetadataCache(value);
 	    if (!normalized) throw new Error("公共模型元数据缓存为空或无效");
-	    const write = this.#writeTail.then(() => this.#storage.setValue(
+	    const startedAt = Date.now(), write = this.#writeTail.then(() => this.#storage.setValue(
 	      this.#metadataCacheStorageKey,
 	      { version: 1, ...normalized }
 	    ));
-	    return this.#writeTail = write.catch(() => {
-	    }), await write, this.metadataChanges.emit(normalized), normalized;
+	    this.#writeTail = write.catch(() => {
+	    });
+	    try {
+	      await write;
+	    } catch (error) {
+	      throw this.#cacheObserver?.record({
+	        operation: "write",
+	        outcome: "failure",
+	        source: "userscript-value",
+	        key: this.#metadataCacheStorageKey,
+	        durationMs: Date.now() - startedAt,
+	        error
+	      }), error;
+	    }
+	    return this.#cacheObserver?.record({
+	      operation: "write",
+	      outcome: "success",
+	      source: "userscript-value",
+	      key: this.#metadataCacheStorageKey,
+	      durationMs: Date.now() - startedAt,
+	      records: normalized.catalog.length
+	    }), this.metadataChanges.emit(normalized), normalized;
+	  }
+	  async clearModelMetadataCache() {
+	    const startedAt = Date.now(), write = this.#writeTail.then(() => this.#storage.setValue(
+	      this.#metadataCacheStorageKey,
+	      null
+	    ));
+	    this.#writeTail = write.catch(() => {
+	    });
+	    try {
+	      await write;
+	    } catch (error) {
+	      throw this.#cacheObserver?.record({
+	        operation: "clear",
+	        outcome: "failure",
+	        source: "userscript-value",
+	        key: this.#metadataCacheStorageKey,
+	        durationMs: Date.now() - startedAt,
+	        error
+	      }), error;
+	    }
+	    this.#cacheObserver?.record({
+	      operation: "clear",
+	      outcome: "success",
+	      source: "userscript-value",
+	      key: this.#metadataCacheStorageKey,
+	      durationMs: Date.now() - startedAt
+	    }), this.metadataChanges.emit(null);
 	  }
 	}
-}, "6a35b53c2d5d31334dfa4d868fb965b770161bad8519d7d01f432977551e973a");
+}, "56eb10b178cd4ebe611e2833f916361f1b776f7913ce902efbe2a25b451bf8dd");
 
 /* Source: lite/src/translation/reader-translation-controller.ts */
 runtime.register("src/translation/reader-translation-controller.js", function(module, exports, require) {
@@ -31161,11 +31357,15 @@ runtime.register("src/translation/translation-request-adapter.js", function(modu
 	  #ownedTasks;
 	  #publicCatalogs = null;
 	  #publicMetadataSources = Object.freeze([]);
+	  #publicCatalogEpoch = 0;
 	  constructor(options) {
 	    this.#gateway = options.gateway, this.#http = options.http, this.#fingerprint = options.fingerprint, this.#translationCache = options.translationCache, this.#credentialCache = options.credentialCache, this.#readConfig = options.readConfig ?? null, this.#delay = options.delay ?? import_coordinated_request_client.abortableDelay, this.#ownedTasks = options.tasks ? null : new import_translation_task_manager.TranslationTaskManager(), this.#tasks = options.tasks ?? this.#ownedTasks;
 	  }
 	  destroy() {
 	    this.#ownedTasks?.destroy();
+	  }
+	  clearPublicModelMetadataCache() {
+	    this.#publicCatalogEpoch += 1, this.#publicCatalogs = null, this.#publicMetadataSources = Object.freeze([]);
 	  }
 	  /**
 	   * 使用业务显式选择的 OpenAI-compatible 供应商与模型，并复用统一任务限流。
@@ -31448,7 +31648,7 @@ runtime.register("src/translation/translation-request-adapter.js", function(modu
 	  }
 	  async #loadPublicCatalogs(signal, openRouterBody, forceRefresh = !1) {
 	    if (this.#publicCatalogs && !forceRefresh) return this.#publicCatalogs;
-	    const metadataLoads = [{
+	    const epoch = this.#publicCatalogEpoch, metadataLoads = [{
 	      name: "models.dev",
 	      load: this.#executeNetwork(this.#requests.modelsDevMetadata(), {
 	        key: "ai-model-metadata:models.dev:v1",
@@ -31472,7 +31672,7 @@ runtime.register("src/translation/translation-request-adapter.js", function(modu
 	    const publicCatalogs = [], metadataSources = [];
 	    return metadataResults.forEach((result, index) => {
 	      result.status === "fulfilled" && (publicCatalogs.push(result.value), metadataSources.push(metadataLoads[index].name));
-	    }), publicCatalogs.length && (this.#publicCatalogs = Object.freeze(publicCatalogs), this.#publicMetadataSources = Object.freeze(metadataSources)), Object.freeze(publicCatalogs);
+	    }), publicCatalogs.length && epoch === this.#publicCatalogEpoch && (this.#publicCatalogs = Object.freeze(publicCatalogs), this.#publicMetadataSources = Object.freeze(metadataSources)), Object.freeze(publicCatalogs);
 	  }
 	  async #executeNetwork(descriptor, options) {
 	    const response = await this.#tasks.request({
@@ -31600,7 +31800,7 @@ runtime.register("src/translation/translation-request-adapter.js", function(modu
 	    }
 	  }
 	}
-}, "65d3fff2436e3f843a473515fc596ea6f310009bf8239e0ff4a7921da4de4e3b");
+}, "a985d9b4347b7e54d5408c8fe89705c9f366d142219795cfb3f78ca3ccb8271d");
 
 /* Source: lite/src/translation/translation-task-manager.ts */
 runtime.register("src/translation/translation-task-manager.js", function(module, exports, require) {

@@ -1,4 +1,6 @@
 import { createReaderIcon } from '../components/reader-icon.js';
+import { renderReaderInlineEmoji } from
+	'../components/reader-inline-emoji.js';
 import type {
 	ReaderTopicOfflineArtifactRecord,
 	ReaderTopicOfflineArtifactStore,
@@ -371,6 +373,7 @@ export interface ReaderTopicDownloadManagerOptions {
 		readonly topicId: DiscourseTopicId;
 		readonly title: string;
 	}> | null;
+	readonly emojiSource?: (id: string) => string;
 	readonly worker: (
 		topicId: DiscourseTopicId,
 		title: string,
@@ -960,7 +963,11 @@ export class ReaderTopicDownloadManager {
 			: '';
 		this.#downloadCurrent.dataset.topicTitle = current?.title ?? '';
 		this.#downloadPreview.hidden = current === null || active || duplicateReady;
-		this.#downloadPreviewTitle.textContent = current?.title ?? '';
+		renderReaderInlineEmoji(
+			this.#downloadPreviewTitle,
+			current?.title ?? '',
+			this.#options.emojiSource ?? (() => ''),
+		);
 		this.#downloadPreviewMeta.textContent = current
 			? `Topic #${current.topicId} · ${this.#selectionPreviewLabel()}`
 			: '';
@@ -1767,7 +1774,11 @@ export class ReaderTopicDownloadManager {
 		}
 		const copy = node(document, 'span', 'ldp-topic-download-task-copy');
 		const title = node(document, 'strong');
-		title.textContent = task.title;
+		renderReaderInlineEmoji(
+			title,
+			task.title,
+			this.#options.emojiSource ?? (() => ''),
+		);
 		const state = node(document, 'small');
 		state.textContent = task.archiveStatus === null
 			? phaseLabel(task)

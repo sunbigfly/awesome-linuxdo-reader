@@ -1232,6 +1232,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	          filterCatalog: nativeUserCatalog
 	        } : {},
 	        storage: options.storage,
+	        emojiSource: (id) => (0, import_native_host_api.discourseNativeEmojiUrl)(options.host, id),
 	        openTarget: async (record) => {
 	          const result = await this.openTarget({
 	            topicId: record.topicId,
@@ -1259,7 +1260,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        session: this.users,
 	        userHref: (username) => this.userNative.requestIdentity(username),
 	        avatarSource: (template, size) => this.userNative.avatarSource(template, size),
-	        recoverAvatarSource: (source) => this.#recoverAvatarSource(source),
+	        recoverAvatarSource: (source, signal) => this.#recoverAvatarSource(source, signal),
 	        toggleFollow: async (username, followed) => {
 	          await this.userActions.dispatch(userCommands.follow(
 	            username,
@@ -1745,6 +1746,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	          ),
 	          baseUrl: topicBaseUrl,
 	          relativeTime: nativeRelativeTime,
+	          emojiSource: bookmarkOptions.emojiSource ?? ((id) => (0, import_native_host_api.discourseNativeEmojiUrl)(options.host, id)),
 	          archiveMarker: (topicId, postNumber) => this.#historyArchiveMarker(topicId, postNumber),
 	          reactionIconSource: bookmarkOptions.reactionIconSource ?? ((reaction) => (0, import_native_host_api.discourseNativeEmojiUrl)(
 	            options.host,
@@ -1873,7 +1875,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	              relativeTime: nativeRelativeTime,
 	              exactTime: nativeExactTime,
 	              currentUsername,
-	              recoverAvatarSource: (source) => this.#recoverAvatarSource(source)
+	              recoverAvatarSource: (source, signal) => this.#recoverAvatarSource(source, signal)
 	            })
 	          ), replyTreePresentation = domOptions.replyTreePresentation ?? new import_reader_reply_tree_preferences.ReaderReplyTreePresentation(
 	            bundle.replies.topology,
@@ -1899,6 +1901,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	              currentUsername
 	            ),
 	            topicArchived: () => bundle.services.session.topic?.archived === !0,
+	            emojiSource: (id) => (0, import_native_host_api.discourseNativeEmojiUrl)(options.host, id),
 	            notify: (message) => this.feedback.show(message),
 	            parentScope: context.scope,
 	            onError: (cause) => reportTopicFeature(
@@ -2418,7 +2421,24 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            parentScope: context.scope
 	          }), postAuthorFilter = options.unwantedTopicFilter ? new import_reader_post_author_filter_feature.ReaderPostAuthorFilterFeature({
 	            preferences: options.unwantedTopicFilter,
-	            parentScope: context.scope
+	            recordHiddenPostAuthor: (username) => {
+	              const topic = bundle.services.session.topic;
+	              this.unwantedTopics.remember({
+	                topicId: context.topicId,
+	                title: String(topic?.title ?? "").trim() || `帖子 #${context.topicId}`,
+	                href: nativeTopicLinks.topicHref(context.topicId),
+	                categoryId: topic?.category_id,
+	                source: "automatic",
+	                matchedRule: `楼层用户：@${username}`,
+	                matchedCategory: !1
+	              });
+	            },
+	            parentScope: context.scope,
+	            onError: (cause) => reportTopicFeature(
+	              context.topicId,
+	              "history",
+	              cause
+	            )
 	          }) : null;
 	          if (context.scope.add(
 	            bundle.services.snapshots.setPersistenceDelayReader(
@@ -3280,6 +3300,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	          openEntry: async (entry) => {
 	            await this.#openHistoryEntry(entry);
 	          },
+	          emojiSource: historyPanelOptions.emojiSource ?? ((id) => (0, import_native_host_api.discourseNativeEmojiUrl)(options.host, id)),
 	          parentScope: this.scope,
 	          onError: (cause) => reportTopicFeature(
 	            this.shell.activeTopicId ?? 0,
@@ -3503,8 +3524,8 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    const target = visibleCandidates.find((bubble) => bubble.closest(".ldp-descendant-replies-layer")) ?? visibleCandidates.find((bubble) => bubble.closest(".ldp-post") === navigationRoot) ?? visibleCandidates[0] ?? hiddenFallback;
 	    target && this.#boostTargetHighlight.highlight(target);
 	  }
-	  async #recoverAvatarSource(source) {
-	    return this.imageResources?.resolveAvatarSource(source) ?? "";
+	  async #recoverAvatarSource(source, signal) {
+	    return this.imageResources?.resolveAvatarSource(source, signal) ?? "";
 	  }
 	  async close() {
 	    return this.#boostTargetHighlight.clear(), this.#openRecoveryController?.abort(
@@ -4681,7 +4702,13 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        throw runtime.destroy(), new Error(
 	          "翻译与 AI 服务设置 form 需要启用 Settings View 与 TranslationRequestAdapter"
 	        );
-	      settingsView && translationFormOptions && runtime.translationRequests && (new import_reader_translation_settings_form.ReaderTranslationSettingsForm({
+	      translationFormOptions && runtime.translationRequests && (runtime.scope.add(
+	        translationFormOptions.repository.attachCacheObserver(
+	          runtime.data.cacheEvents
+	        )
+	      ), translationFormOptions.repository.metadataChanges.subscribe((cache) => {
+	        cache || runtime.translationRequests?.clearPublicModelMetadataCache();
+	      }, runtime.scope)), settingsView && translationFormOptions && runtime.translationRequests && (new import_reader_translation_settings_form.ReaderTranslationSettingsForm({
 	        document: options.runtime.document,
 	        host: settingsView.panelHost("translation"),
 	        repository: translationFormOptions.repository,
@@ -4834,7 +4861,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	              reactions: 0,
 	              boosts: 0,
 	              replies: 0
-	            }, creditBridge = await runtime.creditAccount?.cacheStats() ?? {
+	            }, publicModelMetadata = translationFormOptions ? await translationFormOptions.repository.loadModelMetadataCache() : null, creditBridge = await runtime.creditAccount?.cacheStats() ?? {
 	              records: 0,
 	              bytes: 0,
 	              cachedAt: null,
@@ -4860,8 +4887,8 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	                  detail: `内存热缓存：${notifications.pages} 页 · ${notifications.records} 条消息`
 	                }),
 	                responses: Object.freeze({
-	                  records: bookmarks2.bookmarks + bookmarks2.reactions + bookmarks2.boosts + bookmarks2.replies,
-	                  detail: `内存热缓存：${bookmarks2.bookmarks} 条收藏 · ${bookmarks2.reactions} 条回应 · ${bookmarks2.boosts} 条 Boost · ${bookmarks2.replies} 条回复`
+	                  records: bookmarks2.bookmarks + bookmarks2.reactions + bookmarks2.boosts + bookmarks2.replies + (publicModelMetadata ? 1 : 0),
+	                  detail: `内存热缓存：${bookmarks2.bookmarks} 条收藏 · ${bookmarks2.reactions} 条回应 · ${bookmarks2.boosts} 条 Boost · ${bookmarks2.replies} 条回复；公共模型元数据：${publicModelMetadata?.catalog.length ?? 0} 个模型`
 	                }),
 	                assets: Object.freeze({
 	                  records: imageObjects.objectUrls,
@@ -4871,7 +4898,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            });
 	          },
 	          clear: async (categories) => {
-	            const selected = new Set(categories), failed = [];
+	            const selected = new Set(categories), failed = [], resumes = [];
 	            if (selected.has("users"))
 	              try {
 	                runtime.users.clearCache(), runtime.userObservations.clearCache(), await runtime.creditAccount?.clearCache();
@@ -4880,13 +4907,13 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	              }
 	            if (selected.has("notifications"))
 	              try {
-	                runtime.notificationController?.clearCache();
+	                runtime.notificationController && (runtime.notificationController.clearCache({ resume: !1 }), resumes.push(() => runtime.notificationController?.startBackgroundCache()));
 	              } catch (cause) {
 	                failed.push("notifications"), reportCacheError(cause);
 	              }
 	            if (selected.has("responses"))
 	              try {
-	                runtime.bookmarkController?.clearCache();
+	                runtime.bookmarkController && (runtime.bookmarkController.clearCache({ resume: !1 }), resumes.push(() => runtime.bookmarkController?.startBackgroundCache())), translationFormOptions && await translationFormOptions.repository.clearModelMetadataCache();
 	              } catch (cause) {
 	                failed.push("responses"), reportCacheError(cause);
 	              }
@@ -4902,10 +4929,28 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	                  options.runtime.document
 	                );
 	              }
-	            return Object.freeze({ failed: Object.freeze(failed) });
+	            return Object.freeze({
+	              failed: Object.freeze(failed),
+	              ...resumes.length ? {
+	                resume: () => {
+	                  for (const resume of resumes) resume();
+	                }
+	              } : {}
+	            });
 	          }
 	        },
 	        clearImageObjectUrls: () => runtime.imageResources?.clearObjectUrls(),
+	        cacheLog: runtime.data.cacheEvents,
+	        ...runtime.blobDownloads ? {
+	          saveCacheLog: (content, filename) => {
+	            runtime.blobDownloads.save(
+	              new Blob([content], {
+	                type: "application/x-ndjson;charset=utf-8"
+	              }),
+	              filename
+	            );
+	          }
+	        } : {},
 	        currentTopicAvailable: () => runtime.shell.activeTopicId !== null,
 	        clearCurrentTopic: () => refreshCurrentTopic(),
 	        notify: (message) => runtime.feedback.show(message),
@@ -5097,6 +5142,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        ].includes(runtime.shell.state),
 	        historyEntry: (topicId) => topicId ? runtime.history.entry(topicId) : runtime.history.ordered("recent-viewed")[0] ?? null,
 	        avatarSource: (template, size) => queueTopicPresentation?.avatarSource(template, size) ?? "",
+	        emojiSource: (id) => queueTopicPresentation?.emojiSource?.(id) ?? "",
 	        historyAnchor: (topicId) => {
 	          const activeAnchor = runtime.historyNavigation.snapshot.states[String(topicId)];
 	          if (activeAnchor) return activeAnchor;
@@ -5156,9 +5202,19 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	                (count, postId) => count + +!!session.postById(Number(postId)),
 	                0
 	              );
-	              await waitForQueuePrefetchRequestHeadroom(abort.signal), await session.loadPostsByIds(
+	              await session.loadPostsByIds(
 	                batch,
-	                { background: !0, maxAttempts: 1 }
+	                {
+	                  background: !0,
+	                  maxAttempts: 1,
+	                  /*
+	                   * TopicSession 只在 canonical 缓存与在飞单飞
+	                   * 都未命中时调用 beforeNetwork。额度等待必须
+	                   * 放在这个真实缺口边界，不能阻塞纯缓存
+	                   * 队列或重复消费者加入已有请求。
+	                   */
+	                  beforeNetwork: () => waitForQueuePrefetchRequestHeadroom(abort.signal)
+	                }
 	              );
 	              const loadedAfter = batch.reduce(
 	                (count, postId) => count + +!!session.postById(Number(postId)),
@@ -6007,7 +6063,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    }
 	  });
 	}
-}, "c2abccabad3e6906cac4b8c0c24b0bd193ef84bdb2cb5da3f60dc166e0f5b185");
+}, "21fdf20041acdd7a1e55cfcf4aef45bcec16b43d848d025eaa5a12f34640c8bc");
 
 /* Source: lite/src/app/reader-data-runtime.ts */
 runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -6017,12 +6073,15 @@ runtime.register("src/app/reader-data-runtime.js", function(module, exports, req
 	  READER_CACHE_COORDINATION_LOCK: () => READER_CACHE_COORDINATION_LOCK,
 	  READER_CACHE_COORDINATION_STORAGE_KEY: () => READER_CACHE_COORDINATION_STORAGE_KEY,
 	  READER_RESPONSE_CACHE_DATABASE: () => READER_RESPONSE_CACHE_DATABASE,
+	  READER_RESPONSE_CACHE_LEGACY_DATABASES: () => READER_RESPONSE_CACHE_LEGACY_DATABASES,
 	  READER_RESPONSE_CACHE_STORE: () => READER_RESPONSE_CACHE_STORE,
 	  ReaderDataRuntime: () => ReaderDataRuntime
 	});
 	module.exports = __toCommonJS(reader_data_runtime_exports);
-	var import_cache_coordination = require("../cache/cache-coordination.js"), import_indexeddb_response_cache_store = require("../cache/indexeddb-response-cache-store.js"), import_response_repository = require("../cache/response-repository.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js"), import_domain_request_gateway = require("../network/domain-request-gateway.js"), import_request_rate_limit_policy = require("../network/request-rate-limit-policy.js"), import_request_observer = require("../network/request-observer.js"), import_read_state_coordination = require("../reading/read-state-coordination.js"), import_reader_topic_core_bundle = require("../topic/reader-topic-core-bundle.js");
-	const READER_RESPONSE_CACHE_DATABASE = "linuxdo-enhanced-reader:responses:v1", READER_RESPONSE_CACHE_STORE = "responses", READER_CACHE_COORDINATION_STORAGE_KEY = "linuxdo-enhanced-reader:cache-coordination:v1", READER_CACHE_COORDINATION_LOCK = "linuxdo-enhanced-reader:cache-coordination-lock:v1", READER_CACHE_COORDINATION_CHANNEL = "linuxdo-enhanced-reader:cache-coordination-channel:v1";
+	var import_cache_coordination = require("../cache/cache-coordination.js"), import_indexeddb_response_cache_store = require("../cache/indexeddb-response-cache-store.js"), import_cache_observer = require("../cache/cache-observer.js"), import_response_repository = require("../cache/response-repository.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js"), import_domain_request_gateway = require("../network/domain-request-gateway.js"), import_request_rate_limit_policy = require("../network/request-rate-limit-policy.js"), import_request_observer = require("../network/request-observer.js"), import_read_state_coordination = require("../reading/read-state-coordination.js"), import_reader_topic_core_bundle = require("../topic/reader-topic-core-bundle.js");
+	const READER_RESPONSE_CACHE_DATABASE = "awesome linuxdo reader", READER_RESPONSE_CACHE_LEGACY_DATABASES = Object.freeze([
+	  "linuxdo-enhanced-reader:responses:v1"
+	]), READER_RESPONSE_CACHE_STORE = "responses", READER_CACHE_COORDINATION_STORAGE_KEY = "linuxdo-enhanced-reader:cache-coordination:v1", READER_CACHE_COORDINATION_LOCK = "linuxdo-enhanced-reader:cache-coordination-lock:v1", READER_CACHE_COORDINATION_CHANNEL = "linuxdo-enhanced-reader:cache-coordination-channel:v1";
 	function sourceId(value) {
 	  const normalized = String(value).trim();
 	  if (!normalized) throw new Error("Reader data runtime sourceId 不能为空");
@@ -6035,6 +6094,7 @@ runtime.register("src/app/reader-data-runtime.js", function(module, exports, req
 	  scope;
 	  rateLimit;
 	  requests;
+	  cacheEvents;
 	  client;
 	  responses;
 	  gateway;
@@ -6042,8 +6102,18 @@ runtime.register("src/app/reader-data-runtime.js", function(module, exports, req
 	  readCoordination;
 	  #destroyed = !1;
 	  constructor(options) {
-	    const id = sourceId(options.sourceId), report = (phase, cause) => {
-	      options.onDiagnostic?.(Object.freeze({ phase, cause }));
+	    const id = sourceId(options.sourceId);
+	    this.cacheEvents = new import_cache_observer.ReaderCacheObserver({
+	      ...options.now === void 0 ? {} : { now: options.now }
+	    });
+	    const report = (phase, cause) => {
+	      (phase === "indexeddb" || phase === "cache-coordination") && this.cacheEvents.record({
+	        operation: phase === "indexeddb" ? "read" : "invalidate",
+	        outcome: "failure",
+	        source: phase === "indexeddb" ? "indexeddb" : "cross-tab",
+	        key: phase,
+	        error: cause
+	      }), options.onDiagnostic?.(Object.freeze({ phase, cause }));
 	    };
 	    this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
 	    try {
@@ -6071,13 +6141,15 @@ runtime.register("src/app/reader-data-runtime.js", function(module, exports, req
 	      }), this.scope.add(() => this.cacheCoordination.close());
 	      const store = new import_indexeddb_response_cache_store.IndexedDbResponseCacheStore({
 	        databaseName: READER_RESPONSE_CACHE_DATABASE,
+	        legacyDatabaseNames: READER_RESPONSE_CACHE_LEGACY_DATABASES,
 	        storeName: READER_RESPONSE_CACHE_STORE,
 	        operationTimeoutMs: options.responseOperationTimeoutMs,
 	        maxEntries: options.responsePersistentMaxEntries,
 	        maxBytes: options.responsePersistentMaxBytes,
 	        factory: options.indexedDb ?? null,
 	        ...options.now === void 0 ? {} : { now: options.now },
-	        onError: (cause) => report("indexeddb", cause)
+	        onError: (cause) => report("indexeddb", cause),
+	        observer: this.cacheEvents
 	      });
 	      this.scope.add(() => {
 	        store.close();
@@ -6087,6 +6159,7 @@ runtime.register("src/app/reader-data-runtime.js", function(module, exports, req
 	        maxMemoryBytes: options.responseMemoryMaxBytes,
 	        mutationPort: this.cacheCoordination,
 	        flightPort: this.cacheCoordination,
+	        observer: this.cacheEvents,
 	        ...options.cacheFlightHeartbeatMs === void 0 ? {} : { flightHeartbeatMs: options.cacheFlightHeartbeatMs },
 	        ...options.cacheFlightWaitTimeoutMs === void 0 ? {} : { flightWaitTimeoutMs: options.cacheFlightWaitTimeoutMs },
 	        ...options.now === void 0 ? {} : { now: options.now },
@@ -6141,7 +6214,7 @@ runtime.register("src/app/reader-data-runtime.js", function(module, exports, req
 	    this.#destroyed || (this.#destroyed = !0, this.scope.destroy());
 	  }
 	}
-}, "f9a9d054dc7203aa759bf367dfe44a0063643f22727925396089efc5825942b4");
+}, "32d64f7c2167f34bef75625a2901109b6e6867a224cf442b5f165200013a1bc3");
 
 /* Source: lite/src/app/reader-performance-policy.ts */
 runtime.register("src/app/reader-performance-policy.js", function(module, exports, require) {
@@ -6752,30 +6825,83 @@ runtime.register("src/components/reader-image-fallback.js", function(module, exp
 	    image.parentNode && image.replaceWith(createFallback());
 	  }, { once: !0 });
 	}
+	const readerImageRecoveryRegistries = /* @__PURE__ */ new WeakMap();
+	function registerReaderImageRecovery(node, registration) {
+	  const root = node.getRootNode(), Observer = node.ownerDocument.defaultView?.MutationObserver;
+	  if (!Observer) return () => {
+	  };
+	  let registry = readerImageRecoveryRegistries.get(root);
+	  if (!registry) {
+	    const entries = /* @__PURE__ */ new Set(), observer = new Observer(() => {
+	      for (const entry of [...entries])
+	        entry.currentNode()?.isConnected || entry.abort();
+	    });
+	    observer.observe(root, { childList: !0, subtree: !0 }), registry = { entries, observer }, readerImageRecoveryRegistries.set(root, registry);
+	  }
+	  registry.entries.add(registration);
+	  let released = !1;
+	  return () => {
+	    released || (released = !0, registry?.entries.delete(registration), !registry?.entries.size && (registry?.observer.disconnect(), readerImageRecoveryRegistries.get(root) === registry && readerImageRecoveryRegistries.delete(root)));
+	  };
+	}
 	function installReaderImageSourceFallback(image, sources, createFallback, recoverSource, visibleSource) {
-	  const candidates = [...new Set(
+	  const imageRef = new WeakRef(image), candidates = [...new Set(
 	    sources.map((source) => String(source).trim()).filter(Boolean)
 	  )];
-	  let directIndex = 0, recoveryIndex = 0, fallback = null, recovering = !1;
-	  const showFallback = () => {
+	  let directIndex = 0, recoveryIndex = 0, fallbackRef = null, recovering = !1, activeRecovery = null;
+	  const currentFallback = () => fallbackRef?.deref() ?? null, currentNode = () => {
+	    const fallback = currentFallback();
+	    if (fallback?.isConnected) return fallback;
+	    const currentImage = imageRef.deref();
+	    return currentImage?.isConnected ? currentImage : null;
+	  }, showFallback = () => {
+	    const fallback = currentFallback();
 	    if (fallback?.parentNode) return fallback;
-	    const next = createFallback();
-	    return image.parentNode && image.replaceWith(next), fallback = next, next.parentNode ? next : null;
+	    const next = createFallback(), currentImage = imageRef.deref();
+	    return currentImage?.parentNode && currentImage.replaceWith(next), fallbackRef = new WeakRef(next), next.parentNode ? next : null;
 	  }, recoverNext = async () => {
-	    if (!recovering) {
-	      for (recovering = !0; recoverSource && recoveryIndex < candidates.length; ) {
+	    if (recovering) return;
+	    recovering = !0;
+	    const controller = new AbortController();
+	    activeRecovery = controller;
+	    let releaseLifecycle = () => {
+	    };
+	    Promise.resolve().then(() => {
+	      if (!recovering || activeRecovery !== controller || controller.signal.aborted)
+	        return;
+	      const mounted = currentNode();
+	      if (!mounted) {
+	        controller.abort(new Error("图片恢复宿主已离开文档"));
+	        return;
+	      }
+	      releaseLifecycle = registerReaderImageRecovery(mounted, {
+	        currentNode,
+	        abort: () => controller.abort(new Error("图片恢复宿主已离开文档"))
+	      });
+	    });
+	    try {
+	      for (; recoverSource && recoveryIndex < candidates.length; ) {
 	        const candidate = candidates[recoveryIndex];
 	        recoveryIndex += 1;
 	        try {
-	          const recovered = String(await recoverSource(candidate)).trim();
-	          if (!fallback?.parentNode && !image.parentNode) return;
+	          const recovered = String(
+	            await recoverSource(candidate, controller.signal)
+	          ).trim();
+	          if (controller.signal.aborted) return;
+	          const currentImage2 = imageRef.deref(), fallback2 = currentFallback();
+	          if (!fallback2?.parentNode && !currentImage2?.parentNode) return;
 	          if (!recovered) continue;
-	          fallback?.parentNode && (fallback.replaceWith(image), fallback = null), recovering = !1, image.src = recovered;
+	          if (fallback2?.parentNode && currentImage2 && (fallback2.replaceWith(currentImage2), fallbackRef = null), !currentImage2) return;
+	          currentImage2.src = recovered;
 	          return;
 	        } catch {
+	          if (controller.signal.aborted) return;
 	        }
 	      }
-	      recovering = !1, fallback?.parentNode && image.removeEventListener("error", advance);
+	      const fallback = currentFallback(), currentImage = imageRef.deref();
+	      fallback?.parentNode && currentImage && currentImage.removeEventListener("error", advance);
+	    } finally {
+	      releaseLifecycle(), activeRecovery === controller && (activeRecovery = null), recovering = !1;
 	    }
 	  };
 	  function advance() {
@@ -6785,11 +6911,15 @@ runtime.register("src/components/reader-image-fallback.js", function(module, exp
 	      return;
 	    }
 	    const direct = candidates[directIndex];
-	    if (directIndex += 1, direct) {
-	      image.src = direct;
-	      return;
+	    directIndex += 1;
+	    const currentImage = imageRef.deref();
+	    if (currentImage) {
+	      if (direct) {
+	        currentImage.src = direct;
+	        return;
+	      }
+	      currentImage.removeEventListener("error", advance), showFallback();
 	    }
-	    image.removeEventListener("error", advance), showFallback();
 	  }
 	  if (image.addEventListener("error", advance), recoverSource) {
 	    const visible = String(visibleSource ?? "").trim();
@@ -6834,7 +6964,61 @@ runtime.register("src/components/reader-image-fallback.js", function(module, exp
 	  };
 	  image.addEventListener("error", advance), image.src = sources[0] ?? READER_SITE_LOGO_PLACEHOLDER;
 	}
-}, "4da4b336ae2253b31010cb90068ad1856c50c2996fdea5cbefdb34781e12ee37");
+}, "c6156c9f1e5479ef3274e60147f327c53d73acf2b874bbd1557f675ea6264ff2");
+
+/* Source: lite/src/components/reader-inline-emoji.ts */
+runtime.register("src/components/reader-inline-emoji.js", function(module, exports, require) {
+	var reader_inline_emoji_exports = {};
+	__export(reader_inline_emoji_exports, {
+	  clearReaderInlineEmoji: () => clearReaderInlineEmoji,
+	  renderReaderInlineEmoji: () => renderReaderInlineEmoji
+	});
+	module.exports = __toCommonJS(reader_inline_emoji_exports);
+	const INLINE_EMOJI_ATTRIBUTE = "data-ldp-inline-emoji", INLINE_EMOJI_SIGNATURE_ATTRIBUTE = "data-ldp-inline-emoji-signature", SHORTCODE = /:([a-z0-9_+\-]+):/giu;
+	function emojiSource(source, id) {
+	  try {
+	    return String(source(id) ?? "").trim();
+	  } catch {
+	    return "";
+	  }
+	}
+	function renderReaderInlineEmoji(target, value, source) {
+	  const text = String(value ?? ""), matches = [...text.matchAll(SHORTCODE)];
+	  if (!matches.length)
+	    return (target.textContent !== text || target.hasAttribute(INLINE_EMOJI_SIGNATURE_ATTRIBUTE)) && (target.textContent = text), target.removeAttribute(INLINE_EMOJI_SIGNATURE_ATTRIBUTE), Object.freeze({ rendered: 0, unresolved: 0 });
+	  const resolved = matches.map((match) => Object.freeze({
+	    raw: match[0],
+	    id: match[1] ?? "",
+	    index: match.index ?? 0,
+	    source: emojiSource(source, match[1] ?? "")
+	  })), signature = JSON.stringify([
+	    text,
+	    ...resolved.map((entry) => entry.source)
+	  ]), rendered = resolved.filter((entry) => !!entry.source).length, unresolved = resolved.length - rendered;
+	  if (target.getAttribute(INLINE_EMOJI_SIGNATURE_ATTRIBUTE) === signature && target.querySelectorAll(`:scope > img[${INLINE_EMOJI_ATTRIBUTE}]`).length === rendered) return Object.freeze({ rendered, unresolved });
+	  const document = target.ownerDocument, fragment = document.createDocumentFragment();
+	  let cursor = 0;
+	  for (const entry of resolved) {
+	    if (entry.index > cursor && fragment.append(document.createTextNode(
+	      text.slice(cursor, entry.index)
+	    )), !entry.source)
+	      fragment.append(document.createTextNode(entry.raw));
+	    else {
+	      const image = document.createElement("img");
+	      image.className = "emoji", image.setAttribute(INLINE_EMOJI_ATTRIBUTE, entry.id), image.src = entry.source, image.alt = entry.raw, image.loading = "lazy", image.decoding = "async", image.addEventListener("error", () => {
+	        target.removeAttribute(INLINE_EMOJI_SIGNATURE_ATTRIBUTE), image.replaceWith(document.createTextNode(entry.raw));
+	      }, { once: !0 }), fragment.append(image);
+	    }
+	    cursor = entry.index + entry.raw.length;
+	  }
+	  return cursor < text.length && fragment.append(document.createTextNode(text.slice(cursor))), target.replaceChildren(fragment), target.setAttribute(INLINE_EMOJI_SIGNATURE_ATTRIBUTE, signature), Object.freeze({ rendered, unresolved });
+	}
+	function clearReaderInlineEmoji(target) {
+	  if (!target.hasAttribute(INLINE_EMOJI_SIGNATURE_ATTRIBUTE)) return !1;
+	  const text = [...target.childNodes].map((child) => child.nodeType === 1 && child.matches(`img[${INLINE_EMOJI_ATTRIBUTE}]`) ? child.alt : child.textContent ?? "").join("");
+	  return target.textContent = text, target.removeAttribute(INLINE_EMOJI_SIGNATURE_ATTRIBUTE), !0;
+	}
+}, "33a95f0994cd76d822f37945e66d4710b69fc8e9ba8dbf975a822bab9b3e7a60");
 
 /* Source: lite/src/dom/event-target.ts */
 runtime.register("src/dom/event-target.js", function(module, exports, require) {
@@ -9971,8 +10155,8 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	  EmbeddedHostTopicCardEnhancement: () => EmbeddedHostTopicCardEnhancement
 	});
 	module.exports = __toCommonJS(embedded_host_topic_card_enhancement_exports);
-	var import_value_record = require("../kernel/value-record.js");
-	const CARD_SELECTOR = "tr.topic-list-item,.topic-list-item,.latest-topic-list-item", TOPIC_LINK_SELECTOR = 'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],a[href*="/t/"]', NEW_TOPIC_BADGE_SELECTOR = ".topic-post-badges,.badge-notification.new-topic", AUTOMATIC_FILTER_ATTRIBUTE = "data-ldp-unwanted-auto-filter", OPENED_TOPIC_STORAGE_KEY = "linuxdo-enhanced-reader:opened-host-topics:v1", MAX_OPENED_TOPIC_IDS = 2048;
+	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_inline_emoji = require("../components/reader-inline-emoji.js"), import_value_record = require("../kernel/value-record.js");
+	const CARD_SELECTOR = "tr.topic-list-item,.topic-list-item,.latest-topic-list-item", TOPIC_LINK_SELECTOR = 'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],a[href*="/t/"]', NEW_TOPIC_BADGE_SELECTOR = ".topic-post-badges,.badge-notification.new-topic", AUTOMATIC_FILTER_ATTRIBUTE = "data-ldp-unwanted-auto-filter", MANUAL_FILTER_ATTRIBUTE = "data-ldp-unwanted-manual-filter", EXPOSURE_COUNT_CLASS = "ldp-host-topic-exposure-count", TOPIC_LIST_SELECTOR = ".topic-list,.latest-topic-list", OPENED_TOPIC_STORAGE_KEY = "linuxdo-enhanced-reader:opened-host-topics:v1";
 	function modelValue(value, key) {
 	  const source = (0, import_value_record.valueRecord)(value);
 	  if (!source) return;
@@ -10036,29 +10220,43 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	  #host;
 	  #isTopicHidden;
 	  #hideTopic;
+	  #recordAutomaticTopic;
 	  #automaticFilter;
 	  #notify;
 	  #onError;
 	  #openedTopicStorage;
 	  #openedTopicStorageKey;
 	  #roots = /* @__PURE__ */ new Set();
+	  #rootModes = /* @__PURE__ */ new Map();
 	  #openedTopicIds = /* @__PURE__ */ new Set();
+	  #exposureCounts = /* @__PURE__ */ new Map();
+	  #countedExposureCards = /* @__PURE__ */ new WeakSet();
+	  #observedExposureCards = /* @__PURE__ */ new Set();
+	  #exposureObserver;
+	  #firstTopicCardByList = /* @__PURE__ */ new WeakMap();
 	  #rootClickHandlers = /* @__PURE__ */ new Map();
 	  #pendingCards = /* @__PURE__ */ new WeakSet();
+	  #automaticRecordSignatures = /* @__PURE__ */ new WeakMap();
 	  #nativeDndTooltipAttributes = /* @__PURE__ */ new WeakMap();
 	  constructor(document, host, options = {}) {
 	    this.#document = document, this.#host = host, this.#isTopicHidden = options.isTopicHidden ?? (() => !1), this.#hideTopic = options.hideTopic ?? (() => {
 	      throw new Error("不想看仓库尚未就绪");
+	    }), this.#recordAutomaticTopic = options.recordAutomaticTopic ?? (() => {
 	    }), this.#automaticFilter = options.automaticFilter ?? (() => null), this.#notify = options.notify ?? (() => {
 	    }), this.#onError = options.onError ?? (() => {
 	    }), this.#openedTopicStorage = options.openedTopicStorage ?? null;
 	    const storageScope = normalizedLabel(
 	      options.openedTopicStorageScope ?? this.#currentUsername()
 	    ).toLocaleLowerCase("en-US") || "anonymous";
-	    this.#openedTopicStorageKey = `${OPENED_TOPIC_STORAGE_KEY}:${encodeURIComponent(storageScope)}`, this.#restoreOpenedTopicIds();
+	    this.#openedTopicStorageKey = `${OPENED_TOPIC_STORAGE_KEY}:${encodeURIComponent(storageScope)}`, this.#restoreTopicState();
+	    const NativeIntersectionObserver = document.defaultView?.IntersectionObserver, createObserver = options.createIntersectionObserver ?? (NativeIntersectionObserver ? ((callback, init) => new NativeIntersectionObserver(callback, init)) : null);
+	    this.#exposureObserver = createObserver?.(
+	      (entries) => this.#onExposureIntersections(entries),
+	      { root: null, threshold: 0 }
+	    ) ?? null;
 	  }
 	  syncRoot(root, mode = "embedded") {
-	    if (this.#roots.add(root), !this.#rootClickHandlers.has(root)) {
+	    if (this.#roots.add(root), this.#rootModes.set(root, mode), !this.#rootClickHandlers.has(root)) {
 	      const handler = (event) => this.#onRootClick(event);
 	      root.addEventListener("click", handler, !0), this.#rootClickHandlers.set(root, handler);
 	    }
@@ -10068,7 +10266,7 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	    );
 	  }
 	  releaseRoot(root) {
-	    this.#roots.has(root) && (this.#clearRoot(root), this.#roots.delete(root));
+	    this.#roots.has(root) && (this.#clearRoot(root), this.#roots.delete(root), this.#rootModes.delete(root));
 	  }
 	  syncActivity(card) {
 	    const source = card.querySelector(":scope > td.activity .relative-date"), component = card.querySelector(
@@ -10084,48 +10282,73 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	    return parts.length === 5 && activity && (parts[2] = [...activity.childNodes].map(markup).join(""), component.dataset.ldpSourceSignature = parts.join("")), !0;
 	  }
 	  syncCards(cards, mode = "embedded") {
+	    this.#pruneDisconnectedExposureCards();
 	    const topicModels = this.#topicModels(), reactions = this.#reactionCounts(topicModels);
-	    for (const card of cards) {
+	    for (const card of this.#deduplicateCards(cards)) {
 	      if (!card.matches(CARD_SELECTOR) || card.closest(".ldp-overlay")) continue;
-	      const topic = this.#topicInput(card, topicModels), projection = this.#topicProjection(card, topic);
-	      if (this.#isTopicHidden(projection.topicId)) {
-	        card.remove();
+	      const topic = this.#topicInput(card, topicModels), projection = this.#topicProjection(card, topic), manuallyHidden = this.#isTopicHidden(projection.topicId);
+	      if (card.toggleAttribute(MANUAL_FILTER_ATTRIBUTE, manuallyHidden), manuallyHidden) {
+	        card.removeAttribute(AUTOMATIC_FILTER_ATTRIBUTE), this.#automaticRecordSignatures.delete(card), this.#stopObservingExposure(card);
 	        continue;
 	      }
 	      const automatic = this.#automaticFilter(projection);
-	      card.toggleAttribute(AUTOMATIC_FILTER_ATTRIBUTE, !!automatic), !automatic && (this.#markNewTopic(card, topic), this.#groupTitleTools(card, topic), mode === "embedded" ? (this.#markDateCells(card), this.#syncStats(card, reactions)) : this.#clearEmbeddedCard(card));
+	      if (card.toggleAttribute(AUTOMATIC_FILTER_ATTRIBUTE, !!automatic), automatic) {
+	        this.#recordAutomaticMatch(card, projection, automatic), this.#stopObservingExposure(card);
+	        continue;
+	      }
+	      this.#automaticRecordSignatures.delete(card);
+	      const titleLink = card.querySelector(TOPIC_LINK_SELECTOR);
+	      titleLink && (0, import_reader_inline_emoji.renderReaderInlineEmoji)(
+	        titleLink,
+	        projection.title,
+	        (id) => (0, import_native_host_api.discourseNativeEmojiUrl)(this.#host, id)
+	      ), this.#markNewTopic(card, topic), this.#syncExposure(card), this.#groupTitleTools(card, topic), mode === "embedded" ? (this.#markDateCells(card), this.#syncStats(card, reactions)) : this.#clearEmbeddedCard(card);
 	    }
 	  }
 	  clear() {
 	    for (const root of this.#roots)
 	      this.#clearRoot(root);
-	    this.#roots.clear();
+	    this.#roots.clear(), this.#rootModes.clear(), this.#exposureObserver?.disconnect(), this.#observedExposureCards.clear();
 	  }
 	  get openedTopicStorageKey() {
 	    return this.#openedTopicStorageKey;
 	  }
+	  refreshHiddenTopics() {
+	    for (const root of this.#roots)
+	      this.syncCards(
+	        Object.freeze([...root.querySelectorAll(CARD_SELECTOR)]),
+	        this.#rootModes.get(root) ?? "embedded"
+	      );
+	  }
 	  reloadExternalOpenedTopics() {
-	    this.#openedTopicIds.clear(), this.#restoreOpenedTopicIds();
+	    this.#openedTopicIds.clear(), this.#exposureCounts.clear(), this.#restoreTopicState();
 	    const topicModels = this.#topicModels();
 	    for (const card of this.#document.querySelectorAll(
 	      CARD_SELECTOR
 	    ))
-	      this.#markNewTopic(card, this.#topicInput(card, topicModels));
+	      this.#markNewTopic(card, this.#topicInput(card, topicModels)), this.#syncExposure(card);
 	  }
 	  markTopicOpened(topicId) {
 	    if (!Number.isSafeInteger(topicId) || topicId < 1) return !1;
-	    this.#restoreOpenedTopicIds(), this.#openedTopicIds.has(topicId) || (this.#openedTopicIds.add(topicId), this.#persistOpenedTopicIds());
+	    this.#restoreTopicState();
+	    let stateChanged = !1;
+	    this.#openedTopicIds.has(topicId) || (this.#openedTopicIds.add(topicId), stateChanged = !0), this.#exposureCounts.delete(topicId) && (stateChanged = !0), stateChanged && this.#persistTopicState();
 	    let changed = !1;
 	    for (const card of this.#document.querySelectorAll(
 	      CARD_SELECTOR
 	    )) {
 	      if (Number(this.#cardTopicId(card)) !== topicId) continue;
+	      this.#stopObservingExposure(card), card.querySelector(`.${EXPOSURE_COUNT_CLASS}`)?.remove();
 	      const marker = card.querySelector(NEW_TOPIC_BADGE_SELECTOR);
 	      marker && !marker.hasAttribute("data-ldp-native-new-topic-marker") && (marker.setAttribute("data-ldp-native-new-topic-marker", "true"), changed = !0), card.hasAttribute("data-ldp-native-new-topic") && (card.removeAttribute("data-ldp-native-new-topic"), changed = !0);
 	    }
 	    return changed;
 	  }
 	  #clearRoot(root) {
+	    for (const card of root.querySelectorAll(CARD_SELECTOR))
+	      this.#stopObservingExposure(card);
+	    for (const list of root.querySelectorAll(TOPIC_LIST_SELECTOR))
+	      this.#firstTopicCardByList.delete(list);
 	    const handler = this.#rootClickHandlers.get(root);
 	    handler && root.removeEventListener("click", handler, !0), this.#rootClickHandlers.delete(root);
 	    for (const component of root.querySelectorAll(
@@ -10155,8 +10378,14 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	      "[data-ldp-topic-stats]"
 	    )) node.removeAttribute("data-ldp-topic-stats");
 	    for (const node of root.querySelectorAll(
-	      `[${AUTOMATIC_FILTER_ATTRIBUTE}]`
-	    )) node.removeAttribute(AUTOMATIC_FILTER_ATTRIBUTE);
+	      `[${AUTOMATIC_FILTER_ATTRIBUTE}],[${MANUAL_FILTER_ATTRIBUTE}]`
+	    ))
+	      node.removeAttribute(AUTOMATIC_FILTER_ATTRIBUTE), node.removeAttribute(MANUAL_FILTER_ATTRIBUTE);
+	    for (const node of root.querySelectorAll(`.${EXPOSURE_COUNT_CLASS}`))
+	      node.remove();
+	    for (const node of root.querySelectorAll(
+	      "[data-ldp-inline-emoji-signature]"
+	    )) (0, import_reader_inline_emoji.clearReaderInlineEmoji)(node);
 	  }
 	  #clearEmbeddedCard(card) {
 	    card.querySelector(":scope > td.posts > .ldp-topic-stats-component")?.remove(), card.removeAttribute("data-ldp-topic-stats"), card.removeAttribute("data-ldp-native-topic-date-row");
@@ -10230,15 +10459,13 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	      "[data-ldp-native-new-topic-marker]"
 	    ), legacyMarker = card.querySelector(
 	      ".badge-notification.new-topic"
-	    ), unseen = modelValue(topic, "unseen"), hostNew = unseen === !0 || unseen !== !1 && !!(legacyMarker ?? previous), topicId = Number(this.#cardTopicId(card));
-	    !hostNew && Number.isSafeInteger(topicId) && this.#openedTopicIds.delete(topicId) && this.#persistOpenedTopicIds();
-	    const marker = hostNew ? card.querySelector(NEW_TOPIC_BADGE_SELECTOR) : null;
+	    ), unseen = modelValue(topic, "unseen"), hostNew = unseen === !0 || unseen !== !1 && !!(legacyMarker ?? previous), topicId = Number(this.#cardTopicId(card)), marker = hostNew ? card.querySelector(NEW_TOPIC_BADGE_SELECTOR) : null;
 	    previous && previous !== marker && previous.removeAttribute("data-ldp-native-new-topic-marker"), marker?.setAttribute("data-ldp-native-new-topic-marker", "true"), card.toggleAttribute(
 	      "data-ldp-native-new-topic",
 	      hostNew && !this.#openedTopicIds.has(topicId)
 	    );
 	  }
-	  #restoreOpenedTopicIds() {
+	  #restoreTopicState() {
 	    if (!this.#openedTopicStorage) return;
 	    let raw;
 	    try {
@@ -10249,11 +10476,20 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	    }
 	    if (raw)
 	      try {
-	        const parsed = JSON.parse(raw);
-	        if (!Array.isArray(parsed)) throw new TypeError("本机已打开 Topic 记录格式无效");
-	        for (const value of parsed.slice(-MAX_OPENED_TOPIC_IDS)) {
+	        const parsed = JSON.parse(raw), state = (0, import_value_record.valueRecord)(parsed), opened = Array.isArray(parsed) ? parsed : state?.opened;
+	        if (!Array.isArray(opened))
+	          throw new TypeError("本机 Topic 曝光记录格式无效");
+	        for (const value of opened) {
 	          const topicId = Number(value);
 	          Number.isSafeInteger(topicId) && topicId > 0 && this.#openedTopicIds.add(topicId);
+	        }
+	        const exposures = state?.exposures;
+	        if (exposures !== void 0 && !Array.isArray(exposures))
+	          throw new TypeError("本机 Topic 曝光次数格式无效");
+	        for (const entry of Array.isArray(exposures) ? exposures : []) {
+	          if (!Array.isArray(entry) || entry.length !== 2) continue;
+	          const topicId = Number(entry[0]), count = Number(entry[1]);
+	          Number.isSafeInteger(topicId) && topicId > 0 && Number.isSafeInteger(count) && count > 0 && !this.#openedTopicIds.has(topicId) && this.#exposureCounts.set(topicId, count);
 	        }
 	      } catch (cause) {
 	        this.#onError(cause);
@@ -10264,26 +10500,99 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	        }
 	      }
 	  }
-	  #persistOpenedTopicIds() {
-	    if (this.#openedTopicStorage) {
-	      for (; this.#openedTopicIds.size > MAX_OPENED_TOPIC_IDS; ) {
-	        const oldest = this.#openedTopicIds.values().next().value;
-	        if (oldest === void 0) break;
-	        this.#openedTopicIds.delete(oldest);
-	      }
+	  #persistTopicState() {
+	    if (this.#openedTopicStorage)
 	      try {
-	        if (!this.#openedTopicIds.size) {
+	        if (!this.#openedTopicIds.size && !this.#exposureCounts.size) {
 	          this.#openedTopicStorage.removeItem(this.#openedTopicStorageKey);
 	          return;
 	        }
 	        this.#openedTopicStorage.setItem(
 	          this.#openedTopicStorageKey,
-	          JSON.stringify([...this.#openedTopicIds])
+	          JSON.stringify({
+	            version: 2,
+	            opened: [...this.#openedTopicIds],
+	            exposures: [...this.#exposureCounts]
+	          })
 	        );
 	      } catch (cause) {
 	        this.#onError(cause);
 	      }
+	  }
+	  #deduplicateCards(cards) {
+	    for (const card of cards) {
+	      const container = card.closest(TOPIC_LIST_SELECTOR) ?? card.parentElement, topicId = this.#cardTopicId(card);
+	      if (!container || !topicId || !card.isConnected) continue;
+	      let firstCards = this.#firstTopicCardByList.get(container);
+	      firstCards || (firstCards = /* @__PURE__ */ new Map(), this.#firstTopicCardByList.set(container, firstCards));
+	      const existing = firstCards.get(topicId);
+	      if (!existing || !existing.isConnected || !container.contains(existing)) {
+	        firstCards.set(topicId, card);
+	        continue;
+	      }
+	      if (existing === card) continue;
+	      const existingComesFirst = !!(existing.compareDocumentPosition(card) & 4), duplicate = existingComesFirst ? card : existing;
+	      this.#stopObservingExposure(duplicate), duplicate.remove(), existingComesFirst || firstCards.set(topicId, card);
 	    }
+	    return Object.freeze(cards.filter((card) => card.isConnected));
+	  }
+	  #syncExposure(card) {
+	    const topicId = Number(this.#cardTopicId(card));
+	    if (!(!Number.isSafeInteger(topicId) || topicId < 1)) {
+	      if (this.#openedTopicIds.has(topicId)) {
+	        this.#stopObservingExposure(card), card.querySelector(`.${EXPOSURE_COUNT_CLASS}`)?.remove();
+	        return;
+	      }
+	      this.#renderExposureCount(card, this.#exposureCounts.get(topicId) ?? 0), this.#exposureObserver && !this.#countedExposureCards.has(card) && !this.#observedExposureCards.has(card) && (this.#observedExposureCards.add(card), this.#exposureObserver.observe(card));
+	    }
+	  }
+	  #stopObservingExposure(card) {
+	    this.#observedExposureCards.delete(card) && this.#exposureObserver?.unobserve(card);
+	  }
+	  #pruneDisconnectedExposureCards() {
+	    for (const card of this.#observedExposureCards)
+	      card.isConnected || this.#stopObservingExposure(card);
+	  }
+	  #onExposureIntersections(entries) {
+	    for (const entry of entries) {
+	      const card = entry.target;
+	      if (!card.isConnected) {
+	        this.#stopObservingExposure(card);
+	        continue;
+	      }
+	      if (this.#document.visibilityState === "hidden" || !entry.isIntersecting || entry.intersectionRatio <= 0 || entry.intersectionRect.width <= 0 || entry.intersectionRect.height <= 0 || this.#countedExposureCards.has(card)) continue;
+	      this.#stopObservingExposure(card), this.#countedExposureCards.add(card), this.#restoreTopicState();
+	      const topicId = Number(this.#cardTopicId(card));
+	      if (!Number.isSafeInteger(topicId) || topicId < 1 || this.#openedTopicIds.has(topicId)) {
+	        this.#renderExposureCount(card, 0);
+	        continue;
+	      }
+	      const count = Math.min(
+	        Number.MAX_SAFE_INTEGER,
+	        (this.#exposureCounts.get(topicId) ?? 0) + 1
+	      );
+	      this.#exposureCounts.set(topicId, count), this.#persistTopicState();
+	      for (const current of this.#document.querySelectorAll(CARD_SELECTOR))
+	        Number(this.#cardTopicId(current)) === topicId && this.#renderExposureCount(current, count);
+	    }
+	  }
+	  #renderExposureCount(card, count) {
+	    let badge = card.querySelector(`.${EXPOSURE_COUNT_CLASS}`);
+	    if (!Number.isSafeInteger(count) || count < 1) {
+	      badge?.remove();
+	      return;
+	    }
+	    if (!badge) {
+	      if (!card.querySelector(TOPIC_LINK_SELECTOR)) return;
+	      badge = this.#document.createElement("span"), badge.className = EXPOSURE_COUNT_CLASS;
+	    }
+	    const readerMeta = card.querySelector(
+	      ".ldp-host-topic-reader-meta"
+	    ), bottomLine = card.querySelector(".link-bottom-line");
+	    readerMeta ? readerMeta.after(badge) : bottomLine ? bottomLine.append(badge) : card.querySelector(TOPIC_LINK_SELECTOR)?.after(badge), badge.dataset.exposureCount = String(count), badge.textContent = `出现 ${count} 次`, badge.setAttribute(
+	      "aria-label",
+	      `此 Topic 已在宿主可见视野出现 ${count} 次`
+	    ), badge.title = "打开此 Topic 后将永久停止累计出现次数";
 	  }
 	  #groupTitleTools(card, topic) {
 	    const line = card.querySelector(".link-top-line");
@@ -10319,6 +10628,25 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	    const topic = this.#topicInput(card, this.#topicModels()), projection = this.#topicProjection(card, topic);
 	    this.#hideCard(card, projection, control);
 	  }
+	  #recordAutomaticMatch(card, input, match) {
+	    const record2 = Object.freeze({
+	      topicId: input.topicId,
+	      title: input.title,
+	      href: input.href,
+	      categoryId: input.categoryId,
+	      categoryName: input.categoryName,
+	      categorySlug: input.categorySlug,
+	      source: "automatic",
+	      matchedRule: match.label,
+	      matchedCategory: match.matches.some((reason) => reason.kind === "category")
+	    }), signature = JSON.stringify(record2);
+	    if (this.#automaticRecordSignatures.get(card) !== signature)
+	      try {
+	        this.#recordAutomaticTopic(record2) !== !1 && this.#automaticRecordSignatures.set(card, signature);
+	      } catch (cause) {
+	        this.#onError(cause);
+	      }
+	  }
 	  async #hideCard(card, input, control) {
 	    if (!this.#pendingCards.has(card)) {
 	      this.#pendingCards.add(card), control && (control.dataset.ldpNativeDndPending = "true", control.setAttribute("aria-busy", "true"), control.tagName === "BUTTON" && (control.disabled = !0));
@@ -10333,7 +10661,7 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	          source: "manual",
 	          matchedRule: "",
 	          matchedCategory: !1
-	        })), card.remove(), this.#notify("已加入不想看");
+	        })), card.removeAttribute(AUTOMATIC_FILTER_ATTRIBUTE), card.setAttribute(MANUAL_FILTER_ATTRIBUTE, ""), this.#stopObservingExposure(card), this.#notify("已加入不想看");
 	      } catch (cause) {
 	        this.#onError(cause), this.#notify("加入不想看失败，请稍后重试");
 	      } finally {
@@ -10475,7 +10803,7 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	    return (link?.getAttribute("href") ?? "").match(/\/t\/(?:[^/]+\/)?(\d+)(?:\/|$)/)?.[1] ?? "";
 	  }
 	}
-}, "be577733df15f21236d0dbf9407e88843aa465f5073454044872059f5e405990");
+}, "85ccc51e59e6c042cc42b3e91f17285b6f2ee484ffc2316ad79ba9c26bb9f90e");
 
 /* Source: lite/src/shell/main-outlet-mutation-hub.ts */
 runtime.register("src/shell/main-outlet-mutation-hub.js", function(module, exports, require) {
@@ -17066,6 +17394,7 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	    fontProfile: READER_FONT_DEFAULT,
 	    appearanceProfile: APPEARANCE_PROFILE_DEFAULT,
 	    ...performance,
+	    performanceSuspendHostTurnstileInBackground: !1,
 	    layoutProfile: READER_LAYOUT_DEFAULT,
 	    fullpageLayoutProfile: READER_FULLPAGE_LAYOUT_DEFAULT,
 	    readerWindowWidth: 0,
@@ -17230,6 +17559,7 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	    fontProfile: normalizeFontProfile(source.fontProfile),
 	    appearanceProfile: normalizeAppearanceProfile(source.appearanceProfile),
 	    ...performance,
+	    performanceSuspendHostTurnstileInBackground: source.performanceSuspendHostTurnstileInBackground === !0,
 	    layoutProfile: normalizeLayoutProfile(source.layoutProfile, READER_LAYOUT_DEFAULT),
 	    fullpageLayoutProfile: normalizeLayoutProfile(
 	      source.fullpageLayoutProfile,
@@ -17294,6 +17624,8 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	    unwantedTopicFilterTopicAuthors: Object.freeze([]),
 	    unwantedTopicFilterTopicFields: Object.freeze([]),
 	    unwantedTopicFilterPostAuthors: Object.freeze([])
+	  }), hostTurnstileBackgroundDefaults = Object.freeze({
+	    performanceSuspendHostTurnstileInBackground: !1
 	  });
 	  return new import_preferences_config_codec.PreferencesConfigCodec({
 	    format: READER_CONFIG_EXPORT_FORMAT,
@@ -17303,10 +17635,17 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	    normalize,
 	    legacyImportRules: [
 	      {
-	        missingDefaults: unwantedTopicFilterDefaults
+	        missingDefaults: hostTurnstileBackgroundDefaults
 	      },
 	      {
 	        missingDefaults: {
+	          ...hostTurnstileBackgroundDefaults,
+	          ...unwantedTopicFilterDefaults
+	        }
+	      },
+	      {
+	        missingDefaults: {
+	          ...hostTurnstileBackgroundDefaults,
 	          ...unwantedTopicFilterDefaults,
 	          autoDarkModeEnabled: !1,
 	          autoDarkModeStartTime: "sunset"
@@ -17314,6 +17653,7 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	      },
 	      {
 	        missingDefaults: {
+	          ...hostTurnstileBackgroundDefaults,
 	          ...unwantedTopicFilterDefaults,
 	          autoDarkModeEnabled: !1,
 	          autoDarkModeStartTime: "sunset",
@@ -17322,6 +17662,7 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	      },
 	      {
 	        missingDefaults: {
+	          ...hostTurnstileBackgroundDefaults,
 	          ...unwantedTopicFilterDefaults,
 	          autoDarkModeEnabled: !1,
 	          autoDarkModeStartTime: "sunset",
@@ -17331,6 +17672,7 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	      },
 	      {
 	        missingDefaults: {
+	          ...hostTurnstileBackgroundDefaults,
 	          ...unwantedTopicFilterDefaults,
 	          autoDarkModeEnabled: !1,
 	          autoDarkModeStartTime: "sunset",
@@ -17353,7 +17695,7 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	    prepareStored: prepareStoredReaderPreferences
 	  });
 	}
-}, "a16dd10ba7e82af21cb698bbcccf17fd9f9956b69a2035a5571854ee1c4d81a4");
+}, "1c6b46daad75638ef8eaee96d9751ae87afb413ea02a0391277249c94ab18e87");
 
 /* Source: lite/src/state/reader-settings-config-manager.ts */
 runtime.register("src/state/reader-settings-config-manager.js", function(module, exports, require) {
@@ -18700,13 +19042,20 @@ runtime.register("src/topic/reader-post-author-filter-feature.js", function(modu
 	  activationScope = "node";
 	  #views = /* @__PURE__ */ new Map();
 	  #boundViews = /* @__PURE__ */ new WeakSet();
+	  #recordedUsernames = /* @__PURE__ */ new Set();
+	  #recordHiddenPostAuthor;
+	  #onError;
 	  #preferences;
 	  constructor(options) {
-	    this.#preferences = options.preferences.read(), options.preferences.subscribe((preferences) => {
+	    this.#recordHiddenPostAuthor = options.recordHiddenPostAuthor ?? (() => {
+	    }), this.#onError = options.onError ?? (() => {
+	    }), this.#preferences = options.preferences.read(), options.preferences.subscribe((preferences) => {
 	      this.#preferences = preferences;
 	      for (const [view, username] of this.#views)
 	        this.#project(view, username);
-	    }, options.parentScope), options.parentScope.add(() => this.#views.clear());
+	    }, options.parentScope), options.parentScope.add(() => {
+	      this.#views.clear(), this.#recordedUsernames.clear();
+	    });
 	  }
 	  afterRender(_post, view) {
 	    const username = view.identity.username;
@@ -18717,10 +19066,20 @@ runtime.register("src/topic/reader-post-author-filter-feature.js", function(modu
 	      this.#preferences,
 	      username
 	    );
-	    view.slots.root.classList.toggle("ldp-post-unwanted-author", hidden), hidden ? view.slots.root.dataset.unwantedPostAuthor = username : delete view.slots.root.dataset.unwantedPostAuthor;
+	    view.slots.root.classList.toggle("ldp-post-unwanted-author", hidden);
+	    const normalizedUsername = username.replace(/^@+/, "").trim(), usernameKey = normalizedUsername.toLocaleLowerCase("en-US");
+	    if (hidden) {
+	      if (view.slots.root.dataset.unwantedPostAuthor = normalizedUsername, usernameKey && !this.#recordedUsernames.has(usernameKey))
+	        try {
+	          this.#recordHiddenPostAuthor(normalizedUsername), this.#recordedUsernames.add(usernameKey);
+	        } catch (cause) {
+	          this.#onError(cause);
+	        }
+	    } else
+	      delete view.slots.root.dataset.unwantedPostAuthor, this.#recordedUsernames.delete(usernameKey);
 	  }
 	}
-}, "201cc830587db6df721c9ddb84a7cf406ef8af913d07bb73161e5455f3d76c67");
+}, "d63b3510337b93c8efe598f55bde4791468d30ee6212679aa02a1f8a1074f240");
 
 /* Source: lite/src/topic/reader-post-presentation.ts */
 runtime.register("src/topic/reader-post-presentation.js", function(module, exports, require) {
@@ -22095,7 +22454,9 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	  #pendingBranchCollapseAnchor = null;
 	  #directReplyPrefetchHandle = null;
 	  #projectionHydrationHandle = null;
+	  #projectionHydrationHandleUrgent = !1;
 	  #projectionHydrationPostNumbers = Object.freeze([]);
+	  #projectionHydrationUrgentPostNumbers = /* @__PURE__ */ new Set();
 	  #retainedViewLimit = 0;
 	  #lastVisibleRootChangeKey = "";
 	  #lastPostStreamRevision;
@@ -22165,7 +22526,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	      this.streamView,
 	      this.domOwner,
 	      {
-	        prepareRoots: (_postNumbers, input, window) => this.#prepareRootViews(input, window),
+	        prepareRoots: (postNumbers, input, window) => this.#prepareRootViews(postNumbers, input, window),
 	        roots: () => this.replyTreePresentation.roots(),
 	        resolveGapPlaceholder: (window, input) => {
 	          if (window.unloadedGapTargetPostNumber !== void 0 && window.unloadedGapSide !== void 0)
@@ -22186,10 +22547,11 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	      readWindowInput: () => this.#readVirtualWindowInput(),
 	      applyScrollCompensation: (delta) => options.scroll.applyScrollCompensation(delta),
 	      /*
-	       * 根高测量只更新虚拟坐标。活跃滚动由 Chromium 独占；停稳后的物理
-	       * 视野由 scroll adapter 的唯一视野锁持有，frame 不得再写第二份补偿。
+	       * 根高测量会改写 overflow-anchor:none 的虚拟 spacer，Chromium 不会
+	       * 替它补偿。没有显式 DOM 高度事务时使用 frame 自带的单帧补偿；已有
+	       * 事务则由物理楼层锚点结算，二者不能同时写 scrollTop。
 	       */
-	      shouldApplyScrollCompensation: () => !1,
+	      shouldApplyScrollCompensation: () => this.#pendingViewportMutation === null,
 	      shouldDeferMeasurements: () => !1,
 	      resolveRootBlockSize: (target, observedBlockSize) => {
 	        const postNumber = Number(target.getAttribute("data-post-number")), inset = Number.isSafeInteger(postNumber) ? this.#rootVirtualInsets.get(postNumber) : void 0, virtualBlockSize = observedBlockSize + (inset?.beforeSize ?? 0) + (inset?.afterSize ?? 0), marker = target.nextElementSibling;
@@ -22204,9 +22566,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	        );
 	        const projectionChanged = commit.tree.changed !== !1;
 	        projectionChanged && this.#syncProjectionFeatures(), this.#syncContentFeatures(), this.#syncDirectReplyPrefetchCandidates(), this.#releaseParkedViews(commit.tree.parked), projectionChanged && this.#scheduleBranchPaint();
-	        const visiblePostNumber = this.#scroll.readVisibleViewportAnchor?.(
-	          this.#visiblePostElements()
-	        )?.postNumber ?? this.#treeViewport.visiblePostNumbers[0] ?? commit.window.visiblePostNumbers[0], visibleRootPostNumber = visiblePostNumber === void 0 ? void 0 : this.replyTreePresentation.rootOf(visiblePostNumber) ?? visiblePostNumber;
+	        const mutationPostNumber = this.#pendingViewportMutation?.postNumber, visiblePostNumber = (mutationPostNumber === void 0 ? void 0 : this.domOwner.view(mutationPostNumber)?.slots.root)?.isConnected ? mutationPostNumber : this.#treeViewport.visiblePostNumbers[0] ?? commit.window.visiblePostNumbers[0], visibleRootPostNumber = visiblePostNumber === void 0 ? void 0 : this.replyTreePresentation.rootOf(visiblePostNumber) ?? visiblePostNumber;
 	        if (visibleRootPostNumber !== void 0) {
 	          const changeKey = `${visibleRootPostNumber}|${Number(commit.window.atStart)}|${Number(commit.window.atEnd)}`;
 	          if (changeKey !== this.#lastVisibleRootChangeKey) {
@@ -22668,8 +23028,15 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	        }
 	    }
 	  }
-	  #prepareRootViews(input, window) {
-	    this.#updateRetainedViewLimit(input.maxMountedPostCount);
+	  #prepareRootViews(rootPostNumbers, input, window) {
+	    const connectedRootPostNumbers = [...this.streamView.slots.rootList.children].flatMap((element) => {
+	      if (!element.classList.contains("ldp-post")) return [];
+	      const postNumber = Number(element.getAttribute("data-post-number"));
+	      return Number.isSafeInteger(postNumber) && postNumber > 0 ? [postNumber] : [];
+	    });
+	    (connectedRootPostNumbers.length !== rootPostNumbers.length || connectedRootPostNumbers.some(
+	      (postNumber, index) => postNumber !== rootPostNumbers[index]
+	    )) && this.#beginConnectedViewportMutation(), this.#updateRetainedViewLimit(input.maxMountedPostCount);
 	    let plan = this.#treeViewport.plan(window, input);
 	    if (!this.#ownSizeObserver)
 	      for (let pass = 0; pass < 2; pass += 1) {
@@ -22706,7 +23073,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	      const post = this.#session.postByNumber(postNumber);
 	      if (post)
 	        try {
-	          const renderImmediately = eagerProjectionBudget > 0 && plan.contentPostNumbers.has(postNumber), created = renderImmediately ? this.postProjector.create(
+	          const renderImmediately = visiblePostNumbers.has(postNumber) || eagerProjectionBudget > 0 && plan.contentPostNumbers.has(postNumber), created = renderImmediately ? this.postProjector.create(
 	            post,
 	            this.scope,
 	            postNumber
@@ -22715,7 +23082,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	            this.scope,
 	            postNumber
 	          );
-	          renderImmediately ? eagerProjectionBudget -= 1 : this.#markProjectionPending(
+	          renderImmediately ? eagerProjectionBudget > 0 && (eagerProjectionBudget -= 1) : this.#markProjectionPending(
 	            created,
 	            plan.ownSizes.get(postNumber)
 	          ), this.domOwner.register(created, !1);
@@ -22723,18 +23090,38 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	          this.#onError(error);
 	        }
 	    }
-	    return this.#nextContentPostNumbers = new Set(
+	    [...visiblePostNumbers].some(
+	      (postNumber) => {
+	        const root = this.domOwner.view(postNumber)?.slots.root;
+	        return root?.isConnected === !0 && root.classList.contains(
+	          "ldp-post-projection-pending"
+	        );
+	      }
+	    ) && this.#beginConnectedViewportMutation();
+	    for (const postNumber of visiblePostNumbers)
+	      this.domOwner.view(postNumber)?.slots.root?.classList.contains("ldp-post-projection-pending") && this.#materializeProjection(postNumber, !1);
+	    this.#nextContentPostNumbers = new Set(
 	      [...plan.contentPostNumbers].filter((postNumber) => {
 	        const root = this.domOwner.view(postNumber)?.slots.root;
 	        return !!root && !root.classList.contains(
 	          "ldp-post-projection-pending"
 	        );
 	      })
-	    ), this.#setProjectionHydrationCandidates(
-	      [
-	        ...visiblePostNumbers,
-	        ...plan.contentPostNumbers
-	      ]
+	    );
+	    const scrollDirection = this.#scroll.lastUserScrollDirection?.() ?? 0, orderedContentPostNumbers = [...plan.contentPostNumbers], visibleContentIndices = orderedContentPostNumbers.flatMap(
+	      (postNumber, index) => visiblePostNumbers.has(postNumber) ? [index] : []
+	    ), firstVisibleContentIndex = visibleContentIndices.length ? Math.min(...visibleContentIndices) : -1, lastVisibleContentIndex = visibleContentIndices.length ? Math.max(...visibleContentIndices) : -1, directionalProjectionHydrationPostNumbers = orderedContentPostNumbers.filter(
+	      (_postNumber, index) => scrollDirection === -1 ? firstVisibleContentIndex >= 0 && index < firstVisibleContentIndex : scrollDirection === 1 ? lastVisibleContentIndex >= 0 && index > lastVisibleContentIndex : !1
+	    );
+	    scrollDirection === -1 && directionalProjectionHydrationPostNumbers.reverse();
+	    const projectionHydrationPostNumbers = [
+	      ...visiblePostNumbers,
+	      ...directionalProjectionHydrationPostNumbers,
+	      ...plan.contentPostNumbers
+	    ];
+	    return this.#setProjectionHydrationCandidates(
+	      projectionHydrationPostNumbers,
+	      directionalProjectionHydrationPostNumbers
 	    ), plan;
 	  }
 	  #markProjectionPending(view, ownSize) {
@@ -22744,42 +23131,56 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	      `${Math.max(0, ownSize)}px`
 	    );
 	  }
-	  #setProjectionHydrationCandidates(postNumbers) {
+	  #setProjectionHydrationCandidates(postNumbers, urgentPostNumbers = []) {
 	    const unique = /* @__PURE__ */ new Set();
 	    for (const postNumber of postNumbers)
 	      unique.has(postNumber) || !this.#mountedPostNumbers.has(postNumber) || this.#projectionHydrationFailedPostNumbers.has(postNumber) || !this.domOwner.view(postNumber)?.slots.root?.classList.contains("ldp-post-projection-pending") || unique.add(postNumber);
-	    if (this.#projectionHydrationPostNumbers = Object.freeze([...unique]), !this.#projectionHydrationPostNumbers.length) {
+	    this.#projectionHydrationPostNumbers = Object.freeze([...unique]);
+	    const urgent = new Set(
+	      urgentPostNumbers.filter((postNumber) => unique.has(postNumber))
+	    );
+	    if (this.#projectionHydrationUrgentPostNumbers = urgent, !this.#projectionHydrationPostNumbers.length) {
 	      this.#projectionHydrationHandle !== null && this.#projectionHydrationScheduler.cancel(
 	        this.#projectionHydrationHandle
-	      ), this.#projectionHydrationHandle = null;
+	      ), this.#projectionHydrationHandle = null, this.#projectionHydrationHandleUrgent = !1;
 	      return;
 	    }
-	    this.#scheduleProjectionHydration();
+	    const needsUrgentHandle = urgent.size > 0;
+	    this.#projectionHydrationHandle !== null && this.#projectionHydrationHandleUrgent !== needsUrgentHandle && (this.#projectionHydrationScheduler.cancel(
+	      this.#projectionHydrationHandle
+	    ), this.#projectionHydrationHandle = null, this.#projectionHydrationHandleUrgent = !1), this.#scheduleProjectionHydration();
 	  }
 	  #scheduleProjectionHydration(delayMs) {
 	    if (this.scope.destroyed || this.#projectionHydrationHandle !== null || !this.#projectionHydrationPostNumbers.length) return;
-	    const delay = delayMs ?? Math.max(
+	    const urgent = this.#projectionHydrationUrgentPostNumbers.size > 0, delay = delayMs ?? (urgent ? PROJECTION_HYDRATION_BATCH_DELAY_MS : Math.max(
 	      PROJECTION_HYDRATION_BATCH_DELAY_MS,
 	      this.#scrollLifecycle.remainingIdleMs(
 	        PROJECTION_HYDRATION_MIN_IDLE_MS
 	      )
-	    );
-	    this.#projectionHydrationHandle = this.#projectionHydrationScheduler.schedule(() => {
-	      if (this.#projectionHydrationHandle = null, this.scope.destroyed) return;
-	      const remainingIdleMs = this.#scrollLifecycle.remainingIdleMs(
-	        PROJECTION_HYDRATION_MIN_IDLE_MS
-	      );
-	      if (remainingIdleMs > 0) {
-	        this.#scheduleProjectionHydration(remainingIdleMs);
-	        return;
+	    ));
+	    this.#projectionHydrationHandleUrgent = urgent, this.#projectionHydrationHandle = this.#projectionHydrationScheduler.schedule(() => {
+	      if (this.#projectionHydrationHandle = null, this.#projectionHydrationHandleUrgent = !1, !this.scope.destroyed) {
+	        if (!urgent) {
+	          const remainingIdleMs = this.#scrollLifecycle.remainingIdleMs(
+	            PROJECTION_HYDRATION_MIN_IDLE_MS
+	          );
+	          if (remainingIdleMs > 0) {
+	            this.#scheduleProjectionHydration(remainingIdleMs);
+	            return;
+	          }
+	        }
+	        this.#hydrateProjectionBatch(urgent);
 	      }
-	      this.#hydrateProjectionBatch();
 	    }, Math.max(0, delay));
 	  }
-	  #hydrateProjectionBatch() {
+	  #hydrateProjectionBatch(urgentOnly = !1) {
 	    const remaining = [];
 	    let hydrated = 0;
 	    for (const postNumber of this.#projectionHydrationPostNumbers) {
+	      if (urgentOnly && !this.#projectionHydrationUrgentPostNumbers.has(postNumber)) {
+	        remaining.push(postNumber);
+	        continue;
+	      }
 	      if (hydrated < PROJECTION_HYDRATION_BATCH_SIZE && this.#materializeProjection(postNumber)) {
 	        hydrated += 1;
 	        continue;
@@ -22787,9 +23188,9 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	      const root = this.domOwner.view(postNumber)?.slots.root;
 	      this.#mountedPostNumbers.has(postNumber) && !this.#projectionHydrationFailedPostNumbers.has(postNumber) && root?.classList.contains("ldp-post-projection-pending") && remaining.push(postNumber);
 	    }
-	    this.#projectionHydrationPostNumbers = Object.freeze(remaining), remaining.length && this.#scheduleProjectionHydration(
-	      PROJECTION_HYDRATION_BATCH_DELAY_MS
-	    );
+	    this.#projectionHydrationPostNumbers = Object.freeze(remaining), this.#projectionHydrationUrgentPostNumbers = new Set(
+	      remaining.filter((postNumber) => this.#projectionHydrationUrgentPostNumbers.has(postNumber))
+	    ), remaining.length && this.#scheduleProjectionHydration();
 	  }
 	  #materializeProjection(postNumber, notify = !0) {
 	    if (!this.#mountedPostNumbers.has(postNumber) || this.#projectionHydrationFailedPostNumbers.has(postNumber)) return !1;
@@ -22809,7 +23210,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	  #cancelProjectionHydration() {
 	    this.#projectionHydrationHandle !== null && this.#projectionHydrationScheduler.cancel(
 	      this.#projectionHydrationHandle
-	    ), this.#projectionHydrationHandle = null, this.#projectionHydrationPostNumbers = Object.freeze([]);
+	    ), this.#projectionHydrationHandle = null, this.#projectionHydrationHandleUrgent = !1, this.#projectionHydrationPostNumbers = Object.freeze([]), this.#projectionHydrationUrgentPostNumbers = /* @__PURE__ */ new Set();
 	  }
 	  #measureOwnPostSize(postNumber) {
 	    const view = this.domOwner.view(postNumber), root = view?.slots.root;
@@ -22899,15 +23300,15 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	    if (!this.#pendingOwnSizePostNumbers.size) return;
 	    const pending = [...this.#pendingOwnSizePostNumbers];
 	    this.#pendingOwnSizePostNumbers.clear();
-	    let changed = !1;
+	    let changed = !1, mutation = null;
 	    for (const postNumber of pending) {
 	      const view = this.domOwner.view(postNumber), sample = this.#ownSizeSamples.get(postNumber);
-	      !view?.slots.root.isConnected || view.slots.root.classList.contains("ldp-virtual-ancestor-shell") || sample?.root === void 0 || sample.replyTree === void 0 || (changed = this.#treeViewport.measureOwnSize(
+	      !view?.slots.root.isConnected || view.slots.root.classList.contains("ldp-virtual-ancestor-shell") || sample?.root === void 0 || sample.replyTree === void 0 || (mutation ??= this.#beginConnectedViewportMutation(), changed = this.#treeViewport.measureOwnSize(
 	        postNumber,
 	        Math.max(1, sample.root - sample.replyTree)
 	      ) || changed);
 	    }
-	    changed && this.frame.notifyScroll();
+	    changed ? this.frame.notifyScroll() : mutation && this.#pendingViewportMutation === mutation && this.#cancelPendingViewportMutation();
 	  }
 	  #syncDirectReplyPrefetchCandidates() {
 	    const input = this.#scroll.readWindowInput(), rawScreens = Number(this.#readDirectReplyPrefetchScreens()), prefetchScreens = Number.isFinite(rawScreens) ? Math.min(3, Math.max(0, rawScreens)) : 0, beforeScreens = Math.max(
@@ -23124,7 +23525,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	      throw new Error("ReaderTopicDomCoordinator 已销毁");
 	  }
 	}
-}, "117a5b405d2951b7f9a2d37c694a43cc601d45003dc43737ca729b5c17f227d1");
+}, "6bd5d29e1011979f7959b898a67fdbb1b2300f0228938dcda475cb9336c0c0a5");
 
 /* Source: lite/src/topic/reader-topic-edit-controller.ts */
 runtime.register("src/topic/reader-topic-edit-controller.js", function(module, exports, require) {
@@ -23595,7 +23996,7 @@ runtime.register("src/topic/reader-topic-header.js", function(module, exports, r
 	  readerTopicOwnerUsername: () => readerTopicOwnerUsername
 	});
 	module.exports = __toCommonJS(reader_topic_header_exports);
-	var import_reader_icon = require("../components/reader-icon.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_value_record = require("../kernel/value-record.js");
+	var import_reader_icon = require("../components/reader-icon.js"), import_reader_inline_emoji = require("../components/reader-inline-emoji.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_signal = require("../kernel/signal.js"), import_value_record = require("../kernel/value-record.js");
 	const EMPTY_RECORD = Object.freeze({});
 	function text(value) {
 	  return String(value ?? "").trim();
@@ -23690,6 +24091,9 @@ runtime.register("src/topic/reader-topic-header.js", function(module, exports, r
 	  }
 	  get snapshot() {
 	    return this.#snapshot;
+	  }
+	  emojiSource(id) {
+	    return this.#presentation.emojiSource?.(id) ?? "";
 	  }
 	  refresh() {
 	    const next = normalizeReaderTopicHeader(
@@ -23928,6 +24332,7 @@ runtime.register("src/topic/reader-topic-header.js", function(module, exports, r
 	  #hostMetadataRetryTimer = 0;
 	  #hostMetadataRetryDelay = 80;
 	  #topicVotePending = !1;
+	  #titleEmojiPending = !1;
 	  constructor(options) {
 	    this.#controller = options.controller, this.#elements = options.elements, this.#onJumpFirst = options.onJumpFirst, this.#onlyOp = options.onlyOp ?? null, this.#onToggleTopicVote = options.onToggleTopicVote ?? null, this.#renderIcon = options.renderIcon ?? null, this.#onError = options.onError ?? (() => {
 	    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
@@ -23997,7 +24402,11 @@ runtime.register("src/topic/reader-topic-header.js", function(module, exports, r
 	      this.#hostDocument,
 	      snapshot
 	    );
-	    this.#elements.titleJump.textContent = snapshot.title, this.#elements.metaStats.textContent = snapshot.statsText, this.#elements.metaOwner.hidden = !snapshot.ownerUsername, this.#elements.metaOwnerValue.textContent = snapshot.ownerUsername ? `@${snapshot.ownerUsername}` : "", snapshot.ownerUsername && snapshot.ownerHref ? (this.#elements.metaOwnerValue.href = snapshot.ownerHref, this.#elements.metaOwnerValue.dataset.userCard = snapshot.ownerUsername, this.#elements.metaOwnerValue.target = "_blank", this.#elements.metaOwnerValue.rel = "noopener") : (this.#elements.metaOwnerValue.removeAttribute("href"), this.#elements.metaOwnerValue.removeAttribute("data-user-card"), this.#elements.metaOwnerValue.removeAttribute("target"), this.#elements.metaOwnerValue.removeAttribute("rel")), this.#topicTags.replaceChildren();
+	    this.#titleEmojiPending = (0, import_reader_inline_emoji.renderReaderInlineEmoji)(
+	      this.#elements.titleJump,
+	      snapshot.title,
+	      (id) => this.#controller.emojiSource(id)
+	    ).unresolved > 0, this.#elements.metaStats.textContent = snapshot.statsText, this.#elements.metaOwner.hidden = !snapshot.ownerUsername, this.#elements.metaOwnerValue.textContent = snapshot.ownerUsername ? `@${snapshot.ownerUsername}` : "", snapshot.ownerUsername && snapshot.ownerHref ? (this.#elements.metaOwnerValue.href = snapshot.ownerHref, this.#elements.metaOwnerValue.dataset.userCard = snapshot.ownerUsername, this.#elements.metaOwnerValue.target = "_blank", this.#elements.metaOwnerValue.rel = "noopener") : (this.#elements.metaOwnerValue.removeAttribute("href"), this.#elements.metaOwnerValue.removeAttribute("data-user-card"), this.#elements.metaOwnerValue.removeAttribute("target"), this.#elements.metaOwnerValue.removeAttribute("rel")), this.#topicTags.replaceChildren();
 	    const renderedCategory = snapshot.category ? Object.freeze({
 	      ...snapshot.category,
 	      href: snapshot.category.href || hostIcons.categoryHref
@@ -24032,7 +24441,7 @@ runtime.register("src/topic/reader-topic-header.js", function(module, exports, r
 	        this.#renderIcon,
 	        hostIcons.tagIcons.get(tag.name) ?? null
 	      );
-	    this.#topicTags.hidden = this.#topicTags.childElementCount === 0, this.#renderTopicVote(snapshot.vote), this.#queueTopicHints(), hasCompleteHostIdentityIcons(hostIcons, snapshot) && !(snapshot.categoryId > 0 && !snapshot.category && !hostIcons.categoryName) && this.#stopHostMetadataHydration();
+	    this.#topicTags.hidden = this.#topicTags.childElementCount === 0, this.#renderTopicVote(snapshot.vote), this.#queueTopicHints(), !this.#titleEmojiPending && hasCompleteHostIdentityIcons(hostIcons, snapshot) && !(snapshot.categoryId > 0 && !snapshot.category && !hostIcons.categoryName) && this.#stopHostMetadataHydration();
 	  }
 	  destroy() {
 	    this.scope.destroy();
@@ -24042,7 +24451,7 @@ runtime.register("src/topic/reader-topic-header.js", function(module, exports, r
 	      this.#hostDocument,
 	      refreshed
 	    );
-	    if (!(refreshed.categoryId > 0 && !refreshed.category && !metadata.categoryName) && hasCompleteHostIdentityIcons(metadata, refreshed)) {
+	    if (!this.#titleEmojiPending && !(refreshed.categoryId > 0 && !refreshed.category && !metadata.categoryName) && hasCompleteHostIdentityIcons(metadata, refreshed)) {
 	      this.render(refreshed);
 	      return;
 	    }
@@ -24180,7 +24589,7 @@ runtime.register("src/topic/reader-topic-header.js", function(module, exports, r
 	    ), this.#elements.onlyOpProgressValue.textContent = `已载入 ${snapshot.loadedPostCount}/${snapshot.totalPostCount} · 楼主 ${snapshot.ownerPostCount}`;
 	  }
 	}
-}, "51f322842b7ef4890ced9a0218e8fdceaf3743c94d30c0f262ad7d007e9e42b0");
+}, "db006541a3e0ae1b410214d6a35273e74a9051012580b9dca99cc0542b071629");
 
 /* Source: lite/src/topic/reader-topic-local-archive-feature.ts */
 runtime.register("src/topic/reader-topic-local-archive-feature.js", function(module, exports, require) {
@@ -24838,6 +25247,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	  #lastUserScrollAt = 0;
 	  #lastUserScrollDirection = 0;
 	  #userScrollSessionActive = !1;
+	  #pendingExternalKeyboardScroll = null;
 	  #lastTouchClientY = null;
 	  #stationaryAnchor = null;
 	  #stationaryLockPending = !1;
@@ -24849,6 +25259,8 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	  #programmaticScrollTransactionDepth = 0;
 	  #stationaryMutationObserver = null;
 	  #stationaryResizeObserver = null;
+	  #stationaryRestoreFrame = 0;
+	  #stationaryContentObservationDirty = !1;
 	  constructor(options) {
 	    this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#scrollRoot = options.scrollRoot, this.#readOverscan = options.readOverscan ?? (() => ({})), this.#readMaxMountedPostCount = options.readMaxMountedPostCount ?? (() => {
 	    }), this.#readTopInset = options.readTopInset ?? (() => 0), this.#requestFrame = options.requestFrame ?? ((callback) => requestAnimationFrame(callback)), this.#cancelFrame = options.cancelFrame ?? ((id) => cancelAnimationFrame(id)), this.#now = options.now ?? (() => performance.now()), this.#scrollRoot.classList.remove("ldp-stream-viewport-anchor");
@@ -24857,11 +25269,11 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	      return NativeMutationObserver ? new NativeMutationObserver(callback) : null;
 	    });
 	    this.#stationaryMutationObserver = createMutationObserver(() => {
-	      this.#observeStationaryContentSize(), this.#restoreStationaryViewport();
+	      this.#stationaryContentObservationDirty = !0, this.#scheduleStationaryViewportRestore();
 	    });
 	    const NativeResizeObserver = this.#scrollRoot.ownerDocument.defaultView?.ResizeObserver;
 	    NativeResizeObserver && (this.#stationaryResizeObserver = new NativeResizeObserver(() => {
-	      this.#restoreStationaryViewport();
+	      this.#scheduleStationaryViewportRestore();
 	    })), this.scope.add(() => this.#releaseStationaryViewport()), this.scope.add(() => this.#cancelPendingStationaryViewportLock()), this.scope.add(() => this.#cancelViewportMutation(void 0, !1));
 	    const createResizeObserver = options.createResizeObserver ?? defaultResizeObserverFactory, viewportObserver = createResizeObserver((entries) => {
 	      const entry = entries.find(({ target }) => target === this.#scrollRoot), viewportSize = Math.max(
@@ -24923,6 +25335,12 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    this.scope.listen(this.#scrollRoot, "keydown", (event) => {
 	      const keyboard = event;
 	      keyboard.defaultPrevented || keyboard.altKey || keyboard.ctrlKey || keyboard.metaKey || !SCROLLING_KEYS.has(keyboard.key) || isEditableScrollTarget(keyboard.target) || this.#markUserScrollIntent(this.#keyboardDirection(keyboard));
+	    }), this.scope.listen(this.#scrollRoot.ownerDocument, "keydown", (event) => {
+	      const keyboard = event;
+	      (typeof keyboard.composedPath == "function" ? keyboard.composedPath() : []).includes(this.#scrollRoot) || this.#scrollRoot.contains(keyboard.target) || keyboard.defaultPrevented || keyboard.altKey || keyboard.ctrlKey || keyboard.metaKey || !SCROLLING_KEYS.has(keyboard.key) || isEditableScrollTarget(keyboard.target) || (this.#pendingExternalKeyboardScroll = Object.freeze({
+	        at: finiteNonNegative(this.#now()),
+	        direction: this.#keyboardDirection(keyboard)
+	      }));
 	    }), this.scope.add(() => {
 	      this.#scrollFrame && (this.#cancelFrame(this.#scrollFrame), this.#scrollFrame = 0, this.#pendingScrollOffset = null, this.#scrollOffsetDirty = !1);
 	    }), this.scope.add(() => this.#windowChangeListeners.clear()), this.scope.add(() => this.#userScrollIntentListeners.clear()), this.scope.add(() => this.#directUserScrollIntentListeners.clear());
@@ -24981,6 +25399,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	      ownerOffset: visible.ownerOffset,
 	      scrollTop: finiteNonNegative(this.#scrollRoot.scrollTop)
 	    }), this.#syncViewportAnchorClass(), Object.freeze({
+	      postNumber: visible.postNumber,
 	      restore: () => this.#restoreViewportMutation(token),
 	      cancel: () => this.#cancelViewportMutation(token, !1)
 	    });
@@ -25091,28 +25510,35 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    const rootRect = this.#scrollRoot.getBoundingClientRect(), visibleTop = rootRect.top + Math.min(
 	      rootRect.height,
 	      finiteNonNegative(this.#readTopInset())
-	    ), visibleBottom = rootRect.bottom, candidates = elements.flatMap((owner) => {
+	    ), visibleBottom = rootRect.bottom;
+	    let visibleHeader = null;
+	    const candidates = [];
+	    for (const owner of elements) {
 	      const postNumber = Number(owner.dataset.postNumber);
-	      if (!Number.isSafeInteger(postNumber) || postNumber <= 0 || !owner.isConnected || !this.#scrollRoot.contains(owner) || owner.hidden) return [];
-	      const marker2 = owner.querySelector(":scope > .ldp-post-head") ?? owner, markerRect = marker2.getBoundingClientRect(), ownerRect = owner.getBoundingClientRect();
-	      return [{ postNumber, marker: marker2, markerRect, owner, ownerRect }];
-	    }), visibleHeaders = candidates.filter(
-	      ({ markerRect }) => markerRect.bottom > visibleTop + 1 && markerRect.top < visibleBottom - 1
-	    ).sort(
-	      (left, right) => Math.max(0, left.markerRect.top - visibleTop) - Math.max(0, right.markerRect.top - visibleTop) || left.markerRect.top - right.markerRect.top
-	    ), fallback = candidates.filter(
-	      ({ ownerRect }) => ownerRect.bottom > visibleTop + 1 && ownerRect.top < visibleBottom - 1
-	    ).sort(
-	      (left, right) => Math.abs(left.ownerRect.top - visibleTop) - Math.abs(right.ownerRect.top - visibleTop) || left.ownerRect.height - right.ownerRect.height
-	    ), visibleHeader = visibleHeaders[0], best = visibleHeader ?? fallback[0];
-	    if (!best) return null;
-	    const marker = visibleHeader ? best.marker : best.owner, markerOffset = visibleHeader ? best.markerRect.top - visibleTop : best.ownerRect.top - visibleTop;
+	      if (!Number.isSafeInteger(postNumber) || postNumber <= 0 || !owner.isConnected || !this.#scrollRoot.contains(owner) || owner.hidden) continue;
+	      const marker2 = owner.querySelector(":scope > .ldp-post-head") ?? owner, markerRect = marker2.getBoundingClientRect(), candidate = Object.freeze({ postNumber, marker: marker2, markerRect, owner });
+	      if (candidates.push(candidate), markerRect.bottom <= visibleTop + 1 || markerRect.top >= visibleBottom - 1) continue;
+	      const primary = Math.max(0, markerRect.top - visibleTop), secondary = markerRect.top;
+	      (!visibleHeader || primary < visibleHeader.primary || primary === visibleHeader.primary && secondary < visibleHeader.secondary) && (visibleHeader = Object.freeze({ candidate, primary, secondary }));
+	    }
+	    let best = visibleHeader?.candidate ?? null, ownerRect = best ? best.marker === best.owner ? best.markerRect : best.owner.getBoundingClientRect() : null;
+	    if (!best) {
+	      let fallbackPrimary = Number.POSITIVE_INFINITY, fallbackSecondary = Number.POSITIVE_INFINITY;
+	      for (const candidate of candidates) {
+	        const candidateOwnerRect = candidate.marker === candidate.owner ? candidate.markerRect : candidate.owner.getBoundingClientRect();
+	        if (candidateOwnerRect.bottom <= visibleTop + 1 || candidateOwnerRect.top >= visibleBottom - 1) continue;
+	        const primary = Math.abs(candidateOwnerRect.top - visibleTop), secondary = candidateOwnerRect.height;
+	        primary > fallbackPrimary || primary === fallbackPrimary && secondary >= fallbackSecondary || (best = candidate, ownerRect = candidateOwnerRect, fallbackPrimary = primary, fallbackSecondary = secondary);
+	      }
+	    }
+	    if (!best || !ownerRect) return null;
+	    const marker = visibleHeader ? best.marker : best.owner, markerOffset = visibleHeader ? best.markerRect.top - visibleTop : ownerRect.top - visibleTop;
 	    return Object.freeze({
 	      postNumber: best.postNumber,
 	      marker,
 	      markerOffset,
 	      owner: best.owner,
-	      ownerOffset: best.ownerRect.top - visibleTop
+	      ownerOffset: ownerRect.top - visibleTop
 	    });
 	  }
 	  #notifyWindowChange() {
@@ -25193,7 +25619,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    }), this.#observeStationaryContentSize());
 	  }
 	  #releaseStationaryViewport() {
-	    this.#stationaryAnchor = null, this.#stationaryMutationObserver?.disconnect(), this.#stationaryResizeObserver?.disconnect(), this.#syncViewportAnchorClass();
+	    this.#stationaryAnchor = null, this.#stationaryContentObservationDirty = !1, this.#stationaryRestoreFrame && (this.#cancelFrame(this.#stationaryRestoreFrame), this.#stationaryRestoreFrame = 0), this.#stationaryMutationObserver?.disconnect(), this.#stationaryResizeObserver?.disconnect(), this.#syncViewportAnchorClass();
 	  }
 	  #restoreViewportMutation(token) {
 	    const anchor = this.#viewportMutationAnchor;
@@ -25227,6 +25653,9 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    this.#scrollRoot.classList.toggle(
 	      "ldp-stream-viewport-anchor",
 	      this.#stationaryAnchor !== null || this.#viewportMutationAnchor !== null
+	    ), this.#scrollRoot.classList.toggle(
+	      "ldp-stream-viewport-mutation",
+	      this.#viewportMutationAnchor !== null
 	    );
 	  }
 	  #observeStationaryContentSize() {
@@ -25237,6 +25666,14 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	      ".ldp-virtual-stream"
 	    );
 	    stream && observer.observe(stream);
+	  }
+	  #scheduleStationaryViewportRestore() {
+	    if (this.#stationaryRestoreFrame || this.scope.destroyed || !this.#stationaryAnchor || this.#userScrollSessionActive) return;
+	    let completed = !1;
+	    const handle = this.#requestFrame(() => {
+	      completed = !0, this.#stationaryRestoreFrame = 0, !(this.scope.destroyed || !this.#stationaryAnchor || this.#userScrollSessionActive) && (this.#stationaryContentObservationDirty && (this.#stationaryContentObservationDirty = !1, this.#observeStationaryContentSize()), this.#restoreStationaryViewport());
+	    });
+	    completed || (this.#stationaryRestoreFrame = handle);
 	  }
 	  #restoreStationaryViewport() {
 	    const anchor = this.#stationaryAnchor;
@@ -25272,10 +25709,13 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	  }
 	  #claimScrollOnlyUserInput() {
 	    const actualOffset = finiteNonNegative(this.#scrollRoot.scrollTop), internalOffset = this.#internalScrollWriteOffset;
-	    return this.#internalScrollWriteOffset = null, internalOffset !== null && Math.abs(actualOffset - internalOffset) < 0.5 ? !1 : this.#userScrollSessionActive ? !0 : !this.#stationaryAnchor && !this.#stationaryLockPending ? !1 : (this.#markUserScrollIntent(
-	      this.#directionOf(actualOffset - this.#scrollOffset),
-	      !1
-	    ), !0);
+	    if (this.#internalScrollWriteOffset = null, internalOffset !== null && Math.abs(actualOffset - internalOffset) < 0.5)
+	      return this.#pendingExternalKeyboardScroll = null, !1;
+	    const direction = this.#directionOf(actualOffset - this.#scrollOffset);
+	    if (this.#userScrollSessionActive)
+	      return this.#pendingExternalKeyboardScroll = null, !0;
+	    const pendingKeyboard = this.#pendingExternalKeyboardScroll;
+	    return pendingKeyboard && finiteNonNegative(this.#now()) - pendingKeyboard.at <= USER_SCROLL_SESSION_GAP_MS && direction !== 0 && (pendingKeyboard.direction === 0 || pendingKeyboard.direction === direction) ? (this.#pendingExternalKeyboardScroll = null, this.#markUserScrollIntent(direction, !1), !0) : (pendingKeyboard && (this.#pendingExternalKeyboardScroll = null), !this.#stationaryAnchor && !this.#stationaryLockPending ? !1 : (this.#markUserScrollIntent(direction, !1), !0));
 	  }
 	  #directionOf(delta) {
 	    return !Number.isFinite(delta) || Math.abs(delta) < 0.5 ? 0 : delta < 0 ? -1 : 1;
@@ -25299,7 +25739,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    ), this.#scrollOffsetDirty = !1), this.#pendingScrollOffset ?? this.#scrollOffset;
 	  }
 	}
-}, "d7f3e33f99899893dfb0af8fbb9ad65f0c7a63102637490f38df267d5e1ba693");
+}, "2c601a84e2397b8ee55d60b52164de5ca2f450cc182d9903c12bc9cd9e91b32b");
 
 /* Source: lite/src/topic/reader-topic-scroll-lifecycle.ts */
 runtime.register("src/topic/reader-topic-scroll-lifecycle.js", function(module, exports, require) {
@@ -25377,7 +25817,7 @@ runtime.register("src/topic/reader-topic-special-content-feature.js", function(m
 	  normalizeReaderSolvedAnswers: () => normalizeReaderSolvedAnswers
 	});
 	module.exports = __toCommonJS(reader_topic_special_content_feature_exports);
-	var import_html_element = require("../dom/html-element.js"), import_reader_icon = require("../components/reader-icon.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_value_record = require("../kernel/value-record.js");
+	var import_html_element = require("../dom/html-element.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_inline_emoji = require("../components/reader-inline-emoji.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_value_record = require("../kernel/value-record.js");
 	const EMPTY_RECORD = Object.freeze({});
 	function text(value) {
 	  return String(value ?? "").trim();
@@ -25815,7 +26255,11 @@ runtime.register("src/topic/reader-topic-special-content-feature.js", function(m
 	      "div",
 	      "ldp-solved-excerpt ldp-content cooked"
 	    );
-	    answer.cooked ? excerpt.innerHTML = answer.cooked : excerpt.textContent = answer.excerpt || "查看被采纳的完整回复。", body.append(excerpt);
+	    answer.cooked ? excerpt.innerHTML = answer.cooked : (0, import_reader_inline_emoji.renderReaderInlineEmoji)(
+	      excerpt,
+	      answer.excerpt || "查看被采纳的完整回复。",
+	      (id) => this.#presentation.emojiSource?.(id) ?? ""
+	    ), body.append(excerpt);
 	    const jump = (0, import_html_element.htmlElement)(
 	      this.#document,
 	      "button",
@@ -26114,7 +26558,7 @@ runtime.register("src/topic/reader-topic-special-content-feature.js", function(m
 	    node.append(content), view.slots.bodyLayer.prepend(node);
 	  }
 	}
-}, "b149c5c98ca216145de9530178a7afdece9da9bd44cdfb82c196ca70d50a678d");
+}, "3dc5a42f0d66d267f63b3959e562e67deea3d99fc00ccaff9cccf26c230615fc");
 
 /* Source: lite/src/topic/reader-topic-timeline-controller.ts */
 runtime.register("src/topic/reader-topic-timeline-controller.js", function(module, exports, require) {
@@ -28987,7 +29431,7 @@ runtime.register("src/userscript/main-lite-bootstrap.js", function(module, expor
 	  startMianLiteUserscript: () => startMianLiteUserscript
 	});
 	module.exports = __toCommonJS(main_lite_bootstrap_exports);
-	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_local_sun_clock = require("../appearance/reader-local-sun-clock.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_shell_template = require("../shell/reader-shell-template.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_surface_portal = require("../shell/reader-surface-portal.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_workspace = require("../shell/reader-workspace.js"), import_embedded_host_topic_card_enhancement = require("../shell/embedded-host-topic-card-enhancement.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_boost_copy_rule = require("../post/boost-copy-rule.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_unwanted_topic_filter = require("../collection/reader-unwanted-topic-filter.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_settings_reset_reminder = require("../settings/reader-settings-reset-reminder.js"), import_reader_browser_storage_management = require("../settings/reader-browser-storage-management.js"), import_read_viewport_adapter = require("../reading/read-viewport-adapter.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_information_flow_coordinator = require("../state/reader-information-flow-coordinator.js"), import_reader_post_presentation = require("../topic/reader-post-presentation.js"), import_translation_text = require("../translation/translation-text.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_browser_userscript_environment = require("./browser-userscript-environment.js"), import_reader_userscript_application = require("./reader-userscript-application.js"), import_reader_userscript_target_adapter = require("./reader-userscript-target-adapter.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_credit_account_bridge = require("../user/reader-credit-account-bridge.js"), import_reader_custom_site_repository = require("../site/reader-custom-site-repository.js"), import_reader_embedded_reload_coordinator = require("./reader-embedded-reload-coordinator.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_reader_webdav_config_repository = require("../sync/reader-webdav-config-repository.js");
+	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_local_sun_clock = require("../appearance/reader-local-sun-clock.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_shell_template = require("../shell/reader-shell-template.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_surface_portal = require("../shell/reader-surface-portal.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_workspace = require("../shell/reader-workspace.js"), import_embedded_host_topic_card_enhancement = require("../shell/embedded-host-topic-card-enhancement.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_boost_copy_rule = require("../post/boost-copy-rule.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_unwanted_topic_filter = require("../collection/reader-unwanted-topic-filter.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_settings_reset_reminder = require("../settings/reader-settings-reset-reminder.js"), import_reader_browser_storage_management = require("../settings/reader-browser-storage-management.js"), import_read_viewport_adapter = require("../reading/read-viewport-adapter.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_information_flow_coordinator = require("../state/reader-information-flow-coordinator.js"), import_reader_post_presentation = require("../topic/reader-post-presentation.js"), import_translation_text = require("../translation/translation-text.js"), import_reader_translation_config = require("../translation/reader-translation-config.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_browser_userscript_environment = require("./browser-userscript-environment.js"), import_reader_userscript_application = require("./reader-userscript-application.js"), import_reader_userscript_target_adapter = require("./reader-userscript-target-adapter.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_credit_account_bridge = require("../user/reader-credit-account-bridge.js"), import_reader_custom_site_repository = require("../site/reader-custom-site-repository.js"), import_reader_embedded_reload_coordinator = require("./reader-embedded-reload-coordinator.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_reader_host_turnstile_background_controller = require("../network/reader-host-turnstile-background-controller.js"), import_reader_webdav_config_repository = require("../sync/reader-webdav-config-repository.js");
 	const DEBUG_HANDLE_KEY = "__LDP_MAIN_LITE__", LEGACY_DEBUG_HANDLE_KEY = "__LDP_MIAN_LITE__", CHALLENGE_MONITOR_KEY = "__LDP_CLOUDFLARE_CHALLENGE_MONITOR__", STYLE_ID = "ldp-mian-lite-styles", STYLE_RESOURCE = "ldpReaderStyles", KATEX_STYLE_RESOURCE = "ldpKatexStyles", KATEX_STYLESHEET_URL = "https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css";
 	function pageRecord(value) {
 	  if (value === null || typeof value != "object" && typeof value != "function")
@@ -29191,7 +29635,12 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	            preferenceScope
 	          );
 	        }
-	      }), informationFlow = state.informationFlow;
+	      }), pendingAutomaticTopics = /* @__PURE__ */ new Map();
+	      scope.add(() => pendingAutomaticTopics.clear());
+	      const recordAutomaticTopic = (input) => {
+	        const topicId = Number(input.topicId), runtime = state.runtime;
+	        return runtime ? (runtime.unwantedTopics.remember(input), pendingAutomaticTopics.delete(topicId), !0) : (pendingAutomaticTopics.set(topicId, input), !1);
+	      }, informationFlow = state.informationFlow;
 	      if (!informationFlow)
 	        throw new Error("main-lite 统一信息流协调器尚未就绪");
 	      return (0, import_reader_userscript_application.createReaderUserscriptRuntimeStage)({
@@ -29227,6 +29676,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	                  if (!runtime) throw new Error("不想看仓库尚未就绪");
 	                  runtime.unwantedTopics.remember(input);
 	                },
+	                recordAutomaticTopic,
 	                automaticFilter: (input) => (0, import_reader_unwanted_topic_filter.readerUnwantedTopicFilterPortMatch)(
 	                  unwantedTopicFilter,
 	                  input
@@ -29640,7 +30090,40 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	          }
 	        },
 	        onReady(runtime, context, _settings, settingsView, _layout, appearance, font) {
-	          state.runtime = runtime, persistTranslationMode = (translationMode) => {
+	          state.runtime = runtime;
+	          for (const [topicId, input] of pendingAutomaticTopics)
+	            try {
+	              runtime.unwantedTopics.remember(input), pendingAutomaticTopics.delete(topicId);
+	            } catch (cause) {
+	              console.error("[main-lite:automatic-unwanted-history]", cause);
+	            }
+	          let manualTopicSignature = runtime.unwantedTopics.snapshot.records.filter((record) => record.source === "manual").map((record) => record.topicId).sort((left, right) => left - right).join(",");
+	          if (hostTopicEnhancement?.refreshHiddenTopics(), runtime.unwantedTopics.changes.subscribe((snapshot) => {
+	            const nextSignature = snapshot.records.filter((record) => record.source === "manual").map((record) => record.topicId).sort((left, right) => left - right).join(",");
+	            nextSignature !== manualTopicSignature && (manualTopicSignature = nextSignature, hostTopicEnhancement?.refreshHiddenTopics());
+	          }, runtime.scope), document.location.hostname.toLowerCase() === "linux.do") {
+	            const hostTurnstile = new import_reader_host_turnstile_background_controller.ReaderHostTurnstileBackgroundController({
+	              document,
+	              enabled: context.readPreferences().performanceSuspendHostTurnstileInBackground,
+	              turnstile: () => {
+	                const candidate = window.turnstile;
+	                return candidate && typeof candidate.getResponse == "function" && typeof candidate.remove == "function" && typeof candidate.render == "function" ? candidate : null;
+	              },
+	              parentScope: runtime.scope,
+	              onError: (cause) => {
+	                console.warn(
+	                  "[main-lite:host-turnstile-background]",
+	                  cause
+	                );
+	              }
+	            });
+	            context.preferenceChanges.subscribe((preferences) => {
+	              hostTurnstile.applyEnabled(
+	                preferences.performanceSuspendHostTurnstileInBackground
+	              );
+	            }, runtime.scope);
+	          }
+	          persistTranslationMode = (translationMode) => {
 	            context.updatePreferences?.({ translationMode });
 	          };
 	          const storageAccessDocument = document, browserStorage = window.navigator.storage, storageSurface = settingsView ? new import_reader_browser_storage_management.ReaderBrowserStorageManagementSurface({
@@ -30017,7 +30500,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	  }), handle;
 	}
 	const startMianLiteUserscript = startMainLiteUserscript;
-}, "ee4017e77078ed38f072f3b65f90c70ae3d0e5aca953b66a4e696be2a87a71c4");
+}, "4312cd77f28fbe7588f68c56af6894999480dbb00b90d4b62dda2c7942a825c0");
 
 /* Source: lite/src/userscript/main-lite-entry.ts */
 runtime.register("src/userscript/main-lite-entry.js", function(module, exports, require) {
@@ -30268,7 +30751,7 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	});
 	module.exports = __toCommonJS(reader_host_topic_preheat_controller_exports);
 	var import_identifiers = require("../discourse/identifiers.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_userscript_target_adapter = require("./reader-userscript-target-adapter.js");
-	const CARD_SELECTOR = "tr.topic-list-item,.topic-list-item,.latest-topic-list-item", TOPIC_LINK_SELECTOR = 'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],a[href*="/t/"]', META_SELECTOR = ".ldp-host-topic-reader-meta", PERFORMANCE_CARD_CLASS = "ldp-host-topic-card-performance", DEFAULT_MAX_QUEUED_TOPICS = 6, DEFAULT_MAX_CONCURRENT_PREHEATS = 1, MAX_CONCURRENT_PREHEATS = 3, HOST_REPLY_COUNT_SELECTORS = Object.freeze([
+	const CARD_SELECTOR = "tr.topic-list-item,.topic-list-item,.latest-topic-list-item", TOPIC_LINK_SELECTOR = 'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],a[href*="/t/"]', META_SELECTOR = ".ldp-host-topic-reader-meta", META_ROW_CLASS = "ldp-host-topic-reader-meta-row", PERFORMANCE_CARD_CLASS = "ldp-host-topic-card-performance", DEFAULT_MAX_QUEUED_TOPICS = 6, DEFAULT_MAX_CONCURRENT_PREHEATS = 1, MAX_CONCURRENT_PREHEATS = 3, HOST_REPLY_COUNT_SELECTORS = Object.freeze([
 	  ".ldp-topic-stat--reply .ldp-topic-stat-value",
 	  ":scope > td.posts .number",
 	  ":scope > td.posts",
@@ -30475,11 +30958,14 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	      return;
 	    }
 	    const meta = this.#document.createElement("span");
-	    meta.className = META_SELECTOR.slice(1), card.classList.add(PERFORMANCE_CARD_CLASS), (card.querySelector(".link-bottom-line") ?? card.querySelector(".main-link") ?? card).append(meta);
+	    meta.className = META_SELECTOR.slice(1);
+	    const metaRow = this.#document.createElement("span");
+	    metaRow.className = META_ROW_CLASS, metaRow.append(meta), card.classList.add(PERFORMANCE_CARD_CLASS), (card.querySelector(".link-bottom-line") ?? card.querySelector(".main-link") ?? card).append(metaRow);
 	    const cardState = {
 	      topicId,
 	      routePostNumber: route?.postNumber ?? null,
 	      meta,
+	      metaRow,
 	      near: !1
 	    };
 	    this.#cards.set(card, cardState);
@@ -30509,7 +30995,7 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	    this.#pendingCards.delete(card);
 	    const current = this.#cards.get(card);
 	    if (!current) return;
-	    this.#observer?.unobserve(card), current.meta.remove(), card.classList.remove(PERFORMANCE_CARD_CLASS), this.#cards.delete(card);
+	    this.#observer?.unobserve(card), current.metaRow.remove(), card.classList.remove(PERFORMANCE_CARD_CLASS), this.#cards.delete(card);
 	    const topic = this.#topics.get(current.topicId);
 	    topic?.cards.delete(card), topic && ![...topic.cards].some(
 	      (candidate) => this.#cards.get(candidate)?.near === !0
@@ -30757,7 +31243,7 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	      );
 	    this.#observer?.disconnect(), this.#observer = null;
 	    for (const [card, current] of this.#cards)
-	      current.meta.remove(), card.classList.remove(PERFORMANCE_CARD_CLASS);
+	      current.metaRow.remove(), card.classList.remove(PERFORMANCE_CARD_CLASS);
 	    this.#cards.clear(), this.#topics.clear();
 	  }
 	  #report(error) {
@@ -30767,7 +31253,7 @@ runtime.register("src/userscript/reader-host-topic-preheat-controller.js", funct
 	    }
 	  }
 	}
-}, "e4da2fc2f0f73222474f71a40a683cf363f8a8be36f4d03acbbc78bd08c1f470");
+}, "94b68c4f98cbdb8b4ef900f341cea092338042206a7292006e627033902d0624");
 
 /* Source: lite/src/userscript/reader-host-topic-source-coordinator.ts */
 runtime.register("src/userscript/reader-host-topic-source-coordinator.js", function(module, exports, require) {

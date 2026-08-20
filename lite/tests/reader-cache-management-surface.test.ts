@@ -2,6 +2,7 @@ import { parseHTML } from 'linkedom';
 import {
 	ReaderCacheManagementSurface,
 } from '../src/cache/reader-cache-management-surface.js';
+import { ReaderCacheObserver } from '../src/cache/cache-observer.js';
 import {
 	discoursePostNumber,
 	discourseTopicId,
@@ -146,6 +147,9 @@ let imageObjectUrlClears = 0;
 let browserAssetClears = 0;
 const notices: string[] = [];
 const clearOrder: string[] = [];
+const cacheLog = new ReaderCacheObserver();
+const savedCacheLogs: Array<Readonly<{ content: string; filename: string }>> = [];
+let applicationResumeCount = 0;
 const surface = new ReaderCacheManagementSurface({
 	document,
 	host,
@@ -290,8 +294,22 @@ const surface = new ReaderCacheManagementSurface({
 		clear: async (categories) => {
 			clearOrder.push('application');
 			applicationCacheClears.push([...categories]);
-			return { failed: [] };
+			return {
+				failed: [],
+				...(categories.includes('responses')
+					? {
+						resume: () => {
+							applicationResumeCount += 1;
+							clearOrder.push('resume');
+						},
+					}
+					: {}),
+			};
 		},
+	},
+	cacheLog,
+	saveCacheLog: (content, filename) => {
+		savedCacheLogs.push(Object.freeze({ content, filename }));
 	},
 	prepareClear: (categories) => {
 		clearOrder.push(`prepare:${categories.join(',')}`);
@@ -327,7 +345,7 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 
 assert(
 	host.querySelectorAll('.ldp-cache-row').length === 6 &&
-	host.querySelectorAll('.ldp-config-action').length === 3 &&
+	host.querySelectorAll('.ldp-config-action').length === 4 &&
 	host.querySelector('.ldp-config-body > .ldp-config-actions') !== null &&
 	host.querySelector<HTMLElement>(
 			'[data-setting-category="config-management"] header small',
@@ -496,8 +514,8 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
 	historyEntries.length === 0 &&
 		chronicleEntries.length === 0 &&
-		invalidations[0]?.ids?.join(',') === 'topic,image' &&
-		applicationCacheClears[0]?.join(',') === 'history,topics,assets' &&
+	invalidations[0]?.ids?.join(',') === 'topic,image' &&
+		applicationCacheClears[0]?.join(',') === 'topics' &&
 		browserAssetClears === 1 &&
 	imageObjectUrlClears === 1 &&
 	clearOrder.join('|') ===
@@ -511,6 +529,13 @@ assert(
 	confirmations[2]?.tone === 'danger' &&
 	notices.includes('已清理所选本地缓存'),
 	'选择性清理必须先确认，再取得跨层清理事务并依次处理各 owner，在统计刷新前释放',
+);
+assert(
+	cacheLog.snapshot.events.some((event) =>
+		event.operation === 'clear' &&
+		event.key === 'topics' &&
+		event.outcome === 'success'),
+	'缓存清理控制面必须把每个类别的结果和耗时写入统一缓存账本',
 );
 
 actions.querySelector<HTMLButtonElement>('.ldp-reader-refresh')!.click();
@@ -574,8 +599,23 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 assert(
 	invalidations.at(-1)?.all !== true &&
 		invalidations.at(-1)?.ids?.join(',') === 'api,bookmark-projection' &&
-		records.some((record) => record.id === 'offline-topic'),
-	'清理收藏、回应与其他数据必须删除已识别的永久收藏投影，同时保留永久离线 Topic 且不能使用全库清空',
+		records.some((record) => record.id === 'offline-topic') &&
+		applicationResumeCount === 1 &&
+		clearOrder.slice(-4).join('|') ===
+			'application|responses|release|resume',
+	'清理收藏、回应与其他数据必须先暂停应用 producer，再删除持久投影，释放事务后才恢复后台续传，并保留永久离线 Topic',
+);
+host.querySelector<HTMLButtonElement>('.ldp-cache-log-export')!.click();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert(
+	savedCacheLogs[0]?.filename.startsWith(
+		'awesome-linuxdo-reader-cache-log-',
+	) === true &&
+	savedCacheLogs[0]?.filename.endsWith('.jsonl') === true &&
+	savedCacheLogs[0]?.content.includes('"logType":"cache"') &&
+	savedCacheLogs[0]?.content.includes('"operation":"clear"') &&
+	!savedCacheLogs[0]?.content.includes('"value"'),
+	'数据管理必须导出有界 JSONL 缓存账本，包含操作事实但不包含缓存正文或 value',
 );
 surface.destroy();
 assert(

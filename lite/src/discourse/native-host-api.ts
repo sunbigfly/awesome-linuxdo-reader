@@ -378,6 +378,7 @@ export type DiscourseNativeExactTimeFormatter = (
 
 export interface DiscourseNativeTopicPresentationPort {
 	avatarSource(template: string, size: number): string;
+	emojiSource?(id: string): string;
 	categoryName?(categoryId: number): string;
 	categoryIcon?(categoryId: number): string;
 	categoryHref(categoryId: number, tag?: string): string;
@@ -1476,6 +1477,9 @@ export function discourseNativeTopicPresentation(
 			} catch {
 				return normalized.replace(/\{size\}/g, String(size));
 			}
+		},
+		emojiSource(id: string): string {
+			return discourseNativeEmojiUrl(host, id);
 		},
 		categoryName(categoryId: number): string {
 			if (!Number.isSafeInteger(categoryId) || categoryId < 1) return '';

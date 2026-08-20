@@ -170,6 +170,26 @@
 }
 
 /*
+ * 父楼层正文被虚拟窗口回收时，ancestor shell 仍持有当前可见的子树。若它在
+ * canonical 同级中不是最后一项，就用无交互虚线段代理被回收楼层的入线；真实楼层
+ * 重新物化后 shell class 消失，上一条物理线规则自然接管且不会叠画。
+ */
+.ldp-segmented-branches .ldp-reply-list >
+.ldp-post.ldp-virtual-ancestor-shell:not(
+  .ldp-segmented-branch-last
+)::after {
+  position: absolute;
+  z-index: 0;
+  top: -1px;
+  bottom: -1px;
+  left: calc(var(--ldp-thread-avatar-size) / -2);
+  width: 0;
+  border-left: var(--ldp-reply-line-width) solid var(--ldp-reply-line-color);
+  content: "";
+  pointer-events: none;
+}
+
+/*
  * main.js 的 nested rail toggle 在纵向主干上提供与收纳按钮相同的入口。
  * 分段长树不恢复整棵 SVG；每个已物化楼层只覆盖自己的线段，透明命中带
  * 与 SVG 回复线复用同一宽度，视觉线宽保持不变。

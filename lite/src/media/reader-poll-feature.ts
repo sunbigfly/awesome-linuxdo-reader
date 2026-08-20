@@ -1,5 +1,7 @@
 import type { PostView } from '../dom/post-view.js';
 import { htmlElement as element } from '../dom/html-element.js';
+import { renderReaderInlineEmoji } from
+	'../components/reader-inline-emoji.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import { Signal } from '../kernel/signal.js';
 import type { ReaderTopicPostFeature } from '../topic/reader-topic-dom-coordinator.js';
@@ -204,6 +206,7 @@ export interface ReaderPollViewOptions<TPost extends ReaderPollPostInput> {
 	readonly document: Document;
 	readonly container: HTMLElement;
 	readonly controller: ReaderPollController<TPost>;
+	readonly emojiSource?: (id: string) => string;
 	readonly parentScope?: LifecycleScope;
 }
 
@@ -214,11 +217,13 @@ export class ReaderPollView<TPost extends ReaderPollPostInput> {
 	readonly #controller: ReaderPollController<TPost>;
 	readonly #originalHtml: string;
 	readonly #titleHtml: string;
+	readonly #emojiSource: (id: string) => string;
 
 	constructor(options: ReaderPollViewOptions<TPost>) {
 		this.#document = options.document;
 		this.#container = options.container;
 		this.#controller = options.controller;
+		this.#emojiSource = options.emojiSource ?? (() => '');
 		this.#originalHtml = options.container.innerHTML;
 		this.#titleHtml = options.container
 			.querySelector<HTMLElement>('.poll-title, .ldp-poll-title')
@@ -251,14 +256,22 @@ export class ReaderPollView<TPost extends ReaderPollPostInput> {
 		if (this.#titleHtml || snapshot.title) {
 			const title = element(this.#document, 'div', 'ldp-poll-title');
 			if (this.#titleHtml) title.innerHTML = this.#titleHtml;
-			else title.textContent = snapshot.title;
+			else renderReaderInlineEmoji(
+				title,
+				snapshot.title,
+				this.#emojiSource,
+			);
 			fragment.append(title);
 		}
 		if (snapshot.showResults) fragment.append(this.#results(snapshot));
 		else fragment.append(this.#choices(snapshot));
 		if (snapshot.note) {
 			const note = element(this.#document, 'div', 'ldp-poll-note');
-			note.textContent = snapshot.note;
+			renderReaderInlineEmoji(
+				note,
+				snapshot.note,
+				this.#emojiSource,
+			);
 			fragment.append(note);
 		}
 		fragment.append(this.#footer(snapshot));
@@ -387,6 +400,7 @@ export interface ReaderTopicPollFeatureOptions<TPost extends ReaderPollPostInput
 	readonly readPost: (postId: number) => TPost | undefined;
 	readonly viewer: () => ReaderPollViewer;
 	readonly topicArchived: () => boolean;
+	readonly emojiSource?: (id: string) => string;
 	readonly now?: () => number;
 	readonly parentScope?: LifecycleScope;
 	readonly notify?: (message: string) => void;
@@ -458,6 +472,9 @@ implements ReaderTopicPostFeature<TPost> {
 					document: this.#options.document,
 					container,
 					controller,
+					...(this.#options.emojiSource
+						? { emojiSource: this.#options.emojiSource }
+						: {}),
 					parentScope: scope,
 				});
 			} catch (error) {

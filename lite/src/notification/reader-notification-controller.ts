@@ -424,6 +424,7 @@ export class ReaderNotificationController {
 	#backgroundWarmEpoch = 0;
 	#backgroundCacheActive = false;
 	#backgroundRestore: Promise<void> | null = null;
+	#backgroundRestoreEpoch = 0;
 	readonly #projectionPersistAfterRestore = new Set<
 		ReaderNotificationGroupKey
 	>();
@@ -706,7 +707,8 @@ export class ReaderNotificationController {
 			(this.#activity !== null && !this.#activityVisible())
 		) return;
 		this.#backgroundCacheActive = true;
-		const restore = this.#restoreBackgroundProjections();
+		const epoch = ++this.#backgroundRestoreEpoch;
+		const restore = this.#restoreBackgroundProjections(epoch);
 		this.#backgroundRestore = restore;
 		void restore.catch(this.#onError).finally(() => {
 			if (this.#backgroundRestore !== restore) return;
@@ -741,15 +743,19 @@ export class ReaderNotificationController {
 	reloadExternalProjection(): Promise<void> {
 		if (!this.#projection || this.scope.destroyed) return Promise.resolve();
 		const previous = this.#backgroundRestore ?? Promise.resolve();
+		const epoch = ++this.#backgroundRestoreEpoch;
 		const restore = previous.catch(() => {}).then(() =>
-			this.#restoreBackgroundProjections(true));
+			this.#restoreBackgroundProjections(epoch, true));
 		this.#backgroundRestore = restore;
 		return restore.finally(() => {
 			if (this.#backgroundRestore === restore) this.#backgroundRestore = null;
 		});
 	}
 
-	async #restoreBackgroundProjections(fresh = false): Promise<void> {
+	async #restoreBackgroundProjections(
+		epoch: number,
+		fresh = false,
+	): Promise<void> {
 		if (!this.#projection || this.scope.destroyed) return;
 		const restored = await Promise.all(
 			READER_NOTIFICATION_AGGREGATE_GROUP_ORDER.map(async (group) => {
@@ -767,7 +773,9 @@ export class ReaderNotificationController {
 				}
 			}),
 		);
-		if (this.scope.destroyed) return;
+		if (
+			this.scope.destroyed || epoch !== this.#backgroundRestoreEpoch
+		) return;
 		const checkpointRepairs: ReaderNotificationGroupKey[] = [];
 		for (const { group, snapshot } of restored) {
 			if (!snapshot) continue;
@@ -977,12 +985,16 @@ export class ReaderNotificationController {
 		}
 	}
 
-	clearCache(): void {
+	clearCache(options: Readonly<{ readonly resume?: boolean }> = {}): void {
 		if (this.scope.destroyed) return;
+		const resume = options.resume !== false;
 		this.#loadEpoch += 1;
 		this.#navigationEpoch += 1;
 		this.#backgroundWarmEpoch += 1;
 		this.#backgroundHeadRefreshEpoch += 1;
+		this.#backgroundRestoreEpoch += 1;
+		this.#backgroundCacheActive = false;
+		this.#backgroundRestore = null;
 		if (this.#liveRefresh !== null) this.#cancel(this.#liveRefresh);
 		if (this.#poll !== null) this.#cancel(this.#poll);
 		if (this.#historySchedule !== null) this.#cancel(this.#historySchedule);
@@ -997,6 +1009,9 @@ export class ReaderNotificationController {
 		this.#backgroundHeadRefreshes.clear();
 		this.#backgroundRefreshingGroups.clear();
 		this.#backgroundRefreshFailedGroups.clear();
+		this.#projectionPersistAfterRestore.clear();
+		this.#projectionCheckpointReplacements.clear();
+		this.#taxonomyFlights.clear();
 		this.#pollNotBefore = 0;
 		this.#pages.clear();
 		this.#resetHistoryHydration();
@@ -1016,8 +1031,10 @@ export class ReaderNotificationController {
 		this.#stale = false;
 		this.#error = null;
 		this.#emit();
-		this.#schedulePoll();
-		this.#scheduleBackgroundWarm();
+		if (resume) {
+			this.#schedulePoll();
+			this.startBackgroundCache();
+		}
 		this.#scheduleHistoryHydration(this.#historyContinuationDelay());
 	}
 
@@ -3477,7 +3494,10 @@ export class ReaderNotificationController {
 					token: this.#historyCoordinationKey,
 					signal: this.#historyAbort.signal,
 					onError: this.#onError,
-					beforeRun: () => this.#restoreBackgroundProjections(true),
+					beforeRun: () => this.#restoreBackgroundProjections(
+						this.#backgroundRestoreEpoch,
+						true,
+					),
 					run: async () => {
 					await runReaderCollectionWorkers({
 						concurrency,
@@ -3535,7 +3555,10 @@ export class ReaderNotificationController {
 				leaseResult !== 'producer' &&
 				!this.scope.destroyed &&
 				epoch === this.#historyEpoch
-			) await this.#restoreBackgroundProjections(true);
+			) await this.#restoreBackgroundProjections(
+				this.#backgroundRestoreEpoch,
+				true,
+			);
 		} catch (cause) {
 			if (!this.scope.destroyed && epoch === this.#historyEpoch) {
 				this.#onError(cause);

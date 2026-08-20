@@ -117,6 +117,11 @@ const cards = [...document.querySelectorAll('.topic-list-item')];
 assert(
 	observed.size === 2 &&
 	document.querySelectorAll('.ldp-host-topic-reader-meta').length === 2 &&
+	document.querySelectorAll('.ldp-host-topic-reader-meta-row').length === 2 &&
+	cards.every((card) => card.querySelector(
+		'.link-bottom-line > .ldp-host-topic-reader-meta-row > ' +
+		'.ldp-host-topic-reader-meta',
+	)) &&
 	cards.every((card) => card.classList.contains(
 		'ldp-host-topic-card-performance',
 	)),
@@ -297,6 +302,7 @@ mutationCallback([{
 assert(
 	!observed.has(removed) &&
 	!removed.querySelector('.ldp-host-topic-reader-meta') &&
+	!removed.querySelector('.ldp-host-topic-reader-meta-row') &&
 	!removed.classList.contains('ldp-host-topic-card-performance'),
 	'宿主移除卡片时必须同步释放 observer 和脚本 DOM 引用',
 );
@@ -305,6 +311,7 @@ controller.destroy();
 assert(
 	intersectionDisconnects === 1 &&
 	document.querySelectorAll('.ldp-host-topic-reader-meta').length === 0 &&
+	document.querySelectorAll('.ldp-host-topic-reader-meta-row').length === 0 &&
 	!added.classList.contains('ldp-host-topic-card-performance'),
 	'控制器销毁必须中止预热并清理 observer、队列与列表投影',
 );

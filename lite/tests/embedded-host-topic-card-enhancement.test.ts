@@ -48,6 +48,14 @@ const { document: parsedDocument } = parseHTML(
 	'<div class="link-bottom-line"><a class="discourse-tag">高级推广</a></div></td>' +
 	'<td class="posters"></td><td class="posts">1</td><td class="views">2</td>' +
 	'<td class="activity">刚刚</td></tr>' +
+	'<tr class="topic-list-item" data-topic-id="48">' +
+	'<td class="main-link"><div class="link-top-line">' +
+	'<a class="raw-topic-link" href="/t/exposure/48">持续路过 :laughing:</a></div>' +
+	'<div class="link-bottom-line"><span class="ldp-host-topic-reader-meta-row">' +
+	'<span class="ldp-host-topic-reader-meta">预热 1/1 · 已读 0</span>' +
+	'</span></div></td>' +
+	'<td class="posters"></td><td class="posts">1</td><td class="views">2</td>' +
+	'<td class="activity">刚刚</td></tr>' +
 	'</tbody></table></body></html>',
 );
 const document = parsedDocument as unknown as Document;
@@ -78,11 +86,14 @@ const topics = [
 		creator: { username: 'blockedop' },
 	},
 	{ id: 46, title: '已在不想看' },
+	{ id: 48, title: '持续路过 :laughing:' },
 ] as Record<string, unknown>[];
 const hidden: ReaderUnwantedTopicInput[] = [];
+const automaticHistory: ReaderUnwantedTopicInput[] = [];
 const notices: string[] = [];
 const actionErrors: unknown[] = [];
 let automaticFilterEnabled = true;
+const manuallyHiddenTopicIds = new Set([46]);
 const openedTopicValues = new Map<string, string>();
 const openedTopicStorage = {
 	getItem: (key: string) => openedTopicValues.get(key) ?? null,
@@ -93,6 +104,8 @@ const openedTopicStorage = {
 		openedTopicValues.delete(key);
 	},
 };
+let exposureObserverCallback: IntersectionObserverCallback = () => {};
+const observedExposureCards = new Set<Element>();
 const routeController = { model: { list: { topics } } };
 const host: DiscourseHostApiPort = {
 	lookup(name) {
@@ -103,16 +116,37 @@ const host: DiscourseHostApiPort = {
 		}
 		return null;
 	},
-	lookupModule() {
+	lookupModule(name) {
+		if (name === 'discourse/lib/text') {
+			return { emojiUrlFor: (id: string) => `/emoji/${id}.png` };
+		}
 		return null;
 	},
 };
 const enhancementOptions: EmbeddedHostTopicCardEnhancementOptions = {
 	openedTopicStorage,
 	openedTopicStorageScope: 'viewer',
-	isTopicHidden: (topicId) => topicId === 46,
+	createIntersectionObserver(callback) {
+		exposureObserverCallback = callback;
+		return {
+			observe(target) {
+				observedExposureCards.add(target);
+			},
+			unobserve(target) {
+				observedExposureCards.delete(target);
+			},
+			disconnect() {
+				observedExposureCards.clear();
+			},
+		};
+	},
+	isTopicHidden: (topicId) => manuallyHiddenTopicIds.has(topicId),
 	hideTopic: (input) => {
 		hidden.push(input);
+		manuallyHiddenTopicIds.add(Number(input.topicId));
+	},
+	recordAutomaticTopic: (input) => {
+		automaticHistory.push(input);
 	},
 	automaticFilter: (input) => readerUnwantedTopicFilterMatch({
 		enabled: automaticFilterEnabled,
@@ -138,8 +172,20 @@ const automaticCard = document.querySelector<HTMLElement>(
 const promotionCard = document.querySelector<HTMLElement>(
 	'[data-topic-id="47"]',
 )!;
+const exposureCard = document.querySelector<HTMLElement>(
+	'[data-topic-id="48"]',
+)!;
 enhancement.syncRoot(root, 'embedded');
 await Promise.resolve();
+assert(
+	exposureCard.querySelector<HTMLImageElement>(
+		'.raw-topic-link > img[data-ldp-inline-emoji="laughing"]',
+	)?.getAttribute('src') === '/emoji/laughing.png' &&
+	exposureCard.querySelector<HTMLImageElement>(
+		'.raw-topic-link > img[data-ldp-inline-emoji="laughing"]',
+	)?.alt === ':laughing:',
+	'宿主 Topic 标题中的 Discourse emoji shortcode 必须渲染为原生 emoji 图片',
+);
 const component = card.querySelector<HTMLElement>(
 	':scope > td.posts > .ldp-topic-stats-component',
 );
@@ -180,12 +226,68 @@ assert(
 	!fallbackDnd.hasAttribute('data-ldp-tooltip-label'),
 	'宿主缺少免打扰动作时必须在收纳箱入口后补出无 tooltip 的自有入口',
 );
+const visibleEntry = (target: Element): IntersectionObserverEntry => ({
+	target,
+	isIntersecting: true,
+	intersectionRatio: 1,
+	intersectionRect: { width: 320, height: 48 },
+} as unknown as IntersectionObserverEntry);
+exposureObserverCallback(
+	[visibleEntry(exposureCard)],
+	{} as IntersectionObserver,
+);
+exposureObserverCallback(
+	[visibleEntry(exposureCard)],
+	{} as IntersectionObserver,
+);
+assert(
+	exposureCard.querySelector('.ldp-host-topic-exposure-count')?.textContent ===
+		'出现 1 次' &&
+	exposureCard.querySelector('.ldp-host-topic-reader-meta')
+		?.nextElementSibling?.classList.contains(
+			'ldp-host-topic-exposure-count',
+		) === true &&
+	exposureCard.querySelector('.ldp-host-topic-exposure-count')
+		?.parentElement?.classList.contains(
+			'ldp-host-topic-reader-meta-row',
+		) === true,
+	'同一卡片滚动离开再返回只能累计一次，且次数必须紧跟“已读”状态组',
+);
+const duplicateExposureCard = exposureCard.cloneNode(true) as HTMLElement;
+root.querySelector('tbody')?.append(duplicateExposureCard);
+enhancement.syncCards(Object.freeze([duplicateExposureCard]), 'embedded');
+assert(
+	!duplicateExposureCard.isConnected &&
+	root.querySelectorAll('[data-topic-id="48"]').length === 1,
+	'宿主无限加载追加重复 Topic 时必须保留列表中的首次出现并移除后项',
+);
+const refreshedExposureCard = exposureCard.cloneNode(true) as HTMLElement;
+exposureCard.replaceWith(refreshedExposureCard);
+enhancement.syncCards(Object.freeze([refreshedExposureCard]), 'embedded');
+exposureObserverCallback(
+	[visibleEntry(refreshedExposureCard)],
+	{} as IntersectionObserver,
+);
+assert(
+	refreshedExposureCard.querySelector('.ldp-host-topic-exposure-count')
+		?.textContent === '出现 2 次',
+	'宿主刷新后生成的新卡片再次进入视口时必须累计持久曝光次数',
+);
+exposureObserverCallback(
+	[visibleEntry(card)],
+	{} as IntersectionObserver,
+);
 assert(
 	enhancement.markTopicOpened(42) &&
 	!card.hasAttribute('data-ldp-native-new-topic') &&
 	newTopicMarker?.dataset.ldpNativeNewTopicMarker === 'true' &&
-	[...openedTopicValues.values()].some((value) => value === '[42]'),
-	'Reader 成功打开 Topic 后必须立即恢复宿主标题颜色、继续隐藏图标并持久记录',
+	!card.querySelector('.ldp-host-topic-exposure-count') &&
+	[...openedTopicValues.values()].some((value) => {
+		const state = JSON.parse(value) as { opened?: unknown[]; exposures?: unknown[][] };
+		return state.opened?.includes(42) === true &&
+			state.exposures?.every((entry) => entry[0] !== 42) === true;
+	}),
+	'Reader 成功打开 Topic 后必须立即恢复标题颜色、清除曝光次数并永久停计',
 );
 openedTopicValues.set(enhancement.openedTopicStorageKey, '[]');
 enhancement.reloadExternalOpenedTopics();
@@ -218,9 +320,28 @@ assert(
 	automaticCard.isConnected &&
 	automaticCard.hasAttribute('data-ldp-unwanted-auto-filter') &&
 	promotionCard.hasAttribute('data-ldp-unwanted-auto-filter') &&
-	!document.querySelector('[data-topic-id="46"]') &&
-	hidden.every((input) => input.topicId !== 45),
-	'自动规则必须只投影隐藏、不得写入不想看持久层，手动记录仍应直接移除',
+	document.querySelector('[data-topic-id="46"]')?.hasAttribute(
+		'data-ldp-unwanted-manual-filter',
+	) === true &&
+	hidden.length === 0 &&
+	automaticHistory.some((input) =>
+		input.topicId === 45 &&
+		input.source === 'automatic' &&
+		input.matchedCategory === true &&
+		String(input.matchedRule).includes('类别：国产替代') &&
+		String(input.matchedRule).includes('OP：@blockedop')) &&
+	automaticHistory.some((input) =>
+		input.topicId === 47 &&
+		String(input.matchedRule).includes('标签：高级推广')),
+	'自动规则必须保持动态隐藏，同时把完整命中原因写入历史',
+);
+manuallyHiddenTopicIds.delete(46);
+enhancement.refreshHiddenTopics();
+assert(
+	document.querySelector('[data-topic-id="46"]')?.hasAttribute(
+		'data-ldp-unwanted-manual-filter',
+	) === false,
+	'手动记录在当前或其他标签页移除后，宿主卡片必须原位恢复而不刷新整页',
 );
 automaticFilterEnabled = false;
 enhancement.syncCards(Object.freeze([automaticCard]), 'embedded');
@@ -248,12 +369,13 @@ fallbackDnd.dispatchEvent(manualClick);
 await Promise.resolve();
 await Promise.resolve();
 assert(
-	!fallbackCard.isConnected &&
+	fallbackCard.isConnected &&
+	fallbackCard.hasAttribute('data-ldp-unwanted-manual-filter') &&
 	hidden.some((input) => input.topicId === 43 && input.source === 'manual') &&
 	notices.at(-1) === '已加入不想看' &&
 	actionErrors.length === 0 &&
 	manualClick.defaultPrevented,
-	`手动入口必须拦住宿主导航、写入不想看并让 Topic 消失：` +
+	`手动入口必须拦住宿主导航、写入不想看并投影可恢复隐藏：` +
 		`${fallbackCard.isConnected}/${JSON.stringify(hidden)}/` +
 		`${notices.at(-1)}/${actionErrors.length}/${fallbackCardClicks}/` +
 		`${manualClick.defaultPrevented}`,
@@ -270,15 +392,15 @@ assert(
 assert(
 	!card.hasAttribute('data-ldp-native-new-topic') &&
 	!newTopicMarker?.hasAttribute('data-ldp-native-new-topic-marker') &&
-	openedTopicValues.size === 0,
-	'宿主移除新话题状态后必须撤销标记并清理本机已打开记录',
+	openedTopicValues.get(enhancement.openedTopicStorageKey) === '[42]',
+	'宿主移除新话题状态后必须撤销标记，但不能撤销永久停计记录',
 );
 topicModel.unseen = true;
 enhancement.syncCards(Object.freeze([card]), 'embedded');
 assert(
-	card.hasAttribute('data-ldp-native-new-topic') &&
+	!card.hasAttribute('data-ldp-native-new-topic') &&
 	newTopicMarker?.dataset.ldpNativeNewTopicMarker === 'true',
-	'宿主恢复新话题状态后必须重新投影标题与图标标记',
+	'宿主恢复新话题状态后仍须隐藏原生图标，且已打开 Topic 不能恢复新话题色标',
 );
 const activity = card.querySelector<HTMLElement>('.activity .relative-date')!;
 activity.textContent = '刚刚';
@@ -298,6 +420,7 @@ assert(
 	!card.hasAttribute('data-ldp-native-new-topic') &&
 	!automaticCard.hasAttribute('data-ldp-unwanted-auto-filter') &&
 	!promotionCard.hasAttribute('data-ldp-unwanted-auto-filter') &&
+	!fallbackCard.hasAttribute('data-ldp-unwanted-manual-filter') &&
 	!newTopicMarker?.hasAttribute('data-ldp-native-new-topic-marker') &&
 	dnd?.getAttribute('title') === '宿主免打扰' &&
 	dnd.getAttribute('data-tooltip') === '宿主提示' &&
@@ -305,6 +428,12 @@ assert(
 	dnd.getAttribute('aria-label') === '将此话题设为免打扰' &&
 	!dnd.hasAttribute('data-ldp-native-dnd'),
 	'换根必须撤销自动过滤与嵌入投影，并恢复宿主 tooltip',
+);
+assert(
+	refreshedExposureCard.querySelector('.raw-topic-link')?.textContent ===
+		'持续路过 :laughing:' &&
+	!refreshedExposureCard.querySelector('[data-ldp-inline-emoji]'),
+	'释放宿主增强根时必须把自有 emoji DOM 还原为原始 shortcode 文本',
 );
 
 const actionOnlyCard = document.createElement('tr');
@@ -316,10 +445,14 @@ actionOnlyCard.innerHTML = '<td class="main-link"><div class="link-top-line">' +
 root.querySelector('tbody')?.append(actionOnlyCard);
 topics.push({ id: 44, title: '非嵌入主题' });
 enhancement.syncRoot(root, 'actions-only');
+const duplicateActionOnlyCard = actionOnlyCard.cloneNode(true) as HTMLElement;
+root.querySelector('tbody')?.append(duplicateActionOnlyCard);
+enhancement.syncCards(Object.freeze([duplicateActionOnlyCard]), 'actions-only');
 assert(
 	actionOnlyCard.querySelector('[data-ldp-native-dnd]') &&
 	!actionOnlyCard.querySelector('.ldp-topic-stats-component') &&
-	!actionOnlyCard.hasAttribute('data-ldp-native-topic-date-row'),
-	'非嵌入态必须保留免打扰入口，但不能投影嵌入态统计和日期布局',
+	!actionOnlyCard.hasAttribute('data-ldp-native-topic-date-row') &&
+	!duplicateActionOnlyCard.isConnected,
+	'非嵌入态必须保留免打扰入口、不投影统计布局，并同样移除后项重复 Topic',
 );
 enhancement.clear();

@@ -26,6 +26,7 @@ export const READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME =
 export const READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS = 2_500;
 export const READER_BACKGROUND_REQUEST_MAX_DEFER_MS = 15_000;
 const READER_CLOUDFLARE_CHALLENGE_MAX_PROBE_INTERVAL_MS = 10_000;
+const READER_CLOUDFLARE_AUTOMATIC_CHALLENGE_MAX_WAIT_MS = 30_000;
 const READER_RATE_LIMIT_EVIDENCE_WINDOW_MS = 4_000;
 const READER_RATE_LIMIT_MAX_BACKOFF_MS = 60_000;
 const READER_RATE_LIMIT_PROBE_FAILURE_WAIT_MS = 1_000;
@@ -257,6 +258,8 @@ export interface BrowserCloudflareChallengeOptions {
 	readonly passedTtlMs?: number;
 	readonly pollIntervalMs?: number;
 	readonly verifyIntervalMs?: number;
+	/** 无人工点击时，自动验证窗口最多保留多久。 */
+	readonly automaticMaxWaitMs?: number;
 	readonly maxWaitMs?: number;
 	readonly screen?: Readonly<{
 		readonly availWidth?: number;
@@ -735,6 +738,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 	readonly #challengePassedTtlMs: number;
 	readonly #challengePollIntervalMs: number;
 	readonly #challengeVerifyIntervalMs: number;
+	readonly #challengeAutomaticMaxWaitMs: number;
 	readonly #challengeMaxWaitMs: number;
 	readonly #inspectChallenge: (
 		popup: BrowserCloudflareChallengeWindow,
@@ -750,6 +754,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 	#challengePromise: Promise<boolean> | null = null;
 	#challengeController: AbortController | null = null;
 	#challengeFocusRequested = false;
+	#challengeUserRequested = false;
 	#challengeWindow: BrowserCloudflareChallengeWindow | null = null;
 	#challengeReconcilePromise: Promise<boolean> | null = null;
 	#challengeProbePromise: Promise<boolean> | null = null;
@@ -836,6 +841,14 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			this.#challenge?.maxWaitMs,
 			120_000,
 			'challenge.maxWaitMs',
+		);
+		this.#challengeAutomaticMaxWaitMs = Math.min(
+			this.#challengeMaxWaitMs,
+			positiveInteger(
+				this.#challenge?.automaticMaxWaitMs,
+				READER_CLOUDFLARE_AUTOMATIC_CHALLENGE_MAX_WAIT_MS,
+				'challenge.automaticMaxWaitMs',
+			),
 		);
 		this.#inspectChallenge =
 			this.#challenge?.inspect ?? inspectChallengeWindow;
@@ -1231,6 +1244,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		}
 		if (input.focus === true) {
 			this.#challengeFocusRequested = true;
+			this.#challengeUserRequested = true;
 			this.#focusChallengeWindow();
 			this.#postChannelMessage('challenge-focus');
 			this.#wake();
@@ -1243,6 +1257,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 					this.#challengePromise = null;
 					this.#challengeController = null;
 					this.#challengeFocusRequested = false;
+					this.#challengeUserRequested = false;
 				}
 			});
 			this.#challengePromise = promise;
@@ -1486,7 +1501,11 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		try {
 			while (
 				!this.#closed &&
-				this.#now() - startedAt < this.#challengeMaxWaitMs
+				this.#now() - startedAt < (
+					this.#challengeUserRequested
+						? this.#challengeMaxWaitMs
+						: this.#challengeAutomaticMaxWaitMs
+				)
 			) {
 				if (signal.aborted) throw this.#abortReason(signal);
 				if (popup.closed === true) {
@@ -2347,6 +2366,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			this.#challengePromise
 		) {
 			this.#challengeFocusRequested = true;
+			this.#challengeUserRequested = true;
 			this.#focusChallengeWindow();
 		}
 		if (

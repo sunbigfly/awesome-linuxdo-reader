@@ -828,6 +828,7 @@ export class TranslationRequestAdapter implements TranslationBatchPort {
 	readonly #ownedTasks: TranslationTaskManager | null;
 	#publicCatalogs: readonly PublicModelCatalog[] | null = null;
 	#publicMetadataSources: readonly string[] = Object.freeze([]);
+	#publicCatalogEpoch = 0;
 
 	constructor(options: TranslationRequestAdapterOptions) {
 		this.#gateway = options.gateway;
@@ -843,6 +844,12 @@ export class TranslationRequestAdapter implements TranslationBatchPort {
 
 	destroy(): void {
 		this.#ownedTasks?.destroy();
+	}
+
+	clearPublicModelMetadataCache(): void {
+		this.#publicCatalogEpoch += 1;
+		this.#publicCatalogs = null;
+		this.#publicMetadataSources = Object.freeze([]);
 	}
 
 	/**
@@ -1232,6 +1239,7 @@ export class TranslationRequestAdapter implements TranslationBatchPort {
 		forceRefresh = false,
 	): Promise<readonly PublicModelCatalog[]> {
 		if (this.#publicCatalogs && !forceRefresh) return this.#publicCatalogs;
+		const epoch = this.#publicCatalogEpoch;
 		const metadataLoads: Array<Readonly<{
 			name: string;
 			load: Promise<PublicModelCatalog>;
@@ -1269,7 +1277,7 @@ export class TranslationRequestAdapter implements TranslationBatchPort {
 			publicCatalogs.push(result.value);
 			metadataSources.push(metadataLoads[index]!.name);
 		});
-		if (publicCatalogs.length) {
+		if (publicCatalogs.length && epoch === this.#publicCatalogEpoch) {
 			this.#publicCatalogs = Object.freeze(publicCatalogs);
 			this.#publicMetadataSources = Object.freeze(metadataSources);
 		}

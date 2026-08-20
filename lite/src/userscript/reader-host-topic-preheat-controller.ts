@@ -17,6 +17,7 @@ const CARD_SELECTOR = 'tr.topic-list-item,.topic-list-item,.latest-topic-list-it
 const TOPIC_LINK_SELECTOR =
 	'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],a[href*="/t/"]';
 const META_SELECTOR = '.ldp-host-topic-reader-meta';
+const META_ROW_CLASS = 'ldp-host-topic-reader-meta-row';
 const PERFORMANCE_CARD_CLASS = 'ldp-host-topic-card-performance';
 const DEFAULT_MAX_QUEUED_TOPICS = 6;
 const DEFAULT_MAX_CONCURRENT_PREHEATS = 1;
@@ -147,6 +148,7 @@ interface CardState {
 	readonly topicId: DiscourseTopicId;
 	readonly routePostNumber: DiscoursePostNumber | null;
 	readonly meta: HTMLElement;
+	readonly metaRow: HTMLElement;
 	near: boolean;
 }
 
@@ -411,14 +413,18 @@ export class ReaderHostTopicPreheatController {
 		}
 		const meta = this.#document.createElement('span');
 		meta.className = META_SELECTOR.slice(1);
+		const metaRow = this.#document.createElement('span');
+		metaRow.className = META_ROW_CLASS;
+		metaRow.append(meta);
 		card.classList.add(PERFORMANCE_CARD_CLASS);
 		const mount = card.querySelector('.link-bottom-line') ??
 			card.querySelector('.main-link') ?? card;
-		mount.append(meta);
+		mount.append(metaRow);
 		const cardState: CardState = {
 			topicId,
 			routePostNumber: route?.postNumber ?? null,
 			meta,
+			metaRow,
 			near: false,
 		};
 		this.#cards.set(card, cardState);
@@ -457,7 +463,7 @@ export class ReaderHostTopicPreheatController {
 		const current = this.#cards.get(card);
 		if (!current) return;
 		this.#observer?.unobserve(card);
-		current.meta.remove();
+		current.metaRow.remove();
 		card.classList.remove(PERFORMANCE_CARD_CLASS);
 		this.#cards.delete(card);
 		const topic = this.#topics.get(current.topicId);
@@ -956,7 +962,7 @@ export class ReaderHostTopicPreheatController {
 		this.#observer?.disconnect();
 		this.#observer = null;
 		for (const [card, current] of this.#cards) {
-			current.meta.remove();
+			current.metaRow.remove();
 			card.classList.remove(PERFORMANCE_CARD_CLASS);
 		}
 		this.#cards.clear();

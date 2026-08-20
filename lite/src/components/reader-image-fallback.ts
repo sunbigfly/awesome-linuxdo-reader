@@ -14,7 +14,54 @@ export function replaceImageWithFallbackOnError(
 
 export type ReaderImageSourceRecovery = (
 	source: string,
+	signal?: AbortSignal,
 ) => string | Promise<string>;
+
+interface ReaderImageRecoveryRegistration {
+	readonly currentNode: () => Element | null;
+	readonly abort: () => void;
+}
+
+interface ReaderImageRecoveryRegistry {
+	readonly entries: Set<ReaderImageRecoveryRegistration>;
+	readonly observer: MutationObserver;
+}
+
+const readerImageRecoveryRegistries = new WeakMap<Node, ReaderImageRecoveryRegistry>();
+
+function registerReaderImageRecovery(
+	node: Element,
+	registration: ReaderImageRecoveryRegistration,
+): () => void {
+	const root = node.getRootNode();
+	const Observer = node.ownerDocument.defaultView?.MutationObserver;
+	if (!Observer) return () => {};
+	let registry = readerImageRecoveryRegistries.get(root);
+	if (!registry) {
+		const entries = new Set<ReaderImageRecoveryRegistration>();
+		const observer = new Observer(() => {
+			for (const entry of [...entries]) {
+				if (entry.currentNode()?.isConnected) continue;
+				entry.abort();
+			}
+		});
+		observer.observe(root, { childList: true, subtree: true });
+		registry = { entries, observer };
+		readerImageRecoveryRegistries.set(root, registry);
+	}
+	registry.entries.add(registration);
+	let released = false;
+	return () => {
+		if (released) return;
+		released = true;
+		registry?.entries.delete(registration);
+		if (registry?.entries.size) return;
+		registry?.observer.disconnect();
+		if (readerImageRecoveryRegistries.get(root) === registry) {
+			readerImageRecoveryRegistries.delete(root);
+		}
+	};
+}
 
 /**
  * 装配统一资源层时先保留可替换的语义占位，恢复完成后原位提交真实图片；没有资源层时
@@ -28,44 +75,88 @@ export function installReaderImageSourceFallback(
 	recoverSource?: ReaderImageSourceRecovery,
 	visibleSource?: string,
 ): void {
+	const imageRef = new WeakRef(image);
 	const candidates = [...new Set(
 		sources.map((source) => String(source).trim()).filter(Boolean),
 	)];
 	let directIndex = 0;
 	let recoveryIndex = 0;
-	let fallback: Element | null = null;
+	let fallbackRef: WeakRef<Element> | null = null;
 	let recovering = false;
+	let activeRecovery: AbortController | null = null;
+
+	const currentFallback = (): Element | null => fallbackRef?.deref() ?? null;
+	const currentNode = (): Element | null => {
+		const fallback = currentFallback();
+		if (fallback?.isConnected) return fallback;
+		const currentImage = imageRef.deref();
+		return currentImage?.isConnected ? currentImage : null;
+	};
 
 	const showFallback = (): Element | null => {
+		const fallback = currentFallback();
 		if (fallback?.parentNode) return fallback;
 		const next = createFallback();
-		if (image.parentNode) image.replaceWith(next);
-		fallback = next;
+		const currentImage = imageRef.deref();
+		if (currentImage?.parentNode) currentImage.replaceWith(next);
+		fallbackRef = new WeakRef(next);
 		return next.parentNode ? next : null;
 	};
 	const recoverNext = async (): Promise<void> => {
 		if (recovering) return;
 		recovering = true;
-		while (recoverSource && recoveryIndex < candidates.length) {
-			const candidate = candidates[recoveryIndex]!;
-			recoveryIndex += 1;
-			try {
-				const recovered = String(await recoverSource(candidate)).trim();
-				if (!fallback?.parentNode && !image.parentNode) return;
-				if (!recovered) continue;
-				if (fallback?.parentNode) {
-					fallback.replaceWith(image);
-					fallback = null;
-				}
-				recovering = false;
-				image.src = recovered;
+		const controller = new AbortController();
+		activeRecovery = controller;
+		let releaseLifecycle = (): void => {};
+		void Promise.resolve().then(() => {
+			if (!recovering || activeRecovery !== controller || controller.signal.aborted) {
 				return;
-			} catch {
-				// 当前候选不可恢复时继续使用下一候选，最终保留语义占位。
 			}
+			const mounted = currentNode();
+			if (!mounted) {
+				controller.abort(new Error('图片恢复宿主已离开文档'));
+				return;
+			}
+			releaseLifecycle = registerReaderImageRecovery(mounted, {
+				currentNode,
+				abort: () => controller.abort(new Error('图片恢复宿主已离开文档')),
+			});
+		});
+		try {
+			while (recoverSource && recoveryIndex < candidates.length) {
+				const candidate = candidates[recoveryIndex]!;
+				recoveryIndex += 1;
+				try {
+					const recovered = String(
+						await recoverSource(candidate, controller.signal),
+					).trim();
+					if (controller.signal.aborted) return;
+					const currentImage = imageRef.deref();
+					const fallback = currentFallback();
+					if (!fallback?.parentNode && !currentImage?.parentNode) return;
+					if (!recovered) continue;
+					if (fallback?.parentNode && currentImage) {
+						fallback.replaceWith(currentImage);
+						fallbackRef = null;
+					}
+					if (!currentImage) return;
+					currentImage.src = recovered;
+					return;
+				} catch {
+					if (controller.signal.aborted) return;
+					// 当前候选不可恢复时继续使用下一候选，最终保留语义占位。
+				}
+			}
+			const fallback = currentFallback();
+			const currentImage = imageRef.deref();
+			if (fallback?.parentNode && currentImage) {
+				currentImage.removeEventListener('error', advance);
+			}
+		} finally {
+			releaseLifecycle();
+			if (activeRecovery === controller) activeRecovery = null;
+			recovering = false;
 		}
-		recovering = false;
-		if (fallback?.parentNode) image.removeEventListener('error', advance);
 	};
 	function advance(): void {
 		if (recoverSource) {
@@ -75,11 +166,13 @@ export function installReaderImageSourceFallback(
 		}
 		const direct = candidates[directIndex];
 		directIndex += 1;
+		const currentImage = imageRef.deref();
+		if (!currentImage) return;
 		if (direct) {
-			image.src = direct;
+			currentImage.src = direct;
 			return;
 		}
-		image.removeEventListener('error', advance);
+		currentImage.removeEventListener('error', advance);
 		showFallback();
 	}
 

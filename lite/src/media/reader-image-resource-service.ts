@@ -75,6 +75,26 @@ function waitForConsumer<T>(operation: Promise<T>, signal?: AbortSignal): Promis
 	});
 }
 
+function linkedConsumerSignal(
+	lifecycle: AbortSignal,
+	consumer: AbortSignal,
+): Readonly<{ readonly signal: AbortSignal; readonly release: () => void }> {
+	lifecycle.throwIfAborted();
+	consumer.throwIfAborted();
+	const controller = new AbortController();
+	const abortLifecycle = () => controller.abort(lifecycle.reason);
+	const abortConsumer = () => controller.abort(consumer.reason);
+	lifecycle.addEventListener('abort', abortLifecycle, { once: true });
+	consumer.addEventListener('abort', abortConsumer, { once: true });
+	return Object.freeze({
+		signal: controller.signal,
+		release: () => {
+			lifecycle.removeEventListener('abort', abortLifecycle);
+			consumer.removeEventListener('abort', abortConsumer);
+		},
+	});
+}
+
 function canDegrade(error: unknown): boolean {
 	return error instanceof RequestStatusError && [
 		'authentication',
@@ -204,17 +224,28 @@ export class ReaderImageResourceService implements ReaderLightboxOriginalSourceP
 		return this.#objectUrl(source, blob);
 	}
 
-	async resolveAvatarSource(rawSource: string): Promise<string> {
+	async resolveAvatarSource(
+		rawSource: string,
+		consumerSignal?: AbortSignal,
+	): Promise<string> {
 		this.#assertActive();
 		const source = this.#resources.normalize(rawSource);
 		if (source.startsWith('blob:') || source.startsWith('data:')) return source;
-		this.#nonEmpty(await this.#resources.load(source, {
-			signal: this.#lifecycle.signal,
-			profile: 'resource-visible',
-			validation: 'discourse-avatar',
-		}));
-		this.#assertActive();
-		return source;
+		const linked = consumerSignal
+			? linkedConsumerSignal(this.#lifecycle.signal, consumerSignal)
+			: null;
+		try {
+			this.#nonEmpty(await this.#resources.load(source, {
+				signal: linked?.signal ?? this.#lifecycle.signal,
+				profile: 'resource-visible',
+				validation: 'discourse-avatar',
+			}));
+			this.#assertActive();
+			consumerSignal?.throwIfAborted();
+			return source;
+		} finally {
+			linked?.release();
+		}
 	}
 
 	async missingOriginalCount(items: readonly ReaderLightboxItem[]): Promise<number> {

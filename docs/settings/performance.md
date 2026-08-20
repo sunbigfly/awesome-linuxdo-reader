@@ -1,8 +1,8 @@
 ---
 title: 性能与请求调度
 description: 按 Discourse 正文与直属回复 API 调整批量、预知请求、DOM 窗口和共享安全边界。
-feature_ids: ["READ-001", "READ-002", "SET-012", "SET-013", "SET-014", "SET-015", "MONITOR-003"]
-source_anchors: ["lite/src/settings/reader-performance-settings-form.ts","lite/src/app/reader-performance-policy.ts","lite/src/topic/topic-session.ts","lite/src/topic/reader-topic-flow-controller.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/request-contract.ts"]
+feature_ids: ["READ-001", "READ-002", "SET-012", "SET-013", "SET-014", "SET-015", "SET-023", "MONITOR-003"]
+source_anchors: ["lite/src/settings/reader-performance-settings-form.ts","lite/src/app/reader-performance-policy.ts","lite/src/topic/topic-session.ts","lite/src/topic/reader-topic-flow-controller.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/reader-host-turnstile-background-controller.ts","lite/src/network/request-contract.ts"]
 since: 0.1.2
 version: 1.5.8
 status: current
@@ -44,6 +44,18 @@ screenshots: ["/screenshots/guide-09-performance-settings-v1.5.0.png", "/screens
 “快速预取”是实验档，不作为普通推荐；选择它或把任一自定义目标调得比“自动”更激进时，设置页会提示卡顿与 429 风险。提示不修改目标值，也不替代运行时安全规则。
 
 任何手动改动都会进入“自定义”。保存后当前与后续阅读器立即采用；已经启动的请求自然完成。不确定设备或站点余量时使用“自动（推荐）”，出现卡顿或频繁 429 时切回“自动”或“省流”。
+
+## 宿主后台 Turnstile（实验）
+
+“后台暂停宿主 Turnstile”默认关闭，只适用于 LinuxDo 页面自身放在 `body` 底部的隐藏验证控件。启用后同时满足以下条件才会暂停：
+
+- 标签已在后台停留 30 秒；
+- 宿主控件已经生成有效响应；
+- 页面没有打开的原生编辑器或可见支付控件。
+
+暂停使用 Turnstile 官方 `remove()` 生命周期，不读取、保存或同步响应令牌；标签回到前台、关闭设置或 Reader runtime 销毁时，会用原容器和 sitekey 立即恢复。挑战仍在进行、控件来源不明或恢复 API 不可用时保持原状。
+
+该开关不处理 Reader 的 Cloudflare 验证窗口，也不改变请求并发、429 或共享 permit。若宿主之后调整 Turnstile 结构，安全条件无法匹配时会自动退化为“不暂停”，而不是删除未知安全控件。
 
 ## 正文批量取数
 

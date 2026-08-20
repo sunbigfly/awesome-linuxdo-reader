@@ -5,6 +5,7 @@ import type {
 	ResponseCacheStore,
 	ResponseCacheStoreInvalidationResult,
 } from './response-repository.js';
+import type { ReaderCacheObserver } from './cache-observer.js';
 
 export interface IndexedDbResponseCacheStoreOptions {
 	readonly databaseName: string;
@@ -15,9 +16,21 @@ export interface IndexedDbResponseCacheStoreOptions {
 	readonly factory?: IDBFactory | null;
 	readonly now?: () => number;
 	readonly onError?: (error: unknown) => void;
+	readonly legacyDatabaseNames?: readonly string[];
+	readonly observer?: ReaderCacheObserver;
 }
 
 const PROACTIVE_PRUNE_WRITE_INTERVAL = 32;
+
+export function selectResponseCacheMigrationEntry(
+	current: ResponseCacheEntry | null,
+	legacy: ResponseCacheEntry,
+): ResponseCacheEntry {
+	if (!current) return legacy;
+	return Number(legacy.storedAt) > Number(current.storedAt)
+		? legacy
+		: current;
+}
 
 interface TransactionResult<T> {
 	readonly ok: boolean;
@@ -98,6 +111,8 @@ export class IndexedDbResponseCacheStore implements ResponseCacheStore {
 	readonly #factory: IDBFactory | null;
 	readonly #now: () => number;
 	readonly #onError: (error: unknown) => void;
+	readonly #legacyDatabaseNames: readonly string[];
+	readonly #observer: ReaderCacheObserver | undefined;
 	#databasePromise: Promise<IDBDatabase | null> | null = null;
 	#writesSincePrune = 0;
 	#prunePromise: Promise<void> | null = null;
@@ -119,6 +134,13 @@ export class IndexedDbResponseCacheStore implements ResponseCacheStore {
 			: options.factory;
 		this.#now = options.now ?? Date.now;
 		this.#onError = options.onError ?? (() => {});
+		this.#legacyDatabaseNames = Object.freeze([
+			...new Set((options.legacyDatabaseNames ?? [])
+				.map(String)
+				.map((name) => name.trim())
+				.filter((name) => name && name !== this.#databaseName)),
+		]);
+		this.#observer = options.observer;
 	}
 
 	async read(id: string): Promise<ResponseCacheEntry | null> {
@@ -331,11 +353,18 @@ export class IndexedDbResponseCacheStore implements ResponseCacheStore {
 			};
 			request.onsuccess = () => {
 				const database = request.result;
+				clearTimeout(timeoutId);
 				database.onversionchange = () => {
 					database.close();
 					if (this.#databasePromise === promise) this.#databasePromise = null;
 				};
-				finish(database);
+				void this.#migrateLegacyDatabases(database).then(
+					() => finish(database),
+					(error) => {
+						this.#report(error);
+						finish(database);
+					},
+				);
 			};
 			request.onerror = () => finish(null, request.error);
 			request.onblocked = () => finish(null, new Error('IndexedDB open blocked'));
@@ -345,6 +374,186 @@ export class IndexedDbResponseCacheStore implements ResponseCacheStore {
 			if (!database && this.#databasePromise === promise) this.#databasePromise = null;
 		});
 		return promise;
+	}
+
+	async #migrateLegacyDatabases(target: IDBDatabase): Promise<void> {
+		if (!this.#legacyDatabaseNames.length || !this.#factory) return;
+		for (const legacyName of this.#legacyDatabaseNames) {
+			const startedAt = this.#now();
+			try {
+				if (await this.#legacyDatabaseMissing(legacyName)) {
+					this.#observer?.record({
+						operation: 'migrate', outcome: 'skipped', source: 'migration',
+						key: `${legacyName} -> ${this.#databaseName}`,
+						durationMs: this.#now() - startedAt,
+						reason: '旧数据库不存在',
+					});
+					continue;
+				}
+				const legacy = await this.#readLegacyDatabase(legacyName);
+				if (legacy === null) {
+					this.#observer?.record({
+						operation: 'migrate', outcome: 'skipped', source: 'migration',
+						key: `${legacyName} -> ${this.#databaseName}`,
+						durationMs: this.#now() - startedAt,
+						reason: '旧数据库不存在',
+					});
+					continue;
+				}
+				const migrated = await this.#mergeLegacyEntries(target, legacy.entries);
+				const deleted = await this.#deleteLegacyDatabase(legacyName);
+				this.#observer?.record({
+					operation: 'migrate',
+					outcome: deleted ? 'success' : 'partial',
+					source: 'migration',
+					key: `${legacyName} -> ${this.#databaseName}`,
+					durationMs: this.#now() - startedAt,
+					records: migrated,
+					reason: deleted
+						? '迁移提交后已删除旧数据库'
+						: '迁移已提交；旧数据库删除被其他页面连接阻塞，将在下次启动重试',
+				});
+			} catch (error) {
+				this.#observer?.record({
+					operation: 'migrate', outcome: 'failure', source: 'migration',
+					key: `${legacyName} -> ${this.#databaseName}`,
+					durationMs: this.#now() - startedAt,
+					error,
+				});
+				this.#report(error);
+			}
+		}
+	}
+
+	async #legacyDatabaseMissing(name: string): Promise<boolean> {
+		const factory = this.#factory;
+		if (!factory || typeof factory.databases !== 'function') return false;
+		try {
+			const databases = await factory.databases();
+			return !databases.some((database) => database.name === name);
+		} catch {
+			// databases() 不是事务正确性的前提；不支持时退回兼容打开路径。
+			return false;
+		}
+	}
+
+	#readLegacyDatabase(
+		name: string,
+	): Promise<Readonly<{ readonly entries: readonly ResponseCacheEntry[] }> | null> {
+		const factory = this.#factory;
+		if (!factory) return Promise.resolve(null);
+		return new Promise((resolve, reject) => {
+			let settled = false;
+			let created = false;
+			let database: IDBDatabase | null = null;
+			const finish = (
+				value: Readonly<{ readonly entries: readonly ResponseCacheEntry[] }> | null,
+				cause?: unknown,
+			): void => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timeout);
+				database?.close();
+				if (cause !== undefined) reject(cause);
+				else resolve(value);
+			};
+			const timeout = setTimeout(
+				() => finish(null, new Error(`旧 IndexedDB ${name} 读取超时`)),
+				this.#operationTimeoutMs,
+			);
+			let request: IDBOpenDBRequest;
+			try {
+				request = factory.open(name);
+			} catch (error) {
+				finish(null, error);
+				return;
+			}
+			request.onupgradeneeded = () => {
+				created = true;
+			};
+			request.onerror = () => finish(null, request.error);
+			request.onsuccess = () => {
+				database = request.result;
+				if (created || !database.objectStoreNames.contains(this.#storeName)) {
+					finish(Object.freeze({ entries: Object.freeze([]) }));
+					return;
+				}
+				let transaction: IDBTransaction;
+				try {
+					transaction = database.transaction(this.#storeName, 'readonly');
+					const read = transaction.objectStore(this.#storeName).getAll();
+					read.onsuccess = () => finish(Object.freeze({
+						entries: Object.freeze(Array.isArray(read.result)
+							? read.result as ResponseCacheEntry[]
+							: []),
+					}));
+					read.onerror = () => finish(null, read.error);
+					transaction.onabort = () => finish(null, transaction.error);
+					transaction.onerror = () => finish(null, transaction.error);
+				} catch (error) {
+					finish(null, error);
+				}
+			};
+		});
+	}
+
+	#mergeLegacyEntries(
+		target: IDBDatabase,
+		entries: readonly ResponseCacheEntry[],
+	): Promise<number> {
+		if (!entries.length) return Promise.resolve(0);
+		return new Promise((resolve, reject) => {
+			let migrated = 0;
+			let transaction: IDBTransaction;
+			try {
+				transaction = target.transaction(this.#storeName, 'readwrite');
+				const store = transaction.objectStore(this.#storeName);
+				for (const legacy of entries) {
+					const read = store.get(legacy.id);
+					read.onsuccess = () => {
+						const current = (read.result as ResponseCacheEntry | undefined) ?? null;
+						if (selectResponseCacheMigrationEntry(current, legacy) === current) return;
+						store.put(legacy);
+						migrated += 1;
+					};
+				}
+				transaction.oncomplete = () => resolve(migrated);
+				transaction.onabort = () => reject(
+					transaction.error ?? new Error('旧响应缓存迁移事务已中止'),
+				);
+				transaction.onerror = () => reject(
+					transaction.error ?? new Error('旧响应缓存迁移事务失败'),
+				);
+			} catch (error) {
+				reject(error);
+			}
+		});
+	}
+
+	#deleteLegacyDatabase(name: string): Promise<boolean> {
+		const factory = this.#factory;
+		if (!factory) return Promise.resolve(false);
+		return new Promise((resolve) => {
+			let settled = false;
+			const finish = (deleted: boolean): void => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timeout);
+				resolve(deleted);
+			};
+			const timeout = setTimeout(
+				() => finish(false),
+				this.#operationTimeoutMs,
+			);
+			try {
+				const request = factory.deleteDatabase(name);
+				request.onsuccess = () => finish(true);
+				request.onerror = () => finish(false);
+				request.onblocked = () => finish(false);
+			} catch {
+				finish(false);
+			}
+		});
 	}
 
 	async #transaction<T>(

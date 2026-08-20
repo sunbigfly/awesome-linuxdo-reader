@@ -107,6 +107,7 @@ let presentationLinksReady = true;
 const presentation = {
 	avatarSource: (template: string, size: number) =>
 		template.replace('{size}', String(size)),
+	emojiSource: (id: string) => `/emoji/${id}.png`,
 	categoryName: (categoryId: number) =>
 		categoryId === 7 ? '搞七捻三' : '',
 	categoryIcon: (categoryId: number) =>
@@ -605,7 +606,7 @@ assert(
 	'标题、主题投票与只看楼主必须分别进入唯一应用控制器并回写 canonical Header',
 );
 
-topic = { ...topic, title: '实时更新标题', views: 121 };
+topic = { ...topic, title: '实时更新标题 :laughing:', views: 121 };
 changes.emit(Object.freeze({
 	source: 'message-bus',
 	observedAt: 1,
@@ -616,9 +617,15 @@ changes.emit(Object.freeze({
 	streamChanged: false,
 }));
 assert(
-	String(titleJump.textContent) === '实时更新标题' &&
+	String(titleJump.textContent) === '实时更新标题 ' &&
+	titleJump.querySelector<HTMLImageElement>(
+		'img[data-ldp-inline-emoji="laughing"]',
+	)?.getAttribute('src') === '/emoji/laughing.png' &&
+	titleJump.querySelector<HTMLImageElement>(
+		'img[data-ldp-inline-emoji="laughing"]',
+	)?.alt === ':laughing:' &&
 	document.querySelector('.ldp-meta-stats')?.textContent?.includes('121 浏览'),
-	'TopicSession 提交必须原地刷新唯一 Header，不能重建 Shell 或读取宿主 DOM',
+	'TopicSession 提交必须原地刷新 Header，并把标题 shortcode 投影为原生 emoji',
 );
 
 const solved = normalizeReaderSolvedAnswers(topic, posts, presentation);

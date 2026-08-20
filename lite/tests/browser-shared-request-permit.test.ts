@@ -1731,6 +1731,104 @@ closedGateAbort.abort(new DOMException('test-complete', 'AbortError'));
 await closedGatePending.catch(() => null);
 closedChallengePermit.destroy();
 
+let automaticTimeoutPopupClosed = false;
+const automaticTimeoutPermit = new BrowserSharedRequestPermit({
+	...permitOptions(
+		new MemoryStorage(),
+		new LockQueue(),
+		'challenge-automatic-timeout',
+	),
+	challenge: {
+		origin: 'https://linux.do',
+		open: () => ({
+			get closed() {
+				return automaticTimeoutPopupClosed;
+			},
+			close() {
+				automaticTimeoutPopupClosed = true;
+			},
+		}),
+		inspect: () => 'pending',
+		verify: async () => false,
+		pollIntervalMs: 5,
+		verifyIntervalMs: 10,
+		leaseTtlMs: 100,
+		automaticMaxWaitMs: 40,
+		maxWaitMs: 1_000,
+	},
+});
+const automaticTimeoutResult = await Promise.race([
+	automaticTimeoutPermit.resolveCloudflareChallenge({
+		href: 'https://linux.do/t/automatic-timeout.json',
+		signal: new AbortController().signal,
+	}),
+	delay(500).then(() => 'timeout' as const),
+]);
+assert(
+	automaticTimeoutResult === false &&
+		automaticTimeoutPopupClosed &&
+		(await automaticTimeoutPermit.snapshot()).challengeState === 'required',
+	'无人操作的自动 Cloudflare 验证窗口必须短时关闭，并保留人工恢复硬闸门',
+);
+automaticTimeoutPermit.destroy();
+
+let manualExtensionPopupClosed = false;
+let manualExtensionPopupFocused = 0;
+let manualExtensionPassed = false;
+const manualExtensionPermit = new BrowserSharedRequestPermit({
+	...permitOptions(
+		new MemoryStorage(),
+		new LockQueue(),
+		'challenge-manual-extension',
+	),
+	challenge: {
+		origin: 'https://linux.do',
+		open: () => ({
+			get closed() {
+				return manualExtensionPopupClosed;
+			},
+			close() {
+				manualExtensionPopupClosed = true;
+			},
+			focus() {
+				manualExtensionPopupFocused += 1;
+			},
+		}),
+		inspect: () => 'pending',
+		verify: async () => manualExtensionPassed,
+		pollIntervalMs: 5,
+		verifyIntervalMs: 10,
+		leaseTtlMs: 100,
+		automaticMaxWaitMs: 40,
+		maxWaitMs: 500,
+	},
+});
+const automaticBeforeManual = manualExtensionPermit.resolveCloudflareChallenge({
+	href: 'https://linux.do/t/manual-extension.json',
+	signal: new AbortController().signal,
+});
+await delay(15);
+const manualExtension = manualExtensionPermit.resolveCloudflareChallenge({
+	href: 'https://linux.do/t/manual-extension.json',
+	signal: new AbortController().signal,
+	focus: true,
+});
+await delay(60);
+manualExtensionPassed = true;
+const manualExtensionResults = await Promise.race([
+	Promise.all([automaticBeforeManual, manualExtension]),
+	delay(500).then(() => 'timeout' as const),
+]);
+assert(
+	Array.isArray(manualExtensionResults) &&
+		manualExtensionResults.every(Boolean) &&
+		manualExtensionPopupFocused === 1 &&
+		manualExtensionPopupClosed &&
+		(await manualExtensionPermit.snapshot()).challengeState === 'passed',
+	'人工接管自动 Cloudflare 验证窗口后必须延长完整处理时间，并在成功后关闭窗口',
+);
+manualExtensionPermit.destroy();
+
 let sharedSignalPassed = false;
 let sharedSignalWindowClosed = false;
 let sharedSignalWindowOpens = 0;

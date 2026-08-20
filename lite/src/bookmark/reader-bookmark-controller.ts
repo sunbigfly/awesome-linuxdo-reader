@@ -1101,9 +1101,12 @@ export class ReaderBookmarkController {
 		this.#render();
 	}
 
-	clearCache(): void {
+	clearCache(options: Readonly<{ readonly resume?: boolean }> = {}): void {
 		if (this.scope.destroyed) return;
+		const resume = options.resume !== false;
 		this.#backgroundRestoreEpoch += 1;
+		this.#backgroundCacheActive = false;
+		this.#backgroundRestore = null;
 		this.#cancelLoad();
 		this.#loadEpoch += 1;
 		if (this.#liveRefresh !== null) this.#cancel(this.#liveRefresh);
@@ -1145,7 +1148,7 @@ export class ReaderBookmarkController {
 		this.#stale = false;
 		this.#error = null;
 		this.#render();
-		this.#scheduleBackgroundWarm();
+		if (resume) this.startBackgroundCache();
 	}
 
 	destroy(): void {

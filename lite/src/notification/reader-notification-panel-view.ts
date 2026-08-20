@@ -12,6 +12,8 @@ import {
 import { usesNativeLinkNavigation } from '../dom/event-target.js';
 import { replaceImageWithFallbackOnError } from '../components/reader-image-fallback.js';
 import { renderReaderIcon } from '../components/reader-icon.js';
+import { renderReaderInlineEmoji } from
+	'../components/reader-inline-emoji.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import {
 	READER_DELETED_TOPIC_TITLE,
@@ -969,15 +971,19 @@ export class ReaderNotificationPanelView {
 		const specificType = record.group === 'other'
 			? record.typeLabel.trim() || record.typeName.trim() || '通知'
 			: '';
-		titleText.textContent = specificType
+		renderReaderInlineEmoji(titleText, specificType
 			? `【${specificType}】${displayTitle}`
-			: displayTitle;
+			: displayTitle, this.#emojiSource);
 		title.append(titleText);
 		copy.append(title);
 		if (record.excerpt) {
 			const excerpt = this.#document.createElement('span');
 			excerpt.className = 'ldp-notification-excerpt';
-			excerpt.textContent = record.excerpt;
+			renderReaderInlineEmoji(
+				excerpt,
+				record.excerpt,
+				this.#emojiSource,
+			);
 			copy.append(excerpt);
 		}
 		const meta = this.#document.createElement('span');

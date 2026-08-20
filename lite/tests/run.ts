@@ -96,6 +96,7 @@ import './reader-unwanted-topic.test.js';
 import './reader-history-navigation-controller.test.js';
 import './reader-host-topic-preheat-controller.test.js';
 import './reader-host-topic-source-coordinator.test.js';
+import './reader-host-turnstile-background-controller.test.js';
 import './reader-embedded-reload-coordinator.test.js';
 import './reader-history-navigation-view.test.js';
 import './reader-history-panel-view.test.js';

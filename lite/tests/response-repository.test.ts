@@ -6,6 +6,7 @@ import {
 	type ResponseCachePolicy,
 	type ResponseCacheStore,
 } from '../src/cache/response-repository.js';
+import { ReaderCacheObserver } from '../src/cache/cache-observer.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -68,12 +69,14 @@ const cachePolicy: ResponseCachePolicy = {
 let now = 1000;
 const store = new MemoryStore();
 const mutations: ResponseCacheInvalidation[] = [];
+const cacheObserver = new ReaderCacheObserver({ now: () => now });
 const repository = new ResponseRepository({
 	store,
 	maxMemoryEntries: 2,
 	maxMemoryBytes: 1000,
 	now: () => now,
 	estimateBytes: () => 100,
+	observer: cacheObserver,
 	mutationPort: {
 		publish: (query) => {
 			mutations.push(query);
@@ -161,6 +164,19 @@ assert(
 	staleFallback.version === 1 &&
 		(staleFallback as { readonly stale?: boolean }).stale === true,
 	'fresh 过期但 retain 有效时应支持带来源标记的错误回退',
+);
+assert(
+	cacheObserver.snapshot.events.some((event) =>
+		event.operation === 'read' &&
+		event.outcome === 'stale' &&
+		event.key === cachePolicy.id) &&
+	cacheObserver.snapshot.events.some((event) =>
+		event.operation === 'load' &&
+		event.outcome === 'failure' &&
+		event.error.includes('network')) &&
+	cacheObserver.snapshot.events.some((event) =>
+		event.operation === 'load' && event.outcome === 'fallback'),
+	'统一缓存账本必须记录缓存键、stale 命中、联网失败与旧值回退，且不保存响应正文',
 );
 const cancelled = new AbortController();
 const cancellation = new Error('cancelled');

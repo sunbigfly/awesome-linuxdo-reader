@@ -1,4 +1,8 @@
 import { sharedCacheIdToken } from './cache-identity.js';
+import type {
+	ReaderCacheEventInput,
+	ReaderCacheObserver,
+} from './cache-observer.js';
 
 export type ResponseCacheMode = 'default' | 'refresh' | 'no-store';
 
@@ -155,6 +159,7 @@ export interface ResponseRepositoryOptions {
 	readonly flightHeartbeatMs?: number;
 	readonly flightWaitTimeoutMs?: number;
 	readonly onPersistenceError?: (error: unknown) => void;
+	readonly observer?: ReaderCacheObserver;
 }
 
 export interface ResponseCacheRead<T> {
@@ -274,6 +279,15 @@ function matchesInvalidation(
 	return false;
 }
 
+function invalidationKey(query: ResponseCacheInvalidation): string {
+	if (query.all) return '*';
+	return [
+		...(query.ids ?? []).map((value) => `id:${value}`),
+		...(query.kinds ?? []).map((value) => `kind:${value}`),
+		...(query.tags ?? []).map((value) => `tag:${value}`),
+	].join('|') || '(empty)';
+}
+
 /**
  * 通用 JSON/结构化响应缓存的唯一 owner。
  */
@@ -288,6 +302,7 @@ export class ResponseRepository {
 	readonly #flightHeartbeatMs: number;
 	readonly #flightWaitTimeoutMs: number;
 	readonly #onPersistenceError: (error: unknown) => void;
+	readonly #observer: ReaderCacheObserver | undefined;
 	readonly #memory = new Map<string, ResponseCacheEntry>();
 	readonly #inflight = new Map<string, InflightLoad>();
 	readonly #writes = new Map<string, Promise<void>>();
@@ -310,11 +325,16 @@ export class ResponseRepository {
 			'flightWaitTimeoutMs',
 		);
 		this.#onPersistenceError = options.onPersistenceError ?? (() => {});
+		this.#observer = options.observer;
 	}
 
 	async read<T>(rawPolicy: ResponseCachePolicy): Promise<ResponseCacheRead<T>> {
 		const policy = normalizePolicy(rawPolicy);
+		const startedAt = this.#now();
 		let entry = this.#memory.get(policy.id);
+		let source: 'memory' | 'indexeddb' = entry ? 'memory' : 'indexeddb';
+		let readError: unknown;
+		let reason = '';
 		if (entry) {
 			this.#memory.delete(policy.id);
 			this.#memory.set(policy.id, entry);
@@ -324,13 +344,16 @@ export class ResponseRepository {
 				entry = await this.#store.read(policy.id) ?? undefined;
 			} catch (error) {
 				this.#onPersistenceError(error);
+				readError = error;
 			}
 			if (epoch !== this.#epoch) {
 				entry = undefined;
+				reason = '读取期间缓存世代已失效';
 			} else if (entry && this.#validEntry(entry, policy)) {
 				this.#remember(entry);
 			} else {
 				if (entry) {
+					reason = '持久记录与当前 schema 或缓存身份不兼容';
 					try {
 						await this.#store.invalidate({ ids: [policy.id] });
 					} catch (error) {
@@ -341,6 +364,17 @@ export class ResponseRepository {
 			}
 		}
 		if (!entry || !this.#validEntry(entry, policy)) {
+			this.#record({
+				operation: 'read',
+				outcome: 'miss',
+				source,
+				key: policy.id,
+				kind: policy.kind,
+				tags: policy.tags,
+				durationMs: this.#now() - startedAt,
+				...(reason ? { reason } : {}),
+				...(readError === undefined ? {} : { error: readError }),
+			});
 			return Object.freeze({ state: 'miss' });
 		}
 		const age = Math.max(0, this.#now() - entry.storedAt);
@@ -349,10 +383,32 @@ export class ResponseRepository {
 			(age > policy.retainForMs || entry.expiresAt <= this.#now())
 		) {
 			await this.#invalidateWithReport({ ids: [policy.id] }, true);
+			this.#record({
+				operation: 'read',
+				outcome: 'miss',
+				source,
+				key: policy.id,
+				kind: policy.kind,
+				tags: policy.tags,
+				durationMs: this.#now() - startedAt,
+				sizeBytes: entry.bytes,
+				reason: '超过 retain 生命周期',
+			});
 			return Object.freeze({ state: 'miss' });
 		}
+		const state = age <= policy.freshForMs ? 'fresh' : 'stale';
+		this.#record({
+			operation: 'read',
+			outcome: state,
+			source,
+			key: policy.id,
+			kind: policy.kind,
+			tags: policy.tags,
+			durationMs: this.#now() - startedAt,
+			sizeBytes: entry.bytes,
+		});
 		return Object.freeze({
-			state: age <= policy.freshForMs ? 'fresh' : 'stale',
+			state,
 			value: entry.value as T,
 			storedAt: entry.storedAt,
 		});
@@ -368,6 +424,7 @@ export class ResponseRepository {
 		rawPolicy: ResponseCachePolicy,
 	): Promise<ResponseCacheRead<T>> {
 		const policy = normalizePolicy(rawPolicy);
+		const startedAt = this.#now();
 		const pending = this.#writes.get(policy.id);
 		if (pending) await pending;
 		let entry: ResponseCacheEntry | null;
@@ -375,9 +432,24 @@ export class ResponseRepository {
 			entry = await this.#store.read(policy.id);
 		} catch (error) {
 			this.#onPersistenceError(error);
+			this.#record({
+				operation: 'read',
+				outcome: 'failure',
+				source: 'indexeddb',
+				key: policy.id,
+				kind: policy.kind,
+				tags: policy.tags,
+				durationMs: this.#now() - startedAt,
+				error,
+			});
 			throw error;
 		}
 		if (!entry || !this.#validEntry(entry, policy)) {
+			this.#record({
+				operation: 'read', outcome: 'miss', source: 'indexeddb',
+				key: policy.id, kind: policy.kind, tags: policy.tags,
+				durationMs: this.#now() - startedAt,
+			});
 			return Object.freeze({ state: 'miss' });
 		}
 		const age = Math.max(0, this.#now() - entry.storedAt);
@@ -385,10 +457,24 @@ export class ResponseRepository {
 			entry.permanent !== true &&
 			(age > policy.retainForMs || entry.expiresAt <= this.#now())
 		) {
+			this.#record({
+				operation: 'read', outcome: 'miss', source: 'indexeddb',
+				key: policy.id, kind: policy.kind, tags: policy.tags,
+				durationMs: this.#now() - startedAt,
+				sizeBytes: entry.bytes,
+				reason: '超过 retain 生命周期',
+			});
 			return Object.freeze({ state: 'miss' });
 		}
+		const state = age <= policy.freshForMs ? 'fresh' : 'stale';
+		this.#record({
+			operation: 'read', outcome: state, source: 'indexeddb',
+			key: policy.id, kind: policy.kind, tags: policy.tags,
+			durationMs: this.#now() - startedAt,
+			sizeBytes: entry.bytes,
+		});
 		return Object.freeze({
-			state: age <= policy.freshForMs ? 'fresh' : 'stale',
+			state,
 			value: entry.value as T,
 			storedAt: entry.storedAt,
 		});
@@ -486,6 +572,7 @@ export class ResponseRepository {
 		options: ResponseCacheWriteOptions = {},
 	): Promise<void> {
 		const policy = normalizePolicy(rawPolicy);
+		const startedAt = this.#now();
 		const storedAt = Math.max(
 			this.#now(),
 			(this.#memory.get(policy.id)?.storedAt ?? -1) + 1,
@@ -504,9 +591,18 @@ export class ResponseRepository {
 			...(policy.permanent === true ? { permanent: true as const } : {}),
 		});
 		this.#remember(entry);
-		if (!policy.persist) return;
+		if (!policy.persist) {
+			this.#record({
+				operation: 'write', outcome: 'success', source: 'memory',
+				key: policy.id, kind: policy.kind, tags: policy.tags,
+				durationMs: this.#now() - startedAt,
+				sizeBytes: entry.bytes,
+			});
+			return;
+		}
 		const previous = this.#writes.get(policy.id) ?? Promise.resolve();
 		let persisted = false;
+		let persistenceError: unknown;
 		const write = previous
 			.catch(() => {})
 			.then(async () => {
@@ -515,6 +611,7 @@ export class ResponseRepository {
 			})
 			.catch((error) => {
 				this.#onPersistenceError(error);
+				persistenceError = error;
 			});
 		this.#writes.set(policy.id, write);
 		await write;
@@ -526,6 +623,17 @@ export class ResponseRepository {
 			}
 		}
 		if (this.#writes.get(policy.id) === write) this.#writes.delete(policy.id);
+		this.#record({
+			operation: 'write',
+			outcome: persisted ? 'success' : 'failure',
+			source: 'indexeddb',
+			key: policy.id,
+			kind: policy.kind,
+			tags: policy.tags,
+			durationMs: this.#now() - startedAt,
+			sizeBytes: entry.bytes,
+			...(persistenceError === undefined ? {} : { error: persistenceError }),
+		});
 	}
 
 	/** WebDAV 等受控迁移入口：仅在远端版本更新时保留原 storedAt 写回。 */
@@ -536,6 +644,7 @@ export class ResponseRepository {
 		options: ResponseCacheWriteOptions = {},
 	): Promise<void> {
 		const policy = normalizePolicy(rawPolicy);
+		const startedAt = this.#now();
 		const storedAt = Math.max(0, Math.floor(storedAtValue));
 		if (
 			!Number.isSafeInteger(storedAt) ||
@@ -544,10 +653,24 @@ export class ResponseRepository {
 				storedAt + policy.retainForMs <= this.#now()
 			)
 		) {
+			this.#record({
+				operation: 'restore', outcome: 'skipped', source: 'memory',
+				key: policy.id, kind: policy.kind, tags: policy.tags,
+				durationMs: this.#now() - startedAt,
+				reason: '传入版本已超期或时间无效',
+			});
 			return;
 		}
 		const current = await this.read<T>(policy);
-		if ((current.storedAt ?? -1) >= storedAt) return;
+		if ((current.storedAt ?? -1) >= storedAt) {
+			this.#record({
+				operation: 'restore', outcome: 'skipped', source: 'memory',
+				key: policy.id, kind: policy.kind, tags: policy.tags,
+				durationMs: this.#now() - startedAt,
+				reason: '本机版本不旧于待恢复版本',
+			});
+			return;
+		}
 		const entry: ResponseCacheEntry<T> = Object.freeze({
 			schemaVersion: 1,
 			id: policy.id,
@@ -562,9 +685,18 @@ export class ResponseRepository {
 			...(policy.permanent === true ? { permanent: true as const } : {}),
 		});
 		this.#remember(entry);
-		if (!policy.persist) return;
+		if (!policy.persist) {
+			this.#record({
+				operation: 'restore', outcome: 'success', source: 'memory',
+				key: policy.id, kind: policy.kind, tags: policy.tags,
+				durationMs: this.#now() - startedAt,
+				sizeBytes: entry.bytes,
+			});
+			return;
+		}
 		const previous = this.#writes.get(policy.id) ?? Promise.resolve();
 		let persisted = false;
+		let persistenceError: unknown;
 		const write = previous
 			.catch(() => {})
 			.then(async () => {
@@ -573,6 +705,7 @@ export class ResponseRepository {
 			})
 			.catch((error) => {
 				this.#onPersistenceError(error);
+				persistenceError = error;
 			});
 		this.#writes.set(policy.id, write);
 		await write;
@@ -584,6 +717,15 @@ export class ResponseRepository {
 			}
 		}
 		if (this.#writes.get(policy.id) === write) this.#writes.delete(policy.id);
+		this.#record({
+			operation: 'restore',
+			outcome: persisted ? 'success' : 'failure',
+			source: 'indexeddb',
+			key: policy.id, kind: policy.kind, tags: policy.tags,
+			durationMs: this.#now() - startedAt,
+			sizeBytes: entry.bytes,
+			...(persistenceError === undefined ? {} : { error: persistenceError }),
+		});
 	}
 
 	async merge<T>(
@@ -592,6 +734,7 @@ export class ResponseRepository {
 		mergeValues: (stored: T, incoming: T) => T,
 	): Promise<T> {
 		const policy = normalizePolicy(rawPolicy);
+		const startedAt = this.#now();
 		const memory = this.#memory.get(policy.id);
 		const localValue = !this.#store.merge &&
 			memory && this.#validEntry(memory, policy)
@@ -615,9 +758,18 @@ export class ResponseRepository {
 				: committed.storedAt + policy.retainForMs,
 		});
 		this.#remember(committed);
-		if (!policy.persist) return committed.value;
+		if (!policy.persist) {
+			this.#record({
+				operation: 'merge', outcome: 'success', source: 'memory',
+				key: policy.id, kind: policy.kind, tags: policy.tags,
+				durationMs: this.#now() - startedAt,
+				sizeBytes: committed.bytes,
+			});
+			return committed.value;
+		}
 		const previous = this.#writes.get(policy.id) ?? Promise.resolve();
 		let persisted = false;
+		let persistenceError: unknown;
 		const write = previous
 			.catch(() => {})
 			.then(async () => {
@@ -659,6 +811,7 @@ export class ResponseRepository {
 			})
 			.catch((error) => {
 				this.#onPersistenceError(error);
+				persistenceError = error;
 			});
 		this.#writes.set(policy.id, write);
 		await write;
@@ -673,6 +826,15 @@ export class ResponseRepository {
 			this.#writes.delete(policy.id);
 			if (persisted) this.#remember(committed);
 		}
+		this.#record({
+			operation: 'merge',
+			outcome: persisted ? 'success' : 'failure',
+			source: 'indexeddb',
+			key: policy.id, kind: policy.kind, tags: policy.tags,
+			durationMs: this.#now() - startedAt,
+			sizeBytes: committed.bytes,
+			...(persistenceError === undefined ? {} : { error: persistenceError }),
+		});
 		return committed.value;
 	}
 
@@ -686,14 +848,28 @@ export class ResponseRepository {
 	 * 不撤销其他 cache flight；不得用于用户可见缓存清理或领域失效。
 	 */
 	async prune(query: ResponseCacheInvalidation): Promise<void> {
+		const startedAt = this.#now();
+		let memoryEntries = 0;
 		for (const [id, entry] of this.#memory) {
-			if (matchesInvalidation(entry, query)) this.#memory.delete(id);
+			if (!matchesInvalidation(entry, query)) continue;
+			this.#memory.delete(id);
+			memoryEntries += 1;
 		}
 		if (this.#writes.size) await Promise.all(this.#writes.values());
 		const result = await this.#store.invalidate(query);
 		if (result && !result.ok) {
+			this.#record({
+				operation: 'prune', outcome: 'failure', source: 'indexeddb',
+				key: invalidationKey(query), durationMs: this.#now() - startedAt,
+				records: memoryEntries, error: result.error,
+			});
 			throw result.error ?? new Error('响应缓存内部 generation 修剪失败');
 		}
+		this.#record({
+			operation: 'prune', outcome: 'success', source: 'indexeddb',
+			key: invalidationKey(query), durationMs: this.#now() - startedAt,
+			records: memoryEntries,
+		});
 	}
 
 	/**
@@ -707,6 +883,11 @@ export class ResponseRepository {
 			this.#memory.delete(id);
 			removed += 1;
 		}
+		this.#record({
+			operation: 'invalidate', outcome: 'success', source: 'memory',
+			key: invalidationKey(query), records: removed,
+			reason: '仅丢弃当前标签页内存副本',
+		});
 		return removed;
 	}
 
@@ -721,6 +902,7 @@ export class ResponseRepository {
 		query: ResponseCacheInvalidation,
 		publish: boolean,
 	): Promise<ResponseCacheInvalidationReport> {
+		const startedAt = this.#now();
 		this.#epoch += 1;
 		let memoryEntries = 0;
 		for (const [id, entry] of this.#memory) {
@@ -756,18 +938,44 @@ export class ResponseRepository {
 				failures.push(Object.freeze({ stage: 'broadcast', cause: error }));
 			}
 		}
-		return Object.freeze({
+		const report = Object.freeze({
 			memoryEntries,
 			failures: Object.freeze(failures),
 			complete: failures.length === 0,
 		});
+		this.#record({
+			operation: 'invalidate',
+			outcome: report.complete ? 'success' : 'partial',
+			source: publish ? 'cross-tab' : 'indexeddb',
+			key: invalidationKey(query),
+			durationMs: this.#now() - startedAt,
+			records: memoryEntries,
+			...(failures.length
+				? {
+					reason: failures.map(({ stage }) => stage).join(','),
+					error: new AggregateError(
+						failures.map(({ cause }) => cause),
+						'响应缓存失效部分失败',
+					),
+				}
+				: {}),
+		});
+		return report;
 	}
 
 	applyExternalInvalidation(query: ResponseCacheInvalidation): void {
 		this.#epoch += 1;
+		let removed = 0;
 		for (const [id, entry] of this.#memory) {
-			if (matchesInvalidation(entry, query)) this.#memory.delete(id);
+			if (!matchesInvalidation(entry, query)) continue;
+			this.#memory.delete(id);
+			removed += 1;
 		}
+		this.#record({
+			operation: 'invalidate', outcome: 'success', source: 'cross-tab',
+			key: invalidationKey(query), records: removed,
+			reason: '接收其他标签页失效广播',
+		});
 	}
 
 	memoryStats(): { readonly entries: number; readonly bytes: number } {
@@ -777,12 +985,17 @@ export class ResponseRepository {
 	}
 
 	async records(): Promise<readonly ResponseCacheRecord[]> {
+		const startedAt = this.#now();
 		if (this.#writes.size) await Promise.all(this.#writes.values());
 		let persistent: readonly ResponseCacheRecord[] = [];
 		try {
 			persistent = await this.#store.records?.() ?? [];
 		} catch (error) {
 			this.#onPersistenceError(error);
+			this.#record({
+				operation: 'read', outcome: 'failure', source: 'indexeddb',
+				key: '*directory*', durationMs: this.#now() - startedAt, error,
+			});
 			throw error;
 		}
 		const records = new Map<string, ResponseCacheRecord>(
@@ -799,7 +1012,14 @@ export class ResponseRepository {
 					...(entry.permanent === true ? { permanent: true as const } : {}),
 			}));
 		}
-		return Object.freeze([...records.values()]);
+		const snapshot = Object.freeze([...records.values()]);
+		this.#record({
+			operation: 'read', outcome: snapshot.length ? 'hit' : 'miss',
+			source: 'indexeddb', key: '*directory*',
+			durationMs: this.#now() - startedAt, records: snapshot.length,
+			sizeBytes: snapshot.reduce((sum, entry) => sum + entry.bytes, 0),
+		});
+		return snapshot;
 	}
 
 	/**
@@ -937,7 +1157,25 @@ export class ResponseRepository {
 				}
 			}
 			const epoch = this.#epoch;
-			const value = await loader(options.signal!);
+			const loadStartedAt = this.#now();
+			let value: T;
+			try {
+				value = await loader(options.signal!);
+				this.#record({
+					operation: 'load', outcome: 'success', source: 'network',
+					key: policy.id, kind: policy.kind, tags: policy.tags,
+					durationMs: this.#now() - loadStartedAt,
+					sizeBytes: this.#estimateBytes(value),
+				});
+			} catch (error) {
+				this.#record({
+					operation: 'load', outcome: 'failure', source: 'network',
+					key: policy.id, kind: policy.kind, tags: policy.tags,
+					durationMs: this.#now() - loadStartedAt,
+					error,
+				});
+				throw error;
+			}
 			throwIfAborted();
 			if (cacheMode !== 'no-store' && epoch === this.#epoch) {
 				if (lease && this.#flightPort) {
@@ -966,6 +1204,11 @@ export class ResponseRepository {
 				canFallback
 			) {
 				const value = cached.value as T;
+				this.#record({
+					operation: 'load', outcome: 'fallback', source: 'memory',
+					key: policy.id, kind: policy.kind, tags: policy.tags,
+					reason: error instanceof Error ? error.message : String(error),
+				});
 				return options.mapStaleFallback
 					? options.mapStaleFallback(value, error)
 					: value;
@@ -1024,6 +1267,14 @@ export class ResponseRepository {
 			const oldest = this.#memory.get(evictedId);
 			this.#memory.delete(evictedId);
 			bytes -= oldest?.bytes ?? 0;
+		}
+	}
+
+	#record(event: ReaderCacheEventInput): void {
+		try {
+			this.#observer?.record(event);
+		} catch {
+			// 诊断账本永远不能改变缓存事务结果。
 		}
 	}
 }

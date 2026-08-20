@@ -1,6 +1,7 @@
 import { parseHTML } from 'linkedom';
 import { ReaderAiServiceSettingsForm } from
 	'../src/settings/reader-ai-service-settings-form.js';
+import { ReaderCacheObserver } from '../src/cache/cache-observer.js';
 import { READER_SELECT_RESELECT_EVENT } from
 	'../src/shell/reader-select-surface.js';
 import {
@@ -27,6 +28,8 @@ const repository = new ReaderTranslationConfigRepository({
 		},
 	},
 });
+const cacheObserver = new ReaderCacheObserver();
+repository.attachCacheObserver(cacheObserver);
 await repository.load();
 const { document: parsedDocument, window: parsedWindow } = parseHTML(
 	'<!doctype html><html><body><main id="host"></main></body></html>',
@@ -434,5 +437,19 @@ assert(
 	repository.snapshot.config === restartConfig &&
 	host.textContent?.includes('已缓存 1 个公共模型'),
 	'设置重开必须先读过期缓存并后台强制更新公共资料，不得请求或改写供应商目录',
+);
+await repository.clearModelMetadataCache();
+assert(
+	values.get(READER_AI_MODEL_METADATA_CACHE_STORAGE_KEY) === null &&
+	host.querySelector<HTMLSelectElement>(
+		'select[aria-label="公共模型能力目录"]',
+	)?.disabled === true &&
+	host.textContent?.includes('公共模型元数据缓存已清理') &&
+	cacheObserver.snapshot.events.some((event) =>
+		event.operation === 'clear' &&
+		event.source === 'userscript-value' &&
+		event.key === READER_AI_MODEL_METADATA_CACHE_STORAGE_KEY &&
+		event.outcome === 'success'),
+	'公共模型元数据清理必须同步清空 GM 持久值和当前标签的目录投影',
 );
 restarted.destroy();

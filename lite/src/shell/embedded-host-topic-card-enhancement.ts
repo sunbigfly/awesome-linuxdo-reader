@@ -1,4 +1,11 @@
-import type { DiscourseHostApiPort } from '../discourse/native-host-api.js';
+import {
+	discourseNativeEmojiUrl,
+	type DiscourseHostApiPort,
+} from '../discourse/native-host-api.js';
+import {
+	clearReaderInlineEmoji,
+	renderReaderInlineEmoji,
+} from '../components/reader-inline-emoji.js';
 import type {
 	ReaderUnwantedTopicFilterInput,
 	ReaderUnwantedTopicFilterMatch,
@@ -17,9 +24,11 @@ const TOPIC_LINK_SELECTOR =
 const NEW_TOPIC_BADGE_SELECTOR =
 	'.topic-post-badges,.badge-notification.new-topic';
 const AUTOMATIC_FILTER_ATTRIBUTE = 'data-ldp-unwanted-auto-filter';
+const MANUAL_FILTER_ATTRIBUTE = 'data-ldp-unwanted-manual-filter';
+const EXPOSURE_COUNT_CLASS = 'ldp-host-topic-exposure-count';
+const TOPIC_LIST_SELECTOR = '.topic-list,.latest-topic-list';
 const OPENED_TOPIC_STORAGE_KEY =
 	'linuxdo-enhanced-reader:opened-host-topics:v1';
-const MAX_OPENED_TOPIC_IDS = 2_048;
 
 type OpenedTopicStorage = Pick<
 	Storage,
@@ -112,10 +121,17 @@ function nativeDndLabel(node: Element): boolean {
 export interface EmbeddedHostTopicCardEnhancementOptions {
 	readonly openedTopicStorage?: OpenedTopicStorage;
 	readonly openedTopicStorageScope?: string;
+	readonly createIntersectionObserver?: (
+		callback: IntersectionObserverCallback,
+		options: IntersectionObserverInit,
+	) => Pick<IntersectionObserver, 'observe' | 'unobserve' | 'disconnect'>;
 	readonly isTopicHidden?: (topicId: number) => boolean;
 	readonly hideTopic?: (
 		input: ReaderUnwantedTopicInput,
 	) => void | Promise<void>;
+	readonly recordAutomaticTopic?: (
+		input: ReaderUnwantedTopicInput,
+	) => boolean | void;
 	readonly automaticFilter?: (
 		input: ReaderUnwantedTopicFilterInput,
 	) => ReaderUnwantedTopicFilterMatch | null;
@@ -135,6 +151,9 @@ implements EmbeddedHostEnhancementPort {
 	readonly #host: DiscourseHostApiPort;
 	readonly #isTopicHidden: (topicId: number) => boolean;
 	readonly #hideTopic: (input: ReaderUnwantedTopicInput) => void | Promise<void>;
+	readonly #recordAutomaticTopic: (
+		input: ReaderUnwantedTopicInput,
+	) => boolean | void;
 	readonly #automaticFilter: (
 		input: ReaderUnwantedTopicFilterInput,
 	) => ReaderUnwantedTopicFilterMatch | null;
@@ -143,9 +162,22 @@ implements EmbeddedHostEnhancementPort {
 	readonly #openedTopicStorage: OpenedTopicStorage | null;
 	readonly #openedTopicStorageKey: string;
 	readonly #roots = new Set<Element>();
+	readonly #rootModes = new Map<Element, EmbeddedHostProjectionMode>();
 	readonly #openedTopicIds = new Set<number>();
+	readonly #exposureCounts = new Map<number, number>();
+	readonly #countedExposureCards = new WeakSet<Element>();
+	readonly #observedExposureCards = new Set<Element>();
+	readonly #exposureObserver: Pick<
+		IntersectionObserver,
+		'observe' | 'unobserve' | 'disconnect'
+	> | null;
+	readonly #firstTopicCardByList = new WeakMap<
+		Element,
+		Map<string, Element>
+	>();
 	readonly #rootClickHandlers = new Map<Element, EventListener>();
 	readonly #pendingCards = new WeakSet<Element>();
+	readonly #automaticRecordSignatures = new WeakMap<Element, string>();
 	readonly #nativeDndTooltipAttributes = new WeakMap<
 		HTMLElement,
 		ReadonlyMap<string, string | null>
@@ -162,6 +194,7 @@ implements EmbeddedHostEnhancementPort {
 		this.#hideTopic = options.hideTopic ?? (() => {
 			throw new Error('不想看仓库尚未就绪');
 		});
+		this.#recordAutomaticTopic = options.recordAutomaticTopic ?? (() => {});
 		this.#automaticFilter = options.automaticFilter ?? (() => null);
 		this.#notify = options.notify ?? (() => {});
 		this.#onError = options.onError ?? (() => {});
@@ -171,7 +204,17 @@ implements EmbeddedHostEnhancementPort {
 		).toLocaleLowerCase('en-US') || 'anonymous';
 		this.#openedTopicStorageKey =
 			`${OPENED_TOPIC_STORAGE_KEY}:${encodeURIComponent(storageScope)}`;
-		this.#restoreOpenedTopicIds();
+		this.#restoreTopicState();
+		const NativeIntersectionObserver =
+			document.defaultView?.IntersectionObserver;
+		const createObserver = options.createIntersectionObserver ??
+			(NativeIntersectionObserver
+				? ((callback, init) => new NativeIntersectionObserver(callback, init))
+				: null);
+		this.#exposureObserver = createObserver?.(
+			(entries) => this.#onExposureIntersections(entries),
+			{ root: null, threshold: 0 },
+		) ?? null;
 	}
 
 	syncRoot(
@@ -179,6 +222,7 @@ implements EmbeddedHostEnhancementPort {
 		mode: EmbeddedHostProjectionMode = 'embedded',
 	): void {
 		this.#roots.add(root);
+		this.#rootModes.set(root, mode);
 		if (!this.#rootClickHandlers.has(root)) {
 			const handler: EventListener = (event) => this.#onRootClick(event);
 			root.addEventListener('click', handler, true);
@@ -194,6 +238,7 @@ implements EmbeddedHostEnhancementPort {
 		if (!this.#roots.has(root)) return;
 		this.#clearRoot(root);
 		this.#roots.delete(root);
+		this.#rootModes.delete(root);
 	}
 
 	syncActivity(card: Element): boolean {
@@ -224,22 +269,39 @@ implements EmbeddedHostEnhancementPort {
 		cards: readonly Element[],
 		mode: EmbeddedHostProjectionMode = 'embedded',
 	): void {
+		this.#pruneDisconnectedExposureCards();
 		const topicModels = this.#topicModels();
 		const reactions = this.#reactionCounts(topicModels);
-		for (const card of cards) {
+		for (const card of this.#deduplicateCards(cards)) {
 			if (!card.matches(CARD_SELECTOR) || card.closest('.ldp-overlay')) continue;
 			const topic = this.#topicInput(card, topicModels);
 			const projection = this.#topicProjection(card, topic);
-			if (this.#isTopicHidden(projection.topicId)) {
-				card.remove();
+			const manuallyHidden = this.#isTopicHidden(projection.topicId);
+			card.toggleAttribute(MANUAL_FILTER_ATTRIBUTE, manuallyHidden);
+			if (manuallyHidden) {
+				card.removeAttribute(AUTOMATIC_FILTER_ATTRIBUTE);
+				this.#automaticRecordSignatures.delete(card);
+				this.#stopObservingExposure(card);
 				continue;
 			}
 			const automatic = this.#automaticFilter(projection);
 			card.toggleAttribute(AUTOMATIC_FILTER_ATTRIBUTE, Boolean(automatic));
 			if (automatic) {
+				this.#recordAutomaticMatch(card, projection, automatic);
+				this.#stopObservingExposure(card);
 				continue;
 			}
+			this.#automaticRecordSignatures.delete(card);
+			const titleLink = card.querySelector<HTMLElement>(TOPIC_LINK_SELECTOR);
+			if (titleLink) {
+				renderReaderInlineEmoji(
+					titleLink,
+					projection.title,
+					(id) => discourseNativeEmojiUrl(this.#host, id),
+				);
+			}
 			this.#markNewTopic(card, topic);
+			this.#syncExposure(card);
 			this.#groupTitleTools(card, topic);
 			if (mode === 'embedded') {
 				this.#markDateCells(card);
@@ -255,35 +317,54 @@ implements EmbeddedHostEnhancementPort {
 			this.#clearRoot(root);
 		}
 		this.#roots.clear();
+		this.#rootModes.clear();
+		this.#exposureObserver?.disconnect();
+		this.#observedExposureCards.clear();
 	}
 
 	get openedTopicStorageKey(): string {
 		return this.#openedTopicStorageKey;
 	}
 
+	refreshHiddenTopics(): void {
+		for (const root of this.#roots) {
+			this.syncCards(
+				Object.freeze([...root.querySelectorAll(CARD_SELECTOR)]),
+				this.#rootModes.get(root) ?? 'embedded',
+			);
+		}
+	}
+
 	reloadExternalOpenedTopics(): void {
 		this.#openedTopicIds.clear();
-		this.#restoreOpenedTopicIds();
+		this.#exposureCounts.clear();
+		this.#restoreTopicState();
 		const topicModels = this.#topicModels();
 		for (const card of this.#document.querySelectorAll<HTMLElement>(
 			CARD_SELECTOR,
 		)) {
 			this.#markNewTopic(card, this.#topicInput(card, topicModels));
+			this.#syncExposure(card);
 		}
 	}
 
 	markTopicOpened(topicId: number): boolean {
 		if (!Number.isSafeInteger(topicId) || topicId < 1) return false;
-		this.#restoreOpenedTopicIds();
+		this.#restoreTopicState();
+		let stateChanged = false;
 		if (!this.#openedTopicIds.has(topicId)) {
 			this.#openedTopicIds.add(topicId);
-			this.#persistOpenedTopicIds();
+			stateChanged = true;
 		}
+		if (this.#exposureCounts.delete(topicId)) stateChanged = true;
+		if (stateChanged) this.#persistTopicState();
 		let changed = false;
 		for (const card of this.#document.querySelectorAll<HTMLElement>(
 			CARD_SELECTOR,
 		)) {
 			if (Number(this.#cardTopicId(card)) !== topicId) continue;
+			this.#stopObservingExposure(card);
+			card.querySelector(`.${EXPOSURE_COUNT_CLASS}`)?.remove();
 			const marker = card.querySelector<HTMLElement>(NEW_TOPIC_BADGE_SELECTOR);
 			if (marker && !marker.hasAttribute('data-ldp-native-new-topic-marker')) {
 				marker.setAttribute('data-ldp-native-new-topic-marker', 'true');
@@ -298,6 +379,12 @@ implements EmbeddedHostEnhancementPort {
 	}
 
 	#clearRoot(root: Element): void {
+		for (const card of root.querySelectorAll(CARD_SELECTOR)) {
+			this.#stopObservingExposure(card);
+		}
+		for (const list of root.querySelectorAll(TOPIC_LIST_SELECTOR)) {
+			this.#firstTopicCardByList.delete(list);
+		}
 		const handler = this.#rootClickHandlers.get(root);
 		if (handler) root.removeEventListener('click', handler, true);
 		this.#rootClickHandlers.delete(root);
@@ -335,8 +422,17 @@ implements EmbeddedHostEnhancementPort {
 			'[data-ldp-topic-stats]',
 		)) node.removeAttribute('data-ldp-topic-stats');
 		for (const node of root.querySelectorAll(
-			`[${AUTOMATIC_FILTER_ATTRIBUTE}]`,
-		)) node.removeAttribute(AUTOMATIC_FILTER_ATTRIBUTE);
+			`[${AUTOMATIC_FILTER_ATTRIBUTE}],[${MANUAL_FILTER_ATTRIBUTE}]`,
+		)) {
+			node.removeAttribute(AUTOMATIC_FILTER_ATTRIBUTE);
+			node.removeAttribute(MANUAL_FILTER_ATTRIBUTE);
+		}
+		for (const node of root.querySelectorAll(`.${EXPOSURE_COUNT_CLASS}`)) {
+			node.remove();
+		}
+		for (const node of root.querySelectorAll<HTMLElement>(
+			'[data-ldp-inline-emoji-signature]',
+		)) clearReaderInlineEmoji(node);
 	}
 
 	#clearEmbeddedCard(card: Element): void {
@@ -476,13 +572,6 @@ implements EmbeddedHostEnhancementPort {
 			unseen !== false && Boolean(legacyMarker ?? previous)
 		);
 		const topicId = Number(this.#cardTopicId(card));
-		if (
-			!hostNew &&
-			Number.isSafeInteger(topicId) &&
-			this.#openedTopicIds.delete(topicId)
-		) {
-			this.#persistOpenedTopicIds();
-		}
 		const marker = hostNew
 			? card.querySelector<HTMLElement>(NEW_TOPIC_BADGE_SELECTOR)
 			: null;
@@ -496,7 +585,7 @@ implements EmbeddedHostEnhancementPort {
 		);
 	}
 
-	#restoreOpenedTopicIds(): void {
+	#restoreTopicState(): void {
 		if (!this.#openedTopicStorage) return;
 		let raw: string | null;
 		try {
@@ -508,12 +597,32 @@ implements EmbeddedHostEnhancementPort {
 		if (!raw) return;
 		try {
 			const parsed = JSON.parse(raw) as unknown;
-			if (!Array.isArray(parsed)) throw new TypeError('本机已打开 Topic 记录格式无效');
-			for (const value of parsed.slice(-MAX_OPENED_TOPIC_IDS)) {
+			const state = record(parsed);
+			const opened = Array.isArray(parsed)
+				? parsed
+				: state?.opened;
+			if (!Array.isArray(opened)) {
+				throw new TypeError('本机 Topic 曝光记录格式无效');
+			}
+			for (const value of opened) {
 				const topicId = Number(value);
 				if (Number.isSafeInteger(topicId) && topicId > 0) {
 					this.#openedTopicIds.add(topicId);
 				}
+			}
+			const exposures = state?.exposures;
+			if (exposures !== undefined && !Array.isArray(exposures)) {
+				throw new TypeError('本机 Topic 曝光次数格式无效');
+			}
+			for (const entry of Array.isArray(exposures) ? exposures : []) {
+				if (!Array.isArray(entry) || entry.length !== 2) continue;
+				const topicId = Number(entry[0]);
+				const count = Number(entry[1]);
+				if (
+					Number.isSafeInteger(topicId) && topicId > 0 &&
+					Number.isSafeInteger(count) && count > 0 &&
+					!this.#openedTopicIds.has(topicId)
+				) this.#exposureCounts.set(topicId, count);
 			}
 		} catch (cause) {
 			this.#onError(cause);
@@ -525,27 +634,151 @@ implements EmbeddedHostEnhancementPort {
 		}
 	}
 
-	#persistOpenedTopicIds(): void {
+	#persistTopicState(): void {
 		if (!this.#openedTopicStorage) return;
-		while (this.#openedTopicIds.size > MAX_OPENED_TOPIC_IDS) {
-			const oldest = this.#openedTopicIds.values().next().value as
-				| number
-				| undefined;
-			if (oldest === undefined) break;
-			this.#openedTopicIds.delete(oldest);
-		}
 		try {
-			if (!this.#openedTopicIds.size) {
+			if (!this.#openedTopicIds.size && !this.#exposureCounts.size) {
 				this.#openedTopicStorage.removeItem(this.#openedTopicStorageKey);
 				return;
 			}
 			this.#openedTopicStorage.setItem(
 				this.#openedTopicStorageKey,
-				JSON.stringify([...this.#openedTopicIds]),
+				JSON.stringify({
+					version: 2,
+					opened: [...this.#openedTopicIds],
+					exposures: [...this.#exposureCounts],
+				}),
 			);
 		} catch (cause) {
 			this.#onError(cause);
 		}
+	}
+
+	#deduplicateCards(cards: readonly Element[]): readonly Element[] {
+		for (const card of cards) {
+			const container = card.closest(TOPIC_LIST_SELECTOR) ?? card.parentElement;
+			const topicId = this.#cardTopicId(card);
+			if (!container || !topicId || !card.isConnected) continue;
+			let firstCards = this.#firstTopicCardByList.get(container);
+			if (!firstCards) {
+				firstCards = new Map();
+				this.#firstTopicCardByList.set(container, firstCards);
+			}
+			const existing = firstCards.get(topicId);
+			if (!existing || !existing.isConnected || !container.contains(existing)) {
+				firstCards.set(topicId, card);
+				continue;
+			}
+			if (existing === card) continue;
+			const existingComesFirst = Boolean(
+				existing.compareDocumentPosition(card) & 4,
+			);
+			const duplicate = existingComesFirst ? card : existing;
+			this.#stopObservingExposure(duplicate);
+			duplicate.remove();
+			if (!existingComesFirst) firstCards.set(topicId, card);
+		}
+		return Object.freeze(cards.filter((card) => card.isConnected));
+	}
+
+	#syncExposure(card: Element): void {
+		const topicId = Number(this.#cardTopicId(card));
+		if (!Number.isSafeInteger(topicId) || topicId < 1) return;
+		if (this.#openedTopicIds.has(topicId)) {
+			this.#stopObservingExposure(card);
+			card.querySelector(`.${EXPOSURE_COUNT_CLASS}`)?.remove();
+			return;
+		}
+		this.#renderExposureCount(card, this.#exposureCounts.get(topicId) ?? 0);
+		if (
+			this.#exposureObserver &&
+			!this.#countedExposureCards.has(card) &&
+			!this.#observedExposureCards.has(card)
+		) {
+			this.#observedExposureCards.add(card);
+			this.#exposureObserver.observe(card);
+		}
+	}
+
+	#stopObservingExposure(card: Element): void {
+		if (!this.#observedExposureCards.delete(card)) return;
+		this.#exposureObserver?.unobserve(card);
+	}
+
+	#pruneDisconnectedExposureCards(): void {
+		for (const card of this.#observedExposureCards) {
+			if (!card.isConnected) this.#stopObservingExposure(card);
+		}
+	}
+
+	#onExposureIntersections(
+		entries: readonly IntersectionObserverEntry[],
+	): void {
+		for (const entry of entries) {
+			const card = entry.target;
+			if (!card.isConnected) {
+				this.#stopObservingExposure(card);
+				continue;
+			}
+			if (
+				this.#document.visibilityState === 'hidden' ||
+				!entry.isIntersecting ||
+				entry.intersectionRatio <= 0 ||
+				entry.intersectionRect.width <= 0 ||
+				entry.intersectionRect.height <= 0 ||
+				this.#countedExposureCards.has(card)
+			) continue;
+			this.#stopObservingExposure(card);
+			this.#countedExposureCards.add(card);
+			this.#restoreTopicState();
+			const topicId = Number(this.#cardTopicId(card));
+			if (
+				!Number.isSafeInteger(topicId) || topicId < 1 ||
+				this.#openedTopicIds.has(topicId)
+			) {
+				this.#renderExposureCount(card, 0);
+				continue;
+			}
+			const count = Math.min(
+				Number.MAX_SAFE_INTEGER,
+				(this.#exposureCounts.get(topicId) ?? 0) + 1,
+			);
+			this.#exposureCounts.set(topicId, count);
+			this.#persistTopicState();
+			for (const current of this.#document.querySelectorAll(CARD_SELECTOR)) {
+				if (Number(this.#cardTopicId(current)) === topicId) {
+					this.#renderExposureCount(current, count);
+				}
+			}
+		}
+	}
+
+	#renderExposureCount(card: Element, count: number): void {
+		let badge = card.querySelector<HTMLElement>(`.${EXPOSURE_COUNT_CLASS}`);
+		if (!Number.isSafeInteger(count) || count < 1) {
+			badge?.remove();
+			return;
+		}
+		if (!badge) {
+			const link = card.querySelector<HTMLElement>(TOPIC_LINK_SELECTOR);
+			if (!link) return;
+			badge = this.#document.createElement('span');
+			badge.className = EXPOSURE_COUNT_CLASS;
+		}
+		const readerMeta = card.querySelector<HTMLElement>(
+			'.ldp-host-topic-reader-meta',
+		);
+		const bottomLine = card.querySelector<HTMLElement>('.link-bottom-line');
+		if (readerMeta) readerMeta.after(badge);
+		else if (bottomLine) bottomLine.append(badge);
+		else card.querySelector<HTMLElement>(TOPIC_LINK_SELECTOR)?.after(badge);
+		badge.dataset.exposureCount = String(count);
+		badge.textContent = `出现 ${count} 次`;
+		badge.setAttribute(
+			'aria-label',
+			`此 Topic 已在宿主可见视野出现 ${count} 次`,
+		);
+		badge.title = '打开此 Topic 后将永久停止累计出现次数';
 	}
 
 	#groupTitleTools(card: Element, topic: unknown): void {
@@ -619,6 +852,34 @@ implements EmbeddedHostEnhancementPort {
 		void this.#hideCard(card, projection, control);
 	}
 
+	#recordAutomaticMatch(
+		card: Element,
+		input: ReaderUnwantedTopicFilterInput & ReaderUnwantedTopicInput,
+		match: ReaderUnwantedTopicFilterMatch,
+	): void {
+		const record = Object.freeze<ReaderUnwantedTopicInput>({
+			topicId: input.topicId,
+			title: input.title,
+			href: input.href,
+			categoryId: input.categoryId,
+			categoryName: input.categoryName,
+			categorySlug: input.categorySlug,
+			source: 'automatic',
+			matchedRule: match.label,
+			matchedCategory: match.matches.some((reason) =>
+				reason.kind === 'category'),
+		});
+		const signature = JSON.stringify(record);
+		if (this.#automaticRecordSignatures.get(card) === signature) return;
+		try {
+			if (this.#recordAutomaticTopic(record) !== false) {
+				this.#automaticRecordSignatures.set(card, signature);
+			}
+		} catch (cause) {
+			this.#onError(cause);
+		}
+	}
+
 	async #hideCard(
 		card: Element,
 		input: ReaderUnwantedTopicFilterInput & ReaderUnwantedTopicInput,
@@ -645,7 +906,9 @@ implements EmbeddedHostEnhancementPort {
 				matchedRule: '',
 				matchedCategory: false,
 			}));
-			card.remove();
+			card.removeAttribute(AUTOMATIC_FILTER_ATTRIBUTE);
+			card.setAttribute(MANUAL_FILTER_ATTRIBUTE, '');
+			this.#stopObservingExposure(card);
 			this.#notify('已加入不想看');
 		} catch (cause) {
 			this.#onError(cause);

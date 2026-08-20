@@ -2923,6 +2923,12 @@ export class ReaderResourceMonitor {
 		current: ReaderResourceSample,
 		events: readonly RequestObservationEvent[],
 	): void {
+		/*
+		 * 后续 trace/type/issue 渲染会连续改写同一个设置面板。必须在这些写入前
+		 * 读取日志滚动位置，否则最后进入 #renderRequestLog 时读取 scrollTop 会
+		 * 同步结算整块面板布局，长请求账本可形成数百毫秒强制回流。
+		 */
+		const requestLogScrollTop = this.#requestLog.scrollTop;
 		const at = current.at;
 		const recent60 = events.filter(
 			(event) => (event.endedAt || event.queuedAt) >= at - 60_000,
@@ -3026,7 +3032,7 @@ export class ReaderResourceMonitor {
 		this.#renderRequestTrace(traceEvents, at);
 		this.#renderRequestTypes(sent60, at);
 		this.#renderRequestIssues(issues, at);
-		this.#renderRequestLog(events, at);
+		this.#renderRequestLog(events, at, requestLogScrollTop);
 		this.#renderTopicDiagnostics(current, issues);
 		this.#renderMediaDiagnostics(current, issues);
 		const completedDurations = sent60
@@ -3726,8 +3732,8 @@ export class ReaderResourceMonitor {
 	#renderRequestLog(
 		events: readonly RequestObservationEvent[],
 		at: number,
+		scrollTop: number,
 	): void {
-		const scrollTop = this.#requestLog.scrollTop;
 		const latest = events.slice(-60).reverse();
 		this.#requestLog.replaceChildren(...latest.map((event) => {
 			const row = settingsElement(

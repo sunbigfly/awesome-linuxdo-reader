@@ -54,6 +54,7 @@ const expectedKeys = [
 	'performanceRequestConcurrency',
 	'performanceRequestInterval',
 	'performanceRequestRateTarget',
+	'performanceSuspendHostTurnstileInBackground',
 	'layoutProfile',
 	'fullpageLayoutProfile',
 	'readerWindowWidth',
@@ -143,6 +144,7 @@ assert(
 	defaults.performanceRequestConcurrency === 3 &&
 	defaults.performanceRequestInterval === 100 &&
 	defaults.performanceRequestRateTarget === 85 &&
+	!defaults.performanceSuspendHostTurnstileInBackground &&
 	defaults.inlineReplyTreeMaxDepth === 3 &&
 	defaults.jumpHighlightCount === 1 &&
 	!defaults.confirmNativeComposerClose &&
@@ -240,6 +242,7 @@ const normalized = normalizeReaderPreferences({
 	performanceRequestConcurrency: 9,
 	performanceRequestInterval: 101.6,
 	performanceRequestRateTarget: 2,
+	performanceSuspendHostTurnstileInBackground: 'yes',
 	layoutProfile: { left: 50, main: 90, gap: 30, timeline: 20, right: 20 },
 	readerWindowWidth: 1,
 	readerWindowHeight: 1,
@@ -327,7 +330,12 @@ assert(
 	normalized.performanceNestedPrefetch === 3 &&
 	normalized.performanceRequestConcurrency === 4 &&
 	normalized.performanceRequestInterval === 102 &&
-	normalized.performanceRequestRateTarget === 50,
+	normalized.performanceRequestRateTarget === 50 &&
+	!normalized.performanceSuspendHostTurnstileInBackground &&
+	normalizeReaderPreferences({
+		...defaults,
+		performanceSuspendHostTurnstileInBackground: true,
+	}, environment).performanceSuspendHostTurnstileInBackground,
 	'性能参数限幅或 custom 识别偏移',
 );
 assert(
@@ -502,14 +510,32 @@ const codec = createReaderPreferencesConfigCodec({
 const exported = codec.export({
 	...defaults,
 	performancePageSize: 999,
+	performanceSuspendHostTurnstileInBackground: true,
 	unknown: true,
 });
 assert(
-	exported.settingsCount === 85 &&
-	Object.keys(exported.settings).length === 85 &&
+	exported.settingsCount === 86 &&
+	Object.keys(exported.settings).length === 86 &&
 	exported.settings.performancePageSize === 64 &&
+	exported.settings.performanceSuspendHostTurnstileInBackground === true &&
 	!Object.hasOwn(exported.settings, 'unknown'),
-	'真实配置 codec 必须复用同一 85 字段 schema',
+	'真实配置 codec 必须复用同一 86 字段 schema',
+);
+const beforeHostTurnstileSettings = Object.fromEntries(
+	Object.entries(defaults).filter(([key]) =>
+		key !== 'performanceSuspendHostTurnstileInBackground'),
+);
+const importedBeforeHostTurnstile = codec.import({
+	format: READER_CONFIG_EXPORT_FORMAT,
+	schemaVersion: READER_CONFIG_EXPORT_VERSION,
+	scriptVersion: 'before-host-turnstile-background',
+	exportedAt: '2026-08-18T00:00:00.000Z',
+	settingsCount: Object.keys(beforeHostTurnstileSettings).length,
+	settings: beforeHostTurnstileSettings,
+});
+assert(
+	!importedBeforeHostTurnstile.performanceSuspendHostTurnstileInBackground,
+	'新增宿主后台资源开关必须兼容导入上一版完整配置',
 );
 const beforeUnwantedFilterSettings = Object.fromEntries(
 	Object.entries(defaults).filter(([key]) => !key.startsWith(

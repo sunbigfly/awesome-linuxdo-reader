@@ -2,6 +2,8 @@ import { discourseAvatarTemplateUrl } from '../discourse/native-host-api.js';
 import { replaceImageWithFallbackOnError } from '../components/reader-image-fallback.js';
 import { LifecycleScope } from '../kernel/lifecycle.js';
 import { renderReaderIcon } from '../components/reader-icon.js';
+import { renderReaderInlineEmoji } from
+	'../components/reader-inline-emoji.js';
 import {
 	readerHistoryArchiveDisplayTitle,
 	readerHistoryArchiveMarkerLabel,
@@ -69,6 +71,7 @@ export interface ReaderBookmarkPanelViewOptions {
 	readonly relativeTime: (timestamp: string) => string;
 	readonly renderIcon?: (name: string, document: Document) => Node;
 	readonly reactionIconSource?: (reaction: string) => string | null;
+	readonly emojiSource?: (id: string) => string;
 	readonly avatarSource?: (template: string, size: number) => string | null;
 	readonly archiveMarker?: (
 		topicId: number,
@@ -140,6 +143,7 @@ export class ReaderBookmarkPanelView {
 	readonly #relativeTime: (timestamp: string) => string;
 	readonly #renderIcon: ((name: string, document: Document) => Node) | null;
 	readonly #reactionIconSource: (reaction: string) => string | null;
+	readonly #emojiSource: (id: string) => string;
 	readonly #avatarSource: (template: string, size: number) => string | null;
 	readonly #archiveMarker: NonNullable<
 		ReaderBookmarkPanelViewOptions['archiveMarker']
@@ -172,6 +176,7 @@ export class ReaderBookmarkPanelView {
 		this.#relativeTime = options.relativeTime;
 		this.#renderIcon = options.renderIcon ?? null;
 		this.#reactionIconSource = options.reactionIconSource ?? (() => null);
+		this.#emojiSource = options.emojiSource ?? (() => '');
 		this.#avatarSource = options.avatarSource ??
 			((template, size) =>
 				discourseAvatarTemplateUrl(template, size, this.#baseUrl));
@@ -916,7 +921,7 @@ export class ReaderBookmarkPanelView {
 		copy.className = 'ldp-notification-copy';
 		const title = this.#document.createElement('strong');
 		title.className = 'ldp-notification-title';
-		title.textContent = displayTitle;
+		renderReaderInlineEmoji(title, displayTitle, this.#emojiSource);
 		const meta = this.#document.createElement('span');
 		meta.className = 'ldp-notification-meta';
 		const user = record.authorUsername
@@ -960,7 +965,11 @@ export class ReaderBookmarkPanelView {
 		if (record.excerpt && activityTab(record.tab)) {
 			const excerpt = this.#document.createElement('span');
 			excerpt.className = 'ldp-notification-excerpt';
-			excerpt.textContent = record.excerpt;
+			renderReaderInlineEmoji(
+				excerpt,
+				record.excerpt,
+				this.#emojiSource,
+			);
 			copy.append(excerpt);
 		}
 		link.append(copy);

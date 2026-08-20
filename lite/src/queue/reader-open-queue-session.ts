@@ -5,6 +5,8 @@ import {
 	type DiscourseTopicId,
 } from '../discourse/identifiers.js';
 import { createReaderIcon } from '../components/reader-icon.js';
+import { renderReaderInlineEmoji } from
+	'../components/reader-inline-emoji.js';
 import {
 	deepActiveElement,
 	eventElement,
@@ -119,6 +121,7 @@ export interface ReaderOpenQueueSessionOptions {
 		topicId?: DiscourseTopicId,
 	) => ReaderOpenQueueHistoryEntry | null;
 	readonly avatarSource?: (template: string, size: number) => string;
+	readonly emojiSource?: (id: string) => string;
 	readonly historyAnchor: (
 		topicId: DiscourseTopicId,
 	) => ReaderHistoryAnchorState | null;
@@ -577,6 +580,13 @@ export class ReaderOpenQueueSession {
 		this.#downloadManager = options.topicDownloads
 			? new ReaderTopicDownloadManager({
 					...options.topicDownloads,
+					...((options.emojiSource ??
+						options.topicDownloads.emojiSource) === undefined
+						? {}
+						: {
+							emojiSource: options.emojiSource ??
+								options.topicDownloads.emojiSource!,
+						}),
 					document,
 					mount: options.topicDownloads.mount ?? this.#panel,
 					geometryStorage: options.storage,
@@ -1001,7 +1011,11 @@ export class ReaderOpenQueueSession {
 		this.#avatar(progress, entry, history, reusableAvatar);
 		const copy = node(document, 'span', 'ldp-reader-queue-row-copy');
 		const title = node(document, 'strong');
-		title.textContent = entry.title;
+		renderReaderInlineEmoji(
+			title,
+			entry.title,
+			this.#options.emojiSource ?? (() => ''),
+		);
 		const status = node(document, 'small');
 		status.textContent = queueStatus(
 			entry,

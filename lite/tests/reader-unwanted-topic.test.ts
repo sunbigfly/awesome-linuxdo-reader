@@ -244,11 +244,11 @@ assert(
 		?.textContent.includes('OP：@robot；字段：title:/退款|退费/i') &&
 	document.querySelector<HTMLElement>(
 		'[data-unwanted-topic-id="2"] .ldp-unwanted-topic-row-actions',
-	)?.children[0]?.matches('[data-unwanted-topic-restore="2"]') === true &&
+	)?.children[0]?.matches('[data-unwanted-topic-manage-rules="2"]') === true &&
 	document.querySelector<HTMLElement>(
 		'[data-unwanted-topic-id="2"] .ldp-unwanted-topic-row-actions',
 	)?.children[1]?.matches('[data-unwanted-topic-edit="2"]') === true,
-	'Topic 默认必须保持单行标题，展示全部自动命中标注，并把恢复放在编辑左侧',
+	'Topic 默认必须保持单行标题并展示全部命中原因；自动历史不得伪装成恢复显示',
 );
 const categoryFilter = document.querySelector<HTMLSelectElement>(
 	'.ldp-unwanted-topic-category-filter',
@@ -372,29 +372,36 @@ document.querySelector<HTMLButtonElement>(
 assert(
 	[...document.querySelectorAll<HTMLInputElement>(
 		'[data-unwanted-topic-select]',
-	)].filter((input) => input.checked).length === 2 &&
+	)].every((input) => input.disabled && !input.checked) &&
 	document.querySelector<HTMLElement>('.ldp-unwanted-topic-bulk-status')
-		?.textContent === '当前结果 2 个 · 已选 2 个',
-	'批量管理必须按当前搜索结果全选，而不是越过搜索处理全部历史：' +
+		?.textContent === '当前结果 2 个 · 可恢复 0 个 · 已选 0 个' &&
+	document.querySelector<HTMLButtonElement>(
+		'.ldp-unwanted-topic-bulk-restore',
+	)?.disabled === true,
+	'自动历史不得进入批量恢复，否则会出现内容仍隐藏但历史已删除的断链：' +
 		document.querySelector<HTMLElement>('.ldp-unwanted-topic-bulk-status')
 			?.textContent,
 );
-document.querySelector<HTMLButtonElement>(
-	'.ldp-unwanted-topic-bulk-restore',
-)?.click();
 assert(
-	!reloaded.has(3) && !reloaded.has(4) && reloaded.has(1) && reloaded.has(2),
-	'批量恢复必须一次移除当前搜索结果中的所选 Topic，并保留未命中项',
+	reloaded.has(3) && reloaded.has(4) && reloaded.has(1) && reloaded.has(2),
+	'无可恢复手动条目时，批量操作必须保留全部自动历史',
 );
 document.querySelector<HTMLButtonElement>(
 	'.ldp-unwanted-topic-bulk-done',
 )?.click();
 search.value = '';
 search.dispatchEvent(new parsedWindow.Event('input', { bubbles: true }));
-document.querySelector<HTMLButtonElement>(
-	'[data-unwanted-topic-restore="2"]',
-)?.click();
-assert(!reloaded.has(2) && reloaded.has(1), '行内恢复必须从不想看集合移除对应 Topic');
+const manageAutomaticRules = document.querySelector<HTMLButtonElement>(
+	'[data-unwanted-topic-manage-rules="2"]',
+)!;
+manageAutomaticRules.click();
+assert(
+	reloaded.has(2) &&
+	document.querySelector<HTMLElement>(
+		'.ldp-unwanted-topic-filter-settings',
+	)?.hidden === false,
+	'自动历史的主操作必须进入规则管理，不得删除历史却继续隐藏内容',
+);
 
 view.open();
 document.querySelector<HTMLButtonElement>(
@@ -639,12 +646,14 @@ assert(
 const scope = new LifecycleScope();
 const preferenceChanges = new Signal<ReaderUnwantedTopicFilterPreferences>();
 let current = enabled;
+const hiddenPostAuthors: string[] = [];
 const postFilter = new ReaderPostAuthorFilterFeature<unknown>({
 	preferences: {
 		read: () => current,
-		subscribe: (listener, childScope) =>
-			preferenceChanges.subscribe(listener, childScope),
+			subscribe: (listener, childScope) =>
+				preferenceChanges.subscribe(listener, childScope),
 	},
+	recordHiddenPostAuthor: (username) => hiddenPostAuthors.push(username),
 	parentScope: scope,
 });
 const postRoot = document.createElement('article');
@@ -659,8 +668,14 @@ const postView = {
 postFilter.afterRender({}, postView);
 assert(
 	postRoot.classList.contains('ldp-post-unwanted-author') &&
-	postRoot.dataset.unwantedPostAuthor === 'noise',
-	'命中楼层用户时必须只在 canonical PostView 上投影隐藏状态',
+	postRoot.dataset.unwantedPostAuthor === 'noise' &&
+	hiddenPostAuthors.join('|') === 'noise',
+	'命中楼层用户时必须在 canonical PostView 投影隐藏，并向 Topic 历史 owner 发送一次命中',
+);
+postFilter.afterRender({}, postView);
+assert(
+	hiddenPostAuthors.length === 1,
+	'同一 Topic 内同一用户的多次楼层投影不得重复写历史',
 );
 current = Object.freeze({ ...enabled, enabled: false });
 preferenceChanges.emit(current);
@@ -669,4 +684,94 @@ assert(
 	!postRoot.hasAttribute('data-unwanted-post-author'),
 	'关闭自动过滤后，已挂载楼层必须立即恢复',
 );
+current = enabled;
+preferenceChanges.emit(current);
+assert(
+	postRoot.classList.contains('ldp-post-unwanted-author') &&
+	Number(hiddenPostAuthors.length) === 2,
+	'重新启用规则后楼层必须重新隐藏，但持久 owner 可将同一命中去重',
+);
 scope.destroy();
+
+const automaticOwner = new ReaderUnwantedTopicRepository({
+	storage,
+	key: 'reader-unwanted-topic-consistency',
+	now: () => ++now,
+});
+const externalOwner = new ReaderUnwantedTopicRepository({
+	storage,
+	key: 'reader-unwanted-topic-consistency',
+	now: () => ++now,
+});
+automaticOwner.load();
+externalOwner.load();
+automaticOwner.remember({
+	topicId: 50,
+	title: '自动历史一致性',
+	href: '/t/automatic-history/50',
+	source: 'automatic',
+	matchedRule: '字段：title:/推广/i',
+});
+const automaticRevision = automaticOwner.snapshot.revision;
+const automaticHiddenAt = automaticOwner.snapshot.records[0]?.hiddenAt;
+automaticOwner.remember({
+	topicId: 50,
+	title: '自动历史一致性',
+	href: '/t/automatic-history/50',
+	source: 'automatic',
+	matchedRule: '字段：title:/推广/i',
+});
+assert(
+	automaticOwner.snapshot.revision === automaticRevision,
+	'宿主重扫的相同自动命中必须去重，不得反复写存储或刷新时间',
+);
+externalOwner.reloadExternal();
+assert(
+	externalOwner.has(50) && !externalOwner.isManuallyHidden(50),
+	'自动命中必须通过共享存储到达其他标签页，但不得升级为永久隐藏',
+);
+automaticOwner.remember({
+	topicId: 50,
+	source: 'automatic',
+	matchedRule: '楼层用户：@noise',
+});
+externalOwner.reloadExternal();
+assert(
+	externalOwner.snapshot.records[0]?.title === '自动历史一致性' &&
+	externalOwner.snapshot.records[0]?.matchedRule ===
+		'字段：title:/推广/i；楼层用户：@noise',
+	'主题规则与楼层用户规则必须合并命中原因，且不得用缺省标题覆盖已有历史',
+);
+externalOwner.remember({
+	topicId: 50,
+	title: '自动历史一致性',
+	href: '/t/automatic-history/50',
+	source: 'manual',
+	matchedRule: '',
+	matchedCategory: false,
+});
+const manualRecord = externalOwner.snapshot.records[0];
+assert(
+	externalOwner.isManuallyHidden(50) &&
+	manualRecord?.source === 'manual' &&
+	Number(manualRecord.hiddenAt) > Number(automaticHiddenAt),
+	'用户后续明确手动隐藏时必须升级为持久状态，并记录这次手动时间',
+);
+automaticOwner.reloadExternal();
+const manualRevision = automaticOwner.snapshot.revision;
+automaticOwner.remember({
+	topicId: 50,
+	source: 'automatic',
+	matchedRule: '标签：推广',
+});
+assert(
+	automaticOwner.snapshot.revision === manualRevision &&
+	automaticOwner.isManuallyHidden(50),
+	'并发的自动命中不得覆盖已同步的手动永久隐藏',
+);
+externalOwner.remove(50);
+automaticOwner.reloadExternal();
+assert(
+	!automaticOwner.has(50),
+	'其他标签页取消手动隐藏后，当前标签页必须可通过信息流重载到移除结果',
+);

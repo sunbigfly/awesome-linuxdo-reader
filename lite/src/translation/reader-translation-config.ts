@@ -1,4 +1,6 @@
 import { Signal } from '../kernel/signal.js';
+import type { Cleanup } from '../kernel/lifecycle.js';
+import type { ReaderCacheObserver } from '../cache/cache-observer.js';
 
 export const READER_TRANSLATION_CONFIG_STORAGE_KEY =
 	'awesome-linuxdo-reader:translation:v1';
@@ -964,6 +966,7 @@ export class ReaderTranslationConfigRepository {
 	});
 	#loadPromise: Promise<ReaderTranslationConfigSnapshot> | null = null;
 	#writeTail: Promise<void> = Promise.resolve();
+	#cacheObserver: ReaderCacheObserver | undefined;
 
 	constructor(options: ReaderTranslationConfigRepositoryOptions) {
 		this.#storage = options.storage;
@@ -982,6 +985,13 @@ export class ReaderTranslationConfigRepository {
 
 	get metadataStorageKey(): string {
 		return this.#metadataCacheStorageKey;
+	}
+
+	attachCacheObserver(observer: ReaderCacheObserver): Cleanup {
+		this.#cacheObserver = observer;
+		return () => {
+			if (this.#cacheObserver === observer) this.#cacheObserver = undefined;
+		};
 	}
 
 	async load(): Promise<ReaderTranslationConfigSnapshot> {
@@ -1043,9 +1053,26 @@ export class ReaderTranslationConfigRepository {
 	}
 
 	async loadModelMetadataCache(): Promise<ReaderAiModelMetadataCache | null> {
-		return normalizeReaderAiModelMetadataCache(
-			await this.#storage.getValue(this.#metadataCacheStorageKey),
-		);
+		const startedAt = Date.now();
+		try {
+			const cache = normalizeReaderAiModelMetadataCache(
+				await this.#storage.getValue(this.#metadataCacheStorageKey),
+			);
+			this.#cacheObserver?.record({
+				operation: 'read', outcome: cache ? 'hit' : 'miss',
+				source: 'userscript-value', key: this.#metadataCacheStorageKey,
+				durationMs: Date.now() - startedAt,
+				records: cache ? cache.catalog.length : 0,
+			});
+			return cache;
+		} catch (error) {
+			this.#cacheObserver?.record({
+				operation: 'read', outcome: 'failure',
+				source: 'userscript-value', key: this.#metadataCacheStorageKey,
+				durationMs: Date.now() - startedAt, error,
+			});
+			throw error;
+		}
 	}
 
 	async reloadExternalMetadata(): Promise<ReaderAiModelMetadataCache | null> {
@@ -1060,13 +1087,54 @@ export class ReaderTranslationConfigRepository {
 	): Promise<ReaderAiModelMetadataCache> {
 		const normalized = normalizeReaderAiModelMetadataCache(value);
 		if (!normalized) throw new Error('公共模型元数据缓存为空或无效');
+		const startedAt = Date.now();
 		const write = this.#writeTail.then(() => this.#storage.setValue(
 			this.#metadataCacheStorageKey,
 			{ version: 1, ...normalized },
 		));
 		this.#writeTail = write.catch(() => {});
-		await write;
+		try {
+			await write;
+		} catch (error) {
+			this.#cacheObserver?.record({
+				operation: 'write', outcome: 'failure',
+				source: 'userscript-value', key: this.#metadataCacheStorageKey,
+				durationMs: Date.now() - startedAt, error,
+			});
+			throw error;
+		}
+		this.#cacheObserver?.record({
+			operation: 'write', outcome: 'success',
+			source: 'userscript-value', key: this.#metadataCacheStorageKey,
+			durationMs: Date.now() - startedAt,
+			records: normalized.catalog.length,
+		});
 		this.metadataChanges.emit(normalized);
 		return normalized;
+	}
+
+	async clearModelMetadataCache(): Promise<void> {
+		const startedAt = Date.now();
+		const write = this.#writeTail.then(() => this.#storage.setValue(
+			this.#metadataCacheStorageKey,
+			null,
+		));
+		this.#writeTail = write.catch(() => {});
+		try {
+			await write;
+		} catch (error) {
+			this.#cacheObserver?.record({
+				operation: 'clear', outcome: 'failure',
+				source: 'userscript-value', key: this.#metadataCacheStorageKey,
+				durationMs: Date.now() - startedAt, error,
+			});
+			throw error;
+		}
+		this.#cacheObserver?.record({
+			operation: 'clear', outcome: 'success',
+			source: 'userscript-value', key: this.#metadataCacheStorageKey,
+			durationMs: Date.now() - startedAt,
+		});
+		this.metadataChanges.emit(null);
 	}
 }
