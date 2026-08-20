@@ -400,6 +400,10 @@ export class ReaderTopicScrollAdapter {
 	#lastUserScrollAt = 0;
 	#lastUserScrollDirection: ReaderTopicScrollDirection = 0;
 	#userScrollSessionActive = false;
+	#pendingExternalKeyboardScroll: Readonly<{
+		at: number;
+		direction: ReaderTopicScrollDirection;
+	}> | null = null;
 	#lastTouchClientY: number | null = null;
 	#stationaryAnchor: StationaryViewportAnchor | null = null;
 	#stationaryLockPending = false;
@@ -411,6 +415,8 @@ export class ReaderTopicScrollAdapter {
 	#programmaticScrollTransactionDepth = 0;
 	#stationaryMutationObserver: ReaderTopicMutationObserverPort | null = null;
 	#stationaryResizeObserver: ResizeObserver | null = null;
+	#stationaryRestoreFrame = 0;
+	#stationaryContentObservationDirty = false;
 
 	constructor(options: ReaderTopicScrollAdapterOptions) {
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
@@ -435,14 +441,14 @@ export class ReaderTopicScrollAdapter {
 					: null;
 			});
 		this.#stationaryMutationObserver = createMutationObserver(() => {
-				this.#observeStationaryContentSize();
-				this.#restoreStationaryViewport();
-			});
+			this.#stationaryContentObservationDirty = true;
+			this.#scheduleStationaryViewportRestore();
+		});
 		const NativeResizeObserver =
 			this.#scrollRoot.ownerDocument.defaultView?.ResizeObserver;
 		if (NativeResizeObserver) {
 			this.#stationaryResizeObserver = new NativeResizeObserver(() => {
-				this.#restoreStationaryViewport();
+				this.#scheduleStationaryViewportRestore();
 			});
 		}
 		this.scope.add(() => this.#releaseStationaryViewport());
@@ -597,6 +603,32 @@ export class ReaderTopicScrollAdapter {
 			) return;
 			this.#markUserScrollIntent(this.#keyboardDirection(keyboard));
 		});
+		this.scope.listen(this.#scrollRoot.ownerDocument, 'keydown', (event) => {
+			const keyboard = event as KeyboardEvent;
+			const path = typeof keyboard.composedPath === 'function'
+				? keyboard.composedPath()
+				: [];
+			if (
+				path.includes(this.#scrollRoot) ||
+				this.#scrollRoot.contains(keyboard.target as Node | null) ||
+				keyboard.defaultPrevented ||
+				keyboard.altKey ||
+				keyboard.ctrlKey ||
+				keyboard.metaKey ||
+				!SCROLLING_KEYS.has(keyboard.key) ||
+				isEditableScrollTarget(keyboard.target)
+			) return;
+			/*
+			 * 全屏/嵌入态点击普通楼层不会改变 document.activeElement；PageDown 的
+			 * keydown 因而可能停在宿主 body，但 Chromium 仍把默认滚动交给 Reader。
+			 * 这里只保留一个短命候选，必须等主滚动区真的产生同向 scroll 才取得
+			 * 用户令牌；宿主页自身滚动不会触发 Reader 补流。
+			 */
+			this.#pendingExternalKeyboardScroll = Object.freeze({
+				at: finiteNonNegative(this.#now()),
+				direction: this.#keyboardDirection(keyboard),
+			});
+		});
 		this.scope.add(() => {
 			if (!this.#scrollFrame) return;
 			this.#cancelFrame(this.#scrollFrame);
@@ -701,6 +733,7 @@ export class ReaderTopicScrollAdapter {
 		});
 		this.#syncViewportAnchorClass();
 		return Object.freeze({
+			postNumber: visible.postNumber,
 			restore: () => this.#restoreViewportMutation(token),
 			cancel: () => this.#cancelViewportMutation(token, false),
 		});
@@ -936,7 +969,19 @@ export class ReaderTopicScrollAdapter {
 			finiteNonNegative(this.#readTopInset()),
 		);
 		const visibleBottom = rootRect.bottom;
-		const candidates = elements.flatMap((owner) => {
+		type Candidate = Readonly<{
+			postNumber: number;
+			marker: HTMLElement;
+			markerRect: DOMRect;
+			owner: HTMLElement;
+		}>;
+		let visibleHeader: Readonly<{
+			candidate: Candidate;
+			primary: number;
+			secondary: number;
+		}> | null = null;
+		const candidates: Candidate[] = [];
+		for (const owner of elements) {
 			const postNumber = Number(owner.dataset.postNumber);
 			if (
 				!Number.isSafeInteger(postNumber) ||
@@ -944,35 +989,56 @@ export class ReaderTopicScrollAdapter {
 				!owner.isConnected ||
 				!this.#scrollRoot.contains(owner) ||
 				owner.hidden
-			) return [];
+			) continue;
 			const marker = owner.querySelector<HTMLElement>(':scope > .ldp-post-head') ?? owner;
 			const markerRect = marker.getBoundingClientRect();
-			const ownerRect = owner.getBoundingClientRect();
-			return [{ postNumber, marker, markerRect, owner, ownerRect }];
-		});
-		const visibleHeaders = candidates
-			.filter(({ markerRect }) =>
-				markerRect.bottom > visibleTop + 1 &&
-				markerRect.top < visibleBottom - 1
-			)
-			.sort((left, right) =>
-				Math.max(0, left.markerRect.top - visibleTop) -
-					Math.max(0, right.markerRect.top - visibleTop) ||
-				left.markerRect.top - right.markerRect.top
-			);
-		const fallback = candidates
-			.filter(({ ownerRect }) =>
-				ownerRect.bottom > visibleTop + 1 &&
-				ownerRect.top < visibleBottom - 1
-			)
-			.sort((left, right) =>
-				Math.abs(left.ownerRect.top - visibleTop) -
-					Math.abs(right.ownerRect.top - visibleTop) ||
-				left.ownerRect.height - right.ownerRect.height
-			);
-		const visibleHeader = visibleHeaders[0];
-		const best = visibleHeader ?? fallback[0];
-		if (!best) return null;
+			const candidate = Object.freeze({ postNumber, marker, markerRect, owner });
+			candidates.push(candidate);
+			if (
+				markerRect.bottom <= visibleTop + 1 ||
+				markerRect.top >= visibleBottom - 1
+			) continue;
+			const primary = Math.max(0, markerRect.top - visibleTop);
+			const secondary = markerRect.top;
+			if (
+				!visibleHeader ||
+				primary < visibleHeader.primary ||
+				(primary === visibleHeader.primary &&
+					secondary < visibleHeader.secondary)
+			) {
+				visibleHeader = Object.freeze({ candidate, primary, secondary });
+			}
+		}
+		let best = visibleHeader?.candidate ?? null;
+		let ownerRect = best
+			? best.marker === best.owner
+				? best.markerRect
+				: best.owner.getBoundingClientRect()
+			: null;
+		if (!best) {
+			let fallbackPrimary = Number.POSITIVE_INFINITY;
+			let fallbackSecondary = Number.POSITIVE_INFINITY;
+			for (const candidate of candidates) {
+				const candidateOwnerRect = candidate.marker === candidate.owner
+					? candidate.markerRect
+					: candidate.owner.getBoundingClientRect();
+				if (
+					candidateOwnerRect.bottom <= visibleTop + 1 ||
+					candidateOwnerRect.top >= visibleBottom - 1
+				) continue;
+				const primary = Math.abs(candidateOwnerRect.top - visibleTop);
+				const secondary = candidateOwnerRect.height;
+				if (
+					primary > fallbackPrimary ||
+					(primary === fallbackPrimary && secondary >= fallbackSecondary)
+				) continue;
+				best = candidate;
+				ownerRect = candidateOwnerRect;
+				fallbackPrimary = primary;
+				fallbackSecondary = secondary;
+			}
+		}
+		if (!best || !ownerRect) return null;
 		/*
 		 * projection skeleton 会把 post-head display:none。此时可见性筛选实际选中的是
 		 * owner，锚点也必须保存 owner；不能把隐藏 header 的零尺寸坐标带到水合后再
@@ -981,13 +1047,13 @@ export class ReaderTopicScrollAdapter {
 		const marker = visibleHeader ? best.marker : best.owner;
 		const markerOffset = visibleHeader
 			? best.markerRect.top - visibleTop
-			: best.ownerRect.top - visibleTop;
+			: ownerRect.top - visibleTop;
 		return Object.freeze({
 			postNumber: best.postNumber,
 			marker,
 			markerOffset,
 			owner: best.owner,
-			ownerOffset: best.ownerRect.top - visibleTop,
+			ownerOffset: ownerRect.top - visibleTop,
 		});
 	}
 
@@ -1120,6 +1186,11 @@ export class ReaderTopicScrollAdapter {
 
 	#releaseStationaryViewport(): void {
 		this.#stationaryAnchor = null;
+		this.#stationaryContentObservationDirty = false;
+		if (this.#stationaryRestoreFrame) {
+			this.#cancelFrame(this.#stationaryRestoreFrame);
+			this.#stationaryRestoreFrame = 0;
+		}
 		this.#stationaryMutationObserver?.disconnect();
 		this.#stationaryResizeObserver?.disconnect();
 		this.#syncViewportAnchorClass();
@@ -1191,6 +1262,14 @@ export class ReaderTopicScrollAdapter {
 			this.#stationaryAnchor !== null ||
 				this.#viewportMutationAnchor !== null,
 		);
+		/*
+		 * stationary anchor 只是原生锚定后的观察/兜底；只有显式高度事务会
+		 * 自己结算 scrollTop，必须用独立类关闭 Chromium，避免双重补偿。
+		 */
+		this.#scrollRoot.classList.toggle(
+			'ldp-stream-viewport-mutation',
+			this.#viewportMutationAnchor !== null,
+		);
 	}
 
 	#observeStationaryContentSize(): void {
@@ -1201,6 +1280,36 @@ export class ReaderTopicScrollAdapter {
 			'.ldp-virtual-stream',
 		);
 		if (stream) observer.observe(stream);
+	}
+
+	#scheduleStationaryViewportRestore(): void {
+		if (
+			this.#stationaryRestoreFrame ||
+			this.scope.destroyed ||
+			!this.#stationaryAnchor ||
+			this.#userScrollSessionActive
+		) return;
+		let completed = false;
+		const handle = this.#requestFrame(() => {
+			completed = true;
+			this.#stationaryRestoreFrame = 0;
+			if (
+				this.scope.destroyed ||
+				!this.#stationaryAnchor ||
+				this.#userScrollSessionActive
+			) return;
+			/*
+			 * 一次正文水合会连续触发 childList、class/style 和 ResizeObserver。
+			 * 把所有信号合并到写入后的同一绘制边界，只读一次最终几何；用户在
+			 * 此前恢复滚动时 release 会取消本帧，旧补偿不得追赶新输入。
+			 */
+			if (this.#stationaryContentObservationDirty) {
+				this.#stationaryContentObservationDirty = false;
+				this.#observeStationaryContentSize();
+			}
+			this.#restoreStationaryViewport();
+		});
+		if (!completed) this.#stationaryRestoreFrame = handle;
 	}
 
 	#restoreStationaryViewport(): void {
@@ -1271,19 +1380,37 @@ export class ReaderTopicScrollAdapter {
 		if (
 			internalOffset !== null &&
 			Math.abs(actualOffset - internalOffset) < 0.5
-		) return false;
-		if (this.#userScrollSessionActive) return true;
+		) {
+			this.#pendingExternalKeyboardScroll = null;
+			return false;
+		}
+		const direction = this.#directionOf(actualOffset - this.#scrollOffset);
+		if (this.#userScrollSessionActive) {
+			this.#pendingExternalKeyboardScroll = null;
+			return true;
+		}
+		const pendingKeyboard = this.#pendingExternalKeyboardScroll;
+		if (
+			pendingKeyboard &&
+			finiteNonNegative(this.#now()) - pendingKeyboard.at <=
+				USER_SCROLL_SESSION_GAP_MS &&
+			direction !== 0 &&
+			(pendingKeyboard.direction === 0 ||
+				pendingKeyboard.direction === direction)
+		) {
+			this.#pendingExternalKeyboardScroll = null;
+			this.#markUserScrollIntent(direction, false);
+			return true;
+		}
+		if (pendingKeyboard) this.#pendingExternalKeyboardScroll = null;
 		if (!this.#stationaryAnchor && !this.#stationaryLockPending) return false;
 		/*
 		 * 浮窗的原生 scrollbar 拖动只派发 scroll，不一定先派发
-		 * wheel/touch/key。停稳锁已关闭 Chromium overflow anchoring，因此此时
-		 * 任何未匹配内部写入的 scroll 都是新的外部滚动所有权；必须先解锁，
-		 * 否则 ResizeObserver 会把 thumb 拖动反向写回成来回跳动。
+		 * wheel/touch/key。停稳锁可能仍排着显式 fallback 补偿，因此此时任何
+		 * 未匹配内部写入的 scroll 都是新的外部滚动所有权；必须先解锁，否则
+		 * ResizeObserver 会把 thumb 拖动反向写回成来回跳动。
 		 */
-		this.#markUserScrollIntent(
-			this.#directionOf(actualOffset - this.#scrollOffset),
-			false,
-		);
+		this.#markUserScrollIntent(direction, false);
 		return true;
 	}
 

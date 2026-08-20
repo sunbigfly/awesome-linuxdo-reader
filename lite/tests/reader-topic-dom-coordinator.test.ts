@@ -270,7 +270,12 @@ const coordinator = new ReaderTopicDomCoordinator({
 			viewportMutationBegins += 1;
 			viewportMutationActive = true;
 			let settled = false;
+			const mutationPostNumber = discoursePostNumber(
+				physicalVisiblePostNumber ??
+					Number(elements[0]?.dataset.postNumber ?? 1),
+			);
 			return Object.freeze({
+				postNumber: mutationPostNumber,
 				restore() {
 					if (settled) return;
 					settled = true;
@@ -427,8 +432,8 @@ physicalVisiblePostNumber = 5;
 coordinator.notifyScroll();
 coordinator.flushNow();
 assert(
-	visibleRoots.at(-1) === 5,
-	'虚拟窗口与已提交物理视野暂时不一致时，楼层时间轴必须服从 scroll owner 的物理锚点',
+	visibleRoots.at(-1) !== 5,
+	'普通滚动帧的时间轴不得为物理楼层同步扫描 DOM；精确锚点只属于高度事务与显式历史捕获',
 );
 physicalVisiblePostNumber = 1;
 const viewportMutationBeginsBeforeGapIndexCommit = viewportMutationBegins;
@@ -591,6 +596,9 @@ simulateScrollDuringDirectReply = true;
 stagedPhysicalMaxScrollOffset = 300;
 const commitsBeforeOffscreenReveal = virtualWindowCommitNotifications;
 const transactionsBeforeOffscreenReveal = programmaticScrollTransactions;
+const viewportMutationBeginsBeforeOffscreenReveal = viewportMutationBegins;
+const viewportMutationRestoresBeforeOffscreenReveal = viewportMutationRestores;
+const viewportMutationActiveBeforeOffscreenReveal = viewportMutationActive;
 const revealedOffscreen = coordinator.revealPost(5, {
 	source: 'timeline',
 	alignment: 'center',
@@ -600,8 +608,22 @@ stagedPhysicalMaxScrollOffset = null;
 const offscreenRoot = coordinator.domOwner.view(5)!.slots.root;
 assert(
 	virtualWindowCommitNotifications === commitsBeforeOffscreenReveal + 2 &&
-		programmaticScrollTransactions === transactionsBeforeOffscreenReveal + 1,
-	'窗口外 reveal 必须在同一同步事务内完成物理范围提交、程序化换位和目标窗口提交',
+		programmaticScrollTransactions === transactionsBeforeOffscreenReveal + 1 &&
+		viewportMutationBegins === viewportMutationBeginsBeforeOffscreenReveal + 1 &&
+		viewportMutationRestores === viewportMutationRestoresBeforeOffscreenReveal +
+			1 + Number(viewportMutationActiveBeforeOffscreenReveal) &&
+		!viewportMutationActive,
+	'窗口外 reveal 必须在同一同步事务内完成物理范围提交、程序化换位、目标窗口提交与视口补偿：' +
+		JSON.stringify({
+			commits: virtualWindowCommitNotifications - commitsBeforeOffscreenReveal,
+			transactions: programmaticScrollTransactions - transactionsBeforeOffscreenReveal,
+			viewportMutationBegins:
+				viewportMutationBegins - viewportMutationBeginsBeforeOffscreenReveal,
+			viewportMutationRestores:
+				viewportMutationRestores - viewportMutationRestoresBeforeOffscreenReveal,
+			viewportMutationActiveBeforeOffscreenReveal,
+			viewportMutationActive,
+		}),
 );
 assert(
 	featureEvents.includes('before:5') && featureEvents.includes('after:5'),
@@ -727,7 +749,11 @@ assert(
 	coordinator.restoreViewportAnchor(capturedViewport) &&
 	scrollOffset === 638 &&
 		visibleRoots.at(-1) === 5,
-	'历史恢复必须复用根布局偏移并在同一帧提交虚拟窗口',
+	'历史恢复必须复用根布局偏移并在同一帧提交虚拟窗口：' + JSON.stringify({
+		capturedViewport,
+		scrollOffset,
+		visibleRoot: visibleRoots.at(-1),
+	}),
 );
 assert(
 	coordinator.domOwner.view(5)?.slots.root === offscreenRoot &&
@@ -1125,7 +1151,7 @@ assert(
 	'销毁必须释放虚拟流、根观察器和尚未提交的视口高度事务',
 );
 
-/* 快速滚动只创建稳定高度骨架，完整 PostView 投影必须移出滚动帧并分批水合。 */
+/* 可见楼层提交前完成投影；只有视口外预备楼层延迟分批水合。 */
 const { document: hydrationParsedDocument } = parseHTML(
 	'<!doctype html><html><body><main class="hydration-topic-host"></main></body></html>',
 );
@@ -1160,10 +1186,15 @@ const hydrationPosts = new Map<number, TestPost>([
 let hydrationNow = 1_000;
 let hydrationLastUserScrollAt = 0;
 let hydrationScrollOffset = 0;
+let hydrationScrollDirection: -1 | 0 | 1 = 0;
+let hydrationOverscanAfterScreens = 0;
+let hydrationMaxMountedPostCount = 1;
 const hydrationScrollListener = {
 	value: null as (() => void) | null,
 };
 let hydrationTaskSequence = 0;
+let hydrationViewportMutationBegins = 0;
+let hydrationViewportMutationRestores = 0;
 const hydrationIdleTasks = new Map<number, Readonly<{
 	readonly callback: () => void;
 	readonly dueAt: number;
@@ -1217,10 +1248,24 @@ const hydrationCoordinator = new ReaderTopicDomCoordinator({
 			scrollOffset: hydrationScrollOffset,
 			viewportSize: 300,
 			overscanBeforeScreens: 0,
-			overscanAfterScreens: 0,
-			maxMountedPostCount: 1,
+			overscanAfterScreens: hydrationOverscanAfterScreens,
+			maxMountedPostCount: hydrationMaxMountedPostCount,
 		}),
 		lastUserScrollAt: () => hydrationLastUserScrollAt,
+		lastUserScrollDirection: () => hydrationScrollDirection,
+		beginViewportMutation(elements) {
+			const postNumber = discoursePostNumber(
+				Number(elements[0]?.dataset.postNumber ?? 1),
+			);
+			hydrationViewportMutationBegins += 1;
+			return Object.freeze({
+				postNumber,
+				restore() {
+					hydrationViewportMutationRestores += 1;
+				},
+				cancel() {},
+			});
+		},
 		applyScrollCompensation() {},
 		listenScroll(listener) {
 			hydrationScrollListener.value = listener;
@@ -1303,18 +1348,29 @@ assert(
 );
 hydrationLastUserScrollAt = hydrationNow;
 hydrationScrollOffset = 300;
+hydrationScrollDirection = 1;
+hydrationOverscanAfterScreens = 1;
+hydrationMaxMountedPostCount = 3;
 hydrationScrollListener.value?.();
 hydrationCoordinator.flushNow();
-const pendingChild = hydrationCoordinator.domOwner.view(2)?.slots.root;
+const visibleChild = hydrationCoordinator.domOwner.view(2)?.slots.root;
+const pendingGrandchild = hydrationCoordinator.domOwner.view(3)?.slots.root;
 const hiddenAncestor = hydrationCoordinator.domOwner.view(1)?.slots.root;
 if (!hiddenAncestor) throw new Error('祖先骨架未挂载');
+const hydrationProjectionTaskDueAt = [...projectionTasks.values()][0]?.dueAt;
 assert(
-	pendingChild?.classList.contains('ldp-post-projection-pending') === true &&
-		!hydrationRenderCounts.has(2) &&
-		pendingChild.hasAttribute('aria-busy') &&
-		!hydrationNodeEvents.includes('attach:2') &&
-		projectionTasks.size === 1,
-	'快速滚动进入新窗口时只能创建稳定高度骨架，不能同步投影正文、动作、媒体和已读观察',
+	visibleChild?.classList.contains('ldp-post-projection-pending') === false &&
+		hydrationRenderCounts.get(2) === 1 &&
+		visibleChild.querySelector('.ldp-content')?.textContent === 'child' &&
+		!visibleChild.hasAttribute('aria-busy') &&
+		hydrationNodeEvents.includes('attach:2') &&
+		pendingGrandchild?.classList.contains('ldp-post-projection-pending') === true &&
+		!hydrationRenderCounts.has(3) &&
+		pendingGrandchild.hasAttribute('aria-busy') &&
+		!hydrationNodeEvents.includes('attach:3') &&
+		projectionTasks.size === 1 &&
+		hydrationProjectionTaskDueAt === hydrationNow + 16,
+	'快速滚动时可见楼层必须在 DOM 提交前完整投影，滚动前方预备楼层必须进入逐帧急行水合',
 );
 const nextProjectionTask = [...projectionTasks.entries()]
 	.sort((left, right) => left[1].dueAt - right[1].dueAt)[0];
@@ -1324,13 +1380,16 @@ hydrationNow = nextProjectionTask[1].dueAt;
 nextProjectionTask[1].callback();
 hydrationCoordinator.flushNow();
 assert(
-	pendingChild.classList.contains('ldp-post-projection-pending') === false &&
-		hydrationRenderCounts.get(2) === 1 &&
-		pendingChild.querySelector('.ldp-content')?.textContent === 'child' &&
-		!pendingChild.hasAttribute('aria-busy') &&
-		hydrationNodeEvents.includes('attach:2') &&
+	pendingGrandchild.classList.contains('ldp-post-projection-pending') === false &&
+		hydrationRenderCounts.get(3) === 1 &&
+		pendingGrandchild.querySelector('.ldp-content')?.textContent ===
+			'grandchild' &&
+		!pendingGrandchild.hasAttribute('aria-busy') &&
+		hydrationNodeEvents.includes('attach:3') &&
+		hydrationViewportMutationBegins === 1 &&
+		hydrationViewportMutationRestores === 1 &&
 		Number(projectionTasks.size) === 0,
-	'停滚达到 idle 门槛后必须单批物化正文并恢复节点 feature',
+	'滚动前方预备正文必须逐帧单批物化、经物理高度事务提交并恢复节点 feature，不能依赖估算坐标跳过补偿',
 );
 assert(
 	hiddenAncestor.classList.contains('ldp-virtual-ancestor-shell'),

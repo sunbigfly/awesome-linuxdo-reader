@@ -156,6 +156,7 @@ export interface ReaderTopicViewportAnchor {
  * 提交合并到下一次虚拟帧，并保证销毁或异常路径能够释放事务。
  */
 export interface ReaderTopicViewportMutation {
+	readonly postNumber: PostNumber;
 	restore(): void;
 	cancel(): void;
 }
@@ -316,7 +317,9 @@ export class ReaderTopicDomCoordinator<
 	}> | null = null;
 	#directReplyPrefetchHandle: unknown = null;
 	#projectionHydrationHandle: unknown = null;
+	#projectionHydrationHandleUrgent = false;
 	#projectionHydrationPostNumbers: readonly PostNumber[] = Object.freeze([]);
+	#projectionHydrationUrgentPostNumbers: ReadonlySet<PostNumber> = new Set();
 	#retainedViewLimit = 0;
 	#lastVisibleRootChangeKey = '';
 	#lastPostStreamRevision: number;
@@ -444,8 +447,8 @@ export class ReaderTopicDomCoordinator<
 			this.streamView,
 			this.domOwner,
 			{
-				prepareRoots: (_postNumbers, input, window) =>
-					this.#prepareRootViews(input, window),
+				prepareRoots: (postNumbers, input, window) =>
+					this.#prepareRootViews(postNumbers, input, window),
 				roots: () => this.replyTreePresentation.roots(),
 				resolveGapPlaceholder: (window, input) => {
 					if (
@@ -475,10 +478,12 @@ export class ReaderTopicDomCoordinator<
 			applyScrollCompensation: (delta) =>
 				options.scroll.applyScrollCompensation(delta),
 			/*
-			 * 根高测量只更新虚拟坐标。活跃滚动由 Chromium 独占；停稳后的物理
-			 * 视野由 scroll adapter 的唯一视野锁持有，frame 不得再写第二份补偿。
+			 * 根高测量会改写 overflow-anchor:none 的虚拟 spacer，Chromium 不会
+			 * 替它补偿。没有显式 DOM 高度事务时使用 frame 自带的单帧补偿；已有
+			 * 事务则由物理楼层锚点结算，二者不能同时写 scrollTop。
 			 */
-			shouldApplyScrollCompensation: () => false,
+			shouldApplyScrollCompensation: () =>
+				this.#pendingViewportMutation === null,
 			shouldDeferMeasurements: () => false,
 			resolveRootBlockSize: (target, observedBlockSize) => {
 				const postNumber = Number(target.getAttribute('data-post-number'));
@@ -515,16 +520,19 @@ export class ReaderTopicDomCoordinator<
 				this.#releaseParkedViews(commit.tree.parked);
 				if (projectionChanged) this.#scheduleBranchPaint();
 				/*
-				 * 楼层正文映射提交会重算巨大 gap；虚拟窗口仍可能保留提交前的
-				 * 首项。时间轴必须优先读取 scroll owner 已确认的物理锚点，不能
-				 * 在视野没有移动时把楼层号跳到另一段。
+				 * 楼层正文映射提交会重算巨大 gap；高度事务已在写入前捕获真实
+				 * 楼层，时间轴直接复用它。普通滚动帧只读虚拟树的可见集合，不能
+				 * 为时间轴在每次 DOM 换窗后同步扫描几何并强制 Layout。
 				 */
-				const visiblePostNumber =
-					this.#scroll.readVisibleViewportAnchor?.(
-						this.#visiblePostElements(),
-					)?.postNumber ??
-					this.#treeViewport.visiblePostNumbers[0] ??
-					commit.window.visiblePostNumbers[0];
+				const mutationPostNumber =
+					this.#pendingViewportMutation?.postNumber;
+				const mutationPostRoot = mutationPostNumber === undefined
+					? undefined
+					: this.domOwner.view(mutationPostNumber)?.slots.root;
+				const visiblePostNumber = mutationPostRoot?.isConnected
+					? mutationPostNumber
+					: this.#treeViewport.visiblePostNumbers[0] ??
+						commit.window.visiblePostNumbers[0];
 				const visibleRootPostNumber = visiblePostNumber === undefined
 					? undefined
 					: this.replyTreePresentation.rootOf(visiblePostNumber) ??
@@ -1373,9 +1381,31 @@ export class ReaderTopicDomCoordinator<
 	}
 
 	#prepareRootViews(
+		rootPostNumbers: readonly PostNumber[],
 		input: VirtualWindowInput,
 		window: VirtualStreamDomCommit['window'],
 	) {
+		/*
+		 * 虚拟换窗会在同一 commit 中改写前后 spacer，并挂载/停放一批真实
+		 * 楼层。Chromium 的原生 scroll anchoring 要到后续布局帧才结算，期间
+		 * 会短暂绘制一次未补偿坐标；先取得物理楼层事务，让 DOM 换批与位置
+		 * 补偿在本帧原子提交。窗口未变时继续保留原生锚定，避免每个 scroll
+		 * 帧都创建空事务。
+		 */
+		const connectedRootPostNumbers = [...this.streamView.slots.rootList.children]
+			.flatMap((element) => {
+				if (!element.classList.contains('ldp-post')) return [];
+				const postNumber = Number(element.getAttribute('data-post-number'));
+				return Number.isSafeInteger(postNumber) && postNumber > 0
+					? [postNumber as PostNumber]
+					: [];
+			});
+		const rootWindowChanged =
+			connectedRootPostNumbers.length !== rootPostNumbers.length ||
+			connectedRootPostNumbers.some(
+				(postNumber, index) => postNumber !== rootPostNumbers[index],
+			);
+		if (rootWindowChanged) this.#beginConnectedViewportMutation();
 		this.#updateRetainedViewLimit(input.maxMountedPostCount);
 		let plan = this.#treeViewport.plan(window, input);
 		/*
@@ -1431,9 +1461,14 @@ export class ReaderTopicDomCoordinator<
 			const post = this.#session.postByNumber(postNumber);
 			if (!post) continue;
 			try {
-				const renderImmediately =
-					eagerProjectionBudget > 0 &&
-					plan.contentPostNumbers.has(postNumber);
+				/*
+				 * 可见楼层必须在虚拟 DOM 提交前拥有最终正文。若先提交骨架、再等
+				 * idle 水合，骨架会在真实视野里短暂闪现，并在替换时改变高度。
+				 * 视口外 content 仍受 idle budget 约束，避免把整批投影塞回滚动帧。
+				 */
+				const renderImmediately = visiblePostNumbers.has(postNumber) ||
+					(eagerProjectionBudget > 0 &&
+						plan.contentPostNumbers.has(postNumber));
 				const created = renderImmediately
 					? this.postProjector.create(
 						post,
@@ -1445,15 +1480,39 @@ export class ReaderTopicDomCoordinator<
 						this.scope,
 						postNumber,
 					);
-				if (renderImmediately) eagerProjectionBudget -= 1;
-				else this.#markProjectionPending(
-					created,
-					plan.ownSizes.get(postNumber),
-				);
+				if (renderImmediately) {
+					if (eagerProjectionBudget > 0) eagerProjectionBudget -= 1;
+				} else {
+					this.#markProjectionPending(
+						created,
+						plan.ownSizes.get(postNumber),
+					);
+				}
 				this.domOwner.register(created, false);
 			} catch (error) {
 				this.#onError(error);
 			}
+		}
+		/*
+		 * retained pending view 也可能在本帧重新进入视口。它已参与上一帧
+		 * 物理布局，提升前先取得唯一高度事务，避免 fallback 路径把当前楼层
+		 * 在用户输入之后反向拉动。
+		 */
+		const hasConnectedVisiblePendingProjection = [...visiblePostNumbers].some(
+			(postNumber) => {
+				const root = this.domOwner.view(postNumber)?.slots.root;
+				return root?.isConnected === true && root.classList.contains(
+					'ldp-post-projection-pending',
+				);
+			},
+		);
+		if (hasConnectedVisiblePendingProjection) {
+			this.#beginConnectedViewportMutation();
+		}
+		for (const postNumber of visiblePostNumbers) {
+			const root = this.domOwner.view(postNumber)?.slots.root;
+			if (!root?.classList.contains('ldp-post-projection-pending')) continue;
+			this.#materializeProjection(postNumber, false);
 		}
 		this.#nextContentPostNumbers = new Set(
 			[...plan.contentPostNumbers].filter((postNumber) => {
@@ -1463,11 +1522,42 @@ export class ReaderTopicDomCoordinator<
 				);
 			}),
 		);
+		/*
+		 * 正在向上滚动时，视口上方 overscan 是即将进入视野的正文；若仍等
+		 * idle，它会以估算骨架进入视野，再因真实高度较小把下方楼层向上拉。
+		 * 前进方向的 content 以单楼层/逐帧急行通道预水合，其余 content 仍等
+		 * idle。上方高度变化继续由 #materializeProjection 的唯一事务补偿。
+		 */
+		const scrollDirection = this.#scroll.lastUserScrollDirection?.() ?? 0;
+		const orderedContentPostNumbers = [...plan.contentPostNumbers];
+		const visibleContentIndices = orderedContentPostNumbers.flatMap(
+			(postNumber, index) => visiblePostNumbers.has(postNumber) ? [index] : [],
+		);
+		const firstVisibleContentIndex = visibleContentIndices.length
+			? Math.min(...visibleContentIndices)
+			: -1;
+		const lastVisibleContentIndex = visibleContentIndices.length
+			? Math.max(...visibleContentIndices)
+			: -1;
+		const directionalProjectionHydrationPostNumbers =
+			orderedContentPostNumbers.filter((_postNumber, index) =>
+				scrollDirection === -1
+					? firstVisibleContentIndex >= 0 && index < firstVisibleContentIndex
+					: scrollDirection === 1
+						? lastVisibleContentIndex >= 0 && index > lastVisibleContentIndex
+						: false
+			);
+		if (scrollDirection === -1) {
+			directionalProjectionHydrationPostNumbers.reverse();
+		}
+		const projectionHydrationPostNumbers = [
+			...visiblePostNumbers,
+			...directionalProjectionHydrationPostNumbers,
+			...plan.contentPostNumbers,
+		];
 		this.#setProjectionHydrationCandidates(
-			[
-				...visiblePostNumbers,
-				...plan.contentPostNumbers,
-			],
+			projectionHydrationPostNumbers,
+			directionalProjectionHydrationPostNumbers,
 		);
 		return plan;
 	}
@@ -1486,6 +1576,7 @@ export class ReaderTopicDomCoordinator<
 
 	#setProjectionHydrationCandidates(
 		postNumbers: readonly PostNumber[],
+		urgentPostNumbers: readonly PostNumber[] = [],
 	): void {
 		const unique = new Set<PostNumber>();
 		for (const postNumber of postNumbers) {
@@ -1499,6 +1590,10 @@ export class ReaderTopicDomCoordinator<
 			unique.add(postNumber);
 		}
 		this.#projectionHydrationPostNumbers = Object.freeze([...unique]);
+		const urgent = new Set(
+			urgentPostNumbers.filter((postNumber) => unique.has(postNumber)),
+		);
+		this.#projectionHydrationUrgentPostNumbers = urgent;
 		if (!this.#projectionHydrationPostNumbers.length) {
 			if (this.#projectionHydrationHandle !== null) {
 				this.#projectionHydrationScheduler.cancel(
@@ -1506,7 +1601,19 @@ export class ReaderTopicDomCoordinator<
 				);
 			}
 			this.#projectionHydrationHandle = null;
+			this.#projectionHydrationHandleUrgent = false;
 			return;
+		}
+		const needsUrgentHandle = urgent.size > 0;
+		if (
+			this.#projectionHydrationHandle !== null &&
+			this.#projectionHydrationHandleUrgent !== needsUrgentHandle
+		) {
+			this.#projectionHydrationScheduler.cancel(
+				this.#projectionHydrationHandle,
+			);
+			this.#projectionHydrationHandle = null;
+			this.#projectionHydrationHandleUrgent = false;
 		}
 		this.#scheduleProjectionHydration();
 	}
@@ -1517,31 +1624,45 @@ export class ReaderTopicDomCoordinator<
 			this.#projectionHydrationHandle !== null ||
 			!this.#projectionHydrationPostNumbers.length
 		) return;
-		const delay = delayMs ?? Math.max(
-			PROJECTION_HYDRATION_BATCH_DELAY_MS,
-			this.#scrollLifecycle.remainingIdleMs(
-				PROJECTION_HYDRATION_MIN_IDLE_MS,
-			),
-		);
+		const urgent = this.#projectionHydrationUrgentPostNumbers.size > 0;
+		const delay = delayMs ?? (urgent
+			? PROJECTION_HYDRATION_BATCH_DELAY_MS
+			: Math.max(
+				PROJECTION_HYDRATION_BATCH_DELAY_MS,
+				this.#scrollLifecycle.remainingIdleMs(
+					PROJECTION_HYDRATION_MIN_IDLE_MS,
+				),
+			));
+		this.#projectionHydrationHandleUrgent = urgent;
 		this.#projectionHydrationHandle =
 			this.#projectionHydrationScheduler.schedule(() => {
 				this.#projectionHydrationHandle = null;
+				this.#projectionHydrationHandleUrgent = false;
 				if (this.scope.destroyed) return;
-				const remainingIdleMs = this.#scrollLifecycle.remainingIdleMs(
-					PROJECTION_HYDRATION_MIN_IDLE_MS,
-				);
-				if (remainingIdleMs > 0) {
-					this.#scheduleProjectionHydration(remainingIdleMs);
-					return;
+				if (!urgent) {
+					const remainingIdleMs = this.#scrollLifecycle.remainingIdleMs(
+						PROJECTION_HYDRATION_MIN_IDLE_MS,
+					);
+					if (remainingIdleMs > 0) {
+						this.#scheduleProjectionHydration(remainingIdleMs);
+						return;
+					}
 				}
-				this.#hydrateProjectionBatch();
+				this.#hydrateProjectionBatch(urgent);
 			}, Math.max(0, delay));
 	}
 
-	#hydrateProjectionBatch(): void {
+	#hydrateProjectionBatch(urgentOnly = false): void {
 		const remaining: PostNumber[] = [];
 		let hydrated = 0;
 		for (const postNumber of this.#projectionHydrationPostNumbers) {
+			if (
+				urgentOnly &&
+				!this.#projectionHydrationUrgentPostNumbers.has(postNumber)
+			) {
+				remaining.push(postNumber);
+				continue;
+			}
 			if (
 				hydrated < PROJECTION_HYDRATION_BATCH_SIZE &&
 				this.#materializeProjection(postNumber)
@@ -1557,10 +1678,12 @@ export class ReaderTopicDomCoordinator<
 			) remaining.push(postNumber);
 		}
 		this.#projectionHydrationPostNumbers = Object.freeze(remaining);
+		this.#projectionHydrationUrgentPostNumbers = new Set(
+			remaining.filter((postNumber) =>
+				this.#projectionHydrationUrgentPostNumbers.has(postNumber)),
+		);
 		if (remaining.length) {
-			this.#scheduleProjectionHydration(
-				PROJECTION_HYDRATION_BATCH_DELAY_MS,
-			);
+			this.#scheduleProjectionHydration();
 		}
 	}
 
@@ -1577,6 +1700,11 @@ export class ReaderTopicDomCoordinator<
 			!view ||
 			!root?.classList.contains('ldp-post-projection-pending')
 		) return false;
+		/*
+		 * tree virtual offset 含祖先/后代 inset，pending estimate 尚未落成真实
+		 * DOM 前不能可靠判断节点在视口哪一侧。已连接正文统一交给物理锚点；
+		 * 真正在视口下方时 correction 为 0，不会产生 scrollTop 写入。
+		 */
 		const mutation = notify && root.isConnected
 			? this.#beginConnectedViewportMutation()
 			: null;
@@ -1620,7 +1748,9 @@ export class ReaderTopicDomCoordinator<
 			);
 		}
 		this.#projectionHydrationHandle = null;
+		this.#projectionHydrationHandleUrgent = false;
 		this.#projectionHydrationPostNumbers = Object.freeze([]);
+		this.#projectionHydrationUrgentPostNumbers = new Set();
 	}
 
 	#measureOwnPostSize(postNumber: PostNumber): boolean {
@@ -1755,6 +1885,7 @@ export class ReaderTopicDomCoordinator<
 		const pending = [...this.#pendingOwnSizePostNumbers];
 		this.#pendingOwnSizePostNumbers.clear();
 		let changed = false;
+		let mutation: ReaderTopicViewportMutation | null = null;
 		for (const postNumber of pending) {
 			const view = this.domOwner.view(postNumber);
 			const sample = this.#ownSizeSamples.get(postNumber);
@@ -1764,12 +1895,17 @@ export class ReaderTopicDomCoordinator<
 				sample?.root === undefined ||
 				sample.replyTree === undefined
 			) continue;
+			mutation ??= this.#beginConnectedViewportMutation();
 			changed = this.#treeViewport.measureOwnSize(
 				postNumber,
 				Math.max(1, sample.root - sample.replyTree),
 			) || changed;
 		}
-		if (changed) this.frame.notifyScroll();
+		if (changed) {
+			this.frame.notifyScroll();
+		} else if (mutation && this.#pendingViewportMutation === mutation) {
+			this.#cancelPendingViewportMutation();
+		}
 	}
 
 	#syncDirectReplyPrefetchCandidates(): void {

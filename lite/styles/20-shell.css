@@ -801,14 +801,13 @@
   padding: 0;
 }
 
-.ldp-body:is(.ldp-stream-programmatic-scroll,.ldp-quote-positioning) {
-  /* 程序化换位或引用定位接管期间只允许一个物理锚定 owner。 */
+.ldp-body:is(
+  .ldp-stream-programmatic-scroll,
+  .ldp-quote-positioning,
+  .ldp-stream-viewport-mutation
+) {
+  /* 程序化换位、引用定位或显式高度事务期间只允许一个物理锚定 owner。 */
   overflow-anchor: none;
-}
-
-.ldp-body.ldp-stream-viewport-anchor {
-	/* 显式楼层锚点已由唯一 scroll owner 持有，不能再叠加 Chromium 补偿。 */
-	overflow-anchor: none;
 }
 
 .ldp-body > * {

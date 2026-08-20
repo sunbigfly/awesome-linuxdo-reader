@@ -76,8 +76,15 @@ Object.defineProperty(frozenHeader, 'getBoundingClientRect', {
 	value: () => rect(100, 60),
 });
 let secondRect = rect(80, 100);
+let firstRectReads = 0;
+let secondRectReads = 0;
 Object.defineProperties(first, {
-	getBoundingClientRect: { value: () => rect(150, 300) },
+	getBoundingClientRect: {
+		value: () => {
+			firstRectReads += 1;
+			return rect(150, 300);
+		},
+	},
 });
 let firstBodyRectReads = 0;
 Object.defineProperties(firstBody, {
@@ -89,7 +96,12 @@ Object.defineProperties(firstBody, {
 	},
 });
 Object.defineProperties(second, {
-	getBoundingClientRect: { value: () => secondRect },
+	getBoundingClientRect: {
+		value: () => {
+			secondRectReads += 1;
+			return secondRect;
+		},
+	},
 });
 let reactionsRect = rect(250, 50);
 Object.defineProperties(reactions, {
@@ -200,7 +212,8 @@ const adapter = new ReaderTopicScrollAdapter({
 	},
 });
 assert(
-	!scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
+	!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		!scrollRoot.classList.contains('ldp-stream-viewport-mutation'),
 	'普通滚动必须保留 Chromium 原生 overflow anchoring，不能让延迟 scrollTop 成为第二个视口 owner',
 );
 const bootstrapInput = adapter.readWindowInput();
@@ -232,7 +245,9 @@ const physicalAnchor = adapter.readVisibleViewportAnchor([first, second]);
 assert(
 	physicalAnchor?.postNumber === 2 &&
 		physicalAnchor.postOffset === -60 &&
-		physicalAnchor.scrollTop === 200,
+		physicalAnchor.scrollTop === 200 &&
+		firstRectReads === 1 &&
+		secondRectReads === 1,
 	'时间轴与历史锚点必须读取真实 DOM 顶部楼层，不能继续采用虚拟估算窗口的首个根楼层',
 );
 let scrollEvents = 0;
@@ -279,8 +294,9 @@ const viewportMutation = adapter.beginViewportMutation([first, second]);
 assert(
 	viewportMutation !== null &&
 		scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		scrollRoot.classList.contains('ldp-stream-viewport-mutation') &&
 		adapter.readWindowInput().preservePostNumber === 2,
-	'滚动中的高度更新必须暂时关闭原生双重锚定并硬保留真实可见楼层',
+	'滚动中的高度更新必须以独立事务类暂时关闭原生双重锚定并硬保留真实可见楼层',
 );
 scrollRoot.scrollTop = 260;
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
@@ -291,6 +307,7 @@ assert(
 		adapter.readWindowInput().scrollOffset === 280 &&
 		adapter.lastUserScrollAt() === 100 &&
 		!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		!scrollRoot.classList.contains('ldp-stream-viewport-mutation') &&
 		adapter.readWindowInput().preservePostNumber === undefined,
 	'高度事务必须把 20px 内容位移叠加到用户同帧的 20px 上滚，而不是吞掉输入或双重补偿',
 );
@@ -350,22 +367,31 @@ assert(
 flushPendingFrame();
 assert(
 	scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		!scrollRoot.classList.contains('ldp-stream-viewport-mutation') &&
 		adapter.readWindowInput().preservePostNumber === 2 &&
 		Number(stationaryMutationObserves) === 1,
-	'连续两个稳定绘制边界后必须把当前物理楼层交给停稳锁；idle 窗口仍从 scrollend 重新计时',
+	'连续两个稳定绘制边界后必须把当前物理楼层交给保留原生锚定的停稳锁；idle 窗口仍从 scrollend 重新计时',
 );
 assert(
 	adapter.beginViewportMutation([first, second]) === null &&
 		scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
 	'停稳锁持有视野时高度提交不得再创建第二个补偿 owner',
 );
+secondRect = rect(105, 100);
+stationaryMutationCallback.value?.();
 secondRect = rect(110, 100);
 stationaryMutationCallback.value?.();
 assert(
-	Number(scrollRoot.scrollTop) === 318 &&
-		Number(pendingFrames.size) === 0 &&
+	Number(scrollRoot.scrollTop) === 288 &&
+		Number(pendingFrames.size) === 1 &&
 		scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
-	'停稳后预加载 DOM 使锁定楼层移动时，必须在当前绘制周期恢复原像素位置，不能留到下一帧再拉回',
+	'停稳后的连续 DOM/尺寸信号必须只排一个绘制边界，不能逐个强制布局和写回 scrollTop',
+);
+flushPendingFrame();
+assert(
+	Number(scrollRoot.scrollTop) === 318 &&
+		Number(pendingFrames.size) === 0,
+	'合并帧必须按本批最终几何一次恢复锁定楼层，不能消费中间态高度',
 );
 clock += 16;
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
@@ -397,13 +423,13 @@ stationaryMutationCallback.value?.();
 const frameCancelsBeforeUnlock = frameCancels;
 scrollRoot.dispatchEvent(wheelEvent(120));
 assert(
-	Number(scrollRoot.scrollTop) === 378 &&
+	Number(scrollRoot.scrollTop) === 318 &&
 		!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
 		adapter.readWindowInput().preservePostNumber === undefined &&
 		stationaryMutationDisconnects >= 1 &&
-		frameCancels === frameCancelsBeforeUnlock &&
+		frameCancels === frameCancelsBeforeUnlock + 1 &&
 		Number(pendingFrames.size) === 0,
-	'停稳恢复不得遗留延迟帧；下一次真实输入必须同步解除视野锁和硬保留楼层，不能产生起步阻尼',
+	'下一次真实输入必须同步取消尚未提交的停稳补偿并解除硬保留楼层，不能产生起步阻尼',
 );
 const stationaryMutationObservesBeforeHandoff = stationaryMutationObserves;
 const settlingViewportMutation = adapter.beginViewportMutation([first, second]);
@@ -417,7 +443,7 @@ assert(
 secondRect = rect(145, 100);
 settlingViewportMutation.restore();
 assert(
-	Number(scrollRoot.scrollTop) === 383 &&
+	Number(scrollRoot.scrollTop) === 323 &&
 		stationaryMutationObserves === stationaryMutationObservesBeforeHandoff &&
 		adapter.readWindowInput().preservePostNumber === undefined &&
 		!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
@@ -728,11 +754,66 @@ const frameCancelsBeforeDestroy = frameCancels;
 adapter.destroy();
 assert(
 	adapter.scope.destroyed &&
-	frameCancels > frameCancelsBeforeDestroy &&
-	Number(pendingFrames.size) === 0 &&
-	!scrollRoot.classList.contains('ldp-stream-viewport-anchor'),
+		frameCancels > frameCancelsBeforeDestroy &&
+		Number(pendingFrames.size) === 0 &&
+		!scrollRoot.classList.contains('ldp-stream-viewport-anchor') &&
+		!scrollRoot.classList.contains('ldp-stream-viewport-mutation'),
 	'Topic 销毁必须取消尚未提交的滚动帧与停稳请求，不能让旧 Topic 回调污染新会话',
 );
+
+const { document: externalKeyboardDocument } = parseHTML(
+	'<!doctype html><html><body><main id="reader-scroll"></main></body></html>',
+);
+const externalKeyboardRoot =
+	externalKeyboardDocument.querySelector<HTMLElement>('#reader-scroll')!;
+Object.defineProperties(externalKeyboardRoot, {
+	clientHeight: { get: () => 400 },
+	scrollHeight: { get: () => 2_000 },
+});
+const externalKeyboardClock = 200;
+let externalKeyboardIntents = 0;
+let externalKeyboardDirectIntents = 0;
+const externalKeyboardAdapter = new ReaderTopicScrollAdapter({
+	scrollRoot: externalKeyboardRoot,
+	createResizeObserver: () => null,
+	requestFrame: () => 1,
+	cancelFrame() {},
+	now: () => externalKeyboardClock,
+});
+externalKeyboardAdapter.listenUserScrollIntent(() => {
+	externalKeyboardIntents += 1;
+});
+externalKeyboardAdapter.listenDirectUserScrollIntent(() => {
+	externalKeyboardDirectIntents += 1;
+});
+const externalPageDown = new externalKeyboardDocument.defaultView!.Event(
+	'keydown',
+	{ bubbles: true, cancelable: true },
+);
+Object.defineProperties(externalPageDown, {
+	key: { value: 'PageDown' },
+	altKey: { value: false },
+	ctrlKey: { value: false },
+	metaKey: { value: false },
+});
+externalKeyboardDocument.body.dispatchEvent(externalPageDown);
+assert(
+	externalKeyboardAdapter.lastUserScrollAt() === 0 &&
+		externalKeyboardIntents === 0,
+	'宿主 body 收到 PageDown 时只能登记短命候选，Reader 尚未滚动前不得凭空取得联网令牌',
+);
+externalKeyboardRoot.scrollTop = 320;
+externalKeyboardRoot.dispatchEvent(
+	new externalKeyboardDocument.defaultView!.Event('scroll'),
+);
+assert(
+	externalKeyboardAdapter.lastUserScrollAt() === 200 &&
+		externalKeyboardAdapter.lastUserScrollDirection() === 1 &&
+		externalKeyboardIntents === 1 &&
+		externalKeyboardDirectIntents === 0,
+	'宿主 body 的 PageDown 真正推动 Reader 后必须取得一次 scroll-only 用户令牌，让稀疏远跳段能够定向补窗',
+);
+externalKeyboardAdapter.destroy();
 
 const { document: upwardDocument } = parseHTML(
 	'<!doctype html><html><body><main id="root"><article id="inner"></article></main></body></html>',
