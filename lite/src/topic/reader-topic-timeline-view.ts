@@ -38,6 +38,7 @@ export interface ReaderTopicTimelineViewOptions {
 	readonly readCreatedAt: (postNumber: number) => string | null;
 	readonly readLatestReplyAt: () => string | null;
 	readonly formatRelative: (timestamp: string) => string;
+	readonly reachEnd?: (postNumber: number) => Promise<unknown>;
 	readonly frameScheduler?: ReaderTopicTimelineFrameScheduler;
 	readonly animationFrameScheduler?: ReaderTopicTimelineFrameScheduler;
 	readonly scheduleTimer?: (callback: () => void, delayMs: number) => number;
@@ -117,6 +118,7 @@ export class ReaderTopicTimelineView {
 	readonly #readCreatedAt: (postNumber: number) => string | null;
 	readonly #readLatestReplyAt: () => string | null;
 	readonly #formatRelative: (timestamp: string) => string;
+	readonly #reachEnd: (postNumber: number) => Promise<unknown>;
 	readonly #frameScheduler: ReaderTopicTimelineFrameScheduler;
 	readonly #animationFrameScheduler: ReaderTopicTimelineFrameScheduler;
 	readonly #scheduleTimer: (callback: () => void, delayMs: number) => number;
@@ -147,6 +149,7 @@ export class ReaderTopicTimelineView {
 		this.#readCreatedAt = options.readCreatedAt;
 		this.#readLatestReplyAt = options.readLatestReplyAt;
 		this.#formatRelative = options.formatRelative;
+		this.#reachEnd = options.reachEnd ?? (async () => {});
 		this.#trackTopInset = normalizedInset(options.trackTopInset);
 		this.#trackBottomInset = normalizedInset(options.trackBottomInset);
 		this.#notify = options.notify ?? (() => {});
@@ -242,9 +245,7 @@ export class ReaderTopicTimelineView {
 			this.#submitJump(1);
 		});
 		this.#listen(relative, 'click', () => {
-			const target = this.#controller.targetAtEnd();
-			/* 末尾是 canonical 边界命令：直接换位，不能播放跨越整帖的 lens 滚动。 */
-			this.#submitJump(target, false);
+			this.#submitEndJump();
 		});
 		this.#listen(jump, 'click', () => {
 			if (jumpForm.hidden) this.#openJumpForm();
@@ -534,6 +535,38 @@ export class ReaderTopicTimelineView {
 			if (this.scope.destroyed) return;
 			this.#report(error);
 			this.#notify(`楼层 #${postNumber} 加载失败，请重试`);
+		});
+	}
+
+	#submitEndJump(): void {
+		if (
+			this.scope.destroyed ||
+			this.#controller.snapshot.pendingPostNumber !== null
+		) {
+			return;
+		}
+		/* 末端直接原子换位到流尾，不能播放跨越整帖的 lens 滚动。 */
+		this.#finishJumpAnimation(false);
+		void this.#controller.jumpToEnd({
+			alignment: 'end',
+			focus: false,
+			highlight: false,
+		}).then(async (result) => {
+			if (
+				this.scope.destroyed ||
+				result.status === 'superseded'
+			) {
+				return;
+			}
+			if (result.status !== 'revealed') {
+				this.#notify('暂时无法拉到帖子底部，可重试');
+				return;
+			}
+			await this.#reachEnd(result.postNumber);
+		}).catch((error) => {
+			if (this.scope.destroyed) return;
+			this.#report(error);
+			this.#notify('拉到帖子底部失败，请重试');
 		});
 	}
 

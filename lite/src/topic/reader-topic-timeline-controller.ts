@@ -37,6 +37,8 @@ export interface ReaderTopicTimelineControllerOptions {
 	readonly navigation: ReaderTopicTimelineNavigationPort;
 	readonly readTotalPostCount: () => unknown;
 	readonly readNavigablePostNumbers?: () => readonly unknown[] | null;
+	/** 覆盖不完整时按需补齐 canonical 尾段，并返回最后一个正文根。 */
+	readonly resolveEndPostNumber?: () => Promise<unknown>;
 	/**
 	 * 只有完整投影才能把 roots() 当作一条连续可导航序列。分批缓存、远距预取或
 	 * 滚动期冻结投影必须返回 false，让时间轴暂时使用 canonical 楼层坐标。
@@ -110,9 +112,12 @@ export class ReaderTopicTimelineController {
 	readonly #readTotalPostCount: () => unknown;
 	readonly #readNavigablePostNumbers: () => readonly unknown[] | null;
 	readonly #readNavigablePostNumbersComplete: () => boolean;
+	readonly #resolveEndPostNumber: (() => Promise<unknown>) | null;
 	readonly #onError: (error: unknown) => void;
 	#snapshot: ReaderTopicTimelineSnapshot;
 	#jumpEpoch = 0;
+	#resolvedEndPostNumber: DiscoursePostNumber | null = null;
+	#resolvedEndTotalPostCount = 0;
 	#heldVisiblePostNumber: DiscoursePostNumber | null = null;
 	#visiblePostHoldGeneration = 0;
 
@@ -122,6 +127,7 @@ export class ReaderTopicTimelineController {
 		this.#readTotalPostCount = options.readTotalPostCount;
 		this.#readNavigablePostNumbers =
 			options.readNavigablePostNumbers ?? (() => null);
+		this.#resolveEndPostNumber = options.resolveEndPostNumber ?? null;
 		this.#readNavigablePostNumbersComplete =
 			options.readNavigablePostNumbersComplete ?? (() => true);
 		this.#onError = options.onError ?? (() => {});
@@ -213,7 +219,9 @@ export class ReaderTopicTimelineController {
 		const boundaryPostNumber = options.atStart
 			? navigable?.[0] ?? 1
 			: options.atEnd
-				? navigable?.at(-1) ?? this.#snapshot.totalPostCount
+				? navigable?.at(-1) ??
+					this.#resolvedEndForCurrentTotal() ??
+					this.#snapshot.totalPostCount
 				: postNumber;
 		return this.#commitCachedSources(
 			boundaryPostNumber,
@@ -249,10 +257,14 @@ export class ReaderTopicTimelineController {
 
 	targetAtEnd(): DiscoursePostNumber {
 		/*
-		 * navigablePostNumbers 只描述当前已水合的正文根，并不保证已经覆盖完整
-		 * post_stream。末尾按钮必须命中 canonical 总楼层，让 navigation 按目标
-		 * 请求尾部；否则大 Topic 会把“当前缓存尾部”误当成真实末尾。
+		 * 完整投影已经把楼中楼从主信息流根序列中剔除。末尾入口必须落到最后一个
+		 * 正文根，不能把 numerically latest 的嵌套回复当成时间轴终点。覆盖尚未完成
+		 * 时先复用本次尾段解析出的正文根；尚未解析才退回 canonical 尾楼补流。
 		 */
+		const navigable = this.#snapshot.navigablePostNumbers;
+		if (navigable?.length) return navigable.at(-1)!;
+		const resolved = this.#resolvedEndForCurrentTotal();
+		if (resolved !== null) return resolved;
 		return clampedPostNumber(
 			this.#snapshot.totalPostCount,
 			this.#snapshot.totalPostCount,
@@ -333,6 +345,69 @@ export class ReaderTopicTimelineController {
 		}
 		const epoch = ++this.#jumpEpoch;
 		this.#commit(this.#snapshot.currentPostNumber, target);
+		return this.#navigate(target, options, epoch);
+	}
+
+	async jumpToEnd(
+		options: Readonly<{
+			readonly alignment?: ReaderTopicNavigationRequest['alignment'];
+			readonly focus?: boolean;
+			readonly highlight?: boolean;
+		}> = {},
+	): Promise<ReaderTopicNavigationResult> {
+		const knownEnd = this.#snapshot.navigablePostNumbers?.at(-1) ??
+			this.#resolvedEndForCurrentTotal() ?? undefined;
+		if (knownEnd !== undefined || this.#resolveEndPostNumber === null) {
+			return this.jumpTo(knownEnd ?? this.targetAtEnd(), options);
+		}
+		if (this.scope.destroyed) {
+			throw new Error('ReaderTopicTimelineController 已销毁');
+		}
+		this.#clearVisiblePostHold();
+		const fallback = this.targetAtEnd();
+		const epoch = ++this.#jumpEpoch;
+		this.#commit(this.#snapshot.currentPostNumber, fallback);
+		try {
+			const resolved = tryDiscoursePostNumber(
+				await this.#resolveEndPostNumber(),
+			);
+			if (epoch !== this.#jumpEpoch || this.scope.destroyed) {
+				return Object.freeze({
+					postNumber: fallback,
+					source: 'timeline',
+					status: 'superseded',
+					rootPostNumber: null,
+					mounted: false,
+				});
+			}
+			if (resolved === null || resolved > this.#snapshot.totalPostCount) {
+				throw new Error('无法确认 Topic 末尾的正文回复');
+			}
+			this.#resolvedEndPostNumber = resolved;
+			this.#resolvedEndTotalPostCount = this.#snapshot.totalPostCount;
+			this.#commit(this.#snapshot.currentPostNumber, resolved);
+			return await this.#navigate(resolved, options, epoch);
+		} catch (error) {
+			if (epoch === this.#jumpEpoch && !this.scope.destroyed) {
+				this.#commit(this.#snapshot.currentPostNumber, null);
+			}
+			throw error;
+		}
+	}
+
+	destroy(): void {
+		this.scope.destroy();
+	}
+
+	async #navigate(
+		target: DiscoursePostNumber,
+		options: Readonly<{
+			readonly alignment?: ReaderTopicNavigationRequest['alignment'];
+			readonly focus?: boolean;
+			readonly highlight?: boolean;
+		}>,
+		epoch: number,
+	): Promise<ReaderTopicNavigationResult> {
 		try {
 			return await this.#navigation.navigate({
 				postNumber: target,
@@ -350,10 +425,6 @@ export class ReaderTopicTimelineController {
 				this.#commit(this.#snapshot.currentPostNumber, null);
 			}
 		}
-	}
-
-	destroy(): void {
-		this.scope.destroy();
 	}
 
 	#derive(
@@ -437,5 +508,11 @@ export class ReaderTopicTimelineController {
 	#clearVisiblePostHold(): void {
 		this.#heldVisiblePostNumber = null;
 		this.#visiblePostHoldGeneration += 1;
+	}
+
+	#resolvedEndForCurrentTotal(): DiscoursePostNumber | null {
+		return this.#resolvedEndTotalPostCount === this.#snapshot.totalPostCount
+			? this.#resolvedEndPostNumber
+			: null;
 	}
 }

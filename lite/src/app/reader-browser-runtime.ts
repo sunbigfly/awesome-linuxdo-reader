@@ -612,6 +612,9 @@ import {
 	ReaderTopicTimelineController,
 } from '../topic/reader-topic-timeline-controller.js';
 import {
+	resolveReaderTopicTimelineEndPostNumber,
+} from '../topic/reader-topic-timeline-end-resolver.js';
+import {
 	ReaderTopicTimelineView,
 	type ReaderTopicTimelineViewElements,
 	type ReaderTopicTimelineViewOptions,
@@ -874,6 +877,7 @@ export interface ReaderBrowserTimelineViewOptions extends Omit<
 	| 'readCreatedAt'
 	| 'readLatestReplyAt'
 	| 'formatRelative'
+	| 'reachEnd'
 	| 'parentScope'
 	| 'onError'
 	| 'notify'
@@ -4940,6 +4944,19 @@ export class ReaderBrowserRuntime<
 						readTotalPostCount,
 						readNavigablePostNumbers: () =>
 							timelinePresentation.roots(),
+						resolveEndPostNumber: () =>
+							resolveReaderTopicTimelineEndPostNumber({
+								readTotalPostCount,
+								readCachedPosts: () =>
+									value.services.session.cachedPosts(),
+								loadAround: (postNumber) =>
+									value.services.session.loadTarget(postNumber, {
+										scope: 'around',
+										advanceCursor: false,
+									}),
+								loadBefore: (postNumber) =>
+									value.services.session.loadBeforePost(postNumber),
+							}),
 						readNavigablePostNumbersComplete: () =>
 							!timelinePresentation.canonicalFrozen &&
 							timelinePresentation.coverageComplete,
@@ -4986,6 +5003,9 @@ export class ReaderBrowserRuntime<
 								timestamp(currentTopic().last_posted_at),
 							formatRelative:
 								formatRelative ?? nativeRelativeTime,
+							reachEnd: async (postNumber) => {
+								await value.dom.reachStreamEnd(postNumber);
+							},
 							notify:
 								notify ??
 								((message) => this.feedback.show(message)),

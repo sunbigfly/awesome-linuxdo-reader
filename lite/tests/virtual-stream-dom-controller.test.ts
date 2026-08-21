@@ -34,6 +34,18 @@ assert(
 	streamView.slots.empty.hidden,
 	'虚拟流开始水合时必须只呈现加载状态，并向辅助技术同步 busy 状态',
 );
+streamView.revealEndTip();
+streamView.setFlowState({
+	loading: false,
+	done: false,
+	empty: false,
+});
+assert(
+	!streamView.slots.endTip.hidden &&
+	streamView.slots.endTip.classList.contains('show') &&
+	streamView.slots.endTip.textContent === '已经见底了~',
+	'目的性末端跳转必须直接显示稳定流尾标记，不能等待顺序 cursor 扫完整帖',
+);
 streamView.setFlowState({
 	loading: false,
 	done: true,

@@ -134,6 +134,7 @@ const controller = new ReaderTopicTimelineController({
 	initialPostNumber: 1,
 });
 const notifications: string[] = [];
+const reachedEndPostNumbers: number[] = [];
 let relativeLabel = '刚刚';
 const view = new ReaderTopicTimelineView({
 	controller,
@@ -161,6 +162,9 @@ const view = new ReaderTopicTimelineView({
 			: '2026-07-31T00:00:00.000Z',
 	readLatestReplyAt: () => '2026-07-31T00:00:00.000Z',
 	formatRelative: () => relativeLabel,
+	reachEnd: async (postNumber) => {
+		reachedEndPostNumbers.push(postNumber);
+	},
 	notify: (message) => notifications.push(message),
 });
 
@@ -278,6 +282,25 @@ assert(
 
 template.topicTimelineTop.click();
 await Promise.resolve();
+viewNavigablePostNumbers = [1, 5, 10, 19];
+viewNavigablePostNumbersComplete = true;
+controller.refresh();
+template.topicTimelineRelative.click();
+for (let turn = 0; turn < 8 && reachedEndPostNumbers.length === 0; turn += 1) {
+	await Promise.resolve();
+}
+assert(
+	requests[4]?.postNumber === 1 &&
+	requests[5]?.postNumber === 19 &&
+	requests[5]?.alignment === 'end' &&
+	requests[5]?.highlight === false &&
+	reachedEndPostNumbers.join(',') === '19' &&
+	template.topicTimelineRelative.getAttribute('aria-label') ===
+		'拉到帖子底部' &&
+	!template.topicTimelineTrack.classList.contains('ldp-timeline-jumping') &&
+	notifications.length === 0,
+	'日期/顶部与相对时间入口必须分别映射首楼和流尾；canonical 尾楼属于嵌套回复时先就绪最后正文根，再直接结算到物理底部，且不播放跨帖滚动',
+);
 viewNavigablePostNumbers = [1, 5, 10];
 viewNavigablePostNumbersComplete = false;
 controller.refresh();
@@ -290,15 +313,6 @@ assert(
 	template.topicTimelineCursor
 		.querySelector('.ldp-timeline-lens-selected')?.textContent === '#11',
 	'覆盖未完成的 [#1, #5, #10] 只能是缓存样本；镜片与轨道预览必须继续显示 canonical #11，不能把数组中点 #5 冒充中间楼层',
-);
-template.topicTimelineRelative.click();
-await Promise.resolve();
-assert(
-	requests[4]?.postNumber === 1 &&
-	requests[5]?.postNumber === 20 &&
-	!template.topicTimelineTrack.classList.contains('ldp-timeline-jumping') &&
-	notifications.length === 0,
-	'日期/顶部与相对时间入口必须分别映射首楼和 canonical 末楼；部分已加载根不能截断目标，末尾命令也不能播放跨帖滚动',
 );
 viewNavigablePostNumbers = null;
 viewNavigablePostNumbersComplete = true;

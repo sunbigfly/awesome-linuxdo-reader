@@ -14,8 +14,8 @@
     "vendorMinified": true,
     "sharedHelperDeclarations": 10
   },
-  "modules": 300,
-  "projectTotalExecutableBytes": 5104376,
+  "modules": 301,
+  "projectTotalExecutableBytes": 5111710,
   "libraries": [
     {
       "name": "main-lite-core",
@@ -24,9 +24,9 @@
         "work/greasyfork-lite/libraries/mian-lite-core.js"
       ],
       "description": "应用、Shell、主题、流、布局与 userscript 运行核心",
-      "modules": 103,
-      "bytes": 1660451,
-      "sha256": "7c5ab5f15411c2c12b1faca5c117552baa098d7ff9c2f5e1369731e74b0436f2"
+      "modules": 104,
+      "bytes": 1667785,
+      "sha256": "2127268f52209768a559eb5fec7b2f2003ae23ead306d2fb70d7e3edbf1228c3"
     },
     {
       "name": "main-lite-platform",

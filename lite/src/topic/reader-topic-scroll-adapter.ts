@@ -884,9 +884,13 @@ export class ReaderTopicScrollAdapter {
 
 	alignPost(target: HTMLElement, options: ReaderTopicRevealOptions): void {
 		if (!target.isConnected) return;
-		const correction = this.alignmentError(target, options);
-		if (Math.abs(correction) >= 1) {
-			this.writeScrollOffset(this.#scrollOffset + correction);
+		if (options.alignment === 'end') {
+			this.writeScrollOffset(this.readScrollRange());
+		} else {
+			const correction = this.alignmentError(target, options);
+			if (Math.abs(correction) >= 1) {
+				this.writeScrollOffset(this.#scrollOffset + correction);
+			}
 		}
 		if (options.focus) this.#focus(target);
 		if (options.highlight !== false) this.highlight.highlight(target);
@@ -897,6 +901,10 @@ export class ReaderTopicScrollAdapter {
 		options: ReaderTopicRevealOptions,
 	): number {
 		if (!target.isConnected) return Number.POSITIVE_INFINITY;
+		if (options.alignment === 'end') {
+			return this.readScrollRange() -
+				finiteNonNegative(this.#scrollRoot.scrollTop);
+		}
 		const rootRect = this.#scrollRoot.getBoundingClientRect();
 		const targetRect = target.getBoundingClientRect();
 		const topInset = Math.min(

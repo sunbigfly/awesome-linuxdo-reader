@@ -619,6 +619,17 @@ adapter.writeScrollOffset(440);
 secondRect = rect(300, 100);
 adapter.alignPost(second, {
 	source: 'timeline',
+	alignment: 'end',
+	highlight: false,
+});
+assert(
+	Number(scrollRoot.scrollTop) === 1_600 &&
+	programmaticScrolls.at(-1)?.behavior === 'instant',
+	'末尾时间轴跳转必须直接写入 Reader 最大 scrollTop 并保持 instant，不能只贴目标底边后停在上方楼层',
+);
+adapter.writeScrollOffset(440);
+adapter.alignPost(second, {
+	source: 'timeline',
 	alignment: 'center',
 	highlight: true,
 });

@@ -122,7 +122,7 @@ export type ReaderTopicRangeHydrationOptions = Readonly<Pick<
 	'background' | 'priority' | 'beforeNetwork' | 'maxAttempts'
 >>;
 
-export type ReaderTopicRevealAlignment = 'start' | 'center' | 'nearest';
+export type ReaderTopicRevealAlignment = 'start' | 'center' | 'end' | 'nearest';
 
 export interface ReaderTopicRevealOptions {
 	readonly source: string;
@@ -1322,6 +1322,35 @@ export class ReaderTopicDomCoordinator<
 				maxWaitMs,
 			);
 		});
+	}
+
+	/**
+	 * 目的性末端跳转不等待顺序 cursor 扫完整帖：直接显示唯一流尾标记，
+	 * 立即写入物理底部，再复用锚点静稳结算跟随迟到的虚拟窗口和内容高度。
+	 */
+	reachStreamEnd(
+		rawPostNumber: number,
+		settlement: ReaderTopicAnchorSettlementOptions = {},
+	): Promise<ReaderTopicAnchorSettlementResult> {
+		this.#assertActive();
+		const postNumber = discoursePostReference({
+			post_number: rawPostNumber,
+		}).postNumber;
+		const revealOptions: ReaderTopicRevealOptions = Object.freeze({
+			source: 'timeline',
+			alignment: 'end',
+			focus: false,
+			highlight: false,
+		});
+		this.streamView.revealEndTip();
+		this.frame.flushNow();
+		this.revealPost(postNumber, revealOptions);
+		this.frame.flushNow();
+		return this.settleRevealedPost(
+			postNumber,
+			revealOptions,
+			settlement,
+		);
 	}
 
 	#writeVirtualOffset(readOffset: () => number | undefined): boolean {

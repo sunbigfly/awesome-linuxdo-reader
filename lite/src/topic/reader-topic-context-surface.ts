@@ -38,7 +38,11 @@ import type {
 } from '../history/reader-history-model.js';
 import type {
 	ReaderTopicPostFeature,
+	ReaderTopicRevealAlignment,
 } from './reader-topic-dom-coordinator.js';
+import type {
+	ReaderTopicNavigationSource,
+} from './reader-topic-navigation-controller.js';
 import type { TopicSessionCommit } from './topic-session.js';
 import {
 	ReaderPostViewProjector,
@@ -79,8 +83,8 @@ export interface ReaderTopicContextNavigationPort {
 	isCurrent?(revision: number): boolean;
 	navigate(input: Readonly<{
 		readonly postNumber: number;
-		readonly source: string;
-		readonly alignment?: 'start' | 'center' | 'nearest';
+		readonly source: ReaderTopicNavigationSource;
+		readonly alignment?: ReaderTopicRevealAlignment;
 		readonly highlight?: boolean;
 	}>): Promise<Readonly<{
 		readonly status: string;

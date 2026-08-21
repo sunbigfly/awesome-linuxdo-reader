@@ -52,6 +52,7 @@ function gapPlaceholder(document: Document, side: 'before' | 'after'): HTMLEleme
  */
 export class VirtualStreamView {
 	readonly slots: VirtualStreamSlots;
+	#endTipRevealed = false;
 
 	constructor(document: Document) {
 		const root = htmlElement(document, 'div', 'ldp-virtual-stream');
@@ -73,7 +74,7 @@ export class VirtualStreamView {
 		loadingTip.hidden = true;
 		loadingTip.setAttribute('role', 'status');
 		loadingTip.setAttribute('aria-live', 'polite');
-		endTip.textContent = '已经到底了~';
+		endTip.textContent = '已经见底了~';
 		endTip.hidden = true;
 		endTip.setAttribute('role', 'status');
 		endTip.setAttribute('aria-live', 'polite');
@@ -129,9 +130,16 @@ export class VirtualStreamView {
 		this.slots.root.setAttribute('aria-busy', String(state.loading));
 		this.slots.loadingTip.hidden = !state.loading;
 		this.slots.loadingTip.classList.toggle('show', state.loading);
-		this.slots.endTip.hidden = !state.done;
-		this.slots.endTip.classList.toggle('show', state.done);
+		const showEndTip = state.done || this.#endTipRevealed;
+		this.slots.endTip.hidden = !showEndTip;
+		this.slots.endTip.classList.toggle('show', showEndTip);
 		this.slots.empty.hidden = !state.empty;
+	}
+
+	revealEndTip(): void {
+		this.#endTipRevealed = true;
+		this.slots.endTip.hidden = false;
+		this.slots.endTip.classList.add('show');
 	}
 
 	destroy(): void {

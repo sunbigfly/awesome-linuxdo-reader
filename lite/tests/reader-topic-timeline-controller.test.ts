@@ -9,10 +9,54 @@ import type {
 import {
 	ReaderTopicTimelineController,
 } from '../src/topic/reader-topic-timeline-controller.js';
+import {
+	resolveReaderTopicTimelineEndPostNumber,
+} from '../src/topic/reader-topic-timeline-end-resolver.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
 }
+
+const tailLoads: string[] = [];
+const resolvedTailRoot = await resolveReaderTopicTimelineEndPostNumber({
+	readTotalPostCount: () => 51,
+	loadAround: async (postNumber) => {
+		tailLoads.push(`around:${postNumber}`);
+		return Object.freeze([{ post_number: 51, reply_to_post_number: 4 }]);
+	},
+	loadBefore: async (postNumber) => {
+		tailLoads.push(`before:${postNumber}`);
+		return Object.freeze([
+			{ post_number: 49, reply_to_post_number: 4 },
+			{ post_number: 50, reply_to_post_number: null },
+		]);
+	},
+});
+assert(
+	resolvedTailRoot === 50 &&
+	tailLoads.join(',') === 'around:51,before:51',
+	'canonical 尾楼的 reply_to_post_number 非空时，末尾解析必须从 JSON 尾段向前补流并选择最后一个 reply_to_post_number 为空的正文根，不能退回嵌套回复的早期祖先',
+);
+let cachedTailLoaded = false;
+const cachedTailRoot = await resolveReaderTopicTimelineEndPostNumber({
+	readTotalPostCount: () => 51,
+	readCachedPosts: () => Object.freeze([
+		{ post_number: 50, reply_to_post_number: null },
+		{ post_number: 51, reply_to_post_number: 4 },
+	]),
+	loadAround: async () => {
+		cachedTailLoaded = true;
+		return Object.freeze([]);
+	},
+	loadBefore: async () => {
+		cachedTailLoaded = true;
+		return Object.freeze([]);
+	},
+});
+assert(
+	cachedTailRoot === 50 && !cachedTailLoaded,
+	'缓存已包含连续 #51/#50 JSON 时必须同步判定 #51 为嵌套、#50 为正文根，不能再发尾段请求或制造中间 DOM 提交',
+);
 
 let totalPostCount = 100;
 let navigablePostNumbers: readonly number[] | null = [1, 10, 50, 100];
@@ -20,6 +64,8 @@ let navigablePostNumbersComplete = true;
 let totalReadCount = 0;
 let navigableReadCount = 0;
 let navigableCoverageReadCount = 0;
+let resolvedEndPostNumber = 1;
+let endResolveCount = 0;
 const navigationChanges = new Signal<ReaderTopicNavigationResult>();
 const requests: ReaderTopicNavigationRequest[] = [];
 let resolveJump: ((result: ReaderTopicNavigationResult) => void) | null = null;
@@ -44,6 +90,10 @@ const timeline = new ReaderTopicTimelineController({
 	readNavigablePostNumbersComplete: () => {
 		navigableCoverageReadCount += 1;
 		return navigablePostNumbersComplete;
+	},
+	resolveEndPostNumber: async () => {
+		endResolveCount += 1;
+		return resolvedEndPostNumber;
 	},
 	initialPostNumber: 10,
 });
@@ -98,8 +148,8 @@ timeline.syncVisiblePost(100, { atEnd: true });
 assert(
 	timeline.snapshot.currentPostNumber === 90 &&
 		timeline.targetByStep(50, Number.POSITIVE_INFINITY) === 90 &&
-		timeline.targetAtEnd() === 100,
-	'滚动/键盘 End 必须留在已知正文根；显式末尾按钮必须请求 canonical 尾楼，不能把部分缓存的末根冒充 Topic 末尾',
+		timeline.targetAtEnd() === 90,
+	'滚动、键盘 End 与显式末尾按钮必须统一落到最后一个正文根，不能跳向作为楼中楼的 canonical 尾楼',
 );
 
 totalPostCount = 7_698;
@@ -119,9 +169,40 @@ assert(
 		timeline.snapshot.progress === 7_678 / 7_697 &&
 		timeline.targetByStep(7_679, -1) === 7_678 &&
 		timeline.targetAtRatio(timeline.snapshot.progress) === 7_679 &&
+		timeline.targetAtEnd() === 7_698 &&
 		navigableReadCount === navigableReadsBeforeSparseRefresh,
-	'首段 #1–#39 与尾段 #7679–#7681 并存但覆盖未完成时，时间轴必须忽略稀疏数组下标，按 canonical 楼层计算相邻值、进度与目标，并跳过 O(N) roots 读取',
+	'首段 #1–#39 与尾段 #7679–#7681 并存但覆盖未完成时，时间轴必须忽略稀疏数组下标，按 canonical 楼层计算相邻值、进度与目标，末尾退回 canonical 边界并跳过 O(N) roots 读取',
 );
+resolvedEndPostNumber = 7_681;
+const sparseEndJump = timeline.jumpToEnd();
+await Promise.resolve();
+assert(
+	endResolveCount === 1 &&
+	timeline.snapshot.pendingPostNumber === 7_681 &&
+	requests.at(-1)?.postNumber === 7_681,
+	'覆盖未完成时，末尾命令必须先解析真实尾段正文根，再向统一 navigation 提交一次直接跳转',
+);
+const sparseEndResult: ReaderTopicNavigationResult = Object.freeze({
+	postNumber: discoursePostNumber(7_681),
+	source: 'timeline',
+	status: 'revealed',
+	rootPostNumber: discoursePostNumber(7_681),
+	mounted: true,
+});
+navigationChanges.emit(sparseEndResult);
+resolveJump!(sparseEndResult);
+assert(
+	(await sparseEndJump).status === 'revealed' &&
+	timeline.snapshot.pendingPostNumber === null,
+	'尾段正文根直接跳转完成后必须清除 pending，并保留 canonical navigation 结果',
+);
+timeline.syncVisiblePost(7_679, { atEnd: true });
+assert(
+	timeline.snapshot.currentPostNumber === 7_681 &&
+	timeline.targetAtEnd() === 7_681,
+	'覆盖未完成时滚动到绝对末端必须沿用刚解析出的最后正文根，不能被 canonical 总楼层或视口顶部楼层覆盖',
+);
+requests.length = 0;
 
 totalPostCount = 100;
 navigablePostNumbers = [1, 10, 50, 100];

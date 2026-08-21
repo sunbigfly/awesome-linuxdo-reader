@@ -1100,7 +1100,7 @@ export function createReaderShellTemplate(
 		'ldp-topic-timeline-relative',
 	);
 	topicTimelineRelative.type = 'button';
-	topicTimelineRelative.setAttribute('aria-label', '跳到最新楼层');
+	topicTimelineRelative.setAttribute('aria-label', '拉到帖子底部');
 	const topicTimelineJump = element(
 		document,
 		'button',
