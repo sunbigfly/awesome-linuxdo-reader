@@ -17,11 +17,11 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
 ::: tip 当前发布状态
 本手册当前对应 `1.5.10`；GitHub 与 Greasy Fork 公开版也已同步到同一 Lite 版本。
 
-- **Loader**：脚本 `588185`，固定版本 `1908038`；Greasy Fork 文件 4,172 字节，SHA-256 `572bf549b8f4e6f78e55f790f767e747f4ac5b7c889f06a3ed933cc5847b4bfa`。移除 Greasy Fork 注入的 `@downloadURL none` 后为 4,151 字节，SHA-256 `447b76c84b37710b0f96e716630bbaa7703f2d776fb24ff28b3ed83edf1e80ba`，与仓库 Loader 一致。
-- **Core**：脚本 `590254`，固定版本 `1908030`；1,648,152 字节，SHA-256 `b9b6a04fad31f9a4a95897280cb4f71338e8f190a8c1cbd1888a87bbf8ea2067`。
-- **Platform**：脚本 `591595`，固定版本 `1908032`；1,324,604 字节，SHA-256 `feb52296c03beb63c10913f5ac42d0c10a94afa9acfef7b21d5f93891cdbfde8`。
-- **Features**：脚本 `590255`，固定版本 `1908031`；2,055,551 字节，SHA-256 `f2b624cc16bcb3bda9b9c9976dc4e9c8fea9eb0a0a6c5b95e50c919555ececa4`。
-- **CSS**：固定到 Git `f69dcab7529c58401416fa37f2226d28801423b4`；621,735 字节，SHA-256 `637ea0390be63c8f8b39a5282dcf3a5d211d50b906ed1b193333ca0e0d588e0a`。
+- **Loader**：脚本 `588185`，固定版本 `1908818`；Greasy Fork 文件 4,174 字节，SHA-256 `d4ab28c782247f4dd7c13824be058f98619c5aae64d51f5af950a8cb396ae09f`。移除 Greasy Fork 注入的 `@downloadURL none` 后为 4,153 字节，SHA-256 `7b1627efd8c7a8a81a198071a8955ec4fa9fd4005fb008fce026a50b64694089`，与仓库 Loader 一致。
+- **Core**：脚本 `590254`，固定版本 `1908817`；1,667,785 字节，SHA-256 `2127268f52209768a559eb5fec7b2f2003ae23ead306d2fb70d7e3edbf1228c3`。
+- **Platform**：脚本 `591595`，固定版本 `1908734`；1,344,488 字节，SHA-256 `b79da519159a1f47957950dc3489690e1f1ff5dfa93eba78d191ba7b797e3931`。
+- **Features**：脚本 `590255`，固定版本 `1908733`；2,096,052 字节，SHA-256 `a9d07de2ab4cdb756d951a7d273410722102d1fe2c114aaf41e1f9d8a5a23199`。
+- **CSS**：固定到 Git `1c40185f28a0c2493c498da2898178b16b648e82`；622,157 字节，SHA-256 `99ffa9100f6dba1dea3a5fe8e4a273a07fa14eb5d791340914a14afccc4812f9`。
 :::
 
 ![安装并启用脚本后，LINUX DO 列表页与增强阅读工作区同时可用](/screenshots/guide-01-reader-overview-v1.5.0.png)

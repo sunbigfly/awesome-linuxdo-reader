@@ -2,7 +2,7 @@
 title: 楼层、时间轴与历史
 description: 使用时间轴、只看楼主、历史前后切换、多主题队列和实时阅读进度。
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014", "READ-016"]
-source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-only-op-controller.ts","lite/src/topic/reader-topic-navigation-controller.ts","lite/src/topic/reader-topic-dom-coordinator.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/reading/read-state-controller.ts","lite/src/live/topic-live-controller.ts","lite/src/components/reader-icon.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/topic/reader-topic-header.ts"]
+source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-only-op-controller.ts","lite/src/topic/reader-topic-navigation-controller.ts","lite/src/topic/reader-topic-dom-coordinator.ts","lite/src/topic/reader-topic-timeline-controller.ts","lite/src/topic/reader-topic-timeline-end-resolver.ts","lite/src/topic/reader-topic-timeline-view.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/reading/read-state-controller.ts","lite/src/live/topic-live-controller.ts","lite/src/components/reader-icon.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/topic/reader-topic-header.ts"]
 since: 0.1.2
 version: 1.5.10
 status: current
@@ -21,7 +21,8 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/
 - 目标楼层未加载时，阅读器先补齐数据和虚拟窗口；
 - 跳转会等待最新目标的数据、DOM 挂载和可见位置安静，并继续把锚点结算到 2 px 内；旧请求不会在随后覆盖新目标，新目标或用户直接滚动会取消旧结算；
 - 跳转完成后目标楼层按设置闪烁；
-- 滚动到已经加载内容的真实底部时，当前楼层会校准为主题总楼层；
+- 点击相对时间可直接拉到帖子物理底部；长帖尚未完整加载时，阅读器会从 canonical 尾段按需向前补齐，找到最后一个主信息流正文根，不会把楼中楼尾楼或当前缓存尾部误作主题终点；
+- 到达真实底部后会显示“已经见底了~”，并跟随迟到的虚拟窗口和正文高度继续结算最大滚动位置；当前楼层校准为最后一个主信息流正文根；
 - 底部回顶按钮返回当前主题顶部，而不是宿主页面顶部。
 
 大量楼层快速跳转需要经过“获取数据 → 挂载目标 → 定位”的顺序。不要在第一次等待时连续重复点击，否则会产生互相覆盖的目标。

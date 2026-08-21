@@ -90,8 +90,8 @@ Library 与待发布文件完全相同。快速调试版和四文件本地测试
 
 | 发布单元 | Greasy Fork | 固定版本 | 核验结果 |
 | --- | --- | --- | --- |
-| 主 Loader | [588185](https://greasyfork.org/scripts/588185) | `1908737` | 固定文件 4,174 字节，SHA-256 `8e68608f93c26dbb09a16de4df54e05b72eab19809502cb57c8b8aa2d19858af`；移除平台加入的 `@downloadURL none` 后为 4,153 字节，SHA-256 `389f849812a9605980326eb0ba95d6244f1073b3461810d9ecf24a2a33912ff0` |
-| Core | [590254](https://greasyfork.org/scripts/590254) | `1908732` | 1,660,451 字节，SHA-256 `7c5ab5f15411c2c12b1faca5c117552baa098d7ff9c2f5e1369731e74b0436f2` |
+| 主 Loader | [588185](https://greasyfork.org/scripts/588185) | `1908818` | 固定文件 4,174 字节，SHA-256 `d4ab28c782247f4dd7c13824be058f98619c5aae64d51f5af950a8cb396ae09f`；移除平台加入的 `@downloadURL none` 后为 4,153 字节，SHA-256 `7b1627efd8c7a8a81a198071a8955ec4fa9fd4005fb008fce026a50b64694089` |
+| Core | [590254](https://greasyfork.org/scripts/590254) | `1908817` | 1,667,785 字节，SHA-256 `2127268f52209768a559eb5fec7b2f2003ae23ead306d2fb70d7e3edbf1228c3` |
 | Platform | [591595](https://greasyfork.org/scripts/591595) | `1908734` | 1,344,488 字节，SHA-256 `b79da519159a1f47957950dc3489690e1f1ff5dfa93eba78d191ba7b797e3931` |
 | Features | [590255](https://greasyfork.org/scripts/590255) | `1908733` | 2,096,052 字节，SHA-256 `a9d07de2ab4cdb756d951a7d273410722102d1fe2c114aaf41e1f9d8a5a23199` |
 

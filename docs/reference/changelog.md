@@ -33,12 +33,17 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 - 下载、用户观察、用户通知、收藏与回应统一登记业务请求策略；性能设置可分别调整最大并发、后台最小间隔和后台 RPM，固定 profile、车道、缓存与重试边界继续显性展示，请求记录同步携带业务身份。
 - 后台让路、请求窗口占用、批量预取比例、预热和读取车道并发目标统一进入请求流控制设置，保存后热应用到尚未启动及后续请求。
 
+### 时间轴末端定位
+
+- 时间轴的相对时间入口改为直接“拉到帖子底部”：长帖尚未完整加载时，从 canonical 尾段按需向前补流，找到最后一个主信息流正文根，避免把楼中楼尾楼或当前缓存尾部误作主题末端。
+- 末端目标就绪后直接写入 Reader 最大滚动位置，不播放跨越整帖的滚动动画；界面显示唯一的“已经见底了~”标记，并跟随迟到的虚拟窗口和正文高度继续完成静稳结算。
+
 ### 发布状态
 
-- `1.5.10` 已发布到 Greasy Fork：主 Loader 固定版本为 `1908737`，加载 Core `1908732`、Platform `1908734` 与 Features `1908733`。
-- 固定 Loader 原始文件为 4,174 字节，SHA-256 `8e68608f93c26dbb09a16de4df54e05b72eab19809502cb57c8b8aa2d19858af`；移除平台加入的 `@downloadURL none` 后为 4,153 字节，SHA-256 `389f849812a9605980326eb0ba95d6244f1073b3461810d9ecf24a2a33912ff0`，与仓库 Loader 逐字节一致。
-- Core 为 1,660,451 字节，SHA-256 `7c5ab5f15411c2c12b1faca5c117552baa098d7ff9c2f5e1369731e74b0436f2`；Platform 为 1,344,488 字节，SHA-256 `b79da519159a1f47957950dc3489690e1f1ff5dfa93eba78d191ba7b797e3931`；Features 为 2,096,052 字节，SHA-256 `a9d07de2ab4cdb756d951a7d273410722102d1fe2c114aaf41e1f9d8a5a23199`。
-- CSS 固定到 Git `1c40185f28a0c2493c498da2898178b16b648e82`：622,157 字节，SHA-256 `99ffa9100f6dba1dea3a5fe8e4a273a07fa14eb5d791340914a14afccc4812f9`；源码与分包 runtime 各通过 230 文件契约，300 个模块通过 parity 门禁。
+- `1.5.10` 已发布到 Greasy Fork：主 Loader 固定版本为 `1908818`，加载 Core `1908817`、Platform `1908734` 与 Features `1908733`。
+- 固定 Loader 原始文件为 4,174 字节，SHA-256 `d4ab28c782247f4dd7c13824be058f98619c5aae64d51f5af950a8cb396ae09f`；移除平台加入的 `@downloadURL none` 后为 4,153 字节，SHA-256 `7b1627efd8c7a8a81a198071a8955ec4fa9fd4005fb008fce026a50b64694089`，与仓库 Loader 逐字节一致。
+- Core 为 1,667,785 字节，SHA-256 `2127268f52209768a559eb5fec7b2f2003ae23ead306d2fb70d7e3edbf1228c3`；Platform 为 1,344,488 字节，SHA-256 `b79da519159a1f47957950dc3489690e1f1ff5dfa93eba78d191ba7b797e3931`；Features 为 2,096,052 字节，SHA-256 `a9d07de2ab4cdb756d951a7d273410722102d1fe2c114aaf41e1f9d8a5a23199`。
+- CSS 固定到 Git `1c40185f28a0c2493c498da2898178b16b648e82`：622,157 字节，SHA-256 `99ffa9100f6dba1dea3a5fe8e4a273a07fa14eb5d791340914a14afccc4812f9`；源码与分包 runtime 各通过 230 文件契约，301 个模块通过 parity 门禁。
 
 ## 1.5.9 — 阅读流水线、缓存交接与锚点结算
 
