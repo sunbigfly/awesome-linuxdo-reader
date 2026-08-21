@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader
 // @name:zh-CN   更流畅的 LinuxDo 阅读器
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.10
+// @version      1.5.11
 // @license      MIT
 // @description  为 LINUX DO 深度定制并保持完整功能覆盖，同时通过站点识别与能力检测兼容中文、英文及其他语言的标准 Discourse 社区，在列表页内完成阅读、翻译、回复与原站互动。
 // @description:en Deeply customized for LINUX DO with complete feature coverage, while site detection and capability checks support standard Discourse communities in any language for in-list reading, translation, replies, and native interactions.
@@ -52,16 +52,16 @@
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
-// @require      https://update.greasyfork.org/scripts/590254/1908817/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1908817#sha256=2127268f52209768a559eb5fec7b2f2003ae23ead306d2fb70d7e3edbf1228c3
-// @require      https://update.greasyfork.org/scripts/591595/1908734/Awesome%20LinuxDo%20Reader%20Lite%20Platform%20Library.js?version=1908734#sha256=b79da519159a1f47957950dc3489690e1f1ff5dfa93eba78d191ba7b797e3931
-// @require      https://update.greasyfork.org/scripts/590255/1908733/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1908733#sha256=a9d07de2ab4cdb756d951a7d273410722102d1fe2c114aaf41e1f9d8a5a23199
+// @require      https://update.greasyfork.org/scripts/590254/1908854/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1908854#sha256=50233764e589986904b8ff672a62d397a24bcdfc5fb2f4b5dd57e2286ec96b15
+// @require      https://update.greasyfork.org/scripts/591595/1908856/Awesome%20LinuxDo%20Reader%20Lite%20Platform%20Library.js?version=1908856#sha256=aff265e0cf41f44681da9a96145797e668159e28ae5519b687d2f730f97e6101
+// @require      https://update.greasyfork.org/scripts/590255/1908855/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1908855#sha256=99281d3a1c8e23fac471e20fc9b604cfe6f4e7e971d1ab32f4d619e2f848f98f
 // ==/UserScript==
 
 (function () {
 	'use strict';
 	const runtime = window.__AWESOME_LINUXDO_READER_LITE_MODULE_RUNTIME__;
 	if (!runtime || runtime.schemaVersion !== 1 ||
-		runtime.sourceVersion !== "1.5.10") {
+		runtime.sourceVersion !== "1.5.11") {
 		throw new Error('[main-lite] Greasy Fork Library 缺失或版本不匹配');
 	}
 	runtime.start("src/userscript/main-lite-entry.js", ["main-lite-core","main-lite-platform","main-lite-features"]);
