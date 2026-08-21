@@ -362,6 +362,7 @@ for (const stream of READER_USER_OBSERVATION_STREAMS.filter(
 assert(
 	adapterRequests.length === 9 &&
 	adapterRequests.every((request) =>
+		request.business === 'user-observation' &&
 		request.profile === 'background-prefetch' &&
 		request.variant === (
 			request.collection === 'user-observation-boosts'
@@ -1993,6 +1994,254 @@ Object.assign(globalThis, {
 	HTMLButtonElement: window.HTMLButtonElement,
 	Node: window.Node,
 });
+
+let releaseRealtimeActivityPage!: () => void;
+const realtimeActivityPageWait = new Promise<void>((resolve) => {
+	releaseRealtimeActivityPage = resolve;
+});
+let realtimeActivityPagePending = false;
+const realtimeUsername = 'realtime-tabs';
+const realtimeTopicRecords = Object.freeze([9_001, 9_002].map((topicId) =>
+	normalizeReaderUserTopicCollection({
+		id: topicId,
+		title: `实时主题 ${topicId}`,
+		created_at: '2026-08-11T12:00:00.000Z',
+	}, 'topic', realtimeUsername, categoryName)!));
+const realtimeActivityRecords = Object.freeze(Array.from(
+	{ length: 3 },
+	(_, index) => normalizeReaderUserActivity(
+		activity(index, realtimeUsername),
+		realtimeUsername,
+		categoryName,
+	)!,
+));
+const realtimeSession = new ReaderUserObservationSession({
+	requests: {
+		async loadPage(request) {
+			const stream = request.stream ?? 'activity';
+			if (stream === 'topics') {
+				return Object.freeze({
+					stream,
+					page: request.page,
+					offset: request.offset,
+					records: realtimeTopicRecords,
+					complete: true,
+					nextOffset: request.offset + realtimeTopicRecords.length,
+				});
+			}
+			if (stream === 'activity' && request.page === 0) {
+				return Object.freeze({
+					stream,
+					page: request.page,
+					offset: request.offset,
+					records: realtimeActivityRecords,
+					complete: false,
+					nextOffset: request.offset + realtimeActivityRecords.length,
+				});
+			}
+			if (stream === 'activity') {
+				realtimeActivityPagePending = true;
+				await realtimeActivityPageWait;
+			}
+			return Object.freeze({
+				stream,
+				page: request.page,
+				offset: request.offset,
+				records: Object.freeze([]),
+				complete: true,
+				nextOffset: request.offset,
+			});
+		},
+	},
+	storage: { getItem: () => null, setItem: () => {} },
+	authScope: 'account:realtime-observation-tabs',
+});
+const realtimeMount = document.createElement('main');
+document.body.append(realtimeMount);
+const realtimeView = new ReaderUserObservationView({
+	document,
+	mount: realtimeMount,
+	session: realtimeSession,
+});
+realtimeView.observeAndOpen(identity(realtimeUsername));
+for (let index = 0; index < 20; index += 1) {
+	if (realtimeActivityPagePending) break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+const realtimeEntry = realtimeSession.entry(realtimeUsername);
+const realtimeAllTab = realtimeView.listWindow.body.querySelector(
+	'[data-user-observation-tab="all"]',
+)?.textContent;
+const realtimeTopicTab = realtimeView.listWindow.body.querySelector(
+	'[data-user-observation-tab="topic"]',
+)?.textContent;
+const realtimeTimelineCount = realtimeView.listWindow.body.querySelectorAll(
+	'.ldp-user-observation-activity',
+).length;
+assert(
+	realtimeActivityPagePending &&
+		realtimeEntry?.records.length === 5 &&
+		realtimeAllTab === '全部 5' &&
+		realtimeTopicTab === '主题 3' &&
+		realtimeTimelineCount === 5,
+	'每个网络采集页成功后必须立即更新详情 Tab 计数与时间线，不能等批量页或采集完成：' +
+		JSON.stringify({
+			pending: realtimeActivityPagePending,
+			records: realtimeEntry?.records.length,
+			allTab: realtimeAllTab,
+			topicTab: realtimeTopicTab,
+			timeline: realtimeTimelineCount,
+		}),
+);
+releaseRealtimeActivityPage();
+for (let index = 0; index < 20; index += 1) {
+	if (realtimeSession.entry(realtimeUsername)?.phase === 'ready') break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+realtimeView.destroy();
+realtimeSession.destroy();
+realtimeMount.remove();
+
+const refreshOverlayUsername = 'refresh-overlay';
+const refreshOverlayStore = new ObservationMemoryStore();
+const refreshOverlayPages = new ReaderUserObservationPageRepository(
+	new ResponseRepository({
+		store: refreshOverlayStore,
+		maxMemoryEntries: 16,
+		maxMemoryBytes: 2_000_000,
+	}),
+	'account:refresh-overlay',
+);
+const refreshOverlayOldRecords = Object.freeze([100, 101].map((index) =>
+	normalizeReaderUserActivity(Object.freeze({
+		...activity(index, refreshOverlayUsername),
+		title: `旧缓存消息 ${index}`,
+		created_at: new Date(Date.UTC(2026, 7, 10, 12, 0, index)).toISOString(),
+	}), refreshOverlayUsername, categoryName)!));
+const refreshOverlayNewestRecord = normalizeReaderUserActivity(Object.freeze({
+	...activity(1_000, refreshOverlayUsername),
+	title: '更新后最新消息',
+	created_at: new Date(Date.UTC(2026, 7, 12, 12)).toISOString(),
+}), refreshOverlayUsername, categoryName)!;
+await refreshOverlayPages.write(
+	refreshOverlayUsername,
+	refreshOverlayOldRecords,
+	Date.UTC(2026, 7, 10, 13),
+);
+let releaseRefreshOverlay!: () => void;
+const refreshOverlayWait = new Promise<void>((resolve) => {
+	releaseRefreshOverlay = resolve;
+});
+let refreshOverlayPending = false;
+const refreshOverlaySession = new ReaderUserObservationSession({
+	requests: {
+		async loadPage(request) {
+			const stream = request.stream ?? 'activity';
+			if (stream === 'activity') {
+				return Object.freeze({
+					stream,
+					page: request.page,
+					offset: request.offset,
+					records: Object.freeze([
+						refreshOverlayNewestRecord,
+						refreshOverlayOldRecords[0]!,
+					]),
+					complete: true,
+					nextOffset: request.offset + 2,
+				});
+			}
+			if (stream === 'assigned') {
+				refreshOverlayPending = true;
+				await refreshOverlayWait;
+			}
+			return Object.freeze({
+				stream,
+				page: request.page,
+				offset: request.offset,
+				records: Object.freeze([]),
+				complete: true,
+				nextOffset: request.offset,
+			});
+		},
+	},
+	storage: { getItem: () => null, setItem: () => {} },
+	pages: refreshOverlayPages,
+	authScope: 'account:refresh-overlay',
+});
+refreshOverlaySession.observe(identity(refreshOverlayUsername), {
+	allowNetwork: false,
+});
+refreshOverlaySession.resume({ allowNetwork: false });
+for (let index = 0; index < 30; index += 1) {
+	if (refreshOverlaySession.entry(refreshOverlayUsername)?.phase === 'ready') break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+const refreshOverlayMount = document.createElement('main');
+document.body.append(refreshOverlayMount);
+const refreshOverlayView = new ReaderUserObservationView({
+	document,
+	mount: refreshOverlayMount,
+	session: refreshOverlaySession,
+	pages: refreshOverlayPages,
+});
+refreshOverlayView.openList();
+refreshOverlayView.listWindow.body.querySelector<HTMLButtonElement>(
+	`[data-user-observation-open="${refreshOverlayUsername}"]`,
+)!.click();
+for (let index = 0; index < 30; index += 1) {
+	if (refreshOverlayView.listWindow.body.querySelectorAll(
+		'.ldp-user-observation-activity',
+	).length === 2) break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+refreshOverlaySession.refresh(refreshOverlayUsername);
+for (let index = 0; index < 30; index += 1) {
+	if (refreshOverlayPending) break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+const refreshOverlayEntry = refreshOverlaySession.entry(refreshOverlayUsername);
+const refreshOverlayRows = [
+	...refreshOverlayView.listWindow.body.querySelectorAll(
+		'.ldp-user-observation-activity',
+	),
+];
+assert(
+	refreshOverlayPending &&
+		refreshOverlayEntry?.recordCount === 3 &&
+		refreshOverlayEntry.pendingRecords.length === 1 &&
+		refreshOverlayView.listWindow.body.querySelector(
+			'[data-user-observation-tab="all"]',
+		)?.textContent === '全部 3' &&
+		refreshOverlayRows.length === 3 &&
+		refreshOverlayRows[0]?.textContent?.includes('更新后最新消息') === true,
+	'增量更新的最新记录必须与已提交缓存合并后置顶，旧分页摘要不得覆盖 Tab 计数或时间线',
+);
+releaseRefreshOverlay();
+for (let index = 0; index < 50; index += 1) {
+	if (
+		refreshOverlaySession.entry(refreshOverlayUsername)?.phase === 'ready' &&
+		refreshOverlayView.listWindow.body.querySelector(
+			'[data-user-observation-tab="all"]',
+		)?.textContent === '全部 3' &&
+		refreshOverlayView.listWindow.body.querySelector(
+			'.ldp-user-observation-activity',
+		)?.textContent?.includes('更新后最新消息') === true
+	) break;
+	await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+assert(
+	refreshOverlaySession.entry(refreshOverlayUsername)?.phase === 'ready' &&
+		refreshOverlayView.listWindow.body.querySelector(
+			'[data-user-observation-tab="all"]',
+		)?.textContent === '全部 3' &&
+		refreshOverlayView.listWindow.body.querySelector(
+			'.ldp-user-observation-activity',
+		)?.textContent?.includes('更新后最新消息') === true,
+	'增量更新提交新分页世代后，旧缓存异步回读仍不得把最新记录顶下去',
+);
+refreshOverlayView.destroy();
+refreshOverlaySession.destroy();
+refreshOverlayMount.remove();
 
 const idleDetailStorage = new Map<string, string>();
 const idleDetailStorageKey = readerAccountScopedStorageIdentity(

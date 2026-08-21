@@ -71,6 +71,8 @@ export interface ReaderResourcePerformancePolicySnapshot {
 	readonly requestMaxConcurrent: number;
 	readonly requestMinIntervalMs: number;
 	readonly requestRateTargetPercent: number;
+	readonly readStateRequestsPerMinute?: number;
+	readonly readStateTimingsPerMinute?: number;
 	readonly preheatMaxConcurrent?: number;
 	readonly preheatHandoffMaxEntries?: number;
 	readonly preheatHandoffMaxBytes?: number;
@@ -403,7 +405,7 @@ function requestDecisionLabel(decision: string): string {
 }
 
 function requestContractDiagnostic(event: RequestObservationEvent): string {
-	const contract = [event.profile, event.namespace, event.lane]
+	const contract = [event.business, event.profile, event.namespace, event.lane]
 		.filter(Boolean).join(' / ');
 	const parts = [
 		event.logicalId ? `链 ${event.logicalId}` : '',
@@ -502,6 +504,7 @@ function requestDiagnosticRecord(
 		callSite: event.callSite,
 		controlReason: event.controlReason,
 		profile: event.profile,
+		business: event.business,
 		namespace: event.namespace,
 		lane: event.lane,
 		cacheMode: event.cacheMode,
@@ -2708,13 +2711,17 @@ export class ReaderResourceMonitor {
 		const performancePolicy =
 			this.#options.performancePolicySnapshot?.() ?? null;
 		const adaptivePolicy = performancePolicy &&
+			performancePolicy.readStateRequestsPerMinute !== undefined &&
+			performancePolicy.readStateTimingsPerMinute !== undefined &&
 			performancePolicy.preheatMaxConcurrent !== undefined &&
 			performancePolicy.preheatHandoffMaxEntries !== undefined &&
 			performancePolicy.preheatHandoffMaxBytes !== undefined &&
 			performancePolicy.responseMemoryMaxEntries !== undefined &&
 			performancePolicy.responseMemoryMaxBytes !== undefined &&
 			performancePolicy.projectionHydrationBatchSize !== undefined
-			? ` · 预热 ${performancePolicy.preheatMaxConcurrent} 路 / ` +
+			? ` · 已读 ${performancePolicy.readStateRequestsPerMinute} RPM / ` +
+				`${performancePolicy.readStateTimingsPerMinute} TPM · ` +
+				`预热 ${performancePolicy.preheatMaxConcurrent} 路 / ` +
 				`交接 ${performancePolicy.preheatHandoffMaxEntries} 帖 ` +
 				`${formatBytes(performancePolicy.preheatHandoffMaxBytes)} · ` +
 				`响应内存 ${performancePolicy.responseMemoryMaxEntries} 项 ` +

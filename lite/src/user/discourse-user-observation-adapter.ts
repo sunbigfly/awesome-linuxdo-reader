@@ -6,6 +6,9 @@ import type {
 import type {
 	RequestTransportResponse,
 } from '../network/coordinated-request-client.js';
+import {
+	READER_USER_OBSERVATION_REQUEST_POLICY,
+} from '../network/reader-business-request-policy.js';
 import type {
 	DiscourseNativeAjaxExecution,
 } from '../network/discourse-native-read-transport.js';
@@ -462,14 +465,15 @@ export class DiscourseUserObservationAdapter {
 		const descriptor = pageDescriptor(username, stream, page, offset);
 		const { path } = descriptor;
 		const payload = await this.#gateway.loadCollectionPage<unknown>({
+			business: READER_USER_OBSERVATION_REQUEST_POLICY.kind,
 			authScope: this.#authScope,
 			collection: descriptor.collection,
 			page,
 			cursor: offset,
 			variant: descriptor.variant,
 			profile: request.background
-				? 'background-prefetch'
-				: 'collection-visible',
+				? READER_USER_OBSERVATION_REQUEST_POLICY.backgroundProfile
+				: READER_USER_OBSERVATION_REQUEST_POLICY.foregroundProfile,
 			input: path,
 			signal: request.signal,
 			...(request.refresh ? { cacheMode: 'refresh' as const } : {}),
@@ -517,8 +521,8 @@ export class DiscourseUserObservationAdapter {
 			cursor: offset,
 			variant: descriptor.variant,
 			profile: request.background
-				? 'background-prefetch'
-				: 'collection-visible',
+				? READER_USER_OBSERVATION_REQUEST_POLICY.backgroundProfile
+				: READER_USER_OBSERVATION_REQUEST_POLICY.foregroundProfile,
 			cache: cacheFor(this.#cache, username, page, stream),
 		});
 		request.signal.throwIfAborted();
@@ -590,14 +594,15 @@ export class DiscourseUserObservationAdapter {
 		for (const topicId of topicIds) query.append('topic_ids[]', String(topicId));
 		const path = `/latest.json?${query}`;
 		const payload = await this.#gateway.loadCollectionPage<unknown>({
+			business: READER_USER_OBSERVATION_REQUEST_POLICY.kind,
 			authScope: this.#authScope,
 			collection: 'user-observation-topic-metadata',
 			page: 0,
 			cursor: 0,
 			variant: `v1:${topicIds.join(',')}`,
 			profile: request.background
-				? 'background-prefetch'
-				: 'collection-visible',
+				? READER_USER_OBSERVATION_REQUEST_POLICY.backgroundProfile
+				: READER_USER_OBSERVATION_REQUEST_POLICY.foregroundProfile,
 			input: path,
 			signal: request.signal,
 			...(request.refresh ? { cacheMode: 'refresh' as const } : {}),

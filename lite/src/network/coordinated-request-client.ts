@@ -14,6 +14,9 @@ import type {
 import type {
 	RequestObserver,
 } from './request-observer.js';
+import type {
+	ReaderBusinessRequestKind,
+} from './reader-business-request-config.js';
 
 export interface SharedRequestPermitPort extends RequestStartGate {
 	noteRateLimit(decision: RateLimitDecision): void | Promise<void>;
@@ -68,6 +71,7 @@ export interface CoordinatedRequestOptions {
 	readonly suppressAfterChallengeWait?: boolean;
 	readonly callSite?: string;
 	readonly profile?: string;
+	readonly business?: ReaderBusinessRequestKind;
 	readonly namespace?: string;
 	readonly cacheMode?: string;
 	readonly identity?: Readonly<Record<string, string | number | boolean>>;
@@ -528,14 +532,17 @@ export class CoordinatedRequestClient {
 						key: logical.currentAttemptKey,
 						priority: logical.priority,
 						lane: options.lane ?? 'standard',
+						...(options.business === undefined
+							? {}
+							: { business: options.business }),
 						rateLimitRoute,
 						...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
 						signal: logical.controller.signal,
 						droppable: logical.droppable,
-							onStart: (timing) => {
-								observationStarted = true;
-								attemptWaitReason = timing.waitReason;
-								attemptRateLimitRecoveryProbe = timing.recoveryProbe;
+						onStart: (timing) => {
+							observationStarted = true;
+							attemptWaitReason = timing.waitReason;
+							attemptRateLimitRecoveryProbe = timing.recoveryProbe;
 							observationId = this.#markObservationStarted(
 								observationId,
 								logical,
@@ -843,6 +850,7 @@ export class CoordinatedRequestClient {
 				callSite: options.callSite ?? '',
 				logicalId: logical.logicalId,
 				profile: options.profile ?? '',
+				business: options.business ?? '',
 				namespace: options.namespace ?? '',
 				lane: options.lane ?? 'standard',
 				cacheMode: options.cacheMode ?? '',
@@ -914,6 +922,7 @@ export class CoordinatedRequestClient {
 				callSite: options.callSite ?? '',
 				logicalId: logical.logicalId,
 				profile: options.profile ?? '',
+				business: options.business ?? '',
 				namespace: options.namespace ?? '',
 				lane: options.lane ?? 'standard',
 				cacheMode: options.cacheMode ?? '',
@@ -993,6 +1002,7 @@ export class CoordinatedRequestClient {
 				controlReason: reason,
 				logicalId: logical.logicalId,
 				profile: options.profile ?? '',
+				business: options.business ?? '',
 				namespace: options.namespace ?? '',
 				lane: options.lane ?? 'standard',
 				cacheMode: options.cacheMode ?? '',

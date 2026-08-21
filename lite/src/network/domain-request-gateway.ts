@@ -32,6 +32,10 @@ import type {
 	RequestLane,
 	RequestPriority,
 } from './request-scheduler.js';
+import {
+	assertReaderBusinessRequestContract,
+	type ReaderBusinessRequestKind,
+} from './reader-business-request-policy.js';
 
 export interface CoordinatedRequestPort {
 	request<T>(
@@ -60,6 +64,7 @@ export interface DomainRequestExecution<T> {
 	readonly input: string | URL;
 	readonly signal: AbortSignal;
 	readonly method?: string;
+	readonly business?: ReaderBusinessRequestKind;
 	/** 仅在 response cache miss、即将进入中央 client 时调用。 */
 	readonly beforeNetwork?: (signal: AbortSignal) => void | Promise<void>;
 	readonly cacheMode?: ResponseCacheMode;
@@ -578,6 +583,13 @@ export class DomainRequestGateway {
 			...(input.cacheMode === undefined ? {} : { cacheMode: input.cacheMode }),
 			...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
 		});
+		if (input.business !== undefined) {
+			assertReaderBusinessRequestContract({
+				business: input.business,
+				profile: contract.profile,
+				lane: input.lane,
+			});
+		}
 		if (contract.cacheMode !== 'no-store' && !input.cache) {
 			return Promise.reject(new Error(`${input.profile} 缺少 response cache settings`));
 		}
@@ -612,6 +624,9 @@ export class DomainRequestGateway {
 				callSite:
 					`${effective.profile} / ${input.namespace} / ${input.lane}`,
 				profile: effective.profile,
+				...(input.business === undefined
+					? {}
+					: { business: input.business }),
 				namespace: input.namespace,
 				cacheMode: effective.cacheMode,
 				identity: input.identity,

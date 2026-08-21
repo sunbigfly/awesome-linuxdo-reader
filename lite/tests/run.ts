@@ -110,6 +110,8 @@ import './reader-resource-monitor-request-window.test.js';
 import './reader-pipeline-observer.test.js';
 import './reader-assignment-form-surface.test.js';
 import './reader-performance-policy.test.js';
+import './reader-business-request-policy.test.js';
+import './reader-business-request-config.test.js';
 import './reader-settings-controller.test.js';
 import './reader-settings-field-interaction.test.js';
 import './reader-settings-help-surface.test.js';

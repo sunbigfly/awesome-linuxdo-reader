@@ -1,8 +1,10 @@
 import type { DiscoursePostNumber } from '../src/discourse/identifiers.js';
 import {
 	BrowserReadStateCoordinator,
+	ReadStateClientRateLimitError,
 	READ_STATE_ATTEMPT_STORAGE_KEY,
 	READ_STATE_INTENT_STORAGE_KEY,
+	READ_STATE_RATE_STORAGE_KEY,
 	READ_STATE_SUCCESS_STORAGE_KEY,
 	type ReadStateConfirmation,
 	type ReadStateCoordinationMessage,
@@ -408,6 +410,47 @@ assert(
 	'重开后持久化已读楼层不得再次进入 POST submitter',
 );
 
+const rateStorage = new MemoryStorage();
+let rateNow = 0;
+const rateCoordinator = new BrowserReadStateCoordinator({
+	storage: rateStorage,
+	now: () => rateNow,
+	readRequestsPerMinute: 2,
+	readTimingsPerMinute: 3,
+});
+const rateSubmissions: number[][] = [];
+const submitRate = async (missing: readonly DiscoursePostNumber[]) => {
+	rateSubmissions.push([...missing]);
+	return missing;
+};
+await rateCoordinator.submitOnce('account:rate', 41, [1, 2], submitRate);
+await rateCoordinator.submitOnce('account:rate', 42, [1], submitRate);
+let rateDeferred = false;
+try {
+	await rateCoordinator.submitOnce('account:rate', 43, [1], submitRate);
+} catch (error) {
+	rateDeferred = error instanceof ReadStateClientRateLimitError &&
+		error.retryAt === 60_000;
+}
+assert(
+	rateDeferred &&
+	rateSubmissions.map((entry) => entry.length).join(',') === '2,1' &&
+	rateNow === 0,
+	'同账号已读队列达到 2 RPM 或 3 TPM 后必须保留任务到滚动分钟窗口释放',
+);
+rateNow = 60_000;
+await rateCoordinator.submitOnce('account:rate', 43, [1], submitRate);
+rateCoordinator.applyRuntimePolicy({
+	readRequestsPerMinute: 4,
+	readTimingsPerMinute: 4,
+});
+await rateCoordinator.submitOnce('account:rate', 44, [1], submitRate);
+assert(
+	rateSubmissions.map((entry) => entry.length).join(',') === '2,1,1,1' &&
+	JSON.parse(rateStorage.getItem(READ_STATE_RATE_STORAGE_KEY) ?? '[]').length === 2,
+	'已读 RPM/TPM 设置必须热应用，并只保留当前滚动窗口的跨标签请求账本',
+);
+
 coordinator.close();
 unlocked.close();
 failingTaskCoordinator.close();
@@ -415,4 +458,5 @@ challengeAttemptCoordinator.close();
 reopenedChallengeAttemptCoordinator.close();
 singleRecordCoordinator.close();
 reopenedPersistentCoordinator.close();
+rateCoordinator.close();
 assert(channel.closed, 'coordinator close 必须关闭自有频道');

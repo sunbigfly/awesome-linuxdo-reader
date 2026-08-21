@@ -1,4 +1,15 @@
 import type { LifecycleScope } from '../kernel/lifecycle.js';
+import {
+	READER_BUSINESS_REQUEST_DEFAULTS,
+	normalizeReaderBusinessRequestSettings,
+	type ReaderBusinessRequestKind,
+	type ReaderBusinessRequestSettings,
+} from './reader-business-request-config.js';
+import {
+	READER_REQUEST_FLOW_DEFAULTS,
+	normalizeReaderRequestFlowSettings,
+	type ReaderRequestFlowSettings,
+} from './reader-request-flow-config.js';
 
 export type RequestPriority =
 	| 'critical'
@@ -38,8 +49,12 @@ const LANE_CONCURRENCY_CAP: Readonly<Record<RequestLane, number>> = Object.freez
 	'user-card': 2,
 	/* 五路预加载之外为滚动到眼前的正文预留一路；共享 permit 仍限制启动。 */
 	translation: 6,
-	standard: 1,
+	standard: 4,
 });
+
+export function requestLaneConcurrencyCap(lane: RequestLane): number {
+	return LANE_CONCURRENCY_CAP[lane];
+}
 
 const PRIORITY_WEIGHT: Readonly<Record<RequestPriority, number>> = Object.freeze({
 	critical: 0,
@@ -100,6 +115,7 @@ export interface ScheduleRequestOptions {
 	readonly key: string;
 	readonly priority?: RequestPriority;
 	readonly lane?: RequestLane;
+	readonly business?: ReaderBusinessRequestKind;
 	/** 仅供共享 429 闸门匹配规范化路由，不参与 single-flight identity。 */
 	readonly rateLimitRoute?: string;
 	readonly timeoutMs?: number;
@@ -123,12 +139,15 @@ export interface RequestSchedulerSnapshot {
 	readonly queueLimit: number;
 	readonly disposed: boolean;
 	readonly queuedKeys: readonly string[];
+	readonly maxConcurrentByLane?: Readonly<Record<RequestLane, number>>;
 	readonly activeByLane: Readonly<Record<RequestLane, number>>;
 	readonly queuedByLane: Readonly<Record<RequestLane, number>>;
 }
 
 export interface RequestSchedulerRuntimePolicy {
 	readonly maxConcurrent: number;
+	readonly businessRequestSettings?: ReaderBusinessRequestSettings;
+	readonly requestFlowSettings?: ReaderRequestFlowSettings;
 }
 
 export interface RequestStartPermit {
@@ -154,6 +173,7 @@ interface RequestTask<T> {
 	readonly key: string;
 	priority: RequestPriority;
 	readonly lane: RequestLane;
+	readonly business: ReaderBusinessRequestKind | null;
 	readonly rateLimitRoute: string;
 	readonly sequence: number;
 	readonly queuedAt: number;
@@ -205,6 +225,17 @@ export class RequestScheduler {
 	readonly #queue: RequestTask<unknown>[] = [];
 	readonly #tasksByKey = new Map<string, RequestTask<unknown>>();
 	readonly #activeByLane = new Map<RequestLane, number>();
+	readonly #activeByBusiness = new Map<ReaderBusinessRequestKind, number>();
+	readonly #businessStarts = new Map<
+		ReaderBusinessRequestKind,
+		number[]
+	>();
+	readonly #businessLastStartedAt = new Map<
+		ReaderBusinessRequestKind,
+		number
+	>();
+	#businessRequestSettings = READER_BUSINESS_REQUEST_DEFAULTS;
+	#requestFlowSettings = READER_REQUEST_FLOW_DEFAULTS;
 	#activeCount = 0;
 	#sequence = 0;
 	#pumpQueued = false;
@@ -253,6 +284,7 @@ export class RequestScheduler {
 				!this.#preemptDroppablePermit({
 					priority,
 					lane,
+					business: options.business ?? null,
 					droppable: options.droppable === true,
 				})
 			) {
@@ -274,6 +306,7 @@ export class RequestScheduler {
 			key,
 			priority,
 			lane,
+			business: options.business ?? null,
 			rateLimitRoute: String(options.rateLimitRoute ?? '').trim(),
 			sequence: this.#sequence++,
 			queuedAt,
@@ -339,6 +372,23 @@ export class RequestScheduler {
 			policy.maxConcurrent,
 			'maxConcurrent',
 		);
+		if (policy.businessRequestSettings !== undefined) {
+			this.#businessRequestSettings = normalizeReaderBusinessRequestSettings(
+				policy.businessRequestSettings,
+			);
+			const now = this.#now();
+			for (const task of this.#queue) {
+				if (!task.deferredWaitReason.startsWith('business:')) continue;
+				task.notBefore = Math.min(task.notBefore, now);
+				task.deferredWaitReason = '';
+			}
+			this.#pruneBusinessStarts(now);
+		}
+		if (policy.requestFlowSettings !== undefined) {
+			this.#requestFlowSettings = normalizeReaderRequestFlowSettings(
+				policy.requestFlowSettings,
+			);
+		}
 		this.#queuePump();
 	}
 
@@ -362,6 +412,8 @@ export class RequestScheduler {
 			queueLimit: this.#queueLimit,
 			disposed: this.#disposed,
 			queuedKeys: Object.freeze(this.#queue.map((task) => task.key)),
+			maxConcurrentByLane: this.#laneCounts((lane) =>
+				this.#laneConcurrencyCap(lane)),
 			activeByLane: this.#laneCounts((lane) =>
 				this.#activeByLane.get(lane) ?? 0),
 			queuedByLane: this.#laneCounts((lane) =>
@@ -404,10 +456,16 @@ export class RequestScheduler {
 		this.#sortQueue();
 		while (this.#activeCount < this.#maxConcurrent && this.#queue.length) {
 			const now = this.#now();
-			const nextIndex = this.#queue.findIndex(
-				(candidate) =>
-					candidate.notBefore <= now && this.#taskCanStart(candidate),
-			);
+			const nextIndex = this.#queue.findIndex((candidate) => {
+				if (candidate.notBefore > now || !this.#taskCanStart(candidate)) {
+					return false;
+				}
+				const businessWaitMs = this.#businessTimingWaitMs(candidate, now);
+				if (businessWaitMs <= 0) return true;
+				candidate.notBefore = now + businessWaitMs;
+				candidate.deferredWaitReason = `business:${candidate.business}`;
+				return false;
+			});
 			if (nextIndex < 0) {
 				this.#scheduleDeferredPump(now);
 				return;
@@ -548,7 +606,10 @@ export class RequestScheduler {
 	}
 
 	#preemptDroppablePermit(
-		incoming: Pick<RequestTask<unknown>, 'priority' | 'lane' | 'droppable'>,
+		incoming: Pick<
+			RequestTask<unknown>,
+			'priority' | 'lane' | 'business' | 'droppable'
+		>,
 	): boolean {
 		const waiting = this.#permitTask;
 		const controller = waiting?.controller;
@@ -580,11 +641,11 @@ export class RequestScheduler {
 	}
 
 	#taskCanStart(
-		task: Pick<RequestTask<unknown>, 'lane' | 'priority'>,
+		task: Pick<RequestTask<unknown>, 'lane' | 'priority' | 'business'>,
 	): boolean {
 		let cap = Math.min(
 			this.#maxConcurrent,
-			LANE_CONCURRENCY_CAP[task.lane],
+			this.#laneConcurrencyCap(task.lane),
 		);
 		/*
 		 * 多条低优先级后台 post_ids 补流容易把同一站点推入 Cloudflare challenge；
@@ -593,7 +654,78 @@ export class RequestScheduler {
 		if (task.lane === 'topic-batch' && task.priority === 'background') {
 			cap = Math.min(cap, 1);
 		}
-		return (this.#activeByLane.get(task.lane) ?? 0) < cap;
+		if ((this.#activeByLane.get(task.lane) ?? 0) >= cap) return false;
+		if (task.business === null) return true;
+		return (this.#activeByBusiness.get(task.business) ?? 0) <
+			this.#businessRequestSettings[task.business].maxConcurrent;
+	}
+
+	#laneConcurrencyCap(lane: RequestLane): number {
+		let target: number;
+		switch (lane) {
+			case 'topic-batch':
+				target = this.#requestFlowSettings.topicBatchMaxConcurrent;
+				break;
+			case 'nested-replies':
+				target = this.#requestFlowSettings.nestedRepliesMaxConcurrent;
+				break;
+			case 'user-card':
+				target = this.#requestFlowSettings.userCardMaxConcurrent;
+				break;
+			case 'standard':
+				target = this.#requestFlowSettings.standardMaxConcurrent;
+				break;
+			default:
+				return LANE_CONCURRENCY_CAP[lane];
+		}
+		return Math.min(target, LANE_CONCURRENCY_CAP[lane]);
+	}
+
+	#businessTimingWaitMs(
+		task: Pick<RequestTask<unknown>, 'business' | 'priority'>,
+		now: number,
+	): number {
+		if (
+			task.business === null ||
+			(task.priority !== 'prefetch' && task.priority !== 'background')
+		) return 0;
+		const policy = this.#businessRequestSettings[task.business];
+		const lastStartedAt = this.#businessLastStartedAt.get(task.business) ?? 0;
+		const intervalWaitMs = Math.max(
+			0,
+			lastStartedAt + policy.backgroundMinIntervalMs - now,
+		);
+		const starts = this.#recentBusinessStarts(task.business, now);
+		const rateWaitMs = starts.length < policy.backgroundRequestsPerMinute
+			? 0
+			: Math.max(
+				0,
+				starts[
+					starts.length - policy.backgroundRequestsPerMinute
+				]! + 60_000 - now,
+			);
+		return Math.max(0, Math.ceil(intervalWaitMs), Math.ceil(rateWaitMs));
+	}
+
+	#recentBusinessStarts(
+		business: ReaderBusinessRequestKind,
+		now: number,
+	): number[] {
+		const starts = this.#businessStarts.get(business) ?? [];
+		const minimum = now - 60_000;
+		let first = 0;
+		while (first < starts.length && starts[first]! <= minimum) first += 1;
+		if (first > 0) starts.splice(0, first);
+		if (!this.#businessStarts.has(business)) {
+			this.#businessStarts.set(business, starts);
+		}
+		return starts;
+	}
+
+	#pruneBusinessStarts(now: number): void {
+		for (const business of this.#businessStarts.keys()) {
+			this.#recentBusinessStarts(business, now);
+		}
 	}
 
 	#laneCounts(
@@ -634,6 +766,16 @@ export class RequestScheduler {
 			(this.#activeByLane.get(task.lane) ?? 0) + 1,
 		);
 		const startedAt = this.#now();
+		if (task.business !== null) {
+			this.#activeByBusiness.set(
+				task.business,
+				(this.#activeByBusiness.get(task.business) ?? 0) + 1,
+			);
+			if (task.priority === 'prefetch' || task.priority === 'background') {
+				this.#businessLastStartedAt.set(task.business, startedAt);
+				this.#recentBusinessStarts(task.business, startedAt).push(startedAt);
+			}
+		}
 		try {
 			const waitReason = String(
 				permit?.waitReason || task.deferredWaitReason || '',
@@ -677,6 +819,17 @@ export class RequestScheduler {
 			);
 			if (laneActive) this.#activeByLane.set(task.lane, laneActive);
 			else this.#activeByLane.delete(task.lane);
+			if (task.business !== null) {
+				const businessActive = Math.max(
+					0,
+					(this.#activeByBusiness.get(task.business) ?? 0) - 1,
+				);
+				if (businessActive) {
+					this.#activeByBusiness.set(task.business, businessActive);
+				} else {
+					this.#activeByBusiness.delete(task.business);
+				}
+			}
 			this.#finish(task);
 			this.#queuePump();
 		}

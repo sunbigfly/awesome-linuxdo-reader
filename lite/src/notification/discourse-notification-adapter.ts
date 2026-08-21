@@ -27,6 +27,9 @@ import type {
 	RequestTransportResponse,
 } from '../network/coordinated-request-client.js';
 import {
+	READER_NOTIFICATION_REQUEST_POLICY,
+} from '../network/reader-business-request-policy.js';
+import {
 	READER_NOTIFICATION_GROUP_ORDER,
 	normalizeBoostNotification,
 	normalizeNativeNotification,
@@ -439,12 +442,13 @@ export class DiscourseNotificationRequestAdapter {
 				});
 			}
 			return this.#gateway.loadCollectionPage<unknown>({
+				business: READER_NOTIFICATION_REQUEST_POLICY.kind,
 				authScope: this.authScope,
 				collection: 'notification-topic-taxonomy',
 				page: 0,
 				variant: `v1:${topicIdBatch.join(',')}`,
 				profile: options.background || options.history
-					? 'background-prefetch'
+					? READER_NOTIFICATION_REQUEST_POLICY.backgroundProfile
 					: 'collection-visible',
 				input: path,
 				signal: this.#signal,
@@ -503,11 +507,12 @@ export class DiscourseNotificationRequestAdapter {
 			throw new Error('合并回复缺少 Discourse topic-id-query 目录');
 		}
 		const payload = await this.#gateway.loadTopicTarget<unknown>({
+			business: READER_NOTIFICATION_REQUEST_POLICY.kind,
 			authScope: this.authScope,
 			topicId: info.topicId,
 			operation: 'target:around:topic-id-query',
 			postNumber: info.latestPostNumber,
-			profile: 'background-prefetch',
+			profile: READER_NOTIFICATION_REQUEST_POLICY.backgroundProfile,
 			input: candidate.url,
 			signal: this.#signal,
 			cacheMode: refresh ? 'refresh' : 'default',
@@ -554,7 +559,7 @@ export class DiscourseNotificationRequestAdapter {
 			topicId: info.topicId,
 			operation: 'target:around:topic-id-query',
 			postNumber: info.latestPostNumber,
-			profile: 'background-prefetch',
+			profile: READER_NOTIFICATION_REQUEST_POLICY.backgroundProfile,
 			cache: this.#consolidatedReplyCache(info.topicId),
 		});
 		return payload === null ? null : topicPosts(payload);
@@ -701,6 +706,7 @@ export class DiscourseNotificationRequestAdapter {
 		);
 		assertNotificationDescriptor(descriptor);
 		const payload = await this.#gateway.loadNotificationPage<unknown>({
+			business: READER_NOTIFICATION_REQUEST_POLICY.kind,
 			authScope: this.authScope,
 			group: requestGroup.key,
 			page,
@@ -709,11 +715,11 @@ export class DiscourseNotificationRequestAdapter {
 			...(options.history
 				? {
 					profile: options.visibleHistory
-						? 'surface-prefetch' as const
-						: 'background-prefetch' as const,
+						? READER_NOTIFICATION_REQUEST_POLICY.warmProfile
+						: READER_NOTIFICATION_REQUEST_POLICY.backgroundProfile,
 				}
 				: options.background
-					? { profile: 'surface-prefetch' as const }
+					? { profile: READER_NOTIFICATION_REQUEST_POLICY.warmProfile }
 					: {}),
 			input: descriptor.path,
 			signal: this.#signal,

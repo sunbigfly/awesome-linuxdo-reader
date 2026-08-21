@@ -16,6 +16,16 @@ import {
 	normalizeReaderUnwantedTopicFilterPreferences,
 	readerPreferencesUnwantedTopicFilterAdapter,
 } from '../collection/reader-unwanted-topic-filter.js';
+import {
+	READER_BUSINESS_REQUEST_DEFAULTS,
+	normalizeReaderBusinessRequestSettings,
+	type ReaderBusinessRequestSettings,
+} from '../network/reader-business-request-config.js';
+import {
+	READER_REQUEST_FLOW_DEFAULTS,
+	normalizeReaderRequestFlowSettings,
+	type ReaderRequestFlowSettings,
+} from '../network/reader-request-flow-config.js';
 
 export const READER_PREFERENCES_STORAGE_KEY = 'linuxdo-enhanced-reader:prefs';
 export const READER_CONFIG_EXPORT_FORMAT = 'awesome-linuxdo-reader-settings';
@@ -153,6 +163,12 @@ export interface ReaderPreferences {
 	readonly performanceRequestConcurrency: number;
 	readonly performanceRequestInterval: number;
 	readonly performanceRequestRateTarget: number;
+	readonly performanceReadStateRequestsPerMinute: number;
+	readonly performanceReadStateTimingsPerMinute: number;
+	readonly requestFlowSettings: ReaderRequestFlowSettings;
+	readonly businessRequestSettings: ReaderBusinessRequestSettings;
+	readonly hostTopicPreheatEnabled: boolean;
+	readonly hostTopicPreheatPostCount: number;
 	readonly performanceSuspendHostTurnstileInBackground: boolean;
 	readonly layoutProfile: ReaderLayoutProfile;
 	readonly fullpageLayoutProfile: ReaderLayoutProfile;
@@ -240,6 +256,8 @@ export interface ReaderPerformanceConfig {
 	readonly requestMaxConcurrent: number;
 	readonly requestMinInterval: number;
 	readonly requestRateTarget: number;
+	readonly readStateRequestsPerMinute: number;
+	readonly readStateTimingsPerMinute: number;
 }
 
 export type ReaderPerformanceName = keyof ReaderPerformanceConfig;
@@ -273,6 +291,9 @@ const HISTORY_EDGE_TRIGGER_MAX = 15;
 const HISTORY_EDGE_TRIGGER_DEFAULT = 15;
 const INLINE_REPLY_TREE_DEFAULT_DEPTH = 3;
 const INLINE_REPLY_TREE_MAX_DEPTH = 5;
+export const HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT = 24;
+export const HOST_TOPIC_PREHEAT_POST_COUNT_MIN = 1;
+export const HOST_TOPIC_PREHEAT_POST_COUNT_MAX = 128;
 
 const FONT_FAMILIES = new Set<ReaderFontFamily>([
 	'site',
@@ -472,15 +493,19 @@ const PERFORMANCE_PRESETS = Object.freeze<
 		requestMaxConcurrent: 2,
 		requestMinInterval: 180,
 		requestRateTarget: 75,
+		readStateRequestsPerMinute: 6,
+		readStateTimingsPerMinute: 120,
 	}),
 	balanced: Object.freeze({
-		pageSize: 48,
-		streamOverscanViewports: 1.5,
-		streamMaxItems: 80,
-		nestedPrefetchViewports: 2.5,
+		pageSize: 32,
+		streamOverscanViewports: 1,
+		streamMaxItems: 64,
+		nestedPrefetchViewports: 2,
 		requestMaxConcurrent: 3,
 		requestMinInterval: 100,
 		requestRateTarget: 85,
+		readStateRequestsPerMinute: 10,
+		readStateTimingsPerMinute: 240,
 	}),
 	high: Object.freeze({
 		pageSize: 64,
@@ -490,6 +515,8 @@ const PERFORMANCE_PRESETS = Object.freeze<
 		requestMaxConcurrent: 4,
 		requestMinInterval: 80,
 		requestRateTarget: 90,
+		readStateRequestsPerMinute: 20,
+		readStateTimingsPerMinute: 400,
 	}),
 });
 const PERFORMANCE_NAMES = Object.freeze<readonly PerformanceName[]>([
@@ -500,6 +527,8 @@ const PERFORMANCE_NAMES = Object.freeze<readonly PerformanceName[]>([
 	'requestMaxConcurrent',
 	'requestMinInterval',
 	'requestRateTarget',
+	'readStateRequestsPerMinute',
+	'readStateTimingsPerMinute',
 ]);
 const PERFORMANCE_LIMITS = Object.freeze<
 	Readonly<Record<PerformanceName, NumericLimit>>
@@ -511,8 +540,12 @@ const PERFORMANCE_LIMITS = Object.freeze<
 	requestMaxConcurrent: Object.freeze({ min: 1, max: 4, integer: true }),
 	requestMinInterval: Object.freeze({ min: 80, max: 500, integer: true }),
 	requestRateTarget: Object.freeze({ min: 50, max: 95, integer: true }),
+	readStateRequestsPerMinute: Object.freeze({ min: 1, max: 60, integer: true }),
+	readStateTimingsPerMinute: Object.freeze({ min: 20, max: 1_200, integer: true }),
 });
 export const READER_PERFORMANCE_PRESETS = PERFORMANCE_PRESETS;
+/** 当前性能设置的唯一默认参数；命名预设仅保留给旧配置迁移。 */
+export const READER_PERFORMANCE_DEFAULT_CONFIG = PERFORMANCE_PRESETS.balanced;
 export const READER_PERFORMANCE_LIMITS = PERFORMANCE_LIMITS;
 export const READER_SHORTCUT_DEFAULTS = Object.freeze({
 	historyBack: Object.freeze(['ArrowLeft', 'Mouse3']),
@@ -1042,6 +1075,16 @@ function performanceConfigFromInput(
 			input.performanceRequestRateTarget,
 			fallback.requestRateTarget,
 		),
+		readStateRequestsPerMinute: normalizePerformanceValue(
+			'readStateRequestsPerMinute',
+			input.performanceReadStateRequestsPerMinute,
+			fallback.readStateRequestsPerMinute,
+		),
+		readStateTimingsPerMinute: normalizePerformanceValue(
+			'readStateTimingsPerMinute',
+			input.performanceReadStateTimingsPerMinute,
+			fallback.readStateTimingsPerMinute,
+		),
 	});
 }
 
@@ -1070,6 +1113,8 @@ function performancePreferencesPatch(
 	| 'performanceRequestConcurrency'
 	| 'performanceRequestInterval'
 	| 'performanceRequestRateTarget'
+	| 'performanceReadStateRequestsPerMinute'
+	| 'performanceReadStateTimingsPerMinute'
 > {
 	return {
 		performancePreset: preset,
@@ -1080,6 +1125,8 @@ function performancePreferencesPatch(
 		performanceRequestConcurrency: config.requestMaxConcurrent,
 		performanceRequestInterval: config.requestMinInterval,
 		performanceRequestRateTarget: config.requestRateTarget,
+		performanceReadStateRequestsPerMinute: config.readStateRequestsPerMinute,
+		performanceReadStateTimingsPerMinute: config.readStateTimingsPerMinute,
 	};
 }
 
@@ -1089,6 +1136,13 @@ export function readReaderPerformanceConfig(
 	return performanceConfigFromInput(
 		input as Readonly<Record<string, unknown>>,
 	);
+}
+
+export function readerPerformanceConfigIsDefault(
+	config: ReaderPerformanceConfig,
+): boolean {
+	return PERFORMANCE_NAMES.every((name) =>
+		config[name] === READER_PERFORMANCE_DEFAULT_CONFIG[name]);
 }
 
 export function createReaderPerformancePreferencesPatch(
@@ -1104,8 +1158,38 @@ export function createReaderPerformancePreferencesPatch(
 	| 'performanceRequestConcurrency'
 	| 'performanceRequestInterval'
 	| 'performanceRequestRateTarget'
+	| 'performanceReadStateRequestsPerMinute'
+	| 'performanceReadStateTimingsPerMinute'
 > {
 	return performancePreferencesPatch(config, preset);
+}
+
+export function readReaderBusinessRequestSettings(
+	input: Readonly<Partial<ReaderPreferences>>,
+): ReaderBusinessRequestSettings {
+	return normalizeReaderBusinessRequestSettings(input.businessRequestSettings);
+}
+
+export function createReaderBusinessRequestSettingsPatch(
+	settings: ReaderBusinessRequestSettings,
+): Pick<ReaderPreferences, 'businessRequestSettings'> {
+	return {
+		businessRequestSettings: normalizeReaderBusinessRequestSettings(settings),
+	};
+}
+
+export function readReaderRequestFlowSettings(
+	input: Readonly<Partial<ReaderPreferences>>,
+): ReaderRequestFlowSettings {
+	return normalizeReaderRequestFlowSettings(input.requestFlowSettings);
+}
+
+export function createReaderRequestFlowSettingsPatch(
+	settings: ReaderRequestFlowSettings,
+): Pick<ReaderPreferences, 'requestFlowSettings'> {
+	return {
+		requestFlowSettings: normalizeReaderRequestFlowSettings(settings),
+	};
 }
 
 export function readerPerformancePresetForConfig(
@@ -1425,6 +1509,10 @@ export function createReaderPreferencesDefaults(
 		fontProfile: READER_FONT_DEFAULT,
 		appearanceProfile: APPEARANCE_PROFILE_DEFAULT,
 		...performance,
+		requestFlowSettings: READER_REQUEST_FLOW_DEFAULTS,
+		businessRequestSettings: READER_BUSINESS_REQUEST_DEFAULTS,
+		hostTopicPreheatEnabled: true,
+		hostTopicPreheatPostCount: HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT,
 		performanceSuspendHostTurnstileInBackground: false,
 		layoutProfile: READER_LAYOUT_DEFAULT,
 		fullpageLayoutProfile: READER_FULLPAGE_LAYOUT_DEFAULT,
@@ -1503,8 +1591,9 @@ export function createReaderPreferencesResetValue(
 }
 
 /**
- * 旧版 readPrefs 的存储入口语义：已命名的性能预设覆盖七个存储字段；
- * 普通 update/replace 不调用它，避免把用户刚调的单项值重新覆盖。
+ * 旧版 readPrefs 的存储入口语义：已命名的性能预设覆盖对应存储字段。
+ * 当前设置面板不再暴露或依赖命名预设；这里仅在载入旧配置时迁移。普通
+ * update/replace 不调用它，避免把用户刚调的单项值重新覆盖。
  */
 export function prepareStoredReaderPreferences(
 	value: unknown,
@@ -1668,6 +1757,19 @@ export function normalizeReaderPreferences(
 		fontProfile: normalizeFontProfile(source.fontProfile),
 		appearanceProfile: normalizeAppearanceProfile(source.appearanceProfile),
 		...performance,
+		requestFlowSettings: normalizeReaderRequestFlowSettings(
+			source.requestFlowSettings,
+		),
+		businessRequestSettings: normalizeReaderBusinessRequestSettings(
+			source.businessRequestSettings,
+		),
+		hostTopicPreheatEnabled: source.hostTopicPreheatEnabled !== false,
+		hostTopicPreheatPostCount: roundedRange(
+			source.hostTopicPreheatPostCount,
+			HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT,
+			HOST_TOPIC_PREHEAT_POST_COUNT_MIN,
+			HOST_TOPIC_PREHEAT_POST_COUNT_MAX,
+		),
 		performanceSuspendHostTurnstileInBackground:
 			source.performanceSuspendHostTurnstileInBackground === true,
 		layoutProfile: normalizeLayoutProfile(source.layoutProfile, READER_LAYOUT_DEFAULT),
@@ -1763,7 +1865,15 @@ export function createReaderPreferencesConfigCodec(
 		unwantedTopicFilterTopicFields: Object.freeze([]),
 		unwantedTopicFilterPostAuthors: Object.freeze([]),
 	});
-	const hostTurnstileBackgroundDefaults = Object.freeze({
+	const performanceRuntimeDefaults = Object.freeze({
+		performanceReadStateRequestsPerMinute:
+			PERFORMANCE_PRESETS.balanced.readStateRequestsPerMinute,
+		performanceReadStateTimingsPerMinute:
+			PERFORMANCE_PRESETS.balanced.readStateTimingsPerMinute,
+		requestFlowSettings: READER_REQUEST_FLOW_DEFAULTS,
+		businessRequestSettings: READER_BUSINESS_REQUEST_DEFAULTS,
+		hostTopicPreheatEnabled: true,
+		hostTopicPreheatPostCount: HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT,
 		performanceSuspendHostTurnstileInBackground: false,
 	});
 	return new PreferencesConfigCodec({
@@ -1774,17 +1884,17 @@ export function createReaderPreferencesConfigCodec(
 		normalize,
 		legacyImportRules: [
 			{
-				missingDefaults: hostTurnstileBackgroundDefaults,
+				missingDefaults: performanceRuntimeDefaults,
 			},
 			{
 				missingDefaults: {
-					...hostTurnstileBackgroundDefaults,
+					...performanceRuntimeDefaults,
 					...unwantedTopicFilterDefaults,
 				},
 			},
 			{
 				missingDefaults: {
-					...hostTurnstileBackgroundDefaults,
+					...performanceRuntimeDefaults,
 					...unwantedTopicFilterDefaults,
 					autoDarkModeEnabled: false,
 					autoDarkModeStartTime: 'sunset',
@@ -1792,7 +1902,7 @@ export function createReaderPreferencesConfigCodec(
 			},
 			{
 				missingDefaults: {
-					...hostTurnstileBackgroundDefaults,
+					...performanceRuntimeDefaults,
 					...unwantedTopicFilterDefaults,
 					autoDarkModeEnabled: false,
 					autoDarkModeStartTime: 'sunset',
@@ -1801,7 +1911,7 @@ export function createReaderPreferencesConfigCodec(
 			},
 			{
 				missingDefaults: {
-					...hostTurnstileBackgroundDefaults,
+					...performanceRuntimeDefaults,
 					...unwantedTopicFilterDefaults,
 					autoDarkModeEnabled: false,
 					autoDarkModeStartTime: 'sunset',
@@ -1811,7 +1921,7 @@ export function createReaderPreferencesConfigCodec(
 			},
 			{
 				missingDefaults: {
-					...hostTurnstileBackgroundDefaults,
+					...performanceRuntimeDefaults,
 					...unwantedTopicFilterDefaults,
 					autoDarkModeEnabled: false,
 					autoDarkModeStartTime: 'sunset',

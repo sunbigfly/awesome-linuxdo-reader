@@ -236,6 +236,16 @@ import {
 	PublicResourceRequestAdapter,
 	type PublicResourceRequestAdapterOptions,
 } from '../network/public-resource-request-adapter.js';
+import {
+	READER_TOPIC_DOWNLOAD_REQUEST_POLICY,
+} from '../network/reader-business-request-policy.js';
+import {
+	READER_BUSINESS_REQUEST_DEFAULTS,
+} from '../network/reader-business-request-config.js';
+import {
+	READER_REQUEST_FLOW_DEFAULTS,
+	normalizeReaderRequestFlowSettings,
+} from '../network/reader-request-flow-config.js';
 import type {
 	RequestObserver,
 	RequestObservationEvent,
@@ -1853,12 +1863,16 @@ export class ReaderBrowserRuntime<
 		});
 		this.#performance = options.performance ?? Object.freeze({
 			pageSize: options.topic.pageSize,
-			streamOverscanScreens: 1.5,
-			streamMaxMountedPostCount: 80,
-			nestedPrefetchScreens: 2.5,
+			streamOverscanScreens: 1,
+			streamMaxMountedPostCount: 64,
+			nestedPrefetchScreens: 2,
 			requestMaxConcurrent: options.data.scheduler.maxConcurrent,
 			requestMinIntervalMs: options.permit.minIntervalMs,
 			requestRateTargetPercent: 85,
+			readStateRequestsPerMinute: 10,
+			readStateTimingsPerMinute: 240,
+			businessRequestSettings: READER_BUSINESS_REQUEST_DEFAULTS,
+			requestFlowSettings: READER_REQUEST_FLOW_DEFAULTS,
 			requestShortBudget: options.permit.shortBudget,
 			requestLongBudget: options.permit.longBudget,
 			preheatMaxConcurrent: 2,
@@ -6419,16 +6433,29 @@ export class ReaderBrowserRuntime<
 
 	#applyPerformanceInfrastructure(): void {
 		const snapshot = this.#performance;
+		const requestFlowSettings = normalizeReaderRequestFlowSettings(
+			snapshot.requestFlowSettings,
+		);
 		this.permit.applyRuntimePolicy({
 			shortBudget: snapshot.requestShortBudget,
 			longBudget: snapshot.requestLongBudget,
 			minIntervalMs: snapshot.requestMinIntervalMs,
 			maxConcurrent: snapshot.requestMaxConcurrent,
+			backgroundIdleIntervalMs:
+				requestFlowSettings.backgroundIdleIntervalMs,
+			backgroundMaxDeferMs:
+				requestFlowSettings.backgroundMaxDeferMs,
 		});
 		this.data.applyRequestRuntimePolicy({
 			maxConcurrent: snapshot.requestMaxConcurrent,
 			responseMemoryMaxEntries: snapshot.responseMemoryMaxEntries,
 			responseMemoryMaxBytes: snapshot.responseMemoryMaxBytes,
+			readStateRequestsPerMinute: snapshot.readStateRequestsPerMinute,
+			readStateTimingsPerMinute: snapshot.readStateTimingsPerMinute,
+			requestFlowSettings,
+			...(snapshot.businessRequestSettings === undefined
+				? {}
+				: { businessRequestSettings: snapshot.businessRequestSettings }),
 		});
 	}
 
@@ -8799,7 +8826,10 @@ export function createReaderBrowserRuntimeStage<
 						const snapshot = await runtime.permit.snapshot();
 						if (
 							snapshot.challengeState === 'idle' &&
-							readerQueuePrefetchRequestHasHeadroom(snapshot)
+							readerQueuePrefetchRequestHasHeadroom(
+								snapshot,
+								runtime.performance.requestFlowSettings,
+							)
 						) return;
 						const delayMs = snapshot.nextPermitDelay > 0
 							? Math.max(500, Math.min(2_000, snapshot.nextPermitDelay))
@@ -8829,7 +8859,11 @@ export function createReaderBrowserRuntimeStage<
 					const snapshot = await runtime.permit.snapshot();
 					if (
 						snapshot.challengeState === 'idle' &&
-						readerBulkBackgroundRequestHasHeadroom(snapshot, nestedReplies)
+						readerBulkBackgroundRequestHasHeadroom(
+							snapshot,
+							nestedReplies,
+							runtime.performance.requestFlowSettings,
+						)
 					) return;
 					const delayMs = snapshot.nextPermitDelay > 0
 						? Math.max(180, Math.min(1_000, snapshot.nextPermitDelay))
@@ -9208,6 +9242,7 @@ export function createReaderBrowserRuntimeStage<
 							await waitForTopicDownloadIdle(abort.signal);
 							const topic = await bundle.services.session.init({
 								background: true,
+								business: READER_TOPIC_DOWNLOAD_REQUEST_POLICY.kind,
 								beforeNetwork: beforeDownloadNetwork,
 							});
 										const session = bundle.services.session;
@@ -9240,6 +9275,7 @@ export function createReaderBrowserRuntimeStage<
 										} else {
 								const stream = await session.ensurePostStream({
 									background: true,
+									business: READER_TOPIC_DOWNLOAD_REQUEST_POLICY.kind,
 									maxAttempts: 2,
 									beforeNetwork: beforeDownloadNetwork,
 									beforeBatch: () =>
@@ -9334,6 +9370,7 @@ export function createReaderBrowserRuntimeStage<
 																afterCommentId,
 																refresh: true,
 																background: true,
+																business: READER_TOPIC_DOWNLOAD_REQUEST_POLICY.kind,
 																beforeNetwork: beforeDownloadNetwork,
 															});
 														const payloadRecord = record(payload);
@@ -9443,6 +9480,7 @@ export function createReaderBrowserRuntimeStage<
 												const targetOptions = {
 													scope: 'single' as const,
 													background: true,
+													business: READER_TOPIC_DOWNLOAD_REQUEST_POLICY.kind,
 													beforeNetwork: beforeDownloadNetwork,
 												};
 												const candidates = prioritizeReaderTopicOfflineTargetCandidates(

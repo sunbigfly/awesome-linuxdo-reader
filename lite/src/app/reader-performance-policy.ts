@@ -1,3 +1,14 @@
+import {
+	normalizeReaderBusinessRequestSettings,
+	readerBusinessRequestSettingsEqual,
+	type ReaderBusinessRequestSettings,
+} from '../network/reader-business-request-config.js';
+import {
+	normalizeReaderRequestFlowSettings,
+	readerRequestFlowSettingsEqual,
+	type ReaderRequestFlowSettings,
+} from '../network/reader-request-flow-config.js';
+
 export interface ReaderPerformancePreferences {
 	readonly performancePageSize: number;
 	readonly performanceStreamOverscan: number;
@@ -6,6 +17,10 @@ export interface ReaderPerformancePreferences {
 	readonly performanceRequestConcurrency: number;
 	readonly performanceRequestInterval: number;
 	readonly performanceRequestRateTarget: number;
+	readonly performanceReadStateRequestsPerMinute: number;
+	readonly performanceReadStateTimingsPerMinute: number;
+	readonly businessRequestSettings?: ReaderBusinessRequestSettings;
+	readonly requestFlowSettings?: ReaderRequestFlowSettings;
 }
 
 export interface ReaderPerformanceSnapshot {
@@ -16,6 +31,10 @@ export interface ReaderPerformanceSnapshot {
 	readonly requestMaxConcurrent: number;
 	readonly requestMinIntervalMs: number;
 	readonly requestRateTargetPercent: number;
+	readonly readStateRequestsPerMinute: number;
+	readonly readStateTimingsPerMinute: number;
+	readonly businessRequestSettings?: ReaderBusinessRequestSettings;
+	readonly requestFlowSettings?: ReaderRequestFlowSettings;
 	readonly requestShortBudget: number;
 	readonly requestLongBudget: number;
 	readonly preheatMaxConcurrent: number;
@@ -45,19 +64,16 @@ export interface ReaderPerformancePolicyOptions {
 }
 
 const DEFAULTS = Object.freeze({
-	pageSize: 48,
-	streamOverscanScreens: 1.5,
-	streamMaxMountedPostCount: 80,
-	nestedPrefetchScreens: 2.5,
+	pageSize: 32,
+	streamOverscanScreens: 1,
+	streamMaxMountedPostCount: 64,
+	nestedPrefetchScreens: 2,
 	requestMaxConcurrent: 3,
 	requestMinIntervalMs: 100,
 	requestRateTargetPercent: 85,
+	readStateRequestsPerMinute: 10,
+	readStateTimingsPerMinute: 240,
 });
-
-const BULK_BACKGROUND_REQUEST_BUDGET_SHARE = 0.5;
-const QUEUE_PREFETCH_REQUEST_BUDGET_SHARE = 0.25;
-const QUEUE_PREFETCH_SHORT_REQUEST_LIMIT = 4;
-const QUEUE_PREFETCH_LONG_REQUEST_LIMIT = 8;
 
 function finiteRange(
 	value: number,
@@ -97,15 +113,19 @@ export function readerBulkBackgroundRequestHasHeadroom(input: Readonly<{
 	readonly longBudget: number;
 	readonly shortCount: number;
 	readonly longCount: number;
-}>, nestedReplies = false): boolean {
+}>, nestedReplies = false, flowValue?: ReaderRequestFlowSettings): boolean {
+	const flow = normalizeReaderRequestFlowSettings(flowValue);
+	const budgetShare = flow.bulkBackgroundBudgetPercent / 100;
 	const shortLimit = Math.max(
 		1,
 		Math.min(
 			Math.floor(
 				positiveInteger(input.shortBudget, 'shortBudget') *
-				BULK_BACKGROUND_REQUEST_BUDGET_SHARE,
+					budgetShare,
 			),
-			nestedReplies ? 8 : Number.MAX_SAFE_INTEGER,
+			nestedReplies
+				? flow.nestedBackgroundShortLimit
+				: Number.MAX_SAFE_INTEGER,
 		),
 	);
 	const longLimit = Math.max(
@@ -113,9 +133,11 @@ export function readerBulkBackgroundRequestHasHeadroom(input: Readonly<{
 		Math.min(
 			Math.floor(
 				positiveInteger(input.longBudget, 'longBudget') *
-				BULK_BACKGROUND_REQUEST_BUDGET_SHARE,
+					budgetShare,
 			),
-			nestedReplies ? 24 : Number.MAX_SAFE_INTEGER,
+			nestedReplies
+				? flow.nestedBackgroundLongLimit
+				: Number.MAX_SAFE_INTEGER,
 		),
 	);
 	const normalizedCount = (value: number): number =>
@@ -138,25 +160,20 @@ export function readerQueuePrefetchRequestHasHeadroom(input: Readonly<{
 	readonly longBudget: number;
 	readonly shortCount: number;
 	readonly longCount: number;
-}>): boolean {
+}>, flowValue?: ReaderRequestFlowSettings): boolean {
+	const flow = normalizeReaderRequestFlowSettings(flowValue);
 	const shortLimit = Math.max(
 		1,
 		Math.min(
-			Math.floor(
-				positiveInteger(input.shortBudget, 'shortBudget') *
-				QUEUE_PREFETCH_REQUEST_BUDGET_SHARE,
-			),
-			QUEUE_PREFETCH_SHORT_REQUEST_LIMIT,
+			positiveInteger(input.shortBudget, 'shortBudget'),
+			flow.queuePrefetchShortLimit,
 		),
 	);
 	const longLimit = Math.max(
 		1,
 		Math.min(
-			Math.floor(
-				positiveInteger(input.longBudget, 'longBudget') *
-				QUEUE_PREFETCH_REQUEST_BUDGET_SHARE,
-			),
-			QUEUE_PREFETCH_LONG_REQUEST_LIMIT,
+			positiveInteger(input.longBudget, 'longBudget'),
+			flow.queuePrefetchLongLimit,
 		),
 	);
 	const normalizedCount = (value: number): number =>
@@ -280,6 +297,21 @@ function snapshot(
 		50,
 		95,
 	);
+	const readStateRequestsPerMinute = integerRange(
+		preferences.performanceReadStateRequestsPerMinute,
+		DEFAULTS.readStateRequestsPerMinute,
+		1,
+		60,
+	);
+	const readStateTimingsPerMinute = integerRange(
+		preferences.performanceReadStateTimingsPerMinute,
+		DEFAULTS.readStateTimingsPerMinute,
+		20,
+		1_200,
+	);
+	const requestFlowSettings = normalizeReaderRequestFlowSettings(
+		preferences.requestFlowSettings,
+	);
 	const target = requestRateTargetPercent / 100;
 	const scaledPageSize = integerRange(
 		Math.floor(pageSize * batchScale),
@@ -334,6 +366,12 @@ function snapshot(
 			500,
 		),
 		requestRateTargetPercent,
+		readStateRequestsPerMinute,
+		readStateTimingsPerMinute,
+		businessRequestSettings: normalizeReaderBusinessRequestSettings(
+			preferences.businessRequestSettings,
+		),
+		requestFlowSettings,
 		requestShortBudget: Math.max(
 			1,
 			Math.floor(shortBudgetCeiling * target),
@@ -342,8 +380,10 @@ function snapshot(
 			1,
 			Math.floor(longBudgetCeiling * target),
 		),
-		preheatMaxConcurrent:
+		preheatMaxConcurrent: Math.min(
+			requestFlowSettings.hostPreheatMaxConcurrent,
 			resourceTier === 'low' ? 1 : resourceTier === 'high' ? 3 : 2,
+		),
 		preheatHandoffMaxEntries:
 			resourceTier === 'low' ? 1 : resourceTier === 'high' ? 6 : 3,
 		preheatHandoffMaxBytes:
@@ -360,7 +400,7 @@ function snapshot(
 }
 
 /**
- * 七个性能设置到运行时策略的唯一投影。
+ * 全局性能数值和四类业务请求参数到运行时策略的唯一投影。
  *
  * schema 仍负责存储归一化；本类在运行边界再次防御非法注入，并把同一快照提供给根虚拟
  * 窗口、树预取、Topic loader、会话 scheduler 与跨标签 permit。
@@ -402,12 +442,26 @@ export class ReaderPerformancePolicy {
 			this.#longBudgetCeiling,
 			this.#capabilities,
 		);
-		if (
-			Object.entries(next).every(
-				([key, value]) =>
-					this.#snapshot[key as keyof ReaderPerformanceSnapshot] === value,
-			)
-		) {
+		if (Object.entries(next).every(([key, value]) =>
+			key === 'businessRequestSettings'
+				? readerBusinessRequestSettingsEqual(
+					normalizeReaderBusinessRequestSettings(
+						this.#snapshot.businessRequestSettings,
+					),
+					normalizeReaderBusinessRequestSettings(
+						next.businessRequestSettings,
+					),
+				)
+				: key === 'requestFlowSettings'
+					? readerRequestFlowSettingsEqual(
+						normalizeReaderRequestFlowSettings(
+							this.#snapshot.requestFlowSettings,
+						),
+						normalizeReaderRequestFlowSettings(
+							next.requestFlowSettings,
+						),
+					)
+				: this.#snapshot[key as keyof ReaderPerformanceSnapshot] === value)) {
 			return this.#snapshot;
 		}
 		this.#snapshot = next;

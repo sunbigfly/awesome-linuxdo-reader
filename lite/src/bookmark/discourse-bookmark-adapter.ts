@@ -20,6 +20,9 @@ import type {
 	RequestTransportResponse,
 } from '../network/coordinated-request-client.js';
 import {
+	READER_BOOKMARK_REQUEST_POLICY,
+} from '../network/reader-business-request-policy.js';
+import {
 	mergeGivenReactionRecords,
 	normalizeDiscourseBookmark,
 	normalizeGivenBoost,
@@ -170,8 +173,8 @@ function reportProgress(
 
 function collectionProfile(options: ReaderBookmarkLoadOptions) {
 	return options.background
-		? 'background-prefetch' as const
-		: 'collection-visible' as const;
+		? READER_BOOKMARK_REQUEST_POLICY.backgroundProfile
+		: READER_BOOKMARK_REQUEST_POLICY.foregroundProfile;
 }
 
 function collectionPageLimit(options: ReaderBookmarkLoadOptions): number {
@@ -384,13 +387,14 @@ export class DiscourseBookmarkRequestAdapter {
 			}
 			const path = `/latest.json?${query}`;
 			return this.#gateway.loadCollectionPage<unknown>({
+				business: READER_BOOKMARK_REQUEST_POLICY.kind,
 				authScope: this.authScope,
 				collection: 'bookmark-topic-taxonomy',
 				page: 0,
 				variant: `v1:${topicIdBatch.join(',')}`,
 				profile: options.background
-					? 'background-prefetch'
-					: 'collection-visible',
+					? READER_BOOKMARK_REQUEST_POLICY.backgroundProfile
+					: READER_BOOKMARK_REQUEST_POLICY.foregroundProfile,
 				input: path,
 				signal,
 				timeoutMs: 20_000,
@@ -466,6 +470,7 @@ export class DiscourseBookmarkRequestAdapter {
 				new URLSearchParams({ page: String(page) });
 			const payload = await this.#gateway.loadCollectionPage<unknown>({
 				...common,
+				business: READER_BOOKMARK_REQUEST_POLICY.kind,
 				collection: 'bookmarks',
 				variant: username.toLocaleLowerCase(),
 				input: path,
@@ -506,6 +511,7 @@ export class DiscourseBookmarkRequestAdapter {
 			});
 			const payload = await this.#gateway.loadCollectionPage<unknown>({
 				...common,
+				business: READER_BOOKMARK_REQUEST_POLICY.kind,
 				collection: stream === 'replies' ? 'replied-topics' : 'likes-given',
 				cursor,
 				variant: stream === 'replies'
@@ -543,6 +549,7 @@ export class DiscourseBookmarkRequestAdapter {
 				`/boosts-given.json${query.size ? `?${query}` : ''}`;
 			const payload = await this.#gateway.loadCollectionPage<unknown>({
 				...common,
+				business: READER_BOOKMARK_REQUEST_POLICY.kind,
 				collection: 'boosts-given',
 				cursor,
 				variant: `v1:${username.toLocaleLowerCase()}`,
@@ -577,6 +584,7 @@ export class DiscourseBookmarkRequestAdapter {
 				});
 			const payload = await this.#gateway.loadCollectionPage<unknown>({
 				...common,
+				business: READER_BOOKMARK_REQUEST_POLICY.kind,
 				collection: 'reactions-given',
 				cursor,
 				variant: username.toLocaleLowerCase(),

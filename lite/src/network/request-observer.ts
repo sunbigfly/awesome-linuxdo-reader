@@ -47,6 +47,7 @@ export interface RequestObservationStart {
 	readonly controlReason?: string;
 	readonly logicalId?: string;
 	readonly profile?: string;
+	readonly business?: string;
 	readonly namespace?: string;
 	readonly lane?: string;
 	readonly cacheMode?: string;
@@ -109,6 +110,7 @@ export interface RequestObservationEvent {
 	readonly controlReason: string;
 	readonly logicalId: string;
 	readonly profile: string;
+	readonly business: string;
 	readonly namespace: string;
 	readonly lane: string;
 	readonly cacheMode: string;
@@ -419,6 +421,7 @@ export class RequestObserver {
 			controlReason,
 			logicalId: diagnosticCode(input.logicalId),
 			profile: diagnosticCode(input.profile),
+			business: diagnosticCode(input.business),
 			namespace: diagnosticCode(input.namespace),
 			lane: diagnosticCode(input.lane),
 			cacheMode: diagnosticCode(input.cacheMode),

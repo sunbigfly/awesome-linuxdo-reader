@@ -149,6 +149,23 @@ assert(
 		client.calls[0]?.lane === 'topic-batch',
 	'Topic loader 必须进入可见优先级和 post_ids 批量车道',
 );
+let rejectedMismatchedBusiness = false;
+try {
+	await gateway.loadTopicPosts({
+		...topicInput,
+		topicId: 11,
+		postIds: [110],
+		business: 'topic-download',
+		cache: { ...cache, tags: ['topic:11'] },
+	});
+} catch (error) {
+	rejectedMismatchedBusiness = error instanceof Error &&
+		error.message.includes('topic-visible');
+}
+assert(
+	rejectedMismatchedBusiness,
+	'Gateway 必须就地拒绝业务目录未声明的 profile，不能让设置投影与实际请求漂移',
+);
 
 let bulkBeforeNetworkCalls = 0;
 let bulkTransportCalls = 0;
@@ -305,6 +322,7 @@ const notificationCache = {
 	tags: ['notifications'],
 };
 await gateway.loadNotificationPage({
+	business: 'notifications',
 	authScope: 'account:test',
 	group: 'all',
 	page: 2,
@@ -313,9 +331,14 @@ await gateway.loadNotificationPage({
 	cache: notificationCache,
 	transport: async () => ({ ok: true, status: 200, value: [{ id: 2 }] }),
 });
-assert(client.calls.at(-1)?.priority === 'visible', '当前通知页必须是 visible');
+assert(
+	client.calls.at(-1)?.priority === 'visible' &&
+		client.calls.at(-1)?.business === 'notifications',
+	'当前通知页必须以统一业务身份进入 visible 策略',
+);
 assert(client.calls.at(-1)?.lane === 'standard', '普通通知分页必须保持单请求车道');
 await gateway.loadNotificationPage({
+	business: 'notifications',
 	authScope: 'account:test',
 	group: 'all',
 	page: 0,

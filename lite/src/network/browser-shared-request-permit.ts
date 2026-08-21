@@ -308,6 +308,8 @@ export interface BrowserSharedRequestPermitSnapshot {
 	readonly longBudget: number;
 	readonly minIntervalMs: number;
 	readonly maxConcurrent: number;
+	readonly backgroundIdleIntervalMs?: number;
+	readonly backgroundMaxDeferMs?: number;
 	readonly instances: number;
 	readonly queued: number;
 	readonly active: number;
@@ -332,6 +334,8 @@ export interface BrowserSharedRequestPermitRuntimePolicy {
 	readonly longBudget: number;
 	readonly minIntervalMs: number;
 	readonly maxConcurrent: number;
+	readonly backgroundIdleIntervalMs?: number;
+	readonly backgroundMaxDeferMs?: number;
 }
 
 interface PermitDecision {
@@ -719,8 +723,8 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 	#longBudget: number;
 	#minIntervalMs: number;
 	#maxConcurrent: number;
-	readonly #backgroundIdleIntervalMs: number;
-	readonly #backgroundMaxDeferMs: number;
+	#backgroundIdleIntervalMs: number;
+	#backgroundMaxDeferMs: number;
 	readonly #rateLimitEvidenceWindowMs: number;
 	readonly #rateLimitMaxBackoffMs: number;
 	readonly #rateLimitJitterRatio: number;
@@ -1299,6 +1303,8 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			longBudget: policy.longBudget,
 			minIntervalMs: policy.minIntervalMs,
 			maxConcurrent: policy.maxConcurrent,
+			backgroundIdleIntervalMs: this.#backgroundIdleIntervalMs,
+			backgroundMaxDeferMs: this.#backgroundMaxDeferMs,
 			instances: Math.max(1, instances.size),
 			queued: state.intents.length,
 			active: state.active.length,
@@ -1347,6 +1353,18 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			this.#maxConcurrent,
 			'maxConcurrent',
 		);
+		if (policy.backgroundIdleIntervalMs !== undefined) {
+			this.#backgroundIdleIntervalMs = nonNegativeInteger(
+				policy.backgroundIdleIntervalMs,
+				'backgroundIdleIntervalMs',
+			);
+		}
+		if (policy.backgroundMaxDeferMs !== undefined) {
+			this.#backgroundMaxDeferMs = nonNegativeInteger(
+				policy.backgroundMaxDeferMs,
+				'backgroundMaxDeferMs',
+			);
+		}
 		void this.#transact((state, now) => {
 			this.#rememberPolicy(state, now);
 		}).catch(this.#onError);

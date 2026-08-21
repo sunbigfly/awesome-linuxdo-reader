@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.9
+// @version      1.5.10
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户、翻译与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.9 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.5.10 - main-lite-features
  * 媒体、互动、设置、用户、翻译与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.9",
+			sourceVersion: "1.5.10",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.9") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.10") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -3365,7 +3365,7 @@ runtime.register("src/bookmark/discourse-bookmark-adapter.js", function(module, 
 	  DiscourseBookmarkRequestAdapter: () => DiscourseBookmarkRequestAdapter
 	});
 	module.exports = __toCommonJS(discourse_bookmark_adapter_exports);
-	var import_identifiers = require("../discourse/identifiers.js"), import_native_host_api = require("../discourse/native-host-api.js"), import_discourse_native_read_transport = require("../network/discourse-native-read-transport.js"), import_reader_bookmark_model = require("./reader-bookmark-model.js");
+	var import_identifiers = require("../discourse/identifiers.js"), import_native_host_api = require("../discourse/native-host-api.js"), import_discourse_native_read_transport = require("../network/discourse-native-read-transport.js"), import_reader_business_request_policy = require("../network/reader-business-request-policy.js"), import_reader_bookmark_model = require("./reader-bookmark-model.js");
 	const GIVEN_REACTIONS_PAGE_SIZE = 20, GIVEN_LIKES_PAGE_SIZE = 100, GIVEN_BOOSTS_PAGE_SIZE = 20, GIVEN_REPLIES_PAGE_SIZE = 100, MAX_COLLECTION_PAGES = 500, HISTORICAL_PAGE_FRESH_MS = 10080 * 6e4, HISTORICAL_PAGE_RETAIN_MS = 4320 * 60 * 6e4;
 	function record(value) {
 	  return value !== null && typeof value == "object" ? value : Object.freeze({});
@@ -3417,7 +3417,7 @@ runtime.register("src/bookmark/discourse-bookmark-adapter.js", function(module, 
 	  })), snapshot;
 	}
 	function collectionProfile(options) {
-	  return options.background ? "background-prefetch" : "collection-visible";
+	  return options.background ? import_reader_business_request_policy.READER_BOOKMARK_REQUEST_POLICY.backgroundProfile : import_reader_business_request_policy.READER_BOOKMARK_REQUEST_POLICY.foregroundProfile;
 	}
 	function collectionPageLimit(options) {
 	  if (options.pageLimit === void 0) return MAX_COLLECTION_PAGES;
@@ -3526,11 +3526,12 @@ runtime.register("src/bookmark/discourse-bookmark-adapter.js", function(module, 
 	        query.append("topic_ids[]", String(topicId));
 	      const path = `/latest.json?${query}`;
 	      return this.#gateway.loadCollectionPage({
+	        business: import_reader_business_request_policy.READER_BOOKMARK_REQUEST_POLICY.kind,
 	        authScope: this.authScope,
 	        collection: "bookmark-topic-taxonomy",
 	        page: 0,
 	        variant: `v1:${topicIdBatch.join(",")}`,
-	        profile: options.background ? "background-prefetch" : "collection-visible",
+	        profile: options.background ? import_reader_business_request_policy.READER_BOOKMARK_REQUEST_POLICY.backgroundProfile : import_reader_business_request_policy.READER_BOOKMARK_REQUEST_POLICY.foregroundProfile,
 	        input: path,
 	        signal,
 	        timeoutMs: 2e4,
@@ -3587,6 +3588,7 @@ runtime.register("src/bookmark/discourse-bookmark-adapter.js", function(module, 
 	    if (stream === "bookmarks") {
 	      const path = `/u/${encodeURIComponent(username)}/bookmarks.json?` + new URLSearchParams({ page: String(page) }), payload = await this.#gateway.loadCollectionPage({
 	        ...common,
+	        business: import_reader_business_request_policy.READER_BOOKMARK_REQUEST_POLICY.kind,
 	        collection: "bookmarks",
 	        variant: username.toLocaleLowerCase(),
 	        input: path,
@@ -3618,6 +3620,7 @@ runtime.register("src/bookmark/discourse-bookmark-adapter.js", function(module, 
 	        limit: String(limit)
 	      }), payload = await this.#gateway.loadCollectionPage({
 	        ...common,
+	        business: import_reader_business_request_policy.READER_BOOKMARK_REQUEST_POLICY.kind,
 	        collection: stream === "replies" ? "replied-topics" : "likes-given",
 	        cursor,
 	        variant: stream === "replies" ? `v2-limit100:${username.toLocaleLowerCase()}` : `v3-limit100:${username.toLocaleLowerCase()}`,
@@ -3644,6 +3647,7 @@ runtime.register("src/bookmark/discourse-bookmark-adapter.js", function(module, 
 	      cursor > 0 && query.set("before_boost_id", String(cursor));
 	      const path = `/discourse-boosts/users/${encodeURIComponent(username)}/boosts-given.json${query.size ? `?${query}` : ""}`, payload = await this.#gateway.loadCollectionPage({
 	        ...common,
+	        business: import_reader_business_request_policy.READER_BOOKMARK_REQUEST_POLICY.kind,
 	        collection: "boosts-given",
 	        cursor,
 	        variant: `v1:${username.toLocaleLowerCase()}`,
@@ -3671,6 +3675,7 @@ runtime.register("src/bookmark/discourse-bookmark-adapter.js", function(module, 
 	        ...cursor > 0 ? { before_reaction_user_id: String(cursor) } : {}
 	      }), payload = await this.#gateway.loadCollectionPage({
 	        ...common,
+	        business: import_reader_business_request_policy.READER_BOOKMARK_REQUEST_POLICY.kind,
 	        collection: "reactions-given",
 	        cursor,
 	        variant: username.toLocaleLowerCase(),
@@ -3732,7 +3737,7 @@ runtime.register("src/bookmark/discourse-bookmark-adapter.js", function(module, 
 	    throw collectionLimitError(stream);
 	  }
 	}
-}, "cdb895049b9bce28a7942694cdeb1f11c8d9a47fbac3ed853097a78f188bb6ff");
+}, "679db5695514384b99c84f95fe1a4d5a76a8bb124fb0324a177169eebc0f4cc7");
 
 /* Source: lite/src/bookmark/reader-bookmark-controller.ts */
 runtime.register("src/bookmark/reader-bookmark-controller.js", function(module, exports, require) {
@@ -12246,7 +12251,7 @@ runtime.register("src/post/action-request-adapter.js", function(module, exports,
 	  ActionRequestAdapter: () => ActionRequestAdapter
 	});
 	module.exports = __toCommonJS(action_request_adapter_exports);
-	var import_identifiers = require("../discourse/identifiers.js"), import_discourse_action_transport = require("./discourse-action-transport.js"), import_discourse_action_descriptors = require("./discourse-action-descriptors.js");
+	var import_identifiers = require("../discourse/identifiers.js"), import_reader_business_request_policy = require("../network/reader-business-request-policy.js"), import_discourse_action_transport = require("./discourse-action-transport.js"), import_discourse_action_descriptors = require("./discourse-action-descriptors.js");
 	class ActionRequestAdapter {
 	  authScope;
 	  #gateway;
@@ -12267,8 +12272,11 @@ runtime.register("src/post/action-request-adapter.js", function(module, exports,
 	    );
 	    const input = new URL(
 	      `discourse-native://action/${encodeURIComponent(definition.operation)}?binding=${encodeURIComponent(definition.nativeBinding)}`
+	    ), business = (0, import_reader_business_request_policy.readerBusinessRequestKindForAction)(
+	      definition.operation
 	    );
 	    return this.#gateway.mutate({
+	      ...business === void 0 ? {} : { business },
 	      authScope: this.authScope,
 	      operation: definition.operation,
 	      targetType: definition.targetType,
@@ -12289,7 +12297,7 @@ runtime.register("src/post/action-request-adapter.js", function(module, exports,
 	    });
 	  }
 	}
-}, "93c3776707b852c115d825320af9f76b41fa33dd805c4b9c9e112df2f30d7a0b");
+}, "4e6b5b1509f160fda4577c7a3182cd6befe6c75a3da9ada723c3882a9d0bd54d");
 
 /* Source: lite/src/post/bookmark-action-feature-commands.ts */
 runtime.register("src/post/bookmark-action-feature-commands.js", function(module, exports, require) {
@@ -16707,6 +16715,7 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	  unwantedTopicsButton;
 	  userObservationButton;
 	  #downloadGroup;
+	  #summaryBookmarkGroup;
 	  #secondaryToolsGroup;
 	  #document;
 	  #mount;
@@ -16760,7 +16769,14 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	      "ldp-topic-action-rail-summary",
 	      "AI 总结（LinuxDo 官方 / 自定义）",
 	      "sparkles"
-	    ) : null, this.toggleButton = this.#button(
+	    ) : null, this.#summaryBookmarkGroup = this.summaryButton ? (0, import_html_element.htmlElement)(
+	      this.#document,
+	      "div",
+	      "ldp-topic-action-rail-summary-bookmark-group"
+	    ) : null, this.#summaryBookmarkGroup?.setAttribute("role", "group"), this.#summaryBookmarkGroup?.setAttribute(
+	      "aria-label",
+	      "主题收藏与总结"
+	    ), this.summaryButton && this.#summaryBookmarkGroup?.append(this.summaryButton), this.toggleButton = this.#button(
 	      "ldp-topic-action-rail-toggle",
 	      "展开第二段主题操作；本菜单分两段展开",
 	      "menu-box"
@@ -16794,7 +16810,7 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	    ) : null, this.#downloadGroup?.setAttribute("role", "group"), this.#downloadGroup?.setAttribute(
 	      "aria-label",
 	      "第二段主题工具"
-	    ), this.#secondaryToolsGroup && this.#downloadGroup?.append(this.#secondaryToolsGroup), this.host.append(this.topButton), this.#downloadGroup && this.host.append(this.#downloadGroup), this.summaryButton && this.host.append(this.summaryButton), this.host.append(this.toggleButton), this.#mount.append(this.host);
+	    ), this.#secondaryToolsGroup && this.#downloadGroup?.append(this.#secondaryToolsGroup), this.host.append(this.topButton), this.#downloadGroup && this.host.append(this.#downloadGroup), this.#summaryBookmarkGroup && this.host.append(this.#summaryBookmarkGroup), this.host.append(this.toggleButton), this.#mount.append(this.host);
 	    const interactionRoot = this.#shellRoot.getRootNode(), ownedPointerDowns = /* @__PURE__ */ new WeakSet();
 	    this.scope.listen(this.host, "click", (event) => this.#onClick(event)), this.scope.listen(this.host, "pointerdown", (event) => {
 	      ownedPointerDowns.add(event);
@@ -16859,10 +16875,10 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	      } catch (error) {
 	        throw view.destroy(), error;
 	      }
-	      this.host.insertBefore(view.slots.root, this.toggleButton), this.#view = view, this.#actions.setTopicActionRailExpanded?.(view, this.#expanded);
+	      this.#mountSummaryBookmarkGroup(view), this.host.insertBefore(view.slots.root, this.toggleButton), this.#view = view, this.#actions.setTopicActionRailExpanded?.(view, this.#expanded);
 	    } else
 	      try {
-	        this.#postProjector.render(post, this.#view);
+	        this.#postProjector.render(post, this.#view), this.#mountSummaryBookmarkGroup(this.#view);
 	      } catch (error) {
 	        this.#onError(error);
 	      }
@@ -16887,6 +16903,12 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	      className
 	    );
 	    return button.type = "button", button.setAttribute("aria-label", label), button.append(icon(this.#document, iconName)), button;
+	  }
+	  #mountSummaryBookmarkGroup(view) {
+	    const group = this.#summaryBookmarkGroup, summary = this.summaryButton;
+	    if (!group || !summary) return;
+	    const topicFooter = view.slots.topicFooter;
+	    (group.parentElement !== view.slots.root || topicFooter.parentElement !== group) && (group.replaceChildren(topicFooter, summary), view.slots.root.append(group));
 	  }
 	  #onClick(event) {
 	    if (this.#now() < this.#suppressClickUntil) {
@@ -16939,7 +16961,7 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	    ), this.toggleButton.dataset.railMode = mode, this.toggleButton.setAttribute(
 	      "aria-expanded",
 	      String(this.#expanded)
-	    ), this.#downloadGroup && (this.#downloadGroup.hidden = !this.#expanded), this.summaryButton && (this.summaryButton.hidden = mode !== "compact"), this.downloadButton && (this.downloadButton.hidden = !this.#expanded), this.chronicleButton && (this.chronicleButton.hidden = !this.#expanded), this.unwantedTopicsButton && (this.unwantedTopicsButton.hidden = !this.#expanded), this.userObservationButton && (this.userObservationButton.hidden = !this.#expanded), this.toggleButton.setAttribute(
+	    ), this.#downloadGroup && (this.#downloadGroup.hidden = !this.#expanded), this.summaryButton && (this.summaryButton.hidden = !this.#expanded), this.downloadButton && (this.downloadButton.hidden = !this.#expanded), this.chronicleButton && (this.chronicleButton.hidden = !this.#expanded), this.unwantedTopicsButton && (this.unwantedTopicsButton.hidden = !this.#expanded), this.userObservationButton && (this.userObservationButton.hidden = !this.#expanded), this.toggleButton.setAttribute(
 	      "aria-label",
 	      `${mode === "collapsed" ? "展开第一段主题操作；再次点击可展开第二段" : this.#expanded ? "收纳主题操作；本菜单分两段展开" : "展开第二段主题操作；本菜单分两段展开"}；${this.#settings.fixed ? "位置已固定" : "长按拖动"}`
 	    ), this.toggleButton.replaceChildren(icon(
@@ -16997,7 +17019,7 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	  }
 	  #positionExpandedActions(railLeft, railWidth, anchor) {
 	    const groups = [...this.host.querySelectorAll(
-	      ".ldp-context-actions-slot,.ldp-topic-action-rail-secondary-tools"
+	      ".ldp-context-actions-slot,.ldp-topic-action-rail-summary-bookmark-group,.ldp-topic-action-rail-secondary-tools"
 	    )].filter((group) => group.childElementCount > 0);
 	    if (!groups.length) {
 	      this.host.classList.remove("is-actions-open-left"), this.host.style.removeProperty("--ldp-topic-rail-actions-width"), this.host.style.removeProperty("--ldp-topic-rail-actions-max-width");
@@ -17007,7 +17029,7 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	      TOPIC_ACTION_RAIL_ACTION_GROUP_MIN_WIDTH_PX,
 	      ...groups.map((group) => {
 	        const controls = [...group.querySelectorAll(
-	          ":scope > :is(button,.ldp-topic-notification),:scope > .ldp-topic-footer-actions > :is(button,.ldp-topic-notification)"
+	          ":scope > :is(button,.ldp-topic-notification),:scope > .ldp-topic-footer-slot > :is(button,.ldp-topic-notification),:scope > .ldp-topic-footer-actions > :is(button,.ldp-topic-notification)"
 	        )].filter(
 	          (control) => !control.hidden && control.getAttribute("aria-hidden") !== "true"
 	        ).length;
@@ -17145,7 +17167,7 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	    });
 	  }
 	}
-}, "9711712bace58f210d7c60a67aefbd277ce402044f1d895fc0151d81ad90bf98");
+}, "cd8a117e899e9a7b501adb2f34e79762403bbcb24b74fc15edbc29ecb2dbb3c1");
 
 /* Source: lite/src/post/reader-topic-custom-summary.ts */
 runtime.register("src/post/reader-topic-custom-summary.js", function(module, exports, require) {
@@ -20448,6 +20470,11 @@ runtime.register("src/reading/read-state-controller.js", function(module, export
 	        throw new ReadStateIncompleteConfirmationError(batch, allowed);
 	      return this.#retryCount = 0, this.#cloudflareHalted = !1, this.#challengeRecoveryCount = 0, this.#clearChallengeRecovery(), this.#automaticRetryHalted = !1, allowed.length > 0;
 	    } catch (error) {
+	      if (error instanceof import_read_state_coordination.ReadStateClientRateLimitError)
+	        return this.#nextScheduleDelay = Math.max(
+	          1,
+	          Math.ceil(error.retryAt - this.#now())
+	        ), !1;
 	      this.#retryCount += 1, this.#onError(error), this.#emitDiagnostic("submit-failed", batch, error);
 	      const failureKind = readStateFailureKind(error);
 	      return failureKind === "challenge" && (this.#cloudflareHalted = !0, this.#challengeRecoveryCount < this.#maxChallengeRecoveries && (this.#challengeRecoveryCount += 1, this.#scheduleChallengeRecovery())), !((failureKind === "rate-limit" || failureKind === "transient") && this.#shouldRetry(error)) || this.#retryCount > this.#maxAutomaticRetries ? (this.#automaticRetryHalted = !0, this.#emitDiagnostic("automatic-retry-halted", batch, error)) : this.#nextScheduleDelay = failureKind === "rate-limit" && error instanceof import_coordinated_request_client.RequestRateLimitError ? Math.max(
@@ -20514,7 +20541,7 @@ runtime.register("src/reading/read-state-controller.js", function(module, export
 	      throw new Error("ReadStateController 已销毁");
 	  }
 	}
-}, "d56cff1c6195832dfec545c92e3582c7de82541d519c40e2e80177532177dcaf");
+}, "ea83f3c3b775de1f25d13335cb2316eab696b0f6eb9fa1ff9d3fc99433289a38");
 
 /* Source: lite/src/reading/read-state-coordination.ts */
 runtime.register("src/reading/read-state-coordination.js", function(module, exports, require) {
@@ -20525,17 +20552,25 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	  READ_STATE_ATTEMPT_STORAGE_KEY: () => READ_STATE_ATTEMPT_STORAGE_KEY,
 	  READ_STATE_INTENT_STORAGE_KEY: () => READ_STATE_INTENT_STORAGE_KEY,
 	  READ_STATE_LOCK_NAME: () => READ_STATE_LOCK_NAME,
+	  READ_STATE_RATE_STORAGE_KEY: () => READ_STATE_RATE_STORAGE_KEY,
 	  READ_STATE_SUCCESS_STORAGE_KEY: () => READ_STATE_SUCCESS_STORAGE_KEY,
-	  ReadStateChallengeHaltedError: () => ReadStateChallengeHaltedError
+	  ReadStateChallengeHaltedError: () => ReadStateChallengeHaltedError,
+	  ReadStateClientRateLimitError: () => ReadStateClientRateLimitError
 	});
 	module.exports = __toCommonJS(read_state_coordination_exports);
 	var import_identifiers = require("../discourse/identifiers.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js");
-	const READ_STATE_SUCCESS_STORAGE_KEY = "linuxdo-enhanced-reader:read-success:v1", READ_STATE_ATTEMPT_STORAGE_KEY = "linuxdo-enhanced-reader:read-attempt:v1", READ_STATE_INTENT_STORAGE_KEY = "linuxdo-enhanced-reader:read-intent:v1", READ_STATE_LOCK_NAME = "linuxdo-enhanced-reader:read-request:v1";
+	const READ_STATE_SUCCESS_STORAGE_KEY = "linuxdo-enhanced-reader:read-success:v1", READ_STATE_ATTEMPT_STORAGE_KEY = "linuxdo-enhanced-reader:read-attempt:v1", READ_STATE_INTENT_STORAGE_KEY = "linuxdo-enhanced-reader:read-intent:v1", READ_STATE_RATE_STORAGE_KEY = "linuxdo-enhanced-reader:read-rate:v1", READ_STATE_LOCK_NAME = "linuxdo-enhanced-reader:read-request:v1", READ_STATE_RATE_WINDOW_MS = 6e4, DEFAULT_READ_STATE_REQUESTS_PER_MINUTE = 12, DEFAULT_READ_STATE_TIMINGS_PER_MINUTE = 240;
 	class ReadStateChallengeHaltedError extends Error {
 	  code = "read-state-challenge-halted";
 	  cloudflareMitigated = !0;
 	  constructor(topicId) {
 	    super(`Topic ${topicId} 的 timings 已因 Cloudflare 停止自动补报`), this.name = "ReadStateChallengeHaltedError";
+	  }
+	}
+	class ReadStateClientRateLimitError extends Error {
+	  retryAt;
+	  constructor(retryAt) {
+	    super("timings 已达到客户端 RPM/TPM 上限"), this.name = "ReadStateClientRateLimitError", this.retryAt = retryAt;
 	  }
 	}
 	function positiveMilliseconds(value, fallback, name) {
@@ -20554,6 +20589,23 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	    return Array.isArray(parsed) ? parsed.filter(
 	      (entry) => !!entry && typeof entry == "object" && typeof entry.fingerprint == "string" && Number.isFinite(Number(entry.at))
 	    ) : [];
+	  } catch {
+	    return [];
+	  }
+	}
+	function parseStoredReadRates(value) {
+	  if (!value) return [];
+	  try {
+	    const parsed = JSON.parse(value);
+	    return Array.isArray(parsed) ? parsed.flatMap((entry) => {
+	      if (!entry || typeof entry != "object") return [];
+	      const candidate = entry, requestedAt = Number(candidate.requestedAt), timings = Number(candidate.timings);
+	      return typeof candidate.authScope != "string" || candidate.authScope.length === 0 || !Number.isFinite(requestedAt) || !Number.isSafeInteger(timings) || timings < 1 ? [] : [Object.freeze({
+	        authScope: candidate.authScope,
+	        requestedAt,
+	        timings
+	      })];
+	    }) : [];
 	  } catch {
 	    return [];
 	  }
@@ -20603,10 +20655,14 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	  #intentCoalesceMs;
 	  #maxRecords;
 	  #onCoordinationError;
+	  #delay;
 	  #listeners = /* @__PURE__ */ new Map();
 	  #confirmationListeners = /* @__PURE__ */ new Set();
 	  #challengeHaltedTopics = /* @__PURE__ */ new Map();
 	  #unsubscribeChannel;
+	  #readRequestsPerMinute;
+	  #readTimingsPerMinute;
+	  #localLockTail = Promise.resolve();
 	  #closed = !1;
 	  constructor(options) {
 	    this.#storage = options.storage, this.#channel = options.channel ?? null, this.#lock = options.lock, this.#now = options.now ?? Date.now, this.#ttlMs = options.ttlMs === void 0 ? null : positiveMilliseconds(options.ttlMs, 6e4, "ttlMs"), this.#attemptTtlMs = positiveMilliseconds(
@@ -20621,7 +20677,15 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	      options.intentCoalesceMs,
 	      80,
 	      "intentCoalesceMs"
-	    ), this.#maxRecords = positiveMilliseconds(options.maxRecords, 64, "maxRecords"), this.#onCoordinationError = options.onCoordinationError ?? (() => {
+	    ), this.#maxRecords = positiveMilliseconds(options.maxRecords, 64, "maxRecords"), this.#readRequestsPerMinute = positiveMilliseconds(
+	      options.readRequestsPerMinute,
+	      DEFAULT_READ_STATE_REQUESTS_PER_MINUTE,
+	      "readRequestsPerMinute"
+	    ), this.#readTimingsPerMinute = positiveMilliseconds(
+	      options.readTimingsPerMinute,
+	      DEFAULT_READ_STATE_TIMINGS_PER_MINUTE,
+	      "readTimingsPerMinute"
+	    ), this.#delay = options.delay ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))), this.#onCoordinationError = options.onCoordinationError ?? (() => {
 	    }), this.#unsubscribeChannel = this.#channel?.subscribe((message) => {
 	      const halt = normalizeChallengeHalt(message);
 	      if (halt) {
@@ -20635,6 +20699,17 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	      confirmation && (this.#emit(confirmation), this.#emitConfirmation(confirmation));
 	    }) ?? (() => {
 	    });
+	  }
+	  applyRuntimePolicy(policy) {
+	    this.#closed || (this.#readRequestsPerMinute = positiveMilliseconds(
+	      policy.readRequestsPerMinute,
+	      DEFAULT_READ_STATE_REQUESTS_PER_MINUTE,
+	      "readRequestsPerMinute"
+	    ), this.#readTimingsPerMinute = positiveMilliseconds(
+	      policy.readTimingsPerMinute,
+	      DEFAULT_READ_STATE_TIMINGS_PER_MINUTE,
+	      "readTimingsPerMinute"
+	    ));
 	  }
 	  knownConfirmed(rawAuthScope, rawTopicId, rawPostNumbers) {
 	    if (this.#closed) throw new Error("ReadStateCoordinator 已关闭");
@@ -20711,7 +20786,7 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	      if (missing.length) {
 	        let submitted;
 	        try {
-	          submitted = (0, import_identifiers.discoursePostNumbers)(await submit(missing));
+	          this.#takeReadRatePermit(authScope, missing.length), submitted = (0, import_identifiers.discoursePostNumbers)(await submit(missing));
 	        } catch (error) {
 	          throw isReadStateCloudflareFailure(error) && (this.#rememberAttempt(authScope, topicId, missing), this.#rememberChallengeHalt(authScope, topicId), this.#forgetIntents(authScope, topicId)), error;
 	        }
@@ -20723,12 +20798,69 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	    };
 	    return this.#lock ? (await this.#lock(READ_STATE_LOCK_NAME, async () => {
 	      this.#rememberIntent(authScope, topicId, postNumbers);
-	    }), await new Promise((resolve) => {
-	      setTimeout(resolve, this.#intentCoalesceMs);
-	    }), this.#lock(READ_STATE_LOCK_NAME, () => {
-	      const intended = this.#recentlyIntended(authScope, topicId);
-	      return postNumbers.forEach((postNumber) => intended.add(postNumber)), run((0, import_identifiers.discoursePostNumbers)([...intended]));
-	    })) : run(postNumbers);
+	    }), await this.#delay(this.#intentCoalesceMs), this.#lock(READ_STATE_LOCK_NAME, () => {
+	      const intended = this.#recentlyIntended(authScope, topicId), candidates = (0, import_identifiers.discoursePostNumbers)([
+	        ...postNumbers,
+	        ...[...intended].filter((postNumber) => !postNumbers.includes(postNumber))
+	      ]).slice(0, Math.max(postNumbers.length, this.#readTimingsPerMinute));
+	      return run(candidates);
+	    })) : this.#withLocalLock(() => run(postNumbers));
+	  }
+	  async #withLocalLock(task) {
+	    const previous = this.#localLockTail;
+	    let release;
+	    this.#localLockTail = new Promise((resolve) => {
+	      release = resolve;
+	    }), await previous;
+	    try {
+	      return await task();
+	    } finally {
+	      release();
+	    }
+	  }
+	  #takeReadRatePermit(authScope, timings) {
+	    if (timings > this.#readTimingsPerMinute)
+	      throw new RangeError("单次 timings 数量超过每分钟上限");
+	    const now = this.#now(), cutoff = now - READ_STATE_RATE_WINDOW_MS;
+	    let records;
+	    try {
+	      records = parseStoredReadRates(
+	        this.#storage.getItem(READ_STATE_RATE_STORAGE_KEY)
+	      ).filter((entry) => entry.requestedAt > cutoff);
+	    } catch (error) {
+	      throw this.#onCoordinationError(error), error;
+	    }
+	    const scoped = records.filter((entry) => entry.authScope === authScope).sort((left, right) => left.requestedAt - right.requestedAt), requestWait = scoped.length >= this.#readRequestsPerMinute ? scoped[scoped.length - this.#readRequestsPerMinute].requestedAt + READ_STATE_RATE_WINDOW_MS - now : 0;
+	    let timingTotal = scoped.reduce(
+	      (total, entry) => total + entry.timings,
+	      0
+	    ), timingWait = 0;
+	    for (const entry of scoped) {
+	      if (timingTotal + timings <= this.#readTimingsPerMinute) break;
+	      timingTotal -= entry.timings, timingWait = Math.max(
+	        timingWait,
+	        entry.requestedAt + READ_STATE_RATE_WINDOW_MS - now
+	      );
+	    }
+	    const waitMs = Math.max(requestWait, timingWait, 0);
+	    if (waitMs > 0)
+	      throw new ReadStateClientRateLimitError(now + Math.ceil(waitMs));
+	    records.push(Object.freeze({
+	      authScope,
+	      requestedAt: now,
+	      timings
+	    }));
+	    try {
+	      this.#storage.setItem(
+	        READ_STATE_RATE_STORAGE_KEY,
+	        JSON.stringify(records.slice(-Math.max(
+	          128,
+	          this.#readRequestsPerMinute * 4
+	        )))
+	      );
+	    } catch (error) {
+	      throw this.#onCoordinationError(error), error;
+	    }
 	  }
 	  close() {
 	    this.#closed || (this.#closed = !0, this.#unsubscribeChannel(), this.#channel?.close(), this.#listeners.clear(), this.#confirmationListeners.clear(), this.#challengeHaltedTopics.clear());
@@ -20968,7 +21100,7 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	      }
 	  };
 	}
-}, "98654461efb42c2da193bf71e39f66b8e3a4164507661a2950079c06fdc5a356");
+}, "b481915458ef5d9bed18be3dffb4dd70b920bc29dc6685f70c3caba8bacc52ed");
 
 /* Source: lite/src/reading/read-state-request-adapter.ts */
 runtime.register("src/reading/read-state-request-adapter.js", function(module, exports, require) {
@@ -25353,10 +25485,22 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	  readerPreferencesPerformanceSettingsAdapter: () => readerPreferencesPerformanceSettingsAdapter
 	});
 	module.exports = __toCommonJS(reader_performance_settings_form_exports);
-	var import_lifecycle = require("../kernel/lifecycle.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_settings_dom = require("./reader-settings-dom.js"), import_reader_numeric_settings_draft = require("./reader-numeric-settings-draft.js");
+	var import_lifecycle = require("../kernel/lifecycle.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_business_request_config = require("../network/reader-business-request-config.js"), import_reader_request_flow_config = require("../network/reader-request-flow-config.js"), import_reader_business_request_policy = require("../network/reader-business-request-policy.js"), import_reader_settings_dom = require("./reader-settings-dom.js"), import_reader_numeric_settings_draft = require("./reader-numeric-settings-draft.js");
 	const readerPreferencesPerformanceSettingsAdapter = Object.freeze({
 	  readConfig: import_reader_preferences_schema.readReaderPerformanceConfig,
 	  createPatch: import_reader_preferences_schema.createReaderPerformancePreferencesPatch,
+	  readBusinessRequestSettings: import_reader_preferences_schema.readReaderBusinessRequestSettings,
+	  createBusinessRequestSettingsPatch: import_reader_preferences_schema.createReaderBusinessRequestSettingsPatch,
+	  readRequestFlowSettings: import_reader_preferences_schema.readReaderRequestFlowSettings,
+	  createRequestFlowSettingsPatch: import_reader_preferences_schema.createReaderRequestFlowSettingsPatch,
+	  readHostTopicPreheatEnabled: (preferences) => preferences.hostTopicPreheatEnabled,
+	  createHostTopicPreheatEnabledPatch: (enabled) => ({
+	    hostTopicPreheatEnabled: enabled
+	  }),
+	  readHostTopicPreheatPostCount: (preferences) => preferences.hostTopicPreheatPostCount,
+	  createHostTopicPreheatPostCountPatch: (postCount) => ({
+	    hostTopicPreheatPostCount: postCount
+	  }),
 	  readSuspendHostTurnstileInBackground: (preferences) => preferences.performanceSuspendHostTurnstileInBackground,
 	  createSuspendHostTurnstileInBackgroundPatch: (enabled) => ({
 	    performanceSuspendHostTurnstileInBackground: enabled
@@ -25420,6 +25564,31 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	    ])
 	  }),
 	  Object.freeze({
+	    id: "read-state",
+	    title: "已读上报队列",
+	    description: "只限制 /topics/timings：RPM 是请求数/分钟，TPM 是 timings 已读楼层条目数/分钟。",
+	    fields: Object.freeze([
+	      Object.freeze({
+	        name: "readStateRequestsPerMinute",
+	        title: "已读请求上限（RPM）",
+	        description: "同账号跨标签滚动 60 秒窗口内最多启动多少次已读请求。",
+	        help: "默认 10 RPM。Linux Do 未公开该端点专属额度；此值仍服从全站 10 秒/60 秒共享窗口和服务器 Retry-After。",
+	        unit: "次/分",
+	        step: 1,
+	        inputMode: "numeric"
+	      }),
+	      Object.freeze({
+	        name: "readStateTimingsPerMinute",
+	        title: "已读楼层上限（TPM）",
+	        description: "同账号跨标签每分钟最多提交多少个 timings 楼层条目；这里的 T 表示 timing，不是 token。",
+	        help: "默认 240 TPM；这里的 T 是 timing 条目，不是 token。队列仍按单批最多 20 层合并，达到上限时保留 pending 并等待窗口释放，不把未成功楼层升级为已读。",
+	        unit: "层/分",
+	        step: 20,
+	        inputMode: "numeric"
+	      })
+	    ])
+	  }),
+	  Object.freeze({
 	    id: "request",
 	    title: "全站 API 安全边界",
 	    description: "这里只设置目标上限；后台仍须空闲单飞，并让位于前台、活动请求和共享窗口。",
@@ -25460,20 +25629,318 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	  max: import_reader_preferences_schema.READER_PERFORMANCE_LIMITS[field.name].max,
 	  ...import_reader_preferences_schema.READER_PERFORMANCE_LIMITS[field.name].integer ? { integer: !0 } : {},
 	  decimals: import_reader_preferences_schema.READER_PERFORMANCE_LIMITS[field.name].integer ? 0 : 2
-	}))), presetLabels = Object.freeze({
-	  low: "省流",
-	  balanced: "自动（推荐）",
-	  high: "快速预取（实验）",
-	  custom: "自定义"
-	}), presetHelp = Object.freeze({
-	  low: "缩小批次、DOM 和总并发；后台单飞。适合省流、低配或原站繁忙。",
-	  balanced: "48 楼批次、两批近窗、后台单飞、窗口余量 15%；设备与网络可下调。",
-	  high: "实验档：扩大批次、预知距离和总并发，可能增加卡顿或 429；仍服从共享窗口和请求安全规则。",
-	  custom: "手动目标；高于自动档时会提示卡顿与 429 风险。保存后仍服从自适应、共享窗口和请求契约。"
-	});
-	function performanceConfigExceedsBalanced(config) {
-	  const balanced = import_reader_preferences_schema.READER_PERFORMANCE_PRESETS.balanced;
-	  return config.pageSize > balanced.pageSize || config.streamOverscanViewports > balanced.streamOverscanViewports || config.streamMaxItems > balanced.streamMaxItems || config.nestedPrefetchViewports > balanced.nestedPrefetchViewports || config.requestMaxConcurrent > balanced.requestMaxConcurrent || config.requestMinInterval < balanced.requestMinInterval || config.requestRateTarget > balanced.requestRateTarget;
+	}))), BUSINESS_REQUEST_COPY = Object.freeze({
+	  "topic-download": Object.freeze({
+	    title: "Topic 下载",
+	    description: "可恢复后台任务；优先复用 canonical Topic 正文，只为真实缺口联网。"
+	  }),
+	  "user-observation": Object.freeze({
+	    title: "用户观察",
+	    description: "打开时读取可见分页，后台补历史时降级为可丢弃请求。"
+	  }),
+	  notifications: Object.freeze({
+	    title: "用户通知",
+	    description: "可见头页优先；实时刷新可批次校验头页，历史分页保持低优先级。"
+	  }),
+	  bookmarks: Object.freeze({
+	    title: "收藏与回应",
+	    description: "各来源可并行组织，单个来源的历史分页保持顺序和持久缓存。"
+	  })
+	}), PRIORITY_LABELS = Object.freeze({
+	  critical: "关键",
+	  interactive: "交互",
+	  nested: "树状",
+	  visible: "可见",
+	  prefetch: "预取",
+	  background: "后台"
+	}), LANE_LABELS = Object.freeze({
+	  control: "控制",
+	  "topic-batch": "正文",
+	  "nested-replies": "回复",
+	  "user-card": "用户卡片",
+	  translation: "翻译",
+	  standard: "标准"
+	}), CACHE_OWNER_LABELS = Object.freeze({
+	  "canonical-topic": "canonical Topic",
+	  "persistent-pages": "持久分页"
+	}), EXECUTION_LABELS = Object.freeze({
+	  "idle-resumable": "空闲启动 · 可恢复",
+	  "paged-serial": "分页顺序",
+	  "head-burst-history-serial": "头页批次 · 历史顺序",
+	  "source-parallel-page-serial": "来源并行 · 分页顺序"
+	}), BUSINESS_REQUEST_PARAMETER_COPY = Object.freeze({
+	  maxConcurrent: Object.freeze({
+	    title: "最大并发",
+	    unit: "路",
+	    help: "单个 Reader 实例内该业务的活动请求目标上限；车道上限、共享总并发和跨标签许可可以继续收紧。"
+	  }),
+	  backgroundMinIntervalMs: Object.freeze({
+	    title: "后台最小间隔",
+	    unit: "ms",
+	    help: "只限制该业务 prefetch/background 的实际启动间隔；可见请求与写操作仍服从全站共享间隔。"
+	  }),
+	  backgroundRequestsPerMinute: Object.freeze({
+	    title: "后台 RPM",
+	    unit: "次/分",
+	    help: "单个 Reader 实例内该业务后台请求的滚动 60 秒启动上限；重试也计入，全站跨标签窗口仍是最终硬边界。"
+	  })
+	}), businessNumericDefinitions = Object.freeze(
+	  import_reader_business_request_config.READER_BUSINESS_REQUEST_KINDS.flatMap((kind) => import_reader_business_request_config.READER_BUSINESS_REQUEST_PARAMETER_NAMES.map((name) => Object.freeze({
+	    name: `${kind}.${name}`,
+	    label: `${BUSINESS_REQUEST_COPY[kind].title}${BUSINESS_REQUEST_PARAMETER_COPY[name].title}`,
+	    min: import_reader_business_request_config.READER_BUSINESS_REQUEST_PARAMETER_LIMITS[name].min,
+	    max: import_reader_business_request_config.READER_BUSINESS_REQUEST_PARAMETER_LIMITS[name].max,
+	    integer: !0,
+	    decimals: 0
+	  })))
+	), REQUEST_FLOW_FIELDS = Object.freeze([
+	  Object.freeze({
+	    name: "backgroundIdleIntervalMs",
+	    title: "后台空闲启动间隔",
+	    description: "后台请求在让位期使用的额外启动间隔；0 表示只服从全站基础间隔。",
+	    help: "只作用于 background 优先级；可见、交互和写请求不读取该值，10 秒/60 秒窗口仍是硬边界。",
+	    unit: "ms",
+	    step: 100
+	  }),
+	  Object.freeze({
+	    name: "backgroundMaxDeferMs",
+	    title: "后台最长额外让路",
+	    description: "持续有前台流量时，后台额外空闲间隔最多维持多久。",
+	    help: "到期只解除额外空闲间隔；不会越过活动请求、排队优先级、并发或共享窗口。",
+	    unit: "ms",
+	    step: 1e3
+	  }),
+	  Object.freeze({
+	    name: "hostPreheatMaxConcurrent",
+	    title: "宿主 Topic 预热并发目标",
+	    description: "列表近视口 Topic 最多同时准备多少个；Reader 前台仍最多占一个后台槽。",
+	    help: "设备能力可以下调；每个 Topic 的楼层数量由“预热楼层数”单独控制。",
+	    unit: "路",
+	    step: 1
+	  }),
+	  Object.freeze({
+	    name: "queuePrefetchShortLimit",
+	    title: "阅读队列 10 秒请求目标",
+	    description: "队列预加载在共享 10 秒账本内允许占用的请求数目标。",
+	    help: "实际值还受共享窗口预算、后台间隔、业务 RPM 和 Scheduler 收紧；不维护第二份请求账本。",
+	    unit: "次",
+	    step: 1
+	  }),
+	  Object.freeze({
+	    name: "queuePrefetchLongLimit",
+	    title: "阅读队列 60 秒请求目标",
+	    description: "队列预加载在共享 60 秒账本内允许占用的请求数目标。",
+	    help: "实际值取本目标、Topic 下载后台 RPM 和共享 60 秒预算中的最严格结果。",
+	    unit: "次",
+	    step: 1
+	  }),
+	  Object.freeze({
+	    name: "bulkBackgroundBudgetPercent",
+	    title: "批量后台窗口占用比例",
+	    description: "Topic 下载等批量后台读取最多使用共享窗口预算的比例。",
+	    help: "给原站与用户请求保留其余预算；直属回复还受下方 10 秒/60 秒目标收紧。",
+	    unit: "%",
+	    step: 1
+	  }),
+	  Object.freeze({
+	    name: "nestedBackgroundShortLimit",
+	    title: "后台直属回复 10 秒目标",
+	    description: "Topic 下载补直属回复时在共享 10 秒账本内的请求目标。",
+	    help: "只收紧后台 replies.json；普通阅读中的可见直属回复仍按车道、全局目标与共享许可执行。",
+	    unit: "次",
+	    step: 1
+	  }),
+	  Object.freeze({
+	    name: "nestedBackgroundLongLimit",
+	    title: "后台直属回复 60 秒目标",
+	    description: "Topic 下载补直属回复时在共享 60 秒账本内的请求目标。",
+	    help: "实际值还受 Topic 下载后台 RPM 与共享 60 秒窗口收紧。",
+	    unit: "次",
+	    step: 1
+	  }),
+	  Object.freeze({
+	    name: "topicBatchMaxConcurrent",
+	    title: "正文车道并发目标",
+	    description: "posts.json 与并行通知头页共用的正文车道目标。",
+	    help: "仍受共享总并发、业务最大并发和跨标签许可收紧；后台正文继续单飞。",
+	    unit: "路",
+	    step: 1
+	  }),
+	  Object.freeze({
+	    name: "nestedRepliesMaxConcurrent",
+	    title: "直属回复车道并发目标",
+	    description: "replies.json 同时服务的父楼请求目标。",
+	    help: "直属回复候选 owner 最多产生两路；共享总并发和跨标签许可仍可下调。",
+	    unit: "路",
+	    step: 1
+	  }),
+	  Object.freeze({
+	    name: "userCardMaxConcurrent",
+	    title: "用户卡片车道并发目标",
+	    description: "交互式用户卡片资源同时请求的目标。",
+	    help: "只控制用户卡片车道，不改变缓存、profile、429 或 Cloudflare 语义。",
+	    unit: "路",
+	    step: 1
+	  }),
+	  Object.freeze({
+	    name: "standardMaxConcurrent",
+	    title: "标准读取车道并发目标",
+	    description: "集合分页与普通资源读取共用的标准车道目标。",
+	    help: "业务自身的顺序、最大并发、共享总并发和跨标签许可仍是更高优先级限制。",
+	    unit: "路",
+	    step: 1
+	  })
+	]), requestFlowNumericDefinitions = Object.freeze(
+	  REQUEST_FLOW_FIELDS.map((field) => Object.freeze({
+	    name: field.name,
+	    label: field.title,
+	    min: import_reader_request_flow_config.READER_REQUEST_FLOW_SETTING_LIMITS[field.name].min,
+	    max: import_reader_request_flow_config.READER_REQUEST_FLOW_SETTING_LIMITS[field.name].max,
+	    integer: !0,
+	    decimals: 0
+	  }))
+	);
+	function requestFlowSettingsGroup(input) {
+	  const group = (0, import_reader_settings_dom.settingsElement)(
+	    input.document,
+	    "section",
+	    "ldp-settings-category-group"
+	  );
+	  group.dataset.settingsCategory = "performance-request-flow";
+	  const head = (0, import_reader_settings_dom.settingsElement)(input.document, "div", "ldp-settings-category-head"), title = (0, import_reader_settings_dom.settingsElement)(input.document, "strong");
+	  title.textContent = "请求流控制目标";
+	  const description = (0, import_reader_settings_dom.settingsElement)(input.document, "small");
+	  description.textContent = "调整过去写死的后台让路、预取窗口和车道并发；安全契约仍固定执行。", head.append(title, description);
+	  const content = (0, import_reader_settings_dom.settingsElement)(
+	    input.document,
+	    "div",
+	    "ldp-settings-fields ldp-settings-category-list ldp-performance-fields"
+	  );
+	  for (const field of REQUEST_FLOW_FIELDS) {
+	    const row = (0, import_reader_settings_dom.settingsElement)(input.document, "label", "ldp-setting-row");
+	    row.dataset.settingHelp = field.help;
+	    const copy = (0, import_reader_settings_dom.settingsCopy)(
+	      input.document,
+	      "ldp-performance-copy",
+	      field.title,
+	      field.description
+	    ), control = (0, import_reader_settings_dom.settingsElement)(
+	      input.document,
+	      "span",
+	      "ldp-performance-control"
+	    ), fieldInput = (0, import_reader_settings_dom.settingsElement)(input.document, "input");
+	    fieldInput.type = "number", fieldInput.inputMode = "numeric", fieldInput.step = String(field.step), fieldInput.min = String(
+	      import_reader_request_flow_config.READER_REQUEST_FLOW_SETTING_LIMITS[field.name].min
+	    ), fieldInput.max = String(
+	      import_reader_request_flow_config.READER_REQUEST_FLOW_SETTING_LIMITS[field.name].max
+	    ), fieldInput.dataset.requestFlowKey = field.name, fieldInput.setAttribute("aria-label", field.title);
+	    const unit = (0, import_reader_settings_dom.settingsElement)(input.document, "em");
+	    unit.textContent = field.unit, control.append(fieldInput, unit), row.append(copy, control), content.append(row), input.inputs.set(field.name, fieldInput), input.onInput(field.name, fieldInput);
+	  }
+	  return group.append(head, content), group;
+	}
+	function businessRequestPolicyGroup(input) {
+	  const { document } = input, group = (0, import_reader_settings_dom.settingsElement)(document, "section", "ldp-settings-category-group");
+	  group.dataset.settingsCategory = "performance-business-requests";
+	  const head = (0, import_reader_settings_dom.settingsElement)(document, "div", "ldp-settings-category-head"), title = (0, import_reader_settings_dom.settingsElement)(document, "strong");
+	  title.textContent = "业务请求策略";
+	  const description = (0, import_reader_settings_dom.settingsElement)(document, "small");
+	  description.textContent = "逐业务调整并发、后台间隔和 RPM；车道目标在“请求流控制目标”设置，profile、缓存与重试契约固定执行。", head.append(title, description);
+	  const content = (0, import_reader_settings_dom.settingsElement)(
+	    document,
+	    "div",
+	    "ldp-settings-fields ldp-settings-category-list ldp-performance-policy-list"
+	  );
+	  for (const policy of import_reader_business_request_policy.READER_BUSINESS_REQUEST_POLICIES) {
+	    const snapshot = (0, import_reader_business_request_policy.readerBusinessRequestPolicySnapshot)(policy), mutationProfile = "mutationProfile" in policy ? policy.mutationProfile : void 0, copy = BUSINESS_REQUEST_COPY[policy.kind], row = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "div",
+	      "ldp-setting-row ldp-performance-policy-row"
+	    );
+	    row.dataset.requestBusiness = policy.kind, row.dataset.settingHelp = [
+	      `业务 ${policy.kind}`,
+	      `前台 profile ${policy.foregroundProfile}：优先级 ${snapshot.foreground.priority}，429 重试 ${snapshot.foreground.max429Retries}，过盾重试 ${snapshot.foreground.maxChallengeRetries}`,
+	      `后台 profile ${policy.backgroundProfile}：优先级 ${snapshot.background.priority}，${snapshot.background.droppable ? "可丢弃" : "不可丢弃"}`,
+	      ...mutationProfile === void 0 || snapshot.mutation === void 0 ? [] : [
+	        `写入 profile ${mutationProfile}：优先级 ${snapshot.mutation.priority}，429 重试 ${snapshot.mutation.max429Retries}`
+	      ],
+	      "所有请求仍共享全局 10 秒/60 秒许可、single-flight、429 Retry-After 与 Cloudflare 恢复。"
+	    ].join("；");
+	    const rowCopy = (0, import_reader_settings_dom.settingsCopy)(
+	      document,
+	      "ldp-performance-copy",
+	      copy.title,
+	      copy.description
+	    ), badges = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "div",
+	      "ldp-performance-policy-badges"
+	    ), badgeTexts = [
+	      `前台 ${PRIORITY_LABELS[snapshot.foreground.priority] ?? snapshot.foreground.priority}`,
+	      `后台 ${PRIORITY_LABELS[snapshot.background.priority] ?? snapshot.background.priority}${snapshot.background.droppable ? " · 可丢弃" : ""}`,
+	      ...snapshot.mutation === void 0 ? [] : [
+	        `写入 ${PRIORITY_LABELS[snapshot.mutation.priority] ?? snapshot.mutation.priority} · 429 重试 ${snapshot.mutation.max429Retries}`
+	      ],
+	      EXECUTION_LABELS[policy.execution],
+	      "车道硬上限 " + snapshot.laneCaps.map(({ lane, maxConcurrent }) => `${LANE_LABELS[lane] ?? lane}×${maxConcurrent}`).join(" / "),
+	      `缓存 ${CACHE_OWNER_LABELS[policy.cacheOwner]}`,
+	      `429 重试 ${snapshot.foreground.max429Retries}/${snapshot.background.max429Retries}`
+	    ];
+	    for (const text of badgeTexts) {
+	      const badge = (0, import_reader_settings_dom.settingsElement)(
+	        document,
+	        "span",
+	        "ldp-performance-policy-badge"
+	      );
+	      badge.textContent = text, badges.append(badge);
+	    }
+	    const controls = (0, import_reader_settings_dom.settingsElement)(
+	      document,
+	      "div",
+	      "ldp-performance-policy-controls"
+	    );
+	    for (const name of import_reader_business_request_config.READER_BUSINESS_REQUEST_PARAMETER_NAMES) {
+	      const fieldName = `${policy.kind}.${name}`, fieldCopy = BUSINESS_REQUEST_PARAMETER_COPY[name], field = (0, import_reader_settings_dom.settingsElement)(
+	        document,
+	        "label",
+	        "ldp-performance-policy-field"
+	      );
+	      field.dataset.settingHelp = fieldCopy.help;
+	      const fieldTitle = (0, import_reader_settings_dom.settingsElement)(document, "small");
+	      fieldTitle.textContent = fieldCopy.title;
+	      const control = (0, import_reader_settings_dom.settingsElement)(
+	        document,
+	        "span",
+	        "ldp-performance-control"
+	      ), fieldInput = (0, import_reader_settings_dom.settingsElement)(document, "input");
+	      fieldInput.type = "number", fieldInput.inputMode = "numeric", fieldInput.step = "1", fieldInput.min = String(
+	        import_reader_business_request_config.READER_BUSINESS_REQUEST_PARAMETER_LIMITS[name].min
+	      ), fieldInput.max = String(
+	        import_reader_business_request_config.READER_BUSINESS_REQUEST_PARAMETER_LIMITS[name].max
+	      ), fieldInput.dataset.requestBusinessKey = fieldName, fieldInput.dataset.requestBusinessParameter = name, fieldInput.setAttribute(
+	        "aria-label",
+	        `${copy.title} ${fieldCopy.title}`
+	      );
+	      const unit = (0, import_reader_settings_dom.settingsElement)(document, "em");
+	      unit.textContent = fieldCopy.unit, control.append(fieldInput, unit), field.append(fieldTitle, control), controls.append(field), input.inputs.set(fieldName, fieldInput), input.onInput(fieldName, fieldInput);
+	    }
+	    row.append(rowCopy, controls, badges), content.append(row);
+	  }
+	  return group.append(head, content), group;
+	}
+	function performanceConfigExceedsDefault(config) {
+	  const defaults = import_reader_preferences_schema.READER_PERFORMANCE_DEFAULT_CONFIG;
+	  return config.pageSize > defaults.pageSize || config.streamOverscanViewports > defaults.streamOverscanViewports || config.streamMaxItems > defaults.streamMaxItems || config.nestedPrefetchViewports > defaults.nestedPrefetchViewports || config.requestMaxConcurrent > defaults.requestMaxConcurrent || config.requestMinInterval < defaults.requestMinInterval || config.requestRateTarget > defaults.requestRateTarget || config.readStateRequestsPerMinute > defaults.readStateRequestsPerMinute || config.readStateTimingsPerMinute > defaults.readStateTimingsPerMinute;
+	}
+	function businessRequestSettingsExceedDefault(settings) {
+	  return import_reader_business_request_config.READER_BUSINESS_REQUEST_KINDS.some((kind) => {
+	    const current = settings[kind], defaults = import_reader_business_request_config.READER_BUSINESS_REQUEST_DEFAULTS[kind];
+	    return current.maxConcurrent > defaults.maxConcurrent || current.backgroundMinIntervalMs < defaults.backgroundMinIntervalMs || current.backgroundRequestsPerMinute > defaults.backgroundRequestsPerMinute;
+	  });
+	}
+	function requestFlowSettingsExceedDefault(settings) {
+	  const defaults = import_reader_request_flow_config.READER_REQUEST_FLOW_DEFAULTS;
+	  return settings.backgroundIdleIntervalMs < defaults.backgroundIdleIntervalMs || settings.backgroundMaxDeferMs < defaults.backgroundMaxDeferMs || settings.hostPreheatMaxConcurrent > defaults.hostPreheatMaxConcurrent || settings.queuePrefetchShortLimit > defaults.queuePrefetchShortLimit || settings.queuePrefetchLongLimit > defaults.queuePrefetchLongLimit || settings.bulkBackgroundBudgetPercent > defaults.bulkBackgroundBudgetPercent || settings.nestedBackgroundShortLimit > defaults.nestedBackgroundShortLimit || settings.nestedBackgroundLongLimit > defaults.nestedBackgroundLongLimit || settings.topicBatchMaxConcurrent > defaults.topicBatchMaxConcurrent || settings.nestedRepliesMaxConcurrent > defaults.nestedRepliesMaxConcurrent || settings.userCardMaxConcurrent > defaults.userCardMaxConcurrent || settings.standardMaxConcurrent > defaults.standardMaxConcurrent;
 	}
 	class ReaderPerformanceSettingsForm {
 	  scope;
@@ -25481,45 +25948,39 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	  #preferences;
 	  #host;
 	  #inputs = /* @__PURE__ */ new Map();
-	  #presetButtons = /* @__PURE__ */ new Map();
+	  #businessInputs = /* @__PURE__ */ new Map();
+	  #requestFlowInputs = /* @__PURE__ */ new Map();
 	  #status;
 	  #reset;
 	  #draft;
+	  #businessDraft;
+	  #requestFlowDraft;
+	  #hostTopicPreheat;
+	  #hostTopicPreheatPostCount;
+	  #hostTopicPreheatPostCountRow;
+	  #hostTopicPreheatPostCountSupported;
 	  #suspendHostTurnstile;
+	  #hostTopicPreheatOriginal;
+	  #hostTopicPreheatDraft;
+	  #hostTopicPreheatPostCountOriginal;
+	  #hostTopicPreheatPostCountDraft;
 	  #suspendHostTurnstileOriginal;
 	  #suspendHostTurnstileDraft;
 	  constructor(options) {
 	    this.#controller = options.controller, this.#preferences = options.preferences, this.#host = options.host, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#draft = new import_reader_numeric_settings_draft.ReaderNumericSettingsDraft(
 	      numericDefinitions,
 	      this.#preferences.readConfig(options.readPreferences())
-	    ), this.#suspendHostTurnstileOriginal = this.#readSuspendHostTurnstile(options.readPreferences()), this.#suspendHostTurnstileDraft = this.#suspendHostTurnstileOriginal;
-	    const presets = (0, import_reader_settings_dom.settingsElement)(
-	      options.document,
-	      "div",
-	      "ldp-performance-presets"
-	    );
-	    presets.setAttribute("role", "group"), presets.setAttribute("aria-label", "性能预设");
-	    for (const preset of [
-	      "low",
-	      "balanced",
-	      "high",
-	      "custom"
-	    ]) {
-	      const button = (0, import_reader_settings_dom.settingsElement)(
-	        options.document,
-	        "button",
-	        "ldp-performance-preset"
-	      );
-	      button.type = "button", button.dataset.performancePreset = preset, button.dataset.settingHelp = presetHelp[preset], button.textContent = presetLabels[preset], this.#presetButtons.set(preset, button), presets.append(button), this.scope.listen(button, "click", () => {
-	        if (preset === "custom") {
-	          this.#inputs.values().next().value?.focus({
-	            preventScroll: !0
-	          });
-	          return;
-	        }
-	        this.#writeConfig(import_reader_preferences_schema.READER_PERFORMANCE_PRESETS[preset]);
-	      });
-	    }
+	    ), this.#businessDraft = new import_reader_numeric_settings_draft.ReaderNumericSettingsDraft(
+	      businessNumericDefinitions,
+	      (0, import_reader_business_request_config.flattenReaderBusinessRequestSettings)(
+	        this.#readPersistedBusinessRequestSettings(
+	          options.readPreferences()
+	        )
+	      )
+	    ), this.#requestFlowDraft = new import_reader_numeric_settings_draft.ReaderNumericSettingsDraft(
+	      requestFlowNumericDefinitions,
+	      this.#readPersistedRequestFlowSettings(options.readPreferences())
+	    ), this.#hostTopicPreheatOriginal = this.#readHostTopicPreheatEnabled(options.readPreferences()), this.#hostTopicPreheatDraft = this.#hostTopicPreheatOriginal, this.#hostTopicPreheatPostCountOriginal = this.#readHostTopicPreheatPostCount(options.readPreferences()), this.#hostTopicPreheatPostCountDraft = String(this.#hostTopicPreheatPostCountOriginal), this.#suspendHostTurnstileOriginal = this.#readSuspendHostTurnstile(options.readPreferences()), this.#suspendHostTurnstileDraft = this.#suspendHostTurnstileOriginal;
 	    const categoryGroups = (0, import_reader_settings_dom.settingsElement)(
 	      options.document,
 	      "div",
@@ -25570,6 +26031,25 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	      }
 	      groupNode.append(head, content), categoryGroups.append(groupNode);
 	    }
+	    categoryGroups.append(requestFlowSettingsGroup({
+	      document: options.document,
+	      inputs: this.#requestFlowInputs,
+	      onInput: (name, requestFlowInput) => {
+	        this.scope.listen(requestFlowInput, "input", () => {
+	          this.#requestFlowDraft.setRaw(name, requestFlowInput.value), this.#render(), this.#controller.refresh();
+	        });
+	      }
+	    })), categoryGroups.append(businessRequestPolicyGroup({
+	      document: options.document,
+	      inputs: this.#businessInputs,
+	      onInput: (name, businessInput) => {
+	        this.scope.listen(businessInput, "input", () => {
+	          this.#businessDraft.setRaw(name, businessInput.value), this.#render(), this.#controller.refresh();
+	        });
+	      }
+	    }));
+	    const hostTopicPreheatSupported = typeof this.#preferences.readHostTopicPreheatEnabled == "function" && typeof this.#preferences.createHostTopicPreheatEnabledPatch == "function";
+	    this.#hostTopicPreheatPostCountSupported = typeof this.#preferences.readHostTopicPreheatPostCount == "function" && typeof this.#preferences.createHostTopicPreheatPostCountPatch == "function";
 	    const hostTurnstileSupported = typeof this.#preferences.readSuspendHostTurnstileInBackground == "function" && typeof this.#preferences.createSuspendHostTurnstileInBackgroundPatch == "function", hostRuntimeGroup = (0, import_reader_settings_dom.settingsElement)(
 	      options.document,
 	      "section",
@@ -25581,14 +26061,47 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	      "div",
 	      "ldp-settings-category-head"
 	    ), hostRuntimeTitle = (0, import_reader_settings_dom.settingsElement)(options.document, "strong");
-	    hostRuntimeTitle.textContent = "宿主后台资源（实验）";
+	    hostRuntimeTitle.textContent = "宿主列表与后台资源";
 	    const hostRuntimeDescription = (0, import_reader_settings_dom.settingsElement)(options.document, "small");
-	    hostRuntimeDescription.textContent = "只管理 LinuxDo 页面自身的隐藏验证控件，不改变 Reader 请求预算。", hostRuntimeHead.append(hostRuntimeTitle, hostRuntimeDescription);
+	    hostRuntimeDescription.textContent = "控制列表 Topic 预热与 LinuxDo 页面自身的隐藏验证控件。", hostRuntimeHead.append(hostRuntimeTitle, hostRuntimeDescription);
 	    const hostRuntimeContent = (0, import_reader_settings_dom.settingsElement)(
 	      options.document,
 	      "div",
 	      "ldp-settings-fields ldp-settings-category-list"
-	    ), hostTurnstileSwitch = (0, import_reader_settings_dom.settingsSwitch)(
+	    ), hostTopicPreheatSwitch = (0, import_reader_settings_dom.settingsSwitch)(
+	      options.document,
+	      "预热宿主 Topic 列表",
+	      "ldp-performance-host-preheat-input"
+	    );
+	    this.#hostTopicPreheat = hostTopicPreheatSwitch.input, this.#hostTopicPreheat.dataset.performanceHostKey = "hostTopicPreheatEnabled";
+	    const hostTopicPreheatRow = (0, import_reader_settings_dom.settingsOptionRow)(
+	      options.document,
+	      "预热宿主 Topic 列表",
+	      "列表卡片接近视口时提前准备正文；默认开启。Reader 阅读和滚动期间继续预热其他 Topic，前台最多使用一个后台槽。",
+	      hostTopicPreheatSwitch.root
+	    );
+	    hostTopicPreheatRow.dataset.settingHelp = "关闭后立即停止宿主列表预热并释放交接快照；重新开启后从当前近视口卡片与 canonical 缓存恢复。当前正在阅读的同一 Topic 不重复预热。", hostTopicPreheatSupported && (hostRuntimeContent.append(hostTopicPreheatRow), this.scope.listen(this.#hostTopicPreheat, "change", () => {
+	      this.#hostTopicPreheatDraft = this.#hostTopicPreheat.checked, this.#render(), this.#controller.refresh();
+	    }));
+	    const hostTopicPreheatPostCountControl = (0, import_reader_settings_dom.settingsElement)(
+	      options.document,
+	      "span",
+	      "ldp-performance-control"
+	    );
+	    this.#hostTopicPreheatPostCount = (0, import_reader_settings_dom.settingsElement)(options.document, "input"), this.#hostTopicPreheatPostCount.type = "number", this.#hostTopicPreheatPostCount.min = String(import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_MIN), this.#hostTopicPreheatPostCount.max = String(import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_MAX), this.#hostTopicPreheatPostCount.step = "1", this.#hostTopicPreheatPostCount.inputMode = "numeric", this.#hostTopicPreheatPostCount.dataset.performanceHostKey = "hostTopicPreheatPostCount", this.#hostTopicPreheatPostCount.setAttribute("aria-label", "预热楼层数");
+	    const hostTopicPreheatPostCountUnit = (0, import_reader_settings_dom.settingsElement)(options.document, "em");
+	    hostTopicPreheatPostCountUnit.textContent = "层", hostTopicPreheatPostCountControl.append(
+	      this.#hostTopicPreheatPostCount,
+	      hostTopicPreheatPostCountUnit
+	    ), this.#hostTopicPreheatPostCountRow = (0, import_reader_settings_dom.settingsOptionRow)(
+	      options.document,
+	      "预热楼层数",
+	      "每个宿主 Topic 最多准备多少层正文数据；默认 24 层，不创建隐藏 DOM。",
+	      hostTopicPreheatPostCountControl
+	    ), this.#hostTopicPreheatPostCountRow.dataset.settingHelp = "仅在“预热宿主 Topic 列表”开启时生效。围绕历史或链接目标楼层选择连续窗口，所有正文仍进入 canonical 缓存与交接快照，不在宿主列表挂载 Post DOM。", hostTopicPreheatSupported && this.#hostTopicPreheatPostCountSupported && (hostRuntimeContent.append(this.#hostTopicPreheatPostCountRow), this.scope.listen(this.#hostTopicPreheatPostCount, "input", () => {
+	      this.#hostTopicPreheatPostCountDraft = this.#hostTopicPreheatPostCount.value, this.#render(), this.#controller.refresh();
+	    }));
+	    const hostTurnstileSwitch = (0, import_reader_settings_dom.settingsSwitch)(
 	      options.document,
 	      "后台暂停宿主 Turnstile",
 	      "ldp-performance-host-turnstile-input"
@@ -25600,9 +26113,9 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	      "标签后台停留 30 秒、验证已完成且没有编辑或支付交互时释放隐藏挑战；回到前台立即恢复。默认关闭。",
 	      hostTurnstileSwitch.root
 	    );
-	    hostTurnstileRow.dataset.settingHelp = "实验项：只处理 body 直属、已有有效响应的 LinuxDo 宿主控件；不会读取或保存令牌，也不会处理 Reader Cloudflare 验证窗口。", hostRuntimeContent.append(hostTurnstileRow), hostRuntimeGroup.append(hostRuntimeHead, hostRuntimeContent), hostTurnstileSupported && (categoryGroups.append(hostRuntimeGroup), this.scope.listen(this.#suspendHostTurnstile, "change", () => {
+	    hostTurnstileRow.dataset.settingHelp = "实验项：只处理 body 直属、已有有效响应的 LinuxDo 宿主控件；不会读取或保存令牌，也不会处理 Reader Cloudflare 验证窗口。", hostTurnstileSupported && hostRuntimeContent.append(hostTurnstileRow), hostRuntimeGroup.append(hostRuntimeHead, hostRuntimeContent), (hostTopicPreheatSupported || hostTurnstileSupported) && categoryGroups.append(hostRuntimeGroup), hostTurnstileSupported && this.scope.listen(this.#suspendHostTurnstile, "change", () => {
 	      this.#suspendHostTurnstileDraft = this.#suspendHostTurnstile.checked, this.#render(), this.#controller.refresh();
-	    }));
+	    });
 	    const footer = (0, import_reader_settings_dom.settingsFooter)(
 	      options.document,
 	      "恢复默认",
@@ -25613,18 +26126,31 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	      }
 	    );
 	    this.#status = footer.status, this.#reset = footer.reset, this.scope.listen(this.#reset, "click", () => {
-	      this.#writeConfig(import_reader_preferences_schema.READER_PERFORMANCE_PRESETS.balanced);
-	    }), this.#host.replaceChildren(presets, categoryGroups, footer.root), this.#syncInputs();
+	      this.#requestFlowDraft.setValues(import_reader_request_flow_config.READER_REQUEST_FLOW_DEFAULTS), this.#businessDraft.setValues(
+	        (0, import_reader_business_request_config.flattenReaderBusinessRequestSettings)(
+	          import_reader_business_request_config.READER_BUSINESS_REQUEST_DEFAULTS
+	        )
+	      ), this.#hostTopicPreheatDraft = !0, this.#hostTopicPreheatPostCountDraft = String(import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT), this.#suspendHostTurnstileDraft = !1, this.#writeConfig(import_reader_preferences_schema.READER_PERFORMANCE_DEFAULT_CONFIG);
+	    }), this.#host.replaceChildren(categoryGroups, footer.root), this.#syncInputs();
 	    const adapter = {
 	      panelId: "performance",
 	      changeCount: () => this.#changeCount(),
 	      validate: () => this.#validate(),
 	      createPatch: () => {
-	        const config = this.#readConfig();
+	        const config = this.#readConfig(), requestFlowSettings = this.#readRequestFlowSettings(), businessRequestSettings = this.#readBusinessRequestSettings();
 	        return {
-	          ...this.#preferences.createPatch(
-	            config,
-	            (0, import_reader_preferences_schema.readerPerformancePresetForConfig)(config)
+	          ...this.#preferences.createPatch(config),
+	          ...this.#preferences.createRequestFlowSettingsPatch?.(
+	            requestFlowSettings
+	          ) ?? {},
+	          ...this.#preferences.createBusinessRequestSettingsPatch?.(
+	            businessRequestSettings
+	          ) ?? {},
+	          ...this.#createHostTopicPreheatEnabledPatch(
+	            this.#hostTopicPreheatDraft
+	          ),
+	          ...this.#createHostTopicPreheatPostCountPatch(
+	            this.#readHostTopicPreheatPostCountDraft()
 	          ),
 	          ...this.#createSuspendHostTurnstilePatch(
 	            this.#suspendHostTurnstileDraft
@@ -25641,12 +26167,20 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	    this.scope.add(this.#controller.registerDraft(adapter)), options.preferenceChanges?.subscribe((preferences) => {
 	      this.applyPreferences(preferences);
 	    }, this.scope), this.scope.add(() => {
-	      this.#inputs.clear(), this.#presetButtons.clear(), this.#host.replaceChildren();
+	      this.#inputs.clear(), this.#requestFlowInputs.clear(), this.#businessInputs.clear(), this.#host.replaceChildren();
 	    }), this.#render();
 	  }
 	  applyPreferences(preferences) {
 	    if (this.scope.destroyed) return;
-	    this.#draft.rebase(this.#preferences.readConfig(preferences));
+	    this.#draft.rebase(this.#preferences.readConfig(preferences)), this.#requestFlowDraft.rebase(
+	      this.#readPersistedRequestFlowSettings(preferences)
+	    ), this.#businessDraft.rebase((0, import_reader_business_request_config.flattenReaderBusinessRequestSettings)(
+	      this.#readPersistedBusinessRequestSettings(preferences)
+	    ));
+	    const nextHostTopicPreheat = this.#readHostTopicPreheatEnabled(preferences);
+	    this.#hostTopicPreheatDraft === this.#hostTopicPreheatOriginal && (this.#hostTopicPreheatDraft = nextHostTopicPreheat), this.#hostTopicPreheatOriginal = nextHostTopicPreheat;
+	    const nextHostTopicPreheatPostCount = this.#readHostTopicPreheatPostCount(preferences);
+	    this.#hostTopicPreheatPostCountDraft === String(this.#hostTopicPreheatPostCountOriginal) && (this.#hostTopicPreheatPostCountDraft = String(nextHostTopicPreheatPostCount)), this.#hostTopicPreheatPostCountOriginal = nextHostTopicPreheatPostCount;
 	    const nextSuspendHostTurnstile = this.#readSuspendHostTurnstile(preferences);
 	    this.#suspendHostTurnstileDraft === this.#suspendHostTurnstileOriginal && (this.#suspendHostTurnstileDraft = nextSuspendHostTurnstile), this.#suspendHostTurnstileOriginal = nextSuspendHostTurnstile, this.#syncInputs(), this.#render(), this.#controller.refresh();
 	  }
@@ -25654,7 +26188,11 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	    this.scope.destroy();
 	  }
 	  #acceptPreferences(preferences) {
-	    this.#draft.accept(this.#preferences.readConfig(preferences)), this.#suspendHostTurnstileOriginal = this.#readSuspendHostTurnstile(preferences), this.#suspendHostTurnstileDraft = this.#suspendHostTurnstileOriginal, this.#syncInputs(), this.#render();
+	    this.#draft.accept(this.#preferences.readConfig(preferences)), this.#requestFlowDraft.accept(
+	      this.#readPersistedRequestFlowSettings(preferences)
+	    ), this.#businessDraft.accept((0, import_reader_business_request_config.flattenReaderBusinessRequestSettings)(
+	      this.#readPersistedBusinessRequestSettings(preferences)
+	    )), this.#hostTopicPreheatOriginal = this.#readHostTopicPreheatEnabled(preferences), this.#hostTopicPreheatDraft = this.#hostTopicPreheatOriginal, this.#hostTopicPreheatPostCountOriginal = this.#readHostTopicPreheatPostCount(preferences), this.#hostTopicPreheatPostCountDraft = String(this.#hostTopicPreheatPostCountOriginal), this.#suspendHostTurnstileOriginal = this.#readSuspendHostTurnstile(preferences), this.#suspendHostTurnstileDraft = this.#suspendHostTurnstileOriginal, this.#syncInputs(), this.#render();
 	  }
 	  #writeConfig(config, refresh = !0) {
 	    this.#draft.setValues(config), this.#syncInputs(), this.#render(), refresh && this.#controller.refresh();
@@ -25662,10 +26200,45 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	  #readConfig() {
 	    return this.#draft.read();
 	  }
+	  #readBusinessRequestSettings() {
+	    const values = this.#businessDraft.read();
+	    return values === null ? null : (0, import_reader_business_request_config.expandReaderBusinessRequestSettings)(values);
+	  }
+	  #readRequestFlowSettings() {
+	    const values = this.#requestFlowDraft.read();
+	    return values === null ? null : (0, import_reader_request_flow_config.normalizeReaderRequestFlowSettings)(values);
+	  }
+	  #readPersistedRequestFlowSettings(preferences) {
+	    return this.#preferences.readRequestFlowSettings?.(preferences) ?? import_reader_request_flow_config.READER_REQUEST_FLOW_DEFAULTS;
+	  }
+	  #readPersistedBusinessRequestSettings(preferences) {
+	    return this.#preferences.readBusinessRequestSettings?.(preferences) ?? import_reader_business_request_config.READER_BUSINESS_REQUEST_DEFAULTS;
+	  }
 	  #readSuspendHostTurnstile(preferences) {
 	    return this.#preferences.readSuspendHostTurnstileInBackground?.(
 	      preferences
 	    ) === !0;
+	  }
+	  #readHostTopicPreheatEnabled(preferences) {
+	    return this.#preferences.readHostTopicPreheatEnabled?.(preferences) !== !1;
+	  }
+	  #createHostTopicPreheatEnabledPatch(enabled) {
+	    return this.#preferences.createHostTopicPreheatEnabledPatch?.(enabled) ?? {};
+	  }
+	  #readHostTopicPreheatPostCount(preferences) {
+	    const postCount = Number(
+	      this.#preferences.readHostTopicPreheatPostCount?.(preferences)
+	    );
+	    return Number.isSafeInteger(postCount) && postCount >= import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_MIN && postCount <= import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_MAX ? postCount : import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT;
+	  }
+	  #readHostTopicPreheatPostCountDraft() {
+	    const postCount = Number(this.#hostTopicPreheatPostCountDraft);
+	    return Number.isSafeInteger(postCount) && postCount >= import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_MIN && postCount <= import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_MAX ? postCount : null;
+	  }
+	  #createHostTopicPreheatPostCountPatch(postCount) {
+	    return this.#hostTopicPreheatPostCountSupported ? this.#preferences.createHostTopicPreheatPostCountPatch?.(
+	      postCount
+	    ) ?? {} : {};
 	  }
 	  #createSuspendHostTurnstilePatch(enabled) {
 	    return this.#preferences.createSuspendHostTurnstileInBackgroundPatch?.(
@@ -25673,29 +26246,42 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	    ) ?? {};
 	  }
 	  #validate() {
-	    return this.#draft.issues();
+	    const issues = [
+	      ...this.#draft.issues(),
+	      ...this.#requestFlowDraft.issues(),
+	      ...this.#businessDraft.issues()
+	    ];
+	    return this.#hostTopicPreheatPostCountSupported && this.#readHostTopicPreheatPostCountDraft() === null && issues.push(
+	      `预热楼层数必须是 ${import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_MIN}–${import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_MAX} 的整数`
+	    ), Object.freeze(issues);
 	  }
 	  #changeCount() {
-	    return this.#draft.changeCount() + +(this.#suspendHostTurnstileDraft !== this.#suspendHostTurnstileOriginal);
+	    return this.#draft.changeCount() + this.#requestFlowDraft.changeCount() + this.#businessDraft.changeCount() + +(this.#hostTopicPreheatDraft !== this.#hostTopicPreheatOriginal) + Number(
+	      this.#hostTopicPreheatPostCountSupported && this.#hostTopicPreheatPostCountDraft !== String(this.#hostTopicPreheatPostCountOriginal)
+	    ) + +(this.#suspendHostTurnstileDraft !== this.#suspendHostTurnstileOriginal);
 	  }
 	  #syncInputs() {
 	    for (const field of fields)
 	      this.#inputs.get(field.name).value = this.#draft.rawValue(field.name);
-	    this.#suspendHostTurnstile.checked = this.#suspendHostTurnstileDraft;
+	    for (const name of this.#businessDraft.names)
+	      this.#businessInputs.get(name).value = this.#businessDraft.rawValue(name);
+	    for (const name of import_reader_request_flow_config.READER_REQUEST_FLOW_SETTING_NAMES)
+	      this.#requestFlowInputs.get(name).value = this.#requestFlowDraft.rawValue(name);
+	    this.#hostTopicPreheat.checked = this.#hostTopicPreheatDraft, this.#hostTopicPreheatPostCount.value = this.#hostTopicPreheatPostCountDraft, this.#suspendHostTurnstile.checked = this.#suspendHostTurnstileDraft;
 	  }
 	  #render() {
-	    const config = this.#readConfig(), preset = config ? (0, import_reader_preferences_schema.readerPerformancePresetForConfig)(config) : "custom", risky = config !== null && (preset === "high" || preset === "custom" && performanceConfigExceedsBalanced(config));
-	    for (const [name, button] of this.#presetButtons) {
-	      const active = name === preset;
-	      button.classList.toggle("active", active), button.setAttribute("aria-pressed", String(active)), name === "high" || name === "custom" && active && risky ? button.dataset.performanceRisk = "experimental" : delete button.dataset.performanceRisk;
-	    }
+	    const config = this.#readConfig(), requestFlowSettings = this.#readRequestFlowSettings(), businessRequestSettings = this.#readBusinessRequestSettings(), preheatPostCount = this.#readHostTopicPreheatPostCountDraft(), risky = config !== null && requestFlowSettings !== null && businessRequestSettings !== null && preheatPostCount !== null && (performanceConfigExceedsDefault(config) || requestFlowSettingsExceedDefault(requestFlowSettings) || businessRequestSettingsExceedDefault(businessRequestSettings) || this.#hostTopicPreheatDraft && preheatPostCount > import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT);
+	    this.#hostTopicPreheatPostCountRow.hidden = !this.#hostTopicPreheatDraft, this.#hostTopicPreheatPostCount.disabled = !this.#hostTopicPreheatDraft;
 	    const changed = this.#changeCount();
-	    this.#reset.disabled = config !== null && (0, import_reader_preferences_schema.readerPerformancePresetForConfig)(config) === "balanced";
-	    const status = config === null ? "部分数值无效；不会保存，也不会改变当前运行时。" : changed > 0 ? `${changed} 项目标值等待统一保存；保存后当前与后续帖子立即采用，设备与网络仍可自适应下调。` : `当前采用${presetLabels[preset]}目标：正文每批不超过 ${config.pageSize} 楼，后台请求空闲单飞${config.requestMaxConcurrent >= 2 ? "，总预算允许时可见缺口可用第 2 正文槽" : "，总预算仅 1 槽"}；树状最多 ${Math.min(2, config.requestMaxConcurrent)} 路，共享总并发目标 ${config.requestMaxConcurrent} 路，窗口预算 ${config.requestRateTarget}%。设备与网络可下调；其他 owner 可延后或停止请求。生效批次与 DOM 见性能记录，请求实际值见请求记录。`;
-	    this.#status.textContent = risky ? `${status} 风险提示：高负载目标可能增加卡顿或 429；不确定时请使用自动（推荐）。` : status, this.#status.classList.toggle("is-risk", risky);
+	    this.#reset.disabled = config !== null && (0, import_reader_preferences_schema.readerPerformanceConfigIsDefault)(config) && requestFlowSettings !== null && (0, import_reader_request_flow_config.readerRequestFlowSettingsAreDefault)(requestFlowSettings) && businessRequestSettings !== null && (0, import_reader_business_request_config.readerBusinessRequestSettingsAreDefault)(businessRequestSettings) && this.#hostTopicPreheatDraft && preheatPostCount === import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT && !this.#suspendHostTurnstileDraft;
+	    const status = config === null || requestFlowSettings === null || businessRequestSettings === null || preheatPostCount === null ? "部分数值无效；不会保存，也不会改变当前运行时。" : changed > 0 ? `${changed} 项目标值等待统一保存；保存后当前排队请求与后续请求立即采用，设备、车道和全站许可仍可收紧。` : `当前目标：正文每批不超过 ${config.pageSize} 楼，后台请求空闲单飞${config.requestMaxConcurrent >= 2 ? "，总预算允许时可见缺口可用第 2 正文槽" : "，总预算仅 1 槽"}；树状最多 ${Math.min(
+	      requestFlowSettings.nestedRepliesMaxConcurrent,
+	      config.requestMaxConcurrent
+	    )} 路，共享总并发目标 ${config.requestMaxConcurrent} 路，窗口预算 ${config.requestRateTarget}%；后台空闲 ${requestFlowSettings.backgroundIdleIntervalMs} ms / 最长让路 ${requestFlowSettings.backgroundMaxDeferMs} ms，队列窗口 ${requestFlowSettings.queuePrefetchShortLimit}/${requestFlowSettings.queuePrefetchLongLimit}；已读队列 ${config.readStateRequestsPerMinute} RPM / ${config.readStateTimingsPerMinute} TPM，宿主列表预热${this.#hostTopicPreheatDraft ? `开启（每个 Topic 最多 ${preheatPostCount} 层、${requestFlowSettings.hostPreheatMaxConcurrent} 路）` : "关闭"}；四类业务请求参数均由中央 Scheduler 热应用。设备与网络可下调；其他 owner 可延后或停止请求。生效批次与 DOM 见性能记录，请求实际值见请求记录。`;
+	    this.#status.textContent = risky ? `${status} 风险提示：高于默认值的负载目标可能增加卡顿或 429；不确定时请恢复默认。` : status, this.#status.classList.toggle("is-risk", risky);
 	  }
 	}
-}, "eec051642a0cb632534f7a104a5c843b151808eefc51d17580d6c5ace10627bd");
+}, "b35580673b8dc410fd7b366daaae8f61d9e46432dddbc95fb5fc7e437a63b22b");
 
 /* Source: lite/src/settings/reader-reading-settings-form.ts */
 runtime.register("src/settings/reader-reading-settings-form.js", function(module, exports, require) {
@@ -27151,7 +27737,7 @@ runtime.register("src/settings/reader-settings-reset-reminder.js", function(modu
 	  showReaderSettingsResetReminder: () => showReaderSettingsResetReminder
 	});
 	module.exports = __toCommonJS(reader_settings_reset_reminder_exports);
-	const READER_SETTINGS_RESET_REMINDER_STORAGE_KEY = "linuxdo-enhanced-reader:settings-reset-reminder", READER_SETTINGS_RESET_REMINDER_CAMPAIGN = "settings-contract-2026-08-r4";
+	const READER_SETTINGS_RESET_REMINDER_STORAGE_KEY = "linuxdo-enhanced-reader:settings-reset-reminder", READER_SETTINGS_RESET_REMINDER_CAMPAIGN = "settings-contract-2026-08-r5";
 	function nonEmpty(value, name) {
 	  const normalized = String(value).trim();
 	  if (!normalized) throw new Error(`${name} 不能为空`);
@@ -27203,7 +27789,7 @@ runtime.register("src/settings/reader-settings-reset-reminder.js", function(modu
 	    return "failed";
 	  }
 	}
-}, "11ba523ec303a825eb6d32a6479b4465341121bb2a46ba0596ff3daaaf81380e");
+}, "7e8a38777aa80987ee6b76995678246dbf84193e2690f89b66467c0ebaf92570");
 
 /* Source: lite/src/settings/reader-settings-view.ts */
 runtime.register("src/settings/reader-settings-view.js", function(module, exports, require) {
@@ -32523,7 +33109,7 @@ runtime.register("src/user/discourse-user-observation-adapter.js", function(modu
 	  readerUserObservationStreamLabel: () => readerUserObservationStreamLabel
 	});
 	module.exports = __toCommonJS(discourse_user_observation_adapter_exports);
-	var import_reader_user_observation_model = require("./reader-user-observation-model.js");
+	var import_reader_business_request_policy = require("../network/reader-business-request-policy.js"), import_reader_user_observation_model = require("./reader-user-observation-model.js");
 	const READER_USER_OBSERVATION_STREAMS = Object.freeze([
 	  "topics",
 	  "activity",
@@ -32720,12 +33306,13 @@ runtime.register("src/user/discourse-user-observation-adapter.js", function(modu
 	      throw new RangeError("用户观察 offset 必须是非负安全整数");
 	    request.signal.throwIfAborted();
 	    const descriptor = pageDescriptor(username, stream, page, offset), { path } = descriptor, payload = await this.#gateway.loadCollectionPage({
+	      business: import_reader_business_request_policy.READER_USER_OBSERVATION_REQUEST_POLICY.kind,
 	      authScope: this.#authScope,
 	      collection: descriptor.collection,
 	      page,
 	      cursor: offset,
 	      variant: descriptor.variant,
-	      profile: request.background ? "background-prefetch" : "collection-visible",
+	      profile: request.background ? import_reader_business_request_policy.READER_USER_OBSERVATION_REQUEST_POLICY.backgroundProfile : import_reader_business_request_policy.READER_USER_OBSERVATION_REQUEST_POLICY.foregroundProfile,
 	      input: path,
 	      signal: request.signal,
 	      ...request.refresh ? { cacheMode: "refresh" } : {},
@@ -32762,7 +33349,7 @@ runtime.register("src/user/discourse-user-observation-adapter.js", function(modu
 	      page,
 	      cursor: offset,
 	      variant: descriptor.variant,
-	      profile: request.background ? "background-prefetch" : "collection-visible",
+	      profile: request.background ? import_reader_business_request_policy.READER_USER_OBSERVATION_REQUEST_POLICY.backgroundProfile : import_reader_business_request_policy.READER_USER_OBSERVATION_REQUEST_POLICY.foregroundProfile,
 	      cache: cacheFor(this.#cache, username, page, stream)
 	    });
 	    return request.signal.throwIfAborted(), payload === null ? null : observationPage(
@@ -32813,12 +33400,13 @@ runtime.register("src/user/discourse-user-observation-adapter.js", function(modu
 	    const query = new URLSearchParams({ per_page: String(topicIds.length) });
 	    for (const topicId of topicIds) query.append("topic_ids[]", String(topicId));
 	    const path = `/latest.json?${query}`, payload = await this.#gateway.loadCollectionPage({
+	      business: import_reader_business_request_policy.READER_USER_OBSERVATION_REQUEST_POLICY.kind,
 	      authScope: this.#authScope,
 	      collection: "user-observation-topic-metadata",
 	      page: 0,
 	      cursor: 0,
 	      variant: `v1:${topicIds.join(",")}`,
-	      profile: request.background ? "background-prefetch" : "collection-visible",
+	      profile: request.background ? import_reader_business_request_policy.READER_USER_OBSERVATION_REQUEST_POLICY.backgroundProfile : import_reader_business_request_policy.READER_USER_OBSERVATION_REQUEST_POLICY.foregroundProfile,
 	      input: path,
 	      signal: request.signal,
 	      ...request.refresh ? { cacheMode: "refresh" } : {},
@@ -32858,7 +33446,7 @@ runtime.register("src/user/discourse-user-observation-adapter.js", function(modu
 	    }));
 	  }
 	}
-}, "279cb05f20edeacee6306771f6c854cc0c500963fe2f1c91ab28aa1938f4787c");
+}, "43b724d2e993c970b2ce4e4e3abdab9e5cdbf71317fe1d0e9edbbd195f0c6abc");
 
 /* Source: lite/src/user/reader-connect-trust-adapter.ts */
 runtime.register("src/user/reader-connect-trust-adapter.js", function(module, exports, require) {
@@ -38354,6 +38942,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	          completedStreams: 0,
 	          storedRecordCount: 0,
 	          records: Object.freeze([]),
+	          pendingRecords: Object.freeze([]),
 	          detail: identity.completedAt ? "等待从中央缓存恢复" : "等待后台采集",
 	          error: "",
 	          recoveryKind: null,
@@ -38365,7 +38954,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	      existing.name = identity.name || existing.name, existing.avatarTemplate = identity.avatarTemplate || existing.avatarTemplate, !isActivePhase(existing.phase) && (existing.addedAt = identity.addedAt, existing.completedAt = identity.completedAt, existing.pages = identity.pages, existing.lastRecordCount = Math.max(
 	        existing.records.length,
 	        identity.lastRecordCount
-	      ), existing.streamCheckpoints = { ...identity.streamCheckpoints });
+	      ), existing.streamCheckpoints = { ...identity.streamCheckpoints }, existing.pendingRecords = Object.freeze([]));
 	    }
 	    this.#trim(), this.#emit(), this.resume({ allowNetwork: !1 });
 	  }
@@ -38386,7 +38975,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	      for (const entry of this.#entries.values())
 	        entry.epoch += 1, entry.controller?.abort(
 	          new DOMException("用户观察缓存已清理", "AbortError")
-	        ), entry.controller = null, entry.phase = "idle", entry.completedAt = 0, entry.pages = 0, entry.currentStream = null, entry.completedStreams = 0, entry.lastRecordCount = 0, entry.storedRecordCount = 0, entry.streamCheckpoints = {}, entry.knownIdentities = /* @__PURE__ */ new Set(), entry.records = Object.freeze([]), entry.detail = "本地公开历史缓存已清理", entry.error = "", entry.recoveryKind = null;
+	        ), entry.controller = null, entry.phase = "idle", entry.completedAt = 0, entry.pages = 0, entry.currentStream = null, entry.completedStreams = 0, entry.lastRecordCount = 0, entry.storedRecordCount = 0, entry.streamCheckpoints = {}, entry.knownIdentities = /* @__PURE__ */ new Set(), entry.records = Object.freeze([]), entry.pendingRecords = Object.freeze([]), entry.detail = "本地公开历史缓存已清理", entry.error = "", entry.recoveryKind = null;
 	      this.#persist(), this.#emit();
 	    }
 	  }
@@ -38434,15 +39023,18 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	    let recordsChanged = !1;
 	    const persistentEntries = [];
 	    for (const entry of this.#entries.values()) {
-	      let entryChanged = !1;
+	      let entryChanged = !1, pendingChanged = !1;
 	      const records = entry.records.map((record) => {
 	        const next = (0, import_reader_user_observation_model.mergeReaderUserActivityTopicMetadata)(record, merged);
 	        return next !== record && (entryChanged = !0), next;
+	      }), pendingRecords = entry.pendingRecords.map((record) => {
+	        const next = (0, import_reader_user_observation_model.mergeReaderUserActivityTopicMetadata)(record, merged);
+	        return next !== record && (pendingChanged = !0), next;
 	      });
 	      entryChanged && (entry.records = (0, import_reader_user_observation_model.sortReaderUserActivities)(records), entry.lastRecordCount = Math.max(
 	        entry.lastRecordCount,
 	        entry.records.length
-	      ), recordsChanged = !0), isActivePhase(entry.phase) || persistentEntries.push(entry);
+	      ), recordsChanged = !0), pendingChanged && (entry.pendingRecords = (0, import_reader_user_observation_model.sortReaderUserActivities)(pendingRecords), recordsChanged = !0), isActivePhase(entry.phase) || persistentEntries.push(entry);
 	    }
 	    if (metadataChanged && (this.#topicMetadataRevision += 1), (metadataChanged || recordsChanged) && this.#emit(), this.#pages && persistentEntries.length) {
 	      const persist = async () => {
@@ -38507,6 +39099,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	      streamCheckpoints: {},
 	      knownIdentities: /* @__PURE__ */ new Set(),
 	      records: Object.freeze([]),
+	      pendingRecords: Object.freeze([]),
 	      detail: "",
 	      error: "",
 	      recoveryKind: null,
@@ -38619,7 +39212,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	    const entry = this.#entries.get(job.username);
 	    if (!entry) return;
 	    const epoch = ++entry.epoch, controller = new AbortController();
-	    entry.controller = controller, entry.phase = "loading", entry.recoveryKind = null, job.continueFromCheckpoint || (entry.streamCheckpoints = {});
+	    entry.controller = controller, entry.phase = "loading", entry.recoveryKind = null, entry.pendingRecords = Object.freeze([]), job.continueFromCheckpoint || (entry.streamCheckpoints = {});
 	    const knownIdentities = new Set(entry.knownIdentities);
 	    for (const record of entry.records) knownIdentities.add(record.identity);
 	    const incremental = job.refresh && knownIdentities.size > 0, previousPages = entry.pages, firstPendingStream = job.continueFromCheckpoint ? import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS.findIndex((stream) => entry.streamCheckpoints[stream]?.complete !== !0) : 0, replayCheckpointCache = !!(job.restoreCache && job.continueFromCheckpoint && entry.records.length === 0 && knownIdentities.size === 0 && this.#requests.loadCachedPage), startingStreamIndex = replayCheckpointCache ? 0 : firstPendingStream < 0 ? import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS.length : firstPendingStream;
@@ -38640,10 +39233,10 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	        entry.lastRecordCount = Math.max(entry.lastRecordCount, records.size);
 	        return;
 	      }
-	      const projectedRecords = (0, import_reader_user_observation_model.sortReaderUserActivities)([...records.values()]);
-	      entry.records = this.#pages && (entry.storedRecordCount > 0 || replayCheckpointCache) && projectedRecords.length > SESSION_RECORD_WINDOW ? Object.freeze(projectedRecords.slice(0, SESSION_RECORD_WINDOW)) : projectedRecords, entry.lastRecordCount = Math.max(
+	      const projectedRecords = (0, import_reader_user_observation_model.sortReaderUserActivities)([...records.values()]), pendingRecords = incremental ? projectedRecords.filter((record) => !knownIdentities.has(record.identity)) : [];
+	      (pendingRecords.length !== entry.pendingRecords.length || pendingRecords.some((record, index) => record !== entry.pendingRecords[index])) && (entry.pendingRecords = Object.freeze(pendingRecords)), entry.records = this.#pages && (entry.storedRecordCount > 0 || replayCheckpointCache) && projectedRecords.length > SESSION_RECORD_WINDOW ? Object.freeze(projectedRecords.slice(0, SESSION_RECORD_WINDOW)) : projectedRecords, entry.lastRecordCount = Math.max(
 	        entry.lastRecordCount,
-	        projectedRecords.length
+	        incremental ? knownIdentities.size + entry.pendingRecords.length : projectedRecords.length
 	      ), projectedPages = totalPages;
 	    }, checkpointChanged = (forceProjection = !1) => {
 	      this.#persist(), projectRecords(forceProjection), this.#emit();
@@ -38889,7 +39482,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	            offset,
 	            complete: streamComplete,
 	            ...terminalVerified ? { terminalVerified: !0 } : {}
-	          }), entry.detail = `${incremental ? "增量更新" : "后台采集中"} · ${streamLabel} · ${streamIndex + 1}/${import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS.length} · ${records.size} 条 · ${entry.pages} 页`, checkpointChanged(streamComplete), armStallWatch();
+	          }), entry.detail = `${incremental ? "增量更新" : "后台采集中"} · ${streamLabel} · ${streamIndex + 1}/${import_discourse_user_observation_adapter.READER_USER_OBSERVATION_STREAMS.length} · ${records.size} 条 · ${entry.pages} 页`, checkpointChanged(!0), armStallWatch();
 	        }
 	        entry.completedStreams = streamIndex + 1, entry.streamCheckpoints[stream] = Object.freeze({
 	          ...entry.streamCheckpoints[stream],
@@ -38964,6 +39557,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	          completedStreams: 0,
 	          storedRecordCount: 0,
 	          records: Object.freeze([]),
+	          pendingRecords: Object.freeze([]),
 	          detail: identity.completedAt ? "等待从中央缓存恢复" : "等待后台采集",
 	          error: "",
 	          recoveryKind: null,
@@ -39028,6 +39622,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	      recordCount: Math.max(entry.lastRecordCount, entry.records.length),
 	      storedRecordCount: entry.storedRecordCount,
 	      records: entry.records,
+	      pendingRecords: entry.pendingRecords,
 	      detail: entry.detail,
 	      error: entry.error,
 	      recoveryKind: entry.recoveryKind
@@ -39047,7 +39642,7 @@ runtime.register("src/user/reader-user-observation-session.js", function(module,
 	      this.#onError(cause);
 	  }
 	}
-}, "dc423428c6b0ef4630209706407eef84946f4e0319e4f2b3d8264758bda05be2");
+}, "2671f84c30a51be82d13ffc6bb5881861ee8bc1480b5e674477c3dcf76a84834");
 
 /* Source: lite/src/user/reader-user-observation-view.ts */
 runtime.register("src/user/reader-user-observation-view.js", function(module, exports, require) {
@@ -39648,9 +40243,12 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	      this.#showList();
 	      return;
 	    }
-	    const previousSessionEntry = this.#sessionEntry, recordsChanged = !previousSessionEntry || previousSessionEntry.records !== entry.records, storedAvailable = !!(this.#pages && entry.storedRecordCount > 0), storedProjection = storedAvailable && this.#storedTotal > 0 && previousSessionEntry?.username === entry.username ? Object.freeze({
+	    const previousSessionEntry = this.#sessionEntry, recordsChanged = !previousSessionEntry || previousSessionEntry.records !== entry.records, pendingRecordsChanged = !previousSessionEntry || previousSessionEntry.pendingRecords !== entry.pendingRecords, storedAvailable = !!(this.#pages && entry.storedRecordCount > 0), storedProjection = storedAvailable && this.#storedTotal > 0 && previousSessionEntry?.username === entry.username ? Object.freeze({
 	      ...entry,
-	      records: previousSessionEntry.records,
+	      records: this.#mergePendingRecords(
+	        entry,
+	        previousSessionEntry.records
+	      ),
 	      recordCount: Math.max(
 	        entry.recordCount,
 	        previousSessionEntry.recordCount
@@ -39658,7 +40256,20 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    }) : null, sessionProjection = storedProjection ?? (storedAvailable && !entry.records.length ? Object.freeze({ ...entry, records: Object.freeze([]) }) : entry), projectedRecords = this.#session.projectTopicMetadata(
 	      sessionProjection.records
 	    ), metadataProjected = projectedRecords !== sessionProjection.records;
-	    this.#sessionEntry = metadataProjected ? Object.freeze({ ...sessionProjection, records: projectedRecords }) : sessionProjection, this.listWindow.setTitle(entry.isSelf ? "我的持续观察" : `${entry.name || entry.username} 的公开历史`), this.listWindow.meta.textContent = detailMeta(entry), this.#renderDetailProfile(entry), this.#renderDetailProgress(entry), PRIMARY_OBSERVATION_TABS.some(([tab]) => tab === this.#activeTab) || (this.#activeTab = "all"), (recordsChanged && !storedProjection || metadataProjected || !this.#detailTabs.childElementCount) && (this.#indexRecords(this.#sessionEntry), this.#renderDetailTabs(), this.#renderDetailFilters(), this.#syncDetailFilterState(), this.#syncDetailMinimumWidth(), this.#renderDetailTimeline(this.#sessionEntry)), this.#hydrateStoredDetail(entry);
+	    this.#sessionEntry = metadataProjected ? Object.freeze({ ...sessionProjection, records: projectedRecords }) : sessionProjection, this.listWindow.setTitle(entry.isSelf ? "我的持续观察" : `${entry.name || entry.username} 的公开历史`), this.listWindow.meta.textContent = detailMeta(entry), this.#renderDetailProfile(entry), this.#renderDetailProgress(entry), PRIMARY_OBSERVATION_TABS.some(([tab]) => tab === this.#activeTab) || (this.#activeTab = "all"), (recordsChanged && !storedProjection || pendingRecordsChanged || metadataProjected || !this.#detailTabs.childElementCount) && (this.#indexRecords(this.#sessionEntry), this.#renderDetailTabs(), this.#renderDetailFilters(), this.#syncDetailFilterState(), this.#syncDetailMinimumWidth(), this.#renderDetailTimeline(this.#sessionEntry)), this.#hydrateStoredDetail(entry);
+	  }
+	  #pendingRecords(entry) {
+	    const storedSummary = this.#storedSummary?.username === entry.username ? this.#storedSummary.summary : null;
+	    return storedSummary && storedSummary.total >= entry.recordCount ? Object.freeze([]) : entry.pendingRecords;
+	  }
+	  #mergePendingRecords(entry, records) {
+	    const pendingRecords = this.#pendingRecords(entry);
+	    if (!pendingRecords.length) return records;
+	    const pendingIdentities = new Set(pendingRecords.map((record) => record.identity));
+	    return (0, import_reader_user_observation_model.sortReaderUserActivities)([
+	      ...pendingRecords,
+	      ...records.filter((record) => !pendingIdentities.has(record.identity))
+	    ]);
 	  }
 	  #renderDetailProfile(entry) {
 	    const publicCount = entry.storedRecordCount > 0 ? entry.storedRecordCount : entry.recordCount, signature = [
@@ -39692,18 +40303,18 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	      username: this.#detailUsername,
 	      summary
 	    }));
-	    const storedSummary = summary ?? (this.#storedSummary?.username === this.#detailUsername ? this.#storedSummary.summary : void 0);
+	    const storedSummary = summary ?? (this.#storedSummary?.username === this.#detailUsername ? this.#storedSummary.summary : void 0), pendingRecords = this.#sessionEntry ? this.#pendingRecords(this.#sessionEntry) : Object.freeze([]);
 	    this.#detailTabs.replaceChildren(...PRIMARY_OBSERVATION_TABS.map(
 	      ([tab, label]) => {
 	        const button = this.#document.createElement("button");
 	        button.type = "button", button.dataset.userObservationTab = tab, button.className = tab === this.#activeTab ? "is-active" : "", button.setAttribute("role", "tab"), button.setAttribute("aria-selected", String(tab === this.#activeTab));
-	        const count = storedSummary ? tab === "all" ? storedSummary.total : tab === "reaction-like" ? storedSummary.reactionLikeCount : tab === "other-actions" ? Object.entries(storedSummary.counts).reduce(
+	        const storedCount = storedSummary ? tab === "all" ? storedSummary.total : tab === "reaction-like" ? storedSummary.reactionLikeCount : tab === "other-actions" ? Object.entries(storedSummary.counts).reduce(
 	          (total, [kind, value]) => total + ((0, import_reader_user_observation_page_repository.readerUserObservationStoredTabIncludesKind)(
 	            kind,
 	            tab
 	          ) ? value ?? 0 : 0),
 	          0
-	        ) : storedSummary.counts[tab] ?? 0 : this.#recordsByTab.get(tab)?.length ?? 0;
+	        ) : storedSummary.counts[tab] ?? 0 : this.#recordsByTab.get(tab)?.length ?? 0, pendingCount = storedSummary ? pendingRecords.filter((record) => (0, import_reader_user_observation_page_repository.readerUserObservationStoredTabIncludesKind)(record.kind, tab)).length : 0, count = storedCount + pendingCount;
 	        return button.textContent = `${label} ${count}`, button;
 	      }
 	    ));
@@ -39713,7 +40324,6 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    const hydrationKey = [
 	      entry.username,
 	      entry.completedAt,
-	      entry.recordCount,
 	      entry.storedRecordCount,
 	      this.#activeTab,
 	      this.#detailSearch.value,
@@ -39759,10 +40369,18 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	      this.#storedHydrationPendingKey === hydrationKey && (this.#storedHydrationKey = "", this.#storedHydrationPendingKey = ""), this.#sessionRenderPending = !0;
 	      return;
 	    }
-	    this.#storedHydrationPendingKey === hydrationKey && (this.#storedHydrationPendingKey = ""), this.#storedWindowKey = hydrationKey, this.#storedGeneration = window.generation, this.#storedTotal = window.total, this.#storedPage = 0, this.#storedWindowRecords = this.#session.projectTopicMetadata(window.records), this.#sessionEntry = Object.freeze({
-	      ...entry,
-	      records: this.#storedWindowRecords,
-	      recordCount: summary?.total ?? entry.recordCount
+	    this.#storedHydrationPendingKey === hydrationKey && (this.#storedHydrationPendingKey = ""), this.#storedWindowKey = hydrationKey, this.#storedGeneration = window.generation, this.#storedTotal = window.total, this.#storedPage = 0, this.#storedWindowRecords = this.#session.projectTopicMetadata(window.records);
+	    const currentEntry = this.#session.entry(entry.username) ?? entry;
+	    this.#sessionEntry = Object.freeze({
+	      ...currentEntry,
+	      records: this.#mergePendingRecords(
+	        currentEntry,
+	        this.#storedWindowRecords
+	      ),
+	      recordCount: Math.max(
+	        currentEntry.recordCount,
+	        summary?.total ?? 0
+	      )
 	    }), this.#indexRecords(this.#sessionEntry), this.#renderDetailTimeline(this.#sessionEntry, window.total), this.#storedAppendRequested && (this.#storedAppendRequested = !1, this.#showMore());
 	    let facets;
 	    try {
@@ -40380,12 +40998,12 @@ runtime.register("src/user/reader-user-observation-view.js", function(module, ex
 	    ]);
 	    this.#storedWindowRecords = records, this.#visibleLimit = records.length, this.#sessionEntry = Object.freeze({
 	      ...entry,
-	      records,
+	      records: this.#mergePendingRecords(entry, records),
 	      recordCount: Math.max(entry.recordCount, window.total)
 	    }), this.#indexRecords(this.#sessionEntry), this.#renderDetailTimeline(this.#sessionEntry, window.total);
 	  }
 	}
-}, "3959499ceabcdf348c9c05b91d25a041c0133024176285518c189a3cf6d6cfe7");
+}, "5a51fdbf1376e091d27ef5bc704a2732d1cc67112d9807d3594731919e540c8c");
 
 /* Source: lite/src/user/reader-user-profile-presentation.ts */
 runtime.register("src/user/reader-user-profile-presentation.js", function(module, exports, require) {

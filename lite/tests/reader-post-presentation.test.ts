@@ -154,6 +154,45 @@ assert(
 	'同一 PostView 重投影必须刷新相对时间，但不得重复格式化不变的具体时间',
 );
 
+const detailsPost = {
+	...rootPost,
+	id: 103,
+	post_number: 3,
+	username: 'details-author',
+	name: '折叠正文作者',
+	cooked:
+		'<details><summary>点一下</summary><p>展开正文</p></details>' +
+		'<details open><summary>再点一下</summary><p>默认展开正文</p></details>',
+	read: false,
+};
+const detailsView = new PostView(document, renderer.identity(detailsPost));
+renderer.render(detailsPost, detailsView);
+const initialDetails = [
+	...detailsView.slots.content.querySelectorAll<HTMLDetailsElement>('details'),
+];
+initialDetails[0]!.setAttribute('open', '');
+initialDetails[1]!.removeAttribute('open');
+renderer.render({ ...detailsPost, read: true }, detailsView);
+const rerenderedDetails = [
+	...detailsView.slots.content.querySelectorAll<HTMLDetailsElement>('details'),
+];
+assert(
+	rerenderedDetails[0]?.hasAttribute('open') === true &&
+		rerenderedDetails[1]?.hasAttribute('open') === false &&
+		detailsView.slots.header.querySelector('.ldp-post-read-state')
+			?.getAttribute('data-read-state') === 'read',
+	'滚动引发已读等非正文重投影时必须保留 cooked details 的用户展开/折叠状态',
+);
+renderer.render({
+	...detailsPost,
+	cooked: '<details><summary>更新后的正文</summary><p>新内容</p></details>',
+}, detailsView);
+assert(
+	detailsView.slots.content.querySelector<HTMLDetailsElement>('details')
+		?.hasAttribute('open') === false,
+	'canonical cooked 真正更新时必须采用新正文声明的 details 默认状态',
+);
+
 const childPost = {
 	...rootPost,
 	id: 102,

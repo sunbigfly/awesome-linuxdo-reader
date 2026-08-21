@@ -6,6 +6,12 @@ import {
 	type RequestStartGate,
 	type RequestStartPermit,
 } from '../src/network/request-scheduler.js';
+import {
+	normalizeReaderBusinessRequestSettings,
+} from '../src/network/reader-business-request-config.js';
+import {
+	READER_REQUEST_FLOW_DEFAULTS,
+} from '../src/network/reader-request-flow-config.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -786,6 +792,159 @@ hotFirst.resolve();
 hotSecond.resolve();
 await Promise.all([firstHotRequest, secondHotRequest]);
 hotScheduler.destroy();
+
+const requestFlowScheduler = new RequestScheduler({
+	maxConcurrent: 2,
+	queueLimit: 3,
+	defaultTimeoutMs: 1000,
+});
+const requestFlowFirstHold = deferred<void>();
+const requestFlowSecondHold = deferred<void>();
+let requestFlowActive = 0;
+const requestFlowFirst = requestFlowScheduler.schedule({
+	key: 'request-flow-first',
+	lane: 'standard',
+}, async () => {
+	requestFlowActive += 1;
+	await requestFlowFirstHold.promise;
+	requestFlowActive -= 1;
+});
+const requestFlowSecond = requestFlowScheduler.schedule({
+	key: 'request-flow-second',
+	lane: 'standard',
+}, async () => {
+	requestFlowActive += 1;
+	await requestFlowSecondHold.promise;
+	requestFlowActive -= 1;
+});
+await nextTask();
+assert(
+	requestFlowActive === 1 &&
+	requestFlowScheduler.snapshot().maxConcurrentByLane?.standard === 1,
+	'标准车道必须先采用当前默认单槽目标',
+);
+requestFlowScheduler.applyRuntimePolicy({
+	maxConcurrent: 2,
+	requestFlowSettings: Object.freeze({
+		...READER_REQUEST_FLOW_DEFAULTS,
+		standardMaxConcurrent: 2,
+	}),
+});
+await nextTask();
+assert(
+	Number(requestFlowActive) === 2 &&
+	requestFlowScheduler.snapshot().maxConcurrentByLane?.standard === 2,
+	'请求流车道设置必须原地放行已排队任务，不能停留在写死并发值',
+);
+requestFlowFirstHold.resolve();
+requestFlowSecondHold.resolve();
+await Promise.all([requestFlowFirst, requestFlowSecond]);
+requestFlowScheduler.destroy();
+
+const businessConcurrencyScheduler = new RequestScheduler({
+	maxConcurrent: 3,
+	queueLimit: 4,
+	defaultTimeoutMs: 1000,
+});
+businessConcurrencyScheduler.applyRuntimePolicy({
+	maxConcurrent: 3,
+	businessRequestSettings: normalizeReaderBusinessRequestSettings({
+		'topic-download': {
+			maxConcurrent: 1,
+			backgroundMinIntervalMs: 250,
+			backgroundRequestsPerMinute: 30,
+		},
+	}),
+});
+const businessConcurrencyHold = deferred<void>();
+const businessConcurrencyStarts: string[] = [];
+const businessConcurrencyFirst = businessConcurrencyScheduler.schedule({
+	key: 'business-concurrency-first',
+	business: 'topic-download',
+	lane: 'topic-batch',
+	priority: 'visible',
+}, async () => {
+	businessConcurrencyStarts.push('first');
+	await businessConcurrencyHold.promise;
+});
+const businessConcurrencySecond = businessConcurrencyScheduler.schedule({
+	key: 'business-concurrency-second',
+	business: 'topic-download',
+	lane: 'standard',
+	priority: 'visible',
+}, async () => {
+	businessConcurrencyStarts.push('second');
+});
+await nextTask();
+assert(
+	businessConcurrencyStarts.join(',') === 'first',
+	'同一业务必须跨不同车道服从可热应用的业务并发目标',
+);
+businessConcurrencyHold.resolve();
+await businessConcurrencyFirst;
+await businessConcurrencySecond;
+assert(
+	businessConcurrencyStarts.join(',') === 'first,second',
+	'业务并发槽释放后必须继续原队列，不能丢弃请求',
+);
+businessConcurrencyScheduler.destroy();
+
+let businessNow = 1_000;
+const businessTimingSettings = normalizeReaderBusinessRequestSettings({
+	'topic-download': {
+		maxConcurrent: 2,
+		backgroundMinIntervalMs: 250,
+		backgroundRequestsPerMinute: 1,
+	},
+});
+const businessTimingScheduler = new RequestScheduler({
+	maxConcurrent: 3,
+	queueLimit: 4,
+	defaultTimeoutMs: 1000,
+	now: () => businessNow,
+});
+businessTimingScheduler.applyRuntimePolicy({
+	maxConcurrent: 3,
+	businessRequestSettings: businessTimingSettings,
+});
+await businessTimingScheduler.schedule({
+	key: 'business-timing-first',
+	business: 'topic-download',
+	priority: 'background',
+}, async () => 'first');
+let secondBackgroundStarted = false;
+const secondBackground = businessTimingScheduler.schedule({
+	key: 'business-timing-second',
+	business: 'topic-download',
+	priority: 'background',
+}, async () => {
+	secondBackgroundStarted = true;
+});
+let visibleBusinessStarted = false;
+const visibleBusiness = businessTimingScheduler.schedule({
+	key: 'business-timing-visible',
+	business: 'topic-download',
+	priority: 'visible',
+}, async () => {
+	visibleBusinessStarted = true;
+});
+await nextTask();
+assert(
+	visibleBusinessStarted && !secondBackgroundStarted,
+	'后台间隔与 RPM 必须延后同业务后台任务，但不能阻止新的可见请求',
+);
+await visibleBusiness;
+businessNow = 61_001;
+businessTimingScheduler.applyRuntimePolicy({
+	maxConcurrent: 3,
+	businessRequestSettings: businessTimingSettings,
+});
+await secondBackground;
+assert(
+	secondBackgroundStarted,
+	'滚动分钟窗口释放或热应用后必须原地继续排队业务请求',
+);
+businessTimingScheduler.destroy();
 
 const throwingAcquireScheduler = new RequestScheduler({
 	maxConcurrent: 1,

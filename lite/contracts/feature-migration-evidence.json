@@ -1653,6 +1653,11 @@
       "owners": [
         "lite/src/state/reader-preferences-schema.ts",
         "lite/src/settings/reader-performance-settings-form.ts",
+        "lite/src/network/reader-business-request-config.ts",
+        "lite/src/network/reader-business-request-policy.ts",
+        "lite/src/network/request-scheduler.ts",
+        "lite/src/network/domain-request-gateway.ts",
+        "lite/src/network/request-observer.ts",
         "lite/src/app/reader-performance-policy.ts",
         "lite/src/app/reader-browser-runtime.ts",
         "lite/src/topic/topic-session.ts"
@@ -1660,11 +1665,16 @@
       "tests": [
         "lite/tests/reader-preferences-schema.test.ts",
         "lite/tests/reader-performance-settings-form.test.ts",
+        "lite/tests/reader-business-request-config.test.ts",
+        "lite/tests/reader-business-request-policy.test.ts",
+        "lite/tests/request-scheduler.test.ts",
+        "lite/tests/domain-request-gateway.test.ts",
+        "lite/tests/request-observer.test.ts",
         "lite/tests/reader-performance-policy.test.ts",
         "lite/tests/reader-browser-runtime.test.ts",
         "lite/tests/topic-session.test.ts"
       ],
-      "note": "性能预设与 pageSize 已进入唯一 ReaderPerformancePolicy；当前及后续 Topic 原地更新下一批大小且不移动 cursor。稳定 performance form 复用 schema 预设/范围并通过 Settings controller 单次保存，4 个预设、4 组 7 字段、逐项 help、116px 控制列和卡片间距均已与主线设置表面对齐；browser stage 由显式偏好投影挂到唯一 panelHost。真实长帖请求批次和设置像素仍待验收。"
+      "note": "性能设置直接复用唯一 ReaderPerformancePolicy 的默认参数与范围，旧 low/balanced/high 字段只留在 schema 存储迁移层。下载、用户观察、通知、收藏与回应共用 ReaderBusinessRequestPolicy 固定契约和 ReaderBusinessRequestSettings 数值目录；设置可分别保存最大并发、后台最小间隔与后台 RPM，偏好变化原地热应用到中央 Scheduler，adapter 与 Gateway 请求记录保留业务身份、profile、车道、缓存和重试证据。当前及后续 Topic 原地热应用正文批量、DOM、预取、共享预算和已读 RPM/TPM；宿主列表预热默认开启，可设置每 Topic 连续数据总量且不创建隐藏 Post DOM。真实请求与设置像素仍待浏览器验收。"
     },
   "SET-013": {
     "implementationStatus": "static-complete",
@@ -2133,7 +2143,9 @@
         "lite/src/network/browser-shared-request-permit.ts",
         "lite/src/network/request-rate-limit-policy.ts",
         "lite/src/network/request-scheduler.ts",
+        "lite/src/network/reader-business-request-policy.ts",
         "lite/src/network/coordinated-request-client.ts",
+        "lite/src/network/request-observer.ts",
         "lite/src/network/browser-request-observation.ts",
         "lite/src/network/discourse-native-read-transport.ts",
         "lite/src/post/discourse-action-transport.ts",
@@ -2143,14 +2155,16 @@
       "tests": [
         "lite/tests/browser-shared-request-permit.test.ts",
         "lite/tests/request-rate-limit-policy.test.ts",
+        "lite/tests/reader-business-request-policy.test.ts",
         "lite/tests/coordinated-request-client.test.ts",
+        "lite/tests/request-observer.test.ts",
         "lite/tests/browser-request-observation.test.ts",
         "lite/tests/discourse-native-read-transport.test.ts",
         "lite/tests/discourse-action-transport.test.ts",
         "lite/tests/reader-browser-runtime.test.ts",
         "lite/tests/reader-resource-monitor.test.ts"
       ],
-      "note": "BrowserSharedRequestPermit 在跨标签原子状态中保存每个 live context 的 policy，并按短/长预算最小、启动间隔最大、并发最小进行保守聚合；application 级 Discourse 原生 ajax observer 又把同源非媒体宿主 API 作为被动 lease/event 纳入同一 10/60 秒窗口，Reader scheduler 借用事实不重复记账。全局 429 保留具体 10 秒/60 秒窗口，按当前计数学习预算、降并发、设置服务器阻塞与十分钟 TTL；成功响应可读取标准及兼容 Limit/Remaining/Reset，冷却后只允许有界高优先恢复探针，稳定成功再小步放宽。未知 429 仍先由 Lite 端点熔断处理，只有确认或多路证据才升级为共享全局限制。快照公开实例数、下一许可等待、主导阻塞、学习状态与最近窗口；真实多标签竞争、服务器头和 429 节奏仍待浏览器验收。"
+      "note": "BrowserSharedRequestPermit 在跨标签原子状态中保存每个 live context 的 policy，并按短/长预算最小、启动间隔最大、并发最小进行保守聚合；application 级 Discourse 原生 ajax observer 又把同源非媒体宿主 API 作为被动 lease/event 纳入同一 10/60 秒窗口，Reader scheduler 借用事实不重复记账。下载、用户观察、通知、收藏与回应由唯一业务策略目录声明 profile、车道、缓存与写入规则，Gateway 就地拒绝未声明组合，请求账本保留业务身份。全局 429 保留具体 10 秒/60 秒窗口，按当前计数学习预算、降并发、设置服务器阻塞与十分钟 TTL；成功响应可读取标准及兼容 Limit/Remaining/Reset，冷却后只允许有界高优先恢复探针，稳定成功再小步放宽。未知 429 仍先由 Lite 端点熔断处理，只有确认或多路证据才升级为共享全局限制。快照公开实例数、下一许可等待、主导阻塞、学习状态与最近窗口；真实多标签竞争、服务器头和 429 节奏仍待浏览器验收。"
     },
     "MONITOR-004": {
       "implementationStatus": "static-complete",

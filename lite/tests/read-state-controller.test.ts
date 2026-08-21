@@ -11,8 +11,9 @@ import {
 	RequestRateLimitError,
 	RequestStatusError,
 } from '../src/network/coordinated-request-client.js';
-import type {
-	ReadStateCoordinationPort,
+import {
+	ReadStateClientRateLimitError,
+	type ReadStateCoordinationPort,
 } from '../src/reading/read-state-coordination.js';
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -200,6 +201,33 @@ await rateLimitController.flush({ force: true });
 assert(
 	[...rateLimitTimers.timers.values()].some((timer) => timer.delay === 8_000),
 	'中央 RequestRateLimitError 必须按 retryAt 保留 checkpoint，不能退化成统一 5 秒重试',
+);
+
+const clientRateTimers = timerHarness();
+const clientRateController = new ReadStateController({
+	authScope: 'account:test',
+	topicId: 20,
+	submitter: new RecordingSubmitter(),
+	coordination: {
+		subscribe: () => () => {},
+		submitOnce: async () => {
+			throw new ReadStateClientRateLimitError(9_000);
+		},
+	},
+	now: () => 1_000,
+	setTimer: clientRateTimers.setTimer,
+	clearTimer: clientRateTimers.clearTimer,
+});
+clientRateController.preload([1]);
+clientRateController.setVisible([1], 'root');
+clientRateController.start();
+await clientRateController.flush({ force: true });
+assert(
+	[...clientRateTimers.timers.values()].some((timer) => timer.delay === 8_000) &&
+	clientRateController.snapshot().retryCount === 0 &&
+	!clientRateController.snapshot().automaticRetryHalted &&
+	clientRateController.pendingCount === 1,
+	'客户端 RPM/TPM 只应延后 pending 到窗口释放，不能消耗网络重试次数或停止队列',
 );
 
 const terminalTimers = timerHarness();
@@ -396,6 +424,7 @@ visibilityFirstController.destroy();
 persistedController.destroy();
 retryController.destroy();
 rateLimitController.destroy();
+clientRateController.destroy();
 terminalController.destroy();
 cloudflareController.destroy();
 partialController.destroy();

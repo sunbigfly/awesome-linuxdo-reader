@@ -177,6 +177,8 @@ const monitor = new ReaderResourceMonitor({
 		requestMaxConcurrent: 3,
 		requestMinIntervalMs: 120,
 		requestRateTargetPercent: 85,
+		readStateRequestsPerMinute: 12,
+		readStateTimingsPerMinute: 240,
 		preheatMaxConcurrent: 2,
 		preheatHandoffMaxEntries: 3,
 		preheatHandoffMaxBytes: 8 * 1024 * 1024,

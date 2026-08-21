@@ -83,6 +83,17 @@ assert(
 	'具名 action payload 未透传给原生宿主端口',
 );
 
+await adapter.execute(descriptors.bookmarkCreate({
+	subjectType: 'Post',
+	subjectId: 20,
+	formData: {},
+}));
+assert(
+	gateway.requests.at(-1)?.operation === 'bookmark-create' &&
+		gateway.requests.at(-1)?.business === 'bookmarks',
+	'收藏写操作必须以 bookmarks 业务身份进入统一 action 请求链',
+);
+
 try {
 	await adapter.execute({
 		operation: 'unregistered-rest-action',
@@ -97,7 +108,7 @@ try {
 		'未登记 action 应在进入 gateway 前拒绝',
 	);
 }
-assert(gateway.requests.length === 1, '未登记 action 不得进入请求流水线');
+assert(gateway.requests.length === 2, '未登记 action 不得进入请求流水线');
 
 try {
 	await adapter.execute({
@@ -117,4 +128,4 @@ try {
 		'未品牌化 payload 应在进入 gateway 前拒绝',
 	);
 }
-assert(gateway.requests.length === 1, '手写 native payload 不得进入请求流水线');
+assert(gateway.requests.length === 2, '手写 native payload 不得进入请求流水线');

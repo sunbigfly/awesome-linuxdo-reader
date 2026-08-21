@@ -18,6 +18,12 @@ import {
 	type DomainRequestTracePort,
 } from '../network/domain-request-gateway.js';
 import type { RequestSchedulerOptions } from '../network/request-scheduler.js';
+import type {
+	ReaderBusinessRequestSettings,
+} from '../network/reader-business-request-config.js';
+import type {
+	ReaderRequestFlowSettings,
+} from '../network/reader-request-flow-config.js';
 import {
 	RequestRateLimitPolicy,
 	type RequestRateLimitPolicyOptions,
@@ -82,6 +88,8 @@ export interface ReaderDataRuntimeOptions {
 	readonly cacheFlightWaitTimeoutMs?: number;
 	readonly readCoordinationTtlMs?: number;
 	readonly readCoordinationMaxRecords?: number;
+	readonly readStateRequestsPerMinute?: number;
+	readonly readStateTimingsPerMinute?: number;
 	readonly now?: () => number;
 	readonly parentScope?: LifecycleScope;
 	readonly onDiagnostic?: (diagnostic: ReaderDataRuntimeDiagnostic) => void;
@@ -231,6 +239,12 @@ export class ReaderDataRuntime {
 				...(options.readCoordinationMaxRecords === undefined
 					? {}
 					: { maxRecords: options.readCoordinationMaxRecords }),
+				...(options.readStateRequestsPerMinute === undefined
+					? {}
+					: { readRequestsPerMinute: options.readStateRequestsPerMinute }),
+				...(options.readStateTimingsPerMinute === undefined
+					? {}
+					: { readTimingsPerMinute: options.readStateTimingsPerMinute }),
 				onCoordinationError: (cause) => report('read-coordination', cause),
 			});
 			this.scope.add(() => this.readCoordination.close());
@@ -288,6 +302,10 @@ export class ReaderDataRuntime {
 		maxConcurrent: number;
 		responseMemoryMaxEntries?: number;
 		responseMemoryMaxBytes?: number;
+		readStateRequestsPerMinute?: number;
+		readStateTimingsPerMinute?: number;
+		businessRequestSettings?: ReaderBusinessRequestSettings;
+		requestFlowSettings?: ReaderRequestFlowSettings;
 	}>): void {
 		if (this.#destroyed || this.scope.destroyed) return;
 		this.client.applyRuntimePolicy(policy);
@@ -298,6 +316,15 @@ export class ReaderDataRuntime {
 			this.responses.applyMemoryPolicy({
 				maxEntries: policy.responseMemoryMaxEntries,
 				maxBytes: policy.responseMemoryMaxBytes,
+			});
+		}
+		if (
+			policy.readStateRequestsPerMinute !== undefined &&
+			policy.readStateTimingsPerMinute !== undefined
+		) {
+			this.readCoordination.applyRuntimePolicy({
+				readRequestsPerMinute: policy.readStateRequestsPerMinute,
+				readTimingsPerMinute: policy.readStateTimingsPerMinute,
 			});
 		}
 	}

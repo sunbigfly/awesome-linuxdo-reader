@@ -57,6 +57,10 @@ import type {
 import type {
 	ReaderTopicNavigationResult,
 } from '../src/topic/reader-topic-navigation-controller.js';
+import {
+	READER_REQUEST_FLOW_DEFAULTS,
+	type ReaderRequestFlowSettings,
+} from '../src/network/reader-request-flow-config.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -164,6 +168,9 @@ interface TestPreferences {
 	readonly performanceRequestConcurrency: number;
 	readonly performanceRequestInterval: number;
 	readonly performanceRequestRateTarget: number;
+	readonly performanceReadStateRequestsPerMinute: number;
+	readonly performanceReadStateTimingsPerMinute: number;
+	readonly requestFlowSettings: ReaderRequestFlowSettings;
 	readonly layoutProfile: ReaderLayoutProfile;
 	readonly fullpageLayoutProfile: ReaderLayoutProfile;
 	readonly appearanceProfile: ReaderAppearanceProfile;
@@ -208,6 +215,9 @@ const initialPreferences: Readonly<TestPreferences> = Object.freeze({
 	performanceRequestConcurrency: 3,
 	performanceRequestInterval: 90,
 	performanceRequestRateTarget: 80,
+	performanceReadStateRequestsPerMinute: 12,
+	performanceReadStateTimingsPerMinute: 240,
+	requestFlowSettings: READER_REQUEST_FLOW_DEFAULTS,
 	layoutProfile: Object.freeze({
 		left: 0,
 		main: 88,
@@ -937,6 +947,10 @@ const stage = createReaderBrowserRuntimeStage<TestPreferences, TestTopic, TestPo
 					preferences.performanceRequestInterval,
 				requestRateTarget:
 					preferences.performanceRequestRateTarget,
+				readStateRequestsPerMinute:
+					preferences.performanceReadStateRequestsPerMinute,
+				readStateTimingsPerMinute:
+					preferences.performanceReadStateTimingsPerMinute,
 			}),
 			createPatch: (config) => ({
 				performancePageSize: config.pageSize,
@@ -948,6 +962,15 @@ const stage = createReaderBrowserRuntimeStage<TestPreferences, TestTopic, TestPo
 					config.requestMaxConcurrent,
 				performanceRequestInterval: config.requestMinInterval,
 				performanceRequestRateTarget: config.requestRateTarget,
+				performanceReadStateRequestsPerMinute:
+					config.readStateRequestsPerMinute,
+				performanceReadStateTimingsPerMinute:
+					config.readStateTimingsPerMinute,
+			}),
+			readRequestFlowSettings: (preferences) =>
+				preferences.requestFlowSettings,
+			createRequestFlowSettingsPatch: (requestFlowSettings) => ({
+				requestFlowSettings,
 			}),
 		},
 		readingForm: {
@@ -1310,6 +1333,14 @@ activePreferences = Object.freeze({
 	performanceRequestConcurrency: 1,
 	performanceRequestInterval: 220,
 	performanceRequestRateTarget: 50,
+	performanceReadStateRequestsPerMinute: 2,
+	performanceReadStateTimingsPerMinute: 40,
+	requestFlowSettings: Object.freeze({
+		...READER_REQUEST_FLOW_DEFAULTS,
+		backgroundIdleIntervalMs: 1_200,
+		backgroundMaxDeferMs: 8_000,
+		standardMaxConcurrent: 2,
+	}),
 		jumpHighlightColor: '#abcdef',
 		jumpHighlightRate: 2,
 		jumpHighlightCount: 3,
@@ -1334,13 +1365,20 @@ assert(
 	activeRuntime.performance.pageSize === 24 &&
 	activeRuntime.performance.nestedPrefetchScreens === 2 &&
 	activeRuntime.performance.requestMaxConcurrent === 1 &&
+	activeRuntime.performance.readStateRequestsPerMinute === 2 &&
+	activeRuntime.performance.readStateTimingsPerMinute === 40 &&
+	activeRuntime.performance.requestFlowSettings?.standardMaxConcurrent === 2 &&
 	activeRuntime.performance.requestShortBudget === 25 &&
 	activeRuntime.data.client.scheduler.snapshot().maxConcurrent === 1 &&
+	activeRuntime.data.client.scheduler.snapshot().maxConcurrentByLane
+		?.standard === 2 &&
 	permitPerformance.maxConcurrent === 1 &&
 	permitPerformance.minIntervalMs === 220 &&
+	permitPerformance.backgroundIdleIntervalMs === 1_200 &&
+	permitPerformance.backgroundMaxDeferMs === 8_000 &&
 	permitPerformance.shortBudget === 25 &&
 	permitPerformance.longBudget === 100,
-	'七个性能设置必须从同一快照热更新 loader、树预取、scheduler 与跨标签 permit',
+	'全局与请求流设置必须从同一快照热更新 loader、树预取、scheduler、已读协调与跨标签 permit',
 );
 assert(
 		shellRoot.classList.contains('ldp-history-buttons-always-visible') &&

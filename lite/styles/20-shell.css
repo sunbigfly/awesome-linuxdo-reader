@@ -2961,7 +2961,7 @@
   display: contents;
 }
 
-/* 第一段只保留阅读动作；第二段按收藏、下载、观察、史书、不想看和其余入口排列。 */
+/* 第一段只保留阅读动作；第二段按收藏总结、下载观察史书与其余入口分组。 */
 .ldp-topic-action-rail-top { order: 0; }
 .ldp-topic-action-rail .ldp-actions > * { order: 70; }
 .ldp-topic-action-rail .ldp-actions > :is(
@@ -2974,7 +2974,17 @@
   display: contents;
 }
 .ldp-topic-action-rail-download-group[hidden] { display: none !important; }
-.ldp-topic-action-rail-secondary-tools {
+.ldp-topic-action-rail-summary-bookmark-group {
+  display: contents;
+  order: 50;
+}
+.ldp-topic-action-rail
+  .ldp-topic-action-rail-summary-bookmark-group > .ldp-topic-footer-slot {
+  display: contents;
+}
+.ldp-topic-action-rail-secondary-tools,
+.ldp-topic-action-rail.is-expanded
+  .ldp-topic-action-rail-summary-bookmark-group {
   --ldp-topic-action-group-height: 22px;
   display: flex;
   box-sizing: border-box;
@@ -2999,10 +3009,15 @@
   overscroll-behavior-inline: contain;
   scrollbar-width: none;
   transition: none;
+}
+.ldp-topic-action-rail-secondary-tools {
   order: 51;
 }
 
-.ldp-topic-action-rail.is-expanded .ldp-topic-action-rail-secondary-tools
+.ldp-topic-action-rail.is-expanded :is(
+  .ldp-topic-action-rail-secondary-tools,
+  .ldp-topic-action-rail-summary-bookmark-group
+)
   :is(button:not(.ldp-select-option),.ldp-topic-notification) {
   width: 26px;
   height: 20px;
@@ -3015,7 +3030,7 @@
 .ldp-topic-action-rail .ldp-topic-footer-slot > .ldp-topic-shared-issue {
   order: 40;
 }
-.ldp-topic-action-rail-summary { order: 45; }
+.ldp-topic-action-rail-summary { order: 51; }
 .ldp-topic-action-rail-toggle { order: 100; }
 
 .ldp-topic-action-rail:not(.is-expanded) > .ldp-topic-action-rail-toggle {
@@ -3077,6 +3092,7 @@
 }
 
 .ldp-topic-action-rail-secondary-tools::-webkit-scrollbar,
+.ldp-topic-action-rail-summary-bookmark-group::-webkit-scrollbar,
 .ldp-topic-action-rail.is-expanded
   .ldp-context-actions-slot::-webkit-scrollbar {
   display: none;
@@ -3100,7 +3116,11 @@
 }
 
 .ldp-topic-action-rail.is-expanded.is-actions-open-left
-  :is(.ldp-context-actions-slot,.ldp-topic-action-rail-secondary-tools) {
+  :is(
+    .ldp-context-actions-slot,
+    .ldp-topic-action-rail-summary-bookmark-group,
+    .ldp-topic-action-rail-secondary-tools
+  ) {
   transform: translateX(calc(var(--ldp-control-height) - 100%));
 }
 
@@ -3189,6 +3209,7 @@
 }
 
 .ldp-topic-action-rail :is(
+	.ldp-topic-action-rail-summary,
 	.ldp-topic-action-rail-download,
 	.ldp-topic-action-rail-chronicle,
 	.ldp-topic-action-rail-unwanted-topics,

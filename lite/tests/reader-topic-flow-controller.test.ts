@@ -106,6 +106,8 @@ const performance: ReaderPerformanceSnapshot = Object.freeze({
 	requestMaxConcurrent: 3,
 	requestMinIntervalMs: 200,
 	requestRateTargetPercent: 80,
+	readStateRequestsPerMinute: 12,
+	readStateTimingsPerMinute: 240,
 	requestShortBudget: 40,
 	requestLongBudget: 160,
 	preheatMaxConcurrent: 2,

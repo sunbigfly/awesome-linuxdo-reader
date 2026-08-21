@@ -71,6 +71,7 @@ const queuedId = lifecycleObserver.begin({
 	callSite: 'nested-visible / post-9',
 	logicalId: 'L7',
 	profile: 'nested-visible',
+	business: 'topic-download',
 	namespace: 'topic-nested',
 	lane: 'nested-replies',
 	cacheMode: 'default',
@@ -105,6 +106,7 @@ assert(
 			'?credential&topic_ids[]×2' &&
 		lifecycleObserver.snapshot.events[0]?.logicalId === 'L7' &&
 		lifecycleObserver.snapshot.events[0]?.profile === 'nested-visible' &&
+		lifecycleObserver.snapshot.events[0]?.business === 'topic-download' &&
 		lifecycleObserver.snapshot.events[0]?.namespace === 'topic-nested' &&
 		lifecycleObserver.snapshot.events[0]?.lane === 'nested-replies' &&
 		lifecycleObserver.snapshot.events[0]?.cacheMode === 'default' &&

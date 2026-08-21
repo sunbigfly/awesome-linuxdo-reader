@@ -117,6 +117,8 @@ export interface ReaderUserObservationEntrySnapshot
 	/** 已提交到分页仓库、可按 Tab 和筛选窗口读取的记录数。 */
 	readonly storedRecordCount: number;
 	readonly records: readonly ReaderUserActivityRecord[];
+	/** 本轮增量采集中尚未出现在已加载分页摘要里的新记录。 */
+	readonly pendingRecords: readonly ReaderUserActivityRecord[];
 	readonly detail: string;
 	readonly error: string;
 	readonly recoveryKind: ReaderUserObservationRecoveryKind | null;
@@ -199,6 +201,7 @@ interface ObservationEntry {
 	>>;
 	knownIdentities: ReadonlySet<string>;
 	records: readonly ReaderUserActivityRecord[];
+	pendingRecords: readonly ReaderUserActivityRecord[];
 	detail: string;
 	error: string;
 	recoveryKind: ReaderUserObservationRecoveryKind | null;
@@ -557,6 +560,7 @@ export class ReaderUserObservationSession {
 					completedStreams: 0,
 					storedRecordCount: 0,
 					records: Object.freeze([]),
+					pendingRecords: Object.freeze([]),
 					detail: identity.completedAt
 						? '等待从中央缓存恢复'
 						: '等待后台采集',
@@ -579,6 +583,7 @@ export class ReaderUserObservationSession {
 				identity.lastRecordCount,
 			);
 			existing.streamCheckpoints = { ...identity.streamCheckpoints };
+			existing.pendingRecords = Object.freeze([]);
 		}
 		this.#trim();
 		this.#emit();
@@ -621,6 +626,7 @@ export class ReaderUserObservationSession {
 			entry.streamCheckpoints = {};
 			entry.knownIdentities = new Set<string>();
 			entry.records = Object.freeze([]);
+			entry.pendingRecords = Object.freeze([]);
 			entry.detail = '本地公开历史缓存已清理';
 			entry.error = '';
 			entry.recoveryKind = null;
@@ -689,9 +695,15 @@ export class ReaderUserObservationSession {
 		const persistentEntries: ObservationEntry[] = [];
 		for (const entry of this.#entries.values()) {
 			let entryChanged = false;
+			let pendingChanged = false;
 			const records = entry.records.map((record) => {
 				const next = mergeReaderUserActivityTopicMetadata(record, merged);
 				if (next !== record) entryChanged = true;
+				return next;
+			});
+			const pendingRecords = entry.pendingRecords.map((record) => {
+				const next = mergeReaderUserActivityTopicMetadata(record, merged);
+				if (next !== record) pendingChanged = true;
 				return next;
 			});
 			if (entryChanged) {
@@ -700,6 +712,10 @@ export class ReaderUserObservationSession {
 					entry.lastRecordCount,
 					entry.records.length,
 				);
+				recordsChanged = true;
+			}
+			if (pendingChanged) {
+				entry.pendingRecords = sortReaderUserActivities(pendingRecords);
 				recordsChanged = true;
 			}
 			if (!isActivePhase(entry.phase)) {
@@ -821,10 +837,11 @@ export class ReaderUserObservationSession {
 				completedStreams: 0,
 				lastRecordCount: 0,
 				storedRecordCount: 0,
-				streamCheckpoints: {},
-				knownIdentities: new Set<string>(),
-				records: Object.freeze([]),
-				detail: '',
+					streamCheckpoints: {},
+					knownIdentities: new Set<string>(),
+					records: Object.freeze([]),
+					pendingRecords: Object.freeze([]),
+					detail: '',
 				error: '',
 				recoveryKind: null,
 				epoch: 0,
@@ -1041,6 +1058,7 @@ export class ReaderUserObservationSession {
 		entry.controller = controller;
 		entry.phase = 'loading';
 		entry.recoveryKind = null;
+		entry.pendingRecords = Object.freeze([]);
 		if (!job.continueFromCheckpoint) {
 			/*
 			 * 刷新/新采集开启新的来源断点世代。否则上一轮已完成的 checkpoint
@@ -1101,6 +1119,15 @@ export class ReaderUserObservationSession {
 				return;
 			}
 			const projectedRecords = sortReaderUserActivities([...records.values()]);
+			const pendingRecords = incremental
+				? projectedRecords.filter((record) =>
+					!knownIdentities.has(record.identity))
+				: [];
+			if (
+				pendingRecords.length !== entry.pendingRecords.length ||
+				pendingRecords.some((record, index) =>
+					record !== entry.pendingRecords[index])
+			) entry.pendingRecords = Object.freeze(pendingRecords);
 			entry.records = this.#pages &&
 				(entry.storedRecordCount > 0 || replayCheckpointCache) &&
 				projectedRecords.length > SESSION_RECORD_WINDOW
@@ -1108,7 +1135,9 @@ export class ReaderUserObservationSession {
 				: projectedRecords;
 			entry.lastRecordCount = Math.max(
 				entry.lastRecordCount,
-				projectedRecords.length,
+				incremental
+					? knownIdentities.size + entry.pendingRecords.length
+					: projectedRecords.length,
 			);
 			projectedPages = totalPages;
 		};
@@ -1626,7 +1655,12 @@ export class ReaderUserObservationSession {
 						`${streamLabel} · ${streamIndex + 1}/` +
 						`${READER_USER_OBSERVATION_STREAMS.length} · ` +
 						`${records.size} 条 · ${entry.pages} 页`;
-					checkpointChanged(streamComplete);
+					/*
+					 * 网络页成功后立即投影已获取记录，让详情 Tab 与时间线
+					 * 跟随当前页进度。缓存回放仍保留批量投影，避免恢复大历史时
+					 * 产生无意义的逐页排序和渲染。
+					 */
+					checkpointChanged(true);
 					armStallWatch();
 				}
 				entry.completedStreams = streamIndex + 1;
@@ -1757,6 +1791,7 @@ export class ReaderUserObservationSession {
 					completedStreams: 0,
 					storedRecordCount: 0,
 					records: Object.freeze([]),
+					pendingRecords: Object.freeze([]),
 					detail: identity.completedAt
 						? '等待从中央缓存恢复'
 						: '等待后台采集',
@@ -1851,6 +1886,7 @@ export class ReaderUserObservationSession {
 			recordCount: Math.max(entry.lastRecordCount, entry.records.length),
 			storedRecordCount: entry.storedRecordCount,
 			records: entry.records,
+			pendingRecords: entry.pendingRecords,
 			detail: entry.detail,
 			error: entry.error,
 			recoveryKind: entry.recoveryKind,

@@ -151,6 +151,7 @@ const retried = await client.request(
 		priority: 'visible',
 		callSite: 'topic-visible / reader-topic-target',
 		profile: 'topic-visible',
+		business: 'topic-download',
 		namespace: 'topic-target',
 		lane: 'topic-batch',
 		cacheMode: 'default',
@@ -203,6 +204,7 @@ assert(
 		requestObserver.snapshot.events[0]?.logicalId ===
 			requestObserver.snapshot.events[1]?.logicalId &&
 		requestObserver.snapshot.events[0]?.profile === 'topic-visible' &&
+		requestObserver.snapshot.events[0]?.business === 'topic-download' &&
 		requestObserver.snapshot.events[0]?.namespace === 'topic-target' &&
 		requestObserver.snapshot.events[0]?.lane === 'topic-batch' &&
 		requestObserver.snapshot.events[0]?.cacheMode === 'default' &&

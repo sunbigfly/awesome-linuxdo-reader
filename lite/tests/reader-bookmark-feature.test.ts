@@ -301,10 +301,11 @@ assert(
 	bookmarkRecords.length === 2 &&
 	bookmarkRecords[0]?.tab === 'Post' &&
 	bookmarkRecords[1]?.tab === 'Topic' &&
+	gateway.requests.every((request) => request.business === 'bookmarks') &&
 	gateway.requests.some((request) =>
 		request.collection === 'bookmarks' &&
 		request.input === '/u/viewer/bookmarks.json?page=0'),
-	'收藏 adapter 必须通过中央 Gateway 分页并归一化 Topic/Post',
+	'收藏 adapter 必须以统一业务身份通过中央 Gateway 分页并归一化 Topic/Post',
 );
 assert(
 	reactionRecords.length === 2 &&

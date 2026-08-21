@@ -19,8 +19,14 @@ export const READ_STATE_ATTEMPT_STORAGE_KEY =
 	'linuxdo-enhanced-reader:read-attempt:v1';
 export const READ_STATE_INTENT_STORAGE_KEY =
 	'linuxdo-enhanced-reader:read-intent:v1';
+export const READ_STATE_RATE_STORAGE_KEY =
+	'linuxdo-enhanced-reader:read-rate:v1';
 export const READ_STATE_LOCK_NAME =
 	'linuxdo-enhanced-reader:read-request:v1';
+
+const READ_STATE_RATE_WINDOW_MS = 60_000;
+const DEFAULT_READ_STATE_REQUESTS_PER_MINUTE = 12;
+const DEFAULT_READ_STATE_TIMINGS_PER_MINUTE = 240;
 
 export interface ReadStateConfirmation {
 	readonly authScope: DiscourseAuthScope;
@@ -54,6 +60,16 @@ export class ReadStateChallengeHaltedError extends Error {
 	constructor(topicId: DiscourseTopicId) {
 		super(`Topic ${topicId} 的 timings 已因 Cloudflare 停止自动补报`);
 		this.name = 'ReadStateChallengeHaltedError';
+	}
+}
+
+export class ReadStateClientRateLimitError extends Error {
+	readonly retryAt: number;
+
+	constructor(retryAt: number) {
+		super('timings 已达到客户端 RPM/TPM 上限');
+		this.name = 'ReadStateClientRateLimitError';
+		this.retryAt = retryAt;
 	}
 }
 
@@ -111,6 +127,9 @@ export interface BrowserReadStateCoordinatorOptions {
 	readonly intentTtlMs?: number;
 	readonly intentCoalesceMs?: number;
 	readonly maxRecords?: number;
+	readonly readRequestsPerMinute?: number;
+	readonly readTimingsPerMinute?: number;
+	readonly delay?: (milliseconds: number) => Promise<void>;
 	readonly onCoordinationError?: (error: unknown) => void;
 }
 
@@ -121,6 +140,12 @@ interface StoredReadSuccess {
 	readonly topicId?: number;
 	readonly postNumbers?: readonly number[];
 	readonly confirmedAtByPost?: Readonly<Record<string, number>>;
+}
+
+interface StoredReadRate {
+	readonly authScope: string;
+	readonly requestedAt: number;
+	readonly timings: number;
 }
 
 function positiveMilliseconds(value: number | undefined, fallback: number, name: string): number {
@@ -145,6 +170,34 @@ function parseStoredRecords(value: string | null): StoredReadSuccess[] {
 			typeof (entry as StoredReadSuccess).fingerprint === 'string' &&
 			Number.isFinite(Number((entry as StoredReadSuccess).at)),
 		);
+	} catch {
+		return [];
+	}
+}
+
+function parseStoredReadRates(value: string | null): StoredReadRate[] {
+	if (!value) return [];
+	try {
+		const parsed = JSON.parse(value) as unknown;
+		if (!Array.isArray(parsed)) return [];
+		return parsed.flatMap((entry): StoredReadRate[] => {
+			if (!entry || typeof entry !== 'object') return [];
+			const candidate = entry as Partial<StoredReadRate>;
+			const requestedAt = Number(candidate.requestedAt);
+			const timings = Number(candidate.timings);
+			if (
+				typeof candidate.authScope !== 'string' ||
+				candidate.authScope.length === 0 ||
+				!Number.isFinite(requestedAt) ||
+				!Number.isSafeInteger(timings) ||
+				timings < 1
+			) return [];
+			return [Object.freeze({
+				authScope: candidate.authScope,
+				requestedAt,
+				timings,
+			})];
+		});
 	} catch {
 		return [];
 	}
@@ -207,12 +260,16 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 	readonly #intentCoalesceMs: number;
 	readonly #maxRecords: number;
 	readonly #onCoordinationError: (error: unknown) => void;
+	readonly #delay: (milliseconds: number) => Promise<void>;
 	readonly #listeners = new Map<string, Set<(value: ReadStateConfirmation) => void>>();
 	readonly #confirmationListeners = new Set<
 		(confirmation: ReadStateConfirmation) => void
 	>();
 	readonly #challengeHaltedTopics = new Map<string, number>();
 	readonly #unsubscribeChannel: Cleanup;
+	#readRequestsPerMinute: number;
+	#readTimingsPerMinute: number;
+	#localLockTail: Promise<void> = Promise.resolve();
 	#closed = false;
 
 	constructor(options: BrowserReadStateCoordinatorOptions) {
@@ -239,6 +296,18 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 			'intentCoalesceMs',
 		);
 		this.#maxRecords = positiveMilliseconds(options.maxRecords, 64, 'maxRecords');
+		this.#readRequestsPerMinute = positiveMilliseconds(
+			options.readRequestsPerMinute,
+			DEFAULT_READ_STATE_REQUESTS_PER_MINUTE,
+			'readRequestsPerMinute',
+		);
+		this.#readTimingsPerMinute = positiveMilliseconds(
+			options.readTimingsPerMinute,
+			DEFAULT_READ_STATE_TIMINGS_PER_MINUTE,
+			'readTimingsPerMinute',
+		);
+		this.#delay = options.delay ?? ((milliseconds) =>
+			new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
 		this.#onCoordinationError = options.onCoordinationError ?? (() => {});
 		this.#unsubscribeChannel = this.#channel?.subscribe((message) => {
 			const halt = normalizeChallengeHalt(message);
@@ -255,6 +324,23 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 				this.#emitConfirmation(confirmation);
 			}
 		}) ?? (() => {});
+	}
+
+	applyRuntimePolicy(policy: Readonly<{
+		readonly readRequestsPerMinute: number;
+		readonly readTimingsPerMinute: number;
+	}>): void {
+		if (this.#closed) return;
+		this.#readRequestsPerMinute = positiveMilliseconds(
+			policy.readRequestsPerMinute,
+			DEFAULT_READ_STATE_REQUESTS_PER_MINUTE,
+			'readRequestsPerMinute',
+		);
+		this.#readTimingsPerMinute = positiveMilliseconds(
+			policy.readTimingsPerMinute,
+			DEFAULT_READ_STATE_TIMINGS_PER_MINUTE,
+			'readTimingsPerMinute',
+		);
 	}
 
 	knownConfirmed(
@@ -402,6 +488,7 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 			if (missing.length) {
 				let submitted: readonly DiscoursePostNumber[];
 				try {
+					this.#takeReadRatePermit(authScope, missing.length);
 					submitted = discoursePostNumbers(await submit(missing));
 				} catch (error) {
 					if (isReadStateCloudflareFailure(error)) {
@@ -420,7 +507,7 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 			}
 			return Object.freeze(postNumbers.filter((postNumber) => recent.has(postNumber)));
 		};
-		if (!this.#lock) return run(postNumbers);
+		if (!this.#lock) return this.#withLocalLock(() => run(postNumbers));
 		/*
 		 * 每个 tab 先在同一短事务中登记意图，再在锁外留一个极短合并窗口。
 		 * 这不是请求冷却：它只把同 auth/topic 同时出现的 timings 楼层交给一个
@@ -429,15 +516,91 @@ export class BrowserReadStateCoordinator implements ReadStateCoordinationPort {
 		await this.#lock(READ_STATE_LOCK_NAME, async () => {
 			this.#rememberIntent(authScope, topicId, postNumbers);
 		});
-		await new Promise<void>((resolve) => {
-			setTimeout(resolve, this.#intentCoalesceMs);
-		});
+		await this.#delay(this.#intentCoalesceMs);
 		// lock promise 也承载 task 的失败；这里不能 catch 后重跑，否则网络失败会变成重复 mutation。
 		return this.#lock(READ_STATE_LOCK_NAME, () => {
 			const intended = this.#recentlyIntended(authScope, topicId);
-			postNumbers.forEach((postNumber) => intended.add(postNumber));
-			return run(discoursePostNumbers([...intended]));
+			const candidates = discoursePostNumbers([
+				...postNumbers,
+				...[...intended].filter((postNumber) => !postNumbers.includes(postNumber)),
+			]).slice(0, Math.max(postNumbers.length, this.#readTimingsPerMinute));
+			return run(candidates);
 		});
+	}
+
+	async #withLocalLock<T>(task: () => Promise<T>): Promise<T> {
+		const previous = this.#localLockTail;
+		let release!: () => void;
+		this.#localLockTail = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		await previous;
+		try {
+			return await task();
+		} finally {
+			release();
+		}
+	}
+
+	#takeReadRatePermit(
+		authScope: DiscourseAuthScope,
+		timings: number,
+	): void {
+		if (timings > this.#readTimingsPerMinute) {
+			throw new RangeError('单次 timings 数量超过每分钟上限');
+		}
+		const now = this.#now();
+		const cutoff = now - READ_STATE_RATE_WINDOW_MS;
+		let records: StoredReadRate[];
+		try {
+			records = parseStoredReadRates(
+				this.#storage.getItem(READ_STATE_RATE_STORAGE_KEY),
+			).filter((entry) => entry.requestedAt > cutoff);
+		} catch (error) {
+			this.#onCoordinationError(error);
+			throw error;
+		}
+		const scoped = records
+			.filter((entry) => entry.authScope === authScope)
+			.sort((left, right) => left.requestedAt - right.requestedAt);
+		const requestWait = scoped.length >= this.#readRequestsPerMinute
+			? scoped[scoped.length - this.#readRequestsPerMinute]!.requestedAt +
+				READ_STATE_RATE_WINDOW_MS - now
+			: 0;
+		let timingTotal = scoped.reduce(
+			(total, entry) => total + entry.timings,
+			0,
+		);
+		let timingWait = 0;
+		for (const entry of scoped) {
+			if (timingTotal + timings <= this.#readTimingsPerMinute) break;
+			timingTotal -= entry.timings;
+			timingWait = Math.max(
+				timingWait,
+				entry.requestedAt + READ_STATE_RATE_WINDOW_MS - now,
+			);
+		}
+		const waitMs = Math.max(requestWait, timingWait, 0);
+		if (waitMs > 0) {
+			throw new ReadStateClientRateLimitError(now + Math.ceil(waitMs));
+		}
+		records.push(Object.freeze({
+			authScope,
+			requestedAt: now,
+			timings,
+		}));
+		try {
+			this.#storage.setItem(
+				READ_STATE_RATE_STORAGE_KEY,
+				JSON.stringify(records.slice(-Math.max(
+					128,
+					this.#readRequestsPerMinute * 4,
+				))),
+			);
+		} catch (error) {
+			this.#onCoordinationError(error);
+			throw error;
+		}
 	}
 
 	close(): void {

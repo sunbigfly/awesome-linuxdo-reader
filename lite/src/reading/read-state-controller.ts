@@ -16,6 +16,7 @@ import {
 } from '../network/coordinated-request-client.js';
 import {
 	ReadStateChallengeHaltedError,
+	ReadStateClientRateLimitError,
 	type ReadStateConfirmation,
 	type ReadStateCoordinationPort,
 } from './read-state-coordination.js';
@@ -482,6 +483,13 @@ export class ReadStateController {
 			this.#automaticRetryHalted = false;
 			return allowed.length > 0;
 		} catch (error) {
+			if (error instanceof ReadStateClientRateLimitError) {
+				this.#nextScheduleDelay = Math.max(
+					1,
+					Math.ceil(error.retryAt - this.#now()),
+				);
+				return false;
+			}
 			this.#retryCount += 1;
 			this.#onError(error);
 			this.#emitDiagnostic('submit-failed', batch, error);

@@ -24,6 +24,10 @@ import type {
 import type {
 	DiscourseNativeReadTransport,
 } from '../network/discourse-native-read-transport.js';
+import {
+	READER_TOPIC_DOWNLOAD_REQUEST_POLICY,
+	type ReaderBusinessRequestKind,
+} from '../network/reader-business-request-policy.js';
 
 export interface TopicReadRequestPort {
 	loadTopicPosts<T>(input: TopicPostsRequest<T>): Promise<T>;
@@ -75,6 +79,8 @@ export interface TopicTargetCandidate {
 export interface TopicNetworkLoadOptions {
 	/** response cache miss 后、真正联网前的共享预算闸门。 */
 	readonly beforeNetwork?: (signal: AbortSignal) => void | Promise<void>;
+	/** 集合型上层业务身份；只用于统一策略投影与请求观测。 */
+	readonly business?: ReaderBusinessRequestKind;
 }
 
 export interface TopicTargetLoadOptions extends TopicNetworkLoadOptions {
@@ -171,6 +177,24 @@ function linkedRequestSignal(
 	});
 }
 
+function topicBackgroundProfile(options: Readonly<{
+	readonly business?: ReaderBusinessRequestKind;
+	readonly prefetchTier?: 'nearby';
+}>): 'nearby-prefetch' | 'background-prefetch' {
+	if (options.prefetchTier === 'nearby') return 'nearby-prefetch';
+	return options.business === READER_TOPIC_DOWNLOAD_REQUEST_POLICY.kind
+		? READER_TOPIC_DOWNLOAD_REQUEST_POLICY.backgroundProfile
+		: 'background-prefetch';
+}
+
+function businessBackgroundProfile(options: Readonly<{
+	readonly business?: ReaderBusinessRequestKind;
+}>): 'background-prefetch' {
+	return options.business === READER_TOPIC_DOWNLOAD_REQUEST_POLICY.kind
+		? READER_TOPIC_DOWNLOAD_REQUEST_POLICY.backgroundProfile
+		: 'background-prefetch';
+}
+
 /**
  * 旧 createLoader 只读网络面的唯一窄适配器。
  *
@@ -202,13 +226,12 @@ export class TopicReadRequestAdapter {
 			topicId: this.topicId,
 		});
 		return this.#gateway.loadTopicTarget({
+			...(options.business === undefined ? {} : { business: options.business }),
 			authScope: this.authScope,
 			topicId: this.topicId,
 			operation: 'topic-refresh',
 			profile: options.background
-				? options.prefetchTier === 'nearby'
-					? 'nearby-prefetch'
-					: 'background-prefetch'
+				? topicBackgroundProfile(options)
 				: 'topic-visible',
 			input: descriptor.path,
 			signal: this.#signal,
@@ -236,13 +259,12 @@ export class TopicReadRequestAdapter {
 			postIds,
 		});
 		return this.#gateway.loadTopicPosts({
+			...(options.business === undefined ? {} : { business: options.business }),
 			authScope: this.authScope,
 			topicId: this.topicId,
 			postIds,
 			profile: options.background
-				? options.prefetchTier === 'nearby'
-					? 'nearby-prefetch'
-					: 'background-prefetch'
+				? topicBackgroundProfile(options)
 				: options.priority === 'nested' ? 'nested-visible' : 'topic-visible',
 			input: descriptor.path,
 			signal: this.#signal,
@@ -269,9 +291,7 @@ export class TopicReadRequestAdapter {
 			topicId: this.topicId,
 			postIds,
 			profile: options.background
-				? options.prefetchTier === 'nearby'
-					? 'nearby-prefetch'
-					: 'background-prefetch'
+				? topicBackgroundProfile(options)
 				: options.priority === 'nested' ? 'nested-visible' : 'topic-visible',
 			cacheMode: options.refresh ? 'refresh' : 'default',
 		}) ?? false;
@@ -287,11 +307,14 @@ export class TopicReadRequestAdapter {
 			postId,
 		});
 		return this.#gateway.loadTopicTarget({
+			...(options.business === undefined ? {} : { business: options.business }),
 			authScope: this.authScope,
 			topicId: this.topicId,
 			operation: 'post-by-id-refresh',
 			postId,
-			profile: options.background ? 'background-prefetch' : 'topic-visible',
+			profile: options.background
+				? topicBackgroundProfile(options)
+				: 'topic-visible',
 			input: descriptor.path,
 			signal: this.#signal,
 			...(options.beforeNetwork === undefined
@@ -326,12 +349,13 @@ export class TopicReadRequestAdapter {
 			afterCommentId,
 		});
 		return this.#gateway.loadCollectionPage({
+			...(options.business === undefined ? {} : { business: options.business }),
 			authScope: this.authScope,
 			collection: `post-voting-comments:${postId}`,
 			page: afterCommentId,
 			cursor: afterCommentId,
 			profile: options.background
-				? 'background-prefetch'
+				? businessBackgroundProfile(options)
 				: 'collection-visible',
 			input: descriptor.path,
 			signal: this.#signal,
@@ -388,11 +412,14 @@ export class TopicReadRequestAdapter {
 		}
 		const descriptor = catalogCandidate.descriptor;
 		return this.#gateway.loadTopicTarget({
+			...(options.business === undefined ? {} : { business: options.business }),
 			authScope: this.authScope,
 			topicId,
 			operation: `target:${options.scope}:${candidate.endpoint}`,
 			postNumber,
-			profile: options.background ? 'background-prefetch' : 'topic-visible',
+			profile: options.background
+				? topicBackgroundProfile(options)
+				: 'topic-visible',
 			input: candidate.url,
 			signal: this.#signal,
 			...(options.beforeNetwork === undefined
@@ -436,7 +463,9 @@ export class TopicReadRequestAdapter {
 			topicId,
 			operation: `target:${options.scope}:${candidate.endpoint}`,
 			postNumber,
-			profile: options.background ? 'background-prefetch' : 'topic-visible',
+			profile: options.background
+				? topicBackgroundProfile(options)
+				: 'topic-visible',
 			cache: cacheForTopic(this.#caches.posts, topicId),
 		});
 	}
@@ -463,12 +492,15 @@ export class TopicReadRequestAdapter {
 			options.signal,
 		);
 		return this.#gateway.loadNestedReplies<T>({
+			...(options.business === undefined ? {} : { business: options.business }),
 			authScope: this.authScope,
 			topicId: this.topicId,
 			parentPostNumber,
 			parentPostId,
 			after,
-			profile: options.background ? 'background-prefetch' : 'nested-visible',
+			profile: options.background
+				? businessBackgroundProfile(options)
+				: 'nested-visible',
 			input: descriptor.path,
 			signal: requestLifetime.signal,
 			...(options.beforeNetwork === undefined
@@ -499,7 +531,9 @@ export class TopicReadRequestAdapter {
 			parentPostNumber,
 			parentPostId,
 			after: discourseReplyCursor(options.after),
-			profile: options.background ? 'background-prefetch' : 'nested-visible',
+			profile: options.background
+				? businessBackgroundProfile(options)
+				: 'nested-visible',
 			cacheMode: options.refresh ? 'refresh' : 'default',
 		}) ?? false;
 	}

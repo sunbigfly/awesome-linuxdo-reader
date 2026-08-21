@@ -384,6 +384,7 @@ export function createReaderPostPresentation<
 		PostView,
 		Readonly<{ timestamp: string; value: string }>
 	>();
+	const cookedByView = new WeakMap<PostView, string>();
 	const presentation: ReaderPostPresentation<TPost> = {
 		identity(postValue: TPost): PostViewIdentity {
 			const post = record(postValue);
@@ -490,7 +491,23 @@ export function createReaderPostPresentation<
 				post.read === true,
 				options.renderIcon,
 			);
-			view.slots.content.innerHTML = text(post.cooked);
+			const cooked = text(post.cooked);
+			const detailsOpenState = cookedByView.get(view) === cooked
+				? [...view.slots.content.querySelectorAll<HTMLDetailsElement>('details')]
+					.map((details) => details.hasAttribute('open'))
+				: null;
+			view.slots.content.innerHTML = cooked;
+			cookedByView.set(view, cooked);
+			if (detailsOpenState) {
+				for (const [index, details] of [
+					...view.slots.content.querySelectorAll<HTMLDetailsElement>('details'),
+				].entries()) {
+					details.toggleAttribute(
+						'open',
+						detailsOpenState[index] ?? details.hasAttribute('open'),
+					);
+				}
+			}
 		},
 	};
 	return Object.freeze(presentation);

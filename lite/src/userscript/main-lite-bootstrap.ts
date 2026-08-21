@@ -173,8 +173,6 @@ import {
 import {
 	isReaderCloudflareChallengeWindow,
 	monitorReaderCloudflareChallengeWindow,
-	READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS,
-	READER_BACKGROUND_REQUEST_MAX_DEFER_MS,
 } from '../network/browser-shared-request-permit.js';
 import {
 	ReaderHostTurnstileBackgroundController,
@@ -751,9 +749,11 @@ function createRuntimeStage(
 				maxConcurrent:
 					initialPreferences.performanceRequestConcurrency,
 				backgroundIdleIntervalMs:
-					READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS,
+					initialPreferences.requestFlowSettings
+						.backgroundIdleIntervalMs,
 				backgroundMaxDeferMs:
-					READER_BACKGROUND_REQUEST_MAX_DEFER_MS,
+					initialPreferences.requestFlowSettings
+						.backgroundMaxDeferMs,
 			},
 			data: {
 				scheduler: {
@@ -775,6 +775,10 @@ function createRuntimeStage(
 				responseOperationTimeoutMs: 5_000,
 				cacheFlightTtlMs: 30_000,
 				cacheFlightStaleMs: 45_000,
+				readStateRequestsPerMinute:
+					initialPreferences.performanceReadStateRequestsPerMinute,
+				readStateTimingsPerMinute:
+					initialPreferences.performanceReadStateTimingsPerMinute,
 			},
 				topic: {
 					authScope: currentUsername
@@ -1079,8 +1083,12 @@ function createRuntimeStage(
 		targets: {
 			openInitialRoute: !suppressInitialTopicOpen,
 			serviceWorkerMessages,
-			selectOpenTopicsAtFirstPost: (preferences) =>
-				preferences.openTopicsAtFirstPost,
+				selectOpenTopicsAtFirstPost: (preferences) =>
+					preferences.openTopicsAtFirstPost,
+				selectHostTopicPreheatEnabled: (preferences) =>
+					preferences.hostTopicPreheatEnabled,
+				selectHostTopicPreheatPostCount: (preferences) =>
+					preferences.hostTopicPreheatPostCount,
 			onError: (error) => {
 				console.error('[main-lite:target]', error);
 			},

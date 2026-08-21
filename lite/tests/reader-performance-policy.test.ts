@@ -7,6 +7,9 @@ import {
 	READER_PERFORMANCE_PRESETS,
 	createReaderPerformancePreferencesPatch,
 } from '../src/state/reader-preferences-schema.js';
+import {
+	READER_REQUEST_FLOW_DEFAULTS,
+} from '../src/network/reader-request-flow-config.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -14,13 +17,16 @@ function assert(condition: unknown, message: string): asserts condition {
 
 const policy = new ReaderPerformancePolicy({
 	preferences: {
-		performancePageSize: 48,
-		performanceStreamOverscan: 1.5,
-		performanceStreamMaxItems: 80,
+		performancePageSize: 32,
+		performanceStreamOverscan: 1,
+		performanceStreamMaxItems: 64,
 		performanceNestedPrefetch: 2,
 		performanceRequestConcurrency: 3,
 		performanceRequestInterval: 100,
 		performanceRequestRateTarget: 85,
+		performanceReadStateRequestsPerMinute: 10,
+		performanceReadStateTimingsPerMinute: 240,
+		requestFlowSettings: READER_REQUEST_FLOW_DEFAULTS,
 	},
 	shortBudgetCeiling: 50,
 	longBudgetCeiling: 200,
@@ -43,7 +49,7 @@ assert(
 	highPreset !== undefined &&
 	lowPreset.pageSize < balancedPreset.pageSize &&
 	balancedPreset.pageSize < highPreset.pageSize &&
-	lowPreset.streamOverscanScreens < balancedPreset.streamOverscanScreens &&
+	lowPreset.streamOverscanScreens <= balancedPreset.streamOverscanScreens &&
 	balancedPreset.streamOverscanScreens < highPreset.streamOverscanScreens &&
 	lowPreset.streamMaxMountedPostCount <
 		balancedPreset.streamMaxMountedPostCount &&
@@ -59,8 +65,14 @@ assert(
 	balancedPreset.requestShortBudget < highPreset.requestShortBudget &&
 	lowPreset.requestLongBudget < balancedPreset.requestLongBudget &&
 	balancedPreset.requestLongBudget < highPreset.requestLongBudget &&
+	lowPreset.readStateRequestsPerMinute <
+		balancedPreset.readStateRequestsPerMinute &&
+	balancedPreset.readStateRequestsPerMinute <
+		highPreset.readStateRequestsPerMinute &&
+	lowPreset.readStateTimingsPerMinute < balancedPreset.readStateTimingsPerMinute &&
+	balancedPreset.readStateTimingsPerMinute < highPreset.readStateTimingsPerMinute &&
 	lowPreset.preheatMaxConcurrent < balancedPreset.preheatMaxConcurrent &&
-	balancedPreset.preheatMaxConcurrent < highPreset.preheatMaxConcurrent &&
+	balancedPreset.preheatMaxConcurrent <= highPreset.preheatMaxConcurrent &&
 	lowPreset.preheatHandoffMaxBytes < balancedPreset.preheatHandoffMaxBytes &&
 	balancedPreset.preheatHandoffMaxBytes < highPreset.preheatHandoffMaxBytes &&
 	lowPreset.responseMemoryMaxBytes < balancedPreset.responseMemoryMaxBytes &&
@@ -69,12 +81,19 @@ assert(
 );
 
 assert(
-	policy.value.pageSize === 48 &&
-	policy.value.streamOverscanScreens === 1.5 &&
-	policy.value.streamMaxMountedPostCount === 80 &&
+	policy.value.pageSize === 32 &&
+	policy.value.streamOverscanScreens === 1 &&
+	policy.value.streamMaxMountedPostCount === 64 &&
 	policy.value.nestedPrefetchScreens === 2 &&
 	policy.value.requestMaxConcurrent === 3 &&
 	policy.value.requestMinIntervalMs === 100 &&
+	policy.value.readStateRequestsPerMinute === 10 &&
+	policy.value.readStateTimingsPerMinute === 240 &&
+	policy.value.businessRequestSettings?.['topic-download'].maxConcurrent === 1 &&
+	policy.value.businessRequestSettings?.notifications
+		.backgroundRequestsPerMinute === 40 &&
+	policy.value.requestFlowSettings?.backgroundIdleIntervalMs === 2_500 &&
+	policy.value.requestFlowSettings?.standardMaxConcurrent === 1 &&
 	policy.value.requestShortBudget === 42 &&
 	policy.value.requestLongBudget === 170,
 	'API 自动预取偏好必须一次投影 DOM、树预取、loader 与中央请求预算',
@@ -88,6 +107,8 @@ const clamped = policy.apply({
 	performanceRequestConcurrency: 9,
 	performanceRequestInterval: 20,
 	performanceRequestRateTarget: 2,
+	performanceReadStateRequestsPerMinute: 999,
+	performanceReadStateTimingsPerMinute: 2,
 });
 assert(
 	clamped.pageSize === 64 &&
@@ -97,6 +118,8 @@ assert(
 	clamped.requestMaxConcurrent === 4 &&
 	clamped.requestMinIntervalMs === 80 &&
 	clamped.requestRateTargetPercent === 50 &&
+	clamped.readStateRequestsPerMinute === 60 &&
+	clamped.readStateTimingsPerMinute === 20 &&
 	clamped.requestShortBudget === 25 &&
 	clamped.requestLongBudget === 100,
 	'绕过 schema 的运行态输入仍必须按同一范围防御并重算许可预算',
@@ -110,21 +133,27 @@ const unchanged = policy.apply({
 	performanceRequestConcurrency: 4,
 	performanceRequestInterval: 80,
 	performanceRequestRateTarget: 50,
+	performanceReadStateRequestsPerMinute: 60,
+	performanceReadStateTimingsPerMinute: 20,
 });
 assert(unchanged === clamped, '等价设置必须复用同一运行时快照身份');
 
 const fallbackTarget = policy.apply({
-	performancePageSize: 48,
-	performanceStreamOverscan: 1.5,
-	performanceStreamMaxItems: 80,
+	performancePageSize: 32,
+	performanceStreamOverscan: 1,
+	performanceStreamMaxItems: 64,
 	performanceNestedPrefetch: Number.NaN,
 	performanceRequestConcurrency: 3,
 	performanceRequestInterval: 100,
 	performanceRequestRateTarget: Number.NaN,
+	performanceReadStateRequestsPerMinute: Number.NaN,
+	performanceReadStateTimingsPerMinute: Number.NaN,
 });
 assert(
 	fallbackTarget.requestRateTargetPercent === 85 &&
-		fallbackTarget.nestedPrefetchScreens === 2.5 &&
+		fallbackTarget.readStateRequestsPerMinute === 10 &&
+		fallbackTarget.readStateTimingsPerMinute === 240 &&
+		fallbackTarget.nestedPrefetchScreens === 2 &&
 		fallbackTarget.requestShortBudget === 42 &&
 		fallbackTarget.requestLongBudget === 170,
 	'缺失请求目标必须回到为原站保留 15% 余量的 API 默认预算',
@@ -196,15 +225,72 @@ assert(
 	'队列预加载必须复用共享账本并限制为 4/10s、8/60s，给用户与原站请求留出余量',
 );
 
+const customFlow = Object.freeze({
+	...READER_REQUEST_FLOW_DEFAULTS,
+	queuePrefetchShortLimit: 6,
+	queuePrefetchLongLimit: 12,
+	bulkBackgroundBudgetPercent: 25,
+	nestedBackgroundShortLimit: 5,
+	nestedBackgroundLongLimit: 10,
+	hostPreheatMaxConcurrent: 1,
+});
+assert(
+	readerQueuePrefetchRequestHasHeadroom({
+		shortBudget: 42,
+		longBudget: 170,
+		shortCount: 5,
+		longCount: 11,
+	}, customFlow) &&
+	!readerQueuePrefetchRequestHasHeadroom({
+		shortBudget: 42,
+		longBudget: 170,
+		shortCount: 6,
+		longCount: 11,
+	}, customFlow) &&
+	readerBulkBackgroundRequestHasHeadroom({
+		shortBudget: 42,
+		longBudget: 170,
+		shortCount: 4,
+		longCount: 9,
+	}, true, customFlow) &&
+	!readerBulkBackgroundRequestHasHeadroom({
+		shortBudget: 42,
+		longBudget: 170,
+		shortCount: 5,
+		longCount: 9,
+	}, true, customFlow),
+	'队列与批量后台 owner 必须读取用户请求流目标，不能继续使用写死窗口',
+);
+
+const customFlowSnapshot = policy.apply({
+	performancePageSize: 32,
+	performanceStreamOverscan: 1,
+	performanceStreamMaxItems: 64,
+	performanceNestedPrefetch: 2,
+	performanceRequestConcurrency: 3,
+	performanceRequestInterval: 100,
+	performanceRequestRateTarget: 85,
+	performanceReadStateRequestsPerMinute: 10,
+	performanceReadStateTimingsPerMinute: 240,
+	requestFlowSettings: customFlow,
+});
+assert(
+	customFlowSnapshot.requestFlowSettings?.queuePrefetchShortLimit === 6 &&
+	customFlowSnapshot.preheatMaxConcurrent === 1,
+	'性能策略必须把用户请求流目标投影到当前运行时与宿主预热并发',
+);
+
 const constrained = new ReaderPerformancePolicy({
 	preferences: {
-		performancePageSize: 48,
-		performanceStreamOverscan: 1.5,
-		performanceStreamMaxItems: 80,
+		performancePageSize: 32,
+		performanceStreamOverscan: 1,
+		performanceStreamMaxItems: 64,
 		performanceNestedPrefetch: 2,
 		performanceRequestConcurrency: 3,
 		performanceRequestInterval: 100,
 		performanceRequestRateTarget: 85,
+		performanceReadStateRequestsPerMinute: 10,
+		performanceReadStateTimingsPerMinute: 240,
 	},
 	shortBudgetCeiling: 50,
 	longBudgetCeiling: 200,
@@ -216,9 +302,9 @@ const constrained = new ReaderPerformancePolicy({
 	},
 });
 assert(
-	constrained.value.pageSize === 26 &&
-	Math.abs(constrained.value.streamOverscanScreens - 0.825) < 0.000_001 &&
-	constrained.value.streamMaxMountedPostCount === 44 &&
+	constrained.value.pageSize === 17 &&
+	Math.abs(constrained.value.streamOverscanScreens - 0.55) < 0.000_001 &&
+	constrained.value.streamMaxMountedPostCount === 35 &&
 	constrained.value.nestedPrefetchScreens === 1.1 &&
 	constrained.value.requestMaxConcurrent === 2 &&
 	constrained.value.requestMinIntervalMs === 182 &&

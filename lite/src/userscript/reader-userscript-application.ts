@@ -45,6 +45,9 @@ import type {
 import type {
 	ReaderInformationFlowCoordinator,
 } from '../state/reader-information-flow-coordinator.js';
+import {
+	HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT,
+} from '../state/reader-preferences-schema.js';
 import type {
 	BrowserUserscriptEnvironment,
 } from './browser-userscript-environment.js';
@@ -111,6 +114,12 @@ export interface ReaderUserscriptTargetStageOptions<
 	readonly selectOpenTopicsAtFirstPost?: (
 		preferences: Readonly<TPreferences>,
 	) => boolean;
+	readonly selectHostTopicPreheatEnabled?: (
+		preferences: Readonly<TPreferences>,
+	) => boolean;
+	readonly selectHostTopicPreheatPostCount?: (
+		preferences: Readonly<TPreferences>,
+	) => number;
 	readonly beforeOpenTarget?: (
 		target: ReaderUserscriptInterceptedTarget,
 	) => void | Promise<void>;
@@ -668,6 +677,13 @@ export function createReaderUserscriptRuntimeStage<
 					hostPreheat = new ReaderHostTopicPreheatController({
 						document: options.runtime.document,
 						mutations: runtime.workspace.mutations,
+						enabled: targetOptions.selectHostTopicPreheatEnabled?.(
+							context.readPreferences(),
+						) !== false,
+						preheatPostCount:
+							targetOptions.selectHostTopicPreheatPostCount?.(
+								context.readPreferences(),
+							) ?? HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT,
 						activity: runtime.activity,
 						readMaxConcurrentPreheats: () =>
 							runtime.performance.preheatMaxConcurrent,
@@ -682,6 +698,7 @@ export function createReaderUserscriptRuntimeStage<
 							topicId,
 							postNumber,
 							signal,
+							maximumPostCount,
 						) => withPreheatTrace(
 							topicId,
 							'host-cache-restore',
@@ -695,6 +712,7 @@ export function createReaderUserscriptRuntimeStage<
 								);
 								const result = await active.services.session.restorePreheatEntry(
 									postNumber,
+									maximumPostCount,
 								);
 								runtime.pipeline.mark(traceId, 'preheat-restored', {
 									detail: { complete: result?.complete === true },
@@ -724,6 +742,7 @@ export function createReaderUserscriptRuntimeStage<
 							try {
 								const result = await bundle.services.session.restorePreheatEntry(
 									postNumber,
+									maximumPostCount,
 								);
 								if (result?.complete) {
 									runtime.rememberPreheatedTopicSnapshot(
@@ -750,6 +769,7 @@ export function createReaderUserscriptRuntimeStage<
 							signal,
 							report,
 							minimumTotalCount,
+							maximumPostCount,
 						) => withPreheatTrace(
 							topicId,
 							'host-visible-preheat',
@@ -768,6 +788,7 @@ export function createReaderUserscriptRuntimeStage<
 										prefetchTier: 'nearby',
 										maxAttempts: 1,
 										minimumTotalCount,
+										maximumPostCount,
 										onProgress: report,
 										beforeNetwork: (requestSignal) => {
 											signal.throwIfAborted();
@@ -815,6 +836,7 @@ export function createReaderUserscriptRuntimeStage<
 										prefetchTier: 'nearby',
 										maxAttempts: 1,
 										minimumTotalCount: restoredMinimumTotalCount,
+										maximumPostCount,
 										onProgress: (progress) => {
 											if (progress.complete) {
 											runtime.rememberPreheatedTopicSnapshot(
@@ -856,6 +878,16 @@ export function createReaderUserscriptRuntimeStage<
 							? {}
 							: { onError: targetOptions.onError }),
 					});
+					context.preferenceChanges.subscribe((preferences) => {
+						hostPreheat?.applyPreheatPostCount(
+							targetOptions.selectHostTopicPreheatPostCount?.(
+								preferences,
+							) ?? HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT,
+						);
+						hostPreheat?.applyEnabled(
+							targetOptions.selectHostTopicPreheatEnabled?.(preferences) !== false,
+						);
+					}, hostPreheat.scope);
 					runtime.history.changes.subscribe(
 						() => hostPreheat?.refreshHistory(),
 						hostPreheat.scope,
@@ -907,18 +939,9 @@ export function createReaderUserscriptRuntimeStage<
 								sync();
 							},
 						);
-						const releaseScrollIntent =
-							active.dom.listenDirectUserScrollIntent(() => {
-								const generation =
-									hostPreheat?.beginReaderInteraction() ?? 0;
-								void active.dom.waitForScrollIdle().then(() => {
-									hostPreheat?.finishReaderInteraction(generation);
-								});
-							});
 						releaseActiveReadingProjection = () => {
 							releaseTimeline();
 							releaseRead();
-							releaseScrollIntent();
 						};
 						sync();
 					};
@@ -929,9 +952,6 @@ export function createReaderUserscriptRuntimeStage<
 							state === 'opening' ||
 							state === 'switching' ||
 							state === 'running',
-						);
-						hostPreheat?.setReaderShellBusy(
-							state === 'opening' || state === 'switching',
 						);
 					};
 					runtime.shell.changes.subscribe((state) => {
@@ -946,7 +966,6 @@ export function createReaderUserscriptRuntimeStage<
 					hostPreheat.scope.add(clearActiveReadingProjection);
 					syncReaderPreheatState(runtime.shell.state);
 					if (runtime.shell.state === 'running') bindActiveReadingProjection();
-					const preheatOpenTransactions = new WeakMap<object, number>();
 					targetAdapter = new ReaderUserscriptTargetAdapter({
 						document: options.runtime.document,
 						currentUrl: () =>
@@ -1082,23 +1101,12 @@ export function createReaderUserscriptRuntimeStage<
 									targetOptions.interceptTopicLinks,
 							}),
 						beforeOpenTarget: async (target) => {
-							preheatOpenTransactions.set(
-								target,
-								hostPreheat!.beginReaderOpen(target.request.topicId),
-							);
 							await hostSource!.prepare(target);
 							await targetOptions.beforeOpenTarget?.(target);
 						},
 						afterOpenTarget: async (target, opened) => {
-							try {
-								await hostSource!.settle(target, opened);
-							} finally {
-								hostPreheat!.finishReaderOpen(
-									preheatOpenTransactions.get(target) ?? 0,
-								);
-								preheatOpenTransactions.delete(target);
-								syncReaderPreheatState(runtime.shell.state);
-							}
+							await hostSource!.settle(target, opened);
+							syncReaderPreheatState(runtime.shell.state);
 						},
 						parentScope: runtime.scope,
 						...(targetOptions.onError === undefined

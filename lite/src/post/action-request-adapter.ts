@@ -9,6 +9,9 @@ import type {
 	RequestTransportInput,
 } from '../network/coordinated-request-client.js';
 import {
+	readerBusinessRequestKindForAction,
+} from '../network/reader-business-request-policy.js';
+import {
 	discourseActionTransportDefinition,
 	type DiscourseNativeActionPort,
 } from './discourse-action-transport.js';
@@ -75,7 +78,11 @@ export class ActionRequestAdapter {
 			`discourse-native://action/${encodeURIComponent(definition.operation)}` +
 			`?binding=${encodeURIComponent(definition.nativeBinding)}`,
 		);
+		const business = readerBusinessRequestKindForAction(
+			definition.operation,
+		);
 		return this.#gateway.mutate({
+			...(business === undefined ? {} : { business }),
 			authScope: this.authScope,
 			operation: definition.operation,
 			targetType: definition.targetType,

@@ -631,6 +631,16 @@ assert(
 			),
 		'#1 必须只预热向下一标准批，中间楼层必须预热前后各一批并跳过已有缓存',
 	);
+	const cappedEntryPreheat = await entryPreheatSession.preheatEntry(5, {
+		background: true,
+		maximumPostCount: 3,
+	});
+	assert(
+		cappedEntryPreheat.requestedCount === 3 &&
+		cappedEntryPreheat.posts.map((post) => post.post_number).join(',') ===
+			'4,5,6',
+		'显式预热楼层数必须形成包含目标楼层的连续总量窗口，不能继续隐式扩大为前后各一批',
+	);
 	await entryPreheatSession.flush();
 	const restoredEntryPreheatResponses = new ResponseRepository({
 		store: entryPreheatStore,
@@ -667,10 +677,10 @@ assert(
 		wait: async () => {},
 	});
 	const restoredEntryPreheat = await restoredEntryPreheatSession
-		.restorePreheatEntry(5);
+		.restorePreheatEntry(5, 3);
 	assert(
-		restoredEntryPreheat?.warmedCount === 4 &&
-			restoredEntryPreheat.requestedCount === 4 &&
+		restoredEntryPreheat?.warmedCount === 3 &&
+			restoredEntryPreheat.requestedCount === 3 &&
 			restoredEntryPreheat.totalCount === 6 &&
 			restoredEntryPreheat.cacheHit &&
 			restoredEntryPreheat.complete &&

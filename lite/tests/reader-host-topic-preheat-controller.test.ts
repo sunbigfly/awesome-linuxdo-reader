@@ -605,12 +605,12 @@ intersectionCallback([{
 	target: restoredCard,
 	isIntersecting: true,
 }] as unknown as IntersectionObserverEntry[], {} as IntersectionObserver);
-const restoredOpenGeneration = restored.beginReaderOpen(discourseTopicId(11));
+restored.setReaderForeground(true);
 assert(
 	currentRestoredSignal()?.aborted === false &&
-		restoredCard.querySelector('.ldp-host-topic-reader-meta')?.textContent
+		!restoredCard.querySelector('.ldp-host-topic-reader-meta')?.textContent
 			?.includes('暂停：阅读优先'),
-	'Reader 抢占联网预热时必须保留在途缓存恢复，并明确显示阅读优先暂停态',
+	'Reader 前台阅读不得中止宿主列表的在途缓存恢复或显示暂停态',
 );
 resolveRestoredPreheat(Object.freeze({
 	warmedCount: 48,
@@ -620,7 +620,6 @@ resolveRestoredPreheat(Object.freeze({
 	complete: true,
 }));
 await flushMicrotasks();
-restored.finishReaderOpen(restoredOpenGeneration);
 assert(
 	restoredPreheatCalls.join(',') === '11:22' &&
 	restoredNetworkCalls.length === 0 &&
@@ -827,14 +826,28 @@ assert(activityListeners.size === 0, '宿主预热活跃监听必须随 owner �
 let foregroundPreheatCalls = 0;
 let foregroundPreheatAborts = 0;
 let foregroundPreheatConcurrency = 1;
+const foregroundPreheatPostCounts: number[] = [];
+const foregroundProgressReports: Array<(
+	progress: ReaderHostTopicPreheatProgress,
+) => void> = [];
 const foregroundAware = new ReaderHostTopicPreheatController({
 	document,
 	mutations,
+	preheatPostCount: 48,
 	historyEntry: () => null,
 	readOpenTopicsAtFirstPost: () => true,
 	readMaxConcurrentPreheats: () => foregroundPreheatConcurrency,
-	preheat(_topicId, _postNumber, signal) {
+	preheat(
+		_topicId,
+		_postNumber,
+		signal,
+		report,
+		_minimumTotalCount,
+		maximumPostCount,
+	) {
 		foregroundPreheatCalls += 1;
+		foregroundPreheatPostCounts.push(maximumPostCount);
+		foregroundProgressReports.push(report);
 		return new Promise((_resolve, reject) => {
 			signal.addEventListener('abort', () => {
 				foregroundPreheatAborts += 1;
@@ -873,41 +886,61 @@ intersectionCallback(foregroundCards.map((target) => ({
 	isIntersecting: true,
 } as unknown as IntersectionObserverEntry)), {} as IntersectionObserver);
 assert(
-	foregroundPreheatCalls === 1,
+	foregroundPreheatCalls === 1 &&
+		foregroundPreheatPostCounts.join(',') === '48',
 	'低配档必须把近视口 Topic 网络预热限制为单槽',
 );
-const foregroundOpenGeneration = foregroundAware.beginReaderOpen(
-	discourseTopicId(11),
-);
-await flushMicrotasks();
-assert(
-	foregroundPreheatAborts === 1 &&
-		foregroundPreheatCalls === 1 &&
-		foregroundCards.some((card) =>
-			card.querySelector('.ldp-host-topic-reader-meta')?.textContent
-				?.includes('暂停：阅读优先')),
-	'用户点击 Topic 时必须立即中止宿主联网预热，并明确显示阅读优先暂停态',
-);
 foregroundPreheatConcurrency = 2;
-foregroundAware.finishReaderOpen(foregroundOpenGeneration);
+foregroundAware.setReaderForeground(true);
 await flushMicrotasks();
 assert(
-	Number(foregroundPreheatCalls) === 2,
-	'Reader 稳定后必须恢复低优先级预热，且前台阅读期间至多使用一个联网槽',
+	foregroundPreheatAborts === 0 &&
+		foregroundPreheatCalls === 1 &&
+		foregroundCards.every((card) =>
+			!card.querySelector('.ldp-host-topic-reader-meta')?.textContent
+				?.includes('暂停：阅读优先')),
+	'Reader 打开与阅读期间必须保留宿主预热，前台仍只占一个后台槽',
 );
-const foregroundInteractionGeneration =
-	foregroundAware.beginReaderInteraction();
+foregroundAware.applyEnabled(false);
+await flushMicrotasks();
+assert(
+	Number(foregroundPreheatAborts) === 1 &&
+		foregroundCards.every((card) =>
+			!card.querySelector('.ldp-host-topic-reader-meta')?.textContent
+				?.includes('预热已关闭')) &&
+		foregroundCards.every((card) =>
+			card.querySelector('.ldp-host-topic-reader-meta')?.textContent
+				?.includes('已读')),
+	'关闭预热设置必须立即中止联网并隐藏关闭提示，同时保留独立的已读状态',
+);
+foregroundAware.applyPreheatPostCount(64);
+foregroundAware.applyEnabled(true);
+await flushMicrotasks();
+assert(
+	Number(foregroundPreheatCalls) === 2 &&
+		foregroundPreheatPostCounts.join(',') === '48,64',
+	'关闭期间修改预热楼层数后，重新开启必须按新总量恢复且 Reader 前台仍保持单槽',
+);
+foregroundAware.applyPreheatPostCount(32);
 await flushMicrotasks();
 assert(
 	Number(foregroundPreheatAborts) === 2 &&
-		Number(foregroundPreheatCalls) === 2,
-	'用户主动滚动 Reader 时必须再次抢占宿主联网预热',
+		Number(foregroundPreheatCalls) === 3 &&
+		foregroundPreheatPostCounts.join(',') === '48,64,32',
+	'开启期间修改预热楼层数必须中止旧窗口、释放旧交接并按新总量重新预热',
 );
-foregroundAware.finishReaderInteraction(foregroundInteractionGeneration);
-await flushMicrotasks();
+foregroundProgressReports[1]?.(Object.freeze({
+	warmedCount: 64,
+	requestedCount: 64,
+	totalCount: 64,
+	cacheHit: false,
+	complete: true,
+}));
 assert(
-	Number(foregroundPreheatCalls) === 3,
-	'Reader 滚动稳定后必须恢复单槽预热，不能一直停在零进度',
+	foregroundCards.every((card) =>
+		card.querySelector('.ldp-host-topic-reader-meta')
+			?.getAttribute('data-ldp-preheat-state') !== 'ready'),
+	'楼层数热重启后必须忽略旧窗口迟到的进度，不能覆盖新窗口卡片状态',
 );
 foregroundAware.setReaderForeground(false);
 await flushMicrotasks();

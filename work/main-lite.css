@@ -1,6 +1,6 @@
 /* Awesome LinuxDo Reader Lite stylesheet.
  * Generated only from lite/styles/*.css; do not edit generated outputs.
- * source-sha256: 76dd9636ef6f3eb4049bdd98abf72ecbc7156dbfae4230ab60faf30ed317f05c
+ * source-sha256: 8a84d190da7bc84a40db982cab45311d57e078ce2737ee937dfcc9f33f7cbf64
  */
 
 /* source: 00-foundation.css */
@@ -4932,7 +4932,7 @@ html.ldp-reader-workspace :is(
   display: contents;
 }
 
-/* 第一段只保留阅读动作；第二段按收藏、下载、观察、史书、不想看和其余入口排列。 */
+/* 第一段只保留阅读动作；第二段按收藏总结、下载观察史书与其余入口分组。 */
 .ldp-topic-action-rail-top { order: 0; }
 .ldp-topic-action-rail .ldp-actions > * { order: 70; }
 .ldp-topic-action-rail .ldp-actions > :is(
@@ -4945,7 +4945,17 @@ html.ldp-reader-workspace :is(
   display: contents;
 }
 .ldp-topic-action-rail-download-group[hidden] { display: none !important; }
-.ldp-topic-action-rail-secondary-tools {
+.ldp-topic-action-rail-summary-bookmark-group {
+  display: contents;
+  order: 50;
+}
+.ldp-topic-action-rail
+  .ldp-topic-action-rail-summary-bookmark-group > .ldp-topic-footer-slot {
+  display: contents;
+}
+.ldp-topic-action-rail-secondary-tools,
+.ldp-topic-action-rail.is-expanded
+  .ldp-topic-action-rail-summary-bookmark-group {
   --ldp-topic-action-group-height: 22px;
   display: flex;
   box-sizing: border-box;
@@ -4970,10 +4980,15 @@ html.ldp-reader-workspace :is(
   overscroll-behavior-inline: contain;
   scrollbar-width: none;
   transition: none;
+}
+.ldp-topic-action-rail-secondary-tools {
   order: 51;
 }
 
-.ldp-topic-action-rail.is-expanded .ldp-topic-action-rail-secondary-tools
+.ldp-topic-action-rail.is-expanded :is(
+  .ldp-topic-action-rail-secondary-tools,
+  .ldp-topic-action-rail-summary-bookmark-group
+)
   :is(button:not(.ldp-select-option),.ldp-topic-notification) {
   width: 26px;
   height: 20px;
@@ -4986,7 +5001,7 @@ html.ldp-reader-workspace :is(
 .ldp-topic-action-rail .ldp-topic-footer-slot > .ldp-topic-shared-issue {
   order: 40;
 }
-.ldp-topic-action-rail-summary { order: 45; }
+.ldp-topic-action-rail-summary { order: 51; }
 .ldp-topic-action-rail-toggle { order: 100; }
 
 .ldp-topic-action-rail:not(.is-expanded) > .ldp-topic-action-rail-toggle {
@@ -5048,6 +5063,7 @@ html.ldp-reader-workspace :is(
 }
 
 .ldp-topic-action-rail-secondary-tools::-webkit-scrollbar,
+.ldp-topic-action-rail-summary-bookmark-group::-webkit-scrollbar,
 .ldp-topic-action-rail.is-expanded
   .ldp-context-actions-slot::-webkit-scrollbar {
   display: none;
@@ -5071,7 +5087,11 @@ html.ldp-reader-workspace :is(
 }
 
 .ldp-topic-action-rail.is-expanded.is-actions-open-left
-  :is(.ldp-context-actions-slot,.ldp-topic-action-rail-secondary-tools) {
+  :is(
+    .ldp-context-actions-slot,
+    .ldp-topic-action-rail-summary-bookmark-group,
+    .ldp-topic-action-rail-secondary-tools
+  ) {
   transform: translateX(calc(var(--ldp-control-height) - 100%));
 }
 
@@ -5160,6 +5180,7 @@ html.ldp-reader-workspace :is(
 }
 
 .ldp-topic-action-rail :is(
+	.ldp-topic-action-rail-summary,
 	.ldp-topic-action-rail-download,
 	.ldp-topic-action-rail-chronicle,
 	.ldp-topic-action-rail-unwanted-topics,
@@ -20733,46 +20754,6 @@ img.emoji[data-ldp-inline-emoji] {
 .ldp-color-picker-preset[data-color="#D97706"] { --ldp-color-picker-preset: #d97706; }
 .ldp-color-picker-preset[data-color="#DC2626"] { --ldp-color-picker-preset: #dc2626; }
 
-.ldp-performance-preset {
-  display: inline-flex;
-  min-width: 0;
-  min-height: 34px;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 5px;
-  border: 1px solid var(--ldp-border);
-  border-radius: var(--ldp-radius-sm);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--ldp-font-ui);
-  font-weight: 650;
-}
-
-.ldp-performance-preset:hover {
-  background: var(--ldp-surface-muted);
-}
-
-.ldp-performance-preset.active {
-  border-color: var(--ldp-accent);
-  background: var(--ldp-accent-soft);
-  color: var(--ldp-accent);
-}
-
-.ldp-performance-preset[data-performance-risk="experimental"] {
-  border-color: color-mix(in srgb, var(--ldp-warning, #d97706) 44%, var(--ldp-border));
-  background: color-mix(in srgb, var(--ldp-warning, #d97706) 7%, transparent);
-  color: var(--ldp-warning, #b45309);
-}
-
-.ldp-performance-preset[data-performance-risk="experimental"]:hover,
-.ldp-performance-preset[data-performance-risk="experimental"].active {
-  border-color: var(--ldp-warning, #d97706);
-  background: color-mix(in srgb, var(--ldp-warning, #d97706) 14%, var(--ldp-canvas));
-  color: var(--ldp-warning, #b45309);
-}
-
 .ldp-settings-draft-bar {
   position: sticky;
   bottom: calc(0px - var(--ldp-settings-panel-bottom-gutter));
@@ -23750,12 +23731,6 @@ img.emoji[data-ldp-inline-emoji] {
 }
 
 /* Component-specific controls keep settings geometry deterministic. */
-.ldp-performance-presets {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
 .ldp-performance-control {
   display: grid;
   min-width: 0;
@@ -23790,6 +23765,54 @@ img.emoji[data-ldp-inline-emoji] {
   line-height: 1.35;
 }
 
+.ldp-performance-policy-row {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.ldp-performance-policy-badges {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.ldp-performance-policy-controls {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ldp-performance-policy-field {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  color: var(--ldp-ink-muted);
+}
+
+.ldp-performance-policy-field > small {
+  font-size: var(--ldp-font-sm);
+  line-height: 1.25;
+}
+
+.ldp-performance-policy-badge {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 3px 7px;
+  border: 1px solid var(--ldp-border);
+  border-radius: 999px;
+  background: var(--ldp-surface-muted);
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
 .ldp-performance-control > input,
 .ldp-image-scale-custom,
 .ldp-lightbox-description-height,
@@ -23814,6 +23837,16 @@ img.emoji[data-ldp-inline-emoji] {
   border-color: var(--ldp-accent);
   background: var(--ldp-accent-soft);
   color: var(--ldp-accent);
+}
+
+.ldp-performance-policy-field .ldp-performance-control {
+  gap: 4px;
+}
+
+.ldp-performance-policy-field .ldp-performance-control > input {
+  min-height: 30px;
+  padding: 4px 7px;
+  font-variant-numeric: tabular-nums;
 }
 
 .ldp-performance-control > em {

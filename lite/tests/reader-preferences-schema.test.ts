@@ -54,6 +54,12 @@ const expectedKeys = [
 	'performanceRequestConcurrency',
 	'performanceRequestInterval',
 	'performanceRequestRateTarget',
+	'performanceReadStateRequestsPerMinute',
+	'performanceReadStateTimingsPerMinute',
+	'requestFlowSettings',
+	'businessRequestSettings',
+	'hostTopicPreheatEnabled',
+	'hostTopicPreheatPostCount',
 	'performanceSuspendHostTurnstileInBackground',
 	'layoutProfile',
 	'fullpageLayoutProfile',
@@ -137,13 +143,36 @@ assert(
 	defaults.listReaderMode === 'embed-right' &&
 	defaults.openTopicsAtFirstPost &&
 	defaults.performancePreset === 'balanced' &&
-	defaults.performancePageSize === 48 &&
-	defaults.performanceStreamOverscan === 1.5 &&
-	defaults.performanceStreamMaxItems === 80 &&
-	defaults.performanceNestedPrefetch === 2.5 &&
+	defaults.performancePageSize === 32 &&
+	defaults.performanceStreamOverscan === 1 &&
+	defaults.performanceStreamMaxItems === 64 &&
+	defaults.performanceNestedPrefetch === 2 &&
 	defaults.performanceRequestConcurrency === 3 &&
 	defaults.performanceRequestInterval === 100 &&
 	defaults.performanceRequestRateTarget === 85 &&
+	defaults.performanceReadStateRequestsPerMinute === 10 &&
+	defaults.performanceReadStateTimingsPerMinute === 240 &&
+	defaults.requestFlowSettings.backgroundIdleIntervalMs === 2_500 &&
+	defaults.requestFlowSettings.backgroundMaxDeferMs === 15_000 &&
+	defaults.requestFlowSettings.hostPreheatMaxConcurrent === 2 &&
+	defaults.requestFlowSettings.queuePrefetchShortLimit === 4 &&
+	defaults.requestFlowSettings.queuePrefetchLongLimit === 8 &&
+	defaults.requestFlowSettings.bulkBackgroundBudgetPercent === 50 &&
+	defaults.requestFlowSettings.nestedBackgroundShortLimit === 8 &&
+	defaults.requestFlowSettings.nestedBackgroundLongLimit === 24 &&
+	defaults.requestFlowSettings.topicBatchMaxConcurrent === 3 &&
+	defaults.requestFlowSettings.nestedRepliesMaxConcurrent === 2 &&
+	defaults.requestFlowSettings.userCardMaxConcurrent === 2 &&
+	defaults.requestFlowSettings.standardMaxConcurrent === 1 &&
+	defaults.businessRequestSettings['topic-download'].maxConcurrent === 1 &&
+	defaults.businessRequestSettings['topic-download']
+		.backgroundRequestsPerMinute === 24 &&
+	defaults.businessRequestSettings['user-observation']
+		.backgroundRequestsPerMinute === 24 &&
+	defaults.businessRequestSettings.notifications
+		.backgroundRequestsPerMinute === 40 &&
+	defaults.hostTopicPreheatEnabled &&
+	defaults.hostTopicPreheatPostCount === 24 &&
 	!defaults.performanceSuspendHostTurnstileInBackground &&
 	defaults.inlineReplyTreeMaxDepth === 3 &&
 	defaults.jumpHighlightCount === 1 &&
@@ -242,6 +271,31 @@ const normalized = normalizeReaderPreferences({
 	performanceRequestConcurrency: 9,
 	performanceRequestInterval: 101.6,
 	performanceRequestRateTarget: 2,
+	performanceReadStateRequestsPerMinute: 999,
+	performanceReadStateTimingsPerMinute: 2,
+	requestFlowSettings: {
+		backgroundIdleIntervalMs: -1,
+		backgroundMaxDeferMs: 99_999,
+		hostPreheatMaxConcurrent: 99,
+		queuePrefetchShortLimit: 0,
+		queuePrefetchLongLimit: 999,
+		bulkBackgroundBudgetPercent: 1,
+		nestedBackgroundShortLimit: 999,
+		nestedBackgroundLongLimit: 0,
+		topicBatchMaxConcurrent: 99,
+		nestedRepliesMaxConcurrent: 99,
+		userCardMaxConcurrent: 99,
+		standardMaxConcurrent: 99,
+	},
+	businessRequestSettings: {
+		'topic-download': {
+			maxConcurrent: 99,
+			backgroundMinIntervalMs: 1,
+			backgroundRequestsPerMinute: 999,
+		},
+	},
+	hostTopicPreheatEnabled: 'no',
+	hostTopicPreheatPostCount: 999,
 	performanceSuspendHostTurnstileInBackground: 'yes',
 	layoutProfile: { left: 50, main: 90, gap: 30, timeline: 20, right: 20 },
 	readerWindowWidth: 1,
@@ -331,6 +385,31 @@ assert(
 	normalized.performanceRequestConcurrency === 4 &&
 	normalized.performanceRequestInterval === 102 &&
 	normalized.performanceRequestRateTarget === 50 &&
+	normalized.performanceReadStateRequestsPerMinute === 60 &&
+	normalized.performanceReadStateTimingsPerMinute === 20 &&
+	normalized.requestFlowSettings.backgroundIdleIntervalMs === 0 &&
+	normalized.requestFlowSettings.backgroundMaxDeferMs === 60_000 &&
+	normalized.requestFlowSettings.hostPreheatMaxConcurrent === 3 &&
+	normalized.requestFlowSettings.queuePrefetchShortLimit === 1 &&
+	normalized.requestFlowSettings.queuePrefetchLongLimit === 200 &&
+	normalized.requestFlowSettings.bulkBackgroundBudgetPercent === 10 &&
+	normalized.requestFlowSettings.nestedBackgroundShortLimit === 50 &&
+	normalized.requestFlowSettings.nestedBackgroundLongLimit === 1 &&
+	normalized.requestFlowSettings.topicBatchMaxConcurrent === 3 &&
+	normalized.requestFlowSettings.nestedRepliesMaxConcurrent === 2 &&
+	normalized.requestFlowSettings.userCardMaxConcurrent === 2 &&
+	normalized.requestFlowSettings.standardMaxConcurrent === 4 &&
+	normalized.businessRequestSettings['topic-download'].maxConcurrent === 4 &&
+	normalized.businessRequestSettings['topic-download']
+		.backgroundMinIntervalMs === 80 &&
+	normalized.businessRequestSettings['topic-download']
+		.backgroundRequestsPerMinute === 120 &&
+	normalized.hostTopicPreheatEnabled &&
+	normalized.hostTopicPreheatPostCount === 128 &&
+	!normalizeReaderPreferences({
+		...defaults,
+		hostTopicPreheatEnabled: false,
+	}, environment).hostTopicPreheatEnabled &&
 	!normalized.performanceSuspendHostTurnstileInBackground &&
 	normalizeReaderPreferences({
 		...defaults,
@@ -461,8 +540,8 @@ const rebasedBalanced = normalizeReaderPreferences({
 	}),
 }, environment);
 assert(
-	rebasedBalanced.performancePageSize === 48 &&
-		rebasedBalanced.performanceNestedPrefetch === 2.5 &&
+	rebasedBalanced.performancePageSize === 32 &&
+		rebasedBalanced.performanceNestedPrefetch === 2 &&
 		rebasedBalanced.performanceRequestRateTarget === 85,
 	'已保存的命名均衡预设必须自动跟进现行 API 管线，不能永久冻结旧测试参数',
 );
@@ -510,16 +589,53 @@ const codec = createReaderPreferencesConfigCodec({
 const exported = codec.export({
 	...defaults,
 	performancePageSize: 999,
+	hostTopicPreheatEnabled: false,
 	performanceSuspendHostTurnstileInBackground: true,
 	unknown: true,
 });
 assert(
-	exported.settingsCount === 86 &&
-	Object.keys(exported.settings).length === 86 &&
+	exported.settingsCount === 92 &&
+	Object.keys(exported.settings).length === 92 &&
 	exported.settings.performancePageSize === 64 &&
+	exported.settings.hostTopicPreheatEnabled === false &&
+	exported.settings.hostTopicPreheatPostCount === 24 &&
+	(exported.settings.requestFlowSettings as typeof defaults.requestFlowSettings)
+		.standardMaxConcurrent === 1 &&
+	(exported.settings.businessRequestSettings as typeof defaults.businessRequestSettings)
+		.bookmarks.backgroundRequestsPerMinute === 40 &&
 	exported.settings.performanceSuspendHostTurnstileInBackground === true &&
 	!Object.hasOwn(exported.settings, 'unknown'),
-	'真实配置 codec 必须复用同一 86 字段 schema',
+	'真实配置 codec 必须复用同一 92 字段 schema',
+);
+const beforePerformanceRuntimeSettings = Object.fromEntries(
+	Object.entries(defaults).filter(([key]) => ![
+		'performanceReadStateRequestsPerMinute',
+		'performanceReadStateTimingsPerMinute',
+		'requestFlowSettings',
+		'businessRequestSettings',
+		'hostTopicPreheatEnabled',
+		'hostTopicPreheatPostCount',
+		'performanceSuspendHostTurnstileInBackground',
+	].includes(key)),
+);
+const importedBeforePerformanceRuntime = codec.import({
+	format: READER_CONFIG_EXPORT_FORMAT,
+	schemaVersion: READER_CONFIG_EXPORT_VERSION,
+	scriptVersion: 'before-performance-runtime',
+	exportedAt: '2026-08-18T00:00:00.000Z',
+	settingsCount: Object.keys(beforePerformanceRuntimeSettings).length,
+	settings: beforePerformanceRuntimeSettings,
+});
+assert(
+	importedBeforePerformanceRuntime.hostTopicPreheatEnabled &&
+	importedBeforePerformanceRuntime.hostTopicPreheatPostCount === 24 &&
+	importedBeforePerformanceRuntime.performanceReadStateRequestsPerMinute === 10 &&
+	importedBeforePerformanceRuntime.performanceReadStateTimingsPerMinute === 240 &&
+	importedBeforePerformanceRuntime.requestFlowSettings.standardMaxConcurrent === 1 &&
+	importedBeforePerformanceRuntime.businessRequestSettings.bookmarks
+		.backgroundRequestsPerMinute === 40 &&
+	!importedBeforePerformanceRuntime.performanceSuspendHostTurnstileInBackground,
+	'新增预热与已读速率设置必须兼容导入上一版完整配置',
 );
 const beforeHostTurnstileSettings = Object.fromEntries(
 	Object.entries(defaults).filter(([key]) =>

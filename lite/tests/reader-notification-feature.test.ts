@@ -463,6 +463,7 @@ for (const groupKey of READER_NOTIFICATION_GROUP_ORDER) {
 	assert(
 		page.group === groupKey &&
 		gateway.requests.at(-1)?.group === (groupKey === 'other' ? 'all' : groupKey) &&
+		gateway.requests.at(-1)?.business === 'notifications' &&
 		page.records.length === (
 			groupKey === 'all' || groupKey === 'replies'
 				? 2

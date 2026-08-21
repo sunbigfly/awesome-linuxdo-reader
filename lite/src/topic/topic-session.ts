@@ -139,6 +139,7 @@ export interface TopicBatchOptions {
 	readonly background?: boolean;
 	readonly priority?: 'visible' | 'nested';
 	readonly beforeNetwork?: TopicNetworkLoadOptions['beforeNetwork'];
+	readonly business?: TopicNetworkLoadOptions['business'];
 	readonly maxAttempts?: number;
 	readonly beforeCommit?: () => void | Promise<void>;
 	readonly onSource?: (
@@ -184,6 +185,7 @@ export interface TopicEntryPreheatProgress {
 export interface TopicEntryPreheatOptions extends TopicAheadPrefetchOptions {
 	readonly onProgress?: (progress: TopicEntryPreheatProgress) => void;
 	readonly minimumTotalCount?: number;
+	readonly maximumPostCount?: number;
 }
 
 export interface TopicEntryPreheatResult<TPost>
@@ -821,6 +823,7 @@ export class TopicSession<
 				await this.loadPostsByIds(ids, {
 					...(options.background === undefined ? {} : { background: options.background }),
 					...(options.priority === undefined ? {} : { priority: options.priority }),
+					...(options.business === undefined ? {} : { business: options.business }),
 					...(options.beforeNetwork === undefined
 						? {}
 						: { beforeNetwork: options.beforeNetwork }),
@@ -1041,6 +1044,7 @@ export class TopicSession<
 			try {
 				await this.refresh({
 					background: execution.background,
+					...(options.business === undefined ? {} : { business: options.business }),
 					...(options.beforeNetwork === undefined
 						? {}
 						: { beforeNetwork: options.beforeNetwork }),
@@ -1705,6 +1709,7 @@ export class TopicSession<
 			scope,
 			slug: String(this.#topic?.slug ?? 'topic'),
 			refresh: options.forceRefresh === true,
+			...(options.business === undefined ? {} : { business: options.business }),
 			...(options.beforeNetwork === undefined
 				? {}
 				: { beforeNetwork: options.beforeNetwork }),
@@ -1868,12 +1873,14 @@ export class TopicSession<
 	/**
 	 * 宿主 Topic 列表入口的标准正文预热窗口。
 	 *
-	 * #1 只取向下一个 pageSize；中间楼层取前后各一个 pageSize，目标楼层归入
-	 * 向下窗口。所有批次仍走 loadPostsByIds 的缓存、single-flight 与中央后台调度；
-	 * 完整缓存命中时不创建网络请求。
+	 * 显式提供 maximumPostCount 时，以目标楼层为中心选取不超过该值的连续总量；
+	 * 旧调用不提供上限时，#1 只取向下一个 pageSize，中间楼层仍取前后各一个
+	 * pageSize。所有批次都走 loadPostsByIds 的缓存、single-flight 与中央后台调度；
+	 * 完整缓存命中时不创建网络请求，也不挂载 Post DOM。
 	 */
 	async restorePreheatEntry(
 		rawPostNumber: number,
+		maximumPostCount?: number,
 	): Promise<TopicEntryPreheatProgress | null> {
 		this.#assertActive();
 		if (!this.#topic && !this.#streamPostIds.length && !this.#snapshots.posts().length) {
@@ -1883,7 +1890,10 @@ export class TopicSession<
 			this.#restoreIndexes();
 		}
 		if (!this.#streamPostIds.length) return null;
-		const { ids, totalCount } = this.#entryPreheatWindow(rawPostNumber);
+		const { ids, totalCount } = this.#entryPreheatWindow(
+			rawPostNumber,
+			maximumPostCount,
+		);
 		const warmedCount = ids.reduce(
 			(count, postId) => count + Number(this.#postById.has(postId)),
 			0,
@@ -1902,8 +1912,12 @@ export class TopicSession<
 		options: TopicEntryPreheatOptions = {},
 	): Promise<TopicEntryPreheatResult<TPost>> {
 		this.#assertActive();
-		const { onProgress, minimumTotalCount: rawMinimumTotalCount, ...loadOptions } =
-			options;
+		const {
+			onProgress,
+			minimumTotalCount: rawMinimumTotalCount,
+			maximumPostCount,
+			...loadOptions
+		} = options;
 		const minimumTotalCount = nonNegativeInteger(rawMinimumTotalCount);
 		if (
 			minimumTotalCount > Math.max(
@@ -1923,7 +1937,10 @@ export class TopicSession<
 					: { beforeNetwork: loadOptions.beforeNetwork }),
 			});
 		}
-		const { ids, totalCount } = this.#entryPreheatWindow(rawPostNumber);
+		const { ids, totalCount } = this.#entryPreheatWindow(
+			rawPostNumber,
+			maximumPostCount,
+		);
 		if (!this.#streamPostIds.length) {
 			const empty = Object.freeze({
 				posts: Object.freeze([]),
@@ -1971,7 +1988,10 @@ export class TopicSession<
 		});
 	}
 
-	#entryPreheatWindow(rawPostNumber: number): Readonly<{
+	#entryPreheatWindow(
+		rawPostNumber: number,
+		rawMaximumPostCount?: number,
+	): Readonly<{
 		readonly ids: readonly DiscoursePostId[];
 		readonly totalCount: number;
 	}> {
@@ -1986,6 +2006,23 @@ export class TopicSession<
 			return Object.freeze({ ids: Object.freeze([]), totalCount });
 		}
 		const targetIndex = this.#streamIndexForPostNumber(postNumber);
+		if (rawMaximumPostCount !== undefined) {
+			const maximumPostCount = Math.min(
+				this.#streamPostIds.length,
+				positiveInteger(rawMaximumPostCount, 'maximumPostCount'),
+			);
+			const start = Math.max(
+				0,
+				Math.min(
+					this.#streamPostIds.length - maximumPostCount,
+					targetIndex - Math.floor(maximumPostCount / 2),
+				),
+			);
+			return Object.freeze({
+				ids: this.#streamPostIds.slice(start, start + maximumPostCount),
+				totalCount,
+			});
+		}
 		const start = targetIndex <= 0
 			? 0
 			: Math.max(0, targetIndex - this.#pageSize);
@@ -2108,6 +2145,7 @@ export class TopicSession<
 					parentPostId,
 					after,
 					background: profile.background,
+					...(options.business === undefined ? {} : { business: options.business }),
 					...(options.refresh === undefined
 						? {}
 						: { refresh: options.refresh }),
@@ -2724,6 +2762,9 @@ export class TopicSession<
 				...(options.prefetchTier === undefined
 					? {}
 					: { prefetchTier: options.prefetchTier }),
+				...(options.business === undefined
+					? {}
+					: { business: options.business }),
 				...(options.beforeNetwork === undefined
 					? {}
 					: { beforeNetwork: options.beforeNetwork }),

@@ -185,11 +185,13 @@ await adapter.loadPostVotingComments(80, {
 	afterCommentId: 91,
 	refresh: true,
 	background: true,
+	business: 'topic-download',
 	beforeNetwork,
 });
 assert(
 	gateway.collections.at(-1)?.collection === 'post-voting-comments:80' &&
 	gateway.collections.at(-1)?.cursor === 91 &&
+	gateway.collections.at(-1)?.business === 'topic-download' &&
 	gateway.collections.at(-1)?.profile === 'background-prefetch' &&
 	gateway.collections.at(-1)?.beforeNetwork === beforeNetwork &&
 	String(gateway.collections.at(-1)?.input) ===

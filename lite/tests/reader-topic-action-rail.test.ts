@@ -189,8 +189,9 @@ const rail = new ReaderTopicActionRail<TestPost>({
 assert(
 	!rail.host.hidden &&
 		shellRoot.classList.contains('ldp-topic-action-rail-visible') &&
-		rail.downloadButton?.hidden === true,
-	'首帖缺失时仍必须保留操作列占位，但下载入口只在第二段显示',
+		rail.downloadButton?.hidden === true &&
+		rail.summaryButton?.hidden === true,
+	'首帖缺失时仍必须保留操作列占位，但总结与下载入口只在第二段显示',
 );
 
 function setNumberProperty(
@@ -428,12 +429,15 @@ assert(
 	const secondaryToolsGroup = downloadGroup?.querySelector<HTMLElement>(
 		':scope > .ldp-topic-action-rail-secondary-tools',
 	);
+	const summaryBookmarkGroup = rail.host.querySelector<HTMLElement>(
+		'.ldp-topic-action-rail-summary-bookmark-group',
+	);
 	assert(
 		rail.topButton.querySelector('svg[data-icon="arrow-up"]') !== null &&
 		rail.summaryButton?.querySelector('svg[data-icon="sparkles"]') !== null &&
 		rail.summaryButton?.getAttribute('aria-label') ===
 			'AI 总结（LinuxDo 官方 / 自定义）' &&
-		Boolean(rail.summaryButton?.hidden) === false &&
+		Boolean(rail.summaryButton?.hidden) &&
 		rail.toggleButton.querySelector('svg[data-icon="menu-box"]') !== null &&
 			rail.toggleButton.getAttribute('aria-label')?.includes('两段展开') &&
 		rail.downloadButton?.querySelector('svg[data-icon="download"]') !== null &&
@@ -444,7 +448,14 @@ assert(
 				'svg[data-icon="activity"]',
 			) !== null &&
 			rail.userObservationButton?.hidden === true,
-		'第一段必须显示官方 AI 总结，并把下载、岁月史书与用户观察留到第二段',
+		'第一段必须隐藏总结、下载、岁月史书与用户观察，只保留常用阅读动作',
+	);
+	assert(
+		summaryBookmarkGroup?.children[0] === rail.view?.slots.topicFooter &&
+			summaryBookmarkGroup.children[1] === rail.summaryButton &&
+			summaryBookmarkGroup.querySelector('.ldp-topic-bookmark') !== null &&
+			summaryBookmarkGroup.getAttribute('aria-label') === '主题收藏与总结',
+		'总结必须与唯一主题收藏投影进入同一组合，不能复制或接管收藏按钮',
 	);
 	assert(
 		secondaryToolsGroup?.children[0] === rail.downloadButton &&
@@ -552,15 +563,16 @@ assert(
 
 	click(rail.topButton);
 	assert(jumpCount === 1, '回顶按钮必须只调用统一 timeline 跳转端口');
-	click(rail.summaryButton!);
-	assert(summaryCount === 1, '官方 AI 总结按钮必须只调用 Topic 总结浮窗端口');
 	click(rail.toggleButton);
 	assert(
 		rail.host.classList.contains('is-expanded') &&
 			Boolean(downloadGroup?.hidden) === false &&
-			Boolean(rail.summaryButton?.hidden),
-		'第一段点击收纳箱必须隐藏 AI 总结并进入第二段下载分组',
+			Boolean(rail.summaryButton?.hidden) === false &&
+			rail.summaryButton?.parentElement === summaryBookmarkGroup,
+		'第一段点击收纳箱必须进入第二段，并显示收藏与总结组合',
 	);
+	click(rail.summaryButton!);
+	assert(summaryCount === 1, '第二段 AI 总结按钮必须只调用 Topic 总结浮窗端口');
 	click(rail.downloadButton!);
 	assert(
 		downloadCount === 1 && rail.host.classList.contains('is-expanded') &&
@@ -733,11 +745,11 @@ click(rail.toggleButton);
 	click(rail.toggleButton);
 	assert(
 		!rail.host.classList.contains('is-collapsed') &&
-			rail.summaryButton?.hidden === false &&
+			Boolean(rail.summaryButton?.hidden) &&
 			rail.downloadButton?.hidden === true &&
 			downloadGroup?.hidden === true &&
 		patches.some((patch) => patch.mode === 'compact'),
-		'collapsed 模式必须恢复为仅含阅读动作的第一段，下载仍留在第二段',
+		'collapsed 模式必须恢复为仅含阅读动作的第一段，总结与下载仍留在第二段',
 	);
 
 pointer(rail.toggleButton, 'pointerdown', {

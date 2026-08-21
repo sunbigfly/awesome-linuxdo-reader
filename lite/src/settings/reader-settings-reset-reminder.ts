@@ -9,7 +9,7 @@ export const READER_SETTINGS_RESET_REMINDER_STORAGE_KEY =
  * 只有需要用户重新确认默认设置的大改动才递增；普通版本更新不改此值。
  */
 export const READER_SETTINGS_RESET_REMINDER_CAMPAIGN =
-	'settings-contract-2026-08-r4';
+	'settings-contract-2026-08-r5';
 
 export type ReaderSettingsResetReminderResult =
 	| 'skipped'

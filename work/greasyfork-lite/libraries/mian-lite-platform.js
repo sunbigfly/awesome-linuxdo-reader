@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.9
+// @version      1.5.10
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.9 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.5.10 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.9",
+			sourceVersion: "1.5.10",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.9") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.10") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -12502,7 +12502,7 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	  return REQUEST_DECISION_LABELS[decision] ?? REQUEST_WAIT_REASON_LABELS[decision] ?? decision;
 	}
 	function requestContractDiagnostic(event) {
-	  const contract = [event.profile, event.namespace, event.lane].filter(Boolean).join(" / ");
+	  const contract = [event.business, event.profile, event.namespace, event.lane].filter(Boolean).join(" / ");
 	  return [
 	    event.logicalId ? `链 ${event.logicalId}` : "",
 	    contract,
@@ -12574,6 +12574,7 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	    callSite: event.callSite,
 	    controlReason: event.controlReason,
 	    profile: event.profile,
+	    business: event.business,
 	    namespace: event.namespace,
 	    lane: event.lane,
 	    cacheMode: event.cacheMode,
@@ -14056,7 +14057,7 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	    ));
 	    const establishing = baselineSamples.length < 10;
 	    this.#health.dataset.level = establishing ? "normal" : level, this.#healthState.textContent = establishing ? "建立基线" : warnings.length ? level === "danger" ? "资源压力高" : "需要关注" : "采样正常", this.#healthDetail.textContent = establishing ? `最近 12 秒已取得 ${baselineSamples.length}/10 个真实快照。` : warnings.length ? `${warnings.join("；")}。继续观察趋势，回落后会自动恢复。` : "未发现阅读器页面元素快速膨胀、页面共享主线程卡顿或阅读器请求积压；内存估计不参与自动判定。", this.#updated.textContent = `最近快照 ${new Date(current.at).toLocaleTimeString()} · ${current.visibility === "visible" ? "前台" : "后台"} · 仅内存保留`;
-	    const performancePolicy = this.#options.performancePolicySnapshot?.() ?? null, adaptivePolicy = performancePolicy && performancePolicy.preheatMaxConcurrent !== void 0 && performancePolicy.preheatHandoffMaxEntries !== void 0 && performancePolicy.preheatHandoffMaxBytes !== void 0 && performancePolicy.responseMemoryMaxEntries !== void 0 && performancePolicy.responseMemoryMaxBytes !== void 0 && performancePolicy.projectionHydrationBatchSize !== void 0 ? ` · 预热 ${performancePolicy.preheatMaxConcurrent} 路 / 交接 ${performancePolicy.preheatHandoffMaxEntries} 帖 ${formatBytes(performancePolicy.preheatHandoffMaxBytes)} · 响应内存 ${performancePolicy.responseMemoryMaxEntries} 项 ${formatBytes(performancePolicy.responseMemoryMaxBytes)} · 水合批次 ${performancePolicy.projectionHydrationBatchSize}` : "";
+	    const performancePolicy = this.#options.performancePolicySnapshot?.() ?? null, adaptivePolicy = performancePolicy && performancePolicy.readStateRequestsPerMinute !== void 0 && performancePolicy.readStateTimingsPerMinute !== void 0 && performancePolicy.preheatMaxConcurrent !== void 0 && performancePolicy.preheatHandoffMaxEntries !== void 0 && performancePolicy.preheatHandoffMaxBytes !== void 0 && performancePolicy.responseMemoryMaxEntries !== void 0 && performancePolicy.responseMemoryMaxBytes !== void 0 && performancePolicy.projectionHydrationBatchSize !== void 0 ? ` · 已读 ${performancePolicy.readStateRequestsPerMinute} RPM / ${performancePolicy.readStateTimingsPerMinute} TPM · 预热 ${performancePolicy.preheatMaxConcurrent} 路 / 交接 ${performancePolicy.preheatHandoffMaxEntries} 帖 ${formatBytes(performancePolicy.preheatHandoffMaxBytes)} · 响应内存 ${performancePolicy.responseMemoryMaxEntries} 项 ${formatBytes(performancePolicy.responseMemoryMaxBytes)} · 水合批次 ${performancePolicy.projectionHydrationBatchSize}` : "";
 	    this.#performancePolicy.textContent = performancePolicy ? `已含设备与网络自适应：正文批次 ${performancePolicy.pageSize} 楼 · DOM 最多 ${performancePolicy.streamMaxMountedPostCount} 楼 · 屏外预留 ${formatPolicyNumber(performancePolicy.streamOverscanScreens)} 屏 · API 提前 ${formatPolicyNumber(performancePolicy.nestedPrefetchScreens)} 屏 · 本页请求策略上限 ${performancePolicy.requestMaxConcurrent} 路 / ${performancePolicy.requestMinIntervalMs}ms · 窗口目标 ${performancePolicy.requestRateTargetPercent}%${adaptivePolicy}；跨标签与服务器实时约束见请求记录。` : "当前运行环境未提供性能策略快照；下方仍显示实际 DOM、请求与主线程记录。", this.#renderTrendCharts(current), this.#renderEvidence(current, requestEvents);
 	  }
 	  #renderTrendCharts(current) {
@@ -14746,7 +14747,7 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	    return this.#options.document.visibilityState === "hidden" ? "hidden" : "visible";
 	  }
 	}
-}, "0d754f9f2724a35bc1a42dffee2ec7654bbe849fab52c4070c2f7def3504e620");
+}, "2173d0524762c4b4d6fcc4bd6a41041f6bd949cee662e96187f6320b87159b8e");
 
 /* Source: lite/src/network/browser-request-observation.ts */
 runtime.register("src/network/browser-request-observation.js", function(module, exports, require) {
@@ -15546,6 +15547,8 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	      longBudget: policy.longBudget,
 	      minIntervalMs: policy.minIntervalMs,
 	      maxConcurrent: policy.maxConcurrent,
+	      backgroundIdleIntervalMs: this.#backgroundIdleIntervalMs,
+	      backgroundMaxDeferMs: this.#backgroundMaxDeferMs,
 	      instances: Math.max(1, instances.size),
 	      queued: state.intents.length,
 	      active: state.active.length,
@@ -15578,7 +15581,13 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	      policy.maxConcurrent,
 	      this.#maxConcurrent,
 	      "maxConcurrent"
-	    ), this.#transact((state, now) => {
+	    ), policy.backgroundIdleIntervalMs !== void 0 && (this.#backgroundIdleIntervalMs = nonNegativeInteger(
+	      policy.backgroundIdleIntervalMs,
+	      "backgroundIdleIntervalMs"
+	    )), policy.backgroundMaxDeferMs !== void 0 && (this.#backgroundMaxDeferMs = nonNegativeInteger(
+	      policy.backgroundMaxDeferMs,
+	      "backgroundMaxDeferMs"
+	    )), this.#transact((state, now) => {
 	      this.#rememberPolicy(state, now);
 	    }).catch(this.#onError));
 	  }
@@ -16232,7 +16241,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	    (key === null || key === READER_REQUEST_PERMIT_STORAGE_KEY) && (this.#notifyStateChange(), this.#wake());
 	  };
 	}
-}, "eb21f36175a5272574ef096e21964e16bd1d27e1f838bb4b8ef17eace27861dc");
+}, "983e9421d9d83799e92e72ea0759a8511ec9538a4e3c9aa1752c5de3b720664e");
 
 /* Source: lite/src/network/coordinated-request-client.ts */
 runtime.register("src/network/coordinated-request-client.js", function(module, exports, require) {
@@ -16498,6 +16507,7 @@ runtime.register("src/network/coordinated-request-client.js", function(module, e
 	            key: logical.currentAttemptKey,
 	            priority: logical.priority,
 	            lane: options.lane ?? "standard",
+	            ...options.business === void 0 ? {} : { business: options.business },
 	            rateLimitRoute,
 	            ...options.timeoutMs === void 0 ? {} : { timeoutMs: options.timeoutMs },
 	            signal: logical.controller.signal,
@@ -16667,6 +16677,7 @@ runtime.register("src/network/coordinated-request-client.js", function(module, e
 	        callSite: options.callSite ?? "",
 	        logicalId: logical.logicalId,
 	        profile: options.profile ?? "",
+	        business: options.business ?? "",
 	        namespace: options.namespace ?? "",
 	        lane: options.lane ?? "standard",
 	        cacheMode: options.cacheMode ?? "",
@@ -16709,6 +16720,7 @@ runtime.register("src/network/coordinated-request-client.js", function(module, e
 	        callSite: options.callSite ?? "",
 	        logicalId: logical.logicalId,
 	        profile: options.profile ?? "",
+	        business: options.business ?? "",
 	        namespace: options.namespace ?? "",
 	        lane: options.lane ?? "standard",
 	        cacheMode: options.cacheMode ?? "",
@@ -16758,6 +16770,7 @@ runtime.register("src/network/coordinated-request-client.js", function(module, e
 	          controlReason: reason,
 	          logicalId: logical.logicalId,
 	          profile: options.profile ?? "",
+	          business: options.business ?? "",
 	          namespace: options.namespace ?? "",
 	          lane: options.lane ?? "standard",
 	          cacheMode: options.cacheMode ?? "",
@@ -16796,7 +16809,7 @@ runtime.register("src/network/coordinated-request-client.js", function(module, e
 	    return "request-failed";
 	  }
 	}
-}, "2ce85ceb3d5b928980a277ceb62eeea0f4dc7169df41cb7a58cdb63c74a211c4");
+}, "be72fd3801042ccd6e89f8eab4f34711e281e57e3db7c00d09d309c340f74e5d");
 
 /* Source: lite/src/network/discourse-native-read-transport.ts */
 runtime.register("src/network/discourse-native-read-transport.js", function(module, exports, require) {
@@ -17018,7 +17031,7 @@ runtime.register("src/network/domain-request-gateway.js", function(module, expor
 	  DomainRequestGateway: () => DomainRequestGateway
 	});
 	module.exports = __toCommonJS(domain_request_gateway_exports);
-	var import_request_contract = require("./request-contract.js"), import_request_identities = require("./request-identities.js");
+	var import_request_contract = require("./request-contract.js"), import_request_identities = require("./request-identities.js"), import_reader_business_request_policy = require("./reader-business-request-policy.js");
 	const PRIORITY_WEIGHT = Object.freeze({
 	  critical: 0,
 	  interactive: 1,
@@ -17268,7 +17281,11 @@ runtime.register("src/network/domain-request-gateway.js", function(module, expor
 	      ...input.cacheMode === void 0 ? {} : { cacheMode: input.cacheMode },
 	      ...input.timeoutMs === void 0 ? {} : { timeoutMs: input.timeoutMs }
 	    });
-	    if (contract.cacheMode !== "no-store" && !input.cache)
+	    if (input.business !== void 0 && (0, import_reader_business_request_policy.assertReaderBusinessRequestContract)({
+	      business: input.business,
+	      profile: contract.profile,
+	      lane: input.lane
+	    }), contract.cacheMode !== "no-store" && !input.cache)
 	      return Promise.reject(new Error(`${input.profile} 缺少 response cache settings`));
 	    const execution = this.#acquireExecution(contract), traceId = this.#trace?.resolve(input.identity) ?? "", network = async (signal) => {
 	      if (input.beforeNetwork && execution.contract.priority === "background" && (await input.beforeNetwork(signal), signal.aborted))
@@ -17288,6 +17305,7 @@ runtime.register("src/network/domain-request-gateway.js", function(module, expor
 	        suppressAfterChallengeWait: effective.suppressAfterChallengeWait === !0,
 	        callSite: `${effective.profile} / ${input.namespace} / ${input.lane}`,
 	        profile: effective.profile,
+	        ...input.business === void 0 ? {} : { business: input.business },
 	        namespace: input.namespace,
 	        cacheMode: effective.cacheMode,
 	        identity: input.identity,
@@ -17360,7 +17378,7 @@ runtime.register("src/network/domain-request-gateway.js", function(module, expor
 	    execution.consumers = Math.max(0, execution.consumers - 1), execution.consumers === 0 && this.#executions.get(key) === execution && this.#executions.delete(key);
 	  }
 	}
-}, "82af4c6f93c996720dc6c6a5eb66232503a83d9d6d33133fdcde894368195df0");
+}, "14d22b65a40c0661c913ac8f486251abf9de39e3576c01c33ff20fd83ae2e32f");
 
 /* Source: lite/src/network/public-resource-request-adapter.ts */
 runtime.register("src/network/public-resource-request-adapter.js", function(module, exports, require) {
@@ -17495,6 +17513,217 @@ runtime.register("src/network/public-resource-request-adapter.js", function(modu
 	}
 }, "f4ce9f1cb8ba6a9e8c20b379a43ee1d44816760142d61347ee497ed2000549d5");
 
+/* Source: lite/src/network/reader-business-request-config.ts */
+runtime.register("src/network/reader-business-request-config.js", function(module, exports, require) {
+	var reader_business_request_config_exports = {};
+	__export(reader_business_request_config_exports, {
+	  READER_BUSINESS_REQUEST_DEFAULTS: () => READER_BUSINESS_REQUEST_DEFAULTS,
+	  READER_BUSINESS_REQUEST_KINDS: () => READER_BUSINESS_REQUEST_KINDS,
+	  READER_BUSINESS_REQUEST_PARAMETER_LIMITS: () => READER_BUSINESS_REQUEST_PARAMETER_LIMITS,
+	  READER_BUSINESS_REQUEST_PARAMETER_NAMES: () => READER_BUSINESS_REQUEST_PARAMETER_NAMES,
+	  expandReaderBusinessRequestSettings: () => expandReaderBusinessRequestSettings,
+	  flattenReaderBusinessRequestSettings: () => flattenReaderBusinessRequestSettings,
+	  normalizeReaderBusinessRequestSettings: () => normalizeReaderBusinessRequestSettings,
+	  readerBusinessRequestSettingsAreDefault: () => readerBusinessRequestSettingsAreDefault,
+	  readerBusinessRequestSettingsEqual: () => readerBusinessRequestSettingsEqual
+	});
+	module.exports = __toCommonJS(reader_business_request_config_exports);
+	const READER_BUSINESS_REQUEST_KINDS = Object.freeze([
+	  "topic-download",
+	  "user-observation",
+	  "notifications",
+	  "bookmarks"
+	]), READER_BUSINESS_REQUEST_PARAMETER_NAMES = Object.freeze([
+	  "maxConcurrent",
+	  "backgroundMinIntervalMs",
+	  "backgroundRequestsPerMinute"
+	]), READER_BUSINESS_REQUEST_PARAMETER_LIMITS = Object.freeze({
+	  maxConcurrent: Object.freeze({ min: 1, max: 4, integer: !0 }),
+	  backgroundMinIntervalMs: Object.freeze({ min: 80, max: 5e3, integer: !0 }),
+	  backgroundRequestsPerMinute: Object.freeze({ min: 1, max: 120, integer: !0 })
+	});
+	function parameters(maxConcurrent, backgroundMinIntervalMs, backgroundRequestsPerMinute) {
+	  return Object.freeze({
+	    maxConcurrent,
+	    backgroundMinIntervalMs,
+	    backgroundRequestsPerMinute
+	  });
+	}
+	const READER_BUSINESS_REQUEST_DEFAULTS = Object.freeze({
+	  "topic-download": parameters(1, 250, 24),
+	  "user-observation": parameters(1, 250, 24),
+	  notifications: parameters(3, 100, 40),
+	  bookmarks: parameters(2, 150, 40)
+	});
+	function record(value) {
+	  return value !== null && typeof value == "object" && !Array.isArray(value) ? value : Object.freeze({});
+	}
+	function normalizedParameter(name, value, fallback) {
+	  const limit = READER_BUSINESS_REQUEST_PARAMETER_LIMITS[name], numeric = Number(value);
+	  return Number.isFinite(numeric) ? Math.round(Math.min(limit.max, Math.max(limit.min, numeric))) : fallback;
+	}
+	function normalizeReaderBusinessRequestSettings(value) {
+	  const source = record(value);
+	  return Object.freeze(Object.fromEntries(
+	    READER_BUSINESS_REQUEST_KINDS.map((kind) => {
+	      const candidate = record(source[kind]), fallback = READER_BUSINESS_REQUEST_DEFAULTS[kind];
+	      return [kind, Object.freeze({
+	        maxConcurrent: normalizedParameter(
+	          "maxConcurrent",
+	          candidate.maxConcurrent,
+	          fallback.maxConcurrent
+	        ),
+	        backgroundMinIntervalMs: normalizedParameter(
+	          "backgroundMinIntervalMs",
+	          candidate.backgroundMinIntervalMs,
+	          fallback.backgroundMinIntervalMs
+	        ),
+	        backgroundRequestsPerMinute: normalizedParameter(
+	          "backgroundRequestsPerMinute",
+	          candidate.backgroundRequestsPerMinute,
+	          fallback.backgroundRequestsPerMinute
+	        )
+	      })];
+	    })
+	  ));
+	}
+	function flattenReaderBusinessRequestSettings(settings) {
+	  return Object.freeze(Object.fromEntries(
+	    READER_BUSINESS_REQUEST_KINDS.flatMap((kind) => READER_BUSINESS_REQUEST_PARAMETER_NAMES.map((name) => [
+	      `${kind}.${name}`,
+	      settings[kind][name]
+	    ]))
+	  ));
+	}
+	function expandReaderBusinessRequestSettings(values) {
+	  return normalizeReaderBusinessRequestSettings(Object.fromEntries(
+	    READER_BUSINESS_REQUEST_KINDS.map((kind) => [kind, Object.fromEntries(
+	      READER_BUSINESS_REQUEST_PARAMETER_NAMES.map((name) => [
+	        name,
+	        values[`${kind}.${name}`]
+	      ])
+	    )])
+	  ));
+	}
+	function readerBusinessRequestSettingsAreDefault(settings) {
+	  return READER_BUSINESS_REQUEST_KINDS.every((kind) => READER_BUSINESS_REQUEST_PARAMETER_NAMES.every((name) => settings[kind][name] === READER_BUSINESS_REQUEST_DEFAULTS[kind][name]));
+	}
+	function readerBusinessRequestSettingsEqual(left, right) {
+	  return READER_BUSINESS_REQUEST_KINDS.every((kind) => READER_BUSINESS_REQUEST_PARAMETER_NAMES.every((name) => left[kind][name] === right[kind][name]));
+	}
+}, "e71567d2e0649c17435d2703522148f364751f6028afa1788ab3d92fac1b0ba6");
+
+/* Source: lite/src/network/reader-business-request-policy.ts */
+runtime.register("src/network/reader-business-request-policy.js", function(module, exports, require) {
+	var reader_business_request_policy_exports = {};
+	__export(reader_business_request_policy_exports, {
+	  READER_BOOKMARK_REQUEST_POLICY: () => READER_BOOKMARK_REQUEST_POLICY,
+	  READER_BUSINESS_REQUEST_POLICIES: () => READER_BUSINESS_REQUEST_POLICIES,
+	  READER_NOTIFICATION_REQUEST_POLICY: () => READER_NOTIFICATION_REQUEST_POLICY,
+	  READER_TOPIC_DOWNLOAD_REQUEST_POLICY: () => READER_TOPIC_DOWNLOAD_REQUEST_POLICY,
+	  READER_USER_OBSERVATION_REQUEST_POLICY: () => READER_USER_OBSERVATION_REQUEST_POLICY,
+	  assertReaderBusinessRequestContract: () => assertReaderBusinessRequestContract,
+	  readerBusinessRequestKindForAction: () => readerBusinessRequestKindForAction,
+	  readerBusinessRequestPolicy: () => readerBusinessRequestPolicy,
+	  readerBusinessRequestPolicySnapshot: () => readerBusinessRequestPolicySnapshot
+	});
+	module.exports = __toCommonJS(reader_business_request_policy_exports);
+	var import_request_contract = require("./request-contract.js"), import_request_scheduler = require("./request-scheduler.js");
+	function businessPolicy(policy) {
+	  return Object.freeze({
+	    ...policy,
+	    allowedProfiles: Object.freeze([...policy.allowedProfiles]),
+	    lanes: Object.freeze([...policy.lanes])
+	  });
+	}
+	const READER_TOPIC_DOWNLOAD_REQUEST_POLICY = businessPolicy({
+	  kind: "topic-download",
+	  foregroundProfile: "background-prefetch",
+	  warmProfile: "background-prefetch",
+	  backgroundProfile: "background-prefetch",
+	  allowedProfiles: ["background-prefetch"],
+	  lanes: ["topic-batch", "nested-replies", "standard"],
+	  cacheOwner: "canonical-topic",
+	  execution: "idle-resumable"
+	}), READER_USER_OBSERVATION_REQUEST_POLICY = businessPolicy({
+	  kind: "user-observation",
+	  foregroundProfile: "collection-visible",
+	  warmProfile: "background-prefetch",
+	  backgroundProfile: "background-prefetch",
+	  allowedProfiles: ["collection-visible", "background-prefetch"],
+	  lanes: ["standard"],
+	  cacheOwner: "persistent-pages",
+	  execution: "paged-serial"
+	}), READER_NOTIFICATION_REQUEST_POLICY = businessPolicy({
+	  kind: "notifications",
+	  foregroundProfile: "notification-visible",
+	  warmProfile: "surface-prefetch",
+	  backgroundProfile: "background-prefetch",
+	  mutationProfile: "action-critical",
+	  allowedProfiles: [
+	    "notification-visible",
+	    "surface-prefetch",
+	    "background-prefetch",
+	    "collection-visible",
+	    "action-critical"
+	  ],
+	  lanes: ["standard", "topic-batch", "control"],
+	  cacheOwner: "persistent-pages",
+	  execution: "head-burst-history-serial"
+	}), READER_BOOKMARK_REQUEST_POLICY = businessPolicy({
+	  kind: "bookmarks",
+	  foregroundProfile: "collection-visible",
+	  warmProfile: "background-prefetch",
+	  backgroundProfile: "background-prefetch",
+	  mutationProfile: "action-critical",
+	  allowedProfiles: [
+	    "collection-visible",
+	    "background-prefetch",
+	    "action-critical"
+	  ],
+	  lanes: ["standard", "control"],
+	  cacheOwner: "persistent-pages",
+	  execution: "source-parallel-page-serial"
+	}), READER_BUSINESS_REQUEST_POLICIES = Object.freeze([
+	  READER_TOPIC_DOWNLOAD_REQUEST_POLICY,
+	  READER_USER_OBSERVATION_REQUEST_POLICY,
+	  READER_NOTIFICATION_REQUEST_POLICY,
+	  READER_BOOKMARK_REQUEST_POLICY
+	]), POLICY_BY_KIND = new Map(READER_BUSINESS_REQUEST_POLICIES.map((policy) => [policy.kind, policy]));
+	function readerBusinessRequestPolicy(kind) {
+	  const policy = POLICY_BY_KIND.get(kind);
+	  if (!policy) throw new Error(`未知 Reader 业务请求策略：${kind}`);
+	  return policy;
+	}
+	function readerBusinessRequestKindForAction(operationValue) {
+	  const operation = String(operationValue).trim();
+	  if (operation.includes("bookmark")) return "bookmarks";
+	  if (operation === "notification-mark-read") return "notifications";
+	}
+	function assertReaderBusinessRequestContract(input) {
+	  const policy = readerBusinessRequestPolicy(input.business);
+	  if (!policy.allowedProfiles.includes(input.profile))
+	    throw new Error(
+	      `${input.business} 不允许请求 profile ${input.profile}`
+	    );
+	  if (!policy.lanes.includes(input.lane))
+	    throw new Error(`${input.business} 不允许请求车道 ${input.lane}`);
+	}
+	function readerBusinessRequestPolicySnapshot(policy) {
+	  return Object.freeze({
+	    policy,
+	    foreground: (0, import_request_contract.requestProfileContract)(policy.foregroundProfile),
+	    warm: (0, import_request_contract.requestProfileContract)(policy.warmProfile),
+	    background: (0, import_request_contract.requestProfileContract)(policy.backgroundProfile),
+	    ...policy.mutationProfile === void 0 ? {} : { mutation: (0, import_request_contract.requestProfileContract)(policy.mutationProfile) },
+	    laneCaps: Object.freeze(policy.lanes.map((lane) => Object.freeze({
+	      lane,
+	      maxConcurrent: (0, import_request_scheduler.requestLaneConcurrencyCap)(lane)
+	    })))
+	  });
+	}
+}, "70c97833b4d3ffb3e97f2c4863f2b5072e53cce3b165d5c8a7c241f6dac2c448");
+
 /* Source: lite/src/network/reader-host-turnstile-background-controller.ts */
 runtime.register("src/network/reader-host-turnstile-background-controller.js", function(module, exports, require) {
 	var reader_host_turnstile_background_controller_exports = {};
@@ -17602,6 +17831,81 @@ runtime.register("src/network/reader-host-turnstile-background-controller.js", f
 	  }
 	}
 }, "cb526331db246ff1db932aea4f617e893a0884709665189406ddef9c0dd5f699");
+
+/* Source: lite/src/network/reader-request-flow-config.ts */
+runtime.register("src/network/reader-request-flow-config.js", function(module, exports, require) {
+	var reader_request_flow_config_exports = {};
+	__export(reader_request_flow_config_exports, {
+	  READER_REQUEST_FLOW_DEFAULTS: () => READER_REQUEST_FLOW_DEFAULTS,
+	  READER_REQUEST_FLOW_SETTING_LIMITS: () => READER_REQUEST_FLOW_SETTING_LIMITS,
+	  READER_REQUEST_FLOW_SETTING_NAMES: () => READER_REQUEST_FLOW_SETTING_NAMES,
+	  normalizeReaderRequestFlowSettings: () => normalizeReaderRequestFlowSettings,
+	  readerRequestFlowSettingsAreDefault: () => readerRequestFlowSettingsAreDefault,
+	  readerRequestFlowSettingsEqual: () => readerRequestFlowSettingsEqual
+	});
+	module.exports = __toCommonJS(reader_request_flow_config_exports);
+	const READER_REQUEST_FLOW_SETTING_NAMES = Object.freeze([
+	  "backgroundIdleIntervalMs",
+	  "backgroundMaxDeferMs",
+	  "hostPreheatMaxConcurrent",
+	  "queuePrefetchShortLimit",
+	  "queuePrefetchLongLimit",
+	  "bulkBackgroundBudgetPercent",
+	  "nestedBackgroundShortLimit",
+	  "nestedBackgroundLongLimit",
+	  "topicBatchMaxConcurrent",
+	  "nestedRepliesMaxConcurrent",
+	  "userCardMaxConcurrent",
+	  "standardMaxConcurrent"
+	]), READER_REQUEST_FLOW_SETTING_LIMITS = Object.freeze({
+	  backgroundIdleIntervalMs: Object.freeze({ min: 0, max: 1e4 }),
+	  backgroundMaxDeferMs: Object.freeze({ min: 0, max: 6e4 }),
+	  hostPreheatMaxConcurrent: Object.freeze({ min: 1, max: 3 }),
+	  queuePrefetchShortLimit: Object.freeze({ min: 1, max: 50 }),
+	  queuePrefetchLongLimit: Object.freeze({ min: 1, max: 200 }),
+	  bulkBackgroundBudgetPercent: Object.freeze({ min: 10, max: 85 }),
+	  nestedBackgroundShortLimit: Object.freeze({ min: 1, max: 50 }),
+	  nestedBackgroundLongLimit: Object.freeze({ min: 1, max: 200 }),
+	  topicBatchMaxConcurrent: Object.freeze({ min: 1, max: 3 }),
+	  nestedRepliesMaxConcurrent: Object.freeze({ min: 1, max: 2 }),
+	  userCardMaxConcurrent: Object.freeze({ min: 1, max: 2 }),
+	  standardMaxConcurrent: Object.freeze({ min: 1, max: 4 })
+	}), READER_REQUEST_FLOW_DEFAULTS = Object.freeze({
+	  backgroundIdleIntervalMs: 2500,
+	  backgroundMaxDeferMs: 15e3,
+	  hostPreheatMaxConcurrent: 2,
+	  queuePrefetchShortLimit: 4,
+	  queuePrefetchLongLimit: 8,
+	  bulkBackgroundBudgetPercent: 50,
+	  nestedBackgroundShortLimit: 8,
+	  nestedBackgroundLongLimit: 24,
+	  topicBatchMaxConcurrent: 3,
+	  nestedRepliesMaxConcurrent: 2,
+	  userCardMaxConcurrent: 2,
+	  standardMaxConcurrent: 1
+	});
+	function record(value) {
+	  return value !== null && typeof value == "object" && !Array.isArray(value) ? value : Object.freeze({});
+	}
+	function normalizeReaderRequestFlowSettings(value) {
+	  const source = record(value);
+	  return Object.freeze(Object.fromEntries(
+	    READER_REQUEST_FLOW_SETTING_NAMES.map((name) => {
+	      const limit = READER_REQUEST_FLOW_SETTING_LIMITS[name], numeric = Number(source[name]), fallback = READER_REQUEST_FLOW_DEFAULTS[name];
+	      return [
+	        name,
+	        Number.isFinite(numeric) ? Math.round(Math.min(limit.max, Math.max(limit.min, numeric))) : fallback
+	      ];
+	    })
+	  ));
+	}
+	function readerRequestFlowSettingsAreDefault(settings) {
+	  return READER_REQUEST_FLOW_SETTING_NAMES.every((name) => settings[name] === READER_REQUEST_FLOW_DEFAULTS[name]);
+	}
+	function readerRequestFlowSettingsEqual(left, right) {
+	  return READER_REQUEST_FLOW_SETTING_NAMES.every((name) => left[name] === right[name]);
+	}
+}, "aba33b5edf1cd719a8c97ecb66e0da9a0881db4478586f892f0d00e416771313");
 
 /* Source: lite/src/network/request-contract.ts */
 runtime.register("src/network/request-contract.js", function(module, exports, require) {
@@ -18135,6 +18439,7 @@ runtime.register("src/network/request-observer.js", function(module, exports, re
 	      controlReason,
 	      logicalId: diagnosticCode(input.logicalId),
 	      profile: diagnosticCode(input.profile),
+	      business: diagnosticCode(input.business),
 	      namespace: diagnosticCode(input.namespace),
 	      lane: diagnosticCode(input.lane),
 	      cacheMode: diagnosticCode(input.cacheMode),
@@ -18342,7 +18647,7 @@ runtime.register("src/network/request-observer.js", function(module, exports, re
 	    });
 	  }
 	}
-}, "83139c1716364d713b2f3eca34af599da093d34e037b0f139585a9ae92c544b0");
+}, "cdb3c5ef42fcb37ae430a3393bcc1461e1ddc99d755e582cdbf53522d83675b9");
 
 /* Source: lite/src/network/request-rate-limit-policy.ts */
 runtime.register("src/network/request-rate-limit-policy.js", function(module, exports, require) {
@@ -18484,9 +18789,11 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	  RequestControlError: () => RequestControlError,
 	  RequestScheduler: () => RequestScheduler,
 	  RequestStartDeferredError: () => RequestStartDeferredError,
-	  RequestTimeoutError: () => RequestTimeoutError
+	  RequestTimeoutError: () => RequestTimeoutError,
+	  requestLaneConcurrencyCap: () => requestLaneConcurrencyCap
 	});
 	module.exports = __toCommonJS(request_scheduler_exports);
+	var import_reader_business_request_config = require("./reader-business-request-config.js"), import_reader_request_flow_config = require("./reader-request-flow-config.js");
 	const REQUEST_LANES = Object.freeze([
 	  "control",
 	  "topic-batch",
@@ -18503,8 +18810,12 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	  "user-card": 2,
 	  /* 五路预加载之外为滚动到眼前的正文预留一路；共享 permit 仍限制启动。 */
 	  translation: 6,
-	  standard: 1
-	}), PRIORITY_WEIGHT = Object.freeze({
+	  standard: 4
+	});
+	function requestLaneConcurrencyCap(lane) {
+	  return LANE_CONCURRENCY_CAP[lane];
+	}
+	const PRIORITY_WEIGHT = Object.freeze({
 	  critical: 0,
 	  interactive: 1,
 	  nested: 2,
@@ -18553,6 +18864,11 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	  #queue = [];
 	  #tasksByKey = /* @__PURE__ */ new Map();
 	  #activeByLane = /* @__PURE__ */ new Map();
+	  #activeByBusiness = /* @__PURE__ */ new Map();
+	  #businessStarts = /* @__PURE__ */ new Map();
+	  #businessLastStartedAt = /* @__PURE__ */ new Map();
+	  #businessRequestSettings = import_reader_business_request_config.READER_BUSINESS_REQUEST_DEFAULTS;
+	  #requestFlowSettings = import_reader_request_flow_config.READER_REQUEST_FLOW_DEFAULTS;
 	  #activeCount = 0;
 	  #sequence = 0;
 	  #pumpQueued = !1;
@@ -18580,6 +18896,7 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	      if (!evicted && !this.#preemptDroppablePermit({
 	        priority,
 	        lane,
+	        business: options.business ?? null,
 	        droppable: options.droppable === !0
 	      }))
 	        return Promise.reject(new RequestControlError("queue-limit"));
@@ -18592,6 +18909,7 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	      key,
 	      priority,
 	      lane,
+	      business: options.business ?? null,
 	      rateLimitRoute: String(options.rateLimitRoute ?? "").trim(),
 	      sequence: this.#sequence++,
 	      queuedAt,
@@ -18634,10 +18952,23 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	   * 设置切换不得重建 scheduler，否则会丢失 single-flight、排队顺序和当前请求。
 	   */
 	  applyRuntimePolicy(policy) {
-	    this.#disposed || (this.#maxConcurrent = positiveInteger(
-	      policy.maxConcurrent,
-	      "maxConcurrent"
-	    ), this.#queuePump());
+	    if (!this.#disposed) {
+	      if (this.#maxConcurrent = positiveInteger(
+	        policy.maxConcurrent,
+	        "maxConcurrent"
+	      ), policy.businessRequestSettings !== void 0) {
+	        this.#businessRequestSettings = (0, import_reader_business_request_config.normalizeReaderBusinessRequestSettings)(
+	          policy.businessRequestSettings
+	        );
+	        const now = this.#now();
+	        for (const task of this.#queue)
+	          task.deferredWaitReason.startsWith("business:") && (task.notBefore = Math.min(task.notBefore, now), task.deferredWaitReason = "");
+	        this.#pruneBusinessStarts(now);
+	      }
+	      policy.requestFlowSettings !== void 0 && (this.#requestFlowSettings = (0, import_reader_request_flow_config.normalizeReaderRequestFlowSettings)(
+	        policy.requestFlowSettings
+	      )), this.#queuePump();
+	    }
 	  }
 	  promoteQueued(key, priority, droppable) {
 	    const task = this.#tasksByKey.get(String(key));
@@ -18651,6 +18982,7 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	      queueLimit: this.#queueLimit,
 	      disposed: this.#disposed,
 	      queuedKeys: Object.freeze(this.#queue.map((task) => task.key)),
+	      maxConcurrentByLane: this.#laneCounts((lane) => this.#laneConcurrencyCap(lane)),
 	      activeByLane: this.#laneCounts((lane) => this.#activeByLane.get(lane) ?? 0),
 	      queuedByLane: this.#laneCounts((lane) => this.#queue.reduce(
 	        (total, task) => total + (task.lane === lane ? 1 : 0),
@@ -18675,9 +19007,12 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	  #pump() {
 	    if (!(this.#disposed || this.#permitPending))
 	      for (this.#sortQueue(); this.#activeCount < this.#maxConcurrent && this.#queue.length; ) {
-	        const now = this.#now(), nextIndex = this.#queue.findIndex(
-	          (candidate) => candidate.notBefore <= now && this.#taskCanStart(candidate)
-	        );
+	        const now = this.#now(), nextIndex = this.#queue.findIndex((candidate) => {
+	          if (candidate.notBefore > now || !this.#taskCanStart(candidate))
+	            return !1;
+	          const businessWaitMs = this.#businessTimingWaitMs(candidate, now);
+	          return businessWaitMs <= 0 ? !0 : (candidate.notBefore = now + businessWaitMs, candidate.deferredWaitReason = `business:${candidate.business}`, !1);
+	        });
 	        if (nextIndex < 0) {
 	          this.#scheduleDeferredPump(now);
 	          return;
@@ -18762,9 +19097,50 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	  #taskCanStart(task) {
 	    let cap = Math.min(
 	      this.#maxConcurrent,
-	      LANE_CONCURRENCY_CAP[task.lane]
+	      this.#laneConcurrencyCap(task.lane)
 	    );
-	    return task.lane === "topic-batch" && task.priority === "background" && (cap = Math.min(cap, 1)), (this.#activeByLane.get(task.lane) ?? 0) < cap;
+	    return task.lane === "topic-batch" && task.priority === "background" && (cap = Math.min(cap, 1)), (this.#activeByLane.get(task.lane) ?? 0) >= cap ? !1 : task.business === null ? !0 : (this.#activeByBusiness.get(task.business) ?? 0) < this.#businessRequestSettings[task.business].maxConcurrent;
+	  }
+	  #laneConcurrencyCap(lane) {
+	    let target;
+	    switch (lane) {
+	      case "topic-batch":
+	        target = this.#requestFlowSettings.topicBatchMaxConcurrent;
+	        break;
+	      case "nested-replies":
+	        target = this.#requestFlowSettings.nestedRepliesMaxConcurrent;
+	        break;
+	      case "user-card":
+	        target = this.#requestFlowSettings.userCardMaxConcurrent;
+	        break;
+	      case "standard":
+	        target = this.#requestFlowSettings.standardMaxConcurrent;
+	        break;
+	      default:
+	        return LANE_CONCURRENCY_CAP[lane];
+	    }
+	    return Math.min(target, LANE_CONCURRENCY_CAP[lane]);
+	  }
+	  #businessTimingWaitMs(task, now) {
+	    if (task.business === null || task.priority !== "prefetch" && task.priority !== "background") return 0;
+	    const policy = this.#businessRequestSettings[task.business], lastStartedAt = this.#businessLastStartedAt.get(task.business) ?? 0, intervalWaitMs = Math.max(
+	      0,
+	      lastStartedAt + policy.backgroundMinIntervalMs - now
+	    ), starts = this.#recentBusinessStarts(task.business, now), rateWaitMs = starts.length < policy.backgroundRequestsPerMinute ? 0 : Math.max(
+	      0,
+	      starts[starts.length - policy.backgroundRequestsPerMinute] + 6e4 - now
+	    );
+	    return Math.max(0, Math.ceil(intervalWaitMs), Math.ceil(rateWaitMs));
+	  }
+	  #recentBusinessStarts(business, now) {
+	    const starts = this.#businessStarts.get(business) ?? [], minimum = now - 6e4;
+	    let first = 0;
+	    for (; first < starts.length && starts[first] <= minimum; ) first += 1;
+	    return first > 0 && starts.splice(0, first), this.#businessStarts.has(business) || this.#businessStarts.set(business, starts), starts;
+	  }
+	  #pruneBusinessStarts(now) {
+	    for (const business of this.#businessStarts.keys())
+	      this.#recentBusinessStarts(business, now);
 	  }
 	  #laneCounts(read) {
 	    return Object.freeze(Object.fromEntries(
@@ -18781,6 +19157,10 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	      (this.#activeByLane.get(task.lane) ?? 0) + 1
 	    );
 	    const startedAt = this.#now();
+	    task.business !== null && (this.#activeByBusiness.set(
+	      task.business,
+	      (this.#activeByBusiness.get(task.business) ?? 0) + 1
+	    ), (task.priority === "prefetch" || task.priority === "background") && (this.#businessLastStartedAt.set(task.business, startedAt), this.#recentBusinessStarts(task.business, startedAt).push(startedAt)));
 	    try {
 	      const waitReason = String(
 	        permit?.waitReason || task.deferredWaitReason || ""
@@ -18817,7 +19197,14 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	        0,
 	        (this.#activeByLane.get(task.lane) ?? 0) - 1
 	      );
-	      laneActive ? this.#activeByLane.set(task.lane, laneActive) : this.#activeByLane.delete(task.lane), this.#finish(task), this.#queuePump();
+	      if (laneActive ? this.#activeByLane.set(task.lane, laneActive) : this.#activeByLane.delete(task.lane), task.business !== null) {
+	        const businessActive = Math.max(
+	          0,
+	          (this.#activeByBusiness.get(task.business) ?? 0) - 1
+	        );
+	        businessActive ? this.#activeByBusiness.set(task.business, businessActive) : this.#activeByBusiness.delete(task.business);
+	      }
+	      this.#finish(task), this.#queuePump();
 	    }
 	  }
 	  #releasePermit(permit) {
@@ -18836,7 +19223,7 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	    task.state !== "done" && (task.state = "done", task.externalSignal && task.externalAbort && task.externalSignal.removeEventListener("abort", task.externalAbort), task.externalAbort = null, task.controller = null, task.permitRestart = !1, this.#tasksByKey.get(task.key) === task && this.#tasksByKey.delete(task.key), error !== void 0 && task.reject(error));
 	  }
 	}
-}, "327537da25b41fe287048edb5b96f8f0976e42a61bccf41c9cbfa438bc8cc0c7");
+}, "f35a83113374b848e487d73c2eb250f1c4e39f9a6b5aca03a78de4ed55326b86");
 
 /* Source: lite/src/notification/discourse-notification-adapter.ts */
 runtime.register("src/notification/discourse-notification-adapter.js", function(module, exports, require) {
@@ -18846,7 +19233,7 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	  DiscourseNotificationRequestAdapter: () => DiscourseNotificationRequestAdapter
 	});
 	module.exports = __toCommonJS(discourse_notification_adapter_exports);
-	var import_identifiers = require("../discourse/identifiers.js"), import_native_host_api = require("../discourse/native-host-api.js"), import_native_request_descriptors = require("../discourse/native-request-descriptors.js"), import_reader_notification_model = require("./reader-notification-model.js");
+	var import_identifiers = require("../discourse/identifiers.js"), import_native_host_api = require("../discourse/native-host-api.js"), import_native_request_descriptors = require("../discourse/native-request-descriptors.js"), import_reader_business_request_policy = require("../network/reader-business-request-policy.js"), import_reader_notification_model = require("./reader-notification-model.js");
 	const notificationDescriptorBrand = Symbol(
 	  "DiscourseNotificationPageDescriptor"
 	), notificationDescriptors = /* @__PURE__ */ new WeakSet();
@@ -19033,11 +19420,12 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	        });
 	      }
 	      return this.#gateway.loadCollectionPage({
+	        business: import_reader_business_request_policy.READER_NOTIFICATION_REQUEST_POLICY.kind,
 	        authScope: this.authScope,
 	        collection: "notification-topic-taxonomy",
 	        page: 0,
 	        variant: `v1:${topicIdBatch.join(",")}`,
-	        profile: options.background || options.history ? "background-prefetch" : "collection-visible",
+	        profile: options.background || options.history ? import_reader_business_request_policy.READER_NOTIFICATION_REQUEST_POLICY.backgroundProfile : "collection-visible",
 	        input: path,
 	        signal: this.#signal,
 	        timeoutMs: 2e4,
@@ -19083,11 +19471,12 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	    if (!candidate)
 	      throw new Error("合并回复缺少 Discourse topic-id-query 目录");
 	    const payload = await this.#gateway.loadTopicTarget({
+	      business: import_reader_business_request_policy.READER_NOTIFICATION_REQUEST_POLICY.kind,
 	      authScope: this.authScope,
 	      topicId: info.topicId,
 	      operation: "target:around:topic-id-query",
 	      postNumber: info.latestPostNumber,
-	      profile: "background-prefetch",
+	      profile: import_reader_business_request_policy.READER_NOTIFICATION_REQUEST_POLICY.backgroundProfile,
 	      input: candidate.url,
 	      signal: this.#signal,
 	      cacheMode: refresh ? "refresh" : "default",
@@ -19128,7 +19517,7 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	      topicId: info.topicId,
 	      operation: "target:around:topic-id-query",
 	      postNumber: info.latestPostNumber,
-	      profile: "background-prefetch",
+	      profile: import_reader_business_request_policy.READER_NOTIFICATION_REQUEST_POLICY.backgroundProfile,
 	      cache: this.#consolidatedReplyCache(info.topicId)
 	    });
 	    return payload === null ? null : topicPosts(payload);
@@ -19210,14 +19599,15 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	    );
 	    assertNotificationDescriptor(descriptor);
 	    const payload = await this.#gateway.loadNotificationPage({
+	      business: import_reader_business_request_policy.READER_NOTIFICATION_REQUEST_POLICY.kind,
 	      authScope: this.authScope,
 	      group: requestGroup.key,
 	      page,
 	      ...options.refresh ? { parallelHead: !0 } : {},
 	      ...variant ? { variant } : {},
 	      ...options.history ? {
-	        profile: options.visibleHistory ? "surface-prefetch" : "background-prefetch"
-	      } : options.background ? { profile: "surface-prefetch" } : {},
+	        profile: options.visibleHistory ? import_reader_business_request_policy.READER_NOTIFICATION_REQUEST_POLICY.warmProfile : import_reader_business_request_policy.READER_NOTIFICATION_REQUEST_POLICY.backgroundProfile
+	      } : options.background ? { profile: import_reader_business_request_policy.READER_NOTIFICATION_REQUEST_POLICY.warmProfile } : {},
 	      input: descriptor.path,
 	      signal: this.#signal,
 	      ...options.refresh ? { cacheMode: "refresh" } : {},
@@ -19284,7 +19674,7 @@ runtime.register("src/notification/discourse-notification-adapter.js", function(
 	    });
 	  }
 	}
-}, "16087e694cc4a313caf77972cbe30e4930bda605b4d862b94c12edfb8b344b8b");
+}, "fc36ebd03fa8e2debe93c66eea03bc044f2c4d82fa12d4c2762a78cf87f51c94");
 
 /* Source: lite/src/notification/reader-notification-controller.ts */
 runtime.register("src/notification/reader-notification-controller.js", function(module, exports, require) {

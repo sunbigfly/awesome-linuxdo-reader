@@ -247,6 +247,7 @@ export class ReaderTopicActionRail<TPost> {
 	readonly unwantedTopicsButton: HTMLButtonElement | null;
 	readonly userObservationButton: HTMLButtonElement | null;
 	readonly #downloadGroup: HTMLElement | null;
+	readonly #summaryBookmarkGroup: HTMLElement | null;
 	readonly #secondaryToolsGroup: HTMLElement | null;
 	readonly #document: Document;
 	readonly #mount: HTMLElement;
@@ -334,6 +335,21 @@ export class ReaderTopicActionRail<TPost> {
 				'sparkles',
 			)
 			: null;
+		this.#summaryBookmarkGroup = this.summaryButton
+			? element(
+				this.#document,
+				'div',
+				'ldp-topic-action-rail-summary-bookmark-group',
+			)
+			: null;
+		this.#summaryBookmarkGroup?.setAttribute('role', 'group');
+		this.#summaryBookmarkGroup?.setAttribute(
+			'aria-label',
+			'主题收藏与总结',
+		);
+		if (this.summaryButton) {
+			this.#summaryBookmarkGroup?.append(this.summaryButton);
+		}
 		this.toggleButton = this.#button(
 			'ldp-topic-action-rail-toggle',
 			'展开第二段主题操作；本菜单分两段展开',
@@ -411,7 +427,9 @@ export class ReaderTopicActionRail<TPost> {
 		}
 		this.host.append(this.topButton);
 		if (this.#downloadGroup) this.host.append(this.#downloadGroup);
-		if (this.summaryButton) this.host.append(this.summaryButton);
+		if (this.#summaryBookmarkGroup) {
+			this.host.append(this.#summaryBookmarkGroup);
+		}
 		this.host.append(this.toggleButton);
 		this.#mount.append(this.host);
 
@@ -539,12 +557,14 @@ export class ReaderTopicActionRail<TPost> {
 				view.destroy();
 				throw error;
 			}
+			this.#mountSummaryBookmarkGroup(view);
 			this.host.insertBefore(view.slots.root, this.toggleButton);
 			this.#view = view;
 			this.#actions.setTopicActionRailExpanded?.(view, this.#expanded);
 		} else {
 			try {
 				this.#postProjector.render(post, this.#view);
+				this.#mountSummaryBookmarkGroup(this.#view);
 			} catch (error) {
 				this.#onError(error);
 			}
@@ -586,6 +606,24 @@ export class ReaderTopicActionRail<TPost> {
 		button.setAttribute('aria-label', label);
 		button.append(icon(this.#document, iconName));
 		return button;
+	}
+
+	#mountSummaryBookmarkGroup(view: PostView): void {
+		const group = this.#summaryBookmarkGroup;
+		const summary = this.summaryButton;
+		if (!group || !summary) return;
+		const topicFooter = view.slots.topicFooter;
+		if (
+			group.parentElement !== view.slots.root ||
+			topicFooter.parentElement !== group
+		) {
+			/*
+			 * footer 的按钮仍由 ReaderPostActionFeature 唯一维护；rail 只移动整个
+			 * 命名槽位，使收藏与总结共享同一组合容器，不接管按钮投影。
+			 */
+			group.replaceChildren(topicFooter, summary);
+			view.slots.root.append(group);
+		}
 	}
 
 	#onClick(event: Event): void {
@@ -663,7 +701,7 @@ export class ReaderTopicActionRail<TPost> {
 			String(this.#expanded),
 		);
 		if (this.#downloadGroup) this.#downloadGroup.hidden = !this.#expanded;
-		if (this.summaryButton) this.summaryButton.hidden = mode !== 'compact';
+		if (this.summaryButton) this.summaryButton.hidden = !this.#expanded;
 		if (this.downloadButton) this.downloadButton.hidden = !this.#expanded;
 		if (this.chronicleButton) {
 			this.chronicleButton.hidden = !this.#expanded;
@@ -788,7 +826,9 @@ export class ReaderTopicActionRail<TPost> {
 		anchor: ReaderTopicActionRailPosition['x'] | null,
 	): void {
 		const groups = [...this.host.querySelectorAll<HTMLElement>(
-			'.ldp-context-actions-slot,.ldp-topic-action-rail-secondary-tools',
+			'.ldp-context-actions-slot,' +
+				'.ldp-topic-action-rail-summary-bookmark-group,' +
+				'.ldp-topic-action-rail-secondary-tools',
 		)].filter((group) => group.childElementCount > 0);
 		if (!groups.length) {
 			this.host.classList.remove('is-actions-open-left');
@@ -801,8 +841,10 @@ export class ReaderTopicActionRail<TPost> {
 			...groups.map((group) => {
 				const controls = [...group.querySelectorAll<HTMLElement>(
 					':scope > :is(button,.ldp-topic-notification),' +
+					':scope > .ldp-topic-footer-slot > ' +
+						':is(button,.ldp-topic-notification),' +
 					':scope > .ldp-topic-footer-actions > ' +
-					':is(button,.ldp-topic-notification)',
+						':is(button,.ldp-topic-notification)',
 				)].filter((control) =>
 					!control.hidden && control.getAttribute('aria-hidden') !== 'true'
 				).length;

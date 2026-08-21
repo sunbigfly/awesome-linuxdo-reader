@@ -1146,6 +1146,8 @@ export class ReaderUserObservationView {
 		const previousSessionEntry = this.#sessionEntry;
 		const recordsChanged = !previousSessionEntry ||
 			previousSessionEntry.records !== entry.records;
+		const pendingRecordsChanged = !previousSessionEntry ||
+			previousSessionEntry.pendingRecords !== entry.pendingRecords;
 		const storedAvailable = Boolean(
 			this.#pages && entry.storedRecordCount > 0,
 		);
@@ -1153,7 +1155,10 @@ export class ReaderUserObservationView {
 			previousSessionEntry?.username === entry.username
 			? Object.freeze({
 				...entry,
-				records: previousSessionEntry.records,
+				records: this.#mergePendingRecords(
+					entry,
+					previousSessionEntry.records,
+				),
 				recordCount: Math.max(
 					entry.recordCount,
 					previousSessionEntry.recordCount,
@@ -1181,6 +1186,7 @@ export class ReaderUserObservationView {
 		}
 		if (
 			(recordsChanged && !storedProjection) ||
+			pendingRecordsChanged ||
 			metadataProjected ||
 			!this.#detailTabs.childElementCount
 		) {
@@ -1192,6 +1198,31 @@ export class ReaderUserObservationView {
 			this.#renderDetailTimeline(this.#sessionEntry);
 		}
 		void this.#hydrateStoredDetail(entry);
+	}
+
+	#pendingRecords(
+		entry: ReaderUserObservationEntrySnapshot,
+	): readonly ReaderUserActivityRecord[] {
+		const storedSummary = this.#storedSummary?.username === entry.username
+			? this.#storedSummary.summary
+			: null;
+		return storedSummary && storedSummary.total >= entry.recordCount
+			? Object.freeze([])
+			: entry.pendingRecords;
+	}
+
+	#mergePendingRecords(
+		entry: ReaderUserObservationEntrySnapshot,
+		records: readonly ReaderUserActivityRecord[],
+	): readonly ReaderUserActivityRecord[] {
+		const pendingRecords = this.#pendingRecords(entry);
+		if (!pendingRecords.length) return records;
+		const pendingIdentities = new Set(pendingRecords.map((record) =>
+			record.identity));
+		return sortReaderUserActivities([
+			...pendingRecords,
+			...records.filter((record) => !pendingIdentities.has(record.identity)),
+		]);
 	}
 
 	#renderDetailProfile(entry: ReaderUserObservationEntrySnapshot): void {
@@ -1239,6 +1270,9 @@ export class ReaderUserObservationView {
 				? this.#storedSummary.summary
 				: undefined
 		);
+		const pendingRecords = this.#sessionEntry
+			? this.#pendingRecords(this.#sessionEntry)
+			: Object.freeze([]);
 		this.#detailTabs.replaceChildren(...PRIMARY_OBSERVATION_TABS.map(
 			([tab, label]) => {
 				const button = this.#document.createElement('button');
@@ -1247,7 +1281,7 @@ export class ReaderUserObservationView {
 				button.className = tab === this.#activeTab ? 'is-active' : '';
 				button.setAttribute('role', 'tab');
 				button.setAttribute('aria-selected', String(tab === this.#activeTab));
-				const count = storedSummary
+				const storedCount = storedSummary
 					? tab === 'all'
 						? storedSummary.total
 						: tab === 'reaction-like'
@@ -1264,6 +1298,11 @@ export class ReaderUserObservationView {
 								)
 								: storedSummary.counts[tab] ?? 0
 					: this.#recordsByTab.get(tab)?.length ?? 0;
+				const pendingCount = storedSummary
+					? pendingRecords.filter((record) =>
+						readerUserObservationStoredTabIncludesKind(record.kind, tab)).length
+					: 0;
+				const count = storedCount + pendingCount;
 				button.textContent = `${label} ${count}`;
 				return button;
 			},
@@ -1277,7 +1316,6 @@ export class ReaderUserObservationView {
 		const hydrationKey = [
 			entry.username,
 			entry.completedAt,
-			entry.recordCount,
 			entry.storedRecordCount,
 			this.#activeTab,
 			this.#detailSearch.value,
@@ -1360,10 +1398,17 @@ export class ReaderUserObservationView {
 		this.#storedTotal = window.total;
 		this.#storedPage = 0;
 		this.#storedWindowRecords = this.#session.projectTopicMetadata(window.records);
+		const currentEntry = this.#session.entry(entry.username) ?? entry;
 		this.#sessionEntry = Object.freeze({
-			...entry,
-			records: this.#storedWindowRecords,
-			recordCount: summary?.total ?? entry.recordCount,
+			...currentEntry,
+			records: this.#mergePendingRecords(
+				currentEntry,
+				this.#storedWindowRecords,
+			),
+			recordCount: Math.max(
+				currentEntry.recordCount,
+				summary?.total ?? 0,
+			),
 		});
 		this.#indexRecords(this.#sessionEntry);
 		this.#renderDetailTimeline(this.#sessionEntry, window.total);
@@ -2400,7 +2445,7 @@ export class ReaderUserObservationView {
 		this.#visibleLimit = records.length;
 		this.#sessionEntry = Object.freeze({
 			...entry,
-			records,
+			records: this.#mergePendingRecords(entry, records),
 			recordCount: Math.max(entry.recordCount, window.total),
 		});
 		this.#indexRecords(this.#sessionEntry);

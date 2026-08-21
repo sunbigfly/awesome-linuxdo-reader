@@ -312,6 +312,8 @@ firstOwner.applyRuntimePolicy({
 	longBudget: 30,
 	minIntervalMs: 5,
 	maxConcurrent: 2,
+	backgroundIdleIntervalMs: 1_200,
+	backgroundMaxDeferMs: 8_000,
 });
 const hotPermitSnapshot = await firstOwner.snapshot();
 assert(
@@ -319,8 +321,10 @@ assert(
 	hotPermitSnapshot.longBudget === 30 &&
 	hotPermitSnapshot.minIntervalMs === 5 &&
 	hotPermitSnapshot.maxConcurrent === 2 &&
+	hotPermitSnapshot.backgroundIdleIntervalMs === 1_200 &&
+	hotPermitSnapshot.backgroundMaxDeferMs === 8_000 &&
 	hotPermitSnapshot.active === 1,
-	'许可策略热更新必须保留已取得 lease 和共享窗口状态',
+	'许可策略热更新必须采用后台让路设置并保留已取得 lease 与共享窗口状态',
 );
 firstOwner.applyRuntimePolicy({
 	shortBudget: 20,
