@@ -52,7 +52,7 @@
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.2/dist/index.js
 // @require      https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js
-// @require      https://update.greasyfork.org/scripts/590254/1908732/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1908732#sha256=7c5ab5f15411c2c12b1faca5c117552baa098d7ff9c2f5e1369731e74b0436f2
+// @require      https://update.greasyfork.org/scripts/590254/1908817/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1908817#sha256=2127268f52209768a559eb5fec7b2f2003ae23ead306d2fb70d7e3edbf1228c3
 // @require      https://update.greasyfork.org/scripts/591595/1908734/Awesome%20LinuxDo%20Reader%20Lite%20Platform%20Library.js?version=1908734#sha256=b79da519159a1f47957950dc3489690e1f1ff5dfa93eba78d191ba7b797e3931
 // @require      https://update.greasyfork.org/scripts/590255/1908733/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1908733#sha256=a9d07de2ab4cdb756d951a7d273410722102d1fe2c114aaf41e1f9d8a5a23199
 // ==/UserScript==
