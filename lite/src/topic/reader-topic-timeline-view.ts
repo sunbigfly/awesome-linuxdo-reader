@@ -38,7 +38,7 @@ export interface ReaderTopicTimelineViewOptions {
 	readonly readCreatedAt: (postNumber: number) => string | null;
 	readonly readLatestReplyAt: () => string | null;
 	readonly formatRelative: (timestamp: string) => string;
-	readonly reachEnd?: (postNumber: number) => Promise<unknown>;
+	readonly reachEnd?: () => Promise<unknown>;
 	readonly frameScheduler?: ReaderTopicTimelineFrameScheduler;
 	readonly animationFrameScheduler?: ReaderTopicTimelineFrameScheduler;
 	readonly scheduleTimer?: (callback: () => void, delayMs: number) => number;
@@ -118,7 +118,7 @@ export class ReaderTopicTimelineView {
 	readonly #readCreatedAt: (postNumber: number) => string | null;
 	readonly #readLatestReplyAt: () => string | null;
 	readonly #formatRelative: (timestamp: string) => string;
-	readonly #reachEnd: (postNumber: number) => Promise<unknown>;
+	readonly #reachEnd: () => Promise<unknown>;
 	readonly #frameScheduler: ReaderTopicTimelineFrameScheduler;
 	readonly #animationFrameScheduler: ReaderTopicTimelineFrameScheduler;
 	readonly #scheduleTimer: (callback: () => void, delayMs: number) => number;
@@ -558,11 +558,12 @@ export class ReaderTopicTimelineView {
 			) {
 				return;
 			}
-			if (result.status !== 'revealed') {
-				this.#notify('暂时无法拉到帖子底部，可重试');
-				return;
-			}
-			await this.#reachEnd(result.postNumber);
+			/*
+			 * 首次补尾时，数据已进 canonical cache，但树投影可能还没赶上本轮
+			 * reveal，因而短暂返回 unresolved-tree。流尾定位本就不依赖楼层
+			 * DOM；只要本次没被新意图取代，就继续结算物理底部，不要逼用户再点一次。
+			 */
+			await this.#reachEnd();
 		}).catch((error) => {
 			if (this.scope.destroyed) return;
 			this.#report(error);

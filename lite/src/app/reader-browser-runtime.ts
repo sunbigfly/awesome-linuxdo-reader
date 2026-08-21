@@ -5003,8 +5003,8 @@ export class ReaderBrowserRuntime<
 								timestamp(currentTopic().last_posted_at),
 							formatRelative:
 								formatRelative ?? nativeRelativeTime,
-							reachEnd: async (postNumber) => {
-								await value.dom.reachStreamEnd(postNumber);
+							reachEnd: async () => {
+								await value.dom.reachStreamEnd();
 							},
 							notify:
 								notify ??

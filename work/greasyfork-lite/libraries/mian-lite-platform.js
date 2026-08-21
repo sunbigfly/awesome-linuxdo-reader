@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.10
+// @version      1.5.11
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.10 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.5.11 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.10",
+			sourceVersion: "1.5.11",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.10") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.11") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 

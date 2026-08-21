@@ -97,6 +97,7 @@ Object.defineProperty(
 const navigationChanges = new Signal<ReaderTopicNavigationResult>();
 const requests: ReaderTopicNavigationRequest[] = [];
 let delayNextNavigation = false;
+let nextNavigationStatus: ReaderTopicNavigationResult['status'] = 'revealed';
 let resolveDelayedNavigation:
 	| ((result: ReaderTopicNavigationResult) => void)
 	| null = null;
@@ -112,14 +113,18 @@ const navigation = {
 				resolveDelayedNavigation = resolve;
 			});
 		}
+		const status = nextNavigationStatus;
+		nextNavigationStatus = 'revealed';
 		const result: ReaderTopicNavigationResult = Object.freeze({
 			postNumber: discoursePostNumber(request.postNumber),
 			source: request.source,
-			status: 'revealed',
-			rootPostNumber: discoursePostNumber(request.postNumber),
-			mounted: true,
+			status,
+			rootPostNumber: status === 'revealed'
+				? discoursePostNumber(request.postNumber)
+				: null,
+			mounted: status === 'revealed',
 		});
-		navigationChanges.emit(result);
+		if (status === 'revealed') navigationChanges.emit(result);
 		return result;
 	},
 };
@@ -134,7 +139,7 @@ const controller = new ReaderTopicTimelineController({
 	initialPostNumber: 1,
 });
 const notifications: string[] = [];
-const reachedEndPostNumbers: number[] = [];
+let reachedEndCount = 0;
 let relativeLabel = '刚刚';
 const view = new ReaderTopicTimelineView({
 	controller,
@@ -162,8 +167,8 @@ const view = new ReaderTopicTimelineView({
 			: '2026-07-31T00:00:00.000Z',
 	readLatestReplyAt: () => '2026-07-31T00:00:00.000Z',
 	formatRelative: () => relativeLabel,
-	reachEnd: async (postNumber) => {
-		reachedEndPostNumbers.push(postNumber);
+	reachEnd: async () => {
+		reachedEndCount += 1;
 	},
 	notify: (message) => notifications.push(message),
 });
@@ -285,8 +290,9 @@ await Promise.resolve();
 viewNavigablePostNumbers = [1, 5, 10, 19];
 viewNavigablePostNumbersComplete = true;
 controller.refresh();
+nextNavigationStatus = 'unresolved-tree';
 template.topicTimelineRelative.click();
-for (let turn = 0; turn < 8 && reachedEndPostNumbers.length === 0; turn += 1) {
+for (let turn = 0; turn < 8 && reachedEndCount === 0; turn += 1) {
 	await Promise.resolve();
 }
 assert(
@@ -294,12 +300,12 @@ assert(
 	requests[5]?.postNumber === 19 &&
 	requests[5]?.alignment === 'end' &&
 	requests[5]?.highlight === false &&
-	reachedEndPostNumbers.join(',') === '19' &&
+	reachedEndCount === 1 &&
 	template.topicTimelineRelative.getAttribute('aria-label') ===
 		'拉到帖子底部' &&
 	!template.topicTimelineTrack.classList.contains('ldp-timeline-jumping') &&
 	notifications.length === 0,
-	'日期/顶部与相对时间入口必须分别映射首楼和流尾；canonical 尾楼属于嵌套回复时先就绪最后正文根，再直接结算到物理底部，且不播放跨帖滚动',
+	'日期/顶部与相对时间入口必须分别映射首楼和流尾；首次补尾的树投影即使短暂 unresolved，也必须在同一次点击中继续结算物理底部，且不播放跨帖滚动',
 );
 viewNavigablePostNumbers = [1, 5, 10];
 viewNavigablePostNumbersComplete = false;

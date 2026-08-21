@@ -710,17 +710,18 @@ assert(
 	settledAnchor.attempts === 2,
 	'锚点结算必须在连续两个静稳检查均不超过 2px 后才完成',
 );
-const reachedStreamEnd = await coordinator.reachStreamEnd(5, {
+const reachedStreamEnd = await coordinator.reachStreamEnd({
 	tolerancePx: 2,
 	quietMs: 0,
 	maxWaitMs: 100,
 });
 assert(
 	reachedStreamEnd.status === 'settled' &&
+	reachedStreamEnd.errorPx === 0 &&
+	scrollOffset === scrollRange &&
 	!coordinator.streamView.slots.endTip.hidden &&
-	coordinator.streamView.slots.endTip.textContent === '已经见底了~' &&
-	revealEvents.at(-1) === '5:timeline:end',
-	'直接到底必须显示唯一流尾标记，并在迟到高度稳定前持续结算物理最大滚动位置',
+	coordinator.streamView.slots.endTip.textContent === '已经见底了~',
+	'直接到底必须脱离楼层 DOM 存活性，只连续结算物理最大滚动位置并显示唯一流尾标记',
 );
 blockNextAlignmentErrorMs = 10;
 const throttledSettlement = await coordinator.settleRevealedPost(5, {

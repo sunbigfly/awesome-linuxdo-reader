@@ -1326,31 +1326,127 @@ export class ReaderTopicDomCoordinator<
 
 	/**
 	 * 目的性末端跳转不等待顺序 cursor 扫完整帖：直接显示唯一流尾标记，
-	 * 立即写入物理底部，再复用锚点静稳结算跟随迟到的虚拟窗口和内容高度。
+	 * 只连续写入物理最大位置。结算不再依赖最后正文 DOM：该卡片在进入
+	 * 虚拟 gap 后可能正常卸载，若再用它做存活校验就会在正文与 gap 之间往返。
 	 */
 	reachStreamEnd(
-		rawPostNumber: number,
 		settlement: ReaderTopicAnchorSettlementOptions = {},
 	): Promise<ReaderTopicAnchorSettlementResult> {
 		this.#assertActive();
-		const postNumber = discoursePostReference({
-			post_number: rawPostNumber,
-		}).postNumber;
-		const revealOptions: ReaderTopicRevealOptions = Object.freeze({
-			source: 'timeline',
-			alignment: 'end',
-			focus: false,
-			highlight: false,
-		});
+		this.#anchorSettlementController?.abort(new DOMException(
+			'新流尾结算已取代旧交易',
+			'AbortError',
+		));
+		const controller = new AbortController();
+		this.#anchorSettlementController = controller;
+		const tolerancePx = Math.max(0, Number.isFinite(settlement.tolerancePx)
+			? Number(settlement.tolerancePx)
+			: 2);
+		const quietMs = Math.max(0, Number.isFinite(settlement.quietMs)
+			? Number(settlement.quietMs)
+			: 120);
+		const maxWaitMs = Math.max(quietMs, Number.isFinite(settlement.maxWaitMs)
+			? Number(settlement.maxWaitMs)
+			: 2_000);
+		const startedAt = this.#now();
 		this.streamView.revealEndTip();
-		this.frame.flushNow();
-		this.revealPost(postNumber, revealOptions);
-		this.frame.flushNow();
-		return this.settleRevealedPost(
-			postNumber,
-			revealOptions,
-			settlement,
-		);
+		return new Promise((resolve) => {
+			let quietHandle: unknown = null;
+			let deadlineHandle: unknown = null;
+			let attempts = 0;
+			let stablePasses = 0;
+			let lastError: number | null = null;
+			let completed = false;
+			let aligning = false;
+			let releaseWindowChanges: Cleanup = () => {};
+			let releaseUserIntent: Cleanup = () => {};
+			const cancelHandle = (handle: unknown): void => {
+				if (handle !== null) this.#projectionHydrationScheduler.cancel(handle);
+			};
+			const finish = (
+				status: ReaderTopicAnchorSettlementResult['status'],
+			): void => {
+				if (completed) return;
+				completed = true;
+				cancelHandle(quietHandle);
+				cancelHandle(deadlineHandle);
+				releaseWindowChanges();
+				releaseUserIntent();
+				controller.signal.removeEventListener('abort', abortSettlement);
+				if (this.#anchorSettlementController === controller) {
+					this.#anchorSettlementController = null;
+				}
+				resolve(Object.freeze({
+					status,
+					errorPx: lastError,
+					attempts,
+					durationMs: Math.max(0, this.#now() - startedAt),
+				}));
+			};
+			const abortSettlement = (): void => finish('cancelled');
+			const scheduleQuiet = (): void => {
+				cancelHandle(quietHandle);
+				quietHandle = this.#projectionHydrationScheduler.schedule(
+					alignEnd,
+					quietMs,
+				);
+			};
+			const alignEnd = (): void => {
+				quietHandle = null;
+				if (completed || controller.signal.aborted) return;
+				attempts += 1;
+				aligning = true;
+				try {
+					const commit = (): void => {
+						this.frame.flushNow();
+						const range = this.#scrollRange(this.#scroll.readWindowInput());
+						this.#scroll.writeScrollOffset(range);
+						this.frame.flushNow();
+					};
+					if (this.#scroll.withProgrammaticScrollTransaction) {
+						this.#scroll.withProgrammaticScrollTransaction(commit);
+					} else {
+						commit();
+					}
+					const input = this.#scroll.readWindowInput();
+					lastError = Math.abs(this.#scrollRange(input) - input.scrollOffset);
+					stablePasses = lastError <= tolerancePx ? stablePasses + 1 : 0;
+				} catch (error) {
+					this.#onError(error);
+					finish('unavailable');
+					return;
+				} finally {
+					aligning = false;
+				}
+				if (stablePasses >= 2) {
+					finish('settled');
+					return;
+				}
+				scheduleQuiet();
+			};
+			releaseWindowChanges = this.windowChanges.subscribe(() => {
+				if (aligning) return;
+				stablePasses = 0;
+				scheduleQuiet();
+			});
+			releaseUserIntent = this.listenDirectUserScrollIntent(() => {
+				finish('cancelled');
+			});
+			controller.signal.addEventListener('abort', abortSettlement, { once: true });
+			alignEnd();
+			deadlineHandle = this.#projectionHydrationScheduler.schedule(
+				() => {
+					deadlineHandle = null;
+					if (completed) return;
+					const pendingQuiet = quietHandle;
+					quietHandle = null;
+					cancelHandle(pendingQuiet);
+					if (stablePasses > 0 && lastError !== null) alignEnd();
+					if (!completed) finish('timeout');
+				},
+				maxWaitMs,
+			);
+		});
 	}
 
 	#writeVirtualOffset(readOffset: () => number | undefined): boolean {

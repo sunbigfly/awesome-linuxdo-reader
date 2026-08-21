@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.10
+// @version      1.5.11
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.10 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.5.11 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.10",
+			sourceVersion: "1.5.11",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.10") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.11") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -2984,8 +2984,8 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	              },
 	              readLatestReplyAt: () => timestamp(currentTopic().last_posted_at),
 	              formatRelative: formatRelative ?? nativeRelativeTime,
-	              reachEnd: async (postNumber) => {
-	                await value.dom.reachStreamEnd(postNumber);
+	              reachEnd: async () => {
+	                await value.dom.reachStreamEnd();
 	              },
 	              notify: notify ?? ((message) => this.feedback.show(message)),
 	              parentScope: context.scope,
@@ -6290,7 +6290,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    }
 	  });
 	}
-}, "e3a74bd39f6a14144342cc6e3d29293bdac34d3fd6d119c23ca8e99b9eb9447e");
+}, "c3d45f5602f09538182e09b0516ad680e0ecbef8556b595c03f27264ab59104f");
 
 /* Source: lite/src/app/reader-data-runtime.ts */
 runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -23456,23 +23456,73 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	  }
 	  /**
 	   * 目的性末端跳转不等待顺序 cursor 扫完整帖：直接显示唯一流尾标记，
-	   * 立即写入物理底部，再复用锚点静稳结算跟随迟到的虚拟窗口和内容高度。
+	   * 只连续写入物理最大位置。结算不再依赖最后正文 DOM：该卡片在进入
+	   * 虚拟 gap 后可能正常卸载，若再用它做存活校验就会在正文与 gap 之间往返。
 	   */
-	  reachStreamEnd(rawPostNumber, settlement = {}) {
-	    this.#assertActive();
-	    const postNumber = (0, import_identifiers.discoursePostReference)({
-	      post_number: rawPostNumber
-	    }).postNumber, revealOptions = Object.freeze({
-	      source: "timeline",
-	      alignment: "end",
-	      focus: !1,
-	      highlight: !1
+	  reachStreamEnd(settlement = {}) {
+	    this.#assertActive(), this.#anchorSettlementController?.abort(new DOMException(
+	      "新流尾结算已取代旧交易",
+	      "AbortError"
+	    ));
+	    const controller = new AbortController();
+	    this.#anchorSettlementController = controller;
+	    const tolerancePx = Math.max(0, Number.isFinite(settlement.tolerancePx) ? Number(settlement.tolerancePx) : 2), quietMs = Math.max(0, Number.isFinite(settlement.quietMs) ? Number(settlement.quietMs) : 120), maxWaitMs = Math.max(quietMs, Number.isFinite(settlement.maxWaitMs) ? Number(settlement.maxWaitMs) : 2e3), startedAt = this.#now();
+	    return this.streamView.revealEndTip(), new Promise((resolve) => {
+	      let quietHandle = null, deadlineHandle = null, attempts = 0, stablePasses = 0, lastError = null, completed = !1, aligning = !1, releaseWindowChanges = () => {
+	      }, releaseUserIntent = () => {
+	      };
+	      const cancelHandle = (handle) => {
+	        handle !== null && this.#projectionHydrationScheduler.cancel(handle);
+	      }, finish = (status) => {
+	        completed || (completed = !0, cancelHandle(quietHandle), cancelHandle(deadlineHandle), releaseWindowChanges(), releaseUserIntent(), controller.signal.removeEventListener("abort", abortSettlement), this.#anchorSettlementController === controller && (this.#anchorSettlementController = null), resolve(Object.freeze({
+	          status,
+	          errorPx: lastError,
+	          attempts,
+	          durationMs: Math.max(0, this.#now() - startedAt)
+	        })));
+	      }, abortSettlement = () => finish("cancelled"), scheduleQuiet = () => {
+	        cancelHandle(quietHandle), quietHandle = this.#projectionHydrationScheduler.schedule(
+	          alignEnd,
+	          quietMs
+	        );
+	      }, alignEnd = () => {
+	        if (quietHandle = null, !(completed || controller.signal.aborted)) {
+	          attempts += 1, aligning = !0;
+	          try {
+	            const commit = () => {
+	              this.frame.flushNow();
+	              const range = this.#scrollRange(this.#scroll.readWindowInput());
+	              this.#scroll.writeScrollOffset(range), this.frame.flushNow();
+	            };
+	            this.#scroll.withProgrammaticScrollTransaction ? this.#scroll.withProgrammaticScrollTransaction(commit) : commit();
+	            const input = this.#scroll.readWindowInput();
+	            lastError = Math.abs(this.#scrollRange(input) - input.scrollOffset), stablePasses = lastError <= tolerancePx ? stablePasses + 1 : 0;
+	          } catch (error) {
+	            this.#onError(error), finish("unavailable");
+	            return;
+	          } finally {
+	            aligning = !1;
+	          }
+	          if (stablePasses >= 2) {
+	            finish("settled");
+	            return;
+	          }
+	          scheduleQuiet();
+	        }
+	      };
+	      releaseWindowChanges = this.windowChanges.subscribe(() => {
+	        aligning || (stablePasses = 0, scheduleQuiet());
+	      }), releaseUserIntent = this.listenDirectUserScrollIntent(() => {
+	        finish("cancelled");
+	      }), controller.signal.addEventListener("abort", abortSettlement, { once: !0 }), alignEnd(), deadlineHandle = this.#projectionHydrationScheduler.schedule(
+	        () => {
+	          if (deadlineHandle = null, completed) return;
+	          const pendingQuiet = quietHandle;
+	          quietHandle = null, cancelHandle(pendingQuiet), stablePasses > 0 && lastError !== null && alignEnd(), completed || finish("timeout");
+	        },
+	        maxWaitMs
+	      );
 	    });
-	    return this.streamView.revealEndTip(), this.frame.flushNow(), this.revealPost(postNumber, revealOptions), this.frame.flushNow(), this.settleRevealedPost(
-	      postNumber,
-	      revealOptions,
-	      settlement
-	    );
 	  }
 	  #writeVirtualOffset(readOffset) {
 	    let written = !1;
@@ -24108,7 +24158,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	      throw new Error("ReaderTopicDomCoordinator 已销毁");
 	  }
 	}
-}, "6fbbbfa4191e795c53a37f670324f00a10e35780312eb127505b540ca6004f4b");
+}, "16094adfb0139da6c32d66c4e6b8a23aa2218e11c600fe433b10fd6ce018c4ae");
 
 /* Source: lite/src/topic/reader-topic-edit-controller.ts */
 runtime.register("src/topic/reader-topic-edit-controller.js", function(module, exports, require) {
@@ -27796,13 +27846,7 @@ ${date.getMonth() + 1} 月 ${date.getDate()} 日` : "";
 	      focus: !1,
 	      highlight: !1
 	    }).then(async (result) => {
-	      if (!(this.scope.destroyed || result.status === "superseded")) {
-	        if (result.status !== "revealed") {
-	          this.#notify("暂时无法拉到帖子底部，可重试");
-	          return;
-	        }
-	        await this.#reachEnd(result.postNumber);
-	      }
+	      this.scope.destroyed || result.status === "superseded" || await this.#reachEnd();
 	    }).catch((error) => {
 	      this.scope.destroyed || (this.#report(error), this.#notify("拉到帖子底部失败，请重试"));
 	    }));
@@ -27968,7 +28012,7 @@ ${date.getMonth() + 1} 月 ${date.getDate()} 日` : "";
 	      throw new Error("ReaderTopicTimelineView 已销毁");
 	  }
 	}
-}, "d2a21e174d3c45f3cfad5e3883bc995ce1615944ff62f781ee670d4a6e032a2e");
+}, "680a101693f600b5ada7b84031ec86123c847802e95e09c026226ffe212097f5");
 
 /* Source: lite/src/topic/topic-read-request-adapter.ts */
 runtime.register("src/topic/topic-read-request-adapter.js", function(module, exports, require) {
