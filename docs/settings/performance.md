@@ -1,53 +1,98 @@
 ---
 title: 性能与请求调度
-description: 按 Discourse 正文与直属回复 API 调整批量、预知请求、DOM 窗口和共享安全边界。
+description: 调整正文与直属回复预取、DOM 窗口、宿主 Topic 预热、已读 RPM/TPM 和共享安全边界。
 feature_ids: ["READ-001", "READ-002", "SET-012", "SET-013", "SET-014", "SET-015", "SET-023", "MONITOR-003"]
-source_anchors: ["lite/src/settings/reader-performance-settings-form.ts","lite/src/app/reader-performance-policy.ts","lite/src/topic/topic-session.ts","lite/src/topic/reader-topic-flow-controller.ts","lite/src/cache/topic-snapshot-handoff.ts","lite/src/cache/response-repository.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/reader-host-turnstile-background-controller.ts","lite/src/network/request-contract.ts"]
+source_anchors: ["lite/src/settings/reader-performance-settings-form.ts","lite/src/app/reader-performance-policy.ts","lite/src/topic/topic-session.ts","lite/src/topic/reader-topic-flow-controller.ts","lite/src/cache/topic-snapshot-handoff.ts","lite/src/cache/response-repository.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/reader-host-turnstile-background-controller.ts","lite/src/network/request-contract.ts","lite/src/network/reader-request-flow-config.ts","lite/src/network/reader-business-request-config.ts","lite/src/network/reader-business-request-policy.ts","lite/src/network/request-scheduler.ts","lite/src/network/domain-request-gateway.ts"]
 since: 0.1.2
-version: 1.5.9
+version: 1.5.10
 status: current
 last_verified: 2026-08-21
-screenshots: ["/screenshots/guide-09-performance-settings-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png"]
+screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png"]
 ---
 
 # 性能与请求调度
 
 路径：**阅读器标题栏 → 设置 → 性能设置**。
 
-![性能设置页中的预设、主楼层批量和 DOM 窗口](/screenshots/guide-09-performance-settings-v1.5.0.png)
-
-<p class="image-caption">在“设置 → 性能设置”先选预设，再按长帖规模调整批量、预知和 DOM 窗口；更大数值会提高即时占用，不代表更快。</p>
-
-性能设置按当前 Discourse API 管线分成四层；它提供目标上限，不覆盖请求 owner 的固定安全规则：
+性能设置按当前 Discourse API 管线分成八层；全局、请求流与业务数值提供可编辑目标上限，profile、缓存和重试仍是固定安全规则：
 
 1. **正文批量**：`posts.json + post_ids[]` 按前、后或目标楼层补齐近窗缺口，并复用相同 identity 的在途请求。
 2. **树状直属回复**：`posts/{id}/replies.json` 按父楼分页，邻近父楼最多两路候选。
 3. **DOM 窗口**：同时渲染多少楼层。
 4. **共享调度**：所有候选何时启动、是否排队，以及当前请求 profile 如何处理 429 或 Cloudflare。
+5. **已读上报**：`/topics/timings` 的每分钟请求数（RPM）和每分钟楼层条目数（TPM）。
+6. **宿主列表预热**：是否在列表卡片接近视口时准备 Topic 正文，并把快照交给 Reader。
+7. **请求流控制**：设置后台额外让路、队列窗口占用、批量后台占比、预热与四类读取车道的并发目标。
+8. **业务请求策略**：分别设置下载、用户观察、通知、收藏与回应的最大并发、后台最小间隔和后台 RPM，同时展示固定 profile、车道、缓存与重试契约。
 
 调度器不能抵消过大的预取需求；出现请求压力时，先减少需求，再降低并发。
 
-## 预设
+## 默认参数
 
-| 参数 | 省流 | 自动（默认） | 快速预取（实验） |
+性能设置不再提供省流、自动、快速预取和自定义四档，打开面板后直接显示可编辑参数。新配置及“恢复默认”采用当前实测配置：正文每批 32 层、视口外 1 屏、同时挂载 64 层、API 提前 2 屏、共享并发 3 路、启动间隔 100 ms、窗口预算 85%、已读 10 RPM / 240 TPM、每个宿主 Topic 预热 24 层。“后台暂停宿主 Turnstile”默认关闭。
+
+保存后当前与后续阅读器立即采用；已经启动的普通请求自然完成。任一负载目标高于默认值时仍显示卡顿与 429 风险，但不会改写输入，也不会绕过自适应和共享请求安全规则。不确定设备或站点余量时直接使用“恢复默认”。
+
+## 业务请求策略
+
+性能设置为下载、用户观察、用户通知、收藏与回应四类业务分别提供三个可保存参数。保存后不重建 Scheduler：尚未启动和后续请求立即使用新值，已经启动的请求自然完成。设置参与导入导出和 WebDAV `preferences` 同步。
+
+| 业务 | 默认最大并发 | 默认后台最小间隔 | 默认后台 RPM |
 | --- | ---: | ---: | ---: |
-| 每批正文楼层 | 24 | 48 | 64 |
-| 视口外挂载缓冲 | 1 屏 | 1.5 屏 | 2 屏 |
-| 同时挂载楼层上限 | 48 | 80 | 96 |
-| API 提前加载距离 | 1.25 屏 | 2.5 屏 | 3 屏 |
-| 共享总并发上限 | 2 | 3 | 4 |
-| API 启动保护间隔 | 180 ms | 100 ms | 80 ms |
-| API 窗口预算占用 | 75% | 85% | 90% |
+| Topic 下载 | 1 路 | 250 ms | 24 |
+| 用户观察 | 1 路 | 250 ms | 24 |
+| 用户通知 | 3 路 | 100 ms | 40 |
+| 收藏与回应 | 2 路 | 150 ms | 40 |
 
-三档不是只切换名称：上表七项目标都会形成不同的运行策略，并分别进入正文批次、虚拟 DOM、近窗预知、中央 scheduler 与跨标签 permit。设备、网络或更严格的共享规则可以让最终生效值下调，但设置层不会反向放宽这些 owner。
+最大并发范围为 1–4 路，作用于单个 Reader 实例内该业务的活动请求；实际值还会取业务目标、接口车道上限、全局总并发和跨标签许可中的最严格结果。后台最小间隔范围为 80–5000 ms，后台 RPM 范围为 1–120；二者只限制 `prefetch` / `background` 的实际启动尝试，重试也计入 RPM，不延后新的可见请求或关键写操作。
 
-“快速预取”是实验档，不作为普通推荐；选择它或把任一自定义目标调得比“自动”更激进时，设置页会提示卡顿与 429 风险。提示不修改目标值，也不替代运行时安全规则。
+下列 profile、执行方式、缓存和 429/Cloudflare 语义仍由 `ReaderBusinessRequestPolicy` 与请求 contract 固定管理，不能从设置中改成不安全组合；每条请求会把业务身份写入请求记录，便于按业务归因。
 
-任何手动改动都会进入“自定义”。保存后当前与后续阅读器立即采用；已经启动的请求自然完成。不确定设备或站点余量时使用“自动（推荐）”，出现卡顿或频繁 429 时切回“自动”或“省流”。
+| 业务 | 前台或任务策略 | 后台策略 | 执行与缓存 |
+| --- | --- | --- | --- |
+| Topic 下载 | 用户启动后仍按可丢弃后台请求取得真实缺口 | background，429 不自动重试 | 空闲启动、可恢复；复用 canonical Topic 正文 |
+| 用户观察 | collection-visible，可见请求保留 | background，可丢弃 | 单来源分页顺序；持久分页缓存 |
+| 用户通知 | notification-visible；头页刷新可用批次车道 | 打开期 surface-prefetch，关闭后 background | 头页批次、历史顺序；持久分页缓存 |
+| 收藏与回应 | collection-visible；收藏写操作走 action-critical | background，可丢弃 | 来源可并行、单来源分页顺序；持久分页缓存 |
+
+这里的业务 RPM 是客户端目标，不是 Linux Do 提供的独立额度；车道上限也是本地服务成本边界。所有业务仍共用同一个 Gateway、single-flight、Scheduler、全局并发、跨标签 10 秒/60 秒许可、429 `Retry-After` 和 Cloudflare 恢复，任何业务参数都不能绕过这些安全契约。
+
+## 请求流控制目标
+
+过去分散在 permit、预热 owner 和 Scheduler 内的流控目标现已进入同一性能设置事务；保存后当前排队请求和后续请求热应用，已经启动的请求自然完成。
+
+| 参数 | 范围 | 默认 |
+| --- | ---: | ---: |
+| 后台空闲启动间隔 | 0–10000 ms | 2500 ms |
+| 后台最长额外让路 | 0–60000 ms | 15000 ms |
+| 宿主 Topic 预热并发 | 1–3 路 | 2 路 |
+| 阅读队列 10 秒 / 60 秒请求目标 | 1–50 / 1–200 | 4 / 8 |
+| 批量后台窗口占用比例 | 10%–85% | 50% |
+| 后台直属回复 10 秒 / 60 秒目标 | 1–50 / 1–200 | 8 / 24 |
+| 正文 / 直属回复 / 用户卡片 / 标准读取车道 | 1–3 / 1–2 / 1–2 / 1–4 路 | 3 / 2 / 2 / 1 路 |
+
+这些值是可调目标，不是绕过安全层的开关。控制写车道、请求 identity、single-flight、缓存、请求 profile、重试次数、429 `Retry-After`、Cloudflare 闸门、跨标签 10 秒/60 秒账本和队列容量仍是固定契约；实际运行值取用户目标与所有固定边界中的最严格结果。
 
 ## 自适应内存与前台优先
 
-“自动”档位还应用不额外暴露为设置项的运行时保护：宿主预热最多 2 个候选，前台最多 1 个后台预热槽；完成快照交接最多保留 3 个主题、8 MiB、60 秒；通用响应内存最多保留 72 条、16 MiB；状态投影恢复按单批处理。设备能力、页面压力或共享调度规则可以继续收紧这些值，日志记录会显示最终生效策略。
+默认参数还应用固定运行时保护：前台最多 1 个后台预热槽；完成快照交接最多保留 3 个主题、8 MiB、60 秒；通用响应内存最多保留 72 条、16 MiB；状态投影恢复按单批处理。设备能力、页面压力或共享调度规则可以继续收紧用户目标，日志记录会显示最终生效策略。
+
+## 宿主 Topic 列表预热
+
+“预热宿主 Topic 列表”默认开启。列表卡片接近视口时会通过统一请求链准备正文；Reader 打开、切换或直接滚动不会再暂停其他 Topic 的预热，Reader 前台仍最多只使用一个后台预热槽。当前正在 Reader 中阅读的同一 Topic 不会重复预热。
+
+开启时会显示“预热楼层数”，范围 1–128，默认 24。该数值表示每个 Topic 围绕历史位置或链接目标准备的连续正文总量；预热只写入 canonical 数据缓存和一次性交接快照，不会在宿主列表创建隐藏 Post DOM。修改后会中止旧窗口、释放旧交接并按新总量重新预热。
+
+关闭后会立即中止宿主列表的联网预热、释放一次性交接快照，并在卡片状态行显示“预热已关闭”；重新开启后从当前近视口卡片和 canonical 缓存恢复。该偏好参与设置导入导出和 WebDAV `preferences` 同步。
+
+## 已读上报 RPM / TPM
+
+已读队列仍按单批最多 20 层合并，并新增两个同账号、跨标签的滚动 60 秒硬上限：
+
+- **RPM**：`/topics/timings` 请求数/分钟，默认 10；
+- **TPM**：timings 已读楼层条目数/分钟，默认 240；这里的 T 表示 timing，不是模型 token。
+
+达到任一上限时，pending 楼层保留到窗口释放，不会先标成服务器已确认；设置保存后会热应用到当前和后续 Topic。Discourse 公开文档给出的默认全局限制是每 IP 200 请求/分钟、50 请求/10 秒，但站点管理员可以修改；Linux Do 没有公开 `/topics/timings` 专属数值。因此默认值是保守的客户端预算，不冒充站点私有额度，所有请求仍继续服从共享 10 秒/60 秒账本、429 `Retry-After` 与 Cloudflare 恢复规则。参见 [Discourse 全局限流设置](https://meta.discourse.org/t/available-settings-for-global-rate-limits-and-throttling/78612)。
 
 ## 宿主后台 Turnstile（实验）
 
@@ -100,10 +145,13 @@ screenshots: ["/screenshots/guide-09-performance-settings-v1.5.0.png", "/screens
 | 共享总并发上限 | 1–4 路 | 全站天花板；正文与树状车道各最多两路候选 |
 | API 启动保护间隔 | 80–500 ms | 正常状态的最快启动间隔 |
 | API 窗口预算比例 | 50%–95% | 10 秒/60 秒固定边界的目标比例 |
+| 已读请求上限（RPM） | 1–60 | 同账号跨标签滚动一分钟内的 `/topics/timings` 请求数 |
+| 已读楼层上限（TPM） | 20–1200 | 同账号跨标签滚动一分钟内提交的 timing 楼层条目数 |
+| 宿主 Topic 预热楼层数 | 1–128 | 每个近视口 Topic 准备的连续正文总量；默认 24，不创建隐藏 DOM |
 
 多个阅读器实例采用更严格值。宿主页面自己的 API 请求也会纳入共享账本，阅读器主动避让。
 
-后台请求继续服从当前实现的空闲单飞、额外让路和可丢弃规则；这些固定保护不是性能设置字段。服务器响应中的额度字段只进入诊断，不会自动学习并改写上表目标。
+后台请求继续服从当前实现的空闲单飞和可丢弃规则；额外让路、预取窗口与读取车道目标由“请求流控制目标”设置，固定安全契约仍不可关闭。服务器响应中的额度字段只进入诊断，不会自动学习并改写用户目标。
 
 ## 429 与恢复
 
@@ -119,4 +167,4 @@ screenshots: ["/screenshots/guide-09-performance-settings-v1.5.0.png", "/screens
 - 符合条件的 Cloudflare 信号进入跨标签共享硬闸门；后台与明确隔离的请求只结束自身，不抢开验证窗口；
 - 验证恢复后仍重新经过优先级、并发、固定窗口和当前业务入口，不会突发补发旧队列。
 
-不要仅为了“更快”把总并发和预取同时调到最大。频繁 429 时先切回“自动”或“省流”，再到“日志记录 → 请求记录”核对 profile、最终决策、窗口占用与 Cloudflare 状态。
+不要仅为了“更快”把总并发、预取距离和预热楼层数同时调到最大。频繁 429 时先恢复默认，再到“日志记录 → 请求记录”核对 profile、最终决策、窗口占用与 Cloudflare 状态。

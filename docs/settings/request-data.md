@@ -2,9 +2,9 @@
 title: 日志记录
 description: 在请求记录和性能记录间切换，查看请求预算、异常、P95、页面元素、长任务和网络趋势。
 feature_ids: ["MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
-source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/monitor/reader-pipeline-observer.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/request-observer.ts"]
+source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/monitor/reader-pipeline-observer.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/request-observer.ts","lite/src/network/reader-business-request-policy.ts"]
 since: 0.1.2
-version: 1.5.9
+version: 1.5.10
 status: current
 last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-10-resource-monitor-v1.5.0.png"]
@@ -57,7 +57,7 @@ screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/gui
 - 方法、脱敏路径和查询键形状；
 - 排队、许可、派发、执行阶段及毫秒耗时；
 - 来源、类型、优先级、HTTP 状态、`Retry-After` 和限流响应字段；
-- 阅读器请求的逻辑链编号、profile、namespace、车道、缓存模式和安全 identity；
+- 阅读器请求的逻辑链编号、业务身份、profile、namespace、车道、缓存模式和安全 identity；
 - 同一逻辑请求的尝试序号、429/过盾重试预算、单飞合并人数、优先级晋升和最终决策。
 
 同一逻辑链的多次实际尝试使用相同链编号，便于判断是一次请求重试，还是页面又发起了新的请求。原站或浏览器资源只能被动观测时，可能没有逻辑链和 typed contract，面板会标为“未标记契约”，不会猜测发起 owner。

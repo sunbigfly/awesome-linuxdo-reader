@@ -4,7 +4,7 @@ description: 从主题列表打开阅读器，完成阅读、导航、互动、�
 feature_ids: ["CORE-002", "CORE-003", "CORE-006"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/userscript/main-lite-bootstrap.ts","lite/src/state/reader-preferences-schema.ts"]
 since: 0.1.2
-version: 1.5.9
+version: 1.5.10
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png"]
@@ -71,5 +71,5 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png"]
 4. 只有确实需要跨设备数据时才配置 [WebDAV 同步](/settings/webdav-sync)；它默认关闭，并按 12 类数据分别启用。
 
 ::: tip
-第一次使用建议保留“均衡”性能预设。只有在明确出现等待或资源压力时，再按[性能与请求调度](/settings/performance)调整。
+第一次使用建议保留当前性能默认值。只有在明确出现等待或资源压力时，再按[性能与请求调度](/settings/performance)逐项调整；不确定时使用“恢复默认”。
 :::

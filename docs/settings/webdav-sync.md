@@ -4,7 +4,7 @@ description: 使用坚果云等标准 WebDAV 在设备之间合并同步历史�
 feature_ids: ["DATA-006", "DATA-007"]
 source_anchors: ["lite/src/settings/reader-webdav-settings-form.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-category-ports.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-history-cache-port.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts"]
 since: 1.1.0
-version: 1.5.9
+version: 1.5.10
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-29-webdav-sync-v1.5.0.svg", "/screenshots/guide-32-webdav-sync-v1.5.0.png"]
@@ -80,7 +80,7 @@ WebDAV 用一个小型 JSON 文件在多个浏览器之间交换普通本地记�
 
 1.3.0 生成的离线 Topic v1 清单没有归档状态，1.5.0 会只把该缺失字段升级为“无存档状态”，完整 HTML 仍可导入；字段存在但类型错误时则拒绝，不能把损坏内容当成旧版迁移。主同步文件、十二类 payload、离线清单和加密 API Key 信封都使用精确字段与类型校验；加密盐、IV、迭代次数或密文结构被篡改时会在解密和本机应用前停止。
 
-设置偏好按同一份远端快照联合校验，而不是把每个字段脱离兄弟字段单独判断。图片配置中的“共享三种形态”与浮窗/全屏/移动比例、性能预设与细项、回复树联动开关等组合会一起归一化；合法组合可以跨设备导入，字符串冒充数字、未知字段或内部不一致的组合仍会在写入和本机应用前拒绝。
+设置偏好按同一份远端快照联合校验，而不是把每个字段脱离兄弟字段单独判断。图片配置中的“共享三种形态”与浮窗/全屏/移动比例、全局性能参数、四类业务请求参数、宿主预热开关/楼层数、回复树联动开关等组合会一起归一化；合法组合可以跨设备导入，字符串冒充数字、未知字段或内部不一致的组合仍会在写入和本机应用前拒绝。
 
 ## 与导入、重置和缓存清理的联动
 

@@ -4,7 +4,7 @@ description: 按安装、打开、跳楼、图片、429、配置和缓存分类�
 feature_ids: ["CORE-005", "MEDIA-013", "DATA-003", "MONITOR-003", "MONITOR-004", "TROUBLE-001", "TROUBLE-002", "TROUBLE-003", "TROUBLE-004", "TROUBLE-005", "TROUBLE-006"]
 source_anchors: ["lite/src/components/reader-icon.ts","lite/src/app/reader-browser-runtime.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/network/browser-shared-request-permit.ts","lite/userscript.meta.txt","lite/src/topic/topic-session.ts","lite/src/media/reader-topic-image-index.ts","lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts"]
 since: 0.1.2
-version: 1.5.9
+version: 1.5.10
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-19-image-lightbox-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-13-data-management-v1.5.0.png"]
@@ -21,7 +21,7 @@ screenshots: ["/screenshots/guide-19-image-lightbox-v1.5.0.png", "/screenshots/g
 | 打开过程中显示自动恢复 | 等待当前倒计时；反复失败时查看请求数据 |
 | 跳不到楼层 | 过滤状态、目标是否删除、虚拟窗口是否仍在补齐 |
 | 图片打不开 | 预览是否存在、原图源、来源楼层、资源缓存 |
-| 持续 429 | 请求数据、端点冷却、性能预设、Cloudflare |
+| 持续 429 | 请求数据、端点冷却、性能设置是否高于默认、Cloudflare |
 | 设置异常 | 先导出，再按范围重置 |
 | 页面卡顿 | DOM 数量、媒体、长任务、当前性能设置 |
 
@@ -31,7 +31,7 @@ screenshots: ["/screenshots/guide-19-image-lightbox-v1.5.0.png", "/screenshots/g
 2. 确认脚本和站点访问权限已启用。
 3. 安装/更新后完整刷新。
 4. 停用重复的正式版、本地版或同类接管脚本。
-5. 从脚本管理器确认版本为 `1.5.9`；若仍显示旧版，让脚本管理器检查更新并完整刷新页面。
+5. 从脚本管理器确认版本为 `1.5.10`；若仍显示旧版，让脚本管理器检查更新并完整刷新页面。
 
 ## 主题或楼层无法加载
 

@@ -4,10 +4,10 @@ description: 汇总全部设置项、范围、默认值、生效时机和数据�
 feature_ids: ["SET-012", "SET-013", "SET-014", "SET-015", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021", "DATA-006", "DATA-007"]
 source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree.ts","lite/src/network/request-scheduler.ts","lite/src/dom/reply-tree-repository.ts","lite/src/post/boost-copy-rule.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.5.9
+version: 1.5.10
 status: current
 last_verified: 2026-08-18
-screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png", "/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/guide-04-font-settings-v1.5.0.png", "/screenshots/guide-05-layout-settings-v1.5.0.png", "/screenshots/guide-07-appearance-settings-v1.5.0.png", "/screenshots/guide-09-performance-settings-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-27-shortcuts-v1.5.0.png", "/screenshots/guide-28-applicable-sites-v1.5.0.png", "/screenshots/guide-32-webdav-sync-v1.5.0.png"]
+screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png", "/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/guide-04-font-settings-v1.5.0.png", "/screenshots/guide-05-layout-settings-v1.5.0.png", "/screenshots/guide-07-appearance-settings-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-27-shortcuts-v1.5.0.png", "/screenshots/guide-28-applicable-sites-v1.5.0.png", "/screenshots/guide-32-webdav-sync-v1.5.0.png"]
 ---
 
 # 完整设置参考
@@ -73,13 +73,19 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png", "/screenshot
 
 | 设置 | 范围 | 默认 |
 | --- | --- | --- |
-| 每批正文楼层 | 12–64 条 | 48 |
-| 视口外挂载缓冲 | 0.25–3 屏 | 1.5 |
-| 同时挂载楼层 | 24–128 个 | 80 |
-| API 提前加载距离 | 1–3 屏 | 2.5 |
+| 每批正文楼层 | 12–64 条 | 32 |
+| 视口外挂载缓冲 | 0.25–3 屏 | 1 |
+| 同时挂载楼层 | 24–128 个 | 64 |
+| API 提前加载距离 | 1–3 屏 | 2 |
 | 共享总并发上限 | 1–4 路 | 3 |
+| API 启动保护间隔 | 80–500 ms | 100 |
+| API 窗口预算比例 | 50%–95% | 85% |
+| 已读请求上限（RPM） | 1–60 | 10 |
+| 已读楼层上限（TPM） | 20–1200 | 240 |
+| 宿主 Topic 预热楼层数 | 1–128 | 24 |
+| 后台暂停宿主 Turnstile | 开/关 | 关 |
 
-“快速预取”为实验档；任一自定义目标比“自动”更激进时会显示卡顿与 429 风险提示，但不会自动改写用户保存的数值。
+性能设置直接展示逐项参数，不再提供四档预设；默认值采用当前实测配置。任一负载目标高于默认值时会显示卡顿与 429 风险提示，但不会自动改写用户保存的数值。请求流控制另提供后台让路、队列 10 秒/60 秒目标、批量后台窗口占比、直属回复窗口、宿主预热并发，以及正文、直属回复、用户卡片和标准读取车道并发目标。Topic 下载、用户观察、用户通知、收藏与回应各自可设置 1–4 路最大并发、80–5000 ms 后台最小间隔和 1–120 后台 RPM。保存后热应用，并参与设置导入导出与 WebDAV `preferences` 同步；控制写车道、identity、single-flight、缓存、请求 profile、重试、429 和 Cloudflare 仍是固定安全契约。
 
 ## 翻译设置
 
@@ -112,11 +118,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png", "/screenshot
 
 完整的首次同步、删除传播与故障判断见 [WebDAV 同步](/settings/webdav-sync)。
 离线 HTML 的范围选择、查看与本地删除边界见 [离线 Topic 下载](/guide/offline-topic)。
-| API 启动保护间隔 | 80–500 ms | 100 |
-| API 窗口预算比例 | 50%–95% | 85% |
-
-正文 `post_ids[]` 近窗最多排入两批最近缺口，后台请求只在全局空闲时单飞；树状 `replies.json` 最多两路。
-两者仍共用上表总并发、跨标签固定窗口、宿主请求计账和 429/Cloudflare 契约。性能设置保存后立即生效，但不能覆盖后台让路、请求 profile 或共享硬闸门。
+正文 `post_ids[]` 近窗最多排入两批最近缺口，后台请求只在全局空闲时单飞；树状 `replies.json` 最多两路候选。两者仍共用总并发、跨标签固定窗口、宿主请求计账和 429/Cloudflare 契约。性能与请求流设置保存后立即生效，但不能覆盖请求 profile 或共享硬闸门。
 
 ## 资源监控与请求数据
 

@@ -4,7 +4,7 @@ description: 使用时间轴、只看楼主、历史前后切换、多主题队�
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014", "READ-016"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-only-op-controller.ts","lite/src/topic/reader-topic-navigation-controller.ts","lite/src/topic/reader-topic-dom-coordinator.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/reading/read-state-controller.ts","lite/src/live/topic-live-controller.ts","lite/src/components/reader-icon.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/topic/reader-topic-header.ts"]
 since: 0.1.2
-version: 1.5.9
+version: 1.5.10
 status: current
 last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png", "/screenshots/guide-21-reading-queue-v1.5.0.png"]
@@ -70,13 +70,14 @@ Reader 工作区获得焦点时，`ArrowUp`、`ArrowDown`、`PageUp`、`PageDown
 当前版本的已读上报：
 
 - 每批最多提交 20 个楼层；
+- 默认限制为同账号跨标签 10 RPM / 240 TPM；TPM 表示每分钟 timing 楼层条目数，达到任一滚动分钟上限时保留 pending 到窗口释放；
 - 优先处理显式目标与当前可见楼层，其余已经成功预加载的候选使用后台优先级补充提交；
 - 同一主题同一批成功请求在 60 秒内不会重复提交；
 - 新候选会立即调度，不再额外等待固定 15 秒；浏览器锁仍避免多个标签页同时发送；
 - 阅读器打开时抑制原站 screen-track 对同一主题的重复计时；
 - 只有服务器确认成功后才写入权威已读状态；失败楼层保留待重试，Cloudflare 验证失败时仍保持未确认。
 
-这些约束让已预加载楼层尽快进入 `/topics/timings` 批次，同时用优先级、每批上限、成功指纹和跨标签锁减少重复请求。乐观已读不等于服务器已经确认；联网失败时最终状态仍以原站为准。
+这些约束让已预加载楼层有界进入 `/topics/timings` 批次，同时用优先级、每批上限、RPM/TPM、成功指纹和跨标签锁减少重复请求。乐观已读不等于服务器已经确认；联网失败时最终状态仍以原站为准。
 
 新回复到达时，主题活动与阅读器状态会同步；只有确认存在新楼层时，接近底部的阅读器才自动跟随，单纯刷新元数据不会改变滚动位置。原站创建或编辑帖子、切换回应时，阅读器还会让对应主题、楼层和回应缓存失效，当前主题则就地合并权威楼层。消息跳转会等待目标进入虚拟窗口后再定位。
 

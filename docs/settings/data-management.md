@@ -2,9 +2,9 @@
 title: 数据管理
 description: 导出、导入与恢复设置，管理六类本地缓存与浏览器 localStorage 空间。
 feature_ids: ["DATA-001", "DATA-002", "DATA-007"]
-source_anchors: ["lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/cache-observer.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/browser-asset-cache.ts","lite/src/settings/reader-browser-storage-management.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
+source_anchors: ["lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/settings/reader-settings-reset-reminder.ts","lite/src/cache/cache-observer.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/browser-asset-cache.ts","lite/src/settings/reader-browser-storage-management.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.5.9
+version: 1.5.10
 status: current
 last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-30-settings-update-reminder-v1.5.0.png"]
@@ -54,7 +54,7 @@ v9 导出文件包含当前版本规范化的 85 项图片、字体、布局、�
 
 该操作经确认后覆盖普通偏好、其他适用站点、翻译和 WebDAV 设置并立即投影，同时清除本机翻译 API Key、WebDAV 用户名与密码，并把阅读队列图标恢复到默认位置。用户在“不想再看”中的手动收纳与自动过滤历史，以及自动过滤的总开关、主题类别、Label、OP 用户、字符规则和楼层用户都会保留。阅读队列条目、浏览历史、离线下载、缓存和原站账号数据也不会被删除。若只需恢复某一类设置，进入对应面板使用该面板自己的“恢复默认”。
 
-v1.5.3 会再次为已有设置的用户递增“大版本设置更新”提示锚点；即使已经消费过 v1.5.0 的提示锁，升级后仍会收到一次新版默认值建议。选择“保留当前设置”不会改动任何值；选择“恢复默认值”会重置普通设置和阅读队列图标位置，但保留“不想再看”的手动记录、自动过滤历史与自动过滤设置，也不删除队列条目、历史、下载记录、帖子缓存或账号数据。新用户首次安装仍保持静默，同一锚点不会重复提示。
+v1.5.10 会再次为已有设置的用户递增“大版本设置更新”提示锚点；即使已经消费过此前版本的提示锁，升级后仍会收到一次新版默认值建议。选择“保留当前设置”不会改动任何值；选择“恢复默认值”会重置普通设置和阅读队列图标位置，但保留“不想再看”的手动记录、自动过滤历史与自动过滤设置，也不删除队列条目、历史、下载记录、帖子缓存或账号数据。新用户首次安装仍保持静默，同一锚点不会重复提示。
 
 ![当前设置契约的一次性更新提示与重置入口](/screenshots/guide-30-settings-update-reminder-v1.5.0.png)
 

@@ -4,10 +4,10 @@ description: 选择浮窗、全屏、嵌入或移动布局，理解多主题队�
 feature_ids: ["CORE-003", "CORE-004", "CORE-005", "CORE-006", "READ-001", "READ-002"]
 source_anchors: ["lite/src/userscript/main-lite-bootstrap.ts","lite/src/discourse/native-host-api.ts","lite/src/state/reader-preferences-schema.ts","lite/src/shell/reader-workspace.ts","lite/src/components/reader-icon.ts","lite/src/queue/reader-open-queue-session.ts","lite/src/dom/reply-tree.ts","lite/src/topic/topic-session.ts"]
 since: 0.1.2
-version: 1.5.9
+version: 1.5.10
 status: current
 last_verified: 2026-08-18
-screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/guide-05-layout-settings-v1.5.0.png", "/screenshots/guide-21-reading-queue-v1.5.0.png", "/screenshots/guide-09-performance-settings-v1.5.0.png"]
+screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/guide-05-layout-settings-v1.5.0.png", "/screenshots/guide-21-reading-queue-v1.5.0.png"]
 ---
 
 # 阅读模式与工作区
@@ -51,9 +51,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/
 3. 超出挂载上限的远处楼层卸载，必要时保留高度占位。
 4. 回到相应位置时从内存或缓存重新渲染。
 
-![主楼层批量、DOM 窗口和挂载上限设置](/screenshots/guide-09-performance-settings-v1.5.0.png)
-
-<p class="image-caption">长帖滚动不顺畅时进入“设置 → 性能设置”，优先检查每批楼层、DOM 前后窗口和挂载上限，不要一次把所有值调到最大。</p>
+长帖滚动不顺畅时进入“设置 → 性能设置”，优先检查每批楼层、DOM 前后窗口和挂载上限，不要一次把所有值调到最大；不确定时使用“恢复默认”。
 
 因此，快速跳楼时可能短暂看到等待区域；这通常表示数据或节点正在补齐，不等同于丢失阅读位置。
 

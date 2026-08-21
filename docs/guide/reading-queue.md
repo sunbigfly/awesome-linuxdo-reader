@@ -4,7 +4,7 @@ description: 从主题列表建立多主题阅读队列，管理后台预加载�
 feature_ids: ["CORE-006"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/userscript/reader-host-topic-preheat-controller.ts","lite/src/cache/topic-snapshot-handoff.ts"]
 since: 0.1.2
-version: 1.5.9
+version: 1.5.10
 status: current
 last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-21-reading-queue-v1.5.0.png", "/screenshots/guide-24-reading-queue-entry-v1.5.0.png", "/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png"]
@@ -104,7 +104,7 @@ screenshots: ["/screenshots/guide-21-reading-queue-v1.5.0.png", "/screenshots/gu
 - 从历史位置继续时，同时保留主题开头的一部分楼层和当前位置附近的楼层；
 - 对预加载范围内的楼中楼继续分页补齐；
 - 相关图片最多使用 2 路并发写入图片缓存；
-- Reader 正在打开或切换主题、用户直接滚动时，宿主预热会暂停或中止；前台最多只保留 1 个后台预热槽；
+- Reader 正在打开、切换主题或用户直接滚动时，其他宿主 Topic 继续预热；前台最多只保留 1 个后台预热槽，当前阅读的同一 Topic 不重复预热；
 - 完成快照的内存交接最多保留 3 个主题、8 MiB、60 秒，超限、过期或命中主题失效后立即释放；
 - 当前主题、宿主操作和可见楼层始终优先于队列预加载。
 

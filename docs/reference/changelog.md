@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.5.9
+version: 1.5.10
 status: current
 last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
@@ -15,6 +15,30 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.5.10 — 请求流控制与性能策略
+
+核验日期：2026-08-21。
+
+### 性能设置与预热
+
+- 性能设置移除省流、自动、快速预取和自定义四档，直接展示逐项参数；默认值沿用当前推荐基线，“恢复默认”一次回到该组参数。
+- 打开、切换和用户直接滚动期间不再暂停其他宿主 Topic 预热；设置中可关闭宿主列表预热且默认开启，Reader 前台最多保留 1 个后台预热槽。
+- 宿主列表预热增加每 Topic 1–128 层的连续正文总量设置，默认 24；预热只写 canonical 数据缓存和交接快照，不创建隐藏 Post DOM。
+- 已有设置的用户升级到 1.5.10 后会收到一次恢复默认值提示，可选择保留当前设置；新用户保持静默，恢复只重置普通设置与阅读队列图标位置，不删除“不想再看”、队列条目、历史、离线下载、缓存或账号数据。
+
+### 已读上报与业务请求
+
+- 已读 `/topics/timings` 队列增加同账号跨标签的滚动分钟上限，默认 10 RPM / 240 TPM；达到上限时保留 pending，继续服从共享窗口、429 与 Cloudflare 契约。
+- 下载、用户观察、用户通知、收藏与回应统一登记业务请求策略；性能设置可分别调整最大并发、后台最小间隔和后台 RPM，固定 profile、车道、缓存与重试边界继续显性展示，请求记录同步携带业务身份。
+- 后台让路、请求窗口占用、批量预取比例、预热和读取车道并发目标统一进入请求流控制设置，保存后热应用到尚未启动及后续请求。
+
+### 发布状态
+
+- `1.5.10` 已发布到 Greasy Fork：主 Loader 固定版本为 `1908737`，加载 Core `1908732`、Platform `1908734` 与 Features `1908733`。
+- 固定 Loader 原始文件为 4,174 字节，SHA-256 `8e68608f93c26dbb09a16de4df54e05b72eab19809502cb57c8b8aa2d19858af`；移除平台加入的 `@downloadURL none` 后为 4,153 字节，SHA-256 `389f849812a9605980326eb0ba95d6244f1073b3461810d9ecf24a2a33912ff0`，与仓库 Loader 逐字节一致。
+- Core 为 1,660,451 字节，SHA-256 `7c5ab5f15411c2c12b1faca5c117552baa098d7ff9c2f5e1369731e74b0436f2`；Platform 为 1,344,488 字节，SHA-256 `b79da519159a1f47957950dc3489690e1f1ff5dfa93eba78d191ba7b797e3931`；Features 为 2,096,052 字节，SHA-256 `a9d07de2ab4cdb756d951a7d273410722102d1fe2c114aaf41e1f9d8a5a23199`。
+- CSS 固定到 Git `1c40185f28a0c2493c498da2898178b16b648e82`：622,157 字节，SHA-256 `99ffa9100f6dba1dea3a5fe8e4a273a07fa14eb5d791340914a14afccc4812f9`；源码与分包 runtime 各通过 230 文件契约，300 个模块通过 parity 门禁。
 
 ## 1.5.9 — 阅读流水线、缓存交接与锚点结算
 
