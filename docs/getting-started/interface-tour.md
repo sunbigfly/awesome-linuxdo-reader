@@ -4,7 +4,7 @@ description: 认识宿主区、标题栏、阅读队列、阅读流、时间轴�
 feature_ids: ["CORE-002", "CORE-006", "READ-013", "MEDIA-014", "COLLECT-008", "DATA-006"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-header.ts","lite/src/translation/reader-translation-controller.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/shell/reader-floating-window-frame.ts","lite/src/settings/reader-webdav-settings-form.ts"]
 since: 0.1.2
-version: 1.5.10
+version: 1.5.11
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/guide-05-layout-settings-v1.5.0.png"]

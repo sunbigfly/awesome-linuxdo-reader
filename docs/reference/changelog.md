@@ -4,9 +4,9 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.5.10
+version: 1.5.11
 status: current
-last_verified: 2026-08-21
+last_verified: 2026-08-22
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ---
 
@@ -15,6 +15,22 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.5.11 — 时间轴流尾静稳结算
+
+核验日期：2026-08-22。
+
+### 流尾定位
+
+- “拉到帖子底部”改为直接连续结算 Reader 的物理最大滚动位置，不再依赖最后一个正文卡片持续挂载；虚拟窗口把末楼正常卸载为 gap 时，不会在正文与占位之间来回跳动。
+- 首次补齐 canonical 尾段后，即使回复树投影短暂返回未就绪，也会在同一次点击中继续完成见底结算；新导航或用户直接滚动仍会取消旧交易。
+
+### 发布状态
+
+- `1.5.11` 已发布到 Greasy Fork：主 Loader 固定版本为 `1908857`，加载 Core `1908854`、Platform `1908856` 与 Features `1908855`。
+- 固定 Loader 原始文件为 4,174 字节，SHA-256 `6f99f0b42ec7c897c5b60b1e152b376a65667ecb948bbcd5ed01520b6ac1164f`；移除平台加入的 `@downloadURL none` 后为 4,153 字节，SHA-256 `306d95ab39e0724c87175115255e19e5a70b5a42184d378f83482e8d7df42c59`，与仓库 Loader 逐字节一致。
+- Core 为 1,670,656 字节，SHA-256 `50233764e589986904b8ff672a62d397a24bcdfc5fb2f4b5dd57e2286ec96b15`；Platform 为 1,344,488 字节，SHA-256 `aff265e0cf41f44681da9a96145797e668159e28ae5519b687d2f730f97e6101`；Features 为 2,096,052 字节，SHA-256 `99281d3a1c8e23fac471e20fc9b604cfe6f4e7e971d1ab32f4d619e2f848f98f`。
+- CSS 继续固定到 Git `1c40185f28a0c2493c498da2898178b16b648e82`：622,157 字节，SHA-256 `99ffa9100f6dba1dea3a5fe8e4a273a07fa14eb5d791340914a14afccc4812f9`；源码与分包 runtime 各通过 230 文件契约，301 个模块通过 parity 门禁。
 
 ## 1.5.10 — 请求流控制与性能策略
 
