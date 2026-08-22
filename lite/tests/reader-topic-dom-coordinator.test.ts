@@ -1254,6 +1254,13 @@ const hydrationPosts = new Map<number, TestPost>([
 		username: 'grandchild',
 		cooked: 'grandchild',
 	}],
+	[4, {
+		id: 204,
+		post_number: 4,
+		reply_to_post_number: 3,
+		username: 'great-grandchild',
+		cooked: 'great-grandchild',
+	}],
 ]);
 let hydrationNow = 1_000;
 let hydrationLastUserScrollAt = 0;
@@ -1261,9 +1268,15 @@ let hydrationScrollOffset = 0;
 let hydrationScrollDirection: -1 | 0 | 1 = 0;
 let hydrationOverscanAfterScreens = 0;
 let hydrationMaxMountedPostCount = 1;
+let hydrationProjectionSyncs = 0;
 const hydrationScrollListener = {
 	value: null as (() => void) | null,
 };
+const hydrationObservedRoots = new Set<Element>();
+let hydrationRootMeasurementCallback: ((entries: readonly Readonly<{
+	target: Element;
+	blockSize: number;
+}>[]) => void) | null = null;
 let hydrationTaskSequence = 0;
 let hydrationViewportMutationBegins = 0;
 let hydrationViewportMutationRestores = 0;
@@ -1372,12 +1385,24 @@ const hydrationCoordinator = new ReaderTopicDomCoordinator({
 		detachRoot(_root, postNumber) {
 			hydrationNodeEvents.push(`detach:${postNumber}`);
 		},
+		syncProjection() {
+			hydrationProjectionSyncs += 1;
+		},
 	}],
-	observerFactory: () => ({
-		observe() {},
-		unobserve() {},
-		disconnect() {},
-	}),
+	observerFactory: (callback) => {
+		hydrationRootMeasurementCallback = callback;
+		return {
+			observe(target) {
+				hydrationObservedRoots.add(target);
+			},
+			unobserve(target) {
+				hydrationObservedRoots.delete(target);
+			},
+			disconnect() {
+				hydrationObservedRoots.clear();
+			},
+		};
+	},
 	frameScheduler: {
 		request: () => 1,
 		cancel() {},
@@ -1409,6 +1434,7 @@ const hydrationCoordinator = new ReaderTopicDomCoordinator({
 		},
 	},
 	readDirectReplyPrefetchIdleMs: () => 180,
+	readProjectionHydrationBatchSize: () => 2,
 	now: () => hydrationNow,
 });
 
@@ -1421,15 +1447,20 @@ assert(
 hydrationLastUserScrollAt = hydrationNow;
 hydrationScrollOffset = 300;
 hydrationScrollDirection = 1;
-hydrationOverscanAfterScreens = 1;
-hydrationMaxMountedPostCount = 3;
+hydrationOverscanAfterScreens = 2;
+hydrationMaxMountedPostCount = 4;
 hydrationScrollListener.value?.();
 hydrationCoordinator.flushNow();
 const visibleChild = hydrationCoordinator.domOwner.view(2)?.slots.root;
 const pendingGrandchild = hydrationCoordinator.domOwner.view(3)?.slots.root;
+const pendingGreatGrandchild =
+	hydrationCoordinator.domOwner.view(4)?.slots.root;
 const hiddenAncestor = hydrationCoordinator.domOwner.view(1)?.slots.root;
-if (!hiddenAncestor) throw new Error('祖先骨架未挂载');
+if (!hiddenAncestor || !pendingGreatGrandchild) {
+	throw new Error('祖先或前向水合骨架未挂载');
+}
 const hydrationProjectionTaskDueAt = [...projectionTasks.values()][0]?.dueAt;
+const projectionSyncsBeforeHydrationBatch = hydrationProjectionSyncs;
 assert(
 	visibleChild?.classList.contains('ldp-post-projection-pending') === false &&
 		hydrationRenderCounts.get(2) === 1 &&
@@ -1439,6 +1470,10 @@ assert(
 		pendingGrandchild?.classList.contains('ldp-post-projection-pending') === true &&
 		!hydrationRenderCounts.has(3) &&
 		pendingGrandchild.hasAttribute('aria-busy') &&
+		pendingGreatGrandchild.classList.contains(
+			'ldp-post-projection-pending',
+		) &&
+		!hydrationRenderCounts.has(4) &&
 		!hydrationNodeEvents.includes('attach:3') &&
 		projectionTasks.size === 1 &&
 		hydrationProjectionTaskDueAt === hydrationNow + 16,
@@ -1453,15 +1488,21 @@ nextProjectionTask[1].callback();
 hydrationCoordinator.flushNow();
 assert(
 	pendingGrandchild.classList.contains('ldp-post-projection-pending') === false &&
+		pendingGreatGrandchild.classList.contains(
+			'ldp-post-projection-pending',
+		) === false &&
 		hydrationRenderCounts.get(3) === 1 &&
+		hydrationRenderCounts.get(4) === 1 &&
 		pendingGrandchild.querySelector('.ldp-content')?.textContent ===
 			'grandchild' &&
 		!pendingGrandchild.hasAttribute('aria-busy') &&
 		hydrationNodeEvents.includes('attach:3') &&
+		hydrationNodeEvents.includes('attach:4') &&
+		hydrationProjectionSyncs === projectionSyncsBeforeHydrationBatch + 1 &&
 		hydrationViewportMutationBegins === 1 &&
 		hydrationViewportMutationRestores === 1 &&
 		Number(projectionTasks.size) === 0,
-	'滚动前方预备正文必须逐帧单批物化、经物理高度事务提交并恢复节点 feature，不能依赖估算坐标跳过补偿',
+	'滚动前方预备正文必须按批次共用一次投影同步和物理高度事务，不能逐楼层重复提交或依赖估算坐标跳过补偿',
 );
 assert(
 	hiddenAncestor.classList.contains('ldp-virtual-ancestor-shell'),
@@ -1492,6 +1533,34 @@ assert(
 			'data-target-post-number',
 		) === '2',
 	'可见子楼层正文已到但祖先正文缺失时，必须补最上层缺口并在同一物理 spacer 显示骨架，不能停放子树后留下无状态空白',
+);
+const hydrationObservedRoot = hydrationObservedRoots.values().next().value;
+if (!hydrationObservedRoot || !hydrationRootMeasurementCallback) {
+	throw new Error('水合回归用例未建立根尺寸观察');
+}
+const previousHydrationRootSize = hydrationCoordinator.layout.blockSizeOf(1)!;
+const deferredHydrationRootSize = previousHydrationRootSize + 120;
+hydrationLastUserScrollAt = hydrationNow;
+hydrationRootMeasurementCallback([{
+	target: hydrationObservedRoot,
+	blockSize: deferredHydrationRootSize,
+}]);
+assert(
+	hydrationCoordinator.layout.blockSizeOf(1) === previousHydrationRootSize &&
+		hydrationIdleTasks.size === 1,
+	'活跃滚动中的请求水合尺寸必须只保留最后样本，不能立即改写虚拟根高并争抢 scrollTop',
+);
+const deferredMeasurementTask = [...hydrationIdleTasks.entries()][0];
+if (!deferredMeasurementTask) throw new Error('延迟尺寸提交未排入 idle 队列');
+hydrationIdleTasks.delete(deferredMeasurementTask[0]);
+hydrationNow = deferredMeasurementTask[1].dueAt;
+deferredMeasurementTask[1].callback();
+await Promise.resolve();
+assert(
+	(hydrationCoordinator.layout.blockSizeOf(1) ?? 0) >
+		previousHydrationRootSize &&
+		Number(hydrationIdleTasks.size) === 0,
+	'滚动停稳后必须一次提交最后根高样本及当前树边缘占位，不能丢失请求后的真实 DOM 尺寸',
 );
 hydrationCoordinator.destroy();
 assert(

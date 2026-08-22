@@ -411,6 +411,12 @@ assert(
 		template.headerActionsToggle.getAttribute('aria-expanded') === 'true',
 	'窄屏触控必须点击展开右上角收纳操作，不能依赖 hover',
 );
+template.titleActions.dispatchEvent(new shellWindow.Event('pointerleave'));
+assert(
+	template.titleActions.classList.contains('is-expanded') &&
+		template.headerActionsToggle.getAttribute('aria-expanded') === 'true',
+	'窄屏触控结束产生 pointerleave 时不得提前收起操作层并让 click 穿透到底层标题',
+);
 template.headerActionsToggle.click();
 Object.defineProperty(shellWindow, 'matchMedia', {
 	configurable: true,

@@ -397,6 +397,7 @@ export class ReaderTopicScrollAdapter {
 	#pendingScrollOffset: number | null = null;
 	#scrollOffsetDirty = false;
 	#scrollFrame = 0;
+	#scrollFrameHinted = false;
 	#lastUserScrollAt = 0;
 	#lastUserScrollDirection: ReaderTopicScrollDirection = 0;
 	#userScrollSessionActive = false;
@@ -515,15 +516,25 @@ export class ReaderTopicScrollAdapter {
 			this.#scrollRoot,
 			'scroll',
 			() => {
-				if (this.#claimScrollOnlyUserInput()) {
+				const actualOffset = finiteNonNegative(this.#scrollRoot.scrollTop);
+				if (this.#claimScrollOnlyUserInput(actualOffset)) {
 					this.#markUserScrollProgress();
 				}
+				/* 已由唯一 owner 同步登记的 scrollTop 回声无需再排空帧。 */
+				if (Math.abs(actualOffset - this.#scrollOffset) < 0.5) return;
 				/*
 				 * scroll 事件发生时上一虚拟帧可能刚改完 DOM；在这里同步读取
 				 * scrollTop 会强制完成整棵树布局。事件只登记坐标已变化，统一到
-				 * 已安排的下一 rAF 读取；确需提前消费的补偿/窗口读取才按需刷新。
+				 * 已安排的下一 rAF 读取；但本帧要先给虚拟 DOM 一个合并提示，
+				 * 否则 touch/scrollbar 会先等 scroll adapter 一帧、再等 DOM owner
+				 * 一帧。DOM frame 真正读取时再消费最后一个 scrollTop，不在事件中
+				 * 扫描楼层或强制布局。
 				 */
 				this.#scrollOffsetDirty = true;
+				if (!this.#scrollFrame && !this.#scrollFrameHinted) {
+					this.#scrollFrameHinted = true;
+					this.#notifyWindowChange();
+				}
 				this.#scheduleScrollCommit();
 			},
 			{ passive: true },
@@ -643,9 +654,9 @@ export class ReaderTopicScrollAdapter {
 			});
 		});
 		this.scope.add(() => {
-			if (!this.#scrollFrame) return;
-			this.#cancelFrame(this.#scrollFrame);
+			if (this.#scrollFrame) this.#cancelFrame(this.#scrollFrame);
 			this.#scrollFrame = 0;
+			this.#scrollFrameHinted = false;
 			this.#pendingScrollOffset = null;
 			this.#scrollOffsetDirty = false;
 		});
@@ -1403,8 +1414,7 @@ export class ReaderTopicScrollAdapter {
 		return actualOffset;
 	}
 
-	#claimScrollOnlyUserInput(): boolean {
-		const actualOffset = finiteNonNegative(this.#scrollRoot.scrollTop);
+	#claimScrollOnlyUserInput(actualOffset: number): boolean {
 		const internalOffset = this.#internalScrollWriteOffset;
 		this.#internalScrollWriteOffset = null;
 		if (
@@ -1487,12 +1497,14 @@ export class ReaderTopicScrollAdapter {
 		const handle = this.#requestFrame(() => {
 			completed = true;
 			this.#scrollFrame = 0;
+			const hinted = this.#scrollFrameHinted;
+			this.#scrollFrameHinted = false;
 			if (this.scope.destroyed) return;
 			const scrollOffset = this.#refreshPendingScrollOffset();
 			this.#pendingScrollOffset = null;
 			if (scrollOffset === this.#scrollOffset) return;
 			this.#scrollOffset = scrollOffset;
-			this.#notifyWindowChange();
+			if (!hinted) this.#notifyWindowChange();
 		});
 		if (!completed) this.#scrollFrame = handle;
 	}

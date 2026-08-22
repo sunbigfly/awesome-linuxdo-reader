@@ -126,9 +126,9 @@ export class ReaderMobileReturnController {
 			this.#escapeOnce();
 		});
 		if (this.#window) {
-			this.scope.listen(this.#window, 'popstate', () => {
-				this.#onHistoryPop();
-			});
+			this.scope.listen(this.#window, 'popstate', (event) => {
+				this.#onHistoryPop(event);
+			}, true);
 		}
 		if (this.#media) {
 			const syncMedia = () => this.#sync();
@@ -222,8 +222,9 @@ export class ReaderMobileReturnController {
 		}
 	}
 
-	#onHistoryPop(): void {
+	#onHistoryPop(event: Event): void {
 		if (this.#historyClosePending) {
+			this.#consumeHistoryPop(event);
 			this.#historyClosePending = false;
 			this.#sync();
 			return;
@@ -231,8 +232,14 @@ export class ReaderMobileReturnController {
 		if (!this.#entryActive) return;
 		const history = this.#history();
 		if (history && this.#ownsCurrentEntry(history)) return;
+		this.#consumeHistoryPop(event);
 		this.#entryActive = false;
 		if (readerVisibleState(this.#readReaderState())) this.#escapeOnce();
+	}
+
+	#consumeHistoryPop(event: Event): void {
+		event.preventDefault();
+		event.stopImmediatePropagation();
 	}
 
 	#escapeOnce(): void {

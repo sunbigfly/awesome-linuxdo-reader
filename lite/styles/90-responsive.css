@@ -658,11 +658,11 @@
   .ldp-header .ldp-title {
     min-height: 0;
     padding: 0 36px 0 3px;
-    overflow: hidden;
-    font-size: clamp(14px, 4cqi, var(--ldp-reader-title-font-size, 16px));
+    overflow: visible;
+    font-size: clamp(12px, 4cqi, var(--ldp-reader-title-font-size, 16px));
     line-height: 1.12;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    text-overflow: clip;
+    white-space: normal;
     grid-column: 2 / -1;
     grid-row: 1;
   }
@@ -3276,6 +3276,12 @@
   .ldp-lb-toolbar {
     gap: 2px;
     padding-inline: max(5px, env(safe-area-inset-left, 0px));
+  }
+}
+
+@media (max-width: 700px) and (hover: none) and (pointer: coarse) {
+  .ldp-title-actions > .ldp-browser-immersive-toggle {
+    display: none;
   }
 }
 

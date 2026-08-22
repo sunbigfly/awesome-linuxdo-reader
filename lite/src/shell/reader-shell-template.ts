@@ -986,6 +986,7 @@ export function createReaderShellTemplate(
 		setHeaderActionsExpanded(true);
 	});
 	titleActions.addEventListener('pointerleave', () => {
+		if (usesMobileTitleActionToggle()) return;
 		setHeaderActionsExpanded(false);
 	});
 	titleActions.addEventListener('focusin', () => {

@@ -148,6 +148,10 @@ const controller = new ReaderMobileReturnController({
 		changes.emit(state);
 	},
 });
+let hostPopRequests = 0;
+window.addEventListener('popstate', () => {
+	hostPopRequests += 1;
+});
 
 state = 'opening';
 changes.emit(state);
@@ -156,6 +160,7 @@ assert(
 		window.history.entries.length === 2 &&
 		(window.history.state as Record<string, unknown>).route ===
 			'topic-list' &&
+		hostPopRequests === 0 &&
 		!button.hidden &&
 		root.classList.contains('ldp-apple-mobile-return'),
 	'移动端 Reader 打开时必须保留宿主 state、只压入一个同 URL 返回位，并显示 Apple 返回入口',
@@ -174,15 +179,17 @@ assert(
 		window.history.index === 1 &&
 		window.history.entries.length === 2 &&
 		(window.history.state as Record<string, unknown>).route === 'topic-list' &&
+		hostPopRequests === 0 &&
 		!button.hidden,
-	'第一次返回必须只合成一次 Esc 关闭最上层浮窗，并在 Reader 仍打开时补回同 URL 历史位',
+	'第一次返回必须只合成一次 Esc 关闭最上层浮窗、补回同 URL 历史位，且不能传播给宿主',
 );
 
 window.history.back();
 assert(
 	Number(escapeRequests) === 2 &&
 		String(state) === 'running' &&
-		Number(window.history.index) === 1,
+		Number(window.history.index) === 1 &&
+		hostPopRequests === 0,
 	'第二次返回必须继续复用既有 Esc 层级顺序，每次只关闭一个层级',
 );
 
@@ -192,8 +199,9 @@ assert(
 		String(state) === 'closed' &&
 		Number(window.history.index) === 0 &&
 		(window.history.state as Record<string, unknown>).route === 'topic-list' &&
+		hostPopRequests === 0 &&
 		button.hidden,
-	'最后一层 Esc 关闭 Reader 后必须停在原宿主 URL，不能再补历史位',
+	'最后一层 Esc 关闭 Reader 后必须停在原宿主 URL，不能补历史位或触发宿主刷新',
 );
 
 state = 'opening';
@@ -214,8 +222,9 @@ assert(
 	Number(escapeRequests) === 5 &&
 		String(state) === 'closed' &&
 		Number(window.history.index) === 0 &&
+		hostPopRequests === 0 &&
 		button.hidden,
-	'Apple 可见返回按钮必须逐次复用同一 Esc 链，并在 Reader 关闭时回收历史位',
+	'Apple 可见返回按钮必须逐次复用同一 Esc 链，并在 Reader 关闭时静默回收历史位',
 );
 
 const desktopRoot = document.createElement('main');

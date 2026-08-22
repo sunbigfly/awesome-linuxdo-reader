@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.6.0
+// @version      1.6.1
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.6.0 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.6.1 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.6.0",
+			sourceVersion: "1.6.1",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.0") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.1") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -13652,9 +13652,9 @@ runtime.register("src/shell/reader-mobile-return-controller.js", function(module
 	      READER_MOBILE_RETURN_QUERY
 	    ) ?? null, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.scope.listen(this.#button, "click", (event) => {
 	      event.preventDefault(), event.stopPropagation(), this.#escapeOnce();
-	    }), this.#window && this.scope.listen(this.#window, "popstate", () => {
-	      this.#onHistoryPop();
-	    }), this.#media) {
+	    }), this.#window && this.scope.listen(this.#window, "popstate", (event) => {
+	      this.#onHistoryPop(event);
+	    }, !0), this.#media) {
 	      const syncMedia = () => this.#sync();
 	      typeof this.#media.addEventListener == "function" ? this.scope.listen(this.#media, "change", syncMedia) : typeof this.#media.addListener == "function" && (this.#media.addListener(syncMedia), this.scope.add(() => this.#media?.removeListener(syncMedia)));
 	    }
@@ -13720,14 +13720,17 @@ runtime.register("src/shell/reader-mobile-return-controller.js", function(module
 	      }
 	    }
 	  }
-	  #onHistoryPop() {
+	  #onHistoryPop(event) {
 	    if (this.#historyClosePending) {
-	      this.#historyClosePending = !1, this.#sync();
+	      this.#consumeHistoryPop(event), this.#historyClosePending = !1, this.#sync();
 	      return;
 	    }
 	    if (!this.#entryActive) return;
 	    const history = this.#history();
-	    history && this.#ownsCurrentEntry(history) || (this.#entryActive = !1, readerVisibleState(this.#readReaderState()) && this.#escapeOnce());
+	    history && this.#ownsCurrentEntry(history) || (this.#consumeHistoryPop(event), this.#entryActive = !1, readerVisibleState(this.#readReaderState()) && this.#escapeOnce());
+	  }
+	  #consumeHistoryPop(event) {
+	    event.preventDefault(), event.stopImmediatePropagation();
 	  }
 	  #escapeOnce() {
 	    if (!(this.#escapeDispatching || !readerVisibleState(this.#readReaderState()))) {
@@ -13760,7 +13763,7 @@ runtime.register("src/shell/reader-mobile-return-controller.js", function(module
 	    }
 	  }
 	}
-}, "fbd214a7e44d9a77ae650c8c4fb61768bf744ce514c9e53f280b515cd2700615");
+}, "297e6fefdc2619c54a97bfdfa77147cbb08bc0c3e03bbe84483b956e575185a0");
 
 /* Source: lite/src/shell/reader-rate-limit-notice.ts */
 runtime.register("src/shell/reader-rate-limit-notice.js", function(module, exports, require) {
@@ -14923,7 +14926,7 @@ runtime.register("src/shell/reader-shell-template.js", function(module, exports,
 	  titleActions.addEventListener("pointerenter", () => {
 	    usesMobileTitleActionToggle() || setHeaderActionsExpanded(!0);
 	  }), titleActions.addEventListener("pointerleave", () => {
-	    setHeaderActionsExpanded(!1);
+	    usesMobileTitleActionToggle() || setHeaderActionsExpanded(!1);
 	  }), titleActions.addEventListener("focusin", () => {
 	    usesMobileTitleActionToggle() || setHeaderActionsExpanded(!0);
 	  }), titleActions.addEventListener("focusout", (event) => {
@@ -15283,7 +15286,7 @@ runtime.register("src/shell/reader-shell-template.js", function(module, exports,
 	    liveUpdateDismiss
 	  });
 	}
-}, "367194028f6820e10b1cbbf9b08565727ac589d676ab4d5ad3ea952351304781");
+}, "88fa5a4c4089ccf9c5f0d7db40306cab18b8dc9c95779c85939410f27acd4bcd");
 
 /* Source: lite/src/shell/reader-shell.ts */
 runtime.register("src/shell/reader-shell.js", function(module, exports, require) {
@@ -24008,6 +24011,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	  #projectionHydrationHandleUrgent = !1;
 	  #projectionHydrationPostNumbers = Object.freeze([]);
 	  #projectionHydrationUrgentPostNumbers = /* @__PURE__ */ new Set();
+	  #deferredMeasurementFlushPending = !1;
 	  #retainedViewLimit = 0;
 	  #lastVisibleRootChangeKey = "";
 	  #lastPostStreamRevision;
@@ -24104,7 +24108,8 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	       * 事务则由物理楼层锚点结算，二者不能同时写 scrollTop。
 	       */
 	      shouldApplyScrollCompensation: () => this.#pendingViewportMutation === null,
-	      shouldDeferMeasurements: () => !1,
+	      shouldDeferMeasurements: () => !this.#scrollLifecycle.isIdle(PROJECTION_HYDRATION_MIN_IDLE_MS),
+	      onMeasurementsDeferred: () => this.#scheduleDeferredMeasurementFlush(),
 	      resolveRootBlockSize: (target, observedBlockSize) => {
 	        const postNumber = Number(target.getAttribute("data-post-number")), inset = Number.isSafeInteger(postNumber) ? this.#rootVirtualInsets.get(postNumber) : void 0, virtualBlockSize = observedBlockSize + (inset?.beforeSize ?? 0) + (inset?.afterSize ?? 0), marker = target.nextElementSibling;
 	        return marker?.nodeType === 1 && marker.classList.contains("ldp-hidden-reply-marker") ? virtualBlockSize + HIDDEN_REPLY_MARKER_BLOCK_SIZE : virtualBlockSize;
@@ -24141,7 +24146,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	    this.#ownSizeObserver = NativeResizeObserver ? new NativeResizeObserver((entries) => {
 	      this.#recordOwnSizeMeasurements(entries);
 	    }) : null, this.scope.add(() => {
-	      this.#ownSizeObserver?.disconnect(), this.#ownSizeTargets.clear(), this.#ownSizeSamples.clear(), this.#pendingOwnSizePostNumbers.clear();
+	      this.#ownSizeObserver?.disconnect(), this.#ownSizeTargets.clear(), this.#ownSizeSamples.clear(), this.#pendingOwnSizePostNumbers.clear(), this.#deferredMeasurementFlushPending = !1;
 	    });
 	    const createBranchResizeObserver = options.branchResizeObserverFactory ?? (NativeResizeObserver ? (callback) => new NativeResizeObserver(callback) : void 0);
 	    this.branchOverlay = new import_branch_overlay.ReaderBranchOverlayController({
@@ -24451,7 +24456,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	    const currentRoot = this.domOwner.view(postNumber)?.slots.root, wasMaterialized = currentRoot?.isConnected === !0 && !currentRoot.classList.contains("ldp-virtual-ancestor-shell") && !currentRoot.classList.contains("ldp-post-projection-pending");
 	    if (!wasMaterialized && !this.#writeVirtualOffset(
 	      () => this.#treeViewport.offsetOf(postNumber) ?? this.layout.offsetOf(rootPostNumber)
-	    ) || this.domOwner.view(postNumber)?.slots.root?.classList.contains("ldp-post-projection-pending") && !this.#materializeProjection(postNumber, !1)) return null;
+	    ) || this.domOwner.view(postNumber)?.slots.root?.classList.contains("ldp-post-projection-pending") && !this.#materializeProjection(postNumber)) return null;
 	    const element = this.domOwner.view(postNumber)?.slots.root;
 	    return !element?.isConnected || element.classList.contains("ldp-virtual-ancestor-shell") || element.classList.contains("ldp-post-projection-pending") ? null : (this.#scroll.alignPost(element, options), Object.freeze({
 	      postNumber,
@@ -24807,9 +24812,13 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	        );
 	      }
 	    ) && this.#beginConnectedViewportMutation();
+	    let visibleProjectionMaterialized = !1;
 	    for (const postNumber of visiblePostNumbers)
-	      this.domOwner.view(postNumber)?.slots.root?.classList.contains("ldp-post-projection-pending") && this.#materializeProjection(postNumber, !1);
-	    this.#nextContentPostNumbers = new Set(
+	      this.domOwner.view(postNumber)?.slots.root?.classList.contains("ldp-post-projection-pending") && (visibleProjectionMaterialized = this.#materializeProjection(
+	        postNumber,
+	        { commitEffects: !1 }
+	      ) || visibleProjectionMaterialized);
+	    visibleProjectionMaterialized && this.#commitProjectionMaterialization(!1), this.#nextContentPostNumbers = new Set(
 	      [...plan.contentPostNumbers].filter((postNumber) => {
 	        const root = this.domOwner.view(postNumber)?.slots.root;
 	        return !!root && !root.classList.contains(
@@ -24894,7 +24903,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	        remaining.push(postNumber);
 	        continue;
 	      }
-	      if (hydrated < batchSize && this.#materializeProjection(postNumber)) {
+	      if (hydrated < batchSize && this.#materializeProjection(postNumber, { commitEffects: !1 })) {
 	        hydrated += 1;
 	        continue;
 	      }
@@ -24903,13 +24912,13 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	    }
 	    this.#projectionHydrationPostNumbers = Object.freeze(remaining), this.#projectionHydrationUrgentPostNumbers = new Set(
 	      remaining.filter((postNumber) => this.#projectionHydrationUrgentPostNumbers.has(postNumber))
-	    ), remaining.length && this.#scheduleProjectionHydration();
+	    ), hydrated > 0 && this.#commitProjectionMaterialization(!0), remaining.length && this.#scheduleProjectionHydration();
 	  }
-	  #materializeProjection(postNumber, notify = !0) {
+	  #materializeProjection(postNumber, options = {}) {
 	    if (!this.#mountedPostNumbers.has(postNumber) || this.#projectionHydrationFailedPostNumbers.has(postNumber)) return !1;
 	    const post = this.#session.postByNumber(postNumber), view = this.domOwner.view(postNumber), root = view?.slots.root;
 	    if (!post || !view || !root?.classList.contains("ldp-post-projection-pending")) return !1;
-	    const mutation = notify && root.isConnected ? this.#beginConnectedViewportMutation() : null;
+	    const mutation = root.isConnected ? this.#beginConnectedViewportMutation() : null;
 	    try {
 	      this.postProjector.render(post, view);
 	    } catch (error) {
@@ -24918,7 +24927,10 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	    return this.#topicDirtyRetainedPostNumbers.delete(postNumber), root.classList.remove("ldp-post-projection-pending"), root.removeAttribute("aria-busy"), root.isConnected && this.#rootObservers.has(postNumber) && this.#activateBranch(root, postNumber), root.isConnected && this.#desiredContentPostNumbers.has(postNumber) && !this.#activeContentPostNumbers.has(postNumber) && (this.#activeContentPostNumbers = /* @__PURE__ */ new Set([
 	      ...this.#activeContentPostNumbers,
 	      postNumber
-	    ]), this.#activateNodeContent(root, postNumber)), this.#syncProjectionFeatures(), notify && this.frame.notifyScroll(), this.#scheduleBranchPaint(), !0;
+	    ]), this.#activateNodeContent(root, postNumber)), options.commitEffects !== !1 && this.#commitProjectionMaterialization(!1), !0;
+	  }
+	  #commitProjectionMaterialization(notify) {
+	    this.#syncProjectionFeatures(), notify && this.frame.notifyScroll(), this.#scheduleBranchPaint();
 	  }
 	  #cancelProjectionHydration() {
 	    this.#projectionHydrationHandle !== null && this.#projectionHydrationScheduler.cancel(
@@ -25007,7 +25019,18 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	    }
 	    for (const postNumber of touched)
 	      this.#pendingOwnSizePostNumbers.add(postNumber);
+	    if (!this.#scrollLifecycle.isIdle(PROJECTION_HYDRATION_MIN_IDLE_MS)) {
+	      this.#scheduleDeferredMeasurementFlush();
+	      return;
+	    }
 	    this.#commitPendingOwnSizeMeasurements();
+	  }
+	  #scheduleDeferredMeasurementFlush() {
+	    this.scope.destroyed || this.#deferredMeasurementFlushPending || (this.#deferredMeasurementFlushPending = !0, this.#scrollLifecycle.waitForIdle(
+	      PROJECTION_HYDRATION_MIN_IDLE_MS
+	    ).then(() => {
+	      this.#deferredMeasurementFlushPending = !1, !this.scope.destroyed && (this.frame.flushDeferredMeasurements(), this.#commitPendingOwnSizeMeasurements());
+	    }).catch(this.#onError));
 	  }
 	  #commitPendingOwnSizeMeasurements() {
 	    if (!this.#pendingOwnSizePostNumbers.size) return;
@@ -25210,13 +25233,14 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	    ), this.#branchPaintHandle === null && this.#queueBranchPaintStabilityCheck());
 	  }
 	  #queueBranchPaintStabilityCheck() {
-	    const generation = this.#branchPaintGeneration;
 	    this.#branchPaintHandle = this.#branchFrames.request(() => {
-	      this.#branchPaintHandle = null, !this.scope.destroyed && (this.branchOverlay.paint(), this.streamView.slots.rootList.classList.remove(
+	      if (this.#branchPaintHandle = null, this.scope.destroyed) return;
+	      const generation = this.#branchPaintGeneration;
+	      this.branchOverlay.paint(), this.streamView.slots.rootList.classList.remove(
 	        "ldp-branch-paint-pending"
 	      ), generation !== this.#branchPaintGeneration && (this.streamView.slots.rootList.classList.add(
 	        "ldp-branch-paint-pending"
-	      ), this.#queueBranchPaintStabilityCheck()));
+	      ), this.#queueBranchPaintStabilityCheck());
 	    });
 	  }
 	  #syncProjectionFeatures() {
@@ -25238,7 +25262,7 @@ runtime.register("src/topic/reader-topic-dom-coordinator.js", function(module, e
 	      throw new Error("ReaderTopicDomCoordinator 已销毁");
 	  }
 	}
-}, "16094adfb0139da6c32d66c4e6b8a23aa2218e11c600fe433b10fd6ce018c4ae");
+}, "748c902018c027b6898ae49986ef8f5f82dd3b68308d1a71c1415ffff6635aac");
 
 /* Source: lite/src/topic/reader-topic-edit-controller.ts */
 runtime.register("src/topic/reader-topic-edit-controller.js", function(module, exports, require) {
@@ -26973,6 +26997,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	  #pendingScrollOffset = null;
 	  #scrollOffsetDirty = !1;
 	  #scrollFrame = 0;
+	  #scrollFrameHinted = !1;
 	  #lastUserScrollAt = 0;
 	  #lastUserScrollDirection = 0;
 	  #userScrollSessionActive = !1;
@@ -27028,7 +27053,8 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	      this.#scrollRoot,
 	      "scroll",
 	      () => {
-	        this.#claimScrollOnlyUserInput() && this.#markUserScrollProgress(), this.#scrollOffsetDirty = !0, this.#scheduleScrollCommit();
+	        const actualOffset = finiteNonNegative(this.#scrollRoot.scrollTop);
+	        this.#claimScrollOnlyUserInput(actualOffset) && this.#markUserScrollProgress(), !(Math.abs(actualOffset - this.#scrollOffset) < 0.5) && (this.#scrollOffsetDirty = !0, !this.#scrollFrame && !this.#scrollFrameHinted && (this.#scrollFrameHinted = !0, this.#notifyWindowChange()), this.#scheduleScrollCommit());
 	      },
 	      { passive: !0 }
 	    ), this.scope.listen(this.#scrollRoot, "scrollend", () => {
@@ -27076,7 +27102,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	        direction: this.#keyboardDirection(keyboard)
 	      }));
 	    }), this.scope.add(() => {
-	      this.#scrollFrame && (this.#cancelFrame(this.#scrollFrame), this.#scrollFrame = 0, this.#pendingScrollOffset = null, this.#scrollOffsetDirty = !1);
+	      this.#scrollFrame && this.#cancelFrame(this.#scrollFrame), this.#scrollFrame = 0, this.#scrollFrameHinted = !1, this.#pendingScrollOffset = null, this.#scrollOffsetDirty = !1;
 	    }), this.scope.add(() => this.#windowChangeListeners.clear()), this.scope.add(() => this.#userScrollIntentListeners.clear()), this.scope.add(() => this.#directUserScrollIntentListeners.clear());
 	  }
 	  readWindowInput() {
@@ -27454,8 +27480,8 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    );
 	    return this.#internalScrollWriteOffset = actualOffset, actualOffset;
 	  }
-	  #claimScrollOnlyUserInput() {
-	    const actualOffset = finiteNonNegative(this.#scrollRoot.scrollTop), internalOffset = this.#internalScrollWriteOffset;
+	  #claimScrollOnlyUserInput(actualOffset) {
+	    const internalOffset = this.#internalScrollWriteOffset;
 	    if (this.#internalScrollWriteOffset = null, internalOffset !== null && Math.abs(actualOffset - internalOffset) < 0.5)
 	      return this.#pendingExternalKeyboardScroll = null, !1;
 	    const direction = this.#directionOf(actualOffset - this.#scrollOffset);
@@ -27484,9 +27510,11 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    if (this.#scrollFrame || this.scope.destroyed) return;
 	    let completed = !1;
 	    const handle = this.#requestFrame(() => {
-	      if (completed = !0, this.#scrollFrame = 0, this.scope.destroyed) return;
+	      completed = !0, this.#scrollFrame = 0;
+	      const hinted = this.#scrollFrameHinted;
+	      if (this.#scrollFrameHinted = !1, this.scope.destroyed) return;
 	      const scrollOffset = this.#refreshPendingScrollOffset();
-	      this.#pendingScrollOffset = null, scrollOffset !== this.#scrollOffset && (this.#scrollOffset = scrollOffset, this.#notifyWindowChange());
+	      this.#pendingScrollOffset = null, scrollOffset !== this.#scrollOffset && (this.#scrollOffset = scrollOffset, hinted || this.#notifyWindowChange());
 	    });
 	    completed || (this.#scrollFrame = handle);
 	  }
@@ -27496,7 +27524,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    ), this.#scrollOffsetDirty = !1), this.#pendingScrollOffset ?? this.#scrollOffset;
 	  }
 	}
-}, "e9d1ce9b1be6f4af7892144f44c8d7f06a31c77b4e9c0a801a62fa62f92f995a");
+}, "9af5088ddf291dfa58f771015734be7fef314ae283f3fa24c8b85e019fb2695d");
 
 /* Source: lite/src/topic/reader-topic-scroll-lifecycle.ts */
 runtime.register("src/topic/reader-topic-scroll-lifecycle.js", function(module, exports, require) {

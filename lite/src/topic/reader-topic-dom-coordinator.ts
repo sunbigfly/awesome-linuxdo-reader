@@ -339,6 +339,7 @@ export class ReaderTopicDomCoordinator<
 	#projectionHydrationHandleUrgent = false;
 	#projectionHydrationPostNumbers: readonly PostNumber[] = Object.freeze([]);
 	#projectionHydrationUrgentPostNumbers: ReadonlySet<PostNumber> = new Set();
+	#deferredMeasurementFlushPending = false;
 	#retainedViewLimit = 0;
 	#lastVisibleRootChangeKey = '';
 	#lastPostStreamRevision: number;
@@ -507,7 +508,10 @@ export class ReaderTopicDomCoordinator<
 			 */
 			shouldApplyScrollCompensation: () =>
 				this.#pendingViewportMutation === null,
-			shouldDeferMeasurements: () => false,
+			shouldDeferMeasurements: () =>
+				!this.#scrollLifecycle.isIdle(PROJECTION_HYDRATION_MIN_IDLE_MS),
+			onMeasurementsDeferred: () =>
+				this.#scheduleDeferredMeasurementFlush(),
 			resolveRootBlockSize: (target, observedBlockSize) => {
 				const postNumber = Number(target.getAttribute('data-post-number'));
 				const inset = Number.isSafeInteger(postNumber)
@@ -596,6 +600,7 @@ export class ReaderTopicDomCoordinator<
 			this.#ownSizeTargets.clear();
 			this.#ownSizeSamples.clear();
 			this.#pendingOwnSizePostNumbers.clear();
+			this.#deferredMeasurementFlushPending = false;
 		});
 		const createBranchResizeObserver =
 			options.branchResizeObserverFactory ??
@@ -1173,7 +1178,7 @@ export class ReaderTopicDomCoordinator<
 		const pendingRoot = this.domOwner.view(postNumber)?.slots.root;
 		if (
 			pendingRoot?.classList.contains('ldp-post-projection-pending') &&
-			!this.#materializeProjection(postNumber, false)
+			!this.#materializeProjection(postNumber)
 		) return null;
 		const element = this.domOwner.view(postNumber)?.slots.root;
 		if (
@@ -1812,10 +1817,17 @@ export class ReaderTopicDomCoordinator<
 		if (hasConnectedVisiblePendingProjection) {
 			this.#beginConnectedViewportMutation();
 		}
+		let visibleProjectionMaterialized = false;
 		for (const postNumber of visiblePostNumbers) {
 			const root = this.domOwner.view(postNumber)?.slots.root;
 			if (!root?.classList.contains('ldp-post-projection-pending')) continue;
-			this.#materializeProjection(postNumber, false);
+			visibleProjectionMaterialized = this.#materializeProjection(
+				postNumber,
+				{ commitEffects: false },
+			) || visibleProjectionMaterialized;
+		}
+		if (visibleProjectionMaterialized) {
+			this.#commitProjectionMaterialization(false);
 		}
 		this.#nextContentPostNumbers = new Set(
 			[...plan.contentPostNumbers].filter((postNumber) => {
@@ -1972,7 +1984,7 @@ export class ReaderTopicDomCoordinator<
 			}
 			if (
 				hydrated < batchSize &&
-				this.#materializeProjection(postNumber)
+				this.#materializeProjection(postNumber, { commitEffects: false })
 			) {
 				hydrated += 1;
 				continue;
@@ -1989,12 +2001,16 @@ export class ReaderTopicDomCoordinator<
 			remaining.filter((postNumber) =>
 				this.#projectionHydrationUrgentPostNumbers.has(postNumber)),
 		);
+		if (hydrated > 0) this.#commitProjectionMaterialization(true);
 		if (remaining.length) {
 			this.#scheduleProjectionHydration();
 		}
 	}
 
-	#materializeProjection(postNumber: PostNumber, notify = true): boolean {
+	#materializeProjection(
+		postNumber: PostNumber,
+		options: Readonly<{ readonly commitEffects?: boolean }> = {},
+	): boolean {
 		if (
 			!this.#mountedPostNumbers.has(postNumber) ||
 			this.#projectionHydrationFailedPostNumbers.has(postNumber)
@@ -2012,7 +2028,7 @@ export class ReaderTopicDomCoordinator<
 		 * DOM 前不能可靠判断节点在视口哪一侧。已连接正文统一交给物理锚点；
 		 * 真正在视口下方时 correction 为 0，不会产生 scrollTop 写入。
 		 */
-		const mutation = notify && root.isConnected
+		const mutation = root.isConnected
 			? this.#beginConnectedViewportMutation()
 			: null;
 		try {
@@ -2042,10 +2058,16 @@ export class ReaderTopicDomCoordinator<
 			]);
 			this.#activateNodeContent(root, postNumber);
 		}
+		if (options.commitEffects !== false) {
+			this.#commitProjectionMaterialization(false);
+		}
+		return true;
+	}
+
+	#commitProjectionMaterialization(notify: boolean): void {
 		this.#syncProjectionFeatures();
 		if (notify) this.frame.notifyScroll();
 		this.#scheduleBranchPaint();
-		return true;
 	}
 
 	#cancelProjectionHydration(): void {
@@ -2184,7 +2206,29 @@ export class ReaderTopicDomCoordinator<
 		for (const postNumber of touched) {
 			this.#pendingOwnSizePostNumbers.add(postNumber);
 		}
+		if (!this.#scrollLifecycle.isIdle(PROJECTION_HYDRATION_MIN_IDLE_MS)) {
+			this.#scheduleDeferredMeasurementFlush();
+			return;
+		}
 		this.#commitPendingOwnSizeMeasurements();
+	}
+
+	#scheduleDeferredMeasurementFlush(): void {
+		if (this.scope.destroyed || this.#deferredMeasurementFlushPending) return;
+		this.#deferredMeasurementFlushPending = true;
+		void this.#scrollLifecycle.waitForIdle(
+			PROJECTION_HYDRATION_MIN_IDLE_MS,
+		).then(() => {
+			this.#deferredMeasurementFlushPending = false;
+			if (this.scope.destroyed) return;
+			/*
+			 * 活跃 touch/wheel 期间只保留每个目标的最后尺寸。停稳后把根高与
+			 * 节点 own-size 合入同一虚拟帧，避免请求水合、图片和回复线先后
+			 * 争抢 scrollTop；桌面与移动端继续共享同一个几何 owner。
+			 */
+			this.frame.flushDeferredMeasurements();
+			this.#commitPendingOwnSizeMeasurements();
+		}).catch(this.#onError);
 	}
 
 	#commitPendingOwnSizeMeasurements(): void {
@@ -2573,11 +2617,14 @@ export class ReaderTopicDomCoordinator<
 	}
 
 	#queueBranchPaintStabilityCheck(): void {
-		const generation = this.#branchPaintGeneration;
 		this.#branchPaintHandle = this.#branchFrames.request(() => {
 			this.#branchPaintHandle = null;
 			if (this.scope.destroyed) return;
-			/* 每帧合并一次几何读取；绘制期间若又发生尺寸变化，再补一帧。 */
+			/*
+			 * 回调开始时才锁定代次：排队后、绘制前的所有失效都属于本帧，
+			 * 只有 paint 期间真的又发生变化才补一帧。
+			 */
+			const generation = this.#branchPaintGeneration;
 			this.branchOverlay.paint();
 			this.streamView.slots.rootList.classList.remove(
 				'ldp-branch-paint-pending',

@@ -267,12 +267,12 @@ scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 scrollRoot.scrollTop = 280;
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 assert(
-		scrollEvents === 0 &&
-			frameRequests === 1 &&
-			Number(pendingFrames.size) === 1 &&
+	scrollEvents === 1 &&
+		frameRequests === 1 &&
+		Number(pendingFrames.size) === 1 &&
 		adapter.readWindowInput().scrollOffset === 280 &&
 		adapter.lastUserScrollAt() === 0,
-	'同一帧的连续 scroll 事件必须合并通知，但布局/锚定产生的 scroll 结果不得冒充用户输入',
+	'同一帧的连续 scroll 事件必须立即合并提示虚拟 DOM，但布局/锚定产生的 scroll 结果不得冒充用户输入',
 );
 flushPendingFrame();
 assert(
@@ -405,7 +405,7 @@ observerCallback.value?.([{
 	blockSize: 420,
 }]);
 assert(
-	Number(scrollEvents) === 3 && adapter.readWindowInput().viewportSize === 420,
+	Number(scrollEvents) === 4 && adapter.readWindowInput().viewportSize === 420,
 	'ResizeObserver 尺寸变化必须复用唯一窗口变化订阅，触发虚拟帧而非等待下一次滚动',
 );
 clientHeight = 900;
@@ -413,7 +413,7 @@ readerWindow.dispatchEvent(new parsedDocument.defaultView!.Event(
 	'ldp-reader-window-change',
 ));
 assert(
-	Number(scrollEvents) === 4 && adapter.readWindowInput().viewportSize === 900,
+	Number(scrollEvents) === 5 && adapter.readWindowInput().viewportSize === 900,
 	'浮窗纵向拉长必须立即重新读取真实 viewport 并扩张树节点窗口，不能只拉长 spacer/回复线而留下空白',
 );
 clientHeight = 400;
@@ -471,7 +471,7 @@ scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 flushPendingFrame();
 const backwardWindow = adapter.readWindowInput();
 assert(
-	Number(scrollEvents) === 6 &&
+	Number(scrollEvents) === 7 &&
 		adapter.lastUserScrollDirection() === -1 &&
 		backwardWindow.overscanBeforeScreens === 1.5 &&
 		backwardWindow.overscanAfterScreens === 2,
@@ -481,7 +481,7 @@ stopListening();
 scrollRoot.scrollTop = 320;
 scrollRoot.dispatchEvent(new parsedDocument.defaultView!.Event('scroll'));
 flushPendingFrame();
-assert(Number(scrollEvents) === 6, '释放 Topic 监听后不得继续提交虚拟帧');
+assert(Number(scrollEvents) === 7, '释放 Topic 监听后不得继续提交虚拟帧');
 const supersededViewportMutation = adapter.beginViewportMutation([first, second]);
 assert(supersededViewportMutation !== null, '程序化跳转竞态必须先建立高度事务');
 const rectReadsBeforeProgrammaticScroll = scrollRootRectReads;

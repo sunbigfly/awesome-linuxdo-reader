@@ -560,7 +560,7 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 
 .ldp-reader-action-body.ldp-topic-edit-body {
   display: grid;
-  grid-template-columns: repeat(2, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
   gap: 12px;
   overflow: visible;
 }
