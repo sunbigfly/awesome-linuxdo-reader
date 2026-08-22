@@ -16,6 +16,7 @@ interface JQueryAjaxSettings {
 
 interface JQueryAjaxResponse {
 	readonly status?: unknown;
+	readonly statusText?: unknown;
 	readonly responseURL?: unknown;
 	getResponseHeader?(name: string): string | null;
 }
@@ -38,6 +39,9 @@ export interface DiscourseNativeAjaxObservationAdapterOptions {
 export interface BrowserResourceObservationAdapterOptions {
 	readonly observer: RequestObserver;
 	readonly performance?: Pick<Performance, 'timeOrigin'>;
+	readonly hostRequestBudget?: BrowserSharedHostRequestBudgetPort;
+	/** 常驻链只补齐 fetch/XHR；日志面板临时链仍可采集全部静态资源。 */
+	readonly dynamicOnly?: boolean;
 	readonly createObserver?: (
 		callback: PerformanceObserverCallback,
 	) => Pick<PerformanceObserver, 'observe' | 'disconnect'>;
@@ -80,6 +84,17 @@ function ajaxFinish(response: JQueryAjaxResponse): RequestObservationFinish {
 			ajaxResponseHeader(response, 'RateLimit-Reset') ||
 			ajaxResponseHeader(response, 'X-RateLimit-Reset'),
 	});
+}
+
+function ajaxErrorCode(response: JQueryAjaxResponse, thrownError: unknown): string {
+	if (Number(response.status) > 0) return '';
+	const reason = `${String(response.statusText ?? '')} ${String(thrownError ?? '')}`
+		.trim()
+		.toLowerCase();
+	if (/abort/.test(reason)) return 'AbortError';
+	if (/timeout/.test(reason)) return 'timeout';
+	if (/parsererror|parse error/.test(reason)) return 'response-parse-error';
+	return 'network-error';
 }
 
 /**
@@ -133,6 +148,7 @@ export class DiscourseNativeAjaxObservationAdapter {
 				readonly recoveryProbe: boolean;
 				readonly blockOnCloudflareChallenge: boolean;
 			}> | null;
+			error: string;
 		}>();
 		const borrowedIds = new Set<number>();
 		const send = (
@@ -197,7 +213,22 @@ export class DiscourseNativeAjaxObservationAdapter {
 						blockOnCloudflareChallenge: event.type !== 'read',
 					})
 					: null,
+				error: '',
 			});
+		};
+		const error = (
+			_event: unknown,
+			rawResponse: unknown,
+			_settings: unknown,
+			thrownError: unknown,
+		): void => {
+			if (!rawResponse || typeof rawResponse !== 'object') return;
+			const current = active.get(rawResponse);
+			if (!current) return;
+			current.error = ajaxErrorCode(
+				rawResponse as JQueryAjaxResponse,
+				thrownError,
+			);
 		};
 		const complete = (
 			_event: unknown,
@@ -212,7 +243,7 @@ export class DiscourseNativeAjaxObservationAdapter {
 			const finish = ajaxFinish(rawResponse as JQueryAjaxResponse);
 			this.#observer.finish(
 				current.id,
-				finish,
+				current.error ? { ...finish, error: current.error } : finish,
 			);
 			if (current.sharedResponse && this.#hostRequestBudget) {
 				try {
@@ -233,13 +264,16 @@ export class DiscourseNativeAjaxObservationAdapter {
 			}
 		};
 		const sendEvent = `ajaxSend.${this.#namespace}`;
+		const errorEvent = `ajaxError.${this.#namespace}`;
 		const completeEvent = `ajaxComplete.${this.#namespace}`;
 		try {
 			target.on(sendEvent, send);
+			target.on(errorEvent, error);
 			target.on(completeEvent, complete);
 		} catch {
 			try {
 				target.off(sendEvent, send);
+				target.off(errorEvent, error);
 				target.off(completeEvent, complete);
 			} catch {
 				// 局部绑定失败时只能尽力撤销，不能让观测器阻断 Reader 启动。
@@ -248,12 +282,13 @@ export class DiscourseNativeAjaxObservationAdapter {
 		}
 		scope.add(() => {
 			target.off(sendEvent, send);
+			target.off(errorEvent, error);
 			target.off(completeEvent, complete);
 			for (const current of active.values()) {
 				current.hostLease?.release();
 				if (!current.borrowed) {
 					this.#observer.finish(current.id, {
-						error: 'observer-detached',
+						error: current.error || 'observer-detached',
 					});
 				}
 			}
@@ -270,6 +305,8 @@ export class DiscourseNativeAjaxObservationAdapter {
 export class BrowserResourceObservationAdapter {
 	readonly #observer: RequestObserver;
 	readonly #performance: Pick<Performance, 'timeOrigin'>;
+	readonly #hostRequestBudget: BrowserSharedHostRequestBudgetPort | null;
+	readonly #dynamicOnly: boolean;
 	readonly #createObserver: NonNullable<
 		BrowserResourceObservationAdapterOptions['createObserver']
 	>;
@@ -277,6 +314,8 @@ export class BrowserResourceObservationAdapter {
 	constructor(options: BrowserResourceObservationAdapterOptions) {
 		this.#observer = options.observer;
 		this.#performance = options.performance ?? performance;
+		this.#hostRequestBudget = options.hostRequestBudget ?? null;
+		this.#dynamicOnly = options.dynamicOnly === true;
 		this.#createObserver = options.createObserver ??
 			((callback) => new PerformanceObserver(callback));
 	}
@@ -288,15 +327,40 @@ export class BrowserResourceObservationAdapter {
 				for (const entry of list.getEntries()) {
 					if (entry.entryType !== 'resource') continue;
 					const resource = entry as PerformanceResourceTiming;
-					this.#observer.recordResource({
+					const initiatorType = String(resource.initiatorType ?? '').toLowerCase();
+					if (
+						this.#dynamicOnly &&
+						!['fetch', 'xmlhttprequest'].includes(initiatorType)
+					) continue;
+					const observed = this.#observer.recordResourceDetailed({
 						href: resource.name,
-						initiatorType: resource.initiatorType,
+						initiatorType,
 						startedAt: this.#performance.timeOrigin + resource.startTime,
 						endedAt: this.#performance.timeOrigin +
 							(resource.responseEnd || resource.startTime + resource.duration),
 						status: Number(resource.responseStatus) || 0,
 						size: Number(resource.transferSize || resource.encodedBodySize) || 0,
 					});
+					const event = observed.event;
+					if (
+						!observed.created ||
+						!event?.sameOrigin ||
+						event.source !== 'host' ||
+						!['fetch', 'xmlhttprequest'].includes(event.transport) ||
+						!this.#hostRequestBudget
+					) continue;
+					try {
+						this.#hostRequestBudget.recordHostStart({
+							startedAt: event.startedAt,
+						}).release({
+							source: 'host',
+							href: event.href,
+							method: event.method,
+							status: event.status ?? 0,
+						});
+					} catch {
+						// 被动补账失败不得改变已经完成的宿主 fetch/XHR。
+					}
 				}
 			});
 			nativeObserver.observe({ type: 'resource', buffered: true });

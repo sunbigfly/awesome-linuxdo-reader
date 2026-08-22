@@ -124,6 +124,7 @@
       "owners": [
         "lite/src/shell/reader-shell-template.ts",
         "lite/src/shell/reader-workspace-coordinator.ts",
+        "lite/src/shell/embedded-host-header-controller.ts",
         "lite/src/shell/embedded-host-root-controller.ts",
         "lite/src/shell/embedded-host-topic-card-enhancement.ts",
         "lite/src/shell/embedded-host-scrollbar.ts",
@@ -132,9 +133,11 @@
         "lite/src/shell/main-outlet-mutation-hub.ts"
       ],
       "styles": [
-        "10-workspace.css"
+        "10-workspace.css",
+        "90-responsive.css"
       ],
       "tests": [
+        "lite/tests/embedded-host-header-controller.test.ts",
         "lite/tests/embedded-host-root-controller.test.ts",
         "lite/tests/embedded-host-topic-card-enhancement.test.ts",
         "lite/tests/embedded-host-scrollbar.test.ts",
@@ -151,7 +154,9 @@
         "ldp-topic-stats-row",
         "ldp-topic-stat",
         "ldp-native-topic-title-tools",
-        "ldp-host-topic-exposure-count"
+        "ldp-host-topic-exposure-count",
+        "ldp-host-language-option",
+        "ldp-host-search-backdrop"
       ],
       "styleSignatures": [
         "html.ldp-reader-embedded-right body",
@@ -163,7 +168,25 @@
         "html .link-top-line [data-ldp-native-dnd]::after",
         "html:root body :is(.topic-list-item,.latest-topic-list-item):is(\n  [data-ldp-unwanted-auto-filter],\n  [data-ldp-unwanted-manual-filter]\n) {\n  display: none !important;",
         "html:root body .ldp-host-topic-exposure-count {",
-        "var(--ldp-host-topic-stats-label-size, var(--ldp-font-micro, 9px))"
+        "var(--ldp-host-topic-stats-label-size, var(--ldp-font-micro, 9px))",
+        "html.mobile-view:not(.ldp-reader-workspace)\n  .topic-list-item > .topic-list-data {",
+        "--ldp-host-mobile-topic-avatar-size: 32px;",
+        "font-size: clamp(14px, 3.85vw, 16px);\n    font-weight: 400 !important;",
+        ".topic-list-item > .topic-list-data > .pull-left > a:first-child {\n    display: block !important;",
+        ".topic-list-item > .topic-list-data > .pull-left >\n  [data-user-card][data-user-card-long-press] {",
+        ".topic-list-item .topic-item-metadata > .pull-right {\n    position: absolute;\n    top: 10px;\n    right: 7px;\n    margin: 0;\n    font-size: var(--ldp-host-mobile-topic-time-size) !important;",
+        "--ldp-host-mobile-topic-label-size: 9.6px;",
+        "--ldp-host-mobile-topic-time-size: var(--font-down-1, 14px);",
+        "--ldp-host-mobile-frozen-header-height: clamp(48px, 12.6vw, 52px);",
+        "[data-ldp-host-language-toggle] {",
+        ".ldp-host-search-backdrop {",
+        ".search-menu[data-ldp-host-search-drawer] {",
+        ".topic-list-item .topic-item-stats__category-tags {",
+        "--ldp-host-mobile-topic-label-background: var(",
+        ":is(.topic-item-stats,.link-bottom-line,.bottom-row):has(",
+        "svg [fill]:not([fill=\"none\"])",
+        "font-weight: 400 !important;",
+        ":is(.topic-list-item,.latest-topic-list-item)[data-ldp-native-new-topic]\n  .main-link > :is(a,.title,.raw-topic-link) {"
       ]
     },
     {
@@ -224,6 +247,7 @@
       "id": "reader-shell",
       "owners": [
         "lite/src/shell/reader-shell-template.ts",
+		"lite/src/shell/reader-mobile-return-controller.ts",
         "lite/src/shell/reader-shell-recovery-view.ts"
       ],
       "styles": [
@@ -232,11 +256,14 @@
       ],
       "tests": [
         "lite/tests/reader-shell-template.test.ts",
+		"lite/tests/reader-mobile-return-controller.test.ts",
         "lite/tests/reader-shell-recovery-view.test.ts"
       ],
       "runtimeClasses": [
         "ldp-header",
         "ldp-head-btns",
+		"ldp-mobile-reader-back",
+		"ldp-apple-mobile-return",
         "ldp-reader-main",
         "ldp-topic-timeline",
         "ldp-error",
@@ -246,7 +273,16 @@
         "min-height: 220px;",
         "color: var(--primary-medium, #666);",
         ".ldp-topic-timeline-cursor.ldp-timeline-lens-composited",
-        ".ldp-topic-timeline-track:is(.ldp-timeline-hovering, .ldp-timeline-jumping)"
+        ".ldp-topic-timeline-track:is(.ldp-timeline-hovering, .ldp-timeline-jumping)",
+        ".ldp-reader-main,\n  .ldp-topic-action-rail-visible .ldp-reader-main {",
+        "grid-template-columns: minmax(0, 1fr);",
+        ".ldp-topic-timeline {\n    position: absolute;\n    top: 0;",
+        "grid-column: auto;\n    grid-row: auto;",
+        ".ldp-topic-timeline-track {\n    grid-row: 2;",
+        ".ldp-topic-timeline-footer {\n    flex-direction: column;",
+        "--ldp-mobile-timeline-width: clamp(24px, 7cqi, 30px);",
+        ".ldp-title-topic-row {\n    display: grid !important;",
+        "grid-column: 3;\n    grid-row: 3;"
       ]
     },
     {
@@ -327,7 +363,8 @@
         "animation: ldp-post-read-confirm 1.25s ease-in-out both;",
         "color: var(--ldp-post-font-color, var(--ldp-ink));",
         "--ldp-post-font-family",
-        "--ldp-post-font-weight"
+        "--ldp-post-font-weight",
+        ".ldp-post-body > .ldp-content,\n  .ldp-reply-list > .ldp-post > .ldp-post-body > .ldp-content,"
       ]
     },
     {
@@ -356,7 +393,8 @@
       ],
       "styleSignatures": [
         ".ldp-post.ldp-virtual-ancestor-shell:not(\n  .ldp-segmented-branch-last\n)::after",
-        "z-index: 0;\n  top: -1px;\n  bottom: -1px;"
+        "z-index: 0;\n  top: -1px;\n  bottom: -1px;",
+        ".ldp-segmented-branches .ldp-post-actions >\n  .ldp-reader-branch-toggle {"
       ]
     },
     {
@@ -441,7 +479,8 @@
       "styles": [
         "20-shell.css",
         "30-stream.css",
-        "50-components.css"
+        "50-components.css",
+        "90-responsive.css"
       ],
       "tests": [
         "lite/tests/reader-post-action-feature.test.ts",
@@ -454,6 +493,8 @@
       "runtimeClasses": [
         "ldp-reactions",
         "ldp-actions",
+		"ldp-post-actions-toggle",
+		"ldp-post-actions-expanded",
         "ldp-boost-list",
         "ldp-boost-fallback-icon",
         "ldp-boost-identities",
@@ -528,6 +569,9 @@
         ".ldp-topic-action-rail .ldp-topic-footer-slot > .ldp-topic-shared-issue {\n  order: 40;\n}",
 		".ldp-topic-action-rail-summary-bookmark-group {\n  display: contents;\n  order: 50;\n}",
 		".ldp-topic-action-rail-summary { order: 51; }",
+		".ldp-topic-action-rail:is(\n    .is-default-left,\n    .is-default-right\n  ) {",
+		".ldp-boost-bubble > .ldp-boost-quick-actions.ldp-action-surface {",
+		"@media (hover: hover) {\n  .ldp-boost-bubble:focus-within > .ldp-boost-quick-actions {",
 		".ldp-topic-summary-surface {\n  display: flex;",
 		".ldp-topic-summary-history {\n  display: flex;",
 		".ldp-topic-summary-history-entry {\n  display: grid;",
@@ -583,7 +627,8 @@
       "styles": [
         "50-components.css",
         "55-collections.css",
-        "80-motion.css"
+        "80-motion.css",
+        "90-responsive.css"
       ],
       "tests": [
         "lite/tests/reader-history-panel-view.test.ts",
@@ -609,6 +654,12 @@
 		"ldp-reader-floating-window-add",
 		"ldp-reader-floating-window-add-menu",
 		"ldp-reader-floating-window-add-option",
+		"ldp-reader-floating-window-mobile-menu-wrap",
+		"ldp-reader-floating-window-mobile-menu-toggle",
+		"ldp-reader-floating-window-mobile-current",
+		"ldp-reader-floating-window-mobile-current-title",
+		"ldp-reader-floating-window-mobile-menu",
+		"ldp-reader-floating-window-mobile-menu-option",
 		"ldp-reader-floating-window-extra-action",
 		"ldp-reader-floating-window-extra-actions",
 		"ldp-collection-cache-progress",
@@ -644,7 +695,9 @@
         ".ldp-unwanted-topic-bulk-bar {\n  display: flex;\n  min-width: 0;\n  grid-area: bulk;",
         ".ldp-unwanted-topic-list {\n  display: grid;\n  min-height: 0;\n  grid-area: list;",
         ".ldp-unwanted-topic-footer {\n  display: flex;\n  min-height: 42px;\n  grid-area: footer;",
-        ".ldp-unwanted-topic-filter-master {\n  display: flex;\n  flex: none;\n  align-items: center;"
+        ".ldp-unwanted-topic-filter-master {\n  display: flex;\n  flex: none;\n  align-items: center;",
+		"height: min(78dvh, 680px) !important;",
+		".ldp-reader-floating-window-mobile-menu-option {"
       ],
       "exclusiveRuntimeClasses": [
         "ldp-collection-item",
@@ -669,7 +722,8 @@
 		"lite/src/shell/reader-topic-edit-form-surface.ts"
       ],
       "styles": [
-        "50-components.css"
+        "50-components.css",
+        "90-responsive.css"
       ],
       "tests": [
 		"lite/tests/reader-action-surface-coordinator.test.ts",
@@ -684,6 +738,10 @@
         "ldp-reader-action-dialog",
         "ldp-reader-confirm-dialog",
         "ldp-reader-action-form"
+      ],
+      "styleSignatures": [
+        ".ldp-reader-action-layer,\n  .ldp-reader-confirm-layer {",
+        "max-height: min(82dvh, 680px);"
       ]
     },
     {
@@ -706,15 +764,19 @@
 		"ldp-user-card-follow-preview",
         "ldp-user-card-head",
         "ldp-connect-card",
-        "ldp-connect-metric"
+        "ldp-connect-metric",
+        "is-community-score"
       ],
       "styleSignatures": [
-        ".ldp-user-card-follow-panel {\n  pointer-events: auto;"
+        ".ldp-user-card-follow-panel {\n  pointer-events: auto;",
+        ".ldp-user-profile-fact.is-community-score .ldp-user-profile-fact-value {",
+        "@media (max-width: 480px) {\n  .ldp-connect-rings {\n    grid-template-columns: repeat(3, minmax(0, 1fr));"
       ]
     },
     {
       "id": "media-and-lightbox",
       "owners": [
+        "lite/src/media/reader-lightbox-feature.ts",
         "lite/src/media/reader-lightbox-view.ts",
         "lite/src/media/reader-lightbox-batch-controller.ts",
         "lite/src/media/reader-lightbox-batch-view.ts",
@@ -730,6 +792,7 @@
         "90-responsive.css"
       ],
       "tests": [
+        "lite/tests/reader-lightbox-feature.test.ts",
         "lite/tests/reader-lightbox-view.test.ts",
         "lite/tests/reader-lightbox-batch-controller.test.ts",
         "lite/tests/reader-lightbox-batch-view.test.ts",
@@ -742,6 +805,7 @@
       "runtimeClasses": [
         "ldp-lightbox",
         "ldp-lb-main",
+        "ldp-lb-comments-collapse",
         "ldp-lb-batch-overlay",
         "ldp-lb-batch-dialog",
 		"ldp-lb-batch-preview",
@@ -769,7 +833,12 @@
         "background: rgba(10, 12, 16, .5);",
         "outline: 2px solid #8cc7ff;",
         "scroll-snap-type: x proximity;",
-        "content-visibility: visible;"
+        "content-visibility: visible;",
+        ".ldp-lb-main {\n    flex-direction: column;",
+        ".ldp-lb-tools > .ldp-lb-btn {\n    width: 100%;",
+        "height: min(34dvh, 360px);",
+        "height: 44px;\n    max-height: 44px;",
+        ".ldp-lb-comments-collapse {\n    display: inline-grid;"
       ]
     },
     {
@@ -818,6 +887,9 @@
         "ldp-settings-popover",
         "ldp-settings-panel",
         "ldp-settings-theme",
+        "ldp-settings-menu-toggle",
+        "ldp-settings-menu-current",
+		"ldp-settings-menu-open",
         "ldp-reader-window-fields",
         "ldp-reader-window-field",
         "ldp-reader-window-input",
@@ -835,7 +907,13 @@
         ".ldp-font-option-control:has(.ldp-font-family-custom:not([hidden])) {\n  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;",
         ".ldp-boost-rule-preview {\n  display: flex;",
         ".ldp-boost-rule-preview .ldp-boost-copy-preview {",
-        ".ldp-settings-category-group[data-settings-category^=\"performance-\"]"
+        ".ldp-settings-category-group[data-settings-category^=\"performance-\"]",
+        "@media (max-width: 760px) {\n  .ldp-settings-popover {",
+        ".ldp-settings-popover {\n    --ldp-settings-frozen-height: 68px;",
+        "height: min(86dvh, 720px);",
+        "grid-template-columns: minmax(0, 1fr);\n    grid-template-rows: 48px minmax(0, 1fr);",
+        ".ldp-settings-popover.ldp-settings-menu-open .ldp-settings-nav-shell {",
+        ".ldp-settings-menu-current {\n    font-size: var(--ldp-font-md);"
       ]
     },
     {

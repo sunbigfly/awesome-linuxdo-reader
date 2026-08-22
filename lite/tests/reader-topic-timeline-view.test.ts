@@ -179,8 +179,9 @@ assert(
 	template.topicTimelineTotal.textContent === '20' &&
 	template.topicTimelineDate.textContent?.includes('2026 年') &&
 	template.topicTimelineRelative.textContent === '刚刚' &&
+	template.topicTimelineTrack.dataset.timelineTotal === '20' &&
 	template.topicTimelineTrack.getAttribute('aria-valuemax') === '20',
-	'时间轴 View 初态必须只由 controller snapshot 与显式时间元数据端口渲染',
+	'时间轴 View 初态必须只由 controller snapshot 与显式时间元数据端口渲染，并为移动端固定总楼层标签提供同源数据',
 );
 let stableTimelineAttributeWrites = 0;
 const restoreTimelineAttributes: Array<() => void> = [];

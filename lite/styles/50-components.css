@@ -1451,7 +1451,7 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 .ldp-user-card-head {
   position: static;
   margin-top: 0;
-  padding: 0 44px 0 0;
+  padding: 0;
   background: none;
 }
 
@@ -1572,18 +1572,21 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 }
 
 .ldp-user-card-home {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  display: grid;
-  width: 36px;
-  height: 36px;
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
   place-items: center;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--ldp-ink-muted);
   text-decoration: none;
+}
+
+.ldp-user-card-home .ldp-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .ldp-user-card-home:hover {
@@ -2425,6 +2428,10 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
 
 .ldp-reader-floating-window-tab-row {
   align-items: flex-start;
+}
+
+.ldp-reader-floating-window-mobile-menu-wrap {
+  display: none;
 }
 
 .ldp-reader-floating-window-toolbar-row {

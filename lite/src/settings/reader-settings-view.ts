@@ -132,6 +132,8 @@ export class ReaderSettingsView<TPreferences extends object> {
 	readonly #panelHosts = new Map<ReaderSettingsPanelId, HTMLElement>();
 	readonly #groups = new Map<string, HTMLElement>();
 	readonly #themeHost: HTMLElement;
+	readonly #mobileMenuToggle: HTMLButtonElement;
+	readonly #mobileMenuCurrent: HTMLElement;
 	readonly #fieldInteractions: ReaderSettingsFieldInteraction;
 	readonly #help: ReaderSettingsHelpSurface;
 	#closePending = false;
@@ -192,6 +194,8 @@ export class ReaderSettingsView<TPreferences extends object> {
 		);
 		const tabs = navigation.root;
 		this.#themeHost = navigation.themeHost;
+		this.#mobileMenuToggle = navigation.mobileMenuToggle;
+		this.#mobileMenuCurrent = navigation.mobileMenuCurrent;
 		this.#panel = element(
 			this.#document,
 			'div',
@@ -295,6 +299,10 @@ export class ReaderSettingsView<TPreferences extends object> {
 			if (!readerEscapeOwnedBy(this.#document, this.#popover)) return;
 			keyboard.preventDefault();
 			keyboard.stopImmediatePropagation();
+			if (this.#popover.classList.contains('ldp-settings-menu-open')) {
+				this.#setMobileMenuOpen(false);
+				return;
+			}
 			void this.requestClose();
 		}, true);
 		this.#listen(this.#document, 'pointerdown', (event) => {
@@ -310,6 +318,17 @@ export class ReaderSettingsView<TPreferences extends object> {
 			void this.requestClose();
 		});
 		this.#listen(this.#popover, 'pointerdown', (event) => {
+			const navShell = this.#popover.querySelector<HTMLElement>(
+				'.ldp-settings-nav-shell',
+			);
+			if (
+				this.#popover.classList.contains('ldp-settings-menu-open') &&
+				!eventPathIncludes(event, navShell) &&
+				!eventPathIncludes(event, this.#mobileMenuToggle)
+			) {
+				this.#setMobileMenuOpen(false);
+				return;
+			}
 			this.#help.close();
 			this.#startWindowDrag(event as PointerEvent);
 		});
@@ -382,6 +401,7 @@ export class ReaderSettingsView<TPreferences extends object> {
 		this.#syncPanelSearchIndex();
 		if (panelId === 'user') this.#controller.setQuery('');
 		this.#controller.activatePanel(panelId);
+		this.#setMobileMenuOpen(false);
 		this.#popover.hidden = false;
 		this.#toggle.setAttribute('aria-expanded', 'true');
 		this.#render(this.#controller.snapshot);
@@ -395,6 +415,7 @@ export class ReaderSettingsView<TPreferences extends object> {
 		if (this.scope.destroyed) return;
 		this.#fieldInteractions.close();
 		this.#help.close();
+		this.#setMobileMenuOpen(false);
 		this.#popover.hidden = true;
 		this.#toggle.setAttribute('aria-expanded', 'false');
 		this.#toggle.focus({ preventScroll: true });
@@ -455,8 +476,27 @@ export class ReaderSettingsView<TPreferences extends object> {
 	): Readonly<{
 		readonly root: HTMLElement;
 		readonly themeHost: HTMLElement;
+		readonly mobileMenuToggle: HTMLButtonElement;
+		readonly mobileMenuCurrent: HTMLElement;
 	}> {
 		const tabs = element(this.#document, 'aside', 'ldp-settings-tabs');
+		const mobileMenuToggle = element(
+			this.#document,
+			'button',
+			'ldp-settings-menu-toggle',
+		);
+		mobileMenuToggle.type = 'button';
+		mobileMenuToggle.setAttribute('aria-label', '打开设置分类');
+		mobileMenuToggle.setAttribute('aria-haspopup', 'menu');
+		mobileMenuToggle.setAttribute('aria-controls', 'ldp-settings-mobile-nav');
+		mobileMenuToggle.setAttribute('aria-expanded', 'false');
+		mobileMenuToggle.append(this.#icon('list'));
+		const mobileMenuCurrent = element(
+			this.#document,
+			'span',
+			'ldp-settings-menu-current',
+		);
+		mobileMenuCurrent.setAttribute('aria-live', 'polite');
 		const brand = element(this.#document, 'div', 'ldp-settings-brand');
 		brand.setAttribute('aria-label', brandName);
 		if (logoUrl) {
@@ -494,6 +534,7 @@ export class ReaderSettingsView<TPreferences extends object> {
 			'div',
 			'ldp-settings-nav-shell',
 		);
+		navShell.id = 'ldp-settings-mobile-nav';
 		const nav = element(this.#document, 'div', 'ldp-settings-nav');
 		nav.setAttribute('role', 'tablist');
 		nav.setAttribute('aria-label', '设置分类');
@@ -528,6 +569,7 @@ export class ReaderSettingsView<TPreferences extends object> {
 			this.#listen(button, 'click', () => {
 				if (panelId === 'user') this.#controller.setQuery('');
 				this.#controller.activatePanel(panelId);
+				this.#setMobileMenuOpen(false);
 			});
 			this.#tabs.set(panelId, button);
 			this.#badges.set(panelId, badge);
@@ -566,8 +608,33 @@ export class ReaderSettingsView<TPreferences extends object> {
 			'ldp-settings-theme',
 		);
 		footer.append(themeHost);
-		tabs.append(brand, navShell, footer);
-		return Object.freeze({ root: tabs, themeHost });
+		this.#listen(mobileMenuToggle, 'click', () => {
+			this.#setMobileMenuOpen(
+				!this.#popover.classList.contains('ldp-settings-menu-open'),
+			);
+		});
+		tabs.append(
+			mobileMenuToggle,
+			mobileMenuCurrent,
+			brand,
+			navShell,
+			footer,
+		);
+		return Object.freeze({
+			root: tabs,
+			themeHost,
+			mobileMenuToggle,
+			mobileMenuCurrent,
+		});
+	}
+
+	#setMobileMenuOpen(open: boolean): void {
+		this.#popover.classList.toggle('ldp-settings-menu-open', open);
+		this.#mobileMenuToggle.setAttribute('aria-expanded', String(open));
+		this.#mobileMenuToggle.setAttribute(
+			'aria-label',
+			open ? '收起设置分类' : '打开设置分类',
+		);
 	}
 
 	#createSearch(): HTMLElement {
@@ -684,6 +751,10 @@ export class ReaderSettingsView<TPreferences extends object> {
 			badge.hidden = count === 0;
 			badge.textContent = count > 0 ? String(count) : '';
 		}
+		this.#mobileMenuCurrent.textContent =
+			READER_SETTINGS_PANELS.find(
+				(panel) => panel.id === snapshot.activePanelId,
+			)?.title ?? '设置分类';
 		for (const group of READER_SETTINGS_GROUPS) {
 			this.#groups.get(group.id)!.hidden =
 				!group.panelIds.some((panelId) => visible.has(panelId));

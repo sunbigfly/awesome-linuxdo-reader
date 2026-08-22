@@ -74,8 +74,10 @@ const translationBindings = createReaderUserscriptRuntimeBindings(
 );
 assert(
 	translationBindings.host === translationEnvironment.discourseHost &&
-	translationBindings.translation?.http !== undefined,
-	'翻译 runtime binding 必须由同一 environment 提供站外 GM 白名单端口',
+	translationBindings.translation?.http !== undefined &&
+	translationBindings.communityScore?.http ===
+		translationBindings.translation.http,
+	'翻译与社区分数 runtime binding 必须复用同一 environment 的站外 GM 白名单端口',
 );
 let stageSetups = 0;
 let stageCleanups = 0;

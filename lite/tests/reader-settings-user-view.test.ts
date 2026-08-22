@@ -114,6 +114,7 @@ const gateway: ReaderUserRequestGateway = {
 };
 let connectLoads = 0;
 let creditLoads = 0;
+let communityScoreLoads = 0;
 let creditMode: 'limited' | 'unlimited' | 'error' = 'limited';
 const session = new ReaderUserDomainSession({
 	gateway,
@@ -195,6 +196,18 @@ const session = new ReaderUserDomainSession({
 			});
 		},
 	},
+	communityScore: {
+		async load(username) {
+			communityScoreLoads += 1;
+			return Object.freeze({
+				phase: 'ready',
+				accountUsername: username,
+				metrics: Object.freeze({ score: 73 }),
+				updatedAt: 11,
+				stale: false,
+			});
+		},
+	},
 });
 let historyLoads = 0;
 const historyDates = Object.freeze(Array.from({ length: 50 }, (_, index) => {
@@ -269,10 +282,13 @@ const view = new ReaderSettingsUserView({
 	avatarSource: (template, size) => template.replace('{size}', String(size)),
 	connectEnabled: false,
 	creditEnabled: true,
+	communityScoreEnabled: true,
 });
 for (let index = 0; index < 8; index += 1) await Promise.resolve();
 assert(
-	creditLoads === 1 && view.root.querySelectorAll('[data-user-info-view]').length === 2,
+	creditLoads === 1 &&
+		communityScoreLoads === 1 &&
+		view.root.querySelectorAll('[data-user-info-view]').length === 2,
 	'当前账号设置必须只复用一次 session 外部资源，并保留 LDC/用户信息两个投影',
 );
 assert(
@@ -291,8 +307,22 @@ assert(
 		facts.includes('群组Team') &&
 		facts.includes('正在关注4') &&
 		facts.includes('关注者12') &&
-		facts.includes('点数9'),
-	'当前账号资料事实必须对齐主线信任、群组、关注关系与点数',
+		facts.includes('点数9') &&
+		facts.includes('社区分数73') &&
+		view.root.querySelector(
+			'.ldp-user-profile-fact.is-community-score .ldp-user-profile-fact-value',
+		)?.textContent === '73',
+	'当前账号资料事实必须对齐主线信任、群组、关注关系、点数与独立社区分数',
+);
+assert(
+	[...view.root.querySelectorAll<HTMLElement>(
+		'[data-user-profile-fact-group]',
+	)].map((item) => item.dataset.userProfileFactGroup).join(',') ===
+		'community,social,activity' &&
+	view.root.querySelector('[data-user-profile-fact="points"]')
+		?.nextElementSibling?.getAttribute('data-user-profile-fact') ===
+		'community-score',
+	'当前账号资料必须把动态组置底，并保持点数与社区分数相邻',
 );
 assert(
 	view.root.querySelector('.ldp-user-info-avatar img')?.getAttribute('src') === '/avatar/144.png' &&

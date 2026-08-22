@@ -61,6 +61,7 @@ const READER_FLOATING_WINDOW_LAUNCHERS = Object.freeze([
 const READER_FLOATING_WINDOW_LAUNCHER_SELECTOR =
 	READER_FLOATING_WINDOW_LAUNCHERS.map(({ selector }) => selector).join(',');
 const READER_FLOATING_WINDOW_SCROLLBAR_GUARD_PX = 6;
+const READER_FLOATING_WINDOW_MOBILE_MAX_WIDTH = 760;
 
 const floatingWindowTabGroups = new WeakMap<
 	HTMLElement,
@@ -118,7 +119,11 @@ class ReaderFloatingWindowTabGroup {
 		this.#document = document;
 		this.#mount = mount;
 		this.#onPointerDown = (event) => {
-			if (eventPathMatches(event, '.ldp-reader-floating-window-add-wrap')) {
+			if (eventPathMatches(
+				event,
+				'.ldp-reader-floating-window-add-wrap,' +
+					'.ldp-reader-floating-window-mobile-menu-wrap',
+			)) {
 				return;
 			}
 			this.#closeMenus();
@@ -178,7 +183,9 @@ class ReaderFloatingWindowTabGroup {
 		if (!this.#frames.has(frame.tabId)) return;
 		this.#captureTabScroll();
 		if (this.#visible) this.#captureSharedGeometry();
-		else this.#sharedGeometry = frame.geometry.snapshot.geometry;
+		else if (!frame.compactViewport) {
+			this.#sharedGeometry = frame.geometry.snapshot.geometry;
+		}
 		const revealActive = !this.#opened.includes(frame);
 		if (revealActive) this.#opened.push(frame);
 		this.#active = frame;
@@ -198,6 +205,12 @@ class ReaderFloatingWindowTabGroup {
 		}
 		if (!this.#opened.length) this.#visible = false;
 		this.#sync();
+	}
+
+	dismiss(frame: ReaderFloatingWindowFrame): boolean {
+		if (!this.#visible || this.#active !== frame) return false;
+		this.#dismiss();
+		return true;
 	}
 
 	activate(frame: ReaderFloatingWindowFrame): void {
@@ -227,6 +240,7 @@ class ReaderFloatingWindowTabGroup {
 		) return false;
 		event.preventDefault();
 		event.stopImmediatePropagation();
+		if (frame.closeMobileMenu()) return true;
 		if (this.#pinned) this.#closeMenus();
 		else this.#dismiss();
 		return true;
@@ -265,7 +279,9 @@ class ReaderFloatingWindowTabGroup {
 			| undefined;
 		if (!target) return;
 		target.reloadStoredGeometry();
-		this.#sharedGeometry = target.geometry.snapshot.geometry;
+		if (!target.compactViewport) {
+			this.#sharedGeometry = target.geometry.snapshot.geometry;
+		}
 		this.#sync();
 	}
 
@@ -296,7 +312,7 @@ class ReaderFloatingWindowTabGroup {
 	}
 
 	#captureSharedGeometry(): void {
-		if (!this.#active) return;
+		if (!this.#active || this.#active.compactViewport) return;
 		this.#sharedGeometry = this.#active.geometry.snapshot.geometry;
 	}
 
@@ -309,10 +325,13 @@ class ReaderFloatingWindowTabGroup {
 	}
 
 	#sync(revealActive = false): void {
-		if (!this.#sharedGeometry && this.#active) {
+		const sharesDesktopGeometry = Boolean(
+			this.#active && !this.#active.compactViewport,
+		);
+		if (!this.#sharedGeometry && this.#active && sharesDesktopGeometry) {
 			this.#sharedGeometry = this.#active.geometry.snapshot.geometry;
 		}
-		if (this.#active && this.#sharedGeometry) {
+		if (this.#active && this.#sharedGeometry && sharesDesktopGeometry) {
 			this.#active.applySharedGeometry(this.#sharedGeometry);
 		}
 		const remaining = [...this.#frames.values()]
@@ -466,6 +485,10 @@ export class ReaderFloatingWindowFrame {
 	readonly addWrap: HTMLElement;
 	readonly addButton: HTMLButtonElement;
 	readonly addMenu: HTMLElement;
+	readonly mobileMenuWrap: HTMLElement;
+	readonly mobileMenuButton: HTMLButtonElement;
+	readonly mobileMenuCurrent: HTMLElement;
+	readonly mobileMenu: HTMLElement;
 	readonly pinButton: HTMLButtonElement;
 	readonly closeButton: HTMLButtonElement;
 	readonly tabId: string;
@@ -487,6 +510,8 @@ export class ReaderFloatingWindowFrame {
 	#iconName: string;
 	#open = false;
 	#active = false;
+	#desktopGeometryReady = false;
+	#deferredMinimumWidth: number | null = null;
 
 	constructor(options: ReaderFloatingWindowFrameOptions) {
 		this.#onClose = options.onClose ?? (() => {});
@@ -565,6 +590,38 @@ export class ReaderFloatingWindowFrame {
 		this.addMenu.setAttribute('role', 'menu');
 		this.addMenu.setAttribute('aria-label', '添加剩余工具浮窗');
 		this.addWrap.append(this.addButton, this.addMenu);
+		this.mobileMenuWrap = node(
+			options.document,
+			'div',
+			'ldp-reader-floating-window-mobile-menu-wrap',
+		);
+		this.mobileMenuButton = options.document.createElement('button');
+		this.mobileMenuButton.type = 'button';
+		this.mobileMenuButton.className =
+			'ldp-reader-floating-window-mobile-menu-toggle';
+		this.mobileMenuButton.setAttribute('aria-label', '打开工具分类');
+		this.mobileMenuButton.setAttribute('aria-haspopup', 'menu');
+		this.mobileMenuButton.setAttribute('aria-expanded', 'false');
+		this.mobileMenuButton.append(createReaderIcon(options.document, 'list'));
+		this.mobileMenuCurrent = node(
+			options.document,
+			'span',
+			'ldp-reader-floating-window-mobile-current',
+			options.title,
+		);
+		this.mobileMenu = node(
+			options.document,
+			'div',
+			'ldp-reader-floating-window-mobile-menu',
+		);
+		this.mobileMenu.hidden = true;
+		this.mobileMenu.setAttribute('role', 'menu');
+		this.mobileMenu.setAttribute('aria-label', '工具分类');
+		this.mobileMenuWrap.append(
+			this.mobileMenuButton,
+			this.mobileMenuCurrent,
+			this.mobileMenu,
+		);
 		this.meta = node(
 			options.document,
 			'span',
@@ -591,7 +648,12 @@ export class ReaderFloatingWindowFrame {
 			'div',
 			'ldp-reader-floating-window-tab-row',
 		);
-		this.tabRow.append(this.tabList, this.addWrap, this.pinButton);
+		this.tabRow.append(
+			this.mobileMenuWrap,
+			this.tabList,
+			this.addWrap,
+			this.pinButton,
+		);
 		this.toolbarRow = node(
 			options.document,
 			'div',
@@ -636,6 +698,8 @@ export class ReaderFloatingWindowFrame {
 		this.host.append(this.element);
 		this.scope.add(bindFloatingSurfaceWheel(this.element));
 		const currentViewport = viewport(options.document, options.mount);
+		this.#desktopGeometryReady =
+			currentViewport.width > READER_FLOATING_WINDOW_MOBILE_MAX_WIDTH;
 		const restored = storedPreferences(
 			options.geometryStorage,
 			options.geometryStorageKey,
@@ -653,10 +717,10 @@ export class ReaderFloatingWindowFrame {
 				margin: 8,
 				minWidth: 420,
 				minHeight: 360,
-				compactWidth: 0,
 				defaultViewportWidth: 0.8,
 				defaultViewportHeight: 0.82,
 				...options.policy,
+				compactWidth: READER_FLOATING_WINDOW_MOBILE_MAX_WIDTH,
 			},
 		});
 		this.geometry.changes.subscribe(
@@ -683,6 +747,7 @@ export class ReaderFloatingWindowFrame {
 			...(view ? { viewportTarget: view } : {}),
 			readViewport: () => viewport(options.document, options.mount),
 			onPersist: (preferences) => {
+				if (this.compactViewport) return;
 				try {
 					options.geometryStorage?.setItem(
 						options.geometryStorageKey,
@@ -712,7 +777,12 @@ export class ReaderFloatingWindowFrame {
 			parentScope: this.scope,
 		});
 		this.#applyGeometry(this.geometry.snapshot);
-		this.scope.listen(this.closeButton, 'click', () => this.close());
+		this.scope.listen(this.closeButton, 'click', () => {
+			const compact = this.#document().defaultView
+				?.matchMedia?.('(max-width: 760px)').matches === true;
+			if (compact && this.#tabGroup?.dismiss(this)) return;
+			this.close();
+		});
 		this.scope.listen(this.addButton, 'click', (event) => {
 			event.preventDefault();
 			event.stopPropagation();
@@ -720,6 +790,18 @@ export class ReaderFloatingWindowFrame {
 			const open = this.addButton.getAttribute('aria-expanded') === 'true';
 			this.addButton.setAttribute('aria-expanded', String(!open));
 			this.addMenu.hidden = open;
+		});
+		this.scope.listen(this.mobileMenuButton, 'click', (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			const open =
+				this.mobileMenuButton.getAttribute('aria-expanded') === 'true';
+			this.mobileMenuButton.setAttribute('aria-expanded', String(!open));
+			this.mobileMenuButton.setAttribute(
+				'aria-label',
+				open ? '打开工具分类' : '收起工具分类',
+			);
+			this.mobileMenu.hidden = open;
 		});
 		this.scope.listen(this.tabList, 'wheel', (eventValue) => {
 			const event = eventValue as WheelEvent;
@@ -732,10 +814,41 @@ export class ReaderFloatingWindowFrame {
 			event.preventDefault();
 			event.stopPropagation();
 		}, { passive: false });
+		let compactViewport =
+			currentViewport.width <= READER_FLOATING_WINDOW_MOBILE_MAX_WIDTH;
 		if (view) {
 			this.scope.listen(view, 'resize', () => {
+				const wasCompact = compactViewport;
 				const next = viewport(options.document, options.mount);
 				this.geometry.resizeViewport(next.width, next.height);
+				compactViewport =
+					next.width <= READER_FLOATING_WINDOW_MOBILE_MAX_WIDTH;
+				if (!wasCompact && compactViewport) this.closeAddMenu();
+				if (wasCompact && !compactViewport) {
+					this.closeMobileMenu();
+					if (this.#deferredMinimumWidth !== null) {
+						this.geometry.setMinimumWidth(this.#deferredMinimumWidth);
+						this.#deferredMinimumWidth = null;
+					}
+					if (!this.#desktopGeometryReady) {
+						const restored = storedPreferences(
+							this.#geometryStorage,
+							this.#geometryStorageKey,
+						);
+						if (restored) {
+							this.geometry.setGeometry(
+								restored.readerWindowWidth,
+								restored.readerWindowHeight,
+								restored.readerWindowX,
+								restored.readerWindowY,
+							);
+						} else {
+							this.geometry.reset();
+						}
+						this.#desktopGeometryReady = true;
+					}
+				}
+				this.#tabGroup?.refresh();
 			});
 		}
 		this.#tabGroup = standalone
@@ -765,6 +878,11 @@ export class ReaderFloatingWindowFrame {
 		return this.#active;
 	}
 
+	get compactViewport(): boolean {
+		return this.geometry.snapshot.viewportWidth <=
+			READER_FLOATING_WINDOW_MOBILE_MAX_WIDTH;
+	}
+
 	setIcon(name: string): void {
 		this.#iconName = name;
 		this.#tabGroup?.refresh();
@@ -776,10 +894,15 @@ export class ReaderFloatingWindowFrame {
 	}
 
 	setMinimumWidth(width: number): void {
+		if (this.compactViewport) {
+			this.#deferredMinimumWidth = width;
+			return;
+		}
 		this.geometry.setMinimumWidth(width);
 	}
 
 	applySharedGeometry(geometry: ReaderWindowSnapshot['geometry']): void {
+		if (this.compactViewport) return;
 		this.geometry.setGeometry(
 			geometry.width,
 			geometry.height,
@@ -878,6 +1001,36 @@ export class ReaderFloatingWindowFrame {
 		revealActive: boolean,
 	): void {
 		if (!this.#active || !this.#tabGroup) return;
+		this.mobileMenuCurrent.replaceChildren(
+			createReaderIcon(this.#document(), this.#iconName),
+			node(
+				this.#document(),
+				'span',
+				'ldp-reader-floating-window-mobile-current-title',
+				this.#tabLabel,
+			),
+		);
+		const allFrames = [...opened, ...remaining]
+			.sort((left, right) => left.tabOrder - right.tabOrder);
+		this.mobileMenu.replaceChildren(...allFrames.map((frame) => {
+			const option = this.#document().createElement('button');
+			option.type = 'button';
+			option.className = 'ldp-reader-floating-window-mobile-menu-option';
+			option.dataset.floatingMobileTab = frame.tabId;
+			option.setAttribute('role', 'menuitem');
+			option.setAttribute('aria-current', frame === this ? 'page' : 'false');
+			option.classList.toggle('is-active', frame === this);
+			option.append(
+				createReaderIcon(this.#document(), frame.#iconName),
+				this.#document().createTextNode(frame.#tabLabel),
+			);
+			option.addEventListener('click', () => {
+				this.closeMobileMenu();
+				if (frame.isOpen) this.#tabGroup?.activate(frame);
+				else void frame.requestOpenFromTabs();
+			});
+			return option;
+		}));
 		this.tabList.replaceChildren(...opened.map((frame) => {
 			const item = node(
 				this.#document(),
@@ -989,6 +1142,16 @@ export class ReaderFloatingWindowFrame {
 	closeAddMenu(): void {
 		this.addButton.setAttribute('aria-expanded', 'false');
 		this.addMenu.hidden = true;
+		this.closeMobileMenu();
+	}
+
+	closeMobileMenu(): boolean {
+		const open =
+			this.mobileMenuButton.getAttribute('aria-expanded') === 'true';
+		this.mobileMenuButton.setAttribute('aria-expanded', 'false');
+		this.mobileMenuButton.setAttribute('aria-label', '打开工具分类');
+		this.mobileMenu.hidden = true;
+		return open;
 	}
 
 	async requestOpenFromTabs(): Promise<void> {

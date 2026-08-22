@@ -87,15 +87,16 @@ const coreDomains = new Set([
   'userscript',
 ])
 const platformDomains = new Set([
-  'cache',
-  'collection',
-  'discourse',
-  'history',
-  'monitor',
-  'network',
-  'notification',
-  'queue',
-  'sync',
+	'cache',
+	'collection',
+	'discourse',
+	'history',
+	'monitor',
+	'network',
+	'notification',
+	'queue',
+	'sync',
+	'translation',
 ])
 const libraryDefinitions = [
   Object.freeze({
@@ -114,7 +115,7 @@ const libraryDefinitions = [
     file: 'libraries/main-lite-platform.js',
     compatibilityFiles: ['libraries/mian-lite-platform.js'],
     descriptionEn: 'Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.',
-    description: '缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块',
+		description: '缓存、集合、Discourse、网络、队列、同步、通知、监控与翻译平台模块',
   }),
   Object.freeze({
     name: 'main-lite-features',
@@ -123,7 +124,7 @@ const libraryDefinitions = [
     file: 'libraries/main-lite-features.js',
     compatibilityFiles: ['libraries/mian-lite-features.js'],
     descriptionEn: 'Feature modules for Awesome LinuxDo Reader Lite.',
-    description: '媒体、互动、设置、用户、翻译与其他功能模块',
+		description: '媒体、互动、设置、用户与其他功能模块',
   }),
 ]
 

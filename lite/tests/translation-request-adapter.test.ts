@@ -15,6 +15,7 @@ import {
 } from '../src/network/domain-request-gateway.js';
 import {
 	BrowserUserscriptExternalHttpPort,
+	communityScoreUserInfoRequest,
 	TranslationRequestAdapter,
 	TranslationProviderRequests,
 	type ExternalTranslationHttpDescriptor,
@@ -339,6 +340,16 @@ assert(
 		raw.cloudflareMitigated === true &&
 		requestOptions?.url.startsWith('https://translate.googleapis.com/'),
 	'userscript 外部端口必须保留限速/Cloudflare 响应元数据且只执行白名单 endpoint',
+);
+await browserHttp.execute(communityScoreUserInfoRequest(), {
+	signal,
+	attempt: 0,
+});
+assert(
+	requestOptions?.url === 'https://cdk.linux.do/api/v1/oauth/user-info' &&
+		requestOptions.withCredentials === true &&
+		requestOptions.anonymous === false,
+	'CDK 社区分数 descriptor 必须固定只读 endpoint 并显式携带登录凭据',
 );
 let rejectedDiscourse = false;
 try {

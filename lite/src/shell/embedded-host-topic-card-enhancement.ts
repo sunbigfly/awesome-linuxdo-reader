@@ -6,6 +6,7 @@ import {
 	clearReaderInlineEmoji,
 	renderReaderInlineEmoji,
 } from '../components/reader-inline-emoji.js';
+import { createReaderIcon } from '../components/reader-icon.js';
 import type {
 	ReaderUnwantedTopicFilterInput,
 	ReaderUnwantedTopicFilterMatch,
@@ -20,11 +21,14 @@ import type {
 
 const CARD_SELECTOR = 'tr.topic-list-item,.topic-list-item,.latest-topic-list-item';
 const TOPIC_LINK_SELECTOR =
-	'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],a[href*="/t/"]';
+	'.main-link a.raw-topic-link[href*="/t/"],' +
+	'.main-link a.title[href*="/t/"],.main-link a[href*="/t/"]';
 const NEW_TOPIC_BADGE_SELECTOR =
 	'.topic-post-badges,.badge-notification.new-topic';
 const AUTOMATIC_FILTER_ATTRIBUTE = 'data-ldp-unwanted-auto-filter';
 const MANUAL_FILTER_ATTRIBUTE = 'data-ldp-unwanted-manual-filter';
+const HOST_OP_AVATAR_LONG_PRESS_ATTRIBUTE =
+	'data-ldp-host-op-avatar-long-press';
 const EXPOSURE_COUNT_CLASS = 'ldp-host-topic-exposure-count';
 const TOPIC_LIST_SELECTOR = '.topic-list,.latest-topic-list';
 const OPENED_TOPIC_STORAGE_KEY =
@@ -303,6 +307,7 @@ implements EmbeddedHostEnhancementPort {
 			this.#markNewTopic(card, topic);
 			this.#syncExposure(card);
 			this.#groupTitleTools(card, topic);
+			this.#markMobileOpAvatar(card);
 			if (mode === 'embedded') {
 				this.#markDateCells(card);
 				this.#syncStats(card, reactions);
@@ -409,6 +414,12 @@ implements EmbeddedHostEnhancementPort {
 		for (const node of root.querySelectorAll(
 			'[data-ldp-native-old-topic]',
 		)) node.removeAttribute('data-ldp-native-old-topic');
+		for (const node of root.querySelectorAll(
+			`[${HOST_OP_AVATAR_LONG_PRESS_ATTRIBUTE}]`,
+		)) {
+			node.removeAttribute('data-user-card-long-press');
+			node.removeAttribute(HOST_OP_AVATAR_LONG_PRESS_ATTRIBUTE);
+		}
 		for (const node of root.querySelectorAll(
 			'[data-ldp-native-topic-date-row],[data-ldp-native-dnd-ready],' +
 			'[data-ldp-native-new-topic],[data-ldp-native-new-topic-marker]',
@@ -782,8 +793,14 @@ implements EmbeddedHostEnhancementPort {
 	}
 
 	#groupTitleTools(card: Element, topic: unknown): void {
-		const line = card.querySelector<HTMLElement>('.link-top-line');
+		const titleLink = card.querySelector<HTMLElement>(TOPIC_LINK_SELECTOR);
+		const line = card.querySelector<HTMLElement>('.link-top-line') ??
+			titleLink?.parentElement;
 		if (!line) return;
+		const queue = card.querySelector<HTMLElement>('.ldp-reader-queue-add');
+		if (queue && titleLink && !line.contains(queue)) {
+			titleLink.after(queue);
+		}
 		const controls = [...line.querySelectorAll<HTMLElement>(
 			'a,button,[role="button"]',
 		)];
@@ -826,13 +843,28 @@ implements EmbeddedHostEnhancementPort {
 		group.append(...children.slice(start, end + 1));
 	}
 
+	#markMobileOpAvatar(card: Element): void {
+		const avatar = card.querySelector<HTMLElement>(
+			':scope > .topic-list-data > .pull-left > ' +
+			'[data-user-card]:first-child',
+		);
+		if (!avatar || avatar.hasAttribute('data-user-card-long-press')) return;
+		avatar.setAttribute('data-user-card-long-press', 'true');
+		avatar.setAttribute(HOST_OP_AVATAR_LONG_PRESS_ATTRIBUTE, 'true');
+	}
+
 	#createDndButton(line: HTMLElement, _topic: unknown): HTMLButtonElement {
 		const button = this.#document.createElement('button');
 		button.type = 'button';
 		button.dataset.ldpOwnedNativeDnd = 'true';
 		button.dataset.ldpNativeDnd = 'true';
 		button.setAttribute('aria-label', '免打扰：加入不想看');
-		line.append(button);
+		button.append(createReaderIcon(this.#document, 'bell-off'));
+		const queue = line.querySelector<HTMLElement>('.ldp-reader-queue-add');
+		const title = line.querySelector<HTMLElement>(TOPIC_LINK_SELECTOR);
+		if (queue) queue.after(button);
+		else if (title) title.after(button);
+		else line.append(button);
 		return button;
 	}
 

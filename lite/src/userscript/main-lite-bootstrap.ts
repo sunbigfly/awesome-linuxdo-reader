@@ -621,6 +621,7 @@ function createRuntimeStage(
 				}
 				return {
 					document,
+					host: environment.discourseHost,
 					routeKind,
 					requestedMode: requestedMode(
 						readPreferences(),
@@ -1459,6 +1460,9 @@ export function startMainLiteUserscript(
 	const document = page.document as Document | undefined;
 	const window = environment.pageWindow as Window;
 	if (!document) throw new Error('main-lite document 不可用');
+	if (window.frameElement?.hasAttribute(
+		'data-ldp-host-advanced-search-frame',
+	)) return null;
 	let localStorageAccessError: unknown;
 	let localStorage: Storage;
 	try {

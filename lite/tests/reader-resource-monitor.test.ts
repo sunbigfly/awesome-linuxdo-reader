@@ -286,7 +286,8 @@ assert(
 	pipelineRecords.some((record) =>
 		record.recordType === 'cache' && record.traceId === pipelineTraceId) &&
 	pipelineRecords.some((record) =>
-		record.recordType === 'request' && record.traceId === pipelineTraceId) &&
+		record.recordType === 'request' && record.traceId === pipelineTraceId &&
+			record.attribution === 'rate-limit') &&
 	!pipelineLog?.text.includes('private') &&
 	!pipelineLog?.text.includes('cache-secret') &&
 	!pipelineLog?.text.includes('auth-private'),
@@ -321,6 +322,10 @@ assert(
 			?.textContent?.includes('共享生效上限 3') &&
 		host.querySelector('.ldp-request-flow-window')
 			?.textContent?.includes('生效间隔 80ms') &&
+		host.querySelector('.ldp-request-flow-window')
+			?.textContent?.includes(
+				'近 60 秒来源 阅读器 1 / 原站 0 / 资源 1',
+			) &&
 		host.querySelector('[data-resource-monitor-row="requests"] small')
 			?.textContent?.includes('不是设置目标值') &&
 		host.querySelector('[data-resource-monitor-row="floors"] small')
@@ -348,6 +353,8 @@ assert(
 			?.textContent?.includes('/posts/9/replies.json') &&
 		host.querySelector('.ldp-request-flow-log')
 			?.textContent?.includes('树状可见') &&
+		host.querySelector('.ldp-request-flow-log')
+			?.textContent?.includes('归因 API/429 限流') &&
 		host.querySelector('.ldp-request-flow-observed')
 			?.textContent?.includes('Retry-After 2 秒') &&
 		!host.querySelector('.ldp-request-flow-log')

@@ -105,11 +105,14 @@ export function derivePostActionCapabilities(
 			topic,
 		'can_create_post',
 	);
+	const firstPost = Number(post.post_number) === 1;
 	const reply = !signedIn || hiddenOrDeleted
 		? 'denied'
-		: postReply === 'unknown'
+		: firstPost && topicReply !== 'unknown'
 			? topicReply
-			: postReply;
+			: postReply === 'unknown'
+				? topicReply
+				: postReply;
 	const report = !signedIn || ownPost || post.can_flag === false
 		? 'denied'
 		: post.can_flag === true || hasFlagAction

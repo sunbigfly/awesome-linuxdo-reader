@@ -391,6 +391,11 @@ export class ReaderTopicTimelineView {
 		}
 		this.#setText(current, String(snapshot.currentPostNumber));
 		this.#setText(total, String(snapshot.totalPostCount));
+		this.#setAttribute(
+			track,
+			'data-timeline-total',
+			String(snapshot.totalPostCount),
+		);
 		this.#setAttribute(track, 'aria-valuemin', '1');
 		this.#setAttribute(track, 'aria-valuemax', String(snapshot.totalPostCount));
 		this.#setAttribute(track, 'aria-valuenow', String(snapshot.currentPostNumber));

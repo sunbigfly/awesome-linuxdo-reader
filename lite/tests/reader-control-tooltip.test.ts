@@ -28,6 +28,8 @@ const { document: parsedDocument, window } = parseHTML(
 	'<button class="ldp-avatar-flair" data-ldp-tooltip-label="贡献者"></button>' +
 	'<span class="ldp-notification-type-icon" data-ldp-tooltip-label="回复" ' +
 	'aria-hidden="true"><svg></svg></span>' +
+	'<span class="ldp-time" data-exact-time="2026 年 7 月 23 日 15:30">' +
+	'<span class="ldp-time-relative">· 7 月 23 日</span></span>' +
 	'</section><article class="topic-list-item">' +
 	'<button class="ldp-reader-queue-add" aria-label="加入阅读队列" ' +
 	'data-ldp-tooltip-label="加入阅读队列" title="原生提示"></button>' +
@@ -48,6 +50,7 @@ const badge = document.querySelector<HTMLElement>('.ldp-avatar-flair')!;
 const notificationTypeIcon = document.querySelector<HTMLElement>(
 	'.ldp-notification-type-icon',
 )!;
+const postTime = document.querySelector<HTMLElement>('.ldp-time')!;
 const hostQueueAdd = document.querySelector<HTMLElement>(
 	'.ldp-reader-queue-add',
 )!;
@@ -60,6 +63,9 @@ Object.defineProperty(themeTime, 'getBoundingClientRect', {
 });
 Object.defineProperty(notificationTypeIcon, 'getBoundingClientRect', {
 	value: () => rect(260, 300, 16, 16),
+});
+Object.defineProperty(postTime, 'getBoundingClientRect', {
+	value: () => rect(350, 200, 90, 20),
 });
 Object.defineProperty(hostQueueAdd, 'getBoundingClientRect', {
 	value: () => rect(250, 420, 40, 40),
@@ -141,6 +147,56 @@ hostDnd.dispatchEvent(hover);
 assert(
 	tooltip.element.hidden && !tooltip.element.textContent,
 	'宿主免打扰动作必须退出 Reader tooltip owner，避免重新出现白色提示卡片',
+);
+
+Object.defineProperty(window, 'innerWidth', {
+	configurable: true,
+	value: 720,
+});
+const timeTouchDown = new window.Event('pointerdown', { bubbles: true });
+Object.defineProperty(timeTouchDown, 'pointerType', { value: 'touch' });
+postTime.dispatchEvent(timeTouchDown);
+postTime.click();
+assert(
+	!tooltip.element.hidden &&
+		tooltip.element.textContent === '2026 年 7 月 23 日 15:30' &&
+		tooltip.element.classList.contains('ldp-reader-time-tooltip') &&
+		tooltip.element.classList.contains('ldp-transient-surface') &&
+		tooltip.element.style.left === '205px' &&
+		tooltip.element.style.top === '320px',
+	'移动端点击任一楼层时间必须由统一 tooltip owner 显示具体时间并复用 transient surface 样式',
+);
+overlay.click();
+assert(
+	tooltip.element.hidden && !tooltip.element.textContent,
+	'点击时间以外区域必须关闭移动端固定显示的具体时间 tooltip',
+);
+history.dispatchEvent(hover);
+history.click();
+history.dispatchEvent(new window.Event('ldp-tooltip-refresh', { bubbles: true }));
+assert(
+	tooltip.element.hidden && !tooltip.element.textContent,
+	'移动端点击控件后必须关闭并抑制同次状态刷新重新打开 tooltip',
+);
+Object.defineProperty(window, 'innerWidth', {
+	configurable: true,
+	value: 800,
+});
+
+const touchHover = new window.Event('pointerover', { bubbles: true });
+Object.defineProperties(touchHover, {
+	pointerType: { value: 'touch' },
+	relatedTarget: { value: null },
+});
+history.dispatchEvent(touchHover);
+const touchDown = new window.Event('pointerdown', { bubbles: true });
+Object.defineProperty(touchDown, 'pointerType', { value: 'touch' });
+history.dispatchEvent(touchDown);
+history.dispatchEvent(new window.Event('focusin', { bubbles: true }));
+history.click();
+assert(
+	tooltip.element.hidden && !tooltip.element.textContent,
+	'触屏激活必须立即关闭 tooltip，并阻止点击后残留焦点重新显示提示',
 );
 
 badge.click();

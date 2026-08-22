@@ -217,8 +217,15 @@ const { document: parsedDocument, window: parsedWindow } = parseHTML(
 	'<button data-user-card="alice" data-user-avatar-preview ' +
 	'data-user-avatar-template="/post-avatar/{size}.png">' +
 	'<img src="/post-avatar/48.png" alt=""></button>' +
+	'<button data-user-card="alice" data-test-user-id>@alice</button>' +
+	'<a href="/notifications" data-test-notification-link>' +
+	'<span data-user-card="alice" data-user-card-hover-only ' +
+	'data-user-card-long-press data-test-notification-avatar></span></a>' +
 	'<button data-user-card="bob">Bob</button>' +
-	'</main></body></html>',
+	'</main><table><tbody><tr class="topic-list-item"><td class="topic-list-data">' +
+	'<div class="pull-left"><a href="/u/alice" data-user-card="alice" ' +
+	'data-user-card-long-press data-test-host-op-avatar><img alt=""></a>' +
+	'</div></td></tr></tbody></table></body></html>',
 );
 const document = parsedDocument as unknown as Document;
 const window = parsedWindow as unknown as Window;
@@ -226,6 +233,9 @@ const constructors = window as unknown as {
 	readonly Event: typeof Event;
 };
 const root = document.querySelector<HTMLElement>('main')!;
+const hostOpAvatar = document.querySelector<HTMLElement>(
+	'[data-test-host-op-avatar]',
+)!;
 const skeletonPending = deferred<
 	RequestTransportResponse<ReaderUserProfileResource>
 >();
@@ -326,9 +336,16 @@ const messages: string[] = [];
 const observations: string[] = [];
 const notifications: string[] = [];
 const endorsements: string[] = [];
+let mainTimerId = 0;
+const mainTimers = new Map<number, { callback: () => void; delayMs: number }>();
 const view = new ReaderUserCardView({
 	document,
 	root,
+	longPressDelegates: Object.freeze([Object.freeze({
+		root: document,
+		selector: '[data-test-host-op-avatar]',
+		capture: true,
+	})]),
 	session,
 	userHref: (username) => `/u/${username}`,
 	avatarSource: (template, size) =>
@@ -394,6 +411,14 @@ const view = new ReaderUserCardView({
 		mediaAnchors.push(anchor);
 		mediaReturnFocus.push(returnFocus);
 	},
+	schedule: (callback, delayMs) => {
+		const id = ++mainTimerId;
+		mainTimers.set(id, { callback, delayMs });
+		return id;
+	},
+	cancel: (handle) => {
+		mainTimers.delete(Number(handle));
+	},
 });
 
 const click = (target: Element, options: MouseEventInit = {}) => {
@@ -430,6 +455,10 @@ assert(
 );
 assert(
 	view.element.querySelector('.ldp-user-card-name')?.tagName === 'DIV' &&
+		view.element.querySelector('.ldp-user-card-level')?.nextElementSibling ===
+			view.element.querySelector('.ldp-user-card-home') &&
+		view.element.querySelector<HTMLAnchorElement>('.ldp-user-card-home')?.href
+			.endsWith('/u/alice') === true &&
 		view.element.querySelector('.ldp-user-card-action-status[href]') === null &&
 		view.element.querySelector<HTMLAnchorElement>(
 			'.ldp-user-card-stat[aria-label="查看帖子"]',
@@ -640,14 +669,176 @@ click(postAvatarTrigger);
 for (let index = 0; index < 4; index += 1) await Promise.resolve();
 assert(
 	media.join(',') === '/avatar/alice.png,/post-avatar/48.png' &&
-		mediaOriginals.join(',') ===
+	mediaOriginals.join(',') ===
 			'/avatar/alice.png,/post-avatar/1000.png' &&
-		!view.element.hidden && usernames.join(',') === 'alice' &&
-		mediaAnchors[1] === view.element &&
+		view.element.hidden && usernames.join(',') === 'alice' &&
+		mediaAnchors[1] === postAvatarTrigger &&
 		mediaReturnFocus[1] === postAvatarTrigger,
-	'楼层头像点击必须用当前预览与楼层模板取得原图，并保留 canonical 用户资料、卡片定位锚点和焦点返回目标',
+	'楼层头像点击必须只打开头像查看器，并用当前预览与楼层模板取得原图及焦点返回目标',
 );
-await view.open('alice', root.querySelector('[data-user-card="alice"]') as HTMLElement);
+const avatarPointerDown = new constructors.Event('pointerdown', {
+	bubbles: true,
+	cancelable: true,
+});
+for (const [key, value] of Object.entries({
+	pointerType: 'touch',
+	button: 0,
+	clientX: 24,
+	clientY: 24,
+})) Object.defineProperty(avatarPointerDown, key, { value });
+postAvatarTrigger.dispatchEvent(avatarPointerDown);
+const longPressTimer = [...mainTimers.entries()].find(([, timer]) =>
+	timer.delayMs === 500);
+assert(longPressTimer, '触屏头像必须建立唯一 500ms 长按识别任务');
+mainTimers.delete(longPressTimer[0]);
+longPressTimer[1].callback();
+for (let index = 0; index < 4; index += 1) await Promise.resolve();
+postAvatarTrigger.dispatchEvent(new constructors.Event('pointerup', {
+	bubbles: true,
+}));
+click(postAvatarTrigger);
+assert(
+	!view.element.hidden &&
+		view.element.querySelector('.ldp-user-card-username')?.textContent ===
+			'@alice' &&
+		media.length === 2,
+	'移动端长按头像必须打开用户卡，并吞掉随后合成的 click，不能再叠加头像查看器',
+);
+view.close();
+const notificationAvatarTrigger = root.querySelector<HTMLElement>(
+	'[data-test-notification-avatar]',
+)!;
+const notificationAvatarPointerDown = new constructors.Event('pointerdown', {
+	bubbles: true,
+	cancelable: true,
+});
+for (const [key, value] of Object.entries({
+	pointerType: 'touch',
+	button: 0,
+	clientX: 32,
+	clientY: 32,
+})) Object.defineProperty(notificationAvatarPointerDown, key, { value });
+notificationAvatarTrigger.dispatchEvent(notificationAvatarPointerDown);
+const syntheticTouchHover = new constructors.Event('mouseover', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperty(syntheticTouchHover, 'relatedTarget', { value: null });
+Object.defineProperty(syntheticTouchHover, 'sourceCapabilities', {
+	value: { firesTouchEvents: true },
+});
+notificationAvatarTrigger.dispatchEvent(syntheticTouchHover);
+const notificationLongPressTimer = [...mainTimers.entries()].find(
+	([, timer]) => timer.delayMs === 500,
+);
+assert(
+	notificationLongPressTimer && mainTimers.size === 1,
+	'通知头像触屏长按只能保留一个用户卡任务，兼容 mouseover 不得再并发 Hover 打开',
+);
+mainTimers.delete(notificationLongPressTimer[0]);
+notificationLongPressTimer[1].callback();
+for (let index = 0; index < 4; index += 1) await Promise.resolve();
+notificationAvatarTrigger.dispatchEvent(new constructors.Event('pointerup', {
+	bubbles: true,
+}));
+const notificationContextMenu = new constructors.Event('contextmenu', {
+	bubbles: true,
+	cancelable: true,
+});
+notificationAvatarTrigger.dispatchEvent(notificationContextMenu);
+const notificationAvatarClick = click(notificationAvatarTrigger);
+assert(
+	!view.element.hidden &&
+		view.element.querySelector('.ldp-user-card-username')?.textContent ===
+			'@alice' &&
+		notificationContextMenu.defaultPrevented &&
+		notificationAvatarClick.defaultPrevented &&
+		media.length === 2,
+	'通知头像长按必须只打开用户卡、拦截系统菜单和随后合成点击，不能触发通知跳转或头像查看',
+);
+view.close();
+let hostAvatarClicks = 0;
+document.addEventListener('click', (event) => {
+	if ((event.target as Element | null)?.closest('[data-test-host-op-avatar]')) {
+		hostAvatarClicks += 1;
+	}
+});
+const hostAvatarPointerDown = new constructors.Event('pointerdown', {
+	bubbles: true,
+	cancelable: true,
+});
+for (const [key, value] of Object.entries({
+	pointerType: 'touch',
+	button: 0,
+	clientX: 40,
+	clientY: 40,
+})) Object.defineProperty(hostAvatarPointerDown, key, { value });
+hostOpAvatar.dispatchEvent(hostAvatarPointerDown);
+const hostLongPressTimer = [...mainTimers.entries()].find(([, timer]) =>
+	timer.delayMs === 500);
+assert(
+	hostLongPressTimer && mainTimers.size === 1,
+	'宿主 OP 头像必须在 document 捕获阶段建立唯一长按任务',
+);
+mainTimers.delete(hostLongPressTimer[0]);
+hostLongPressTimer[1].callback();
+for (let index = 0; index < 4; index += 1) await Promise.resolve();
+hostOpAvatar.dispatchEvent(new constructors.Event('pointerup', {
+	bubbles: true,
+}));
+const hostContextMenu = new constructors.Event('contextmenu', {
+	bubbles: true,
+	cancelable: true,
+});
+hostOpAvatar.dispatchEvent(hostContextMenu);
+const hostLongPressClick = click(hostOpAvatar);
+assert(
+	!view.element.hidden &&
+		view.element.querySelector('.ldp-user-card-username')?.textContent ===
+			'@alice' &&
+		hostContextMenu.defaultPrevented &&
+		hostLongPressClick.defaultPrevented &&
+		hostAvatarClicks === 0,
+	'宿主 OP 头像长按必须优先打开 Lite 用户卡，并吞掉宿主菜单与合成 click：' +
+		`${view.element.hidden}/${String(
+			view.element.querySelector('.ldp-user-card-username')?.textContent,
+		)}/${hostContextMenu.defaultPrevented}/${hostLongPressClick.defaultPrevented}/` +
+		`${hostAvatarClicks}`,
+);
+view.close();
+const hostScrollPointerDown = new constructors.Event('pointerdown', {
+	bubbles: true,
+	cancelable: true,
+});
+for (const [key, value] of Object.entries({
+	pointerType: 'touch',
+	button: 0,
+	clientX: 40,
+	clientY: 40,
+})) Object.defineProperty(hostScrollPointerDown, key, { value });
+hostOpAvatar.dispatchEvent(hostScrollPointerDown);
+const hostScrollPointerMove = new constructors.Event('pointermove', {
+	bubbles: true,
+	cancelable: true,
+});
+for (const [key, value] of Object.entries({
+	pointerType: 'touch',
+	clientX: 40,
+	clientY: 56,
+})) Object.defineProperty(hostScrollPointerMove, key, { value });
+hostOpAvatar.dispatchEvent(hostScrollPointerMove);
+const hostScrollClick = click(hostOpAvatar);
+assert(
+	mainTimers.size === 0 && hostScrollClick.defaultPrevented === false &&
+		hostAvatarClicks === 1 && view.element.hidden,
+	'宿主 OP 头像移动超过阈值必须立即取消长按，不能拦截滚动后的普通宿主行为',
+);
+click(root.querySelector('[data-test-user-id]')!);
+for (let index = 0; index < 4; index += 1) await Promise.resolve();
+assert(
+	!view.element.hidden && view.isOpen,
+	'用户昵称或 @ID 入口必须打开用户卡，不能误走头像查看器',
+);
 click(view.element.querySelector('[data-user-notification-menu-toggle]')!);
 assert(
 	!view.element.querySelector<HTMLElement>(

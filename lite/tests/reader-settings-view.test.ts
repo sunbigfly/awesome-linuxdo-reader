@@ -78,9 +78,25 @@ assert(
 			'.ldp-settings-search-clear svg[data-icon="x"]',
 		) !== null &&
 		surfaceHost.querySelector(
+			'.ldp-settings-menu-toggle svg[data-icon="list"]',
+		) !== null &&
+		surfaceHost.querySelector(
 			'.ldp-settings-save-all svg[data-icon="check"]',
 		) !== null,
 	'设置入口、目录、搜索、保存和关闭必须全部由共享图标入口渲染',
+);
+const mobileMenuToggle = surfaceHost.querySelector<HTMLButtonElement>(
+	'.ldp-settings-menu-toggle',
+)!;
+const mobileMenuCurrent = surfaceHost.querySelector<HTMLElement>(
+	'.ldp-settings-menu-current',
+)!;
+assert(
+	mobileMenuToggle.getAttribute('aria-expanded') === 'false' &&
+		mobileMenuToggle.getAttribute('aria-controls') ===
+			'ldp-settings-mobile-nav' &&
+		mobileMenuCurrent.textContent === '用户信息',
+	'移动端分类入口必须声明受控列表，并同步显示当前设置分类',
 );
 assert(
 	view.snapshot.activePanelId === 'user' &&
@@ -135,6 +151,10 @@ assert(
 		viewChanges.at(-1) === true &&
 		settingsOpenFocusTarget === 'panel',
 	'打开设置必须同步入口 ARIA、controller 激活面板和唯一 View 状态信号，并让搜索默认保持收起',
+);
+assert(
+	mobileMenuCurrent.textContent === '性能设置',
+	'切换设置页后移动端分类入口必须投影当前标题',
 );
 const settingsPopover = surfaceHost.querySelector<HTMLElement>(
 	'.ldp-settings-popover',
@@ -216,12 +236,40 @@ assert(
 	settingsBoundaryWheel.defaultPrevented && escapedWheelCount === 0,
 	'设置导航抵达内部滚动边界后必须阻止滚轮继续冒泡到宿主页面',
 );
+mobileMenuToggle.click();
+assert(
+	mobileMenuToggle.getAttribute('aria-expanded') === 'true' &&
+		settingsPopover.classList.contains('ldp-settings-menu-open'),
+	'移动端分类入口必须显式打开同一设置浮窗内的分类列表抽屉',
+);
+surfaceHost.querySelector<HTMLElement>('.ldp-settings-panel')!.dispatchEvent(
+	new parsedWindow.Event('pointerdown', { bubbles: true, cancelable: true }),
+);
+assert(
+	mobileMenuToggle.getAttribute('aria-expanded') === 'false' &&
+		!settingsPopover.classList.contains('ldp-settings-menu-open'),
+	'点击移动端分类侧抽屉之外的内容区必须只收起内层菜单',
+);
+mobileMenuToggle.click();
 const escapeSettings = new parsedWindow.Event('keydown', {
 	bubbles: true,
 	cancelable: true,
 });
 Object.defineProperty(escapeSettings, 'key', { value: 'Escape' });
 surfaceHost.querySelector('.ldp-settings-popover')?.dispatchEvent(escapeSettings);
+await Promise.resolve();
+assert(
+	view.snapshot.open &&
+		mobileMenuToggle.getAttribute('aria-expanded') === 'false' &&
+		!settingsPopover.classList.contains('ldp-settings-menu-open'),
+	'分类列表展开时 Esc 必须先收起内层抽屉，不得直接关闭整个设置浮窗',
+);
+const closeSettings = new parsedWindow.Event('keydown', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperty(closeSettings, 'key', { value: 'Escape' });
+surfaceHost.querySelector('.ldp-settings-popover')?.dispatchEvent(closeSettings);
 await Promise.resolve();
 assert(
 	!view.snapshot.open,

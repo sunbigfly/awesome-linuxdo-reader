@@ -577,6 +577,12 @@ function readerTopicOfflineRuntime(
 	const toolStatus = document.querySelector<HTMLElement>(
 		'#ldp-offline-tool-status',
 	);
+	const exactTimeTooltip = document.createElement('div');
+	exactTimeTooltip.className =
+		'ldp-reader-icon-tooltip ldp-reader-time-tooltip ldp-transient-surface';
+	exactTimeTooltip.setAttribute('role', 'tooltip');
+	exactTimeTooltip.hidden = true;
+	offlineReader.append(exactTimeTooltip);
 
 	const data = JSON.parse(dataNode.textContent || '{}');
 	const posts = (Array.isArray(data.posts) ? data.posts : [])
@@ -1789,8 +1795,13 @@ function readerTopicOfflineRuntime(
 			const created = relativeTime(answer.created_at);
 			if (created) {
 				const time = document.createElement('span');
+				time.className = 'ldp-time';
 				time.dataset.exactTime = created.exact;
-				time.textContent = `· ${created.relative}`;
+				time.title = created.exact;
+				time.append(textNode(
+					'ldp-time-relative',
+					`· ${created.relative}`,
+				));
 				authorRow.append(time);
 			}
 			const floor = document.createElement('span');
@@ -2329,11 +2340,6 @@ function readerTopicOfflineRuntime(
 			'ldp-floor ldp-body-floor',
 			`#${view.postNumber}`,
 		));
-		if (created) {
-			const exact = textNode('ldp-time-exact', created.exact);
-			exact.setAttribute('aria-hidden', 'true');
-			view.header.append(exact);
-		}
 		view.content.innerHTML = String(post.cooked || '');
 		prepareOfflineCooked(post, view.content);
 		prepareReadOnlyPolls(post, view.content);
@@ -3101,7 +3107,11 @@ function readerTopicOfflineRuntime(
 		updateStatus();
 	};
 
-	viewport.addEventListener('scroll', () => scheduleRender(), { passive: true });
+	viewport.addEventListener('scroll', () => {
+		exactTimeTooltip.hidden = true;
+		exactTimeTooltip.textContent = '';
+		scheduleRender();
+	}, { passive: true });
 	discussionList.addEventListener('scroll', () => {
 		if (
 			discussionCursor < discussionEntries.length &&
@@ -3109,13 +3119,50 @@ function readerTopicOfflineRuntime(
 				discussionList.scrollHeight - 480
 		) appendDiscussionBatch();
 	}, { passive: true });
-	window.addEventListener('resize', () => scheduleRender(true), { passive: true });
+	window.addEventListener('resize', () => {
+		exactTimeTooltip.hidden = true;
+		exactTimeTooltip.textContent = '';
+		scheduleRender(true);
+	}, { passive: true });
 	document.addEventListener('toggle', () => scheduleRender(true), true);
 	document.addEventListener('click', (event) => {
 		const target = event.target &&
 			typeof (event.target as Element).closest === 'function'
 			? event.target as Element
 			: null;
+		const exactTime = target?.closest<HTMLElement>(
+			'.ldp-time[data-exact-time]',
+		) ?? null;
+		if (exactTime) {
+			const exact = String(exactTime.dataset.exactTime ?? '').trim();
+			exactTime.removeAttribute('title');
+			exactTimeTooltip.textContent = exact;
+			exactTimeTooltip.hidden = !exact;
+			const targetRect = exactTime.getBoundingClientRect();
+			const tooltipRect = exactTimeTooltip.getBoundingClientRect();
+			const edge = 8;
+			const width = Math.max(0, tooltipRect.width);
+			const height = Math.max(0, tooltipRect.height);
+			const left = Math.max(
+				edge,
+				Math.min(
+					targetRect.left + (targetRect.width - width) / 2,
+					window.innerWidth - width - edge,
+				),
+			);
+			let top = targetRect.top - height - 6;
+			if (top < edge) {
+				top = Math.min(
+					window.innerHeight - height - edge,
+					targetRect.bottom + 6,
+				);
+			}
+			exactTimeTooltip.style.left = `${Math.round(left)}px`;
+			exactTimeTooltip.style.top = `${Math.round(Math.max(edge, top))}px`;
+			return;
+		}
+		exactTimeTooltip.hidden = true;
+		exactTimeTooltip.textContent = '';
 		const calloutToggle = target?.closest<HTMLButtonElement>(
 			'[data-reader-callout-action="toggle"]',
 		) ?? null;

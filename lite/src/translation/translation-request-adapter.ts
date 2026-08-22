@@ -48,6 +48,7 @@ export interface ExternalTranslationHttpDescriptor {
 		| 'model-metadata-openrouter'
 		| 'ai'
 		| 'credit-user'
+		| 'community-score'
 		| 'connect-trust';
 	readonly url: string;
 	readonly method: 'GET' | 'POST';
@@ -312,6 +313,13 @@ function assertExternalDescriptor(
 		) ||
 		(
 			registered &&
+			descriptor.provider === 'community-score' &&
+			descriptor.method === 'GET' &&
+			descriptor.credentials === true &&
+			url.href === 'https://cdk.linux.do/api/v1/oauth/user-info'
+		) ||
+		(
+			registered &&
 			descriptor.provider === 'connect-trust' &&
 			descriptor.method === 'GET' &&
 			descriptor.credentials === true &&
@@ -458,6 +466,19 @@ export function creditUserInfoRequest(): ExternalTranslationHttpDescriptor {
 		provider: 'credit-user',
 		method: 'GET',
 		url: 'https://credit.linux.do/api/v1/oauth/user-info',
+		headers: Object.freeze({ Accept: 'application/json' }),
+		credentials: true,
+		[translationDescriptorBrand]: true as const,
+	});
+	translationDescriptors.add(descriptor);
+	return descriptor;
+}
+
+export function communityScoreUserInfoRequest(): ExternalTranslationHttpDescriptor {
+	const descriptor: ExternalTranslationHttpDescriptor = Object.freeze({
+		provider: 'community-score',
+		method: 'GET',
+		url: 'https://cdk.linux.do/api/v1/oauth/user-info',
 		headers: Object.freeze({ Accept: 'application/json' }),
 		credentials: true,
 		[translationDescriptorBrand]: true as const,

@@ -153,6 +153,7 @@ let now = 100;
 const errors: unknown[] = [];
 let connectCalls = 0;
 let creditCalls = 0;
+let communityScoreCalls = 0;
 const session = new ReaderUserDomainSession({
 	gateway,
 	native,
@@ -179,6 +180,18 @@ const session = new ReaderUserDomainSession({
 				accountUsername: username,
 				metrics: Object.freeze({ availableBalance: 8 }),
 				updatedAt: 901,
+				stale: false,
+			});
+		},
+	},
+	communityScore: {
+		async load(username) {
+			communityScoreCalls += 1;
+			return Object.freeze({
+				phase: 'ready',
+				accountUsername: username,
+				metrics: Object.freeze({ score: 73 }),
+				updatedAt: 902,
 				stale: false,
 			});
 		},
@@ -411,15 +424,19 @@ assert(
 );
 const creditBob = await session.loadCredit('bob');
 const connectBob = await session.loadConnect('bob');
+const scoreBob = await session.loadCommunityScore('bob');
 assert(
 	creditCalls === 1 &&
 		connectCalls === 1 &&
+		communityScoreCalls === 1 &&
 		creditBob.credit.phase === 'ready' &&
 		creditBob.credit.accountUsername === 'bob' &&
 		creditBob.credit.metrics.availableBalance === 8 &&
 		connectBob.connect.phase === 'ready' &&
-		connectBob.connect.metrics.targetLevel === 3,
-	'Connect/LDC 外部 slot 必须共用同一 session owner 并保持独立投影',
+		connectBob.connect.metrics.targetLevel === 3 &&
+		scoreBob.communityScore.phase === 'ready' &&
+		scoreBob.communityScore.metrics.score === 73,
+	'Connect/LDC/社区分数外部 slot 必须共用同一 session owner 并保持独立投影',
 );
 
 const connectRefresh = deferred<ReaderUserExternalSnapshot>();

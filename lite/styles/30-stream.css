@@ -555,8 +555,7 @@
   color: #a12b2b;
 }
 
-.ldp-time,
-.ldp-time-exact {
+.ldp-time {
   color: var(--ldp-ink-muted);
   font-size: var(--ldp-font-ui);
   font-weight: var(--ldp-reader-font-weight-base, 400);
@@ -660,36 +659,12 @@ button.ldp-floor:hover {
   }
 }
 
-.ldp-time-relative,
-.ldp-time-exact {
+.ldp-time-relative {
   opacity: .58;
 }
 
-.ldp-time-exact {
-  display: none;
-  min-width: 0;
-  flex: 0 1 auto;
-  pointer-events: none;
-}
-
-.ldp-time[data-exact-time]::after {
-  position: absolute;
-  top: 50%;
-  left: calc(100% + 6px);
-  z-index: 5;
-  display: none;
-  color: inherit;
-  content: attr(data-exact-time);
-  font: inherit;
-  line-height: inherit;
-  opacity: .58;
-  pointer-events: none;
-  transform: translateY(-50%);
-  white-space: nowrap;
-}
-
-.ldp-time[data-exact-time]:hover::after {
-  display: inline;
+.ldp-reader-time-tooltip {
+  font-variant-numeric: tabular-nums;
 }
 
 .ldp-post-body {
@@ -1038,8 +1013,7 @@ button.ldp-floor:hover {
     visibility var(--ldp-motion-fast) step-end;
 }
 
-.ldp-boost-bubble.ldp-boost-quick-actions-open > .ldp-boost-quick-actions,
-.ldp-boost-bubble:focus-within > .ldp-boost-quick-actions {
+.ldp-boost-bubble.ldp-boost-quick-actions-open > .ldp-boost-quick-actions {
   visibility: visible;
   opacity: 1;
   transform: translateX(-50%);
@@ -1178,6 +1152,10 @@ button.ldp-floor:hover {
   flex: none;
   gap: 2px;
   margin-left: 2px;
+}
+
+.ldp-post-actions-toggle {
+  display: none;
 }
 
 .ldp-context-actions-slot {
@@ -1925,9 +1903,6 @@ button.ldp-floor:hover {
 
 .ldp-boost-bubble.ldp-boost-quick-actions-open
   > .ldp-boost-quick-actions
-  > .ldp-boost-item-action,
-.ldp-boost-bubble:focus-within
-  > .ldp-boost-quick-actions
   > .ldp-boost-item-action {
   pointer-events: auto;
 }
@@ -1954,20 +1929,21 @@ button.ldp-floor:hover {
   opacity: .35;
 }
 
-@media (hover: none) {
-  .ldp-boost-quick-actions {
-    position: static;
-    bottom: auto;
-    left: auto;
-    margin-left: 2px;
+@media (hover: hover) {
+  .ldp-boost-bubble:focus-within > .ldp-boost-quick-actions {
     visibility: visible;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
     opacity: 1;
+    transform: translateX(-50%);
+    transition:
+      opacity var(--ldp-motion-fast) ease-out,
+      transform var(--ldp-motion-fast) ease-out,
+      visibility 0s step-start;
+  }
+
+  .ldp-boost-bubble:focus-within
+    > .ldp-boost-quick-actions
+    > .ldp-boost-item-action {
     pointer-events: auto;
-    transform: none;
-    transition: none;
   }
 }
 

@@ -73,6 +73,7 @@ export interface ReaderUserDomainSnapshot {
 	readonly followList: ReaderUserFollowListSnapshot;
 	readonly connect: ReaderUserExternalSnapshot;
 	readonly credit: ReaderUserExternalSnapshot;
+	readonly communityScore: ReaderUserExternalSnapshot;
 	readonly stale: boolean;
 	readonly diagnostic: ReaderUserDomainDiagnostic | null;
 	readonly updatedAt: number | null;
@@ -117,6 +118,7 @@ export interface ReaderUserDomainSessionOptions {
 	readonly searchForms?: ReaderSearchFormsPort;
 	readonly connect?: ReaderUserExternalPort;
 	readonly credit?: ReaderUserCreditPort;
+	readonly communityScore?: ReaderUserExternalPort;
 }
 
 export interface ReaderUserLoadOptions {
@@ -164,6 +166,7 @@ interface UserEntry {
 	followErrorStatus: number | null;
 	connect: ReaderUserExternalSnapshot;
 	credit: ReaderUserExternalSnapshot;
+	communityScore: ReaderUserExternalSnapshot;
 }
 
 interface FollowLoadOperation {
@@ -312,6 +315,7 @@ export class ReaderUserDomainSession {
 	readonly #searchForms: ReaderSearchFormsPort;
 	readonly #connect: ReaderUserExternalPort | null;
 	readonly #credit: ReaderUserCreditPort | null;
+	readonly #communityScore: ReaderUserExternalPort | null;
 	readonly #entries = new Map<string, UserEntry>();
 	readonly #subscriptions = new Map<string, number>();
 	readonly #loads = new Map<string, Promise<ReaderUserDomainSnapshot>>();
@@ -333,6 +337,7 @@ export class ReaderUserDomainSession {
 			((value) => Object.freeze([value]));
 		this.#connect = options.connect ?? null;
 		this.#credit = options.credit ?? null;
+		this.#communityScore = options.communityScore ?? null;
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		this.scope.add(() => {
 			this.#controller.abort(new Error('用户域 session 已销毁'));
@@ -366,6 +371,7 @@ export class ReaderUserDomainSession {
 			followLists += Object.keys(entry.followSources).length;
 			if (entry.connect.phase !== 'idle') externalSnapshots += 1;
 			if (entry.credit.phase !== 'idle') externalSnapshots += 1;
+			if (entry.communityScore.phase !== 'idle') externalSnapshots += 1;
 		}
 		return Object.freeze({ profiles, followLists, externalSnapshots });
 	}
@@ -804,6 +810,18 @@ export class ReaderUserDomainSession {
 		);
 	}
 
+	loadCommunityScore(
+		usernameValue: string,
+		refresh = false,
+	): Promise<ReaderUserDomainSnapshot> {
+		return this.#loadExternal(
+			'communityScore',
+			this.#communityScore,
+			usernameValue,
+			refresh,
+		);
+	}
+
 	async reloadExternalCredit(): Promise<void> {
 		const port = this.#credit;
 		if (this.scope.destroyed || !port?.externalCached) return;
@@ -828,7 +846,7 @@ export class ReaderUserDomainSession {
 	}
 
 	async #loadExternal(
-		slot: 'connect' | 'credit',
+		slot: 'connect' | 'credit' | 'communityScore',
 		port: ReaderUserExternalPort | null,
 		usernameValue: string,
 		refresh: boolean,
@@ -896,7 +914,7 @@ export class ReaderUserDomainSession {
 	}
 
 	#startExternalRefresh(
-		slot: 'connect' | 'credit',
+		slot: 'connect' | 'credit' | 'communityScore',
 		port: ReaderUserExternalPort,
 		username: string,
 		entry: UserEntry,
@@ -1335,6 +1353,7 @@ export class ReaderUserDomainSession {
 			followErrorStatus: null,
 			connect: EMPTY_EXTERNAL,
 			credit: EMPTY_EXTERNAL,
+			communityScore: EMPTY_EXTERNAL,
 		};
 		this.#entries.set(username, entry);
 		this.#trimEntries(username);
@@ -1352,6 +1371,7 @@ export class ReaderUserDomainSession {
 					this.#loads.has(username) ||
 					this.#externalLoads.has(`connect:${username}`) ||
 					this.#externalLoads.has(`credit:${username}`) ||
+					this.#externalLoads.has(`communityScore:${username}`) ||
 					[...this.#followLoads.keys()].some((key) =>
 						key.startsWith(`${username}:`))
 				) {
@@ -1401,6 +1421,7 @@ export class ReaderUserDomainSession {
 			followList,
 			connect: entry.connect,
 			credit: entry.credit,
+			communityScore: entry.communityScore,
 			stale: entry.stale,
 			diagnostic: entry.diagnostic,
 			updatedAt: entry.updatedAt,

@@ -144,6 +144,8 @@ export interface ReaderPostActionFeatureOptions<
 
 export type ReaderPostActionIconName =
 	| 'check'
+	| 'chevron-left'
+	| 'chevron-right'
 	| 'copy'
 	| 'heart'
 	| 'reply'
@@ -274,6 +276,7 @@ interface BoundPostAction<TPost> extends BoundReactionState<TPost> {
 	readonly kind: 'post';
 	readonly view: PostView;
 	contextHydrated: boolean;
+	topicActionRailExpanded: boolean;
 	unbind: (() => void) | null;
 }
 
@@ -645,7 +648,17 @@ export class ReaderPostActionFeature<
 			this.#onClick(event);
 		});
 		this.scope.listen(this.#document, 'pointerdown', (event) => {
+			this.#collapsePostActionsOutside(event);
 			this.#boostPointerDownOwned = false;
+			const quickActionBubble = this.#ownedBoostQuickActionBubble(
+				eventElement(event),
+			);
+			if (
+				this.#boostQuickActionBubble &&
+				quickActionBubble !== this.#boostQuickActionBubble
+			) {
+				this.#closeBoostQuickActions();
+			}
 			if (!this.#boostMenu || this.#boostMenu.hidden) return;
 			const insideMenu = eventPathIncludes(event, this.#boostMenu);
 			const insideEmoji = Boolean(
@@ -708,21 +721,30 @@ export class ReaderPostActionFeature<
 		this.scope.listen(this.#document, 'keydown', (event) => {
 			const keyboard = event as KeyboardEvent;
 			if (keyboard.key !== 'Escape') return;
+			const expandedPostActions = [...this.#byRoot.values()]
+				.filter((binding): binding is BoundPostAction<TPost> =>
+					binding.kind === 'post')
+				.map((binding) => binding.view.slots.actions.querySelector<HTMLElement>(
+					':scope > .ldp-actions.ldp-post-actions-expanded',
+				))
+				.filter((actions): actions is HTMLElement => actions !== null);
 			const reactionPickers = readerSurfaceQueryAll(
 				this.#document,
 				'.ldp-reaction-picker:not([hidden])',
 			);
 			if (!readerEscapeOwnedBy(this.#document, [
 				this.#boostMenu,
+				...expandedPostActions,
 				...reactionPickers,
 			])) return;
 			const reactionsClosed = this.#closeAll();
 			const boostClosed = this.#closeBoost();
-			if (!reactionsClosed && !boostClosed) return;
+			const postActionsClosed = this.#collapsePostActionsOutside();
+			if (!reactionsClosed && !boostClosed && !postActionsClosed) return;
 			keyboard.preventDefault();
 			keyboard.stopImmediatePropagation();
 		});
-		this.scope.listen(this.#document, 'scroll', (event) => {
+		const repositionBoostAfterScroll = (event: Event): void => {
 			if (!this.#boostMenu || this.#boostMenu.hidden) return;
 			const target = eventElement(event);
 			if (
@@ -738,11 +760,36 @@ export class ReaderPostActionFeature<
 				return;
 			}
 			this.#scheduleBoostPosition();
-		}, true);
+		};
+		this.scope.listen(
+			this.#document,
+			'scroll',
+			repositionBoostAfterScroll,
+			true,
+		);
+		if (interactionRoot !== this.#document) {
+			this.scope.listen(
+				interactionRoot,
+				'scroll',
+				repositionBoostAfterScroll,
+				true,
+			);
+		}
 		if (defaultView) {
 			this.scope.listen(defaultView, 'resize', () => {
 				this.#scheduleBoostPosition();
 			}, { passive: true });
+			const visualViewport = defaultView.visualViewport;
+			if (visualViewport) {
+				for (const type of ['resize', 'scroll']) {
+					this.scope.listen(
+						visualViewport,
+						type,
+						() => this.#scheduleBoostPosition(),
+						{ passive: true },
+					);
+				}
+			}
 		}
 		for (const type of [
 			'ldp-reader-window-change',
@@ -800,6 +847,7 @@ export class ReaderPostActionFeature<
 			post,
 			open: false,
 			contextHydrated: this.#eagerContextActions,
+			topicActionRailExpanded: false,
 			snapshot: manifest.snapshot(),
 			unbind: null,
 		};
@@ -924,6 +972,7 @@ export class ReaderPostActionFeature<
 		this.#renderBoostList(binding);
 		this.#renderActions(binding);
 		this.#renderTopicFooter(binding);
+		this.#syncTopicActionRailReply(binding);
 		this.#renderReactions(binding);
 	}
 
@@ -1279,6 +1328,7 @@ export class ReaderPostActionFeature<
 				'aria-label',
 				boost.username ? `@${boost.username} 的 Boost` : 'Boost',
 			);
+			bubble.setAttribute('aria-expanded', 'false');
 			if (boost.avatarTemplate) {
 				const source = this.#presentation?.avatarSource(
 					boost.avatarTemplate,
@@ -1562,7 +1612,8 @@ export class ReaderPostActionFeature<
 			else likeButton.removeAttribute('aria-busy');
 		}
 		let replyButton = actions.querySelector<HTMLButtonElement>(
-			':scope > .ldp-replybtn',
+			':scope > .ldp-replybtn, ' +
+				':scope > .ldp-context-actions-slot > .ldp-replybtn',
 		);
 		if (!showReply) replyButton?.remove();
 		else if (!replyButton) {
@@ -1621,6 +1672,29 @@ export class ReaderPostActionFeature<
 			String(contextActionCount),
 		);
 		actions.append(contextActions);
+		let mobileActionsToggle = actions.querySelector<HTMLButtonElement>(
+			':scope > .ldp-post-actions-toggle',
+		);
+		const showMobileActionsToggle =
+			contextActionCount > 0;
+		if (!showMobileActionsToggle) {
+			mobileActionsToggle?.remove();
+		} else if (!mobileActionsToggle) {
+			mobileActionsToggle = this.#actionButton(
+				'chevron-right',
+				'展开其余楼层操作',
+				'ldp-post-actions-toggle',
+			);
+			mobileActionsToggle.dataset.postActionsToggle = '';
+			actions.append(mobileActionsToggle);
+		}
+		if (mobileActionsToggle) {
+			this.#syncPostActionsToggle(
+				actions,
+				actions.classList.contains('ldp-post-actions-expanded'),
+			);
+			actions.append(mobileActionsToggle);
+		}
 		if (!binding.contextHydrated) {
 			contextActions.replaceChildren();
 			contextActions.dataset.ldpContextActions = '0';
@@ -2191,6 +2265,28 @@ export class ReaderPostActionFeature<
 		slot.hidden = false;
 	}
 
+	#syncTopicActionRailReply(binding: BoundPostAction<TPost>): void {
+		if (!binding.root.classList.contains('ldp-topic-action-rail-post')) {
+			return;
+		}
+		const actions = binding.view.slots.actions.querySelector<HTMLElement>(
+			':scope > .ldp-actions',
+		);
+		const contextActions = actions?.querySelector<HTMLElement>(
+			':scope > .ldp-context-actions-slot',
+		);
+		const replyButton = actions?.querySelector<HTMLButtonElement>(
+			':scope > .ldp-replybtn, ' +
+				':scope > .ldp-context-actions-slot > .ldp-replybtn',
+		);
+		if (!actions || !replyButton) return;
+		if (binding.topicActionRailExpanded) {
+			contextActions?.append(replyButton);
+		} else if (replyButton.parentElement !== actions) {
+			actions.append(replyButton);
+		}
+	}
+
 	#currentUserIdentity(post: TPost): ReaderCurrentUserIdentity {
 		const input = this.#capabilityInput(post);
 		return Object.freeze({
@@ -2269,6 +2365,34 @@ export class ReaderPostActionFeature<
 		button.setAttribute('aria-label', label);
 		button.append(this.#iconNode(iconName));
 		return button;
+	}
+
+	#syncPostActionsToggle(actions: HTMLElement, expanded: boolean): void {
+		actions.classList.toggle('ldp-post-actions-expanded', expanded);
+		const toggle = actions.querySelector<HTMLButtonElement>(
+			':scope > .ldp-post-actions-toggle',
+		);
+		if (!toggle) return;
+		toggle.setAttribute('aria-expanded', String(expanded));
+		const label = expanded ? '收起其余楼层操作' : '展开其余楼层操作';
+		toggle.setAttribute('aria-label', label);
+		toggle.replaceChildren(this.#iconNode(
+			expanded ? 'chevron-left' : 'chevron-right',
+		));
+	}
+
+	#collapsePostActionsOutside(event?: Event): boolean {
+		let collapsed = false;
+		for (const binding of this.#byRoot.values()) {
+			if (binding.kind !== 'post') continue;
+			const actions = binding.view.slots.actions.querySelector<HTMLElement>(
+				':scope > .ldp-actions.ldp-post-actions-expanded',
+			);
+			if (!actions || (event && eventPathIncludes(event, actions))) continue;
+			this.#syncPostActionsToggle(actions, false);
+			collapsed = true;
+		}
+		return collapsed;
 	}
 
 	#ensureBoostMenu(): HTMLElement {
@@ -2719,23 +2843,66 @@ export class ReaderPostActionFeature<
 	}
 
 	#positionBoostMenu(menu: HTMLElement, anchor: HTMLElement): void {
-		const viewport = this.#document.documentElement;
+		const bounds = this.#boostViewportBounds();
 		const measuredWidth = menu.offsetWidth || menu.getBoundingClientRect().width;
 		const width = Math.min(
 			Math.max(0, measuredWidth),
-			Math.max(0, viewport.clientWidth - 16),
+			Math.max(0, bounds.width - 16),
 		);
 		const rect = anchor.getBoundingClientRect();
+		const minLeft = bounds.left + 8;
+		const maxLeft = Math.max(minLeft, bounds.right - width - 8);
 		const left = Math.max(
-			8,
-			Math.min(rect.left, viewport.clientWidth - width - 8),
+			minLeft,
+			Math.min(rect.left, maxLeft),
 		);
+		const measuredHeight =
+			menu.offsetHeight || menu.getBoundingClientRect().height;
+		const minTop = bounds.top + 8;
+		const maxTop = Math.max(minTop, bounds.bottom - measuredHeight - 8);
+		const spaceBelow = bounds.bottom - 8 - rect.bottom - 6;
+		const spaceAbove = rect.top - 6 - minTop;
 		let top = rect.bottom + 6;
-		if (top + menu.offsetHeight > viewport.clientHeight - 8) {
-			top = Math.max(8, rect.top - menu.offsetHeight - 6);
+		if (measuredHeight > spaceBelow && spaceAbove > spaceBelow) {
+			top = rect.top - measuredHeight - 6;
 		}
+		top = Math.max(minTop, Math.min(top, maxTop));
 		menu.style.left = `${Math.round(left)}px`;
 		menu.style.top = `${Math.round(top)}px`;
+	}
+
+	#boostViewportBounds(): Readonly<{
+		readonly left: number;
+		readonly top: number;
+		readonly right: number;
+		readonly bottom: number;
+		readonly width: number;
+		readonly height: number;
+	}> {
+		const layoutViewport = this.#document.documentElement;
+		const visualViewport = this.#document.defaultView?.visualViewport;
+		const finite = (value: unknown, fallback: number): number =>
+			typeof value === 'number' && Number.isFinite(value)
+				? value
+				: fallback;
+		const left = finite(visualViewport?.offsetLeft, 0);
+		const top = finite(visualViewport?.offsetTop, 0);
+		const width = Math.max(
+			0,
+			finite(visualViewport?.width, layoutViewport.clientWidth),
+		);
+		const height = Math.max(
+			0,
+			finite(visualViewport?.height, layoutViewport.clientHeight),
+		);
+		return Object.freeze({
+			left,
+			top,
+			right: left + width,
+			bottom: top + height,
+			width,
+			height,
+		});
 	}
 
 	#scheduleBoostPosition(): void {
@@ -2775,7 +2942,7 @@ export class ReaderPostActionFeature<
 			return;
 		}
 		const rect = anchor.getBoundingClientRect();
-		const viewport = this.#document.documentElement;
+		const bounds = this.#boostViewportBounds();
 		const overlaps = (
 			left: number,
 			top: number,
@@ -2793,7 +2960,7 @@ export class ReaderPostActionFeature<
 		if (
 			rect.width <= 0 ||
 			rect.height <= 0 ||
-			!overlaps(0, 0, viewport.clientWidth, viewport.clientHeight) ||
+			!overlaps(bounds.left, bounds.top, bounds.right, bounds.bottom) ||
 			(
 				clipRect &&
 				!overlaps(
@@ -3259,6 +3426,28 @@ export class ReaderPostActionFeature<
 		}
 		if (BOOST_SURFACE_OWNED_EVENTS.has(event)) return;
 		const target = eventElement(event);
+		const quickActionBubble = this.#ownedBoostQuickActionBubble(target);
+		const clickedQuickAction = Boolean(
+			target?.closest('.ldp-boost-quick-actions'),
+		);
+		if (
+			quickActionBubble &&
+			!clickedQuickAction &&
+			!target?.closest('a,button')
+		) {
+			event.preventDefault();
+			if (this.#boostQuickActionBubble === quickActionBubble) {
+				this.#closeBoostQuickActions();
+			} else {
+				this.#clearBoostQuickActionOpenTimer();
+				this.#clearBoostQuickActionCloseTimer();
+				this.#activateBoostQuickActions(quickActionBubble);
+			}
+			return;
+		}
+		if (this.#boostQuickActionBubble && !quickActionBubble) {
+			this.#closeBoostQuickActions();
+		}
 		if (eventPathIncludes(event, this.#boostMenu)) return;
 		if (
 			target?.closest(
@@ -3275,6 +3464,27 @@ export class ReaderPostActionFeature<
 		const binding = surfaceBinding?.kind === 'post'
 			? surfaceBinding
 			: undefined;
+		const postActionsToggle = target?.closest<HTMLButtonElement>(
+			'button[data-post-actions-toggle]',
+		) ?? null;
+		if (
+			binding &&
+			postActionsToggle &&
+			binding.view.slots.actions.contains(postActionsToggle)
+		) {
+			event.preventDefault();
+			const expanded = postActionsToggle.getAttribute('aria-expanded') ===
+				'true';
+			if (!binding.contextHydrated) {
+				binding.contextHydrated = true;
+				this.#renderActions(binding);
+			}
+			const actions = binding.view.slots.actions.querySelector<HTMLElement>(
+				':scope > .ldp-actions',
+			);
+			if (actions) this.#syncPostActionsToggle(actions, !expanded);
+			return;
+		}
 		const mention = target?.closest<HTMLButtonElement>(
 			'button[data-boost-mention]',
 		) ?? null;
@@ -3594,9 +3804,11 @@ export class ReaderPostActionFeature<
 			this.#boostQuickActionBubble?.classList.remove(
 				'ldp-boost-quick-actions-open',
 			);
+			this.#boostQuickActionBubble?.setAttribute('aria-expanded', 'false');
 			this.#boostQuickActionBubble = bubble;
 		}
 		bubble.classList.add('ldp-boost-quick-actions-open');
+		bubble.setAttribute('aria-expanded', 'true');
 	}
 
 	#scheduleBoostQuickActionOpen(bubble: HTMLElement): void {
@@ -3637,6 +3849,7 @@ export class ReaderPostActionFeature<
 			const active = this.#boostQuickActionBubble;
 			this.#boostQuickActionBubble = null;
 			active?.classList.remove('ldp-boost-quick-actions-open');
+			active?.setAttribute('aria-expanded', 'false');
 		}, BOOST_QUICK_ACTION_CLOSE_DELAY_MS);
 	}
 
@@ -3646,6 +3859,7 @@ export class ReaderPostActionFeature<
 		this.#boostQuickActionBubble?.classList.remove(
 			'ldp-boost-quick-actions-open',
 		);
+		this.#boostQuickActionBubble?.setAttribute('aria-expanded', 'false');
 		this.#boostQuickActionBubble = null;
 	}
 
@@ -4051,11 +4265,13 @@ export class ReaderPostActionFeature<
 			!binding.root.classList.contains('ldp-topic-action-rail-post')
 		) return;
 		binding.open = false;
+		binding.topicActionRailExpanded = expanded;
 		if (expanded && !binding.contextHydrated) {
 			binding.contextHydrated = true;
 			this.#renderActions(binding);
 			this.#renderTopicFooter(binding);
 		}
+		this.#syncTopicActionRailReply(binding);
 		this.#clearReactionHoverTimers(binding.slot);
 		this.#syncReactionPickerVisibility(binding);
 	}

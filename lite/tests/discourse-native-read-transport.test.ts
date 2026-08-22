@@ -1,5 +1,6 @@
 import {
 	BrowserDiscourseNativeReadTransport,
+	DiscourseNativeTransportError,
 } from '../src/network/discourse-native-read-transport.js';
 import {
 	DiscourseNativeRequests,
@@ -183,6 +184,34 @@ assert(
 	'原生 ajax 必须把 Discourse 限流错误码归一为可共享的具体窗口',
 );
 
+const networkFailed = new BrowserDiscourseNativeReadTransport({
+	lookup() {
+		return null;
+	},
+	lookupModule() {
+		return {
+			ajax() {
+				return Promise.reject({ status: 0, statusText: 'error' });
+			},
+		};
+	},
+});
+let networkFailure: unknown;
+try {
+	await networkFailed.request({
+		descriptor: DiscourseNativeRequests.topic({ topicId: 10 }),
+		signal,
+		attempt: 1,
+	});
+} catch (error) {
+	networkFailure = error;
+}
+assert(
+	networkFailure instanceof DiscourseNativeTransportError &&
+		networkFailure.code === 'network-error',
+	'宿主 ajax 的 status=0 必须明确归因为网络/传输失败，不能伪装成完成响应',
+);
+
 const challengeWithoutReadableHeader = new BrowserDiscourseNativeReadTransport({
 	lookup() {
 		return null;
@@ -269,7 +298,7 @@ try {
 		attempt: 1,
 	});
 } catch (error) {
-	missingRejected = error instanceof Error &&
-		error.message.includes('discourse/lib/ajax#ajax 不可用');
+	missingRejected = error instanceof DiscourseNativeTransportError &&
+		error.code === 'host-module-unavailable';
 }
-assert(missingRejected, '原生 ajax module 缺失时必须显式失败');
+assert(missingRejected, '原生 ajax module 缺失时必须明确归因到宿主绑定');

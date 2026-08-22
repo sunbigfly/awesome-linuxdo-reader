@@ -16,11 +16,14 @@ interface TooltipMatch {
 	readonly label: string;
 }
 
+const TIME_TOOLTIP_SELECTOR = '.ldp-time[data-exact-time]';
+
 const TOOLTIP_CONTROL_SELECTOR = [
 	'button',
 	'a',
 	'[role="button"]',
 	'[data-ldp-tooltip-label]',
+	TIME_TOOLTIP_SELECTOR,
 	'.ldp-nested-branch-toggle',
 	'.ldp-avatar-flair',
 	'.ldp-user-card-badge',
@@ -57,6 +60,8 @@ export class ReaderControlTooltip {
 	readonly #schedule: (callback: () => void, delayMs: number) => number;
 	readonly #cancelSchedule: (handle: number) => void;
 	#activeControl: HTMLElement | null = null;
+	#clickPinnedControl: HTMLElement | null = null;
+	#touchSuppressedControl: HTMLElement | null = null;
 	#copyResetTimer = 0;
 
 	constructor(options: ReaderControlTooltipOptions) {
@@ -105,6 +110,7 @@ export class ReaderControlTooltip {
 		if (
 			!match ||
 			control.hidden ||
+			control === this.#touchSuppressedControl ||
 			!this.#keepOpen(control)
 		) {
 			if (control === this.#activeControl) this.close();
@@ -118,11 +124,13 @@ export class ReaderControlTooltip {
 			return;
 		}
 		this.#activeControl = null;
+		this.#clickPinnedControl = null;
 		this.element.hidden = true;
 		this.element.textContent = '';
 		this.element.classList.remove(
 			'ldp-reader-history-tooltip',
 			'ldp-connect-help-tooltip',
+			'ldp-reader-time-tooltip',
 		);
 	}
 
@@ -137,9 +145,36 @@ export class ReaderControlTooltip {
 		});
 		this.scope.listen(root, 'click', (event) => {
 			this.#copyNamedTarget(event);
+			const control = eventElement(event)?.closest<HTMLElement>(
+				TOOLTIP_CONTROL_SELECTOR,
+			) ?? null;
+			if (control?.matches(TIME_TOOLTIP_SELECTOR)) {
+				const match = this.#match(control);
+				if (match) {
+					this.#touchSuppressedControl = null;
+					this.#show(match, null, true);
+				}
+				return;
+			}
+			if (this.#clickPinnedControl) this.close();
+			if (
+				control &&
+				(
+					control === this.#touchSuppressedControl ||
+					this.#usesCompactInteraction()
+				)
+			) {
+				this.#touchSuppressedControl = control;
+				this.close();
+			}
 		}, true);
 		this.scope.listen(root, 'pointerover', (event) => {
 			const pointer = event as PointerEvent;
+			if (pointer.pointerType === 'touch') {
+				this.close();
+				return;
+			}
+			this.#touchSuppressedControl = null;
 			const match = this.#match(eventElement(event));
 			if (
 				!match ||
@@ -149,6 +184,15 @@ export class ReaderControlTooltip {
 			this.#show(match, pointer);
 		});
 		this.scope.listen(root, 'pointerdown', (event) => {
+			const pointer = event as PointerEvent;
+			if (pointer.pointerType === 'touch') {
+				this.#touchSuppressedControl = eventElement(event)?.closest<HTMLElement>(
+					TOOLTIP_CONTROL_SELECTOR,
+				) ?? null;
+				this.close();
+				return;
+			}
+			this.#touchSuppressedControl = null;
 			if (eventElement(event)?.closest(
 				'.ldp-header[data-ldp-reader-drag-surface]',
 			)) this.close();
@@ -169,12 +213,18 @@ export class ReaderControlTooltip {
 			const active = this.#activeControl;
 			if (
 				!active ||
+				pointer.pointerType === 'touch' ||
+				active === this.#clickPinnedControl ||
 				(domNode(pointer.relatedTarget) && active.contains(pointer.relatedTarget))
 			) return;
 			if (!active.matches(':focus-visible')) this.close();
 		});
 		this.scope.listen(root, 'focusin', (event) => {
 			const match = this.#match(eventElement(event));
+			if (match?.control === this.#touchSuppressedControl) {
+				this.close();
+				return;
+			}
 			if (match) this.#show(match);
 		});
 		this.scope.listen(root, 'focusout', () => {
@@ -229,6 +279,7 @@ export class ReaderControlTooltip {
 		const functional = control.matches(
 			'button,[role="button"],.ldp-nested-branch-toggle',
 		);
+		const timeTarget = control.matches(TIME_TOOLTIP_SELECTOR);
 		const iconOnlyLink = control.matches('a') &&
 			Boolean(control.querySelector('.ldp-icon,.ldp-logo,img')) &&
 			!this.#hasVisibleText(control);
@@ -236,7 +287,10 @@ export class ReaderControlTooltip {
 			'.ldp-avatar-flair,.ldp-user-card-badge',
 		);
 		const namedTarget = control.hasAttribute('data-ldp-tooltip-label');
-		if (!functional && !iconOnlyLink && !namedCopyTarget && !namedTarget) {
+		if (
+			!functional && !timeTarget && !iconOnlyLink &&
+			!namedCopyTarget && !namedTarget
+		) {
 			return null;
 		}
 		const narrowTitle = control.matches('.ldp-title-jump') &&
@@ -245,8 +299,10 @@ export class ReaderControlTooltip {
 		const label = String(
 			narrowTitle
 				? control.textContent
-				: control.getAttribute('aria-label') ??
-					control.dataset.ldpTooltipLabel ?? '',
+				: timeTarget
+					? control.dataset.exactTime ?? ''
+					: control.getAttribute('aria-label') ??
+						control.dataset.ldpTooltipLabel ?? '',
 		).trim();
 		return label ? Object.freeze({ control, label }) : null;
 	}
@@ -270,10 +326,15 @@ export class ReaderControlTooltip {
 		});
 	}
 
-	#show(match: TooltipMatch, pointer: PointerEvent | null = null): void {
+	#show(
+		match: TooltipMatch,
+		pointer: PointerEvent | null = null,
+		clickPinned = false,
+	): void {
 		/* 统一浮层已接管文案，避免长时间 hover 后浏览器再叠一层原生 title。 */
 		match.control.removeAttribute('title');
 		this.#activeControl = match.control;
+		this.#clickPinnedControl = clickPinned ? match.control : null;
 		this.element.textContent = match.label;
 		this.element.classList.toggle(
 			'ldp-reader-history-tooltip',
@@ -282,6 +343,10 @@ export class ReaderControlTooltip {
 		this.element.classList.toggle(
 			'ldp-connect-help-tooltip',
 			match.control.matches('.ldp-connect-metric'),
+		);
+		this.element.classList.toggle(
+			'ldp-reader-time-tooltip',
+			match.control.matches(TIME_TOOLTIP_SELECTOR),
 		);
 		this.element.hidden = false;
 		this.#position(match.control, pointer);
@@ -345,6 +410,7 @@ export class ReaderControlTooltip {
 
 	#keepOpen(control: HTMLElement | null): boolean {
 		if (!control) return false;
+		if (control === this.#clickPinnedControl) return true;
 		try {
 			return control.matches(':hover') || control.matches(':focus-visible');
 		} catch {
@@ -354,6 +420,13 @@ export class ReaderControlTooltip {
 			 */
 			return false;
 		}
+	}
+
+	#usesCompactInteraction(): boolean {
+		const viewport = this.#document.defaultView;
+		if (!viewport) return false;
+		return viewport.innerWidth <= 760 ||
+			viewport.matchMedia?.('(hover: none) and (pointer: coarse)').matches === true;
 	}
 
 	#copyNamedTarget(event: Event): void {

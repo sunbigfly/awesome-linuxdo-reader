@@ -4039,7 +4039,8 @@ assert(
 				'[data-reader-target-interception="off"]',
 		) !== null &&
 		[...template.notificationList.querySelectorAll<HTMLElement>(
-			'.ldp-user-avatar-card[data-user-card][data-user-card-hover-only]',
+			'.ldp-user-avatar-card[data-user-card][data-user-card-hover-only]' +
+				'[data-user-card-long-press]',
 		)].length === controller.snapshot.records.filter((record) =>
 			Boolean(record.actor)).length &&
 		template.notificationList.querySelectorAll(

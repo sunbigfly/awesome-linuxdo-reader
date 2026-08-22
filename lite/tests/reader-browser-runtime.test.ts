@@ -1170,8 +1170,8 @@ assert(
 	'application 启动只注册当前账号的七类公开观察字段且不得自动联网采集；通知、私信与收藏继续由原功能独立拥有',
 );
 assert(
-	nativeAjaxObservationState() === '2/2/0',
-	'application 必须只安装一次具名宿主 Ajax 观察器',
+	nativeAjaxObservationState() === '3/3/0',
+	'application 必须只安装一次具名宿主 Ajax 发送、错误与完成观察器',
 );
 const manualChallengeLink = document.querySelector<HTMLAnchorElement>(
 	'.ldp-rate-limit-challenge',
@@ -1279,7 +1279,7 @@ assert(
 );
 (settingsView as ReaderSettingsView<TestPreferences>).close();
 assert(
-	nativeAjaxObservationState() === '2/2/0',
+	nativeAjaxObservationState() === '3/3/0',
 	'Settings/ResourceMonitor 开关不得重复安装或释放 application Ajax 观察器',
 );
 assert(
@@ -3109,7 +3109,7 @@ assert(
 		(layoutStyle as ReaderLayoutStyleController<TestPreferences>).scope
 			.destroyed &&
 		Number(appEventSubscriptions.size) === 0 &&
-		nativeAjaxObservationState() === '0/2/2' &&
+		nativeAjaxObservationState() === '0/3/3' &&
 		readyCleanups === 1 &&
 		!document.querySelector('.ldp-overlay') &&
 		!document.querySelector('.ldp-settings-toggle') &&

@@ -32,6 +32,40 @@ assert(
 	topicReply.reply === 'allowed',
 	'楼层缺少 can_reply 时必须复用 Discourse Topic details.can_create_post',
 );
+const ownTopicReply = derivePostActionCapabilities({
+	post: {
+		...livePost,
+		post_number: 1,
+		user_id: 99,
+		username: 'Author',
+		can_reply: false,
+	},
+	topic: { details: { can_create_post: true } },
+	currentUser: { id: 99 },
+	currentUsername: 'author',
+});
+assert(
+	ownTopicReply.reply === 'allowed',
+	'作者首帖必须使用 Topic can_create_post 显示主题回复，不能被楼层 can_reply=false 误伤',
+);
+const closedTopicReply = derivePostActionCapabilities({
+	post: { ...livePost, post_number: 1, can_reply: true },
+	topic: { details: { can_create_post: false } },
+	currentUsername: 'viewer',
+});
+assert(
+	closedTopicReply.reply === 'denied',
+	'首帖必须服从 Topic can_create_post，关闭主题不能被楼层 can_reply=true 绕过',
+);
+const deniedPostReply = derivePostActionCapabilities({
+	post: { ...livePost, can_reply: false },
+	topic: { details: { can_create_post: true } },
+	currentUsername: 'viewer',
+});
+assert(
+	deniedPostReply.reply === 'denied',
+	'普通楼层必须继续服从 can_reply，不能把主题发帖权限扩大为楼层回复权限',
+);
 const unknownManifest = derivePostActionManifest({
 	post: livePost,
 	currentUsername: 'viewer',

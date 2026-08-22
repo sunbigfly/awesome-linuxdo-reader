@@ -354,6 +354,41 @@ assert(
 			!root.querySelector<HTMLElement>('.ldp-reader-queue')!.hidden,
 	'队列会话必须为 Discourse 列表与原生 header 提供带可见 SVG 的唯一入口，历史入口不得携带楼层',
 );
+document.documentElement.classList.add('mobile-view');
+const nativeUserDrawer = document.createElement('div');
+nativeUserDrawer.className = 'menu-panel user-menu';
+nativeUserDrawer.dataset.tabId = 'all-notifications';
+document.body.append(nativeUserDrawer);
+mutationCallback([{
+	type: 'childList',
+	target: document.body,
+	attributeName: null,
+	addedNodes: [nativeUserDrawer] as unknown as NodeList,
+	removedNodes: [] as unknown as NodeList,
+}] as unknown as MutationRecord[], mutationObserver);
+assert(
+	nativeTrigger.parentElement?.hidden === true &&
+		!document.documentElement.classList.contains(
+			'ldp-native-reader-trigger-visible',
+		),
+	'移动端用户抽屉展开后必须隐藏原生 Header 阅读器入口并撤销宿主占位',
+);
+nativeUserDrawer.remove();
+mutationCallback([{
+	type: 'childList',
+	target: document.body,
+	attributeName: null,
+	addedNodes: [] as unknown as NodeList,
+	removedNodes: [nativeUserDrawer] as unknown as NodeList,
+}] as unknown as MutationRecord[], mutationObserver);
+assert(
+	!nativeTrigger.parentElement?.hidden &&
+		document.documentElement.classList.contains(
+			'ldp-native-reader-trigger-visible',
+		),
+	'移动端用户抽屉收起后必须恢复当前阅读器入口',
+);
+document.documentElement.classList.remove('mobile-view');
 nativeTrigger.click();
 await Promise.resolve();
 await Promise.resolve();

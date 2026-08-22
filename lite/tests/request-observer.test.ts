@@ -163,9 +163,20 @@ lifecycleObserver.finish(challengedId, {
 assert(
 	lifecycleObserver.snapshot.events.at(-1)?.status === 429 &&
 		lifecycleObserver.snapshot.events.at(-1)?.cloudflareMitigated === true &&
+		lifecycleObserver.snapshot.events.at(-1)?.attribution === 'cloudflare' &&
 		lifecycleObserver.snapshot.events.at(-1)?.decision ===
 			'require-cloudflare',
 	'429 请求账本必须保留 Cloudflare challenge 归因',
+);
+const hostFailureId = lifecycleObserver.begin({
+	href: '/t/20.json',
+	transport: 'scheduler',
+	source: 'reader',
+});
+lifecycleObserver.finish(hostFailureId, { error: 'host-module-unavailable' });
+assert(
+	lifecycleObserver.snapshot.events.at(-1)?.attribution === 'host',
+	'宿主模块不可用必须与 API HTTP 错误、网络错误和调度取消分开归因',
 );
 const cancelledId = lifecycleObserver.begin({
 	href: '/posts/10/replies.json',
@@ -294,6 +305,24 @@ assert(
 		ignoredResource === 0 &&
 		privacyObserver.snapshot.events.length === beforeIgnoredResource,
 	'非 HTTP(S) 显式事实只能保留协议资源标签，ResourceTiming 的 data/blob 内容必须完全忽略',
+);
+
+const passiveHostFetch = privacyObserver.recordResourceDetailed({
+	href: 'https://linux.do/t/88.json?token=private',
+	initiatorType: 'fetch',
+	startedAt: 3_020,
+	endedAt: 3_040,
+	status: 429,
+});
+assert(
+	passiveHostFetch.created &&
+		passiveHostFetch.event?.source === 'host' &&
+		passiveHostFetch.event.transport === 'fetch' &&
+		passiveHostFetch.event.method === 'UNKNOWN' &&
+		passiveHostFetch.event.attribution === 'rate-limit' &&
+		passiveHostFetch.event.queryShape === '?credential' &&
+		!JSON.stringify(passiveHostFetch.event).includes('private'),
+	'未被 Reader/jQuery 账本命中的同源 fetch 必须作为脱敏宿主请求保留并明确 429 归因',
 );
 
 observer.clearCompleted();

@@ -86,10 +86,12 @@ export interface ReaderShellTemplate {
 	readonly headerActions: HTMLDivElement;
 	readonly headerActionsToggle: HTMLButtonElement;
 	readonly layoutToggle: HTMLButtonElement;
+	readonly immersiveToggle: HTMLButtonElement;
 	readonly titleActions: HTMLDivElement;
 	readonly topicEditTrigger: HTMLButtonElement;
 	readonly refreshTopic: HTMLButtonElement;
 	readonly openNative: HTMLAnchorElement;
+	readonly mobileReaderBack: HTMLButtonElement;
 	readonly closeReader: HTMLButtonElement;
 	readonly rateLimitNotice: HTMLDivElement;
 	readonly rateLimitDetail: HTMLSpanElement;
@@ -441,6 +443,14 @@ export function createReaderShellTemplate(
 	}
 
 	const header = element(document, 'div', 'ldp-header');
+	const mobileReaderBack = button(
+		options,
+		'ldp-mobile-reader-back',
+		'返回上一层',
+		'chevron-left',
+	);
+	mobileReaderBack.title = '返回上一层';
+	mobileReaderBack.hidden = true;
 	const home = element(document, 'a', 'ldp-home-logo');
 	home.href = homeUrl;
 	home.setAttribute('aria-label', `回到 ${siteName} 首页`);
@@ -940,6 +950,13 @@ export function createReaderShellTemplate(
 		'清除当前帖子缓存并刷新',
 		'rotate-ccw',
 	);
+	const immersiveToggle = button(
+		options,
+		'ldp-browser-immersive-toggle ldp-icon-btn',
+		'进入沉浸式阅读',
+		'maximize-2',
+	);
+	immersiveToggle.hidden = true;
 	refreshTopic.disabled = true;
 	const closeReader = button(
 		options,
@@ -947,6 +964,10 @@ export function createReaderShellTemplate(
 		'关闭阅读器',
 		'x',
 	);
+	const usesMobileTitleActionToggle = (): boolean =>
+		document.defaultView?.matchMedia?.(
+			'(max-width: 700px) and (hover: none) and (pointer: coarse)',
+		).matches === true;
 	const setHeaderActionsExpanded = (expanded: boolean) => {
 		titleActions.classList.toggle('is-expanded', expanded);
 		header.classList.toggle('ldp-title-actions-expanded', expanded);
@@ -961,12 +982,14 @@ export function createReaderShellTemplate(
 		);
 	};
 	titleActions.addEventListener('pointerenter', () => {
+		if (usesMobileTitleActionToggle()) return;
 		setHeaderActionsExpanded(true);
 	});
 	titleActions.addEventListener('pointerleave', () => {
 		setHeaderActionsExpanded(false);
 	});
 	titleActions.addEventListener('focusin', () => {
+		if (usesMobileTitleActionToggle()) return;
 		setHeaderActionsExpanded(true);
 	});
 	titleActions.addEventListener('focusout', (event) => {
@@ -976,11 +999,27 @@ export function createReaderShellTemplate(
 		}
 	});
 	headerActionsToggle.addEventListener('click', () => {
-		setHeaderActionsExpanded(true);
+		setHeaderActionsExpanded(
+			usesMobileTitleActionToggle()
+				? !titleActions.classList.contains('is-expanded')
+				: true,
+		);
 	});
 	setHeaderActionsExpanded(false);
-	titleActions.append(headerActionsToggle, refreshTopic, openNative, closeReader);
-	header.append(home, titleWrap, headerActions, titleActions);
+	titleActions.append(
+		headerActionsToggle,
+		immersiveToggle,
+		refreshTopic,
+		openNative,
+		closeReader,
+	);
+	header.append(
+		mobileReaderBack,
+		home,
+		titleWrap,
+		headerActions,
+		titleActions,
+	);
 
 	const readerMain = element(document, 'div', 'ldp-reader-main');
 	const rateLimitNotice = element(document, 'div', 'ldp-rate-limit-notice');
@@ -1258,6 +1297,7 @@ export function createReaderShellTemplate(
 		header,
 		titleActions,
 		headButtons: headerActions,
+		browserImmersiveToggle: immersiveToggle,
 		windowCapsule: capsule,
 		windowLockButton: lockButton,
 		windowPinButton: pinButton,
@@ -1284,10 +1324,12 @@ export function createReaderShellTemplate(
 		headerActions,
 		headerActionsToggle,
 		layoutToggle,
+		immersiveToggle,
 		titleActions,
 		topicEditTrigger,
 		refreshTopic,
 		openNative,
+		mobileReaderBack,
 		closeReader,
 		rateLimitNotice,
 		rateLimitDetail,

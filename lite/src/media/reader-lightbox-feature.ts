@@ -200,6 +200,10 @@ export class ReaderLightboxFeature<
 			? [...options.items, ...this.#options.topicImages.snapshot().items]
 			: options.items;
 		const defaults = this.#defaults();
+		const mobileLayout =
+			this.#options.document.defaultView?.matchMedia?.(
+				'(max-width: 760px)',
+			).matches === true;
 		const initialPostNumbers = initialItems.map((item) =>
 			Number(item.sourcePostNumber));
 		const boundaryCursor: Record<-1 | 1, number> = {
@@ -212,7 +216,8 @@ export class ReaderLightboxFeature<
 				? {}
 				: { initialIndex: options.initialIndex }),
 			commentsExpanded:
-				options.commentsExpanded ?? defaults.commentsExpanded,
+				options.commentsExpanded ??
+					(mobileLayout ? false : defaults.commentsExpanded),
 			descriptionExpanded:
 				options.descriptionExpanded ?? defaults.descriptionExpanded,
 			parentScope: localScope,

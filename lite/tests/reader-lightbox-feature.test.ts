@@ -429,6 +429,24 @@ assert(
 	closeCount === 0,
 	'再次打开必须热读新默认值且保留评论能力，不能沿用启动快照或把收起误作禁用',
 );
+lightboxDefaults = Object.freeze({
+	...lightboxDefaults,
+	commentsExpanded: true,
+});
+Object.defineProperty(window, 'matchMedia', {
+	configurable: true,
+	value: () => ({ matches: true }),
+});
+const mobile = feature.open({ items: [first] });
+assert(
+	!mobile.sequence.snapshot().commentsExpanded &&
+		mobile.view.slots.root.classList.contains('ldp-lb-comments-collapsed'),
+	'移动端灯箱必须覆盖桌面偏好，以评论抽屉收纳态开始且不禁用评论能力',
+);
+Object.defineProperty(window, 'matchMedia', {
+	configurable: true,
+	value: () => ({ matches: false }),
+});
 const isolated = feature.open({
 	items: [{
 		key: 'user:avatar',

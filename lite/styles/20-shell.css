@@ -549,6 +549,7 @@
 }
 
 .ldp-title-actions:not(.is-expanded) > :is(
+  .ldp-browser-immersive-toggle,
   .ldp-reader-refresh,
   .ldp-open,
   .ldp-close

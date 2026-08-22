@@ -131,26 +131,21 @@ assert(
 	root.slots.header.querySelector<HTMLElement>('.ldp-time')?.dataset.exactTime ===
 		'2026年7月30日 08:00' &&
 	root.slots.header.querySelector('.ldp-body-floor')?.textContent === '#1' &&
-	root.slots.header.querySelector('.ldp-body-floor')?.nextElementSibling
-		?.classList.contains('ldp-time-exact') === true &&
-	root.slots.header.querySelector('.ldp-time-exact')?.textContent ===
-		'2026年7月30日 08:00' &&
-	root.slots.header.querySelector('.ldp-time-exact')
-		?.getAttribute('aria-hidden') === 'true' &&
+	root.slots.header.querySelector('.ldp-time-exact') === null &&
 		root.slots.header.querySelector('.ldp-post-read-state')
 			?.getAttribute('data-read-state') === 'read' &&
 		root.slots.header.querySelector(
 			'.ldp-post-read-state .ldp-icon[data-icon="check"][data-ldp-reader-icon]',
 		),
-	'具体时间必须保留正式楼层 hover 数据，并为树状嵌套准备楼层后的独立元信息项',
+	'正式楼层与树状嵌套必须只保留统一 tooltip 读取的具体时间数据',
 );
 renderer.render(rootPost, root);
 assert(
 	relativeTimeCalls === 2 &&
-		exactTimeCalls === 1 &&
+	exactTimeCalls === 1 &&
 	root.slots.header.querySelector<HTMLElement>('.ldp-time')?.dataset.exactTime ===
 		'2026年7月30日 08:00' &&
-	root.slots.header.querySelectorAll('.ldp-time-exact').length === 1,
+	root.slots.header.querySelectorAll('.ldp-time-exact').length === 0,
 	'同一 PostView 重投影必须刷新相对时间，但不得重复格式化不变的具体时间',
 );
 

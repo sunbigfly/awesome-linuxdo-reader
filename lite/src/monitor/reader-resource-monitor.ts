@@ -246,6 +246,18 @@ const REQUEST_WAIT_REASON_LABELS: Readonly<Record<string, string>> = Object.free
 	signal: '主动取消',
 	cancelled: '主动取消',
 });
+const REQUEST_ATTRIBUTION_LABELS: Readonly<Record<string, string>> = Object.freeze({
+	pending: '待定',
+	success: '成功响应',
+	'api-client': 'API/权限或参数',
+	'api-server': 'API/服务器或上游',
+	'rate-limit': 'API/429 限流',
+	cloudflare: 'Cloudflare challenge',
+	host: '宿主请求端口',
+	network: '网络/传输',
+	scheduler: 'Reader 调度',
+	unknown: '被动观测/状态未知',
+});
 
 const EXPECTED_CANCELLATION_REASONS = new Set([
 	'cancelled',
@@ -408,6 +420,7 @@ function requestContractDiagnostic(event: RequestObservationEvent): string {
 	const contract = [event.business, event.profile, event.namespace, event.lane]
 		.filter(Boolean).join(' / ');
 	const parts = [
+		`归因 ${REQUEST_ATTRIBUTION_LABELS[event.attribution] ?? event.attribution}`,
 		event.logicalId ? `链 ${event.logicalId}` : '',
 		contract,
 		event.cacheMode ? `缓存 ${event.cacheMode}` : '',
@@ -481,6 +494,7 @@ function requestDiagnosticRecord(
 		traceId: event.traceId,
 		logicalId: event.logicalId,
 		phase: event.phase,
+		attribution: event.attribution,
 		visibility,
 		queuedAt: event.queuedAt,
 		queuedAtIso: diagnosticIsoTime(event.queuedAt),
@@ -641,10 +655,15 @@ function requestIssue(
 	}
 	if (event.error) {
 		const aborted = /abort/i.test(event.error);
+		const hostFailure = event.attribution === 'host';
 		return {
 			level: aborted ? 'warning' : 'danger',
-			label: aborted ? '中止/超时' : '网络错误',
-			detail: event.error,
+			label: aborted
+				? '中止/超时'
+				: hostFailure ? '宿主端口异常' : '网络/传输错误',
+			detail: hostFailure
+				? `Discourse 宿主绑定失败（${event.error}）`
+				: event.error,
 		};
 	}
 	if (event.phase === 'queued') {
@@ -754,6 +773,7 @@ function requestStatus(event: RequestObservationEvent): string {
 		return '已取消';
 	}
 	if (event.status !== null && event.status > 0) return String(event.status);
+	if (event.attribution === 'unknown') return '状态未知';
 	return event.error ? 'ERR' : '完成';
 }
 
@@ -1697,7 +1717,7 @@ export class ReaderResourceMonitor {
 			{
 				recordType: 'meta',
 				logType: 'request',
-				schemaVersion: 1,
+				schemaVersion: 2,
 				generatedAt,
 				generatedAtIso: diagnosticIsoTime(generatedAt),
 				retention: 'current RequestObserver in-memory snapshot',
@@ -1705,6 +1725,8 @@ export class ReaderResourceMonitor {
 				requestRuntimeStateCount: this.#requestRuntimeStates.length,
 				privacy:
 					'query keys and counts only; no query values, headers, bodies, cookies, authorization, or response content',
+				coverage:
+					'Reader scheduler, Discourse jQuery Ajax, same-origin fetch/XHR ResourceTiming, and browser resources observed while the log panel is open',
 			},
 			{
 				recordType: 'runtime-state',
@@ -3036,6 +3058,10 @@ export class ReaderResourceMonitor {
 		const sent60 = recent60.filter(
 			(event) => event.phase !== 'queued' && !event.controlReason,
 		);
+		const sourceCounts = sent60.reduce((counts, event) => {
+			counts[event.source] += 1;
+			return counts;
+		}, { reader: 0, host: 0, browser: 0 });
 		const recent10 = sent60.filter(
 			(event) => event.startedAt >= at - REQUEST_TRACE_MS,
 		);
@@ -3097,6 +3123,8 @@ export class ReaderResourceMonitor {
 		).join(' · ');
 		this.#requestWindow.textContent =
 			`近 10 秒 ${recent10.length} 已发出 · 排队 ${queued} · ` +
+			`近 60 秒来源 阅读器 ${sourceCounts.reader} / 原站 ${sourceCounts.host} / ` +
+			`资源 ${sourceCounts.browser} · ` +
 			`实时 ${liveRunning} 运行 · ${liveQueued} 排队 · ` +
 			`本页生效槽 ${current.activeRequests}/${current.requestMaxConcurrent} · ` +
 			`队列 ${current.queuedRequests}/${current.requestQueueLimit} · ` +
@@ -3165,7 +3193,10 @@ export class ReaderResourceMonitor {
 					: '',
 			].filter(Boolean).join('，');
 			this.#requestObserved.textContent =
-				`本页最近观测：${REQUEST_TYPE_LABELS[latestLimit.type] ?? '请求'} ` +
+				`本页最近观测：${latestLimit.source === 'reader'
+					? '阅读器'
+					: latestLimit.source === 'host' ? '原站' : '浏览器资源'} ` +
+				`${REQUEST_TYPE_LABELS[latestLimit.type] ?? '请求'} ` +
 				`${latestLimit.method} ${requestDisplayPath(latestLimit)} ` +
 				`收到 ${latestLimit.cloudflareMitigated ? 'Cloudflare challenge 429' : '429'}` +
 				`${details ? `（${details}）` : ''}` +
@@ -3845,6 +3876,7 @@ export class ReaderResourceMonitor {
 			if (issue) row.dataset.level = issue.level;
 			row.dataset.requestFlowType = event.type;
 			row.dataset.requestPhase = event.phase;
+			row.dataset.requestAttribution = event.attribution;
 			if (event.logicalId) row.dataset.requestLogicalId = event.logicalId;
 			if (event.decision) row.dataset.requestDecision = event.decision;
 			const priority = requestPriorityLabel(event.priority);

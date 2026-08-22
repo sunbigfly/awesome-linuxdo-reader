@@ -3150,21 +3150,33 @@ export class ReaderTopicContextSurface<
 			'--ldp-descendant-tree-width',
 			`${baseWidth + overflowDepth * 28}px`,
 		);
+		this.#discussionList.style.setProperty(
+			'--ldp-descendant-tree-pan-width',
+			`${baseWidth + maxDepth * 28}px`,
+		);
+		const hasHorizontalOverflow =
+			overflowDepth > 0 ||
+			this.#discussionList.scrollWidth >
+				this.#discussionList.clientWidth + 1;
 		this.#discussionList.classList.toggle(
 			'ldp-descendant-tree-pannable',
-			overflowDepth > 0,
+			hasHorizontalOverflow,
 		);
-		if (!overflowDepth) this.#discussionList.scrollLeft = 0;
+		if (!hasHorizontalOverflow) this.#discussionList.scrollLeft = 0;
 	}
 
 	#onTreePanPointerDown(event: PointerEvent): void {
 		const target = eventElement(event);
+		const hasHorizontalOverflow =
+			this.#discussionList.classList.contains(
+				'ldp-descendant-tree-pannable',
+			) ||
+			this.#discussionList.scrollWidth >
+				this.#discussionList.clientWidth + 1;
 		if (
 			event.button !== 0 ||
 			(event.pointerType && event.pointerType !== 'mouse') ||
-			!this.#discussionList.classList.contains(
-				'ldp-descendant-tree-pannable',
-			) ||
+			!hasHorizontalOverflow ||
 			!target ||
 			target.closest([
 				'button',

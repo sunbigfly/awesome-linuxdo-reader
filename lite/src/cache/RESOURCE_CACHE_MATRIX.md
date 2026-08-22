@@ -30,6 +30,7 @@
 | 关注/粉丝完整集合 | user follow list；账号、username、kind | 与用户资料相同，30 分钟 / 24 小时；内存另记录每 kind 的更新时间 | 用户卡关注面板，本地搜索/分页 | freshness 内只做本地分页；超期重校验。follow action 同时失效目标 followers 与当前用户 following；空集合与资料计数冲突时强制校验 |
 | Connect 信任摘要 | 固定带凭据 `https://connect.linux.do/`；账号、username、resource | `external-user-summary`，30 分钟 / 24 小时 | 设置用户页 Connect tab | 无可靠站点事件，打开时按 freshness 校验；账号不一致拒绝写入，失败映射 stale snapshot |
 | LDC 账户摘要 | 固定带凭据 credit user-info；账号、username、resource | 中央 `external-user-summary` 30 分钟 / 24 小时；兼容 GM bridge `awesome-linuxdo-reader:ldc-user-bridge:v1` 30 分钟 | 设置用户页 LDC tab | 无可靠事件，打开/显式刷新时校验；账号不一致拒绝消费。bridge 过期即回收，用户资料清理同时清中央响应、会话投影和 bridge，晚到请求不能复写已清记录 |
+| CDK 社区分数 | 固定带凭据 `https://cdk.linux.do/api/v1/oauth/user-info`；账号、username、resource | `external-user-summary`，30 分钟 / 24 小时 | 设置用户页“用户信息”的社区分数 | 打开/显式刷新时校验；只持久化已校验账号的 username 与 score，账号不一致或未登录时不投影 |
 | 可认可类别 | 原生 endorsable categories；账号、username | `users`，1 分钟内存 / 5 分钟，不持久化 | 用户认可动作菜单 | 容量变化快且只在动作前需要，短内存缓存；显式刷新可绕过 |
 | 翻译 | provider + 文本 SHA 指纹 + source/target language | `translations`，30 天 / 180 天，持久化；Microsoft token 8 分钟内存且不持久化 | 翻译 controller | 内容不可变，命中期间零请求；provider 失败按登记顺序回退。凭据永不写 IDB |
 | 公共 AI 模型元数据 | 固定匿名 `models.dev/models.json` 与 OpenRouter 公共目录 | GM `awesome-linuxdo-reader:ai-model-metadata:v1` 最长 7 天；`TranslationRequestAdapter.#publicCatalogs` 为 application 内存副本 | AI 服务公共能力查询、供应商目录字段补全 | 本地有效时命中；过期后台更新，显式刷新绕过。归“收藏、回应与其他数据”清理：先清 GM 值并广播，再中止设置页晚到请求、清当前/其他标签投影和 adapter 内存副本，避免立即写回；供应商 `/models` 目录仍是用户配置，不随缓存删除 |

@@ -148,6 +148,7 @@ import {
 import { ReaderPipelineObserver } from
 	'../monitor/reader-pipeline-observer.js';
 import {
+	BrowserResourceObservationAdapter,
 	DiscourseNativeAjaxObservationAdapter,
 } from '../network/browser-request-observation.js';
 import {
@@ -261,6 +262,9 @@ import {
 	ReaderCreditAccountAdapter,
 	type ReaderCreditAccountAdapterOptions,
 } from '../user/reader-credit-account-adapter.js';
+import {
+	ReaderCommunityScoreAdapter,
+} from '../user/reader-community-score-adapter.js';
 import {
 	ReaderConnectTrustAdapter,
 	ReaderConnectTrustHistoryAdapter,
@@ -380,6 +384,9 @@ import {
 	type ReaderTopicFactory,
 	type ReaderTopicFactoryContext,
 } from '../shell/reader-shell.js';
+import {
+	ReaderMobileReturnController,
+} from '../shell/reader-mobile-return-controller.js';
 import {
 	createReaderShellWorkspaceStage,
 	type ReaderShellWorkspaceStageOptions,
@@ -703,6 +710,10 @@ const hostTopicUserCardSelector =
 	'html.ldp-reader-workspace ' +
 	':is(.topic-list-item,.latest-topic-list-item) ' +
 	':is(.posters,.topic-poster) [data-user-card]';
+const hostTopicAvatarLongPressSelector =
+	'html.mobile-view:not(.ldp-reader-workspace) ' +
+	'.topic-list-item > .topic-list-data > .pull-left > ' +
+	'[data-user-card][data-user-card-long-press]';
 
 export function readerWebDavCacheClearPlan(
 	categories: readonly ReaderCacheCategory[],
@@ -1002,6 +1013,10 @@ export interface ReaderBrowserConnectOptions {
 	readonly http: ExternalTranslationHttpPort;
 }
 
+export interface ReaderBrowserCommunityScoreOptions {
+	readonly http: ExternalTranslationHttpPort;
+}
+
 export interface ReaderBrowserTargetResult<
 	TTopic extends DiscourseComposerTopicInput<TPost>,
 	TPost extends ReaderLightboxCommentPostInput
@@ -1101,6 +1116,7 @@ export interface ReaderBrowserRuntimeOptions<
 	readonly translation?: Omit<TranslationRequestAdapterOptions, 'gateway'>;
 	readonly connect?: false | ReaderBrowserConnectOptions;
 	readonly credit?: false | ReaderBrowserCreditOptions;
+	readonly communityScore?: false | ReaderBrowserCommunityScoreOptions;
 	readonly translationView?: false | ReaderBrowserTranslationViewOptions;
 	readonly resources?: ReaderBrowserResourceOptions;
 	readonly topic: Omit<
@@ -1569,6 +1585,8 @@ function readerBookmarkPanelElements(
 
 function readerShellFailureKind(cause: unknown): ReaderShellFailureKind {
 	if (cause && typeof cause === 'object') {
+		const code = 'code' in cause ? String(cause.code ?? '') : '';
+		if (code === 'network-error') return 'network';
 		const kind = 'kind' in cause ? String(cause.kind ?? '') : '';
 		if (
 			[
@@ -2307,6 +2325,13 @@ export class ReaderBrowserRuntime<
 					})
 					: null;
 				const credit = this.creditAccount;
+				const communityScore = options.communityScore
+					? new ReaderCommunityScoreAdapter({
+						gateway: this.data.gateway,
+						http: options.communityScore.http,
+						authScope: options.topic.authScope,
+					})
+					: null;
 			this.users = new ReaderUserDomainSession({
 				gateway: this.data.gateway,
 				native: this.userNative,
@@ -2316,6 +2341,7 @@ export class ReaderBrowserRuntime<
 					: { searchForms: options.searchForms }),
 				...(connect ? { connect } : {}),
 				...(credit ? { credit } : {}),
+				...(communityScore ? { communityScore } : {}),
 				parentScope: this.scope,
 				onError: (cause) => reportTopicFeature(
 					this.shell.activeTopicId ?? 0,
@@ -2552,11 +2578,16 @@ export class ReaderBrowserRuntime<
 			this.userCardView = new ReaderUserCardView({
 				document: options.document,
 				root: this.shell.view.surfaceHost,
-				hoverDelegates: Object.freeze([Object.freeze({
-					root: options.document,
-					selector: hostTopicUserCardSelector,
-					capture: true,
-				})]),
+					hoverDelegates: Object.freeze([Object.freeze({
+						root: options.document,
+						selector: hostTopicUserCardSelector,
+						capture: true,
+					})]),
+					longPressDelegates: Object.freeze([Object.freeze({
+						root: options.document,
+						selector: hostTopicAvatarLongPressSelector,
+						capture: true,
+					})]),
 				session: this.users,
 				userHref: (username) =>
 					this.userNative.requestIdentity(username),
@@ -7643,7 +7674,21 @@ export function createReaderBrowserRuntimeStage<
 				document: options.runtime.document,
 				hostRequestBudget: runtime.permit,
 			}).install(runtime.scope);
-				const refreshTopicButton =
+				const browserPerformance =
+					options.runtime.document.defaultView?.performance ?? null;
+			if (browserPerformance) {
+				new BrowserResourceObservationAdapter({
+					observer: runtime.data.requests,
+					performance: browserPerformance,
+					hostRequestBudget: runtime.permit,
+					dynamicOnly: true,
+					}).install(runtime.scope);
+				}
+					const mobileReaderBackButton =
+						shell.view.root.querySelector<HTMLButtonElement>(
+							'.ldp-mobile-reader-back',
+						);
+					const refreshTopicButton =
 					shell.view.root.querySelector<HTMLButtonElement>(
 						'.ldp-reader-refresh',
 					);
@@ -7656,13 +7701,26 @@ export function createReaderBrowserRuntimeStage<
 						'.ldp-layout-toggle',
 					);
 				if (
+					!mobileReaderBackButton ||
 					!refreshTopicButton ||
 					!closeReaderButton ||
 					!layoutToggleButton
 				) {
 					runtime.destroy();
-					throw new Error('Reader Shell 缺少布局、刷新或关闭入口');
+					throw new Error('Reader Shell 缺少移动返回、布局、刷新或关闭入口');
 				}
+					new ReaderMobileReturnController({
+						document: options.runtime.document,
+						root: shell.view.root,
+						button: mobileReaderBackButton,
+						window: options.runtime.document.defaultView,
+						readReaderState: () => runtime.shell.state,
+						readerChanges: runtime.shell.changes,
+						parentScope: runtime.scope,
+						onError: (cause) => {
+							console.error('[main-lite:mobile-return]', cause);
+						},
+					});
 				let currentTopicRefresh:
 					Promise<ReaderCurrentTopicRefreshResult> | null = null;
 				const syncHeaderTopicActions = (): void => {
@@ -8132,6 +8190,9 @@ export function createReaderBrowserRuntimeStage<
 							history: runtime.connectHistory,
 							creditEnabled:
 							options.runtime.document.location?.hostname === 'linux.do',
+							communityScoreEnabled:
+								Boolean(options.runtime.communityScore) &&
+								options.runtime.document.location?.hostname === 'linux.do',
 						...(options.runtime.renderIcon
 							? { renderIcon: options.runtime.renderIcon }
 							: {}),

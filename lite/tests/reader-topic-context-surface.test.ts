@@ -1400,7 +1400,10 @@ changes.emit({ source: 'layout-test' });
 assert(
 	discussionList.classList.contains('ldp-descendant-tree-pannable') &&
 	discussionList.style.getPropertyValue('--ldp-descendant-tree-width') ===
-		'404px',
+		'404px' &&
+	discussionList.style.getPropertyValue(
+		'--ldp-descendant-tree-pan-width',
+	) === '404px',
 	'窄窗深树必须扩展逻辑树宽并进入可横移状态，不能继续压缩正文或截断层级',
 );
 const dispatchPointer = (

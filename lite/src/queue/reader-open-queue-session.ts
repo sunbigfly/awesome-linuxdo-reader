@@ -289,6 +289,71 @@ function mutationAffectsQueueGeometry(mutation: MutationRecord): boolean {
 	});
 }
 
+const HOST_USER_DRAWER_SELECTOR =
+	'.user-menu[data-tab-id],.menu-panel.user-menu';
+
+function nodeContainsHostUserDrawer(value: Node): boolean {
+	if (value.nodeType !== 1) return false;
+	const element = value as Element;
+	return element.matches(HOST_USER_DRAWER_SELECTOR) ||
+		element.querySelector(HOST_USER_DRAWER_SELECTOR) !== null;
+}
+
+function mutationAffectsNativeReaderTriggerVisibility(
+	mutation: MutationRecord,
+): boolean {
+	if (mutation.type === 'childList') {
+		return [...mutation.addedNodes, ...mutation.removedNodes]
+			.some(nodeContainsHostUserDrawer);
+	}
+	if (mutation.type !== 'attributes' || mutation.target.nodeType !== 1) {
+		return false;
+	}
+	const target = mutation.target as Element;
+	if (mutation.attributeName === 'aria-expanded') {
+		return target.closest('.d-header-icons .current-user') !== null;
+	}
+	return (
+		mutation.attributeName === 'aria-hidden' ||
+		mutation.attributeName === 'hidden'
+	) && target.matches(HOST_USER_DRAWER_SELECTOR);
+}
+
+function hostUserDrawerVisible(drawer: HTMLElement): boolean {
+	if (
+		!drawer.isConnected ||
+		drawer.hidden ||
+		drawer.getAttribute('aria-hidden') === 'true'
+	) return false;
+	const view = drawer.ownerDocument.defaultView;
+	if (typeof view?.getComputedStyle !== 'function') return true;
+	try {
+		const style = view.getComputedStyle(drawer);
+		return style.display !== 'none' && style.visibility !== 'hidden';
+	} catch {
+		return true;
+	}
+}
+
+function mobileUserDrawerOpen(document: Document): boolean {
+	const mobile = document.documentElement.classList.contains('mobile-view') ||
+		document.defaultView?.matchMedia?.('(max-width: 760px)').matches === true;
+	if (!mobile) return false;
+	if ([...document.querySelectorAll<HTMLElement>(HOST_USER_DRAWER_SELECTOR)]
+		.some(hostUserDrawerVisible)) return true;
+	const currentUser = document.querySelector<HTMLElement>(
+		'.d-header-icons .current-user:has(img.avatar)',
+	);
+	if (
+		!currentUser ||
+		(
+			currentUser.getAttribute('aria-expanded') !== 'true' &&
+			currentUser.querySelector('[aria-expanded="true"]') === null
+		)
+	) return false;
+	return true;
+}
+
 function normalizedSurface(value: unknown): ReaderQueueSurfaceState {
 	const source = value && typeof value === 'object'
 		? value as Record<string, unknown>
@@ -700,6 +765,9 @@ export class ReaderOpenQueueSession {
 			if (mutations.some(mutationAffectsQueueGeometry)) {
 				this.#scheduleSurfaceMeasure();
 			}
+			if (mutations.some(mutationAffectsNativeReaderTriggerVisibility)) {
+				this.#syncNativeReaderTrigger();
+			}
 			if (mutations.some((mutation) =>
 				mutationAffectsQueueScan(mutation, this.#rail))) {
 				this.#queueScan();
@@ -710,6 +778,9 @@ export class ReaderOpenQueueSession {
 					if (mutations.some(mutationAffectsQueueGeometry)) {
 						this.#scheduleSurfaceMeasure();
 					}
+					if (mutations.some(mutationAffectsNativeReaderTriggerVisibility)) {
+						this.#syncNativeReaderTrigger();
+					}
 					if (mutations.some((mutation) =>
 						mutationAffectsQueueScan(mutation, this.#rail))) {
 						this.#queueScan();
@@ -718,6 +789,8 @@ export class ReaderOpenQueueSession {
 				: null);
 		if (observer && document.body) {
 			this.scope.observe(observer, document.body, {
+				attributes: true,
+				attributeFilter: ['aria-expanded', 'aria-hidden', 'hidden'],
 				childList: true,
 				subtree: true,
 			});
@@ -2184,7 +2257,13 @@ export class ReaderOpenQueueSession {
 		const avatarHost = document.querySelector<HTMLElement>(
 			'.d-header-icons .current-user:has(img.avatar)',
 		);
-		if (!item || !button || !avatarHost || this.#options.readerOpen()) {
+		if (
+			!item ||
+			!button ||
+			!avatarHost ||
+			this.#options.readerOpen() ||
+			mobileUserDrawerOpen(document)
+		) {
 			if (item) item.hidden = true;
 			document.documentElement.classList.remove(
 				'ldp-native-reader-trigger-visible',

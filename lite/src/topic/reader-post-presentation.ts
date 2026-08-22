@@ -443,7 +443,6 @@ export function createReaderPostPresentation<
 			const createdAt =
 				text(post.created_at) || text(view.identity.createdAt);
 			const relative = options.relativeTime(createdAt);
-			let exactLabel: HTMLElement | null = null;
 			if (relative) {
 				const time = options.document.createElement('span');
 				time.className = 'ldp-time';
@@ -459,10 +458,6 @@ export function createReaderPostPresentation<
 				}
 				if (exact) {
 					time.dataset.exactTime = exact;
-					exactLabel = options.document.createElement('span');
-					exactLabel.className = 'ldp-time-exact';
-					exactLabel.textContent = exact;
-					exactLabel.setAttribute('aria-hidden', 'true');
 				}
 				const label = options.document.createElement('span');
 				label.className = 'ldp-time-relative';
@@ -484,7 +479,6 @@ export function createReaderPostPresentation<
 				postNumber,
 				replyToPostNumber,
 			);
-			if (exactLabel) header.append(exactLabel);
 			appendReadState(
 				options.document,
 				header,

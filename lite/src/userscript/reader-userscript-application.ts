@@ -8,6 +8,7 @@ import {
 } from '../app/reader-application.js';
 import {
 	createReaderBrowserRuntimeStage,
+	type ReaderBrowserCommunityScoreOptions,
 	type ReaderBrowserConnectOptions,
 	type ReaderBrowserResourceOptions,
 	type ReaderBrowserCreditOptions,
@@ -100,6 +101,7 @@ export interface ReaderUserscriptRuntimeBindings {
 	readonly translation?: Omit<TranslationRequestAdapterOptions, 'gateway'>;
 	readonly connect?: ReaderBrowserConnectOptions;
 	readonly credit?: ReaderBrowserCreditOptions;
+	readonly communityScore?: ReaderBrowserCommunityScoreOptions;
 	readonly resources?: ReaderBrowserResourceOptions;
 	readonly assetCacheStorage?: BrowserAssetCacheStoragePort;
 	readonly fontStylesheet?: (href: string) => HTMLLinkElement;
@@ -418,6 +420,7 @@ export function createReaderUserscriptRuntimeBindings(
 						? { storage: valueStorage }
 						: {}),
 				}),
+				communityScore: Object.freeze({ http: externalHttp }),
 			}
 			: {}),
 		...(translation === undefined ? {} : { translation }),
@@ -469,6 +472,9 @@ export function createReaderUserscriptRuntimeStage<
 			share: bindings.share,
 			...(bindings.connect ? { connect: bindings.connect } : {}),
 			...(bindings.credit ? { credit: bindings.credit } : {}),
+			...(bindings.communityScore
+				? { communityScore: bindings.communityScore }
+				: {}),
 			...(bindings.translation === undefined
 				? {}
 				: { translation: bindings.translation }),

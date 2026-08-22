@@ -27,6 +27,17 @@ export type RequestObservationType =
 	| 'reaction'
 	| 'topic'
 	| 'other';
+export type RequestObservationAttribution =
+	| 'pending'
+	| 'success'
+	| 'api-client'
+	| 'api-server'
+	| 'rate-limit'
+	| 'cloudflare'
+	| 'host'
+	| 'network'
+	| 'scheduler'
+	| 'unknown';
 
 export interface RequestObservationStart {
 	readonly traceId?: string;
@@ -93,6 +104,7 @@ export interface RequestObservationEvent {
 	readonly transport: RequestObservationTransport;
 	readonly source: RequestObservationSource;
 	readonly phase: RequestObservationPhase;
+	readonly attribution: RequestObservationAttribution;
 	readonly type: RequestObservationType;
 	readonly sameOrigin: boolean;
 	readonly queuedAt: number;
@@ -134,6 +146,12 @@ export interface RequestObservationEvent {
 	readonly serverRemaining: string;
 	readonly serverReset: string;
 	readonly resourceTimed: boolean;
+}
+
+export interface RequestResourceObservationResult {
+	readonly id: number;
+	readonly created: boolean;
+	readonly event: RequestObservationEvent | null;
 }
 
 export interface RequestObservationSnapshot {
@@ -298,6 +316,34 @@ function isCancellationCode(value: string): boolean {
 	return CANCELLATION_CODES.has(value);
 }
 
+const HOST_FAILURE_CODES = new Set([
+	'host-ajax-call-failed',
+	'host-ajax-rejected',
+	'host-module-unavailable',
+]);
+
+function requestObservationAttribution(input: Readonly<{
+	readonly source: RequestObservationSource;
+	readonly phase: RequestObservationPhase;
+	readonly status: number | null;
+	readonly cloudflareMitigated: boolean;
+	readonly error: string;
+	readonly controlReason: string;
+}>): RequestObservationAttribution {
+	if (input.phase === 'queued' || input.phase === 'running') return 'pending';
+	if (input.controlReason || input.phase === 'cancelled') return 'scheduler';
+	if (input.cloudflareMitigated) return 'cloudflare';
+	if (input.status === 429) return 'rate-limit';
+	if ((input.status ?? 0) >= 500) return 'api-server';
+	if ((input.status ?? 0) >= 400) return 'api-client';
+	if (input.error) {
+		if (HOST_FAILURE_CODES.has(input.error)) return 'host';
+		return 'network';
+	}
+	if ((input.status ?? 0) >= 200 && (input.status ?? 0) < 400) return 'success';
+	return 'unknown';
+}
+
 export function requestObservationType(
 	href: string,
 	options: {
@@ -328,7 +374,7 @@ export function requestObservationType(
 		/post_actions|user_actions|discourse-reactions|\/boosts?(?:\/|\.|$)|\/emojis\.json$/.test(path)
 	) return 'reaction';
 	if (/\/t\/|\/posts(?:\/|\.|$)|\/posts\/by_number\//.test(path)) return 'topic';
-	if (!['GET', 'HEAD'].includes(method)) return 'reaction';
+	if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return 'reaction';
 	if (['img', 'image', 'video', 'audio'].includes(initiator)) return 'media';
 	if (['css', 'link', 'script', 'font'].includes(initiator)) return 'asset';
 	return 'other';
@@ -396,6 +442,7 @@ export class RequestObserver {
 			transport: input.transport,
 			source: input.source,
 			phase,
+			attribution: controlReason ? 'scheduler' : 'pending',
 			type: input.type ?? requestObservationType(input.href, {
 				baseHref: this.#baseHref,
 				method,
@@ -482,6 +529,7 @@ export class RequestObserver {
 		const running: RequestObservationEvent = Object.freeze({
 			...current,
 			phase: 'running',
+			attribution: 'pending',
 			queuedAt,
 			permittedAt,
 			startedAt,
@@ -514,6 +562,7 @@ export class RequestObserver {
 		const cancelled: RequestObservationEvent = Object.freeze({
 			...current,
 			phase: 'cancelled',
+			attribution: 'scheduler',
 			permittedAt: endedAt,
 			startedAt: endedAt,
 			endedAt,
@@ -567,21 +616,33 @@ export class RequestObserver {
 		const error = diagnosticError(input.error);
 		const cancelled = isCancellationCode(error);
 		const controlledCancellation = cancelled && error !== 'AbortError';
+		const phase: RequestObservationPhase = cancelled ? 'cancelled' : 'finished';
+		const status = cancelled
+			? 0
+			: input.status === undefined
+				? current.status
+				: Math.trunc(nonNegative(input.status));
+		const cloudflareMitigated = input.cloudflareMitigated === true;
+		const controlReason = controlledCancellation ? error : current.controlReason;
 		const completed: RequestObservationEvent = Object.freeze({
 			...current,
-			phase: cancelled ? 'cancelled' : 'finished',
+			phase,
 			endedAt,
 			duration: endedAt - current.startedAt,
 			pending: false,
-			status: cancelled
-				? 0
-				: input.status === undefined
-					? current.status
-					: Math.trunc(nonNegative(input.status)),
-			cloudflareMitigated: input.cloudflareMitigated === true,
+			status,
+			cloudflareMitigated,
 			size: nonNegative(input.size, current.size),
 			error,
-			controlReason: controlledCancellation ? error : current.controlReason,
+			controlReason,
+			attribution: requestObservationAttribution({
+				source: current.source,
+				phase,
+				status,
+				cloudflareMitigated,
+				error,
+				controlReason,
+			}),
 			rateLimitCode: diagnosticCode(input.rateLimitCode),
 			retryAfter: diagnosticText(input.retryAfter, 80),
 			serverLimit: diagnosticText(input.serverLimit, 80),
@@ -633,14 +694,29 @@ export class RequestObserver {
 	recordResource(input: {
 		readonly href: string;
 		readonly initiatorType?: string;
+		readonly method?: string;
 		readonly startedAt: number;
 		readonly endedAt: number;
 		readonly status?: number;
 		readonly size?: number;
 	}): number {
+		return this.recordResourceDetailed(input).id;
+	}
+
+	recordResourceDetailed(input: {
+		readonly href: string;
+		readonly initiatorType?: string;
+		readonly method?: string;
+		readonly startedAt: number;
+		readonly endedAt: number;
+		readonly status?: number;
+		readonly size?: number;
+	}): RequestResourceObservationResult {
 		const initiator = String(input.initiatorType ?? '').toLowerCase();
 		const resourceUrl = requestUrl(input.href, this.#baseHref);
-		if (!resourceUrl || !['http:', 'https:'].includes(resourceUrl.protocol)) return 0;
+		if (!resourceUrl || !['http:', 'https:'].includes(resourceUrl.protocol)) {
+			return Object.freeze({ id: 0, created: false, event: null });
+		}
 		const normalizedHref = requestObservationHref(
 			resourceUrl,
 		);
@@ -651,7 +727,9 @@ export class RequestObserver {
 			Math.abs(event.startedAt - input.startedAt) <= 0.1 &&
 			Math.abs(event.duration - resourceDuration) <= 0.1
 		);
-		if (repeated) return repeated.id;
+		if (repeated) {
+			return Object.freeze({ id: repeated.id, created: false, event: repeated });
+		}
 		if (['fetch', 'xmlhttprequest'].includes(initiator)) {
 			const match = this.#events
 				.filter((event) =>
@@ -677,23 +755,38 @@ export class RequestObserver {
 				if (index >= 0) this.#events[index] = enriched;
 				if (match.pending) this.#active.set(match.id, enriched);
 				this.#publish();
-				return match.id;
+				return Object.freeze({
+					id: match.id,
+					created: false,
+					event: enriched,
+				});
 			}
 		}
+		const dynamicTransport = initiator === 'fetch' || initiator === 'xmlhttprequest'
+			? initiator
+			: null;
+		const sameOrigin = resourceUrl.origin === new URL(this.#baseHref).origin;
+		const method = String(
+			input.method ?? (dynamicTransport ? 'UNKNOWN' : 'GET'),
+		).toUpperCase();
 		const id = this.begin({
 			href: input.href,
-			transport: 'resource',
-			source: 'browser',
+			method,
+			transport: dynamicTransport ?? 'resource',
+			source: dynamicTransport && sameOrigin ? 'host' : 'browser',
 			startedAt: input.startedAt,
 			type: requestObservationType(input.href, {
 				baseHref: this.#baseHref,
+				method,
 				...(input.initiatorType === undefined
 					? {}
 					: { initiatorType: input.initiatorType }),
 			}),
-			callSite: input.initiatorType
-				? `${input.initiatorType} 资源加载`
-				: '浏览器资源加载',
+			callSite: dynamicTransport
+				? `${dynamicTransport} PerformanceResourceTiming 被动观测`
+				: input.initiatorType
+					? `${input.initiatorType} 资源加载`
+					: '浏览器资源加载',
 		});
 		this.finish(id, input);
 		const index = this.#events.findIndex((event) => event.id === id);
@@ -702,7 +795,11 @@ export class RequestObserver {
 			this.#events[index] = Object.freeze({ ...completed, resourceTimed: true });
 			this.#publish();
 		}
-		return id;
+		return Object.freeze({
+			id,
+			created: true,
+			event: this.#events[index] ?? null,
+		});
 	}
 
 	clearCompleted(): void {

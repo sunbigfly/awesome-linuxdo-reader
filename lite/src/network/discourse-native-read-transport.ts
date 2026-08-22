@@ -74,6 +74,24 @@ interface ResolvedNativeAjax {
 	) => NativeAjaxRequest<T>;
 }
 
+export type DiscourseNativeTransportErrorCode =
+	| 'host-module-unavailable'
+	| 'host-ajax-call-failed'
+	| 'host-ajax-rejected'
+	| 'network-error';
+
+export class DiscourseNativeTransportError extends Error {
+	readonly code: DiscourseNativeTransportErrorCode;
+	override readonly cause: unknown;
+
+	constructor(code: DiscourseNativeTransportErrorCode, cause?: unknown) {
+		super(code);
+		this.name = 'DiscourseNativeTransportError';
+		this.code = code;
+		this.cause = cause;
+	}
+}
+
 export interface BrowserDiscourseNativeAjaxTransportOptions {
 	readonly origin?: string;
 }
@@ -231,7 +249,7 @@ function resolveNativeAjax(host: DiscourseHostApiPort): ResolvedNativeAjax {
 			? defaultExport
 			: null;
 	if (!owner) {
-		throw new Error('Discourse 原生模块 discourse/lib/ajax#ajax 不可用');
+		throw new DiscourseNativeTransportError('host-module-unavailable');
 	}
 	return {
 		owner,
@@ -290,7 +308,9 @@ async function executeNativeAjax<T>(
 		pending = resolved.ajax.call(resolved.owner, path, options) as NativeAjaxRequest<T>;
 	} catch (error) {
 		const failure = discourseNativeFailureResponse<T>(error);
-		if (!failure) throw error;
+		if (!failure) {
+			throw new DiscourseNativeTransportError('host-ajax-call-failed', error);
+		}
 		return failure;
 	}
 	const abort = () => {
@@ -308,7 +328,18 @@ async function executeNativeAjax<T>(
 	} catch (error) {
 		if (input.signal.aborted) throw input.signal.reason;
 		const failure = discourseNativeFailureResponse<T>(error);
-		if (!failure) throw error;
+		if (!failure) {
+			const errorName = error && typeof error === 'object' && 'name' in error
+				? String(error.name ?? '')
+				: '';
+			throw new DiscourseNativeTransportError(
+				['TypeError', 'NetworkError', 'OfflineError'].includes(errorName) ||
+					!(error instanceof Error)
+					? 'network-error'
+					: 'host-ajax-rejected',
+				error,
+			);
+		}
 		return failure;
 	} finally {
 		input.signal.removeEventListener('abort', abort);

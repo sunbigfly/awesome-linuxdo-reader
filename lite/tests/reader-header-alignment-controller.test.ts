@@ -22,6 +22,7 @@ const titleActions = document.querySelector<HTMLElement>('.title-actions')!;
 const headButtons = document.querySelector<HTMLElement>('.head-buttons')!;
 let contentLeft = 200;
 let modalHeight = 800;
+let headerHeight = 96;
 Object.defineProperty(modal, 'clientHeight', {
 	configurable: true,
 	get: () => modalHeight,
@@ -46,6 +47,17 @@ content.getBoundingClientRect = () => ({
 	left: contentLeft,
 	width: 1_000 - contentLeft,
 	height: 600,
+	toJSON: () => ({}),
+});
+header.getBoundingClientRect = () => ({
+	x: 100,
+	y: 0,
+	top: 0,
+	right: 1_100,
+	bottom: headerHeight,
+	left: 100,
+	width: 1_000,
+	height: headerHeight,
 	toJSON: () => ({}),
 });
 
@@ -90,6 +102,7 @@ const emitModalResize = (height: number): void => {
 };
 const emitHeaderResize = (width: number, height: number): void => {
 	if (!resizeCallback) throw new Error('缺少 ResizeObserver callback');
+	headerHeight = height;
 	const size = Object.freeze({ inlineSize: width, blockSize: height });
 	(resizeCallback as ResizeObserverCallback)([{
 		target: header,
@@ -158,6 +171,7 @@ runNextFrame();
 assert(
 	header.style.paddingLeft === '100px' &&
 		header.style.paddingRight === '100px' &&
+		modal.style.getPropertyValue('--ldp-reader-header-block-size') === '96px' &&
 		frames.size === 1 &&
 		observedResizeTargets.has(modal) &&
 		observedResizeTargets.has(header) &&
@@ -207,6 +221,10 @@ assert(
 emitHeaderResize(1_000, 120);
 assert(frames.size === 1, '冻结标题高度变化必须安排一次标题密度重算');
 runNextFrame();
+assert(
+	modal.style.getPropertyValue('--ldp-reader-header-block-size') === '120px',
+	'冻结标题高度必须同步为移动端抽屉的唯一上边界',
+);
 assert(frames.size === 1, '标题密度重算必须与几何读取拆帧执行');
 runNextFrame();
 if (!mutationCallback) throw new Error('缺少 MutationObserver callback');
@@ -229,6 +247,7 @@ runNextFrame();
 controller.destroy();
 assert(
 	Number(frames.size) === 0 &&
-		!modal.classList.contains('ldp-reader-surface-short'),
+		!modal.classList.contains('ldp-reader-surface-short') &&
+		!modal.style.getPropertyValue('--ldp-reader-header-block-size'),
 	'销毁时必须取消全部 frame 并清理紧凑高度状态',
 );

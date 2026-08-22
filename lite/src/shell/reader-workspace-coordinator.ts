@@ -5,11 +5,13 @@ import type {
 	ReaderApplicationContext,
 	ReaderApplicationStage,
 } from '../app/reader-application.js';
+import type { DiscourseHostApiPort } from '../discourse/native-host-api.js';
 import type { ReaderAppearanceProfile } from '../state/reader-preferences-schema.js';
 import {
 	EmbeddedHostAppearanceController,
 	type EmbeddedHostResolvedAppearance,
 } from './embedded-host-appearance.js';
+import { EmbeddedHostHeaderController } from './embedded-host-header-controller.js';
 import {
 	EmbeddedHostRootController,
 	type EmbeddedHostEnhancementPort,
@@ -23,6 +25,8 @@ import {
 import { EmbeddedHostTopShortcutController } from './embedded-host-top-shortcut.js';
 import { MainOutletMutationHub } from './main-outlet-mutation-hub.js';
 import { ReaderEmbedResizeController } from './reader-embed-resize-controller.js';
+import { ReaderBrowserImmersiveController } from
+	'./reader-browser-immersive-controller.js';
 import {
 	createReaderShellStage,
 	type ReaderShell,
@@ -47,6 +51,7 @@ export interface ReaderWorkspaceCoordinatorElements {
 	readonly header: HTMLElement;
 	readonly titleActions: HTMLElement;
 	readonly headButtons: HTMLElement;
+	readonly browserImmersiveToggle?: HTMLButtonElement;
 	readonly windowCapsule?: HTMLElement;
 	readonly windowLockButton?: HTMLButtonElement;
 	readonly windowPinButton?: HTMLButtonElement;
@@ -61,6 +66,7 @@ export interface ReaderWorkspaceCoordinatorElements {
 
 export interface ReaderWorkspaceCoordinatorOptions {
 	readonly document: Document;
+	readonly host?: DiscourseHostApiPort;
 	readonly routeKind: 'list' | 'direct-topic';
 	readonly requestedMode: ReaderWorkspaceMode;
 	readonly embedWidth: number;
@@ -324,6 +330,25 @@ export class ReaderHeaderAlignmentController {
 
 	#sync(): void {
 		if (this.#destroyed) return;
+		const headerBlockSize = Math.max(
+			0,
+			Math.round(
+				this.#elements.header.getBoundingClientRect().height * 2,
+			) / 2,
+		);
+		if (headerBlockSize > 0) {
+			const value = `${headerBlockSize}px`;
+			if (
+				this.#elements.modal.style.getPropertyValue(
+					'--ldp-reader-header-block-size',
+				) !== value
+			) {
+				this.#elements.modal.style.setProperty(
+					'--ldp-reader-header-block-size',
+					value,
+				);
+			}
+		}
 		this.#elements.modal.classList.toggle(
 			'ldp-reader-surface-short',
 			this.#elements.modal.clientHeight <= 560,
@@ -456,6 +481,9 @@ export class ReaderHeaderAlignmentController {
 	#clear(): void {
 		this.#clearGeometry();
 		this.#elements.modal.classList.remove('ldp-reader-surface-short');
+		this.#elements.modal.style.removeProperty(
+			'--ldp-reader-header-block-size',
+		);
 		this.#elements.titleActions.style.removeProperty(
 			'--ldp-title-actions-align-y',
 		);
@@ -581,6 +609,16 @@ export class ReaderWorkspaceCoordinator {
 				: {}),
 		});
 		this.scope.add(() => this.mutations.destroy());
+		new EmbeddedHostHeaderController({
+			model: this.workspace,
+			routeKind: options.routeKind,
+			document: options.document,
+			...(options.host ? { host: options.host } : {}),
+			mutations: this.mutations,
+			requestFrame,
+			cancelFrame,
+			parentScope: this.scope,
+		});
 		new EmbeddedHostRootController({
 			model: this.workspace,
 			routeKind: options.routeKind,
@@ -713,8 +751,20 @@ export function createReaderShellWorkspaceStage<
 				active: READER_VISIBLE_STATES.has(shell.state),
 				parentScope: shell.scope,
 			});
+			const immersive = workspaceOptions.elements.browserImmersiveToggle
+				? new ReaderBrowserImmersiveController({
+					document: workspaceOptions.document,
+					button: workspaceOptions.elements.browserImmersiveToggle,
+					enterReaderFullpage: () => {
+						workspace.setMode('fullpage');
+					},
+					parentScope: shell.scope,
+				})
+				: null;
 			shell.changes.subscribe((state) => {
-				workspace.workspace.setActive(READER_VISIBLE_STATES.has(state));
+				const visible = READER_VISIBLE_STATES.has(state);
+				workspace.workspace.setActive(visible);
+				if (!visible) immersive?.exit();
 			}, workspace.scope);
 			const takeover = new ReaderHostTakeoverController({
 				shell: shell as ReaderShell<unknown>,

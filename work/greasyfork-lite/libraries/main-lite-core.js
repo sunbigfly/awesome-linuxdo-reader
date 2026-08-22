@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.5.11
+// @version      1.6.0
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.5.11 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.6.0 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.5.11",
+			sourceVersion: "1.6.0",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.5.11") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.0") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -375,8 +375,8 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	  readerWebDavCacheClearPlan: () => readerWebDavCacheClearPlan
 	});
 	module.exports = __toCommonJS(reader_browser_runtime_exports);
-	var import_native_host_api = require("../discourse/native-host-api.js"), import_native_request_descriptors = require("../discourse/native-request-descriptors.js"), import_reader_cache_management_surface = require("../cache/reader-cache-management-surface.js"), import_reader_collection_page_repository = require("../cache/reader-collection-page-repository.js"), import_browser_asset_cache = require("../cache/browser-asset-cache.js"), import_discourse_application_cache_invalidation = require("../cache/discourse-application-cache-invalidation.js"), import_topic_snapshot_handoff = require("../cache/topic-snapshot-handoff.js"), import_reader_settings_config_manager = require("../state/reader-settings-config-manager.js"), import_native_composer = require("../discourse/native-composer.js"), import_reader_control_tooltip = require("../components/reader-control-tooltip.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_reader_native_post_admin_menu = require("../discourse/reader-native-post-admin-menu.js"), import_native_post_model_factory = require("../discourse/native-post-model-factory.js"), import_native_presence = require("../discourse/native-presence.js"), import_identifiers = require("../discourse/identifiers.js"), import_reader_history_navigation_controller = require("../history/reader-history-navigation-controller.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_history_navigation_view = require("../history/reader-history-navigation-view.js"), import_reader_history_panel_view = require("../history/reader-history-panel-view.js"), import_reader_chronicle_repository = require("../history/reader-chronicle-repository.js"), import_reader_chronicle_view = require("../history/reader-chronicle-view.js"), import_reader_unwanted_topic_repository = require("../collection/reader-unwanted-topic-repository.js"), import_reader_unwanted_topic_view = require("../collection/reader-unwanted-topic-view.js"), import_discourse_bookmark_adapter = require("../bookmark/discourse-bookmark-adapter.js"), import_reader_bookmark_controller = require("../bookmark/reader-bookmark-controller.js"), import_reader_bookmark_panel_view = require("../bookmark/reader-bookmark-panel-view.js"), import_reader_bookmark_model = require("../bookmark/reader-bookmark-model.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_post_author_filter_feature = require("../topic/reader-post-author-filter-feature.js"), import_signal = require("../kernel/signal.js"), import_reader_topic_live_navigation_controller = require("../live/reader-topic-live-navigation-controller.js"), import_reader_resource_monitor = require("../monitor/reader-resource-monitor.js"), import_reader_pipeline_observer = require("../monitor/reader-pipeline-observer.js"), import_browser_request_observation = require("../network/browser-request-observation.js"), import_reader_topic_live_navigation_view = require("../live/reader-topic-live-navigation-view.js"), import_reader_rate_limit_notice = require("../shell/reader-rate-limit-notice.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_reader_image_download_service = require("../media/reader-image-download-service.js"), import_reader_image_resource_service = require("../media/reader-image-resource-service.js"), import_reader_lightbox_image_picker = require("../media/reader-lightbox-image-picker.js"), import_reader_media_prefetch_service = require("../media/reader-media-prefetch-service.js"), import_reader_topic_image_index = require("../media/reader-topic-image-index.js"), import_reader_topic_image_interaction = require("../media/reader-topic-image-interaction.js"), import_reader_lightbox_feature = require("../media/reader-lightbox-feature.js"), import_reader_compact_image_viewer = require("../media/reader-compact-image-viewer.js"), import_reader_topic_media_feature = require("../media/reader-topic-media-feature.js"), import_reader_media_controller = require("../media/reader-media-controller.js"), import_reader_cooked_content_feature = require("../media/reader-cooked-content-feature.js"), import_reader_poll_feature = require("../media/reader-poll-feature.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js"), import_discourse_native_read_transport = require("../network/discourse-native-read-transport.js"), import_public_resource_request_adapter = require("../network/public-resource-request-adapter.js"), import_reader_business_request_policy = require("../network/reader-business-request-policy.js"), import_reader_business_request_config = require("../network/reader-business-request-config.js"), import_reader_request_flow_config = require("../network/reader-request-flow-config.js"), import_discourse_native_user_port = require("../user/discourse-native-user-port.js"), import_reader_user_domain_session = require("../user/reader-user-domain-session.js"), import_reader_credit_account_adapter = require("../user/reader-credit-account-adapter.js"), import_reader_connect_trust_adapter = require("../user/reader-connect-trust-adapter.js"), import_reader_user_endorsement_adapter = require("../user/reader-user-endorsement-adapter.js"), import_reader_user_card_view = require("../user/reader-user-card-view.js"), import_discourse_user_observation_adapter = require("../user/discourse-user-observation-adapter.js"), import_reader_user_observation_session = require("../user/reader-user-observation-session.js"), import_reader_user_observation_page_repository = require("../user/reader-user-observation-page-repository.js"), import_reader_user_observation_model = require("../user/reader-user-observation-model.js"), import_reader_user_observation_view = require("../user/reader-user-observation-view.js"), import_reader_settings_user_view = require("../user/reader-settings-user-view.js"), import_discourse_notification_adapter = require("../notification/discourse-notification-adapter.js"), import_reader_notification_controller = require("../notification/reader-notification-controller.js"), import_reader_notification_model = require("../notification/reader-notification-model.js"), import_reader_notification_panel_view = require("../notification/reader-notification-panel-view.js"), import_action_request_adapter = require("../post/action-request-adapter.js"), import_discourse_action_transport = require("../post/discourse-action-transport.js"), import_post_action_controller = require("../post/post-action-controller.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_post_action_feature_commands = require("../post/post-action-feature-commands.js"), import_user_action_feature_commands = require("../post/user-action-feature-commands.js"), import_reader_post_action_feature = require("../post/reader-post-action-feature.js"), import_reader_bookmark_action_coordinator = require("../post/reader-bookmark-action-coordinator.js"), import_reader_share_action_coordinator = require("../post/reader-share-action-coordinator.js"), import_reader_topic_notification_coordinator = require("../post/reader-topic-notification-coordinator.js"), import_reader_topic_shared_issue_coordinator = require("../post/reader-topic-shared-issue-coordinator.js"), import_topic_action_feature_commands = require("../post/topic-action-feature-commands.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_topic_summary_request_adapter = require("../post/reader-topic-summary-request-adapter.js"), import_reader_topic_summary_surface = require("../post/reader-topic-summary-surface.js"), import_reader_topic_custom_summary = require("../post/reader-topic-custom-summary.js"), import_reader_post_management_action_coordinator = require("../post/reader-post-management-action-coordinator.js"), import_reader_selection_quote_feature = require("../post/reader-selection-quote-feature.js"), import_reader_workspace_coordinator = require("../shell/reader-workspace-coordinator.js"), import_reader_feedback_surface = require("../shell/reader-feedback-surface.js"), import_reader_action_surface_coordinator = require("../shell/reader-action-surface-coordinator.js"), import_reader_exclusive_panel_coordinator = require("../shell/reader-exclusive-panel-coordinator.js"), import_reader_shell_recovery_view = require("../shell/reader-shell-recovery-view.js"), import_reader_report_form_surface = require("../shell/reader-report-form-surface.js"), import_reader_assignment_form_surface = require("../shell/reader-assignment-form-surface.js"), import_reader_choice_form_surface = require("../shell/reader-choice-form-surface.js"), import_reader_topic_edit_form_surface = require("../shell/reader-topic-edit-form-surface.js"), import_reader_settings_controller = require("../settings/reader-settings-controller.js"), import_reader_settings_view = require("../settings/reader-settings-view.js"), import_reader_theme_settings_control = require("../settings/reader-theme-settings-control.js"), import_reader_window_settings_form = require("../settings/reader-window-settings-form.js"), import_reader_shortcut_settings_form = require("../settings/reader-shortcut-settings-form.js"), import_reader_custom_site_settings_form = require("../settings/reader-custom-site-settings-form.js"), import_reader_webdav_settings_form = require("../settings/reader-webdav-settings-form.js"), import_browser_discourse_site_probe = require("../site/browser-discourse-site-probe.js"), import_reader_webdav_coordinator = require("../sync/reader-webdav-coordinator.js"), import_reader_webdav_category_ports = require("../sync/reader-webdav-category-ports.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_translation_settings_form = require("../settings/reader-translation-settings-form.js"), import_reader_ai_service_settings_form = require("../settings/reader-ai-service-settings-form.js"), import_reader_appearance_settings_form = require("../settings/reader-appearance-settings-form.js"), import_reader_font_settings_form = require("../settings/reader-font-settings-form.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_reader_layout_settings_form = require("../settings/reader-layout-settings-form.js"), import_reader_interaction_settings_form = require("../settings/reader-interaction-settings-form.js"), import_reader_image_settings_form = require("../settings/reader-image-settings-form.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_reader_about_settings_content = require("../settings/reader-about-settings-content.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_topic_download_manager = require("../queue/reader-topic-download-manager.js"), import_reader_topic_offline_document = require("../archive/reader-topic-offline-document.js"), import_reader_topic_offline_artifact_repository = require("../archive/reader-topic-offline-artifact-repository.js"), import_reader_cooked_content_feature2 = require("../media/reader-cooked-content-feature.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_font_catalog = require("../font/reader-font-catalog.js"), import_reader_loading_animation_view = require("../motion/reader-loading-animation-view.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_topic_factory = require("../topic/reader-topic-factory.js"), import_reader_topic_navigation_controller = require("../topic/reader-topic-navigation-controller.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_topic_flow_controller = require("../topic/reader-topic-flow-controller.js"), import_reader_topic_navigation_preferences = require("../topic/reader-topic-navigation-preferences.js"), import_reader_topic_scroll_adapter = require("../topic/reader-topic-scroll-adapter.js"), import_reader_topic_local_archive_feature = require("../topic/reader-topic-local-archive-feature.js"), import_reader_topic_timeline_controller = require("../topic/reader-topic-timeline-controller.js"), import_reader_topic_timeline_end_resolver = require("../topic/reader-topic-timeline-end-resolver.js"), import_reader_topic_timeline_view = require("../topic/reader-topic-timeline-view.js"), import_reader_topic_header = require("../topic/reader-topic-header.js"), import_reader_topic_edit_controller = require("../topic/reader-topic-edit-controller.js"), import_reader_topic_comments_header = require("../topic/reader-topic-comments-header.js"), import_reader_topic_only_op_controller = require("../topic/reader-topic-only-op-controller.js"), import_reader_topic_special_content_feature = require("../topic/reader-topic-special-content-feature.js"), import_reader_topic_context_controller = require("../topic/reader-topic-context-controller.js"), import_reader_topic_context_surface = require("../topic/reader-topic-context-surface.js"), import_reader_topic_context_state = require("../topic/reader-topic-context-state.js"), import_reader_information_flow_coordinator = require("../state/reader-information-flow-coordinator.js"), import_reader_topic_state_projection = require("../state/reader-topic-state-projection.js"), import_topic_session = require("../topic/topic-session.js"), import_reader_translation_feature = require("../translation/reader-translation-feature.js"), import_translation_request_adapter = require("../translation/translation-request-adapter.js"), import_reader_data_runtime = require("./reader-data-runtime.js"), import_reader_performance_policy = require("./reader-performance-policy.js");
-	const readerSurfaceOnlyCloseEvents = /* @__PURE__ */ new WeakSet(), hostTopicUserCardSelector = "html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item) :is(.posters,.topic-poster) [data-user-card]";
+	var import_native_host_api = require("../discourse/native-host-api.js"), import_native_request_descriptors = require("../discourse/native-request-descriptors.js"), import_reader_cache_management_surface = require("../cache/reader-cache-management-surface.js"), import_reader_collection_page_repository = require("../cache/reader-collection-page-repository.js"), import_browser_asset_cache = require("../cache/browser-asset-cache.js"), import_discourse_application_cache_invalidation = require("../cache/discourse-application-cache-invalidation.js"), import_topic_snapshot_handoff = require("../cache/topic-snapshot-handoff.js"), import_reader_settings_config_manager = require("../state/reader-settings-config-manager.js"), import_native_composer = require("../discourse/native-composer.js"), import_reader_control_tooltip = require("../components/reader-control-tooltip.js"), import_reader_icon = require("../components/reader-icon.js"), import_reader_native_composer_window = require("../discourse/reader-native-composer-window.js"), import_reader_native_post_admin_menu = require("../discourse/reader-native-post-admin-menu.js"), import_native_post_model_factory = require("../discourse/native-post-model-factory.js"), import_native_presence = require("../discourse/native-presence.js"), import_identifiers = require("../discourse/identifiers.js"), import_reader_history_navigation_controller = require("../history/reader-history-navigation-controller.js"), import_reader_history_model = require("../history/reader-history-model.js"), import_reader_history_repository = require("../history/reader-history-repository.js"), import_reader_history_navigation_view = require("../history/reader-history-navigation-view.js"), import_reader_history_panel_view = require("../history/reader-history-panel-view.js"), import_reader_chronicle_repository = require("../history/reader-chronicle-repository.js"), import_reader_chronicle_view = require("../history/reader-chronicle-view.js"), import_reader_unwanted_topic_repository = require("../collection/reader-unwanted-topic-repository.js"), import_reader_unwanted_topic_view = require("../collection/reader-unwanted-topic-view.js"), import_discourse_bookmark_adapter = require("../bookmark/discourse-bookmark-adapter.js"), import_reader_bookmark_controller = require("../bookmark/reader-bookmark-controller.js"), import_reader_bookmark_panel_view = require("../bookmark/reader-bookmark-panel-view.js"), import_reader_bookmark_model = require("../bookmark/reader-bookmark-model.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_post_author_filter_feature = require("../topic/reader-post-author-filter-feature.js"), import_signal = require("../kernel/signal.js"), import_reader_topic_live_navigation_controller = require("../live/reader-topic-live-navigation-controller.js"), import_reader_resource_monitor = require("../monitor/reader-resource-monitor.js"), import_reader_pipeline_observer = require("../monitor/reader-pipeline-observer.js"), import_browser_request_observation = require("../network/browser-request-observation.js"), import_reader_topic_live_navigation_view = require("../live/reader-topic-live-navigation-view.js"), import_reader_rate_limit_notice = require("../shell/reader-rate-limit-notice.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_reader_image_download_service = require("../media/reader-image-download-service.js"), import_reader_image_resource_service = require("../media/reader-image-resource-service.js"), import_reader_lightbox_image_picker = require("../media/reader-lightbox-image-picker.js"), import_reader_media_prefetch_service = require("../media/reader-media-prefetch-service.js"), import_reader_topic_image_index = require("../media/reader-topic-image-index.js"), import_reader_topic_image_interaction = require("../media/reader-topic-image-interaction.js"), import_reader_lightbox_feature = require("../media/reader-lightbox-feature.js"), import_reader_compact_image_viewer = require("../media/reader-compact-image-viewer.js"), import_reader_topic_media_feature = require("../media/reader-topic-media-feature.js"), import_reader_media_controller = require("../media/reader-media-controller.js"), import_reader_cooked_content_feature = require("../media/reader-cooked-content-feature.js"), import_reader_poll_feature = require("../media/reader-poll-feature.js"), import_browser_shared_request_permit = require("../network/browser-shared-request-permit.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js"), import_discourse_native_read_transport = require("../network/discourse-native-read-transport.js"), import_public_resource_request_adapter = require("../network/public-resource-request-adapter.js"), import_reader_business_request_policy = require("../network/reader-business-request-policy.js"), import_reader_business_request_config = require("../network/reader-business-request-config.js"), import_reader_request_flow_config = require("../network/reader-request-flow-config.js"), import_discourse_native_user_port = require("../user/discourse-native-user-port.js"), import_reader_user_domain_session = require("../user/reader-user-domain-session.js"), import_reader_credit_account_adapter = require("../user/reader-credit-account-adapter.js"), import_reader_community_score_adapter = require("../user/reader-community-score-adapter.js"), import_reader_connect_trust_adapter = require("../user/reader-connect-trust-adapter.js"), import_reader_user_endorsement_adapter = require("../user/reader-user-endorsement-adapter.js"), import_reader_user_card_view = require("../user/reader-user-card-view.js"), import_discourse_user_observation_adapter = require("../user/discourse-user-observation-adapter.js"), import_reader_user_observation_session = require("../user/reader-user-observation-session.js"), import_reader_user_observation_page_repository = require("../user/reader-user-observation-page-repository.js"), import_reader_user_observation_model = require("../user/reader-user-observation-model.js"), import_reader_user_observation_view = require("../user/reader-user-observation-view.js"), import_reader_settings_user_view = require("../user/reader-settings-user-view.js"), import_discourse_notification_adapter = require("../notification/discourse-notification-adapter.js"), import_reader_notification_controller = require("../notification/reader-notification-controller.js"), import_reader_notification_model = require("../notification/reader-notification-model.js"), import_reader_notification_panel_view = require("../notification/reader-notification-panel-view.js"), import_action_request_adapter = require("../post/action-request-adapter.js"), import_discourse_action_transport = require("../post/discourse-action-transport.js"), import_post_action_controller = require("../post/post-action-controller.js"), import_discourse_action_descriptors = require("../post/discourse-action-descriptors.js"), import_post_action_feature_commands = require("../post/post-action-feature-commands.js"), import_user_action_feature_commands = require("../post/user-action-feature-commands.js"), import_reader_post_action_feature = require("../post/reader-post-action-feature.js"), import_reader_bookmark_action_coordinator = require("../post/reader-bookmark-action-coordinator.js"), import_reader_share_action_coordinator = require("../post/reader-share-action-coordinator.js"), import_reader_topic_notification_coordinator = require("../post/reader-topic-notification-coordinator.js"), import_reader_topic_shared_issue_coordinator = require("../post/reader-topic-shared-issue-coordinator.js"), import_topic_action_feature_commands = require("../post/topic-action-feature-commands.js"), import_reader_topic_action_rail = require("../post/reader-topic-action-rail.js"), import_reader_topic_summary_request_adapter = require("../post/reader-topic-summary-request-adapter.js"), import_reader_topic_summary_surface = require("../post/reader-topic-summary-surface.js"), import_reader_topic_custom_summary = require("../post/reader-topic-custom-summary.js"), import_reader_post_management_action_coordinator = require("../post/reader-post-management-action-coordinator.js"), import_reader_selection_quote_feature = require("../post/reader-selection-quote-feature.js"), import_reader_mobile_return_controller = require("../shell/reader-mobile-return-controller.js"), import_reader_workspace_coordinator = require("../shell/reader-workspace-coordinator.js"), import_reader_feedback_surface = require("../shell/reader-feedback-surface.js"), import_reader_action_surface_coordinator = require("../shell/reader-action-surface-coordinator.js"), import_reader_exclusive_panel_coordinator = require("../shell/reader-exclusive-panel-coordinator.js"), import_reader_shell_recovery_view = require("../shell/reader-shell-recovery-view.js"), import_reader_report_form_surface = require("../shell/reader-report-form-surface.js"), import_reader_assignment_form_surface = require("../shell/reader-assignment-form-surface.js"), import_reader_choice_form_surface = require("../shell/reader-choice-form-surface.js"), import_reader_topic_edit_form_surface = require("../shell/reader-topic-edit-form-surface.js"), import_reader_settings_controller = require("../settings/reader-settings-controller.js"), import_reader_settings_view = require("../settings/reader-settings-view.js"), import_reader_theme_settings_control = require("../settings/reader-theme-settings-control.js"), import_reader_window_settings_form = require("../settings/reader-window-settings-form.js"), import_reader_shortcut_settings_form = require("../settings/reader-shortcut-settings-form.js"), import_reader_custom_site_settings_form = require("../settings/reader-custom-site-settings-form.js"), import_reader_webdav_settings_form = require("../settings/reader-webdav-settings-form.js"), import_browser_discourse_site_probe = require("../site/browser-discourse-site-probe.js"), import_reader_webdav_coordinator = require("../sync/reader-webdav-coordinator.js"), import_reader_webdav_category_ports = require("../sync/reader-webdav-category-ports.js"), import_reader_performance_settings_form = require("../settings/reader-performance-settings-form.js"), import_reader_reading_settings_form = require("../settings/reader-reading-settings-form.js"), import_reader_translation_settings_form = require("../settings/reader-translation-settings-form.js"), import_reader_ai_service_settings_form = require("../settings/reader-ai-service-settings-form.js"), import_reader_appearance_settings_form = require("../settings/reader-appearance-settings-form.js"), import_reader_font_settings_form = require("../settings/reader-font-settings-form.js"), import_reader_motion_settings_form = require("../settings/reader-motion-settings-form.js"), import_reader_layout_settings_form = require("../settings/reader-layout-settings-form.js"), import_reader_interaction_settings_form = require("../settings/reader-interaction-settings-form.js"), import_reader_image_settings_form = require("../settings/reader-image-settings-form.js"), import_reader_select_surface = require("../shell/reader-select-surface.js"), import_reader_floating_window_frame = require("../shell/reader-floating-window-frame.js"), import_reader_collection_floating_window = require("../collection/reader-collection-floating-window.js"), import_reader_image_preferences = require("../media/reader-image-preferences.js"), import_reader_reply_tree_preferences = require("../topic/reader-reply-tree-preferences.js"), import_reader_about_settings_content = require("../settings/reader-about-settings-content.js"), import_reader_open_queue_session = require("../queue/reader-open-queue-session.js"), import_reader_topic_download_manager = require("../queue/reader-topic-download-manager.js"), import_reader_topic_offline_document = require("../archive/reader-topic-offline-document.js"), import_reader_topic_offline_artifact_repository = require("../archive/reader-topic-offline-artifact-repository.js"), import_reader_cooked_content_feature2 = require("../media/reader-cooked-content-feature.js"), import_reader_katex_controller = require("../media/reader-katex-controller.js"), import_reader_shortcut_controller = require("../shell/reader-shortcut-controller.js"), import_reader_appearance_style_controller = require("../appearance/reader-appearance-style-controller.js"), import_reader_theme_controller = require("../appearance/reader-theme-controller.js"), import_reader_font_style_controller = require("../font/reader-font-style-controller.js"), import_reader_font_catalog = require("../font/reader-font-catalog.js"), import_reader_loading_animation_view = require("../motion/reader-loading-animation-view.js"), import_reader_layout_style_controller = require("../layout/reader-layout-style-controller.js"), import_reader_topic_factory = require("../topic/reader-topic-factory.js"), import_reader_topic_navigation_controller = require("../topic/reader-topic-navigation-controller.js"), import_reader_native_topic_route = require("../topic/reader-native-topic-route.js"), import_reader_topic_flow_controller = require("../topic/reader-topic-flow-controller.js"), import_reader_topic_navigation_preferences = require("../topic/reader-topic-navigation-preferences.js"), import_reader_topic_scroll_adapter = require("../topic/reader-topic-scroll-adapter.js"), import_reader_topic_local_archive_feature = require("../topic/reader-topic-local-archive-feature.js"), import_reader_topic_timeline_controller = require("../topic/reader-topic-timeline-controller.js"), import_reader_topic_timeline_end_resolver = require("../topic/reader-topic-timeline-end-resolver.js"), import_reader_topic_timeline_view = require("../topic/reader-topic-timeline-view.js"), import_reader_topic_header = require("../topic/reader-topic-header.js"), import_reader_topic_edit_controller = require("../topic/reader-topic-edit-controller.js"), import_reader_topic_comments_header = require("../topic/reader-topic-comments-header.js"), import_reader_topic_only_op_controller = require("../topic/reader-topic-only-op-controller.js"), import_reader_topic_special_content_feature = require("../topic/reader-topic-special-content-feature.js"), import_reader_topic_context_controller = require("../topic/reader-topic-context-controller.js"), import_reader_topic_context_surface = require("../topic/reader-topic-context-surface.js"), import_reader_topic_context_state = require("../topic/reader-topic-context-state.js"), import_reader_information_flow_coordinator = require("../state/reader-information-flow-coordinator.js"), import_reader_topic_state_projection = require("../state/reader-topic-state-projection.js"), import_topic_session = require("../topic/topic-session.js"), import_reader_translation_feature = require("../translation/reader-translation-feature.js"), import_translation_request_adapter = require("../translation/translation-request-adapter.js"), import_reader_data_runtime = require("./reader-data-runtime.js"), import_reader_performance_policy = require("./reader-performance-policy.js");
+	const readerSurfaceOnlyCloseEvents = /* @__PURE__ */ new WeakSet(), hostTopicUserCardSelector = "html.ldp-reader-workspace :is(.topic-list-item,.latest-topic-list-item) :is(.posters,.topic-poster) [data-user-card]", hostTopicAvatarLongPressSelector = "html.mobile-view:not(.ldp-reader-workspace) .topic-list-item > .topic-list-data > .pull-left > [data-user-card][data-user-card-long-press]";
 	function readerWebDavCacheClearPlan(categories) {
 	  const webDavCategories = [], protectedCategories = [];
 	  return categories.includes("history") && (webDavCategories.push("history"), protectedCategories.push("history")), categories.includes("notifications") && (webDavCategories.push("notification-history"), protectedCategories.push("notifications")), categories.includes("responses") && (webDavCategories.push(
@@ -565,6 +565,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	}
 	function readerShellFailureKind(cause) {
 	  if (cause && typeof cause == "object") {
+	    if (("code" in cause ? String(cause.code ?? "") : "") === "network-error") return "network";
 	    const kind = "kind" in cause ? String(cause.kind ?? "") : "";
 	    if ([
 	      "cloudflare",
@@ -1080,7 +1081,11 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        authScope: options.topic.authScope,
 	        ...options.credit.storage ? { storage: options.credit.storage } : {}
 	      }) : null;
-	      const credit = this.creditAccount;
+	      const credit = this.creditAccount, communityScore = options.communityScore ? new import_reader_community_score_adapter.ReaderCommunityScoreAdapter({
+	        gateway: this.data.gateway,
+	        http: options.communityScore.http,
+	        authScope: options.topic.authScope
+	      }) : null;
 	      this.users = new import_reader_user_domain_session.ReaderUserDomainSession({
 	        gateway: this.data.gateway,
 	        native: this.userNative,
@@ -1088,6 +1093,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        ...options.searchForms === void 0 ? {} : { searchForms: options.searchForms },
 	        ...connect ? { connect } : {},
 	        ...credit ? { credit } : {},
+	        ...communityScore ? { communityScore } : {},
 	        parentScope: this.scope,
 	        onError: (cause) => reportTopicFeature(
 	          this.shell.activeTopicId ?? 0,
@@ -1279,6 +1285,11 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        hoverDelegates: Object.freeze([Object.freeze({
 	          root: options.document,
 	          selector: hostTopicUserCardSelector,
+	          capture: !0
+	        })]),
+	        longPressDelegates: Object.freeze([Object.freeze({
+	          root: options.document,
+	          selector: hostTopicAvatarLongPressSelector,
 	          capture: !0
 	        })]),
 	        session: this.users,
@@ -4566,15 +4577,36 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	        document: options.runtime.document,
 	        hostRequestBudget: runtime.permit
 	      }).install(runtime.scope);
-	      const refreshTopicButton = shell.view.root.querySelector(
+	      const browserPerformance = options.runtime.document.defaultView?.performance ?? null;
+	      browserPerformance && new import_browser_request_observation.BrowserResourceObservationAdapter({
+	        observer: runtime.data.requests,
+	        performance: browserPerformance,
+	        hostRequestBudget: runtime.permit,
+	        dynamicOnly: !0
+	      }).install(runtime.scope);
+	      const mobileReaderBackButton = shell.view.root.querySelector(
+	        ".ldp-mobile-reader-back"
+	      ), refreshTopicButton = shell.view.root.querySelector(
 	        ".ldp-reader-refresh"
 	      ), closeReaderButton = shell.view.root.querySelector(
 	        ".ldp-close"
 	      ), layoutToggleButton = shell.view.root.querySelector(
 	        ".ldp-layout-toggle"
 	      );
-	      if (!refreshTopicButton || !closeReaderButton || !layoutToggleButton)
-	        throw runtime.destroy(), new Error("Reader Shell 缺少布局、刷新或关闭入口");
+	      if (!mobileReaderBackButton || !refreshTopicButton || !closeReaderButton || !layoutToggleButton)
+	        throw runtime.destroy(), new Error("Reader Shell 缺少移动返回、布局、刷新或关闭入口");
+	      new import_reader_mobile_return_controller.ReaderMobileReturnController({
+	        document: options.runtime.document,
+	        root: shell.view.root,
+	        button: mobileReaderBackButton,
+	        window: options.runtime.document.defaultView,
+	        readReaderState: () => runtime.shell.state,
+	        readerChanges: runtime.shell.changes,
+	        parentScope: runtime.scope,
+	        onError: (cause) => {
+	          console.error("[main-lite:mobile-return]", cause);
+	        }
+	      });
 	      let currentTopicRefresh = null;
 	      const syncHeaderTopicActions = () => {
 	        refreshTopicButton.disabled = currentTopicRefresh !== null || runtime.shell.activeValue === null;
@@ -4865,6 +4897,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            connectEnabled: !!options.runtime.connect && options.runtime.document.location?.hostname === "linux.do",
 	            history: runtime.connectHistory,
 	            creditEnabled: options.runtime.document.location?.hostname === "linux.do",
+	            communityScoreEnabled: !!options.runtime.communityScore && options.runtime.document.location?.hostname === "linux.do",
 	            ...options.runtime.renderIcon ? { renderIcon: options.runtime.renderIcon } : {},
 	            parentScope: runtime.scope,
 	            onError: (cause) => {
@@ -6290,7 +6323,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    }
 	  });
 	}
-}, "c3d45f5602f09538182e09b0516ad680e0ecbef8556b595c03f27264ab59104f");
+}, "2b6baa85fc9b90bc308c603718f5c3d7f1d49607a1cf534e44280b986171343e");
 
 /* Source: lite/src/app/reader-data-runtime.ts */
 runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -6718,11 +6751,12 @@ runtime.register("src/components/reader-control-tooltip.js", function(module, ex
 	});
 	module.exports = __toCommonJS(reader_control_tooltip_exports);
 	var import_event_target = require("../dom/event-target.js"), import_html_element = require("../dom/html-element.js"), import_lifecycle = require("../kernel/lifecycle.js");
-	const TOOLTIP_CONTROL_SELECTOR = [
+	const TIME_TOOLTIP_SELECTOR = ".ldp-time[data-exact-time]", TOOLTIP_CONTROL_SELECTOR = [
 	  "button",
 	  "a",
 	  '[role="button"]',
 	  "[data-ldp-tooltip-label]",
+	  TIME_TOOLTIP_SELECTOR,
 	  ".ldp-nested-branch-toggle",
 	  ".ldp-avatar-flair",
 	  ".ldp-user-card-badge"
@@ -6743,6 +6777,8 @@ runtime.register("src/components/reader-control-tooltip.js", function(module, ex
 	  #schedule;
 	  #cancelSchedule;
 	  #activeControl = null;
+	  #clickPinnedControl = null;
+	  #touchSuppressedControl = null;
 	  #copyResetTimer = 0;
 	  constructor(options) {
 	    this.#document = options.document, this.#copyText = options.copyText ?? null;
@@ -6770,16 +6806,17 @@ runtime.register("src/components/reader-control-tooltip.js", function(module, ex
 	  refresh(control) {
 	    this.#activeControl && !this.#activeControl.isConnected && this.close();
 	    const match = this.#match(control);
-	    if (!match || control.hidden || !this.#keepOpen(control)) {
+	    if (!match || control.hidden || control === this.#touchSuppressedControl || !this.#keepOpen(control)) {
 	      control === this.#activeControl && this.close();
 	      return;
 	    }
 	    this.#show(match);
 	  }
 	  close() {
-	    !this.#activeControl && this.element.hidden && !this.element.textContent || (this.#activeControl = null, this.element.hidden = !0, this.element.textContent = "", this.element.classList.remove(
+	    !this.#activeControl && this.element.hidden && !this.element.textContent || (this.#activeControl = null, this.#clickPinnedControl = null, this.element.hidden = !0, this.element.textContent = "", this.element.classList.remove(
 	      "ldp-reader-history-tooltip",
-	      "ldp-connect-help-tooltip"
+	      "ldp-connect-help-tooltip",
+	      "ldp-reader-time-tooltip"
 	    ));
 	  }
 	  destroy() {
@@ -6791,11 +6828,32 @@ runtime.register("src/components/reader-control-tooltip.js", function(module, ex
 	      control && this.refresh(control);
 	    }), this.scope.listen(root, "click", (event) => {
 	      this.#copyNamedTarget(event);
+	      const control = (0, import_event_target.eventElement)(event)?.closest(
+	        TOOLTIP_CONTROL_SELECTOR
+	      ) ?? null;
+	      if (control?.matches(TIME_TOOLTIP_SELECTOR)) {
+	        const match = this.#match(control);
+	        match && (this.#touchSuppressedControl = null, this.#show(match, null, !0));
+	        return;
+	      }
+	      this.#clickPinnedControl && this.close(), control && (control === this.#touchSuppressedControl || this.#usesCompactInteraction()) && (this.#touchSuppressedControl = control, this.close());
 	    }, !0), this.scope.listen(root, "pointerover", (event) => {
-	      const pointer = event, match = this.#match((0, import_event_target.eventElement)(event));
+	      const pointer = event;
+	      if (pointer.pointerType === "touch") {
+	        this.close();
+	        return;
+	      }
+	      this.#touchSuppressedControl = null;
+	      const match = this.#match((0, import_event_target.eventElement)(event));
 	      !match || domNode(pointer.relatedTarget) && match.control.contains(pointer.relatedTarget) || this.#show(match, pointer);
 	    }), this.scope.listen(root, "pointerdown", (event) => {
-	      (0, import_event_target.eventElement)(event)?.closest(
+	      if (event.pointerType === "touch") {
+	        this.#touchSuppressedControl = (0, import_event_target.eventElement)(event)?.closest(
+	          TOOLTIP_CONTROL_SELECTOR
+	        ) ?? null, this.close();
+	        return;
+	      }
+	      this.#touchSuppressedControl = null, (0, import_event_target.eventElement)(event)?.closest(
 	        ".ldp-header[data-ldp-reader-drag-surface]"
 	      ) && this.close();
 	    }, !0), this.scope.listen(root, "pointermove", (event) => {
@@ -6805,9 +6863,13 @@ runtime.register("src/components/reader-control-tooltip.js", function(module, ex
 	      ) || !domNode(event.target) || !active.contains(event.target) || this.#position(active, event);
 	    }), this.scope.listen(root, "pointerout", (event) => {
 	      const pointer = event, active = this.#activeControl;
-	      !active || domNode(pointer.relatedTarget) && active.contains(pointer.relatedTarget) || active.matches(":focus-visible") || this.close();
+	      !active || pointer.pointerType === "touch" || active === this.#clickPinnedControl || domNode(pointer.relatedTarget) && active.contains(pointer.relatedTarget) || active.matches(":focus-visible") || this.close();
 	    }), this.scope.listen(root, "focusin", (event) => {
 	      const match = this.#match((0, import_event_target.eventElement)(event));
+	      if (match?.control === this.#touchSuppressedControl) {
+	        this.close();
+	        return;
+	      }
 	      match && this.#show(match);
 	    }), this.scope.listen(root, "focusout", () => {
 	      queueMicrotask(() => {
@@ -6840,13 +6902,13 @@ runtime.register("src/components/reader-control-tooltip.js", function(module, ex
 	    )) return null;
 	    const functional = control.matches(
 	      'button,[role="button"],.ldp-nested-branch-toggle'
-	    ), iconOnlyLink = control.matches("a") && !!control.querySelector(".ldp-icon,.ldp-logo,img") && !this.#hasVisibleText(control), namedCopyTarget = control.matches(
+	    ), timeTarget = control.matches(TIME_TOOLTIP_SELECTOR), iconOnlyLink = control.matches("a") && !!control.querySelector(".ldp-icon,.ldp-logo,img") && !this.#hasVisibleText(control), namedCopyTarget = control.matches(
 	      ".ldp-avatar-flair,.ldp-user-card-badge"
 	    ), namedTarget = control.hasAttribute("data-ldp-tooltip-label");
-	    if (!functional && !iconOnlyLink && !namedCopyTarget && !namedTarget)
+	    if (!functional && !timeTarget && !iconOnlyLink && !namedCopyTarget && !namedTarget)
 	      return null;
 	    const narrowTitle = control.matches(".ldp-title-jump") && (control.closest(".ldp-modal")?.getBoundingClientRect().width ?? 0) <= 480 && control.scrollWidth > control.clientWidth + 1, label = String(
-	      narrowTitle ? control.textContent : control.getAttribute("aria-label") ?? control.dataset.ldpTooltipLabel ?? ""
+	      narrowTitle ? control.textContent : timeTarget ? control.dataset.exactTime ?? "" : control.getAttribute("aria-label") ?? control.dataset.ldpTooltipLabel ?? ""
 	    ).trim();
 	    return label ? Object.freeze({ control, label }) : null;
 	  }
@@ -6866,13 +6928,16 @@ runtime.register("src/components/reader-control-tooltip.js", function(module, ex
 	      return !!(child.innerText?.trim() || child.textContent?.trim());
 	    });
 	  }
-	  #show(match, pointer = null) {
-	    match.control.removeAttribute("title"), this.#activeControl = match.control, this.element.textContent = match.label, this.element.classList.toggle(
+	  #show(match, pointer = null, clickPinned = !1) {
+	    match.control.removeAttribute("title"), this.#activeControl = match.control, this.#clickPinnedControl = clickPinned ? match.control : null, this.element.textContent = match.label, this.element.classList.toggle(
 	      "ldp-reader-history-tooltip",
 	      match.control.matches(".ldp-reader-history-nav")
 	    ), this.element.classList.toggle(
 	      "ldp-connect-help-tooltip",
 	      match.control.matches(".ldp-connect-metric")
+	    ), this.element.classList.toggle(
+	      "ldp-reader-time-tooltip",
+	      match.control.matches(TIME_TOOLTIP_SELECTOR)
 	    ), this.element.hidden = !1, this.#position(match.control, pointer);
 	  }
 	  #position(control, pointer) {
@@ -6909,11 +6974,16 @@ runtime.register("src/components/reader-control-tooltip.js", function(module, ex
 	  }
 	  #keepOpen(control) {
 	    if (!control) return !1;
+	    if (control === this.#clickPinnedControl) return !0;
 	    try {
 	      return control.matches(":hover") || control.matches(":focus-visible");
 	    } catch {
 	      return !1;
 	    }
+	  }
+	  #usesCompactInteraction() {
+	    const viewport = this.#document.defaultView;
+	    return viewport ? viewport.innerWidth <= 760 || viewport.matchMedia?.("(hover: none) and (pointer: coarse)").matches === !0 : !1;
 	  }
 	  #copyNamedTarget(event) {
 	    if (!this.#copyText) return;
@@ -6935,7 +7005,7 @@ runtime.register("src/components/reader-control-tooltip.js", function(module, ex
 	    this.#copyResetTimer && (this.#cancelSchedule(this.#copyResetTimer), this.#copyResetTimer = 0);
 	  }
 	}
-}, "8c6538bb3b9ca78569693905b692efac4491c47d8b3a091d5629adde434613bb");
+}, "00ba7e4555de3a8675ade39e43a7bb51e7494995ae1ffb3eed6755a4a3d419a9");
 
 /* Source: lite/src/components/reader-icon.ts */
 runtime.register("src/components/reader-icon.js", function(module, exports, require) {
@@ -9913,6 +9983,592 @@ runtime.register("src/shell/embedded-host-appearance.js", function(module, expor
 	}
 }, "551dfb96890751093acf088ff55afc564c71121e94330d07eb3be899bbdb95f4");
 
+/* Source: lite/src/shell/embedded-host-header-controller.ts */
+runtime.register("src/shell/embedded-host-header-controller.js", function(module, exports, require) {
+	var embedded_host_header_controller_exports = {};
+	__export(embedded_host_header_controller_exports, {
+	  EmbeddedHostHeaderController: () => EmbeddedHostHeaderController
+	});
+	module.exports = __toCommonJS(embedded_host_header_controller_exports);
+	var import_lifecycle = require("../kernel/lifecycle.js"), import_value_record = require("../kernel/value-record.js"), import_native_host_api = require("../discourse/native-host-api.js");
+	const MOBILE_HEADER_MAX_WIDTH = 700, LANGUAGE_ITEM_SELECTOR = ".d-header-icons > .language-switcher", LANGUAGE_TRIGGER_SELECTOR = ".language-switcher-trigger,[data-ldp-host-language-toggle]", SEARCH_TRIGGER_SELECTOR = ".d-header-icons > .search-dropdown", SEARCH_SURFACE_SELECTOR = ".search-menu.glimmer-search-menu,.d-header .panel > .search-menu", SEARCH_FILTER_TRIGGER_SELECTOR = ".show-advanced-search", SEARCH_MORE_RESULTS_SELECTOR = '.filter.search-link[href^="/search"]', SEARCH_ADVANCED_PANEL_SELECTOR = "[data-ldp-host-advanced-search-panel]", SEARCH_ADVANCED_FRAME_ATTRIBUTE = "data-ldp-host-advanced-search-frame", SEARCH_HISTORY_STATE_KEY = "__awesomeLinuxDoReaderHostSearch", READER_STYLE_ELEMENT_ID = "ldp-mian-lite-styles", USER_MENU_SELECTOR = ".user-menu,.menu-panel.user-menu,.fk-d-menu.user-menu", USER_MENU_RAIL_SELECTORS = Object.freeze([
+	  ".user-menu__tabs-list",
+	  ".user-menu__tabs",
+	  ".tabs-list",
+	  '[role="tablist"]'
+	]), LANGUAGE_OPTION_SELECTOR = '[data-locale],[data-value],[lang],[hreflang],button,a,li,span,div,[role="menuitem"],[role="option"]', LANGUAGE_OPTION_OWNER_SELECTOR = 'button,a,li,[data-locale],[data-value],[role="menuitem"],[role="option"],.select-kit-row,.dropdown-menu__item', LANGUAGE_ROOT_SURFACE_SELECTOR = ".language-switcher-content,.language-switcher-menu,.fk-d-menu", LANGUAGE_SURFACE_SELECTOR = `${LANGUAGE_ROOT_SURFACE_SELECTOR},.menu-panel,.select-kit-body,.select-kit-collection,.select-kit,.dropdown-menu,.popover-content,[role="menu"],[role="listbox"]`, LANGUAGE_SCAN_LIMIT = 10, LATEST_NAVIGATION_LABEL_SELECTOR = [
+	  '[data-value="latest"]',
+	  '[data-value="/latest"]',
+	  '[data-name="latest"]',
+	  'a[href="/latest"]',
+	  'a[href$="/latest"]',
+	  ".list-control-toggle-link-trigger",
+	  ".list-control-toggle-link__text",
+	  ".navigation-container .select-kit-header",
+	  '.navigation-container [role="option"]',
+	  '.navigation-container [role="menuitem"]',
+	  ".category-navigation .select-kit-header",
+	  '.category-navigation [role="option"]',
+	  ".category-breadcrumb .select-kit-header",
+	  '.select-kit-body [role="option"]',
+	  ".select-kit-body .select-kit-row",
+	  '.select-kit-collection [role="option"]',
+	  ".select-kit-collection .select-kit-row"
+	].join(","), LATEST_LABEL_RE = /^最新(?:\s*(?:[（(]\s*\d+\s*[）)]|\d+))?$/u, LATEST_COUNT_SUFFIX_RE = /\s*(?:[（(]\s*\d+\s*[）)]|\d+)\s*$/u, COUNT_ONLY_RE = /^\s*(?:[（(]\s*)?\d+(?:\s*[）)])?\s*$/u, LATEST_REFRESH_SELECTOR = ".show-more.has-topics", LATEST_REFRESH_COUNT_RE = /查看\s*(\d+)\s*个(?=[^话题]*(?:新|更新))[^话题]+话题/u;
+	function eventElement(event) {
+	  const target = event.target;
+	  return target && target.nodeType === 1 ? target : null;
+	}
+	function normalizedLanguageKey(value) {
+	  const normalized = String(value ?? "").trim().toLowerCase().replace(/[-_\s]/g, "");
+	  return normalized ? normalized === "zh" || normalized.startsWith("zhcn") || normalized.includes("中文") || normalized.includes("简体") || normalized.includes("chinese") ? "zh" : normalized === "en" || normalized.startsWith("enus") || normalized.includes("english") || normalized.includes("英文") ? "en" : null : null;
+	}
+	function languageKey(element) {
+	  for (const value of [
+	    element.getAttribute("data-locale"),
+	    element.getAttribute("data-value"),
+	    element.getAttribute("lang"),
+	    element.getAttribute("hreflang"),
+	    element.getAttribute("aria-label"),
+	    element.getAttribute("title"),
+	    element.textContent
+	  ]) {
+	    const key = normalizedLanguageKey(value);
+	    if (key) return key;
+	  }
+	  return null;
+	}
+	function explicitLanguageOptionKey(element) {
+	  for (const name of ["data-locale", "data-value", "lang", "hreflang"]) {
+	    const key = normalizedLanguageKey(element.getAttribute(name));
+	    if (key) return key;
+	  }
+	  const text = String(element.textContent ?? "").trim().replace(/\s+/g, " ");
+	  return /^(?:英语\s*[（(]English[）)]|English(?:\s*\([^)]*\))?|EN)$/i.test(text) ? "en" : /^(?:简体中文|Chinese Simplified\s*[（(]简体中文[）)]|中文(?:（简体）|\s*\(Simplified\))?|ZH)$/i.test(text) ? "zh" : null;
+	}
+	function hidden(element) {
+	  return element.hasAttribute("hidden") || element.getAttribute("aria-hidden") === "true";
+	}
+	function normalizedText(value) {
+	  return String(value ?? "").replace(/\s+/g, " ").trim();
+	}
+	function latestRefreshCount(document) {
+	  for (const refresh of document.querySelectorAll(
+	    LATEST_REFRESH_SELECTOR
+	  )) {
+	    if (hidden(refresh)) continue;
+	    const match = normalizedText(refresh.textContent).match(LATEST_REFRESH_COUNT_RE);
+	    if (match) return Number.parseInt(match[1] ?? "0", 10) || 0;
+	  }
+	  return 0;
+	}
+	function syncLatestLabelCount(element, count) {
+	  if (!LATEST_LABEL_RE.test(normalizedText(element.textContent))) return;
+	  const rendered = count > 0 ? `最新 (${count})` : "最新";
+	  for (const attribute of ["aria-label", "title"]) {
+	    const value = element.getAttribute(attribute);
+	    value && LATEST_LABEL_RE.test(normalizedText(value)) && element.setAttribute(attribute, rendered);
+	  }
+	  const explicitOwner = element.matches(".list-control-toggle-link__text") ? element : element.querySelector(".list-control-toggle-link__text");
+	  if (explicitOwner) {
+	    normalizedText(explicitOwner.textContent) !== rendered && (explicitOwner.textContent = rendered);
+	    return;
+	  }
+	  const textNodes = [], collectTextNodes = (node) => {
+	    for (const child of [...node.childNodes])
+	      child.nodeType === 3 ? textNodes.push(child) : collectTextNodes(child);
+	  };
+	  collectTextNodes(element);
+	  const latestNode = textNodes.find((node) => /最新/u.test(node.nodeValue ?? ""));
+	  for (const node of textNodes)
+	    node !== latestNode && COUNT_ONLY_RE.test(node.nodeValue ?? "") && (node.nodeValue = "");
+	  latestNode && (latestNode.nodeValue = (latestNode.nodeValue ?? "").replace(LATEST_COUNT_SUFFIX_RE, "").replace(/最新/u, rendered));
+	}
+	class EmbeddedHostHeaderController {
+	  scope;
+	  #model;
+	  #routeKind;
+	  #document;
+	  #host;
+	  #mutations;
+	  #requestFrame;
+	  #cancelFrame;
+	  #activeScope = null;
+	  #syncFrame = 0;
+	  #languageFrame = 0;
+	  #languageScanCount = 0;
+	  #languageBypass = !1;
+	  #languageState = "zh";
+	  #pendingLanguage = null;
+	  #nativeLanguageItem = null;
+	  #nativeLanguageTrigger = null;
+	  #languageItem = null;
+	  #languageToggle = null;
+	  #searchBackdrop = null;
+	  #searchSurface = null;
+	  #searchTrigger = null;
+	  #allowSearchRoute = !1;
+	  #searchHistoryEntry = !1;
+	  #searchHistoryClosePending = !1;
+	  #destroyed = !1;
+	  constructor(options) {
+	    this.#model = options.model, this.#routeKind = options.routeKind, this.#document = options.document, this.#host = options.host ?? null, this.#mutations = options.mutations, this.#requestFrame = options.requestFrame ?? ((callback) => requestAnimationFrame(callback)), this.#cancelFrame = options.cancelFrame ?? ((id) => cancelAnimationFrame(id)), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#model.changes.subscribe(() => this.#syncActivation(), this.scope), this.scope.add(() => this.#deactivate()), this.#syncActivation();
+	  }
+	  destroy() {
+	    this.#destroyed || (this.#destroyed = !0, this.scope.destroy());
+	  }
+	  #shouldActivate() {
+	    return this.#routeKind === "list" && (this.#document.documentElement.classList.contains("mobile-view") || this.#model.snapshot.viewportWidth <= MOBILE_HEADER_MAX_WIDTH);
+	  }
+	  #syncActivation() {
+	    if (this.#destroyed) return;
+	    const shouldActivate = this.#shouldActivate();
+	    if (!shouldActivate && this.#activeScope && this.#deactivate(), !shouldActivate || this.#activeScope) return;
+	    const activeScope = this.scope.child();
+	    this.#activeScope = activeScope, this.#document.documentElement.setAttribute(
+	      "data-ldp-host-header-condensed",
+	      ""
+	    ), activeScope.add((0, import_native_host_api.discourseDeferredSubscription)(
+	      () => this.#attachSearchRouteGuard()
+	    )), this.#mutations.subscribe(() => {
+	      this.#scheduleSync(), this.#languageScanCount && this.#scheduleLanguageScan();
+	    }, activeScope), activeScope.listen(this.#document, "click", (event) => {
+	      this.#onDocumentClick(event);
+	    }, !0), activeScope.listen(this.#document, "keydown", (event) => {
+	      const keyboardEvent = event;
+	      if (keyboardEvent.key === "Escape") {
+	        this.#dismissSearch(!0);
+	        return;
+	      }
+	      keyboardEvent.key === "Enter" && (keyboardEvent.ctrlKey || keyboardEvent.metaKey) && eventElement(event)?.closest("[data-ldp-host-search-drawer]") && (this.#allowSearchRoute = !0);
+	    });
+	    const pageWindow = this.#document.defaultView;
+	    pageWindow && activeScope.listen(pageWindow, "popstate", () => {
+	      this.#onSearchHistoryPop();
+	    }), this.#scheduleSync();
+	  }
+	  #deactivate() {
+	    const activeScope = this.#activeScope;
+	    this.#activeScope = null, activeScope?.destroy(), this.#syncFrame && this.#cancelFrame(this.#syncFrame), this.#languageFrame && this.#cancelFrame(this.#languageFrame), this.#syncFrame = 0, this.#languageFrame = 0, this.#languageScanCount = 0, this.#closeSearch(!0), this.#document.documentElement.removeAttribute("data-ldp-host-header-condensed"), this.#document.documentElement.removeAttribute("data-ldp-host-language-switching"), this.#restoreLanguageItem(), this.#searchBackdrop?.remove(), this.#searchTrigger?.removeAttribute("data-ldp-host-search-trigger"), this.#searchBackdrop = null, this.#searchSurface = null, this.#searchTrigger = null, this.#allowSearchRoute = !1, this.#searchHistoryClosePending = !1;
+	  }
+	  #scheduleSync() {
+	    !this.#activeScope || this.#syncFrame || (this.#syncFrame = this.#requestFrame(() => {
+	      this.#syncFrame = 0, this.#syncHostHeader();
+	    }));
+	  }
+	  #syncHostHeader() {
+	    if (!this.#activeScope) return;
+	    const searchTrigger = this.#document.querySelector(
+	      SEARCH_TRIGGER_SELECTOR
+	    );
+	    searchTrigger && (this.#searchTrigger = searchTrigger, searchTrigger.setAttribute("data-ldp-host-search-trigger", "")), this.#syncSearchSurface(), this.#syncLatestCount(), this.#syncLanguageItem();
+	  }
+	  #syncSearchSurface() {
+	    if (!this.#document.documentElement.hasAttribute("data-ldp-host-search-open")) {
+	      this.#searchSurface && this.#restoreSearchSurface(this.#searchSurface), this.#searchSurface = null;
+	      return;
+	    }
+	    const surface = [...this.#document.querySelectorAll(
+	      SEARCH_SURFACE_SELECTOR
+	    )].filter((element) => !element.closest(".ldp-overlay") && !hidden(element)).at(-1) ?? null;
+	    if (!surface) {
+	      this.#searchSurface && !this.#searchSurface.isConnected && this.#closeSearch(!1);
+	      return;
+	    }
+	    this.#searchSurface && this.#searchSurface !== surface && this.#restoreSearchSurface(this.#searchSurface), this.#searchSurface = surface, surface.setAttribute("data-ldp-host-search-drawer", ""), this.#ensureSearchAdvancedPanel(surface);
+	  }
+	  #ensureSearchAdvancedPanel(surface) {
+	    const trigger = surface.querySelector(
+	      SEARCH_FILTER_TRIGGER_SELECTOR
+	    );
+	    trigger && (trigger.hasAttribute("data-ldp-host-search-filter-trigger") || (trigger.setAttribute(
+	      "data-ldp-host-search-filter-title",
+	      trigger.getAttribute("title") ?? ""
+	    ), trigger.setAttribute("data-ldp-host-search-filter-trigger", ""), trigger.setAttribute("aria-controls", "ldp-host-advanced-search-panel"), trigger.setAttribute("aria-expanded", "false"), trigger.setAttribute("title", this.#languageState === "en" ? "Advanced search filters" : "高级搜索筛选器")));
+	  }
+	  #createSearchAdvancedPanel(surface, mode) {
+	    const english = this.#languageState === "en", panel = this.#document.createElement("section");
+	    panel.id = "ldp-host-advanced-search-panel", panel.setAttribute("data-ldp-host-advanced-search-panel", ""), panel.setAttribute("aria-label", english ? "Advanced search filters" : "高级搜索筛选器"), panel.setAttribute("hidden", "");
+	    const header = this.#document.createElement("header");
+	    header.className = "ldp-host-advanced-search-header";
+	    const title = this.#document.createElement("span");
+	    title.className = "ldp-host-advanced-search-title";
+	    const close = this.#document.createElement("button");
+	    close.type = "button", close.setAttribute("data-ldp-host-advanced-search-close", ""), close.setAttribute("aria-label", english ? "Return to quick search" : "返回快捷搜索"), close.textContent = english ? "Quick search" : "快捷搜索", header.append(title, close);
+	    const status = this.#document.createElement("div");
+	    status.className = "ldp-host-advanced-search-status", status.setAttribute("role", "status"), status.textContent = english ? "Loading advanced filters…" : "正在加载高级筛选器…";
+	    const frame = this.#document.createElement("iframe");
+	    return frame.name = "ldp-host-advanced-search", frame.title = english ? "Advanced search" : "高级搜索", frame.setAttribute(SEARCH_ADVANCED_FRAME_ATTRIBUTE, ""), frame.setAttribute("aria-busy", "true"), frame.setAttribute("loading", "eager"), frame.setAttribute("referrerpolicy", "same-origin"), frame.setAttribute(
+	      "sandbox",
+	      "allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+	    ), frame.dataset.ldpHostSearchMode = mode, frame.src = this.#advancedSearchUrl(surface, mode).href, this.#activeScope?.listen(frame, "load", () => {
+	      this.#prepareSearchAdvancedFrame(frame, panel, status);
+	    }), panel.append(header, status, frame), this.#syncSearchAdvancedPanelTitle(panel, mode), panel;
+	  }
+	  #advancedSearchUrl(surface, mode) {
+	    const url = new URL(
+	      "/search",
+	      this.#document.location?.href ?? "https://linux.do/"
+	    );
+	    mode === "advanced" && url.searchParams.set("expanded", "true"), url.searchParams.set("ldp_embedded_search", "1");
+	    const query = surface.querySelector(
+	      'input[type="search"]'
+	    )?.value.trim();
+	    return query && url.searchParams.set("q", query), url;
+	  }
+	  #syncSearchAdvancedPanelTitle(panel, mode) {
+	    const title = panel.querySelector(
+	      ".ldp-host-advanced-search-title"
+	    );
+	    if (!title) return;
+	    const english = this.#languageState === "en";
+	    title.textContent = mode === "results" ? english ? "More results" : "更多搜索结果" : english ? "Advanced search" : "高级搜索";
+	  }
+	  #prepareSearchAdvancedFrame(frame, panel, status) {
+	    try {
+	      const frameDocument = frame.contentDocument;
+	      if (!frameDocument) throw new Error("高级搜索文档不可用");
+	      frameDocument.documentElement.setAttribute(
+	        SEARCH_ADVANCED_FRAME_ATTRIBUTE,
+	        ""
+	      );
+	      const sourceStyle = this.#document.getElementById(
+	        READER_STYLE_ELEMENT_ID
+	      );
+	      if (sourceStyle?.textContent) {
+	        const style = frameDocument.createElement("style");
+	        style.id = `${READER_STYLE_ELEMENT_ID}-advanced-search`, style.textContent = sourceStyle.textContent, frameDocument.getElementById(style.id)?.remove(), (frameDocument.head ?? frameDocument.documentElement).append(style);
+	      }
+	      frame.removeAttribute("aria-busy"), panel.setAttribute("data-ldp-host-advanced-search-ready", ""), status.setAttribute("hidden", "");
+	    } catch {
+	      panel.setAttribute("data-ldp-host-advanced-search-error", ""), status.textContent = this.#languageState === "en" ? "Advanced filters could not be loaded." : "高级筛选器加载失败。";
+	    }
+	  }
+	  #restoreSearchSurface(surface) {
+	    const trigger = surface.querySelector(
+	      "[data-ldp-host-search-filter-trigger]"
+	    );
+	    if (trigger) {
+	      const originalTitle = trigger.getAttribute(
+	        "data-ldp-host-search-filter-title"
+	      ) ?? "";
+	      originalTitle ? trigger.setAttribute("title", originalTitle) : trigger.removeAttribute("title"), trigger.removeAttribute("data-ldp-host-search-filter-title"), trigger.removeAttribute("data-ldp-host-search-filter-trigger"), trigger.removeAttribute("aria-controls"), trigger.removeAttribute("aria-expanded");
+	    }
+	    surface.querySelector(SEARCH_ADVANCED_PANEL_SELECTOR)?.remove(), surface.removeAttribute("data-ldp-host-advanced-search-open"), surface.removeAttribute("data-ldp-host-search-drawer");
+	  }
+	  #toggleSearchAdvancedPanel(surface) {
+	    const panel = surface.querySelector(
+	      SEARCH_ADVANCED_PANEL_SELECTOR
+	    );
+	    if (panel && !panel.hasAttribute("hidden")) {
+	      this.#closeSearchAdvancedPanel(surface, panel);
+	      return;
+	    }
+	    this.#openSearchAdvancedPanel(surface, "advanced");
+	  }
+	  #openSearchAdvancedPanel(surface, mode) {
+	    let panel = surface.querySelector(SEARCH_ADVANCED_PANEL_SELECTOR);
+	    panel || (panel = this.#createSearchAdvancedPanel(surface, mode), surface.querySelector(".panel-body-contents")?.append(panel));
+	    const trigger = surface.querySelector(
+	      "[data-ldp-host-search-filter-trigger]"
+	    );
+	    !panel || !trigger || (this.#syncSearchAdvancedPanelTitle(panel, mode), this.#syncSearchAdvancedFrame(surface, panel, mode), panel.removeAttribute("hidden"), surface.setAttribute("data-ldp-host-advanced-search-open", ""), trigger.setAttribute("aria-expanded", "true"));
+	  }
+	  #closeSearchAdvancedPanel(surface, panel) {
+	    panel.setAttribute("hidden", ""), surface.removeAttribute("data-ldp-host-advanced-search-open"), surface.querySelector(
+	      "[data-ldp-host-search-filter-trigger]"
+	    )?.setAttribute("aria-expanded", "false");
+	  }
+	  #syncSearchAdvancedFrame(surface, panel, mode) {
+	    const frame = panel.querySelector(
+	      `[${SEARCH_ADVANCED_FRAME_ATTRIBUTE}]`
+	    );
+	    if (!frame) return;
+	    const currentMode = frame.dataset.ldpHostSearchMode;
+	    if (mode === "advanced" && currentMode === mode) return;
+	    const nextUrl = this.#advancedSearchUrl(surface, mode), currentUrl = new URL(
+	      frame.src,
+	      this.#document.location?.href ?? "https://linux.do/"
+	    );
+	    if (currentMode === mode && currentUrl.searchParams.get("q") === nextUrl.searchParams.get("q")) return;
+	    frame.dataset.ldpHostSearchMode = mode, frame.setAttribute("aria-busy", "true"), panel.removeAttribute("data-ldp-host-advanced-search-ready"), panel.removeAttribute("data-ldp-host-advanced-search-error");
+	    const status = panel.querySelector(
+	      ".ldp-host-advanced-search-status"
+	    );
+	    status && (status.removeAttribute("hidden"), status.textContent = mode === "results" ? this.#languageState === "en" ? "Loading more results…" : "正在加载更多结果…" : this.#languageState === "en" ? "Loading advanced filters…" : "正在加载高级筛选器…"), frame.src = nextUrl.href;
+	  }
+	  #syncLatestCount() {
+	    const count = latestRefreshCount(this.#document);
+	    for (const label of this.#document.querySelectorAll(
+	      LATEST_NAVIGATION_LABEL_SELECTOR
+	    )) syncLatestLabelCount(label, count);
+	  }
+	  #syncLanguageItem() {
+	    const nativeItem = this.#document.querySelector(
+	      LANGUAGE_ITEM_SELECTOR
+	    ), nativeTrigger = nativeItem?.querySelector(
+	      ".language-switcher-trigger"
+	    );
+	    nativeItem && nativeTrigger && (this.#nativeLanguageItem = nativeItem, this.#nativeLanguageTrigger = nativeTrigger, nativeItem.setAttribute("data-ldp-host-language-source", ""), this.#pendingLanguage || this.#setLanguageState(languageKey(nativeTrigger) ?? "zh"));
+	    const rail = this.#findUserMenuRail();
+	    if (!rail || !this.#nativeLanguageTrigger) return;
+	    let item = this.#languageItem;
+	    item?.isConnected || (item = this.#createLanguageItem(), this.#languageItem = item), (item.parentElement !== rail || rail.lastElementChild !== item) && rail.append(item);
+	  }
+	  #createLanguageItem() {
+	    const item = this.#document.createElement("li");
+	    item.setAttribute("data-ldp-host-language-item", "");
+	    const trigger = this.#document.createElement("button");
+	    trigger.type = "button", trigger.setAttribute("data-ldp-host-language-toggle", "");
+	    const chinese = this.#document.createElement("span");
+	    chinese.className = "ldp-host-language-option", chinese.dataset.language = "zh", chinese.textContent = "中";
+	    const english = this.#document.createElement("span");
+	    return english.className = "ldp-host-language-option", english.dataset.language = "en", english.textContent = "EN", trigger.append(chinese, english), item.append(trigger), this.#languageToggle = trigger, this.#setLanguageState(this.#languageState), item;
+	  }
+	  #setLanguageState(state) {
+	    this.#languageState = state;
+	    const toggle = this.#languageToggle;
+	    if (!toggle) return;
+	    toggle.dataset.languageState = state;
+	    const chinese = state === "zh";
+	    toggle.setAttribute("aria-label", chinese ? "当前为中文，点击切换到 English" : "Current language is English, switch to Chinese"), toggle.setAttribute("title", chinese ? "中文 / English" : "English / 中文");
+	  }
+	  #findUserMenuRail() {
+	    for (const surface of this.#document.querySelectorAll(
+	      USER_MENU_SELECTOR
+	    )) {
+	      if (surface.closest(".ldp-overlay") || hidden(surface)) continue;
+	      for (const selector of USER_MENU_RAIL_SELECTORS) {
+	        const rail = surface.querySelector(selector);
+	        if (rail) return rail;
+	      }
+	      const lists = surface.querySelectorAll("ul,ol");
+	      for (const list of lists)
+	        if (list.querySelector('[data-tab-id],[role="tab"],.user-menu-tab'))
+	          return list;
+	    }
+	    return null;
+	  }
+	  #restoreLanguageItem() {
+	    this.#languageItem?.remove(), this.#nativeLanguageItem?.removeAttribute("data-ldp-host-language-source"), this.#nativeLanguageItem = null, this.#nativeLanguageTrigger = null, this.#languageItem = null, this.#languageToggle = null;
+	  }
+	  #onDocumentClick(event) {
+	    const target = eventElement(event);
+	    if (!target) return;
+	    const searchSurface = target.closest(
+	      "[data-ldp-host-search-drawer]"
+	    );
+	    if (searchSurface) {
+	      if (target.closest("[data-ldp-host-advanced-search-close]")) {
+	        event.preventDefault(), event.stopImmediatePropagation();
+	        const panel = searchSurface.querySelector(
+	          SEARCH_ADVANCED_PANEL_SELECTOR
+	        );
+	        panel && this.#closeSearchAdvancedPanel(searchSurface, panel);
+	        return;
+	      }
+	      if (target.closest(SEARCH_FILTER_TRIGGER_SELECTOR)) {
+	        event.preventDefault(), event.stopImmediatePropagation(), this.#toggleSearchAdvancedPanel(searchSurface);
+	        return;
+	      }
+	      if (target.closest(SEARCH_MORE_RESULTS_SELECTOR)) {
+	        event.preventDefault(), event.stopImmediatePropagation(), this.#openSearchAdvancedPanel(searchSurface, "results");
+	        return;
+	      }
+	    }
+	    const searchTrigger = target.closest(SEARCH_TRIGGER_SELECTOR);
+	    if (searchTrigger) {
+	      event.preventDefault(), event.stopImmediatePropagation(), this.#document.documentElement.hasAttribute("data-ldp-host-search-open") ? this.#dismissSearch(!0) : this.#openSearch(searchTrigger);
+	      return;
+	    }
+	    !target.closest(LANGUAGE_TRIGGER_SELECTOR) || this.#languageBypass || (event.preventDefault(), event.stopImmediatePropagation(), this.#beginLanguageCycle());
+	  }
+	  #openSearch(trigger) {
+	    if (this.#allowSearchRoute = !1, this.#ensureSearchBackdrop().removeAttribute("hidden"), this.#document.documentElement.setAttribute("data-ldp-host-search-open", ""), this.#searchTrigger = trigger, trigger.setAttribute("aria-expanded", "true"), !this.#setHostSearchVisible(!0)) {
+	      this.#closeSearch(!1);
+	      return;
+	    }
+	    this.#pushSearchHistoryEntry(), this.#scheduleSync();
+	  }
+	  #ensureSearchBackdrop() {
+	    if (this.#searchBackdrop?.isConnected) return this.#searchBackdrop;
+	    const backdrop = this.#document.createElement("div");
+	    return backdrop.className = "ldp-host-search-backdrop", backdrop.setAttribute("aria-hidden", "true"), backdrop.setAttribute("hidden", ""), this.#activeScope?.listen(backdrop, "click", (event) => {
+	      event.target === backdrop && this.#dismissSearch(!0);
+	    }), (this.#searchTrigger?.closest(".d-header-wrap") ?? this.#document.body)?.append(backdrop), this.#searchBackdrop = backdrop, backdrop;
+	  }
+	  #history() {
+	    try {
+	      return this.#document.defaultView?.history ?? null;
+	    } catch {
+	      return null;
+	    }
+	  }
+	  #pushSearchHistoryEntry() {
+	    if (this.#searchHistoryEntry) return;
+	    const history = this.#history();
+	    if (history)
+	      try {
+	        const current = (0, import_value_record.valueRecord)(history.state), state = current ? { ...current } : {};
+	        state[SEARCH_HISTORY_STATE_KEY] = !0, history.pushState(state, ""), this.#searchHistoryEntry = !0;
+	      } catch {
+	        this.#searchHistoryEntry = !1;
+	      }
+	  }
+	  #dismissSearch(invokeHost) {
+	    if (this.#document.documentElement.hasAttribute("data-ldp-host-search-open")) {
+	      if (this.#searchHistoryEntry && !this.#searchHistoryClosePending) {
+	        const history = this.#history();
+	        if (history) {
+	          this.#searchHistoryClosePending = !0;
+	          try {
+	            history.back();
+	            return;
+	          } catch {
+	            this.#searchHistoryClosePending = !1;
+	          }
+	        }
+	      }
+	      this.#closeSearch(invokeHost);
+	    }
+	  }
+	  #onSearchHistoryPop() {
+	    const ownedEntry = this.#searchHistoryEntry;
+	    if (this.#searchHistoryEntry = !1, this.#searchHistoryClosePending = !1, ownedEntry && this.#document.documentElement.hasAttribute("data-ldp-host-search-open")) {
+	      this.#closeSearch(!0);
+	      return;
+	    }
+	    this.#removeSearchHistoryMarker();
+	  }
+	  #removeSearchHistoryMarker() {
+	    const history = this.#history();
+	    if (history)
+	      try {
+	        const current = (0, import_value_record.valueRecord)(history.state);
+	        if (!current || current[SEARCH_HISTORY_STATE_KEY] !== !0) return;
+	        const state = { ...current };
+	        delete state[SEARCH_HISTORY_STATE_KEY], history.replaceState(state, "");
+	      } catch {
+	      }
+	  }
+	  #closeSearch(invokeHost) {
+	    this.#searchBackdrop?.setAttribute("hidden", ""), this.#document.documentElement.removeAttribute("data-ldp-host-search-open"), this.#searchSurface && this.#restoreSearchSurface(this.#searchSurface), this.#searchSurface = null, this.#allowSearchRoute = !1, this.#searchHistoryEntry && (this.#searchHistoryEntry = !1, this.#removeSearchHistoryMarker()), this.#searchHistoryClosePending = !1, this.#searchTrigger?.setAttribute("aria-expanded", "false"), invokeHost && this.#setHostSearchVisible(!1);
+	  }
+	  #setHostSearchVisible(visible) {
+	    if (!this.#host) return !1;
+	    const search = (0, import_value_record.valueRecord)(this.#host.lookup("service:search"));
+	    if (!search) return !1;
+	    try {
+	      return search.visible = visible, !0;
+	    } catch {
+	      return !1;
+	    }
+	  }
+	  #attachSearchRouteGuard() {
+	    if (!this.#host) return () => {
+	    };
+	    const router = (0, import_value_record.valueRecord)(this.#host.lookup("service:router")), on = router?.on, off = router?.off;
+	    if (typeof on != "function" || typeof off != "function") return null;
+	    const guard = (transition) => {
+	      if (!this.#document.documentElement.hasAttribute("data-ldp-host-search-open"))
+	        return;
+	      const transitionRecord = (0, import_value_record.valueRecord)(transition), destination = (0, import_value_record.valueRecord)(transitionRecord?.to);
+	      if (String(destination?.name ?? "") !== "full-page-search") return;
+	      if (this.#allowSearchRoute) {
+	        this.#allowSearchRoute = !1;
+	        return;
+	      }
+	      const abort = transitionRecord?.abort;
+	      typeof abort == "function" && abort.call(transitionRecord);
+	    };
+	    try {
+	      on.call(router, "routeWillChange", guard);
+	    } catch {
+	      return null;
+	    }
+	    return () => {
+	      try {
+	        off.call(router, "routeWillChange", guard);
+	      } catch {
+	      }
+	    };
+	  }
+	  #beginLanguageCycle() {
+	    if (this.#languageScanCount) return;
+	    const trigger = this.#nativeLanguageTrigger;
+	    if (!trigger) return;
+	    const current = languageKey(trigger) ?? this.#languageState;
+	    this.#pendingLanguage = current === "zh" ? "en" : "zh", this.#languageScanCount = 1, this.#document.documentElement.setAttribute(
+	      "data-ldp-host-language-switching",
+	      ""
+	    ), this.#languageBypass = !0, trigger.click(), this.#languageBypass = !1, this.#scheduleLanguageScan();
+	  }
+	  #scheduleLanguageScan() {
+	    !this.#activeScope || this.#languageFrame || !this.#languageScanCount || (this.#languageFrame = this.#requestFrame(() => {
+	      this.#languageFrame = 0, this.#scanLanguageOptions();
+	    }));
+	  }
+	  #scanLanguageOptions() {
+	    const trigger = this.#nativeLanguageTrigger;
+	    if (!trigger || !this.#activeScope) {
+	      this.#finishLanguageCycle();
+	      return;
+	    }
+	    if (!this.#pendingLanguage) {
+	      const surface = this.#document.querySelector(
+	        "[data-ldp-host-language-menu]"
+	      );
+	      if (!surface?.isConnected) {
+	        this.#finishLanguageCycle();
+	        return;
+	      }
+	      if (this.#languageScanCount += 1, this.#languageScanCount <= LANGUAGE_SCAN_LIMIT) {
+	        this.#scheduleLanguageScan();
+	        return;
+	      }
+	      trigger.getAttribute("aria-expanded") === "true" && (this.#languageBypass = !0, trigger.click(), this.#languageBypass = !1), surface.isConnected && surface.remove(), this.#finishLanguageCycle();
+	      return;
+	    }
+	    const desired = this.#pendingLanguage, candidates = this.#languageOptions(), alternative = new Set(candidates.map((entry) => entry.key)).size >= 2 ? candidates.find((entry) => entry.key === desired) : null;
+	    if (alternative) {
+	      const surface = alternative.element.closest(
+	        LANGUAGE_ROOT_SURFACE_SELECTOR
+	      ) ?? alternative.element.closest(
+	        LANGUAGE_SURFACE_SELECTOR
+	      ) ?? alternative.element.parentElement;
+	      surface && surface !== this.#document.body && surface.setAttribute("data-ldp-host-language-menu", ""), alternative.element.click(), this.#setLanguageState(alternative.key), this.#pendingLanguage = null, this.#languageScanCount = 1, this.#scheduleLanguageScan();
+	      return;
+	    }
+	    if (this.#languageScanCount += 1, this.#languageScanCount <= LANGUAGE_SCAN_LIMIT) {
+	      this.#scheduleLanguageScan();
+	      return;
+	    }
+	    trigger.getAttribute("aria-expanded") === "true" && (this.#languageBypass = !0, trigger.click(), this.#languageBypass = !1), this.#finishLanguageCycle();
+	  }
+	  #languageOptions() {
+	    const options = /* @__PURE__ */ new Map();
+	    for (const candidate of this.#document.querySelectorAll(
+	      LANGUAGE_OPTION_SELECTOR
+	    )) {
+	      if (candidate.closest(".ldp-overlay,[data-ldp-host-language-item]") || candidate.closest("[data-ldp-host-language-source]")) continue;
+	      const key = explicitLanguageOptionKey(candidate);
+	      if (!key) continue;
+	      const owner = candidate.matches('button,a,[role="menuitem"],[role="option"]') ? candidate : candidate.querySelector(
+	        'button,a,[role="menuitem"],[role="option"]'
+	      ) ?? candidate.closest(LANGUAGE_OPTION_OWNER_SELECTOR) ?? candidate;
+	      options.has(owner) || options.set(owner, key);
+	    }
+	    return Object.freeze([...options].map(([element, key]) => Object.freeze({ element, key })));
+	  }
+	  #finishLanguageCycle() {
+	    this.#languageFrame && this.#cancelFrame(this.#languageFrame), this.#languageFrame = 0, this.#languageScanCount = 0, this.#pendingLanguage = null, this.#document.documentElement.removeAttribute("data-ldp-host-language-switching");
+	    for (const surface of this.#document.querySelectorAll(
+	      "[data-ldp-host-language-menu]"
+	    )) surface.removeAttribute("data-ldp-host-language-menu");
+	  }
+	}
+}, "6711a1a14015c5644e4aac79aefb7b6d87138c18a292d30475aa62aadd5b70bb");
+
 /* Source: lite/src/shell/embedded-host-root-controller.ts */
 runtime.register("src/shell/embedded-host-root-controller.js", function(module, exports, require) {
 	var embedded_host_root_controller_exports = {};
@@ -10438,8 +11094,8 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	  EmbeddedHostTopicCardEnhancement: () => EmbeddedHostTopicCardEnhancement
 	});
 	module.exports = __toCommonJS(embedded_host_topic_card_enhancement_exports);
-	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_inline_emoji = require("../components/reader-inline-emoji.js"), import_value_record = require("../kernel/value-record.js");
-	const CARD_SELECTOR = "tr.topic-list-item,.topic-list-item,.latest-topic-list-item", TOPIC_LINK_SELECTOR = 'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"],a[href*="/t/"]', NEW_TOPIC_BADGE_SELECTOR = ".topic-post-badges,.badge-notification.new-topic", AUTOMATIC_FILTER_ATTRIBUTE = "data-ldp-unwanted-auto-filter", MANUAL_FILTER_ATTRIBUTE = "data-ldp-unwanted-manual-filter", EXPOSURE_COUNT_CLASS = "ldp-host-topic-exposure-count", TOPIC_LIST_SELECTOR = ".topic-list,.latest-topic-list", OPENED_TOPIC_STORAGE_KEY = "linuxdo-enhanced-reader:opened-host-topics:v1";
+	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_inline_emoji = require("../components/reader-inline-emoji.js"), import_reader_icon = require("../components/reader-icon.js"), import_value_record = require("../kernel/value-record.js");
+	const CARD_SELECTOR = "tr.topic-list-item,.topic-list-item,.latest-topic-list-item", TOPIC_LINK_SELECTOR = '.main-link a.raw-topic-link[href*="/t/"],.main-link a.title[href*="/t/"],.main-link a[href*="/t/"]', NEW_TOPIC_BADGE_SELECTOR = ".topic-post-badges,.badge-notification.new-topic", AUTOMATIC_FILTER_ATTRIBUTE = "data-ldp-unwanted-auto-filter", MANUAL_FILTER_ATTRIBUTE = "data-ldp-unwanted-manual-filter", HOST_OP_AVATAR_LONG_PRESS_ATTRIBUTE = "data-ldp-host-op-avatar-long-press", EXPOSURE_COUNT_CLASS = "ldp-host-topic-exposure-count", TOPIC_LIST_SELECTOR = ".topic-list,.latest-topic-list", OPENED_TOPIC_STORAGE_KEY = "linuxdo-enhanced-reader:opened-host-topics:v1";
 	function modelValue(value, key) {
 	  const source = (0, import_value_record.valueRecord)(value);
 	  if (!source) return;
@@ -10585,7 +11241,7 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	        titleLink,
 	        projection.title,
 	        (id) => (0, import_native_host_api.discourseNativeEmojiUrl)(this.#host, id)
-	      ), this.#markNewTopic(card, topic), this.#syncExposure(card), this.#groupTitleTools(card, topic), mode === "embedded" ? (this.#markDateCells(card), this.#syncStats(card, reactions)) : this.#clearEmbeddedCard(card);
+	      ), this.#markNewTopic(card, topic), this.#syncExposure(card), this.#groupTitleTools(card, topic), this.#markMobileOpAvatar(card), mode === "embedded" ? (this.#markDateCells(card), this.#syncStats(card, reactions)) : this.#clearEmbeddedCard(card);
 	    }
 	  }
 	  clear() {
@@ -10653,6 +11309,10 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	    for (const node of root.querySelectorAll(
 	      "[data-ldp-native-old-topic]"
 	    )) node.removeAttribute("data-ldp-native-old-topic");
+	    for (const node of root.querySelectorAll(
+	      `[${HOST_OP_AVATAR_LONG_PRESS_ATTRIBUTE}]`
+	    ))
+	      node.removeAttribute("data-user-card-long-press"), node.removeAttribute(HOST_OP_AVATAR_LONG_PRESS_ATTRIBUTE);
 	    for (const node of root.querySelectorAll(
 	      "[data-ldp-native-topic-date-row],[data-ldp-native-dnd-ready],[data-ldp-native-new-topic],[data-ldp-native-new-topic-marker]"
 	    ))
@@ -10878,8 +11538,10 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	    ), badge.title = "打开此 Topic 后将永久停止累计出现次数";
 	  }
 	  #groupTitleTools(card, topic) {
-	    const line = card.querySelector(".link-top-line");
+	    const titleLink = card.querySelector(TOPIC_LINK_SELECTOR), line = card.querySelector(".link-top-line") ?? titleLink?.parentElement;
 	    if (!line) return;
+	    const queue = card.querySelector(".ldp-reader-queue-add");
+	    queue && titleLink && !line.contains(queue) && titleLink.after(queue);
 	    const direct = [...line.querySelectorAll(
 	      'a,button,[role="button"]'
 	    )].find(
@@ -10901,9 +11563,17 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	    const group = this.#document.createElement("span");
 	    group.className = "ldp-native-topic-title-tools", startNode.before(group), group.append(...children.slice(start, end + 1));
 	  }
+	  #markMobileOpAvatar(card) {
+	    const avatar = card.querySelector(
+	      ":scope > .topic-list-data > .pull-left > [data-user-card]:first-child"
+	    );
+	    !avatar || avatar.hasAttribute("data-user-card-long-press") || (avatar.setAttribute("data-user-card-long-press", "true"), avatar.setAttribute(HOST_OP_AVATAR_LONG_PRESS_ATTRIBUTE, "true"));
+	  }
 	  #createDndButton(line, _topic) {
 	    const button = this.#document.createElement("button");
-	    return button.type = "button", button.dataset.ldpOwnedNativeDnd = "true", button.dataset.ldpNativeDnd = "true", button.setAttribute("aria-label", "免打扰：加入不想看"), line.append(button), button;
+	    button.type = "button", button.dataset.ldpOwnedNativeDnd = "true", button.dataset.ldpNativeDnd = "true", button.setAttribute("aria-label", "免打扰：加入不想看"), button.append((0, import_reader_icon.createReaderIcon)(this.#document, "bell-off"));
+	    const queue = line.querySelector(".ldp-reader-queue-add"), title = line.querySelector(TOPIC_LINK_SELECTOR);
+	    return queue ? queue.after(button) : title ? title.after(button) : line.append(button), button;
 	  }
 	  #onRootClick(event) {
 	    const eventTarget = event.target, control = (eventTarget?.nodeType === 1 ? eventTarget : eventTarget?.parentElement ?? null)?.closest("[data-ldp-native-dnd]"), card = control?.closest(CARD_SELECTOR);
@@ -11086,7 +11756,7 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	    return (link?.getAttribute("href") ?? "").match(/\/t\/(?:[^/]+\/)?(\d+)(?:\/|$)/)?.[1] ?? "";
 	  }
 	}
-}, "85ccc51e59e6c042cc42b3e91f17285b6f2ee484ffc2316ad79ba9c26bb9f90e");
+}, "7d82758ab5f65987170f6e35a714a5c85fc6be173889ac896c37d5d168b1ae5e");
 
 /* Source: lite/src/shell/main-outlet-mutation-hub.ts */
 runtime.register("src/shell/main-outlet-mutation-hub.js", function(module, exports, require) {
@@ -11633,6 +12303,82 @@ runtime.register("src/shell/reader-assignment-form-surface.js", function(module,
 	  }
 	}
 }, "bafbf9aad17fff35ba421f5cd5887e74f855572affd55569a16854e4972f8dff");
+
+/* Source: lite/src/shell/reader-browser-immersive-controller.ts */
+runtime.register("src/shell/reader-browser-immersive-controller.js", function(module, exports, require) {
+	var reader_browser_immersive_controller_exports = {};
+	__export(reader_browser_immersive_controller_exports, {
+	  ReaderBrowserImmersiveController: () => ReaderBrowserImmersiveController
+	});
+	module.exports = __toCommonJS(reader_browser_immersive_controller_exports);
+	var import_lifecycle = require("../kernel/lifecycle.js");
+	const MOBILE_IMMERSIVE_QUERY = "(max-width: 700px) and (hover: none) and (pointer: coarse)";
+	class ReaderBrowserImmersiveController {
+	  #options;
+	  #scope;
+	  #target;
+	  #owned = !1;
+	  #pending = !1;
+	  #exitAfterRequest = !1;
+	  constructor(options) {
+	    this.#options = options, this.#scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#target = options.document.documentElement;
+	    const supported = this.#supported();
+	    options.button.hidden = !supported, options.button.dataset.immersiveSupported = String(supported), this.#sync(), supported && (this.#scope.listen(options.button, "click", (event) => {
+	      event.preventDefault(), event.stopPropagation(), this.#toggle();
+	    }), this.#scope.listen(options.document, "fullscreenchange", () => {
+	      options.document.fullscreenElement !== this.#target && (this.#owned = !1), this.#sync();
+	    }), this.#scope.add(() => {
+	      this.exit();
+	    }));
+	  }
+	  get supported() {
+	    return this.#supported();
+	  }
+	  exit() {
+	    !this.#owned || typeof this.#options.document.exitFullscreen != "function" || (this.#exitAfterRequest = this.#pending, this.#options.document.fullscreenElement === this.#target && (this.#owned = !1, this.#options.document.exitFullscreen().catch(() => {
+	    }), this.#sync()));
+	  }
+	  destroy() {
+	    this.#scope.destroy();
+	  }
+	  #supported() {
+	    return this.#options.document.defaultView?.matchMedia?.(
+	      MOBILE_IMMERSIVE_QUERY
+	    ).matches === !0 && this.#options.document.fullscreenEnabled !== !1 && typeof this.#target.requestFullscreen == "function" && typeof this.#options.document.exitFullscreen == "function";
+	  }
+	  #toggle() {
+	    if (this.#pending) return;
+	    if (this.#options.document.fullscreenElement === this.#target) {
+	      this.exit();
+	      return;
+	    }
+	    if (this.#options.document.fullscreenElement !== null) {
+	      this.#options.showFeedback?.("浏览器已有其他全屏内容，请先退出后重试。");
+	      return;
+	    }
+	    this.#options.enterReaderFullpage(), this.#pending = !0, this.#owned = !0, this.#exitAfterRequest = !1, this.#sync();
+	    let request;
+	    try {
+	      request = this.#target.requestFullscreen();
+	    } catch {
+	      this.#pending = !1, this.#owned = !1, this.#sync(), this.#options.showFeedback?.("浏览器未允许进入沉浸式阅读。");
+	      return;
+	    }
+	    request.then(() => {
+	      this.#exitAfterRequest && (this.#exitAfterRequest = !1, this.#owned = !1, this.#options.document.fullscreenElement === this.#target && typeof this.#options.document.exitFullscreen == "function" && this.#options.document.exitFullscreen().catch(() => {
+	      }));
+	    }).catch(() => {
+	      this.#owned = !1, this.#exitAfterRequest = !1, this.#options.showFeedback?.("浏览器未允许进入沉浸式阅读。");
+	    }).finally(() => {
+	      this.#pending = !1, this.#sync();
+	    });
+	  }
+	  #sync() {
+	    const active = this.#options.document.fullscreenElement === this.#target, label = active ? "退出沉浸式阅读" : "进入沉浸式阅读";
+	    this.#options.button.disabled = this.#pending, this.#options.button.classList.toggle("is-active", active), this.#options.button.setAttribute("aria-pressed", String(active)), this.#options.button.setAttribute("aria-label", label), this.#options.button.title = label;
+	  }
+	}
+}, "a14568bdd407605435e50db25d93cd156d7065067015b251b201dfdd41aa84d4");
 
 /* Source: lite/src/shell/reader-choice-form-surface.ts */
 runtime.register("src/shell/reader-choice-form-surface.js", function(module, exports, require) {
@@ -12202,7 +12948,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    selector: ".ldp-topic-action-rail-unwanted-topics",
 	    id: "unwanted-topics"
 	  })
-	]), READER_FLOATING_WINDOW_LAUNCHER_SELECTOR = READER_FLOATING_WINDOW_LAUNCHERS.map(({ selector }) => selector).join(","), READER_FLOATING_WINDOW_SCROLLBAR_GUARD_PX = 6, floatingWindowTabGroups = /* @__PURE__ */ new WeakMap();
+	]), READER_FLOATING_WINDOW_LAUNCHER_SELECTOR = READER_FLOATING_WINDOW_LAUNCHERS.map(({ selector }) => selector).join(","), READER_FLOATING_WINDOW_SCROLLBAR_GUARD_PX = 6, READER_FLOATING_WINDOW_MOBILE_MAX_WIDTH = 760, floatingWindowTabGroups = /* @__PURE__ */ new WeakMap();
 	function eventPathMatches(event, selector) {
 	  const composed = typeof event.composedPath == "function" ? event.composedPath() : [event.target];
 	  return (composed.length ? composed : [event.target]).some((target) => {
@@ -12238,7 +12984,10 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	  #visible = !1;
 	  constructor(document, mount) {
 	    this.#document = document, this.#mount = mount, this.#onPointerDown = (event) => {
-	      eventPathMatches(event, ".ldp-reader-floating-window-add-wrap") || this.#closeMenus();
+	      eventPathMatches(
+	        event,
+	        ".ldp-reader-floating-window-add-wrap,.ldp-reader-floating-window-mobile-menu-wrap"
+	      ) || this.#closeMenus();
 	    }, this.#onClick = (event) => {
 	      const launcher = READER_FLOATING_WINDOW_LAUNCHERS.find(({ selector }) => eventPathMatches(event, selector)), frame = launcher ? this.#frames.get(launcher.id) : null;
 	      frame?.isOpen && (event.preventDefault(), event.stopImmediatePropagation(), frame.open());
@@ -12262,13 +13011,16 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	  }
 	  open(frame) {
 	    if (!this.#frames.has(frame.tabId)) return;
-	    this.#captureTabScroll(), this.#visible ? this.#captureSharedGeometry() : this.#sharedGeometry = frame.geometry.snapshot.geometry;
+	    this.#captureTabScroll(), this.#visible ? this.#captureSharedGeometry() : frame.compactViewport || (this.#sharedGeometry = frame.geometry.snapshot.geometry);
 	    const revealActive = !this.#opened.includes(frame);
 	    revealActive && this.#opened.push(frame), this.#active = frame, this.#visible = !0, this.#sync(revealActive);
 	  }
 	  close(frame) {
 	    const index = this.#opened.indexOf(frame);
 	    index < 0 || (this.#captureTabScroll(), this.#captureSharedGeometry(), this.#opened.splice(index, 1), this.#active === frame && (this.#active = this.#opened[Math.min(index, this.#opened.length - 1)] ?? this.#opened.at(-1) ?? null), this.#opened.length || (this.#visible = !1), this.#sync());
+	  }
+	  dismiss(frame) {
+	    return !this.#visible || this.#active !== frame ? !1 : (this.#dismiss(), !0);
 	  }
 	  activate(frame) {
 	    !frame.isOpen || !this.#opened.includes(frame) || frame.open();
@@ -12277,7 +13029,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    return this.#active !== frame || this.#claimedOutsideEvents.has(event) ? !1 : (this.#claimedOutsideEvents.add(event), this.#dismiss(), !0);
 	  }
 	  dismissFromEscapeEvent(frame, event) {
-	    return event.key !== "Escape" || this.#active !== frame || !(0, import_reader_escape_surface.readerEscapeOwnedBy)(this.#document, [frame.element]) ? !1 : (event.preventDefault(), event.stopImmediatePropagation(), this.#pinned ? this.#closeMenus() : this.#dismiss(), !0);
+	    return event.key !== "Escape" || this.#active !== frame || !(0, import_reader_escape_surface.readerEscapeOwnedBy)(this.#document, [frame.element]) ? !1 : (event.preventDefault(), event.stopImmediatePropagation(), frame.closeMobileMenu() || (this.#pinned ? this.#closeMenus() : this.#dismiss()), !0);
 	  }
 	  dismissActiveFromEarlyEscapeEvent(event) {
 	    return !this.#visible || !this.#active?.active ? !1 : this.dismissFromEscapeEvent(this.#active, event);
@@ -12300,7 +13052,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	  }
 	  reloadStoredGeometry() {
 	    const target = this.#active ?? this.#frames.values().next().value;
-	    target && (target.reloadStoredGeometry(), this.#sharedGeometry = target.geometry.snapshot.geometry, this.#sync());
+	    target && (target.reloadStoredGeometry(), target.compactViewport || (this.#sharedGeometry = target.geometry.snapshot.geometry), this.#sync());
 	  }
 	  restore(tabId) {
 	    if (this.#visible || !this.#opened.length) return !1;
@@ -12318,7 +13070,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    this.#captureTabScroll(), this.#captureSharedGeometry(), this.#visible = !1, this.#sync();
 	  }
 	  #captureSharedGeometry() {
-	    this.#active && (this.#sharedGeometry = this.#active.geometry.snapshot.geometry);
+	    !this.#active || this.#active.compactViewport || (this.#sharedGeometry = this.#active.geometry.snapshot.geometry);
 	  }
 	  #captureTabScroll() {
 	    if (!this.#active?.active) return;
@@ -12326,7 +13078,8 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    Number.isFinite(scrollLeft) && (this.#tabScrollLeft = Math.max(0, scrollLeft));
 	  }
 	  #sync(revealActive = !1) {
-	    !this.#sharedGeometry && this.#active && (this.#sharedGeometry = this.#active.geometry.snapshot.geometry), this.#active && this.#sharedGeometry && this.#active.applySharedGeometry(this.#sharedGeometry);
+	    const sharesDesktopGeometry = !!(this.#active && !this.#active.compactViewport);
+	    !this.#sharedGeometry && this.#active && sharesDesktopGeometry && (this.#sharedGeometry = this.#active.geometry.snapshot.geometry), this.#active && this.#sharedGeometry && sharesDesktopGeometry && this.#active.applySharedGeometry(this.#sharedGeometry);
 	    const remaining = [...this.#frames.values()].filter((frame) => !this.#opened.includes(frame)).sort((left, right) => left.tabOrder - right.tabOrder);
 	    for (const frame of this.#frames.values())
 	      frame.syncTabVisibility(this.#visible && frame === this.#active);
@@ -12415,6 +13168,10 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	  addWrap;
 	  addButton;
 	  addMenu;
+	  mobileMenuWrap;
+	  mobileMenuButton;
+	  mobileMenuCurrent;
+	  mobileMenu;
 	  pinButton;
 	  closeButton;
 	  tabId;
@@ -12434,6 +13191,8 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	  #iconName;
 	  #open = !1;
 	  #active = !1;
+	  #desktopGeometryReady = !1;
+	  #deferredMinimumWidth = null;
 	  constructor(options) {
 	    this.#onClose = options.onClose ?? (() => {
 	    }), this.#baseZIndex = options.zIndex, this.#geometryStorage = options.geometryStorage, this.#geometryStorageKey = options.geometryStorageKey, this.#requestOpen = options.requestOpen, this.#tabAction = options.tabAction ?? null, this.#tabAction?.classList.add("ldp-reader-floating-window-tab-action");
@@ -12468,7 +13227,24 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	      options.document,
 	      "div",
 	      "ldp-reader-floating-window-add-menu"
-	    ), this.addMenu.hidden = !0, this.addMenu.setAttribute("role", "menu"), this.addMenu.setAttribute("aria-label", "添加剩余工具浮窗"), this.addWrap.append(this.addButton, this.addMenu), this.meta = (0, import_html_element.htmlElement)(
+	    ), this.addMenu.hidden = !0, this.addMenu.setAttribute("role", "menu"), this.addMenu.setAttribute("aria-label", "添加剩余工具浮窗"), this.addWrap.append(this.addButton, this.addMenu), this.mobileMenuWrap = (0, import_html_element.htmlElement)(
+	      options.document,
+	      "div",
+	      "ldp-reader-floating-window-mobile-menu-wrap"
+	    ), this.mobileMenuButton = options.document.createElement("button"), this.mobileMenuButton.type = "button", this.mobileMenuButton.className = "ldp-reader-floating-window-mobile-menu-toggle", this.mobileMenuButton.setAttribute("aria-label", "打开工具分类"), this.mobileMenuButton.setAttribute("aria-haspopup", "menu"), this.mobileMenuButton.setAttribute("aria-expanded", "false"), this.mobileMenuButton.append((0, import_reader_icon.createReaderIcon)(options.document, "list")), this.mobileMenuCurrent = (0, import_html_element.htmlElement)(
+	      options.document,
+	      "span",
+	      "ldp-reader-floating-window-mobile-current",
+	      options.title
+	    ), this.mobileMenu = (0, import_html_element.htmlElement)(
+	      options.document,
+	      "div",
+	      "ldp-reader-floating-window-mobile-menu"
+	    ), this.mobileMenu.hidden = !0, this.mobileMenu.setAttribute("role", "menu"), this.mobileMenu.setAttribute("aria-label", "工具分类"), this.mobileMenuWrap.append(
+	      this.mobileMenuButton,
+	      this.mobileMenuCurrent,
+	      this.mobileMenu
+	    ), this.meta = (0, import_html_element.htmlElement)(
 	      options.document,
 	      "span",
 	      "ldp-reader-floating-window-meta"
@@ -12480,7 +13256,12 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	      options.document,
 	      "div",
 	      "ldp-reader-floating-window-tab-row"
-	    ), this.tabRow.append(this.tabList, this.addWrap, this.pinButton), this.toolbarRow = (0, import_html_element.htmlElement)(
+	    ), this.tabRow.append(
+	      this.mobileMenuWrap,
+	      this.tabList,
+	      this.addWrap,
+	      this.pinButton
+	    ), this.toolbarRow = (0, import_html_element.htmlElement)(
 	      options.document,
 	      "div",
 	      "ldp-reader-floating-window-toolbar-row"
@@ -12517,7 +13298,9 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	      return handle.dataset.readerResize = direction, handle.dataset.resize = direction, handle.setAttribute("aria-hidden", "true"), handle;
 	    });
 	    this.element.append(this.header, this.body, ...handles), this.host.append(this.element), this.scope.add((0, import_floating_surface_wheel.bindFloatingSurfaceWheel)(this.element));
-	    const currentViewport = viewport(options.document, options.mount), restored = storedPreferences(
+	    const currentViewport = viewport(options.document, options.mount);
+	    this.#desktopGeometryReady = currentViewport.width > READER_FLOATING_WINDOW_MOBILE_MAX_WIDTH;
+	    const restored = storedPreferences(
 	      options.geometryStorage,
 	      options.geometryStorageKey
 	    );
@@ -12534,10 +13317,10 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	        margin: 8,
 	        minWidth: 420,
 	        minHeight: 360,
-	        compactWidth: 0,
 	        defaultViewportWidth: 0.8,
 	        defaultViewportHeight: 0.82,
-	        ...options.policy
+	        ...options.policy,
+	        compactWidth: READER_FLOATING_WINDOW_MOBILE_MAX_WIDTH
 	      }
 	    }), this.geometry.changes.subscribe(
 	      (snapshot) => this.#applyGeometry(snapshot),
@@ -12555,14 +13338,15 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	      ...view ? { viewportTarget: view } : {},
 	      readViewport: () => viewport(options.document, options.mount),
 	      onPersist: (preferences) => {
-	        try {
-	          options.geometryStorage?.setItem(
-	            options.geometryStorageKey,
-	            JSON.stringify(preferences)
-	          );
-	        } catch {
-	          options.notify?.(`${options.title}浮窗位置保存失败`);
-	        }
+	        if (!this.compactViewport)
+	          try {
+	            options.geometryStorage?.setItem(
+	              options.geometryStorageKey,
+	              JSON.stringify(preferences)
+	            );
+	          } catch {
+	            options.notify?.(`${options.title}浮窗位置保存失败`);
+	          }
 	      },
 	      requestFrame,
 	      cancelFrame,
@@ -12579,18 +13363,41 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	      projectPlacement: () => {
 	      },
 	      parentScope: this.scope
-	    }), this.#applyGeometry(this.geometry.snapshot), this.scope.listen(this.closeButton, "click", () => this.close()), this.scope.listen(this.addButton, "click", (event) => {
+	    }), this.#applyGeometry(this.geometry.snapshot), this.scope.listen(this.closeButton, "click", () => {
+	      this.#document().defaultView?.matchMedia?.("(max-width: 760px)").matches === !0 && this.#tabGroup?.dismiss(this) || this.close();
+	    }), this.scope.listen(this.addButton, "click", (event) => {
 	      if (event.preventDefault(), event.stopPropagation(), this.addButton.disabled) return;
 	      const open = this.addButton.getAttribute("aria-expanded") === "true";
 	      this.addButton.setAttribute("aria-expanded", String(!open)), this.addMenu.hidden = open;
+	    }), this.scope.listen(this.mobileMenuButton, "click", (event) => {
+	      event.preventDefault(), event.stopPropagation();
+	      const open = this.mobileMenuButton.getAttribute("aria-expanded") === "true";
+	      this.mobileMenuButton.setAttribute("aria-expanded", String(!open)), this.mobileMenuButton.setAttribute(
+	        "aria-label",
+	        open ? "打开工具分类" : "收起工具分类"
+	      ), this.mobileMenu.hidden = open;
 	    }), this.scope.listen(this.tabList, "wheel", (eventValue) => {
 	      const event = eventValue;
 	      if (this.tabList.scrollWidth <= this.tabList.clientWidth + 1) return;
 	      const delta = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
 	      delta && (this.tabList.scrollLeft += delta, event.preventDefault(), event.stopPropagation());
-	    }, { passive: !1 }), view && this.scope.listen(view, "resize", () => {
-	      const next = viewport(options.document, options.mount);
-	      this.geometry.resizeViewport(next.width, next.height);
+	    }, { passive: !1 });
+	    let compactViewport = currentViewport.width <= READER_FLOATING_WINDOW_MOBILE_MAX_WIDTH;
+	    view && this.scope.listen(view, "resize", () => {
+	      const wasCompact = compactViewport, next = viewport(options.document, options.mount);
+	      if (this.geometry.resizeViewport(next.width, next.height), compactViewport = next.width <= READER_FLOATING_WINDOW_MOBILE_MAX_WIDTH, !wasCompact && compactViewport && this.closeAddMenu(), wasCompact && !compactViewport && (this.closeMobileMenu(), this.#deferredMinimumWidth !== null && (this.geometry.setMinimumWidth(this.#deferredMinimumWidth), this.#deferredMinimumWidth = null), !this.#desktopGeometryReady)) {
+	        const restored2 = storedPreferences(
+	          this.#geometryStorage,
+	          this.#geometryStorageKey
+	        );
+	        restored2 ? this.geometry.setGeometry(
+	          restored2.readerWindowWidth,
+	          restored2.readerWindowHeight,
+	          restored2.readerWindowX,
+	          restored2.readerWindowY
+	        ) : this.geometry.reset(), this.#desktopGeometryReady = !0;
+	      }
+	      this.#tabGroup?.refresh();
 	    }), this.#tabGroup = standalone ? null : tabGroup(options.document, options.mount), this.#tabGroup?.register(this), this.#tabGroup && this.scope.listen(this.pinButton, "click", () => {
 	      this.#tabGroup?.syncPinnedFrom(this);
 	    }), this.scope.add(() => {
@@ -12606,6 +13413,9 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	  get active() {
 	    return this.#active;
 	  }
+	  get compactViewport() {
+	    return this.geometry.snapshot.viewportWidth <= READER_FLOATING_WINDOW_MOBILE_MAX_WIDTH;
+	  }
 	  setIcon(name) {
 	    this.#iconName = name, this.#tabGroup?.refresh();
 	  }
@@ -12613,10 +13423,14 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    this.title.textContent = value, this.#tabGroup?.refresh();
 	  }
 	  setMinimumWidth(width) {
+	    if (this.compactViewport) {
+	      this.#deferredMinimumWidth = width;
+	      return;
+	    }
 	    this.geometry.setMinimumWidth(width);
 	  }
 	  applySharedGeometry(geometry) {
-	    this.geometry.setGeometry(
+	    this.compactViewport || this.geometry.setGeometry(
 	      geometry.width,
 	      geometry.height,
 	      geometry.left,
@@ -12657,7 +13471,26 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    this.#active = active && this.#open, this.element.hidden = !this.#active, this.element.classList.toggle("is-active-tab", this.#active), this.#active || this.closeAddMenu();
 	  }
 	  renderTabChrome(opened, remaining, scrollLeft, revealActive) {
-	    !this.#active || !this.#tabGroup || (this.tabList.replaceChildren(...opened.map((frame) => {
+	    if (!this.#active || !this.#tabGroup) return;
+	    this.mobileMenuCurrent.replaceChildren(
+	      (0, import_reader_icon.createReaderIcon)(this.#document(), this.#iconName),
+	      (0, import_html_element.htmlElement)(
+	        this.#document(),
+	        "span",
+	        "ldp-reader-floating-window-mobile-current-title",
+	        this.#tabLabel
+	      )
+	    );
+	    const allFrames = [...opened, ...remaining].sort((left, right) => left.tabOrder - right.tabOrder);
+	    this.mobileMenu.replaceChildren(...allFrames.map((frame) => {
+	      const option = this.#document().createElement("button");
+	      return option.type = "button", option.className = "ldp-reader-floating-window-mobile-menu-option", option.dataset.floatingMobileTab = frame.tabId, option.setAttribute("role", "menuitem"), option.setAttribute("aria-current", frame === this ? "page" : "false"), option.classList.toggle("is-active", frame === this), option.append(
+	        (0, import_reader_icon.createReaderIcon)(this.#document(), frame.#iconName),
+	        this.#document().createTextNode(frame.#tabLabel)
+	      ), option.addEventListener("click", () => {
+	        this.closeMobileMenu(), frame.isOpen ? this.#tabGroup?.activate(frame) : frame.requestOpenFromTabs();
+	      }), option;
+	    })), this.tabList.replaceChildren(...opened.map((frame) => {
 	      const item = (0, import_html_element.htmlElement)(
 	        this.#document(),
 	        "div",
@@ -12703,7 +13536,7 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	      ), button.addEventListener("click", () => {
 	        this.closeAddMenu(), frame.requestOpenFromTabs();
 	      }), button;
-	    })), remaining.length || this.closeAddMenu());
+	    })), remaining.length || this.closeAddMenu();
 	  }
 	  #revealActiveTab() {
 	    const activeTab = this.tabList.querySelector(
@@ -12714,7 +13547,11 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    tabStart < viewportStart ? this.tabList.scrollLeft = tabStart : tabEnd > viewportEnd && (this.tabList.scrollLeft = tabEnd - this.tabList.clientWidth);
 	  }
 	  closeAddMenu() {
-	    this.addButton.setAttribute("aria-expanded", "false"), this.addMenu.hidden = !0;
+	    this.addButton.setAttribute("aria-expanded", "false"), this.addMenu.hidden = !0, this.closeMobileMenu();
+	  }
+	  closeMobileMenu() {
+	    const open = this.mobileMenuButton.getAttribute("aria-expanded") === "true";
+	    return this.mobileMenuButton.setAttribute("aria-expanded", "false"), this.mobileMenuButton.setAttribute("aria-label", "打开工具分类"), this.mobileMenu.hidden = !0, open;
 	  }
 	  async requestOpenFromTabs() {
 	    try {
@@ -12749,7 +13586,181 @@ runtime.register("src/shell/reader-floating-window-frame.js", function(module, e
 	    return this.element.ownerDocument;
 	  }
 	}
-}, "3f8914bdc9fb08d11fdc41b5e366a21a92aa9145ccc11cfd59f4b28aa7766fe1");
+}, "bee4971965f37627b252051c9b7dc1f545bf1dd8f755e1dd72f00a45da68e741");
+
+/* Source: lite/src/shell/reader-mobile-return-controller.ts */
+runtime.register("src/shell/reader-mobile-return-controller.js", function(module, exports, require) {
+	var reader_mobile_return_controller_exports = {};
+	__export(reader_mobile_return_controller_exports, {
+	  ReaderMobileReturnController: () => ReaderMobileReturnController,
+	  dispatchReaderEscape: () => dispatchReaderEscape,
+	  isReaderAppleMobilePlatform: () => isReaderAppleMobilePlatform
+	});
+	module.exports = __toCommonJS(reader_mobile_return_controller_exports);
+	var import_lifecycle = require("../kernel/lifecycle.js");
+	const READER_MOBILE_RETURN_QUERY = "(max-width: 700px) and (hover: none) and (pointer: coarse)", READER_MOBILE_RETURN_STATE_KEY = "ldpReaderMobileReturn";
+	let readerMobileReturnSequence = 0;
+	function valueRecord(value) {
+	  return value !== null && typeof value == "object" && !Array.isArray(value) ? value : null;
+	}
+	function readerVisibleState(state) {
+	  return state !== "idle" && state !== "closed" && state !== "destroyed";
+	}
+	function isReaderAppleMobilePlatform(navigator) {
+	  const userAgent = String(navigator?.userAgent ?? ""), platform = String(navigator?.platform ?? ""), touchPoints = Math.max(0, Number(navigator?.maxTouchPoints) || 0);
+	  return /(?:iPad|iPhone|iPod)/i.test(userAgent) || /^Mac/i.test(platform) && touchPoints > 1;
+	}
+	function dispatchReaderEscape(document) {
+	  const window = document.defaultView;
+	  if (!window) return;
+	  let event;
+	  typeof window.KeyboardEvent == "function" ? event = new window.KeyboardEvent("keydown", {
+	    key: "Escape",
+	    code: "Escape",
+	    bubbles: !0,
+	    cancelable: !0
+	  }) : (event = new window.Event("keydown", {
+	    bubbles: !0,
+	    cancelable: !0
+	  }), Object.defineProperties(event, {
+	    key: { value: "Escape", configurable: !0 },
+	    code: { value: "Escape", configurable: !0 }
+	  })), document.dispatchEvent(event);
+	}
+	class ReaderMobileReturnController {
+	  scope;
+	  #document;
+	  #root;
+	  #button;
+	  #window;
+	  #media;
+	  #readReaderState;
+	  #dispatchEscape;
+	  #onError;
+	  #appleMobile;
+	  #token;
+	  #entryActive = !1;
+	  #historyClosePending = !1;
+	  #escapeDispatching = !1;
+	  constructor(options) {
+	    if (this.#document = options.document, this.#root = options.root, this.#button = options.button, this.#window = options.window === void 0 ? options.document.defaultView : options.window, this.#readReaderState = options.readReaderState, this.#dispatchEscape = options.dispatchEscape ?? (() => {
+	      dispatchReaderEscape(options.document);
+	    }), this.#onError = options.onError ?? (() => {
+	    }), this.#appleMobile = isReaderAppleMobilePlatform(
+	      this.#window?.navigator
+	    ), this.#token = `reader-mobile-return:${++readerMobileReturnSequence}`, this.#media = this.#window?.matchMedia?.(
+	      READER_MOBILE_RETURN_QUERY
+	    ) ?? null, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.scope.listen(this.#button, "click", (event) => {
+	      event.preventDefault(), event.stopPropagation(), this.#escapeOnce();
+	    }), this.#window && this.scope.listen(this.#window, "popstate", () => {
+	      this.#onHistoryPop();
+	    }), this.#media) {
+	      const syncMedia = () => this.#sync();
+	      typeof this.#media.addEventListener == "function" ? this.scope.listen(this.#media, "change", syncMedia) : typeof this.#media.addListener == "function" && (this.#media.addListener(syncMedia), this.scope.add(() => this.#media?.removeListener(syncMedia)));
+	    }
+	    options.readerChanges.subscribe(() => this.#sync(), this.scope), this.scope.add(() => {
+	      this.#root.classList.remove("ldp-apple-mobile-return"), this.#button.hidden = !0, this.#removeCurrentMarker();
+	    }), this.#sync();
+	  }
+	  destroy() {
+	    this.scope.destroy();
+	  }
+	  #sync() {
+	    if (this.scope.destroyed) return;
+	    const visible = readerVisibleState(this.#readReaderState()), mobile = this.#mobileViewport(), appleEntryVisible = visible && mobile && this.#appleMobile;
+	    if (this.#button.hidden = !appleEntryVisible, this.#root.classList.toggle(
+	      "ldp-apple-mobile-return",
+	      appleEntryVisible
+	    ), !visible) {
+	      this.#releaseHistoryEntry();
+	      return;
+	    }
+	    mobile && this.#ensureHistoryEntry();
+	  }
+	  #mobileViewport() {
+	    return this.#media?.matches === !0 || this.#document.documentElement.classList.contains("mobile-view");
+	  }
+	  #history() {
+	    try {
+	      return this.#window?.history ?? null;
+	    } catch {
+	      return null;
+	    }
+	  }
+	  #ownsCurrentEntry(history) {
+	    return valueRecord(history.state)?.[READER_MOBILE_RETURN_STATE_KEY] === this.#token;
+	  }
+	  #ensureHistoryEntry() {
+	    if (this.#entryActive || this.#historyClosePending) return;
+	    const history = this.#history();
+	    if (history)
+	      try {
+	        if (this.#ownsCurrentEntry(history)) {
+	          this.#entryActive = !0;
+	          return;
+	        }
+	        const current = valueRecord(history.state);
+	        history.pushState({
+	          ...current ?? {},
+	          [READER_MOBILE_RETURN_STATE_KEY]: this.#token
+	        }, ""), this.#entryActive = !0;
+	      } catch (cause) {
+	        this.#report(cause);
+	      }
+	  }
+	  #releaseHistoryEntry() {
+	    if (!this.#entryActive || this.#historyClosePending) return;
+	    const history = this.#history();
+	    if (this.#entryActive = !1, !(!history || !this.#ownsCurrentEntry(history))) {
+	      this.#historyClosePending = !0;
+	      try {
+	        history.back();
+	      } catch (cause) {
+	        this.#historyClosePending = !1, this.#removeCurrentMarker(), this.#report(cause);
+	      }
+	    }
+	  }
+	  #onHistoryPop() {
+	    if (this.#historyClosePending) {
+	      this.#historyClosePending = !1, this.#sync();
+	      return;
+	    }
+	    if (!this.#entryActive) return;
+	    const history = this.#history();
+	    history && this.#ownsCurrentEntry(history) || (this.#entryActive = !1, readerVisibleState(this.#readReaderState()) && this.#escapeOnce());
+	  }
+	  #escapeOnce() {
+	    if (!(this.#escapeDispatching || !readerVisibleState(this.#readReaderState()))) {
+	      this.#escapeDispatching = !0;
+	      try {
+	        this.#dispatchEscape();
+	      } catch (cause) {
+	        this.#report(cause);
+	      } finally {
+	        this.#escapeDispatching = !1, this.#sync();
+	      }
+	    }
+	  }
+	  #removeCurrentMarker() {
+	    const history = this.#history();
+	    if (!(!history || !this.#ownsCurrentEntry(history)))
+	      try {
+	        const state = { ...valueRecord(history.state) ?? {} };
+	        delete state[READER_MOBILE_RETURN_STATE_KEY], history.replaceState(state, "");
+	      } catch (cause) {
+	        this.#report(cause);
+	      } finally {
+	        this.#entryActive = !1, this.#historyClosePending = !1;
+	      }
+	  }
+	  #report(cause) {
+	    try {
+	      this.#onError(cause);
+	    } catch {
+	    }
+	  }
+	}
+}, "fbd214a7e44d9a77ae650c8c4fb61768bf744ce514c9e53f280b515cd2700615");
 
 /* Source: lite/src/shell/reader-rate-limit-notice.ts */
 runtime.register("src/shell/reader-rate-limit-notice.js", function(module, exports, require) {
@@ -13488,7 +14499,14 @@ runtime.register("src/shell/reader-shell-template.js", function(module, exports,
 	    const handle = (0, import_html_element.htmlElement)(document, "span", "ldp-reader-resize-handle");
 	    handle.dataset.readerResize = direction, handle.setAttribute("aria-hidden", "true"), modal.append(handle);
 	  }
-	  const header = (0, import_html_element.htmlElement)(document, "div", "ldp-header"), home = (0, import_html_element.htmlElement)(document, "a", "ldp-home-logo");
+	  const header = (0, import_html_element.htmlElement)(document, "div", "ldp-header"), mobileReaderBack = button(
+	    options,
+	    "ldp-mobile-reader-back",
+	    "返回上一层",
+	    "chevron-left"
+	  );
+	  mobileReaderBack.title = "返回上一层", mobileReaderBack.hidden = !0;
+	  const home = (0, import_html_element.htmlElement)(document, "a", "ldp-home-logo");
 	  if (home.href = homeUrl, home.setAttribute("aria-label", `回到 ${siteName} 首页`), options.logoUrl) {
 	    const logo = (0, import_html_element.htmlElement)(document, "img", "ldp-logo");
 	    (0, import_reader_image_fallback.installReaderSiteLogoFallback)(logo, options.logoUrl), logo.alt = "", logo.loading = "lazy", logo.decoding = "async", logo.dataset.ldpSiteLogo = "", home.append(logo);
@@ -13881,14 +14899,21 @@ runtime.register("src/shell/reader-shell-template.js", function(module, exports,
 	    "ldp-reader-refresh ldp-icon-btn",
 	    "清除当前帖子缓存并刷新",
 	    "rotate-ccw"
+	  ), immersiveToggle = button(
+	    options,
+	    "ldp-browser-immersive-toggle ldp-icon-btn",
+	    "进入沉浸式阅读",
+	    "maximize-2"
 	  );
-	  refreshTopic.disabled = !0;
+	  immersiveToggle.hidden = !0, refreshTopic.disabled = !0;
 	  const closeReader = button(
 	    options,
 	    "ldp-close ldp-icon-btn",
 	    "关闭阅读器",
 	    "x"
-	  ), setHeaderActionsExpanded = (expanded) => {
+	  ), usesMobileTitleActionToggle = () => document.defaultView?.matchMedia?.(
+	    "(max-width: 700px) and (hover: none) and (pointer: coarse)"
+	  ).matches === !0, setHeaderActionsExpanded = (expanded) => {
 	    titleActions.classList.toggle("is-expanded", expanded), header.classList.toggle("ldp-title-actions-expanded", expanded), headerActionsToggle.setAttribute("aria-expanded", String(expanded));
 	    const label = expanded ? "收起原右上角操作" : "展开原右上角操作";
 	    headerActionsToggle.setAttribute("aria-label", label), headerActionsToggle.title = label, headerActionsToggle.replaceChildren(
@@ -13896,17 +14921,31 @@ runtime.register("src/shell/reader-shell-template.js", function(module, exports,
 	    );
 	  };
 	  titleActions.addEventListener("pointerenter", () => {
-	    setHeaderActionsExpanded(!0);
+	    usesMobileTitleActionToggle() || setHeaderActionsExpanded(!0);
 	  }), titleActions.addEventListener("pointerleave", () => {
 	    setHeaderActionsExpanded(!1);
 	  }), titleActions.addEventListener("focusin", () => {
-	    setHeaderActionsExpanded(!0);
+	    usesMobileTitleActionToggle() || setHeaderActionsExpanded(!0);
 	  }), titleActions.addEventListener("focusout", (event) => {
 	    const next = event.relatedTarget;
 	    (!next || !titleActions.contains(next)) && setHeaderActionsExpanded(!1);
 	  }), headerActionsToggle.addEventListener("click", () => {
-	    setHeaderActionsExpanded(!0);
-	  }), setHeaderActionsExpanded(!1), titleActions.append(headerActionsToggle, refreshTopic, openNative, closeReader), header.append(home, titleWrap, headerActions, titleActions);
+	    setHeaderActionsExpanded(
+	      usesMobileTitleActionToggle() ? !titleActions.classList.contains("is-expanded") : !0
+	    );
+	  }), setHeaderActionsExpanded(!1), titleActions.append(
+	    headerActionsToggle,
+	    immersiveToggle,
+	    refreshTopic,
+	    openNative,
+	    closeReader
+	  ), header.append(
+	    mobileReaderBack,
+	    home,
+	    titleWrap,
+	    headerActions,
+	    titleActions
+	  );
 	  const readerMain = (0, import_html_element.htmlElement)(document, "div", "ldp-reader-main"), rateLimitNotice = (0, import_html_element.htmlElement)(document, "div", "ldp-rate-limit-notice");
 	  rateLimitNotice.hidden = !0, rateLimitNotice.setAttribute("role", "status"), rateLimitNotice.setAttribute("aria-live", "polite"), rateLimitNotice.setAttribute("aria-atomic", "true");
 	  const rateLimitIcon = (0, import_html_element.htmlElement)(document, "span", "ldp-rate-limit-icon");
@@ -14125,6 +15164,7 @@ runtime.register("src/shell/reader-shell-template.js", function(module, exports,
 	    header,
 	    titleActions,
 	    headButtons: headerActions,
+	    browserImmersiveToggle: immersiveToggle,
 	    windowCapsule: capsule,
 	    windowLockButton: lockButton,
 	    windowPinButton: pinButton,
@@ -14151,10 +15191,12 @@ runtime.register("src/shell/reader-shell-template.js", function(module, exports,
 	    headerActions,
 	    headerActionsToggle,
 	    layoutToggle,
+	    immersiveToggle,
 	    titleActions,
 	    topicEditTrigger,
 	    refreshTopic,
 	    openNative,
+	    mobileReaderBack,
 	    closeReader,
 	    rateLimitNotice,
 	    rateLimitDetail,
@@ -14241,7 +15283,7 @@ runtime.register("src/shell/reader-shell-template.js", function(module, exports,
 	    liveUpdateDismiss
 	  });
 	}
-}, "59fea72e7b42bca92add7c038034d188596fef1bdc8c0bb455d913231ace403b");
+}, "367194028f6820e10b1cbbf9b08565727ac589d676ab4d5ad3ea952351304781");
 
 /* Source: lite/src/shell/reader-shell.ts */
 runtime.register("src/shell/reader-shell.js", function(module, exports, require) {
@@ -15300,7 +16342,7 @@ runtime.register("src/shell/reader-workspace-coordinator.js", function(module, e
 	  createReaderShellWorkspaceStage: () => createReaderShellWorkspaceStage
 	});
 	module.exports = __toCommonJS(reader_workspace_coordinator_exports);
-	var import_lifecycle = require("../kernel/lifecycle.js"), import_embedded_host_appearance = require("./embedded-host-appearance.js"), import_embedded_host_root_controller = require("./embedded-host-root-controller.js"), import_embedded_host_scrollbar = require("./embedded-host-scrollbar.js"), import_embedded_host_top_shortcut = require("./embedded-host-top-shortcut.js"), import_main_outlet_mutation_hub = require("./main-outlet-mutation-hub.js"), import_reader_embed_resize_controller = require("./reader-embed-resize-controller.js"), import_reader_shell = require("./reader-shell.js"), import_reader_workspace = require("./reader-workspace.js");
+	var import_lifecycle = require("../kernel/lifecycle.js"), import_embedded_host_appearance = require("./embedded-host-appearance.js"), import_embedded_host_header_controller = require("./embedded-host-header-controller.js"), import_embedded_host_root_controller = require("./embedded-host-root-controller.js"), import_embedded_host_scrollbar = require("./embedded-host-scrollbar.js"), import_embedded_host_top_shortcut = require("./embedded-host-top-shortcut.js"), import_main_outlet_mutation_hub = require("./main-outlet-mutation-hub.js"), import_reader_embed_resize_controller = require("./reader-embed-resize-controller.js"), import_reader_browser_immersive_controller = require("./reader-browser-immersive-controller.js"), import_reader_shell = require("./reader-shell.js"), import_reader_workspace = require("./reader-workspace.js");
 	const READER_VISIBLE_STATES = /* @__PURE__ */ new Set([
 	  "opening",
 	  "switching",
@@ -15399,6 +16441,21 @@ runtime.register("src/shell/reader-workspace-coordinator.js", function(module, e
 	  }
 	  #sync() {
 	    if (this.#destroyed) return;
+	    const headerBlockSize = Math.max(
+	      0,
+	      Math.round(
+	        this.#elements.header.getBoundingClientRect().height * 2
+	      ) / 2
+	    );
+	    if (headerBlockSize > 0) {
+	      const value = `${headerBlockSize}px`;
+	      this.#elements.modal.style.getPropertyValue(
+	        "--ldp-reader-header-block-size"
+	      ) !== value && this.#elements.modal.style.setProperty(
+	        "--ldp-reader-header-block-size",
+	        value
+	      );
+	    }
 	    this.#elements.modal.classList.toggle(
 	      "ldp-reader-surface-short",
 	      this.#elements.modal.clientHeight <= 560
@@ -15459,7 +16516,9 @@ runtime.register("src/shell/reader-workspace-coordinator.js", function(module, e
 	    header.style.removeProperty("--ldp-header-logo-inset"), header.style.removeProperty("padding-left"), header.style.removeProperty("padding-right"), titleActions.style.removeProperty("right"), headButtons.classList.remove("is-content-aligned");
 	  }
 	  #clear() {
-	    this.#clearGeometry(), this.#elements.modal.classList.remove("ldp-reader-surface-short"), this.#elements.titleActions.style.removeProperty(
+	    this.#clearGeometry(), this.#elements.modal.classList.remove("ldp-reader-surface-short"), this.#elements.modal.style.removeProperty(
+	      "--ldp-reader-header-block-size"
+	    ), this.#elements.titleActions.style.removeProperty(
 	      "--ldp-title-actions-align-y"
 	    );
 	  }
@@ -15538,7 +16597,16 @@ runtime.register("src/shell/reader-workspace-coordinator.js", function(module, e
 	      }), this.mutations = new import_main_outlet_mutation_hub.MainOutletMutationHub({
 	        document: options.document,
 	        ...options.createMutationObserver ? { createObserver: options.createMutationObserver } : {}
-	      }), this.scope.add(() => this.mutations.destroy()), new import_embedded_host_root_controller.EmbeddedHostRootController({
+	      }), this.scope.add(() => this.mutations.destroy()), new import_embedded_host_header_controller.EmbeddedHostHeaderController({
+	        model: this.workspace,
+	        routeKind: options.routeKind,
+	        document: options.document,
+	        ...options.host ? { host: options.host } : {},
+	        mutations: this.mutations,
+	        requestFrame,
+	        cancelFrame,
+	        parentScope: this.scope
+	      }), new import_embedded_host_root_controller.EmbeddedHostRootController({
 	        model: this.workspace,
 	        routeKind: options.routeKind,
 	        document: options.document,
@@ -15628,9 +16696,17 @@ runtime.register("src/shell/reader-workspace-coordinator.js", function(module, e
 	        ...workspaceOptions,
 	        active: READER_VISIBLE_STATES.has(shell.state),
 	        parentScope: shell.scope
-	      });
+	      }), immersive = workspaceOptions.elements.browserImmersiveToggle ? new import_reader_browser_immersive_controller.ReaderBrowserImmersiveController({
+	        document: workspaceOptions.document,
+	        button: workspaceOptions.elements.browserImmersiveToggle,
+	        enterReaderFullpage: () => {
+	          workspace.setMode("fullpage");
+	        },
+	        parentScope: shell.scope
+	      }) : null;
 	      shell.changes.subscribe((state) => {
-	        workspace.workspace.setActive(READER_VISIBLE_STATES.has(state));
+	        const visible = READER_VISIBLE_STATES.has(state);
+	        workspace.workspace.setActive(visible), visible || immersive?.exit();
 	      }, workspace.scope);
 	      const takeover = new ReaderHostTakeoverController({
 	        shell,
@@ -15676,7 +16752,7 @@ runtime.register("src/shell/reader-workspace-coordinator.js", function(module, e
 	    }
 	  });
 	}
-}, "d639d0de2286c5056234e1a8427b8af223a676703de21b77e24196b1ad46bcb4");
+}, "48db56e5e4472a75f62a2b030820b3a92a2b4eb8a5e2b68cd9aa552ffdb1579f");
 
 /* Source: lite/src/shell/reader-workspace.ts */
 runtime.register("src/shell/reader-workspace.js", function(module, exports, require) {
@@ -19714,7 +20790,6 @@ runtime.register("src/topic/reader-post-presentation.js", function(module, expor
 	        username
 	      ), username && username === (0, import_reader_topic_header.readerTopicOwnerUsername)(options.readTopic()) && appendBadge(options.document, header, "ldp-op", "OP");
 	      const createdAt = text(post.created_at) || text(view.identity.createdAt), relative = options.relativeTime(createdAt);
-	      let exactLabel = null;
 	      if (relative) {
 	        const time = options.document.createElement("span");
 	        time.className = "ldp-time";
@@ -19722,7 +20797,7 @@ runtime.register("src/topic/reader-post-presentation.js", function(module, expor
 	        exact && cachedExact?.timestamp !== createdAt && exactTimeByView.set(view, Object.freeze({
 	          timestamp: createdAt,
 	          value: exact
-	        })), exact && (time.dataset.exactTime = exact, exactLabel = options.document.createElement("span"), exactLabel.className = "ldp-time-exact", exactLabel.textContent = exact, exactLabel.setAttribute("aria-hidden", "true"));
+	        })), exact && (time.dataset.exactTime = exact);
 	        const label = options.document.createElement("span");
 	        label.className = "ldp-time-relative", label.textContent = `· ${relative}`, time.append(label), header.append(time);
 	      }
@@ -19736,7 +20811,7 @@ runtime.register("src/topic/reader-post-presentation.js", function(module, expor
 	        header,
 	        postNumber,
 	        replyToPostNumber
-	      ), exactLabel && header.append(exactLabel), appendReadState(
+	      ), appendReadState(
 	        options.document,
 	        header,
 	        post.read === !0,
@@ -19754,7 +20829,7 @@ runtime.register("src/topic/reader-post-presentation.js", function(module, expor
 	    }
 	  });
 	}
-}, "86753501de06eeb89dc6613fe5ad680748911142ddafdcfa52c031f14a70c03e");
+}, "92f8b61e4b37ccb7253f5cec5755dfd441424c9c1fa5a3f12ac630f4481e8621");
 
 /* Source: lite/src/topic/reader-post-view-projector.ts */
 runtime.register("src/topic/reader-post-view-projector.js", function(module, exports, require) {
@@ -22575,16 +23650,21 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	    this.#discussionList.style.setProperty(
 	      "--ldp-descendant-tree-width",
 	      `${baseWidth + overflowDepth * 28}px`
-	    ), this.#discussionList.classList.toggle(
+	    ), this.#discussionList.style.setProperty(
+	      "--ldp-descendant-tree-pan-width",
+	      `${baseWidth + maxDepth * 28}px`
+	    );
+	    const hasHorizontalOverflow = overflowDepth > 0 || this.#discussionList.scrollWidth > this.#discussionList.clientWidth + 1;
+	    this.#discussionList.classList.toggle(
 	      "ldp-descendant-tree-pannable",
-	      overflowDepth > 0
-	    ), overflowDepth || (this.#discussionList.scrollLeft = 0);
+	      hasHorizontalOverflow
+	    ), hasHorizontalOverflow || (this.#discussionList.scrollLeft = 0);
 	  }
 	  #onTreePanPointerDown(event) {
-	    const target = (0, import_event_target.eventElement)(event);
-	    if (!(event.button !== 0 || event.pointerType && event.pointerType !== "mouse" || !this.#discussionList.classList.contains(
+	    const target = (0, import_event_target.eventElement)(event), hasHorizontalOverflow = this.#discussionList.classList.contains(
 	      "ldp-descendant-tree-pannable"
-	    ) || !target || target.closest([
+	    ) || this.#discussionList.scrollWidth > this.#discussionList.clientWidth + 1;
+	    if (!(event.button !== 0 || event.pointerType && event.pointerType !== "mouse" || !hasHorizontalOverflow || !target || target.closest([
 	      "button",
 	      "a",
 	      "input",
@@ -22656,7 +23736,7 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	    );
 	  }
 	}
-}, "a84790cd015fd12dbfc1b5bcd9da470463f9f63d3a57b91544da44b70468014f");
+}, "f778f1c9bb14e3043cb100800c52942cca995836d0165af39077c0a1c63bdbbb");
 
 /* Source: lite/src/topic/reader-topic-core-bundle.ts */
 runtime.register("src/topic/reader-topic-core-bundle.js", function(module, exports, require) {
@@ -27760,7 +28840,11 @@ ${date.getMonth() + 1} 月 ${date.getDate()} 日` : "";
 	    } = this.#elements, hidden = snapshot.totalPostCount <= 1;
 	    timeline.hidden !== hidden && (timeline.hidden = hidden);
 	    const progress = String(snapshot.progress);
-	    timeline.style.getPropertyValue("--ldp-timeline-progress") !== progress && timeline.style.setProperty("--ldp-timeline-progress", progress), this.#setText(current, String(snapshot.currentPostNumber)), this.#setText(total, String(snapshot.totalPostCount)), this.#setAttribute(track, "aria-valuemin", "1"), this.#setAttribute(track, "aria-valuemax", String(snapshot.totalPostCount)), this.#setAttribute(track, "aria-valuenow", String(snapshot.currentPostNumber)), this.#setAttribute(
+	    timeline.style.getPropertyValue("--ldp-timeline-progress") !== progress && timeline.style.setProperty("--ldp-timeline-progress", progress), this.#setText(current, String(snapshot.currentPostNumber)), this.#setText(total, String(snapshot.totalPostCount)), this.#setAttribute(
+	      track,
+	      "data-timeline-total",
+	      String(snapshot.totalPostCount)
+	    ), this.#setAttribute(track, "aria-valuemin", "1"), this.#setAttribute(track, "aria-valuemax", String(snapshot.totalPostCount)), this.#setAttribute(track, "aria-valuenow", String(snapshot.currentPostNumber)), this.#setAttribute(
 	      track,
 	      "aria-valuetext",
 	      `第 ${snapshot.currentPostNumber} 楼，共 ${snapshot.totalPostCount} 楼`
@@ -28012,7 +29096,7 @@ ${date.getMonth() + 1} 月 ${date.getDate()} 日` : "";
 	      throw new Error("ReaderTopicTimelineView 已销毁");
 	  }
 	}
-}, "680a101693f600b5ada7b84031ec86123c847802e95e09c026226ffe212097f5");
+}, "3006dff9e81cf6bac5222c8878f9f1f4c8e8dd3484f564920fd023c4138091d2");
 
 /* Source: lite/src/topic/topic-read-request-adapter.ts */
 runtime.register("src/topic/topic-read-request-adapter.js", function(module, exports, require) {
@@ -30534,6 +31618,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	              refresh: () => hostTopicEnhancement?.reloadExternalOpenedTopics()
 	            }))), {
 	              document,
+	              host: environment.discourseHost,
 	              routeKind,
 	              requestedMode: requestedMode(
 	                readPreferences(),
@@ -31156,6 +32241,9 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	    userscriptGlobal
 	  }), page = pageRecord(environment.pageWindow), existing = page[DEBUG_HANDLE_KEY] ?? page[LEGACY_DEBUG_HANDLE_KEY], document = page.document, window = environment.pageWindow;
 	  if (!document) throw new Error("main-lite document 不可用");
+	  if (window.frameElement?.hasAttribute(
+	    "data-ldp-host-advanced-search-frame"
+	  )) return null;
 	  let localStorageAccessError, localStorage;
 	  try {
 	    localStorage = window.localStorage;
@@ -31341,7 +32429,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	  }), handle;
 	}
 	const startMianLiteUserscript = startMainLiteUserscript;
-}, "b6ffee793ad7e315353ad7742f48235a23137cb1d7d33ab4cdeca5f2fde687de");
+}, "80611e2d04b547f8fe2c596334a3d00fcabcda756ecd88c6bf568ac4b2638357");
 
 /* Source: lite/src/userscript/main-lite-entry.ts */
 runtime.register("src/userscript/main-lite-entry.js", function(module, exports, require) {
@@ -32566,7 +33654,8 @@ runtime.register("src/userscript/reader-userscript-application.js", function(mod
 	      credit: Object.freeze({
 	        http: externalHttp,
 	        ...valueStorage ? { storage: valueStorage } : {}
-	      })
+	      }),
+	      communityScore: Object.freeze({ http: externalHttp })
 	    } : {},
 	    ...translation === void 0 ? {} : { translation },
 	    ...resources === void 0 ? {} : { resources },
@@ -32590,6 +33679,7 @@ runtime.register("src/userscript/reader-userscript-application.js", function(mod
 	      share: bindings.share,
 	      ...bindings.connect ? { connect: bindings.connect } : {},
 	      ...bindings.credit ? { credit: bindings.credit } : {},
+	      ...bindings.communityScore ? { communityScore: bindings.communityScore } : {},
 	      ...bindings.translation === void 0 ? {} : { translation: bindings.translation },
 	      ...bindings.resources === void 0 ? {} : { resources: bindings.resources },
 	      ...bindings.assetCacheStorage === void 0 ? {} : { assetCacheStorage: bindings.assetCacheStorage },
@@ -33036,7 +34126,7 @@ runtime.register("src/userscript/reader-userscript-application.js", function(mod
 	    }
 	  });
 	}
-}, "26915f0934ba77cb434a4124a04f53a13ddfc033d0a2f18a12a948d8c2d811f7");
+}, "2301381da7f1da248e845b152a74ba9f79765df2c799190754a9fc375771e6b8");
 
 /* Source: lite/src/userscript/reader-userscript-target-adapter.ts */
 runtime.register("src/userscript/reader-userscript-target-adapter.js", function(module, exports, require) {

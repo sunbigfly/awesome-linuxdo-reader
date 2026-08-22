@@ -156,6 +156,43 @@ assert(
 	active.addButton.disabled,
 	'七个标签必须使用四字标题并保持打开顺序；全部打开后加号不得生成空菜单',
 );
+assert(
+	active.mobileMenuCurrent.textContent?.includes('不想再看') &&
+	active.mobileMenu.querySelectorAll(
+		'.ldp-reader-floating-window-mobile-menu-option',
+	).length === 7,
+	'移动端分类入口必须显示当前工具，并一次列出全部七类工具',
+);
+active.mobileMenuButton.click();
+assert(
+	active.mobileMenuButton.getAttribute('aria-expanded') === 'true' &&
+	!active.mobileMenu.hidden,
+	'移动端工具分类必须由左上角菜单按钮展开为抽屉列表',
+);
+active.mobileMenu.querySelector<HTMLButtonElement>(
+	'[data-floating-mobile-tab="history"]',
+)!.click();
+assert(
+	frames[1]!.active && frames[1]!.mobileMenu.hidden,
+	'移动端分类列表选择已打开工具时必须切换当前标签并收起列表',
+);
+frames[1]!.mobileMenuButton.click();
+const mobileMenuEscape = new window.Event('keydown', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperty(mobileMenuEscape, 'key', { value: 'Escape' });
+document.dispatchEvent(mobileMenuEscape);
+assert(
+	mobileMenuEscape.defaultPrevented && frames[1]!.active &&
+	frames[1]!.mobileMenu.hidden && frames.every((frame) => frame.isOpen),
+	'移动端分类抽屉打开时 Esc 必须只关闭内层列表，不能关闭共享浮窗会话',
+);
+frames[1]!.mobileMenuButton.click();
+frames[1]!.mobileMenu.querySelector<HTMLButtonElement>(
+	'[data-floating-mobile-tab="unwanted-topics"]',
+)!.click();
+assert(active.active, '分类列表切换测试结束后必须恢复原活动工具');
 active.pinButton.click();
 assert(
 	frames.every((frame) =>
@@ -297,6 +334,28 @@ assert(
 	frames[0]!.tabList.scrollLeft === 96,
 	'切换已有标签必须继承共享横向位置，不得调用聚焦滚动造成标签轨道跳动',
 );
+Object.defineProperty(window, 'matchMedia', {
+	configurable: true,
+	value: (query: string) => Object.freeze({
+		matches: query === '(max-width: 760px)',
+		media: query,
+	}),
+});
+frames[0]!.closeButton.click();
+assert(
+	frames.every((frame) => frame.isOpen && frame.element.hidden) &&
+	frames.every((frame) => !frame.active),
+	'移动端共享浮窗的关闭按钮必须一次收起整组，不能逐个关闭工具标签',
+);
+assert(
+	restoreReaderFloatingWindowTabSession(mount, 'notifications') &&
+	frames[0]!.active,
+	'移动端一次收起整组后必须保留七类工具会话并可恢复原标签',
+);
+Object.defineProperty(window, 'matchMedia', {
+	configurable: true,
+	value: (query: string) => Object.freeze({ matches: false, media: query }),
+});
 frames[0]!.tabList.querySelector<HTMLButtonElement>(
 	'[data-floating-tab-close="bookmarks"]',
 )!.click();
@@ -384,6 +443,62 @@ assert(
 	geometryAfterHeaderDrag.left === geometryBeforeHeaderDrag.left + 110 &&
 	geometryAfterHeaderDrag.top === geometryBeforeHeaderDrag.top + 30,
 	'标签轨道空白和顶部非交互区域必须支持左键拖动七类共享浮窗',
+);
+
+const desktopGeometryBeforeMobile = frames[0]!.geometry.snapshot.geometry;
+const desktopViewportBeforeMobile = Object.freeze({
+	width: frames[0]!.geometry.snapshot.viewportWidth,
+	height: frames[0]!.geometry.snapshot.viewportHeight,
+});
+const storedGeometryBeforeMobile = storageValues.get(
+	'reader-floating-window-tabs-test',
+);
+Object.defineProperties(window, {
+	innerWidth: { configurable: true, value: 440 },
+	innerHeight: { configurable: true, value: 956 },
+});
+window.dispatchEvent(new window.Event('resize'));
+assert(
+	frames.every((frame) => frame.compactViewport) &&
+	frames.every((frame) => !frame.geometry.snapshot.managed),
+	'移动端浮窗必须切换为临时响应式投影，禁用桌面几何管理',
+);
+frames[0]!.applySharedGeometry({
+	width: 320,
+	height: 480,
+	left: 8,
+	top: 8,
+});
+const mobileHeaderPointerDown = pointerEvent('pointerdown', 180, 64);
+frames[0]!.header.dispatchEvent(mobileHeaderPointerDown);
+frames[0]!.element.dispatchEvent(pointerEvent('pointermove', 250, 120));
+frames[0]!.element.dispatchEvent(pointerEvent('pointerup', 250, 120));
+frames[0]!.pinButton.click();
+assert(
+	!mobileHeaderPointerDown.defaultPrevented &&
+	storageValues.get('reader-floating-window-tabs-test') ===
+		storedGeometryBeforeMobile,
+	'移动端拖动、共享几何与固定操作不得写回桌面浮窗偏好',
+);
+Object.defineProperties(window, {
+	innerWidth: {
+		configurable: true,
+		value: desktopViewportBeforeMobile.width,
+	},
+	innerHeight: {
+		configurable: true,
+		value: desktopViewportBeforeMobile.height,
+	},
+});
+window.dispatchEvent(new window.Event('resize'));
+const desktopGeometryAfterMobile = frames[0]!.geometry.snapshot.geometry;
+assert(
+	!frames[0]!.compactViewport &&
+	desktopGeometryAfterMobile.width === desktopGeometryBeforeMobile.width &&
+	desktopGeometryAfterMobile.height === desktopGeometryBeforeMobile.height &&
+	desktopGeometryAfterMobile.left === desktopGeometryBeforeMobile.left &&
+	desktopGeometryAfterMobile.top === desktopGeometryBeforeMobile.top,
+	'离开移动端后必须恢复原桌面几何，不能继承移动抽屉尺寸或位置',
 );
 
 const geometryBeforeScrollbarDrag = frames[0]!.geometry.snapshot.geometry;

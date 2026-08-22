@@ -876,9 +876,14 @@ export class ReaderTopicActionRail<TPost> {
 	}
 
 	#onPointerDown(event: PointerEvent): void {
+		const window = this.#document.defaultView;
+		const usesNarrowTouchDock =
+			this.#mount.clientWidth <= 700 &&
+			window?.matchMedia?.('(hover: none) and (pointer: coarse)').matches === true;
 		if (
 			event.button !== 0 ||
 			this.#settings.fixed ||
+			usesNarrowTouchDock ||
 			!(event.target as Element | null)?.closest(
 				'.ldp-topic-action-rail-toggle',
 			)

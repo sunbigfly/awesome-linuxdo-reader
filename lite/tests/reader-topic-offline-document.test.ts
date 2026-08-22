@@ -1304,9 +1304,7 @@ const readOnlyProjectionContract = Object.freeze({
 	op: currentRoot.querySelector('.ldp-op')?.textContent === 'OP',
 	time: currentRoot.querySelector('.ldp-time[data-exact-time]') !== null,
 	floor: currentRoot.querySelector('.ldp-floor')?.textContent === '#1',
-	exactTimeAfterFloor: currentRoot.querySelector(
-		'.ldp-floor + .ldp-time-exact[aria-hidden="true"]',
-	) !== null,
+	noParallelExactTime: currentRoot.querySelector('.ldp-time-exact') === null,
 	boost: currentRoot.querySelector('.ldp-offline-boost-bubble')?.textContent
 		?.includes('这条 Boost 也属于正文快照') === true,
 	boostAvatar: currentRoot.querySelector<HTMLImageElement>('.ldp-boost-avatar')
@@ -1382,6 +1380,39 @@ assert(
 	`只读离线投影必须完整保留正文信息：${JSON.stringify(
 		readOnlyProjectionContract,
 	)}`,
+);
+const offlineTime = currentRoot.querySelector<HTMLElement>(
+	'.ldp-time[data-exact-time]',
+)!;
+const offlineTimeTooltip = mounted.document.querySelector<HTMLElement>(
+	'.ldp-reader-time-tooltip[role="tooltip"]',
+)!;
+Object.defineProperty(offlineTime, 'getBoundingClientRect', {
+	value: () => ({
+		top: 350,
+		left: 200,
+		right: 290,
+		bottom: 370,
+		width: 90,
+		height: 20,
+	}) as DOMRect,
+});
+Object.defineProperty(offlineTimeTooltip, 'getBoundingClientRect', {
+	value: () => ({ width: 80, height: 24 }) as DOMRect,
+});
+offlineTime.click();
+assert(
+	!offlineTimeTooltip.hidden &&
+		offlineTimeTooltip.textContent === offlineTime.dataset.exactTime &&
+		offlineTimeTooltip.classList.contains('ldp-transient-surface') &&
+		offlineTimeTooltip.style.left === '205px' &&
+		offlineTimeTooltip.style.top === '320px',
+	'离线移动阅读也必须用统一 transient tooltip 显示点击楼层的具体时间',
+);
+currentRoot.querySelector<HTMLElement>('.ldp-content')!.click();
+assert(
+	offlineTimeTooltip.hidden && !offlineTimeTooltip.textContent,
+	'离线时间 tooltip 必须在点击正文后关闭',
 );
 const boostAvatar = currentRoot.querySelector<HTMLImageElement>(
 	'.ldp-offline-boost-bubble .ldp-boost-avatar',

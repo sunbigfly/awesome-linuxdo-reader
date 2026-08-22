@@ -36,6 +36,7 @@ export interface ReaderSettingsUserViewOptions {
 	readonly connectEnabled: boolean;
 	readonly history?: ReaderConnectTrustHistoryPort | null;
 	readonly creditEnabled: boolean;
+	readonly communityScoreEnabled?: boolean;
 	readonly renderIcon?: ReaderIconRenderer;
 	readonly parentScope?: LifecycleScope;
 	readonly onError?: (cause: unknown) => void;
@@ -192,6 +193,7 @@ export class ReaderSettingsUserView {
 	readonly #history: ReaderConnectTrustHistoryPort | null;
 	readonly #historySignal: AbortSignal;
 	readonly #creditEnabled: boolean;
+	readonly #communityScoreEnabled: boolean;
 	readonly #renderIcon: ReaderIconRenderer | null;
 	readonly #onError: (cause: unknown) => void;
 	#tab: 'connect' | 'profile' | 'credit';
@@ -208,6 +210,7 @@ export class ReaderSettingsUserView {
 		this.#connectEnabled = options.connectEnabled;
 		this.#history = options.history ?? null;
 		this.#creditEnabled = options.creditEnabled;
+		this.#communityScoreEnabled = options.communityScoreEnabled === true;
 		this.#renderIcon = options.renderIcon ?? null;
 		this.#onError = options.onError ?? (() => {});
 		this.#tab = this.#connectEnabled ? 'connect' : 'profile';
@@ -426,6 +429,9 @@ export class ReaderSettingsUserView {
 			const creditLoad = this.#creditEnabled
 				? this.#session.loadCredit(this.#username, refresh)
 				: Promise.resolve(null);
+			const communityScoreLoad = this.#communityScoreEnabled
+				? this.#session.loadCommunityScore(this.#username, refresh)
+				: Promise.resolve(null);
 			const connectLoad = this.#connectEnabled
 				? this.#session.loadConnect(this.#username, refresh)
 				: Promise.resolve(null);
@@ -452,7 +458,13 @@ export class ReaderSettingsUserView {
 					this.#commitHistory(authoritative, historyEpoch);
 				})
 				: Promise.resolve();
-			await Promise.all([profileLoad, creditLoad, connectLoad, historyLoad]);
+			await Promise.all([
+				profileLoad,
+				creditLoad,
+				communityScoreLoad,
+				connectLoad,
+				historyLoad,
+			]);
 		} catch (cause) {
 			this.#onError(cause);
 		}
@@ -504,14 +516,15 @@ export class ReaderSettingsUserView {
 				? snapshot.connect.refreshing === true
 				: this.#tab === 'credit'
 					? snapshot.credit.refreshing === true
-					: false;
+					: snapshot.communityScore.refreshing === true;
 			const refreshing = snapshot.phase === 'loading' ||
 				snapshot.phase === 'refreshing' ||
-				snapshot.connect.phase === 'loading' ||
-				snapshot.credit.phase === 'loading' ||
-				externalRefreshing;
+					snapshot.connect.phase === 'loading' ||
+					snapshot.credit.phase === 'loading' ||
+					snapshot.communityScore.phase === 'loading' ||
+					externalRefreshing;
 			const activeStale = this.#tab === 'profile'
-				? snapshot.stale
+				? snapshot.stale || snapshot.communityScore.stale
 				: this.#tab === 'connect'
 					? snapshot.connect.stale
 					: snapshot.credit.stale;
@@ -677,40 +690,73 @@ export class ReaderSettingsUserView {
 			new Intl.NumberFormat('zh-CN').format(value ?? 0);
 		const facts = [
 			{
+				key: 'joined',
+				group: 'activity',
 				label: '加入日期：',
 				value: readerUserDateLabel(profile.profile.createdAt),
 			},
 			{
+				key: 'last-post',
+				group: 'activity',
 				label: '最后一个帖子',
 				value: readerUserRecentDateLabel(profile.profile.lastPostedAt),
 			},
 			{
+				key: 'last-active',
+				group: 'activity',
 				label: '最后活动',
 				value: readerUserRecentDateLabel(profile.profile.lastSeenAt),
 			},
 			{
+				key: 'views',
+				group: 'community',
 				label: '浏览量',
 				value: number(profile.community.profileViewCount),
 			},
 			{
+				key: 'trust',
+				group: 'community',
 				label: '信任级别',
 				value: trustLevel === null
 					? ''
 					: trustLabels[trustLevel] ?? `Lv${trustLevel}`,
 			},
-			{ label: '群组', value: groups, accent: true, wide: true },
 			{
+				key: 'groups',
+				group: 'community',
+				label: '群组',
+				value: groups,
+				accent: true,
+				wide: true,
+			},
+			{
+				key: 'following',
+				group: 'social',
 				label: '正在关注',
 				value: number(profile.relationship.totalFollowing),
 			},
 			{
+				key: 'followers',
+				group: 'social',
 				label: '关注者',
 				value: number(profile.relationship.totalFollowers),
 			},
 			{
+				key: 'points',
+				group: 'social',
 				label: '点数',
 				value: number(profile.community.gamificationScore),
 				accent: true,
+			},
+			{
+				key: 'community-score',
+				group: 'social',
+				label: '社区分数',
+				value: snapshot.communityScore.phase === 'ready'
+					? metric(snapshot.communityScore.metrics.score)
+					: '',
+				accent: true,
+				glow: true,
 			},
 		].filter((fact) => Boolean(fact.value));
 		if (facts.length) {
@@ -719,29 +765,41 @@ export class ReaderSettingsUserView {
 				'div',
 				'ldp-user-profile-facts is-settings',
 			);
-			for (const item of facts) {
-				const fact = node(
+			for (const group of ['community', 'social', 'activity']) {
+				const groupNode = node(
 					this.#document,
-					'span',
-					`ldp-user-profile-fact${
-						item.accent ? ' is-accent' : ''
-					}${item.wide ? ' is-wide' : ''}`,
+					'div',
+					`ldp-user-profile-fact-group is-${group}`,
 				);
-				fact.append(
-					node(
+				groupNode.dataset.userProfileFactGroup = group;
+				for (const item of facts.filter((fact) => fact.group === group)) {
+					const fact = node(
 						this.#document,
 						'span',
-						'ldp-user-profile-fact-label',
-						item.label,
-					),
-					node(
-						this.#document,
-						'span',
-						'ldp-user-profile-fact-value',
-						item.value,
-					),
-				);
-				factList.append(fact);
+						`ldp-user-profile-fact${
+							item.accent ? ' is-accent' : ''
+						}${item.wide ? ' is-wide' : ''}${
+							item.glow ? ' is-community-score' : ''
+						}`,
+					);
+					fact.dataset.userProfileFact = item.key;
+					fact.append(
+						node(
+							this.#document,
+							'span',
+							'ldp-user-profile-fact-label',
+							item.label,
+						),
+						node(
+							this.#document,
+							'span',
+							'ldp-user-profile-fact-value',
+							item.value,
+						),
+					);
+					groupNode.append(fact);
+				}
+				if (groupNode.childElementCount) factList.append(groupNode);
 			}
 			body.append(factList);
 		}

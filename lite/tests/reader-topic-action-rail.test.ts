@@ -971,6 +971,23 @@ assert(
 	'同步偏好写异常必须进入统一诊断，不能逃出 rail click listener',
 );
 rejectPreferenceUpdate = false;
+Object.defineProperty(parsedWindow, 'matchMedia', {
+	configurable: true,
+	value: () => ({ matches: true }),
+});
+pointer(rail.toggleButton, 'pointerdown', {
+	pointerId: 90,
+	clientX: 1,
+	clientY: 1,
+});
+assert(
+	Number(timerCallbacks.size) === 0,
+	'窄屏触控底部操作坞不得启动不可见拖动或改写桌面位置偏好',
+);
+Object.defineProperty(parsedWindow, 'matchMedia', {
+	configurable: true,
+	value: () => ({ matches: false }),
+});
 pointer(rail.toggleButton, 'pointerdown', {
 	pointerId: 9,
 	clientX: 1,

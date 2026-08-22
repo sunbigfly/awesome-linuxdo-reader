@@ -903,6 +903,7 @@ export class ReaderNotificationPanelView {
 			trigger.className = 'ldp-user-avatar-card';
 			trigger.dataset.userCard = record.actor;
 			trigger.dataset.userCardHoverOnly = '';
+			trigger.dataset.userCardLongPress = '';
 			trigger.append(avatar);
 			item.append(trigger);
 		} else {

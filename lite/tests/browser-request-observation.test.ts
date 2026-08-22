@@ -53,8 +53,9 @@ const ajaxAdapter = new DiscourseNativeAjaxObservationAdapter({
 });
 assert(ajaxAdapter.install(scope), 'Discourse jQuery module 可用时必须安装 native ajax 观测');
 const send = handlers.get('ajaxSend.mianLiteRequestObserver');
+const ajaxError = handlers.get('ajaxError.mianLiteRequestObserver');
 const complete = handlers.get('ajaxComplete.mianLiteRequestObserver');
-assert(send && complete, '必须使用具名 jQuery ajax lifecycle namespace');
+assert(send && ajaxError && complete, '必须使用具名 jQuery ajax lifecycle namespace');
 const xhr = {
 	status: 429,
 	getResponseHeader: (name: string) => ({
@@ -180,6 +181,21 @@ assert(
 	'服务器入站 MessageBus/Presence 与宿主媒体只能被动接收和观测，不得消耗 Reader REST 预算',
 );
 
+const networkFailedXhr = {
+	status: 0,
+	statusText: 'error',
+	getResponseHeader: () => '',
+};
+send({}, networkFailedXhr, { url: '/t/99.json', type: 'GET' });
+ajaxError({}, networkFailedXhr, {}, 'NetworkError');
+complete({}, networkFailedXhr);
+assert(
+	observer.snapshot.events.at(-1)?.error === 'network-error' &&
+		observer.snapshot.events.at(-1)?.attribution === 'network' &&
+		observer.snapshot.events.at(-1)?.status === 0,
+	'宿主 Ajax status=0 必须通过 ajaxError 记为网络/传输失败，不能显示成完成',
+);
+
 const pendingXhr = { status: 0 };
 send({}, pendingXhr, { url: '/notifications.json', method: 'GET' });
 scope.destroy();
@@ -303,3 +319,80 @@ assert(
 );
 assert(failedObserverDisconnected, 'observe 失败前创建的 observer 必须立即释放');
 failedResourceScope.destroy();
+
+const dynamicObserver = new RequestObserver({
+	baseHref: 'https://linux.do',
+	now: () => 4_100,
+});
+const dynamicResourceCallback: {
+	current: PerformanceObserverCallback | null;
+} = { current: null };
+let passiveHostStarts = 0;
+let passiveHostReleases = 0;
+const passiveHostResponses: unknown[] = [];
+const dynamicScope = new LifecycleScope();
+assert(new BrowserResourceObservationAdapter({
+	observer: dynamicObserver,
+	performance: { timeOrigin: 1_000 } as Performance,
+	dynamicOnly: true,
+	hostRequestBudget: {
+		recordHostStart: () => {
+			passiveHostStarts += 1;
+			return {
+				release: (input) => {
+					passiveHostReleases += 1;
+					passiveHostResponses.push(input);
+				},
+			};
+		},
+		noteObservedResponse: () => {},
+	},
+	createObserver: (callback) => {
+		dynamicResourceCallback.current = callback;
+		return { observe: () => {}, disconnect: () => {} };
+	},
+}).install(dynamicScope), '常驻动态请求 ResourceTiming 观察必须可安装');
+const passiveEntries = [
+	{
+		entryType: 'resource',
+		name: 'https://linux.do/assets/app.css',
+		initiatorType: 'link',
+		startTime: 10,
+		responseEnd: 20,
+		duration: 10,
+		responseStatus: 200,
+		transferSize: 50,
+		encodedBodySize: 40,
+	},
+	{
+		entryType: 'resource',
+		name: 'https://linux.do/t/77.json?token=private',
+		initiatorType: 'fetch',
+		startTime: 30,
+		responseEnd: 50,
+		duration: 20,
+		responseStatus: 429,
+		transferSize: 80,
+		encodedBodySize: 70,
+	},
+] as PerformanceResourceTiming[];
+dynamicResourceCallback.current?.({
+	getEntries: () => passiveEntries,
+} as unknown as PerformanceObserverEntryList, {} as PerformanceObserver);
+dynamicResourceCallback.current?.({
+	getEntries: () => passiveEntries,
+} as unknown as PerformanceObserverEntryList, {} as PerformanceObserver);
+assert(
+	dynamicObserver.snapshot.events.length === 1 &&
+		dynamicObserver.snapshot.events[0]?.source === 'host' &&
+		dynamicObserver.snapshot.events[0]?.transport === 'fetch' &&
+		dynamicObserver.snapshot.events[0]?.method === 'UNKNOWN' &&
+		dynamicObserver.snapshot.events[0]?.status === 429 &&
+		dynamicObserver.snapshot.events[0]?.attribution === 'rate-limit' &&
+		passiveHostStarts === 1 &&
+		passiveHostReleases === 1 &&
+		(passiveHostResponses[0] as { readonly status?: number })?.status === 429 &&
+		!JSON.stringify(dynamicObserver.snapshot.events).includes('private'),
+	'未走 jQuery 的宿主 fetch 必须常驻补入统一账本和共享窗口，静态资源与 buffered 重放不得重复计数',
+);
+dynamicScope.destroy();

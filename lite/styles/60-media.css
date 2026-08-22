@@ -805,6 +805,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.ldp-lb-comments-collapse {
+  display: none;
+}
+
 .ldp-lb-comments-body {
   display: flex;
   flex: 1;

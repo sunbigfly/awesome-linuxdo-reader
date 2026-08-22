@@ -61,8 +61,9 @@ const shellIconNames = [
 	'check',
 	'user-round',
 	'pencil',
-	'rotate-ccw',
-	'external-link',
+		'rotate-ccw',
+		'chevron-left',
+		'external-link',
 	'select-items',
 	'trash-2',
 	'x',
@@ -128,6 +129,17 @@ assert(
 	`Shell 图标按钮必须逐控件输出自足 SVG：${shellIconControls.length}`,
 );
 assert(
+	template.mobileReaderBack.hidden &&
+	template.mobileReaderBack.parentElement ===
+			template.view.root.querySelector('.ldp-header') &&
+		template.mobileReaderBack.getAttribute('aria-label') ===
+			'返回上一层' &&
+		template.mobileReaderBack.querySelector(
+			'svg[data-icon="chevron-left"]',
+		) !== null,
+	'移动端返回入口必须由稳定 Shell 命名节点提供，并默认等待平台 owner 投影',
+);
+assert(
 	template.workspaceElements.windowPlacementOptions?.length === 4 &&
 	template.workspaceElements.windowPlacementOptions.every((option) =>
 		option.querySelector('svg[data-ldp-reader-icon]') !== null
@@ -142,6 +154,14 @@ assert(
 		'.ldp-layout-toggle svg[data-icon="maximize-2"]',
 	) !== null,
 	'浮窗标题栏模式按钮默认必须使用通用向外全屏图标',
+);
+assert(
+	template.immersiveToggle.hidden &&
+		template.immersiveToggle.parentElement === template.titleActions &&
+		template.immersiveToggle.querySelector(
+			'svg[data-icon="maximize-2"]',
+		) !== null,
+	'浏览器沉浸入口必须归属折叠标题操作，并在能力检测前保持隐藏',
 );
 assert(
 	[
@@ -350,10 +370,12 @@ assert(
 	!template.headerActions.hidden &&
 	!template.titleActions.classList.contains('is-expanded') &&
 	template.titleActions.firstElementChild === template.headerActionsToggle &&
-	template.headerActionsToggle.nextElementSibling === template.refreshTopic &&
+	template.headerActionsToggle.nextElementSibling === template.immersiveToggle &&
+	template.immersiveToggle.nextElementSibling === template.refreshTopic &&
 	template.refreshTopic.nextElementSibling === template.openNative &&
 	template.openNative.nextElementSibling === template.closeReader &&
 	template.refreshTopic.parentElement === template.titleActions &&
+	template.immersiveToggle.parentElement === template.titleActions &&
 	template.openNative.parentElement === template.titleActions &&
 	template.closeReader.parentElement === template.titleActions &&
 	template.refreshTopic.disabled &&
@@ -377,6 +399,27 @@ assert(
 		template.headerActionsToggle.getAttribute('aria-expanded') === 'false' &&
 		template.headerActionsToggle.querySelector('[data-icon="chevron-left"]') !== null,
 	'右上角收纳组必须在 pointerleave 同步收起，延时必须为 0',
+);
+const originalMatchMedia = shellWindow.matchMedia;
+Object.defineProperty(shellWindow, 'matchMedia', {
+	configurable: true,
+	value: () => ({ matches: true }),
+});
+template.headerActionsToggle.click();
+assert(
+	template.titleActions.classList.contains('is-expanded') &&
+		template.headerActionsToggle.getAttribute('aria-expanded') === 'true',
+	'窄屏触控必须点击展开右上角收纳操作，不能依赖 hover',
+);
+template.headerActionsToggle.click();
+Object.defineProperty(shellWindow, 'matchMedia', {
+	configurable: true,
+	value: originalMatchMedia,
+});
+assert(
+	!template.titleActions.classList.contains('is-expanded') &&
+		template.headerActionsToggle.getAttribute('aria-expanded') === 'false',
+	'窄屏触控再次点击必须收起右上角操作组',
 );
 assert(
 	template.topicTimeline.parentElement?.classList.contains('ldp-reader-main') &&

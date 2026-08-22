@@ -39,6 +39,11 @@ export interface ReaderUserCardViewOptions {
 		readonly selector: string;
 		readonly capture?: boolean;
 	}>[];
+	readonly longPressDelegates?: readonly Readonly<{
+		readonly root: EventTarget;
+		readonly selector: string;
+		readonly capture?: boolean;
+	}>[];
 	readonly session: ReaderUserDomainSession;
 	readonly userHref: (username: string) => string;
 	readonly avatarSource?: (template: string, size: number) => string;
@@ -123,6 +128,19 @@ function eventNode(value: EventTarget | null): Node | null {
 
 const USER_CARD_POINTER_GAP_PX = 4;
 const USER_CARD_HIDE_GRACE_MS = 480;
+const USER_CARD_AVATAR_LONG_PRESS_MS = 500;
+const USER_CARD_AVATAR_LONG_PRESS_MOVE_PX = 8;
+const USER_CARD_AVATAR_LONG_PRESS_SELECTOR =
+	'[data-user-card][data-user-avatar-preview],' +
+	'[data-user-card][data-user-card-long-press]';
+
+function mouseEventFiredByTouch(event: MouseEvent): boolean {
+	return Boolean((event as MouseEvent & {
+		readonly sourceCapabilities?: Readonly<{
+			firesTouchEvents?: boolean;
+		}>;
+	}).sourceCapabilities?.firesTouchEvents);
+}
 
 /**
  * application 级唯一用户卡 DOM owner。
@@ -180,6 +198,10 @@ export class ReaderUserCardView {
 	#previewUsername = '';
 	#renderedUsername = '';
 	#renderedRevision = -1;
+	#avatarLongPressTimer: unknown = null;
+	#avatarLongPressAnchor: HTMLElement | null = null;
+	#avatarLongPressStart: Readonly<{ x: number; y: number }> | null = null;
+	#suppressAvatarClick: HTMLElement | null = null;
 	readonly #followNavigation: Array<{
 		username: string;
 		kind: ReaderUserFollowKind;
@@ -246,6 +268,42 @@ export class ReaderUserCardView {
 		this.scope.listen(options.root, 'click', (event) => {
 			this.#onRootClick(event as MouseEvent);
 		});
+		const listenForLongPress = (
+			root: EventTarget,
+			selector: string,
+			capture = false,
+			suppressFollowupClick = false,
+		): void => {
+			this.scope.listen(root, 'pointerdown', (event) => {
+				this.#onRootPointerDown(event as PointerEvent, selector);
+			}, capture);
+			this.scope.listen(root, 'pointermove', (event) => {
+				this.#onRootPointerMove(event as PointerEvent);
+			}, { capture, passive: true });
+			for (const type of ['pointerup', 'pointercancel']) {
+				this.scope.listen(root, type, () => {
+					this.#cancelAvatarLongPress(false);
+				}, capture);
+			}
+			this.scope.listen(root, 'contextmenu', (event) => {
+				this.#onAvatarLongPressContextMenu(event, selector);
+			}, capture);
+			if (!suppressFollowupClick) return;
+			this.scope.listen(root, 'click', (event) => {
+				this.#onDelegatedAvatarLongPressClick(event as MouseEvent, selector);
+			}, capture);
+		};
+		listenForLongPress(options.root, USER_CARD_AVATAR_LONG_PRESS_SELECTOR);
+		for (const delegate of options.longPressDelegates ?? []) {
+			const selector = delegate.selector.trim();
+			if (!selector) continue;
+			listenForLongPress(
+				delegate.root,
+				selector,
+				delegate.capture === true,
+				true,
+			);
+		}
 		const listenForHover = (
 			root: EventTarget,
 			selector: string,
@@ -370,6 +428,7 @@ export class ReaderUserCardView {
 		}, this.scope);
 		this.scope.add(() => {
 			this.#mediaToken += 1;
+			this.#cancelAvatarLongPress(true);
 			this.#cancelOpening();
 			this.#cancelHide();
 			this.#closePreview();
@@ -446,6 +505,12 @@ export class ReaderUserCardView {
 		if (!target || this.element.contains(target)) return;
 		const username = String(target.dataset.userCard ?? '').trim();
 		if (!username) return;
+		if (target === this.#suppressAvatarClick) {
+			this.#suppressAvatarClick = null;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			return;
+		}
 		if (target.hasAttribute('data-user-card-hover-only')) return;
 		if (this.followPanel.contains(target)) return;
 		const mediaToken = ++this.#mediaToken;
@@ -454,10 +519,84 @@ export class ReaderUserCardView {
 		event.preventDefault();
 		event.stopPropagation();
 		if (target.hasAttribute('data-user-avatar-preview') && this.#openMedia) {
+			this.close();
 			void this.#openAvatarMedia(username, target, mediaToken);
 			return;
 		}
 		void this.open(username, target);
+	}
+
+	#onRootPointerDown(event: PointerEvent, selector: string): void {
+		if (event.pointerType !== 'touch' || event.button !== 0) return;
+		const target = closestTarget<HTMLElement>(
+			event,
+			selector,
+		);
+		if (!target || this.element.contains(target)) return;
+		const username = String(target.dataset.userCard ?? '').trim();
+		if (!username) return;
+		/* 多个 capture delegate 会看到同一事件；不匹配的 delegate 不得取消已命中的任务。 */
+		this.#cancelAvatarLongPress(true);
+		this.#cancelOpening();
+		this.#cancelHide();
+		this.#avatarLongPressAnchor = target;
+		this.#avatarLongPressStart = Object.freeze({
+			x: event.clientX,
+			y: event.clientY,
+		});
+		this.#avatarLongPressTimer = this.#schedule(() => {
+			this.#avatarLongPressTimer = null;
+			if (
+				this.scope.destroyed ||
+				this.#avatarLongPressAnchor !== target ||
+				!target.isConnected
+			) return;
+			this.#suppressAvatarClick = target;
+			this.#avatarLongPressStart = null;
+			this.close();
+			void this.open(username, target);
+		}, USER_CARD_AVATAR_LONG_PRESS_MS);
+	}
+
+	#onAvatarLongPressContextMenu(event: Event, selector: string): void {
+		const target = closestTarget<HTMLElement>(event, selector);
+		if (!target || (
+			target !== this.#avatarLongPressAnchor &&
+			target !== this.#suppressAvatarClick
+		)) return;
+		event.preventDefault();
+		event.stopImmediatePropagation();
+	}
+
+	#onDelegatedAvatarLongPressClick(
+		event: MouseEvent,
+		selector: string,
+	): void {
+		const target = closestTarget<HTMLElement>(event, selector);
+		if (!target || target !== this.#suppressAvatarClick) return;
+		this.#suppressAvatarClick = null;
+		event.preventDefault();
+		event.stopImmediatePropagation();
+	}
+
+	#onRootPointerMove(event: PointerEvent): void {
+		const start = this.#avatarLongPressStart;
+		if (!start || !this.#avatarLongPressTimer) return;
+		if (
+			Math.hypot(event.clientX - start.x, event.clientY - start.y) <=
+				USER_CARD_AVATAR_LONG_PRESS_MOVE_PX
+		) return;
+		this.#cancelAvatarLongPress(false);
+	}
+
+	#cancelAvatarLongPress(clearSuppressed: boolean): void {
+		if (this.#avatarLongPressTimer !== null) {
+			this.#cancel(this.#avatarLongPressTimer);
+			this.#avatarLongPressTimer = null;
+		}
+		this.#avatarLongPressAnchor = null;
+		this.#avatarLongPressStart = null;
+		if (clearSuppressed) this.#suppressAvatarClick = null;
 	}
 
 	async #openAvatarMedia(
@@ -473,8 +612,7 @@ export class ReaderUserCardView {
 			const avatarTemplate = String(
 				anchor.dataset.userAvatarTemplate ?? '',
 			).trim();
-			/* 点击头像也先同步打开骨架；资料 single-flight 完成后再进入媒体层。 */
-			const opening = this.open(username, anchor);
+			/* 头像入口只复用资料 single-flight 取得 canonical media，不打开用户卡。 */
 			const snapshot = await this.#session.prefetch(username);
 			if (
 				this.scope.destroyed ||
@@ -483,13 +621,7 @@ export class ReaderUserCardView {
 			) {
 				return;
 			}
-			await opening;
-			if (
-				this.scope.destroyed ||
-				token !== this.#mediaToken ||
-				!this.#open
-			) return;
-			const profile = this.#session.activeSnapshot?.profile ?? snapshot.profile;
+			const profile = snapshot.profile;
 			if (!profile) return;
 			let media = profile.media;
 			const index = media.findIndex((entry) => entry.kind === 'avatar');
@@ -515,7 +647,7 @@ export class ReaderUserCardView {
 						})
 						: entry));
 			}
-			await this.#openMedia?.(media, index, this.element, profile, anchor);
+			await this.#openMedia?.(media, index, anchor, profile, anchor);
 		} catch (cause) {
 			if (!this.scope.destroyed && token === this.#mediaToken) {
 				this.#onError(cause);
@@ -527,6 +659,11 @@ export class ReaderUserCardView {
 		event: MouseEvent,
 		selector: string,
 	): void {
+		if (mouseEventFiredByTouch(event)) {
+			this.#cancelOpening();
+			this.#cancelHide();
+			return;
+		}
 		const target = closestTarget<HTMLElement>(event, selector);
 		if (!target || this.element.contains(target)) {
 			return;
@@ -566,6 +703,10 @@ export class ReaderUserCardView {
 		event: MouseEvent,
 		selector: string,
 	): void {
+		if (mouseEventFiredByTouch(event)) {
+			this.#cancelOpening();
+			return;
+		}
 		const target = closestTarget<HTMLElement>(event, selector);
 		if (!target || this.element.contains(target)) {
 			return;
@@ -1192,7 +1333,6 @@ export class ReaderUserCardView {
 			background.append(image);
 			target.append(background);
 		}
-		target.append(home);
 		const head = element(this.#document, 'div', 'ldp-user-card-head');
 		const avatarIndex = profile.media.findIndex((entry) =>
 			entry.kind === 'avatar');
@@ -1277,6 +1417,7 @@ export class ReaderUserCardView {
 				`Lv${profile.community.trustLevel}`,
 			));
 		}
+		nameRow.append(home);
 		identity.append(nameRow, element(
 			this.#document,
 			'div',

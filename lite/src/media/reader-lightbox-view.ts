@@ -132,6 +132,7 @@ export class ReaderLightboxView {
 	readonly #statusText: HTMLElement;
 	readonly #retry: HTMLButtonElement;
 	readonly #commentsToggle: HTMLButtonElement;
+	readonly #commentsDrawerToggle: HTMLButtonElement;
 	readonly #commentsCount: HTMLElement;
 	readonly #descriptionToggle: HTMLButtonElement;
 	readonly #filmstrip: HTMLElement;
@@ -194,7 +195,7 @@ export class ReaderLightboxView {
 				<aside class="ldp-lb-comments" aria-label="图片评论">
 					<button class="ldp-lb-comments-resizer" type="button" role="separator" aria-orientation="vertical" aria-label="调整图片评论区宽度"></button>
 					<div class="ldp-lb-comments-inner">
-						<div class="ldp-lb-comments-head"><strong>评论</strong><span>（0）</span><button class="ldp-lb-description-toggle" type="button" aria-label="展开图片描述" aria-expanded="false"></button></div>
+						<div class="ldp-lb-comments-head"><strong>评论</strong><span>（0）</span><button class="ldp-lb-description-toggle" type="button" aria-label="展开图片描述" aria-expanded="false"></button><button class="ldp-lb-comments-collapse" type="button" data-lb-action="toggle-comments" aria-label="收起图片评论" aria-expanded="true"></button></div>
 						<details class="ldp-lb-source" hidden><summary>图片描述</summary><div class="ldp-lb-source-text"></div></details>
 						<div class="ldp-lb-source-reactions" hidden><div class="ldp-reactions"></div></div>
 						<div class="ldp-lb-comments-body">
@@ -282,8 +283,12 @@ export class ReaderLightboxView {
 		this.#statusText = required(root, '.ldp-lb-status span');
 		this.#retry = required(root, '.ldp-lb-retry');
 		this.#commentsToggle = required(root, '.ldp-lb-comments-toggle');
+		this.#commentsDrawerToggle = required(root, '.ldp-lb-comments-collapse');
 		this.#commentsCount = required(root, '.ldp-lb-comments-count');
 		this.#descriptionToggle = required(root, '.ldp-lb-description-toggle');
+		this.#commentsDrawerToggle.append(
+			createReaderIcon(this.#document, 'chevron-down'),
+		);
 		this.#filmstrip = required(root, '.ldp-lb-filmstrip');
 		this.#thumbs = required(root, '.ldp-lb-thumbs');
 		for (const [action, icon] of [
@@ -421,8 +426,16 @@ export class ReaderLightboxView {
 			'aria-expanded',
 			String(snapshot.commentsExpanded),
 		);
+		this.#commentsDrawerToggle.setAttribute(
+			'aria-expanded',
+			String(snapshot.commentsExpanded),
+		);
 		buttonLabel(
 			this.#commentsToggle,
+			snapshot.commentsExpanded ? '收起图片评论' : '展开图片评论',
+		);
+		buttonLabel(
+			this.#commentsDrawerToggle,
 			snapshot.commentsExpanded ? '收起图片评论' : '展开图片评论',
 		);
 		this.slots.source.open = snapshot.descriptionExpanded;

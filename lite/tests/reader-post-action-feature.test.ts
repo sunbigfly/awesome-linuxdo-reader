@@ -714,6 +714,21 @@ assert(
 		) === null,
 	'已有主爱心回应必须以未点赞常规色显示在胶囊首项、禁用悬浮提示，且不能保留胶囊外旧入口',
 );
+const mobilePostActionsToggle = regular.slots.actions.querySelector<
+	HTMLButtonElement
+>('[data-post-actions-toggle]');
+const regularActions = regular.slots.actions.querySelector<HTMLElement>(
+	':scope > .ldp-actions',
+);
+assert(
+	mobilePostActionsToggle?.getAttribute('aria-expanded') === 'false' &&
+	mobilePostActionsToggle.querySelector(
+		'svg[data-icon="chevron-right"]',
+	) &&
+	regularActions &&
+	!regularActions.classList.contains('ldp-post-actions-expanded'),
+	'普通楼层必须提供移动端点击收纳入口，并默认保持其余操作收起',
+);
 const ownPost: TestPost = {
 	...comment,
 	id: 4,
@@ -847,6 +862,9 @@ const mergedRailActions = topicRailView.slots.actions.querySelector<HTMLElement>
 const topicRailActions = mergedRailActions?.querySelector<HTMLElement>(
 	':scope > .ldp-topic-footer-actions',
 );
+const topicRailReply = mergedRailActions?.querySelector<HTMLButtonElement>(
+	':scope > .ldp-replybtn:not(.ldp-topic-reply)',
+);
 const topicRailBookmark = topicRailView.slots.topicFooter.querySelector(
 	':scope > .ldp-topic-bookmark',
 );
@@ -864,10 +882,25 @@ assert(
 	!topicRailActions.querySelector(
 		'.ldp-topic-report,.ldp-topic-assign,.ldp-topic-reply',
 	) &&
-	topicRailView.slots.actions.querySelector(
-		':scope > .ldp-actions > .ldp-replybtn:not(.ldp-topic-reply)',
+	topicRailReply &&
+	topicRailActions.nextElementSibling === topicRailReply &&
+	!topicRailView.slots.actions.querySelector(
+		':scope > .ldp-actions > .ldp-replybtn',
 	),
 	'全展开收纳箱必须合并楼层与主题操作、去重举报和负责人、移除重复回复，并把共享问题放到独立书签后',
+);
+feature.setTopicActionRailExpanded(topicRailView, false);
+assert(
+	topicRailView.slots.actions.querySelector(
+		':scope > .ldp-actions > .ldp-replybtn:not(.ldp-topic-reply)',
+	) === topicRailReply &&
+	!mergedRailActions?.querySelector(':scope > .ldp-replybtn'),
+	'收纳箱退出全展开后必须把同一个回复入口移回常显动作位，不能复制按钮或事件 owner',
+);
+feature.setTopicActionRailExpanded(topicRailView, true);
+assert(
+	topicRailActions.nextElementSibling === topicRailReply,
+	'收纳箱再次全展开时必须把同一个回复入口恢复到底部动作组末尾',
 );
 const railTopicShare = topicRailActions!.querySelector<HTMLButtonElement>(
 	'[data-topic-share]',
@@ -1053,7 +1086,9 @@ const lightboxPost = list.querySelector<HTMLElement>('[data-post-id="2"]')!;
 assert(
 	regular.slots.actions.innerHTML ===
 		lightboxPost.querySelector('.ldp-post-actions')?.innerHTML,
-	'普通楼层与灯箱评论必须复用同一 PostAction feature 的回应与回复 DOM',
+	'普通楼层与灯箱评论必须复用同一 PostAction feature 的回应与回复 DOM；' +
+		`regular=${regular.slots.actions.innerHTML};` +
+		`lightbox=${lightboxPost.querySelector('.ldp-post-actions')?.innerHTML}`,
 );
 assert(
 	lightboxPost.querySelector(
@@ -1078,6 +1113,29 @@ assert(
 		'[data-post-share]',
 	),
 	'普通、嵌套、实时、回屏和灯箱 PostView 必须由同一 feature 按需水合低频动作',
+);
+click(mobilePostActionsToggle);
+assert(
+	mobilePostActionsToggle.getAttribute('aria-expanded') === 'true' &&
+	mobilePostActionsToggle.querySelector(
+		'svg[data-icon="chevron-left"]',
+	) &&
+	regularActions.classList.contains('ldp-post-actions-expanded') &&
+	regular.slots.actions.querySelector('[data-post-share]'),
+	'点击楼层操作收纳入口必须展开已水合低频动作，不能依赖 hover',
+);
+pointerDown(document.querySelector('main')!);
+assert(
+	mobilePostActionsToggle.getAttribute('aria-expanded') === 'false' &&
+	!regularActions.classList.contains('ldp-post-actions-expanded'),
+	'点击楼层操作组之外的空白区域必须自动收起移动端次级操作',
+);
+click(mobilePostActionsToggle);
+click(mobilePostActionsToggle);
+assert(
+	mobilePostActionsToggle.getAttribute('aria-expanded') === 'false' &&
+	!regularActions.classList.contains('ldp-post-actions-expanded'),
+	'再次点击楼层操作收纳入口必须原位收起，不改变业务动作 DOM owner',
 );
 const boostQuickActions = regularBoost.querySelector<HTMLElement>(
 	':scope > .ldp-boost-quick-actions',
@@ -1121,6 +1179,28 @@ boostQuickClose[1]();
 assert(
 	!regularBoost.classList.contains('ldp-boost-quick-actions-open'),
 	'Boost 快捷层离开延迟结束后必须关闭，不能留下跨楼层遮挡层',
+);
+const boostCooked = regularBoost.querySelector<HTMLElement>(
+	'.ldp-boost-cooked',
+)!;
+click(boostCooked);
+assert(
+	regularBoost.classList.contains('ldp-boost-quick-actions-open') &&
+		regularBoost.getAttribute('aria-expanded') === 'true',
+	'点按 Boost 内容必须展开临时快捷工具，而不是在触屏端长显整排动作',
+);
+click(boostCooked);
+assert(
+	!regularBoost.classList.contains('ldp-boost-quick-actions-open') &&
+		regularBoost.getAttribute('aria-expanded') === 'false',
+	'再次点按同一 Boost 必须收起临时快捷工具',
+);
+click(boostCooked);
+pointerDown(document.body);
+assert(
+	!regularBoost.classList.contains('ldp-boost-quick-actions-open') &&
+		regularBoost.getAttribute('aria-expanded') === 'false',
+	'点按 Boost 外部必须收起快捷工具，不能在移动端形成粘滞浮层',
 );
 const hoverTrigger = regular.slots.actions.querySelector<HTMLElement>(
 	'[data-reaction-picker]',
@@ -1507,6 +1587,50 @@ assert(
 		`level=${shadowTopicNotificationRequests[0]?.level ?? 'none'}; ` +
 		`rendered=${shadowTopicNotification.value}`,
 );
+const shadowBoostButton = shadowRailView.slots.actions
+	.querySelector<HTMLButtonElement>('[data-post-boost]');
+assert(shadowBoostButton, 'ShadowRoot 楼层必须保留可锚定的 Boost 入口');
+Object.defineProperties(document.documentElement, {
+	clientWidth: { configurable: true, value: 360 },
+	clientHeight: { configurable: true, value: 240 },
+});
+let shadowBoostAnchorTop = 170;
+shadowBoostButton.getBoundingClientRect = () => ({
+	x: 338,
+	y: shadowBoostAnchorTop,
+	top: shadowBoostAnchorTop,
+	right: 358,
+	bottom: shadowBoostAnchorTop + 20,
+	left: 338,
+	width: 20,
+	height: 20,
+	toJSON: () => ({}),
+});
+click(shadowBoostButton);
+const shadowBoostMenu = shadowActionRoot.querySelector<HTMLElement>(
+	'.ldp-native-boost-menu',
+);
+assert(shadowBoostMenu && !shadowBoostMenu.hidden, 'ShadowRoot Boost 必须打开浮窗');
+Object.defineProperties(shadowBoostMenu, {
+	offsetWidth: { configurable: true, value: 200 },
+	offsetHeight: { configurable: true, value: 80 },
+});
+shadowActionRoot.dispatchEvent(new parsedWindow.Event('scroll'));
+assert(
+	shadowBoostMenu.style.left === '152px' &&
+		shadowBoostMenu.style.top === '84px',
+	'ShadowRoot 滚动必须把 Boost 浮窗夹入四边并在下方碰撞时翻到 anchor 上方：' +
+		`${shadowBoostMenu.style.left}/${shadowBoostMenu.style.top}`,
+);
+const shadowBoostTopBeforeScroll = shadowBoostMenu.style.top;
+shadowBoostAnchorTop = 130;
+shadowActionRoot.dispatchEvent(new parsedWindow.Event('scroll'));
+assert(
+	!shadowBoostMenu.hidden &&
+		shadowBoostMenu.style.top !== shadowBoostTopBeforeScroll,
+	'ShadowRoot 内部滑动后 Boost 浮窗必须继续跟随原点击 anchor',
+);
+click(shadowBoostButton);
 shadowCurrentUsername = '';
 shadowFeature.afterRender({ ...source, can_reply: false }, shadowTopicRailView);
 assert(

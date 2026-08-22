@@ -56,6 +56,18 @@ const { document: parsedDocument } = parseHTML(
 	'</span></div></td>' +
 	'<td class="posters"></td><td class="posts">1</td><td class="views">2</td>' +
 	'<td class="activity">刚刚</td></tr>' +
+	'<tr class="topic-list-item" data-topic-id="49">' +
+	'<td class="main-link"><a class="raw-topic-link" href="/t/mobile/49">移动端标题</a>' +
+	'<button class="ldp-reader-queue-add" aria-label="加入收纳箱">+</button></td>' +
+	'<td class="posters"></td><td class="posts">1</td><td class="views">2</td>' +
+	'<td class="activity">刚刚</td></tr>' +
+	'<tr class="topic-list-item" data-topic-id="50"><td class="topic-list-data">' +
+	'<div class="pull-left"><a href="/t/mobile/50" data-user-card="author50">作者</a>' +
+	'<button class="ldp-reader-queue-add" aria-label="加入收纳箱">+</button></div>' +
+	'<div class="topic-item-metadata right"><div class="main-link">' +
+	'<a class="raw-topic-link" href="/t/mobile/50">当前宿主移动端标题</a></div>' +
+	'<div class="topic-item-stats"><div class="activity"><span class="relative-date">2 分钟</span>' +
+	'</div></div></div></td></tr>' +
 	'</tbody></table></body></html>',
 );
 const document = parsedDocument as unknown as Document;
@@ -87,6 +99,8 @@ const topics = [
 	},
 	{ id: 46, title: '已在不想看' },
 	{ id: 48, title: '持续路过 :laughing:' },
+	{ id: 49, title: '移动端标题' },
+	{ id: 50, title: '当前宿主移动端标题', creator: { username: 'author50' } },
 ] as Record<string, unknown>[];
 const hidden: ReaderUnwantedTopicInput[] = [];
 const automaticHistory: ReaderUnwantedTopicInput[] = [];
@@ -195,7 +209,49 @@ const fallbackCard = document.querySelector<HTMLElement>('[data-topic-id="43"]')
 const fallbackDnd = fallbackCard.querySelector<HTMLElement>(
 	'[data-ldp-native-dnd]',
 );
+const mobileFallbackCard = document.querySelector<HTMLElement>(
+	'[data-topic-id="49"]',
+)!;
+const mobileFallbackDnd = mobileFallbackCard.querySelector<HTMLElement>(
+	'[data-ldp-native-dnd]',
+);
+const currentMobileCard = document.querySelector<HTMLElement>(
+	'[data-topic-id="50"]',
+)!;
+const currentMobileTitleLine = currentMobileCard.querySelector<HTMLElement>(
+	'.main-link',
+)!;
+const currentMobileQueue = currentMobileCard.querySelector<HTMLElement>(
+	'.ldp-reader-queue-add',
+)!;
+const currentMobileDnd = currentMobileCard.querySelector<HTMLElement>(
+	'[data-ldp-native-dnd]',
+)!;
+const currentMobileAvatar = currentMobileCard.querySelector<HTMLElement>(
+	'.pull-left > [data-user-card="author50"]',
+)!;
 assert(dnd && fallbackDnd, '宿主与回退免打扰入口都必须完成投影');
+assert(
+	mobileFallbackDnd?.previousElementSibling?.classList.contains(
+		'ldp-reader-queue-add',
+	) === true &&
+		mobileFallbackDnd.parentElement?.classList.contains('main-link') === true,
+	'移动端没有 link-top-line 时也必须把不想看入口补在标题队列动作之后',
+);
+assert(
+	currentMobileQueue.parentElement === currentMobileTitleLine &&
+	currentMobileDnd.parentElement === currentMobileTitleLine &&
+	currentMobileQueue.previousElementSibling?.classList.contains(
+		'raw-topic-link',
+	) === true &&
+	currentMobileDnd.previousElementSibling === currentMobileQueue,
+	'当前宿主移动卡必须把队列与免打扰动作连续投影到真实标题末尾',
+);
+assert(
+	currentMobileAvatar.dataset.userCardLongPress === 'true' &&
+		currentMobileAvatar.dataset.ldpHostOpAvatarLongPress === 'true',
+	'宿主移动卡 OP 头像必须声明 Lite 捕获阶段长按入口与自有清理标记',
+);
 assert(
 	card.hasAttribute('data-ldp-native-new-topic') &&
 	newTopicMarker?.dataset.ldpNativeNewTopicMarker === 'true',
@@ -424,9 +480,11 @@ assert(
 	!newTopicMarker?.hasAttribute('data-ldp-native-new-topic-marker') &&
 	dnd?.getAttribute('title') === '宿主免打扰' &&
 	dnd.getAttribute('data-tooltip') === '宿主提示' &&
-	dnd.getAttribute('data-ldp-tooltip-label') === '宿主显式提示' &&
-	dnd.getAttribute('aria-label') === '将此话题设为免打扰' &&
-	!dnd.hasAttribute('data-ldp-native-dnd'),
+		dnd.getAttribute('data-ldp-tooltip-label') === '宿主显式提示' &&
+		dnd.getAttribute('aria-label') === '将此话题设为免打扰' &&
+		!dnd.hasAttribute('data-ldp-native-dnd') &&
+		!currentMobileAvatar.hasAttribute('data-user-card-long-press') &&
+		!currentMobileAvatar.hasAttribute('data-ldp-host-op-avatar-long-press'),
 	'换根必须撤销自动过滤与嵌入投影，并恢复宿主 tooltip',
 );
 assert(
