@@ -2,11 +2,11 @@
 title: 故障排查
 description: 按安装、打开、跳楼、图片、429、配置和缓存分类排查常见问题。
 feature_ids: ["CORE-005", "MEDIA-013", "DATA-003", "MONITOR-003", "MONITOR-004", "TROUBLE-001", "TROUBLE-002", "TROUBLE-003", "TROUBLE-004", "TROUBLE-005", "TROUBLE-006"]
-source_anchors: ["lite/src/components/reader-icon.ts","lite/src/app/reader-browser-runtime.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/network/browser-shared-request-permit.ts","lite/userscript.meta.txt","lite/src/topic/topic-session.ts","lite/src/media/reader-topic-image-index.ts","lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts"]
+source_anchors: ["lite/src/components/reader-icon.ts","lite/src/app/reader-browser-runtime.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/network/browser-shared-request-permit.ts","lite/userscript.meta.txt","lite/src/topic/topic-session.ts","lite/src/topic/reader-topic-dom-coordinator.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/media/reader-topic-image-index.ts","lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts"]
 since: 0.1.2
-version: 1.6.0
+version: 1.6.1
 status: current
-last_verified: 2026-08-18
+last_verified: 2026-08-23
 screenshots: ["/screenshots/guide-19-image-lightbox-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-13-data-management-v1.5.0.png"]
 ---
 
@@ -31,7 +31,7 @@ screenshots: ["/screenshots/guide-19-image-lightbox-v1.5.0.png", "/screenshots/g
 2. 确认脚本和站点访问权限已启用。
 3. 安装/更新后完整刷新。
 4. 停用重复的正式版、本地版或同类接管脚本。
-5. 从脚本管理器确认版本为 `1.6.0`；若仍显示旧版，让脚本管理器检查更新并完整刷新页面。
+5. 从脚本管理器确认版本为 `1.6.1`；若仍显示旧版，让脚本管理器检查更新并完整刷新页面。
 
 ## 主题或楼层无法加载
 
@@ -50,6 +50,8 @@ screenshots: ["/screenshots/guide-19-image-lightbox-v1.5.0.png", "/screenshots/g
 - “网络”或“429 / Cloudflare”异常：按对应调度状态等待或完成验证。
 
 若仅一个主题异常，使用“数据管理”清理当前主题缓存，而不是清空全部历史。
+
+1.6.1 会在用户仍在滚动时合并虚拟窗口提示，并把请求水合、图片和回复线导致的尺寸写回延迟到停稳后一次提交。快速滑动长帖时偶尔看到离屏骨架属于正常预备状态；如果停稳后仍持续空白或反复跳位，再记录主题路径、目标楼层和“帖子与楼层诊断”中的虚拟窗口状态。
 
 ## 打开中断与自动恢复
 

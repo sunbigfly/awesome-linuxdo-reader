@@ -5,7 +5,7 @@ description: 从安装、连续阅读和原站互动，到设置、缓存、WebD
 feature_ids: ["CORE-001", "CORE-002", "CORE-004", "CORE-007", "READ-001", "ACTION-001", "DATA-001", "DATA-006", "DATA-007"]
 source_anchors: ["lite/userscript.meta.txt","lite/src/queue/reader-open-queue-session.ts","lite/src/shell/reader-workspace.ts","lite/src/app/reader-application.ts","lite/src/dom/reply-tree.ts","lite/src/app/reader-browser-runtime.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/queue/reader-topic-download-manager.ts"]
 since: 0.1.2
-version: 1.6.0
+version: 1.6.1
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png"]
@@ -65,7 +65,7 @@ features:
 
 ## 从阅读到管理，一套完整工作流
 
-这套手册对应 userscript `1.6.0`，覆盖从打开主题、理解讨论、完成原站互动，到整理内容、迁移配置、清理缓存和跨设备同步的完整链路。LINUX DO 是完整功能基线；其他标准 Discourse 社区会按运行态、语言和插件能力自动适配。
+这套手册对应 userscript `1.6.1`，覆盖从打开主题、理解讨论、完成原站互动，到整理内容、迁移配置、清理缓存和跨设备同步的完整链路。LINUX DO 是完整功能基线；其他标准 Discourse 社区会按运行态、语言和插件能力自动适配。
 
 阅读器不会替代原站：账号、权限、帖子、消息、收藏和互动结果始终由当前社区负责。阅读器补充的是连续阅读工作区、讨论上下文、内容工具、个性设置与本地数据管理；WebDAV 默认关闭，只有用户配置凭据并选择类别后才会访问远端。
 

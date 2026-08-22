@@ -4,7 +4,7 @@ description: 在请求记录和性能记录间切换，查看请求预算、异�
 feature_ids: ["MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
 source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/monitor/reader-pipeline-observer.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/request-observer.ts","lite/src/network/reader-business-request-policy.ts"]
 since: 0.1.2
-version: 1.6.0
+version: 1.6.1
 status: current
 last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-10-resource-monitor-v1.5.0.png"]

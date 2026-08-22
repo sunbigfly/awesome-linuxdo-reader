@@ -2,11 +2,11 @@
 title: 界面总览
 description: 认识宿主区、标题栏、阅读队列、阅读流、时间轴、工具面板和设置中心。
 feature_ids: ["CORE-002", "CORE-006", "READ-013", "MEDIA-014", "COLLECT-008", "DATA-006"]
-source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-header.ts","lite/src/translation/reader-translation-controller.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/shell/reader-floating-window-frame.ts","lite/src/shell/reader-mobile-return-controller.ts","lite/src/settings/reader-webdav-settings-form.ts"]
+source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-header.ts","lite/src/translation/reader-translation-controller.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/shell/reader-floating-window-frame.ts","lite/src/shell/reader-mobile-return-controller.ts","lite/src/shell/reader-shell-template.ts","lite/src/settings/reader-webdav-settings-form.ts"]
 since: 0.1.2
-version: 1.6.0
+version: 1.6.1
 status: current
-last_verified: 2026-08-18
+last_verified: 2026-08-23
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/guide-05-layout-settings-v1.5.0.png"]
 ---
 
@@ -28,9 +28,9 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/
 
 标题栏左侧展示主题身份信息，右侧集中放置主题编辑入口、返回、原生页面、关闭、消息、历史、收藏、正文翻译和设置。翻译按钮在非中文内置社区和语言未知的自定义 Discourse 站点显示，内置中文站点 LINUX DO 隐藏；其他按钮也会按账号权限和主题能力决定是否出现。
 
-窄屏触控时，右侧标题操作改为点击收纳，不再依赖悬停；浏览器支持时可从同一组操作进入或退出沉浸式阅读。移动端系统返回键会复用 `Esc` 关闭顺序逐层退出当前浮层，Reader 仍打开时不会越过当前主题；iPhone 与 iPad 还会在标题栏显示同语义返回入口。移动列表页同时压缩宿主头部，把原站搜索投影为底部抽屉，并把中英语言直切入口放到用户菜单末位。
+窄屏触控时，右侧标题操作改为点击收纳，不再依赖悬停；展开后不会因触控结束产生的 `pointerleave` 提前收起或把点击穿透到底层标题。纯触屏手机隐藏浏览器沉浸入口，其他支持该能力的布局仍可从标题操作进入或退出沉浸式阅读。移动端系统返回键会复用 `Esc` 关闭顺序逐层退出当前浮层，并截断这次内部历史回退，Reader 关闭前不会让宿主刷新或越过当前主题；iPhone 与 iPad 还会在标题栏显示同语义返回入口。移动列表页同时压缩宿主头部，把原站搜索投影为底部抽屉，并把中英语言直切入口放到用户菜单末位。
 
-0.1.16 会根据阅读器宽度和“界面字号”设置动态调整标题、楼主、统计、分类与标签字号；标题可自然换行，右侧操作按钮会跟随首行文字精确对齐。分类和标签过多时不再挤压标题，而是在独立横向区域中浏览：左右提示表示仍有隐藏内容，鼠标滚轮或触控横向滑动可以继续查看；内容未溢出时提示自动隐藏。
+标题会根据阅读器宽度和“界面字号”设置动态调整标题、楼主、统计、分类与标签字号；移动端允许标题自然换行并在更窄宽度继续缩小，右侧操作按钮会跟随首行文字精确对齐。分类和标签过多时不再挤压标题，而是在独立横向区域中浏览：左右提示表示仍有隐藏内容，鼠标滚轮或触控横向滑动可以继续查看；内容未溢出时提示自动隐藏。
 
 ## 阅读流与时间轴
 

@@ -4,9 +4,9 @@ description: 使用主帖操作列，并在阅读器内回复、引用、点赞�
 feature_ids: ["MEDIA-010", "ACTION-001", "ACTION-002", "ACTION-003", "ACTION-004", "ACTION-005", "ACTION-006", "ACTION-007", "ACTION-008", "ACTION-009", "ACTION-010", "ACTION-011", "ACTION-012", "ACTION-013", "ACTION-014"]
 source_anchors: ["lite/src/media/reader-poll-model.ts","lite/src/app/reader-browser-runtime.ts","lite/src/post/reader-post-action-feature.ts","lite/src/post/reader-selection-quote-feature.ts","lite/src/post/boost-copy-rule.ts","lite/src/discourse/native-host-api.ts","lite/src/discourse/native-composer.ts","lite/src/post/reader-topic-shared-issue-coordinator.ts","lite/src/post/reader-topic-action-rail.ts"]
 since: 0.1.2
-version: 1.6.0
+version: 1.6.1
 status: current
-last_verified: 2026-08-18
+last_verified: 2026-08-23
 screenshots: ["/screenshots/guide-20-community-actions-v1.5.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.5.0.png", "/screenshots/guide-15-notifications-replies-v1.5.0.png"]
 ---
 
@@ -60,6 +60,8 @@ screenshots: ["/screenshots/guide-20-community-actions-v1.5.0.png", "/screenshot
 “设置 → 阅读与导航 → 关闭原生回复窗口前再次确认”默认开启。开启后，按 `Esc`、关闭或舍弃草稿都需要在 1.5 秒内重复同一操作；这个保护只作用于原生回复窗口，不改变阅读器本体的退出偏好。
 
 编辑已有楼层时，阅读器使用与回复相同的宿主隔离提交链路。保存成功后会重新读取该楼层并就地刷新；如果编辑的是楼中楼回复，阅读器会重新聚焦对应的直属讨论，不会让宿主页面自行跳走。
+
+主题编辑表单会按当前可用宽度自动排列字段；窄屏不足以容纳双列时直接收为单列，不会让输入项撑出阅读器边界。
 
 ## 点赞与回应
 

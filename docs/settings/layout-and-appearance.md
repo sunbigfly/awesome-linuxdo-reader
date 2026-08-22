@@ -4,7 +4,7 @@ description: 分别设置普通与全屏五区比例，并配置浮窗位置、�
 feature_ids: ["SET-001", "SET-007", "SET-008", "SET-009"]
 source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/shell/reader-workspace.ts","lite/src/appearance/reader-appearance-style-controller.ts"]
 since: 0.1.2
-version: 1.6.0
+version: 1.6.1
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-05-layout-settings-v1.5.0.png", "/screenshots/guide-06-window-settings-v1.5.0.png", "/screenshots/guide-07-appearance-settings-v1.5.0.png"]

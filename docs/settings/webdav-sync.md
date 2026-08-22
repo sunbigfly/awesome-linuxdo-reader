@@ -4,7 +4,7 @@ description: 使用坚果云等标准 WebDAV 在设备之间合并同步历史�
 feature_ids: ["DATA-006", "DATA-007"]
 source_anchors: ["lite/src/settings/reader-webdav-settings-form.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-category-ports.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-history-cache-port.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts"]
 since: 1.1.0
-version: 1.6.0
+version: 1.6.1
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-29-webdav-sync-v1.5.0.svg", "/screenshots/guide-32-webdav-sync-v1.5.0.png"]

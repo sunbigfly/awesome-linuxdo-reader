@@ -4,9 +4,9 @@ description: 使用时间轴、只看楼主、历史前后切换、多主题队�
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014", "READ-016"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-only-op-controller.ts","lite/src/topic/reader-topic-navigation-controller.ts","lite/src/topic/reader-topic-dom-coordinator.ts","lite/src/topic/reader-topic-timeline-controller.ts","lite/src/topic/reader-topic-timeline-end-resolver.ts","lite/src/topic/reader-topic-timeline-view.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/reading/read-state-controller.ts","lite/src/live/topic-live-controller.ts","lite/src/components/reader-icon.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/topic/reader-topic-header.ts"]
 since: 0.1.2
-version: 1.6.0
+version: 1.6.1
 status: current
-last_verified: 2026-08-22
+last_verified: 2026-08-23
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png", "/screenshots/guide-21-reading-queue-v1.5.0.png"]
 ---
 
@@ -27,6 +27,8 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/
 - 底部回顶按钮返回当前主题顶部，而不是宿主页面顶部。
 
 大量楼层快速跳转需要经过“获取数据 → 挂载目标 → 定位”的顺序。不要在第一次等待时连续重复点击，否则会产生互相覆盖的目标。
+
+直接触控或拖动滚动条时，虚拟窗口会在同一帧收到最后滚动位置提示；请求返回、图片展开和回复线变化产生的楼层尺寸会在滚动停稳后批量提交。前方多层正文也按批次共用一次投影与视口补偿，避免一边滚动一边逐楼层争抢位置而出现短暂空白、卡顿或上下跳位。
 
 ![阅读工作区右侧时间轴、当前楼层和回顶入口](/screenshots/guide-01-reader-overview-v1.5.0.png)
 
