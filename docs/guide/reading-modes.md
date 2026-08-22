@@ -4,7 +4,7 @@ description: 选择浮窗、全屏、嵌入或移动布局，理解多主题队�
 feature_ids: ["CORE-003", "CORE-004", "CORE-005", "CORE-006", "READ-001", "READ-002"]
 source_anchors: ["lite/src/userscript/main-lite-bootstrap.ts","lite/src/discourse/native-host-api.ts","lite/src/state/reader-preferences-schema.ts","lite/src/shell/reader-workspace.ts","lite/src/components/reader-icon.ts","lite/src/queue/reader-open-queue-session.ts","lite/src/dom/reply-tree.ts","lite/src/topic/topic-session.ts"]
 since: 0.1.2
-version: 1.5.11
+version: 1.6.0
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/guide-05-layout-settings-v1.5.0.png", "/screenshots/guide-21-reading-queue-v1.5.0.png"]
@@ -23,6 +23,8 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/
 | 移动 | 窄屏、触控设备或纵向窗口 | 使用移动配置和紧凑控件，减少横向依赖 |
 
 主题原始路由只使用浮窗接管；列表页可以切换浮窗、全屏和左右嵌入，新配置默认使用右侧嵌入。进入左右嵌入时，阅读器会把宿主站点主题强制切换为侧栏画笔入口中的 `Default`；主题实际变化时页面只刷新一次。布局按钮的实际可用项会随当前路由和窗口宽度变化。
+
+移动触控环境会把标题操作、设置分类和七类工具收纳为点按展开的分类抽屉，避免依赖悬停或横向标签轨道。浏览器支持 Fullscreen API 时，标题操作中还会显示“沉浸式阅读”：点击后先切换 Reader 全屏布局，再进入浏览器全屏；再次点击或关闭 Reader 会退出由阅读器持有的沉浸态。
 
 ![列表页与右侧嵌入阅读工作区同时显示](/screenshots/guide-01-reader-overview-v1.5.0.png)
 

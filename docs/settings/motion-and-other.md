@@ -4,7 +4,7 @@ description: 配置跳转提示、加载动画、历史导航、退出方式、�
 feature_ids: ["READ-007", "READ-014", "ACTION-006", "SET-010", "SET-011", "SET-016", "SET-017", "SET-018", "SET-019"]
 source_anchors: ["lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/post/boost-copy-rule.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts"]
 since: 0.1.2
-version: 1.5.11
+version: 1.6.0
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-08-motion-settings-v1.5.0.png", "/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/guide-18-thread-context-v1.5.0.png"]

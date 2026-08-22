@@ -4,7 +4,7 @@ description: 阅读资源趋势、请求脉络、429 状态和 Cloudflare 恢复
 feature_ids: ["SET-023", "MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
 source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/monitor/reader-pipeline-observer.ts","lite/src/cache/cache-observer.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/reader-host-turnstile-background-controller.ts","lite/src/network/request-observer.ts","lite/src/network/reader-business-request-policy.ts"]
 since: 0.1.2
-version: 1.5.11
+version: 1.6.0
 status: current
 last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-10-resource-monitor-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png"]
@@ -55,7 +55,7 @@ screenshots: ["/screenshots/guide-10-resource-monitor-v1.5.0.png", "/screenshots
 - 60 秒传输量；
 - 60 秒异常数。
 
-详细区域展示最近 10 秒排队/放行/网络脉络、主要瓶颈、异常点、按类型 P95 和毫秒请求记录。阅读器请求还显示贯穿重试的逻辑链、业务身份、typed contract、缓存模式、安全 identity、单飞合并、优先级晋升、重试预算和最终决策。请求页可把当前完整脱敏账本、导出瞬间状态及采集期间调度/共享限流状态变化导出为 JSONL。
+详细区域展示最近 10 秒排队/放行/网络脉络、主要瓶颈、异常点、按类型 P95 和毫秒请求记录，并分别统计阅读器、原站与浏览器资源来源。每条记录会区分成功响应、API 参数或权限、API 服务端、普通 429、Cloudflare challenge、宿主请求端口、网络传输、Reader 调度和状态未知；`status=0` 不会再显示成成功完成。阅读器请求还显示贯穿重试的逻辑链、业务身份、typed contract、缓存模式、安全 identity、单飞合并、优先级晋升、重试预算和最终决策。请求页可把当前完整脱敏账本、导出瞬间状态及采集期间调度/共享限流状态变化导出为 JSONL。
 
 性能事件按毫秒时间分别记录类型、耗时或 DOM 增减、前后台、归因范围与浏览器依据；界面只显示最近事件，JSONL 导出保留内存中的十分钟样本、完整事件、前后台时间线、性能策略、关联脱敏请求，以及浏览器能力、观察器安装结果、数据来源、保留上限和淘汰计数。请求、性能与流水线三类导出互相独立，不进入设置配置导出或 WebDAV。
 
@@ -67,7 +67,7 @@ screenshots: ["/screenshots/guide-10-resource-monitor-v1.5.0.png", "/screenshots
 
 来源分为阅读器、原站和浏览器资源。类型包括正文、二级回复、头像、媒体、用户资料、收藏、消息、实时通道、在线状态、回应、搜索、已读上报和静态资源。
 
-原站 fetch/XHR 能纳入共享账本，但无法可靠确认脚本来源的活动保留为“原站/未标记”或“页面共享”，不会强行归因，也不会补造逻辑链或 typed contract。
+原站 fetch/XHR 能纳入共享账本。未经过 Reader 或 jQuery 账本的同源动态请求会由 Resource Timing 被动补入并参与共享窗口；浏览器无法提供的方法会记为 `UNKNOWN`，无法可靠确认脚本来源的活动保留为原站或浏览器资源，不会补造逻辑链、typed contract、请求正文或响应内容。静态资源不进入常驻动态请求预算。
 
 ## 429 与排队原因
 

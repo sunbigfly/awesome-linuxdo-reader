@@ -4,7 +4,7 @@ description: 查看当前账号资料、社区统计、Connect 信任进度和 L
 feature_ids: ["USER-005", "USER-006"]
 source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/translation/translation-request-adapter.ts"]
 since: 0.1.2
-version: 1.5.11
+version: 1.6.0
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png"]
@@ -37,6 +37,8 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png"]
 ## 用户信息标签
 
 “用户信息”汇总当前账号可公开读取的资料与社区统计。字段是否出现取决于原站返回值和当前账号权限；某项为空时，阅读器不会自行推断。
+
+LINUX DO 当前账号还会显示独立的“社区分数”。阅读器通过 `cdk.linux.do` 的只读用户信息接口读取，只保留校验后的用户名与整数分数，并复用中央请求调度和 30 分钟成功缓存。接口未登录、返回账号不一致或分数无效时不会投影该字段；它与原站点数、信任级别及 LDC 资产是不同指标。
 
 ## LDC 标签
 
@@ -75,6 +77,7 @@ LINUX DO 站点新增“LDC”标签，用于只读展示 `credit.linux.do` 当�
 - **部分字段缺失**：先确认登录状态，再检查“日志记录 → 请求记录”是否有权限错误。
 - **全部内容为空**：刷新一次；仍为空时重新加载 LINUX DO 页面。
 - **与原站不一致**：以原站账号页为准，并清理“用户卡”缓存后复查。
+- **社区分数缺失**：确认当前浏览器已登录对应服务，且返回账号与 LINUX DO 当前账号一致；无有效缓存时不会用其他账号数据补位。
 - **LDC 提示账号不一致**：分别确认 LINUX DO 和 LDC 当前登录账号，不要依赖旧缓存判断资产。
 - **LDC 提示授权失效**：先打开 LDC 完成登录，再回到设置中心刷新。
 

@@ -1,6 +1,6 @@
 # Lite Greasy Fork 发布工程
 
-> `1.5.11` 已完成 GitHub、Greasy Fork 四文件链、公开介绍和用户手册同步；本节记录当前不可变坐标与逐字节核验结果。
+> `1.6.0` 已完成 GitHub、Greasy Fork 四文件链、公开介绍和用户手册同步；本节记录当前不可变坐标与逐字节核验结果。
 
 Greasy Fork 主脚本公开介绍的同步源是仓库根部 [`GREASYFORK.md`](../../GREASYFORK.md)，共享长介绍维护在 [`docs/INTRODUCTION.md`](../../docs/INTRODUCTION.md)。本文件只维护四文件构建、固定坐标和发布证据。
 
@@ -13,8 +13,8 @@ userscript 超过 2 MB 的问题。构建不压缩、不混淆、不缩短标识
 | 路径 | 用途 |
 | --- | --- |
 | `libraries/main-lite-core.js` | 应用、Shell、主题、流、布局与 userscript 运行核心 |
-| `libraries/main-lite-platform.js` | 缓存、集合、Discourse、网络、队列、同步、通知与监控平台模块 |
-| `libraries/main-lite-features.js` | 媒体、互动、设置、用户、翻译与其他功能模块 |
+| `libraries/main-lite-platform.js` | 缓存、集合、Discourse、网络、队列、同步、通知、监控与翻译平台模块 |
+| `libraries/main-lite-features.js` | 媒体、互动、设置、用户与其他功能模块 |
 | `main-loader.template.user.js` | 等待填入固定 Greasy Fork Library URL 的薄主脚本模板 |
 | `build-manifest.json` | 模块数、编译器、字节数与 SHA-256 |
 | `published-libraries.json` | 已发布 Library 的真实 ID、固定 URL、同步 URL 与远端哈希 |
@@ -28,7 +28,7 @@ userscript 超过 2 MB 的问题。构建不压缩、不混淆、不缩短标识
 时的元数据校验，实际运行站点仍完全由主 Loader 的元数据决定。
 
 各模块仍保留独立可读工厂，但 esbuild 生成的 CommonJS helper 只在每个 Library
-顶部声明一次，避免 238 个模块重复携带相同编译辅助代码。
+顶部声明一次，避免每个模块重复携带相同编译辅助代码。
 
 ## 构建与校验
 
@@ -85,6 +85,17 @@ Library 与待发布文件完全相同。快速调试版和四文件本地测试
 `npm run main-lite:greasyfork:release` 只读取已核验的 `published-libraries.json`。
 `release.config.json` 不进入 Git；其中没有凭据，但只作为首次发布草稿，不能用占位符
 冒充已发布状态。
+
+### v1.6.0 已发布坐标
+
+| 发布单元 | Greasy Fork | 固定版本 | 核验结果 |
+| --- | --- | --- | --- |
+| 主 Loader | [588185](https://greasyfork.org/scripts/588185) | `1909686` | 固定文件 4,202 字节，SHA-256 `f5c0f1f32f9bcebbddd0462ae86343d9ec68aee9a4af173577cc1525a6ab8f32`；移除平台加入的 `@downloadURL none` 后为 4,181 字节，SHA-256 `7617d340ea44f4d057cf6d9eb5b16b4927e0db25825b70468d61b04bdeece054` |
+| Core | [590254](https://greasyfork.org/scripts/590254) | `1909681` | 1,727,952 字节，SHA-256 `9058145c424d679256ef9f18a85bf68ade2984c68c9405cf190077e08fe96f9d` |
+| Platform | [591595](https://greasyfork.org/scripts/591595) | `1909683` | 1,482,147 字节，SHA-256 `1552e729a5bbcf0053078f4d68599e7c87d2320e9025dc4d826be7a10f9db84f` |
+| Features | [590255](https://greasyfork.org/scripts/590255) | `1909682` | 1,988,121 字节，SHA-256 `f32f36104263301af4c0ee53ac69e741fc3e2ec31dd90d2e3e1f3eedb02675a8` |
+
+四个发布单元已在 `update.greasyfork.org` 固定版本 URL 核验；主 Loader 归一化后与仓库产物逐字节一致。CSS 固定到 Git `e4a3dd3aeec8266e30a25601f01bfbe617e2bffc`，688,102 字节，SHA-256 `4b44c21a3d2951e6c3819e500f7d6774a43ab07ecd1ba2cfe0377862e478b4f2`。
 
 ### v1.5.11 已发布坐标
 

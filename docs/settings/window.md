@@ -4,7 +4,7 @@ description: 设置桌面浮窗尺寸、坐标和拖拽缩放后的保存行为�
 feature_ids: ["SET-008"]
 source_anchors: ["lite/src/shell/reader-workspace.ts"]
 since: 0.1.2
-version: 1.5.11
+version: 1.6.0
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-06-window-settings-v1.5.0.png"]
@@ -18,7 +18,7 @@ screenshots: ["/screenshots/guide-06-window-settings-v1.5.0.png"]
 
 <p class="image-caption">在“设置 → 窗口设置”保存桌面浮窗宽高和左上角坐标；拖拽缩放后的几何会按共享窗口规则复用，不影响嵌入或移动布局。</p>
 
-浮窗设置只决定桌面“浮窗阅读器”的几何位置。嵌入、全屏和移动形态不使用这些坐标。
+浮窗设置只决定桌面“浮窗阅读器”的几何位置。嵌入、全屏和移动形态不使用这些坐标。进入 760 px 及以下的移动宽度后，浮窗会临时铺满可用区域并停用拖动、缩放、固定与共享几何写回；返回桌面宽度时恢复进入移动布局前的桌面位置和尺寸。
 
 ## 可调字段
 

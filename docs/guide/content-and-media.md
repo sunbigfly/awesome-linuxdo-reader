@@ -4,7 +4,7 @@ description: 使用非中文正文翻译、原图灯箱、图片评论、下载�
 feature_ids: ["READ-012", "MEDIA-001", "MEDIA-002", "MEDIA-003", "MEDIA-004", "MEDIA-005", "MEDIA-006", "MEDIA-007", "MEDIA-008", "MEDIA-009", "MEDIA-010", "MEDIA-011", "MEDIA-012", "MEDIA-013", "MEDIA-014"]
 source_anchors: ["lite/src/topic/reader-topic-special-content-feature.ts","lite/src/media/reader-image-scale.ts","lite/src/app/reader-browser-runtime.ts","lite/src/network/public-resource-request-adapter.ts","lite/src/media/reader-lightbox-controller.ts","lite/src/media/reader-image-download-service.ts","lite/src/user/discourse-native-user-port.ts","lite/src/media/reader-katex-controller.ts","lite/src/media/reader-poll-model.ts","lite/src/media/reader-cooked-content-feature.ts","lite/src/translation/reader-translation-controller.ts"]
 since: 0.1.2
-version: 1.5.11
+version: 1.6.0
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/guide-19-image-lightbox-v1.5.0.png", "/screenshots/guide-25-user-card-v1.5.0.png"]
@@ -42,6 +42,7 @@ screenshots: ["/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/g
 - **关联评论**：评论面板按图片所在楼层查找直接关系；数据缺失时按需补取主题楼层并建立评论树。
 - **评论回应**：在评论树中查看回应数量，点击当前回应可取消，打开回应选择器可切换；提交后与正文对应楼层同步。
 - **评论宽度**：拖动分隔线调整，允许范围为灯箱宽度的 18%–50%。
+- **移动端**：评论能力保持可用，但灯箱初始采用评论抽屉收纳态；需要时再展开，避免图片与评论同时挤占窄屏。
 
 原图或来源楼层加载失败时，灯箱会保留现有预览并给出重试/不可用状态。来源楼层 404 不一定意味着 CDN 图片已经失效。
 
@@ -55,7 +56,7 @@ screenshots: ["/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/g
 
 ## 头像与资料媒体
 
-点击用户头像可以打开独立预览器，支持缩放、前后翻看和下载。头像缓存与帖子原图缓存分开管理。
+点击用户头像可以直接打开独立预览器，支持缩放、前后翻看和下载，不需要先打开用户卡。触屏端长按头像用于打开用户卡，普通点击仍只进入头像预览；两者不会在同次手势中叠加。头像缓存与帖子原图缓存分开管理。
 
 ![阅读器用户卡与头像原图预览器同时打开](/screenshots/guide-25-user-card-v1.5.0.png)
 

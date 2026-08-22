@@ -4,7 +4,7 @@ description: 导出导入设置，理解本地与 WebDAV 数据范围，查看�
 feature_ids: ["COLLECT-004", "DATA-001", "DATA-002", "DATA-003", "DATA-004", "DATA-006", "DATA-007", "TROUBLE-004"]
 source_anchors: ["lite/src/history/reader-history-repository.ts","lite/src/state/preferences-config-codec.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/cache/browser-asset-cache.ts","lite/src/cache/reader-cache-management-surface.ts","lite/src/cache/response-repository.ts","lite/src/cache/topic-snapshot-handoff.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/sync/reader-webdav-coordinator.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/font/reader-imported-font-store.ts"]
 since: 0.1.2
-version: 1.5.11
+version: 1.6.0
 status: current
 last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-13-data-management-v1.5.0.png"]

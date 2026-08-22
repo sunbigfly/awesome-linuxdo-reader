@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.5.11
+version: 1.6.0
 status: current
 last_verified: 2026-08-22
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
@@ -15,6 +15,34 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.6.0 — 移动端工作区与请求诊断
+
+核验日期：2026-08-22。
+
+### 移动端工作区
+
+- 移动列表页采用紧凑宿主头部：搜索保留原站完整结果和高级筛选并投影为底部抽屉，语言入口改为用户菜单内的中英直切，“最新”数量跟随真实刷新横幅。
+- Reader 新增浏览器沉浸入口；设置与七类工具浮窗改用移动分类抽屉，移动态不再覆盖桌面浮窗几何，退出移动宽度后恢复原桌面位置与尺寸。
+- 移动端浏览器返回键按既有 `Esc` 层级逐次关闭最上层浮窗，Reader 未关闭前不会离开当前主题；iPhone 与 iPad 同时显示走同一返回链的可见入口。
+- 楼层操作、Boost 快捷动作、图片评论、楼层时间和讨论树针对触屏重新收纳；头像点击直接进入预览，长按头像打开用户卡并避免同时触发宿主菜单或头像查看器。
+
+### 用户信息与社区操作
+
+- LINUX DO 当前账号资料新增独立社区分数，经过账号校验、中央请求调度与 30 分钟成功缓存；账号不一致或无有效分数时不会写入投影。
+- 首帖回复权限改为服从 Topic 发帖能力，普通楼层继续服从楼层回复能力；移动端低频楼层动作按需展开，收纳前后继续复用同一个回复与回应 owner。
+
+### 请求归因
+
+- 请求记录新增 API 客户端、API 服务端、普通 429、Cloudflare、宿主端口、网络传输和 Reader 调度归因，并分别统计阅读器、原站与浏览器资源来源。
+- 常驻被动观测补齐未经过 Reader 或 jQuery 账本的同源 fetch/XHR；`status=0` 明确记录为网络/传输失败，日志继续只保存脱敏路径与诊断字段。
+
+### 发布状态
+
+- `1.6.0` 已发布到 Greasy Fork：主 Loader 固定版本为 `1909686`，加载 Core `1909681`、Platform `1909683` 与 Features `1909682`。
+- 固定 Loader 原始文件为 4,202 字节，SHA-256 `f5c0f1f32f9bcebbddd0462ae86343d9ec68aee9a4af173577cc1525a6ab8f32`；移除平台加入的 `@downloadURL none` 后为 4,181 字节，SHA-256 `7617d340ea44f4d057cf6d9eb5b16b4927e0db25825b70468d61b04bdeece054`，与仓库 Loader 逐字节一致。
+- Core 为 1,727,952 字节，SHA-256 `9058145c424d679256ef9f18a85bf68ade2984c68c9405cf190077e08fe96f9d`；Platform 为 1,482,147 字节，SHA-256 `1552e729a5bbcf0053078f4d68599e7c87d2320e9025dc4d826be7a10f9db84f`；Features 为 1,988,121 字节，SHA-256 `f32f36104263301af4c0ee53ac69e741fc3e2ec31dd90d2e3e1f3eedb02675a8`。
+- CSS 固定到 Git `e4a3dd3aeec8266e30a25601f01bfbe617e2bffc`：688,102 字节，SHA-256 `4b44c21a3d2951e6c3819e500f7d6774a43ab07ecd1ba2cfe0377862e478b4f2`；源码与分包 runtime 各通过 234 文件契约，305 个模块通过 parity 门禁。
 
 ## 1.5.11 — 时间轴流尾静稳结算
 

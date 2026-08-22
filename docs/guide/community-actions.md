@@ -4,7 +4,7 @@ description: 使用主帖操作列，并在阅读器内回复、引用、点赞�
 feature_ids: ["MEDIA-010", "ACTION-001", "ACTION-002", "ACTION-003", "ACTION-004", "ACTION-005", "ACTION-006", "ACTION-007", "ACTION-008", "ACTION-009", "ACTION-010", "ACTION-011", "ACTION-012", "ACTION-013", "ACTION-014"]
 source_anchors: ["lite/src/media/reader-poll-model.ts","lite/src/app/reader-browser-runtime.ts","lite/src/post/reader-post-action-feature.ts","lite/src/post/reader-selection-quote-feature.ts","lite/src/post/boost-copy-rule.ts","lite/src/discourse/native-host-api.ts","lite/src/discourse/native-composer.ts","lite/src/post/reader-topic-shared-issue-coordinator.ts","lite/src/post/reader-topic-action-rail.ts"]
 since: 0.1.2
-version: 1.5.11
+version: 1.6.0
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-20-community-actions-v1.5.0.png", "/screenshots/guide-17-bookmarks-reactions-v1.5.0.png", "/screenshots/guide-15-notifications-replies-v1.5.0.png"]
@@ -40,11 +40,15 @@ screenshots: ["/screenshots/guide-20-community-actions-v1.5.0.png", "/screenshot
 
 拖动位置按阅读器尺寸保存，窗口缩放或形态变化时会重新限制在可用范围内。
 
+窄屏触控时主帖操作列固定为底部操作坞，不响应不可见拖动，也不会改写桌面位置偏好。普通楼层常显高频回应与回复，其余动作由右侧收纳按钮按需展开；点击动作组外或再次点击按钮会收起，展开前后仍复用同一组业务按钮和事件 owner。
+
 全屏时，标题栏会跟随正文左右边界对齐，阅读队列入口也会跟随操作列收纳按钮的横向中心；拖动操作列或修改全屏布局后会自动重新计算，避免三个入口互相遮挡。
 
 ## 回复与引用
 
 点击楼层底部“回复”会以该楼层为目标打开编辑器；主题末尾“回复主题”创建普通主题回复。
+
+首帖的回复入口服从 Topic 是否允许创建新回复，普通楼层继续服从该楼层的回复权限；主题关闭时不会因首帖自身的楼层字段而误显示可用入口。
 
 选中正文后会出现：
 
@@ -75,6 +79,8 @@ screenshots: ["/screenshots/guide-20-community-actions-v1.5.0.png", "/screenshot
 ## Boost
 
 Boost 气泡显示内容和参与用户。账号权限允许时可以发送、举报或进入相关原生操作。
+
+触屏端点按 Boost 内容会临时展开快捷动作，再次点按或点击外部收起；软键盘、内部滚动或可视视口变化时，Boost 菜单会继续贴近原锚点并限制在当前四边内。
 
 Boost 输入框里的表情按钮会打开站点原生表情选择器；面板会显示在阅读器上方，不受浮窗
 层级遮挡。选中的表情与普通文字一起计入 16 字上限，最多插入 5 个；关闭或切换楼层时，

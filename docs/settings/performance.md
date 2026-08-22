@@ -4,7 +4,7 @@ description: 调整正文与直属回复预取、DOM 窗口、宿主 Topic 预�
 feature_ids: ["READ-001", "READ-002", "SET-012", "SET-013", "SET-014", "SET-015", "SET-023", "MONITOR-003"]
 source_anchors: ["lite/src/settings/reader-performance-settings-form.ts","lite/src/app/reader-performance-policy.ts","lite/src/topic/topic-session.ts","lite/src/topic/reader-topic-flow-controller.ts","lite/src/cache/topic-snapshot-handoff.ts","lite/src/cache/response-repository.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/reader-host-turnstile-background-controller.ts","lite/src/network/request-contract.ts","lite/src/network/reader-request-flow-config.ts","lite/src/network/reader-business-request-config.ts","lite/src/network/reader-business-request-policy.ts","lite/src/network/request-scheduler.ts","lite/src/network/domain-request-gateway.ts"]
 since: 0.1.2
-version: 1.5.11
+version: 1.6.0
 status: current
 last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png"]

@@ -4,7 +4,7 @@ description: 使用时间轴、只看楼主、历史前后切换、多主题队�
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014", "READ-016"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-only-op-controller.ts","lite/src/topic/reader-topic-navigation-controller.ts","lite/src/topic/reader-topic-dom-coordinator.ts","lite/src/topic/reader-topic-timeline-controller.ts","lite/src/topic/reader-topic-timeline-end-resolver.ts","lite/src/topic/reader-topic-timeline-view.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/reading/read-state-controller.ts","lite/src/live/topic-live-controller.ts","lite/src/components/reader-icon.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/topic/reader-topic-header.ts"]
 since: 0.1.2
-version: 1.5.11
+version: 1.6.0
 status: current
 last_verified: 2026-08-22
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png", "/screenshots/guide-21-reading-queue-v1.5.0.png"]
@@ -22,6 +22,7 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/
 - 跳转会等待最新目标的数据、DOM 挂载和可见位置安静，并继续把锚点结算到 2 px 内；旧请求不会在随后覆盖新目标，新目标或用户直接滚动会取消旧结算；
 - 跳转完成后目标楼层按设置闪烁；
 - 点击相对时间可直接拉到帖子物理底部；长帖尚未完整加载时，阅读器会从 canonical 尾段按需向前补齐，找到最后一个主信息流正文根，不会把楼中楼尾楼或当前缓存尾部误作主题终点；
+- 移动端点击任一楼层的相对时间会通过统一提示层显示具体日期时间；点击正文或其他控件会关闭提示，不会在正式楼层、楼中楼和离线文档中各维护一套状态；
 - 到达真实底部后会显示“已经见底了~”，并连续结算 Reader 的物理最大滚动位置，不依赖最后正文卡片持续挂载；首次补尾的回复树投影短暂未就绪时，同一次点击仍会继续完成见底；
 - 底部回顶按钮返回当前主题顶部，而不是宿主页面顶部。
 

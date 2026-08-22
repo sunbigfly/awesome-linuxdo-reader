@@ -4,7 +4,7 @@ description: 查看用户卡、资料、徽章、统计、关注关系并持续�
 feature_ids: ["MEDIA-007", "USER-001", "USER-002", "USER-003", "USER-004", "USER-005", "USER-007"]
 source_anchors: ["lite/src/user/discourse-native-user-port.ts","lite/src/discourse/native-request-descriptors.ts","lite/src/discourse/native-host-api.ts","lite/src/user/reader-user-observation-session.ts"]
 since: 0.1.2
-version: 1.5.11
+version: 1.6.0
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-25-user-card-v1.5.0.png", "/screenshots/guide-02-settings-overview-v1.5.0.png"]
@@ -23,6 +23,8 @@ screenshots: ["/screenshots/guide-25-user-card-v1.5.0.png", "/screenshots/guide-
 - 账号允许的关系操作。
 
 阅读器开启时，在宿主主题列表悬停参与者头像也会进入同一张阅读器用户卡；不会再同时唤起宿主卡片与另一套资料交互。
+
+触屏端点击头像直接打开头像预览器，长按约 500 ms 才打开用户卡；移动超过阈值会取消长按，因此列表滚动不会被误拦截。宿主主题列表的楼主头像、通知头像和 Reader 楼层头像共用这套互斥规则，不会在一次触摸后同时打开宿主菜单、用户卡和头像预览。
 
 缓存资料可能短暂显示旧值，联网成功后会刷新。用户资料最终以原站为准。
 
@@ -77,7 +79,7 @@ screenshots: ["/screenshots/guide-25-user-card-v1.5.0.png", "/screenshots/guide-
 
 ## 设置中的当前账号
 
-“设置 → 用户信息”集中展示当前登录账号、社区统计以及 Connect 信任级别升级进度，并允许手动刷新。
+“设置 → 用户信息”集中展示当前登录账号、社区统计、社区分数以及 Connect 信任级别升级进度，并允许手动刷新。社区分数只在 LINUX DO 当前账号校验成功后显示，并使用独立的 30 分钟成功缓存；它不会替代点数、信任级别或 LDC 资产。
 
 ![设置中心的当前账号信息、社区统计和 Connect 进度](/screenshots/guide-02-settings-overview-v1.5.0.png)
 
