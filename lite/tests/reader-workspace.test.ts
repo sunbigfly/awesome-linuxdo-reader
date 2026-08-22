@@ -409,6 +409,36 @@ const pointerDomAdapter = new ReaderWindowDomAdapter({
 	lockButton,
 	pinButton,
 });
+const pointerOverlayAddEventListener = pointerOverlay.addEventListener.bind(
+	pointerOverlay,
+);
+const pointerOverlayRemoveEventListener = pointerOverlay.removeEventListener.bind(
+	pointerOverlay,
+);
+let pointerMoveListenerAdds = 0;
+let pointerMoveListenerRemoves = 0;
+Object.defineProperty(pointerOverlay, 'addEventListener', {
+	configurable: true,
+	value: (
+		type: string,
+		listener: EventListenerOrEventListenerObject,
+		options?: boolean | AddEventListenerOptions,
+	) => {
+		if (type === 'pointermove') pointerMoveListenerAdds += 1;
+		pointerOverlayAddEventListener(type, listener, options);
+	},
+});
+Object.defineProperty(pointerOverlay, 'removeEventListener', {
+	configurable: true,
+	value: (
+		type: string,
+		listener: EventListenerOrEventListenerObject,
+		options?: boolean | EventListenerOptions,
+	) => {
+		if (type === 'pointermove') pointerMoveListenerRemoves += 1;
+		pointerOverlayRemoveEventListener(type, listener, options);
+	},
+});
 const frames = new Map<number, FrameRequestCallback>();
 let nextFrame = 1;
 const persisted: ReaderWindowPreferenceInput[] = [];
@@ -433,6 +463,10 @@ const pointerController = new ReaderWindowPointerController({
 		frames.delete(id);
 	},
 });
+assert(
+	pointerMoveListenerAdds === 0,
+	'Reader 浮窗初始化不得在整层 overlay 常驻 pointermove 监听',
+);
 const flushFrames = () => {
 	const queued = [...frames.values()];
 	frames.clear();
@@ -483,6 +517,10 @@ dispatchPointer(pointerHeader, 'pointerdown', {
 	clientX: 200,
 	clientY: 100,
 });
+assert(
+	pointerMoveListenerAdds === 1,
+	'只有真实浮窗拖动开始后才允许临时监听 overlay pointermove',
+);
 dispatchPointer(pointerHeader, 'pointermove', {
 	pointerId: 1,
 	clientX: 300,
@@ -521,6 +559,10 @@ assert(
 	persisted.length === 1,
 	'拖动结束必须一次提交模型、清理预览并持久化一次',
 );
+assert(
+	pointerMoveListenerRemoves === 1,
+	'浮窗拖动结束必须立即移除临时 pointermove 监听',
+);
 
 const beforeBlockedDrag = pointerModel.snapshot.geometry;
 dispatchPointer(pointerButton, 'pointerdown', {
@@ -539,7 +581,8 @@ dispatchPointer(pointerButton, 'pointerup', {
 	clientY: 400,
 });
 assert(
-	pointerModel.snapshot.geometry === beforeBlockedDrag,
+	pointerModel.snapshot.geometry === beforeBlockedDrag &&
+	pointerMoveListenerAdds === 1,
 	'Header 交互控件不得误触浮窗拖动',
 );
 
@@ -549,6 +592,10 @@ dispatchPointer(resizeWest, 'pointerdown', {
 	clientX: 300,
 	clientY: 300,
 });
+assert(
+	pointerMoveListenerAdds === 2,
+	'真实缩放开始后必须复用同一临时 pointermove 生命周期',
+);
 dispatchPointer(resizeWest, 'pointermove', {
 	pointerId: 3,
 	clientX: 1_000,
@@ -570,7 +617,8 @@ dispatchPointer(resizeWest, 'pointerup', {
 });
 assert(
 	pointerOverlay.dataset.readerWindowInteraction === undefined &&
-		Number(interactionStarts) === 2 && Number(interactionEnds) === 2,
+		Number(interactionStarts) === 2 && Number(interactionEnds) === 2 &&
+		pointerMoveListenerRemoves === 2,
 	'缩放结束也必须发出一次交互结束信号并清理临时 mode',
 );
 
@@ -603,7 +651,8 @@ dispatchPointer(pointerHeader, 'pointerup', {
 	clientY: 300,
 });
 assert(
-	pointerModel.snapshot.geometry === beforeLockedDrag,
+	pointerModel.snapshot.geometry === beforeLockedDrag &&
+	pointerMoveListenerAdds === 2,
 	'锁定后必须拒绝拖动和缩放',
 );
 pinButton.dispatchEvent(new pointerDocument.defaultView!.Event('click', {
@@ -649,7 +698,8 @@ pointerController.destroy();
 pointerDomAdapter.destroy();
 assert(
 	!pointerOverlay.classList.contains('ldp-window-interacting') &&
-	!pointerModal.style.transform,
+	!pointerModal.style.transform &&
+	pointerMoveListenerAdds === pointerMoveListenerRemoves,
 	'Pointer controller 销毁必须释放 frame、capture 和临时样式',
 );
 

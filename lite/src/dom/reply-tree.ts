@@ -61,6 +61,7 @@ export class ReplyTreeTopology {
 	#rootsCache: readonly PostNumber[] | null = null;
 	#rootBranchesCache: readonly ReplyTreeRootBranch[] | null = null;
 	#snapshotCache: ReplyTreeSnapshot | null = null;
+	#stateShared = false;
 
 	get revision(): number {
 		return this.#revision;
@@ -108,24 +109,24 @@ export class ReplyTreeTopology {
 	clone(): ReplyTreeTopology {
 		const clone = new ReplyTreeTopology();
 		clone.#revision = this.#revision;
-		clone.#parentByPost = new Map(this.#parentByPost);
-		clone.#childrenByParent = new Map(
-			[...this.#childrenByParent].map(([postNumber, children]) => [
-				postNumber,
-				new Set(children),
-			]),
-		);
-		clone.#subtreePostCountByPost = new Map(
-			this.#subtreePostCountByPost,
-		);
-		clone.#rootPostNumbers = new Set(this.#rootPostNumbers);
-		clone.#sortedChildrenByParent = new Map(this.#sortedChildrenByParent);
-		clone.#depthByPost = new Map(this.#depthByPost);
-		clone.#rootByPost = new Map(this.#rootByPost);
+		/*
+		 * 滚动手势开始时会克隆完整 Topic 拓扑作为短生命周期只读投影。
+		 * 这里共享当前不可变状态，把 O(n) 复制推迟到任一副本真正收到关系
+		 * mutation 时；普通首滑只交换引用，不再同步遍历整棵回复树。
+		 */
+		clone.#parentByPost = this.#parentByPost;
+		clone.#childrenByParent = this.#childrenByParent;
+		clone.#subtreePostCountByPost = this.#subtreePostCountByPost;
+		clone.#rootPostNumbers = this.#rootPostNumbers;
+		clone.#sortedChildrenByParent = this.#sortedChildrenByParent;
+		clone.#depthByPost = this.#depthByPost;
+		clone.#rootByPost = this.#rootByPost;
 		clone.#postNumbersCache = this.#postNumbersCache;
 		clone.#rootsCache = this.#rootsCache;
 		clone.#rootBranchesCache = this.#rootBranchesCache;
 		clone.#snapshotCache = this.#snapshotCache;
+		this.#stateShared = true;
+		clone.#stateShared = true;
 		return clone;
 	}
 
@@ -195,6 +196,7 @@ export class ReplyTreeTopology {
 				detachedPostNumbers: Object.freeze([]),
 			});
 		}
+		this.#detachSharedState();
 
 		let membershipChanged = false;
 		let rootsChanged = false;
@@ -291,6 +293,7 @@ export class ReplyTreeTopology {
 		}
 		const previousParent = this.#parentByPost.get(postNumber) ?? null;
 		const directChildren = this.childrenOf(postNumber);
+		this.#detachSharedState();
 		const affectedCounts = new Set<PostNumber>();
 		this.#addKnownAncestorChain(postNumber, affectedCounts);
 		if (previousParent === null) {
@@ -367,13 +370,14 @@ export class ReplyTreeTopology {
 				.map(([postNumber]) => postNumber),
 		);
 		this.#revision = Math.max(this.#revision + 1, snapshot.revision);
-		this.#sortedChildrenByParent.clear();
+		this.#sortedChildrenByParent = new Map();
 		this.#depthByPost = new Map();
 		this.#rootByPost = new Map();
 		this.#postNumbersCache = null;
 		this.#rootsCache = null;
 		this.#rootBranchesCache = null;
 		this.#snapshotCache = null;
+		this.#stateShared = false;
 		return Object.freeze({
 			revision: this.#revision,
 			changedPostNumbers: Object.freeze(sorted(changed)),
@@ -430,6 +434,23 @@ export class ReplyTreeTopology {
 			this.#depthByPost.set(descendantPostNumber, depth);
 			this.#rootByPost.set(descendantPostNumber, rootPostNumber);
 		}
+	}
+
+	#detachSharedState(): void {
+		if (!this.#stateShared) return;
+		this.#parentByPost = new Map(this.#parentByPost);
+		this.#childrenByParent = new Map(
+			[...this.#childrenByParent].map(([postNumber, children]) => [
+				postNumber,
+				new Set(children),
+			]),
+		);
+		this.#subtreePostCountByPost = new Map(this.#subtreePostCountByPost);
+		this.#rootPostNumbers = new Set(this.#rootPostNumbers);
+		this.#sortedChildrenByParent = new Map(this.#sortedChildrenByParent);
+		this.#depthByPost = new Map(this.#depthByPost);
+		this.#rootByPost = new Map(this.#rootByPost);
+		this.#stateShared = false;
 	}
 
 	#attachChild(parentPostNumber: PostNumber, postNumber: PostNumber): void {

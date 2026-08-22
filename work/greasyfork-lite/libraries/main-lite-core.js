@@ -6861,7 +6861,7 @@ runtime.register("src/components/reader-control-tooltip.js", function(module, ex
 	      !active?.matches(
 	        ".ldp-nested-rail-toggle,.ldp-nested-branch-toggle"
 	      ) || !domNode(event.target) || !active.contains(event.target) || this.#position(active, event);
-	    }), this.scope.listen(root, "pointerout", (event) => {
+	    }, { passive: !0 }), this.scope.listen(root, "pointerout", (event) => {
 	      const pointer = event, active = this.#activeControl;
 	      !active || pointer.pointerType === "touch" || active === this.#clickPinnedControl || domNode(pointer.relatedTarget) && active.contains(pointer.relatedTarget) || active.matches(":focus-visible") || this.close();
 	    }), this.scope.listen(root, "focusin", (event) => {
@@ -7005,7 +7005,7 @@ runtime.register("src/components/reader-control-tooltip.js", function(module, ex
 	    this.#copyResetTimer && (this.#cancelSchedule(this.#copyResetTimer), this.#copyResetTimer = 0);
 	  }
 	}
-}, "00ba7e4555de3a8675ade39e43a7bb51e7494995ae1ffb3eed6755a4a3d419a9");
+}, "d792038a86884da7def88414340c1b323e2d2a112ef569ac70797e983dba0598");
 
 /* Source: lite/src/components/reader-icon.ts */
 runtime.register("src/components/reader-icon.js", function(module, exports, require) {
@@ -8126,6 +8126,7 @@ runtime.register("src/dom/reply-tree.js", function(module, exports, require) {
 	  #rootsCache = null;
 	  #rootBranchesCache = null;
 	  #snapshotCache = null;
+	  #stateShared = !1;
 	  get revision() {
 	    return this.#revision;
 	  }
@@ -8157,14 +8158,7 @@ runtime.register("src/dom/reply-tree.js", function(module, exports, require) {
 	  }
 	  clone() {
 	    const clone = new ReplyTreeTopology();
-	    return clone.#revision = this.#revision, clone.#parentByPost = new Map(this.#parentByPost), clone.#childrenByParent = new Map(
-	      [...this.#childrenByParent].map(([postNumber, children]) => [
-	        postNumber,
-	        new Set(children)
-	      ])
-	    ), clone.#subtreePostCountByPost = new Map(
-	      this.#subtreePostCountByPost
-	    ), clone.#rootPostNumbers = new Set(this.#rootPostNumbers), clone.#sortedChildrenByParent = new Map(this.#sortedChildrenByParent), clone.#depthByPost = new Map(this.#depthByPost), clone.#rootByPost = new Map(this.#rootByPost), clone.#postNumbersCache = this.#postNumbersCache, clone.#rootsCache = this.#rootsCache, clone.#rootBranchesCache = this.#rootBranchesCache, clone.#snapshotCache = this.#snapshotCache, clone;
+	    return clone.#revision = this.#revision, clone.#parentByPost = this.#parentByPost, clone.#childrenByParent = this.#childrenByParent, clone.#subtreePostCountByPost = this.#subtreePostCountByPost, clone.#rootPostNumbers = this.#rootPostNumbers, clone.#sortedChildrenByParent = this.#sortedChildrenByParent, clone.#depthByPost = this.#depthByPost, clone.#rootByPost = this.#rootByPost, clone.#postNumbersCache = this.#postNumbersCache, clone.#rootsCache = this.#rootsCache, clone.#rootBranchesCache = this.#rootBranchesCache, clone.#snapshotCache = this.#snapshotCache, this.#stateShared = !0, clone.#stateShared = !0, clone;
 	  }
 	  subtreePostCountOf(postNumber) {
 	    return assertPostNumber(postNumber, "postNumber"), this.#subtreePostCountByPost.get(postNumber);
@@ -8205,6 +8199,7 @@ runtime.register("src/dom/reply-tree.js", function(module, exports, require) {
 	        changedPostNumbers: Object.freeze([]),
 	        detachedPostNumbers: Object.freeze([])
 	      });
+	    this.#detachSharedState();
 	    let membershipChanged = !1, rootsChanged = !1;
 	    const addedPostCount = [...changed].filter(
 	      (postNumber) => !this.#parentByPost.has(postNumber)
@@ -8254,7 +8249,9 @@ runtime.register("src/dom/reply-tree.js", function(module, exports, require) {
 	        changedPostNumbers: Object.freeze([]),
 	        detachedPostNumbers: Object.freeze([])
 	      });
-	    const previousParent = this.#parentByPost.get(postNumber) ?? null, directChildren = this.childrenOf(postNumber), affectedCounts = /* @__PURE__ */ new Set();
+	    const previousParent = this.#parentByPost.get(postNumber) ?? null, directChildren = this.childrenOf(postNumber);
+	    this.#detachSharedState();
+	    const affectedCounts = /* @__PURE__ */ new Set();
 	    this.#addKnownAncestorChain(postNumber, affectedCounts), previousParent === null ? this.#rootPostNumbers.delete(postNumber) : this.#detachChild(previousParent, postNumber), this.#parentByPost.delete(postNumber), this.#childrenByParent.delete(postNumber), this.#sortedChildrenByParent.delete(postNumber), this.#subtreePostCountByPost.delete(postNumber);
 	    for (const childPostNumber of directChildren)
 	      this.#parentByPost.set(childPostNumber, previousParent), previousParent === null ? this.#rootPostNumbers.add(childPostNumber) : this.#attachChild(previousParent, childPostNumber), this.#addKnownAncestorChain(childPostNumber, affectedCounts);
@@ -8284,7 +8281,7 @@ runtime.register("src/dom/reply-tree.js", function(module, exports, require) {
 	      this.#childrenByParent
 	    ), this.#rootPostNumbers = new Set(
 	      [...nextParents].filter(([, parentPostNumber]) => parentPostNumber === null).map(([postNumber]) => postNumber)
-	    ), this.#revision = Math.max(this.#revision + 1, snapshot.revision), this.#sortedChildrenByParent.clear(), this.#depthByPost = /* @__PURE__ */ new Map(), this.#rootByPost = /* @__PURE__ */ new Map(), this.#postNumbersCache = null, this.#rootsCache = null, this.#rootBranchesCache = null, this.#snapshotCache = null, Object.freeze({
+	    ), this.#revision = Math.max(this.#revision + 1, snapshot.revision), this.#sortedChildrenByParent = /* @__PURE__ */ new Map(), this.#depthByPost = /* @__PURE__ */ new Map(), this.#rootByPost = /* @__PURE__ */ new Map(), this.#postNumbersCache = null, this.#rootsCache = null, this.#rootBranchesCache = null, this.#snapshotCache = null, this.#stateShared = !1, Object.freeze({
 	      revision: this.#revision,
 	      changedPostNumbers: Object.freeze(sorted(changed)),
 	      detachedPostNumbers: Object.freeze(sorted(detached))
@@ -8327,6 +8324,14 @@ runtime.register("src/dom/reply-tree.js", function(module, exports, require) {
 	      const descendantPostNumber = path.pop();
 	      depth !== void 0 && (depth += 1), this.#depthByPost.set(descendantPostNumber, depth), this.#rootByPost.set(descendantPostNumber, rootPostNumber);
 	    }
+	  }
+	  #detachSharedState() {
+	    this.#stateShared && (this.#parentByPost = new Map(this.#parentByPost), this.#childrenByParent = new Map(
+	      [...this.#childrenByParent].map(([postNumber, children]) => [
+	        postNumber,
+	        new Set(children)
+	      ])
+	    ), this.#subtreePostCountByPost = new Map(this.#subtreePostCountByPost), this.#rootPostNumbers = new Set(this.#rootPostNumbers), this.#sortedChildrenByParent = new Map(this.#sortedChildrenByParent), this.#depthByPost = new Map(this.#depthByPost), this.#rootByPost = new Map(this.#rootByPost), this.#stateShared = !1);
 	  }
 	  #attachChild(parentPostNumber, postNumber) {
 	    const children = this.#childrenByParent.get(parentPostNumber) ?? /* @__PURE__ */ new Set();
@@ -8430,7 +8435,7 @@ runtime.register("src/dom/reply-tree.js", function(module, exports, require) {
 	    }
 	  }
 	}
-}, "cddb81ad8170f21ba3e8274c9e7c28173b0f74f8a7084202bb52d62bf8fd63d9");
+}, "fe7b97571ff64d5f27c7fbf4ec07a3b417a3b9b00e0e8de55e6ee1f6d38af0d5");
 
 /* Source: lite/src/dom/required-element.ts */
 runtime.register("src/dom/required-element.js", function(module, exports, require) {
@@ -17336,19 +17341,13 @@ runtime.register("src/shell/reader-workspace.js", function(module, exports, requ
 	  #restingTransform;
 	  #projectPlacement;
 	  #interaction = null;
+	  #interactionScope = null;
 	  #frame = 0;
 	  #destroyed = !1;
 	  constructor(options) {
 	    this.#model = options.model, this.#overlay = options.overlay, this.#modal = options.modal, this.#header = options.header, this.#onPersist = options.onPersist, this.#requestFrame = options.requestFrame ?? ((callback) => requestAnimationFrame(callback)), this.#cancelFrame = options.cancelFrame ?? ((id) => cancelAnimationFrame(id)), this.#dragSurfaceSelector = options.dragSurfaceSelector ?? ".ldp-header[data-ldp-reader-drag-surface]", this.#blockedSelector = options.blockedSelector ?? WINDOW_DRAG_BLOCKED_SELECTOR, this.#isDragBlocked = options.isDragBlocked, this.#interactingClassName = options.interactingClassName ?? "ldp-window-interacting", this.#restingTransform = options.restingTransform, this.#projectPlacement = options.projectPlacement ?? projectReaderWindowPlacement, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.scope.listen(this.#overlay, "pointerdown", (event) => this.#onPointerDown(
 	      event
-	    )), this.scope.listen(this.#overlay, "pointermove", (event) => this.#onPointerMove(
-	      event
-	    ));
-	    for (const type of ["pointerup", "pointercancel"])
-	      this.scope.listen(this.#overlay, type, (event) => this.#onPointerEnd(
-	        event
-	      ));
-	    options.lockButton && this.scope.listen(options.lockButton, "click", (event) => {
+	    )), options.lockButton && this.scope.listen(options.lockButton, "click", (event) => {
 	      event.preventDefault(), event.stopPropagation(), this.#stopInteraction(), this.#model.setLocked(!this.#model.snapshot.locked), this.#persist();
 	    }), options.pinButton && this.scope.listen(options.pinButton, "click", (event) => {
 	      event.preventDefault(), event.stopPropagation(), this.#model.setPinned(!this.#model.snapshot.pinned), this.#persist();
@@ -17390,7 +17389,7 @@ runtime.register("src/shell/reader-workspace.js", function(module, exports, requ
 	      y: event.clientY,
 	      start,
 	      preview: null
-	    }, this.#overlay.classList.add(this.#interactingClassName), this.#overlay.dataset.readerWindowInteraction = mode, dispatchCompatibilityEvent(
+	    }, this.#bindInteractionPointer(), this.#overlay.classList.add(this.#interactingClassName), this.#overlay.dataset.readerWindowInteraction = mode, dispatchCompatibilityEvent(
 	      this.#overlay,
 	      "ldp-reader-window-interaction-start"
 	    );
@@ -17404,6 +17403,17 @@ runtime.register("src/shell/reader-workspace.js", function(module, exports, requ
 	    !this.#interaction || event.pointerId !== this.#interaction.pointerId || (this.#interaction.x = event.clientX, this.#interaction.y = event.clientY, this.#frame || (this.#frame = this.#requestFrame(() => {
 	      this.#frame = 0, this.#renderInteraction();
 	    })));
+	  }
+	  #bindInteractionPointer() {
+	    this.#interactionScope?.destroy();
+	    const interactionScope = this.scope.child();
+	    this.#interactionScope = interactionScope, interactionScope.listen(this.#overlay, "pointermove", (event) => {
+	      this.#onPointerMove(event);
+	    });
+	    for (const type of ["pointerup", "pointercancel"])
+	      interactionScope.listen(this.#overlay, type, (event) => {
+	        this.#onPointerEnd(event);
+	      });
 	  }
 	  #onPointerEnd(event) {
 	    if (!this.#interaction || event.pointerId !== this.#interaction.pointerId) return;
@@ -17444,6 +17454,8 @@ runtime.register("src/shell/reader-workspace.js", function(module, exports, requ
 	  }
 	  #stopInteraction() {
 	    this.#frame && this.#cancelFrame(this.#frame), this.#frame = 0;
+	    const interactionScope = this.#interactionScope;
+	    this.#interactionScope = null, interactionScope?.destroy();
 	    const interaction = this.#interaction;
 	    if (this.#interaction = null, this.#overlay.classList.remove(this.#interactingClassName), this.#restingTransform === void 0 ? this.#modal.style.removeProperty("transform") : this.#modal.style.setProperty("transform", this.#restingTransform), !interaction) return;
 	    const snapshot = this.#model.snapshot;
@@ -17465,7 +17477,7 @@ runtime.register("src/shell/reader-workspace.js", function(module, exports, requ
 	    this.#onPersist?.(this.#model.preferencePatch());
 	  }
 	}
-}, "be3fa9973004533dd517ba8f40072d98e5b3898e3c8b1e7e2a9ed68f230b224e");
+}, "274eb11f15056c4b85bf5565fa32a6caca5658716121b763f58c7aa614f87195");
 
 /* Source: lite/src/state/preferences-config-codec.ts */
 runtime.register("src/state/preferences-config-codec.js", function(module, exports, require) {
@@ -27318,14 +27330,16 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    for (const listener of [...this.#windowChangeListeners]) listener();
 	  }
 	  #markUserScrollIntent(direction = 0, direct = !0) {
-	    this.#cancelPendingStationaryViewportLock(), this.#releaseStationaryViewport(), direction !== 0 && (this.#lastUserScrollDirection = direction), this.#userScrollSessionActive = !0, this.#lastUserScrollAt = Math.max(
+	    const now = finiteNonNegative(this.#now()), startsSession = !this.#userScrollSessionActive || this.#lastUserScrollAt <= 0 || now - this.#lastUserScrollAt > USER_SCROLL_SESSION_GAP_MS;
+	    if (this.#cancelPendingStationaryViewportLock(), this.#releaseStationaryViewport(), direction !== 0 && (this.#lastUserScrollDirection = direction), this.#userScrollSessionActive = !0, this.#lastUserScrollAt = Math.max(
 	      Number.EPSILON,
-	      finiteNonNegative(this.#now())
-	    );
-	    for (const listener of [...this.#userScrollIntentListeners]) listener();
-	    if (direct)
-	      for (const listener of [...this.#directUserScrollIntentListeners])
-	        listener();
+	      now
+	    ), !!startsSession) {
+	      for (const listener of [...this.#userScrollIntentListeners]) listener();
+	      if (direct)
+	        for (const listener of [...this.#directUserScrollIntentListeners])
+	          listener();
+	    }
 	  }
 	  #markUserScrollProgress() {
 	    if (!this.#userScrollSessionActive) return;
@@ -27524,7 +27538,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    ), this.#scrollOffsetDirty = !1), this.#pendingScrollOffset ?? this.#scrollOffset;
 	  }
 	}
-}, "9af5088ddf291dfa58f771015734be7fef314ae283f3fa24c8b85e019fb2695d");
+}, "29424c45778c4881c8f3c49d097f566616dff32b7247425eb74f2c2e7f9ece82");
 
 /* Source: lite/src/topic/reader-topic-scroll-lifecycle.ts */
 runtime.register("src/topic/reader-topic-scroll-lifecycle.js", function(module, exports, require) {

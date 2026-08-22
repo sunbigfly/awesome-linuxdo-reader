@@ -558,6 +558,7 @@ export class ReaderPostActionFeature<
 	readonly #eagerContextActions: boolean;
 	readonly #byView = new WeakMap<PostView, BoundPostAction<TPost>>();
 	readonly #byRoot = new Map<HTMLElement, BoundReactionSurface<TPost>>();
+	readonly #expandedPostActions = new Set<HTMLElement>();
 	readonly #reactionHoverOpenTimers = new Map<HTMLElement, number>();
 	readonly #reactionHoverCloseTimers = new Map<HTMLElement, number>();
 	readonly #queuedReactionIntentByPostId = new Map<number, string>();
@@ -818,6 +819,7 @@ export class ReaderPostActionFeature<
 				binding.manifest.destroy();
 			}
 			this.#byRoot.clear();
+			this.#expandedPostActions.clear();
 			this.#capabilityRefreshes.clear();
 			this.#capabilityRefreshAttempts.clear();
 		});
@@ -858,6 +860,10 @@ export class ReaderPostActionFeature<
 			this.#render(binding);
 		});
 		view.scope.add(() => {
+			const actions = binding.view.slots.actions.querySelector<HTMLElement>(
+				':scope > .ldp-actions',
+			);
+			if (actions) this.#expandedPostActions.delete(actions);
 			this.#byRoot.delete(view.slots.root);
 			if (
 				(this.#boostQuickActionBubble &&
@@ -1678,6 +1684,7 @@ export class ReaderPostActionFeature<
 		const showMobileActionsToggle =
 			contextActionCount > 0;
 		if (!showMobileActionsToggle) {
+			this.#syncPostActionsToggle(actions, false);
 			mobileActionsToggle?.remove();
 		} else if (!mobileActionsToggle) {
 			mobileActionsToggle = this.#actionButton(
@@ -2369,6 +2376,8 @@ export class ReaderPostActionFeature<
 
 	#syncPostActionsToggle(actions: HTMLElement, expanded: boolean): void {
 		actions.classList.toggle('ldp-post-actions-expanded', expanded);
+		if (expanded) this.#expandedPostActions.add(actions);
+		else this.#expandedPostActions.delete(actions);
 		const toggle = actions.querySelector<HTMLButtonElement>(
 			':scope > .ldp-post-actions-toggle',
 		);
@@ -2383,12 +2392,12 @@ export class ReaderPostActionFeature<
 
 	#collapsePostActionsOutside(event?: Event): boolean {
 		let collapsed = false;
-		for (const binding of this.#byRoot.values()) {
-			if (binding.kind !== 'post') continue;
-			const actions = binding.view.slots.actions.querySelector<HTMLElement>(
-				':scope > .ldp-actions.ldp-post-actions-expanded',
-			);
-			if (!actions || (event && eventPathIncludes(event, actions))) continue;
+		for (const actions of this.#expandedPostActions) {
+			if (!actions.classList.contains('ldp-post-actions-expanded')) {
+				this.#expandedPostActions.delete(actions);
+				continue;
+			}
+			if (event && eventPathIncludes(event, actions)) continue;
 			this.#syncPostActionsToggle(actions, false);
 			collapsed = true;
 		}

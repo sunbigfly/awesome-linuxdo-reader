@@ -24,6 +24,7 @@ export interface ReaderImageTransformControllerOptions {
 	readonly allowContainedPan?: boolean;
 	readonly resetPanAtFit?: boolean;
 	readonly preventDragDefault?: boolean;
+	readonly enablePinchZoom?: boolean;
 	readonly zoomValue?: HTMLElement;
 	readonly zoomOutButton?: HTMLButtonElement;
 	readonly zoomInButton?: HTMLButtonElement;
@@ -57,6 +58,23 @@ function browserFrameScheduler(target: HTMLElement): ReaderImageTransformFrameSc
 	};
 }
 
+interface ReaderImageTouchPoint {
+	readonly x: number;
+	readonly y: number;
+}
+
+interface ReaderImagePinchGesture {
+	readonly pointerIds: readonly [number, number];
+	readonly distance: number;
+	readonly centerX: number;
+	readonly centerY: number;
+	readonly scale: number;
+	readonly panX: number;
+	readonly panY: number;
+	readonly imageCenterX: number;
+	readonly imageCenterY: number;
+}
+
 /**
  * 灯箱、头像预览和批量图片预览共用的唯一缩放/拖拽状态 owner。
  *
@@ -74,6 +92,7 @@ export class ReaderImageTransformController {
 	readonly #allowContainedPan: boolean;
 	readonly #resetPanAtFit: boolean;
 	readonly #preventDragDefault: boolean;
+	readonly #pinchZoomEnabled: boolean;
 	readonly #zoomValue: HTMLElement | null;
 	readonly #zoomOutButton: HTMLButtonElement | null;
 	readonly #zoomInButton: HTMLButtonElement | null;
@@ -90,6 +109,8 @@ export class ReaderImageTransformController {
 	#pendingPanX = 0;
 	#pendingPanY = 0;
 	#dragFrame = 0;
+	readonly #touchPointers = new Map<number, ReaderImageTouchPoint>();
+	#pinchGesture: ReaderImagePinchGesture | null = null;
 
 	constructor(options: ReaderImageTransformControllerOptions) {
 		this.#stage = options.stage;
@@ -104,6 +125,7 @@ export class ReaderImageTransformController {
 		this.#allowContainedPan = options.allowContainedPan === true;
 		this.#resetPanAtFit = options.resetPanAtFit !== false;
 		this.#preventDragDefault = options.preventDragDefault === true;
+		this.#pinchZoomEnabled = options.enablePinchZoom === true;
 		this.#zoomValue = options.zoomValue ?? null;
 		this.#zoomOutButton = options.zoomOutButton ?? null;
 		this.#zoomInButton = options.zoomInButton ?? null;
@@ -123,6 +145,8 @@ export class ReaderImageTransformController {
 			if (this.#dragFrame) this.#frames.cancel(this.#dragFrame);
 			this.#dragFrame = 0;
 			this.#pointerId = null;
+			this.#touchPointers.clear();
+			this.#pinchGesture = null;
 			this.#image.classList.remove('is-zoomed', 'is-dragging');
 			this.changes.clear();
 		});
@@ -139,7 +163,7 @@ export class ReaderImageTransformController {
 			panX: this.#panX,
 			panY: this.#panY,
 			zoomed: this.#scale > 1.01,
-			dragging: this.#pointerId !== null,
+			dragging: this.#pointerId !== null || this.#pinchGesture !== null,
 		});
 	}
 
@@ -250,58 +274,201 @@ export class ReaderImageTransformController {
 
 	#onPointerDown(event: PointerEvent): void {
 		if (
+			this.#pinchZoomEnabled &&
+			event.pointerType === 'touch' &&
+			event.target === this.#image
+		) {
+			event.preventDefault();
+			this.#touchPointers.set(event.pointerId, {
+				x: event.clientX,
+				y: event.clientY,
+			});
+			this.#capturePointer(event.pointerId);
+			if (this.#touchPointers.size >= 2) {
+				this.#beginPinch();
+			} else if (this.#scale > 1.01) {
+				this.#beginDrag(event.pointerId, event.clientX, event.clientY);
+			}
+			return;
+		}
+		if (
 			this.#scale <= 1.01 ||
 			event.button !== 0 ||
 			event.target !== this.#image
 		) {
 			return;
 		}
-		this.#pointerId = event.pointerId;
-		this.#dragX = event.clientX - this.#panX;
-		this.#dragY = event.clientY - this.#panY;
-		this.#pendingPanX = this.#panX;
-		this.#pendingPanY = this.#panY;
-		const capture = this.#captureTarget.setPointerCapture;
-		if (typeof capture === 'function') capture.call(this.#captureTarget, event.pointerId);
-		this.#image.classList.add('is-dragging');
+		this.#beginDrag(event.pointerId, event.clientX, event.clientY);
+		this.#capturePointer(event.pointerId);
 		if (this.#preventDragDefault) event.preventDefault();
 	}
 
 	#onPointerMove(event: PointerEvent): void {
+		if (
+			this.#pinchZoomEnabled &&
+			event.pointerType === 'touch' &&
+			this.#touchPointers.has(event.pointerId)
+		) {
+			event.preventDefault();
+			this.#touchPointers.set(event.pointerId, {
+				x: event.clientX,
+				y: event.clientY,
+			});
+			if (!this.#pinchGesture && this.#touchPointers.size >= 2) {
+				this.#beginPinch();
+			}
+			if (this.#pinchGesture) {
+				this.#scheduleInteractionFrame();
+				return;
+			}
+			if (this.#touchPointers.size >= 2) return;
+		}
 		if (this.#pointerId !== event.pointerId) return;
 		this.#pendingPanX = event.clientX - this.#dragX;
 		this.#pendingPanY = event.clientY - this.#dragY;
-		if (!this.#dragFrame) {
-			this.#dragFrame = this.#frames.request(() => this.#flushDrag());
-		}
+		this.#scheduleInteractionFrame();
 	}
 
 	#onPointerEnd(event: PointerEvent): void {
-		if (this.#pointerId !== event.pointerId) return;
-		if (this.#dragFrame) {
-			this.#frames.cancel(this.#dragFrame);
-			this.#dragFrame = 0;
-			this.#flushDrag();
-		}
-		const hasCapture = this.#captureTarget.hasPointerCapture;
-		const release = this.#captureTarget.releasePointerCapture;
 		if (
-			typeof hasCapture === 'function' &&
-			typeof release === 'function' &&
-			hasCapture.call(this.#captureTarget, event.pointerId)
+			this.#pinchZoomEnabled &&
+			event.pointerType === 'touch' &&
+			this.#touchPointers.has(event.pointerId)
 		) {
-			release.call(this.#captureTarget, event.pointerId);
+			event.preventDefault();
+			this.#flushPendingInteraction();
+			this.#touchPointers.delete(event.pointerId);
+			this.#releasePointer(event.pointerId);
+			const endedPinch = this.#pinchGesture?.pointerIds.includes(event.pointerId) === true;
+			if (endedPinch) this.#pinchGesture = null;
+			if (!this.#pinchGesture && this.#touchPointers.size >= 2) {
+				this.#beginPinch();
+			}
+			if (!this.#pinchGesture && this.#touchPointers.size === 1 && this.#scale > 1.01) {
+				const [pointerId, point] = this.#touchPointers.entries().next().value as [
+					number,
+					ReaderImageTouchPoint,
+				];
+				this.#beginDrag(pointerId, point.x, point.y);
+			} else if (!this.#pinchGesture) {
+				this.#pointerId = null;
+				this.#image.classList.remove('is-dragging');
+				this.render();
+			}
+			return;
 		}
+		if (this.#pointerId !== event.pointerId) return;
+		this.#flushPendingInteraction();
+		this.#releasePointer(event.pointerId);
 		this.#pointerId = null;
 		this.#image.classList.remove('is-dragging');
 		this.render();
 	}
 
-	#flushDrag(): void {
+	#beginDrag(pointerId: number, clientX: number, clientY: number): void {
+		this.#pointerId = pointerId;
+		this.#dragX = clientX - this.#panX;
+		this.#dragY = clientY - this.#panY;
+		this.#pendingPanX = this.#panX;
+		this.#pendingPanY = this.#panY;
+		this.#image.classList.add('is-dragging');
+	}
+
+	#beginPinch(): void {
+		if (this.#pinchGesture) return;
+		const entries = [...this.#touchPointers.entries()].slice(0, 2) as Array<
+			[number, ReaderImageTouchPoint]
+		>;
+		const first = entries[0];
+		const second = entries[1];
+		if (!first || !second) return;
+		const distance = Math.hypot(second[1].x - first[1].x, second[1].y - first[1].y);
+		if (distance < 1) return;
+		this.#flushPendingInteraction();
+		this.#pointerId = null;
+		const imageRect = this.#image.getBoundingClientRect();
+		this.#pinchGesture = Object.freeze({
+			pointerIds: Object.freeze([first[0], second[0]]) as readonly [number, number],
+			distance,
+			centerX: (first[1].x + second[1].x) / 2,
+			centerY: (first[1].y + second[1].y) / 2,
+			scale: this.#scale,
+			panX: this.#panX,
+			panY: this.#panY,
+			imageCenterX: imageRect.left + imageRect.width / 2,
+			imageCenterY: imageRect.top + imageRect.height / 2,
+		});
+		this.#image.classList.add('is-dragging');
+	}
+
+	#scheduleInteractionFrame(): void {
+		if (!this.#dragFrame) {
+			this.#dragFrame = this.#frames.request(() => this.#flushInteraction());
+		}
+	}
+
+	#flushPendingInteraction(): void {
+		if (!this.#dragFrame) return;
+		this.#frames.cancel(this.#dragFrame);
 		this.#dragFrame = 0;
+		this.#flushInteraction();
+	}
+
+	#flushInteraction(): void {
+		this.#dragFrame = 0;
+		if (this.#pinchGesture) {
+			const [firstId, secondId] = this.#pinchGesture.pointerIds;
+			const first = this.#touchPointers.get(firstId);
+			const second = this.#touchPointers.get(secondId);
+			if (!first || !second) return;
+			const distance = Math.hypot(second.x - first.x, second.y - first.y);
+			const centerX = (first.x + second.x) / 2;
+			const centerY = (first.y + second.y) / 2;
+			const nextScale = Math.max(
+				this.#minScale,
+				Math.min(
+					this.#maxScale,
+					this.#pinchGesture.scale * distance / this.#pinchGesture.distance,
+				),
+			);
+			const scaleRatio = nextScale / this.#pinchGesture.scale;
+			this.#scale = nextScale;
+			this.#panX = this.#pinchGesture.panX +
+				(centerX - this.#pinchGesture.centerX) +
+				(this.#pinchGesture.centerX - this.#pinchGesture.imageCenterX) *
+				(1 - scaleRatio);
+			this.#panY = this.#pinchGesture.panY +
+				(centerY - this.#pinchGesture.centerY) +
+				(this.#pinchGesture.centerY - this.#pinchGesture.imageCenterY) *
+				(1 - scaleRatio);
+			this.#containedPan = this.#allowContainedPan;
+			if (this.#resetPanAtFit && this.#scale <= 1.01) {
+				this.#panX = 0;
+				this.#panY = 0;
+			}
+			this.render();
+			return;
+		}
 		this.#panX = this.#pendingPanX;
 		this.#panY = this.#pendingPanY;
 		this.render();
+	}
+
+	#capturePointer(pointerId: number): void {
+		const capture = this.#captureTarget.setPointerCapture;
+		if (typeof capture === 'function') capture.call(this.#captureTarget, pointerId);
+	}
+
+	#releasePointer(pointerId: number): void {
+		const hasCapture = this.#captureTarget.hasPointerCapture;
+		const release = this.#captureTarget.releasePointerCapture;
+		if (
+			typeof hasCapture === 'function' &&
+			typeof release === 'function' &&
+			hasCapture.call(this.#captureTarget, pointerId)
+		) {
+			release.call(this.#captureTarget, pointerId);
+		}
 	}
 
 	#assertActive(): void {

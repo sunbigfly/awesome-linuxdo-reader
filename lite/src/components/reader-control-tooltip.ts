@@ -207,7 +207,7 @@ export class ReaderControlTooltip {
 				!active.contains(event.target)
 			) return;
 			this.#position(active, event as PointerEvent);
-		});
+		}, { passive: true });
 		this.scope.listen(root, 'pointerout', (event) => {
 			const pointer = event as PointerEvent;
 			const active = this.#activeControl;

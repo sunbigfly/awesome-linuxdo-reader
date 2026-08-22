@@ -1102,6 +1102,7 @@ export class ReaderWindowPointerController {
 		geometry: ReaderWindowGeometry | null,
 	) => void;
 	#interaction: ReaderWindowPointerInteraction | null = null;
+	#interactionScope: LifecycleScope | null = null;
 	#frame = 0;
 	#destroyed = false;
 
@@ -1128,14 +1129,6 @@ export class ReaderWindowPointerController {
 		this.scope.listen(this.#overlay, 'pointerdown', (event) => this.#onPointerDown(
 			event as PointerEvent,
 		));
-		this.scope.listen(this.#overlay, 'pointermove', (event) => this.#onPointerMove(
-			event as PointerEvent,
-		));
-		for (const type of ['pointerup', 'pointercancel']) {
-			this.scope.listen(this.#overlay, type, (event) => this.#onPointerEnd(
-				event as PointerEvent,
-			));
-		}
 		if (options.lockButton) {
 			this.scope.listen(options.lockButton, 'click', (event) => {
 				event.preventDefault();
@@ -1226,6 +1219,7 @@ export class ReaderWindowPointerController {
 			start,
 			preview: null,
 		};
+		this.#bindInteractionPointer();
 		this.#overlay.classList.add(this.#interactingClassName);
 		this.#overlay.dataset.readerWindowInteraction = mode;
 		dispatchCompatibilityEvent(
@@ -1250,6 +1244,20 @@ export class ReaderWindowPointerController {
 			this.#frame = this.#requestFrame(() => {
 				this.#frame = 0;
 				this.#renderInteraction();
+			});
+		}
+	}
+
+	#bindInteractionPointer(): void {
+		this.#interactionScope?.destroy();
+		const interactionScope = this.scope.child();
+		this.#interactionScope = interactionScope;
+		interactionScope.listen(this.#overlay, 'pointermove', (event) => {
+			this.#onPointerMove(event as PointerEvent);
+		});
+		for (const type of ['pointerup', 'pointercancel']) {
+			interactionScope.listen(this.#overlay, type, (event) => {
+				this.#onPointerEnd(event as PointerEvent);
 			});
 		}
 	}
@@ -1307,6 +1315,9 @@ export class ReaderWindowPointerController {
 	#stopInteraction(): void {
 		if (this.#frame) this.#cancelFrame(this.#frame);
 		this.#frame = 0;
+		const interactionScope = this.#interactionScope;
+		this.#interactionScope = null;
+		interactionScope?.destroy();
 		const interaction = this.#interaction;
 		this.#interaction = null;
 		this.#overlay.classList.remove(this.#interactingClassName);

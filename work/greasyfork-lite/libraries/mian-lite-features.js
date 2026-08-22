@@ -8442,6 +8442,7 @@ runtime.register("src/media/reader-image-transform-controller.js", function(modu
 	  #allowContainedPan;
 	  #resetPanAtFit;
 	  #preventDragDefault;
+	  #pinchZoomEnabled;
 	  #zoomValue;
 	  #zoomOutButton;
 	  #zoomInButton;
@@ -8458,14 +8459,16 @@ runtime.register("src/media/reader-image-transform-controller.js", function(modu
 	  #pendingPanX = 0;
 	  #pendingPanY = 0;
 	  #dragFrame = 0;
+	  #touchPointers = /* @__PURE__ */ new Map();
+	  #pinchGesture = null;
 	  constructor(options) {
 	    this.#stage = options.stage, this.#image = options.image, this.#captureTarget = options.captureTarget ?? options.stage, this.#minScale = finiteRange(options.minScale, 0.25, Number.EPSILON), this.#maxScale = Math.max(
 	      this.#minScale,
 	      finiteRange(options.maxScale, 8, Number.EPSILON)
-	    ), this.#overflowPadding = finiteRange(options.overflowPadding, 0, 0), this.#allowContainedPan = options.allowContainedPan === !0, this.#resetPanAtFit = options.resetPanAtFit !== !1, this.#preventDragDefault = options.preventDragDefault === !0, this.#zoomValue = options.zoomValue ?? null, this.#zoomOutButton = options.zoomOutButton ?? null, this.#zoomInButton = options.zoomInButton ?? null, this.#renderView = options.render ?? (() => {
+	    ), this.#overflowPadding = finiteRange(options.overflowPadding, 0, 0), this.#allowContainedPan = options.allowContainedPan === !0, this.#resetPanAtFit = options.resetPanAtFit !== !1, this.#preventDragDefault = options.preventDragDefault === !0, this.#pinchZoomEnabled = options.enablePinchZoom === !0, this.#zoomValue = options.zoomValue ?? null, this.#zoomOutButton = options.zoomOutButton ?? null, this.#zoomInButton = options.zoomInButton ?? null, this.#renderView = options.render ?? (() => {
 	    }), this.#frames = options.frameScheduler ?? browserFrameScheduler(this.#captureTarget), this.#onError = options.onError ?? (() => {
 	    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.scope.listen(this.#captureTarget, "pointerdown", (event) => this.#onPointerDown(event)), this.scope.listen(this.#captureTarget, "pointermove", (event) => this.#onPointerMove(event)), this.scope.listen(this.#captureTarget, "pointerup", (event) => this.#onPointerEnd(event)), this.scope.listen(this.#captureTarget, "pointercancel", (event) => this.#onPointerEnd(event)), this.scope.add(() => {
-	      this.#dragFrame && this.#frames.cancel(this.#dragFrame), this.#dragFrame = 0, this.#pointerId = null, this.#image.classList.remove("is-zoomed", "is-dragging"), this.changes.clear();
+	      this.#dragFrame && this.#frames.cancel(this.#dragFrame), this.#dragFrame = 0, this.#pointerId = null, this.#touchPointers.clear(), this.#pinchGesture = null, this.#image.classList.remove("is-zoomed", "is-dragging"), this.changes.clear();
 	    }), this.render();
 	  }
 	  get scale() {
@@ -8477,7 +8480,7 @@ runtime.register("src/media/reader-image-transform-controller.js", function(modu
 	      panX: this.#panX,
 	      panY: this.#panY,
 	      zoomed: this.#scale > 1.01,
-	      dragging: this.#pointerId !== null
+	      dragging: this.#pointerId !== null || this.#pinchGesture !== null
 	    });
 	  }
 	  setZoom(value, clientX, clientY) {
@@ -8532,30 +8535,97 @@ runtime.register("src/media/reader-image-transform-controller.js", function(modu
 	    this.#panX = Math.max(-maxX, Math.min(maxX, this.#panX)), this.#panY = Math.max(-maxY, Math.min(maxY, this.#panY));
 	  }
 	  #onPointerDown(event) {
-	    if (this.#scale <= 1.01 || event.button !== 0 || event.target !== this.#image)
+	    if (this.#pinchZoomEnabled && event.pointerType === "touch" && event.target === this.#image) {
+	      event.preventDefault(), this.#touchPointers.set(event.pointerId, {
+	        x: event.clientX,
+	        y: event.clientY
+	      }), this.#capturePointer(event.pointerId), this.#touchPointers.size >= 2 ? this.#beginPinch() : this.#scale > 1.01 && this.#beginDrag(event.pointerId, event.clientX, event.clientY);
 	      return;
-	    this.#pointerId = event.pointerId, this.#dragX = event.clientX - this.#panX, this.#dragY = event.clientY - this.#panY, this.#pendingPanX = this.#panX, this.#pendingPanY = this.#panY;
-	    const capture = this.#captureTarget.setPointerCapture;
-	    typeof capture == "function" && capture.call(this.#captureTarget, event.pointerId), this.#image.classList.add("is-dragging"), this.#preventDragDefault && event.preventDefault();
+	    }
+	    this.#scale <= 1.01 || event.button !== 0 || event.target !== this.#image || (this.#beginDrag(event.pointerId, event.clientX, event.clientY), this.#capturePointer(event.pointerId), this.#preventDragDefault && event.preventDefault());
 	  }
 	  #onPointerMove(event) {
-	    this.#pointerId === event.pointerId && (this.#pendingPanX = event.clientX - this.#dragX, this.#pendingPanY = event.clientY - this.#dragY, this.#dragFrame || (this.#dragFrame = this.#frames.request(() => this.#flushDrag())));
+	    if (this.#pinchZoomEnabled && event.pointerType === "touch" && this.#touchPointers.has(event.pointerId)) {
+	      if (event.preventDefault(), this.#touchPointers.set(event.pointerId, {
+	        x: event.clientX,
+	        y: event.clientY
+	      }), !this.#pinchGesture && this.#touchPointers.size >= 2 && this.#beginPinch(), this.#pinchGesture) {
+	        this.#scheduleInteractionFrame();
+	        return;
+	      }
+	      if (this.#touchPointers.size >= 2) return;
+	    }
+	    this.#pointerId === event.pointerId && (this.#pendingPanX = event.clientX - this.#dragX, this.#pendingPanY = event.clientY - this.#dragY, this.#scheduleInteractionFrame());
 	  }
 	  #onPointerEnd(event) {
-	    if (this.#pointerId !== event.pointerId) return;
-	    this.#dragFrame && (this.#frames.cancel(this.#dragFrame), this.#dragFrame = 0, this.#flushDrag());
-	    const hasCapture = this.#captureTarget.hasPointerCapture, release = this.#captureTarget.releasePointerCapture;
-	    typeof hasCapture == "function" && typeof release == "function" && hasCapture.call(this.#captureTarget, event.pointerId) && release.call(this.#captureTarget, event.pointerId), this.#pointerId = null, this.#image.classList.remove("is-dragging"), this.render();
+	    if (this.#pinchZoomEnabled && event.pointerType === "touch" && this.#touchPointers.has(event.pointerId)) {
+	      if (event.preventDefault(), this.#flushPendingInteraction(), this.#touchPointers.delete(event.pointerId), this.#releasePointer(event.pointerId), this.#pinchGesture?.pointerIds.includes(event.pointerId) === !0 && (this.#pinchGesture = null), !this.#pinchGesture && this.#touchPointers.size >= 2 && this.#beginPinch(), !this.#pinchGesture && this.#touchPointers.size === 1 && this.#scale > 1.01) {
+	        const [pointerId, point] = this.#touchPointers.entries().next().value;
+	        this.#beginDrag(pointerId, point.x, point.y);
+	      } else this.#pinchGesture || (this.#pointerId = null, this.#image.classList.remove("is-dragging"), this.render());
+	      return;
+	    }
+	    this.#pointerId === event.pointerId && (this.#flushPendingInteraction(), this.#releasePointer(event.pointerId), this.#pointerId = null, this.#image.classList.remove("is-dragging"), this.render());
 	  }
-	  #flushDrag() {
-	    this.#dragFrame = 0, this.#panX = this.#pendingPanX, this.#panY = this.#pendingPanY, this.render();
+	  #beginDrag(pointerId, clientX, clientY) {
+	    this.#pointerId = pointerId, this.#dragX = clientX - this.#panX, this.#dragY = clientY - this.#panY, this.#pendingPanX = this.#panX, this.#pendingPanY = this.#panY, this.#image.classList.add("is-dragging");
+	  }
+	  #beginPinch() {
+	    if (this.#pinchGesture) return;
+	    const entries = [...this.#touchPointers.entries()].slice(0, 2), first = entries[0], second = entries[1];
+	    if (!first || !second) return;
+	    const distance = Math.hypot(second[1].x - first[1].x, second[1].y - first[1].y);
+	    if (distance < 1) return;
+	    this.#flushPendingInteraction(), this.#pointerId = null;
+	    const imageRect = this.#image.getBoundingClientRect();
+	    this.#pinchGesture = Object.freeze({
+	      pointerIds: Object.freeze([first[0], second[0]]),
+	      distance,
+	      centerX: (first[1].x + second[1].x) / 2,
+	      centerY: (first[1].y + second[1].y) / 2,
+	      scale: this.#scale,
+	      panX: this.#panX,
+	      panY: this.#panY,
+	      imageCenterX: imageRect.left + imageRect.width / 2,
+	      imageCenterY: imageRect.top + imageRect.height / 2
+	    }), this.#image.classList.add("is-dragging");
+	  }
+	  #scheduleInteractionFrame() {
+	    this.#dragFrame || (this.#dragFrame = this.#frames.request(() => this.#flushInteraction()));
+	  }
+	  #flushPendingInteraction() {
+	    this.#dragFrame && (this.#frames.cancel(this.#dragFrame), this.#dragFrame = 0, this.#flushInteraction());
+	  }
+	  #flushInteraction() {
+	    if (this.#dragFrame = 0, this.#pinchGesture) {
+	      const [firstId, secondId] = this.#pinchGesture.pointerIds, first = this.#touchPointers.get(firstId), second = this.#touchPointers.get(secondId);
+	      if (!first || !second) return;
+	      const distance = Math.hypot(second.x - first.x, second.y - first.y), centerX = (first.x + second.x) / 2, centerY = (first.y + second.y) / 2, nextScale = Math.max(
+	        this.#minScale,
+	        Math.min(
+	          this.#maxScale,
+	          this.#pinchGesture.scale * distance / this.#pinchGesture.distance
+	        )
+	      ), scaleRatio = nextScale / this.#pinchGesture.scale;
+	      this.#scale = nextScale, this.#panX = this.#pinchGesture.panX + (centerX - this.#pinchGesture.centerX) + (this.#pinchGesture.centerX - this.#pinchGesture.imageCenterX) * (1 - scaleRatio), this.#panY = this.#pinchGesture.panY + (centerY - this.#pinchGesture.centerY) + (this.#pinchGesture.centerY - this.#pinchGesture.imageCenterY) * (1 - scaleRatio), this.#containedPan = this.#allowContainedPan, this.#resetPanAtFit && this.#scale <= 1.01 && (this.#panX = 0, this.#panY = 0), this.render();
+	      return;
+	    }
+	    this.#panX = this.#pendingPanX, this.#panY = this.#pendingPanY, this.render();
+	  }
+	  #capturePointer(pointerId) {
+	    const capture = this.#captureTarget.setPointerCapture;
+	    typeof capture == "function" && capture.call(this.#captureTarget, pointerId);
+	  }
+	  #releasePointer(pointerId) {
+	    const hasCapture = this.#captureTarget.hasPointerCapture, release = this.#captureTarget.releasePointerCapture;
+	    typeof hasCapture == "function" && typeof release == "function" && hasCapture.call(this.#captureTarget, pointerId) && release.call(this.#captureTarget, pointerId);
 	  }
 	  #assertActive() {
 	    if (this.scope.destroyed)
 	      throw new Error("ReaderImageTransformController 已销毁");
 	  }
 	}
-}, "e4674018726831abff34d08fceb84cf7c6f46c3a632dc003516da80dba121af3");
+}, "d961a60f7eac09405bc6678c646da4bbbe40c614e6da365e0052cece3ae7634a");
 
 /* Source: lite/src/media/reader-katex-controller.ts */
 runtime.register("src/media/reader-katex-controller.js", function(module, exports, require) {
@@ -10580,6 +10650,7 @@ runtime.register("src/media/reader-lightbox-view.js", function(module, exports, 
 	      overflowPadding: 24,
 	      allowContainedPan: !0,
 	      resetPanAtFit: !1,
+	      enablePinchZoom: !0,
 	      zoomValue: this.#zoomValue,
 	      zoomOutButton: required(root, '[data-lb-action="zoom-out"]'),
 	      zoomInButton: required(root, '[data-lb-action="zoom-in"]'),
@@ -10833,7 +10904,7 @@ runtime.register("src/media/reader-lightbox-view.js", function(module, exports, 
 	      } else event.key === "ArrowLeft" ? (event.preventDefault(), this.#move(-1)) : event.key === "ArrowRight" ? (event.preventDefault(), this.#move(1)) : this.transform.handleShortcut(event);
 	  }
 	}
-}, "c65156d9b4f26a135ac44d4f38dfc5a90fc34bc53d366d10ccd2d4025a94bede");
+}, "6f5f50883d847ac1c8b61f75e37774f48cd73cf1a2232e5a6b77114590371e70");
 
 /* Source: lite/src/media/reader-media-controller.ts */
 runtime.register("src/media/reader-media-controller.js", function(module, exports, require) {
@@ -14267,6 +14338,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	  #eagerContextActions;
 	  #byView = /* @__PURE__ */ new WeakMap();
 	  #byRoot = /* @__PURE__ */ new Map();
+	  #expandedPostActions = /* @__PURE__ */ new Set();
 	  #reactionHoverOpenTimers = /* @__PURE__ */ new Map();
 	  #reactionHoverCloseTimers = /* @__PURE__ */ new Map();
 	  #queuedReactionIntentByPostId = /* @__PURE__ */ new Map();
@@ -14404,7 +14476,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	      this.#cancelHostRuntimeReadyRetry(), this.#closeBoostQuickActions(), this.#clearReactionHoverTimers(), this.#queuedReactionIntentByPostId.clear(), this.#closeBoost();
 	      for (const binding of this.#byRoot.values())
 	        binding.kind === "post" && binding.unbind?.(), binding.manifest.destroy();
-	      this.#byRoot.clear(), this.#capabilityRefreshes.clear(), this.#capabilityRefreshAttempts.clear();
+	      this.#byRoot.clear(), this.#expandedPostActions.clear(), this.#capabilityRefreshes.clear(), this.#capabilityRefreshAttempts.clear();
 	    });
 	  }
 	  afterRender(post, view) {
@@ -14435,7 +14507,10 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	    this.#byView.set(view, binding), this.#byRoot.set(view.slots.root, binding), binding.unbind = view.bindActionManifest(manifest, (_slots, snapshot) => {
 	      binding.snapshot = snapshot, this.#render(binding);
 	    }), view.scope.add(() => {
-	      this.#byRoot.delete(view.slots.root), (this.#boostQuickActionBubble && view.slots.root.contains(this.#boostQuickActionBubble) || this.#boostQuickActionCandidate && view.slots.root.contains(this.#boostQuickActionCandidate)) && this.#closeBoostQuickActions(), this.#boostBinding === binding && this.#closeBoost();
+	      const actions = binding.view.slots.actions.querySelector(
+	        ":scope > .ldp-actions"
+	      );
+	      actions && this.#expandedPostActions.delete(actions), this.#byRoot.delete(view.slots.root), (this.#boostQuickActionBubble && view.slots.root.contains(this.#boostQuickActionBubble) || this.#boostQuickActionCandidate && view.slots.root.contains(this.#boostQuickActionCandidate)) && this.#closeBoostQuickActions(), this.#boostBinding === binding && this.#closeBoost();
 	    }), this.#refreshMissingPostCapabilities(post);
 	  }
 	  #refreshMissingPostCapabilities(post) {
@@ -14814,7 +14889,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	      "chevron-right",
 	      "展开其余楼层操作",
 	      "ldp-post-actions-toggle"
-	    ), mobileActionsToggle.dataset.postActionsToggle = "", actions.append(mobileActionsToggle)) : mobileActionsToggle?.remove(), mobileActionsToggle && (this.#syncPostActionsToggle(
+	    ), mobileActionsToggle.dataset.postActionsToggle = "", actions.append(mobileActionsToggle)) : (this.#syncPostActionsToggle(actions, !1), mobileActionsToggle?.remove()), mobileActionsToggle && (this.#syncPostActionsToggle(
 	      actions,
 	      actions.classList.contains("ldp-post-actions-expanded")
 	    ), actions.append(mobileActionsToggle)), !binding.contextHydrated) {
@@ -15167,7 +15242,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	    return button.type = "button", button.className = `ldp-btn ${className}`, button.setAttribute("aria-label", label), button.append(this.#iconNode(iconName)), button;
 	  }
 	  #syncPostActionsToggle(actions, expanded) {
-	    actions.classList.toggle("ldp-post-actions-expanded", expanded);
+	    actions.classList.toggle("ldp-post-actions-expanded", expanded), expanded ? this.#expandedPostActions.add(actions) : this.#expandedPostActions.delete(actions);
 	    const toggle = actions.querySelector(
 	      ":scope > .ldp-post-actions-toggle"
 	    );
@@ -15180,12 +15255,12 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	  }
 	  #collapsePostActionsOutside(event) {
 	    let collapsed = !1;
-	    for (const binding of this.#byRoot.values()) {
-	      if (binding.kind !== "post") continue;
-	      const actions = binding.view.slots.actions.querySelector(
-	        ":scope > .ldp-actions.ldp-post-actions-expanded"
-	      );
-	      !actions || event && (0, import_event_target.eventPathIncludes)(event, actions) || (this.#syncPostActionsToggle(actions, !1), collapsed = !0);
+	    for (const actions of this.#expandedPostActions) {
+	      if (!actions.classList.contains("ldp-post-actions-expanded")) {
+	        this.#expandedPostActions.delete(actions);
+	        continue;
+	      }
+	      event && (0, import_event_target.eventPathIncludes)(event, actions) || (this.#syncPostActionsToggle(actions, !1), collapsed = !0);
 	    }
 	    return collapsed;
 	  }
@@ -16184,7 +16259,7 @@ ${content}
 	    !binding || !binding.root.classList.contains("ldp-topic-action-rail-post") || (binding.open = !1, binding.topicActionRailExpanded = expanded, expanded && !binding.contextHydrated && (binding.contextHydrated = !0, this.#renderActions(binding), this.#renderTopicFooter(binding)), this.#syncTopicActionRailReply(binding), this.#clearReactionHoverTimers(binding.slot), this.#syncReactionPickerVisibility(binding));
 	  }
 	}
-}, "ed9940f1d44b95d1fe9b2a5b988514078ac80ab0333f7cf0fb4fcdabc88c039e");
+}, "33837dfc3ce3d3cd8133df2ee3e821c460b7f4f72d5bb122c2451f9ae70aba25");
 
 /* Source: lite/src/post/reader-post-management-action-coordinator.ts */
 runtime.register("src/post/reader-post-management-action-coordinator.js", function(module, exports, require) {
@@ -16463,11 +16538,11 @@ ${text}
 	      this.#run(event);
 	    }), imageToolbar && (this.scope.listen(this.#contentRoot, "pointerover", (event) => {
 	      this.#updateImagePointer(event);
-	    }), this.scope.listen(this.#contentRoot, "pointermove", (event) => {
+	    }, { passive: !0 }), this.scope.listen(this.#contentRoot, "pointermove", (event) => {
 	      this.#updateImagePointer(event);
-	    }), this.scope.listen(this.#contentRoot, "pointerout", (event) => {
+	    }, { passive: !0 }), this.scope.listen(this.#contentRoot, "pointerout", (event) => {
 	      this.#leaveImage(event);
-	    }), this.scope.listen(imageToolbar, "pointerdown", (event) => {
+	    }, { passive: !0 }), this.scope.listen(imageToolbar, "pointerdown", (event) => {
 	      event.preventDefault();
 	    }), this.scope.listen(imageToolbar, "pointerenter", () => {
 	      this.#imagePointerInside = !1, this.#clearImageHideTimer(), this.#clearImageCycleTimers();
@@ -16683,7 +16758,7 @@ ${text}
 	    this.#imageShowTimer !== null && clearTimeout(this.#imageShowTimer), this.#imageCycleTimer !== null && clearTimeout(this.#imageCycleTimer), this.#imageShowTimer = null, this.#imageCycleTimer = null;
 	  }
 	}
-}, "629aebcf3c8120393f0944394c2c73c0db9a865bb88a9cdbc1681f35a376a8a9");
+}, "4ce0ae6bbb6da2b6f639f30318df0b6e834b996250805011552bfac2a167dd1e");
 
 /* Source: lite/src/post/reader-share-action-coordinator.ts */
 runtime.register("src/post/reader-share-action-coordinator.js", function(module, exports, require) {
@@ -16889,6 +16964,8 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	  #expanded = !1;
 	  #frame = 0;
 	  #holdTimer = 0;
+	  #dragPointerId = null;
+	  #dragPointerScope = null;
 	  #drag = null;
 	  #suppressClickUntil = 0;
 	  constructor(options) {
@@ -16983,13 +17060,7 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	      collapseExpandedFromOutside(event);
 	    }), this.scope.listen(this.#document, "pointerdown", (event) => {
 	      ownedPointerDowns.has(event) || collapseExpandedFromOutside(event);
-	    }), this.scope.listen(this.#document, "pointermove", (event) => {
-	      this.#onPointerMove(event);
-	    }, !0), this.scope.listen(this.#document, "pointerup", (event) => {
-	      this.#finishDrag(event);
-	    }, !0), this.scope.listen(this.#document, "pointercancel", (event) => {
-	      this.#finishDrag(event);
-	    }, !0), window && this.scope.listen(window, "resize", () => this.#queuePosition()), this.scope.listen(this.#shellRoot, "ldp-reader-workspace-change", () => {
+	    }), window && this.scope.listen(window, "resize", () => this.#queuePosition()), this.scope.listen(this.#shellRoot, "ldp-reader-workspace-change", () => {
 	      this.#queuePosition();
 	    });
 	    const resizeObserver = (options.createResizeObserver ?? (window?.ResizeObserver ? (callback) => new window.ResizeObserver(callback) : null))?.(() => {
@@ -16998,7 +17069,7 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	    resizeObserver && (resizeObserver.observe(this.#mount), resizeObserver.observe(this.host), this.scope.add(() => resizeObserver.disconnect())), this.#preferences.subscribe((preferences) => {
 	      this.#settings = preferences, this.#expanded || this.#applyMode(preferences.mode, !1), this.#syncVisibility(), this.#queuePosition();
 	    }, this.scope), this.scope.add(() => {
-	      this.#clearHold(), this.#frame && this.#cancelFrame(this.#frame), this.#frame = 0, this.#view?.destroy(), this.#view = null, this.host.remove(), this.#shellRoot.classList.remove(
+	      this.#clearHold(), this.#releaseDragPointer(), this.#frame && this.#cancelFrame(this.#frame), this.#frame = 0, this.#view?.destroy(), this.#view = null, this.host.remove(), this.#shellRoot.classList.remove(
 	        "ldp-topic-action-rail-visible",
 	        "ldp-topic-action-rail-expanded"
 	      );
@@ -17202,9 +17273,11 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	    ))
 	      return;
 	    this.#clearHold();
-	    const pointerId = event.pointerId, startX = event.clientX, startY = event.clientY;
+	    const pointerId = event.pointerId;
+	    this.#bindDragPointer(pointerId);
+	    const startX = event.clientX, startY = event.clientY;
 	    this.#holdTimer = this.#scheduleTimer(() => {
-	      if (this.#holdTimer = 0, this.scope.destroyed) return;
+	      if (this.#holdTimer = 0, this.scope.destroyed || this.#dragPointerId !== pointerId) return;
 	      const hostRect = this.host.getBoundingClientRect(), mountRect = this.#mount.getBoundingClientRect(), toggleInsets = this.#toggleHorizontalInsets(
 	        hostRect,
 	        this.toggleButton.getBoundingClientRect()
@@ -17237,9 +17310,13 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	    ))}px`, event.preventDefault();
 	  }
 	  #finishDrag(event) {
+	    if (event.pointerId !== this.#dragPointerId) return;
 	    this.#clearHold();
 	    const drag = this.#drag;
-	    if (!drag || event.pointerId !== drag.pointerId) return;
+	    if (!drag || event.pointerId !== drag.pointerId) {
+	      this.#releaseDragPointer();
+	      return;
+	    }
 	    const railMaxLeft = Math.max(
 	      1,
 	      this.#mount.clientWidth - this.host.offsetWidth
@@ -17266,7 +17343,23 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	      positions
 	    }), this.#suppressClickUntil = this.#now() + 300, this.#run(() => this.#preferences.update({
 	      positions
-	    })), this.#queuePosition();
+	    })), this.#releaseDragPointer(), this.#queuePosition();
+	  }
+	  #bindDragPointer(pointerId) {
+	    this.#releaseDragPointer(), this.#dragPointerId = pointerId;
+	    const pointerScope = this.scope.child();
+	    this.#dragPointerScope = pointerScope, pointerScope.listen(this.#document, "pointermove", (event) => {
+	      this.#onPointerMove(event);
+	    }, !0);
+	    for (const type of ["pointerup", "pointercancel"])
+	      pointerScope.listen(this.#document, type, (event) => {
+	        this.#finishDrag(event);
+	      }, !0);
+	  }
+	  #releaseDragPointer() {
+	    this.#dragPointerId = null;
+	    const pointerScope = this.#dragPointerScope;
+	    this.#dragPointerScope = null, pointerScope?.destroy();
 	  }
 	  #toggleHorizontalInsets(hostRect, toggleRect) {
 	    const offsetLeft = Math.max(
@@ -17316,7 +17409,7 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	    });
 	  }
 	}
-}, "769e39f6a9ae51fb53713fdd4b120e215688504f20b2b545e785e204969c411c");
+}, "993dec015e95747d020f5cfebd21b0d862562614a5c82cbe121f872c67bc12a4");
 
 /* Source: lite/src/post/reader-topic-custom-summary.ts */
 runtime.register("src/post/reader-topic-custom-summary.js", function(module, exports, require) {
@@ -27342,6 +27435,7 @@ runtime.register("src/settings/reader-settings-field-interaction.js", function(m
 	  #activeColorInput = null;
 	  #activeRangeRow = null;
 	  #activeWheelPointer = null;
+	  #wheelPointerScope = null;
 	  #eyeDropperAbort = null;
 	  #hsv = Object.freeze({ h: 0, s: 0, v: 100 });
 	  #commitFrame = 0;
@@ -27547,14 +27641,7 @@ runtime.register("src/settings/reader-settings-field-interaction.js", function(m
 	      }), this.scope.listen(input, "change", () => this.#flushCommit());
 	    this.scope.listen(this.#wheel, "pointerdown", (event) => {
 	      this.#startWheelPointer(event);
-	    }), this.scope.listen(this.#document, "pointermove", (event) => {
-	      this.#moveWheelPointer(event);
-	    });
-	    for (const type of ["pointerup", "pointercancel"])
-	      this.scope.listen(this.#document, type, (event) => {
-	        this.#finishWheelPointer(event);
-	      });
-	    this.scope.listen(this.#wheel, "lostpointercapture", (event) => {
+	    }), this.scope.listen(this.#wheel, "lostpointercapture", (event) => {
 	      this.#finishWheelPointer(event, !1);
 	    }), this.scope.listen(this.#wheel, "keydown", (event) => {
 	      this.#onWheelKeyDown(event);
@@ -27593,7 +27680,7 @@ runtime.register("src/settings/reader-settings-field-interaction.js", function(m
 	  }
 	  #startWheelPointer(event) {
 	    if (event.button === 0) {
-	      event.preventDefault(), this.#activeWheelPointer = event.pointerId, this.#stageWheelPoint(event);
+	      event.preventDefault(), this.#stopWheelPointer(), this.#activeWheelPointer = event.pointerId, this.#bindWheelPointer(), this.#stageWheelPoint(event);
 	      try {
 	        this.#wheel.setPointerCapture(event.pointerId);
 	      } catch {
@@ -27608,11 +27695,23 @@ runtime.register("src/settings/reader-settings-field-interaction.js", function(m
 	  }
 	  #stopWheelPointer() {
 	    const pointerId = this.#activeWheelPointer;
-	    if (this.#activeWheelPointer = null, pointerId !== null)
+	    this.#activeWheelPointer = null;
+	    const pointerScope = this.#wheelPointerScope;
+	    if (this.#wheelPointerScope = null, pointerScope?.destroy(), pointerId !== null)
 	      try {
 	        this.#wheel.hasPointerCapture(pointerId) && this.#wheel.releasePointerCapture(pointerId);
 	      } catch {
 	      }
+	  }
+	  #bindWheelPointer() {
+	    const pointerScope = this.scope.child();
+	    this.#wheelPointerScope = pointerScope, pointerScope.listen(this.#document, "pointermove", (event) => {
+	      this.#moveWheelPointer(event);
+	    });
+	    for (const type of ["pointerup", "pointercancel"])
+	      pointerScope.listen(this.#document, type, (event) => {
+	        this.#finishWheelPointer(event);
+	      });
 	  }
 	  #stageWheelPoint(event) {
 	    const bounds = this.#wheel.getBoundingClientRect(), radius = Math.min(bounds.width, bounds.height) / 2;
@@ -27754,7 +27853,7 @@ runtime.register("src/settings/reader-settings-field-interaction.js", function(m
 	    this.#picker.style.left = `${Math.round(left - bounds.left)}px`, this.#picker.style.top = `${Math.round(top - bounds.top)}px`;
 	  }
 	}
-}, "96431966730167ced19953e272af82550d73b4f86b51d94d65fad79f3744043c");
+}, "1528f81bfe0a4fe0625f817bbd8b78bee47388d437f5b26b63fa90795d66f87e");
 
 /* Source: lite/src/settings/reader-settings-help-surface.ts */
 runtime.register("src/settings/reader-settings-help-surface.js", function(module, exports, require) {

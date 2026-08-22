@@ -729,6 +729,27 @@ assert(
 	!regularActions.classList.contains('ldp-post-actions-expanded'),
 	'普通楼层必须提供移动端点击收纳入口，并默认保持其余操作收起',
 );
+const regularSlotQuerySelector =
+	regular.slots.actions.querySelector.bind(regular.slots.actions);
+let inactiveCollapseQueries = 0;
+Object.defineProperty(regular.slots.actions, 'querySelector', {
+	configurable: true,
+	value: (selector: string) => {
+		if (selector.includes('ldp-post-actions-expanded')) {
+			inactiveCollapseQueries += 1;
+		}
+		return regularSlotQuerySelector(selector);
+	},
+});
+pointerDown(document.body);
+Object.defineProperty(regular.slots.actions, 'querySelector', {
+	configurable: true,
+	value: regularSlotQuerySelector,
+});
+assert(
+	inactiveCollapseQueries === 0,
+	'没有楼层操作展开时，宿主 pointerdown 必须走空集合快路径，不能逐个扫描 PostView DOM 阻塞移动端首滑',
+);
 const ownPost: TestPost = {
 	...comment,
 	id: 4,

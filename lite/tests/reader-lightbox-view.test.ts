@@ -178,6 +178,57 @@ assert(
 view.slots.image.dispatchEvent(new window.Event('load'));
 assert(!view.slots.image.hidden, '预览加载完成后必须显示当前图片');
 
+Object.defineProperties(view.slots.stage, {
+	clientWidth: { value: 300 },
+	clientHeight: { value: 200 },
+});
+Object.defineProperties(view.slots.image, {
+	clientWidth: { value: 200 },
+	clientHeight: { value: 100 },
+});
+view.slots.image.getBoundingClientRect = () => ({
+	x: 50,
+	y: 50,
+	left: 50,
+	top: 50,
+	right: 250,
+	bottom: 150,
+	width: 200,
+	height: 100,
+	toJSON: () => ({}),
+});
+const touchPointer = (
+	type: string,
+	pointerId: number,
+	clientX: number,
+): Event => {
+	const event = new window.Event(type, { bubbles: true, cancelable: true });
+	Object.defineProperties(event, {
+		button: { value: 0 },
+		pointerId: { value: pointerId },
+		pointerType: { value: 'touch' },
+		clientX: { value: clientX },
+		clientY: { value: 100 },
+	});
+	return event;
+};
+const firstTouch = touchPointer('pointerdown', 31, 100);
+const secondTouch = touchPointer('pointerdown', 32, 200);
+view.slots.image.dispatchEvent(firstTouch);
+view.slots.image.dispatchEvent(secondTouch);
+const pinchMove = touchPointer('pointermove', 32, 250);
+view.slots.image.dispatchEvent(pinchMove);
+assert(
+	firstTouch.defaultPrevented &&
+		secondTouch.defaultPrevented &&
+		pinchMove.defaultPrevented &&
+		view.transform.scale === 1.5,
+	'移动端灯箱必须启用双指缩放并阻止宿主接管同一触摸手势',
+);
+view.slots.image.dispatchEvent(touchPointer('pointerup', 32, 250));
+view.slots.image.dispatchEvent(touchPointer('pointerup', 31, 100));
+assert(!view.transform.snapshot().dragging, '灯箱双指手势结束后必须释放交互状态');
+
 const zoomIn = view.slots.root.querySelector<HTMLElement>('[data-lb-action="zoom-in"]')!;
 click(window, zoomIn);
 assert(view.transform.scale > 1, '灯箱缩放控件必须委托共用 transform owner');

@@ -273,6 +273,8 @@ export class ReaderTopicActionRail<TPost> {
 	#expanded = false;
 	#frame = 0;
 	#holdTimer = 0;
+	#dragPointerId: number | null = null;
+	#dragPointerScope: LifecycleScope | null = null;
 	#drag: DragState | null = null;
 	#suppressClickUntil = 0;
 
@@ -481,15 +483,6 @@ export class ReaderTopicActionRail<TPost> {
 			if (ownedPointerDowns.has(event)) return;
 			collapseExpandedFromOutside(event);
 		});
-		this.scope.listen(this.#document, 'pointermove', (event) => {
-			this.#onPointerMove(event as PointerEvent);
-		}, true);
-		this.scope.listen(this.#document, 'pointerup', (event) => {
-			this.#finishDrag(event as PointerEvent);
-		}, true);
-		this.scope.listen(this.#document, 'pointercancel', (event) => {
-			this.#finishDrag(event as PointerEvent);
-		}, true);
 		if (window) {
 			this.scope.listen(window, 'resize', () => this.#queuePosition());
 		}
@@ -517,6 +510,7 @@ export class ReaderTopicActionRail<TPost> {
 		}, this.scope);
 		this.scope.add(() => {
 			this.#clearHold();
+			this.#releaseDragPointer();
 			if (this.#frame) this.#cancelFrame(this.#frame);
 			this.#frame = 0;
 			this.#view?.destroy();
@@ -892,11 +886,15 @@ export class ReaderTopicActionRail<TPost> {
 		}
 		this.#clearHold();
 		const pointerId = event.pointerId;
+		this.#bindDragPointer(pointerId);
 		const startX = event.clientX;
 		const startY = event.clientY;
 		this.#holdTimer = this.#scheduleTimer(() => {
 			this.#holdTimer = 0;
-			if (this.scope.destroyed) return;
+			if (
+				this.scope.destroyed ||
+				this.#dragPointerId !== pointerId
+			) return;
 			const hostRect = this.host.getBoundingClientRect();
 			const mountRect = this.#mount.getBoundingClientRect();
 			const toggleInsets = this.#toggleHorizontalInsets(
@@ -946,9 +944,13 @@ export class ReaderTopicActionRail<TPost> {
 	}
 
 	#finishDrag(event: PointerEvent): void {
+		if (event.pointerId !== this.#dragPointerId) return;
 		this.#clearHold();
 		const drag = this.#drag;
-		if (!drag || event.pointerId !== drag.pointerId) return;
+		if (!drag || event.pointerId !== drag.pointerId) {
+			this.#releaseDragPointer();
+			return;
+		}
 		const railMaxLeft = Math.max(
 			1,
 			this.#mount.clientWidth - this.host.offsetWidth,
@@ -994,7 +996,30 @@ export class ReaderTopicActionRail<TPost> {
 		this.#run(() => this.#preferences.update({
 			positions,
 		}));
+		this.#releaseDragPointer();
 		this.#queuePosition();
+	}
+
+	#bindDragPointer(pointerId: number): void {
+		this.#releaseDragPointer();
+		this.#dragPointerId = pointerId;
+		const pointerScope = this.scope.child();
+		this.#dragPointerScope = pointerScope;
+		pointerScope.listen(this.#document, 'pointermove', (event) => {
+			this.#onPointerMove(event as PointerEvent);
+		}, true);
+		for (const type of ['pointerup', 'pointercancel']) {
+			pointerScope.listen(this.#document, type, (event) => {
+				this.#finishDrag(event as PointerEvent);
+			}, true);
+		}
+	}
+
+	#releaseDragPointer(): void {
+		this.#dragPointerId = null;
+		const pointerScope = this.#dragPointerScope;
+		this.#dragPointerScope = null;
+		pointerScope?.destroy();
 	}
 
 	#toggleHorizontalInsets(

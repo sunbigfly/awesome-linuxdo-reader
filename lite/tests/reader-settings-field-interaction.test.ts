@@ -32,6 +32,32 @@ const { document: parsedDocument, window } = parseHTML(
 		'</body></html>',
 );
 const document = parsedDocument as unknown as Document;
+const documentAddEventListener = document.addEventListener.bind(document);
+const documentRemoveEventListener = document.removeEventListener.bind(document);
+let documentPointerMoveAdds = 0;
+let documentPointerMoveRemoves = 0;
+Object.defineProperty(document, 'addEventListener', {
+	configurable: true,
+	value: (
+		type: string,
+		listener: EventListenerOrEventListenerObject,
+		options?: boolean | AddEventListenerOptions,
+	) => {
+		if (type === 'pointermove') documentPointerMoveAdds += 1;
+		documentAddEventListener(type, listener, options);
+	},
+});
+Object.defineProperty(document, 'removeEventListener', {
+	configurable: true,
+	value: (
+		type: string,
+		listener: EventListenerOrEventListenerObject,
+		options?: boolean | EventListenerOptions,
+	) => {
+		if (type === 'pointermove') documentPointerMoveRemoves += 1;
+		documentRemoveEventListener(type, listener, options);
+	},
+});
 const surface = document.querySelector<HTMLElement>('#surface')!;
 const popover = document.querySelector<HTMLElement>('#settings')!;
 const range = document.querySelector<HTMLInputElement>('#range')!;
@@ -99,8 +125,9 @@ interactions.picker.getBoundingClientRect = () => ({
 assert(
 	range.style.getPropertyValue('--ldp-range-progress') === '25%' &&
 	color.getAttribute('aria-haspopup') === 'dialog' &&
-	interactions.picker.hidden,
-	'统一字段 owner 必须初始化 range 进度、颜色弹层 ARIA，且不得提前显示临时 DOM',
+	interactions.picker.hidden &&
+	documentPointerMoveAdds === 0,
+	'统一字段 owner 必须初始化 range 进度、颜色弹层 ARIA，且不得提前显示临时 DOM 或常驻全局 pointermove',
 );
 
 function pointer(
@@ -294,6 +321,10 @@ wheel.getBoundingClientRect = () => ({
 } as DOMRect);
 scheduledFrame = null;
 pointer(wheel, 'pointerdown', 3, 120, 60);
+assert(
+	documentPointerMoveAdds === 1,
+	'只有真实拖动二维色盘期间才允许临时监听 document pointermove',
+);
 pointer(document, 'pointermove', 3, 60, 120);
 assert(
 	Number(colorInputs) === 3 && scheduledFrame,
@@ -305,7 +336,8 @@ assert(
 	Number(colorInputs) === 4 &&
 	Number(cancelledFrames) === 2 &&
 	wheel.getAttribute('aria-valuetext') === '色相 180°，饱和度 100%' &&
-	wheel.style.getPropertyValue('--ldp-color-wheel-thumb') === '#00FFFF',
+	wheel.style.getPropertyValue('--ldp-color-wheel-thumb') === '#00FFFF' &&
+	documentPointerMoveRemoves === 1,
 	'二维色盘必须把坐标映射为 HSV、在手势结束时提交，并同步可访问数值和游标颜色',
 );
 
@@ -340,6 +372,7 @@ assert(
 );
 interactions.scope.destroy();
 assert(
-	!surface.querySelector('.ldp-color-picker-popover'),
+	!surface.querySelector('.ldp-color-picker-popover') &&
+	documentPointerMoveAdds === documentPointerMoveRemoves,
 	'字段 owner 销毁必须移除唯一临时弹层和全部监听生命周期',
 );

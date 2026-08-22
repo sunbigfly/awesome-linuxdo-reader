@@ -427,7 +427,9 @@
         "[data-ldp-reader-top-layer=\"portal\"][popover]",
 		"[data-identifier=\"admin-post-menu\"][data-ldp-reader-admin-menu=\"positioned\"]",
         "pointer-events: none;",
-        "@media (max-width: 760px)"
+        "@media (max-width: 760px)",
+        "html[data-ldp-font-rendering] #reply-control:not(.closed) {\n    font-size: var(--ldp-composer-font-size, 80%) !important;\n  }",
+        "border-radius: 10px 10px 0 0 !important;\n    font-size: var(--ldp-composer-font-size, 80%) !important;\n    transform: none !important;"
       ]
     },
     {

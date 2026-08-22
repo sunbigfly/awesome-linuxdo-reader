@@ -436,6 +436,10 @@ html.ldp-composer-window-interacting * {
 }
 
 @media (max-width: 760px) {
+  html[data-ldp-font-rendering] #reply-control:not(.closed) {
+    font-size: var(--ldp-composer-font-size, 80%) !important;
+  }
+
   html.ldp-reader-open #reply-control[data-ldp-reader-composer-positioned="1"]:not(.closed) {
     top: auto !important;
     right: 6px !important;
@@ -448,6 +452,7 @@ html.ldp-composer-window-interacting * {
     max-width: none !important;
     max-height: calc(100vh - 12px) !important;
     border-radius: 10px 10px 0 0 !important;
+    font-size: var(--ldp-composer-font-size, 80%) !important;
     transform: none !important;
   }
 

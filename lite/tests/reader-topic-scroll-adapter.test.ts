@@ -290,6 +290,12 @@ assert(
 		Number(directUserScrollIntents) === 1,
 	'用户滚动所有权必须由 wheel 意图立即取得，不能依赖下一次 scroll 结果猜测来源',
 );
+scrollRoot.dispatchEvent(wheelEvent(120));
+assert(
+	Number(userScrollIntents) === 1 &&
+		Number(directUserScrollIntents) === 1,
+	'同一次连续滚动会话只能广播一次业务意图，后续 wheel 不得反复冻结回复树、取消导航或重启流水线',
+);
 const viewportMutation = adapter.beginViewportMutation([first, second]);
 assert(
 	viewportMutation !== null &&
@@ -977,3 +983,58 @@ assert(
 );
 upwardAdapter.destroy();
 assert(upwardFrame === null, '独立向上滚动用例销毁时必须释放待提交帧');
+
+const { document: touchDocument } = parseHTML(
+	'<!doctype html><html><body><main id="touch-reader-scroll"></main></body></html>',
+);
+const touchRoot =
+	touchDocument.querySelector<HTMLElement>('#touch-reader-scroll')!;
+Object.defineProperties(touchRoot, {
+	clientHeight: { get: () => 400 },
+	scrollHeight: { get: () => 2_000 },
+});
+let touchClock = 500;
+let touchIntents = 0;
+let touchDirectIntents = 0;
+const touchAdapter = new ReaderTopicScrollAdapter({
+	scrollRoot: touchRoot,
+	createResizeObserver: () => null,
+	requestFrame: () => 1,
+	cancelFrame() {},
+	now: () => touchClock,
+});
+touchAdapter.listenUserScrollIntent(() => {
+	touchIntents += 1;
+});
+touchAdapter.listenDirectUserScrollIntent(() => {
+	touchDirectIntents += 1;
+});
+const touch = (type: string, clientY?: number): void => {
+	const event = new touchDocument.defaultView!.Event(type, {
+		bubbles: true,
+		cancelable: true,
+	});
+	Object.defineProperty(event, 'touches', {
+		value: clientY === undefined ? [] : [{ clientY }],
+	});
+	touchRoot.dispatchEvent(event);
+};
+touch('touchstart', 300);
+touch('touchmove', 260);
+touch('touchmove', 220);
+assert(
+	touchIntents === 1 &&
+		touchDirectIntents === 1 &&
+		touchAdapter.lastUserScrollDirection() === 1,
+	'移动端一次手势的 touchstart/touchmove 序列必须只建立一次滚动会话，同时持续刷新方向而不逐帧广播重活',
+);
+touch('touchend');
+touchClock += 200;
+touchRoot.dispatchEvent(new touchDocument.defaultView!.Event('scrollend'));
+touchClock += 16;
+touch('touchstart', 300);
+assert(
+	touchIntents === 2 && touchDirectIntents === 2,
+	'上一轮滚动停稳后，下一次独立触摸仍必须取得新的用户滚动令牌',
+);
+touchAdapter.destroy();

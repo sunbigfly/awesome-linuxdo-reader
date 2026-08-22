@@ -76,6 +76,7 @@ const controller = new ReaderImageTransformController({
 	allowContainedPan: true,
 	resetPanAtFit: false,
 	preventDragDefault: true,
+	enablePinchZoom: true,
 	frameScheduler: frames,
 	render: (snapshot) => {
 		image.style.setProperty('--scale', String(snapshot.scale));
@@ -108,7 +109,7 @@ controller.setZoom(2);
 
 function pointerEvent(
 	type: string,
-	values: Readonly<Record<string, number>>,
+	values: Readonly<Record<string, number | string>>,
 ): Event {
 	const event = new window.Event(type, { bubbles: true, cancelable: true });
 	for (const [key, value] of Object.entries(values)) {
@@ -116,6 +117,78 @@ function pointerEvent(
 	}
 	return event;
 }
+
+controller.reset();
+const firstTouchDown = pointerEvent('pointerdown', {
+	button: 0,
+	pointerId: 21,
+	pointerType: 'touch',
+	clientX: 100,
+	clientY: 100,
+});
+const secondTouchDown = pointerEvent('pointerdown', {
+	button: 0,
+	pointerId: 22,
+	pointerType: 'touch',
+	clientX: 200,
+	clientY: 100,
+});
+image.dispatchEvent(firstTouchDown);
+image.dispatchEvent(secondTouchDown);
+image.dispatchEvent(pointerEvent('pointermove', {
+	button: 0,
+	pointerId: 21,
+	pointerType: 'touch',
+	clientX: 50,
+	clientY: 100,
+}));
+image.dispatchEvent(pointerEvent('pointermove', {
+	button: 0,
+	pointerId: 22,
+	pointerType: 'touch',
+	clientX: 250,
+	clientY: 100,
+}));
+assert(frames.callbacks.size === 1, '连续双指移动必须合并到单一 frame');
+frames.flush();
+assert(
+	firstTouchDown.defaultPrevented &&
+		secondTouchDown.defaultPrevented &&
+		controller.snapshot().scale === 2 &&
+		controller.snapshot().panX === 50 &&
+		controller.snapshot().dragging &&
+		image.classList.contains('is-dragging'),
+	'双指缩放必须围绕手势中心放大图片，并投影统一交互状态',
+);
+image.dispatchEvent(pointerEvent('pointerup', {
+	button: 0,
+	pointerId: 22,
+	pointerType: 'touch',
+	clientX: 250,
+	clientY: 100,
+}));
+image.dispatchEvent(pointerEvent('pointermove', {
+	button: 0,
+	pointerId: 21,
+	pointerType: 'touch',
+	clientX: 70,
+	clientY: 100,
+}));
+frames.flush();
+assert(
+	controller.snapshot().panX === 70 && controller.snapshot().dragging,
+	'双指释放一指后必须无跳变衔接单指平移',
+);
+image.dispatchEvent(pointerEvent('pointerup', {
+	button: 0,
+	pointerId: 21,
+	pointerType: 'touch',
+	clientX: 70,
+	clientY: 100,
+}));
+assert(!controller.snapshot().dragging, '最后一指释放后必须结束图片交互状态');
+controller.reset();
+controller.setZoom(2);
 
 const down = pointerEvent('pointerdown', {
 	button: 0,

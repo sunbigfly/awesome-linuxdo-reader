@@ -283,13 +283,13 @@ export class ReaderSelectionQuoteFeature<
 		if (imageToolbar) {
 			this.scope.listen(this.#contentRoot, 'pointerover', (event) => {
 				this.#updateImagePointer(event as PointerEvent);
-			});
+			}, { passive: true });
 			this.scope.listen(this.#contentRoot, 'pointermove', (event) => {
 				this.#updateImagePointer(event as PointerEvent);
-			});
+			}, { passive: true });
 			this.scope.listen(this.#contentRoot, 'pointerout', (event) => {
 				this.#leaveImage(event as PointerEvent);
-			});
+			}, { passive: true });
 			this.scope.listen(imageToolbar, 'pointerdown', (event) => {
 				event.preventDefault();
 			});

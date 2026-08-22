@@ -29,6 +29,32 @@ const { document: parsedDocument, window: parsedWindow } = parseHTML(
 );
 const document = parsedDocument as unknown as Document;
 const EventConstructor = parsedWindow.Event as unknown as typeof Event;
+const documentAddEventListener = document.addEventListener.bind(document);
+const documentRemoveEventListener = document.removeEventListener.bind(document);
+let documentDragListenerAdds = 0;
+let documentDragListenerRemoves = 0;
+Object.defineProperty(document, 'addEventListener', {
+	configurable: true,
+	value: (
+		type: string,
+		listener: EventListenerOrEventListenerObject,
+		options?: boolean | AddEventListenerOptions,
+	) => {
+		if (type === 'pointermove') documentDragListenerAdds += 1;
+		documentAddEventListener(type, listener, options);
+	},
+});
+Object.defineProperty(document, 'removeEventListener', {
+	configurable: true,
+	value: (
+		type: string,
+		listener: EventListenerOrEventListenerObject,
+		options?: boolean | EventListenerOptions,
+	) => {
+		if (type === 'pointermove') documentDragListenerRemoves += 1;
+		documentRemoveEventListener(type, listener, options);
+	},
+});
 const portal = document.querySelector<HTMLElement>('#reader-portal')!;
 const portalRoot = portal.attachShadow({ mode: 'open' });
 const shellRoot = document.createElement('section');
@@ -190,8 +216,9 @@ assert(
 	!rail.host.hidden &&
 		shellRoot.classList.contains('ldp-topic-action-rail-visible') &&
 		rail.downloadButton?.hidden === true &&
-		rail.summaryButton?.hidden === true,
-	'首帖缺失时仍必须保留操作列占位，但总结与下载入口只在第二段显示',
+		rail.summaryButton?.hidden === true &&
+		documentDragListenerAdds === 0,
+	'首帖缺失时仍必须保留操作列占位，但总结与下载入口只在第二段显示；未开始拖动时不得常驻全局 pointermove',
 );
 
 function setNumberProperty(
@@ -758,6 +785,10 @@ pointer(rail.toggleButton, 'pointerdown', {
 	clientY: 20,
 });
 assert(timerCallbacks.size === 1, '未固定操作列长按时必须只登记一个拖动计时器');
+assert(
+	documentDragListenerAdds === 1,
+	'只有按下可拖控件后才允许临时接管 document pointermove',
+);
 const hold = [...timerCallbacks.values()][0];
 timerCallbacks.clear();
 hold?.();
@@ -785,7 +816,8 @@ assert(
 	positionPatch.positions.fullpage.y === 0.25 &&
 	positionPatch.positions.embedded.x === 0.5 &&
 	positionPatch.positions.embedded.y === 0.5 &&
-	!rail.host.classList.contains('is-dragging'),
+	!rail.host.classList.contains('is-dragging') &&
+	documentDragListenerRemoves === 1,
 	'浮窗拖动必须只持久化浮窗比例位置，并保留另外两个形态槽位',
 );
 
@@ -998,8 +1030,9 @@ assert(
 	!rail.host.isConnected &&
 	preferenceChanges.size === 0 &&
 	!shellRoot.classList.contains('ldp-topic-action-rail-visible') &&
-	resizeDisconnected,
-	'销毁必须释放 DOM、偏好监听和 Shell 状态',
+	resizeDisconnected &&
+	documentDragListenerAdds === documentDragListenerRemoves,
+	'销毁必须释放 DOM、偏好监听、临时全局拖动监听和 Shell 状态',
 );
 assert(
 	cancelledFrames.length === 1 && cancelledTimers.length === 1,

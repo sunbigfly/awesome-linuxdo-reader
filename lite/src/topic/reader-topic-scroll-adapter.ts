@@ -1106,14 +1106,25 @@ export class ReaderTopicScrollAdapter {
 		direction: ReaderTopicScrollDirection = 0,
 		direct = true,
 	): void {
+		const now = finiteNonNegative(this.#now());
+		const startsSession =
+			!this.#userScrollSessionActive ||
+			this.#lastUserScrollAt <= 0 ||
+			now - this.#lastUserScrollAt > USER_SCROLL_SESSION_GAP_MS;
 		this.#cancelPendingStationaryViewportLock();
 		this.#releaseStationaryViewport();
 		if (direction !== 0) this.#lastUserScrollDirection = direction;
 		this.#userScrollSessionActive = true;
 		this.#lastUserScrollAt = Math.max(
 			Number.EPSILON,
-			finiteNonNegative(this.#now()),
+			now,
 		);
+		/*
+		 * touchmove/wheel 会在一次惯性会话里高频到达。会话状态与方向照常刷新，
+		 * 但冻结 canonical、取消导航和流水线记账只需在边沿广播一次；逐事件
+		 * 重启这些 owner 会与浏览器首帧争抢主线程。
+		 */
+		if (!startsSession) return;
 		for (const listener of [...this.#userScrollIntentListeners]) listener();
 		if (direct) {
 			for (const listener of [...this.#directUserScrollIntentListeners]) {

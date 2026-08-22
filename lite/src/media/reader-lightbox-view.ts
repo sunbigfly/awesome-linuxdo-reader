@@ -328,6 +328,7 @@ export class ReaderLightboxView {
 			overflowPadding: 24,
 			allowContainedPan: true,
 			resetPanAtFit: false,
+			enablePinchZoom: true,
 			zoomValue: this.#zoomValue,
 			zoomOutButton: required(root, '[data-lb-action="zoom-out"]'),
 			zoomInButton: required(root, '[data-lb-action="zoom-in"]'),

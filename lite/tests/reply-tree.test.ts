@@ -169,3 +169,27 @@ assert(
 		deepTopology.subtreePostCountOf(1) === 7_001,
 	'7000+ 楼层单点改父必须保持整树计数一致',
 );
+
+const copyOnWriteTopology = new ReplyTreeTopology();
+copyOnWriteTopology.commit([
+	{ postNumber: 1, parentPostNumber: null },
+	{ postNumber: 2, parentPostNumber: 1 },
+	{ postNumber: 3, parentPostNumber: 2 },
+]);
+const copyOnWriteChildren = copyOnWriteTopology.childrenOf(2);
+const frozenTopology = copyOnWriteTopology.clone();
+copyOnWriteTopology.commit([{ postNumber: 3, parentPostNumber: 1 }]);
+assert(
+	copyOnWriteTopology.parentOf(3) === 1 &&
+		frozenTopology.parentOf(3) === 2 &&
+		frozenTopology.childrenOf(2) === copyOnWriteChildren,
+	'写时复制 clone 必须保留手势开始时的关系与已热缓存，canonical 后续更新不得穿透冻结投影',
+);
+frozenTopology.remove(2);
+assert(
+	copyOnWriteTopology.has(2) &&
+		copyOnWriteTopology.parentOf(3) === 1 &&
+		!frozenTopology.has(2) &&
+		frozenTopology.parentOf(3) === 1,
+	'冻结副本自身发生 mutation 时也必须先分离，不能反向污染 canonical',
+);

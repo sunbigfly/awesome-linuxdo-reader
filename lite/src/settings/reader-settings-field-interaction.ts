@@ -168,6 +168,7 @@ export class ReaderSettingsFieldInteraction {
 	#activeColorInput: HTMLInputElement | null = null;
 	#activeRangeRow: HTMLElement | null = null;
 	#activeWheelPointer: number | null = null;
+	#wheelPointerScope: LifecycleScope | null = null;
 	#eyeDropperAbort: AbortController | null = null;
 	#hsv: ReaderSettingsColorHsv = Object.freeze({ h: 0, s: 0, v: 100 });
 	#commitFrame = 0;
@@ -542,14 +543,6 @@ export class ReaderSettingsFieldInteraction {
 		this.scope.listen(this.#wheel, 'pointerdown', (event) => {
 			this.#startWheelPointer(event as PointerEvent);
 		});
-		this.scope.listen(this.#document, 'pointermove', (event) => {
-			this.#moveWheelPointer(event as PointerEvent);
-		});
-		for (const type of ['pointerup', 'pointercancel']) {
-			this.scope.listen(this.#document, type, (event) => {
-				this.#finishWheelPointer(event as PointerEvent);
-			});
-		}
 		this.scope.listen(this.#wheel, 'lostpointercapture', (event) => {
 			this.#finishWheelPointer(event as PointerEvent, false);
 		});
@@ -615,7 +608,9 @@ export class ReaderSettingsFieldInteraction {
 	#startWheelPointer(event: PointerEvent): void {
 		if (event.button !== 0) return;
 		event.preventDefault();
+		this.#stopWheelPointer();
 		this.#activeWheelPointer = event.pointerId;
+		this.#bindWheelPointer();
 		this.#stageWheelPoint(event);
 		try {
 			this.#wheel.setPointerCapture(event.pointerId);
@@ -640,6 +635,9 @@ export class ReaderSettingsFieldInteraction {
 	#stopWheelPointer(): void {
 		const pointerId = this.#activeWheelPointer;
 		this.#activeWheelPointer = null;
+		const pointerScope = this.#wheelPointerScope;
+		this.#wheelPointerScope = null;
+		pointerScope?.destroy();
 		if (pointerId === null) return;
 		try {
 			if (this.#wheel.hasPointerCapture(pointerId)) {
@@ -647,6 +645,19 @@ export class ReaderSettingsFieldInteraction {
 			}
 		} catch {
 			// linkedom、旧 Chromium 或已释放的 pointer 可能没有捕获能力。
+		}
+	}
+
+	#bindWheelPointer(): void {
+		const pointerScope = this.scope.child();
+		this.#wheelPointerScope = pointerScope;
+		pointerScope.listen(this.#document, 'pointermove', (event) => {
+			this.#moveWheelPointer(event as PointerEvent);
+		});
+		for (const type of ['pointerup', 'pointercancel']) {
+			pointerScope.listen(this.#document, type, (event) => {
+				this.#finishWheelPointer(event as PointerEvent);
+			});
 		}
 	}
 
