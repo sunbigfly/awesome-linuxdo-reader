@@ -1,5 +1,11 @@
 import {
 	BrowserSharedRequestPermit,
+	READER_AUTOMATIC_REQUEST_DEPHASE_MAX_MS,
+	READER_AUTOMATIC_REQUEST_DEPHASE_MIN_MS,
+	READER_AUTOMATIC_REQUEST_LONG_BUDGET,
+	READER_AUTOMATIC_REQUEST_MAX_CONCURRENT,
+	READER_AUTOMATIC_REQUEST_MAX_QUEUE_WAIT_MS,
+	READER_AUTOMATIC_REQUEST_SHORT_BUDGET,
 	READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS,
 	READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME,
 	READER_REQUEST_PERMIT_STORAGE_KEY,
@@ -9,7 +15,10 @@ import {
 	monitorReaderCloudflareChallengeWindow,
 } from '../src/network/browser-shared-request-permit.js';
 import type { RateLimitDecision } from '../src/network/request-rate-limit-policy.js';
-import { RequestStartDeferredError } from '../src/network/request-scheduler.js';
+import {
+	RequestControlError,
+	RequestStartDeferredError,
+} from '../src/network/request-scheduler.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -231,6 +240,8 @@ function permitOptions(
 		maxConcurrent: 1,
 		intentTtlMs: 2_000,
 		permitTtlMs: 2_000,
+		automaticDephaseMinMs: 0,
+		automaticDephaseMaxMs: 0,
 		rateLimitJitterRatio: 0,
 		random: () => 0,
 	};
@@ -391,6 +402,200 @@ visibleDuringBackgroundWait.release();
 const secondBackground = await secondBackgroundPromise;
 secondBackground.release();
 backgroundOwner.destroy();
+
+const automaticStorage = new MemoryStorage();
+const automaticLocks = new LockQueue();
+const automaticTopicOwner = new BrowserSharedRequestPermit({
+	...permitOptions(automaticStorage, automaticLocks, 'automatic-topic-owner'),
+	maxConcurrent: 3,
+	backgroundIdleIntervalMs: 0,
+});
+const automaticHistoryOwner = new BrowserSharedRequestPermit({
+	...permitOptions(automaticStorage, automaticLocks, 'automatic-history-owner'),
+	maxConcurrent: 3,
+	backgroundIdleIntervalMs: 0,
+});
+const automaticTopicPermit = await automaticTopicOwner.acquire({
+	key: 'topic-card-prefetch',
+	priority: 'prefetch',
+	droppable: true,
+	signal: new AbortController().signal,
+});
+let automaticHistoryGranted = false;
+const automaticHistoryPending = automaticHistoryOwner.acquire({
+	key: 'notification-history-hydration',
+	priority: 'prefetch',
+	droppable: true,
+	signal: new AbortController().signal,
+}).then((permit) => {
+	automaticHistoryGranted = true;
+	return permit;
+});
+await delay(20);
+assert(
+	!automaticHistoryGranted,
+	'不同业务、不同标签的自动 prefetch/background 必须共享单飞许可，不能各自占用普通并发槽',
+);
+const visibleDuringAutomatic = await automaticHistoryOwner.acquire({
+	key: 'visible-topic-open-during-automatic',
+	priority: 'visible',
+	signal: new AbortController().signal,
+});
+visibleDuringAutomatic.release();
+automaticTopicPermit.release();
+(await automaticHistoryPending).release();
+await delay(0);
+const readConfirmation = await automaticHistoryOwner.acquire({
+	key: 'topic-read-confirmation',
+	priority: 'background',
+	droppable: false,
+	signal: new AbortController().signal,
+});
+readConfirmation.release();
+const automaticSnapshot = await automaticTopicOwner.snapshot();
+assert(
+	automaticSnapshot.automaticShortBudget ===
+		READER_AUTOMATIC_REQUEST_SHORT_BUDGET &&
+		automaticSnapshot.automaticLongBudget ===
+			READER_AUTOMATIC_REQUEST_LONG_BUDGET &&
+		automaticSnapshot.automaticMaxConcurrent ===
+			READER_AUTOMATIC_REQUEST_MAX_CONCURRENT &&
+		automaticSnapshot.automaticMaxQueueWaitMs ===
+			READER_AUTOMATIC_REQUEST_MAX_QUEUE_WAIT_MS &&
+		automaticSnapshot.automaticLongCount === 2,
+	'自动请求固定安全闸门必须公开默认 1 路、4/10 秒、24/分钟与有限排队寿命，且不把已读成功确认计入自动预算',
+);
+automaticTopicOwner.destroy();
+automaticHistoryOwner.destroy();
+
+assert(
+	READER_AUTOMATIC_REQUEST_DEPHASE_MIN_MS === 250 &&
+		READER_AUTOMATIC_REQUEST_DEPHASE_MAX_MS === 1_250,
+	'自动请求默认必须采用温和且有界的 250–1250ms 启动错峰',
+);
+const dephasedAutomatic = new BrowserSharedRequestPermit({
+	...permitOptions(
+		new MemoryStorage(),
+		new LockQueue(),
+		'dephased-automatic',
+	),
+	backgroundIdleIntervalMs: 0,
+	automaticDephaseMinMs: 60,
+	automaticDephaseMaxMs: 60,
+});
+const firstDephasedAutomatic = await dephasedAutomatic.acquire({
+	key: 'dephased-automatic-first',
+	priority: 'prefetch',
+	droppable: true,
+	signal: new AbortController().signal,
+});
+firstDephasedAutomatic.release();
+await delay(0);
+let secondDephasedAutomaticGranted = false;
+const secondDephasedAutomaticPending = dephasedAutomatic.acquire({
+	key: 'dephased-automatic-second',
+	priority: 'prefetch',
+	droppable: true,
+	signal: new AbortController().signal,
+}).then((permit) => {
+	secondDephasedAutomaticGranted = true;
+	return permit;
+});
+await delay(20);
+assert(
+	!secondDephasedAutomaticGranted,
+	'自动 backlog 释放后必须先经过一次性错峰，不能在同一固定边界立即续发',
+);
+(await secondDephasedAutomaticPending).release();
+dephasedAutomatic.destroy();
+
+let automaticWindowNow = 50_000;
+const automaticWindowStorage = new MemoryStorage();
+const automaticWindowLocks = new LockQueue();
+const automaticWindowOwnerA = new BrowserSharedRequestPermit({
+	...permitOptions(
+		automaticWindowStorage,
+		automaticWindowLocks,
+		'automatic-window-a',
+	),
+	maxConcurrent: 3,
+	automaticShortBudget: 2,
+	automaticLongBudget: 3,
+	automaticMaxConcurrent: 1,
+	backgroundIdleIntervalMs: 0,
+	now: () => automaticWindowNow,
+});
+const automaticWindowOwnerB = new BrowserSharedRequestPermit({
+	...permitOptions(
+		automaticWindowStorage,
+		automaticWindowLocks,
+		'automatic-window-b',
+	),
+	maxConcurrent: 3,
+	automaticShortBudget: 2,
+	automaticLongBudget: 3,
+	automaticMaxConcurrent: 1,
+	backgroundIdleIntervalMs: 0,
+	now: () => automaticWindowNow,
+});
+for (let index = 0; index < 2; index += 1) {
+	const permit = await (index % 2
+		? automaticWindowOwnerB
+		: automaticWindowOwnerA).acquire({
+		key: `automatic-window-${index}`,
+		priority: index % 2 ? 'background' : 'prefetch',
+		droppable: true,
+		signal: new AbortController().signal,
+	});
+	permit.release();
+	await delay(0);
+}
+let automaticWindowThirdGranted = false;
+const automaticWindowController = new AbortController();
+const automaticWindowThird = automaticWindowOwnerB.acquire({
+	key: 'automatic-window-third',
+	priority: 'prefetch',
+	droppable: true,
+	signal: automaticWindowController.signal,
+}).then((permit) => {
+	automaticWindowThirdGranted = true;
+	return permit;
+});
+await delay(20);
+assert(
+	!automaticWindowThirdGranted,
+	'自动请求短窗口预算必须跨业务、跨标签聚合，不能被普通全局高预算掩盖',
+);
+automaticWindowNow += 1_001;
+await delay(25);
+(await automaticWindowThird).release();
+automaticWindowOwnerA.destroy();
+automaticWindowOwnerB.destroy();
+
+const expiredAutomatic = new BrowserSharedRequestPermit({
+	...permitOptions(new MemoryStorage(), new LockQueue(), 'expired-automatic'),
+	automaticMaxQueueWaitMs: 30,
+	now: () => 80_000,
+});
+let expiredAutomaticError: unknown = null;
+try {
+	await expiredAutomatic.acquire({
+		key: 'stale-topic-prefetch',
+		priority: 'prefetch',
+		droppable: true,
+		queuedAt: 79_969,
+		signal: new AbortController().signal,
+	});
+} catch (error) {
+	expiredAutomaticError = error;
+}
+assert(
+	expiredAutomaticError instanceof RequestControlError &&
+		expiredAutomaticError.code === 'cancelled' &&
+		(await expiredAutomatic.snapshot()).queued === 0,
+	'过期自动意图必须取消并清出共享队列，不能在页面恢复后追赶执行',
+);
+expiredAutomatic.destroy();
 
 const fairBackgroundStorage = new MemoryStorage();
 const fairBackgroundLocks = new LockQueue();
@@ -751,6 +956,39 @@ assert(
 sharedHostLease.release();
 const crossTabReaderPermit = await crossTabReaderPending;
 crossTabReaderPermit.release();
+
+const sharedAutomaticHostLease = sharedHostOwner.recordHostStart({
+	startedAt: Date.now(),
+});
+sharedHostOwner.applyRuntimePolicy({
+	shortBudget: 20,
+	longBudget: 40,
+	minIntervalMs: 0,
+	maxConcurrent: 3,
+});
+sharedReaderOwner.applyRuntimePolicy({
+	shortBudget: 20,
+	longBudget: 40,
+	minIntervalMs: 0,
+	maxConcurrent: 3,
+});
+let automaticDuringHostGranted = false;
+const automaticDuringHostPending = sharedReaderOwner.acquire({
+	key: 'topic-card-prefetch-during-host-request',
+	priority: 'prefetch',
+	droppable: true,
+	signal: new AbortController().signal,
+}).then((permit) => {
+	automaticDuringHostGranted = true;
+	return permit;
+});
+await delay(20);
+assert(
+	!automaticDuringHostGranted,
+	'宿主原生请求占用期间，自动 prefetch/background 必须让路，即使普通并发仍有空槽',
+);
+sharedAutomaticHostLease.release();
+(await automaticDuringHostPending).release();
 sharedHostOwner.destroy();
 sharedReaderOwner.destroy();
 

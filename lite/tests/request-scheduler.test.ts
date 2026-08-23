@@ -506,6 +506,7 @@ const permitDeferred = deferred<{ release(): void }>();
 let permitReleaseCount = 0;
 let gatedOperationRan = false;
 let gatedNow = 100;
+let gatedRequestQueuedAt = -1;
 const gatedTimings: Array<{
 	readonly queuedAt: number;
 	readonly permittedAt: number;
@@ -517,7 +518,10 @@ const gatedScheduler = new RequestScheduler({
 	defaultTimeoutMs: 1000,
 	now: () => gatedNow,
 	startGate: {
-		acquire: async () => permitDeferred.promise,
+		acquire: async (input) => {
+			gatedRequestQueuedAt = input.queuedAt ?? -1;
+			return permitDeferred.promise;
+		},
 	},
 });
 const gatedRequest = gatedScheduler.schedule({
@@ -541,10 +545,11 @@ assert((await gatedRequest) === 'gated-result', 'permit 后 transport 结果错�
 assert(permitReleaseCount === 1, 'transport 完成后 permit 必须且只能释放一次');
 assert(
 	gatedTimings.length === 1 &&
+		gatedRequestQueuedAt === 100 &&
 		gatedTimings[0]?.queuedAt === 100 &&
 		gatedTimings[0]?.permittedAt === 160 &&
 		gatedTimings[0]?.startedAt === 160,
-	'调度器必须向中央观测端口暴露一次真实排队、放行和启动时间',
+	'调度器必须把首次排队时间交给跨标签闸门，并向中央观测端口暴露真实排队、放行和启动时间',
 );
 gatedScheduler.destroy();
 
@@ -679,6 +684,57 @@ assert(
 	'被抢占预取不得迟到启动 transport；可见 permit 必须且只能释放一次',
 );
 preemptScheduler.destroy();
+
+const durableYieldGate = controlledStartGate();
+const durableYieldScheduler = new RequestScheduler({
+	maxConcurrent: 2,
+	queueLimit: 2,
+	defaultTimeoutMs: 1000,
+	startGate: durableYieldGate.gate,
+});
+let durableReadTransportCount = 0;
+const durableRead = durableYieldScheduler.schedule({
+	key: 'permit-durable-read',
+	priority: 'background',
+	droppable: false,
+}, async () => {
+	durableReadTransportCount += 1;
+	return 'read-confirmed';
+});
+await nextTask();
+const visibleAfterDurableRead = durableYieldScheduler.schedule({
+	key: 'permit-visible-topic',
+	priority: 'visible',
+	droppable: false,
+}, async () => 'topic-visible');
+for (let index = 0; index < 8; index += 1) await nextTask();
+assert(
+	durableYieldGate.attempts.map((attempt) =>
+		`${attempt.key}:${attempt.priority}`).join(',') ===
+		'permit-durable-read:background,permit-visible-topic:visible' &&
+		durableYieldGate.attempts[0]?.aborted() === true,
+	'不可丢的已读确认等待共享许可时必须暂退，让可见 Topic 先取号且不得丢失原任务',
+);
+durableYieldGate.attempts[1]!.grant();
+assert(
+	await visibleAfterDurableRead === 'topic-visible',
+	'已读确认暂退后可见 Topic 必须立即启动并完成',
+);
+for (let index = 0; index < 8; index += 1) await nextTask();
+assert(
+	durableYieldGate.attempts.map((attempt) =>
+		`${attempt.key}:${attempt.priority}`).join(',') ===
+		'permit-durable-read:background,permit-visible-topic:visible,permit-durable-read:background',
+	'可见 Topic 完成后必须用原优先级恢复同一个不可丢已读任务',
+);
+durableYieldGate.attempts[2]!.grant();
+assert(
+	await durableRead === 'read-confirmed' &&
+		durableReadTransportCount === 1 &&
+		durableYieldGate.releaseCount() === 2,
+	'暂退不得复制或丢失已读 transport，两个 permit 都必须各释放一次',
+);
+durableYieldScheduler.destroy();
 
 const promotionGate = controlledStartGate();
 const promotionScheduler = new RequestScheduler({

@@ -276,6 +276,12 @@ postCustom.dispatchEvent(new parsedWindow.Event('input', { bubbles: true }));
 const postScale = host.querySelector<HTMLInputElement>(
 	'[data-font-setting="post"]',
 )!;
+assert(
+	postScale.type === 'range' &&
+	postScale.min === '50' &&
+	postScale.max === '250',
+	'字体领域表单必须保留连续预览滑块，直接输入入口由设置字段公共 owner 统一增强',
+);
 postScale.value = '120';
 postScale.dispatchEvent(new parsedWindow.Event('input', { bubbles: true }));
 assert(
@@ -333,7 +339,7 @@ assert(
 		updateCount === 1 &&
 		preferences.fontProfile.postFamily === 'custom' &&
 		preferences.fontProfile.postCustomFamily === 'Local Test' &&
-		preferences.fontProfile.post === 120 &&
+		Number(preferences.fontProfile.post) === 120 &&
 		Number(settings.snapshot.draftCount) === 0 &&
 		!font.snapshot.previewing,
 	'字体草稿必须一次保存为完整 profile，再由持久偏好接管 CSS',

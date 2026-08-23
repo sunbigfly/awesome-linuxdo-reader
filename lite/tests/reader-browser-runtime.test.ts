@@ -835,6 +835,7 @@ const stage = createReaderBrowserRuntimeStage<TestPreferences, TestTopic, TestPo
 			authScope: 'account:test',
 			origin: 'https://linux.do',
 			pageSize: 20,
+			readMinimumDwellMs: 0,
 			caches: {
 				topic: { freshForMs: 1_000, retainForMs: 60_000, persist: true },
 				posts: { freshForMs: 1_000, retainForMs: 60_000, persist: true },

@@ -9,6 +9,7 @@ import {
 	type RateLimitDecision,
 } from './request-rate-limit-policy.js';
 import {
+	RequestControlError,
 	RequestStartDeferredError,
 	type RequestPriority,
 	type RequestStartGateInput,
@@ -25,6 +26,12 @@ export const READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME =
 	'ldp-cloudflare-challenge';
 export const READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS = 2_500;
 export const READER_BACKGROUND_REQUEST_MAX_DEFER_MS = 15_000;
+export const READER_AUTOMATIC_REQUEST_SHORT_BUDGET = 4;
+export const READER_AUTOMATIC_REQUEST_LONG_BUDGET = 24;
+export const READER_AUTOMATIC_REQUEST_MAX_CONCURRENT = 1;
+export const READER_AUTOMATIC_REQUEST_MAX_QUEUE_WAIT_MS = 60_000;
+export const READER_AUTOMATIC_REQUEST_DEPHASE_MIN_MS = 250;
+export const READER_AUTOMATIC_REQUEST_DEPHASE_MAX_MS = 1_250;
 const READER_CLOUDFLARE_CHALLENGE_MAX_PROBE_INTERVAL_MS = 10_000;
 const READER_CLOUDFLARE_AUTOMATIC_CHALLENGE_MAX_WAIT_MS = 30_000;
 const READER_RATE_LIMIT_EVIDENCE_WINDOW_MS = 4_000;
@@ -155,6 +162,7 @@ interface StoredIntent {
 	readonly id: string;
 	readonly ownerId: string;
 	readonly priority: RequestPriority;
+	readonly automatic?: boolean;
 	readonly rateLimitRoute: string;
 	readonly queuedAt: number;
 	readonly expiresAt: number;
@@ -163,6 +171,8 @@ interface StoredIntent {
 interface StoredPermit {
 	readonly id: string;
 	readonly ownerId: string;
+	readonly priority?: RequestPriority;
+	readonly automatic?: boolean;
 	readonly expiresAt: number;
 }
 
@@ -225,6 +235,7 @@ interface MutablePermitState {
 	schemaVersion: 1;
 	updatedAt: number;
 	events: number[];
+	automaticEvents: number[];
 	intents: StoredIntent[];
 	active: StoredPermit[];
 	policies: StoredPolicy[];
@@ -281,6 +292,18 @@ export interface BrowserSharedRequestPermitOptions {
 	readonly longBudget: number;
 	readonly minIntervalMs: number;
 	readonly maxConcurrent: number;
+	/** Reader 自动 prefetch/background 的独立跨标签短窗口预算。 */
+	readonly automaticShortBudget?: number;
+	/** Reader 自动 prefetch/background 的独立跨标签长窗口预算。 */
+	readonly automaticLongBudget?: number;
+	/** Reader 自动 prefetch/background 的独立跨标签并发上限。 */
+	readonly automaticMaxConcurrent?: number;
+	/** 自动意图从首次进入 scheduler 起允许等待的最长时间。 */
+	readonly automaticMaxQueueWaitMs?: number;
+	/** 自动意图在上一请求之后额外等待的最小错峰时间。 */
+	readonly automaticDephaseMinMs?: number;
+	/** 自动意图在上一请求之后额外等待的最大错峰时间。 */
+	readonly automaticDephaseMaxMs?: number;
 	/** 后台历史只在全局空闲窗口单飞启动；缓存命中不会进入该窗口。 */
 	readonly backgroundIdleIntervalMs?: number;
 	/** 连续前台流量下最多让路多久；到期仍不越过排队前台或活动请求。 */
@@ -308,13 +331,23 @@ export interface BrowserSharedRequestPermitSnapshot {
 	readonly longBudget: number;
 	readonly minIntervalMs: number;
 	readonly maxConcurrent: number;
+	readonly automaticShortBudget?: number;
+	readonly automaticLongBudget?: number;
+	readonly automaticMaxConcurrent?: number;
+	readonly automaticMaxQueueWaitMs?: number;
+	readonly automaticDephaseMinMs?: number;
+	readonly automaticDephaseMaxMs?: number;
 	readonly backgroundIdleIntervalMs?: number;
 	readonly backgroundMaxDeferMs?: number;
 	readonly instances: number;
 	readonly queued: number;
 	readonly active: number;
+	readonly automaticQueued?: number;
+	readonly automaticActive?: number;
 	readonly shortCount: number;
 	readonly longCount: number;
+	readonly automaticShortCount?: number;
+	readonly automaticLongCount?: number;
 	readonly challengeState: 'idle' | 'required' | 'active' | 'passed';
 	readonly challengeOwned: boolean;
 	readonly nextPermitDelay: number;
@@ -389,6 +422,14 @@ const PRIORITY_WEIGHT: Readonly<Record<RequestPriority, number>> = Object.freeze
 	background: 5,
 });
 
+function automaticRequest(
+	priority: RequestPriority | undefined,
+	droppable: boolean | undefined,
+): boolean {
+	return droppable === true &&
+		(priority === 'prefetch' || priority === 'background');
+}
+
 function positiveInteger(value: number | undefined, fallback: number, name: string): number {
 	const normalized = Number(value ?? fallback);
 	if (!Number.isSafeInteger(normalized) || normalized < 1) {
@@ -443,6 +484,7 @@ function emptyState(): MutablePermitState {
 		schemaVersion: 1,
 		updatedAt: 0,
 		events: [],
+		automaticEvents: [],
 		intents: [],
 		active: [],
 		policies: [],
@@ -466,6 +508,13 @@ function normalizeState(
 			.sort((left, right) => left - right)
 			.slice(-1000)
 		: [];
+	const automaticEvents = Array.isArray(source.automaticEvents)
+		? source.automaticEvents
+			.map(Number)
+			.filter((at) => Number.isFinite(at) && at > now - longWindowMs && at <= now)
+			.sort((left, right) => left - right)
+			.slice(-1000)
+		: [];
 	const intents = Array.isArray(source.intents)
 		? source.intents.filter((intent): intent is StoredIntent =>
 			!!intent &&
@@ -479,9 +528,10 @@ function normalizeState(
 				) &&
 				Number.isFinite(intent.queuedAt) &&
 				Number(intent.expiresAt) > now)
-				.map((intent) => Object.freeze({
-					...intent,
-					rateLimitRoute: String(intent.rateLimitRoute ?? '').trim(),
+					.map((intent) => Object.freeze({
+						...intent,
+						automatic: intent.automatic === true,
+						rateLimitRoute: String(intent.rateLimitRoute ?? '').trim(),
 				}))
 				.slice(-256)
 		: [];
@@ -491,7 +541,16 @@ function normalizeState(
 			typeof permit === 'object' &&
 			typeof permit.id === 'string' &&
 			typeof permit.ownerId === 'string' &&
-			Number(permit.expiresAt) > now)
+				Number(permit.expiresAt) > now)
+			.map((permit) => Object.freeze({
+				id: permit.id,
+				ownerId: permit.ownerId,
+				...(permit.priority && permit.priority in PRIORITY_WEIGHT
+					? { priority: permit.priority }
+					: {}),
+				...(permit.automatic === true ? { automatic: true } : {}),
+				expiresAt: Number(permit.expiresAt),
+			}))
 			.slice(-128)
 		: [];
 	const policies = Array.isArray(source.policies)
@@ -588,6 +647,7 @@ function normalizeState(
 		schemaVersion: 1,
 		updatedAt: Math.max(0, Number(source.updatedAt) || 0),
 		events,
+		automaticEvents,
 		intents,
 		active,
 		policies,
@@ -723,6 +783,12 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 	#longBudget: number;
 	#minIntervalMs: number;
 	#maxConcurrent: number;
+	readonly #automaticShortBudget: number;
+	readonly #automaticLongBudget: number;
+	readonly #automaticMaxConcurrent: number;
+	readonly #automaticMaxQueueWaitMs: number;
+	readonly #automaticDephaseMinMs: number;
+	readonly #automaticDephaseMaxMs: number;
 	#backgroundIdleIntervalMs: number;
 	#backgroundMaxDeferMs: number;
 	readonly #rateLimitEvidenceWindowMs: number;
@@ -778,6 +844,42 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		this.#longBudget = positiveInteger(options.longBudget, 160, 'longBudget');
 		this.#minIntervalMs = nonNegativeInteger(options.minIntervalMs, 'minIntervalMs');
 		this.#maxConcurrent = positiveInteger(options.maxConcurrent, 3, 'maxConcurrent');
+		this.#automaticShortBudget = positiveInteger(
+			options.automaticShortBudget,
+			READER_AUTOMATIC_REQUEST_SHORT_BUDGET,
+			'automaticShortBudget',
+		);
+		this.#automaticLongBudget = positiveInteger(
+			options.automaticLongBudget,
+			READER_AUTOMATIC_REQUEST_LONG_BUDGET,
+			'automaticLongBudget',
+		);
+		if (this.#automaticLongBudget < this.#automaticShortBudget) {
+			throw new RangeError('automaticLongBudget 不能小于 automaticShortBudget');
+		}
+		this.#automaticMaxConcurrent = positiveInteger(
+			options.automaticMaxConcurrent,
+			READER_AUTOMATIC_REQUEST_MAX_CONCURRENT,
+			'automaticMaxConcurrent',
+		);
+		this.#automaticMaxQueueWaitMs = positiveInteger(
+			options.automaticMaxQueueWaitMs,
+			READER_AUTOMATIC_REQUEST_MAX_QUEUE_WAIT_MS,
+			'automaticMaxQueueWaitMs',
+		);
+		this.#automaticDephaseMinMs = nonNegativeInteger(
+			options.automaticDephaseMinMs ??
+				READER_AUTOMATIC_REQUEST_DEPHASE_MIN_MS,
+			'automaticDephaseMinMs',
+		);
+		this.#automaticDephaseMaxMs = nonNegativeInteger(
+			options.automaticDephaseMaxMs ??
+				READER_AUTOMATIC_REQUEST_DEPHASE_MAX_MS,
+			'automaticDephaseMaxMs',
+		);
+		if (this.#automaticDephaseMaxMs < this.#automaticDephaseMinMs) {
+			throw new RangeError('automaticDephaseMaxMs 不能小于 automaticDephaseMinMs');
+		}
 		this.#backgroundIdleIntervalMs = nonNegativeInteger(
 			options.backgroundIdleIntervalMs ??
 				READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS,
@@ -914,20 +1016,36 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		this.#assertOpen();
 		if (input.signal.aborted) throw this.#abortReason(input.signal);
 		const intentId = `${this.#sourceId}:intent:${this.#createId()}`;
-		const queuedAt = this.#now();
+		const acquiredAt = this.#now();
+		const requestedQueuedAt = Number(input.queuedAt);
+		const queuedAt = Number.isFinite(requestedQueuedAt) && requestedQueuedAt >= 0
+			? Math.min(acquiredAt, requestedQueuedAt)
+			: acquiredAt;
+		const automatic = automaticRequest(input.priority, input.droppable);
+		const automaticDephaseMs = automatic
+			? this.#nextAutomaticDephaseMs()
+			: 0;
 		let granted = false;
 		let waitReason = '';
 		try {
 			while (!this.#closed) {
 				if (input.signal.aborted) throw this.#abortReason(input.signal);
+				if (
+					automatic &&
+					this.#now() - queuedAt >= this.#automaticMaxQueueWaitMs
+				) {
+					throw new RequestControlError('cancelled');
+				}
 					const decision = await this.#transact((state, now) =>
 						this.#tryGrant(
 							state,
 							now,
 							intentId,
-							queuedAt,
-							input.priority,
-							String(input.rateLimitRoute ?? '').trim(),
+								queuedAt,
+								input.priority,
+								automatic,
+								automaticDephaseMs,
+								String(input.rateLimitRoute ?? '').trim(),
 						));
 				if (decision.granted && decision.permitId) {
 					granted = true;
@@ -1291,6 +1409,9 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		const policy = this.#effectivePolicy(state);
 		const blocking = this.#blockingState(state, now, policy);
 		const rateLimitBlocking = this.#rateLimitGate(state, now, '', false);
+		const automaticShortCount = state.automaticEvents.filter(
+			(at) => at > now - this.#shortWindowMs,
+		).length;
 		const instances = new Set([
 			this.#sourceId,
 			...state.policies.map((entry) => entry.ownerId),
@@ -1303,13 +1424,25 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			longBudget: policy.longBudget,
 			minIntervalMs: policy.minIntervalMs,
 			maxConcurrent: policy.maxConcurrent,
+			automaticShortBudget: this.#automaticShortBudget,
+			automaticLongBudget: this.#automaticLongBudget,
+			automaticMaxConcurrent: this.#automaticMaxConcurrent,
+			automaticMaxQueueWaitMs: this.#automaticMaxQueueWaitMs,
+			automaticDephaseMinMs: this.#automaticDephaseMinMs,
+			automaticDephaseMaxMs: this.#automaticDephaseMaxMs,
 			backgroundIdleIntervalMs: this.#backgroundIdleIntervalMs,
 			backgroundMaxDeferMs: this.#backgroundMaxDeferMs,
 			instances: Math.max(1, instances.size),
 			queued: state.intents.length,
 			active: state.active.length,
+			automaticQueued: state.intents.filter((entry) =>
+				entry.automatic === true).length,
+			automaticActive: state.active.filter((entry) =>
+				entry.automatic === true).length,
 			shortCount: state.events.filter((at) => at > now - this.#shortWindowMs).length,
 			longCount: state.events.length,
+			automaticShortCount,
+			automaticLongCount: state.automaticEvents.length,
 			challengeState: state.challenge
 				? state.challenge.state === 'active' && state.challenge.required
 					? 'required'
@@ -1835,6 +1968,8 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		intentId: string,
 		queuedAt: number,
 		priority: RequestPriority,
+		automatic: boolean,
+		automaticDephaseMs: number,
 		rateLimitRoute: string,
 	): PermitDecision {
 		this.#rememberPolicy(state, now);
@@ -1845,6 +1980,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 				intent.id === intentId
 					? Object.freeze({
 						...intent,
+						automatic,
 						rateLimitRoute,
 						expiresAt: now + this.#intentTtlMs,
 					})
@@ -1854,6 +1990,7 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 				id: intentId,
 				ownerId: this.#sourceId,
 				priority,
+				automatic,
 				rateLimitRoute,
 				queuedAt,
 				expiresAt: now + this.#intentTtlMs,
@@ -1905,6 +2042,8 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			policy,
 			priority,
 			queuedAt,
+			automatic,
+			automaticDephaseMs,
 		);
 		const rateLimitBlocking = this.#rateLimitGate(
 			state,
@@ -1937,10 +2076,13 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		).recoveryProbe;
 		state.intents = state.intents.filter((intent) => intent.id !== intentId);
 		state.events.push(now);
+		if (automatic) state.automaticEvents.push(now);
 		const permitId = `${this.#sourceId}:permit:${this.#createId()}`;
 		state.active.push(Object.freeze({
 			id: permitId,
 			ownerId: this.#sourceId,
+			priority,
+			automatic,
 			expiresAt: now + this.#permitTtlMs,
 		}));
 		return Object.freeze({
@@ -2071,6 +2213,8 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		policy: BrowserSharedRequestPermitRuntimePolicy,
 		priority: RequestPriority = 'visible',
 		queuedAt = now,
+		automatic = false,
+		automaticDephaseMs = 0,
 	): Readonly<{
 		waitMs: number;
 		reason: BrowserSharedRequestPermitSnapshot['blockingReason'];
@@ -2095,6 +2239,22 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 				Math.min(...state.active.map((permit) => permit.expiresAt - now)),
 			)
 			: 0;
+		const automaticActive = automatic
+			? state.active.filter((permit) => permit.automatic === true)
+			: [];
+		const automaticMustYield = automatic && state.active.some(
+			(permit) => permit.automatic !== true,
+		);
+		const automaticActiveDelay = automatic && state.active.length &&
+			(
+				automaticMustYield ||
+				automaticActive.length >= this.#automaticMaxConcurrent
+			)
+			? Math.max(
+				25,
+				Math.min(...state.active.map((permit) => permit.expiresAt - now)),
+			)
+			: 0;
 		const shortEvents = state.events.filter(
 			(at) => at > now - this.#shortWindowMs,
 		);
@@ -2104,12 +2264,32 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			this.#shortWindowMs,
 			now,
 		);
+		const automaticShortEvents = automatic
+			? state.automaticEvents.filter((at) => at > now - this.#shortWindowMs)
+			: [];
+		const automaticShortWindowDelay = automatic
+			? this.#windowDelay(
+				automaticShortEvents,
+				this.#automaticShortBudget,
+				this.#shortWindowMs,
+				now,
+			)
+			: 0;
 		const longWindowDelay = this.#windowDelay(
 			state.events,
 			policy.longBudget,
 			this.#longWindowMs,
 			now,
 		);
+		const automaticLongWindowDelay = automatic
+			? this.#windowDelay(
+				state.automaticEvents,
+				this.#automaticLongBudget,
+				this.#longWindowMs,
+				now,
+			)
+			: 0;
+		const hasPreviousEvent = state.events.length > 0;
 		const latest = state.events.at(-1) ?? 0;
 		const backgroundDeferRemainingMs = priority === 'background'
 			? Math.max(0, queuedAt + this.#backgroundMaxDeferMs - now)
@@ -2119,23 +2299,29 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 		const requestIntervalMs = enforceBackgroundIdle
 			? Math.max(policy.minIntervalMs, this.#backgroundIdleIntervalMs)
 			: policy.minIntervalMs;
-		let intervalDelay = Math.max(
-			0,
-			latest + requestIntervalMs - now,
-		);
+		const dephaseMs = automatic ? automaticDephaseMs : 0;
+		const minimumIntervalDelay = hasPreviousEvent
+			? Math.max(0, latest + policy.minIntervalMs + dephaseMs - now)
+			: 0;
+		let intervalDelay = hasPreviousEvent
+			? Math.max(0, latest + requestIntervalMs + dephaseMs - now)
+			: 0;
 		if (enforceBackgroundIdle) {
 			// 到达最大让路时间后只解除额外 idle；固定窗口、活动 lease 与
 			// 排队优先级仍继续裁决，不能借此形成后台追赶突发。
-			intervalDelay = Math.min(
-				intervalDelay,
-				backgroundDeferRemainingMs,
+			intervalDelay = Math.max(
+				minimumIntervalDelay,
+				Math.min(intervalDelay, backgroundDeferRemainingMs),
 			);
 		}
 		const candidates = [
-			['concurrency', Math.max(activeDelay, backgroundActiveDelay)],
+			[
+				'concurrency',
+				Math.max(activeDelay, backgroundActiveDelay, automaticActiveDelay),
+			],
 			['interval', intervalDelay],
-			['10s', shortWindowDelay],
-			['60s', longWindowDelay],
+			['10s', Math.max(shortWindowDelay, automaticShortWindowDelay)],
+			['60s', Math.max(longWindowDelay, automaticLongWindowDelay)],
 		] as const;
 		let reason: BrowserSharedRequestPermitSnapshot['blockingReason'] = '';
 		let waitMs = 0;
@@ -2146,6 +2332,17 @@ export class BrowserSharedRequestPermit implements SharedRequestPermitPort {
 			}
 		}
 		return Object.freeze({ waitMs, reason, recoveryProbe: false });
+	}
+
+	#nextAutomaticDephaseMs(): number {
+		if (this.#automaticDephaseMaxMs <= this.#automaticDephaseMinMs) {
+			return this.#automaticDephaseMinMs;
+		}
+		const random = Math.max(0, Math.min(1, Number(this.#random()) || 0));
+		return Math.round(
+			this.#automaticDephaseMinMs +
+				(this.#automaticDephaseMaxMs - this.#automaticDephaseMinMs) * random,
+		);
 	}
 
 	#windowDelay(

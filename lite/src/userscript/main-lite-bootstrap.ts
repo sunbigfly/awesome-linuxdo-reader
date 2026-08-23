@@ -882,6 +882,7 @@ function createRuntimeStage(
 						new ReaderPostReadViewportFeature<MainLitePost>({
 							controller: bundle.services.read,
 							document,
+							focusTarget: window,
 							parentScope: context.scope,
 							rootFor: (postRoot) => {
 								const discussion = postRoot.closest<HTMLElement>(

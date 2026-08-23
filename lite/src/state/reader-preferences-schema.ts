@@ -1511,7 +1511,7 @@ export function createReaderPreferencesDefaults(
 		...performance,
 		requestFlowSettings: READER_REQUEST_FLOW_DEFAULTS,
 		businessRequestSettings: READER_BUSINESS_REQUEST_DEFAULTS,
-		hostTopicPreheatEnabled: true,
+		hostTopicPreheatEnabled: false,
 		hostTopicPreheatPostCount: HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT,
 		performanceSuspendHostTurnstileInBackground: false,
 		layoutProfile: READER_LAYOUT_DEFAULT,
@@ -1763,7 +1763,7 @@ export function normalizeReaderPreferences(
 		businessRequestSettings: normalizeReaderBusinessRequestSettings(
 			source.businessRequestSettings,
 		),
-		hostTopicPreheatEnabled: source.hostTopicPreheatEnabled !== false,
+		hostTopicPreheatEnabled: source.hostTopicPreheatEnabled === true,
 		hostTopicPreheatPostCount: roundedRange(
 			source.hostTopicPreheatPostCount,
 			HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT,
@@ -1872,7 +1872,7 @@ export function createReaderPreferencesConfigCodec(
 			PERFORMANCE_PRESETS.balanced.readStateTimingsPerMinute,
 		requestFlowSettings: READER_REQUEST_FLOW_DEFAULTS,
 		businessRequestSettings: READER_BUSINESS_REQUEST_DEFAULTS,
-		hostTopicPreheatEnabled: true,
+		hostTopicPreheatEnabled: false,
 		hostTopicPreheatPostCount: HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT,
 		performanceSuspendHostTurnstileInBackground: false,
 	});

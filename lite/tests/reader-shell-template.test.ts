@@ -183,13 +183,19 @@ assert(
 	template.titleJump.textContent === '正在载入主题…' &&
 	template.metaStats.textContent === '正在读取主题信息…' &&
 	template.metaStats.parentElement === template.metaHost &&
+	template.metaHost.parentElement?.classList.contains('ldp-topic-details') &&
 	template.topicIdentityHost.classList.contains('ldp-title-topic-row'),
-	'稳定 header 必须提供 Topic identity 的命名更新点',
+	'稳定 header 必须提供可迁移的帖子详情与 Topic identity 命名更新点',
 );
 assert(
 	template.onlyOpToggle.querySelector('[data-icon="user-round"]') !== null &&
+	template.onlyOpToggle.parentElement?.hidden === true &&
+	template.onlyOpToggle.parentElement?.hasAttribute(
+		'data-ldp-topic-controls-parking',
+	) === true &&
+	!template.metaOwner.contains(template.onlyOpToggle) &&
 	!(template.onlyOpToggle.textContent ?? '').trim(),
-	'只看楼主入口必须复用 Header 图标语言，不能用 OP 文本撑宽元信息行',
+	'只看楼主必须保留唯一按钮并停放到稳定 parking，不能继续占用帖子详情行',
 );
 assert(
 	template.historyBackEdge.parentElement === template.view.modal &&

@@ -34,6 +34,13 @@ interface ReaderSettingsColorHsv {
 	readonly v: number;
 }
 
+interface ReaderSettingsRangeEntry {
+	readonly root: HTMLElement;
+	readonly input: HTMLInputElement;
+	readonly unit: HTMLElement;
+	readonly source: HTMLElement | null;
+}
+
 const COLOR_PRESETS = Object.freeze([
 	'#F0FFF0', '#FFFFFF', '#E5E7EB', '#94A3B8', '#475569', '#111827',
 	'#47855F', '#22C55E', '#2563EB', '#7C3AED', '#D97706', '#DC2626',
@@ -163,6 +170,14 @@ export class ReaderSettingsFieldInteraction {
 	readonly #hueValue: HTMLOutputElement;
 	readonly #saturationValue: HTMLOutputElement;
 	readonly #brightnessValue: HTMLOutputElement;
+	readonly #rangeEntries = new Map<
+		HTMLInputElement,
+		ReaderSettingsRangeEntry
+	>();
+	readonly #rangeByInput = new WeakMap<
+		HTMLInputElement,
+		HTMLInputElement
+	>();
 	readonly #requestFrame: (callback: FrameRequestCallback) => number;
 	readonly #cancelFrame: (handle: number) => void;
 	#activeColorInput: HTMLInputElement | null = null;
@@ -219,11 +234,32 @@ export class ReaderSettingsFieldInteraction {
 		for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
 			this.scope.listen(this.#popover, type, () => this.#stopRangeDrag());
 		}
-		this.scope.listen(this.#popover, 'input', (event) => {
+		const onRangeInput = (event: Event) => {
 			const target = eventElement(event);
+			const numeric = target?.closest<HTMLInputElement>(
+				'input[data-settings-range-input]',
+			) ?? null;
+			if (numeric) {
+				this.#applyRangeInput(numeric);
+				return;
+			}
 			const range = target?.closest<HTMLInputElement>('input[type="range"]');
-			if (range && this.#popover.contains(range)) this.#syncRange(range);
-		});
+			if (range) this.#syncRange(range);
+		};
+		const onRangeChange = (event: Event) => {
+			const numeric = eventElement(event)?.closest<HTMLInputElement>(
+				'input[data-settings-range-input]',
+			) ?? null;
+			if (!numeric) return;
+			if (!this.#applyRangeInput(numeric)) {
+				const range = this.#rangeByInput.get(numeric);
+				if (range) numeric.value = range.value;
+			}
+		};
+		for (const host of [this.#popover, this.#picker]) {
+			this.scope.listen(host, 'input', onRangeInput);
+			this.scope.listen(host, 'change', onRangeChange);
+		}
 		this.scope.listen(this.#popover, 'click', (event) => {
 			const target = eventElement(event);
 			const color = target?.closest<HTMLInputElement>('input[type="color"]');
@@ -248,6 +284,11 @@ export class ReaderSettingsFieldInteraction {
 		this.#bindPicker();
 		this.scope.add(() => {
 			this.close();
+			for (const entry of this.#rangeEntries.values()) {
+				entry.source?.classList.remove('ldp-setting-range-source-value');
+				entry.root.remove();
+			}
+			this.#rangeEntries.clear();
 			this.#picker.remove();
 		});
 		this.sync();
@@ -262,7 +303,22 @@ export class ReaderSettingsFieldInteraction {
 	}
 
 	sync(root: HTMLElement = this.#popover): void {
+		for (const [range, entry] of this.#rangeEntries) {
+			if (
+				range.isConnected &&
+				(
+					this.#popover.contains(range) ||
+					this.#picker.contains(range)
+				)
+			) continue;
+			entry.source?.classList.remove('ldp-setting-range-source-value');
+			entry.root.remove();
+			this.#rangeEntries.delete(range);
+		}
 		for (const range of root.querySelectorAll<HTMLInputElement>(
+			'input[type="range"]',
+		)) this.#syncRange(range);
+		for (const range of this.#picker.querySelectorAll<HTMLInputElement>(
 			'input[type="range"]',
 		)) this.#syncRange(range);
 		for (const color of root.querySelectorAll<HTMLInputElement>(
@@ -754,6 +810,92 @@ export class ReaderSettingsFieldInteraction {
 
 	#syncRange(input: HTMLInputElement): void {
 		input.style.setProperty('--ldp-range-progress', `${rangeProgress(input)}%`);
+		const entry = this.#rangeEntry(input);
+		entry.input.min = input.min;
+		entry.input.max = input.max;
+		entry.input.step = input.step || '1';
+		entry.input.inputMode = Number(entry.input.step) % 1 === 0
+			? 'numeric'
+			: 'decimal';
+		entry.input.disabled = input.disabled;
+		entry.input.value = input.value;
+		const formatted = String(
+			entry.source?.textContent ||
+				(entry.source as HTMLOutputElement | null)?.value ||
+				'',
+		).trim();
+		const unit = formatted.replace(
+			/^\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*/,
+			'',
+		);
+		entry.unit.textContent = unit;
+		entry.unit.hidden = !unit;
+	}
+
+	#rangeEntry(range: HTMLInputElement): ReaderSettingsRangeEntry {
+		const current = this.#rangeEntries.get(range);
+		if (current) return current;
+		const sourceCandidate = range.nextElementSibling;
+		const source = sourceCandidate &&
+			(
+				sourceCandidate.tagName === 'OUTPUT' ||
+				(sourceCandidate.getAttribute('class') ?? '').includes('value')
+			)
+			? sourceCandidate as HTMLElement
+			: null;
+		const root = element(
+			this.#document,
+			'span',
+			'ldp-setting-range-entry',
+		);
+		const input = element(
+			this.#document,
+			'input',
+			'ldp-setting-range-input',
+		);
+		input.type = 'number';
+		input.autocomplete = 'off';
+		input.dataset.settingsRangeInput = 'true';
+		input.setAttribute(
+			'aria-label',
+			`${range.getAttribute('aria-label') || '范围'}数值`,
+		);
+		const unit = element(
+			this.#document,
+			'span',
+			'ldp-setting-range-unit',
+		);
+		unit.setAttribute('aria-hidden', 'true');
+		root.append(input, unit);
+		range.insertAdjacentElement('afterend', root);
+		source?.classList.add('ldp-setting-range-source-value');
+		const entry = Object.freeze({ root, input, unit, source });
+		this.#rangeEntries.set(range, entry);
+		this.#rangeByInput.set(input, range);
+		return entry;
+	}
+
+	#applyRangeInput(input: HTMLInputElement): boolean {
+		const range = this.#rangeByInput.get(input);
+		if (!range || range.disabled || input.disabled) return false;
+		const raw = input.value.trim();
+		const value = Number(raw);
+		const minimum = Number(range.min);
+		const maximum = Number(range.max);
+		const step = Number(range.step) || 1;
+		const stepBase = Number.isFinite(minimum) ? minimum : 0;
+		const stepRatio = (value - stepBase) / step;
+		if (
+			!raw ||
+			!Number.isFinite(value) ||
+			(Number.isFinite(minimum) && value < minimum) ||
+			(Number.isFinite(maximum) && value > maximum) ||
+			Math.abs(stepRatio - Math.round(stepRatio)) > 1e-7
+		) return false;
+		range.value = raw;
+		const EventConstructor = this.#document.defaultView?.Event ?? Event;
+		range.dispatchEvent(new EventConstructor('input', { bubbles: true }));
+		return true;
 	}
 
 	#syncPicker(): void {
@@ -824,6 +966,9 @@ export class ReaderSettingsFieldInteraction {
 			'--ldp-color-slider-thumb',
 			colorHsvToHex({ h, s, v }),
 		);
+		for (const input of [this.#hue, this.#saturation, this.#brightness]) {
+			this.#syncRange(input);
+		}
 	}
 
 	#syncPresets(color: string): void {

@@ -684,6 +684,58 @@ assert(
 	!offscreenRoot.querySelector('.ldp-reply-tree')?.hasAttribute('aria-busy'),
 	'树状回复提交完成后必须同步清理父楼层加载状态',
 );
+coordinator.branchOverlay.toggle(discoursePostNumber(5));
+coordinator.flushNow();
+const collapsedReplyList = coordinator.domOwner.view(5)!.slots.replyList;
+assert(
+	offscreenRoot.classList.contains('ldp-branch-parent-collapsed') &&
+	collapsedReplyList.hidden,
+	'长树收纳回归必须先把已加载分支保持为单一折叠 owner',
+);
+const lateCollapsedChild: TestPost = Object.freeze({
+	id: 107,
+	post_number: 7,
+	reply_to_post_number: 5,
+	username: 'late-collapsed-child',
+	cooked: 'late-collapsed-child',
+});
+const viewportMutationBeginsBeforeCollapsedLoad = viewportMutationBegins;
+const viewportMutationRestoresBeforeCollapsedLoad = viewportMutationRestores;
+physicalVisiblePostNumber = 5;
+posts.set(7, lateCollapsedChild);
+replies.ingest([lateCollapsedChild], 'loader-batch');
+changes.emit(Object.freeze({
+	source: 'loader-batch' as const,
+	observedAt: now++,
+	acceptedPosts: 1,
+	ignoredPosts: 0,
+	changedPostNumbers: Object.freeze([7]),
+	topicChanged: false,
+	streamChanged: false,
+}));
+coordinator.flushNow();
+assert(
+	viewportMutationBegins === viewportMutationBeginsBeforeCollapsedLoad + 1 &&
+	viewportMutationRestores === viewportMutationRestoresBeforeCollapsedLoad + 1 &&
+	offscreenRoot.classList.contains('ldp-branch-parent-collapsed') &&
+	collapsedReplyList.hidden,
+	'已收纳长树继续加载子楼层时必须用可见父楼层持有并恢复唯一视口事务，不能跳到其他楼层',
+);
+coordinator.branchOverlay.toggle(discoursePostNumber(5));
+posts.delete(7);
+replies.remove(7, 'loader-batch');
+changes.emit(Object.freeze({
+	source: 'loader-batch' as const,
+	observedAt: now++,
+	acceptedPosts: 0,
+	ignoredPosts: 0,
+	changedPostNumbers: Object.freeze([]),
+	removedPostNumbers: Object.freeze([7]),
+	topicChanged: false,
+	streamChanged: false,
+}));
+coordinator.flushNow();
+physicalVisiblePostNumber = null;
 simulateScrollDuringBatch = true;
 const pendingBatch = coordinator.loadNext();
 await pendingBatch;

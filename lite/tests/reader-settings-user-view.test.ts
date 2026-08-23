@@ -413,6 +413,37 @@ assert(
 	'LDC 后台刷新失败时必须保留最后可用缓存，并只在刷新入口标记陈旧状态',
 );
 view.destroy();
+const loginScoreSession = new ReaderUserDomainSession({
+	gateway,
+	native,
+	authScope: 'account:alice-login-score',
+	communityScore: {
+		async load() {
+			throw Object.assign(new Error('authentication required'), { status: 401 });
+		},
+	},
+});
+const loginScoreHost = document.createElement('section');
+document.body.append(loginScoreHost);
+const loginScoreView = new ReaderSettingsUserView({
+	document,
+	host: loginScoreHost,
+	session: loginScoreSession,
+	username: 'alice',
+	avatarSource: (template, size) => template.replace('{size}', String(size)),
+	connectEnabled: false,
+	creditEnabled: false,
+	communityScoreEnabled: true,
+});
+for (let index = 0; index < 8; index += 1) await Promise.resolve();
+assert(
+	loginScoreView.root.querySelector(
+		'[data-user-profile-fact="community-score"]',
+	)?.textContent === '社区分数请先登录',
+	'社区分数因未登录不可用时必须保留事实项并明确提示登录，不能显示空白或伪装成零分',
+);
+loginScoreView.destroy();
+loginScoreSession.destroy();
 const connectHost = document.createElement('section');
 document.body.append(connectHost);
 const connectView = new ReaderSettingsUserView({

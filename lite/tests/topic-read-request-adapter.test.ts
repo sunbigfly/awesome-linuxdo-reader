@@ -131,6 +131,16 @@ assert(
 	gateway.targets.at(-1)?.profile === 'nearby-prefetch',
 	'宿主近视口 Topic 初始化必须进入高优先预热契约',
 );
+const prefetchedTopicRequest = nativeRequests.at(-1);
+const prefetchedTopicHeaders = prefetchedTopicRequest?.options.headers as
+	Readonly<Record<string, string>> | undefined;
+assert(
+	String(gateway.targets.at(-1)?.input) === '/t/10.json?forceLoad=true' &&
+		!String(prefetchedTopicRequest?.path).includes('track_visit') &&
+		prefetchedTopicHeaders?.['Discourse-Track-View'] === undefined &&
+		prefetchedTopicHeaders?.['Discourse-Track-View-Topic-Id'] === undefined,
+	'Topic 预热只能取数，不能冒充原生路由浏览或登记 Topic visit',
+);
 
 await adapter.loadPostsByIds([30, 10, 30]);
 assert(gateway.posts[0]?.postIds.join(',') === '10,30', 'post IDs 必须排序去重');

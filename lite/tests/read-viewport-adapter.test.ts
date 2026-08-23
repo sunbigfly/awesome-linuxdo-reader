@@ -72,12 +72,18 @@ Object.defineProperty(document, 'visibilityState', {
 	value: 'visible',
 	configurable: true,
 });
+let focused = true;
+Object.defineProperty(document, 'hasFocus', {
+	value: () => focused,
+	configurable: true,
+});
 const controller = new RecordingController();
 let observer: FakeObserver | null = null;
 const callbackErrors: unknown[] = [];
 const adapter = new ReadViewportAdapter({
 	controller,
 	document,
+	focusTarget: parsedWindow as unknown as EventTarget,
 	root: document.body,
 	createObserver(callback) {
 		observer = new FakeObserver(callback);
@@ -129,6 +135,19 @@ Object.defineProperty(document, 'visibilityState', {
 });
 document.dispatchEvent(new parsedWindow.Event('visibilitychange') as unknown as Event);
 assert(controller.pageVisibility.at(-1) === false, '页面隐藏必须暂停 read flush');
+Object.defineProperty(document, 'visibilityState', {
+	value: 'visible',
+	configurable: true,
+});
+focused = false;
+document.dispatchEvent(new parsedWindow.Event('visibilitychange') as unknown as Event);
+assert(controller.pageVisibility.at(-1) === false, '页面可见但未聚焦仍必须暂停 read timing');
+focused = true;
+parsedWindow.dispatchEvent(new parsedWindow.Event('focus'));
+assert(controller.pageVisibility.at(-1) === true, '窗口重新聚焦后必须恢复 read timing');
+focused = false;
+parsedWindow.dispatchEvent(new parsedWindow.Event('blur'));
+assert(controller.pageVisibility.at(-1) === false, '窗口失焦必须立即暂停 read timing');
 
 adapter.destroy();
 assert(observer!.disconnected, 'destroy 必须释放 IntersectionObserver');

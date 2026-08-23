@@ -100,11 +100,13 @@ assert(
 	'近视口预热必须快于普通后台任务，同时保持可丢弃、零重放和 Cloudflare 隔离',
 );
 assert(
-	requestProfileContract('read-critical').max429Retries === 0 &&
-	requestProfileContract('read-critical').maxChallengeRetries === 0 &&
-	requestProfileContract('read-critical').blockOnCloudflareChallenge === false &&
-	requestProfileContract('read-critical').suppressAfterChallengeWait === true,
-	'阅读状态命中 Cloudflare challenge 时必须只保留 checkpoint 并结束自身，不得被通用过盾结果追发',
+	requestProfileContract('read-critical').priority === 'background' &&
+		!requestProfileContract('read-critical').droppable &&
+		requestProfileContract('read-critical').max429Retries === 0 &&
+		requestProfileContract('read-critical').maxChallengeRetries === 0 &&
+		requestProfileContract('read-critical').blockOnCloudflareChallenge === false &&
+		requestProfileContract('read-critical').suppressAfterChallengeWait === true,
+	'阅读状态必须作为不可丢后台请求让位于真实交互，并在 Cloudflare challenge 时只保留 checkpoint',
 );
 
 const profiles: readonly RequestContractProfile[] = [

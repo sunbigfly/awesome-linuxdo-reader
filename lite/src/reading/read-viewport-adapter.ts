@@ -13,6 +13,7 @@ export interface ReadViewportControllerPort {
 export interface ReadViewportAdapterOptions {
 	readonly controller: ReadViewportControllerPort;
 	readonly document: Document;
+	readonly focusTarget?: EventTarget;
 	readonly root: Element | Document | null;
 	readonly createObserver?: (
 		callback: IntersectionObserverCallback,
@@ -31,6 +32,7 @@ export interface ReaderPostReadViewportFeatureOptions {
 	/** false 表示该投影（例如灯箱或 action rail）不参与服务端已读。 */
 	readonly rootFor: (postRoot: HTMLElement) => ReadViewportRoot | false;
 	readonly createObserver?: ReadViewportAdapterOptions['createObserver'];
+	readonly focusTarget?: EventTarget;
 	readonly onError?: (error: unknown) => void;
 }
 
@@ -71,15 +73,20 @@ export class ReadViewportAdapter {
 			(entries) => this.#onEntries(entries),
 			{ root: options.root, threshold: 0 },
 		);
-		const onVisibilityChange = () => {
-			this.#controller.setPageVisible(this.#document.visibilityState === 'visible');
+		const focusTarget = options.focusTarget ?? this.#document.defaultView ?? this.#document;
+		const pageActive = () => this.#document.visibilityState !== 'hidden' &&
+			(typeof this.#document.hasFocus !== 'function' || this.#document.hasFocus());
+		const onPageActivityChange = () => {
+			this.#controller.setPageVisible(pageActive());
 		};
 		this.scope.listen(
 			this.#document,
 			'visibilitychange',
-			onVisibilityChange as EventListener,
+			onPageActivityChange as EventListener,
 		);
-		this.#controller.setPageVisible(this.#document.visibilityState !== 'hidden');
+		this.scope.listen(focusTarget, 'focus', onPageActivityChange as EventListener);
+		this.scope.listen(focusTarget, 'blur', onPageActivityChange as EventListener);
+		this.#controller.setPageVisible(pageActive());
 		this.scope.add(() => {
 			this.#closed = true;
 			for (const node of this.#visible) {
@@ -193,6 +200,7 @@ export class ReaderPostReadViewportFeature<TPost>
 	readonly #document: Document;
 	readonly #rootFor: ReaderPostReadViewportFeatureOptions['rootFor'];
 	readonly #createObserver: ReadViewportAdapterOptions['createObserver'];
+	readonly #focusTarget: EventTarget | undefined;
 	readonly #onError: (error: unknown) => void;
 	readonly #adapters = new Map<ReadViewportRoot, ReadViewportAdapter>();
 	readonly #mounted = new Map<HTMLElement, ReadViewportAdapter>();
@@ -202,6 +210,7 @@ export class ReaderPostReadViewportFeature<TPost>
 		this.#document = options.document;
 		this.#rootFor = options.rootFor;
 		this.#createObserver = options.createObserver;
+		this.#focusTarget = options.focusTarget;
 		this.#onError = options.onError ?? (() => {});
 		this.scope = LifecycleScope.ownedBy(options.parentScope);
 		this.scope.add(() => {
@@ -221,6 +230,7 @@ export class ReaderPostReadViewportFeature<TPost>
 				document: this.#document,
 				root: viewportRoot,
 				scope: this.scope,
+				...(this.#focusTarget ? { focusTarget: this.#focusTarget } : {}),
 				...(this.#createObserver
 					? { createObserver: this.#createObserver }
 					: {}),

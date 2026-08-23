@@ -1,6 +1,5 @@
 import {
 	discoursePostNumbers,
-	type DiscoursePostNumber,
 } from '../src/discourse/identifiers.js';
 import {
 	ReadStateController,
@@ -14,6 +13,7 @@ import {
 import {
 	ReadStateClientRateLimitError,
 	type ReadStateCoordinationPort,
+	type ReadStateSubmission,
 } from '../src/reading/read-state-coordination.js';
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -47,8 +47,11 @@ function timerHarness(): {
 
 class RecordingSubmitter implements ReadStateSubmitPort {
 	readonly batches: number[][] = [];
+	readonly submissions: ReadStateSubmission[] = [];
 
-	async submit(postNumbers: readonly DiscoursePostNumber[]): Promise<readonly number[]> {
+	async submit(submission: ReadStateSubmission): Promise<readonly number[]> {
+		this.submissions.push(submission);
+		const postNumbers = submission.timings.map((timing) => timing.postNumber);
 		this.batches.push([...postNumbers]);
 		return postNumbers;
 	}
@@ -56,12 +59,14 @@ class RecordingSubmitter implements ReadStateSubmitPort {
 
 const timers = timerHarness();
 const submitter = new RecordingSubmitter();
+let readNow = 0;
 const controller = new ReadStateController({
 	authScope: 'account:test',
 	topicId: 10,
 	submitter,
 	setTimer: timers.setTimer,
 	clearTimer: timers.clearTimer,
+	now: () => readNow,
 });
 const changes: ReadStateChange[] = [];
 controller.changes.subscribe((change) => changes.push(change));
@@ -74,34 +79,118 @@ assert(
 	'仅加载到缓存且未进入 viewport 的楼层不得由 force 伪造成已读',
 );
 controller.setVisible(Array.from({ length: 25 }, (_, index) => index + 1), 'root');
-controller.setVisible([2], 'nested');
+controller.setVisible([25], 'nested');
 controller.setVisible([3], false);
 assert(
-	controller.snapshot().pending.length === 25 &&
-		changes[0]?.kind === 'optimistic' &&
-		changes[0].postNumbers.length === 25,
-	'只有进入 viewport 后才可建立 pending/optimistic 已读状态',
+	controller.snapshot().pending.length === 0 && changes.length === 0,
+	'只擦过 viewport、尚未达到真实前台停留阈值的楼层不得建立 optimistic 已读',
 );
 controller.start();
+const dwellTimer = [...timers.timers.values()].find((timer) => timer.delay === 1_000);
 assert(
-	[...timers.timers.values()].some((timer) => timer.delay === 120),
-	'视口已读上报必须先经过短收敛窗口，不能在滚动回调内立即拆批发请求',
+	dwellTimer,
+	'可见楼层必须经过一秒真实停留采样，不能在 IntersectionObserver 回调后立即上报',
+);
+readNow = 1_000;
+dwellTimer.callback();
+assert(
+	controller.snapshot().pending.length === 24 &&
+		changes[0]?.kind === 'optimistic' &&
+		changes[0].postNumbers.length === 24,
+	'只有持续可见满一秒的楼层才可建立 pending；提前离屏楼层不得被补成已读',
 );
 await controller.flush({ force: true });
 assert(submitter.batches[0]?.length === 20, '单批必须限制为 20');
 assert(
-	submitter.batches[0]?.slice(0, 3).join(',') === '2,1,3',
-	'批次优先级必须 nested > root，并保留同级进入顺序',
+	submitter.submissions[0]?.topicTimeMs === 1_000 &&
+		submitter.submissions[0]?.timings.every((timing) => timing.milliseconds === 1_000),
+	'首批必须提交实际逐楼停留时间与独立 Topic 前台时间，不能退化为固定估值',
 );
 assert(
-	submitter.batches[0]?.includes(3),
-	'快速滚过后离开 viewport 的楼层仍必须保留合法 POST 资格',
+	submitter.batches[0]?.includes(25) && !submitter.batches[0]?.includes(21),
+	'批次选取必须 nested > root，并保留同级进入顺序',
+);
+assert(
+	!submitter.batches[0]?.includes(3),
+	'未满一秒就离开 viewport 的楼层不得取得 POST 资格',
 );
 assert(controller.snapshot().confirmed.length === 20, '首批成功确认数错误');
-assert(controller.snapshot().pending.length === 5, '首批后 pending 不得丢失');
+assert(controller.snapshot().pending.length === 4, '首批后 pending 不得丢失');
 await controller.flush({ force: true });
 assert(controller.snapshot().pending.length === 0, '第二批后应无 pending');
-assert(controller.snapshot().confirmed.length === 25, '全部确认数错误');
+assert(controller.snapshot().confirmed.length === 24, '全部合法楼层确认数错误');
+
+const focusTimers = timerHarness();
+const focusSubmitter = new RecordingSubmitter();
+let focusNow = 0;
+const focusController = new ReadStateController({
+	authScope: 'account:test',
+	topicId: 21,
+	submitter: focusSubmitter,
+	now: () => focusNow,
+	setTimer: focusTimers.setTimer,
+	clearTimer: focusTimers.clearTimer,
+});
+focusController.preload([1]);
+focusController.setVisible([1], 'root');
+focusController.start();
+focusNow = 500;
+focusController.setPageVisible(false);
+focusNow = 5_000;
+focusController.setPageVisible(true);
+const resumedTiming = [...focusTimers.timers.values()].find((timer) =>
+	timer.delay === 1_000);
+assert(resumedTiming, '重新聚焦后必须恢复真实停留采样');
+focusNow = 6_000;
+resumedTiming.callback();
+await focusController.flush({ force: true });
+assert(
+	focusSubmitter.submissions[0]?.timings[0]?.milliseconds === 1_500 &&
+		focusSubmitter.submissions[0]?.topicTimeMs === 1_500,
+	'失焦的 4500ms 不得计入楼层 timing 或 topic_time，恢复后只累计真实前台时间',
+);
+
+const activityTimers = timerHarness();
+const activitySubmitter = new RecordingSubmitter();
+const activityController = new ReadStateController({
+	authScope: 'account:test',
+	topicId: 22,
+	submitter: activitySubmitter,
+	minimumDwellMs: 0,
+	setTimer: activityTimers.setTimer,
+	clearTimer: activityTimers.clearTimer,
+});
+activityController.preload(Array.from({ length: 25 }, (_, index) => index + 1));
+activityController.setVisible(
+	Array.from({ length: 25 }, (_, index) => index + 1),
+	'root',
+);
+activityController.start();
+const firstActivityFlush = [...activityTimers.timers].find(([, timer]) =>
+	timer.delay === 120);
+assert(firstActivityFlush, '真实可见资格必须调度首批已读');
+activityTimers.timers.delete(firstActivityFlush[0]);
+firstActivityFlush[1].callback();
+await activityController.flush();
+assert(
+	activitySubmitter.batches.length === 1 &&
+		activityController.pendingCount === 5 &&
+		![...activityTimers.timers.values()].some((timer) => timer.delay === 120),
+	'同一次可见活动留下的 backlog 不得由固定定时器机械连续排空',
+);
+activityController.preload([26]);
+activityController.setVisible([26], 'root');
+const resumedActivityFlush = [...activityTimers.timers].find(([, timer]) =>
+	timer.delay === 120);
+assert(resumedActivityFlush, '新的真实可见资格必须重新唤醒保留的 pending');
+activityTimers.timers.delete(resumedActivityFlush[0]);
+resumedActivityFlush[1].callback();
+await activityController.flush();
+assert(
+	activitySubmitter.batches.length === 2 &&
+		activityController.pendingCount === 0,
+	'真实阅读活动恢复后必须合并提交旧 pending 与新资格楼层',
+);
 
 const visibilityFirstSubmitter = new RecordingSubmitter();
 const visibilityFirstController = new ReadStateController({
@@ -114,9 +203,9 @@ visibilityFirstController.setVisible([7], false);
 visibilityFirstController.preload([7, 8]);
 await visibilityFirstController.flush({ force: true });
 assert(
-	visibilityFirstSubmitter.batches[0]?.join(',') === '7' &&
+	visibilityFirstSubmitter.batches.length === 0 &&
 		!visibilityFirstController.isOptimistic(8),
-	'viewport 先于候选提交的时序也只能上报真正经过的树状楼层',
+	'viewport 先于候选但未形成持续停留时不得补报离屏楼层',
 );
 
 const persistedSubmitter = new RecordingSubmitter();
@@ -124,6 +213,7 @@ const persistedController = new ReadStateController({
 	authScope: 'account:test',
 	topicId: 17,
 	submitter: persistedSubmitter,
+	minimumDwellMs: 0,
 	coordination: {
 		knownConfirmed: (_authScope, _topicId, postNumbers) =>
 			discoursePostNumbers(
@@ -151,6 +241,7 @@ let failureCalls = 0;
 const retryController = new ReadStateController({
 	authScope: 'account:test',
 	topicId: 11,
+	minimumDwellMs: 0,
 	submitter: {
 		async submit() {
 			failureCalls += 1;
@@ -178,6 +269,7 @@ const rateLimitTimers = timerHarness();
 const rateLimitController = new ReadStateController({
 	authScope: 'account:test',
 	topicId: 18,
+	minimumDwellMs: 0,
 	submitter: {
 		async submit() {
 			throw new RequestRateLimitError(Object.freeze({
@@ -204,17 +296,24 @@ assert(
 );
 
 const clientRateTimers = timerHarness();
+let clientRateNow = 1_000;
+let clientRateCalls = 0;
 const clientRateController = new ReadStateController({
 	authScope: 'account:test',
 	topicId: 20,
+	minimumDwellMs: 0,
 	submitter: new RecordingSubmitter(),
 	coordination: {
 		subscribe: () => () => {},
-		submitOnce: async () => {
-			throw new ReadStateClientRateLimitError(9_000);
+		submitOnce: async (_authScope, _topicId, postNumbers, submit) => {
+			clientRateCalls += 1;
+			if (clientRateCalls === 1) {
+				throw new ReadStateClientRateLimitError(9_000);
+			}
+			return discoursePostNumbers(await submit(discoursePostNumbers(postNumbers)));
 		},
 	},
-	now: () => 1_000,
+	now: () => clientRateNow,
 	setTimer: clientRateTimers.setTimer,
 	clearTimer: clientRateTimers.clearTimer,
 });
@@ -223,17 +322,30 @@ clientRateController.setVisible([1], 'root');
 clientRateController.start();
 await clientRateController.flush({ force: true });
 assert(
-	[...clientRateTimers.timers.values()].some((timer) => timer.delay === 8_000) &&
+	clientRateTimers.timers.size === 0 &&
 	clientRateController.snapshot().retryCount === 0 &&
 	!clientRateController.snapshot().automaticRetryHalted &&
 	clientRateController.pendingCount === 1,
-	'客户端 RPM/TPM 只应延后 pending 到窗口释放，不能消耗网络重试次数或停止队列',
+	'客户端 RPM/TPM 必须保留 pending 且不得建立机械匀速 drain 定时器',
+);
+clientRateNow = 9_000;
+clientRateController.setVisible([1], 'root');
+const clientRateActivityFlush = [...clientRateTimers.timers].find(([, timer]) =>
+	timer.delay === 120);
+assert(clientRateActivityFlush, '窗口释放后的真实可见活动必须重新唤醒 pending');
+clientRateTimers.timers.delete(clientRateActivityFlush[0]);
+clientRateActivityFlush[1].callback();
+await clientRateController.flush();
+assert(
+	clientRateController.isConfirmed(1) && clientRateCalls === 2,
+	'客户端窗口释放后只能由真实阅读活动继续提交',
 );
 
 const terminalTimers = timerHarness();
 const terminalController = new ReadStateController({
 	authScope: 'account:test',
 	topicId: 19,
+	minimumDwellMs: 0,
 	submitter: {
 		async submit() {
 			throw new RequestStatusError(401);
@@ -257,13 +369,14 @@ let cloudflareCalls = 0;
 const cloudflareController = new ReadStateController({
 	authScope: 'account:test',
 	topicId: 12,
+	minimumDwellMs: 0,
 	submitter: {
-		async submit(postNumbers) {
+		async submit(submission) {
 			cloudflareCalls += 1;
 			if (cloudflareCalls === 1) {
 				throw new RequestStatusError(403, { cloudflareMitigated: true });
 			}
-			return postNumbers;
+			return submission.timings.map((timing) => timing.postNumber);
 		},
 	},
 	setTimer: cloudflareTimers.setTimer,
@@ -289,25 +402,21 @@ assert(
 		!cloudflareController.isConfirmed(3),
 	'Cloudflare 冷却必须覆盖 force flush，且不得把被拒绝响应伪装成确认',
 );
-const challengeRecovery = [...cloudflareTimers.timers.values()].find((timer) =>
-	timer.delay === 10_000);
-assert(challengeRecovery, 'Cloudflare 拒绝后必须建立一次有界恢复冷却');
-challengeRecovery.callback();
-await cloudflareController.flush({ force: true });
 assert(
-	cloudflareController.isConfirmed(3) &&
-		cloudflareController.isConfirmed(2) &&
-		cloudflareCalls === 2 &&
-		!cloudflareController.snapshot().automaticRetryHalted,
-	'冷却到期后必须合并恢复失败 checkpoint 与后续新楼层，成功后再确认清账',
+	![...cloudflareTimers.timers.values()].some((timer) => timer.delay === 10_000) &&
+		cloudflareCalls === 1 &&
+		cloudflareController.pendingCount === 2,
+	'Cloudflare 拒绝后默认必须保留 checkpoint 且不再定时重发，避免连续 403',
 );
 
 const attemptedBatches: number[][] = [];
 const attemptedController = new ReadStateController({
 	authScope: 'account:test',
 	topicId: 13,
+	minimumDwellMs: 0,
 	submitter: {
-		async submit(postNumbers) {
+		async submit(submission) {
+			const postNumbers = submission.timings.map((timing) => timing.postNumber);
 			attemptedBatches.push([...postNumbers]);
 			return postNumbers;
 		},
@@ -337,8 +446,10 @@ assert(
 const partialController = new ReadStateController({
 	authScope: 'account:test',
 	topicId: 14,
+	minimumDwellMs: 0,
 	submitter: {
-		async submit(postNumbers) {
+		async submit(submission) {
+			const postNumbers = submission.timings.map((timing) => timing.postNumber);
 			return postNumbers.slice(0, 1);
 		},
 	},
@@ -373,6 +484,7 @@ const subscriptionController = new ReadStateController({
 	authScope: 'account:test',
 	topicId: 15,
 	submitter: new RecordingSubmitter(),
+	minimumDwellMs: 0,
 	coordination: failingCoordination,
 	onError(error) {
 		subscriptionErrors.push(error);
@@ -392,8 +504,10 @@ const inFlightTimers = timerHarness();
 const inFlightController = new ReadStateController({
 	authScope: 'account:test',
 	topicId: 13,
+	minimumDwellMs: 0,
 	submitter: {
-		submit(postNumbers) {
+		submit(submission) {
+			const postNumbers = submission.timings.map((timing) => timing.postNumber);
 			inFlightBatches.push([...postNumbers]);
 			if (inFlightBatches.length > 1) return Promise.resolve(postNumbers);
 			return new Promise((resolve) => {
@@ -420,6 +534,8 @@ assert(
 );
 
 controller.destroy();
+focusController.destroy();
+activityController.destroy();
 visibilityFirstController.destroy();
 persistedController.destroy();
 retryController.destroy();

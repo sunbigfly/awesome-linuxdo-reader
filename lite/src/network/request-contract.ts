@@ -91,7 +91,7 @@ const PROFILES: Readonly<Record<RequestContractProfile, RequestProfileContract>>
 		maxChallengeRetries: 1,
 	}),
 	'read-critical': Object.freeze({
-		priority: 'critical',
+		priority: 'background',
 		lifecycle: 'topic',
 		droppable: false,
 		/*

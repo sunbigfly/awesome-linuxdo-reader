@@ -2,6 +2,7 @@ import {
 	LifecycleScope,
 	type Cleanup,
 } from '../kernel/lifecycle.js';
+import { readerFrontmostEscapeSurface } from './reader-escape-surface.js';
 import type { ReaderShellState } from './reader-shell.js';
 
 const READER_MOBILE_RETURN_QUERY =
@@ -55,6 +56,7 @@ export function isReaderAppleMobilePlatform(
 export function dispatchReaderEscape(document: Document): void {
 	const window = document.defaultView;
 	if (!window) return;
+	const target = readerFrontmostEscapeSurface(document) ?? document;
 	let event: Event;
 	if (typeof window.KeyboardEvent === 'function') {
 		event = new window.KeyboardEvent('keydown', {
@@ -62,18 +64,21 @@ export function dispatchReaderEscape(document: Document): void {
 			code: 'Escape',
 			bubbles: true,
 			cancelable: true,
+			composed: true,
 		});
 	} else {
 		event = new window.Event('keydown', {
 			bubbles: true,
 			cancelable: true,
+			composed: true,
 		});
 		Object.defineProperties(event, {
 			key: { value: 'Escape', configurable: true },
 			code: { value: 'Escape', configurable: true },
+			composed: { value: true, configurable: true },
 		});
 	}
-	document.dispatchEvent(event);
+	target.dispatchEvent(event);
 }
 
 /**
@@ -96,8 +101,11 @@ export class ReaderMobileReturnController {
 	readonly #appleMobile: boolean;
 	readonly #token: string;
 	#entryActive = false;
+	#entryPushed = false;
 	#historyClosePending = false;
+	#historyRestorePending = false;
 	#escapeDispatching = false;
+	#entryHref = '';
 
 	constructor(options: ReaderMobileReturnControllerOptions) {
 		this.#document = options.document;
@@ -162,11 +170,11 @@ export class ReaderMobileReturnController {
 			'ldp-apple-mobile-return',
 			appleEntryVisible,
 		);
-		if (!visible) {
+		if (!visible || !mobile) {
 			this.#releaseHistoryEntry();
 			return;
 		}
-		if (mobile) this.#ensureHistoryEntry();
+		this.#ensureHistoryEntry();
 	}
 
 	#mobileViewport(): boolean {
@@ -188,12 +196,17 @@ export class ReaderMobileReturnController {
 	}
 
 	#ensureHistoryEntry(): void {
-		if (this.#entryActive || this.#historyClosePending) return;
+		if (this.#historyClosePending || this.#historyRestorePending) return;
 		const history = this.#history();
 		if (!history) return;
 		try {
 			if (this.#ownsCurrentEntry(history)) {
 				this.#entryActive = true;
+				this.#entryHref = this.#href();
+				return;
+			}
+			if (this.#entryActive && this.#href() === this.#entryHref) {
+				this.#markCurrentEntry(history, this.#entryPushed);
 				return;
 			}
 			const current = valueRecord(history.state);
@@ -202,6 +215,8 @@ export class ReaderMobileReturnController {
 				[READER_MOBILE_RETURN_STATE_KEY]: this.#token,
 			}, '');
 			this.#entryActive = true;
+			this.#entryPushed = true;
+			this.#entryHref = this.#href();
 		} catch (cause) {
 			this.#report(cause);
 		}
@@ -212,6 +227,11 @@ export class ReaderMobileReturnController {
 		const history = this.#history();
 		this.#entryActive = false;
 		if (!history || !this.#ownsCurrentEntry(history)) return;
+		if (!this.#entryPushed) {
+			this.#removeCurrentMarker();
+			return;
+		}
+		this.#entryPushed = false;
 		this.#historyClosePending = true;
 		try {
 			history.back();
@@ -229,11 +249,53 @@ export class ReaderMobileReturnController {
 			this.#sync();
 			return;
 		}
+		if (this.#historyRestorePending) {
+			this.#consumeHistoryPop(event);
+			this.#historyRestorePending = false;
+			const history = this.#history();
+			if (history) this.#markCurrentEntry(history, false);
+			this.#entryActive = true;
+			if (readerVisibleState(this.#readReaderState())) this.#escapeOnce();
+			else this.#sync();
+			return;
+		}
 		if (!this.#entryActive) return;
 		const history = this.#history();
-		if (history && this.#ownsCurrentEntry(history)) return;
+		if (history && this.#ownsCurrentEntry(history)) {
+			/*
+			 * Reader 打开期间宿主可能在 guard 之后又 push 一个真实路由。
+			 * 此时系统返回会先落回 guard；它仍然是一次用户返回，必须消费并
+			 * 关闭最上层 Reader surface，不能只让 URL 回退而 Reader 原封不动。
+			 */
+			this.#consumeHistoryPop(event);
+			this.#historyRestorePending = true;
+			try {
+				history.forward();
+			} catch (cause) {
+				this.#historyRestorePending = false;
+				this.#report(cause);
+				if (readerVisibleState(this.#readReaderState())) this.#escapeOnce();
+			}
+			return;
+		}
 		this.#consumeHistoryPop(event);
+		if (
+			history &&
+			this.#entryHref &&
+			this.#href() &&
+			this.#href() !== this.#entryHref
+		) {
+			this.#historyRestorePending = true;
+			try {
+				history.forward();
+				return;
+			} catch (cause) {
+				this.#historyRestorePending = false;
+				this.#report(cause);
+			}
+		}
 		this.#entryActive = false;
+		this.#entryPushed = false;
 		if (readerVisibleState(this.#readReaderState())) this.#escapeOnce();
 	}
 
@@ -268,8 +330,29 @@ export class ReaderMobileReturnController {
 			this.#report(cause);
 		} finally {
 			this.#entryActive = false;
+			this.#entryPushed = false;
 			this.#historyClosePending = false;
+			this.#historyRestorePending = false;
+			this.#entryHref = '';
 		}
+	}
+
+	#href(): string {
+		try {
+			return String(this.#window?.location?.href ?? '');
+		} catch {
+			return '';
+		}
+	}
+
+	#markCurrentEntry(history: History, pushed: boolean): void {
+		const current = valueRecord(history.state);
+		history.replaceState({
+			...(current ?? {}),
+			[READER_MOBILE_RETURN_STATE_KEY]: this.#token,
+		}, '');
+		this.#entryPushed = pushed;
+		this.#entryHref = this.#href();
 	}
 
 	#report(cause: unknown): void {

@@ -92,8 +92,22 @@ assert(
 		root.slots.header.querySelector<HTMLElement>(
 			'[data-reader-avatar]',
 		)?.dataset.userAvatarTemplate === '/avatar/{size}.png' &&
-		root.slots.header.querySelector('.ldp-op')?.textContent === 'OP' &&
-		root.slots.header.querySelector('.ldp-me')?.textContent === 'ME',
+		root.slots.header.querySelector(
+			'.ldp-post-identity-badges > .ldp-op',
+		)?.textContent === 'OP' &&
+		root.slots.header.querySelector(
+			'.ldp-post-identity-badges > .ldp-me',
+		)?.textContent === 'ME' &&
+		root.slots.header.querySelector(
+			'.ldp-op .ldp-post-identity-compact-icon[data-icon="pencil"]',
+		) &&
+		root.slots.header.querySelector(
+			'.ldp-me .ldp-post-identity-compact-icon[data-icon="user-round"]',
+		) &&
+		root.slots.header.querySelector('.ldp-op')
+			?.getAttribute('aria-label') === '主题作者（OP）' &&
+		root.slots.header.querySelector('.ldp-me')
+			?.getAttribute('aria-label') === '当前用户',
 	'基础投影首帧必须立即挂载精确尺寸头像、原图模板与 OP/ME 身份',
 );
 for (let index = 0; index < 3; index += 1) await Promise.resolve();

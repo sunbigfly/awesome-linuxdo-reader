@@ -62,7 +62,14 @@ shellRoot.className = 'ldp-root';
 shellRoot.dataset.readerWorkspaceMode = 'floating';
 const mount = document.createElement('main');
 mount.className = 'ldp-modal';
-shellRoot.append(mount);
+const onlyOpHome = document.createElement('span');
+onlyOpHome.hidden = true;
+onlyOpHome.dataset.ldpTopicControlsParking = '';
+const onlyOpToggle = document.createElement('button');
+onlyOpToggle.className = 'ldp-only-op-toggle';
+onlyOpToggle.setAttribute('aria-label', '只看楼主');
+onlyOpHome.append(onlyOpToggle);
+shellRoot.append(onlyOpHome, mount);
 portalRoot.append(shellRoot);
 assert(mount && shellRoot, '测试 DOM 缺少操作列挂载点');
 
@@ -145,6 +152,7 @@ const rail = new ReaderTopicActionRail<TestPost>({
 			reactionExpandedStates.push(expanded);
 		},
 	},
+	onlyOpToggle,
 	preferences: {
 		read: () => preferences,
 		subscribe(listener, scope) {
@@ -217,6 +225,7 @@ assert(
 		shellRoot.classList.contains('ldp-topic-action-rail-visible') &&
 		rail.downloadButton?.hidden === true &&
 		rail.summaryButton?.hidden === true &&
+		onlyOpToggle.hidden === true &&
 		documentDragListenerAdds === 0,
 	'首帖缺失时仍必须保留操作列占位，但总结与下载入口只在第二段显示；未开始拖动时不得常驻全局 pointermove',
 );
@@ -480,9 +489,11 @@ assert(
 	assert(
 		summaryBookmarkGroup?.children[0] === rail.view?.slots.topicFooter &&
 			summaryBookmarkGroup.children[1] === rail.summaryButton &&
+			summaryBookmarkGroup.children[2] === onlyOpToggle &&
 			summaryBookmarkGroup.querySelector('.ldp-topic-bookmark') !== null &&
-			summaryBookmarkGroup.getAttribute('aria-label') === '主题收藏与总结',
-		'总结必须与唯一主题收藏投影进入同一组合，不能复制或接管收藏按钮',
+			summaryBookmarkGroup.getAttribute('aria-label') ===
+				'主题收藏、AI 总结与只看楼主',
+		'收藏、AI 总结与唯一只看楼主按钮必须依次进入同一组合，不能复制状态 owner',
 	);
 	assert(
 		secondaryToolsGroup?.children[0] === rail.downloadButton &&
@@ -595,8 +606,10 @@ assert(
 		rail.host.classList.contains('is-expanded') &&
 			Boolean(downloadGroup?.hidden) === false &&
 			Boolean(rail.summaryButton?.hidden) === false &&
-			rail.summaryButton?.parentElement === summaryBookmarkGroup,
-		'第一段点击收纳箱必须进入第二段，并显示收藏与总结组合',
+			rail.summaryButton?.parentElement === summaryBookmarkGroup &&
+			onlyOpToggle.parentElement === summaryBookmarkGroup &&
+			onlyOpToggle.hidden === false,
+		'第一段点击收纳箱必须进入第二段，并在 AI 总结右侧显示只看楼主',
 	);
 	click(rail.summaryButton!);
 	assert(summaryCount === 1, '第二段 AI 总结按钮必须只调用 Topic 总结浮窗端口');
@@ -1031,8 +1044,9 @@ assert(
 	preferenceChanges.size === 0 &&
 	!shellRoot.classList.contains('ldp-topic-action-rail-visible') &&
 	resizeDisconnected &&
+	onlyOpToggle.parentElement === onlyOpHome &&
 	documentDragListenerAdds === documentDragListenerRemoves,
-	'销毁必须释放 DOM、偏好监听、临时全局拖动监听和 Shell 状态',
+	'销毁必须释放 DOM、偏好监听与 Shell 状态，并把只看楼主归还稳定 parking',
 );
 assert(
 	cancelledFrames.length === 1 && cancelledTimers.length === 1,

@@ -1125,7 +1125,7 @@ export class ReaderTopicSpecialContentFeature<
 
 	#renderIdentityBadge(post: UnknownRecord, view: PostView): void {
 		view.slots.header
-			.querySelector(':scope > .ldp-new-user-badge')
+			.querySelector('.ldp-new-user-badge')
 			?.remove();
 		const noticeType = text(record(post.notice)?.type);
 		view.slots.root.classList.toggle(
@@ -1144,11 +1144,23 @@ export class ReaderTopicSpecialContentFeature<
 		badge.setAttribute('aria-label', identity.title);
 		badge.append(
 			this.#icon(identity.icon),
-			htmlElement(this.#document, 'span', '', identity.label),
+			htmlElement(
+				this.#document,
+				'span',
+				'ldp-post-identity-label',
+				identity.label,
+			),
 		);
-		const username = view.slots.header.querySelector(':scope > .ldp-user');
-		if (username) username.after(badge);
-		else view.slots.header.append(badge);
+		const existingHost = view.slots.header.querySelector<HTMLElement>(
+			':scope > .ldp-post-identity-badges',
+		);
+		const host = existingHost ?? htmlElement(
+			this.#document,
+			'span',
+			'ldp-post-identity-badges',
+		);
+		if (!existingHost) view.slots.header.append(host);
+		host.append(badge);
 	}
 
 	#renderSpecialBadges(post: UnknownRecord, view: PostView): void {

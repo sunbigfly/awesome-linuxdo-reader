@@ -78,10 +78,10 @@ assert(
 		host.querySelector<HTMLInputElement>(
 			'[data-performance-host-key="hostTopicPreheatPostCount"]',
 		)?.value === '24' &&
-		!host.querySelector(
+		host.querySelector(
 			'[data-performance-host-key="hostTopicPreheatPostCount"]',
 		)?.closest<HTMLElement>('.ldp-setting-row')?.hidden &&
-		host.querySelector<HTMLInputElement>(
+		!host.querySelector<HTMLInputElement>(
 			'[data-performance-host-key="hostTopicPreheatEnabled"]',
 		)?.checked &&
 		!host.querySelector<HTMLInputElement>(
@@ -129,7 +129,7 @@ assert(
 			?.includes('业务自身的顺序') &&
 		host.querySelector('[data-performance-key="readStateRequestsPerMinute"]')
 			?.closest<HTMLElement>('.ldp-setting-row')?.dataset.settingHelp
-			?.includes('全站 10 秒/60 秒共享窗口') &&
+			?.includes('普通 pending 不由定时器匀速排空') &&
 		host.querySelector('[data-performance-key="readStateTimingsPerMinute"]')
 			?.closest<HTMLElement>('.ldp-setting-row')?.dataset.settingHelp
 			?.includes('不是 token') &&
@@ -145,7 +145,7 @@ assert(
 			?.includes('请求实际值见请求记录') &&
 		host.querySelector('.ldp-performance-status')?.textContent
 			?.includes(
-				'已读队列 10 RPM / 240 TPM，宿主列表预热开启（每个 Topic 最多 24 层、2 路）',
+				'已读队列 10 RPM / 240 TPM，宿主列表预热关闭',
 			) &&
 		!host.querySelector('.ldp-performance-status')?.classList
 			.contains('is-risk') &&
@@ -244,8 +244,9 @@ assert(
 	defaultSave.kind === 'saved' &&
 		Number(updateCount) === 2 &&
 		preferences.performancePreset === 'balanced' &&
-		preferences.performancePageSize === 32 &&
-		preferences.hostTopicPreheatPostCount === 24 &&
+	preferences.performancePageSize === 32 &&
+	!preferences.hostTopicPreheatEnabled &&
+	preferences.hostTopicPreheatPostCount === 24 &&
 		!preferences.performanceSuspendHostTurnstileInBackground,
 	'默认参数必须经同一保存事务落盘并继续兼容旧 performancePreset 字段',
 );
@@ -277,6 +278,23 @@ assert(
 const hostTopicPreheat = host.querySelector<HTMLInputElement>(
 	'[data-performance-host-key="hostTopicPreheatEnabled"]',
 )!;
+hostTopicPreheat.checked = true;
+hostTopicPreheat.dispatchEvent(
+	new parsedWindow.Event('change', { bubbles: true }),
+);
+assert(
+	Number(controller.snapshot.draftCount) === 1 &&
+		!preferences.hostTopicPreheatEnabled &&
+		!hostTopicPreheatPostCount.closest<HTMLElement>('.ldp-setting-row')?.hidden,
+	'宿主 Topic 预热必须由用户显式开启，并先进入同一性能设置草稿',
+);
+const hostPreheatEnableSave = controller.saveAll();
+assert(
+	hostPreheatEnableSave.kind === 'saved' &&
+		preferences.hostTopicPreheatEnabled &&
+		controller.snapshot.draftCount === 0,
+	'显式开启宿主 Topic 预热后才允许进入运行时',
+);
 hostTopicPreheatPostCount.value = '64';
 hostTopicPreheatPostCount.dispatchEvent(
 	new parsedWindow.Event('input', { bubbles: true }),

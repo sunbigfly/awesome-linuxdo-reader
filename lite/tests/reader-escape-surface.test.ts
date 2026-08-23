@@ -82,6 +82,17 @@ assert(
 );
 
 colorPicker.hidden = true;
+const selectMenu = document.createElement('section');
+selectMenu.className = 'ldp-select-menu';
+settings.append(selectMenu);
+assert(
+	readerFrontmostEscapeSurface(document) === selectMenu &&
+		readerEscapeOwnedBy(document, selectMenu) &&
+		!readerEscapeOwnedBy(document, settings),
+	'设置内增强下拉菜单打开时必须先取得 Esc，不能越级关闭整个设置面板',
+);
+
+selectMenu.hidden = true;
 const modelMetadata = document.createElement('article');
 modelMetadata.className = 'ldp-ai-service-model-metadata';
 shadowRoot.append(modelMetadata);

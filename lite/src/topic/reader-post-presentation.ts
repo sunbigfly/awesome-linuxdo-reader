@@ -158,6 +158,31 @@ function appendBadge(
 	parent.append(badge);
 }
 
+function appendIdentityBadge(
+	document: Document,
+	parent: HTMLElement,
+	className: string,
+	label: string,
+	tooltip: string,
+	iconName: string,
+	renderIcon?: (name: string, document: Document) => Node | null,
+): void {
+	const badge = document.createElement('span');
+	badge.className = className;
+	badge.dataset.ldpTooltipLabel = tooltip;
+	badge.setAttribute('role', 'img');
+	badge.setAttribute('aria-label', tooltip);
+	const icon = renderReaderIcon(document, iconName, renderIcon);
+	if (icon.nodeType === 1) {
+		(icon as Element).classList.add('ldp-post-identity-compact-icon');
+	}
+	const text = document.createElement('span');
+	text.className = 'ldp-post-identity-label';
+	text.textContent = label;
+	badge.append(icon, text);
+	parent.append(badge);
+}
+
 function appendFloor(
 	document: Document,
 	parent: HTMLElement,
@@ -423,9 +448,6 @@ export function createReaderPostPresentation<
 				profileHref,
 				username,
 			);
-			if (currentUsername && username === currentUsername) {
-				appendBadge(options.document, header, 'ldp-me', 'ME');
-			}
 			appendUserLink(
 				options.document,
 				header,
@@ -434,11 +456,33 @@ export function createReaderPostPresentation<
 				profileHref,
 				username,
 			);
+			const identityBadges = options.document.createElement('span');
+			identityBadges.className = 'ldp-post-identity-badges';
+			header.append(identityBadges);
+			if (currentUsername && username === currentUsername) {
+				appendIdentityBadge(
+					options.document,
+					identityBadges,
+					'ldp-me',
+					'ME',
+					'当前用户',
+					'user-round',
+					options.renderIcon,
+				);
+			}
 			if (
 				username &&
 				username === readerTopicOwnerUsername(options.readTopic())
 			) {
-				appendBadge(options.document, header, 'ldp-op', 'OP');
+				appendIdentityBadge(
+					options.document,
+					identityBadges,
+					'ldp-op',
+					'OP',
+					'主题作者（OP）',
+					'pencil',
+					options.renderIcon,
+				);
 			}
 			const createdAt =
 				text(post.created_at) || text(view.identity.createdAt);

@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.6.1
+// @version      1.6.2
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知、监控与翻译平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.6.1 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.6.2 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知、监控与翻译平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.6.1",
+			sourceVersion: "1.6.2",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.1") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.2") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -6582,7 +6582,7 @@ ${inserted}`), after && !/^\s/.test(after) && (inserted += `
 	    }, onKeyDown = (event) => {
 	      if (handledEvents.has(event)) return;
 	      const keyboard = event;
-	      if (!(keyboard.key !== "Escape" || keyboard.repeat || keyboard.defaultPrevented || !this.isOpen())) {
+	      if (!(keyboard.key !== "Escape" || keyboard.repeat || keyboard.defaultPrevented || !this.isOpen() || options.ownsEscape?.() === !1)) {
 	        if (handledEvents.add(event), requiresConfirmation("composer:escape", "再按一次 Esc 舍弃回复")) {
 	          consume(event);
 	          return;
@@ -7439,7 +7439,7 @@ ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer,
 	      throw new Error("DiscourseComposerTopicSyncController 已销毁");
 	  }
 	}
-}, "15a15d4ab9fbacbed02df246d9066f3d29e78cbcf408dc595536d1564fb0aa00");
+}, "ecd9995f0f4c907d656dcaca05a25f62bc7e88b22c44d7899b24216dddea503d");
 
 /* Source: lite/src/discourse/native-host-api.ts */
 runtime.register("src/discourse/native-host-api.js", function(module, exports, require) {
@@ -9227,6 +9227,14 @@ runtime.register("src/discourse/native-request-descriptors.js", function(module,
 	      }
 	    );
 	  },
+	  topicPrefetch(input) {
+	    const topicId = (0, import_identifiers.discourseTopicId)(input.topicId);
+	    return readDescriptor(
+	      "topic",
+	      `${discourseBasePath(input.basePath)}/t/${topicId}.json?forceLoad=true`,
+	      { headers: { Accept: "application/json" } }
+	    );
+	  },
 	  postsById(input) {
 	    const topicId = (0, import_identifiers.discourseTopicId)(input.topicId), query = (0, import_identifiers.discoursePostIds)(input.postIds).map((postId) => `post_ids[]=${encodeURIComponent(postId)}`).join("&");
 	    return readDescriptor(
@@ -9346,16 +9354,20 @@ runtime.register("src/discourse/native-request-descriptors.js", function(module,
 	    );
 	  },
 	  topicTimings(input) {
-	    const topicId = (0, import_identifiers.discourseTopicId)(input.topicId), postNumbers = (0, import_identifiers.discoursePostNumbers)(input.postNumbers), readTimeMs = Number(input.readTimeMs);
-	    if (!Number.isSafeInteger(readTimeMs) || readTimeMs < 1 || readTimeMs > 6e4)
-	      throw new RangeError("readTimeMs 必须是 1..60000 的安全整数");
-	    const timings = Object.fromEntries(postNumbers.map((postNumber) => [
-	      String(postNumber),
-	      readTimeMs
-	    ])), data = Object.freeze({
+	    const topicId = (0, import_identifiers.discourseTopicId)(input.topicId), timings = /* @__PURE__ */ new Map();
+	    for (const timing of input.timings) {
+	      const postNumber = (0, import_identifiers.discoursePostNumber)(timing.postNumber), milliseconds = Math.round(Number(timing.milliseconds));
+	      if (!Number.isSafeInteger(milliseconds) || milliseconds < 1 || milliseconds > 6e4) throw new RangeError("timing milliseconds 必须是 1..60000 的安全整数");
+	      timings.set(postNumber, Math.max(timings.get(postNumber) ?? 0, milliseconds));
+	    }
+	    const topicTimeMs = Math.round(Number(input.topicTimeMs));
+	    if (!Number.isSafeInteger(topicTimeMs) || topicTimeMs < 1 || topicTimeMs > 6e4) throw new RangeError("topicTimeMs 必须是 1..60000 的安全整数");
+	    const data = Object.freeze({
 	      topic_id: topicId,
-	      topic_time: readTimeMs * postNumbers.length,
-	      timings: Object.freeze(timings)
+	      topic_time: topicTimeMs,
+	      timings: Object.freeze(Object.fromEntries([...timings].map(
+	        ([postNumber, milliseconds]) => [String(postNumber), milliseconds]
+	      )))
 	    }), descriptor = Object.freeze({
 	      operation: "topic-timings",
 	      path: `${discourseBasePath(input.basePath)}/topics/timings`,
@@ -9393,7 +9405,7 @@ runtime.register("src/discourse/native-request-descriptors.js", function(module,
 	    return nativeMutationDescriptors.add(descriptor), descriptor;
 	  }
 	});
-}, "e02199ee304a9a30932ed0e49eb4cc80be4143f88d9fc516734cd45b70331918");
+}, "7023852fb6d63b90cad15450f2fa115d7f2c7132b9bdc5cbf8ec512e0b13b9f6");
 
 /* Source: lite/src/discourse/native-topic-notification-action.ts */
 runtime.register("src/discourse/native-topic-notification-action.js", function(module, exports, require) {
@@ -12631,6 +12643,14 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	    shortBudget: snapshot.shortBudget,
 	    longCount: snapshot.longCount,
 	    longBudget: snapshot.longBudget,
+	    automaticShortCount: snapshot.automaticShortCount ?? null,
+	    automaticShortBudget: snapshot.automaticShortBudget ?? null,
+	    automaticLongCount: snapshot.automaticLongCount ?? null,
+	    automaticLongBudget: snapshot.automaticLongBudget ?? null,
+	    automaticQueued: snapshot.automaticQueued ?? null,
+	    automaticActive: snapshot.automaticActive ?? null,
+	    automaticMaxConcurrent: snapshot.automaticMaxConcurrent ?? null,
+	    automaticMaxQueueWaitMs: snapshot.automaticMaxQueueWaitMs ?? null,
 	    minIntervalMs: snapshot.minIntervalMs,
 	    maxConcurrent: snapshot.maxConcurrent,
 	    instances: snapshot.instances,
@@ -14761,7 +14781,7 @@ runtime.register("src/monitor/reader-resource-monitor.js", function(module, expo
 	    return this.#options.document.visibilityState === "hidden" ? "hidden" : "visible";
 	  }
 	}
-}, "89a8b6708af7136d7eb001cf6af902d51832c0658d3a299d3d9b7a369976e204");
+}, "188c5cb25875c46178b5fce835eebb6db5c614f4bf74d093ba67b3956f0298fc");
 
 /* Source: lite/src/network/browser-request-observation.ts */
 runtime.register("src/network/browser-request-observation.js", function(module, exports, require) {
@@ -14973,6 +14993,12 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	var browser_shared_request_permit_exports = {};
 	__export(browser_shared_request_permit_exports, {
 	  BrowserSharedRequestPermit: () => BrowserSharedRequestPermit,
+	  READER_AUTOMATIC_REQUEST_DEPHASE_MAX_MS: () => READER_AUTOMATIC_REQUEST_DEPHASE_MAX_MS,
+	  READER_AUTOMATIC_REQUEST_DEPHASE_MIN_MS: () => READER_AUTOMATIC_REQUEST_DEPHASE_MIN_MS,
+	  READER_AUTOMATIC_REQUEST_LONG_BUDGET: () => READER_AUTOMATIC_REQUEST_LONG_BUDGET,
+	  READER_AUTOMATIC_REQUEST_MAX_CONCURRENT: () => READER_AUTOMATIC_REQUEST_MAX_CONCURRENT,
+	  READER_AUTOMATIC_REQUEST_MAX_QUEUE_WAIT_MS: () => READER_AUTOMATIC_REQUEST_MAX_QUEUE_WAIT_MS,
+	  READER_AUTOMATIC_REQUEST_SHORT_BUDGET: () => READER_AUTOMATIC_REQUEST_SHORT_BUDGET,
 	  READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS: () => READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS,
 	  READER_BACKGROUND_REQUEST_MAX_DEFER_MS: () => READER_BACKGROUND_REQUEST_MAX_DEFER_MS,
 	  READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME: () => READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME,
@@ -14986,7 +15012,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	});
 	module.exports = __toCommonJS(browser_shared_request_permit_exports);
 	var import_lifecycle = require("../kernel/lifecycle.js"), import_request_rate_limit_policy = require("./request-rate-limit-policy.js"), import_request_scheduler = require("./request-scheduler.js");
-	const READER_REQUEST_PERMIT_STORAGE_KEY = "linuxdo-enhanced-reader:request-permit:v1", READER_REQUEST_PERMIT_LOCK = "linuxdo-enhanced-reader:request-permit-lock:v1", READER_REQUEST_PERMIT_CHANNEL = "linuxdo-enhanced-reader:request-permit-channel:v1", READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME = "ldp-cloudflare-challenge", READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS = 2500, READER_BACKGROUND_REQUEST_MAX_DEFER_MS = 15e3, READER_CLOUDFLARE_CHALLENGE_MAX_PROBE_INTERVAL_MS = 1e4, READER_CLOUDFLARE_AUTOMATIC_CHALLENGE_MAX_WAIT_MS = 3e4, READER_RATE_LIMIT_EVIDENCE_WINDOW_MS = 4e3, READER_RATE_LIMIT_MAX_BACKOFF_MS = 6e4, READER_RATE_LIMIT_PROBE_FAILURE_WAIT_MS = 1e3, READER_RATE_LIMIT_PROBE_RECHECK_MS = 500;
+	const READER_REQUEST_PERMIT_STORAGE_KEY = "linuxdo-enhanced-reader:request-permit:v1", READER_REQUEST_PERMIT_LOCK = "linuxdo-enhanced-reader:request-permit-lock:v1", READER_REQUEST_PERMIT_CHANNEL = "linuxdo-enhanced-reader:request-permit-channel:v1", READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME = "ldp-cloudflare-challenge", READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS = 2500, READER_BACKGROUND_REQUEST_MAX_DEFER_MS = 15e3, READER_AUTOMATIC_REQUEST_SHORT_BUDGET = 4, READER_AUTOMATIC_REQUEST_LONG_BUDGET = 24, READER_AUTOMATIC_REQUEST_MAX_CONCURRENT = 1, READER_AUTOMATIC_REQUEST_MAX_QUEUE_WAIT_MS = 6e4, READER_AUTOMATIC_REQUEST_DEPHASE_MIN_MS = 250, READER_AUTOMATIC_REQUEST_DEPHASE_MAX_MS = 1250, READER_CLOUDFLARE_CHALLENGE_MAX_PROBE_INTERVAL_MS = 1e4, READER_CLOUDFLARE_AUTOMATIC_CHALLENGE_MAX_WAIT_MS = 3e4, READER_RATE_LIMIT_EVIDENCE_WINDOW_MS = 4e3, READER_RATE_LIMIT_MAX_BACKOFF_MS = 6e4, READER_RATE_LIMIT_PROBE_FAILURE_WAIT_MS = 1e3, READER_RATE_LIMIT_PROBE_RECHECK_MS = 500;
 	function isReaderCloudflareChallengeWindow(window) {
 	  return window.name === READER_CLOUDFLARE_CHALLENGE_WINDOW_NAME;
 	}
@@ -15057,6 +15083,9 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	  prefetch: 4,
 	  background: 5
 	});
+	function automaticRequest(priority, droppable) {
+	  return droppable === !0 && (priority === "prefetch" || priority === "background");
+	}
 	function positiveInteger(value, fallback, name) {
 	  const normalized = Number(value ?? fallback);
 	  if (!Number.isSafeInteger(normalized) || normalized < 1)
@@ -15097,6 +15126,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	    schemaVersion: 1,
 	    updatedAt: 0,
 	    events: [],
+	    automaticEvents: [],
 	    intents: [],
 	    active: [],
 	    policies: [],
@@ -15105,10 +15135,17 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	  };
 	}
 	function normalizeState(raw, now, longWindowMs) {
-	  const source = raw && typeof raw == "object" ? raw : {}, events = Array.isArray(source.events) ? source.events.map(Number).filter((at) => Number.isFinite(at) && at > now - longWindowMs && at <= now).sort((left, right) => left - right).slice(-1e3) : [], intents = Array.isArray(source.intents) ? source.intents.filter((intent) => !!intent && typeof intent == "object" && typeof intent.id == "string" && typeof intent.ownerId == "string" && intent.priority in PRIORITY_WEIGHT && (intent.rateLimitRoute === void 0 || typeof intent.rateLimitRoute == "string") && Number.isFinite(intent.queuedAt) && Number(intent.expiresAt) > now).map((intent) => Object.freeze({
+	  const source = raw && typeof raw == "object" ? raw : {}, events = Array.isArray(source.events) ? source.events.map(Number).filter((at) => Number.isFinite(at) && at > now - longWindowMs && at <= now).sort((left, right) => left - right).slice(-1e3) : [], automaticEvents = Array.isArray(source.automaticEvents) ? source.automaticEvents.map(Number).filter((at) => Number.isFinite(at) && at > now - longWindowMs && at <= now).sort((left, right) => left - right).slice(-1e3) : [], intents = Array.isArray(source.intents) ? source.intents.filter((intent) => !!intent && typeof intent == "object" && typeof intent.id == "string" && typeof intent.ownerId == "string" && intent.priority in PRIORITY_WEIGHT && (intent.rateLimitRoute === void 0 || typeof intent.rateLimitRoute == "string") && Number.isFinite(intent.queuedAt) && Number(intent.expiresAt) > now).map((intent) => Object.freeze({
 	    ...intent,
+	    automatic: intent.automatic === !0,
 	    rateLimitRoute: String(intent.rateLimitRoute ?? "").trim()
-	  })).slice(-256) : [], active = Array.isArray(source.active) ? source.active.filter((permit) => !!permit && typeof permit == "object" && typeof permit.id == "string" && typeof permit.ownerId == "string" && Number(permit.expiresAt) > now).slice(-128) : [], policies = Array.isArray(source.policies) ? source.policies.filter((policy) => !!policy && typeof policy == "object" && typeof policy.ownerId == "string" && Number(policy.expiresAt) > now && Number.isSafeInteger(Number(policy.shortBudget)) && Number(policy.shortBudget) > 0 && Number.isSafeInteger(Number(policy.longBudget)) && Number(policy.longBudget) > 0 && Number.isSafeInteger(Number(policy.minIntervalMs)) && Number(policy.minIntervalMs) >= 0 && Number.isSafeInteger(Number(policy.maxConcurrent)) && Number(policy.maxConcurrent) > 0).map((policy) => Object.freeze({
+	  })).slice(-256) : [], active = Array.isArray(source.active) ? source.active.filter((permit) => !!permit && typeof permit == "object" && typeof permit.id == "string" && typeof permit.ownerId == "string" && Number(permit.expiresAt) > now).map((permit) => Object.freeze({
+	    id: permit.id,
+	    ownerId: permit.ownerId,
+	    ...permit.priority && permit.priority in PRIORITY_WEIGHT ? { priority: permit.priority } : {},
+	    ...permit.automatic === !0 ? { automatic: !0 } : {},
+	    expiresAt: Number(permit.expiresAt)
+	  })).slice(-128) : [], policies = Array.isArray(source.policies) ? source.policies.filter((policy) => !!policy && typeof policy == "object" && typeof policy.ownerId == "string" && Number(policy.expiresAt) > now && Number.isSafeInteger(Number(policy.shortBudget)) && Number(policy.shortBudget) > 0 && Number.isSafeInteger(Number(policy.longBudget)) && Number(policy.longBudget) > 0 && Number.isSafeInteger(Number(policy.minIntervalMs)) && Number(policy.minIntervalMs) >= 0 && Number.isSafeInteger(Number(policy.maxConcurrent)) && Number(policy.maxConcurrent) > 0).map((policy) => Object.freeze({
 	    ownerId: policy.ownerId,
 	    shortBudget: Number(policy.shortBudget),
 	    longBudget: Number(policy.longBudget),
@@ -15142,6 +15179,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	    schemaVersion: 1,
 	    updatedAt: Math.max(0, Number(source.updatedAt) || 0),
 	    events,
+	    automaticEvents,
 	    intents,
 	    active,
 	    policies,
@@ -15218,6 +15256,12 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	  #longBudget;
 	  #minIntervalMs;
 	  #maxConcurrent;
+	  #automaticShortBudget;
+	  #automaticLongBudget;
+	  #automaticMaxConcurrent;
+	  #automaticMaxQueueWaitMs;
+	  #automaticDephaseMinMs;
+	  #automaticDephaseMaxMs;
 	  #backgroundIdleIntervalMs;
 	  #backgroundMaxDeferMs;
 	  #rateLimitEvidenceWindowMs;
@@ -15259,7 +15303,33 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	  constructor(options) {
 	    if (this.#storage = options.storage, this.#sourceId = normalizedSourceId(options.sourceId), this.#locks = options.locks ?? null, this.coordinationMode = this.#locks ? "atomic" : "best-effort", this.#shortWindowMs = positiveInteger(options.shortWindowMs, 1e4, "shortWindowMs"), this.#longWindowMs = positiveInteger(options.longWindowMs, 6e4, "longWindowMs"), this.#longWindowMs < this.#shortWindowMs)
 	      throw new RangeError("longWindowMs 不能小于 shortWindowMs");
-	    this.#shortBudget = positiveInteger(options.shortBudget, 40, "shortBudget"), this.#longBudget = positiveInteger(options.longBudget, 160, "longBudget"), this.#minIntervalMs = nonNegativeInteger(options.minIntervalMs, "minIntervalMs"), this.#maxConcurrent = positiveInteger(options.maxConcurrent, 3, "maxConcurrent"), this.#backgroundIdleIntervalMs = nonNegativeInteger(
+	    if (this.#shortBudget = positiveInteger(options.shortBudget, 40, "shortBudget"), this.#longBudget = positiveInteger(options.longBudget, 160, "longBudget"), this.#minIntervalMs = nonNegativeInteger(options.minIntervalMs, "minIntervalMs"), this.#maxConcurrent = positiveInteger(options.maxConcurrent, 3, "maxConcurrent"), this.#automaticShortBudget = positiveInteger(
+	      options.automaticShortBudget,
+	      READER_AUTOMATIC_REQUEST_SHORT_BUDGET,
+	      "automaticShortBudget"
+	    ), this.#automaticLongBudget = positiveInteger(
+	      options.automaticLongBudget,
+	      READER_AUTOMATIC_REQUEST_LONG_BUDGET,
+	      "automaticLongBudget"
+	    ), this.#automaticLongBudget < this.#automaticShortBudget)
+	      throw new RangeError("automaticLongBudget 不能小于 automaticShortBudget");
+	    if (this.#automaticMaxConcurrent = positiveInteger(
+	      options.automaticMaxConcurrent,
+	      READER_AUTOMATIC_REQUEST_MAX_CONCURRENT,
+	      "automaticMaxConcurrent"
+	    ), this.#automaticMaxQueueWaitMs = positiveInteger(
+	      options.automaticMaxQueueWaitMs,
+	      READER_AUTOMATIC_REQUEST_MAX_QUEUE_WAIT_MS,
+	      "automaticMaxQueueWaitMs"
+	    ), this.#automaticDephaseMinMs = nonNegativeInteger(
+	      options.automaticDephaseMinMs ?? READER_AUTOMATIC_REQUEST_DEPHASE_MIN_MS,
+	      "automaticDephaseMinMs"
+	    ), this.#automaticDephaseMaxMs = nonNegativeInteger(
+	      options.automaticDephaseMaxMs ?? READER_AUTOMATIC_REQUEST_DEPHASE_MAX_MS,
+	      "automaticDephaseMaxMs"
+	    ), this.#automaticDephaseMaxMs < this.#automaticDephaseMinMs)
+	      throw new RangeError("automaticDephaseMaxMs 不能小于 automaticDephaseMinMs");
+	    this.#backgroundIdleIntervalMs = nonNegativeInteger(
 	      options.backgroundIdleIntervalMs ?? READER_BACKGROUND_REQUEST_IDLE_INTERVAL_MS,
 	      "backgroundIdleIntervalMs"
 	    ), this.#backgroundMaxDeferMs = nonNegativeInteger(
@@ -15340,17 +15410,21 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	  }
 	  async acquire(input) {
 	    if (this.#assertOpen(), input.signal.aborted) throw this.#abortReason(input.signal);
-	    const intentId = `${this.#sourceId}:intent:${this.#createId()}`, queuedAt = this.#now();
+	    const intentId = `${this.#sourceId}:intent:${this.#createId()}`, acquiredAt = this.#now(), requestedQueuedAt = Number(input.queuedAt), queuedAt = Number.isFinite(requestedQueuedAt) && requestedQueuedAt >= 0 ? Math.min(acquiredAt, requestedQueuedAt) : acquiredAt, automatic = automaticRequest(input.priority, input.droppable), automaticDephaseMs = automatic ? this.#nextAutomaticDephaseMs() : 0;
 	    let granted = !1, waitReason = "";
 	    try {
 	      for (; !this.#closed; ) {
 	        if (input.signal.aborted) throw this.#abortReason(input.signal);
+	        if (automatic && this.#now() - queuedAt >= this.#automaticMaxQueueWaitMs)
+	          throw new import_request_scheduler.RequestControlError("cancelled");
 	        const decision = await this.#transact((state, now) => this.#tryGrant(
 	          state,
 	          now,
 	          intentId,
 	          queuedAt,
 	          input.priority,
+	          automatic,
+	          automaticDephaseMs,
 	          String(input.rateLimitRoute ?? "").trim()
 	        ));
 	        if (decision.granted && decision.permitId)
@@ -15577,7 +15651,9 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	    });
 	  }
 	  async snapshot() {
-	    const now = this.#now(), state = this.#read(now), policy = this.#effectivePolicy(state), blocking = this.#blockingState(state, now, policy), rateLimitBlocking = this.#rateLimitGate(state, now, "", !1), instances = /* @__PURE__ */ new Set([
+	    const now = this.#now(), state = this.#read(now), policy = this.#effectivePolicy(state), blocking = this.#blockingState(state, now, policy), rateLimitBlocking = this.#rateLimitGate(state, now, "", !1), automaticShortCount = state.automaticEvents.filter(
+	      (at) => at > now - this.#shortWindowMs
+	    ).length, instances = /* @__PURE__ */ new Set([
 	      this.#sourceId,
 	      ...state.policies.map((entry) => entry.ownerId),
 	      ...state.intents.map((entry) => entry.ownerId),
@@ -15589,13 +15665,23 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	      longBudget: policy.longBudget,
 	      minIntervalMs: policy.minIntervalMs,
 	      maxConcurrent: policy.maxConcurrent,
+	      automaticShortBudget: this.#automaticShortBudget,
+	      automaticLongBudget: this.#automaticLongBudget,
+	      automaticMaxConcurrent: this.#automaticMaxConcurrent,
+	      automaticMaxQueueWaitMs: this.#automaticMaxQueueWaitMs,
+	      automaticDephaseMinMs: this.#automaticDephaseMinMs,
+	      automaticDephaseMaxMs: this.#automaticDephaseMaxMs,
 	      backgroundIdleIntervalMs: this.#backgroundIdleIntervalMs,
 	      backgroundMaxDeferMs: this.#backgroundMaxDeferMs,
 	      instances: Math.max(1, instances.size),
 	      queued: state.intents.length,
 	      active: state.active.length,
+	      automaticQueued: state.intents.filter((entry) => entry.automatic === !0).length,
+	      automaticActive: state.active.filter((entry) => entry.automatic === !0).length,
 	      shortCount: state.events.filter((at) => at > now - this.#shortWindowMs).length,
 	      longCount: state.events.length,
+	      automaticShortCount,
+	      automaticLongCount: state.automaticEvents.length,
 	      challengeState: state.challenge ? state.challenge.state === "active" && state.challenge.required ? "required" : state.challenge.state : "idle",
 	      challengeOwned: state.challenge?.state === "active" && !state.challenge.required && state.challenge.ownerId === this.#sourceId,
 	      nextPermitDelay: Math.max(blocking.waitMs, rateLimitBlocking.waitMs),
@@ -15918,17 +16004,19 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	      }));
 	    });
 	  }
-	  #tryGrant(state, now, intentId, queuedAt, priority, rateLimitRoute) {
+	  #tryGrant(state, now, intentId, queuedAt, priority, automatic, automaticDephaseMs, rateLimitRoute) {
 	    this.#rememberPolicy(state, now);
 	    const policy = this.#effectivePolicy(state);
 	    state.intents.find((intent) => intent.id === intentId) ? state.intents = state.intents.map((intent) => intent.id === intentId ? Object.freeze({
 	      ...intent,
+	      automatic,
 	      rateLimitRoute,
 	      expiresAt: now + this.#intentTtlMs
 	    }) : intent) : state.intents.push(Object.freeze({
 	      id: intentId,
 	      ownerId: this.#sourceId,
 	      priority,
+	      automatic,
 	      rateLimitRoute,
 	      queuedAt,
 	      expiresAt: now + this.#intentTtlMs
@@ -15970,7 +16058,9 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	      now,
 	      policy,
 	      priority,
-	      queuedAt
+	      queuedAt,
+	      automatic,
+	      automaticDephaseMs
 	    ), rateLimitBlocking = this.#rateLimitGate(
 	      state,
 	      now,
@@ -15992,11 +16082,13 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	      rateLimitRoute,
 	      !0
 	    ).recoveryProbe;
-	    state.intents = state.intents.filter((intent) => intent.id !== intentId), state.events.push(now);
+	    state.intents = state.intents.filter((intent) => intent.id !== intentId), state.events.push(now), automatic && state.automaticEvents.push(now);
 	    const permitId = `${this.#sourceId}:permit:${this.#createId()}`;
 	    return state.active.push(Object.freeze({
 	      id: permitId,
 	      ownerId: this.#sourceId,
+	      priority,
+	      automatic,
 	      expiresAt: now + this.#permitTtlMs
 	    })), Object.freeze({
 	      granted: !0,
@@ -16076,7 +16168,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	      ));
 	    return effective;
 	  }
-	  #blockingState(state, now, policy, priority = "visible", queuedAt = now) {
+	  #blockingState(state, now, policy, priority = "visible", queuedAt = now, automatic = !1, automaticDephaseMs = 0) {
 	    if (state.challenge?.state === "active")
 	      return Object.freeze({
 	        waitMs: Math.max(25, state.challenge.expiresAt - now),
@@ -16089,6 +16181,11 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	    ) : 0, backgroundActiveDelay = priority === "background" && state.active.length ? Math.max(
 	      25,
 	      Math.min(...state.active.map((permit) => permit.expiresAt - now))
+	    ) : 0, automaticActive = automatic ? state.active.filter((permit) => permit.automatic === !0) : [], automaticMustYield = automatic && state.active.some(
+	      (permit) => permit.automatic !== !0
+	    ), automaticActiveDelay = automatic && state.active.length && (automaticMustYield || automaticActive.length >= this.#automaticMaxConcurrent) ? Math.max(
+	      25,
+	      Math.min(...state.active.map((permit) => permit.expiresAt - now))
 	    ) : 0, shortEvents = state.events.filter(
 	      (at) => at > now - this.#shortWindowMs
 	    ), shortWindowDelay = this.#windowDelay(
@@ -16096,30 +16193,48 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	      policy.shortBudget,
 	      this.#shortWindowMs,
 	      now
-	    ), longWindowDelay = this.#windowDelay(
+	    ), automaticShortEvents = automatic ? state.automaticEvents.filter((at) => at > now - this.#shortWindowMs) : [], automaticShortWindowDelay = automatic ? this.#windowDelay(
+	      automaticShortEvents,
+	      this.#automaticShortBudget,
+	      this.#shortWindowMs,
+	      now
+	    ) : 0, longWindowDelay = this.#windowDelay(
 	      state.events,
 	      policy.longBudget,
 	      this.#longWindowMs,
 	      now
-	    ), latest = state.events.at(-1) ?? 0, backgroundDeferRemainingMs = priority === "background" ? Math.max(0, queuedAt + this.#backgroundMaxDeferMs - now) : 0, enforceBackgroundIdle = priority === "background" && backgroundDeferRemainingMs > 0, requestIntervalMs = enforceBackgroundIdle ? Math.max(policy.minIntervalMs, this.#backgroundIdleIntervalMs) : policy.minIntervalMs;
-	    let intervalDelay = Math.max(
-	      0,
-	      latest + requestIntervalMs - now
-	    );
-	    enforceBackgroundIdle && (intervalDelay = Math.min(
-	      intervalDelay,
-	      backgroundDeferRemainingMs
+	    ), automaticLongWindowDelay = automatic ? this.#windowDelay(
+	      state.automaticEvents,
+	      this.#automaticLongBudget,
+	      this.#longWindowMs,
+	      now
+	    ) : 0, hasPreviousEvent = state.events.length > 0, latest = state.events.at(-1) ?? 0, backgroundDeferRemainingMs = priority === "background" ? Math.max(0, queuedAt + this.#backgroundMaxDeferMs - now) : 0, enforceBackgroundIdle = priority === "background" && backgroundDeferRemainingMs > 0, requestIntervalMs = enforceBackgroundIdle ? Math.max(policy.minIntervalMs, this.#backgroundIdleIntervalMs) : policy.minIntervalMs, dephaseMs = automatic ? automaticDephaseMs : 0, minimumIntervalDelay = hasPreviousEvent ? Math.max(0, latest + policy.minIntervalMs + dephaseMs - now) : 0;
+	    let intervalDelay = hasPreviousEvent ? Math.max(0, latest + requestIntervalMs + dephaseMs - now) : 0;
+	    enforceBackgroundIdle && (intervalDelay = Math.max(
+	      minimumIntervalDelay,
+	      Math.min(intervalDelay, backgroundDeferRemainingMs)
 	    ));
 	    const candidates = [
-	      ["concurrency", Math.max(activeDelay, backgroundActiveDelay)],
+	      [
+	        "concurrency",
+	        Math.max(activeDelay, backgroundActiveDelay, automaticActiveDelay)
+	      ],
 	      ["interval", intervalDelay],
-	      ["10s", shortWindowDelay],
-	      ["60s", longWindowDelay]
+	      ["10s", Math.max(shortWindowDelay, automaticShortWindowDelay)],
+	      ["60s", Math.max(longWindowDelay, automaticLongWindowDelay)]
 	    ];
 	    let reason = "", waitMs = 0;
 	    for (const [candidateReason, delay] of candidates)
 	      delay > waitMs && (reason = candidateReason, waitMs = delay);
 	    return Object.freeze({ waitMs, reason, recoveryProbe: !1 });
+	  }
+	  #nextAutomaticDephaseMs() {
+	    if (this.#automaticDephaseMaxMs <= this.#automaticDephaseMinMs)
+	      return this.#automaticDephaseMinMs;
+	    const random = Math.max(0, Math.min(1, Number(this.#random()) || 0));
+	    return Math.round(
+	      this.#automaticDephaseMinMs + (this.#automaticDephaseMaxMs - this.#automaticDephaseMinMs) * random
+	    );
 	  }
 	  #windowDelay(events, budget, windowMs, now) {
 	    if (events.length < budget) return 0;
@@ -16283,7 +16398,7 @@ runtime.register("src/network/browser-shared-request-permit.js", function(module
 	    (key === null || key === READER_REQUEST_PERMIT_STORAGE_KEY) && (this.#notifyStateChange(), this.#wake());
 	  };
 	}
-}, "983e9421d9d83799e92e72ea0759a8511ec9538a4e3c9aa1752c5de3b720664e");
+}, "2f6913a65df3761fcac802397bcb70f6f5841e54abe934c900cb7e951a950a97");
 
 /* Source: lite/src/network/coordinated-request-client.ts */
 runtime.register("src/network/coordinated-request-client.js", function(module, exports, require) {
@@ -18007,7 +18122,7 @@ runtime.register("src/network/request-contract.js", function(module, exports, re
 	    maxChallengeRetries: 1
 	  }),
 	  "read-critical": Object.freeze({
-	    priority: "critical",
+	    priority: "background",
 	    lifecycle: "topic",
 	    droppable: !1,
 	    /*
@@ -18218,7 +18333,7 @@ runtime.register("src/network/request-contract.js", function(module, exports, re
 	    timeoutMs: timeout(input.timeoutMs, contract.defaultTimeoutMs)
 	  });
 	}
-}, "a0920906dc4828164718274ee9f09feb1e460e175a7c29b309a6cad15bbc963d");
+}, "422a883423e804f003d547dc9d6ed9caaaff81420d9c5102c9aa73c375e93436");
 
 /* Source: lite/src/network/request-identities.ts */
 runtime.register("src/network/request-identities.js", function(module, exports, require) {
@@ -19033,7 +19148,7 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	      "abort",
 	      task.externalAbort,
 	      { once: !0 }
-	    )), this.#tasksByKey.set(key, task), this.#queue.push(task), this.#preemptDroppablePermit(task), this.#queuePump(), promise;
+	    )), this.#tasksByKey.set(key, task), this.#queue.push(task), this.#preemptDroppablePermit(task) || this.#yieldLowerPriorityPermit(task), this.#queuePump(), promise;
 	  }
 	  cancelQueued(key) {
 	    const task = this.#tasksByKey.get(String(key));
@@ -19125,6 +19240,8 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	        const permitPromise = Promise.resolve().then(() => this.#startGate.acquire({
 	          key: task.key,
 	          priority: task.priority,
+	          queuedAt: task.queuedAt,
+	          droppable: task.droppable,
 	          lane: task.lane,
 	          ...task.rateLimitRoute ? { rateLimitRoute: task.rateLimitRoute } : {},
 	          signal: controller.signal
@@ -19180,6 +19297,17 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	  #preemptDroppablePermit(incoming) {
 	    const waiting = this.#permitTask, controller = waiting?.controller;
 	    return incoming.droppable || !waiting || !waiting.droppable || waiting.state !== "permit" || !controller || controller.signal.aborted || this.#activeCount >= this.#maxConcurrent || !this.#taskCanStart(incoming) || PRIORITY_WEIGHT[incoming.priority] >= PRIORITY_WEIGHT[waiting.priority] ? !1 : (waiting.permitRestart = !1, controller.abort(new RequestControlError("cancelled")), !0);
+	  }
+	  /**
+	   * 不可丢的后台确认可以暂退共享许可队首，但不能被可见请求取消。
+	   *
+	   * start gate 同一时刻只登记一个 intent；若 timings 等不可丢后台任务正在等
+	   * 宿主并发/固定窗口，后来到达的可见 Topic 必须先取号。后台任务保留原 Promise、
+	   * 首次 queuedAt 与 single-flight 身份，等可见请求启动后再用原优先级重新登记。
+	   */
+	  #yieldLowerPriorityPermit(incoming) {
+	    const waiting = this.#permitTask, controller = waiting?.controller;
+	    return incoming.droppable || !waiting || waiting.droppable || waiting.state !== "permit" || !controller || controller.signal.aborted || this.#activeCount >= this.#maxConcurrent || !this.#taskCanStart(incoming) || PRIORITY_WEIGHT[incoming.priority] >= PRIORITY_WEIGHT[waiting.priority] ? !1 : (waiting.permitRestart = !0, controller.abort(new RequestControlError("cancelled")), !0);
 	  }
 	  #clearPermitTask(task) {
 	    this.#permitTask === task && (this.#permitPending = !1, this.#permitLane = null, this.#permitTask = null);
@@ -19316,7 +19444,7 @@ runtime.register("src/network/request-scheduler.js", function(module, exports, r
 	    task.state !== "done" && (task.state = "done", task.externalSignal && task.externalAbort && task.externalSignal.removeEventListener("abort", task.externalAbort), task.externalAbort = null, task.controller = null, task.permitRestart = !1, this.#tasksByKey.get(task.key) === task && this.#tasksByKey.delete(task.key), error !== void 0 && task.reject(error));
 	  }
 	}
-}, "f35a83113374b848e487d73c2eb250f1c4e39f9a6b5aca03a78de4ed55326b86");
+}, "1793d2b1934df16bbd5696c901a57862274d819f5c8de9d98ead61801ea735d9");
 
 /* Source: lite/src/notification/discourse-notification-adapter.ts */
 runtime.register("src/notification/discourse-notification-adapter.js", function(module, exports, require) {

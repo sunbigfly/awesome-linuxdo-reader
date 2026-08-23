@@ -23,7 +23,8 @@ const { document: parsedDocument, window } = parseHTML(
 	'<!doctype html><html><body>' +
 		'<main id="surface"><section id="settings">' +
 		'<label class="ldp-setting-row" id="range-row">' +
-		'<input id="range" type="range" min="10" max="50" value="20">' +
+		'<input id="range" type="range" min="10" max="50" value="20" aria-label="字号百分比">' +
+		'<output id="range-value">20%</output>' +
 		'</label>' +
 		'<label class="ldp-setting-row" id="color-row">' +
 		'<input id="color" type="color" value="#47855f" aria-label="回复连接线颜色">' +
@@ -61,6 +62,7 @@ Object.defineProperty(document, 'removeEventListener', {
 const surface = document.querySelector<HTMLElement>('#surface')!;
 const popover = document.querySelector<HTMLElement>('#settings')!;
 const range = document.querySelector<HTMLInputElement>('#range')!;
+const rangeValue = document.querySelector<HTMLOutputElement>('#range-value')!;
 const color = document.querySelector<HTMLInputElement>('#color')!;
 range.min = '10';
 range.max = '50';
@@ -121,13 +123,42 @@ interactions.picker.getBoundingClientRect = () => ({
 	height: 220,
 	toJSON() { return {}; },
 } as DOMRect);
+const rangeInput = popover.querySelector<HTMLInputElement>(
+	'input[data-settings-range-input]',
+)!;
+const rangeUnit = popover.querySelector<HTMLElement>(
+	'.ldp-setting-range-unit',
+)!;
 
 assert(
 	range.style.getPropertyValue('--ldp-range-progress') === '25%' &&
+	rangeInput.type === 'number' &&
+	rangeInput.value === '20' &&
+	rangeInput.min === '10' &&
+	rangeInput.max === '50' &&
+	rangeUnit.textContent === '%' &&
+	rangeValue.classList.contains('ldp-setting-range-source-value') &&
 	color.getAttribute('aria-haspopup') === 'dialog' &&
 	interactions.picker.hidden &&
 	documentPointerMoveAdds === 0,
 	'统一字段 owner 必须初始化 range 进度、颜色弹层 ARIA，且不得提前显示临时 DOM 或常驻全局 pointermove',
+);
+
+let rangeInputs = 0;
+range.addEventListener('input', () => {
+	rangeInputs += 1;
+});
+rangeInput.value = '2';
+rangeInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(
+	rangeInput.value === '2' && range.value === '20' && rangeInputs === 0,
+	'百分比输入的中间态不得被最小值立即夹断，用户必须能继续输入完整数值',
+);
+rangeInput.value = '42';
+rangeInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(
+	range.value === '42' && rangeInput.value === '42' && rangeInputs === 1,
+	'统一数字入口必须写回原 range 并派发同一 input 事件，不能建立第二份设置状态',
 );
 
 function pointer(
@@ -159,7 +190,8 @@ assert(
 range.value = '42';
 range.dispatchEvent(new window.Event('input', { bubbles: true }));
 assert(
-	range.style.getPropertyValue('--ldp-range-progress') === '80%',
+	range.style.getPropertyValue('--ldp-range-progress') === '80%' &&
+	rangeInput.value === '42',
 	'range input 必须实时同步统一 CSS progress，不能由各领域表单重复计算',
 );
 pointer(range, 'pointerup');
@@ -255,6 +287,18 @@ assert(
 interactions.picker.querySelector<HTMLButtonElement>(
 	'.ldp-color-picker-more',
 )!.click();
+const saturationRange = interactions.picker.querySelector<HTMLInputElement>(
+	'.ldp-color-picker-saturation',
+)!;
+const saturationInput = saturationRange.parentElement?.querySelector<
+	HTMLInputElement
+>('input[data-settings-range-input]');
+assert(
+	saturationInput?.value === saturationRange.value &&
+		saturationInput.max === '100' &&
+		saturationInput.nextElementSibling?.textContent === '%',
+	'高级调色中的百分比滑块也必须获得同一数字输入入口和单位',
+);
 const hex = interactions.picker.querySelector<HTMLInputElement>(
 	'.ldp-color-picker-hex',
 )!;
@@ -373,6 +417,8 @@ assert(
 interactions.scope.destroy();
 assert(
 	!surface.querySelector('.ldp-color-picker-popover') &&
+	!popover.querySelector('.ldp-setting-range-entry') &&
+	!rangeValue.classList.contains('ldp-setting-range-source-value') &&
 	documentPointerMoveAdds === documentPointerMoveRemoves,
 	'字段 owner 销毁必须移除唯一临时弹层和全部监听生命周期',
 );

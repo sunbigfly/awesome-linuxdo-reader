@@ -3546,6 +3546,14 @@ export class ReaderBrowserRuntime<
 								this.#recoverAvatarSource(source, signal),
 							}),
 					);
+					const topicHeaderElements = readerTopicHeaderElements(
+						this.shell.view.root,
+					);
+					const topicDetails = readerShellElement<HTMLElement>(
+						this.shell.view.root,
+						'.ldp-topic-details',
+						'帖子详情',
+					);
 					const replyTreePresentation =
 						domOptions.replyTreePresentation ??
 						new ReaderReplyTreePresentation(
@@ -4042,6 +4050,7 @@ export class ReaderBrowserRuntime<
 							identity: domOptions.identity,
 							actions: topicPostActions,
 							preferences: options.topicActionRail,
+							onlyOpToggle: topicHeaderElements.onlyOpToggle,
 							jumpToTop: async () => {
 								const timeline = topicTimelines.get(context.scope);
 								if (!timeline) {
@@ -4271,6 +4280,8 @@ export class ReaderBrowserRuntime<
 						new ReaderTopicCommentsHeader<TTopic, TPost>({
 							document: options.document,
 							topicId: context.topicId,
+							topicRoot: root,
+							topicDetails,
 							session: bundle.services.session,
 							presence: nativePresence,
 							presentation: nativeTopicPresentation,
@@ -8876,6 +8887,10 @@ export function createReaderBrowserRuntimeStage<
 						queuePreferences.read(
 							context.readPreferences(),
 						).confirmNativeComposerClose,
+					ownsEscape: () =>
+						readerFrontmostEscapeSurface(
+							options.runtime.document,
+						) === null,
 					notify: (message) => runtime.feedback.show(message),
 					parentScope: runtime.scope,
 				});

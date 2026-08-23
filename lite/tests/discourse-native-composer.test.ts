@@ -417,6 +417,8 @@ const resetDiscardModel = async (): Promise<void> => {
 coordinator.installCloseGuard({
 	document,
 	enabled: () => closeGuardEnabled,
+	ownsEscape: () =>
+		document.querySelector('.ldp-settings-popover') === null,
 	notify: (message) => closeNotices.push(message),
 });
 const dispatchClick = (selector: string): Event => {
@@ -473,6 +475,16 @@ const dispatchEscape = (): Event => {
 	return event;
 };
 await resetDiscardModel();
+const topReaderSurface = document.createElement('section');
+topReaderSurface.className = 'ldp-settings-popover';
+document.body.append(topReaderSurface);
+const noticesBeforeReaderSurfaceEscape = closeNotices.length;
+assert(
+	!dispatchEscape().defaultPrevented &&
+		closeNotices.length === noticesBeforeReaderSurfaceEscape,
+	'Reader 顶层浮窗存在时 Composer 不得在捕获阶段抢走 Esc',
+);
+topReaderSurface.remove();
 assert(
 	dispatchEscape().defaultPrevented &&
 	dispatchEscape().defaultPrevented,

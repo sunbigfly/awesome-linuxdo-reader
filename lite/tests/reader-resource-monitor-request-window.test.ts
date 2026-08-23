@@ -124,6 +124,10 @@ const monitor = new ReaderResourceMonitor({
 		coordinationMode: 'atomic',
 		shortBudget: 40,
 		longBudget: 160,
+		automaticShortBudget: 4,
+		automaticLongBudget: 24,
+		automaticMaxConcurrent: 1,
+		automaticMaxQueueWaitMs: 60_000,
 		minIntervalMs: 80,
 		maxConcurrent: 3,
 		instances: 1,
@@ -131,6 +135,10 @@ const monitor = new ReaderResourceMonitor({
 		active: 1,
 		shortCount: 4,
 		longCount: 8,
+		automaticQueued: 2,
+		automaticActive: 1,
+		automaticShortCount: 3,
+		automaticLongCount: 7,
 		challengeState: 'idle',
 		challengeOwned: false,
 		nextPermitDelay: 0,
@@ -422,11 +430,23 @@ const exportedUserCard = requestRecords.find((record) =>
 	record.recordType === 'request' && record.logicalId === 'L-user');
 const runtimeStates = requestRecords.filter((record) =>
 	record.recordType === 'request-runtime-state');
+const exportedRuntimeState = requestRecords.find((record) =>
+	record.recordType === 'runtime-state');
+const exportedPermit = exportedRuntimeState?.permit as
+	Record<string, unknown> | null | undefined;
 assert(
 	requestLog?.mimeType === 'application/x-ndjson;charset=utf-8' &&
 		requestLog.filename.endsWith('.jsonl') &&
 		requestRecords[0]?.recordType === 'meta' &&
 		requestRecords.some((record) => record.recordType === 'runtime-state') &&
+		exportedPermit?.automaticShortCount === 3 &&
+		exportedPermit.automaticShortBudget === 4 &&
+		exportedPermit.automaticLongCount === 7 &&
+		exportedPermit.automaticLongBudget === 24 &&
+		exportedPermit.automaticQueued === 2 &&
+		exportedPermit.automaticActive === 1 &&
+		exportedPermit.automaticMaxConcurrent === 1 &&
+		exportedPermit.automaticMaxQueueWaitMs === 60_000 &&
 		runtimeStates.length >= 3 &&
 		runtimeStates.some((record) =>
 			(record.scheduler as Record<string, unknown> | null)?.queued === 3) &&

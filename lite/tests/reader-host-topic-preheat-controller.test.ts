@@ -64,6 +64,7 @@ const first = new Promise<ReaderHostTopicPreheatProgress>((resolve) => {
 const controller = new ReaderHostTopicPreheatController({
 	document,
 	mutations,
+	enabled: true,
 	historyEntry: (topicId) => history.get(Number(topicId)) ?? null,
 	readOpenTopicsAtFirstPost: () => false,
 	readConfirmedCount: (topicId) =>
@@ -321,6 +322,7 @@ let stalePreheatAborted = false;
 const cancellable = new ReaderHostTopicPreheatController({
 	document,
 	mutations,
+	enabled: true,
 	historyEntry: () => null,
 	readOpenTopicsAtFirstPost: () => true,
 	maxConcurrentPreheats: 2,
@@ -401,6 +403,7 @@ assert(
 	const settling = new ReaderHostTopicPreheatController({
 		document,
 		mutations,
+		enabled: true,
 		historyEntry: () => null,
 		readOpenTopicsAtFirstPost: () => true,
 		maxConcurrentPreheats: 1,
@@ -464,6 +467,7 @@ let parallelPreheatAborted = false;
 const throttled = new ReaderHostTopicPreheatController({
 	document,
 	mutations,
+	enabled: true,
 	historyEntry: () => null,
 	readOpenTopicsAtFirstPost: () => true,
 	maxConcurrentPreheats: 3,
@@ -559,6 +563,7 @@ restoredCard.append(hostStats);
 const restored = new ReaderHostTopicPreheatController({
 	document,
 	mutations,
+	enabled: true,
 	historyEntry: (topicId) => history.get(Number(topicId)) ?? null,
 	readOpenTopicsAtFirstPost: () => false,
 	restorePreheat(topicId, postNumber, signal) {
@@ -650,6 +655,7 @@ const partialCalls: number[] = [];
 const partial = new ReaderHostTopicPreheatController({
 	document,
 	mutations,
+	enabled: true,
 	historyEntry: () => null,
 	readOpenTopicsAtFirstPost: () => true,
 	preheat(_topicId, _postNumber, _signal, _report, minimumTotalCount) {
@@ -725,6 +731,7 @@ const currentActivityPreheatSignal = (): AbortSignal | null =>
 const activityAware = new ReaderHostTopicPreheatController({
 	document,
 	mutations,
+	enabled: true,
 	historyEntry: () => null,
 	readOpenTopicsAtFirstPost: () => true,
 	activity: {
@@ -833,6 +840,7 @@ const foregroundProgressReports: Array<(
 const foregroundAware = new ReaderHostTopicPreheatController({
 	document,
 	mutations,
+	enabled: true,
 	preheatPostCount: 48,
 	historyEntry: () => null,
 	readOpenTopicsAtFirstPost: () => true,
@@ -949,4 +957,91 @@ assert(
 	'Reader 关闭后必须按最新设备档位恢复近视口预热，不能固化启动时并发值',
 );
 foregroundAware.destroy();
+
+let interactivePreheatCalls = 0;
+const interactivePreheatTopics: number[] = [];
+const interactivePreheatAborts: number[] = [];
+const interactiveAware = new ReaderHostTopicPreheatController({
+	document,
+	mutations,
+	enabled: true,
+	historyEntry: () => null,
+	readOpenTopicsAtFirstPost: () => true,
+	maxConcurrentPreheats: 2,
+	preheat(topicId, _postNumber, signal) {
+		interactivePreheatCalls += 1;
+		interactivePreheatTopics.push(Number(topicId));
+		return new Promise((_resolve, reject) => {
+			signal.addEventListener('abort', () => {
+				interactivePreheatAborts.push(Number(topicId));
+				reject(signal.reason);
+			}, { once: true });
+		});
+	},
+	createIntersectionObserver(callback) {
+		intersectionCallback = callback;
+		return {
+			observe(target) {
+				observed.add(target);
+			},
+			unobserve(target) {
+				observed.delete(target);
+			},
+			disconnect() {
+				intersectionDisconnects += 1;
+				observed.clear();
+			},
+		};
+	},
+	requestFrame(callback) {
+		const id = nextFrame++;
+		frames.set(id, callback);
+		return id;
+	},
+	cancelFrame(id) {
+		frames.delete(id);
+	},
+});
+flushFrames();
+const interactiveCards = [...document.querySelectorAll('.topic-list-item')]
+	.slice(0, 2);
+const interactiveTopicIds = interactiveCards.map((card) =>
+	Number((card as HTMLElement).dataset.topicId));
+intersectionCallback(interactiveCards.map((target) => ({
+	target,
+	isIntersecting: true,
+} as unknown as IntersectionObserverEntry)), {} as IntersectionObserver);
+assert(
+	interactivePreheatCalls === 2 &&
+		interactivePreheatTopics.join(',') === interactiveTopicIds.join(','),
+	`Reader 未打开时必须按配置允许两个近视口 Topic 并行预热；` +
+		`calls=${interactivePreheatCalls}; topics=${interactivePreheatTopics.join(',')}`,
+);
+const releaseInteractiveOpen = interactiveAware.holdInteractiveOpen(
+	interactiveTopicIds[1]!,
+);
+await flushMicrotasks();
+assert(
+	interactivePreheatAborts.join(',') === interactiveTopicIds.join(',') &&
+		interactivePreheatCalls === 2,
+	'打开未预热 Topic 时必须中止全部后台预热；隐藏 bundle 不得把目标请求锁在后台优先级',
+);
+const interactiveTargetTopicId = interactiveTopicIds[1]!;
+const unrelatedInteractiveTopicId = interactiveTopicIds[0]!;
+interactiveAware.updateLiveReading(interactiveTargetTopicId, 1, 0);
+releaseInteractiveOpen();
+await flushMicrotasks();
+assert(
+	Number(interactivePreheatCalls) === 3 &&
+		interactivePreheatTopics.join(',') ===
+			[...interactiveTopicIds, unrelatedInteractiveTopicId].join(','),
+	'可见 Topic 必须先移出 queued/restore/active，再只恢复其他宿主预热',
+);
+releaseInteractiveOpen();
+await flushMicrotasks();
+assert(
+	Number(interactivePreheatCalls) === 3,
+	'交互打开 hold 的重复释放不得重复启动后台预热',
+);
+interactiveAware.destroy();
 mutations.destroy();

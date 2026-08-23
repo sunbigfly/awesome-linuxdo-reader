@@ -499,7 +499,10 @@ await gateway.submitReadState({
 	signal: controller.signal,
 	transport: async () => ({ ok: true, status: 200, value: { ok: true } }),
 });
-assert(client.calls.at(-1)?.priority === 'critical', '已读提交必须是 critical');
+assert(
+	client.calls.at(-1)?.priority === 'background',
+	'已读提交必须作为不可丢后台请求让位于真实交互',
+);
 assert(
 	client.calls.at(-1)?.max429Retries === 0 &&
 	client.calls.at(-1)?.maxChallengeRetries === 0 &&

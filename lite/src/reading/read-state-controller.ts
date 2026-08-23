@@ -17,8 +17,12 @@ import {
 import {
 	ReadStateChallengeHaltedError,
 	ReadStateClientRateLimitError,
+	READ_STATE_MAX_BATCH_SIZE,
+	READ_STATE_MAX_TIMING_MS,
+	normalizeReadStateSubmission,
 	type ReadStateConfirmation,
 	type ReadStateCoordinationPort,
+	type ReadStateSubmission,
 } from './read-state-coordination.js';
 
 export type ReadVisibility = 'root' | 'nested';
@@ -30,7 +34,7 @@ export interface ReadCandidate {
 
 export interface ReadStateSubmitPort {
 	submit(
-		postNumbers: readonly DiscoursePostNumber[],
+		submission: ReadStateSubmission,
 	): Promise<readonly number[]>;
 }
 
@@ -80,11 +84,15 @@ export interface ReadStateControllerOptions {
 	readonly coordination?: ReadStateCoordinationPort;
 	readonly batchSize?: number;
 	readonly retryDelayMs?: number;
-	/** Cloudflare 拒绝后允许同 Topic 新楼层恢复上报前的有界冷却。 */
+	/** 显式启用 Cloudflare 恢复时的有界冷却；生产默认不定时重发。 */
 	readonly challengeRecoveryDelayMs?: number;
-	/** 同一 Topic 会话最多自动恢复几次 Cloudflare checkpoint。 */
+	/** 同一 Topic 会话最多自动恢复几次 Cloudflare checkpoint；默认 0。 */
 	readonly maxChallengeRecoveries?: number;
 	readonly settleDelayMs?: number;
+	/** 未读楼层必须在前台聚焦视口内累计停留多久才具备上报资格。 */
+	readonly minimumDwellMs?: number;
+	/** 前台聚焦停留的采样间隔。 */
+	readonly timingIntervalMs?: number;
 	readonly maxAutomaticRetries?: number;
 	readonly now?: () => number;
 	readonly shouldRetry?: (error: unknown) => boolean;
@@ -97,6 +105,7 @@ export interface ReadStateControllerOptions {
 interface PendingRead {
 	readonly postNumber: DiscoursePostNumber;
 	readonly sequence: number;
+	readonly visibility: ReadVisibility;
 }
 
 const VISIBILITY_WEIGHT: Readonly<Record<ReadVisibility, number>> = Object.freeze({
@@ -165,6 +174,8 @@ export class ReadStateController {
 	readonly #challengeRecoveryDelayMs: number;
 	readonly #maxChallengeRecoveries: number;
 	readonly #settleDelayMs: number;
+	readonly #minimumDwellMs: number;
+	readonly #timingIntervalMs: number;
 	readonly #maxAutomaticRetries: number;
 	readonly #shouldRetry: (error: unknown) => boolean;
 	readonly #setTimer: (callback: () => void, milliseconds: number) => number;
@@ -175,12 +186,17 @@ export class ReadStateController {
 	readonly #candidates = new Set<DiscoursePostNumber>();
 	readonly #pending = new Map<DiscoursePostNumber, PendingRead>();
 	readonly #visibility = new Map<DiscoursePostNumber, ReadVisibility>();
+	readonly #timings = new Map<DiscoursePostNumber, number>();
 	#unsubscribeCoordination: Cleanup = () => {};
 	#flushPromise: Promise<boolean> | null = null;
 	#timerId = 0;
+	#timingTimerId = 0;
+	#lastTimingAt: number | null = null;
+	#topicTimeMs = 0;
 	#challengeRecoveryTimerId = 0;
 	#challengeRecoveryCount = 0;
 	#nextScheduleDelay = 0;
+	#activityRevision = 0;
 	#sequence = 0;
 	#retryCount = 0;
 	#cloudflareHalted = false;
@@ -194,7 +210,10 @@ export class ReadStateController {
 		this.topicId = discourseTopicId(options.topicId);
 		this.#submitter = options.submitter;
 		this.#coordination = options.coordination ?? null;
-		this.#batchSize = positiveInteger(options.batchSize, 20, 'batchSize');
+		this.#batchSize = Math.min(
+			positiveInteger(options.batchSize, READ_STATE_MAX_BATCH_SIZE, 'batchSize'),
+			READ_STATE_MAX_BATCH_SIZE,
+		);
 		this.#retryDelayMs = nonNegativeInteger(
 			options.retryDelayMs,
 			5_000,
@@ -207,13 +226,23 @@ export class ReadStateController {
 		);
 		this.#maxChallengeRecoveries = nonNegativeInteger(
 			options.maxChallengeRecoveries,
-			1,
+			0,
 			'maxChallengeRecoveries',
 		);
 		this.#settleDelayMs = nonNegativeInteger(
 			options.settleDelayMs,
 			120,
 			'settleDelayMs',
+		);
+		this.#minimumDwellMs = nonNegativeInteger(
+			options.minimumDwellMs,
+			1_000,
+			'minimumDwellMs',
+		);
+		this.#timingIntervalMs = positiveInteger(
+			options.timingIntervalMs,
+			1_000,
+			'timingIntervalMs',
 		);
 		this.#maxAutomaticRetries = nonNegativeInteger(
 			options.maxAutomaticRetries,
@@ -236,6 +265,7 @@ export class ReadStateController {
 			this.#candidates.clear();
 			this.#pending.clear();
 			this.#visibility.clear();
+			this.#timings.clear();
 		});
 	}
 
@@ -289,14 +319,19 @@ export class ReadStateController {
 			this.#onError(error);
 			return false;
 		}
+		this.#lastTimingAt = this.#now();
+		this.#scheduleTimingSample();
 		this.#schedule(this.#settleDelayMs);
 		return true;
 	}
 
 	stop(): void {
 		if (!this.#started && !this.#closed) return;
+		this.#sampleReadTime();
 		this.#started = false;
 		this.#clearScheduledFlush();
+		this.#clearTimingSample();
+		this.#lastTimingAt = null;
 		this.#unsubscribeCoordination();
 		this.#unsubscribeCoordination = () => {};
 	}
@@ -323,9 +358,7 @@ export class ReadStateController {
 		} catch (error) {
 			this.#onError(error);
 		}
-		const optimistic: DiscoursePostNumber[] = [];
 		const alreadyRead: DiscoursePostNumber[] = [];
-		const wasEmpty = this.#pending.size === 0;
 		for (const candidate of candidates) {
 			const postNumber = candidate.postNumber;
 			if (candidate.read || persistedConfirmed.has(postNumber)) {
@@ -337,22 +370,12 @@ export class ReadStateController {
 				this.#pending.has(postNumber) ||
 				this.#candidates.has(postNumber)
 			) continue;
-			if (this.#visibility.has(postNumber)) {
-				this.#enqueuePending(postNumber);
-				optimistic.push(postNumber);
-			} else {
-				this.#candidates.add(postNumber);
-			}
+			this.#candidates.add(postNumber);
+			this.#timings.set(postNumber, 0);
 		}
 		if (alreadyRead.length) this.#applyConfirmed(alreadyRead);
-		if (optimistic.length) {
-			if (
-				(wasEmpty || this.#automaticRetryHalted) &&
-				!this.#cloudflareHalted
-			) this.#resetRetryGate();
-			this.#emitChange('optimistic', optimistic);
-			this.#schedule(this.#settleDelayMs);
-		}
+		const optimistic = this.#qualifyDwellCandidates();
+		this.#scheduleTimingSample();
 		return Object.freeze(optimistic);
 	}
 
@@ -366,44 +389,51 @@ export class ReadStateController {
 		visibility: ReadVisibility | false,
 	): void {
 		this.#assertOpen();
-		if (visibility === false) return;
-		const optimistic: DiscoursePostNumber[] = [];
-		const wasEmpty = this.#pending.size === 0;
+		this.#sampleReadTime();
+		if (visibility !== false) this.#activityRevision += 1;
 		for (const rawPostNumber of rawPostNumbers) {
 			const postNumber = discoursePostNumber(rawPostNumber);
+			if (visibility === false) {
+				this.#visibility.delete(postNumber);
+				continue;
+			}
 			if (this.#confirmed.has(postNumber)) continue;
 			const currentVisibility = this.#visibility.get(postNumber);
 			if (
 				currentVisibility === undefined ||
 				VISIBILITY_WEIGHT[visibility] > VISIBILITY_WEIGHT[currentVisibility]
 			) this.#visibility.set(postNumber, visibility);
-			if (!this.#candidates.delete(postNumber)) continue;
-			this.#enqueuePending(postNumber);
-			optimistic.push(postNumber);
+			if (this.#candidates.has(postNumber) && !this.#timings.has(postNumber)) {
+				this.#timings.set(postNumber, 0);
+			}
 		}
-		if (optimistic.length) {
-			if (
-				(wasEmpty || this.#automaticRetryHalted) &&
-				!this.#cloudflareHalted
-			) this.#resetRetryGate();
-			this.#emitChange('optimistic', optimistic);
+		this.#qualifyDwellCandidates();
+		if (this.#hasTimingTargets()) this.#scheduleTimingSample();
+		else this.#clearTimingSample();
+		if (visibility !== false && this.#pending.size) {
+			this.#schedule(this.#settleDelayMs);
 		}
-		this.#clearScheduledFlush();
-		this.#schedule(this.#settleDelayMs);
 	}
 
 	setPageVisible(visible: boolean): void {
 		this.#assertOpen();
+		this.#sampleReadTime();
 		this.#pageVisible = visible;
 		if (!visible) {
 			this.#clearScheduledFlush();
+			this.#clearTimingSample();
+			this.#lastTimingAt = null;
 			return;
 		}
+		this.#lastTimingAt = this.#now();
+		this.#activityRevision += 1;
+		this.#scheduleTimingSample();
 		this.#schedule(this.#settleDelayMs);
 	}
 
 	flush(options: { readonly force?: boolean } = {}): Promise<boolean> {
 		this.#assertOpen();
+		this.#sampleReadTime();
 		if (this.#flushPromise) return this.#flushPromise;
 		if (this.#cloudflareHalted) return Promise.resolve(false);
 		if (
@@ -418,15 +448,22 @@ export class ReadStateController {
 		}
 		this.#clearScheduledFlush();
 		const batch = this.#nextBatch();
-		// preload 只登记 canonical 未读候选；只有 viewport owner 证明曾经正面积
-		// 相交的楼层才进入 pending。资格一经取得便保留到成功确认，避免快速滚过或
-		// 虚拟列表卸载让真实经过的楼层漏报。force 不能升级纯缓存候选。
-		if (!batch.length) return Promise.resolve(false);
+		// preload 只登记 canonical 未读候选；只有 viewport owner 证明在前台聚焦
+		// 视口内累计达到停留阈值的楼层才进入 pending。资格一经取得便保留到成功
+		// 确认，避免后续离屏或虚拟列表卸载丢失。force 不能升级纯缓存候选。
+		if (!batch.timings.length) return Promise.resolve(false);
+		const activityRevision = this.#activityRevision;
 		const promise = this.#submitBatch(batch).finally(() => {
 			if (this.#flushPromise === promise) this.#flushPromise = null;
 			const delay = this.#nextScheduleDelay;
 			this.#nextScheduleDelay = 0;
-			if (this.#started && this.#pending.size && !this.#automaticRetryHalted) {
+			const activityAdvanced = this.#activityRevision > activityRevision;
+			if (
+				this.#started &&
+				this.#pending.size &&
+				!this.#automaticRetryHalted &&
+				(delay > 0 || activityAdvanced)
+			) {
 				this.#schedule(Math.max(delay, this.#settleDelayMs));
 			}
 		});
@@ -434,47 +471,66 @@ export class ReadStateController {
 		return promise;
 	}
 
-	#nextBatch(): readonly DiscoursePostNumber[] {
-		return Object.freeze(
-			[...this.#pending.values()]
-				.filter((entry) => this.#visibility.has(entry.postNumber))
+	#nextBatch(): ReadStateSubmission {
+		const entries = [...this.#pending.values()]
 				.sort((left, right) => {
-					const leftWeight = VISIBILITY_WEIGHT[
-						this.#visibility.get(left.postNumber) ?? 'root'
-					] - (this.#visibility.has(left.postNumber) ? 0 : 1);
-					const rightWeight = VISIBILITY_WEIGHT[
-						this.#visibility.get(right.postNumber) ?? 'root'
-					] - (this.#visibility.has(right.postNumber) ? 0 : 1);
+					const leftWeight = VISIBILITY_WEIGHT[left.visibility];
+					const rightWeight = VISIBILITY_WEIGHT[right.visibility];
 					return rightWeight - leftWeight || left.sequence - right.sequence;
 				})
-				.slice(0, this.#batchSize)
-				.map((entry) => entry.postNumber),
-		);
+				.slice(0, this.#batchSize);
+		if (!entries.length) return Object.freeze({ timings: [], topicTimeMs: 1 });
+		return normalizeReadStateSubmission({
+			timings: entries.map((entry) => ({
+				postNumber: entry.postNumber,
+				milliseconds: Math.max(1, this.#timings.get(entry.postNumber) ?? 0),
+			})),
+			topicTimeMs: Math.max(1, this.#topicTimeMs),
+		});
 	}
 
 	async #submitBatch(
-		batch: readonly DiscoursePostNumber[],
+		batch: ReadStateSubmission,
 	): Promise<boolean> {
+		const batchPostNumbers = batch.timings.map((timing) => timing.postNumber);
 		try {
-			const confirmed = this.#coordination
-				? await this.#coordination.submitOnce(
+			const confirmed = this.#coordination?.submitTimedOnce
+				? await this.#coordination.submitTimedOnce(
 					this.authScope,
 					this.topicId,
 					batch,
 					(missing) => this.#submitter.submit(missing),
 				)
-				: discoursePostNumbers(await this.#submitter.submit(batch));
-			const allowed = confirmed.filter((postNumber) => batch.includes(postNumber));
+				: this.#coordination
+					? await this.#coordination.submitOnce(
+						this.authScope,
+						this.topicId,
+						batchPostNumbers,
+						(missingPostNumbers) => this.#submitter.submit(
+							normalizeReadStateSubmission({
+								timings: batch.timings.filter((timing) =>
+									missingPostNumbers.includes(timing.postNumber)),
+								topicTimeMs: batch.topicTimeMs,
+							}),
+						),
+					)
+					: discoursePostNumbers(await this.#submitter.submit(batch));
+			this.#topicTimeMs = Math.max(0, this.#topicTimeMs - batch.topicTimeMs);
+			const allowed = confirmed.filter((postNumber) =>
+				batchPostNumbers.includes(postNumber));
 			const attempted = this.#coordination?.knownAttempted?.(
 				this.authScope,
 				this.topicId,
-				batch,
+				batchPostNumbers,
 			) ?? [];
 			this.#applyConfirmed(allowed);
-			attempted.forEach((postNumber) => this.#pending.delete(postNumber));
+			attempted.forEach((postNumber) => {
+				this.#pending.delete(postNumber);
+				this.#timings.delete(postNumber);
+			});
 			const settled = new Set<DiscoursePostNumber>([...allowed, ...attempted]);
-			if (settled.size !== batch.length) {
-				throw new ReadStateIncompleteConfirmationError(batch, allowed);
+			if (settled.size !== batchPostNumbers.length) {
+				throw new ReadStateIncompleteConfirmationError(batchPostNumbers, allowed);
 			}
 			this.#retryCount = 0;
 			this.#cloudflareHalted = false;
@@ -484,21 +540,21 @@ export class ReadStateController {
 			return allowed.length > 0;
 		} catch (error) {
 			if (error instanceof ReadStateClientRateLimitError) {
-				this.#nextScheduleDelay = Math.max(
-					1,
-					Math.ceil(error.retryAt - this.#now()),
-				);
+				/*
+				 * 客户端预算拒绝不建立匀速 drain 定时器。pending 由下一次真实
+				 * Reader 可见活动重新尝试，协调器届时重算窗口；关闭仍可 force flush。
+				 */
 				return false;
 			}
 			this.#retryCount += 1;
 			this.#onError(error);
-			this.#emitDiagnostic('submit-failed', batch, error);
+			this.#emitDiagnostic('submit-failed', batchPostNumbers, error);
 			const failureKind = readStateFailureKind(error);
 			if (failureKind === 'challenge') {
 				/*
 				 * Cloudflare 明确拒绝意味着本批没有服务器成功确认，pending 必须作为
-				 * checkpoint 保留。冷却后最多自动恢复一次；若再次被拒绝则继续保留
-				 * checkpoint 并停下，避免无限 mutation 循环。
+				 * checkpoint 保留。生产默认不建立定时恢复；后续是否重试只能由显式
+				 * 配置和新的用户活动决定，避免固定 10 秒形成第二次机械 403。
 				 */
 				this.#cloudflareHalted = true;
 				if (this.#challengeRecoveryCount < this.#maxChallengeRecoveries) {
@@ -514,7 +570,7 @@ export class ReadStateController {
 				this.#retryCount > this.#maxAutomaticRetries
 			) {
 				this.#automaticRetryHalted = true;
-				this.#emitDiagnostic('automatic-retry-halted', batch, error);
+				this.#emitDiagnostic('automatic-retry-halted', batchPostNumbers, error);
 			} else {
 				this.#nextScheduleDelay = failureKind === 'rate-limit' &&
 					error instanceof RequestRateLimitError
@@ -538,10 +594,12 @@ export class ReadStateController {
 			const wasPending = this.#pending.delete(postNumber);
 			const wasConfirmed = this.#confirmed.has(postNumber);
 			this.#visibility.delete(postNumber);
+			this.#timings.delete(postNumber);
 			this.#confirmed.add(postNumber);
 			if (wasPending || !wasConfirmed) transitioned.push(postNumber);
 		}
 		if (transitioned.length) this.#emitChange('confirmed', transitioned);
+		if (!this.#hasTimingTargets()) this.#clearTimingSample();
 		return Object.freeze(transitioned);
 	}
 
@@ -551,7 +609,66 @@ export class ReadStateController {
 		this.#pending.set(postNumber, Object.freeze({
 			postNumber,
 			sequence: this.#sequence,
+			visibility: this.#visibility.get(postNumber) ?? 'root',
 		}));
+	}
+
+	#sampleReadTime(): void {
+		const now = this.#now();
+		const previous = this.#lastTimingAt;
+		this.#lastTimingAt = now;
+		if (
+			previous === null ||
+			!this.#started ||
+			!this.#pageVisible ||
+			now <= previous
+		) return;
+		const elapsed = Math.min(
+			READ_STATE_MAX_TIMING_MS,
+			Math.max(0, Math.round(now - previous)),
+		);
+		if (elapsed < 1) return;
+		this.#topicTimeMs = Math.min(
+			READ_STATE_MAX_TIMING_MS,
+			this.#topicTimeMs + elapsed,
+		);
+		for (const postNumber of this.#visibility.keys()) {
+			if (
+				this.#confirmed.has(postNumber) ||
+				(!this.#candidates.has(postNumber) && !this.#pending.has(postNumber))
+			) continue;
+			this.#timings.set(
+				postNumber,
+				Math.min(
+					READ_STATE_MAX_TIMING_MS,
+					(this.#timings.get(postNumber) ?? 0) + elapsed,
+				),
+			);
+		}
+		this.#qualifyDwellCandidates();
+	}
+
+	#qualifyDwellCandidates(): readonly DiscoursePostNumber[] {
+		const optimistic: DiscoursePostNumber[] = [];
+		const wasEmpty = this.#pending.size === 0;
+		for (const postNumber of [...this.#candidates]) {
+			if (!this.#visibility.has(postNumber)) continue;
+			if ((this.#timings.get(postNumber) ?? 0) < this.#minimumDwellMs) continue;
+			this.#candidates.delete(postNumber);
+			if ((this.#timings.get(postNumber) ?? 0) < 1) this.#timings.set(postNumber, 1);
+			this.#enqueuePending(postNumber);
+			optimistic.push(postNumber);
+		}
+		if (!optimistic.length) return Object.freeze([]);
+		this.#activityRevision += 1;
+		if (
+			(wasEmpty || this.#automaticRetryHalted) &&
+			!this.#cloudflareHalted
+		) this.#resetRetryGate();
+		this.#emitChange('optimistic', optimistic);
+		this.#clearScheduledFlush();
+		this.#schedule(this.#settleDelayMs);
+		return Object.freeze(optimistic);
 	}
 
 	#acceptCoordinatedConfirmation(confirmation: ReadStateConfirmation): void {
@@ -602,6 +719,36 @@ export class ReadStateController {
 			this.#timerId = 0;
 			void this.flush();
 		}, delay);
+	}
+
+	#scheduleTimingSample(): void {
+		if (
+			this.#timingTimerId ||
+			!this.#started ||
+			!this.#pageVisible ||
+			this.#minimumDwellMs === 0 ||
+			!this.#hasTimingTargets()
+		) return;
+		this.#timingTimerId = this.#setTimer(() => {
+			this.#timingTimerId = 0;
+			this.#sampleReadTime();
+			this.#scheduleTimingSample();
+		}, this.#timingIntervalMs);
+	}
+
+	#hasTimingTargets(): boolean {
+		for (const postNumber of this.#visibility.keys()) {
+			if (this.#candidates.has(postNumber) || this.#pending.has(postNumber)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	#clearTimingSample(): void {
+		if (!this.#timingTimerId) return;
+		this.#clearTimer(this.#timingTimerId);
+		this.#timingTimerId = 0;
 	}
 
 	#clearScheduledFlush(): void {

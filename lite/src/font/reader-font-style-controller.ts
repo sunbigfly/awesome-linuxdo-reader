@@ -101,6 +101,7 @@ export interface ReaderFontStyleControllerOptions<TPreferences extends object> {
 		): Cleanup;
 	};
 	readonly readReaderWidth?: () => number;
+	readonly readMobileView?: () => boolean;
 	readonly readSiteFontFamily?: () => string;
 	readonly readExternalFontRendering?: () => boolean;
 	readonly userAgent?: string;
@@ -195,6 +196,34 @@ const HOST_SIZE_PROPERTIES = Object.freeze([
 		] as const),
 	}),
 ] as const);
+const MOBILE_HOST_FONT_PROPERTIES = Object.freeze([
+	Object.freeze({
+		key: 'hostEmbeddedTitleScale',
+		property: '--ldp-host-mobile-topic-title-size-runtime',
+		defaultPixels: 16.5,
+		defaultScale: READER_HOST_FONT_SCALE_DEFAULTS.title,
+	}),
+	Object.freeze({
+		key: 'hostEmbeddedStatsScale',
+		property: '--ldp-host-mobile-topic-meta-size-runtime',
+		defaultPixels: 10,
+		defaultScale: READER_HOST_FONT_SCALE_DEFAULTS.stats,
+	}),
+	Object.freeze({
+		key: 'hostEmbeddedStatsScale',
+		property: '--ldp-host-mobile-topic-time-size-runtime',
+		defaultPixels: 14,
+		defaultScale: READER_HOST_FONT_SCALE_DEFAULTS.stats,
+	}),
+	Object.freeze({
+		key: 'hostEmbeddedLabelCardScale',
+		property: '--ldp-host-mobile-topic-label-size-runtime',
+		defaultPixels: 9.6,
+		defaultScale: READER_HOST_FONT_SCALE_DEFAULTS.labelCard,
+	}),
+] as const);
+const MOBILE_FONT_REFERENCE_WIDTH = 360;
+const MOBILE_FONT_MAX_SCALE = 1.18;
 const ROOT_PROPERTIES = Object.freeze([
 	'--ldp-reader-display-scale',
 	'--ldp-reader-title-font-size',
@@ -225,6 +254,7 @@ const PAGE_PROPERTIES = Object.freeze([
 	...HOST_SIZE_PROPERTIES.flatMap((setting) =>
 		setting.values.map(([property]) => property),
 	),
+	...MOBILE_HOST_FONT_PROPERTIES.map((setting) => setting.property),
 ]);
 const EXTERNAL_RENDERING_REFRESH_DELAYS = Object.freeze([50, 250, 1_000]);
 
@@ -238,6 +268,33 @@ function clampedInteger(
 	return Number.isFinite(numeric)
 		? Math.min(maximum, Math.max(minimum, Math.round(numeric)))
 		: fallback;
+}
+
+function rounded(value: number, digits = 2): number {
+	const factor = 10 ** digits;
+	return Math.round(value * factor) / factor;
+}
+
+function mobileFluidFontSize(pixelsAtReferenceWidth: number): string {
+	const minimum = rounded(pixelsAtReferenceWidth);
+	const fluid = rounded(
+		pixelsAtReferenceWidth / MOBILE_FONT_REFERENCE_WIDTH * 100,
+		4,
+	);
+	const maximum = rounded(
+		pixelsAtReferenceWidth * MOBILE_FONT_MAX_SCALE,
+	);
+	return `clamp(${minimum}px, ${fluid}vw, ${maximum}px)`;
+}
+
+function readerDisplayScale(width: number, mobileView: boolean): number {
+	if (mobileView) {
+		return Math.min(
+			MOBILE_FONT_MAX_SCALE,
+			Math.max(1, width / MOBILE_FONT_REFERENCE_WIDTH),
+		);
+	}
+	return Math.min(1.1, Math.max(1, 0.73 + width / 4_000));
 }
 
 function normalizedFamily(
@@ -374,6 +431,7 @@ export class ReaderFontStyleController<TPreferences extends object> {
 	readonly #pageRoot: HTMLElement;
 	readonly #adapter: ReaderFontPreferencesAdapter<TPreferences>;
 	readonly #readReaderWidth: () => number;
+	readonly #readMobileView: () => boolean;
 	readonly #readSiteFontFamily: () => string;
 	readonly #readExternalFontRendering: () => boolean;
 	readonly #rootOriginal: Map<string, InlineStyleSnapshot>;
@@ -399,6 +457,8 @@ export class ReaderFontStyleController<TPreferences extends object> {
 		this.#preferences = options.readPreferences();
 		this.#readReaderWidth = options.readReaderWidth ??
 			(() => this.#root.clientWidth || 1_080);
+		this.#readMobileView = options.readMobileView ??
+			(() => this.#pageRoot.classList.contains('mobile-view'));
 		this.#readSiteFontFamily = options.readSiteFontFamily ??
 			(() => 'inherit');
 		this.#readExternalFontRendering =
@@ -593,7 +653,8 @@ export class ReaderFontStyleController<TPreferences extends object> {
 	#commit(): ReaderFontStyleSnapshot {
 		const settings = this.#preview ?? this.settings();
 		const width = Math.max(360, this.#readReaderWidth());
-		const displayScale = Math.min(1.1, Math.max(1, 0.73 + width / 4_000));
+		const mobileView = this.#readMobileView();
+		const displayScale = readerDisplayScale(width, mobileView);
 		const headerProgress = Math.min(
 			1,
 			Math.max(0, (width - 360) / (1_080 - 360)),
@@ -610,7 +671,8 @@ export class ReaderFontStyleController<TPreferences extends object> {
 		const headerPixels = (minimum: number, maximum: number) =>
 			`${Math.round((
 				minimum + (maximum - minimum) * headerProgress
-			) * settings.fontProfile.interface / 100 * 10) / 10}px`;
+			) * settings.fontProfile.interface / 100 *
+				(mobileView ? displayScale : 1) * 10) / 10}px`;
 		this.#root.style.setProperty(
 			'--ldp-reader-display-scale',
 			String(displayScale),
@@ -677,6 +739,14 @@ export class ReaderFontStyleController<TPreferences extends object> {
 					`${Math.round(base * scale * 10) / 10}px`,
 				);
 			}
+		}
+		for (const setting of MOBILE_HOST_FONT_PROPERTIES) {
+			const pixels = setting.defaultPixels *
+				settings[setting.key] / setting.defaultScale;
+			this.#pageRoot.style.setProperty(
+				setting.property,
+				mobileFluidFontSize(pixels),
+			);
 		}
 
 		this.#pageRoot.style.setProperty(

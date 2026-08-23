@@ -566,6 +566,24 @@ export class ReaderSettingsUserView {
 			return view;
 		}
 		const profile = snapshot.profile;
+		const communityScoreValue = (() => {
+			if (snapshot.communityScore.phase === 'ready') {
+				const score = metric(snapshot.communityScore.metrics.score);
+				return score || '暂无数据';
+			}
+			if (snapshot.communityScore.phase === 'loading') return '获取中…';
+			if (snapshot.communityScore.phase === 'error') {
+				return [401, 403].includes(
+					Number(snapshot.communityScore.errorStatus),
+				)
+					? '请先登录'
+					: snapshot.communityScore.errorStatus !== null &&
+						snapshot.communityScore.errorStatus !== undefined
+						? '加载失败'
+						: '请登录后重试';
+			}
+			return '登录后查看';
+		})();
 		const card = node(this.#document, 'section', 'ldp-user-info-profile');
 		card.setAttribute('aria-label', '当前用户资料');
 		const cover = node(this.#document, 'div', 'ldp-user-info-cover');
@@ -752,9 +770,7 @@ export class ReaderSettingsUserView {
 				key: 'community-score',
 				group: 'social',
 				label: '社区分数',
-				value: snapshot.communityScore.phase === 'ready'
-					? metric(snapshot.communityScore.metrics.score)
-					: '',
+				value: communityScoreValue,
 				accent: true,
 				glow: true,
 			},

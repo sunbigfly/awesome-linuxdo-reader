@@ -44,7 +44,10 @@ html.ldp-native-reader-trigger-visible .d-header-icons .current-user {
   pointer-events: auto;
   position: fixed;
   z-index: 2147483608;
+  box-sizing: border-box;
   width: min(360px, calc(100vw - 16px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 7px;
   border: 1px solid var(--ldp-border);
   border-radius: var(--ldp-radius-md);

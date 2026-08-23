@@ -56,6 +56,7 @@ export interface ReaderUserExternalSnapshot {
 	readonly updatedAt: number | null;
 	readonly stale: boolean;
 	readonly refreshing?: boolean;
+	readonly errorStatus?: number | null;
 }
 
 export function staleExternalSnapshot(
@@ -860,6 +861,7 @@ export class ReaderUserDomainSession {
 				...entry[slot],
 				phase: 'error',
 				accountUsername: username,
+				errorStatus: null,
 			});
 			entry.revision += 1;
 			this.#emit(username, entry);
@@ -907,6 +909,7 @@ export class ReaderUserDomainSession {
 			phase: 'loading',
 			accountUsername: username,
 			refreshing: true,
+			errorStatus: null,
 		});
 		entry.revision += 1;
 		this.#emit(username, entry);
@@ -934,6 +937,7 @@ export class ReaderUserDomainSession {
 			entry[slot] = Object.freeze({
 				...snapshot,
 				refreshing: false,
+				errorStatus: null,
 			});
 		} catch (cause) {
 			if (cacheEpoch !== this.#cacheEpoch) return this.snapshot(username);
@@ -946,6 +950,7 @@ export class ReaderUserDomainSession {
 					...entry[slot],
 					phase: 'error',
 					refreshing: false,
+					errorStatus: status(cause),
 				});
 			this.#onError(cause);
 		}

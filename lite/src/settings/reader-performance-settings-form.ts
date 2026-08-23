@@ -237,7 +237,7 @@ const groups = Object.freeze<readonly PerformanceGroupDefinition[]>([
 				title: '已读请求上限（RPM）',
 				description:
 					'同账号跨标签滚动 60 秒窗口内最多启动多少次已读请求。',
-				help: '默认 10 RPM。Linux Do 未公开该端点专属额度；此值仍服从全站 10 秒/60 秒共享窗口和服务器 Retry-After。',
+				help: '默认 10 RPM，并按 60 秒 ÷ RPM 形成跨标签最小启动间隔（默认至少 6 秒）。普通 pending 不由定时器匀速排空，只在新的真实 Reader 可见活动后继续；服务器 Retry-After 仍按要求恢复。',
 				unit: '次/分',
 				step: 1,
 				inputMode: 'numeric',
@@ -247,7 +247,7 @@ const groups = Object.freeze<readonly PerformanceGroupDefinition[]>([
 				title: '已读楼层上限（TPM）',
 				description:
 					'同账号跨标签每分钟最多提交多少个 timings 楼层条目；这里的 T 表示 timing，不是 token。',
-				help: '默认 240 TPM；这里的 T 是 timing 条目，不是 token。队列仍按单批最多 20 层合并，达到上限时保留 pending 并等待窗口释放，不把未成功楼层升级为已读。',
+				help: '默认 240 TPM；这里的 T 是 timing 条目，不是 token。队列仍按单批最多 20 层合并，达到上限时保留 pending，待窗口释放且出现新的真实可见活动后继续。',
 				unit: '层/分',
 				step: 20,
 				inputMode: 'numeric',
@@ -435,7 +435,7 @@ const REQUEST_FLOW_FIELDS = Object.freeze<readonly RequestFlowFieldDefinition[]>
 		name: 'hostPreheatMaxConcurrent',
 		title: '宿主 Topic 预热并发目标',
 		description: '列表近视口 Topic 最多同时准备多少个；Reader 前台仍最多占一个后台槽。',
-		help: '设备能力可以下调；每个 Topic 的楼层数量由“预热楼层数”单独控制。',
+		help: '这是 producer 目标；实际自动联网固定同账号跨标签最多 1 路，并在宿主或可见请求活动时让路。每个 Topic 的楼层数量由“预热楼层数”单独控制。',
 		unit: '路',
 		step: 1,
 	}),
@@ -987,7 +987,7 @@ export class ReaderPerformanceSettingsForm<TPreferences extends object> {
 		const hostTopicPreheatRow = settingsOptionRow(
 			options.document,
 			'预热宿主 Topic 列表',
-			'列表卡片接近视口时提前准备正文；默认开启。Reader 阅读和滚动期间继续预热其他 Topic，前台最多使用一个后台槽。',
+			'列表卡片接近视口时提前准备正文；默认关闭，仅在显式开启后联网。前台最多使用一个后台槽。',
 			hostTopicPreheatSwitch.root,
 		);
 		hostTopicPreheatRow.dataset.settingHelp =
@@ -1087,7 +1087,7 @@ export class ReaderPerformanceSettingsForm<TPreferences extends object> {
 					READER_BUSINESS_REQUEST_DEFAULTS,
 				),
 			);
-			this.#hostTopicPreheatDraft = true;
+			this.#hostTopicPreheatDraft = false;
 			this.#hostTopicPreheatPostCountDraft =
 				String(HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT);
 			this.#suspendHostTurnstileDraft = false;
@@ -1390,7 +1390,7 @@ export class ReaderPerformanceSettingsForm<TPreferences extends object> {
 			readerRequestFlowSettingsAreDefault(requestFlowSettings) &&
 			businessRequestSettings !== null &&
 			readerBusinessRequestSettingsAreDefault(businessRequestSettings) &&
-			this.#hostTopicPreheatDraft &&
+			!this.#hostTopicPreheatDraft &&
 			preheatPostCount === HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT &&
 			!this.#suspendHostTurnstileDraft;
 		const status = config === null ||
@@ -1412,7 +1412,7 @@ export class ReaderPerformanceSettingsForm<TPreferences extends object> {
 					`后台空闲 ${requestFlowSettings.backgroundIdleIntervalMs} ms / ` +
 					`最长让路 ${requestFlowSettings.backgroundMaxDeferMs} ms，` +
 					`队列窗口 ${requestFlowSettings.queuePrefetchShortLimit}/` +
-					`${requestFlowSettings.queuePrefetchLongLimit}；` +
+					`${requestFlowSettings.queuePrefetchLongLimit}，自动流量固定跨标签 1 路 / 4 次每 10 秒 / 24 次每分钟；` +
 					`已读队列 ${config.readStateRequestsPerMinute} RPM / ` +
 					`${config.readStateTimingsPerMinute} TPM，宿主列表预热` +
 					`${this.#hostTopicPreheatDraft

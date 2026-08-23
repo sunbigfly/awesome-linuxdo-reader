@@ -14,6 +14,16 @@ const { document: parsedDocument } = parseHTML(
 	'<!doctype html><html><body></body></html>',
 );
 const document = parsedDocument as unknown as Document;
+const titleSubline = document.createElement('div');
+titleSubline.className = 'ldp-title-subline';
+const topicDetails = document.createElement('div');
+topicDetails.className = 'ldp-meta-row ldp-topic-details';
+const topicIdentity = document.createElement('div');
+topicIdentity.className = 'ldp-title-topic-row';
+titleSubline.append(topicDetails, topicIdentity);
+const topicRoot = document.createElement('main');
+topicRoot.className = 'ldp-topic-runtime';
+document.body.append(titleSubline, topicRoot);
 const changes = new Signal<TopicSessionCommit>();
 const topic = { posts_count: 3, highest_post_number: 3 };
 const posts = [
@@ -31,6 +41,8 @@ let presenceCleanups = 0;
 const feature = new ReaderTopicCommentsHeader({
 	document,
 	topicId: 9,
+	topicRoot,
+	topicDetails,
 	session: {
 		topic,
 		changes,
@@ -69,12 +81,20 @@ const header = rootPost.slots.root.querySelector<HTMLElement>(
 );
 assert(
 	rootPost.slots.root.isConnected === false &&
+	topicDetails.parentElement === titleSubline &&
 	header?.previousElementSibling === rootPost.slots.replyTree &&
 	header.nextElementSibling === null &&
 	header.querySelector('.ldp-comments-count')?.textContent === '（2）',
 	'评论区标题必须在 PostView 挂载前投影 canonical 总数，并锚定在楼主树状子回复之后',
 );
-document.body.append(rootPost.slots.root);
+topicRoot.append(rootPost.slots.root);
+feature.attachRoot(rootPost.slots.root, 1);
+assert(
+	topicDetails.parentElement === rootPost.slots.root &&
+	topicDetails.nextElementSibling === header &&
+	header?.previousElementSibling === topicDetails,
+	'帖子详情必须只在主阅读流 #1 的评论横线前投影，并保持靠近分隔组件',
+);
 presenceListener([
 	{
 		username: 'me',
@@ -101,6 +121,20 @@ assert(
 	header.querySelector('.ldp-comments-count')?.textContent === '（4）',
 	'TopicSession 更新必须实时刷新评论总数',
 );
+const discussionRoot = document.createElement('aside');
+const discussionPost = new PostView(document, {
+	postId: 20,
+	postNumber: 1,
+	username: 'op',
+});
+feature.afterRender(posts[0]!, discussionPost);
+discussionRoot.append(discussionPost.slots.root);
+document.body.append(discussionRoot);
+feature.attachRoot(discussionPost.slots.root, 1);
+assert(
+	topicDetails.parentElement === rootPost.slots.root,
+	'完整讨论等 #1 副投影不得从主阅读流偷走唯一帖子详情节点',
+);
 
 const reply = new PostView(document, {
 	postId: 11,
@@ -114,6 +148,12 @@ assert(
 	'普通回复不得复制主帖评论分隔组件',
 );
 feature.destroy();
-assert(presenceCleanups === 1, '评论区销毁必须释放 Presence 订阅');
+assert(
+	presenceCleanups === 1 &&
+	topicDetails.parentElement === titleSubline &&
+	topicDetails.nextElementSibling === topicIdentity,
+	'评论区销毁必须释放 Presence 订阅，并把帖子详情归还稳定 Shell parking',
+);
 rootPost.destroy();
 reply.destroy();
+discussionPost.destroy();

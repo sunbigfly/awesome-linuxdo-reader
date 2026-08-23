@@ -685,7 +685,7 @@ export function createReaderUserscriptRuntimeStage<
 						mutations: runtime.workspace.mutations,
 						enabled: targetOptions.selectHostTopicPreheatEnabled?.(
 							context.readPreferences(),
-						) !== false,
+						) === true,
 						preheatPostCount:
 							targetOptions.selectHostTopicPreheatPostCount?.(
 								context.readPreferences(),
@@ -972,6 +972,10 @@ export function createReaderUserscriptRuntimeStage<
 					hostPreheat.scope.add(clearActiveReadingProjection);
 					syncReaderPreheatState(runtime.shell.state);
 					if (runtime.shell.state === 'running') bindActiveReadingProjection();
+					const interactivePreheatReleases = new WeakMap<
+						ReaderUserscriptInterceptedTarget,
+						Cleanup
+					>();
 					targetAdapter = new ReaderUserscriptTargetAdapter({
 						document: options.runtime.document,
 						currentUrl: () =>
@@ -1107,12 +1111,31 @@ export function createReaderUserscriptRuntimeStage<
 									targetOptions.interceptTopicLinks,
 							}),
 						beforeOpenTarget: async (target) => {
+							const release = hostPreheat?.holdInteractiveOpen(
+								target.request.topicId,
+							);
+							if (release) interactivePreheatReleases.set(target, release);
 							await hostSource!.prepare(target);
 							await targetOptions.beforeOpenTarget?.(target);
 						},
 						afterOpenTarget: async (target, opened) => {
-							await hostSource!.settle(target, opened);
-							syncReaderPreheatState(runtime.shell.state);
+							try {
+								/*
+								 * shell change 通常会绑定当前阅读投影；这里在释放预热
+								 * hold 前再按 canonical active Topic 确认一次，覆盖 reused
+								 * 或状态未切换的打开路径。目标必须先进入 liveReading，
+								 * 否则 fillQueue 会把刚取消的同 Topic 预热重新加入队列。
+								 */
+								if (
+									runtime.shell.activeValue?.services.session.topicId ===
+										target.request.topicId
+								) bindActiveReadingProjection();
+								await hostSource!.settle(target, opened);
+								syncReaderPreheatState(runtime.shell.state);
+							} finally {
+								interactivePreheatReleases.get(target)?.();
+								interactivePreheatReleases.delete(target);
+							}
 						},
 						parentScope: runtime.scope,
 						...(targetOptions.onError === undefined

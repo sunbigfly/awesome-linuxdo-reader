@@ -1,8 +1,14 @@
-import type { DiscoursePostNumber } from '../src/discourse/identifiers.js';
+import {
+	discoursePostNumber,
+	type DiscoursePostNumber,
+} from '../src/discourse/identifiers.js';
 import {
 	BrowserReadStateCoordinator,
 	ReadStateClientRateLimitError,
+	READ_STATE_REQUEST_INTERVAL_DEPHASE_MAX_RATIO,
+	READ_STATE_REQUEST_INTERVAL_DEPHASE_MIN_RATIO,
 	READ_STATE_ATTEMPT_STORAGE_KEY,
+	READ_STATE_CHALLENGE_HALT_STORAGE_KEY,
 	READ_STATE_INTENT_STORAGE_KEY,
 	READ_STATE_RATE_STORAGE_KEY,
 	READ_STATE_SUCCESS_STORAGE_KEY,
@@ -10,6 +16,7 @@ import {
 	type ReadStateCoordinationMessage,
 	type ReadStateMessageChannel,
 	type ReadStateStoragePort,
+	type ReadStateSubmission,
 } from '../src/reading/read-state-coordination.js';
 import {
 	RequestStatusError,
@@ -225,6 +232,68 @@ assert(
 coalescedA.close();
 coalescedB.close();
 
+const boundedStorage = new MemoryStorage();
+let boundedNow = 0;
+let boundedLockTail = Promise.resolve<unknown>(undefined);
+const boundedLock = <T>(_name: string, task: () => Promise<T>): Promise<T> => {
+	const result = boundedLockTail.catch(() => undefined).then(task);
+	boundedLockTail = result.then(() => undefined, () => undefined);
+	return result;
+};
+const boundedCoordinators = Array.from({ length: 2 }, () =>
+	new BrowserReadStateCoordinator({
+		storage: boundedStorage,
+		lock: boundedLock,
+		now: () => boundedNow,
+		intentCoalesceMs: 10,
+		readIntervalDephaseMinRatio: 0,
+		readIntervalDephaseMaxRatio: 0,
+	}),
+);
+const boundedSubmissions: ReadStateSubmission[] = [];
+await Promise.all([
+	boundedCoordinators[0]!.submitTimedOnce(
+		'account:bounded',
+		77,
+		{
+			timings: Array.from({ length: 15 }, (_, index) => ({
+				postNumber: discoursePostNumber(index + 1),
+				milliseconds: 1_000 + index,
+			})),
+			topicTimeMs: 4_000,
+		},
+		async (missing) => {
+			boundedSubmissions.push(missing);
+			boundedNow += 5_000;
+			return missing.timings.map((timing) => timing.postNumber);
+		},
+	),
+	boundedCoordinators[1]!.submitTimedOnce(
+		'account:bounded',
+		77,
+		{
+			timings: Array.from({ length: 15 }, (_, index) => ({
+				postNumber: discoursePostNumber(index + 16),
+				milliseconds: 2_000 + index,
+			})),
+			topicTimeMs: 5_000,
+		},
+		async (missing) => {
+			boundedSubmissions.push(missing);
+			boundedNow += 5_000;
+			return missing.timings.map((timing) => timing.postNumber);
+		},
+	),
+]);
+assert(
+	boundedSubmissions.length === 2 &&
+		boundedSubmissions.every((submission) => submission.timings.length <= 20) &&
+		boundedSubmissions.flatMap((submission) => submission.timings)
+			.every((timing) => timing.milliseconds >= 1_000),
+	'跨标签合并后的每个实际 /topics/timings 请求仍必须严格限制为最多 20 层',
+);
+boundedCoordinators.forEach((value) => value.close());
+
 let unlockedSubmitted = false;
 const unlocked = new BrowserReadStateCoordinator({
 	storage: new MemoryStorage(),
@@ -254,8 +323,12 @@ try {
 }
 assert(failedTaskCalls === 1, '锁内 task 失败不得被当成 lock 失败重放');
 
+let untypedChallengeNow = 0;
 const untypedChallengeCoordinator = new BrowserReadStateCoordinator({
 	storage: new MemoryStorage(),
+	now: () => untypedChallengeNow,
+	readIntervalDephaseMinRatio: 0,
+	readIntervalDephaseMaxRatio: 0,
 });
 try {
 	await untypedChallengeCoordinator.submitOnce('account:a', 15, [1], async () => {
@@ -270,6 +343,7 @@ try {
 		'非中央异常必须原样传播',
 	);
 }
+untypedChallengeNow = 5_000;
 let untypedChallengeRecovered = false;
 await untypedChallengeCoordinator.submitOnce('account:a', 15, [2], async (missing) => {
 	untypedChallengeRecovered = missing.join(',') === '2';
@@ -288,6 +362,9 @@ const challengeAttemptCoordinator = new BrowserReadStateCoordinator({
 	storage: challengeAttemptStorage,
 	now: () => challengeAttemptNow,
 	attemptTtlMs: 1_000,
+	challengeHaltTtlMs: 1_000,
+	readIntervalDephaseMinRatio: 0,
+	readIntervalDephaseMaxRatio: 0,
 	lock: async (_name, task) => task(),
 });
 try {
@@ -320,12 +397,32 @@ assert(
 			.join(',') === '3,4,5',
 	'过盾后同 Topic 的等待 tab 必须收到同一停止语义，不能接棒提交不同新楼层',
 );
+let crossTopicChallengeSubmission = false;
+try {
+	await challengeAttemptCoordinator.submitOnce('account:a', 99, [1], async (missing) => {
+		crossTopicChallengeSubmission = missing.length > 0;
+		return missing;
+	});
+} catch (error) {
+	propagatedChallenge = !!error && typeof error === 'object' &&
+		'cloudflareMitigated' in error && error.cloudflareMitigated === true;
+}
+assert(
+	propagatedChallenge && !crossTopicChallengeSubmission,
+	'/topics/timings 过盾后必须按账号跨 Topic 熔断，不能让每个新 Topic 各撞一次 403',
+);
 assert(
 	JSON.parse(challengeAttemptStorage.getItem(READ_STATE_ATTEMPT_STORAGE_KEY) ?? '[]')
 		.length === 1,
 	'Cloudflare 楼层尝试必须写入单独账本，不能伪装成服务器成功确认',
 );
-challengeAttemptNow += 1_001;
+assert(
+	JSON.parse(
+		challengeAttemptStorage.getItem(READ_STATE_CHALLENGE_HALT_STORAGE_KEY) ?? '[]',
+	).some((entry: { authScope?: string }) => entry.authScope === 'account:a'),
+	'Cloudflare 熔断必须持久化到同账号跨标签账本',
+);
+challengeAttemptNow += 5_001;
 let sameOwnerRecovered = false;
 await challengeAttemptCoordinator.submitOnce('account:a', 14, [3, 4, 5, 6], async (missing) => {
 	sameOwnerRecovered = missing.join(',') === '3,4,5,6';
@@ -340,6 +437,7 @@ const reopenedChallengeAttemptCoordinator = new BrowserReadStateCoordinator({
 	storage: challengeAttemptStorage,
 	now: () => challengeAttemptNow,
 	attemptTtlMs: 1_000,
+	challengeHaltTtlMs: 1_000,
 	lock: async (_name, task) => task(),
 });
 let recoveredCheckpointRepeated = false;
@@ -358,11 +456,16 @@ assert(
 );
 
 const singleRecordStorage = new MemoryStorage();
+let singleRecordNow = 0;
 const singleRecordCoordinator = new BrowserReadStateCoordinator({
 	storage: singleRecordStorage,
 	maxRecords: 1,
+	now: () => singleRecordNow,
+	readIntervalDephaseMinRatio: 0,
+	readIntervalDephaseMaxRatio: 0,
 });
 await singleRecordCoordinator.submitOnce('account:a', 20, [1], async (missing) => missing);
+singleRecordNow = 5_000;
 await singleRecordCoordinator.submitOnce('account:a', 20, [2], async (missing) => missing);
 const singleRecords = JSON.parse(
 	singleRecordStorage.getItem(READ_STATE_SUCCESS_STORAGE_KEY) ?? '[]',
@@ -417,6 +520,8 @@ const rateCoordinator = new BrowserReadStateCoordinator({
 	now: () => rateNow,
 	readRequestsPerMinute: 2,
 	readTimingsPerMinute: 3,
+	readIntervalDephaseMinRatio: 0,
+	readIntervalDephaseMaxRatio: 0,
 });
 const rateSubmissions: number[][] = [];
 const submitRate = async (missing: readonly DiscoursePostNumber[]) => {
@@ -424,6 +529,7 @@ const submitRate = async (missing: readonly DiscoursePostNumber[]) => {
 	return missing;
 };
 await rateCoordinator.submitOnce('account:rate', 41, [1, 2], submitRate);
+rateNow = 30_000;
 await rateCoordinator.submitOnce('account:rate', 42, [1], submitRate);
 let rateDeferred = false;
 try {
@@ -435,20 +541,52 @@ try {
 assert(
 	rateDeferred &&
 	rateSubmissions.map((entry) => entry.length).join(',') === '2,1' &&
-	rateNow === 0,
+	rateNow === 30_000,
 	'同账号已读队列达到 2 RPM 或 3 TPM 后必须保留任务到滚动分钟窗口释放',
 );
+
+const pacedStorage = new MemoryStorage();
+let pacedNow = 0;
+const pacedCoordinator = new BrowserReadStateCoordinator({
+	storage: pacedStorage,
+	now: () => pacedNow,
+	readRequestsPerMinute: 10,
+	readTimingsPerMinute: 240,
+	random: () => 0,
+});
+const submitPaced = async (missing: readonly DiscoursePostNumber[]) => missing;
+await pacedCoordinator.submitOnce('account:paced', 51, [1], submitPaced);
+let pacedDeferred = false;
+try {
+	await pacedCoordinator.submitOnce('account:paced', 52, [1], submitPaced);
+} catch (error) {
+	pacedDeferred = error instanceof ReadStateClientRateLimitError &&
+		error.retryAt === 6_900;
+}
+assert(
+	pacedDeferred &&
+		READ_STATE_REQUEST_INTERVAL_DEPHASE_MIN_RATIO === 0.15 &&
+		READ_STATE_REQUEST_INTERVAL_DEPHASE_MAX_RATIO === 0.45 &&
+		JSON.parse(
+			pacedStorage.getItem(READ_STATE_RATE_STORAGE_KEY) ?? '[]',
+		)[0]?.cooldownMs === 6_900,
+	'10 RPM 必须作为严格上限，并把一次生成的 15%–45% 错峰冷却写入跨标签账本',
+);
+pacedNow = 6_900;
+await pacedCoordinator.submitOnce('account:paced', 52, [1], submitPaced);
+pacedCoordinator.close();
 rateNow = 60_000;
 await rateCoordinator.submitOnce('account:rate', 43, [1], submitRate);
 rateCoordinator.applyRuntimePolicy({
 	readRequestsPerMinute: 4,
 	readTimingsPerMinute: 4,
 });
+rateNow = 90_000;
 await rateCoordinator.submitOnce('account:rate', 44, [1], submitRate);
 assert(
 	rateSubmissions.map((entry) => entry.length).join(',') === '2,1,1,1' &&
-	JSON.parse(rateStorage.getItem(READ_STATE_RATE_STORAGE_KEY) ?? '[]').length === 2,
-	'已读 RPM/TPM 设置必须热应用，并只保留当前滚动窗口的跨标签请求账本',
+		JSON.parse(rateStorage.getItem(READ_STATE_RATE_STORAGE_KEY) ?? '[]').length === 2,
+	'已读 RPM/TPM 设置必须热应用、不得缩短已写入的跨标签冷却，并只保留当前滚动窗口账本',
 );
 
 coordinator.close();

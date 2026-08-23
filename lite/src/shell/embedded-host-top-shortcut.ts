@@ -177,31 +177,30 @@ export class EmbeddedHostTopShortcutController {
 	}
 
 	#show(): void {
-		if (
-			!this.#active ||
-			!Number.isFinite(this.#pointerX) ||
-			!Number.isFinite(this.#pointerY)
-		) {
-			return;
-		}
+		if (!this.#active) return;
 		if (this.#safeScrollTop() <= TOP_EDGE) {
 			this.#hide();
 			return;
 		}
 		if (this.#button.hidden) {
 			const bounds = this.#hostBounds();
-			const left = Math.max(
-				bounds.left + TOP_EDGE,
-				Math.min(
-					bounds.right - BUTTON_SIZE - TOP_EDGE,
-					this.#pointerX + POINTER_GAP,
-				),
-			);
+			const left = Number.isFinite(this.#pointerX)
+				? Math.max(
+					bounds.left + TOP_EDGE,
+					Math.min(
+						bounds.right - BUTTON_SIZE - TOP_EDGE,
+						this.#pointerX + POINTER_GAP,
+					),
+				)
+				: bounds.right - BUTTON_SIZE - TOP_EDGE;
+			const pointerY = Number.isFinite(this.#pointerY)
+				? this.#pointerY
+				: this.#readViewportHeight() * .3;
 			const top = Math.max(
 				TOP_EDGE,
 				Math.min(
 					this.#readViewportHeight() - BUTTON_SIZE - TOP_EDGE,
-					this.#pointerY - BUTTON_SIZE / 2,
+					pointerY - BUTTON_SIZE / 2,
 				),
 			);
 			this.#button.style.left = `${Math.round(left)}px`;

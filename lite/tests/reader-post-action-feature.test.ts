@@ -410,6 +410,7 @@ let boostEmojiCloses = 0;
 const boostEmojiTopLayers = new Set<HTMLElement>();
 let scheduledId = 0;
 const scheduled = new Map<number, () => void>();
+const scheduledDelays = new Map<number, number>();
 let boostCopySettings: BoostCopySettings = {
 	mode: 'counter' as const,
 	prefix: '同意：',
@@ -605,13 +606,15 @@ const feature = new ReaderPostActionFeature<TestTopic, TestPost>({
 			};
 		},
 	},
-	schedule(callback) {
+	schedule(callback, delayMs) {
 		scheduledId += 1;
 		scheduled.set(scheduledId, callback);
+		scheduledDelays.set(scheduledId, delayMs);
 		return scheduledId;
 	},
 	cancelSchedule(handle) {
 		scheduled.delete(handle);
+		scheduledDelays.delete(handle);
 	},
 });
 
@@ -636,8 +639,12 @@ function openReactionPicker(root: Element): void {
 	const beforeOpen = new Set(scheduled.keys());
 	pointerOver(trigger);
 	const open = [...scheduled].find(([handle]) => !beforeOpen.has(handle));
-	assert(open, '回应入口 pointerover 必须建立延迟打开任务');
+	assert(
+		open && scheduledDelays.get(open[0]) === 180,
+		'主页与楼层回应入口必须共用 180ms 延迟打开任务',
+	);
 	scheduled.delete(open[0]);
+	scheduledDelays.delete(open[0]);
 	open[1]();
 	assert(
 		!root.querySelector<HTMLElement>('.ldp-reaction-picker')?.hidden,
@@ -653,8 +660,12 @@ function closeReactionPicker(root: Element): void {
 	const beforeClose = new Set(scheduled.keys());
 	pointerOut(reactions);
 	const close = [...scheduled].find(([handle]) => !beforeClose.has(handle));
-	assert(close, '离开回应 surface 必须建立延迟关闭任务');
+	assert(
+		close && scheduledDelays.get(close[0]) === 650,
+		'主页与楼层回应入口必须保留 650ms 可达桥接关闭时间',
+	);
 	scheduled.delete(close[0]);
+	scheduledDelays.delete(close[0]);
 	close[1]();
 	assert(
 		root.querySelector<HTMLElement>('.ldp-reaction-picker')?.hidden,
@@ -1231,8 +1242,12 @@ const beforeHoverOpen = new Set(scheduled.keys());
 pointerOver(hoverTrigger);
 const hoverOpen = [...scheduled].find(([handle]) =>
 	!beforeHoverOpen.has(handle));
-assert(hoverOpen, '回应入口 pointerover 必须建立唯一延迟打开任务');
+assert(
+	hoverOpen && scheduledDelays.get(hoverOpen[0]) === 180,
+	'回应入口 pointerover 必须建立唯一 180ms 延迟打开任务',
+);
 scheduled.delete(hoverOpen[0]);
+scheduledDelays.delete(hoverOpen[0]);
 hoverOpen[1]();
 assert(
 	reactionsRoot.querySelector('[data-reaction-picker]') === hoverTrigger &&
@@ -1240,19 +1255,23 @@ assert(
 		reactionsRoot.querySelector<HTMLImageElement>(
 			'.ldp-reaction-picker [data-reaction="heart"] img',
 		)?.getAttribute('src') === '/emoji/heart.png',
-	'回应选择器必须在 250ms 悬停门后原位展开并保留触发按钮，不能因替换鼠标下节点而抖动或吞掉点击',
+	'回应选择器必须在 180ms 悬停门后原位展开并保留触发按钮，不能因替换鼠标下节点而抖动或吞掉点击',
 );
 const beforeHoverClose = new Set(scheduled.keys());
 pointerOut(reactionsRoot);
 const hoverClose = [...scheduled].find(([handle]) =>
 	!beforeHoverClose.has(handle));
-assert(hoverClose, '离开回应动作行必须建立唯一延迟关闭任务');
+assert(
+	hoverClose && scheduledDelays.get(hoverClose[0]) === 650,
+	'离开回应动作行必须建立唯一 650ms 延迟关闭任务',
+);
 scheduled.delete(hoverClose[0]);
+scheduledDelays.delete(hoverClose[0]);
 hoverClose[1]();
 assert(
 	reactionsRoot.querySelector('[data-reaction-picker]') === hoverTrigger &&
 		reactionsRoot.querySelector<HTMLElement>('.ldp-reaction-picker')?.hidden,
-	'回应选择器离开 250ms 后必须关闭，不能留下遮挡层',
+	'回应选择器离开 650ms 后必须关闭，不能留下遮挡层',
 );
 const postReportButton = regular.slots.actions.querySelector<HTMLButtonElement>(
 	'[data-post-report]',
@@ -1834,17 +1853,33 @@ copiedBoostMenu.getBoundingClientRect = () => ({
 	toJSON: () => ({}),
 });
 document.body.append(boostEmojiSurface);
+Object.defineProperty(document.defaultView!, 'visualViewport', {
+	configurable: true,
+	value: {
+		offsetLeft: 24,
+		offsetTop: 0,
+		width: 280,
+		height: 240,
+	},
+});
 positionBoostEmoji?.(boostEmojiPicker);
 assert(
 	boostEmojiPicker.classList.contains('ldp-boost-picker-constrained') &&
 		boostEmojiPicker.style.height === '224px' &&
+		boostEmojiPicker.style.getPropertyValue('max-width') === '264px' &&
+		boostEmojiPicker.style.getPropertyValue('--ldp-boost-picker-left') ===
+			'32px' &&
 		boostEmojiPicker.style.getPropertyValue('--ldp-boost-picker-top') ===
 			'8px' &&
 		boostEmojiSurface.getAttribute('popover') === 'manual' &&
 		boostEmojiSurface.dataset.ldpReaderTopLayer === 'portal' &&
 		boostEmojiTopLayers.has(boostEmojiSurface),
-	'原生 emoji picker 必须进入与回复浮窗一致的 top layer，再复用 constrained CSS 夹入 Reader 边界',
+	'原生 emoji picker 必须进入与回复浮窗一致的 top layer，并按移动 VisualViewport 同时限宽限高',
 );
+Object.defineProperty(document.defaultView!, 'visualViewport', {
+	configurable: true,
+	value: undefined,
+});
 let emojiWheelLeaks = 0;
 document.body.addEventListener('wheel', () => {
 	emojiWheelLeaks += 1;
@@ -1871,18 +1906,29 @@ assert(
 	'Boost 内部 emoji picker 滚动不得被 document capture listener 误判为阅读流滚动并关闭 composer',
 );
 boostEmojiSurface.remove();
+copiedBoostEditor.focus();
 const detachedCopyAnchor =
 	regular.slots.boost.querySelector<HTMLElement>('[data-boost-copy]')!;
 feature.afterRender(comment, regular);
 assert(
-	copiedBoostMenu.hidden &&
+	!copiedBoostMenu.hidden &&
 		!detachedCopyAnchor.isConnected &&
-		!boostEmojiTopLayers.has(boostEmojiSurface) &&
-		!boostEmojiSurface.hasAttribute('popover') &&
-		!boostEmojiSurface.dataset.ldpReaderTopLayer &&
-		regular.slots.actions.querySelector('[data-post-boost]')
-			?.getAttribute('aria-expanded') === 'false',
-	'canonical 重投替换 Boost copy anchor 前必须收口 composer、宿主 top layer 与 ARIA，不能遗留脱离 DOM 的 owner',
+		copiedBoostEditor.textContent?.includes('同意：原 Boo') === true,
+	'canonical 重投或移动端键盘缩小虚拟窗口使 Boost anchor 脱离 DOM 时，必须保留正在编辑的 composer 与草稿：' +
+		JSON.stringify({
+			hidden: copiedBoostMenu.hidden,
+			anchorConnected: detachedCopyAnchor.isConnected,
+			active: document.activeElement?.className,
+			text: copiedBoostEditor.textContent,
+		}),
+);
+pointerDown(document.querySelector('main')!);
+assert(
+	copiedBoostMenu.hidden &&
+	!boostEmojiTopLayers.has(boostEmojiSurface) &&
+	!boostEmojiSurface.hasAttribute('popover') &&
+	!boostEmojiSurface.dataset.ldpReaderTopLayer,
+	'失去 anchor 后保留的 Boost composer 仍必须由明确的浮层外 pointerdown 完整关闭',
 );
 document.dispatchEvent(new parsedWindow.Event('scroll'));
 assert(boostEmojiCloses > 0, '关闭 Boost composer 必须同步关闭原生 emoji surface');
@@ -2002,7 +2048,31 @@ assert(
 			?.hidden,
 	'回应 picker 消费 Esc 后必须只关闭自身，不能继续触发 Reader 退出监听器',
 );
-openReactionPicker(regular.slots.actions);
+const reactionPickerTrigger = regular.slots.actions.querySelector<
+	HTMLButtonElement
+>('button[data-reaction-picker]');
+assert(reactionPickerTrigger, '楼层回应必须存在可触达的表情选择入口');
+const keyboardReactionOpen = new parsedWindow.Event('keydown', {
+	bubbles: true,
+	cancelable: true,
+});
+Object.defineProperty(keyboardReactionOpen, 'key', { value: 'Enter' });
+reactionPickerTrigger.dispatchEvent(keyboardReactionOpen);
+const keyboardReactionPicker = regular.slots.actions.querySelector<HTMLElement>(
+	'.ldp-reaction-picker',
+);
+assert(
+	reactionPickerTrigger.getAttribute('aria-expanded') === 'true' &&
+	keyboardReactionPicker && !keyboardReactionPicker.hidden &&
+	mutation.calls.length === 0,
+	'触屏/键盘激活回应入口必须先打开 picker，不能直接锁死在当前表情：' +
+		JSON.stringify({
+			expanded: reactionPickerTrigger.getAttribute('aria-expanded'),
+			hidden: keyboardReactionPicker?.hidden,
+			calls: mutation.calls.length,
+			postLike: reactionPickerTrigger.hasAttribute('data-post-like'),
+		}),
+);
 const laughing = regular.slots.actions.querySelector<HTMLButtonElement>(
 	'.ldp-reaction-picker [data-reaction="laughing"]',
 )!;
@@ -2014,18 +2084,14 @@ const firstReactionNativePost = (
 	}> | undefined
 )?.args?.[0] as TestPost | undefined;
 assert(
-	mutation.calls.length === 1 &&
+	Number(mutation.calls.length) === 1 &&
 	mutation.calls[0]?.operation === 'reaction-toggle' &&
 	mutation.calls[0]?.variant === 'laughing' &&
 	firstReactionNativePost?.current_user_reaction == null,
 	'新增回应必须以未投影的 authoritative post 生成唯一原生 descriptor，再进入共享 PostActionController',
 );
-const heart = regular.slots.actions.querySelector<HTMLButtonElement>(
-	'[data-reaction="heart"]',
-);
-if (heart) click(heart);
 assert(
-	mutation.calls.length === 1 &&
+	Number(mutation.calls.length) === 1 &&
 	regular.slots.actions.querySelector('.ldp-reaction-summary')
 		?.getAttribute('aria-busy') === 'true' &&
 	lightboxPost.querySelector('.ldp-reaction-summary')
@@ -2119,6 +2185,32 @@ assert(
 		boostMenu.style.left
 	}`,
 );
+boostEditor.focus();
+Object.defineProperty(document.defaultView!, 'visualViewport', {
+	configurable: true,
+	value: {
+		offsetLeft: 24,
+		offsetTop: 80,
+		width: 320,
+		height: 120,
+	},
+});
+boostAnchorTop = 10;
+document.querySelector('main')!.dispatchEvent(
+	new parsedWindow.Event('ldp-reader-window-change'),
+);
+assert(
+	!boostMenu.hidden &&
+	boostMenu.style.maxWidth === '304px' &&
+	boostMenu.style.maxHeight === '104px' &&
+	boostEditor.isConnected,
+	'移动输入法缩小 VisualViewport 并把原楼层挤出可视区时，Boost composer 必须约束实际宽高并保留编辑状态',
+);
+Object.defineProperty(document.defaultView!, 'visualViewport', {
+	configurable: true,
+	value: undefined,
+});
+boostAnchorTop = 130;
 const boostClip = boostButton.closest<HTMLElement>('.ldp-body');
 if (boostClip) {
 	boostClip.getBoundingClientRect = () => ({
@@ -2568,7 +2660,7 @@ await Promise.resolve();
 assert(
 	mutation.calls.length === railLikeCallIndex + 1 &&
 		String(mutation.calls[railLikeCallIndex]?.operation) === 'reaction-toggle' &&
-		mutation.calls[railLikeCallIndex]?.variant === 'heart' &&
+		String(mutation.calls[railLikeCallIndex]?.variant) === 'heart' &&
 		railView.slots.actions.querySelector<HTMLElement>('.ldp-reaction-picker')
 			?.hidden,
 	'同时作为 picker 锚点的主爱心按钮点击必须直接切换主回应，不能只打开表情列表',
@@ -2614,7 +2706,7 @@ assert(
 	mutation.calls.length === nestedDefaultReactionCallIndex + 1 &&
 		String(mutation.calls[nestedDefaultReactionCallIndex]?.operation) ===
 			'reaction-toggle' &&
-		mutation.calls[nestedDefaultReactionCallIndex]?.variant === 'heart' &&
+		String(mutation.calls[nestedDefaultReactionCallIndex]?.variant) === 'heart' &&
 		nestedReactionClickLeaks === 0 &&
 		nestedReactionEvent.defaultPrevented &&
 		!nestedReactionAnchorDetached &&
@@ -2667,7 +2759,7 @@ assert(
 	mutation.calls.length === defaultReactionCallIndex + 1 &&
 		String(mutation.calls[defaultReactionCallIndex]?.operation) ===
 			'reaction-toggle' &&
-		mutation.calls[defaultReactionCallIndex]?.variant === 'heart' &&
+		String(mutation.calls[defaultReactionCallIndex]?.variant) === 'heart' &&
 		sourceView.slots.actions.querySelector('[data-post-like]')
 			?.classList.contains('liked') &&
 		sourceView.slots.actions.querySelector('.ldp-like-count')

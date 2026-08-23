@@ -2,7 +2,6 @@ import {
 	discoursePostId,
 	discoursePostIds,
 	discoursePostNumber,
-	discoursePostNumbers,
 	discourseReplyCursor,
 	discourseTopicId,
 	type DiscoursePostId,
@@ -154,8 +153,11 @@ export interface DiscourseNativePostVotingCommentsReadInput {
 export interface DiscourseNativeTopicTimingsInput {
 	readonly basePath?: string;
 	readonly topicId: string | number;
-	readonly postNumbers: readonly number[];
-	readonly readTimeMs: number;
+	readonly timings: readonly Readonly<{
+		readonly postNumber: number;
+		readonly milliseconds: number;
+	}>[];
+	readonly topicTimeMs: number;
 }
 
 export interface DiscourseNativeTopicSummaryInput {
@@ -254,6 +256,15 @@ export const DiscourseNativeRequests = Object.freeze({
 					'Discourse-Track-View-Topic-Id': String(topicId),
 				},
 			},
+		);
+	},
+
+	topicPrefetch(input: DiscourseNativeTopicReadInput): DiscourseNativeReadDescriptor {
+		const topicId = discourseTopicId(input.topicId);
+		return readDescriptor(
+			'topic',
+			`${discourseBasePath(input.basePath)}/t/${topicId}.json?forceLoad=true`,
+			{ headers: { Accept: 'application/json' } },
 		);
 	},
 
@@ -437,19 +448,29 @@ export const DiscourseNativeRequests = Object.freeze({
 		input: DiscourseNativeTopicTimingsInput,
 	): DiscourseNativeMutationDescriptor {
 		const topicId: DiscourseTopicId = discourseTopicId(input.topicId);
-		const postNumbers = discoursePostNumbers(input.postNumbers);
-		const readTimeMs = Number(input.readTimeMs);
-		if (!Number.isSafeInteger(readTimeMs) || readTimeMs < 1 || readTimeMs > 60_000) {
-			throw new RangeError('readTimeMs 必须是 1..60000 的安全整数');
+		const timings = new Map<DiscoursePostNumber, number>();
+		for (const timing of input.timings) {
+			const postNumber = discoursePostNumber(timing.postNumber);
+			const milliseconds = Math.round(Number(timing.milliseconds));
+			if (
+				!Number.isSafeInteger(milliseconds) ||
+				milliseconds < 1 ||
+				milliseconds > 60_000
+			) throw new RangeError('timing milliseconds 必须是 1..60000 的安全整数');
+			timings.set(postNumber, Math.max(timings.get(postNumber) ?? 0, milliseconds));
 		}
-		const timings = Object.fromEntries(postNumbers.map((postNumber) => [
-			String(postNumber),
-			readTimeMs,
-		]));
+		const topicTimeMs = Math.round(Number(input.topicTimeMs));
+		if (
+			!Number.isSafeInteger(topicTimeMs) ||
+			topicTimeMs < 1 ||
+			topicTimeMs > 60_000
+		) throw new RangeError('topicTimeMs 必须是 1..60000 的安全整数');
 		const data: Readonly<Record<string, unknown>> = Object.freeze({
 			topic_id: topicId,
-			topic_time: readTimeMs * postNumbers.length,
-			timings: Object.freeze(timings),
+			topic_time: topicTimeMs,
+			timings: Object.freeze(Object.fromEntries([...timings].map(
+				([postNumber, milliseconds]) => [String(postNumber), milliseconds],
+			))),
 		});
 		const descriptor: DiscourseNativeMutationDescriptor = Object.freeze({
 			operation: 'topic-timings' as const,

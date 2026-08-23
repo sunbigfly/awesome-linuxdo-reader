@@ -712,11 +712,12 @@ export class ReaderFontSettingsForm<TPreferences extends object> {
 		const title = element(document, 'strong');
 		title.textContent = titleText;
 		const control = element(document, 'span', 'ldp-font-scale-control');
-		const input = element(document, 'input', 'ldp-font-scale-range');
+		const input = element(document, 'input');
 		input.type = 'range';
 		input.min = String(minimum);
 		input.max = String(maximum);
 		input.step = '1';
+		input.setAttribute('aria-label', `${titleText}百分比`);
 		input.dataset.fontSetting = name;
 		this.#inputs.set(name, input);
 		this.scope.listen(input, 'input', () => {

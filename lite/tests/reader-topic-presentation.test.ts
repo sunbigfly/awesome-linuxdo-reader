@@ -753,7 +753,8 @@ special.afterRender({
 } as TestPost, specialView);
 assert(
 	specialView.slots.header.querySelector(
-		'.ldp-new-user-badge[aria-label="新用户，首次发帖"]',
+		'.ldp-post-identity-badges > ' +
+			'.ldp-new-user-badge[aria-label="新用户，首次发帖"]',
 	)?.textContent === '新用户' &&
 		specialView.slots.header.querySelector<HTMLElement>(
 			'.ldp-new-user-badge',

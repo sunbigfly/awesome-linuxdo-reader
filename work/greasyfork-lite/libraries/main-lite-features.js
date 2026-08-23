@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.6.1
+// @version      1.6.2
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.6.1 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.6.2 - main-lite-features
  * 媒体、互动、设置、用户与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.6.1",
+			sourceVersion: "1.6.2",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.1") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.2") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -6204,7 +6204,32 @@ runtime.register("src/font/reader-font-style-controller.js", function(module, ex
 	      ["--ldp-host-label-card-padding", 7]
 	    ])
 	  })
-	]), ROOT_PROPERTIES = Object.freeze([
+	]), MOBILE_HOST_FONT_PROPERTIES = Object.freeze([
+	  Object.freeze({
+	    key: "hostEmbeddedTitleScale",
+	    property: "--ldp-host-mobile-topic-title-size-runtime",
+	    defaultPixels: 16.5,
+	    defaultScale: import_reader_preferences_schema.READER_HOST_FONT_SCALE_DEFAULTS.title
+	  }),
+	  Object.freeze({
+	    key: "hostEmbeddedStatsScale",
+	    property: "--ldp-host-mobile-topic-meta-size-runtime",
+	    defaultPixels: 10,
+	    defaultScale: import_reader_preferences_schema.READER_HOST_FONT_SCALE_DEFAULTS.stats
+	  }),
+	  Object.freeze({
+	    key: "hostEmbeddedStatsScale",
+	    property: "--ldp-host-mobile-topic-time-size-runtime",
+	    defaultPixels: 14,
+	    defaultScale: import_reader_preferences_schema.READER_HOST_FONT_SCALE_DEFAULTS.stats
+	  }),
+	  Object.freeze({
+	    key: "hostEmbeddedLabelCardScale",
+	    property: "--ldp-host-mobile-topic-label-size-runtime",
+	    defaultPixels: 9.6,
+	    defaultScale: import_reader_preferences_schema.READER_HOST_FONT_SCALE_DEFAULTS.labelCard
+	  })
+	]), MOBILE_FONT_REFERENCE_WIDTH = 360, MOBILE_FONT_MAX_SCALE = 1.18, ROOT_PROPERTIES = Object.freeze([
 	  "--ldp-reader-display-scale",
 	  "--ldp-reader-title-font-size",
 	  "--ldp-reader-meta-font-size",
@@ -6232,11 +6257,31 @@ runtime.register("src/font/reader-font-style-controller.js", function(module, ex
 	  ]),
 	  ...HOST_SIZE_PROPERTIES.flatMap(
 	    (setting) => setting.values.map(([property]) => property)
-	  )
+	  ),
+	  ...MOBILE_HOST_FONT_PROPERTIES.map((setting) => setting.property)
 	]), EXTERNAL_RENDERING_REFRESH_DELAYS = Object.freeze([50, 250, 1e3]);
 	function clampedInteger(value, fallback, minimum, maximum) {
 	  const numeric = Number(value);
 	  return Number.isFinite(numeric) ? Math.min(maximum, Math.max(minimum, Math.round(numeric))) : fallback;
+	}
+	function rounded(value, digits = 2) {
+	  const factor = 10 ** digits;
+	  return Math.round(value * factor) / factor;
+	}
+	function mobileFluidFontSize(pixelsAtReferenceWidth) {
+	  const minimum = rounded(pixelsAtReferenceWidth), fluid = rounded(
+	    pixelsAtReferenceWidth / MOBILE_FONT_REFERENCE_WIDTH * 100,
+	    4
+	  ), maximum = rounded(
+	    pixelsAtReferenceWidth * MOBILE_FONT_MAX_SCALE
+	  );
+	  return `clamp(${minimum}px, ${fluid}vw, ${maximum}px)`;
+	}
+	function readerDisplayScale(width, mobileView) {
+	  return mobileView ? Math.min(
+	    MOBILE_FONT_MAX_SCALE,
+	    Math.max(1, width / MOBILE_FONT_REFERENCE_WIDTH)
+	  ) : Math.min(1.1, Math.max(1, 0.73 + width / 4e3));
 	}
 	function normalizedFamily(value, fallback) {
 	  return import_reader_preferences_schema.READER_FONT_FAMILIES.includes(value) ? value : fallback;
@@ -6322,6 +6367,7 @@ runtime.register("src/font/reader-font-style-controller.js", function(module, ex
 	  #pageRoot;
 	  #adapter;
 	  #readReaderWidth;
+	  #readMobileView;
 	  #readSiteFontFamily;
 	  #readExternalFontRendering;
 	  #rootOriginal;
@@ -6336,7 +6382,7 @@ runtime.register("src/font/reader-font-style-controller.js", function(module, ex
 	  #snapshot;
 	  #externalRefreshEpoch = 0;
 	  constructor(options) {
-	    this.#root = options.root, this.#pageRoot = options.pageRoot, this.#adapter = options.preferences, this.#preferences = options.readPreferences(), this.#readReaderWidth = options.readReaderWidth ?? (() => this.#root.clientWidth || 1080), this.#readSiteFontFamily = options.readSiteFontFamily ?? (() => "inherit"), this.#readExternalFontRendering = options.readExternalFontRendering ?? (() => this.#pageRoot.hasAttribute("fr-init-once")), this.#rootOriginal = captureStyles(this.#root, ROOT_PROPERTIES), this.#pageOriginal = captureStyles(this.#pageRoot, PAGE_PROPERTIES), this.#rootRenderingMode = this.#root.dataset.ldpFontRendering, this.#pageRenderingMode = this.#pageRoot.dataset.ldpFontRendering, this.#pageRenderingHost = this.#pageRoot.dataset.ldpFontRenderingHost, this.#pageMacSmoothing = this.#pageRoot.hasAttribute(
+	    this.#root = options.root, this.#pageRoot = options.pageRoot, this.#adapter = options.preferences, this.#preferences = options.readPreferences(), this.#readReaderWidth = options.readReaderWidth ?? (() => this.#root.clientWidth || 1080), this.#readMobileView = options.readMobileView ?? (() => this.#pageRoot.classList.contains("mobile-view")), this.#readSiteFontFamily = options.readSiteFontFamily ?? (() => "inherit"), this.#readExternalFontRendering = options.readExternalFontRendering ?? (() => this.#pageRoot.hasAttribute("fr-init-once")), this.#rootOriginal = captureStyles(this.#root, ROOT_PROPERTIES), this.#pageOriginal = captureStyles(this.#pageRoot, PAGE_PROPERTIES), this.#rootRenderingMode = this.#root.dataset.ldpFontRendering, this.#pageRenderingMode = this.#pageRoot.dataset.ldpFontRendering, this.#pageRenderingHost = this.#pageRoot.dataset.ldpFontRenderingHost, this.#pageMacSmoothing = this.#pageRoot.hasAttribute(
 	      "data-ldp-font-mac-smoothing"
 	    );
 	    const userAgent = options.userAgent ?? "", isGecko = /Firefox\//.test(userAgent), isWebKit = /AppleWebKit\//.test(userAgent) && !/(?:Chrome|Chromium|Edg|OPR|CriOS|FxiOS)\//.test(userAgent);
@@ -6443,7 +6489,7 @@ runtime.register("src/font/reader-font-style-controller.js", function(module, ex
 	    );
 	  }
 	  #commit() {
-	    const settings = this.#preview ?? this.settings(), width = Math.max(360, this.#readReaderWidth()), displayScale = Math.min(1.1, Math.max(1, 0.73 + width / 4e3)), headerProgress = Math.min(
+	    const settings = this.#preview ?? this.settings(), width = Math.max(360, this.#readReaderWidth()), mobileView = this.#readMobileView(), displayScale = readerDisplayScale(width, mobileView), headerProgress = Math.min(
 	      1,
 	      Math.max(0, (width - 360) / 720)
 	    ), interfaceScale = settings.fontProfile.interface / 100 * displayScale, scaledPixels = (base) => `${Math.round(base * interfaceScale * 100) / 100}px`;
@@ -6451,7 +6497,7 @@ runtime.register("src/font/reader-font-style-controller.js", function(module, ex
 	      INTERFACE_FONT_TOKEN_BASES
 	    ))
 	      this.#root.style.setProperty(property, scaledPixels(base));
-	    const headerPixels = (minimum, maximum) => `${Math.round((minimum + (maximum - minimum) * headerProgress) * settings.fontProfile.interface / 100 * 10) / 10}px`;
+	    const headerPixels = (minimum, maximum) => `${Math.round((minimum + (maximum - minimum) * headerProgress) * settings.fontProfile.interface / 100 * (mobileView ? displayScale : 1) * 10) / 10}px`;
 	    this.#root.style.setProperty(
 	      "--ldp-reader-display-scale",
 	      String(displayScale)
@@ -6500,6 +6546,13 @@ runtime.register("src/font/reader-font-style-controller.js", function(module, ex
 	          `${Math.round(base * scale * 10) / 10}px`
 	        );
 	    }
+	    for (const setting of MOBILE_HOST_FONT_PROPERTIES) {
+	      const pixels = setting.defaultPixels * settings[setting.key] / setting.defaultScale;
+	      this.#pageRoot.style.setProperty(
+	        setting.property,
+	        mobileFluidFontSize(pixels)
+	      );
+	    }
 	    this.#pageRoot.style.setProperty(
 	      "--ldp-font-rendering-stroke-runtime",
 	      `${this.#renderingDefaults.stroke}px currentcolor`
@@ -6521,7 +6574,7 @@ runtime.register("src/font/reader-font-style-controller.js", function(module, ex
 	    });
 	  }
 	}
-}, "e72d3354e4db54f88242dc0e767ac0908f5aeb34dc68b6dc2e338de1e263302d");
+}, "18b9486c2e2d223767993b6f9b7bb9b922e34e1dee0999306e8ae6d1bfc7bc66");
 
 /* Source: lite/src/font/reader-imported-font-store.ts */
 runtime.register("src/font/reader-imported-font-store.js", function(module, exports, require) {
@@ -14179,7 +14232,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	  new: "ldp-boost-identity-new",
 	  return: "ldp-boost-identity-return",
 	  custom: "ldp-boost-identity-custom"
-	}), BOOST_EMOJI_MENU_IDENTIFIER = "ldp-native-boost-emoji-picker", BOOST_SURFACE_OWNED_EVENTS = /* @__PURE__ */ new WeakSet(), BOOST_MAX_VISIBLE_LENGTH = 16, BOOST_MAX_EMOJI = 5, BOOST_QUICK_ACTION_OPEN_DELAY_MS = 180, BOOST_QUICK_ACTION_SWITCH_DELAY_MS = 250, BOOST_QUICK_ACTION_CLOSE_DELAY_MS = 500, HOST_RUNTIME_READY_RETRY_DELAYS = Object.freeze([
+	}), BOOST_EMOJI_MENU_IDENTIFIER = "ldp-native-boost-emoji-picker", BOOST_SURFACE_OWNED_EVENTS = /* @__PURE__ */ new WeakSet(), BOOST_MAX_VISIBLE_LENGTH = 16, BOOST_MAX_EMOJI = 5, BOOST_QUICK_ACTION_OPEN_DELAY_MS = 180, BOOST_QUICK_ACTION_SWITCH_DELAY_MS = 250, BOOST_QUICK_ACTION_CLOSE_DELAY_MS = 500, REACTION_PICKER_OPEN_DELAY_MS = 180, REACTION_PICKER_CLOSE_DELAY_MS = 650, HOST_RUNTIME_READY_RETRY_DELAYS = Object.freeze([
 	  120,
 	  360,
 	  1080,
@@ -14401,7 +14454,16 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	      this.#onBoostQuickActionPointerOver(event), this.#onReactionPointerOver(event);
 	    }, { passive: !0 }), this.scope.listen(interactionRoot, "pointerout", (event) => {
 	      this.#onBoostQuickActionPointerOut(event), this.#onReactionPointerOut(event);
-	    }, { passive: !0 }), this.scope.listen(interactionRoot, "focusin", (event) => {
+	    }, { passive: !0 }), this.scope.listen(interactionRoot, "keydown", (event) => {
+	      const keyboard = event;
+	      if (keyboard.key !== "Enter" && keyboard.key !== " ") return;
+	      const trigger = (0, import_event_target.eventElement)(event)?.closest(
+	        "button[data-reaction-picker]"
+	      ) ?? null, root = trigger?.closest(
+	        ".ldp-post,.ldp-lb-source-reactions"
+	      ) ?? null, binding = root ? this.#byRoot.get(root) : void 0;
+	      !trigger || !binding || trigger.disabled || !binding.slot.contains(trigger) || (event.preventDefault(), event.stopImmediatePropagation(), this.#toggleReactionPicker(binding));
+	    }), this.scope.listen(interactionRoot, "focusin", (event) => {
 	      hydrateContextActions(event);
 	      const bubble = this.#ownedBoostQuickActionBubble((0, import_event_target.eventElement)(event));
 	      bubble && this.#boostQuickActionBubble && this.#boostQuickActionBubble !== bubble && this.#closeBoostQuickActions();
@@ -14510,7 +14572,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	      const actions = binding.view.slots.actions.querySelector(
 	        ":scope > .ldp-actions"
 	      );
-	      actions && this.#expandedPostActions.delete(actions), this.#byRoot.delete(view.slots.root), (this.#boostQuickActionBubble && view.slots.root.contains(this.#boostQuickActionBubble) || this.#boostQuickActionCandidate && view.slots.root.contains(this.#boostQuickActionCandidate)) && this.#closeBoostQuickActions(), this.#boostBinding === binding && this.#closeBoost();
+	      actions && this.#expandedPostActions.delete(actions), this.#byRoot.delete(view.slots.root), (this.#boostQuickActionBubble && view.slots.root.contains(this.#boostQuickActionBubble) || this.#boostQuickActionCandidate && view.slots.root.contains(this.#boostQuickActionCandidate)) && this.#closeBoostQuickActions(), this.#boostBinding === binding && (this.#boostInteractionActive() ? this.#scheduleBoostPosition() : this.#closeBoost());
 	    }), this.#refreshMissingPostCapabilities(post);
 	  }
 	  #refreshMissingPostCapabilities(post) {
@@ -14711,7 +14773,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	  }
 	  #renderBoostList(binding) {
 	    const slot = binding.view.slots.boost;
-	    (this.#boostQuickActionBubble && slot.contains(this.#boostQuickActionBubble) || this.#boostQuickActionCandidate && slot.contains(this.#boostQuickActionCandidate)) && this.#closeBoostQuickActions(), this.#boostBinding === binding && this.#boostAnchor && slot.contains(this.#boostAnchor) && this.#closeBoost();
+	    (this.#boostQuickActionBubble && slot.contains(this.#boostQuickActionBubble) || this.#boostQuickActionCandidate && slot.contains(this.#boostQuickActionCandidate)) && this.#closeBoostQuickActions(), this.#boostBinding === binding && this.#boostAnchor && slot.contains(this.#boostAnchor) && (this.#boostInteractionActive() ? this.#scheduleBoostPosition() : this.#closeBoost());
 	    const boosts = postBoosts(binding.post), boostManifest = binding.snapshot.entries.find((entry) => entry.name === "boost"), canCreate = boostManifest?.decision === "allowed", currentUser = this.#currentUserIdentity(binding.post), hasOwnBoost = boosts.some((boost) => this.#boostBelongsToCurrentUser(boost, currentUser)), topicOwner = (0, import_reader_topic_header.readerTopicOwnerUsername)(this.#topic()).toLocaleLowerCase(), fragment = this.#document.createDocumentFragment();
 	    for (const boost of boosts) {
 	      const bubble = this.#document.createElement("span"), own = this.#boostBelongsToCurrentUser(boost, currentUser);
@@ -15397,16 +15459,29 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	    this.#promoteBoostEmojiTopLayer(
 	      content.closest(".fk-d-menu") ?? content
 	    ), content.classList.add("ldp-boost-picker-positioned");
-	    const viewport = this.#document.documentElement, readerRect = this.#boostBinding?.view.slots.root.closest(
+	    const bounds = this.#boostViewportBounds(), readerRect = this.#boostBinding?.view.slots.root.closest(
 	      ".ldp-modal"
-	    )?.getBoundingClientRect(), menuRect = menu.getBoundingClientRect(), padding = 8, gap = 8, leftBound = Math.max(padding, readerRect?.left ?? padding), rightBound = Math.min(
-	      viewport.clientWidth - padding,
-	      readerRect?.right ?? viewport.clientWidth - padding
-	    ), topBound = Math.max(padding, readerRect?.top ?? padding), bottomBound = Math.min(
-	      viewport.clientHeight - padding,
-	      readerRect?.bottom ?? viewport.clientHeight - padding
-	    ), picker = content.matches(".emoji-picker") ? content : content.querySelector(".emoji-picker");
+	    )?.getBoundingClientRect(), menuRect = menu.getBoundingClientRect(), padding = 8, gap = 8, leftBound = Math.max(
+	      bounds.left + padding,
+	      readerRect?.left ?? bounds.left + padding
+	    ), rightBound = Math.min(
+	      bounds.right - padding,
+	      readerRect?.right ?? bounds.right - padding
+	    ), topBound = Math.max(
+	      bounds.top + padding,
+	      readerRect?.top ?? bounds.top + padding
+	    ), bottomBound = Math.min(
+	      bounds.bottom - padding,
+	      readerRect?.bottom ?? bounds.bottom - padding
+	    ), availableWidth = Math.max(0, rightBound - leftBound);
+	    content.style.setProperty(
+	      "max-width",
+	      `${Math.floor(availableWidth)}px`,
+	      "important"
+	    ), content.style.setProperty("box-sizing", "border-box");
+	    const picker = content.matches(".emoji-picker") ? content : content.querySelector(".emoji-picker");
 	    if (picker) {
+	      picker !== content && (picker.style.setProperty("max-width", "100%", "important"), picker.style.setProperty("box-sizing", "border-box"));
 	      const naturalHeight = Number(
 	        picker.dataset.ldpBoostNaturalHeight
 	      ) || picker.offsetHeight;
@@ -15488,15 +15563,45 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	    editor.textContent = raw, editor.contentEditable = "true", submit.disabled = !0, emoji.disabled = !1, cancel.disabled = !1, count.textContent = `0/${BOOST_MAX_VISIBLE_LENGTH}`, error.textContent = "", this.#boostBinding = binding, this.#boostAnchor = anchor, this.#boostSubmitting = !1, this.#boostComposing = !1, this.#boostPreviousEditorHtml = editor.innerHTML, menu.hidden = !1, anchor.setAttribute("aria-expanded", "true"), this.#positionBoostMenu(menu, anchor), this.#syncBoostEditor(menu, editor, !0), raw ? this.#placeBoostCursorAtEnd(editor) : editor.focus();
 	  }
 	  #positionBoostMenu(menu, anchor) {
-	    const bounds = this.#boostViewportBounds(), measuredWidth = menu.offsetWidth || menu.getBoundingClientRect().width, width = Math.min(
+	    const bounds = this.#boostViewportBounds(), availableWidth = Math.max(0, bounds.width - 16), availableHeight = Math.max(0, bounds.height - 16);
+	    menu.style.maxWidth = `${Math.floor(availableWidth)}px`, menu.style.maxHeight = `${Math.floor(availableHeight)}px`;
+	    const measuredWidth = menu.offsetWidth || menu.getBoundingClientRect().width, width = Math.min(
 	      Math.max(0, measuredWidth),
-	      Math.max(0, bounds.width - 16)
+	      availableWidth
 	    ), rect = anchor.getBoundingClientRect(), minLeft = bounds.left + 8, maxLeft = Math.max(minLeft, bounds.right - width - 8), left = Math.max(
 	      minLeft,
 	      Math.min(rect.left, maxLeft)
 	    ), measuredHeight = menu.offsetHeight || menu.getBoundingClientRect().height, minTop = bounds.top + 8, maxTop = Math.max(minTop, bounds.bottom - measuredHeight - 8), spaceBelow = bounds.bottom - 8 - rect.bottom - 6, spaceAbove = rect.top - 6 - minTop;
 	    let top = rect.bottom + 6;
 	    measuredHeight > spaceBelow && spaceAbove > spaceBelow && (top = rect.top - measuredHeight - 6), top = Math.max(minTop, Math.min(top, maxTop)), menu.style.left = `${Math.round(left)}px`, menu.style.top = `${Math.round(top)}px`;
+	  }
+	  #boostInteractionActive() {
+	    const menu = this.#boostMenu;
+	    return !!(menu && !menu.hidden);
+	  }
+	  #clampBoostMenuToViewport(menu) {
+	    const bounds = this.#boostViewportBounds(), availableWidth = Math.max(0, bounds.width - 16), availableHeight = Math.max(0, bounds.height - 16);
+	    menu.style.maxWidth = `${Math.floor(availableWidth)}px`, menu.style.maxHeight = `${Math.floor(availableHeight)}px`;
+	    const rect = menu.getBoundingClientRect(), width = Math.min(
+	      availableWidth,
+	      Math.max(0, rect.width || menu.offsetWidth)
+	    ), height = Math.min(
+	      availableHeight,
+	      Math.max(0, rect.height || menu.offsetHeight)
+	    ), currentLeft = Number.parseFloat(menu.style.left), currentTop = Number.parseFloat(menu.style.top), minLeft = bounds.left + 8, minTop = bounds.top + 8, left = Math.max(
+	      minLeft,
+	      Math.min(
+	        Number.isFinite(currentLeft) ? currentLeft : minLeft,
+	        Math.max(minLeft, bounds.right - width - 8)
+	      )
+	    ), top = Math.max(
+	      minTop,
+	      Math.min(
+	        Number.isFinite(currentTop) ? currentTop : minTop,
+	        Math.max(minTop, bounds.bottom - height - 8)
+	      )
+	    );
+	    menu.style.left = `${Math.round(left)}px`, menu.style.top = `${Math.round(top)}px`;
 	  }
 	  #boostViewportBounds() {
 	    const layoutViewport = this.#document.documentElement, visualViewport = this.#document.defaultView?.visualViewport, finite = (value, fallback) => typeof value == "number" && Number.isFinite(value) ? value : fallback, left = finite(visualViewport?.offsetLeft, 0), top = finite(visualViewport?.offsetTop, 0), width = Math.max(
@@ -15529,7 +15634,15 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	  }
 	  #syncBoostPosition() {
 	    const menu = this.#boostMenu, anchor = this.#boostAnchor;
-	    if (!menu || menu.hidden || !menu.isConnected || !anchor || !anchor.isConnected) {
+	    if (!menu || menu.hidden || !menu.isConnected) {
+	      this.#closeBoost();
+	      return;
+	    }
+	    if (!anchor || !anchor.isConnected) {
+	      if (this.#boostInteractionActive()) {
+	        this.#clampBoostMenuToViewport(menu);
+	        return;
+	      }
 	      this.#closeBoost();
 	      return;
 	    }
@@ -15542,6 +15655,10 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	      clipRect.right,
 	      clipRect.bottom
 	    )) {
+	      if (this.#boostInteractionActive()) {
+	        this.#clampBoostMenuToViewport(menu);
+	        return;
+	      }
 	      this.#closeBoost();
 	      return;
 	    }
@@ -15754,9 +15871,11 @@ ${content}
 	    ) ?? null, binding = root ? this.#byRoot.get(root) : void 0;
 	    if (!binding) return !1;
 	    const trigger = target?.closest(
-	      "button[data-reaction-picker]:not([data-post-like])"
+	      "button[data-reaction-picker]"
 	    ) ?? null;
-	    if (trigger && binding.slot.contains(trigger) && !trigger.disabled) {
+	    if (trigger && binding.slot.contains(trigger) && !trigger.disabled && (this.#eagerContextActions || !trigger.hasAttribute("data-post-like"))) {
+	      if (this.#eagerContextActions)
+	        return event.preventDefault(), event.stopPropagation(), event.stopImmediatePropagation(), this.#toggleReactionPicker(binding), !0;
 	      event.preventDefault(), event.stopPropagation(), event.stopImmediatePropagation(), this.#clearReactionHoverTimers(binding.slot);
 	      const reaction = reactionId(trigger.dataset.reaction) || "heart";
 	      return this.#dispatchReaction(
@@ -16049,7 +16168,7 @@ ${content}
 	      reactions
 	    ), this.#reactionHoverOpenTimers.set(reactions, this.#schedule(() => {
 	      this.#reactionHoverOpenTimers.delete(reactions), !(!reactions.isConnected || binding.open) && (binding.open = !0, this.#closeAll(binding), this.#syncReactionPickerVisibility(binding));
-	    }, 250)));
+	    }, REACTION_PICKER_OPEN_DELAY_MS)));
 	  }
 	  #onReactionPointerOut(event) {
 	    const reactions = (0, import_event_target.eventElement)(event)?.closest(".ldp-reactions");
@@ -16066,7 +16185,7 @@ ${content}
 	    ), binding = post ? this.#byRoot.get(post) : void 0;
 	    !binding || !binding.open || this.#reactionHoverCloseTimers.set(reactions, this.#schedule(() => {
 	      this.#reactionHoverCloseTimers.delete(reactions), binding.open && (binding.open = !1, this.#syncReactionPickerVisibility(binding));
-	    }, 250));
+	    }, REACTION_PICKER_CLOSE_DELAY_MS));
 	  }
 	  #syncReactionPickerVisibility(binding) {
 	    binding.slot.querySelector(
@@ -16076,6 +16195,11 @@ ${content}
 	      ".ldp-reaction-picker"
 	    );
 	    picker && (picker.hidden = !binding.open);
+	  }
+	  #toggleReactionPicker(binding) {
+	    this.#clearReactionHoverTimers(binding.slot);
+	    const opening = !binding.open;
+	    binding.open = opening, opening && this.#closeAll(binding), this.#syncReactionPickerVisibility(binding);
 	  }
 	  #clearReactionHoverTimer(timers, reactions) {
 	    const handle = timers.get(reactions);
@@ -16259,7 +16383,7 @@ ${content}
 	    !binding || !binding.root.classList.contains("ldp-topic-action-rail-post") || (binding.open = !1, binding.topicActionRailExpanded = expanded, expanded && !binding.contextHydrated && (binding.contextHydrated = !0, this.#renderActions(binding), this.#renderTopicFooter(binding)), this.#syncTopicActionRailReply(binding), this.#clearReactionHoverTimers(binding.slot), this.#syncReactionPickerVisibility(binding));
 	  }
 	}
-}, "33837dfc3ce3d3cd8133df2ee3e821c460b7f4f72d5bb122c2451f9ae70aba25");
+}, "690074c2be1fbfe8cd21deab0113900640997e0258be3e3f423c1ac4679507fa");
 
 /* Source: lite/src/post/reader-post-management-action-coordinator.ts */
 runtime.register("src/post/reader-post-management-action-coordinator.js", function(module, exports, require) {
@@ -16947,6 +17071,8 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	  #actions;
 	  #preferences;
 	  #jumpToTop;
+	  #onlyOpToggle;
+	  #onlyOpHome;
 	  #openTopicSummary;
 	  #downloadCurrentTopic;
 	  #openChronicle;
@@ -16977,7 +17103,7 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	      },
 	      features: [options.actions],
 	      onError: this.#onError
-	    }), this.#actions = options.actions, this.#preferences = options.preferences, this.#jumpToTop = options.jumpToTop, this.#openTopicSummary = options.openTopicSummary ?? null, this.#downloadCurrentTopic = options.downloadCurrentTopic ?? null, this.#openChronicle = options.openChronicle ?? null, this.#openUnwantedTopics = options.openUnwantedTopics ?? null, this.#openUserObservations = options.openUserObservations ?? null, this.#now = options.now ?? Date.now;
+	    }), this.#actions = options.actions, this.#preferences = options.preferences, this.#jumpToTop = options.jumpToTop, this.#onlyOpToggle = options.onlyOpToggle ?? null, this.#onlyOpHome = this.#onlyOpToggle?.parentNode ?? null, this.#openTopicSummary = options.openTopicSummary ?? null, this.#downloadCurrentTopic = options.downloadCurrentTopic ?? null, this.#openChronicle = options.openChronicle ?? null, this.#openUnwantedTopics = options.openUnwantedTopics ?? null, this.#openUserObservations = options.openUserObservations ?? null, this.#now = options.now ?? Date.now;
 	    const window = this.#document.defaultView;
 	    this.#requestFrame = options.requestFrame ?? (window?.requestAnimationFrame ? (callback) => window.requestAnimationFrame(callback) : (callback) => globalThis.setTimeout(
 	      () => callback(this.#now()),
@@ -16994,14 +17120,14 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	      "ldp-topic-action-rail-summary",
 	      "AI 总结（LinuxDo 官方 / 自定义）",
 	      "sparkles"
-	    ) : null, this.#summaryBookmarkGroup = this.summaryButton ? (0, import_html_element.htmlElement)(
+	    ) : null, this.#summaryBookmarkGroup = this.summaryButton || this.#onlyOpToggle ? (0, import_html_element.htmlElement)(
 	      this.#document,
 	      "div",
 	      "ldp-topic-action-rail-summary-bookmark-group"
 	    ) : null, this.#summaryBookmarkGroup?.setAttribute("role", "group"), this.#summaryBookmarkGroup?.setAttribute(
 	      "aria-label",
-	      "主题收藏与总结"
-	    ), this.summaryButton && this.#summaryBookmarkGroup?.append(this.summaryButton), this.toggleButton = this.#button(
+	      "主题收藏、AI 总结与只看楼主"
+	    ), this.summaryButton && this.#summaryBookmarkGroup?.append(this.summaryButton), this.#onlyOpToggle && this.#summaryBookmarkGroup?.append(this.#onlyOpToggle), this.toggleButton = this.#button(
 	      "ldp-topic-action-rail-toggle",
 	      "展开第二段主题操作；本菜单分两段展开",
 	      "menu-box"
@@ -17069,7 +17195,7 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	    resizeObserver && (resizeObserver.observe(this.#mount), resizeObserver.observe(this.host), this.scope.add(() => resizeObserver.disconnect())), this.#preferences.subscribe((preferences) => {
 	      this.#settings = preferences, this.#expanded || this.#applyMode(preferences.mode, !1), this.#syncVisibility(), this.#queuePosition();
 	    }, this.scope), this.scope.add(() => {
-	      this.#clearHold(), this.#releaseDragPointer(), this.#frame && this.#cancelFrame(this.#frame), this.#frame = 0, this.#view?.destroy(), this.#view = null, this.host.remove(), this.#shellRoot.classList.remove(
+	      this.#clearHold(), this.#releaseDragPointer(), this.#frame && this.#cancelFrame(this.#frame), this.#frame = 0, this.#view?.destroy(), this.#view = null, this.#onlyOpToggle && this.#onlyOpHome && this.#onlyOpHome.append(this.#onlyOpToggle), this.host.remove(), this.#shellRoot.classList.remove(
 	        "ldp-topic-action-rail-visible",
 	        "ldp-topic-action-rail-expanded"
 	      );
@@ -17124,10 +17250,14 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	    return button.type = "button", button.setAttribute("aria-label", label), button.append(icon(this.#document, iconName)), button;
 	  }
 	  #mountSummaryBookmarkGroup(view) {
-	    const group = this.#summaryBookmarkGroup, summary = this.summaryButton;
-	    if (!group || !summary) return;
+	    const group = this.#summaryBookmarkGroup, summary = this.summaryButton, onlyOp = this.#onlyOpToggle;
+	    if (!group) return;
 	    const topicFooter = view.slots.topicFooter;
-	    (group.parentElement !== view.slots.root || topicFooter.parentElement !== group) && (group.replaceChildren(topicFooter, summary), view.slots.root.append(group));
+	    (group.parentElement !== view.slots.root || topicFooter.parentElement !== group) && (group.replaceChildren(
+	      topicFooter,
+	      ...summary ? [summary] : [],
+	      ...onlyOp ? [onlyOp] : []
+	    ), view.slots.root.append(group));
 	  }
 	  #onClick(event) {
 	    if (this.#now() < this.#suppressClickUntil) {
@@ -17180,7 +17310,7 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	    ), this.toggleButton.dataset.railMode = mode, this.toggleButton.setAttribute(
 	      "aria-expanded",
 	      String(this.#expanded)
-	    ), this.#downloadGroup && (this.#downloadGroup.hidden = !this.#expanded), this.summaryButton && (this.summaryButton.hidden = !this.#expanded), this.downloadButton && (this.downloadButton.hidden = !this.#expanded), this.chronicleButton && (this.chronicleButton.hidden = !this.#expanded), this.unwantedTopicsButton && (this.unwantedTopicsButton.hidden = !this.#expanded), this.userObservationButton && (this.userObservationButton.hidden = !this.#expanded), this.toggleButton.setAttribute(
+	    ), this.#downloadGroup && (this.#downloadGroup.hidden = !this.#expanded), this.summaryButton && (this.summaryButton.hidden = !this.#expanded), this.#onlyOpToggle && (this.#onlyOpToggle.hidden = !this.#expanded), this.downloadButton && (this.downloadButton.hidden = !this.#expanded), this.chronicleButton && (this.chronicleButton.hidden = !this.#expanded), this.unwantedTopicsButton && (this.unwantedTopicsButton.hidden = !this.#expanded), this.userObservationButton && (this.userObservationButton.hidden = !this.#expanded), this.toggleButton.setAttribute(
 	      "aria-label",
 	      `${mode === "collapsed" ? "展开第一段主题操作；再次点击可展开第二段" : this.#expanded ? "收纳主题操作；本菜单分两段展开" : "展开第二段主题操作；本菜单分两段展开"}；${this.#settings.fixed ? "位置已固定" : "长按拖动"}`
 	    ), this.toggleButton.replaceChildren(icon(
@@ -17409,7 +17539,7 @@ runtime.register("src/post/reader-topic-action-rail.js", function(module, export
 	    });
 	  }
 	}
-}, "993dec015e95747d020f5cfebd21b0d862562614a5c82cbe121f872c67bc12a4");
+}, "4279d9c3b3642ed2f557e61d7d0622bea4afef727da47109b7af25f694c57126");
 
 /* Source: lite/src/post/reader-topic-custom-summary.ts */
 runtime.register("src/post/reader-topic-custom-summary.js", function(module, exports, require) {
@@ -20528,6 +20658,8 @@ runtime.register("src/reading/read-state-controller.js", function(module, export
 	  #challengeRecoveryDelayMs;
 	  #maxChallengeRecoveries;
 	  #settleDelayMs;
+	  #minimumDwellMs;
+	  #timingIntervalMs;
 	  #maxAutomaticRetries;
 	  #shouldRetry;
 	  #setTimer;
@@ -20538,13 +20670,18 @@ runtime.register("src/reading/read-state-controller.js", function(module, export
 	  #candidates = /* @__PURE__ */ new Set();
 	  #pending = /* @__PURE__ */ new Map();
 	  #visibility = /* @__PURE__ */ new Map();
+	  #timings = /* @__PURE__ */ new Map();
 	  #unsubscribeCoordination = () => {
 	  };
 	  #flushPromise = null;
 	  #timerId = 0;
+	  #timingTimerId = 0;
+	  #lastTimingAt = null;
+	  #topicTimeMs = 0;
 	  #challengeRecoveryTimerId = 0;
 	  #challengeRecoveryCount = 0;
 	  #nextScheduleDelay = 0;
+	  #activityRevision = 0;
 	  #sequence = 0;
 	  #retryCount = 0;
 	  #cloudflareHalted = !1;
@@ -20553,7 +20690,10 @@ runtime.register("src/reading/read-state-controller.js", function(module, export
 	  #automaticRetryHalted = !1;
 	  #closed = !1;
 	  constructor(options) {
-	    this.authScope = (0, import_identifiers.discourseAuthScope)(options.authScope), this.topicId = (0, import_identifiers.discourseTopicId)(options.topicId), this.#submitter = options.submitter, this.#coordination = options.coordination ?? null, this.#batchSize = positiveInteger(options.batchSize, 20, "batchSize"), this.#retryDelayMs = nonNegativeInteger(
+	    this.authScope = (0, import_identifiers.discourseAuthScope)(options.authScope), this.topicId = (0, import_identifiers.discourseTopicId)(options.topicId), this.#submitter = options.submitter, this.#coordination = options.coordination ?? null, this.#batchSize = Math.min(
+	      positiveInteger(options.batchSize, import_read_state_coordination.READ_STATE_MAX_BATCH_SIZE, "batchSize"),
+	      import_read_state_coordination.READ_STATE_MAX_BATCH_SIZE
+	    ), this.#retryDelayMs = nonNegativeInteger(
 	      options.retryDelayMs,
 	      5e3,
 	      "retryDelayMs"
@@ -20563,19 +20703,27 @@ runtime.register("src/reading/read-state-controller.js", function(module, export
 	      "challengeRecoveryDelayMs"
 	    ), this.#maxChallengeRecoveries = nonNegativeInteger(
 	      options.maxChallengeRecoveries,
-	      1,
+	      0,
 	      "maxChallengeRecoveries"
 	    ), this.#settleDelayMs = nonNegativeInteger(
 	      options.settleDelayMs,
 	      120,
 	      "settleDelayMs"
+	    ), this.#minimumDwellMs = nonNegativeInteger(
+	      options.minimumDwellMs,
+	      1e3,
+	      "minimumDwellMs"
+	    ), this.#timingIntervalMs = positiveInteger(
+	      options.timingIntervalMs,
+	      1e3,
+	      "timingIntervalMs"
 	    ), this.#maxAutomaticRetries = nonNegativeInteger(
 	      options.maxAutomaticRetries,
 	      1,
 	      "maxAutomaticRetries"
 	    ), this.#shouldRetry = options.shouldRetry ?? (() => !0), this.#setTimer = options.setTimer ?? ((callback, milliseconds) => setTimeout(callback, milliseconds)), this.#clearTimer = options.clearTimer ?? clearTimeout, this.#now = options.now ?? Date.now, this.#onError = options.onError ?? (() => {
 	    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.scope), this.scope.add(() => {
-	      this.#closed = !0, this.stop(), this.#clearChallengeRecovery(), this.changes.clear(), this.diagnostics.clear(), this.#candidates.clear(), this.#pending.clear(), this.#visibility.clear();
+	      this.#closed = !0, this.stop(), this.#clearChallengeRecovery(), this.changes.clear(), this.diagnostics.clear(), this.#candidates.clear(), this.#pending.clear(), this.#visibility.clear(), this.#timings.clear();
 	    });
 	  }
 	  get started() {
@@ -20617,10 +20765,10 @@ runtime.register("src/reading/read-state-controller.js", function(module, export
 	      return this.#started = !1, this.#unsubscribeCoordination = () => {
 	      }, this.#onError(error), !1;
 	    }
-	    return this.#schedule(this.#settleDelayMs), !0;
+	    return this.#lastTimingAt = this.#now(), this.#scheduleTimingSample(), this.#schedule(this.#settleDelayMs), !0;
 	  }
 	  stop() {
-	    !this.#started && !this.#closed || (this.#started = !1, this.#clearScheduledFlush(), this.#unsubscribeCoordination(), this.#unsubscribeCoordination = () => {
+	    !this.#started && !this.#closed || (this.#sampleReadTime(), this.#started = !1, this.#clearScheduledFlush(), this.#clearTimingSample(), this.#lastTimingAt = null, this.#unsubscribeCoordination(), this.#unsubscribeCoordination = () => {
 	    });
 	  }
 	  destroy() {
@@ -20642,84 +20790,108 @@ runtime.register("src/reading/read-state-controller.js", function(module, export
 	    } catch (error) {
 	      this.#onError(error);
 	    }
-	    const optimistic = [], alreadyRead = [], wasEmpty = this.#pending.size === 0;
+	    const alreadyRead = [];
 	    for (const candidate of candidates) {
 	      const postNumber = candidate.postNumber;
 	      if (candidate.read || persistedConfirmed.has(postNumber)) {
 	        alreadyRead.push(postNumber);
 	        continue;
 	      }
-	      this.#confirmed.has(postNumber) || this.#pending.has(postNumber) || this.#candidates.has(postNumber) || (this.#visibility.has(postNumber) ? (this.#enqueuePending(postNumber), optimistic.push(postNumber)) : this.#candidates.add(postNumber));
+	      this.#confirmed.has(postNumber) || this.#pending.has(postNumber) || this.#candidates.has(postNumber) || (this.#candidates.add(postNumber), this.#timings.set(postNumber, 0));
 	    }
-	    return alreadyRead.length && this.#applyConfirmed(alreadyRead), optimistic.length && ((wasEmpty || this.#automaticRetryHalted) && !this.#cloudflareHalted && this.#resetRetryGate(), this.#emitChange("optimistic", optimistic), this.#schedule(this.#settleDelayMs)), Object.freeze(optimistic);
+	    alreadyRead.length && this.#applyConfirmed(alreadyRead);
+	    const optimistic = this.#qualifyDwellCandidates();
+	    return this.#scheduleTimingSample(), Object.freeze(optimistic);
 	  }
 	  confirm(rawPostNumbers) {
 	    return this.#assertOpen(), this.#applyConfirmed((0, import_identifiers.discoursePostNumbers)(rawPostNumbers));
 	  }
 	  setVisible(rawPostNumbers, visibility) {
-	    if (this.#assertOpen(), visibility === !1) return;
-	    const optimistic = [], wasEmpty = this.#pending.size === 0;
+	    this.#assertOpen(), this.#sampleReadTime(), visibility !== !1 && (this.#activityRevision += 1);
 	    for (const rawPostNumber of rawPostNumbers) {
 	      const postNumber = (0, import_identifiers.discoursePostNumber)(rawPostNumber);
+	      if (visibility === !1) {
+	        this.#visibility.delete(postNumber);
+	        continue;
+	      }
 	      if (this.#confirmed.has(postNumber)) continue;
 	      const currentVisibility = this.#visibility.get(postNumber);
-	      (currentVisibility === void 0 || VISIBILITY_WEIGHT[visibility] > VISIBILITY_WEIGHT[currentVisibility]) && this.#visibility.set(postNumber, visibility), this.#candidates.delete(postNumber) && (this.#enqueuePending(postNumber), optimistic.push(postNumber));
+	      (currentVisibility === void 0 || VISIBILITY_WEIGHT[visibility] > VISIBILITY_WEIGHT[currentVisibility]) && this.#visibility.set(postNumber, visibility), this.#candidates.has(postNumber) && !this.#timings.has(postNumber) && this.#timings.set(postNumber, 0);
 	    }
-	    optimistic.length && ((wasEmpty || this.#automaticRetryHalted) && !this.#cloudflareHalted && this.#resetRetryGate(), this.#emitChange("optimistic", optimistic)), this.#clearScheduledFlush(), this.#schedule(this.#settleDelayMs);
+	    this.#qualifyDwellCandidates(), this.#hasTimingTargets() ? this.#scheduleTimingSample() : this.#clearTimingSample(), visibility !== !1 && this.#pending.size && this.#schedule(this.#settleDelayMs);
 	  }
 	  setPageVisible(visible) {
-	    if (this.#assertOpen(), this.#pageVisible = visible, !visible) {
-	      this.#clearScheduledFlush();
+	    if (this.#assertOpen(), this.#sampleReadTime(), this.#pageVisible = visible, !visible) {
+	      this.#clearScheduledFlush(), this.#clearTimingSample(), this.#lastTimingAt = null;
 	      return;
 	    }
-	    this.#schedule(this.#settleDelayMs);
+	    this.#lastTimingAt = this.#now(), this.#activityRevision += 1, this.#scheduleTimingSample(), this.#schedule(this.#settleDelayMs);
 	  }
 	  flush(options = {}) {
-	    if (this.#assertOpen(), this.#flushPromise) return this.#flushPromise;
+	    if (this.#assertOpen(), this.#sampleReadTime(), this.#flushPromise) return this.#flushPromise;
 	    if (this.#cloudflareHalted || !this.#pending.size || options.force !== !0 && (!this.#started || !this.#pageVisible || this.#automaticRetryHalted))
 	      return Promise.resolve(!1);
 	    this.#clearScheduledFlush();
 	    const batch = this.#nextBatch();
-	    if (!batch.length) return Promise.resolve(!1);
-	    const promise = this.#submitBatch(batch).finally(() => {
+	    if (!batch.timings.length) return Promise.resolve(!1);
+	    const activityRevision = this.#activityRevision, promise = this.#submitBatch(batch).finally(() => {
 	      this.#flushPromise === promise && (this.#flushPromise = null);
 	      const delay = this.#nextScheduleDelay;
-	      this.#nextScheduleDelay = 0, this.#started && this.#pending.size && !this.#automaticRetryHalted && this.#schedule(Math.max(delay, this.#settleDelayMs));
+	      this.#nextScheduleDelay = 0;
+	      const activityAdvanced = this.#activityRevision > activityRevision;
+	      this.#started && this.#pending.size && !this.#automaticRetryHalted && (delay > 0 || activityAdvanced) && this.#schedule(Math.max(delay, this.#settleDelayMs));
 	    });
 	    return this.#flushPromise = promise, promise;
 	  }
 	  #nextBatch() {
-	    return Object.freeze(
-	      [...this.#pending.values()].filter((entry) => this.#visibility.has(entry.postNumber)).sort((left, right) => {
-	        const leftWeight = VISIBILITY_WEIGHT[this.#visibility.get(left.postNumber) ?? "root"] - (this.#visibility.has(left.postNumber) ? 0 : 1);
-	        return VISIBILITY_WEIGHT[this.#visibility.get(right.postNumber) ?? "root"] - (this.#visibility.has(right.postNumber) ? 0 : 1) - leftWeight || left.sequence - right.sequence;
-	      }).slice(0, this.#batchSize).map((entry) => entry.postNumber)
-	    );
+	    const entries = [...this.#pending.values()].sort((left, right) => {
+	      const leftWeight = VISIBILITY_WEIGHT[left.visibility];
+	      return VISIBILITY_WEIGHT[right.visibility] - leftWeight || left.sequence - right.sequence;
+	    }).slice(0, this.#batchSize);
+	    return entries.length ? (0, import_read_state_coordination.normalizeReadStateSubmission)({
+	      timings: entries.map((entry) => ({
+	        postNumber: entry.postNumber,
+	        milliseconds: Math.max(1, this.#timings.get(entry.postNumber) ?? 0)
+	      })),
+	      topicTimeMs: Math.max(1, this.#topicTimeMs)
+	    }) : Object.freeze({ timings: [], topicTimeMs: 1 });
 	  }
 	  async #submitBatch(batch) {
+	    const batchPostNumbers = batch.timings.map((timing) => timing.postNumber);
 	    try {
-	      const allowed = (this.#coordination ? await this.#coordination.submitOnce(
+	      const confirmed = this.#coordination?.submitTimedOnce ? await this.#coordination.submitTimedOnce(
 	        this.authScope,
 	        this.topicId,
 	        batch,
 	        (missing) => this.#submitter.submit(missing)
-	      ) : (0, import_identifiers.discoursePostNumbers)(await this.#submitter.submit(batch))).filter((postNumber) => batch.includes(postNumber)), attempted = this.#coordination?.knownAttempted?.(
+	      ) : this.#coordination ? await this.#coordination.submitOnce(
 	        this.authScope,
 	        this.topicId,
-	        batch
+	        batchPostNumbers,
+	        (missingPostNumbers) => this.#submitter.submit(
+	          (0, import_read_state_coordination.normalizeReadStateSubmission)({
+	            timings: batch.timings.filter((timing) => missingPostNumbers.includes(timing.postNumber)),
+	            topicTimeMs: batch.topicTimeMs
+	          })
+	        )
+	      ) : (0, import_identifiers.discoursePostNumbers)(await this.#submitter.submit(batch));
+	      this.#topicTimeMs = Math.max(0, this.#topicTimeMs - batch.topicTimeMs);
+	      const allowed = confirmed.filter((postNumber) => batchPostNumbers.includes(postNumber)), attempted = this.#coordination?.knownAttempted?.(
+	        this.authScope,
+	        this.topicId,
+	        batchPostNumbers
 	      ) ?? [];
-	      if (this.#applyConfirmed(allowed), attempted.forEach((postNumber) => this.#pending.delete(postNumber)), (/* @__PURE__ */ new Set([...allowed, ...attempted])).size !== batch.length)
-	        throw new ReadStateIncompleteConfirmationError(batch, allowed);
+	      if (this.#applyConfirmed(allowed), attempted.forEach((postNumber) => {
+	        this.#pending.delete(postNumber), this.#timings.delete(postNumber);
+	      }), (/* @__PURE__ */ new Set([...allowed, ...attempted])).size !== batchPostNumbers.length)
+	        throw new ReadStateIncompleteConfirmationError(batchPostNumbers, allowed);
 	      return this.#retryCount = 0, this.#cloudflareHalted = !1, this.#challengeRecoveryCount = 0, this.#clearChallengeRecovery(), this.#automaticRetryHalted = !1, allowed.length > 0;
 	    } catch (error) {
 	      if (error instanceof import_read_state_coordination.ReadStateClientRateLimitError)
-	        return this.#nextScheduleDelay = Math.max(
-	          1,
-	          Math.ceil(error.retryAt - this.#now())
-	        ), !1;
-	      this.#retryCount += 1, this.#onError(error), this.#emitDiagnostic("submit-failed", batch, error);
+	        return !1;
+	      this.#retryCount += 1, this.#onError(error), this.#emitDiagnostic("submit-failed", batchPostNumbers, error);
 	      const failureKind = readStateFailureKind(error);
-	      return failureKind === "challenge" && (this.#cloudflareHalted = !0, this.#challengeRecoveryCount < this.#maxChallengeRecoveries && (this.#challengeRecoveryCount += 1, this.#scheduleChallengeRecovery())), !((failureKind === "rate-limit" || failureKind === "transient") && this.#shouldRetry(error)) || this.#retryCount > this.#maxAutomaticRetries ? (this.#automaticRetryHalted = !0, this.#emitDiagnostic("automatic-retry-halted", batch, error)) : this.#nextScheduleDelay = failureKind === "rate-limit" && error instanceof import_coordinated_request_client.RequestRateLimitError ? Math.max(
+	      return failureKind === "challenge" && (this.#cloudflareHalted = !0, this.#challengeRecoveryCount < this.#maxChallengeRecoveries && (this.#challengeRecoveryCount += 1, this.#scheduleChallengeRecovery())), !((failureKind === "rate-limit" || failureKind === "transient") && this.#shouldRetry(error)) || this.#retryCount > this.#maxAutomaticRetries ? (this.#automaticRetryHalted = !0, this.#emitDiagnostic("automatic-retry-halted", batchPostNumbers, error)) : this.#nextScheduleDelay = failureKind === "rate-limit" && error instanceof import_coordinated_request_client.RequestRateLimitError ? Math.max(
 	        this.#retryDelayMs,
 	        Math.ceil(error.decision.retryAt - this.#now())
 	      ) : this.#retryDelayMs, !1;
@@ -20731,15 +20903,45 @@ runtime.register("src/reading/read-state-controller.js", function(module, export
 	    for (const postNumber of (0, import_identifiers.discoursePostNumbers)(rawPostNumbers)) {
 	      this.#candidates.delete(postNumber);
 	      const wasPending = this.#pending.delete(postNumber), wasConfirmed = this.#confirmed.has(postNumber);
-	      this.#visibility.delete(postNumber), this.#confirmed.add(postNumber), (wasPending || !wasConfirmed) && transitioned.push(postNumber);
+	      this.#visibility.delete(postNumber), this.#timings.delete(postNumber), this.#confirmed.add(postNumber), (wasPending || !wasConfirmed) && transitioned.push(postNumber);
 	    }
-	    return transitioned.length && this.#emitChange("confirmed", transitioned), Object.freeze(transitioned);
+	    return transitioned.length && this.#emitChange("confirmed", transitioned), this.#hasTimingTargets() || this.#clearTimingSample(), Object.freeze(transitioned);
 	  }
 	  #enqueuePending(postNumber) {
 	    this.#pending.has(postNumber) || this.#confirmed.has(postNumber) || (this.#sequence += 1, this.#pending.set(postNumber, Object.freeze({
 	      postNumber,
-	      sequence: this.#sequence
+	      sequence: this.#sequence,
+	      visibility: this.#visibility.get(postNumber) ?? "root"
 	    })));
+	  }
+	  #sampleReadTime() {
+	    const now = this.#now(), previous = this.#lastTimingAt;
+	    if (this.#lastTimingAt = now, previous === null || !this.#started || !this.#pageVisible || now <= previous) return;
+	    const elapsed = Math.min(
+	      import_read_state_coordination.READ_STATE_MAX_TIMING_MS,
+	      Math.max(0, Math.round(now - previous))
+	    );
+	    if (!(elapsed < 1)) {
+	      this.#topicTimeMs = Math.min(
+	        import_read_state_coordination.READ_STATE_MAX_TIMING_MS,
+	        this.#topicTimeMs + elapsed
+	      );
+	      for (const postNumber of this.#visibility.keys())
+	        this.#confirmed.has(postNumber) || !this.#candidates.has(postNumber) && !this.#pending.has(postNumber) || this.#timings.set(
+	          postNumber,
+	          Math.min(
+	            import_read_state_coordination.READ_STATE_MAX_TIMING_MS,
+	            (this.#timings.get(postNumber) ?? 0) + elapsed
+	          )
+	        );
+	      this.#qualifyDwellCandidates();
+	    }
+	  }
+	  #qualifyDwellCandidates() {
+	    const optimistic = [], wasEmpty = this.#pending.size === 0;
+	    for (const postNumber of [...this.#candidates])
+	      this.#visibility.has(postNumber) && ((this.#timings.get(postNumber) ?? 0) < this.#minimumDwellMs || (this.#candidates.delete(postNumber), (this.#timings.get(postNumber) ?? 0) < 1 && this.#timings.set(postNumber, 1), this.#enqueuePending(postNumber), optimistic.push(postNumber)));
+	    return optimistic.length ? (this.#activityRevision += 1, (wasEmpty || this.#automaticRetryHalted) && !this.#cloudflareHalted && this.#resetRetryGate(), this.#emitChange("optimistic", optimistic), this.#clearScheduledFlush(), this.#schedule(this.#settleDelayMs), Object.freeze(optimistic)) : Object.freeze([]);
 	  }
 	  #acceptCoordinatedConfirmation(confirmation) {
 	    confirmation.authScope !== this.authScope || confirmation.topicId !== this.topicId || this.#closed || this.#applyConfirmed(confirmation.postNumbers);
@@ -20764,6 +20966,20 @@ runtime.register("src/reading/read-state-controller.js", function(module, export
 	      this.#timerId = 0, this.flush();
 	    }, delay));
 	  }
+	  #scheduleTimingSample() {
+	    this.#timingTimerId || !this.#started || !this.#pageVisible || this.#minimumDwellMs === 0 || !this.#hasTimingTargets() || (this.#timingTimerId = this.#setTimer(() => {
+	      this.#timingTimerId = 0, this.#sampleReadTime(), this.#scheduleTimingSample();
+	    }, this.#timingIntervalMs));
+	  }
+	  #hasTimingTargets() {
+	    for (const postNumber of this.#visibility.keys())
+	      if (this.#candidates.has(postNumber) || this.#pending.has(postNumber))
+	        return !0;
+	    return !1;
+	  }
+	  #clearTimingSample() {
+	    this.#timingTimerId && (this.#clearTimer(this.#timingTimerId), this.#timingTimerId = 0);
+	  }
 	  #clearScheduledFlush() {
 	    this.#timerId && (this.#clearTimer(this.#timerId), this.#timerId = 0);
 	  }
@@ -20783,7 +20999,7 @@ runtime.register("src/reading/read-state-controller.js", function(module, export
 	      throw new Error("ReadStateController 已销毁");
 	  }
 	}
-}, "ea83f3c3b775de1f25d13335cb2316eab696b0f6eb9fa1ff9d3fc99433289a38");
+}, "dda9a371621c47d848b6f2a96f8c45b0ebb5d7b649c061701912bdbfbeda9ff8");
 
 /* Source: lite/src/reading/read-state-coordination.ts */
 runtime.register("src/reading/read-state-coordination.js", function(module, exports, require) {
@@ -20792,16 +21008,39 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	  BroadcastReadStateChannel: () => BroadcastReadStateChannel,
 	  BrowserReadStateCoordinator: () => BrowserReadStateCoordinator,
 	  READ_STATE_ATTEMPT_STORAGE_KEY: () => READ_STATE_ATTEMPT_STORAGE_KEY,
+	  READ_STATE_CHALLENGE_HALT_STORAGE_KEY: () => READ_STATE_CHALLENGE_HALT_STORAGE_KEY,
 	  READ_STATE_INTENT_STORAGE_KEY: () => READ_STATE_INTENT_STORAGE_KEY,
 	  READ_STATE_LOCK_NAME: () => READ_STATE_LOCK_NAME,
+	  READ_STATE_MAX_BATCH_SIZE: () => READ_STATE_MAX_BATCH_SIZE,
+	  READ_STATE_MAX_TIMING_MS: () => READ_STATE_MAX_TIMING_MS,
 	  READ_STATE_RATE_STORAGE_KEY: () => READ_STATE_RATE_STORAGE_KEY,
+	  READ_STATE_REQUEST_INTERVAL_DEPHASE_MAX_RATIO: () => READ_STATE_REQUEST_INTERVAL_DEPHASE_MAX_RATIO,
+	  READ_STATE_REQUEST_INTERVAL_DEPHASE_MIN_RATIO: () => READ_STATE_REQUEST_INTERVAL_DEPHASE_MIN_RATIO,
 	  READ_STATE_SUCCESS_STORAGE_KEY: () => READ_STATE_SUCCESS_STORAGE_KEY,
 	  ReadStateChallengeHaltedError: () => ReadStateChallengeHaltedError,
-	  ReadStateClientRateLimitError: () => ReadStateClientRateLimitError
+	  ReadStateClientRateLimitError: () => ReadStateClientRateLimitError,
+	  normalizeReadStateSubmission: () => normalizeReadStateSubmission
 	});
 	module.exports = __toCommonJS(read_state_coordination_exports);
 	var import_identifiers = require("../discourse/identifiers.js"), import_coordinated_request_client = require("../network/coordinated-request-client.js");
-	const READ_STATE_SUCCESS_STORAGE_KEY = "linuxdo-enhanced-reader:read-success:v1", READ_STATE_ATTEMPT_STORAGE_KEY = "linuxdo-enhanced-reader:read-attempt:v1", READ_STATE_INTENT_STORAGE_KEY = "linuxdo-enhanced-reader:read-intent:v1", READ_STATE_RATE_STORAGE_KEY = "linuxdo-enhanced-reader:read-rate:v1", READ_STATE_LOCK_NAME = "linuxdo-enhanced-reader:read-request:v1", READ_STATE_RATE_WINDOW_MS = 6e4, DEFAULT_READ_STATE_REQUESTS_PER_MINUTE = 12, DEFAULT_READ_STATE_TIMINGS_PER_MINUTE = 240;
+	const READ_STATE_SUCCESS_STORAGE_KEY = "linuxdo-enhanced-reader:read-success:v1", READ_STATE_ATTEMPT_STORAGE_KEY = "linuxdo-enhanced-reader:read-attempt:v1", READ_STATE_INTENT_STORAGE_KEY = "linuxdo-enhanced-reader:read-intent:v1", READ_STATE_RATE_STORAGE_KEY = "linuxdo-enhanced-reader:read-rate:v1", READ_STATE_CHALLENGE_HALT_STORAGE_KEY = "linuxdo-enhanced-reader:read-challenge-halt:v1", READ_STATE_LOCK_NAME = "linuxdo-enhanced-reader:read-request:v1", READ_STATE_RATE_WINDOW_MS = 6e4, READ_STATE_MAX_BATCH_SIZE = 20, READ_STATE_MAX_TIMING_MS = 6e4, READ_STATE_REQUEST_INTERVAL_DEPHASE_MIN_RATIO = 0.15, READ_STATE_REQUEST_INTERVAL_DEPHASE_MAX_RATIO = 0.45, DEFAULT_READ_STATE_REQUESTS_PER_MINUTE = 12, DEFAULT_READ_STATE_TIMINGS_PER_MINUTE = 240, DEFAULT_READ_STATE_CHALLENGE_HALT_TTL_MS = 15 * 6e4;
+	function normalizeReadStateSubmission(input) {
+	  const timings = /* @__PURE__ */ new Map();
+	  for (const value of input.timings) {
+	    const postNumber = (0, import_identifiers.discoursePostNumber)(value.postNumber), milliseconds = Math.round(Number(value.milliseconds));
+	    if (!Number.isSafeInteger(milliseconds) || milliseconds < 1 || milliseconds > READ_STATE_MAX_TIMING_MS) throw new RangeError("timing milliseconds 必须是 1..60000 的安全整数");
+	    timings.set(postNumber, Math.max(timings.get(postNumber) ?? 0, milliseconds));
+	  }
+	  const topicTimeMs = Math.round(Number(input.topicTimeMs));
+	  if (!Number.isSafeInteger(topicTimeMs) || topicTimeMs < 1 || topicTimeMs > READ_STATE_MAX_TIMING_MS) throw new RangeError("topicTimeMs 必须是 1..60000 的安全整数");
+	  return Object.freeze({
+	    timings: Object.freeze([...timings.entries()].sort(([left], [right]) => left - right).map(([postNumber, milliseconds]) => Object.freeze({
+	      postNumber,
+	      milliseconds
+	    }))),
+	    topicTimeMs
+	  });
+	}
 	class ReadStateChallengeHaltedError extends Error {
 	  code = "read-state-challenge-halted";
 	  cloudflareMitigated = !0;
@@ -20819,6 +21058,12 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	  const normalized = Number(value ?? fallback);
 	  if (!Number.isSafeInteger(normalized) || normalized < 1)
 	    throw new RangeError(`${name} 必须是正安全整数`);
+	  return normalized;
+	}
+	function unitRatio(value, fallback, name) {
+	  const normalized = Number(value ?? fallback);
+	  if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1)
+	    throw new RangeError(`${name} 必须是 0..1 的有限数`);
 	  return normalized;
 	}
 	function listenerKey(authScope, topicId) {
@@ -20841,11 +21086,28 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	    const parsed = JSON.parse(value);
 	    return Array.isArray(parsed) ? parsed.flatMap((entry) => {
 	      if (!entry || typeof entry != "object") return [];
-	      const candidate = entry, requestedAt = Number(candidate.requestedAt), timings = Number(candidate.timings);
+	      const candidate = entry, requestedAt = Number(candidate.requestedAt), timings = Number(candidate.timings), cooldownMs = Number(candidate.cooldownMs);
 	      return typeof candidate.authScope != "string" || candidate.authScope.length === 0 || !Number.isFinite(requestedAt) || !Number.isSafeInteger(timings) || timings < 1 ? [] : [Object.freeze({
 	        authScope: candidate.authScope,
 	        requestedAt,
-	        timings
+	        timings,
+	        ...Number.isSafeInteger(cooldownMs) && cooldownMs > 0 ? { cooldownMs } : {}
+	      })];
+	    }) : [];
+	  } catch {
+	    return [];
+	  }
+	}
+	function parseStoredChallengeHalts(value) {
+	  if (!value) return [];
+	  try {
+	    const parsed = JSON.parse(value);
+	    return Array.isArray(parsed) ? parsed.flatMap((entry) => {
+	      if (!entry || typeof entry != "object") return [];
+	      const candidate = entry, haltedAt = Number(candidate.haltedAt);
+	      return typeof candidate.authScope != "string" || candidate.authScope.length === 0 || !Number.isFinite(haltedAt) || haltedAt < 0 ? [] : [Object.freeze({
+	        authScope: candidate.authScope,
+	        haltedAt
 	      })];
 	    }) : [];
 	  } catch {
@@ -20895,19 +21157,23 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	  #attemptTtlMs;
 	  #intentTtlMs;
 	  #intentCoalesceMs;
+	  #challengeHaltTtlMs;
 	  #maxRecords;
 	  #onCoordinationError;
 	  #delay;
+	  #readIntervalDephaseMinRatio;
+	  #readIntervalDephaseMaxRatio;
+	  #random;
 	  #listeners = /* @__PURE__ */ new Map();
 	  #confirmationListeners = /* @__PURE__ */ new Set();
-	  #challengeHaltedTopics = /* @__PURE__ */ new Map();
+	  #challengeHaltedAuthScopes = /* @__PURE__ */ new Map();
 	  #unsubscribeChannel;
 	  #readRequestsPerMinute;
 	  #readTimingsPerMinute;
 	  #localLockTail = Promise.resolve();
 	  #closed = !1;
 	  constructor(options) {
-	    this.#storage = options.storage, this.#channel = options.channel ?? null, this.#lock = options.lock, this.#now = options.now ?? Date.now, this.#ttlMs = options.ttlMs === void 0 ? null : positiveMilliseconds(options.ttlMs, 6e4, "ttlMs"), this.#attemptTtlMs = positiveMilliseconds(
+	    if (this.#storage = options.storage, this.#channel = options.channel ?? null, this.#lock = options.lock, this.#now = options.now ?? Date.now, this.#ttlMs = options.ttlMs === void 0 ? null : positiveMilliseconds(options.ttlMs, 6e4, "ttlMs"), this.#attemptTtlMs = positiveMilliseconds(
 	      options.attemptTtlMs,
 	      1e4,
 	      "attemptTtlMs"
@@ -20919,6 +21185,10 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	      options.intentCoalesceMs,
 	      80,
 	      "intentCoalesceMs"
+	    ), this.#challengeHaltTtlMs = positiveMilliseconds(
+	      options.challengeHaltTtlMs,
+	      DEFAULT_READ_STATE_CHALLENGE_HALT_TTL_MS,
+	      "challengeHaltTtlMs"
 	    ), this.#maxRecords = positiveMilliseconds(options.maxRecords, 64, "maxRecords"), this.#readRequestsPerMinute = positiveMilliseconds(
 	      options.readRequestsPerMinute,
 	      DEFAULT_READ_STATE_REQUESTS_PER_MINUTE,
@@ -20927,12 +21197,24 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	      options.readTimingsPerMinute,
 	      DEFAULT_READ_STATE_TIMINGS_PER_MINUTE,
 	      "readTimingsPerMinute"
-	    ), this.#delay = options.delay ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))), this.#onCoordinationError = options.onCoordinationError ?? (() => {
+	    ), this.#readIntervalDephaseMinRatio = unitRatio(
+	      options.readIntervalDephaseMinRatio,
+	      READ_STATE_REQUEST_INTERVAL_DEPHASE_MIN_RATIO,
+	      "readIntervalDephaseMinRatio"
+	    ), this.#readIntervalDephaseMaxRatio = unitRatio(
+	      options.readIntervalDephaseMaxRatio,
+	      READ_STATE_REQUEST_INTERVAL_DEPHASE_MAX_RATIO,
+	      "readIntervalDephaseMaxRatio"
+	    ), this.#readIntervalDephaseMaxRatio < this.#readIntervalDephaseMinRatio)
+	      throw new RangeError(
+	        "readIntervalDephaseMaxRatio 不能小于 readIntervalDephaseMinRatio"
+	      );
+	    this.#random = options.random ?? Math.random, this.#delay = options.delay ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))), this.#onCoordinationError = options.onCoordinationError ?? (() => {
 	    }), this.#unsubscribeChannel = this.#channel?.subscribe((message) => {
 	      const halt = normalizeChallengeHalt(message);
 	      if (halt) {
-	        this.#challengeHaltedTopics.set(
-	          listenerKey(halt.authScope, halt.topicId),
+	        this.#challengeHaltedAuthScopes.set(
+	          halt.authScope,
 	          halt.haltedAt
 	        );
 	        return;
@@ -21044,9 +21326,43 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	      const intended = this.#recentlyIntended(authScope, topicId), candidates = (0, import_identifiers.discoursePostNumbers)([
 	        ...postNumbers,
 	        ...[...intended].filter((postNumber) => !postNumbers.includes(postNumber))
-	      ]).slice(0, Math.max(postNumbers.length, this.#readTimingsPerMinute));
+	      ]).slice(0, READ_STATE_MAX_BATCH_SIZE);
 	      return run(candidates);
 	    })) : this.#withLocalLock(() => run(postNumbers));
+	  }
+	  async submitTimedOnce(rawAuthScope, rawTopicId, rawSubmission, submit) {
+	    if (this.#closed) throw new Error("ReadStateCoordinator 已关闭");
+	    const authScope = (0, import_identifiers.discourseAuthScope)(rawAuthScope), topicId = (0, import_identifiers.discourseTopicId)(rawTopicId), submission = normalizeReadStateSubmission(rawSubmission), postNumbers = submission.timings.map((timing) => timing.postNumber), run = async (candidates) => {
+	      const recent = this.#recentlyConfirmed(authScope, topicId), attempted = this.#recentlyAttempted(authScope, topicId);
+	      if ((attempted.size > 0 || this.#challengeHaltActive(authScope, topicId)) && candidates.timings.some((timing) => !recent.has(timing.postNumber)))
+	        throw this.#forgetIntents(authScope, topicId), new ReadStateChallengeHaltedError(topicId);
+	      const missingTimings = candidates.timings.filter((timing) => !recent.has(timing.postNumber) && !attempted.has(timing.postNumber));
+	      if (missingTimings.length) {
+	        const missing = normalizeReadStateSubmission({
+	          timings: missingTimings,
+	          topicTimeMs: candidates.topicTimeMs
+	        });
+	        let submitted;
+	        try {
+	          this.#takeReadRatePermit(authScope, missing.timings.length), submitted = (0, import_identifiers.discoursePostNumbers)(await submit(missing));
+	        } catch (error) {
+	          throw isReadStateCloudflareFailure(error) && (this.#rememberAttempt(
+	            authScope,
+	            topicId,
+	            missing.timings.map((timing) => timing.postNumber)
+	          ), this.#rememberChallengeHalt(authScope, topicId), this.#forgetIntents(authScope, topicId)), error;
+	        }
+	        const missingPostNumbers = missing.timings.map((timing) => timing.postNumber), allowed = submitted.filter((postNumber) => missingPostNumbers.includes(postNumber));
+	        allowed.length && this.#remember(authScope, topicId, allowed), allowed.forEach((postNumber) => recent.add(postNumber));
+	      }
+	      return this.#forgetIntents(authScope, topicId), Object.freeze(postNumbers.filter((postNumber) => recent.has(postNumber)));
+	    };
+	    return this.#lock ? (await this.#lock(READ_STATE_LOCK_NAME, async () => {
+	      this.#rememberTimedIntent(authScope, topicId, submission);
+	    }), await this.#delay(this.#intentCoalesceMs), this.#lock(READ_STATE_LOCK_NAME, () => {
+	      const intended = this.#recentTimedIntent(authScope, topicId);
+	      return run(this.#mergeTimedSubmissions(submission, intended));
+	    })) : this.#withLocalLock(() => run(submission));
 	  }
 	  async #withLocalLock(task) {
 	    const previous = this.#localLockTail;
@@ -21072,7 +21388,9 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	    } catch (error) {
 	      throw this.#onCoordinationError(error), error;
 	    }
-	    const scoped = records.filter((entry) => entry.authScope === authScope).sort((left, right) => left.requestedAt - right.requestedAt), requestWait = scoped.length >= this.#readRequestsPerMinute ? scoped[scoped.length - this.#readRequestsPerMinute].requestedAt + READ_STATE_RATE_WINDOW_MS - now : 0;
+	    const scoped = records.filter((entry) => entry.authScope === authScope).sort((left, right) => left.requestedAt - right.requestedAt), requestWait = scoped.length >= this.#readRequestsPerMinute ? scoped[scoped.length - this.#readRequestsPerMinute].requestedAt + READ_STATE_RATE_WINDOW_MS - now : 0, requestIntervalMs = Math.ceil(
+	      READ_STATE_RATE_WINDOW_MS / this.#readRequestsPerMinute
+	    ), latest = scoped.at(-1), previousCooldownMs = latest ? Math.max(requestIntervalMs, latest.cooldownMs ?? requestIntervalMs) : requestIntervalMs, intervalWait = latest ? latest.requestedAt + previousCooldownMs - now : 0;
 	    let timingTotal = scoped.reduce(
 	      (total, entry) => total + entry.timings,
 	      0
@@ -21084,13 +21402,17 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	        entry.requestedAt + READ_STATE_RATE_WINDOW_MS - now
 	      );
 	    }
-	    const waitMs = Math.max(requestWait, timingWait, 0);
+	    const waitMs = Math.max(requestWait, intervalWait, timingWait, 0);
 	    if (waitMs > 0)
 	      throw new ReadStateClientRateLimitError(now + Math.ceil(waitMs));
+	    const random = Math.max(0, Math.min(1, Number(this.#random()) || 0)), dephaseRatio = this.#readIntervalDephaseMinRatio + (this.#readIntervalDephaseMaxRatio - this.#readIntervalDephaseMinRatio) * random, cooldownMs = requestIntervalMs + Math.ceil(
+	      requestIntervalMs * dephaseRatio
+	    );
 	    records.push(Object.freeze({
 	      authScope,
 	      requestedAt: now,
-	      timings
+	      timings,
+	      cooldownMs
 	    }));
 	    try {
 	      this.#storage.setItem(
@@ -21105,7 +21427,7 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	    }
 	  }
 	  close() {
-	    this.#closed || (this.#closed = !0, this.#unsubscribeChannel(), this.#channel?.close(), this.#listeners.clear(), this.#confirmationListeners.clear(), this.#challengeHaltedTopics.clear());
+	    this.#closed || (this.#closed = !0, this.#unsubscribeChannel(), this.#channel?.close(), this.#listeners.clear(), this.#confirmationListeners.clear(), this.#challengeHaltedAuthScopes.clear());
 	  }
 	  #readRecords() {
 	    try {
@@ -21175,6 +21497,48 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	        }
 	    return intended;
 	  }
+	  #recentTimedIntent(authScope, topicId) {
+	    const timings = /* @__PURE__ */ new Map();
+	    let topicTimeMs = 0;
+	    for (const record of this.#readIntentRecords()) {
+	      if (record.authScope !== authScope || Number(record.topicId) !== topicId) continue;
+	      for (const [rawPostNumber, rawMilliseconds] of Object.entries(
+	        record.timingsByPost ?? {}
+	      ))
+	        try {
+	          const postNumber = (0, import_identifiers.discoursePostNumber)(rawPostNumber), milliseconds = Number(rawMilliseconds);
+	          Number.isSafeInteger(milliseconds) && milliseconds >= 1 && milliseconds <= READ_STATE_MAX_TIMING_MS && timings.set(postNumber, Math.max(timings.get(postNumber) ?? 0, milliseconds));
+	        } catch {
+	        }
+	      const candidateTopicTime = Number(record.topicTimeMs);
+	      Number.isSafeInteger(candidateTopicTime) && (topicTimeMs = Math.max(topicTimeMs, candidateTopicTime));
+	    }
+	    return !timings.size || topicTimeMs < 1 ? null : normalizeReadStateSubmission({
+	      timings: [...timings].map(([postNumber, milliseconds]) => ({
+	        postNumber,
+	        milliseconds
+	      })),
+	      topicTimeMs
+	    });
+	  }
+	  #mergeTimedSubmissions(primary, secondary) {
+	    const timings = /* @__PURE__ */ new Map();
+	    for (const submission of [primary, secondary])
+	      if (submission)
+	        for (const timing of submission.timings)
+	          timings.set(
+	            timing.postNumber,
+	            Math.max(timings.get(timing.postNumber) ?? 0, timing.milliseconds)
+	          );
+	    const primaryOrder = primary.timings.map((timing) => timing.postNumber), remainingOrder = [...timings.keys()].filter((postNumber) => !primaryOrder.includes(postNumber)).sort((left, right) => left - right), selected = [...primaryOrder, ...remainingOrder].slice(0, READ_STATE_MAX_BATCH_SIZE);
+	    return normalizeReadStateSubmission({
+	      timings: selected.map((postNumber) => ({
+	        postNumber,
+	        milliseconds: timings.get(postNumber)
+	      })),
+	      topicTimeMs: Math.max(primary.topicTimeMs, secondary?.topicTimeMs ?? 0)
+	    });
+	  }
 	  #rememberIntent(authScope, topicId, postNumbers) {
 	    try {
 	      const intendedAt = this.#now(), records = this.#readIntentRecords(), merged = this.#recentlyIntended(authScope, topicId);
@@ -21186,6 +21550,31 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	        authScope,
 	        topicId,
 	        postNumbers: [...(0, import_identifiers.discoursePostNumbers)([...merged])]
+	      }), this.#storage.setItem(
+	        READ_STATE_INTENT_STORAGE_KEY,
+	        JSON.stringify(retained.slice(-this.#maxRecords))
+	      );
+	    } catch (error) {
+	      this.#onCoordinationError(error);
+	    }
+	  }
+	  #rememberTimedIntent(authScope, topicId, submission) {
+	    try {
+	      const intendedAt = this.#now(), records = this.#readIntentRecords(), merged = this.#mergeTimedSubmissions(
+	        submission,
+	        this.#recentTimedIntent(authScope, topicId)
+	      ), retained = records.filter((entry) => entry.authScope !== authScope || Number(entry.topicId) !== topicId);
+	      retained.push({
+	        fingerprint: listenerKey(authScope, topicId),
+	        at: intendedAt,
+	        authScope,
+	        topicId,
+	        postNumbers: merged.timings.map((timing) => timing.postNumber),
+	        timingsByPost: Object.fromEntries(merged.timings.map((timing) => [
+	          String(timing.postNumber),
+	          timing.milliseconds
+	        ])),
+	        topicTimeMs: merged.topicTimeMs
 	      }), this.#storage.setItem(
 	        READ_STATE_INTENT_STORAGE_KEY,
 	        JSON.stringify(retained.slice(-this.#maxRecords))
@@ -21231,19 +21620,35 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	      topicId,
 	      haltedAt: this.#now()
 	    });
-	    this.#challengeHaltedTopics.set(
-	      listenerKey(authScope, topicId),
-	      halt.haltedAt
-	    );
+	    this.#challengeHaltedAuthScopes.set(authScope, halt.haltedAt);
+	    try {
+	      const retained = parseStoredChallengeHalts(
+	        this.#storage.getItem(READ_STATE_CHALLENGE_HALT_STORAGE_KEY)
+	      ).filter((entry) => entry.authScope !== authScope);
+	      retained.push(Object.freeze({ authScope, haltedAt: halt.haltedAt })), this.#storage.setItem(
+	        READ_STATE_CHALLENGE_HALT_STORAGE_KEY,
+	        JSON.stringify(retained.slice(-this.#maxRecords))
+	      );
+	    } catch (error) {
+	      this.#onCoordinationError(error);
+	    }
 	    try {
 	      this.#channel?.post(halt);
 	    } catch (error) {
 	      this.#onCoordinationError(error);
 	    }
 	  }
-	  #challengeHaltActive(authScope, topicId) {
-	    const key = listenerKey(authScope, topicId), haltedAt = this.#challengeHaltedTopics.get(key);
-	    return haltedAt === void 0 ? !1 : haltedAt > this.#now() - this.#attemptTtlMs ? !0 : (this.#challengeHaltedTopics.delete(key), !1);
+	  #challengeHaltActive(authScope, _topicId) {
+	    let haltedAt = this.#challengeHaltedAuthScopes.get(authScope);
+	    try {
+	      for (const entry of parseStoredChallengeHalts(
+	        this.#storage.getItem(READ_STATE_CHALLENGE_HALT_STORAGE_KEY)
+	      ))
+	        entry.authScope === authScope && (haltedAt = Math.max(haltedAt ?? 0, entry.haltedAt));
+	    } catch (error) {
+	      this.#onCoordinationError(error);
+	    }
+	    return haltedAt === void 0 ? !1 : haltedAt > this.#now() - this.#challengeHaltTtlMs ? (this.#challengeHaltedAuthScopes.set(authScope, haltedAt), !0) : (this.#challengeHaltedAuthScopes.delete(authScope), !1);
 	  }
 	  #remember(authScope, topicId, postNumbers) {
 	    const confirmedAt = this.#now(), confirmation = Object.freeze({
@@ -21342,7 +21747,7 @@ runtime.register("src/reading/read-state-coordination.js", function(module, expo
 	      }
 	  };
 	}
-}, "b481915458ef5d9bed18be3dffb4dd70b920bc29dc6685f70c3caba8bacc52ed");
+}, "2785ce37984c4fa0963886c32a63cf97407dd502a718064907b115f8b3f8dbe9");
 
 /* Source: lite/src/reading/read-state-request-adapter.ts */
 runtime.register("src/reading/read-state-request-adapter.js", function(module, exports, require) {
@@ -21351,13 +21756,7 @@ runtime.register("src/reading/read-state-request-adapter.js", function(module, e
 	  ReadStateRequestAdapter: () => ReadStateRequestAdapter
 	});
 	module.exports = __toCommonJS(read_state_request_adapter_exports);
-	var import_identifiers = require("../discourse/identifiers.js"), import_native_request_descriptors = require("../discourse/native-request-descriptors.js");
-	function positiveMilliseconds(value) {
-	  const milliseconds = Number(value ?? 1500);
-	  if (!Number.isSafeInteger(milliseconds) || milliseconds < 1 || milliseconds > 6e4)
-	    throw new RangeError("readTimeMs 必须是 1..60000 的安全整数");
-	  return milliseconds;
-	}
+	var import_identifiers = require("../discourse/identifiers.js"), import_native_request_descriptors = require("../discourse/native-request-descriptors.js"), import_read_state_coordination = require("./read-state-coordination.js");
 	class ReadStateRequestAdapter {
 	  topicId;
 	  authScope;
@@ -21365,16 +21764,17 @@ runtime.register("src/reading/read-state-request-adapter.js", function(module, e
 	  #transport;
 	  #signal;
 	  #basePath;
-	  #readTimeMs;
 	  constructor(options) {
-	    this.#gateway = options.gateway, this.#transport = options.transport, this.authScope = (0, import_identifiers.discourseAuthScope)(options.authScope), this.topicId = (0, import_identifiers.discourseTopicId)(options.topicId), this.#signal = options.signal, this.#basePath = (0, import_native_request_descriptors.discourseBasePath)(options.basePath), this.#readTimeMs = positiveMilliseconds(options.readTimeMs);
+	    this.#gateway = options.gateway, this.#transport = options.transport, this.authScope = (0, import_identifiers.discourseAuthScope)(options.authScope), this.topicId = (0, import_identifiers.discourseTopicId)(options.topicId), this.#signal = options.signal, this.#basePath = (0, import_native_request_descriptors.discourseBasePath)(options.basePath);
 	  }
-	  async submit(rawPostNumbers) {
-	    const postNumbers = (0, import_identifiers.discoursePostNumbers)(rawPostNumbers), descriptor = import_native_request_descriptors.DiscourseNativeRequests.topicTimings({
+	  async submit(rawSubmission) {
+	    const submission = (0, import_read_state_coordination.normalizeReadStateSubmission)(rawSubmission), postNumbers = (0, import_identifiers.discoursePostNumbers)(
+	      submission.timings.map((timing) => timing.postNumber)
+	    ), descriptor = import_native_request_descriptors.DiscourseNativeRequests.topicTimings({
 	      basePath: this.#basePath,
 	      topicId: this.topicId,
-	      postNumbers,
-	      readTimeMs: this.#readTimeMs
+	      timings: submission.timings,
+	      topicTimeMs: submission.topicTimeMs
 	    });
 	    return await this.#gateway.submitReadState({
 	      authScope: this.authScope,
@@ -21391,7 +21791,7 @@ runtime.register("src/reading/read-state-request-adapter.js", function(module, e
 	    }), postNumbers;
 	  }
 	}
-}, "0c4d867b1a22086c29dedc6a47f2917a40c0395157a37db25eeb67e9f0c72f3a");
+}, "b6298213abe37be8708f35561f21b988e0d27845f42764056e5126b25f6b386d");
 
 /* Source: lite/src/reading/read-viewport-adapter.ts */
 runtime.register("src/reading/read-viewport-adapter.js", function(module, exports, require) {
@@ -21428,14 +21828,14 @@ runtime.register("src/reading/read-viewport-adapter.js", function(module, export
 	      (entries) => this.#onEntries(entries),
 	      { root: options.root, threshold: 0 }
 	    );
-	    const onVisibilityChange = () => {
-	      this.#controller.setPageVisible(this.#document.visibilityState === "visible");
+	    const focusTarget = options.focusTarget ?? this.#document.defaultView ?? this.#document, pageActive = () => this.#document.visibilityState !== "hidden" && (typeof this.#document.hasFocus != "function" || this.#document.hasFocus()), onPageActivityChange = () => {
+	      this.#controller.setPageVisible(pageActive());
 	    };
 	    this.scope.listen(
 	      this.#document,
 	      "visibilitychange",
-	      onVisibilityChange
-	    ), this.#controller.setPageVisible(this.#document.visibilityState !== "hidden"), this.scope.add(() => {
+	      onPageActivityChange
+	    ), this.scope.listen(focusTarget, "focus", onPageActivityChange), this.scope.listen(focusTarget, "blur", onPageActivityChange), this.#controller.setPageVisible(pageActive()), this.scope.add(() => {
 	      this.#closed = !0;
 	      for (const node of this.#visible) {
 	        const postNumber = this.#postNumbers.get(node);
@@ -21494,11 +21894,12 @@ runtime.register("src/reading/read-viewport-adapter.js", function(module, export
 	  #document;
 	  #rootFor;
 	  #createObserver;
+	  #focusTarget;
 	  #onError;
 	  #adapters = /* @__PURE__ */ new Map();
 	  #mounted = /* @__PURE__ */ new Map();
 	  constructor(options) {
-	    this.#controller = options.controller, this.#document = options.document, this.#rootFor = options.rootFor, this.#createObserver = options.createObserver, this.#onError = options.onError ?? (() => {
+	    this.#controller = options.controller, this.#document = options.document, this.#rootFor = options.rootFor, this.#createObserver = options.createObserver, this.#focusTarget = options.focusTarget, this.#onError = options.onError ?? (() => {
 	    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.scope.add(() => {
 	      this.#mounted.clear(), this.#adapters.clear();
 	    });
@@ -21513,6 +21914,7 @@ runtime.register("src/reading/read-viewport-adapter.js", function(module, export
 	      document: this.#document,
 	      root: viewportRoot,
 	      scope: this.scope,
+	      ...this.#focusTarget ? { focusTarget: this.#focusTarget } : {},
 	      ...this.#createObserver ? { createObserver: this.#createObserver } : {},
 	      onError: this.#onError
 	    }), this.#adapters.set(viewportRoot, adapter)), adapter.observe(root), this.#mounted.set(root, adapter);
@@ -21522,7 +21924,7 @@ runtime.register("src/reading/read-viewport-adapter.js", function(module, export
 	    adapter && (adapter.unobserve(root), this.#mounted.delete(root));
 	  }
 	}
-}, "aa069a61c2accd8ae5a55992f13f37a240f22f9a27aa8e8c1a29ea7f769ffcf8");
+}, "680810247d80702929f88e5456bbcec3bb27a784a26fca10cc0d265a38aa3666");
 
 /* Source: lite/src/search/reader-search.ts */
 runtime.register("src/search/reader-search.js", function(module, exports, require) {
@@ -23946,8 +24348,8 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	  #rangeRow(document, name, titleText, minimum, maximum) {
 	    const row = (0, import_reader_settings_dom.settingsElement)(document, "label", "ldp-setting-row"), title = (0, import_reader_settings_dom.settingsElement)(document, "strong");
 	    title.textContent = titleText;
-	    const control = (0, import_reader_settings_dom.settingsElement)(document, "span", "ldp-font-scale-control"), input = (0, import_reader_settings_dom.settingsElement)(document, "input", "ldp-font-scale-range");
-	    input.type = "range", input.min = String(minimum), input.max = String(maximum), input.step = "1", input.dataset.fontSetting = name, this.#inputs.set(name, input), this.scope.listen(input, "input", () => {
+	    const control = (0, import_reader_settings_dom.settingsElement)(document, "span", "ldp-font-scale-control"), input = (0, import_reader_settings_dom.settingsElement)(document, "input");
+	    input.type = "range", input.min = String(minimum), input.max = String(maximum), input.step = "1", input.setAttribute("aria-label", `${titleText}百分比`), input.dataset.fontSetting = name, this.#inputs.set(name, input), this.scope.listen(input, "input", () => {
 	      this.#edit(
 	        name,
 	        Math.min(maximum, Math.max(minimum, Math.round(
@@ -24246,7 +24648,7 @@ runtime.register("src/settings/reader-font-settings-form.js", function(module, e
 	    );
 	  }
 	}
-}, "18c19db598085a39c2d90c79f56daab0c45a6e2318c7cfc75cf6e155e4a88fbd");
+}, "a4bfc4328a6c70a7664e8df9c2992400243812e7ff184c59a60f9b10d86f59dc");
 
 /* Source: lite/src/settings/reader-image-settings-form.ts */
 runtime.register("src/settings/reader-image-settings-form.js", function(module, exports, require) {
@@ -25814,7 +26216,7 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	        name: "readStateRequestsPerMinute",
 	        title: "已读请求上限（RPM）",
 	        description: "同账号跨标签滚动 60 秒窗口内最多启动多少次已读请求。",
-	        help: "默认 10 RPM。Linux Do 未公开该端点专属额度；此值仍服从全站 10 秒/60 秒共享窗口和服务器 Retry-After。",
+	        help: "默认 10 RPM，并按 60 秒 ÷ RPM 形成跨标签最小启动间隔（默认至少 6 秒）。普通 pending 不由定时器匀速排空，只在新的真实 Reader 可见活动后继续；服务器 Retry-After 仍按要求恢复。",
 	        unit: "次/分",
 	        step: 1,
 	        inputMode: "numeric"
@@ -25823,7 +26225,7 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	        name: "readStateTimingsPerMinute",
 	        title: "已读楼层上限（TPM）",
 	        description: "同账号跨标签每分钟最多提交多少个 timings 楼层条目；这里的 T 表示 timing，不是 token。",
-	        help: "默认 240 TPM；这里的 T 是 timing 条目，不是 token。队列仍按单批最多 20 层合并，达到上限时保留 pending 并等待窗口释放，不把未成功楼层升级为已读。",
+	        help: "默认 240 TPM；这里的 T 是 timing 条目，不是 token。队列仍按单批最多 20 层合并，达到上限时保留 pending，待窗口释放且出现新的真实可见活动后继续。",
 	        unit: "层/分",
 	        step: 20,
 	        inputMode: "numeric"
@@ -25956,7 +26358,7 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	    name: "hostPreheatMaxConcurrent",
 	    title: "宿主 Topic 预热并发目标",
 	    description: "列表近视口 Topic 最多同时准备多少个；Reader 前台仍最多占一个后台槽。",
-	    help: "设备能力可以下调；每个 Topic 的楼层数量由“预热楼层数”单独控制。",
+	    help: "这是 producer 目标；实际自动联网固定同账号跨标签最多 1 路，并在宿主或可见请求活动时让路。每个 Topic 的楼层数量由“预热楼层数”单独控制。",
 	    unit: "路",
 	    step: 1
 	  }),
@@ -26319,7 +26721,7 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	    const hostTopicPreheatRow = (0, import_reader_settings_dom.settingsOptionRow)(
 	      options.document,
 	      "预热宿主 Topic 列表",
-	      "列表卡片接近视口时提前准备正文；默认开启。Reader 阅读和滚动期间继续预热其他 Topic，前台最多使用一个后台槽。",
+	      "列表卡片接近视口时提前准备正文；默认关闭，仅在显式开启后联网。前台最多使用一个后台槽。",
 	      hostTopicPreheatSwitch.root
 	    );
 	    hostTopicPreheatRow.dataset.settingHelp = "关闭后立即停止宿主列表预热并释放交接快照；重新开启后从当前近视口卡片与 canonical 缓存恢复。当前正在阅读的同一 Topic 不重复预热。", hostTopicPreheatSupported && (hostRuntimeContent.append(hostTopicPreheatRow), this.scope.listen(this.#hostTopicPreheat, "change", () => {
@@ -26372,7 +26774,7 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	        (0, import_reader_business_request_config.flattenReaderBusinessRequestSettings)(
 	          import_reader_business_request_config.READER_BUSINESS_REQUEST_DEFAULTS
 	        )
-	      ), this.#hostTopicPreheatDraft = !0, this.#hostTopicPreheatPostCountDraft = String(import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT), this.#suspendHostTurnstileDraft = !1, this.#writeConfig(import_reader_preferences_schema.READER_PERFORMANCE_DEFAULT_CONFIG);
+	      ), this.#hostTopicPreheatDraft = !1, this.#hostTopicPreheatPostCountDraft = String(import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT), this.#suspendHostTurnstileDraft = !1, this.#writeConfig(import_reader_preferences_schema.READER_PERFORMANCE_DEFAULT_CONFIG);
 	    }), this.#host.replaceChildren(categoryGroups, footer.root), this.#syncInputs();
 	    const adapter = {
 	      panelId: "performance",
@@ -26515,15 +26917,15 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	    const config = this.#readConfig(), requestFlowSettings = this.#readRequestFlowSettings(), businessRequestSettings = this.#readBusinessRequestSettings(), preheatPostCount = this.#readHostTopicPreheatPostCountDraft(), risky = config !== null && requestFlowSettings !== null && businessRequestSettings !== null && preheatPostCount !== null && (performanceConfigExceedsDefault(config) || requestFlowSettingsExceedDefault(requestFlowSettings) || businessRequestSettingsExceedDefault(businessRequestSettings) || this.#hostTopicPreheatDraft && preheatPostCount > import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT);
 	    this.#hostTopicPreheatPostCountRow.hidden = !this.#hostTopicPreheatDraft, this.#hostTopicPreheatPostCount.disabled = !this.#hostTopicPreheatDraft;
 	    const changed = this.#changeCount();
-	    this.#reset.disabled = config !== null && (0, import_reader_preferences_schema.readerPerformanceConfigIsDefault)(config) && requestFlowSettings !== null && (0, import_reader_request_flow_config.readerRequestFlowSettingsAreDefault)(requestFlowSettings) && businessRequestSettings !== null && (0, import_reader_business_request_config.readerBusinessRequestSettingsAreDefault)(businessRequestSettings) && this.#hostTopicPreheatDraft && preheatPostCount === import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT && !this.#suspendHostTurnstileDraft;
+	    this.#reset.disabled = config !== null && (0, import_reader_preferences_schema.readerPerformanceConfigIsDefault)(config) && requestFlowSettings !== null && (0, import_reader_request_flow_config.readerRequestFlowSettingsAreDefault)(requestFlowSettings) && businessRequestSettings !== null && (0, import_reader_business_request_config.readerBusinessRequestSettingsAreDefault)(businessRequestSettings) && !this.#hostTopicPreheatDraft && preheatPostCount === import_reader_preferences_schema.HOST_TOPIC_PREHEAT_POST_COUNT_DEFAULT && !this.#suspendHostTurnstileDraft;
 	    const status = config === null || requestFlowSettings === null || businessRequestSettings === null || preheatPostCount === null ? "部分数值无效；不会保存，也不会改变当前运行时。" : changed > 0 ? `${changed} 项目标值等待统一保存；保存后当前排队请求与后续请求立即采用，设备、车道和全站许可仍可收紧。` : `当前目标：正文每批不超过 ${config.pageSize} 楼，后台请求空闲单飞${config.requestMaxConcurrent >= 2 ? "，总预算允许时可见缺口可用第 2 正文槽" : "，总预算仅 1 槽"}；树状最多 ${Math.min(
 	      requestFlowSettings.nestedRepliesMaxConcurrent,
 	      config.requestMaxConcurrent
-	    )} 路，共享总并发目标 ${config.requestMaxConcurrent} 路，窗口预算 ${config.requestRateTarget}%；后台空闲 ${requestFlowSettings.backgroundIdleIntervalMs} ms / 最长让路 ${requestFlowSettings.backgroundMaxDeferMs} ms，队列窗口 ${requestFlowSettings.queuePrefetchShortLimit}/${requestFlowSettings.queuePrefetchLongLimit}；已读队列 ${config.readStateRequestsPerMinute} RPM / ${config.readStateTimingsPerMinute} TPM，宿主列表预热${this.#hostTopicPreheatDraft ? `开启（每个 Topic 最多 ${preheatPostCount} 层、${requestFlowSettings.hostPreheatMaxConcurrent} 路）` : "关闭"}；四类业务请求参数均由中央 Scheduler 热应用。设备与网络可下调；其他 owner 可延后或停止请求。生效批次与 DOM 见性能记录，请求实际值见请求记录。`;
+	    )} 路，共享总并发目标 ${config.requestMaxConcurrent} 路，窗口预算 ${config.requestRateTarget}%；后台空闲 ${requestFlowSettings.backgroundIdleIntervalMs} ms / 最长让路 ${requestFlowSettings.backgroundMaxDeferMs} ms，队列窗口 ${requestFlowSettings.queuePrefetchShortLimit}/${requestFlowSettings.queuePrefetchLongLimit}，自动流量固定跨标签 1 路 / 4 次每 10 秒 / 24 次每分钟；已读队列 ${config.readStateRequestsPerMinute} RPM / ${config.readStateTimingsPerMinute} TPM，宿主列表预热${this.#hostTopicPreheatDraft ? `开启（每个 Topic 最多 ${preheatPostCount} 层、${requestFlowSettings.hostPreheatMaxConcurrent} 路）` : "关闭"}；四类业务请求参数均由中央 Scheduler 热应用。设备与网络可下调；其他 owner 可延后或停止请求。生效批次与 DOM 见性能记录，请求实际值见请求记录。`;
 	    this.#status.textContent = risky ? `${status} 风险提示：高于默认值的负载目标可能增加卡顿或 429；不确定时请恢复默认。` : status, this.#status.classList.toggle("is-risk", risky);
 	  }
 	}
-}, "b35580673b8dc410fd7b366daaae8f61d9e46432dddbc95fb5fc7e437a63b22b");
+}, "d2bddcba76c103cf54512e1c847213078e9981819ea37bd7bc65765068c7e9e8");
 
 /* Source: lite/src/settings/reader-reading-settings-form.ts */
 runtime.register("src/settings/reader-reading-settings-form.js", function(module, exports, require) {
@@ -27430,6 +27832,8 @@ runtime.register("src/settings/reader-settings-field-interaction.js", function(m
 	  #hueValue;
 	  #saturationValue;
 	  #brightnessValue;
+	  #rangeEntries = /* @__PURE__ */ new Map();
+	  #rangeByInput = /* @__PURE__ */ new WeakMap();
 	  #requestFrame;
 	  #cancelFrame;
 	  #activeColorInput = null;
@@ -27452,10 +27856,28 @@ runtime.register("src/settings/reader-settings-field-interaction.js", function(m
 	    });
 	    for (const type of ["pointerup", "pointercancel", "lostpointercapture"])
 	      this.scope.listen(this.#popover, type, () => this.#stopRangeDrag());
-	    this.scope.listen(this.#popover, "input", (event) => {
-	      const range = (0, import_event_target.eventElement)(event)?.closest('input[type="range"]');
-	      range && this.#popover.contains(range) && this.#syncRange(range);
-	    }), this.scope.listen(this.#popover, "click", (event) => {
+	    const onRangeInput = (event) => {
+	      const target = (0, import_event_target.eventElement)(event), numeric = target?.closest(
+	        "input[data-settings-range-input]"
+	      ) ?? null;
+	      if (numeric) {
+	        this.#applyRangeInput(numeric);
+	        return;
+	      }
+	      const range = target?.closest('input[type="range"]');
+	      range && this.#syncRange(range);
+	    }, onRangeChange = (event) => {
+	      const numeric = (0, import_event_target.eventElement)(event)?.closest(
+	        "input[data-settings-range-input]"
+	      ) ?? null;
+	      if (numeric && !this.#applyRangeInput(numeric)) {
+	        const range = this.#rangeByInput.get(numeric);
+	        range && (numeric.value = range.value);
+	      }
+	    };
+	    for (const host of [this.#popover, this.#picker])
+	      this.scope.listen(host, "input", onRangeInput), this.scope.listen(host, "change", onRangeChange);
+	    this.scope.listen(this.#popover, "click", (event) => {
 	      const color = (0, import_event_target.eventElement)(event)?.closest('input[type="color"]');
 	      !color || !this.#popover.contains(color) || color.disabled || (event.preventDefault(), this.openColorPicker(color));
 	    }), this.scope.listen(this.#document, "pointerdown", (event) => {
@@ -27465,7 +27887,10 @@ runtime.register("src/settings/reader-settings-field-interaction.js", function(m
 	    }), this.scope.listen(this.#picker, "click", (event) => {
 	      event.stopPropagation();
 	    }), this.#bindPicker(), this.scope.add(() => {
-	      this.close(), this.#picker.remove();
+	      this.close();
+	      for (const entry of this.#rangeEntries.values())
+	        entry.source?.classList.remove("ldp-setting-range-source-value"), entry.root.remove();
+	      this.#rangeEntries.clear(), this.#picker.remove();
 	    }), this.sync();
 	  }
 	  get picker() {
@@ -27475,7 +27900,12 @@ runtime.register("src/settings/reader-settings-field-interaction.js", function(m
 	    return (0, import_event_target.eventPathIncludes)(event, this.#picker);
 	  }
 	  sync(root = this.#popover) {
+	    for (const [range, entry] of this.#rangeEntries)
+	      range.isConnected && (this.#popover.contains(range) || this.#picker.contains(range)) || (entry.source?.classList.remove("ldp-setting-range-source-value"), entry.root.remove(), this.#rangeEntries.delete(range));
 	    for (const range of root.querySelectorAll(
+	      'input[type="range"]'
+	    )) this.#syncRange(range);
+	    for (const range of this.#picker.querySelectorAll(
 	      'input[type="range"]'
 	    )) this.#syncRange(range);
 	    for (const color of root.querySelectorAll(
@@ -27774,6 +28204,49 @@ runtime.register("src/settings/reader-settings-field-interaction.js", function(m
 	  }
 	  #syncRange(input) {
 	    input.style.setProperty("--ldp-range-progress", `${rangeProgress(input)}%`);
+	    const entry = this.#rangeEntry(input);
+	    entry.input.min = input.min, entry.input.max = input.max, entry.input.step = input.step || "1", entry.input.inputMode = Number(entry.input.step) % 1 === 0 ? "numeric" : "decimal", entry.input.disabled = input.disabled, entry.input.value = input.value;
+	    const unit = String(
+	      entry.source?.textContent || entry.source?.value || ""
+	    ).trim().replace(
+	      /^\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*/,
+	      ""
+	    );
+	    entry.unit.textContent = unit, entry.unit.hidden = !unit;
+	  }
+	  #rangeEntry(range) {
+	    const current = this.#rangeEntries.get(range);
+	    if (current) return current;
+	    const sourceCandidate = range.nextElementSibling, source = sourceCandidate && (sourceCandidate.tagName === "OUTPUT" || (sourceCandidate.getAttribute("class") ?? "").includes("value")) ? sourceCandidate : null, root = (0, import_reader_settings_dom.settingsElement)(
+	      this.#document,
+	      "span",
+	      "ldp-setting-range-entry"
+	    ), input = (0, import_reader_settings_dom.settingsElement)(
+	      this.#document,
+	      "input",
+	      "ldp-setting-range-input"
+	    );
+	    input.type = "number", input.autocomplete = "off", input.dataset.settingsRangeInput = "true", input.setAttribute(
+	      "aria-label",
+	      `${range.getAttribute("aria-label") || "范围"}数值`
+	    );
+	    const unit = (0, import_reader_settings_dom.settingsElement)(
+	      this.#document,
+	      "span",
+	      "ldp-setting-range-unit"
+	    );
+	    unit.setAttribute("aria-hidden", "true"), root.append(input, unit), range.insertAdjacentElement("afterend", root), source?.classList.add("ldp-setting-range-source-value");
+	    const entry = Object.freeze({ root, input, unit, source });
+	    return this.#rangeEntries.set(range, entry), this.#rangeByInput.set(input, range), entry;
+	  }
+	  #applyRangeInput(input) {
+	    const range = this.#rangeByInput.get(input);
+	    if (!range || range.disabled || input.disabled) return !1;
+	    const raw = input.value.trim(), value = Number(raw), minimum = Number(range.min), maximum = Number(range.max), step = Number(range.step) || 1, stepBase = Number.isFinite(minimum) ? minimum : 0, stepRatio = (value - stepBase) / step;
+	    if (!raw || !Number.isFinite(value) || Number.isFinite(minimum) && value < minimum || Number.isFinite(maximum) && value > maximum || Math.abs(stepRatio - Math.round(stepRatio)) > 1e-7) return !1;
+	    range.value = raw;
+	    const EventConstructor = this.#document.defaultView?.Event ?? Event;
+	    return range.dispatchEvent(new EventConstructor("input", { bubbles: !0 })), !0;
 	  }
 	  #syncPicker() {
 	    if (!this.#activeColorInput) return;
@@ -27816,6 +28289,8 @@ runtime.register("src/settings/reader-settings-field-interaction.js", function(m
 	      "--ldp-color-slider-thumb",
 	      colorHsvToHex({ h, s, v })
 	    );
+	    for (const input of [this.#hue, this.#saturation, this.#brightness])
+	      this.#syncRange(input);
 	  }
 	  #syncPresets(color) {
 	    for (const button of this.#presetButtons)
@@ -27853,7 +28328,7 @@ runtime.register("src/settings/reader-settings-field-interaction.js", function(m
 	    this.#picker.style.left = `${Math.round(left - bounds.left)}px`, this.#picker.style.top = `${Math.round(top - bounds.top)}px`;
 	  }
 	}
-}, "1528f81bfe0a4fe0625f817bbd8b78bee47388d437f5b26b63fa90795d66f87e");
+}, "7bb319e4cf733f217c83559f627af58b2b5745981838adacebedd2cd9875fa06");
 
 /* Source: lite/src/settings/reader-settings-help-surface.ts */
 runtime.register("src/settings/reader-settings-help-surface.js", function(module, exports, require) {
@@ -32658,7 +33133,9 @@ runtime.register("src/user/reader-settings-user-view.js", function(module, expor
 	        snapshot.phase === "error" ? "ldp-user-info-error" : "ldp-user-info-loading",
 	        snapshot.phase === "error" ? "用户资料加载失败" : "正在加载用户资料"
 	      )), view;
-	    const profile = snapshot.profile, card = (0, import_html_element.htmlElement)(this.#document, "section", "ldp-user-info-profile");
+	    const profile = snapshot.profile, communityScoreValue = snapshot.communityScore.phase === "ready" ? metric(snapshot.communityScore.metrics.score) || "暂无数据" : snapshot.communityScore.phase === "loading" ? "获取中…" : snapshot.communityScore.phase === "error" ? [401, 403].includes(
+	      Number(snapshot.communityScore.errorStatus)
+	    ) ? "请先登录" : snapshot.communityScore.errorStatus !== null && snapshot.communityScore.errorStatus !== void 0 ? "加载失败" : "请登录后重试" : "登录后查看", card = (0, import_html_element.htmlElement)(this.#document, "section", "ldp-user-info-profile");
 	    card.setAttribute("aria-label", "当前用户资料");
 	    const cover = (0, import_html_element.htmlElement)(this.#document, "div", "ldp-user-info-cover"), background = profile.media.find((item) => item.kind === "card-background" || item.kind === "profile-background");
 	    if (background) {
@@ -32805,7 +33282,7 @@ runtime.register("src/user/reader-settings-user-view.js", function(module, expor
 	        key: "community-score",
 	        group: "social",
 	        label: "社区分数",
-	        value: snapshot.communityScore.phase === "ready" ? metric(snapshot.communityScore.metrics.score) : "",
+	        value: communityScoreValue,
 	        accent: !0,
 	        glow: !0
 	      }
@@ -33331,7 +33808,7 @@ runtime.register("src/user/reader-settings-user-view.js", function(module, expor
 	    return card.append(stats, details, actions), view.append(card), view;
 	  }
 	}
-}, "1962e927b4aa195cded8edb03386a3f27d130533865f777f2e30c7feb3f433df");
+}, "ac5c09fddff349fe039d3fd35342db23b1f92b88f2f4fd999686a7139e557ef5");
 
 /* Source: lite/src/user/reader-user-badge-icon.ts */
 runtime.register("src/user/reader-user-badge-icon.js", function(module, exports, require) {
@@ -35356,7 +35833,8 @@ runtime.register("src/user/reader-user-domain-session.js", function(module, expo
 	      return entry[slot] = Object.freeze({
 	        ...entry[slot],
 	        phase: "error",
-	        accountUsername: username
+	        accountUsername: username,
+	        errorStatus: null
 	      }), entry.revision += 1, this.#emit(username, entry), this.#snapshot(username, entry);
 	    const key = `${slot}:${username}`, active = this.#externalLoads.get(key);
 	    if (active)
@@ -35390,7 +35868,8 @@ runtime.register("src/user/reader-user-domain-session.js", function(module, expo
 	      ...entry[slot],
 	      phase: "loading",
 	      accountUsername: username,
-	      refreshing: !0
+	      refreshing: !0,
+	      errorStatus: null
 	    }), entry.revision += 1, this.#emit(username, entry), this.#startExternalRefresh(slot, port, username, entry, cacheEpoch, key);
 	  }
 	  #startExternalRefresh(slot, port, username, entry, cacheEpoch, key) {
@@ -35406,7 +35885,8 @@ runtime.register("src/user/reader-user-domain-session.js", function(module, expo
 	        if (cacheEpoch !== this.#cacheEpoch) return this.snapshot(username);
 	        entry[slot] = Object.freeze({
 	          ...snapshot,
-	          refreshing: !1
+	          refreshing: !1,
+	          errorStatus: null
 	        });
 	      } catch (cause) {
 	        if (cacheEpoch !== this.#cacheEpoch) return this.snapshot(username);
@@ -35416,7 +35896,8 @@ runtime.register("src/user/reader-user-domain-session.js", function(module, expo
 	        }) : Object.freeze({
 	          ...entry[slot],
 	          phase: "error",
-	          refreshing: !1
+	          refreshing: !1,
+	          errorStatus: status(cause)
 	        }), this.#onError(cause);
 	      }
 	      return this.scope.destroyed || (entry.revision += 1, this.#emit(username, entry)), this.#snapshot(username, entry);
@@ -35708,7 +36189,7 @@ runtime.register("src/user/reader-user-domain-session.js", function(module, expo
 	      for (const error of this.changes.emit(snapshot)) this.#onError(error);
 	  }
 	}
-}, "ae5bfff7b1655ef2d6baa02eb8ac3597aff6da50d2b936aad6a912436f256535");
+}, "0d2f3e35286a8d04ea113c283d5885422a01463dc51b06232f0bb5f1fbde2f21");
 
 /* Source: lite/src/user/reader-user-endorsement-adapter.ts */
 runtime.register("src/user/reader-user-endorsement-adapter.js", function(module, exports, require) {

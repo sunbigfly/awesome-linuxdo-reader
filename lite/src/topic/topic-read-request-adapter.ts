@@ -221,7 +221,9 @@ export class TopicReadRequestAdapter {
 	}
 
 	loadTopic<T>(options: TopicLoadOptions = {}): Promise<T> {
-		const descriptor = DiscourseNativeRequests.topic({
+		const descriptor = DiscourseNativeRequests[
+			options.background ? 'topicPrefetch' : 'topic'
+		]({
 			basePath: this.#basePath,
 			topicId: this.topicId,
 		});

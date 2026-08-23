@@ -638,7 +638,7 @@
     grid-template-columns: var(--ldp-home-logo-box-size) minmax(0, 1fr) auto;
     grid-template-rows:
       auto
-      var(--ldp-header-compact-row-height)
+      0
       var(--ldp-header-compact-row-height);
     align-items: center;
     gap: 0 5px;
@@ -705,7 +705,7 @@
     height: var(--ldp-header-compact-row-height);
     max-height: var(--ldp-header-compact-row-height);
     margin: 0;
-    padding-left: 3px;
+    padding-left: 0;
     contain: paint;
     overflow: hidden;
     grid-column: 2 / 3;
@@ -732,7 +732,7 @@
     --ldp-header-action-gap: 4px;
     position: absolute;
     z-index: 8;
-    top: var(--ldp-window-capsule-rail, 0px);
+    top: -3px;
     right: 8px;
     justify-self: end;
     gap: var(--ldp-header-action-gap);
@@ -795,9 +795,14 @@
   .ldp-reader-main,
   .ldp-topic-action-rail-visible .ldp-reader-main {
     --ldp-mobile-timeline-width: clamp(22px, 6cqi, 26px);
+    --ldp-mobile-content-gutter: var(--ldp-mobile-timeline-width);
     --ldp-thread-avatar-size: 22px;
     --ldp-thread-head-gap: 4px;
     --ldp-reply-line-hit-width: 10px;
+    --ldp-thread-body-offset: calc(
+      var(--ldp-thread-avatar-size) / 2 +
+      var(--ldp-reply-line-hit-width) / 2
+    );
     --ldp-reply-line-radius: 12px;
     grid-template-columns: minmax(0, 1fr);
   }
@@ -807,9 +812,14 @@
   }
 
   .ldp-body > * {
-    padding-right: calc(var(--ldp-mobile-timeline-width) + 1px);
-    padding-left: 4px;
+    padding-right: var(--ldp-mobile-timeline-width);
+    padding-left: var(--ldp-mobile-content-gutter);
     grid-column: 1;
+  }
+
+  .ldp-body > .ldp-topic-runtime {
+    padding-right: var(--ldp-mobile-timeline-width);
+    padding-left: var(--ldp-mobile-content-gutter);
   }
 
   .ldp-topic-action-rail-visible .ldp-body {
@@ -818,10 +828,8 @@
 
   .ldp-post,
   .ldp-virtual-root-list > .ldp-post {
-    --ldp-post-inline: 8px;
-    padding-right: calc(
-      var(--ldp-mobile-timeline-width) + 2px
-    );
+    --ldp-post-inline: 2px;
+    padding-right: 0;
     padding-left: var(--ldp-post-inline);
   }
 
@@ -831,6 +839,73 @@
     flex-wrap: wrap;
     gap: 5px 6px;
     padding-right: 16px;
+  }
+
+  .ldp-overlay:not([data-offline-reader])
+    .ldp-post-head > .ldp-user {
+    display: none;
+  }
+
+  .ldp-overlay:not([data-offline-reader])
+    .ldp-post-head > .ldp-post-identity-badges {
+    position: absolute;
+    z-index: 4;
+    top: -3px;
+    left: calc(var(--ldp-thread-avatar-size) - 7px);
+    display: inline-flex;
+    gap: 0;
+  }
+
+  .ldp-overlay:not([data-offline-reader])
+    .ldp-post-identity-badges > :is(.ldp-op,.ldp-me,.ldp-new-user-badge) {
+    width: 14px;
+    min-width: 14px;
+    height: 14px;
+    min-height: 14px;
+    justify-content: center;
+    margin-left: -5px;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--ldp-canvas);
+    border-radius: 50%;
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--ldp-ink) 18%, transparent);
+  }
+
+  .ldp-overlay:not([data-offline-reader])
+    .ldp-post-identity-badges > :first-child {
+    margin-left: 0;
+  }
+
+  .ldp-overlay:not([data-offline-reader])
+    .ldp-post-identity-badges .ldp-post-identity-label {
+    display: none;
+  }
+
+  .ldp-overlay:not([data-offline-reader])
+    .ldp-post-identity-badges .ldp-post-identity-compact-icon {
+    display: block;
+  }
+
+  .ldp-overlay:not([data-offline-reader])
+    .ldp-post-identity-badges .ldp-icon {
+    width: 8px;
+    height: 8px;
+    stroke-width: 2.4;
+  }
+
+  .ldp-overlay:not([data-offline-reader])
+    .ldp-post-head:has(> .ldp-post-identity-badges:not(:empty)) > .ldp-author {
+    margin-left: 2px;
+  }
+
+  .ldp-overlay:not([data-offline-reader])
+    .ldp-post-head:has(> .ldp-post-identity-badges > :nth-child(2)) > .ldp-author {
+    margin-left: 11px;
+  }
+
+  .ldp-overlay:not([data-offline-reader])
+    .ldp-post-head:has(> .ldp-post-identity-badges > :nth-child(3)) > .ldp-author {
+    margin-left: 20px;
   }
 
   .ldp-post-head > .ldp-post-read-state {
@@ -850,7 +925,7 @@
 
   .ldp-post-body > .ldp-content,
   .ldp-reply-list > .ldp-post > .ldp-post-body > .ldp-content {
-    margin-left: var(--ldp-thread-avatar-size);
+    margin-left: var(--ldp-thread-body-offset);
   }
 
   .ldp-post-body > :is(
@@ -884,8 +959,8 @@
     .ldp-btn,
     .ldp-reaction-add
   ) {
-    min-width: 28px;
-    height: 28px;
+    min-width: 32px;
+    height: 32px;
   }
 
   .ldp-post:not(.ldp-topic-action-rail-post)
@@ -902,7 +977,12 @@
   }
 
   .ldp-post:not(.ldp-topic-action-rail-post) .ldp-reactions {
-    width: 100%;
+    position: relative;
+    width: calc(
+      100%
+      - var(--ldp-thread-body-offset)
+      - var(--ldp-thread-body-offset)
+    );
     min-height: 28px;
     flex-wrap: nowrap;
     gap: 0;
@@ -919,22 +999,105 @@
     white-space: nowrap;
   }
 
+  .ldp-post:not(.ldp-topic-action-rail-post)
+    .ldp-reaction-picker-anchor,
+  .ldp-topic-action-rail .ldp-reaction-picker-anchor {
+    position: static;
+  }
+
   .ldp-post:not(.ldp-topic-action-rail-post) .ldp-reaction-picker {
-    width: fit-content;
-    max-width: min(320px, calc(100cqi - 24px));
+    left: 50%;
+    width: max-content;
+    max-width: min(320px, calc(100% - 8px));
+    flex-wrap: nowrap;
     gap: 2px;
-    padding: 3px 5px;
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--secondary, #fff) 98%, transparent);
+    padding: 2px 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border: 1px solid color-mix(in srgb, var(--ldp-canvas) 72%, var(--ldp-border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ldp-canvas) 72%, transparent);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 58%),
+      0 7px 20px rgb(0 0 0 / 14%);
+    backdrop-filter: blur(18px) saturate(150%);
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
   }
 
   .ldp-post:not(.ldp-topic-action-rail-post)
-    .ldp-reaction-picker > .ldp-reaction-chip {
-    width: 20px;
-    min-width: 20px;
-    height: 22px;
-    gap: 0;
-    padding: 1px;
+    .ldp-reaction-picker::-webkit-scrollbar {
+    display: none;
+  }
+
+  :is(
+    .ldp-post:not(.ldp-topic-action-rail-post),
+    .ldp-topic-action-rail
+  ) .ldp-reaction-picker .ldp-reaction-chip {
+    width: auto;
+    min-width: 18px;
+    height: 100%;
+    flex-direction: column;
+    gap: 1px;
+    padding: 3px;
+  }
+
+  :is(
+    .ldp-post:not(.ldp-topic-action-rail-post),
+    .ldp-topic-action-rail
+  ) .ldp-reaction-picker .ldp-reaction-chip > b {
+    display: block;
+    min-height: 9px;
+    color: inherit;
+    font-size: var(--ldp-font-micro);
+    font-weight: inherit;
+    line-height: 1;
+    opacity: .72;
+  }
+
+  :is(
+    .ldp-post:not(.ldp-topic-action-rail-post),
+    .ldp-topic-action-rail
+  ) .ldp-reaction-picker .ldp-reaction-chip > b:empty {
+    display: none;
+  }
+
+  :is(
+    .ldp-post:not(.ldp-topic-action-rail-post),
+    .ldp-topic-action-rail
+  ) .ldp-reaction-picker .ldp-reaction-chip > span {
+    display: inline-flex;
+  }
+
+  :is(
+    .ldp-post:not(.ldp-topic-action-rail-post),
+    .ldp-topic-action-rail
+  ) .ldp-reaction-picker .ldp-reaction-chip.on > b {
+    color: var(--ldp-accent);
+    font-weight: 700;
+    opacity: 1;
+  }
+
+  :is(
+    .ldp-post:not(.ldp-topic-action-rail-post),
+    .ldp-topic-action-rail
+  ) .ldp-reaction-picker img.emoji {
+    width: 18px;
+    height: 18px;
+    transition: transform var(--ldp-motion-fast) var(--ldp-ease-out);
+  }
+
+  :is(
+    .ldp-post:not(.ldp-topic-action-rail-post),
+    .ldp-topic-action-rail
+  ) .ldp-reaction-picker .ldp-reaction-chip:is(
+    :hover,
+    :focus-visible
+  ) img.emoji {
+    transform: scale(1.2);
   }
 
   .ldp-post:not(.ldp-topic-action-rail-post) .ldp-actions {
@@ -1006,9 +1169,9 @@
   }
 
   .ldp-topic-timeline-track::before {
-    right: 4px;
+    right: auto;
     bottom: 16px;
-    left: auto;
+    left: 4px;
   }
 
   .ldp-topic-timeline-track {
@@ -1057,15 +1220,15 @@
   }
 
   .ldp-topic-timeline-count {
-    right: 4px;
+    right: auto;
     z-index: 3;
-    left: auto;
+    left: 4px;
     display: block;
     min-width: 15px;
     padding: 2px;
     line-height: 1;
     text-align: center;
-    transform: translate(50%, -50%);
+    transform: translate(-50%, -50%);
   }
 
   .ldp-topic-timeline-count > :not(.ldp-topic-timeline-current) {
@@ -1274,11 +1437,30 @@
     top: auto;
     bottom: calc(100% + 6px);
     left: 50%;
+    width: max-content;
+    max-width: calc(100cqi - 24px);
     height: auto;
     min-height: var(--ldp-control-height);
-    padding: 4px 6px;
-    border-radius: var(--ldp-radius-sm);
+    flex-wrap: nowrap;
+    padding: 2px 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border: 1px solid color-mix(in srgb, var(--ldp-canvas) 72%, var(--ldp-border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ldp-canvas) 72%, transparent);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 58%),
+      0 7px 20px rgb(0 0 0 / 14%);
+    backdrop-filter: blur(18px) saturate(150%);
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
     transform: translateX(-50%);
+    white-space: nowrap;
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+  }
+
+  .ldp-topic-action-rail .ldp-reaction-picker::-webkit-scrollbar {
+    display: none;
   }
 
   .ldp-topic-action-rail-toggle {
@@ -2625,8 +2807,14 @@
   html.mobile-view:not(.ldp-reader-workspace)
   .topic-list-item > .topic-list-data {
     --ldp-host-mobile-topic-avatar-size: 32px;
-    --ldp-host-mobile-topic-label-size: 9.6px;
-    --ldp-host-mobile-topic-time-size: var(--font-down-1, 14px);
+    --ldp-host-mobile-topic-label-size: var(
+      --ldp-host-mobile-topic-label-size-runtime,
+      9.6px
+    );
+    --ldp-host-mobile-topic-time-size: var(
+      --ldp-host-mobile-topic-time-size-runtime,
+      var(--font-down-1, 14px)
+    );
     --ldp-host-mobile-topic-label-background: var(
       --ldp-surface-muted,
       var(--primary-very-low, #f5f5f5)
@@ -2702,7 +2890,14 @@
     display: inline !important;
     width: auto;
     max-width: 100%;
-    font-size: clamp(14px, 3.85vw, 16px);
+    font-size: clamp(
+      12px,
+      var(
+        --ldp-host-mobile-topic-title-size-runtime,
+        var(--ldp-host-topic-title-size, 3.85vw)
+      ),
+      22px
+    );
     font-weight: 400 !important;
     line-height: 1.3;
     overflow-wrap: anywhere;
@@ -2774,9 +2969,10 @@
     bottom: 7px;
     left: calc(var(--ldp-host-mobile-topic-avatar-size) + 15px);
     display: block;
+    width: auto;
     margin: 0;
     overflow: hidden;
-    font-size: 10px;
+    font-size: var(--ldp-host-mobile-topic-meta-size-runtime, 10px);
     line-height: 1.3;
     text-overflow: ellipsis;
     white-space: nowrap;

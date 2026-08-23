@@ -163,6 +163,7 @@ export interface ReaderTopicActionRailOptions<TPost> {
 	readonly actions: ReaderTopicActionRailPostFeature<TPost>;
 	readonly preferences: ReaderTopicActionRailPreferencesPort;
 	readonly jumpToTop: () => void | Promise<void>;
+	readonly onlyOpToggle?: HTMLButtonElement;
 	readonly openTopicSummary?: () => void | Promise<void>;
 	readonly downloadCurrentTopic?: () => void | Promise<void>;
 	readonly openChronicle?: () => void | Promise<void>;
@@ -256,6 +257,8 @@ export class ReaderTopicActionRail<TPost> {
 	readonly #actions: ReaderTopicActionRailPostFeature<TPost>;
 	readonly #preferences: ReaderTopicActionRailPreferencesPort;
 	readonly #jumpToTop: () => void | Promise<void>;
+	readonly #onlyOpToggle: HTMLButtonElement | null;
+	readonly #onlyOpHome: ParentNode | null;
 	readonly #openTopicSummary: (() => void | Promise<void>) | null;
 	readonly #downloadCurrentTopic: (() => void | Promise<void>) | null;
 	readonly #openChronicle: (() => void | Promise<void>) | null;
@@ -293,6 +296,8 @@ export class ReaderTopicActionRail<TPost> {
 		this.#actions = options.actions;
 		this.#preferences = options.preferences;
 		this.#jumpToTop = options.jumpToTop;
+		this.#onlyOpToggle = options.onlyOpToggle ?? null;
+		this.#onlyOpHome = this.#onlyOpToggle?.parentNode ?? null;
 		this.#openTopicSummary = options.openTopicSummary ?? null;
 		this.#downloadCurrentTopic = options.downloadCurrentTopic ?? null;
 		this.#openChronicle = options.openChronicle ?? null;
@@ -337,7 +342,7 @@ export class ReaderTopicActionRail<TPost> {
 				'sparkles',
 			)
 			: null;
-		this.#summaryBookmarkGroup = this.summaryButton
+		this.#summaryBookmarkGroup = this.summaryButton || this.#onlyOpToggle
 			? element(
 				this.#document,
 				'div',
@@ -347,10 +352,13 @@ export class ReaderTopicActionRail<TPost> {
 		this.#summaryBookmarkGroup?.setAttribute('role', 'group');
 		this.#summaryBookmarkGroup?.setAttribute(
 			'aria-label',
-			'主题收藏与总结',
+			'主题收藏、AI 总结与只看楼主',
 		);
 		if (this.summaryButton) {
 			this.#summaryBookmarkGroup?.append(this.summaryButton);
+		}
+		if (this.#onlyOpToggle) {
+			this.#summaryBookmarkGroup?.append(this.#onlyOpToggle);
 		}
 		this.toggleButton = this.#button(
 			'ldp-topic-action-rail-toggle',
@@ -515,6 +523,9 @@ export class ReaderTopicActionRail<TPost> {
 			this.#frame = 0;
 			this.#view?.destroy();
 			this.#view = null;
+			if (this.#onlyOpToggle && this.#onlyOpHome) {
+				this.#onlyOpHome.append(this.#onlyOpToggle);
+			}
 			this.host.remove();
 			this.#shellRoot.classList.remove(
 				'ldp-topic-action-rail-visible',
@@ -605,7 +616,8 @@ export class ReaderTopicActionRail<TPost> {
 	#mountSummaryBookmarkGroup(view: PostView): void {
 		const group = this.#summaryBookmarkGroup;
 		const summary = this.summaryButton;
-		if (!group || !summary) return;
+		const onlyOp = this.#onlyOpToggle;
+		if (!group) return;
 		const topicFooter = view.slots.topicFooter;
 		if (
 			group.parentElement !== view.slots.root ||
@@ -615,7 +627,11 @@ export class ReaderTopicActionRail<TPost> {
 			 * footer 的按钮仍由 ReaderPostActionFeature 唯一维护；rail 只移动整个
 			 * 命名槽位，使收藏与总结共享同一组合容器，不接管按钮投影。
 			 */
-			group.replaceChildren(topicFooter, summary);
+			group.replaceChildren(
+				topicFooter,
+				...(summary ? [summary] : []),
+				...(onlyOp ? [onlyOp] : []),
+			);
 			view.slots.root.append(group);
 		}
 	}
@@ -696,6 +712,7 @@ export class ReaderTopicActionRail<TPost> {
 		);
 		if (this.#downloadGroup) this.#downloadGroup.hidden = !this.#expanded;
 		if (this.summaryButton) this.summaryButton.hidden = !this.#expanded;
+		if (this.#onlyOpToggle) this.#onlyOpToggle.hidden = !this.#expanded;
 		if (this.downloadButton) this.downloadButton.hidden = !this.#expanded;
 		if (this.chronicleButton) {
 			this.chronicleButton.hidden = !this.#expanded;

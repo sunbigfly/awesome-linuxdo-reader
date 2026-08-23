@@ -110,8 +110,8 @@ export interface ReaderTopicCoreBundleOptions<
 	readonly basePath?: string;
 	readonly refreshCachedInBackground?: boolean;
 	readonly readCoordination?: ReadStateCoordinationPort;
-	readonly readTimeMs?: number;
 	readonly readBatchSize?: number;
+	readonly readMinimumDwellMs?: number;
 	readonly readRetryDelayMs?: number;
 	readonly readMaxAutomaticRetries?: number;
 	readonly livePostDelayMs?: number;
@@ -301,7 +301,6 @@ export function createReaderTopicCoreBundle<
 		topicId,
 		signal: context.signal,
 		...(options.basePath === undefined ? {} : { basePath: options.basePath }),
-		...(options.readTimeMs === undefined ? {} : { readTimeMs: options.readTimeMs }),
 	});
 	const read = new ReadStateController({
 		authScope: options.authScope,
@@ -313,6 +312,9 @@ export function createReaderTopicCoreBundle<
 		...(options.readBatchSize === undefined
 			? {}
 			: { batchSize: options.readBatchSize }),
+		...(options.readMinimumDwellMs === undefined
+			? {}
+			: { minimumDwellMs: options.readMinimumDwellMs }),
 		...(options.readRetryDelayMs === undefined
 			? {}
 			: { retryDelayMs: options.readRetryDelayMs }),

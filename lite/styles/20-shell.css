@@ -106,6 +106,11 @@
   align-items: center;
 }
 
+/* 帖子详情只在 #1 评论分隔线前展示；Shell 内只保留稳定 parking。 */
+.ldp-title-subline > .ldp-topic-details.ldp-meta-row {
+  display: none;
+}
+
 .ldp-meta {
   flex-wrap: wrap;
   color: var(--ldp-ink-muted);
@@ -324,6 +329,29 @@
 
 .ldp-title-topic-row:not(.has-overflow) .ldp-title-topic-scroll-hint {
   display: none;
+}
+
+/* 只有实际可向左滚动时才给左箭头留位，首屏类别直接贴齐内容起点。 */
+.ldp-title-topic-row.has-overflow:not(.can-scroll-left) {
+  grid-template-columns: minmax(0, 1fr) 14px;
+}
+
+.ldp-title-topic-row.has-overflow:not(.can-scroll-left)
+  .ldp-title-topic-scroll-hint-left {
+  display: none;
+}
+
+.ldp-title-topic-row.has-overflow:not(.can-scroll-right) {
+  grid-template-columns: 14px minmax(0, 1fr);
+}
+
+.ldp-title-topic-row.has-overflow:not(.can-scroll-right)
+  .ldp-title-topic-scroll-hint-right {
+  display: none;
+}
+
+.ldp-title-topic-row.has-overflow:not(.can-scroll-left):not(.can-scroll-right) {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .ldp-title-topic-scroller {
@@ -731,6 +759,19 @@
     align-items: flex-end;
     margin-top: 0;
     overflow: visible;
+  }
+
+  /* 嵌入与全屏复用移动端的两行冻结 Header：标题 / 类别与操作。 */
+  :is(.ldp-reader-embedded, .ldp-fullpage) .ldp-header {
+    grid-template-rows: auto 0 auto;
+  }
+
+  :is(.ldp-reader-embedded, .ldp-fullpage) .ldp-head-btns {
+    height: calc(
+      var(--ldp-head-button-size) * var(--ldp-reader-display-scale, 1)
+    );
+    align-self: center;
+    align-items: center;
   }
 
   .ldp-title-actions {
@@ -3032,6 +3073,7 @@
   order: 40;
 }
 .ldp-topic-action-rail-summary { order: 51; }
+.ldp-topic-action-rail .ldp-only-op-toggle { order: 52; }
 .ldp-topic-action-rail-toggle { order: 100; }
 
 .ldp-topic-action-rail:not(.is-expanded) > .ldp-topic-action-rail-toggle {

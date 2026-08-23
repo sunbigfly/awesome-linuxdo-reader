@@ -482,7 +482,11 @@ export function createReaderShellTemplate(
 	topicEditTrigger.setAttribute('aria-expanded', 'false');
 	title.append(titleJump, topicEditTrigger);
 	const titleSubline = element(document, 'div', 'ldp-title-subline');
-	const metaRow = element(document, 'div', 'ldp-meta-row');
+	const metaRow = element(
+		document,
+		'div',
+		'ldp-meta-row ldp-topic-details',
+	);
 	const meta = element(document, 'div', 'ldp-meta');
 	const metaStats = element(document, 'span', 'ldp-meta-stats');
 	metaStats.textContent = '正在读取主题信息…';
@@ -506,7 +510,15 @@ export function createReaderShellTemplate(
 	onlyOpToggle.setAttribute('aria-label', '只看楼主');
 	onlyOpToggle.setAttribute('aria-pressed', 'false');
 	onlyOpToggle.append(icon(options, 'user-round'));
-	metaOwner.append(metaOwnerCopy, onlyOpToggle);
+	metaOwner.append(metaOwnerCopy);
+	/*
+	 * 只看楼主的唯一按钮由 Topic Header 更新状态，但视觉入口属于主帖收纳箱。
+	 * 稳定 parking 保证 Topic 切换/rail 销毁后同一节点仍可被下一次装配复用。
+	 */
+	const topicControlsParking = element(document, 'span', '');
+	topicControlsParking.hidden = true;
+	topicControlsParking.dataset.ldpTopicControlsParking = '';
+	topicControlsParking.append(onlyOpToggle);
 	const onlyOpProgress = element(
 		document,
 		'span',
@@ -1018,6 +1030,7 @@ export function createReaderShellTemplate(
 		mobileReaderBack,
 		home,
 		titleWrap,
+		topicControlsParking,
 		headerActions,
 		titleActions,
 	);

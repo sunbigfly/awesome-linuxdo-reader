@@ -187,6 +187,7 @@ const bundle = createReaderTopicCoreBundle<TestTopic, TestPost>({
 	responses,
 	authScope: 'account:test',
 	pageSize: 20,
+	readMinimumDwellMs: 0,
 	liveTopicDelayMs: 0,
 	caches: {
 		topic: { freshForMs: 1_000, retainForMs: 60_000, persist: true },

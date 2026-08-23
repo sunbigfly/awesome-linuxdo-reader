@@ -25,6 +25,8 @@ export interface ReaderTopicCommentsSessionPort<TTopic, TPost> {
 export interface ReaderTopicCommentsHeaderOptions<TTopic, TPost> {
 	readonly document: Document;
 	readonly topicId: number;
+	readonly topicRoot: HTMLElement;
+	readonly topicDetails: HTMLElement;
 	readonly session: ReaderTopicCommentsSessionPort<TTopic, TPost>;
 	readonly presence: DiscoursePresencePort;
 	readonly presentation: DiscourseNativeTopicPresentationPort;
@@ -68,6 +70,10 @@ export class ReaderTopicCommentsHeader<
 > {
 	readonly scope: LifecycleScope;
 	readonly #document: Document;
+	readonly #topicRoot: HTMLElement;
+	readonly #topicDetails: HTMLElement;
+	readonly #topicDetailsHome: Node & ParentNode;
+	readonly #topicDetailsNext: ChildNode | null;
 	readonly #session: ReaderTopicCommentsSessionPort<TTopic, TPost>;
 	readonly #presentation: DiscourseNativeTopicPresentationPort;
 	readonly #currentUsername: string;
@@ -79,6 +85,14 @@ export class ReaderTopicCommentsHeader<
 
 	constructor(options: ReaderTopicCommentsHeaderOptions<TTopic, TPost>) {
 		this.#document = options.document;
+		this.#topicRoot = options.topicRoot;
+		this.#topicDetails = options.topicDetails;
+		const topicDetailsHome = options.topicDetails.parentNode;
+		if (!topicDetailsHome) {
+			throw new Error('帖子详情必须具有稳定 Shell parking');
+		}
+		this.#topicDetailsHome = topicDetailsHome as Node & ParentNode;
+		this.#topicDetailsNext = options.topicDetails.nextSibling;
 		this.#session = options.session;
 		this.#presentation = options.presentation;
 		this.#currentUsername = String(options.currentUsername ?? '').trim();
@@ -97,6 +111,10 @@ export class ReaderTopicCommentsHeader<
 			this.#onError,
 		));
 		this.scope.add(() => {
+			this.#topicDetailsHome.insertBefore(
+				this.#topicDetails,
+				this.#topicDetailsNext,
+			);
 			this.#count = null;
 			this.#presence = null;
 		});
@@ -120,6 +138,12 @@ export class ReaderTopicCommentsHeader<
 		);
 		this.#refreshCount();
 		this.#renderPresence();
+		this.#mountTopicDetails(root);
+	}
+
+	attachRoot(root: HTMLElement, postNumber: number): void {
+		if (postNumber !== 1) return;
+		this.#mountTopicDetails(root);
 	}
 
 	destroy(): void {
@@ -146,6 +170,15 @@ export class ReaderTopicCommentsHeader<
 		presence.setAttribute('aria-live', 'polite');
 		header.append(label, count, presence);
 		return header;
+	}
+
+	#mountTopicDetails(root: HTMLElement): void {
+		if (!this.#topicRoot.contains(root)) return;
+		const header = root.querySelector<HTMLElement>(
+			':scope > .ldp-comments-header',
+		);
+		if (!header) return;
+		header.before(this.#topicDetails);
 	}
 
 	#refreshCount(): void {

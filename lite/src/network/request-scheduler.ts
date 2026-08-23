@@ -159,6 +159,10 @@ export interface RequestStartPermit {
 export interface RequestStartGateInput {
 	readonly key: string;
 	readonly priority: RequestPriority;
+	/** 保留 scheduler 首次入队时间，让跨标签闸门能丢弃过期自动意图。 */
+	readonly queuedAt?: number;
+	/** 只有可丢弃的 prefetch/background 才属于自动流量；已读确认不在此列。 */
+	readonly droppable?: boolean;
 	/** Shared permit 是全局账本，车道只供本地 scheduler 参考。 */
 	readonly lane?: RequestLane;
 	readonly rateLimitRoute?: string;
@@ -348,7 +352,9 @@ export class RequestScheduler {
 		}
 		this.#tasksByKey.set(key, task as RequestTask<unknown>);
 		this.#queue.push(task as RequestTask<unknown>);
-		this.#preemptDroppablePermit(task as RequestTask<unknown>);
+		if (!this.#preemptDroppablePermit(task as RequestTask<unknown>)) {
+			this.#yieldLowerPriorityPermit(task as RequestTask<unknown>);
+		}
 		this.#queuePump();
 		return promise;
 	}
@@ -490,6 +496,8 @@ export class RequestScheduler {
 				.then(() => this.#startGate!.acquire({
 					key: task.key,
 					priority: task.priority,
+					queuedAt: task.queuedAt,
+					droppable: task.droppable,
 					lane: task.lane,
 					...(task.rateLimitRoute
 						? { rateLimitRoute: task.rateLimitRoute }
@@ -625,6 +633,37 @@ export class RequestScheduler {
 			PRIORITY_WEIGHT[incoming.priority] >= PRIORITY_WEIGHT[waiting.priority]
 		) return false;
 		waiting.permitRestart = false;
+		controller.abort(new RequestControlError('cancelled'));
+		return true;
+	}
+
+	/**
+	 * 不可丢的后台确认可以暂退共享许可队首，但不能被可见请求取消。
+	 *
+	 * start gate 同一时刻只登记一个 intent；若 timings 等不可丢后台任务正在等
+	 * 宿主并发/固定窗口，后来到达的可见 Topic 必须先取号。后台任务保留原 Promise、
+	 * 首次 queuedAt 与 single-flight 身份，等可见请求启动后再用原优先级重新登记。
+	 */
+	#yieldLowerPriorityPermit(
+		incoming: Pick<
+			RequestTask<unknown>,
+			'priority' | 'lane' | 'business' | 'droppable'
+		>,
+	): boolean {
+		const waiting = this.#permitTask;
+		const controller = waiting?.controller;
+		if (
+			incoming.droppable ||
+			!waiting ||
+			waiting.droppable ||
+			waiting.state !== 'permit' ||
+			!controller ||
+			controller.signal.aborted ||
+			this.#activeCount >= this.#maxConcurrent ||
+			!this.#taskCanStart(incoming) ||
+			PRIORITY_WEIGHT[incoming.priority] >= PRIORITY_WEIGHT[waiting.priority]
+		) return false;
+		waiting.permitRestart = true;
 		controller.abort(new RequestControlError('cancelled'));
 		return true;
 	}

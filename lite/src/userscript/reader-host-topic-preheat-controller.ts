@@ -100,7 +100,7 @@ export interface ReaderHostTopicPreheatActivityPort {
 export interface ReaderHostTopicPreheatControllerOptions {
 	readonly document: Document;
 	readonly mutations: MainOutletMutationHub;
-	readonly enabled?: boolean;
+	readonly enabled: boolean;
 	readonly preheatPostCount?: number;
 	readonly historyEntry: (
 		topicId: DiscourseTopicId,
@@ -236,13 +236,14 @@ export class ReaderHostTopicPreheatController {
 	#enabled: boolean;
 	#preheatPostCount: number;
 	#readerForeground = false;
+	#interactiveOpenHolds = 0;
 	#frame = 0;
 	#destroyed = false;
 
 	constructor(options: ReaderHostTopicPreheatControllerOptions) {
 		this.#options = options;
 		this.#document = options.document;
-		this.#enabled = options.enabled !== false;
+		this.#enabled = options.enabled === true;
 		this.#preheatPostCount = hostTopicPreheatPostCount(
 			options.preheatPostCount,
 		);
@@ -344,6 +345,34 @@ export class ReaderHostTopicPreheatController {
 		this.#enforceForegroundNetworkBudget();
 		this.#fillQueue();
 		this.#pump();
+	}
+
+	/**
+	 * 用户正在打开一个 Topic 时，暂停全部宿主预热联网与缓存恢复。
+	 *
+	 * 隐藏预热 bundle 与可见 Topic bundle 不是同一个 Session；保留同 Topic 的后台
+	 * 请求会让可见打开等它完整落盘后才取得 handoff，无法在原地提升为 topic-visible。
+	 * 因此这里也取消目标 Topic 的未完成预热，让可见 Session 立即以自身优先级读取。
+	 * 引用计数让快速连续点击不会被较早事务的 finally 提前恢复后台流。
+	 */
+	holdInteractiveOpen(rawTopicId: number): () => void {
+		if (this.#destroyed || this.scope.destroyed) return () => {};
+		discourseTopicId(rawTopicId);
+		this.#interactiveOpenHolds += 1;
+		this.#enforceInteractiveOpenBudget();
+		let released = false;
+		return () => {
+			if (released) return;
+			released = true;
+			this.#interactiveOpenHolds = Math.max(0, this.#interactiveOpenHolds - 1);
+			if (this.#destroyed || this.scope.destroyed) return;
+			if (this.#interactiveOpenHolds > 0) {
+				this.#enforceInteractiveOpenBudget();
+				return;
+			}
+			this.#fillQueue();
+			this.#pump();
+		};
 	}
 
 	updateLiveReading(
@@ -600,7 +629,12 @@ export class ReaderHostTopicPreheatController {
 	}
 
 	#fillQueue(): void {
-		if (!this.#enabled || this.#paused || !this.#activityVisible()) return;
+		if (
+			!this.#enabled ||
+			this.#paused ||
+			this.#interactiveOpenHolds > 0 ||
+			!this.#activityVisible()
+		) return;
 		this.#dropStaleQueuedTopics();
 		for (const [topicId] of [...this.#nearTopics.entries()]
 			.sort((left, right) => left[1] - right[1])) {
@@ -650,6 +684,7 @@ export class ReaderHostTopicPreheatController {
 			this.scope.destroyed ||
 			!this.#enabled ||
 			this.#paused ||
+			this.#interactiveOpenHolds > 0 ||
 			!this.#activityVisible()
 		) return;
 		for (let index = this.#queue.length - 1; index >= 0; index -= 1) {
@@ -749,7 +784,12 @@ export class ReaderHostTopicPreheatController {
 	}
 
 	#restorePreheat(topic: TopicState): void {
-		if (!this.#enabled || topic.restoreAttempted || !this.#options.restorePreheat) {
+		if (
+			!this.#enabled ||
+			this.#interactiveOpenHolds > 0 ||
+			topic.restoreAttempted ||
+			!this.#options.restorePreheat
+		) {
 			return;
 		}
 		topic.restoreAttempted = true;
@@ -936,6 +976,23 @@ export class ReaderHostTopicPreheatController {
 			if (retained <= 1) continue;
 			controller.abort(new DOMException(
 				'Reader 前台阅读收紧宿主预热并发',
+				'AbortError',
+			));
+		}
+	}
+
+	#enforceInteractiveOpenBudget(): void {
+		if (this.#interactiveOpenHolds <= 0) return;
+		for (const controller of this.#activeControllers.values()) {
+			controller.abort(new DOMException(
+				'Reader 正在打开可见 Topic，宿主预热让出请求槽',
+				'AbortError',
+			));
+		}
+		for (const topic of this.#topics.values()) {
+			if (!topic.restoreController) continue;
+			topic.restoreController.abort(new DOMException(
+				'Reader 正在打开可见 Topic，宿主缓存恢复让出事务',
 				'AbortError',
 			));
 		}

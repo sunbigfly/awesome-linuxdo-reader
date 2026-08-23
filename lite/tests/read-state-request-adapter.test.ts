@@ -7,6 +7,7 @@ import {
 import {
 	DiscourseNativeRequests,
 } from '../src/discourse/native-request-descriptors.js';
+import { discoursePostNumber } from '../src/discourse/identifiers.js';
 import {
 	ReadStateRequestAdapter,
 } from '../src/reading/read-state-request-adapter.js';
@@ -53,7 +54,14 @@ const adapter = new ReadStateRequestAdapter({
 	signal: controller.signal,
 });
 
-const confirmed = await adapter.submit([5, 3, 5]);
+const confirmed = await adapter.submit({
+	timings: [
+		{ postNumber: discoursePostNumber(5), milliseconds: 1_700 },
+		{ postNumber: discoursePostNumber(3), milliseconds: 1_200 },
+		{ postNumber: discoursePostNumber(5), milliseconds: 1_500 },
+	],
+	topicTimeMs: 2_000,
+});
 assert(confirmed.join(',') === '3,5', 'timings 楼层必须按 post_number 排序去重');
 const request = gateway.requests[0]!;
 assert(request.authScope === 'account:test', 'timings identity 缺少 auth scope');
@@ -68,9 +76,9 @@ assert(transportRequest.path === '/topics/timings', 'timings 必须使用原生 
 assert(transportRequest.options.type === 'POST', 'timings 原生 transport 必须使用 POST');
 assert(transportRequest.options.cache === false, 'timings 不得使用浏览器缓存');
 assert(transportData.topic_id === 10, 'timings body topic_id 错误');
-assert(transportData.topic_time === 3000, 'topic_time 必须按本批楼层数累计');
-assert(timings['3'] === 1500, '#3 read time 错误');
-assert(timings['5'] === 1500, '#5 read time 错误');
+assert(transportData.topic_time === 2_000, 'topic_time 必须独立累计真实 Topic 前台时间');
+assert(timings['3'] === 1_200, '#3 必须保留真实逐楼 read time');
+assert(timings['5'] === 1_700, '重复楼层必须保留更长的真实 read time');
 assert(
 	transportHeaders['Discourse-Background'] === 'true' &&
 	transportHeaders['X-SILENCE-LOGGER'] === 'true',
@@ -107,8 +115,8 @@ const cloudflareTransport = new BrowserDiscourseNativeMutationTransport({
 const cloudflareResponse = await cloudflareTransport.request({
 	descriptor: DiscourseNativeRequests.topicTimings({
 		topicId: 10,
-		postNumbers: [3],
-		readTimeMs: 1_500,
+		timings: [{ postNumber: 3, milliseconds: 1_500 }],
+		topicTimeMs: 1_500,
 	}),
 	signal: controller.signal,
 	attempt: 1,
@@ -126,8 +134,8 @@ try {
 		descriptor: {
 			...DiscourseNativeRequests.topicTimings({
 				topicId: 10,
-				postNumbers: [3],
-				readTimeMs: 1_500,
+				timings: [{ postNumber: 3, milliseconds: 1_500 }],
+				topicTimeMs: 1_500,
 			}),
 			path: '/posts/10.json',
 		} as never,

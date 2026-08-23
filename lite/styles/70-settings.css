@@ -1650,6 +1650,45 @@
   text-align: right;
 }
 
+.ldp-setting-range-entry {
+  display: inline-flex;
+  min-width: 68px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+}
+
+.ldp-setting-range-input {
+  width: 68px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--ldp-border);
+  border-radius: var(--ldp-radius-sm);
+  background: var(--ldp-canvas);
+  color: var(--ldp-ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.ldp-setting-range-input:focus-visible {
+  border-color: var(--ldp-accent);
+  box-shadow: var(--ldp-focus-ring);
+  outline: none;
+}
+
+.ldp-setting-range-unit {
+  flex: none;
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-ui);
+  white-space: nowrap;
+}
+
+.ldp-setting-range-source-value {
+  display: none !important;
+}
+
 .ldp-layout-reset,
 .ldp-performance-reset {
   display: grid;
@@ -5610,7 +5649,7 @@
 }
 
 .ldp-font-color-value,
-.ldp-font-scale-range,
+.ldp-setting-range-input,
 .ldp-history-edge-trigger-range,
 .ldp-history-edge-trigger-control {
   min-width: 0;

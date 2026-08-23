@@ -159,6 +159,26 @@
   }
 }
 
+.ldp-post > .ldp-topic-details.ldp-meta-row {
+  box-sizing: border-box;
+  display: flex;
+  width: calc(100% - var(--ldp-thread-body-offset));
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 8px 0 0 var(--ldp-thread-body-offset);
+  padding: 0 8px 3px;
+  color: var(--ldp-ink-muted);
+  text-align: right;
+}
+
+.ldp-post > .ldp-topic-details.ldp-meta-row > .ldp-meta {
+  width: auto;
+  max-width: 100%;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+
 .ldp-comments-header {
   display: flex;
   min-width: 0;
@@ -492,6 +512,22 @@
   color: var(--ldp-accent);
 }
 
+.ldp-post-identity-badges {
+  display: inline-flex;
+  min-width: 0;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.ldp-post-identity-badges:empty {
+  display: none;
+}
+
+.ldp-post-identity-compact-icon {
+  display: none;
+}
+
 .ldp-op,
 .ldp-me,
 .ldp-new-user-badge,
@@ -505,6 +541,10 @@
   font-size: var(--ldp-font-sm);
   font-weight: 750;
   line-height: 1;
+}
+
+.ldp-post-identity-badges > :is(.ldp-op,.ldp-me) {
+  gap: 4px;
 }
 
 .ldp-new-user-badge {

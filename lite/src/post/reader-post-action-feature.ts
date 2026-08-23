@@ -222,6 +222,8 @@ const BOOST_MAX_EMOJI = 5;
 const BOOST_QUICK_ACTION_OPEN_DELAY_MS = 180;
 const BOOST_QUICK_ACTION_SWITCH_DELAY_MS = 250;
 const BOOST_QUICK_ACTION_CLOSE_DELAY_MS = 500;
+const REACTION_PICKER_OPEN_DELAY_MS = 180;
+const REACTION_PICKER_CLOSE_DELAY_MS = 650;
 const HOST_RUNTIME_READY_RETRY_DELAYS = Object.freeze([
 	120,
 	360,
@@ -697,6 +699,26 @@ export class ReaderPostActionFeature<
 			this.#onBoostQuickActionPointerOut(event as PointerEvent);
 			this.#onReactionPointerOut(event as PointerEvent);
 		}, { passive: true });
+		this.scope.listen(interactionRoot, 'keydown', (event) => {
+			const keyboard = event as KeyboardEvent;
+			if (keyboard.key !== 'Enter' && keyboard.key !== ' ') return;
+			const trigger = eventElement(event)?.closest<HTMLButtonElement>(
+				'button[data-reaction-picker]',
+			) ?? null;
+			const root = trigger?.closest<HTMLElement>(
+				'.ldp-post,.ldp-lb-source-reactions',
+			) ?? null;
+			const binding = root ? this.#byRoot.get(root) : undefined;
+			if (
+				!trigger ||
+				!binding ||
+				trigger.disabled ||
+				!binding.slot.contains(trigger)
+			) return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			this.#toggleReactionPicker(binding);
+		});
 		this.scope.listen(interactionRoot, 'focusin', (event) => {
 			hydrateContextActions(event);
 			const bubble = this.#ownedBoostQuickActionBubble(eventElement(event));
@@ -873,7 +895,10 @@ export class ReaderPostActionFeature<
 			) {
 				this.#closeBoostQuickActions();
 			}
-			if (this.#boostBinding === binding) this.#closeBoost();
+			if (this.#boostBinding === binding) {
+				if (this.#boostInteractionActive()) this.#scheduleBoostPosition();
+				else this.#closeBoost();
+			}
 		});
 		this.#refreshMissingPostCapabilities(post);
 	}
@@ -1311,7 +1336,8 @@ export class ReaderPostActionFeature<
 			this.#boostAnchor &&
 			slot.contains(this.#boostAnchor)
 		) {
-			this.#closeBoost();
+			if (this.#boostInteractionActive()) this.#scheduleBoostPosition();
+			else this.#closeBoost();
 		}
 		const boosts = postBoosts(binding.post as UnknownRecord);
 		const boostManifest = binding.snapshot.entries.find((entry) =>
@@ -2686,7 +2712,7 @@ export class ReaderPostActionFeature<
 			content.closest<HTMLElement>('.fk-d-menu') ?? content,
 		);
 		content.classList.add('ldp-boost-picker-positioned');
-		const viewport = this.#document.documentElement;
+		const bounds = this.#boostViewportBounds();
 		const reader = this.#boostBinding?.view.slots.root.closest<HTMLElement>(
 			'.ldp-modal',
 		);
@@ -2694,20 +2720,37 @@ export class ReaderPostActionFeature<
 		const menuRect = menu.getBoundingClientRect();
 		const padding = 8;
 		const gap = 8;
-		const leftBound = Math.max(padding, readerRect?.left ?? padding);
+		const leftBound = Math.max(
+			bounds.left + padding,
+			readerRect?.left ?? bounds.left + padding,
+		);
 		const rightBound = Math.min(
-			viewport.clientWidth - padding,
-			readerRect?.right ?? viewport.clientWidth - padding,
+			bounds.right - padding,
+			readerRect?.right ?? bounds.right - padding,
 		);
-		const topBound = Math.max(padding, readerRect?.top ?? padding);
+		const topBound = Math.max(
+			bounds.top + padding,
+			readerRect?.top ?? bounds.top + padding,
+		);
 		const bottomBound = Math.min(
-			viewport.clientHeight - padding,
-			readerRect?.bottom ?? viewport.clientHeight - padding,
+			bounds.bottom - padding,
+			readerRect?.bottom ?? bounds.bottom - padding,
 		);
+		const availableWidth = Math.max(0, rightBound - leftBound);
+		content.style.setProperty(
+			'max-width',
+			`${Math.floor(availableWidth)}px`,
+			'important',
+		);
+		content.style.setProperty('box-sizing', 'border-box');
 		const picker = content.matches('.emoji-picker')
 			? content
 			: content.querySelector<HTMLElement>('.emoji-picker');
 		if (picker) {
+			if (picker !== content) {
+				picker.style.setProperty('max-width', '100%', 'important');
+				picker.style.setProperty('box-sizing', 'border-box');
+			}
 			const naturalHeight = Number(
 				picker.dataset.ldpBoostNaturalHeight,
 			) || picker.offsetHeight;
@@ -2853,10 +2896,14 @@ export class ReaderPostActionFeature<
 
 	#positionBoostMenu(menu: HTMLElement, anchor: HTMLElement): void {
 		const bounds = this.#boostViewportBounds();
+		const availableWidth = Math.max(0, bounds.width - 16);
+		const availableHeight = Math.max(0, bounds.height - 16);
+		menu.style.maxWidth = `${Math.floor(availableWidth)}px`;
+		menu.style.maxHeight = `${Math.floor(availableHeight)}px`;
 		const measuredWidth = menu.offsetWidth || menu.getBoundingClientRect().width;
 		const width = Math.min(
 			Math.max(0, measuredWidth),
-			Math.max(0, bounds.width - 16),
+			availableWidth,
 		);
 		const rect = anchor.getBoundingClientRect();
 		const minLeft = bounds.left + 8;
@@ -2876,6 +2923,53 @@ export class ReaderPostActionFeature<
 			top = rect.top - measuredHeight - 6;
 		}
 		top = Math.max(minTop, Math.min(top, maxTop));
+		menu.style.left = `${Math.round(left)}px`;
+		menu.style.top = `${Math.round(top)}px`;
+	}
+
+	#boostInteractionActive(): boolean {
+		const menu = this.#boostMenu;
+		/*
+		 * Boost composer 是显式打开、显式取消的草稿 surface。移动输入法会让
+		 * activeElement、VisualViewport 与虚拟楼层挂载在不同帧变化，不能把
+		 * 任一瞬态失焦当作用户关闭意图。
+		 */
+		return Boolean(menu && !menu.hidden);
+	}
+
+	#clampBoostMenuToViewport(menu: HTMLElement): void {
+		const bounds = this.#boostViewportBounds();
+		const availableWidth = Math.max(0, bounds.width - 16);
+		const availableHeight = Math.max(0, bounds.height - 16);
+		menu.style.maxWidth = `${Math.floor(availableWidth)}px`;
+		menu.style.maxHeight = `${Math.floor(availableHeight)}px`;
+		const rect = menu.getBoundingClientRect();
+		const width = Math.min(
+			availableWidth,
+			Math.max(0, rect.width || menu.offsetWidth),
+		);
+		const height = Math.min(
+			availableHeight,
+			Math.max(0, rect.height || menu.offsetHeight),
+		);
+		const currentLeft = Number.parseFloat(menu.style.left);
+		const currentTop = Number.parseFloat(menu.style.top);
+		const minLeft = bounds.left + 8;
+		const minTop = bounds.top + 8;
+		const left = Math.max(
+			minLeft,
+			Math.min(
+				Number.isFinite(currentLeft) ? currentLeft : minLeft,
+				Math.max(minLeft, bounds.right - width - 8),
+			),
+		);
+		const top = Math.max(
+			minTop,
+			Math.min(
+				Number.isFinite(currentTop) ? currentTop : minTop,
+				Math.max(minTop, bounds.bottom - height - 8),
+			),
+		);
 		menu.style.left = `${Math.round(left)}px`;
 		menu.style.top = `${Math.round(top)}px`;
 	}
@@ -2940,13 +3034,15 @@ export class ReaderPostActionFeature<
 	#syncBoostPosition(): void {
 		const menu = this.#boostMenu;
 		const anchor = this.#boostAnchor;
-		if (
-			!menu ||
-			menu.hidden ||
-			!menu.isConnected ||
-			!anchor ||
-			!anchor.isConnected
-		) {
+		if (!menu || menu.hidden || !menu.isConnected) {
+			this.#closeBoost();
+			return;
+		}
+		if (!anchor || !anchor.isConnected) {
+			if (this.#boostInteractionActive()) {
+				this.#clampBoostMenuToViewport(menu);
+				return;
+			}
 			this.#closeBoost();
 			return;
 		}
@@ -2980,6 +3076,10 @@ export class ReaderPostActionFeature<
 				)
 			)
 		) {
+			if (this.#boostInteractionActive()) {
+				this.#clampBoostMenuToViewport(menu);
+				return;
+			}
 			this.#closeBoost();
 			return;
 		}
@@ -3367,13 +3467,24 @@ export class ReaderPostActionFeature<
 		if (!binding) return false;
 
 		const trigger = target?.closest<HTMLButtonElement>(
-			'button[data-reaction-picker]:not([data-post-like])',
+			'button[data-reaction-picker]',
 		) ?? null;
 		if (
 			trigger &&
 			binding.slot.contains(trigger) &&
-			!trigger.disabled
+			!trigger.disabled &&
+			(
+				this.#eagerContextActions ||
+				!trigger.hasAttribute('data-post-like')
+			)
 		) {
+			if (this.#eagerContextActions) {
+				event.preventDefault();
+				event.stopPropagation();
+				event.stopImmediatePropagation();
+				this.#toggleReactionPicker(binding);
+				return true;
+			}
 			event.preventDefault();
 			event.stopPropagation();
 			event.stopImmediatePropagation();
@@ -3926,7 +4037,7 @@ export class ReaderPostActionFeature<
 			binding.open = true;
 			this.#closeAll(binding);
 			this.#syncReactionPickerVisibility(binding);
-		}, 250));
+		}, REACTION_PICKER_OPEN_DELAY_MS));
 	}
 
 	#onReactionPointerOut(event: PointerEvent): void {
@@ -3955,7 +4066,7 @@ export class ReaderPostActionFeature<
 			if (!binding.open) return;
 			binding.open = false;
 			this.#syncReactionPickerVisibility(binding);
-		}, 250));
+		}, REACTION_PICKER_CLOSE_DELAY_MS));
 	}
 
 	#syncReactionPickerVisibility(
@@ -3969,6 +4080,14 @@ export class ReaderPostActionFeature<
 			'.ldp-reaction-picker',
 		);
 		if (picker) picker.hidden = !binding.open;
+	}
+
+	#toggleReactionPicker(binding: BoundReactionSurface<TPost>): void {
+		this.#clearReactionHoverTimers(binding.slot);
+		const opening = !binding.open;
+		binding.open = opening;
+		if (opening) this.#closeAll(binding);
+		this.#syncReactionPickerVisibility(binding);
 	}
 
 	#clearReactionHoverTimer(

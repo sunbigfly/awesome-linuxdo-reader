@@ -116,4 +116,15 @@ assert(
 	button.hidden && Number(timeouts.size) === 0 && Number(intervals.size) === 0,
 	'离开 embedded 必须完整清理提示',
 );
+workspace.setRequestedMode('embed-left');
+scrollTop = 500;
+dispatchScroll(500, 350);
+dispatchScroll(350, 400);
+dispatchScroll(200, 500);
+assert(
+	!button.hidden &&
+	String(button.style.left) === '1402px' &&
+	String(button.style.top) === '255px',
+	'触屏滚动没有 pointermove 坐标时，宿主 Top 入口必须使用安全区内的稳定回退位置保持可触达',
+);
 controller.destroy();

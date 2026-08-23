@@ -171,7 +171,7 @@ assert(
 		.backgroundRequestsPerMinute === 24 &&
 	defaults.businessRequestSettings.notifications
 		.backgroundRequestsPerMinute === 40 &&
-	defaults.hostTopicPreheatEnabled &&
+	!defaults.hostTopicPreheatEnabled &&
 	defaults.hostTopicPreheatPostCount === 24 &&
 	!defaults.performanceSuspendHostTurnstileInBackground &&
 	defaults.inlineReplyTreeMaxDepth === 3 &&
@@ -404,8 +404,12 @@ assert(
 		.backgroundMinIntervalMs === 80 &&
 	normalized.businessRequestSettings['topic-download']
 		.backgroundRequestsPerMinute === 120 &&
-	normalized.hostTopicPreheatEnabled &&
+	!normalized.hostTopicPreheatEnabled &&
 	normalized.hostTopicPreheatPostCount === 128 &&
+	normalizeReaderPreferences({
+		...defaults,
+		hostTopicPreheatEnabled: true,
+	}, environment).hostTopicPreheatEnabled &&
 	!normalizeReaderPreferences({
 		...defaults,
 		hostTopicPreheatEnabled: false,
@@ -627,7 +631,7 @@ const importedBeforePerformanceRuntime = codec.import({
 	settings: beforePerformanceRuntimeSettings,
 });
 assert(
-	importedBeforePerformanceRuntime.hostTopicPreheatEnabled &&
+	!importedBeforePerformanceRuntime.hostTopicPreheatEnabled &&
 	importedBeforePerformanceRuntime.hostTopicPreheatPostCount === 24 &&
 	importedBeforePerformanceRuntime.performanceReadStateRequestsPerMinute === 10 &&
 	importedBeforePerformanceRuntime.performanceReadStateTimingsPerMinute === 240 &&

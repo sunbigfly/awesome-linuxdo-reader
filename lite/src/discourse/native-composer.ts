@@ -103,6 +103,7 @@ export interface DiscourseComposerCoordinatorOptions {
 export interface DiscourseComposerCloseGuardOptions {
 	readonly document: Document;
 	readonly enabled: () => boolean;
+	readonly ownsEscape?: () => boolean;
 	readonly notify?: (message: string) => void;
 	readonly parentScope?: LifecycleScope;
 }
@@ -400,7 +401,8 @@ export class DiscourseComposerCoordinator {
 				keyboard.key !== 'Escape' ||
 				keyboard.repeat ||
 				keyboard.defaultPrevented ||
-				!this.isOpen()
+				!this.isOpen() ||
+				options.ownsEscape?.() === false
 			) return;
 			handledEvents.add(event);
 			if (requiresConfirmation('composer:escape', '再按一次 Esc 舍弃回复')) {
