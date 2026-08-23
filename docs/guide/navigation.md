@@ -4,7 +4,7 @@ description: 使用时间轴、只看楼主、历史前后切换、多主题队�
 feature_ids: ["CORE-006", "READ-004", "READ-005", "READ-006", "READ-007", "READ-009", "READ-010", "READ-011", "READ-014", "READ-016"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/topic/reader-topic-only-op-controller.ts","lite/src/topic/reader-topic-navigation-controller.ts","lite/src/topic/reader-topic-dom-coordinator.ts","lite/src/topic/reader-topic-timeline-controller.ts","lite/src/topic/reader-topic-timeline-end-resolver.ts","lite/src/topic/reader-topic-timeline-view.ts","lite/src/history/reader-history-model.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/reading/read-state-controller.ts","lite/src/live/topic-live-controller.ts","lite/src/components/reader-icon.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/topic/reader-topic-header.ts"]
 since: 0.1.2
-version: 1.6.1
+version: 1.6.2
 status: current
 last_verified: 2026-08-23
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png", "/screenshots/guide-16-history-v1.5.0.png", "/screenshots/guide-21-reading-queue-v1.5.0.png"]
@@ -69,19 +69,19 @@ Reader 工作区获得焦点时，`ArrowUp`、`ArrowDown`、`PageUp`、`PageDown
 
 ## 真实已读进度
 
-阅读器在楼层正文成功预加载后把它加入候选，并立即在当前阅读器中显示乐观已读，避免已经准备好的楼层继续显示为未读。这个状态只用于当前会话的界面和阅读排序，不会在服务器确认前写入帖子缓存的权威 `read` 字段。
+阅读器在楼层正文成功预加载后只把它加入候选。候选必须在当前聚焦、前台可见的 Reader 视口内正面积相交并累计停留至少 1 秒，才进入 pending 并在当前阅读器中显示乐观已读；快速擦过、后台标签和失焦窗口不会取得上报资格。这个状态只用于当前会话的界面和阅读排序，不会在服务器确认前写入帖子缓存的权威 `read` 字段。
 
 当前版本的已读上报：
 
 - 每批最多提交 20 个楼层；
-- 默认限制为同账号跨标签 10 RPM / 240 TPM；TPM 表示每分钟 timing 楼层条目数，达到任一滚动分钟上限时保留 pending 到窗口释放；
-- 优先处理显式目标与当前可见楼层，其余已经成功预加载的候选使用后台优先级补充提交；
-- 同一主题同一批成功请求在 60 秒内不会重复提交；
-- 新候选会立即调度，不再额外等待固定 15 秒；浏览器锁仍避免多个标签页同时发送；
+- 默认限制为同账号跨标签 10 RPM / 240 TPM；除滚动分钟上限外，RPM 还形成确定性最小启动间隔（默认至少 6 秒）；普通 pending 不由定时器匀速排空，达到限制后保留到窗口释放，并由新的真实 Reader 可见活动继续；
+- 按实际前台停留分别累计每个楼层的 timing 与独立 `topic_time`，并通过不可丢的后台请求让位于真实交互；
+- 已取得资格的楼层即使随后离屏也保留到服务器确认，跨标签成功账本避免同账号重复提交；
+- 浏览器锁先合并同主题并发意图，但每个实际网络批次仍严格不超过 20 层；同一次可见活动留下的 backlog 不会自动连续续批；
 - 阅读器打开时抑制原站 screen-track 对同一主题的重复计时；
 - 只有服务器确认成功后才写入权威已读状态；失败楼层保留待重试，Cloudflare 验证失败时仍保持未确认。
 
-这些约束让已预加载楼层有界进入 `/topics/timings` 批次，同时用优先级、每批上限、RPM/TPM、成功指纹和跨标签锁减少重复请求。乐观已读不等于服务器已经确认；联网失败时最终状态仍以原站为准。
+这些约束让真正阅读过的候选有界进入 `/topics/timings` 批次，同时用真实计时、每批上限、滚动窗口 RPM/TPM、成功账本和跨标签锁减少重复请求。乐观已读不等于服务器已经确认；联网失败时最终状态仍以原站为准。
 
 新回复到达时，主题活动与阅读器状态会同步；只有确认存在新楼层时，接近底部的阅读器才自动跟随，单纯刷新元数据不会改变滚动位置。原站创建或编辑帖子、切换回应时，阅读器还会让对应主题、楼层和回应缓存失效，当前主题则就地合并权威楼层。消息跳转会等待目标进入虚拟窗口后再定位。
 

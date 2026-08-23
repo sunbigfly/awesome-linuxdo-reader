@@ -4,7 +4,7 @@ description: 在请求记录和性能记录间切换，查看请求预算、异�
 feature_ids: ["MONITOR-001", "MONITOR-002", "MONITOR-003", "MONITOR-004", "MONITOR-005"]
 source_anchors: ["lite/src/monitor/reader-resource-monitor.ts","lite/src/monitor/reader-pipeline-observer.ts","lite/src/app/reader-data-runtime.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/request-observer.ts","lite/src/network/reader-business-request-policy.ts"]
 since: 0.1.2
-version: 1.6.1
+version: 1.6.2
 status: current
 last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-10-resource-monitor-v1.5.0.png"]
@@ -70,6 +70,7 @@ screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/gui
 
 摘要行同时显示：
 
+- 全部请求的跨标签短/长窗口、活动与排队数量；导出的运行态还会单列自动 `prefetch` / `background` 的活动、排队、4/24 窗口和 60 秒意图寿命；
 - 当前活动槽和排队数量；
 - 共享并发上限；
 - 实际启动间隔；

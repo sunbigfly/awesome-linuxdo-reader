@@ -4,7 +4,7 @@ description: 汇总全部设置项、范围、默认值、生效时机和数据�
 feature_ids: ["SET-012", "SET-013", "SET-014", "SET-015", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021", "DATA-006", "DATA-007"]
 source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree.ts","lite/src/network/request-scheduler.ts","lite/src/dom/reply-tree-repository.ts","lite/src/post/boost-copy-rule.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.6.1
+version: 1.6.2
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png", "/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/guide-04-font-settings-v1.5.0.png", "/screenshots/guide-05-layout-settings-v1.5.0.png", "/screenshots/guide-07-appearance-settings-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-27-shortcuts-v1.5.0.png", "/screenshots/guide-28-applicable-sites-v1.5.0.png", "/screenshots/guide-32-webdav-sync-v1.5.0.png"]
@@ -40,6 +40,8 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png", "/screenshot
 | 字重 | 300/400/500/600 | 400 |
 | 颜色 | 跟随主题或自定义 | 跟随主题 |
 | 字号 | 50%–250% | 新配置界面/正文/回复为 92/95/80% |
+
+设置面板中的滑块同时提供数值输入入口；百分比字段会显示 `%` 单位，移动端既可拖动，也可直接输入精确数值。
 
 ## 布局与浮窗
 
@@ -85,7 +87,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png", "/screenshot
 | 宿主 Topic 预热楼层数 | 1–128 | 24 |
 | 后台暂停宿主 Turnstile | 开/关 | 关 |
 
-性能设置直接展示逐项参数，不再提供四档预设；默认值采用当前实测配置。任一负载目标高于默认值时会显示卡顿与 429 风险提示，但不会自动改写用户保存的数值。请求流控制另提供后台让路、队列 10 秒/60 秒目标、批量后台窗口占比、直属回复窗口、宿主预热并发，以及正文、直属回复、用户卡片和标准读取车道并发目标。Topic 下载、用户观察、用户通知、收藏与回应各自可设置 1–4 路最大并发、80–5000 ms 后台最小间隔和 1–120 后台 RPM。保存后热应用，并参与设置导入导出与 WebDAV `preferences` 同步；控制写车道、identity、single-flight、缓存、请求 profile、重试、429 和 Cloudflare 仍是固定安全契约。
+性能设置直接展示逐项参数，不再提供四档预设；默认值采用当前实测配置。任一负载目标高于默认值时会显示卡顿与 429 风险提示，但不会自动改写用户保存的数值。已读 RPM 除滚动分钟上限外，还按 `60 秒 ÷ RPM` 形成跨标签基础启动间隔，并在每次尝试时把一次生成的 15%–45% 正向错峰冷却写入共享账本（默认约 6.9–8.7 秒）；每批最多 20 层，普通 backlog 只由新的真实 Reader 可见活动续批，不按冷却间隔自动排空。请求流控制另提供后台让路、队列 10 秒/60 秒目标、批量后台窗口占比、直属回复窗口、宿主预热并发，以及正文、直属回复、用户卡片和标准读取车道并发目标。Topic 下载、用户观察、用户通知、收藏与回应各自可设置 1–4 路最大并发、80–5000 ms 后台最小间隔和 1–120 后台 RPM；所有可丢弃的自动 `prefetch` / `background` 还固定共用同账号跨标签 1 路、10 秒 4 次、60 秒 24 次和 60 秒排队寿命，在宿主或可见请求活动时让路，并在连续自动启动之间增加 250–1250 ms 一次性错峰。宿主 Topic 预热默认关闭，仅在用户显式开启后运行。保存后热应用，并参与设置导入导出与 WebDAV `preferences` 同步；控制写车道、identity、single-flight、缓存、请求 profile、重试、429 和 Cloudflare 仍是固定安全契约。
 
 ## 翻译设置
 

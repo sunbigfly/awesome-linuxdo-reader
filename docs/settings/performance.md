@@ -4,7 +4,7 @@ description: 调整正文与直属回复预取、DOM 窗口、宿主 Topic 预�
 feature_ids: ["READ-001", "READ-002", "SET-012", "SET-013", "SET-014", "SET-015", "SET-023", "MONITOR-003"]
 source_anchors: ["lite/src/settings/reader-performance-settings-form.ts","lite/src/app/reader-performance-policy.ts","lite/src/topic/topic-session.ts","lite/src/topic/reader-topic-flow-controller.ts","lite/src/cache/topic-snapshot-handoff.ts","lite/src/cache/response-repository.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/reader-host-turnstile-background-controller.ts","lite/src/network/request-contract.ts","lite/src/network/reader-request-flow-config.ts","lite/src/network/reader-business-request-config.ts","lite/src/network/reader-business-request-policy.ts","lite/src/network/request-scheduler.ts","lite/src/network/domain-request-gateway.ts"]
 since: 0.1.2
-version: 1.6.1
+version: 1.6.2
 status: current
 last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png"]
@@ -29,7 +29,7 @@ screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png"]
 
 ## 默认参数
 
-性能设置不再提供省流、自动、快速预取和自定义四档，打开面板后直接显示可编辑参数。新配置及“恢复默认”采用当前实测配置：正文每批 32 层、视口外 1 屏、同时挂载 64 层、API 提前 2 屏、共享并发 3 路、启动间隔 100 ms、窗口预算 85%、已读 10 RPM / 240 TPM、每个宿主 Topic 预热 24 层。“后台暂停宿主 Turnstile”默认关闭。
+性能设置不再提供省流、自动、快速预取和自定义四档，打开面板后直接显示可编辑参数。新配置及“恢复默认”采用当前实测配置：正文每批 32 层、视口外 1 屏、同时挂载 64 层、API 提前 2 屏、共享并发 3 路、启动间隔 100 ms、窗口预算 85%、已读 10 RPM / 240 TPM、每个宿主 Topic 预热 24 层。“预热宿主 Topic 列表”和“后台暂停宿主 Turnstile”默认关闭。
 
 保存后当前与后续阅读器立即采用；已经启动的普通请求自然完成。任一负载目标高于默认值时仍显示卡顿与 429 风险，但不会改写输入，也不会绕过自适应和共享请求安全规则。不确定设备或站点余量时直接使用“恢复默认”。
 
@@ -57,6 +57,8 @@ screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png"]
 
 这里的业务 RPM 是客户端目标，不是 Linux Do 提供的独立额度；车道上限也是本地服务成本边界。所有业务仍共用同一个 Gateway、single-flight、Scheduler、全局并发、跨标签 10 秒/60 秒许可、429 `Retry-After` 和 Cloudflare 恢复，任何业务参数都不能绕过这些安全契约。
 
+此外，所有标记为可丢弃的 `prefetch` / `background` 还共用一层固定的同账号跨标签自动流量闸门：最多 1 路活动、10 秒 4 次、60 秒 24 次。宿主原生请求或 Reader 可见请求活动时，自动流量先让路；从首次进入 Scheduler 起等待超过 60 秒的自动意图直接取消，不在页面恢复后追赶。可见读取、显式操作、原生 MessageBus 和不可丢的已读成功确认不计入这份自动预算。该层只按真实事件确定性放行，不加入随机间隔或伪造人工行为。
+
 ## 请求流控制目标
 
 过去分散在 permit、预热 owner 和 Scheduler 内的流控目标现已进入同一性能设置事务；保存后当前排队请求和后续请求热应用，已经启动的请求自然完成。
@@ -71,7 +73,7 @@ screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png"]
 | 后台直属回复 10 秒 / 60 秒目标 | 1–50 / 1–200 | 8 / 24 |
 | 正文 / 直属回复 / 用户卡片 / 标准读取车道 | 1–3 / 1–2 / 1–2 / 1–4 路 | 3 / 2 / 2 / 1 路 |
 
-这些值是可调目标，不是绕过安全层的开关。控制写车道、请求 identity、single-flight、缓存、请求 profile、重试次数、429 `Retry-After`、Cloudflare 闸门、跨标签 10 秒/60 秒账本和队列容量仍是固定契约；实际运行值取用户目标与所有固定边界中的最严格结果。
+这些值是可调目标，不是绕过安全层的开关。控制写车道、请求 identity、single-flight、缓存、请求 profile、重试次数、429 `Retry-After`、Cloudflare 闸门、跨标签总账本、自动流量 1 路与 4/24 账本、60 秒意图寿命和队列容量仍是固定契约；实际运行值取用户目标与所有固定边界中的最严格结果。
 
 ## 自适应内存与前台优先
 
@@ -79,9 +81,9 @@ screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png"]
 
 ## 宿主 Topic 列表预热
 
-“预热宿主 Topic 列表”默认开启。列表卡片接近视口时会通过统一请求链准备正文；Reader 打开、切换或直接滚动不会再暂停其他 Topic 的预热，Reader 前台仍最多只使用一个后台预热槽。当前正在 Reader 中阅读的同一 Topic 不会重复预热。
+“预热宿主 Topic 列表”默认关闭，只有用户显式开启后，列表卡片接近视口才会通过统一请求链准备正文；Reader 打开、切换或直接滚动不会销毁其他 Topic 的预热意图，但实际自动联网会等待宿主与当前可见请求空闲，并服从固定单飞、4/24 窗口和 250–1250 ms 一次性启动错峰。当前正在 Reader 中阅读的同一 Topic 不会重复预热。
 
-开启时会显示“预热楼层数”，范围 1–128，默认 24。该数值表示每个 Topic 围绕历史位置或链接目标准备的连续正文总量；预热只写入 canonical 数据缓存和一次性交接快照，不会在宿主列表创建隐藏 Post DOM。修改后会中止旧窗口、释放旧交接并按新总量重新预热。
+开启时会显示“预热楼层数”，范围 1–128，默认 24。该数值表示每个 Topic 围绕历史位置或链接目标准备的连续正文总量；预热只写入 canonical 数据缓存和一次性交接快照，不会在宿主列表创建隐藏 Post DOM，也不会发送 `track_visit=true` 或 `Discourse-Track-View` 冒充原生路由浏览。修改后会中止旧窗口、释放旧交接并按新总量重新预热。
 
 关闭后会立即中止宿主列表的联网预热、释放一次性交接快照，并在卡片状态行显示“预热已关闭”；重新开启后从当前近视口卡片和 canonical 缓存恢复。该偏好参与设置导入导出和 WebDAV `preferences` 同步。
 
@@ -89,10 +91,10 @@ screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png"]
 
 已读队列仍按单批最多 20 层合并，并新增两个同账号、跨标签的滚动 60 秒硬上限：
 
-- **RPM**：`/topics/timings` 请求数/分钟，默认 10；
+- **RPM**：`/topics/timings` 请求数/分钟，默认 10；同时按 `60 秒 ÷ RPM` 形成跨标签确定性最小启动间隔，默认至少 6 秒；普通队列只由新的真实 Reader 可见活动续批，不按该间隔匀速排空；
 - **TPM**：timings 已读楼层条目数/分钟，默认 240；这里的 T 表示 timing，不是模型 token。
 
-达到任一上限时，pending 楼层保留到窗口释放，不会先标成服务器已确认；设置保存后会热应用到当前和后续 Topic。Discourse 公开文档给出的默认全局限制是每 IP 200 请求/分钟、50 请求/10 秒，但站点管理员可以修改；Linux Do 没有公开 `/topics/timings` 专属数值。因此默认值是保守的客户端预算，不冒充站点私有额度，所有请求仍继续服从共享 10 秒/60 秒账本、429 `Retry-After` 与 Cloudflare 恢复规则。参见 [Discourse 全局限流设置](https://meta.discourse.org/t/available-settings-for-global-rate-limits-and-throttling/78612)。
+达到任一上限或最小间隔尚未释放时，pending 楼层继续保留，不会先标成服务器已确认；窗口释放后由新的真实 Reader 可见活动继续，普通 backlog 不建立匀速 drain 定时器。服务器 `Retry-After`、有界瞬时失败重试和关闭前强制 flush 继续按恢复契约执行。设置保存后会热应用到当前和后续 Topic。每个网络批次仍最多 20 层，前台聚焦视口内停留满 1 秒才建立 pending，并按实际逐楼 timing 与独立 `topic_time` 上报。Discourse 公开文档给出的默认全局限制是每 IP 200 请求/分钟、50 请求/10 秒，但站点管理员可以修改；Linux Do 没有公开 `/topics/timings` 专属数值。因此默认值是保守的客户端预算，不冒充站点私有额度，所有请求仍继续服从共享 10 秒/60 秒账本、429 `Retry-After` 与 Cloudflare 恢复规则。参见 [Discourse 全局限流设置](https://meta.discourse.org/t/available-settings-for-global-rate-limits-and-throttling/78612)。
 
 ## 宿主后台 Turnstile（实验）
 

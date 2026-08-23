@@ -4,7 +4,7 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.6.1
+version: 1.6.2
 status: current
 last_verified: 2026-08-23
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
@@ -15,6 +15,35 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.6.2 — 真实已读、自动流量与移动交互
+
+核验日期：2026-08-23。
+
+### 真实已读与跨标签协调
+
+- 楼层必须在前台聚焦的 Reader 视口内正面积相交并累计停留至少 1 秒，才取得已读上报资格；快速擦过、后台标签和失焦窗口不再冒充阅读。
+- `/topics/timings` 按实际逐楼停留时间和独立 `topic_time` 上报；同账号跨标签会合并同主题意图、保留已离屏但尚未确认的合格楼层，并继续保证每个网络批次最多 20 层。
+- 已读 RPM 同时形成跨标签确定性最小启动间隔，普通 backlog 只由新的真实可见活动续批，不建立匀速排空定时器；服务器成功前仍不会写入权威已读状态。
+
+### 自动流量与预热边界
+
+- 可丢弃的 `prefetch` / `background` 共用同账号跨标签 1 路、10 秒 4 次、60 秒 24 次和 60 秒意图寿命；宿主或 Reader 可见请求活跃时自动让路，过期自动意图直接取消。
+- 宿主 Topic 预热默认关闭；显式开启后也不会发送原生浏览追踪标志，打开可见 Topic 时会中止冲突预热和缓存恢复，让当前阅读请求立即接管。
+- 请求与资源诊断新增自动流量活动、排队、短/长窗口和寿命字段，便于区分用户操作、不可丢的已读确认与自动后台流量。
+
+### 移动端与操作界面
+
+- 移动 Reader 与宿主主题列表字号按 360px 参考宽度流动缩放；设置滑块同时提供带单位的数值输入，触屏也能精确调整百分比和性能参数。
+- 系统返回会先定位最上层 Reader 浮层，并在宿主路由变化后恢复 guard 再执行既有关闭层级；原生 Composer 只在自己真正位于最前时消费 `Esc`。
+- 主帖详情移动到首帖评论分隔线前，“只看楼主”进入同一主帖操作收纳；ME、OP 和特殊身份统一使用紧凑图标标记，窄屏标题与操作区继续保持可见。
+
+### 发布状态
+
+- `1.6.2` 已发布到 Greasy Fork：主 Loader 固定版本为 `1910580`，加载 Core `1910575`、Platform `1910577` 与 Features `1910576`。
+- 固定 Loader 原始文件为 4,202 字节，SHA-256 `ad86d37a6eda6e922289319cfc5f49c41760c89c87e62c8272b43e318574886a`；移除平台加入的 `@downloadURL none` 后为 4,181 字节，SHA-256 `5dfd86c76883c603e36bd350005cb657fe5e27e209fadcdbc53ec7f492618377`，与仓库 Loader 逐字节一致。
+- Core 为 1,738,833 字节，SHA-256 `bfec60620a453ffde822fbb18fff2b840592cefdcbf8d27a3c638b5d35743454`；Platform 为 1,490,614 字节，SHA-256 `b1bf5294baca37df8ad5ffb9396ccd4ed241033258e0ed1b58dfbba383288bae`；Features 为 2,020,439 字节，SHA-256 `b3e6c891249eff335c932b9f14de5f6752b8f02a2cc67c3e0ae33c1c0f52d07d`。
+- CSS 固定到 Git `4473716d05c9151c79639d6a17e4d71e124c7aef`：696,558 字节，SHA-256 `7cf3e876b3536c0d2f23325fe3fe88c7152c1c632f09c2622309c0799a8bd68c`；源码与分包 runtime 各通过 235 文件契约，305 个模块通过 parity 门禁。
 
 ## 1.6.1 — 移动滚动稳定与触屏返回
 
