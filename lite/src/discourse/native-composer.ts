@@ -725,9 +725,13 @@ export class DiscourseComposerCoordinator {
 			draftKey: key,
 			draftSequence: sequence,
 			skipJumpOnSave: true,
-			...(postReference.postNumber === 1
-				? { topic: topicModel }
-				: { post: postModel }),
+			/*
+			 * 楼层 Post 不能直接交给 composer.open：Discourse 会先在宿主
+			 * post-stream 中定位该楼层，并为此向下滚动/加载尚未展开的页面。
+			 * 统一复用 Topic 回复入口打开浮窗，再像复用既有 Composer 时一样
+			 * 只改 model.post；回复目标不变，宿主滚动不再参与。
+			 */
+			topic: topicModel,
 		};
 		const draftResult = record(await Draft.get.call(Draft, key));
 		if (draftResult?.draft) {
@@ -778,11 +782,16 @@ export class DiscourseComposerCoordinator {
 		}
 		await composer.open.call(composer, options);
 		this.#assertActive();
+		const model = modelValue(composer, 'model');
+		if (!record(model)) throw new Error('Discourse composer.open 未生成 model');
+		setModelValue(
+			model,
+			'post',
+			postReference.postNumber === 1 ? null : postModel,
+		);
 		if (!await this.#waitForComposerPopup(this.#composerOpenTimeoutMs)) {
 			throw new Error('Discourse 原生回复浮窗未显示');
 		}
-		const model = modelValue(composer, 'model');
-		if (!record(model)) throw new Error('Discourse composer.open 未生成 model');
 		this.#presentComposerWindow();
 		if (insertAfterOpen && initialRaw) {
 			const composerInput = await this.#waitForComposerInput(

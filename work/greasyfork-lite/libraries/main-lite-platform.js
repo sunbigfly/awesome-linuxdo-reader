@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.6.2
+// @version      1.6.3
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知、监控与翻译平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.6.2 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.6.3 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知、监控与翻译平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.6.2",
+			sourceVersion: "1.6.3",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.2") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.3") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -6785,7 +6785,13 @@ ${inserted}`), after && !/^\s/.test(after) && (inserted += `
 	      draftKey: key,
 	      draftSequence: sequence,
 	      skipJumpOnSave: !0,
-	      ...postReference.postNumber === 1 ? { topic: topicModel } : { post: postModel }
+	      /*
+	       * 楼层 Post 不能直接交给 composer.open：Discourse 会先在宿主
+	       * post-stream 中定位该楼层，并为此向下滚动/加载尚未展开的页面。
+	       * 统一复用 Topic 回复入口打开浮窗，再像复用既有 Composer 时一样
+	       * 只改 model.post；回复目标不变，宿主滚动不再参与。
+	       */
+	      topic: topicModel
 	    }, draftResult = (0, import_value_record.valueRecord)(await Draft.get.call(Draft, key));
 	    if (draftResult?.draft) {
 	      const draft = parseDraft(draftResult.draft);
@@ -6794,11 +6800,16 @@ ${inserted}`), after && !/^\s/.test(after) && (inserted += `
 	      ), input.replaceRaw !== !0 && initialRaw && rawMentionsUsername(draft.reply, dedupeMention) ? (options.reply = draft.reply, insertionSkipped = "duplicate-mention") : input.replaceRaw === !0 ? options.reply = initialRaw : initialRaw && initialRichHtml ? (options.reply = draft.reply, insertAfterOpen = !0) : options.reply = `${draft.reply}${initialRaw ? `
 ${initialRaw}` : ""}`, draft.whisper !== void 0 && (options.whisper = draft.whisper);
 	    } else initialRaw && (input.replaceRaw === !0 ? options.reply = initialRaw : initialRichHtml ? insertAfterOpen = !0 : options.quote = initialRaw);
-	    if (currentReply && currentOpen && currentTopicId === topicId && (input.replaceRaw !== !0 && initialRaw && rawMentionsUsername(currentReply, dedupeMention) ? (options.reply = currentReply, insertAfterOpen = !1, insertionSkipped = "duplicate-mention") : input.replaceRaw === !0 ? (options.reply = initialRaw, insertAfterOpen = !1) : initialRaw && initialRichHtml ? (options.reply = currentReply, insertAfterOpen = !0) : options.reply = `${currentReply}${initialRaw ? `
-${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer, options), this.#assertActive(), !await this.#waitForComposerPopup(this.#composerOpenTimeoutMs))
-	      throw new Error("Discourse 原生回复浮窗未显示");
+	    currentReply && currentOpen && currentTopicId === topicId && (input.replaceRaw !== !0 && initialRaw && rawMentionsUsername(currentReply, dedupeMention) ? (options.reply = currentReply, insertAfterOpen = !1, insertionSkipped = "duplicate-mention") : input.replaceRaw === !0 ? (options.reply = initialRaw, insertAfterOpen = !1) : initialRaw && initialRichHtml ? (options.reply = currentReply, insertAfterOpen = !0) : options.reply = `${currentReply}${initialRaw ? `
+${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer, options), this.#assertActive();
 	    const model = modelValue(composer, "model");
 	    if (!(0, import_value_record.valueRecord)(model)) throw new Error("Discourse composer.open 未生成 model");
+	    if (setModelValue(
+	      model,
+	      "post",
+	      postReference.postNumber === 1 ? null : postModel
+	    ), !await this.#waitForComposerPopup(this.#composerOpenTimeoutMs))
+	      throw new Error("Discourse 原生回复浮窗未显示");
 	    if (this.#presentComposerWindow(), insertAfterOpen && initialRaw) {
 	      const composerInput = await this.#waitForComposerInput(
 	        this.#composerOpenTimeoutMs
@@ -7439,7 +7450,7 @@ ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer,
 	      throw new Error("DiscourseComposerTopicSyncController 已销毁");
 	  }
 	}
-}, "ecd9995f0f4c907d656dcaca05a25f62bc7e88b22c44d7899b24216dddea503d");
+}, "6e7a2a9a0fd7cd18909b8b7ea180f5710d4b7b618ef9fa9e0c404fbf7977ce51");
 
 /* Source: lite/src/discourse/native-host-api.ts */
 runtime.register("src/discourse/native-host-api.js", function(module, exports, require) {

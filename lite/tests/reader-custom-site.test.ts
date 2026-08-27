@@ -14,6 +14,9 @@ import {
 	readerDiscourseSiteAllowsBodyTranslation,
 	readerDiscourseSiteDisplayName,
 } from '../src/site/reader-custom-site-repository.js';
+import {
+	onboardDetectedDiscourseSite,
+} from '../src/site/reader-detected-site-onboarding.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -91,6 +94,61 @@ assert(
 	repository.storageKey === READER_CUSTOM_SITES_STORAGE_KEY &&
 		repository.snapshot.join(',') === 'remote.example',
 	'其他标签的 GM 配置事件必须无写回地重读共享站点列表并触发当前设置投影',
+);
+
+const onboardingStorage = new Map<string, unknown>();
+const onboardingRepository = new ReaderCustomSiteRepository({
+	storage: {
+		getValue: (key) => onboardingStorage.get(key),
+		setValue: (key, value) => {
+			onboardingStorage.set(key, value);
+		},
+	},
+});
+const onboardingConfirms: string[] = [];
+const onboardingNotices: string[] = [];
+assert(
+	await onboardDetectedDiscourseSite({
+		hostname: 'Detected.Example.com',
+		detection: 'dom-marker',
+		repository: onboardingRepository,
+		feedback: {
+			confirm: async (request) => {
+				onboardingConfirms.push(`${request.title}:${request.message}`);
+				return true;
+			},
+			show: (message) => onboardingNotices.push(message),
+		},
+	}) === 'added' &&
+	onboardingRepository.snapshot.includes('detected.example.com') &&
+	onboardingConfirms.length === 1 &&
+	onboardingNotices.at(-1)?.includes('detected.example.com'),
+	'非内置站点经本地 Discourse 证据确认后必须先询问用户，再写入自定义站点仓储',
+);
+assert(
+	await onboardDetectedDiscourseSite({
+		hostname: 'detected.example.com',
+		detection: 'native-module',
+		repository: onboardingRepository,
+		feedback: {
+			confirm: async () => {
+				throw new Error('已保存站点不得重复弹窗');
+			},
+			show: () => {},
+		},
+	}) === 'already-added' &&
+	await onboardDetectedDiscourseSite({
+		hostname: 'linux.do',
+		detection: 'native-module',
+		repository: onboardingRepository,
+		feedback: {
+			confirm: async () => {
+				throw new Error('内置站点不得弹窗');
+			},
+			show: () => {},
+		},
+	}) === 'not-needed',
+	'已保存与内置站点必须跳过自动加入提示',
 );
 
 let requestOptions: BrowserDiscourseSiteProbeRequestOptions | null = null;

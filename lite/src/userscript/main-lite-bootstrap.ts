@@ -168,6 +168,9 @@ import {
 	readerDiscourseSiteDisplayName,
 } from '../site/reader-custom-site-repository.js';
 import {
+	onboardDetectedDiscourseSite,
+} from '../site/reader-detected-site-onboarding.js';
+import {
 	ReaderEmbeddedReloadCoordinator,
 } from './reader-embedded-reload-coordinator.js';
 import {
@@ -1097,6 +1100,14 @@ function createRuntimeStage(
 		},
 		onReady(runtime, context, _settings, settingsView, _layout, appearance, font) {
 			state.runtime = runtime;
+			void onboardDetectedDiscourseSite({
+				hostname: document.location.hostname,
+				detection: applicationContext.host.detection,
+				repository: customSites.repository,
+				feedback: runtime.feedback,
+			}).catch((cause) => {
+				console.error('[main-lite:detected-custom-site]', cause);
+			});
 			for (const [topicId, input] of pendingAutomaticTopics) {
 				try {
 					runtime.unwantedTopics.remember(input);

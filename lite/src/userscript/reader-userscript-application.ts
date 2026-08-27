@@ -327,8 +327,8 @@ export function createReaderUserscriptRouteChangePort(
 /**
  * userscript 启动链的唯一 application 工厂。
  *
- * 所有 HTTPS host 都先做本地 Discourse 识别；DOM marker 只用于识别，不会创建探测
- * 请求。已验证站点列表只在本地识别失败后兜底，不再作为未知域名的前置白名单。
+ * 每个已获 userscript 管理器运行许可的 host 都先做本地 Discourse 识别；DOM marker
+ * 只用于识别，不会创建探测请求。已验证站点列表只在本地识别失败后兜底。
  * 函数本身无副作用，调用者仍须显式 start/destroy。
  */
 export function createReaderUserscriptApplication<TPreferences extends object>(

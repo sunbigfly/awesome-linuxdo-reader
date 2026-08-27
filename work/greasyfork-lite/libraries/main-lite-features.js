@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.6.2
+// @version      1.6.3
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.6.2 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.6.3 - main-lite-features
  * 媒体、互动、设置、用户与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.6.2",
+			sourceVersion: "1.6.3",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.2") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.3") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -23807,7 +23807,7 @@ runtime.register("src/settings/reader-custom-site-settings-form.js", function(mo
 	    ), title = (0, import_reader_settings_dom.settingsElement)(options.document, "strong");
 	    title.textContent = "其他适用站点";
 	    const description = (0, import_reader_settings_dom.settingsElement)(options.document, "small");
-	    description.textContent = "标准 HTTPS Discourse 会自动识别；这里只添加自动识别失败的兼容兜底站点。", head.append(title, description);
+	    description.textContent = "Loader 默认仅运行于内置社区；额外获准运行的 Discourse 会提示保存，也可在此手动验证。", head.append(title, description);
 	    const form = (0, import_reader_settings_dom.settingsElement)(
 	      options.document,
 	      "form",
@@ -23850,7 +23850,7 @@ runtime.register("src/settings/reader-custom-site-settings-form.js", function(mo
 	    try {
 	      const sites = await this.#repository.load();
 	      if (this.scope.destroyed) return;
-	      this.#renderSites(sites), this.#repository.writable ? this.#probe ? this.#status.textContent = "通常无需添加；深度定制论坛识别失败时再输入域名。" : (this.#status.textContent = "自动识别仍可使用；脚本没有权限验证兼容兜底站点。", this.#input.disabled = !0, this.#add.disabled = !0) : (this.#status.textContent = "自动识别仍可使用；脚本没有权限保存兼容兜底站点。", this.#input.disabled = !0, this.#add.disabled = !0);
+	      this.#renderSites(sites), this.#repository.writable ? this.#probe ? this.#status.textContent = "添加后仍需在脚本管理器中允许该域名运行。" : (this.#status.textContent = "当前页面仍可本地识别；脚本没有权限验证兼容兜底站点。", this.#input.disabled = !0, this.#add.disabled = !0) : (this.#status.textContent = "当前页面仍可本地识别；脚本没有权限保存兼容兜底站点。", this.#input.disabled = !0, this.#add.disabled = !0);
 	    } catch (cause) {
 	      if (this.scope.destroyed) return;
 	      this.#status.textContent = cause instanceof Error ? `读取站点失败：${cause.message}` : "读取站点失败。", this.#input.disabled = !0, this.#add.disabled = !0;
@@ -23878,7 +23878,7 @@ runtime.register("src/settings/reader-custom-site-settings-form.js", function(mo
 	    try {
 	      const info = await this.#probe.probe(host, operation.signal);
 	      if (await this.#repository.add(host), this.scope.destroyed || epoch !== this.#epoch) return;
-	      this.#input.value = "", this.#status.textContent = `已添加 ${info.title || host}；自动识别失败时将用它兜底启动。`;
+	      this.#input.value = "", this.#status.textContent = `已添加 ${info.title || host}；还需在脚本管理器中允许该域名运行。`;
 	    } catch (cause) {
 	      if (this.scope.destroyed || epoch !== this.#epoch || operation.signal.aborted) return;
 	      this.#status.textContent = `${cause instanceof Error ? cause.message : "检测失败"}；仅支持 Discourse 论坛。`;
@@ -23912,7 +23912,7 @@ runtime.register("src/settings/reader-custom-site-settings-form.js", function(mo
 	    })), this.#list.hidden = sites.length === 0;
 	  }
 	}
-}, "dd47fe44f7599c19cbeddc59bc80453266d5ffdae635fe089dfb9b870bfddfc9");
+}, "9744a53286d115e56b5da2c05c194c89ac38db31d91f5f9d96607189dd4fa05c");
 
 /* Source: lite/src/settings/reader-font-settings-form.ts */
 runtime.register("src/settings/reader-font-settings-form.js", function(module, exports, require) {
@@ -30872,6 +30872,28 @@ runtime.register("src/site/reader-custom-site-repository.js", function(module, e
 	  }
 	}
 }, "b500efe4ba032fff21c9b5434fb2f691cd6a379b21c1384b9712d3c2e570394e");
+
+/* Source: lite/src/site/reader-detected-site-onboarding.ts */
+runtime.register("src/site/reader-detected-site-onboarding.js", function(module, exports, require) {
+	var reader_detected_site_onboarding_exports = {};
+	__export(reader_detected_site_onboarding_exports, {
+	  onboardDetectedDiscourseSite: () => onboardDetectedDiscourseSite
+	});
+	module.exports = __toCommonJS(reader_detected_site_onboarding_exports);
+	var import_reader_custom_site_repository = require("./reader-custom-site-repository.js");
+	async function onboardDetectedDiscourseSite(options) {
+	  const host = (0, import_reader_custom_site_repository.normalizeReaderCustomSiteHost)(options.hostname);
+	  return !host || (0, import_reader_custom_site_repository.readerBuiltinDiscourseHost)(host) || options.detection === "verified-site" ? "not-needed" : (await options.repository.load()).includes(host) ? "already-added" : options.repository.writable ? await options.feedback.confirm({
+	    title: "发现新的 Discourse 社区",
+	    message: `已通过当前页面的 Discourse 证据确认 ${host}。是否加入自定义站点？`,
+	    note: "保存只作为站点识别兜底；脚本管理器仍需单独允许此域名运行。",
+	    confirmLabel: "加入自定义站点",
+	    cancelLabel: "暂不添加",
+	    tone: "primary",
+	    icon: "plus"
+	  }) ? (await options.repository.add(host), options.feedback.show(`已将 ${host} 加入自定义站点`), "added") : "declined" : (options.feedback.show(`已识别 ${host} 为 Discourse，但当前无法保存站点`), "unavailable");
+	}
+}, "35b2e5022ac5ed11218639f5fb5a88b212b644b2302d3d1f027ebbcac6e7b396");
 
 /* Source: lite/src/user/discourse-native-user-port.ts */
 runtime.register("src/user/discourse-native-user-port.js", function(module, exports, require) {

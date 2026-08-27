@@ -218,10 +218,14 @@ assert(
 	opened.parentPostNumber === 2 &&
 	draftCalls.join(',') === 'topic_10' &&
 	openOptions.length === 1 &&
+	openOptions[0]?.topic &&
+	!('post' in openOptions[0]!) &&
 	openOptions[0]?.reply === '已有草稿\n图片引用' &&
 	openOptions[0]?.draftSequence === 4 &&
+	service.model?.post &&
+	(service.model.post as TestModel).post_number === 2 &&
 	presentedComposerWindows.length === 1,
-	'并发普通/灯箱回复必须 single-flight，并通过 Discourse Draft/model/composer 打开',
+	'楼层回复必须 single-flight 复用 Topic 打开路径，再绑定目标 Post，避免宿主定位滚动',
 );
 const reused = await coordinator.openReply({
 	topic,

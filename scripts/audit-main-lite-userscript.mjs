@@ -7,6 +7,7 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, '..');
 const METADATA_PATH = 'lite/userscript.meta.txt';
 const PACKAGE_PATH = 'package.json';
+const BUILTIN_SITES_PATH = 'lite/src/site/reader-custom-site-repository.ts';
 const LOADER_PATH = 'work/local-debug.user.js';
 const LOCAL_BUNDLE_PATH = 'work/main-lite.local.js';
 const LEGACY_LOCAL_BUNDLE_PATH = 'work/mian-lite.local.js';
@@ -116,11 +117,12 @@ function sortedKeys(entries, omitted = new Set()) {
 }
 
 const { localArtifact } = parseArgs(process.argv.slice(2));
-const [metadataSource, loaderSource, packageSource, localBundleSource,
-	localStylesheetSource] = await Promise.all([
+const [metadataSource, loaderSource, packageSource, builtinSitesSource,
+	localBundleSource, localStylesheetSource] = await Promise.all([
 		readFile(path.join(projectRoot, METADATA_PATH), 'utf8'),
 		readFile(path.join(projectRoot, LOADER_PATH), 'utf8'),
 		readFile(path.join(projectRoot, PACKAGE_PATH), 'utf8'),
+		readFile(path.join(projectRoot, BUILTIN_SITES_PATH), 'utf8'),
 		readFile(path.join(projectRoot, LOCAL_BUNDLE_PATH), 'utf8'),
 		readFile(path.join(projectRoot, LOCAL_STYLESHEET_PATH), 'utf8'),
 	]);
@@ -161,6 +163,15 @@ for (const forbidden of ['updateURL', 'installURL', 'downloadURL']) {
 	}
 }
 assertValues(metadata, 'version', [packageVersion], METADATA_PATH);
+const builtinSitesBlock = builtinSitesSource.match(
+	/READER_BUILTIN_DISCOURSE_HOSTS\s*=\s*Object\.freeze\(\[([\s\S]*?)\]\);/,
+)?.[1];
+if (!builtinSitesBlock) {
+	throw new Error(`${BUILTIN_SITES_PATH} 缺少内置 Discourse host 列表`);
+}
+const builtinMatches = [...builtinSitesBlock.matchAll(/'([^']+)'/g)]
+	.map(([, host]) => `https://${host}/*`);
+assertValues(metadata, 'match', builtinMatches, METADATA_PATH);
 assertValues(metadata, 'resource', [
 	`ldpReaderStyles ${STYLE_RESOURCE_TOKEN}`,
 	`ldpKatexStyles ${KATEX_STYLESHEET}`,

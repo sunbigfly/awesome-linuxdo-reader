@@ -26,7 +26,7 @@ export interface ReaderCustomSiteSettingsFormOptions {
  * “适用站点”面板的唯一 DOM owner。
  *
  * 表单只发出验证/增删命令；规范化、持久化和已验证站点兜底共享 repository，
- * 跨站请求则只能通过固定 endpoint 的 probe。标准 Discourse 站点无需手动添加。
+ * 跨站请求则只能通过固定 endpoint 的 probe。保存站点不会修改 userscript 元数据权限。
  */
 export class ReaderCustomSiteSettingsForm {
 	readonly scope: LifecycleScope;
@@ -64,7 +64,7 @@ export class ReaderCustomSiteSettingsForm {
 		title.textContent = '其他适用站点';
 		const description = element(options.document, 'small');
 		description.textContent =
-			'标准 HTTPS Discourse 会自动识别；这里只添加自动识别失败的兼容兜底站点。';
+			'Loader 默认仅运行于内置社区；额外获准运行的 Discourse 会提示保存，也可在此手动验证。';
 		head.append(title, description);
 		const form = element(
 			options.document,
@@ -144,17 +144,17 @@ export class ReaderCustomSiteSettingsForm {
 			this.#renderSites(sites);
 			if (!this.#repository.writable) {
 				this.#status.textContent =
-					'自动识别仍可使用；脚本没有权限保存兼容兜底站点。';
+					'当前页面仍可本地识别；脚本没有权限保存兼容兜底站点。';
 				this.#input.disabled = true;
 				this.#add.disabled = true;
 			} else if (!this.#probe) {
 				this.#status.textContent =
-					'自动识别仍可使用；脚本没有权限验证兼容兜底站点。';
+					'当前页面仍可本地识别；脚本没有权限验证兼容兜底站点。';
 				this.#input.disabled = true;
 				this.#add.disabled = true;
 			} else {
 				this.#status.textContent =
-					'通常无需添加；深度定制论坛识别失败时再输入域名。';
+					'添加后仍需在脚本管理器中允许该域名运行。';
 			}
 		} catch (cause) {
 			if (this.scope.destroyed) return;
@@ -200,7 +200,7 @@ export class ReaderCustomSiteSettingsForm {
 			if (this.scope.destroyed || epoch !== this.#epoch) return;
 			this.#input.value = '';
 			this.#status.textContent =
-				`已添加 ${info.title || host}；自动识别失败时将用它兜底启动。`;
+				`已添加 ${info.title || host}；还需在脚本管理器中允许该域名运行。`;
 		} catch (cause) {
 			if (
 				this.scope.destroyed ||
