@@ -50,9 +50,9 @@ LINUX DO 是完整功能基线。其他标准 Discourse 社区会根据站点运
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 在本页点击“安装此脚本”。普通用户只需安装主脚本，不需要单独安装 Core、Platform 或 Features Library。
-3. 打开或刷新 LINUX DO、内置社区或其他标准 HTTPS Discourse，点击主题标题开始使用。
+3. 打开或刷新 LINUX DO、内置社区，或已在脚本管理器中额外允许的标准 HTTPS Discourse，点击主题标题开始使用。
 
-> 当前正式版为 Lite `1.6.2`。发布坐标：Loader `588185 / 1910580`、Core `590254 / 1910575`、Platform `591595 / 1910577`、Features `590255 / 1910576`。更新后刷新已打开的 Discourse 页面，并在“设置 → 关于”或脚本管理器中核对实际运行版本。
+> 当前正式版为 Lite `1.6.3`。发布坐标：Loader `588185 / 1914298`、Core `590254 / 1914292`、Platform `591595 / 1914294`、Features `590255 / 1914293`。Loader 默认只在 21 个内置社区运行；其他标准 Discourse 需先由脚本管理器允许当前域名，识别成功后会询问是否保存为自定义站点。更新后刷新已打开的 Discourse 页面，并在“设置 → 关于”或脚本管理器中核对实际运行版本。
 
 ## 数据与权限边界
 

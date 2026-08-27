@@ -4,9 +4,9 @@ description: 安装 userscript、确认启用状态、理解更新方式并排�
 feature_ids: ["CORE-001", "CORE-007", "TROUBLE-001"]
 source_anchors: ["lite/userscript.meta.txt","lite/src/app/reader-application.ts"]
 since: 0.1.2
-version: 1.6.2
+version: 1.6.3
 status: current
-last_verified: 2026-08-23
+last_verified: 2026-08-27
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png"]
 ---
 
@@ -15,12 +15,12 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png"]
 Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要先安装脚本管理器，再从 GreasyFork 安装正式版。
 
 ::: tip 当前发布状态
-本手册当前对应 `1.6.2`；GitHub 与 Greasy Fork 公开版也已同步到同一 Lite 版本。
+本手册当前对应 `1.6.3` 正式版；GitHub 与 Greasy Fork 已同步，主脚本继续采用 Loader + Core + Platform + Features 四文件结构。
 
-- **Loader**：脚本 `588185`，固定版本 `1910580`；Greasy Fork 文件 4,202 字节，SHA-256 `ad86d37a6eda6e922289319cfc5f49c41760c89c87e62c8272b43e318574886a`。移除 Greasy Fork 注入的 `@downloadURL none` 后为 4,181 字节，SHA-256 `5dfd86c76883c603e36bd350005cb657fe5e27e209fadcdbc53ec7f492618377`，与仓库 Loader 一致。
-- **Core**：脚本 `590254`，固定版本 `1910575`；1,738,833 字节，SHA-256 `bfec60620a453ffde822fbb18fff2b840592cefdcbf8d27a3c638b5d35743454`。
-- **Platform**：脚本 `591595`，固定版本 `1910577`；1,490,614 字节，SHA-256 `b1bf5294baca37df8ad5ffb9396ccd4ed241033258e0ed1b58dfbba383288bae`。
-- **Features**：脚本 `590255`，固定版本 `1910576`；2,020,439 字节，SHA-256 `b3e6c891249eff335c932b9f14de5f6752b8f02a2cc67c3e0ae33c1c0f52d07d`。
+- **Loader**：脚本 `588185`，固定版本 `1914298`；Greasy Fork 文件 4,173 字节，SHA-256 `c518455262e0a811be49ed686906eab03f7279979128e9badbef492ead85a01a`。移除 Greasy Fork 注入的 `@downloadURL none` 后为 4,152 字节，SHA-256 `5e35a981598c18cfe1d7e4dccdb0b7e1d53d7b56b59a7f84ae2efe7171c95f04`，与仓库 Loader 一致。
+- **Core**：脚本 `590254`，固定版本 `1914292`；1,739,322 字节，SHA-256 `0b1ab733f3891bf39e3e4bfb28bc486eb85317edd73e5d658c402c2621a18fe9`。
+- **Platform**：脚本 `591595`，固定版本 `1914294`；1,491,039 字节，SHA-256 `19e3c5bcc93772dd779f06957eeaa83ff5d0b69381ea956ae715661411fbd014`。
+- **Features**：脚本 `590255`，固定版本 `1914293`；2,022,100 字节，SHA-256 `21325b267ed42e07ca0f50a64989e57bc3dcc96cac53c91ebdc72c015b57e6a8`。
 - **CSS**：固定到 Git `4473716d05c9151c79639d6a17e4d71e124c7aef`；696,558 字节，SHA-256 `7cf3e876b3536c0d2f23325fe3fe88c7152c1c632f09c2622309c0799a8bd68c`。
 :::
 
@@ -32,7 +32,7 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
 
 | 项目 | 要求 |
 | --- | --- |
-| 站点 | LINUX DO 全面适配；20 个其他社区内置支持；其余标准 HTTPS Discourse 自动识别，深度定制站点可验证添加为兜底 |
+| 站点 | LINUX DO 全面适配；20 个其他社区内置支持；其他标准 HTTPS Discourse 需先由脚本管理器允许当前域名，再经本地识别或手动验证保存 |
 | 登录 | 阅读公开内容不一定需要；消息、收藏、回复等能力需要对应账号权限 |
 | 脚本管理器 | Tampermonkey 或能够完整支持本脚本权限的兼容管理器 |
 | 浏览器能力 | 现代 Chromium、Firefox 或同等级浏览器；具体边界见[兼容性](/reference/compatibility) |
@@ -64,11 +64,11 @@ Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要�
    - [Swift Forums](https://forums.swift.org/)
    - [Julia Discourse](https://discourse.julialang.org/)
    - [Rust Users Forum](https://users.rust-lang.org/)
-5. 其他标准 HTTPS Discourse 论坛会自动识别；只有深度定制站点未被识别时，才需在任一可用论坛通过“设置 → 适用站点 → 其他适用站点”验证添加为兼容兜底。
+5. 使用其他标准 HTTPS Discourse 时，先在脚本管理器中为本脚本添加对应 `https://域名/*` 用户匹配或站点访问；脚本运行后会用原生模块与 DOM 证据识别，并弹窗询问是否保存为自定义站点。也可在任一内置论坛通过“设置 → 适用站点 → 其他适用站点”手动验证保存。
 6. 在主题列表顶部或主题链接附近确认阅读器入口已经出现。
 
 ::: tip 站点与翻译能力
-LINUX DO 保持完整功能覆盖。中文、英文及其他语言的标准 HTTPS Discourse 论坛会被自动识别并启用核心阅读能力，站点未安装的 Boost、Reactions、Post Voting 等插件入口会自动隐藏。站点适配不限内容语言；除内置中文站点 LINUX DO 外，其他 Discourse 社区会显示译为简体中文的正文翻译按钮。
+LINUX DO 保持完整功能覆盖。获得脚本管理器站点许可后，中文、英文及其他语言的标准 HTTPS Discourse 论坛会被本地识别并启用核心阅读能力，站点未安装的 Boost、Reactions、Post Voting 等插件入口会自动隐藏。站点适配不限内容语言；除内置中文站点 LINUX DO 外，其他 Discourse 社区会显示译为简体中文的正文翻译按钮。
 :::
 
 ::: warning 不要同时启用两个版本
@@ -80,12 +80,12 @@ LINUX DO 保持完整功能覆盖。中文、英文及其他语言的标准 HTTP
 正式脚本由 GreasyFork 安装后，脚本管理器会记录对应的下载与更新地址；仓库源码不写入
 绕过 GreasyFork 的自定义 `updateURL`、`installURL` 或 `downloadURL`。更新频率由脚本管理器决定：
 
-当前公开的 `1.6.2` 主脚本通过固定 `@require` 加载同一发布快照的 Core、Platform 与 Features 三个 Greasy Fork Library。
+当前公开的 `1.6.3` 主脚本通过固定 `@require` 加载同一发布快照的 Core、Platform 与 Features 三个 Greasy Fork Library。
 Library 是正式脚本的一部分，无需单独安装。固定版本 URL 与完整性哈希用于避免更新期间混用不同版本。
 
 - 想立即检查时，在 Tampermonkey 面板中对该脚本执行“检查更新”。
 - 更新后刷新当前 Discourse 页面，已打开页面不会自动替换正在运行的旧代码。
-- 在“设置 → 关于”或脚本管理器中确认版本为 `1.6.2`；若仍显示旧版，先让脚本管理器检查更新，再完整刷新页面。
+- 在脚本管理器中确认版本为 `1.6.3`；刚完成更新但页面仍显示旧版时，请完整刷新已打开的 Discourse 页面。
 
 ## 三种保留版本
 
@@ -93,7 +93,7 @@ Library 是正式脚本的一部分，无需单独安装。固定版本 URL 与�
 | --- | --- | --- |
 | GitHub 原版 | 开发者与代码审查者 | `lite/src/`、`lite/styles/` 和构建脚本 |
 | 本地测试版 | 发布前手动审查 | 本机单文件 `main-lite.local.js` 与本地四文件 Loader，不会上传；旧 `mian-lite` 拼写保留为兼容副本 |
-| Greasy Fork 上传版 | 普通用户 | 当前 `1.6.2` 薄 Loader 固定加载 Core、Platform、Features |
+| Greasy Fork 上传版 | 普通用户 | 当前 `1.6.3` 薄 Loader 固定加载 Core、Platform、Features |
 
 普通用户只安装 Greasy Fork 的 **Awesome LinuxDo Reader** 主脚本。页面上标注“库”的
 Core、Platform 和 Features 是当前公开脚本依赖，不应单独安装。

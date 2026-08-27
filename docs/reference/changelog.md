@@ -4,9 +4,9 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.6.2
+version: 1.6.3
 status: current
-last_verified: 2026-08-23
+last_verified: 2026-08-27
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ---
 
@@ -15,6 +15,28 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.6.3 — 回复隔离与站点运行边界
+
+核验日期：2026-08-27。
+
+### 回复路径
+
+- Reader 楼层回复改为先按 Topic 级入口打开原生 Composer，再把目标 Post 绑定到 Composer model；回复对象保持不变，同时不再让宿主 post-stream 为定位楼层而自动滚动和加载后续页面。
+- Topic 操作列、普通楼层、嵌套回复、实时回复与灯箱继续复用同一个原生 Composer owner，不复制草稿、提交或成功事件链。
+
+### 站点匹配与发现
+
+- Loader 移除 `https://*/*` 全站命中，只保留 LINUX DO 与 20 个明确内置的常用 Discourse 社区，普通 HTTPS 页面不再加载整套 userscript 依赖。
+- 其他域名由脚本管理器另行允许后，Reader 使用当前页面的 Discourse 原生模块或 DOM 证据做无网络识别；确认是 Discourse 时弹窗询问，用户同意后才保存为自定义站点兜底。
+- 自定义站点存储不会冒充 userscript 运行授权，也不会自行扩大 `@match`；手动验证仍只匿名访问目标域名的 `/site/basic-info.json`。
+
+### 发布状态
+
+- `1.6.3` 已发布到 Greasy Fork：主 Loader 固定版本为 `1914298`，加载 Core `1914292`、Platform `1914294` 与 Features `1914293`。
+- 固定 Loader 原始文件为 4,173 字节，SHA-256 `c518455262e0a811be49ed686906eab03f7279979128e9badbef492ead85a01a`；移除平台加入的 `@downloadURL none` 后为 4,152 字节，SHA-256 `5e35a981598c18cfe1d7e4dccdb0b7e1d53d7b56b59a7f84ae2efe7171c95f04`，与仓库 Loader 逐字节一致。
+- Core 为 1,739,322 字节，SHA-256 `0b1ab733f3891bf39e3e4bfb28bc486eb85317edd73e5d658c402c2621a18fe9`；Platform 为 1,491,039 字节，SHA-256 `19e3c5bcc93772dd779f06957eeaa83ff5d0b69381ea956ae715661411fbd014`；Features 为 2,022,100 字节，SHA-256 `21325b267ed42e07ca0f50a64989e57bc3dcc96cac53c91ebdc72c015b57e6a8`。
+- CSS 未变化，继续固定到 Git `4473716d05c9151c79639d6a17e4d71e124c7aef`：696,558 字节，SHA-256 `7cf3e876b3536c0d2f23325fe3fe88c7152c1c632f09c2622309c0799a8bd68c`；源码与分包 runtime 各通过 235 文件契约，306 个模块通过 parity 门禁。
 
 ## 1.6.2 — 真实已读、自动流量与移动交互
 

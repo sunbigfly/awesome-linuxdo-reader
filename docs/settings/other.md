@@ -4,7 +4,7 @@ description: 配置队列入口、历史、退出、键盘与鼠标快捷方式�
 feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "COLLECT-007", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/app/reader-application.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-context-controller.ts","lite/src/post/boost-copy-rule.ts","lite/src/post/reader-topic-action-rail.ts","lite/src/collection/reader-unwanted-topic-filter.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts"]
 since: 0.1.2
-version: 1.6.2
+version: 1.6.3
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/guide-18-thread-context-v1.5.0.png", "/screenshots/guide-26-reading-navigation-v1.5.0.png", "/screenshots/guide-27-shortcuts-v1.5.0.png", "/screenshots/guide-28-applicable-sites-v1.5.0.png"]
@@ -129,6 +129,6 @@ screenshots: ["/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/g
 
 <p class="image-caption">在“适用站点”输入 HTTPS 论坛地址并验证 Discourse 证据，成功后才加入自定义站点；验证不会绕过目标站登录或权限。</p>
 
-标准 HTTPS Discourse 论坛会自动识别，通常无需添加。只有深度定制站点自动识别失败时，才输入域名或完整网址并点击“验证并添加”；阅读器会匿名访问该站点的 `/site/basic-info.json`，检测到 Discourse 公开站点信息后保存为兼容兜底。已内置站点不需要重复添加，保存的域名可以在同一区域移除。
+Loader 默认只匹配 21 个内置社区。其他标准 HTTPS Discourse 需先在脚本管理器中为本脚本允许对应域名；脚本运行后会用当前页面的原生模块与 DOM 证据识别，并弹窗询问是否保存为自定义站点。也可以输入域名或完整网址并点击“验证并添加”；阅读器会匿名访问该站点的 `/site/basic-info.json`，检测到 Discourse 公开站点信息后保存为兼容兜底。已内置站点不需要重复添加，保存的域名可以在同一区域移除。
 
-兼容兜底域名保存在脚本管理器的全局脚本存储中，只在本地自动识别失败时启用；若目标不是 Discourse、拒绝访问公开接口或请求超时，阅读器不会保存。
+兼容兜底域名保存在脚本管理器的全局脚本存储中，只在本地自动识别失败时启用；它不会自行修改 `@match`，因此脚本管理器仍须允许目标域名运行。若目标不是 Discourse、拒绝访问公开接口或请求超时，阅读器不会保存。

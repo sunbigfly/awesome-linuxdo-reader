@@ -1,6 +1,6 @@
 # Awesome LinuxDo Reader 项目介绍
 
-本文集中维护项目与用户手册可复用的产品介绍。当前版本：`1.6.2`。
+本文集中维护项目与用户手册可复用的产品介绍。当前版本：`1.6.3`。
 
 ## 一句话介绍
 
@@ -74,7 +74,7 @@ Awesome LinuxDo Reader 面向频繁阅读长帖、跟进讨论和处理社区消
 
 | 项目 | 当前配置 |
 | --- | --- |
-| 匹配站点 | LINUX DO、20 个其他内置社区、自动识别的标准 HTTPS Discourse，以及用户验证添加的深度定制站点兜底 |
+| 匹配站点 | Loader 仅匹配 LINUX DO 与 20 个其他内置社区；额外获脚本管理器许可的标准 HTTPS Discourse 会在本地识别后提示保存为自定义站点 |
 | 脚本权限 | `GM_getValue`、`GM_setValue`、`GM_xmlhttpRequest`、`GM_getResourceText`、`unsafeWindow` |
 | 跨域连接 | `connect.linux.do`、`credit.linux.do`、自定义站点检测、用户配置的 HTTPS WebDAV，以及用户主动启用的 Google / Microsoft 或 OpenAI 兼容翻译接口；动态目标由 `@connect *` 承载，业务端口按固定用途收窄 |
 | 外部依赖 | KaTeX、pinyin-pro、hls.js（jsDelivr） |
@@ -89,6 +89,6 @@ LINUX DO 全面适配、标准 Discourse 社区通用的增强阅读器：列表
 
 - 项目名称：Awesome LinuxDo Reader
 - 中文名称：LinuxDo 增强阅读
-- 当前版本：1.6.2
+- 当前版本：1.6.3
 - Logo：[`assets/logo.png`](../assets/logo.png)
 - 开源许可：[MIT License](../LICENSE)

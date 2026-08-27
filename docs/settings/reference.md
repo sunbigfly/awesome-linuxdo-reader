@@ -4,7 +4,7 @@ description: 汇总全部设置项、范围、默认值、生效时机和数据�
 feature_ids: ["SET-012", "SET-013", "SET-014", "SET-015", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021", "DATA-006", "DATA-007"]
 source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree.ts","lite/src/network/request-scheduler.ts","lite/src/dom/reply-tree-repository.ts","lite/src/post/boost-copy-rule.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.6.2
+version: 1.6.3
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png", "/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/guide-04-font-settings-v1.5.0.png", "/screenshots/guide-05-layout-settings-v1.5.0.png", "/screenshots/guide-07-appearance-settings-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-27-shortcuts-v1.5.0.png", "/screenshots/guide-28-applicable-sites-v1.5.0.png", "/screenshots/guide-32-webdav-sync-v1.5.0.png"]
@@ -166,9 +166,9 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png", "/screenshot
 
 ![适用站点面板中的自定义 HTTPS Discourse 验证入口](/screenshots/guide-28-applicable-sites-v1.5.0.png)
 
-<p class="image-caption">自定义站点必须使用 HTTPS 并通过 Discourse 能力验证；添加只扩展脚本适用范围，不授予额外账号、跨域或站点权限。</p>
+<p class="image-caption">自定义站点必须使用 HTTPS 并通过 Discourse 能力验证；添加只保存识别兜底，不会修改脚本管理器的域名匹配或授予额外权限。</p>
 
-标准 HTTPS Discourse 会自动识别。只有深度定制站点识别失败时才需输入域名或 HTTPS 网址；阅读器只匿名检测公开站点信息，确认是 Discourse 后保存为兼容兜底。已内置站点不需要重复添加，验证失败或超时不会写入配置。
+Loader 默认只匹配 21 个内置社区。其他标准 HTTPS Discourse 需先由脚本管理器允许当前域名；脚本本地识别成功后会弹窗询问是否保存，也可输入域名或 HTTPS 网址匿名验证公开站点信息。保存项只作识别兜底，不会自行扩大 `@match`；验证失败或超时不会写入配置。
 
 ## 搜索与保存
 

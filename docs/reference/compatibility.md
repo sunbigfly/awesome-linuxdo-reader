@@ -4,7 +4,7 @@ description: LINUX DO 全面适配、中英文及其他语言 Discourse 站点�
 feature_ids: ["CORE-007", "DATA-005", "REF-001"]
 source_anchors: ["lite/src/app/reader-application.ts","lite/src/userscript/browser-userscript-environment.ts","lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.6.2
+version: 1.6.3
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png"]
@@ -22,8 +22,8 @@ LINUX DO 是完整功能与真实回归基线。中文、英文及其他语言�
 
 | 项目 | 当前值 |
 | --- | --- |
-| 脚本版本 | `1.6.2` |
-| 匹配站点 | LINUX DO 全面适配；20 个其他社区内置支持；其余标准 HTTPS Discourse 自动识别，深度定制站点可验证添加为兜底 |
+| 脚本版本 | `1.6.3` |
+| 匹配站点 | Loader 仅声明 LINUX DO 与 20 个其他内置社区；其他标准 HTTPS Discourse 需由脚本管理器另行允许，再本地识别并提示保存 |
 | 启动时机 | `document-start` |
 | GM 权限 | `GM_getValue`、`GM_setValue`、`GM_xmlhttpRequest`、`GM_getResourceText`、`unsafeWindow` |
 | 跨域连接 | `connect.linux.do`、`credit.linux.do`、用户输入站点的 `/site/basic-info.json`、用户配置的 HTTPS WebDAV、Google / Microsoft 或用户配置的 OpenAI 兼容翻译接口；元数据以 `@connect *` 承载动态目标，业务端口仍按固定用途收窄 |
@@ -56,7 +56,7 @@ LINUX DO 是完整功能与真实回归基线。中文、英文及其他语言�
 | Julia Discourse | `https://discourse.julialang.org/*` | Discourse 核心能力，插件功能按站点检测 |
 | Rust Users Forum | `https://users.rust-lang.org/*` | Discourse 核心能力，插件功能按站点检测 |
 
-脚本同时声明 `https://*/*`，在未知域名上只通过 Discourse 原生模块和页面 DOM 标志做本地识别，不发送站点探测请求；识别成功后才初始化阅读器，普通网站在页面加载完成后仍无证据便静默退出。用户保存的自定义域名不再是前置白名单，只在自动识别失败时作为已验证兜底。手动添加时会匿名请求该域名的 `/site/basic-info.json`，只有检测到 Discourse 站点信息才保存。站点 Logo 从 Discourse 公开站点信息、宿主 Header 或页面图标中自动选择。
+Loader 不再声明 `https://*/*`，只在上表 21 个内置社区运行。其他域名必须先由脚本管理器为本脚本添加对应用户匹配或站点访问；获得运行许可后，脚本只通过 Discourse 原生模块和页面 DOM 标志做本地识别，不发送探测请求，识别成功会弹窗询问是否保存为自定义站点。保存项只在后续本地识别失败时作为已验证兜底，不能自行扩大 userscript 的 `@match`。手动添加时会匿名请求该域名的 `/site/basic-info.json`，只有检测到 Discourse 站点信息才保存。站点 Logo 从 Discourse 公开站点信息、宿主 Header 或页面图标中自动选择。
 
 站点适配不限制内容语言。正文翻译对非中文内置社区和语言未知的自定义 Discourse 站点开放，译文目标为简体中文；LINUX DO 作为内置中文站点隐藏翻译入口。未配置 API Key 时使用 Google / Microsoft 公共接口；配置供应商并缓存模型目录后，可在翻译设置中按 URL 分组选择 OpenAI 兼容模型。翻译服务不可用时，原文阅读不受影响。
 
