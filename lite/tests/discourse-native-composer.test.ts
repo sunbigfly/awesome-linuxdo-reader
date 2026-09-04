@@ -30,6 +30,7 @@ const draftCalls: string[] = [];
 const openOptions: Record<string, unknown>[] = [];
 const inserted: string[] = [];
 const richInsertions: string[] = [];
+const replyReloadedPostNumbers: number[] = [];
 const saveCalls: unknown[][] = [];
 const routed: string[] = [];
 const privateMessageOpenOptions: Record<string, unknown>[] = [];
@@ -42,7 +43,13 @@ const service = {
 	appEvents: {
 		on() {},
 		off() {},
-		trigger(name: string, value: string) {
+		trigger(name: string, value: unknown) {
+			if (name === 'composer:reply-reloaded') {
+				const reloaded = value as TestModel;
+				const reloadedPost = reloaded.get('post') as TestModel | null;
+				replyReloadedPostNumbers.push(Number(reloadedPost?.post_number ?? 0));
+				return;
+			}
 			inserted.push(`${name}:${value}`);
 		},
 	},
@@ -224,8 +231,9 @@ assert(
 	openOptions[0]?.draftSequence === 4 &&
 	service.model?.post &&
 	(service.model.post as TestModel).post_number === 2 &&
+	replyReloadedPostNumbers.join(',') === '2' &&
 	presentedComposerWindows.length === 1,
-	'楼层回复必须 single-flight 复用 Topic 打开路径，再绑定目标 Post，避免宿主定位滚动',
+	'楼层回复必须 single-flight 复用 Topic 打开路径，再按原生生命周期绑定目标 Post，避免宿主定位滚动',
 );
 const reused = await coordinator.openReply({
 	topic,
@@ -381,6 +389,72 @@ assert(
 	'新建 Composer 必须先交给窗口 owner 显示，再选择可见文本控件并写入 model/value',
 );
 delayedInputCoordinator.destroy();
+
+const { document: freshRichParsedDocument } = parseHTML(
+	'<!doctype html><html><body><section id="reply-control" class="closed"></section></body></html>',
+);
+const freshRichDocument = freshRichParsedDocument as unknown as Document;
+const freshRichOpenOptions: Record<string, unknown>[] = [];
+const freshRichRaw =
+	'[quote="booster, post:2, topic:10"]\n正文\n[/quote]\n\n@booster ';
+const freshRichService = {
+	model: null as ReturnType<typeof model> | null,
+	appEvents: {
+		trigger() {},
+	},
+	async open(options: Record<string, unknown>) {
+		freshRichOpenOptions.push(options);
+		freshRichDocument.querySelector('#reply-control')?.classList.remove('closed');
+		this.model = model({
+			...options,
+			topic: options.topic,
+			viewOpen: true,
+			composeState: 'open',
+		});
+	},
+};
+const freshRichHost: DiscourseHostApiPort = {
+	lookup(name) {
+		return name === 'service:composer'
+			? freshRichService
+			: name === 'service:app-events'
+				? freshRichService.appEvents
+				: null;
+	},
+	lookupModule(name) {
+		if (name === 'discourse/models/draft') {
+			return { default: { async get() { return null; } } };
+		}
+		return modules[name] ?? null;
+	},
+};
+const freshRichCoordinator = new DiscourseComposerCoordinator({
+	host: freshRichHost,
+	document: freshRichDocument,
+	composerOpenTimeoutMs: 1,
+	waitForDelay: async () => {},
+});
+freshRichCoordinator.bindWindow({
+	open: (element) => Boolean(element),
+});
+const freshRichSession = await freshRichCoordinator.openReply({
+	topic,
+	post,
+	initialRaw: freshRichRaw,
+	initialRichHtml: '<aside class="quote"><blockquote>正文</blockquote></aside>',
+	dedupeMention: 'booster',
+});
+assert(
+	!freshRichSession.reused &&
+		freshRichOpenOptions.length === 1 &&
+		freshRichOpenOptions[0]?.topic &&
+		!('post' in freshRichOpenOptions[0]!) &&
+		freshRichOpenOptions[0]?.reply === freshRichRaw.trim() &&
+		freshRichService.model?.reply === freshRichRaw.trim() &&
+		(freshRichService.model?.post as TestModel).post_number === 2,
+	'首次 Boost/图片富文本引用必须随 Topic Composer 原子建立 canonical raw，不能依赖空编辑器出现后的 DOM 补写',
+);
+freshRichCoordinator.destroy();
 
 const priorReplyModel = service.model;
 const postTopicOnlyModel = model({

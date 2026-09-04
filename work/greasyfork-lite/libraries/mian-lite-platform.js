@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.6.3
+// @version      1.6.4
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知、监控与翻译平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.6.3 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.6.4 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知、监控与翻译平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.6.3",
+			sourceVersion: "1.6.4",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -113,7 +113,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.3") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.4") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -6433,6 +6433,12 @@ runtime.register("src/discourse/native-composer.js", function(module, exports, r
 	  const setter = target.set;
 	  typeof setter == "function" ? setter.call(target, key, value) : target[key] = value;
 	}
+	function setComposerReplyTarget(appEvents, model, postNumber, postModel) {
+	  const currentPost = modelValue(model, "post"), currentPostNumber = Number(modelValue(currentPost, "post_number")), nextPost = Number(postNumber) === 1 ? null : postModel, changed = nextPost === null ? currentPost != null : currentPostNumber !== Number(postNumber);
+	  if (setModelValue(model, "post", nextPost), !changed) return;
+	  const trigger = appEvents.trigger;
+	  typeof trigger == "function" && trigger.call(appEvents, "composer:reply-reloaded", model);
+	}
 	function moduleDefault(host, name) {
 	  const module2 = (0, import_value_record.valueRecord)(host.lookupModule(name)), value = (0, import_value_record.valueRecord)(module2?.default);
 	  if (!value) throw new Error(`Discourse 原生模块未就绪：${name}`);
@@ -6737,10 +6743,11 @@ ${inserted}`), after && !/^\s/.test(after) && (inserted += `
 	      draft: Draft
 	    } = this.#replyRuntime(), topicModel = this.#models.createTopic(input.topic), postModel = this.#models.createPost(input.topic, input.post, topicModel), currentModel = modelValue(composer, "model"), currentTopicId = composerModelTopicId(currentModel), currentOpen = modelValue(currentModel, "viewOpen") === !0 || String(modelValue(currentModel, "composeState") ?? "").toLowerCase() === "open", currentAction = modelValue(currentModel, "action"), currentReply = String(modelValue(currentModel, "reply") ?? ""), initialRaw = String(input.initialRaw ?? "").trim(), initialRichHtml = String(input.initialRichHtml ?? "").trim(), dedupeMention = normalizedMentionUsername(input.dedupeMention);
 	    if (currentOpen && currentTopicId === topicId && currentAction === replyAction && await this.#waitForComposerPopup(640)) {
-	      setModelValue(
+	      setComposerReplyTarget(
+	        appEvents,
 	        currentModel,
-	        "post",
-	        postReference.postNumber === 1 ? null : postModel
+	        postReference.postNumber,
+	        postModel
 	      ), this.#presentComposerWindow();
 	      const duplicateMention = input.replaceRaw !== !0 && initialRaw && rawMentionsUsername(currentReply, dedupeMention);
 	      if (!duplicateMention) {
@@ -6799,15 +6806,16 @@ ${inserted}`), after && !/^\s/.test(after) && (inserted += `
 	        draftResult.draft_sequence ?? sequence
 	      ), input.replaceRaw !== !0 && initialRaw && rawMentionsUsername(draft.reply, dedupeMention) ? (options.reply = draft.reply, insertionSkipped = "duplicate-mention") : input.replaceRaw === !0 ? options.reply = initialRaw : initialRaw && initialRichHtml ? (options.reply = draft.reply, insertAfterOpen = !0) : options.reply = `${draft.reply}${initialRaw ? `
 ${initialRaw}` : ""}`, draft.whisper !== void 0 && (options.whisper = draft.whisper);
-	    } else initialRaw && (input.replaceRaw === !0 ? options.reply = initialRaw : initialRichHtml ? insertAfterOpen = !0 : options.quote = initialRaw);
+	    } else initialRaw && (input.replaceRaw === !0 || initialRichHtml ? options.reply = initialRaw : options.quote = initialRaw);
 	    currentReply && currentOpen && currentTopicId === topicId && (input.replaceRaw !== !0 && initialRaw && rawMentionsUsername(currentReply, dedupeMention) ? (options.reply = currentReply, insertAfterOpen = !1, insertionSkipped = "duplicate-mention") : input.replaceRaw === !0 ? (options.reply = initialRaw, insertAfterOpen = !1) : initialRaw && initialRichHtml ? (options.reply = currentReply, insertAfterOpen = !0) : options.reply = `${currentReply}${initialRaw ? `
 ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer, options), this.#assertActive();
 	    const model = modelValue(composer, "model");
 	    if (!(0, import_value_record.valueRecord)(model)) throw new Error("Discourse composer.open 未生成 model");
-	    if (setModelValue(
+	    if (setComposerReplyTarget(
+	      appEvents,
 	      model,
-	      "post",
-	      postReference.postNumber === 1 ? null : postModel
+	      postReference.postNumber,
+	      postModel
 	    ), !await this.#waitForComposerPopup(this.#composerOpenTimeoutMs))
 	      throw new Error("Discourse 原生回复浮窗未显示");
 	    if (this.#presentComposerWindow(), insertAfterOpen && initialRaw) {
@@ -7450,7 +7458,7 @@ ${initialRaw}` : ""}`, delete options.quote), await composer.open.call(composer,
 	      throw new Error("DiscourseComposerTopicSyncController 已销毁");
 	  }
 	}
-}, "6e7a2a9a0fd7cd18909b8b7ea180f5710d4b7b618ef9fa9e0c404fbf7977ce51");
+}, "55bcb4e55783ea1ef6c9b8cc4b2d66515cf44b8cf381ddd66159c01eec90b6e7");
 
 /* Source: lite/src/discourse/native-host-api.ts */
 runtime.register("src/discourse/native-host-api.js", function(module, exports, require) {

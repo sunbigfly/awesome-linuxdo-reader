@@ -153,6 +153,26 @@ function setModelValue(model: unknown, key: string, value: unknown): void {
 	else target[key] = value;
 }
 
+function setComposerReplyTarget(
+	appEvents: MutableRecord,
+	model: unknown,
+	postNumber: DiscoursePostNumber,
+	postModel: unknown,
+): void {
+	const currentPost = modelValue(model, 'post');
+	const currentPostNumber = Number(modelValue(currentPost, 'post_number'));
+	const nextPost = Number(postNumber) === 1 ? null : postModel;
+	const changed = nextPost === null
+		? currentPost !== null && currentPost !== undefined
+		: currentPostNumber !== Number(postNumber);
+	setModelValue(model, 'post', nextPost);
+	if (!changed) return;
+	const trigger = appEvents.trigger;
+	if (typeof trigger === 'function') {
+		trigger.call(appEvents, 'composer:reply-reloaded', model);
+	}
+}
+
 function moduleDefault(host: DiscourseHostApiPort, name: string): MutableRecord {
 	const module = record(host.lookupModule(name));
 	const value = record(module?.default);
@@ -662,10 +682,11 @@ export class DiscourseComposerCoordinator {
 			currentTopicId === topicId &&
 			currentAction === replyAction;
 		if (sameTopicReply && await this.#waitForComposerPopup(640)) {
-			setModelValue(
+			setComposerReplyTarget(
+				appEvents,
 				currentModel,
-				'post',
-				postReference.postNumber === 1 ? null : postModel,
+				postReference.postNumber,
+				postModel,
 			);
 			this.#presentComposerWindow();
 			const duplicateMention = input.replaceRaw !== true &&
@@ -757,8 +778,14 @@ export class DiscourseComposerCoordinator {
 			if (draft.whisper !== undefined) options.whisper = draft.whisper;
 		} else if (initialRaw) {
 			if (input.replaceRaw === true) options.reply = initialRaw;
-			else if (initialRichHtml) insertAfterOpen = true;
-			else options.quote = initialRaw;
+			else if (initialRichHtml) {
+				/*
+				 * 首次打开时把 canonical Markdown 与 Composer model 一起建立。
+				 * 原生富文本编辑器会从 model.reply 初始化；不能先打开空回复再
+				 * 等待 DOM 补写，否则入口渲染时序变化会让 Boost/图片引用失效。
+				 */
+				options.reply = initialRaw;
+			} else options.quote = initialRaw;
 		}
 		if (currentReply && currentOpen && currentTopicId === topicId) {
 			if (
@@ -784,10 +811,11 @@ export class DiscourseComposerCoordinator {
 		this.#assertActive();
 		const model = modelValue(composer, 'model');
 		if (!record(model)) throw new Error('Discourse composer.open 未生成 model');
-		setModelValue(
+		setComposerReplyTarget(
+			appEvents,
 			model,
-			'post',
-			postReference.postNumber === 1 ? null : postModel,
+			postReference.postNumber,
+			postModel,
 		);
 		if (!await this.#waitForComposerPopup(this.#composerOpenTimeoutMs)) {
 			throw new Error('Discourse 原生回复浮窗未显示');
