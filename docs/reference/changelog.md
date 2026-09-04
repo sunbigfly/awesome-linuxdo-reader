@@ -4,9 +4,9 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.6.3
+version: 1.6.4
 status: current
-last_verified: 2026-08-27
+last_verified: 2026-09-04
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ---
 
@@ -15,6 +15,22 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.6.4 — Boost 回复入口兼容修复
+
+核验日期：2026-09-04。
+
+### Boost `@` 回复
+
+- 点击带用户名 Boost 的 `@` 操作时，规范 Markdown 引用、作者提及和目标楼层随 Topic Composer 原子建立，不再依赖空富文本编辑器出现后的 DOM 补写。
+- 复用已打开的回复框切换目标楼层时，会同步更新 Composer model 并触发原生 `composer:reply-reloaded` 生命周期；Topic 级隔离入口和宿主页面不跳转的行为保持不变。
+
+### 发布状态
+
+- `1.6.4` 已发布到 Greasy Fork：主 Loader 固定版本为 `1921699`，加载 Core `1921693`、Platform `1921695` 与 Features `1921694`。
+- 固定 Loader 原始文件为 4,173 字节，SHA-256 `7b68003bd806ec1c2b0b681aee3c2b9002045c0cdcf3f6d15b1785d35c8a6de5`；移除平台加入的 `@downloadURL none` 后为 4,152 字节，SHA-256 `f9248c55c2ab1fc86c43b028063ed0cae621afc814f3dd7fd72aaa7f95233c7f`，与仓库 Loader 逐字节一致。
+- Core 为 1,739,322 字节，SHA-256 `aec251cdb2502211bf4add0e8abfa6d7449ecd1abcf816f89f0165d2853a5288`；Platform 为 1,491,573 字节，SHA-256 `09b9ab7e8c567fb5645976254b61681c9f5eac01866bd514c0e95cdd7397992b`；Features 为 2,022,100 字节，SHA-256 `734fc340bf5f3d08340217f8de649b1352035f7595acca1629dd2e6949266271`。
+- CSS 未变化，继续固定到 Git `4473716d05c9151c79639d6a17e4d71e124c7aef`：696,558 字节，SHA-256 `7cf3e876b3536c0d2f23325fe3fe88c7152c1c632f09c2622309c0799a8bd68c`；306 个源码模块通过结构 parity 与兼容副本逐字节门禁。
 
 ## 1.6.3 — 回复隔离与站点运行边界
 

@@ -4,7 +4,7 @@ description: LINUX DO 全面适配、中英文及其他语言 Discourse 站点�
 feature_ids: ["CORE-007", "DATA-005", "REF-001"]
 source_anchors: ["lite/src/app/reader-application.ts","lite/src/userscript/browser-userscript-environment.ts","lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.6.3
+version: 1.6.4
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png"]
@@ -22,7 +22,7 @@ LINUX DO 是完整功能与真实回归基线。中文、英文及其他语言�
 
 | 项目 | 当前值 |
 | --- | --- |
-| 脚本版本 | `1.6.3` |
+| 脚本版本 | `1.6.4` |
 | 匹配站点 | Loader 仅声明 LINUX DO 与 20 个其他内置社区；其他标准 HTTPS Discourse 需由脚本管理器另行允许，再本地识别并提示保存 |
 | 启动时机 | `document-start` |
 | GM 权限 | `GM_getValue`、`GM_setValue`、`GM_xmlhttpRequest`、`GM_getResourceText`、`unsafeWindow` |
