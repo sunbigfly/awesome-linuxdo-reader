@@ -4,9 +4,9 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.6.4
+version: 1.6.5
 status: current
-last_verified: 2026-09-04
+last_verified: 2026-09-12
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ---
 
@@ -15,6 +15,31 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.6.5 — 移动端启动兼容与纯本地单文件
+
+核验日期：2026-09-12。
+
+### 启动修复
+
+- 启动参数使用普通对象，避免继承 Window 的只读 `window` 属性后赋值导致脚本在入口处报错。
+- 正式版显式捕获脚本管理器局部作用域中的 GM API，兼容移动端管理器的接口注入方式。
+- 四文件运行时记录失败入口；同一页面再次请求启动时，不重复执行已失败的入口或再次抛出同一启动异常。刷新页面后可重新尝试。
+
+### 纯本地单文件
+
+- 新增公开的 `main-lite.standalone.user.js`，阅读器 JS、CSS、KaTeX、拼音、视频库和数学字体全部内置，无 `@require`、`@resource` 或运行所需的本机文件路径。
+- 单文件关闭自动更新，更新时重新下载并导入；与正式版或其他调试版只启用一个。论坛内容和用户启用的在线服务仍需联网。
+
+### 发布状态
+
+- Greasy Fork 1.6.5 主 Loader 固定版本为 `1929091`，引用 Core `1929088`、Platform `1929090`、Features `1929089`；固定下载和自动更新元数据均已核验。
+- Loader 原始文件 4,173 字节，SHA-256 `3438c88899e65e5243a77bf62c20d7e037d0eda35ded1e2846e3a3c77477d210`；移除平台更新元数据后 4,152 字节，SHA-256 `bf0ec28e250784e9c976379e7df9405465f9004086b35d3210cb31cf9d97dfb9`，与仓库一致。
+- main-lite-core：1,740,611 字节，SHA-256 `f4a1f29f1c4c9e5f23acb3455bcc936f676eec2012e0069d395372ad613331f4`。
+- main-lite-platform：1,491,587 字节，SHA-256 `6114c3882645348c8453fd15bba5a2aa70241a9d88f05b73704090ff15ade8c6`。
+- main-lite-features：2,022,114 字节，SHA-256 `f36367beee9d7e92551860d70a1c6c606b9efd174e6f03157ff82a0a4d7ad760`。
+- 纯本地单文件固定于 Git `2dc8c9adbe61bf958877841a4693d2d8c49ad2ea`，8,618,692 字节，SHA-256 `ece3f22922d3dcdc90fe68babbb344d5d58335aca0a3b4d397793981414d58cc`；两个 CDN 下载均与本地产物一致。
+- 源码与分包各 235 个契约测试文件、306 模块 parity、启动保护与单文件审计通过。X 浏览器真机尚未验收；未将桌面启动验证表述为手机验收。
 
 ## 1.6.4 — Boost 回复入口兼容修复
 

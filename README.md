@@ -21,7 +21,7 @@
   <a href="CONTRIBUTING.md">参与开发</a>
 </p>
 
-<p align="center"><sub>Lite 1.6.4 · TypeScript · MIT License · Tampermonkey</sub></p>
+<p align="center"><sub>Lite 1.6.5 · TypeScript · MIT License · Tampermonkey</sub></p>
 
 <p align="center">
   <a href="assets/screenshots/guide-01-reader-overview-v1.5.0.png">
@@ -139,7 +139,7 @@ LINUX DO 是完整功能基线。对于其他标准 Discourse 社区，阅读器
 
 ## 开始使用
 
-当前项目版本为 `1.6.4`。
+当前项目版本为 `1.6.5`。
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 前往 [Greasy Fork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 安装 **Awesome LinuxDo Reader**。
@@ -159,6 +159,8 @@ LINUX DO 是完整功能基线。对于其他标准 Discourse 社区，阅读器
 | 常见问题 | [故障排查](https://sunbigfly.github.io/awesome-linuxdo-reader/manage/troubleshooting) |
 | 版本变化 | [更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog) |
 
+需要一个文件直接导入时，下载 [1.6.5 纯本地单文件（CDN）](https://gcore.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@2dc8c9adbe61bf958877841a4693d2d8c49ad2ea/work/main-lite.standalone.user.js)（[GitHub 源文件](https://github.com/sunbigfly/awesome-linuxdo-reader/blob/2dc8c9adbe61bf958877841a4693d2d8c49ad2ea/work/main-lite.standalone.user.js)）。阅读器、CSS、第三方库和数学字体全部内置，无 `@require`、`@resource`，不依赖 `GM_getResourceText`。安装后只启用这一版；更新时重新下载导入，论坛内容与在线服务仍需联网。
+
 <details>
 <summary><strong>面向开发者</strong></summary>
 
@@ -173,6 +175,8 @@ Lite 阅读器以以下目录为事实源：
 ```bash
 npm run main-lite:local-debug
 ```
+
+需要直接导入油猴时，使用生成的 `work/main-lite.standalone.user.js`：阅读器 JS、CSS、KaTeX、拼音和视频库以及数学字体全部内置，没有 `@require`、`@resource`，也不依赖 `GM_getResourceText` 或本机文件路径。脚本依赖无需联网下载，论坛内容和用户启用的在线服务仍正常联网。纯本地版关闭自动更新，重新构建后需重新导入；它与正式版、其他本地版不可同时启用。
 
 开发规范、验证要求和提交约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
