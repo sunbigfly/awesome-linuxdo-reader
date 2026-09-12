@@ -1,7 +1,8 @@
-import { build } from 'esbuild';
+import { build, transform } from 'esbuild';
+import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { runInThisContext } from 'node:vm';
+import { runInThisContext, Script } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const runtimeKey = '__AWESOME_LINUXDO_READER_LITE_MODULE_RUNTIME__';
@@ -89,9 +90,60 @@ async function loadSplitRuntime() {
 	return runtime;
 }
 
+async function verifyStartupGuards(runtime) {
+	const entryPath = path.join(sourceDirectory, 'userscript/main-lite-entry.ts');
+	const entry = await transform(await readFile(entryPath, 'utf8'), {
+		loader: 'ts', format: 'cjs', target: 'es2022',
+	});
+	const page = {};
+	const scriptGlobal = Object.defineProperty({}, 'window', { get: () => page });
+	let captured;
+	new Script(
+		'(function (GM_getValue, GM_getResourceText, unsafeWindow, globalThis) {\n' +
+		entry.code + '\n})(__readValue, __readResource, window, __global);',
+	).runInNewContext({
+		window: page,
+		__global: scriptGlobal,
+		__readValue: (key) => `value:${key}`,
+		__readResource: (key) => `resource:${key}`,
+		require(request) {
+			assert.equal(request, './main-lite-bootstrap.js');
+			return { startMainLiteUserscript: (environment) => { captured = environment; } };
+		},
+	}, { timeout: 1000 });
+	assert.equal(captured.window, page);
+	assert.equal(captured.unsafeWindow, page);
+	assert.equal(captured.GM_getValue('probe'), 'value:probe');
+	assert.equal(captured.GM_getResourceText('styles'), 'resource:styles');
+	assert.equal(Object.getOwnPropertyDescriptor(captured, 'window').writable, true);
+	let failedAttempts = 0;
+	let healthyAttempts = 0;
+	runtime.register('test/startup-failure.js', () => {
+		failedAttempts += 1;
+		throw new Error('startup failure fixture');
+	}, 'a'.repeat(64));
+	runtime.register('test/startup-healthy.js', (module) => {
+		healthyAttempts += 1;
+		module.exports = { ready: true };
+	}, 'b'.repeat(64));
+	assert.throws(() => runtime.start('test/startup-failure.js', expectedLibraries), /startup failure fixture/);
+	for (let attempt = 0; attempt < 50; attempt += 1) {
+		assert.equal(runtime.start('test/startup-failure.js', expectedLibraries), undefined);
+	}
+	assert.equal(failedAttempts, 1, '失败入口不得再次初始化或重复抛错');
+	const healthy = runtime.start('test/startup-healthy.js', expectedLibraries);
+	assert.equal(runtime.start('test/startup-healthy.js', expectedLibraries), healthy);
+	assert.equal(healthyAttempts, 1, '成功模块仍须复用缓存');
+	assert.equal(healthy.ready, true, '失败锁定不得影响其他模块');
+	assert.throws(() => runtime.start('test/missing-library.js', ['missing-fixture']), /missing library/);
+	assert.equal(runtime.start('test/missing-library.js', ['missing-fixture']), undefined);
+	process.stdout.write('main-lite startup guards: passed (lexical GM, readonly Window, single failure)\n');
+}
+
 async function run() {
 	const testFiles = await verifyTestEntry();
 	const runtime = await loadSplitRuntime();
+	await verifyStartupGuards(runtime);
 	const result = await build({
 		entryPoints: [runPath],
 		bundle: true,

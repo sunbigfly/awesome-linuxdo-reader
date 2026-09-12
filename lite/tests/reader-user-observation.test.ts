@@ -2744,6 +2744,20 @@ Object.defineProperties(calendar, {
 	},
 });
 calendarToggle.click();
+const calendarToday = new Date();
+assert(
+	calendar.querySelector('.ldp-user-observation-calendar-title')
+		?.textContent === `${calendarToday.getFullYear()}年${String(calendarToday.getMonth() + 1).padStart(2, '0')}月`,
+	'月历初次展开必须显示当前月份',
+);
+// 活动样本固定在 2026 年 8 月，通过月历导航定位，避免测试依赖运行月份。
+const fixtureMonthOffset = (2026 - calendarToday.getFullYear()) * 12 +
+	7 - calendarToday.getMonth();
+for (let index = 0; index < Math.abs(fixtureMonthOffset); index += 1) {
+	calendar.querySelector<HTMLButtonElement>(
+		`[data-user-observation-calendar-month="${Math.sign(fixtureMonthOffset)}"]`,
+	)!.click();
+}
 const calendarCount = (day: string) => calendar.querySelector(
 	`[data-user-observation-calendar-day="${day}"] small`,
 )?.textContent ?? '';
@@ -2757,7 +2771,7 @@ assert(
 	calendar.querySelectorAll('[data-activity-level]:not([data-activity-level="0"])')
 		.length >= 2 &&
 	calendarCount('2026-08-11') === '10',
-	`月历必须展示当前月份中 Topic Tab 每天的数量与活跃强度：${JSON.stringify({
+	`月历必须展示指定月份中 Topic Tab 每天的数量与活跃强度：${JSON.stringify({
 		hidden: calendar.hidden,
 		expanded: calendarToggle.getAttribute('aria-expanded'),
 		days: calendar.querySelectorAll('.ldp-user-observation-calendar-day').length,

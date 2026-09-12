@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { Script } from 'node:vm';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, '..');
@@ -10,6 +11,7 @@ const PACKAGE_PATH = 'package.json';
 const BUILTIN_SITES_PATH = 'lite/src/site/reader-custom-site-repository.ts';
 const LOADER_PATH = 'work/local-debug.user.js';
 const LOCAL_BUNDLE_PATH = 'work/main-lite.local.js';
+const STANDALONE_PATH = 'work/main-lite.standalone.user.js';
 const LEGACY_LOCAL_BUNDLE_PATH = 'work/mian-lite.local.js';
 const LOCAL_STYLESHEET_PATH = 'work/main-lite.css';
 const LEGACY_LOCAL_STYLESHEET_PATH = 'work/mian-lite.css';
@@ -195,6 +197,7 @@ for (const key of loaderInheritedKeys) {
 assertValues(loader, 'name', [LOCAL_NAME], LOADER_PATH);
 const localBundleSha256 = sha256(localBundleSource);
 const localStylesheetSha256 = sha256(localStylesheetSource);
+let standaloneSha256 = null;
 assertValues(loader, 'version', [
 	`${LOCAL_VERSION_PREFIX}.${localBundleSha256.slice(0, 12)}`,
 ], LOADER_PATH);
@@ -240,6 +243,95 @@ if (localArtifact) {
 		`ldpReaderStyles ${localStylesheetUrl}`,
 		`ldpKatexStyles ${KATEX_STYLESHEET}`,
 	], LOCAL_BUNDLE_PATH);
+
+	const standaloneSource = await readFile(path.join(projectRoot, STANDALONE_PATH), 'utf8');
+	new Script(standaloneSource, { filename: STANDALONE_PATH });
+	const standalone = metadataEntries(standaloneSource, STANDALONE_PATH);
+	for (const key of metadata.keys()) {
+		if (['name', 'resource', 'require', 'grant', 'icon'].includes(key) || key.startsWith('name:')) continue;
+		assertValues(standalone, key, values(metadata, key), STANDALONE_PATH);
+	}
+	assertValues(standalone, 'name', ['Awesome LinuxDo Reader（纯本地单文件版）'], STANDALONE_PATH);
+	for (const key of ['require', 'resource', 'icon']) {
+		assertValues(standalone, key, [], STANDALONE_PATH);
+	}
+	assertValues(standalone, 'grant', values(metadata, 'grant').filter(
+		(value) => value !== 'GM_getResourceText',
+	), STANDALONE_PATH);
+	assertValues(standalone, 'updateURL', ['none'], STANDALONE_PATH);
+	assertValues(standalone, 'downloadURL', ['none'], STANDALONE_PATH);
+	const stylesMarker = '\nvar __LDP_LOCAL_STYLES__ = ';
+	const stylesOffset = standaloneSource.lastIndexOf(stylesMarker);
+	const stylesEnd = standaloneSource.indexOf(';\n', stylesOffset);
+	if (stylesOffset < 0 || stylesEnd < 0) {
+		throw new Error('纯本地版缺少内置样式');
+	}
+	const inlineStyles = JSON.parse(standaloneSource.slice(
+		stylesOffset + stylesMarker.length, stylesEnd,
+	));
+	if (inlineStyles.reader !== localStylesheetSource) {
+		throw new Error('纯本地版内置 CSS 与当前样式产物不一致');
+	}
+	const katexRoot = path.join(projectRoot, 'node_modules/katex/dist');
+	const katexCss = await readFile(path.join(katexRoot, 'katex.min.css'), 'utf8');
+	const fontPattern = /url\((fonts\/[^)]+)\)/g;
+	const fontFiles = [...new Set([...katexCss.matchAll(fontPattern)].map((match) => match[1]))];
+	const fontData = new Map(await Promise.all(fontFiles.map(async (file) => [
+		file,
+		`data:font/${path.extname(file).slice(1)};base64,` +
+			(await readFile(path.join(katexRoot, file))).toString('base64'),
+	])));
+	if (!fontFiles.length || inlineStyles.katex !== katexCss.replace(
+		fontPattern, (_match, file) => `url(${fontData.get(file)})`,
+	)) {
+		throw new Error('纯本地版 KaTeX 样式或字体内容不完整');
+	}
+	if ([...(inlineStyles.reader + inlineStyles.katex).matchAll(/url\(\s*['"]?([^)'"\s]+)/gi)]
+		.some((match) => !/^(data:|#)/i.test(match[1]))) {
+		throw new Error('纯本地版样式仍包含外部资源');
+	}
+	const vendorStartMarker = '/* BEGIN LOCAL VENDORS */\n';
+	const vendorStart = standaloneSource.indexOf(vendorStartMarker);
+	const vendorEnd = standaloneSource.indexOf('/* END LOCAL VENDORS */', vendorStart);
+	if (vendorStart < 0 || vendorEnd < vendorStart) throw new Error('纯本地版缺少内置依赖');
+	let captured = null;
+	let startupCalls = 0;
+	const page = {};
+	// Window.window 是只读访问器；普通 VM 全局对象不会准确复现该继承行为。
+	const scriptGlobal = Object.defineProperty({}, 'window', { get: () => page });
+	const lexicalRead = (key) => `lexical:${key}`;
+	const smoke = new Script(
+		'(function (GM_getValue, unsafeWindow, globalThis) {\n' +
+		standaloneSource.slice(vendorStart + vendorStartMarker.length, vendorEnd) +
+		standaloneSource.slice(stylesOffset) +
+		'\n})(__readValue, __page, __global);',
+	);
+	smoke.runInNewContext({
+		window: page,
+		__readValue: lexicalRead,
+		__page: page,
+		__global: scriptGlobal,
+		AwesomeLinuxDoReaderLite: {
+			startMainLiteUserscript(environment, readerStyles, mathStyles) {
+				startupCalls += 1;
+				captured = { environment, readerStyles, mathStyles };
+			},
+		},
+	}, { timeout: 10_000 });
+	if (startupCalls !== 1 || captured?.readerStyles !== inlineStyles.reader ||
+		captured.mathStyles !== inlineStyles.katex || captured.environment.unsafeWindow !== page ||
+		captured.environment.GM_getValue('probe') !== lexicalRead('probe')) {
+		throw new Error('纯本地版启动未正确传递内置资源或词法 GM API');
+	}
+	const vendors = captured.environment;
+	const required = values(metadata, 'require').join('\n');
+	if (vendors.katex?.version !== required.match(/\/katex@([^/]+)\//)?.[1] ||
+		vendors.Hls?.version !== required.match(/\/hls\.js@([^/]+)\//)?.[1] ||
+		!vendors.katex.renderToString('x^2').includes('katex') ||
+		vendors.pinyinPro?.pinyin('中文', { toneType: 'none' }) !== 'zhong wen') {
+		throw new Error('纯本地版第三方依赖版本或执行结果异常');
+	}
+	standaloneSha256 = sha256(standaloneSource);
 
 	const [fourPartLoaderSource, ...fourPartLibrarySources] =
 		await Promise.all([
@@ -317,6 +409,8 @@ process.stdout.write(`${JSON.stringify({
 	packageVersion,
 	loader: LOADER_PATH,
 	localBundle: localArtifact ? LOCAL_BUNDLE_PATH : null,
+	standalone: localArtifact ? STANDALONE_PATH : null,
+	standaloneSha256,
 	localFourPartLoader: localArtifact ? LOCAL_FOUR_PART_LOADER_PATH : null,
 	localBundleSha256,
 	localStylesheetSha256,

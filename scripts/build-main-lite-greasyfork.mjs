@@ -283,7 +283,7 @@ function runtimeBootstrap(sourceVersion, sharedHelpers) {
 \t\tconst sourceHashes = new Map();
 \t\tconst modules = new Map();
 \t\tconst libraries = new Set();
-\t\tlet started = false;
+\t\tconst failedEntries = new Set();
 \t\tconst externalModuleIds = Object.freeze(${JSON.stringify(externalModuleIds)});
 
 \t\tconst resolve = (parentId, request) => {
@@ -345,17 +345,16 @@ function runtimeBootstrap(sourceVersion, sharedHelpers) {
 \t\t\t\tlibraries.add(name);
 \t\t\t},
 \t\t\tstart(entryId, expectedLibraries) {
-\t\t\t\tfor (const name of expectedLibraries) {
-\t\t\t\t\tif (!libraries.has(name)) {
-\t\t\t\t\t\tthrow new Error(\`[main-lite] missing library: \${name}\`);
-\t\t\t\t\t}
-\t\t\t\t}
-\t\t\t\tif (started) return requireModule(entryId);
-\t\t\t\tstarted = true;
+\t\t\t\tif (failedEntries.has(entryId)) return undefined;
 \t\t\t\ttry {
+\t\t\t\t\tfor (const name of expectedLibraries) {
+\t\t\t\t\t\tif (!libraries.has(name)) {
+\t\t\t\t\t\t\tthrow new Error(\`[main-lite] missing library: \${name}\`);
+\t\t\t\t\t\t}
+\t\t\t\t\t}
 \t\t\t\t\treturn requireModule(entryId);
 \t\t\t\t} catch (error) {
-\t\t\t\t\tstarted = false;
+\t\t\t\t\tfailedEntries.add(entryId);
 \t\t\t\t\tthrow error;
 \t\t\t\t}
 \t\t\t},

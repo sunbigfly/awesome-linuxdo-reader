@@ -1,6 +1,6 @@
 {
   "name": "awesome-linuxdo-reader",
-	"version": "1.6.4",
+  "version": "1.6.5",
   "private": true,
   "type": "module",
   "engines": {
@@ -60,7 +60,10 @@
     "@babel/traverse": "^8.0.4",
     "esbuild": "0.25.12",
     "eslint": "^10.8.0",
+    "hls.js": "1.6.16",
+    "katex": "0.16.22",
     "linkedom": "^0.18.13",
+    "pinyin-pro": "3.18.2",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
     "vitepress": "1.6.4"

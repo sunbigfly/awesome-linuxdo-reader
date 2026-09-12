@@ -11,6 +11,7 @@ const STYLESHEET_PATH = 'work/main-lite.css';
 const DEBUG_OUTPUT_PATHS = ['work/main-lite.debug.js', 'work/mian-lite.debug.js'];
 const LOCAL_DEBUG_OUTPUT_PATHS = ['work/main-lite.local.js', 'work/mian-lite.local.js'];
 const LOCAL_DEBUG_LOADER_PATH = 'work/local-debug.user.js';
+const STANDALONE_OUTPUT_PATH = 'work/main-lite.standalone.user.js';
 const ADVISORY_OUTPUT_BYTES = 1_650_000;
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, '..');
@@ -27,6 +28,26 @@ function browserFileUrl(filePath) {
 
 function sha256(value) {
 	return createHash('sha256').update(value).digest('hex');
+}
+
+async function inlineKatexStylesheet() {
+	const root = path.join(projectRoot, 'node_modules/katex/dist');
+	const css = await readFile(path.join(root, 'katex.min.css'), 'utf8');
+	const pattern = /url\((fonts\/[^)]+)\)/g;
+	const files = [...new Set([...css.matchAll(pattern)].map((match) => match[1]))];
+	const fonts = await Promise.all(files.map(async (file) => {
+		const bytes = await readFile(path.join(root, file));
+		const format = path.extname(file).slice(1);
+		if (!['woff2', 'woff', 'ttf'].includes(format)) {
+			throw new Error(`KaTeX 字体格式不支持：${file}`);
+		}
+		return [file, `data:font/${format};base64,${bytes.toString('base64')}`];
+	}));
+	const resources = new Map(fonts);
+	return {
+		css: css.replace(pattern, (_match, file) => `url(${resources.get(file)})`),
+		fonts: files.length,
+	};
 }
 
 function versionedLocalFileUrl(filePath, digest) {
@@ -166,6 +187,9 @@ const artifact = `${metadata.trimEnd()}\n\n${banner}${outputFile.text}`;
 const bytes = Buffer.byteLength(artifact);
 const artifactSha256 = sha256(artifact);
 let localDebugLoader = null;
+let standaloneArtifact = null;
+let standaloneFonts = 0;
+let standaloneVendors = null;
 
 if (mode === 'debug') {
 	await Promise.all(DEBUG_OUTPUT_PATHS.map(async (outputPath) => {
@@ -187,6 +211,69 @@ if (mode === 'debug') {
 	);
 	await mkdir(path.dirname(loaderFilePath), { recursive: true });
 	await writeFile(loaderFilePath, localDebugLoader);
+	const packages = [
+		['katex', katexScriptVersion],
+		['pinyin-pro', metadata.match(/\/pinyin-pro@([^/]+)\//)?.[1]],
+		['hls.js', metadata.match(/\/hls\.js@([^/]+)\//)?.[1]],
+	];
+	const licenses = await Promise.all(packages.map(async ([name, version]) => {
+		const root = path.join(projectRoot, 'node_modules', name);
+		const installed = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+		if (!version || installed.version !== version) {
+			throw new Error(`本地 ${name} 版本与 userscript 元数据不一致`);
+		}
+		return `/*! ${name}@${version}\n${await readFile(path.join(root, 'LICENSE'), 'utf8')}\n*/`;
+	}));
+	const [standaloneResult, vendorResult, katexStyles] = await Promise.all([
+		build({ ...options, entryPoints: [path.join(projectRoot, BOOTSTRAP_PATH)] }),
+		build({
+			...options,
+			entryPoints: undefined,
+			stdin: {
+				contents: 'export { default as katex } from "katex";\n' +
+					'export { default as Hls } from "hls.js";\n' +
+					'import { pinyin } from "pinyin-pro";\nexport const pinyinPro = { pinyin };',
+				resolveDir: projectRoot,
+				sourcefile: 'main-lite-standalone-vendors.js',
+			},
+			globalName: 'AwesomeLinuxDoReaderVendors',
+			minify: true,
+		}),
+		inlineKatexStylesheet(),
+	]);
+	const standaloneBundle = standaloneResult.outputFiles?.[0];
+	const vendorBundle = vendorResult.outputFiles?.[0];
+	if (standaloneResult.warnings.length || vendorResult.warnings.length ||
+		!standaloneBundle || !vendorBundle) {
+		throw new Error('本地合并版构建失败或存在警告');
+	}
+	standaloneFonts = katexStyles.fonts;
+	standaloneVendors = Object.fromEntries(packages);
+	const standaloneMetadata = rawMetadata
+		.replace(/^\/\/\s+@name:[^\s]+\s+.*\r?\n/gm, '')
+		.replace(/^\/\/\s+@name\s+.*$/m,
+			'// @name         Awesome LinuxDo Reader（纯本地单文件版）')
+		.replace(/^\/\/\s+@(require|resource|icon)\s+.*\r?\n/gm, '')
+		.replace(/^\/\/\s+@grant\s+GM_getResourceText\s*\r?\n/gm, '')
+		.replace('// ==/UserScript==',
+			'// @updateURL    none\n// @downloadURL  none\n// ==/UserScript==');
+	const grants = [...standaloneMetadata.matchAll(/^\/\/\s+@grant\s+(GM_\w+)/gm)]
+		.map((match) => match[1]);
+	const bindings = grants.map((name) =>
+		`${name}: typeof ${name} === "function" ? (...args) => ${name}(...args) : undefined`);
+	standaloneArtifact = `${standaloneMetadata.trimEnd()}\n\n` +
+		licenses.join('\n') + '\n/* BEGIN LOCAL VENDORS */\n' + vendorBundle.text +
+		'\n/* END LOCAL VENDORS */\n' +
+		standaloneBundle.text +
+		`\nvar __LDP_LOCAL_STYLES__ = ${JSON.stringify({ reader: stylesheet, katex: katexStyles.css })};\n` +
+		'AwesomeLinuxDoReaderLite.startMainLiteUserscript(\n' +
+		'  Object.assign({}, AwesomeLinuxDoReaderVendors, {\n' +
+		'    window, unsafeWindow: typeof unsafeWindow === "undefined" ? window : unsafeWindow,\n' +
+		'    GM: typeof GM === "undefined" ? undefined : GM,\n' +
+		'    GM_info: typeof GM_info === "undefined" ? undefined : GM_info,\n' +
+		`    ${bindings.join(',\n    ')}\n` +
+		'  }), __LDP_LOCAL_STYLES__.reader, __LDP_LOCAL_STYLES__.katex);\n';
+	await writeFile(path.join(projectRoot, STANDALONE_OUTPUT_PATH), standaloneArtifact);
 }
 
 const outputPaths =
@@ -219,6 +306,14 @@ process.stdout.write(
 				bytes: Buffer.byteLength(localDebugLoader),
 				sha256: sha256(localDebugLoader),
 			},
+		standalone: standaloneArtifact === null ? null : {
+			file: STANDALONE_OUTPUT_PATH,
+			bytes: Buffer.byteLength(standaloneArtifact),
+			sha256: sha256(standaloneArtifact),
+			inlineStylesSha256: stylesheetSha256,
+			fonts: standaloneFonts,
+			vendors: standaloneVendors,
+		},
 		compiler: { name: 'esbuild', version: esbuildVersion },
 	})}\n`,
 );

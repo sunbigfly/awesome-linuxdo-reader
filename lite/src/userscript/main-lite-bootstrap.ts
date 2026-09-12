@@ -277,14 +277,16 @@ function createStyleStage(
 	environment: BrowserUserscriptEnvironment,
 	document: Document,
 	state: MutableMainLiteState,
+	inlineReaderStyles?: string,
+	inlineKatexStyles?: string,
 ): ReaderApplicationStage<ReaderPreferences> {
 	return Object.freeze({
 		name: 'userscript-styles',
 		required: true,
 		async setup() {
 			const [css, katexCss] = await Promise.all([
-				environment.readTextResource(STYLE_RESOURCE),
-				environment.readTextResource(KATEX_STYLE_RESOURCE),
+				inlineReaderStyles ?? environment.readTextResource(STYLE_RESOURCE),
+				inlineKatexStyles ?? environment.readTextResource(KATEX_STYLE_RESOURCE),
 			]);
 			document.getElementById(STYLE_ID)?.remove();
 			const style = document.createElement('style');
@@ -1459,10 +1461,12 @@ function createRuntimeStage(
 /**
  * 最终 userscript entry 的唯一显式启动函数。
  *
- * 只有 `main-lite-entry.ts` 会调用它；其余模块保持 import-time 无副作用。
+ * 普通 entry 与合并版构建入口调用它；其余模块保持 import-time 无副作用。
  */
 export function startMainLiteUserscript(
 	userscriptGlobal: unknown = globalThis,
+	inlineReaderStyles?: string,
+	inlineKatexStyles?: string,
 ): MainLiteUserscriptHandle | null {
 	const environment = new BrowserUserscriptEnvironment({
 		userscriptGlobal,
@@ -1643,7 +1647,7 @@ export function startMainLiteUserscript(
 					}]
 					: []),
 			]),
-			createStyleStage(environment, document, state),
+			createStyleStage(environment, document, state, inlineReaderStyles, inlineKatexStyles),
 			createRuntimeStage(
 				environment,
 				document,

@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.6.4
+// @version      1.6.5
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知、监控与翻译平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.6.4 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.6.5 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知、监控与翻译平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -29,7 +29,7 @@
 		const sourceHashes = new Map();
 		const modules = new Map();
 		const libraries = new Set();
-		let started = false;
+		const failedEntries = new Set();
 		const externalModuleIds = Object.freeze({"@xsai/generate-text":"vendor/xsai-generate-text.js"});
 
 		const resolve = (parentId, request) => {
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.6.4",
+			sourceVersion: "1.6.5",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -91,17 +91,16 @@
 				libraries.add(name);
 			},
 			start(entryId, expectedLibraries) {
-				for (const name of expectedLibraries) {
-					if (!libraries.has(name)) {
-						throw new Error(`[main-lite] missing library: ${name}`);
-					}
-				}
-				if (started) return requireModule(entryId);
-				started = true;
+				if (failedEntries.has(entryId)) return undefined;
 				try {
+					for (const name of expectedLibraries) {
+						if (!libraries.has(name)) {
+							throw new Error(`[main-lite] missing library: ${name}`);
+						}
+					}
 					return requireModule(entryId);
 				} catch (error) {
-					started = false;
+					failedEntries.add(entryId);
 					throw error;
 				}
 			},
@@ -113,7 +112,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.4") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.5") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 

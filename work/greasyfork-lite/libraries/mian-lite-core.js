@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.6.4
+// @version      1.6.5
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.6.4 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.6.5 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -29,7 +29,7 @@
 		const sourceHashes = new Map();
 		const modules = new Map();
 		const libraries = new Set();
-		let started = false;
+		const failedEntries = new Set();
 		const externalModuleIds = Object.freeze({"@xsai/generate-text":"vendor/xsai-generate-text.js"});
 
 		const resolve = (parentId, request) => {
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.6.4",
+			sourceVersion: "1.6.5",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -91,17 +91,16 @@
 				libraries.add(name);
 			},
 			start(entryId, expectedLibraries) {
-				for (const name of expectedLibraries) {
-					if (!libraries.has(name)) {
-						throw new Error(`[main-lite] missing library: ${name}`);
-					}
-				}
-				if (started) return requireModule(entryId);
-				started = true;
+				if (failedEntries.has(entryId)) return undefined;
 				try {
+					for (const name of expectedLibraries) {
+						if (!libraries.has(name)) {
+							throw new Error(`[main-lite] missing library: ${name}`);
+						}
+					}
 					return requireModule(entryId);
 				} catch (error) {
-					started = false;
+					failedEntries.add(entryId);
 					throw error;
 				}
 			},
@@ -113,7 +112,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.4") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.5") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -31561,14 +31560,14 @@ runtime.register("src/userscript/main-lite-bootstrap.js", function(module, expor
 	    }
 	  });
 	}
-	function createStyleStage(environment, document, state) {
+	function createStyleStage(environment, document, state, inlineReaderStyles, inlineKatexStyles) {
 	  return Object.freeze({
 	    name: "userscript-styles",
 	    required: !0,
 	    async setup() {
 	      const [css, katexCss] = await Promise.all([
-	        environment.readTextResource(STYLE_RESOURCE),
-	        environment.readTextResource(KATEX_STYLE_RESOURCE)
+	        inlineReaderStyles ?? environment.readTextResource(STYLE_RESOURCE),
+	        inlineKatexStyles ?? environment.readTextResource(KATEX_STYLE_RESOURCE)
 	      ]);
 	      document.getElementById(STYLE_ID)?.remove();
 	      const style = document.createElement("style");
@@ -32418,7 +32417,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	    }
 	  });
 	}
-	function startMainLiteUserscript(userscriptGlobal = globalThis) {
+	function startMainLiteUserscript(userscriptGlobal = globalThis, inlineReaderStyles, inlineKatexStyles) {
 	  const environment = new import_browser_userscript_environment.BrowserUserscriptEnvironment({
 	    userscriptGlobal
 	  }), page = pageRecord(environment.pageWindow), existing = page[DEBUG_HANDLE_KEY] ?? page[LEGACY_DEBUG_HANDLE_KEY], document = page.document, window = environment.pageWindow;
@@ -32555,7 +32554,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	          refresh: () => webDav.repository.reloadExternal()
 	        }] : []
 	      ]),
-	      createStyleStage(environment, document, state),
+	      createStyleStage(environment, document, state, inlineReaderStyles, inlineKatexStyles),
 	      createRuntimeStage(
 	        environment,
 	        document,
@@ -32611,13 +32610,31 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	  }), handle;
 	}
 	const startMianLiteUserscript = startMainLiteUserscript;
-}, "e202bc006e9ffe685432ab2cc7a9f73e9feffcdda7b25a0941ca01b5cb2a9171");
+}, "df893597e6ac2de631b38cdd958db0c5c01d912734261324d1b8810e62b9615b");
 
 /* Source: lite/src/userscript/main-lite-entry.ts */
 runtime.register("src/userscript/main-lite-entry.js", function(module, exports, require) {
 	var import_main_lite_bootstrap = require("./main-lite-bootstrap.js");
-	(0, import_main_lite_bootstrap.startMainLiteUserscript)();
-}, "9e50c00fd0262b242afcb1582b85bc77d9ea61386a6ca6dc6939dc68f814e1ff");
+	function callable(value) {
+	  return typeof value == "function" ? (...args) => Reflect.apply(value, globalThis, args) : void 0;
+	}
+	(0, import_main_lite_bootstrap.startMainLiteUserscript)({
+	  window,
+	  unsafeWindow: typeof unsafeWindow > "u" ? window : unsafeWindow,
+	  GM: typeof GM > "u" ? void 0 : GM,
+	  GM_info: typeof GM_info > "u" ? void 0 : GM_info,
+	  GM_getValue: callable(typeof GM_getValue > "u" ? void 0 : GM_getValue),
+	  GM_setValue: callable(typeof GM_setValue > "u" ? void 0 : GM_setValue),
+	  GM_addValueChangeListener: callable(typeof GM_addValueChangeListener > "u" ? void 0 : GM_addValueChangeListener),
+	  GM_removeValueChangeListener: callable(typeof GM_removeValueChangeListener > "u" ? void 0 : GM_removeValueChangeListener),
+	  GM_xmlhttpRequest: callable(typeof GM_xmlhttpRequest > "u" ? void 0 : GM_xmlhttpRequest),
+	  GM_addElement: callable(typeof GM_addElement > "u" ? void 0 : GM_addElement),
+	  GM_getResourceText: callable(typeof GM_getResourceText > "u" ? void 0 : GM_getResourceText),
+	  katex: typeof katex > "u" ? void 0 : katex,
+	  Hls: typeof Hls > "u" ? void 0 : Hls,
+	  pinyinPro: typeof pinyinPro > "u" ? void 0 : pinyinPro
+	});
+}, "a4ce83964e4b6618d479eeb3b55fd8bc40a5320a62396917ad04159d0ac38395");
 
 /* Source: lite/src/userscript/reader-embedded-reload-coordinator.ts */
 runtime.register("src/userscript/reader-embedded-reload-coordinator.js", function(module, exports, require) {
