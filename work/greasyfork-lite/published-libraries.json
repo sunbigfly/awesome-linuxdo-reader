@@ -1,35 +1,35 @@
 {
   "schemaVersion": 1,
-	"sourceVersion": "1.6.4",
-	"publishedAt": "2026-09-04",
+	"sourceVersion": "1.6.5",
+	"publishedAt": "2026-09-12",
   "provider": "greasyfork",
   "libraries": [
     {
 		"name": "main-lite-core",
 		"scriptId": 590254,
-		"versionId": 1921693,
-		"url": "https://update.greasyfork.org/scripts/590254/1921693/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1921693",
+		"versionId": 1929088,
+		"url": "https://update.greasyfork.org/scripts/590254/1929088/Awesome%20LinuxDo%20Reader%20Lite%20Core%20Library.js?version=1929088",
 		"syncUrl": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/main-lite-core.js",
-		"bytes": 1739322,
-		"sha256": "aec251cdb2502211bf4add0e8abfa6d7449ecd1abcf816f89f0165d2853a5288"
+		"bytes": 1740611,
+		"sha256": "f4a1f29f1c4c9e5f23acb3455bcc936f676eec2012e0069d395372ad613331f4"
     },
     {
 		"name": "main-lite-platform",
 		"scriptId": 591595,
-		"versionId": 1921695,
-		"url": "https://update.greasyfork.org/scripts/591595/1921695/Awesome%20LinuxDo%20Reader%20Lite%20Platform%20Library.js?version=1921695",
+		"versionId": 1929090,
+		"url": "https://update.greasyfork.org/scripts/591595/1929090/Awesome%20LinuxDo%20Reader%20Lite%20Platform%20Library.js?version=1929090",
 		"syncUrl": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/main-lite-platform.js",
-			"bytes": 1491573,
-		"sha256": "09b9ab7e8c567fb5645976254b61681c9f5eac01866bd514c0e95cdd7397992b"
+			"bytes": 1491587,
+		"sha256": "6114c3882645348c8453fd15bba5a2aa70241a9d88f05b73704090ff15ade8c6"
     },
     {
       "name": "main-lite-features",
       "scriptId": 590255,
-		"versionId": 1921694,
-		"url": "https://update.greasyfork.org/scripts/590255/1921694/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1921694",
+		"versionId": 1929089,
+		"url": "https://update.greasyfork.org/scripts/590255/1929089/Awesome%20LinuxDo%20Reader%20Lite%20Features%20Library.js?version=1929089",
       "syncUrl": "https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/greasyfork-lite/libraries/main-lite-features.js",
-			"bytes": 2022100,
-		"sha256": "734fc340bf5f3d08340217f8de649b1352035f7595acca1629dd2e6949266271"
+			"bytes": 2022114,
+		"sha256": "f36367beee9d7e92551860d70a1c6c606b9efd174e6f03157ff82a0a4d7ad760"
     }
   ]
 }
