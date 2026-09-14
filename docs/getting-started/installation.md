@@ -4,7 +4,7 @@ description: 安装 userscript、确认启用状态、理解更新方式并排�
 feature_ids: ["CORE-001", "CORE-007", "TROUBLE-001"]
 source_anchors: ["lite/userscript.meta.txt","lite/src/app/reader-application.ts"]
 since: 0.1.2
-version: 1.6.5
+version: 1.6.6
 status: current
 last_verified: 2026-09-12
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png"]
@@ -15,12 +15,12 @@ screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png"]
 Awesome LinuxDo Reader 是 userscript，不是独立浏览器扩展。你需要先安装脚本管理器，再从 GreasyFork 安装正式版。
 
 ::: tip 当前发布状态
-本手册当前对应 `1.6.5` 正式版；GitHub 与 Greasy Fork 代码已同步，主脚本继续采用 Loader + Core + Platform + Features 四文件结构。
+本手册当前对应 `1.6.6` 正式版；GitHub 与 Greasy Fork 代码已同步，主脚本继续采用 Loader + Core + Platform + Features 四文件结构。
 
-- **Loader**：脚本 `588185`，固定版本 `1929091`；Greasy Fork 文件 4,173 字节，SHA-256 `3438c88899e65e5243a77bf62c20d7e037d0eda35ded1e2846e3a3c77477d210`。移除 Greasy Fork 注入的 `@downloadURL none` 后为 4,152 字节，SHA-256 `bf0ec28e250784e9c976379e7df9405465f9004086b35d3210cb31cf9d97dfb9`，与仓库 Loader 一致。
-- **Core**：脚本 `590254`，固定版本 `1929088`；1,740,611 字节，SHA-256 `f4a1f29f1c4c9e5f23acb3455bcc936f676eec2012e0069d395372ad613331f4`。
-- **Platform**：脚本 `591595`，固定版本 `1929090`；1,491,587 字节，SHA-256 `6114c3882645348c8453fd15bba5a2aa70241a9d88f05b73704090ff15ade8c6`。
-- **Features**：脚本 `590255`，固定版本 `1929089`；2,022,114 字节，SHA-256 `f36367beee9d7e92551860d70a1c6c606b9efd174e6f03157ff82a0a4d7ad760`。
+- **Loader**：脚本 `588185`，固定版本 `1931401`；Greasy Fork 文件 4,173 字节，SHA-256 `904d6f3c5e7b5abe75db12e018f4a61a8cd5da250892041035387078855331e2`。移除 Greasy Fork 注入的 `@downloadURL none` 后为 4,152 字节，SHA-256 `1fae88a9a99465c48abeb59d49d43d5c405f9a39409157e66d4a6398b5ccf78d`，与仓库 Loader 一致。
+- **Core**：脚本 `590254`，固定版本 `1931396`；1,740,789 字节，SHA-256 `e7ac617450f592f9001dbdf3dcc506041ac99efb5590d1f32526d4a6ccaf51b6`。
+- **Platform**：脚本 `591595`，固定版本 `1931398`；1,491,680 字节，SHA-256 `d302dee8fa9f58bc84ab897c476be7deaa5ab660ed900ea0f9eeb580d1ffadf4`。
+- **Features**：脚本 `590255`，固定版本 `1931397`；2,022,114 字节，SHA-256 `feb27200aec1846ad496858b2fa877cd8335ce7eeab74bee5cb53d5da19eec1b`。
 - **CSS**：固定到 Git `4473716d05c9151c79639d6a17e4d71e124c7aef`；696,558 字节，SHA-256 `7cf3e876b3536c0d2f23325fe3fe88c7152c1c632f09c2622309c0799a8bd68c`。
 :::
 
@@ -75,19 +75,19 @@ LINUX DO 保持完整功能覆盖。获得脚本管理器站点许可后，中�
 正式版、本地调试版或其他同类脚本同时接管主题链接时，可能造成重复入口、重复请求和界面状态冲突。
 :::
 
-需要一个文件直接导入时，下载 [1.6.5 纯本地单文件（CDN）](https://gcore.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@2dc8c9adbe61bf958877841a4693d2d8c49ad2ea/work/main-lite.standalone.user.js)（[GitHub 源文件](https://github.com/sunbigfly/awesome-linuxdo-reader/blob/2dc8c9adbe61bf958877841a4693d2d8c49ad2ea/work/main-lite.standalone.user.js)）。阅读器、CSS、第三方库和数学字体全部内置，无 `@require`、`@resource`，不依赖 `GM_getResourceText`。安装后只启用这一版；更新时重新下载导入，论坛内容与在线服务仍需联网。
+需要一个文件直接导入时，下载 [1.6.6 纯本地单文件（CDN）](https://gcore.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@f089a78c0a9eaae1e2eccfdc9e8fc51c35826b51/work/main-lite.standalone.user.js)（[GitHub 源文件](https://github.com/sunbigfly/awesome-linuxdo-reader/blob/f089a78c0a9eaae1e2eccfdc9e8fc51c35826b51/work/main-lite.standalone.user.js)）。阅读器、CSS、第三方库和数学字体全部内置，无 `@require`、`@resource`，不依赖 `GM_getResourceText`。安装后只启用这一版；更新时重新下载导入，论坛内容与在线服务仍需联网。
 
 ## 自动更新
 
 正式脚本由 GreasyFork 安装后，脚本管理器会记录对应的下载与更新地址；仓库源码不写入
 绕过 GreasyFork 的自定义 `updateURL`、`installURL` 或 `downloadURL`。更新频率由脚本管理器决定：
 
-当前公开的 `1.6.5` 主脚本通过固定 `@require` 加载同一发布快照的 Core、Platform 与 Features 三个 Greasy Fork Library。
+当前公开的 `1.6.6` 主脚本通过固定 `@require` 加载同一发布快照的 Core、Platform 与 Features 三个 Greasy Fork Library。
 Library 是正式脚本的一部分，无需单独安装。固定版本 URL 与完整性哈希用于避免更新期间混用不同版本。
 
 - 想立即检查时，在 Tampermonkey 面板中对该脚本执行“检查更新”。
 - 更新后刷新当前 Discourse 页面，已打开页面不会自动替换正在运行的旧代码。
-- 在脚本管理器中确认版本为 `1.6.5`；刚完成更新但页面仍显示旧版时，请完整刷新已打开的 Discourse 页面。
+- 在脚本管理器中确认版本为 `1.6.6`；刚完成更新但页面仍显示旧版时，请完整刷新已打开的 Discourse 页面。
 
 ## 可用版本
 
@@ -96,7 +96,7 @@ Library 是正式脚本的一部分，无需单独安装。固定版本 URL 与�
 | GitHub 原版 | 开发者与代码审查者 | `lite/src/`、`lite/styles/` 和构建脚本 |
 | 纯本地单文件 | 需要直接导入移动端脚本管理器的用户 | `main-lite.standalone.user.js`，所有脚本、CSS 和数学字体内置；更新时重新下载导入 |
 | 本地测试版 | 发布前手动审查 | 本机单文件 `main-lite.local.js` 与本地四文件 Loader，不会上传；旧 `mian-lite` 拼写保留为兼容副本 |
-| Greasy Fork 上传版 | 普通用户 | 当前 `1.6.5` 薄 Loader 固定加载 Core、Platform、Features |
+| Greasy Fork 上传版 | 普通用户 | 当前 `1.6.6` 薄 Loader 固定加载 Core、Platform、Features |
 
 使用自动更新版本时，只安装 Greasy Fork 的 **Awesome LinuxDo Reader** 主脚本。页面上标注“库”的
 Core、Platform 和 Features 是当前公开脚本依赖，不应单独安装。

@@ -4,9 +4,9 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.6.5
+version: 1.6.6
 status: current
-last_verified: 2026-09-12
+last_verified: 2026-09-14
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ---
 
@@ -15,6 +15,15 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.6.6 — 书签话题标题与操作按钮修复
+
+发布日期：2026-09-14。
+
+- 修复已添加书签的话题标题重复：标题渲染只更新真正的标题链接，保留书签图标。
+- 修复添加阅读队列与免打扰按钮出现在标题之前：按“标题 → 阅读队列 → 免打扰”排列，并纠正已有错位。
+- 回归用例、ESLint、源码与四文件版各 235 个契约测试文件及本地产物一致性检查通过；本次未执行真实浏览器验收。
+- GitHub 与 Greasy Fork 1.6.6 代码已同步，更新后请完整刷新已打开的页面。
 
 ## 1.6.5 — 移动端启动兼容与纯本地单文件
 
