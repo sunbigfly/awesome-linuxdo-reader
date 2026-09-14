@@ -2191,7 +2191,10 @@ export class ReaderOpenQueueSession {
 		const document = this.#options.document;
 		for (const row of document.querySelectorAll<HTMLElement>(TOPIC_ROW)) {
 			if (row.querySelector('.ldp-reader-queue-add')) continue;
-			const link = row.querySelector<HTMLAnchorElement>(TOPIC_LINK);
+			// querySelector 的逗号列表按 DOM 顺序匹配，不能用它给标题设优先级。
+			const link = row.querySelector<HTMLAnchorElement>(
+				'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"]',
+			) ?? row.querySelector<HTMLAnchorElement>(TOPIC_LINK);
 			const route = link && parseReaderUserscriptTopicRoute(
 				link.href || link.getAttribute('href') || '',
 				document.baseURI,

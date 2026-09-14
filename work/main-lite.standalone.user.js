@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Awesome LinuxDo Reader（纯本地单文件版）
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.6.5
+// @version      1.6.6
 // @license      MIT
 // @description  为 LINUX DO 深度定制并保持完整功能覆盖，同时通过站点识别与能力检测兼容中文、英文及其他语言的标准 Discourse 社区，在列表页内完成阅读、翻译、回复与原站互动。
 // @description:en Deeply customized for LINUX DO with complete feature coverage, while site detection and capability checks support standard Discourse communities in any language for in-list reading, translation, replies, and native interactions.
@@ -12533,7 +12533,7 @@ var AwesomeLinuxDoReaderLite = (() => {
 
   // lite/src/shell/embedded-host-topic-card-enhancement.ts
   var CARD_SELECTOR = "tr.topic-list-item,.topic-list-item,.latest-topic-list-item";
-  var TOPIC_LINK_SELECTOR = '.main-link a.raw-topic-link[href*="/t/"],.main-link a.title[href*="/t/"],.main-link a[href*="/t/"]';
+  var TOPIC_LINK_SELECTOR = '.main-link a.raw-topic-link[href*="/t/"],.main-link a.title[href*="/t/"]';
   var NEW_TOPIC_BADGE_SELECTOR = ".topic-post-badges,.badge-notification.new-topic";
   var AUTOMATIC_FILTER_ATTRIBUTE = "data-ldp-unwanted-auto-filter";
   var MANUAL_FILTER_ATTRIBUTE = "data-ldp-unwanted-manual-filter";
@@ -13146,7 +13146,7 @@ var AwesomeLinuxDoReaderLite = (() => {
       const line = card.querySelector(".link-top-line") ?? titleLink?.parentElement;
       if (!line) return;
       const queue = card.querySelector(".ldp-reader-queue-add");
-      if (queue && titleLink && !line.contains(queue)) {
+      if (queue && titleLink && queue.previousElementSibling !== titleLink) {
         titleLink.after(queue);
       }
       const controls = [...line.querySelectorAll(
@@ -13165,6 +13165,8 @@ var AwesomeLinuxDoReaderLite = (() => {
         dnd = this.#createDndButton(line, topic);
       }
       if (!dnd) return;
+      const actionAnchor = queue ?? titleLink;
+      if (dnd.hasAttribute("data-ldp-owned-native-dnd") && actionAnchor && dnd.previousElementSibling !== actionAnchor) actionAnchor.after(dnd);
       dnd.dataset.ldpNativeDnd = "true";
       line.dataset.ldpNativeDndReady = "true";
       this.#prepareDndTooltip(dnd);
@@ -25970,7 +25972,9 @@ ${OFFLINE_RUNTIME_SCRIPT_OPEN}(${readerTopicOfflineRuntime.toString()})();<\/scr
       const document2 = this.#options.document;
       for (const row of document2.querySelectorAll(TOPIC_ROW)) {
         if (row.querySelector(".ldp-reader-queue-add")) continue;
-        const link = row.querySelector(TOPIC_LINK);
+        const link = row.querySelector(
+          'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"]'
+        ) ?? row.querySelector(TOPIC_LINK);
         const route = link && parseReaderUserscriptTopicRoute(
           link.href || link.getAttribute("href") || "",
           document2.baseURI

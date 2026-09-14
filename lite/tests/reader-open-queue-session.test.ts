@@ -44,6 +44,7 @@ const { document: parsedDocument, window: parsedWindow } = parseHTML(`
 			<header><ul class="d-header-icons"><li class="current-user"><img class="avatar"></li></ul></header>
 			<table><tbody><tr class="topic-list-item">
 				<td>
+					<span class="topic-statuses"><a class="topic-status" href="/t/demo/42/9"><svg class="d-icon-bookmark"></svg></a></span>
 					<a class="raw-topic-link" href="/t/demo/42/3">测试主题</a>
 					<img class="avatar" data-avatar-template="/avatar/{size}.png">
 					<span data-user-card="owner"></span>
@@ -336,6 +337,13 @@ assert(
 const add = document.querySelector<HTMLButtonElement>(
 	'.ldp-reader-queue-add',
 )!;
+assert(
+	add.previousElementSibling?.classList.contains('raw-topic-link') &&
+	add.dataset.readerQueueTitle === '测试主题' &&
+	add.dataset.readerQueueHref === 'https://linux.do/t/demo/42/3' &&
+	!document.querySelector('.topic-statuses .ldp-reader-queue-add'),
+	'书签在标题之前时，队列入口必须插在真实标题后，并使用标题链接的名称与楼层',
+);
 const nativeTrigger = document.querySelector<HTMLButtonElement>(
 	'.ldp-native-reader-trigger',
 )!;

@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Platform Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 平台库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.6.5
+// @version      1.6.6
 // @description  Data, network, synchronization, and platform modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 缓存、集合、Discourse、网络、队列、同步、通知、监控与翻译平台模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.6.5 - main-lite-platform
+/* Awesome LinuxDo Reader Lite 1.6.6 - main-lite-platform
  * 缓存、集合、Discourse、网络、队列、同步、通知、监控与翻译平台模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.6.5",
+			sourceVersion: "1.6.6",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -112,7 +112,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.5") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.6") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -24223,7 +24223,9 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	    const document = this.#options.document;
 	    for (const row of document.querySelectorAll(TOPIC_ROW)) {
 	      if (row.querySelector(".ldp-reader-queue-add")) continue;
-	      const link = row.querySelector(TOPIC_LINK), route = link && (0, import_reader_userscript_target_adapter.parseReaderUserscriptTopicRoute)(
+	      const link = row.querySelector(
+	        'a.raw-topic-link[href*="/t/"],a.title[href*="/t/"]'
+	      ) ?? row.querySelector(TOPIC_LINK), route = link && (0, import_reader_userscript_target_adapter.parseReaderUserscriptTopicRoute)(
 	        link.href || link.getAttribute("href") || "",
 	        document.baseURI
 	      );
@@ -24336,7 +24338,7 @@ runtime.register("src/queue/reader-open-queue-session.js", function(module, expo
 	    }
 	  }
 	}
-}, "58bd8e98cc7416704df377da2e0856aae834f82d04edeea105b298b906f23b2c");
+}, "4684a81e54547125d911f1916a2a633a75a54b790aeeb8afa785f138902aedae");
 
 /* Source: lite/src/queue/reader-topic-download-manager.ts */
 runtime.register("src/queue/reader-topic-download-manager.js", function(module, exports, require) {

@@ -514,3 +514,62 @@ assert(
 	'非嵌入态必须保留免打扰入口、不投影统计布局，并同样移除后项重复 Topic',
 );
 enhancement.clear();
+
+for (const mode of ['embedded', 'actions-only'] as const) {
+	for (const titleClass of ['raw-topic-link', 'title']) {
+		const { document: bookmarkDocument } = parseHTML(
+			'<html><body><table class="topic-list"><tbody>' +
+			'<tr class="topic-list-item" data-topic-id="42"><td class="main-link">' +
+			'<div class="link-top-line"><span class="topic-statuses">' +
+			'<a class="topic-status" href="/t/demo/42/9" title="已添加书签">' +
+			'<svg class="d-icon-bookmark"><use href="#bookmark"></use></svg></a></span>' +
+			`<a class="${titleClass}" href="/t/demo/42">主题</a>` +
+			'<a class="badge-notification" href="/t/demo/42/10">33</a>' +
+			'</div></td><td class="posts">7</td><td class="views">12</td>' +
+			'<td class="activity">刚刚</td></tr></tbody></table></body></html>',
+		);
+		const bookmarkRoot = bookmarkDocument.querySelector('.topic-list')!;
+		const bookmark = bookmarkRoot.querySelector('.topic-status')!;
+		const bookmarkMarkup = bookmark.outerHTML;
+		const bookmarkIcon = bookmark.firstElementChild;
+		const title = bookmarkRoot.querySelector(`.${titleClass}`)!;
+		const queue = bookmarkDocument.createElement('button');
+		queue.className = 'ldp-reader-queue-add';
+		bookmark.parentElement!.after(queue);
+		const bookmarkEnhancement = new EmbeddedHostTopicCardEnhancement(
+			bookmarkDocument as unknown as Document,
+			host,
+		);
+		bookmarkEnhancement.syncRoot(bookmarkRoot, mode);
+		bookmarkEnhancement.syncRoot(bookmarkRoot, mode);
+		const ownedDnd = bookmarkRoot.querySelector('[data-ldp-owned-native-dnd]')!;
+		assert(
+			queue.previousElementSibling === title &&
+			ownedDnd.previousElementSibling === queue,
+			'标题前遗留的队列入口必须移至标题后，免打扰紧随队列入口',
+		);
+		bookmark.parentElement!.after(queue, ownedDnd);
+		bookmarkEnhancement.syncRoot(bookmarkRoot, mode);
+		assert(
+			queue.previousElementSibling === title &&
+			ownedDnd.previousElementSibling === queue,
+			'重复增强必须同时纠正已有队列和免打扰的位置',
+		);
+		assert(
+			bookmark.outerHTML === bookmarkMarkup &&
+			bookmark.firstElementChild === bookmarkIcon &&
+			title.textContent === topicModel.title &&
+			bookmarkRoot.querySelector('.badge-notification')?.textContent === '33' &&
+			bookmarkRoot.textContent?.split(topicModel.title).length === 2,
+			`${mode}/${titleClass}：书签在标题之前时，重复增强也只能更新标题，保留书签图标和未读数`,
+		);
+		title.remove();
+		bookmarkEnhancement.syncRoot(bookmarkRoot, mode);
+		assert(
+			bookmark.outerHTML === bookmarkMarkup &&
+			bookmarkRoot.querySelector('.badge-notification')?.textContent === '33',
+			'宿主标题暂时缺失时，不得把书签或未读链接当成标题写入',
+		);
+		bookmarkEnhancement.clear();
+	}
+}

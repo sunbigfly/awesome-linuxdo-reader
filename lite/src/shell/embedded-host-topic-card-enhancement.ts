@@ -20,9 +20,10 @@ import type {
 } from './embedded-host-root-controller.js';
 
 const CARD_SELECTOR = 'tr.topic-list-item,.topic-list-item,.latest-topic-list-item';
+// 书签和未读数也链接到 /t/；标题投影只能写入明确的标题节点。
 const TOPIC_LINK_SELECTOR =
 	'.main-link a.raw-topic-link[href*="/t/"],' +
-	'.main-link a.title[href*="/t/"],.main-link a[href*="/t/"]';
+	'.main-link a.title[href*="/t/"]';
 const NEW_TOPIC_BADGE_SELECTOR =
 	'.topic-post-badges,.badge-notification.new-topic';
 const AUTOMATIC_FILTER_ATTRIBUTE = 'data-ldp-unwanted-auto-filter';
@@ -798,7 +799,7 @@ implements EmbeddedHostEnhancementPort {
 			titleLink?.parentElement;
 		if (!line) return;
 		const queue = card.querySelector<HTMLElement>('.ldp-reader-queue-add');
-		if (queue && titleLink && !line.contains(queue)) {
+		if (queue && titleLink && queue.previousElementSibling !== titleLink) {
 			titleLink.after(queue);
 		}
 		const controls = [...line.querySelectorAll<HTMLElement>(
@@ -820,6 +821,11 @@ implements EmbeddedHostEnhancementPort {
 			dnd = this.#createDndButton(line, topic);
 		}
 		if (!dnd) return;
+		const actionAnchor = queue ?? titleLink;
+		if (
+			dnd.hasAttribute('data-ldp-owned-native-dnd') && actionAnchor &&
+			dnd.previousElementSibling !== actionAnchor
+		) actionAnchor.after(dnd);
 		dnd.dataset.ldpNativeDnd = 'true';
 		line.dataset.ldpNativeDndReady = 'true';
 		this.#prepareDndTooltip(dnd);

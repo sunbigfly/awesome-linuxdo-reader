@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.6.5
+// @version      1.6.6
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.6.5 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.6.6 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.6.5",
+			sourceVersion: "1.6.6",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -112,7 +112,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.5") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.6") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -11110,7 +11110,7 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	});
 	module.exports = __toCommonJS(embedded_host_topic_card_enhancement_exports);
 	var import_native_host_api = require("../discourse/native-host-api.js"), import_reader_inline_emoji = require("../components/reader-inline-emoji.js"), import_reader_icon = require("../components/reader-icon.js"), import_value_record = require("../kernel/value-record.js");
-	const CARD_SELECTOR = "tr.topic-list-item,.topic-list-item,.latest-topic-list-item", TOPIC_LINK_SELECTOR = '.main-link a.raw-topic-link[href*="/t/"],.main-link a.title[href*="/t/"],.main-link a[href*="/t/"]', NEW_TOPIC_BADGE_SELECTOR = ".topic-post-badges,.badge-notification.new-topic", AUTOMATIC_FILTER_ATTRIBUTE = "data-ldp-unwanted-auto-filter", MANUAL_FILTER_ATTRIBUTE = "data-ldp-unwanted-manual-filter", HOST_OP_AVATAR_LONG_PRESS_ATTRIBUTE = "data-ldp-host-op-avatar-long-press", EXPOSURE_COUNT_CLASS = "ldp-host-topic-exposure-count", TOPIC_LIST_SELECTOR = ".topic-list,.latest-topic-list", OPENED_TOPIC_STORAGE_KEY = "linuxdo-enhanced-reader:opened-host-topics:v1";
+	const CARD_SELECTOR = "tr.topic-list-item,.topic-list-item,.latest-topic-list-item", TOPIC_LINK_SELECTOR = '.main-link a.raw-topic-link[href*="/t/"],.main-link a.title[href*="/t/"]', NEW_TOPIC_BADGE_SELECTOR = ".topic-post-badges,.badge-notification.new-topic", AUTOMATIC_FILTER_ATTRIBUTE = "data-ldp-unwanted-auto-filter", MANUAL_FILTER_ATTRIBUTE = "data-ldp-unwanted-manual-filter", HOST_OP_AVATAR_LONG_PRESS_ATTRIBUTE = "data-ldp-host-op-avatar-long-press", EXPOSURE_COUNT_CLASS = "ldp-host-topic-exposure-count", TOPIC_LIST_SELECTOR = ".topic-list,.latest-topic-list", OPENED_TOPIC_STORAGE_KEY = "linuxdo-enhanced-reader:opened-host-topics:v1";
 	function modelValue(value, key) {
 	  const source = (0, import_value_record.valueRecord)(value);
 	  if (!source) return;
@@ -11556,7 +11556,7 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	    const titleLink = card.querySelector(TOPIC_LINK_SELECTOR), line = card.querySelector(".link-top-line") ?? titleLink?.parentElement;
 	    if (!line) return;
 	    const queue = card.querySelector(".ldp-reader-queue-add");
-	    queue && titleLink && !line.contains(queue) && titleLink.after(queue);
+	    queue && titleLink && queue.previousElementSibling !== titleLink && titleLink.after(queue);
 	    const direct = [...line.querySelectorAll(
 	      'a,button,[role="button"]'
 	    )].find(
@@ -11568,7 +11568,8 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	      'a,button,[role="button"]'
 	    ) ?? fallback;
 	    if (!dnd && topic && this.#currentUsername() && (dnd = this.#createDndButton(line, topic)), !dnd) return;
-	    dnd.dataset.ldpNativeDnd = "true", line.dataset.ldpNativeDndReady = "true", this.#prepareDndTooltip(dnd);
+	    const actionAnchor = queue ?? titleLink;
+	    dnd.hasAttribute("data-ldp-owned-native-dnd") && actionAnchor && dnd.previousElementSibling !== actionAnchor && actionAnchor.after(dnd), dnd.dataset.ldpNativeDnd = "true", line.dataset.ldpNativeDndReady = "true", this.#prepareDndTooltip(dnd);
 	    const expert = [...line.querySelectorAll("*")].find((node) => normalizedLabel(node.textContent) === "专家回应");
 	    if (!expert) return;
 	    const startNode = directChild(line, expert), endNode = directChild(line, dnd);
@@ -11771,7 +11772,7 @@ runtime.register("src/shell/embedded-host-topic-card-enhancement.js", function(m
 	    return (link?.getAttribute("href") ?? "").match(/\/t\/(?:[^/]+\/)?(\d+)(?:\/|$)/)?.[1] ?? "";
 	  }
 	}
-}, "7d82758ab5f65987170f6e35a714a5c85fc6be173889ac896c37d5d168b1ae5e");
+}, "dfd6baff8215bca40ee0f9332c23ce3c98f040a4a7db0c8def061226803a5462");
 
 /* Source: lite/src/shell/main-outlet-mutation-hub.ts */
 runtime.register("src/shell/main-outlet-mutation-hub.js", function(module, exports, require) {
