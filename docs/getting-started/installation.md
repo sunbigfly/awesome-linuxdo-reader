@@ -6,7 +6,7 @@ source_anchors: ["lite/userscript.meta.txt","lite/src/app/reader-application.ts"
 since: 0.1.2
 version: 1.6.7
 status: current
-last_verified: 2026-09-20
+last_verified: 2026-10-12
 screenshots: ["/screenshots/guide-01-reader-overview-v1.5.0.png"]
 ---
 
@@ -17,11 +17,11 @@ Awesome LinuxDo Reader 的正式发布渠道是 userscript：普通用户先安�
 ::: tip 当前发布状态
 本手册当前对应 `1.6.7` 正式版；GitHub 与 Greasy Fork 代码已同步，主脚本继续采用 Loader + Core + Platform + Features 四文件结构。
 
-- **Loader**：脚本 `588185`，固定版本 `1931401`；Greasy Fork 文件 4,173 字节，SHA-256 `904d6f3c5e7b5abe75db12e018f4a61a8cd5da250892041035387078855331e2`。移除 Greasy Fork 注入的 `@downloadURL none` 后为 4,152 字节，SHA-256 `1fae88a9a99465c48abeb59d49d43d5c405f9a39409157e66d4a6398b5ccf78d`，与仓库 Loader 一致。
-- **Core**：脚本 `590254`，固定版本 `1931396`；1,740,789 字节，SHA-256 `e7ac617450f592f9001dbdf3dcc506041ac99efb5590d1f32526d4a6ccaf51b6`。
-- **Platform**：脚本 `591595`，固定版本 `1931398`；1,491,680 字节，SHA-256 `d302dee8fa9f58bc84ab897c476be7deaa5ab660ed900ea0f9eeb580d1ffadf4`。
-- **Features**：脚本 `590255`，固定版本 `1931397`；2,022,114 字节，SHA-256 `feb27200aec1846ad496858b2fa877cd8335ce7eeab74bee5cb53d5da19eec1b`。
-- **CSS**：固定到 Git `4473716d05c9151c79639d6a17e4d71e124c7aef`；696,558 字节，SHA-256 `7cf3e876b3536c0d2f23325fe3fe88c7152c1c632f09c2622309c0799a8bd68c`。
+- **Loader**：脚本 `588185`，固定版本 `1959555`；Greasy Fork 文件 4,255 字节，SHA-256 `f02e72b2cd7456b87b3b4ddc2b9e62f492229726a0bb5e3ce020d13e97ccd9bf`。移除 Greasy Fork 注入的 `@downloadURL none` 后为 4,234 字节，SHA-256 `4ed1c67cc1845991f48c7461e65aa7aea0669ea17112652d0dedf23f87379636`，与仓库 Loader 一致。
+- **Core**：脚本 `590254`，固定版本 `1959548`；1,767,252 字节，SHA-256 `43de2a184cc1aa31fff6031b123222df39cfdd93547a856e667795e818d1f9a4`。
+- **Platform**：脚本 `591595`，固定版本 `1959550`；1,491,680 字节，SHA-256 `f733fccc5042455a2d9129abe8e71f2f3e7a434f8c2452dd86f2b1d94020819d`。
+- **Features**：脚本 `590255`，固定版本 `1959549`；2,036,974 字节，SHA-256 `f95408421970c942533666a772e9d017a4ad222d9f7dd936f39cc95d2f7420a4`。
+- **CSS**：固定到 Git `b11ae01dffdeb6bf78ccb4f9ff777687beea5734`；706,646 字节，SHA-256 `1fe8ee02f75094fea92c698dee157c44bdb0d4b3a69d08cbe1702e4bd6bc5ba0`。
 :::
 
 ![安装并启用脚本后，LINUX DO 列表页与增强阅读工作区同时可用](/screenshots/guide-01-reader-overview-v1.5.0.png)
@@ -84,7 +84,7 @@ LINUX DO 保持完整功能覆盖。获得脚本管理器站点许可后，中�
 正式版、本地调试版或其他同类脚本同时接管主题链接时，可能造成重复入口、重复请求和界面状态冲突。
 :::
 
-需要一个文件直接导入时，下载 [1.6.7 纯本地单文件（CDN）](https://gcore.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@f089a78c0a9eaae1e2eccfdc9e8fc51c35826b51/work/main-lite.standalone.user.js)（[GitHub 源文件](https://github.com/sunbigfly/awesome-linuxdo-reader/blob/f089a78c0a9eaae1e2eccfdc9e8fc51c35826b51/work/main-lite.standalone.user.js)）。阅读器、CSS、第三方库和数学字体全部内置，无 `@require`、`@resource`，不依赖 `GM_getResourceText`。安装后只启用这一版；更新时重新下载导入，论坛内容与在线服务仍需联网。
+需要一个文件直接导入时，下载 [1.6.7 纯本地单文件（CDN）](https://gcore.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@b11ae01dffdeb6bf78ccb4f9ff777687beea5734/work/main-lite.standalone.user.js)（[GitHub 源文件](https://github.com/sunbigfly/awesome-linuxdo-reader/blob/b11ae01dffdeb6bf78ccb4f9ff777687beea5734/work/main-lite.standalone.user.js)）。阅读器、CSS、第三方库和数学字体全部内置，无 `@require`、`@resource`，不依赖 `GM_getResourceText`。安装后只启用这一版；更新时重新下载导入，论坛内容与在线服务仍需联网。
 
 ## 自动更新
 

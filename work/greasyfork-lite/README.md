@@ -1,6 +1,6 @@
 # Lite Greasy Fork 发布工程
 
-> `1.6.6` 已完成 GitHub、Greasy Fork 四文件链和用户手册同步；本节记录当前不可变坐标与逐字节核验结果。
+> `1.6.7` 已完成 GitHub、Greasy Fork 四文件链和用户手册同步；本节记录当前不可变坐标与逐字节核验结果。
 
 Greasy Fork 主脚本公开介绍的同步源是仓库根部 [`GREASYFORK.md`](../../GREASYFORK.md)，共享长介绍维护在 [`docs/INTRODUCTION.md`](../../docs/INTRODUCTION.md)。本文件只维护四文件构建、固定坐标和发布证据。
 
@@ -85,6 +85,35 @@ Library 与待发布文件完全相同。快速调试版和四文件本地测试
 `npm run main-lite:greasyfork:release` 只读取已核验的 `published-libraries.json`。
 `release.config.json` 不进入 Git；其中没有凭据，但只作为首次发布草稿，不能用占位符
 冒充已发布状态。
+
+### v1.6.7 已发布坐标
+
+| 发布单元 | Greasy Fork | 固定版本 | 核验结果 |
+| --- | --- | --- | --- |
+| 主 Loader | [588185](https://greasyfork.org/scripts/588185) | `1959555` | 固定文件 4,255 字节，SHA-256 `f02e72b2cd7456b87b3b4ddc2b9e62f492229726a0bb5e3ce020d13e97ccd9bf`；移除平台加入的 `@downloadURL none` 后为 4,234 字节，SHA-256 `4ed1c67cc1845991f48c7461e65aa7aea0669ea17112652d0dedf23f87379636` |
+| Core | [590254](https://greasyfork.org/scripts/590254) | `1959548` | 1,767,252 字节，SHA-256 `43de2a184cc1aa31fff6031b123222df39cfdd93547a856e667795e818d1f9a4` |
+| Platform | [591595](https://greasyfork.org/scripts/591595) | `1959550` | 1,491,680 字节，SHA-256 `f733fccc5042455a2d9129abe8e71f2f3e7a434f8c2452dd86f2b1d94020819d` |
+| Features | [590255](https://greasyfork.org/scripts/590255) | `1959549` | 2,036,974 字节，SHA-256 `f95408421970c942533666a772e9d017a4ad222d9f7dd936f39cc95d2f7420a4` |
+
+四个发布单元在 `update.greasyfork.org` 固定版本 URL 核验；主 Loader 归一化后与仓库产物逐字节一致。CSS 更新并固定到 Git `b11ae01dffdeb6bf78ccb4f9ff777687beea5734`，706,646 字节，SHA-256 `1fe8ee02f75094fea92c698dee157c44bdb0d4b3a69d08cbe1702e4bd6bc5ba0`；GitHub Raw 与 jsDelivr 均已核验。
+
+纯本地单文件版也固定到上述 Git 提交，8,669,592 字节，SHA-256 `a86b450b76ec91d8467bec7d4a60e44954009140709fa109cbac7d140ba9eebc`，CDN 文件与本地一致。
+
+Greasy Fork 主脚本同步源保持 `https://raw.githubusercontent.com/sunbigfly/awesome-linuxdo-reader/main/work/main-lite.js`，由 GitHub Webhook 同步。主脚本公开代码更新时间为 `2026-10-12T07:09:59.000Z`。公开 `user.js` 与 `meta.js` 均已核验为 `1.6.7`；介绍页已单独保存并从无需登录的公开页面回读目标版本及四文件坐标，介绍修改未生成新的代码版本。
+
+#### 本地构建快照收据
+
+`npm run main-lite:local-debug` 成功：源码与实际分包 runtime 各 237 个测试文件通过，310 个模块的源码哈希、元数据、CSS、manifest 和兼容副本 parity gate 通过；扩展站点权限测试与本地 userscript 审计通过。最终 Loader 构建前后 Library、CSS、事实源与构建器哈希保持一致，复用本次收据。同步阶段未重复浏览器或性能验收。
+
+单文件本地调试版：5,357,440 字节，SHA-256 `79cb4c1c6105f6482e4a0e366127dfc12b5a148bc777af872bf729ca184d3f29`。
+
+| 构建或契约脚本 | Git blob ID |
+| --- | --- |
+| `scripts/build-main-lite.mjs` | `69d185dbe6c51282b2fa3948609f6edbb0990925` |
+| `scripts/build-main-lite-greasyfork.mjs` | `6391bac0bc7eb6fec6bd714656efb8f6d63a225a` |
+| `scripts/test-main-lite.mjs` | `11d6c713822a35faff4f881a6baf987618ac0ca2` |
+| `scripts/test-main-lite-greasyfork.mjs` | `ded7ed2a0ab173b0ed6445f896ed119ea0d3a972` |
+| `scripts/verify-main-lite-local-parity.mjs` | `517d674da96277edca10b5511f8e17a32a916948` |
 
 ### v1.6.6 已发布坐标
 

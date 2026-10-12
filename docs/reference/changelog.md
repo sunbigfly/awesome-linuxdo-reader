@@ -25,6 +25,7 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 - 整理阅读动画与互动设置，补充浏览器 DoH 配置指引。
 - 未打包 Chrome 扩展支持按域名申请自定义站点权限；移除站点时注销内容脚本并撤销对应权限。userscript 版提供脚本管理器授权指引。
 - 正式入口继续使用 Loader + Core + Platform + Features 四文件结构，纯本地单文件版同步生成。
+- GitHub 与 Greasy Fork `1.6.7` 已同步；更新后请完整刷新已打开的 Discourse 页面。
 
 ## 1.6.6 — 书签话题标题与操作按钮修复
 
